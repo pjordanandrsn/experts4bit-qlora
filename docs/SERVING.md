@@ -226,12 +226,14 @@ device's free memory (`serve_recipe.choose_max_seqs`):
 - **What SC2e read** (Qwen3-30B-A3B int4, one RTX 5090, 512-token prompts, 2,048 tokens a slot): 64 slots on the default
   list held the SLO to 8 req/s against 4 at 16 slots, and 64 with `E4B_PAGED_BUCKETS=auto` to 12. Serial TTFT and TPOT
   were within 1 % and serial output byte-identical. Other models, prompt lengths and cards are unread for speed.
+- **Outputs under load.** A request's greedy text depends on the requests it shares a decode step with, at 16 slots as
+  at 64. Under load, SC2e's 64-slot server produced the 16-slot server's text on 0.46–0.74 of requests. Compare
+  outputs across loads with that in mind.
 - `/health` reports `engine.max_seqs` (the width serving), `engine.max_seqs_requested` and
   `engine.max_seqs_resolution` (every candidate's arithmetic and the reason).
 
 `E4B_PAGED_BUCKETS=auto` stays opt-in: wide decode steps change the bf16 arithmetic (under load SC2e's wide-bucket arms
-agreed with 16 slots' text on 0.01–0.12 of requests, against 0.46–0.74 for 64 slots on the default list), so it waits
-on a teacher-forced read at buckets 32 and 64.
+agreed with 16 slots' text on 0.01–0.12 of requests), so it waits on a teacher-forced read at buckets 32 and 64.
 
 **Slots above 16 and their buckets.** The default bucket list stops at 16, so a
 decode step over 16 rows runs as consecutive 16-row replays with a host sync after each, and the server logs that at

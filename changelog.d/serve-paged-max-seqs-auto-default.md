@@ -15,6 +15,8 @@
 - **What it picks for Qwen3-30B-A3B int4.** 64 on an RTX 5090 at 2,048 tokens a slot; 16 at the default 4,096; 16 on a
   24 GB card.
 - **The way back.** `E4B_PAGED_MAX_SEQS=16`.
+- **Outputs under load.** Serial output is byte-identical. Under load a request's greedy text depends on the
+  requests it is batched with; wider batches change it more often (`docs/SERVING.md`).
 - **Not changed.** The bucket list (`E4B_PAGED_BUCKETS=auto` stays opt-in until a teacher-forced read at buckets 32 and
   64), the estimate itself, routes and kernels. Speed is read on one model, one card, 512-token prompts and 2,048
   tokens a slot.
