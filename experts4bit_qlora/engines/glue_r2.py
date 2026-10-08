@@ -31,12 +31,6 @@ attention (q/k/v/o + per-head q/k norms) that the calibrated int4 lane
 runs; anything else keeps its own forward rather than being half-patched.
 Off decode shapes every patch falls through to the original chain.
 
-The rotary is licensed the same way (:func:`rotary_is_rotate_half`): the
-kernels compute rotate-half, so the module's OWN rotary must compute the
-same function, probed, never assumed. ERNIE-4.5's attention has exactly
-the q/k/v/o structure, but it re-interleaves cos/sin and rotates
-adjacent pairs; it is refused (the FAM lane's find, e4b#1362).
-
 Engagement is census PRESENCE of ``_rmsnorm_resid_rows`` and
 ``_rope_norm_heads``, never a symbol grep.
 """
@@ -52,52 +46,6 @@ __all__ = ["fuse_t1_glue_r2"]
 
 # decode rows stay small; prefill keeps the upstream chain
 _MAX_DECODE_ROWS = 64
-
-
-def _module_rotary(mod):
-    """The rotary the module's own forward applies: ``apply_rotary_pos_emb`` in the namespace its class's ``forward``
-    was defined in, which is how every transformers attention calls it (an instance-level forward patch does not
-    change it). ``None`` when there is none to read."""
-    fn = getattr(getattr(type(mod), "forward", None), "__globals__", {}).get("apply_rotary_pos_emb")
-    return fn if callable(fn) else None
-
-
-def _probe_rotary(fn, d: int) -> bool:
-    """Does ``fn(q, k, cos, sin)`` compute ``x * cos + rotate_half(x) * sin`` with ``rotate_half(x) = cat(-x[d/2:],
-    x[:d/2])`` -- what ``rope_heads`` and ``rope_norm_heads`` compute -- for ARBITRARY cos/sin, in transformers'
-    calling convention (q/k ``[batch, heads, T, d]``, cos/sin ``[batch, T, d]``)?"""
-    g = torch.Generator().manual_seed(0)
-    q, k = torch.randn(1, 2, 3, d, generator=g), torch.randn(1, 1, 3, d, generator=g)
-    cos, sin = torch.randn(1, 3, d, generator=g), torch.randn(1, 3, d, generator=g)
-    try:
-        with torch.no_grad():
-            got = fn(q, k, cos, sin)
-    except Exception:       # a rotary that cannot be probed is not licensed
-        return False
-    h = d // 2
-
-    def want(x):
-        return x * cos.unsqueeze(1) + torch.cat([-x[..., h:], x[..., :h]], dim=-1) * sin.unsqueeze(1)
-    return (isinstance(got, (tuple, list)) and len(got) == 2
-            and all(isinstance(t, torch.Tensor) and t.shape == x.shape
-                    and torch.allclose(t.float(), want(x), rtol=1e-5, atol=1e-5)
-                    for t, x in zip(got, (q, k))))
-
-
-_ROTARY_PROBED: dict = {}
-
-
-def rotary_is_rotate_half(mod, d: int) -> bool:
-    """License a fold's rotary on what the module computes: its own ``apply_rotary_pos_emb``
-    (:func:`_module_rotary`) must be rotate-half over ``d`` (:func:`_probe_rotary`). ERNIE-4.5 (interleaved),
-    a module whose rotary cannot be read, and one that raises on the probe are refused. One probe per function and
-    width."""
-    fn = _module_rotary(mod)
-    if fn is None or d % 2:
-        return False
-    if (fn, d) not in _ROTARY_PROBED:
-        _ROTARY_PROBED[(fn, d)] = _probe_rotary(fn, d)
-    return _ROTARY_PROBED[(fn, d)]
 
 
 def _decode_rows(x: torch.Tensor, width: int) -> bool:
@@ -314,8 +262,6 @@ def _patch_attention(mod, rope_norm_heads) -> bool:
         return False
     if mod.head_dim % 2 or qn.weight.numel() != mod.head_dim:
         return False
-    if not rotary_is_rotate_half(mod, int(mod.head_dim)):
-        return False
     orig = mod.forward
 
     def _fwd(hidden_states, position_embeddings=None,
@@ -421,8 +367,6 @@ def _patch_attention_unfused(mod, rope_norm_heads) -> bool:
     d = int(mod.head_dim)
     if d % 2 or qn.weight.numel() != d or kn.weight.numel() != d:
         return False
-    if not rotary_is_rotate_half(mod, d):
-        return False
     orig = mod.forward
 
     def _fwd(hidden_states, position_embeddings=None,
@@ -487,11 +431,9 @@ def _patch_attention_rope_only(mod, int4_b32) -> bool:
     """The rotary chain folded for attention WITHOUT a head norm (the
     Llama-shaped q/k/v/o module GraniteMoe and Mixtral use): exactly the
     four projections, nothing of the module's own, the usual attributes,
-    a rotate-half rotary (:func:`rotary_is_rotate_half`; ERNIE-4.5 has the
-    structure but an interleaved rotary), and the kernel side's
-    ``rope_heads``; refuses loudly on a kernel cut without it. gpt-oss's
-    attention carries ``sinks`` (a parameter of its own) and is refused by
-    the structure rule."""
+    and the kernel side's ``rope_heads``; refuses loudly on a kernel cut
+    without it. gpt-oss's attention carries ``sinks`` (a parameter of its
+    own) and is refused by the structure rule."""
     children = {n for n, _ in mod.named_children()}
     if children != _NONORM_ATTN_CHILDREN:
         return False
@@ -510,8 +452,6 @@ def _patch_attention_rope_only(mod, int4_b32) -> bool:
     d = int(mod.head_dim)
     if d % 2:
         return False
-    if not rotary_is_rotate_half(mod, d):
-        return False            # e.g. ERNIE-4.5: q/k/v/o exactly, interleaved rotary (e4b#1362)
     rope_heads = getattr(int4_b32, "rope_heads", None)
     if rope_heads is None:
         raise _KernelGap(

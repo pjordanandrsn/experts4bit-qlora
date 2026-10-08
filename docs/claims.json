@@ -10329,35 +10329,6 @@
       "notes": "Pre-registered in #1320 and reviewed by the maintainer before any box. Vast invoiced $1.017 for the reading; the lane cost $1.262 across 3 receipts. The board (575 W) is not SC2's or SC2c's, so absolute times compare only within this box, and no comparator ran here: this is no position against vLLM or SGLang. Since 0.50.0 the defaults are E4B_PAGED_MAX_SEQS=auto (#1334, 64 slots where the serve estimate fits with 1.5 GiB to spare) and E4B_PAGED_BUCKETS=auto (#1346, after P117's AT_PARITY quality read); E4B_PAGED_MAX_SEQS=16 restores the 16-slot server."
     },
     {
-      "id": "e4b.serve.p120.wide-tiles.qwen3-int4.5090.2026-10-08",
-      "package": "experts4bit-qlora",
-      "area": "serve",
-      "model": "Qwen/Qwen3-30B-A3B",
-      "claim": "Lane P120, one RTX 5090: on SC2e's served stack (Qwen3-30B-A3B int4 experts and int4 RTN attention, the folds, fused q/k/v), building the tile table above 256 routed rows in one launch (E4B_INT4_WIDE_TILES=1, grouped-nf4-gemm's cumsum rank) makes the captured 64-row decode step 1.44x slower (17.55 -> 25.31 ms), with identical tokens at all 16,704 positions: the one-launch table costs 10.45 ms a step at 512 routed rows x 128 experts (218 us a launch) against 1.43 ms for the chained builder's kernels. SLOWER by the registered rule: the switch stays opt-in.",
-      "value": 1.4428,
-      "unit": "ratio of the served 64-row decode step, E4B_INT4_WIDE_TILES=1 over 0 (median of 256 captured bucket-64 replays after 5 warm; ABBA pair a; pair b 1.4419)",
-      "hardware": "RTX 5090 (sm_120, driver 595.71.05, 32607 MiB), one rented Vast.ai host (instance 54897838, AMD EPYC 7C13, 256 threads, 1,007 GiB RAM), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
-      "conditions": "e4b @b38866c (0.50.0 + P120's registration #1360; the switch #1357) + grouped-nf4-gemm @3ce2ecd8 (0.43.0 + #515); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0; Qwen/Qwen3-30B-A3B @ad44e77, NF4 arena baked on the box, int4 stores repacked at load, built eager with one slot; premise tests/test_decode_graph_buckets.py 7 passed and grouped-nf4-gemm's cumsum-rank tests compiled for the card 66 passed; profile arms: P119's 64-row eager bracket under torch.profiler with the switch 0 and 1; served arms OFF_a ON_a ON_b OFF_b, each a fresh runner with buckets 1-64 captured under its setting, 64 wikitext windows of 512 tokens, 5 warm + 256 timed bucket-64 steps, every token recorded; a mutant (live tiles' expert ids shifted by one) must change the tokens; verdict by bench/p120/p120_reduce.py",
-      "measured_on": "2026-10-08",
-      "status": "measured",
-      "tier": "measured",
-      "evidence": [
-        "bench/p120/RESULTS-p120.md",
-        "bench/p120/PREREG-p120.md",
-        "bench/p120/p120_reduce.py",
-        "bench/p120/p120_box.py",
-        "bench/p120/receipts/p120-5090-1/verdict.json",
-        "bench/p120/receipts/p120-5090-1/box.json",
-        "bench/p120/receipts/p120-5090-1/summary.txt",
-        "bench/p120/receipts/p120-5090-1/SHA256SUMS"
-      ],
-      "evidence_private": [
-        "receipts/experts4bit-qlora/2026-10-08/p120-5090-1/ (receipt.json, teardown-proof.json)",
-        "receipts/experts4bit-qlora/2026-10-08/p120-prove-1/ (receipt.json, the proving run)"
-      ],
-      "notes": "Pre-registered in #1360 and reviewed by the maintainer before any box. Vast invoiced $0.878 for the reading; the lane cost $1.079 with the proof. The kernel, not the graph, explains it: the eager step is already 1.48x slower. By subtraction, the chained builder costs about 2.7-2.8 ms of the 17.55 ms step, so a faster one-launch table (a launch-shape lane in grouped-nf4-gemm) remains a lever. On the proof's Granite (40 experts; not a reading) the same switch was 2.9 % faster."
-    },
-    {
       "id": "e4b.serve.p115.fused-stack-engagement.gptoss-qwen36.5090.2026-10-08",
       "package": "experts4bit-qlora",
       "area": "serve",

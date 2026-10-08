@@ -139,10 +139,10 @@ def _dequant_int4_bf16(packed, scales, ids, N: int, K: int):
 
 
 def _lean_glue_mode_env() -> str:
-    """``E4B_INT4_LEAN_GLUE`` (lane K23): ``auto`` (the default, also when unset) folds the grouping glue around K19 or
-    K25 into the two kernels that bracket it when the kernel package carries K23's options, and keeps the separate
-    launches when it predates them; ``1`` requires K23 (absent is a refusal); ``0`` keeps the separate launches. Lane
-    P89 LICENSED it on K19's rows (see :func:`_lean_glue_env`). Anything else is refused."""
+    """``E4B_INT4_LEAN_GLUE`` (lane K23): ``auto`` (the default, also when unset) folds the grouping glue around K19 into
+    the two kernels that bracket it when the kernel package carries K23's options, and keeps the separate launches when
+    it predates them; ``1`` requires K23 (absent is a refusal); ``0`` keeps the separate launches. Lane P89 LICENSED it
+    on K19's rows (see :func:`_lean_glue_env`). Anything else is refused."""
     v = os.environ.get("E4B_INT4_LEAN_GLUE", "auto").strip().lower() or "auto"
     if v not in ("auto", "0", "1"):
         raise ValueError(f"E4B_INT4_LEAN_GLUE={v!r}: expected 'auto', '0' or '1'")
@@ -151,13 +151,12 @@ def _lean_glue_mode_env() -> str:
 
 def _lean_glue_env() -> bool:
     """Whether the lean glue is wanted at all (``auto`` or ``1``; see :func:`_lean_glue_mode_env`). The glue folds
-    around K19, or K25 on the NF4 store, into the two kernels that bracket it. The tile table is built in ONE launch: no host int32 cast, no pre-zero fills, and the sorted ids from
+    around K19 into the two kernels that bracket it. The tile table is built in ONE launch: no host int32 cast, no pre-zero fills, and the sorted ids from
     the same launch instead of an index_select. gate_up reads the all-resident collapse's token rows directly
     (``gather_div``), so the ``[T * top_k, H]`` expansion is never made. The down projection is stored straight into
     the caller's row order, with no index_copy_ unsort. Bit-identical by construction (grouped-nf4-gemm's K23 contract
-    tests; lane P89: tokens identical in all 16 rows of a B=16 step). It applies to K19's rows and to K25's (whose
-    kernel takes the same ``scatter`` / ``gather_div`` options; it ran inside lane P96's K25 arms, never read alone),
-    and not to gpt-oss's epilogue, which reads the sorted down output."""
+    tests; lane P89: tokens identical in all 16 rows of a B=16 step). It applies to K19's rows only, and not to
+    gpt-oss's epilogue, which reads the sorted down output."""
     return _lean_glue_mode_env() != "0"
 
 
