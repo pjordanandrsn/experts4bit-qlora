@@ -1,0 +1,9 @@
+{
+  "schema": "dq9-diagnostic/1",
+  "verdict": "VOID",
+  "cause": "controller checksum subject dq9_drive.sh was not staged; tripwire stopped before all proofs/readings",
+  "proof_count": 0,
+  "reading_count": 0,
+  "capacity_licensed": false,
+  "calibration_replacement_licensed": false
+}
