@@ -1069,6 +1069,25 @@ POS67_GAP_PD_MAX = 1.2           # P196: e4b defaults' training-phase peak - Uns
 POS67_GAP_PO_MAX = 0.5           # P197: with the offload, at most this many GB
 POS67_OFF_COST_MAX = 1.03        # P198: s/step po / pd at most this (amendment 64: the copies 1.023 of the reentrant step)
 POS67_HELDOUT_MAX = 0.01         # P199: |mean held-out at N, e4b defaults - Unsloth|
+# TC1 amendment 68: amendment 67's position profiled -- e4b defaults (pd) and Unsloth (pv), two draws each in ABBA order, every arm profiled
+POS68_FAM = "qwen3pos68"
+FAMS.append(POS68_FAM)
+NAMES[POS68_FAM] = "Qwen3-30B-A3B (amendment 68: amendment 67's packed-row position profiled -- e4b defaults vs Unsloth, two draws each; device time and host share)"
+N_LAYERS[POS68_FAM] = 48
+ATTN_CENSUS[POS68_FAM] = 192
+DENSE_PINS[POS68_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[POS68_FAM] = ("e4b", "fused_attn4_m_pd")
+EXPECTED[POS68_FAM] = [("e4b", "fused_attn4_m_pd"), ("unsloth", "ckpt_unsloth_m_pv"), ("unsloth", "ckpt_unsloth_m_pv_d2"), ("e4b", "fused_attn4_m_pd_d2")]
+PACKED_FAMS = PACKED_FAMS + (POS68_FAM,)
+LOOP_ROUTE_SHARE_MAX[POS68_FAM] = 0.05
+POS68_DEVICE_BAND = (1.06, 1.24)  # P200: device ms per profiled step Unsloth / e4b defaults (amendment 66's box: 10152 / 8897 = 1.141)
+POS68_BUSY_GAP_MIN = 0.08         # P201: e4b's busy_t - Unsloth's at least this (amendment 66's box: 0.992 vs 0.880)
+POS68_OPS_RATIO_MIN = 5.0         # P202: CPU ops per profiled step Unsloth / e4b at least this (amendment 66's box: 7.66 M / 1.08 M = 7.07)
+POS68_SLOW_HOST_S = 14.0          # P203's condition: Unsloth's s/step (median of its draws) at or above this (every draw on machine 152440: 16.0-16.3)
+POS68_SLOW_BUSY_MAX = 0.75        # P203: then Unsloth's busy_t at most this ...
+POS68_SLOW_DEVICE_REF = 10152.2   # ... and its device ms per profiled step within POS68_SLOW_DEVICE_TOL of amendment 66's box's
+POS68_SLOW_DEVICE_TOL = 0.08
+POS68_HELDOUT_MAX = 0.01          # P204: |mean held-out at N, e4b defaults - Unsloth|
 # TC1 amendment 59: the same switch at TC1's field recipe (seq 2048, micro-batch 2), the shipped and the matched arm, before any default
 # (not packed: TC1's no-loop rule applies as written, as on amendments 49 and 50)
 CKPTOFFF_FAM = "qwen3ckptofff"
@@ -2387,6 +2406,66 @@ def score_pos67(F, fam=POS67_FAM):
     return out
 
 
+def pos68_why(tag, r):
+    """Amendment 68's predicates: amendment 67's (torch 2.12; on e4b every new default as recorded and the default reentrant checkpoint), only
+    the pd side on e4b, and a profile with CPU ops on every arm, Unsloth's included. Empty string = as registered."""
+    r = r or {}
+    if r.get("framework") == "e4b" and "_pd" not in (tag or ""):
+        return f"amendment 68 registers only the e4b defaults (pd), not {tag}"
+    bad = [w for w in (pos67_why(tag, r),) if w]
+    pr = r.get("profile") or {}
+    if not (_cbk_device_ms(r) and pr.get("cpu_ops_per_step")):
+        bad.append("no profile with CPU ops on the receipt: amendment 68 profiles every arm (P200-P203 read device time and host share)")
+    return "; ".join(bad)
+
+
+def score_pos68(F, fam=POS68_FAM):
+    """TC1-PREREG amendment 68 (two VALID profiled draws a side, medians). P200: device ms per profiled step Unsloth / e4b defaults inside
+    POS68_DEVICE_BAND. P201: busy_t (device ms per profiled step / timed s/step) e4b - Unsloth >= POS68_BUSY_GAP_MIN. P202: CPU ops per
+    profiled step Unsloth / e4b >= POS68_OPS_RATIO_MIN. P203, read only when Unsloth's s/step >= POS68_SLOW_HOST_S: Unsloth's busy_t <=
+    POS68_SLOW_BUSY_MAX and its device ms per profiled step within POS68_SLOW_DEVICE_TOL of POS68_SLOW_DEVICE_REF (else UNTESTED, a fast
+    host). P204: |mean held-out at N| <= POS68_HELDOUT_MAX. The s/step ratio is descriptive, quoted with the host."""
+    R = F.get(fam)
+    if not R:
+        return []
+    rows = {(x["fw"], x["tag"]): x for x in R["rows"]}
+    def side(fw, tag):
+        rs = [rows.get(k) or {} for k in ((fw, tag), (fw, tag + "_d2"))]
+        if not all(x.get("verdict") == "VALID" for x in rs):
+            return None
+        rs = [x.get("r") or {} for x in rs]
+        q = {"dev": [_cbk_device_ms(x) for x in rs], "busy": [_busy_vs_timed(x) for x in rs],
+             "ops": [(x.get("profile") or {}).get("cpu_ops_per_step") for x in rs], "s": [x.get("s_per_step_median_11plus") for x in rs],
+             "held": [x.get("eval_loss_final") for x in rs]}
+        return None if any(None in v for v in q.values()) else {k: statistics.median(v) for k, v in q.items()} | {"held": statistics.mean(q["held"])}
+    e, u = side("e4b", "fused_attn4_m_pd"), side("unsloth", "ckpt_unsloth_m_pv")
+    if e is None or u is None:
+        miss = f"two VALID profiled draws a side are registered: e4b {'ok' if e else 'missing'}, Unsloth {'ok' if u else 'missing'}"
+        return [(pid, fam, "UNTESTED", miss) for pid in ("P200", "P201", "P202", "P203", "P204")]
+    x = u["dev"] / e["dev"]
+    out = [("P200", fam, "HELD" if POS68_DEVICE_BAND[0] <= x <= POS68_DEVICE_BAND[1] else "FALSIFIED",
+            f"device ms per profiled step Unsloth {u['dev']:.1f} / e4b {e['dev']:.1f} = {x:.3f} vs in [{POS68_DEVICE_BAND[0]}, {POS68_DEVICE_BAND[1]}]; "
+            f"s/step Unsloth / e4b {u['s'] / e['s']:.3f} on this host (descriptive)")]
+    g = e["busy"] - u["busy"]
+    out.append(("P201", fam, "HELD" if g >= POS68_BUSY_GAP_MIN else "FALSIFIED",
+                f"busy_t e4b {e['busy']:.3f}, Unsloth {u['busy']:.3f} (gap {g:+.3f} vs >= {POS68_BUSY_GAP_MIN})"))
+    o = float(u["ops"]) / float(e["ops"])
+    out.append(("P202", fam, "HELD" if o >= POS68_OPS_RATIO_MIN else "FALSIFIED",
+                f"CPU ops per profiled step Unsloth {u['ops']:.0f} / e4b {e['ops']:.0f} = {o:.2f} vs >= {POS68_OPS_RATIO_MIN}"))
+    if u["s"] < POS68_SLOW_HOST_S:
+        out.append(("P203", fam, "UNTESTED", f"Unsloth s/step {u['s']:.3f} < {POS68_SLOW_HOST_S}: not a slow host for Unsloth, the condition is unmet"))
+    else:
+        dr = u["dev"] / POS68_SLOW_DEVICE_REF - 1.0
+        ok = u["busy"] <= POS68_SLOW_BUSY_MAX and abs(dr) <= POS68_SLOW_DEVICE_TOL
+        out.append(("P203", fam, "HELD" if ok else "FALSIFIED",
+                    f"Unsloth s/step {u['s']:.3f} >= {POS68_SLOW_HOST_S}: busy_t {u['busy']:.3f} vs <= {POS68_SLOW_BUSY_MAX}; device ms per profiled step "
+                    f"{u['dev']:.1f} vs {POS68_SLOW_DEVICE_REF} ({dr:+.1%} vs |.| <= {POS68_SLOW_DEVICE_TOL:.0%})"))
+    d = e["held"] - u["held"]
+    out.append(("P204", fam, "HELD" if abs(d) <= POS68_HELDOUT_MAX else "FALSIFIED",
+                f"mean held-out at N e4b defaults {e['held']:.5f}, Unsloth {u['held']:.5f} (diff {d:+.5f} vs |.| <= {POS68_HELDOUT_MAX})"))
+    return out
+
+
 def pad_buckets_why(tag, r, sides=("pk0", "pk1"), need_chunked=True, torch_prefix="2.12"):
     """Amendments 48 / 52's engagement predicate: the arm ran the torch its family names (torch_prefix: 2.12 = venv-unsloth for
     amendment 48, 2.8 = venv-e4b for amendment 52); grouped-nf4-gemm's per-path counters
@@ -3356,6 +3435,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == POS67_FAM:                               # amendment 67: every new default as recorded, and the checkpoint the tag names
         w = pos67_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == POS68_FAM:                               # amendment 68: amendment 67's predicates on pd, and a profile on every arm
+        w = pos68_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if fam == CKPTOFF_FAM:                             # amendment 58: torch 2.12; on e4b its defaults and the checkpoint its side names
@@ -6313,6 +6396,20 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_pos67(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if POS68_FAM in F:
+        out += ["\n## Amendment 68: the packed-row position profiled -- device time and host share (descriptive)",
+                "| arm | VERDICT | s/step (11..N) | device ms / profiled step | busy_t | CPU ops / profiled step | device events / profiled step | train peak GB | held-out N |",
+                "|---|---|---|---|---|---|---|---|---|"]
+        for x in F[POS68_FAM]["rows"]:
+            r = x.get("r") or {}
+            pr = r.get("profile") or {}
+            out.append(f"| {x['fw']}/{x['tag']} | {x['verdict']} | {f(r.get('s_per_step_median_11plus'), 3)} | {f(_cbk_device_ms(r), 1)} | "
+                       f"{f(_busy_vs_timed(r), 3)} | {pr.get('cpu_ops_per_step')} | {pr.get('device_events_per_step')} | "
+                       f"{(r.get('peak_vram_gb_phases') or {}).get('train')} | {r.get('eval_loss_final')} |")
+        out += ["\n## Predictions P200-P204 (TC1-PREREG amendment 68: the packed-row position profiled; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_pos68(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if CKPTOFFF_FAM in F:
         out += ["\n## Amendment 59: checkpoint inputs on the GPU vs in pinned host memory at the field recipe, peaks by phase (descriptive)",
                 "| arm | VERDICT | s/step (11..N) | run peak GB | setup | eval | train |", "|---|---|---|---|---|---|---|"]
@@ -7520,6 +7617,29 @@ def _pos67_set(s=None, train=None, held=None, rec=None):
                 r["chunked_lm_loss"] = dict(r["chunked_lm_loss"], eval_env=None, eval_chunked_calls=16, eval_stock_calls=0)
                 for k, v in ((rec or {}).get(tag) or {}).items():
                     r[k] = v
+            R[(fw, tag)] = r
+    return R
+
+
+def _pos68_set(s=None, dev=None, ops=None, held=None, rec=None, profile=True):
+    """Amendment 68: e4b defaults (pd) and Unsloth (pv), two draws each, every arm profiled -- `s` side -> draws' s/step; `dev` side -> device
+    ms per profiled step; `ops` side -> CPU ops per profiled step; `held` side -> held-out at N; `rec` tag -> a record override;
+    `profile=False` drops every arm's profile. The default fixture is amendment 66's box (GPU-bound host)."""
+    s = dict({"pd": (8.97, 8.97), "pv": (11.54, 11.55)}, **(s or {}))
+    dev = dict({"pd": 8897.0, "pv": 10152.0}, **(dev or {}))
+    ops = dict({"pd": 1083800, "pv": 7659000}, **(ops or {}))
+    src = _pos67_set(held=held)
+    R = {}
+    for side in ("pd", "pv"):
+        for i, sfx in enumerate(("", "_d2")):
+            fw = "unsloth" if side == "pv" else "e4b"
+            tag = f"ckpt_unsloth_m_pv{sfx}" if fw == "unsloth" else f"fused_attn4_m_pd{sfx}"
+            r = json.loads(json.dumps(src[(fw, tag)]))
+            r.update(fam=POS68_FAM, s_per_step_median_11plus=s[side][i])
+            r["profile"] = ({"profiled_steps": 3, "device_ms": 3 * dev[side], "wall_ms_per_step": 1.1 * dev[side], "cpu_ops_per_step": ops[side],
+                             "device_events_per_step": 160000 if side == "pd" else 759000} if profile else None)
+            for k, v in ((rec or {}).get(tag) or {}).items():
+                r[k] = v
             R[(fw, tag)] = r
     return R
 
@@ -9990,6 +10110,24 @@ def selftest():
     hf = {"ckpt_offload_layers": 0, "ckpt_offload_funcs": []}
     assert PS(_pos67_set(rec={"fused_attn4_m_pd_d2": hf}))[POS67_FAM]["verdicts"][("e4b", "fused_attn4_m_pd_d2")] == "VOID"
     assert "P199" in render(RPS, "x") and "amendment 67" in render(RPS, "x")
+    cases += 1
+    # 121. TC1 amendment 68 (qwen3pos68): the position profiled -- VALID; P200-P202 + P204 HELD and P203 UNTESTED on amendment 66's GPU-bound
+    #      box (1.141, busy gap 0.112, 7.07x ops); a slow host (Unsloth 16.0 s, device unchanged) HOLDS P203; Unsloth's device time grown with
+    #      its step FALSIFIES P203; equal device time FALSIFIES P200; an unprofiled Unsloth arm is VOID; an offload tag is VOID
+    P8 = lambda R: {POS68_FAM: reduce_family(POS68_FAM, R, {}, 20)}
+    R8 = P8(_pos68_set())
+    assert all(x["verdict"] == "VALID" for x in R8[POS68_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in R8[POS68_FAM]["rows"]]
+    p8 = lambda R: {p: v for p, _, v, _ in score_pos68(R)}
+    assert p8(R8) == {"P200": "HELD", "P201": "HELD", "P202": "HELD", "P203": "UNTESTED", "P204": "HELD"}, score_pos68(R8)
+    slow = P8(_pos68_set(s={"pv": (16.01, 16.04)}))
+    assert p8(slow)["P203"] == "HELD" and p8(slow)["P201"] == "HELD", score_pos68(slow)
+    assert p8(P8(_pos68_set(s={"pv": (16.01, 16.04)}, dev={"pv": 14100.0})))["P203"] == "FALSIFIED"
+    assert p8(P8(_pos68_set(dev={"pv": 8900.0})))["P200"] == "FALSIFIED"
+    assert p8(P8(_pos68_set(ops={"pv": 2000000})))["P202"] == "FALSIFIED"
+    nop = P8(_pos68_set(rec={"ckpt_unsloth_m_pv_d2": {"profile": None}}))
+    assert nop[POS68_FAM]["verdicts"][("unsloth", "ckpt_unsloth_m_pv_d2")] == "VOID" and set(p8(nop).values()) == {"UNTESTED"}
+    assert pos68_why("fused_attn4_m_po", {"framework": "e4b"}).startswith("amendment 68 registers only the e4b defaults")
+    assert "P203" in render(R8, "x") and "amendment 68" in render(R8, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases

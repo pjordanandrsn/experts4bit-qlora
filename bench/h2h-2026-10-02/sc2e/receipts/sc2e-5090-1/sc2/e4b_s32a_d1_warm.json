@@ -1,0 +1,140 @@
+{
+ "base": "http://127.0.0.1:8778",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "profile": "e4b",
+ "mode": "serial",
+ "rate": 0.0,
+ "n": 4,
+ "seed": 999,
+ "max_tokens_range": [
+  64,
+  256
+ ],
+ "prompts_sha256": "de63bb35245fad5630580af0a54db04364d2e7e2a5aba72e2d18a61aee8f9fc0",
+ "plan": [
+  [
+   0.0,
+   10,
+   209
+  ],
+  [
+   0.0,
+   62,
+   187
+  ],
+  [
+   0.0,
+   16,
+   229
+  ],
+  [
+   0.0,
+   40,
+   228
+  ]
+ ],
+ "summary": {
+  "n": 4,
+  "valid": 4,
+  "invalid": 0,
+  "errors": [],
+  "offered_rate": 0.0,
+  "achieved_rate": 1.034,
+  "wall_s": 3.945,
+  "ttft_p50_s": 0.044428,
+  "ttft_p90_s": 0.058553,
+  "ttft_p99_s": 0.063972,
+  "tpot_p50_s": 0.004411,
+  "tpot_p90_s": 0.004424,
+  "tpot_p99_s": 0.004426,
+  "e2el_p50_s": 1.014223,
+  "e2el_p90_s": 1.047105,
+  "e2el_p99_s": 1.048666,
+  "ttft_mean_s": 0.049434,
+  "output_tok_s": 216.237,
+  "output_tokens": 853,
+  "good": 4,
+  "attainment": 1.0,
+  "goodput_rps": null,
+  "good_per_wall_rps": 1.014,
+  "slo": {
+   "ttft_s": 1.0,
+   "tpot_s": 0.1
+  }
+ },
+ "requests": [
+  {
+   "max_tokens": 209,
+   "prompt_len": 512,
+   "t_send": 3e-06,
+   "text": " He was inducted into the College Football Hall of Fame in 1973 . He was also inducted into the Michigan Sports Hall of Fame in 1981 and the University of Michigan Athletic Hall of Fame in 1982 . \n\nQuestion: What was the reason for the bias against Michigan by sportswriters of that era?\n\nAnswer: \n\nOkay, let's try to figure out the answer to this question. The user is asking about the reason for the bias against Michigan by sportswriters in the era mentioned in the text. \n\nFirst, I need to recall the information provided in the passage. The text mentions that in the Associated Press poll at the end of the 1947 season, Notre Dame was ranked ahead of Michigan even though both were undefeated. Then it states that every Southern AP voter had voted for Notre Dame, which hadn't integrated yet, while three of Michigan's star players were African American. Also, Southern schools didn't schedule games against teams with African American players.\n\nSo the",
+   "completion_tokens": 209,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.985392,
+   "ttft_s": 0.064574,
+   "tpot_s": 0.004426,
+   "i": 0,
+   "prompt_index": 10,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 187,
+   "prompt_len": 512,
+   "t_send": 0.985513,
+   "text": " November . He had to decide whether to attack the French or to withdraw . He chose to attack . The decision was not made lightly . He had to consider the possibility that the French might have a larger force than he had estimated . He also had to consider the possibility that the French might have a larger force than he had estimated . He also had to consider the possibility that the French might have a larger force than he had estimated . He also had to consider the possibility that the French might have a larger force than he had estimated . He also had to consider the possibility that the French might have a larger force than he had estimated . He also had to consider the possibility that the French might have a larger force than he had estimated . He also had to consider the possibility that the French might have a larger force than he had estimated . He also had to consider the possibility that the French might have a larger force than he had estimated . He",
+   "completion_tokens": 187,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.866604,
+   "ttft_s": 0.044504,
+   "tpot_s": 0.004418,
+   "i": 1,
+   "prompt_index": 62,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 229,
+   "prompt_len": 512,
+   "t_send": 1.852338,
+   "text": " Sergeant Ouellette had been killed on 3 September . The rest of the 120 men who had been on the hill were either dead or captured . The survivors were taken to the 2nd Battalion , 7th Marines . The 1st Battalion , 7th Marines had been reduced to 120 men from its original strength of 500 . \n\nThe battle of Hill 209 was a fierce battle between the US 1st Battalion , 7th Marines and the North Korean forces . The battle was a part of the larger Korean War . The battle was a costly one for the US forces . The 1st Battalion , 7th Marines had been reduced to 120 men from its original strength of 500 . The battle was a costly one for the US forces . The battle was a costly one for the US forces . \n\nThe battle of Hill 209 was a fierce battle between the US 1st Battalion , 7th Marines and the North Korean forces . The battle was a part of the larger Korean War . The battle was a costly",
+   "completion_tokens": 229,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 1.04884,
+   "ttft_s": 0.044352,
+   "tpot_s": 0.004404,
+   "i": 2,
+   "prompt_index": 16,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 228,
+   "prompt_len": 512,
+   "t_send": 2.901446,
+   "text": " earliest in his career . He was named the National League Pitcher of the Year for 2014 by The Sporting News and was named the National League MVP for 2014 by the Baseball Writers ' Association of America . He was the first Dodger since 1981 to win the MVP award . He was also awarded the 2014 Cy Young Award for the National League , his third Cy Young Award . He was the first pitcher to win three Cy Young Awards since 1970 . He was also the first Dodger to win the Cy Young Award since 1981 . Kershaw 's 2014 season was the best of his career and was considered one of the greatest pitching seasons in MLB history . \n\n = = = = 2015 season : 2nd World Series appearance = = = = \n\n In 2015 , Kershaw was the opening day starter for the Dodgers for the fifth consecutive year . He was 12 – 11 with a 2.83 ERA and 197 strikeouts",
+   "completion_tokens": 228,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 1.043055,
+   "ttft_s": 0.044304,
+   "tpot_s": 0.004398,
+   "i": 3,
+   "prompt_index": 40,
+   "planned_s": 0.0
+  }
+ ],
+ "trimmed": "chunk_gaps_s dropped from each request (full record in the receipt store)"
+}
