@@ -47,7 +47,8 @@ Every plan field is echoed and checked by the reducer. No setup switch or silent
 **Proof first.** The tiny Qwen3 subject has 2 layers, hidden1024/intermediate4096, 8 query/4 KV heads of dimension128,
 vocab512. Attention's packed codes are below the 1 MiB threshold and stay resident; the three MLP projections per
 layer exceed it and stream. Both paths must work in the same subject. This is a CUDA correctness proof, never speed.
-Seed731, TF32 off, deterministic algorithms, math SDPA (flash and memory-efficient SDPA disabled), 64 real token ids,
+Seed731, TF32 off, deterministic algorithms, cuBLAS workspace `:4096:8` set before CUDA initialization,
+math SDPA (flash and memory-efficient SDPA disabled), 64 real token ids,
 no dropout. Independently prepared resident and streamed models must match **bitwise** in loss, every LoRA gradient
 and one AdamW update. Sampled first/last frozen bytes must stay unchanged. Fourteen NF4 PEFT wrappers must engage;
 streaming must pin 2 layers and late-bind 6 projections. Export/reload must preserve adapter tensors and logits bitwise.

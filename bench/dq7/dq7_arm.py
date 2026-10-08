@@ -27,6 +27,8 @@ def make_plan(directory, placement, seq, data=None):
 
 
 def prove(directory, out):
+    # cuBLAS requires this before the CUDA context is created for deterministic matmul.
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
     import torch
     from peft.tuners.lora.layer import LoraLayer
     from transformers import AutoTokenizer
