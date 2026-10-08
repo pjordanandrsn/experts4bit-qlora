@@ -8,7 +8,9 @@ this test runs the same comparison in CI. It also runs the lane's self-tests and
 - the reducer reads a census record that SC1b's own `arm()` writes (synthetic exports), and its fakes carry that
   record's keys (P115 Phase D's Amendment 4 lesson);
 - the order: refusals, install and tripwire, self-tests, the premise on the card (19), nsys, fetch, bake, prompts,
-  two speed arms, four captures, the census arms, the reducer;
+  two speed arms, (the proof only, Amendment 1) the router build, four captures, the census arms, the reducer;
+- Amendment 1: the router build sets E4B_FUSE_ROUTER_EPI=auto and no other lever, on the proof only, and its record
+  carries the keys the reducer's fake carries;
 - the subject: the shipped default (every lever unset, 16 slots named); every time-left check inside its guard; the
   exit codes.
 """
@@ -97,8 +99,8 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 
 
 def test_the_self_tests_pass():
-    for script, arg, want in (("p123_reduce.py", "--self-test", "p123_reduce self-test OK (19 cases)"),
-                              ("p123_box.py", "--self-test", "p123_box self-test OK (5 cases)")):
+    for script, arg, want in (("p123_reduce.py", "--self-test", "p123_reduce self-test OK (23 cases)"),
+                              ("p123_box.py", "--self-test", "p123_box self-test OK (9 cases)")):
         out = subprocess.run([sys.executable, str(LANE / script), arg], capture_output=True, text=True, env=_env())
         assert out.returncode == 0 and want in out.stdout, out.stdout + out.stderr
     out = subprocess.run([sys.executable, str(SC1B / "sc1b_census.py"), "--self-test"], capture_output=True, text=True,
@@ -156,6 +158,34 @@ def test_the_reducer_reads_the_census_record_sc1b_writes(tmp_path):
     assert set(fake["gates"]) <= set(c1["gates"]) and "kernels_per_graph_modal" in c1["node"]
 
 
+def test_amendment_1_the_proof_licenses_every_router_under_the_router_knob_alone():
+    """The router build runs on the proof only, after the speed arms, with E4B_FUSE_ROUTER_EPI=auto and nothing else; the
+    reducer VOIDs the proof unless all of Granite's 32 routers license (fam-prove-1 read 27; #1398's regression check),
+    and its fake router record carries the keys ``routers_main`` writes and the fold's own report keys."""
+    import ast
+    r = _import("p123_reduce", LANE)
+    box = _import("p123_box", LANE, REPO / "bench" / "p109")
+    assert box.routers_env_ok({"E4B_FUSE_ROUTER_EPI": "auto"})[0]
+    assert not box.routers_env_ok({"E4B_FUSE_ROUTER_EPI": "auto", "E4B_PAGED_FUSE_QKV": "auto"})[0]
+    assert not box.routers_env_ok({"E4B_FUSE_ROUTER_EPI": "auto", "GNF4_GEMV_BW": "1"})[0]
+    step = RUN[RUN.index('if [ "$PROVE" = 1 ] && [ "$ARMS_OK" = 1 ]; then'):RUN.index("# ---- the census")]
+    assert "$ENGINE_ENV E4B_FUSE_ROUTER_EPI=auto E4B_SHA" in step and "--out $W/router_census.json" in step
+    fn = next(n for n in ast.walk(ast.parse((LANE / "p123_box.py").read_text()))
+              if isinstance(n, ast.FunctionDef) and n.name == "routers_main")
+    rec = next(n.value for n in ast.walk(fn) if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") == "rec")
+    assert {k.value for k in rec.keys} == set(r.fake_routers()), "the fake router record drifted from routers_main's"
+    fold = (REPO / "experts4bit_qlora" / "engines" / "router_epilogue.py").read_text()
+    for key in r.fake_routers()["router_report"]:
+        assert f"{key}=" in fold, f"the fold's report has no {key!r}"
+    gran = {"S1a": r.fake_arm("S1a", r.GRAN), "S1b": r.fake_arm("S1b", r.GRAN)}
+    drvs = {b: r.fake_drv(b, r.GRAN) for b in r.BATCHES}
+    cen = {1: r.fake_census(1), 16: r.fake_census(16, p=17.0)}
+    assert r.reduce(gran, drvs, cen, r.E, proof=True, routers=r.fake_routers())["routers"]["licensed"] == 32
+    assert r.reduce(gran, drvs, cen, r.E, proof=True, routers=r.fake_routers(n=27))["verdict"] == "VOID"
+    assert r.reduce(gran, drvs, cen, r.E, proof=True)["verdict"] == "VOID"
+    assert "Amendment 1" in PREREG and "router_census.json" in PREREG
+
+
 def test_the_rule_is_the_registered_rule():
     r = _import("p123_reduce", LANE)
     assert r.GNF4_SHA == "6ee2e10408161a9d3c874975c9191a7f2957e6f4" and f"GNF4_SHA={r.GNF4_SHA}" in RUN
@@ -178,7 +208,8 @@ def test_the_order_puts_every_refusal_before_the_fetch():
     order = ["CUDA_PROBE=$(python -", "REFUSED: card is", "REFUSED: ${FREE_GB", "REFUSED: ${RAM_GB", 'say "install e4b @',
              "python - <<'PYT'", "p123_reduce.py --self-test", "p123_box.py --self-test", "sc1b_census.py --self-test",
              "python -m pytest " + " ".join(PREMISE), 'echo "premise ok"', 'say "fetch $MODEL @ $REV"',
-             "python $W/k8_bake.py", "p109_box.py --prompts-only", "for TAG in S1a S1b; do", "  install_nsys\n",
+             "python $W/k8_bake.py", "p109_box.py --prompts-only", "for TAG in S1a S1b; do",
+             'if [ "$PROVE" = 1 ] && [ "$ARMS_OK" = 1 ]; then', "p123_box.py --mode routers", "  install_nsys\n",
              "for B in 1 16; do", "for MODE in graph node; do", "sc1b_census.py arm --graph",
              "python $W/p123_reduce.py --dir $W --out $W/verdict_p123.json"]
     at = [RUN.index(s) for s in order]
@@ -199,7 +230,10 @@ def test_the_subject_is_the_shipped_default():
         assert re.search(rf"\b{knob}\b", unset), knob
     assert ('ENGINE_ENV="E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$REV E4B_PAGED_ARENA=$W/work/nf4.arena '
             'E4B_PAGED_CALIB=$W/calib.json E4B_PAGED_MAX_SEQS=16"') in RUN
-    assert not re.search(r"E4B_PAGED_FUSE_QKV=|E4B_FUSE_T1_GLUE=|GNF4_GEMV_BW=", RUN.split(": > summary.txt")[1])
+    after = RUN.split(": > summary.txt")[1]
+    assert not re.search(r"E4B_PAGED_FUSE_QKV=|E4B_FUSE_T1_GLUE=|GNF4_GEMV_BW=", after)
+    code = "\n".join(line for line in after.splitlines() if not line.lstrip().startswith("#"))
+    assert re.findall(r"E4B_FUSE_ROUTER_EPI=\S*", code) == ["E4B_FUSE_ROUTER_EPI=auto"], "only Amendment 1's build"
     box = (LANE / "p123_box.py").read_text()
     census = (LANE / "p123_census.py").read_text()
     assert "default_env_ok(os.environ)" in box and "default_env_ok(os.environ)" in census
@@ -216,7 +250,7 @@ def test_every_time_left_check_fits_its_own_guard():
         assert int(need) + 600 <= 0.75 * 3600 - 900, prove
     for need in reading.values():
         assert int(need) + 600 <= 1.5 * 3600 - 900, reading
-    assert re.findall(r"can_run (\S+)", RUN) == ["$NEED_FETCH", "$NEED_BAKE", "$NEED_ARM", "$NEED_CAPTURE"]
+    assert re.findall(r"can_run (\S+)", RUN) == ["$NEED_FETCH", "$NEED_BAKE", "$NEED_ARM", "$NEED_ARM", "$NEED_CAPTURE"]
 
 
 def test_lane_failures_avoid_the_machine_exclusion_codes():

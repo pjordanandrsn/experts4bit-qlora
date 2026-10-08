@@ -11811,6 +11811,31 @@
       "row_status": "OK",
       "row_reason": "Valid known-subject diagnostic only (COMPLETE_DIAGNOSTIC); capacity and calibration_replacement licenses are false.",
       "notes": "Four paired tiny proofs pass bitwise loss/all28 gradients/updates/reload and sampled frozen integrity. Q32 resident2048 clear releases32MiB with allocated unchanged; other seven release0; all training peak deltas0. Training reserve slack remains; no cache-clear executor change, reserve import, DQ8 or opt-in removal follows. DQ7 stays VOID. Invoice$0.343; teardown verified."
+    },
+    {
+      "id": "e4b.train.single-ladder-auto.gpu-bound.5090.2026-10-08",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 72 (#835), amendment 71's box unchanged on a third host (tc1-5090-141, AMD Ryzen 9 9950X3D, Vast machine 18967, GPU-bound: the matched l0's GPU busy 0.884 of its step, no draw voided for host load): grouped-nf4-gemm's NF4_QLORA_SINGLE_LADDER=auto against 0 at TC1's field recipe over 60 load-gated steps, e4b at its defaults in venv-unsloth (torch 2.12.1), the shipped (bf16 adapters) and the matched (fp32 adapters) arm, two draws a side in ABBA order, every arm profiled. Matched s/step la / l0 1.031 [1.028, 1.034] (P215 HELD, <= 1.05 on a GPU-bound box); shipped 1.002 [1.001, 1.003] (P216 HELD); aten::bmm CPU self per call 95.9 -> 8.8 us = 0.092 (P217 HELD); device ms per profiled step 1.055 matched, 0.999 shipped (P218 HELD); held-out unchanged (P219 HELD). P220 and P221 hold with P219, so by amendment 72's rule auto becomes grouped-nf4-gemm's default.",
+      "value": 1.031,
+      "unit": "ratio, s/step NF4_QLORA_SINGLE_LADDER=auto / =0, e4b matched arm (fp32 adapters) at TC1's field recipe on a GPU-bound box (medians of two draws); shipped arm (bf16 adapters) 1.002",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-141: instance 54916667, AMD Ryzen 9 9950X3D, 32 threads, Vast machine 18967); e4b @ 9629874 + grouped-nf4-gemm @ 3ce2ecd, torch 2.12.1+cu130",
+      "conditions": "bench/tc1 token qwen3slauto (TC1 amendments 71 and 72): TC1's tokens and field recipe, TC1_STEPS=60, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_shipped_l0 / _la and fused_attn4_m_l0 / _la (+ _d2), --phase-peaks 1 and the profile instrument on every arm; validity (slauto_why) and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-08",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-slauto-h3.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-141/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-08/tc1-5090-141/tc1/"
+      ],
+      "notes": "Vast invoiced $0.798. Amendment 70's host-bound box read 0.797 on the matched arm; this GPU-bound one 1.031, the ladder's 5.5 % of device time not hidden. The default flip is grouped-nf4-gemm#521."
     }
   ]
 }

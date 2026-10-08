@@ -3,11 +3,14 @@
 """p123_reduce.py -- lane P123's rule (#1313; bench/p123/PREREG-p123.md): where the shipped default's decode step goes.
 
 Inputs in --dir: the unprofiled speed arms ``arm_S1a.json`` / ``arm_S1b.json`` (p123_box.py), the census drivers'
-records ``census_drv_b1.json`` / ``census_drv_b16.json`` (p123_census.py), and the census arms ``census_b1.json`` /
-``census_b16.json`` (bench/sc1b/sc1b_census.py ``arm`` with the v1 NF4 class map, unchanged).
+records ``census_drv_b1.json`` / ``census_drv_b16.json`` (p123_census.py), the census arms ``census_b1.json`` /
+``census_b16.json`` (bench/sc1b/sc1b_census.py ``arm`` with the v1 NF4 class map, unchanged), and on the proof
+``router_census.json`` (Amendment 1: p123_box.py --mode routers).
 
 First rung that applies:
-  VOID   a record missing or not ok; another e4b / grouped-nf4-gemm commit or model revision; not the shipped default
+  VOID   a record missing or not ok; another e4b / grouped-nf4-gemm commit or model revision; on the proof, the router
+         epilogue licensed on fewer than every router under E4B_FUSE_ROUTER_EPI=auto alone (Amendment 1: the
+         fam-prove-1 case, #1398's regression check); not the shipped default
          (a fusion knob not resolved by the default, the fusion census or the decode-GEMV route off the registration);
          a speed slope void; a census arm void, or labelled CLASS_MAP_INCOMPLETE, CLASS_MAP_SEGMENT_BROKEN,
          NSYS_DIAGNOSTIC_ERRORS or CLOCK_MISMATCH; a census window not exactly the registered steps.
@@ -129,16 +132,39 @@ def read_batch(c, drv, unprof_ms, b, proof):
     return row
 
 
-def reduce(arms, drvs, census, e4b_sha, proof=False):
+def router_faults(r, e4b_sha, model) -> list:
+    """Amendment 1, the proof: every router licensed by the epilogue's probe under E4B_FUSE_ROUTER_EPI=auto alone."""
+    out = []
+    if r.get("e4b_sha") != e4b_sha or r.get("model") != model:
+        out.append(f"router_census: e4b {r.get('e4b_sha')} model {r.get('model')}")
+    want = {k: (None if k != "E4B_FUSE_ROUTER_EPI" else "auto") for k in KNOBS}
+    if {k: (r.get("knobs") or {}).get(k) for k in KNOBS} != want:
+        out.append(f"router_census: knobs {r.get('knobs')}, Amendment 1 sets E4B_FUSE_ROUTER_EPI=auto alone")
+    if (r.get("fusion_sources") or {}).get("E4B_FUSE_ROUTER_EPI") != "explicit":
+        out.append(f"router_census: the router knob resolved {(r.get('fusion_sources') or {}).get('E4B_FUSE_ROUTER_EPI')}")
+    n = (r.get("fusions") or {}).get("fuse_router_epilogue_n")
+    if n != MOE_LAYERS[model]:
+        out.append(f"router_census: the router epilogue licensed {n} of {MOE_LAYERS[model]} routers "
+                   f"(report {r.get('router_report')})")
+    return out
+
+
+def reduce(arms, drvs, census, e4b_sha, proof=False, routers=None):
     model = GRAN if proof else QWEN
     out = {"lane": "P123", "proof": proof, "model": model, "verdict": None, "reasons": []}
     missing = [f"arm_{t}" for t in ("S1a", "S1b") if not arms.get(t) or arms[t].get("status") != "ok"]
+    if proof and (not routers or routers.get("status") != "ok"):
+        missing.append("router_census")
     missing += [f"census_drv_b{b}" for b in BATCHES if not drvs.get(b)]
     missing += [f"census_b{b}" for b in BATCHES if not census.get(b)]
     if missing:
         out.update(verdict="VOID", reasons=[f"record(s) missing or not ok: {missing}"])
         return out
     void = []
+    if proof:
+        void += router_faults(routers, e4b_sha, model)
+        out["routers"] = {"licensed": (routers.get("fusions") or {}).get("fuse_router_epilogue_n"),
+                          "of": MOE_LAYERS[model], "report": routers.get("router_report")}
     for t, r in arms.items():
         void += speed_faults(t, r, e4b_sha, model, proof)
     for b in BATCHES:
@@ -198,6 +224,21 @@ def fake_drv(b, model=QWEN, steps=STEPS):
             "window_decode_positions": [40, 140], "max_memory_reserved": 25 << 30}
 
 
+def fake_routers(model=GRAN, n=None, knobs=None, source="explicit"):
+    """A router census as p123_box.py --mode routers writes it."""
+    return {"mode": "routers", "e4b_sha": E, "gnf4_sha": GNF4_SHA, "model": model, "revision": REVS[model],
+            "torch": "2.8.0", "load_s": 5.0,
+            "knobs": knobs or {k: ("auto" if k == "E4B_FUSE_ROUTER_EPI" else None) for k in KNOBS},
+            "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0],
+                        "fuse_router_epilogue_n": MOE_LAYERS[model] if n is None else n},
+            "fusion_modes": {k: ("auto" if k == "E4B_FUSE_ROUTER_EPI" else "0") for k in KNOBS},
+            "fusion_sources": {k: (source if k == "E4B_FUSE_ROUTER_EPI" else "default-off") for k in KNOBS},
+            "model_type": "granitemoe", "router_report": {
+                "mode": "auto", "patched": MOE_LAYERS[model] if n is None else n,
+                "failed_probe": 0 if n is None else MOE_LAYERS[model] - n, "no_kernel_mode": 0, "fp32_upstream": 0},
+            "moe_layers": MOE_LAYERS[model], "status": "ok"}
+
+
 def fake_census(b, p=4.6, shares=None, labels=None, i_in=0.15, idle_out=0.2, kps=1200, status=None):
     """A census arm as sc1b_census.arm writes it (P_ms, terms, labels, gates, node)."""
     sh = shares or {"dense_gemm": 0.40, "moe_expert": 0.22, "attn": 0.10, "moe_route": 0.05, "norm_elem": 0.08,
@@ -213,13 +254,13 @@ def fake_census(b, p=4.6, shares=None, labels=None, i_in=0.15, idle_out=0.2, kps
 
 
 def self_test() -> int:
-    def run(arms=None, drvs=None, census=None, proof=False):
+    def run(arms=None, drvs=None, census=None, proof=False, routers=None):
         model = GRAN if proof else QWEN
         arms = arms or {"S1a": fake_arm("S1a", model), "S1b": fake_arm("S1b", model)}
         drvs = drvs or {b: fake_drv(b, model) for b in BATCHES}
         census = census or {1: fake_census(1), 16: fake_census(16, p=17.0, shares={
             "dense_gemm": 0.2, "moe_expert": 0.5, "attn": 0.08, "moe_route": 0.05, "norm_elem": 0.05})}
-        return reduce(arms, drvs, census, E, proof=proof)
+        return reduce(arms, drvs, census, E, proof=proof, routers=routers or (fake_routers() if proof else None))
     v = lambda **kw: run(**kw)["verdict"]  # noqa: E731
     r = run()
     b1 = r["batches"]["1"]
@@ -256,6 +297,16 @@ def self_test() -> int:
                                   {1: fake_census(1)}, E)["verdict"] == "VOID"),
         ("proof on Granite's unfused default", run(proof=True, arms={"S1a": fake_arm("S1a", GRAN),
                                                                     "S1b": fake_arm("S1b", GRAN)})["verdict"] == "READ"),
+        ("Amendment 1: a proof whose routers all license", run(proof=True, arms={
+            "S1a": fake_arm("S1a", GRAN), "S1b": fake_arm("S1b", GRAN)})["routers"]["licensed"] == 32),
+        ("Amendment 1: 27 of 32 routers VOIDs the proof (fam-prove-1)", run(proof=True, arms={
+            "S1a": fake_arm("S1a", GRAN), "S1b": fake_arm("S1b", GRAN)}, routers=fake_routers(n=27))["verdict"] == "VOID"),
+        ("Amendment 1: a proof without the router census VOIDs", reduce(
+            {"S1a": fake_arm("S1a", GRAN), "S1b": fake_arm("S1b", GRAN)}, {b: fake_drv(b, GRAN) for b in BATCHES},
+            {1: fake_census(1), 16: fake_census(16, p=17.0)}, E, proof=True)["verdict"] == "VOID"),
+        ("Amendment 1: another knob set VOIDs", run(proof=True, arms={
+            "S1a": fake_arm("S1a", GRAN), "S1b": fake_arm("S1b", GRAN)}, routers=fake_routers(knobs={
+                **{k: None for k in KNOBS}, "E4B_FUSE_ROUTER_EPI": "auto", "E4B_FUSE_T1_GLUE": "auto"}))["verdict"] == "VOID"),
         ("the reading's records on a proof", run(proof=True, arms={"S1a": fake_arm("S1a"), "S1b": fake_arm("S1b")},
                                                   drvs={b: fake_drv(b) for b in BATCHES})["verdict"] == "VOID"),
         ("the default's census is #1361's", DEFAULT[QWEN]["census"]["fuse_t1_glue_n"] == 4 * MOE_LAYERS[QWEN] + 1),
@@ -278,7 +329,7 @@ def main(argv=None) -> int:
     arms = {t: r for t in ("S1a", "S1b") if (r := _load(a.dir, f"arm_{t}.json"))}
     drvs = {b: r for b in BATCHES if (r := _load(a.dir, f"census_drv_b{b}.json"))}
     census = {b: r for b in BATCHES if (r := _load(a.dir, f"census_b{b}.json"))}
-    v = reduce(arms, drvs, census, a.e4b_sha, proof=a.proof)
+    v = reduce(arms, drvs, census, a.e4b_sha, proof=a.proof, routers=_load(a.dir, "router_census.json"))
     json.dump(v, open(a.out, "w"), indent=1, default=str)
     print(f"P123_VERDICT {v['verdict']} {json.dumps(v['reasons'], default=str)[:1500]}")
     return 0

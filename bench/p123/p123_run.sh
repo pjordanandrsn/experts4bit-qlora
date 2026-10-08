@@ -180,6 +180,19 @@ for TAG in S1a S1b; do
   { echo -n "arm $TAG rc=$rc "; grep -a "^P123_ARM" logs/arm_$TAG.log | tail -1 | cut -c1-600; echo; } | tee -a summary.txt
   [ "$rc" = 0 ] || { ARMS_OK=0; tail -6 logs/arm_$TAG.log | cut -c1-300 | tee -a summary.txt; say "ARM $TAG FAILED (rc=$rc) -- the reducer will VOID"; }
 done
+# ---- Amendment 1 (the proof only): the router epilogue's probe on every router of this model on this card, the
+# default server built with E4B_FUSE_ROUTER_EPI=auto alone (Granite's default leaves the fold off; fam-prove-1 read 27 of
+# 32 on a 5090 under #1385's probe). A failure leaves no record and the reducer VOIDs the proof.
+if [ "$PROVE" = 1 ] && [ "$ARMS_OK" = 1 ]; then
+  can_run $NEED_ARM "routers" || finish 40
+  AL=$(step_alarm 1200); say "routers (alarm=$AL)"
+  # shellcheck disable=SC2086
+  env PYTHONPATH= $ENGINE_ENV E4B_FUSE_ROUTER_EPI=auto E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA \
+    perl -e "alarm $AL; exec @ARGV" python $W/p123_box.py --mode routers --out $W/router_census.json > logs/routers.log 2>&1
+  rc=$?
+  { echo -n "routers rc=$rc "; grep -a "^P123_ROUTERS" logs/routers.log | tail -1 | cut -c1-400; echo; } | tee -a summary.txt
+  [ "$rc" = 0 ] || { tail -6 logs/routers.log | cut -c1-300 | tee -a summary.txt; say "ROUTERS FAILED (rc=$rc) -- the reducer will VOID the proof"; }
+fi
 # ---- the census (not when a speed arm failed): Nsight Systems, then B = 1 and 16, graph mode then node mode
 install_nsys(){ say "install nsight-systems-cli-$NSYS_VER (NVIDIA devtools apt repo; the image's own nsys is Nsight Compute's, never used)"
   { apt-get update -qq && apt-get install -y -qq --no-install-recommends gnupg2 wget ca-certificates \
