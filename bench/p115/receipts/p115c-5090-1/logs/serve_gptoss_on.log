@@ -1,0 +1,19 @@
+Fetching 12 files:   0%|          | 0/12 [00:00<?, ?it/s]Fetching 12 files: 100%|██████████| 12/12 [00:00<00:00, 1244.75it/s]
+[04:05:36]   checkpoint: openai/gpt-oss-20b @ 6cee5e81ee83917806bbde320786a8fb61efebee (requested 6cee5e81ee83917806bbde320786a8fb61efebee)
+[04:05:36]   fusing + quantizing experts (up to 24x32) to nf4 (streaming)...
+[04:05:36]   quantized experts on 24/24 MoE layers (32 experts each)
+[04:05:36]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[04:05:39]   experts deferred to the arena: 24 module(s), 120 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[04:05:39]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[04:05:50]   hybrid tier active on 24 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Fetching 12 files:   0%|          | 0/12 [00:00<?, ?it/s]Fetching 12 files: 100%|██████████| 12/12 [00:00<00:00, 1421.88it/s]
+[serve_paged] INT4EXP enabled: 24 layers (model_type=gpt_oss)
+[serve_paged] fusions (q/k/v auto; folds set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 0, 'fuse_t1_glue_n': 49, 'fuse_t1_glue_r2_n': [24, 0], 'fuse_router_epilogue_n': 24}
+DECODE_GRAPH bucket=1 captured
+DECODE_GRAPH bucket=2 captured
+DECODE_GRAPH bucket=4 captured
+DECODE_GRAPH bucket=8 captured
+DECODE_GRAPH bucket=16 captured
+[serve_paged] PREFILL_GRAPH on (auto): first chunks of 512 tokens replay one graph (startup check bitwise on two prompts; pool 246 MiB, 4902 MiB free)
+[serve_paged] ready: {"moe_layers": 24, "experts": 32, "top_k": 4, "model_type": "gpt_oss", "int4_expert_layers": 24, "int4_store_kinds": ["mxfp4"], "int4_attn_projections": 0, "kv": {"n_kv_heads": 8, "head_dim": 64, "k_groups": "auto", "scratch_slots": 16, "blocks_per_seq": 256, "pool_mib": 1783.7}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "grouping": {"device_grouping": true, "force_singleton_groups": false}, "prefill_graph": "auto", "levers_env": {"E4B_SERVE_EXP_INT4": "1", "E4B_SERVE_ATTN_INT4_CALIB": "0", "E4B_CALIB_SOURCE": "c4", "E4B_INT4_KEEP_NF4": "1", "E4B_FUSE_T1_GLUE": "auto", "E4B_FUSE_T1_GLUE_R2": "auto", "E4B_FUSE_ROUTER_EPI": "auto"}, "exp_int4_layers_enabled": 24, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glue_n": 49, "fuse_t1_glue_r2_n": [24, 0], "fuse_router_epilogue_n": 24, "fusion_modes": {"E4B_PAGED_FUSE_QKV": "auto", "E4B_FUSE_T1_GLUE": "auto", "E4B_FUSE_T1_GLUE_R2": "auto", "E4B_FUSE_ROUTER_EPI": "auto"}, "fusion_report": {"E4B_FUSE_T1_GLUE": {"mode": "auto", "patched": 49, "failed_probe": 0}, "E4B_FUSE_T1_GLUE_R2": {"mode": "auto", "patched": [24, 0], "kernel_gaps": 0}, "E4B_FUSE_ROUTER_EPI": {"mode": "auto", "patched": 24, "failed_probe": 0, "no_kernel_mode": 0}}, "pinned_cache_released": true, "host_heap_trimmed": true}
+P115C_SERVE gptoss/on census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 49, 'fuse_t1_glue_r2_n': [24, 0], 'fuse_router_epilogue_n': 24} graphs={'1': 'graph', '2': 'graph', '4': 'graph', '8': 'graph', '16': 'graph'} passes=1
