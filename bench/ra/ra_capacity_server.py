@@ -23,7 +23,7 @@ def parent_death_guard(parent_pid):
         raise RuntimeError("capacity supervisor already exited")
 
 
-def instrumented_app(server, instrument, cfg):
+def instrumented_app(server, instrument, cfg, *, listener=None):
     original = server.build_engine
     observed = {}
     attempted = False
@@ -33,7 +33,7 @@ def instrumented_app(server, instrument, cfg):
         if attempted:
             raise RuntimeError("capacity engine may build only once")
         attempted = True
-        parts, kernels, forwards = ra_serving.build_instrumented(server, instrument, config, builder=original)
+        parts, kernels, forwards = ra_serving.build_instrumented(server, instrument, config, builder=original, listener=listener)
         observed.update(parts=parts, kernels=kernels, forwards=forwards)
         return parts
 
@@ -49,6 +49,7 @@ def instrumented_app(server, instrument, cfg):
                 "config": {k: v for k, v in vars(cfg).items() if k != "token"},
                 "fusions": {k: copy.deepcopy(parts.info[k]) for k in instrument.CENSUS_KEYS},
                 "fusion_modes": copy.deepcopy(parts.info["fusion_modes"]),
+                "resolved_defaults": copy.deepcopy(observed["forwards"].ra_defaults),
                 "kernels": observed["kernels"].snapshot(), "forward_counts": observed["forwards"].snapshot()}
 
     return app
@@ -82,7 +83,7 @@ def main():
         raise ValueError("owned loopback listener required")
     cfg = serve_paged.PagedServeConfig.from_env()
     cfg.host, cfg.port = listener.getsockname()
-    app = instrumented_app(serve_paged, p115_quality, cfg)
+    app = instrumented_app(serve_paged, p115_quality, cfg, listener=listener)
     uvicorn.Server(uvicorn.Config(app, host=cfg.host, port=cfg.port, log_level="info")).run(sockets=[listener])
 
 

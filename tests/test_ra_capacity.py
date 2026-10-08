@@ -240,11 +240,11 @@ def test_server_hooks_before_capture_builds_once_and_redacts_token(monkeypatch):
     server.create_app = lambda cfg: app
     seen = []
 
-    def instrument(server, instrument, cfg, *, builder):
+    def instrument(server, instrument, cfg, *, builder, listener=None):
         assert builder is original
         seen.append("before-capture")
         return builder(cfg), types.SimpleNamespace(snapshot=lambda: {"calls": 1}), types.SimpleNamespace(
-            snapshot=lambda: {"qkv_calls": 1})
+            snapshot=lambda: {"qkv_calls": 1}, ra_defaults={"synthetic": True})
 
     monkeypatch.setattr(server_wrapper.ra_serving, "build_instrumented", instrument)
     instrumented = server_wrapper.instrumented_app(server, types.SimpleNamespace(CENSUS_KEYS=("census",)), cfg)
@@ -252,6 +252,7 @@ def test_server_hooks_before_capture_builds_once_and_redacts_token(monkeypatch):
     assert server.build_engine(cfg) is parts
     evidence = instrumented.routes["/_ra/evidence"]()
     assert "token" not in evidence["config"] and evidence["kernels"] == {"calls": 1}
+    assert evidence["resolved_defaults"] == {"synthetic": True}
     assert seen == ["before-capture"]
     with pytest.raises(RuntimeError, match="only once"):
         server.build_engine(cfg)

@@ -31,3 +31,7 @@ The local test environment lacks Uvicorn; actual HTTP serving is not rehearsed.
 Output explicitly remains pending engagement: independent wheel/input/default/
 fallback verification, full trace/request joins, GPU premises, ABBA, lock and
 reviewed launch/ledger/retrieval/teardown gates still precede proof clearance.
+
+The listener is the only host/port config exception. Shared assembly compares
+other fields to the native factory and resolves fusion modes by the loaded
+model family; evidence retains both raw and resolved modes and their sources.

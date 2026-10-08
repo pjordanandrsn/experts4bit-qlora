@@ -6,3 +6,6 @@ CPU composition checks grant no GPU capacity claim or proof clearance.
 
 CPU capacity composition loads the serving fallback and route adapters explicitly,
 so isolated collection has the same dependencies as the combined suite.
+
+Bind config host/port changes to the inherited listening socket and retain the
+independently resolved family defaults in capacity evidence.
