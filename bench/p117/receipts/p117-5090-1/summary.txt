@@ -1,0 +1,38 @@
+KNOBS e4b=9ea952809014fee4985d079a0c0b7f13f9bb3717 gnf4=b4f93f1c62d1e3436ed45bec8ccd608c90433737 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 prove=0 windows=64 cont=128
+e4b 0.48.0 @9ea952809014fee4985d079a0c0b7f13f9bb3717
+gnf4 0.42.0 @b4f93f1c62d1e3436ed45bec8ccd608c90433737
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+p117_reduce self-test OK (22 cases)
+premise run rc=0: 7 passed in 6.38s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+box rc=0 P117_BOX: windows 64 | rep bias +0.00000 spread 0.00000 | half bias -0.00251 spread 0.01449 | chunk bias -0.00066 spread 0.01478 | rev bias +0.00000 spread 0.00000 | W32 bias +0.00059 spread 0.01520 | W64 bias -0.00317 spread 0.01449 | W64pad bias -0.00331 spread 0.01397 | mutant_scale bias +1.14650 spread 1.14650 | rep identical True | function {'positions': 8128, 'differ': 0} | load 91s | mem 21.32 GB | 227.1 s
+
+P117_ARM rep done at 54 s
+P117_ARM half done at 96 s
+P117_ARM chunk done at 124 s
+P117_ARM rev done at 150 s
+P117_ARM W32 done at 168 s
+P117_ARM W64 done at 184 s
+P117_ARM W64pad done at 197 s
+P117_ARM mutant_scale done at 213 s
+P117_ARM G64 done at 227 s
+P117_VERDICT AT_PARITY ["W32 bias +0.00059 (bar 0.01251), spread 0.01520 (bar 0.02956)", "W64 bias -0.00317 (bar 0.01251), spread 0.01449 (bar 0.02956)", "W64pad bias -0.00331 (bar 0.01251), spread 0.01397 (bar 0.02956)"]
+  floor: {"draws": ["half", "chunk", "rev"], "B_floor": 0.002507233322159831, "S_floor": 0.014778721290706925}
+  bar: {"tol": 0.01, "spread_x": 2.0, "spread_min": 0.005, "bias_bar": 0.012507233322159831, "spread_bar": 0.02955744258141385}
+  function: {"positions": 8128, "differ": 0}
+  rep_identical: true
+  subjects_pass: {"W32": true, "W64": true, "W64pad": true}
+  rep: bias +0.00000 spread 0.00000 se 0.00000 max 0.00000 kl 0.0 agree 1.0000
+  half: bias -0.00251 spread 0.01449 se 0.00224 max 0.04477 kl 0.011032121734057274 agree 0.9583
+  chunk: bias -0.00066 spread 0.01478 se 0.00246 max 0.07201 kl 0.012611336060124654 agree 0.9537
+  rev: bias +0.00000 spread 0.00000 se 0.00000 max 0.00000 kl 0.0 agree 1.0000
+  W32: bias +0.00059 spread 0.01520 se 0.00233 max 0.06048 kl 0.010913873222768608 agree 0.9543
+  W64: bias -0.00317 spread 0.01449 se 0.00223 max 0.04803 kl 0.011142332310625025 agree 0.9583
+  W64pad: bias -0.00331 spread 0.01397 se 0.00250 max 0.04803 kl 0.011199089485335831 agree 0.9606
+  mutant_scale: bias +1.14650 spread 1.14650 se 0.03620 max 2.07153 kl 1.267808388767999 agree 0.5764
