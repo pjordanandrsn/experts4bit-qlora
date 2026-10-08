@@ -168,9 +168,9 @@ _WIDE_TILES_MAX = 1024
 
 
 def _wide_tiles_mode_env() -> str:
-    """``E4B_INT4_WIDE_TILES`` (e4b#846): ``1`` builds the device tile table of a call with 257 to
-    :data:`_WIDE_TILES_MAX` routed rows -- a decode step above 32 rows at top-k 8, which takes K19's prefill route --
-    in ONE launch with grouped-nf4-gemm's cumsum rank, instead of the chained builder (argsort, scatter, cumsum,
+    """``E4B_INT4_WIDE_TILES`` (e4b#846): ``1`` builds the device tile table of every device-grouped call with 257 to
+    :data:`_WIDE_TILES_MAX` routed rows -- a decode step above 32 rows at top-k 8, on the int4 store's K19 route or the
+    NF4 store's M-tile alike -- in ONE launch with grouped-nf4-gemm's cumsum rank, instead of the chained builder (argsort, scatter, cumsum,
     searchsorted, index_select: lane P119 read it at 2.87 ms of a 15.64 ms 64-row step against 0.93 ms for the
     one-launch table at 256 rows). The tables are the chained builder's integers (grouped-nf4-gemm's
     ``test_tile_table_cumsum_interp.py``), so outputs are bit-identical. ``0`` (the default, also when unset) keeps the
