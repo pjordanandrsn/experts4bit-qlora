@@ -1,0 +1,127 @@
+{
+ "lane": "P122",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "predictions": {
+  "Q1": {
+   "band": [
+    0.06,
+    0.12
+   ],
+   "result": "HELD",
+   "statistic": "builder_share_off",
+   "value": 0.0906
+  },
+  "Q2": {
+   "band": [
+    0.3,
+    1.0
+   ],
+   "result": "MISSED",
+   "statistic": "table_on_over_builder_off",
+   "value": 1.75
+  },
+  "Q3": {
+   "band": [
+    0.88,
+    0.99
+   ],
+   "result": "HELD",
+   "statistic": "eager_on_over_off",
+   "value": 0.9748
+  },
+  "Q4": {
+   "band": [
+    0.86,
+    0.96
+   ],
+   "result": "HELD",
+   "statistic": "served_ratios",
+   "value": [
+    0.9568,
+    0.9569
+   ]
+  },
+  "Q5": {
+   "band": [
+    0.0,
+    0.005
+   ],
+   "result": "HELD",
+   "statistic": "same_setting_disagreement",
+   "value": 0.001
+  }
+ },
+ "reasons": [
+  "ON/OFF 0.9568, 0.9569 <= 0.98"
+ ],
+ "tables": {
+  "builder_share_off": 0.0906,
+  "eager_off_minus_on_ms": 0.399,
+  "eager_on_over_off": 0.9748,
+  "off_disagreement": 0.0008,
+  "off_minus_on_ms": 0.756,
+  "on_disagreement": 0.001,
+  "profile": {
+   "off": {
+    "builder_ms": 1.4336,
+    "device_ms": 15.8183,
+    "radix_sort_calls": 48.0,
+    "table_calls": 0.0,
+    "table_ms": 0.0
+   },
+   "on": {
+    "builder_ms": 0.0,
+    "device_ms": 15.4193,
+    "radix_sort_calls": 0.0,
+    "table_calls": 48.0,
+    "table_ms": 2.5088
+   }
+  },
+  "ratio_a": 0.9568,
+  "ratio_b": 0.9569,
+  "same_setting_disagreement": 0.001,
+  "served": {
+   "MUTANT": {
+    "max_ms": 13.9201,
+    "median_ms": 13.3405,
+    "min_ms": 12.956
+   },
+   "OFF_a": {
+    "max_ms": 18.7621,
+    "median_ms": 17.5261,
+    "min_ms": 16.2785
+   },
+   "OFF_b": {
+    "max_ms": 18.6021,
+    "median_ms": 17.5407,
+    "min_ms": 16.3971
+   },
+   "ON_a": {
+    "max_ms": 22.6041,
+    "median_ms": 16.7693,
+    "min_ms": 15.6388
+   },
+   "ON_b": {
+    "max_ms": 18.862,
+    "median_ms": 16.7856,
+    "min_ms": 15.8255
+   }
+  },
+  "served_ratios": [
+   0.9568,
+   0.9569
+  ],
+  "table_on_over_builder_off": 1.75,
+  "tokens": {
+   "compared": 16704,
+   "mutant_vs_off_differing": 16254,
+   "mutant_vs_off_first_diff": [
+    0,
+    1
+   ],
+   "on_vs_off_differing": 0,
+   "on_vs_off_first_diff": null
+  }
+ },
+ "verdict": "DEFAULT_ON"
+}
