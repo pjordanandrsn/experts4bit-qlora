@@ -587,3 +587,60 @@ def test_a_biased_router_returning_unbiased_logits_is_refused(monkeypatch, dtype
     m.gate = UnbiasedFirstSlotGptOssRouter().to(dtype)
     with pytest.raises(RuntimeError, match="failed the semantic probe"):
         fuse_router_epilogue(m)
+
+
+# ---------------------------------------- the cast follows upstream's dtype (e4b#1368) --
+# Mixtral's router returns fp32 weights; Qwen3-MoE's casts them to the logits' dtype. The fused path may cast only
+# where the module's own forward does, read by the probe from the module, under every E4B_ROUTER_EPI_CAST setting.
+
+@pytest.mark.parametrize("setting", [None, True])
+def test_a_router_returning_fp32_is_never_cast(monkeypatch, setting):
+    from experts4bit_qlora.engines import router_epilogue as re_mod
+    monkeypatch.setenv("E4B_FUSE_ROUTER_EPI", "1")
+    monkeypatch.setattr(re_mod, "CAST_WEIGHTS", [setting])
+    calls = {"fused": 0}
+    _stub(monkeypatch, calls)
+    torch.manual_seed(13)
+    m = torch.nn.Module()
+    m.gate = MixtralLikeRouter().to(torch.bfloat16)          # bf16 BEFORE fusing, as a served model is
+    ref = copy.deepcopy(m.gate)
+    report = {}
+    assert fuse_router_epilogue(m, report=report) == 1 and report["fp32_upstream"] == 1
+    x = torch.randn(8, HID, dtype=torch.bfloat16)
+    _, w, i = m.gate(x)
+    _, rw, ri = ref(x)
+    assert calls["fused"] == 1 and rw.dtype == w.dtype == torch.float32
+    assert torch.equal(i, ri)
+
+
+def _real_router(modeling, config_cls, router_cls, **cfg):
+    m = pytest.importorskip(f"transformers.models.{modeling}.modeling_{modeling}")
+    torch.manual_seed(17)
+    return getattr(m, router_cls)(getattr(m, config_cls)(hidden_size=HID, **cfg)).to(torch.bfloat16)
+
+
+@pytest.mark.parametrize("modeling,config_cls,router_cls,cfg,upstream", [
+    ("mixtral", "MixtralConfig", "MixtralTopKRouter", {"num_local_experts": E, "num_experts_per_tok": K},
+     torch.float32),
+    ("qwen3_moe", "Qwen3MoeConfig", "Qwen3MoeTopKRouter",
+     {"num_experts": E, "num_experts_per_tok": K, "norm_topk_prob": True}, torch.bfloat16),
+])
+@pytest.mark.parametrize("setting", [None, True])
+def test_real_routers_keep_their_upstream_weight_dtype(monkeypatch, modeling, config_cls, router_cls, cfg, upstream,
+                                                       setting):
+    """transformers' own routers, bf16: the fused weights come back in the dtype upstream returns -- fp32 on Mixtral
+    whatever the setting, bf16 on Qwen3-MoE under the default and under '1'."""
+    from experts4bit_qlora.engines import router_epilogue as re_mod
+    monkeypatch.setenv("E4B_FUSE_ROUTER_EPI", "1")
+    monkeypatch.setattr(re_mod, "CAST_WEIGHTS", [setting])
+    calls = {"fused": 0}
+    _stub(monkeypatch, calls)
+    m = torch.nn.Module()
+    m.gate = _real_router(modeling, config_cls, router_cls, **cfg)
+    ref = copy.deepcopy(m.gate)
+    assert fuse_router_epilogue(m) == 1
+    x = torch.randn(8, HID, dtype=torch.bfloat16)
+    _, w, i = m.gate(x)
+    _, rw, ri = ref(x)
+    assert calls["fused"] == 1 and rw.dtype == upstream and w.dtype == upstream
+    assert torch.equal(i, ri)
