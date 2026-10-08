@@ -1,0 +1,21 @@
+KNOBS e4b=6357ecc3d784a0f6aed1f0d33e1d53b8a72bb1ed gnf4=b155f1c120843b639581ac5d5242cb1ec37d71e1 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 prove=0 windows=64
+e4b 0.50.0 @6357ecc3d784a0f6aed1f0d33e1d53b8a72bb1ed
+gnf4 0.43.0 @b155f1c120843b639581ac5d5242cb1ec37d71e1
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+p122_reduce self-test OK (30 cases)
+premise run rc=0: 7 passed in 11.38s
+premise rank rc=0: 117 passed in 117.14s (0:01:57)
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+box rc=0 P120_BOX: OFF_a 17.5261 ms | ON_a 16.7693 ms | ON_b 16.7855 ms | OFF_b 17.5407 ms | MUTANT 13.3405 ms | builder off 1.4336 on 0 ms | load 166s | 132.1 s
+
+P120_ARM OFF_a median 17.5261 ms at 62 s
+P120_ARM ON_a median 16.7693 ms at 79 s
+P120_ARM ON_b median 16.7855 ms at 97 s
+P120_ARM OFF_b median 17.5407 ms at 115 s
+P122_VERDICT DEFAULT_ON ["ON/OFF 0.9568, 0.9569 <= 0.98"]
