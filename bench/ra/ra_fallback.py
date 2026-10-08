@@ -20,11 +20,39 @@ FEATURES = ("rms_glue", "residual_glue", "rope_glue", "router_epilogue")
 MODULES = {"experts4bit_qlora.engines." + m for m in ("glue_fuse", "glue_r2", "router_epilogue")}
 
 
+def canonical_ast(value):
+    """Explicit fields, including empty lists; ignore only absent generic params.
+
+    ast.dump formatting and optional fields change with Python. Registered
+    bodies use no generic type parameters; nonempty parameters remain hashed.
+    """
+    if isinstance(value, ast.AST):
+        fields = {k: canonical_ast(v) for k, v in ast.iter_fields(value)
+                  if not (k == "type_params" and not v)}
+        return {"node": type(value).__name__, "fields": fields}
+    if isinstance(value, list):
+        return [canonical_ast(v) for v in value]
+    if isinstance(value, bytes):
+        return {"bytes": value.hex()}
+    if isinstance(value, complex):
+        return {"complex": [value.real, value.imag]}
+    if value is Ellipsis:
+        return {"ellipsis": True}
+    if value is None or type(value) in (str, bool, int, float):
+        return value
+    raise ValueError("unsupported AST value")
+
+
+def ast_digest(tree):
+    raw = json.dumps(canonical_ast(tree), sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
 def fingerprint(fn):
     tree = ast.parse(textwrap.dedent(inspect.getsource(fn)))
     if len(tree.body) != 1 or not isinstance(tree.body[0], ast.FunctionDef):
         raise ValueError("unsupported forward source")
-    return hashlib.sha256(ast.dump(tree.body[0], include_attributes=False).encode()).hexdigest()
+    return ast_digest(tree.body[0])
 
 
 def rows(args, kwargs):
@@ -70,7 +98,7 @@ def clone_orig(fn, observer):
 class GlueObserver:
     def __init__(self, adapters=None):
         data = adapters or json.loads(Path(__file__).with_name("fallback-adapters.json").read_text())
-        if data["schema"] != 1:
+        if data["schema"] != 2:
             raise ValueError("unknown fallback adapter schema")
         self.adapters = {(r["module"], r["qualname"], r["ast_sha256"]): r["feature"] for r in data["adapters"]}
         if len(self.adapters) != len(data["adapters"]) or any(role not in FEATURES for role in self.adapters.values()):

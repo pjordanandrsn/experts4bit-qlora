@@ -29,7 +29,9 @@ calls without changing installed function defaults. Small-row fallbacks and
 large-row prefill fallbacks are separate, with per-pass and per-module counts.
 This observes Python eager/capture execution, not replayed graph internals.
 `ra_routes.py` binds the QKV, residency and NF4 modules to source-bound AST
-adapters. QKV coverage checks structural candidates, retained projections and
+adapters. Schema 2 uses explicit canonical AST JSON: empty optional generic
+parameters are omitted and all other fields are retained, independent of
+Python AST display formatting. Older fingerprints refuse. QKV coverage checks structural candidates, retained projections and
 the active fused forward, then reconciles per-projection calls. Its zero-fallback
 basis is the complete supported fusion, which retains no unfused projection.
 GEMV observes each all-VRAM MoE forward and its retained-reference branch,

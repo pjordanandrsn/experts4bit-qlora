@@ -9,3 +9,6 @@ reconcile census and independently reconstructed defaults, and refuse auto
 kernel gaps. Source-bound QKV coverage and per-MoE GEMV/reference/dispatch observations
 replace unknown counters. Partial coverage, unexpected routes and plan
 overrides refuse; failure snapshots remain in process logs. CPU controls establish composition only.
+
+Use canonical AST JSON across Python versions and refuse legacy display-format
+fingerprints; native bodies remain unchanged.

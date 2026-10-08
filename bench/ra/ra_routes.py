@@ -8,18 +8,19 @@ from __future__ import annotations
 import ast
 import copy
 import functools
-import hashlib
 import inspect
 import json
 import sys
 from pathlib import Path
+
+import ra_fallback
 
 PRIMARY = ("dotpad", "dotpad_splitk", "scalar", "scalar_splitk", "bw_tree", "bw_prmt32")
 COUNTERS = set(PRIMARY) | {"bw_splitk"}
 
 
 def module_digest(module):
-    return hashlib.sha256(ast.dump(ast.parse(inspect.getsource(module)), include_attributes=False).encode()).hexdigest()
+    return ra_fallback.ast_digest(ast.parse(inspect.getsource(module)))
 
 
 def counters(nf4):
@@ -32,7 +33,7 @@ def counters(nf4):
 class RouteObserver:
     def __init__(self, nf4, hot, qkv, *, adapters=None):
         data = adapters or json.loads(Path(__file__).with_name("route-adapters.json").read_text())
-        if data["schema"] != 1:
+        if data["schema"] != 2:
             raise ValueError("unknown route adapter schema")
         for name, mod in (("nf4", nf4), ("hot", hot), ("qkv", qkv)):
             if not any(r["module"] == name and r["ast_sha256"] == module_digest(mod) for r in data["modules"]):

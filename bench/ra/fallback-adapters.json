@@ -1,82 +1,82 @@
 {
-  "schema": 1,
+  "schema": 2,
   "baseline_version": "0.50.0",
   "baseline_commit": "72e6dfeb36dfefbfdb84d71b77b1399c64709581",
   "adapters": [
     {
       "module": "experts4bit_qlora.engines.glue_fuse",
       "qualname": "fuse_t1_glue.<locals>._fwd",
-      "ast_sha256": "c81afd748afcdfedabcb848b80de100bef105a50b8ba381a2d5aa92c6e5941f9",
+      "ast_sha256": "b6ed0e81f4392fd4de5f6bedc90a19ffee8fbbf0de9ab916183bea384dbe6374",
       "feature": "rms_glue",
       "source_commit": "72e6dfeb36dfefbfdb84d71b77b1399c64709581"
     },
     {
       "module": "experts4bit_qlora.engines.glue_r2",
       "qualname": "_patch_layer_scaled.<locals>._fwd",
-      "ast_sha256": "a8aeca127e76e1e60985e964ea28a38fd1c2560d12f83427dd87b253bd563780",
+      "ast_sha256": "a4f66fe542cfd6b1ebee45a5487aad556f5d6b7e42596084a2464d15b376dcc5",
       "feature": "residual_glue",
       "source_commit": "72e6dfeb36dfefbfdb84d71b77b1399c64709581"
     },
     {
       "module": "experts4bit_qlora.engines.glue_r2",
       "qualname": "_patch_layer.<locals>._fwd",
-      "ast_sha256": "0535cd6ff65cc1565d1021ba493b79cd39c18081367d7861a4eb45dcebed28f4",
+      "ast_sha256": "cb1e0b2d6b88df1fa1d7758138bae77ce4bc54796f5baf6f9cffc618fb0b0f74",
       "feature": "residual_glue",
       "source_commit": "72e6dfeb36dfefbfdb84d71b77b1399c64709581"
     },
     {
       "module": "experts4bit_qlora.engines.glue_r2",
       "qualname": "_patch_attention.<locals>._fwd",
-      "ast_sha256": "f76debdf87de827f2becc7bef5d4ad0e37b1ddf7bc1e7f090d114e118570fc36",
+      "ast_sha256": "dd2266902b610659fcc3d35ee494df9654f2d5a312fbd87b574fefc85e3e754b",
       "feature": "rope_glue",
       "source_commit": "72e6dfeb36dfefbfdb84d71b77b1399c64709581"
     },
     {
       "module": "experts4bit_qlora.engines.glue_r2",
       "qualname": "_patch_attention_unfused.<locals>._fwd",
-      "ast_sha256": "0c0b839baaf6454cbb8303ae752f1c3c7bb34605b0424cbc925a6d8f231d1206",
+      "ast_sha256": "1331c40d16eeba897ab2c7a49f4d5f4816c4a98fb440579acea869f8f0099aea",
       "feature": "rope_glue",
       "source_commit": "72e6dfeb36dfefbfdb84d71b77b1399c64709581"
     },
     {
       "module": "experts4bit_qlora.engines.glue_r2",
       "qualname": "_patch_attention_rope_only.<locals>._fwd",
-      "ast_sha256": "d2bd636a9e83941b3862ad6463f539d7d16bd39851406adc23c0c8b4e8c6eaf7",
+      "ast_sha256": "629483af71ec74c70f406b3bd223bb30c37237ae181182c93ab7ed02dc514bb5",
       "feature": "rope_glue",
       "source_commit": "72e6dfeb36dfefbfdb84d71b77b1399c64709581"
     },
     {
       "module": "experts4bit_qlora.engines.router_epilogue",
       "qualname": "fuse_router_epilogue.<locals>._fwd",
-      "ast_sha256": "da587dbf9119134f17ce25ff3cb2431dca05ff145790e6063be80b08945f2852",
+      "ast_sha256": "fe5052e575a553882ebd648c5ee3345ae93b33e791c68f6380bd550db7e44fba",
       "feature": "router_epilogue",
       "source_commit": "72e6dfeb36dfefbfdb84d71b77b1399c64709581"
     },
     {
       "module": "experts4bit_qlora.engines.router_epilogue",
       "qualname": "fuse_router_epilogue.<locals>._fwd",
-      "ast_sha256": "9b8009b3102a6914545ce943aa1b08473df28349ce48952d6a5856f1ad92fb7c",
+      "ast_sha256": "8afb2669e8e0d0efe5874ad2ad3707e8cb87f8b8ba67b3a414a648be3e29395e",
       "feature": "router_epilogue",
       "source_commit": "72e6dfeb36dfefbfdb84d71b77b1399c64709581"
     },
     {
       "module": "experts4bit_qlora.engines.router_epilogue",
       "qualname": "fuse_router_epilogue.<locals>._fwd",
-      "ast_sha256": "b7d3c0fb2fb5f3f1bd9a2d997513e5f9d87e5cce0d4a2f6894abf8ffef1fb4b9",
+      "ast_sha256": "1126aef4dd0a3154955dbbb64a161fa5c6fb100b57a080b1bd9a48f4396d3d8d",
       "feature": "router_epilogue",
       "source_commit": "72e6dfeb36dfefbfdb84d71b77b1399c64709581"
     },
     {
       "module": "experts4bit_qlora.engines.router_epilogue",
       "qualname": "fuse_router_epilogue.<locals>._fwd",
-      "ast_sha256": "8739775b50d8cf246d3aae78fc93410e7e76224269c913c2cdb471aab474772e",
+      "ast_sha256": "14812583801d20d5c462261e89b2bb0833f6df32e2bb3ded9dee1eb8bd92e228",
       "feature": "router_epilogue",
       "source_commit": "5905a0cee9424e466c1fcc17cd91fb0ff1f69be6"
     },
     {
       "module": "experts4bit_qlora.engines.router_epilogue",
       "qualname": "fuse_router_epilogue.<locals>._fwd",
-      "ast_sha256": "300bc60fa60f14d302ecea94c884565e57cbc93fb631cfc3585af574fde5370a",
+      "ast_sha256": "22b3507a9aed414e56f6d52093e1312bb92d3bc2a7be0973d3c1b9c468538a94",
       "feature": "router_epilogue",
       "source_commit": "5905a0cee9424e466c1fcc17cd91fb0ff1f69be6"
     }

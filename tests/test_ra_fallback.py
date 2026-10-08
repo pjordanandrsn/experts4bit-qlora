@@ -1,4 +1,5 @@
 """CPU mutation controls over native glue forwards, with CPU kernel stand-ins."""
+import ast
 import copy
 import importlib.util
 import json
@@ -229,3 +230,28 @@ def test_all_router_forward_variants_report_large_prefill_fallback(monkeypatch, 
     model.subject(x)
     e = observer.evidence(dict(rms_glue=0, residual_glue=0, rope_glue=0, router_epilogue=1))["router_epilogue"]
     assert e["large_fallbacks"] == 1 and e["fallback_calls"] == 0
+
+
+def test_portable_ast_ignores_display_and_empty_optional_fields(monkeypatch):
+    tree = ast.parse("def f(x): return x + 1").body[0]
+    expected = fallback.ast_digest(tree)
+    if hasattr(tree, "type_params"):
+        del tree.type_params
+    assert fallback.ast_digest(tree) == expected
+    tree.type_params = []
+    assert fallback.ast_digest(tree) == expected
+    tree.type_params = [ast.Name(id="T", ctx=ast.Load())]
+    assert fallback.ast_digest(tree) != expected
+    tree.type_params = []
+    tree.body[0].value.right.value = 2
+    assert fallback.ast_digest(tree) != expected
+
+    def unavailable(*args, **kwargs):
+        raise AssertionError("ast.dump is a display format, not the wire identity")
+
+    monkeypatch.setattr(ast, "dump", unavailable)
+    fallback.GlueObserver().install(patched(monkeypatch))
+    legacy = json.loads((ROOT / "bench/ra/fallback-adapters.json").read_text())
+    legacy["schema"] = 1
+    with pytest.raises(ValueError, match="schema"):
+        fallback.GlueObserver(legacy)

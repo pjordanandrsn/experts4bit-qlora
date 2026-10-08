@@ -9,6 +9,10 @@ import pytest
 import torch
 
 ROOT = Path(__file__).resolve().parents[1]
+dependency = importlib.util.spec_from_file_location("ra_fallback", ROOT / "bench/ra/ra_fallback.py")
+module = importlib.util.module_from_spec(dependency)
+sys.modules[dependency.name] = module
+dependency.loader.exec_module(module)
 spec = importlib.util.spec_from_file_location("ra_routes", ROOT / "bench/ra/ra_routes.py")
 routes = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = routes
@@ -67,7 +71,7 @@ def observer():
                  split=1, increments={"bw_prmt32": 1}, seen=[])
     module = sys.modules[__name__]
     digest = routes.module_digest(module)
-    adapters = dict(schema=1, modules=[dict(module=k, ast_sha256=digest) for k in ("nf4", "hot", "qkv")])
+    adapters = dict(schema=2, modules=[dict(module=k, ast_sha256=digest) for k in ("nf4", "hot", "qkv")])
     return routes.RouteObserver(module, module, module, adapters=adapters)
 
 
@@ -146,7 +150,7 @@ def test_unreviewed_module_and_changed_counter_schema_refuse():
     obs = observer()
     module = sys.modules[__name__]
     with pytest.raises(ValueError, match="unreviewed"):
-        routes.RouteObserver(module, module, module, adapters=dict(schema=1, modules=[]))
+        routes.RouteObserver(module, module, module, adapters=dict(schema=2, modules=[]))
     STATE["counts"]["unknown"] = 0
     with pytest.raises(ValueError, match="schema"):
         routes.counters(obs.nf4)
