@@ -1549,3 +1549,31 @@ per profiled step:
 - about 3,100 `bmm` calls.
 
 No change is registered against it yet.
+
+## Amendment 70 (2026-10-08): the single-block ladder steps the fp32-adapter arm 0.797 and leaves the bf16 arm unhelped (P210, P212–P214 HELD; P211 FALSIFIED)
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 70. One RTX 5090 (`tc1-5090-138`, AMD EPYC 7K62, a 23-CPU
+quota, Vast machine 152440). e4b `822884d`, grouped-nf4-gemm `f8b4a0a` (#513), venv-unsloth (torch 2.12.1), every arm profiled. TC1's
+field recipe over 60 load-gated steps; one shipped `l1` draw was voided twice for host load, and its last attempt stands. Read:
+[`RESULTS-tc1-sladder.md`](RESULTS-tc1-sladder.md).
+
+| arm | s/step `l0` → `l1` (two draws) | `aten::bmm` CPU / call | device ms / profiled step | peak |
+|---|---|---|---|---|
+| matched (fp32 adapters) | 4.137 / 4.167 → **3.286 / 3.334** | 305 → 24.5 µs | 1731 → 1802 | 26.16 → 26.50 GB |
+| shipped (bf16 adapters) | 3.231 / 3.201 → 3.251 / 3.280 | 27.8 → 23.8 µs | 1349 → 1392 | 23.32 → 23.32 GB |
+
+- **P210 HELD:** matched `l1 / l0` **0.797** on a host-bound box (the matched `l0`'s GPU busy 0.417 of its step).
+- **P211 FALSIFIED:** shipped **1.015**.
+- **P212 HELD:** `bmm` CPU time per call 0.080 of the unladdered.
+- **P213 HELD:** device time +4.1 % (matched) and +3.2 % (shipped).
+- **P214 HELD:** step-0 held-out identical; N within 0.0014.
+
+By the rule the flag stays opt-in. The rule also asks what held the shipped step instead of the `bmm`. Per profiled step, the shipped
+arm's host time sits in:
+- the checkpoint functions, about 0.86 s: the layer's Python forward, run twice;
+- about 54 k kernel launches;
+- about 9,000 `aten::mm` calls;
+- the grouped kernels' wrappers and allocations.
+
+That is what remains on the matched arm with the ladder too. The per-new-shape cost is cuBLAS's fp32 batched product's, so amendment 71
+reads `NF4_QLORA_SINGLE_LADDER=auto` (grouped-nf4-gemm#514), the ladder exactly when the adapters are fp32, as the candidate default.

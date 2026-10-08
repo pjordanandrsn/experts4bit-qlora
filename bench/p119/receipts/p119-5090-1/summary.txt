@@ -1,0 +1,16 @@
+KNOBS e4b=caac7f0881ff410682aedd1326279b00e282bac8 gnf4=b4f93f1c62d1e3436ed45bec8ccd608c90433737 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 prove=0 windows=64 cont=128
+e4b 0.50.0 @caac7f0881ff410682aedd1326279b00e282bac8
+gnf4 0.42.0 @b4f93f1c62d1e3436ed45bec8ccd608c90433737
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+p119_reduce self-test OK (22 cases)
+premise run rc=0: 7 passed in 9.95s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+box rc=0 P119_BOX: decode d16 8.2238 ms | d32 10.9905 ms | d64 15.6406 ms | d64x4 32.8287 ms | prefill p512_off 41.2112 ms | p512_on 40.2753 ms | load 159s | mem 21.01 GB | 53.5 s
+
+P119_VERDICT READ []

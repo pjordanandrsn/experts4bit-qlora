@@ -1,0 +1,167 @@
+{
+ "lane": "P119",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "tables": {
+  "chained_over_one_piece": 2.0989,
+  "decode_classes": {
+   "d16": {
+    "attn": 0.7915,
+    "dense_gemm": 0.5627,
+    "dense_int4": 0.7819,
+    "elementwise": 0.514,
+    "expert_int4": 4.6074,
+    "memcpy_dtod": 0.0008,
+    "memcpy_other": 0.0016,
+    "moe_route": 0.6403,
+    "norm_glue": 0.2694,
+    "other": 0.0471,
+    "sample": 0.0071
+   },
+   "d32": {
+    "attn": 1.115,
+    "dense_gemm": 1.9811,
+    "elementwise": 0.5347,
+    "expert_int4": 5.8713,
+    "memcpy_dtod": 0.0009,
+    "memcpy_other": 0.0016,
+    "moe_route": 1.1271,
+    "norm_glue": 0.2874,
+    "other": 0.0592,
+    "sample": 0.0122
+   },
+   "d64": {
+    "attn": 1.6749,
+    "dense_gemm": 2.5433,
+    "elementwise": 2.6658,
+    "expert_int4": 6.8108,
+    "memcpy_dtod": 0.1185,
+    "memcpy_other": 0.0015,
+    "moe_route": 1.4133,
+    "norm_glue": 0.3242,
+    "other": 0.0707,
+    "sample": 0.0176
+   },
+   "d64x4": {
+    "attn": 3.1609,
+    "dense_gemm": 2.25,
+    "dense_int4": 3.1347,
+    "elementwise": 2.0612,
+    "expert_int4": 18.3555,
+    "memcpy_dtod": 0.0033,
+    "memcpy_other": 0.0055,
+    "moe_route": 2.5646,
+    "norm_glue": 1.0732,
+    "other": 0.1911,
+    "sample": 0.0287
+   }
+  },
+  "decode_ms_per_step": {
+   "d16": 8.2238,
+   "d32": 10.9905,
+   "d64": 15.6406,
+   "d64x4": 32.8287
+  },
+  "decode_sum_check": {
+   "d16": 0.0,
+   "d32": -0.0,
+   "d64": 0.0,
+   "d64x4": 0.0
+  },
+  "dtod_per_layer": {
+   "d16": 0.021,
+   "d32": 0.021,
+   "d64": 3.021,
+   "d64x4": 0.083,
+   "p512_off": 4.0,
+   "p512_on": 4.0
+  },
+  "head_ms": {
+   "1": 0.1504,
+   "16": 0.15,
+   "512": 0.5333,
+   "64": 0.1716
+  },
+  "head_weight": {
+   "dtype": "torch.bfloat16",
+   "module": "Linear",
+   "shape": [
+    151936,
+    2048
+   ]
+  },
+  "marginal_per_row": {
+   "d16->d32": {
+    "by_class": {
+     "attn": 0.02022,
+     "dense_gemm": 0.08865,
+     "dense_int4": -0.04887,
+     "elementwise": 0.00129,
+     "expert_int4": 0.07899,
+     "memcpy_dtod": 1e-05,
+     "memcpy_other": 0.0,
+     "moe_route": 0.03043,
+     "norm_glue": 0.00113,
+     "other": 0.00076,
+     "sample": 0.00032
+    },
+    "per_row_ms": 0.17292
+   },
+   "d16->d64": {
+    "by_class": {
+     "attn": 0.0184,
+     "dense_gemm": 0.04126,
+     "dense_int4": -0.01629,
+     "elementwise": 0.04483,
+     "expert_int4": 0.0459,
+     "memcpy_dtod": 0.00245,
+     "memcpy_other": -0.0,
+     "moe_route": 0.0161,
+     "norm_glue": 0.00114,
+     "other": 0.00049,
+     "sample": 0.00022
+    },
+    "per_row_ms": 0.15452
+   },
+   "d32->d64": {
+    "by_class": {
+     "attn": 0.0175,
+     "dense_gemm": 0.01757,
+     "elementwise": 0.0666,
+     "expert_int4": 0.02936,
+     "memcpy_dtod": 0.00367,
+     "memcpy_other": -0.0,
+     "moe_route": 0.00894,
+     "norm_glue": 0.00115,
+     "other": 0.00036,
+     "sample": 0.00017
+    },
+    "per_row_ms": 0.14532
+   }
+  },
+  "prefill_classes": {
+   "attn": 1.5004,
+   "dense_gemm": 6.6454,
+   "elementwise": 10.5928,
+   "expert_int4": 19.8983,
+   "memcpy_dtod": 0.1648,
+   "memcpy_other": 0.0034,
+   "moe_route": 2.0995,
+   "other": 0.3007,
+   "sample": 0.0059
+  },
+  "prefill_ms": 41.2112,
+  "prefill_on_classes": {
+   "attn": 1.5008,
+   "dense_gemm": 5.6648,
+   "elementwise": 10.5907,
+   "expert_int4": 19.9465,
+   "memcpy_dtod": 0.1649,
+   "memcpy_other": 0.0013,
+   "moe_route": 2.0998,
+   "other": 0.3007,
+   "sample": 0.0058
+  },
+  "prefill_on_minus_off_ms": -0.9359
+ },
+ "verdict": "READ"
+}

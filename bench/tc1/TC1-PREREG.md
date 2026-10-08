@@ -3125,3 +3125,42 @@ Validity (`sladder_why`):
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Eight profiled 60-step e4b
 arms: about $1.5 with the download.
+
+### Amendment 71 (2026-10-08T16:08Z, after amendment 70's read, before any box): `NF4_QLORA_SINGLE_LADDER=auto` at the field recipe (P215–P219)
+
+**Why.** Amendment 70 (`tc1-5090-138`, Vast machine 152440, host-bound: the matched arm's GPU busy for 0.417 of its step) read
+`NF4_QLORA_SINGLE_LADDER=1` at TC1's field recipe:
+- **The fp32-adapter (matched) arm** stepped **0.797** (P210 HELD). `aten::bmm`'s CPU self time per call fell from 305 µs to 24.5 µs (P212
+  HELD), for 4.1 % more device time and 0.33 GB more peak.
+- **The bf16-adapter (shipped) arm** stepped **1.015** (P211 FALSIFIED). Its `bmm` already took about 28 µs a call, so the padding's 3.2 %
+  of device time bought nothing.
+
+The per-new-shape host cost is cuBLAS's fp32 batched product's. grouped-nf4-gemm#514 adds `NF4_QLORA_SINGLE_LADDER=auto`, which takes the
+ladder exactly when the adapters are fp32 and is the single block op for op otherwise. This box asks whether `auto` is safe as the default
+on another host, including a GPU-bound one, where the ladder's device cost is not hidden.
+
+**The box** (token `qwen3slauto`). Amendment 70's design with `l1` replaced by `la` (`NF4_QLORA_SINGLE_LADDER=auto`). TC1's field
+recipe over 60 load-gated steps, e4b at its defaults in venv-unsloth (torch 2.12), `=0` (`l0`) against `=auto` (`la`). It runs the
+shipped arm (bf16 adapters) and the matched arm (fp32 adapters), two draws a side in ABBA order, every arm profiled with `--phase-peaks 1`.
+One RTX 5090, avoiding machines 145701, 130223 and 55583, and amendment 70's machine 152440, so it reads a second host.
+
+Validity (`slauto_why`): amendment 70's predicates, plus the setting the side names. `l0` must show no laddered call. `la` must show
+laddered calls on the matched arm and none on the shipped arm.
+
+**Predictions** (two VALID draws a side, medians):
+- **P215:** matched s/step `la / l0`, with the bound set by the box's host:
+  - at most **0.97** if the matched `l0`'s `busy_t` is at most 0.85 (host-bound);
+  - otherwise (GPU-bound) at most **1.05**: the ladder's device cost, about 4 %, is the most it may cost there.
+- **P216:** shipped s/step `la / l0` in **[0.98, 1.02]**: `auto` does not engage on bf16 adapters, so the ops are the same.
+- **P217:** matched `aten::bmm` CPU self time per call `la / l0` at most **0.5**.
+- **P218:** device ms per profiled step `la / l0`: at most **1.06** on the matched arm, in [0.98, 1.02] on the shipped arm.
+- **P219:** on each arm, step-0 held-out within **0.0005** per draw pair and held-out at N within **0.005**.
+
+**Decision rules.**
+- **P215, P216 and P219 HELD:** `auto` becomes grouped-nf4-gemm's default (unset = `auto`; `0` the single block; `1` always). The read
+  reports the matched arm's peak beside P218.
+- **P215 FALSIFIED on a GPU-bound box:** `auto` stays opt-in. The read states the device cost that was not hidden.
+- **P216 FALSIFIED:** `auto` touched the bf16 path; the read finds out how before anything else.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Eight profiled 60-step e4b
+arms: about $1.7 with the download.
