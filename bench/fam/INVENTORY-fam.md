@@ -28,7 +28,7 @@ read per family.
 
 | family | graphs | slots | 1 graph/step | KV select | fp8 attn | BW GEMV | dot-pad | PDL | K19 | K23 | K21 | K25 | router cast |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `qwen3_moe` | ✓ | ✓ | ✓ | ✓ | ✓ `m3` | ✓ | shadowed ⚠ | ✓ | ✓ | ✓ | shape | `p121` | inert (✓ `p70` with the fold on) |
+| `qwen3_moe` | ✓ | ✓ | ✓ | ✓ | ✓ `m3` | ✓ | shadowed ⚠ | ✓ | ✓ | ✓ | shape | **·** | inert (✓ `p70` with the fold on) |
 | `qwen3_5_moe` | `p101` | · | · | · | · | shape | shape | shape | opt-in store | · | shape | · | inert |
 | `granitemoe` | `E p115c` | · | · | · | shape | shape | shape | shape | opt-in store | `p96` | shape | `p93` `p96` | inert |
 | `olmoe` | · | · | · | · | · | shape | shape | shape | opt-in store | `p96` | shape | `p93` `p96` | inert |
@@ -52,9 +52,8 @@ read per family.
 - **K23** (lean glue) also applies to K25 rows, though its docstring says K19 only. On Granite and OLMoE it ran inside
   P96's K25 arms, not alone.
 - **K25** has no family or shape gate. It takes every NF4 decode step with T > 1 and at most 256 routed rows. That is
-  buckets 2–32 at top-8, T ≤ 42 on ERNIE, T ≤ 64 on gpt-oss. On Qwen3-30B-A3B it engages at W16 (128 routed rows).
-  Its licence (P96) read Granite and OLMoE; **P121 (2026-10-08) read Qwen3's W16 step LICENSED**: 1.57× as fast as the
-  NF4 M-tile, within P110's bar on wikitext and c4val1.
+  buckets 2–32 at top-8, T ≤ 42 on ERNIE, T ≤ 64 on gpt-oss. On **Qwen3-30B-A3B it engages at W16 (128 routed rows) and
+  was never A/B'd there**. Its licence (P96) read Granite and OLMoE only.
 - **Router cast** acts only inside the fused router epilogue (`E4B_FUSE_ROUTER_EPI`, default `0`). ⚠ On Mixtral it is
   not upstream's function: Mixtral's router returns fp32 weights, but the cast sends them to bf16.
 - **Slots** on Gemma-4: the estimate's per-layer KV geometry is unread.
@@ -129,8 +128,8 @@ Ranked by: default on (or waiting to flip), changes arithmetic, engages on a ser
 
 1. **The fused stack at T == 1 against each family's own floor:** gpt-oss-20b one knob per arm, then Granite and Qwen3.6.
    The allowlist waits on these (FAM2).
-2. **K25 on Qwen3-30B-A3B.** It is on in every default W16 step and changes arithmetic (a TF32 select tree). Read by
-   P121 (LICENSED, 2026-10-08) with P115 Phase B's instrument at 16 rows a step.
+2. **K25 on Qwen3-30B-A3B.** It is on in every default W16 step, changes arithmetic (a TF32 select tree), and was never
+   A/B'd on the flagship model. P96's windowed instrument fits.
 3. **fp8 attention compute on head_dim-128 families** (OLMoE, Mixtral, ERNIE) and Qwen3.6's full-attention layers. It is
    on by default, read on Qwen3 (zero cost) and Gemma-4 (a cost). FAM1's instrument reads it as fp8 against f32.
 4. **Decode graphs and the one-graph step on other families.** The padded-bucket arithmetic was read on Qwen3 only.
