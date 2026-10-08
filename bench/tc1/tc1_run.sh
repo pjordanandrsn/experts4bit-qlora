@@ -1532,6 +1532,26 @@ tc1_cbk_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
   can_run 600 $FAM/unsloth/m_kk       && arm $FAM unsloth ckpt_unsloth_m_kk unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH $PP
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_slauto_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 71 (2026-10-08): NF4_QLORA_SINGLE_LADDER 0 (l0) vs auto (la: the ladder
+# exactly when the adapters are fp32, grouped-nf4-gemm#514) at TC1's field recipe, e4b at its defaults otherwise, the shipped (bf16 adapters) and
+# the matched (fp32 adapters) arm, two draws a side in ABBA order, venv-unsloth, every arm profiled with --phase-peaks 1.
+tc1_slauto_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_shipped_l0:fused e4b:fused_attn4_shipped_la:fused e4b:fused_attn4_m_l0:fused e4b:fused_attn4_m_la:fused e4b:fused_attn4_m_la_d2:fused e4b:fused_attn4_m_l0_d2:fused e4b:fused_attn4_shipped_la_d2:fused e4b:fused_attn4_shipped_l0_d2:fused"
+  say "===== SINGLE-BLOCK LADDER AUTO family $FAM ($MID @ $REV; NF4_QLORA_SINGLE_LADDER 0 vs auto, field recipe, e4b defaults; profiled; amendment 71)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local NATIVE="--adapter-dtype native --lora-init native"
+  local PP="--phase-peaks 1 --profile-steps $PROFILE_STEPS --profile-warm $PROFILE_WARM" L0="NF4_QLORA_SINGLE_LADDER=0" LA="NF4_QLORA_SINGLE_LADDER=auto"
+  can_run 600 $FAM/e4b/shipped_l0     && TC1_ARM_EXTRA_ENV="$L0" E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_l0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE $PP
+  can_run 600 $FAM/e4b/shipped_la     && TC1_ARM_EXTRA_ENV="$LA" E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_la fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE $PP
+  can_run 600 $FAM/e4b/m_l0           && TC1_ARM_EXTRA_ENV="$L0" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_l0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  can_run 600 $FAM/e4b/m_la           && TC1_ARM_EXTRA_ENV="$LA" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_la fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  can_run 600 $FAM/e4b/m_la_d2        && TC1_ARM_EXTRA_ENV="$LA" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_la fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  can_run 600 $FAM/e4b/m_l0_d2        && TC1_ARM_EXTRA_ENV="$L0" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_l0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  can_run 600 $FAM/e4b/shipped_la_d2  && TC1_ARM_EXTRA_ENV="$LA" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_la fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE $PP
+  can_run 600 $FAM/e4b/shipped_l0_d2  && TC1_ARM_EXTRA_ENV="$L0" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_l0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE $PP
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_sladder_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 70 (2026-10-08): grouped-nf4-gemm's single-block ladder
 # (NF4_QLORA_SINGLE_LADDER) 0 (l0) vs 1 (l1) at TC1's field recipe, e4b at its defaults otherwise, the shipped and the matched arm, two draws a
 # side in ABBA order, venv-unsloth, every arm profiled with --phase-peaks 1. e4b against itself: no Unsloth arm.
@@ -2170,6 +2190,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3pos68) tc1_pos68_family qwen3pos68 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 68: amendment 67's position profiled
   qwen3pos69) tc1_pos69_family qwen3pos69 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 69: the field recipe's same-stack position profiled
   qwen3sladder) tc1_sladder_family qwen3sladder Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 70: the single-block ladder 0 vs 1, field recipe
+  qwen3slauto) tc1_slauto_family qwen3slauto Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 71: the single-block ladder 0 vs auto, field recipe
   qwen3dqpack) tc1_dqpack_family qwen3dqpack Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 56: the double-quantized absmax on packed rows, phase peaks
   qwen3ckptoff) tc1_ckptoff_family qwen3ckptoff Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 58: checkpoint inputs in pinned host memory, off vs on, packed rows
   qwen3evalce) tc1_evalce_family qwen3evalce Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 60: the held-out loss from the logits in chunks, packed rows

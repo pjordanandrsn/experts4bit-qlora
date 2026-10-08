@@ -1,0 +1,20 @@
+{
+ "box": "A",
+ "run_id": "tc1-5090-138",
+ "instance_id": "54853789",
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "driver": "595.91.07",
+ "cpu": "AMD EPYC 7K62 48-Core Processor",
+ "nproc": 96,
+ "mem_total_kb": "527994556",
+ "cgroup_memory_max": "259519414272",
+ "disk_root": "overlay         320G   57M  320G   1% /",
+ "hostname": "bc054401501e",
+ "cgroup_cpu_max": "2304000 100000",
+ "affinity_cpus": 96,
+ "cgroup_cpuset_effective": "0-95",
+ "registered_gpu_class": "5090",
+ "prereg": "tc1/TC1-PREREG.md",
+ "local_box": null,
+ "local_snapshot": null
+}

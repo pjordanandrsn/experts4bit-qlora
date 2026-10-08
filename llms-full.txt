@@ -2224,6 +2224,8 @@ host reuse) each stepped the field recipe at 0.847–0.968 of the code before, h
   `e4b.train.moe-keep.qwen3.5090.2026-10-04`
 - `GNF4_TRAIN_GEMM=decoded`: 1.066 of the fused kernels' step on Qwen3, so `auto` does not take it.
   `e4b.train.decoded-route.qwen3.5090.2026-10-06`
+- `NF4_QLORA_SINGLE_LADDER=1` (grouped-nf4-gemm): 0.797 of the step with fp32 adapters on a host-bound box,
+  1.015 with bf16 adapters (the shipped arm). `e4b.train.single-ladder.field.5090.2026-10-08`
 
 **Energy: on a card that already fits the model, 4-bit costs energy.** `bnb.matmul_4bit` costs 1.748× native bf16's
 J/op at decode, 1.601× at prefill and 1.965× in training. The fused 4-bit MoE forward's J/token at batch 4096 is 0.063
@@ -2355,7 +2357,7 @@ Superseded and retired readings are not repeated here. The register keeps each w
   built a different one is unexplained, and no open issue carries it.
 - **Open register rows:** reproducing the TR2 training receipt from published artifacts (`e4b.open.tr2-repro-gap`);
   int8-offload's best training eval, confounded by an evaluator offset (`e4b.open.int8-offload-confounded`).
-- **Registered, not yet read:** TC1 amendment 70. The head-to-head campaigns stay open: training #835, serving #846,
+- **Registered, not yet read:** TC1 amendment 71 (the single-block ladder's `auto`, which takes it only for fp32 adapters). The head-to-head campaigns stay open: training #835, serving #846,
   single-stream decode #1313.
 - **Older documents' debts:** `POST_AUDIT_WORK_QUEUE.md` (Q1–Q4), `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10),
   `LAYOUT_FACTS.md` (training determinism UNKNOWN), and `support_matrix.md`'s footer hash, which no longer matches its
@@ -3199,6 +3201,7 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.train.memory.packed-4k-position-defaults.5090.2026-10-07 [measured]: TC1 amendment 67 (#835), one rented RTX 5090 (tc1-5090-135, AMD EPYC 7K62, Vast machine 152440): e4b's matched arm on packed rows of 4,096 real tokens in venv-unsloth (torch 2.12.1) at all the new defaults (the double-quantized absmax, the reentrant checkpoint, the combine over row chunks, the chunked held-out loss …
 - e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio [measured]: TC1 amendment 68 (#835), one rented RTX 5090 (tc1-5090-136, an AMD engineering-sample CPU, Vast machine 13828): e4b's matched arm at its defaults against Unsloth 2026.9.14's matched arm on packed rows of 4,096 real tokens, both in venv-unsloth (torch 2.12.1), two draws each in ABBA order, every arm profiled, 40 …
 - e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio [measured]: TC1 amendment 69 (#835), one rented RTX 5090 (tc1-5090-137, AMD EPYC 7713, Vast machine 55913): TC1's field recipe (alpaca, seq 2048, micro-batch 2 x accum 4) over 60 load-gated steps with both frameworks on one stack (venv-unsloth, torch 2.12.1), e4b's matched arm at every current default against Unsloth 2026.9.14's …
+- e4b.train.single-ladder.field.5090.2026-10-08 [measured]: TC1 amendment 70 (#835), one rented RTX 5090 (tc1-5090-138, AMD EPYC 7K62, Vast machine 152440): grouped-nf4-gemm's opt-in single-block ladder (NF4_QLORA_SINGLE_LADDER=1, grouped-nf4-gemm#513) against the single padded block at TC1's field recipe over 60 load-gated steps, e4b at its defaults in venv-unsloth (torch …
 
 Open items (no evidence either way):
 
@@ -3206,4 +3209,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 …
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(415 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(416 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

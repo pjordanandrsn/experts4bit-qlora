@@ -196,6 +196,12 @@ AMD EPYC 7713.** The wall ratio depends on the host. Unsloth runs 14× e4b's CPU
 against e4b's 0.49, so a slower host stretches Unsloth's step more. The GPU-time ratio is what remains as host overhead goes to zero.
 Held-out at N agrees within 0.0012. e4b peaks 1.89 GB higher (26.16 against 24.27 GB). The 2.352 and 2.468 above are the earlier wall
 readings, before the reentrant checkpoint.
+**e4b's own host time at the field recipe.** grouped-nf4-gemm's opt-in single-block ladder (`NF4_QLORA_SINGLE_LADDER=1`,
+grouped-nf4-gemm#513) puts the padded LoRA block's batched products on repeating shapes
+(`e4b.train.single-ladder.field.5090.2026-10-08`, TC1 amendment 70). On a host-bound box it stepped e4b's matched arm, with fp32 adapters,
+**0.797** of its time. `aten::bmm`'s CPU time per call fell from 305 µs to 24.5 µs, for 4.1 % more device time and 0.33 GB more peak. With
+bf16 adapters (the shipped arm) it stepped 1.015: that `bmm` was already cheap. It stays opt-in. TC1 amendment 71 reads `auto`, which takes
+the ladder exactly when the adapters are fp32, as the candidate default.
 **Those positions read short rows.** The field recipe's Alpaca rows carry about 1,000–1,400 real tokens per step. On packed rows of
 4,096 real tokens (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.packed-4k`, TC1 amendment 39) e4b at its defaults runs out of memory at
 step 1, allocating the fp32 copy of the full-vocabulary logits (2.32 GiB), while Unsloth trains the same rows at 24.86 GB: an e4b loss
