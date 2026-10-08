@@ -1,0 +1,14 @@
+# Names as the BOX sees them after staging (/root/p122). The box runs `sha256sum -c` on this file; p122_drive.sh and
+# tests/test_p122_staged_pin.py resolve each name to its source (bench/p122, bench/p120, bench/p119, bench/p117, bench/p108,
+# bench/p97, bench/p39, tests).
+5f8419d1cd0da41571794870adab6e056ee8e4bd43aaf1a2dd313a8deb565356  p122_run.sh
+7f5832296caf70264b2b7eb3448d436351bfa4b86814582b7b9175fc9454da63  p120_box.py
+dd32187f0ec5ef806134418f4ad7e4c2289e6f976bde7a0e1267a4b6faffde8d  p122_reduce.py
+17f8dd0c5001efcc6971e8938d6907a8c7c1c172b8e9ca86fa108f551d670fea  p119_box.py
+f93a38c21a08ee49e0ef68a2d1e513852b2b94d04ad3e8e5ddd99508037c0049  p117_box.py
+b57dff71cba30d9c649bae05df28f8c5376de9f7ac7ae5759157e57475b83e4b  p108_box.py
+608c1a20136393495ebb482afc58a24880e053a2caab6152fa3eb87183063a31  p97_box.py
+e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+f53952c1a26b06e8a8f61dcfdbd511acad0b0507cae58cb1bbfca7f3c8f4313a  test_decode_graph_buckets.py
+da5fa63cebc2b488b3f515098844861ca9d16e8d3fbe251f2708b2316edce2c4  test_tile_table_cumsum_chunked_interp.py
