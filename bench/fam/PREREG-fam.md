@@ -201,8 +201,9 @@ verdict is not a reading. The reducer's tables are scaled to the proof's positio
 
 ## Budget and STOP rules
 
-- **Proof:** one RTX 5090, **guard 0.75 h**, `--download-gb 7`; about $0.6 at the launcher's policy rate.
-- **Reading:** one RTX 5090, **guard 4.5 h**, `--download-gb 92`; about $3.4 at most at $0.75/h.
+- **Proof:** one RTX 5090, **guard 0.75 h**, `--download-gb 7`; about $0.7 at most at the policy rate ($0.85/h).
+- **Reading:** one RTX 5090, **guard 4.5 h**, `--download-gb 92`; about $4.8 at most at the policy rate ($0.85/h plus
+  the download), about $3.6 at the expected 3 h.
 - **Expected time, about 3 h:**
   - install and premise, 5 min; fetches 15–40 min; bakes 10 min;
   - Granite about 35 min, gpt-oss about 60 min, Qwen3.6 about 55 min.
