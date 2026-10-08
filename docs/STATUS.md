@@ -161,6 +161,8 @@ host reuse) each stepped the field recipe at 0.847–0.968 of the code before, h
   `e4b.train.decoded-route.qwen3.5090.2026-10-06`
 - `NF4_QLORA_SINGLE_LADDER=1` (grouped-nf4-gemm): 0.797 of the step with fp32 adapters on a host-bound box,
   1.015 with bf16 adapters (the shipped arm). `e4b.train.single-ladder.field.5090.2026-10-08`
+  Its `auto` (the ladder only with fp32 adapters) held its mechanism on a second host, but the step time went unread
+  there: the host was loaded. `e4b.train.single-ladder-auto.field.5090.2026-10-08`
 
 **Energy: on a card that already fits the model, 4-bit costs energy.** `bnb.matmul_4bit` costs 1.748× native bf16's
 J/op at decode, 1.601× at prefill and 1.965× in training. The fused 4-bit MoE forward's J/token at batch 4096 is 0.063
@@ -185,11 +187,11 @@ together; serial output is unchanged. `e4b.serve.sc2e.64-slots-buckets-auto.qwen
 16 unchanged, within P110's quality bar; it is grouped-nf4-gemm's default from 0.43.0 at Qwen3's NF4 expert shapes on
 GPUs with 160 or more SMs. `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`.
 
-**The B=1 fused stack passes its combined read on Qwen3-MoE.** On top of grouped-nf4-gemm 0.43.0's bandwidth GEMV,
-fused q/k/v plus three glue folds decode one request 1.5902× and 16 requests 1.1644× as fast on Qwen3-30B-A3B NF4, and
-P115 Phase D's SANE read at T == 1 passes (bias +0.00541 nats, argmax agreement 0.9674). The knobs stay `0` until the
-family-scoped default (#1361) lands, for Qwen3-MoE only: gpt-oss-20b failed Phase C's argmax gate (0.924 against 0.95),
-and Qwen3.5/3.6-MoE and Granite-MoE wait for lane FAM's reads at T == 1 (#1362).
+**The B=1 fused stack is the default on Qwen3-MoE.** On top of grouped-nf4-gemm 0.43.0's bandwidth GEMV, fused q/k/v
+plus three glue folds decode one request 1.5902× and 16 requests 1.1644× as fast on Qwen3-30B-A3B NF4, and P115 Phase
+D's SANE read at T == 1 passes (bias +0.00541 nats, argmax agreement 0.9674). The four knobs resolve to `auto` on the one
+family with that read and stay off elsewhere: gpt-oss-20b failed Phase C's argmax gate (0.924 against 0.95), and
+Qwen3.5/3.6-MoE and Granite-MoE wait for lane FAM's reads at T == 1 (#1362). `0` on each knob is the way back.
 `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`,
 `e4b.serve.p115.fused-stack-quality.qwen3.5090.2026-10-07`,
 `e4b.serve.p115.fused-stack-engagement.gptoss-qwen36.5090.2026-10-08`,
@@ -265,6 +267,7 @@ controls. `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-
 | bandwidth-targeted NF4 decode GEMV | grouped-nf4-gemm | `GNF4_GEMV_BW=0` | `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07` |
 | grouped small-M routes above T == 1 (K19, K23, K21, K25; K25 read on Granite, OLMoE and Qwen3's W16 step) | serving | `E4B_INT4_GROUPED_SMALLM=0`, `E4B_INT4_LEAN_GLUE=0`, `E4B_MXFP4_GROUPED_SMALLM=0`, `E4B_NF4_GROUPED_SMALLM=0` | `e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01`, `e4b.serve.p89.qwen3.int4.k23-lean-glue-b16.5090.2026-10-01`, `e4b.serve.p90.gptoss.mxfp4.k21-b16.5090.2026-10-01`, `e4b.serve.p96.nf4-families.k25-windowed-k8.5090.2026-10-02`, `e4b.serve.p121.k25-w16.qwen3.5090.2026-10-08` |
 | router weights cast to bf16 at ≤ 64 rows (`softmax_topk`) | fused router epilogue | `E4B_ROUTER_EPI_CAST=0` | `e4b.serve.p70.qwen3.b1.router-weight-cast.5090.2026-09-25` |
+| B=1 fused stack (fused q/k/v and three glue folds) on Qwen3-MoE | `serve_paged` | `E4B_PAGED_FUSE_QKV=0`, `E4B_FUSE_T1_GLUE=0`, `E4B_FUSE_T1_GLUE_R2=0`, `E4B_FUSE_ROUTER_EPI=0` | `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07` |
 
 ---
 
@@ -298,8 +301,8 @@ Superseded and retired readings are not repeated here. The register keeps each w
   built a different one is unexplained, and no open issue carries it.
 - **Open register rows:** reproducing the TR2 training receipt from published artifacts (`e4b.open.tr2-repro-gap`);
   int8-offload's best training eval, confounded by an evaluator offset (`e4b.open.int8-offload-confounded`).
-- **Registered, not yet read:** TC1 amendment 71 (the single-block ladder's `auto`, which takes it only for fp32 adapters). The head-to-head campaigns stay open: training #835, serving #846,
-  single-stream decode #1313.
+- **Registered, not yet read:** TC1 amendment 72 (amendment 71's `auto` box again, on a third host). The head-to-head
+  campaigns stay open: training #835, serving #846, single-stream decode #1313.
 - **Older documents' debts:** `POST_AUDIT_WORK_QUEUE.md` (Q1–Q4), `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10),
   `LAYOUT_FACTS.md` (training determinism UNKNOWN), and `support_matrix.md`'s footer hash, which no longer matches its
   bytes and is recorded, not fixed, because the file is anchored.

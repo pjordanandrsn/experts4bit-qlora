@@ -55,10 +55,12 @@ def _clear(monkeypatch):
     monkeypatch.setenv("E4B_PAGED_DEVICE", "cpu")
 
 
-def test_from_env_defaults_are_unchanged(monkeypatch):
+def test_from_env_unset_knobs_resolve_per_family_at_the_build(monkeypatch):
+    """Lane P115 Amendment 3, mechanism (B): an unset knob is ``default``, resolved per ``model_type`` when the engine is
+    built (``tests/test_fusions_default.py``). A config built directly, without modes, is unchanged."""
     _clear(monkeypatch)
     cfg = PagedServeConfig.from_env()
-    assert cfg.fuse_qkv is False and cfg.fusion_modes == {k: "0" for k in FUSION_KNOBS}
+    assert cfg.fuse_qkv is True and cfg.fusion_modes == {k: "default" for k in FUSION_KNOBS}
     assert PagedServeConfig().fuse_qkv is False and PagedServeConfig().fusion_modes == {}
 
 

@@ -3164,3 +3164,31 @@ laddered calls on the matched arm and none on the shipped arm.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Eight profiled 60-step e4b
 arms: about $1.7 with the download.
+
+### Amendment 72 (2026-10-08T21:18Z, after amendment 71's read, before any box): amendment 71's box on a third host (P220, P221)
+
+**Why.** Amendment 71 (`tc1-5090-139`, Vast machine 150670, host-bound: the matched `l0`'s GPU busy 0.475 of its step) held P217
+(`bmm` CPU per call 0.120), P218 (device 1.043 matched, 1.002 shipped) and P219 (held-out unchanged). P215 and P216 went UNTESTED. The
+host's load rose through the box: seven draws were voided, three second draws stood at load1 13.0–14.1, and three arms' draws differed
+by 7.1–9.5 %, over the 5 % rule. So `auto` stays opt-in, and the speed question is still open.
+
+**The box.** Amendment 71's token `qwen3slauto`, unchanged: same arms, order, steps, load gate (6.0, two retries) and profiling. It runs
+on a third host, off machines 152440 (amendment 70) and 150670 (amendment 71) on top of amendment 71's lists. grouped-nf4-gemm is pinned
+at amendment 71's `3ce2ecd`. e4b is main at launch; its package changes since amendment 71's `d0ae243` are on the serving path only
+(the decode folds' guards and the router epilogue's probe). No new reducer code.
+
+**Predictions**, read off this box's own rows by the merged reducer:
+- **P220:** this box's P215 row is HELD.
+- **P221:** this box's P216 row is HELD.
+
+Its P217–P219 rows are reported beside.
+
+**Decision rules.**
+- **P220 and P221 HELD, and this box's P219 row HELD:** `auto` becomes grouped-nf4-gemm's default, as amendment 71 set out.
+- **P220 FALSIFIED on a GPU-bound box:** `auto` stays opt-in. The read states the device cost that was not hidden.
+- **P221 FALSIFIED:** `auto` touched the bf16 path; the read finds out how before anything else.
+- **P220 or P221 UNTESTED again:** `auto` stays opt-in, and no further re-run is registered on host-load grounds. Two loaded hosts in a
+  row would say this box cannot settle a 5 % question on rented hosts, and that goes back to the design.
+
+**Budget.** As amendment 71: one RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor. Amendment 71 billed $2.75
+with seven load re-runs; expect $1.7–3.

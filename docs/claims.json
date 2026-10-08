@@ -11763,6 +11763,31 @@
       "row_status": "HARNESS_ERROR",
       "row_reason": "Qwen3-32B resident 4096 requires 30.69 GiB device + 1.57 GiB policy headroom > 31.34 GiB free; the runner stops before streamed 4096.",
       "notes": "The tiny CUDA proof passes bitwise loss, all 28 LoRA gradients, updates and reload logits, with sampled frozen bytes unchanged. Completed negative arms remain data. Anchor 2048 residuals R +6373888 bytes / S -20119040 bytes are unattributed. No NEVER_UNDER, calibration, DQ8 draw or dense release follows. Invoice $0.513; teardown proved."
+    },
+    {
+      "id": "e4b.train.single-ladder-auto.field.5090.2026-10-08",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 71 (#835), one rented RTX 5090 (tc1-5090-139, AMD EPYC 7763, Vast machine 150670): grouped-nf4-gemm's NF4_QLORA_SINGLE_LADDER=auto (grouped-nf4-gemm#514, the single-block ladder exactly when the adapters are fp32) against 0 at TC1's field recipe over 60 load-gated steps, e4b at its defaults in venv-unsloth (torch 2.12.1), the shipped (bf16 adapters) and the matched (fp32 adapters) arm, two draws a side in ABBA order, every arm profiled. auto laddered 49,152 calls on each matched draw and none on the shipped arm. Matched aten::bmm CPU self time per call 175.1 -> 21.1 us = 0.120 (P217 HELD, <= 0.5); device ms per profiled step 1.043 matched (<= 1.06) and 1.002 shipped (in [0.98, 1.02]) (P218 HELD); held-out unchanged (P219 HELD). P215 (matched s/step) and P216 (shipped s/step) UNTESTED: the host's load rose through the box (seven draws voided for load1 over 6.0, three second draws standing at 13.0-14.1) and three arms' two draws differed by 7.1-9.5 %, over the 5 % rule. By the rule auto stays opt-in; amendment 72 re-reads the box on a third host.",
+      "value": 0.12,
+      "unit": "ratio, aten::bmm CPU self time per call NF4_QLORA_SINGLE_LADDER=auto / =0, e4b matched arm (fp32 adapters), medians of two draws; the step-time ratios are UNTESTED",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-139: instance 54893119, AMD EPYC 7763, a 61-CPU quota, Vast machine 150670); e4b @ d0ae243 + grouped-nf4-gemm @ 3ce2ecd, torch 2.12.1+cu130",
+      "conditions": "bench/tc1 token qwen3slauto (TC1 amendment 71): TC1's tokens and field recipe, TC1_STEPS=60, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_shipped_l0 / _la and fused_attn4_m_l0 / _la (+ _d2), --phase-peaks 1 and the profile instrument on every arm; validity (slauto_why: amendment 70's predicates, no laddered call on l0, laddered calls on the matched la and none on the shipped la) and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-08",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-slauto.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-139/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-08/tc1-5090-139/tc1/"
+      ],
+      "notes": "Vast invoiced $2.751, with seven load-gate re-runs. Paired by draw (not quoted by the rule): shipped la / l0 0.997 in both draws, matched 0.876 and 0.813. The matched l0's GPU busy was 0.475 of its step (host-bound)."
     }
   ]
 }

@@ -39,8 +39,11 @@ lever that is set and patches nothing RAISES at startup (the lanes' ``_lever_che
 census -- how many modules each lever patched -- is reported at ``GET /health`` so a reader can
 tell which stack answered. The four fusion knobs (``E4B_PAGED_FUSE_QKV`` and the three folds) each
 also take ``auto`` (:func:`_fusion_env`): apply where the module structure and the installed kernels
-license it, patch nothing -- without raising -- where they do not; ``1`` keeps the refusal. All four
-default to ``0``; ``/health`` reports the modes and what each fold skipped.
+license it, patch nothing -- without raising -- where they do not; ``1`` keeps the refusal. Unset, each resolves
+per family at the build (:func:`resolve_fusion_modes`): ``auto`` on a family with a SANE read at T == 1 at reading
+size (:data:`FUSION_DEFAULT_FAMILIES`, lane P115) and ``0`` everywhere else. Explicit ``auto`` stays structural and,
+off that list, logs one warning naming the read the family lacks or failed. ``/health`` reports each knob's
+resolution, its source and what each fold skipped.
 
 **Semantics (stated, not silently approximated).** Greedy only: ``temperature`` must be 0 or
 absent (the runner argmaxes; a nonzero temperature is a 400, never ignored). ``max_tokens`` is
@@ -135,6 +138,21 @@ LEVER_ENV = ("E4B_SERVE_EXP_INT4", "E4B_SERVE_EXP_INT4_CALIB", "E4B_SERVE_ATTN_I
 FUSION_ENV = ("E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")
 FUSE_QKV_ENV = "E4B_PAGED_FUSE_QKV"
 FUSION_KNOBS = (FUSE_QKV_ENV,) + FUSION_ENV
+# Lane P115's family-scoped default (PREREG-p115.md Amendment 3, mechanism (B)): an UNSET fusion knob resolves to
+# ``auto`` on a model_type with a SANE read at T == 1 at reading size (the maintainer's rule, 2026-10-08, #1366) and to
+# ``0`` everywhere else. Explicit ``auto`` stays structural, as Phase C measured it.
+FUSION_DEFAULT_FAMILIES = {
+    "qwen3_moe": "P115 Phases A and B: speed and quality (#1328); Phase D: SANE at T == 1, COMBINED_SANE (#1379)",
+}
+# the read each other known family lacks or failed, named in the warning an explicit ``auto`` logs on it
+FUSION_UNLICENSED = {
+    "gpt_oss": "P115 Phase C: SANE argmax agreement 0.924 < 0.95 (#1342)",
+    "qwen3_5_moe": ("no SANE read at T == 1 at reading size (P115 Phase C's was at T == 12, #1342); "
+                    "lane FAM reads it (#1362)"),
+    "granitemoe": "no SANE read at T == 1 at reading size; lane FAM reads it (#1362)",
+}
+FUSION_UNSET = "default"          # from_env's value for an unset knob, resolved per family by resolve_fusion_modes
+_FUSION_WARNED: set = set()
 
 
 def _capability(device: str):
@@ -293,6 +311,45 @@ def _lookahead_env(value: str) -> bool:
     raise ValueError(f"E4B_PAGED_DECODE_LOOKAHEAD={value!r}: expected '0' or '1'")
 
 
+def _fusion_knob_from_env(name: str, raw) -> str:
+    """One fusion knob as ``from_env`` reads it: unset or empty -> :data:`FUSION_UNSET` (resolved per family at the
+    build), otherwise :func:`_fusion_env`'s three settings."""
+    return FUSION_UNSET if not (raw or "").strip() else _fusion_env(name, raw)
+
+
+def resolve_fusion_modes(modes: dict, model_type) -> tuple:
+    """``(resolved, sources)`` for the fusion knobs in ``modes``. :data:`FUSION_UNSET` resolves to ``auto`` on a
+    ``model_type`` in :data:`FUSION_DEFAULT_FAMILIES` (source ``default-allowlisted``) and to ``0`` elsewhere
+    (``default-off``); an explicit value passes through (``explicit``). Explicit ``auto`` off the list logs one warning
+    per family per process, naming the read that family lacks or failed."""
+    resolved, sources = {}, {}
+    allowed = model_type in FUSION_DEFAULT_FAMILIES
+    for k, v in modes.items():
+        if v == FUSION_UNSET:
+            resolved[k] = "auto" if allowed else "0"
+            sources[k] = "default-allowlisted" if allowed else "default-off"
+        else:
+            resolved[k] = v
+            sources[k] = "explicit"
+    explicit_auto = [k for k, v in modes.items() if v == "auto"]
+    if explicit_auto and not allowed and model_type not in _FUSION_WARNED:
+        _FUSION_WARNED.add(model_type)
+        why = FUSION_UNLICENSED.get(model_type, "no registered read")
+        log(f"WARNING {', '.join(explicit_auto)}=auto on model_type {model_type!r}: {why}. Explicit auto is structural; "
+            f"it is quality-licensed only on {sorted(FUSION_DEFAULT_FAMILIES)} (lane P115)")
+    return resolved, sources
+
+
+def _fuse_qkv_health(cfg, info: dict):
+    """``/health``'s ``engine.fuse_qkv``: the q/k/v fusion as the build resolved it, not ``cfg.fuse_qkv`` (which an
+    unset knob sets, to be resolved per family). Before the build an unset knob is unresolved (``None``); a config
+    without modes keeps ``cfg.fuse_qkv``."""
+    mode = (info.get("fusion_modes") or {}).get(FUSE_QKV_ENV) or (cfg.fusion_modes or {}).get(FUSE_QKV_ENV)
+    if mode is None:
+        return cfg.fuse_qkv
+    return None if mode == FUSION_UNSET else mode != "0"
+
+
 def _fusion_env(name: str, value: str) -> str:
     """One fusion knob (``E4B_PAGED_FUSE_QKV``, ``E4B_FUSE_T1_GLUE``, ``E4B_FUSE_T1_GLUE_R2``, ``E4B_FUSE_ROUTER_EPI``),
     one of three settings (:func:`~.engines.glue_fuse.fold_mode`):
@@ -344,8 +401,9 @@ class PagedServeConfig:
     hot_rows: int = 64                   # E4B_PAGED_HOT_ROWS
     kv_groups: str = "auto"              # E4B_PAGED_KV_GROUPS: auto | <int>
     fuse_qkv: bool = False               # E4B_PAGED_FUSE_QKV not 0 (fuse_qkv applies the env-gated folds itself)
-    fusion_modes: dict = field(default_factory=dict)   # FUSION_KNOBS -> auto | 0 | 1 (_fusion_env); a knob not named
-                                                       # keeps its old reading: fuse_qkv, or the fold's own env var
+    fusion_modes: dict = field(default_factory=dict)   # FUSION_KNOBS -> auto | 0 | 1 (_fusion_env), or "default" when
+                                                       # unset (resolved per family at the build); a knob not named keeps
+                                                       # its old reading: fuse_qkv, or the fold's own env var
     torch_threads: int = 8               # E4B_PAGED_TORCH_THREADS
     max_tokens_cap: int = 0              # E4B_PAGED_MAX_TOKENS: 0 -> max_tokens_per_seq - 1 (refuses, never clamps)
     max_queue: int = 0                   # E4B_PAGED_MAX_QUEUE: in-flight cap, 0 = unbounded
@@ -366,7 +424,7 @@ class PagedServeConfig:
         def _ints(s):
             return tuple(int(x) for x in s.split(",") if x.strip())
 
-        modes = {k: _fusion_env(k, env(k, "")) for k in FUSION_KNOBS}
+        modes = {k: _fusion_knob_from_env(k, env(k, "")) for k in FUSION_KNOBS}
         cfg = cls(
             model=env("E4B_PAGED_MODEL", ""),
             arena=env("E4B_PAGED_ARENA", ""),
@@ -1020,13 +1078,15 @@ def _apply_fusions(model, cfg: PagedServeConfig, report: dict | None = None) -> 
     branch the fold functions are wrapped on their modules for the duration of the call -- ``fuse_qkv``
     imports them inside its body, so the wrapper is what it calls -- and restored afterwards.
 
-    Modes come from ``cfg.fusion_modes`` (``auto`` / ``0`` / ``1``, :func:`_fusion_env`). A knob it does not name keeps
+    Modes come from ``cfg.fusion_modes`` (``auto`` / ``0`` / ``1``, :func:`_fusion_env`; ``default`` resolved per
+    family by :func:`resolve_fusion_modes` from the model's ``config.model_type``). A knob it does not name keeps
     its old reading -- ``cfg.fuse_qkv`` for the q/k/v fusion, the fold's own environment variable for a fold -- and is
     called exactly as before, so a config built without modes behaves as it always did. Fused q/k/v at ``1`` refuses a
     model with no Qwen3-MoE attention; at ``auto`` it fuses what matches and the folds run either way. ``report`` (a
     dict, when given) receives the resolved modes and each fold's report."""
     from .engines import glue_fuse, glue_r2, router_epilogue
-    modes = dict(cfg.fusion_modes or {})
+    model_type = getattr(getattr(model, "config", None), "model_type", None)
+    modes, sources = resolve_fusion_modes(dict(cfg.fusion_modes or {}), model_type)
     qkv_mode = modes.get(FUSE_QKV_ENV) or ("1" if cfg.fuse_qkv else "0")
     fold_modes = {k: modes.get(k) for k in FUSION_ENV}
     fold_reports = {} if report is not None else None
@@ -1080,7 +1140,8 @@ def _apply_fusions(model, cfg: PagedServeConfig, report: dict | None = None) -> 
         out = {"fuse_qkv_n": 0, **{key: _count(getattr(mod, fname)(model, **_fold_kw(env_name)))
                                    for (mod, fname, key), env_name in zip(folds, FUSION_ENV)}}
     if report is not None:
-        report.update(modes={FUSE_QKV_ENV: qkv_mode, **resolved}, folds=fold_reports)
+        report.update(modes={FUSE_QKV_ENV: qkv_mode, **resolved}, folds=fold_reports, sources=sources,
+                      model_type=model_type)
     log(f"fusions (q/k/v {qkv_mode}; folds set: {set_folds or 'none'}): {out}")
     return out
 
@@ -1244,6 +1305,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     info.update(levers)
     info.update(fusions)
     info["fusion_modes"] = fusion_report.get("modes")
+    info["fusion_sources"] = fusion_report.get("sources")
     info["fusion_report"] = fusion_report.get("folds")
     # The build churns through host buffers it frees (the hybrid tier's setup tier, the stacks' one-shot reads), and
     # glibc keeps freed blocks under its mmap threshold resident for the life of the server: 0.34 GB on OLMoE-1B-7B
@@ -1502,7 +1564,8 @@ def create_app(cfg: Optional[PagedServeConfig] = None, engine: Optional[PagedEng
                 "chunk_tokens": cfg.chunk_tokens, "max_prefill_tokens_per_step": cfg.prefill_budget,
                 "graphs": cfg.graphs, "buckets": list(cfg.buckets), "buckets_requested": cfg.buckets_requested,
                 "graph_status": info.pop("graph_status", None), "graph_stats": _graph_stats(parts),
-                "placement": cfg.placement, "fuse_qkv": cfg.fuse_qkv, "max_tokens_limit": cfg.max_tokens_limit,
+                "placement": cfg.placement, "fuse_qkv": _fuse_qkv_health(cfg, info),
+                "max_tokens_limit": cfg.max_tokens_limit,
                 "max_queue": cfg.max_queue or None, "bulk_kv": cfg.bulk_kv,
                 "decode_lookahead": cfg.decode_lookahead,
             },
