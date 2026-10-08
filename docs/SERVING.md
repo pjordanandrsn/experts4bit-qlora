@@ -96,11 +96,11 @@ the paged attention, and the fusions at one assembly point as the harness: `fuse
 (`E4B_PAGED_FUSE_QKV=1`), which applies the env-gated folds (`E4B_FUSE_T1_GLUE`, `E4B_FUSE_T1_GLUE_R2`,
 `E4B_FUSE_ROUTER_EPI`) itself -- the registered B=1 fused stack is `--fuse-qkv` with those flags set -- or,
 without it, the three folds called directly. Unset, the four knobs resolve per family at startup: `auto` on
-`qwen3_moe`, the one family with a SANE read at T == 1 at reading size (lane P115 Phase D, #1379), and `0` elsewhere, Qwen3.5/3.6-MoE
-and Granite-MoE included until lane FAM reads them (#1362); `/health` reports each knob's resolution and its source.
-Explicit `auto` is structural and quality-licensed only on that list: elsewhere it logs one warning naming the read the
-family lacks or failed. `0` on a knob is the way
-back. A set lever that patches nothing refuses at startup, and
+`qwen3_moe`, the one family with a SANE read at T == 1 at reading size (lane P115 Phase D, #1379), and `0`
+elsewhere, Qwen3.5/3.6-MoE and Granite-MoE included until lane FAM reads them (#1362); `/health` reports each knob's
+resolution and its source. Explicit `auto` is structural and quality-licensed only on that list: elsewhere it logs one
+warning naming the read the family lacks or failed. `0` on a knob is the way back. A set lever that patches nothing
+refuses at startup, and
 `GET /health` reports the census (int4 expert layers, int4 attention projections, modules each fusion
 patched, decode-graph status per bucket) so a reader can tell which stack answered. Its `prefill_routes` block
 reports the prefill routes as the forward resolves them, read at each request: `int4_prefill` (`E4B_INT4_PREFILL`
