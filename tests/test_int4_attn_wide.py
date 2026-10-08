@@ -6,12 +6,14 @@ A batched decode step above 16 rows takes ``Int4Linear``'s cached bf16 copy and 
 These pin, on the CPU with the kernel package stubbed as ``tests/test_int4_attn.py`` stubs it:
   - ``wide=True`` sends 17..64 rows to the small-M GEMM through a workspace sized for 64 rows; 2..16 rows keep their
     construction-time workspace (K16, unchanged), one row the GEMV, more than 64 rows the bf16 matmul;
-  - the workspace is ONE per (device, width, plan, stream), shared by every module of that width;
+  - the workspace is ONE per (device, width, plan), shared by every module of that width and built at construction,
+    zeroed, before any capture; a lookup that misses under a capture raises rather than allocates;
   - ``E4B_ATTN_INT4_WIDE``: ``0`` (the default) changes nothing; ``1`` needs the K16 route and a kernel with
     ``block_m=`` (detected by signature), refused otherwise; anything else refused; fuse and enable carry it.
 And on a CUDA device with the real kernel (the A2000 correctness run; skipped elsewhere): two ``Int4Linear`` of one
-width captured in ONE graph, sharing the capture stream's workspace, replay to their eager bits and within one bf16
-ulp of the dequant reference; another stream gets its own workspace.
+width captured in ONE graph, sharing the workspace, replay to their eager bits and within one bf16 ulp of the dequant
+reference; and two graphs that both take the route (32 rows captured first, 64 second) replay to their eager bits with
+the second replayed FIRST -- the case a workspace born inside the first capture would get wrong.
 """
 import inspect
 import os
@@ -96,11 +98,13 @@ def test_without_wide_17_rows_keep_the_bf16_matmul(monkeypatch):
     assert ia._WIDE_WS == {}
 
 
-def test_the_workspace_is_one_per_width_plan_and_stream(monkeypatch):
+def test_the_workspace_is_one_per_width_and_plan_built_at_construction(monkeypatch):
     calls = []
     ia = _stubs(monkeypatch, calls)
     a, b = (ia.Int4Linear(_lin(seed=s), smallm=True, wide=True) for s in (1, 2))
     c = ia.Int4Linear(_lin(n_out=32, seed=3), smallm=True, wide=True)
+    built = dict(ia._WIDE_WS)
+    assert len(built) == 2 and int(sum(int(w[1].sum()) for w in built.values())) == 0      # before any forward, zeroed
     x = torch.randn(40, 64, dtype=torch.bfloat16)
     a(x)
     b(x)
@@ -109,8 +113,17 @@ def test_the_workspace_is_one_per_width_plan_and_stream(monkeypatch):
     ws = [call[4] for call in calls if call[0] == "smallm"]
     assert ws[0] is ws[1] is ws[3], "modules of one width share one workspace on a stream"
     assert ws[2] is not ws[0] and ws[2][0].shape[-1] == 32, "another width gets its own"
-    assert len(ia._WIDE_WS) == 2
+    assert ia._WIDE_WS == built and all(any(w is v for v in built.values()) for w in ws), "forwards allocate nothing"
     assert ia.wide_workspace_bytes() == sum(t.numel() * t.element_size() for w in (ws[0], ws[2]) for t in w)
+
+
+def test_a_lookup_that_misses_under_a_capture_raises(monkeypatch):
+    calls = []
+    ia = _stubs(monkeypatch, calls)
+    monkeypatch.setattr(torch.cuda, "is_current_stream_capturing", lambda: True)
+    with pytest.raises(RuntimeError, match="this stream is capturing"):
+        ia._wide_workspace(96, 64, 4, torch.device("cuda", 0))          # raises before touching the device
+    assert ia._WIDE_WS == {}
 
 
 def test_resolve_wide(monkeypatch):
@@ -240,12 +253,13 @@ def test_two_modules_of_one_width_in_one_graph_replay_to_their_references(monkey
         step()
     torch.cuda.current_stream(dev).wait_stream(side)
     torch.cuda.synchronize(dev)
+    built = dict(ia._WIDE_WS)
+    assert len(built) == 1, "one workspace for the width, built at construction"
     g = torch.cuda.CUDAGraph()
     with torch.cuda.graph(g):                                    # ... then capture on the capture stream
         outs = step()
     torch.cuda.synchronize(dev)
-    keys = {k[-1] for k in ia._WIDE_WS}
-    assert len(ia._WIDE_WS) == len(keys) >= 2, "one shared workspace per stream (warm-up and capture)"
+    assert ia._WIDE_WS == built, "the capture allocated a workspace"
     for seed in (21, 22, 23):
         torch.manual_seed(seed)
         x1.copy_(torch.randn_like(x1))
@@ -263,18 +277,41 @@ def test_two_modules_of_one_width_in_one_graph_replay_to_their_references(monkey
 
 
 @needs_wide_cuda
-def test_another_stream_gets_its_own_workspace(monkeypatch):
+def test_two_graphs_on_the_route_replay_in_either_order(monkeypatch):
+    """Graph A (32 rows) is captured first, graph B (64 rows) second, both through the one workspace; B replays first.
+    A workspace born inside A's capture would be zeroed only when A replays, and B would start from garbage counters."""
     from experts4bit_qlora.engines import int4_attn as ia
     monkeypatch.setattr(ia, "_WIDE_WS", {})
     dev = torch.device("cuda")
-    torch.manual_seed(3)
-    m = ia.Int4Linear(nn.Linear(2048, 512, bias=False, dtype=torch.bfloat16, device=dev), smallm=True, wide=True)
-    x = torch.randn(24, 2048, dtype=torch.bfloat16, device=dev)
-    y0 = m(x)
-    s = torch.cuda.Stream(dev)
-    s.wait_stream(torch.cuda.current_stream(dev))
-    with torch.cuda.stream(s):
-        y1 = m(x)
-    torch.cuda.current_stream(dev).wait_stream(s)
+    N, K = 1024, 2048
+    torch.manual_seed(31)
+    a = ia.Int4Linear(nn.Linear(K, N, bias=False, dtype=torch.bfloat16, device=dev), smallm=True, wide=True)
+    b = ia.Int4Linear(nn.Linear(K, N, bias=False, dtype=torch.bfloat16, device=dev), smallm=True, wide=True)
+    x32 = torch.randn(32, K, dtype=torch.bfloat16, device=dev)
+    x64 = torch.randn(64, K, dtype=torch.bfloat16, device=dev)
+    graphs, outs = [], []
+    for fn in (lambda: (a(x32), b(x32)), lambda: (b(x64), a(x64))):
+        side = torch.cuda.Stream(dev)
+        side.wait_stream(torch.cuda.current_stream(dev))
+        with torch.cuda.stream(side):
+            fn()
+        torch.cuda.current_stream(dev).wait_stream(side)
+        torch.cuda.synchronize(dev)
+        g = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(g):
+            outs.append(fn())
+        graphs.append(g)
     torch.cuda.synchronize(dev)
-    assert len(ia._WIDE_WS) == 2 and torch.equal(y0, y1)
+    assert len(ia._WIDE_WS) == 1
+    for seed in (41, 42):
+        torch.manual_seed(seed)
+        x32.copy_(torch.randn_like(x32))
+        x64.copy_(torch.randn_like(x64))
+        graphs[1].replay()                                       # B first
+        torch.cuda.synchronize(dev)
+        want = (b(x64), a(x64))
+        assert all(torch.equal(g_, w_) for g_, w_ in zip(outs[1], want)), "B replayed first moved a bit"
+        graphs[0].replay()
+        torch.cuda.synchronize(dev)
+        want = (a(x32), b(x32))
+        assert all(torch.equal(g_, w_) for g_, w_ in zip(outs[0], want)), "A replayed after B moved a bit"

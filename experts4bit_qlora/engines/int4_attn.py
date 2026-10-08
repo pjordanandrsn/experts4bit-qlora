@@ -63,7 +63,8 @@ class Int4Linear(nn.Module):
         :func:`resolve_smallm`); callers pass the resolved flag.
 
         ``wide=True`` (needs ``smallm``) also routes ``SMALLM_ROWS_MAX < rows <= WIDE_ROWS_MAX`` to the same
-        kernel with a 32- or 64-row tile, through a workspace shared per stream (:func:`_wide_workspace`).
+        kernel with a 32- or 64-row tile, through a workspace shared by every projection of its width and
+        built here, zeroed, before any capture (:func:`_wide_workspace`).
         Opt-in (:func:`resolve_wide`); callers pass the resolved flag."""
         super().__init__()
         _gemv, _qx, _dref, pack = _kernels()
@@ -168,6 +169,8 @@ class Int4Linear(nn.Module):
             part_sm, cnt_sm = smallm_workspace(self.N, block_n=bn, sk=sk_sm, device=dev)
             self.register_buffer("_smallm_part", part_sm, persistent=False)
             self.register_buffer("_smallm_cnt", cnt_sm, persistent=False)
+            if self._wide:
+                _wide_workspace(self.N, bn, sk_sm, dev, build=True)      # zeroed now: never born under a capture
         if bias is not None:
             self.register_buffer("bias", bias, persistent=False)
         else:
@@ -262,28 +265,38 @@ class Int4Linear(nn.Module):
         return w.reshape(self.N, self.K).to(torch.bfloat16)
 
 
-#: The 17..64-row route's split-K workspaces: ONE per (device, N, plan, stream), shared by every Int4Linear of that
-#: width. See :func:`_wide_workspace`.
+#: The 17..64-row route's split-K workspaces: ONE per (device, N, plan), shared by every Int4Linear of that width.
+#: See :func:`_wide_workspace`.
 _WIDE_WS: dict = {}
 
 
-def _wide_workspace(N: int, block_n: int, sk: int, device: torch.device):
+def _wide_workspace(N: int, block_n: int, sk: int, device: torch.device, *, build: bool = False):
     """The ``(part, cnt)`` workspace of the 17..64-row route for an ``N``-wide projection on ``device``, sized for the
-    64-row tile (it serves the 32-row tile too), shared by every ``Int4Linear`` of that width and plan on one stream.
+    64-row tile (it serves the 32-row tile too) and shared by every ``Int4Linear`` of that width and plan.
 
-    Why sharing is safe: the kernel reads ``part`` and re-arms ``cnt`` within one launch, and one stream's launches
-    run in order -- in a captured graph as well, where a single-stream capture is one chain -- so modules taking
-    turns never overlap. A second stream gets its own workspace, so two streams never race on one. Per-module
-    workspaces sized for 64 rows would cost ``4 x 64 x N`` fp32 each (264 MB more on Qwen3-30B-A3B's 96
-    projections); shared, it is ``4 x 64 x N`` per width and stream (5.2 + 2.1 MB there).
+    **Born eagerly, zeroed, never under a capture.** ``Int4Linear`` builds it at construction (``build=True``), so
+    ``cnt``'s zeros are written to memory before any graph exists. A workspace first allocated inside a capture would
+    have its zeroing recorded into that graph, not executed; a second graph sharing it could replay before the first
+    ever had, and split-K would start from uninitialised counters. A lookup that finds no workspace under a capture
+    therefore raises rather than allocates.
 
-    Built on first use per stream: eager steps' and each warm-up stream's before any capture, and the capture
-    stream's inside the first capture that takes the route (in that graph's private pool, once; kept for the
-    process). :func:`wide_workspace_bytes` reports the total."""
-    stream = torch.cuda.current_stream(device).cuda_stream if device.type == "cuda" else 0
-    key = (device.type, device.index, int(N), int(block_n), int(sk), stream)
+    **One stream at a time.** The kernel reads ``part`` and re-arms ``cnt`` within one launch, and one stream's
+    launches run in order -- in a captured graph as well, where a single-stream capture is one chain -- so the
+    projections of a width taking turns never overlap. Two streams must not run the route at the same time on one
+    device: e4b's runner warms up on a side stream and waits for it before it captures or replays on another, so its
+    uses never overlap. (Each module's own K16 workspace for 2..16 rows carries the same single-stream rule.)
+
+    Shared, it costs ``4 x 64 x N`` fp32 per width (5.2 + 2.1 MB on Qwen3-30B-A3B); per module it would be 264 MB
+    more over 96 projections. :func:`wide_workspace_bytes` reports the total."""
+    index = device.index if device.index is not None or device.type != "cuda" else torch.cuda.current_device()
+    key = (device.type, index, int(N), int(block_n), int(sk))
     ws = _WIDE_WS.get(key)
     if ws is None:
+        if not build and device.type == "cuda" and torch.cuda.is_current_stream_capturing():
+            raise RuntimeError(
+                f"E4B_ATTN_INT4_WIDE: no workspace for an N={N} projection (block_n {block_n}, sk {sk}) on {device}, "
+                "and this stream is capturing; it is built when the Int4Linear is constructed with wide=True, before "
+                "any capture -- a workspace born inside a capture would only be zeroed when that graph replays")
         _gemm, _plan, smallm_workspace = _smallm_kernels()
         ws = _WIDE_WS[key] = smallm_workspace(N, block_m=Int4Linear.WIDE_ROWS_MAX, block_n=block_n, sk=sk,
                                               device=device)
@@ -291,7 +304,7 @@ def _wide_workspace(N: int, block_n: int, sk: int, device: torch.device):
 
 
 def wide_workspace_bytes() -> int:
-    """Device bytes held by the 17..64-row route's shared workspaces (all streams, all widths)."""
+    """Device bytes held by the 17..64-row route's shared workspaces (all widths)."""
     return sum(t.numel() * t.element_size() for ws in _WIDE_WS.values() for t in ws)
 
 
