@@ -2123,11 +2123,11 @@ than `load_moe_4bit_streaming`. `e4b.offload.kimi-k3.full-depth.a2000.five-runs.
 `e4b.parity.kimi-k3.reproducible-on-gnf4-0.33.6.a2000.2026-09-29`
 ([results](../bench/kimi-k3-a2000/RESULTS-kimi-k3-a2000.md)).
 
-**Dense execution remains gated after a failed out-of-sample reading.** DQ7 of Loggetta's actual executor is VOID:
-fourteen of sixteen arms complete, and Qwen3-32B resident4096 is refused by the planner before loading. Completed
-Llama-3.1-8B allocator estimates are below measured peaks at2048/4096 in both placements. All completed streamed
-full-device plans also understate sampled driver use, by up to2395904403B; the inferred20% reserve does not cover
-that deficit. The tiny CUDA proof passes, but no calibration or DQ8 draw follows, and the opt-in remains.
+**Dense execution stays a development opt-in after its first out-of-sample reading.** DQ7 is VOID: the planner
+refused the Qwen3-32B resident 4096 anchor before loading, leaving fourteen of sixteen arms. Completed Llama-3.1-8B
+allocator estimates fall below measured peaks at 2048 and 4096 tokens in both placements. Every completed streamed
+full-device plan also falls below sampled driver use, by up to **2.40 GB**; the inferred 20% reserve does not cover
+the deficit. The tiny bitwise CUDA proof passes, but no reserve calibration or DQ8 draw follows.
 `e4b.train.dense-executor.dq7.5090.2026-10-08` ([results](../bench/dq7/RESULTS-dq7.md)).
 
 ### Training against other frameworks
@@ -3211,7 +3211,7 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio [measured]: TC1 amendment 68 (#835), one rented RTX 5090 (tc1-5090-136, an AMD engineering-sample CPU, Vast machine 13828): e4b's matched arm at its defaults against Unsloth 2026.9.14's matched arm on packed rows of 4,096 real tokens, both in venv-unsloth (torch 2.12.1), two draws each in ABBA order, every arm profiled, 40 …
 - e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio [measured]: TC1 amendment 69 (#835), one rented RTX 5090 (tc1-5090-137, AMD EPYC 7713, Vast machine 55913): TC1's field recipe (alpaca, seq 2048, micro-batch 2 x accum 4) over 60 load-gated steps with both frameworks on one stack (venv-unsloth, torch 2.12.1), e4b's matched arm at every current default against Unsloth 2026.9.14's …
 - e4b.train.single-ladder.field.5090.2026-10-08 [measured]: TC1 amendment 70 (#835), one rented RTX 5090 (tc1-5090-138, AMD EPYC 7K62, Vast machine 152440): grouped-nf4-gemm's opt-in single-block ladder (NF4_QLORA_SINGLE_LADDER=1, grouped-nf4-gemm#513) against the single padded block at TC1's field recipe over 60 load-gated steps, e4b at its defaults in venv-unsloth (torch …
-- e4b.train.dense-executor.dq7.5090.2026-10-08 [measured]: DQ7 of Loggetta dense execution is VOID: fourteen of sixteen architecture-only arms complete, the Qwen3-32B resident4096 anchor is refused before load, Llama allocator estimates understate both placements at2048/4096, and all completed streamed full-device plans understate sampled driver use (maximum2395904403B).
+- e4b.train.dense-executor.dq7.5090.2026-10-08 [measured]: DQ7 of Loggetta dense execution is VOID: fourteen of sixteen architecture-only arms complete; the Qwen3-32B resident 4096 anchor is refused before load; Llama allocator estimates understate both placements at 2048 and 4096 tokens …
 
 Open items (no evidence either way):
 

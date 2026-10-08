@@ -51,11 +51,11 @@ than `load_moe_4bit_streaming`. `e4b.offload.kimi-k3.full-depth.a2000.five-runs.
 `e4b.parity.kimi-k3.reproducible-on-gnf4-0.33.6.a2000.2026-09-29`
 ([results](../bench/kimi-k3-a2000/RESULTS-kimi-k3-a2000.md)).
 
-**Dense execution remains gated after a failed out-of-sample reading.** DQ7 of Loggetta's actual executor is VOID:
-fourteen of sixteen arms complete, and Qwen3-32B resident4096 is refused by the planner before loading. Completed
-Llama-3.1-8B allocator estimates are below measured peaks at2048/4096 in both placements. All completed streamed
-full-device plans also understate sampled driver use, by up to2395904403B; the inferred20% reserve does not cover
-that deficit. The tiny CUDA proof passes, but no calibration or DQ8 draw follows, and the opt-in remains.
+**Dense execution stays a development opt-in after its first out-of-sample reading.** DQ7 is VOID: the planner
+refused the Qwen3-32B resident 4096 anchor before loading, leaving fourteen of sixteen arms. Completed Llama-3.1-8B
+allocator estimates fall below measured peaks at 2048 and 4096 tokens in both placements. Every completed streamed
+full-device plan also falls below sampled driver use, by up to **2.40 GB**; the inferred 20% reserve does not cover
+the deficit. The tiny bitwise CUDA proof passes, but no reserve calibration or DQ8 draw follows.
 `e4b.train.dense-executor.dq7.5090.2026-10-08` ([results](../bench/dq7/RESULTS-dq7.md)).
 
 ### Training against other frameworks
