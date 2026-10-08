@@ -663,6 +663,17 @@ rented RTX 5090; **measured** — [`bench/p115/RESULTS-p115.md`](../bench/p115/R
 - **Default:** still opt-in. DEFAULT_AUTO licenses `auto`, but the flip waits for Phase C's reads on gpt-oss-20b,
   Qwen3.6-35B-A3B and Granite (PREREG Amendment 2) and then applies only to families with a registered reading.
 
+**grouped-nf4-gemm K33's NF4 decode GEMV decodes 1.24× as fast with one request** (lane P116, 2026-10-07, one rented
+RTX 5090; **measured** — [`bench/p116/RESULTS-p116.md`](../bench/p116/RESULTS-p116.md),
+`e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`).
+- **Speed:** on the default graph server (Qwen3-30B-A3B NF4), `GNF4_GEMV_BW=1` at K33's selected plans runs 1.2417× /
+  1.0003× the default (one request / 16; min over two pairs). The one-request step falls 10.22 → 8.22 ms. 16 requests
+  are unchanged with identical tokens, because a T > 1 step never reaches the switch.
+- **Quality:** within P110's bar at T == 1: wikitext ON bias −0.0012 nats (bar 0.0118), K8 −0.0104 ppl; c4val1
+  −0.0053 (bar 0.0116), K8 −0.090 (reported). A second draw on another host read g1 1.2681 and identical quality.
+- **Default:** still opt-in. DEFAULT_ON licenses grouped-nf4-gemm's `auto` at Qwen3's shapes on ≥ 160-SM parts, then
+  e4b's floor on that release.
+
 **The Gated DeltaNet kernels speed hybrid decode** (lane P105, 2026-10-03, one rented RTX 5090; **measured** —
 [`bench/p105/RESULTS-p105.md`](../bench/p105/RESULTS-p105.md), `e4b.serve.p105.qwen36-gdn-kernels.5090.2026-10-03`).
 - **Speed:** with `flash-linear-attention` 0.5.2 and `causal-conv1d` 1.7.0 installed, Qwen3.6-35B-A3B's bucketed decode
