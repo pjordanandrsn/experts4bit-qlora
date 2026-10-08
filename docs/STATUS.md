@@ -178,9 +178,9 @@ together; serial output is unchanged. Lane SC2e has no register row; its read is
 16 unchanged, within P110's quality bar; it is grouped-nf4-gemm's default from 0.43.0 at Qwen3's NF4 expert shapes on
 GPUs with 160 or more SMs. `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`.
 
-**The B=1 fused stack is the default on the families with a registered read.** Fused q/k/v plus three glue folds
-resolve to `auto` on Qwen3-MoE, Qwen3.5/3.6-MoE and Granite-MoE and stay off elsewhere: gpt-oss-20b failed Phase C's
-argmax gate (0.924 against 0.95). On Qwen3-30B-A3B NF4 the stack decoded one request 1.4289× and 16 requests 1.2298× as
+**The B=1 fused stack is the default on Qwen3-MoE.** Fused q/k/v plus three glue folds resolve to `auto` on the one
+family with a SANE read at T == 1 at reading size, and stay off elsewhere. gpt-oss-20b failed Phase C's argmax gate
+(0.924 against 0.95); Qwen3.5/3.6-MoE and Granite-MoE wait for lane FAM's reads at T == 1 (#1362). On Qwen3-30B-A3B NF4 the stack decoded one request 1.4289× and 16 requests 1.2298× as
 fast at grouped-nf4-gemm 0.42.0, within P110's bar. [Phase D pending: on top of 0.43.0's bandwidth GEMV.]
 `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`,
 `e4b.serve.p115.fused-stack-quality.qwen3.5090.2026-10-07`,
@@ -253,7 +253,7 @@ controls. `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-
 | bandwidth-targeted NF4 decode GEMV | grouped-nf4-gemm | `GNF4_GEMV_BW=0` | `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07` |
 | grouped small-M routes above T == 1 (K19, K23, K21, K25) | serving | `E4B_INT4_GROUPED_SMALLM=0`, `E4B_INT4_LEAN_GLUE=0`, `E4B_MXFP4_GROUPED_SMALLM=0`, `E4B_NF4_GROUPED_SMALLM=0` | `e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01`, `e4b.serve.p89.qwen3.int4.k23-lean-glue-b16.5090.2026-10-01`, `e4b.serve.p90.gptoss.mxfp4.k21-b16.5090.2026-10-01`, `e4b.serve.p96.nf4-families.k25-windowed-k8.5090.2026-10-02` |
 | router weights cast to bf16 at ≤ 64 rows (`softmax_topk`) | fused router epilogue | `E4B_ROUTER_EPI_CAST=0` | `e4b.serve.p70.qwen3.b1.router-weight-cast.5090.2026-09-25` |
-| B=1 fused stack (fused q/k/v and three glue folds) on Qwen3-MoE, Qwen3.5/3.6-MoE and Granite-MoE | `serve_paged` | `E4B_PAGED_FUSE_QKV=0`, `E4B_FUSE_T1_GLUE=0`, `E4B_FUSE_T1_GLUE_R2=0`, `E4B_FUSE_ROUTER_EPI=0` | `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`, `e4b.serve.p115.fused-stack-quality.granite.5090.2026-10-08` [Phase D pending] |
+| B=1 fused stack (fused q/k/v and three glue folds) on Qwen3-MoE | `serve_paged` | `E4B_PAGED_FUSE_QKV=0`, `E4B_FUSE_T1_GLUE=0`, `E4B_FUSE_T1_GLUE_R2=0`, `E4B_FUSE_ROUTER_EPI=0` | `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07` [Phase D pending] |
 
 ---
 

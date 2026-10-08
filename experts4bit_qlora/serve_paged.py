@@ -40,10 +40,10 @@ census -- how many modules each lever patched -- is reported at ``GET /health`` 
 tell which stack answered. The four fusion knobs (``E4B_PAGED_FUSE_QKV`` and the three folds) each
 also take ``auto`` (:func:`_fusion_env`): apply where the module structure and the installed kernels
 license it, patch nothing -- without raising -- where they do not; ``1`` keeps the refusal. Unset, each resolves
-per family at the build (:func:`resolve_fusion_modes`): ``auto`` on a family with a registered passing read
-(:data:`FUSION_DEFAULT_FAMILIES`, lane P115) and ``0`` everywhere else. Explicit ``auto`` stays structural and, off
-that list, logs one warning naming the read the family lacks or failed. ``/health`` reports each knob's resolution,
-its source and what each fold skipped.
+per family at the build (:func:`resolve_fusion_modes`): ``auto`` on a family with a SANE read at T == 1 at reading
+size (:data:`FUSION_DEFAULT_FAMILIES`, lane P115) and ``0`` everywhere else. Explicit ``auto`` stays structural and,
+off that list, logs one warning naming the read the family lacks or failed. ``/health`` reports each knob's
+resolution, its source and what each fold skipped.
 
 **Semantics (stated, not silently approximated).** Greedy only: ``temperature`` must be 0 or
 absent (the runner argmaxes; a nonzero temperature is a 400, never ignored). ``max_tokens`` is
@@ -139,16 +139,17 @@ FUSION_ENV = ("E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")
 FUSE_QKV_ENV = "E4B_PAGED_FUSE_QKV"
 FUSION_KNOBS = (FUSE_QKV_ENV,) + FUSION_ENV
 # Lane P115's family-scoped default (PREREG-p115.md Amendment 3, mechanism (B)): an UNSET fusion knob resolves to
-# ``auto`` on a model_type with a registered passing read and to ``0`` everywhere else. Explicit ``auto`` stays
-# structural, as Phase C measured it.
+# ``auto`` on a model_type with a SANE read at T == 1 at reading size (the maintainer's rule, 2026-10-08, #1366) and to
+# ``0`` everywhere else. Explicit ``auto`` stays structural, as Phase C measured it.
 FUSION_DEFAULT_FAMILIES = {
-    "qwen3_moe": "P115 Phases A and B: speed and quality (#1328)",
-    "qwen3_5_moe": "P115 Phase C: engagement and SANE (#1342)",
-    "granitemoe": "P115 Phase C: Phase B's quality read, GRANITE_LICENSED (#1342)",
+    "qwen3_moe": "P115 Phases A and B: speed and quality (#1328); Phase D: SANE at T == 1 [Phase D pending]",
 }
-# families with a registered read that FAILED, named in the warning an explicit ``auto`` logs on them
-FUSION_FAILED_READS = {
+# the read each other known family lacks or failed, named in the warning an explicit ``auto`` logs on it
+FUSION_UNLICENSED = {
     "gpt_oss": "P115 Phase C: SANE argmax agreement 0.924 < 0.95 (#1342)",
+    "qwen3_5_moe": ("no SANE read at T == 1 at reading size (P115 Phase C's was at T == 12, #1342); "
+                    "lane FAM reads it (#1362)"),
+    "granitemoe": "no SANE read at T == 1 at reading size; lane FAM reads it (#1362)",
 }
 FUSION_UNSET = "default"          # from_env's value for an unset knob, resolved per family by resolve_fusion_modes
 _FUSION_WARNED: set = set()
@@ -333,7 +334,7 @@ def resolve_fusion_modes(modes: dict, model_type) -> tuple:
     explicit_auto = [k for k, v in modes.items() if v == "auto"]
     if explicit_auto and not allowed and model_type not in _FUSION_WARNED:
         _FUSION_WARNED.add(model_type)
-        why = FUSION_FAILED_READS.get(model_type, "no registered read")
+        why = FUSION_UNLICENSED.get(model_type, "no registered read")
         log(f"WARNING {', '.join(explicit_auto)}=auto on model_type {model_type!r}: {why}. Explicit auto is structural; "
             f"it is quality-licensed only on {sorted(FUSION_DEFAULT_FAMILIES)} (lane P115)")
     return resolved, sources

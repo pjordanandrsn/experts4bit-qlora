@@ -2,9 +2,10 @@
 """The B=1 fusion knobs' family-scoped default (lane P115, ``bench/p115/PREREG-p115.md`` Amendment 3, mechanism (B)).
 
 An UNSET knob (``E4B_PAGED_FUSE_QKV``, ``E4B_FUSE_T1_GLUE``, ``E4B_FUSE_T1_GLUE_R2``, ``E4B_FUSE_ROUTER_EPI``) resolves at
-the build, per the model's ``config.model_type``: ``auto`` on a family with a registered passing read (Qwen3-MoE,
-Qwen3.5/3.6-MoE, Granite-MoE) and ``0`` everywhere else. Explicit ``auto`` stays structural, as Phase C measured it, and
-off that list logs one warning naming the read the family lacks or failed. ``1`` and ``0`` keep their meanings.
+the build, per the model's ``config.model_type``: ``auto`` on a family with a SANE read at T == 1 at reading size
+(Qwen3-MoE; the maintainer's rule, #1366) and ``0`` everywhere else, Qwen3.5/3.6-MoE and Granite-MoE included until
+lane FAM reads them (#1362). Explicit ``auto`` stays structural, as Phase C measured it, and off that list logs one
+warning naming the read the family lacks or failed. ``1`` and ``0`` keep their meanings.
 ``tests/test_fusion_modes.py`` (staged by Phase C) pins the three settings themselves; this file pins the default.
 """
 import types
@@ -52,10 +53,13 @@ def folds(monkeypatch):
     return calls
 
 
-def test_the_allowlist_is_the_registered_reads():
-    assert set(FUSION_DEFAULT_FAMILIES) == {"qwen3_moe", "qwen3_5_moe", "granitemoe"}
-    assert "#1328" in FUSION_DEFAULT_FAMILIES["qwen3_moe"] and "#1342" in FUSION_DEFAULT_FAMILIES["granitemoe"]
-    assert "gpt_oss" not in FUSION_DEFAULT_FAMILIES and "0.924" in serve_paged.FUSION_FAILED_READS["gpt_oss"]
+def test_the_allowlist_is_the_families_with_a_sane_read_at_t1():
+    assert set(FUSION_DEFAULT_FAMILIES) == {"qwen3_moe"}
+    assert "#1328" in FUSION_DEFAULT_FAMILIES["qwen3_moe"] and "T == 1" in FUSION_DEFAULT_FAMILIES["qwen3_moe"]
+    unlicensed = serve_paged.FUSION_UNLICENSED
+    assert not set(unlicensed) & set(FUSION_DEFAULT_FAMILIES)
+    assert "0.924" in unlicensed["gpt_oss"]
+    assert all("#1362" in unlicensed[f] and "T == 1" in unlicensed[f] for f in ("qwen3_5_moe", "granitemoe"))
 
 
 def test_unset_knobs_come_from_env_as_default(monkeypatch):
@@ -74,7 +78,8 @@ def test_unset_resolves_to_auto_on_an_allowlisted_family(family):
     assert sources == {k: "default-allowlisted" for k in FUSION_KNOBS}
 
 
-@pytest.mark.parametrize("family", ["gpt_oss", "olmoe", "mixtral", "granitemoehybrid", None])
+@pytest.mark.parametrize("family", ["gpt_oss", "qwen3_5_moe", "granitemoe", "olmoe", "mixtral", "granitemoehybrid",
+                                    None])
 def test_unset_resolves_to_0_everywhere_else(family):
     resolved, sources = resolve_fusion_modes(dict(UNSET), family)
     assert resolved == {k: "0" for k in FUSION_KNOBS}
@@ -99,11 +104,15 @@ def test_explicit_auto_off_the_list_warns_once_naming_the_failed_read(monkeypatc
     assert capsys.readouterr().out == ""                   # once per family per process
     resolve_fusion_modes(dict(modes), "olmoe")
     assert "no registered read" in capsys.readouterr().out
+    resolve_fusion_modes(dict(modes), "granitemoe")
+    out = capsys.readouterr().out
+    assert "WARNING" in out and "T == 1" in out and "#1362" in out
     resolve_fusion_modes(dict(modes), "qwen3_moe")
     assert capsys.readouterr().out == ""                   # allowlisted: no warning
 
 
-@pytest.mark.parametrize("family,want", [("qwen3_moe", "auto"), ("granitemoe", "auto"), ("gpt_oss", "0"), (None, "0")])
+@pytest.mark.parametrize("family,want", [("qwen3_moe", "auto"), ("qwen3_5_moe", "0"), ("granitemoe", "0"),
+                                         ("gpt_oss", "0"), (None, "0")])
 def test_apply_fusions_resolves_the_default_per_family(folds, family, want):
     rep = {}
     _apply_fusions(_model(family), PagedServeConfig(fuse_qkv=True, fusion_modes=dict(UNSET)), report=rep)
