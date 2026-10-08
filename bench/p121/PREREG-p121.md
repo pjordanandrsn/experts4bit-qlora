@@ -70,7 +70,7 @@ on 12 wikitext windows:
 
 It reports K25's arithmetic at the shape P96 read, in nats and perplexity, not in K8's windows.
 
-## The rule (`bench/p121/p121_reduce.py`, self-tested on 35 cases)
+## The rule (`bench/p121/p121_reduce.py`, self-tested on 36 cases)
 
 The first that applies is the verdict.
 
@@ -106,7 +106,10 @@ The license rests on the main read only: P110's bar and g16 (the maintainer's ru
 - each text's perplexity move (exp of the mean NLL over its positions). This is the number P115 gated on wikitext at
   0.05; here it gates nothing;
 - the continuity row;
-- the route tallies.
+- the route tallies;
+- **peak allocated and reserved memory** for every arm and phase, after the build and at its end, with K1 − K0 over
+  the speed pairs. These are reported, never gated: K25 and the M-tile can differ in workspace (the maintainer's
+  addition at review).
 
 Floats are summed with `math.fsum`, so the verdict file is byte-identical on any Python.
 

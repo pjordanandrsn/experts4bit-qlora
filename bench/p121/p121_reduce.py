@@ -32,6 +32,9 @@ The verdict is the first of these that applies:
 The floor is ``half`` and ``chunk`` under R's arithmetic, plus ``rep`` if R did not repeat bit for bit (P110's B_floor
 and S_floor).
 
+**Memory (reported, no bar; the maintainer's addition):** each arm's and phase's peak allocated and reserved GiB after
+the build and at its end, and K1 - K0 (the mean over the two pairs) for the speed arms.
+
 **Continuity (reported, no bar):** P96's arms through the same instrument at one window a pass (T == 1) on 12 wikitext
 windows: Cm (``0`` + T == 1 device grouping, the M-tile) scores R, Ct (``1``: K25 at T == 1) scores ON. Read as
 "not run", "void" (with reasons: engagement, windows, commits) or "read" (bias, spread, perplexity move, argmax). Floats are summed with ``math.fsum``, so the verdict file is byte-identical on any Python.
@@ -292,6 +295,29 @@ def continuity_read(coff, con, e4b_sha: str) -> dict:
     return {"status": "read", "stats": st, "ppl_R": ppl_r, "ppl_ON": ppl_on, "ppl_delta": ppl_on - ppl_r}
 
 
+def _gib(b):
+    return round(b / 2**30, 3) if isinstance(b, (int, float)) else None
+
+
+def memory(arms: dict, recs: dict) -> dict:
+    """Peak allocated / reserved GiB per arm and phase, and K1 - K0 over the speed pairs: reported, never gated."""
+    out = {}
+    for name, r in list((t, arms.get(t)) for t in TAGS) + list(recs.items()):
+        if not r:
+            continue
+        p, pb = r.get("peak") or {}, r.get("peak_build") or {}
+        out[name] = {"max_allocated_gib": _gib(p.get("max_allocated")), "max_reserved_gib": _gib(p.get("max_reserved")),
+                     "build_max_allocated_gib": _gib(pb.get("max_allocated")),
+                     "build_max_reserved_gib": _gib(pb.get("max_reserved"))}
+    diffs = {}
+    for k in ("max_allocated_gib", "max_reserved_gib"):
+        v = [out.get(a, {}).get(k) for a in ("K1a", "K0a", "K1b", "K0b")]
+        if all(x is not None for x in v):
+            diffs[k] = round(math.fsum([v[0] - v[1], v[2] - v[3]]) / 2, 3)
+    out["k1_minus_k0"] = diffs
+    return out
+
+
 def predictions(out: dict) -> dict:
     q = out.get("quality") or {}
     vals = {"g16": out.get("g16"), "w1_pairs": out.get("pair_ratios", {}).get("W1"),
@@ -316,6 +342,7 @@ def reduce(arms: dict, off: dict | None, on: dict | None, e4b_sha: str, coff=Non
            "bars": {"self_pair": [SELF_LO, SELF_HI], "gain_min_w16": GAIN_MIN_W16, "tol": TOL, "spread_x": SPREAD_X,
                     "spread_min": SPREAD_MIN, "k8_budget": K8_BUDGET, "k8_gated": list(K8_GATED)}}
     out["continuity"] = continuity_read(coff, con, e4b_sha)
+    out["memory"] = memory(arms, {"quality_off": off, "quality_on": on, "continuity_off": coff, "continuity_on": con})
     missing = [t for t in TAGS if t not in arms or arms[t].get("status") != "ok"]
     missing += [n for n, r in (("quality_off", off), ("quality_on", on)) if not r or r.get("status") != "ok"]
     if missing:
@@ -418,7 +445,10 @@ def _fake_arm(tag, rate16, rate1, toks16, toks1, *, model=QWEN, prove=False, e4b
                 "tokens": {str(short): [t[:short] for t in toks], str(long_): toks},
                 "rep_digests": digests or {str(short): ["x"] * 3, str(long_): ["y"] * 3},
                 "routes": {"k25": 0, "mtile_small": 0, "mtile_large": 0}}
+    gib = 2**30
+    peak = {"max_allocated": 22 * gib + (gib // 4 if k1 else 0), "max_reserved": 24 * gib, "allocated": 20 * gib, "reserved": 23 * gib}
     return {"tag": tag, "status": "ok", "e4b_sha": e4b, "gnf4_sha": GNF4_SHA, "model": model, "revision": REVS[model],
+            "peak": peak, "peak_build": dict(peak),
             "prove": prove, "graph_status": graphs or {str(b): "graph" for b in BUCKETS}, "fusions": dict(ZERO_FUSIONS),
             "max_seqs": 16, "buckets": list(BUCKETS), "route_build": rb, "prompts_sha256": "p", "short": short,
             "long": long_, "reps": 3, "workloads": {"W16": wl(rate16, toks16), "W1": wl(rate1, toks1)}}
@@ -549,6 +579,9 @@ def self_test() -> int:
     c = r["continuity"]
     cases.append(("continuity read", r["verdict"] == "LICENSED" and c["status"] == "read" and abs(c["stats"]["bias"] - 0.002) < 1e-9))
     cases.append(("continuity not run", run()["continuity"] == {"status": "not run"}))
+    m = run()["memory"]
+    cases.append(("memory reported", m["K1a"]["max_allocated_gib"] == 22.25 and m["k1_minus_k0"] == {"max_allocated_gib": 0.25, "max_reserved_gib": 0.0}
+                  and m["quality_off"]["max_allocated_gib"] is None))
     con = _fake_continuity("on")
     con["engagement"]["wikitext"]["ON"][3]["kernels"]["k25"] = 0
     r = reduce(arms(), _fake_quality("off"), _fake_quality("on"), E, _fake_continuity("off"), con)

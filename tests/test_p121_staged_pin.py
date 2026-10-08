@@ -93,10 +93,10 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 def test_the_self_tests_pass():
     out = subprocess.run([sys.executable, str(LANE / "p121_reduce.py"), "--self-test"], capture_output=True, text=True,
                          env=_env())
-    assert out.returncode == 0 and "p121_reduce self-test OK (35 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "p121_reduce self-test OK (36 cases)" in out.stdout, out.stdout + out.stderr
     out = subprocess.run([sys.executable, str(LANE / "p121_box.py"), "--self-test"], capture_output=True, text=True,
                          env=_env())
-    assert out.returncode == 0 and "p121_box self-test OK (20/20 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "p121_box self-test OK (21/21 cases)" in out.stdout, out.stdout + out.stderr
 
 
 def test_the_rule_is_the_registered_rule():

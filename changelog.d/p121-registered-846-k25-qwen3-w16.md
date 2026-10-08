@@ -9,7 +9,8 @@
     floor, with a mutant that must fail.
   - **route counter:** wraps K25 and the M-tile, so every record shows which kernel ran.
   - **continuity row:** P96's arms at T == 1, reported with no bar.
-- **The rule** (`bench/p121/p121_reduce.py`, 35 self-test cases), first match wins: VOID, NOISY, FUNCTION_FAIL,
-  QUALITY_FAIL (P110's bar), SLOWER (g16 < 1.00), else LICENSED. The perplexity move is reported, not gated.
+- **The rule** (`bench/p121/p121_reduce.py`, 36 self-test cases), first match wins: VOID, NOISY, FUNCTION_FAIL,
+  QUALITY_FAIL (P110's bar), SLOWER (g16 < 1.00), else LICENSED. The perplexity move and each arm's peak
+  allocated and reserved memory are reported, not gated.
 - **Premise on the card:** the decode-graph bucket tests and K25's row-exactness GPU tests, 11 passed.
 - **Budget:** proof on Granite (guard 0.75 h), reading guard 2.0 h, lane ceiling $3.00.

@@ -18,6 +18,9 @@ time), so every record carries which kernel ran: K25 calls, and M-tile calls at 
 ``--mode speed``: P109's workloads, timing and token records at P109's registered bytes (W16: 16 prompts at once; W1:
 row 0 alone), the route tally after the build (the bucket graphs' captures) and over each workload.
 
+Every arm and phase records its peak allocated and reserved memory (``_peak``), after the build and at its end: reported,
+never gated (the maintainer's addition; K25 and the M-tile can differ in workspace).
+
 ``--mode quality``: P115 Phase B's instrument (``p115_quality.measure_phase`` at its registered bytes) on the default
 server built eager, at ``--group`` 16 windows a pass: every decode step 16 rows, 128 routed rows, device grouping, lean
 glue and padding as served. K0 scores R, its floor (``rep``, ``half``, ``chunk``) and ``mutant_scale``, and saves R's
@@ -126,6 +129,16 @@ def _gemv_counts():
         return {}
 
 
+def _peak(torch) -> dict:
+    """Peak and current allocated / reserved bytes on the device, since the process started."""
+    return {"max_allocated": int(torch.cuda.max_memory_allocated()), "max_reserved": int(torch.cuda.max_memory_reserved()),
+            "allocated": int(torch.cuda.memory_allocated()), "reserved": int(torch.cuda.memory_reserved())}
+
+
+def _gib(b) -> float:
+    return round(b / 2**30, 3)
+
+
 def _common(cfg, parts, arm, load_s):
     import torch
     info = parts.info
@@ -158,7 +171,7 @@ def speed_main(a) -> int:
     parts = build_engine(cfg)
     load_s = time.perf_counter() - t0
     rec = {"mode": "speed", "tag": a.tag, **_common(cfg, parts, arm, load_s), "routes_wrapped": rc.wrapped,
-           "route_build": _delta(rc.snapshot(), r0), "gemv_build": _delta(_gemv_counts(), g0),
+           "route_build": _delta(rc.snapshot(), r0), "gemv_build": _delta(_gemv_counts(), g0), "peak_build": _peak(torch),
            "prompts_sha256": pf["prompts_sha256"], "short": a.short, "long": a.long, "reps": a.reps,
            "mem_after_load": p109_box._mem(torch), "workloads": {}, "status": "ok"}
     for wname, b in p109_box.WORKLOADS.items():
@@ -182,9 +195,11 @@ def speed_main(a) -> int:
     rec["graph_stats"] = {str(k): dict(v) for k, v in gs.items()} if isinstance(gs, dict) else None
     rec["route_total"] = _delta(rc.snapshot(), r0)
     rec["mem_after_runs"] = p109_box._mem(torch)
+    rec["peak"] = _peak(torch)
     rec["nvidia_smi"] = p109_box._smi()
     json.dump(rec, open(a.out, "w"), indent=1, default=str)
     print("P121_ARM " + json.dumps({"arm": arm, "tag": a.tag, "route_build": rec["route_build"], "load_s": rec["load_s"],
+                                    "peak_gib": [_gib(rec["peak"]["max_allocated"]), _gib(rec["peak"]["max_reserved"])],
                                     "W16": rec["workloads"]["W16"]["decode_tok_s"],
                                     "W1": rec["workloads"]["W1"]["decode_tok_s"]}, default=str), flush=True)
     return 0
@@ -206,6 +221,7 @@ def quality_main(a) -> int:
     model = parts.runner.model
     model.eval()
     load_s = time.time() - t0
+    peak_build = _peak(torch)
     fwd = q.ForwardCounter(model)
     texts = tuple(t for t in a.texts.split(",") if t)
     windows = {t: q.LOADERS[t](parts.tokenizer, a.windows, a.prompt, a.cont) for t in texts}
@@ -214,10 +230,11 @@ def quality_main(a) -> int:
                           chunk=a.chunk, floor_chunk=a.floor_chunk, group=a.group, device=cfg.device,
                           ref_dir=a.ref_dir, counters=rc, fwd=fwd, arms=QUALITY_ARMS[arm])
     rec = {"mode": "quality", **_common(cfg, parts, arm, load_s), "transformers": transformers.__version__,
-           "routes_wrapped": rc.wrapped, "route_measure": _delta(rc.snapshot(), r1), **rec,
-           "max_mem_gb": round(torch.cuda.max_memory_allocated() / 2**30, 2), "status": "ok"}
+           "routes_wrapped": rc.wrapped, "route_measure": _delta(rc.snapshot(), r1), **rec, "peak_build": peak_build,
+           "peak": _peak(torch), "max_mem_gb": round(torch.cuda.max_memory_allocated() / 2**30, 2), "status": "ok"}
     json.dump(rec, open(a.out, "w"), indent=1, default=str)
     print(f"P121_QUALITY {arm} windows={rec['windows']} group={rec['group']} routes={rec['route_measure']} "
+          f"peak {_gib(rec['peak']['max_allocated'])} / {_gib(rec['peak']['max_reserved'])} GiB "
           f"load {load_s:.0f}s {rec['seconds']} s", flush=True)
     return 0
 
@@ -256,6 +273,7 @@ def self_test() -> int:
     RouteCounter().install({"nf4_smallm": sm, "nf4_grouped": ng})                   # never wrapped twice
     sm.gemm_nf4_grouped_smallm(_T(16), 0, 0)
     ok.append(rc.snapshot()["k25"] == 2)
+    ok.append(_gib(3 * 2**30 + 2**29) == 3.5)
     print(f"p121_box self-test {'OK' if all(ok) else 'FAILED'} ({sum(ok)}/{len(ok)} cases)")
     return 0 if all(ok) else 1
 
