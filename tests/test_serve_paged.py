@@ -584,15 +584,17 @@ def test_config_from_env_and_defaults(monkeypatch):
 
 
 @pytest.mark.parametrize("max_seqs,value,buckets,requested", [
-    ("16", None, (1, 2, 4, 8, 16), "default"),
-    ("32", None, (1, 2, 4, 8, 16), "default"),              # unchanged: a 32-row step runs as two 16-row replays
+    ("16", None, (1, 2, 4, 8, 16), "default"),              # up to 16 sequences auto reads the old list exactly
+    ("32", None, (1, 2, 4, 8, 16, 32), "default"),          # the default is auto (lane P117): one graph per step
+    ("64", None, (1, 2, 4, 8, 16, 32, 64), "default"),
     ("8", "", (1, 2, 4, 8), "default"),
+    ("64", "1,2,4,8,16", (1, 2, 4, 8, 16), "1,2,4,8,16"),   # the way back: a 64-row step as four 16-row replays
     ("32", "auto", (1, 2, 4, 8, 16, 32), "auto"),
     ("12", "AUTO", (1, 2, 4, 8, 12), "AUTO"),
     ("64", "auto", (1, 2, 4, 8, 16, 32, 64), "auto"),
     ("32", "1,2,4,8,16,32,64", (1, 2, 4, 8, 16, 32), "1,2,4,8,16,32,64"),
 ])
-def test_buckets_default_to_the_list_and_auto_follows_max_seqs(monkeypatch, max_seqs, value, buckets, requested):
+def test_buckets_default_to_auto_and_an_explicit_list_is_the_way_back(monkeypatch, max_seqs, value, buckets, requested):
     monkeypatch.setattr(serve_paged_mod, "_capability", lambda device: None)   # host-independent: no GPU facts
     monkeypatch.setenv("E4B_PAGED_GRAPHS", "1")
     monkeypatch.setenv("E4B_PAGED_MAX_SEQS", max_seqs)
@@ -616,10 +618,10 @@ def test_a_server_wider_than_its_largest_bucket_says_so(monkeypatch, capsys):
     monkeypatch.setattr(serve_paged_mod, "_capability", lambda device: None)
     monkeypatch.setenv("E4B_PAGED_GRAPHS", "1")
     monkeypatch.setenv("E4B_PAGED_MAX_SEQS", "32")
-    monkeypatch.delenv("E4B_PAGED_BUCKETS", raising=False)
+    monkeypatch.setenv("E4B_PAGED_BUCKETS", "1,2,4,8,16")
     PagedServeConfig.from_env()
     assert "consecutive 16-row replays" in capsys.readouterr().out
-    monkeypatch.setenv("E4B_PAGED_BUCKETS", "auto")
+    monkeypatch.delenv("E4B_PAGED_BUCKETS", raising=False)                  # the default, auto
     PagedServeConfig.from_env()
     assert "consecutive" not in capsys.readouterr().out
 
@@ -671,8 +673,9 @@ def test_max_seqs_refuses_what_it_cannot_read(monkeypatch, value):
         PagedServeConfig.from_env()
 
 
-@pytest.mark.parametrize("buckets_env,widths,want", [(None, (64, 16), (1, 2, 4, 8, 16)),
-                                                     ("auto", (64, 32, 16), (1, 2, 4, 8, 16, 32, 64))])
+@pytest.mark.parametrize("buckets_env,widths,want", [(None, (64, 32, 16), (1, 2, 4, 8, 16, 32, 64)),
+                                                     ("auto", (64, 32, 16), (1, 2, 4, 8, 16, 32, 64)),
+                                                     ("1,2,4,8,16", (64, 16), (1, 2, 4, 8, 16))])
 def test_resolve_max_seqs_sets_the_width_then_its_buckets(monkeypatch, buckets_env, widths, want):
     from experts4bit_qlora import serve_recipe
     monkeypatch.setattr(serve_paged_mod, "_capability", lambda device: None)
