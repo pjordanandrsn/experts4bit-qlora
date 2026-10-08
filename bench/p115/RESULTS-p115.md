@@ -213,3 +213,102 @@ This read registers two rows:
 
 The launcher's receipts and ledger rows are in the receipt store. The reading's is adertha-receipts `58f25d67`, and the
 proof's is `07b05b78`.
+
+## Phase D (`p115d-5090-1`): **COMBINED_SANE**
+
+Registration: Amendment 3 (#1354, `88040546`) and Amendment 4 (#1366, `d1d76084`). Amendment 4 reads W1's GEMV
+engagement at the capture, after `p115d-prove-2` VOIDed on the reducer. The proof `p115d-prove-3` passed first.
+
+Code under test:
+- e4b 0.50.0 at `d1d76084`;
+- grouped-nf4-gemm 0.43.0 at `6ee2e10`, with P116's bandwidth GEMV at its default (`GNF4_GEMV_BW=auto`);
+- torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0, bitsandbytes 0.50.2;
+- `Qwen/Qwen3-30B-A3B` at `ad44e77`, its NF4 arena baked on the box.
+
+**Subject:** the default graph server at 16 slots (`E4B_PAGED_MAX_SEQS=16` named, buckets 1–16 captured, all-vram).
+- **D0:** the four fusion knobs at `0`.
+- **D1:** all four at `auto`.
+
+**Verdict by `p115d_reduce.py`: `COMBINED_SANE`.**
+
+| | D0 (knobs `0`) | D1 (knobs `auto`) |
+|---|---|---|
+| census (q/k/v / glue / r2 / router) | 0 / 0 / [0, 0] / 0 | 48 / 193 / [48, 48] / 48 |
+| GEMV at the capture, each speed arm | `bw_prmt32` ×288, no dot-pad | `bw_prmt32` ×288, no dot-pad |
+| bucket 1 in the speed arms | 776 replays, no eager step | 776 replays, no eager step |
+| GEMV in SANE (T == 1) | `bw_prmt32` ×146,304, no dot-pad | `bw_prmt32` ×146,304, no dot-pad |
+| W1 decode tok/s (a / b) | 135.48 / 134.80 | 215.44 / 215.19 |
+| W16 decode tok/s (a / b) | 771.84 / 770.34 | 898.74 / 899.70 |
+
+**SANE at one window per pass (T == 1):** 12 wikitext windows × 128 positions, with D1 scored against D0's log-probs.
+- **Bias +0.00541 nats** (gate |bias| ≤ 0.02). Per window it ranges from −0.0287 to +0.0409.
+- **Argmax agreement 0.9674** (gate ≥ 0.95). Per window it ranges from 0.9453 to 0.9922.
+- **Mean KL 0.0110**, per-window maximum 0.0151.
+
+**Reported, not ruled:**
+- **g1 1.5902** (the minimum over the two ABBA pairs; geomean 1.5933) and **g16 1.1644** (geomean 1.1662). D0's
+  one-request step is 7.38 ms and D1's is 4.64 ms: on top of the GEMV, the stack removes 2.74 ms per token.
+- **Self-pairs:** D0b/D0a 0.995 (W1) and 0.998 (W16); D1b/D1a 0.999 and 1.001. Every self-pair decoded identical
+  tokens.
+- **D1 against D0:** D1 decoded W1's one row identically at both lengths. Of W16's 16 rows it decoded 9 identically at
+  32 tokens and 1 at 160, as differing arithmetic does.
+
+### The reading (`p115d-5090-1`)
+
+**Host:** one RTX 5090 (sm_120, driver 595.71.05, 170 SMs, **power limit 450 W**) on an AMD EPYC 7C13 host (256
+threads, ~1 TB RAM), 320 GB free. It was Vast instance 54900821. P118's 5090 ran at 575 W. Speed is reported here,
+and every arm ran on this one host.
+
+**Cost:** $0.882, 20 minutes from launch to teardown (19:35:59–19:56:01).
+
+**Timeline (the box's own log, UTC):**
+- the premise passed by 19:39 (19 passed, none skipped);
+- Qwen3-30B-A3B was fetched by 19:43, and baked with the prompts made by 19:44;
+- the speed arms D0a, D1a, D1b and D0b ran 19:44–19:49;
+- SANE D0 took 147.5 s and D1 117.5 s;
+- TP_DONE at 19:55:57.
+
+### Against the predictions
+
+| # | prediction | result |
+|---|---|---|
+| D1 | engagement exact; `bw_prmt32` on every W1 workload and both SANE phases, dot-pad never; every bucket captured | **held**: the census exact; `bw_prmt32` at every arm's capture, bucket 1 replayed with no eager step, and in both SANE phases; dot-pad never; every bucket captured |
+| D2 | self-pairs bitwise; D1 ≠ D0 on some rows | **held** |
+| D3 | SANE bias within ±0.005 nats, argmax agreement ≥ 0.96 | **missed on the bias**: +0.00541 nats, outside the predicted ±0.005 (inside the 0.02 gate). The argmax half held: 0.9674 |
+| D4 | g1 ∈ [1.30, 1.60], g16 ∈ [1.15, 1.30] | **held**: g1 1.5902, near the top; g16 1.1644, near the bottom |
+| D5 | COMBINED_SANE about 90 % | held |
+| D6 | each speed arm ≤ 3 min, each SANE phase ≤ 15 min, peak ≤ 23 GiB | **held**: about a minute per arm, SANE 2.5 and 2.0 min, peak 22.56 GiB (D1's speed arms; SANE 21.75) |
+
+### The registered consequence (COMBINED_SANE)
+
+- **As registered:** the family-scoped default PR may proceed, quoting D4's ratios as the stack's gain at
+  grouped-nf4-gemm 0.43.0, with this read's register row.
+- **Narrowed by the maintainer** (bus 2026-10-08T19:13Z, the #1366 review): a family is allowlisted by default only
+  with a SANE read at T == 1 at reading size.
+  - This read is that read for Qwen3-MoE, so the default covers **`qwen3_moe` only**.
+  - Qwen3.5/3.6-MoE and Granite-MoE stay off until lane FAM reads them at T == 1 against their own floors (#1362).
+  - Phase D's proof is why: it read Granite at T == 1 with a SANE bias of −0.0139 nats, where Phase C's proof had
+    read −0.0009 with 12 windows per pass.
+- **The default:** #1361 carries it.
+
+This read registers `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`. Its value is the SANE bias, +0.00541;
+the claim text carries the argmax agreement, g1 and g16.
+
+### What Phase D took
+
+| run | status | cost | note |
+|---|---|---:|---|
+| `p115d-prove-1` | NOT_RUN | $0.062 | the box's SSH never authenticated; its machine was excluded from the later launches |
+| `p115d-prove-2` | HARNESS_ERROR (rc 27, VOID) | $0.076 | the reducer read W1's own GEMV tally, which graph replays never increment; Amendment 4 |
+| `p115d-prove-3` | OK, PROVED | $0.159 | Granite end to end at `d1d76084`; its verdict (not a reading) COMBINED_SANE |
+| `p115d-5090-1` | **OK, COMBINED_SANE** | $0.882 | the reading |
+
+**Phase D cost $1.179**, inside its $4.00 ceiling. **P115 has cost $3.634** over all phases, against its $10 hard stop.
+
+**Receipts** are in `receipts/p115d-5090-1/`, with `SHA256SUMS`:
+- the four speed-arm records, `sane_off.json`, `sane_on.json` and `verdict_d.json`;
+- `summary.txt`, `forensics.txt`, `versions.txt`, `prompts.json`, `bake.json` and the logs.
+
+`p115d-prove-2`'s records are in `receipts/p115d-prove-2/` (Amendment 4). The launcher's receipts and ledger rows are in
+the receipt store: the reading's is adertha-receipts `b07d47c2`, and the proofs' are `2ef73398`, `6938da3a` and
+`deaf7733`.

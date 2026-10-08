@@ -614,9 +614,15 @@ def test_a_router_returning_fp32_is_never_cast(monkeypatch, setting):
 
 
 def _real_router(modeling, config_cls, router_cls, **cfg):
+    """transformers' router with its weight initialised explicitly. MixtralTopKRouter allocates it with torch.empty
+    (uninitialised memory, which no seed reaches: the source of #1372's intermittent failure) and Qwen3MoeTopKRouter
+    with torch.zeros (every expert tied on every row)."""
     m = pytest.importorskip(f"transformers.models.{modeling}.modeling_{modeling}")
-    torch.manual_seed(17)
-    return getattr(m, router_cls)(getattr(m, config_cls)(hidden_size=HID, **cfg)).to(torch.bfloat16)
+    r = getattr(m, router_cls)(getattr(m, config_cls)(hidden_size=HID, **cfg))
+    g = torch.Generator().manual_seed(17)
+    with torch.no_grad():
+        r.weight.copy_(torch.randn(r.weight.shape, generator=g))
+    return r.to(torch.bfloat16)
 
 
 @pytest.mark.parametrize("modeling,config_cls,router_cls,cfg,upstream", [
@@ -644,3 +650,85 @@ def test_real_routers_keep_their_upstream_weight_dtype(monkeypatch, modeling, co
     _, rw, ri = ref(x)
     assert calls["fused"] == 1 and rw.dtype == upstream and w.dtype == upstream
     assert torch.equal(i, ri)
+
+
+# --------------------------------------------- near ties in the probe (#1372's flaky test) --
+# A row whose k-th and (k+1)-th selection logits sit within rounding can select either expert under the same function,
+# so the probe compares the routing on the decisive rows only, per expert rather than per slot, and refuses a router
+# that leaves none.
+
+def test_decisive_rows_are_the_ones_outside_rounding_at_the_k_boundary():
+    from experts4bit_qlora.engines import router_epilogue as re_mod
+    logits = torch.tensor([[9.0, 5.0, 5.0, 1.0],          # k = 2: the 2nd and 3rd tie exactly
+                           [9.0, 5.0, 4.0, 1.0],          # decisive
+                           [9.0, 5.0, 5.0 - 1e-7, 1.0]])  # inside two fp32 ulps of 5.0
+    assert re_mod._decisive_rows(logits, 2).tolist() == [False, True, False]
+    assert re_mod._decisive_rows(logits.to(torch.bfloat16), 2).tolist() == [False, True, False]
+    assert re_mod._decisive_rows(logits, 4).tolist() == [True, True, True]      # k == E: nothing to tie with
+
+
+class TieBreakingRouter(MixtralLikeRouter):
+    """MixtralLikeRouter whose own path nudges one expert's logit by ``jitter``: the same function to rounding, which
+    breaks an exact tie the other way from the reference."""
+    def __init__(self, nudge_expert, jitter):
+        super().__init__()
+        self._nudge, self._jitter = nudge_expert, jitter
+
+    def forward(self, x):
+        x = x.reshape(-1, HID)
+        logits = F.linear(x, self.weight)
+        logits = logits + torch.nn.functional.one_hot(torch.tensor(self._nudge), E).to(logits.dtype) * self._jitter
+        probs = torch.softmax(logits.float(), dim=-1)
+        top, i = torch.topk(probs, self.top_k, dim=-1)
+        top = top / top.sum(dim=-1, keepdim=True)
+        return logits, top, i
+
+
+def _tied_probe(monkeypatch):
+    """Probe rows whose first row ties experts K-1 and K exactly at the k boundary; the other three are random."""
+    from experts4bit_qlora.engines import router_epilogue as re_mod
+    g = torch.Generator().manual_seed(29)
+    w = torch.randn(E, HID, generator=g)
+    w[:, 1] = torch.linspace(-4.0, -1.0, E)
+    w[: K - 1, 1] = torch.tensor([10.0, 9.0, 8.0])[: K - 1]
+    w[K - 1, 1] = w[K, 1] = 5.0                         # row 0 reads column 1 only: an exact tie
+    w[K, 0] = w[K - 1, 0] + 3.0                         # the other rows read column 0 too: there the two differ
+    rows = torch.randn(4, HID, generator=g)
+    rows[0] = 0.0
+    rows[0, 1] = 1.0
+    monkeypatch.setattr(re_mod, "_probe_rows", lambda hidden, wt: rows.to(wt.device, wt.dtype))
+    return re_mod, w, rows
+
+
+def test_a_tied_probe_row_is_left_out_and_the_decisive_rows_license(monkeypatch):
+    re_mod, w, rows = _tied_probe(monkeypatch)
+    ref_i = torch.topk(torch.softmax(F.linear(rows, w), dim=-1), K, dim=-1).indices[0]
+    other = K if (K - 1) in ref_i.tolist() else K - 1   # break row 0's tie the other way from the reference
+    gate = TieBreakingRouter(other, 1e-4)
+    with torch.no_grad():
+        gate.weight.copy_(w)
+    assert re_mod._decisive_rows(F.linear(rows, w), K).tolist() == [False, True, True, True]
+    assert not torch.equal(gate(rows)[2][0].sort().values, ref_i.sort().values), "the module disagrees on row 0"
+    cands = re_mod._structural(gate)
+    assert any(re_mod._probe_matches(gate, kind, spec) for kind, spec in cands)
+
+
+def test_a_router_whose_probe_rows_all_tie_is_refused(monkeypatch):
+    from experts4bit_qlora.engines import router_epilogue as re_mod
+    monkeypatch.setenv("E4B_FUSE_ROUTER_EPI", "1")
+    _stub(monkeypatch, {"fused": 0})
+    m = torch.nn.Module()
+    m.gate = MixtralLikeRouter()
+    with torch.no_grad():
+        m.gate.weight.copy_(torch.randn(1, HID).expand(E, HID))     # every expert identical: every row ties
+    assert not any(re_mod._probe_matches(m.gate, kind, spec) for kind, spec in re_mod._structural(m.gate))
+    with pytest.raises(RuntimeError, match="failed the semantic probe"):
+        fuse_router_epilogue(m)
+
+
+def test_a_router_with_non_finite_logits_is_refused():
+    from experts4bit_qlora.engines import router_epilogue as re_mod
+    gate = MixtralLikeRouter()
+    with torch.no_grad():
+        gate.weight[3, 0] = float("inf")
+    assert not any(re_mod._probe_matches(gate, kind, spec) for kind, spec in re_mod._structural(gate))
