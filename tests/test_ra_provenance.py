@@ -41,6 +41,95 @@ def make_wheel(root, name, module, *, extra=None, version="0.0.0"):
     return {"path": str(path), "sha256": provenance.digest(path)}
 
 
+def test_vendored_metadata_is_record_checked_payload(tmp_path):
+    vendor = "ra_probe/_vendor/foreign-7.dist-info/METADATA"
+    pin = make_wheel(tmp_path, "example", "ra_probe", extra={vendor: b"Name: foreign\nVersion: 7\n"})
+    observed = provenance.wheel(pin)
+    assert observed["name"] == "example" and vendor in observed["files"]
+    path = Path(pin["path"])
+    with zipfile.ZipFile(path) as archive:
+        files = {n: archive.read(n) for n in archive.namelist()}
+    files[vendor] += b"Changed: yes\n"
+    with zipfile.ZipFile(path, "w") as archive:
+        for rel, data in files.items():
+            archive.writestr(rel, data)
+    pin["sha256"] = provenance.digest(path)
+    with pytest.raises(ValueError, match="RECORD bytes"):
+        provenance.wheel(pin)
+
+
+@pytest.mark.parametrize("extra", [
+    {"other-7.dist-info/METADATA": b"Name: other\nVersion: 7\n"},
+    {"example-0.0.0.dist-info/METADATA": b"Name: example\nName: other\nVersion: 0.0.0\n"},
+])
+def test_ambiguous_top_level_identity_refuses(tmp_path, extra):
+    with pytest.raises(ValueError, match="one wheel"):
+        provenance.wheel(make_wheel(tmp_path, "example", "ra_probe", extra=extra))
+
+
+def test_vendored_metadata_real_install_is_owned_by_outer_wheel(tmp_path):
+    manifest, python, site = setup(tmp_path)
+    vendor = "ra_vendor/foreign-7.dist-info/METADATA"
+    pin = make_wheel(tmp_path, "experts4bit-qlora", "ra_probe_e4b", extra={vendor: b"Name: foreign\nVersion: 7\n"})
+    subprocess.run([sys.executable, "-m", "pip", "--python", str(python.parent.parent), "install",
+                    "--force-reinstall", "--no-index", "--no-deps", "--no-compile", pin["path"]],
+                   check=True, capture_output=True, text=True)
+    manifest["wheels"][0] = pin
+    result = probe(tmp_path, manifest, python)
+    assert result.returncode == 0, result.stderr
+    assert (site / vendor).exists()
+    assert set(json.loads((tmp_path / "provenance.json").read_bytes())["distributions"]) == set(provenance.RELEASES.values())
+
+
+@pytest.mark.parametrize("mutation", [None, "hash", "version", "body", "extra_hook", "bytecode",
+                                     "status", "duplicate_adapter", "site_enabled", "not_isolated"])
+def test_startup_audit_controls_never_activate_hook(tmp_path, mutation):
+    marker = tmp_path / "hook-executed"
+    body = f"import pathlib; pathlib.Path({str(marker)!r}).touch()\n".encode()
+    pin = make_wheel(tmp_path, "example", "ra_probe", extra={"example.pth": body})
+    adapter = {"name": "example", "version": "0.0.0", "wheel_sha256": pin["sha256"],
+               "startup": {"example.pth": hashlib.sha256(body).hexdigest()}, "semantics": "synthetic negative control"}
+    registry = {"schema": 1, "status": "PROPOSED_AUDIT_ONLY", "adapters": [adapter]}
+    if mutation == "hash":
+        adapter["wheel_sha256"] = "0" * 64
+    elif mutation == "version":
+        adapter["version"] = "1.0.0"
+    elif mutation == "status":
+        registry["status"] = "APPROVED"
+    elif mutation == "duplicate_adapter":
+        registry["adapters"].append(dict(adapter))
+    elif mutation in ("body", "extra_hook", "bytecode"):
+        payload = {"example.pth": body + (b"# changed\n" if mutation == "body" else b"")}
+        if mutation == "extra_hook":
+            payload["unknown.pth"] = body
+        elif mutation == "bytecode":
+            payload["ra_probe.pyc"] = b"unknown bytecode"
+        pin = make_wheel(tmp_path, "example", "ra_probe", extra=payload)
+        # Even a resealed whole archive cannot bypass the separate body/set binding.
+        adapter["wheel_sha256"] = pin["sha256"]
+    manifest = {"schema": 1, "wheels": [pin]}
+    arguments = tmp_path / "audit-input.json"
+    arguments.write_text(json.dumps([manifest, registry]))
+    code = ("import importlib.util,json,sys; "
+            f"s=importlib.util.spec_from_file_location('probe',{str(TOOL)!r}); "
+            "m=importlib.util.module_from_spec(s); s.loader.exec_module(m); "
+            "data=json.load(open(sys.argv[1])); print(json.dumps(m.audit_wheels(*data)))")
+    result = subprocess.run([sys.executable, *([] if mutation == "not_isolated" else ["-I"]),
+                             *([] if mutation == "site_enabled" else ["-S"]), "-B", "-c", code, str(arguments)],
+                            capture_output=True, text=True, timeout=30)
+    assert not marker.exists()
+    if mutation:
+        assert result.returncode != 0, mutation
+    else:
+        assert result.returncode == 0, result.stderr
+        receipt = json.loads(result.stdout)
+        assert receipt["startup_activated"] is False
+        assert not any(v for k, v in receipt.items() if k.startswith("proves_"))
+        # The installation path cannot receive this audit adapter.
+        with pytest.raises(ValueError, match="startup/bytecode"):
+            provenance.wheel(pin)
+
+
 def setup(tmp_path):
     prefix = tmp_path / "venv"
     venv.EnvBuilder(with_pip=False, symlinks=True).create(prefix)

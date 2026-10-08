@@ -61,7 +61,7 @@ def record_rows(data):
     return {r[0]: (r[1], r[2]) for r in rows}
 
 
-def wheel(pin):
+def wheel(pin, *, audit_startup=None):
     require(set(pin) == {"path", "sha256"}, "wheel pin fields")
     path = Path(pin["path"])
     require(path.suffix == ".whl" and digest(path) == pin["sha256"], "wheel archive digest")
@@ -75,17 +75,27 @@ def wheel(pin):
                     "\\" not in entry.filename and not stat.S_ISLNK(entry.external_attr >> 16), "unsafe ZIP entry")
             if entry.is_dir():
                 continue
-            require(not entry.filename.endswith((".pth", ".pyc")), "startup/bytecode wheel payload refused")
+            require(not entry.filename.endswith(".pyc") and
+                    (not entry.filename.endswith(".pth") or audit_startup is not None),
+                    "startup/bytecode wheel payload refused")
             with archive.open(entry) as stream:
                 files[entry.filename] = (sha(stream), entry.file_size)
-        metadata = [p for p in files if p.endswith(".dist-info/METADATA")]
+        # Vendored METADATA is payload owned by this wheel's outer RECORD,
+        # not a second installed distribution.
+        metadata = [p for p in files if p.count("/") == 1 and p.endswith(".dist-info/METADATA")]
         require(len(metadata) == 1, "one wheel METADATA required")
         info = metadata[0].rsplit("/", 1)[0]
         msg = email.parser.BytesParser().parsebytes(archive.read(metadata[0]))
-        require(msg["Name"] and msg["Version"], "missing wheel identity")
+        require(len(msg.get_all("Name", [])) == len(msg.get_all("Version", [])) == 1,
+                "one wheel name/version required")
         name, version = canonical(msg["Name"]), msg["Version"]
         require(canonical(path.name.split("-")[0]) == name and path.name.split("-")[1] == version,
                 "wheel metadata/name/version")
+        startup = {p: data[0] for p, data in files.items() if p.endswith(".pth")}
+        if startup:
+            matches = [a for a in audit_startup if a["name"] == name and a["version"] == version and
+                       a["wheel_sha256"] == pin["sha256"] and a["startup"] == startup]
+            require(len(matches) == 1, "startup audit adapter bytes/identity")
         records = record_rows(archive.read(info + "/RECORD").decode())
         require(set(records) == set(files), "wheel RECORD coverage")
         for rel, (actual, size) in files.items():
@@ -100,7 +110,40 @@ def wheel(pin):
         if info + "/entry_points.txt" in files:
             entrypoints.read_string(archive.read(info + "/entry_points.txt").decode())
     return {"name": name, "version": version, "info": info, "files": files,
-            "wheel_sha256": pin["sha256"], "entrypoints": entrypoints, "path": str(path)}
+            "wheel_sha256": pin["sha256"], "entrypoints": entrypoints, "path": str(path), "startup": startup}
+
+
+def audit_wheels(manifest, registry):
+    """Inspect proposed startup bytes without activating site or importing wheels.
+
+    This path cannot be used by probe(). A reviewed execution adapter must
+    independently verify installation before any site startup is enabled.
+    """
+    require(sys.flags.isolated and sys.flags.no_site and sys.dont_write_bytecode,
+            "startup audit requires python -I -S -B")
+    require(set(manifest) == {"schema", "wheels"} and manifest["schema"] == 1 and manifest["wheels"],
+            "audit manifest fields/schema")
+    require(set(registry) == {"schema", "status", "adapters"} and registry["schema"] == 1 and
+            registry["status"] == "PROPOSED_AUDIT_ONLY" and isinstance(registry["adapters"], list),
+            "proposed audit registry fields/schema")
+    adapters = registry["adapters"]
+    for adapter in adapters:
+        require(set(adapter) == {"name", "version", "wheel_sha256", "startup", "semantics"} and
+                canonical(adapter["name"]) == adapter["name"] and adapter["version"] and
+                re.fullmatch(r"[0-9a-f]{64}", adapter["wheel_sha256"]) and adapter["startup"] and
+                isinstance(adapter["semantics"], str), "startup audit adapter fields")
+        require(all(isinstance(p, str) and p.endswith(".pth") and
+                    re.fullmatch(r"[0-9a-f]{64}", value) for p, value in adapter["startup"].items()),
+                "startup audit adapter payload")
+    packages = {}
+    for pin in manifest["wheels"]:
+        package = wheel(pin, audit_startup=adapters)
+        require(package["name"] not in packages, "duplicate audit distribution")
+        packages[package["name"]] = {"version": package["version"], "wheel_sha256": package["wheel_sha256"],
+                                     "startup": package["startup"], "payload_files": len(package["files"])}
+    return {"schema": 1, "status": "PROPOSED_ADAPTER_BYTES_VERIFIED_ONLY", "distributions": packages,
+            "startup_activated": False, "proves_installation": False,
+            "proves_dependency_closure": False, "proves_imports": False, "proves_gpu_engagement": False}
 
 
 def destination(rel, site):
@@ -276,11 +319,20 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--manifest", required=True, type=Path)
     ap.add_argument("--out", required=True, type=Path)
+    ap.add_argument("--audit-wheels", action="store_true",
+                    help="proposed startup byte audit only; requires python -I -S -B")
     args = ap.parse_args()
     regular(args.manifest)
     require(args.out.is_absolute(), "absolute receipt output required")
     original = digest(args.manifest)
-    result = probe(json.loads(args.manifest.read_bytes()))
+    if args.audit_wheels:
+        registry_path = regular(Path(__file__).absolute().with_name("startup-audit-adapters.json"))
+        registry_digest = digest(registry_path)
+        result = audit_wheels(json.loads(args.manifest.read_bytes()), json.loads(registry_path.read_bytes()))
+        require(digest(registry_path) == registry_digest, "startup registry changed during audit")
+        result["startup_registry_sha256"] = registry_digest
+    else:
+        result = probe(json.loads(args.manifest.read_bytes()))
     require(digest(args.manifest) == original, "manifest changed during verification")
     result["manifest_sha256"] = original
     with args.out.open("x") as stream:

@@ -10,7 +10,9 @@ The stdlib probe hashes each archive, verifies its wheel RECORD, compares
 installed payload bytes to the archive, checks installed RECORD coverage and
 hashes, and rejects editable origins, symlinks, startup `.pth` files, cached
 bytecode and unlisted files. Resealing installed metadata cannot hide modified
-wheel payload. Only purelib/platlib relocations are supported; other wheel data
+wheel payload. Only top-level METADATA identifies the distribution; vendored
+metadata remains payload checked by the outer wheel's RECORD.
+Only purelib/platlib relocations are supported; other wheel data
 schemes fail until a reviewed adapter exists.
 
 Pip-generated scripts are derived from the already verified pip wheel's own
@@ -35,3 +37,12 @@ dependency bindings and retain failed process receipts.
 CPU tests install tiny wheels into fresh isolated venvs without network access.
 They exercise the real pip script template using re-archived test-host installer
 bytes. These are controls, not validation of the actual Linux proof wheels.
+
+`--audit-wheels` requires `python -I -S -B` and a manifest containing only
+`schema: 1` and `wheels`. It hashes archives and their RECORD payloads without
+activating site or importing wheels. The proposed registry binds setuptools
+84.0.0's exact archive and `distutils-precedence.pth` bytes; changed, additional
+or unknown hooks refuse. The hook selects local distutils through
+`_distutils_hack.add_shim` unless its environment flag disables it. This audit
+does not execute that branch or authorize installation. The installation probe
+still refuses every `.pth` pending a reviewed pre-startup installation adapter.
