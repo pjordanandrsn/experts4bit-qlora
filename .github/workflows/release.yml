@@ -3,11 +3,12 @@ name: Release
 # Publishes to PyPI via Trusted Publishing (OIDC) — no API token/secret.
 # Requires a PyPI trusted publisher for project `experts4bit-qlora` configured with:
 #   owner: pjordanandrsn | repo: experts4bit-qlora | workflow: release.yml
-# Trigger by pushing a version tag, e.g.  git tag v0.1.0 && git push origin v0.1.0
+# Triggered by publishing a GitHub release for a version tag (gh release create vX.Y.Z), so every PyPI version has a
+# GitHub release with the same notes. Pushing a tag alone publishes nothing.
 
 on:
-  push:
-    tags: ["v*"]
+  release:
+    types: [published]
 
 jobs:
   pypi-publish:
