@@ -83,7 +83,7 @@ def test_auto_unmatched_family_is_explicitly_inapplicable():
     assert serving.feature("auto", 0, 0, scope="synthetic")["mode"] == "inapplicable"
 
 
-def fake_build(*, fail=False):
+def fake_build(*, fail=False, model_type=None):
     counter = types.SimpleNamespace(snapshot=lambda: {"rmsnorm_rows": 0, "rmsnorm_resid_rows": 0,
                                                       "rope_norm_heads": 0, "rope_heads": 0, "router_epilogue": 0})
     instrument = types.SimpleNamespace(KernelCounters=lambda: types.SimpleNamespace(install=lambda: counter),
@@ -107,6 +107,8 @@ def fake_build(*, fail=False):
 
     def build(cfg):
         model = types.SimpleNamespace(observed=False, eval=lambda: None, named_modules=lambda: [])
+        if model_type is not None:
+            model.config = types.SimpleNamespace(model_type=model_type)
         server._apply_fusions(model, cfg)
         assert model.observed  # Hooks must exist before the simulated graph capture.
         if fail:
@@ -216,3 +218,35 @@ def test_registered_reducer_refuses_unknown_or_observed_fallback(fallback_calls)
                                                         fallback_calls=fallback_calls)}}
     with pytest.raises(reducer.Invalid, match="fallback"):
         reducer.features(rec)
+
+
+def test_owned_listener_only_permits_the_network_fixture(monkeypatch):
+    import os
+    import socket
+    from experts4bit_qlora import serve_paged as native
+    monkeypatch.setattr(os, "environ", {"E4B_PAGED_DEVICE": "cpu"})
+    server, instrument, parts, _ = fake_build(model_type="granitemoe")
+    server.PagedServeConfig = native.PagedServeConfig
+    server.resolve_fusion_modes = native.resolve_fusion_modes
+    cfg = native.PagedServeConfig.from_env()
+    native_port = cfg.port
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        # SO_ACCEPTCONN is Linux-only on this host. The query is a declared
+        # CPU stand-in over a real held listener; Linux ownership stays a proof gate.
+        guard = types.SimpleNamespace(family=listener.family, getsockname=listener.getsockname,
+                                      getsockopt=lambda *args: 1)
+        cfg.host, cfg.port = listener.getsockname()
+        cfg.port += 1
+        with pytest.raises(ValueError, match="listener"):
+            serving.build_instrumented(server, instrument, cfg, listener=guard)
+        cfg.port -= 1
+        cfg.graphs = not cfg.graphs
+        with pytest.raises(ValueError, match="independently reconstructed"):
+            serving.build_instrumented(server, instrument, cfg, listener=guard)
+        cfg.graphs = not cfg.graphs
+        _, _, fwd = serving.build_instrumented(server, instrument, cfg, listener=guard)
+        assert fwd.ra_defaults["port"] == native_port
+        assert cfg.port == listener.getsockname()[1]
+        assert set(fwd.ra_defaults["fusion_modes"].values()) == {"0"}

@@ -11,6 +11,7 @@ import copy
 import functools
 import json
 import os
+import socket
 import sys
 import time
 from pathlib import Path
@@ -43,6 +44,9 @@ def fusion_features(info, kernels, qkv_calls, *, scope, fallback, defaults):
     modes = info["fusion_modes"]
     if modes != defaults["fusion_modes"]:
         raise ValueError("assembly modes differ from independent release defaults")
+    if defaults.get("fusion_sources") is not None and (info.get("fusion_sources") != defaults["fusion_sources"] or
+                                                         info.get("model_type") != defaults["model_type"]):
+        raise ValueError("assembly family/sources differ from independent release defaults")
     layers, attention = info["fuse_t1_glue_r2_n"]
     fields = {
         "qkv": ("E4B_PAGED_FUSE_QKV", info["fuse_qkv_n"], qkv_calls),
@@ -62,19 +66,30 @@ def glue_census(info):
             "router_epilogue": info["fuse_router_epilogue_n"]}
 
 
-def build_instrumented(server, instrument, cfg, *, routes=None):
+def build_instrumented(server, instrument, cfg, *, routes=None, listener=None):
     """Install kernel counters before folds bind them; QKV hooks before capture."""
     counters = instrument.KernelCounters().install()
     forwards = []
+    initial = copy.deepcopy(cfg)
+    if listener is not None:
+        if listener.family != socket.AF_INET or listener.getsockname()[0] != "127.0.0.1" or \
+                not listener.getsockopt(socket.SOL_SOCKET, socket.SO_ACCEPTCONN) or \
+                (cfg.host, cfg.port) != listener.getsockname():
+            raise ValueError("configuration requires the owned loopback listener")
+        native = server.PagedServeConfig.from_env()
+        initial.host, initial.port = native.host, native.port
     original = server._apply_fusions
 
     @functools.wraps(original)
     def folds(model, *args, **kwargs):
         candidates = routes.candidates(model) if routes else []
+        model_type = getattr(getattr(model, "config", None), "model_type", None)
+        defaults = ra_fallback.resolved_defaults(server, initial, model_type=model_type) if initial is not None else None
         result = original(model, *args, **kwargs)
         if routes:
-            routes.assemble(model, candidates, cfg.fusion_modes)
+            routes.assemble(model, candidates, defaults["fusion_modes"])
         forward = instrument.ForwardCounter(model)
+        forward.ra_defaults = defaults
         forward.ra_glue = ra_fallback.GlueObserver().install(model)
         forwards.append(forward)
         return result
@@ -97,10 +112,10 @@ def decode(spec, helper, instrument, server, torch, nf4, *, routes=None):
             helper.digest(rows) != pf["prompts_sha256"]:
         raise ValueError("decode prompt bytes/shape")
     cfg = server.PagedServeConfig.from_env()
-    defaults = ra_fallback.resolved_defaults(server, cfg)
     start_dispatch = nf4.dispatch_counts()
     start = time.perf_counter()
     parts, counters, fwd = build_instrumented(server, instrument, cfg, routes=routes)
+    defaults = fwd.ra_defaults
     build_dispatch = delta(nf4.dispatch_counts(), start_dispatch)
     record = {"status": "ok", "model": cfg.model, "revision": cfg.revision,
               "load_s": time.perf_counter() - start, "config": {k: v for k, v in vars(cfg).items() if k != "token"},
@@ -150,10 +165,10 @@ def decode(spec, helper, instrument, server, torch, nf4, *, routes=None):
 @ra_routes.observed
 def quality(spec, instrument, server, torch, nf4, *, routes=None):
     cfg = server.PagedServeConfig.from_env()
-    defaults = ra_fallback.resolved_defaults(server, cfg)
     if cfg.graphs:
         raise ValueError("quality requires named eager fixture")
     parts, counters, fwd = build_instrumented(server, instrument, cfg, routes=routes)
+    defaults = fwd.ra_defaults
     parts.runner.model.eval()
     windows = json.loads(Path(spec["windows"]).read_bytes())
     if set(windows) != {"wikitext"} or len(windows["wikitext"]) != 12 or any(

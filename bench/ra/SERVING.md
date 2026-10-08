@@ -21,7 +21,13 @@ pass and requires singleton GEMV at group 1, no singleton dispatch at group 12.
 It retains the helper's attention/bucket evidence and score-preserving argmax
 capture. Temporary assembly/pass/score hooks restore after failures.
 
-`ra_fallback.py` reconstructs defaults before assembly, reconciles observed
+`ra_fallback.py` snapshots the initial config and reconstructs it independently.
+At fusion assembly it resolves unset modes with the loaded model type using the
+release resolver, retaining raw/resolved modes and native sources; legacy releases
+retain their direct modes. This avoids mistaking the build's capacity resolution
+for a configuration override. Capacity may replace host/port only with a
+verified listening loopback socket; other config fields still match the native
+factory. It reconciles observed
 glue forward coverage with native census and rejects auto kernel gaps. Nine baseline 0.50.0 bodies plus the two main router cast variants carry
 source commits in the adapter registry. They bind complete native forward bodies; changed
 bodies require a reviewed adapter. Private clones observe retained-original

@@ -3,6 +3,7 @@ import ast
 import copy
 import importlib.util
 import json
+import os
 import sys
 import types
 from pathlib import Path
@@ -255,3 +256,20 @@ def test_portable_ast_ignores_display_and_empty_optional_fields(monkeypatch):
     legacy["schema"] = 1
     with pytest.raises(ValueError, match="schema"):
         fallback.GlueObserver(legacy)
+
+
+@pytest.mark.parametrize("model_type,mode,source", [("qwen3_moe", "auto", "default-allowlisted"),
+                                                   ("granitemoe", "0", "default-off")])
+def test_real_release_from_env_resolves_unset_by_family(monkeypatch, model_type, mode, source):
+    from experts4bit_qlora import serve_paged as native
+    assert Path(native.__file__).resolve() == ROOT / "experts4bit_qlora/serve_paged.py"
+    monkeypatch.setattr(os, "environ", {"E4B_PAGED_DEVICE": "cpu"})
+    cfg = native.PagedServeConfig.from_env()  # No stub; no fusion overrides.
+    assert set(cfg.fusion_modes.values()) == {native.FUSION_UNSET}
+    result = fallback.resolved_defaults(native, cfg, model_type=model_type)
+    assert set(result["fusion_modes"].values()) == {mode}
+    assert set(result["fusion_sources"].values()) == {source}
+    assert result["fusion_modes_unresolved"] == cfg.fusion_modes
+    assert result["model_type"] == model_type
+    with pytest.raises(ValueError, match="model type"):
+        fallback.resolved_defaults(native, cfg)

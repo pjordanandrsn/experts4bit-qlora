@@ -173,7 +173,7 @@ class GlueObserver:
         return result
 
 
-def resolved_defaults(server, cfg):
+def resolved_defaults(server, cfg, *, model_type=None):
     """Reconstruct release defaults independently of assembly's reported modes."""
     fresh = server.PagedServeConfig.from_env()
     actual = {k: v for k, v in vars(cfg).items() if k != "token"}
@@ -181,9 +181,22 @@ def resolved_defaults(server, cfg):
     if actual != expected:
         raise ValueError("configuration differs from independently reconstructed release defaults")
     required = {"E4B_PAGED_FUSE_QKV", "E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI"}
-    modes = actual.get("fusion_modes")
+    unresolved = actual.get("fusion_modes")
+    if not isinstance(unresolved, dict) or set(unresolved) != required:
+        raise ValueError("unresolved release fusion defaults")
+    resolver = getattr(server, "resolve_fusion_modes", None)
+    if resolver is not None:
+        if not callable(resolver) or not isinstance(model_type, str) or not model_type:
+            raise ValueError("model type required for release fusion defaults")
+        modes, sources = resolver(copy.deepcopy(unresolved), model_type)
+        if set(sources) != required or any(not isinstance(v, str) or not v for v in sources.values()):
+            raise ValueError("unresolved release fusion sources")
+    else:
+        modes, sources = unresolved, None  # Legacy release has no source resolver.
     if not isinstance(modes, dict) or set(modes) != required or any(v not in ("auto", "0", "1") for v in modes.values()):
         raise ValueError("unresolved release fusion defaults")
+    actual.update(fusion_modes_unresolved=copy.deepcopy(unresolved), fusion_modes=copy.deepcopy(modes),
+                  fusion_sources=copy.deepcopy(sources), model_type=model_type)
     return copy.deepcopy(actual)
 
 

@@ -12,3 +12,6 @@ overrides refuse; failure snapshots remain in process logs. CPU controls establi
 
 Use canonical AST JSON across Python versions and refuse legacy display-format
 fingerprints; native bodies remain unchanged.
+
+Resolve unset fusion defaults with the loaded model family, recording raw modes,
+resolved modes and native sources before capture, without changing release config.
