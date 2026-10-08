@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 LANE = ROOT / "bench/dq7"
 sys.path.insert(0, str(LANE))
 try:
+    import dq7_arm as arm
     import dq7_reduce as reducer
     import dq7_subject as subject
 finally:
@@ -160,6 +161,27 @@ def test_builder_is_reproducible_on_a_reduced_cpu_fixture(tmp_path, monkeypatch)
         assert (first / file).read_bytes() == (second / file).read_bytes()
     with pytest.raises(FileExistsError):
         subject.build("tiny", first)
+
+
+@pytest.mark.parametrize("placement", ["device", "stream"])
+def test_registered_setup_is_accepted_by_the_actual_loggetta_planner(tmp_path, monkeypatch, placement):
+    pytest.importorskip("loggetta")
+    from loggetta import hardware
+    from loggetta.backends import dense
+
+    fact = lambda value: hardware.Fact(value, "inferred", "CPU test fixture")  # noqa: E731
+    gpu = hardware.GPU(0, "nvidia", "Fixture GPU", None, fact((8, 6)), fact(32 * 2**30), fact(32 * 2**30),
+                       fact("fixture"), fact(5), fact(16), fact(5), fact(16))
+    host = hardware.Host(fact("fixture"), fact(16), fact(128 * 2**30), fact(100 * 2**30), fact(128 * 2**30))
+    monkeypatch.setattr(hardware, "probe", lambda: hardware.HardwareProfile((gpu,), host, "Linux x86_64"))
+    # Avoid writing weights: description and planning need only the exact tiny configuration.
+    describe = dense.describe
+    monkeypatch.setattr(dense, "describe", lambda *args: describe(subject.config_for("tiny")))
+    result = arm.make_plan(tmp_path, placement, 64)
+    assert result.status == "feasible"
+    assert result.selected.setup["targets"] == ["attn_in", "attn_out", "mlp_in", "mlp_out"]
+    assert result.selected.setup["loss_chunk"] == 512
+    assert result.constraints.allow_development_executor
 
 
 def test_runner_refuses_a2000_before_install_and_binds_nonce(tmp_path):
