@@ -1,0 +1,2 @@
+VRAM_PROBE device=NVIDIA GeForce RTX 5090 free=30.85 GiB total=31.35 GiB
+VRAM_PROBE_OK 29.5 GiB in 14 blocks
