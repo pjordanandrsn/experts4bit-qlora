@@ -119,3 +119,6 @@ is explicitly under excluded plural `adapters/`. Keep logs, source/config,
 shard/row hashes and raw scientific receipts. Receipt publication uses a
 separate PR after the draw; no credential, model weights or private bus URI
 belongs in the public tracked files.
+
+
+Amendment 1: `dq9-5090-1` stopped at the checksum tripwire before proofs/readings; derive staging from `instrument.sha256` with an offline closure test, preserve that failure, and authorize one proof-first replacement `dq9-5090-2` from this amendment's reviewed merge commit under the unchanged $2.80 budget and decision.
