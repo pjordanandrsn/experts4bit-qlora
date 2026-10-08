@@ -381,12 +381,20 @@ engage only on a family with a registered passing read. The allowlist, by `model
 | `granitemoe` | Phase C: Phase B's quality read, GRANITE_LICENSED | #1342 |
 
 Every other family stays unfused unless set otherwise. That includes gpt-oss (`gpt_oss`), which gets a
-one-knob-per-arm follow-up with its own neutral floor first. Two mechanisms are possible:
-- **(A)** gate explicit `auto` itself on the allowlist;
-- **(B)** keep explicit `auto` structural, as Phase C read it, and resolve an unset knob per family.
+one-knob-per-arm follow-up with its own neutral floor first.
 
-Which one ships is the maintainer's call (#1313). The measurement below does not depend on it: on Qwen3-30B-A3B both
-resolve to all four knobs engaged. This page names the chosen mechanism before it merges.
+**Mechanism: (B), unset resolves per family; explicit `auto` structural, with a warning off the allowlist** (the
+maintainer's decision on the bus, 2026-10-08T18:25Z):
+- An **unset** knob resolves to `auto` on an allowlisted `model_type` and to `0` everywhere else. `/health` reports each
+  knob's resolution and its source (`default-allowlisted` or `explicit`).
+- **Explicit `auto`** stays structural, exactly as Phase C measured it. On a `model_type` outside the allowlist it logs
+  one warning naming the read that family lacks or failed, for gpt-oss: Phase C's SANE, argmax 0.924 < 0.95 (#1342).
+  `docs/SERVING.md` says in one line that explicit `auto` is structural and quality-licensed only on the allowlist.
+- `1` and `0` keep their meanings. No pinned file changes: `tests/test_fusion_modes.py`, which Phase C staged, still
+  asserts structural `auto`.
+
+The measurement below does not depend on the mechanism: on Qwen3-30B-A3B both the default and explicit `auto` engage
+all four knobs.
 
 ### Phase D — the combined read on Qwen3-30B-A3B
 

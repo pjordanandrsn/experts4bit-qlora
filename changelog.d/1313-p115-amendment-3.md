@@ -12,5 +12,9 @@
   (allowlist `qwen3_moe`, `qwen3_5_moe`, `granitemoe`).
 - **Budget.** Proof on Granite (guard 0.75 h), reading guard 1.5 h. Phase D ceiling $4.00, inside P115's $10 hard stop
   ($2.455 spent).
-- **Not measured yet.** No box runs before this page merges and the maintainer ACKs. The allowlist mechanism (gate
-  `auto` itself, or resolve the default per family) is the maintainer's choice.
+- **Mechanism: (B), unset resolves per family; explicit `auto` structural, with a warning off the allowlist** (the
+  maintainer's decision). An unset knob resolves to `auto` on `qwen3_moe`, `qwen3_5_moe` and `granitemoe`, and to `0`
+  elsewhere; `/health` reports the resolution and its source. Explicit `auto` on any other family logs a one-time
+  warning naming the read it lacks or failed.
+- **Not measured yet.** No box runs before this page merges. The default change itself is its own PR, after Phase D
+  reads.
