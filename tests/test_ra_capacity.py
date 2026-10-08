@@ -21,7 +21,8 @@ def load(name):
     return mod
 
 
-for name in ("ra_env", "ra_stage", "ra_reduce", "ra_normalize", "ra_process", "ra_training", "ra_quality", "ra_fallback", "ra_routes", "ra_serving"):
+for name in ("ra_env", "ra_stage", "ra_reduce", "ra_normalize", "ra_process", "ra_training", "ra_quality",
+             "ra_fallback", "ra_routes", "ra_serving", "ra_trace"):
     load(name)
 capacity = load("ra_capacity")
 server_wrapper = load("ra_capacity_server")
@@ -136,7 +137,7 @@ def test_drained_distinguishes_loading_from_permanent_failure(monkeypatch):
         capacity.drained("http://127.0.0.1:1", None, 1)
 
 
-@pytest.mark.parametrize("mutant", [None, "request", "health", "inputs", "driver", "trace"])
+@pytest.mark.parametrize("mutant", [None, "request", "health", "inputs", "driver", "trace", "close", "binding"])
 def test_owned_socket_sequence_retention_and_failure_cleanup(tmp_path, monkeypatch, mutant):
     s, stage, _ = prepared(tmp_path)
     model, pf, _, _, driver = capacity.prepared(s, stage)
@@ -207,10 +208,25 @@ def test_owned_socket_sequence_retention_and_failure_cleanup(tmp_path, monkeypat
 
     monkeypatch.setattr(capacity.ra_process, "run", client)
     monkeypatch.setattr(capacity, "get_json", get)
+    def close(*_):
+        assert calls == ["warm", "burst", "end"] and admitted[0] == 188
+        if mutant == "close":
+            raise TimeoutError("synthetic trace close timeout")
+        return {"closed": True, "synthetic": True}
+
+    monkeypatch.setattr(capacity, "close_trace", close)
+    # This suite tests process composition; native joins have their own mutation
+    # and production-engine tests in test_ra_trace.py.
+    def bind(*_):
+        if mutant == "binding":
+            raise ValueError("synthetic trace join failure")
+        return {"synthetic": True}
+
+    monkeypatch.setattr(capacity.ra_trace, "bind", bind)
     out = tmp_path / "out"
     try:
         if mutant:
-            with pytest.raises((ValueError, RuntimeError, capacity.ra_normalize.reducer.Invalid)):
+            with pytest.raises((ValueError, RuntimeError, TimeoutError, capacity.ra_normalize.reducer.Invalid)):
                 capacity.execute(s, stage, out)
         else:
             result = capacity.execute(s, stage, out)
@@ -233,6 +249,7 @@ def test_server_hooks_before_capture_builds_once_and_redacts_token(monkeypatch):
     cfg = types.SimpleNamespace(token="synthetic-secret", graphs=True)
     app = types.SimpleNamespace(routes={})
     app.get = lambda path: lambda fn: app.routes.setdefault(path, fn)
+    app.post = app.get
     parts = types.SimpleNamespace(info={"fusion_modes": {"graph": "auto"}, "census": 1})
     def original(cfg):
         return parts
