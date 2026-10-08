@@ -11372,6 +11372,31 @@
         "receipts/experts4bit-qlora/2026-10-07/tc1-5090-135/tc1/"
       ],
       "notes": "Vast invoiced $1.34; one earlier draw was refused at pre-flight (tc1-5090-134, $0.08, Hugging Face bandwidth 13.0 MB/s)."
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 68 (#835), one rented RTX 5090 (tc1-5090-136, an AMD engineering-sample CPU, Vast machine 13828): e4b's matched arm at its defaults against Unsloth 2026.9.14's matched arm on packed rows of 4,096 real tokens, both in venv-unsloth (torch 2.12.1), two draws each in ABBA order, every arm profiled, 40 load-gated steps. Unsloth's device time per profiled step is 1.160x e4b's (11649.4 / 10042.8 ms; P200 HELD, [1.06, 1.24]; amendment 66's host read 1.141). Unsloth runs 7.09x e4b's CPU ops per step (P202 HELD, >= 5) and its GPU is busy for 0.783 of its timed step against e4b's 0.993 (P201 HELD, gap >= 0.08), so its wall time depends on the host far more than e4b's: s/step 14.886 against 10.111 here, a wall ratio of 1.472. Held-out at N within 0.0001 (P204 HELD). P203 FALSIFIED as registered: Unsloth's device time was 14.7 % above amendment 66's absolute reference, but e4b's rose 12.9 % on the same card, so the bound tested the card.",
+      "value": 1.16,
+      "unit": "ratio, device ms per profiled step, Unsloth matched arm / e4b matched arm at its defaults, packed 4,096-token rows (medians of two draws); wall s/step ratio 1.472 on this host",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-136: instance 54768641, an AMD engineering-sample CPU, a 30.7-CPU quota, Vast machine 13828); e4b @ 0b29952 + grouped-nf4-gemm @ 8944aa8, torch 2.12.1+cu130; Unsloth 2026.9.14",
+      "conditions": "bench/tc1 token qwen3pos68 (TC1 amendment 68): packed rows (TC1_PACK=1, seq 4096, micro-batch 1 x accum 4, TC1_FREE_OUTPUTS=1), held-out at 0 and 40, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_m_pd and Unsloth ckpt_unsloth_m_pv (grouped_mm), two draws each, --phase-peaks 1 and the profile instrument (3 warm + 3 profiled steps, before the timed window) on every arm; validity (pos68_why) and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-08",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos68.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-136/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-08/tc1-5090-136/tc1/"
+      ],
+      "notes": "Vast invoiced $1.96."
     }
   ]
 }
