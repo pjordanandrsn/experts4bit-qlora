@@ -1,6 +1,6 @@
 # Docs index — what each document is, and whether it is current
 
-55 documents accumulated over two months of measured campaigns (the count is
+56 documents accumulated over two months of measured campaigns (the count is
 the number of distinct documents this index links, held by `tests/test_docs_index_count.py`).
 This index says what each one is *for*, whether it is still the thing to
 read, and whether it is OpenTimestamps-anchored (**anchored** documents
@@ -47,7 +47,7 @@ Start here: [`STATUS.md`](STATUS.md) (one page, current) →
 
 | doc | what it is |
 |---|---|
-| [`STATUS.md`](STATUS.md) | what you get today, what was retired, what is open |
+| [`STATUS.md`](STATUS.md) | the current position: what you get today, the defaults and the reads behind them, what is open |
 | [`claims.json`](claims.json) / [`claims-schema.md`](claims-schema.md) | machine-readable register of every claim, with status and evidence path |
 | [`CHOOSING.md`](CHOOSING.md) | which entry point, by the constraint you hit (VRAM, host RAM, disk) |
 | [`METHODOLOGY.md`](METHODOLOGY.md) | hosts, protocols, every measurement's provenance; §13 serving parity, §13.1 the routing-flip floor |
@@ -69,6 +69,7 @@ Start here: [`STATUS.md`](STATUS.md) (one page, current) →
 
 | doc | superseded by / note |
 |---|---|
+| [`STATUS-RECORD.md`](STATUS-RECORD.md) | the dated narrative behind `STATUS.md` to 0.50.0 (2026-10-08): every superseded reading with its reason. Frozen, not appended to; `STATUS.md` is the position. |
 | [`INFERENCE.md`](INFERENCE.md) | its decode grid is v0 offload-path figures; the pipelined and paged engines supersede them for decode (the doc says so). The mechanics and kill-switches are still current. |
 | [`support_matrix.md`](support_matrix.md) · anchored | the 2026-07-05 OLMoE/Qwen3 storage-mode matrix. Current for what it covers; serving parity is in `SERVING-PARITY.md`. Its footer's disclosed pre-footer hash no longer matches its pre-footer bytes — an older discrepancy, recorded, not fixed (that would mean editing an anchored file). |
 | [`hybrid/INTEGRATION-ASSESSMENT.md`](hybrid/INTEGRATION-ASSESSMENT.md) | §5's recommendation (vLLM hosts the throughput surface) is superseded by its own §6: decided 2026-08-16, own system. Kept as the record of what was evaluated. |
