@@ -1,0 +1,103 @@
+{
+  "schema": "dense-loss-liveness/1",
+  "status": "PASS",
+  "device": "cuda",
+  "scope": "Frozen bf16 head and exact transformers ForCausalLMLoss; no full model, timing or capacity claim.",
+  "versions": {
+    "torch": "2.8.0+cu128",
+    "transformers": "5.18.0"
+  },
+  "source_sha256": {
+    "loss_utils.py": "83db16b24ce5c3a0642097624aa9a0ae7eb72445c41d8b4d5059a129862fdbbe",
+    "dense-loss-census.py": "fb7d2acefaba8b63418d9e724d68d543b6a4d7ad299ac1a4daafea2f80bae2cd"
+  },
+  "tensor_names": [
+    "NLL backward output / log-softmax incoming gradient",
+    "saved log-softmax forward output",
+    "log-softmax backward output / logits gradient"
+  ],
+  "rows": [
+    {
+      "seq": 512,
+      "vocab": 128256,
+      "baseline_allocated": 16486400,
+      "peak_allocated": 813011968,
+      "priced_full_logits_bytes": 656670720,
+      "backward_live_tensor_bytes": 788004864,
+      "unpriced_named_tensor_bytes": 131334144,
+      "backward": {
+        "operator": "aten._log_softmax_backward_data.default",
+        "live_tensors": [
+          {
+            "shape": [
+              512,
+              128256
+            ],
+            "dtype": "torch.float32",
+            "bytes": 262668288
+          },
+          {
+            "shape": [
+              512,
+              128256
+            ],
+            "dtype": "torch.float32",
+            "bytes": 262668288
+          },
+          {
+            "shape": [
+              512,
+              128256
+            ],
+            "dtype": "torch.float32",
+            "bytes": 262668288
+          }
+        ],
+        "live_bytes": 788004864,
+        "allocator_before": 550343680,
+        "allocator_after": 813011968
+      }
+    },
+    {
+      "seq": 1024,
+      "vocab": 128256,
+      "baseline_allocated": 33595392,
+      "peak_allocated": 1609606144,
+      "priced_full_logits_bytes": 1313341440,
+      "backward_live_tensor_bytes": 1576009728,
+      "unpriced_named_tensor_bytes": 262668288,
+      "backward": {
+        "operator": "aten._log_softmax_backward_data.default",
+        "live_tensors": [
+          {
+            "shape": [
+              1024,
+              128256
+            ],
+            "dtype": "torch.float32",
+            "bytes": 525336576
+          },
+          {
+            "shape": [
+              1024,
+              128256
+            ],
+            "dtype": "torch.float32",
+            "bytes": 525336576
+          },
+          {
+            "shape": [
+              1024,
+              128256
+            ],
+            "dtype": "torch.float32",
+            "bytes": 525336576
+          }
+        ],
+        "live_bytes": 1576009728,
+        "allocator_before": 1084269568,
+        "allocator_after": 1609606144
+      }
+    }
+  ]
+}

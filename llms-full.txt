@@ -2123,6 +2123,13 @@ than `load_moe_4bit_streaming`. `e4b.offload.kimi-k3.full-depth.a2000.five-runs.
 `e4b.parity.kimi-k3.reproducible-on-gnf4-0.33.6.a2000.2026-09-29`
 ([results](../bench/kimi-k3-a2000/RESULTS-kimi-k3-a2000.md)).
 
+**Dense execution stays gated after a failed out-of-sample reading.** DQ7 of Loggetta's dense executor is VOID: 14 of
+16 arms ran, and the planner refused the Qwen3-32B resident anchor at 4096 tokens before loading. On the arms that
+ran, the allocator estimate held on Qwen3-14B but fell below the measured peak on Llama-3.1-8B at 2048 and 4096 tokens,
+resident and streamed. Every streamed plan's device total was below the measured driver peak, by up to 2.40 GB
+(driver/plan up to 1.196), so the inferred 20 % reserve doesn't cover streamed placement. No calibration or DQ8 draw
+follows. `e4b.train.dense-executor.dq7.5090.2026-10-08` ([results](../bench/dq7/RESULTS-dq7.md)).
+
 ### Training against other frameworks
 
 **Qwen3-30B-A3B against Unsloth: Unsloth spends 1.92× e4b's GPU time per step; wall-clock 2.80× on an AMD EPYC
@@ -3211,6 +3218,7 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio [measured]: TC1 amendment 68 (#835), one rented RTX 5090 (tc1-5090-136, an AMD engineering-sample CPU, Vast machine 13828): e4b's matched arm at its defaults against Unsloth 2026.9.14's matched arm on packed rows of 4,096 real tokens, both in venv-unsloth (torch 2.12.1), two draws each in ABBA order, every arm profiled, 40 …
 - e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio [measured]: TC1 amendment 69 (#835), one rented RTX 5090 (tc1-5090-137, AMD EPYC 7713, Vast machine 55913): TC1's field recipe (alpaca, seq 2048, micro-batch 2 x accum 4) over 60 load-gated steps with both frameworks on one stack (venv-unsloth, torch 2.12.1), e4b's matched arm at every current default against Unsloth 2026.9.14's …
 - e4b.train.single-ladder.field.5090.2026-10-08 [measured]: TC1 amendment 70 (#835), one rented RTX 5090 (tc1-5090-138, AMD EPYC 7K62, Vast machine 152440): grouped-nf4-gemm's opt-in single-block ladder (NF4_QLORA_SINGLE_LADDER=1, grouped-nf4-gemm#513) against the single padded block at TC1's field recipe over 60 load-gated steps, e4b at its defaults in venv-unsloth (torch …
+- e4b.train.dense-executor.dq7.5090.2026-10-08 [measured]: DQ7 of Loggetta dense execution is VOID: fourteen of sixteen architecture-only arms complete; the Qwen3-32B resident 4096 anchor is refused before load; Llama allocator estimates understate both placements at 2048 and 4096 tokens …
 
 Open items (no evidence either way):
 
@@ -3218,4 +3226,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 …
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(420 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(421 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
