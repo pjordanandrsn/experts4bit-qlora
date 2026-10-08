@@ -1,0 +1,18 @@
+{
+  "read-llama31_8b-device-2048-baseline.json": "0230067f89f0a6f04696d08155d1ca747d73648df66ba74c6ff706bd6297177a",
+  "read-llama31_8b-device-2048-empty.json": "24e58cb1502b8ab68ed6c6bf99ba2f18aed9b41b5ced9dce59331f31eb7e0f64",
+  "read-llama31_8b-device-4096-baseline.json": "b2b34c070f142e3a8659f5cf72b0bf12f0036de8e883fe17491d5640cbd92ff3",
+  "read-llama31_8b-device-4096-empty.json": "07b6973913e8eeaf2ef51adf2ee61037965baa6428342c94eefd6486f04498fb",
+  "read-llama31_8b-stream-2048-baseline.json": "d912c3db7739a03c5b2166b6ebd132b50ffa51263c10ed5a77b5c774d6f90918",
+  "read-llama31_8b-stream-2048-empty.json": "4c55b6b920ac5a67c05a76ca18df29efdb9690668651cb74c8858ce9b3e4cb2c",
+  "read-llama31_8b-stream-4096-baseline.json": "c3c36107a9afcf6b6cd1fea00b36de01f1fd79c7451f8bddd210cc16bb9cc561",
+  "read-llama31_8b-stream-4096-empty.json": "35b65be7e5802fb35d3585069213dacf9ce9923209a5403464619f8b6b63c11a",
+  "read-qwen3_14b-stream-4096-baseline.json": "3794c72894b762070e5fad93dfa004fb7970f571de8d110d106764e0967f6608",
+  "read-qwen3_14b-stream-4096-empty.json": "a1dfd5b9a5cf3268ffc387b4884e8414a61d69f484f5ce5cbd0aeed7687ec32f",
+  "read-qwen3_14b-stream-512-baseline.json": "daaabe7af7bccb62305d0f2e87ecc865445b6e3aadfe0da8b4d89d0e6b4f063c",
+  "read-qwen3_14b-stream-512-empty.json": "eded6ee2cca710341996d84d39550ca06f542c0aab0e8c80e6ea3630a48ffa09",
+  "read-qwen3_32b-device-2048-baseline.json": "78348cdb643465e645c005a209c0aec5143ab49c2ca2c1b36b793bd22d5c7f2d",
+  "read-qwen3_32b-device-2048-empty.json": "68137ea232077b0ec67cee46fb27753d2619f56a3f9badfc30f0154d0f139304",
+  "read-qwen3_32b-stream-2048-baseline.json": "7251d7ebe46243f2c284dbc0215b6f841b9da71f103e3e735bc9eede708c8eb8",
+  "read-qwen3_32b-stream-2048-empty.json": "55a6cd969afea282213e74fd2e4c14c097ab9db2160671af0352268ff4029411"
+}
