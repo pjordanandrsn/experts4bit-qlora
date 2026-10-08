@@ -1532,6 +1532,22 @@ tc1_cbk_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
   can_run 600 $FAM/unsloth/m_kk       && arm $FAM unsloth ckpt_unsloth_m_kk unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH $PP
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_pos69_family FAM MID REV FETCH_AL E4B_AL UNS_AL -- TC1 amendment 69 (2026-10-08): the field recipe's same-stack position at the new
+# defaults, profiled -- e4b's matched arm at its defaults (fd) and Unsloth's matched arm (fv), two draws each in ABBA order (fd fv fv fd), both
+# in venv-unsloth, every arm profiled (device time, CPU ops per step); TC1's field command with TC1_STEPS=60.
+tc1_pos69_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
+  local ALL="e4b:fused_attn4_m_fd:fused unsloth:ckpt_unsloth_m_fv:unsloth unsloth:ckpt_unsloth_m_fv_d2:unsloth e4b:fused_attn4_m_fd_d2:fused"
+  say "===== FIELD POSITION PROFILED family $FAM ($MID @ $REV; e4b defaults vs Unsloth on one stack; device time and host share; amendment 69)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local UNS="--grad-ckpt unsloth --unsloth-targets $UT7 --unsloth-moe-backend grouped_mm"
+  local PP="--profile-steps $PROFILE_STEPS --profile-warm $PROFILE_WARM"
+  can_run 600 $FAM/e4b/m_fd         && E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_fd fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  can_run 600 $FAM/unsloth/m_fv     && arm   $FAM unsloth ckpt_unsloth_m_fv unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS $MATCH $PP
+  can_run 600 $FAM/unsloth/m_fv_d2  && draw2 $FAM unsloth ckpt_unsloth_m_fv unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS $MATCH $PP
+  can_run 600 $FAM/e4b/m_fd_d2      && E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_fd fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_pos68_family FAM MID REV FETCH_AL E4B_AL UNS_AL -- TC1 amendment 68 (2026-10-08): amendment 67's packed-row position profiled -- e4b's
 # matched arm at its defaults (pd) and Unsloth's matched arm (pv), two draws each in ABBA order (pd pv pv pd), venv-unsloth, every arm profiled
 # (device time, CPU ops per step) with --phase-peaks 1.
@@ -2132,6 +2148,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3cbk) tc1_cbk_family qwen3cbk Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 66: grouped-nf4-gemm's compact bucketed delta, packed rows
   qwen3pos67) tc1_pos67_family qwen3pos67 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 67: the packed-row position at the new defaults
   qwen3pos68) tc1_pos68_family qwen3pos68 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 68: amendment 67's position profiled
+  qwen3pos69) tc1_pos69_family qwen3pos69 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 69: the field recipe's same-stack position profiled
   qwen3dqpack) tc1_dqpack_family qwen3dqpack Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 56: the double-quantized absmax on packed rows, phase peaks
   qwen3ckptoff) tc1_ckptoff_family qwen3ckptoff Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 58: checkpoint inputs in pinned host memory, off vs on, packed rows
   qwen3evalce) tc1_evalce_family qwen3evalce Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 60: the held-out loss from the logits in chunks, packed rows

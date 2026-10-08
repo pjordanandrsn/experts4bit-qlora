@@ -3046,3 +3046,42 @@ stays opt-in.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Two e4b arms and two
 Unsloth arms, all profiled: about $1.2 with the download.
+
+### Amendment 69 (2026-10-08T05:46Z, after amendment 68's read, before any box): the field recipe's same-stack position at the new defaults, profiled (P205–P209)
+
+**Why.** STATUS's field-recipe position is Unsloth / e4b **2.352** on one stack (amendment 33, 2026-10-05), replicated at 2.468 on a second
+host (amendment 42). Both readings predate the reentrant checkpoint, which stepped e4b's shipped arm 0.900 at the field recipe in torch 2.12
+(amendment 62). Amendment 68 showed on packed rows that the wall ratio is the device ratio times the ratio of the two frameworks' GPU-busy
+shares: the GPU-side ratio replicated across two hosts (1.141, 1.160), while the wall ratio moved with the host. The field recipe should be
+more host-sensitive still. `tc1-5090-16` profiled Unsloth there with its GPU busy for 0.427 of the timed step.
+
+**The box** (token `qwen3pos69`). TC1's field recipe and tokens (alpaca, seq 2048, micro-batch 2 × accum 4) over 60 steps, both frameworks
+in venv-unsloth (torch 2.12): e4b `fused_attn4_m_fd` (matched set, every default unset) and Unsloth `ckpt_unsloth_m_fv` (matched set,
+grouped_mm), two draws each in ABBA order (fd fv fv fd). Every arm is profiled (`--profile-steps 3 --profile-warm 3`). One RTX 5090,
+`TC1_LOAD_GATE=6.0`, `TC1_LOAD_RETRIES=2`, avoiding machines 145701, 130223 and 55583. The launcher's ranking picks the host.
+
+Validity (`pos69_why`): torch 2.12; on e4b every default present and unset as recorded. That covers the double-quantized absmax, the
+reentrant checkpoint on all 48 layers, the chunked losses, the combine chunks, grouped-nf4-gemm's bucket mode and its compact bucketed delta.
+Their size gates need not fire on these rows. Every arm, Unsloth's included, must carry a profile with CPU ops.
+
+**Predictions** (two VALID profiled draws a side, medians). Every bound is a ratio within the box; amendment 68's P203 showed an absolute
+time carried from another box tests the card.
+- **P205:** device ms per profiled step, Unsloth / e4b, in **[1.7, 2.7]**. Basis: `tc1-5090-16`'s Unsloth at 4218 ms, against e4b's
+  matched arm at 1.92 s in torch 2.8 (`tc1-5090-125`, amendment 63): about 2.2. Cross-box and cross-torch, hence the width.
+- **P206:** s/step Unsloth / e4b in **[2.3, 3.3]** on the box's host. Basis: 2.352 and 2.468 before the checkpoint's 0.900.
+- **P207:** Unsloth's CPU ops per profiled step at least **8×** e4b's. Basis: 7.43 M against e4b's 0.54–0.75 M.
+- **P208:** the s/step ratio over the device ratio, which equals e4b's busy share over Unsloth's, is at least **1.05**. That is, Unsloth
+  loses more of its step to the host.
+- **P209:** |mean held-out at N, e4b − Unsloth| ≤ **0.01**.
+
+**Decision rules** (amended in review, before any box). What the quantity measures chooses it, not whether P205's band was right.
+- **P207 and P208 HELD** (Unsloth loses more of its step to the host): STATUS replaces "the Qwen3-30B-A3B position to quote" with the field
+  device-time ratio, named as what it is: "Unsloth spends N× e4b's GPU time per step; wall-clock M× on <host>". The earlier wall readings
+  (2.352, 2.468) stay as history. P205 is scored as a prediction only.
+- **P208 HELD, P207 FALSIFIED:** the same quote. The read says the host share is not explained by CPU op count.
+- **P208 FALSIFIED** (wall ≈ device): STATUS quotes this box's wall ratio, which is then not host-sensitive.
+- **P206 alone FALSIFIED:** the wall ratio is reported as this host's. It does not block the quote.
+- **P209 FALSIFIED:** quality is compared before any position is quoted.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Four profiled 60-step arms:
+about $1.2 with the download.

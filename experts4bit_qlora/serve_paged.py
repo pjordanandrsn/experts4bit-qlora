@@ -100,6 +100,12 @@ never emitted in pieces), ``finish_reason`` on the last token's chunk, a ``usage
   the same work in a launch count independent of layers and blocks, leaving the same pool, tables and lengths. It is
   the default since lanes SC2c (#1166: DEFAULT_LICENSED) and SC2d (#1192: engaged and output-identical on a hybrid
   and on gpt-oss); ``0`` keeps the per-layer path.
+* **Decode lookahead.** A decode step reads its tokens back before the step ends, so the GPU idles while the host
+  emits them, retires finished requests, plans the next step and copies its inputs in. ``E4B_PAGED_DECODE_LOOKAHEAD=1``
+  (opt-in until lane P118 reads it; needs decode graphs) issues the next decode step before reading the previous one
+  back, its input ids taken on the device (:meth:`~.engines.paged_runner.PagedModelRunner.issue_decode`). Tokens and
+  finish reasons are the synchronous path's; a request that ends on a stop id has had one more step computed and
+  discarded, and frees its slot one step later.
 
 Not in v1: sampling, logprobs, stop strings, adapters, prefix caching, per-request timeouts.
 Everything above the engine seam is testable on CPU with a fake runner (``tests/test_serve_paged.py``);
@@ -193,8 +199,8 @@ def _prefill_graph_env(value: str) -> str:
 def _max_seqs_env(value: str) -> int:
     """``E4B_PAGED_MAX_SEQS``: ``auto`` (the default since lane SC2e, also when unset or empty) or a positive int.
     ``auto`` is resolved when the engine builds (:func:`resolve_max_seqs`): the widest width lane SC2e read that the
-    serve estimate fits in the device's free memory (64 or 16 on the default bucket list; 64, 32 or 16 with
-    ``E4B_PAGED_BUCKETS=auto``). Until then the config carries 16. ``16`` restores the old default;
+    serve estimate fits in the device's free memory (64, 32 or 16 with the default ``E4B_PAGED_BUCKETS=auto``; 64 or 16
+    with an explicit list such as ``1,2,4,8,16``). Until then the config carries 16. ``16`` restores the old default;
     anything else is refused rather than guessed."""
     v = (value or "").strip().lower() or "auto"
     if v == "auto":
@@ -245,15 +251,16 @@ def resolve_max_seqs(cfg: "PagedServeConfig", model_config, free_bytes) -> dict:
 
 
 def _buckets_env(value: str):
-    """``E4B_PAGED_BUCKETS``: a comma-separated list of decode-graph buckets (``1,2,4,8,16``, the default, also when
-    unset or empty), trimmed to what ``max_seqs`` sequences can use (:func:`~.serve_recipe.usable_buckets`), or
-    ``auto``: every power of two below ``max_seqs``, then ``max_seqs`` itself (:func:`~.serve_recipe.default_buckets`).
-    Up to 16 sequences the two read the same buckets. Above 16 the default list runs a wider decode step as consecutive
-    16-row replays with a host sync after each, and ``auto`` captures one graph that covers it. ``auto`` is opt-in until
-    a lane reads it. Anything else is refused rather than guessed."""
+    """``E4B_PAGED_BUCKETS``: ``auto`` (the default since lane P117, also when unset or empty): every power of two
+    below ``max_seqs``, then ``max_seqs`` itself (:func:`~.serve_recipe.default_buckets`), so the widest decode step is
+    one graph replay. Or a comma-separated list, trimmed to what ``max_seqs`` sequences can use
+    (:func:`~.serve_recipe.usable_buckets`); ``1,2,4,8,16`` restores the old default, which runs a step above 16 rows
+    as consecutive 16-row replays. Up to 16 sequences the two read the same buckets. Lane SC2e (#846) read the speed
+    (64 slots: 12 req/s with ``auto``, 8 on the list) and lane P117 the quality (AT_PARITY at buckets 32 and 64), on
+    Qwen3-30B-A3B int4 on an RTX 5090. Anything else is refused rather than guessed."""
     v = (value or "").strip()
     if not v:
-        return DEFAULT_BUCKETS
+        return "auto"
     if v.lower() == "auto":
         return "auto"
     try:
@@ -273,6 +280,17 @@ def _bulk_kv_env(value: str) -> bool:
     if v in ("0", "1"):
         return v == "1"
     raise ValueError(f"E4B_PAGED_BULK_KV={value!r}: expected '0' or '1'")
+
+
+def _lookahead_env(value: str) -> bool:
+    """``E4B_PAGED_DECODE_LOOKAHEAD``: ``1`` issues each decode step before the previous one's tokens are read back
+    (:class:`~.engines.scheduler.ContinuousScheduler` ``lookahead``), so the GPU has a step queued while the host works
+    between steps; it needs decode graphs. ``0`` (the default, also when unset or empty) reads every step back before
+    the next is issued. Opt-in until lane P118 (e4b#1313) reads it. Anything else is refused."""
+    v = (value or "0").strip() or "0"
+    if v in ("0", "1"):
+        return v == "1"
+    raise ValueError(f"E4B_PAGED_DECODE_LOOKAHEAD={value!r}: expected '0' or '1'")
 
 
 def _fusion_env(name: str, value: str) -> str:
@@ -318,7 +336,7 @@ class PagedServeConfig:
     graphs: bool = False                 # E4B_PAGED_GRAPHS: from_env resolves auto (the default) / 1 / 0 (_graphs_env)
     prefill_graph: str = "auto"          # E4B_PAGED_PREFILL_GRAPH: auto (default) / 1 / 0 (_prefill_graph_env)
     last_logits: bool = False            # E4B_PAGED_LAST_LOGITS: opt-in prefill head at one position
-    buckets: tuple = DEFAULT_BUCKETS     # E4B_PAGED_BUCKETS="1,2,4,8,16" or "auto" (validate resolves; _buckets_env)
+    buckets: tuple = DEFAULT_BUCKETS     # in code: the list unless "auto" is passed; from_env: "auto" when unset (_buckets_env)
     buckets_requested: str = "default"   # E4B_PAGED_BUCKETS as given ("default" when unset or empty); /health reports it
     placement: str = "all-vram"          # E4B_PAGED_PLACEMENT: all-vram | solver
     vram_gb: float = 1.2                 # E4B_PAGED_VRAM_GB (solver budget; the harness default)
@@ -338,6 +356,7 @@ class PagedServeConfig:
     trace_path: str = ""                 # E4B_PAGED_TRACE: per-request JSONL
     step_trace_path: str = ""            # E4B_PAGED_STEP_TRACE: per-step JSONL (engines.step_trace)
     bulk_kv: bool = True                 # E4B_PAGED_BULK_KV: 1 (default since SC2c/SC2d) / 0 (_bulk_kv_env)
+    decode_lookahead: bool = False       # E4B_PAGED_DECODE_LOOKAHEAD: 0 (default) / 1 (_lookahead_env)
     device: str = "cuda"
 
     @classmethod
@@ -382,6 +401,7 @@ class PagedServeConfig:
             trace_path=env("E4B_PAGED_TRACE", ""),
             step_trace_path=env("E4B_PAGED_STEP_TRACE", ""),
             bulk_kv=_bulk_kv_env(env("E4B_PAGED_BULK_KV", "1")),
+            decode_lookahead=_lookahead_env(env("E4B_PAGED_DECODE_LOOKAHEAD", "0")),
             device=env("E4B_PAGED_DEVICE", "cuda"),
         )
         cfg.validate()
@@ -421,6 +441,9 @@ class PagedServeConfig:
             int(self.kv_groups)
         if self.max_queue < 0:
             raise ValueError("E4B_PAGED_MAX_QUEUE must be >= 0")
+        if self.decode_lookahead and not self.graphs:
+            raise ValueError("E4B_PAGED_DECODE_LOOKAHEAD=1 needs bucketed decode graphs, and E4B_PAGED_GRAPHS resolved "
+                             "to eager decode here")
 
     @property
     def prefill_budget(self) -> int:
@@ -1211,7 +1234,8 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     graph_status = runner.enable_decode_graphs(cfg.buckets) if cfg.graphs else None
     engage_prefill_graph(runner, cfg)
     sched = ContinuousScheduler(runner=runner, max_seqs=cfg.max_seqs, kv_slots=cfg.max_seqs,
-                                chunk_tokens=cfg.chunk_tokens, max_prefill_tokens_per_step=cfg.prefill_budget)
+                                chunk_tokens=cfg.chunk_tokens, max_prefill_tokens_per_step=cfg.prefill_budget,
+                                lookahead=cfg.decode_lookahead)
     info = {"moe_layers": L, "experts": E, "top_k": k, "model_type": getattr(model.config, "model_type", None),
             "int4_expert_layers": int4_layers, "int4_store_kinds": kinds, "int4_attn_projections": int4_attn,
             "kv": {"n_kv_heads": hkv, "head_dim": hd, "k_groups": cfg.kv_groups, "scratch_slots": scratch,
@@ -1480,6 +1504,7 @@ def create_app(cfg: Optional[PagedServeConfig] = None, engine: Optional[PagedEng
                 "graph_status": info.pop("graph_status", None), "graph_stats": _graph_stats(parts),
                 "placement": cfg.placement, "fuse_qkv": cfg.fuse_qkv, "max_tokens_limit": cfg.max_tokens_limit,
                 "max_queue": cfg.max_queue or None, "bulk_kv": cfg.bulk_kv,
+                "decode_lookahead": cfg.decode_lookahead,
             },
             "levers": info,
             "prefill_routes": prefill_routes(),
