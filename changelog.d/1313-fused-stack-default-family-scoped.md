@@ -10,9 +10,9 @@
     failed: for gpt-oss, P115 Phase C's SANE argmax agreement, 0.924 < 0.95 (#1342); for Qwen3.5/3.6-MoE and
     Granite-MoE, a SANE read at T == 1, which lane FAM takes (#1362).
 - **Why.**
-  - On Qwen3-30B-A3B NF4 the stack decoded one request 1.4289× and 16 requests 1.2298× as fast, within P110's quality
-    bar (#1328).
-  - [Phase D pending: the stack on top of grouped-nf4-gemm 0.43.0's bandwidth GEMV, SANE at T == 1.]
+  - On Qwen3-30B-A3B NF4, on top of grouped-nf4-gemm 0.43.0's bandwidth GEMV, the stack decodes one request 1.5902×
+    and 16 requests 1.1644× as fast. P115 Phase D's SANE read at T == 1 passes: bias +0.00541 nats, argmax agreement
+    0.9674 (#1379). Phases A and B read it within P110's quality bar at grouped-nf4-gemm 0.42.0 (#1328).
   - The maintainer's rule (#1366): a family is on by default only with a SANE read at T == 1 at reading size. Phase D's
     proof read Granite at T == 1 with a SANE bias of −0.0139 nats, against −0.0009 at T == 12, so the served
     one-request path moves a family's arithmetic more than the 12-window read showed.

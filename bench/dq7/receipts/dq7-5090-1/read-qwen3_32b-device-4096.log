@@ -1,0 +1,47 @@
+Generating train split: 0 examples [00:00, ? examples/s]Generating train split: 1 examples [00:00, 1074.36 examples/s]
+Traceback (most recent call last):
+  File "/root/tc1/dq7_arm.py", line 152, in <module>
+    result = prove(args.checkpoint, args.out) if args.mode == "proof" else read(
+                                                                           ^^^^^
+  File "/root/tc1/dq7_arm.py", line 113, in read
+    p = make_plan(directory, placement, seq, spec.to_dict())
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/dq7_arm.py", line 25, in make_plan
+    raise ValueError("registered setup is refused: " + result.render())
+ValueError: registered setup is refused: Model     hf-cache/qwen3_32b  (qwen3; hf-cache/qwen3_32b (qwen3, dense decoder): 64 layers, H 5120, I 25600, heads 64/8 x 128, vocab 151,936; 32.76B params (31.21B in decoder linears); per layer: attn_in 3, attn_out 1, mlp_in 2, mlp_out 1)
+Workload  train: seq 4096 x micro-batch 1 (= 4096 tokens/forward), grad-accum 1, 2 steps
+Budget    device  31.34 GiB [reported: free now]   host 117.66 GiB [reported: available now]   headroom   1.57 GiB [policy]
+Data      receipts/qwen3_32b-4096.jsonl (text, split train); full-sequence loss; learning rate 0.0002
+
+NOT FEASIBLE under the requested constraints.
+
+  dense nf4 base, resident, LoRA r16 on all projections, sdpa, chunked loss: device 30.69 + headroom 1.57 GiB > budget 31.34 GiB
+
+Closest candidate: dense nf4 base, resident, LoRA r16 on all projections, sdpa, chunked loss
+  device frozen decoder linears                 14.99 GiB [derived]
+  device embeddings + lm head (bf16)             2.90 GiB [derived]
+  device norms, biases and other parameters (bf16)   0.00 GiB [derived]
+  device LoRA adapters                           0.50 GiB [derived]
+  device adapter gradients                       0.50 GiB [derived]
+  device optimizer state (adamw)                 1.00 GiB [derived]
+  device activations                             5.02 GiB [heuristic]
+  device dequantization transient                0.24 GiB [heuristic]
+  device allocator reserve (cached, unallocated blocks)   5.03 GiB [inferred]
+  device CUDA context + library workspaces       0.50 GiB [inferred]
+  host   process baseline (torch, CUDA, libraries, model objects)   3.00 GiB [inferred]
+
+What would change the answer:
+  - 0.92 GiB more device memory (a larger --vram budget, or free what other processes hold)
+  - allow streaming the frozen layers from host memory: 13.80 GiB device + 19.50 GiB host fits
+  - reduce tokens per micro-batch to 2048 (seq x micro-batch) with the same setup
+
+Why
+  - dense: kernel flash_attention_2 not usable here: flash-attn is not installed
+
+Warnings
+  - Data preparation buffers and temporary token-file disk space are not included in the training memory estimate; data is validated before model loading. A feasible plan is an estimate, not a guarantee against out-of-memory errors.
+
+Performance  not predicted: no performance model is calibrated for this backend yet; the ordering below rests on measured relative speeds, not on a time estimate
+
+Alternatives considered
+  [no   ] dense nf4 base, resident, LoRA r16 on all projections, sdpa, chunked loss device  30.69 GiB  host   3.00 GiB  device 30.69 + headroom 1.57 GiB > budget 31.34 GiB

@@ -1,0 +1,32 @@
+KNOBS e4b=d1d76084f33f78a5eae34017a5ee25ea9e73f631 gnf4=6ee2e10408161a9d3c874975c9191a7f2957e6f4 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 prove=0 short=32 long=160 reps=3 windows=12 cont=128
+CUDA_PROBE ok
+e4b 0.50.0 @d1d76084f33f78a5eae34017a5ee25ea9e73f631
+gnf4 0.43.0 @6ee2e10408161a9d3c874975c9191a7f2957e6f4
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p115d_reduce self-test OK (28 cases)
+p109_box self-test OK (5/5 cases)
+p115d_box self-test OK (12/12 cases)
+p115_quality self-test OK (11/11 cases)
+premise rc=0: 19 passed, 5 warnings in 18.41s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709
+arm D0a rc=0 P115D_ARM {"arm": "D0", "tag": "D0a", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "load_s": 41.35, "W16": 771.84, "W1": 135.48}
+
+arm D1a rc=0 P115D_ARM {"arm": "D1", "tag": "D1a", "fusions": {"fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}, "load_s": 33.41, "W16": 898.74, "W1": 215.44}
+
+arm D1b rc=0 P115D_ARM {"arm": "D1", "tag": "D1b", "fusions": {"fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}, "load_s": 33.52, "W16": 899.7, "W1": 215.19}
+
+arm D0b rc=0 P115D_ARM {"arm": "D0", "tag": "D0b", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "load_s": 33.37, "W16": 770.34, "W1": 134.8}
+
+sane off rc=0 P115D_SANE D0 windows={'wikitext': 12} census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0} dispatch={'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 146304, 'bw_splitk': 0} 147.5 s
+
+sane on rc=0 P115D_SANE D1 windows={'wikitext': 12} census={'fuse_qkv_n': 48, 'fuse_t1_glue_n': 193, 'fuse_t1_glue_r2_n': [48, 48], 'fuse_router_epilogue_n': 48} dispatch={'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 146304, 'bw_splitk': 0} 117.5 s
+
+P115D_VERDICT COMBINED_SANE ["SANE bias +0.00541 nats, argmax 0.9674, KL 0.01100; reported: g1 1.5902, g16 1.1644"]

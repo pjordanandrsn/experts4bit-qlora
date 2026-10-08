@@ -142,7 +142,7 @@ FUSION_KNOBS = (FUSE_QKV_ENV,) + FUSION_ENV
 # ``auto`` on a model_type with a SANE read at T == 1 at reading size (the maintainer's rule, 2026-10-08, #1366) and to
 # ``0`` everywhere else. Explicit ``auto`` stays structural, as Phase C measured it.
 FUSION_DEFAULT_FAMILIES = {
-    "qwen3_moe": "P115 Phases A and B: speed and quality (#1328); Phase D: SANE at T == 1 [Phase D pending]",
+    "qwen3_moe": "P115 Phases A and B: speed and quality (#1328); Phase D: SANE at T == 1, COMBINED_SANE (#1379)",
 }
 # the read each other known family lacks or failed, named in the warning an explicit ``auto`` logs on it
 FUSION_UNLICENSED = {
