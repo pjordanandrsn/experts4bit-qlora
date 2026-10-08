@@ -10244,6 +10244,35 @@
       "notes": "Pre-registered in #1322 (P116, e4b#1313), K33's registered consequence (grouped-nf4-gemm#502, LEVER 0.341). Predictions held for engagement, determinism, g16, the self-pairs, wikitext quality, the floor, the mutant and the verdict; missed for g1 (1.2417, above [1.06, 1.22]: the whole ~1.8-2.0 ms kernel saving reached the step, not K6b's 0.55 of it), c4val1's bias (-0.0053, 0.0003 past +-0.005, inside the bar), the W1 row (it matched B0) and quality OFF's time (25.9 min against 25). Lane cost $2.142 (proof $0.211, the VOID draw $0.853, the reading $1.078)."
     },
     {
+      "id": "e4b.serve.p117.wide-bucket-quality.qwen3.5090.2026-10-08",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P117, one RTX 5090: on SC2e's served stack (Qwen3-30B-A3B int4 experts and int4 RTN attention, the T=1 folds, fused q/k/v), decoding 32 or 64 rows in one graph (E4B_PAGED_BUCKETS=auto) costs no measurable quality against decode in pieces of at most 16 rows. Teacher-forced over 64 wikitext windows (512 + 128, decoded together) W32 reads +0.0006 nats, W64 -0.0032 and W64pad (48 windows padded to 64) -0.0033, inside the 16-row arithmetic's own neutral perturbations (half-batch -0.0025, prefill split -0.0007; B_floor 0.0025, S_floor 0.0148); the captured 64-row replay emits the eager W64 tokens at all 8,128 positions; a halved decode scale reads +1.147. AT_PARITY.",
+      "value": -0.003174810658067649,
+      "unit": "mean NLL bias of one 64-row decode piece (W64) against four 16-row pieces (R), nats, over 64 windows x 128 positions",
+      "hardware": "RTX 5090 (sm_120, driver 595.91.07, 32607 MiB), one rented Vast.ai host (instance 54778599, AMD Ryzen 9 9950X, 32 threads, 123 GiB RAM), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @9ea9528 (0.48.0 + P117's registration #1335) + grouped-nf4-gemm @b4f93f1 (v0.42.0); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0; Qwen/Qwen3-30B-A3B @ad44e77, NF4 arena baked on the box, int4 stores repacked at load; premise tests/test_decode_graph_buckets.py 7 passed on the card; arms R (buckets 1-16), rep, floor (half buckets 1-8 / chunk 256 / rev), W32 (1-32), W64 (1-64), W64pad, mutant_scale, G64 (captured); every pass device-grouped, capture=False except G64; rule AT_PARITY iff W32, W64 and W64pad each have bias <= B_floor + 0.01 and spread <= 2 x max(S_floor, 0.005); verdict by bench/p117/p117_reduce.py",
+      "measured_on": "2026-10-08",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p117/RESULTS-p117.md",
+        "bench/p117/PREREG-p117.md",
+        "bench/p117/p117_reduce.py",
+        "bench/p117/p117_box.py",
+        "bench/p117/receipts/p117-5090-1/verdict.json",
+        "bench/p117/receipts/p117-5090-1/box.json",
+        "bench/p117/receipts/p117-5090-1/summary.txt",
+        "bench/p117/receipts/p117-5090-1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-08/p117-5090-1/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-08/p117-prove-1/ (receipt.json, the proving run)"
+      ],
+      "notes": "Pre-registered in #1335 (e4b#846), the read the ruling on #1320 required before E4B_PAGED_BUCKETS=auto may be a default. With SC2e (bench/h2h-2026-10-02/sc2e: 64 slots with buckets up to 64 serve 12 req/s, against 8 on the default list) this licenses E4B_PAGED_BUCKETS=auto as serve_paged's default. Read on one model and card; other models ride this read. Predictions held for R's repeat, the floor, FUNCTION, the mutant, engagement, the box's time and the verdict; missed for rev (bit-identical: 64 windows reverse into the same 16-row sets) and narrowly for W64 and W64pad's bias (-0.0032 / -0.0033 against [-0.003, +0.003], the better side). Lane cost $1.068."
+    },
+    {
       "package": "experts4bit-qlora",
       "area": "train",
       "model": "allenai/OLMoE-1B-7B-0924-Instruct @7f1c97f4",

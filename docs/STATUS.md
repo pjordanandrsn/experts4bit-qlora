@@ -1,6 +1,6 @@
 # Status — what this package does, what changed, what is open
 
-**As of 2026-10-05, version 0.48.0** (the version of record is
+**As of 2026-10-08, version 0.49.0** (the version of record is
 `pyproject.toml`'s). One page. The README argues the case; this page
 states the position. Every line has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
@@ -673,6 +673,15 @@ RTX 5090; **measured** — [`bench/p116/RESULTS-p116.md`](../bench/p116/RESULTS-
   −0.0053 (bar 0.0116), K8 −0.090 (reported). A second draw on another host read g1 1.2681 and identical quality.
 - **Default:** still opt-in. DEFAULT_ON licenses grouped-nf4-gemm's `auto` at Qwen3's shapes on ≥ 160-SM parts, then
   e4b's floor on that release.
+
+**Decoding 32 or 64 rows in one graph costs no measurable quality** (lane P117, 2026-10-08, one rented RTX 5090;
+**measured** — [`bench/p117/RESULTS-p117.md`](../bench/p117/RESULTS-p117.md),
+`e4b.serve.p117.wide-bucket-quality.qwen3.5090.2026-10-08`).
+- **Quality:** on SC2e's int4 server (Qwen3-30B-A3B), teacher-forced over 64 windows decoded together, one 64-row piece
+  reads −0.0032 nats against four 16-row pieces, inside the 16-row arithmetic's own neutral perturbations. 32-row
+  pieces and a padded 64-row step pass too.
+- **Verdict AT_PARITY:** with SC2e's capacity read (64 slots and buckets up to 64 serve 12 req/s), this licenses
+  `E4B_PAGED_BUCKETS=auto` as `serve_paged`'s default, in its own PR.
 
 **The Gated DeltaNet kernels speed hybrid decode** (lane P105, 2026-10-03, one rented RTX 5090; **measured** —
 [`bench/p105/RESULTS-p105.md`](../bench/p105/RESULTS-p105.md), `e4b.serve.p105.qwen36-gdn-kernels.5090.2026-10-03`).
