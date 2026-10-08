@@ -3085,3 +3085,43 @@ time carried from another box tests the card.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Four profiled 60-step arms:
 about $1.2 with the download.
+
+### Amendment 70 (2026-10-08T13:24Z, after amendment 69's read, before any box): grouped-nf4-gemm's single padded block on its ladder at the field recipe (P210–P214)
+
+**Why.** At TC1's field recipe e4b's GPU is busy for under half its step: 0.49, against 0.33 for Unsloth (amendment 69, `tc1-5090-137`).
+In that box's profile, grouped-nf4-gemm's padded LoRA delta ran about 3,076 `aten::bmm` calls a step. Each took about 172 µs of CPU self
+time, above its 120 µs of device time.
+
+Below the bucket gate, every call takes the single padded block, whose two `bmm`s run at `[G, widest, K]`. The router makes nearly every
+`(G, widest)` new, and a cuBLAS batched product pays host time per new shape: 119 µs against 38 µs repeated (amendment 24). On packed rows
+the bucket ladder cut `aten::bmm`'s CPU time per call about tenfold, but that host was GPU-bound and the step did not move (amendment 54).
+grouped-nf4-gemm#513 adds `NF4_QLORA_SINGLE_LADDER=1` (opt-in): the single block runs at `[_ladder_up(G), _ladder_up(widest), K]`. Its
+padded groups take zero adapters and zero rows, and values and gradients equal the single block's to rounding.
+
+**The box** (token `qwen3sladder`). TC1's field recipe and tokens over 60 load-gated steps, e4b at its defaults in venv-unsloth (torch 2.12),
+`NF4_QLORA_SINGLE_LADDER` 0 (`l0`) against 1 (`l1`). It runs the shipped and the matched arm, two draws a side in ABBA order, every arm
+profiled with `--phase-peaks 1`, and no Unsloth arm. One RTX 5090, avoiding machines 145701, 130223 and 55583.
+
+Validity (`sladder_why`):
+- torch 2.12;
+- e4b's defaults: the double-quantized absmax, and the reentrant checkpoint on all 48 layers with `E4B_CKPT_OFFLOAD` unset;
+- the single padded block serving every call, with no bucketed call;
+- the side's ladder: `l1` with laddered calls recorded, `l0` set to 0 with none;
+- a profile with `aten::bmm`'s row on every arm.
+
+**Predictions** (two VALID draws a side, medians):
+- **Premise:** P210 and P211 are read only if the matched `l0`'s `busy_t` is at most **0.85** (a host-bound box); otherwise UNTESTED.
+- **P210 / P211:** s/step `l1 / l0` at most **0.97** on the matched arm and on the shipped arm.
+- **P212:** `aten::bmm`'s CPU self time per call `l1 / l0` at most **0.5** on the matched arm.
+- **P213:** device ms per profiled step `l1 / l0` at most **1.05** on each arm (the padding adds device work).
+- **P214:** on each arm, step-0 held-out within **0.0005** per draw pair and held-out at N within **0.005**.
+
+**Decision rules.**
+- **P210, P211, P213 and P214 HELD:** `NF4_QLORA_SINGLE_LADDER` becomes grouped-nf4-gemm's default (`0` restores the single block).
+- **P212 HELD with P210 or P211 FALSIFIED:** the read says the `bmm`'s host time was not what held the step, names what the profile shows
+  instead, and the flag stays opt-in.
+- **P212 FALSIFIED:** the ladder did not repeat the shapes on real routing, and the read says why before anything else is registered.
+- **Premise unmet:** the speed predictions are UNTESTED, and the box is redrawn once.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Eight profiled 60-step e4b
+arms: about $1.5 with the download.

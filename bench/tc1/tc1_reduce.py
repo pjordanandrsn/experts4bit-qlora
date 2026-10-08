@@ -1106,6 +1106,27 @@ POS69_SPEED_BAND = (2.3, 3.3)     # P206: s/step Unsloth / e4b on the box's host
 POS69_OPS_RATIO_MIN = 8.0         # P207: CPU ops per profiled step Unsloth / e4b at least this (7.43 M against e4b's 0.54-0.75 M)
 POS69_HOST_SHARE_MIN = 1.05       # P208: the s/step ratio over the device ratio (= e4b's busy_t / Unsloth's) at least this
 POS69_HELDOUT_MAX = 0.01          # P209: |mean held-out at N, e4b defaults - Unsloth|
+# TC1 amendment 70: grouped-nf4-gemm's single-block ladder (NF4_QLORA_SINGLE_LADDER) 0 (l0) vs 1 (l1) at TC1's field recipe, e4b at its
+# defaults otherwise, the shipped and the matched arm, two draws a side in ABBA order, every arm profiled; e4b against itself
+SLADDER_FAM = "qwen3sladder"
+FAMS.append(SLADDER_FAM)
+NAMES[SLADDER_FAM] = "Qwen3-30B-A3B (amendment 70: grouped-nf4-gemm's single padded block off vs on its ladder at the field recipe, shipped and matched arms; profiled)"
+N_LAYERS[SLADDER_FAM] = 48
+ATTN_CENSUS[SLADDER_FAM] = 192
+DENSE_PINS[SLADDER_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[SLADDER_FAM] = ("e4b", "fused_attn4_m_l0")
+EXPECTED[SLADDER_FAM] = [("e4b", "fused_attn4_shipped_l0"), ("e4b", "fused_attn4_shipped_l1"), ("e4b", "fused_attn4_m_l0"), ("e4b", "fused_attn4_m_l1"),
+                         ("e4b", "fused_attn4_m_l1_d2"), ("e4b", "fused_attn4_m_l0_d2"), ("e4b", "fused_attn4_shipped_l1_d2"), ("e4b", "fused_attn4_shipped_l0_d2")]
+MATCHED |= {"fused_attn4_m_l0", "fused_attn4_m_l1", "fused_attn4_m_l0_d2", "fused_attn4_m_l1_d2"}
+for _t in ("fused_attn4_m", "fused_attn4_shipped"):
+    for _side in ("l0", "l1"):
+        DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
+SLADDER_PREMISE_BUSY_MAX = 0.85   # P210 / P211 are read only on a host-bound box: the matched l0's busy_t (median of its draws) at most this
+SLADDER_SPEED_MAX = 0.97          # P210 (matched) / P211 (shipped): s/step l1 / l0 at most this
+SLADDER_BMM_CPU_MAX = 0.5         # P212: aten::bmm CPU self ms per call l1 / l0 (medians of each side's draws), matched arm, at most this
+SLADDER_DEVICE_MAX = 1.05         # P213: device ms per profiled step l1 / l0, each arm, at most this (the padding adds device work)
+SLADDER_STEP0_MAX = 0.0005        # P214: |step-0 held-out l1 - l0| per draw pair, each arm (rounding: the bmm shapes differ)
+SLADDER_HELDOUT_MAX = 0.005       # P214: |mean held-out at N, l1 - l0|, each arm
 # TC1 amendment 59: the same switch at TC1's field recipe (seq 2048, micro-batch 2), the shipped and the matched arm, before any default
 # (not packed: TC1's no-loop rule applies as written, as on amendments 49 and 50)
 CKPTOFFF_FAM = "qwen3ckptofff"
@@ -2453,6 +2474,116 @@ def _profiled_sides(R, etag, utag):
     return side("e4b", etag), side("unsloth", utag)
 
 
+def sladder_side(tag):
+    """Amendment 70: (arm, side) of a qwen3sladder e4b tag, e.g. ("m", "l1") for fused_attn4_m_l1_d2."""
+    m = re.match(r"^fused_attn4_(m|shipped)_(l[01])(?:_d2)?$", tag or "")
+    return (m.group(1), m.group(2)) if m else (None, None)
+
+
+def _bmm_cpu_per_call(r):
+    """Amendment 70's P212 quantity: aten::bmm's CPU self ms per call over the profiled steps, or None without that row."""
+    for x in ((r or {}).get("profile") or {}).get("top_cpu") or []:
+        if x.get("name") == "aten::bmm" and x.get("count"):
+            return float(x["self_cpu_ms"]) / float(x["count"])
+    return None
+
+
+def sladder_why(tag, r):
+    """Amendment 70's predicates: torch 2.12; e4b's defaults at the field recipe (the double-quantized absmax, the default reentrant checkpoint
+    on all 48 layers with E4B_CKPT_OFFLOAD unset), the single padded block serving the rows (no bucketed call), and the ladder the side names:
+    l1 NF4_QLORA_SINGLE_LADDER=1 with laddered calls recorded, l0 set to 0 with none; a profile with aten::bmm's row on every arm. Empty
+    string = as registered."""
+    r = r or {}
+    bad = []
+    tv = str((r.get("env") or {}).get("torch") or "")
+    if not tv.startswith("2.12"):
+        bad.append(f"env.torch {tv or 'missing'} is not 2.12*")
+    arm, side = sladder_side(tag)
+    if side is None:
+        return f"amendment 70 registers no e4b side for tag {tag}"
+    if r.get("absmax_dq") is not True:
+        bad.append(f"absmax_dq {r.get('absmax_dq')!r}: e4b's default is the double-quantized absmax")
+    ck = (r.get("ckpt_offload_layers"), r.get("ckpt_offload_env") or None, r.get("ckpt_offload_funcs"))
+    if ck != (48, None, ["reentrant_checkpoint"]):
+        bad.append(f"checkpoint {ck!r}: e4b's default is the reentrant checkpoint on all 48 layers, E4B_CKPT_OFFLOAD unset")
+    calls = (r.get("lean_ab") or {}).get("lora_path_calls") or {}
+    if not (int(calls.get("padded") or 0) > 0 and int(calls.get("padded_bucketed") or 0) == 0):
+        bad.append(f"the single padded block did not serve the rows alone (calls {calls})")
+    sl = r.get("single_ladder") or {}
+    env, n = str(sl.get("env")), int(sl.get("calls") or 0)
+    if side == "l1" and not (sl.get("gnf4_has_single_ladder") and env == "1" and n > 0):
+        bad.append(f"the single-block ladder did not serve l1 (record {sl})")
+    if side == "l0" and not (env == "0" and n == 0):
+        bad.append(f"NF4_QLORA_SINGLE_LADDER={env!r} with {n} laddered calls: l0 names 0 and none (record {sl})")
+    if not (_cbk_device_ms(r) and _bmm_cpu_per_call(r) is not None):
+        bad.append("no profile with aten::bmm's row on the receipt: amendment 70 profiles every arm (P212 / P213 read it)")
+    return "; ".join(bad)
+
+
+def score_sladder(F, fam=SLADDER_FAM):
+    """TC1-PREREG amendment 70 (two VALID draws a side, medians). P210 (matched) / P211 (shipped): s/step l1 / l0 <= SLADDER_SPEED_MAX, read
+    only when the matched l0's busy_t <= SLADDER_PREMISE_BUSY_MAX (a host-bound box), else UNTESTED. P212: aten::bmm CPU self ms per call
+    l1 / l0 <= SLADDER_BMM_CPU_MAX on the matched arm. P213: device ms per profiled step l1 / l0 <= SLADDER_DEVICE_MAX on each arm. P214:
+    each arm's step-0 held-out within SLADDER_STEP0_MAX per draw pair and held-out at N within SLADDER_HELDOUT_MAX."""
+    R = F.get(fam)
+    if not R:
+        return []
+    rows = {(x["fw"], x["tag"]): x for x in R["rows"]}
+    def side_rows(arm, sd):
+        rs = [(rows.get(("e4b", f"fused_attn4_{arm}_{sd}{sfx}")) or {}) for sfx in ("", "_d2")]
+        return all(x.get("verdict") == "VALID" for x in rs), [x.get("r") or {} for x in rs]
+    def med(arm, sd, fn):
+        ok, rs = side_rows(arm, sd)
+        v = [fn(x) for x in rs] if ok else [None]
+        return None if None in v else statistics.median(v)
+    out = []
+    busy = med("m", "l0", _busy_vs_timed)
+    for pid, arm in (("P210", "m"), ("P211", "shipped")):
+        D = {sd: R["draws"].get(("e4b", f"fused_attn4_{arm}_{sd}"), {}) for sd in ("l0", "l1")}
+        p = _ckptre_ratio(D, "l1", "l0", pid, fam, lambda x: x <= SLADDER_SPEED_MAX, f"<= {SLADDER_SPEED_MAX}")
+        if busy is None:
+            p = (pid, fam, "UNTESTED", "the premise needs the matched l0's two profiled VALID draws; " + p[3])
+        elif busy > SLADDER_PREMISE_BUSY_MAX:
+            p = (pid, fam, "UNTESTED", f"premise unmet: the matched l0's busy_t {busy:.3f} > {SLADDER_PREMISE_BUSY_MAX} (not host-bound); " + p[3])
+        else:
+            p = p[:3] + (p[3] + f"; matched l0 busy_t {busy:.3f} (premise <= {SLADDER_PREMISE_BUSY_MAX})",)
+        out.append(p)
+    b0, b1 = med("m", "l0", _bmm_cpu_per_call), med("m", "l1", _bmm_cpu_per_call)
+    if b0 is None or b1 is None:
+        out.append(("P212", fam, "UNTESTED", "two VALID profiled draws a side with aten::bmm's row are registered (matched arm)"))
+    else:
+        out.append(("P212", fam, "HELD" if b1 / b0 <= SLADDER_BMM_CPU_MAX else "FALSIFIED",
+                    f"aten::bmm CPU self per call {1000 * b0:.1f} -> {1000 * b1:.1f} us = {b1 / b0:.3f} vs <= {SLADDER_BMM_CPU_MAX} (matched)"))
+    legs, bad = [], False
+    for arm in ("m", "shipped"):
+        d0, d1 = med(arm, "l0", _cbk_device_ms), med(arm, "l1", _cbk_device_ms)
+        if d0 is None or d1 is None:
+            legs.append(f"{arm}: two VALID profiled draws a side are registered")
+            bad = None if bad is not True else True
+            continue
+        bad = True if d1 / d0 > SLADDER_DEVICE_MAX else bad
+        legs.append(f"{arm}: {d0:.1f} -> {d1:.1f} ms = {d1 / d0:.3f}")
+    out.append(("P213", fam, "FALSIFIED" if bad is True else ("UNTESTED" if bad is None else "HELD"),
+                "device ms per profiled step l1 / l0: " + "; ".join(legs) + f" (each <= {SLADDER_DEVICE_MAX})"))
+    legs, bad = [], False
+    for arm in ("m", "shipped"):
+        o0, r0 = side_rows(arm, "l0")
+        o1, r1 = side_rows(arm, "l1")
+        s0 = [(a.get("eval_loss_step0"), b.get("eval_loss_step0")) for a, b in zip(r0, r1)]
+        h0, h1 = [x.get("eval_loss_final") for x in r0], [x.get("eval_loss_final") for x in r1]
+        if not (o0 and o1) or any(a is None or b is None for a, b in s0) or None in h0 + h1:
+            legs.append(f"{arm}: two VALID draws a side with held-out are registered")
+            bad = None if bad is not True else True
+            continue
+        ds = [b - a for a, b in s0]
+        dn = statistics.mean(h1) - statistics.mean(h0)
+        bad = True if not (all(abs(x) <= SLADDER_STEP0_MAX for x in ds) and abs(dn) <= SLADDER_HELDOUT_MAX) else bad
+        legs.append(f"{arm}: step 0 " + ", ".join(f"{x:+.5f}" for x in ds) + f"; N {dn:+.5f}")
+    out.append(("P214", fam, "FALSIFIED" if bad is True else ("UNTESTED" if bad is None else "HELD"),
+                "; ".join(legs) + f" (step 0 |.| <= {SLADDER_STEP0_MAX}, N |.| <= {SLADDER_HELDOUT_MAX})"))
+    return out
+
+
 def pos69_why(tag, r):
     """Amendment 69's predicates: torch 2.12; on e4b only the fd side, with every default present and unset as recorded at the field recipe
     (the double-quantized absmax, the reentrant checkpoint on all 48 layers, the chunked training and held-out losses, the combine chunks,
@@ -3529,6 +3660,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == POS69_FAM:                               # amendment 69: e4b's field defaults as recorded, and a profile on every arm
         w = pos69_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == SLADDER_FAM:                             # amendment 70: e4b's field defaults, the single block, the ladder its side names, a profile
+        w = sladder_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if fam == CKPTOFF_FAM:                             # amendment 58: torch 2.12; on e4b its defaults and the checkpoint its side names
@@ -6514,6 +6649,20 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_pos69(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if SLADDER_FAM in F:
+        out += ["\n## Amendment 70: the single padded block off vs on its ladder at the field recipe (descriptive)",
+                "| arm | VERDICT | s/step (11..N) | device ms / profiled step | busy_t | aten::bmm CPU us / call | laddered calls | peak GB | held-out 0 / N |",
+                "|---|---|---|---|---|---|---|---|---|"]
+        for x in F[SLADDER_FAM]["rows"]:
+            r = x.get("r") or {}
+            b = _bmm_cpu_per_call(r)
+            out.append(f"| {x['fw']}/{x['tag']} | {x['verdict']} | {f(r.get('s_per_step_median_11plus'), 3)} | {f(_cbk_device_ms(r), 1)} | "
+                       f"{f(_busy_vs_timed(r), 3)} | {f(None if b is None else 1000 * b, 1)} | {(r.get('single_ladder') or {}).get('calls')} | "
+                       f"{f(r.get('peak_vram_gb'), 3)} | {r.get('eval_loss_step0')} / {r.get('eval_loss_final')} |")
+        out += ["\n## Predictions P210-P214 (TC1-PREREG amendment 70: the single-block ladder at the field recipe; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_sladder(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if CKPTOFFF_FAM in F:
         out += ["\n## Amendment 59: checkpoint inputs on the GPU vs in pinned host memory at the field recipe, peaks by phase (descriptive)",
                 "| arm | VERDICT | s/step (11..N) | run peak GB | setup | eval | train |", "|---|---|---|---|---|---|---|"]
@@ -7775,6 +7924,35 @@ def _pos69_set(s=None, dev=None, ops=None, held=None, rec=None):
             for k, v in ((rec or {}).get(tag) or {}).items():
                 r[k] = v
             R[(fw, tag)] = r
+    return R
+
+
+def _sladder_set(s=None, dev=None, bmm=None, step0=None, sl=None, profile=True):
+    """Amendment 70: the shipped and matched arms at the field recipe with NF4_QLORA_SINGLE_LADDER 0 (l0) / 1 (l1), two draws each -- `s`
+    (arm, side) -> draws' s/step; `dev` (arm, side) -> device ms per profiled step; `bmm` side -> aten::bmm CPU self us per call (matched);
+    `step0` tag -> step-0 held-out; `sl` tag -> the single_ladder record; `profile=False` drops every arm's profile. The default fixture is a
+    host-bound box (busy_t about 0.5) where the ladder takes 0.4 s off a 3.5 s step."""
+    s = {("m", "l0"): (3.49, 3.50), ("m", "l1"): (3.10, 3.11), ("shipped", "l0"): (2.90, 2.91), ("shipped", "l1"): (2.55, 2.56)} | (s or {})
+    dev = {("m", "l0"): 1700.0, ("m", "l1"): 1730.0, ("shipped", "l0"): 1450.0, ("shipped", "l1"): 1475.0} | (dev or {})
+    bmm = dict({"l0": 172.0, "l1": 20.0}, **(bmm or {}))
+    src = _pos69_set()[("e4b", "fused_attn4_m_fd")]
+    R = {}
+    for arm in ("m", "shipped"):
+        for side in ("l0", "l1"):
+            for i, sfx in enumerate(("", "_d2")):
+                tag = f"fused_attn4_{arm}_{side}{sfx}"
+                r = json.loads(json.dumps(src))
+                r.update(tag=tag, fam=SLADDER_FAM, s_per_step_median_11plus=s[(arm, side)][i],
+                         eval_loss_step0=(step0 or {}).get(tag, 1.28851), eval_loss_final=0.7569 if arm == "m" else 0.7611,
+                         single_ladder=(sl or {}).get(tag, {"env": "1" if side == "l1" else "0", "gnf4_has_single_ladder": True,
+                                                            "calls": 1536 if side == "l1" else 0}))
+                r["profile"] = ({"profiled_steps": 3, "device_ms": 3 * dev[(arm, side)], "wall_ms_per_step": 1100.0 * s[(arm, side)][i],
+                                 "cpu_ops_per_step": 527000, "top_cpu": [{"name": "aten::bmm", "count": 9228,
+                                                                         "self_cpu_ms": 9228 * bmm[side] / 1000.0}]} if profile else None)
+                if arm == "shipped":
+                    r["arm_facts"] = dict(r.get("arm_facts") or {}, adapter_dtype="native")
+                    r["matched"] = False
+                R[("e4b", tag)] = r
     return R
 
 
@@ -10280,6 +10458,25 @@ def selftest():
     nop9 = P9(_pos69_set(rec={"ckpt_unsloth_m_fv": {"profile": None}}))
     assert nop9[POS69_FAM]["verdicts"][("unsloth", "ckpt_unsloth_m_fv")] == "VOID" and set(p9(nop9).values()) == {"UNTESTED"}
     assert "P208" in render(R9, "x") and "amendment 69" in render(R9, "x")
+    cases += 1
+    # 123. TC1 amendment 70 (qwen3sladder): the single-block ladder at the field recipe -- VALID; P210-P214 HELD on a host-bound fixture (0.89 /
+    #      0.88, bmm 172 -> 20 us, device +1.8 %); a GPU-bound l0 (busy_t 0.95) leaves P210 / P211 UNTESTED; 0.99 FALSIFIES P210; device +8 %
+    #      FALSIFIES P213; an l1 draw without laddered calls, or a bucketed call, is VOID
+    SL = lambda R: {SLADDER_FAM: reduce_family(SLADDER_FAM, R, {}, 20)}
+    RSL = SL(_sladder_set())
+    assert all(x["verdict"] == "VALID" for x in RSL[SLADDER_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RSL[SLADDER_FAM]["rows"]]
+    psl = lambda R: {p: v for p, _, v, _ in score_sladder(R)}
+    assert psl(RSL) == {p: "HELD" for p in ("P210", "P211", "P212", "P213", "P214")}, score_sladder(RSL)
+    gpu = psl(SL(_sladder_set(dev={("m", "l0"): 3320.0})))
+    assert gpu["P210"] == "UNTESTED" and gpu["P211"] == "UNTESTED", gpu
+    assert psl(SL(_sladder_set(s={("m", "l1"): (3.46, 3.47)})))["P210"] == "FALSIFIED"
+    assert psl(SL(_sladder_set(dev={("shipped", "l1"): 1570.0})))["P213"] == "FALSIFIED"
+    nol = {"fused_attn4_m_l1": {"env": "1", "gnf4_has_single_ladder": True, "calls": 0}}
+    assert SL(_sladder_set(sl=nol))[SLADDER_FAM]["verdicts"][("e4b", "fused_attn4_m_l1")] == "VOID"
+    bk = _sladder_set()
+    bk[("e4b", "fused_attn4_shipped_l0")]["lean_ab"]["lora_path_calls"]["padded_bucketed"] = 12
+    assert SL(bk)[SLADDER_FAM]["verdicts"][("e4b", "fused_attn4_shipped_l0")] == "VOID"
+    assert "P212" in render(RSL, "x") and "amendment 70" in render(RSL, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
