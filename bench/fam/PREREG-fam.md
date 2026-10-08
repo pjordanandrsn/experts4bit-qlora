@@ -166,8 +166,14 @@ The verdict for each (family, ON config) is the first of these that applies.
   needs. For gpt-oss, each knob licenses alone; ON_auto licenses all three together.
 - **FAIL:** the knob or knobs stay off on that family by default. The gate statistic that failed, and the cell, are
   named in RESULTS-fam.md.
-- **UNRESOLVED:** no gate is licensed for that family. An amendment registers a larger window count at the size the
-  ladder resolved, before any default.
+- **UNRESOLVED:** no gate is licensed for that family. Before any default, an amendment re-reads it with more windows,
+  and the window count is fixed here, from the ladder:
+  - per set: 12 × ⌈(δ / 0.02)²⌉, where δ = 1 − the ladder rung closest to 1 that failed;
+  - δ = 0.05 (× 0.95 failed) gives 84 windows; δ = 0.10 (only × 0.90 failed) gives 300;
+  - this assumes the mutant's effect grows linearly with its deviation and the standard error falls as one over the
+    square root of the windows;
+  - if neither rung fails, or the count does not fit the lane ceiling, no gate is licensed for that family under this
+    design.
 - **VOID:** no consequence; one rerun inside the ceiling, then an amendment.
 - **The anchor** changes no default. It is quoted beside the gpt-oss verdicts so 0.924 is read against its own floor.
 
