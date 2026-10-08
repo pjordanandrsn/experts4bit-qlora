@@ -1,0 +1,58 @@
+{
+  "schema": "dense-reserve-policy/1",
+  "name": "dq10",
+  "basis": "inferred",
+  "licensed": false,
+  "source_diagnostic": "9a77ab73cadc31b35a89c061cb6d6cfabb5c3da09ace44e359bb0c79ab9a83c6",
+  "hypotheses": {
+    "device": {
+      "reserve_numerator": 1,
+      "reserve_denominator": 5,
+      "context_bytes": 660602880
+    },
+    "stream": {
+      "reserve_numerator": 2197697,
+      "reserve_denominator": 5494591,
+      "context_bytes": 731906048
+    }
+  },
+  "hardware": {
+    "name": "NVIDIA GeForce RTX 5090",
+    "driver": "595.91.07",
+    "memory_min": 32212254720,
+    "memory_max": 35433480192
+  },
+  "runtime": {
+    "torch": "2.8.0+cu128",
+    "bitsandbytes": "0.50.2",
+    "transformers": "5.18.0",
+    "peft": "0.21.2",
+    "experts4bit-qlora": "0.50.0",
+    "grouped-nf4-gemm": "0.43.0"
+  },
+  "config_sha256": [
+    "affafc6478ec0fd07a32f0ca57aa2fc57743f4d17d6730f86a96ac24d1507f99",
+    "c72b1031274ff4626e434d0019e88e95a767460135db9ee492eb80652b786af1"
+  ],
+  "recipe": {
+    "base": "nf4",
+    "r": 16,
+    "alpha": 32,
+    "adapter_dtype": "fp32",
+    "attn_impl": "sdpa",
+    "loss_chunk": 0,
+    "targets": [
+      "attn_in",
+      "attn_out",
+      "mlp_in",
+      "mlp_out"
+    ]
+  },
+  "sequence_rungs": [
+    512,
+    2048,
+    4096
+  ],
+  "allocator_profile": "default",
+  "notes": "Explicit prospective hypothesis only. Training peak differences and sampled driver-minus-reserved are noncontemporaneous peak comparisons. No capacity/calibration import; default unchanged."
+}

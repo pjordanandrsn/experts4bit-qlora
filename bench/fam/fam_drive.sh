@@ -51,9 +51,12 @@ POLL=${FAM_POLL_S:-60}; W=/root/fam
 HF_TOKEN_FILE=${HF_TOKEN_FILE:-$HOME/.config/hf/token}
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
 PASS="FAM_RUN_ID=$RUN_ID FAM_RUN_NONCE=$NONCE FAM_DEADLINE_EPOCH=$DEADLINE FAM_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA"
-# Only the proving-run switch travels: a rental is the registered run, so the knobs that change WHAT is measured are not
-# forwarded -- a rehearsal sets them on its own box and the runner marks it REHEARSAL.
-for v in FAM_PROVE; do [ -n "${!v:-}" ] && PASS="$PASS $v=$(printf %q "${!v}")"; done
+# Only the proving-run switch and the run's family travel (Amendment 1: one family per box): a rental is the registered
+# run, so the knobs that change HOW it is measured are not forwarded -- a rehearsal sets them on its own box and the
+# runner marks it REHEARSAL.
+case "${FAM_FAMILY:-}" in ""|granite|gptoss|qw36) ;; *) say "refusing: FAM_FAMILY must be granite, gptoss or qw36"; exit 78;; esac
+[ "${FAM_PROVE:-0}" = 1 ] || [ -n "${FAM_FAMILY:-}" ] || { say "refusing: a reading names its family (FAM_FAMILY)"; exit 78; }
+for v in FAM_PROVE FAM_FAMILY; do [ -n "${!v:-}" ] && PASS="$PASS $v=$(printf %q "${!v}")"; done
 if [ "${FAM_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash fam_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/fam"; exit 0; fi
 say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; launch e4b $E4B_SHA (from $REPO); stacks are the runner's constants; receipts -> $RUN_DIR/fam; deadline $DEADLINE"
 $SSH "rm -rf -- $W && mkdir -p $W/logs /root/.cache/huggingface" || { say "stage failed: remote cleanup"; exit 20; }

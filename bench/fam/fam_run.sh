@@ -3,10 +3,10 @@
 # the run's nonce; FAM_RUN_NONCE first, then FAM_EXIT_CODE.<nonce> + TP_DONE.<nonce> on every exit and
 # FAM_SUCCESS.<nonce> only when the reducer ran (or, under FAM_PROVE=1, when the proof passed).
 #
-# Does the B=1 fused stack, at T == 1 and T == 12, stay inside each family's OWN neutral floor? On ONE RTX 5090, per
-# model, in order Granite, gpt-oss, Qwen3.6 (a later model's fetch or bake failure still leaves the earlier reads):
-# fetch, NF4 arena bake, then fresh processes of fam_box.py -- OFF first (it writes every cell's reference), then each
-# ON config -- and for gpt-oss the anchor's two processes on SC2g's path; then fam_reduce.py.
+# Does the B=1 fused stack, at T == 1 and T == 12, stay inside each family's OWN neutral floor? On ONE RTX 5090, ONE
+# family per box (FAM_FAMILY: granite, gptoss or qw36; Amendment 1): fetch, NF4 arena bake, then fresh processes of
+# fam_box.py -- OFF first (it writes every cell's reference), then each ON config -- and for gpt-oss the anchor's two
+# processes on SC2g's path; then fam_reduce.py over that family.
 #   premise  on THIS card, before anything is fetched: tests/test_fam_split1_gpu.py and tests/test_fusion_modes.py,
 #            all passed, none skipped (rc 25)
 #
@@ -26,10 +26,21 @@ case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char sha"; finish 78; }
 GNF4_SHA=6ee2e10408161a9d3c874975c9191a7f2957e6f4   # grouped-nf4-gemm v0.43.0, e4b CI's pin at registration; a registered constant
 PROVE=${FAM_PROVE:-0}
+# Amendment 1: one family per box (FAM_FAMILY), every time-left check sized from fam-prove-1's measured wall time per
+# process (OFF 1024 s, an ON config about 170 s at 32 positions; x 127/31 at 128) with a 1.5x margin, Qwen3.6 at 1.5x
+# Granite's step. Each NEED + 600 s of fetch-back fits inside the family's guard (2.5 h / 3.75 h / 4.0 h; proof 1.25 h).
+FAMILY=${FAM_FAMILY:-}
 if [ "$PROVE" = 1 ]; then
-  TAGS="granite"; CONT_DEF=32; NEED_FETCH=300; NEED_BAKE=300; NEED_OFF=900; NEED_ON=300; CAP_OFF=1500; CAP_ON=900
+  [ -z "$FAMILY" ] || [ "$FAMILY" = granite ] || { say "refusing: the proof is Granite's (FAM_FAMILY=$FAMILY)"; finish 78; }
+  TAGS="granite"; CONT_DEF=32; NEED_FETCH=300; NEED_BAKE=300; NEED_OFF=1800; NEED_ON=400; CAP_OFF=2400; CAP_ON=900
 else
-  TAGS="granite gptoss qw36"; CONT_DEF=128; NEED_FETCH=1800; NEED_BAKE=900; NEED_OFF=3000; NEED_ON=900; CAP_OFF=5400; CAP_ON=2400
+  case "$FAMILY" in
+    granite) NEED_FETCH=900;  NEED_BAKE=600; NEED_OFF=6300; NEED_ON=1100; CAP_OFF=7200;  CAP_ON=1800;;
+    gptoss)  NEED_FETCH=1200; NEED_BAKE=900; NEED_OFF=6300; NEED_ON=1100; CAP_OFF=7200;  CAP_ON=1800;;
+    qw36)    NEED_FETCH=2400; NEED_BAKE=900; NEED_OFF=9500; NEED_ON=1600; CAP_OFF=10800; CAP_ON=2700;;
+    *) say "refusing: FAM_FAMILY must be granite, gptoss or qw36 (got '${FAMILY}')"; finish 78;;
+  esac
+  TAGS="$FAMILY"; CONT_DEF=128
 fi
 GPU_CLASS=${FAM_GPU_CLASS:-5090}; MIN_DISK_GB=${FAM_MIN_DISK_GB:-200}; MIN_RAM_GB=${FAM_MIN_RAM_GB:-60}
 REHEARSAL=${FAM_REHEARSAL:-0}; CONT=${FAM_CONT:-$CONT_DEF}
@@ -43,7 +54,7 @@ unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_
       E4B_KV_STEP_SELECT E4B_PAGED_BULK_KV E4B_PAGED_PREFILL_GRAPH E4B_FUSE_SWIGLU E4B_FUSE_COMBINE GNF4_PDL GNF4_PDL_MAX_ROWS \
       GNF4_GEMV_DOTPAD GNF4_DECODE_PLAN GNF4_GEMV_SPLITK GNF4_GEMV_BW GNF4_TRITON_PREBIND E4B_INT4_WIDE_TILES
 : > summary.txt; echo "$FAM_INSTANCE_ID" > INSTANCE_ID
-echo "KNOBS e4b=$E4B_SHA gnf4=$GNF4_SHA models=$TAGS gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_ram_gb=$MIN_RAM_GB prove=$PROVE cont=$CONT" | tee -a summary.txt
+echo "KNOBS e4b=$E4B_SHA gnf4=$GNF4_SHA family=${FAMILY:-proof} models=$TAGS gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_ram_gb=$MIN_RAM_GB prove=$PROVE cont=$CONT" | tee -a summary.txt
 if [ "$REHEARSAL" != 0 ] || [ "$GPU_CLASS" != 5090 ] || [ "$MIN_DISK_GB" != 200 ] || [ "$MIN_RAM_GB" != 60 ] || [ "$CONT" != "$CONT_DEF" ]; then
   echo "REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)" | tee -a summary.txt; : > REHEARSAL
 fi
@@ -187,7 +198,7 @@ for M in $TAGS; do
   fi
   rm -rf $W/work_$M/nf4snap                                # the snapshot is not needed after the model's processes (disk)
 done
-PF=""; [ "$PROVE" = 1 ] && PF="--proof"
+PF="--families $TAGS"; [ "$PROVE" = 1 ] && PF="--proof"
 say "reduce"; python $W/fam_reduce.py --dir $W --out $W/verdict.json --e4b-sha $E4B_SHA $PF 2>&1 | tee -a summary.txt
 [ "${PIPESTATUS[0]}" = 0 ] && [ -s $W/verdict.json ] || { say "REDUCER FAILED"; finish 22; }
 if [ "$PROVE" = 1 ]; then

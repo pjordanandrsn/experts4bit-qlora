@@ -10358,6 +10358,35 @@
       "notes": "Pre-registered in #1360 and reviewed by the maintainer before any box. Vast invoiced $0.878 for the reading; the lane cost $1.079 with the proof. The kernel, not the graph, explains it: the eager step is already 1.48x slower. By subtraction, the chained builder costs about 2.7-2.8 ms of the 17.55 ms step, so a faster one-launch table (a launch-shape lane in grouped-nf4-gemm) remains a lever. On the proof's Granite (40 experts; not a reading) the same switch was 2.9 % faster."
     },
     {
+      "id": "e4b.serve.p122.wide-tiles-chunked.qwen3-int4.5090.2026-10-08",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P122, one RTX 5090: on SC2e's served stack (Qwen3-30B-A3B int4 experts and int4 RTN attention, the folds, fused q/k/v), with grouped-nf4-gemm #519 building the tile table above 256 routed rows in 64-row chunks, E4B_INT4_WIDE_TILES=1 makes the captured 64-row decode step 4.3 % faster (17.53 -> 16.78 ms), with identical tokens at all 16,704 positions: the chunked table costs 2.51 ms a step against 10.45 ms for P120's one-piece table, and removing the chained builder's kernels and launches nets 0.76 ms a step. DEFAULT_ON by the registered rule (both ABBA ratios <= 0.98).",
+      "value": 0.9568,
+      "unit": "ratio of the served 64-row decode step, E4B_INT4_WIDE_TILES=1 over 0 (median of 256 captured bucket-64 replays after 5 warm; ABBA pair a; pair b 0.9569)",
+      "hardware": "RTX 5090 (sm_120, driver 595.71.05; the board of P120's and P121's readings), one rented Vast.ai host (instance 54913207, AMD EPYC 7C13, 256 threads), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @6357ecc (0.50.0 + P122's registration #1386; the switch #1357) + grouped-nf4-gemm @b155f1c (0.43.0 + #515's cumsum rank + #519's chunked table); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0; Qwen/Qwen3-30B-A3B @ad44e77, NF4 arena baked on the box, int4 stores repacked at load, built eager with one slot; premise tests/test_decode_graph_buckets.py 7 passed and #519's chunked cumsum tests compiled for the card 117 passed; P120's box at its registered bytes: the 64-row eager profile with the switch 0 and 1, four captured-graph arms OFF_a ON_a ON_b OFF_b x 256 timed bucket-64 steps with every token recorded, and a mutant that must change the tokens; verdict by bench/p122/p122_reduce.py (P120's rule)",
+      "measured_on": "2026-10-08",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p122/RESULTS-p122.md",
+        "bench/p122/PREREG-p122.md",
+        "bench/p122/p122_reduce.py",
+        "bench/p120/p120_box.py",
+        "bench/p122/receipts/p122-5090-1/verdict.json",
+        "bench/p122/receipts/p122-5090-1/box.json",
+        "bench/p122/receipts/p122-5090-1/summary.txt",
+        "bench/p122/receipts/p122-5090-1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-08/p122-5090-1/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-08/p122-prove-1/ (receipt.json, the proving run)"
+      ],
+      "notes": "Pre-registered in #1386 and reviewed by the maintainer before any box. Vast invoiced $0.837 for the reading; the lane cost $0.930 with the proof. The chunked table is 4.2x faster than P120's one-piece table but still 1.75x the chained builder's named kernels (Q2 missed high): a multi-program table is the next lever. The default flip is a separate PR, scoped to tables no larger than the one read (next_pow2(E) x next_pow2(R) <= 128 x 512)."
+    },
+    {
       "id": "e4b.serve.p121.k25-w16.qwen3.5090.2026-10-08",
       "package": "experts4bit-qlora",
       "area": "serve",
@@ -11759,6 +11788,29 @@
         "receipts/experts4bit-qlora/2026-10-08/tc1-5090-139/tc1/"
       ],
       "notes": "Vast invoiced $2.751, with seven load-gate re-runs. Paired by draw (not quoted by the rule): shipped la / l0 0.997 in both draws, matched 0.876 and 0.813. The matched l0's GPU busy was 0.475 of its step (host-bound)."
+    },
+    {
+      "id": "e4b.train.dense-executor.dq9.5090.2026-10-08",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "claim": "DQ9 is COMPLETE_DIAGNOSTIC on sixteen known-subject arms: all eight paired training peaks are unchanged by one setup cache clear; all allocator estimates are above measured peaks, but all ten streamed full-device estimates remain below sampled driver use, by at most 1135096620 bytes.",
+      "value": 1135096620,
+      "unit": "bytes, maximum sampled driver peak minus full streamed device plan",
+      "model": "synthetic Qwen3-14B, Llama-3.1-8B and Qwen3-32B architecture checkpoints",
+      "hardware": "RTX 5090, 32607 MiB, driver 595.91.07, PCIe gen5 x16",
+      "conditions": "DQ9 amendment a04b7dc4; Loggetta efe1c93 with 12-byte full-logit workspace; NF4 doublequant64/bf16 compute, fp32 all-projection r16/alpha32, SDPA/non-reentrant checkpointing, micro-batch1/grad-accum1, two AdamW steps at constant2e-4/clip1, default allocator. Eight exact known-subject shape/placement pairs; baseline and one empty_cache after setup, before optimizer creation. No new phase synchronization, peak reset or tensor-data reads.",
+      "measured_on": "2026-10-08",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/dq9/receipts/dq9-5090-2/dq9-read.json",
+        "bench/dq9/receipts/dq9-5090-2/raw-science.tar.gz",
+        "bench/dq9/receipts/dq9-5090-2/README.md"
+      ],
+      "validity": "VALID",
+      "row_status": "OK",
+      "row_reason": "Valid known-subject diagnostic only (COMPLETE_DIAGNOSTIC); capacity and calibration_replacement licenses are false.",
+      "notes": "Four paired tiny proofs pass bitwise loss/all28 gradients/updates/reload and sampled frozen integrity. Q32 resident2048 clear releases32MiB with allocated unchanged; other seven release0; all training peak deltas0. Training reserve slack remains; no cache-clear executor change, reserve import, DQ8 or opt-in removal follows. DQ7 stays VOID. Invoice$0.343; teardown verified."
     },
     {
       "id": "e4b.train.single-ladder-auto.gpu-bound.5090.2026-10-08",

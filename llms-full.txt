@@ -2129,12 +2129,13 @@ than `load_moe_4bit_streaming`. `e4b.offload.kimi-k3.full-depth.a2000.five-runs.
 `e4b.parity.kimi-k3.reproducible-on-gnf4-0.33.6.a2000.2026-09-29`
 ([results](../bench/kimi-k3-a2000/RESULTS-kimi-k3-a2000.md)).
 
-**Dense execution stays gated after a failed out-of-sample reading.** DQ7 of Loggetta's dense executor is VOID: 14 of
-16 arms ran, and the planner refused the Qwen3-32B resident anchor at 4096 tokens before loading. On the arms that
-ran, the allocator estimate held on Qwen3-14B but fell below the measured peak on Llama-3.1-8B at 2048 and 4096 tokens,
-resident and streamed. Every streamed plan's device total was below the measured driver peak, by up to 2.40 GB
-(driver/plan up to 1.196), so the inferred 20 % reserve doesn't cover streamed placement. No calibration or DQ8 draw
-follows. `e4b.train.dense-executor.dq7.5090.2026-10-08` ([results](../bench/dq7/RESULTS-dq7.md)).
+**Dense execution remains in development.** DQ7's out-of-sample reading is VOID; no reserve calibration or 24 GB
+boundary has passed. DQ9 completed sixteen known-subject diagnostics with the corrected full-logit workspace:
+allocator estimates were above measured peaks, but all ten streamed full-device estimates remained below sampled
+driver use, by up to 1.14 GB. One setup clear released 32 MiB on one arm and changed no training peak, so it provides
+no training-memory remedy. DQ9 licenses neither capacity nor calibration; the opt-in and enforced streamed margin
+remain. `e4b.train.dense-executor.dq9.5090.2026-10-08` ([diagnostic record](../bench/dq9/receipts/dq9-5090-2/README.md));
+`e4b.train.dense-executor.dq7.5090.2026-10-08` ([original VOID reading](../bench/dq7/RESULTS-dq7.md)).
 
 ### Training against other frameworks
 
@@ -2278,9 +2279,10 @@ Qwen3.5/3.6-MoE and Granite-MoE wait for lane FAM's reads at T == 1 (#1362). `0`
 **Other opt-ins.** `E4B_PAGED_DECODE_LOOKAHEAD=1` recovers the whole host gap between decode steps, but the gap is
 small: 1.0198× at one request, SLOWER against its 1.02 bar. `E4B_PAGED_LAST_LOGITS=1` projects only the final prompt
 position through the LM head (#1337). `E4B_INT4_WIDE_TILES=1` builds the tile table above 256 routed rows in one
-launch; on Qwen3-30B-A3B int4 the 64-row step is 1.44× slower (the table costs 10.4 ms a step), so it is SLOWER
-and stays opt-in. `e4b.serve.p118.decode-lookahead.qwen3.5090.2026-10-08`,
-`e4b.serve.p120.wide-tiles.qwen3-int4.5090.2026-10-08`.
+launch. On Qwen3-30B-A3B int4 the one-piece table made the 64-row step 1.44× slower (P120). grouped-nf4-gemm #519's
+chunked table makes it 4.3 % faster (P122, DEFAULT_ON); the default flip, scoped to the table size read, is its own PR.
+`e4b.serve.p118.decode-lookahead.qwen3.5090.2026-10-08`, `e4b.serve.p120.wide-tiles.qwen3-int4.5090.2026-10-08`,
+`e4b.serve.p122.wide-tiles-chunked.qwen3-int4.5090.2026-10-08`.
 
 **Qwen3-30B-A3B's licensed int4 stack** (calibrated int4 experts and attention, folds, router epilogue) passes the K8
 gate on both texts loaded by fingerprint (expert pack `sha256:0c9955a9…`; wikitext −0.05275, c4val1 −0.06622 ppl). On
@@ -3172,6 +3174,7 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.serve.sc2e.64-slots-default-buckets.qwen3.5090.2026-10-07 [measured]: Lane SC2e, one RTX 5090: e4b serve_paged on Qwen3-30B-A3B int4 with 64 slots on the 1-16 decode-graph buckets (a wider step chains 16-row replays) meets the SLO (TTFT <= 1.0 s and TPOT <= 100 ms for >= 0.95 of requests in both Poisson draws) up to 8 req/s, twice the 16-slot server's 4, with serial output byte-identical …
 - e4b.serve.sc2e.64-slots-buckets-auto.qwen3.5090.2026-10-07 [measured]: Lane SC2e, one RTX 5090: e4b serve_paged on Qwen3-30B-A3B int4 with 64 slots and decode-graph buckets up to 64 (E4B_PAGED_BUCKETS=auto) meets the SLO (TTFT <= 1.0 s and TPOT <= 100 ms for >= 0.95 of requests in both Poisson draws) up to 12 req/s (1.000 / 0.967), three times the 16-slot server's 4, with serial output …
 - e4b.serve.p120.wide-tiles.qwen3-int4.5090.2026-10-08 [measured]: Lane P120, one RTX 5090: on SC2e's served stack (Qwen3-30B-A3B int4 experts and int4 RTN attention, the folds, fused q/k/v), building the tile table above 256 routed rows in one launch (E4B_INT4_WIDE_TILES=1, grouped-nf4-gemm's cumsum rank) makes the captured 64-row decode step 1.44x slower (17.55 -> 25.31 ms), with …
+- e4b.serve.p122.wide-tiles-chunked.qwen3-int4.5090.2026-10-08 [measured]: Lane P122, one RTX 5090: on SC2e's served stack (Qwen3-30B-A3B int4 experts and int4 RTN attention, the folds, fused q/k/v), with grouped-nf4-gemm #519 building the tile table above 256 routed rows in 64-row chunks, E4B_INT4_WIDE_TILES=1 makes the captured 64-row decode step 4.3 % faster (17.53 -> 16.78 ms), with …
 - e4b.serve.p121.k25-w16.qwen3.5090.2026-10-08 [measured]: Lane P121, one RTX 5090: on the default serve_paged server (Qwen3-30B-A3B NF4, bucketed decode graphs, 16 slots), K25 (E4B_NF4_GROUPED_SMALLM=auto, the default since P96) decodes the served W16 step 1.57x as fast as the NF4 M-tile it replaces (E4B_NF4_GROUPED_SMALLM=0): 491 -> 771 tok/s, 32.6 -> 20.7 ms a step, with W1 …
 - e4b.serve.p115.fused-stack-engagement.gptoss-qwen36.5090.2026-10-08 [measured]: Lane P115 Phase C, one RTX 5090: auto on the four B=1 fusion knobs (E4B_PAGED_FUSE_QKV, E4B_FUSE_T1_GLUE, E4B_FUSE_T1_GLUE_R2, E4B_FUSE_ROUTER_EPI) at serve_paged's build engages by structure exactly as predicted: gpt-oss-20b 0 / 49 / [24, 0] / 24 (its attention carries sinks, so the rotary-only fold refuses …
 - e4b.serve.p115.fused-stack-quality.granite.5090.2026-10-08 [measured]: Lane P115 Phase C (Granite's full read, Amendment 2), one RTX 5090: the B=1 fusion knobs at auto on Granite-3.1-3b-a800m (engaged 0 / 65 / [32, 32] / 32; the q/k/v fusion refuses) score within P110's teacher-forced quality bar against the unfused server, with Phase B's instrument at Phase B's size. …
@@ -3229,6 +3232,7 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.train.single-ladder.field.5090.2026-10-08 [measured]: TC1 amendment 70 (#835), one rented RTX 5090 (tc1-5090-138, AMD EPYC 7K62, Vast machine 152440): grouped-nf4-gemm's opt-in single-block ladder (NF4_QLORA_SINGLE_LADDER=1, grouped-nf4-gemm#513) against the single padded block at TC1's field recipe over 60 load-gated steps, e4b at its defaults in venv-unsloth (torch …
 - e4b.train.dense-executor.dq7.5090.2026-10-08 [measured]: DQ7 of Loggetta dense execution is VOID: fourteen of sixteen architecture-only arms complete; the Qwen3-32B resident 4096 anchor is refused before load; Llama allocator estimates understate both placements at 2048 and 4096 tokens …
 - e4b.train.single-ladder-auto.field.5090.2026-10-08 [measured]: TC1 amendment 71 (#835), one rented RTX 5090 (tc1-5090-139, AMD EPYC 7763, Vast machine 150670): grouped-nf4-gemm's NF4_QLORA_SINGLE_LADDER=auto (grouped-nf4-gemm#514, the single-block ladder exactly when the adapters are fp32) against 0 at TC1's field recipe over 60 load-gated steps, e4b at its defaults in …
+- e4b.train.dense-executor.dq9.5090.2026-10-08 [measured]: DQ9 is COMPLETE_DIAGNOSTIC on sixteen known-subject arms: all eight paired training peaks are unchanged by one setup cache clear; all allocator estimates are above measured peaks, but all ten streamed full-device estimates remain below sampled driver use, by at most 1135096620 bytes.
 - e4b.train.single-ladder-auto.gpu-bound.5090.2026-10-08 [measured]: TC1 amendment 72 (#835), amendment 71's box unchanged on a third host (tc1-5090-141, AMD Ryzen 9 9950X3D, Vast machine 18967, GPU-bound: the matched l0's GPU busy 0.884 of its step, no draw voided for host load): grouped-nf4-gemm's NF4_QLORA_SINGLE_LADDER=auto against 0 at TC1's field recipe over 60 load-gated steps …
 
 Open items (no evidence either way):
@@ -3237,4 +3241,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 …
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(424 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(426 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

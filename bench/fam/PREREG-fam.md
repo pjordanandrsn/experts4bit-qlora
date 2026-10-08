@@ -262,3 +262,52 @@ Fetched to the run directory's `fam/` and committed to `bench/fam/receipts/<run>
   `SHA256SUMS`.
 
 The references and the arenas stay on the box.
+
+## Amendment 1 (2026-10-08, after `fam-prove-1`, before any reading)
+
+**What the proof read.** `fam-prove-1` ran on one RTX 5090 on an AMD EPYC 7C13 host: Vast instance 54917126, launched
+2026-10-08T21:48:57Z, lane done 22:17:44Z, $0.423. It VOIDed on census, as registered: the router epilogue licensed 27
+of Granite's 32 routers (`failed_probe: 5` in the build log's fusion report, ON_epi and ON_auto alike).
+- **Everything else held on the real card:** OFF's census zero, no int4 store, decode-attention calls, decode-shaped
+  forwards, wrapper coverage, windows, prefill sizes and group sizes. The premise passed (36 tests), and so did all
+  three self-tests.
+- **The anchor's two processes were skipped** by the time-left rule.
+- **Receipt:** the store's `e63b1f10`. The run's records go in their own receipts pull request.
+
+**Two consequences; neither changes the rule.**
+1. **The router probe.** The seat A2000 licensed 32 of 32 at the same code and weights. #1385's probe judges near ties
+   on the device's own bf16 logits, over four rows. The fix belongs to the B=1 lane, and the maintainer has made it a
+   release blocker.
+   - The census table stands at 32, and the relaunched proof must read it on the 5090.
+   - No FAM box launches before that fix and #1395 are on `main`.
+2. **Time.** This is a sizing basis seen on one host, clock-read from the proof's records, not a speed claim.
+   - The median eager decode step was 49.0 ms at T == 1 and 53.6 ms at T == 12.
+   - Wall time per process at 32 positions: OFF 1024.1 s, ON_epi 171.1 s, ON_auto 167.1 s.
+   - At 128 positions, OFF projects to about 70 minutes a family on such a host, and an ON config to about 12. The
+     registered single 4.5 h box cannot hold all three families.
+
+**Changes.**
+- **One family per box.** `FAM_FAMILY` names it: `granite`, `gptoss` (which also runs the anchor) or `qw36`. Each is
+  its own launch under this registration, with the same rule, gates and predictions. The driver forwards
+  `FAM_FAMILY` and refuses any other value, and a reading must name one. The box reduces its own family
+  (`fam_reduce.py --families`).
+- **Guards,** at 1.5 × the projection, with Qwen3.6 taken at 1.5 × Granite's step:
+
+  | run | guard | the box's checks (need / alarm cap) |
+  |---|---|---|
+  | Granite | 2.5 h | fetch 900 s, bake 600 s, OFF 6300 / 7200 s, each ON 1100 / 1800 s |
+  | gpt-oss (+ the anchor) | 3.75 h | fetch 1200 s, bake 900 s, OFF 6300 / 7200 s, each ON 1100 / 1800 s |
+  | Qwen3.6 | 4.0 h | fetch 2400 s, bake 900 s, OFF 9500 / 10800 s, each ON 1600 / 2700 s |
+  | the proof | 1.25 h | fetch 300 s, bake 300 s, OFF 1800 / 2400 s, each ON 400 / 900 s |
+
+  Each check plus 600 s of fetch-back fits inside its guard (`tests/test_fam_staged_pin.py`). The proof's longer
+  guard lets the anchor's SC2g processes run.
+- **Budget,** at the policy rate ($0.85/h plus $0.011/GB):
+  - each run's ceiling: proof $1.14, Granite $2.2, gpt-oss $3.4, Qwen3.6 $4.2;
+  - **lane ceiling $18.00** (was $10.00), which covers one rerun of the largest; $0.423 is spent;
+  - every run stays under the owner's $15 no-ask tier.
+- **Unchanged:** the instrument, the cells, the arms, the gate and its margins, the mutants and the × 0.90 resolution
+  rung, the predictions, the census and per-step tables, and the rule's rungs.
+
+The reducer's self-test now runs 45 cases: one family per box, the anchor only on gpt-oss's box, and an unregistered
+family refused.

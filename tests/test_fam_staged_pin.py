@@ -86,11 +86,11 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 
 def test_the_self_tests_pass():
     base = {"PATH": "/usr/bin:/bin", **{k: os.environ[k] for k in ("SYSTEMROOT",) if k in os.environ}}
-    for script, want in (("fam_reduce.py", "fam_reduce self-test OK (42/42 cases)"),
+    for script, want in (("fam_reduce.py", "fam_reduce self-test OK (45/45 cases)"),
                          ("fam_box.py", "fam_box self-test OK (27/27 cases)")):
         out = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True, env=base)
         assert out.returncode == 0 and want in out.stdout, out.stdout + out.stderr
-    assert "self-tested on 42 cases" in PREREG
+    assert "self-tested on 42 cases" in PREREG and "self-test now runs 45 cases" in PREREG     # Amendment 1
 
 
 def test_the_rule_is_the_registered_rule():
@@ -156,19 +156,34 @@ def test_the_order_puts_every_refusal_before_the_fetch():
              "python $W/fam_reduce.py --dir $W --out $W/verdict.json"]
     at = [RUN.index(s) for s in order]
     assert at == sorted(at), list(zip(order, at))
-    assert 'TAGS="granite gptoss qw36"' in RUN and 'TAGS="granite"' in RUN
+    assert 'TAGS="$FAMILY"' in RUN and 'TAGS="granite"' in RUN, "Amendment 1: one family per box; the proof is Granite's"
+    assert 'PF="--families $TAGS"' in RUN, "the box reduces its own family"
+    assert "for v in FAM_PROVE FAM_FAMILY; do" in DRIVE and 'a reading names its family (FAM_FAMILY)' in DRIVE
     trip = RUN[RUN.index("python - <<'PYT'"):RUN.index("PYT\ncat versions.txt")]
     assert 'md.version("grouped-nf4-gemm") == "0.43.0"' in trip and 'transformers.__version__ == "5.17.0"' in trip
     assert '"n_split" in inspect.signature(fp8_paged_attn.fp8_paged_decode_attention).parameters' in trip
 
 
 def test_every_time_left_check_fits_inside_its_guard():
-    """The reading's guard is 4.5 h; the proof's 0.75 h. Every per-step need, plus the 600 s fetch-back, fits."""
-    reading = re.search(r'TAGS="granite gptoss qw36"; CONT_DEF=128; (.*)', RUN).group(1)
-    proof = re.search(r'TAGS="granite"; CONT_DEF=32; (.*)', RUN).group(1)
-    for line, guard in ((reading, 4.5 * 3600), (proof, 0.75 * 3600)):
+    """Amendment 1's guards: Granite 2.5 h, gpt-oss 3.75 h, Qwen3.6 4.0 h, the proof 1.25 h. Every per-step need, plus
+    the 600 s fetch-back, fits; and the runner's table is the amendment's."""
+    guards = {"granite": 2.5, "gptoss": 3.75, "qw36": 4.0}
+    for fam, hours in guards.items():
+        line = re.search(rf"^\s*{fam}\)\s+(NEED_FETCH=.*);;$", RUN, re.M).group(1)
         vals = dict(re.findall(r"(NEED_\w+|CAP_\w+)=(\d+)", line))
+        assert set(vals) == {"NEED_FETCH", "NEED_BAKE", "NEED_OFF", "NEED_ON", "CAP_OFF", "CAP_ON"}, fam
         for k, v in vals.items():
             if k.startswith("NEED_"):
-                assert int(v) + 600 <= guard, (k, v, guard)
-    assert "guard 4.5 h" in PREREG and "guard 0.75 h" in PREREG
+                assert int(v) + 600 <= hours * 3600, (fam, k, v)
+        assert int(vals["CAP_OFF"]) >= int(vals["NEED_OFF"]) and int(vals["CAP_ON"]) >= int(vals["NEED_ON"]), fam
+    proof = dict(re.findall(r"(NEED_\w+|CAP_\w+)=(\d+)", re.search(r'TAGS="granite"; CONT_DEF=32; (.*)', RUN).group(1)))
+    for k, v in proof.items():
+        if k.startswith("NEED_"):
+            assert int(v) + 600 <= 1.25 * 3600, (k, v)
+    amend = PREREG[PREREG.index("## Amendment 1"):]
+    for s_ in ("| Granite | 2.5 h | fetch 900 s, bake 600 s, OFF 6300 / 7200 s, each ON 1100 / 1800 s |",
+               "| gpt-oss (+ the anchor) | 3.75 h | fetch 1200 s, bake 900 s, OFF 6300 / 7200 s, each ON 1100 / 1800 s |",
+               "| Qwen3.6 | 4.0 h | fetch 2400 s, bake 900 s, OFF 9500 / 10800 s, each ON 1600 / 2700 s |",
+               "| the proof | 1.25 h | fetch 300 s, bake 300 s, OFF 1800 / 2400 s, each ON 400 / 900 s |",
+               "**lane ceiling $18.00**"):
+        assert s_ in amend, s_
