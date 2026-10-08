@@ -51,6 +51,13 @@ than `load_moe_4bit_streaming`. `e4b.offload.kimi-k3.full-depth.a2000.five-runs.
 `e4b.parity.kimi-k3.reproducible-on-gnf4-0.33.6.a2000.2026-09-29`
 ([results](../bench/kimi-k3-a2000/RESULTS-kimi-k3-a2000.md)).
 
+**Dense execution stays gated after a failed out-of-sample reading.** DQ7 of Loggetta's dense executor is VOID: 14 of
+16 arms ran, and the planner refused the Qwen3-32B resident anchor at 4096 tokens before loading. On the arms that
+ran, the allocator estimate held on Qwen3-14B but fell below the measured peak on Llama-3.1-8B at 2048 and 4096 tokens,
+resident and streamed. Every streamed plan's device total was below the measured driver peak, by up to 2.40 GB
+(driver/plan up to 1.196), so the inferred 20 % reserve doesn't cover streamed placement. No calibration or DQ8 draw
+follows. `e4b.train.dense-executor.dq7.5090.2026-10-08` ([results](../bench/dq7/RESULTS-dq7.md)).
+
 ### Training against other frameworks
 
 **Qwen3-30B-A3B against Unsloth: Unsloth spends 1.92× e4b's GPU time per step; wall-clock 2.80× on an AMD EPYC
@@ -188,7 +195,10 @@ registration. `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`,
 
 **Other opt-ins.** `E4B_PAGED_DECODE_LOOKAHEAD=1` recovers the whole host gap between decode steps, but the gap is
 small: 1.0198× at one request, SLOWER against its 1.02 bar. `E4B_PAGED_LAST_LOGITS=1` projects only the final prompt
-position through the LM head (#1337). `e4b.serve.p118.decode-lookahead.qwen3.5090.2026-10-08`.
+position through the LM head (#1337). `E4B_INT4_WIDE_TILES=1` builds the tile table above 256 routed rows in one
+launch; on Qwen3-30B-A3B int4 the 64-row step is 1.44× slower (the table costs 10.4 ms a step), so it is SLOWER
+and stays opt-in. `e4b.serve.p118.decode-lookahead.qwen3.5090.2026-10-08`,
+`e4b.serve.p120.wide-tiles.qwen3-int4.5090.2026-10-08`.
 
 **Qwen3-30B-A3B's licensed int4 stack** (calibrated int4 experts and attention, folds, router epilogue) passes the K8
 gate on both texts loaded by fingerprint (expert pack `sha256:0c9955a9…`; wikitext −0.05275, c4val1 −0.06622 ppl). On
