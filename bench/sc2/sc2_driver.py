@@ -12,7 +12,8 @@ Every request streams (``stream: true``), is greedy (``temperature: 0``), runs e
 (``ignore_eos: true``) and asks for usage (``stream_options.include_usage``). Engine-specific body fields come from the
 profile (llama.cpp's ``cache_prompt: false``); nothing else differs between engines.
 
-Per request: the send time; the first token chunk (TTFT); every token chunk's arrival; ``completion_tokens`` from
+Per request: the server's completion id (``request_id``, when supplied); the send time; the first token chunk (TTFT);
+every token chunk's arrival; ``completion_tokens`` from
 usage; the streamed text; ``finish_reason``; any error. A TOKEN CHUNK is a chunk whose choice carries non-empty text: a
 choice chunk with empty text (a finish-only chunk, a partial character held back by the detokenizer) is counted in
 ``empty_chunks`` but never timed, so it cannot move TTFT or stretch TPOT; a usage-only chunk (empty ``choices``) is
@@ -115,7 +116,8 @@ def request_body(model: str, prompt: list, max_tokens: int, extra: dict) -> dict
 
 def new_record(prompt: list, max_tokens: int, t_send: float) -> dict:
     return {"max_tokens": max_tokens, "prompt_len": len(prompt), "t_send": round(t_send, 6), "chunks": [], "text": "",
-            "completion_tokens": None, "prompt_tokens": None, "finish_reason": None, "empty_chunks": 0, "valid": False}
+            "completion_tokens": None, "prompt_tokens": None, "finish_reason": None, "empty_chunks": 0,
+            "request_id": None, "valid": False}
 
 
 def fold(rec: dict, event: str, t: float) -> None:
@@ -123,6 +125,14 @@ def fold(rec: dict, event: str, t: float) -> None:
     if event == "[DONE]":
         return
     msg = json.loads(event)
+    request_id = msg.get("id")
+    if isinstance(request_id, str) and request_id:
+        if rec["request_id"] is None:
+            rec["request_id"] = request_id
+        elif rec["request_id"] != request_id:
+            # Identity is diagnostic metadata, independent of SC2's registered validity rule.
+            # A trace join must refuse it, while the timing/quality reading remains unchanged.
+            rec["request_id_conflict"] = True
     ch = msg.get("choices") or []
     if ch:
         c = ch[0]
