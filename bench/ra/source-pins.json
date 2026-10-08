@@ -1,0 +1,39 @@
+{
+  "baseline": {
+    "e4b": {
+      "commit": "72e6dfeb36dfefbfdb84d71b77b1399c64709581",
+      "version": "0.50.0"
+    },
+    "gnf4": {
+      "commit": "6ee2e10408161a9d3c874975c9191a7f2957e6f4",
+      "version": "0.43.0"
+    }
+  },
+  "instruments": {
+    "bench/p108/p108_box.py": "b57dff71cba30d9c649bae05df28f8c5376de9f7ac7ae5759157e57475b83e4b",
+    "bench/p109/p109_box.py": "b53f94192b4040b6451ceb18f8cd4e3e5629a6e40c4885b40600fcc4205d8248",
+    "bench/p109/p109_reduce.py": "97d40656afc5c416d8ae7c6a54e0794fd1ac6b8aeb2e07902c33aded1c51eabc",
+    "bench/p110/p110_box.py": "02d82d88259c169060f78e47c219e7dfd82d146dd80e0c7c3b0e3acdfca252cf",
+    "bench/p115/p115_quality.py": "f1500a26404284fbb14cce214c548d73b3889e9db5ef1faf5ef63bf74449b574",
+    "bench/p115/p115d_box.py": "e120a7391135f59715e89f48349381b1f73efa7402f77064cbcd5ca5bce290eb",
+    "bench/p115/p115d_reduce.py": "0f593378e653dfe1fc7d087e7b683a724f2d204d9f035cc991528baa68faf438",
+    "bench/p39/calib.json": "15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2",
+    "bench/p39/k8_bake.py": "e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e",
+    "bench/p97/p97_box.py": "608c1a20136393495ebb482afc58a24880e053a2caab6152fa3eb87183063a31",
+    "bench/sc2/sc2_driver.py": "d6338054b862484a2da62390d02c04ee4909033521b999f7631b1eeb435a1a7c",
+    "bench/sc2/sc2_prompts.py": "6a8f3e3a0837286f618acc655f85288876fa200bbb19096b302e7c30a847b51d",
+    "bench/sc2/sc2_reduce.py": "6255a5d207959fa6a850c9bdf0b1870e208609c42c8274895356ba2bde749d48",
+    "bench/sc2/sc2e_census.py": "fb51a639b3e6fd2476ce019e48999649dfad03c00e6b88dd3a9f07f995cdc149",
+    "bench/sc2/sc2e_reduce.py": "76f674dce7edf2e0457b309fe6ea479a9e4af7d5fbaf98086adeb28f0fc2d05f",
+    "bench/tc1/tc1_arm.py": "c62a88864905e8d94f5e92151e8b92eb2034d1e96eee85bd506ff49bce7f3b2d",
+    "bench/tc1/tc1_reduce.py": "1a88f0ea1236012257a7f04ebf17505b9ede2bb0cfe9815003956c35f50625da",
+    "bench/tc1/tc1_run.sh": "9e7cdbed5aff88f13f1aa737c978e8caefbd4c25b1a538e80d271061cb1c27e1",
+    "bench/tp4/tp4_alpaca.py": "34761911c2a6986bffbcb72d3ebb5ce56d54834bb2285fec8a6f0b996562535d"
+  },
+  "models": {
+    "Qwen/Qwen3-30B-A3B": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "ibm-granite/granite-3.1-3b-a800m-instruct": "a02780686e08a03fe0d2679a293b5c74a90efa89"
+  },
+  "schema": 1,
+  "source_commit": "b38866c609d663cacbace283fb55b2060dffd958"
+}
