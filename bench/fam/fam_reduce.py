@@ -306,9 +306,20 @@ def reduce_anchor(recs):
             "phase_c_0924_within_floor": PHASE_C_ANCHOR_AGREE >= f["A"] - AGREE_MARGIN}
 
 
-def load_dir(d, proof=False):
+def _families(proof, families):
+    """The families a run reduces: the proof's, or (Amendment 1: one family per box) the run's own, never another."""
+    if proof:
+        return PROOF["families"]
+    fams = tuple(families or MODELS)
+    bad = [f for f in fams if f not in MODELS]
+    if bad or not fams:
+        raise SystemExit(f"REFUSED: --families {fams}; registered: {tuple(MODELS)}")
+    return fams
+
+
+def load_dir(d, proof=False, families=None):
     out = {}
-    fams = PROOF["families"] if proof else tuple(MODELS)
+    fams = _families(proof, families)
     for fam in fams:
         out[fam] = {}
         for config in (PROOF["configs"][fam] if proof else FAMILY_CONFIGS[fam]):
@@ -322,10 +333,11 @@ def load_dir(d, proof=False):
     return out
 
 
-def reduce_all(recs, e4b_sha, proof=False):
-    fams = PROOF["families"] if proof else tuple(MODELS)
+def reduce_all(recs, e4b_sha, proof=False, families=None):
+    fams = _families(proof, families)
     out = {"proof": bool(proof), "families": {f: reduce_family(f, recs.get(f) or {}, e4b_sha, proof) for f in fams}}
-    out["anchor"] = reduce_anchor(recs.get("anchor") or {})
+    if proof or ANCHOR["family"] in fams:                # the anchor rides with gpt-oss's box (and the proof's)
+        out["anchor"] = reduce_anchor(recs.get("anchor") or {})
     out["constants"] = {"BIAS_MARGIN": BIAS_MARGIN, "SPREAD_MULT": SPREAD_MULT, "SPREAD_MIN": SPREAD_MIN,
                         "AGREE_MARGIN": AGREE_MARGIN, "BACKSTOP_BIAS": BACKSTOP_BIAS, "BACKSTOP_AGREE": BACKSTOP_AGREE}
     return out
@@ -506,6 +518,17 @@ def self_test() -> int:
     r = copy.deepcopy(base)
     r["ON_r2"]["cells"]["c4val1|1|B"]["base"]["prompt"] = 64
     case("a prompt at or under the folds' 64-row bound VOIDs", "gptoss", r, "VOID")
+    one = reduce_all({"granite": _fam_recs("granite")}, "E", families=("granite",))
+    cases.append(("a one-family box reduces that family only, with no anchor",
+                  set(one["families"]) == {"granite"} and "anchor" not in one, sorted(one)))
+    gpt = reduce_all({"gptoss": base, "anchor": {}}, "E", families=("gptoss",))
+    cases.append(("gpt-oss's box carries the anchor", "anchor" in gpt and gpt["anchor"]["status"] == "missing",
+                  gpt.get("anchor")))
+    try:
+        _families(False, ("mixtral",))
+        cases.append(("an unregistered family is refused", False, None))
+    except SystemExit:
+        cases.append(("an unregistered family is refused", True, None))
     ok = [c[1] for c in cases]
     # gate arithmetic, by hand
     fl = {"B": 0.002, "S": 0.010, "A": 0.95}
@@ -539,17 +562,19 @@ def main(argv=None) -> int:
     p.add_argument("--out")
     p.add_argument("--e4b-sha")
     p.add_argument("--proof", action="store_true")
+    p.add_argument("--families", nargs="+", help="the run's family (Amendment 1: one per box); default all three")
     a = p.parse_args(argv)
     if a.self_test:
         return self_test()
     if not (a.dir and a.out and a.e4b_sha):
         raise SystemExit("REFUSED: --dir, --out and --e4b-sha are required")
-    v = reduce_all(load_dir(a.dir, a.proof), a.e4b_sha, a.proof)
+    v = reduce_all(load_dir(a.dir, a.proof, a.families), a.e4b_sha, a.proof, a.families)
     with open(a.out, "w") as f:
         json.dump(v, f, indent=1)
     for fam, r in v["families"].items():
         print(f"FAM_VERDICT {fam} {r['verdict']}" + (f" -- {r['why'][:3]}" if r["why"] else ""))
-    print(f"FAM_ANCHOR {json.dumps(v['anchor'].get('floor', v['anchor']), default=str)[:300]}")
+    if "anchor" in v:
+        print(f"FAM_ANCHOR {json.dumps(v['anchor'].get('floor', v['anchor']), default=str)[:300]}")
     return 0
 
 
