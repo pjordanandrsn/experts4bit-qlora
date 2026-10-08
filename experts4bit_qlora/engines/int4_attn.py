@@ -50,7 +50,7 @@ def _smallm_kernels():
 class Int4Linear(nn.Module):
     """Frozen serving projection stored on the int4-b32 grid."""
 
-    def __init__(self, lin: nn.Linear, packer=None, smallm: bool = False):
+    def __init__(self, lin: nn.Linear, packer=None, smallm: bool = False, wide: bool = False):
         """``packer(w_fp32_cpu) -> (packed, scales)`` defaults to the
         shipped round-to-nearest packer; the calibrated lane passes one
         closed over that projection's Hessian. Same bytes either way.
@@ -60,7 +60,11 @@ class Int4Linear(nn.Module):
         the cached bf16 matmul, on the SAME packed bytes; its split-K
         workspace is preallocated here so a captured decode step allocates
         nothing. Default ``auto`` since the K16 P5 read (see
-        :func:`resolve_smallm`); callers pass the resolved flag."""
+        :func:`resolve_smallm`); callers pass the resolved flag.
+
+        ``wide=True`` (needs ``smallm``) also routes ``SMALLM_ROWS_MAX < rows <= WIDE_ROWS_MAX`` to the same
+        kernel with a 32- or 64-row tile, through a workspace shared per stream (:func:`_wide_workspace`).
+        Opt-in (:func:`resolve_wide`); callers pass the resolved flag."""
         super().__init__()
         _gemv, _qx, _dref, pack = _kernels()
         N, K = lin.out_features, lin.in_features
@@ -73,11 +77,11 @@ class Int4Linear(nn.Module):
         bias = None if lin.bias is None else lin.bias.detach().to(torch.bfloat16).clone()
         self._install(packed.reshape(1, N, K // 2).to(dev),
                       scales.reshape(1, N, K // 32).to(dev),
-                      N, K, bias, dev, smallm)
+                      N, K, bias, dev, smallm, wide)
 
     @classmethod
     def from_packed(cls, packed: torch.Tensor, scales: torch.Tensor, N: int, K: int, *,
-                    bias: torch.Tensor | None = None, smallm: bool = False) -> "Int4Linear":
+                    bias: torch.Tensor | None = None, smallm: bool = False, wide: bool = False) -> "Int4Linear":
         """An ``Int4Linear`` over bytes that are ALREADY on the int4-b32 grid
         (``packed [N, K//2] uint8`` or ``[1, N, K//2]``; ``scales [N, K//32]`` or
         ``[1, N, K//32]``). Nothing is re-quantised: the grid is the one the
@@ -92,7 +96,7 @@ class Int4Linear(nn.Module):
                 f"(packed {tuple(packed.shape)}, scales {tuple(scales.shape)})")
         dev = packed.device
         self._install(packed.reshape(1, N, K // 2), scales.reshape(1, N, K // 32),
-                      N, K, None if bias is None else bias.to(torch.bfloat16), dev, smallm)
+                      N, K, None if bias is None else bias.to(torch.bfloat16), dev, smallm, wide)
         return self
 
     @classmethod
@@ -109,7 +113,7 @@ class Int4Linear(nn.Module):
         three -- which is the whole point at decode (k/v_proj sit within 1 us
         of the launch floor on a 5090, K16 rows). Refuses (``ValueError``)
         rather than half-fuses: every part must be an ``Int4Linear`` with the
-        same ``K``, the same small-M routing, and either all or none biased."""
+        same ``K``, the same small-M routing (``smallm`` and ``wide``), and either all or none biased."""
         mods = list(mods)
         if not mods or not all(isinstance(m, cls) for m in mods):
             raise ValueError("fuse: every part must be an Int4Linear")
@@ -119,22 +123,29 @@ class Int4Linear(nn.Module):
         smallm = mods[0]._smallm is not None
         if any((m._smallm is not None) != smallm for m in mods):
             raise ValueError("fuse: parts disagree on the smallm route (some route rows 2..16 to K16, some do not)")
+        wide = mods[0]._wide
+        if any(m._wide != wide for m in mods):
+            raise ValueError("fuse: parts disagree on the wide route (some route rows 17..64 to the small-M GEMM, "
+                             "some do not)")
         biased = [m.bias is not None for m in mods]
         if any(biased) and not all(biased):
             raise ValueError("fuse: some parts carry a bias and some do not -- refusing to half-fuse")
         packed = torch.cat([m.packed for m in mods], dim=1)
         scales = torch.cat([m.scales for m in mods], dim=1)
         bias = torch.cat([m.bias for m in mods]) if all(biased) else None
-        fused = cls.from_packed(packed, scales, sum(m.N for m in mods), K, bias=bias, smallm=smallm)
+        fused = cls.from_packed(packed, scales, sum(m.N for m in mods), K, bias=bias, smallm=smallm, wide=wide)
         # Marked so an attention pack is never dumped from fused modules: their names do not
         # exist on the unfused model a licensed load installs onto (#674). Fuse after loading.
         fused._e4b_fused_parts = len(mods)
         return fused
 
-    def _install(self, packed, scales, N, K, bias, dev, smallm):
+    def _install(self, packed, scales, N, K, bias, dev, smallm, wide=False):
         gemv, qx, dref, _pack = _kernels()
         self._gemv, self._qx, self._dref = gemv, qx, dref
         self._smallm = None
+        if wide and not smallm:
+            raise ValueError("Int4Linear(wide=True) needs smallm=True: rows 17..64 ride the K16 small-M GEMM")
+        self._wide = bool(wide)
         if smallm:
             self._smallm, plan_smallm, smallm_workspace = _smallm_kernels()
         self.N, self.K = N, K
@@ -178,6 +189,10 @@ class Int4Linear(nn.Module):
     # (#561: the bf16 cache holds a second, 4x larger representation of every projection). Opt-in
     # until the K16 lane's 5090 numbers meet its registered decision rule.
     SMALLM_ROWS_MAX = 16
+    # E4B_ATTN_INT4_WIDE (e4b#846, opt-in): the same kernel with a 32- or 64-row M tile serves 17..64 rows -- a batched
+    # decode step above 16 rows -- instead of the cached bf16 copy (P119: 2.05 ms of Qwen3-30B-A3B's 15.64 ms 64-row
+    # step, reading 1.81 GB a step where the int4 grid is 510 MB). Needs grouped-nf4-gemm's block_m= (#522).
+    WIDE_ROWS_MAX = 64
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         rows = x.reshape(-1, self.K)
@@ -195,6 +210,14 @@ class Int4Linear(nn.Module):
             out = self._smallm(rows.to(torch.bfloat16), self.packed[0], self.scales[0],
                                block_n=bn, kc=kc, sk=sk_sm,
                                workspace=(self._smallm_part, self._smallm_cnt))
+            if self.bias is not None:
+                out = out + self.bias
+            return out.reshape(*x.shape[:-1], self.N).to(x.dtype)
+        if self._wide and R <= self.WIDE_ROWS_MAX:
+            bn, kc, sk_sm = self._smallm_cfg
+            out = self._smallm(rows.to(torch.bfloat16), self.packed[0], self.scales[0],
+                               block_n=bn, kc=kc, sk=sk_sm,
+                               workspace=_wide_workspace(self.N, bn, sk_sm, rows.device))
             if self.bias is not None:
                 out = out + self.bias
             return out.reshape(*x.shape[:-1], self.N).to(x.dtype)
@@ -239,6 +262,71 @@ class Int4Linear(nn.Module):
         return w.reshape(self.N, self.K).to(torch.bfloat16)
 
 
+#: The 17..64-row route's split-K workspaces: ONE per (device, N, plan, stream), shared by every Int4Linear of that
+#: width. See :func:`_wide_workspace`.
+_WIDE_WS: dict = {}
+
+
+def _wide_workspace(N: int, block_n: int, sk: int, device: torch.device):
+    """The ``(part, cnt)`` workspace of the 17..64-row route for an ``N``-wide projection on ``device``, sized for the
+    64-row tile (it serves the 32-row tile too), shared by every ``Int4Linear`` of that width and plan on one stream.
+
+    Why sharing is safe: the kernel reads ``part`` and re-arms ``cnt`` within one launch, and one stream's launches
+    run in order -- in a captured graph as well, where a single-stream capture is one chain -- so modules taking
+    turns never overlap. A second stream gets its own workspace, so two streams never race on one. Per-module
+    workspaces sized for 64 rows would cost ``4 x 64 x N`` fp32 each (264 MB more on Qwen3-30B-A3B's 96
+    projections); shared, it is ``4 x 64 x N`` per width and stream (5.2 + 2.1 MB there).
+
+    Built on first use per stream: eager steps' and each warm-up stream's before any capture, and the capture
+    stream's inside the first capture that takes the route (in that graph's private pool, once; kept for the
+    process). :func:`wide_workspace_bytes` reports the total."""
+    stream = torch.cuda.current_stream(device).cuda_stream if device.type == "cuda" else 0
+    key = (device.type, device.index, int(N), int(block_n), int(sk), stream)
+    ws = _WIDE_WS.get(key)
+    if ws is None:
+        _gemm, _plan, smallm_workspace = _smallm_kernels()
+        ws = _WIDE_WS[key] = smallm_workspace(N, block_m=Int4Linear.WIDE_ROWS_MAX, block_n=block_n, sk=sk,
+                                              device=device)
+    return ws
+
+
+def wide_workspace_bytes() -> int:
+    """Device bytes held by the 17..64-row route's shared workspaces (all streams, all widths)."""
+    return sum(t.numel() * t.element_size() for ws in _WIDE_WS.values() for t in ws)
+
+
+def _wide_supported(gemm) -> bool:
+    """Whether the installed ``gemm_int4_b32_smallm`` takes ``block_m=`` (grouped-nf4-gemm #522): read from its
+    signature, never from a version string."""
+    import inspect
+    return "block_m" in inspect.signature(gemm).parameters
+
+
+def resolve_wide(smallm: bool, wide=None) -> bool:
+    """``E4B_ATTN_INT4_WIDE`` (e4b#846), decided ONCE per enable: ``1`` routes 17..64 rows -- a batched decode step
+    above 16 rows -- to the K16 small-M GEMM with a 32- or 64-row tile, on the same packed bytes, instead of the
+    cached bf16 matmul. ``0`` (the default, also unset or empty) keeps the cached bf16 matmul above 16 rows. ``1``
+    is refused without the K16 route (``E4B_ATTN_INT4_SMALLM=0``, or its kernel absent) and on a kernel package
+    whose ``gemm_int4_b32_smallm`` has no ``block_m=``; anything else is refused. Never a silent fallback."""
+    import os
+    if wide is None:
+        v = os.environ.get("E4B_ATTN_INT4_WIDE", "0").strip().lower() or "0"
+        if v not in ("0", "1"):
+            raise ValueError(f"E4B_ATTN_INT4_WIDE={v!r}: expected '0' or '1'")
+        wide = v == "1"
+    if not wide:
+        return False
+    if not smallm:
+        raise RuntimeError("E4B_ATTN_INT4_WIDE=1 needs the K16 small-M route, which is off "
+                           "(E4B_ATTN_INT4_SMALLM=0, or the installed grouped-nf4-gemm has no int4_smallm)")
+    gemm, _plan, _ws = _smallm_kernels()
+    if not _wide_supported(gemm):
+        raise RuntimeError("E4B_ATTN_INT4_WIDE=1 needs grouped-nf4-gemm whose gemm_int4_b32_smallm takes block_m= "
+                           "(rows above 16); install that cut or unset the flag -- the route is never substituted "
+                           "silently")
+    return True
+
+
 def resolve_smallm(smallm=None, *, banner=print) -> bool:
     """The K16 route's default, decided ONCE per enable (K16 P5 read, bench/k16/RESULTS-k16-p5.md: -1.06 ms/step
     at B=16 on the 5090). ``E4B_ATTN_INT4_SMALLM``: ``1`` requires the kernel (refuses without it), ``0`` keeps the
@@ -280,14 +368,16 @@ def attention_linears(model):
                     yield mod, name, child
 
 
-def enable_serve_attn_int4(model, smallm: bool | None = None) -> int:
+def enable_serve_attn_int4(model, smallm: bool | None = None, wide: bool | None = None) -> int:
     """Swap every structural attention projection for Int4Linear.
     Returns the count; refuses a vacuous enable. lm_head untouched.
 
     ``smallm`` (default: ``E4B_ATTN_INT4_SMALLM``, ``auto``) routes ``1 < rows <= 16``
     to the K16 small-M int4 GEMM when the kernel is installed (see
     :func:`resolve_smallm`); ``=1`` with the kernel absent refuses here, never
-    at forward time."""
+    at forward time. ``wide`` (default: ``E4B_ATTN_INT4_WIDE``, ``0``) routes
+    ``16 < rows <= 64`` to the same kernel (see :func:`resolve_wide`), refused here
+    when it cannot run."""
     try:
         _kernels()
     except ImportError as e:
@@ -296,10 +386,11 @@ def enable_serve_attn_int4(model, smallm: bool | None = None) -> int:
             f"(missing: {e}); install the matching cut or unset the flag"
         ) from e
     smallm = resolve_smallm(smallm)
+    wide = resolve_wide(smallm, wide)
     n = 0
     from .host_heap import release_freed_host_heap
     for mod, name, child in attention_linears(model):
-        setattr(mod, name, Int4Linear(child, smallm=smallm))
+        setattr(mod, name, Int4Linear(child, smallm=smallm, wide=wide))
         child = None
         n += 1
         release_freed_host_heap()    # each projection is packed from an fp32 host copy (engines.host_heap)
