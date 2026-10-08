@@ -10273,6 +10273,62 @@
       "notes": "Pre-registered in #1335 (e4b#846), the read the ruling on #1320 required before E4B_PAGED_BUCKETS=auto may be a default. With SC2e (bench/h2h-2026-10-02/sc2e: 64 slots with buckets up to 64 serve 12 req/s, against 8 on the default list) this licenses E4B_PAGED_BUCKETS=auto as serve_paged's default. Read on one model and card; other models ride this read. Predictions held for R's repeat, the floor, FUNCTION, the mutant, engagement, the box's time and the verdict; missed for rev (bit-identical: 64 windows reverse into the same 16-row sets) and narrowly for W64 and W64pad's bias (-0.0032 / -0.0033 against [-0.003, +0.003], the better side). Lane cost $1.068."
     },
     {
+      "id": "e4b.serve.sc2e.64-slots-default-buckets.qwen3.5090.2026-10-07",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane SC2e, one RTX 5090: e4b serve_paged on Qwen3-30B-A3B int4 with 64 slots on the 1-16 decode-graph buckets (a wider step chains 16-row replays) meets the SLO (TTFT <= 1.0 s and TPOT <= 100 ms for >= 0.95 of requests in both Poisson draws) up to 8 req/s, twice the 16-slot server's 4, with serial output byte-identical to 16 slots; at 12 req/s it misses on time per token (0.633 / 0.608, TPOT p50 48-50 ms).",
+      "value": 8,
+      "unit": "req/s, capacity ceiling: the largest Poisson rate of 1, 2, 4, 8, 12 and 16 at which >= 0.95 of requests meet TTFT <= 1.0 s and TPOT <= 100 ms in both draws",
+      "hardware": "RTX 5090 (sm_120, driver 610.43.02, 32607 MiB, 575 W, 3105 MHz), one rented Vast.ai host (machine 58411, AMD EPYC 7352, 48 threads), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "bench/sc2/SC2e-PREREG.md box L (#1320): e4b @3bbcb01b (package tree 4d96736c, the code of #1319) + grouped-nf4-gemm v0.42.0 @b4f93f1c; torch 2.8.0+cu128, triton 3.4.0, transformers 5.16.1; Qwen/Qwen3-30B-A3B @ad44e77 int4 experts and int4 RTN attention (SC2's levers, E4B_PAGED_FUSE_QKV=1), 2,048 tokens a slot, chunk 512, bulk KV bookkeeping and the prefill graph at their defaults; arms s16, s32a, s64c and s64a, each its own server per draw (draw 1 s16 -> s32a -> s64c -> s64a, draw 2 reversed); SC2's open-loop driver, each request one 512-token wikitext-2 row with max_tokens from U[64, 256], Poisson at 1, 2, 4, 8, 12 and 16 req/s x 120 requests; gates ROUTES, SLOTS, ENGAGED (the burst replayed each arm's widest bucket), PROMPTS, DETERMINISM and IDENTITY passed on all eight servers; licence SLOTS_LICENSED(64, auto) by bench/sc2/sc2e_reduce.py; this row is arm s64c (E4B_PAGED_MAX_SEQS=64 on the 1-16 bucket list)",
+      "measured_on": "2026-10-07",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/sc2e/README.md",
+        "bench/sc2/SC2e-PREREG.md",
+        "bench/sc2/sc2e_reduce.py",
+        "bench/h2h-2026-10-02/sc2e/receipts/sc2e-5090-1/sc2/verdict_sc2e.json",
+        "bench/h2h-2026-10-02/sc2e/receipts/sc2e-5090-1/box.json",
+        "bench/h2h-2026-10-02/sc2e/receipts/sc2e-5090-1/capacity_check.json",
+        "bench/h2h-2026-10-02/sc2e/receipts/sc2e-5090-1/forensics.txt"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-07/sc2e-5090-1/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-07/sc2e-prove-2/ (receipt.json, the proving run)"
+      ],
+      "notes": "Pre-registered in #1320 and reviewed by the maintainer before any box. Vast invoiced $1.017 for the reading; the lane cost $1.262 across 3 receipts. The board (575 W) is not SC2's or SC2c's, so absolute times compare only within this box, and no comparator ran here: this is no position against vLLM or SGLang. Since 0.50.0 the defaults are E4B_PAGED_MAX_SEQS=auto (#1334, 64 slots where the serve estimate fits with 1.5 GiB to spare) and E4B_PAGED_BUCKETS=auto (#1346, after P117's AT_PARITY quality read); E4B_PAGED_MAX_SEQS=16 restores the 16-slot server."
+    },
+    {
+      "id": "e4b.serve.sc2e.64-slots-buckets-auto.qwen3.5090.2026-10-07",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane SC2e, one RTX 5090: e4b serve_paged on Qwen3-30B-A3B int4 with 64 slots and decode-graph buckets up to 64 (E4B_PAGED_BUCKETS=auto) meets the SLO (TTFT <= 1.0 s and TPOT <= 100 ms for >= 0.95 of requests in both Poisson draws) up to 12 req/s (1.000 / 0.967), three times the 16-slot server's 4, with serial output byte-identical to 16 slots; its 64-row graph step runs in 18.4 ms against 36.5 ms for four 16-row replays.",
+      "value": 12,
+      "unit": "req/s, capacity ceiling: the largest Poisson rate of 1, 2, 4, 8, 12 and 16 at which >= 0.95 of requests meet TTFT <= 1.0 s and TPOT <= 100 ms in both draws",
+      "hardware": "RTX 5090 (sm_120, driver 610.43.02, 32607 MiB, 575 W, 3105 MHz), one rented Vast.ai host (machine 58411, AMD EPYC 7352, 48 threads), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "bench/sc2/SC2e-PREREG.md box L (#1320): e4b @3bbcb01b (package tree 4d96736c, the code of #1319) + grouped-nf4-gemm v0.42.0 @b4f93f1c; torch 2.8.0+cu128, triton 3.4.0, transformers 5.16.1; Qwen/Qwen3-30B-A3B @ad44e77 int4 experts and int4 RTN attention (SC2's levers, E4B_PAGED_FUSE_QKV=1), 2,048 tokens a slot, chunk 512, bulk KV bookkeeping and the prefill graph at their defaults; arms s16, s32a, s64c and s64a, each its own server per draw (draw 1 s16 -> s32a -> s64c -> s64a, draw 2 reversed); SC2's open-loop driver, each request one 512-token wikitext-2 row with max_tokens from U[64, 256], Poisson at 1, 2, 4, 8, 12 and 16 req/s x 120 requests; gates ROUTES, SLOTS, ENGAGED (the burst replayed each arm's widest bucket), PROMPTS, DETERMINISM and IDENTITY passed on all eight servers; licence SLOTS_LICENSED(64, auto) by bench/sc2/sc2e_reduce.py; this row is arm s64a (E4B_PAGED_MAX_SEQS=64, E4B_PAGED_BUCKETS=auto: buckets 1-64)",
+      "measured_on": "2026-10-07",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/sc2e/README.md",
+        "bench/sc2/SC2e-PREREG.md",
+        "bench/sc2/sc2e_reduce.py",
+        "bench/h2h-2026-10-02/sc2e/receipts/sc2e-5090-1/sc2/verdict_sc2e.json",
+        "bench/h2h-2026-10-02/sc2e/receipts/sc2e-5090-1/box.json",
+        "bench/h2h-2026-10-02/sc2e/receipts/sc2e-5090-1/capacity_check.json",
+        "bench/h2h-2026-10-02/sc2e/receipts/sc2e-5090-1/forensics.txt"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-07/sc2e-5090-1/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-07/sc2e-prove-2/ (receipt.json, the proving run)"
+      ],
+      "notes": "Pre-registered in #1320 and reviewed by the maintainer before any box. Vast invoiced $1.017 for the reading; the lane cost $1.262 across 3 receipts. The board (575 W) is not SC2's or SC2c's, so absolute times compare only within this box, and no comparator ran here: this is no position against vLLM or SGLang. Since 0.50.0 the defaults are E4B_PAGED_MAX_SEQS=auto (#1334, 64 slots where the serve estimate fits with 1.5 GiB to spare) and E4B_PAGED_BUCKETS=auto (#1346, after P117's AT_PARITY quality read); E4B_PAGED_MAX_SEQS=16 restores the 16-slot server."
+    },
+    {
       "id": "e4b.serve.p115.fused-stack-engagement.gptoss-qwen36.5090.2026-10-08",
       "package": "experts4bit-qlora",
       "area": "serve",

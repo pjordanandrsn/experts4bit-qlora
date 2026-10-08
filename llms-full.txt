@@ -2242,9 +2242,9 @@ AT_PARITY). `e4b.serve.p109.decode-graphs-vs-eager-default.qwen3.5090.2026-10-03
 prompts, 2,048 tokens a slot, TTFT ≤ 1.0 s and TPOT ≤ 100 ms). Since 0.50.0 `serve_paged` sizes its slots to the serve
 estimate and decodes the widest step as one graph replay. One 64-row piece costs no measurable quality against four
 16-row pieces (−0.0032 nats, P117 AT_PARITY). Under load, output text depends on which requests a step batches
-together; serial output is unchanged. Lane SC2e has no register row; its read is
-[`bench/h2h-2026-10-02/sc2e/`](../bench/h2h-2026-10-02/sc2e/README.md).
-`e4b.serve.p117.wide-bucket-quality.qwen3.5090.2026-10-08`.
+together; serial output is unchanged. `e4b.serve.sc2e.64-slots-buckets-auto.qwen3.5090.2026-10-07` (12 req/s),
+`e4b.serve.sc2e.64-slots-default-buckets.qwen3.5090.2026-10-07` (8 req/s on the 1–16 buckets),
+`e4b.serve.p117.wide-bucket-quality.qwen3.5090.2026-10-08` ([SC2e](../bench/h2h-2026-10-02/sc2e/README.md)).
 
 **Single-request decode.** grouped-nf4-gemm's bandwidth-targeted NF4 decode GEMV decodes one request 1.2417× as fast,
 16 unchanged, within P110's quality bar; it is grouped-nf4-gemm's default from 0.43.0 at Qwen3's NF4 expert shapes on
@@ -2317,8 +2317,8 @@ controls. `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-
 | expert combine over row chunks | `enable_fast_train` | `E4B_COMBINE_CHUNK=0` | `e4b.train.combine-row-chunks.packed-4k.5090.2026-10-07` |
 | bucketed LoRA-delta padding, compact | grouped-nf4-gemm | `NF4_QLORA_PAD_BUCKETS=0`, `NF4_QLORA_COMPACT_BUCKETS=0` | `e4b.train.pad-buckets.auto.default-decision.5090.2026-10-06`, `e4b.train.compact-buckets.packed-4k.5090.2026-10-07` |
 | bucketed CUDA-graph decode (sm_89+) | `serve_paged` | `E4B_PAGED_GRAPHS=0` | `e4b.serve.p109.decode-graphs-vs-eager-default.qwen3.5090.2026-10-03`, `e4b.serve.p110.graph-arithmetic-quality.qwen3.5090.2026-10-03` |
-| estimate-sized slots | `serve_paged` | `E4B_PAGED_MAX_SEQS=16` | SC2e |
-| one graph per decode step | `serve_paged` | `E4B_PAGED_BUCKETS=1,2,4,8,16` | SC2e, `e4b.serve.p117.wide-bucket-quality.qwen3.5090.2026-10-08` |
+| estimate-sized slots | `serve_paged` | `E4B_PAGED_MAX_SEQS=16` | `e4b.serve.sc2e.64-slots-default-buckets.qwen3.5090.2026-10-07` |
+| one graph per decode step | `serve_paged` | `E4B_PAGED_BUCKETS=1,2,4,8,16` | `e4b.serve.sc2e.64-slots-buckets-auto.qwen3.5090.2026-10-07`, `e4b.serve.p117.wide-bucket-quality.qwen3.5090.2026-10-08` |
 | one KV-table selection per step | decode graphs | `E4B_KV_STEP_SELECT=0` | `e4b.serve.p111.kv-step-select.qwen3.5090.2026-10-04` |
 | programmatic dependent launch, capped at 8 rows | grouped-nf4-gemm | `GNF4_PDL=0` | `e4b.serve.p113.gnf4-pdl-capped.qwen3-int4.5090.2026-10-04` |
 | bandwidth-targeted NF4 decode GEMV | grouped-nf4-gemm | `GNF4_GEMV_BW=0` | `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07` |
@@ -3149,6 +3149,8 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.serve.p115.fused-stack-quality.qwen3.5090.2026-10-07 [measured]: Lane P115 (Phase B), one RTX 5090: the registered B=1 fused stack on the default serve_paged server (Qwen3-30B-A3B NF4) scores within P110's teacher-forced quality bar against the server's own arithmetic. Wikitext-2 (48 windows x 128 positions): ON bias +0.00098 nats (SE 0.0021 …
 - e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07 [measured]: Lane P116, one RTX 5090: on the default serve_paged server (Qwen3-30B-A3B NF4, bucketed decode graphs), grouped-nf4-gemm K33's bandwidth-targeted NF4 decode GEMV (GNF4_GEMV_BW=1, prmt32, at K33's selected plans via GNF4_GEMV_BW_PLAN …
 - e4b.serve.p117.wide-bucket-quality.qwen3.5090.2026-10-08 [measured]: Lane P117, one RTX 5090: on SC2e's served stack (Qwen3-30B-A3B int4 experts and int4 RTN attention, the T=1 folds, fused q/k/v), decoding 32 or 64 rows in one graph (E4B_PAGED_BUCKETS=auto) costs no measurable quality against decode in pieces of at most 16 rows. …
+- e4b.serve.sc2e.64-slots-default-buckets.qwen3.5090.2026-10-07 [measured]: Lane SC2e, one RTX 5090: e4b serve_paged on Qwen3-30B-A3B int4 with 64 slots on the 1-16 decode-graph buckets (a wider step chains 16-row replays) meets the SLO (TTFT <= 1.0 s and TPOT <= 100 ms for >= 0.95 of requests in both Poisson draws) up to 8 req/s, twice the 16-slot server's 4, with serial output byte-identical …
+- e4b.serve.sc2e.64-slots-buckets-auto.qwen3.5090.2026-10-07 [measured]: Lane SC2e, one RTX 5090: e4b serve_paged on Qwen3-30B-A3B int4 with 64 slots and decode-graph buckets up to 64 (E4B_PAGED_BUCKETS=auto) meets the SLO (TTFT <= 1.0 s and TPOT <= 100 ms for >= 0.95 of requests in both Poisson draws) up to 12 req/s (1.000 / 0.967), three times the 16-slot server's 4, with serial output …
 - e4b.serve.p115.fused-stack-engagement.gptoss-qwen36.5090.2026-10-08 [measured]: Lane P115 Phase C, one RTX 5090: auto on the four B=1 fusion knobs (E4B_PAGED_FUSE_QKV, E4B_FUSE_T1_GLUE, E4B_FUSE_T1_GLUE_R2, E4B_FUSE_ROUTER_EPI) at serve_paged's build engages by structure exactly as predicted: gpt-oss-20b 0 / 49 / [24, 0] / 24 (its attention carries sinks, so the rotary-only fold refuses …
 - e4b.serve.p115.fused-stack-quality.granite.5090.2026-10-08 [measured]: Lane P115 Phase C (Granite's full read, Amendment 2), one RTX 5090: the B=1 fusion knobs at auto on Granite-3.1-3b-a800m (engaged 0 / 65 / [32, 32] / 32; the q/k/v fusion refuses) score within P110's teacher-forced quality bar against the unfused server, with Phase B's instrument at Phase B's size. …
 - e4b.serve.p118.decode-lookahead.qwen3.5090.2026-10-08 [measured]: Lane P118, one RTX 5090: on the default serve_paged server (Qwen3-30B-A3B NF4, bucketed decode graphs, 16 slots, grouped-nf4-gemm 0.43.0's bandwidth GEMV), the decode lookahead (E4B_PAGED_DECODE_LOOKAHEAD=1: each decode step issued before the previous one is read back, its ids gathered on the device) decodes one …
@@ -3209,4 +3211,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 …
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(416 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(418 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
