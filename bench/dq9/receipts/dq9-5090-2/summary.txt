@@ -1,0 +1,37 @@
+[2026-10-08T21:38:53Z] dq9: install pinned Loggetta efe1c93d55a09a66d760f9f5f7a0232e15e7e5a0 and e4b a04b7dc4e73bc780f0fae2e0a1bb114cc4578ec2
+DQ9 software tripwire PASS {'loggetta_sha': 'efe1c93d55a09a66d760f9f5f7a0232e15e7e5a0', 'gnf4_sha': '6ee2e10408161a9d3c874975c9191a7f2957e6f4', 'torch': '2.8.0+cu128', 'bitsandbytes': '0.50.2', 'transformers': '5.18.0', 'peft': '0.21.2'}
+[2026-10-08T21:40:02Z] dq9: synthetic tiny checkpoint and deterministic CUDA proof
+[2026-10-08T21:40:29Z] dq9: paired proof and actual admission PASS; known-subject diagnostic begins
+[2026-10-08T21:42:51Z] dq9: read-llama31_8b-device-2048-baseline
+[2026-10-08T21:43:01Z] dq9: read-llama31_8b-device-2048-baseline completed
+[2026-10-08T21:43:01Z] dq9: read-llama31_8b-device-2048-empty
+[2026-10-08T21:43:12Z] dq9: read-llama31_8b-device-2048-empty completed
+[2026-10-08T21:43:12Z] dq9: read-llama31_8b-stream-2048-baseline
+[2026-10-08T21:43:24Z] dq9: read-llama31_8b-stream-2048-baseline completed
+[2026-10-08T21:43:24Z] dq9: read-llama31_8b-stream-2048-empty
+[2026-10-08T21:43:37Z] dq9: read-llama31_8b-stream-2048-empty completed
+[2026-10-08T21:43:37Z] dq9: read-llama31_8b-device-4096-baseline
+[2026-10-08T21:43:49Z] dq9: read-llama31_8b-device-4096-baseline completed
+[2026-10-08T21:43:49Z] dq9: read-llama31_8b-device-4096-empty
+[2026-10-08T21:44:01Z] dq9: read-llama31_8b-device-4096-empty completed
+[2026-10-08T21:44:01Z] dq9: read-llama31_8b-stream-4096-baseline
+[2026-10-08T21:44:15Z] dq9: read-llama31_8b-stream-4096-baseline completed
+[2026-10-08T21:44:15Z] dq9: read-llama31_8b-stream-4096-empty
+[2026-10-08T21:44:29Z] dq9: read-llama31_8b-stream-4096-empty completed
+[2026-10-08T21:53:58Z] dq9: read-qwen3_32b-device-2048-baseline
+[2026-10-08T21:54:19Z] dq9: read-qwen3_32b-device-2048-baseline completed
+[2026-10-08T21:54:19Z] dq9: read-qwen3_32b-device-2048-empty
+[2026-10-08T21:54:40Z] dq9: read-qwen3_32b-device-2048-empty completed
+[2026-10-08T21:54:40Z] dq9: read-qwen3_32b-stream-2048-baseline
+[2026-10-08T21:55:10Z] dq9: read-qwen3_32b-stream-2048-baseline completed
+[2026-10-08T21:55:10Z] dq9: read-qwen3_32b-stream-2048-empty
+[2026-10-08T21:55:40Z] dq9: read-qwen3_32b-stream-2048-empty completed
+[2026-10-08T21:59:58Z] dq9: read-qwen3_14b-stream-512-baseline
+[2026-10-08T22:00:17Z] dq9: read-qwen3_14b-stream-512-baseline completed
+[2026-10-08T22:00:17Z] dq9: read-qwen3_14b-stream-512-empty
+[2026-10-08T22:00:36Z] dq9: read-qwen3_14b-stream-512-empty completed
+[2026-10-08T22:00:36Z] dq9: read-qwen3_14b-stream-4096-baseline
+[2026-10-08T22:00:58Z] dq9: read-qwen3_14b-stream-4096-baseline completed
+[2026-10-08T22:00:58Z] dq9: read-qwen3_14b-stream-4096-empty
+[2026-10-08T22:01:20Z] dq9: read-qwen3_14b-stream-4096-empty completed
+DQ9 COMPLETE_DIAGNOSTIC
