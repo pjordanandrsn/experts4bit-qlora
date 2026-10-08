@@ -2,11 +2,12 @@
 # tests/test_p123_staged_pin.py resolve each name to its source (bench/p123, bench/sc1b, bench/p109, bench/p39,
 # tests) and compare.
 # Re-pinned 2026-10-08 for Amendment 1 (the proof's router-licensing build), before any box ran.
+# Re-pinned 2026-10-08 for Amendment 2 (the class map names torch.cat), after p123-prove-1, before p123-prove-2.
 67cf1c89e72332e4def6accf00396d84d402a1ca6f77689a02ef96e4f5ee5cdf  p123_run.sh
 4b2d9b14eabfe0ca0b9e575f3c98d7f48d12628fbfac73b3e420a84c91d872e9  p123_box.py
 f0c74443db1031863e005ec42cd671db69166f8e2d71cda405d4c6650e08a484  p123_census.py
 613ec7ac672a0865a7d6f1e95c56f7707065a9497e75bbf950657b3477a22a4b  p123_reduce.py
-1d6c7423591d6156d980778a5bd40a0e6dc4c29f8c30f030c90cc7c00bb39c87  kernel_classes_nf4.json
+f72f4a0b57d2d0acb3368ce0eb63021977292f40892f623536fb3bbcf78c632c  kernel_classes_nf4.json
 8565150a494395bc8ca51659a4b95ca98fd43a8abe6644ab840cb29b57b2bccf  sc1b_census.py
 4737f90a6648efa79c7fe95c41ffccd76d0bf1f9c7368625397c548f213f2279  sc1b_e4b_census.py
 b53f94192b4040b6451ceb18f8cd4e3e5629a6e40c4885b40600fcc4205d8248  p109_box.py

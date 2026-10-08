@@ -4,7 +4,9 @@
 this test runs the same comparison in CI. It also runs the lane's self-tests and pins its shape:
 - P109's box, P39's bake and calibration and the premise tests at the bytes P115 Phase D pinned; SC1b's census reducer
   and window at SC1b's bytes;
-- the v1 class map: SC1b's v0 e4b map with only the NF4 expert kernels added;
+- the v1.1 class map: SC1b's v0 e4b map with only the NF4 expert kernels added, and (Amendment 2) torch.cat's
+  CatArrayBatchedCopy named beside v0's `cat`; the map names every kernel of the committed name inventory (the A2000's
+  and p123-prove-1's) except CUPTI memcpy / memset records, and a cat kernel in a layer classifies as norm_elem;
 - the reducer reads a census record that SC1b's own `arm()` writes (synthetic exports), and its fakes carry that
   record's keys (P115 Phase D's Amendment 4 lesson);
 - the order: refusals, install and tripwire, self-tests, the premise on the card (19), nsys, fetch, bake, prompts,
@@ -108,23 +110,68 @@ def test_the_self_tests_pass():
     assert out.returncode == 0 and "self-test OK" in out.stdout, out.stdout + out.stderr
 
 
-def test_the_class_map_is_sc1b_v0_with_only_the_nf4_experts_named():
+def test_the_class_map_is_sc1b_v0_with_the_nf4_experts_and_torch_cat_named():
     v0 = json.loads((SC1B / "kernel_classes.json").read_text())["e4b"]
     v1 = json.loads((LANE / "kernel_classes_nf4.json").read_text())["e4b"]
-    assert v1["rules"] == v0["rules"] and v1["segment"] == v0["segment"]
+    assert len(v1["rules"]) == len(v0["rules"])
+    for a, b in zip(v0["rules"], v1["rules"]):
+        cat = "cat" in a["match"]
+        want = a["match"][:a["match"].index("cat") + 1] + ["CatArrayBatchedCopy"] + a["match"][a["match"].index("cat") + 1:] \
+            if cat else a["match"]
+        assert {**b, "match": None} == {**a, "match": None} and b["match"] == want, (a, b)
+    assert sum("CatArrayBatchedCopy" in r["match"] for r in v1["rules"]) == 2, "input_prep and norm_elem (Amendment 2)"
+    assert v1["segment"] == v0["segment"]
     assert v1["inherit_next"] == v0["inherit_next"] and v1["inherit_prev"] == v0["inherit_prev"]
     assert set(v1["expert_names"]) == set(v0["expert_names"]) | set(NF4_EXPERTS)
     assert set(v1["matmul_names"]) == set(v0["matmul_names"]) | set(NF4_EXPERTS)
 
 
-def _census_record(tmp_path, batch, moe_layers=1):
+def _named_by(spec_e4b):
+    m = spec_e4b
+    return ([x for r in m["rules"] for x in r["match"]] + m["expert_names"] + m["matmul_names"] + m["segment"]["start"]
+            + m["segment"]["end"] + m["inherit_next"] + m["inherit_prev"])
+
+
+def test_amendment_2_the_map_names_every_kernel_of_the_inventory():
+    """Every kernel the map will meet is named.
+    - The A2000 inventory: torch.profiler's names are the demangled ones, so the map must match each by SC1b's own
+      (case-sensitive substring) `_hit`. CUPTI memcpy / memset records are SC1b's memcpy term, not kernels.
+    - p123-prove-1's census: its name_map keeps Nsight's short names, and SC1b classified them on the 5090 from the
+      short and demangled names together (cuBLAS's `Kernel2` is a cutlass gemm). So every name there carries a class,
+      except torch.cat's, left in the residual (2.2 % > 2 %), which the map now names by its short name.
+    The test is not vacuous: v0's lowercase `cat` and `copy` miss torch.cat's kernel."""
+    cen = _import("sc1b_census", SC1B)
+    inv = json.loads((LANE / "inventory_names.json").read_text())
+    subs = _named_by(json.loads((LANE / "kernel_classes_nf4.json").read_text())["e4b"])
+    a2000 = {n for b in ("b1", "b16") for n in inv["a2000"][b] if not n.startswith(("Memcpy", "Memset"))}
+    assert len(a2000) > 40, len(a2000)
+    unnamed = sorted(n[:120] for n in a2000 if not cen._hit({"name": n, "demangled": n}, subs))
+    assert not unnamed, unnamed
+    for b in ("b1", "b16"):
+        proof = inv["p123_prove_1"][b]
+        left = {n for n, classes in proof.items() if "residual" in classes}
+        assert left == {"CatArrayBatchedCopy", "CatArrayBatchedCopy_alignedK_contig"}, (b, left)
+        assert all(cen._hit({"name": n, "demangled": n}, subs) for n in left), left
+    cats = {n for n in a2000 if "CatArrayBatchedCopy" in n} | left
+    assert cats and not any(cen._hit({"name": n, "demangled": n}, ["cat", "copy"]) for n in cats)
+
+
+def test_amendment_2_a_cat_kernel_in_a_layer_is_norm_elem(tmp_path):
+    rec = _census_record(tmp_path, 1, extra=(("CatArrayBatchedCopy", 5), ("CatArrayBatchedCopy", 5)))
+    assert rec["node"]["residual_fraction"] == 0.0 and "CLASS_MAP_INCOMPLETE" not in rec["labels"], rec["labels"]
+    assert set(rec["node"]["name_map"]["CatArrayBatchedCopy"]) == {"norm_elem"}, rec["node"]["name_map"]
+
+
+def _census_record(tmp_path, batch, moe_layers=1, extra=()):
     """A census arm record written by SC1b's own arm() from synthetic exports: per replay one layer of the default NF4
-    step (rmsnorm, the fused q/k/v GEMV, attention, the router epilogue, two bandwidth GEMVs and swiglu, the combine)."""
+    step (rmsnorm, the fused q/k/v GEMV, ``extra`` kernels, attention, the router epilogue, two bandwidth GEMVs and
+    swiglu, the combine)."""
     cen = _import("sc1b_census", SC1B)
     spec = cen.load_classes(str(LANE / "kernel_classes_nf4.json"), "e4b")
     us = 1000
-    layer = [("_rmsnorm_rows", 30), ("gemv2T_kernel_val", 200), ("_fp8_paged_decode_split", 60), ("_router_epilogue", 20),
-             ("_gemv_nf4_bw", 120), ("_swiglu_rows", 10), ("_gemv_nf4_bw", 60), ("_combine_rows", 10)]
+    layer = [("_rmsnorm_rows", 30), ("gemv2T_kernel_val", 200), *extra, ("_fp8_paged_decode_split", 60),
+             ("_router_epilogue", 20), ("_gemv_nf4_bw", 120), ("_swiglu_rows", 10), ("_gemv_nf4_bw", 60),
+             ("_combine_rows", 10)]
     nk, nl, gg, gk = [], [], [], []
     for i in range(10):
         t, c = 1_000_000 * (i + 1), 1000 + i
