@@ -162,6 +162,36 @@ def _lean_glue_env() -> bool:
 
 _LEAN_GLUE_SUPPORT: dict = {}
 
+#: ``E4B_INT4_WIDE_TILES=1``: the most routed rows the one-launch tile table takes with grouped-nf4-gemm's cumsum rank
+#: (``build_group_tiles_fused(..., rank="cumsum")``); wider calls (prefill chunks) keep the chained builder.
+_WIDE_TILES_MAX = 1024
+
+
+def _wide_tiles_mode_env() -> str:
+    """``E4B_INT4_WIDE_TILES`` (e4b#846): ``1`` builds the device tile table of every device-grouped call with 257 to
+    :data:`_WIDE_TILES_MAX` routed rows -- a decode step above 32 rows at top-k 8, on the int4 store's K19 route or the
+    NF4 store's M-tile alike -- in ONE launch with grouped-nf4-gemm's cumsum rank, instead of the chained builder (argsort, scatter, cumsum,
+    searchsorted, index_select: lane P119 read it at 2.87 ms of a 15.64 ms 64-row step against 0.93 ms for the
+    one-launch table at 256 rows). The tables are the chained builder's integers (grouped-nf4-gemm's
+    ``test_tile_table_cumsum_interp.py``), so outputs are bit-identical. ``0`` (the default, also when unset) keeps the
+    chained builder; ``1`` on a kernel package without ``rank=`` is refused. Anything else is refused."""
+    v = os.environ.get("E4B_INT4_WIDE_TILES", "0").strip().lower() or "0"
+    if v not in ("0", "1"):
+        raise ValueError(f"E4B_INT4_WIDE_TILES={v!r}: expected '0' or '1'")
+    return v
+
+
+_WIDE_TILES_SUPPORT: dict = {}
+
+
+def _wide_tiles_supported(builder) -> bool:
+    """Whether the installed ``build_group_tiles_fused`` takes ``rank=`` (grouped-nf4-gemm's cumsum rank). Read once
+    per builder, not per call."""
+    if builder not in _WIDE_TILES_SUPPORT:
+        import inspect
+        _WIDE_TILES_SUPPORT[builder] = "rank" in inspect.signature(builder).parameters
+    return _WIDE_TILES_SUPPORT[builder]
+
 
 def _lean_glue_supported(builder, k19) -> bool:
     """Whether the installed kernel package carries K23's options (``lean=`` / ``sorted_ids=`` on the builder,
@@ -494,6 +524,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     _k19 = None
     _k19_mode = _k19_mode_env()
     _lean_mode = _lean_glue_mode_env()    # read (and refused if malformed) on every call, like the K19 mode
+    _wide_mode = _wide_tiles_mode_env()   # likewise
     _lean = False
     if _int4_gemv_decode and _k19_mode != "0":
         try:
@@ -604,6 +635,17 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                 from int4_b32 import build_group_tiles_fused as _fused_tiles
             except ImportError:
                 _fused_tiles = None
+        elif not _lean and _wide_mode == "1" and local_ids.numel() <= _WIDE_TILES_MAX:
+            # E4B_INT4_WIDE_TILES=1: the one-launch table above 256 rows, through the cumsum rank (same integers)
+            try:
+                from int4_b32 import build_group_tiles_fused as _wide_builder
+            except ImportError:
+                _wide_builder = None
+            if _wide_builder is None or not _wide_tiles_supported(_wide_builder):
+                raise RuntimeError(
+                    "E4B_INT4_WIDE_TILES=1 needs grouped-nf4-gemm with build_group_tiles_fused(rank='cumsum')")
+            import functools
+            _fused_tiles = functools.partial(_wide_builder, rank="cumsum")
         if _lean:
             # K23: one launch for the table AND the sorted ids
             t_row0, t_rows, t_grp, order, _counts, sorted_ids = _fused_tiles(
