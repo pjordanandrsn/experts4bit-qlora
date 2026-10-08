@@ -267,6 +267,11 @@ registers the speed reading.
   uncapped it costs 16 requests 2.1 %. The capped form is grouped-nf4-gemm's default from
   0.37.0. The default NF4 server reaches only two of the switched kernels, so it was not read there.
 
+**Single-request decode GEMV (grouped-nf4-gemm 0.43.0; lane P116).** On GPUs with at least 160 SMs, decode at
+Qwen3-30B-A3B's NF4 expert shapes uses grouped-nf4-gemm's bandwidth-targeted GEMV: 1.24× as fast at one request and
+unchanged at 16, with quality within P110's bar (`e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`). It is grouped-nf4-gemm's
+default from 0.43.0; `GNF4_GEMV_BW=0` restores dot-pad. Other shapes and smaller GPUs are unchanged.
+
 **Prefill on the int4 expert store (#916; lanes P100, P102).** With `max_seqs` 1 the server leaves
 `hot_residency.DEVICE_GROUPING` off. Until P102, every prefill chunk's MoE call on the int4 store therefore ran a
 Python loop: one reference decode, a cast, a matmul and a copy per routed expert per projection, paid per chunk per

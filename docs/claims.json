@@ -10214,6 +10214,36 @@
       "notes": "Pre-registered in #1314. Every quality prediction (Q6) held: biases inside +-0.004 / +-0.006, spreads <= 0.015, |dK8| 0.0088 / 0.042, floors B <= 0.003 and S <= 0.015, mutant > +0.3. R repeated bit for bit on both texts. Read on Qwen3-30B-A3B only: other families get their own reads in Phase C (Amendment 2)."
     },
     {
+      "id": "e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P116, one RTX 5090: on the default serve_paged server (Qwen3-30B-A3B NF4, bucketed decode graphs), grouped-nf4-gemm K33's bandwidth-targeted NF4 decode GEMV (GNF4_GEMV_BW=1, prmt32, at K33's selected plans via GNF4_GEMV_BW_PLAN; engaged on every single-row decode GEMV, dot-pad never) decodes one request 1.2417x (min over two ABBA pairs; geomean 1.2425) as fast as the shipped default (97.89 -> 121.70 tok/s, step 10.22 -> 8.22 ms) and 16 concurrent requests 1.0003x (unchanged with identical tokens: a T > 1 step never reaches the switch), within P110's teacher-forced bar at T == 1: wikitext ON bias -0.0012 nats (bar 0.0118), K8 -0.0104 ppl; c4val1 -0.0053 (bar 0.0116), K8 -0.090 (reported). A second draw on another host (p116-5090-1, reduced after Amendment 1, not the reading) read g1 1.2681 and the identical quality numbers. DEFAULT_ON.",
+      "value": 1.2417,
+      "unit": "decode tok/s ratio, GNF4_GEMV_BW=1 over the default (dot-pad), one request (W1; min over two ABBA pairs)",
+      "hardware": "RTX 5090 (sm_120, driver 580.126.09, 575 W, 32607 MiB), one rented Vast.ai host (instance 54737263, machine 55913, AMD, 128 threads), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @730c8acc (0.48.0 + P116's registration #1322 and Amendment 1 #1329) + grouped-nf4-gemm @5a60c37 (0.42.0 + K33 #500/#501); torch 2.8.0+cu128, transformers 5.17.0; Qwen/Qwen3-30B-A3B @ad44e77, NF4 arena baked on the box; premise grouped-nf4-gemm kernel/test_nf4_gemv_bw.py 27 passed + test_decode_graph_buckets.py, test_kv_step_select.py, test_gemv_bw_served_gpu.py 18 passed on the card; the default graph serve_paged server (graphs auto, max_seqs 16, buckets 1-16, all-vram, GNF4_PDL default); four ABBA arms (B0a B1a B1b B0b) differing only in GNF4_GEMV_BW (unset vs 1 with K33's plans), W16 = 16 wikitext 512-token prompts at once, W1 = one, 32/160 new tokens, 3 timed reps; quality P110 at one window per pass (24 x 128 per text, floor chunk); verdict by bench/p116/p116_reduce.py",
+      "measured_on": "2026-10-07",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p116/RESULTS-p116.md",
+        "bench/p116/PREREG-p116.md",
+        "bench/p116/p116_reduce.py",
+        "bench/p116/p116_box.py",
+        "bench/p116/receipts/p116-5090-2/verdict.json",
+        "bench/p116/receipts/p116-5090-2/arm_B1a.json",
+        "bench/p116/receipts/p116-5090-2/arm_B0a.json",
+        "bench/p116/receipts/p116-5090-2/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-07/p116-5090-2/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-07/p116-5090-1/ (receipt.json, the VOID draw reported as the second draw)",
+        "receipts/experts4bit-qlora/2026-10-07/p116-prove-1/ (receipt.json, the proving run)"
+      ],
+      "notes": "Pre-registered in #1322 (P116, e4b#1313), K33's registered consequence (grouped-nf4-gemm#502, LEVER 0.341). Predictions held for engagement, determinism, g16, the self-pairs, wikitext quality, the floor, the mutant and the verdict; missed for g1 (1.2417, above [1.06, 1.22]: the whole ~1.8-2.0 ms kernel saving reached the step, not K6b's 0.55 of it), c4val1's bias (-0.0053, 0.0003 past +-0.005, inside the bar), the W1 row (it matched B0) and quality OFF's time (25.9 min against 25). Lane cost $2.142 (proof $0.211, the VOID draw $0.853, the reading $1.078)."
+    },
+    {
       "package": "experts4bit-qlora",
       "area": "train",
       "model": "allenai/OLMoE-1B-7B-0924-Instruct @7f1c97f4",
@@ -11317,6 +11347,31 @@
         "receipts/experts4bit-qlora/2026-10-07/tc1-5090-133/tc1/"
       ],
       "notes": "Vast invoiced $1.58; two earlier draws never ran (tc1-5090-131 / -132, $0.04 each, SSH during a Vast proxy blip)."
+    },
+    {
+      "id": "e4b.train.memory.packed-4k-position-defaults.5090.2026-10-07",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 67 (#835), one rented RTX 5090 (tc1-5090-135, AMD EPYC 7K62, Vast machine 152440): e4b's matched arm on packed rows of 4,096 real tokens in venv-unsloth (torch 2.12.1) at all the new defaults (the double-quantized absmax, the reentrant checkpoint, the combine over row chunks, the chunked held-out loss, grouped-nf4-gemm's compact bucketed delta), the same with E4B_CKPT_OFFLOAD=1, and Unsloth 2026.9.14's matched arm, two draws each, 40 load-gated steps. e4b's training-phase peak is 25.904 GB against Unsloth's 24.864, a gap of 1.040 GB (P196 HELD, <= 1.2), and 0.303 GB with the offload (P197 HELD, <= 0.5); held-out at N 0.95440 against 0.95419 (P199 HELD). Unsloth / e4b s/step 1.773 [1.769, 1.777] (P195 FALSIFIED, registered [1.15, 1.45]) is this machine's: Unsloth's packed step is 16.0-16.3 s on all three boxes run on machine 152440 and 11.1-11.7 s on four other machines, while e4b steps 9.04 s here. The offload costs 1.041 of the step (P198 FALSIFIED, <= 1.03).",
+      "value": 1.04,
+      "unit": "GB, training-phase peak allocated, e4b matched arm at its defaults minus Unsloth's matched arm, packed 4,096-token rows (medians of two draws); 0.303 GB with E4B_CKPT_OFFLOAD=1",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-135: instance 54735496, AMD EPYC 7K62, a 23-CPU quota, Vast machine 152440); e4b @ 08ff61c + grouped-nf4-gemm @ 9953bab, torch 2.12.1+cu130; Unsloth 2026.9.14",
+      "conditions": "bench/tc1 token qwen3pos67 (TC1 amendment 67): packed rows (TC1_PACK=1, seq 4096, micro-batch 1 x accum 4, TC1_FREE_OUTPUTS=1), held-out at 0 and 40, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_m_pd / _po and Unsloth ckpt_unsloth_m_pv (grouped_mm), two draws each, --phase-peaks 1; validity (pos67_why: every new default as recorded, the checkpoint the tag names) and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-07",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos67.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-135/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-07/tc1-5090-135/tc1/"
+      ],
+      "notes": "Vast invoiced $1.34; one earlier draw was refused at pre-flight (tc1-5090-134, $0.08, Hugging Face bandwidth 13.0 MB/s)."
     }
   ]
 }

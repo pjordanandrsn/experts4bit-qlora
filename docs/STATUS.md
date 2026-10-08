@@ -1,6 +1,6 @@
 # Status — what this package does, what changed, what is open
 
-**As of 2026-10-05, version 0.48.0** (the version of record is
+**As of 2026-10-08, version 0.49.0** (the version of record is
 `pyproject.toml`'s). One page. The README argues the case; this page
 states the position. Every line has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
@@ -254,8 +254,13 @@ autograd node with the same bytes, and TC1 amendment 66 read it on packed rows
 (`e4b.train.compact-buckets.packed-4k.5090.2026-10-07`). The matched training peak fell 0.654 GB, and both arms stepped faster: 0.972
 (matched) and 0.977 (shipped), with less device time per step. Held-out was unchanged. So it is grouped-nf4-gemm's default
 (grouped-nf4-gemm#508). At these defaults e4b's matched training phase peaks 25.91 GB, 1.04 GB above Unsloth's 24.86 (P193, registered
-at most 1.0, FALSIFIED narrowly), and steps 8.97 s against Unsloth's 11.54 on that host. TC1 amendment 67 reads the new default-settings
-position.
+at most 1.0, FALSIFIED narrowly), and steps 8.97 s against Unsloth's 11.54 on that host. TC1 amendment 67 read the new default-settings
+position (`e4b.train.memory.packed-4k-position-defaults.5090.2026-10-07`). Memory: e4b's training phase peaks 25.90 GB, 1.04 GB above
+Unsloth's 24.86, and 0.30 GB above with `E4B_CKPT_OFFLOAD=1`, which costs 4 % of the step on that host. Speed: Unsloth / e4b read 1.773,
+outside the registered [1.15, 1.45]. No e4b default moved it. That box ran on a Vast machine where Unsloth's packed step is 16.0–16.3 s
+on three boxes, against 11.1–11.7 s on four other machines, with e4b at 9.04 s. So the ratio there is the host's. Amendment 66's profile
+points to a cause: Unsloth runs about 7× e4b's CPU ops per step, and its GPU is busy for less of its step. TC1 amendment 68 profiles both
+frameworks to test that before any packed speed position replaces amendment 51's.
 
 The packed-row reading above supersedes amendment 39's out-of-memory row as the default-settings reading. In the field image's environment (torch 2.8) the
 same e4b steps 13.62 s: an environment ratio of 0.739, which amendment 51 had registered in [0.84, 0.98] (FALSIFIED). The buckets are
@@ -657,6 +662,17 @@ rented RTX 5090; **measured** — [`bench/p115/RESULTS-p115.md`](../bench/p115/R
   ppl; c4val1 −0.00256 (bar 0.0119), K8 −0.042 (reported).
 - **Default:** still opt-in. DEFAULT_AUTO licenses `auto`, but the flip waits for Phase C's reads on gpt-oss-20b,
   Qwen3.6-35B-A3B and Granite (PREREG Amendment 2) and then applies only to families with a registered reading.
+
+**grouped-nf4-gemm K33's NF4 decode GEMV decodes 1.24× as fast with one request** (lane P116, 2026-10-07, one rented
+RTX 5090; **measured** — [`bench/p116/RESULTS-p116.md`](../bench/p116/RESULTS-p116.md),
+`e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`).
+- **Speed:** on the default graph server (Qwen3-30B-A3B NF4), `GNF4_GEMV_BW=1` at K33's selected plans runs 1.2417× /
+  1.0003× the default (one request / 16; min over two pairs). The one-request step falls 10.22 → 8.22 ms. 16 requests
+  are unchanged with identical tokens, because a T > 1 step never reaches the switch.
+- **Quality:** within P110's bar at T == 1: wikitext ON bias −0.0012 nats (bar 0.0118), K8 −0.0104 ppl; c4val1
+  −0.0053 (bar 0.0116), K8 −0.090 (reported). A second draw on another host read g1 1.2681 and identical quality.
+- **Default:** still opt-in. DEFAULT_ON licenses grouped-nf4-gemm's `auto` at Qwen3's shapes on ≥ 160-SM parts, then
+  e4b's floor on that release.
 
 **The Gated DeltaNet kernels speed hybrid decode** (lane P105, 2026-10-03, one rented RTX 5090; **measured** —
 [`bench/p105/RESULTS-p105.md`](../bench/p105/RESULTS-p105.md), `e4b.serve.p105.qwen36-gdn-kernels.5090.2026-10-03`).

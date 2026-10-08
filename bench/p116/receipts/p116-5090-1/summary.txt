@@ -1,0 +1,33 @@
+KNOBS e4b=c3cd1c56188756bdd9b7c8eaede3fb453b933dde gnf4=5a60c37dbd0756040052b603c9b0ee680f06d444 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 prove=0 short=32 long=160 reps=3 windows=24 cont=128
+CUDA_PROBE ok
+e4b 0.48.0 @c3cd1c56188756bdd9b7c8eaede3fb453b933dde
+gnf4 0.42.0 @5a60c37dbd0756040052b603c9b0ee680f06d444
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p116_reduce self-test OK (26 cases)
+p109_box self-test OK (5/5 cases)
+p116_box self-test OK (14/14 cases)
+p115_quality self-test OK (11/11 cases)
+premise kernel contract rc=0: 27 passed in 33.61s
+premise served route rc=0: 18 passed, 5 warnings in 17.44s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709
+arm B0a rc=0 P116_ARM {"arm": "B0", "tag": "B0a", "dispatch_build": {"dotpad": 288, "dotpad_splitk": 0, "scalar": 0, "scalar_splitk": 0, "bw_tree": 0, "bw_prmt32": 0, "bw_splitk": 0}, "load_s": 55.5, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "W16": 814.98, "W1": 112.86}
+
+arm B1a rc=0 P116_ARM {"arm": "B1", "tag": "B1a", "dispatch_build": {"dotpad": 0, "dotpad_splitk": 0, "scalar": 0, "scalar_splitk": 0, "bw_tree": 0, "bw_prmt32": 288, "bw_splitk": 0}, "load_s": 39.72, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "W16": 815.36, "W1": 143.55}
+
+arm B1b rc=0 P116_ARM {"arm": "B1", "tag": "B1b", "dispatch_build": {"dotpad": 0, "dotpad_splitk": 0, "scalar": 0, "scalar_splitk": 0, "bw_tree": 0, "bw_prmt32": 288, "bw_splitk": 0}, "load_s": 39.38, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "W16": 813.94, "W1": 143.78}
+
+arm B0b rc=0 P116_ARM {"arm": "B0", "tag": "B0b", "dispatch_build": {"dotpad": 288, "dotpad_splitk": 0, "scalar": 0, "scalar_splitk": 0, "bw_tree": 0, "bw_prmt32": 0, "bw_splitk": 0}, "load_s": 39.73, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "W16": 815.58, "W1": 113.38}
+
+quality off rc=0 P116_QUALITY B0 windows={'wikitext': 24, 'c4val1': 24} dispatch={'dotpad': 1780032, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 0, 'bw_splitk': 0} load 35s mem 21.55 GB 1721.1 s
+
+quality on rc=0 P116_QUALITY B1 windows={'wikitext': 24, 'c4val1': 24} dispatch={'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 585216, 'bw_splitk': 0} load 36s mem 21.54 GB 593.9 s
+
+P116_VERDICT VOID ["quality_off wikitext: arm R has 24 windows, expected 48", "quality_off wikitext R: 24 passes, expected 48", "quality_off wikitext: arm chunk has 24 windows, expected 48", "quality_off wikitext chunk: 24 passes, expected 48", "quality_off wikitext: arm mutant_scale has 24 windows, expected 48", "quality_off wikitext mutant_scale: 24 passes, expected 48", "quality_on wikitext: arm ON has 24 windows, expected 48", "quality_on wikitext ON: 24 passes, expected 48", "quality_off c4val1: arm R has 24 windows, expected 48", "quality_off c4val1 R: 24 passes, expected 48", "quality_off c4val1: arm chunk has 24 windows, expected 48", "quality_off c4val1 chunk: 24 passes, expected 48", "quality_off c4val1: arm mutant_scale has 24 windows, expected 48", "quality_off c4val1 mutant_scale: 24 passes, expected 48", "quality_on c4val1: arm ON has 24 windows, expected 48", "quality_on c4val1 ON: 24 passes, expected 48"]
