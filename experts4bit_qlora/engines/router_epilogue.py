@@ -64,7 +64,7 @@ def _cast_default():
 #: token (lane P63's P7).
 #:
 #: ``None`` (the default since lane P70's read): the ``softmax_topk`` kind
-#: (Qwen3-MoE, OLMoE, Mixtral) casts; the ``topk_softmax`` kind (gpt-oss,
+#: (Qwen3-MoE, OLMoE) casts; the ``topk_softmax`` kind (gpt-oss,
 #: GraniteMoe) keeps fp32 until it is read. P70 read the cast on Qwen3-30B-A3B
 #: at B = 1 decode as INDISTINGUISHABLE from the instrument's floor
 #: (``e4b.serve.p70.qwen3.b1.router-weight-cast.5090.2026-09-25``). On
@@ -76,11 +76,19 @@ def _cast_default():
 #: matches but not every bit: upstream takes the k-softmax in the logits'
 #: dtype, the kernel in fp32. ``True`` casts both kinds; ``False`` casts
 #: neither. Gemma-4's branch casts already and is not affected.
+#:
+#: Under EVERY setting the fused path casts only a router whose own forward
+#: returns its weights in the logits' dtype, read by the probe from the module
+#: (``spec["casts"]``), never from a family name. Mixtral's router returns
+#: fp32 weights, so its fused path keeps fp32 whatever the setting: a cast
+#: there would change upstream's function, not match it (the FAM0 inventory's
+#: find, e4b#1368).
 CAST_WEIGHTS = [_cast_default()]
 
 
 def _cast_for(kind: str) -> bool:
-    """Whether the fused ``kind`` branch casts on this call."""
+    """Whether the fused ``kind`` branch casts on this call, where its router's own forward returns weights in the
+    logits' dtype (``spec["casts"]``; a router returning fp32 is never cast)."""
     v = CAST_WEIGHTS[0]
     if v is None:
         return kind == "softmax_topk"
@@ -243,6 +251,9 @@ def _probe_matches(mod, kind, spec) -> bool:
     # inside it by construction, once the logits are formed as it forms them.
     if not torch.allclose(got_w.float().cpu(), ref_w.float().cpu(), rtol=2 ** -8, atol=2 ** -12):
         return False
+    # Whether upstream hands its weights back in the logits' dtype (Qwen3-MoE, gpt-oss: bf16 on a bf16 model) or keeps
+    # fp32 (Mixtral): the fused path may cast only in the first case, since a cast must reproduce upstream's function.
+    spec["casts"] = got_w.dtype == w.dtype
     # The FIRST slot is part of the module's contract too (callers that
     # record router logits read it): it is either the kind's first output
     # (Qwen3-MoE returns the softmax probabilities there; the
@@ -294,6 +305,7 @@ def fuse_router_epilogue(model, mode: str | None = None, report: dict | None = N
         ) from e
     has_sol = _kernel_supports_select_on_logits(router_epilogue)
     n = 0
+    fp32_upstream = 0
     skipped = 0
     no_kernel_mode = 0
     for mod in model.modules():
@@ -332,29 +344,31 @@ def fuse_router_epilogue(model, mode: str | None = None, report: dict | None = N
                 w = w * _m.per_expert_scale.float()[idx]
                 return _assemble(_pos, logits if _raw else probs, w.to(hidden_states.dtype), idx)
         elif kind == "softmax_topk":
-            def _fwd(hidden_states, _m=mod, _orig=orig, _k=k, _h=hidden, _pos=pos, _norm=spec["norm"], _raw=raw_first):
+            def _fwd(hidden_states, _m=mod, _orig=orig, _k=k, _h=hidden, _pos=pos, _norm=spec["norm"], _raw=raw_first,
+                     _casts=spec["casts"]):
                 rows = hidden_states.reshape(-1, _h)
                 if rows.shape[0] > _MAX_DECODE_ROWS:
                     return _orig(hidden_states)
                 logits = torch.nn.functional.linear(rows, _m.weight)
                 first, w, idx = router_epilogue(logits.float(), _k, _norm)
-                if _cast_for("softmax_topk"):
+                if _casts and _cast_for("softmax_topk"):
                     w = w.to(logits.dtype)
                 return _assemble(_pos, logits if _raw else first, w, idx)
         else:
             def _fwd(hidden_states, _m=mod, _orig=orig, _k=k, _h=hidden, _pos=pos,
-                     _has_bias=spec["bias"] is not None, _raw=raw_first):
+                     _has_bias=spec["bias"] is not None, _raw=raw_first, _casts=spec["casts"]):
                 rows = hidden_states.reshape(-1, _h)
                 if rows.shape[0] > _MAX_DECODE_ROWS:
                     return _orig(hidden_states)
                 logits = _topk_softmax_logits(_m, rows, _has_bias)
                 first, w, idx = router_epilogue(logits.float(), _k, False, select_on_logits=True)
-                if _cast_for("topk_softmax"):
+                if _casts and _cast_for("topk_softmax"):
                     w = w.to(logits.dtype)
                 return _assemble(_pos, logits if _raw else first, w, idx)
         mod.forward = _fwd
         n += 1
-    _note(report, patched=n, failed_probe=skipped, no_kernel_mode=no_kernel_mode)
+        fp32_upstream += kind != "gemma4" and not spec["casts"]
+    _note(report, patched=n, failed_probe=skipped, no_kernel_mode=no_kernel_mode, fp32_upstream=fp32_upstream)
     if n == 0 and mode == "1":
         raise RuntimeError(
             f"E4B_FUSE_ROUTER_EPI=1 patched no routers ({skipped} "
