@@ -4,6 +4,2793 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
+## 0.49.0 — 2026-10-08 — seven defaults licensed by registered reads (faster, leaner enable_fast_train; bulk KV in serve_paged); transformers 5.19.0 works again
+
+**0.49.0.** A fresh install works again: under transformers 5.19.0, 0.48.0's streaming loaders failed with `TypeError` on
+Qwen3-MoE-shaped models (#1280, #1283). Training through `enable_fast_train` is faster and leaner by default, and `serve_paged`
+handles twice the request rate before its latency bound. Upgrade if you install fresh, use transformers ≥ 5.19, train with
+`enable_fast_train`, or serve with `serve_paged`. Upgrade grouped-nf4-gemm to 0.43.0 as well (`pip install -U grouped-nf4-gemm`):
+single-request decode is 1.24× as fast on GPUs with 160+ SMs, and packed-row training holds 0.65 GB less. The `[fast]` floor
+stays at 0.30.0. CI runs on grouped-nf4-gemm 0.43.0.
+
+Seven defaults change. Each was licensed by a rule registered before its read, and each has a way back:
+
+| default | where | way back | read |
+|---|---|---|---|
+| the reentrant checkpoint | `enable_fast_train` | `E4B_CKPT_OFFLOAD=0` | `e4b.train.ckpt-flavour.default.5090.2026-10-07` |
+| the double-quantized expert absmax | `enable_fast_train` | `E4B_ABSMAX_DQ=0` or `absmax_dq=False` | `e4b.train.absmax-dq.packed-4k.5090.2026-10-07` |
+| the chunked held-out loss | `enable_fast_train` | `E4B_CHUNKED_EVAL_LOSS=0` | `e4b.train.chunked-eval-loss.packed-4k.5090.2026-10-07` |
+| the chunked LM loss as `auto` | training | `E4B_CHUNKED_LM_LOSS=0` | TC1 amendments 39–44 |
+| the routed-expert combine over row chunks (same bytes) | training | `E4B_COMBINE_CHUNK=0` | `e4b.train.combine-row-chunks.packed-4k.5090.2026-10-07` |
+| `train_prefetch` for dense offload on CUDA | `enable_dense_offload` | `train_prefetch=False` | DQ3–DQ5 |
+| bulk KV bookkeeping | `serve_paged` | `E4B_PAGED_BULK_KV=0` | lane SC2c (`bench/h2h-2026-10-02/sc2c/`) |
+
+**For programmatic callers.**
+- The reentrant checkpoint does not support `torch.autograd.grad` or `backward(inputs=...)` through checkpointed layers.
+- It covers the layers checkpointed when `enable_fast_train` runs. A Hugging Face or TRL `Trainer` with
+  `gradient_checkpointing=True` re-enables Hugging Face's own checkpoint inside `train()`.
+- Attach an offload or NVMe engine before `enable_fast_train`: it compresses the expert absmax, which those engines refuse.
+  Expert offload is tested under both checkpoints (#1325).
+
+**Opt-in, no default change:** the fusion knobs take `auto` (#1315; their default waits for P115 Phase C);
+`E4B_PAGED_BUCKETS=auto` (#1319); `E4B_CKPT_OFFLOAD=1` (#1298); `serve_capacity` (#1134). Scope: Qwen3-30B-A3B on one RTX 5090 for
+every speed and memory figure above, unless its entry below says otherwise.
+
+### P117 registered (#846): does decoding 32 or 64 rows in one graph (`E4B_PAGED_BUCKETS=auto`) cost quality against decode in pieces of at most 16 rows? (bench and tests only)
+
+- **Why.** SC2e read 64 slots with buckets up to 64 holding the SLO to 12 req/s against 8 on the default list and 4 at
+  16 slots (#1333). The ruling on #1320: `E4B_PAGED_BUCKETS=auto` becomes a default only after P110's teacher-forced
+  read at buckets 32 and 64. Above 16 rows a decode step takes the prefill-side routes (`Int4Linear`'s cached bf16 weight
+  with cuBLAS; above 256 routed rows K19's chained tile table).
+- **The box** (`bench/p117/p117_box.py`): SC2e's int4 stack built eager with one slot on one RTX 5090, then ten
+  teacher-forced paged passes over 64 wikitext windows decoded together: R (16-row pieces), rep, the floor (half, chunk,
+  rev), the subjects W32, W64 and W64pad (48 windows padded to 64), the scale mutant, and G64, a captured bucket-64
+  replay whose emitted tokens must equal W64's (FUNCTION).
+- **The rule** (`bench/p117/p117_reduce.py`, 22 self-test cases): P110's bar unchanged; AT_PARITY iff W32, W64 and
+  W64pad all pass. AT_PARITY licenses `E4B_PAGED_BUCKETS=auto` as a default in a separate PR; COST keeps it opt-in.
+- **Proof** on Granite-3.1-3B-A800M (40 windows, 32 positions, guard 0.75 h); reading guard 1.5 h; lane ceiling $3.00.
+
+### P115 Phase C's scripts: does `auto` on the fusion knobs engage by structure on gpt-oss-20b and Qwen3.6, compute nothing grossly wrong, and pass Phase B's quality read on Granite?
+
+- `bench/p115/` gains Phase C's box (`p115c_run.sh`, `p115c_box.py`), its rule (`p115c_reduce.py`), its controller
+  (`p115c_drive.sh`) and their pins (`staged-c.sha256`). PREREG-p115 amendment 2 registers them before any Phase C box.
+- One RTX 5090 runs Granite-3.1-3b-a800m, gpt-oss-20b (on SC2g's e4b path) and Qwen3.6-35B-A3B (on P98's arena), in
+  that order. Each model gets serve off (`0`), on (`auto`) and explicit (`1`, which must refuse) on the default server.
+  - gpt-oss and Qwen3.6 then get SANE, the maintainer's gross-error gate: Phase B's teacher-forced instrument on 12
+    wikitext windows, |bias| ≤ 0.02 nats and argmax agreement ≥ 0.95. FLIP_LICENSED needs every gate on both models.
+  - Granite gets Phase B's full quality read instead, under Phase B's rule unchanged. It was asked for in review after
+    the proof hinted at a c4val1 cost. Its own verdict, GRANITE_LICENSED or GRANITE_HELD, decides whether the flip's
+    `auto` allowlist takes Granite.
+- One prediction is corrected before data. On Qwen3.6, all four knobs at `1` hit glue round 1's own vacuous-enable
+  refusal before the q/k/v check. The explicit gate now accepts any of the four knobs' own refusals, provided the
+  message names the knob at `=1`.
+- Budget: a Granite proof (guard 0.75 h, every process kind), then the reading (guard 2.0 h). Phase C's ceiling is $5.00
+  inside the lane's registered $10 hard stop; anything over $15 needs the maintainer lane's approval.
+- Tests: `tests/test_p115c_staged_pin.py` (the pins, self-tests, order, subject, guards and exit codes, plus the
+  explicit gate against the code's real refusals on tiny gpt-oss, Qwen3.5-MoE and Granite models) and
+  `tests/test_p115c_sane_families.py` (SANE's instrument builds and scores gpt-oss and the Qwen3.5 hybrid on CPU).
+- Nothing in the package changes; every default is as before.
+
+### SC2e read (#846): 64 slots with decode buckets up to 64 lift `serve_paged`'s capacity ceiling 4 → 12 req/s on one 5090; `SLOTS_LICENSED(64, auto)` (bench only)
+
+- **The reading** (`sc2e-5090-1`, $1.017; lane total $1.262 over 3 receipts): Qwen3-30B-A3B int4 at `max_seqs` 16
+  (control), 32 with `E4B_PAGED_BUCKETS=auto`, 64 on the default list and 64 with `auto`, paired over two draws. Every
+  gate passed, and serial output was byte-identical to the control on every arm in both draws.
+  - Ceilings: 4 / 8 / 8 / **12** req/s (P3, P4 HOLD).
+  - One 64-row decode graph runs in 18.4 ms, half of four chained 16-row replays (36.5 ms; P1b HOLDS at 0.50).
+  - Output at 16 req/s: 1,514 / 1,569 tok/s at 64 slots with `auto`, against 1,073 / 1,089 at 16 slots.
+  - Serial TTFT and TPOT within 1 % on every arm (P2).
+  - P1 was refuted on the fast side: above 16 rows each row costs ~0.18–0.21 ms, not the ~0.35 ms extrapolated.
+  - P7 was refuted low: the `auto` arms used 263–320 MiB less than their KV pool growth, so the serve estimate
+    over-prices them.
+  - **`SLOTS_LICENSED(64, auto)`**, with every wide arm licensable. As ruled on #1320, the default flip is
+    `E4B_PAGED_MAX_SEQS=auto` (estimate-sized) on the default bucket list, in a separate PR. `E4B_PAGED_BUCKETS=auto`
+    as a default waits on P110's teacher-forced read at buckets 32 and 64.
+- **The census** (`sc2e_census.py`): the queue, not the decode step, bound 16 slots (queue wait p50 0.3–4.6 s at
+  8–16 req/s against ≤ 56 ms at 64 slots); the prefill step and its 40.5 ms stall did not change with slots. Text
+  agreement with the control under load is 0.46–0.74 for 64 slots on ≤ 16-row buckets and 0.01–0.12 for the wide
+  buckets (no bar).
+- **Post hoc** (`sc2e_capacity_check.py`): `serve_capacity` on each server's own costs reproduces 42 of 48 attainment
+  cells within 0.03, every cell within 0.075, and every ceiling.
+
+### P116 read (RTX 5090): DEFAULT_ON — grouped-nf4-gemm K33's NF4 decode GEMV (`GNF4_GEMV_BW=1`) decodes the default `serve_paged` server 1.24× as fast with one request, 16 requests unchanged, within P110's quality bar
+
+Register: `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`; `bench/p116/RESULTS-p116.md`.
+- **The reading** (`p116-5090-2`, $1.078). Qwen3-30B-A3B NF4 on the default graph server, four ABBA arms differing only
+  in `GNF4_GEMV_BW` (unset against `1` at K33's plans).
+  - W1 ran 97.89 → 121.70 tok/s (step 10.22 → 8.22 ms), g1 1.2417. W16 was unchanged (1.0003) with identical tokens.
+  - Engagement was exact: B1 dispatched only `bw_prmt32`, B0 only dot-pad.
+  - Quality at T == 1: wikitext ON bias −0.0012 nats (bar 0.0118); c4val1 −0.0053 (bar 0.0116).
+- **The second draw** (`p116-5090-1`, VOID on the reducer's window table and reduced after Amendment 1, not the reading):
+  g1 1.2681 on another host, with identical quality numbers.
+- **The predictions.** Engagement, determinism, g16, the self-pairs, wikitext quality and the verdict held. g1 came in
+  above its band, because the whole kernel saving reached the step. c4val1's bias was 0.0003 past its prediction, inside
+  the bar.
+- **What follows (registered).** grouped-nf4-gemm makes `GNF4_GEMV_BW=auto` its default at Qwen3's shapes on ≥ 160-SM
+  parts, with K33's plans, in a release. e4b then floors `[fast]` on it.
+- **Cost:** $2.142 over three runs.
+
+### TC1 amendment 67 read; amendment 68 registered
+
+- **Amendment 67** (`tc1-5090-135`, RTX 5090, AMD EPYC 7K62, $1.34): at the new defaults, e4b's packed-row training peak is 1.040 GB
+  above Unsloth's, and 0.303 GB above with `E4B_CKPT_OFFLOAD=1` (P196, P197 HELD). Held-out agrees (P199 HELD). Unsloth / e4b read
+  1.773 (P195 FALSIFIED, high), and no e4b default moved it: Unsloth's packed step is 16.0–16.3 s on that Vast machine against
+  11.1–11.7 s on four others. The offload cost 1.041 of the step (P198 FALSIFIED); it stays opt-in. Register row
+  `e4b.train.memory.packed-4k-position-defaults.5090.2026-10-07`.
+- **Amendment 68** registered: token `qwen3pos68` reads the same position with every arm profiled, to separate GPU work from host work
+  (P200-P204). The reducer adds the family, `pos68_why` and `score_pos68` (self-test 134).
+
+### P115 read (RTX 5090, Phases A and B): DEFAULT_AUTO — the registered B=1 fused stack decodes the default `serve_paged` server 1.43× as fast with one request and 1.23× with 16, within P110's quality bar
+
+Register: `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`, `e4b.serve.p115.fused-stack-quality.qwen3.5090.2026-10-07`;
+`bench/p115/RESULTS-p115.md`.
+- **The reading** (`p115-5090-8`, $0.496). Qwen3-30B-A3B NF4 on the default graph server, four ABBA arms differing only
+  in the four fusion knobs.
+  - W1 ran 94.15 → 134.53 tok/s (step 10.62 → 7.43 ms) and W16 701 → 863 tok/s; g1 1.4289, g16 1.2298.
+  - Self-pairs read 0.9999–1.0014, and each arm's repeat was bitwise.
+  - Quality: wikitext ON bias +0.00098 nats (bar 0.0117), K8 +0.0088 ppl; c4val1 −0.00256, K8 −0.042 (reported).
+- **The predictions.** Engagement, determinism, g1's band, the self-pairs, quality and the verdict held. F1's absolute
+  W1 step (7.43 ms, on a host whose default step was 10.62 ms) and g16 (1.2298, above its band) missed.
+- **What follows (registered).** The knobs stay opt-in here. The flip to `auto` waits for Phase C (PREREG Amendment 2,
+  #1318) and, per the maintainer's review, applies only to families with a registered reading.
+- **Cost:** Phases A and B, $0.952 over ten launcher runs. Seven draws failed before any lane work, on the host or the
+  launcher.
+
+### TC1 amendment 66 read; amendment 67 registered
+
+- **Amendment 66** (`tc1-5090-133`, RTX 5090, i9-14900K, $1.58): grouped-nf4-gemm's compact bucketed delta takes 0.654 GB off the matched
+  packed-row training peak and steps 0.972 (matched) / 0.977 (shipped) with less device time, held-out unchanged (P189-P192, P194 HELD).
+  e4b's matched peak stays 1.044 GB above Unsloth's (P193 FALSIFIED narrowly). By the rule it becomes grouped-nf4-gemm's default
+  (grouped-nf4-gemm#508). Register row `e4b.train.compact-buckets.packed-4k.5090.2026-10-07`.
+- **Amendment 67** registered: token `qwen3pos67` reads the packed-row position at all the new defaults: e4b defaults, e4b with the offload
+  and Unsloth, two draws each (P195-P199). The reducer adds the family, `pos67_why` and `score_pos67` (self-test 133).
+
+### Expert offload is tested under the reentrant checkpoint
+
+- `enable_fast_train`'s reentrant-checkpoint default also applies to expert-offloaded and NVMe models. The offload
+  checkpoint tests now run under both checkpoint kinds, and pass. A reentrant recompute always reaches the expert
+  module's post-hook, so the tests now also catch a broken in-backward check there.
+
+### TC1 amendment 65 read; amendment 66 registered
+
+- **Amendment 65** (`tc1-5090-130`, RTX 5090, Ryzen 9 9950X, $1.26): at the new defaults e4b's packed-row training phase peaks +1.717 GB
+  over Unsloth (+0.962 with `E4B_CKPT_OFFLOAD=1`), all of it transient; every static class is equal. With the offload, the largest
+  transients at the peak are grouped-nf4-gemm's bucketed LoRA delta, about 1.70 GB in four groups at three source lines (P184-P188 HELD). Register row
+  `e4b.train.memory.packed-4k-train-census-defaults.5090.2026-10-07`.
+- **Amendment 66** registered: token `qwen3cbk` reads grouped-nf4-gemm's `NF4_QLORA_COMPACT_BUCKETS=1` (#505, the bucketed delta as one
+  autograd node, the same bytes) against the autograd body on packed rows, shipped and matched arms, Unsloth beside (P189-P194; P194,
+  added by the maintainer before any box, reads the node's device time per profiled step, which a host-bound box's s/step can hide).
+  `tc1_arm.py` records `compact_buckets`; the reducer adds the family, `cbk_why` and `score_cbk` (self-test 132).
+
+### P116 registered: does grouped-nf4-gemm K33's bandwidth-targeted NF4 decode GEMV (`GNF4_GEMV_BW=1`) decode the default `serve_paged` server faster at one request, at no measurable quality cost?
+
+- `bench/p116/` adds the lane's runner, driver, box, reducer and pins. `PREREG-p116.md` registers it before any box.
+  - The arms are B0a B1a B1b B0b on the default graph server (Qwen3-30B-A3B NF4, one RTX 5090). Only grouped-nf4-gemm's
+    decode GEMV switch differs: unset against `GNF4_GEMV_BW=1` at K33's selected plans (`GNF4_GEMV_BW_PLAN`).
+  - The served server reaches the switch only at T == 1, so W1 is the subject and W16 a no-regression control.
+  - Quality is P110's teacher-forced bar at one window per pass. That is the served W1 arithmetic, with floors from
+    `chunk` and `rep`.
+  - Engagement is grouped-nf4-gemm's dispatch tally: B1 all `bw_prmt32`, B0 dot-pad.
+  - DEFAULT_ON iff g1 ≥ 1.03, g16 ≥ 0.99 and the quality bar holds.
+- `tests/test_gemv_bw_served_gpu.py` (GPU) pins the served route on a tiny all-hot NF4 store under the served collapse.
+  T == 1 dispatches only `bw_prmt32` with the switch on and none with it off. Both routes read the reference. The T == 1
+  step captures and replays bitwise as eager. T > 1 never reaches the decode GEMV.
+- `tests/test_p116_staged_pin.py` pins the staged files, the self-tests, the order, the subject, the guards and the exit
+  codes.
+- Nothing in the package changes; every default is as before.
+
+### TC1 amendment 65 registered: the training-phase census at the new defaults (P184-P188)
+
+- Token `qwen3memc4kr` runs amendment 57's training-phase census on packed rows against e4b's current defaults (the reentrant checkpoint,
+  the combine over row chunks, the chunked held-out loss), against e4b with `E4B_CKPT_OFFLOAD=1`, and against Unsloth, one draw each,
+  `--mem-census 1`, with no evaluation inside the census window.
+- P184: at least 90 % of each peak attributed. P185: e4b defaults 1.3-2.1 GB above Unsloth. P186: with the offload, at most 1.2 GB above.
+  P187: every peak in a training step. P188: the offload arm's largest non-static group at the peak is grouped-nf4-gemm's LoRA delta.
+- The reducer adds the family, `memc4kr_why` and a generic largest-group prediction in `score_memc4k` (self-test 131).
+
+### SC2e registered (#846): `serve_paged` at 16, 32 and 64 slots, with decode buckets that end at `max_seqs` (`E4B_PAGED_BUCKETS=auto`) against the default list, box L (bench and tests only)
+
+- **Why.** At 8 req/s SC2c's ON server holds 16 saturated slots: queue wait p50 0.22 / 1.17 s, TPOT 13 ms against a
+  100 ms bound, the bucket-16 decode step 9.3 ms (`bench/sc2/sc2e_basis.py census` on `sc2c-5090-1`). `serve_capacity`
+  on SC2c's costs puts 64 slots at 1.00 / 1.00 attainment at 8 req/s against 0.70 / 0.34 today.
+- **The box.** `SC1_BOX=L` (`bench/sc2/sc2e_box_l.sh`): four servers a draw, SC2c's ON server at `max_seqs` 16 (control),
+  32 with `auto`, 64 with the default list and 64 with `auto`; Qwen3-30B-A3B int4, one RTX 5090, grouped-nf4-gemm
+  v0.42.0. Per server: warm, a 64-request burst that must replay the widest bucket, serial (twice on the control's draw
+  1), Poisson at 1, 2, 4, 8, 12 and 16 req/s. A tripwire refuses an e4b without `E4B_PAGED_BUCKETS=auto` (#1319, the code under test).
+- **The rule** (`bench/sc2/sc2e_reduce.py`, 23 self-test cases): per-server gates ROUTES, SLOTS, ENGAGED, PROMPTS; lane
+  gates DETERMINISM and IDENTITY; predictions P1–P8 (P1b: the 64-row graph against four 16-row replays); a licence for
+  the first of 64 `auto`, 64 default, 32 `auto` whose ceiling rises above the control's with no regression. A licence
+  licenses `E4B_PAGED_MAX_SEQS=auto` sized by the serve estimate, never a bare 64, in a separate PR.
+- **Census** (`bench/sc2/sc2e_census.py`): decode steps keyed by bucket and by piece count (a chained step's trace
+  `bucket` names only its last piece), busy-loop gaps, mean requests in the server and queue wait per rate.
+- **Harness.** `sc1_run.sh` and `sc1_drive.sh` gain box L; `staged.sha256` regenerated; the box tests that enumerate the
+  box letters now include L.
+
+### serve_paged: `E4B_PAGED_BUCKETS=auto` captures decode-graph buckets up to `max_seqs` (opt-in); `/health` reports the buckets asked for, each bucket's replays and the KV pool's size
+
+- **Why.** SC2c's post hoc (`bench/h2h-2026-10-02/sc2c/README.md`) put `max_seqs` 16 → 64 first among the levers toward
+  8 req/s under `serve_capacity`. Above 16 sequences the default bucket list stops at 16, so a wide decode step runs as
+  consecutive 16-row replays with a host sync after each, and nothing reported it.
+- **The change.**
+  - `E4B_PAGED_BUCKETS=auto` (or `ServeSetup(buckets="auto")`) captures every power of two below `max_seqs`, then
+    `max_seqs` itself (`serve_recipe.default_buckets`: 32 → `1,2,4,8,16,32`). Up to 16 sequences it equals the default
+    list after its trim.
+  - The default stays `1,2,4,8,16`, so every existing server captures what it did. An empty `E4B_PAGED_BUCKETS` now reads
+    as the default, as the other knobs do; an unreadable value is refused by name.
+  - The server logs when its widest step would run as consecutive replays, and when a bucket exceeds 64 rows (the T=1
+    folds stop there).
+  - `/health` gains `engine.buckets_requested`, `engine.graph_stats` (per bucket: replays, eager steps, rows, padding
+    rows; `/stats` already had it) and `levers.kv.pool_mib` (`paged_kv_pool_bytes` on the pool's own geometry).
+  - The step trace counts `dec_pieces`, the replays a decode step took; its `bucket` names only the last one.
+  - `ServeSetup.decode_buckets` is what the server captures. The estimate sizes the scratch slots from it and says
+    that graph pools for buckets above 16 rows are unmeasured.
+- **Memory.** 103.5 MiB of FP8 KV per slot at 2,048 tokens on Qwen3-30B-A3B: 1.63 / 3.26 / 6.52 GiB at 16 / 32 / 64 slots.
+- **Not changed.** No route, kernel or default. Decode rows above 16 take the paths prefill chunks take today
+  (`Int4Linear`'s cached bf16 weight above 16 rows; the chained tile table above 256 routed rows). Speed is unread: lane
+  SC2e (#846) registers it.
+- **Tests** (the wide-step ones in a new `tests/test_serve_slots.py`; `tests/test_decode_graph_buckets.py` is pinned by
+  lanes P109–P115). `default_buckets` against the trimmed default up to 16; `auto` round-trips through `ServeSetup.to_env` and
+  the estimate prices its scratch slots; the env parser's cases and refusals; the startup log; `/health`'s new fields;
+  `_kv_pool_mib` against a constructed pool; `dec_pieces` on a chained and a native 40-row step.
+
+### P115 and K33 runners: a GPU the image's torch cannot use is the host floor (exit 18), not a harness error
+
+- `bench/p115/p115_run.sh` and `bench/k33/k33_run.sh` refused a CUDA-unusable host with exit 10 ("DUD BOX"). That code names no
+  machine, so the launcher recorded HARNESS_ERROR, and a relaunch could buy the same host. `p115-5090-1` drew Vast machine 34887
+  ($0.044), the host that broke TC1's `tc1-5090-119`.
+- Both runners now probe as TC1 amendment 61 does:
+  - unusable CUDA exits **18** with a REFUSAL line, so the launcher names the machine;
+  - a torch that will not import, which is the image's fault, stays 10.
+- P115 records this as PREREG amendment 1. No rule, prediction or budget changes. Staged pins are updated, and the
+  staged-pin tests pin exactly one 18, in the no-cuda branch.
+
+### Lane K33's runner (#1313): the GNF4_GEMV_BW decode-GEMV bench's box side (bench and tests only)
+
+- **What.** `bench/k33/` drives grouped-nf4-gemm's lane K33 (`kernel/PREREG-k33-nf4-decode-gemv-bw.md`, gnf4 #501) on one
+  RTX 5090: K28's runner with the tripwire, the premise and the bench replaced. No model is fetched.
+- **The box.** Refusals (card class, disk) come before the install of gnf4 at `GNF4_SHA`. The tripwire proves the installed
+  commit carries `_gemv_nf4_bw`, the `bw_*` tally keys and an empty `_BW_SHAPES`, and that `prmt32` is the decode on the
+  card. The premise is `kernel/test_nf4_gemv_bw.py` compiled on the card, 27 passed and none skipped (rc 23). Then
+  `k33_bench.py` runs from the clone at `GNF4_SHA`. Every GNF4 decode knob starts unset.
+- **Tests.** `tests/test_k33_staged_pin.py`: the runner's pin, its shape and order, the exit codes, and the drive's dry run.
+
+### The fusion knobs take `auto` (`E4B_PAGED_FUSE_QKV`, `E4B_FUSE_T1_GLUE`, `E4B_FUSE_T1_GLUE_R2`, `E4B_FUSE_ROUTER_EPI`); every default unchanged (#1313)
+
+- **What `auto` does.** It applies a fusion where the module structure and the installed kernels license it, and
+  patches nothing, without raising, where they do not: another family, a missing kernel module, or a kernel cut that
+  lacks what a matched structure needs (GraniteMoe's scaled residual fold, the norm-less rotary). `1` keeps every
+  refusal it had; `0` (also unset or empty) is off. Any other value is now refused at startup rather than read as off.
+- **`serve_paged`:**
+  - `_fusion_env()` parses the four knobs; `PagedServeConfig` gains `fusion_modes`, and `fuse_qkv` is true for `auto`
+    and `1`.
+  - `_apply_fusions` passes each fold its mode. Fused q/k/v at `auto` fuses what matches, and the folds run either way.
+  - `/health` `levers` gains `fusion_modes` and `fusion_report` (what each fold patched, failed to probe, or skipped,
+    and why).
+  - A config built without modes, such as a bench harness's `PagedServeConfig(fuse_qkv=...)`, calls everything
+    exactly as before.
+- **The library:**
+  - `glue_fuse.fold_mode()` is the shared parser.
+  - `fuse_t1_glue`, `fuse_t1_glue_r2` and `fuse_router_epilogue` take `mode=` and `report=`. Without `mode` they still
+    read their environment variable, but through the same parser. For a direct caller (a bench harness or your own
+    code), `auto` there now applies the fold where licensed, where any value but `1` used to read as off. A value other
+    than `auto`, `0` or `1` now raises when the fold is called.
+  - `fuse_qkv` takes `fold_modes=` and `fold_reports=`.
+- **Why now.** Lane P115 (#1314) registers the read that would make `auto` `serve_paged`'s default for the registered
+  B=1 fused stack; its Phase C reads this code on gpt-oss-20b and Qwen3.6-35B-A3B. No default moves here.
+- **Tests:** `tests/test_fusion_modes.py`, 34 cases, CPU, with the glue kernels stood in by torch functions:
+  - the parser and `from_env`;
+  - `_apply_fusions` under each mode;
+  - each fold's `auto` with no matching module, no kernel module, and an older kernel cut (each against `1`'s
+    refusal);
+  - the `auto` census on tiny Qwen3-MoE, GraniteMoe, gpt-oss and Qwen3.5-MoE. The last two are P115 Phase C's
+    predictions at small layer counts: gpt-oss `0 / 2L+1 / [L, 0] / L`, Qwen3.5 the router only.
+
+### P115 registered (#1313): the registered B=1 fused stack on the default `serve_paged` server, speed and teacher-forced quality on one RTX 5090 (bench and tests only)
+
+- **Why.** The default NF4 graph server decodes one Qwen3-30B-A3B request at 9.05–10.06 ms per token (P109, P111),
+  2.3× e4b's own int4 route. SV2's census puts ~1.7 ms of that step in glue the opt-in folds remove; bo7 timed the folds
+  at 8.68 → 6.16 ms at B=1, but they have no K8 on record (bo5's one-text FAIL-by-improving predates 0.37.5's router
+  cast), and fused q/k/v has never been timed on the bf16 route.
+- **Phase A, speed** (`bench/p115/p115_box.py`, P111's protocol): F0a F1a F1b F0b on the default graph server, F1 =
+  `E4B_PAGED_FUSE_QKV=1` + the three folds; W16 and W1, p37's slope. The fusion census is checked against SC1's
+  receipts (48 / 193 / [48, 48] / 48).
+- **Phase B, quality** (`bench/p115/p115_quality.py`, P110's instrument): an OFF process scores the default server's
+  arithmetic R, its floor (half, chunk, rep) and the scale mutant on wikitext and c4val1 and saves R's log-probs; an ON
+  process builds the fused stack as the server does and scores against them. Engagement counts every glue kernel call
+  (49 / 48 / 96 / 48 per decode step on Qwen3) and every `qkv_proj` call.
+- **The rule** (`bench/p115/p115_reduce.py`, 27 self-test cases): VOID, NOISY, FUNCTION_FAIL (F1 against F1 bitwise),
+  QUALITY_FAIL (P110's floor bar on both texts; K8 ±0.05 ppl gated on wikitext, reported on c4val1, where 0.05 ppl is
+  below the instrument's floor), SLOWER (g1 < 1.10 or g16 < 1.00), DEFAULT_AUTO. Phase C (engagement under `auto` on
+  gpt-oss-20b and Qwen3.6-35B-A3B) is registered and lands as an amendment before its box.
+- **Tests:** `tests/test_p115_staged_pin.py`; `tests/test_p115_quality_box.py` runs both quality phases on CPU and
+  reproduces the census and per-step tables on tiny Qwen3-MoE and GraniteMoe models with the glue kernels stood in;
+  `tests/test_fused_glue_decode_graphs_gpu.py` (the lane's premise on the card) replays glue rounds 1 and 2 under
+  bucketed graphs and asserts they decode exactly as the padded eager step.
+
+### Pricing the dense engines before building them
+
+- **`engines.dense_offload.offload_plan(layers, *, pin, train_prefetch, min_bytes, skip_trainable)`** prices what
+  `enable_dense_offload` would do without building it:
+  - **Input:** per decoder layer, the `(nbytes, ndim, trainable[, is_param])` of every tensor a handle walks. Mark
+    buffers `is_param=False`; it defaults to True.
+  - **Selection:** the handle's own rule: 2-D tensors of at least `min_bytes` stream, and trainable ones beside frozen
+    parameters stay on the device. A frozen buffer does not keep them, as in `enable_dense_offload`.
+  - **Outputs:**
+    - the streamed bytes;
+    - the pinned host reservation, with each request rounded to a power of two;
+    - the staged slots: two layers under `train_prefetch`, one on the synchronous path;
+    - what stays on the device;
+    - the host-to-device bytes per micro-batch.
+  - **Checks:** on Qwen3-32B's NF4 layers it reproduces DQ3's measured host reservation exactly: 15,602,810,880 B
+    requested, 17,716,740,096 B reserved. On a toy model on CPU it streams exactly what real handles stream, in each
+    freeze mode.
+- **`engines.dense_offload.late_bound_4bit_refusal()`** says why offloaded `Linear4bit` training would free no VRAM:
+  the installed bitsandbytes differs from the 0.50.2 sources the late-bound backward mirrors. It returns None when
+  the backward engages.
+- **`engines.chunked_lm_loss.chunked_loss_bytes(supervised_tokens, vocab, hidden=0, chunk=512)`** gives the chunked
+  loss's workspace: one chunk's logits at 10 B per logit (`CHUNK_BYTES_PER_LOGIT`, the coefficient the recipe charges
+  stock logits), plus the gathered supervised hidden rows.
+- **Pure functions:** nothing changes for any caller.
+
+### TC1 amendment 64 read: the reentrant checkpoint becomes e4b's default checkpoint (P178, P179, P181-P183 HELD; P180 FALSIFIED)
+
+- Packed rows, torch 2.12 (`tc1-5090-129`, Ryzen 9 5900XT, $1.00): the reentrant checkpoint steps 0.980 of Hugging Face's with an
+  identical training peak; the offload's copies cost 1.023 of the reentrant step (P180 FALSIFIED, <= 1.01).
+- Field recipe, torch 2.8 (`tc1-5090-128`, EPYC 7K62, $1.47, host-bound at device busy 0.404): the reentrant checkpoint steps 0.838.
+- Held-out within 0.004 on both. Register row `e4b.train.ckpt-flavour.default.5090.2026-10-07`, a README section, STATUS, receipts.
+
+### `enable_fast_train` checkpoints with PyTorch's reentrant checkpoint by default (TC1 amendment 64); `E4B_CKPT_OFFLOAD=0` is the way back
+
+- Every decoder layer checkpointed when `enable_fast_train` runs now uses PyTorch's reentrant checkpoint instead of Hugging Face's non-reentrant one, unless
+  `E4B_CKPT_OFFLOAD=0`. `E4B_CKPT_OFFLOAD=1` adds the host-memory inputs (the offload, still opt-in), and `=reentrant` names the default
+  explicitly.
+- Why, on Qwen3-30B-A3B on one RTX 5090 (`e4b.train.ckpt-flavour.default.5090.2026-10-07`, `e4b.train.ckpt-flavour.field.5090.2026-10-07`):
+  the step falls to 0.980 of Hugging Face's checkpoint on packed 4,096-token rows (torch 2.12), 0.900 at TC1's field recipe (torch 2.12)
+  and 0.838 there in torch 2.8 on a host-bound box. The training peak is unchanged, and held-out stayed within 0.004. Scope: one model,
+  one card class, torch 2.12 and 2.8, two recipes.
+- **What changes for a caller.** A reentrant checkpoint does not support `torch.autograd.grad` or `backward(inputs=...)` through the
+  checkpointed layers. It gives a layer gradients for its contents only when the layer's input requires grad, so `enable_fast_train`
+  now calls the model's `enable_input_require_grads()` by default (as PEFT does for reentrant checkpointing; no value changes). Set
+  `E4B_CKPT_OFFLOAD=0` to keep Hugging Face's checkpoint.
+- **It applies to the layers checkpointed when `enable_fast_train` runs.** Hugging Face's `Trainer` (and TRL's) with
+  `gradient_checkpointing=True` calls `gradient_checkpointing_enable()` again inside `train()`, which puts Hugging Face's checkpoint back
+  on every layer. To keep e4b's checkpoint there, enable checkpointing on the model before `enable_fast_train` and leave the trainer's
+  `gradient_checkpointing` off, as the guide's loop does. Calling `enable_fast_train` again after such a re-enable now routes the layers
+  again; before, a stale reference made it a silent no-op, which also dropped an explicit `E4B_CKPT_OFFLOAD=1`.
+- Left alone by default: a model without gradient checkpointing (silently), and a model whose decoder layers carry
+  `enable_dense_offload`'s handles (that pairing is untested; an explicit `1` or `reentrant` pairs them, and `enable_dense_offload` warns).
+  The CLI trainer keeps its own checkpointing.
+- The offload's trade, for long rows: 0.74 GB of training peak for 1.023 of the reentrant step on packed rows (P180 FALSIFIED against
+  1.01), so it is not recommended by default.
+
+### Read: SV7 (#1294): the planner's re-matched 24 GB plan (VRAM tier 13.143 GiB) for Qwen3-30B-A3B served 8,000-token prompts inside its plan, and the borrowed same-shape reserve held (bench and receipts only)
+
+- **The runs:**
+  - `sv7-4090-1` ($0.611): V1 and V2 NO_READING, because its container listed host-namespace PIDs (amendment 1, #1308).
+  - `sv7-4090-2` ($0.408): every driver sample matched by PID.
+  - Lane total $1.019 (`bench/sv7/RESULTS-sv7.md`). Both runs' receipts and verdicts are committed and byte-identical to
+    the store's.
+- **Readings** (`sv7-4090-2`, through `bench/sv7/sv7_reduce.py`), all HELD:
+  - V1: no OOM at 8 × 8,000-token prompts, and the driver peak is under the card (21.916 of 23.988 GiB);
+  - V2: driver peak 21.916 GiB against the 22.344 GiB plan;
+  - V3: reserved minus allocated 823 MiB against the borrowed 877 MiB, in both runs;
+  - V4: −1.6%;
+  - V5: tier rows exactly 5,316 / 828 / 0.
+- **Consequences, as registered:**
+  - the tier plan, the estimate's long-prompt total and its tier pricing stand;
+  - loggetta's same-shape reserve rule stands for this shape and card class;
+  - `sv7-4090-2`'s receipts become same-setup evidence for the planner's reserve and context on this class, and
+    `sv7-4090-1`'s do not.
+
+### TC1 amendments 62 and 63 read; amendment 64 registered
+
+- **Amendment 62** (`tc1-5090-127`, RTX 5090, EPYC 9655, $1.11): the field recipe's speed-up is the reentrant checkpoint's. Alone it steps
+  0.900 of Hugging Face's checkpoint on the shipped arm, and the host-memory copies cost 1.019 on top; held-out within 0.0011 (P170-P173
+  HELD). Register row `e4b.train.ckpt-flavour.field.5090.2026-10-07`.
+- **Amendment 63** (`tc1-5090-125`, RTX 5090, Ryzen 9 9950X, $1.48): in torch 2.8 on a host-bound box (premise met) the offload steps
+  0.994 (matched) / 0.985 (shipped) and takes 0.181 GB off the matched training peak (P174-P177 HELD). Register row
+  `e4b.train.ckpt-offload.field-torch28.5090.2026-10-07`.
+- **Amendment 64** registered: tokens `qwen3ckptre4k` (packed rows, torch 2.12, matched arm) and `qwen3ckptre28` (field recipe, torch 2.8,
+  shipped arm) read the three checkpoints where amendment 62 did not: P178-P183, toward the reentrant checkpoint as e4b's default
+  checkpoint. The reducer adds the families and `score_ckptre64` (self-test 130). Added in review: every torch 2.8 arm is profiled and P182 is read only
+  on a host-bound box (amendment 63's premise gate).
+
+### SV7 amendment 1 (#1294): the serve measure's driver sampler takes a sole unmatched compute process (bench, prereg and tests only)
+
+- `sv7-4090-1` (OK, $0.611) read V3, V4 and V5 HELD but V1 and V2 NO_READING. Its host's container listed
+  host-namespace PIDs in `nvidia-smi --query-compute-apps`, so `bench/sv4/sv4_measure.py` matched no row and took zero
+  driver samples.
+- `sv4_measure.py`'s new `driver_sample` keeps the PID match. When no row matches and exactly one compute process is
+  listed, it takes that one, and the receipt records how each sample matched (`driver_match`).
+- `tests/test_sv4_measure_sampler.py` pins the cases.
+- The next SV7 box launches from this amendment's merge.
+
+### TC1 amendments 59 and 61 read; amendments 62 and 63 registered
+
+- **Amendment 59** (`tc1-5090-120`, RTX 5090, Ryzen 9 9950X, $1.37): at TC1's field recipe, keeping checkpoint inputs in host memory steps
+  0.948 (matched) and 0.916 (shipped) of the default, takes 0.171 GB off the matched training peak, and leaves held-out within 0.003
+  (P158-P161 HELD). Register row `e4b.train.ckpt-offload.field.5090.2026-10-07`.
+- **Amendment 61** (`tc1-5090-122`, RTX 5090, EPYC 9655, $1.40): the combine over row chunks steps 0.978 of the whole-tensor combine with
+  held-out unchanged (P167, P168 HELD) but leaves the packed-row training peak where it was (-0.009 GB; P166 FALSIFIED), and e4b's
+  training phase 0.979 GB above Unsloth's (P169 FALSIFIED). Register row `e4b.train.combine-row-chunks.packed-4k.5090.2026-10-07`.
+- **Amendment 62** registered: token `qwen3ckptre` reads the shipped arm at the field recipe with Hugging Face's checkpoint, the reentrant
+  checkpoint alone (`E4B_CKPT_OFFLOAD=reentrant`) and with its inputs in host memory, to say which made the step faster (P170-P173).
+  `tc1_arm.py` records `ckpt_offload_funcs`; the reducer adds the family, `ckptre_why` and `score_ckptre` (self-test 127).
+- **Amendment 63** registered: token `qwen3ckptoff28` reads amendment 59's A/B in the field image's torch 2.8 with every arm profiled.
+  Its speed predictions (P174, P175: g1 / g0 at most 1.01) are scored only on a host-bound host: the g0 arm's device busy fraction
+  against its timed step must be at most 0.9. P176 checks held-out and P177 the training peak. Amendment 59's rule requires this read
+  before the offload can become a default. The reducer adds the family and `score_ckptoff28` (self-test 128).
+
+### `E4B_CKPT_OFFLOAD=reentrant` (a diagnostic), and the offload's guards for a future default
+
+- `E4B_CKPT_OFFLOAD=reentrant` routes the checkpointed decoder layers through PyTorch's reentrant checkpoint without the host-memory hook,
+  so their inputs stay on the GPU. It separates the two halves of `E4B_CKPT_OFFLOAD=1` (the checkpoint flavour and the copies) for TC1
+  amendment 62, which asks which of them made amendment 59's field-recipe step faster. Gradients equal Hugging Face's checkpointing
+  exactly in the tests. TC1 receipts record the routed function (`ckpt_offload_funcs`).
+- `E4B_CKPT_OFFLOAD` stays opt-in: TC1 amendment 59's rule asks for a torch 2.8 read on a host-bound box first (amendment 63). The values
+  are now parsed strictly (`0` / `1` / `reentrant`, plus on / off spellings; anything else is an error).
+- Ready for when it does become the default (`CKPT_OFFLOAD_DEFAULT`, still off): a default-path request leaves a dense-offloaded model alone
+  and is silent without checkpointing, and `enable_dense_offload` warns when it finds offloaded checkpoints, because that pairing is
+  untested.
+
+### `E4B_CHUNKED_EVAL_LOSS` is on by default (TC1 amendment 60); `0` turns it off
+
+- A `torch.no_grad` forward with labels whose fp32 logits would reach 1 GiB now runs without labels, returns the stock logits unchanged,
+  and takes its loss from them in 512-token fp32 chunks, by default. TC1 amendment 60 read it on Qwen3-30B-A3B's packed 4,096-token rows,
+  on one RTX 5090 in torch 2.12 (`e4b.train.chunked-eval-loss.packed-4k.5090.2026-10-07`): the evaluation-phase peak fell from 26.88 to
+  22.50 GB, below the 25.85 GB training phase, so e4b's run peak there is the training phase's.
+- **Held-out values compared across this change are not byte-identical above the gate.** The loss differs from the stock one by fp32
+  summation order only: on that box step-0 held-out was identical on both draw pairs and held-out at N moved +0.00005. Below the gate
+  nothing changes (TC1's field-recipe evaluation rows peak at 411 tokens, 0.23 GiB). Set `E4B_CHUNKED_EVAL_LOSS=0` for the stock loss.
+- Scope of the evidence: one model, one RTX 5090, torch 2.12, plus the RTX A2000 correctness and memory receipts of #1302.
+
+### TC1 amendment 60 read: the held-out loss from the logits in chunks takes 4.37 GB off e4b's packed-row evaluation peak (P162-P165 HELD)
+
+- `tc1-5090-121` (RTX 5090, AMD EPYC 9755, torch 2.12, $1.46): with `E4B_CKPT_OFFLOAD=1`, `E4B_CHUNKED_EVAL_LOSS=1` lowers the evaluation-phase
+  peak from 26.877 to 22.504 GB on both draws, below the 25.85 GB training phase, so e4b's run peak on packed rows is the training phase's,
+  0.99 GB above Unsloth's 24.86. Step-0 held-out is identical and held-out at N moves +0.00005.
+- Register row `e4b.train.chunked-eval-loss.packed-4k.5090.2026-10-07`, a README section, STATUS, the receipts. By the amendment's rule the
+  switch goes to a default PR next.
+
+### TC1 amendment 61 registered: the routed-expert combine over row chunks on packed rows (P166-P169), and a CUDA host floor
+
+- Token `qwen3combck` runs e4b's matched arm on packed rows with `E4B_CKPT_OFFLOAD=1`, `E4B_COMBINE_CHUNK=0` against the default (row
+  chunks), two draws each in A B B A order, with Unsloth's matched arm beside it and peaks split by phase.
+- P166: the training-phase peak falls by 0.3 GB or more. P167: c1 / c0 at most 1.02. P168: step-0 held-out within 0.0001 per draw pair and
+  held-out at N within 0.005. P169: c1's training peak at most 0.7 GB above Unsloth's.
+- `tc1_arm.py` records `combine_chunk` (the variable, chunked forwards and backwards, the gate). The reducer adds the family, `combck_why`
+  and `score_combck`. Self-test 126.
+- `tc1_run.sh` probes the image's torch after the driver gate: torch that imports but cannot use the GPU refuses the box with code 18
+  (`BOX_REFUSED cuda=unusable`), so the receipt names the machine for exclusion instead of a harness error.
+
+### The routed-expert combine runs over row chunks on large rows (same bytes)
+
+- The training combine (`_ScatterCombine`) and the inference combine build a `[tokens*k, hidden]` fp32 image: the forward's scatter and
+  weight multiply, the backward's weight gradient (a per-row sum) and down gradient. On Qwen3-30B-A3B's packed 4,096-token rows that is
+  256 MiB per copy. Each transient held about three copies: 768 MiB above its inputs in forward and in backward, measured on an RTX A2000.
+- Every one of those operations is row-wise. Once the whole image would reach 128 MiB (`COMBINE_CHUNK_MIN_BYTES`), they now run over row
+  chunks of about 32 MiB (`COMBINE_CHUNK_BYTES`: 4,096 rows at hidden 2048), writing into preallocated gradients. The forward and both
+  gradients are `torch.equal` to the whole-tensor path on CPU and on the A2000, at 1,024- to 32,768-row chunks. At 4,096-row chunks the
+  forward's transient falls from 768 to 320 MiB and the backward's from 768 to 256 MiB
+  (`bench/combine-chunk/receipts/combine_chunk_a2000.json`). `tests/test_moe_keep.py`'s packed-shape CUDA test reads the backward
+  at 0.269 GB, against 0.805 GB after #1296, with both gradients still `torch.equal` to the original composite.
+- Every chunk keeps at least 16 rows, and a short tail joins the chunk before it. Below 16 rows, ATen's CUDA reduction picks its
+  per-row thread layout from the row count, so the weight gradient's summation order can change: a 7-row chunk at width 128 did, on
+  the A2000. From 16 rows up, every row gets the same layout on any GPU, for widths from 128 to 32,767.
+- Under the gate the whole-tensor path runs as before; at TC1's field recipe a call's image is about 70 MiB. `E4B_COMBINE_CHUNK=0` turns
+  chunking off. `COMBINE_STATS` counts chunked forwards and backwards.
+- What it does to a training step's peak and speed is for a TC1 box to read.
+
+### TC1 amendment 60 registered: the held-out loss from the logits in chunks on packed rows (P162-P165)
+
+- Token `qwen3evalce` runs e4b's matched arm on packed rows with `E4B_CKPT_OFFLOAD=1`, `E4B_CHUNKED_EVAL_LOSS` 0 against 1, two draws
+  each in A B B A order, with Unsloth's matched arm beside it and peaks split by phase.
+- P162: the evaluation-phase peak falls by 3.5 GB or more. P163: with the switch on, every draw's evaluation peak sits below its training
+  peak. P164: step-0 held-out within 0.0001 per draw pair. P165: held-out at N within 0.005.
+- The reducer adds the family, `evalce_why` and `score_evalce`. Self-test 125.
+
+### `E4B_CHUNKED_EVAL_LOSS=1`: a held-out forward computes its loss from the logits in fp32 chunks (opt-in)
+
+- A `torch.no_grad` forward with labels (an evaluation loop's) ran Hugging Face's loss, which upcasts the whole logits to fp32 and takes the
+  log-softmax of the copy. At Qwen3's vocabulary and 4,096 tokens, that is 4.64 GiB above the bf16 logits on an RTX A2000. On TC1's packed
+  rows it made the held-out evaluation e4b's run peak: 26.88 GB, against a training-phase peak of 26.59, or 25.85 with
+  `E4B_CKPT_OFFLOAD=1` (TC1 amendment 58).
+- With the variable set, such a forward runs where its fp32 logits would reach 1 GiB (the training gate's value). It runs without labels,
+  so the returned logits are the stock forward's bit for bit, and the loss is computed from them 512 tokens at a time
+  (`chunked_lm_loss_from_logits`, the router auxiliary loss added as the forward adds it). The loss transient is 0.58 GiB above the
+  logits on the A2000, at 2,048 and 4,096 tokens, and the loss was bit-identical to stock in both
+  (`bench/chunked-lm-loss/receipts/eval_loss_peak_a2000.json`, allocator bytes; correctness and memory only).
+- Below the gate, or for a forward without labels, with `logits_to_keep` or a tuple return, evaluation is the stock forward. It rides on
+  the training patch, so `E4B_CHUNKED_LM_LOSS=0` leaves evaluation stock. `CHUNKED_LM_LOSS_STATS` counts `eval_chunked_calls` /
+  `eval_stock_calls`, and TC1's `chunked_lm_loss` receipt records them with the variable.
+- It stays opt-in until a TC1 box reads its effect on the run peak.
+
+### TC1 amendment 59 registered: checkpoint inputs in pinned host memory at the field recipe (P158-P161)
+
+- Token `qwen3ckptofff` runs e4b's shipped and matched arms at TC1's field recipe, `E4B_CKPT_OFFLOAD` 0 against 1, two draws a side in
+  A B B A order, with peaks split by phase. This is the read amendment 58's rule names before any default.
+- P158 / P159: f1 / f0 at most 1.01 on the matched / shipped arm. P160: held-out within 0.005 on each arm. P161: the matched arm's
+  training-phase peak falls by 0.10 GB or more.
+- `ckptoff_why` takes the field recipe's form (padding and loss stay stock there). The reducer adds the family and `score_ckptofff`.
+  Self-test 124.
+
+### Read: TC1 amendment 58 -- checkpoint inputs in host memory take 0.74 GB off e4b's packed-row training peak for 0.3 % of the step (P153-P155, P157 HELD; P156 FALSIFIED)
+
+- `tc1-5090-115` ($0.82, a Ryzen 9 7900). With `E4B_CKPT_OFFLOAD=1`, e4b's training-phase peak falls 26.59 → 25.85 GB at 1.003 of the
+  step, and held-out moves by +0.0002. Row `e4b.train.ckpt-offload.packed-4k.5090.2026-10-07`.
+- Against Unsloth's training-phase peak: +1.72 GB without the offload (P156 missed its 1.7 by 0.02; #1296 took 0.20 GB off the training
+  peak) and **+0.98 GB** with it (P157).
+- With the offload, e4b's run peak is the held-out evaluation's 26.88 GB. Next, by the registered rule: the offload at the field recipe,
+  before any default.
+
+### TC1 amendment 58 registered: checkpoint inputs in pinned host memory on packed rows (P153-P157)
+
+- Token `qwen3ckptoff` runs e4b's matched arm on packed rows at its defaults, `E4B_CKPT_OFFLOAD` 0 against 1, two draws each, with
+  Unsloth's matched arm beside it and peaks split by phase.
+- P153: the training-phase peak falls by 0.6 GB or more. P154: o1 / o0 at most 1.05. P155: held-out within 0.005. P156 / P157: o0 / o1
+  within 1.7 / 1.0 GB of Unsloth's training-phase peak.
+- `tc1_arm.py` records `ckpt_offload_layers` and `ckpt_offload_env`. The reducer adds the family, `ckptoff_why` and `score_ckptoff`.
+  Self-test 123.
+
+### `E4B_CKPT_OFFLOAD=1`: checkpointed decoder layers keep their input in pinned host memory (opt-in)
+
+- Under gradient checkpointing every decoder layer keeps its input hidden states on the GPU until its backward. On Qwen3-30B-A3B's packed
+  4,096-token rows that is 47 × 16.8 MB, 0.79 GB of the training peak. TC1 amendment 57's census found it the largest single group above
+  Unsloth's (`e4b.train.memory.packed-4k-train-census.5090.2026-10-07`).
+- With the variable set, `enable_fast_train` routes each checkpointed layer through PyTorch's reentrant checkpoint inside
+  `torch.autograd.graph.save_on_cpu(pin_memory=True)`. That saves exactly the layer's input, in host memory. It also calls
+  `enable_input_require_grads()`, which reentrant checkpointing needs, and which changes no value. `disable_fast_train` undoes it, and
+  layers that `E4B_MOE_KEEP_LAYERS` keeps are left alone.
+- Gradients equal Hugging Face's default checkpointing exactly on CPU, including with a frozen embedding. e4b's fused ExpertsLoRA path
+  under the offloaded checkpoint matches the plain path exactly on CUDA (RTX A2000). The copies are synchronous: what they cost a
+  training step is for a TC1 box to read, so it stays opt-in.
+- **Untested with `enable_dense_offload`** (maintainer review): the dense-weight offload's train-prefetch schedule is documented for the
+  non-reentrant checkpoint's layer order, and this switches checkpointed layers to the reentrant one. The layer order should match
+  (forward 0..L-1, then each recompute L-1..0), but no test runs the two together. Read that pairing before relying on it.
+
+### SV7 registered (#1294): the planner's re-matched 24 GB plan for Qwen3-30B-A3B, solver tiers at VRAM 13.143 GiB and 8 × 8192, on an RTX 4090 at the longest prompts (bench and prereg only)
+
+- `bench/sv7/` follows SV6's layout:
+  - `SV7-PREREG.md`;
+  - `sv7_run.sh`, the box side, which reuses `bench/sv4/sv4_measure.py`. It keeps SV6's host-only exit codes, its driver
+    floor (18) and its estimate-pin tripwire.
+  - `sv7_reduce.py`, with a 32-case self-test, also run by `tests/test_sv7.py`.
+- **The plan:** loggetta `10cbf9f` now borrows a same-shape reserve (SV4 `t4_plan8`, 4.08%) instead of a 4 × 4096 NVMe
+  arm's 6.7%. Its tier plan grows from SV6's VRAM 12.631 GiB to 13.143 GiB (5,316 rows), 22.344 GiB planned. The
+  estimate is 20.987 GiB at `c07ea7f6`.
+- **Readings:**
+  - V1: the plan fits at 8 × 8,000-token prompts;
+  - V2: the driver peak against the plan;
+  - V3: the measured reserved-minus-allocated against the borrowed 0.856 GiB reserve;
+  - V4: the estimate ±5% at long prompts;
+  - V5: the server's tier rows equal the estimate's.
+- Each reading's consequence is registered before the data. V3 decides whether loggetta keeps borrowing a serve slack
+  across tier budgets.
+- Spend is capped at $5 by #1294, within the owner's $50 approval.
+
+### The routed-expert combine's backward keeps 0.4 GB fewer fp32 temporaries, with the same gradient bytes (TC1 amendment 57)
+
+- TC1 amendment 57's training-phase census put 1.07 GB of e4b's packed-row training peak in `_ScatterCombine`'s backward. The backward
+  materialised the incoming gradient's expanded `[tokens × top-k, hidden]` fp32 image before indexing it, and kept a second fp32 product
+  alive.
+- It now reads the image by index (`g[order // k]`), and computes the weight gradient before scaling the down gradient in place. Both
+  gradients are the same bytes as before, and the same as autograd's composite (`tests/test_moe_keep.py`).
+- At a packed row's shape (4,096 tokens, top-8, hidden 2,048) the backward's peak falls from 1.208 GB to 0.805 GB on CUDA. That is an
+  allocator measurement on an RTX A2000; the training-step peak is for a TC1 box to read.
+
+### Read: TC1 amendment 57 -- e4b's 1.92 GB training-phase excess on packed rows, attributed (P149-P152 HELD)
+
+- `tc1-5090-114` ($1.08, an EPYC 7713): the census of the training phase. Peaks: e4b fp32 28.14 GB, e4b with the double-quantized absmax
+  26.79 GB, Unsloth 24.86 GB, all in a training backward. Row `e4b.train.memory.packed-4k-train-census.5090.2026-10-07`.
+- With the double-quantized absmax every static class matches Unsloth's. The +1.91 GB is transient:
+  - checkpoint activations kept on the GPU, 0.79 GB (Unsloth's own checkpointing holds none there);
+  - fp32 temporaries in e4b's routed-expert combine backward, 1.07 GB;
+  - grouped-nf4-gemm's bucketed delta block, 0.90 GB.
+- STATUS says so. The next registration targets the checkpoint activations, with the combine backward as e4b's own candidate.
+
+### TC1 amendment 57 registered: the memory census of the training phase on packed rows (P149-P152)
+
+- Token `qwen3memc4kt` runs amendment 47's census box with `TC1_EVAL_EVERY` above `TC1_STEPS`, so no evaluation sits inside the census
+  window. The family refuses to run otherwise. Arms: e4b with the fp32 absmax, e4b with it double-quantized, and Unsloth.
+- P149: at least 90 % attributed. P150: e4b fp32 2.0-4.5 GB above Unsloth. P151: e4b absmax-dq at most 2.5 GB above. P152: every census
+  peak falls in a training step.
+- The census scorer takes an optional training-phase prediction (`MEMC_SPECS["train_phase"]`); amendment 47 and 55 readings are
+  unchanged. Self-test 122.
+
+### `enable_fast_train` stores the frozen expert absmax double-quantized by default (TC1 amendment 56)
+
+- `enable_fast_train` now applies `compress_expert_absmax_` after patching, as the CLI trainer already does for resident training.
+  - On Qwen3-30B-A3B's packed 4,096-token rows it costs 0.2 % of the step (1.002) and saves 1.35 GB, held-out within 0.0002.
+  - Evidence scope: one model on one RTX 5090 in torch 2.12 / triton 3.7. Its packed-row speed under the field image's torch 2.8 is
+    unread. Row `e4b.train.absmax-dq.packed-4k.5090.2026-10-07`.
+- It has the same guards as the trainer:
+  - off under `OFFLOAD_EXPERTS=1` or `TRAIN_ARENA`;
+  - a model the compressor refuses (offloaded, arena or 8-bit storage, a stack another engine patched) keeps its fp32 absmax, with the
+    reason in `FAST_TRAIN_STATS["absmax_dq"]`;
+  - nothing is compressed when nothing was patched.
+- To keep the fp32 absmax, which the offload, batched, residency and NVMe engines read, set `E4B_ABSMAX_DQ=0` or call
+  `enable_fast_train(model, absmax_dq=False)`. `E4B_ABSMAX_DQ=1` or `absmax_dq=True` makes a refusal an error. The compression is lossy
+  and stays after `disable_fast_train`.
+- The refusal those engines give a compressed model now names the default and the way to keep fp32.
+- **Behaviour change for programmatic callers** (maintainer review): call order now matters.
+  - Attaching an offload, batched, residency or NVMe engine BEFORE `enable_fast_train` (as the guides do) is unchanged. The compressor
+    refuses that stack, and the fp32 absmax stays.
+  - Calling `enable_fast_train` FIRST now compresses the absmax, and the engine attached afterwards refuses the model. Attach the
+    engine first, or pass `absmax_dq=False`.
+- **TC1 and other benches:** an arm run "at e4b's defaults" now includes the compressed absmax. An arm meant to read the fp32 absmax
+  must set `E4B_ABSMAX_DQ=0`. The receipts record the state as it is, so an arm that silently got the default is visible.
+- The test suite pins the default off in-process (`tests/conftest.py`), so tests written against the fp32 absmax keep their meaning.
+  `tests/test_absmax_dq.py` tests the default itself.
+- TC1 receipts now record the absmax as it is (`absmax_dq`), the arm's flag (`absmax_dq_flag`) and the default's record
+  (`absmax_dq_fast_train`).
+
+### Read: TC1 amendment 56 -- the double-quantized absmax costs packed rows 0.2 % for 1.35 GB; e4b's training phase peaks 1.92 GB above Unsloth's with it (P144-P146, P148 HELD; P147 FALSIFIED)
+
+- `tc1-5090-113` ($1.05, an EPYC 7713), torch 2.12. `E4B_ABSMAX_DQ=1` steps 1.002 of the fp32 absmax's time. It lowers the run peak by
+  1.35 GB, and held-out moves by +0.0002. Row `e4b.train.absmax-dq.packed-4k.5090.2026-10-07`.
+- Peaks by phase:
+  - e4b's training steps peak at 28.14 GB with the fp32 absmax, about 0.09 GB below its evaluation (28.23);
+  - with the double-quantized absmax, its training phase peaks at 26.79 GB against Unsloth's 24.86, which is +1.92 GB.
+- This corrects how amendment 55's census was read: the packed-row gap is in training, not in the evaluation's logits. STATUS says so.
+- Next, by the registered rules: a library PR defaults `enable_fast_train` to the compressed absmax for resident training, and a
+  training-phase census.
+
+### TC1 amendment 56 registered: the double-quantized absmax as a library default on packed rows, with each run's peak split by phase (P144-P148)
+
+- `tc1_arm.py --phase-peaks 1` records the run's peak allocated by phase (setup / eval / train) in `peak_vram_gb_phases`, resetting the
+  allocator's max at each boundary. `peak_vram_gb` is unchanged. The flag is refused with `--mem-census 1`. Unit-tested.
+- Token `qwen3dqpack` runs e4b's matched arm with the fp32 against the double-quantized expert absmax on packed rows, two draws each, with
+  Unsloth's matched arm beside it, every arm with phase peaks.
+- P144: dq / fp32 s/step <= 1.02. P145: run peak -1.2 GB or more. P146: held-out within 0.005. P147: e4b's training-phase peak within
+  1.0 GB above Unsloth's. P148: e4b's evaluation peak exceeds its training peak.
+- The reducer adds the family, `dqpack_why` and `score_dqpack`. Self-test 121.
+
+### Read: TC1 amendment 55 -- on packed rows e4b's run peak is its held-out evaluation; with the double-quantized absmax the gap to Unsloth is 2.01 GB (P141-P143 HELD)
+
+- `tc1-5090-112` ($0.89, an EPYC 7K62): amendment 47's census at the current defaults. Peaks: e4b defaults 28.23 GB, e4b with
+  `E4B_ABSMAX_DQ=1` 26.88 GB, Unsloth 24.86 GB. The gaps are +3.36 GB and +2.01 GB. Row
+  `e4b.train.memory.packed-4k-census.5090.2026-10-06`.
+- e4b's peak falls in the held-out evaluation, where the stock LM loss's fp32 logits and their working copies take about 6.3 GB. The
+  chunked loss takes training forwards only, by design. Unsloth's peak falls in a training backward. grouped-nf4-gemm's groups hold
+  nothing at e4b's peak. STATUS says so.
+- By the registered rule, the next registration reads the double-quantized absmax as a library default on packed rows. It will record
+  training and evaluation peaks separately.
+
+### TC1 amendment 55 registered: amendment 47's packed-row memory census at the current defaults (P141-P143)
+
+- Token `qwen3memc4kb` re-reads the census on packed rows at the current defaults, with bucketed padding `auto`. Three arms, each in
+  venv-unsloth: e4b defaults, e4b with `E4B_ABSMAX_DQ=1`, and Unsloth.
+- P141: at least 90 % of each peak is attributed. P142: e4b's defaults peak 2.0 to 5.0 GB above Unsloth's. P143: the double-quantized
+  absmax brings it within 2.5 GB.
+- The reducer's census scorer is now registered per family (`MEMC_SPECS`). Amendment 47's reading is unchanged, and its self-test case
+  still passes. New: `memc4kb_why` and self-test case 108 (120 cases).
+
+### Read: TC1 amendment 54 -- neither remedy moves torch 2.8's step on a host that is not host-bound (P137, P138 FALSIFIED; P139, P140 HELD)
+
+- `tc1-5090-111` ($1.41, a Threadripper PRO 7965WX). At e4b's defaults in torch 2.8 the matched arm stepped 10.50 s with device time 99 % of
+  the step, against 12.55 s on amendment 53's host. Neither remedy had host time to recover:
+  - grouped-nf4-gemm's bucket ladder: 1.010;
+  - a larger cuBLASLt heuristics cache: 0.996.
+- Held-out within 0.0002; the ladder's peak +0.34 GB. Row `e4b.train.pad-ladder.torch28.qwen3.5090.2026-10-06`.
+- Reported, not scored: the ladder cut `aten::bmm`'s CPU self time per call about tenfold, so the per-shape cost is real. It matters where
+  the host is the bottleneck. The next registration reads the registered candidate, fewer and wider buckets, on a host where the defaults
+  are host-bound. STATUS says torch 2.8's host-side share depends on the host.
+
+### Read: TC1 amendment 53 -- 60 % of torch 2.8's extra time at e4b's defaults is not device time, its largest host-side increase in the bucketed delta's batched matmuls (P134-P136 HELD)
+
+- `tc1-5090-110` ($1.30, a quiet Threadripper PRO 3955WX) profiled e4b's matched arm on packed rows. Environment ratio **0.790** [0.789,
+  0.792]; of the 2.63 s per step torch 2.8 adds, 59.7 % is not device time. In torch 2.8 the buckets drop the device's share of the step
+  from 0.965 to 0.850. Row `e4b.train.env-gap.torch28.profile.qwen3.5090.2026-10-06`.
+- The largest host-side increase is `aten::bmm`: the same ~26,750 calls a step in both torches, about three times the CPU self time per
+  call in torch 2.8. That is an upper bound on host work, since self time also counts waits on a full launch queue.
+  The device time is grouped-nf4-gemm's Triton kernels (+22 % forward, +52 % data gradient, buckets or not).
+- By the registered rule, the next registration is a shape-stable bucket ladder in grouped-nf4-gemm. STATUS says so.
+
+### TC1 amendment 54 registered: two remedies for torch 2.8's host time at e4b's defaults (P137-P140)
+
+- Token `qwen3ladder28` runs e4b's matched arm on packed rows in torch 2.8 at its defaults, against two remedies:
+  - cuBLASLt's heuristics cache raised to 262,144 entries;
+  - grouped-nf4-gemm's bucket ladder (#498).
+
+  Each side runs two draws, profiled on steps 3-5.
+- P137: ladder / defaults <= 0.95. P138: cache / defaults <= 0.97. P139: held-out within 0.005. P140: the ladder's peak rises at most
+  1.5 GB.
+- The arm's receipt records the ladder and cache settings, and the reducer adds the family, `ladder28_why` and `score_ladder28`. Self-test
+  119.
+- The RTX A2000 cuBLAS API count behind the *Why* is committed: `bench/tc1/bmm_api_count.py` and
+  `bench/h2h-2026-10-02/tc1/a2000-cublas-api/`.
+
+### TC1 amendment 53: the RTX A2000 bucket count is committed with its script
+
+- `bench/tc1/bucket_count.py` counts grouped-nf4-gemm's LoRA-delta kernels, launches, syncs and allocations, single block against buckets, at
+  Qwen3-30B-A3B's packed-row shape. The outputs under torch 2.8 and 2.11 are in `bench/h2h-2026-10-02/tc1/a2000-bucket-counts/`. It is a
+  diagnostic that licenses nothing, and its millisecond fields are not readings.
+- A prereg note corrects amendment 53's *Why*: fp32 and bf16 adapters give close kernel counts, not identical ones.
+
+### Compatibility: transformers 5.19.0 in the Glimmer loader too, with a test both loaders share
+
+- **`arch/glimmer_load.py`** carried the same `compute_default_rope_parameters(cfg, device)` call that #1280 fixed in
+  `arch/moe_load.py`. Under transformers 5.19 it raised `TypeError` when rebuilding a meta `inv_freq`. It now passes
+  `device=` by keyword and moves the result to the device.
+- **`tests/test_rope_rebuild_compat.py`** builds a Qwen3-MoE rotary under `torch.device("meta")` and requires each
+  loader's rebuild to return the constructor's own CPU bytes. On transformers 5.19.0, the glimmer case fails without
+  this fix and passes with it. Both cases pass on 5.17.0. `test_glimmer_load.py` could not show this, because its
+  checkpoint-backed cases skip in CI.
+
+### TC1 amendment 53 registered: where torch 2.8's extra time goes at e4b's defaults on packed rows (P134-P136)
+
+- Token `qwen3prof28` profiles e4b's matched arm on packed rows at its defaults. It runs in torch 2.12 and torch 2.8, plus torch 2.8 with
+  the single block, two draws each. Steps 3-5 are profiled; the timed window stays steps 11..40.
+- P134: environment ratio <= 0.92. P135: at least half of torch 2.8's added profiled wall is not device time. P136: in torch 2.8 the
+  buckets lower the device busy fraction by >= 0.03.
+- The reducer adds the family, its engagement predicate, the profile table, the family deltas and the scorer. Self-test 118.
+
+### DQ6 read: on a 24 GB RTX 4090, streaming trains 4.75× the resident sequence length (CAP_REAL; bench, receipts and docs; #1083)
+
+- **The read.** DQ4's capacity read on one 24 GB RTX 4090 (`dq6-4090-1`, $0.802), with the chunked loss and the
+  default allocator: resident L\* 2048 tokens, streamed 9728, so **G = 4.75**, bracket [3.80, 5.00]. With
+  `expandable_segments` it reads 5.20 (2560 → 13312).
+- **Against the 32 GB card.** DQ4's 5090 read 2.00×. The resident weights take most of a 24 GB card, while the
+  streamed model keeps two layers of them, so the factor more than doubles.
+- **How it checks out:**
+  - every fresh confirmation agreed with its ladder;
+  - R − S allocated is 14.07–14.08 GiB at every common rung, which is the weights less two layers;
+  - step time is unchanged at the registered rung (T(S)/T(R) 0.993 at 2048 tokens).
+- **What is new in the tree:**
+  - `bench/dq6/RESULTS-dq6.md`;
+  - the receipts, re-derived byte for byte by a new lane test;
+  - a two-card capacity table in `docs/CHOOSING.md`.
+
+### Read: TC1 amendment 52 -- bucketed padding costs torch 2.8 nothing on packed rows (P130-P133 HELD)
+
+- `tc1-5090-109` ($2.35, an AMD EPYC 7713): amendment 48's packed box in the field image's torch 2.8. Buckets against the single block:
+  matched 0.983 [0.974, 0.993], shipped 0.939 [0.929, 0.949]; the matched peak drops 4.24 GB; held-out within 0.0002. Row
+  `e4b.train.pad-buckets.torch28.qwen3.5090.2026-10-06`. grouped-nf4-gemm's `auto` default stands in torch 2.8, and amendment 51's
+  environment ratio (0.739) is not the buckets' cost.
+- Reported, not scored: under torch 2.8 the bucketed arms left the GPU idle more of the step (median utilisation 87 % against 97 %).
+  Host-side time in the bucketed delta under torch 2.8 is the next lead; STATUS says so.
+
+### Compatibility: transformers 5.19.0 (released 2026-10-06)
+
+- **The meta-tensor rope rebuild** (`arch/moe_load.py`). transformers 5.19 changed
+  `<Model>RotaryEmbedding.compute_default_rope_parameters` to `(config, **kwargs)`, so the positional `device` argument
+  raised `TypeError`. The rebuild did not run, which broke streaming loads of a model whose `inv_freq` was still on
+  meta, such as Qwen3-MoE. It now passes `device=` by keyword, which every version accepts, and moves the result onto
+  the device, because 5.19 returns a CPU tensor.
+- **The fused-layout probe's toy config** (`arch/fused_layout_probe.py`) now carries `swiglu_alpha=1.702`. 5.19's
+  `GptOssExperts` reads the value from the config where earlier versions hard-coded it. The value equals e4b's
+  `GPTOSS_ALPHA`.
+- **Tests.** `tests/test_moe_load.py` and `tests/test_fused_layout_probe.py`: 39 passed on transformers 5.17.0 and on
+  5.19.0. Before the fix, 6 failed on 5.19.0, the same 6 that failed e4b's CI after 5.19.0 was published.
+
+### Make the README easier to use
+
+Lead with installation and a working first step, select current public results, and link detailed API, support, and evidence records. Keep release and development status distinct.
+
+### Read: SV6 (#1267): the planner's 24 GB tier plan for Qwen3-30B-A3B served 8,000-token prompts inside its plan, and #1247's bulk flush priced the prompt-length delta to 0.3% (bench and receipts only)
+
+- `sv6-4090-3`: one RTX 4090, **$0.320**, teardown proven. It launched from amendment 1's merge (`af0d95df`) after both
+  registrations were reviewed. Lane total $0.372 (`bench/sv6/RESULTS-sv6.md`).
+- Read through `bench/sv6/sv6_reduce.py`, verdict `READ`, integrity clean:
+  - Y1 HELD: no out-of-memory at 8 × 8,000-token prompts.
+  - Y2 HELD: driver peak 21.357 GiB, against a 22.343 GiB plan.
+  - Y3 HELD at −1.6%.
+  - Y4 MISSED below at −6.4%, as registered likely: the short prompts leave the flush and staging ceilings unused.
+  - Y5 HELD exactly: tier rows 5,109 / 1,035 / 0.
+  - Y6 HELD: the long-minus-short allocator delta was 1,001.0 MiB against the flush and staging items' 1,003.9 MiB,
+    the first measurement of #1247's item.
+- **Consequences, as registered:**
+  - the tier plan, the reserve and context, and the estimate's long-prompt total, tier pricing, flush and staging
+    items stand;
+  - the receipts become same-setup evidence for the planner's reserve and context on this class;
+  - Y4's below-band miss changes nothing.
+
+### TC1 amendment 52 registered: bucketed padding on packed rows in the field image's torch 2.8 (P130-P133)
+
+- Token `qwen3padbk28`: amendment 48's packed-row A/B (`NF4_QLORA_PAD_BUCKETS=0` vs `1`, shipped and matched arms, two load-gated draws a
+  side) in venv-e4b (torch 2.8, triton 3.4), where amendment 51 read e4b at its defaults 0.739 of its torch-2.12 step. P130 / P131: no slower
+  than 1.02; P132: the matched peak falls by at least 3.0 GB; P133: held-out within 0.005. A slow side sends grouped-nf4-gemm's `auto` to a
+  gate or a fix.
+- `tc1_reduce.py`: the family; `pad_buckets_why` takes the torch prefix; self-test 117 cases.
+
+### Read: TC1 amendment 51 -- at e4b's defaults the packed position is Unsloth/e4b 1.453 on one stack (P126, P128, P129 HELD; P127 FALSIFIED)
+
+- `tc1-5090-108` ($1.09, a quiet Xeon W-2145): amendment 43's packed same-stack box with nothing set. The chunked loss and bucketed
+  padding engaged by themselves. e4b 10.07 / 10.05 s/step against Unsloth's 14.62 / 14.61: **1.453** [1.451, 1.455]; every e4b arm
+  resident at 28.23 GB. Row `e4b.train.h2h.unsloth.qwen3.5090.2026-10-06.packed-4k-defaults` supersedes amendment 39's out-of-memory row as
+  the default-settings packed reading; STATUS says so.
+- P127 FALSIFIED: in the field image's torch 2.8, e4b stepped 13.62 s, an environment ratio of 0.739. Bucketed padding under torch 2.8 is
+  the suspect; its A/B there is the next registration.
+
+### SV6 amendment 1 (#1267): a registered driver floor, exit 18, before the lane's next box (bench, prereg and tests only)
+
+- `sv6-4090-1` (NOT_RUN, pre-flight HF bandwidth, $0.023) and `sv6-4090-2` (tripwire rc 9, $0.029) both landed on Vast
+  machine 29956. It runs driver 535 / `cuda_max_good` 12.2, where torch 2.8+cu128 cannot initialise CUDA (error 804).
+  Neither reached an arm, so there is no data.
+- `bench/sv6/sv6_run.sh` now refuses a driver older than 570 before installing anything and exits 18, the registered
+  host-floor code, so a later launch can exclude the machine. `tests/test_sv6.py` pins it.
+- Readings, consequences, the reducer and its pinned numbers are unchanged.
+
+### `enable_dense_offload` streams training with `train_prefetch` by default on CUDA (behaviour change; closes the DQ3 → DQ5 line of #1083)
+
+- **What changed.** `train_prefetch` now defaults to `None`, which turns the overlapped training schedule on for every
+  CUDA device chain and leaves it off elsewhere. `True` forces it on every chain, as before. `train_prefetch=False` is
+  the opt-out: the old synchronous single-slot path.
+- **Why.** On an RTX 5090 at 2048 tokens, training with the schedule was bitwise identical to resident on every
+  measured link:
+  - 1.0023× the resident step time on PCIe gen 5 x16 (DQ3, #1188), against 1.18× synchronous;
+  - 1.0050× on gen 4 x16 (DQ5, #1218), against 1.51× synchronous;
+  - 2.00× the resident arm's longest trainable sequence (DQ4, #1206).
+- **Who is affected.** A model in `train()` mode on CUDA. Inference (`eval()`, including `formats/dense_disk.py`) never
+  consults the schedule. The bench arms that compare against the synchronous path (DQ3's S0) pass `False` explicitly.
+- **New tests.** Reentrant gradient checkpointing (whose first forward runs under `no_grad` in `train()`): parity, and
+  on CUDA the exact per-step prefetch counts. The default on a CUDA chain, the opt-out, and a model split across CPU and
+  CUDA, where only the CUDA chain is scheduled and the report shows it.
+- **Memory note, documented and not defaulted.** DQ4's streamed arm reached 2.375× instead of 2.00× with
+  `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`: under the default allocator the longest fitting sequence left
+  6.22 GiB reserved but unallocated. That setting is the caller's (it must be set before CUDA initialises), so
+  nothing in the engine sets it.
+
+### CI exercises grouped-nf4-gemm 0.42.0 (CI only; the `[fast]` floor stays `>=0.30.0`)
+
+- The CI install pin moves from v0.41.0's commit (`dc8f94ab…`) to v0.42.0's (`b4f93f1c…`). 0.42.0 makes bucketed LoRA-delta padding
+  the default as `auto` (TC1 amendments 47–50), and turns the int4-b32 split-K R term off on every part (K30/K32).
+- e4b needs nothing new from 0.42.0, so the `[fast]` floor is unchanged. A user with an older grouped-nf4-gemm keeps the single padded
+  block; `NF4_QLORA_PAD_BUCKETS=0` restores it on 0.42.0.
+
+### DQ6 registered: DQ4's capacity read on a 24 GB RTX 4090 (bench and prereg only; #1083)
+
+- **The read.** `bench/dq6/` measures the longest QLoRA sequence that trains on a 24 GB RTX 4090, resident against
+  streamed, on DQ3's Qwen3-32B-architecture subject. Predicted from DQ4's receipts: resident about 1.5k tokens, streamed
+  about 9k, a ratio of about 6 (DQ4's 32 GB 5090 read 2.00).
+- **Reused unchanged:** DQ4's harness, configurations and rule.
+- **The registered differences:**
+  - a card gate: a 24 GB RTX 4090, otherwise rc 19;
+  - DQ3's VRAM probe with a 21.5 GiB floor;
+  - a 512-token ladder;
+  - DQ4's reducer re-registered to the 4090, with a 24 GB total-memory check.
+- **The runner's drift from `dq4_run.sh`** is pinned by `tests/test_dq6_lane.py`, which also checks that DQ4's committed
+  read still re-derives byte for byte.
+
+### TC1 amendment 51 registered: the packed 4,096-token position on one stack at e4b's defaults (P126-P129)
+
+- Token `qwen3samestack4kd`: amendment 43's packed same-stack box with nothing set. The chunked LM loss (`auto`, #1203) and
+  grouped-nf4-gemm's bucketed padding (`auto`, grouped-nf4-gemm#492) both engage on these rows by themselves, and validity checks that they
+  did. P126: Unsloth/e4b in [1.25, 1.80]; P127: environment in [0.84, 0.98]; P128: every e4b arm resident; P129: e4b's matched peak <=
+  29.5 GB. Bands set with amendments 43 and 48 in view. A stable P126 with P128 becomes the default-settings packed position, superseding
+  amendment 39's out-of-memory row as that reading.
+- `tc1_reduce.py`: the family, `packed_defaults_why`, `score_packed4kd_peak`; self-test 116 cases.
+
+### SV6 registered (#1267): the planner's revised 24 GB plan for Qwen3-30B-A3B, solver tiers at 8 × 8192, on an RTX 4090 at the longest prompts (bench and prereg only)
+
+- `bench/sv6/`:
+  - `SV6-PREREG.md`;
+  - `sv6_run.sh`, the box side, which reuses `bench/sv4/sv4_measure.py`. Host-only exit codes: 13 disk, 18 RAM. A
+    tripwire refuses the box if the registered estimate total moved.
+  - `sv6_reduce.py`, with a 30-case self-test, also run by `tests/test_sv6.py`.
+- **The plan:** loggetta `dd4783f`'s solver tiers, VRAM 12.631 / DRAM 15.187 GiB, eager decode, 22.343 GiB planned. The
+  estimate is 20.476 GiB at `50e24f3c`, including #1247's bulk flush (526 MiB).
+- **Arms:** `b6_short` (1,024-token prompts, the anchor) and `b6_long` (8,000).
+- **Readings:**
+  - Y1: the plan fits;
+  - Y2: the driver peak against the plan;
+  - Y3 / Y4: the estimate ±5%;
+  - Y5: the server's tier rows equal the estimate's;
+  - Y6: the long-minus-short allocator delta against the flush and staging items' 1,003.9 MiB, ±15%. That is the first
+    measurement of #1247's item.
+- Each reading's consequence is registered before the data.
+- Spend is capped at $5 by #1267, within the owner's $50 approval.
+
+### SC1g A7 read (#846): FRAGILE_POSITIONS -- e4b's worst positions are router-flip positions in both arms, so the rule cannot attribute (a)'s excess to them (bench and tests only)
+
+- **The run.** `sc1g-diag-a7-4` (box J, $0.701, Vast 145701) captured the decode GEMV's expert ids per position for
+  (a) `KEEP_NF4=0` and (b), on all four windows. The perturbation control is bit-identical, every capture passes its
+  gates, and layer 0's flip rate is exactly 0, as it must be.
+- **Reading (conv2).** (a)'s top-1 % KL positions all flip (21/21 against 0.706, p 6.4e-4), but so do (b)'s own. By
+  precedence that is FRAGILE_POSITIONS, and router-flip attribution is set aside.
+- **Descriptive.** conv2's flips sit in the first quarter of decode, where (a)'s excess is (5.8 flipped layers per
+  position, against about 1.3–2.4 later). (a)'s and (b)'s worst positions overlap on only 3 of 21.
+- **Post-data, flagged.** The control compares (a) with (b), not each arm with the reference, so it cannot separate
+  "positions fragile in both arms" from "each arm's tail sits where its own routing left the reference's". The next
+  instrument is the reference's per-position routing.
+- **Correction.** The A6 continuation read blamed busy neighbours for its slow conv1 arms. This box ran on the same host
+  at higher load at normal speed, so the cause is unknown.
+- **Launch history:** one $0.007 pre-flight NOT_RUN and two $0 refusals over my exclusion entry. **Spend:** the lane is
+  at $10.843.
+
+### Read: TC1 amendment 50 -- under `auto` the field recipe never buckets (P123-P125 HELD); `auto` is licensed as grouped-nf4-gemm's default
+
+- `tc1-5090-107` ($0.79, a quiet Threadripper PRO 3955WX): `NF4_QLORA_PAD_BUCKETS=auto` (grouped-nf4-gemm#491) against `0` at the field
+  recipe. Every `auto` arm resolved `auto` and made no bucketed call (49,152 single-block calls each); held-out within 0.0022; matched
+  peak -0.012 GB. Speed reported: the same within the draws on both arms.
+- With amendment 48's re-ask HELD, amendment 50's rule licenses `auto` as grouped-nf4-gemm's default; the flip is a grouped-nf4-gemm
+  PR and release, not yet made (row
+  `e4b.train.pad-buckets.auto.default-decision.5090.2026-10-06`); STATUS says so.
+
+### SC1g A6 continuation read (#846): P3 HELD -- bf16 decode activations move e4b's median KL by at most 9 %; A6 complete (bench and tests only)
+
+- **The run.** `sc1g-diag-a6-2` (box J, $0.753, Vast 145701) ran the bf16-activation arms the first A6 box's deadline
+  dropped.
+- **P3 HELD.** median(c) / median(b) is 1.019, 0.920 and 0.912 on conv1–conv3. conv4's (c) was dropped by `can_run`'s
+  600 s reserve. The decode GEMV's int8 activations are cleared at the median, though the conv2 and conv3 margins are
+  thin (8–9 %).
+- **Determinism.** (b) is bit-identical to its repeat, to A5's reading and to A6-1's: three runs on two hosts.
+- **Per-arm times** are recorded beside each arm. conv1's three arms took 3.6–5.2 min on a shared host whose host-wide
+  load was 17–33; the rest took about 2 min. Values are unaffected.
+- **Descriptive.** On conv1, bf16 activations leave the median but double the mean KL: a tail effect.
+- **A6 is complete:** P1 PARTIAL, P2 FALSIFIED, P3 HELD. The conv2 lead is with A7 (`sc1g-diag-a7-1`, running).
+- **Spend.** The lane is at $10.135.
+
+### DQ3's box runner gates the PCIe width negotiated under load, and refuses out-of-band hosts at rc 19, not 13 (bench only; #1262, closes #1216)
+
+- **The width gate.** `bench/dq3/dq3_run.sh` runs DQ5's link gate verbatim (`bench/dq5/dq5_link_gate.py`).
+  `nvidia-smi`'s `width.max` is what the slot can negotiate, not what it did, so the gate reads the width during a
+  pinned copy instead.
+- **The exit code.** An out-of-band link now exits 19, a code adertha does not admit as machine evidence. Before, a
+  good gen 4 5090 refused by DQ3 could have been excluded from other lanes' searches.
+- **DQ3's read is unaffected.** Its host measured 53.9 GB/s, which is only possible at x16.
+
+### SC1g A7 registered (#846): the router-flip instrument -- per-position decode expert ids on box J, to see whether (a)'s worst positions sit where its routing left (b)'s (bench and tests only)
+
+- **Why.** A6 put conv2's excess with the prompt on MXFP4 in the first quarter of decode. The $0 kernel check (#1260)
+  cleared the MXFP4 prompt kernel. The maintainer's explanation is router flips, and testing it needs routing data, not
+  more KL.
+- **Instrument.** `sc1g_k8.py`'s `route_ids_capture` (`SC1G_ROUTE_IDS_OUT`) wraps gnf4's decode GEMV.
+  - Its expert ids are copied device-side, with no new sync.
+  - Each scored log-prob row records the call count, which aligns positions.
+  - The reducer gates every capture: exactly 48 calls per position, gate_up equal to down, every id written and in range.
+- **Box J.** 9 arms: conv2's (a) and (b) captured, plus (b) uncaptured, a perturbation control that must be
+  bit-identical. Then (a) and (b) on conv1, conv3, conv4.
+- **Rule (conv2).** The share of (a)'s top-1 % KL positions with a flipped decode set against all positions (exact
+  hypergeometric p).
+  - Mean flip count reads instead when the share saturates (> 0.8).
+  - A fragility control on (b)'s own top positions separates SUPPORTS from FRAGILE_POSITIONS.
+  - Both thresholds are registered with their α: share +0.20 at hypergeometric p ≤ 0.01; intensity ×1.5 at
+    permutation p ≤ 0.01.
+  - Outcomes, in precedence order: UNREAD, FRAGILE_POSITIONS, SUPPORTS, CONTRADICTS, INCONCLUSIVE.
+  - The top set is ranked by this box's own KL.
+  - Descriptive: the same rule on flips in [t − 8, t], since a flip reaches later positions through the KV cache.
+- **Scope.** Descriptive: no engine change is licensed. The consequences only pick the next registration (on SUPPORTS, a
+  causal routing replay).
+- **Code.** `box_j` now runs `i_arms_a7`; A6's continuation box is kept as `box_j_a6c`. The reducer self-test has 55 cases
+  (10 new). `tests/test_sc1g_a7.py` drives the arms through the real script and runs the capture on CPU through the
+  reducer's gate.
+
+### SC1g (#846): A6's conv2 lead is not the MXFP4 prompt kernel -- `gemm_mxfp4_grouped` at > 256 rows reads IN_LINE and at its bf16 floor ($0, A2000; bench only)
+
+- **The question.** Is e4b's `KEEP_NF4=0` prompt kernel (`mxfp4_grouped_v1|gt256`) out of line with the other expert
+  paths at large M? A6's conv2 excess sat on the decode steps nearest that prompt.
+- **What runs.** e4b passes `sizes=[1] * M`, so gnf4 takes the per-row `_gemv_mxfp4_grouped`: an exact e2m1 × e8m0
+  decode, fp32 accumulation, and one bf16 rounding.
+- **Result.** On real gpt-oss-20b experts (layers 0, 11, 23), its mean error equals the bf16 output floor on every shape.
+  It is bit-equal to the correctly rounded exact result for ≥ 99.9955 % of outputs at M = 2048. The decode GEMV's int8
+  activations sit about 7× above that floor.
+- **Positive control.** Swapping the nibble order in the reference moves every MXFP4 path about 1000× off the floor.
+  - A floor gate was added because the relative verdict cannot see a defect shared by all MXFP4 paths.
+  - The mutation arm exits 1, as required.
+- **Next.** The router-flip instrument (A7), which needs routing data.
+
+### TC1 amendment 50 registered: bucketed padding as `auto` -- its default decision (P123-P125)
+
+- Token `qwen3fieldauto`: `NF4_QLORA_PAD_BUCKETS=0` vs `auto` (grouped-nf4-gemm#491: buckets only where a call carries >= 16,384 routed
+  rows) at TC1's field recipe, whose calls carry at most 9,040. Shipped and matched arms, two load-gated draws a side. P123: `auto` never
+  buckets there; P124: held-out within 0.005; P125: matched peak within +0.05 GB. Speed is reported, not scored: both sides run the same ops,
+  and amendment 49 showed this baseline's own draws 8-21 % apart. All HELD (with amendment 48's re-ask) makes `auto` grouped-nf4-gemm's default.
+- `tc1_arm.py` records the bucket mode grouped-nf4-gemm resolved and its row gate. `tc1_reduce.py`: the family, `fieldauto_why`,
+  `score_fieldauto` (structure and values from the VALID receipts, speed reported); self-test 115 cases.
+
+### Read: TC1 amendment 49's re-ask -- UNTESTED again; the census places the field recipe's delta calls at 9,040 routed rows at most
+
+- `tc1-5090-106` ($1.25, Xeon 8347C, quiet): the single block's draws unstable again (matched 13.4 %, shipped 8.0 % apart), the bucketed
+  draws stable: P119-P122 UNTESTED. `TC1_PAD_CENSUS=1` measured every delta call: at most 9,040 routed rows at the field recipe (median 3,968),
+  single blocks up to about 104,000 rows. Packed rows carry exactly 32,768 per call, so a routed-rows gate at 16,384 separates the two.
+
+### Read (exploratory): SV5 (#1242): the planner's all-VRAM 8 × 8192 plan for Qwen3-30B-A3B ran out of memory on a real RTX 4090 at 8,000-token prompts (bench and receipts only; licenses no change)
+
+- `sv5-4090-1`: one RTX 4090, **$0.128**, teardown proven. Two arm receipts (`bench/sv5/RESULTS-sv5.md`).
+- Read through `bench/sv5/sv5_reduce.py` (#1243), verdict `READ`:
+  - Z1 MISSED: `a5_long` ran out of memory;
+  - Z2 MISSED on a lower bound (23.53 GiB against the plan's 22.74);
+  - Z3 NO_READING: the floor is +2.1%, inside the band;
+  - Z4 HELD at −1.9%.
+- The OOM's site is not recorded. The unpriced bulk KV flush is the leading candidate, not a measured cause; #1247
+  prices it on its code.
+- **Exploratory:** the box ran before #1243 was reviewed, and its rule was written after the data. Per #1243 this read
+  licenses no change in this package or in the planner.
+
+### SC1g A6 continuation registered (#846): box J reads P3, the bf16-activation arms the first A6 box's deadline dropped (bench and tests only)
+
+- **What it adds.** No new hypothesis. It runs the arms P3 needs: (b) and (c) (`E4B_MXFP4_GEMV=0`) on conv1–conv4, plus
+  the (b') repeat on conv1, placed third so the noise gate cannot leave P3 UNREAD.
+- **The rules are A6's, unchanged:** the same predictions, bars, gates and reducer.
+- **P1 and P2** stand from `sc1g-diag-a6-1`.
+- **The box.** 9 arms, about 43 min inside the 1.0 h guard, about $0.6.
+- **Code.** `box_j` now runs `i_arms_a6c`, and the first box's `i_arms_a6` is kept. The wiring test drives the
+  continuation through the real box script.
+
+### SC1g A6 read (#846): the NF4-prefilled prompt carries part of e4b's excess KL, not most of it (P1 PARTIAL); conv2's front-loading is not the prompt route (P2 FALSIFIED); P3 unread (bench and tests only)
+
+- **The run.** `sc1g-diag-a6-1` (box J, $0.532) graded e4b within the box by the median of per-position full KL against
+  box R's reference.
+- **P1 PARTIAL.** With the prompt on MXFP4 (`KEEP_NF4=0`), the median falls to 0.70×, 0.76× and 0.58× of the baseline on
+  conv1–conv3. No window reaches 0.5×, and none stays above 0.9×.
+- **P2 FALSIFIED.** On conv2, the first-half / second-half median ratio rose from 3.24 to 5.79.
+- **P3 UNREAD.** The 1.0 h guard's deadline dropped the four bf16-activation arms. Setup took about 24 minutes, including
+  an 8-minute staging of the 4 GB of reference rows.
+- **Determinism.** The baseline is bit-identical to its repeat, and to A5's reading on a different host.
+- **Descriptive.** With the prompt on MXFP4, conv2's mean KL doubles (0.088 against 0.043) and its NLL rises 0.23, all of
+  it in the first quarter of decode, while the later quarters improve. This is a lead on the MXFP4 large-row prefill path,
+  not graded here.
+- **Receipt.** Committed; the reading re-derives (pinned by a test).
+- **Spend.** The lane is at $9.382.
+
+### SC1g amendment A6 registered (#846): box J under A5's instrument tests whether e4b's NF4-prefilled prompt carries its excess KL, graded within the box by the median (bench and tests only)
+
+- **Why.** These observations were found after A5's data, at $0, from the committed per-position records:
+  - A5's mean KL is tail-dominated: the top 1% of positions carry 38–59% of each window.
+  - At the median, e4b MXFP4 served is 4–6× further from the reference than vLLM on all four windows.
+  - conv2's excess is front-loaded.
+  - e4b's served stack (`E4B_INT4_KEEP_NF4=1`) runs the 512-token prompt's MoE on NF4. vLLM and box R use MXFP4.
+- **The box.** Box J (e4b only, guard 1 h, about $1) reuses box R's registered rows and grades every arm against its own
+  baseline (b): (a) the prompt on MXFP4 too (`KEEP_NF4=0`), (c) bf16 decode activations (`E4B_MXFP4_GEMV=0`), and (b') a
+  determinism repeat. Each arm runs in its own process, with engagement gates on its routes.
+- **Predictions.** P1 (prompt route), P2 (conv2 front-loading) and P3 (int8 activations) each have three-way outcomes and
+  bars set before data.
+- **Consequences.** P1 HELD licenses only a priced serve A/B, never a default change on fidelity alone.
+- **The noise caveat.** Box R kept no per-position floor, so the medians may sit at the reference's arithmetic noise.
+- **The wiring proof.** `tests/test_sc1g_a6.py` drives the real box script with stubbed engines, and the reducer's
+  self-test covers A6 (45 cases). A3's box J is kept as `box_j_a3`.
+
+### Read: TC1 amendment 49 -- bucketed padding at the field recipe reads UNTESTED (the single block's draws 12-21 % apart)
+
+- `tc1-5090-103` ($1.11, Threadripper 3990X): `NF4_QLORA_PAD_BUCKETS=0` vs `=1` at the field recipe. The single block's draws were unstable
+  on both arms (matched 3.524 / 4.342, shipped 2.970 / 3.358 s/step), so P119-P122 are UNTESTED. The bucketed draws were stable (4.218 / 4.159, 3.685 /
+  3.709). Which way buckets move the field step is not established: recorded, not read. Buckets stay opt-in pending a re-ask that records each call's
+  single block.
+
+### SC1g A5 read (#846): K-A REFUTED, L1 HOLDS, L2 HOLDS on gpt-oss-20b by full-vocabulary KL; vLLM's served output is not run-to-run deterministic (bench and tests only)
+
+- **The proof.** Box I's proof `sc1g-prove-a5-8` was PROVED ($0.955): every engine read zero masked reference mass, so no
+  common-support rule.
+- **The reading.** `sc1g-5090-a5-1` ($1.557), from the same commit and host, graded conv1–conv4 against box R's
+  reference:
+  - **K-A REFUTED:** NF4 is ≥ 3× MXFP4 on conv1–conv3 (10.8×, 4.7×, 4.0×) but 2.5× on conv4.
+  - **L1 HOLDS:** e4b MXFP4 pooled KL 0.0224 is 1.85× vLLM's 0.0121, under 2×. conv3 is dropped, because vLLM is within
+    the floor there.
+  - **L2 HOLDS:** every native-MXFP4 engine sits below R's NF4-requant scale.
+- **Descriptive:**
+  - vLLM's conv1 KL moved 0.0332 → 0.0250 between two runs on one host, while e4b and llama.cpp were bit-identical. L1's
+    0.0027 margin is inside that spread.
+  - On conv1 and conv2, e4b NF4 has the lowest NLL and the largest KL: NLL flattery, now graded.
+  - e4b MXFP4's conv2 KL, 0.043, is 5× vLLM's. That is open.
+- **Receipts.** Both are committed, and the reading re-derives from its committed receipt, every verdict identical and every number to 1e-12 relative (pinned by a test).
+- **PREREG.** The proof record gains `-a5-7` and `-a5-8`. The lane is at $8.850.
+
+### TC1 harness: an opt-in census of every grouped-LoRA delta call's single padded block (`TC1_PAD_CENSUS=1`)
+
+- `tc1_arm.py` wraps grouped-nf4-gemm's `lora_delta_grouped` when `TC1_PAD_CENSUS=1` and records, from host facts only, each call's
+  single padded block. The receipt's `pad_census` gives, per projection input width, quantiles of the block's rows (G × widest), of the
+  routed rows and of its bytes in the allocation dtype, plus the share of calls at or above 0.25-4 GiB. `tc1_drive.sh` forwards the
+  variable. Off, nothing is wrapped.
+- Amendment 49's re-ask runs it on every arm; its sizes place a size gate for bucketed padding if the field recipe pays for buckets.
+
+### Read: TC1 amendment 48's re-ask — bucketed padding takes 4.29 GB off e4b's packed-row peak and steps it 0.893 (P115–P118 HELD)
+
+- `tc1-5090-102` ($1.20, a quiet Xeon W-2145 host): `NF4_QLORA_PAD_BUCKETS=1` (grouped-nf4-gemm#490) against the single padded block on
+  packed 4,096-token rows. Matched arm 0.893 [0.892, 0.895] with its peak 32.52 → 28.23 GB; shipped 0.933 [0.932, 0.934]; held-out within
+  0.0004. Row `e4b.train.pad-buckets.qwen3.5090.2026-10-06`; STATUS says so. Opt-in until a field-recipe A/B.
+
+### TC1 amendment 49 registered: grouped-nf4-gemm's bucketed padding at the field recipe (P119–P122)
+
+- Token `qwen3fieldbk`: `NF4_QLORA_PAD_BUCKETS=0` vs `=1` at TC1's field recipe, shipped and matched arms, two load-gated draws a side,
+  venv-unsloth, e4b's defaults. P119 / P120: no slower than 1.01; P121: the matched peak not above +0.05 GB; P122: held-out within 0.005.
+  All HELD (with amendment 48's re-ask) makes buckets grouped-nf4-gemm's default; a field-recipe cost sends it to a size-gated `auto`
+  first.
+- `tc1_reduce.py`: the family (TC1's no-loop rule as written), `pad_buckets_why` taking its sides and skipping the chunked-loss check here,
+  P119–P122 through amendment 41's scorer; self-test 114 cases.
+
+### SC1g A5 (#846): vLLM's full vocabulary is verified by coverage, not a count; box I's proof record (bench and tests only)
+
+- **The proof.** Box I's proof `sc1g-prove-a5-6` read e4b served and llama.cpp q8 VALID: zero masked reference mass and
+  no void positions on all 2,048 positions. So no common-support rule is registered for either.
+- **The defect.** vLLM's row was VOID, because `logprobs=-1` returned 201,089 entries for the 201,088-token vocabulary.
+  vLLM 0.30.0's V2 runner returns the generated token first and then every token
+  (`vllm/v1/worker/gpu/sample/logprob.py`, `compute_topk_scores`). The count check was wrong, not vLLM.
+- **The fix.** `full_vocab_cover` replaces the count on A5's path, at request 0 and at every position:
+  - every id must be present;
+  - V + 1 entries are accepted only when the repeat is entry 0 with an identical log-prob;
+  - anything else is still VOID, with no downgrade.
+  - SC1's own arms are unchanged.
+- **Tests.** Unit cases for the coverage check, and the served loop on vLLM's real vocab + 1 flat shape. The latter fails
+  with the count check.
+- **PREREG.** It records the six proof attempts (`-a5-1` to `-a5-6`, $1.03 in all) and the support decision.
+
+### SV5 registered (#1242): the planner's all-VRAM 8 × 8192 plan for Qwen3-30B-A3B on a 24 GB RTX 4090, at the longest prompts (bench and prereg only)
+
+- `bench/sv5/`: `SV5-PREREG.md` and `sv5_run.sh` (box side; one `bake_nf4` arena; SV4's `sv4_measure.py`).
+- Arms:
+  - `a5_short`: 1,024-token prompts (the anchor);
+  - `a5_long`: 8,000-token prompts.
+- Readings:
+  - Z1: the plan fits (no OOM);
+  - Z2: the driver peak at or under the plan's 22.74 GiB;
+  - Z3, Z4: the estimate within ±5%.
+- Spend is capped at $5 by #1242, within the owner's $50 approval.
+
+### Serve estimate: the bulk KV flush is priced (lane SV5's out-of-memory)
+
+- Lane SV5 (#1242, RTX 4090) served Qwen3-30B-A3B all-VRAM at 8 × 8192, the plan a planner made from SV4's receipts.
+  It ran out of memory at 8,000-token prompts with 22.59 GiB allocated, against an estimate of 22.150 GiB.
+- The estimate listed the bulk KV flush (`E4B_PAGED_BULK_KV`, on by default) as not modelled. At a finished prompt it
+  quantizes every pool layer's K/V and holds it until one bulk write. At a full 8,192-token slot that is 526 MiB on
+  Qwen3-30B-A3B.
+- `fp8_paged_kv.append_prompt_peak_bytes(layer_geometry, T)` is now a pure function, and
+  `Fp8PagedKV.append_prompt_peak_bytes` calls it.
+- The estimate prices it as a derived item at the slot's capacity, the bound the server's prefill-graph headroom check
+  already used. `ServeSetup.bulk_kv` (default `True`) sets `E4B_PAGED_BULK_KV`.
+- SV5's estimate becomes 22.664 GiB, above the 22.62 GiB the out-of-memory arm had reached. That figure is only a floor on what
+  the arm needed (it stopped at the failed allocation), so whether the estimate now covers that peak is untested.
+- What licenses this change is the code, not SV5's read. The estimate already listed the flush as not modelled, and the item uses the
+  pool's own bound. SV5 launched before its registration (#1243) merged, so its read licenses nothing until it is reviewed.
+
+### Read: TC1 amendment 48's first box reads UNTESTED -- the arm's loop share did not count grouped-nf4-gemm's bucketed calls; fixed
+
+- `tc1-5090-101` ($1.27): every `NF4_QLORA_PAD_BUCKETS=1` arm read VOID on amendment 43's loop rule. Its `lora_loop_share` read 1.000
+  because `tc1_arm.py` summed only loop + padded + grouped_mm calls, leaving out grouped-nf4-gemm#490's new `padded_bucketed` counter. The
+  real share was 1.5 % (494 of 32,256 calls). P115–P118 UNTESTED; the VOID arms' numbers are not read.
+- `tc1_arm.py`: `_lora_loop_share` divides by every `lora_path_*` counter (a self-test case pins this receipt's numbers). Amendment 48 records
+  the re-ask, the same box on the fixed arm, before it runs.
+
+### CI: a `maintainer-hold` required check -- a PR labelled `hold` cannot merge by any route
+
+- `.github/workflows/maintainer-hold.yml` fails while the PR carries the `hold` label and passes otherwise; it re-runs on
+  every label change and push. It is a required check on `main`, whose protection has `enforce_admins`, so a held PR
+  cannot merge by auto-merge, a direct merge or an admin merge until the label comes off.
+- Why: removing `ready-to-merge` and disabling auto-merge did not hold a PR once its CI was green, and four PRs were merged
+  directly over open change requests on 2026-10-06. Every actor is one GitHub account, so GitHub's review requirement cannot
+  express "not until reviewed". Added at Jordan's direction.
+
+### `serve_paged.build_engine` releases the loader's cached pinned memory
+
+- The loader stages through pinned host memory, and torch's caching host allocator keeps every freed pinned block for
+  the life of the process.
+- Lane SV4 (#1240, RTX 4090) read 1.1–1.3 GB of pinned memory beyond the priced cold-tier landing in every Qwen3-30B-A3B
+  serve.
+- Measured on an RTX A2000 host:
+  - after `load_moe_4bit_streaming`: 1.09 GB reserved, 0 B allocated;
+  - after the hybrid tier: 1.37 GB reserved, 4 MB allocated.
+- `engines.host_heap.release_cached_pinned_memory()` calls `torch._C._host_emptyCache()` (private in torch 2.8–2.11,
+  guarded). `build_engine` calls it before its heap trim and reports `pinned_cache_released`.
+- Qwen3-30B-A3B's pinned memory after the build fell from 1,314 MiB to 14 MiB. Serving then adds only the cold-tier
+  landing as it fills.
+
+### Read: SV4 (#1236): the serve estimate and the planner's tiers measured at 30B on a real RTX 4090 (bench and receipts only; licenses no change)
+
+- `sv4-4090-1`: one RTX 4090, **$0.153**, teardown proven. Three arms OK (`bench/sv4/RESULTS-sv4.md`).
+- Held:
+  - X1: all-VRAM 1 × 4096, −0.1%;
+  - X2: the planner's tiers for 8 × 8192, −4.3%;
+  - X3: VRAM / DRAM / NVMe, −3.2%, with 4.2 GiB streamed from NVMe;
+  - X4: the server's tier split equalled the estimate's exactly in both solver arms.
+- **X5 MISSED.** Pinned host memory was 1.9 GB against the 512 MiB landing. Every arm carries 1.1–1.3 GB of pinned
+  memory beyond the priced landing and setup tier; it is not attributed yet.
+- Tiered allocator slack at 30B was 4.1–6.7%, against the up-to-15% a planner had borrowed from OLMoE.
+- **Process (maintainer note, 2026-10-06):** the box launched at 04:05:42Z, before review, from a registration that was not on
+  main; #1239 and this read were then merged directly over open reviews. The expectations were public before the data; no
+  consequence was registered, so this read licenses no change. See `bench/sv4/RESULTS-sv4.md`.
+
+### SV4 registered (#1236): the serve estimate and the planner's tiers on a real RTX 4090, Qwen3-30B-A3B (bench and prereg only)
+
+- `bench/sv4/`: `SV4-PREREG.md`, `sv4_run.sh` (box side; one arena, which the NVMe tier also reads) and
+  `sv4_measure.py`. The measure script records the estimate's device, host and NVMe items, pinned host memory, and the
+  server's own tier split.
+- Arms:
+  - `t4_all1`: all-VRAM, 1 × 4096 (the anchor);
+  - `t4_plan8`: the planner's tiers for 8 × 8192 on 24 GB;
+  - `t4_deep4`: VRAM 8 / DRAM 3 GiB, 4.2 GiB on NVMe.
+- Readings:
+  - X1–X3: the estimate within ±5% of each peak;
+  - X4: the server's split equals the estimate's;
+  - X5: the pinned landing.
+- Spend is capped at $10 by #1236, within the owner's $50 approval.
+
+### Read: TC1c amendment 9 — the same-stack H100 box reads UNTESTED (e4b's draws 18 % and 29 % apart); 1.061 stays the H100 position
+
+- `tc1c-h100-22`, the first complete lane on RunPod Secure (H100 NVL, Xeon 8452Y, 18 vCPUs allotted, $3.19/h against a registered $2.80
+  ceiling, on the owner's go). e4b 2.968 / 3.557 and 3.428 / 2.568 s/step, Unsloth 3.127 / 3.021: P27 and P28 UNTESTED, P29 HELD.
+  Nothing is quoted.
+- Candidate cause, recorded, not read: the lane ran 72 OpenMP threads (the host's physical cores) in an 18-vCPU pod, and its load gate
+  read the host's load (7.5–42). The launcher booked $3.48 from partial billing; the box cost about $6.78 (adertha-agents #174).
+
+### TC1 harness: every box records the container's CPU allotment beside the host's cores
+
+- **Why.** The lane sets `OMP_NUM_THREADS` to the host's physical cores, and a rented container can be held to far fewer. The RunPod H100
+  pod `tc1c-h100-22` had 18 vCPUs under 72 threads, and e4b's draws there came 18 % and 29 % apart while Unsloth's held. Vast lists 5090
+  rentals at a fraction of the host too (for example 24 of 96 cores on machine 152440). No receipt has recorded the allotment.
+- **What.** `forensics.txt` gains the cgroup's `cpu.max` (v2) or CFS quota and period (v1), `cpuset.cpus.effective` and the affinity count.
+  `box.json` gains `cgroup_cpu_max`, `cgroup_cpuset_effective` and `affinity_cpus`. Recorded only: no arm runs differently.
+
+### TC1 amendment 46's gate checkout is deleted after the gate and never fetched (bench and tests only)
+
+- **What happened.** On `tc1dec-5090-4`, the gate's grouped-nf4-gemm checkout (`gnf4-src`) was pulled into the live run's
+  `tc1.partial/`. Its `docs/receipts-ab/receipt.json` failed adertha's reconciler, which refused every launch on the account
+  (`REFUSED[97]`, sc1g-r-7).
+- **The fix.**
+  - `tc1_decoded_gate` records the checkout's HEAD in `decgate.json` (`checkout_head`), then deletes the checkout before any arm, on
+    every path.
+  - `tc1_drive.sh` adds `--exclude 'gnf4-src'` to `TC1_RSYNC_EXCLUDES`, which both the partial pulls and the final fetch use.
+- **Tests.** The gate test's stand-in checkout carries a nested `receipt.json`, and each path asserts that the checkout and every
+  `receipt.json` are gone. A new test pins the exclude on both rsyncs.
+
+### TC1 amendment 48 registered: grouped-nf4-gemm's bucketed LoRA-delta padding on packed rows (P115–P118)
+
+- Token `qwen3padbk`: `NF4_QLORA_PAD_BUCKETS=0` vs `=1` (grouped-nf4-gemm#490) on amendment 39's packed 4,096-token rows, the shipped and
+  matched arms, two load-gated draws a side, venv-unsloth, e4b's defaults. P115: the matched peak falls by at least 3.0 GB; P116 / P117:
+  no slower than 1.02; P118: held-out within 0.005. All HELD leads to a size-gated `auto` and its field-recipe A/B, not straight to a
+  default.
+- `tc1_reduce.py`: the family (packed predicates, the loop as a recorded route), `pad_buckets_why` (the delta body from grouped-nf4-gemm's
+  per-path counters), P115–P118 through amendment 41's scorer; self-test 113 cases.
+
+### Read: TC1 amendment 47 — on packed rows e4b's peak is 7.47 GB above Unsloth's; 6.1 GB of it is the padded LoRA delta padding every expert to the hottest (P112, P113 HELD; P114 FALSIFIED)
+
+- `tc1-5090-100` ($1.05): the allocator census on packed 4,096-token rows. e4b's defaults 32.34 GB, with `E4B_ABSMAX_DQ=1` and the
+  compact delta 29.54 GB, Unsloth 24.86 GB. Of the 7.47 GB gap, 1.35 GB is the fp32 absmax and 6.10 GB grouped-nf4-gemm's padded LoRA
+  delta, about 11.6× the routed rows at the down projection. The compact delta leaves its own padded block and output (4.28 GB).
+- Row `e4b.train.memory-census.packed-4k.qwen3.5090.2026-10-06`; STATUS says so. The next registration targets the padding.
+
+### TC1 amendment 47 registered: the memory census on packed 4,096-token rows (P112–P114)
+
+- Token `qwen3memc4k`: amendment 23's census (`--mem-census 1`) on amendment 39's packed rows, one draw per arm in venv-unsloth. The arms are
+  e4b's library defaults; e4b with `E4B_ABSMAX_DQ=1` + `NF4_QLORA_COMPACT_DELTA=1`; and Unsloth. P112: at least 90 % of each peak
+  attributed. P113: e4b's defaults 5–10 GB above Unsloth (amendment 43 read 7.6). P114: with both levers, at most 3 GB above.
+- `tc1_reduce.py`: the family (packed predicates, the loop as a recorded route), `memc4k_why`, `score_memc4k`; self-test 112 cases.
+
+### Read: TC1 amendment 46 — grouped-nf4-gemm's decoded route shows no measurable step-time saving on OLMoE (1.005 [0.979, 1.031]) and costs Qwen3-30B-A3B 6.6 % (P108 FALSIFIED); `auto` stays as it is
+
+- **The box:** `tc1dec-5090-4`, $1.07, an AMD EPYC 7713 host.
+- **The gate passed first.** grouped-nf4-gemm's compiled tests for the route ran on the 5090 before any arm, and passed (P107).
+- **The step:**
+  - OLMoE decoded/fused is **1.005** [0.979, 1.031], against a registered ≤ 0.95 (P108 FALSIFIED);
+  - Qwen3-30B-A3B is **1.066** [1.050, 1.081] (P109 HELD);
+  - held-out and peak are unchanged on both (P110, P111).
+- **What it means.** RD1's per-call win shows no measurable gain on the training step: the interval cannot exclude about 2 %, and it
+  excludes the registered 5 %. So grouped-nf4-gemm's `auto` is unchanged and `GNF4_TRAIN_GEMM=decoded` stays opt-in.
+- **Records:** rows `e4b.train.decoded-route.{olmoe,qwen3}.5090.2026-10-06`, the README section, the STATUS sentence and the receipts.
+
+### TC1 amendment 46 registered: grouped-nf4-gemm's decoded route against its fused kernels on OLMoE and Qwen3-30B-A3B, the sm_120 gate first (P107-P111; bench and tests only)
+
+- **What it reads.** RD1's licence for the opt-in `GNF4_TRAIN_GEMM=decoded` (grouped-nf4-gemm#487): the full training step on one RTX 5090.
+  - Arms: fused vs decoded on the matched arm, two draws a side, venv-e4b, 60 steps.
+  - Families: OLMoE (about 64 rows per expert, above RD1's 48-row line) and Qwen3-30B-A3B (about 32, below it).
+- **The box's first step: `tc1_decoded_gate`.** It runs grouped-nf4-gemm's compiled tests for the route at the pinned SHA on the box's card.
+  - Each run must pass the tests it names, so a SHA without the route cannot pass on `-k` alone.
+  - A failure refuses the box before any timing, with exit 19, which names no machine. `decgate.json` is the record.
+- **Predictions:**
+  - P107: the gate;
+  - P108: OLMoE ≤ 0.95, on the median and on every cross-draw ratio (it moves a default);
+  - P109: Qwen3-30B-A3B in [0.97, 1.25];
+  - P110: held-out within 0.01;
+  - P111: peak at most +0.30 GB.
+- **The decision.** If P107, P108, P110 and P111 hold, `auto` takes the route on compute capability (12, 0), the card measured, for calls
+  with more than 16 groups and at least 48 rows per present group. That is grouped-nf4-gemm's own PR; other 12.x parts stay on today's
+  route until measured.
+- **Tooling and tests:**
+  - harness: `tc1_decoded_gate` and `tc1_decodedab_family`;
+  - reducer: the families, the engagement predicate and the P107–P111 scorers, with self-test cases 100–103;
+  - tests for the tokens, plus the gate's pass, fail, no-route and no-checkout paths on a stand-in checkout.
+
+### TC1 amendment 45 registered: OMP_NUM_THREADS at the host's physical cores against the container's CPU allotment (P104–P106)
+
+- Token `qwen3ompab`: e4b's and Unsloth's matched arms in venv-unsloth, `_om0` (the host's physical cores, as every box so far) vs `_om1`
+  (the container's allotment: cgroup `cpu.max` or the CFS quota, capped by affinity), two load-gated draws a side. P104: e4b ≤ 0.97;
+  P105: Unsloth ≤ 1.01; P106: held-out within 0.005. A host with no allotment below its cores refuses at setup (rc 18) for about a cent.
+- `tc1_run.sh` computes the allotment for every box and records it in `summary.txt`. `OMP_NUM_THREADS=$PHYS` now precedes the per-arm
+  environment, so a family can override it; arms that do not are unchanged. `tc1_reduce.py`: the family, `ompab_why`, `score_ompab`;
+  self-test 107 cases.
+
+### Read: TC1 amendment 45 — the threads A/B reads UNTESTED on the busiest host; that container was held to 31 CPUs under 128 threads
+
+- `tc1-5090-98` ($3.02, EPYC 7B13, machine 145701): cgroup `cpu.max` 3071999 / 100000 (31 CPUs) under `OMP_NUM_THREADS=128`, the
+  first box to record it. The host's load (4–75) left e4b's `_om1` draws 13.6 % apart, Unsloth's `_om0` draws 5.2 %, and e4b's last `_om0`
+  draw unrun at the 4 h guard: P104–P106 UNTESTED. The unquotable readings are confounded by host load (e4b's one physical-core
+  draw at load 4, its allotment draws at 33 and 54), so they say nothing either way about the thread effect. A re-ask is allowed;
+  the harness keeps the physical cores. Amendments 41 and 43 ran on this machine under the same 31-CPU quota with 128 threads.
+
+### Read: TC1 amendment 44 — `E4B_CHUNKED_LM_LOSS=auto` costs the field recipe nothing and its gate never fired (P99–P103 HELD); it becomes e4b's default
+
+- `tc1-5090-97` ($0.79, Threadripper PRO 3955WX, a quiet host): `auto` against the stock loss at the field recipe. Shipped **0.992**
+  [0.978, 1.006], matched **0.999** [0.997, 1.001], peak unchanged, held-out within 0.0001; every `auto` arm ran its 240 training forwards
+  stock (P99).
+- With amendment 43's P98 HELD, amendment 44's rule makes `auto` e4b's default (row
+  `e4b.train.chunked-lm-loss.auto.default-decision.5090.2026-10-05`); STATUS says so. The default flip is its own PR.
+
+### TC1 amendment 44 registered: e4b's chunked LM loss as `auto` — its default decision (P99–P103)
+
+- Token `qwen3chunkauto`: amendment 41's box with `E4B_CHUNKED_LM_LOSS=auto` (#1178) against the default at the field recipe, shipped and
+  matched arms, two load-gated draws a side, venv-unsloth, avoiding amendment 41's busy host. P99: the 1 GiB gate never fires there
+  (`chunked_calls` 0, `small_calls` 240 on every `auto` arm); P100 / P101: `auto` / off ≤ 1.02; P102: the matched peak not above +0.05 GB;
+  P103: held-out within 0.005.
+- With P99–P103 and amendment 43's P98 HELD, `auto` becomes e4b's default. Registered before amendment 43's box was read.
+- `tc1_reduce.py`: the family, its engagement predicate (`chunk_auto_why`), P99's scorer, P100–P103 through amendment 41's scorer;
+  self-test 106 cases.
+
+### Read: TC1 amendment 43 — on packed 4,096-token rows, with its chunked loss, e4b is 1.278× Unsloth's speed on one stack (P96, P97, P98 HELD; labelled)
+
+- `tc1-5090-95` ($2.65, EPYC 7B13, machine 145701, 40-step load-gated draws): amendment 40's box with the per-expert LoRA loop read
+  as a recorded route (max 2.6 % of delta calls). e4b 11.188 / 11.220 s/step against Unsloth's 14.266 / 14.366: **1.278** [1.271, 1.284];
+  environment 0.915; every e4b arm resident (peak 32.5 GB against Unsloth's 24.86).
+- Recorded as the LABELLED packed position (row `….packed-4k-chunked`, `E4B_CHUNKED_LM_LOSS=1` opt-in) beside amendment 39's
+  out-of-memory row; STATUS says so. P98 is amendment 44's packed side.
+- Caveats: three of the six standing attempts ran above the 6.0 load gate on a shared host, both of e4b's quoted draws among them (machine 145701; standing load1 e4b 8.0 / 52.2, Unsloth 4.7 / 18.2, venv-e4b 5.7 / 3.6; the draws stayed within 0.3 % and 0.7 %), and the bands were set with amendment 40's 1.43 in view, so this is a replication, not a blind test.
+
+### TC1 amendment 43 registered: the packed 4,096-token regime with e4b's chunked loss again, the LoRA loop read as a recorded route (bench and tests only)
+
+- **Why.** Amendment 40's e4b arms trained the packed rows with the chunked loss (32.4–32.6 GB, no OOM) but read VOID under TC1's
+  no-loop rule: grouped-nf4-gemm's `auto` route took its per-expert LoRA loop for ~1.5 % of delta calls (padded blocks over its 2 GiB
+  limit), its default behaviour at 4,096 tokens.
+- **The change** (this family only): the loop is a recorded route up to 5 % of a step's delta calls; the share is printed per arm.
+- **The box** (token `qwen3samestack4kce2`): amendment 40's box on another host. P96 Unsloth/e4b in [1.25, 1.65]; P97 the environment
+  in [0.84, 0.95]; P98 every e4b arm completes resident. The bands were set with amendment 40's unquotable 1.43 / 0.892 in view, and the
+  registration says so. Amendment 41's default decision reads P98 in place of amendment 40's P89.
+- One new self-test case; amendment 40's receipts reduce as before.
+
+### TC1 amendment 42 registered: the same-stack position on a second host, on the current code (bench and tests only)
+
+- **Why.** The Qwen3-30B-A3B position to quote (Unsloth/e4b 2.352, amendment 33) is one box on one host model. Amendment 38's box stepped
+  e4b 37-44 % faster on an EPYC 9655 than on two other hosts, and TC2 amendment 9 traced most of Mixtral's 0.836 to the host.
+- **The box** (token `qwen3samestackh2`): amendment 33's box on a machine other than 145701, on the current code. P94 Unsloth/e4b in
+  [1.9, 2.9]; P95 the environment in [0.80, 0.95]. A reading outside makes STATUS quote the two hosts' readings as a range.
+- The reducer reads it with amendment 25's scorer (one new self-test case).
+
+### Read: TC1 amendment 42 — the same-stack position replicates on a second host, Unsloth/e4b 2.468 (P94, P95 HELD)
+
+- `tc1-5090-94` ($1.25, EPYC 7K62, machine 152440, 60-step load-gated draws): amendment 33's box on the current code. e4b 4.143 / 4.073
+  s/step against Unsloth's 10.155 / 10.120: **2.468** [2.443, 2.493], COMPARABLE; the environment **0.870** with the prebound launches on
+  both of e4b's sides.
+- 2.352 stays the position to quote, now read on two hosts 5 % apart (row `….same-stack-host2`); STATUS says so.
+
+### Read: TC1 amendment 41 — e4b's chunked LM loss costs the shipped arm 4.9 % at the field recipe; it stays opt-in (P91 FALSIFIED)
+
+- `tc1-5090-89` ($2.51, EPYC 7B13, machine 145701, 60-step load-gated draws, every attempt above the gate): `E4B_CHUNKED_LM_LOSS=1`
+  against the default in venv-unsloth. Shipped arm **1.049** [1.017, 1.082] (P91 FALSIFIED, registered ≤ 1.01), peak 24.673 → 23.508
+  GB; the matched pair was unstable (P90, P92, P93 UNTESTED). By the registered rule the flag stays opt-in (row
+  `e4b.train.chunked-lm-loss.default-decision.5090.2026-10-05`); STATUS says so.
+
+### TC1 amendment 41 registered: e4b's chunked LM loss at the field recipe, its default decision (bench and tests only)
+
+- **Why.** Amendment 39 found e4b out of memory on packed 4,096-token rows at the full-vocabulary fp32 logits; #1142's opt-in
+  `E4B_CHUNKED_LM_LOSS` never materialises them, and amendment 40 reads whether it fits that regime. A default must also cost the field
+  recipe's short rows nothing it should not.
+- **The box** (token `qwen3chunkab`): `E4B_CHUNKED_LM_LOSS` 0 vs 1 on the shipped and the matched arm, venv-unsloth, 60 steps, load-gated
+  draws. One-sided: P90 / P91 speed ≤ 1.01, P92 matched peak ≤ +0.05 GB, P93 held-out within 0.005. With amendment 40's P89, all
+  HELD makes it e4b's default in `enable_fast_train`.
+- `tc1_run.sh` gains `tc1_chunkab_family`; the reducer reads it with amendment 36's scorer, whose side names now come from
+  `COMPACT_SPECS` (amendments 36-38 re-reduce to identical verdicts), and checks engagement on the `chunked_lm_loss` record (one new
+  self-test case).
+
+### Read: TC1 amendment 40 — with its chunked loss e4b trains packed 4,096-token rows (no OOM), but the box reads UNTESTED (P87–P89)
+
+- `tc1-5090-91` ($1.43, EPYC 7K62, machine 152440): amendment 39's packed box with `E4B_CHUNKED_LM_LOSS=1` on every e4b arm. Every e4b
+  arm trained to step 40 at a 32.4–32.6 GB peak (amendment 39's OOMed at step 1); Unsloth 16.03 / 16.03 s/step at 24.86 GB.
+- Every e4b arm is VOID under TC1's registered no-loop rule: grouped-nf4-gemm's `auto` route took the per-expert LoRA loop on ~1.5 % of
+  delta calls (padded blocks over its 2 GiB limit). P87–P89 UNTESTED; no speed ratio is read from this box (the as-if-VALID
+  figures, unquotable, are in `bench/h2h-2026-10-02/tc1/README.md`, with the shared-host note). The host was shared with the
+  campaign's `tc1-5090-94` from 14:19Z.
+- Three earlier launches died on their hosts ($0.24): offline, ssh never authenticated, a driver below the floor.
+
+### SV3 registered (#1224): the hybrid state pool and the decode-bucket cap beside the estimate on Qwen3.6-35B-A3B, + gpt-oss-20b (bench and prereg only)
+
+- `bench/sv3/`: `SV3-PREREG.md`, `sv3_run.sh` (box side, `tc1_drive.sh`'s `TC1_RUNNER` contract) and `sv3_measure.py`.
+  The measure script records the per-slot linear-attention state pool's own `nbytes()` beside its price.
+- One RTX 5090. Arms:
+  - Qwen3.6: `q36_e16` (the anchor), `q36_g16`, `q36_g1_default`, `q36_g1_capped`;
+  - gpt-oss: `gptoss_g16`.
+  - Both arenas are baked on the box through `bench/p98/p98_bake.py`, outside the fetched tree.
+- Readings, registered with the estimate's numbers computed before the box:
+  - W1, W3, W5: the estimate within ±5% of each peak;
+  - W2: the pool's `nbytes()` exactly its price;
+  - W4: the bucket cap's saving, priced 931 MiB, measured within −32 / +256 MiB of it.
+- Spend is capped at $10 by #1224, within the owner's $50 approval.
+
+### Read: SV3 (#1224): Qwen3.6-35B-A3B's linear-attention state pool measured beside its price, equal to the byte (bench and receipts only; licenses no change)
+
+- `sv3-5090-1`: one RTX 5090, **$0.514**, teardown proven. Five arms OK (`bench/sv3/RESULTS-sv3.md`).
+- **W2 HELD, exactly.** In all four Qwen3.6 arms the pool's `nbytes()` equalled the estimate's item to the byte (16,
+  32, 17 and 2 slots, 30 layers).
+- **W1, W3, W5 HELD.** Qwen3.6 eager +0.8% and with graphs +1.0%; gpt-oss-20b +1.8%. The peaks ran 0.2–0.3 GiB over
+  their estimates, the allocator residual earlier serve runs measured.
+- **W4 ALARM.** With one sequence and the default buckets, buckets 2–16 failed to capture on Qwen3.6, so that arm's
+  peak is not used. The 968 MiB recorded against 931 MiB priced is a floor on the bucket cap's saving.
+- **Process (maintainer note, 2026-10-06):** the box launched at 03:01:55Z from a registration that was not on main and under an
+  open change request; #1225 and this read were then merged directly. The expectations were public before the data; no
+  consequence was registered, so this read licenses no change. See `bench/sv3/RESULTS-sv3.md`.
+
+### SV2 registered (#1207): the int4 serving levers beside the estimate on Qwen3-30B-A3B with decode graphs (bench and prereg only)
+
+- `bench/sv2/`:
+  - `SV2-PREREG.md`;
+  - `sv2_run.sh`: box side, `tc1_drive.sh`'s `TC1_RUNNER` contract. The arena and the checkpoint stay outside the
+    fetched tree.
+  - `sv2_measure.py`: one arm, `sv2-arm/1`.
+- One RTX 5090, one arena, four arms: `q_nf4` (the anchor), `q_exp`, `q_both`, `q_exp_prefill`.
+- The readings, registered with expectations:
+  - V1: the estimate against `q_exp`'s peak, ±5%;
+  - V2: the int4 stores' load delta, ±32 MiB of +54;
+  - V3: int4 attention, ±64 MiB of +571;
+  - V5: the repack's host peak at or under its 6,912 MiB price;
+  - V6: the heap handed back, within 0.25 GB of NF4.
+- One reading is measured only: V4, the prefill graph's pool at int4.
+- Spend is capped at $5 by #1207.
+
+### Read: SV2 (#1207): the int4 serving levers measured beside the estimate on Qwen3-30B-A3B with decode graphs (bench and receipts only; licenses no change)
+
+- `sv2-5090-1`: one RTX 5090, **$0.45**, teardown proven. Four arms OK, integrity clean.
+- Every reading fell inside its registered expectation (`bench/sv2/RESULTS-sv2.md`):
+  - V1: `q_exp` 0.8% under its estimate;
+  - V2: the int4 stores +54.0 MiB at load against +54 priced;
+  - V3: int4 attention +585.2 MiB against +585.0 priced (the prereg's "+571 MiB" was 0.571 GiB, a unit slip);
+  - V5: the repack's host peak 3.30 GB against 6.9 GiB priced;
+  - V6: after load, the int4 builds hold 1.5 GB less host memory than the NF4 build.
+- V4, measured only: the prefill graph at int4 costs +571 MiB (pool 294 MiB). That equals SV1's NF4 figure; SC2b's
+  +3.3 GiB (0.47.0) is not reproduced.
+- **Process (maintainer note, 2026-10-06):** the box launched at 22:39:55Z, one minute after the maintainer asked for
+  registered consequences, a reducer and an exit-code fix on #1208, from a registration not yet on main. #1208 and this read
+  were then merged over those requests. The expectations were public before the data; no consequence was registered, so
+  this read licenses no change to the estimate, the repack price or the trims. See `bench/sv2/RESULTS-sv2.md`.
+
+### SV1's runner deletes its arenas before it finishes (bench only)
+
+- `bench/sv1/sv1_run.sh` baked its arenas under `/root/tc1`, the directory `tc1_drive.sh`'s final rsync copies back
+  whole. `sv1-5090-1` left the 16 GB Qwen3-30B-A3B arena there, and the fetch would have taken hours of billed box
+  time. The lane owner stopped it after saving the receipts.
+- The runner now removes `arenas/` after the last arm and on every early exit that baked one.
+
+### Read: SV1 (#1152) — the serve estimate held beside decode graphs and the prefill graph (bench and receipts only)
+
+- `sv1-5090-1` on one RTX 5090, $1.50. All five arms finished with integrity clean: `serve_paged` all-VRAM, 16 ×
+  1,024-token prompts. Results in `bench/sv1/RESULTS-sv1.md`; receipts in `bench/sv1/receipts/sv1-5090-1/`.
+- **S1 HELD:** the OLMoE eager peak is 4.2% under the estimate. That margin is prefill staging priced at its 4,096-token
+  ceiling; re-priced at the 1,536 tokens these prompts staged, the estimate is within about 9 MiB.
+- **S4:** Qwen3-30B-A3B with decode graphs peaked 0.8% under the estimate. With the prefill graph also on, it peaked
+  **over** it by 0.38 GiB (+1.8%): that pool is not priced.
+- **The two unpriced pools, measured at NF4:**
+  - decode graphs: +60 MiB allocated (OLMoE);
+  - the first-chunk prefill graph: +240 MiB (OLMoE) and +571 MiB (Qwen3-30B-A3B), against the runner's own pool of
+    224 and 310 MiB (261 MiB of the Qwen3 figure is not explained by this run). SC2b's +3.3 GiB was the int4 stack.
+
+### `serve_paged` captures only the decode buckets its sequences can use
+
+- `PagedServeConfig.validate` now keeps the buckets below `max_seqs`, then `max_seqs` itself, capped at the largest
+  given (`serve_recipe.usable_buckets`), and logs the change.
+- A decode step never carries more rows than sequences, and the runner pads a step to the next bucket, so a bucket
+  above `max_seqs` never runs. It still cost a captured graph and, as the largest, the scratch slots: each a full slot
+  of a hybrid model's linear-attention state, ~62 MiB on Qwen3.6-35B-A3B.
+- Lane SV3 (#1232) found worse: on Qwen3.6 served for one sequence, buckets 2–16 failed to capture.
+- The serve estimate sizes the scratch slots by the same rule.
+
+### `serve_paged` and its estimate refuse multi-head latent attention before loading
+
+- DeepSeek-V2-Lite was planned as a feasible serve. The FP8 paged pool keeps one head dim per layer for K and V, and
+  it was built `head_dim` (64, the rotary width) wide.
+- MLA hands attention keys of `qk_nope + qk_rope` (192) and values of `v_head_dim` (128). The first prompt's append
+  refused them, after the whole model had loaded.
+- `engines.paged_runner.kv_layout_refusal(config)` names it from the config (`kv_lora_rank`).
+- `build_engine` now refuses before reading a weight, and `paged_state_refusal` (and so the serve estimate) refuses
+  with the same words.
+
+### `serve_paged` serves models whose first layers are dense (ERNIE-4.5; DeepSeek-V2's dense-first layout too, but its MLA attention is refused, #1233)
+
+ERNIE-4.5-21B-A3B (layer 0 dense, MoE in layers 1–27) failed twice in `build_engine`.
+- **The arena's layer ids.**
+  - A bake keys its rows by the checkpoint's layer numbers, and the server stamped its MoE modules with ordinals
+    0..L-1, so the first module asked for row (0, 0).
+  - `serve_paged.arena_layer_ids(arena, L)` reads the arena's own ids and refuses one whose layer count is not the
+    model's.
+  - The server re-keys its placement manifest to those ids and passes them as `enable_hybrid_tier(layers=...)`.
+- **The KV pool's layer count.**
+  - The pool was sized by the MoE layers (27), but layer 0 has attention too, and the 28th append indexed past the
+    pool.
+  - `engines.paged_runner.decoder_layers(config)` now gives the decoder's layer count for both the server's pool and
+    `MoETopology.kv_layers`, so the serve estimate prices the same pool.
+- Measured on an RTX A2000: ERNIE-4.5-21B-A3B now builds and serves 4 × 1,024-token prompts with the solver's
+  tiers.
+
+### Serve estimate: refuses the hybrid models the paged runner refuses
+
+- `estimate_serve_footprint` planned serves for LFM2-8B-A1B and granite-4.0-h-tiny that `serve_paged` refuses when it
+  builds its runner:
+  - LFM2's `conv` layers are a type the runner keeps no state for;
+  - granite-4.0-h's Mamba layers are labelled `linear_attention`, but the per-slot state pool drives Gated DeltaNet
+    only.
+- `engines.paged_runner.paged_state_refusal(model)` states both of the runner's rules (`layer_plan`'s kept layer types
+  and `linear_state.install`'s drivable layers, through the new `linear_state.driven_linear_layers`) on a meta tree.
+- `MoETopology.paged_state_refusal` carries that verdict, and the estimate refuses with it.
+- A test builds each tiny model for real and checks that the runner's layer plan refuses exactly when the verdict says
+  so.
+
+### Serve estimate: the hybrid models' linear-attention state pool is priced
+
+- The paged server keeps a per-slot conv window and recurrent state for every Gated DeltaNet layer (Qwen3.5 / 3.6 /
+  Next, `engines.linear_state.LinearStatePool`). The estimate listed it as "recurrent state ... not modelled".
+- It is now a derived device item, `linear_state_pool_bytes(topology.linear_state_layers, slots)`. Per layer and slot:
+  - a `[conv_dim, conv_kernel]` conv window in the model's dtype;
+  - a `[v_heads, head_k_dim, head_v_dim]` recurrent state in fp32, which is how transformers keeps it.
+  - Slots are `max_seqs` plus the decode graphs' scratch slots, as the runner sizes the pool.
+- `MoETopology.linear_state_layers` comes from `engines.linear_state.state_geometry`, read from the very modules the
+  pool drives.
+- A test stores a real Gated DeltaNet forward's state into a real pool and checks `nbytes()` against the price,
+  74,240 B both on a tiny model.
+- Qwen3.6-35B-A3B at 16 sequences with decode graphs: **1.93 GiB** (30 layers × 32 slots), previously unpriced.
+
+### Serve estimate: the int4 serving levers are priced; their host heap is handed back
+
+- **`ServeSetup.exp_int4`** (`E4B_SERVE_EXP_INT4=1`, all-VRAM only).
+  - The int4-b32 expert stores replace the NF4 stacks, which are freed. They hold the same bytes per weight (0.5625)
+    plus each projection's fp32 split-K partials for `top_k` rows.
+  - The repack's host peak is priced at `INT4_REPACK_HOST_BYTES_PER_PARAM` (12) per parameter of the largest layer: its
+    fp32 reads, their fused copy and the packed lists.
+  - On the device, one layer's int4 store sits beside the NF4 stacks before the KV pool is built. That is priced where
+    it exceeds the serving total.
+  - The source checkpoint on local disk is listed as not modelled.
+  - Refused with the solver placement (`enable_serve_experts_int4` refuses tiered layers) and for gpt-oss, whose MXFP4
+    store is not priced.
+- **`ServeSetup.attn_int4`** (`E4B_SERVE_ATTN_INT4=1`).
+  - The attention projections on the int4-b32 grid.
+  - The bf16 copy each `Int4Linear` builds at its first call over 16 rows (any prefill chunk) and keeps.
+  - Its preallocated GEMV and K16 workspaces.
+  - Net: more memory than bf16 attention once a prompt is served. It is a decode-speed lever, not a memory one.
+- **Measured** on an RTX A2000: OLMoE-1B-7B, all-VRAM, 4 sequences × 4,096 tokens, 1,024-token prompts.
+  - Allocator peak against the NF4 build, priced / measured:
+    - `exp_int4`: +24 MiB / +8 MiB. The load peak is +24 MiB exactly; the int4 prefill route's transients are 16 MiB
+      smaller than NF4's.
+    - `attn_int4`: +184.1 MiB / +184.1 MiB.
+  - The repack's anonymous host peak: 10.4–11.2 B per parameter of a layer.
+- **The int4 levers hand their freed host heap back** (`engines.host_heap.release_freed_host_heap`, glibc
+  `malloc_trim(0)`).
+  - The expert repack reads every projection in fp32 on the host, and the attention swap copies every projection to
+    the host in fp32. glibc kept those freed 8-16 MiB blocks for the life of the process.
+  - Measured on the run above:
+    - +3.6 GB of anonymous host memory after load with `exp_int4`, +2.3 GB with `attn_int4`;
+    - one trim returned 3.9 GB with both.
+  - Now:
+    - the repack drops each layer's fp32 stacks before the next layer's read, and trims after every layer;
+    - the attention swap trims after every projection.
+  - Both levers now end their load below the NF4 build's anonymous memory (0.57–0.61 GB against 0.70 GB). The
+    attention swap's host peak is the NF4 build's (1.33 GB, was 3.24 GB), and the repack's fell from 7.58 GB to
+    4.88 GB.
+- `ServeSetup.to_env()` now always sets both lever variables (and `E4B_INT4_KEEP_NF4=0` with `exp_int4`), so an
+  inherited environment cannot turn a lever on behind the estimate.
+- `MoETopology.int4_attention_linears`: the `(out, in)` shape of every projection the swap would take. It comes from
+  `engines.int4_attn.attention_linears`, the rule `enable_serve_attn_int4` iterates.
+
+### Serve estimate: the DRAM tier's prefill on the GPU is priced
+
+- Under the solver placement, a prefill chunk computes the DRAM tier's routed experts on the GPU
+  (`hybrid._dram_on_gpu`, on by default as the runner's `gpu_only_prefill`). It uploads their NF4 bytes with absmax
+  cast to bf16 and allocates the chunk's routed rows (bf16 in, two fp32 outs).
+- The estimate did not price it. On ERNIE-4.5-21B-A3B (RTX A2000, 992 DRAM rows, no NVMe) the serving peak sat
+  0.33 GiB over the estimate, and an allocator-history replay put 457.5 MiB live in `_dram_on_gpu` at the peak:
+  64 experts × 5.98 MiB + 75 MiB, this exact arithmetic.
+- New derived item "DRAM experts run on the GPU at prefill (one layer call)". It is priced by its excess over the
+  cold rows' stack, since a layer call streams one or the other.
+- `serve_recipe.dram_rows_per_layer` gives the most DRAM experts one layer holds under the solver's placement.
+  `solver_tiers` and it now share one cached `solve_placement` call.
+- ERNIE now reads 117 MiB over its peak, against 168 MiB of prefill-staging ceiling. OLMoE's three tiered receipts
+  (128-token prompts) read 165–173 MiB over, the chunk-sized ceilings that short prompts do not reach.
+
+### Serve estimate: the graph pools it leaves unpriced now cite what SV1 measured
+
+- `estimate_serve_footprint` still lists the decode graphs' pools and the first-chunk prefill graph's pool as not
+  modelled. Its notes now carry lane SV1's NF4 measurements (`bench/sv1/RESULTS-sv1.md`):
+  - decode graphs: +60 MiB allocated (OLMoE-1B-7B, 16 sequences);
+  - the prefill graph: +0.24 GiB (OLMoE-1B-7B) and +0.57 GiB (Qwen3-30B-A3B);
+  - beside SC2b's +3.3 GiB for the int4 stack.
+- No number is priced from two points.
+
+### `serve_paged.build_engine` hands its freed host heap back
+
+- The build churns through host buffers it then frees, among them the hybrid tier's setup tier and the stacks'
+  one-shot reads. glibc kept those blocks resident for the life of the server.
+- `build_engine` now calls `engines.host_heap.release_freed_host_heap()` once it is built, and reports
+  `host_heap_trimmed` in its `info`.
+- Measured on OLMoE-1B-7B (RTX A2000 host, NF4, all-VRAM):
+  - anonymous host memory after the build fell from 0.90 GB to 0.56 GB;
+  - a second trim afterwards returns nothing;
+  - the loader alone leaves ~4 MB, so the build is where the trim belongs.
+- What the trim returns on a 30B build was not measured here: lane SV2's NF4-vs-int4 after-load difference on
+  Qwen3-30B-A3B mixes the trim with the levers' other changes, so it is not this quantity.
+
+### SC2d registered (#846): the `E4B_PAGED_BULK_KV` default's engagement reads on Qwen3.6 (hybrid) and gpt-oss, box K (bench and tests only)
+
+- **Why.** SC2c licensed the bulk-KV default on Qwen3-30B-A3B (#1166). As registered there, the flip first carries
+  one `kv_bookkeeping` engagement read on a hybrid model (the pool holds its attention layers only) and one on gpt-oss
+  (attention sinks). Neither model fits the 12 GB A2000, so the reads run on one 5090, for correctness only.
+- **Box K** (`bench/sc2/sc2d_box_k.sh`):
+  - **Models:** gpt-oss-20b on SC2g's e4b path; Qwen3.6-35B-A3B on the server's defaults over P98's NF4 arena
+    (`p98_bake.py`, now staged and pinned).
+  - **Per model:** an OFF server then an ON server, with 4 warm requests, 16 serial (plus a repeat on OFF), and each
+    server's own `/health`.
+  - **Records:** the checkpoint's layer types and sinks.
+  - **Guard:** a tripwire refuses an e4b without #1174's `flush_bulk_fallback`.
+- **The rule** (`sc2d_reduce.py`, 12 self-test cases), per model: SERVED, ARCH, PROMPTS, ENGAGED, DETERMINISM,
+  IDENTITY. ENGAGED reads what ran: ON's `flush_bulk_fallback` must be 0. The flip is licensed iff both models are
+  ENGAGED_IDENTICAL.
+- **Harness:** `sc1_run.sh` / `sc1_drive.sh` / `make_pin.sh` gain box K, mirroring box H; the box-list tests are
+  updated; `tests/test_sc2d_box.py` runs `k_arch` on hybrid- and sinks-shaped snapshots.
+
+### SC2d read (#846): bulk KV bookkeeping engages and changes nothing on Qwen3.6 (hybrid) and gpt-oss; FLIP_LICENSED (bench only)
+
+- **The reading** (`sc2d-5090-4`, $0.739; lane total $0.887 over 5 receipts, three of them host or launcher refusals
+  before any workload). Both models were served OFF then ON through `serve_paged`'s HTTP server; it was Qwen3.6's
+  first run there. Both models read **ENGAGED_IDENTICAL**:
+  - gpt-oss-20b: sinks on 24 of 24 layers.
+  - Qwen3.6-35B-A3B: the pool holds its 10 attention layers out of 40.
+  - On every ON server the bulk path *wrote* every prompt (`flush_bulk_fallback` 0, e4b#1174), with the block claims
+    made at the flush. Output was byte-identical OFF against ON in both models, and OFF was deterministic.
+- **FLIP_LICENSED**, as registered. With SC2c's licence (#1166) the `E4B_PAGED_BULK_KV` default flip may now cite
+  both reads, in its own PR.
+- **Correctness only.** The recorded TTFT and TPOT are not read as speed.
+
+### SC2c read (#846): bulk KV bookkeeping licensed as a default; capacity ceiling 2 → 4 req/s on one 5090 (bench only)
+
+- **The reading** (`sc2c-5090-1`, $1.27; lane total $1.458 over 4 receipts): `E4B_PAGED_BULK_KV` OFF against ON on
+  Qwen3-30B-A3B int4, paired, with the prefill graph at `auto` in both arms. Every gate passed, and output was
+  byte-identical OFF against ON in both draws.
+  - The bucket-controlled stall per prefill fell from 0.211 / 0.199 s to 0.040 / 0.039 s (P1).
+  - Serial TTFT fell from 161 / 156 ms to 42.7 / 41.8 ms (P2, 3.78× and 3.74×).
+  - The ceiling rose from 2 to 4 req/s (P4, P5).
+  - P3 was refuted on the fast side (TPOT ON / OFF 0.943): OFF's first-decode block claims sit inside TPOT, while the
+    decode step is unchanged by bucket.
+  - **DEFAULT_LICENSED.** The flip is a separate PR.
+- **The census** closes on the box: the direct stall and the fitted stall agree within 1 ms on every server.
+  - OFF's prefill step is a 152–158 ms host flush over a 38.5 ms forward, plus 44–48 ms of first-decode claims.
+  - ON's step is the forward.
+- **Post hoc** (descriptive): `serve_capacity` on each server's own step costs reproduces 12 of 16 attainment cells
+  within 0.03 and ON's ceiling. Under the model, 8 req/s needs slots or decode-step time; the forward comes third.
+
+### SC1g A5 box R read (#846): `R_OK`, conv1–conv4 gradable; box R's full-vocabulary rows registered for box I, and the reference is bit-reproducible across hosts (bench and tests only)
+
+- **The run.** `sc1g-r5-2` (Vast H100 NVL, $0.826, from A5's merge `dfc5bdaf`) read `R_OK`:
+  - all validity checks OK;
+  - floor F 5.7e-3, 7.0e-3, 1.8e-3 and 1.9e-3 on conv1–conv4, all gradable; wikitext (2.2e-2) is never graded;
+  - the fp16 storage error at most 4.8e-6, about 150× under its bar.
+- **The registration.** `bench/sc1/sc1g_ref/` holds what box I stages:
+  - the shas of the five `[2048, 201088]` fp16 row files (`ref_full_shas.json`);
+  - R's `r_verdict.json` and `r_calib.json`.
+  - A test pins all three to the committed receipt, and `--reverdict` re-derives `R_OK`.
+- **The rows** live outside git: on the mini, and on QNAP Pool 3, each re-hashed.
+- **Bit-reproducible.** Every number this run shares with A4's `sc1g-r-8` is bit-identical (25 of 25), across a different
+  card, provider and driver.
+- **Spend.** Box R totals $1.5164; the lane is at $5.308.
+
+### SC1g amendment A5 registered (#846): engines graded by the full-vocabulary KL, each window above its own floor; box R's rule pinned beside A4's (bench and tests only)
+
+- **The estimator.**
+  - Box R stores the reference's decode-shaped log-softmax over all 201,088 tokens: fp16, computed in fp64, masked `−inf`
+    kept exact, ~0.82 GB per window, sha-pinned, outside git.
+  - Engines read KL(p_ref ‖ p_eng) in fp64 over the full vocabulary (`sc1g_kl.kl_full_support`), with no truncation
+    bound.
+  - Each position also records the common-support KL, the reference mass on any token the engine masks to `−inf`, and
+    the masked count. The read never raises into a serving loop: a failed read is a void position with its reason.
+  - This holds at all three call sites, and the C++ read was checked against the Python one.
+  - A row that masks reference mass, or has a void position, is VOID.
+  - The proof reports the masked mass per engine. If it is non-zero, a common-support rule with a mass bound is
+    registered on the proof's numbers before the reading.
+  - A4's coverage and calibration checks are dropped by name.
+- **R's gate (`verdict_a5`).**
+  - The fp16 storage error must be ≤ 0.1 × F on both of R's pairs, on every gradable window.
+  - A conv window is graded only if its own F < 1e-2. Wikitext is never graded.
+  - Fewer than 3 gradable windows gives the new `R_NO_GRADABLE` outcome, a cost gate: box I is not launched.
+  - Digest `7f307c39…` is pinned beside A4's `verdict()` sha. `--reverdict` dispatches on the receipt's rule, and A4's
+    committed read still re-derives.
+- **Engines.**
+  - e4b: the served proxy's full capture.
+  - vLLM: `logprobs=-1` with `LLM(max_logprobs=-1)`, verified full on request 0, VOID with no downgrade.
+  - llama.cpp: the harness's `--ref-full`/`--kl-out`.
+  - SGLang: UNREAD by registration.
+- **Predictions.** K-A, L1 and L2 are graded only where a KL exceeds its window's floor:
+  - F is used as the upper bound of an unresolved MXFP4 denominator or e4b row;
+  - a window is dropped when NF4, or the best comparator, is unresolved.
+- **Storage.** The rows' durable copy goes to the QNAP's Pool 3. Box I stages them and refuses any KL arm whose rows do not
+  match the registered sha. `sc1g_ref` joins the SC staging lists.
+
+### SC1g amendment A2 registered (#846): an e4b-only diagnostic box first, because e4b's served path reads +0.185 nats over its own prefill on in-distribution text (bench and tests only)
+
+- **`sc1g-prove-2` ($1.306) ran out of its guard** on a slow host: the vLLM install took 23 min and the first arm started at
+  72 min. On conversation `conv1` (ppl ≈ 2) it still read e4b served **0.905** vs e4b prefill **0.720**, +0.185 nats. prove-1's
+  wikitext rows split a similar gap into the paged path (+0.25, both bf16 activations) and the int8 GEMV (+0.24). vLLM's served −
+  prefill is +0.016.
+- **The kernel is correct on sm_86:** on prove-2's real captured decode activations (160 calls) it agrees with its bf16-rounded
+  exact reference to ≤ 1.9e-4 ($0, A2000, correctness only). The int8 per-32 scheme itself costs 0.45–0.94% per GEMV output.
+- **Box J** (`SC1_BOX=J`, guard 1.0 h, no comparators, no proof): 20 e4b arms in priority order plus G6 on the 5090. The anchor is
+  the chunk-free full forward. The paged kernel's fp8 K/V roundings are modelled inside it (`kv`, `k`, `v`, 16 key groups), and it
+  adds eager chunk 1, the real kernel at `--kv-groups 16`, PDL=0 and folds-off, on `conv1` with `conv2` replication.
+- **Six predictions, J1–J6, are registered per arm** (e.g. J1: chunk 1 closes ≥ 0.5 of the gap; J2: fp8 K/V rounding reproduces
+  ≥ 0.5 of it). Graphs and step-select are already excluded, because K8 runs eager. The cross-engine reading waits for J: after an
+  e4b fix if the path is at fault, otherwise with a 2.0 h proof guard.
+
+### SC1 driver (#846): the receipt fetch leaves SC1g's staged reference rows on the box (bench and tests only)
+
+- **The failure.** `sc1g-prove-a5-1`, box I's A5 proof, was refused on the box: 317 GB free against the 320 GB floor, after
+  3.9 GB of box R's full-vocabulary rows were staged. Its fetch then pulled those same input rows back into the receipt:
+  3.9 GB into the receipt store, and about 7 min of rented time.
+- **The fix.** `sc1_drive.sh`'s `pull_box` (the mid-run pulls and the final fetch) now excludes `sc1g_ref_full/` and box I's
+  `.f16` copies (`sc1g/ref_full_*.f16`). Those rows are inputs, registered by sha, never receipts.
+- **The test.** It runs rsync with the driver's own filter list against a box-shaped tree.
+- **The receipt.** The fetched-back copies were byte-identical to the registered rows. They were moved out of the store
+  (`TRIMMED.txt`). The proof re-runs with more disk, so that 320 GB stays free after staging.
+
+### SC1 box (#846): the disk floor counts the lane's own staged inputs (bench and tests only)
+
+- **What went wrong.** Box I's A5 proof was refused twice on a healthy host (`sc1g-prove-a5-1`, `-2`: Vast 145701, 317 GB
+  free). The launcher orders a fixed 320 GB disk, and the controller stages SC1g's ~3.8 GB of reference rows before the
+  box's 320 GB free-disk check. Every box was refused on the lane's account, not the host's, and asking for more storage
+  in the manifest cannot fix it.
+- **The fix.** `sc1_run.sh` now counts `sc1g_ref_full/` (`du -BG`) toward `MIN_DISK_GB`, and notes it in the summary. The
+  floor itself is unchanged, so this is not a knob change.
+- **The test.** It runs the check block as the script has it, with `df`/`du` faked. The 317 + 4 case passes; 317 with
+  nothing staged, and 300 + 4, are still refused (rc 13). It fails with the old check.
+
+### RD1 read: on one RTX 5090 the decoded frozen-expert route beats every shipped route per call, at both lengths, on 4 of 7 many-group families -> an opt-in route, then a TC1 A/B (bench and tests only; `bench/moegen/rd1/RESULTS-rd1.md`)
+
+- **Licensed reading:** `rd1-rp-5090-2`, RunPod Secure, $0.12. The post-probe anchor passed (rc 0, `pcie-full/launch-fast`), and
+  every arm passed the fp32-reference gate on all 32 cells.
+- **DECODED HELD, 4/7.** decoded_cap (dequant_groups + one grouped bf16 GEMM, 256 MiB cap) / best of v1, v3 and dense, skewed
+  router, at seq 512 / 2048: olmoe 0.79 / 0.39, lfm2 0.74 / 0.37, ernie 0.81 / 0.40, graniteh 0.79 / 0.40.
+  - At seq 2048 it wins on all seven families (0.37–0.82).
+  - qwen3, nemotron and qwen36 fail at seq 512 only (1.05, 1.60, 1.38), where they have 16–32 rows per expert.
+- **V3 NOT HELD, 0/7:** v3 / v1 is 0.88–1.23.
+- **Predictions, scored on their registered text by `rd_table.py`:** P0, P3 and P4 HELD. P1 REFUTED: the bar held, but qwen3
+  and qwen36, two of the three families it named, fail. P5 REFUTED: on mixtral, dense beats decoded_cap on the skewed draw but
+  not on the uniform one.
+- **Runner fix:** an anchor that crashes now exits 9 (a harness error), not 12 (a refusal). `rd1-rp-5090-1`'s pinned-memory
+  `CUDA error: invalid argument` had been written as a refusal.
+- **No speed claim follows for training.** That waits on the TC1 full-step A/B, registered separately before its box.
+
+### RD1 amendment 3 registered: a post-probe anchor licenses the reading, and host load is informational (bench and tests only)
+
+- **Why.** RD1's RunPod proving run (`rd1-rp-prove-1`, $0.23) fetched every file, and the anchor passed on its first
+  attempt at host load1 19.58. But load1 never reached amendment 1's 5.0 gate (min 9.66, on 120 CPUs).
+  - Across five anchored boxes, load did not predict the anchor: Vast's 145701 failed at 12–31, RunPod passed at 19.6.
+- **What.**
+  - `rd1_run.sh` drops the load wait.
+  - It runs the anchor before the probe (at most 3 attempts) and once more after it, and writes the post-probe verdict
+    into the probe's receipt as `anchor_post`.
+  - `rd_table.py` decides only when that post-probe anchor passed. Host load stays recorded, informational only.
+- **Tests.** `tests/test_rd1_lane.py`: a passing post-probe anchor decides even at load 30, and a failed or missing one never
+  does.
+
+### RD1 amendment 2 registered: RTX 5090 on RunPod Secure, with a proving run first; the runner installs rsync (bench and tests only)
+
+- **Why.** Under amendment 1's load-gated anchor, a fourth Vast draw (`rd1-5090-5`) landed on machine 145701 a third time.
+  - Host load1 stayed between 6.5 and 47 for 35 minutes on a 256-thread host, so the 5.0 gate was never reached.
+  - The anchor failed launch and H2D stability even at load 12.
+  - Four Vast draws cost $0.43 and produced no reading.
+- **What.**
+  - The lane moves to RunPod Secure Cloud's RTX 5090 (the provider rate row is adertha-agents#173).
+  - `rd1_run.sh` installs `rsync`: `tc1_drive.sh` fetches with it, and RunPod's pytorch image has none (`tc1c-h100-19`
+    fetched zero files).
+  - A proving run (`RD1_PROVE=1`, forwarded by `tc1_drive.sh`) runs install, tripwire, the load-gated anchor and host-load
+    sampling, with no probe. It reads the fetch path, the anchor and whether the 5.0 gate is reachable before any draw.
+  - `RD1_REHEARSAL` is still never forwarded.
+- **Tests.** `tests/test_rd1_lane.py`: exactly `RD1_PROVE` of RD1's knobs is forwarded, and rsync is installed before the
+  anchor.
+
+### RD1 amendment 1 registered: a load-gated train anchor, after three anchor refusals on launch jitter (bench and tests only)
+
+- **Why.** RD1's three RTX 5090 draws were refused by the train anchor, each on `launch.self_pair` alone (1.042 on machine
+  145701 twice, 1.060 on 36544; FLOPs and H2D in band), for $0.068 in all.
+  - TC1 amendment 33 measured host load from other tenants driving this kind of instability on these multi-tenant hosts.
+  - adertha's anchor-exclusion class cannot name the machines, because it accepts only P41-layout receipts.
+- **What.** `bench/moegen/rd1/rd1_run.sh`:
+  - runs the anchor only at host load1 ≤ 5.0 (waiting up to 600 s), at most 3 attempts, with the last attempt standing and
+    every attempt's files kept;
+  - samples `/proc/loadavg` every 5 s, and writes the probe window's load summary into its receipt.
+  - `rd_table.py` takes no decision from a probe whose median load1 exceeded the gate, or that has no load summary.
+  - On any card other than the RTX 5090 (the A2000 rehearsal), `rd_table.py` prints only the correctness gate: no timing
+    column and no bar.
+  - The bar, the correctness gate and the probe are unchanged.
+- **Tests.** `tests/test_rd1_lane.py` pins the constants to the registration, and shows a loaded or unrecorded probe decides
+  nothing.
+
+### P114 registered: the two energy harnesses on a rented RTX 5090, to supersede the A2000 energy rows (#1133 decision 1; bench and tests only)
+
+- `bench/p114/PREREG-p114.md`: three passes each, unchanged and sha-pinned, of:
+  - `bench/_upstream/bench_energy.py`: one OLMoE-dims gate_up projection; native bf16, dequant → linear and
+    `bnb.matmul_4bit` at decode, prefill and train;
+  - `bench/bench_energy_excluded.py`: Part B, J/token as batch grows.
+
+  The stack is bitsandbytes 0.50.2 on one rented RTX 5090. The run is refused unless the card's `power.draw` reads,
+  every pass is logged by `nvidia-smi pmon`, and a correctness gate runs first.
+- The rule (`bench/p114/p114_reduce.py`, 10-case self-test) reads READ, NOISY (any ratio spreads more than 0.10 over the
+  three passes) or VOID.
+- On READ, a 5090 row supersedes `e4b.train.energy-honest.scoped-a2000` and
+  `e4b.train.energy-honest.a2000-bnb0502.2026-10-04`, and the README's energy sentence is restated from the 5090 medians,
+  whatever their sign. No band is borrowed from the A2000.
+- `tests/test_p114_lane.py`: the pins, the gate-before-passes order, the exact card check, the guard fitting every alarm,
+  and the driver's dry run.
+
+### Read: P114 — on one rented RTX 5090, `bnb.matmul_4bit` costs 1.6–2.0× native bf16's energy per op; the 5090 row supersedes both A2000 energy rows (READ; bench, docs and register)
+
+- **The run.** `p114-5090-1`: one RTX 5090 at a 500 W power limit (driver 570.133.07), bitsandbytes 0.50.2, the two
+  energy harnesses unchanged, three passes each. It cost $0.148, with teardown proven.
+  - `bench/p114/p114_reduce.py` reads **READ**: every spread is ≤ 0.047 against the registered 0.10.
+  - The reducer reproduces the verdict byte-identically from the committed receipts (`bench/p114/RESULTS-p114.md`,
+    Reproduce).
+- **The reading** (medians of three passes). Total J/op over native bf16 on one OLMoE-dims projection:
+
+  | workload | `bnb.matmul_4bit` | dequantize → `linear` |
+  |---|---:|---:|
+  | decode | 1.748 | 3.293 |
+  | prefill | 1.601 | 1.539 |
+  | train | 1.965 | 1.405 |
+
+  The fused 4-bit MoE forward's J/token at batch 4096 is 0.063 of batch 64's (≈16×).
+- **The registered prediction that `matmul_4bit` would read near 1× at decode is refuted: 1.748×.** It draws half
+  native's power at 0.28 of native's op rate. The other directions held.
+- **Register.** `e4b.train.energy-honest.5090.2026-10-05` (measured) supersedes
+  `e4b.train.energy-honest.scoped-a2000` and `e4b.train.energy-honest.a2000-bnb0502.2026-10-04`, and
+  `e4b.train.energy-honest` now points at it directly. The A2000 rows stand as measured on their card.
+- **Quotes.**
+  - README, STATUS, SOLUTIONS, `capabilities.json`, the bitsandbytes solution page, BITSANDBYTES.md and
+    STORAGE-MODES.md cite the new row with its scope. Where a figure is quoted, the dequant arm keeps its own numbers.
+  - METHODOLOGY §10 gains the 5090 tables (c), and the A2000 tables stay as the record.
+
+### Tests: the chunked-LM-loss gradient bound gains a model-scale floor (tests only)
+
+- `tests/test_chunked_lm_loss.py` held each gradient tensor to 1e-5 of its OWN largest element. On `qwen3_5_moe` the Gated
+  DeltaNet's `dt_bias` / `A_log` gradients peak near 2e-5, against a model maximum near 0.2. The chunked loss's fp32
+  reorder reaches them from upstream at the large gradients' scale, so a Linux CI runner read `dt_bias` 1.3x over that bound
+  (1.79e-10 absolute; #1159's run 37323695463, outside #1159's diff). The Mac reads 2e-6 of it at every thread count.
+- Each tensor is now held to 1e-5 of the larger of its own maximum and 1e-3 of the model's largest gradient. That is a 2e-9
+  floor here. A 0.1 % error in `dt_bias`'s gradient is still caught (mutation-checked); a 0.01 % one no longer is, on
+  tensors whose whole gradient is 1e-4 of the model's. No package code changes.
+
+### Training: `E4B_CHUNKED_LM_LOSS=auto` -- chunk the loss only where the fp32 logits are large
+
+- **Why.** The chunked loss is what lets e4b train packed 4,096-token Qwen3 rows (TC1 amendments 39, 40), and at the field recipe it
+  is a cost: 1.049 of the shipped arm's step on a host-bound RTX 5090 (TC1 amendment 41, P91 FALSIFIED), where a micro-batch's fp32
+  logits are 0.3-0.6 GiB. One switch for both regimes needs to tell them apart.
+- **What.** `auto` chunks a training forward (512-token chunks) only when its stock fp32 logits -- positions x vocabulary x 4 bytes,
+  read from the labels' shape before anything runs -- would reach `AUTO_MIN_LOGITS_BYTES` (1 GiB); a smaller forward runs the stock
+  forward untouched and is counted in `CHUNKED_LM_LOSS_STATS["small_calls"]`. The gate sits between TC1's field recipe (0.64 GiB at
+  most over a 60-step run, 0.86 GiB for the two longest of its 1,200 rows) and one packed 4,096-token row (2.32 GiB). Mixtral's
+  32,000-token vocabulary stays under it at 4,096 tokens (0.49 GiB). `enable_chunked_lm_loss(..., min_logits_bytes=)` is the direct
+  call; `enable_fast_train` and the CLI trainer read it from the environment. Opt-in, like `1`; the default is unchanged.
+- **Tests.** `tests/test_chunked_lm_loss.py`: a forward one byte under the gate is the stock forward exactly (loss and every gradient
+  `torch.equal`, logits returned), one at it chunks; re-enabling moves the gate; the gate separates the TC1 shapes it was set
+  between; `enable_fast_train` carries it from `E4B_CHUNKED_LM_LOSS=auto`. The TC1 arm's receipt block records `small_calls` and
+  `patched`.
+
+### Training: the chunked LM loss is on by default as `auto` (TC1 amendments 39, 40, 41, 43, 44)
+
+- **What changes.** `E4B_CHUNKED_LM_LOSS` unset now means `auto`. `enable_fast_train` and the CLI trainer compute the causal-LM loss over
+  512-token chunks for a training forward whose stock fp32 logits would reach 1 GiB, and run the stock loss for every smaller forward. `0`
+  keeps the stock loss everywhere (nothing patched); `1` or a chunk size chunks every training forward, as before. Under the default, a
+  model outside the chunked-loss table keeps its stock loss without a warning; with the variable set, the refusal warns as before.
+- **Why, by the registered rule.** On packed 4,096-token Qwen3 rows e4b at its old defaults ran out of memory at step 1 on an RTX 5090
+  (amendment 39). With the chunked loss it trains them resident, 1.278× Unsloth's speed on one stack (amendments 40, 43; P98 HELD). At
+  the field recipe, chunking every forward cost the shipped arm 4.9 % (amendment 41), while `auto`'s gate never fired and stepped
+  0.992 / 0.999 of the stock loss (amendment 44, P99–P103 HELD).
+- **Scope.** The evidence is Qwen3-30B-A3B. The gate counts bytes, so on a large vocabulary it fires at ordinary micro-batches
+  (about 1,335 positions per forward for gpt-oss, about 1,081 for Qwen3.5-MoE), where chunking's step cost was not measured;
+  `E4B_CHUNKED_LM_LOSS=0` restores the stock loss.
+- **Not changed.** Evaluation under `torch.no_grad`, generation, `logits_to_keep` and tuple returns run the stock forward; a forward
+  under the gate is the stock forward exactly (test-pinned).
+
+### Changelog entries are one file each in `changelog.d/`; `## Unreleased` is no longer edited by hand (tooling only)
+
+- **Why.** About ten pull requests an hour each inserted a `###` section at the top of `## Unreleased`. Every merge left every
+  other open pull request DIRTY on that one hunk. #1136 (commit a5f88f2a) replaced the whole 8,187-line file with 31 lines,
+  and CI caught it. GitHub's mergeability check ignores `.gitattributes` merge drivers, so `merge=union` is no fix. A new file
+  never conflicts.
+- **The rule.** A change adds `changelog.d/<pr-or-slug>.md`: its `### Title` and body, exactly what it would have put under
+  `## Unreleased`. That section's body is now one pointer paragraph. The release
+  (`scripts/changelog_fragments.py --release`) writes the fragments into the new version's section, newest first by the
+  commit that added each, and deletes them. `--render` previews the section.
+- **CI** (discoverability job): `scripts/changelog_fragments.py --check --base <PR base>` refuses entries under `## Unreleased`
+  and malformed fragments. It also checks that released history is append-only: the merge base's released sections survive
+  byte for byte as the tail of the file, so only a release adds to them (a new section on top), and an unreleased fragment
+  leaves only by being released. It flags a5f88f2a (all 7,959 released lines lost). Replayed over the last 400 first-parent
+  commits to `CHANGELOG.md`, it flags 21:
+  - four losses, each a deliberate edit: two misplaced entries moved, a conflict-marker repair, and a redaction of owner quotes;
+  - 16 lane entries inserted inside a section whose release had already merged: 13 inside 0.37.3 on 2026-09-24, one each in
+    0.38.1 and 0.40.0, and #1122's inside 0.48.0 on 2026-10-05, which is still misfiled there;
+  - 0.43.0's deliberate re-homing of a peer's entry.
+
+  A deliberate edit passes with the `changelog-history-edit` label.
+- **Migration.** Every section under `## Unreleased` moved, unchanged, into `changelog.d/<original PR>-<slug>.md`. Joined in
+  their old order they reproduce the old section byte for byte. The released sections are byte-identical (681,295 bytes).
+- `scripts/check_change_impact.py` (shared; grouped-nf4-gemm first) accepts a fragment as the `CHANGELOG.md` companion where a
+  repository keeps `changelog.d/`. A version bump still needs `CHANGELOG.md`, because the release writes it.
+
+### `scripts/changelog_fragments.py` joins the shared tooling (tooling only)
+
+- grouped-nf4-gemm moved its own `## Unreleased` to `changelog.d/` fragments and took `scripts/changelog_fragments.py` as
+  shared tooling, with itself as upstream. This repository's copy was already byte-identical. `scripts/check_shared_tooling.py`
+  gains the entry, so CI now holds the two copies equal (15 shared files).
+
+### serve_paged: `/health` `kv_bookkeeping` counts bulk flushes written per layer (`flush_bulk_fallback`)
+
+- `Fp8PagedKV.append_prompt` now returns whether its bulk path wrote the prompt. It still falls back to `append` per
+  layer, with the same bytes, for a slot already holding tokens, prompts of different lengths or a demoted arena.
+- `PagedModelRunner` counts those fallbacks as `flush_bulk_fallback`, and `/health`'s `kv_bookkeeping` block reports
+  the count. Before this, `flush_bulk` counted the call, not what ran inside it.
+- **Why now.** The `E4B_PAGED_BULK_KV` default (licensed by SC2c, #1166) waits on an engagement read on a hybrid model
+  and on gpt-oss (#1131's review). That read should show the bulk path ran there, not that it was called.
+- No behaviour change: same pool bytes, same paths. Two tests are added.
+
+### serve_paged: bulk KV bookkeeping is on by default (`E4B_PAGED_BULK_KV`, `0` restores the per-layer path)
+
+- **The licence.** Lane SC2c (#1166) read DEFAULT_LICENSED on Qwen3-30B-A3B int4: the stall per prefill ON/OFF was 0.19,
+  serial TTFT 3.78× / 3.74× faster, the capacity ceiling went 2 → 4, and the output was identical. SC2d (#1192) read the two
+  engagement checks SC2c registered before the flip, FLIP_LICENSED: on gpt-oss-20b and on Qwen3.6-35B-A3B (hybrid),
+  every bulk flush wrote in bulk (`flush_bulk_fallback` 0), and the streamed text was byte-equal OFF vs ON.
+- **The change.** `PagedServeConfig.bulk_kv` defaults to `True`, and `E4B_PAGED_BULK_KV` unset or empty reads `1`;
+  `0` keeps the per-layer path. The estimate (`estimate_serve_footprint`) now lists the bulk flush transient as not
+  modelled (SC2d recorded 168 MiB on gpt-oss-20b).
+- **Tests.** The env parser's unset/empty case, the dataclass default agreeing with it, and `/health`'s `requested`.
+
+### SC1g A4 box R read (#846): R_NOT_OK, so the KL65 grading is UNREAD; the reference's own NF4 fake-quant reads below the true model where its KL is largest, supporting A3's flattery hypothesis (bench and tests only)
+
+- **The run.** `sc1g-r-8` (H100 NVL, $0.5556) ran to its verdict, and the registered gate refused the bucketed estimator:
+  - coverage 0.77–0.98, bar 0.99;
+  - KL65 / KL_full 0.75–0.91, bar 0.90;
+  - the floor F reaches 2.2e-2 on wikitext and 6–7e-3 on conv1/conv2, bar 1e-2.
+- **The descriptive reading.** The true model reads 0.884 on conv1, where e4b MXFP4 served reads 0.905 and NF4 served 0.736.
+  The reference's own NF4 fake-quant drops NLL by 0.118 and 0.139 on conv1 and conv2, at full KL 0.108 and 0.139. MXFP4's −0.074
+  on conv2 is unexplained.
+- **Receipts.** Box R's receipts are committed with every attempt, r-1 to r-8 (box R total $0.6904).
+  - `sc1g_ref.py --reverdict` re-derives R's verdict from them.
+  - A test pins R's whole rule (digest `ee122b74…`) to its registration.
+- **Next.** A5 moves to A4's registered full-vocabulary fallback, with a per-window floor gradability rule.
+
+### DQ5 read (#1083): PROTO_PASS on PCIe gen 4 x16 — streamed QLoRA at 1.0050× resident, bitwise, 15.08 GB freed (bench only; #1218)
+
+- **The run.** `dq5-5090-1` ($0.401) ran DQ3's lane and rule on a gen 4 x16 RTX 5090. The link was confirmed x16
+  under load, at about 21–22 GB/s.
+- **The gates.** T(S)/T(R) = 1.0050, inside the host's step-to-step noise. 0 blocking prefetches, 15.08 GB saved,
+  parity bitwise.
+- **Thinner margin than gen 5.** 20–59 of 62 forward copies per step were still in flight when their layer started
+  (gen 5: 9–13). The synchronous path pays 1.51× (gen 5: 1.18×).
+- **Evidence.** The receipts re-derive the verdict byte for byte. `bench/dq5/RESULTS-dq5.md` carries the host context
+  and an independent review.
+
+### SC1g A4 box R: the egress pre-flight probes in Python and records why it refused (bench and tests only)
+
+- **What happened.** Box R's first rented attempt, `sc1g-r-6` (RunPod H100 NVL, $0.1348), refused itself at the egress
+  pre-flight: "HF CDN 0.0 MB/s".
+- **Why the cause is unknown.** The curl probe discarded its stderr, so whether curl was missing from the image or the host
+  could not reach Hugging Face's CDN cannot be told from the receipt.
+- **The fix.** The probe now runs in Python (`urllib`): the same URL, the same 50 MB range, the same 20 s cap and the same
+  20 MB/s floor.
+  - It logs the HTTP status, the final CDN host and any error to `logs/egress.log`.
+  - It records curl's presence in `forensics.txt`.
+  - A refusal line carries the probe's own message.
+  - **Two outcomes, never conflated:**
+    - a probe that raises before reading any byte (HTTP 403/429, TLS, DNS, an import) exits **rc 9** with the reason logged;
+    - **rc 14** means only "measured slow": bytes were read and the rate is under the floor, a timeout mid-read included.
+  - Each path is tested against a local server.
+- **Pin.** R's staging pin is regenerated. The registered rule (`sc1g_ref.py`, `sc1g_kl.py`) is untouched.
+
+### DQ5 registered (#1083): DQ3's streamed-QLoRA lane on a PCIe gen 4 x16 RTX 5090 (bench only; #1209)
+
+- **What runs.** DQ3's subject, arms, rule and reducer, unchanged, on a gen 4 x16 link.
+- **The runner.** `bench/dq5/dq5_run.sh` is DQ3's runner with two changes:
+  - a gen 4 gate on `nvidia-smi pcie.link.gen.max/width.max`. Anything else exits rc 19, which is not an admitted
+    machine-evidence code, so a good gen 5 host is never excluded;
+  - a descriptive pinned-H2D probe that never refuses.
+- **The search.** The offer search takes adertha-agents#177's new PCIe generation ceiling.
+- **The prediction.** T(S)/T(R) in [1.00, 1.05], so PROTO_PASS.
+
+### DQ4 read (#1083): CAP_REAL — streamed frozen weights train a 2.00× longer sequence on one RTX 5090 (graded c_def; bench only; #1206)
+
+- **The run.** `dq4-5090-2` ($0.689): Qwen3-32B architecture, 64 layers, PEFT + bnb QLoRA, chunked loss, default
+  allocator.
+- **The boundaries.** The longest training sequence is 7,168 tokens resident and 14,336 streamed, both confirmed in
+  fresh processes. G = 2.00, bracket [1.75, 2.14], at unchanged step time.
+- **The measured cause of the shortfall against the ~20k predicted** is default-allocator fragmentation: about 6.2 GiB
+  reserved but unallocated. The secondary `expandable_segments` configuration reaches 19,456 tokens (G 2.375).
+- **Evidence.** The receipts re-derive the verdict byte for byte. `bench/dq4/RESULTS-dq4.md` carries the scope and an
+  independent review.
+
+### SC1g amendment A4 registered (#846): engines graded by KL to a bf16-dequant reference of gpt-oss-20b, cross-engine NLL descriptive (bench and tests only)
+
+- **Why.** A3's read showed teacher-forced NLL on off-policy chat text can rank the less faithful path first (NF4 under the
+  native MXFP4 store). So A1's cross-engine NLL is now descriptive, and engines are graded by KL from P44's reference.
+- **Estimator (`bench/sc2/sc1g_kl.py`).** KL65 on a partition of the reference's top-64 named tokens plus rest.
+  - Each engine returns its exact log-probs on those named tokens:
+    - vLLM `logprob_token_ids`;
+    - SGLang `token_ids_logprob`;
+    - llama.cpp's harness `--named`;
+    - e4b through a `torch` proxy in `sc1g_k8.py`. The shared harness bytes stay untouched; alignment is proved to 1e-9
+      against the arm's own NLL.
+  - Registered rules: rest clamp ε 1e-9 with a 1 % clamp ceiling; a 0.99 coverage floor; a top-K ≥ 256 fallback.
+- **Box R (`bench/sc2/sc1g-r/`, one H100 NVL, declared $3.50/h, maintainer-approved).**
+  - Scores the reference decode-shaped on the five committed windows and writes hashed artifacts.
+  - Calibrates KL65 against the full-vocabulary KL on two real perturbations (decode vs prefill, and an NF4 fake-quant). The
+    ratio must be ≥ 0.90 on both, or the estimator is UNREAD.
+  - Reads its own OK / UNREAD / VOID verdict.
+- **Box I under A4.** Named KL rows for every engine on four conversations, then descriptive prefill rows. Its proof reads
+  one named row per engine path.
+- **Predictions.**
+  - K-A: NF4 ≥ 3× MXFP4. A prediction, not a gate.
+  - L1: e4b ≤ 2× the best comparator.
+  - L2: every native-MXFP4 engine sits below R's NF4-requant scale.
+
+### DQ4 registered (#1083): the sequence-length capacity of streamed against resident QLoRA on one RTX 5090 (bench only; #1195)
+
+- **The question.** With DQ3's subject (Qwen3-32B architecture, 64 layers), what is the longest training sequence
+  resident (R) against streamed (S)? Each boundary is a real out-of-memory boundary: an ascending ladder to the first
+  OOM, then fresh-process confirmations.
+- **The configurations.** The graded one is the chunked loss with the default allocator. The secondary is
+  `expandable_segments`. The stock loss is descriptive.
+- **The rule.** G = L\*_S / L\*_R: CAP_REAL if G ≥ 1.5. Predicted G ~2.3, from DQ3's 5090 numbers.
+- **The files.** `bench/dq4/` (harness, reducer with a 25-case self-test, A2000 rehearsal gate) and
+  `tests/test_dq4_lane.py`.
+
+### `chunked_lm_loss` supports dense `Qwen3ForCausalLM` (#1193)
+
+- **The change.** Dense Qwen3's post-`lm_head` code in transformers 5.18.0 is the identity with no aux loss, so it
+  joins the chunked-loss table as an `_identity` row.
+- **The tests.** `test_loss_and_every_gradient_match_stock[qwen3]` pins it against the stock loss and gradients. The
+  refusal test now uses `LlamaForCausalLM`.
+- **Opt-in as before.** Needed by lane DQ4 (#1083), whose capacity pairs must not be bound by the full-vocabulary
+  logits.
+
+### DQ3 follow-ups (#1190): `dense_offload_report` records the late-bound route; the DQ3 timing peaks start from a clean cache
+
+- `dense_offload_report(handles)["late_bound_4bit"]` counts the offloaded bnb `Linear4bit` projections whose grad-mode
+  matmul is late-bound. 0 means stock bnb, for example after a source mismatch. DQ3's arm receipt records it.
+- `bench/dq3/dq3_arm.py` empties the CUDA cache before resetting the peak stats for the timing pass.
+- Doc fixes: `dq3_run.sh`'s header cites Amendments 0–3, and the bnb-mirror comment notes the inference-only CPU
+  AVX-512 branch.
+- **Observation** (rehearsal, 4 layers at Qwen3-32B width): streaming cuts peak allocated (5.82 → 5.37 GiB) but raises
+  peak reserved (6.45 → 6.69 GiB), most likely through caching-allocator fragmentation. A capacity claim needs real
+  OOM boundaries.
+
+### DQ3 read (#1083): PROTO_PASS — streamed frozen-weight QLoRA on a PCIe gen 5 x16 RTX 5090 is bitwise-identical to resident, at 1.0023× its step time, and frees 15.08 GB (bench only; #1188)
+
+- **The run.** `dq3-5090-5` ($0.282): Qwen3-32B architecture, 64 layers, PEFT + bnb QLoRA, 2048 tokens, run as the
+  palindrome R S S0 S0 S R. Every gate passed:
+  - step T(S)/T(R) = 1.0023;
+  - coverage: 62 + 62 prefetches per steady step, 0 blocking, high-water 2;
+  - capacity: 15.08 GB saved, 99.75 % of the slot prediction;
+  - parity: bitwise.
+
+  S0/R = 1.18 (descriptive).
+- **What it took.** #1183's late-bound backward was required: bnb 0.50.2 keeps the frozen weight on ctx (not reported
+  upstream).
+- **Cost.** Five attempts, $0.625 in all.
+- **Evidence.** The receipts re-derive the verdict byte for byte. `bench/dq3/RESULTS-dq3.md` has the scope (one card,
+  gen 5 only), the reserved-memory note and an independent review.
+
+### SC1g A3 read (#846): MXFP4's cost on in-distribution chats is the weights, not e4b's route, and it does not replicate across windows; NF4's lower NLL is most likely entropy flattery (hypothesis: P44's KL; A4 adds a fidelity instrument) (bench only)
+
+- **`sc1g-diag-2` ($0.726):**
+  - MXFP4 served repeats box J bit for bit across hosts (0.904969107589033).
+  - **K1 REFUTED:** the MXFP4-weights prefill reads +0.157 over NF4.
+  - **K2 REFUTED:** the int8 activations carry 0.185 of the gap on `conv1` and none on `conv2`.
+  - **K5 REFUTED across windows:** the gap is +0.169, +0.097 and −0.033 on `conv1`, `conv2` and `conv3`.
+  - By the registered rules, nothing is filed on e4b.
+  - The receipts of both box J runs are committed (`bench/h2h-2026-10-02/sc1g/`), and the lines re-derive from them with
+    `sc1g_reduce.py`.
+- **P44 already measured the native store as ten times closer** to a bf16 dequant reference than NF4 (KL 0.0019 vs 0.0222).
+  So NF4's lower teacher-forced NLL on off-policy chat text is most likely entropy flattery. That is a hypothesis resting
+  on P44's KL, untested in this lane. A4 will read cross-engine NLL as descriptive only and add a KL fidelity instrument.
+- **e4b#1175:**
+  - The 5090 attention check reads INERT. Synthetic N(0,1) sinks carry about 1/T of the softmax mass, so the no-sink
+    mutation had no power. The kernel agrees within 1.7–1.9e-3 at k_groups 4, 8 and 16.
+  - $0 on the A2000: the served loop's KV writes (`append_prompt`, then `append_many` per decode token) are bitwise equal
+    to per-layer `append` at every group count (`sc1g_prompt_append_check.py`).
+  - The kg16 regression is narrowed to the kernel under real sinks and lengths.
+
+### Tests: the late-bound saving is measured as bytes held across the forward, against a same-config control (tests only; #1186)
+
+- **Why:** #1183's power control compared a resident baseline with an offloaded model. At `0bf98cf3`, with the route
+  disabled, it reported 42.8 MB saved, more than the toy's 25 MB of weights.
+- **The new measurement:** `memory_allocated()` immediately before and after a warm forward, with `gc.collect()` first.
+  The stock-bnb graph can sit in a reference cycle through its ctx.
+- **The tests:**
+  - route-off minus route-on in the same offloaded config must be at least (L−2) layers;
+  - route-on must be at most resident + 2 layers.
+- **On the A2000:** every config has 0.00 MB spread over 15 samples. The ctx-pin mutant fails all four tests.
+
+### DQ3 Amendment 3 registered (#1083): S and S0 run on #1183's late-bound backward; the rehearsal gate asserts the memory direction (bench only; #1185)
+
+- **Three 5090 attempts ($0.329 in all):**
+  - a host that refused large allocations (fixed in #1171);
+  - a host with ~33 KB/s GitHub egress (fixed in #1173);
+  - `dq3-5090-3`, where streaming freed nothing because bnb 0.50.2 keeps the frozen weight on ctx (worked around in
+    #1183; bnb behaviour, not reported upstream).
+- **R's run-3 numbers** were seen and are not reused.
+- **Unchanged:** the rule, gates, bands, arms, predictions and guard.
+- **`bench/dq3/dq3_rehearsal_check.py`** exits 1 unless parity is bitwise and each streamed arm peaks (L−2) layers
+  below resident. It fails every streamed arm of the pre-fix rehearsal that had been read as green.
+
+### Offloaded training through bitsandbytes `Linear4bit` now frees the evicted weights (behaviour change; #1183)
+
+- **The bug.** bnb 0.50.2's `MatMul4Bit` keeps the frozen packed weight as a ctx attribute (`ctx.tensors = (None, B)`)
+  whenever the input needs grad. Checkpointing cannot drop it, so every layer's weight stayed alive from forward to
+  backward and dense offload saved no VRAM in training. DQ3's streamed arm ran out of memory on a 5090 (#1083).
+  This is bnb 0.50.2 behaviour, worked around locally and not reported upstream.
+- **The fix.** Every offloaded `Linear4bit`'s grad-mode matmul now goes through `_LateBoundMatMul4Bit`:
+  - its forward is bnb's own no-grad `gemm_4bit` call;
+  - its backward is `MatMul4Bit.backward`'s expressions on the weight bound at backward time;
+  - only the module is kept.
+
+  Gradients are bitwise identical to stock bnb. Inference takes the stock forward.
+- **The pin.** The mirror is pinned by sha256 of the four bnb 0.50.2 sources it reproduces. On a mismatch it warns
+  and keeps stock bnb.
+- **Measured on the A2000** (DQ3 rehearsal, 4 layers at Qwen3-32B width): the streamed arm now peaks at 5.37 GiB and
+  synchronous offload at 4.91 GiB, against 5.82 GiB resident. Before the fix, the streamed arm was at 6.47 GiB.
+
+### SC1g amendment A3 registered (#846): box J again, to split the MXFP4 route's +0.17 nats into weights, route and int8 activations, plus e4b#1175's attention check (bench and tests only)
+
+- **What box J (`sc1g-diag-1`, $0.709) read on `conv1`:**
+  - The paged fp8-KV path carries no gap: NF4 served, eager chunk 1 and prefill agree within 0.006.
+  - The MXFP4 T == 1 route does: +0.169 nats served and +0.225 under identical attention.
+  - The GEMV kernel is exact for its scheme on sm_120 (≤ 1.9e-4).
+  - The modelled-fp8 arms are VOID: `--ppl-fq` omits gpt-oss's sinks.
+  - `--kv-groups 16` reads +0.130 worse than the default 4 (e4b#1175).
+- **$0 on the A2000** (`bench/sc2/sc1g-a2000/a3_*`):
+  - e4b's fp8 KV pack is correct at 4, 8 and 16 key groups, with its error falling with finer groups. The kvg16 regression is
+    the kernel's, not the pack's.
+  - gnf4's NF4 M-tile on 10,244 rows in one call matches 128-token chunks and fp32 to the bf16 floor. Large M does not explain
+    the chunk-free full anchor's +0.075.
+  - Both mutation arms fire.
+- **Box J under A3:**
+  - GEMV=0 (the decode rows on bf16 activations), and a true MXFP4-weights prefill at `KEEP_NF4=0`. Box J's "MXFP4 prefill"
+    had run the kept NF4 stacks.
+  - Both are route-gated.
+  - The K2/K5 rows on four conversations, a determinism repeat, folds-off and PDL=0.
+  - `sc1g_attn_check.py`: the fp8 decode kernel against a dequantize-then-attend reference at 4, 8 and 16 groups, plus pack
+    reconstruction and compute mode.
+- **Predictions K1–K5:**
+  - The weights cost ≤ 0.05.
+  - The int8 activations carry ≥ 0.5 of the gap, on `conv1` and pooled over ≥ 3 windows.
+  - No fold or PDL bug.
+  - Determinism within 1e-4.
+  - The gap is ≥ 0.10 on every window. 0.10 is about 2× the 0.051 path spread box J read on `conv2`.
+
+### DQ3 (#1083): the box refuses a host whose GitHub egress cannot carry the install, at rc 14 before any install (#1173)
+
+- **What happened.** `dq3-5090-2` ($0.203) passed the link and VRAM checks, then cloned from GitHub at about 33 KB/s.
+  The host was machine 147454 in Shanghai. The 115 MB experts4bit-qlora clone could never finish inside pip's
+  30-minute alarm.
+- **The probe.** `bench/dq3/dq3_egress_probe.py` reads the pinned grouped-nf4-gemm codeload tarball for at most 30 s.
+  - Below 1 MB/s, it exits 4, which the runner turns into rc 14, the registered egress refusal and machine evidence for
+    a relaunch's exclusion.
+  - No transfer at all, or a probe crash, goes to rc 9 and excludes nothing.
+- **Tests:** the runner refuses at 14 before any install, maps 1 and 2 to rc 9, and runs the VRAM probe first.
+
+### DQ3 (#1083): the box refuses a host that will not hand out the subject's memory, at rc 18 before any install (#1171)
+
+- `dq3-5090-1` ($0.058) died on the subject's first allocation. A 2.90 GiB embedding raised CUDA OOM with 30.85 GiB
+  free and 0 bytes allocated by PyTorch, on host 564677 (Ryzen 9 9950X, driver 595.84). The same allocation succeeded
+  on DQ2's 5090 and in the A2000 rehearsal.
+- An arm failure (rc 11) cannot name the machine, so `bench/dq3/dq3_vram_probe.py` now runs first. It asks for
+  3.5 GiB, then 2 GiB blocks to 28 GiB, each written. Only its `torch.OutOfMemoryError` exit (3) becomes the
+  registered host-floor refusal (rc 18), so a relaunch can exclude that machine. Every other probe failure goes to the
+  harness rc 9 and excludes nothing: no CUDA device, an image torch without kernels for the card, or an exception.
+- `tests/test_dq3_lane.py` drives the real runner with a fake `nvidia-smi` and `python`:
+  - an OOM refusal exits 18 and never reaches the install;
+  - a non-OOM probe error exits 9 and names nothing;
+  - the link check still comes first;
+  - a passing probe proceeds.
+
+### DQ3 stage 2 (#1083): an opt-in training prefetch for dense offload, `enable_dense_offload(..., train_prefetch=True)` (off by default), and the lane harness (#1167)
+
+- **What it does.** Under grad mode, layer i's forward prefetches layer i+1's frozen weights on the prefetch stream.
+  The last layer prefetches L−2, the first layer reused in backward, and backward prefetches i−1. Residency is at
+  most two layers: the current one and its scheduled neighbour. A steady step issues 2×(L−2) prefetches and blocks
+  on none. The first use of each prefetched block passes a `record_stream` fence at bind time.
+- **The off path is unchanged:** no stream or schedule is built, and the output is bitwise equal to running with no
+  offload. `dense_offload_report` gains a `train_prefetch` counters key, which is `None` when off.
+- **Trainable parameters** follow #1165's per-call rule on both paths.
+- **Tests** (`tests/test_dense_offload_train_prefetch.py`):
+  - the pure schedule;
+  - CPU and CUDA bitwise parity, with and without checkpointing;
+  - bounded residency and exact counter values;
+  - a fence race test with a warmed reader, so it can race; with the fence removed it fails. On the A2000, a cold
+    first cuBLAS GEMM synchronized the device and made the test vacuous.
+- **The lane harness** (`bench/dq3/`):
+  - `dq3_arm.py` runs one arm per process on Qwen3-32B's architecture with random NF4 weights.
+  - `dq3_reduce.py` has a 25-case self-test.
+  - `dq3_run.sh` refuses with rc 13 any host that is not a gen 5 x16 RTX 5090.
+  - `tests/test_dq3_lane.py` kills all 16 rule mutants.
+  - `DQ3-PREREG.md` Amendment 2 (pre-data) records the A2000 rehearsal's S0 crash and the #1165 fix.
+
+### `enable_dense_offload` keeps a trainable parameter resident beside frozen ones and warns on an unfrozen model (behaviour change; #1165)
+
+- **The crash.** On a PEFT/QLoRA model, the trainable LoRA matrices over `MIN_BYTES` were selected for streaming. At
+  25600 wide, `lora_B` is 1.6 MB. Eviction swapped them for empty placeholders, and `AdamW.step` raised "The size of
+  tensor a (0) must match the size of tensor b (16)". Found by the DQ3 rehearsal (#1083) at Qwen3-32B width.
+- **The new selection is decided per call.** If any streamable parameter (2-D, `>= min_bytes`) in the decoder layers
+  is frozen, trainable ones are **never streamed**: they stay resident, and a warning names the count and GB. If none
+  is frozen (an unfrozen model), the selection is unchanged, with a warning that an optimizer cannot step the
+  streamed trainable tensors. A frozen model is unchanged and silent.
+- **A trainable parameter that offload moves onto the device is moved in place** (`t.data = ...`). An optimizer
+  built before `enable_dense_offload` keeps stepping it. A re-wrapped `Parameter` had left it stepping a stale CPU
+  copy, so training silently did nothing. Frozen tensors are re-wrapped as before.
+- **Freeze for inference:** `model.requires_grad_(False)` before `enable_dense_offload`, then add adapters. README and
+  `docs/CHOOSING.md` now say so beside the API.
+- **Tests** (`tests/test_dense_offload_trainable.py`) cover:
+  - the frozen and unfrozen selections, both identical to before;
+  - the kept-resident cases, including a partial fine-tune;
+  - the warnings, through `warnings` and through `log=`;
+  - AdamW through the offload matching no offload bit for bit, on CPU and CUDA.
+
+### SC2c amendment A1 (#846): box H pins torch 2.8.0 like boxes C–I (bench and tests only)
+
+- When box I merged beside box H (#1140, #1132), box H was left out of `sc1_run.sh`'s `torch==2.8.0` pin.
+  `sc2c-prove-2` installed torch 2.14.1+cu130 / triton 3.8.0 instead of SC2b's and SC2g's 2.8.0+cu128 / 3.4.0.
+- A1 adds H to the pin; a test asserts every python3 box (C–I) carries it. The reading runs after a proof on the fixed
+  harness. Design, rule, predictions and guards unchanged.
+
+### SV1 registered (#1152): the serve estimate beside decode graphs and the prefill graph (bench and prereg only)
+
+- `bench/sv1/` (`SV1-PREREG.md`, `sv1_run.sh`, `sv1_measure.py`) for one RTX 5090. `serve_paged`'s engine is built
+  in-process with the environment `ServeSetup.to_env()` gives, all-VRAM, from arenas baked on the box.
+- Arms: OLMoE-1B-7B with eager decode, decode graphs, and decode graphs + the prefill graph; then Qwen3-30B-A3B with
+  decode graphs, and + the prefill graph.
+- Readings:
+  - S1: the estimate against the eager peak;
+  - S2–S3: the two graph pools the estimate lists as not modelled;
+  - S4: the same at 30B NF4.
+
+### K30 registered: the int4-b32 split-K R term on one rented NVIDIA L4 (bench and tests only)
+
+- **Why.** grouped-nf4-gemm's R term is on by default for every part with 64 SMs or fewer, and its only receipt is an RTX
+  A2000 sweep. The A2000 is a correctness-only testbed, so the term has no admissible speed evidence (the A2000-timing
+  audit, e4b#1133 / grouped-nf4-gemm#475). The owner asked for an L4 read.
+- **The lane** (prereg and rule in grouped-nf4-gemm `kernel/PREREG-k30-splitk-r-term-l4.md`) runs the unchanged 48-cell
+  `sk_sweep.py` twice on one L4 (58 SMs), after three correctness gates. It reads KEEP if the R-aware pick's summed time
+  is <= 0.97 of the N-only pick's with no cell > 1.02 worse, and OFF otherwise.
+- **Here:** `bench/k30/k30_drive.sh` (controller, K20's pattern), `bench/k30/k30_run.sh` (box; `K30_PROVE=1` for the
+  proving rental, `K30_REHEARSAL=1` for the $0 A2000 rehearsal), `bench/k30/staged.sha256`, and
+  `tests/test_k30_staged_pin.py` (pins, and the gates ordered before any timing).
+
+### SC1g amendment A1 registered (#846): gpt-oss quality graded on in-distribution conversations; activation quantization costs every engine on out-of-distribution text (bench and tests only)
+
+- **`sc1g-prove-1` PROVED ($1.051) and refuted the chat-framed wikitext premise.** Every engine scored the same ids, and gpt-oss
+  read perplexity ~500–2,400 with top-1 3–8%. On that text every engine lost NLL as its activations coarsened: MXFP8 +0.15, int8
+  per-32 +0.24 (e4b's GEMV vs its NF4) to +0.66 (llama.cpp q8), W4A4 +1.45. Two independent int8 implementations paid, so it is
+  the text plus the activation scheme. The reading was held before it launched.
+- **A1's graded text** is the first two ultrachat_200k `test_sft` conversations (pinned revision) whose single rendering in
+  gpt-oss's chat template reaches 2,561 tokens. Their scored targets are 97% and 90% assistant content. Wikitext stays as a
+  descriptive control. The floor, G1–G5 and COMPARABLE are read on the conversations only.
+- **G6, new:** `gemv_mxfp4_b32` against its exact reference rounded to bf16, on the 5090, with a mutation arm that must disagree.
+  The same check on the A2000 (sm_86, correctness only) agrees within 4.4e-5; the mutation reads 1.47. It also measures the int8
+  scheme's own error: 0.5% on normal rows, 1.0–1.3% with 100× outliers.
+- **e4b diagnostics** (descriptive, meanings registered): served at `GNF4_PDL=0`, with the folds off, and eager `--ppl-chunk 1`
+  for MXFP4 and NF4, which separates the paged fp8-KV decode path from the expert route. A registered hypothesis: the paged path
+  carries e4b's served-vs-prefill gap.
+- `sc1g_k8.py` reads the e4b arms' window from its file and captures GEMV activations by wrapping gnf4's functions. The shared
+  harness stays unmodified. New: `sc1g_gemv_check.py`; `sc1g_reduce.py` at 13 self-test cases. Lane ≈ $4.5 with the re-proof.
+
+### DQ3 registered: a streamed frozen-weight QLoRA prototype — bitwise-identical training, resident speed, a layer-count VRAM saving? (registration only; no code)
+
+- **Licensed** by DQ2's C_ALIVE. Stage 1 of 3: the pre-registration and design note only (`bench/dq3/`). Stage 2 is an
+  opt-in, off-by-default training prefetch in `engines/dense_offload.py`, with its tests and a $0 A2000 rehearsal.
+  Stage 3 is one gen 5 x16 RTX 5090 read.
+- **Subject and arms.** Qwen3-32B @ `9216db57`, HF + PEFT + bnb QLoRA, 2048-token micro-batch, non-reentrant
+  checkpointing. Three arms: R (resident), S (streamed, overlapped) and S0 (today's synchronous grad-mode offload).
+- **Gates**, with the maintainer session's additions:
+  - bitwise parity of loss and every LoRA gradient in a deterministic pass, with an R-vs-R control;
+  - step time T(S)/T(R) ≤ 1.10;
+  - steady-state blocking fetches ≤ 2 per step, forward and backward both;
+  - a VRAM saving ≥ 13.6 GB, against a 15.12 GB slot-count prediction;
+  - pinned-host bytes read from the allocator;
+  - a fence race test with a mutation arm;
+  - an off path that stays byte-identical.
+
+  Bands come from DQ2's 5090 readings only.
+
+### Read: DQ2 run 2 — a dense layer's frozen NF4 weights stream behind its own QLoRA compute on PCIe 5.0 x16 (C_ALIVE) (bench only)
+
+- `dq2-5090-7` ($0.032, RTX 5090, gen 5 x16, 48.6 GB/s), under Amendment 1: READ, **C_ALIVE**. One Qwen3-32B layer as
+  HF + PEFT + bnb QLoRA runs it gives Rmin(2048) = 2.86 (T_fwd 15.02 ms against a 5.25 ms copy of its 251.5 MB of
+  frozen bytes). The forward slows by 1.6% under DMA.
+- **Quality of the read.** 0/10 self-pairs out of band, 25/25 draws covered, and an independent recomputation agrees.
+  8 of 9 prediction clauses held; T_fwd missed by 0.13%.
+- **Break-even and scope.** Break-even is 1024 tokens a micro-batch. Planner rule (measured, layer rate):
+  R = 1.25 at M ≈ 4.25e4 / B. This is one layer on gen 5 x16, so whole-model overlap is not measured.
+- **Consequence.** A streamed frozen-weight prototype is licensed, on a branch, with gradient-parity and step-time
+  gates. No new repository. `bench/dq2/RESULTS-dq2.md`.
+
+### A2000-timing audit, the owner's decisions applied: the runtime warning and two lane files stop quoting A2000 timings (no output change)
+
+- **Runtime warning.** `enable_fast_train`'s warning, raised when a hybrid family's recurrent blocks fall back to
+  transformers' reference PyTorch, no longer cites the A2000's 36 % device-time cut. It still names the fallback and the
+  three packages to install. Decision 3 on #1133.
+- **MG1's box runner.** `bench/moegen/mg1_run.sh` installs mamba-ssm and causal-conv1d for the structural reason: without
+  them the recurrent blocks run unfused reference PyTorch, so an arm that pays the fallback is not the fast path. The
+  A2000 36 % is no longer the reason given. Decision 4.
+- **TC3's lane README.** The 12 GB section drops the A2000's 70 s/step, tokens/s and J/step, matching the relabelled row
+  `e4b.train.frontier.qwen3.a2000-12gb.2026-10-02`; the receipts keep them as the record. Decision 4.
+- Not in this change: the energy rows' rented rerun (decision 1) and the TC lane's band erratum (decision 5), each its
+  own follow-up.
+
+### TC1 amendment 40 registered: the packed 4,096-token regime again, e4b with its chunked LM loss (bench and tests only)
+
+- **Why.** Amendment 39 found every e4b arm out of memory at step 1 on packed 4,096-token rows (the fp32 full-vocabulary logits, 2.32 GiB)
+  where Unsloth trained at 24.86 GB. #1142's opt-in chunked LM loss never materialises those logits.
+- **The box** (token `qwen3samestack4kce`): amendment 39's box with `E4B_CHUNKED_LM_LOSS=1` on every e4b arm, 40 steps. P87 Unsloth/e4b
+  in [0.80, 1.60]; P88 the environment in [0.80, 1.00]; P89 every e4b arm completes resident. A stable reading is recorded, labelled
+  opt-in, whichever side it favours.
+- `tc1_arm.py` records a `chunked_lm_loss` block on every e4b arm (requested, has it, chunked and stock calls, run-time fallbacks); the
+  reducer requires it on this family (`chunked_lm_loss_why`) and reads the box with amendment 39's scorer (one new self-test case).
+
+### DQ2 run 1 read C_UNCOVERED (instrument diagnosed); Amendment 1 registered before run 2 (bench and tests only)
+
+- **`dq2-5090-6`** ($0.034, RTX 5090 on PCIe gen 5 x16, Threadripper PRO 7965WX). The lane READs: engagement and
+  integrity hold, and 1/10 self-pairs is out of band. One of 25 streaming draws (copy under the forward, M = 512, not a
+  graded row) was not covered end to end, so the rule withholds the stream verdict. No reading is reported.
+- **Cause.** At M = 512 the forward is host-launch-bound, and the probe enqueued every forward before any copy.
+- **Amendment 1.** The copies wait on the first forward's event, then run while the host issues the rest. The rule is
+  byte-identical (pinned), and the predictions are unchanged. Run 2 is the registered single re-run.
+- **Before run 1:** five launch attempts on gen 5 hosts died at the launcher's pre-flight (stuck loading, HF-CDN floor)
+  or were refused before a rental. That cost $0.128, with every receipt committed. adertha-agents#164 tracks the
+  stuck-loading exclusion gap.
+
+### Read: TC1 amendment 39 — on packed 4,096-token rows e4b at its defaults runs out of memory where Unsloth trains (P86 FALSIFIED; P84, P85 UNTESTED)
+
+- `tc1-5090-86` ($1.37, EPYC 7B13): Qwen3-30B-A3B's matched set on packed rows of exactly 4,096 real tokens, both frameworks on one
+  stack. Every e4b arm OOMed at step 1 allocating 2.32 GiB, the fp32 copy of the full-vocabulary logits in Hugging Face's causal-LM loss.
+  Unsloth trained resident at 24.86 GB (its draws 7.7 % apart, so no speed is read).
+- Recorded as an e4b loss in that regime (row `e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.packed-4k`). A chunked loss for e4b is its own
+  registration.
+
+### Training: opt-in chunked causal-LM loss (`E4B_CHUNKED_LM_LOSS`) -- the `[tokens, vocab]` logits are never materialised
+
+- **Why.** TC1 amendment 39's box `tc1-5090-86` (packed rows of 4,096 real tokens at micro-batch 1 on Qwen3-30B-A3B) ran
+  e4b's arm out of memory at step 1: `Tried to allocate 2.32 GiB` with 29.5 of 31.36 GiB in use. 2.32 GiB is 4,096 x 151,936 x 4
+  bytes, the fp32 upcast of the full-vocabulary logits in Hugging Face's `ForCausalLMLoss`. That loss also keeps the fp32
+  log-probabilities for backward and builds their fp32 gradient and the bf16 logits' gradient.
+- **What.** `engines/chunked_lm_loss.py`. A training forward with `labels` runs the decoder as before, takes the hidden states
+  `lm_head` would have seen, and computes Hugging Face's loss over chunks of tokens: per chunk `lm_head`, the architecture's own
+  post-head transform, fp32, cross-entropy summed. Each chunk runs under non-reentrant `torch.utils.checkpoint`, so its logits are
+  dropped after the forward and recomputed one chunk at a time in backward. The semantics are HF's: shift by one inside each row
+  (or `shift_labels` as given), `ignore_index`, the mean over supervised tokens or the sum over `num_items_in_batch`, and the router
+  auxiliary loss added as the forward adds it. Ignored rows never reach the head (finding them is one host sync per training
+  forward, after the decoder). The output is the model's own class with `.loss`
+  and `.logits=None`.
+- **Where it hooks in.** `enable_fast_train` applies it when `E4B_CHUNKED_LM_LOSS` is set, and `disable_fast_train` unwinds it, as
+  it does the rotary, RMSNorm and MoE-keep switches. So the TC1 harness's fused arm takes it from `TC1_E4B_ENV` alone, through its
+  unchanged `model(input_ids=ids, labels=labels)`. `python -m experts4bit_qlora.train` applies it itself (and lists it in `--help`).
+  `enable_chunked_lm_loss(model, chunk)` is the direct call. `1` means 512-token chunks; a number is a chunk size in tokens.
+- **Off by default, and narrow when on.** Unset, nothing is patched. When on, generation, `torch.no_grad` evaluation (both
+  held-out paths in the harness and the CLI trainer) and `return_dict=False` run the stock forward, so a held-out loss is the stock
+  path's bit for bit.
+- **Covers / refuses.** Covered: the HF classes of Qwen3-MoE, Qwen3.5/3.6-MoE (text), Mixtral, OLMoE, gpt-oss, ERNIE-4.5-MoE,
+  Granite-MoE / -Shared / -Hybrid (their `/ logits_scaling` reproduced), LFM2-MoE and Nemotron-H (its `.float()`). Anything else is
+  refused with a `RuntimeWarning` and keeps the stock loss. That includes Gemma-4 (final-logit softcap), a forward or
+  `loss_function` replaced by another library, and a hooked or already-patched `lm_head`. Every training forward also checks the
+  transform at run time: `lm_head` returns a one-element probe that must come back exactly as the table's transform of it. Any
+  other change disables the switch for that model with a warning, and the call re-runs stock.
+- **Equality** (`tests/test_chunked_lm_loss.py`, CPU, and CUDA where present). Every covered family on a tiny config, with the
+  aux loss on, micro-batch 2 with right padding and a mask, a masked prompt and 7-token chunks. The loss is within 8 fp32 ulps of
+  stock (measured at most 1). Every gradient, the head's included, is within 1e-5 of its tensor's largest element (measured at
+  most 1.4e-6). The tests also pin chunk sizes that do not divide the supervised count, a tied head, `num_items_in_batch`,
+  `shift_labels`, positional labels, and an all-ignored batch (stock's nan with zero gradients). bf16 and CPU autocast stay within
+  2 bf16 ulps. Switching off is byte-identical to stock. Mutating the module (no shift, the mean over ignored positions, no aux
+  loss, no Granite scaling, no fp32 upcast, a dropped tail chunk, mis-compacted labels, `num_items_in_batch` or `shift_labels`
+  ignored) fails the suite.
+- **RTX A2000 12 GB, head + loss alone** (`bench/chunked-lm-loss/bench_lm_head_loss.py`): vocab 151,936, hidden 2048, bf16
+  hidden states with grad, frozen bf16 head, torch 2.8.0+cu128. Each cell is the peak allocated above the inputs (GiB); the
+  A2000 is a correctness testbed, so no timing is read from it:
+
+  | tokens | stock | chunk 256 | chunk 512 | chunk 1,024 | chunk 2,048 |
+  |---|---|---|---|---|---|
+  | 1,024 | 2.04 | 0.44 | 0.88 | 1.74 | 1.74 |
+  | 2,048 | 4.06 | 0.45 | 0.89 | 1.75 | 3.48 |
+  | 4,096 | 8.11 | 0.47 | 0.90 | 1.77 | 3.51 |
+
+  The time cost is structural: one more head matmul and cross-entropy forward per chunk in backward (the recompute). Its size
+  on a target card is unread here.
+  - The loss matched stock to 1 fp32 ulp. The hidden-state gradient was `torch.equal` to stock wherever the head's backward
+    matmul ran at stock's row count. Elsewhere about a third of its elements differed by bf16 rounding (relative L2 3.2e-3 at
+    2,048 tokens, 4.6e-3 at 4,096). That is cuBLAS choosing its bf16 split-K reduction by shape: with
+    `torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction = False` it was `torch.equal` at 2,048 and 4,096.
+- **RTX A2000, a training step** (`train_step_ab.py`): Qwen3-30B-A3B's first 4 layers with the real embedding and head, through
+  the harness's fused-arm setup (NF4 experts, gradient checkpointing, fp32 attention LoRA r16, `enable_fast_train(dgrad=True)`),
+  micro-batch 1. Arms were interleaved in one process, each cell the peak GiB per step:
+
+  | tokens | stock | chunk 512 | chunk 1,024 |
+  |---|---|---|---|
+  | 512 | 3.91 | 3.77 | 3.77 |
+  | 1,024 | 4.94 | 4.55 | 4.65 |
+  | 2,048 | 6.99 | 6.10-6.15 | 6.19 |
+  | 4,096 | **OOM** (`Tried to allocate 2.32 GiB`, the 5090's allocation, on an 11.62 GiB card) | 7.11 | 7.11 |
+
+  The step's time cost on a 5090 is a TC1 registration's to read; the A2000 is not a speed testbed. `1` means 512-token chunks.
+  - At 2,048 tokens the loss was identical in every comparison. LoRA gradients differed from stock by 2.7e-3 relative L2 on the
+    fused path (stock against itself: 1.8e-3) and 2.6e-3 on the reference path (6.1e-4). With the reduced-precision flag off:
+    1.36e-3 against 1.46e-3, and 5.2e-4 against 5.4e-4, inside run-to-run noise.
+  - Receipts are in `bench/chunked-lm-loss/receipts/`. These are A2000 numbers, read as correctness and memory. A position on the
+    5090 is a TC1 registration's to measure.
+
+### SC1g registered (#846): the quality of each engine's gpt-oss-20b arithmetic on identical tokens, against a routing-flip floor measured on the same windows (bench and tests only)
+
+- **Why.** SC2g read speed on four stacks serving gpt-oss-20b's MXFP4 experts on different arithmetic, and no quality, so no
+  position sentence came from it. e4b's distance to bf16 is already measured (P44 / P90 on an H100). SC1g asks whether, on one
+  RTX 5090 and the SAME token ids, any engine's arithmetic moves NLL beyond the floor two equally correct forwards already show.
+- **Box I** (`SC1_BOX=I`, box G's image). Teacher-forced NLL in SC1's two shapes, on SC1's two texts in gpt-oss's chat frame
+  with the template's date pinned. Arms:
+  - e4b: the serve env (served = MXFP4 GEMV W4A8; prefill = kept-NF4 host M-tile at chunk 64 and 128, the floor), and an NF4 control;
+  - vLLM: Marlin W4A16;
+  - SGLang: `flashinfer_mxfp4` and Marlin;
+  - llama.cpp: the published GGUF, default and `GGML_CUDA_MMQ_PREC=q8`.
+- **Route records gate the e4b rows** (e4b#1129's counters, written at exit). A missing record FAILS the row.
+- **The shared harness is untouched.** P39's `step_decomp.py`, SC1's `sc1_prompts.py` and P42's hook are byte-pinned by other
+  lanes. The new `bench/sc2/sc1g_k8.py` runs them unmodified, with the chat date pin and the route record in its own process.
+- **SGLang's server script** gains `gptoss_q` / `gptoss_qm` modes, whose engagement check requires the resolved MoE runner.
+- **Predictions and scope:** G1–G5 in `bench/sc2/SC1g-PREREG.md`; `sc1g_reduce.py`, 9 self-test cases. COMPARABLE, if licensed,
+  covers e4b's B = 1 served arithmetic and its host NF4 prefill experts only, not serve_paged's batched K21 / captured paths.
+  Lane ≤ about $3.4.
+
+### Serve estimate: the cold rows' device stack
+
+- Under the solver, a layer call streams its routed NVMe experts to the GPU and runs them there
+  (`hot_residency._cold_contrib`). `estimate_serve_footprint` now prices that stack at its ceiling, `min_hot_rows ×`
+  the row bytes, as a device item.
+- Measured on an RTX A2000 (OLMoE-1B-7B, solver at 1.2 / 1.5 GiB, a 128-token prompt). Allocator history at the
+  generation peak put the whole 183 MiB gap between the estimate and the peak in `_cold_contrib`: 54 routed rows ×
+  3.375 MiB plus their outputs.
+- At all-VRAM with a short prompt the estimate was 8 MiB over the peak, so nothing there is missing.
+- **Prefill staging is priced too.** A prompt's K/V stay bf16, for every attention layer, until the prompt
+  completes (paged_attention's staging buffer). The scheduler can hold one finishing prompt plus the next one's
+  first chunk.
+  - The estimate charges `(max_tokens_per_seq + chunk_tokens) ×` the bf16 K/V bytes per token (at most `max_seqs`
+    prompts): its ceiling, since prompt lengths are the caller's.
+  - Measured (OLMoE, four 1024-token prompts): 128 MiB staged at the peak, exactly one prompt's worth. That was most
+    of the 179 MiB all-VRAM gap; the rest is MoE workspace above the stated working-set heuristic.
+
+### Read: TC1 amendment 38 — on a fast host the compact delta is 1.3–1.6 % slower (P77, P78, P80 FALSIFIED); the peak holds (P79, P81 HELD); it stays opt-in
+
+- `tc1-5090-85` ($2.64, EPYC 9655, machine 150700, 60-step load-gated draws): `NF4_QLORA_COMPACT_DELTA` 0 vs 1 with grouped-nf4-gemm#473.
+  Qwen3 matched 1.016, shipped 1.013, Mixtral matched 1.013; peaks Qwen3 −0.312 GB, Mixtral −0.037 GB; held-out within 0.001.
+- The flag stays opt-in. Across three hosts its speed follows how host-bound the step is (0.967–0.970 at 3.4–3.9 s steps, 1.013–1.016 at a
+  2.17 s step): it trades host work for device work. Its memory saving holds on every host.
+
+### Read: SC2g (#846) -- on gpt-oss-20b e4b's `serve_paged` serves every row VALID and is prefill-bound under load as registered (Q4, b/a 27); capacity 1 req/s against vLLM's and SGLang's 8
+
+- **What ran.** `sc2g-5090-2` ($0.959, a 575 W 5090) drove four engines on openai/gpt-oss-20b's MXFP4 experts: e4b
+  `eaf3e5b4` (MXFP4 decode, NF4 prefill, prefill graph `auto` engaged), vLLM 0.30.0 (Marlin W4A16), SGLang 0.5.20
+  (`flashinfer_mxfp4`, W4A8) and llama.cpp (the published GGUF). Every e4b ratio is ARITH_MISMATCH. Lane total $3.052 across
+  4 receipts, inside the registered ~$3.4.
+- **Verdicts.**
+  - Q1 HOLDS: serial TTFT 5.05× vLLM's.
+  - Q2 REFUTED: serial TPOT 1.74× vLLM's (6.21 ms against 3.56 ms).
+  - Q3 HOLDS: ceilings vLLM 8, SGLang 8, llama.cpp 2, e4b 1.
+  - **Q4 HOLDS:** 0.245 s stall per prefill landing during a decode, against 8.94 ms per token; b/a 27.4, R² 0.984.
+  - Q5 REFUTED, on one row: llama.cpp's serial TTFT moved 51 → 44 ms between two runs of the same requests. All 16 Poisson
+    rows are VALID.
+- **Engagement rests on the code path, not on `/health`'s route names.** `prefill_routes` is env-resolved, so its k19 / flash
+  are not gpt-oss's path. The read cites the lines: K21 ≤ 256 rows, kept-NF4 M-tile above, explicit-mask attention on every
+  sinks layer. e4b#1129's `seen` fields are what a future box G check should assert.
+- `tests/test_sc2_trace.py` pins the Q4 fit from the committed trace.
+
+### TC1 amendment 39 registered: the packed 4,096-token regime with both frameworks on one stack (bench and tests only)
+
+- **Why.** Every TC1 position reads the field recipe, whose Alpaca rows carry about 1,000–1,400 real tokens per step against a nominal
+  16,384: a host-bound regime. Packed full-length rows put about 12× the tokens through each step, where the device does most of the work.
+- **The box** (token `qwen3samestack4k`): amendment 25's same-stack family on rows of exactly 4,096 real tokens, micro-batch 1 × accum 4,
+  30 steps, held-out at 0 and N, load-gated draws, every e4b arm resident at defaults. P84 Unsloth/e4b in [0.80, 1.60]; P85 the
+  environment in [0.80, 1.00]; P86 every e4b arm completes resident. A stable reading is recorded whichever side it favours.
+- **`TC1_FREE_OUTPUTS=1`** (`tc1_arm.py`): each micro-batch's output is released once its loss is read. Unset, the previous micro-batch's
+  output, its logits included, stays live through the next forward and the optimizer step, inside every arm's peak. Off by default, so
+  every earlier box keeps its instrument; the packed family requires it.
+- **The builder.** `tc1_arm.py --prepare --pack 1` renders each example with the same template and tokenizer call, minus the
+  per-example truncation. It concatenates the token lists with the tokenizer's EOS between examples and cuts rows of exactly `--seq`
+  tokens. Labels are the input ids, nothing is padded, and attention is full causal across example boundaries (standard packing).
+  - At 4,096 tokens the registered 1,200 + 48 rows fill only ~57 + 2 rows. So the pools extend the registered text in its own order:
+    tp4_alpaca.py's pinned source and seed. `pack_pools` refuses unless the shuffled prefix reproduces the registered rows. The train
+    pool is the 1,200 registered rows and then the next 4,800 examples. The held-out pool is the 48 registered rows and then the next
+    352. The pools are disjoint.
+  - On Qwen3-30B-A3B at the pin: 284 train rows and 8 held-out rows, every row 4,096 tokens, tokens sha `d2a501eba57d`. The first
+    235,852 train tokens are the field recipe's 1,200 rows, unchanged.
+- **Unchanged when off.** With `--pack 0` (the default) the tokens file is byte-identical to before: the field-recipe file for
+  Qwen3-30B-A3B rebuilds to tokens sha `bfc742f67e37`, the sha TC3-PREREG cites. A test pins a small file's sha from the old code.
+- **The box.** `TC1_PACK=1` (forwarded by `tc1_drive.sh`, recorded on the FIXTURE line) packs `tc1_prepare`'s tokens, at least
+  steps x micro-batch x accum rows. The new token `qwen3samestack4k` is amendment 25's same-stack family in this regime. The box refuses
+  the token without `TC1_PACK=1 TC1_SEQ=4096`, and refuses `TC1_PACK=1` beside a field-recipe token. The arm refuses a packed file whose
+  seq is not its own `--seq`, and each receipt's `tokens` records `pack`.
+- **The reducer.** The family is read with amendment 25's scorer and `score_packed4k`, against its own fixture. A row is VOID unless its
+  tokens are packed at seq 4,096, micro-batch 1 x accum 4, with 16,384 real tokens and none padded on every step, so the field recipe's
+  receipts never pass under this token. One new self-test case (101).
+
+### DQ2 registered: can a dense layer's frozen NF4 weights stream behind its own QLoRA compute on PCIe 5.0 x16? (bench and tests only)
+
+- **Why** (#1083). DQ1 left the capacity axis at C_MARGINAL. Its link was PCIe 4.0, and its compute counted the linears
+  only. DQ2 measures one real Qwen3-32B decoder layer as HF + PEFT + bitsandbytes QLoRA runs it:
+  - `Linear4bit` nf4 with double-quant;
+  - PEFT's `lora.bnb.Linear4bit` with fp32 adapters, r16 on all seven projections;
+  - SDPA and RoPE, under non-reentrant checkpointing.
+
+  It times forward and backward against pinned H2D of the layer's own frozen bytes, on a gen 5 x16 RTX 5090.
+- **Rule.** Rmin(2048) = min(T_fwd, T_bwd) / X. C_ALIVE (≥ 1.25) licenses a streaming prototype on a branch. 27 self-test
+  cases; 18 rule mutants are killed in CI. Every band's basis is rented-5090 data.
+- **Rehearsed on the RTX A2000 through the local pool** (correctness only). The first rehearsal's engagement check caught
+  PEFT's generic wrapper with bf16 adapters (a bare layer lacks `is_loaded_in_4bit`); the fixed subject engages PEFT's bnb
+  path with fp32 adapters.
+- **Launch.** The box refuses a non-gen-5 x16 host (rc 13). The Vast search gains an opt-in PCIe band
+  (adertha-agents#162).
+
+### `serve_capacity`: the paged server's capacity, predicted from its own step costs (new module, no default changes)
+
+- **Why.** `serve_recipe` prices what `serve_paged` allocates. Nothing predicted what it delivers, so a planner could
+  not answer whether a workload is servable at an SLO on this box, or which `max_seqs` it needs.
+- **What.** `experts4bit_qlora.serve_capacity`, a model of `ContinuousScheduler` as `serve_paged` drives it:
+  - `StepCosts` holds the step costs. `StepCosts.from_step_trace` reads them from a server's own
+    `E4B_PAGED_STEP_TRACE` and refuses rather than invent a missing one;
+  - `Workload` draws plans exactly as `bench/sc2/sc2_driver.plan` does;
+  - `simulate` returns per-request TTFT / TPOT and SLO attainment;
+  - `ceiling` gives SC2's ceiling rule under the model.
+- **Checked against receipts.** From SC2b's two ON servers' own step costs it reproduces their measured attainment at
+  1 / 2 / 4 / 8 req/s within 0.10. The worst gap is +0.093 at 4 req/s, where the model is optimistic, so its ceiling
+  near the knee is an upper bound.
+
+### Docs: A2000 timings out as speed evidence (testbed-policy audit; docs and comments only)
+
+- **Why.** The RTX A2000 is a correctness-only testbed (policy standing since 2026-07-27, re-stated 2026-10-05): an A2000
+  timing may not seed a prediction, filter a candidate, or appear as speed evidence, whatever its label. An audit of both
+  repositories found such timings in current-facing text here. The full findings table, including what is left for the
+  owner, is [`docs/audits/a2000-timing-2026-10-05.md`](docs/audits/a2000-timing-2026-10-05.md).
+- **Code comments** (no behaviour change). The docstrings and comments of `engines/batched.py`, `engines/fast.py`,
+  `engines/moe_keep.py`, `engines/paged_attention.py`, `engines/pipelined.py`, `engines/triton_prebind.py`, `serve.py` and
+  `train.py` no longer quote A2000 step times, tok/s, per-call ratios or host microseconds. Where a rented reading exists it
+  is cited instead: TC1 amendment 21's RTX 5090 step for `E4B_MOE_KEEP_LAYERS`, and the RunPod A5000 / L40S pair for the
+  hot-set host dependence. `serve.py`'s offload-path advice for `E4B_HOT_PER_LAYER=0` now rests on memory alone (1.02 GB),
+  which is all the A2000 read can support. Memory figures stay.
+- **Docs.** `INFERENCE.md`'s decode table keeps peak GPU and drops tok/s. `RESIDENCY-ENGINES.md` cites the rented A5000's
+  +56 % / +120 % in place of the A2000's +40 %. `SERVING.md` and `STORAGE-MODES.md` drop A2000 decode rates.
+  `MOE_RUNTIME_PORTABILITY.md` retracts its "within-box ratios" label. `OFFLOAD-TRANSFER-NOTES.md` and `METHODOLOGY.md`
+  gain testbed notes; their records stand as measured.
+- **STATUS and register.** The TC3 A2000 row's 69.9 s/step and Kimi-K3's 90-92 s per decode token leave `STATUS.md` and
+  their rows' claim and unit; the headline values (peak memory) are unchanged. Four rows' notes drop A2000 timings: the
+  P66 gather and fixed-tax rows, `e4b.serve.informed-hot-sets` and the TC1c route row.
+- **Left for the owner** (listed in the audit file): the A2000 energy rows (`e4b.train.energy-honest.*`, quoted in the
+  README), the PREREG/RESULTS records, and the runtime warning in `enable_fast_train`, which still quotes the A2000's 36 %.
+
+### SC2c registered (#846): bulk KV bookkeeping OFF against ON on one 5090, with a per-step trace in both arms; the stall census behind it (bench and tests only)
+
+- **The census** (`bench/stall-census-2026-10-05`, exploratory, $0).
+  - **Batch growth.** SC2b's fitted per-prefill stall carried batch growth; bucket-controlled, it is 0.218 / 0.224 s
+    on the ON servers, not 0.262 / 0.269.
+  - **The prefill step does not grow under load.** Admission to first token holds at 157–170 ms.
+  - **The bookkeeping.** One request's KV bookkeeping is ~13.5k host-issued launches at SC2b's geometry, against 66
+    in bulk, bitwise identical (counted and checked on the NAS A2000, a correctness testbed: no A2000 timing is read,
+    e4b#1133).
+  - **Inferred from box F's traces and P107's 5090 receipt, not measured:** with the forward near ~42 ms of device
+    time, ~120 ms of the prefill step is host work, most of it the prompt's flush (8,688 launches at box F's ~12 µs).
+    The first graphed decode's block claims add ~55 ms.
+  - **Projected:** `capsim.py`, a scheduler model calibrated on SC2b's rows, puts the ceiling at 2–4 req/s without the
+    bookkeeping, depending on the 512-token forward's device time.
+- **SC2c** (`bench/sc2/SC2c-PREREG.md`, reviewed and approved by the maintainer agent on #1132).
+  - **The box.** Box H runs `E4B_PAGED_BULK_KV=0|1` paired, with the prefill graph at `auto` in both arms and
+    `E4B_PAGED_STEP_TRACE` on.
+  - **Gates.** ROUTES; ENGAGED (`/health`'s `kv_bookkeeping` counts); DETERMINISM; IDENTITY; PROMPTS.
+  - **Predictions.** P1 stall ON/OFF ≤ 0.6; P2 TTFT ≥ 1.4×; P3 TPOT unchanged; P4 ceiling ≥ 2; P5 ceiling ≥ 4;
+    P6 no regression.
+  - **Licence:** gates + P6 + TTFT ≥ 1.10×.
+  - **Tools.** `sc2c_reduce.py` (13 self-test cases) and `sc2c_census.py` (7) read the step trace's decomposition and
+    the bucket-controlled stall. ROUTES also reads `prefill_routes.seen` (e4b#1129): every expert GEMM above 256 rows
+    on K19 and every prefill attention call on flash, as the forward took them.
+  - **Harness.** `sc1_run.sh` / `sc1_drive.sh` gain box H; `staged.sha256` regenerated.
+
+### serve_paged: opt-in bulk KV bookkeeping (`E4B_PAGED_BULK_KV`) and a per-step trace (`E4B_PAGED_STEP_TRACE`)
+
+- **Why.** SC2b left most of the per-prefill stall under load outside the graphed forward. Each request also costs
+  `serve_paged` its KV bookkeeping: on Qwen3-30B-A3B at 2048 tokens per slot, about 13.5k host-issued launches. They are
+  the slot resets, the prompt's flush into the FP8 pool, and, with decode graphs, a claim of every reachable block at
+  the slot's first decode. All are serialized on the engine thread ahead of every resident decode. The stall census
+  (`bench/stall-census-2026-10-05`, exploratory) counted them; its A2000 runs are correctness and counts only (the
+  testbed policy), and the time they cost on a 5090 box is SC2c's to measure.
+- **`E4B_PAGED_BULK_KV=1`** does that work in a launch count independent of layers and blocks:
+  `Fp8PagedKV.reset_all_layers`, `claim_blocks` (one async table write per request) and `append_prompt` (one quantize
+  per side and one scatter per region per side, per byte-bounded group of layers of one geometry). It leaves the pool
+  bytes, block tables, lengths and free lists exactly as the per-layer path does, with the same rows for the same slot
+  (`tests/test_bulk_kv.py`, whole-pool comparisons; a tiny model decodes the same tokens either way). **Off by default**:
+  no request-level effect is claimed until a registered lane reads one.
+- **Memory, stated.** A bulk flush allocates up to `Fp8PagedKV.append_prompt_peak_bytes(T)` (~216 MiB on Qwen3-30B-A3B
+  at 2048 tokens). Under the prefill graph that is additive to the graph's private pool, so the graph's `auto` headroom
+  check counts it when bulk is on, and `/health` reports `prefill_graph.bulk_flush_mib`. The bound is checked against
+  the allocator's measured peak on CUDA.
+- **`E4B_PAGED_STEP_TRACE=<path>`**: one JSON line per engine step. It records what the step carried, its host time by
+  segment, and when the GPU finished the forward, the flush and the decode, read after the step's own syncs. `/health`
+  reports `engine.bulk_kv` and `step_trace_path`.
+
+### Serve estimate: the cold tier's minimum `hot_rows`, and a refusal below it
+
+- `serve_recipe.min_hot_rows(topology, setup)` is the fewest cold-tier rows a solver setup can serve with, by
+  grouped-nf4-gemm's own ColdTier rule ("size hot_rows >= max routed experts per layer"): `top_k × max(chunk_tokens,
+  max_seqs)`, at most `n_experts` and at most the NVMe rows.
+  - Without a routing profile the solver fills layer by layer, so NVMe holds whole trailing layers.
+  - The server's default of 64 is below that for Qwen3-30B-A3B (128 experts, top-8): a long prefill through an
+    NVMe layer would be refused mid-request.
+  - The default is far above it for Mixtral (8 experts). There, 64 rows of ~99 MB each in the pinned landing, the
+    cold view and the setup tier crowd the DRAM tier out of the host budget.
+- `estimate_serve_footprint` refuses a solver setup with rows on NVMe and `hot_rows` below the minimum, in words.
+
+### `/health`'s `prefill_routes` gains `seen`: the routes the forward ran, not the environment's resolution (serving)
+
+- **What was wrong.** `prefill_routes` reports the environment's resolution: `int4_prefill`, `int4_prefill_above_256_rows`
+  and `prefill_attn`. Those name what an int4-b32 store and a layer without sinks or a window would take. On gpt-oss-20b
+  (SC2g's `sc2g-prove-2`) they read `k19` / `k19` / `flash`, and no call took any of them:
+  - the MXFP4 store's rows up to 256 take K21, and rows above take the kept NF4 stacks' M-tile GEMM;
+  - every gpt-oss layer has sinks, so it keeps the explicit mask.
+
+  Box G's engagement check asserted those names, so it passed without testing the route.
+- **`prefill_routes.seen`.**
+  - `moe` counts each expert-GEMM call's route and row class (`hot_residency.ROUTE_SEEN`), for example `mxfp4_k21|le256` or
+    `nf4_mtile_captured|gt256`.
+  - `prefill_attn` counts each prefill attention call's path (`paged_attention.ATTN_SEEN`): `flash`, or
+    `explicit_mask:sinks|window|env`.
+  - Both are counted where the route is chosen, in the Python forward: eager calls and graph captures count, graph
+    replays do not. An MXFP4 store whose NF4 stacks were freed now shows `mxfp4_*|gt256` instead of `nf4_*|gt256`, which
+    `/health` could not tell apart before.
+- **Unchanged:** the resolved fields are kept as they were, and no route, kernel or output changes. `tests/test_route_seen.py`
+  ties each label to the GEMM that was actually called (mocked, on CPU). Mutating a label or the sinks reason fails it.
+
+### DQ1 erratum: one prediction clause leaned on an A2000 timing (docs only)
+
+- The research note quoted a code comment's A2000 decoder timing, and the G1 prediction's reason drew on it. Under the
+  testbed policy an A2000 timing cannot seed a prediction.
+- The registered band stands and held on the 5090. The note now cites the 5090's own decoder measurement (run 2).
+- `RESULTS-dq1.md` records the erratum. Every other A2000 use in DQ1 was correctness only.
+
+### Read: TC2 amendment 9 — on one stack e4b is faster on Mixtral-8x7B too, Unsloth/e4b 1.144 (P29, P30, P31 HELD); it becomes Mixtral's quoted position
+
+- `tc1-5090-84` ($1.59, EPYC 7B13, 60-step load-gated draws): Mixtral resident at e4b's defaults (the dense route), both frameworks on
+  torch 2.12.1 / transformers 5.5.0. e4b 3.233 / 3.248 s/step, Unsloth 3.701 / 3.711: **1.144** [1.140, 1.148], COMPARABLE. e4b on the
+  field image's stack in the same box: 3.681 / 3.636, so the environment reads **0.886**, and the dense route ran on every e4b arm.
+- Amendment 8's 0.836 (Unsloth faster, on a 285K host with e4b on torch 2.8) stays as that reading. On this host e4b on its own stack
+  reads 1.013; one stack moves it to 1.144. Unsloth keeps a 2.07 GB lower peak at e4b's defaults (the fp32 absmax) and ×0.93 the energy.
+
+### RD1 registered: grouped-nf4-gemm's frozen-expert GEMM routes per call at MoE training shapes, on one RTX 5090 (bench and tests only)
+
+- **Why.** On sm_120, `auto` keeps the fused NF4 kernels for calls with more than 16 present experts.
+  - The per-expert `dense` loop is launch-bound there (TC1 amendment 22: 2.947× on Qwen3-30B-A3B).
+  - The fused kernels run TF32 and decode the weight once per M-tile inside the GEMM loop.
+  - No torch release through 2.14.1 has a single-launch grouped bf16 GEMM for that card.
+  - A decoded route needs no per-expert launches: grouped-nf4-gemm's `dequant_groups` (one launch), then one Triton grouped
+    bf16 GEMM launch.
+  - RD1 asks whether it beats the best of {v1 as shipped, the fused kernels' own bf16 MMA (v3, plus a probe-local bf16
+    dgrad), `dense`} per call.
+- **What.** `bench/moegen/rd1/`:
+  - `RD1-PREREG.md`: the bar, the correctness gate, the decision and the hypotheses, registered before the box;
+  - `rd_probe.py`: five arms, eight families' shapes, seq 512 / 2048, uniform and skewed routers. It records device and
+    event time, peak bytes, and each arm's error against an fp32 reference;
+  - `rd_table.py`: the gate and the bar, with the decision read only on an RTX 5090 receipt;
+  - `rd1_run.sh`: the box side, under `tc1_drive.sh`, with the train anchor strict;
+  - `a2000/`: the correctness rehearsal, with no timing field.
+  - `tests/test_rd1_lane.py` pins the staged pieces, the shape table, the bar and the gate to the registration. It also shows
+    that a fast arm with 3× dense's error on one call cannot count.
+- **Budget.** One RTX 5090 with no checkpoint fetch, about $0.64 under a 0.75 h guard.
+
+### TC1 amendment 38 registered: the compact padded LoRA delta's default decision, a third host and a second family (bench and tests only)
+
+- **Why.** Two hosts read the compact delta on Qwen3-30B-A3B at 0.967–0.970 (matched) and 0.948–0.970 (shipped); with
+  grouped-nf4-gemm#473 the matched peak fell 0.288 GB. Amendment 37's two-sided band kept it opt-in on the favourable side, and a
+  grouped-nf4-gemm default changes every family, with no family but Qwen3 read.
+- **The box** (tokens `qwen3compactab3`, `mixtralcompactab`): amendment 36's A/B on a third host, then Mixtral-8x7B's matched arm
+  resident at defaults. One-sided predictions: Qwen3 speed ≤ 0.99 on both arms (P77, P78), its matched peak ≤ +0.05 GB (P79); Mixtral
+  ≤ 1.01 (P80), its peak ≤ +0.05 GB (P81); held-out within 0.005 (P82, P83). All HELD makes it grouped-nf4-gemm's default.
+- The reducer reads both with amendment 36's scorer (`COMPACT_SPECS`); one new self-test case.
+
+### Read: TC1 amendment 37 — with grouped-nf4-gemm#473 the compact delta lowers the matched peak 0.29 GB and runs 0.967 / 0.948; it stays opt-in (P75 FALSIFIED on the fast side)
+
+- `tc1-5090-83` ($0.78, EPYC 7702P, machine 45379, 60-step load-gated draws, venv-unsloth, grouped-nf4-gemm after #473):
+  `NF4_QLORA_COMPACT_DELTA` 0 vs 1. Matched 0.967 [0.959, 0.975], peak 27.477 → 27.189 GB (P73, P74 HELD); shipped 0.948
+  [0.933, 0.964], below its [0.95, 0.99] band (P75 FALSIFIED); held-out within 0.003 (P76 HELD).
+- #473 turned amendment 36's +0.229 GB into −0.288 GB. The speed replicated on a second host.
+- By the registered rule it stays opt-in pending its own registration: a ratio below 0.95 is the rule's "otherwise" branch.
+
+### Read: DQ1 run 2 — no dense W4A16 speed primitive at QLoRA rows (S_DEAD, G1_PARITY, GF_LOSS); streaming marginal on PCIe 4.0 (bench only)
+
+- `dq1-5090-2` ($0.10, RTX 5090, PCIe 4.0 x16, under Amendment 1). The lane READs; 6/250 self-pairs are out of band.
+- **Speed.** A perfect bf16-math 4-bit kernel could save at most ~10% of base-linear time at 2048 tokens, ~5% at 4096
+  (H 0.097 / 0.050; 0.097 is within draw noise of the line, and the consequence is the same either way). That share is
+  bnb's dequant, within ±10%.
+- **G=1 and fused.** grouped-nf4-gemm at G=1 (`auto` = dense route) is at parity (1.002–1.010). Its packed kernel is
+  3.2–4.5× slower. bitsandbytes 0.50.2 takes dequant + cuBLAS at every census row on sm_120.
+- **LoRA.** PEFT's unfused delta costs ~9–10% of base-linear time at ≥ 2048 tokens, as much as or more than the whole
+  dequant headroom.
+- **Streaming.** DMA costs the GEMMs ≤ 2.5%. The forward phase binds: Rmin 1.07 at 2048, 1.93 at 4096 on 27.9 GB/s.
+  Model-size-free rule: break-even at M ≈ 0.26·F/B. C_MARGINAL licenses no prototype; a PCIe 5.0 lane is the
+  registered next step.
+- **Write-ups.** `bench/dq1/RESULTS-dq1.md` and `SUMMARY-dq1.md`: speed is a negative result, there is no new
+  repository, and the next lanes are ranked.
+
+### Serve estimate: bytes per expert is the arena row, not a share of the stack
+
+- `serve_recipe.bytes_per_expert(stack)` is the stack's growth from one expert to `n_experts`. It is exactly the arena
+  row before alignment: packed 4-bit plus fp32 absmax, gate_up and down. The previous `slab // n_experts` smeared the
+  stack's per-stack constants (the NF4 code table) across every row. On OLMoE that gave 3,538,945 bytes against the
+  bake's 3,538,944, enough to round the aligned stride up a page. The solver's tier split and the hybrid tier's buffers
+  use the exact figure now.
+
+### SC2g amendment A1: box G's proof died in the harness; the box sources cleanly, and a dead lane is now seen (bench and tests only)
+
+- **`sc2g-prove-1`** ($0.848) died at box G's install: `sc2g_box_g.sh: line 20: FOLDS: unbound variable`. `sc1_run.sh` sources the
+  box scripts under `set -u` before it defines `FOLDS`. `$FOLDS` is now appended where the e4b server starts, so the server's
+  environment is unchanged. A test sources every SC2 box script under `set -u` with only `W` set; it reproduces the failure on the
+  old line.
+- **The controller's dead-lane check never fired.** It counted `pgrep -f 'bash sc1_run.sh'` inside a shell whose own command line
+  holds the pattern; procps counts that shell, so `live` read 2 for 66 polls after the box died, and the run waited out its
+  deadline. It now counts `[b]ash sc1_run.sh`.
+- **`sc1_run.sh` gains an EXIT trap**: an exit that skips `finish` still writes its rc and TP_DONE; rc 0 there is recorded as 79.
+- No change to SC2g's design, rule or guards. Next: `sc2g-prove-2`.
+
+### TC2 amendment 9 registered: Mixtral's position with both frameworks on one stack (bench and tests only)
+
+- **Why.** Mixtral-8x7B is e4b's one losing family at default settings (TC2 amendment 8: Unsloth/e4b 0.836). That box ran e4b on the
+  field image's torch 2.8 against Unsloth's torch 2.12, on a 285K host where Unsloth's Mixtral step is at its fastest.
+- **The box** (token `mixtralsamestack`): TC1 amendment 25's same-stack family on Mixtral, resident, e4b at default settings (the dense
+  route), 60 steps, load-gated draws, a 192 GB host floor, off machines 151350, 45511 and 138786. P29 Unsloth/e4b on one stack in
+  [0.85, 1.25]; P30 e4b venv-unsloth / venv-e4b in [0.85, 1.02]; P31 the dense route on every fused e4b arm. A stable reading becomes
+  Mixtral's position to quote whichever side it favours.
+- The reducer reads it with amendment 25's scorer; the route check now takes a predicate per family (`SAMESTACK_ROUTE`), so Mixtral's is
+  read from the dense call counts. One new self-test case; TC2 box M's real Mixtral receipts reduce under the new family.
+
+### TC1 amendment 37 registered: the compact padded LoRA delta again, with grouped-nf4-gemm#473's backward, on another host (bench and tests only)
+
+- **Why.** Amendment 36 found the compact delta faster (0.969 / 0.970) but its matched peak 0.229 GB higher. Its backward held the padded
+  output gradient while rebuilding the input block; grouped-nf4-gemm#473 releases each intermediate at its last use (values identical),
+  and on an RTX A2000 its per-call backward peak went from 24–55 % above the autograd path's to 2–30 % below.
+- **The box** (token `qwen3compactab2`): amendment 36's box with grouped-nf4-gemm at or after #473, off machine 145701. P73 matched
+  peak change in [−0.05, +0.50] GB of drop; P74 / P75 speed in [0.95, 0.99]; P76 held-out within 0.005. All four HELD makes it
+  grouped-nf4-gemm's default.
+- The reducer reads it with amendment 36's scorer, now per family (`COMPACT_SPECS`); one new self-test case. Amendment 36's own
+  receipts re-reduce to the same verdicts.
+
+### Read: TC1 amendment 36 — the compact padded LoRA delta is about 3 % faster and the matched peak rose 0.23 GB (P69, P70, P71 FALSIFIED; P72 HELD); it stays opt-in
+
+- `tc1-5090-80` ($1.48, EPYC 7B13, 60-step load-gated draws, venv-unsloth): `NF4_QLORA_COMPACT_DELTA` 0 vs 1. Matched 0.969
+  [0.962, 0.977], peak 27.490 → 27.719 GB; shipped 0.970 [0.957, 0.983], peak unchanged; held-out within 0.001.
+- The registered reason was memory; the box found speed instead. By the rule it stays opt-in. The single node's backward keeps the padded
+  output gradient live while it rebuilds the input block, which is where the extra peak points; releasing intermediates at their last use
+  is grouped-nf4-gemm's own change, and a speed default would be its own registration.
+
+### Read: TC1 amendment 35 — under triton 3.7.1 the prebound launches read 0.986 (matched) and 0.996 (shipped); triton 3.7 stays covered (P66, P67, P68 HELD)
+
+- `tc1-5090-79` ($1.68, EPYC 7B13, 60-step load-gated draws): amendment 26's A/B in venv-unsloth (torch 2.12.1, triton 3.7.1).
+  Matched `_pb1`/`_pb0` 0.986 [0.975, 0.997]; shipped 0.996 [0.978, 1.013]; held-out within 0.003. Every `_pb1` arm counted 216,335
+  e4b and 72,162 grouped-nf4-gemm prebound launches.
+- By the registered rule triton 3.7 stays in the prebound path's supported versions (#1108, grouped-nf4-gemm#471). Row
+  `e4b.train.prebind.triton37.qwen3.5090.2026-10-05`. The shipped arm's interval reaches 1.0.
+- The gate voided five draws; the shipped arm's first draws stood at load 8.2 after the retries ran out. First attempts read 0.980 /
+  0.995: no verdict changes.
+
+### Read: TC1 amendment 34 — the 5090's environment gain is torch 2.12's (P63 HELD, 0.905), not transformers 5.5's (P62 FALSIFIED, 1.005)
+
+- `tc1-5090-78` ($1.73, EPYC 7B13, 60-step load-gated draws, prebound launches off): e4b's matched arm in venv-e4b (torch 2.8,
+  transformers 5.18), venv-e4b-tf55 (torch 2.8, transformers 5.5, built on the box) and venv-unsloth (torch 2.12.1, transformers 5.5).
+  transformers alone 1.005 [0.995, 1.014]; torch 2.12 + triton 3.7 0.905 [0.892, 0.918]; the whole environment 0.909 (P64 HELD);
+  held-out within 0.0013 (P65 HELD). With amendment 32's triton-alone 0.992, nearly all of the gain is torch 2.12's.
+- By the registered rule (P63 HELD) the install section says that torch 2.12 runs e4b's host-bound training step faster on an
+  RTX 5090. Row `e4b.train.env-split.qwen3.5090.2026-10-05`.
+- The gate voided six draws, some under load from this campaign's own boxes on the same machine; the first attempts read 1.004 / 0.907 /
+  0.911, so no verdict changes.
+
+### SC2g registered (#846): request-level serving of gpt-oss-20b, with e4b's first gpt-oss run through `serve_paged`
+
+- **What runs.** SC2's driver and rule on openai/gpt-oss-20b (`6cee5e81`), one RTX 5090, a new box G in the CUDA 13
+  image, four engines, each on its own arithmetic over the checkpoint's MXFP4 experts. Every row carries an arithmetic
+  label (sourced) and every e4b ratio is ARITH_MISMATCH:
+  - e4b: native MXFP4 decode (`gemv_mxfp4_b32` on int8 activations; K21 on bf16) and NF4 prefill (`E4B_INT4_KEEP_NF4=1`);
+  - vLLM: Marlin W4A16 with TRITON_ATTN pinned;
+  - SGLang: its gpt-oss defaults, via a new `gptoss` mode in `bench/sc1/sglang/server.sh`;
+  - llama.cpp: ggml-org's published MXFP4 GGUF.
+- **Design fix from SC2's read.** Both draws repeat ONE Poisson realisation.
+- **Predictions.** Q1 TTFT ≥ 2× vLLM's; Q2 TPOT ≤ 1.5×; Q3 vLLM's ceiling ≥ 4 req/s and above e4b's; **Q4 registers
+  SC2's post-hoc mechanism** (e4b's stall per interleaved prefill ≥ 10× its per-token cost, R² ≥ 0.9); Q5 every row
+  VALID.
+- **Files.** `bench/sc2/SC2g-PREREG.md`, `sc2g_box_g.sh`, `sc2g_reduce.py`; `sc2_trace.py` is now staged; grouped-nf4-gemm
+  v0.41.0 (e4b 0.48.0's CI pin) is pinned for box G, with `GNF4_TRITON_PREBIND=1` pinned and recorded; `tests/test_sc2g_box.py` executes the child-env, SGLang-engagement and e4b-check paths.
+
 ## 0.48.0 — 2026-10-05 — two training defaults licensed by TC1 (prebound Triton launches, 0.973-0.980 of the step; the CLI trainer's double-quantized expert absmax, 1.34-2.04 GB less peak); Qwen3.6 supported for fast training; on one stack e4b trains Qwen3-30B-A3B 2.352x as fast as Unsloth (TC1 amendment 33); CI on grouped-nf4-gemm 0.41.0
 
 **0.48.0.** Two training defaults change, each by a rule registered and read in lane TC1 (#835).
