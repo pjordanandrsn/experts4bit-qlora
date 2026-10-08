@@ -120,6 +120,7 @@ def _pool(model, rows, tokens, scratch, device):
     cfg = getattr(model.config, "text_config", None) or model.config
     hkv, hd = _kv_geometry(model.config)
     layers = kv_layers(model, int(cfg.num_hidden_layers))
+    # kv_layers() returns the pool's layer COUNT (an int), as Fp8PagedKV takes it (amendment 1)
     return Fp8PagedKV(layers, hkv, hd, batch=rows, max_tokens_per_seq=tokens, device=device, scratch_slots=scratch), layers
 
 
@@ -143,7 +144,7 @@ def decode_bracket(model, ws, P, device, *, buckets, rows, warm, steps, bulk_kv=
     from experts4bit_qlora.engines.paged_runner import PagedModelRunner
     kv, layers = _pool(model, rows, P + warm + steps + 16, max(buckets), device)
     runner = PagedModelRunner(model, kv, device=device, bulk_kv=bulk_kv)
-    rec = {"buckets": list(buckets), "rows": rows, "warm": warm, "steps": steps, "layers": len(layers),
+    rec = {"buckets": list(buckets), "rows": rows, "warm": warm, "steps": steps, "layers": int(layers),
            "bulk_kv": bool(bulk_kv)}
     with _Grouped(), torch.no_grad():
         rec["graph_status"] = {str(k): v for k, v in
@@ -160,7 +161,7 @@ def decode_bracket(model, ws, P, device, *, buckets, rows, warm, steps, bulk_kv=
     rec["profiled"] = {b: {k: after[b][k] - before.get(b, {}).get(k, 0) for k in after[b]} for b in after}
     rec["wall_ms_per_step"] = wall
     rec.update(kernel_table(avgs, steps))
-    rec["dtod_per_layer"] = round(rec["dtod"] / max(len(layers), 1), 3)
+    rec["dtod_per_layer"] = round(rec["dtod"] / max(int(layers), 1), 3)
     return rec
 
 
@@ -173,7 +174,7 @@ def prefill_bracket(model, ws, P, device, *, last_logits, reps, bulk_kv=True):
         runner = PagedModelRunner(model, kv, device=device, bulk_kv=bulk_kv, last_logits=last_logits)
     except ValueError as e:
         return {"last_logits": last_logits, "refused": str(e)[:300]}
-    rec = {"last_logits": last_logits, "reps": reps, "tokens": P, "layers": len(layers), "bulk_kv": bool(bulk_kv)}
+    rec = {"last_logits": last_logits, "reps": reps, "tokens": P, "layers": int(layers), "bulk_kv": bool(bulk_kv)}
     with _Grouped(), torch.no_grad():
         runner.bind(0, 0, ws[0][:P])
         runner.run_prefill([(0, 0, P)])
@@ -185,7 +186,7 @@ def prefill_bracket(model, ws, P, device, *, last_logits, reps, bulk_kv=True):
     rec["last_logits_stats"] = stats() if callable(stats) else None
     rec["wall_ms_per_prefill"] = wall
     rec.update(kernel_table(avgs, reps))
-    rec["dtod_per_layer"] = round(rec["dtod"] / max(len(layers), 1), 3)
+    rec["dtod_per_layer"] = round(rec["dtod"] / max(int(layers), 1), 3)
     return rec
 
 

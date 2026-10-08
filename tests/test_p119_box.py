@@ -116,7 +116,7 @@ def run():
     from experts4bit_qlora.engines import paged_runner
     real_runner, real_pool = paged_runner.PagedModelRunner, box._pool
     paged_runner.PagedModelRunner = _StandIn
-    box._pool = lambda model, rows, tokens, scratch, device: (object(), [0, 1])
+    box._pool = lambda model, rows, tokens, scratch, device: (object(), 2)   # kv_layers() returns an int (amendment 1)
     _StandIn.made.clear()
     try:
         g = torch.Generator().manual_seed(1)

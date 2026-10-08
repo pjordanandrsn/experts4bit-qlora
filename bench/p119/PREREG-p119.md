@@ -5,6 +5,11 @@ claimed by `prereg/p119` (pushed 2026-10-08T06:28:57Z). Follows SC2e (#1333), P1
 (#1346). Shared with the TTFT lane (`CTO/codex-desktop/ttft`): one profiling run serves both, so neither registers
 duplicate profiling. Derived from P117 (`bench/p117/PREREG-p117.md`) by named substitutions; descriptive only.
 
+**Amendment 1 (2026-10-08, before any reading).** `p119-prove-1` (HARNESS_ERROR, $0.069) failed in the box: it called
+`len()` on `kv_layers()`, which returns the pool's layer count as an int. The box now records that int; the CPU test's
+stand-in pool returns an int as the real one does, so the same defect fails on CPU. `staged.sha256` is re-pinned. No
+bracket, rule, prediction, guard or budget changes.
+
 ## Why this lane
 
 - **SC2e:** 64 slots with buckets up to 64 serve 12 req/s on Qwen3-30B-A3B int4, one RTX 5090. The 64-row decode step
