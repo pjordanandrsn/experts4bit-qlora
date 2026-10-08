@@ -206,8 +206,9 @@ class PagedModelRunner(StepRunner):
         self.slot_of[rid] = slot
         self.pos_of[rid] = 0
         self.tokens[rid] = list(prompt)
-        if self._la is not None:
-            self._la["dev_len"].pop(slot, None)     # the slot's device token is the previous tenant's
+        if self._la is not None:                    # the slot's device token is the previous tenant's
+            self._la["dev_len"].pop(slot, None)
+            self._la["dev_tok"].pop(slot, None)
         self._reset(slot)            # a recycled slot carries no history
         if self.linear_state is not None:
             self.linear_state.reset(slot)
@@ -586,8 +587,11 @@ class PagedModelRunner(StepRunner):
             la = self._la = {
                 # each slot's newest token on the device; the scratch slots' entries stay 0, the padding rows' ids
                 "tok": torch.zeros(int(kv.B) + len(kv.scratch), dtype=torch.long, device=dev),
-                # slot -> the request's token count with the token in "tok" counted (a mismatch resyncs from the host)
+                # slot -> the request's token count with the token in "tok" counted, and that token's value once
+                # collected (its host shadow): with nothing in flight, a row whose count or newest token differs from
+                # these was edited on the host and is resynced from it
                 "dev_len": {},
+                "dev_tok": {},
                 "inflight": {},      # rid -> steps issued and not yet collected
                 # host staging for two queued steps: slot ids, positions, tokens read back; reused only once collected
                 "ring": [{"slots": host(rows), "pos": host(rows), "out": host(rows), "event": None, "open": False}
@@ -601,8 +605,9 @@ class PagedModelRunner(StepRunner):
         """Enqueue one decode step for ``rids`` and return without waiting for it; :meth:`collect_decode` reads its
         tokens. A row's input is its newest token, which may still be in flight: its position counts the queued steps
         and its id is gathered on the device. A row whose newest token is known only on the host (its first decode, or
-        after a host edit of ``tokens`` that changed its length) is written into the device table first. At most two
-        steps may be queued. ``tokens``, ``pos_of`` and the KV host mirrors advance when a step is collected, as
+        after a host edit of ``tokens`` with nothing queued: appended, or its last token rewritten in place) is written
+        into the device table first. With a step queued for the row, an edit that changes its length is refused and
+        an in-place rewrite cannot be seen (it is not supported). At most two steps may be queued. ``tokens``, ``pos_of`` and the KV host mirrors advance when a step is collected, as
         :meth:`run_decode` advances them."""
         if not rids:
             raise ValueError("issue_decode: no rows")
@@ -642,9 +647,11 @@ class PagedModelRunner(StepRunner):
             for r, s_ in zip(chunk, slots):
                 k = inflight.get(r, 0)
                 have = len(self.tokens[r]) + k      # the row's tokens once its queued steps land
-                if dev_len.get(s_) != have:         # known on the host only (k == 0, checked above)
-                    tok.narrow(0, s_, 1).fill_(self.tokens[r][-1])
+                newest = self.tokens[r][-1]
+                if dev_len.get(s_) != have or (not k and la["dev_tok"].get(s_) != newest):
+                    tok.narrow(0, s_, 1).fill_(newest)       # known on the host only (k == 0, checked above)
                     dev_len[s_] = have
+                    la["dev_tok"][s_] = newest
                 pos.append(self.pos_of[r] - 1 + k)
             ph = ring["pos"][off:off + b]
             ph.copy_(torch.as_tensor(pos + [0] * pad, dtype=torch.long))
@@ -714,6 +721,7 @@ class PagedModelRunner(StepRunner):
                 got[rid] = int(t)
                 self.tokens[rid].append(int(t))
                 self.pos_of[rid] += 1
+                self._la["dev_tok"][slot] = int(t)  # the device table's value once nothing newer is queued
                 for layer in self.pool_layers:
                     kv._seen[layer][slot] += 1     # the host mirror of the device append
         ring["open"] = False
@@ -945,6 +953,7 @@ class PagedModelRunner(StepRunner):
             if self._la["inflight"].get(rid):
                 raise RuntimeError(f"free_slot: rid {rid} has a decode step in flight; collect it first")
             self._la["dev_len"].pop(self.slot_of.get(rid), None)
+            self._la["dev_tok"].pop(self.slot_of.get(rid), None)
         slot = self.slot_of.pop(rid, None)
         if self._graphs is not None:
             self._graph_ready.discard(slot)

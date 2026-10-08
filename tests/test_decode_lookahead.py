@@ -260,14 +260,22 @@ def _bound(device, monkeypatch, n=2):
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_a_host_edit_resyncs_when_nothing_is_queued(device, monkeypatch):
+@pytest.mark.parametrize("edit", ["append", "in_place"])
+def test_a_host_edit_resyncs_when_nothing_is_queued(device, edit, monkeypatch):
+    """``run_decode`` feeds whatever ``tokens[rid][-1]`` holds. With nothing queued the lookahead must too: after an
+    appended token (its position advanced with it), or after the last token rewritten in place, which is how a
+    teacher-forced box writes and which leaves the length unchanged."""
     toks = {}
     for look in (False, True):
         r = _bound(device, monkeypatch)
         step = (lambda rids: r.collect_decode(r.issue_decode(rids))) if look else r.run_decode
         step([0, 1])
-        r.tokens[1].append(5)                           # a host edit between steps (its position advances with it)
-        r.pos_of[1] += 1
+        if edit == "append":
+            r.tokens[1].append(5)
+            r.pos_of[1] += 1
+        else:
+            r.tokens[1][-1] = (r.tokens[1][-1] + 11) % V
+        step([0, 1])
         step([0, 1])
         toks[look] = (list(r.tokens[0]), list(r.tokens[1]))
     assert toks[True] == toks[False]
