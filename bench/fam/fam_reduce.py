@@ -51,6 +51,9 @@ ANCHOR = {"family": "gptoss", "configs": ("OFF", "ON_auto"), "cell": ("wikitext"
 PROOF = {"families": ("granite",), "configs": {"granite": ("OFF", "ON_epi", "ON_auto")}, "anchor_family": "granite",
          "cont": 32}
 CONT = 128                                    # registered teacher-forced positions per window (the reading)
+#: registered prompt, prefill chunk and floor chunk: every prefill forward carries more than 64 rows, so only the decode
+#: steps (and a hybrid's one-token warm-up) are decode-shaped -- the per-step count below depends on it
+PREFILL = (512, 512, 256)
 PHASE_C_ANCHOR_AGREE = 0.924                  # Phase C's SANE argmax agreement on gpt-oss (SC2g path, T == 12, set A)
 
 ATTN_LAYERS = {"granite": 32, "gptoss": 24, "qw36": 10}
@@ -180,6 +183,9 @@ def family_checks(fam, recs, e4b_sha, cells, why, configs=None, cont=CONT):
             base = c["base"]
             if base.get("cont") != cont:
                 why.append(f"{config} {cell}: {base.get('cont')} teacher-forced positions, registered {cont}")
+            if (base.get("prompt"), base.get("chunk"), base.get("floor_chunk")) != PREFILL:
+                why.append(f"{config} {cell}: prompt / chunk / floor chunk "
+                           f"{(base.get('prompt'), base.get('chunk'), base.get('floor_chunk'))}, registered {PREFILL}")
             if base.get("group") != int(shape):
                 why.append(f"{config} {cell}: group {base.get('group')} != {shape}")
             dg = base.get("windows_sha256", {}).get(text)
@@ -483,6 +489,9 @@ def self_test() -> int:
     r = copy.deepcopy(base)
     r["ON_auto"]["gnf4_sha"] = "H"
     case("another grouped-nf4-gemm commit VOIDs", "gptoss", r, "VOID")
+    r = copy.deepcopy(base)
+    r["ON_r2"]["cells"]["c4val1|1|B"]["base"]["prompt"] = 64
+    case("a prompt at or under the folds' 64-row bound VOIDs", "gptoss", r, "VOID")
     ok = [c[1] for c in cases]
     # gate arithmetic, by hand
     fl = {"B": 0.002, "S": 0.010, "A": 0.95}

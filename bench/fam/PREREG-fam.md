@@ -120,7 +120,7 @@ question Phase C could not: knob or gate. It licenses nothing.
 levers), the census, the fusion modes, grouped-nf4-gemm's NF4 dispatch tally per cell, peak memory, and every pass's
 engagement.
 
-## The rule (`bench/fam/fam_reduce.py`, self-tested on 39 cases)
+## The rule (`bench/fam/fam_reduce.py`, self-tested on 40 cases)
 
 The verdict for each (family, ON config) is the first of these that applies.
 
@@ -128,6 +128,8 @@ The verdict for each (family, ON config) is the first of these that applies.
    - a record missing or not ok;
    - another model revision, e4b commit or grouped-nf4-gemm commit across the family's processes;
    - a cell missing, or run at the wrong group size;
+   - a prompt, prefill chunk or floor chunk off 512 / 512 / 256: every prefill forward must carry more than the folds'
+     64 decode rows, or the per-step counts below do not hold;
    - the configs scored different windows (the windows' digests per cell);
    - an arm short of its windows: 12 per set; `rep` = the shape;
    - a census off the table above;

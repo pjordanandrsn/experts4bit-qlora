@@ -60,7 +60,7 @@ def test_self_tests():
     assert _load("fam_reduce").self_test() == 0
 
 
-P, C, CHUNK, FLOOR_CHUNK = 24, 6, 24, 8
+P, C, CHUNK, FLOOR_CHUNK = 136, 6, 136, 68          # every prefill forward above the folds' 64-row decode bound
 UNPADDED = {"device_grouping": True}
 L = 2
 
@@ -105,6 +105,7 @@ def gptoss_records(tmp_path_factory):
 def _tiny_reducer(red):
     """The reducer with the tiny model's registered constants."""
     red.CONT = C
+    red.PREFILL = (P, CHUNK, FLOOR_CHUNK)
     red.ATTN_LAYERS = {**red.ATTN_LAYERS, "gptoss": L}
     red.CENSUS = {**red.CENSUS, ("gptoss", "OFF"): [0, 0, [0, 0], 0], ("gptoss", "ON_glue"): [0, 2 * L + 1, [0, 0], 0],
                   ("gptoss", "ON_r2"): [0, 0, [L, 0], 0], ("gptoss", "ON_epi"): [0, 0, [0, 0], L],
