@@ -11515,6 +11515,31 @@
         "receipts/experts4bit-qlora/2026-10-08/tc1-5090-136/tc1/"
       ],
       "notes": "Vast invoiced $1.96."
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 69 (#835), one rented RTX 5090 (tc1-5090-137, AMD EPYC 7713, Vast machine 55913): TC1's field recipe (alpaca, seq 2048, micro-batch 2 x accum 4) over 60 load-gated steps with both frameworks on one stack (venv-unsloth, torch 2.12.1), e4b's matched arm at every current default against Unsloth 2026.9.14's matched arm (grouped_mm), two draws each in ABBA order, every arm profiled. Unsloth's device time per profiled step is 1.924x e4b's (3259.1 / 1693.9 ms; P205 HELD, [1.7, 2.7]); s/step 9.780 against 3.489, a wall ratio of 2.803 on this host (P206 HELD, [2.3, 3.3]). Unsloth runs 14.09x e4b's CPU ops per step (P207 HELD, >= 8) and its GPU is busy for 0.333 of its timed step against e4b's 0.486, so the wall ratio is 1.457x the device ratio (P208 HELD, >= 1.05). Held-out at N 0.75643 against 0.75761 (P209 HELD, within 0.01). e4b peaks 26.16 GB against Unsloth's 24.27.",
+      "value": 1.924,
+      "unit": "ratio, device ms per profiled step, Unsloth matched arm / e4b matched arm at its defaults, TC1 field recipe (medians of two draws); wall s/step ratio 2.803 on this host",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-137: instance 54809007, AMD EPYC 7713, Vast machine 55913); e4b @ 737f02f + grouped-nf4-gemm @ 8371c38, torch 2.12.1+cu130; Unsloth 2026.9.14",
+      "conditions": "bench/tc1 token qwen3pos69 (TC1 amendment 69): TC1's tokens and field recipe, TC1_STEPS=60, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_m_fd and Unsloth ckpt_unsloth_m_fv, matched set (fp32 adapters, matched init), two draws each, the profile instrument (3 warm + 3 profiled steps, before the timed window) on every arm; validity (pos69_why: every e4b default present and unset) and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-08",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos69.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-137/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-08/tc1-5090-137/tc1/"
+      ],
+      "notes": "Vast invoiced $2.12."
     }
   ]
 }

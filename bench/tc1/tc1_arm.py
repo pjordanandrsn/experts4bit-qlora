@@ -3977,6 +3977,16 @@ def run_arm(a, load_fn, sampler=True):
                                "calls": int((_cb or {}).get("calls", 0))}
         except Exception:
             compact_buckets = {"env": os.environ.get("NF4_QLORA_COMPACT_BUCKETS"), "gnf4_has_compact_buckets": False}
+    single_ladder = None                               # TC1 amendment 70: grouped-nf4-gemm's single-block ladder (NF4_QLORA_SINGLE_LADDER): how often, how padded
+    if a.framework == "e4b":
+        try:
+            import nf4_qlora as _nqs
+            _sl = getattr(_nqs, "SINGLE_LADDER_STATS", None)
+            single_ladder = {"env": os.environ.get("NF4_QLORA_SINGLE_LADDER"), "gnf4_has_single_ladder": _sl is not None,
+                             "calls": int((_sl or {}).get("calls", 0)), "rows_laddered": int((_sl or {}).get("rows_laddered", 0)),
+                             "rows_single": int((_sl or {}).get("rows_single", 0))}
+        except Exception:
+            single_ladder = {"env": os.environ.get("NF4_QLORA_SINGLE_LADDER"), "gnf4_has_single_ladder": False}
     route_ab = None                                    # TC1c amendment 4: which training GEMM route grouped-nf4-gemm took (GNF4_TRAIN_GEMM), and how often
     if a.framework == "e4b":
         try:
@@ -4060,6 +4070,7 @@ def run_arm(a, load_fn, sampler=True):
         "chunked_lm_loss": chunked_lm_loss,                                                                              # TC1 amendment 40
         "combine_chunk": combine_chunk,                                                                                  # TC1 amendment 61
         "compact_buckets": compact_buckets,                                                                              # TC1 amendment 66
+        "single_ladder": single_ladder,                                                                                  # TC1 amendment 70
         "keep_ab": keep_ab,                                                                                              # TC1 amendment 21 (#945)
         "route_ab": route_ab,                                                                                            # TC1c amendment 4
         **({"mem_census": mem_census} if mcen is not None else {}),                                                    # TC1 amendment 23 (only with --mem-census 1)
