@@ -83,8 +83,7 @@ The two kernels' workspaces do not differ measurably.
 
 - **LICENSED:** K25's `auto` default is now read on Qwen3-30B-A3B at the served W16 step. It is 1.57× as fast as the
   NF4 M-tile there, within P110's bar on both texts. No code change.
-- **The register row** is `e4b.serve.p121.k25-w16.qwen3.5090.2026-10-08`. STATUS's K25 row and FAM0's `qwen3_moe` cell
-  cite it.
+- **The register row** is `e4b.serve.p121.k25-w16.qwen3.5090.2026-10-08`. STATUS's K25 row cites it.
 - **Still unread**, as registered:
   - other row counts: W2–W8, and bucket 32 (256 routed rows) on today's 64-slot default;
   - other families;
