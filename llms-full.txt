@@ -2738,16 +2738,9 @@ rented RTX 5090; **measured** — [`bench/p115/RESULTS-p115.md`](../bench/p115/R
 **Phase C holds the flip; Granite is licensed** (lane P115 Phase C, 2026-10-08, one rented RTX 5090; **measured** —
 [`bench/p115/RESULTS-p115.md`](../bench/p115/RESULTS-p115.md),
 `e4b.serve.p115.fused-stack-engagement.gptoss-qwen36.5090.2026-10-08`, `e4b.serve.p115.fused-stack-quality.granite.5090.2026-10-08`).
-- **Engagement under `auto`:** exactly as predicted. gpt-oss-20b 0 / 49 / [24, 0] / 24, Qwen3.6-35B-A3B
-  0 / 0 / [0, 0] / 40 (router epilogue only), Granite 0 / 65 / [32, 32] / 32. `=1` raises each family's own
-  vacuous-enable refusal.
-- **SANE against the unfused server:** Qwen3.6 passes (argmax 0.995, 16 / 16 rows identical). gpt-oss-20b fails on
-  argmax agreement: 0.924 against the registered 0.95, with a bias of only +0.0022 nats. FLIP_HELD.
-- **Granite's quality read:** within P110's bar on both texts (wikitext ON bias −0.00268 nats, K8 −0.0171; c4val1
-  +0.00355). GRANITE_LICENSED.
-- **Default:** the four knobs stay `0`. A family-scoped `auto` (Qwen3-30B-A3B, Qwen3.6-35B-A3B, Granite) needs a new
-  registration, which also reads Qwen3-30B-A3B with P116's GEMV default at grouped-nf4-gemm 0.43.0. gpt-oss gets a
-  one-knob-per-arm follow-up first.
+- **`auto`** engages as predicted on gpt-oss-20b, Qwen3.6-35B-A3B and Granite. SANE: Qwen3.6 passes; gpt-oss-20b fails
+  on argmax agreement (0.924 < 0.95; bias +0.0022 nats), so FLIP_HELD. Granite passes P110's bar: GRANITE_LICENSED.
+- **Default:** the four knobs stay `0`; a family-scoped `auto` needs a new registration.
 
 **grouped-nf4-gemm K33's NF4 decode GEMV decodes 1.24× as fast with one request** (lane P116, 2026-10-07, one rented
 RTX 5090; **measured** — [`bench/p116/RESULTS-p116.md`](../bench/p116/RESULTS-p116.md),
@@ -2759,6 +2752,15 @@ RTX 5090; **measured** — [`bench/p116/RESULTS-p116.md`](../bench/p116/RESULTS-
   −0.0053 (bar 0.0116), K8 −0.090 (reported). A second draw on another host read g1 1.2681 and identical quality.
 - **Default:** still opt-in. DEFAULT_ON licenses grouped-nf4-gemm's `auto` at Qwen3's shapes on ≥ 160-SM parts, then
   e4b's floor on that release.
+
+**Decoding 32 or 64 rows in one graph costs no measurable quality** (lane P117, 2026-10-08, one rented RTX 5090;
+**measured** — [`bench/p117/RESULTS-p117.md`](../bench/p117/RESULTS-p117.md),
+`e4b.serve.p117.wide-bucket-quality.qwen3.5090.2026-10-08`).
+- **Quality:** on SC2e's int4 server (Qwen3-30B-A3B), teacher-forced over 64 windows decoded together, one 64-row piece
+  reads −0.0032 nats against four 16-row pieces, inside the 16-row arithmetic's own neutral perturbations. 32-row
+  pieces and a padded 64-row step pass too.
+- **Verdict AT_PARITY:** with SC2e's capacity read (64 slots and buckets up to 64 serve 12 req/s), this licenses
+  `E4B_PAGED_BUCKETS=auto` as `serve_paged`'s default, in its own PR.
 
 **The Gated DeltaNet kernels speed hybrid decode** (lane P105, 2026-10-03, one rented RTX 5090; **measured** —
 [`bench/p105/RESULTS-p105.md`](../bench/p105/RESULTS-p105.md), `e4b.serve.p105.qwen36-gdn-kernels.5090.2026-10-03`).
@@ -4281,6 +4283,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07 [measured]: Lane P115 (Phases A and B), one RTX 5090: on the default serve_paged server (Qwen3-30B-A3B NF4, bucketed decode graphs), the registered B=1 fused stack -- fused q/k/v (E4B_PAGED_FUSE_QKV) and the three glue folds (E4B_FUSE_T1_GLUE, E4B_FUSE_T1_GLUE_R2, E4B_FUSE_ROUTER_EPI), engaged at 48 / 193 / [48, 48] / 48 -- decodes one request 1.4289x (min over two ABBA pairs; geomean 1.4296) as fast as the unfused default (94.15 -> 134.53 tok/s, step 10.62 -> 7.43 ms) and 16 concurrent requests 1.2298x (geomean 1.2305; 701 -> 863 tok/s), within P110's teacher-forced quality bar on wikitext and c4val1 (row e4b.serve.p115.fused-stack-quality.qwen3.5090.2026-10-07). DEFAULT_AUTO; the default moves only after Phase C (Amendment 2).
 - e4b.serve.p115.fused-stack-quality.qwen3.5090.2026-10-07 [measured]: Lane P115 (Phase B), one RTX 5090: the registered B=1 fused stack on the default serve_paged server (Qwen3-30B-A3B NF4) scores within P110's teacher-forced quality bar against the server's own arithmetic. Wikitext-2 (48 windows x 128 positions): ON bias +0.00098 nats (SE 0.0021; bar B_floor + 0.01 = 0.0117), spread 0.0120 (bar 0.0277), K8 perplexity 8.9710 -> 8.9798 (+0.0088, budget 0.05), argmax agreement 0.961. c4val1: ON bias -0.00256 nats (SE 0.0031; bar 0.0119), spread 0.0142, K8 16.403 -> 16.361 (-0.042, reported, not gated). The neutral half-batch and prefill-chunk draws moved the NLL by -0.0013 / +0.0017 (wikitext) and -0.0006 / -0.0019 (c4val1); the halved attention scale (the mutant) moved it +1.05 / +0.77.
 - e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07 [measured]: Lane P116, one RTX 5090: on the default serve_paged server (Qwen3-30B-A3B NF4, bucketed decode graphs), grouped-nf4-gemm K33's bandwidth-targeted NF4 decode GEMV (GNF4_GEMV_BW=1, prmt32, at K33's selected plans via GNF4_GEMV_BW_PLAN; engaged on every single-row decode GEMV, dot-pad never) decodes one request 1.2417x (min over two ABBA pairs; geomean 1.2425) as fast as the shipped default (97.89 -> 121.70 tok/s, step 10.22 -> 8.22 ms) and 16 concurrent requests 1.0003x (unchanged with identical tokens: a T > 1 step never reaches the switch), within P110's teacher-forced bar at T == 1: wikitext ON bias -0.0012 nats (bar 0.0118), K8 -0.0104 ppl; c4val1 -0.0053 (bar 0.0116), K8 -0.090 (reported). A second draw on another host (p116-5090-1, reduced after Amendment 1, not the reading) read g1 1.2681 and the identical quality numbers. DEFAULT_ON.
+- e4b.serve.p117.wide-bucket-quality.qwen3.5090.2026-10-08 [measured]: Lane P117, one RTX 5090: on SC2e's served stack (Qwen3-30B-A3B int4 experts and int4 RTN attention, the T=1 folds, fused q/k/v), decoding 32 or 64 rows in one graph (E4B_PAGED_BUCKETS=auto) costs no measurable quality against decode in pieces of at most 16 rows. Teacher-forced over 64 wikitext windows (512 + 128, decoded together) W32 reads +0.0006 nats, W64 -0.0032 and W64pad (48 windows padded to 64) -0.0033, inside the 16-row arithmetic's own neutral perturbations (half-batch -0.0025, prefill split -0.0007; B_floor 0.0025, S_floor 0.0148); the captured 64-row replay emits the eager W64 tokens at all 8,128 positions; a halved decode scale reads +1.147. AT_PARITY.
 - e4b.serve.p115.fused-stack-engagement.gptoss-qwen36.5090.2026-10-08 [measured]: Lane P115 Phase C, one RTX 5090: auto on the four B=1 fusion knobs (E4B_PAGED_FUSE_QKV, E4B_FUSE_T1_GLUE, E4B_FUSE_T1_GLUE_R2, E4B_FUSE_ROUTER_EPI) at serve_paged's build engages by structure exactly as predicted: gpt-oss-20b 0 / 49 / [24, 0] / 24 (its attention carries sinks, so the rotary-only fold refuses; the q/k/v fusion matches no attention module) and Qwen3.6-35B-A3B 0 / 0 / [0, 0] / 40 (its 101 centered RMSNorms fail the semantic probe; only the router epilogue engages). Setting the knobs to 1 raises each family's own vacuous-enable refusal, and OFF repeats. Against OFF (12 wikitext windows x 128 teacher-forced positions), Qwen3.6 reads bias +0.0004 nats, argmax agreement 0.995 and 16 / 16 rows token-identical. gpt-oss reads bias +0.0022 nats but argmax agreement 0.924 (mean KL 0.030), under the registered 0.95, so it fails the SANE gate. FLIP_HELD: the four knobs stay 0 by default, and only a family-scoped default under a new registration may follow.
 - e4b.serve.p115.fused-stack-quality.granite.5090.2026-10-08 [measured]: Lane P115 Phase C (Granite's full read, Amendment 2), one RTX 5090: the B=1 fusion knobs at auto on Granite-3.1-3b-a800m (engaged 0 / 65 / [32, 32] / 32; the q/k/v fusion refuses) score within P110's teacher-forced quality bar against the unfused server, with Phase B's instrument at Phase B's size. Wikitext-2 (48 windows x 128 positions): ON bias -0.00268 nats (bar B_floor + 0.01 = 0.01204), spread 0.0111 (bar 0.0203), K8 perplexity 6.4027 -> 6.3856 (-0.0171, budget 0.05), argmax agreement 0.963. c4val1: ON bias +0.00355 (bar 0.01400), spread 0.0119 (bar 0.0253), K8 11.7045 -> 11.7462 (+0.0417, reported, not gated). The neutral half-batch and prefill-chunk draws set floors of 0.0020 / 0.0102 (wikitext) and 0.0040 / 0.0127 (c4val1); the halved attention scale moved the NLL +2.84 / +1.97. GRANITE_LICENSED: Granite may join a family-scoped auto default.
 - e4b.train.parity.mg1.olmoe.reference.2026-10-04 [measured]: [OK · REF] Training parity lane MG1 (one RTX 5090 behind tp1's train anchor): the reference per-expert-loop arm of allenai/OLMoE-1B-7B-0924-Instruct loads and verifies 16/16 MoE layers and trains 60 steps on the clinical text with the frozen 4-bit stack bit-identical (C1: 3,623,878,656 bytes hashed, 0 empties, byte-flip control fires); it is the family's REF row, not a verdict.
@@ -4337,4 +4340,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(411 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(412 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
