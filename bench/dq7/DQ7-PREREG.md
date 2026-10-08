@@ -36,7 +36,8 @@ grouped-nf4-gemm v0.43.0 commit, and the reviewed Loggetta executor commit. The 
 The runner checks pip's direct_url commit IDs and exact package versions and requires the mirrored bnb sources to
 match, so the late-bound backward can engage. A registration pin change is reviewed before launch.
 
-The opt-in LOGGETTA_DENSE_EXECUTE=1 is explicit. Every capacity arm plans through Loggetta and executes that same plan:
+The typed opt-in Constraints.allow_development_executor=True is explicit. Every capacity arm plans through Loggetta
+and executes that same plan:
 NF4 double-quant blocksize64, bf16 compute; PEFT fp32 r16/alpha32/dropout0 on all seven classified projections;
 SDPA; non-reentrant checkpointing; micro-batch1, accumulation1; two AdamW steps, lr2e-4 constant, clip1.0;
 default allocator (both allocator configuration environment variables unset). Qwen loss_chunk=512. Llama
@@ -56,8 +57,8 @@ Failure stops before every capacity arm.
 
 | subject | sequences | placements | role |
 |---|---|---|---|
-| qwen3_14b | 512, 2048 | resident, streamed | decisive out-of-sample |
-| llama31_8b | 512, 2048 | resident, streamed | decisive out-of-sample |
+| qwen3_14b | 512, 2048, 4096 | resident, streamed | decisive out-of-sample |
+| llama31_8b | 512, 2048, 4096 | resident, streamed | decisive out-of-sample |
 | qwen3_32b | 2048, 4096 | resident, streamed | DQ4 anchor |
 
 Order: subjects as above, sequences ascending, resident then streamed. Every row contains exactly seq_len **real
@@ -78,7 +79,7 @@ Any excess remains a separate clip line; it is never folded into the activation 
 
 ## Registered decision
 
-The reducer requires all 12 completed arms, matching software, the exact device/memory range, config hashes,
+The reducer requires all 16 completed arms, matching software, the exact device/memory range, config hashes,
 setup and row fingerprints, and engaged chunked loss where specified. Streamed arms must pin all homes and late-bind
 7×layers projections. Any missing, failed, OOM, changed or duplicate arm is **VOID/INCOMPLETE**, with the cause retained.
 A failed deterministic proof is **FUNCTION_FAIL** and prevents the reading. Wrong-card refusal is rc19, not machine
@@ -96,6 +97,15 @@ one byte below in any arm is **ESTIMATE_UNDER**. Overestimate bounds are predict
 
 An absolute anchor residual above its arm's empirical spread is **ANCHOR_MISS**. Out-of-sample verdicts are still
 reported, but no pass is quoted until the anchor miss is attributed through itemized bytes, clip census and residuals.
+**ATTRIBUTED** means, at every anchor arm, abs(new peak − DQ4 peak − named accounted delta) ≤ that arm's empirical
+spread. The only new peak term the current instrument measures is clip_added_cumulative_peak_bytes when that clip's
+post-call peak equals the final training peak (maximum across the two steps). A clip transient surpassed by AdamW
+accounts for zero final-peak delta. Two consistent before/after clip readings are required. The load peak has an
+explicitly zero delta in this comparison because training resets peaks
+after loading in both harnesses. Both lines and the unexplained remainder are reported. If clipping does not account
+for the miss, it is **UNATTRIBUTED** and no pass is licensed. Itemized estimate lines are retained for diagnosis;
+an estimated line or a newly named post-read term cannot absorb the residual. A further attribution instrument needs
+its own review/registration before a reread; activation/reserve coefficients stay unchanged.
 The empirical spread is deliberately not replaced with the earlier 4%/10% estimate brackets.
 
 **Predictions, graded separately:**

@@ -31,6 +31,8 @@ def fixtures():
                 receipts.append({"backend": "dense", "status": "OK", "setup": setup,
                     "hardware": {"gpu": {"name": reducer.DEVICE, "memory_total": 32 * 2**30}}, "workload": {"steps": 2},
                     "model": {"n_layers": reducer.LAYERS[name]},
+                    "measured": {"clip_peak_census": [{"peak_before_bytes": peak, "peak_after_bytes": peak,
+                                                         "added_cumulative_peak_bytes": 0}] * 2},
                     "dq7": {"subject": name, "placement": placement, "seq": seq, "config_sha256": subject.CONFIG_HASHES[name],
                             "synthetic": True, "pretrained": False, "real_tokens_per_row": seq, "padded_tokens": 0,
                             "allocator": "default", "row_tokens_sha256": "fixture rows only",
@@ -46,7 +48,7 @@ def fixtures():
 def test_complete_anchored_fixture_passes_and_reports_bytes():
     result = reducer.reduce(*fixtures())
     assert result["verdict"] == "NEVER_UNDER" and result["pass_licensed"]
-    assert len(result["rows"]) == 12
+    assert len(result["rows"]) == 16
     assert all(row["residual_bytes"] <= 0 for row in result["rows"])
     assert not result["quality_read"] and not result["calibration_replacement_licensed"]
 
@@ -63,9 +65,41 @@ def test_anchor_miss_keeps_oos_verdict_but_prevents_pass_quotation():
     proof, receipts = fixtures()
     receipt = next(row for row in receipts if row["dq7"]["subject"] == "qwen3_32b")
     receipt["comparison"]["device_allocator"]["measured"] += reducer.ANCHOR_DRAW_SPREAD_BYTES["device"] + 1
+    for entry in receipt["measured"]["clip_peak_census"]:
+        entry["peak_after_bytes"] = receipt["comparison"]["device_allocator"]["measured"]
+        entry["peak_before_bytes"] = entry["peak_after_bytes"]
     result = reducer.reduce(proof, receipts)
     assert result["verdict"] == "ANCHOR_MISS" and result["out_of_sample_verdict"] == "NEVER_UNDER"
     assert not result["pass_licensed"]
+
+
+def test_anchor_attribution_is_named_and_cannot_absorb_unexplained_bytes():
+    proof, receipts = fixtures()
+    receipt = next(row for row in receipts if row["dq7"]["subject"] == "qwen3_32b")
+    delta = 2 * reducer.ANCHOR_DRAW_SPREAD_BYTES["device"]
+    receipt["comparison"]["device_allocator"]["measured"] += delta
+    peak = receipt["comparison"]["device_allocator"]["measured"]
+    receipt["measured"] = {"clip_peak_census": [{"peak_before_bytes": peak-delta, "peak_after_bytes": peak,
+                                                 "added_cumulative_peak_bytes": delta}] * 2}
+    result = reducer.reduce(proof, receipts)
+    assert result["verdict"] == "NEVER_UNDER" and result["pass_licensed"]
+    anchor = next(row for row in result["rows"] if row["subject"] == "qwen3_32b")
+    assert not anchor["anchor_reproduced"] and anchor["anchor_attributed"]
+    assert anchor["anchor_accounting"][-1]["bytes"] == 0
+    receipt["comparison"]["device_allocator"]["measured"] += reducer.ANCHOR_DRAW_SPREAD_BYTES["device"] + 1
+    result = reducer.reduce(proof, receipts)
+    assert result["verdict"] == "ANCHOR_MISS" and not result["pass_licensed"]
+
+
+def test_a_clip_transient_below_final_peak_cannot_attribute_the_anchor():
+    proof, receipts = fixtures()
+    receipt = next(row for row in receipts if row["dq7"]["subject"] == "qwen3_32b")
+    delta = 2 * reducer.ANCHOR_DRAW_SPREAD_BYTES["device"]
+    receipt["comparison"]["device_allocator"]["measured"] += delta
+    peak = receipt["comparison"]["device_allocator"]["measured"]
+    receipt["measured"] = {"clip_peak_census": [{"peak_before_bytes": peak-2*delta, "peak_after_bytes": peak-delta,
+                                                 "added_cumulative_peak_bytes": delta}] * 2}
+    assert reducer.reduce(proof, receipts)["verdict"] == "ANCHOR_MISS"
 
 
 @pytest.mark.parametrize("field,value", [("padded_tokens", 1), ("config_sha256", "wrong fixture hash"),
@@ -92,7 +126,8 @@ def test_missing_duplicate_wrong_card_and_unengaged_stream_are_void():
     receipts[0]["hardware"]["gpu"]["name"] = "fixture A2000"
     assert reducer.reduce(proof, receipts)["verdict"] == "VOID"
     proof, receipts = fixtures()
-    receipts[2]["engaged"]["dense_offload"]["late_bound_4bit"] = 0
+    streamed = next(row for row in receipts if row["dq7"]["placement"] == "stream")
+    streamed["engaged"]["dense_offload"]["late_bound_4bit"] = 0
     assert reducer.reduce(proof, receipts)["verdict"] == "VOID"
 
 

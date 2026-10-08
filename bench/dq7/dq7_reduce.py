@@ -9,7 +9,7 @@ from pathlib import Path
 from dq7_subject import CONFIG_HASHES
 
 LAYERS = {"qwen3_14b": 40, "llama31_8b": 32, "qwen3_32b": 64}
-SEQS = {"qwen3_14b": (512, 2048), "llama31_8b": (512, 2048), "qwen3_32b": (2048, 4096)}
+SEQS = {"qwen3_14b": (512, 2048, 4096), "llama31_8b": (512, 2048, 4096), "qwen3_32b": (2048, 4096)}
 DEVICE = "NVIDIA GeForce RTX 5090"
 # Exact DQ4 c_def ladder allocator peaks; spreads are ladder vs fresh confirmation at each arm's binding rung.
 ANCHOR_BYTES = {("device", 2048): 23577589760, ("device", 4096): 26273331200,
@@ -69,14 +69,30 @@ def reduce(proof, receipts):
         if subject == "qwen3_32b":
             anchor = ANCHOR_BYTES[(placement, seq)]
             spread = ANCHOR_DRAW_SPREAD_BYTES[placement]
+            census = receipt.get("measured", {}).get("clip_peak_census", [])
+            if len(census) != 2 or any(
+                not all(isinstance(entry.get(k), int) for k in ("peak_before_bytes", "peak_after_bytes", "added_cumulative_peak_bytes"))
+                or not 0 < entry["peak_before_bytes"] <= entry["peak_after_bytes"] <= peak
+                or entry["added_cumulative_peak_bytes"] != entry["peak_after_bytes"] - entry["peak_before_bytes"]
+                for entry in census):
+                return {"verdict": "VOID", "cause": "invalid clip peak census"}
+            # A clip transient surpassed by AdamW cannot account for the final training peak.
+            clip_delta = max((entry["added_cumulative_peak_bytes"] for entry in census
+                              if entry["peak_after_bytes"] == peak), default=0)
+            residual = peak - anchor
+            unexplained = residual - clip_delta
             row.update(anchor_expected_bytes=anchor, anchor_spread_bytes=spread,
-                       anchor_residual_bytes=peak-anchor, anchor_reproduced=abs(peak - anchor) <= spread)
+                       anchor_residual_bytes=residual, anchor_reproduced=abs(residual) <= spread,
+                       anchor_attributed=abs(unexplained) <= spread,
+                       anchor_accounting=[{"name": "gradient clip added cumulative peak", "bytes": clip_delta},
+                                          {"name": "load peak scope delta (training resets peak after load)", "bytes": 0},
+                                          {"name": "unexplained anchor residual", "bytes": unexplained}])
         rows.append(row)
     if seen != expected or len(versions) != 1 or any(not value for value in next(iter(versions), ())):
         return {"verdict": "VOID", "cause": "missing arms or inconsistent software pins", "rows": rows}
     misses = [row for row in rows if row["subject"] != "qwen3_32b" and not row["never_under"]]
     oos = "ESTIMATE_UNDER" if misses else "NEVER_UNDER"
-    anchored = all(row.get("anchor_reproduced", True) for row in rows)
+    anchored = all(row.get("anchor_reproduced", True) or row.get("anchor_attributed", False) for row in rows)
     return {"verdict": oos if anchored else "ANCHOR_MISS", "out_of_sample_verdict": oos,
             "pass_licensed": anchored and not misses, "rows": rows,
             "decisive_subjects": ["qwen3_14b", "llama31_8b"], "underestimate_arms": len(misses),

@@ -17,7 +17,7 @@ def make_plan(directory, placement, seq, data=None):
     topology = dense.describe(str(directory))
     hardware = probe()
     workload = Workload(seq_len=seq, steps=2, learning_rate=2e-4, lr_schedule="constant", data=data)
-    constraints = Constraints(fixed={"base": "nf4", "placement": placement, "r": 16, "alpha": 32,
+    constraints = Constraints(allow_development_executor=True, fixed={"base": "nf4", "placement": placement, "r": 16, "alpha": 32,
                                      "adapter_dtype": "fp32", "targets": "all", "attn_impl": "sdpa",
                                      "loss_chunk": 0 if topology.model_type == "llama" else 512})
     result = plan(topology, hardware, workload, constraints, backends=(dense,))

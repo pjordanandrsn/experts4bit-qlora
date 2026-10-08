@@ -1,5 +1,5 @@
 {
-  "loggetta_sha": "afb4710de6862958ca5ba3bf11c92c32bb19d4ce",
+  "loggetta_sha": "27f51acd089fece4f0f80291a22c2d31fafe2653",
   "gnf4_sha": "6ee2e10408161a9d3c874975c9191a7f2957e6f4",
   "torch": "2.8.0+cu128",
   "bitsandbytes": "0.50.2",

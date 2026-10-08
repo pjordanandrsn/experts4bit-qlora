@@ -63,7 +63,10 @@ def build(subject, directory, config_dir=None):
         file = directory / f"tensor-{i:05d}.safetensors"
         save_file({name: tensor}, str(file))
         with file.open("rb") as stream:
-            digest = hashlib.file_digest(stream, "sha256").hexdigest()
+            sha = hashlib.sha256()
+            for chunk in iter(lambda: stream.read(8 << 20), b""):
+                sha.update(chunk)
+            digest = sha.hexdigest()
         files[file.name] = {"tensor": name, "shape": list(meta.shape), "seed": seed, "sha256": digest}
         total += tensor.numel() * tensor.element_size()
         del tensor

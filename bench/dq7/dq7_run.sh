@@ -46,7 +46,6 @@ python dq7_reduce.py --self-test > logs/reducer_selftest.log 2>&1 || finish 9
 nvidia-smi --query-gpu=name,memory.total,driver_version,pcie.link.gen.max,pcie.link.width.max,power.limit --format=csv,noheader > forensics.txt
 unset PYTORCH_CUDA_ALLOC_CONF PYTORCH_ALLOC_CONF
 export TOKENIZERS_PARALLELISM=false
-export LOGGETTA_DENSE_EXECUTE=1
 say 'synthetic tiny checkpoint and deterministic CUDA proof'
 python dq7_subject.py tiny hf-cache/tiny --config-dir configs > logs/build-tiny.log 2>&1 || finish 9
 python dq7_arm.py --mode proof --checkpoint hf-cache/tiny --out receipts/proof.json > logs/proof.log 2>&1 \
@@ -58,7 +57,7 @@ for subject in qwen3_14b llama31_8b qwen3_32b; do
   say "build architecture-only checkpoint $subject"
   python dq7_subject.py "$subject" "hf-cache/$subject" --config-dir configs > "logs/build-$subject.log" 2>&1 || finish 9
   cp "hf-cache/$subject/dq7-subject.json" "receipts/subject-$subject.json"
-  seqs='512 2048'; [ "$subject" = qwen3_32b ] && seqs='2048 4096'
+  seqs='512 2048 4096'; [ "$subject" = qwen3_32b ] && seqs='2048 4096'
   for seq in $seqs; do
     for placement in device stream; do
       tag="read-$subject-$placement-$seq"
