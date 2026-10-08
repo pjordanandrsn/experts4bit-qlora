@@ -12,4 +12,6 @@ e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
 15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
 1b523751b504c16a977853e12b9db7f07c3e5c4019fe31f22e4b4c69caff6f89  p98_bake.py
 7e47f873456eafac9182d257ba61353e0be25899bd06818c233814ae7dafa849  test_fam_split1_gpu.py
-da2fca7f810f2030beac85e27943a9e58ba7468f06f955b2f491e3f72ca8ea91  test_fusion_modes.py
+# Re-pinned 2026-10-08 after #1361 changed test_fusion_modes.py (the family-scoped default); it stays at Phase C's
+# pin, which #1361 moved too. fam-prove-1 ran at 9629874f with the old bytes (da2fca7f810f).
+b0a1250852e72f821cd08444d20eb86a14a05158e497bdc753041b67d4a5bf78  test_fusion_modes.py
