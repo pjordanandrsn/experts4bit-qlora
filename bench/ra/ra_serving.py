@@ -18,6 +18,7 @@ from pathlib import Path
 import ra_env
 import ra_fallback
 import ra_quality
+import ra_routes
 import ra_stage
 
 
@@ -61,7 +62,7 @@ def glue_census(info):
             "router_epilogue": info["fuse_router_epilogue_n"]}
 
 
-def build_instrumented(server, instrument, cfg):
+def build_instrumented(server, instrument, cfg, *, routes=None):
     """Install kernel counters before folds bind them; QKV hooks before capture."""
     counters = instrument.KernelCounters().install()
     forwards = []
@@ -69,7 +70,10 @@ def build_instrumented(server, instrument, cfg):
 
     @functools.wraps(original)
     def folds(model, *args, **kwargs):
+        candidates = routes.candidates(model) if routes else []
         result = original(model, *args, **kwargs)
+        if routes:
+            routes.assemble(model, candidates, cfg.fusion_modes)
         forward = instrument.ForwardCounter(model)
         forward.ra_glue = ra_fallback.GlueObserver().install(model)
         forwards.append(forward)
@@ -85,7 +89,8 @@ def build_instrumented(server, instrument, cfg):
     return parts, counters, forwards[0]
 
 
-def decode(spec, helper, instrument, server, torch, nf4):
+@ra_routes.observed
+def decode(spec, helper, instrument, server, torch, nf4, *, routes=None):
     pf = json.loads(Path(spec["prompts"]).read_bytes())
     rows = pf["rows"]
     if len(rows) != 16 or any(len(row) != 512 or any(type(t) is not int or t < 0 for t in row) for row in rows) or \
@@ -95,7 +100,7 @@ def decode(spec, helper, instrument, server, torch, nf4):
     defaults = ra_fallback.resolved_defaults(server, cfg)
     start_dispatch = nf4.dispatch_counts()
     start = time.perf_counter()
-    parts, counters, fwd = build_instrumented(server, instrument, cfg)
+    parts, counters, fwd = build_instrumented(server, instrument, cfg, routes=routes)
     build_dispatch = delta(nf4.dispatch_counts(), start_dispatch)
     record = {"status": "ok", "model": cfg.model, "revision": cfg.revision,
               "load_s": time.perf_counter() - start, "config": {k: v for k, v in vars(cfg).items() if k != "token"},
@@ -126,24 +131,29 @@ def decode(spec, helper, instrument, server, torch, nf4):
     record["fusion_modes"] = copy.deepcopy(parts.info["fusion_modes"])
     record["resolved_defaults"] = defaults
     record["glue_modules"] = fwd.ra_glue.snapshot()
-    record["fallback_evidence"] = fwd.ra_glue.evidence(glue_census(parts.info))
+    record["route_evidence"] = routes.evidence(parts.info, fwd.qkv_calls)
+    record["route_modules"] = routes.snapshot()
+    record["unscoped_native_calls"] = routes.unscoped_calls
+    record["fallback_evidence"] = {**fwd.ra_glue.evidence(glue_census(parts.info)), **record["route_evidence"]}
     record["features"] = fusion_features(parts.info, record["kernels"], fwd.qkv_calls, scope="build-capture+warm+timed",
                                           fallback=record["fallback_evidence"], defaults=defaults)
-    calls = sum(record["dispatch_total"].values())
+    calls = record["route_evidence"]["decode_gemv"]["calls"]
     if calls <= 0 or (cfg.graphs and record["graph_stats"].get("1", {}).get("replays", 0) <= 0):
         raise ValueError("W1 GEMV capture/replay not engaged")
     record["features"]["decode_gemv"] = feature("auto", parts.info["moe_layers"], calls,
-                                                  scope="build-capture+warm+timed")
+                                                  scope="build-capture+warm+timed",
+                                                  fallback_calls=record["route_evidence"]["decode_gemv"]["fallback_calls"])
     record["proves_gpu_engagement"] = False
     return record
 
 
-def quality(spec, instrument, server, torch, nf4):
+@ra_routes.observed
+def quality(spec, instrument, server, torch, nf4, *, routes=None):
     cfg = server.PagedServeConfig.from_env()
     defaults = ra_fallback.resolved_defaults(server, cfg)
     if cfg.graphs:
         raise ValueError("quality requires named eager fixture")
-    parts, counters, fwd = build_instrumented(server, instrument, cfg)
+    parts, counters, fwd = build_instrumented(server, instrument, cfg, routes=routes)
     parts.runner.model.eval()
     windows = json.loads(Path(spec["windows"]).read_bytes())
     if set(windows) != {"wikitext"} or len(windows["wikitext"]) != 12 or any(
@@ -155,9 +165,13 @@ def quality(spec, instrument, server, torch, nf4):
     def observed_pass(*args, **kwargs):
         before = nf4.dispatch_counts()
         glue_before = fwd.ra_glue.snapshot()
+        route_before = routes.snapshot()
+        qkv_before = fwd.qkv_calls
         result, engagement = original(*args, **kwargs)
         engagement["gemv_dispatch"] = delta(nf4.dispatch_counts(), before)
-        engagement["fallback_evidence"] = fwd.ra_glue.evidence(glue_census(parts.info), glue_before)
+        engagement["route_evidence"] = routes.evidence(parts.info, fwd.qkv_calls - qkv_before, route_before)
+        engagement["fallback_evidence"] = {**fwd.ra_glue.evidence(glue_census(parts.info), glue_before),
+                                           **engagement["route_evidence"]}
         return result, engagement
 
     instrument.p110_box.paged_pass = observed_pass
@@ -170,13 +184,14 @@ def quality(spec, instrument, server, torch, nf4):
     for engagement in record["engagement"]["wikitext"]["R"]:
         engagement["features"] = fusion_features(parts.info, engagement["kernels"], engagement["qkv_calls"], scope="R-pass",
                                                        fallback=engagement["fallback_evidence"], defaults=defaults)
-        calls = sum(engagement["gemv_dispatch"].values())
+        calls = engagement["route_evidence"]["decode_gemv"]["calls"]
         if spec["group"] == 1 and calls <= 0:
             raise ValueError("group-1 GEMV did not dispatch")
         if spec["group"] == 12 and calls != 0:
             raise ValueError("group-12 unexpectedly dispatched singleton GEMV")
         engagement["features"]["decode_gemv"] = feature("auto", parts.info["moe_layers"] if spec["group"] == 1 else 0,
-                                                           calls, scope="R-pass")
+                                                           calls, scope="R-pass",
+                                                           fallback_calls=engagement["route_evidence"]["decode_gemv"]["fallback_calls"])
     record.update(status="ok", model=cfg.model, revision=cfg.revision, resolved_defaults=defaults,
                   glue_modules=fwd.ra_glue.snapshot(), proves_gpu_engagement=False,
                   fusions={k: copy.deepcopy(parts.info[k]) for k in instrument.CENSUS_KEYS},

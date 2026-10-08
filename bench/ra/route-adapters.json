@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "modules": [
+    {
+      "module": "hot",
+      "source_commit": "72e6dfeb36dfefbfdb84d71b77b1399c64709581",
+      "path": "experts4bit_qlora/engines/hot_residency.py",
+      "ast_sha256": "a5961ed1d495bacf0353409f33e4864199f7464d099f2c527f4262bf345e9b2a"
+    },
+    {
+      "module": "hot",
+      "source_commit": "4810113ac34aef36eed14f687d5e51738cbfa479",
+      "path": "experts4bit_qlora/engines/hot_residency.py",
+      "ast_sha256": "5418bc11d4b8db47d1b20458e2e64adeebd818d30e160d0ccc71712a0f2d0578"
+    },
+    {
+      "module": "qkv",
+      "source_commit": "72e6dfeb36dfefbfdb84d71b77b1399c64709581",
+      "path": "experts4bit_qlora/engines/qkv_fuse.py",
+      "ast_sha256": "3e07565aee60239b14b8460f49dbef96f8dd509e2e33f141595fcad8831fba07"
+    },
+    {
+      "module": "qkv",
+      "source_commit": "4810113ac34aef36eed14f687d5e51738cbfa479",
+      "path": "experts4bit_qlora/engines/qkv_fuse.py",
+      "ast_sha256": "6fde4e318e5bf4780069bd3d62e5b40b7b2d4abf15a42532ba085b798c8f8f7f"
+    },
+    {
+      "module": "nf4",
+      "source_commit": "6ee2e10408161a9d3c874975c9191a7f2957e6f4",
+      "path": "kernel/nf4_grouped.py",
+      "ast_sha256": "54134e3f8004c287c08f66ab47ae070cb057d6a6d7485e376545f385a7919dd3"
+    }
+  ]
+}

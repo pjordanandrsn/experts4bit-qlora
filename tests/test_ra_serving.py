@@ -21,7 +21,32 @@ env = load("ra_env")
 load("ra_stage")
 load("ra_quality")
 load("ra_fallback")
+load("ra_routes")
 serving = load("ra_serving")
+
+
+@pytest.fixture(autouse=True)
+def synthetic_route_composition(monkeypatch):
+    # Composition controls only; independent route mutation tests use their own
+    # declared synthetic source adapter. Runtime never accepts an adapter spec.
+    class FakeRoutes:
+        unscoped_calls = 0
+        def __init__(self, nf4):
+            self.nf4 = nf4
+        def start(self):
+            return self
+        def close(self):
+            pass
+        def candidates(self, model):
+            return []
+        def assemble(self, model, candidates, modes):
+            pass
+        def snapshot(self):
+            return self.nf4.dispatch_counts()
+        def evidence(self, info, calls, before=None):
+            count = sum(v - (before or {}).get(k, 0) for k, v in self.snapshot().items())
+            return {"qkv": {"fallback_calls": 0}, "decode_gemv": {"calls": count, "fallback_calls": 0}}
+    monkeypatch.setattr(serving.ra_routes.RouteObserver, "native", lambda nf4: FakeRoutes(nf4))
 
 
 @pytest.mark.parametrize("name", ["E4B_PAGED_MAX_SEQS", "E4B_PAGED_BUCKETS", "E4B_FUSE_T1_GLUE",

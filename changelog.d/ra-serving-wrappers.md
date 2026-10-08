@@ -6,5 +6,6 @@ allowlist. GPU engagement and proof clearance still require on-card evidence.
 
 Observe native glue retained-original branches with source-bound AST adapters,
 reconcile census and independently reconstructed defaults, and refuse auto
-kernel gaps. Unknown QKV/GEMV fallback coverage is explicit and cannot clear
-a release. CPU controls establish composition only.
+kernel gaps. Source-bound QKV coverage and per-MoE GEMV/reference/dispatch observations
+replace unknown counters. Partial coverage, unexpected routes and plan
+overrides refuse; failure snapshots remain in process logs. CPU controls establish composition only.

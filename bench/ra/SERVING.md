@@ -28,8 +28,17 @@ bodies require a reviewed adapter. Private clones observe retained-original
 calls without changing installed function defaults. Small-row fallbacks and
 large-row prefill fallbacks are separate, with per-pass and per-module counts.
 This observes Python eager/capture execution, not replayed graph internals.
-QKV and GEMV fallback coverage remains `UNVERIFIED` with a null count; the
-wrapper cannot produce release clearance from an assumed zero.
+`ra_routes.py` binds the QKV, residency and NF4 modules to source-bound AST
+adapters. QKV coverage checks structural candidates, retained projections and
+the active fused forward, then reconciles per-projection calls. Its zero-fallback
+basis is the complete supported fusion, which retains no unfused projection.
+GEMV observes each all-VRAM MoE forward and its retained-reference branch,
+requires both singleton projections, and joins native primary dispatches to
+the release's default route rules. The bandwidth split-K counter is
+supplementary, not a second dispatch. Per-pass census/counter gaps, unknown
+module bodies, plan overrides and unexpected routes refuse. Failure snapshots
+go to the retained process log; temporary route hooks restore on exceptions.
+Python counts still require the separate on-card premise and replay gates.
 
 `ra_env.py` constructs a fresh process environment with separate release caches
 and rejects extra flags in direct wrapper invocations. Serving fixtures may set
@@ -41,6 +50,6 @@ recordable; inherited values and credential variables are not copied into logs.
 
 These wrappers are not on-card evidence. CPU controls use native glue bodies
 with CPU kernel stand-ins, not real GPU kernels. Remaining work includes training and
-capacity wrappers, complete independently verified feature/fallback coverage,
+capacity wrappers, broader default/feature integration for training and capacity,
 wheel/input provenance, ABBA supervision, collected no-skip premise tests and
 reviewed launch/receipt-retrieval/teardown gates. No proof clearance requested.
