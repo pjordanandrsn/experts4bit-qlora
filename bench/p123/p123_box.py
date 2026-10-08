@@ -9,7 +9,13 @@ resolved, grouped-nf4-gemm's dispatch tally after the build and after the runs, 
 S1b) in fresh processes give the census its unprofiled reference and its noise.
 
     python p123_box.py --prompts prompts.json --out arm_S1a.json --tag S1a [--short 32 --long 160 --reps 3]
+    python p123_box.py --mode routers --out router_census.json      (Amendment 1: E4B_FUSE_ROUTER_EPI=auto alone)
     python p123_box.py --self-test
+
+``--mode routers`` (Amendment 1, the proof only): the default server built with ONE knob set, ``E4B_FUSE_ROUTER_EPI=auto``,
+so the router epilogue's semantic probe runs on every router of the proof's model on this card. Granite's default leaves
+the fold off, and a rented 5090 licensed 27 of its 32 routers under #1385's probe (lane FAM's fam-prove-1); #1398 judges
+the probe's decisive rows on fp32 CPU logits. The record carries the fold census, the fold's report and the sources.
 """
 import argparse
 import json
@@ -29,6 +35,37 @@ def default_env_ok(env) -> tuple:
     """``(ok, why)``: the subject is the shipped default -- the fusion and decode-GEMV knobs are unset."""
     bad = {k: env.get(k) for k in KNOBS + GEMV_KNOBS if (env.get(k) or "").strip()}
     return (not bad), f"set: {bad}"
+
+
+def routers_env_ok(env) -> tuple:
+    """``(ok, why)``: Amendment 1's build -- E4B_FUSE_ROUTER_EPI=auto and nothing else of the fusion / decode-GEMV knobs."""
+    want = {"E4B_FUSE_ROUTER_EPI": "auto"}
+    bad = {k: env.get(k) for k in KNOBS + GEMV_KNOBS if (env.get(k) or "").strip().lower() != want.get(k, "")}
+    return (not bad), f"off Amendment 1's build: {bad}"
+
+
+def routers_main(a) -> int:
+    ok, why = routers_env_ok(os.environ)
+    if not ok:
+        raise SystemExit(f"REFUSED: {why}")
+    import torch
+
+    from experts4bit_qlora.serve_paged import PagedServeConfig, build_engine
+    cfg = PagedServeConfig.from_env()
+    t0 = time.perf_counter()
+    parts = build_engine(cfg)
+    info = parts.info
+    rec = {"mode": "routers", "e4b_sha": os.environ.get("E4B_SHA"), "gnf4_sha": os.environ.get("GNF4_SHA"),
+           "model": cfg.model, "revision": cfg.revision, "torch": torch.__version__,
+           "load_s": round(time.perf_counter() - t0, 2), "knobs": {k: os.environ.get(k) for k in KNOBS + GEMV_KNOBS},
+           "fusions": {k: info.get(k) for k in CENSUS_KEYS}, "fusion_modes": info.get("fusion_modes"),
+           "fusion_sources": info.get("fusion_sources"), "model_type": info.get("model_type"),
+           "router_report": (info.get("fusion_report") or {}).get("E4B_FUSE_ROUTER_EPI"),
+           "moe_layers": info.get("moe_layers"), "status": "ok"}
+    json.dump(rec, open(a.out, "w"), indent=1, default=str)
+    print("P123_ROUTERS " + json.dumps({"fusions": rec["fusions"], "moe_layers": rec["moe_layers"],
+                                        "router_report": rec["router_report"]}, default=str), flush=True)
+    return 0
 
 
 def _counts():
@@ -102,6 +139,11 @@ def self_test() -> int:
         ("a set fusion knob refuses", not default_env_ok({"E4B_PAGED_FUSE_QKV": "auto"})[0]),
         ("a set GEMV knob refuses", not default_env_ok({"GNF4_GEMV_BW": "1"})[0]),
         ("P109's workloads", p109_box.WORKLOADS == {"W16": 16, "W1": 1}),
+        ("Amendment 1: the router knob alone", routers_env_ok({"E4B_FUSE_ROUTER_EPI": "auto"})[0]),
+        ("Amendment 1: no other knob", not routers_env_ok({"E4B_FUSE_ROUTER_EPI": "auto",
+                                                            "E4B_FUSE_T1_GLUE": "auto"})[0]),
+        ("Amendment 1: the router knob must be auto", not routers_env_ok({"E4B_FUSE_ROUTER_EPI": "1"})[0]),
+        ("Amendment 1: not the speed arms' default", not default_env_ok({"E4B_FUSE_ROUTER_EPI": "auto"})[0]),
     ]
     bad = [n for n, ok in cases if not ok]
     print(f"p123_box self-test {'OK' if not bad else 'FAILED ' + str(bad)} ({len(cases)} cases)")
@@ -111,6 +153,7 @@ def self_test() -> int:
 def main(argv=None) -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--self-test", action="store_true")
+    p.add_argument("--mode", default="speed", choices=("speed", "routers"))
     p.add_argument("--prompts")
     p.add_argument("--out")
     p.add_argument("--tag", default="")
@@ -120,7 +163,7 @@ def main(argv=None) -> int:
     a = p.parse_args(argv)
     if a.self_test:
         return self_test()
-    return speed_main(a)
+    return routers_main(a) if a.mode == "routers" else speed_main(a)
 
 
 if __name__ == "__main__":

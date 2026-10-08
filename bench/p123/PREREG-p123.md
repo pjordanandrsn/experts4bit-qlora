@@ -171,3 +171,43 @@ Shares of P on Qwen3-30B-A3B. Each is graded HELD or MISSED; a miss is reported 
 - No comparison with another engine (SC1b did that).
 - No lever is chosen here. The next lever's lane is registered on its own; a 4-bit attention-projection or lm_head
   lever changes the arithmetic, so it needs a quality bar as well as speed (the maintainer, 21:47Z).
+
+## Amendment 1 (2026-10-08, the proof checks the router epilogue's license on this card; before any box)
+
+**What happened.** Lane FAM's `fam-prove-1`, on a rented RTX 5090 at `9629874f`, licensed 27 of Granite's 32 routers
+for the router epilogue under `E4B_FUSE_ROUTER_EPI=auto`. The A2000 and Phase C read 32. The probe from #1385 judged
+near ties on the card's bf16 logits from 4 probe rows, so which routers licensed depended on the card's rounding. A
+refused router falls back to the unfused (reference) path, so the output stays safe. But the `qwen3_moe` default
+(#1361) then engages a card-dependent subset of its folds. #1398 judges the decisive rows on fp32 CPU logits from 64
+probe rows.
+
+**The amendment (the maintainer's shape, on the bus 2026-10-08T22:23Z).** The proof gains one build, and the reading
+is unchanged.
+- **The build:** `p123_box.py --mode routers`. It is the default server on the proof's model, built with
+  `E4B_FUSE_ROUTER_EPI=auto` and no other fusion or decode-GEMV knob (`routers_env_ok`).
+- **What it records:** the fusion census, the router fold's own report (`patched`, `failed_probe`, `no_kernel_mode`,
+  `fp32_upstream`), the resolved modes and sources, and the model, written to `router_census.json`.
+- **When it runs:** on the proof only, after the two speed arms (when both passed) and before the captures, under the
+  same `NEED_ARM` time-left check.
+- **The rule:** the proof VOIDs (rc 27) unless `router_census.json` exists with status `ok` at this e4b commit and model,
+  sets that knob alone, resolves it `explicit`, and licenses **every** router: `fuse_router_epilogue_n == 32` on
+  Granite. The verdict carries `routers: {licensed, of, report}`.
+- **Why the proof:** this is the `fam-prove-1` case exactly, so a PROVED proof is #1398's regression check on a 5090.
+- **The reading:** it already VOIDs on any `qwen3_moe` census short of 48 (`DEFAULT[QWEN]["census"]`). That is the
+  5090 check of the shipped default's routers with the fixed probe.
+- **Unchanged:** every other rung, constant, prediction and budget. The build adds well under a minute on Granite
+  inside the 0.75 h guard.
+
+**Launch order (the maintainer's):** #1398, then this amendment, then the proof, then the reading after PROVED. The
+proof launches from a commit that contains #1398, #1395 and this amendment.
+
+**Self-tests:** the reducer has 23 cases (was 19) and the box 9 (was 5).
+- **New reducer cases:** a proof whose routers all license; 27 of 32 VOIDs (the `fam-prove-1` case); a proof without
+  the router census VOIDs; another knob set beside the router knob VOIDs.
+- **New box cases:** the router knob alone passes; another knob beside it is refused; the router knob must be `auto`;
+  the speed arms' default refuses the router knob.
+- **The pin test:** the fake router record must carry the keys `routers_main` writes, and the fold's own report keys.
+  This is P115 Phase D's Amendment 4 lesson: fakes match real records.
+
+**Re-pinned before any box ran:** `p123_box.py`, `p123_run.sh` and `p123_reduce.py` in `staged-p123.sha256`. The
+borrowed files are unchanged.
