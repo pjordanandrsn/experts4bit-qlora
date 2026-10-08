@@ -1521,3 +1521,31 @@ CPU, a 30.7-CPU quota, Vast machine 13828). e4b `0b29952`, grouped-nf4-gemm `894
   1.773 is quoted as that host's wall ratio, with no measured cause.
 
 Wall ratio on this host: 1.472. The quotable packed position is the device ratio, with the wall ratio per host beside it.
+
+## Amendment 69 (2026-10-08): at the field recipe Unsloth spends 1.92× e4b's GPU time per step; wall-clock 2.80× on this host (P205–P209 HELD)
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 69, with its decision rule amended in review. One RTX 5090
+(`tc1-5090-137`, AMD EPYC 7713, Vast machine 55913). e4b `737f02f` at every default, grouped-nf4-gemm `8371c38`, Unsloth 2026.9.14, both in
+venv-unsloth (torch 2.12.1), every arm profiled. TC1's field recipe over 60 load-gated steps, every attempt first time. Read:
+[`RESULTS-tc1-pos69.md`](RESULTS-tc1-pos69.md).
+
+| arm | s/step (two draws) | device ms / profiled step | GPU busy share of the step | CPU ops / step | peak |
+|---|---|---|---|---|---|
+| e4b defaults | 3.430 / 3.548 | 1692 / 1696 | 0.493 / 0.478 | 0.53 M | 26.16 GB |
+| Unsloth | 9.833 / 9.727 | 3261 / 3257 | 0.332 / 0.335 | 7.43 M | 24.27 GB |
+
+- **P205 HELD:** device ratio **1.924** ([1.7, 2.7]).
+- **P206 HELD:** wall ratio **2.803** on this host ([2.3, 3.3]).
+- **P207 HELD:** 14.1× e4b's CPU ops per step.
+- **P208 HELD:** the wall ratio is 1.457× the device ratio, so Unsloth loses more of its step to the host.
+- **P209 HELD:** held-out within 0.0012.
+
+By the rule, STATUS's position to quote is now "Unsloth spends 1.92× e4b's GPU time per step; wall-clock 2.80× on an AMD EPYC 7713".
+
+**e4b's own host share.** At the field recipe e4b's GPU is busy for under half its step. The profile shows where e4b's CPU time goes,
+per profiled step:
+- about 0.79 s inside the checkpoint functions: the decoder layer's Python forward, run once and again in the recompute;
+- about 57 k kernel launches;
+- about 3,100 `bmm` calls.
+
+No change is registered against it yet.
