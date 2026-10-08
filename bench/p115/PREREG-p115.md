@@ -361,3 +361,144 @@ and 72 GB with their snapshots and arenas; each snapshot is deleted once its mod
 - `verdict_c.json`, `summary.txt`, `forensics.txt`, `versions.txt`, `prompts_<m>.json`, `logs/`, `work_<m>/bake.json`.
 
 The arenas, the snapshots and the reference log-probs (SANE's and Granite's) stay on the box.
+
+## Amendment 3 (2026-10-08, after Phase C read FLIP_HELD; Phase D, the combined read, and the family-scoped default; before any Phase D box)
+
+**Why.** Phase C read FLIP_HELD (#1342): gpt-oss-20b fails the SANE gate on argmax agreement (0.924 < 0.95). Qwen3.6
+passes, and Granite reads GRANITE_LICENSED. The registered consequence is "a family-scoped default only under a new
+registration". This amendment is that registration. It carries the read the maintainer asked for in #1318's review.
+grouped-nf4-gemm 0.43.0 made P116's bandwidth decode GEMV the default (`GNF4_GEMV_BW=auto`, at Qwen3-30B-A3B's two expert
+shapes on ≥ 160-SM parts). The fused stack (Phases A and B, at 0.42.0) and that GEMV (P116) were each read alone; the
+combination never was.
+
+**The family-scoped default (the code PR this registration licenses).** Under the default, the four fusion knobs
+engage only on a family with a registered passing read. The allowlist, by `model_type`:
+
+| `model_type` | read | registered by |
+|---|---|---|
+| `qwen3_moe` | Phases A and B: speed and quality | #1328 |
+| `qwen3_5_moe` | Phase C: engagement and SANE (the router epilogue only) | #1342 |
+| `granitemoe` | Phase C: Phase B's quality read, GRANITE_LICENSED | #1342 |
+
+Every other family stays unfused unless set otherwise. That includes gpt-oss (`gpt_oss`), which gets a
+one-knob-per-arm follow-up with its own neutral floor first. Two mechanisms are possible:
+- **(A)** gate explicit `auto` itself on the allowlist;
+- **(B)** keep explicit `auto` structural, as Phase C read it, and resolve an unset knob per family.
+
+Which one ships is the maintainer's call (#1313). The measurement below does not depend on it: on Qwen3-30B-A3B both
+resolve to all four knobs engaged. This page names the chosen mechanism before it merges.
+
+### Phase D — the combined read on Qwen3-30B-A3B
+
+**The subject.** The shipped default server at the launch commit: graphs `auto`, buckets 1–16, all-vram, bulk KV, one
+KV-table selection per step, and **`max_seqs` 16, named** (`E4B_PAGED_MAX_SEQS=16`; main's default is now `auto`).
+It runs Qwen3-30B-A3B @ `ad44e777bcd1…`, with the NF4 arena baked on the box by P39's `k8_bake.py`. grouped-nf4-gemm is
+at **`6ee2e10`** (v0.43.0, a registered constant). The decode GEMV is at its default: the bandwidth route at Qwen3's
+shapes, never forced. transformers is 5.17.0.
+
+**The arms.** The arms differ only in the four fusion knobs:
+- **D0:** all four `0`.
+- **D1:** all four `auto` (named explicitly in both arms).
+
+**The SANE read (the gate).**
+- **Instrument:** Phase B's (`p115_quality.measure_phase`), at P115's registered bytes, on the default server built
+  eager, at **one window per pass** (group 1). That is bucket 1, `T == 1`, the served one-request arithmetic: the only
+  place the bandwidth GEMV and the folds meet, since `hot_residency._collapsed_grouping` sends `T > 1` to the M-tile.
+  Phase C's SANE ran 12 windows as one group (`T == 12`), which would never reach the GEMV.
+- **Size:** Phase C's, 12 wikitext windows of 512 prompt tokens and 128 teacher-forced positions.
+- **Phases:** D0 scores R and saves its fp32 log-probs; D1 scores ON against them.
+- **Gate:** Phase C's, unchanged: |mean d_ON| ≤ 0.02 nats and argmax agreement ≥ 0.95.
+- **Engagement:** grouped-nf4-gemm's dispatch tally is recorded over each phase's measurement. Both phases must
+  dispatch `bw_prmt32` and never dot-pad.
+
+**The speed read (reported, not ruled).** Four fresh processes, ABBA: **D0a D1a D1b D0b** on the graph server.
+- **Workloads:** P109's, at P109's registered bytes. W16 is 16 distinct 512-token wikitext prompts at once; W1 is row 0
+  alone. 32 and 160 new tokens, 1 warm pass then 3 timed passes, p37's slope.
+- **Records:** the dispatch tally after the build and after each workload.
+- **Reported:** g1 = min(D1a/D0a, D1b/D0b) at W1 and g16 at W16. That is the stack's gain on top of the GEMV, which
+  the default PR quotes in place of Phase A's 0.42.0 ratio.
+
+### The rule (`bench/p115/p115d_reduce.py`, self-tested on 23 cases)
+
+First rung that applies:
+1. **VOID:**
+   - a record is missing or not ok;
+   - another e4b or grouped-nf4-gemm commit, or another model revision;
+   - a speed arm with a bucket not captured;
+   - the arms differ in prompts or lengths;
+   - a slope is void;
+   - a fusion census off its registration: D0 all zero; D1 `48 / 193 / [48, 48] / 48` on Qwen3, as Phases A/B read it;
+   - the modes not the arm's;
+   - the bandwidth GEMV not where the registration puts it: on the reading, every W1 speed workload and both SANE
+     phases dispatch `bw_prmt32` and no dot-pad; on the proof's Granite, whose shapes the route does not cover, the
+     scalar GEMV and no `bw_*`;
+   - a SANE phase not at one window per pass, or short of its 12 windows.
+2. **FUNCTION_FAIL:** a self-pair (D0b/D0a, D1b/D1a) decodes different tokens on any row, workload or length, or one
+   arm's timed reps digest differently. D1 ≠ D0 is expected and reported.
+3. **COMBINED_FAIL:** the SANE gate fails on the combination.
+4. **COMBINED_SANE:** otherwise.
+
+### Predictions (written before any data)
+
+| # | prediction |
+|---|---|
+| D1 | engagement exact: D1's census `48 / 193 / [48, 48] / 48` and D0's zero; `bw_prmt32` on every W1 workload and both SANE phases, dot-pad never; every bucket captured |
+| D2 | D0b ≡ D0a and D1b ≡ D1a bitwise; D1 ≠ D0 on some rows |
+| D3 | SANE: bias within ±0.005 nats, argmax agreement ≥ 0.96 (Phase B's ON read 0.961 at T = 12; P116 read the GEMV within P110's bar at T == 1) |
+| D4 | reported speed: **g1 ∈ [1.30, 1.60]**. The bandwidth GEMV's W1 step is about 8.2 ms (P116), and the stack removed about 3.2 ms at Phase A; its glue, router and q/k/v work does not overlap the GEMV's. **g16 ∈ [1.15, 1.30]** (Phase A's 1.23; T > 1 never reaches the GEMV) |
+| D5 | COMBINED_SANE about 90 % |
+| D6 | each speed arm ≤ 3 min; each SANE phase ≤ 15 min; peak ≤ 23 GiB |
+
+### Consequence, registered now
+
+- **COMBINED_SANE:** the family-scoped default PR may proceed on the allowlist above, quoting D4's ratios as the stack's
+  gain at grouped-nf4-gemm 0.43.0 (the register row `e4b.serve.p115.fused-stack-combined.qwen3.5090.<date>`, SANE bias
+  as its value, g1 and g16 in the claim text). Its changelog and `docs/SERVING.md` list per family what was read (Phase
+  A/B's rule) and name `0` on each knob as the way back.
+- **COMBINED_FAIL:** no default on Qwen3-30B-A3B. The combination is examined one knob per arm at T == 1 under its own
+  registration before any flip. Qwen3.6 and Granite are unaffected by this phase, because the GEMV route covers neither
+  family's shapes, so their entries may still proceed.
+- **FUNCTION_FAIL:** a determinism defect, found first.
+- **VOID:** no consequence; one rerun inside the ceiling, then an amendment.
+
+### The premise and the proving rental
+
+**Premise**, on the card before anything is fetched (rc 25). `tests/test_decode_graph_buckets.py`,
+`tests/test_kv_step_select.py`, `tests/test_fused_glue_decode_graphs_gpu.py` and `tests/test_gemv_bw_served_gpu.py`:
+**19 passed**, none skipped. They show:
+- the bucket graphs replay as the padded eager step;
+- the fused glue captures under the graphs;
+- the bandwidth GEMV reaches the served `T == 1` route only and replays bitwise as eager.
+
+**Proof** (`p115d-prove-<n>`): the whole box on Granite-3.1-3b-a800m, at 8 / 24 tokens, 1 rep and 12 windows × 32
+positions. Its GEMV is the scalar route, since Granite's shapes are not in the table. A VOID from the reducer fails the
+proof (rc 27). Its verdict is not a reading.
+
+**Order on the box:**
+1. Refusals, then install and the tripwire. The tripwire checks:
+   - the pins;
+   - the knobs opt-in at this commit and `auto` parsing;
+   - `GNF4_GEMV_BW` at `auto` with Qwen3's two shapes in `_BW_SHAPES`;
+   - the `T == 1` / `T > 1` boundary.
+2. The reducer, box and quality self-tests, then the premise.
+3. Fetch, bake and prompts.
+4. The four speed arms, then SANE D0 and D1. SANE does not start when an arm failed.
+5. The reducer.
+
+### Budget and STOP
+
+- **Proof:** one RTX 5090, **guard 0.75 h**, `--download-gb 7`, about $0.65 at the launcher's policy rate.
+- **Reading:** one RTX 5090, **guard 1.5 h**, `--download-gb 61`, about $2.0 at the policy rate.
+- **Ceiling:** Phase D's ceiling is **$4.00** (the proof, the reading and one rerun), inside P115's registered $10 hard
+  stop. P115 has spent $2.455 over Phases A–C. Every run sits inside the owner's standing no-ask tier for a single run
+  under $15; anything over $15 needs the maintainer lane's approval first.
+- **STOP:** STOP-1 to STOP-4 as Phase C's: the refusals (18, 10, 15, 13 at < 150 GB, 16, 25), every time-left check
+  inside its guard, no in-launch retry, and the driver refusing a dirty tree or a staged file that differs from
+  `bench/p115/staged-d.sha256`.
+
+**Receipts.** The run directory's `p115d/` is committed to `bench/p115/receipts/<run>/`:
+- `arm_{D0a,D1a,D1b,D0b}.json`, `sane_off.json`, `sane_on.json`, `verdict_d.json`;
+- `summary.txt`, `forensics.txt`, `versions.txt`, `prompts.json`, `bake.json`;
+- `logs/` (added with `git add -f`) and `SHA256SUMS`.
+
+The reference log-probs and the arena stay on the box.
