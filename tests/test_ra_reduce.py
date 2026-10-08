@@ -68,3 +68,57 @@ def test_argmax_quality_regression_with_same_nll():
     assert out["verdict"] == "REGRESSION"
     assert out["regression_blocks_next_release"] is True
     assert out["metrics"]["quality_group_12"]["pairs"][0]["bias_nats"] == 0
+
+
+def tradeoff_fixture():
+    run, arms = ra.fixture()
+    for tag in ("new_a", "new_b"):
+        arms[tag]["training"]["step_ms"] = [1120.] * 20
+    run["expected_tradeoffs"] = [{"metric": "train_wall_s", "claim_id": "e4b.synthetic.tradeoff",
+                                  "package": "e4b", "release_commit": run["new"]["e4b"]["commit"],
+                                  "direction": "worse", "unit": "new_over_old_cost_ratio", "interval": [1.10, 1.20],
+                                  "claim_status": "measured", "changelog_quote": "Synthetic e4b.synthetic.tradeoff",
+                                  "read_path": "synthetic/RESULTS.md", "read_quote": "Synthetic registered interval",
+                                  "identity": run["identity"]}]
+    return run, arms
+
+
+def test_expected_tradeoff_does_not_remove_release_block():
+    run, arms = tradeoff_fixture()
+    out = ra.reduce(run, arms)
+    assert out["verdict"] == "REGRESSION"
+    assert out["metrics"]["train_wall_s"]["verdict"] == "REGRESSION"
+    assert out["release_clearance"] is False
+    assert out["regression_blocks_next_release"] is True
+    assert out["expected_tradeoffs"][0]["changes_release_block"] is False
+    assert out["expected_tradeoffs"][0]["provenance"] == "MANIFEST_CITATION_REQUIRES_MAINTAINER_VERIFICATION"
+
+
+@pytest.mark.parametrize("field,value", [("changelog_quote", "uncited"), ("direction", "better"),
+                                         ("interval", [1.13, 1.20]), ("claim_status", "retired"),
+                                         ("release_commit", "c" * 40), ("unit", "absolute-seconds")])
+def test_unsupported_tradeoff_stays_regression(field, value):
+    run, arms = tradeoff_fixture()
+    run["expected_tradeoffs"][0][field] = value
+    out = ra.reduce(run, arms)
+    assert out["verdict"] == "REGRESSION"
+    assert out["regression_blocks_next_release"] is True
+    assert not out["expected_tradeoffs"]
+    assert out["rejected_tradeoff_annotations"]
+
+
+def test_out_of_interval_one_pair_does_not_annotate():
+    run, arms = tradeoff_fixture()
+    arms["new_b"]["training"]["step_ms"] = [1160.] * 20
+    run["expected_tradeoffs"][0]["interval"] = [1.10, 1.14]
+    out = ra.reduce(run, arms)
+    assert out["verdict"] == "REGRESSION"
+    assert not out["expected_tradeoffs"]
+
+
+def test_tradeoff_cannot_annotate_wrong_workload():
+    run, arms = tradeoff_fixture()
+    run["expected_tradeoffs"][0]["identity"] = {"workload": "different"}
+    out = ra.reduce(run, arms)
+    assert out["verdict"] == "REGRESSION"
+    assert not out["expected_tradeoffs"]

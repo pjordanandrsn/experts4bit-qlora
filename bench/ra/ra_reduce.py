@@ -94,6 +94,46 @@ def quality_metric(rows):
             "unsettled": not noisy and failures == 1, "bias_bar_nats": 0.02, "agreement_bar": 0.95}
 
 
+def annotate_tradeoffs(run, metrics):
+    """Information only; never changes a measured verdict or release block.
+
+    A manifest citation is not independent merge/document verification.
+    Match its stated scope and both ratios, retain REGRESSION, and require
+    maintainer verification of the immutable release documents and read.
+    Bad annotation metadata cannot erase the underlying measured evidence.
+    """
+    out, rejected = [], []
+    candidates = run.get("expected_tradeoffs", [])
+    if not isinstance(candidates, list):
+        return [], ["expected_tradeoffs is not a list"]
+    seen = set()
+    for item in candidates:
+        try:
+            name, cid, pkg = item["metric"], item["claim_id"], item["package"]
+            require(name in BOUNDS and metrics[name]["verdict"] == "REGRESSION", "not a performance REGRESSION")
+            require(name not in seen, "duplicate metric annotation")
+            seen.add(name)
+            require(pkg in ("e4b", "gnf4") and cid.startswith(pkg + "."), "claim namespace mismatch")
+            require(item["release_commit"] == run["new"][pkg]["commit"], "wrong release citation")
+            require(item["direction"] == "worse" and item["unit"] == "new_over_old_cost_ratio", "wrong direction/units")
+            lo, hi = item["interval"]
+            require(finite(lo) and finite(hi) and 1 < lo <= hi, "invalid intended-cost interval")
+            ratios = metrics[name]["cost_ratios"]
+            require(all(r is not None and lo <= r <= hi for r in ratios), "both ABBA ratios must be in interval")
+            require(item["claim_status"] in ("measured", "verified", "confirmed"), "claim not an active public read")
+            require(cid in item["changelog_quote"] and bool(item["read_path"]) and bool(item["read_quote"]), "uncited read")
+            require(item["identity"] == run["identity"], "annotation workload/common identity mismatch")
+            out.append({"annotation": "EXPECTED_TRADEOFF", "metric": name, "claim_id": cid, "package": pkg,
+                        "direction": "worse", "unit": item["unit"], "interval": [lo, hi], "cost_ratios": ratios,
+                        "release_commit": item["release_commit"], "read_path": item["read_path"],
+                        "changelog_quote": item["changelog_quote"], "read_quote": item["read_quote"],
+                        "provenance": "MANIFEST_CITATION_REQUIRES_MAINTAINER_VERIFICATION",
+                        "original_verdict": "REGRESSION", "changes_release_block": False})
+        except (Invalid, KeyError, TypeError, ValueError, AttributeError) as exc:
+            rejected.append(str(exc))
+    return out, rejected
+
+
 def released(r):
     require(set(r) == {"e4b", "gnf4"}, "release pair must name both packages")
     for pkg, pin in r.items():
@@ -266,6 +306,7 @@ def reduce(run, arms):
         out["reasons"] = function_faults
         out["release_clearance"] = not proof and out["verdict"] == "CLEAR"
         out["regression_blocks_next_release"] = not proof and out["verdict"] == "REGRESSION"
+        out["expected_tradeoffs"], out["rejected_tradeoff_annotations"] = annotate_tradeoffs(run, out["metrics"])
     except (Invalid, KeyError, TypeError, ValueError, IndexError, ZeroDivisionError, OverflowError) as exc:
         out.update(verdict="VOID", reasons=[str(exc)], metrics={}, release_clearance=False,
                    regression_blocks_next_release=False)

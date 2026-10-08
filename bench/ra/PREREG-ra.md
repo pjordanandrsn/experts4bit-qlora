@@ -231,6 +231,25 @@ mutant-sensitive instrument. Do not excuse the failure by moving the bound.
 The maintainer owns release enforcement; Jordan is final authority. Upstream
 filings need Jordan's explicit say-so.
 
+**Intended-tradeoff annotation (review addition, before measurement).** The
+prelaunch manifest may cite a new-release CHANGELOG entry and an already merged,
+active public register read that predicted a worse performance metric. Record
+the claim id, release commit, read/CHANGELOG quotations, metric, direction,
+matching workload and its fixed cost-ratio interval. Annotate
+`EXPECTED_TRADEOFF` only if both ABBA cost ratios lie in that interval. A bound
+around a cited value must be converted to its interval before launch. An uncited,
+wrong-direction, wrong-unit, different-workload or out-of-interval result gets
+no annotation. Quality metrics are not covered by this performance annotation.
+
+The annotation is **information, never a verdict replacement or bypass**:
+the metric and run keep REGRESSION and the release remains blocked. The reducer
+marks manifest citations as requiring maintainer verification; it cannot prove
+a merge or read from caller-provided quotations. The executor stages the release
+documents and cited read from their immutable Git trees for that verification.
+The maintainer verifies and records the annotation in RESULTS, and takes any
+proposed per-release exception to Jordan **before tagging**. The charter stands
+unless Jordan explicitly changes it for that release.
+
 **State:** registration/reducer only. Executor, GPU proof, successor reading,
 cost feasibility and enforcement integration remain unmeasured work. Review
 of this PR authorizes no implicit rental; ask the maintainer for explicit

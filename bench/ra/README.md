@@ -30,6 +30,14 @@ Exit 0 means CLEAR, exit 2 means another verdict. PROOF is always marked with
 `release_clearance: false`. VOID carries its reason. A noisier metric cannot
 hide another metric's regression. Output never serializes NaN/Infinity.
 
+Optional `run.json.expected_tradeoffs` entries identify a prelaunch manifest's
+performance metric, claim id/package/status, new release commit, worse direction,
+`new_over_old_cost_ratio` unit/interval, matching identity and CHANGELOG/read
+quotations. Supported entries annotate the verdict as `EXPECTED_TRADEOFF`;
+they **never replace REGRESSION or remove its release block**. Citation provenance
+is explicitly pending maintainer verification of staged immutable documents.
+Unsupported annotations are reported separately and leave the measured verdict.
+
 **Current scope:** the registration and reducer contract. Synthetic fixtures
 exercise validation and the verdicts on CPU. The executor that obtains these
 records, proves normalization against native files, and verifies each release's
