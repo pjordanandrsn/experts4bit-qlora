@@ -2129,6 +2129,8 @@ ran, the allocator estimate held on Qwen3-14B but fell below the measured peak o
 resident and streamed. Every streamed plan's device total was below the measured driver peak, by up to 2.40 GB
 (driver/plan up to 1.196), so the inferred 20 % reserve doesn't cover streamed placement. No calibration or DQ8 draw
 follows. `e4b.train.dense-executor.dq7.5090.2026-10-08` ([results](../bench/dq7/RESULTS-dq7.md)).
+DQ9’s first diagnostic draw stopped at a checksum staging refusal before any proofs or readings;
+[failed diagnostic record](../bench/dq9/RESULTS-dq9.md).
 
 ### Training against other frameworks
 
