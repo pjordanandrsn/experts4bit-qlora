@@ -3,6 +3,7 @@ import copy
 import importlib.util
 import json
 import shutil
+import subprocess
 import sys
 import types
 from pathlib import Path
@@ -29,9 +30,44 @@ spec.loader.exec_module(driver)
 
 @pytest.fixture(scope="session")
 def staged(tmp_path_factory):
-    path = tmp_path_factory.mktemp("ra") / "instruments"
-    stage.stage(ROOT, ROOT / "bench/ra/source-pins.json", path)
+    root = tmp_path_factory.mktemp("ra")
+    repo = root / "synthetic-repo"
+    repo.mkdir()
+    files = {"bench/p109/p109_box.py": b"import ra_fixture_helper\n",
+             "bench/fixture/ra_fixture_helper.py": b"VALUE = 'synthetic closure'\n",
+             "bench/sc2/sc2_driver.py": (ROOT / "bench/sc2/sc2_driver.py").read_bytes()}
+    for name, data in files.items():
+        p = repo / name
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(data)
+    stage.git(repo, "init", "--quiet")
+    stage.git(repo, "add", "--", *files)
+    stage.git(repo, "-c", "user.name=RA synthetic test", "-c", "user.email=ra-tests@example.invalid",
+              "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null",
+              "commit", "--quiet", "-m", "Synthetic staging fixture", "--only", "--", *files)
+    commit = stage.git(repo, "rev-parse", "HEAD").decode().strip()
+    pins = {"schema": 1, "source_commit": commit,
+            "instruments": {name: stage.sha(data) for name, data in files.items()
+                            if name != "bench/fixture/ra_fixture_helper.py"}}
+    pins_path = root / "synthetic-pins.json"
+    pins_path.write_text(json.dumps(pins))
+    path = root / "instruments"
+    stage.stage(repo, pins_path, path)
     return path
+
+
+def test_staging_uses_own_commit_and_collects_unregistered_local_import(staged):
+    manifest = stage.verify(staged)
+    assert set(manifest["files"]) == {"p109_box.py", "sc2_driver.py", "ra_fixture_helper.py"}
+    assert manifest["files"]["p109_box.py"]["registered"] is True
+    assert manifest["files"]["ra_fixture_helper.py"]["registered"] is False
+    assert (staged / "ra_fixture_helper.py").read_bytes() == b"VALUE = 'synthetic closure'\n"
+    # Prove the generated source object exists in the fixture's repo, not ROOT.
+    repo = staged.parent / "synthetic-repo"
+    assert stage.git(repo, "cat-file", "-t", manifest["source_commit"]).strip() == b"commit"
+    result = subprocess.run(["git", "-C", str(ROOT), "cat-file", "-e", manifest["source_commit"]],
+                            capture_output=True)
+    assert result.returncode != 0
 
 
 def native_sc2(mode, rate, seed, n):
