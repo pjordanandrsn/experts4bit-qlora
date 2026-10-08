@@ -1903,7 +1903,12 @@ Register: [`../claims.json`](../claims.json). The position, **measured** (receip
     "e4b.serve.cuda-graph-capture",
     "e4b.serve.p55x.qwen3.rtn-attn.k8.2026-09-22",
     "e4b.serve.p55x.qwen3.pack-deterministic-samebox.2026-09-22",
-    "e4b.serve.p55x.qwen3.pack-reproduces-crossbox.2026-09-22"
+    "e4b.serve.p55x.qwen3.pack-reproduces-crossbox.2026-09-22",
+    "e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07",
+    "e4b.serve.p115.fused-stack-quality.qwen3.5090.2026-10-07",
+    "e4b.serve.p115.fused-stack-engagement.gptoss-qwen36.5090.2026-10-08",
+    "e4b.serve.p115.fused-stack-quality.granite.5090.2026-10-08",
+    "e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07"
    ],
    "limitations": [
     "Not a general-purpose vLLM replacement: on the same box with identical prompt token ids vLLM 0.30.0 decodes faster than this package's current int4 stack at both B=1 and B=16 (claims e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b1.5090.2026-09-22, e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b16.5090.2026-09-22), bounded to graph decode on one RTX 5090 box with one prompt set; quality quoted, never equated; the 2026-09-05 comparison against vLLM 0.28.0 and the NF4 control (e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05) is history",
@@ -2250,10 +2255,11 @@ together; serial output is unchanged. Lane SC2e has no register row; its read is
 16 unchanged, within P110's quality bar; it is grouped-nf4-gemm's default from 0.43.0 at Qwen3's NF4 expert shapes on
 GPUs with 160 or more SMs. `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`.
 
-**The B=1 fused stack is faster and stays opt-in.** Fused q/k/v plus three glue folds decode one request 1.4289× and 16
-requests 1.2298× as fast on Qwen3-30B-A3B NF4, within P110's bar. P115 Phase C held the default flip: Granite passes,
-but gpt-oss-20b fails the argmax gate (0.924 against 0.95). The four knobs stay `0`; a family-scoped `auto` needs a new
-registration. `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`,
+**The B=1 fused stack is the default on the families with a registered read.** Fused q/k/v plus three glue folds
+resolve to `auto` on Qwen3-MoE, Qwen3.5/3.6-MoE and Granite-MoE and stay off elsewhere: gpt-oss-20b failed Phase C's
+argmax gate (0.924 against 0.95). On Qwen3-30B-A3B NF4 the stack decoded one request 1.4289× and 16 requests 1.2298× as
+fast at grouped-nf4-gemm 0.42.0, within P110's bar. [Phase D pending: on top of 0.43.0's bandwidth GEMV.]
+`e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`,
 `e4b.serve.p115.fused-stack-quality.qwen3.5090.2026-10-07`,
 `e4b.serve.p115.fused-stack-engagement.gptoss-qwen36.5090.2026-10-08`,
 `e4b.serve.p115.fused-stack-quality.granite.5090.2026-10-08` ([P115](../bench/p115/RESULTS-p115.md)).
@@ -2324,6 +2330,7 @@ controls. `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-
 | bandwidth-targeted NF4 decode GEMV | grouped-nf4-gemm | `GNF4_GEMV_BW=0` | P116 |
 | grouped small-M routes above T == 1 (K19, K23, K21, K25) | serving | `E4B_INT4_GROUPED_SMALLM=0`, `E4B_INT4_LEAN_GLUE=0`, `E4B_MXFP4_GROUPED_SMALLM=0`, `E4B_NF4_GROUPED_SMALLM=0` | `e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01`, `e4b.serve.p89.qwen3.int4.k23-lean-glue-b16.5090.2026-10-01`, `e4b.serve.p90.gptoss.mxfp4.k21-b16.5090.2026-10-01`, `e4b.serve.p96.nf4-families.k25-windowed-k8.5090.2026-10-02` |
 | router weights cast to bf16 at ≤ 64 rows (`softmax_topk`) | fused router epilogue | `E4B_ROUTER_EPI_CAST=0` | P70 |
+| B=1 fused stack (fused q/k/v and three glue folds) on Qwen3-MoE, Qwen3.5/3.6-MoE and Granite-MoE | `serve_paged` | `E4B_PAGED_FUSE_QKV=0`, `E4B_FUSE_T1_GLUE=0`, `E4B_FUSE_T1_GLUE_R2=0`, `E4B_FUSE_ROUTER_EPI=0` | `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`, `e4b.serve.p115.fused-stack-quality.granite.5090.2026-10-08` [Phase D pending] |
 
 ---
 

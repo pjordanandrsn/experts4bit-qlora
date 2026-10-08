@@ -725,6 +725,22 @@ def test_health_reports_the_width_asked_for_and_how_auto_resolved():
         assert e["max_seqs_requested"] == "16" and e["max_seqs_resolution"] is None
 
 
+def test_health_reports_fuse_qkv_as_the_build_resolved_it():
+    """An unset knob sets ``cfg.fuse_qkv`` (resolved per family at the build, lane P115): /health reports the build's
+    resolution, so a family the default leaves off never reads as fused."""
+    from experts4bit_qlora.serve_paged import FUSE_QKV_ENV, FUSION_KNOBS
+    unset = {k: "default" for k in FUSION_KNOBS}
+    for built, want in ((None, None), ("0", False), ("auto", True)):
+        client, engine = _client(ScriptedRunner(), fuse_qkv=True, fusion_modes=dict(unset))
+        if built is not None:
+            engine.parts.info["fusion_modes"] = {FUSE_QKV_ENV: built}
+        with client as c:
+            assert c.get("/health").json()["engine"]["fuse_qkv"] is want, built
+    client, engine = _client(ScriptedRunner(), fuse_qkv=True)            # a config without modes: unchanged
+    with client as c:
+        assert c.get("/health").json()["engine"]["fuse_qkv"] is True
+
+
 # ---------------------------------------------------------------- fusions --
 
 FOLD_FLAGS = ("E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")

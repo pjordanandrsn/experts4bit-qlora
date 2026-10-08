@@ -16,4 +16,8 @@ e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
 f53952c1a26b06e8a8f61dcfdbd511acad0b0507cae58cb1bbfca7f3c8f4313a  test_decode_graph_buckets.py
 0af027ec93837f2b0cd150a77c7692386ac33eb59d553727c40fe784c6c273de  test_kv_step_select.py
 5a8eb6b4b0e4d515d8789f1fb729bb847fd74d53288f2faa3efac07e04e1a740  test_fused_glue_decode_graphs_gpu.py
-da2fca7f810f2030beac85e27943a9e58ba7468f06f955b2f491e3f72ca8ea91  test_fusion_modes.py
+# Re-pinned 2026-10-08 for the family-scoped default (PREREG-p115.md Amendment 3, mechanism (B), the maintainer's
+# OK on the bus 2026-10-08T18:27Z): test_from_env_defaults_are_unchanged became
+# test_from_env_unset_knobs_resolve_per_family_at_the_build. Phase C is read (#1342); its receipts record the staged
+# files as run at 32e1eaf6 (this name was da2fca7f810f2030beac85e27943a9e58ba7468f06f955b2f491e3f72ca8ea91).
+b0a1250852e72f821cd08444d20eb86a14a05158e497bdc753041b67d4a5bf78  test_fusion_modes.py

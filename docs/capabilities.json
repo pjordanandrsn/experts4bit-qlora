@@ -1019,7 +1019,12 @@
     "e4b.serve.cuda-graph-capture",
     "e4b.serve.p55x.qwen3.rtn-attn.k8.2026-09-22",
     "e4b.serve.p55x.qwen3.pack-deterministic-samebox.2026-09-22",
-    "e4b.serve.p55x.qwen3.pack-reproduces-crossbox.2026-09-22"
+    "e4b.serve.p55x.qwen3.pack-reproduces-crossbox.2026-09-22",
+    "e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07",
+    "e4b.serve.p115.fused-stack-quality.qwen3.5090.2026-10-07",
+    "e4b.serve.p115.fused-stack-engagement.gptoss-qwen36.5090.2026-10-08",
+    "e4b.serve.p115.fused-stack-quality.granite.5090.2026-10-08",
+    "e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07"
    ],
    "limitations": [
     "Not a general-purpose vLLM replacement: on the same box with identical prompt token ids vLLM 0.30.0 decodes faster than this package's current int4 stack at both B=1 and B=16 (claims e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b1.5090.2026-09-22, e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b16.5090.2026-09-22), bounded to graph decode on one RTX 5090 box with one prompt set; quality quoted, never equated; the 2026-09-05 comparison against vLLM 0.28.0 and the NF4 control (e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05) is history",
