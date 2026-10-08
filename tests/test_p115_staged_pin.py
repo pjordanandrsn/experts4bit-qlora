@@ -103,8 +103,8 @@ def test_the_rule_is_the_registered_rule():
     assert 'K8_GATED = ("wikitext",)' in REDUCE and 'FLOORS = ("half", "chunk")' in REDUCE
     gnf4 = re.search(r'GNF4_SHA = "([0-9a-f]{40})"', REDUCE).group(1)
     assert f"GNF4_SHA={gnf4}" in RUN and gnf4 == "b4f93f1c62d1e3436ed45bec8ccd608c90433737"
-    ci = (REPO / ".github" / "workflows" / "ci.yml").read_text()
-    assert f"grouped-nf4-gemm.git@{gnf4}" in ci, "the lane pins e4b CI's grouped-nf4-gemm"
+    # Registered against e4b CI's grouped-nf4-gemm pin of that day (v0.42.0). CI's pin moves with each release (0.49.0
+    # pins v0.43.0); the lane's box installs its registered GNF4_SHA itself, so CI's pin is not part of the rule.
     revs = dict(re.findall(r'"([\w./-]+)": "([0-9a-f]{40})"', REDUCE))
     for model, rev in revs.items():
         assert f"MODEL={model}; REV={rev}" in RUN, model
