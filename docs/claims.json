@@ -101,7 +101,7 @@
       ],
       "notes": "The only same-box, same-prompt comparison against a production engine this project has. Supersedes the 2026-08 '6.31x ahead' figure (e4b.retired.vllm-6.31x-ahead), which used template prompts and a different box. The e4b arm is the 2026-09-03 RTN int4 configuration class, which later FAILED its second text on lane bo5 (e4b.serve.buildout.qwen3.b1.5090.2026-09-04 notes) and is not the licensed stack (bo6c); the comparison against the licensed stack on one box with a recorded vLLM version is lane P37 and is registered when its receipt lands. SUPERSEDED 2026-09-05 for current-position use by e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05 (lane p37: same box, same session, identical prompt ids, vLLM 0.28.0 pinned, every knob recorded; the e4b side is the shipped 0.35.0 code -- the NF4 control VALID, the licensed arms VOID on that box under the pack-fingerprint rule). This entry's numbers stand as measured on their box and date. Quote history, from quoted_in's free-text form before the 2026-09-23 schema convergence: README.md ('Do not use this when'; the results table -- re-pointed to the successor 2026-09-05); docs/STATUS.md ('Serving speed'; 'What changed' -- re-pointed 2026-09-05); docs/capabilities.json (serve-moe-on-consumer-gpu claim_ids and limitations -- re-pointed 2026-09-05); docs/solutions/serve-large-moe-on-a-consumer-gpu.md (Limitations; Evidence -- re-pointed 2026-09-05); llms-full.txt (the projections of the above). Since the 2026-09-23 schema convergence (successors are direct): e4b.retired.vllm-6.31x-ahead names e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05, this row's own successor, and that row lists it in supersedes; this row no longer does.",
       "quoted_in": [
-        "docs/STATUS.md#what-you-get-today",
+        "docs/STATUS-RECORD.md#what-you-get-today",
         "docs/solutions/serve-large-moe-on-a-consumer-gpu.md#limitations",
         "llms-full.txt"
       ],
@@ -6529,7 +6529,7 @@
       "notes": "Same-box position; the vLLM number includes its serving loop and e4b's replay window has no scheduler, so the engine advantage is understated, not inflated. Quality quoted, never equated. e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05 stays as history (a different e4b stack). Moved from the claim sentence (2026-09-22, llms bundle budget): Checkpoint pin in full: Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441.",
       "quoted_in": [
         "docs/SERVING-THROUGHPUT.md",
-        "docs/STATUS.md"
+        "docs/STATUS-RECORD.md"
       ]
     },
     {
@@ -8383,7 +8383,7 @@
       ],
       "notes": "",
       "quoted_in": [
-        "docs/STATUS.md"
+        "docs/STATUS-RECORD.md"
       ]
     },
     {
@@ -8495,7 +8495,7 @@
       ],
       "notes": "The profiles say why the cards disagree (.dispatch-profile): e4b issues ~139k device events per step on both cards; Unsloth issues 612k on the RTX 5090 (torch 2.12.1+cu130, sm_120) and 82k on the H100 (sm_90) with 14x fewer CPU-side ops -- the grouped GEMM it routes through is one launch per call on Hopper and not on Blackwell. Which torch code path sm_120 takes is not established here. HF+PEFT (bf16 experts) fit on 80 GB (62 GB resident) but produced no step within its 1,800 s alarm: not measured. axolotl died in transformers 5.17.0's Qwen3-MoE router (bf16 vs fp32) before any receipt. Measured on the code BEFORE #945. The position after TC1 amendments 10-15: e4b.train.h2h.unsloth.qwen3.h100.2026-10-04 (0.817, Unsloth still faster).",
       "quoted_in": [
-        "docs/STATUS.md",
+        "docs/STATUS-RECORD.md",
         "docs/solutions/qlora-fused-moe-experts.md"
       ]
     },
