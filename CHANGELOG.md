@@ -4,6 +4,227 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
+## 0.50.0 — 2026-10-08 — serve_paged takes more requests by default (estimate-sized slots, one graph per decode step); the training comparison is quoted as GPU time
+
+**0.50.0.** `serve_paged` takes more requests by default. `E4B_PAGED_MAX_SEQS=auto` sizes the slot count to the GPU's free
+memory, and `E4B_PAGED_BUCKETS=auto` decodes each step as one graph replay. On Qwen3-30B-A3B int4 on one RTX 5090 at 2,048
+tokens a slot, that is 64 slots holding the latency bound to 12 req/s, against 4 at the old 16 slots (SC2e). One 64-row step
+costs no measurable quality against four 16-row pieces (P117). Upgrade if you serve with `serve_paged`. grouped-nf4-gemm is
+unchanged: the `[fast]` floor stays at 0.30.0, and CI runs on 0.43.0.
+
+The Qwen3-30B-A3B training position against Unsloth is now quoted as GPU time: **Unsloth spends 1.92× e4b's GPU time per
+step; wall-clock 2.80× on an AMD EPYC 7713** (TC1 amendment 69, e4b at every current default, both on one stack). The wall
+ratio depends on the host, because Unsloth runs 14× e4b's CPU ops per step. The earlier 2.352 and 2.468 are wall readings from
+before the reentrant checkpoint.
+
+Two defaults change. Each was licensed by a rule registered before its read:
+
+| default | where | way back | read |
+|---|---|---|---|
+| `E4B_PAGED_MAX_SEQS=auto`: the widest slot count SC2e read (64, 32 or 16) that the serve estimate fits | `serve_paged` | `E4B_PAGED_MAX_SEQS=16` | lane SC2e (`bench/h2h-2026-10-02/sc2e/`) |
+| `E4B_PAGED_BUCKETS=auto`: one graph per decode step | `serve_paged` | `E4B_PAGED_BUCKETS=1,2,4,8,16` | SC2e and `e4b.serve.p117.wide-bucket-quality.qwen3.5090.2026-10-08` |
+
+At the server's default 4,096 tokens a slot, Qwen3-30B-A3B int4 on an RTX 5090 now resolves to 32 slots (16 before). A 24 GB
+card stays at 16. Under load, output text depends on the requests a step batches together; serial output is unchanged.
+
+**Opt-in, no default change:**
+- `E4B_PAGED_LAST_LOGITS=1` projects only the final prompt position through the LM head (#1337).
+- `E4B_PAGED_DECODE_LOOKAHEAD=1` issues the next decode step before reading the last one back. P118 read it SLOWER against its
+  2 % bar: it recovers the whole host gap, which is small (1.0198× at one request).
+- The fusion knobs stay `0`. P115 Phase C held the flip: gpt-oss-20b failed the quality gate.
+
+Scope: Qwen3-30B-A3B on one RTX 5090 for every speed and quality figure above. Other models get the new serving defaults on
+the strength of these reads, not their own.
+
+### TC1 amendment 70 registered: grouped-nf4-gemm's single padded block on its ladder at the field recipe
+
+- Token `qwen3sladder`: `NF4_QLORA_SINGLE_LADDER` 0 against 1 (grouped-nf4-gemm#513) at TC1's field recipe, e4b's shipped and matched arms,
+  two draws a side, every arm profiled. P210 / P211 predict s/step at most 0.97 on a host-bound box; P212 `aten::bmm`'s CPU time per call
+  halved; P213 device time at most 1.05; P214 held-out unchanged. If P210, P211, P213 and P214 hold, it becomes grouped-nf4-gemm's default.
+- `tc1_arm.py` records grouped-nf4-gemm's `SINGLE_LADDER_STATS` (`single_ladder`). The reducer adds the family, `sladder_why` and
+  `score_sladder` (self-test 136).
+
+### TC1 amendment 69 read
+
+- **Amendment 69** (`tc1-5090-137`, RTX 5090, AMD EPYC 7713, $2.12, every arm profiled): at TC1's field recipe on one stack, with e4b at
+  every current default, Unsloth spends 1.924× e4b's GPU time per step, and the wall-clock ratio is 2.803 on that host (P205-P209 HELD).
+  Unsloth runs 14.1× e4b's CPU ops per step, and its GPU is busy for 0.33 of its step against e4b's 0.49. STATUS's Qwen3-30B-A3B
+  position to quote is now the GPU-time ratio, with the host's wall ratio beside it. Register row
+  `e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio`.
+
+### P118 read (#1313): SLOWER. The decode lookahead recovers the whole host gap, but the gap is small; `E4B_PAGED_DECODE_LOOKAHEAD` stays opt-in
+
+- **What was read.** One RTX 5090 at `971c2043`, with grouped-nf4-gemm 0.43.0. The default `serve_paged` server on
+  Qwen3-30B-A3B NF4, at 16 slots, in ABBA arms differing only in the switch.
+  - **Tokens and bucket statistics:** identical in every arm.
+  - **Speed:** one request decodes 1.0198× as fast (140.0 → 142.8 tok/s); 16 requests 1.0085×.
+  - **The step trace:** L0's host gap between decode steps is 0.207 ms at one request (0.283 ms at 16). The lookahead
+    recovers all of it: L1's step period equals the device time.
+- **Verdict.** The premise held (gap ≥ 0.2 ms), and g1 falls 0.0002 under the registered 1.02 bar: **SLOWER**. The
+  switch stays opt-in; nothing changes by default.
+- **Register:** `e4b.serve.p118.decode-lookahead.qwen3.5090.2026-10-08`.
+- **Receipts:** `bench/p118/receipts/p118-5090-2/`. P118 cost $1.110 (proof $0.125, a pre-flight NOT_RUN $0.071,
+  reading $0.914).
+
+### P119 registered (#846): a descriptive census of the 64-slot server's steps, per kernel, on one RTX 5090 (bench and tests only)
+
+- **Why.** SC2e serves 12 req/s at 64 slots; the capacity model on its costs says prefill and the decode step set the
+  next ceiling, and neither has been attributed by kernel on this stack (SC1b read B = 16 before the folds, lean glue,
+  bulk KV bookkeeping and wide buckets).
+- **The box** (`bench/p119/p119_box.py`): SC2e's int4 stack built eager with one slot; `torch.profiler` on the eager
+  twins of the served graphs (P109: bit-identical to the replays) for decode at 16, 32 and 64 rows and 64 as four
+  16-row pieces, the 512-token prefill with `E4B_PAGED_LAST_LOGITS` off and on, and the LM head alone. Shared with the
+  TTFT lane, so one profiling run serves both.
+- **The rule** (`bench/p119/p119_reduce.py`, 22 self-test cases): READ or VOID only; it checks every bracket ran its
+  registered split and tabulates device ms by class, the marginal cost per decode row and the D2D copies per layer.
+- **Proof** on Granite (guard 0.75 h); reading guard 1.5 h; lane ceiling $3.00.
+
+### TC1 amendment 68 read; amendment 69 registered
+
+- **Amendment 68** (`tc1-5090-136`, RTX 5090, $1.96, every arm profiled): on packed rows Unsloth spends 1.160× e4b's GPU time per step
+  (P200 HELD; 1.141 on amendment 66's host), runs 7.09× its CPU ops (P202 HELD) and keeps its GPU busy for 0.21 less of each step (P201
+  HELD). The packed position is now quoted as that device-time ratio, with the wall ratio per host beside it. P203 FALSIFIED as registered:
+  its absolute device-time bound read a card slower for both frameworks. Register row
+  `e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio`.
+- **Amendment 69** registered: token `qwen3pos69` re-reads the field recipe's same-stack position (2.352, before the reentrant checkpoint)
+  at the new defaults, every arm profiled, with every bound a ratio within the box (P205-P209). If Unsloth loses more of its step to the host (P208), STATUS quotes
+  the GPU-time ratio; otherwise the wall ratio. The reducer adds the family, `pos69_why` and
+  `score_pos69` (self-test 135).
+
+### serve_paged: `E4B_PAGED_BUCKETS=auto` by default, so the widest decode step is one graph replay (lanes SC2e and P117; `1,2,4,8,16` restores the old list)
+
+- **The licence.** SC2e (#846) read 64 slots holding the SLO to 12 req/s with `auto` against 8 on the old list, whose
+  64-row step runs as four 16-row replays. P117 read the quality AT_PARITY: one 64-row piece is −0.0032 nats against
+  four 16-row pieces (`e4b.serve.p117.wide-bucket-quality.qwen3.5090.2026-10-08`), inside the 16-row arithmetic's own
+  neutral perturbations.
+- **The change.** `E4B_PAGED_BUCKETS` unset or empty reads `auto`: every power of two below `max_seqs`, then `max_seqs`.
+  Up to 16 slots that is the old list exactly. With `E4B_PAGED_MAX_SEQS=auto` the widths are now 64, 32 or 16; on an RTX
+  5090, Qwen3-30B-A3B int4 at the server's default 4,096 tokens a slot resolves to 32 slots (16 before).
+- **The way back.** `E4B_PAGED_BUCKETS=1,2,4,8,16`.
+- **Not changed.** A `PagedServeConfig` built in code keeps the list unless `buckets="auto"` is passed; `ServeSetup`
+  plans (and loggetta's) still write the list explicitly.
+- **Scope.** Measured on Qwen3-30B-A3B int4 on an RTX 5090; other models get the wide buckets on the strength of this
+  read, not their own. Outputs under load change more often with wide steps, at no measured quality cost.
+
+### Lane P118 registered (#1313): does the decode lookahead decode the default `serve_paged` server faster at one request, with identical tokens?
+
+- **What.** `bench/p118/`: the pre-registration, an RTX 5090 runner and driver, the box and the reducer, and
+  `tests/test_p118_staged_pin.py`. The subject is the default graph server at 16 slots on Qwen3-30B-A3B NF4.
+  - **Arms:** four ABBA arms differing only in `E4B_PAGED_DECODE_LOOKAHEAD` (#1339), over P109's W16 and W1 workloads.
+  - **Engagement:** counted on the runner's `issue_decode` / `collect_decode`; L1 must overlap at least 90 % of its
+    collects.
+  - **Mechanism:** a traced pass per workload, after the timed ones, prices the host gap the lookahead removes. L0's
+    W1 gap is the rule's premise; the rest is reported.
+- **Rule.** VOID → NOISY (W1 self-pairs outside [0.99, 1.01]) → FUNCTION_FAIL (any token or bucket difference between
+  arms) → UNTESTED (premise unmet: L0's traced W1 host gap under 0.2 ms, so there is nothing to hide; added in review)
+  → SLOWER (g1 < 1.02 or g16 < 0.99) → DEFAULT_ON.
+- **Budget.** Proof on Granite-3.1-3b-a800m (guard 0.75 h), reading guard 1.25 h. Lane ceiling $2.50, hard stop $3.00.
+- **Not measured yet.** No box runs before this page merges, after #1339 and the P117 reading (#1335).
+
+### `serve_paged`: an opt-in decode lookahead, `E4B_PAGED_DECODE_LOOKAHEAD=1` (lane P118, #1313; off by default)
+
+- **What.** Each decode step used to read its tokens back before the step ended, so the GPU idled while the host
+  emitted them, retired finished requests, planned the next step and copied its inputs in. With the switch on, the
+  serving scheduler (`ContinuousScheduler(lookahead=True)`) issues the next decode step before it reads the previous
+  one back. New runner entry points do the split: `PagedModelRunner.issue_decode` enqueues a step whose input ids are
+  gathered on the device from a table of each slot's newest token, and `collect_decode` reads a queued step's tokens
+  back through pinned memory and an event. `Fp8PagedKV.graph_bucket_load` takes an optional host `staging` buffer, so
+  a step can be loaded while the one before it is still queued.
+- **Contract.** A step's device inputs (ids, positions, slots, padding) are the synchronous step's, so the tokens and
+  finish reasons are too. A sequence is never issued past `max_new_tokens`. A sequence that stops on a stop id has
+  had one more step computed, whose token is discarded (`stats()["lookahead_discarded"]`), and frees its slot once
+  that step is collected. When requests are waiting for a slot that the queued step frees, that step is collected
+  before the next admission, so admission matches the synchronous path. `PagedModelRunner.run_decode` keeps its
+  contract and refuses while a lookahead step is queued, as `free_slot` does for a sequence with one in flight.
+- **Who is affected.** Nobody by default. The switch needs decode graphs (refused at startup otherwise) and does not
+  run with a slot controller. `/health` reports `engine.decode_lookahead`.
+- **Not measured.** No speed number yet: lane P118 reads it on an RTX 5090 (W1 and W16, tokens identical) before any
+  default changes.
+- **Tests.** `tests/test_decode_lookahead.py` (CPU, plus CUDA when present) checks:
+  - the scheduler on a fake runner: the synchronous streams; the length bound; at most one discarded step per stop;
+    the queued-request drain; an abort with a step queued;
+  - the runner on a real `Fp8PagedKV` and the buckets `enable_decode_graphs` builds, with a stand-in graph: the
+    synchronous streams and bucket statistics, chained replays included; a host edit resyncs; misuse is refused;
+  - the switch's parsing, and an HTTP completion stopping on EOS both ways.
+
+  `tests/test_decode_lookahead_gpu.py` (sm_89+) runs the tiny Qwen3 through captured graphs and the padded eager step:
+  identical tokens, buckets and KV lengths, with the overlap engaged.
+
+### Correlate client TTFT with the server trace
+
+SC2 retains the server's completion id. `bench/sc2/ttft_join.py` joins each valid
+client request to its server trace and reports queue wait, admission-to-first-token
+time and the client/server residual. Missing, duplicate or conflicting ids are
+refused. Existing timing and validity rules are unchanged.
+
+### P115 Phase C read (#1313): FLIP_HELD; Granite GRANITE_LICENSED. The B=1 fusion knobs stay `0` by default
+
+- **What was read.** One RTX 5090 at `32e1eaf6` (Amendment 2, #1318), with grouped-nf4-gemm v0.42.0. The four B=1
+  fusion knobs were set to `auto` at `serve_paged`'s build.
+  - **Engagement:** exactly as predicted on all three families:
+    - gpt-oss-20b 0 / 49 / [24, 0] / 24;
+    - Qwen3.6-35B-A3B 0 / 0 / [0, 0] / 40;
+    - Granite-3.1-3b-a800m 0 / 65 / [32, 32] / 32.
+
+    `=1` raises each family's own vacuous-enable refusal, and OFF repeats.
+  - **SANE against the unfused server:** Qwen3.6 passes (argmax agreement 0.995, every row token-identical).
+    gpt-oss-20b fails on argmax agreement, 0.924 against the registered 0.95, although its bias is only +0.0022 nats.
+    The flip verdict is **FLIP_HELD**.
+  - **Granite's quality read** (Phase B's instrument at Phase B's size) passes on both texts. Wikitext: ON bias
+    −0.00268 nats, K8 −0.0171. c4val1: +0.00355. **GRANITE_LICENSED.**
+- **Consequence.** No default changes; the knobs stay `0`. A family-scoped `auto` for Qwen3-30B-A3B, Qwen3.6-35B-A3B
+  and Granite needs a new registration, which also reads Qwen3-30B-A3B with P116's GEMV default at grouped-nf4-gemm
+  0.43.0. gpt-oss gets a one-knob-per-arm follow-up first.
+- **Register:**
+  - `e4b.serve.p115.fused-stack-engagement.gptoss-qwen36.5090.2026-10-08`;
+  - `e4b.serve.p115.fused-stack-quality.granite.5090.2026-10-08`.
+- **Receipts:** `bench/p115/receipts/p115c-5090-1/`. Phase C cost $1.503 (proof $0.158, reading $1.345).
+
+### Opt-in final-position prefill logits
+
+`E4B_PAGED_LAST_LOGITS=1` asks a model with an explicit supported keyword to
+project only the final prompt position through its LM head. All prompt tokens
+still populate K/V. Eager prefill, graph capture and its startup check share the
+mode; `/health` reports the keyword and forward count. Unsupported forwards
+refuse. The default remains off pending a served-prefill quality and speed read.
+
+### serve_paged: `E4B_PAGED_MAX_SEQS=auto` by default, sized by the serve estimate (lane SC2e; `16` restores the old default)
+
+- **The licence.** Lane SC2e (#846, read `bench/h2h-2026-10-02/sc2e/`) read `SLOTS_LICENSED(64, auto)` on Qwen3-30B-A3B
+  int4 on one RTX 5090. 64 slots on the default bucket list held the SLO to 8 req/s against 4 at 16 slots, with serial
+  output byte-identical and serial TTFT / TPOT within 1 %. The ruling on #1320 scoped the default to the slot count,
+  estimate-sized, on the default bucket list.
+- **The change.**
+  - `E4B_PAGED_MAX_SEQS` unset, empty or `auto` resolves when the engine builds, before any weight is read
+    (`serve_paged.resolve_max_seqs`). It takes the widest width SC2e read that fits the device's free memory: 64 or 16
+    on the default bucket list; 64, 32 or 16 with `E4B_PAGED_BUCKETS=auto`. An integer keeps its meaning.
+  - The fit (`serve_recipe.choose_max_seqs`): the estimate's device total for the width, a reserve for the prefill
+    graph's pool (`prefill_graph_reserve_bytes`: `chunk_tokens x hidden_size x layers x 16 B`, above every pool
+    measured), and 1.5 GiB must fit. No CUDA device, the solver placement, or nothing fitting: 16.
+  - `/health` gains `engine.max_seqs_requested` and `engine.max_seqs_resolution`.
+- **What it picks for Qwen3-30B-A3B int4.** 64 on an RTX 5090 at 2,048 tokens a slot; 16 at the default 4,096; 16 on a
+  24 GB card.
+- **The way back.** `E4B_PAGED_MAX_SEQS=16`.
+- **Outputs under load.** Serial output is byte-identical. Under load, output text differs from unbatched output;
+  that comes from batching, not slots, but more slots mean more batching (`docs/SERVING.md`).
+- **Not changed.** The bucket list (`E4B_PAGED_BUCKETS=auto` stays opt-in until a teacher-forced read at buckets 32 and
+  64), the estimate itself, routes and kernels. Measured on Qwen3-30B-A3B int4 on an RTX 5090; other models get the
+  widest width the estimate fits, not separately measured.
+- **Tests.** The chooser on Qwen3-30B-A3B's shape: 64 on a 5090 at 2,048 tokens, never 64 at 4,096, 16 on a 24 GB
+  card, 16 when 64's need lands within the margin of the free memory; a hybrid's per-slot state in the price and no prefill-graph reserve; 16 without a CUDA device or under the
+  solver; the reserve against every measured pool. The env parser, the resolution's buckets, its fallback, and
+  `/health`.
+
+### P117 read (#846): decoding 32 or 64 rows in one graph costs no measurable quality; AT_PARITY (bench, docs and register only)
+
+- **The reading** (`p117-5090-1`, one RTX 5090, $0.914): on SC2e's int4 stack (Qwen3-30B-A3B), teacher-forced over 64
+  wikitext windows decoded together, one 64-row piece reads −0.0032 nats against four 16-row pieces
+  (`e4b.serve.p117.wide-bucket-quality.qwen3.5090.2026-10-08`). 32-row pieces and a padded 64-row step pass P110's bar
+  too; the captured 64-row replay emits the eager tokens at every position; a halved decode scale fails the bar.
+- **What it licenses:** `E4B_PAGED_BUCKETS=auto` as `serve_paged`'s default, with SC2e's capacity read, in a separate PR.
+- **Files:** `bench/p117/RESULTS-p117.md`, `bench/p117/receipts/p117-5090-1/` (with `SHA256SUMS`), `docs/STATUS.md`,
+  the register row.
+
 ## 0.49.0 — 2026-10-08 — seven defaults licensed by registered reads (faster, leaner enable_fast_train; bulk KV in serve_paged); transformers 5.19.0 works again
 
 **0.49.0.** A fresh install works again: under transformers 5.19.0, 0.48.0's streaming loaders failed with `TypeError` on
