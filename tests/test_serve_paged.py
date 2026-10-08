@@ -746,6 +746,18 @@ def test_health_reports_fuse_qkv_as_the_build_resolved_it():
 FOLD_FLAGS = ("E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")
 
 
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """transformers' rotate-half rotary, in this module's namespace as in a modeling file: fuse_qkv and the glue_r2
+    attention folds license a module's rotary by probing the one its class's forward namespace provides."""
+    import torch
+    cos, sin = cos.unsqueeze(unsqueeze_dim), sin.unsqueeze(unsqueeze_dim)
+
+    def rot(x):
+        h = x.shape[-1] // 2
+        return torch.cat([-x[..., h:], x[..., :h]], dim=-1)
+    return q * cos + rot(q) * sin, k * cos + rot(k) * sin
+
+
 def _fake_attention_model():
     """A CPU stand-in the REAL qkv_fuse.fuse_qkv accepts: a module whose class is named Qwen3MoeAttention with
     unbiased dense q/k/v projections (the dense branch of the fusion), so the test exercises fuse_qkv's own
@@ -762,6 +774,11 @@ def _fake_attention_model():
             self.k_norm = torch.nn.Identity()
             self.head_dim = 4
             self.config = types.SimpleNamespace()
+
+        def forward(self, hidden_states, position_embeddings=None, **kw):
+            """Calls this namespace's rotary, as transformers' forward calls its modeling file's (what fuse_qkv
+            probes)."""
+            return apply_rotary_pos_emb(hidden_states, hidden_states, *position_embeddings)
 
     return torch.nn.Sequential(Qwen3MoeAttention())
 

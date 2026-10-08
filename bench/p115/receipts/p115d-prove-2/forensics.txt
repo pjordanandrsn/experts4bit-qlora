@@ -1,0 +1,8 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.58.03, GPU-554486d3-b383-cc43-4796-b47951d5ad30, 12.0
+power.limit,clocks.max.sm 500.00 W, 3090 MHz
+CPU(s):                               24
+Vendor ID:                            AuthenticAMD
+Model name:                           AMD Ryzen 9 9900X3D 12-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             123           2          39           0          81         119
+overlay         320G  984K  320G   1% /
