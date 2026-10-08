@@ -1,0 +1,15 @@
+{
+  "run_id": "dq7-5090-1",
+  "status": "HARNESS_ERROR",
+  "lane_rc": 11,
+  "receipt_commit": "45f63168",
+  "registration_sha": "4ca5a3494e746b9aaa812270e03f4d0c1ec050a9",
+  "loggetta_sha": "1dd862f73433b5d9fdd42d835dac7504726574ae",
+  "cost_usd": 0.513,
+  "guard_armed_at": "2026-10-08T18:58:48Z",
+  "final_fetch_at": "2026-10-08T19:36:58Z",
+  "teardown_at": "2026-10-08T19:36:59Z",
+  "provider_instance": "54895866",
+  "scope": "architecture-only synthetic weights; not quality",
+  "transport_variance": "Declared runtime cap1.70 plus default100GB transport allowance1.10 gave launcher reservation2.80. Singular adapter output escaped plural adapters rsync exclusion, adding transfer. Generated artifacts archived recoverably outside Git with sha256s in original receipt store."
+}

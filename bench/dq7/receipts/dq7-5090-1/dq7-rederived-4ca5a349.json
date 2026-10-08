@@ -1,0 +1,1521 @@
+{
+  "verdict": "VOID",
+  "cause": "missing arms or inconsistent software pins",
+  "rows": [
+    {
+      "subject": "llama31_8b",
+      "placement": "device",
+      "seq": 2048,
+      "estimate_bytes": 9749680131,
+      "peak_bytes": 9947172352,
+      "estimate_GB": 9.749680131,
+      "peak_GB": 9.947172352,
+      "residual_bytes": 197492221,
+      "residual_GB": 0.197492221,
+      "never_under": false,
+      "overestimate_fraction": -0.019854106675882797,
+      "overestimate_prediction": 0.04,
+      "itemized_lines": [
+        {
+          "name": "frozen decoder linears",
+          "where": "device",
+          "bytes": 3600416768,
+          "basis": "derived",
+          "detail": "32 layers x 7 linears in NF4 with nested statistics"
+        },
+        {
+          "name": "embeddings + lm head (bf16)",
+          "where": "device",
+          "bytes": 2101346304,
+          "basis": "derived",
+          "detail": "input embeddings and the untied lm head"
+        },
+        {
+          "name": "norms, biases and other parameters (bf16)",
+          "where": "device",
+          "bytes": 532480,
+          "basis": "derived",
+          "detail": ""
+        },
+        {
+          "name": "LoRA adapters",
+          "where": "device",
+          "bytes": 167772160,
+          "basis": "derived",
+          "detail": "r=16, fp32, on attn_in, attn_out, mlp_in, mlp_out: 41,943,040 parameters"
+        },
+        {
+          "name": "adapter gradients",
+          "where": "device",
+          "bytes": 167772160,
+          "basis": "derived",
+          "detail": "one gradient per trainable parameter"
+        },
+        {
+          "name": "optimizer state (adamw)",
+          "where": "device",
+          "bytes": 335544320,
+          "basis": "derived",
+          "detail": "exp_avg + exp_avg_sq per trainable parameter"
+        },
+        {
+          "name": "activations",
+          "where": "device",
+          "bytes": 3258855427,
+          "basis": "heuristic",
+          "detail": "checkpointed layer inputs + the loss's workspace at 2,048 tokens; per-token terms x 1.178, DQ4's measured slope over the formula's (Qwen3-32B, fp32 adapters); loss: full logits: bf16, fp32 upcast and fp32 grad"
+        },
+        {
+          "name": "dequantization transient",
+          "where": "device",
+          "bytes": 117440512,
+          "basis": "heuristic",
+          "detail": "one weight dequantized to bf16 for its matmul"
+        },
+        {
+          "name": "allocator reserve (cached, unallocated blocks)",
+          "where": "device",
+          "bytes": 1949936026,
+          "basis": "inferred",
+          "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "CUDA context + library workspaces",
+          "where": "device",
+          "bytes": 536870912,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "process baseline (torch, CUDA, libraries, model objects)",
+          "where": "host",
+          "bytes": 3221225472,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this host"
+        }
+      ],
+      "reserved_peak_bytes": 11463032832,
+      "driver_peak_bytes": 12123635712
+    },
+    {
+      "subject": "llama31_8b",
+      "placement": "device",
+      "seq": 4096,
+      "estimate_bytes": 13008535558,
+      "peak_bytes": 13670706688,
+      "estimate_GB": 13.008535558,
+      "peak_GB": 13.670706688,
+      "residual_bytes": 662171130,
+      "residual_GB": 0.66217113,
+      "never_under": false,
+      "overestimate_fraction": -0.048437227504942865,
+      "overestimate_prediction": 0.04,
+      "itemized_lines": [
+        {
+          "name": "frozen decoder linears",
+          "where": "device",
+          "bytes": 3600416768,
+          "basis": "derived",
+          "detail": "32 layers x 7 linears in NF4 with nested statistics"
+        },
+        {
+          "name": "embeddings + lm head (bf16)",
+          "where": "device",
+          "bytes": 2101346304,
+          "basis": "derived",
+          "detail": "input embeddings and the untied lm head"
+        },
+        {
+          "name": "norms, biases and other parameters (bf16)",
+          "where": "device",
+          "bytes": 532480,
+          "basis": "derived",
+          "detail": ""
+        },
+        {
+          "name": "LoRA adapters",
+          "where": "device",
+          "bytes": 167772160,
+          "basis": "derived",
+          "detail": "r=16, fp32, on attn_in, attn_out, mlp_in, mlp_out: 41,943,040 parameters"
+        },
+        {
+          "name": "adapter gradients",
+          "where": "device",
+          "bytes": 167772160,
+          "basis": "derived",
+          "detail": "one gradient per trainable parameter"
+        },
+        {
+          "name": "optimizer state (adamw)",
+          "where": "device",
+          "bytes": 335544320,
+          "basis": "derived",
+          "detail": "exp_avg + exp_avg_sq per trainable parameter"
+        },
+        {
+          "name": "activations",
+          "where": "device",
+          "bytes": 6517710854,
+          "basis": "heuristic",
+          "detail": "checkpointed layer inputs + the loss's workspace at 4,096 tokens; per-token terms x 1.178, DQ4's measured slope over the formula's (Qwen3-32B, fp32 adapters); loss: full logits: bf16, fp32 upcast and fp32 grad"
+        },
+        {
+          "name": "dequantization transient",
+          "where": "device",
+          "bytes": 117440512,
+          "basis": "heuristic",
+          "detail": "one weight dequantized to bf16 for its matmul"
+        },
+        {
+          "name": "allocator reserve (cached, unallocated blocks)",
+          "where": "device",
+          "bytes": 2601707111,
+          "basis": "inferred",
+          "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "CUDA context + library workspaces",
+          "where": "device",
+          "bytes": 536870912,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "process baseline (torch, CUDA, libraries, model objects)",
+          "where": "host",
+          "bytes": 3221225472,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this host"
+        }
+      ],
+      "reserved_peak_bytes": 16307453952,
+      "driver_peak_bytes": 16968056832
+    },
+    {
+      "subject": "llama31_8b",
+      "placement": "device",
+      "seq": 512,
+      "estimate_bytes": 7305538560,
+      "peak_bytes": 7154521600,
+      "estimate_GB": 7.30553856,
+      "peak_GB": 7.1545216,
+      "residual_bytes": -151016960,
+      "residual_GB": -0.15101696,
+      "never_under": true,
+      "overestimate_fraction": 0.021107904685059586,
+      "overestimate_prediction": 0.04,
+      "itemized_lines": [
+        {
+          "name": "frozen decoder linears",
+          "where": "device",
+          "bytes": 3600416768,
+          "basis": "derived",
+          "detail": "32 layers x 7 linears in NF4 with nested statistics"
+        },
+        {
+          "name": "embeddings + lm head (bf16)",
+          "where": "device",
+          "bytes": 2101346304,
+          "basis": "derived",
+          "detail": "input embeddings and the untied lm head"
+        },
+        {
+          "name": "norms, biases and other parameters (bf16)",
+          "where": "device",
+          "bytes": 532480,
+          "basis": "derived",
+          "detail": ""
+        },
+        {
+          "name": "LoRA adapters",
+          "where": "device",
+          "bytes": 167772160,
+          "basis": "derived",
+          "detail": "r=16, fp32, on attn_in, attn_out, mlp_in, mlp_out: 41,943,040 parameters"
+        },
+        {
+          "name": "adapter gradients",
+          "where": "device",
+          "bytes": 167772160,
+          "basis": "derived",
+          "detail": "one gradient per trainable parameter"
+        },
+        {
+          "name": "optimizer state (adamw)",
+          "where": "device",
+          "bytes": 335544320,
+          "basis": "derived",
+          "detail": "exp_avg + exp_avg_sq per trainable parameter"
+        },
+        {
+          "name": "activations",
+          "where": "device",
+          "bytes": 814713856,
+          "basis": "heuristic",
+          "detail": "checkpointed layer inputs + the loss's workspace at 512 tokens; per-token terms x 1.178, DQ4's measured slope over the formula's (Qwen3-32B, fp32 adapters); loss: full logits: bf16, fp32 upcast and fp32 grad"
+        },
+        {
+          "name": "dequantization transient",
+          "where": "device",
+          "bytes": 117440512,
+          "basis": "heuristic",
+          "detail": "one weight dequantized to bf16 for its matmul"
+        },
+        {
+          "name": "allocator reserve (cached, unallocated blocks)",
+          "where": "device",
+          "bytes": 1461107712,
+          "basis": "inferred",
+          "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "CUDA context + library workspaces",
+          "where": "device",
+          "bytes": 536870912,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "process baseline (torch, CUDA, libraries, model objects)",
+          "where": "host",
+          "bytes": 3221225472,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this host"
+        }
+      ],
+      "reserved_peak_bytes": 7910457344,
+      "driver_peak_bytes": 8571060224
+    },
+    {
+      "subject": "llama31_8b",
+      "placement": "stream",
+      "seq": 2048,
+      "estimate_bytes": 6478123011,
+      "peak_bytes": 6675090944,
+      "estimate_GB": 6.478123011,
+      "peak_GB": 6.675090944,
+      "residual_bytes": 196967933,
+      "residual_GB": 0.196967933,
+      "never_under": false,
+      "overestimate_fraction": -0.029507902536825722,
+      "overestimate_prediction": 0.1,
+      "itemized_lines": [
+        {
+          "name": "frozen decoder linears, two layers staged",
+          "where": "device",
+          "bytes": 218103808,
+          "basis": "derived",
+          "detail": "experts4bit-qlora offload_plan: the layer in use and its prefetched neighbour"
+        },
+        {
+          "name": "frozen decoder linears, quantization statistics",
+          "where": "device",
+          "bytes": 110755840,
+          "basis": "derived",
+          "detail": "absmax and second-level scales stay on the device"
+        },
+        {
+          "name": "frozen decoder linears, pinned host homes",
+          "where": "host",
+          "bytes": 3892314112,
+          "basis": "derived",
+          "detail": "3.49 GB of NF4 with nested statistics, each pinned request rounded up to a power of two (experts4bit-qlora offload_plan)"
+        },
+        {
+          "name": "frozen layers streamed per micro-batch",
+          "where": "link",
+          "bytes": 6979321856,
+          "basis": "derived",
+          "detail": "each layer copied for its forward and again for its backward (an upper bound)"
+        },
+        {
+          "name": "embeddings + lm head (bf16)",
+          "where": "device",
+          "bytes": 2101346304,
+          "basis": "derived",
+          "detail": "input embeddings and the untied lm head"
+        },
+        {
+          "name": "norms, biases and other parameters (bf16)",
+          "where": "device",
+          "bytes": 532480,
+          "basis": "derived",
+          "detail": ""
+        },
+        {
+          "name": "LoRA adapters",
+          "where": "device",
+          "bytes": 167772160,
+          "basis": "derived",
+          "detail": "r=16, fp32, on attn_in, attn_out, mlp_in, mlp_out: 41,943,040 parameters"
+        },
+        {
+          "name": "adapter gradients",
+          "where": "device",
+          "bytes": 167772160,
+          "basis": "derived",
+          "detail": "one gradient per trainable parameter"
+        },
+        {
+          "name": "optimizer state (adamw)",
+          "where": "device",
+          "bytes": 335544320,
+          "basis": "derived",
+          "detail": "exp_avg + exp_avg_sq per trainable parameter"
+        },
+        {
+          "name": "activations",
+          "where": "device",
+          "bytes": 3258855427,
+          "basis": "heuristic",
+          "detail": "checkpointed layer inputs + the loss's workspace at 2,048 tokens; per-token terms x 1.178, DQ4's measured slope over the formula's (Qwen3-32B, fp32 adapters); loss: full logits: bf16, fp32 upcast and fp32 grad"
+        },
+        {
+          "name": "dequantization transient",
+          "where": "device",
+          "bytes": 117440512,
+          "basis": "heuristic",
+          "detail": "one weight dequantized to bf16 for its matmul"
+        },
+        {
+          "name": "allocator reserve (cached, unallocated blocks)",
+          "where": "device",
+          "bytes": 1295624602,
+          "basis": "inferred",
+          "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "CUDA context + library workspaces",
+          "where": "device",
+          "bytes": 536870912,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "process baseline (torch, CUDA, libraries, model objects)",
+          "where": "host",
+          "bytes": 3221225472,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this host"
+        }
+      ],
+      "reserved_peak_bytes": 9160359936,
+      "driver_peak_bytes": 9892265984
+    },
+    {
+      "subject": "llama31_8b",
+      "placement": "stream",
+      "seq": 4096,
+      "estimate_bytes": 9736978438,
+      "peak_bytes": 10398625280,
+      "estimate_GB": 9.736978438,
+      "peak_GB": 10.39862528,
+      "residual_bytes": 661646842,
+      "residual_GB": 0.661646842,
+      "never_under": false,
+      "overestimate_fraction": -0.06362829933612148,
+      "overestimate_prediction": 0.1,
+      "itemized_lines": [
+        {
+          "name": "frozen decoder linears, two layers staged",
+          "where": "device",
+          "bytes": 218103808,
+          "basis": "derived",
+          "detail": "experts4bit-qlora offload_plan: the layer in use and its prefetched neighbour"
+        },
+        {
+          "name": "frozen decoder linears, quantization statistics",
+          "where": "device",
+          "bytes": 110755840,
+          "basis": "derived",
+          "detail": "absmax and second-level scales stay on the device"
+        },
+        {
+          "name": "frozen decoder linears, pinned host homes",
+          "where": "host",
+          "bytes": 3892314112,
+          "basis": "derived",
+          "detail": "3.49 GB of NF4 with nested statistics, each pinned request rounded up to a power of two (experts4bit-qlora offload_plan)"
+        },
+        {
+          "name": "frozen layers streamed per micro-batch",
+          "where": "link",
+          "bytes": 6979321856,
+          "basis": "derived",
+          "detail": "each layer copied for its forward and again for its backward (an upper bound)"
+        },
+        {
+          "name": "embeddings + lm head (bf16)",
+          "where": "device",
+          "bytes": 2101346304,
+          "basis": "derived",
+          "detail": "input embeddings and the untied lm head"
+        },
+        {
+          "name": "norms, biases and other parameters (bf16)",
+          "where": "device",
+          "bytes": 532480,
+          "basis": "derived",
+          "detail": ""
+        },
+        {
+          "name": "LoRA adapters",
+          "where": "device",
+          "bytes": 167772160,
+          "basis": "derived",
+          "detail": "r=16, fp32, on attn_in, attn_out, mlp_in, mlp_out: 41,943,040 parameters"
+        },
+        {
+          "name": "adapter gradients",
+          "where": "device",
+          "bytes": 167772160,
+          "basis": "derived",
+          "detail": "one gradient per trainable parameter"
+        },
+        {
+          "name": "optimizer state (adamw)",
+          "where": "device",
+          "bytes": 335544320,
+          "basis": "derived",
+          "detail": "exp_avg + exp_avg_sq per trainable parameter"
+        },
+        {
+          "name": "activations",
+          "where": "device",
+          "bytes": 6517710854,
+          "basis": "heuristic",
+          "detail": "checkpointed layer inputs + the loss's workspace at 4,096 tokens; per-token terms x 1.178, DQ4's measured slope over the formula's (Qwen3-32B, fp32 adapters); loss: full logits: bf16, fp32 upcast and fp32 grad"
+        },
+        {
+          "name": "dequantization transient",
+          "where": "device",
+          "bytes": 117440512,
+          "basis": "heuristic",
+          "detail": "one weight dequantized to bf16 for its matmul"
+        },
+        {
+          "name": "allocator reserve (cached, unallocated blocks)",
+          "where": "device",
+          "bytes": 1947395687,
+          "basis": "inferred",
+          "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "CUDA context + library workspaces",
+          "where": "device",
+          "bytes": 536870912,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "process baseline (torch, CUDA, libraries, model objects)",
+          "where": "host",
+          "bytes": 3221225472,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this host"
+        }
+      ],
+      "reserved_peak_bytes": 13885243392,
+      "driver_peak_bytes": 14617149440
+    },
+    {
+      "subject": "llama31_8b",
+      "placement": "stream",
+      "seq": 512,
+      "estimate_bytes": 4033981440,
+      "peak_bytes": 3882440192,
+      "estimate_GB": 4.03398144,
+      "peak_GB": 3.882440192,
+      "residual_bytes": -151541248,
+      "residual_GB": -0.151541248,
+      "never_under": true,
+      "overestimate_fraction": 0.039032474553570666,
+      "overestimate_prediction": 0.1,
+      "itemized_lines": [
+        {
+          "name": "frozen decoder linears, two layers staged",
+          "where": "device",
+          "bytes": 218103808,
+          "basis": "derived",
+          "detail": "experts4bit-qlora offload_plan: the layer in use and its prefetched neighbour"
+        },
+        {
+          "name": "frozen decoder linears, quantization statistics",
+          "where": "device",
+          "bytes": 110755840,
+          "basis": "derived",
+          "detail": "absmax and second-level scales stay on the device"
+        },
+        {
+          "name": "frozen decoder linears, pinned host homes",
+          "where": "host",
+          "bytes": 3892314112,
+          "basis": "derived",
+          "detail": "3.49 GB of NF4 with nested statistics, each pinned request rounded up to a power of two (experts4bit-qlora offload_plan)"
+        },
+        {
+          "name": "frozen layers streamed per micro-batch",
+          "where": "link",
+          "bytes": 6979321856,
+          "basis": "derived",
+          "detail": "each layer copied for its forward and again for its backward (an upper bound)"
+        },
+        {
+          "name": "embeddings + lm head (bf16)",
+          "where": "device",
+          "bytes": 2101346304,
+          "basis": "derived",
+          "detail": "input embeddings and the untied lm head"
+        },
+        {
+          "name": "norms, biases and other parameters (bf16)",
+          "where": "device",
+          "bytes": 532480,
+          "basis": "derived",
+          "detail": ""
+        },
+        {
+          "name": "LoRA adapters",
+          "where": "device",
+          "bytes": 167772160,
+          "basis": "derived",
+          "detail": "r=16, fp32, on attn_in, attn_out, mlp_in, mlp_out: 41,943,040 parameters"
+        },
+        {
+          "name": "adapter gradients",
+          "where": "device",
+          "bytes": 167772160,
+          "basis": "derived",
+          "detail": "one gradient per trainable parameter"
+        },
+        {
+          "name": "optimizer state (adamw)",
+          "where": "device",
+          "bytes": 335544320,
+          "basis": "derived",
+          "detail": "exp_avg + exp_avg_sq per trainable parameter"
+        },
+        {
+          "name": "activations",
+          "where": "device",
+          "bytes": 814713856,
+          "basis": "heuristic",
+          "detail": "checkpointed layer inputs + the loss's workspace at 512 tokens; per-token terms x 1.178, DQ4's measured slope over the formula's (Qwen3-32B, fp32 adapters); loss: full logits: bf16, fp32 upcast and fp32 grad"
+        },
+        {
+          "name": "dequantization transient",
+          "where": "device",
+          "bytes": 117440512,
+          "basis": "heuristic",
+          "detail": "one weight dequantized to bf16 for its matmul"
+        },
+        {
+          "name": "allocator reserve (cached, unallocated blocks)",
+          "where": "device",
+          "bytes": 806796288,
+          "basis": "inferred",
+          "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "CUDA context + library workspaces",
+          "where": "device",
+          "bytes": 536870912,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "process baseline (torch, CUDA, libraries, model objects)",
+          "where": "host",
+          "bytes": 3221225472,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this host"
+        }
+      ],
+      "reserved_peak_bytes": 5056233472,
+      "driver_peak_bytes": 5788139520
+    },
+    {
+      "subject": "qwen3_14b",
+      "placement": "device",
+      "seq": 2048,
+      "estimate_bytes": 12920707844,
+      "peak_bytes": 12660288000,
+      "estimate_GB": 12.920707844,
+      "peak_GB": 12.660288,
+      "residual_bytes": -260419844,
+      "residual_GB": -0.260419844,
+      "never_under": true,
+      "overestimate_fraction": 0.020569819896672177,
+      "overestimate_prediction": 0.04,
+      "itemized_lines": [
+        {
+          "name": "frozen decoder linears",
+          "where": "device",
+          "bytes": 6815692800,
+          "basis": "derived",
+          "detail": "40 layers x 7 linears in NF4 with nested statistics"
+        },
+        {
+          "name": "embeddings + lm head (bf16)",
+          "where": "device",
+          "bytes": 3111649280,
+          "basis": "derived",
+          "detail": "input embeddings and the untied lm head"
+        },
+        {
+          "name": "norms, biases and other parameters (bf16)",
+          "where": "device",
+          "bytes": 849920,
+          "basis": "derived",
+          "detail": ""
+        },
+        {
+          "name": "LoRA adapters",
+          "where": "device",
+          "bytes": 256901120,
+          "basis": "derived",
+          "detail": "r=16, fp32, on attn_in, attn_out, mlp_in, mlp_out: 64,225,280 parameters"
+        },
+        {
+          "name": "adapter gradients",
+          "where": "device",
+          "bytes": 256901120,
+          "basis": "derived",
+          "detail": "one gradient per trainable parameter"
+        },
+        {
+          "name": "optimizer state (adamw)",
+          "where": "device",
+          "bytes": 513802240,
+          "basis": "derived",
+          "detail": "exp_avg + exp_avg_sq per trainable parameter"
+        },
+        {
+          "name": "activations",
+          "where": "device",
+          "bytes": 1786653444,
+          "basis": "heuristic",
+          "detail": "checkpointed layer inputs + the loss's workspace at 2,048 tokens; per-token terms x 1.178, DQ4's measured slope over the formula's (Qwen3-32B, fp32 adapters); loss: experts4bit-qlora chunked_loss_bytes: 512 tokens of logits at a time"
+        },
+        {
+          "name": "dequantization transient",
+          "where": "device",
+          "bytes": 178257920,
+          "basis": "heuristic",
+          "detail": "one weight dequantized to bf16 for its matmul"
+        },
+        {
+          "name": "allocator reserve (cached, unallocated blocks)",
+          "where": "device",
+          "bytes": 2584141568,
+          "basis": "inferred",
+          "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "CUDA context + library workspaces",
+          "where": "device",
+          "bytes": 536870912,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "process baseline (torch, CUDA, libraries, model objects)",
+          "where": "host",
+          "bytes": 3221225472,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this host"
+        }
+      ],
+      "reserved_peak_bytes": 13530824704,
+      "driver_peak_bytes": 14191427584
+    },
+    {
+      "subject": "qwen3_14b",
+      "placement": "device",
+      "seq": 4096,
+      "estimate_bytes": 14749291153,
+      "peak_bytes": 14535191040,
+      "estimate_GB": 14.749291153,
+      "peak_GB": 14.53519104,
+      "residual_bytes": -214100113,
+      "residual_GB": -0.214100113,
+      "never_under": true,
+      "overestimate_fraction": 0.01472977633460812,
+      "overestimate_prediction": 0.04,
+      "itemized_lines": [
+        {
+          "name": "frozen decoder linears",
+          "where": "device",
+          "bytes": 6815692800,
+          "basis": "derived",
+          "detail": "40 layers x 7 linears in NF4 with nested statistics"
+        },
+        {
+          "name": "embeddings + lm head (bf16)",
+          "where": "device",
+          "bytes": 3111649280,
+          "basis": "derived",
+          "detail": "input embeddings and the untied lm head"
+        },
+        {
+          "name": "norms, biases and other parameters (bf16)",
+          "where": "device",
+          "bytes": 849920,
+          "basis": "derived",
+          "detail": ""
+        },
+        {
+          "name": "LoRA adapters",
+          "where": "device",
+          "bytes": 256901120,
+          "basis": "derived",
+          "detail": "r=16, fp32, on attn_in, attn_out, mlp_in, mlp_out: 64,225,280 parameters"
+        },
+        {
+          "name": "adapter gradients",
+          "where": "device",
+          "bytes": 256901120,
+          "basis": "derived",
+          "detail": "one gradient per trainable parameter"
+        },
+        {
+          "name": "optimizer state (adamw)",
+          "where": "device",
+          "bytes": 513802240,
+          "basis": "derived",
+          "detail": "exp_avg + exp_avg_sq per trainable parameter"
+        },
+        {
+          "name": "activations",
+          "where": "device",
+          "bytes": 3615236753,
+          "basis": "heuristic",
+          "detail": "checkpointed layer inputs + one layer's recompute at 4,096 tokens; per-token terms x 1.178, DQ4's measured slope over the formula's (Qwen3-32B, fp32 adapters); loss: experts4bit-qlora chunked_loss_bytes: 512 tokens of logits at a time"
+        },
+        {
+          "name": "dequantization transient",
+          "where": "device",
+          "bytes": 178257920,
+          "basis": "heuristic",
+          "detail": "one weight dequantized to bf16 for its matmul"
+        },
+        {
+          "name": "allocator reserve (cached, unallocated blocks)",
+          "where": "device",
+          "bytes": 2949858230,
+          "basis": "inferred",
+          "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "CUDA context + library workspaces",
+          "where": "device",
+          "bytes": 536870912,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "process baseline (torch, CUDA, libraries, model objects)",
+          "where": "host",
+          "bytes": 3221225472,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this host"
+        }
+      ],
+      "reserved_peak_bytes": 15883829248,
+      "driver_peak_bytes": 16544432128
+    },
+    {
+      "subject": "qwen3_14b",
+      "placement": "device",
+      "seq": 512,
+      "estimate_bytes": 12164152001,
+      "peak_bytes": 11939568640,
+      "estimate_GB": 12.164152001,
+      "peak_GB": 11.93956864,
+      "residual_bytes": -224583361,
+      "residual_GB": -0.224583361,
+      "never_under": true,
+      "overestimate_fraction": 0.018810006271717368,
+      "overestimate_prediction": 0.04,
+      "itemized_lines": [
+        {
+          "name": "frozen decoder linears",
+          "where": "device",
+          "bytes": 6815692800,
+          "basis": "derived",
+          "detail": "40 layers x 7 linears in NF4 with nested statistics"
+        },
+        {
+          "name": "embeddings + lm head (bf16)",
+          "where": "device",
+          "bytes": 3111649280,
+          "basis": "derived",
+          "detail": "input embeddings and the untied lm head"
+        },
+        {
+          "name": "norms, biases and other parameters (bf16)",
+          "where": "device",
+          "bytes": 849920,
+          "basis": "derived",
+          "detail": ""
+        },
+        {
+          "name": "LoRA adapters",
+          "where": "device",
+          "bytes": 256901120,
+          "basis": "derived",
+          "detail": "r=16, fp32, on attn_in, attn_out, mlp_in, mlp_out: 64,225,280 parameters"
+        },
+        {
+          "name": "adapter gradients",
+          "where": "device",
+          "bytes": 256901120,
+          "basis": "derived",
+          "detail": "one gradient per trainable parameter"
+        },
+        {
+          "name": "optimizer state (adamw)",
+          "where": "device",
+          "bytes": 513802240,
+          "basis": "derived",
+          "detail": "exp_avg + exp_avg_sq per trainable parameter"
+        },
+        {
+          "name": "activations",
+          "where": "device",
+          "bytes": 1030097601,
+          "basis": "heuristic",
+          "detail": "checkpointed layer inputs + the loss's workspace at 512 tokens; per-token terms x 1.178, DQ4's measured slope over the formula's (Qwen3-32B, fp32 adapters); loss: experts4bit-qlora chunked_loss_bytes: 512 tokens of logits at a time"
+        },
+        {
+          "name": "dequantization transient",
+          "where": "device",
+          "bytes": 178257920,
+          "basis": "heuristic",
+          "detail": "one weight dequantized to bf16 for its matmul"
+        },
+        {
+          "name": "allocator reserve (cached, unallocated blocks)",
+          "where": "device",
+          "bytes": 2432830400,
+          "basis": "inferred",
+          "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "CUDA context + library workspaces",
+          "where": "device",
+          "bytes": 536870912,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "process baseline (torch, CUDA, libraries, model objects)",
+          "where": "host",
+          "bytes": 3221225472,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this host"
+        }
+      ],
+      "reserved_peak_bytes": 12599689216,
+      "driver_peak_bytes": 13260292096
+    },
+    {
+      "subject": "qwen3_14b",
+      "placement": "stream",
+      "seq": 2048,
+      "estimate_bytes": 6644980484,
+      "peak_bytes": 6334917120,
+      "estimate_GB": 6.644980484,
+      "peak_GB": 6.33491712,
+      "residual_bytes": -310063364,
+      "residual_GB": -0.310063364,
+      "never_under": true,
+      "overestimate_fraction": 0.04894513347634767,
+      "overestimate_prediction": 0.1,
+      "itemized_lines": [
+        {
+          "name": "frozen decoder linears, two layers staged",
+          "where": "device",
+          "bytes": 330301440,
+          "basis": "derived",
+          "detail": "experts4bit-qlora offload_plan: the layer in use and its prefetched neighbour"
+        },
+        {
+          "name": "frozen decoder linears, quantization statistics",
+          "where": "device",
+          "bytes": 209664000,
+          "basis": "derived",
+          "detail": "absmax and second-level scales stay on the device"
+        },
+        {
+          "name": "frozen decoder linears, pinned host homes",
+          "where": "host",
+          "bytes": 9730785280,
+          "basis": "derived",
+          "detail": "6.61 GB of NF4 with nested statistics, each pinned request rounded up to a power of two (experts4bit-qlora offload_plan)"
+        },
+        {
+          "name": "frozen layers streamed per micro-batch",
+          "where": "link",
+          "bytes": 13212057600,
+          "basis": "derived",
+          "detail": "each layer copied for its forward and again for its backward (an upper bound)"
+        },
+        {
+          "name": "embeddings + lm head (bf16)",
+          "where": "device",
+          "bytes": 3111649280,
+          "basis": "derived",
+          "detail": "input embeddings and the untied lm head"
+        },
+        {
+          "name": "norms, biases and other parameters (bf16)",
+          "where": "device",
+          "bytes": 849920,
+          "basis": "derived",
+          "detail": ""
+        },
+        {
+          "name": "LoRA adapters",
+          "where": "device",
+          "bytes": 256901120,
+          "basis": "derived",
+          "detail": "r=16, fp32, on attn_in, attn_out, mlp_in, mlp_out: 64,225,280 parameters"
+        },
+        {
+          "name": "adapter gradients",
+          "where": "device",
+          "bytes": 256901120,
+          "basis": "derived",
+          "detail": "one gradient per trainable parameter"
+        },
+        {
+          "name": "optimizer state (adamw)",
+          "where": "device",
+          "bytes": 513802240,
+          "basis": "derived",
+          "detail": "exp_avg + exp_avg_sq per trainable parameter"
+        },
+        {
+          "name": "activations",
+          "where": "device",
+          "bytes": 1786653444,
+          "basis": "heuristic",
+          "detail": "checkpointed layer inputs + the loss's workspace at 2,048 tokens; per-token terms x 1.178, DQ4's measured slope over the formula's (Qwen3-32B, fp32 adapters); loss: experts4bit-qlora chunked_loss_bytes: 512 tokens of logits at a time"
+        },
+        {
+          "name": "dequantization transient",
+          "where": "device",
+          "bytes": 178257920,
+          "basis": "heuristic",
+          "detail": "one weight dequantized to bf16 for its matmul"
+        },
+        {
+          "name": "allocator reserve (cached, unallocated blocks)",
+          "where": "device",
+          "bytes": 1328996096,
+          "basis": "inferred",
+          "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "CUDA context + library workspaces",
+          "where": "device",
+          "bytes": 536870912,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "process baseline (torch, CUDA, libraries, model objects)",
+          "where": "host",
+          "bytes": 3221225472,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this host"
+        }
+      ],
+      "reserved_peak_bytes": 8516534272,
+      "driver_peak_bytes": 9248440320
+    },
+    {
+      "subject": "qwen3_14b",
+      "placement": "stream",
+      "seq": 4096,
+      "estimate_bytes": 8473563793,
+      "peak_bytes": 8213359104,
+      "estimate_GB": 8.473563793,
+      "peak_GB": 8.213359104,
+      "residual_bytes": -260204689,
+      "residual_GB": -0.260204689,
+      "never_under": true,
+      "overestimate_fraction": 0.03168066630293534,
+      "overestimate_prediction": 0.1,
+      "itemized_lines": [
+        {
+          "name": "frozen decoder linears, two layers staged",
+          "where": "device",
+          "bytes": 330301440,
+          "basis": "derived",
+          "detail": "experts4bit-qlora offload_plan: the layer in use and its prefetched neighbour"
+        },
+        {
+          "name": "frozen decoder linears, quantization statistics",
+          "where": "device",
+          "bytes": 209664000,
+          "basis": "derived",
+          "detail": "absmax and second-level scales stay on the device"
+        },
+        {
+          "name": "frozen decoder linears, pinned host homes",
+          "where": "host",
+          "bytes": 9730785280,
+          "basis": "derived",
+          "detail": "6.61 GB of NF4 with nested statistics, each pinned request rounded up to a power of two (experts4bit-qlora offload_plan)"
+        },
+        {
+          "name": "frozen layers streamed per micro-batch",
+          "where": "link",
+          "bytes": 13212057600,
+          "basis": "derived",
+          "detail": "each layer copied for its forward and again for its backward (an upper bound)"
+        },
+        {
+          "name": "embeddings + lm head (bf16)",
+          "where": "device",
+          "bytes": 3111649280,
+          "basis": "derived",
+          "detail": "input embeddings and the untied lm head"
+        },
+        {
+          "name": "norms, biases and other parameters (bf16)",
+          "where": "device",
+          "bytes": 849920,
+          "basis": "derived",
+          "detail": ""
+        },
+        {
+          "name": "LoRA adapters",
+          "where": "device",
+          "bytes": 256901120,
+          "basis": "derived",
+          "detail": "r=16, fp32, on attn_in, attn_out, mlp_in, mlp_out: 64,225,280 parameters"
+        },
+        {
+          "name": "adapter gradients",
+          "where": "device",
+          "bytes": 256901120,
+          "basis": "derived",
+          "detail": "one gradient per trainable parameter"
+        },
+        {
+          "name": "optimizer state (adamw)",
+          "where": "device",
+          "bytes": 513802240,
+          "basis": "derived",
+          "detail": "exp_avg + exp_avg_sq per trainable parameter"
+        },
+        {
+          "name": "activations",
+          "where": "device",
+          "bytes": 3615236753,
+          "basis": "heuristic",
+          "detail": "checkpointed layer inputs + one layer's recompute at 4,096 tokens; per-token terms x 1.178, DQ4's measured slope over the formula's (Qwen3-32B, fp32 adapters); loss: experts4bit-qlora chunked_loss_bytes: 512 tokens of logits at a time"
+        },
+        {
+          "name": "dequantization transient",
+          "where": "device",
+          "bytes": 178257920,
+          "basis": "heuristic",
+          "detail": "one weight dequantized to bf16 for its matmul"
+        },
+        {
+          "name": "allocator reserve (cached, unallocated blocks)",
+          "where": "device",
+          "bytes": 1694712758,
+          "basis": "inferred",
+          "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "CUDA context + library workspaces",
+          "where": "device",
+          "bytes": 536870912,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "process baseline (torch, CUDA, libraries, model objects)",
+          "where": "host",
+          "bytes": 3221225472,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this host"
+        }
+      ],
+      "reserved_peak_bytes": 10991173632,
+      "driver_peak_bytes": 11723079680
+    },
+    {
+      "subject": "qwen3_14b",
+      "placement": "stream",
+      "seq": 512,
+      "estimate_bytes": 5888424641,
+      "peak_bytes": 5615508480,
+      "estimate_GB": 5.888424641,
+      "peak_GB": 5.61550848,
+      "residual_bytes": -272916161,
+      "residual_GB": -0.272916161,
+      "never_under": true,
+      "overestimate_fraction": 0.04860043609087382,
+      "overestimate_prediction": 0.1,
+      "itemized_lines": [
+        {
+          "name": "frozen decoder linears, two layers staged",
+          "where": "device",
+          "bytes": 330301440,
+          "basis": "derived",
+          "detail": "experts4bit-qlora offload_plan: the layer in use and its prefetched neighbour"
+        },
+        {
+          "name": "frozen decoder linears, quantization statistics",
+          "where": "device",
+          "bytes": 209664000,
+          "basis": "derived",
+          "detail": "absmax and second-level scales stay on the device"
+        },
+        {
+          "name": "frozen decoder linears, pinned host homes",
+          "where": "host",
+          "bytes": 9730785280,
+          "basis": "derived",
+          "detail": "6.61 GB of NF4 with nested statistics, each pinned request rounded up to a power of two (experts4bit-qlora offload_plan)"
+        },
+        {
+          "name": "frozen layers streamed per micro-batch",
+          "where": "link",
+          "bytes": 13212057600,
+          "basis": "derived",
+          "detail": "each layer copied for its forward and again for its backward (an upper bound)"
+        },
+        {
+          "name": "embeddings + lm head (bf16)",
+          "where": "device",
+          "bytes": 3111649280,
+          "basis": "derived",
+          "detail": "input embeddings and the untied lm head"
+        },
+        {
+          "name": "norms, biases and other parameters (bf16)",
+          "where": "device",
+          "bytes": 849920,
+          "basis": "derived",
+          "detail": ""
+        },
+        {
+          "name": "LoRA adapters",
+          "where": "device",
+          "bytes": 256901120,
+          "basis": "derived",
+          "detail": "r=16, fp32, on attn_in, attn_out, mlp_in, mlp_out: 64,225,280 parameters"
+        },
+        {
+          "name": "adapter gradients",
+          "where": "device",
+          "bytes": 256901120,
+          "basis": "derived",
+          "detail": "one gradient per trainable parameter"
+        },
+        {
+          "name": "optimizer state (adamw)",
+          "where": "device",
+          "bytes": 513802240,
+          "basis": "derived",
+          "detail": "exp_avg + exp_avg_sq per trainable parameter"
+        },
+        {
+          "name": "activations",
+          "where": "device",
+          "bytes": 1030097601,
+          "basis": "heuristic",
+          "detail": "checkpointed layer inputs + the loss's workspace at 512 tokens; per-token terms x 1.178, DQ4's measured slope over the formula's (Qwen3-32B, fp32 adapters); loss: experts4bit-qlora chunked_loss_bytes: 512 tokens of logits at a time"
+        },
+        {
+          "name": "dequantization transient",
+          "where": "device",
+          "bytes": 178257920,
+          "basis": "heuristic",
+          "detail": "one weight dequantized to bf16 for its matmul"
+        },
+        {
+          "name": "allocator reserve (cached, unallocated blocks)",
+          "where": "device",
+          "bytes": 1177684928,
+          "basis": "inferred",
+          "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "CUDA context + library workspaces",
+          "where": "device",
+          "bytes": 536870912,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "process baseline (torch, CUDA, libraries, model objects)",
+          "where": "host",
+          "bytes": 3221225472,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this host"
+        }
+      ],
+      "reserved_peak_bytes": 7432306688,
+      "driver_peak_bytes": 8164212736
+    },
+    {
+      "subject": "qwen3_32b",
+      "placement": "device",
+      "seq": 2048,
+      "estimate_bytes": 24317258957,
+      "peak_bytes": 23583963648,
+      "estimate_GB": 24.317258957,
+      "peak_GB": 23.583963648,
+      "residual_bytes": -733295309,
+      "residual_GB": -0.733295309,
+      "never_under": true,
+      "overestimate_fraction": 0.031092962995734007,
+      "overestimate_prediction": 0.04,
+      "itemized_lines": [
+        {
+          "name": "frozen decoder linears",
+          "where": "device",
+          "bytes": 16098017280,
+          "basis": "derived",
+          "detail": "64 layers x 7 linears in NF4 with nested statistics"
+        },
+        {
+          "name": "embeddings + lm head (bf16)",
+          "where": "device",
+          "bytes": 3111649280,
+          "basis": "derived",
+          "detail": "input embeddings and the untied lm head"
+        },
+        {
+          "name": "norms, biases and other parameters (bf16)",
+          "where": "device",
+          "bytes": 1353728,
+          "basis": "derived",
+          "detail": ""
+        },
+        {
+          "name": "LoRA adapters",
+          "where": "device",
+          "bytes": 536870912,
+          "basis": "derived",
+          "detail": "r=16, fp32, on attn_in, attn_out, mlp_in, mlp_out: 134,217,728 parameters"
+        },
+        {
+          "name": "adapter gradients",
+          "where": "device",
+          "bytes": 536870912,
+          "basis": "derived",
+          "detail": "one gradient per trainable parameter"
+        },
+        {
+          "name": "optimizer state (adamw)",
+          "where": "device",
+          "bytes": 1073741824,
+          "basis": "derived",
+          "detail": "exp_avg + exp_avg_sq per trainable parameter"
+        },
+        {
+          "name": "activations",
+          "where": "device",
+          "bytes": 2696611021,
+          "basis": "heuristic",
+          "detail": "checkpointed layer inputs + one layer's recompute at 2,048 tokens; per-token terms x 1.178, DQ4's measured slope over the formula's (Qwen3-32B, fp32 adapters); loss: experts4bit-qlora chunked_loss_bytes: 512 tokens of logits at a time"
+        },
+        {
+          "name": "dequantization transient",
+          "where": "device",
+          "bytes": 262144000,
+          "basis": "heuristic",
+          "detail": "one weight dequantized to bf16 for its matmul"
+        },
+        {
+          "name": "allocator reserve (cached, unallocated blocks)",
+          "where": "device",
+          "bytes": 4863451791,
+          "basis": "inferred",
+          "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "CUDA context + library workspaces",
+          "where": "device",
+          "bytes": 536870912,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "process baseline (torch, CUDA, libraries, model objects)",
+          "where": "host",
+          "bytes": 3221225472,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this host"
+        }
+      ],
+      "reserved_peak_bytes": 25222447104,
+      "driver_peak_bytes": 25883049984,
+      "anchor_expected_bytes": 23577589760,
+      "anchor_spread_bytes": 65536,
+      "anchor_residual_bytes": 6373888,
+      "anchor_reproduced": false,
+      "anchor_attributed": false,
+      "anchor_accounting": [
+        {
+          "name": "gradient clip added cumulative peak",
+          "bytes": 0
+        },
+        {
+          "name": "load peak scope delta (training resets peak after load)",
+          "bytes": 0
+        },
+        {
+          "name": "unexplained anchor residual",
+          "bytes": 6373888
+        }
+      ]
+    },
+    {
+      "subject": "qwen3_32b",
+      "placement": "stream",
+      "seq": 2048,
+      "estimate_bytes": 9202035917,
+      "peak_bytes": 8439691776,
+      "estimate_GB": 9.202035917,
+      "peak_GB": 8.439691776,
+      "residual_bytes": -762344141,
+      "residual_GB": -0.762344141,
+      "never_under": true,
+      "overestimate_fraction": 0.09032843393260906,
+      "overestimate_prediction": 0.1,
+      "itemized_lines": [
+        {
+          "name": "frozen decoder linears, two layers staged",
+          "where": "device",
+          "bytes": 487587840,
+          "basis": "derived",
+          "detail": "experts4bit-qlora offload_plan: the layer in use and its prefetched neighbour"
+        },
+        {
+          "name": "frozen decoder linears, quantization statistics",
+          "where": "device",
+          "bytes": 495206400,
+          "basis": "derived",
+          "detail": "absmax and second-level scales stay on the device"
+        },
+        {
+          "name": "frozen decoder linears, pinned host homes",
+          "where": "host",
+          "bytes": 17716740096,
+          "basis": "derived",
+          "detail": "15.60 GB of NF4 with nested statistics, each pinned request rounded up to a power of two (experts4bit-qlora offload_plan)"
+        },
+        {
+          "name": "frozen layers streamed per micro-batch",
+          "where": "link",
+          "bytes": 31205621760,
+          "basis": "derived",
+          "detail": "each layer copied for its forward and again for its backward (an upper bound)"
+        },
+        {
+          "name": "embeddings + lm head (bf16)",
+          "where": "device",
+          "bytes": 3111649280,
+          "basis": "derived",
+          "detail": "input embeddings and the untied lm head"
+        },
+        {
+          "name": "norms, biases and other parameters (bf16)",
+          "where": "device",
+          "bytes": 1353728,
+          "basis": "derived",
+          "detail": ""
+        },
+        {
+          "name": "LoRA adapters",
+          "where": "device",
+          "bytes": 536870912,
+          "basis": "derived",
+          "detail": "r=16, fp32, on attn_in, attn_out, mlp_in, mlp_out: 134,217,728 parameters"
+        },
+        {
+          "name": "adapter gradients",
+          "where": "device",
+          "bytes": 536870912,
+          "basis": "derived",
+          "detail": "one gradient per trainable parameter"
+        },
+        {
+          "name": "optimizer state (adamw)",
+          "where": "device",
+          "bytes": 1073741824,
+          "basis": "derived",
+          "detail": "exp_avg + exp_avg_sq per trainable parameter"
+        },
+        {
+          "name": "activations",
+          "where": "device",
+          "bytes": 2696611021,
+          "basis": "heuristic",
+          "detail": "checkpointed layer inputs + one layer's recompute at 2,048 tokens; per-token terms x 1.178, DQ4's measured slope over the formula's (Qwen3-32B, fp32 adapters); loss: experts4bit-qlora chunked_loss_bytes: 512 tokens of logits at a time"
+        },
+        {
+          "name": "dequantization transient",
+          "where": "device",
+          "bytes": 262144000,
+          "basis": "heuristic",
+          "detail": "one weight dequantized to bf16 for its matmul"
+        },
+        {
+          "name": "allocator reserve (cached, unallocated blocks)",
+          "where": "device",
+          "bytes": 1840407183,
+          "basis": "inferred",
+          "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "CUDA context + library workspaces",
+          "where": "device",
+          "bytes": 536870912,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this GPU + driver"
+        },
+        {
+          "name": "process baseline (torch, CUDA, libraries, model objects)",
+          "where": "host",
+          "bytes": 3221225472,
+          "basis": "inferred",
+          "detail": "default; no receipt on file measured this host"
+        }
+      ],
+      "reserved_peak_bytes": 11815354368,
+      "driver_peak_bytes": 12547260416,
+      "anchor_expected_bytes": 8459810816,
+      "anchor_spread_bytes": 3711488,
+      "anchor_residual_bytes": -20119040,
+      "anchor_reproduced": false,
+      "anchor_attributed": false,
+      "anchor_accounting": [
+        {
+          "name": "gradient clip added cumulative peak",
+          "bytes": 0
+        },
+        {
+          "name": "load peak scope delta (training resets peak after load)",
+          "bytes": 0
+        },
+        {
+          "name": "unexplained anchor residual",
+          "bytes": -20119040
+        }
+      ]
+    }
+  ]
+}

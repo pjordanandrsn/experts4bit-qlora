@@ -51,6 +51,13 @@ than `load_moe_4bit_streaming`. `e4b.offload.kimi-k3.full-depth.a2000.five-runs.
 `e4b.parity.kimi-k3.reproducible-on-gnf4-0.33.6.a2000.2026-09-29`
 ([results](../bench/kimi-k3-a2000/RESULTS-kimi-k3-a2000.md)).
 
+**Dense execution remains gated after a failed out-of-sample reading.** DQ7 of Loggetta's actual executor is VOID:
+fourteen of sixteen arms complete, and Qwen3-32B resident4096 is refused by the planner before loading. Completed
+Llama-3.1-8B allocator estimates are below measured peaks at2048/4096 in both placements. All completed streamed
+full-device plans also understate sampled driver use, by up to2395904403B; the inferred20% reserve does not cover
+that deficit. The tiny CUDA proof passes, but no calibration or DQ8 draw follows, and the opt-in remains.
+`e4b.train.dense-executor.dq7.5090.2026-10-08` ([results](../bench/dq7/RESULTS-dq7.md)).
+
 ### Training against other frameworks
 
 **Qwen3-30B-A3B against Unsloth: Unsloth spends 1.92× e4b's GPU time per step; wall-clock 2.80× on an AMD EPYC
