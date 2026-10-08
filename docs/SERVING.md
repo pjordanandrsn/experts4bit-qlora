@@ -195,7 +195,7 @@ refuses on forward. `/health.last_logits` reports the mode, keyword and prefill 
 and warmup; replays are counted separately). The default is `0`: the head's GEMM shape changes, so this needs a
 served-prefill quality and speed read before a default change. Decode is unchanged.
 
-**Decode lookahead (`E4B_PAGED_DECODE_LOOKAHEAD=1`; opt-in, unread for speed until lane P118).** A decode step reads
+**Decode lookahead (`E4B_PAGED_DECODE_LOOKAHEAD=1`; opt-in: lane P118 read it SLOWER, one request 1.0198× against a 1.02 bar, `bench/p118/RESULTS-p118.md`).** A decode step reads
 its tokens back before the step ends, so the GPU idles while the host emits them, retires finished requests, plans
 the next step and copies its inputs in. With the switch on, the scheduler issues the next decode step first and reads
 the previous one back after (`PagedModelRunner.issue_decode` / `collect_decode`). A step's input ids are gathered on

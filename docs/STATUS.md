@@ -694,6 +694,11 @@ RTX 5090; **measured** — [`bench/p116/RESULTS-p116.md`](../bench/p116/RESULTS-
 - **Verdict AT_PARITY:** with SC2e's capacity read (64 slots and buckets up to 64 serve 12 req/s), this licenses
   `E4B_PAGED_BUCKETS=auto` as `serve_paged`'s default, in its own PR.
 
+**The decode lookahead recovers the host gap, which is small** (lane P118, 2026-10-08, one rented RTX 5090; **measured**
+— [`bench/p118/RESULTS-p118.md`](../bench/p118/RESULTS-p118.md), `e4b.serve.p118.decode-lookahead.qwen3.5090.2026-10-08`).
+- `E4B_PAGED_DECODE_LOOKAHEAD=1` decodes one request 1.0198× (16: 1.0085×) with identical tokens. The trace's host gap,
+  0.207 ms of a 7.2 ms step, is recovered in full. SLOWER against the 1.02 bar: it stays opt-in.
+
 **The Gated DeltaNet kernels speed hybrid decode** (lane P105, 2026-10-03, one rented RTX 5090; **measured** —
 [`bench/p105/RESULTS-p105.md`](../bench/p105/RESULTS-p105.md), `e4b.serve.p105.qwen36-gdn-kernels.5090.2026-10-03`).
 - **Speed:** with `flash-linear-attention` 0.5.2 and `causal-conv1d` 1.7.0 installed, Qwen3.6-35B-A3B's bucketed decode
