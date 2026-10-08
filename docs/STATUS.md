@@ -178,10 +178,12 @@ together; serial output is unchanged. `e4b.serve.sc2e.64-slots-buckets-auto.qwen
 16 unchanged, within P110's quality bar; it is grouped-nf4-gemm's default from 0.43.0 at Qwen3's NF4 expert shapes on
 GPUs with 160 or more SMs. `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`.
 
-**The B=1 fused stack is faster and stays opt-in.** Fused q/k/v plus three glue folds decode one request 1.4289× and 16
-requests 1.2298× as fast on Qwen3-30B-A3B NF4, within P110's bar. P115 Phase C held the default flip: Granite passes,
-but gpt-oss-20b fails the argmax gate (0.924 against 0.95). The four knobs stay `0`; a family-scoped `auto` needs a new
-registration. `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`,
+**The B=1 fused stack passes its combined read on Qwen3-MoE.** On top of grouped-nf4-gemm 0.43.0's bandwidth GEMV,
+fused q/k/v plus three glue folds decode one request 1.5902× and 16 requests 1.1644× as fast on Qwen3-30B-A3B NF4, and
+P115 Phase D's SANE read at T == 1 passes (bias +0.00541 nats, argmax agreement 0.9674). The knobs stay `0` until the
+family-scoped default (#1361) lands, for Qwen3-MoE only: gpt-oss-20b failed Phase C's argmax gate (0.924 against 0.95),
+and Qwen3.5/3.6-MoE and Granite-MoE wait for lane FAM's reads at T == 1 (#1362).
+`e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`,
 `e4b.serve.p115.fused-stack-quality.qwen3.5090.2026-10-07`,
 `e4b.serve.p115.fused-stack-engagement.gptoss-qwen36.5090.2026-10-08`,
 `e4b.serve.p115.fused-stack-quality.granite.5090.2026-10-08` ([P115](../bench/p115/RESULTS-p115.md)).
