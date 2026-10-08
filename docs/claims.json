@@ -10358,6 +10358,36 @@
       "notes": "Pre-registered in #1360 and reviewed by the maintainer before any box. Vast invoiced $0.878 for the reading; the lane cost $1.079 with the proof. The kernel, not the graph, explains it: the eager step is already 1.48x slower. By subtraction, the chained builder costs about 2.7-2.8 ms of the 17.55 ms step, so a faster one-launch table (a launch-shape lane in grouped-nf4-gemm) remains a lever. On the proof's Granite (40 experts; not a reading) the same switch was 2.9 % faster."
     },
     {
+      "id": "e4b.serve.p121.k25-w16.qwen3.5090.2026-10-08",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P121, one RTX 5090: on the default serve_paged server (Qwen3-30B-A3B NF4, bucketed decode graphs, 16 slots), K25 (E4B_NF4_GROUPED_SMALLM=auto, the default since P96) decodes the served W16 step 1.57x as fast as the NF4 M-tile it replaces (E4B_NF4_GROUPED_SMALLM=0): 491 -> 771 tok/s, 32.6 -> 20.7 ms a step, with W1 unchanged (0.998, tokens identical), within P110's teacher-forced quality bar at 128 routed rows a step: bias +0.0002 nats on wikitext and +0.0022 on c4val1 (bars 0.0115 / 0.0116; perplexity +0.0018 / +0.037), the mutant moving +1.06 / +0.78. LICENSED: K25's auto default is read on Qwen3.",
+      "value": 1.5697,
+      "unit": "decode tok/s ratio, E4B_NF4_GROUPED_SMALLM=auto over 0, 16 requests (W16; min over two ABBA pairs; geomean 1.5713)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, driver 595.71.05, 450 W power limit), one rented Vast.ai host (instance 54908429, AMD EPYC 7C13, 256 threads, 1,007 GiB RAM), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @e96e4be (0.50.0 + P121's registration #1377) + grouped-nf4-gemm @56f90e3 (0.43.0); torch 2.8.0+cu128, transformers 5.17.0; Qwen/Qwen3-30B-A3B @ad44e77, NF4 arena baked on the box; premise tests/test_decode_graph_buckets.py + tests/test_k25_row_exact_gpu.py 11 passed on the card; speed: the default graph server with E4B_PAGED_MAX_SEQS=16 named, arms K0a K1a K1b K0b in fresh processes, P109's W16 / W1 at 32 and 160 new tokens, 3 timed passes; quality: P115 Phase B's teacher-forced instrument at 16 windows a pass (128 routed rows a decode step), wikitext + c4val1 x 48 windows x 128 positions against P110's floor (half, chunk) with a halved-scale mutant; engagement by a K25 / M-tile route counter (K25 1,152 graph-capture calls in K1, none in K0; 73,152 in the ON passes); verdict by bench/p121/p121_reduce.py",
+      "measured_on": "2026-10-08",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p121/RESULTS-p121.md",
+        "bench/p121/PREREG-p121.md",
+        "bench/p121/p121_reduce.py",
+        "bench/p121/p121_box.py",
+        "bench/p121/receipts/p121-5090-1/verdict.json",
+        "bench/p121/receipts/p121-5090-1/quality_on.json",
+        "bench/p121/receipts/p121-5090-1/arm_K1a.json",
+        "bench/p121/receipts/p121-5090-1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-08/p121-5090-1/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-08/p121-prove-1/ (receipt.json, the proving run)"
+      ],
+      "licensed_by": "e4b.serve.p121.k25-w16.qwen3.5090.2026-10-08",
+      "notes": "Pre-registered in #1377 and reviewed by the maintainer before any box; asked for from FAM0's inventory (#1368). Vast invoiced $1.056 for the reading; the lane cost $1.245 with the proof. The licence rests on P110's bar and g16 only (the perplexity move is reported). Continuity row, no bar: P96's arms at T == 1 on 12 wikitext windows read -0.0027 nats (auto never runs K25 at T == 1). Peak memory 22.17 GiB in every arm; K1 - K0 0.000 GiB. Unread: W2-W8, bucket 32 on the 64-slot default, other families."
+    },
+    {
       "id": "e4b.serve.p115.fused-stack-engagement.gptoss-qwen36.5090.2026-10-08",
       "package": "experts4bit-qlora",
       "area": "serve",
