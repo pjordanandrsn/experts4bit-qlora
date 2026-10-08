@@ -1,0 +1,9 @@
+{
+  "loggetta_sha": "05ee04d6a4005cbf50bbcbda4d189a6869fe7f8b",
+  "gnf4_sha": "6ee2e10408161a9d3c874975c9191a7f2957e6f4",
+  "torch": "2.8.0+cu128",
+  "bitsandbytes": "0.50.2",
+  "transformers": "5.18.0",
+  "peft": "0.21.2",
+  "policy_sha256": "766020d5d9b848e533d87bb64f231976c74b7c55b0a85946b1e002db04fb5d59"
+}
