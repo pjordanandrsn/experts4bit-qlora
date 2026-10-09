@@ -118,13 +118,17 @@ def run(tmp_path, m, j, py, tool, sock):
         "--worker-sha256",
         sha(wp),
     ]
+    env, _ = s.f.worker_environment.clean(os.environ, component="capacity",
+        fixture={"E4B_PAGED_MAX_TOKENS_PER_SEQ": "2048", "E4B_PAGED_CHUNK_TOKENS": "512"},
+        venv=Path(m["payload"]["venv"]), cache=tmp_path / "worker-cache",
+        threads=1, allocator="expandable_segments:True")
     return subprocess.run(
         argv,
         pass_fds=(sock.fileno(),),
         capture_output=True,
         text=True,
         timeout=45,
-        env=dict(os.environ, E4B_PAGED_MAX_TOKENS_PER_SEQ="2048", E4B_PAGED_CHUNK_TOKENS="512"),
+        env=env,
     )
 
 
