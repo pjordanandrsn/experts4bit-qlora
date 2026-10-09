@@ -55,6 +55,7 @@ SUPPORTED_ARCHITECTURES = {
     "olmoe": "mlp.experts",
     "qwen3_moe": "mlp.experts",
     "qwen3_5_moe": "mlp.experts",
+    "qwen3_5_moe_text": "mlp.experts",  # the native text CausalLM built from the composite's text_config
     "gpt_oss": "mlp.experts",  # GPT-OSS: on-disk MXFP4 blocks/scales + per-proj biases (see gptoss.py)
     "gemma4": "experts",  # multimodal top-level config
     "gemma4_text": "experts",  # the text tower (what a text-only QLoRA loads)

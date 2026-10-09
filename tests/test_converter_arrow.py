@@ -207,12 +207,13 @@ _WITH_UPSTREAM_CONVERTER = {
     "granitemoe": "granitemoe",
     "qwen3_vl_moe": "qwen3_vl_moe",
     "nemotron_h": "nemotron_h",
+    "qwen3_5_moe": "qwen3_5_moe_text",
 }
 
 #: Conventions upstream gives NO converter entry, so there is nothing to compare
 #: against and the adjudication stays prose plus a released index. Stated rather
 #: than silently skipped -- an unverifiable family must not look verified.
-_NO_UPSTREAM_CONVERTER = {"gemma4", "qwen3_5_moe", "gptoss", "jetmoe", "dbrx", "dense"}
+_NO_UPSTREAM_CONVERTER = {"gemma4", "gptoss", "jetmoe", "dbrx", "dense"}
 
 #: Conventions whose shape DIFFERS from upstream's converter without either being
 #: wrong. A converter whose source patterns do not match a checkpoint is a no-op --
@@ -223,6 +224,14 @@ _NO_UPSTREAM_CONVERTER = {"gemma4", "qwen3_5_moe", "gptoss", "jetmoe", "dbrx", "
 #: Recorded with the evidence that settled each one, and asserted below to still be
 #: exactly this, so a real contradiction cannot hide behind an explained one.
 _CONVERTER_COVERS_ANOTHER_SPELLING = {
+    "qwen3_5_moe": (
+        "The native text tree saves pre-fused gate_up_proj/down_proj stacks. "
+        "Upstream also accepts legacy per-expert gate/up/down weights using "
+        "MergeModulelist(0) and Concatenate(1), with no transpose. These "
+        "patterns cannot match native fused keys. e4b supports native stacks "
+        "and loudly refuses the legacy spelling; both paths are executed in "
+        "test_qwen35_composite_int4.py. PrefixChange is checked independently."
+    ),
     "axk1": (
         "Upstream's converter merges per-expert keys "
         "(mlp.experts.*.{gate,up}_proj.weight -> MergeModulelist + Concatenate), "
@@ -291,10 +300,10 @@ def test_the_no_converter_set_is_true_of_upstream():
         if mt is None:
             continue
         has = bool(_mapping(mt))
-        if name in _CONVERTER_COVERS_ANOTHER_SPELLING:
-            continue
         if name in _WITH_UPSTREAM_CONVERTER:
             assert has, f"{name}: expected an upstream converter for {mt}, found none"
+        elif name in _CONVERTER_COVERS_ANOTHER_SPELLING:
+            continue
         elif name in _NO_UPSTREAM_CONVERTER:
             assert not has, (
                 f"{name}: upstream now DOES ship a converter for {mt} -- move it into "
@@ -342,10 +351,11 @@ def test_transpose_declaration_matches_upstreams_operations(name, model_type):
 
 @pytest.mark.parametrize("name,model_type", sorted(_WITH_UPSTREAM_CONVERTER.items()))
 def test_per_expert_declaration_matches_upstreams_merge_and_concatenate(name, model_type):
-    """``roles``/``expert_re`` set iff upstream MERGES per-expert tensors.
+    """Compare native layout to upstream merges, accounting for named legacy spelling.
 
-    ``MergeModulelist`` is what makes a family per-expert on disk; a pre-fused one
-    has none. e4b encodes the same distinction as a matchable-vs-unmatchable
+    ``MergeModulelist`` accepts per-expert disk keys. A converter may also
+    accept a legacy spelling that never matches the native pre-fused stacks.
+    e4b encodes the same distinction as a matchable-vs-unmatchable
     ``expert_re``, and the two must not drift: treating a pre-fused stack as
     per-expert gathers keys that are already stacked, and the reverse silently
     reads a layer as dense.
@@ -373,6 +383,23 @@ def test_per_expert_declaration_matches_upstreams_merge_and_concatenate(name, mo
             assert "Concatenate" not in names, (
                 f"{name}: declared non-gated, but upstream concatenates ({names})"
             )
+    elif name == "qwen3_5_moe":
+        # Native fused stacks pass through; legacy spelling is explicitly refused.
+        converter, _ = _ops_for(model_type, "mlp.experts.gate_up_proj")
+        assert names == ["MergeModulelist", "Concatenate"]
+        assert [o.dim for o in ops] == [0, 1]
+        assert converter.source_patterns == [
+            "mlp.experts.*.gate_proj.weight", "mlp.experts.*.up_proj.weight"]
+        converter, down_ops = _ops_for(model_type, "mlp.experts.down_proj")
+        assert converter.source_patterns == ["mlp.experts.*.down_proj.weight"]
+        assert [type(o).__name__ for o in down_ops] == ["MergeModulelist"]
+        assert down_ops[0].dim == 0
+        for key in ("model.layers.0.mlp.experts.gate_up_proj",
+                    "model.layers.0.mlp.experts.down_proj"):
+            for converter in _mapping(model_type):
+                renamed, pattern = converter.rename_source_key(key)
+                assert renamed == key and pattern is None
+            assert conv.match(key) is None
     else:
         assert "MergeModulelist" not in names, (
             f"{name}: upstream MERGES per-expert tensors for {model_type} ({names}), "
@@ -404,9 +431,7 @@ def test_e4b_never_invents_a_rename_upstream_does_not_have(name, model_type):
     the other is a recorded census.
     """
     conv = next(c for c in CONVENTIONS if c.name == name)
-    upstream = {(_unescape(s0), t0)
-                for c in _mapping(model_type) if type(c).__name__ == "WeightRenaming"
-                for s0, t0 in zip(c.source_patterns, c.target_patterns)}
+    upstream = _upstream_rename_pairs(model_type)
     for src, dst in conv.renames:
         assert (src, dst) in upstream, (
             f"{name}: e4b rewrites {src!r} -> {dst!r}, which upstream's converter for "
@@ -418,9 +443,22 @@ def test_e4b_never_invents_a_rename_upstream_does_not_have(name, model_type):
 
 def _upstream_rename_pairs(model_type):
     """Upstream's renames as a set of literal ``(source, target)`` pairs."""
-    return {(_unescape(s0), t0)
-            for c in _mapping(model_type) if type(c).__name__ == "WeightRenaming"
-            for s0, t0 in zip(c.source_patterns, c.target_patterns)}
+    pairs = set()
+    for c in _mapping(model_type):
+        if type(c).__name__ == "WeightRenaming":
+            pairs.update((_unescape(s), t) for s, t in zip(c.source_patterns, c.target_patterns))
+        elif type(c).__name__ == "PrefixChange":
+            prefix = f"{c.model_prefix}." if c.model_prefix else ""
+            if c.prefix_to_remove is not None:
+                source, target = prefix + c.prefix_to_remove + ".", prefix
+            else:
+                source, target = prefix, prefix + c.prefix_to_add + "."
+            # Execute the upstream regex rather than treating its capture as a literal.
+            tail = "layers.0.mlp.experts.gate_up_proj"
+            renamed, pattern = c.rename_source_key(source + tail)
+            assert pattern is not None and renamed == target + tail
+            pairs.add((source, target))
+    return pairs
 
 
 @pytest.mark.parametrize("name,model_type", sorted(_WITH_UPSTREAM_CONVERTER.items()))

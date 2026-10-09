@@ -345,6 +345,24 @@ def plan_moe_checkpoint(
     conv = convention_for(model_type, dense_ok=dense_ok)
     checkpoint_keys, block_scales = _split_block_scales(checkpoint_keys)
     _refuse_gptq_v2(block_scales, model, model_type)
+    tree = set(model.state_dict())
+    outside_text = ()
+    prefix = conv.text_checkpoint_prefix
+    if (prefix and any(k.startswith(prefix) for k in checkpoint_keys)
+            and not any(k.startswith(prefix) for k in tree)):
+        # A text-only tree consumes only its declared composite text root and
+        # shared top-level parameters that exist in the tree (e.g. lm_head).
+        # Visual/MTP experts are excluded by this scope, never a name list.
+        # Unknown keys INSIDE the text root still reach strict plan validation.
+        mixed = [k for k in checkpoint_keys if not k.startswith(prefix)
+                 and k.startswith(conv.rename(prefix)) and k in tree]
+        if mixed:
+            raise MoEConventionError(f"{model_type}: mixed composite and plain text roots: {mixed[:3]}")
+        outside_text = tuple(k for k in checkpoint_keys if not k.startswith(prefix) and k not in tree)
+        drop = set(outside_text)
+        checkpoint_keys = [k for k in checkpoint_keys if k not in drop]
+        block_scales = {mk: v for mk, v in block_scales.items()
+                        if mk not in drop and not (set(v[1:]) & drop)}
     extra = _extra_head_keys(checkpoint_keys, model)
     if extra and skip_extra_layers:
         drop = set(extra)
@@ -359,7 +377,6 @@ def plan_moe_checkpoint(
             f"usually a multi-token-prediction head the base model does not "
             f"build. Pass skip_extra_layers=True to load without it; they are "
             f"NOT dropped silently")
-    tree = set(model.state_dict())
     ignore_re = [re.compile(p) for p in ignore_param_patterns]
     ignored = tuple(sorted(n for n in tree if any(r.search(n) for r in ignore_re)))
     claimable = tree - set(ignored)
@@ -377,7 +394,7 @@ def plan_moe_checkpoint(
                             if mk not in drop and not (set(v[1:]) & drop)}
     plan = MoELoadPlan(model_type=model_type, convention=conv.name,
                        ignored_params=ignored, scales=block_scales,
-                       skipped_keys=(tuple(extra) if skip_extra_layers else ()) + dropped)
+                       skipped_keys=outside_text + (tuple(extra) if skip_extra_layers else ()) + dropped)
     # layer -> role -> {expert_idx: ckpt key}
     experts = defaultdict(lambda: defaultdict(dict))
     targets = {}

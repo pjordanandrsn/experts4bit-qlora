@@ -10,12 +10,13 @@ PYTHONPATH=. python bench/smoke/gpu_serve_smoke.py --output-dir /tmp/e4b-serve-s
 Use a new output directory each time. The command reports PASS/FAIL for each of
 four families (`qwen3_moe`, `granitemoe`, `mixtral`, and hybrid `qwen3_5_moe`),
 first with the default NF4 stack, then with the applicable int4 stack.
-Qwen3-MoE, GraniteMoE and Mixtral require expert and attention int4. Qwen3.5's
-served text tower currently lacks an expert-int4 source convention
-([#1485](https://github.com/pjordanandrsn/experts4bit-qlora/issues/1485)); its cell
-requires attention int4, keeps experts NF4, and explicitly prints expert-int4
-**UNSUPPORTED** with the convention's refusal text. Once that convention exists,
-the same cell also requires expert int4. Execution failures never become skips.
+Current sources require expert and attention int4 for all four families.
+Qwen3.5's source planner projects a native composite checkpoint onto the served
+text tower and excludes auxiliary tensors by structure. Its cell must install
+both expert-int4 layers. When testing historical sources without that text
+convention, the cell keeps experts NF4, requires attention int4, and explicitly
+prints expert-int4 **UNSUPPORTED** with the refusal text. Execution failures
+never become skips.
 Any failure, including a missing CUDA device, worker crash or the whole-suite
 five-minute deadline, returns nonzero. `summary.json` records the exceptions,
 source package digest, actual residency classes, lever engagement, graph

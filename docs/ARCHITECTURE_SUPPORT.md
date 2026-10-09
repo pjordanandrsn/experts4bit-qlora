@@ -107,6 +107,19 @@ modules, fits at 30.47 GB. About 1.6 GB of that gap is this coverage difference.
 `int4_attn_projections: 0`. So the attention projections, the Gated DeltaNet projections and the shared experts all
 run in bf16.
 
+**Native Qwen3.5 text loading and served int4**
+([#1493](https://github.com/pjordanandrsn/experts4bit-qlora/pull/1493)). The loader also admits
+`qwen3_5_moe_text`, the native text CausalLM type, and the expert-int4 baker handles both its plain `model.` keys
+and a composite checkpoint's declared `model.language_model.` text prefix. CPU fixtures verify the mapping,
+bitwise equality of the baked expert bytes, and a direct native-text load without an outer `text_config`.
+A synthetic two-layer native-text checkpoint then loaded and served with int4 on an RTX A2000 (sm86), eagerly:
+both expert layers and all four full-attention projections engaged, and two 512-token prefill/four-token output
+requests completed. The ten-cell serving smoke also passed with the composite Qwen3.5 fixture's expert-int4 path
+engaged. These are fixture correctness receipts; they establish neither real-checkpoint quality or capacity nor
+sm89 CUDA-graph execution. The native-text type has no committed published-checkpoint probe row here, so its
+coverage baseline and generated checkpoint-evidence grade remain `none`. The earlier P98–P106 readings above
+retain their original NF4/bf16 scope.
+
 **The bf16 default is deliberate, and unmeasured as a trade.** NF4 error in a Gated DeltaNet input projection feeds a
 recurrent state that carries it across every later token, and the shared expert sits on every token's path. No reading
 has priced either in nats. An opt-in that quantizes them would need a KL reading against the bf16 default, as P97 did
@@ -264,13 +277,14 @@ not cover, notably CUDA-graph capture and any throughput figure.*
 
 ## Claimed vs evidenced
 
-`SUPPORTED_ARCHITECTURES` claims **14** families.
+`SUPPORTED_ARCHITECTURES` claims **15** families.
 
 | claimed model_type | best evidence | checkpoint |
 |---|---|---|
 | `olmoe` | **reference-ok** | `OLMoE-1B-7B-0924` |
 | `qwen3_moe` | **reference-ok** | `Qwen3-30B-A3B` |
 | `qwen3_5_moe` | **reference-ok** | `Qwen3.6-35B-A3B` |
+| `qwen3_5_moe_text` | **none** | — |
 | `gpt_oss` | **reference-ok** | `gpt-oss-20b` |
 | `gemma4` | **reference-ok** | `google/gemma-4-26B-A4B` |
 | `gemma4_text` | **none** | — |
@@ -291,7 +305,7 @@ Probed but **not** in the claimed list (reachable by convention, or not supporte
 - `ernie4_5_moe` — reference-ok on `baidu/ERNIE-4.5-21B-A3B-PT`
 - `qwen3_next` — toy-ok on `theo77186/Qwen3-Next-70M-TinyStories`
 
-**10 of 14** claimed families have a reference-tier passing row.
+**10 of 15** claimed families have a reference-tier passing row.
 
 Why some rows above read `none` and always will:
 

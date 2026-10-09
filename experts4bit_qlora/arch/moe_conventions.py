@@ -133,6 +133,10 @@ class MoEConvention:
     # the key has no home in the tree; a multimodal tree that does build
     # the tower keeps them. None means no key is ever dropped.
     drop_re: re.Pattern | None = None
+    # Native composite checkpoint root of the text decoder. When the built
+    # tree is text-only, project this root onto the tree and record tensors
+    # outside it that the tree does not construct. No tower-name blacklist.
+    text_checkpoint_prefix: str | None = None
 
     def __post_init__(self):
         # A frozen dataclass cannot repair itself, so refuse rather than coerce.
@@ -486,22 +490,23 @@ DBRX = MoEConvention(
     renames=(),
 )
 
-#: qwen3_5_moe ships experts PRE-FUSED with an EMPTY/native converter — unlike
+#: qwen3_5_moe ships experts PRE-FUSED in the native layout — unlike
 #: its sibling qwen3_vl_moe, there is no Transpose, so the stacked
 #: ``mlp.experts.gate_up_proj`` [E, 2*inter, hidden] and ``down_proj``
 #: [E, hidden, inter] match the module tree as-is. Pure passthrough, never
 #: per-expert; the per-layer shared_expert passes through too. Adjudicated from
-#: the converter API (empty) + the built tree; awaiting a canonical released
-#: checkpoint to confirm end-to-end (none published in standard form yet), but
-#: native placement makes no orientation choice, so there is nothing to get
-#: wrong once the format is confirmed native.
+#: the native built tree; no transpose applies to these already-fused tensors.
+#: Native placement makes no orientation choice. The served text type shares
+#: the same gate-first native stacks; a composite checkpoint places those under
+#: model.language_model., whereas the text CausalLM declares model.*.
 QWEN3_5_MOE = MoEConvention(
     name="qwen3_5_moe",
     expert_re=re.compile(r"(?!)"),      # matches nothing: pre-fused native
     roles={},
     fused_prefix="mlp.experts",
-    model_types=frozenset({"qwen3_5_moe"}),
-    renames=(),
+    model_types=frozenset({"qwen3_5_moe", "qwen3_5_moe_text"}),
+    renames=(("model.language_model.", "model."),),
+    text_checkpoint_prefix="model.language_model.",
 )
 
 #: Nemotron-H is a hybrid Mamba/attention model whose MoE lives in a ``mixer``
