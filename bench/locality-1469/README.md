@@ -9,9 +9,9 @@ quantities per MoE layer:
 It feeds #1469 items 2 and 3 (the bytes model and the planner decision, owned by `loggetta-e4b-gnf4`), #1470's
 speculative-decoding cost question, and the next decode lever (K19 above 256 routed rows).
 
-**Where it runs.** On the RTX A2000, under a `gpu:a2000` claim, with no rental. Expert ids are correctness-class data, so
-the A2000 is enough, and no timing from it is quoted. The A2000 (sm_86) cannot run the fp8 paged runner, so the trace
-goes through e4b's NF4 host-residency path: `load_moe_4bit_streaming(offload=True, pin=True, prefetch=True)` and the
+**Where it runs.** On one rented RTX A2000, a single run under the #846 standing tier (under $15). Expert ids are
+correctness-class data, so the A2000 is enough, and no timing from it is quoted. The A2000 (sm_86) cannot run the fp8
+paged runner, so the trace goes through e4b's NF4 host-residency path: `load_moe_4bit_streaming(offload=True, pin=True, prefetch=True)` and the
 pipelined residency engine.
 
 **What it reuses.** grouped-nf4-gemm's `bench/cold-engine/routing-trace/capture_routing.py`, from a pinned checkout and
@@ -30,6 +30,14 @@ locality_capture.py --phase census --revision REV --trace-dir GNF4/bench/cold-en
                     --hot-profile OUT/calibration_profile.jsonl            # --steps 512 --prompt-tokens 64 --hot-per-layer 8
 locality_summary.py --npz OUT/decode.npz  --manifest OUT/manifest.json --phase decode  --out OUT/summary_decode.json
 locality_summary.py --npz OUT/prefill.npz --phase prefill --out OUT/summary_prefill.json
+```
+
+On the box, `locality_run.sh` runs these four steps after its host refusals, the install (experts4bit-qlora at the
+launch commit, grouped-nf4-gemm installed from its clone at `GNF4_SHA`), an import tripwire, the model fetch at `REV`
+and both self-tests. The controller starts it through the launcher:
+
+```
+GNF4_SHA=<40-hex> bash bench/locality-1469/locality_drive.sh     # the launcher's --command
 ```
 
 1. **Calibration.** The expert profile over 8 wikitext-2-raw-v1 *validation* windows picks the hot set per layer: the
