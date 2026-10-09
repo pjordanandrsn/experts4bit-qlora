@@ -46,7 +46,7 @@ rather than hiding behind speed.
 - **Prompts:** SC2's 64 distinct 512-token wikitext-2 rows (`bench/sc2/sc2_prompts.py`).
 - **Requests:** every request is greedy, with `max_tokens` = 256 *(size at registration)*, `ignore_eos`, and streaming.
   A request is VALID only when it returns exactly `max_tokens` tokens with finish reason `length` (SC2's rule).
-- **Closed loop (new driver mode).** C ∈ {1, 16, 64} workers each send their next request as soon as the last one
+- **Closed loop (a new driver, `bench/sc5/sc5_driver.py`).** C ∈ {1, 16, 64} workers each send their next request as soon as the last one
   finishes, until N requests have completed. N is 32 at C = 1, 128 at C = 16 and 256 at C = 64 *(size at registration)*.
   The first C requests of each cell are warm-up, excluded from every statistic.
 - **Reported per cell:**
@@ -162,7 +162,9 @@ A block or cell is VOID, and is never read, when any of these holds:
 
 ## Work items (zero rental; each lands as reviewed code before registration)
 
-- **`bench/sc2/sc2_driver.py`:** a closed-loop mode, `closed C N`, with tests. The existing modes stay byte-identical.
+- **`bench/sc5/sc5_driver.py`:** a closed-loop mode, `closed C N`, with tests. It imports `bench/sc2/sc2_driver.py`'s
+  request, streaming and summary code and leaves that file byte-identical, because `bench/sc1/staged.sha256` and RA's
+  `bench/ra/source-pins.json` both pin it.
 - **`bench/sc5/sc5_box.sh`:** the box. It reuses SC2's install, start, stop and readiness pieces with the pinned versions,
   the two memory settings, the ABBA blocks, the GPU memory sampler and the capacity readout.
 - **`bench/sc5/sc5_ref.py`:** the bf16 reference, per-position NLL and argmax.
