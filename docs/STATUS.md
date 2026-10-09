@@ -222,6 +222,11 @@ build, depending on the host. `e4b.serve.p125.int4-attn-calib-default.qwen3.5090
 small: 1.0198× at one request, SLOWER against its 1.02 bar. `E4B_PAGED_LAST_LOGITS=1` projects only the final prompt
 position through the LM head (#1337). `e4b.serve.p118.decode-lookahead.qwen3.5090.2026-10-08`.
 
+**The tile table over 4 programs.** `E4B_INT4_TILE_PROGRAMS=4` splits the one-launch cumsum tile table over 4 programs
+(#1433, grouped-nf4-gemm #524). On Qwen3-30B-A3B int4 it makes the captured 64-row step about 15.5 % faster with identical
+tokens: P126 read DEFAULT_ON_4 on attempt 2, under its Amendment 1. The default flip is its own PR.
+`e4b.serve.p126.tile-programs.qwen3-int4.5090.2026-10-09` ([P126](../bench/p126/RESULTS-p126.md)).
+
 **Qwen3-30B-A3B's licensed int4 stack** (calibrated int4 experts and attention, folds, router epilogue) passes the K8
 gate on both texts loaded by fingerprint (expert pack `sha256:0c9955a9…`; wikitext −0.05275, c4val1 −0.06622 ppl). On
 the bo7 census (the bo6c pack) it decodes ×2.067 at B=1 (238.1 tok/s) and ×2.602 at B=16 (1327.5 tok/s) against
