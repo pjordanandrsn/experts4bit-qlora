@@ -187,6 +187,11 @@ grep -a "BAKE" logs/bake.log | tail -1 | tee -a summary.txt
 perl -e "alarm 1200; exec @ARGV" python $W/p109_box.py --prompts-only --model "$MODEL" --revision "$REV" --out $W/prompts.json > logs/prompts.log 2>&1 \
   || { tail -4 logs/prompts.log; say "PROMPTS FAIL"; finish 19; }
 grep -a "^P109_PROMPTS" logs/prompts.log | tee -a summary.txt
+# ---- Amendment 3: every gate's windows load, full, from the real corpora and tokenizer -- before any arm (rc 19)
+CAPF=""; [ "$CAP" != 0 ] && CAPF="--max-windows $CAP"
+perl -e "alarm 1200; exec @ARGV" python $W/p125_box.py --windows-check --model "$MODEL" --revision "$REV" $CAPF > logs/windows.log 2>&1 \
+  || { tail -4 logs/windows.log | cut -c1-300 | tee -a summary.txt; say "WINDOWS FAIL: a gate's windows do not fit its corpus"; finish 19; }
+grep -a "^P125_WINDOWS" logs/windows.log | cut -c1-400 | tee -a summary.txt
 ENGINE_ENV="E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$REV E4B_PAGED_ARENA=$W/work/nf4.arena E4B_PAGED_CALIB=$W/calib.json E4B_PAGED_MAX_SEQS=16"
 lever(){ case "$1" in A) echo "";; B|K) echo "E4B_SERVE_ATTN_INT4_CALIB=1";;
                       C) echo "E4B_SERVE_ATTN_INT4_CALIB=1 E4B_SERVE_LMHEAD_INT4_CALIB=1";; M) echo "E4B_SERVE_ATTN_INT4=1";; esac; }
@@ -204,7 +209,6 @@ for TAG in A1 B1 C1 C2 B2 A2; do
   [ "$rc" = 0 ] || { tail -6 logs/arm_$TAG.log | cut -c1-300 | tee -a summary.txt; say "ARM $TAG FAILED (rc=$rc) -- the reducer will VOID"; }
 done
 # ---- the five quality arms: the server built eager; A first (it writes R's log-probs, which stay on the box)
-CAPF=""; [ "$CAP" != 0 ] && CAPF="--max-windows $CAP"
 for ARM in A B C M K; do
   can_run $NEED_QUALITY "quality $ARM" || finish 40
   AL=$(step_alarm 3600); say "quality arm $ARM (alarm=$AL)"

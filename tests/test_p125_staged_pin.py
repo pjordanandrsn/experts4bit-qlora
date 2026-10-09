@@ -20,6 +20,8 @@ import re
 import subprocess
 import sys
 
+import pytest
+
 REPO = pathlib.Path(__file__).resolve().parents[1]
 LANE = REPO / "bench" / "p125"
 PIN = LANE / "staged-p125.sha256"
@@ -106,7 +108,7 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 
 def test_the_self_tests_pass():
     for script, want in (("p125_reduce.py", "p125_reduce self-test OK (25 cases)"),
-                         ("p125_box.py", "p125_box self-test OK (16 cases)")):
+                         ("p125_box.py", "p125_box self-test OK (18 cases)")):
         out = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True, env=_env())
         assert out.returncode == 0 and want in out.stdout, out.stdout + out.stderr
 
@@ -169,7 +171,7 @@ def test_the_order_puts_every_refusal_before_the_fetch():
     order = ["CUDA_PROBE=$(python -", "REFUSED: card is", "REFUSED: ${FREE_GB", "REFUSED: ${RAM_GB", 'say "install e4b @',
              "python - <<'PYT'", "p125_reduce.py --self-test", "p125_box.py --self-test",
              "python -m pytest " + " ".join(PREMISE), 'echo "premise ok"', 'say "fetch $MODEL @ $REV"',
-             "C4_FETCH shard", "python $W/k8_bake.py", "p109_box.py --prompts-only", "for TAG in A1 B1 C1 C2 B2 A2; do",
+             "C4_FETCH shard", "python $W/k8_bake.py", "p109_box.py --prompts-only", "--windows-check", "for TAG in A1 B1 C1 C2 B2 A2; do",
              "for ARM in A B C M K; do", "python $W/p125_reduce.py --dir $W --out $W/verdict_p125.json"]
     at = [RUN.index(s) for s in order]
     assert at == sorted(at), list(zip(order, at))
@@ -271,3 +273,53 @@ def test_amendment_2_a_gate_record_keeps_the_box_s_count_over_measure_phase_s():
     fake = red.fake_quality("B")["gates"]["k16"]
     assert keys <= set(fake), keys - set(fake)
     assert isinstance(fake["windows"], int) and fake["windows"] == red.GATES["k16"][2]
+
+
+def _fake_corpus(monkeypatch, n_lines=4000):
+    """A deterministic stand-in for datasets.load_dataset and a character tokenizer: both loaders read exactly what they
+    would from the real corpus, so their outputs can be compared token for token without the network."""
+    import types
+
+    import torch
+    lines = [("" if i % 7 == 0 else f" = section {i} = the text of line {i} " * (1 + i % 3)) for i in range(n_lines)]
+    monkeypatch.setitem(sys.modules, "datasets", types.SimpleNamespace(load_dataset=lambda *a, **k: {"text": lines}))
+
+    def tok(text, return_tensors=None):
+        return types.SimpleNamespace(input_ids=torch.tensor([[ord(c) % 50000 for c in text]]))
+    return tok, len("\n\n".join(t for t in lines if t.strip()))
+
+
+def test_amendment_3_the_loader_is_p97_s_corpus_join_and_tokenisation_at_another_stride(monkeypatch):
+    box = _box()
+    p97 = _import("p97_box", REPO / "bench" / "p97")
+    tok, n_tok = _fake_corpus(monkeypatch)
+    fit = (n_tok - 640) // 4096 + 1
+    assert fit >= 10, fit
+    assert box.wikitext_windows(tok, fit, 512, 128, stride=4096) == p97.wikitext_windows(tok, fit, 512, 128), \
+        "at P97's stride the loader is P97's, token for token"
+    with pytest.raises(AssertionError):
+        p97.wikitext_windows(tok, fit + 1, 512, 128)              # P97's stride runs out where the gates did
+
+
+def test_amendment_3_the_gates_windows_are_full_and_non_overlapping(monkeypatch):
+    box = _box()
+    tok, n_tok = _fake_corpus(monkeypatch, n_lines=12000)
+    n = (n_tok - 640) // box.STRIDE["wikitext"] + 1
+    ws = box.wikitext_windows(tok, n, 512, 128)
+    assert all(len(w) == 640 for w in ws) and box.STRIDE["wikitext"] >= 640, "every window full; stride >= 640: no overlap"
+    for name, text, _g, want, k_want in box.GATES:
+        assert max(want, k_want) <= box.capacity(text), (name, box.capacity(text))
+    assert box.capacity("wikitext") == 146 and box.capacity("c4val1") == 212
+    assert (box.CORPUS_TOKENS["wikitext"] - 640) // 4096 + 1 == 73, "P97's stride: the 73 windows p125-5090-1 found"
+    assert "--windows-check" in RUN and "finish 19" in RUN[RUN.index("--windows-check"):RUN.index("--windows-check") + 400]
+
+
+@pytest.mark.skipif(not os.environ.get("P125_REAL_CORPUS"), reason="the real corpus and tokenizer: set P125_REAL_CORPUS=1")
+def test_amendment_3_on_the_real_corpus():
+    from transformers import AutoTokenizer
+    box = _box()
+    p97 = _import("p97_box", REPO / "bench" / "p97")
+    tok = AutoTokenizer.from_pretrained("Qwen/Qwen3-30B-A3B", revision="ad44e777bcd18fa416d9da3bd8f70d33ebb85d39")
+    assert box.wikitext_windows(tok, 73, 512, 128, stride=4096) == p97.wikitext_windows(tok, 73, 512, 128)
+    ws = box.wikitext_windows(tok, 112, 512, 128)
+    assert len(ws) == 112 and all(len(w) == 640 for w in ws)
