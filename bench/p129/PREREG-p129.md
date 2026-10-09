@@ -325,3 +325,16 @@ Self-test case 125 reads GAIN on the host-bound fixture, and checks the other br
 - a 0.01 held-out shift reads QUALITY_FAIL;
 - a `q1` draw with 47 fused modules is VOID;
 - a `q0` draw on a build without the module is VOID.
+
+## Box log
+
+- **`tc1-5090-142`** (2026-10-09, $0): refused before any instance existed. The cheapest eligible RTX 5090 billed $0.93/h with storage,
+  above the $0.85/h policy rate.
+- **`tc1-5090-143`** (2026-10-09, $0.211, machine 19317): a harness failure, not a reading; no arm ran and nothing is reduced.
+  - The model fetch failed in venv-e4b's hub client (`process() takes no keyword arguments`): a brotli older than 1.2 under
+    huggingface_hub 2.x's httpx2.
+  - Every arm was written as a `not_run` stub, and the box ended OK.
+  - TC1's harness now installs `brotli>=1.2.0` in venv-e4b, probes the fetch before building the other venvs, and ends a box that
+    staged no model with rc 15.
+  - The box reruns on the main commit that carries that fix.
+
