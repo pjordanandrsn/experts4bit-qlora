@@ -1,0 +1,7 @@
+e4b 0.50.0 @2ed9c11f098e279dda8b506d75d9df1b2f1a9dd6
+gnf4 0.43.0 @4ed26d962ff03e664785c20413db3360a0f4d648
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)

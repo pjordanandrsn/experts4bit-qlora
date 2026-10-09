@@ -1,0 +1,31 @@
+KNOBS e4b=2ed9c11f098e279dda8b506d75d9df1b2f1a9dd6 gnf4=4ed26d962ff03e664785c20413db3360a0f4d648 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 prove=0 windows=64 cont=128
+e4b 0.50.0 @2ed9c11f098e279dda8b506d75d9df1b2f1a9dd6
+gnf4 0.43.0 @4ed26d962ff03e664785c20413db3360a0f4d648
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+p124_reduce self-test OK (42 cases)
+premise run rc=0: 7 passed in 11.00s
+premise k16 rc=0: 25 passed in 12.81s
+premise wide rc=0: 11 passed in 5.91s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+box rc=0 P124_BOX: d64 a OFF 16.3763 ms | d64 a ON 15.8004 ms | d64 b OFF 16.3699 ms | d64 b ON 15.8302 ms | d32 a OFF 11.8148 ms | d32 a ON 11.3608 ms | d32 b OFF 11.77 ms | d32 b ON 11.3923 ms | int4 linears 96 | rep identical True | function {'positions': 8128, 'differ': 0} | load 161s | 506.7 s
+
+P124_BLOCK d64 a (OFF-ON) OFF 16.3763 ms ON 15.8004 ms at 71 s
+P124_BLOCK d64 b (ON-OFF) OFF 16.3699 ms ON 15.8302 ms at 105 s
+P124_BLOCK d32 a (OFF-ON) OFF 11.8148 ms ON 11.3608 ms at 140 s
+P124_BLOCK d32 b (ON-OFF) OFF 11.77 ms ON 11.3923 ms at 162 s
+P124_QUALITY R done at 34 s
+P124_QUALITY rep done at 72 s
+P124_QUALITY half done at 118 s
+P124_QUALITY chunk done at 162 s
+P124_QUALITY ON64 done at 200 s
+P124_QUALITY ON32 done at 245 s
+P124_QUALITY mutant_scale done at 281 s
+P124_QUALITY mutant_wide done at 319 s
+P124_QUALITY G64on done at 344 s
+P124_VERDICT DEFAULT_ON ["ON/OFF {'64': [0.9648, 0.967], '32': [0.9616, 0.9679]} all <= 0.98"]
