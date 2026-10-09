@@ -206,11 +206,14 @@ sized from SC1-era fetch times on this checkpoint, about 15 minutes for the 61 G
 
 ## Budget and STOP rules
 
-- **Proof:** one RTX 5090 (Vast verified/secure), guard 1.25 h at ≤ $0.75/h, estimate $0.94. It is mostly the 61 GB
-  fetch and the bake.
-- **Reading:** one RTX 5090, guard 2.5 h at ≤ $0.75/h, estimate $1.875. The expected time is about 90 min: install 10,
-  fetch 15, bake 15, five arms of 6–10 min each.
-- **Lane ceiling:** $4.00, inside the $15 no-ask tier. Each rental goes after this registration merges and the
+**Pricing.** Each rental is priced at the launcher's policy rate, ≤ $0.85/h (5090 supply on 2026-10-09 was $0.85–0.95/h),
+plus the checkpoint download: about $0.67 for 61 GB at about $0.011/GB, paid by every Qwen3-30B-A3B rental.
+- **Proof:** one RTX 5090 (Vast verified/secure), guard 1.25 h. Estimate 1.25 × $0.85 + $0.67 ≈ **$1.73**. It is
+  mostly the 61 GB fetch and the bake.
+- **Reading:** one RTX 5090, guard 2.5 h. Estimate 2.5 × $0.85 + $0.67 ≈ **$2.80**. The expected time is about
+  90 min: install 10, fetch 15, bake 15, five arms of 6–10 min each.
+- **Lane ceiling:** $6.00, inside the $15 no-ask tier. It covers the proof and the reading (≈ $4.53) with room for one
+  pre-flight retry. Each rental goes after this registration merges and the
   maintainer ACKs.
 - **STOP-1:** the refusals (card class, disk, RAM, a dud box, the premise, the diff audit) run before the fetch.
 - **STOP-2:** an arm that cannot finish 10 minutes before the deadline is skipped, and the reducer VOIDs.
