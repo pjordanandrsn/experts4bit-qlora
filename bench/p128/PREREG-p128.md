@@ -131,3 +131,47 @@ The work, in the order the premise found the blockers:
 - **Phase 1:** no rental (the A2000).
 - **Phase 2:** one RTX 5090 box at the policy rate, about $1.5–2 with the download, and at most one replication box for DEFAULT_ON.
 - The lane stays under **$15**, so it needs no ask. Anything above that is asked first.
+
+## Phase 1 read (2026-10-09): NO_CANDIDATE for compile and CUDA graphs; the lane closes with no box
+
+On the RTX A2000, with the same model, rows and setup as the premise, every route to a compiled or captured MoE path stops on the grouped
+kernels' contract. Each knob below clears one blocker and exposes the next:
+
+| step | blocker |
+|---|---|
+| `torch.compile` of the MoE block, defaults | grouped-nf4-gemm's plan memo keys on `torch.Stream.cuda_stream`, which Dynamo cannot read |
+| + `E4B_TRITON_PREBIND=0` | e4b's prebound Triton launcher (symbolic grid) |
+| + `GNF4_TRITON_PREBIND=0`, `GNF4_HOST_REUSE=0`, `GNF4_PINNED_RING=0` | grouped-nf4-gemm's raw grouped-GEMM launch. Its grid is sized from the routing counts: data-dependent host integers from the MoE grouping's one read per layer pass |
+
+That last blocker is the kernel contract (host-sized grids), not a wrapper:
+- **An opaque custom op around the MoE path** would let the layer compile, but every MoE-glue launch inside it stays eager.
+- **The compile-reachable rest** (attention, norms) already runs e4b's fused kernels. Compiling it removed **0** of 769 launches.
+- **CUDA graphs** fail on the same host-sized grids.
+
+Reaching the glue needs a sync-free MoE path (device offsets, upper-bound grids, no host rows), a kernel-contract change outside this
+lane. With all four knobs off, eager runs 901 launches and 998 device kernels per two-layer step (default: 769 and 841).
+
+**Where the launches are** (one training step of the two-layer model at the defaults, 799 launches). Forward and recompute launches are
+attributed by profiler ranges on the layer's modules and on e4b's and grouped-nf4-gemm's MoE entry points. Backward launches are
+attributed by the autograd node they run under.
+
+| component | forward | recompute | backward | total |
+|---|---|---|---|---|
+| attention (NF4 projections with fp32 LoRA, norms, rope, flash) | 90 | 90 | 50 | 230 |
+| expert LoRA delta | 60 | 46 | 40 | 146 |
+| MoE glue (sort, index, gathers) | 44 | 44 | 0 | 88 |
+| dense `mm` backward (attention LoRA, router, head) | | | 55 | 55 |
+| combine | 14 | 14 | 20 | 48 |
+| dtype casts (backward) | | | 39 | 39 |
+| router | 16 | 16 | 0 | 32 |
+| grouped expert GEMMs | 4 | 4 | 16 | 24 |
+| norms, epilogue, grouping, optimizer, elementwise, loss, other | | | | 137 |
+
+The serving path already runs some of this sync-free on the device: the router epilogue, the tile tables, the MoE glue, the combine, the
+grouped GEMMs and the norms. That share is about 185 launches (23 %), forward and recompute only, and its backward has no serving
+counterpart. The rest, about 70 %, is training-only:
+- **The attention projections' LoRA on NF4.** Per layer pass: 16 `mm`, 8 casts, 8 bitsandbytes dequantizes and 8 adds; about 27 of the
+  45 are q, k and v.
+- **The expert LoRA delta.** About 30 per pass: gathers, casts, `bmm`, plan building, fill, `index_copy`.
+
+A launch cut, if registered, belongs to its own lane with the same counts-only A2000 gate.
