@@ -19,6 +19,10 @@ Concatenating changes the GEMM shapes, and cuBLAS may then pick another algorith
 equal to rounding, not bit for bit. The forward is serving's fused attention forward (``qkv_fuse._fused_forward``), which looks
 the modeling module's rotary up at call time, so e4b's fused training rope and RMSNorm stay in force.
 
+Memory: the q/k/v NF4 bases are released once the fused copy holds their bytes, so the packed weights are not duplicated. The
+expanded fp32 absmax replaces the nested 8-bit one, about 3 bytes more per 64-element block: roughly 24 MB over Qwen3-30B-A3B's
+48 layers. A released projection called on its own raises a ``RuntimeError`` that names the fusion.
+
 Anything that does not match is refused and keeps today's path (``TRAIN_QKV_STATS["refused"]`` says why). With the knob unset
 nothing here runs.
 """
@@ -130,6 +134,20 @@ class FusedQKVLoRA(nn.Module):
         return base.to(x.dtype) + _scaled(delta, self.scaling).to(x.dtype)
 
 
+def _fused_away_forward(self, x):
+    raise RuntimeError(f"{self._e4b_fused_name} was fused into its attention module's qkv_proj by E4B_TRAIN_FUSE_QKV=1 and its NF4 "
+                       "base released; call the attention module, which runs the fused projection")
+
+
+def _release_base(p, name: str) -> None:
+    """Mark a q/k/v ``LoRALinear`` as fused: drop its NF4 base (the fused copy holds those bytes) and make a direct call fail with a
+    clear error instead of a ``TypeError`` on ``None``. Its adapters stay the parameters."""
+    p._e4b_fused_into_qkv = True
+    p._e4b_fused_name = name
+    p.base = None
+    p.forward = types.MethodType(_fused_away_forward, p)
+
+
 def enable_train_fuse_qkv(model, verbose: bool = False) -> int:
     """Fuse every eligible attention module's q/k/v for training; returns the number fused. Refused modules keep today's path, with
     the reason in ``TRAIN_QKV_STATS["refused"]``. The q/k/v ``LoRALinear`` modules stay (their adapters are the parameters); their
@@ -146,9 +164,8 @@ def enable_train_fuse_qkv(model, verbose: bool = False) -> int:
             continue
         mod.qkv_proj = FusedQKVLoRA(mod)
         mod._fused_nq, mod._fused_nk, mod._fused_nv = mod.qkv_proj.ns
-        for p in (mod.q_proj, mod.k_proj, mod.v_proj):
-            p._e4b_fused_into_qkv = True
-            p.base = None                         # the fused copy holds these bytes now; nothing calls the unfused path
+        for pn in ("q_proj", "k_proj", "v_proj"):
+            _release_base(getattr(mod, pn), f"{name}.{pn}" if name else pn)
         mod._e4b_unfused_forward = mod.forward
         mod.forward = types.MethodType(_fused_forward, mod)
         n += 1
