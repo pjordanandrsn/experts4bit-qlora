@@ -30,8 +30,8 @@ def _box():
 
 
 def _model(layer_types):
+    from hybrid_reference import reference_modeling
     from transformers import Qwen3_5MoeTextConfig
-    from transformers.models.qwen3_5_moe.modeling_qwen3_5_moe import Qwen3_5MoeForCausalLM
     cfg = Qwen3_5MoeTextConfig(vocab_size=128, hidden_size=64, num_hidden_layers=len(layer_types), num_attention_heads=4,
                                num_key_value_heads=2, head_dim=32, moe_intermediate_size=32,
                                shared_expert_intermediate_size=32, num_experts=4, num_experts_per_tok=2,
@@ -39,7 +39,7 @@ def _model(layer_types):
                                linear_value_head_dim=16, linear_conv_kernel_dim=4, layer_types=list(layer_types),
                                max_position_embeddings=256)
     torch.manual_seed(0)
-    return Qwen3_5MoeForCausalLM(cfg).eval()
+    return reference_modeling("qwen3_5_moe").Qwen3_5MoeForCausalLM(cfg).eval()
 
 
 def _windows(n, length):
