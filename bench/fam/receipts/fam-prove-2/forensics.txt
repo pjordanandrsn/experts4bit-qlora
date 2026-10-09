@@ -1,0 +1,7 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-1988d9ef-19d0-36d8-6639-210c4347c852, 12.0
+CPU(s):                                  24
+Vendor ID:                               GenuineIntel
+Model name:                              Intel(R) Core(TM) Ultra 9 285K
+               total        used        free      shared  buff/cache   available
+Mem:             188           1          68           0         117         184
+overlay         320G   56M  320G   1% /

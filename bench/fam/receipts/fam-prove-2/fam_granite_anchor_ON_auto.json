@@ -1,0 +1,295 @@
+{
+ "config": "ON_auto",
+ "path": "sc2g",
+ "tag": "anchor",
+ "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+ "revision": "a02780686e08a03fe0d2679a293b5c74a90efa89",
+ "e4b_sha": "9766fb4c5cf64fbf63566de22708b281c4edfcb7",
+ "gnf4_sha": "6ee2e10408161a9d3c874975c9191a7f2957e6f4",
+ "knobs": {
+  "E4B_PAGED_FUSE_QKV": "auto",
+  "E4B_FUSE_T1_GLUE": "auto",
+  "E4B_FUSE_T1_GLUE_R2": "auto",
+  "E4B_FUSE_ROUTER_EPI": "auto"
+ },
+ "store_env": {
+  "E4B_SERVE_EXP_INT4": "1",
+  "E4B_INT4_KEEP_NF4": "1",
+  "E4B_SERVE_ATTN_INT4_CALIB": "0",
+  "E4B_CALIB_SOURCE": "c4",
+  "GNF4_TRITON_PREBIND": "1"
+ },
+ "transformers": "5.17.0",
+ "torch": "2.8.0+cu128",
+ "load_s": 5.8,
+ "census": {
+  "fuse_qkv_n": 0,
+  "fuse_t1_glue_n": 65,
+  "fuse_t1_glue_r2_n": [
+   32,
+   32
+  ],
+  "fuse_router_epilogue_n": 32
+ },
+ "fusion_modes": {
+  "E4B_PAGED_FUSE_QKV": "auto",
+  "E4B_FUSE_T1_GLUE": "auto",
+  "E4B_FUSE_T1_GLUE_R2": "auto",
+  "E4B_FUSE_ROUTER_EPI": "auto"
+ },
+ "store": {
+  "int4_expert_layers": 32,
+  "int4_store_kinds": [
+   "int4_b32"
+  ],
+  "levers_env": {
+   "E4B_SERVE_EXP_INT4": "1",
+   "E4B_SERVE_ATTN_INT4_CALIB": "0",
+   "E4B_CALIB_SOURCE": "c4",
+   "E4B_INT4_KEEP_NF4": "1",
+   "E4B_FUSE_T1_GLUE": "auto",
+   "E4B_FUSE_T1_GLUE_R2": "auto",
+   "E4B_FUSE_ROUTER_EPI": "auto"
+  },
+  "grouping": {
+   "device_grouping": false,
+   "force_singleton_groups": false
+  },
+  "model_type": "granitemoe",
+  "moe_layers": 32,
+  "top_k": 8
+ },
+ "kv": {
+  "n_kv_heads": 8,
+  "head_dim": 64,
+  "k_groups": "auto",
+  "scratch_slots": 0,
+  "blocks_per_seq": 256,
+  "pool_mib": 2368.5
+ },
+ "layers": 32,
+ "counters_wrapped": [
+  "rmsnorm_rows",
+  "rmsnorm_resid_rows",
+  "scaled_resid_add_rows",
+  "rope_norm_heads",
+  "rope_heads",
+  "router_epilogue"
+ ],
+ "qkv_modules": 0,
+ "ref_kw": null,
+ "texts": [
+  "wikitext"
+ ],
+ "shapes": [
+  12
+ ],
+ "sets": [
+  "A"
+ ],
+ "prompt": 512,
+ "cont": 32,
+ "cells": {
+  "wikitext|12|A": {
+   "base": {
+    "phase": "on",
+    "arms": [
+     "ON"
+    ],
+    "windows": {
+     "wikitext": 12
+    },
+    "windows_sha256": {
+     "wikitext": "279daa7e9217ef229d4592976baef6b591df2000d19cb4f7aaad215be8ab9937"
+    },
+    "group": 12,
+    "prompt": 512,
+    "cont": 32,
+    "chunk": 512,
+    "floor_chunk": 256,
+    "layers": 32,
+    "ref_kw": {
+     "device_grouping": true,
+     "padded": true
+    },
+    "rep_identical": {},
+    "counters_wrapped": [
+     "rmsnorm_rows",
+     "rmsnorm_resid_rows",
+     "scaled_resid_add_rows",
+     "rope_norm_heads",
+     "rope_heads",
+     "router_epilogue"
+    ],
+    "qkv_modules": 0,
+    "rehearsal": {
+     "stand_in_attention": false
+    },
+    "per_window": {
+     "wikitext": {
+      "ON": [
+       {
+        "window": 0,
+        "nll": 1.8118996213769378,
+        "argmax_agree": 0.96875,
+        "kl": 0.008196253224355132
+       },
+       {
+        "window": 1,
+        "nll": 3.127870184791391,
+        "argmax_agree": 0.96875,
+        "kl": 0.006454748679061595
+       },
+       {
+        "window": 2,
+        "nll": 2.3922411828607437,
+        "argmax_agree": 0.96875,
+        "kl": 0.007413646667600915
+       },
+       {
+        "window": 3,
+        "nll": 2.069605092585789,
+        "argmax_agree": 0.96875,
+        "kl": 0.004899677841028627
+       },
+       {
+        "window": 4,
+        "nll": 1.7445660038283677,
+        "argmax_agree": 0.96875,
+        "kl": 0.007439048090134293
+       },
+       {
+        "window": 5,
+        "nll": 2.555613486050035,
+        "argmax_agree": 1.0,
+        "kl": 0.004631645953936836
+       },
+       {
+        "window": 6,
+        "nll": 1.6492694754904278,
+        "argmax_agree": 1.0,
+        "kl": 0.0032715504284013264
+       },
+       {
+        "window": 7,
+        "nll": 2.8759624679223634,
+        "argmax_agree": 1.0,
+        "kl": 0.01638543751846555
+       },
+       {
+        "window": 8,
+        "nll": 1.884670405349425,
+        "argmax_agree": 0.9375,
+        "kl": 0.00505674795105282
+       },
+       {
+        "window": 9,
+        "nll": 2.1220572449929023,
+        "argmax_agree": 1.0,
+        "kl": 0.007166130014724104
+       },
+       {
+        "window": 10,
+        "nll": 1.3272501031169668,
+        "argmax_agree": 0.96875,
+        "kl": 0.004295186999712541
+       },
+       {
+        "window": 11,
+        "nll": 1.4779304286749948,
+        "argmax_agree": 0.96875,
+        "kl": 0.0029522074756300754
+       }
+      ]
+     }
+    },
+    "engagement": {
+     "wikitext": {
+      "ON": [
+       {
+        "device_grouping": true,
+        "padded": true,
+        "halves": false,
+        "reverse": false,
+        "graph_status": {
+         "1": "eager: capture=False",
+         "2": "eager: capture=False",
+         "4": "eager: capture=False",
+         "8": "eager: capture=False",
+         "16": "eager: capture=False"
+        },
+        "step_ms": 25.88,
+        "decode_calls": 992,
+        "grouping_flags_in_pass": {
+         "device_grouping": true,
+         "force_singleton_groups": false
+        },
+        "graph_stats": {
+         "1": {
+          "replays": 0,
+          "eager_steps": 0,
+          "rows": 0,
+          "pad_rows": 0
+         },
+         "2": {
+          "replays": 0,
+          "eager_steps": 0,
+          "rows": 0,
+          "pad_rows": 0
+         },
+         "4": {
+          "replays": 0,
+          "eager_steps": 0,
+          "rows": 0,
+          "pad_rows": 0
+         },
+         "8": {
+          "replays": 0,
+          "eager_steps": 0,
+          "rows": 0,
+          "pad_rows": 0
+         },
+         "16": {
+          "replays": 0,
+          "eager_steps": 31,
+          "rows": 372,
+          "pad_rows": 124
+         }
+        },
+        "kernels": {
+         "rmsnorm_rows": 1023,
+         "rmsnorm_resid_rows": 992,
+         "scaled_resid_add_rows": 992,
+         "rope_norm_heads": 0,
+         "rope_heads": 1984,
+         "router_epilogue": 992
+        },
+        "forwards": 43,
+        "qkv_calls": 0
+       }
+      ]
+     }
+    },
+    "seconds": 2.4
+   },
+   "extra": {},
+   "dispatch": {
+    "dotpad": 0,
+    "dotpad_splitk": 0,
+    "scalar": 0,
+    "scalar_splitk": 0,
+    "bw_tree": 0,
+    "bw_prmt32": 0,
+    "bw_splitk": 0
+   }
+  }
+ },
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "capability": [
+  12,
+  0
+ ],
+ "max_mem_gb": 6.44,
+ "seconds": 2.4,
+ "status": "ok"
+}
