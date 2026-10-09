@@ -257,3 +257,50 @@ The reference log-probs stay on the box.
 - K8 is not run; the K8-style ppl is reported, not gated.
 - No claim about prompts longer than 512 tokens, other families or other cards.
 - A2000 numbers are correctness only.
+
+## Amendment 1 (2026-10-09, after `p125-prove-1`; the int4 head's build fix, the measured calibration time and the reading's guard; before any further box)
+
+**What happened.** `p125-prove-1` VOIDed (rc 27, $0.402; adertha-receipts `454b44ea`) on one reason: the speed arms C1
+and C2 never built.
+- **The crash:** with the calibrated int4 lm_head, `build_engine` engages the default's prefill graph, and
+  `PagedModelRunner.enable_prefill_graph` read `get_output_embeddings().weight.shape[0]`. The int4 head is an
+  `Int4Linear` with no `weight`, so the build raised `AttributeError`.
+- **A real user-facing bug:** the int4 head could not serve on the shipped graph default at all. The eager quality arm C
+  never reaches that line and ran.
+- **The fix is #1426:** `_output_width(model)` reads `N` on an int4 head. A CPU test, mutation-checked, covers it, and
+  the A2000 reproduced the crash on main and captured the prefill graph on the fix.
+
+**Everything else read as registered.** The premise passed 39. Every int4 arm engaged exactly on shape on Granite's
+unfused default:
+- `t1`: `gemv:1` = 16 × 127 × 128 for B and M, × 129 for C, and 12 × 127 × 128 for K;
+- `k16`: `k16:16` = 1 × 127 × 128;
+- every gate prefilled on the bf16 copy.
+
+**Granite's gates: instrument behaviour, not evidence about Qwen3.** They are 16 windows on a 3B model:
+
+| arm | `t1` d | argmax | `k16` d |
+|---|---|---|---|
+| B | +0.0369 | 0.911 | +0.0328 |
+| C | +0.046 | | |
+| M (RTN) | +0.106 | | |
+| K | +7.34 | 0.04 | |
+
+The bound was 0.0075, and every arm FAILed. The instrument orders them calibrated < RTN ≪ rolled, as registered, and
+`t1` ≈ `k16` says the error on Granite is the weights rather than the one-row path's activation quantisation.
+
+**The calibration time (registered to be measured on the proof).**
+- **Granite:** about **49 s a build** (the speed B arms' build minus A's; quality C − A: 58 s).
+- **Qwen3, projected:** its attention is about 4.5× Granite's (906 M against ~201 M parameters; K 2048 / 4096 against
+  1536), so **3–5 min a build**, over the 1–3 min the registration predicted.
+- **The reading's builds:** nine calibrate (B1 B2 C1 C2, and quality B, C and K; M is RTN and A has no lever). That
+  adds ~20–30 min to the 2.25 h plan.
+- **The C4 fetch:** shard 0 in 3.8 s, shard 1 in 2.6 s.
+
+**The amendment (the maintainer's ACK, bus 2026-10-09T02:35Z):**
+- **The launch commit carries #1426's fix.** The tripwire refuses an e4b without `paged_runner._output_width` (rc 9).
+- **The reading's guard 2.5 h → guard 3.0 h** (about $2.25 at the policy rate). The proof stays at 0.75 h.
+- **The lane ceiling: $5.50, hard stop $6.50**, inside the owner's no-ask tier.
+- **Unchanged:** every gate, bound, window count, prediction, arm and rung. The calibration seconds and the C4 fetch are
+  reported again from the reading.
+
+**Re-pinned before any further box:** `p125_run.sh` (the tripwire's fix check) in `staged-p125.sha256`.

@@ -1,7 +1,8 @@
 # Names as the BOX sees them after staging (/root/p125). The box runs `sha256sum -c` on this file; p125_drive.sh and
 # tests/test_p125_staged_pin.py resolve each name to its source (bench/p125, bench/p115, bench/p110, bench/p108,
 # bench/p97, bench/p109, bench/p39, tests) and compare.
-681a6ff3b92d7153f92c70d9e6cbce1e78ad6892cd9b4bc298d2bfa1c0746107  p125_run.sh
+# Re-pinned 2026-10-09 for Amendment 1 (the tripwire's #1426 fix check), after p125-prove-1, before p125-prove-2.
+6f2ce3bb9b9ed649e62b674c73e894cd196a13e09a58156f8654f8c7b08cdb54  p125_run.sh
 354dc91282ef44f62460080305d13ef2b7616fd68bb075dfc26e680a8c79bb20  p125_box.py
 bd30a0a638bbfaf21ca9cf392c7564c9e0a21ae90ed378896ff3be8b88449e9b  p125_reduce.py
 f1500a26404284fbb14cce214c548d73b3889e9db5ef1faf5ef63bf74449b574  p115_quality.py
