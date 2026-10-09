@@ -32,14 +32,16 @@ def pinned(pin):
 
 def check(plan, *, all_timeouts=True):
     fields = {"schema", "battery", "stage", "inputs", "versions", "deadline_epoch_s"}
-    if plan.get("schema") in (2, 3, 4):
+    if plan.get("schema") in (2, 3, 4, 5):
         fields.add("startup")
-    if plan.get("schema") in (3, 4):
+    if plan.get("schema") in (3, 4, 5):
         fields.add("source_publication")
-    if plan.get("schema") == 4:
+    if plan.get("schema") in (4, 5):
         fields.add("checkpoint_authority")
+    if plan.get("schema") == 5:
+        fields.add("alpaca_source")
     if set(plan) != fields or type(plan["schema"]) is not int or \
-            plan["schema"] not in (1, 2, 3, 4) or plan["battery"] not in ("proof", "reading"):
+            plan["schema"] not in (1, 2, 3, 4, 5) or plan["battery"] not in ("proof", "reading"):
         raise ValueError("ABBA plan fields/battery")
     if set(plan["stage"]) != {"path", "sha256"} or set(plan["inputs"]) != {"spec", "lock"}:
         raise ValueError("stage/input bindings")
@@ -127,16 +129,19 @@ def check(plan, *, all_timeouts=True):
     caches = [Path(v["cache"]) for v in plan["versions"].values()]
     if caches[0] == caches[1] or caches[0] in caches[1].parents or caches[1] in caches[0].parents:
         raise ValueError("separate release output caches required")
-    if plan["schema"] in (3, 4):
+    if plan["schema"] in (3, 4, 5):
         total += 8 * plan["source_publication"]["timeout_s"]
-    if plan["schema"] == 4:
+    if plan["schema"] in (4, 5):
         check_checkpoint(plan)
         total += 8 * plan["checkpoint_authority"]["timeout_s"]
+    if plan['schema'] == 5:
+        evidence['alpaca_source'] = check_alpaca(plan)
+        total += 8 * plan['alpaca_source']['timeout_s']
     if all_timeouts:
         ra_process.window(plan["deadline_epoch_s"], total)
-    if plan["schema"] in (2, 3, 4):
+    if plan["schema"] in (2, 3, 4, 5):
         evidence["startup"] = check_startup(plan)
-    if plan["schema"] in (3, 4):
+    if plan["schema"] in (3, 4, 5):
         evidence["source_publication"] = check_publication(plan)
     return evidence
 
@@ -555,6 +560,73 @@ def checkpoint_gate(plan, slot, output):
             'proves_gpu_engagement': False, 'release_cleared': False}
 
 
+def check_alpaca(plan):
+    gate = plan['alpaca_source']
+    require(set(gate) == {'timeout_s'}, 'fixed Alpaca gate fields')
+    ra_process.window(plan['deadline_epoch_s'], gate['timeout_s'])
+    for name in ('ra_alpaca.py', 'ra_inputs.py', 'ra_stage.py', 'source-pins.json'):
+        require(plan['startup']['tools'].get(name) == ra_process.file_digest(HERE / name),
+                'Alpaca helper pin differs')
+    import ra_alpaca as alpaca
+    require(Path(alpaca.__file__).resolve() == HERE / 'ra_alpaca.py', 'Alpaca helper owner')
+    values = alpaca.recipe(plan['stage']['path'])
+    return {'recipe': values, 'helper_sha256': ra_process.file_digest(HERE / 'ra_alpaca.py')}
+
+
+def alpaca_gate(plan, slot, output):
+    """Run the fixed no-site child, then re-evaluate source/projection locally."""
+    import ra_alpaca as alpaca
+    require(Path(alpaca.__file__).resolve() == HERE / 'ra_alpaca.py', 'Alpaca helper owner')
+    before = check(plan, all_timeouts=False)
+    manifest = checkpoint_manifest(plan)
+    output = ra_inputs.absolute(output)
+    spec = pinned(plan['inputs']['spec'])
+    protected = [HERE, Path(plan['stage']['path']), *map(Path, spec['trees'].values()),
+                 *map(Path, spec['files'].values()), *[Path(p['path']) for p in plan['inputs'].values()]]
+    for v in plan['versions'].values():
+        protected += [Path(v['venv']), Path(v['cache'])]
+    for pin in plan['startup']['manifests'].values():
+        m = pinned(pin)
+        protected += [Path(pin['path']), Path(m['payload']['image']), *[Path(p['path']) for p in m['payload']['wheels']]]
+    for pin in plan['source_publication']['manifests'].values():
+        m = pinned(pin)
+        protected += [Path(pin['path']), Path(m['parser']['path']), *[Path(row['repo']) for row in m['releases']]]
+    candidates = [output, output.with_suffix('.manifest.json'), output.with_suffix('.log'),
+                  output.with_suffix('.process.json')]
+    require(all(not a.exists() and not any(a == b or a in b.parents or b in a.parents for b in protected)
+                for a in candidates), 'Alpaca fresh protected output')
+    output.parent.mkdir(parents=True, exist_ok=True)
+    mp = candidates[1]
+    with mp.open('x') as stream:
+        stream.write(json.dumps(manifest, sort_keys=True, indent=2, allow_nan=False) + '\n')
+    manifest_sha = ra_process.file_digest(mp)
+    version = plan['versions'][slot]
+    env, _ = ra_env.clean(os.environ, component='decode', fixture={}, venv=Path(version['venv']),
+                         cache=Path(version['cache']), threads=version['threads'], allocator=version['allocator'])
+    process = ra_process.run([version['python']['path'], '-I', '-S', '-B', str(HERE / 'ra_alpaca.py'),
+                             '--manifest', str(mp), '--out', str(output)], env=env, cwd=output.parent,
+                            log=candidates[2], receipt=candidates[3], deadline=plan['deadline_epoch_s'],
+                            timeout=plan['alpaca_source']['timeout_s'])
+    require(process.get('status') == 'OK' and process.get('returncode') == 0 and
+            process.get('cleanup_complete') is True and process.get('parent_death_guard', {}).get('verified') is True,
+            'Alpaca process/guard/cleanup incomplete')
+    require(ra_process.file_digest(mp) == manifest_sha and before == check(plan, all_timeouts=False),
+            'Alpaca manifest/common/tool drift')
+    require({p.name for p in output.iterdir()} == {'result.json'} and
+            all(p.is_file() and not p.is_symlink() for p in output.iterdir()), 'Alpaca receipt inventory')
+    result = ra_inputs.read_json(output / 'result.json')
+    require(result.get('status') == 'PASS' and type(result.get('pid')) is int and
+            result['pid'] == process['pid'] and result.get('manifest_sha256') == manifest_sha,
+            'Alpaca receipt status/PID/manifest')
+    # The child summary is never accepted as its own source/recipe evidence.
+    # Rehash the raw source and rederive the complete prepared UTF8 bytes here.
+    expected = alpaca.audit(manifest)
+    require(result == {**expected, 'status': 'PASS', 'pid': process['pid'], 'manifest_sha256': manifest_sha} and
+            before == check(plan, all_timeouts=False), 'Alpaca parent source/projection receipt differs')
+    return {'identity': expected, 'result_sha256': ra_process.file_digest(output / 'result.json'),
+            'process': process, 'proves_gpu_engagement': False, 'release_cleared': False}
+
+
 def supervise(plan, output, lock_path):
     """Invoke the six existing wrappers in each ABBA position, with no retries.
 
@@ -564,7 +636,7 @@ def supervise(plan, output, lock_path):
     """
     plan = copy.deepcopy(plan)
     checked = check(plan)
-    verified = plan["schema"] in (2, 3, 4)
+    verified = plan["schema"] in (2, 3, 4, 5)
     output, lock_path = ra_inputs.absolute(output), ra_inputs.absolute(lock_path)
     spec = pinned(plan["inputs"]["spec"])
     protected = [Path(plan["stage"]["path"]), *map(Path, spec["trees"].values()),
@@ -583,7 +655,7 @@ def supervise(plan, output, lock_path):
             protected += [Path(manifest['payload']['image']), *[Path(p['path']) for p in manifest['payload']['wheels']]]
         require(not any(a == b or a in b.parents or b in a.parents for a in (output, lock_path) for b in protected),
                 'ABBA verified output/lock overlaps protected inputs')
-    if plan['schema'] in (3, 4):
+    if plan['schema'] in (3, 4, 5):
         for pin in plan['source_publication']['manifests'].values():
             manifest = pinned(pin)
             protected += [Path(pin['path']), Path(manifest['parser']['path'])]
@@ -596,7 +668,8 @@ def supervise(plan, output, lock_path):
         output.mkdir(parents=True, exist_ok=False)
         (output / "plan.json").write_text(json.dumps(plan, indent=2, allow_nan=False) + "\n")
         record = {"status": "RUNNING", "started_at": ra_process.clock(), "attempts": 1,
-                  "completed": [], "publication_gates": [], "checkpoint_gates": [],
+                  "completed": [], "publication_gates": [], "checkpoint_gates": [], "alpaca_gates": [],
+                  "registered_alpaca_source_verified": False,
                   "checkpoint_authority_verified": False, "proves_gpu_engagement": False, "release_cleared": False,
                   "verified_wrapper_startup": False, "source_publication_verified": False,
                   "runtime_consumption_verified": False, "native_context_absence_verified": False}
@@ -604,9 +677,10 @@ def supervise(plan, output, lock_path):
         try:
             identities = {}
             checkpoint_identity = None
+            alpaca_identity = None
             for tag, slot in POSITIONS:
                 authority = None
-                if plan['schema'] in (3, 4):
+                if plan['schema'] in (3, 4, 5):
                     record['active'] = {'tag': tag, 'phase': 'publication_before'}
                     journal.write_text(json.dumps(record, indent=2) + '\n')
                     authority = publication_gate(plan, slot, output / 'publication' / tag / 'before')
@@ -615,7 +689,7 @@ def supervise(plan, output, lock_path):
                     identities[slot] = authority['identity']
                     record['publication_gates'].append({'tag': tag, 'side': 'before', **authority})
                 checkpoint_before = None
-                if plan['schema'] == 4:
+                if plan['schema'] in (4, 5):
                     record['active'] = {'tag': tag, 'phase': 'checkpoint_before'}
                     journal.write_text(json.dumps(record, indent=2) + '\n')
                     checkpoint_before = checkpoint_gate(plan, slot, output / 'checkpoint' / tag / 'before')
@@ -623,6 +697,15 @@ def supervise(plan, output, lock_path):
                             'checkpoint identity changed across ABBA positions')
                     checkpoint_identity = checkpoint_before['identity']
                     record['checkpoint_gates'].append({'tag': tag, 'side': 'before', **checkpoint_before})
+                alpaca_before = None
+                if plan['schema'] == 5:
+                    record['active'] = {'tag': tag, 'phase': 'alpaca_before'}
+                    journal.write_text(json.dumps(record, indent=2) + '\n')
+                    alpaca_before = alpaca_gate(plan, slot, output / 'alpaca' / tag / 'before')
+                    require(alpaca_identity in (None, alpaca_before['identity']),
+                            'Alpaca identity changed across ABBA positions')
+                    alpaca_identity = alpaca_before['identity']
+                    record['alpaca_gates'].append({'tag': tag, 'side': 'before', **alpaca_before})
                 version = plan["versions"][slot]
                 for phase in PHASES:
                     record["active"] = {"tag": tag, "phase": phase}
@@ -677,8 +760,16 @@ def supervise(plan, output, lock_path):
                     require(checkpoint_after['identity'] == checkpoint_before['identity'],
                             'checkpoint identity changed during position')
                     record['checkpoint_gates'].append({'tag': tag, 'side': 'after', **checkpoint_after})
-            record['checkpoint_authority_verified'] = plan['schema'] == 4
-            record['source_publication_verified'] = plan['schema'] in (3, 4)
+                if alpaca_before is not None:
+                    record['active'] = {'tag': tag, 'phase': 'alpaca_after'}
+                    journal.write_text(json.dumps(record, indent=2) + '\n')
+                    alpaca_after = alpaca_gate(plan, slot, output / 'alpaca' / tag / 'after')
+                    require(alpaca_after['identity'] == alpaca_before['identity'],
+                            'Alpaca identity changed during position')
+                    record['alpaca_gates'].append({'tag': tag, 'side': 'after', **alpaca_after})
+            record['registered_alpaca_source_verified'] = plan['schema'] == 5
+            record['checkpoint_authority_verified'] = plan['schema'] in (4, 5)
+            record['source_publication_verified'] = plan['schema'] in (3, 4, 5)
             record["status"] = "ORDERED_COMPONENTS_RECORDED_PENDING_GATES"
             record["verified_wrapper_startup"] = verified
         except BaseException as exc:

@@ -110,8 +110,8 @@ def check(manifest):
     return spec, lock, common
 
 
-def verify(manifest):
-    require(sys.flags.isolated and sys.flags.no_site and sys.dont_write_bytecode, 'python -I -S -B required')
+def audit(manifest):
+    """Re-evaluate retained source/recipe bytes; startup flags belong to verify."""
     inputs = load_inputs()
     base = Path(__file__).absolute().parent
     paths = [base / (n + '.py') for n in PEERS] + [base / 'source-pins.json']
@@ -137,6 +137,10 @@ def verify(manifest):
             'proves_runtime_consumption': False, 'proves_publisher_signature': False,
             'proves_gpu_engagement': False, 'launch_authority': False}
 
+
+def verify(manifest):
+    require(sys.flags.isolated and sys.flags.no_site and sys.dont_write_bytecode, 'python -I -S -B required')
+    return audit(manifest)
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

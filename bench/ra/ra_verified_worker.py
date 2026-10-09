@@ -11,7 +11,7 @@ import sysconfig
 from pathlib import Path
 
 HERE = Path(__file__).absolute().parent
-PYTOOLS = set('''ra_abba ra_checkpoint ra_capacity ra_capacity_server ra_child_guard ra_closure ra_env ra_fallback
+PYTOOLS = set('''ra_abba ra_alpaca ra_checkpoint ra_capacity ra_capacity_server ra_child_guard ra_closure ra_env ra_fallback
 ra_handoff ra_inputs ra_normalize ra_prestartup ra_process ra_provenance ra_publication ra_quality
 ra_reduce ra_routes ra_serving ra_source_binding ra_source_metadata ra_stage ra_trace ra_training
 ra_wheel_lock ra_verified_worker'''.split())
