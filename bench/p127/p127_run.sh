@@ -27,8 +27,8 @@ E4B_A=a8c01d426bc3e489c8bd11c7c8ced091da557582     # the last main commit before
 GNF4_A=d1f64ba50afce94533e0166ba3332ef075aa43bb    # grouped-nf4-gemm v0.44.0
 GNF4_B=d769d5022c0fb7a2ada847f69a3cba6e0f45c77f    # grouped-nf4-gemm at #527's merge (carries #526-#530)
 E4B_B=$E4B_SHA                                     # the launch commit: this registration's merge
-E4B_P127="ce3dfb5413a33c780a76eac7a8142a881515a444 1ddcb0aeeae63f32d57ab67fa3f5e48d8c370781 8ea9729608135fb47fa94835258eceecc68bb8b7 __E4B_1482_MERGE__"   # Amendment 1: #1482
-E4B_INERT="2384d2c3083b615a0c8f117cb30799e0a59f6171 058f98eb419ff463dd19c21096ecdc6ce1eff1be f539896244bf418ac782ef4257f32d8fbd0c236b abe7d77223ed19a4f18f6f412877982862604213"
+E4B_P127="ce3dfb5413a33c780a76eac7a8142a881515a444 1ddcb0aeeae63f32d57ab67fa3f5e48d8c370781 8ea9729608135fb47fa94835258eceecc68bb8b7 508cdd032b03c321d88479feabc175d3f0804bbd"   # Amendment 1: #1482
+E4B_INERT="2384d2c3083b615a0c8f117cb30799e0a59f6171 058f98eb419ff463dd19c21096ecdc6ce1eff1be f539896244bf418ac782ef4257f32d8fbd0c236b abe7d77223ed19a4f18f6f412877982862604213 d14bcb10eac9c18d4c15c40af400873a0d37bd17"   # + Amendment 1: #1465
 GNF4_P127="18f5bdaa491f4ff85c2c984c01499147aacd6267 f69adccf839b5e2dfb8b6eecd957232e1decb4f9 d0a2e56d903dad0385f1a86d7afe225caf363105 b64a39b5067db68e40b1bb365dbe95766c3d5d26 $GNF4_B"
 GNF4_INERT="14b1f23d0befb5aef64aaa638863e69ef4418d04 e21a71242b361dd0a3f72cdf4152de94633891a8 7d4163b6c3827ae982c8826da28c3b89a636cdcc"
 case "$GNF4_B $E4B_P127" in *__*) say "refusing: a registered SHA is still a placeholder"; finish 78;; esac

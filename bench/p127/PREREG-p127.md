@@ -239,18 +239,28 @@ plus the checkpoint download: about $0.67 for 61 GB at about $0.011/GB, paid by 
   hybrid's `_HybridTier`, this subject's state class, overrides `forward` without it, so every MoE call of B's
   served build raised. The families lane reproduced it independently in `fam-mixtral-3`.
 
-**The fix is #1482**, merged at `__E4B_1482_SHORT__`. It is part of P127's Phase 2 and changes no arithmetic:
+**The fix is #1482**, merged at `508cdd03`. It is part of P127's Phase 2 and changes no arithmetic:
 - no `residual=` keyword when there is none;
 - `_HybridTier` takes the residual and hands it to the base forward;
 - the base residual path does not re-enter a subclass override;
 - a licence probe that raises refuses instead of stopping the build.
 
 On an RTX A2000, the hybrid tier's CUDA tests fail 14 on #1477 alone and pass with #1482, along with a new
-served-collapse residual test.
+served-collapse residual test. The families lane's served `build_engine` smoke (Granite-3.1-3b and a tiny Mixtral,
+eager) raised on #1477 and built on #1482, with the residual licensed on 4 of 4 Mixtral layers and tokens identical to
+knobs 0. No GPU we own runs the sm_89+ decode-graph path; `p127-prove-2` is that check.
 
 **What changes here:**
-- **The diff audit** lists #1482's merge as **P127**.
-- **Arm B's e4b** is the launch commit, this amendment's merge, which carries #1482.
+- **The diff audit** gains two rows. This amendment appends them to the table above:
+
+  | repo | commit | what | status |
+  |---|---|---|---|
+  | e4b | `508cdd03` (#1482) | the fix above | **P127** |
+  | e4b | `d14bcb10` (#1465) | `engines/train_qkv_fuse.py`: a released q/k/v projection raises a clear error | inert: training only, as #1459 is; reached only through `fast._maybe_fuse_train_qkv`, which does nothing without `E4B_TRAIN_FUSE_QKV=1` |
+
+  `a0d32bdd` (#1481, RA's tokenizer assets) changes only `bench/ra/` and `tests/`, so the audit never lists it.
+- **Arm B's e4b** is the launch commit, this amendment's merge on main after `d14bcb10`, which carries #1482. The
+  launch reads it from git; any further package commit before the launch is refused (rc 31) until an amendment lists it.
 - **The tripwire** also requires #1482's fix: `_HybridTier.forward` takes `residual=`, and
   `hot_residency._state_forward` exists.
 - **`staged.sha256`** is re-pinned for the runner.

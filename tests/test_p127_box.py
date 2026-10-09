@@ -300,7 +300,7 @@ def test_the_runner_runs_the_registered_arms_on_the_registered_stacks():
 def test_the_audit_allows_exactly_the_registered_commits():
     prereg = (LANE / "PREREG-p127.md").read_text(encoding="utf-8")
     for short in ("ce3dfb54", "1ddcb0ae", "8ea97296", "2384d2c3", "058f98eb", "f5398962", "abe7d772", "14b1f23", "e21a712", "7d4163b", "18f5bda", "f69adcc",
-                  "d0a2e56", "b64a39b", "d769d502"):
+                  "d0a2e56", "b64a39b", "d769d502", "508cdd03", "d14bcb10"):
         assert short in prereg, f"{short} is not in the PREREG's audit table"
         assert re.search(short + r"[0-9a-f]{%d}" % (40 - len(short)), RUN), f"{short} is not a full SHA in the runner"
 
@@ -314,3 +314,8 @@ def test_amendment_1_requires_the_1482_fix_and_lists_it():
     assert 'hasattr(_hr, "_state_forward")' in RUN
     e4b_p127 = re.search(r'^E4B_P127="([^"]+)"', RUN, re.M).group(1).split()
     assert len(e4b_p127) == 4, "Phase 1, #1472, #1477 and #1482"
+    assert e4b_p127[-1] == "508cdd032b03c321d88479feabc175d3f0804bbd" and "`508cdd03` (#1482)" in prereg
+    e4b_inert = re.search(r'^E4B_INERT="([^"]+)"', RUN, re.M).group(1).split()
+    assert e4b_inert[-1] == "d14bcb10eac9c18d4c15c40af400873a0d37bd17" and "`d14bcb10` (#1465)" in prereg, \
+        "#1465 changes engines/train_qkv_fuse.py (training only); unlisted, the audit refuses the launch"
+    assert "__" not in " ".join(e4b_p127 + e4b_inert) and "__E4B" not in prereg
