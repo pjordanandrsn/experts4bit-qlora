@@ -17,8 +17,8 @@ handoff = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(handoff)
 
 
-def setup(tmp_path, *, hook=False, body=None, shim_body=None):
-    payload, python, site, tool, hook_marker, import_marker = fixtures.setup(tmp_path)
+def setup(tmp_path, *, hook=False, body=None, shim_body=None, copies=False):
+    payload, python, site, tool, hook_marker, import_marker = fixtures.setup(tmp_path, copies=copies)
     for name in ("ra_handoff.py", "startup-execution-proposal.json"):
         shutil.copyfile(ROOT / "bench/ra" / name, tool / name)
     if body is not None:
@@ -72,13 +72,15 @@ def run(tmp_path, manifest, python, tool, *, env=None, flags=("-I", "-S", "-B"),
 
 
 @pytest.mark.parametrize("hook", [False, True])
-def test_payload_then_native_site_then_imports(tmp_path, hook):
-    manifest, python, site, tool, hook_marker, import_marker = setup(tmp_path, hook=hook)
+@pytest.mark.parametrize("copies", [False, True])
+def test_payload_then_native_site_then_imports(tmp_path, hook, copies):
+    manifest, python, site, tool, hook_marker, import_marker = setup(tmp_path, hook=hook, copies=copies)
     result = run(tmp_path, manifest, python, tool)
     assert result.returncode == 0, result.stderr
     receipt = json.loads((tmp_path / "result.json").read_text())
     assert receipt["status"] == "PASSED" and receipt["phase"] == "COMPLETE"
     assert receipt["payload"]["startup_activated"] is False
+    assert receipt["payload"]["copied_executable"] is copies
     assert receipt["startup_activated"] and receipt["proves_requested_release_imports"]
     assert len(receipt["startup_hooks"]) == hook
     assert all(n == 2 for n in receipt["startup_hooks"].values())
@@ -159,6 +161,7 @@ def test_refusals_before_release_import(tmp_path, mutation):
     "from pathlib import Path\nPath(__file__).write_text('CHANGED=1')\n",
     "from pathlib import Path\nPath(__file__).with_name('extra.py').touch()\n",
     "raise RuntimeError('import failed')\n",
+    "import sys\nsys._base_executable='/foreign/python'\n",
 ])
 def test_post_import_changes_preserve_failed_payload_receipt(tmp_path, body):
     manifest, python, site, tool, hook_marker, import_marker = setup(tmp_path, body=body)

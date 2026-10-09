@@ -101,6 +101,7 @@ def run(manifest, progress):
             manifest["schema"] == 1, "handoff manifest fields/schema")
     payload = manifest["payload"]
     prefix, sites, config, real, executable_hash = pre.layout(payload, helper)
+    base = Path(sys._base_executable).resolve(strict=True)
     # No wheel code may already be loaded in this fresh no-site interpreter.
     require(not any(getattr(m, "__file__", None) and any(Path(m.__file__).absolute().is_relative_to(p)
                     for p in sites) for m in sys.modules.values()), "handoff preloaded site code")
@@ -188,6 +189,8 @@ def run(manifest, progress):
     for path, value in input_hashes.items():
         require(helper.digest(path) == value, "handoff inputs changed")
     require(Path(sys.executable).resolve() == real and helper.digest(real) == executable_hash, "handoff interpreter changed")
+    require(Path(sys._base_executable).resolve() == base and
+            helper.digest(base) == verified["base_executable_sha256"], "handoff base interpreter changed")
     for package in packages:
         require(helper.digest(Path(package["path"])) == package["wheel_sha256"], "handoff archive changed")
     progress.update(status="PASSED", phase="COMPLETE", imports=imports, startup_activated=True,

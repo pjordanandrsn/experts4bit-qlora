@@ -18,6 +18,8 @@ Requested modules are selected against wheel owners before import. Afterwards
 all loaded module origins, path/finder order, environment, retained archives,
 installed files and bootstrap inputs are checked again. Failed receipts retain
 the phase and any completed payload evidence. Output paths must be fresh.
+Both the selected and CPython base executable identities must still match
+the pre-startup image binding after imports, for copied and symlinked venvs.
 
 The execution policy is a **proposal**, not approval or launch authority.
 The original audit registry stays `PROPOSED_AUDIT_ONLY`; the original full
