@@ -3,6 +3,7 @@
 
 - Off by default: with the knob unset ``enable_fast_train``'s hook does nothing.
 - Refusals keep today's path, with the reason recorded.
+- A released projection called on its own raises a clear ``RuntimeError`` naming the fusion.
 - On CUDA with bitsandbytes NF4 bases (the last two with fp32 and with bf16 adapters, the dtypes training runs):
   - the fused dequantize is bit for bit the three dequantized weights stacked;
   - the fused projection is within TC1's rounding bar of the three ``LoRALinear`` modules on outputs, the input gradient and every
@@ -97,6 +98,15 @@ def test_other_attention_classes_untouched():
     assert tq.enable_train_fuse_qkv(m) == 0 and not hasattr(m.attn, "qkv_proj")
 
 
+def test_a_released_projection_raises_a_clear_error():
+    m = LoRALinear(nn.Linear(16, 8, bias=False), 4, 4, torch.float32)
+    tq._release_base(m, "model.layers.0.self_attn.q_proj")
+    assert m.base is None and m._e4b_fused_into_qkv
+    assert [n for n, _ in m.named_parameters()] == ["lora_A", "lora_B"]
+    with pytest.raises(RuntimeError, match=r"model\.layers\.0\.self_attn\.q_proj was fused .* E4B_TRAIN_FUSE_QKV=1"):
+        m(torch.randn(2, 16))
+
+
 # --- CUDA: NF4 bases ---
 
 needs_nf4 = pytest.mark.skipif(not CUDA, reason="bitsandbytes NF4 Linear4bit needs CUDA here")
@@ -169,6 +179,8 @@ def test_patched_attention_within_reorder_bar_and_adapters_stay_params(adapter_d
     assert tq.enable_train_fuse_qkv(holder) == 1 and tq.TRAIN_QKV_STATS["refused"] == {}
     assert {n: id(p) for n, p in holder.named_parameters() if "lora" in n} == names
     assert all(getattr(attn, n).base is None for n in ("q_proj", "k_proj", "v_proj"))
+    with pytest.raises(RuntimeError, match="E4B_TRAIN_FUSE_QKV"):
+        attn.k_proj(torch.randn(1, 3, cfg.hidden_size, device="cuda").to(torch.bfloat16))
     torch.manual_seed(9)
     x = torch.randn(1, 7, cfg.hidden_size, device="cuda").to(torch.bfloat16)
     rot = qmod.Qwen3MoeRotaryEmbedding(cfg).cuda()

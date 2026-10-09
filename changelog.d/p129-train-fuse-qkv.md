@@ -9,6 +9,9 @@ Each eligible attention module's q, k and v (`LoRALinear` around bitsandbytes NF
 The adapters stay the parameters, under their own names. Anything that does not match is refused and keeps today's path
 (`TRAIN_QKV_STATS["refused"]` says why). It is off by default: unset, `enable_fast_train` runs today's attention. Serving is not changed.
 
+Memory: the q/k/v NF4 bases are released, and the expanded fp32 absmax adds about 3 bytes per 64-element block (roughly 24 MB on
+Qwen3-30B-A3B). A released projection called on its own raises a `RuntimeError` naming the fusion, not a `TypeError` on `None`.
+
 P129 Phase 1, on an RTX A2000 with a two-layer Qwen3-MoE at Qwen3-30B-A3B's layer dimensions:
 - 110 fewer kernel launches and 12 % fewer Python calls per training step;
 - the projection within TC1's rounding bar;
