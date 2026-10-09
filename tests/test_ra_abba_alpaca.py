@@ -291,7 +291,7 @@ def test_complete_probe_budget_and_input_protection(sourced, tmp_path, monkeypat
 def test_explicit_fixed_inventory_adds_only_alpaca(tmp_path, mutation):
     import test_ra_verified_worker as f
 
-    assert len(f.worker.TOOLS) == 35 and "ra_alpaca.py" in f.worker.TOOLS
+    assert len(f.worker.TOOLS) == 36 and "ra_alpaca.py" in f.worker.TOOLS
     manifest, job, python, tool, _ = f.setup(tmp_path)
     if mutation == "missing":
         del job["tools"]["ra_alpaca.py"]
