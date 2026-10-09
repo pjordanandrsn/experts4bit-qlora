@@ -146,10 +146,11 @@ FUSION_DEFAULT_FAMILIES = {
 }
 # the read each other known family lacks or failed, named in the warning an explicit ``auto`` logs on it
 FUSION_UNLICENSED = {
-    "gpt_oss": "P115 Phase C: SANE argmax agreement 0.924 < 0.95 (#1342)",
-    "qwen3_5_moe": ("no SANE read at T == 1 at reading size (P115 Phase C's was at T == 12, #1342); "
-                    "lane FAM reads it (#1362)"),
-    "granitemoe": "no SANE read at T == 1 at reading size; lane FAM reads it (#1362)",
+    "gpt_oss": ("lane FAM at T == 1: every knob FAILs the 0.90 agreement backstop, which the family's own neutral floor "
+                "misses too; Phase C's 0.924 lies inside that floor (#1362)"),
+    "qwen3_5_moe": ("lane FAM at T == 1: quality PASS (#1362); the default waits for FAM Amendment 4's speed read of the "
+                    "router epilogue, the only knob that engages"),
+    "granitemoe": "lane FAM at T == 1: ON_auto FAILs one gated entry of 12 (#1362)",
 }
 FUSION_UNSET = "default"          # from_env's value for an unset knob, resolved per family by resolve_fusion_modes
 _FUSION_WARNED: set = set()

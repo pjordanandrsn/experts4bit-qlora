@@ -27,6 +27,8 @@ SOURCES = {
     "fam_run.sh": LANE / "fam_run.sh",
     "fam_box.py": LANE / "fam_box.py",
     "fam_reduce.py": LANE / "fam_reduce.py",
+    "fam_speed.py": LANE / "fam_speed.py",
+    "fam_speed_reduce.py": LANE / "fam_speed_reduce.py",
     "p115_quality.py": REPO / "bench" / "p115" / "p115_quality.py",
     "p110_box.py": REPO / "bench" / "p110" / "p110_box.py",
     "p108_box.py": REPO / "bench" / "p108" / "p108_box.py",
@@ -87,7 +89,9 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 def test_the_self_tests_pass():
     base = {"PATH": "/usr/bin:/bin", **{k: os.environ[k] for k in ("SYSTEMROOT",) if k in os.environ}}
     for script, want in (("fam_reduce.py", "fam_reduce self-test OK (50/50 cases)"),
-                         ("fam_box.py", "fam_box self-test OK (28/28 cases)")):
+                         ("fam_box.py", "fam_box self-test OK (28/28 cases)"),
+                         ("fam_speed.py", "fam_speed self-test OK (9/9 cases)"),
+                         ("fam_speed_reduce.py", "fam_speed_reduce self-test OK (30/30 cases)")):
         out = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True, env=base)
         assert out.returncode == 0 and want in out.stdout, out.stdout + out.stderr
     assert "self-tested on 42 cases" in PREREG and "self-test now runs 45 cases" in PREREG     # Amendment 1
@@ -160,7 +164,7 @@ def test_the_order_puts_every_refusal_before_the_fetch():
     assert at == sorted(at), list(zip(order, at))
     assert 'TAGS="$FAMILY"' in RUN and 'TAGS="granite"' in RUN, "Amendment 1: one family per box; the proof is Granite's"
     assert 'PF="--families $TAGS"' in RUN, "the box reduces its own family"
-    assert "for v in FAM_PROVE FAM_FAMILY; do" in DRIVE and 'a reading names its family (FAM_FAMILY)' in DRIVE
+    assert "for v in FAM_PROVE FAM_FAMILY FAM_SPEED; do" in DRIVE and 'a reading names its family (FAM_FAMILY)' in DRIVE
     trip = RUN[RUN.index("python - <<'PYT'"):RUN.index("PYT\ncat versions.txt")]
     assert 'md.version("grouped-nf4-gemm") == "0.43.0"' in trip and 'transformers.__version__ == "5.17.0"' in trip
     assert '"n_split" in inspect.signature(fp8_paged_attn.fp8_paged_decode_attention).parameters' in trip
@@ -188,4 +192,37 @@ def test_every_time_left_check_fits_inside_its_guard():
                "| Qwen3.6 | 4.0 h | fetch 2400 s, bake 900 s, OFF 9500 / 10800 s, each ON 1600 / 2700 s |",
                "| the proof | 1.25 h | fetch 300 s, bake 300 s, OFF 1800 / 2400 s, each ON 400 / 900 s |",
                "**lane ceiling $18.00**"):
+        assert s_ in amend, s_
+
+
+def test_the_speed_read_is_amendment_4_s():
+    """Amendment 4: FAM_SPEED=1 is Qwen3.6's alone; the box's knobs, the rule's bars, the guards (reading 1.5 h, proof
+    1.0 h) and the order -- the self-tests before the premise, the speed process after the bake, its own reducer -- are
+    the registration's."""
+    sp, red = _load("fam_speed"), _load("fam_speed_reduce")
+    assert sp.KNOBS == {"E4B_PAGED_FUSE_QKV": "0", "E4B_FUSE_T1_GLUE": "0", "E4B_FUSE_T1_GLUE_R2": "0",
+                        "E4B_FUSE_ROUTER_EPI": "1"}
+    assert ("E4B_PAGED_FUSE_QKV=0 E4B_FUSE_T1_GLUE=0 E4B_FUSE_T1_GLUE_R2=0 E4B_FUSE_ROUTER_EPI=1 \\\n"
+            "      E4B_PAGED_GRAPHS=0 E4B_PAGED_MAX_SEQS=2") in RUN
+    assert (red.FAST, red.SLOW, red.NOISE, red.CENSUS, red.ROUTERS) == (0.98, 1.02, 0.015, [0, 0, [0, 0], 40], 40)
+    assert (sp.WARM, sp.STEPS, sp.BUSY, sp.PROOF_STEPS, sp.SLOT, sp.KV_BATCH) == (5, 256, 32, 32, {"OFF": 0, "ON": 1}, 2)
+    assert 'SPEED_STEPS=256; [ "$PROVE" = 1 ] && SPEED_STEPS=32' in RUN
+    assert "refusing: the speed read is Qwen3.6's" in RUN and "refusing: FAM_SPEED=1 is Qwen3.6's" in DRIVE
+    line = re.search(r'TAGS="qw36"; CONT_DEF=128; (.*)', RUN).group(1)
+    vals = dict(re.findall(r"(NEED_\w+|CAP_\w+)=(\d+)", line))
+    assert set(vals) == {"NEED_FETCH", "NEED_BAKE", "NEED_SPEED", "CAP_SPEED"} and int(vals["CAP_SPEED"]) >= int(vals["NEED_SPEED"])
+    for hours in (1.5, 1.0):                                    # the reading, the proof
+        for k, v in vals.items():
+            if k.startswith("NEED_"):
+                assert int(v) + 600 <= hours * 3600, (hours, k, v)
+    order = ["fam_box.py --self-test", "fam_speed.py --self-test", "fam_speed_reduce.py --self-test",
+             "python -m pytest " + " ".join(PREMISE), "python $W/p98_bake.py", "python $W/fam_speed.py --out",
+             "box $M OFF default", "python $W/fam_speed_reduce.py --rec", "python $W/fam_reduce.py --dir $W"]
+    at = [RUN.index(x) for x in order]
+    assert at == sorted(at), list(zip(order, at))
+    amend = PREREG[PREREG.index("## Amendment 4"):]
+    for s_ in ("| the reading | 1.5 h | fetch 2400 s, bake 900 s, speed 1200 / 1800 s |",
+               "| the proof | 1.0 h | fetch 2400 s, bake 900 s, speed 1200 / 1800 s |",
+               "both ratios ≤ **0.98**", "both ≥ **1.02**", "more than **1.5 %**",
+               "speed reducer's self-test runs 30 cases", "speed box's self-test runs 9 cases"):
         assert s_ in amend, s_

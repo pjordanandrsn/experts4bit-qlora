@@ -59,7 +59,8 @@ def test_the_allowlist_is_the_families_with_a_sane_read_at_t1():
     unlicensed = serve_paged.FUSION_UNLICENSED
     assert not set(unlicensed) & set(FUSION_DEFAULT_FAMILIES)
     assert "0.924" in unlicensed["gpt_oss"]
-    assert all("#1362" in unlicensed[f] and "T == 1" in unlicensed[f] for f in ("qwen3_5_moe", "granitemoe"))
+    assert all("lane FAM" in unlicensed[f] and "#1362" in unlicensed[f] and "T == 1" in unlicensed[f]
+               for f in ("gpt_oss", "qwen3_5_moe", "granitemoe"))
 
 
 def test_unset_knobs_come_from_env_as_default(monkeypatch):
@@ -99,7 +100,7 @@ def test_explicit_auto_off_the_list_warns_once_naming_the_failed_read(monkeypatc
     resolved, _ = resolve_fusion_modes(dict(modes), "gpt_oss")
     assert resolved == modes                               # structural: it still engages where the structure matches
     out = capsys.readouterr().out
-    assert "WARNING" in out and "gpt_oss" in out and "0.924 < 0.95" in out and "#1342" in out
+    assert "WARNING" in out and "gpt_oss" in out and "lane FAM" in out and "0.924" in out and "#1362" in out
     resolve_fusion_modes(dict(modes), "gpt_oss")
     assert capsys.readouterr().out == ""                   # once per family per process
     resolve_fusion_modes(dict(modes), "olmoe")
