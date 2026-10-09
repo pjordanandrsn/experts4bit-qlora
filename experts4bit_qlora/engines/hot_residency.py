@@ -1127,6 +1127,30 @@ def _kernel_tensor(t) -> bool:
 
 
 _COMBINE_RESIDUAL_SUPPORT: dict = {}
+_STATE_RESIDUAL_SUPPORT: dict = {}
+
+
+def _state_takes_residual(cls) -> bool:
+    """Whether a residency state class's ``forward`` takes ``residual=``. Read once per class."""
+    if cls not in _STATE_RESIDUAL_SUPPORT:
+        import inspect
+        try:
+            _STATE_RESIDUAL_SUPPORT[cls] = "residual" in inspect.signature(cls.forward).parameters
+        except (TypeError, ValueError):
+            _STATE_RESIDUAL_SUPPORT[cls] = False
+    return _STATE_RESIDUAL_SUPPORT[cls]
+
+
+def _state_forward(st, hidden, top_k_index, top_k_weights, residual):
+    """``st.forward`` with the decoder layer's residual (lane P127's item c). With no residual, no ``residual=`` keyword
+    at all, so a state class that overrides ``forward`` without it still runs: p127-prove-1 found hybrid's
+    ``_HybridTier`` raising a TypeError on every MoE call of the served all-resident build. The keyword goes where the
+    class takes it; otherwise the residual is the layer's own add."""
+    if residual is None:
+        return st.forward(hidden, top_k_index, top_k_weights)
+    if _state_takes_residual(type(st)):
+        return st.forward(hidden, top_k_index, top_k_weights, residual=residual)
+    return st.forward(hidden, top_k_index, top_k_weights) + residual
 
 
 def _combine_takes_residual(ck) -> bool:
@@ -1385,8 +1409,10 @@ class _HotResidency:
             return self._forward_collapsed(x, flat, top_k_weights, T, k,
                                            H, dev, input_dev, input_dtype, residual=residual)
         if residual is not None:
-            # only the collapse folds the residual into its combine; every other path adds it as the layer does
-            return self.forward(hidden_states, top_k_index, top_k_weights) + residual
+            # only the collapse folds the residual into its combine; every other path adds it as the layer does. The
+            # base forward by name, never self.forward: a subclass override (hybrid's prefetch submit and amortization
+            # count) has already run once for this call
+            return _HotResidency.forward(self, hidden_states, top_k_index, top_k_weights) + residual
         if self.dispatch_diet:
             return self._forward_diet(x, flat, top_k_weights, T, k, H, dev,
                                       input_dev, input_dtype)
@@ -1820,7 +1846,7 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
             )):
                 out = _m._e4b_hot_ref(hidden, top_k_index, top_k_weights)
                 return out if residual is None else out + residual
-            return st.forward(hidden, top_k_index, top_k_weights, residual=residual)
+            return _state_forward(st, hidden, top_k_index, top_k_weights, residual)
 
         _fwd._e4b_takes_residual = True
         mod.forward = _fwd

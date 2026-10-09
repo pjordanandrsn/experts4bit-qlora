@@ -340,6 +340,7 @@ def license_moe_residual(model, rows, mode: str | None = None, report: dict | No
         return 0
     gen = torch.Generator(device="cpu").manual_seed(0x5127)
     full = partial = refused = 0
+    errors = []
     for mod in model.modules():
         if not _residual_candidate(mod):
             continue
@@ -350,9 +351,13 @@ def license_moe_residual(model, rows, mode: str | None = None, report: dict | No
             for t in rows:
                 h = torch.randn(1, t, width, generator=gen).to(device=dev, dtype=torch.bfloat16)
                 r = (torch.randn(1, t, width, generator=gen) * 4).to(device=dev, dtype=torch.bfloat16)
-                want = mod.mlp(h)
-                want = r + (want[0] if isinstance(want, tuple) else want)
-                got = _moe_with_residual(mod.mlp, h, r, width)
+                try:
+                    want = mod.mlp(h)
+                    want = r + (want[0] if isinstance(want, tuple) else want)
+                    got = _moe_with_residual(mod.mlp, h, r, width)
+                except Exception as e:  # noqa: BLE001 -- a probe that raises refuses the licence; it never stops a build
+                    errors.append(f"{type(mod).__name__} at {t} rows: {type(e).__name__}: {e}"[:240])
+                    break
                 if got.dtype == want.dtype and got.shape == want.shape and torch.equal(got, want):
                     ok.append(t)
         if ok:
@@ -362,7 +367,7 @@ def license_moe_residual(model, rows, mode: str | None = None, report: dict | No
         full += len(ok) == len(rows)
         partial += 0 < len(ok) < len(rows)
         refused += not ok
-    _note(report, licensed=full, partial=partial, refused=refused)
+    _note(report, licensed=full, partial=partial, refused=refused, probe_errors=errors[:8])
     if mode == "1" and full == 0:
         raise RuntimeError(
             "E4B_FUSE_T1_GLUE_R2=1: no folded layer's MoE residual composition was bitwise its own body at every "
