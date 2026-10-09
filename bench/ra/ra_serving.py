@@ -66,7 +66,7 @@ def glue_census(info):
             "router_epilogue": info["fuse_router_epilogue_n"]}
 
 
-def build_instrumented(server, instrument, cfg, *, routes=None, listener=None):
+def build_instrumented(server, instrument, cfg, *, routes=None, listener=None, builder=None):
     """Install kernel counters before folds bind them; QKV hooks before capture."""
     counters = instrument.KernelCounters().install()
     forwards = []
@@ -96,7 +96,7 @@ def build_instrumented(server, instrument, cfg, *, routes=None, listener=None):
 
     server._apply_fusions = folds
     try:
-        parts = server.build_engine(cfg)
+        parts = (builder or server.build_engine)(cfg)
     finally:
         server._apply_fusions = original
     if len(forwards) != 1:
