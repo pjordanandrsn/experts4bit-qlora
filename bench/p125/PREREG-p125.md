@@ -304,3 +304,41 @@ The bound was 0.0075, and every arm FAILed. The instrument orders them calibrate
   reported again from the reading.
 
 **Re-pinned before any further box:** `p125_run.sh` (the tripwire's fix check) in `staged-p125.sha256`.
+
+## Amendment 2 (2026-10-09, after `p125-prove-2`; the gate record keeps the box's own count; before `p125-prove-3`)
+
+**What happened.** `p125-prove-2` VOIDed (rc 27, $0.295; adertha-receipts `8e86a2fd`; the maintainer re-derived it
+byte-identical). All 15 reasons were one fault in my box:
+- `quality_main` built each gate record as `{text, group, windows: n, routes, dispatch, **r}`;
+- `measure_phase`'s result `r` carries a `windows` of its own, `{text: count}`, which, merged last, overwrote the count.
+
+The reducer's fakes never carried `measure_phase`'s merged keys. This is P115 Phase D's Amendment 4 lesson again: fakes
+must match the records the box really writes.
+
+**The records were otherwise complete.** Re-reduced with the count restored, the proof read READ:
+- **#1426 works:** C1 and C2 built and served on the graph server.
+- **The calibration is deterministic:** B1 = B2 = quality B, C1 = C2 = quality C, and C's attention bytes equal B's.
+- **The mutants:** RTN FAILS `t1`, as predicted, and K FAILS every gate.
+- **Every route count is exact, and there is no slot cost.**
+- **The gate numbers reproduced IDENTICALLY on two boxes** (`p125-prove-1` and `p125-prove-2`). **The proof's READ
+  counts only from `p125-prove-3`.**
+
+**The calibration time is host-dependent:**
+- about **49 s** a build on `p125-prove-1`'s host;
+- **22–25 s** on `p125-prove-2`'s (B 22.4 s, C 24.7 s over A's build).
+
+The reading keeps its **3.0 h guard** (Amendment 1).
+
+**The amendment (the maintainer's ACK, bus 2026-10-09T03:42Z), box only, no rule change:**
+- **`gate_record(text, group, n, routes, dispatch, measured)`:** `measure_phase`'s result with the box's own keys ON
+  TOP. `quality_main` builds every gate through it.
+- **The reducer's `fake_quality`** carries `measure_phase`'s merged keys under the box's.
+- **A new pin test** composes a gate record from `measure_phase`'s **real return keys**, read from its source. It
+  asserts the box's count wins and the fake carries the same keys. Mutation-checked: the old merge order fails it.
+
+**Also in the launch commit:** #1429 (`E4B_ATTN_INT4_WIDE` defaults to `auto`). At grouped-nf4-gemm 0.43.0, whose
+`gemm_int4_b32_smallm` has no `block_m=`, `auto` keeps the cached bf16 copy above 16 rows and says so in one line. The
+gates' paths (1, 16 and 512 rows) are unchanged.
+
+**Re-pinned before `p125-prove-3`:** `p125_box.py` and `p125_reduce.py`. Every gate, bound, window count, prediction,
+arm and rung is unchanged.
