@@ -8,8 +8,10 @@ projections are real ``Int4Linear`` modules, so :class:`Route` runs through the 
 piece to its bucket and calls every projection on exactly the bucket's rows, eagerly or at capture and replay. Checks:
 - each arm sets the route before its captures, profile or pass, and the modules are restored afterwards;
 - the route counts are the ones the reducer registers (decode calls by bucket; prefill rows above 64);
-- ``mutant_wide`` moves only the wide calls; the served arms replay one piece per step and record every token, the
-  traced steps and the memory; the reducer reads the record (only the step counts lowered) without VOID.
+- ``mutant_wide`` moves only the wide calls; each served block (Amendment 1) holds one runner per setting, captured
+  under its setting, and decodes them in strict alternation in the block's order; every runner replays one piece per
+  step and records every token and its traced steps, each block its memory and its GPU log; the reducer reads the
+  record (only the step counts lowered) without VOID.
 Speeds and quality are read on the rental.
 """
 import importlib.util
@@ -64,7 +66,7 @@ def _x(tok, K):
 
 class _Runner:
     """``PagedModelRunner``'s surface the arms drive: a padded step of bucket b runs every projection on b rows."""
-    made = []
+    made, log = [], []
 
     def __init__(self, model, kv=None, device="cpu", bulk_kv=False, **_):
         from experts4bit_qlora.engines.int4_attn import Int4Linear
@@ -104,6 +106,7 @@ class _Runner:
 
     def run_decode(self, rids):
         from experts4bit_qlora.engines.paged_runner import bucket_for, chunk_rows
+        _Runner.log.append(self)
         got, self.scores = {}, {}
         for piece in chunk_rows(rids, self.buckets[-1]):
             b = bucket_for(len(piece), self.buckets)
@@ -210,24 +213,29 @@ def run(tmp_path_factory):
             return {**m, "max_allocated_mib": 100.0 + m["wide_workspace_mib"], "max_reserved_mib": 200.0}
         mp.setattr(box, "_busy", busy)
         mp.setattr(box, "_mem", mem)
+        mp.setattr(box._Clock, "PERIOD", 0.01)
+        mp.setattr(box.subprocess, "run", lambda *a, **k: types.SimpleNamespace(
+            returncode=0, stdout="2797, 14001, 512.3, 61, P1\n"))         # nvidia-smi, stood in
         _Runner.made.clear()
+        _Runner.log.clear()
         g = torch.Generator().manual_seed(1)
         ws = [torch.randint(0, V, (P + C,), generator=g).tolist() for _ in range(ROWS)]
         rec = box.measure(model, ws, prompt=P, cont=C, device="cpu", rows=ROWS, steps=STEPS, bulk_kv=True,
                           trace_dir=str(tmp_path_factory.mktemp("trace")))
         lins = box.int4_linears(model)
         after = [(m._wide, "forward" in m.__dict__, "_bf16_weight" in m.__dict__) for m in lins]
-        made = list(_Runner.made)
+        made, log = list(_Runner.made), list(_Runner.log)
     finally:
         mp.undo()
-    return box, rec, after, traced, made
+    return box, rec, after, traced, made, log
 
 
 def test_each_arm_sets_the_route_before_it_runs_and_the_modules_are_restored(run):
-    box, rec, after, _t, made = run
+    box, rec, after, _t, made, _log = run
     assert after == [(True, False, False)] * 4                       # built with wide=True; no wrapper left behind
     served = [m for m in made if getattr(m, "capture", False) and hasattr(m, "bulk_kv") and m.bulk_kv]
-    assert [all(m.wide_at_capture) for m in served] == [False, True, True, False] * 2    # ABBA at 64, then at 32
+    assert [all(m.wide_at_capture) for m in served] == [False, True, True, False] * 2    # blocks a, b at 64, then 32
+    assert not any(any(m.wide_at_capture) for m in served if not all(m.wide_at_capture))   # each captured whole
     assert all(getattr(m, "disabled", False) for m in served)
     assert [rec["profile"][k]["wide"] for k in ("off64", "on64", "off32", "on32")] == [False, True, False, True]
     assert [rec["quality"]["engagement"][a]["wide"] for a in box.QUALITY] == \
@@ -247,9 +255,10 @@ def test_the_route_counts_are_the_registered_ones(run):
         assert r[f"bf16:{P}"] == ROWS * 4, arm                          # the prefill: one 80-row forward per window
     on, off = rec["profile"]["on64"]["route"], rec["profile"]["off64"]["route"]
     assert on["wide:64"] == off["bf16:64"] == (3 + 8) * 4 and "bf16:64" not in on and "wide:64" not in off
-    cap = rec["served"]["64"]["ON_a"]["capture_route"]
-    assert cap["wide:64"] == cap["wide:32"] == 3 * 4 and cap["k16:16"] == 3 * 4 and cap["gemv:1"] == 3 * 4
-    assert "bf16:64" not in cap and "wide:64" not in rec["served"]["64"]["OFF_a"]["capture_route"]
+    for b in box.BLOCKS:
+        cap = rec["served"]["64"][b]["arms"]["ON"]["capture_route"]
+        assert cap["wide:64"] == cap["wide:32"] == 3 * 4 and cap["k16:16"] == 3 * 4 and cap["gemv:1"] == 3 * 4
+        assert "bf16:64" not in cap and "wide:64" not in rec["served"]["64"][b]["arms"]["OFF"]["capture_route"]
 
 
 def test_mutant_wide_moves_only_the_wide_calls(monkeypatch):
@@ -269,19 +278,28 @@ def test_mutant_wide_moves_only_the_wide_calls(monkeypatch):
     assert r.counts == {"bf16:40": 1} and m._wide is True and "forward" not in m.__dict__
 
 
-def test_the_served_arms_replay_one_piece_per_step_and_record_tokens_trace_and_memory(run):
-    box, rec, _a, traced, _m = run
+def test_the_served_blocks_interleave_and_record_tokens_trace_memory_and_clock(run):
+    box, rec, _a, traced, made, log = run
     n = box.WARM + STEPS + BUSY
     for d, rows in (("64", ROWS), ("32", 32)):
-        for label in box.SERVED:
-            s = rec["served"][d][label]
-            assert s["graph_stats"][d] == {"replays": n, "eager_steps": 0, "rows": rows * n, "pad_rows": (int(d) - rows) * n}
-            assert all(v["replays"] == 0 for b, v in s["graph_stats"].items() if b != d)
-            assert len(s["step_ms"]) == STEPS and len(s["tokens"]) == n and all(len(t) == rows for t in s["tokens"])
-            assert len(s["busy"]) == BUSY and s["memory"]["max_allocated_mib"] > 0
+        for b in box.BLOCKS:
+            blk = rec["served"][d][b]
+            assert blk["order"] == (["OFF", "ON"] if b == "a" else ["ON", "OFF"])
+            assert blk["memory"]["max_allocated_mib"] > 0 and blk["memory"]["wide_workspace_mib"] > 0
+            assert blk["clock"] and all(r[1:] == ["2797", "14001", "512.3", "61", "P1"] for r in blk["clock"])
+            for st in box.SETTINGS:
+                s = blk["arms"][st]
+                assert s["wide"] is (st == "ON")
+                assert s["graph_stats"][d] == {"replays": n, "eager_steps": 0, "rows": rows * n,
+                                               "pad_rows": (int(d) - rows) * n}
+                assert all(v["replays"] == 0 for k, v in s["graph_stats"].items() if k != d)
+                assert len(s["step_ms"]) == STEPS and len(s["tokens"]) == n and all(len(t) == rows for t in s["tokens"])
+                assert len(s["busy"]) == BUSY
     assert sorted(traced.values()) == [BUSY] * 8
-    on, off = rec["served"]["64"]["ON_a"]["memory"], rec["served"]["64"]["OFF_a"]["memory"]
-    assert on["wide_workspace_mib"] > 0 and on["max_allocated_mib"] > off["max_allocated_mib"] - 1
+    served = [m for m in made if getattr(m, "capture", False) and m.bulk_kv]
+    for first, second in zip(served[0::2], served[1::2]):           # each block's two runners, in creation order
+        calls = [m for m in log if m is first or m is second]
+        assert calls == [first, second] * n, "the block's runners must alternate step by step in lockstep"
 
 
 def test_the_busy_fraction_reads_the_trace_events(tmp_path):
@@ -308,7 +326,8 @@ def test_the_reducer_reads_the_record_with_only_the_step_counts_lowered(run, mon
     q = v["tables"]["quality"]
     assert q["passes"]["ON64"] and q["passes"]["ON32"] and not q["passes"]["mutant_wide"] and not q["passes"]["mutant_scale"]
     assert q["rep_identical"] is True and q["function"]["differ"] == 0
-    assert box.SERVED == red.SERVED and box.WARM == red.WARM and box.QUALITY == red.QUALITY
+    assert box.BLOCKS == red.BLOCKS and box.SETTINGS == red.SETTINGS and box.WARM == red.WARM
+    assert box.QUALITY == red.QUALITY
     assert tuple(box.B64) == red.B64 and tuple(box.B32) == red.B32 and box.DEPTHS == red.DEPTHS
     assert {a: tuple(k["buckets"]) for a, k in box.Q_KW.items()} == {a: tuple(b) for a, b in red.Q_BUCKETS.items()}
     assert {a: k["wide"] for a, k in box.Q_KW.items()} == red.Q_WIDE

@@ -87,7 +87,7 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 
 def test_the_reducer_self_tests_and_pins_its_constants():
     out = subprocess.run([sys.executable, str(LANE / "p124_reduce.py"), "--self-test"], capture_output=True, text=True)
-    assert out.returncode == 0 and "self-test OK (38 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "self-test OK (42 cases)" in out.stdout, out.stdout + out.stderr
     gnf4 = re.search(r'GNF4_SHA = "([0-9a-f]{40})"', REDUCE).group(1)
     assert f"GNF4_SHA={gnf4}" in RUN and gnf4 == GNF4
     for model, rev in re.findall(r'"([\w./-]+)": "([0-9a-f]{40})"', REDUCE):
@@ -98,7 +98,7 @@ def test_the_reducer_self_tests_and_pins_its_constants():
                   "BIAS_SLACK, SPREAD_FLOOR = 0.01, 0.005"):
         assert const in REDUCE, const
     prereg = (LANE / "PREREG-p124.md").read_text(encoding="utf-8")
-    for words in ("under **5 %**", "more than **1.5 %**", "at most **0.98**", "**256 timed steps**", "38 cases",
+    for words in ("under **5 %**", "more than **1.5 %**", "at most **0.98**", "**256 timed steps**", "42 cases",
                   "exactly 293 times (5 + 256 + 32)", "mean d_X ≤ B_floor + 0.01 nats", "2 × max(S_floor, 0.005)"):
         assert words in prereg, words
 
@@ -120,7 +120,7 @@ def _mods():
 
 def test_the_box_and_the_reducer_register_the_same_arms():
     box, red = _mods()
-    assert box.SERVED == red.SERVED == ("OFF_a", "ON_a", "ON_b", "OFF_b")
+    assert box.BLOCKS == red.BLOCKS == ("a", "b") and box.SETTINGS == red.SETTINGS == ("OFF", "ON")
     assert box.DEPTHS == red.DEPTHS == ("64", "32")
     assert box.QUALITY == red.QUALITY and box.FLOORS == red.FLOORS == ("half", "chunk")
     assert box.SUBJECTS == red.SUBJECTS == ("ON64", "ON32") and box.MUTANTS == red.MUTANTS
@@ -178,7 +178,8 @@ def test_the_subject_is_sc2es_int4_stack_built_eager_with_one_slot_and_the_route
     assert "$ENGINE_KNOBS $LEVERS\"" in RUN
     assert 'cfg.graphs or cfg.placement != "all-vram" or cfg.max_seqs != 1' in BOX and "model = parts.runner.model" in BOX
     assert "runner.enable_decode_graphs(B64, capture=True, verbose=False)" in BOX
-    assert "with Route(model, on) as route, p119_box._Grouped(), torch.no_grad():" in BOX and "bulk_kv=cfg.bulk_kv" in BOX
+    assert "with Route(model, st == \"ON\") as route:" in BOX and "bulk_kv=cfg.bulk_kv" in BOX
+    assert "for st in first:                             # strict alternation, one step of each per pair" in BOX
     assert "m._wide = self.wide" in BOX and '"attn_int4_wide_env": os.environ.get("E4B_ATTN_INT4_WIDE")' in BOX
     for flag in ('"--rows", type=int, default=64', '"--prompt", type=int, default=512', '"--cont", type=int, default=128',
                  '"--stride", type=int, default=3072'):

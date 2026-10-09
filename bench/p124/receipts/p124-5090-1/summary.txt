@@ -1,0 +1,35 @@
+KNOBS e4b=ee91522968f2560bb04c0eb2ede9dc7e8194f9f2 gnf4=4ed26d962ff03e664785c20413db3360a0f4d648 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 prove=0 windows=64 cont=128
+e4b 0.50.0 @ee91522968f2560bb04c0eb2ede9dc7e8194f9f2
+gnf4 0.43.0 @4ed26d962ff03e664785c20413db3360a0f4d648
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+p124_reduce self-test OK (38 cases)
+premise run rc=0: 7 passed in 10.76s
+premise k16 rc=0: 25 passed in 12.91s
+premise wide rc=0: 11 passed in 6.00s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+box rc=0 P124_BOX: d64 OFF_a 16.4124 ms | d64 ON_a 16.3989 ms | d64 ON_b 16.3441 ms | d64 OFF_b 16.9239 ms | d32 OFF_a 11.8108 ms | d32 ON_a 11.3941 ms | d32 ON_b 11.3968 ms | d32 OFF_b 11.8048 ms | int4 linears 96 | rep identical True | function {'positions': 8128, 'differ': 0} | load 192s | 535.9 s
+
+P124_ARM d64 OFF_a median 16.4124 ms at 56 s
+P124_ARM d64 ON_a median 16.3989 ms at 73 s
+P124_ARM d64 ON_b median 16.3441 ms at 91 s
+P124_ARM d64 OFF_b median 16.9239 ms at 108 s
+P124_ARM d32 OFF_a median 11.8108 ms at 132 s
+P124_ARM d32 ON_a median 11.3941 ms at 143 s
+P124_ARM d32 ON_b median 11.3968 ms at 155 s
+P124_ARM d32 OFF_b median 11.8048 ms at 166 s
+P124_QUALITY R done at 37 s
+P124_QUALITY rep done at 78 s
+P124_QUALITY half done at 124 s
+P124_QUALITY chunk done at 173 s
+P124_QUALITY ON64 done at 215 s
+P124_QUALITY ON32 done at 261 s
+P124_QUALITY mutant_scale done at 302 s
+P124_QUALITY mutant_wide done at 343 s
+P124_QUALITY G64on done at 369 s
+P124_VERDICT NOISY ["d64: OFF pair 0.0312, ON pair 0.0033 (bound 0.015)", "d32: OFF pair 0.0005, ON pair 0.0002 (bound 0.015)"]

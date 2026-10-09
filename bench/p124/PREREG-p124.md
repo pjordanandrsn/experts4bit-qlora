@@ -208,3 +208,61 @@ Fetched to the run directory's `p124/` and committed to `bench/p124/receipts/<ru
 - `SHA256SUMS`.
 
 `RESULTS-p124.md` is written from those files.
+
+## Amendment 1 (2026-10-09, after attempt 1 read NOISY, before attempt 2)
+
+Approved by the maintainer on the bus (2026-10-09T01:11Z). The registered consequence of NOISY is a rerun as an
+amendment. This one changes how the served arms are timed, and nothing else.
+
+**What attempt 1 (`p124-5090-1`) showed.** Its receipts are in `bench/p124/receipts/p124-5090-1/`, and RESULTS-p124.md
+has a section on it.
+- At 64 rows `OFF_b`'s median sat 3.1 % above `OFF_a`'s, so the rule read NOISY. The ON pair agreed within 0.33 %,
+  and every pair at 32 rows within 0.05 %.
+- The offset was a level shift of the whole arm: about +0.5 ms in both halves of `OFF_b`, and in its replay's device
+  time (16.96 against 16.43 ms). The within-arm drift (the second half 0.35–0.65 ms slower as the context grows) was the
+  same in every arm. A longer arm cannot remove a level shift, so this amendment interleaves the settings instead.
+
+**Nothing from attempt 1 decides anything.** Against `OFF_a` alone, attempt 1 reads 0.9992 at 64 rows and 0.965 at 32,
+so it is tempting to read DEFAULT_ON_32 from that box. The registered rule read NOISY; attempt 2 decides.
+
+**What changes: the served arms only.**
+- **Blocks.** At each depth there are two blocks. Each block has one runner per setting, both alive at once. Each
+  runner has its own pool, and its bucket graphs are captured under its setting. Both runners are prefilled.
+- **Strict alternation.** They then decode in strict alternation, step by step in lockstep: 5 warm, **256 timed** and
+  32 traced steps of each. Block `a` runs OFF first in every pair and block `b` ON first. The two steps of a pair share
+  the context length and the GPU's state. Each timed step is `run_decode`'s synchronised wall, as before.
+- **Ratios.** `ratio_a` is median(ON) / median(OFF) within block a, and `ratio_b` likewise within block b.
+  DEFAULT_ON, DEFAULT_ON_64, DEFAULT_ON_32, SLOWER and NO_GAIN read them as registered (both ≤ 0.98 at a depth).
+- **NOISY:** at either depth, `ratio_a` and `ratio_b` differ by more than 1.5 %.
+- **Nondeterministic (VOID):** a setting emits different tokens in blocks a and b.
+- **Structure (VOID):** a block missing or out of its order. Each runner is checked as each served arm was: every bucket
+  captured, its bucket replayed exactly 293 times, no eager step, no other bucket, and the step, token and traced-step
+  counts.
+- **Reported, never gated:**
+  - the median of each block's per-pair ON/OFF ratios;
+  - each block's GPU log: SM and memory clocks, power, temperature and performance state from `nvidia-smi` every 5 s;
+  - each block's peak memory, with both runners alive.
+- **Q9** is graded on the route's workspace (`wide_workspace_mib`), as the maintainer ruled after attempt 1. The
+  workspace is built at enable, so it exists in both settings, and a block holds both settings at once, so no ON − OFF
+  difference can show it.
+- **Q6** compares each setting across the two blocks (`OFF_a` with `OFF_b`, `ON_a` with `ON_b`).
+
+**What does not change:**
+- the profiles, the quality passes and P110's bar, the premise and its counts;
+- the pins (grouped-nf4-gemm `4ed26d96`), the model and the stack;
+- every other VOID condition, PREMISE_ABSENT, QUALITY_FAIL, the licence and the consequences;
+- the predictions Q1–Q9, as registered and unedited.
+
+**Code.**
+- The box gets `interleaved_block` and `_Clock`.
+- The reducer (`p124_reduce.py`) is self-tested on 42 cases, among them: a level shift shared by both settings of a
+  block is not NOISY; a block out of its order is VOID.
+- `tests/test_p124_box.py` checks that each block's two runners are captured whole under their settings and alternate
+  step by step in lockstep.
+
+**Runs and budget.**
+- `p124-prove-2`: Granite with int4 attention, guard 0.75 h, the amended box end to end.
+- `p124-5090-2`: guard 2.0 h, on the maintainer's go after the proof is re-derived.
+- A second 64-slot pool adds about 2.5 GB to attempt 1's 22.6 GB peak on a 32 GB card.
+- The lane has spent $1.178 so far (`p124-prove-1` $0.175, `p124-5090-1` $1.003). With attempt 2 it comes to about
+  $2.4, inside the $3.00 ceiling.

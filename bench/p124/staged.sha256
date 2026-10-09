@@ -1,9 +1,9 @@
 # Names as the BOX sees them after staging (/root/p124). The box runs `sha256sum -c` on this file; p124_drive.sh and
 # tests/test_p124_staged_pin.py resolve each name to its source (bench/p124, bench/p119, bench/p117, bench/p108, bench/p97,
 # bench/p39, tests).
-d429cce70cdb80ad5d5aa58a1ed2c77f37dc3cd2b6f58ac6f3df32f5a04be7de  p124_run.sh
-2b16aac98ff35373679c0ce1fcdd6b2b6c9ff44e4d8c834946573f331aef3932  p124_box.py
-178801660f569ffb662858cc174bcc58d986b4d6c159d2913d42d49a31817b0d  p124_reduce.py
+e418ae1308727480802d3f70a19c1775b83951f156b7309d73bd43bbe6911ba4  p124_run.sh
+5c5db684528eed4c7ba0e4b46a5462f6472322448ea04695e26f7564d8e1cce4  p124_box.py
+07322f3d3629f34301d0d2564cfcf43fe0df8c41c46e482053e631d1d481147a  p124_reduce.py
 17f8dd0c5001efcc6971e8938d6907a8c7c1c172b8e9ca86fa108f551d670fea  p119_box.py
 f93a38c21a08ee49e0ef68a2d1e513852b2b94d04ad3e8e5ddd99508037c0049  p117_box.py
 b57dff71cba30d9c649bae05df28f8c5376de9f7ac7ae5759157e57475b83e4b  p108_box.py
