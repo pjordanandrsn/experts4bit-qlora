@@ -672,3 +672,56 @@ self-test now runs 68 cases: resolution at × 0.90 and at × 0.80, UNRESOLVED wi
 weakest failing rung claimed whatever × 0.80 does, a FAIL still FAILing at × 0.80, and VOID without × 0.80. The merged
 readings re-derive identically apart from the new `resolution` field (`fam-granite-1`, `fam-gptoss-1`, `fam-qw36-2`
 against Amendment 3's verdict, and Granite's two proofs).
+
+## Amendment 9 (2026-10-09, after `fam-mixtral-3`, before any Mixtral or Gemma-4 reading): the runs launch past #1482
+
+**What happened.** `fam-mixtral-3` (store `97d853b6`, $0.87) launched from Amendment 8's merge (`4b9954f5`).
+- Its self-tests, premise, fetch and bake passed.
+- Its OFF process then raised `TypeError: _HybridTier.forward() got an unexpected keyword argument 'residual'` on its
+  first forward. Every config VOIDed, and no reading ran.
+- The cause was #1477, P127's MoE residual fold, which merged after Amendment 8's review. The patched experts forward
+  handed `residual=` to the hybrid tier that the default server installs, and that tier did not take it.
+- #1482 (`508cdd03`) fixed it.
+- Two earlier tries, `fam-mixtral-1` and `-2`, were refused at the provider before any instance existed ($0): no
+  verified RTX 5090 was offered at or under the policy's $0.85/h.
+
+**Changes.** Mixtral's and Gemma-4's remaining runs launch from this amendment's merge, past #1482, instead of from
+Amendment 8's. Nothing else changes: not the rule, gates, tables or predictions, and no pinned file (`staged.sha256` is
+unchanged).
+
+**The served code under the ON configs since `fam-mixtral-prove-2` (`da17bbc5`).**
+- #1472 (P127's kernel options) engages nothing at grouped-nf4-gemm 0.43.0. The pinned package has no `weights_dtype`,
+  no `rope_norm_qk`, and no `gather_div` on `gemm_4bit_grouped`.
+- #1477 with #1482: wherever the r2 fold folds a layer, P127 moves the MoE residual add into the experts' combine. It
+  is licensed per row count, only where it is bitwise the layer's own body. On Mixtral that is ON_r2 and ON_auto; on
+  Gemma-4 the r2 fold engages nothing.
+- **Measured on the seat's RTX A2000.** The setup:
+  - a tiny random 4-layer Mixtral;
+  - the served build, eager;
+  - P115's kernel counters installed before `build_engine`, as the box installs them;
+  - all five configs, at `da17bbc5` and at `508cdd03`.
+
+  The results:
+  - The census and the glue-kernel calls per one-row decode forward are identical at the two commits.
+  - Both follow Amendment 5's pattern at L = 4. ON_auto reads `rmsnorm_rows` 5, `rmsnorm_resid_rows` 4,
+    `rope_heads` 8 and `router_epilogue` 4.
+  - At `508cdd03` the residual fold licensed 4 of 4 layers under ON_r2 and ON_auto, and it calls no counted kernel.
+  - So Amendment 5's tables stand.
+
+**Before launch.** No FAM run launches until two things are done:
+- the maintainer re-derives `p127-prove-2`, the 5090 check of the fixed main's decode graphs;
+- this amendment merges.
+
+**Budget.** The lane has spent $11.48. At the policy rate the rest is:
+- the Mixtral reading, at most $6.10;
+- Gemma-4's proof, at most $1.61;
+- Gemma-4's reading, at most $3.95.
+
+That makes at most $23.14 of $26.00.
+
+**No second Mixtral proof** (the maintainer agreed on the bus). It would cost at most $2.70 and bring the lane to $25.84,
+and four things already cover what it would check:
+- The per-step counts above are identical across `da17bbc5` and `508cdd03`.
+- The A2000 smokes on #1482 cover the served eager build, on a real Granite arena and a tiny Mixtral.
+- `p127-prove-2` covers the 5090's decode-graph path with the residual fold.
+- A harness crash in the reading surfaces at the first forward, for about $0.9, not after 6 h (`fam-mixtral-3`).
