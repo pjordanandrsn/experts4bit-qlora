@@ -3,7 +3,7 @@
 
 - Off by default: with the knob unset ``enable_fast_train``'s hook does nothing.
 - Refusals keep today's path, with the reason recorded.
-- On CUDA with bitsandbytes NF4 bases:
+- On CUDA with bitsandbytes NF4 bases (the last two with fp32 and with bf16 adapters, the dtypes training runs):
   - the fused dequantize is bit for bit the three dequantized weights stacked;
   - the fused projection is within TC1's rounding bar of the three ``LoRALinear`` modules on outputs, the input gradient and every
     adapter gradient (``2**-6`` of the largest entry for bf16, ``2**-16`` for fp32);
@@ -102,7 +102,7 @@ def test_other_attention_classes_untouched():
 needs_nf4 = pytest.mark.skipif(not CUDA, reason="bitsandbytes NF4 Linear4bit needs CUDA here")
 
 
-def _nf4_attn(seed=3):
+def _nf4_attn(seed=3, adapter_dtype=torch.float32):
     bnb = pytest.importorskip("bitsandbytes")
     cfg = _cfg()
     torch.manual_seed(seed)
@@ -113,7 +113,11 @@ def _nf4_attn(seed=3):
         q.weight = bnb.nn.Params4bit(lin.weight.data.clone(), requires_grad=False, quant_type="nf4")
         setattr(attn, n, q)
     attn = attn.cuda()
-    return cfg, _lora_wrap(attn)
+    return cfg, _lora_wrap(attn, dtype=adapter_dtype)
+
+
+#: The adapter dtypes training runs: fp32 (matched init) and bf16 (the shipped default).
+ADAPTER_DTYPES = pytest.mark.parametrize("adapter_dtype", [torch.float32, torch.bfloat16], ids=["fp32", "bf16"])
 
 
 @needs_nf4
@@ -131,8 +135,9 @@ def _bar(got, ref):
 
 
 @needs_nf4
-def test_isolated_projection_within_rounding_bar():
-    _, attn = _nf4_attn()
+@ADAPTER_DTYPES
+def test_isolated_projection_within_rounding_bar(adapter_dtype):
+    _, attn = _nf4_attn(adapter_dtype=adapter_dtype)
     fused = tq.FusedQKVLoRA(attn)
     g = torch.Generator(device="cuda").manual_seed(7)
     x = torch.randn(2, 9, 128, generator=g, device="cuda").to(torch.bfloat16)
@@ -155,8 +160,9 @@ def test_isolated_projection_within_rounding_bar():
 
 
 @needs_nf4
-def test_patched_attention_within_reorder_bar_and_adapters_stay_params():
-    cfg, attn = _nf4_attn()
+@ADAPTER_DTYPES
+def test_patched_attention_within_reorder_bar_and_adapters_stay_params(adapter_dtype):
+    cfg, attn = _nf4_attn(adapter_dtype=adapter_dtype)
     ref_attn = copy.deepcopy(attn)
     holder = _Holder(attn)
     names = {n: id(p) for n, p in holder.named_parameters() if "lora" in n}
