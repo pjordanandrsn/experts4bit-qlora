@@ -1,6 +1,7 @@
 # Names as the BOX sees them after staging (/root/p127). The box runs `sha256sum -c` on this file; p127_drive.sh and
 # tests/test_p127_box.py resolve each name to its source (bench/p127, bench/p109, bench/p39, tests) and compare.
-d84d348e25ad51f8396f9e044f0b83900de30f4d56d81322990e781d39915842  p127_run.sh
+# Re-pinned 2026-10-09 for Amendment 1 (#1482 in the audit; the tripwire requires its fix), after p127-prove-1.
+1e27e31b596bb1aaba8ee5463014e537c39ce32d5da39f90b466cd0ae28b55c4  p127_run.sh
 03a80e4f24a3234c300338c967bee5a8c1a4f54c422280db5a4ec5a8592316c0  p127_box.py
 aff0eeeff7a22c5a2d75b950f44e66669aecf5f09d002fb87d7f45e052ec73bb  p127_reduce.py
 b53f94192b4040b6451ceb18f8cd4e3e5629a6e40c4885b40600fcc4205d8248  p109_box.py

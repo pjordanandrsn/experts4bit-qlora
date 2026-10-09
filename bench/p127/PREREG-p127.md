@@ -226,3 +226,48 @@ plus the checkpoint download: about $0.67 for 61 GB at about $0.011/GB, paid by 
 - Nothing about prefill or TTFT beyond the tokens. Prefill is in both walls and cancels.
 - Nothing about quality beyond identity. B is bitwise A, or the verdict is FUNCTION_FAIL.
 - Nothing about which option bought the speed: the arms are all-or-nothing. A per-option split would be its own lane.
+
+## Amendment 1 (2026-10-09, after `p127-prove-1`, before `p127-prove-2`): #1482 joins the audit as P127
+
+**What `p127-prove-1` found.** The run was HARNESS_ERROR, lane rc 27, actual $0.827; receipts are in adertha-receipts
+`0627cbd5`.
+- **What ran.** Everything up to the arms passed: the refusals, both installs, the diff audit, the tripwire, both
+  self-tests, the premise, the fetch, the bake and the prompts. Arms **A1 and A2** ran.
+- **What failed.** Arms **B1, B2 and M1** died in `build_engine` with `TypeError: _HybridTier.forward() got an
+  unexpected keyword argument 'residual'`.
+- **Cause.** #1477's patched experts forward passed `residual=`, even `None`, to the residency state's `forward`.
+  hybrid's `_HybridTier`, this subject's state class, overrides `forward` without it, so every MoE call of B's
+  served build raised. The families lane reproduced it independently in `fam-mixtral-3`.
+
+**The fix is #1482**, merged at `508cdd03`. It is part of P127's Phase 2 and changes no arithmetic:
+- no `residual=` keyword when there is none;
+- `_HybridTier` takes the residual and hands it to the base forward;
+- the base residual path does not re-enter a subclass override;
+- a licence probe that raises refuses instead of stopping the build.
+
+On an RTX A2000, the hybrid tier's CUDA tests fail 14 on #1477 alone and pass with #1482, along with a new
+served-collapse residual test. The families lane's served `build_engine` smoke (Granite-3.1-3b and a tiny Mixtral,
+eager) raised on #1477 and built on #1482, with the residual licensed on 4 of 4 Mixtral layers and tokens identical to
+knobs 0. No GPU we own runs the sm_89+ decode-graph path; `p127-prove-2` is that check.
+
+**What changes here:**
+- **The diff audit** gains two rows. This amendment appends them to the table above:
+
+  | repo | commit | what | status |
+  |---|---|---|---|
+  | e4b | `508cdd03` (#1482) | the fix above | **P127** |
+  | e4b | `d14bcb10` (#1465) | `engines/train_qkv_fuse.py`: a released q/k/v projection raises a clear error | inert: training only, as #1459 is; reached only through `fast._maybe_fuse_train_qkv`, which does nothing without `E4B_TRAIN_FUSE_QKV=1` |
+
+  `a0d32bdd` (#1481, RA's tokenizer assets) changes only `bench/ra/` and `tests/`, so the audit never lists it.
+- **Arm B's e4b** is the launch commit, this amendment's merge on main after `d14bcb10`, which carries #1482. The
+  launch reads it from git; any further package commit before the launch is refused (rc 31) until an amendment lists it.
+- **The tripwire** also requires #1482's fix: `_HybridTier.forward` takes `residual=`, and
+  `hot_residency._state_forward` exists.
+- **`staged.sha256`** is re-pinned for the runner.
+
+**What does not change:** the arms, the subject, the rule, the predictions and the budget.
+- `p127-prove-2` is priced as `p127-prove-1` was: guard 1.25 h at ≤ $0.85/h plus about $0.67 of download, about
+  $1.73.
+- P127's spend so far is $0.827, inside the $6.00 ceiling.
+- The reading still waits for PROVED and the maintainer's re-derivation. The families lane's Mixtral smoke waits on
+  that same re-derivation (the maintainer's sequencing, 2026-10-09).
