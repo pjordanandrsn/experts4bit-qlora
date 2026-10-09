@@ -217,7 +217,7 @@ host-bound premise gate, wall and device ratios separately, and the TC1 held-out
 The first step's gradients, reported as registered: the worst relative difference from the baseline, per seed, was
 - 0.009–0.010 for F1;
 - 0.009–0.065 for F2;
-- 0.129–0.149 for F3;
+- 0.128–0.149 for F3;
 - 0.110–0.222 for the fused path.
 
 The fused path's step-1 differences are the size of the micro-batch split's, the floor's own largest. A per-step gradient is not a
