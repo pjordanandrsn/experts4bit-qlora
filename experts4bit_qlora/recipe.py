@@ -22,6 +22,12 @@ from dataclasses import asdict, dataclass, field
 
 import torch
 
+#: Bytes per logit live at a training step's loss: three fp32 logits-sized tensors together (one allocated in
+#: transformers' ``fixed_cross_entropy``, two from frames the replay could not name), measured by allocator replays on
+#: an RTX A2000: granite-3.1-3b-a800m (3 x 192.0 MiB at T = 1024, V = 49,155; loggetta#49) and OLMoE-1B-7B (3 x 196.5 MiB,
+#: V = 50,304; loggetta#44). It was 10 (bf16 + fp32 + fp32), which left those peaks short by 2 x T x V bytes. The chunked
+#: LM loss (``enable_fast_train`` past 1 GiB of fp32 logits) does not materialize them whole; this term does not model it.
+LOGITS_LOSS_BYTES = 12
 #: storage width per scheme, mirroring ``_vendor.experts._SCHEME_BITS`` without importing a private table
 _ADAPTER_BYTES = {"bf16": 2, "fp32": 4}
 _DTYPES = {"bf16": torch.bfloat16, "fp32": torch.float32}
@@ -265,15 +271,15 @@ def estimate_qlora_footprint(topology, setup: QLoRASetup, *, tokens_per_microbat
     # --- activations (gradient checkpointing on; a stated formula, not a measurement) ---------------------
     n_layers = topology.n_layers
     boundaries = n_layers * T * H * 2
-    logits = T * V * 10
+    logits = T * V * LOGITS_LOSS_BYTES
     st0 = topology.expert_stacks[0]
     first_out0 = _first_out(st0)
     kv = (attn.kv_elements_per_token // max(attn.layers, 1)) if attn else 0
     layer = T * ((H + kv + H) * 2 + (topology.top_k or 0) * (first_out0 + st0.intermediate + H) * 2
                  + st0.n_experts * 4)
     items.append(FootprintItem("activations", "device", boundaries + max(logits, 2 * layer), "heuristic",
-                               f"{n_layers} saved layer inputs (T x H bf16) + max(logits and loss in "
-                               f"bf16+fp32+fp32 = {logits / 1e9:.2f} GB, 2 x one layer's recompute = "
+                               f"{n_layers} saved layer inputs (T x H bf16) + max(logits and loss, three "
+                               f"fp32 logits-sized tensors = {logits / 1e9:.2f} GB, 2 x one layer's recompute = "
                                f"{2 * layer / 1e9:.2f} GB) at T={T}"))
     if setup.keep_moe_layers:
         n_keep = min(setup.keep_moe_layers, len(topology.expert_stacks))
