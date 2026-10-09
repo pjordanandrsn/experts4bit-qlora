@@ -18,7 +18,8 @@ ra_wheel_lock ra_verified_worker'''.split())
 TOOLS = {n + '.py' for n in PYTOOLS} | {'fallback-adapters.json', 'route-adapters.json', 'source-pins.json',
     'startup-audit-adapters.json', 'startup-execution-proposal.json', 'proof-image.json',
     'proof-wheel-lock.json', 'PREREG-ra.md'}
-NATIVE = {'tc1_training': 'training', 'tc1_training_profile': 'training_profile'}
+NATIVE = {'tc1_training': 'training', 'tc1_training_profile': 'training_profile',
+          'sc2_warm': 'capacity', 'sc2_burst': 'capacity', 'sc2_end': 'capacity'}
 CURRENT = None  # Only installed by this module during a verified wrapper continuation.
 TARGETS = {'training': 'ra_training.py', 'training_profile': 'ra_training.py',
            'capacity': 'ra_capacity.py', 'decode': 'ra_serving.py', 'quality': 'ra_serving.py'}
@@ -65,9 +66,10 @@ def argv(spec):
 
 def execute(spec, spec_path, spec_hash, handoff, handoff_path, manifest):
     native_phase = spec.get('phase') in NATIVE
+    sc2_phase = spec.get('phase', '').startswith('sc2_')
     fields = {'schema', 'phase', 'tools', 'native_spec', 'stage', 'native_out', 'receipt'}
-    require(set(spec) == fields | ({'handoff_manifest'} if native_phase else set()) and
-            type(spec['schema']) is int and spec['schema'] == (2 if native_phase else 1) and
+    require(set(spec) == fields | ({'handoff_manifest'} if native_phase else set()) | ({'sc2'} if sc2_phase else set()) and
+            type(spec['schema']) is int and spec['schema'] == (3 if sc2_phase else 2 if native_phase else 1) and
             spec['phase'] in (NATIVE if native_phase else TARGETS), 'worker spec fields/phase')
     require(handoff['status'] == 'PASSED' and handoff['phase'] == 'COMPLETE' and
             handoff['payload']['proves_installed_payload'] and handoff['proves_requested_release_imports'],
@@ -141,7 +143,21 @@ def execute(spec, spec_path, spec_hash, handoff, handoff_path, manifest):
             nested_workers_verified=False)
         global CURRENT
         require(CURRENT is None, 'recursive in-process worker context')
-        if native_phase:
+        if sc2_phase:
+            capacity = importlib.import_module('ra_capacity')
+            native_spec = json.loads(native.read_bytes())
+            point, base_url, parent_out = sc2_arguments(spec)
+            effective = capacity.owned_traces(native_spec, parent_out)
+            model, prompts, _, _, driver = capacity.prepared(effective, stage, driver_only=True)
+            generated = capacity.driver_command(Path(native_spec['venv']) / 'bin/python', stage, base_url,
+                model, native_spec['prompts']['path'], point, output / sc2_filename(point))
+            require(Path(generated[0]).resolve() == executable, 'nested selected interpreter')
+            require('sc2_driver.py' in staged['files'] and staged['files']['sc2_driver.py']['registered'],
+                    'nested SC2 frozen instrument required')
+            output.mkdir()
+            sys.path.insert(0, str(stage))
+            sys.argv = generated[2:]
+        elif native_phase:
             training = importlib.import_module('ra_training')
             native_spec = json.loads(native.read_bytes())
             generated, _, _ = training.command(native_spec, stage, output,
@@ -166,7 +182,13 @@ def execute(spec, spec_path, spec_hash, handoff, handoff_path, manifest):
         finally:
             CURRENT = None
             sys.argv = old_argv
-        if native_phase:
+        if sc2_phase:
+            capacity.ra_process.check_input(native_spec['prompts'])
+            native_result = output / sc2_filename(point)
+            capacity.check_native(json.loads(native_result.read_bytes()), point, driver, base_url, model, prompts)
+            record.update(native_receipt_sha256=digest(native_result), fixed_argv_sha256=hashlib.sha256(
+                json.dumps(generated, separators=(',', ':')).encode()).hexdigest())
+        elif native_phase:
             for key in ('data', 'tokens', 'prereg'):
                 training.ra_process.check_input(native_spec[key])
             fam, _ = training.MODEL[native_spec['battery']]
@@ -255,3 +277,76 @@ def check_tc1_child(binding, process, *, profile):
     return {'status': 'VERIFIED_TC1_CHILD_STARTUP_PENDING_ENGAGEMENT', 'worker_sha256': digest(binding['worker_receipt']),
             'handoff_sha256': digest(binding['handoff_receipt']), 'pid': process['pid'],
             'proves_gpu_engagement': False, 'release_cleared': False}
+
+
+def sc2_filename(point):
+    return ('capacity' if point[0] == 'end' else 'capacity_' + point[0]) + '.json'
+
+
+def sc2_arguments(spec):
+    from urllib.parse import urlsplit
+    import ra_capacity
+    pin = spec['sc2']
+    require(set(pin) == {'base', 'parent_out'}, 'SC2 fixed invocation fields')
+    url = urlsplit(pin['base'])
+    require(url.scheme == 'http' and url.hostname == '127.0.0.1' and url.username is None and
+            url.password is None and not url.path and not url.query and not url.fragment and
+            type(url.port) is int and 0 < url.port < 65536 and
+            pin['base'] == 'http://127.0.0.1:' + str(url.port), 'SC2 owned numeric loopback base')
+    label = spec['phase'].removeprefix('sc2_')
+    point = next(p for p in ra_capacity.POINTS if p[0] == label)
+    parent_out = Path(pin['parent_out'])
+    require(parent_out.is_absolute() and parent_out.is_dir() and
+            not any(p.is_symlink() for p in (parent_out, *parent_out.parents)) and
+            spec['native_out'] == str(parent_out / (label + '-driver') / 'frozen'), 'SC2 fixed child output')
+    return point, pin['base'], parent_out
+
+
+def sc2_child(spec, stage, out, *, base, point):
+    """Derive one of three fixed driver phases from the live verified capacity wrapper."""
+    require(CURRENT is not None, 'verified SC2 parent context required')
+    parent = CURRENT['spec']
+    require(parent['phase'] == 'capacity' and parent['native_out'] == str(out) and
+            parent['stage']['path'] == str(stage) and
+            json.loads(regular(parent['native_spec']['path']).read_bytes()) == spec and
+            digest(CURRENT['spec_path']) == CURRENT['spec_hash'], 'nested SC2 parent binding')
+    import ra_capacity
+    require(point in ra_capacity.POINTS, 'SC2 registered point required')
+    check_tools(parent['tools'])
+    own = out / (point[0] + '-driver')
+    own.mkdir(exist_ok=False)
+    mp, wp, hp, rp = [own / n for n in ('handoff-spec.json', 'worker-spec.json', 'handoff.json', 'worker.json')]
+    with mp.open('x') as stream:
+        stream.write(json.dumps(CURRENT['manifest'], sort_keys=True, indent=2) + '\n')
+    child = {'schema': 3, 'phase': 'sc2_' + point[0], 'tools': dict(parent['tools']),
+             'native_spec': dict(parent['native_spec']), 'stage': dict(parent['stage']),
+             'native_out': str(own / 'frozen'), 'receipt': str(rp),
+             'sc2': {'base': base, 'parent_out': str(out)},
+             'handoff_manifest': {'path': str(mp), 'sha256': digest(mp)}}
+    sc2_arguments(child)
+    with wp.open('x') as stream:
+        stream.write(json.dumps(child, sort_keys=True, indent=2) + '\n')
+    command = [str(Path(sys.executable)), '-I', '-S', '-B', str(HERE / 'ra_handoff.py'),
+               '--manifest', str(mp), '--out', str(hp), '--worker-spec', str(wp), '--worker-sha256', digest(wp)]
+    return command, Path(child['native_out']) / sc2_filename(point), {
+        'manifest': child['handoff_manifest'], 'worker_spec': {'path': str(wp), 'sha256': digest(wp)},
+        'handoff_receipt': str(hp), 'worker_receipt': str(rp)}
+
+
+def check_sc2_child(binding, process, *, point, native):
+    for name in ('manifest', 'worker_spec'):
+        require(digest(binding[name]['path']) == binding[name]['sha256'], 'nested SC2 input changed')
+    handoff = json.loads(regular(binding['handoff_receipt']).read_bytes())
+    record = json.loads(regular(binding['worker_receipt']).read_bytes())
+    require(process['status'] == 'OK' and process.get('cleanup_complete') and
+            record['status'] == 'WORKER_RETURNED_PENDING_GATES' and record['phase'] == 'COMPLETE' and
+            record['worker_phase'] == 'sc2_' + point[0] and record['pid'] == process['pid'] and
+            record['spec_sha256'] == binding['worker_spec']['sha256'] and
+            record['handoff_sha256'] == digest(binding['handoff_receipt']) and
+            handoff['status'] == 'PASSED' and handoff['manifest_sha256'] == binding['manifest']['sha256'] and
+            record['handoff_evidence'] == handoff and record['native_receipt_sha256'] == digest(native),
+            'nested SC2 startup receipt join')
+    return {'status': 'VERIFIED_SC2_DRIVER_STARTUP_PENDING_GATES', 'worker_sha256': digest(binding['worker_receipt']),
+            'handoff_sha256': digest(binding['handoff_receipt']), 'pid': process['pid'],
+            'native_receipt_sha256': record['native_receipt_sha256'],
+            'proves_gpu_engagement': False, 'release_cleared': False, 'server_startup_verified': False}

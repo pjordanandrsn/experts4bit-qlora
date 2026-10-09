@@ -7,11 +7,13 @@ default/fallback coverage remain external gates. This is no rental controller.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import signal
 import socket
 import subprocess
+import sys
 import time
 import types
 import urllib.error
@@ -48,10 +50,11 @@ def owned_traces(spec, out):
     return {**spec, "fixture": fixture}
 
 
-def prepared(spec, stage):
+def prepared(spec, stage, *, driver_only=False):
     if set(spec) != SPEC or spec["battery"] not in ra_training.MODEL:
         raise ValueError("capacity spec fields/battery")
-    ra_process.window(spec["deadline_epoch_s"], spec["startup_s"] + 3 * spec["driver_s"])
+    ra_process.window(spec["deadline_epoch_s"], spec["driver_s"] if driver_only else
+                      spec["startup_s"] + 3 * spec["driver_s"])
     for value in (spec["startup_s"], spec["driver_s"]):
         if type(value) not in (int, float) or value <= 0:
             raise ValueError("positive phase timeouts required")
@@ -135,11 +138,20 @@ def check_native(native, point, driver, base, model, pf):
     ra_normalize.requests(native)
 
 
+def retain_driver(source, destination, expected):
+    payload = source.read_bytes()
+    if hashlib.sha256(payload).hexdigest() != expected:
+        raise ValueError("SC2 native bytes changed before retention")
+    with destination.open("xb") as stream:
+        stream.write(payload)
+
+
 def execute(spec, stage, out):
     if not stage.is_absolute() or not out.is_absolute() or any(
             p.is_symlink() for path in (stage, out) for p in (path, *path.parents)):
         raise ValueError("absolute non-symlink component paths required")
     ra_stage.verify(stage)
+    original_spec = spec
     spec = owned_traces(spec, out)
     model, pf, env, removed, driver = prepared(spec, stage)
     python = Path(spec["venv"]) / "bin/python"
@@ -162,7 +174,8 @@ def execute(spec, stage, out):
                                        stdin=subprocess.DEVNULL, start_new_session=True, pass_fds=(listener.fileno(),))
             record["pid"] = process.pid
             (out / "health_start.json").write_text(json.dumps(drained(base, process, spec["startup_s"]), indent=2) + "\n")
-            raw, workloads = {}, []
+            raw, workloads, driver_startups = {}, [], []
+            worker = sys.modules.get("ra_verified_worker")
             for point in POINTS:
                 label = point[0]
                 name = "capacity" if label == "end" else "capacity_" + label
@@ -170,9 +183,17 @@ def execute(spec, stage, out):
                 started = time.monotonic()
                 ra_process.window(spec["deadline_epoch_s"], spec["driver_s"])
                 argv = driver_command(python, stage, base, model, spec["prompts"]["path"], point, out / f"{name}.json")
-                ra_process.run(argv, env=env, cwd=out, log=out / f"{name}.log", receipt=out / f"{name}_process.json",
+                native_path, binding = out / f"{name}.json", None
+                if worker is not None and worker.CURRENT is not None:
+                    argv, native_path, binding = worker.sc2_child(original_spec, stage, out, base=base, point=point)
+                process_result = ra_process.run(argv, env=env, cwd=out, log=out / f"{name}.log", receipt=out / f"{name}_process.json",
                                deadline=spec["deadline_epoch_s"], timeout=spec["driver_s"])
-                native = json.loads((out / f"{name}.json").read_bytes())
+                if binding is not None:
+                    evidence = worker.check_sc2_child(binding, process_result, point=point, native=native_path)
+                    driver_startups.append(evidence)
+                    # The native bytes are preserved exactly at the usual projection path.
+                    retain_driver(native_path, out / f"{name}.json", evidence["native_receipt_sha256"])
+                native = json.loads(native_path.read_bytes())
                 check_native(native, point, driver, base, model, pf)
                 workloads.append(native)
                 remaining = spec["driver_s"] - (time.monotonic() - started)
@@ -201,7 +222,8 @@ def execute(spec, stage, out):
                     raise ValueError("missing native capacity trace")
                 record[filename + "_sha256"] = ra_process.file_digest(path)
             ra_process.window(spec["deadline_epoch_s"], .001)
-            record["status"] = "NATIVE_RECORDED_PENDING_ENGAGEMENT"
+            record.update(status="NATIVE_RECORDED_PENDING_ENGAGEMENT", verified_driver_startups=driver_startups,
+                          server_startup_verified=False, nested_workers_verified=False)
     except Exception as exc:
         record.update(status="FAILED", error_type=type(exc).__name__)
         raise
