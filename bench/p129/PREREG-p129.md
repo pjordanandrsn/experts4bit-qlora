@@ -326,6 +326,72 @@ Self-test case 125 reads GAIN on the host-bound fixture, and checks the other br
 - a `q1` draw with 47 fused modules is VOID;
 - a `q0` draw on a build without the module is VOID.
 
+## Phase 2 read (`tc1-5090-146`, 2026-10-09): QUALITY_FAIL, as registered
+
+**The box.**
+- **Host:** machine 152440 (AMD EPYC 7K62, RTX 5090) at $0.659/h; $1.874. All eight arms are VALID.
+- **e4b `be7a88d`:** Amendment 2's harness at its merge, plus the fetch guards (#1471). Its package code differs from Amendment 2's
+  pin `fc99614` only in `experts4bit_qlora/recipe.py` (#1467, a footprint-estimate constant that no measured path calls), as the
+  manifest recorded.
+- **grouped-nf4-gemm:** v0.44.0 at `d1f64ba`.
+- **Reduction:** main's `tc1_reduce.py` at `d14bcb1` (`RESULTS-p129-a2.md`).
+
+**Load.** The load gate voided six draws and ran them again. Three first draws stand at their third attempt above the 6.0 gate:
+- shipped `q0` at load 12.21;
+- shipped `q1` at 8.96;
+- matched `q0` at 6.63.
+
+Every second draw ran at its first attempt, under the gate (3.71–4.43). The wall rows rest partly on the three loaded draws. Each side's
+two draws still agree within the 5 % rule.
+
+| row | verdict | reading | prediction |
+|---|---|---|---|
+| `R_m` | HELD | launches per step 79,581 → 68,517, −13.9 % (gate 11.2 %) | 12–15 %: held |
+| `R_shipped` | HELD | 75,833 → 64,761, −14.6 % | held |
+| `PREMISE` | HELD | matched `q0` busy_t 0.523 (≤ 0.85) | |
+| `W_m` | HELD | `q1 / q0` 0.896 [0.882, 0.909] | [0.86, 0.95]: held |
+| `W_shipped` | HELD | 0.879 [0.868, 0.890] | held |
+| `DEVICE` | reported | 0.987 matched, 0.985 shipped; peak +0.005 / +0.023 GB | [0.97, 1.02]: held |
+| `QUALITY` | **FALSIFIED** | step 0: −0.01233 on both arms, in every draw (bar 0.0005); at N: −0.00077 matched, −0.00153 shipped (bar 0.005) | HELD: falsified |
+| `FQKV` | **QUALITY_FAIL** | | GAIN: falsified |
+
+**By the rule, nothing turns on, and the read finds out why.**
+
+**Why: GEMM-shape rounding, amplified through 48 layers.**
+- **Where and how:** measured on an RTX A2000 (`instrument/p129_step0.py`; records in `records/a2/`) with the real Qwen3-30B-A3B at the
+  pin, under expert offload, on the box's eight held-out rows. The local copy was checked file for file against the revision's
+  sha256s.
+- **Build:** e4b `be7a88d`, grouped-nf4-gemm `d1f64ba`, transformers 5.18.0, bitsandbytes 0.50.2.
+- **What differs:** the adapters are at init (`lora_B` zero), so only the base projections differ.
+
+| variant | the q/k/v base projections | step-0 held-out | vs stock | mean per-row \|row − D1\| |
+|---|---|---|---|---|
+| A | stock: three dequantizes and matmuls | 1.94705 | | 0.0132 |
+| D1 | the three matmuls in fp32, rounded to bf16 | 1.95649 | +0.0094 | 0 |
+| D2 | stock, q's matmul split in two along N | 1.96983 | +0.0228 | 0.0255 |
+| C | one matmul over the three dequantized weights concatenated, in the stock forward | 1.97018 | +0.0231 | 0.0170 |
+| C2 | the stock forward fed the fused module's q/k/v | 1.97018 | +0.0231 | 0.0170 |
+| B | the fused module and serving's fused forward | 1.97018 | +0.0231 | 0.0170 |
+
+- **No semantic difference.** B, C2 and C agree row for row. On one held-out row, C2 and B are bitwise equal in every recorded tensor of
+  all 48 layers: q and k before and after rope, v, the attention output, the projection output and the layer output. Serving's forward
+  does what the stock forward does with the same q, k and v.
+- **The difference is the GEMM shape.** Against the stock path, the first difference is layer 0's k; layer 0's q is bitwise equal. k
+  differs by 2.8e-3 relative and v by 2.5e-3, under one bf16 step. The difference grows with depth:
+  - the attention output: 0.4 % at layer 0, 5.5 % at layer 11, 9.8 % at layer 35;
+  - the residual stream: 0.6 % at layer 0, 1.2 % at layer 35, 8.0 % at the last layer.
+- **The floor is as large as the shift.** Splitting q's matmul in two (D2), a change of the same class, moves the step-0 loss as much
+  as fusion does (+0.0228 against +0.0231). The fp32 reference lies between the stock and the fused paths.
+- **The sign follows the card.** On the A2000 the fused path's step-0 loss is 0.0231 above the stock path's. On the box's RTX 5090 it
+  was 0.0123 below.
+
+TC1's step-0 bar (0.0005) presumes the initial computation is unchanged. That holds for changes confined to the adapters, whose
+`lora_B` is zero at init. A change to the base projections' GEMM shape cannot meet it on this model, whatever its quality. This is a
+registration error of the same kind as Phase 1's: an exactness expectation applied end to end. It does not change this read.
+
+Held-out at N held on both arms. The last training step's loss lies in 0.8153–0.8206 across all eight draws. Nothing turns on. A
+re-measure needs an amendment that sets the step-0 clause against a floor measured on the box, before any new box.
+
 ## Box log
 
 - **`tc1-5090-142`** (2026-10-09, $0): refused before any instance existed. The cheapest eligible RTX 5090 billed $0.93/h with storage,
@@ -337,4 +403,10 @@ Self-test case 125 reads GAIN on the host-bound fixture, and checks the other br
   - TC1's harness now installs `brotli>=1.2.0` in venv-e4b, probes the fetch before building the other venvs, and ends a box that
     staged no model with rc 15.
   - The box reruns on the main commit that carries that fix.
-
+- **`tc1-5090-144`** (2026-10-09, $0): refused before any instance existed. The receipts store's head was behind its upstream for a
+  moment.
+- **`tc1-5090-145`** (2026-10-09, $0): refused. The offer seen at $0.82/h was taken before the launcher searched, and the cheapest
+  left billed $0.93/h.
+- A $0.95/h ceiling for box 1 was set after those refusals and then found not to apply: the launcher's policy fixes RTX 5090s at
+  $0.85/h whatever a manifest declares. Box 1 ran inside the policy rate.
+- **`tc1-5090-146`** (2026-10-09, $1.874, machine 152440 at $0.659/h): the Phase 2 read above.

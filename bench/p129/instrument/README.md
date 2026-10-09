@@ -10,3 +10,8 @@
 
 `../p129_reduce.py` re-derives Amendment 1's verdict from `../records/a1`. The records were made with e4b `590962a` and
 grouped-nf4-gemm `e21a712`; the environment is in `../records/a1/env.json`.
+
+- `p129_step0.py` (Phase 2 read): the step-0 held-out loss of the real Qwen3-30B-A3B at the pin under six ways to compute the q/k/v base
+  projections (stock, fp32, q split in two, one concatenated matmul, the fused module's q/k/v in the stock forward, the fused module with
+  serving's forward), and a per-layer localization on one held-out row. `P129_MODEL_DIR` names a local copy checked against the
+  revision's sha256s; the first argument is TC1's tokens file. Records: `records/a2/`.
