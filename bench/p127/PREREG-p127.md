@@ -21,7 +21,7 @@ own test:
   - (b2) the singleton decode reads the token row in place at one token (#530);
   - (c) the decoder layer's MoE residual add in the combine's epilogue (#527). It is licensed per row count by a
     probe of the model as served.
-  - The e4b wiring is #1472 (b1, d, a1, b2) and the residual PR (c).
+  - The e4b wiring is #1472 (b1, d, a1, b2) and #1477 (c).
 
 **No knob.** None of this has one: the changes ship on. This lane therefore decides the **claim**, not shipping. It
 must do three things:
@@ -33,8 +33,10 @@ must do three things:
 ## Subject
 
 The shipped server as `PagedServeConfig.from_env()` builds it with `build_engine`, at its defaults, on one RTX 5090:
-- **Fixed by the lane:** `E4B_PAGED_MAX_SEQS=16`. `auto` sizes the server from free memory, and the two arms could
-  then differ.
+- **Fixed by the lane:**
+  - `E4B_PAGED_MAX_SEQS=16`. `auto` sizes the server from free memory, and the two arms could then differ.
+  - `E4B_INT4_TILE_PROGRAMS=1`, A's own default. #1476 made `auto` the default after A; it is inert at this subject
+    (see the audit), and the pin keeps any table it might split identical to A's.
 - **Graphs:** on (`auto` on sm_120), buckets 1–16, all-vram, chunk 512, 4,096 tokens per sequence, NF4 experts.
 - **Fusions:** every fusion knob unset. On `qwen3_moe` they resolve to `auto` (P115's family default): fused q/k/v,
   both glue folds, and the router epilogue.
@@ -56,7 +58,7 @@ imported.
 | arm | e4b | grouped-nf4-gemm | box-side change |
 |---|---|---|---|
 | A (before P127) | `a8c01d42`, the last main commit before #1448 | `d1f64ba`, v0.44.0 | none |
-| B (after P127) | the launch commit: this registration's merge, which carries #1448, #1472 and the residual PR | `d769d502`, the merge commit of gnf4 #527, which carries #526–#530 | none |
+| B (after P127) | the launch commit: this registration's merge, which carries #1448, #1472 and #1477 | `d769d502`, the merge commit of gnf4 #527, which carries #526–#530 | none |
 | M (blindness check) | B's | B's | the router kernel's bf16 weight store **rounds toward zero** instead of to nearest even: a box-side wrapper of `int4_b32.router_epilogue` keeps its signature |
 
 **Order:** A1, B1, B2, A2, then M1. A and B alternate in a palindrome, so drift lands on both.
@@ -102,7 +104,8 @@ change between `d1f64ba` and `d769d502`, is either P127's or inert at this subje
 |---|---|---|---|
 | e4b | `ce3dfb54` (#1448) | Phase 1: three host casts | **P127** |
 | e4b | `1ddcb0ae` (#1472) | Phase 2 wiring (b1, d, a1, b2) | **P127** |
-| e4b | the residual PR | Phase 2 (c), plus `serve_paged.build_engine`'s licence step | **P127** |
+| e4b | `8ea97296` (#1477) | Phase 2 (c), plus `serve_paged.build_engine`'s licence step | **P127** |
+| e4b | `2384d2c3` (#1476) | `E4B_INT4_TILE_PROGRAMS` defaults to `auto` (4 programs) | inert: it splits only the one-launch cumsum tile table above 256 routed rows, and only within `next_pow2(E) × next_pow2(R) ≤ 128 × 512`. Decode here routes at most 16 × 8 = 128 rows (below 256), and a 512-token prefill chunk routes 4,096 (outside the size, so one program). The runner also pins `E4B_INT4_TILE_PROGRAMS=1`, A's default, in every arm |
 | e4b | `058f98eb` (#1456) | Release 0.51.0: `__init__.__version__` only | inert: a version string |
 | e4b | `f5398962` (#1459) | `E4B_TRAIN_FUSE_QKV` (`engines/fast.py`, `engines/train_qkv_fuse.py`) | inert: training only, nothing without `E4B_TRAIN_FUSE_QKV=1` and the fused training path |
 | e4b | `abe7d772` (#1467) | `recipe.py` training memory estimate | inert: not on the serving path |

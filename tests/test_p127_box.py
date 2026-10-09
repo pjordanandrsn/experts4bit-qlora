@@ -284,6 +284,7 @@ def test_the_reducer_reads_the_boxs_own_records(monkeypatch, tmp_path):
 def test_the_runner_runs_the_registered_arms_on_the_registered_stacks():
     assert re.search(r"for TAG in A1 B1 B2 A2 M1; do", RUN)
     assert "E4B_PAGED_MAX_SEQS=16" in RUN and 'EXTRA="--identity-only"' in RUN
+    assert re.search(r'ENGINE_ENV="[^"]*E4B_PAGED_MAX_SEQS=16 E4B_INT4_TILE_PROGRAMS=1"', RUN), "both fixed knobs reach every arm"
     assert "E4B_A=a8c01d426bc3e489c8bd11c7c8ced091da557582" in RUN
     assert "GNF4_A=d1f64ba50afce94533e0166ba3332ef075aa43bb" in RUN
     assert re.search(r"^GNF4_B=d769d5022c0fb7a2ada847f69a3cba6e0f45c77f", RUN, re.M)
@@ -298,7 +299,7 @@ def test_the_runner_runs_the_registered_arms_on_the_registered_stacks():
 
 def test_the_audit_allows_exactly_the_registered_commits():
     prereg = (LANE / "PREREG-p127.md").read_text(encoding="utf-8")
-    for short in ("ce3dfb54", "1ddcb0ae", "058f98eb", "f5398962", "abe7d772", "14b1f23", "e21a712", "7d4163b", "18f5bda", "f69adcc",
+    for short in ("ce3dfb54", "1ddcb0ae", "8ea97296", "2384d2c3", "058f98eb", "f5398962", "abe7d772", "14b1f23", "e21a712", "7d4163b", "18f5bda", "f69adcc",
                   "d0a2e56", "b64a39b", "d769d502"):
         assert short in prereg, f"{short} is not in the PREREG's audit table"
         assert re.search(short + r"[0-9a-f]{%d}" % (40 - len(short)), RUN), f"{short} is not a full SHA in the runner"
