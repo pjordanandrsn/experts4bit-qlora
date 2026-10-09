@@ -181,6 +181,20 @@ OPTIMIZERS = {
 }
 
 
+def estimate_env() -> dict:
+    """The environment switches :func:`estimate_qlora_footprint` reads, with their values in this process (``None`` when
+    unset): today ``E4B_CHUNKED_LM_LOSS``, which decides whether the loss branch is priced chunked or whole.
+
+    When to use it: a planner that prices in one process and runs in another records this beside the plan and compares it
+    before the run, since the run builds what its own process's switches say. The names come from the modules that read
+    them, so the list grows with the estimate rather than being kept twice."""
+    import os
+
+    from .engines.chunked_lm_loss import _ENV as chunked_loss_switch
+
+    return {chunked_loss_switch: os.environ.get(chunked_loss_switch)}
+
+
 def _loss_chunk(topology, setup: QLoRASetup, tokens: int, vocab: int):
     """The chunk size the run's training loss will use, or None for the stock loss: what ``enable_fast_train`` decides
     through :mod:`~experts4bit_qlora.engines.chunked_lm_loss` (its table of supported architectures, its switch and its
