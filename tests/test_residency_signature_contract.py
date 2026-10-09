@@ -8,8 +8,7 @@ from pathlib import Path
 import pytest
 
 ENGINES = Path(__file__).resolve().parents[1] / "experts4bit_qlora" / "engines"
-ADAPTER = ("pipelined", "_GptOssPipelined", "forward")
-ROUTING_ALIASES = {"top_k_index": "router_indices", "top_k_weights": "router_scores"}
+OLD_ROUTING_NAMES = {"router_indices", "router_scores"}
 
 
 def _ast_signature(method):
@@ -102,14 +101,10 @@ def _ancestors(key, parents):
         yield from _ancestors(parent, parents)
 
 
-def _assert_accepts(base, override, label, aliases=None):
+def _assert_accepts(base, override, label):
     values = {p.name: object() for p in base.parameters.values()
               if p.name not in ("self", "cls") and p.kind in
               (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)}
-    if aliases:
-        missing = values.keys() - override.parameters.keys()
-        assert missing == aliases.keys(), f"{label}: positional adapter exception changed: {missing}"
-        values = {aliases.get(name, name): value for name, value in values.items()}
     if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in base.parameters.values()):
         assert any(p.kind == inspect.Parameter.VAR_KEYWORD for p in override.parameters.values()), label
     positional = [object() for p in base.parameters.values()
@@ -120,29 +115,22 @@ def _assert_accepts(base, override, label, aliases=None):
         raise AssertionError(f"{label}: base {base}, override {override}: {exc}") from exc
 
 
-def _assert_positional_dispatch(trees, classes):
-    # ONE named exception: gpt-oss's pipelined positional adapter renames
-    # top_k_index/top_k_weights to router_indices/router_scores. Conservatively
-    # check every dynamic forward receiver in engines, not just today's `st`
-    # alias: a new caller cannot introduce routing keywords behind the waiver.
-    calls = []
+def _assert_no_old_routing_keywords(trees):
+    # The gpt-oss pipelined override now follows its base's keyword contract.
+    # Audit all forward calls in engines for either historical spelling;
+    # current callers are positional, and future base-name keywords are valid.
     for module, tree in trees.items():
         for call in ast.walk(tree):
             if not isinstance(call, ast.Call) or not isinstance(call.func, ast.Attribute) or call.func.attr != "forward":
                 continue
-            receiver = call.func.value
-            if isinstance(receiver, ast.Name) and (module, receiver.id) in classes:
-                continue  # explicit class implementation, not state dispatch
-            if isinstance(receiver, ast.Call) and isinstance(receiver.func, ast.Name) and receiver.func.id in ("super", "type"):
-                continue  # statically bound implementation on self
-            calls.append((module, call))
-    assert calls, "positional adapter exception has no dispatch sites to check"
-    assert any(module == "pipelined" for module, _ in calls), "pipelined dispatch was not audited"
-    for module, call in calls:
-        label = f"{module}:{call.lineno}: {ast.unparse(call)}"
-        assert len(call.args) >= 3 and not any(isinstance(arg, ast.Starred) for arg in call.args[:3]), label
-        assert all(kw.arg is not None and kw.arg not in {*ROUTING_ALIASES, *ROUTING_ALIASES.values()}
-                   for kw in call.keywords), label
+            label = f"{module}:{call.lineno}: obsolete or unprovable routing keyword in {ast.unparse(call)}"
+            for keyword in call.keywords:
+                if keyword.arg is not None:
+                    assert keyword.arg not in OLD_ROUTING_NAMES, label
+                else:
+                    assert isinstance(keyword.value, ast.Dict), label
+                    assert all(isinstance(key, ast.Constant) and isinstance(key.value, str)
+                               and key.value not in OLD_ROUTING_NAMES for key in keyword.value.keys), label
 
 
 def test_residency_overrides_accept_base_keywords():
@@ -150,7 +138,6 @@ def test_residency_overrides_accept_base_keywords():
     found = _residencies(classes, parents)
     assert ("hot_residency", "_HotResidency") in found
     assert ("hybrid", "_HybridTier") in found
-    assert (ADAPTER[0], ADAPTER[1]) in found
     loaded, checks = {}, []
     for key in sorted(found):
         for parent in _ancestors(key, parents):
@@ -162,11 +149,10 @@ def test_residency_overrides_accept_base_keywords():
                 if name not in _methods(classes[key]) or name not in base_methods:
                     continue
                 label = f"{key[0]}.{key[1]}.{name} overrides {parent[0]}.{parent[1]}.{name}"
-                aliases = ROUTING_ALIASES if (*key, name) == ADAPTER else None
-                _assert_accepts(_signature(parent, name, classes, loaded), _signature(key, name, classes, loaded), label, aliases)
+                _assert_accepts(_signature(parent, name, classes, loaded), _signature(key, name, classes, loaded), label)
                 checks.append(label)
     assert checks, "no residency overrides were checked"
-    _assert_positional_dispatch(trees, classes)
+    _assert_no_old_routing_keywords(trees)
 
 
 def test_ast_signatures_enforce_keyword_only_and_kwargs_contracts():
@@ -180,11 +166,18 @@ def test_ast_signatures_enforce_keyword_only_and_kwargs_contracts():
         _assert_accepts(base, signature("def hook(self, x, residual=None, /): pass"), "positional-only keyword")
 
 
-def test_positional_adapter_exception_refuses_keyword_callers():
-    trees, classes, _ = _catalog(ENGINES)
-    tree = ast.parse("state.forward(hidden, top_k_index=idx, top_k_weights=wts)")
-    with pytest.raises(AssertionError, match="top_k_index"):
-        _assert_positional_dispatch({**trees, "new_caller": tree}, classes)
+def test_callers_use_base_routing_names():
+    trees, _, _ = _catalog(ENGINES)
+    _assert_no_old_routing_keywords({**trees, "new_caller": ast.parse(
+        "state.forward(hidden, top_k_index=idx, top_k_weights=wts)")})
+    for name in OLD_ROUTING_NAMES:
+        with pytest.raises(AssertionError, match=name):
+            _assert_no_old_routing_keywords({**trees, "old_caller": ast.parse(f"state.forward(hidden, {name}=routed)")})
+        with pytest.raises(AssertionError, match=name):
+            _assert_no_old_routing_keywords({**trees, "old_caller": ast.parse(
+                f"state.forward(hidden, **{{'{name}': routed}})")})
+    with pytest.raises(AssertionError, match="unprovable"):
+        _assert_no_old_routing_keywords({**trees, "opaque_caller": ast.parse("state.forward(hidden, **kwargs)")})
 
 
 def test_full_residency_guard_uses_ast_when_cpu_imports_are_unavailable(monkeypatch):
