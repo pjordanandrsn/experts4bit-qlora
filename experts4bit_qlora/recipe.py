@@ -182,17 +182,18 @@ OPTIMIZERS = {
 
 
 def estimate_env() -> dict:
-    """The environment switches :func:`estimate_qlora_footprint` reads, with their values in this process (``None`` when
-    unset): today ``E4B_CHUNKED_LM_LOSS``, which decides whether the loss branch is priced chunked or whole.
+    """The environment switches :func:`estimate_qlora_footprint` reads, keyed by name, each valued as the engine that reads
+    it interprets it in this process: today ``E4B_CHUNKED_LM_LOSS``, as ``{"chunk": <tokens or None>, "auto_gate_bytes":
+    <bytes or None>}`` from :mod:`~experts4bit_qlora.engines.chunked_lm_loss`'s own ``chunked_lm_loss_requested`` and
+    ``chunked_lm_loss_min_bytes``. Unset, empty and ``auto`` therefore report the same value, as they behave the same.
 
     When to use it: a planner that prices in one process and runs in another records this beside the plan and compares it
-    before the run, since the run builds what its own process's switches say. The names come from the modules that read
-    them, so the list grows with the estimate rather than being kept twice."""
-    import os
-
+    before the run, since the run builds what its own process's switches say. The names and the interpretation come from
+    the modules that read them, so neither is kept twice."""
     from .engines.chunked_lm_loss import _ENV as chunked_loss_switch
+    from .engines.chunked_lm_loss import chunked_lm_loss_min_bytes, chunked_lm_loss_requested
 
-    return {chunked_loss_switch: os.environ.get(chunked_loss_switch)}
+    return {chunked_loss_switch: {"chunk": chunked_lm_loss_requested(), "auto_gate_bytes": chunked_lm_loss_min_bytes()}}
 
 
 def _loss_chunk(topology, setup: QLoRASetup, tokens: int, vocab: int):

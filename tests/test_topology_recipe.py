@@ -265,10 +265,18 @@ def test_estimate_env_reports_the_switches_the_estimate_reads(monkeypatch):
     from experts4bit_qlora import estimate_env
     from experts4bit_qlora.engines.chunked_lm_loss import AUTO_MIN_LOGITS_BYTES
 
+    from experts4bit_qlora.engines.chunked_lm_loss import DEFAULT_CHUNK
+
     monkeypatch.delenv("E4B_CHUNKED_LM_LOSS", raising=False)
-    assert estimate_env() == {"E4B_CHUNKED_LM_LOSS": None}
-    monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", "auto")
-    assert estimate_env() == {"E4B_CHUNKED_LM_LOSS": "auto"}
+    unset = estimate_env()
+    assert unset == {"E4B_CHUNKED_LM_LOSS": {"chunk": DEFAULT_CHUNK, "auto_gate_bytes": AUTO_MIN_LOGITS_BYTES}}
+    for same in ("", "auto", "AUTO"):                      # the engine treats these as unset: no spurious difference
+        monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", same)
+        assert estimate_env() == unset, same
+    monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", "1")        # every forward chunks: the gate is off
+    assert estimate_env() == {"E4B_CHUNKED_LM_LOSS": {"chunk": DEFAULT_CHUNK, "auto_gate_bytes": None}}
+    monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", "0")
+    assert estimate_env() == {"E4B_CHUNKED_LM_LOSS": {"chunk": None, "auto_gate_bytes": None}}
     V = 50_000
     topo = describe_moe(_qwen3(vocab_size=V, architectures=["Qwen3MoeForCausalLM"]))
     T = -(-AUTO_MIN_LOGITS_BYTES // (V * 4))
