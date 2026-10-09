@@ -29,6 +29,7 @@ def checkpoints(tmp_path):
     plain = tmp_path / "plain"
     plain.mkdir()
     save_file({k: v.contiguous().clone() for k, v in model.state_dict().items()}, str(plain / "model.safetensors"))
+    model.config.save_pretrained(plain)
     return model, composite, plain
 
 
@@ -48,6 +49,27 @@ def test_composite_plan_claims_only_text_and_head_by_structure(checkpoints):
     assert any(k.startswith("mtp.") and "experts" in k for k in plan.skipped_keys)
     assert "auxiliary_decoder.layers.0.mlp.experts.gate_up_proj" in plan.skipped_keys
     assert len([v for v in plan.passthrough.values() if v.endswith("experts.gate_up_proj")]) == 2
+
+
+def test_native_text_alias_is_admitted_and_loads_plain_checkpoint_on_cpu(checkpoints):
+    from experts4bit_qlora import ExpertsNbit
+    from experts4bit_qlora.loader import check_admission, load_moe_4bit_streaming
+    from quant_guard import require_quantize
+
+    model, _, plain = checkpoints
+    assert model.config.model_type == "qwen3_5_moe_text"
+    check_admission(model.config)
+    require_quantize("cpu")
+    # One layer quantized and one left plain exercises both native fused reads.
+    # A missing CPU quantizer may skip here, after the admission assertion;
+    # refusal by the actual loader remains a hard failure.
+    loaded, config = load_moe_4bit_streaming(
+        str(plain), "cpu", torch.float32, r=4, alpha=8, quantize_layers={0})
+    assert config.model_type == "qwen3_5_moe_text"
+    assert all(not parameter.is_meta for parameter in loaded.parameters())
+    assert any(isinstance(m, ExpertsNbit) for m in loaded.model.layers[0].mlp.experts.modules())
+    for name in ("gate_up_proj", "down_proj"):
+        assert torch.equal(getattr(loaded.model.layers[1].mlp.experts, name), getattr(model.model.layers[1].mlp.experts, name).float())
 
 
 @pytest.mark.parametrize("fault", ("unknown_text", "missing_expert", "mixed_roots"))
