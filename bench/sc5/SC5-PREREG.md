@@ -133,6 +133,10 @@ speed.
   - the mean NLL delta against the reference, in nats per scored position, with its spread over windows;
   - argmax agreement with the reference, as the share of positions;
   - SC1's comparability labels (CLOSE ≤ 0.0095, COMPARABLE ≤ 0.02 nats).
+- **Scoring shapes (pending the maintainer).** vLLM's and SGLang's `prompt_logprobs` run their **prefill** path, one
+  forward over the window. e4b's `paged_pass` prefills the prompt and then scores through its **decode** graphs. The
+  proposal adds an e4b prefill-shaped column, one offline forward over the window, so each framework has a
+  like-for-like row; e4b's decode-shaped column stays as the served arithmetic.
 - **Quality gates no speed row; it sits beside every one.**
 
 ## Provenance
