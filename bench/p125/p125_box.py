@@ -281,6 +281,13 @@ def speed_main(a) -> int:
     return 0
 
 
+def gate_record(text, group, n, routes, dispatch, measured) -> dict:
+    """One gate's record: ``measure_phase``'s result with the box's own keys ON TOP. ``measure_phase`` returns a
+    ``windows`` of its own ({text: count}); merged last, it overwrote this gate's count (Amendment 2, ``p125-prove-2``)."""
+    return {**measured, "text": text, "group": group, "windows": int(n), "routes": dict(sorted(routes.items())),
+            "dispatch": dispatch}
+
+
 def quality_main(a) -> int:
     arm = _arm(ARMS)
     import torch
@@ -313,8 +320,7 @@ def quality_main(a) -> int:
                                 chunk=a.chunk, floor_chunk=a.chunk, group=group, device=cfg.device,
                                 ref_dir=os.path.join(a.ref_dir, name), counters=counters, fwd=fwd,
                                 arms=("R",) if arm == "A" else ("ON",))
-        rec["gates"][name] = {"text": text, "group": group, "windows": n, "routes": dict(sorted(rt.counts.items())),
-                              "dispatch": _delta(_counts(), c1), **r}
+        rec["gates"][name] = gate_record(text, group, n, rt.counts, _delta(_counts(), c1), r)
         print(f"P125_GATE {arm} {name} {text} group={group} windows={n} routes={rec['gates'][name]['routes']} "
               f"{r.get('seconds')} s", flush=True)
     rec["n_int4_modules"] = len(mods)

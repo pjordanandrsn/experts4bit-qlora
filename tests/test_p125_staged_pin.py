@@ -223,12 +223,16 @@ def test_the_reducer_reads_records_shaped_as_the_box_writes_them():
     fake = red.fake_speed("B1")
     assert set(fake) <= speed_keys, set(fake) - speed_keys
     assert set(fake["memory"]) <= speed_keys, set(fake["memory"]) - speed_keys
-    quality_keys = _rec_keys({"quality_main", "_common"})
+    quality_keys = _rec_keys({"quality_main", "_common", "gate_record"})
     fq = red.fake_quality("K")
     assert set(fq) <= quality_keys | {"workloads"}, set(fq) - quality_keys
     gate = next(iter(fq["gates"].values()))
     q = (REPO / "bench" / "p115" / "p115_quality.py").read_text()
-    assert set(gate) - {"per_window"} <= quality_keys and '"per_window"' in q, "per_window comes from measure_phase"
+    fn = next(n for n in ast.walk(ast.parse(q)) if isinstance(n, ast.FunctionDef) and n.name == "measure_phase")
+    measured = {k.value for n in ast.walk(fn) if isinstance(n, ast.Return) and isinstance(n.value, ast.Dict)
+                for k in n.value.keys}
+    assert set(gate) <= quality_keys | measured, set(gate) - quality_keys - measured
+    assert "per_window" in measured, "per_window comes from measure_phase"
     for k in ("nll", "argmax_agree", "window"):
         assert f'"{k}"' in q, k
     box = _box()
@@ -244,3 +248,26 @@ def test_the_driver_runs_to_its_dry_run(tmp_path):
            "E4B_RENT_INSTANCE_ID": "0", "E4B_SHA": "0" * 40, "P125_DRIVE_DRYRUN": "1"}
     out = subprocess.run(["bash", str(LANE / "p125_drive.sh")], capture_output=True, text=True, env=env)
     assert out.returncode == 0 and out.stdout.startswith("DRYRUN stage -> root@h:/root/p125"), out.stdout + out.stderr
+
+
+def test_amendment_2_a_gate_record_keeps_the_box_s_count_over_measure_phase_s():
+    """p125-prove-2 VOIDed because measure_phase's own ``windows`` ({text: count}) was merged over the gate's count.
+    The record is built from measure_phase's REAL return keys (read from its source), the box's keys must win, and the
+    reducer's fake carries the same merged keys (P115 Phase D's Amendment 4 lesson: fakes match real records)."""
+    box, red = _box(), _reduce()
+    q = ast.parse((REPO / "bench" / "p115" / "p115_quality.py").read_text())
+    fn = next(n for n in ast.walk(q) if isinstance(n, ast.FunctionDef) and n.name == "measure_phase")
+    ret = next(n.value for n in ast.walk(fn) if isinstance(n, ast.Return) and isinstance(n.value, ast.Dict))
+    keys = {k.value for k in ret.keys}
+    assert {"windows", "group", "per_window"} <= keys, keys
+    text, group, n = "wikitext", 16, 112
+    measured = {k: None for k in keys}
+    measured.update(windows={text: n}, group=group, per_window={text: {"ON": []}})
+    rec = box.gate_record(text, group, n, {"k16:16": 1}, {}, measured)
+    assert rec["windows"] == n and rec["text"] == text and rec["group"] == group, rec
+    assert rec["per_window"] == measured["per_window"] and keys <= set(rec)
+    src = (LANE / "p125_box.py").read_text()
+    assert "gate_record(text, group, n, rt.counts" in src, "quality_main builds every gate through gate_record"
+    fake = red.fake_quality("B")["gates"]["k16"]
+    assert keys <= set(fake), keys - set(fake)
+    assert isinstance(fake["windows"], int) and fake["windows"] == red.GATES["k16"][2]

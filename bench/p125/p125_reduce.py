@@ -342,8 +342,14 @@ def fake_quality(arm, model=QWEN, shift=0.0, argmax=0.97, noise=0.002, digest_se
             rt = {}
         if routes and gname in routes:
             rt = routes[gname]
-        rec["gates"][gname] = {"text": text, "group": group, "windows": n, "routes": rt,
-                               "per_window": {text: {("R" if arm == "A" else "ON"): pw}}}
+        # measure_phase's own result, merged UNDER the box's keys as p125_box.gate_record merges it (Amendment 2: its
+        # windows is a {text: count} dict, and merged last it overwrote the gate's count in p125-prove-2)
+        measured = {"phase": "off" if arm == "A" else "on", "arms": ["R" if arm == "A" else "ON"],
+                    "windows": {text: n}, "windows_sha256": {text: "0" * 64}, "group": group, "prompt": 512,
+                    "cont": CONT, "chunk": 512, "floor_chunk": 512, "layers": LAYERS[model], "ref_kw": {},
+                    "rep_identical": {}, "counters_wrapped": None, "qkv_modules": None, "rehearsal": {},
+                    "per_window": {text: {("R" if arm == "A" else "ON"): pw}}, "engagement": {}, "seconds": 1.0}
+        rec["gates"][gname] = {**measured, "text": text, "group": group, "windows": n, "routes": rt, "dispatch": {}}
     return rec
 
 
