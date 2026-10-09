@@ -10,7 +10,8 @@
   allocated peak is 4105.3 MiB, against 6522.7 MiB with the loss stock. The estimate charged whole logits either way
   and sat 2458.9 MiB over the chunked run. It is now 58.7 MiB over. Stock points are unchanged (+41.5 and +72.5 MiB).
 - **Not covered.** Forced chunking at a small T (`E4B_CHUNKED_LM_LOSS=1` at T = 1024, an opt-in setting) is now
-  36.2 MiB under. A chunk's own coefficient (`CHUNK_BYTES_PER_LOGIT`, 10) is a stated formula. The allocator replay
+  36.2 MiB under at the allocator. loggetta's plan for that run, reserve included, still covers its driver peak
+  (0.814 with no receipts on file, 0.869 with them). The auto point's plan sits at 0.827 and 0.863. A chunk's own coefficient (`CHUNK_BYTES_PER_LOGIT`, 10) is a stated formula. The allocator replay
   that would attribute it fails inside the chunk's checkpoint recompute, and the coefficient is unchanged here.
 - **Evidence.** `bench/chunked-lm-loss/estimate-a2000-granite/`: four receipts and the evaluation. In sample: one
   model, one card.

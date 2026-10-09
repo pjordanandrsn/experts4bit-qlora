@@ -45,5 +45,26 @@ allocated peak.
 - **The coefficient is unchanged here.** `chunked_loss_bytes` also prices loggetta's dense chunked-loss workspace, and
   a change there needs its own attribution.
 
+## The plans against the driver's peak
+
+The estimate is one line of a plan. `replan.py` plans each run the way loggetta's `bench/plan_vs_driver.py --replan`
+does: the receipt's own hardware, workload and setup, with `E4B_CHUNKED_LM_LOSS` set as the run ran, and this branch's
+estimate. Each run is planned twice, with no receipts on file and with loggetta's committed RTX A2000 training receipts
+on file. GiB:
+
+| run | `E4B_CHUNKED_LM_LOSS` | driver peak | receipts on file | plan total | driver / plan | reserve line | context line |
+|---|---|---|---|---|---|---|---|
+| P1 | `1` | 3.219 | none | 3.955 | **0.814** | inferred 0.576 | inferred 0.500 |
+| P1 | `1` | 3.219 | A2000 training receipts | 3.702 | **0.869** | measured 0.657 | measured 0.166 |
+| A6 | `auto` | 4.451 | none | 5.380 | **0.827** | inferred 0.813 | inferred 0.500 |
+| A6 | `auto` | 4.451 | A2000 training receipts | 5.160 | **0.863** | measured 0.928 | measured 0.166 |
+| S6 | `0` | 6.775 | none | 8.192 | 0.827 | inferred 1.282 | inferred 0.500 |
+| S6 | `0` | 6.775 | A2000 training receipts | 8.039 | 0.843 | measured 1.463 | measured 0.166 |
+
+- **Every plan covers its driver peak.**
+- **The forced point's 36.2 MiB allocator shortfall** sits inside its plan's reserve (0.58–0.66 GiB), so no margin is
+  added on the forced path.
+- **The A2000 receipts on file include granite-3.1's own,** so its reserve line is its own model's (loggetta#49).
+
 **In sample.** These are four points on one model and one card. No committed loggetta MoE training receipt reaches
 the chunked regime: all run at T = 1024, and Qwen3-30B-A3B's stock fp32 logits there are 0.59 GiB, under the gate.

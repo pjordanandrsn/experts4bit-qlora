@@ -214,6 +214,10 @@ def estimate_qlora_footprint(topology, setup: QLoRASetup, *, tokens_per_microbat
     Qwen3's 151,936-token vocabulary, ``T >= 5,462`` at granite's 49,155). Then the branch is
     :func:`~experts4bit_qlora.engines.chunked_lm_loss.chunked_loss_bytes` (one chunk's logits plus the gathered hidden
     rows); otherwise it is the whole logits at :data:`LOGITS_LOSS_BYTES` per logit.
+
+    ``E4B_CHUNKED_LM_LOSS`` is read here, at estimate time, so a plan prices the loss the run takes only if both see the
+    same environment. In one process (a plan followed by its run) they do. A plan written in one process and run in
+    another prices the planning process's setting.
     """
     refusals = setup_refusals(topology, setup)
     if refusals:
