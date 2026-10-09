@@ -97,3 +97,81 @@ seeds.
 
 - **Phase 1:** no rental.
 - **Phase 2:** one RTX 5090 box (about $1.5–2), plus at most one replication. The lane stays under $15.
+
+## Phase 1 read, as registered (RTX A2000, 2026-10-09): counts PASS, exactness FAIL on the end-to-end clause
+
+The prototype is `E4B_TRAIN_FUSE_QKV=1`, the module above. It was read on the registered model, rows and seeds against today's path.
+Both layers fused, none refused.
+
+**Counts (gate PASS; both predictions missed high):**
+
+| per training step | today | fused | change | gate | prediction |
+|---|---|---|---|---|---|
+| kernel launches | 769 | 659 | −110 (−14.3 %) | ≥ 50 fewer: **HELD** | `[60, 100]`: missed high |
+| Python calls | 16,240 | 14,266 | −12.2 % | ≥ 3 %: **HELD** | 4–12 %: missed high |
+
+**Exactness:**
+- **The dequantize: bitwise, as claimed.** `torch.equal` on both layers.
+- **The fused projection in isolation, reported:** the same input and the same upstream gradient through the fused module and through the
+  three `LoRALinear` modules. Every tensor is within TC1's rounding bar, none bit for bit:
+
+  | tensor | relative difference | bar |
+  |---|---|---|
+  | q/k/v outputs (bf16) | 6.7e-3 | `2**-6` |
+  | input gradient (bf16) | 1.06e-2 | `2**-6` |
+  | the six adapter gradients (fp32) | about 4e-7 | `2**-16` |
+
+- **The end-to-end clause: FAIL.**
+  - The loss read 8.682032 against 8.682492, a relative difference of 5.3e-5 against a `2**-16` bar.
+  - All 24 gradients differ. The worst is layer 0's `gate_up_lora_B`, at 0.18 of its largest entry.
+
+**Cause.** The clause applied an op-level rounding bar to a whole bf16 MoE training step. A reorder-class change moves the projections by a
+rounding step. Attention and the router amplify that: a flipped top-k choice moves the expert gradients by whole contributions. So no
+change of this class can meet that clause in bf16 MoE training. The condition in review named "the projections and the loss", and this page
+widened it to every gradient. The condition was itself ambiguous about the end-to-end loss. By the rule this read is **FAIL**, and the bar
+is not replaced on these records. Amendment 1 re-asks the end-to-end question in its own units, against a neutral floor, on fresh seeds.
+
+## Amendment 1 (2026-10-09T14:24Z, after the Phase 1 read, before any new run): the end-to-end question against a neutral floor
+
+The question Phase 1's end-to-end clause should have asked: **does the fused projection move a short training run more than the eager path
+moves under changes that are equally valid?** A single-seed comparison of one MoE step cannot say; a floor over seeds can.
+
+**The instrument.** P128's two-layer random Qwen3-MoE at Qwen3-30B-A3B's layer dimensions, set up as TC1's e4b arm at e4b's defaults
+(fp32 LoRA, the reentrant checkpoint, `NF4_QLORA_SINGLE_LADDER=auto`). Per seed `s`:
+- 30 optimizer steps of bitsandbytes' AdamW8bit, lr 2e-4 with 5 linear warm-up steps, weight decay 0.001;
+- each step one batch of 2 rows × 270 random tokens from a generator seeded by `s`;
+- the adapters initialised from `s` (`lora_B` drawn N(0, 0.02), so the attention adapters are live from step 0);
+- a fixed held-out set of 4 such batches from `s + 1000`, evaluated at steps 0 and 30.
+
+**The seeds (fresh; none was read before):** 211, 223, 227, 229, 233.
+
+**Divergence of a run V from the baseline run B with the same seed:**
+- `D_traj` = max over steps 1..30 of |training loss of V − of B|;
+- `D_held` = |held-out loss of V at step 30 − of B|.
+
+**The neutral floor.** The eager path under three changes that leave the arithmetic's meaning unchanged and move only its reduction order:
+- **F1** `NF4_QLORA_SINGLE_LADDER=0` (the expert LoRA block unladdered);
+- **F2** `NF4_QLORA_PAD_BUCKETS=1` (the LoRA delta bucketed);
+- **F3** each 2-row batch as two 1-row micro-batches with gradients accumulated. Both rows carry 270 tokens, so the mean loss is the
+  same quantity.
+
+The floor of each measure is its **worst draw**: the maximum over F1–F3 × the five seeds (15 draws).
+
+**The fused path:** `E4B_TRAIN_FUSE_QKV=1` against B, the same five seeds (5 draws).
+
+**The end-to-end gate** (registered now):
+- **HELD** iff the fused path's maximum `D_traj` is at most the floor's worst `D_traj`, **and** its maximum `D_held` at most the floor's
+  worst `D_held`, **and** (the backstop, TC1's held-out bar) every fused `D_held` is at most 0.005.
+- Per-step gradients (the first step's relative differences) are reported, not gated.
+
+**The counts gate is unchanged** (≥ 50 fewer launches, ≥ 3 % fewer Python calls), re-read on the same build.
+
+**The rule:**
+- **PASS:** the counts gate and the end-to-end gate both HELD.
+- **NO_GAIN:** the counts gate missed.
+- **FAIL:** the end-to-end gate missed. The read then names the measure and the draw.
+
+**Prediction:** the end-to-end gate HELD (about 70 %). The fused projection moves each run by a rounding step, the same class as F1–F3.
+The floor's own magnitude is not predicted; it is read.
+
+**Budget:** the RTX A2000 only: 20 runs of 30 steps. Phase 2's speed A/B is still registered by its own amendment after a PASS.
