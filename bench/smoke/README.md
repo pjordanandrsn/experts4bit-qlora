@@ -40,7 +40,7 @@ reset, including the hybrid's linear state. No server implementations are
 mocked or replaced.
 The composite Qwen3.5 checkpoint also includes visual and MTP distractor tensors,
 including a full MTP decoder block with its own experts. Both the arena bake and
-the served build must see exactly the text tower's two MoE layers.
+the served build must see exactly the text tower's two MoE layers by module name.
 
 **Graph coverage depends on the GPU.** The shipped `auto` default resolves to
 eager decode on the sm_86 A2000: its result explicitly says graphs were not
@@ -69,5 +69,10 @@ docker run --rm --gpus all --ipc=host -v "$PWD":/src -w /src \
 For a lane with an already pinned environment, run only the one-line command in
 that environment; do not replace its dependencies. The source checkout selected
 by `PYTHONPATH` is what is tested, and the output records its package digest
-separately from installed distribution metadata. Run under the shared GPU's
+separately from installed distribution metadata. GNF4 provenance records the
+actual imported kernel module paths and content hashes, plus native C sources;
+its installed version is labelled as metadata. The kernel digest includes loaded
+flat modules sharing the actual kernel source directory (which may include other
+flat modules in a shared site-packages directory); their names make that scope
+explicit. Run under the shared GPU's
 resource claim. Keep correctness receipts separate from code changes.

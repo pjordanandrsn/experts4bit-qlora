@@ -14,6 +14,7 @@ import hashlib
 import json
 import math
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -133,8 +134,7 @@ def bake_arena(snapshot, root):
     model, _ = load_moe_4bit_streaming(str(snapshot), "cuda", torch.bfloat16, 8, 16)
     tensors = {}
     mods = target_modules(model)
-    if len(mods) != 2:
-        raise RuntimeError(f"random checkpoint loaded {len(mods)} expert layers, expected the two text layers")
+    check_text_targets(model, mods)
     for layer, mod in enumerate(mods):
         e = mod.num_experts
         n1, k1 = mod._gate_up_shape
@@ -182,9 +182,38 @@ def stage_offline_snapshot(snapshot, root, family):
     return model_id, dest, revision
 
 
+def imported_kernel_sources(roots, native_root):
+    """Hash loaded siblings of the actual kernel modules, never metadata paths.
+
+    A shared site-packages root can also contain unrelated flat Python modules;
+    their names are retained so the scope of this conservative digest is visible.
+    Native C sources are included because gnf4 compiles them at first use.
+    """
+    modules = {}
+    for name, mod in sorted(sys.modules.copy().items()):
+        file = getattr(mod, "__file__", None)
+        if not file:
+            continue
+        path = Path(file).resolve()
+        if path.is_file() and (path.parent in roots or path.is_relative_to(native_root)):
+            modules[name] = {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+    native = {str(p.relative_to(native_root)): hashlib.sha256(p.read_bytes()).hexdigest()
+              for p in sorted(native_root.rglob("*.c"))}
+    digest = hashlib.sha256()
+    for name, row in modules.items():
+        digest.update(name.encode() + b"\0" + bytes.fromhex(row["sha256"]))
+    for name, sha in native.items():
+        digest.update(name.encode() + b"\0" + bytes.fromhex(sha))
+    return {"modules": modules, "native_source_root": str(native_root),
+            "native_c_sources": native, "imported_source_sha256": digest.hexdigest()}
+
+
 def source_identity():
     import importlib.metadata
     import experts4bit_qlora
+    import gnf4_native
+    import nf4_grouped
+    import nvme_arena
 
     root = Path(experts4bit_qlora.__file__).resolve().parents[1]
     head = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True)
@@ -194,7 +223,24 @@ def source_identity():
     return {"source": str(root), "git_head": head.stdout.strip() if head.returncode == 0 else None,
             "package_sha256": tree.hexdigest(),
             "installed_e4b": importlib.metadata.version("experts4bit-qlora"),
-            "gnf4": importlib.metadata.version("grouped-nf4-gemm")}
+            "installed_gnf4": importlib.metadata.version("grouped-nf4-gemm"),
+            "gnf4_sources": imported_kernel_sources(
+                {Path(m.__file__).resolve().parent for m in (nf4_grouped, nvme_arena)},
+                Path(gnf4_native.__file__).resolve().parent)}
+
+
+def check_text_targets(model, targets):
+    ids = {id(m) for m in targets}
+    names = [n for n, m in model.named_modules() if id(m) in ids]
+    layers = []
+    for name in names:
+        match = re.fullmatch(r"model\.layers\.([01])\.(?:mlp|block_sparse_moe)\.experts(?:\.base)?", name)
+        if match is None:
+            raise RuntimeError(f"expert target is outside the two text-tower layers: {names}")
+        layers.append(int(match[1]))
+    if len(targets) != 2 or sorted(layers) != [0, 1]:
+        raise RuntimeError(f"expert targets are not exactly the two text-tower layers: {names}")
+    return names
 
 
 def check_graphs(capability, enabled, status, stats):
@@ -262,7 +308,9 @@ def run_cell(family, stack, root):
                            ("E4B_PAGED_FUSE_QKV", "E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")})
     cfg = PagedServeConfig.from_env()
     parts = build_engine(cfg)
-    states = [type(m._hot_residency).__name__ for m in target_modules(parts.runner.model)]
+    targets = target_modules(parts.runner.model)
+    target_names = check_text_targets(parts.runner.model, targets)
+    states = [type(m._hot_residency).__name__ for m in targets]
     if len(states) != 2 or set(states) != {"_HybridTier"}:
         raise RuntimeError(f"real hybrid residency was not installed on both layers: {states}")
     if cfg.placement != "all-vram":
@@ -296,7 +344,7 @@ def run_cell(family, stack, root):
     return {"device": torch.cuda.get_device_name(), "capability": list(torch.cuda.get_device_capability()),
             "torch": torch.__version__, "source": source_identity(), "placement": cfg.placement,
             "synthetic_snapshot": {"id": model_id, "content_revision": fixture_revision},
-            "residency_states": states, "graph_default_enabled": cfg.graphs,
+            "residency_states": states, "expert_target_names": target_names, "graph_default_enabled": cfg.graphs,
             "decode_coverage": "graph capture and replay" if cfg.graphs else "eager default; graphs not exercised",
             "graph_status": graph_status, "graph_stats": graph_stats,
             "prefill_graph": parts.runner.prefill_graph_stats(), "int4_expert_layers": parts.info["int4_expert_layers"],

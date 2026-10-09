@@ -4,6 +4,8 @@ import importlib.util
 import json
 from pathlib import Path
 import subprocess
+import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -77,3 +79,33 @@ def test_partial_or_failed_residual_licence_cannot_pass():
             smoke.check_residual(dict(good, moe_residual=residual))
     with pytest.raises(RuntimeError, match="did not engage"):
         smoke.check_residual(dict(good, fuse_t1_glue_r2_n=[0, 0]))
+
+
+def test_two_expert_targets_cannot_include_mtp_or_duplicate_text_layer():
+    a, b = object(), object()
+    for names in (("model.layers.0.mlp.experts.base", "mtp.layers.0.mlp.experts.base"),
+                  ("model.layers.0.mlp.experts.base", "model.layers.0.block_sparse_moe.experts.base")):
+        model = SimpleNamespace(named_modules=lambda: zip(names, (a, b)))
+        with pytest.raises(RuntimeError, match="text-tower"):
+            smoke.check_text_targets(model, [a, b])
+    names = ("model.layers.0.mlp.experts.base", "model.layers.1.mlp.experts.base")
+    assert smoke.check_text_targets(SimpleNamespace(named_modules=lambda: zip(names, (a, b))), [a, b]) == list(names)
+
+
+def test_kernel_digest_tracks_imported_source_and_native_c_without_metadata(tmp_path, monkeypatch):
+    kernels = tmp_path / "override"
+    native = kernels / "gnf4_native"
+    native.mkdir(parents=True)
+    module = kernels / "nf4_grouped.py"
+    module.write_text("imported_source = 43\n")
+    c = native / "kernel.c"
+    c.write_text("actual native source\n")
+    monkeypatch.setitem(sys.modules, "nf4_grouped", SimpleNamespace(__file__=str(module)))
+    first = smoke.imported_kernel_sources({kernels}, native)
+    assert first["modules"]["nf4_grouped"]["path"] == str(module)
+    assert first["native_c_sources"]["kernel.c"]
+    module.write_text("imported_source = 44\n")
+    second = smoke.imported_kernel_sources({kernels}, native)
+    assert second["imported_source_sha256"] != first["imported_source_sha256"]
+    c.write_text("changed native source\n")
+    assert smoke.imported_kernel_sources({kernels}, native)["imported_source_sha256"] != second["imported_source_sha256"]
