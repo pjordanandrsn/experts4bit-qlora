@@ -19,7 +19,7 @@ TOOLS = {n + '.py' for n in PYTOOLS} | {'fallback-adapters.json', 'route-adapter
     'startup-audit-adapters.json', 'startup-execution-proposal.json', 'proof-image.json',
     'proof-wheel-lock.json', 'PREREG-ra.md'}
 NATIVE = {'tc1_training': 'training', 'tc1_training_profile': 'training_profile',
-          'sc2_warm': 'capacity', 'sc2_burst': 'capacity', 'sc2_end': 'capacity'}
+          'sc2_warm': 'capacity', 'sc2_burst': 'capacity', 'sc2_end': 'capacity', 'capacity_server': 'capacity'}
 CURRENT = None  # Only installed by this module during a verified wrapper continuation.
 TARGETS = {'training': 'ra_training.py', 'training_profile': 'ra_training.py',
            'capacity': 'ra_capacity.py', 'decode': 'ra_serving.py', 'quality': 'ra_serving.py'}
@@ -67,9 +67,10 @@ def argv(spec):
 def execute(spec, spec_path, spec_hash, handoff, handoff_path, manifest):
     native_phase = spec.get('phase') in NATIVE
     sc2_phase = spec.get('phase', '').startswith('sc2_')
+    server_phase = spec.get('phase') == 'capacity_server'
     fields = {'schema', 'phase', 'tools', 'native_spec', 'stage', 'native_out', 'receipt'}
-    require(set(spec) == fields | ({'handoff_manifest'} if native_phase else set()) | ({'sc2'} if sc2_phase else set()) and
-            type(spec['schema']) is int and spec['schema'] == (3 if sc2_phase else 2 if native_phase else 1) and
+    require(set(spec) == fields | ({'handoff_manifest'} if native_phase else set()) | ({'sc2'} if sc2_phase else {'server'} if server_phase else set()) and
+            type(spec['schema']) is int and spec['schema'] == (4 if server_phase else 3 if sc2_phase else 2 if native_phase else 1) and
             spec['phase'] in (NATIVE if native_phase else TARGETS), 'worker spec fields/phase')
     require(handoff['status'] == 'PASSED' and handoff['phase'] == 'COMPLETE' and
             handoff['payload']['proves_installed_payload'] and handoff['proves_requested_release_imports'],
@@ -143,7 +144,18 @@ def execute(spec, spec_path, spec_hash, handoff, handoff_path, manifest):
             nested_workers_verified=False)
         global CURRENT
         require(CURRENT is None, 'recursive in-process worker context')
-        if sc2_phase:
+        if server_phase:
+            capacity = importlib.import_module('ra_capacity')
+            native_spec = json.loads(native.read_bytes())
+            server_pin, parent_out = server_arguments(spec)
+            capacity.prepared(capacity.owned_traces(native_spec, parent_out), stage)
+            require(Path(native_spec['venv']) / 'bin/python' == Path(sys.executable), 'server selected interpreter')
+            output.mkdir()
+            generated = [str(HERE / 'ra_capacity_server.py'), '--socket-fd', str(server_pin['listener']['fd']),
+                '--parent-pid', str(server_pin['parent_pid']), '--instruments', str(stage),
+                '--receipt', str(output / 'lifecycle.json')]
+            sys.argv = generated
+        elif sc2_phase:
             capacity = importlib.import_module('ra_capacity')
             native_spec = json.loads(native.read_bytes())
             point, base_url, parent_out = sc2_arguments(spec)
@@ -182,7 +194,18 @@ def execute(spec, spec_path, spec_hash, handoff, handoff_path, manifest):
         finally:
             CURRENT = None
             sys.argv = old_argv
-        if sc2_phase:
+        if server_phase:
+            capacity.ra_process.check_input(native_spec['prompts'])
+            result = json.loads(regular(output / 'lifecycle.json').read_bytes())
+            require(result['status'] == 'SERVER_RETURNED_PENDING_GATES' and result['pid'] == os.getpid() and
+                    result['parent_pid'] == server_pin['parent_pid'] and result['listener'] == server_pin['listener'] and
+                    result['closed']['closed'] is True and result['closed']['thread_alive'] is False and
+                    result['engine_thread_alive'] is False, 'server lifecycle binding')
+            require(result['trace_sha256'] == {n: digest(parent_out / n) for n in
+                    ('request-trace.jsonl', 'step-trace.jsonl')}, 'server trace bytes changed')
+            record.update(native_receipt_sha256=digest(output / 'lifecycle.json'), fixed_argv_sha256=hashlib.sha256(
+                json.dumps(generated, separators=(',', ':')).encode()).hexdigest())
+        elif sc2_phase:
             capacity.ra_process.check_input(native_spec['prompts'])
             native_result = output / sc2_filename(point)
             capacity.check_native(json.loads(native_result.read_bytes()), point, driver, base_url, model, prompts)
@@ -350,3 +373,82 @@ def check_sc2_child(binding, process, *, point, native):
             'handoff_sha256': digest(binding['handoff_receipt']), 'pid': process['pid'],
             'native_receipt_sha256': record['native_receipt_sha256'],
             'proves_gpu_engagement': False, 'release_cleared': False, 'server_startup_verified': False}
+
+
+def server_arguments(spec):
+    import ra_capacity_server
+    pin = spec['server']
+    require(set(pin) == {'listener', 'parent_pid', 'parent_out'} and
+            type(pin['parent_pid']) is int and pin['parent_pid'] > 1 and
+            os.getppid() == pin['parent_pid'], 'server live parent binding')
+    parent_out = Path(pin['parent_out'])
+    require(parent_out.is_absolute() and parent_out.is_dir() and
+            not any(p.is_symlink() for p in (parent_out, *parent_out.parents)) and
+            spec['native_out'] == str(parent_out / 'server-child' / 'native'), 'server fixed output')
+    require(set(pin['listener']) == {'fd', 'device', 'inode', 'address'} and
+            ra_capacity_server.listener_identity(pin['listener']['fd']) == pin['listener'],
+            'server inherited socket identity')
+    return pin, parent_out
+
+
+def server_child(spec, stage, out, listener):
+    require(CURRENT is not None, 'verified server parent context required')
+    parent = CURRENT['spec']
+    require(parent['phase'] == 'capacity' and parent['native_out'] == str(out) and
+            parent['stage']['path'] == str(stage) and
+            json.loads(regular(parent['native_spec']['path']).read_bytes()) == spec and
+            digest(CURRENT['spec_path']) == CURRENT['spec_hash'], 'nested server parent binding')
+    import ra_capacity_server
+    check_tools(parent['tools'])
+    own = out / 'server-child'
+    own.mkdir(exist_ok=False)
+    mp, wp, hp, rp = [own / n for n in ('handoff-spec.json', 'worker-spec.json', 'handoff.json', 'worker.json')]
+    with mp.open('x') as stream:
+        stream.write(json.dumps(CURRENT['manifest'], sort_keys=True, indent=2) + '\n')
+    child = {'schema': 4, 'phase': 'capacity_server', 'tools': dict(parent['tools']),
+             'native_spec': dict(parent['native_spec']), 'stage': dict(parent['stage']),
+             'native_out': str(own / 'native'), 'receipt': str(rp),
+             'server': {'listener': ra_capacity_server.listener_identity(listener.fileno()),
+                        'parent_pid': os.getpid(), 'parent_out': str(out)},
+             'handoff_manifest': {'path': str(mp), 'sha256': digest(mp)}}
+    with wp.open('x') as stream:
+        stream.write(json.dumps(child, sort_keys=True, indent=2) + '\n')
+    command = [str(Path(sys.executable)), '-I', '-S', '-B', str(HERE / 'ra_handoff.py'),
+               '--manifest', str(mp), '--out', str(hp), '--worker-spec', str(wp), '--worker-sha256', digest(wp)]
+    return command, {'manifest': child['handoff_manifest'],
+        'worker_spec': {'path': str(wp), 'sha256': digest(wp)}, 'handoff_receipt': str(hp),
+        'worker_receipt': str(rp), 'lifecycle': str(own / 'native' / 'lifecycle.json'), 'server': child['server']}
+
+
+def check_server_ready(binding, process, evidence):
+    for name in ('manifest', 'worker_spec'):
+        require(digest(binding[name]['path']) == binding[name]['sha256'], 'server input changed')
+    handoff = json.loads(regular(binding['handoff_receipt']).read_bytes())
+    require(handoff['status'] == 'PASSED' and handoff['phase'] == 'COMPLETE' and
+            handoff['manifest_sha256'] == binding['manifest']['sha256'] and
+            handoff['payload']['proves_installed_payload'] and handoff['proves_requested_release_imports'] and
+            evidence.get('ready') is True and type(evidence.get('pid')) is int and evidence['pid'] == process['pid'] and
+            process['parent_death_guard'].get('verified') is True, 'server ready/startup/guard join')
+    return digest(binding['handoff_receipt'])
+
+
+def check_server_child(binding, process, closed, traces):
+    check_server_ready(binding, process, {'ready': True, 'pid': process['pid']})
+    handoff = json.loads(regular(binding['handoff_receipt']).read_bytes())
+    record = json.loads(regular(binding['worker_receipt']).read_bytes())
+    native = json.loads(regular(binding['lifecycle']).read_bytes())
+    require(process['status'] == 'OK' and process['returncode'] == 0 and process.get('cleanup_complete') is True and
+            record['status'] == 'WORKER_RETURNED_PENDING_GATES' and record['phase'] == 'COMPLETE' and
+            record['worker_phase'] == 'capacity_server' and record['pid'] == process['pid'] and
+            record['spec_sha256'] == binding['worker_spec']['sha256'] and
+            record['handoff_sha256'] == digest(binding['handoff_receipt']) and record['handoff_evidence'] == handoff and
+            record['native_receipt_sha256'] == digest(binding['lifecycle']) and
+            native['status'] == 'SERVER_RETURNED_PENDING_GATES' and native['pid'] == process['pid'] and
+            native['parent_pid'] == binding['server']['parent_pid'] and native['listener'] == binding['server']['listener'] and
+            native['closed'] == closed and closed.get('closed') is True and closed.get('thread_alive') is False and
+            native['engine_thread_alive'] is False and native['trace_sha256'] == traces,
+            'server normal shutdown receipt join')
+    return {'status': 'VERIFIED_SERVER_STARTUP_RETURN_PENDING_GATES', 'pid': process['pid'],
+            'worker_sha256': digest(binding['worker_receipt']), 'handoff_sha256': digest(binding['handoff_receipt']),
+            'lifecycle_sha256': digest(binding['lifecycle']), 'proves_gpu_engagement': False,
+            'proves_native_context_absence': False, 'release_cleared': False}

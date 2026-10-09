@@ -180,7 +180,11 @@ def test_owned_socket_sequence_retention_and_failure_cleanup(tmp_path, monkeypat
             self.returncode = -signal.SIGKILL
 
     monkeypatch.setattr(capacity.subprocess, "Popen", Process)
-    monkeypatch.setattr(capacity.os, "killpg", lambda pid, sig: killed.append((pid, sig)))
+    def own_signal(pid, sig):
+        if sig == 0:
+            raise ProcessLookupError
+        killed.append((pid, sig))
+    monkeypatch.setattr(capacity.os, "killpg", own_signal)
 
     def client(argv, **kwargs):
         options = dict(zip(argv[4::2], argv[5::2]))
