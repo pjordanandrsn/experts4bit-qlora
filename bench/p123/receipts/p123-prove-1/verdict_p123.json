@@ -1,0 +1,20 @@
+{
+ "lane": "P123",
+ "proof": true,
+ "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+ "verdict": "VOID",
+ "reasons": [
+  "census_b1: CLASS_MAP_INCOMPLETE"
+ ],
+ "routers": {
+  "licensed": 32,
+  "of": 32,
+  "report": {
+   "mode": "auto",
+   "patched": 32,
+   "failed_probe": 0,
+   "no_kernel_mode": 0,
+   "fp32_upstream": 0
+  }
+ }
+}

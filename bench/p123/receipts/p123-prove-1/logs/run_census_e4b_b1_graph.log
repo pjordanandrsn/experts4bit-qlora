@@ -1,0 +1,24 @@
+Fetching 11 files:   0%|          | 0/11 [00:00<?, ?it/s]Fetching 11 files: 100%|██████████| 11/11 [00:00<00:00, 1454.38it/s]
+[23:22:59]   checkpoint: ibm-granite/granite-3.1-3b-a800m-instruct @ a02780686e08a03fe0d2679a293b5c74a90efa89 (requested a02780686e08a03fe0d2679a293b5c74a90efa89)
+[23:22:59]   fusing + quantizing experts (up to 32x40) to nf4 (streaming)...
+[23:22:59]   quantized experts on 32/32 MoE layers (40 experts each)
+[23:22:59]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[23:22:59]   experts deferred to the arena: 32 module(s), 160 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[23:22:59]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[23:23:00]   hybrid tier active on 32 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] fusions (q/k/v 0; folds set: none): {'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0}
+DECODE_GRAPH bucket=1 captured
+DECODE_GRAPH bucket=2 captured
+DECODE_GRAPH bucket=4 captured
+DECODE_GRAPH bucket=8 captured
+DECODE_GRAPH bucket=16 captured
+[serve_paged] PREFILL_GRAPH on (auto): first chunks of 512 tokens replay one graph (startup check bitwise on two prompts; pool 156 MiB, 26092 MiB free)
+[serve_paged] ready: {"moe_layers": 32, "experts": 40, "top_k": 8, "model_type": "granitemoe", "int4_expert_layers": 0, "int4_store_kinds": [], "int4_attn_projections": 0, "kv": {"n_kv_heads": 8, "head_dim": 64, "k_groups": "auto", "scratch_slots": 16, "blocks_per_seq": 256, "pool_mib": 2378.3}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "grouping": {"device_grouping": true, "force_singleton_groups": false}, "prefill_graph": "auto", "levers_env": {}, "exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0, "fusion_modes": {"E4B_PAGED_FUSE_QKV": "0", "E4B_FUSE_T1_GLUE": "0", "E4B_FUSE_T1_GLUE_R2": "0", "E4B_FUSE_ROUTER_EPI": "0"}, "fusion_sources": {"E4B_PAGED_FUSE_QKV": "default-off", "E4B_FUSE_T1_GLUE": "default-off", "E4B_FUSE_T1_GLUE_R2": "default-off", "E4B_FUSE_ROUTER_EPI": "default-off"}, "fusion_report": {"E4B_FUSE_T1_GLUE": {"mode": "0"}, "E4B_FUSE_T1_GLUE_R2": {"mode": "0"}, "E4B_FUSE_ROUTER_EPI": {"mode": "0"}}, "pinned_cache_released": true, "host_heap_trimmed": true}
+Capture range started in the application.
+Capture range ended in the application.
+Generating '/tmp/nsys-report-b804.qdstrm'
+[1/1] [0%                          ] census_e4b_b1_graph.nsys-repProcessing events...
+[1/1] [0%                          ] census_e4b_b1_graph.nsys-rep[1/1] [9%                          ] census_e4b_b1_graph.nsys-rep[1/1] [==18%                       ] census_e4b_b1_graph.nsys-rep[1/1] [=============58%            ] census_e4b_b1_graph.nsys-rep[1/1] [========================100%] census_e4b_b1_graph.nsys-rep[1/1] [========================100%] census_e4b_b1_graph.nsys-rep
+P123_CENSUS {"batch": 1, "steps_bracketed": 64, "profiled_ms_per_step": 4.9521}
+Generated:
+	/root/p123/census/census_e4b_b1_graph.nsys-rep

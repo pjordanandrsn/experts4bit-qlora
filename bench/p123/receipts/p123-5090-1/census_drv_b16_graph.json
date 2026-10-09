@@ -1,0 +1,72 @@
+{
+ "engine": "e4b",
+ "batch": 16,
+ "mode": "census",
+ "e4b_sha": "b371053a0f3b43e7874a8fb006cf25644fe615a3",
+ "gnf4_sha": "6ee2e10408161a9d3c874975c9191a7f2957e6f4",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "load_s": 35.4,
+ "torch": "2.8.0+cu128",
+ "fusions": {
+  "fuse_qkv_n": 48,
+  "fuse_t1_glue_n": 193,
+  "fuse_t1_glue_r2_n": [
+   48,
+   48
+  ],
+  "fuse_router_epilogue_n": 48
+ },
+ "fusion_sources": {
+  "E4B_PAGED_FUSE_QKV": "default-allowlisted",
+  "E4B_FUSE_T1_GLUE": "default-allowlisted",
+  "E4B_FUSE_T1_GLUE_R2": "default-allowlisted",
+  "E4B_FUSE_ROUTER_EPI": "default-allowlisted"
+ },
+ "prompts_sha256": "21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709",
+ "ramp_steps": 17,
+ "skip": 32,
+ "steps_bracketed": 64,
+ "row_tokens": 160,
+ "window_decode_positions": [
+  35,
+  113
+ ],
+ "profiled_wall_s": 1.150802,
+ "profiled_ms_per_step": 17.9813,
+ "note": "profiled wall: never a speed reading (SC1's unprofiled arm is the speed)",
+ "graph_stats": {
+  "1": {
+   "replays": 4,
+   "eager_steps": 0,
+   "rows": 4,
+   "pad_rows": 0
+  },
+  "2": {
+   "replays": 4,
+   "eager_steps": 0,
+   "rows": 8,
+   "pad_rows": 0
+  },
+  "4": {
+   "replays": 8,
+   "eager_steps": 0,
+   "rows": 28,
+   "pad_rows": 4
+  },
+  "8": {
+   "replays": 16,
+   "eager_steps": 0,
+   "rows": 104,
+   "pad_rows": 24
+  },
+  "16": {
+   "replays": 188,
+   "eager_steps": 0,
+   "rows": 2896,
+   "pad_rows": 112
+  }
+ },
+ "max_memory_allocated": 24227871232,
+ "max_memory_reserved": 24494735360
+}

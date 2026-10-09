@@ -11836,6 +11836,37 @@
         "receipts/experts4bit-qlora/2026-10-08/tc1-5090-141/tc1/"
       ],
       "notes": "Vast invoiced $0.798. Amendment 70's host-bound box read 0.797 on the matched arm; this GPU-bound one 1.031, the ladder's 5.5 % of device time not hidden. The default flip is grouped-nf4-gemm#521."
+    },
+    {
+      "id": "e4b.serve.p123.default-decode-census.qwen3.5090.2026-10-09",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P123, one RTX 5090: a kernel-class census (SC1b's Nsight Systems instrument, P123's v1.1 NF4 class map) of the shipped default serve_paged decode step on Qwen3-30B-A3B NF4 (graphs, buckets 1-16, 16 slots, the B=1 fused stack default-allowlisted with census 48 / 193 / [48, 48] / 48, grouped-nf4-gemm 0.43.0's bandwidth GEMV bw_prmt32). At one sequence the step is 4.7475 ms graph-profiled (4.56 ms unprofiled) and the dense bf16 GEMVs are its largest class: dense_gemm 0.382 (1.814 ms, 146 launches), moe_expert 0.255, attn 0.149, moe_route 0.107, norm_elem 0.078, RESIDUAL 0.025; GPU busy fraction 0.923. At 16 sequences (17.94 ms) the small-M grouped NF4 GEMM is the step: moe_expert 0.691, dense_gemm 0.140, busy 0.962. Unmapped kernels: none. Predictions held except B=1 moe_route (0.107 against 0.02-0.09: seven launch-bound kernels per layer) and B=16 moe_expert (0.691 against 0.40-0.65). Reported, not ruled: W1 220.3 / 218.3 tok/s, W16 877.1 / 869.5 tok/s, self-pairs 1.009. It prices the next lever and moves no default; the router census of 48 is the 5090 check of #1398's fp32 probe on the shipped default.",
+      "value": 0.3821,
+      "unit": "share of the one-sequence decode step (graph-profiled P 4.7475 ms) in the dense_gemm class (cuBLAS bf16 GEMVs: attention projections, router logits, lm_head), node-mode attribution over 61 kept steps",
+      "hardware": "RTX 5090 (sm_120, driver 595.71.05, 450 W power limit, 32607 MiB, 170 SMs), one rented Vast.ai host (instance 54935034, AMD EPYC 7C13, 256 threads, ~1 TB RAM), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @b371053a (0.50.0 + P123 #1394, Amendments 1 #1405 and 2 #1411) + grouped-nf4-gemm @6ee2e10 (v0.43.0); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0, Nsight Systems 2025.6.1; Qwen/Qwen3-30B-A3B @ad44e77, NF4 arena baked on the box; premise 19 passed on the card; every lever unset, E4B_PAGED_MAX_SEQS=16 named; P109's W16 / W1 workloads (512-token prompts) for the two unprofiled speed arms; graph- and node-mode captures of 64 decode steps at B = 1 and 16 (context positions 35-113), read by bench/sc1b/sc1b_census.py at SC1b's bytes",
+      "measured_on": "2026-10-09",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p123/RESULTS-p123.md",
+        "bench/p123/PREREG-p123.md",
+        "bench/p123/p123_reduce.py",
+        "bench/p123/kernel_classes_nf4.json",
+        "bench/p123/receipts/p123-5090-1/verdict_p123.json",
+        "bench/p123/receipts/p123-5090-1/census_b1.json",
+        "bench/p123/receipts/p123-5090-1/census_b16.json",
+        "bench/p123/receipts/p123-5090-1/arm_S1a.json",
+        "bench/p123/receipts/p123-5090-1/arm_S1b.json",
+        "bench/p123/receipts/p123-5090-1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-09/p123-5090-1/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-08/p123-prove-2/ (receipt.json, the proving run)"
+      ],
+      "notes": "Pre-registered in #1394 with Amendments 1 (#1405, the proof's router check) and 2 (#1411, the class map names torch.cat after p123-prove-1 VOIDed on it). The maintainer re-derived the verdict from the receipt store with main's reducer, byte-identical. The proofs' router builds licensed 32 of 32 Granite routers twice on a 5090 (fam-prove-1 read 27 before #1398). The host's RTX 5090 ran at a 450 W power limit."
     }
   ]
 }

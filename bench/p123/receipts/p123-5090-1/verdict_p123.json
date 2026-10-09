@@ -1,0 +1,138 @@
+{
+ "lane": "P123",
+ "proof": false,
+ "model": "Qwen/Qwen3-30B-A3B",
+ "verdict": "READ",
+ "reasons": [
+  "B=1: P 4.7475 ms, largest class dense_gemm (38%), RESIDUAL 2.5%, busy 0.9233"
+ ],
+ "speed": {
+  "decode_ms_per_step": {
+   "W1": [
+    4.5392,
+    4.5806
+   ],
+   "W16": [
+    18.2412,
+    18.401
+   ]
+  },
+  "self_pair_S1b_over_S1a": {
+   "W1": 1.0091,
+   "W16": 1.0088
+  },
+  "peak_allocated_bytes": 24227871232
+ },
+ "batches": {
+  "1": {
+   "P_ms": 4.7475,
+   "unprofiled_ms": 4.5599,
+   "inflate": 0.0411,
+   "labels": [
+    "NODE_TRACE_INFLATED"
+   ],
+   "classes_ms": {
+    "moe_expert": 1.2112,
+    "moe_route": 0.5087,
+    "attn": 0.7079,
+    "dense_gemm": 1.8142,
+    "norm_elem": 0.3716,
+    "sample": 0.0052,
+    "input_prep": 0.0077,
+    "memcpy": 0.0027
+   },
+   "shares": {
+    "moe_expert": 0.2551,
+    "moe_route": 0.1072,
+    "attn": 0.1491,
+    "dense_gemm": 0.3821,
+    "norm_elem": 0.0783,
+    "sample": 0.0011,
+    "input_prep": 0.0016,
+    "memcpy": 0.0006
+   },
+   "RESIDUAL": {
+    "ms": 0.1183,
+    "share": 0.0249,
+    "unmapped_kernels_ms": 0.0,
+    "I_in_ms": 0.01965,
+    "idle_out_ms": 0.344353,
+    "overlap_in_ms": -0.244704,
+    "O_ms": 0.001031
+   },
+   "busy_fraction": 0.9233,
+   "busy_fraction_status": "read",
+   "kernels_per_step": 1072,
+   "peak_reserved_bytes": 24494735360,
+   "window_positions": [
+    35,
+    98
+   ],
+   "predictions": {
+    "dense_gemm": "HELD",
+    "moe_expert": "HELD",
+    "attn": "HELD",
+    "moe_route": "MISSED",
+    "norm_elem": "HELD",
+    "RESIDUAL": "HELD",
+    "busy_fraction": "HELD",
+    "kernels_per_step": "HELD"
+   },
+   "largest_class": "dense_gemm"
+  },
+  "16": {
+   "P_ms": 17.9429,
+   "unprofiled_ms": 18.3211,
+   "inflate": -0.0206,
+   "labels": [],
+   "classes_ms": {
+    "moe_expert": 12.3899,
+    "moe_route": 0.7714,
+    "attn": 0.8924,
+    "dense_gemm": 2.516,
+    "norm_elem": 0.703,
+    "sample": 0.0072,
+    "input_prep": 0.024,
+    "memcpy": 0.0024
+   },
+   "shares": {
+    "moe_expert": 0.6905,
+    "moe_route": 0.043,
+    "attn": 0.0497,
+    "dense_gemm": 0.1402,
+    "norm_elem": 0.0392,
+    "sample": 0.0004,
+    "input_prep": 0.0013,
+    "memcpy": 0.0001
+   },
+   "RESIDUAL": {
+    "ms": 0.6366,
+    "share": 0.0355,
+    "unmapped_kernels_ms": 0.0,
+    "I_in_ms": 0.290564,
+    "idle_out_ms": 0.385218,
+    "overlap_in_ms": -0.004896,
+    "O_ms": 0.034303
+   },
+   "busy_fraction": 0.9623,
+   "busy_fraction_status": "read",
+   "kernels_per_step": 1168,
+   "peak_reserved_bytes": 24494735360,
+   "window_positions": [
+    35,
+    113
+   ],
+   "predictions": {
+    "dense_gemm": "HELD",
+    "moe_expert": "MISSED",
+    "attn": "HELD",
+    "moe_route": "HELD",
+    "norm_elem": "HELD",
+    "RESIDUAL": "HELD",
+    "busy_fraction": "HELD",
+    "kernels_per_step": "HELD"
+   },
+   "largest_class": "moe_expert"
+  }
+ }
+}

@@ -1,0 +1,132 @@
+{
+ "lane": "P123",
+ "proof": true,
+ "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+ "verdict": "READ",
+ "reasons": [
+  "B=1: P 4.9056 ms, largest class moe_expert (35%), RESIDUAL 7.3%, busy None"
+ ],
+ "routers": {
+  "licensed": 32,
+  "of": 32,
+  "report": {
+   "mode": "auto",
+   "patched": 32,
+   "failed_probe": 0,
+   "no_kernel_mode": 0,
+   "fp32_upstream": 0
+  }
+ },
+ "speed": {
+  "decode_ms_per_step": {
+   "W1": [
+    4.6787,
+    4.6525
+   ],
+   "W16": [
+    6.8706,
+    6.7819
+   ]
+  },
+  "self_pair_S1b_over_S1a": {
+   "W1": 0.9944,
+   "W16": 0.9871
+  },
+  "peak_allocated_bytes": 5175933952
+ },
+ "batches": {
+  "1": {
+   "P_ms": 4.9056,
+   "unprofiled_ms": 4.6656,
+   "inflate": 0.0514,
+   "labels": [
+    "PROFILER_INFLATED",
+    "NODE_TRACE_INFLATED"
+   ],
+   "classes_ms": {
+    "moe_expert": 1.7301,
+    "moe_route": 0.4572,
+    "attn": 0.4418,
+    "dense_gemm": 0.7127,
+    "norm_elem": 1.1856,
+    "sample": 0.0092,
+    "input_prep": 0.0088,
+    "memcpy": 0.0022
+   },
+   "shares": {
+    "moe_expert": 0.3527,
+    "moe_route": 0.0932,
+    "attn": 0.0901,
+    "dense_gemm": 0.1453,
+    "norm_elem": 0.2417,
+    "sample": 0.0019,
+    "input_prep": 0.0018,
+    "memcpy": 0.0004
+   },
+   "RESIDUAL": {
+    "ms": 0.3581,
+    "share": 0.073,
+    "unmapped_kernels_ms": 0.0,
+    "I_in_ms": -0.014817,
+    "idle_out_ms": 0.372481,
+    "overlap_in_ms": -0.0,
+    "O_ms": -0.000416
+   },
+   "busy_fraction": null,
+   "busy_fraction_status": "UNREAD (the profiler inflated the step)",
+   "kernels_per_step": 1656,
+   "peak_reserved_bytes": 5509218304,
+   "window_positions": [
+    35,
+    98
+   ],
+   "largest_class": "moe_expert"
+  },
+  "16": {
+   "P_ms": 6.8327,
+   "unprofiled_ms": 6.8262,
+   "inflate": 0.001,
+   "labels": [
+    "NODE_TRACE_INFLATED"
+   ],
+   "classes_ms": {
+    "moe_expert": 2.2774,
+    "moe_route": 0.4906,
+    "attn": 0.6753,
+    "dense_gemm": 1.4782,
+    "norm_elem": 1.4622,
+    "sample": 0.0094,
+    "input_prep": 0.0252,
+    "memcpy": 0.002
+   },
+   "shares": {
+    "moe_expert": 0.3333,
+    "moe_route": 0.0718,
+    "attn": 0.0988,
+    "dense_gemm": 0.2163,
+    "norm_elem": 0.214,
+    "sample": 0.0014,
+    "input_prep": 0.0037,
+    "memcpy": 0.0003
+   },
+   "RESIDUAL": {
+    "ms": 0.4123,
+    "share": 0.0603,
+    "unmapped_kernels_ms": 0.0,
+    "I_in_ms": -0.000802,
+    "idle_out_ms": 0.410626,
+    "overlap_in_ms": -0.000192,
+    "O_ms": -0.00266
+   },
+   "busy_fraction": 0.94,
+   "busy_fraction_status": "read",
+   "kernels_per_step": 1656,
+   "peak_reserved_bytes": 5509218304,
+   "window_positions": [
+    35,
+    113
+   ],
+   "largest_class": "moe_expert"
+  }
+ }
+}

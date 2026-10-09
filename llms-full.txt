@@ -1909,7 +1909,8 @@ Register: [`../claims.json`](../claims.json). The position, **measured** (receip
     "e4b.serve.p115.fused-stack-engagement.gptoss-qwen36.5090.2026-10-08",
     "e4b.serve.p115.fused-stack-quality.granite.5090.2026-10-08",
     "e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07",
-    "e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08"
+    "e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08",
+    "e4b.serve.p123.default-decode-census.qwen3.5090.2026-10-09"
    ],
    "limitations": [
     "Not a general-purpose vLLM replacement: on the same box with identical prompt token ids vLLM 0.30.0 decodes faster than this package's current int4 stack at both B=1 and B=16 (claims e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b1.5090.2026-09-22, e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b16.5090.2026-09-22), bounded to graph decode on one RTX 5090 box with one prompt set; quality quoted, never equated; the 2026-09-05 comparison against vLLM 0.28.0 and the NF4 control (e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05) is history",
@@ -2275,6 +2276,14 @@ Qwen3.5/3.6-MoE and Granite-MoE wait for lane FAM's reads at T == 1 (#1362). `0`
 `e4b.serve.p115.fused-stack-quality.qwen3.5090.2026-10-07`,
 `e4b.serve.p115.fused-stack-engagement.gptoss-qwen36.5090.2026-10-08`,
 `e4b.serve.p115.fused-stack-quality.granite.5090.2026-10-08` ([P115](../bench/p115/RESULTS-p115.md)).
+
+**Where the default single-request step goes.** A kernel-class census of the shipped default on Qwen3-30B-A3B NF4,
+run on a 5090 with the fused stack and the bandwidth GEMV both on, puts the one-request step at 4.75 ms. The dense bf16
+GEMVs (attention projections, router logits, lm_head) lead at 38 %, then the NF4 experts at 26 %, attention at 15 %
+and launch-bound routing glue at 11 %; the GPU is busy 92 % of the step. At 16 requests the small-M grouped NF4 GEMM is
+69 % of an 18 ms step. The census moves no default: it prices the next single-request lever, the dense GEMVs, which
+needs a quality bar of its own. Its router census of 48 is the 5090 check of the fp32 router probe on the shipped
+default. `e4b.serve.p123.default-decode-census.qwen3.5090.2026-10-09` ([P123](../bench/p123/RESULTS-p123.md)).
 
 **Other opt-ins.** `E4B_PAGED_DECODE_LOOKAHEAD=1` recovers the whole host gap between decode steps, but the gap is
 small: 1.0198× at one request, SLOWER against its 1.02 bar. `E4B_PAGED_LAST_LOGITS=1` projects only the final prompt
@@ -3231,6 +3240,7 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.train.single-ladder-auto.field.5090.2026-10-08 [measured]: TC1 amendment 71 (#835), one rented RTX 5090 (tc1-5090-139, AMD EPYC 7763, Vast machine 150670): grouped-nf4-gemm's NF4_QLORA_SINGLE_LADDER=auto (grouped-nf4-gemm#514, the single-block ladder exactly when the adapters are fp32) against 0 at TC1's field recipe over 60 load-gated steps, e4b at its defaults in …
 - e4b.train.dense-executor.dq9.5090.2026-10-08 [measured]: DQ9 is COMPLETE_DIAGNOSTIC on sixteen known-subject arms: all eight paired training peaks are unchanged by one setup cache clear; all allocator estimates are above measured peaks, but all ten streamed full-device estimates remain below sampled driver use, by at most 1135096620 bytes.
 - e4b.train.single-ladder-auto.gpu-bound.5090.2026-10-08 [measured]: TC1 amendment 72 (#835), amendment 71's box unchanged on a third host (tc1-5090-141, AMD Ryzen 9 9950X3D, Vast machine 18967, GPU-bound: the matched l0's GPU busy 0.884 of its step, no draw voided for host load): grouped-nf4-gemm's NF4_QLORA_SINGLE_LADDER=auto against 0 at TC1's field recipe over 60 load-gated steps …
+- e4b.serve.p123.default-decode-census.qwen3.5090.2026-10-09 [measured]: Lane P123, one RTX 5090: a kernel-class census (SC1b's Nsight Systems instrument, P123's v1.1 NF4 class map) of the shipped default serve_paged decode step on Qwen3-30B-A3B NF4 (graphs, buckets 1-16, 16 slots, the B=1 fused stack default-allowlisted with census 48 / 193 / [48, 48] / 48, grouped-nf4-gemm 0.43.0's …
 
 Open items (no evidence either way):
 
@@ -3238,4 +3248,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 …
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(426 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(427 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
