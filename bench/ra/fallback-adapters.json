@@ -79,6 +79,27 @@
       "ast_sha256": "22b3507a9aed414e56f6d52093e1312bb92d3bc2a7be0973d3c1b9c468538a94",
       "feature": "router_epilogue",
       "source_commit": "5905a0cee9424e466c1fcc17cd91fb0ff1f69be6"
+    },
+    {
+      "module": "experts4bit_qlora.engines.router_epilogue",
+      "qualname": "fuse_router_epilogue.<locals>._fwd",
+      "ast_sha256": "734227b1c8f17c0bf31bc1c8c5f998f318558e2c7196a9eb3cb28a363c4f89c3",
+      "feature": "router_epilogue",
+      "source_commit": "8666dee43dad743366026067692d082a3a5a05d8"
+    },
+    {
+      "module": "experts4bit_qlora.engines.router_epilogue",
+      "qualname": "fuse_router_epilogue.<locals>._fwd",
+      "ast_sha256": "ab0a3a4b2a05cde265ab2d02be78c734fdc1d1b51c867b2391177ea0b13c7d19",
+      "feature": "router_epilogue",
+      "source_commit": "8666dee43dad743366026067692d082a3a5a05d8"
+    },
+    {
+      "module": "experts4bit_qlora.engines.router_epilogue",
+      "qualname": "fuse_router_epilogue.<locals>._fwd",
+      "ast_sha256": "fe1233ad3bbc56cd61172b2c886350bf48bfe38a8ca59539ce52e48fd07a2619",
+      "feature": "router_epilogue",
+      "source_commit": "8666dee43dad743366026067692d082a3a5a05d8"
     }
   ]
 }

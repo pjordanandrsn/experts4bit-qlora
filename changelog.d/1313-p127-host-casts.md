@@ -13,4 +13,6 @@
   - CPU tests assert what each kernel is handed and that the result is bitwise what the cast gave. Each is
     mutation-checked: restoring the cast fails it.
   - A CUDA test runs the real kernels both ways and asserts identical outputs.
+- **RA's fallback observer.** It fails closed on a router forward body it has not reviewed. Its registry
+  (`bench/ra/fallback-adapters.json`) gains the three new bodies, and the old ones stay.
 - **No speed claim.** P127's read prices these together with Phase 2 (gnf4 kernel options) under a bitwise gate.
