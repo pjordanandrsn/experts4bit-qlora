@@ -285,3 +285,15 @@ def test_estimate_env_reports_the_switches_the_estimate_reads(monkeypatch):
         on = _activations(topo, T).bytes
         monkeypatch.setenv(switch, "0")
         assert _activations(topo, T).bytes != on, switch
+
+
+def test_whole_and_chunked_logits_are_priced_at_one_measured_coefficient():
+    """Whole stock logits (allocator replay, loggetta#44/#49) and one chunk's (peak allocated around the chunked loss,
+    #1504) both hold three fp32 logits-sized tensors; the estimate and the chunk workspace read one constant."""
+    from experts4bit_qlora import recipe
+    from experts4bit_qlora.engines import chunked_lm_loss
+
+    assert chunked_lm_loss.LOGITS_LOSS_BYTES == 12
+    assert recipe.LOGITS_LOSS_BYTES is chunked_lm_loss.LOGITS_LOSS_BYTES
+    assert chunked_lm_loss.CHUNK_BYTES_PER_LOGIT == chunked_lm_loss.LOGITS_LOSS_BYTES
+    assert chunked_lm_loss.chunked_loss_bytes(4096, 1000, hidden=8) == 512 * 1000 * 12 + 4096 * 8 * 2

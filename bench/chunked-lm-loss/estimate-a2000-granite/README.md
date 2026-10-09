@@ -68,3 +68,10 @@ on file. GiB:
 
 **In sample.** These are four points on one model and one card. No committed loggetta MoE training receipt reaches
 the chunked regime: all run at T = 1024, and Qwen3-30B-A3B's stock fp32 logits there are 0.59 GiB, under the gate.
+
+**Update (#1504).** The chunk's own coefficient was later measured without the recorder, as peak allocated around
+`chunked_causal_lm_loss` at T = 1024, 2048 and 4096 with 512-token chunks: 12.0–12.07 B per chunk logit after the
+hidden-row term. `CHUNK_BYTES_PER_LOGIT` now equals `LOGITS_LOSS_BYTES`, 12. It does not move the four points above: at
+P1 the estimate's `grouped_nf4` backward branch exceeds the chunk at either coefficient. P1's remaining 36.2 MiB is
+not attributed. A candidate is granite's `logits_scaling` transform, an extra bf16 copy per chunk, which the
+identity-transform measurement does not include.

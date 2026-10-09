@@ -121,11 +121,19 @@ _ENV = "E4B_CHUNKED_LM_LOSS"
 _EVAL_ENV = "E4B_CHUNKED_EVAL_LOSS"
 
 
-#: bytes per (supervised token, vocabulary entry) of one chunk's workspace at its backward peak: the bf16 logits, their fp32
-#: upcast and the fp32 gradient. A stated formula, not a measurement. Whole stock logits are priced at
-#: ``recipe.LOGITS_LOSS_BYTES`` (12: three fp32 tensors, measured by allocator replay); a chunk's own coefficient is not
-#: attributed -- the allocator recorder's Python stacks fail inside the chunk's checkpoint recompute (torch 2.11).
-CHUNK_BYTES_PER_LOGIT = 10
+#: Bytes per logit live at a training step's loss: three fp32 logits-sized tensors together, whether the logits are whole
+#: (stock) or one chunk's (this module). The one source for both: ``recipe.LOGITS_LOSS_BYTES`` is this value.
+#: - Whole logits, by allocator replay on an RTX A2000: granite-3.1-3b-a800m, 3 x 192.0 MiB at T = 1024 and V = 49,155
+#:   (loggetta#49); OLMoE-1B-7B, 3 x 196.5 MiB at V = 50,304 (loggetta#44).
+#: - One chunk, measured as peak allocated around :func:`chunked_causal_lm_loss` with no recorder (the allocator recorder
+#:   cannot run inside the chunk's checkpoint recompute, #1504): 512-token chunks at V = 49,155 and H = 1536 on an RTX A2000
+#:   gave 12.0, 12.06 and 12.07 B per chunk logit at T = 1024, 2048 and 4096, once ``T x H x 2`` of gathered hidden rows
+#:   is taken out.
+LOGITS_LOSS_BYTES = 12
+
+#: bytes per (supervised token, vocabulary entry) of one chunk's workspace at its backward peak (measured; see
+#: :data:`LOGITS_LOSS_BYTES`). It was a stated 10 (bf16 logits + fp32 upcast + fp32 gradient), 2 B under the measurement.
+CHUNK_BYTES_PER_LOGIT = LOGITS_LOSS_BYTES
 
 
 def chunked_loss_bytes(supervised_tokens: int, vocab: int, hidden: int = 0, chunk: int = DEFAULT_CHUNK,

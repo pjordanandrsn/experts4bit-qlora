@@ -22,12 +22,9 @@ from dataclasses import asdict, dataclass, field
 
 import torch
 
-#: Bytes per logit live at a training step's loss: three fp32 logits-sized tensors together (one allocated in
-#: transformers' ``fixed_cross_entropy``, two from frames the replay could not name), measured by allocator replays on
-#: an RTX A2000: granite-3.1-3b-a800m (3 x 192.0 MiB at T = 1024, V = 49,155; loggetta#49) and OLMoE-1B-7B (3 x 196.5 MiB,
-#: V = 50,304; loggetta#44). It was 10 (bf16 + fp32 + fp32), which left those peaks short by 2 x T x V bytes. The chunked
-#: LM loss (``enable_fast_train`` past 1 GiB of fp32 logits) does not materialize them whole; this term does not model it.
-LOGITS_LOSS_BYTES = 12
+#: Bytes per logit live at a training step's loss (three fp32 logits-sized tensors), whole or chunked: one value, defined and
+#: measured in :mod:`~experts4bit_qlora.engines.chunked_lm_loss`.
+from .engines.chunked_lm_loss import LOGITS_LOSS_BYTES  # noqa: E402
 #: storage width per scheme, mirroring ``_vendor.experts._SCHEME_BITS`` without importing a private table
 _ADAPTER_BYTES = {"bf16": 2, "fp32": 4}
 _DTYPES = {"bf16": torch.bfloat16, "fp32": torch.float32}
