@@ -133,10 +133,16 @@ speed.
   - the mean NLL delta against the reference, in nats per scored position, with its spread over windows;
   - argmax agreement with the reference, as the share of positions;
   - SC1's comparability labels (CLOSE ≤ 0.0095, COMPARABLE ≤ 0.02 nats).
-- **Scoring shapes (pending the maintainer).** vLLM's and SGLang's `prompt_logprobs` run their **prefill** path, one
-  forward over the window. e4b's `paged_pass` prefills the prompt and then scores through its **decode** graphs. The
-  proposal adds an e4b prefill-shaped column, one offline forward over the window, so each framework has a
-  like-for-like row; e4b's decode-shaped column stays as the served arithmetic.
+- **Scoring shapes (decided 2026-10-09).** The cross-framework comparison is **prefill-shaped for all three**: vLLM and
+  SGLang through `prompt_logprobs`, and e4b through one offline forward over the same window on its served weights and
+  kernels.
+  - e4b's decode-shaped row (`p117_box.paged_pass` through its served graphs) is **reported**, labelled as the served
+    arithmetic.
+  - **Cannot-say:** the competitors' decode-shaped arithmetic is not measured.
+- **The ordering floor (proposed).** `sc5_ref.py --chunked 256` scores the same windows through the bf16 cache in chunks.
+  Its NLL delta and argmax agreement against the full forward are the floor that every argmax agreement is read against.
+  Chunking reorders an MoE's arithmetic and flips a few percent of Qwen3's router choices (6.77 %, METHODOLOGY 13.1), so
+  even a correct implementation agrees below 100 %.
 - **Quality gates no speed row; it sits beside every one.**
 
 ## Provenance
