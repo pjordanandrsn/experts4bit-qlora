@@ -89,7 +89,8 @@ def test_host_guard_refuses_with_failed_receipt(owned):
     assert q.returncode != 0
     result = json.loads((owned / 'out/result.json').read_bytes())
     assert result['status'] == 'FAILED' and result['observations'] == []
-    assert 'selected Linux' in result['error']
+    expected = 'inherited SIGKILL parent guard' if sys.platform == 'linux' else 'selected Linux'
+    assert expected in result['error']
 
 
 @pytest.mark.parametrize('change', ['rows', 'join', 'summary', 'extra_summary', 'raw', 'resealed_raw', 'url', 'clock', 'sequence', 'record_extra', 'extra_file', 'symlink'])
