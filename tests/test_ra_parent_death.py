@@ -196,4 +196,3 @@ def test_parent_thread_refused_before_launch(tmp_path, monkeypatch):
                     log=tmp_path / "worker.log", receipt=tmp_path / "process.json",
                     deadline=time.time() + 1000, timeout=1)
     assert not (tmp_path / "process.json").exists()
-
