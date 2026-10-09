@@ -16,6 +16,8 @@ for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR 
 done
 case "$TC1_BOX" in A|B) ;; *) say "refusing: TC1_BOX must be A (TC1's one RTX 5090) or B (lane TC2's box B, tc2big)"; exit 78;; esac
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
+LANE_HELPER="$REPO/bench/common/lane_liveness.sh"
+source "$LANE_HELPER" || { say "refusing: missing lane liveness helper"; exit 78; }
 # TC1b (the qwen3curve token): + the clinical builder and its manifest, referenced where tp4_drive.sh references them (never copied into bench/tc1)
 STAGE="$HERE/tc1_run.sh $HERE/tc1_arm.py $HERE/tc1_reduce.py $REPO/bench/tp4/tp4_alpaca.py $REPO/bench/flagship-matrix/drivers/n9_datasets.py $REPO/bench/flagship-matrix/ds_manifest.json"
 # A lane that governs its own draw through tp4's machinery (P67: bench/p67/p67_drive.sh) stages its box-side
@@ -69,7 +71,13 @@ if [ -s "$HF_TOKEN_FILE" ]; then   # HF pulls run authenticated (unauthenticated
 else
   say "no hf token file at $HF_TOKEN_FILE -- pulls run unauthenticated (every registered checkpoint is ungated)"
 fi
-$SSH "cd $W || exit 20; nohup env $PASS bash $RUNNER > outer.log 2>&1 < /dev/null & child=\$!; end=\$((\$(date +%s)+30)); while [ \$(date +%s) -lt \$end ]; do [ \"\$(cat TC1_RUN_NONCE 2>/dev/null)\" = '$NONCE' ] && { echo started:\$child; exit 0; }; kill -0 \$child 2>/dev/null || { wait \$child; echo child-exited-early:rc=\$? >&2; exit 125; }; sleep 1; done; echo nonce-handshake-timeout >&2; exit 124" || { say "start failed: child did not bind the nonce"; exit 21; }
+LANE_STARTED_AT=$(date +%s)
+LAUNCH_REPLY=$({ cat "$LANE_HELPER"; printf '%s\n' "cd $W || exit 20; nohup env $PASS bash $RUNNER > outer.log 2>&1 < /dev/null & child=\$!; identity=\$(lane_proc_snapshot \$child); end=\$((\$(date +%s)+30)); while [ \$(date +%s) -lt \$end ]; do [ \"\$(cat TC1_RUN_NONCE 2>/dev/null)\" = '$NONCE' ] && { echo started:\$child; echo identity:\$identity; exit 0; }; kill -0 \$child 2>/dev/null || { wait \$child; echo child-exited-early:rc=\$? >&2; exit 125; }; sleep 1; done; echo nonce-handshake-timeout >&2; exit 124"; } | $SSH bash -s) || { say "start failed: child did not bind the nonce"; exit 21; }
+printf '%s\n' "$LAUNCH_REPLY"
+LANE_PID=$(printf '%s\n' "$LAUNCH_REPLY" | sed -n 's/^started:\([0-9][0-9]*\)$/\1/p')
+[[ "$LANE_PID" =~ ^[1-9][0-9]*$ ]] || { say "start failed: malformed child PID"; exit 21; }
+LANE_INITIAL=$(printf '%s\n' "$LAUNCH_REPLY" | sed -n 's/^identity://p')
+say "lane identity: pid=$LANE_PID snapshot=${LANE_INITIAL:-unknown}"
 # Pure decision function, extracted so it can be tested without renting a box.
 # Args: idle_s stall_s util dfk_now dfk_prev du_now du_prev
 # Echoes "" (healthy) | "fetching:<delta>" | "stall:<idle_s>".
@@ -104,10 +112,8 @@ tc1_progress_verdict() {
 # free -- so every marker the controller polls for was simply absent forever,
 # which is indistinguishable from "still working" to a poller. The box itself
 # answers the question: is the lane's own process still there?
-# Two consecutive absences, so one flaky ssh or pgrep does not end a good run.
-tc1_lane_dead() {  # live_now live_prev  -> "dead" when both are a definite 0
-  [ "${1:-}" = "0" ] && [ "${2:-}" = "0" ] && echo dead
-}
+# Two consecutive absences, so one flaky SSH probe does not end a good run.
+tc1_lane_dead() { lane_two_missing "$@"; }
 
 # e4b#835, box B (tc1-5090-22): the host stopped the container 4 h 40 min into the run and every finished arm's receipt
 # died with its disk, because receipts were fetched once, at the end. Each time the box's summary line changes (an arm
@@ -128,10 +134,16 @@ while :; do
   now=$(date +%s)
   $SSH "test -f $W/TP_DONE.$NONCE" 2>/dev/null && { say "TP_DONE seen"; break; }
   [ "$now" -ge $((DEADLINE - POLL)) ] && { say "deadline reached without TP_DONE -- fetching what exists"; break; }
-  hb=$($SSH "echo \"\$(grep -v '^[[:space:]]*$' $W/summary.txt 2>/dev/null | tail -n 1 | cut -c1-160) | gpu \$(nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits 2>/dev/null | tr -d ' ') | du \$(du -sm $W 2>/dev/null | cut -f1)M | disk \$(df -h /root | tail -1 | awk '{print \$4}') | dfk \$(df -k /root | tail -1 | awk '{print \$4}') | live \$(pgrep -f 'bash $RUNNER' | wc -l | tr -d ' ')\"" 2>/dev/null)
+  hb=$($SSH "echo \"\$(grep -v '^[[:space:]]*$' $W/summary.txt 2>/dev/null | tail -n 1 | cut -c1-160) | gpu \$(nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits 2>/dev/null | tr -d ' ') | du \$(du -sm $W 2>/dev/null | cut -f1)M | disk \$(df -h /root | tail -1 | awk '{print \$4}') | dfk \$(df -k /root | tail -1 | awk '{print \$4}')\"" 2>/dev/null)
   line=${hb%% | gpu*}; util=$(echo "$hb" | sed -n 's/.*| gpu \([0-9]*\),.*/\1/p')
   dfk=$(echo "$hb" | sed -n 's/.*| dfk \([0-9]*\).*/\1/p'); duM=$(echo "$hb" | sed -n 's/.*| du \([0-9]*\)M.*/\1/p')
-  live=$(echo "$hb" | sed -n 's/.*| live \([0-9]*\).*/\1/p')
+  snapshot=$($SSH "bash -s -- --probe $LANE_PID" < "$LANE_HELPER" 2>/dev/null) || snapshot=""
+  live=$(lane_snapshot_verdict "$snapshot" "$LANE_INITIAL" "$((now - LANE_STARTED_AT))")
+  hb="$hb | live ${live:-unknown} | pid $LANE_PID"
+  if [ "$live" = reboot ]; then
+    say "LANE DEAD: host rebooted (boot identity changed or uptime below lane age/baseline); fetching what exists"
+    LANE_DEAD=1; break
+  fi
   if [ "$line" != "$LAST" ]; then
     LAST=$line; LAST_CHANGE=$now
     if [ -n "$line" ]; then
@@ -140,7 +152,7 @@ while :; do
     fi
   fi
   if [ -n "$(tc1_lane_dead "$live" "$LAST_LIVE")" ]; then
-    say "LANE DEAD: no 'bash $RUNNER' on the box for two consecutive polls and no TP_DONE -- the remote process exited without writing its markers; not waiting out the deadline"
+    say "LANE DEAD: launch PID $LANE_PID gone/reused on the box for two consecutive polls and no TP_DONE -- the remote process exited without writing its markers; not waiting out the deadline"
     LANE_DEAD=1; break
   fi
   LAST_LIVE=$live
