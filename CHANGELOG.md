@@ -4,6 +4,979 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
+## 0.51.0 — 2026-10-09 — faster MoE decode by default: Qwen3's fused stack, Qwen3.5/3.6's router epilogue, int4 wide tiles and int4 attention projections
+
+**0.51.0.** `serve_paged` decodes MoE models faster by default. All figures are on one RTX 5090:
+
+- **Qwen3-30B-A3B NF4.** The B=1 fused stack decodes one request 1.59× and 16 requests 1.16× as fast (lane P115
+  Phase D).
+- **Qwen3.6-MoE.** The fused router epilogue cuts the one-request step to 0.973 of its time (lane FAM). Qwen3.5-MoE
+  shares the model type and gets the same default.
+- **Int4 Qwen3-30B-A3B, with grouped-nf4-gemm 0.44.0.** Two separate reads: the wide tile table makes the 64-row
+  decode step 4.3 % faster (P122), and int4 attention projections make the 32- and 64-row steps 3.2–3.8 % faster
+  (P124).
+
+Upgrade if you serve these models with `serve_paged`. Each change moves the arithmetic within P110's quality bar, so
+greedy text can change.
+
+Each default was licensed by a rule registered before its read:
+
+| default | where | way back | read |
+|---|---|---|---|
+| the B=1 fused stack (fused q/k/v and the three glue folds) | `qwen3_moe` | `E4B_PAGED_FUSE_QKV=0 E4B_FUSE_T1_GLUE=0 E4B_FUSE_T1_GLUE_R2=0 E4B_FUSE_ROUTER_EPI=0` | P115 Phase D |
+| the same knobs; only the router epilogue engages | `qwen3_5_moe`, `qwen3_5_moe_text` | `E4B_FUSE_ROUTER_EPI=0` | FAM |
+| `E4B_INT4_WIDE_TILES=auto`: a one-launch tile table above 256 routed rows | device-grouped int4 calls | `E4B_INT4_WIDE_TILES=0` | P122 |
+| `E4B_ATTN_INT4_WIDE=auto`: 17–64-row attention projections from the int4 grid, not a cached bf16 copy | `Int4Linear` | `E4B_ATTN_INT4_WIDE=0` | P124 |
+
+The two int4 defaults detect what they need from grouped-nf4-gemm's signatures. On 0.43.0 they change nothing.
+
+**Fixes.**
+- The router-epilogue probe now judges near ties on fp32 CPU logits, so every card licenses the same routers. On a
+  5090, Granite now licenses all 32 of its routers (it was 27) and Qwen3-30B-A3B all 48.
+- An int4 lm_head (`E4B_SERVE_LMHEAD_INT4_CALIB=1`) no longer crashes the prefill-graph warm-up.
+
+**Training.** grouped-nf4-gemm 0.44.0 makes `NF4_QLORA_SINGLE_LADDER=auto` its default (TC1 amendment 72). The
+fp32-adapter step took 0.797 of its time on a host-bound box and at most 1.031 on a GPU-bound one, inside the
+registered 1.05. bf16 adapters are unchanged.
+
+**Opt-in.** `E4B_INT4_TILE_PROGRAMS=P` splits the cumsum tile-table build across P programs. Its tables are
+bit-identical, and it needs the grouped-nf4-gemm release after 0.44.0. Lane P126 will read it.
+
+grouped-nf4-gemm: the `[fast]` floor stays at 0.30.0; CI runs on 0.44.0.
+
+### Added
+
+- Added proposed fixed schema-6 ABBA raw WikiText probes with independent parent
+  raw-index/archive evaluation, complete guarded receipt joins and an explicit
+  36-file worker inventory. No decoding, consumption, GPU or launch clearance.
+
+### Added
+
+- Propose a standalone WikiText test-archive gate with reviewed input bytes, repeated Hub index reconciliation and precise pending decoding/tokenizer/runtime scope.
+
+### Added
+
+- Propose fixed ABBA Alpaca source probes with parent source/projection rechecks, guarded receipt joins and an explicit fixed tool inventory expansion. Completion remains pending executor and launch gates.
+
+### Bind TC1 prepared Alpaca bytes to the registered source recipe
+
+A standalone no-site gate checks the retained raw-source SHA and independently
+reconstructs the frozen 1,200/48 shuffle split and exact prepared JSON bytes.
+Resealed inputs, changed recipes and helper drift refuse. The gate remains
+separate from tokenizer/runtime consumption, other datasets and GPU/launch
+clearance; no instrument or fixed worker inventory changes.
+
+### Join checkpoint index probes into the fixed ABBA supervisor
+
+Schema 4 brackets each position with fixed guarded checkpoint processes,
+reparses their retained Hub indexes and joins local inventories, reviewed
+inputs, manifests, PIDs and cleanup before advancing. The fixed worker set
+adds only the checkpoint helper. Completion still waits for consumption,
+telemetry, on-card, context and launch gates; no rental or clearance is added.
+
+### RA pinned checkpoint repository binding
+
+Add a standalone no-site checkpoint gate that reconciles the Hub's complete
+model-info/tree indexes with the reviewed materialized input inventory, checks
+Git/LFS addresses and safetensors shard coverage, and retains failed authority
+records. Repository-index equality does not establish runtime consumption or
+proof clearance. Implemented by the Codex desktop release-anchor executor.
+
+### RA source and publication joins
+
+Add draft ABBA source/publication process and archive-to-installed-release joins;
+completion still requires the remaining engagement and launch gates.
+
+### Added
+- Proposed schema-2 RA ABBA composition through fixed verified startup/worker
+  handoffs, with common dependency and retained native input projection joins.
+  CPU/synthetic controls confer no GPU, rental or release clearance.
+
+### RA capacity server startup and return
+
+Add a fixed verified capacity server continuation with inherited-listener binding,
+normal drained shutdown and post-return receipt joins. CPU composition controls
+remain separate from GPU engagement and rental clearance.
+
+### Added
+- RA draft fixed SC2 driver startup continuation and joined child receipts; no GPU or release clearance.
+
+### RA frozen TC1 child startup
+
+RA draft: route the frozen TC1 field/profile child through fresh verified no-site startup, retain and join its PID/receipts, and refuse incomplete startup or cleanup evidence. Synthetic CPU controls only; no GPU engagement or launch clearance.
+
+### Three host casts gone from the T == 1 decode (#1313, lane P127's Phase 1)
+
+- **What.** Three host-side casts are dropped, each one a kernel launch per MoE layer. The kernels already do the
+  conversion, so the outputs are unchanged:
+  - The fused router forwards (`router_epilogue.py`, all three kinds) hand `router_epilogue` the logits in the
+    projection's own dtype. The kernel loads them with `.to(tl.float32)`, so the host `logits.float()` was redundant.
+  - The collapsed hot path's combine (`hot_residency._combine_topk`) hands `combine_rows` the top-k weights in the
+    router's dtype. The kernel widens them on load. The torch fallback chain still casts its weights to fp32.
+  - The NF4 grouped route casts the expert ids to int32 once, for both its `gemm_4bit_grouped` calls. Before, the
+    wrapper cast them on each call. The int4 and MXFP4 routes already did this.
+- **Why it is value-preserving.** bf16 -> fp32 widening is exact, the ids are the same integers, and every
+  grouped-nf4-gemm since e4b's floor (0.30.0) widens on load in both kernels. Tests:
+  - CPU tests assert what each kernel is handed and that the result is bitwise what the cast gave. Each is
+    mutation-checked: restoring the cast fails it.
+  - A CUDA test runs the real kernels both ways and asserts identical outputs.
+- **RA's fallback observer.** It fails closed on a router forward body it has not reviewed. Its registry
+  (`bench/ra/fallback-adapters.json`) gains the three new bodies, and the old ones stay.
+- **No speed claim.** P127's read prices these together with Phase 2 (gnf4 kernel options) under a bitwise gate.
+
+### RA: proposed same-process verified worker continuation
+
+Continue the isolated payload/startup/import handoff into a fixed RA wrapper
+only after checking pinned tools, inputs, stage and output boundaries. Retain
+worker failures separately from a passed handoff and recheck bytes/origins after
+return. CPU synthetic controls do not establish nested startup, GPU engagement
+or launch clearance. Actual executor: Codex desktop.
+
+### P125 read (#1313): calibrated int4 attention is not licensed on the shipped default
+
+- **The verdict.** On Qwen3-30B-A3B at the shipped default, `E4B_SERVE_ATTN_INT4_CALIB=1` fails the registered gate, alone
+  and with the calibrated int4 lm_head. At one window per pass, only 92.9 % of next-token argmaxes agree with the
+  default (91.8 % with the head), against 0.95; the 16-row path reads the same.
+- **Why bias alone was not enough.** The mean NLL bias sits inside K8's budget in nats, so a K8-style ppl gate alone
+  would have passed a lever that changes about one top-1 token in fourteen.
+- **What it would have bought.** One request decodes 1.154× as fast (1.238× with the head). Memory rises 0.58 GiB
+  (0.79 with the head), with no auto-slot cost.
+- **No default change.** Both levers stay opt-in.
+- **A finding about the instrument.** int4 weights spread the per-window NLL difference wider than the registered
+  prior, so the bias half alone would have needed about 295 windows.
+
+### RA Linux parent-death bootstrap
+
+Guard cooperating Linux worker lifetimes before target exec and retain signal
+readback and parent identity evidence. This draft control grants no GPU clearance.
+
+### Lane K34's runner (#846): the K16 32/64-row plan census's box side (bench and tests only)
+
+- **What.** `bench/k34/` drives grouped-nf4-gemm's lane K34 (`kernel/PREREG-k34-k16-wide-plan-census.md`, gnf4 #525) on
+  one RTX 5090. It is K33's runner with the tripwire, the premise and the bench replaced, and it fetches no model. The
+  census is exploratory: a plan it names licenses nothing until its own confirmatory read in this repository.
+- **The box.** Refusals (card class, disk) come before the install of gnf4 at `GNF4_SHA`. The tripwire proves two things:
+  - the installed commit carries #522's 32- and 64-row tiles;
+  - `k34_bench`'s shipped plan is the one `Int4Linear` serves (`plan_smallm` at both shapes, with the signature's warps
+    and stages).
+
+  The premise is `kernel/test_int4_smallm_interp.py` compiled on the card, 25 passed and none skipped (rc 23). Then
+  `k34_bench.py` runs from the clone at `GNF4_SHA`. Every GNF4 int4 knob starts unset.
+- **Tests.** `tests/test_k34_staged_pin.py`: the runner's pin, its shape and order, the exit codes, and the drive's dry run.
+
+### RA serial ABBA process composition
+
+Add fixed ABBA process ordering, repeated input bindings and retained failure
+journals. Preserve post-kill wait failures and refuse incomplete process cleanup.
+The draft library has no launch CLI and grants no GPU or release clearance.
+
+### Behaviour change (#1362): the B=1 fusion knobs default to `auto` on Qwen3.5/3.6-MoE
+
+An unset `E4B_PAGED_FUSE_QKV`, `E4B_FUSE_T1_GLUE`, `E4B_FUSE_T1_GLUE_R2` or `E4B_FUSE_ROUTER_EPI` now resolves to `auto`
+on Qwen3.5/3.6-MoE (`qwen3_5_moe_text`, the text tower `serve_paged` builds, and `qwen3_5_moe`), as it already does on
+Qwen3-MoE. Only the router epilogue engages there. Lane FAM licensed it on two reads: quality at T == 1 against the
+family's own floor (`e4b.serve.fam.fused-stack-t1.qw36.5090.2026-10-09`), and one request decoding in 0.973 of the
+step (`e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`). The epilogue changes arithmetic, so greedy text
+can change on these models. The way back is `E4B_FUSE_ROUTER_EPI=0`. `FUSION_UNLICENSED` no longer lists the family.
+
+### Release anchor common input verification
+
+Add a draft byte inventory and prepared-fixture projection gate for RA's
+checkpoint/tokenizer, datasets, calibration inputs, TC1 payloads, decode
+prompts, quality windows and native SC2 plans. CPU mutations test refusal;
+launch authorization, tokenization and GPU engagement remain unproven.
+
+### FAM speed read (#1362): the router epilogue decodes one Qwen3.6 request in 0.973 of the step
+
+Amendment 4's reading (`fam-speed-1`, one RTX 5090, $0.632) reads FASTER. On the default graph server, the fused router
+epilogue, the only B=1 fusion that engages on Qwen3.6, cuts the one-row decode step from 12.64 to 12.30 ms: ON/OFF
+0.9727 and 0.9732 in two interleaved blocks, with tokens identical. With FAM's quality PASS it licenses the allowlist
+flip, which ships separately. Receipts: `bench/fam/receipts/fam-speed-prove-1/`, `fam-speed-1/`; claim
+`e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`.
+
+### P125 Amendment 3 (#1313): every gate's windows fit its corpus, checked before any arm
+
+- **What happened.** The first reading, `p125-5090-1`, VOIDed: wikitext-2-raw test holds 298,938 tokens, only 73 windows
+  at the borrowed loader's 4096-token stride, and the gates registered 108 and 112.
+- **The fix.** P125's own loader keeps the same corpus, join and tokenisation, and starts a window every 2048 tokens
+  (capacity 146).
+- **The tests.**
+  - At 4096, the loader reproduces the borrowed one token for token, verified on the real corpus with the pinned
+    tokenizer.
+  - A windows preflight refuses before any arm if a gate does not fit.
+- **The prior and the predictions** are unchanged. The first attempt's speed arms are recorded as history only.
+
+### Propose a verified startup/import handoff for RA
+
+Add a no-site entry point that verifies the installed payload before a
+byte-bound setuptools startup adapter and requested release imports, then
+rechecks module owners and bytes. Synthetic CPU controls and failed-phase
+receipts do not grant proof clearance or establish real installation/GPU use.
+
+### RA published release binding
+
+Bind retained release wheels and source to live GitHub release/tag and PyPI
+file records, preserving raw observations and refusing publication drift.
+
+### FAM Amendment 4 (#1362): a speed read of the router epilogue on Qwen3.6, before any default flip
+
+On Qwen3.6, FAM's T == 1 quality read passed, but only the router epilogue engages there. Nothing has measured what it
+buys, so `bench/fam/fam_speed.py` times it at one row with P124's interleaved method: two blocks, one runner per setting
+in each, and strict lockstep alternation. Each runner binds its own linear-state slot, because the hybrid's one pool is
+shared. `bench/fam/fam_speed_reduce.py` reads FASTER (both ratios ≤ 0.98), SLOWER, NO_GAIN or NOISY (blocks over 1.5 %
+apart), self-tested on 30 cases. `serve_paged.FUSION_UNLICENSED` now cites FAM's reads for gpt-oss, Qwen3.5/3.6-MoE and
+Granite-MoE. No default changes.
+
+### RA source dependency metadata binding
+
+Compare retained release dependency declarations with pinned Git sources using
+the byte-verified packaging parser without site startup or release imports.
+Changed version, marker and extra gates refuse; this grants no GPU or rental clearance.
+
+### FAM readings (#1362): the B=1 fused stack at T == 1 on Granite, gpt-oss and Qwen3.6
+
+Each family is read against its own neutral floor on one RTX 5090 ($6.456 for the lane). Granite-MoE fails on one gated
+entry of 12. gpt-oss-20b fails on every knob, because its own floor sits below the 0.90 agreement backstop; the anchor
+places Phase C's 0.924 inside that floor, so Phase C's miss was the gate, not the knob. Qwen3.6-MoE passes, under
+Amendment 3's re-reduction. No default changes here. Receipts: `bench/fam/receipts/`; results:
+`bench/fam/RESULTS-fam.md`; claims: `e4b.serve.fam.fused-stack-t1.*.5090.2026-10-09`.
+
+### `E4B_INT4_TILE_PROGRAMS=P`: the one-launch cumsum tile table above 256 routed rows, split over P programs (opt-in; #846)
+
+- **What changes, opt-in.** A device-grouped call with 257–1,024 routed rows (a decode step above 32 rows at top-k 8)
+  can build its tile table with grouped-nf4-gemm's cumsum rank. When it does, `E4B_INT4_TILE_PROGRAMS=P` (an integer
+  from 2 to 64) passes `programs=P` to `build_group_tiles_fused` (grouped-nf4-gemm #524). Each of P programs then ranks
+  a slice of the experts instead of one program ranking them all. The tables are the same integers at every P, so
+  outputs are bit-identical.
+- **Default.** `1` (also unset or empty) calls the builder exactly as before, with no `programs=` keyword. Calls that
+  take no cumsum table are unchanged: at most 256 rows, `E4B_INT4_WIDE_TILES=0`, and prefill chunks.
+- **Refusals.** `P > 1` is refused where the cumsum table is built if the installed grouped-nf4-gemm's builder has no
+  `programs=`, which is detected from its signature, never from a version. Anything that is not an integer from 1 to
+  64 is refused.
+- **Why.** Lane P122 read the one-program chunked table at 2.51 ms of Qwen3-30B-A3B's 64-row decode step. A P-lane will
+  read the split before any default moves. It takes effect with the grouped-nf4-gemm release carrying #524, after
+  0.44.0.
+
+### FAM Amendment 3 (#1362): the hybrid's warm-up forward is counted once per process
+
+`fam-qw36-2` ($2.345) VOIDed on an engagement count. The registration expected Qwen3.6's linear-state warm-up forward on
+every padded pass, but e4b's `PagedModelRunner._warm_linear_state` runs it once per process, on its first padded pass.
+The records show exactly that. The reducer now expects the warm-up on each process's first pass only (`FIRST_CELL`) and
+VOIDs on anything else. Its self-test has five new cases (50). The gates, cells and predictions are unchanged, and
+`fam-qw36-2`'s records are re-reduced under the amended rule, with no new rental.
+
+### P125 Amendment 2 (#1313): the gate record keeps the box's own window count
+
+- **What happened.** The second proof, `p125-prove-2`, VOIDed on a record-shape bug: the quality instrument's own
+  `windows` field, merged last, overwrote each gate's count.
+- **The fix.** The box now builds every gate record through `gate_record`, with its own keys on top. A pin test composes
+  a record from the instrument's real return keys and fails on the old merge order.
+- **What the records showed.** Re-reduced with the count restored, the proof read READ: the int4 head builds with #1426,
+  the calibration is deterministic, and the gate numbers reproduced identically on two boxes.
+- **Next.** `p125-prove-3` proves the fixed box end to end.
+
+### RA release runtime source binding
+
+Add an isolated Git-to-wheel verifier for the two static release packaging
+layouts. It checks complete runtime payloads and package data without importing
+release code; CPU controls do not grant installation, GPU or rental clearance.
+
+### `E4B_ATTN_INT4_WIDE` defaults to `auto`: the attention projections of a 17–64-row decode step on the int4 small-M GEMM, where lane P124 read them faster (#846)
+
+- **What changes.** `auto`, now the default and also used when the variable is unset or empty, serves the attention
+  projections of a 17–64-row decode step from the int4 grid, using the K16 small-M GEMM at a 32- or 64-row tile,
+  instead of a cached bf16 copy on cuBLAS. It does so only when both of these hold:
+  - the K16 route is on (`E4B_ATTN_INT4_SMALLM`, `auto` by default);
+  - the installed `gemm_int4_b32_smallm` takes `block_m=` (grouped-nf4-gemm #522), detected from its signature,
+    never from a version string.
+
+  Otherwise those rows take the cached bf16 matmul, as before. When K16 is on but `block_m=` is missing, one line
+  says so.
+- **Why.** Lane P124 (`e4b.serve.p124.attn-int4-wide.qwen3-int4.5090.2026-10-09`) read DEFAULT_ON on Qwen3-30B-A3B
+  int4. With SC2e's stack on one RTX 5090, the captured 64- and 32-row decode steps were 3.2–3.8 % faster, and the
+  teacher-forced NLL stayed inside P110's bar (+0.0011 nats at 64 rows, +0.0014 at 32). Other models ride that read.
+- **When it takes effect.** With the grouped-nf4-gemm release that carries #522 (0.44.0, pending). v0.43.0 does not
+  carry it: there `auto` finds no `block_m=` and nothing changes.
+- **Other values.** `1` still requires the route, and is refused without the K16 route or without `block_m=`. `0`
+  keeps the cached bf16 matmul, as before P124.
+- **Memory.** The route's split-K workspace is shared by every projection of one width. P124 measured 11.5 MiB on
+  Qwen3-30B-A3B, against 1.81 GB a step for the bf16 copy the route stops reading. About 4.5 MiB of that belongs to the
+  q/k/v widths built before the fusion pass replaces them. The serve estimate now prices the workspace once per
+  projection width it sees.
+- **Tests.** P124's premise ran `tests/test_int4_attn_wide.py` at its registered bytes. Those bytes now live in
+  `bench/p124/test_int4_attn_wide.py`, which P124's driver stages and its staged-pin test checks, so the live tests can
+  follow the new default.
+
+### Check RA installed payload before startup
+
+A separate no-site verifier binds the selected interpreter and installed wheel
+payload before importing verified installer templates. Proposed startup bytes
+are inspected without execution; release imports and launch authority remain
+separate gates.
+
+Copied and symlinked venv interpreters bind their selected and base executable
+bytes independently to the proof image and retain both checks in the receipt.
+
+### P125 Amendment 1 (#1313): launch with the int4-head fix; the reading's guard to 3.0 h
+
+- **What happened.** The first proof, `p125-prove-1`, found that the calibrated int4 lm_head could not build the default
+  graph server (fixed in #1426). It also measured the attention calibration at about 49 s a build on Granite.
+- **What changes.**
+  - The launch commit must carry the fix; the box's tripwire refuses an e4b without it.
+  - The reading's guard rises to 3.0 h, from the projected 3–5 min a build on Qwen3.
+- **Unchanged.** Every gate, bound, window count, prediction and arm.
+- **Granite's proof gates.** Calibrated < RTN ≪ rolled scales, all failing, is reported as instrument behaviour, not
+  evidence about Qwen3.
+
+### P124 read (#846): DEFAULT_ON -- the attention projections above 16 rows on the int4 small-M GEMM make Qwen3-30B-A3B's 64- and 32-row decode steps 3.2–3.8 % faster, within P110's quality bar (bench, docs)
+
+- **The reading** (`p124-5090-4`, $0.787; the lane $2.285): SC2e's served stack, interleaved blocks under Amendment 1.
+  With `E4B_ATTN_INT4_WIDE=1` the 64-row step reads ON/OFF 0.9648 / 0.9670 and the 32-row step 0.9616 / 0.9679. The
+  blocks agree within 0.65 %. The teacher-forced NLL moves +0.0011 nats at 64 rows and +0.0014 at 32, inside P110's
+  bar. Both mutants fail it, and the captured run matches the eager one at all 8,128 positions.
+- **Why:** the route replaces cuBLAS on a 1.81 GB bf16 copy (12.4 % of the eager step) with K16's int4 tile. The
+  64-row tile still costs 0.74 of the time it replaces (0.59 at 32 rows), so a plan census for it is the next lever.
+- **Recorded:** `bench/p124/RESULTS-p124.md` and the receipts (SHA256SUMS; the verdict re-derives byte for byte).
+  The register row is `e4b.serve.p124.attn-int4-wide.qwen3-int4.5090.2026-10-09`, and STATUS cites it. The registered
+  default flip is a separate PR.
+
+### Fix: the int4 lm_head no longer crashes the default graph server at build
+
+- **The crash.** With `E4B_SERVE_LMHEAD_INT4_CALIB=1`, or any int4 lm_head, `serve_paged.build_engine` failed while
+  engaging the prefill graph, with `AttributeError: 'Int4Linear' object has no attribute 'weight'`.
+  - `PagedModelRunner.enable_prefill_graph` read the head's `.weight.shape[0]` to draw its warm-up prompts.
+  - The int4 head carries a packed grid and `N`, never a `weight`.
+  - Lane P125's proof (`p125-prove-1`, #1313) found it.
+- **The fix.** The runner now reads the head's width through `_output_width(model)`: `N` on an `Int4Linear`, the
+  weight's rows on a dense head.
+- **Nothing else needed changing.** This was the only serving-path read of the head's `.weight`. The other
+  `get_output_embeddings()` callers take the module, not its weight.
+
+### Check RA retained dependency closure
+
+A no-site check derives Linux/Python dependency closure from the hash-verified
+wheel metadata and frozen roots. It expands extras, checks constraints and
+rejects missing or surplus pins without importing releases or enabling startup
+hooks. Archived metadata closure grants no installation or GPU proof.
+
+### Pin release-anchor proof environment inputs
+
+Freeze the Linux image/interpreter and complete wheel archive set for RA's
+baseline proof. Bind retained bytes to the image pin and provide a manifest
+handoff to the isolated provenance probe. Installation and on-card gates remain.
+
+### P125 registered (#1313): calibrated int4 attention (and the int4 lm_head) on the shipped default's single-stream decode
+
+- **The question.** P123 found the dense bf16 GEMVs are 38 % of the default's one-request step on Qwen3-30B-A3B NF4.
+  P125 reads whether calibrated int4 attention (`E4B_SERVE_ATTN_INT4_CALIB=1`) licenses there, alone and with the int4
+  lm_head, and what it buys. Neither lever has been read on today's default.
+- **The gates.** They sit at the paths the default serves:
+  - the one-row path, which quantises activations, at `T == 1`;
+  - K16 in 16-row pieces.
+- **The bound.** It is K8's +0.05 ppl budget in nats, computed in-box from the default arm's own windows. The windows
+  are sized so the standard error is at most a third of the bound (108 and 112), and a wider spread reads UNDERPOWERED.
+- **The mutants.** A sure-fail mutant (scales rolled one block) is the VOID rung. RTN attention is the reported
+  sensitivity check.
+- **Also recorded.** Speed (palindromic arms), memory including the first-prefill transient, the auto slot count per
+  arm, and the calibration time. The calibration runs on the box, as a user's build does.
+- **The premise.** An A2000 composition test showed `fuse_qkv` fusing the int4 projections bit for bit on the gemv and
+  K16 paths, and the calibration deterministic.
+
+### P124 Amendment 1 (#846): attempt 1 read NOISY; the served arms are interleaved step by step (bench and tests only)
+
+- **Attempt 1** (`p124-5090-1`, $1.003) read NOISY: at 64 rows one route-off arm sat 3.1 % above the other, a level
+  shift of the whole arm on the device, while every pair at 32 rows agreed within 0.05 %. Quality passed (ON64 +0.0011,
+  ON32 +0.0014 nats), and both mutants failed. Nothing from attempt 1 decides anything. Its receipts and a RESULTS
+  section are committed.
+- **Amendment 1:** at each depth, two blocks with one runner per setting, both alive and captured under their
+  settings, decoding in strict alternation (OFF first in block a, ON first in block b), so a shift in the GPU's state
+  lands on both. NOISY when the blocks' ON/OFF ratios differ by more than 1.5 %. The per-pair ratio median and a GPU
+  clock, power and temperature log are reported, never gated. Everything else is as registered. The reducer is
+  self-tested on 42 cases.
+
+### Verify RA wheel bytes and import origins independently
+
+A standalone isolated-venv probe binds installed payload and generated scripts
+to retained wheel archives, rejects unlisted or editable installs, and derives
+release import paths and shared dependency identity. CPU controls grant no GPU
+engagement, dependency-lock approval or rental clearance. Vendored metadata
+remains RECORD-checked payload. An audit-only, no-site adapter binds proposed
+setuptools startup bytes without executing them; installation still refuses
+all startup hooks pending review.
+
+### FAM Amendment 2 (#1362): the box scores the largest shape first
+
+`fam-qw36-1` ($1.639) VOIDed on a harness bug. On the hybrid Qwen3.6, the first runner (shape 1, padded) sized and froze
+the model's linear-state pool at 17 slots, and e4b refused the 28 that shape 12 needs. `fam_box.run_cells` now scores
+shape 12 first. `tests/test_fam_shape_order.py` reproduces the refusal at the box's slot counts and shows the fix
+leaves the arithmetic unchanged: a shape-1 pass is bit-identical on either pool size, and after a shape-12 pass. The
+rule, gates and predictions are unchanged. The registration's one rerun, `fam-qw36-2`, follows the merge.
+
+### Bind RA capacity completions and buffered traces
+
+The release-anchor capacity wrapper now closes its drained native engine before
+joining HTTP completions to request traces and reconciling aggregate step and
+graph counters. CPU checks do not grant GPU engagement or release clearance.
+
+- Preserve the owned capacity server receipt and original failure when its post-kill wait times out.
+
+### P123 read (#1313): where the shipped default's single-stream decode step goes
+
+- **One sequence (4.75 ms per step).** On Qwen3-30B-A3B NF4 at the shipped default (the B=1 fused stack and the
+  bandwidth GEMV both on), the dense bf16 GEMVs are the largest class at 38 %. Then come the NF4 experts at 26 %,
+  attention at 15 % and routing glue at 11 %. The GPU is busy 92 % of the step.
+- **Sixteen sequences.** The small-M grouped NF4 GEMM is 69 % of the step.
+- **Predictions.** Two missed and are reported in `bench/p123/RESULTS-p123.md`: routing glue at one sequence, and the
+  experts' share at sixteen.
+- **No default change.** The census prices the next lever.
+- **The 5090 check of #1398.** The router census of 48 is the check of the fp32 router probe on the shipped default.
+  The two proofs licensed 32 of 32 Granite routers.
+
+### RA capacity process orchestration
+
+Add an owned loopback server and frozen SC2 warm/burst/point processes with
+native request/health checks, pre-capture counters and retained failures.
+CPU composition checks grant no GPU capacity claim or proof clearance.
+
+CPU capacity composition loads the serving fallback and route adapters explicitly,
+so isolated collection has the same dependencies as the combined suite.
+
+Bind config host/port changes to the inherited listening socket and retain the
+independently resolved family defaults in capacity evidence.
+
+### P124 registered (#846): the attention projections above 16 rows on the int4 small-M GEMM, speed at 64 and 32 rows and teacher-forced quality (bench and tests only)
+
+- **Why.** In lane P119, `Int4Linear` above 16 rows served a cached bf16 copy with cuBLAS: 2.05 ms of SC2e's 15.64 ms
+  64-row step, reading 1.81 GB a step where the int4 grid is 510 MB. grouped-nf4-gemm #522 lets the K16 small-M GEMM
+  take a 32- or 64-row tile, and #1410 routes 17–64 rows to it under `E4B_ATTN_INT4_WIDE=1`.
+- **The box** (`bench/p124/p124_box.py`):
+  - profiles the eager 64- and 32-row steps with the route off and on (P119's bracket);
+  - times four captured-graph ABBA arms of 256 steps at each depth, plus 32 traced steps for the GPU busy fraction and
+    the peak memory;
+  - runs P117's teacher-forced passes: the route off as reference and floor, on as the subjects, two mutants, and a
+    captured function check.
+- **The rule** (`p124_reduce.py`, 38 self-test cases): VOID on any engagement, determinism, function or mutant fault;
+  QUALITY_FAIL on P110's bar; DEFAULT_ON (or DEFAULT_ON_64 / _32) when both ABBA ratios at a depth are ≤ 0.98.
+- **Budget.** Proof on Granite with int4 attention (guard 0.75 h), reading guard 2.0 h, lane ceiling $3.00.
+
+### Re-pin DQ10 after structural frozen-weight correction
+
+Update the reviewed Loggetta pin and its instrument checksum before any DQ10
+holdout reading. Preserve the frozen policy, fitting estimates, gates and the
+single replacement budget (#1397).
+
+### `E4B_ATTN_INT4_WIDE=1`: attention projections of 17–64 rows on the int4 small-M GEMM instead of a cached bf16 copy (opt-in; #846)
+
+- **What changes, opt-in.** With `E4B_ATTN_INT4_WIDE=1`, an `Int4Linear` serves 17–64 rows with grouped-nf4-gemm's
+  K16 small-M GEMM, on its own int4 bytes, at a 32- or 64-row tile. That covers the attention projections of a
+  batched decode step above 16 rows. Today those rows take a cached bf16 copy and cuBLAS. One row still takes the
+  GEMV, 2–16 rows still take K16 exactly as before, and more than 64 rows (prefill) still take the bf16 matmul.
+- **Why.** In lane P119 that cuBLAS path cost 2.05 ms of Qwen3-30B-A3B's 15.64 ms 64-row step. It reads 1.81 GB a
+  step; the int4 grid it is dequantised from is 510 MB. The speed and the quality are lane P124's to read; nothing
+  is claimed here.
+- **Needs.** The K16 route on (`E4B_ATTN_INT4_SMALLM` not `0`) and a grouped-nf4-gemm whose `gemm_int4_b32_smallm`
+  takes `block_m=` (grouped-nf4-gemm #522). This is detected from the signature, never from a version string. `1` is
+  refused at enable time when either is missing, and any value other than `0` or `1` is refused.
+- **Memory.** The route's split-K workspace is shared by every projection of one width. It is built zeroed when the
+  module is constructed, so it is never born inside a graph capture: there, its zeroing would be recorded into one
+  graph rather than run, and another graph sharing it could replay first. A lookup that misses under a capture raises.
+  The route runs on one stream at a time, as e4b's runner uses it, so the projections never overlap. That is one
+  `4 × 64 × N` fp32 buffer per width (5.2 + 2.1 MB on Qwen3-30B-A3B), not one per projection. While the route is
+  opt-in the serve estimate does not price it. `int4_attn.wide_workspace_bytes()` reports it.
+- `tests/test_int4_attn_wide.py` covers the route, the sharing and the refusals on the CPU. Its two CUDA tests passed
+  on an RTX A2000 (correctness only):
+  - two projections of one width captured in one graph replay to their eager bits and within one bf16 ulp of the
+    dequant reference;
+  - two graphs on the route, captured at 32 then 64 rows, replay to their eager bits with the second replayed first.
+
+### Preserve DQ10 first-draw host refusal
+
+Record the registered GitHub egress refusal before installation, zero scientific readings, the unchanged staged instrument, actual invoice and verified teardown. This result licenses no capacity or default change.
+
+### RA training process and failure retention
+
+Add the fresh TC1 field/profile process runner with fixed arguments, input
+and native-fixture binding, a retrieval deadline margin and retained failure
+logs. This CPU-tested component grants no proof clearance or GPU licence.
+
+### P123 Amendment 2 (#1313): the census class map names torch.cat
+
+- **What happened.** The first proof, `p123-prove-1`, VOIDed: 2.2 % of Granite's B = 1 step went unnamed, against
+  SC1b's 2 % gate. All of it was `torch.cat` (`CatArrayBatchedCopy`, two per layer from the unfused `rotate_half`).
+- **Why.** SC1b's map lists `cat`, but its name match is case-sensitive and Nsight names the kernel in CamelCase.
+- **The fix.** Class map v1.1 names `CatArrayBatchedCopy` beside `cat`; SC1b's census code is unchanged.
+- **The tests.** A committed name inventory (the A2000's and the proof's) lets the pin test check that the map names
+  every kernel it will meet.
+- **Also from that proof.** Amendment 1's router check licensed 32 of 32 on a 5090, confirming #1398 on a real card.
+
+### `E4B_INT4_WIDE_TILES` defaults to `auto`: the one-launch tile table above 256 routed rows, where lane P122 read it faster (#846)
+
+- **What changes.** `auto`, now the default and also used when the variable is unset, builds the device tile table of
+  a device-grouped call with 257–1,024 routed rows in one launch, using grouped-nf4-gemm's cumsum rank. It does so only
+  when both of these hold:
+  - the installed `build_group_tiles_fused` takes `rank=` and `rchunk=` (grouped-nf4-gemm #515 and #519). This is
+    detected by capability, never by version string.
+  - the table is no larger than the one read: `next_pow2(E) × next_pow2(R) ≤ 128 × 512`.
+
+  Otherwise the chained builder runs, as before.
+- **Why.** Lane P122 (`e4b.serve.p122.wide-tiles-chunked.qwen3-int4.5090.2026-10-08`) read Qwen3-30B-A3B's 64-row
+  decode step 4.3 % faster with #519's chunked table, with identical tokens (DEFAULT_ON). Without the chunks the table
+  was 1.44× slower (lane P120), so `auto` keeps the chained builder on a kernel package that has `rank=` but no
+  `rchunk=`.
+- **When it takes effect.** grouped-nf4-gemm #519 is on grouped-nf4-gemm's main but in no release yet. Until a
+  grouped-nf4-gemm release carries it, `auto` finds no `rchunk=` and nothing changes.
+- **Other values.** `1` still forces the one-launch table at any size, and is refused without `rank=`. `0` keeps the
+  chained builder, as before P122. Outputs are bit-identical every way: the tables are the chained builder's integers.
+
+### DQ10: replace the refused host with the scientific instrument unchanged
+
+Register one replacement draw after a measured pre-install GitHub egress refusal.
+Require the existing launcher's committed lane-receipt machine exclusion, unchanged
+scientific source checksums, original gates, budget, proofs and lifecycle guards.
+A replacement failure authorizes no further draw.
+
+### Release-anchor decode and quality wrappers
+
+Add RA processes over the frozen P109/P115 helpers, with release-default
+configuration, capture-aware counters and an exact fixture environment
+allowlist. GPU engagement and proof clearance still require on-card evidence.
+
+Observe native glue retained-original branches with source-bound AST adapters,
+reconcile census and independently reconstructed defaults, and refuse auto
+kernel gaps. Source-bound QKV coverage and per-MoE GEMV/reference/dispatch observations
+replace unknown counters. Partial coverage, unexpected routes and plan
+overrides refuse; failure snapshots remain in process logs. CPU controls establish composition only.
+
+Use canonical AST JSON across Python versions and refuse legacy display-format
+fingerprints; native bodies remain unchanged.
+
+Resolve unset fusion defaults with the loaded model family, recording raw modes,
+resolved modes and native sources before capture, without changing release config.
+
+### TC1 amendment 72 read: the single-block ladder's `auto` becomes grouped-nf4-gemm's default
+
+- **Amendment 72** (`tc1-5090-141`, RTX 5090, AMD Ryzen 9 9950X3D, $0.80, GPU-bound, no load voids): amendment 71's box
+  on a third host. With `NF4_QLORA_SINGLE_LADDER=auto` the fp32-adapter arm stepped 1.031, inside the registered 1.05,
+  and the bf16 arm 1.002. `aten::bmm`'s CPU time per call fell to 0.092, device time rose 5.5 % on the fp32 arm, and
+  held-out was unchanged (P215–P221 HELD). By the rule `auto` becomes grouped-nf4-gemm's default (grouped-nf4-gemm#521).
+  Register row `e4b.train.single-ladder-auto.gpu-bound.5090.2026-10-08`.
+
+### P123 Amendment 1 (#1313): the proof checks that every router licenses on a 5090
+
+- **What changes.** The proof gains one build of the default server on Granite with `E4B_FUSE_ROUTER_EPI=auto` alone
+  (`p123_box.py --mode routers`). It VOIDs unless all 32 routers license.
+- **Why.** That is lane FAM's `fam-prove-1` case, which licensed 27 of 32 before #1398 judged the probe's decisive rows
+  on fp32 CPU logits. So a PROVED proof doubles as #1398's regression check on a 5090.
+- **Unchanged.** The reading already VOIDs on any `qwen3_moe` router census short of 48. The reducer's self-test now
+  has 23 cases and the box's 9; the three lane scripts are re-pinned before any box ran.
+
+### DQ9: setup cache clear does not reduce training peaks
+
+Publish the complete sixteen-arm known-subject diagnostic, raw scientific archive and byte-identical reducer output. All paired training peaks are unchanged; streamed full-device estimates still understate driver use despite conservative allocator estimates. Preserve the gates, inferred reserve and execution opt-in. No cache-clear executor change follows.
+
+### FAM Amendment 1 (#1362): one family per box, guards from the proof's measured step time
+
+`fam-prove-1` ($0.423) VOIDed on census as registered. On the RTX 5090 the router epilogue licensed 27 of Granite's 32
+routers (`failed_probe: 5`); the seat A2000 licensed all 32. Every other check held. The B=1 lane fixes the probe first,
+and no FAM box launches before that fix is on `main`.
+
+The proof's OFF process took 1024 s at 32 positions, a 49 ms median eager step on that host: a sizing basis, not a
+speed claim. So the reading moves to one family per box (`FAM_FAMILY`: `granite`, `gptoss` with the anchor, `qw36`),
+with guards of 2.5 h, 3.75 h and 4.0 h. The proof's guard rises to 1.25 h so the anchor runs. The lane ceiling is now
+$18, with every run under $15. The rule, gates, mutants and predictions are unchanged.
+
+### Register new-family dense holdouts for the explicit DQ10 memory policy
+
+Freeze per-placement training reserve and driver overhead from DQ9 diagnostic fitting rows, then test untouched
+Mistral and tied SmolLM3 full-loss subjects through actual policy admission and execution. Keep every component
+residual, one-byte failure and DQ8 24 GB opt-in gate. This registration makes no default change or capacity claim.
+
+### P123 registered (#1313): a kernel-class census of the shipped default's single-stream decode step
+
+- **The question.** Since #1361 the default `serve_paged` decodes one Qwen3-30B-A3B NF4 sequence at 4.64 ms per token,
+  with the B=1 fused stack and grouped-nf4-gemm 0.43.0's bandwidth GEMV both on by default. The last device census of
+  this route predates both. Where does the step go now? The answer prices the next lever before any kernel work.
+- **The instrument.** SC1b's census, reused unchanged by import:
+  - one RTX 5090, the shipped default (every lever unset, 16 slots named);
+  - two unprofiled speed arms as the reference;
+  - graph-mode and node-mode Nsight Systems captures of 64 steady decode steps at B = 1 and B = 16;
+  - `sc1b_census.py` with a v1 class map: SC1b's v0 map plus grouped-nf4-gemm's NF4 expert kernels, named from an
+    RTX A2000 kernel-name inventory of the default step (names and counts only).
+- **The rule.** VOID / NOISY / READ (`bench/p123/p123_reduce.py`, 19 self-test cases). It reads per batch:
+  - each kernel class's share of the step;
+  - a RESIDUAL row (the step minus the named classes);
+  - the GPU busy fraction;
+  - kernels per step and peak memory.
+
+  Each registered prediction is graded. No default changes.
+- **Budget.** Proof (guard 0.75 h, ~$0.65) and reading (guard 1.5 h, ~$2.0), lane ceiling $3.00, hard stop $4.00.
+- **Files:**
+  - `bench/p123/`: PREREG, box, census driver, reducer, run and drive scripts, class map, `staged-p123.sha256`;
+  - `tests/test_p123_staged_pin.py`.
+
+### P122 read (#846): with grouped-nf4-gemm #519's chunked tile table, `E4B_INT4_WIDE_TILES=1` makes Qwen3-30B-A3B's 64-row decode step 4.3 % faster — DEFAULT_ON (bench and docs only)
+
+- **The reading** (`p122-5090-1`, one RTX 5090, $0.837; lane $0.930): on SC2e's int4 stack the captured 64-row step goes
+  from 17.53 ms to 16.78 ms (ON/OFF 0.9568, 0.9569). Every token is identical (16,704 positions), the mutant died, and
+  the same-setting pairs agree within 0.1 %. The box is P120's, run at its registered bytes.
+- **Why it turned:** the chunked table costs 2.51 ms a step at 512 routed rows × 128 experts, against 10.45 ms for P120's
+  one-piece table. That is still 1.75× the chained builder's named kernels (Q2 missed high), so a multi-program table
+  is the next lever.
+- **The registered consequence:** a separate e4b PR makes the switch default to on for tables no larger than the one
+  read, with `0` restoring the chained builder.
+- **Register row:** `e4b.serve.p122.wide-tiles-chunked.qwen3-int4.5090.2026-10-08`.
+- **Files:** `bench/p122/RESULTS-p122.md`, `bench/p122/receipts/p122-5090-1/` (with `SHA256SUMS`).
+
+### Router epilogue: decisive probe rows judged on fp32 CPU logits over 64 rows (fix; #1385 follow-up)
+
+- **What changed.** `router_epilogue._probe_matches` decides which probe rows are decisive on the selection logits
+  computed in fp32 on the CPU (`_selection_logits_fp32`: the same projection, with the select-on-logits kind's bias and
+  Gemma-4's pre-norm), with the near-tie threshold at two ulps of the module's own dtype. It probes 64 rows, up from 4.
+  The comparison itself (expert set and weights, per expert) is unchanged.
+- **Why.** On a rented RTX 5090 (lane FAM's fam-prove-1), Granite's router fold licensed 27 of its 32 routers, where
+  the RTX A2000 and P115 Phase C read 32. The near ties had been judged on the device's bf16 logits over 4 rows, so
+  which routers licensed depended on the card's rounding. A refusal is safe (that router keeps its own forward),
+  but the Qwen3-MoE default would then engage a card-dependent subset of its routers.
+- **Tests (`tests/test_router_epilogue.py`):**
+  - under six emulated cards' bf16 rounding (every bf16 linear moved by up to half an ulp), the logits that judge the
+    decisive rows are fp32 on the CPU and bitwise the same, and transformers' Qwen3-MoE and Mixtral routers and the
+    gpt-oss-shaped one license on every card;
+  - a router with Granite-scale logits keeps decisive rows and is licensed.
+
+  Both were mutation-checked: judged on device logits, the first fails; with 4 rows, the second fails.
+
+### FAM: re-pin `test_fusion_modes.py` after the family-scoped default
+
+#1361 changed `tests/test_fusion_modes.py` and re-pinned P115 Phase C's manifest; #1380 had pinned the same file at
+Phase C's old bytes, so main's `tests/test_fam_staged_pin.py` failed once both merged. FAM's pin moves to the new bytes,
+again equal to Phase C's. FAM's arms set every fusion knob explicitly, so its measurement is unchanged; its premise now
+runs the current knob tests.
+
+### `serve_paged`: the B=1 fused stack is on by default for Qwen3-MoE (behaviour change; lane P115)
+
+- **What changed.** The four B=1 fusion knobs now have a family-scoped default: fused q/k/v (`E4B_PAGED_FUSE_QKV`) and
+  the three glue folds (`E4B_FUSE_T1_GLUE`, `E4B_FUSE_T1_GLUE_R2`, `E4B_FUSE_ROUTER_EPI`).
+  - An **unset** knob resolves at startup to `auto` on a model whose `config.model_type` has a SANE read at T == 1 at
+    reading size: `qwen3_moe`. It resolves to `0` everywhere else.
+  - `/health` reports each knob's resolution and source (`fusion_modes`, `fusion_sources`). Its `engine.fuse_qkv` is
+    now the build's resolution, `null` before the build, rather than the config flag an unset knob sets.
+  - Explicit `auto` stays structural. On any other family it logs one warning naming the read the family lacks or
+    failed: for gpt-oss, P115 Phase C's SANE argmax agreement, 0.924 < 0.95 (#1342); for Qwen3.5/3.6-MoE and
+    Granite-MoE, a SANE read at T == 1, which lane FAM takes (#1362).
+- **Why.**
+  - On Qwen3-30B-A3B NF4, on top of grouped-nf4-gemm 0.43.0's bandwidth GEMV, the stack decodes one request 1.5902×
+    and 16 requests 1.1644× as fast. P115 Phase D's SANE read at T == 1 passes: bias +0.00541 nats, argmax agreement
+    0.9674 (#1379). Phases A and B read it within P110's quality bar at grouped-nf4-gemm 0.42.0 (#1328).
+  - The maintainer's rule (#1366): a family is on by default only with a SANE read at T == 1 at reading size. Phase D's
+    proof read Granite at T == 1 with a SANE bias of −0.0139 nats, against −0.0009 at T == 12, so the served
+    one-request path moves a family's arithmetic more than the 12-window read showed.
+- **Who is affected.** `serve_paged` users serving Qwen3-MoE: decode is faster and the arithmetic differs within
+  P110's bar, so greedy text can change. Everyone else: nothing.
+- **The way back.** `E4B_PAGED_FUSE_QKV=0 E4B_FUSE_T1_GLUE=0 E4B_FUSE_T1_GLUE_R2=0 E4B_FUSE_ROUTER_EPI=0`.
+- **Tests:**
+  - `tests/test_fusions_default.py`: the allowlist; unset resolving per family; explicit values passing through; the
+    once-per-family warning; `_apply_fusions` resolving at the build; `0` as the way back.
+  - `tests/test_fusion_modes.py`: its default test now pins the per-family resolution. Phase C's `staged-c.sha256` is
+    re-pinned with a dated note; its receipts record the files as run.
+  - `tests/test_serve_paged.py`: `/health`'s `engine.fuse_qkv` is the build's resolution.
+
+### FAM registered (#1362): a quality instrument with each family's own neutral floor, and the fused B=1 stack at T == 1 on gpt-oss-20b, Granite and Qwen3.6
+
+- **Why.** Phase C's SANE bar (argmax ≥ 0.95) was set on Qwen3 and sits on Qwen3's and Granite's own neutral floors
+  (0.953–0.964). gpt-oss-20b failed it at 0.924 without its floor ever being drawn, and on SC2g's path, not the default
+  server's. The allowlist now needs a T == 1 read at reading size.
+- **What.** `bench/fam/{PREREG-fam.md,fam_box.py,fam_reduce.py,fam_run.sh,fam_drive.sh,staged.sha256}`, with
+  `tests/test_fam_box.py`, `tests/test_fam_staged_pin.py` and `tests/test_fam_split1_gpu.py`.
+  - **Instrument:** P115's teacher-forced quality instrument at its registered bytes, per (text, shape, set): two
+    texts, T == 1 and T == 12, three disjoint window sets.
+  - **Floor:** each family's own neutral draws: prefill chunking, half-batch grouping, and one KV split
+    (`n_split=1`).
+  - **Gate:** relative to the floor's worst draw, with a backstop (|bias| ≤ 0.02 nats, agreement ≥ 0.90).
+  - **Mutants:** P108's scale mutant must fail. A graded × 0.90 mutant that passes makes the read UNRESOLVED; a PASS is
+    a null read of that size (no effect as large as a 10 % softmax-temperature change).
+- **Readings.** gpt-oss-20b one knob per arm (and all `auto`) on the default server, plus an anchor cell at Phase C's
+  SC2g setting; Granite and Qwen3.6 all `auto`.
+- **Rule.** VOID → UNRESOLVED → FAIL → **PASS**, which licenses a separate allowlist PR.
+- **Budget.** Proof on Granite (guard 0.75 h), reading guard 4.5 h; lane ceiling $10.
+- **Not measured yet.** No box runs before this page merges.
+
+### TC1 amendment 71 read; amendment 72 registered
+
+- **Amendment 71** (`tc1-5090-139`, RTX 5090, AMD EPYC 7763, $2.75, every arm profiled): grouped-nf4-gemm's
+  `NF4_QLORA_SINGLE_LADDER=auto` laddered only the fp32-adapter arm. `aten::bmm`'s CPU time per call fell to 0.120 of
+  the unladdered, device time rose 4.3 % (fp32) and 0.2 % (bf16), and held-out was unchanged (P217–P219 HELD). The step
+  times went unread (P215, P216 UNTESTED): the host's load rose through the box and three arms' draws differed by more
+  than 5 %. `auto` stays opt-in. Register row `e4b.train.single-ladder-auto.field.5090.2026-10-08`.
+- **Amendment 72** registered: the same box (token `qwen3slauto`, no new code) on a third host, off amendments 70's and
+  71's machines. If its P215 and P216 rows hold (P220, P221) with P219, `auto` becomes grouped-nf4-gemm's default. If
+  either is UNTESTED again, no further host-load re-run is registered.
+
+### Preserve the first DQ9 staging refusal
+
+Publish the pre-proof checksum refusal, zero-reading record, source pins, invoice and verified teardown for dq9-5090-1. Keep the dense capacity and calibration gates closed; the staging fix ships separately.
+
+### Close the DQ9 checksum staging contract
+
+Derive the staged file list from the registered checksum manifest, including
+the controller script, and refuse absent, changed or colliding subjects.
+The first DQ9 run stopped at this tripwire before proofs or readings. Add an
+offline test of the real controller's complete stage plan against every
+registered checksum, including basename uniqueness. The diagnostic rules,
+executor, budget and failed receipt remain unchanged.
+
+### P121 read (#846): K25 is LICENSED on Qwen3-30B-A3B's served W16 step — 1.57× as fast as the NF4 M-tile, within P110's quality bar (bench and docs only)
+
+- **The reading** (`p121-5090-1`, one RTX 5090, $1.056; lane $1.245): on the default `serve_paged` server, K25
+  (`E4B_NF4_GROUPED_SMALLM=auto`, the default since P96) decodes 16 requests at 771 tok/s against 491 for the M-tile
+  (`0`): 20.7 against 32.6 ms a step, g16 = 1.5697. W1 is unchanged (0.998) with identical tokens.
+- **Quality** at 128 routed rows a step, P115 Phase B's teacher-forced instrument: bias +0.0002 nats on wikitext and
+  +0.0022 on c4val1, against bars of 0.0115 and 0.0116. The mutant moved +1.06 and +0.78. Q1–Q5 held.
+- **No code change:** the default was already `auto`. Register row `e4b.serve.p121.k25-w16.qwen3.5090.2026-10-08`.
+  STATUS's K25 row now cites it.
+- **Files:** `bench/p121/RESULTS-p121.md`, `bench/p121/receipts/p121-5090-1/` (with `SHA256SUMS`).
+
+### P115 Phase D read (#1313): COMBINED_SANE on Qwen3-30B-A3B. The fused stack on top of the bandwidth GEMV passes SANE at T == 1
+
+- **What was read.** One RTX 5090 at `d1d76084` (Amendments 3 and 4, #1354 and #1366), with grouped-nf4-gemm 0.43.0
+  and its bandwidth decode GEMV at the default. The default graph server ran at 16 slots, the four B=1 fusion knobs at
+  `0` (D0) against `auto` (D1).
+  - **Engagement:** exact. D1's census was 48 / 193 / [48, 48] / 48 and D0's zero. `bw_prmt32` was at every arm's
+    capture and in both SANE phases, and dot-pad never ran.
+  - **SANE at one window per pass (T == 1):** bias +0.00541 nats (gate 0.02), argmax agreement 0.9674 (gate 0.95),
+    mean KL 0.0110. **COMBINED_SANE.**
+  - **Reported:** one request decodes 135.5 → 215.4 tok/s (g1 1.5902), and 16 requests 1.1644× as fast.
+  - **Predictions:** all held but one. The bias, predicted within ±0.005, read +0.00541.
+- **Consequence.** The family-scoped default may proceed for **Qwen3-MoE only**, under the maintainer's rule that a
+  family needs a SANE read at T == 1 at reading size (#1361). Qwen3.5/3.6-MoE and Granite-MoE wait for lane FAM
+  (#1362), and gpt-oss stays off.
+- **Register:** `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`.
+- **Receipts:** `bench/p115/receipts/p115d-5090-1/`. Phase D cost $1.179: three proofs ($0.062 NOT_RUN, $0.076 VOID,
+  $0.159 PROVED) and the reading ($0.882).
+
+### P122 registered (#846): P120's speed read again on grouped-nf4-gemm #519's chunked cumsum tile table (bench and tests only)
+
+- **Why.** P120 read `E4B_INT4_WIDE_TILES=1` SLOWER, 1.44× at 64 rows. The cause was the one-program cumsum table:
+  10.45 ms a step at 128 experts. The chained builder it replaces still costs about 2.7 ms of the step. grouped-nf4-gemm
+  #519 builds the table in 64-row chunks with a per-expert carry, giving the same integers.
+- **The box is P120's**, run at its registered bytes: the eager profile with the knob 0 and 1 (now with the chunked
+  table's time), four captured-graph ABBA arms of 256 timed steps with every token recorded, and the mutant.
+- **The rule is P120's** (`bench/p122/p122_reduce.py`, 30 self-test cases): DEFAULT_ON iff both ratios are ≤ 0.98 with
+  every token identical.
+- **The premise on the card** is the decode-graph bucket tests plus #519's chunked cumsum tests compiled for the card.
+- **Budget:** proof on Granite (guard 0.75 h); reading guard 1.5 h; lane ceiling $3.00.
+
+### Router epilogue: the semantic probe ignores near-tied rows, and its real-router tests initialise their weights (fix; #1372 follow-up)
+
+- **What changed.**
+  - `router_epilogue._probe_matches` compares the routing (expert set and weights) only on decisive probe rows: those
+    whose k-th and (k+1)-th selection logits are more than two ulps of the logits' dtype apart, relative to the k-th.
+    It compares them per expert rather than per slot.
+  - A router with non-finite logits on the probe, or with no decisive row, is refused.
+- **Why.** `test_real_routers_keep_their_upstream_weight_dtype[mixtral]` failed intermittently in CI. transformers'
+  `MixtralTopKRouter` allocates its weight with `torch.empty`, so the test's seed never reached it, and the probe then
+  saw whatever memory held. `Qwen3MoeTopKRouter` allocates zeros, which ties every expert on every row.
+  - A near tie at the k boundary can select either expert under the same function rounded differently, so it says
+    nothing about which function a router computes.
+  - An explicit `E4B_FUSE_ROUTER_EPI=1` could therefore have raised at random on such a row.
+- **Who is affected.** Nobody serving: real routers on real weights read the same. The probe now licenses a router
+  whose only disagreement with the reference is on near-tied rows.
+- **Tests (`tests/test_router_epilogue.py`):**
+  - the real-router tests initialise the weight from a seeded generator;
+  - `_decisive_rows` on exact, sub-ulp and decisive rows;
+  - a router that breaks an exact probe-row tie the other way from the reference is licensed on its decisive rows (and
+    refused when every row counts);
+  - a router whose experts all tie is refused, as is one with non-finite logits.
+
+### Register paired dense cache diagnostics
+
+Add a fixed sixteen-arm diagnostic using the actual Loggetta executor, with
+host-only phase counters, metadata-only tensor census, and four fresh CUDA
+correctness proofs. DQ7 remains failed; this registration licenses neither
+capacity nor reserve calibration and changes no executor cache policy.
+
+### Diagnose DQ7 full-logit loss workspace
+
+Preserve a same-version CPU/CUDA operator census: three distinct fp32 full-logit tensors overlap in log-softmax backward, giving twelve bytes per logit rather than the current ten-byte allowance. This names a missing term without refitting coefficients. Load-phase reserved memory was not recorded, so the streamed cache hypothesis remains unmeasured; no reread or calibration is implied.
+
+### Release-anchor native receipt binding
+
+Add frozen instrument staging, native SC2 request and health normalization,
+and score-preserving P115 argmax capture for RA's executor. CPU mutation checks
+cover these components; the GPU executor and proof clearance remain pending.
+
+### P121 registered (#846): K25 (`E4B_NF4_GROUPED_SMALLM=auto`, the default) against the NF4 M-tile on Qwen3-30B-A3B at the served W16 step, quality and speed on one box (bench and tests only)
+
+- **Why.** K25 has no family gate and takes Qwen3's W16 step (128 routed rows). Its licence (P93's speed, P96's
+  quality) read Granite and OLMoE only. FAM0's inventory (#1368) lists it as the one unread cell in Qwen3's serving row.
+- **The box** (`bench/p121/p121_box.py`, from P115 Phase D's):
+  - **speed:** ABBA arms K0 (`0`) and K1 (`auto`) on the default graph server at 16 slots, through W16 and W1. W1 is a
+    token-identity null control, since T == 1 runs the same kernels in both arms.
+  - **quality:** P115 Phase B's teacher-forced instrument at 16 windows a pass on wikitext and c4val1, against P110's
+    floor, with a mutant that must fail.
+  - **route counter:** wraps K25 and the M-tile, so every record shows which kernel ran.
+  - **continuity row:** P96's arms at T == 1, reported with no bar.
+- **The rule** (`bench/p121/p121_reduce.py`, 36 self-test cases), first match wins: VOID, NOISY, FUNCTION_FAIL,
+  QUALITY_FAIL (P110's bar), SLOWER (g16 < 1.00), else LICENSED. The perplexity move and each arm's peak
+  allocated and reserved memory are reported, not gated.
+- **Premise on the card:** the decode-graph bucket tests and K25's row-exactness GPU tests, 11 passed.
+- **Budget:** proof on Granite (guard 0.75 h), reading guard 2.0 h, lane ceiling $3.00.
+
+### Dense executor: preserve the failed DQ7 reading
+
+Publish the unchanged VOID reducer result, all fourteen completed scientific receipts, the pre-load refusal, proof and teardown. Record Llama allocator underestimates and the streamed full-device deficit beside every itemized estimate. No coefficient, reserve, threshold or execution gate changes.
+
+### P120 read (#846): `E4B_INT4_WIDE_TILES=1` makes Qwen3-30B-A3B's 64-row decode step 1.44× slower; it stays opt-in (bench and docs only)
+
+- **The reading** (`p120-5090-1`, one RTX 5090, $0.878; lane $1.079): on SC2e's int4 stack, the captured 64-row step
+  goes from 17.55 ms to 25.31 ms with the one-launch tile table above 256 routed rows. Every token is identical
+  (16,704 positions), the mutant died, and the same-setting pairs agree within 0.09 %. Verdict SLOWER by the
+  registered rule.
+- **Why:** the single-program cumsum table costs 10.45 ms a step at 512 routed rows × 128 experts (218 µs a launch),
+  against 1.43 ms for the chained builder's kernels. By subtraction the chained builder costs about 2.7 ms of the step,
+  so a faster one-launch table remains a lever: a grouped-nf4-gemm launch-shape lane.
+- **Predictions:** Q1 (the premise) and Q5 (noise) held; Q2–Q4 missed high.
+- **Register row:** `e4b.serve.p120.wide-tiles.qwen3-int4.5090.2026-10-08`.
+- **Files:** `bench/p120/RESULTS-p120.md`, `bench/p120/receipts/p120-5090-1/` (with `SHA256SUMS`).
+
+### Decode folds: the rotary and the router-weight cast are licensed on what the module computes (fix; lanes P115, FAM)
+
+- **What changed.**
+  - **The rotary.** `glue_r2`'s three attention folds and `fuse_qkv` now probe the module's own rotary, the
+    `apply_rotary_pos_emb` its class's forward calls. The fold applies only where that function is rotate-half, which
+    is what the kernels compute, for arbitrary cos/sin (`glue_r2.rotary_is_rotate_half`). A module whose rotary
+    differs, cannot be read, or raises on the probe keeps its own forward. `fuse_qkv` raises on a `Qwen3MoeAttention`
+    whose rotary is not rotate-half: transformers drifted.
+  - **The router-weight cast.** The router epilogue now casts its routing weights to the logits' dtype only where the
+    router's own forward returns them in that dtype, as the probe reads it from the module. That holds under every
+    `E4B_ROUTER_EPI_CAST` setting. `/health`'s fold report counts the routers that keep fp32 (`fp32_upstream`).
+- **Why.** Both were found by lane FAM's inventory (#1362, #1368):
+  - ERNIE-4.5's attention has exactly the q/k/v/o structure the rope-only fold accepts, but interleaves its rotary.
+    The fold applied rotate-half, and the rotated q came out about 1.1 off in relative norm.
+  - Mixtral's router returns fp32 weights. Casting them to bf16 changed upstream's function instead of matching it.
+
+  Neither fold is on by default for either family. Explicit `auto` or `1` reached both.
+- **Who is affected.** Only explicit `auto` / `1` on those families:
+  - ERNIE-4.5's attention is no longer folded;
+  - Mixtral's fused router keeps fp32 weights.
+
+  Qwen3-MoE, Granite-MoE and gpt-oss fold and cast exactly as before.
+- **Tests:**
+  - `tests/test_glue_r2.py`:
+    - the probe on rotate-half and interleaved fixtures;
+    - each attention fold refusing an interleaved rotary;
+    - transformers' own ERNIE-4.5 MoE attention refused (forced past the guard, it changes its output and its rotated
+      q);
+    - transformers' Mixtral, GraniteMoe and Qwen3-MoE attention still licensed and matching.
+  - `tests/test_router_epilogue.py`: a router returning fp32 is never cast; transformers' Mixtral router keeps fp32,
+    and Qwen3-MoE's casts to bf16, under the default and under `1`.
+
+### Register the release-anchor battery
+
+Register an ABBA comparison of shipped e4b/gnf4 pairs with a CPU-tested reducer
+for training, decode, one serving point and SANE quality. The executor and GPU
+proof remain pending; this registration reports no measured release result.
+
+### DQ8: register dense execution at the 24 GB boundary
+
+Registered the proposed DQ8 dense-execution reading on a 24 GB RTX4090: proof first, five 4096-token allocator
+readings and the Qwen3-32B resident planner-refusal control. Reuses DQ7's architecture-only subjects and exact
+executor pins; no measured result, calibration or development-gate change.
+
+### Register the Loggetta dense executor proof and out-of-sample capacity reading
+
+DQ7 specifies a deterministic CUDA proof before architecture-only capacity measurements on Qwen3-14B and
+Llama-3.1-8B, with Qwen3-32B as the in-sample DQ4 anchor. It checks the actual Loggetta plan/executor and reports
+itemized allocator estimates, peaks and residuals. CPU instrument tests cover refusal, setup and row mismatches,
+underestimates and anchor misses. No new measurement, general capacity bound or planner calibration is claimed.
+
+### P120 registered (#846): does `E4B_INT4_WIDE_TILES=1` make SC2e's 64-row decode step faster with identical tokens? Two SC2e rows join the claims register (bench, tests and docs only)
+
+- **Why.** P119 read the chained tile-table builder at 1.39 ms (8.9 %) of the 64-row step in its uniquely named kernels
+  alone. grouped-nf4-gemm #515 builds the same integers in one launch up to 1,024 rows, and #1357 routes calls of
+  257–1,024 rows to it under `E4B_INT4_WIDE_TILES=1` (opt-in).
+- **The box** (`bench/p120/p120_box.py`): SC2e's int4 stack built eager with one slot. P119's 64-row eager bracket
+  profiled with the knob 0 and 1 (the premise and the engagement). Four captured-graph arms in ABBA order, 256 timed
+  bucket-64 steps each with every token recorded. A mutant that shifts the table's expert ids, so the token gate can
+  fail.
+- **The rule** (`bench/p120/p120_reduce.py`, 30 self-test cases), every bound a ratio within the box:
+  - `DEFAULT_ON` iff both ABBA ratios are ≤ 0.98 and every token is identical;
+  - `NOISY` above 1.5 % same-setting disagreement;
+  - `PREMISE_ABSENT` below a 5 % builder share;
+  - otherwise `NO_GAIN` or `SLOWER`.
+- **The premise on the card** before any fetch: the decode-graph bucket tests, and grouped-nf4-gemm's cumsum-rank
+  tests compiled for the card.
+- **Budget:** proof on Granite (guard 0.75 h); reading guard 1.5 h; lane ceiling $3.00.
+- **Claims register:** `e4b.serve.sc2e.64-slots-default-buckets.qwen3.5090.2026-10-07` (ceiling 8 req/s) and
+  `e4b.serve.sc2e.64-slots-buckets-auto.qwen3.5090.2026-10-07` (ceiling 12 req/s), from SC2e's committed receipts.
+
+### P115 Amendment 3 registered (#1313): Phase D, the fused stack on top of P116's bandwidth GEMV, and the family-scoped default
+
+- **Why.** Phase C read FLIP_HELD, so any default must be family-scoped under a new registration. grouped-nf4-gemm
+  0.43.0 made P116's bandwidth decode GEMV the default, and the fused stack and that GEMV were never read together.
+- **What.** `bench/p115/p115d_{run,drive,box,reduce}` and `staged-d.sha256`, plus `tests/test_p115d_staged_pin.py`.
+  - **Subject:** Qwen3-30B-A3B NF4 on the default server at 16 slots, grouped-nf4-gemm v0.43.0, the GEMV at its default.
+  - **Arms:** D0 (the four knobs `0`) against D1 (all `auto`).
+  - **Gate:** Phase C's SANE gate (12 windows; |bias| ≤ 0.02 nats, argmax ≥ 0.95), at **one window per pass**
+    (T == 1, where the GEMV and the folds meet). The dispatch tally must show the bandwidth route in both phases.
+  - **Reported:** the speed of an ABBA W1/W16 pair, the stack's gain on top of the GEMV.
+- **Rule.** VOID → FUNCTION_FAIL → COMBINED_FAIL → **COMBINED_SANE**, which licenses the family-scoped default
+  (allowlist `qwen3_moe`, `qwen3_5_moe`, `granitemoe`).
+- **Budget.** Proof on Granite (guard 0.75 h), reading guard 1.5 h. Phase D ceiling $4.00, inside P115's $10 hard stop
+  ($2.455 spent).
+- **Mechanism: (B), unset resolves per family; explicit `auto` structural, with a warning off the allowlist** (the
+  maintainer's decision). An unset knob resolves to `auto` on `qwen3_moe`, `qwen3_5_moe` and `granitemoe`, and to `0`
+  elsewhere; `/health` reports the resolution and its source. Explicit `auto` on any other family logs a one-time
+  warning naming the read it lacks or failed.
+- **Not measured yet.** No box runs before this page merges. The default change itself is its own PR, after Phase D
+  reads.
+
+### `E4B_INT4_WIDE_TILES=1`: the one-launch tile table above 256 routed rows (opt-in)
+
+A decode step above 32 rows at top-k 8 routes more than 256 rows and takes K19's prefill route, whose expert-major
+tile table the chained builder makes (argsort, scatter, cumsum, searchsorted, index_select). Lane P119 read it at
+2.87 ms of a 15.64 ms 64-row step on an RTX 5090, against 0.93 ms for the one-launch table at 256 rows.
+
+`E4B_INT4_WIDE_TILES=1` builds that table in one launch with grouped-nf4-gemm's cumsum rank
+(`build_group_tiles_fused(..., rank="cumsum")`) for every device-grouped call of 257 to 1024 routed rows (the int4
+store's K19 route and the NF4 store's M-tile alike). Its integers are the chained
+builder's, so outputs are bit-identical. The default stays `0` until a registered read licenses it; `1` on a kernel
+package without `rank=` is refused; prefill chunks (more rows) keep the chained builder.
+
+### STATUS.md states the current position; the dated narrative moves to STATUS-RECORD.md
+
+- `docs/STATUS.md` is cut from 16,703 words to about 3,000. It states the position in each area with its claim id and
+  evidence link, the defaults and the reads behind them, what changed, and what is open.
+- The old text moves verbatim to `docs/STATUS-RECORD.md`, frozen at 0.50.0. Four register rows whose `quoted_in` named
+  STATUS.md for text that now lives only in the record point at the record.
+- `AGENTS.md`: a moved position replaces its STATUS entry; the detail goes to the lane's RESULTS file.
+
+### TC1 amendment 70 read; amendment 71 registered
+
+- **Amendment 70** (`tc1-5090-138`, RTX 5090, AMD EPYC 7K62, $1.73, every arm profiled): grouped-nf4-gemm's opt-in single-block ladder
+  (`NF4_QLORA_SINGLE_LADDER=1`) steps e4b's matched arm (fp32 adapters) 0.797 at the field recipe on a host-bound box. `aten::bmm`'s CPU
+  time per call falls from 305 µs to 24.5 µs, for 4.1 % more device time and 0.33 GB more peak (P210, P212-P214 HELD). The shipped arm
+  (bf16 adapters) steps 1.015 (P211 FALSIFIED), so the flag stays opt-in. Register row `e4b.train.single-ladder.field.5090.2026-10-08`.
+- **Amendment 71** registered: token `qwen3slauto` reads `NF4_QLORA_SINGLE_LADDER=auto` (grouped-nf4-gemm#514, the ladder exactly when the
+  adapters are fp32) against 0 on a second host (P215-P219). If P215, P216 and P219 hold, `auto` becomes grouped-nf4-gemm's default. The
+  reducer adds the family, `slauto_why` and `score_slauto` (self-test 137).
+
+### P119 read (#846): where the 64-slot server's steps spend their device time (bench only; descriptive, no claim)
+
+- **The reading** (`p119-5090-1`, one RTX 5090, $0.827; lane $1.029): on SC2e's int4 stack (Qwen3-30B-A3B), a 64-row
+  decode step is 15.6 ms of device time, 44 % of it K19; above 256 routed rows the chained tile table adds 2.9 ms
+  against 0.9 below, and `Int4Linear` above 16 rows runs bf16 cuBLAS. The 512-token prefill is 41.2 ms of device time,
+  48 % int4 experts and 26 % small elementwise kernels; last-logits saves 0.9 ms. D2D copies are 4 per layer under bulk
+  KV bookkeeping.
+- **Predictions:** Q1–Q6 and Q8 held; Q7 (the LM head's share) missed. The standalone head bracket undercounted its
+  calls; `RESULTS-p119.md` says by how much.
+- **Files:** `bench/p119/RESULTS-p119.md`, `bench/p119/receipts/p119-5090-1/` (with `SHA256SUMS`).
+
+### P119 amendment 1 (#846): the census box records the KV pool's layer count as the int `kv_layers()` returns (bench and tests only)
+
+- `p119-prove-1` (HARNESS_ERROR, $0.069) stopped in the box: it called `len()` on `kv_layers()`'s int. Fixed; the CPU
+  test's stand-in pool now returns an int as the real one does, so the defect fails on CPU. `staged.sha256` re-pinned.
+- No bracket, rule, prediction, guard or budget changes; before any reading.
+
 ## 0.50.0 — 2026-10-08 — serve_paged takes more requests by default (estimate-sized slots, one graph per decode step); the training comparison is quoted as GPU time
 
 **0.50.0.** `serve_paged` takes more requests by default. `E4B_PAGED_MAX_SEQS=auto` sizes the slot count to the GPU's free

@@ -222,3 +222,67 @@ def test_the_census_per_knob_on_other_families(monkeypatch, family):
         got = {k: v - before[k] for k, v in counters.snapshot().items() if v - before[k]}
         assert got == step_want, (config, got)
     assert math.isfinite(layers)
+
+
+def test_mixtral_at_full_depth_is_the_registered_census_per_step_and_fp32_router_path(monkeypatch):
+    """Amendment 5: a tiny Mixtral at the real depth (32 layers) reads exactly the registered census and per-step glue
+    calls for each config, and wherever the router epilogue engages, every patched router keeps fp32 weights
+    (``fusion_report``'s ``fp32_upstream``, which the reducer checks on the card)."""
+    pytest.importorskip("transformers.models.mixtral", reason="needs transformers with Mixtral")
+    from transformers import MixtralConfig, MixtralForCausalLM
+
+    from experts4bit_qlora.serve_paged import FUSION_KNOBS, PagedServeConfig, _apply_fusions
+    box, red = _load("fam_box"), _load("fam_reduce")
+    q = _load("p115_quality", "p115")
+    for config in red.FAMILY_CONFIGS["mixtral"]:
+        monkeypatch.setitem(sys.modules, "int4_b32", _stub())
+        counters = q.KernelCounters().install()
+        cfg = MixtralConfig(vocab_size=256, hidden_size=128, intermediate_size=64, num_hidden_layers=32,
+                            num_attention_heads=4, num_key_value_heads=2, head_dim=32, num_local_experts=4,
+                            num_experts_per_tok=2, max_position_embeddings=512)
+        torch.manual_seed(0)
+        model = MixtralForCausalLM(cfg).to(torch.bfloat16).eval()
+        report = {}
+        census = _apply_fusions(model, PagedServeConfig(fusion_modes={k: box.CONFIGS[config][k] for k in FUSION_KNOBS}),
+                                report=report)
+        assert [census[k] for k in box.CENSUS_KEYS] == red.CENSUS[("mixtral", config)], (config, census)
+        with torch.no_grad():
+            before = counters.snapshot()
+            model(input_ids=torch.randint(0, 256, (4, 1)), position_ids=torch.full((4, 1), 32), use_cache=False)
+        got = {k: v - before[k] for k, v in counters.snapshot().items() if v - before[k]}
+        assert got == red.PER_STEP.get(("mixtral", config), {}), (config, got)
+        epi = report["folds"]["E4B_FUSE_ROUTER_EPI"]
+        if census["fuse_router_epilogue_n"]:
+            assert epi["patched"] == epi["fp32_upstream"] == red.FP32_ROUTERS["mixtral"], (config, epi)
+
+
+def test_gemma4_at_full_depth_is_the_registered_census_and_per_step(monkeypatch):
+    """Amendment 6: a tiny Gemma-4 at the real depth and layer pattern (30 layers, five sliding to one full, K = V on the
+    full layers, the logit softcap) reads exactly the registered census and per-step glue calls for each config. The
+    r2 fold refuses Gemma-4's extra norms, so it engages nothing and has no arm."""
+    pytest.importorskip("transformers.models.gemma4", reason="needs transformers with Gemma-4")
+    from transformers import Gemma4ForCausalLM, Gemma4TextConfig
+
+    from experts4bit_qlora.serve_paged import FUSION_KNOBS, PagedServeConfig, _apply_fusions
+    box, red = _load("fam_box"), _load("fam_reduce")
+    q = _load("p115_quality", "p115")
+    for config in red.FAMILY_CONFIGS["gemma4"] + ("ON_r2",):
+        monkeypatch.setitem(sys.modules, "int4_b32", _stub())
+        counters = q.KernelCounters().install()
+        cfg = Gemma4TextConfig(vocab_size=256, hidden_size=128, intermediate_size=128, num_hidden_layers=30,
+                               num_attention_heads=4, num_key_value_heads=2, head_dim=32, global_head_dim=64,
+                               num_global_key_value_heads=1,
+                               layer_types=(["sliding_attention"] * 5 + ["full_attention"]) * 5, sliding_window=1024,
+                               enable_moe_block=True, num_experts=4, top_k_experts=2, moe_intermediate_size=64,
+                               attention_k_eq_v=True, hidden_size_per_layer_input=0, vocab_size_per_layer_input=256,
+                               final_logit_softcapping=30.0)
+        torch.manual_seed(0)
+        model = Gemma4ForCausalLM(cfg).to(torch.bfloat16).eval()
+        census = _apply_fusions(model, PagedServeConfig(fusion_modes={k: box.CONFIGS[config][k] for k in FUSION_KNOBS}))
+        want = red.CENSUS.get(("gemma4", config), [0, 0, [0, 0], 0])          # ON_r2: engages nothing
+        assert [census[k] for k in box.CENSUS_KEYS] == want, (config, census)
+        with torch.no_grad():
+            before = counters.snapshot()
+            model(input_ids=torch.randint(0, 256, (4, 1)), position_ids=torch.full((4, 1), 32), use_cache=False)
+        got = {k: v - before[k] for k, v in counters.snapshot().items() if v - before[k]}
+        assert got == red.PER_STEP.get(("gemma4", config), {}), (config, got)

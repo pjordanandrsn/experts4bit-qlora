@@ -228,6 +228,7 @@ def main_run(a) -> int:
            "knobs": {k: os.environ.get(k) for k in KNOBS}, "store_env": {k: os.environ.get(k) for k in SC2G_ENV},
            "transformers": transformers.__version__, "torch": torch.__version__, "load_s": round(load_s, 1),
            "census": {k: info.get(k) for k in CENSUS_KEYS}, "fusion_modes": info.get("fusion_modes"),
+           "fusion_report": info.get("fusion_report"),              # Amendment 5: the router epilogue's fp32_upstream
            "store": {k: info.get(k) for k in STORE_KEYS}, "kv": info.get("kv"), "layers": q_layers(model),
            "counters_wrapped": list(counters.wrapped), "qkv_modules": fwd.qkv_modules, "ref_kw": ref_kw,
            "texts": list(texts), "shapes": list(shapes), "sets": list(sets), "prompt": a.prompt, "cont": a.cont,

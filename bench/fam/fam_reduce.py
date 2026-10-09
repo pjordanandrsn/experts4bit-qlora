@@ -44,25 +44,34 @@ MODELS = {
     "granite": ("ibm-granite/granite-3.1-3b-a800m-instruct", "a02780686e08a03fe0d2679a293b5c74a90efa89"),
     "gptoss": ("openai/gpt-oss-20b", "6cee5e81ee83917806bbde320786a8fb61efebee"),
     "qw36": ("Qwen/Qwen3.6-35B-A3B", "995ad96eacd98c81ed38be0c5b274b04031597b0"),
+    "mixtral": ("mistralai/Mixtral-8x7B-Instruct-v0.1", "eba92302a2861cdc0098cc54bc9f17cb2c47eb61"),   # Amendment 5
+    "gemma4": ("google/gemma-4-26B-A4B-it", "4d7ae4984b7db7de8f8457170b3f1a419ee76d52"),             # Amendment 6
 }
 FAMILY_CONFIGS = {"granite": ("OFF", "ON_auto"), "gptoss": ("OFF", "ON_glue", "ON_r2", "ON_epi", "ON_auto"),
-                  "qw36": ("OFF", "ON_auto")}
+                  "qw36": ("OFF", "ON_auto"), "mixtral": ("OFF", "ON_glue", "ON_r2", "ON_epi", "ON_auto"),
+                  "gemma4": ("OFF", "ON_glue", "ON_epi", "ON_auto")}          # Amendment 6: r2 engages nothing
 ANCHOR = {"family": "gptoss", "configs": ("OFF", "ON_auto"), "cell": ("wikitext", 12, "A")}
-#: the proving rental (PREREG "The premise and the proving rental"): Granite alone, every process kind, 32 positions
-PROOF = {"families": ("granite",), "configs": {"granite": ("OFF", "ON_epi", "ON_auto")}, "anchor_family": "granite",
-         "cont": 32}
+#: the proving rental (PREREG "The premise and the proving rental"): Granite alone, every process kind, 32 positions.
+#: Amendment 5: a family's own proof (``--proof --families mixtral``) runs that family's OFF, ON_epi and ON_auto, no anchor
+PROOF = {"families": ("granite",), "configs": {"granite": ("OFF", "ON_epi", "ON_auto"),
+                                               "mixtral": ("OFF", "ON_epi", "ON_auto"),
+                                               "gemma4": ("OFF", "ON_epi", "ON_auto")},
+         "anchor_family": "granite", "cont": 32}
 CONT = 128                                    # registered teacher-forced positions per window (the reading)
 #: registered prompt, prefill chunk and floor chunk: every prefill forward carries more than 64 rows, so only the decode
 #: steps (and a hybrid's one-token warm-up) are decode-shaped -- the per-step count below depends on it
 PREFILL = (512, 512, 256)
 PHASE_C_ANCHOR_AGREE = 0.924                  # Phase C's SANE argmax agreement on gpt-oss (SC2g path, T == 12, set A)
 
-ATTN_LAYERS = {"granite": 32, "gptoss": 24, "qw36": 10}
+ATTN_LAYERS = {"granite": 32, "gptoss": 24, "qw36": 10, "mixtral": 32, "gemma4": 30}
 #: decode-shaped forwards beyond the decode steps: a hybrid's one-token linear-state warm-up
 #: (``PagedModelRunner._warm_linear_state``), ONCE PER PROCESS -- on its first padded pass, while the model's pool is
 #: unallocated (Amendment 3; Phase C ran one pass a process, so it could not tell the two apart). That pass is the first
 #: arm (R on OFF, ON otherwise) of the first cell the box visits; every other pass carries none.
-WARMUP_FORWARDS = {"granite": 0, "gptoss": 0, "qw36": 1}
+WARMUP_FORWARDS = {"granite": 0, "gptoss": 0, "qw36": 1, "mixtral": 0, "gemma4": 0}
+#: routers whose upstream weights are fp32 and stay fp32 through the fused epilogue (its report's ``fp32_upstream``):
+#: wherever the epilogue engages on such a family, every patched router must be on that path (Amendment 5)
+FP32_ROUTERS = {"mixtral": 32}
 FIRST_CELL = fam_box.cell_key(fam_box.TEXTS[0], fam_box.shape_order(fam_box.SHAPES)[0], "A")
 CENSUS = {
     ("granite", "OFF"): [0, 0, [0, 0], 0], ("granite", "ON_auto"): [0, 65, [32, 32], 32],
@@ -71,6 +80,11 @@ CENSUS = {
     ("gptoss", "ON_r2"): [0, 0, [24, 0], 0], ("gptoss", "ON_epi"): [0, 0, [0, 0], 24],
     ("gptoss", "ON_auto"): [0, 49, [24, 0], 24],
     ("qw36", "OFF"): [0, 0, [0, 0], 0], ("qw36", "ON_auto"): [0, 0, [0, 0], 40],
+    ("mixtral", "OFF"): [0, 0, [0, 0], 0], ("mixtral", "ON_glue"): [0, 65, [0, 0], 0],
+    ("mixtral", "ON_r2"): [0, 0, [32, 32], 0], ("mixtral", "ON_epi"): [0, 0, [0, 0], 32],
+    ("mixtral", "ON_auto"): [0, 65, [32, 32], 32],
+    ("gemma4", "OFF"): [0, 0, [0, 0], 0], ("gemma4", "ON_glue"): [0, 271, [0, 0], 0],
+    ("gemma4", "ON_epi"): [0, 0, [0, 0], 30], ("gemma4", "ON_auto"): [0, 271, [0, 0], 30],
 }
 #: glue-kernel calls per decode-shaped forward (P115's KernelCounters names)
 PER_STEP = {
@@ -82,6 +96,13 @@ PER_STEP = {
     ("gptoss", "ON_epi"): {"router_epilogue": 24},
     ("gptoss", "ON_auto"): {"rmsnorm_rows": 25, "rmsnorm_resid_rows": 24, "router_epilogue": 24},
     ("qw36", "ON_auto"): {"router_epilogue": 40},
+    ("mixtral", "ON_glue"): {"rmsnorm_rows": 65},
+    ("mixtral", "ON_r2"): {"rmsnorm_resid_rows": 32, "rope_heads": 64},
+    ("mixtral", "ON_epi"): {"router_epilogue": 32},
+    ("mixtral", "ON_auto"): {"rmsnorm_rows": 33, "rmsnorm_resid_rows": 32, "rope_heads": 64, "router_epilogue": 32},
+    ("gemma4", "ON_glue"): {"rmsnorm_rows": 271},
+    ("gemma4", "ON_epi"): {"router_epilogue": 30},
+    ("gemma4", "ON_auto"): {"rmsnorm_rows": 271, "router_epilogue": 30},
 }
 CENSUS_KEYS = fam_box.CENSUS_KEYS
 
@@ -183,6 +204,11 @@ def family_checks(fam, recs, e4b_sha, cells, why, configs=None, cont=CONT):
             why.append(f"{config}: the default path carries an int4 / MXFP4 store {store.get('int4_store_kinds')}")
         if not isinstance(rec.get("max_mem_gb"), (int, float)):
             why.append(f"{config}: no peak memory")
+        if fam in FP32_ROUTERS and CENSUS.get((fam, config), [0, 0, [0, 0], 0])[3]:
+            epi = (rec.get("fusion_report") or {}).get("E4B_FUSE_ROUTER_EPI") or {}
+            if epi.get("fp32_upstream") != FP32_ROUTERS[fam]:
+                why.append(f"{config}: the router epilogue's fp32_upstream {epi.get('fp32_upstream')} != "
+                           f"{FP32_ROUTERS[fam]} (Mixtral's router weights must stay fp32)")
         if _census(rec) != CENSUS[(fam, config)]:
             why.append(f"{config}: census {_census(rec)} != {CENSUS[(fam, config)]}")
         for cell in cells:
@@ -317,9 +343,15 @@ def reduce_anchor(recs):
 
 
 def _families(proof, families):
-    """The families a run reduces: the proof's, or (Amendment 1: one family per box) the run's own, never another."""
+    """The families a run reduces: the proof's, or (Amendment 1: one family per box) the run's own, never another.
+    Amendment 5: ``--proof --families mixtral`` is Mixtral's own proof."""
     if proof:
-        return PROOF["families"]
+        if not families:
+            return PROOF["families"]
+        fams = tuple(families)
+        if len(fams) != 1 or fams[0] not in PROOF["configs"]:
+            raise SystemExit(f"REFUSED: a proof is one family of {tuple(PROOF['configs'])}, got {fams}")
+        return fams
     fams = tuple(families or MODELS)
     bad = [f for f in fams if f not in MODELS]
     if bad or not fams:
@@ -346,7 +378,7 @@ def load_dir(d, proof=False, families=None):
 def reduce_all(recs, e4b_sha, proof=False, families=None):
     fams = _families(proof, families)
     out = {"proof": bool(proof), "families": {f: reduce_family(f, recs.get(f) or {}, e4b_sha, proof) for f in fams}}
-    if proof or ANCHOR["family"] in fams:                # the anchor rides with gpt-oss's box (and the proof's)
+    if (proof and fams == PROOF["families"]) or ANCHOR["family"] in fams:   # gpt-oss's box, and Granite's proof
         out["anchor"] = reduce_anchor(recs.get("anchor") or {})
     out["constants"] = {"BIAS_MARGIN": BIAS_MARGIN, "SPREAD_MULT": SPREAD_MULT, "SPREAD_MIN": SPREAD_MIN,
                         "AGREE_MARGIN": AGREE_MARGIN, "BACKSTOP_BIAS": BACKSTOP_BIAS, "BACKSTOP_AGREE": BACKSTOP_AGREE}
@@ -411,9 +443,11 @@ def _synthetic(fam, config, *, floor_d=0.002, floor_agree=0.95, on_d=0.0, on_agr
                 cells[cell] = {"base": base, "extra": extra, "dispatch": None}
     model, rev = MODELS[fam]
     census = dict(zip(CENSUS_KEYS, CENSUS[(fam, config)]))
+    routers = census["fuse_router_epilogue_n"]
+    epi = {"patched": routers, "fp32_upstream": routers if fam in FP32_ROUTERS else 0} if routers else {"mode": "0"}
     return {"config": config, "path": "default", "model": model, "revision": rev, "e4b_sha": e4b, "gnf4_sha": "G",
-            "census": census, "store": {"int4_expert_layers": 0, "int4_store_kinds": {}}, "max_mem_gb": 20.0,
-            "cells": cells, "status": "ok"}
+            "census": census, "fusion_report": {"E4B_FUSE_ROUTER_EPI": epi},
+            "store": {"int4_expert_layers": 0, "int4_store_kinds": {}}, "max_mem_gb": 20.0, "cells": cells, "status": "ok"}
 
 
 def _fam_recs(fam, configs=None, **kw):
@@ -437,6 +471,27 @@ def self_test() -> int:
     cases.append(("the proof at the reading's positions VOIDs", set(got.values()) == {"VOID"}, got))
     case("a reading at the proof's positions VOIDs", "granite", _fam_recs("granite", cont=PROOF["cont"]), "VOID")
     case("granite clean pass", "granite", _fam_recs("granite"), "PASS")
+    case("mixtral clean pass (Amendment 5)", "mixtral", _fam_recs("mixtral"), "PASS")
+    r = _fam_recs("mixtral")
+    r["ON_epi"]["fusion_report"]["E4B_FUSE_ROUTER_EPI"]["fp32_upstream"] = 0
+    case("mixtral's router weights cast off fp32 VOID", "mixtral", r, "VOID")
+    r = _fam_recs("mixtral")
+    r["ON_auto"].pop("fusion_report")
+    case("mixtral with no fusion report VOIDs", "mixtral", r, "VOID")
+    got = reduce_family("mixtral", _fam_recs("mixtral", PROOF["configs"]["mixtral"], cont=PROOF["cont"]), "E",
+                        proof=True)["verdict"]
+    cases.append(("mixtral's own proof at 32 positions", got == {"ON_epi": "PASS", "ON_auto": "PASS"}, got))
+    case("gemma4 clean pass (Amendment 6)", "gemma4", _fam_recs("gemma4"), "PASS")
+    got = reduce_family("gemma4", _fam_recs("gemma4", PROOF["configs"]["gemma4"], cont=PROOF["cont"]), "E",
+                        proof=True)["verdict"]
+    cases.append(("gemma4's own proof at 32 positions", got == {"ON_epi": "PASS", "ON_auto": "PASS"}, got))
+    cases.append(("a proof names one registered family", _families(True, ["mixtral"]) == ("mixtral",)
+                  and _families(True, None) == ("granite",), None))
+    try:
+        _families(True, ["qw36"])
+        cases.append(("a proof of an unregistered proof family is refused", False, None))
+    except SystemExit:
+        cases.append(("a proof of an unregistered proof family is refused", True, None))
     case("qw36: the warm-up on both processes' first passes", "qw36", _fam_recs("qw36"), "PASS")
 
     def warm_at(where):
@@ -560,7 +615,7 @@ def self_test() -> int:
     cases.append(("gpt-oss's box carries the anchor", "anchor" in gpt and gpt["anchor"]["status"] == "missing",
                   gpt.get("anchor")))
     try:
-        _families(False, ("mixtral",))
+        _families(False, ("olmoe",))
         cases.append(("an unregistered family is refused", False, None))
     except SystemExit:
         cases.append(("an unregistered family is refused", True, None))
