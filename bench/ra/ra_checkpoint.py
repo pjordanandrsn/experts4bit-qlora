@@ -11,6 +11,7 @@ import datetime
 import hashlib
 import importlib.util
 import json
+import os
 import re
 import sys
 import urllib.request
@@ -224,7 +225,7 @@ def main():
     try:
         result = verify(manifest, fetch)
         require(inputs.file_record(args.manifest) == manifest_before, "manifest changed")
-        result.update(status="PASS", manifest_sha256=manifest_before["sha256"])
+        result.update(status="PASS", pid=os.getpid(), manifest_sha256=manifest_before["sha256"])
     except Exception as error:
         result = {"schema": 1, "status": "FAILED", "error_type": type(error).__name__,
                   "manifest_sha256": manifest_before["sha256"]}
