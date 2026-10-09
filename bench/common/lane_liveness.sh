@@ -18,7 +18,8 @@ lane_proc_snapshot() {  # pid [proc-root] -> live start-ticks boot-id uptime-sec
       case "$state" in Z|X) live=0;; *) live=1;; esac
     else ticks=-; fi
   elif [ ! -d "$root/$pid" ]; then
-    live=0  # unreadable existing /proc entry is UNKNOWN, not a dead process
+    live=0
+  # If the entry still exists but stat is unreadable, live stays unknown.
   fi
   printf '%s %s %s %s\n' "$live" "$ticks" "$boot" "$uptime"
 }
