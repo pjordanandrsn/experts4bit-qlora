@@ -194,6 +194,9 @@ def run(manifest, progress):
     for package in packages:
         require(helper.digest(Path(package["path"])) == package["wheel_sha256"], "handoff archive changed")
     progress.update(status="PASSED", phase="COMPLETE", imports=imports, startup_activated=True,
+                    installed_inventory_sha256=hashlib.sha256(json.dumps(
+                        {str(p.relative_to(prefix)): h for p, h in hashes.items()},
+                        sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
                     proves_requested_release_imports=True, proves_full_image_installation=False,
                     proves_gpu_engagement=False, proves_launch_authority=False)
     return progress
@@ -203,13 +206,22 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--manifest", required=True, type=Path)
     ap.add_argument("--out", required=True, type=Path)
+    ap.add_argument("--worker-spec", type=Path)
+    ap.add_argument("--worker-sha256")
     args = ap.parse_args()
     helper = load_prestartup().load_provenance()
+    helper.require((args.worker_spec is None) == (args.worker_sha256 is None), "worker pin pair")
+    worker = None
+    if args.worker_spec is not None:
+        helper.require(args.worker_spec.is_absolute() and
+                       helper.digest(args.worker_spec) == args.worker_sha256, "worker spec pin")
+        worker = json.loads(args.worker_spec.read_bytes())
     helper.require(args.out.is_absolute() and not args.out.exists(), "fresh absolute handoff receipt")
     before = helper.digest(args.manifest)
     progress = {"schema": 1, "status": "FAILED", "phase": "PRECONDITIONS", "manifest_sha256": before}
     try:
-        result = run(json.loads(args.manifest.read_bytes()), progress)
+        manifest = json.loads(args.manifest.read_bytes())
+        result = run(manifest, progress)
         helper.require(helper.digest(args.manifest) == before, "handoff manifest changed")
     except Exception as error:
         progress.update(status="FAILED", error_type=type(error).__name__, error=str(error))
@@ -217,6 +229,15 @@ def main():
         raise
     with args.out.open("x") as stream:
         stream.write(json.dumps(result, sort_keys=True, indent=2) + "\n")
+    if worker is not None:
+        helper.require(helper.digest(args.worker_spec) == args.worker_sha256, "worker spec changed during handoff")
+        path = Path(__file__).absolute().with_name("ra_verified_worker.py")
+        helper.require(helper.digest(path) == worker["tools"][path.name], "worker helper pin")
+        spec = importlib.util.spec_from_file_location("ra_verified_worker", path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        module.execute(worker, args.worker_spec, args.worker_sha256, result, args.out, manifest)
 
 
 if __name__ == "__main__":
