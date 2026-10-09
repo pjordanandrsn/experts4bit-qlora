@@ -342,3 +342,29 @@ decodes in bucket 1, so it has no padding rows and reads only its own, freshly r
 $3.40, inside Qwen3.6's $4.2 ceiling. The lane has spent $4.111 (proofs $0.637, Granite $0.828, gpt-oss $1.007,
 `fam-qw36-1` $1.639). With the rerun it stays under $8.31 plus downloads, inside the $18 lane ceiling. It launches
 from this amendment's merge commit, after review.
+
+## Amendment 3 (2026-10-09, after `fam-qw36-2`, before any gate statistic from it)
+
+**What VOIDed.** `fam-qw36-2` (store `555ba11f`, $2.345) ran both Qwen3.6 processes to completion under Amendment 2's
+order: OFF 5966 s and ON_auto 922 s, every cell at both shapes, census exact, peak 24.38 GB. The reducer VOIDed on one
+engagement count, 613 times over: "decode-shaped forwards 127 != 128" (254 != 255 on `half`), with router-epilogue calls
+5080 against 5120 (127 × 40 against 128 × 40).
+
+**The registered count was wrong about e4b, not the data.** The rule expected the hybrid's one-token linear-state
+warm-up once per padded pass. At `98d59921`, `PagedModelRunner._warm_linear_state` (`engines/paged_runner.py`, line 466)
+returns early once the model's pool is allocated, so the warm-up runs once per process: on its first padded pass. The
+records show exactly that. Each process has one +1 pass, its first (OFF: `wikitext|12|A` R, 1 of 460 passes; ON_auto:
+`wikitext|12|A` ON, 1 of 78), and every other pass carries exactly the decode steps. Phase C ran one pass per process
+(140 forwards = 12 + 127 + 1), so it could not tell the two apart.
+
+**Change** (`fam_reduce.py`; the rule's gates, cells, arms, windows, mutants and predictions are unchanged). On qw36,
+each process's first padded pass in visit order carries exactly one extra decode-shaped forward, with its per-step glue
+calls. That pass is the first arm (R on OFF, ON otherwise) of `FIRST_CELL` = `wikitext|12|A`. Every other pass carries
+none, and anything else VOIDs. Granite and gpt-oss carry none. The reducer's self-test now runs 50 cases. The new
+ones put the warm-up on both processes' first passes (PASS), and on every pass, on a later cell's first pass, on no
+pass, missing from the ON process, or twice in the OFF process (each VOID).
+
+**These records are re-reduced, with no new rental** (the maintainer's ruling). That is not picking the rule from the
+result. The count is an integrity check fixed by e4b's code and read off the engagement records. It was decided before
+anyone computed a gate statistic from `fam-qw36-2`, and nobody computes one until this amendment merges. After the
+merge, the maintainer re-derives the verdict from the store before it counts. The lane stays at $6.456.

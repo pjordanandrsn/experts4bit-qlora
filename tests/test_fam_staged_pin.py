@@ -86,12 +86,13 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 
 def test_the_self_tests_pass():
     base = {"PATH": "/usr/bin:/bin", **{k: os.environ[k] for k in ("SYSTEMROOT",) if k in os.environ}}
-    for script, want in (("fam_reduce.py", "fam_reduce self-test OK (45/45 cases)"),
+    for script, want in (("fam_reduce.py", "fam_reduce self-test OK (50/50 cases)"),
                          ("fam_box.py", "fam_box self-test OK (28/28 cases)")):
         out = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True, env=base)
         assert out.returncode == 0 and want in out.stdout, out.stdout + out.stderr
     assert "self-tested on 42 cases" in PREREG and "self-test now runs 45 cases" in PREREG     # Amendment 1
     assert "box's self-test now runs 28 cases" in PREREG                                   # Amendment 2
+    assert "reducer's self-test now runs 50 cases" in PREREG                               # Amendment 3
 
 
 def test_the_rule_is_the_registered_rule():
@@ -105,7 +106,7 @@ def test_the_rule_is_the_registered_rule():
                                 "qw36": ("OFF", "ON_auto")}
     assert r.PROOF["configs"] == {"granite": ("OFF", "ON_epi", "ON_auto")} and r.PROOF["anchor_family"] == "granite"
     assert r.ATTN_LAYERS == {"granite": 32, "gptoss": 24, "qw36": 10}
-    assert r.EXTRA_DECODE_FORWARDS == {"granite": 0, "gptoss": 0, "qw36": 1}
+    assert r.WARMUP_FORWARDS == {"granite": 0, "gptoss": 0, "qw36": 1} and r.FIRST_CELL == "wikitext|12|A"   # Am. 3
 
     def text(c):
         return f"`{c[0]} / {c[1]} / [{c[2][0]}, {c[2][1]}] / {c[3]}`"
