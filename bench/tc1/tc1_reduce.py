@@ -2656,6 +2656,21 @@ def score_slauto(F, fam=SLAUTO_FAM):
     return out
 
 
+def weights_commit_why(fam, r):
+    """P129 Amendment 2: e4b's arm passes the pinned revision to its loader and records the commit the weights loaded from
+    (``weights_commit``, the config's ``_commit_hash``). A draw whose commit differs from the pinned revision -- the family's
+    registered pin where one exists, else the arm's own -- is VOID. Receipts from before the field carry none and keep their verdict;
+    the qwen3fqkv family requires it (``fqkv_why``)."""
+    wc = (r or {}).get("weights_commit")
+    if wc is None:
+        return ""
+    pin = (TC2_MODELS.get(fam) or (None, None))[1] or (DENSE_PINS.get(fam) or (None, None))[1] or (r or {}).get("revision")
+    pin = str(pin or "").lower()
+    if not re.fullmatch(r"[0-9a-f]{7,40}", pin):
+        return ""                                                        # a branch, tag or local path: nothing to compare a commit with
+    return "" if str(wc).lower().startswith(pin) else f"weights loaded from commit {str(wc)[:12]}, not the pinned revision {pin[:12]}"
+
+
 def fqkv_side(tag):
     """P129 Amendment 2: (arm, side) of a qwen3fqkv e4b tag, e.g. ("m", "q1") for fused_attn4_m_q1_d2."""
     m = re.match(r"^fused_attn4_(m|shipped)_(q[01])(?:_d2)?$", tag or "")
@@ -2665,8 +2680,8 @@ def fqkv_side(tag):
 def fqkv_why(tag, r):
     """P129 Amendment 2's predicates: torch 2.12; e4b's field defaults (the double-quantized absmax, the reentrant checkpoint on all 48
     layers, E4B_CKPT_OFFLOAD unset); the setting the side names: q1 E4B_TRAIN_FUSE_QKV=1 with all 48 attention modules fused, none refused
-    and fused calls recorded; q0 set to 0 with none fused, on the same build (the module present); a profile with its launch count. Empty
-    string = as registered."""
+    and fused calls recorded; q0 set to 0 with none fused, on the same build (the module present); the commit the weights loaded from
+    (``weights_commit_why`` VOIDs one that is not the pin); a profile with its launch count. Empty string = as registered."""
     r = r or {}
     bad = []
     tv = str((r.get("env") or {}).get("torch") or "")
@@ -2686,6 +2701,8 @@ def fqkv_why(tag, r):
         bad.append(f"the fused q/k/v projection did not serve q1 on all 48 attention modules (record {tq})")
     if side == "q0" and not (tq.get("e4b_has_train_qkv") and env == "0" and n == 0):
         bad.append(f"E4B_TRAIN_FUSE_QKV={env!r} with {n} fused modules: q0 names 0 and none, on a build that has the module (record {tq})")
+    if not r.get("weights_commit"):
+        bad.append("no weights_commit on the receipt: P129 Amendment 2 records the commit e4b's weights loaded from")
     pr = r.get("profile") or {}
     if not (_cbk_device_ms(r) and pr.get("launches_per_step")):
         bad.append("no profile with launches_per_step on the receipt: P129 Amendment 2 profiles every arm (the recount gate reads it)")
@@ -3678,6 +3695,9 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
         mid, rev = DENSE_PINS[fam]
         if r.get("model") not in (None, mid) or r.get("revision") not in (None, rev):
             why.append(f"model/revision {r.get('model')} @ {str(r.get('revision'))[:12]} != the registered pin {mid} @ {rev[:12]}")
+    w = weights_commit_why(fam, r)                                      # P129 Amendment 2: the weights loaded at the pinned revision
+    if w:
+        why.append(w)
     if not c1_ok(r) or r.get("status") == "c1_failed":
         why.append("C1 not clean" if r.get("status") != "c1_failed" else "C1 FAILED (the arm's own status)")
         if not r.get("C1_control_tensor"):
@@ -8269,7 +8289,7 @@ def _fqkv_set(s=None, dev=None, launches=None, held=None, tq=None):
         arm, side = sladder_side(tag)
         q = {"l0": "q0", "l1": "q1"}[side]
         nt = tag.replace(f"_{side}", f"_{q}")
-        r = dict(r, tag=nt, fam=FQKV_FAM, eval_loss_final=held[q])
+        r = dict(r, tag=nt, fam=FQKV_FAM, eval_loss_final=held[q], weights_commit=r.get("revision"))
         r.pop("single_ladder", None)
         r["train_qkv"] = (tq or {}).get(nt, {"env": "1" if q == "q1" else "0", "e4b_has_train_qkv": True, "fused": 48 if q == "q1" else 0,
                                              "refused": 0, "calls": 9216 if q == "q1" else 0})
@@ -10831,6 +10851,26 @@ def selftest():
     assert FQ(_fqkv_set(tq=bad))[FQKV_FAM]["verdicts"][("e4b", "fused_attn4_m_q1")] == "VOID"
     old = {"fused_attn4_shipped_q0": {"env": "0", "e4b_has_train_qkv": False}}
     assert FQ(_fqkv_set(tq=old))[FQKV_FAM]["verdicts"][("e4b", "fused_attn4_shipped_q0")] == "VOID"
+    cases += 1
+    # 126. P129 Amendment 2's weight pin: a draw whose weights loaded from another commit is VOID, in qwen3fqkv and in any family; a
+    #      qwen3fqkv draw without the record is VOID; an older family's receipt without it keeps its verdict
+    S = _fqkv_set()
+    S[("e4b", "fused_attn4_m_q1_d2")]["weights_commit"] = "0" * 40
+    V = FQ(S)[FQKV_FAM]
+    assert V["verdicts"][("e4b", "fused_attn4_m_q1_d2")] == "VOID", V["verdicts"]
+    assert any("not the pinned revision 000000000000" in (x["why"] or "") or "not the pinned revision ad44e777bcd1" in (x["why"] or "")
+               for x in V["rows"] if x["tag"] == "fused_attn4_m_q1_d2"), [x["why"] for x in V["rows"]]
+    S = _fqkv_set()
+    S[("e4b", "fused_attn4_shipped_q1")].pop("weights_commit")
+    assert FQ(S)[FQKV_FAM]["verdicts"][("e4b", "fused_attn4_shipped_q1")] == "VOID"
+    S = _sladder_set()
+    k0 = next(iter(S))
+    assert reduce_family(SLADDER_FAM, S, {}, 20)["verdicts"][k0] == "VALID"
+    S[k0]["weights_commit"] = "f" * 40
+    assert reduce_family(SLADDER_FAM, S, {}, 20)["verdicts"][k0] == "VOID"
+    S[k0]["weights_commit"] = S[k0]["revision"]
+    assert reduce_family(SLADDER_FAM, S, {}, 20)["verdicts"][k0] == "VALID"
+    assert weights_commit_why("qwen3", {"revision": "main", "weights_commit": "a" * 40}) == ""
     assert "P129 Amendment 2" in render(RFQ, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")

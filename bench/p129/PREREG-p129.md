@@ -229,9 +229,11 @@ measure any reorder-class change can pass, which is why Amendment 1 does not gat
 (above) set the shape. This amendment fixes the token, the validity, the numbers, the host and the predictions. Random tokens barely
 learn, so Phase 2 also carries TC1's held-out bars on the field recipe, where learning shows.
 
-**The build.** e4b main at launch, with the module merged as opt-in code (`engines/train_qkv_fuse.py`, `E4B_TRAIN_FUSE_QKV`, off by
-default), and grouped-nf4-gemm 0.44.0 (whose single-block ladder is `auto` by default, so the matched arm takes it). The manifest pins both
-SHAs.
+**The build.**
+- **e4b:** main at launch. It carries the module, merged as opt-in code at `f539896` (`engines/train_qkv_fuse.py`, `E4B_TRAIN_FUSE_QKV`,
+  off by default), and this amendment's harness.
+- **grouped-nf4-gemm:** v0.44.0 at `d1f64ba`. Its single-block ladder is `auto` by default, so the matched arm takes it.
+- **Pins:** the manifest pins both SHAs.
 
 **The box** (token `qwen3fqkv`, `bench/tc1/tc1_run.sh`):
 - **Recipe:** TC1's field recipe (Alpaca rows, micro-batch 2 × accumulation 4, the reentrant checkpoint on all 48 layers), 60
@@ -243,13 +245,19 @@ SHAs.
 - **Profiling:** every arm, with `--phase-peaks 1` and TC1's profile steps.
 - **New receipt fields** (`bench/tc1/tc1_arm.py`):
   - a `train_qkv` record: the knob, whether e4b has the module, modules fused and refused, fused calls;
-  - `profile.launches_per_step`: the four launch API calls Phase 1 counted, per profiled step.
+  - `profile.launches_per_step`: the four launch API calls Phase 1 counted, per profiled step;
+  - `weights_commit`: the commit e4b's weights loaded from (the config's `_commit_hash`).
+- **The weight pin, fixed here:** e4b's arm called `load_moe_4bit_streaming` without `revision=`, although the tokenizer and every other
+  framework's snapshot lookup passed the registered one. The arm now passes `--revision` to the loader, which pins the config and the
+  snapshot and refuses a full-sha mismatch. The reducer (`weights_commit_why`, every family) VOIDs a draw whose `weights_commit` is
+  not the pinned revision. Receipts from before the field carry none and keep their verdicts.
 
 **Validity** (`fqkv_why`, on top of TC1's):
 - torch 2.12;
 - e4b's field defaults: the double-quantized absmax, the reentrant checkpoint on all 48 layers, `E4B_CKPT_OFFLOAD` unset;
 - `q1`: the knob at `1`, all 48 attention modules fused, none refused, fused calls recorded;
 - `q0`: the knob at `0`, none fused, on the same build (the module present);
+- `weights_commit` recorded, and the pinned revision;
 - a profile with its launch count.
 
 **The gates and the verdict** (`score_fqkv`; two VALID draws a side, medians; the first rung that applies):
@@ -302,8 +310,15 @@ SHAs.
 **Budget.** Eight profiled 60-step e4b arms come to about $1–3 a box with the download (amendments 71 and 72 billed $2.75 and $0.80). Two
 boxes at most keep it under $6, and the lane stays under $15.
 
-**The reducer** (`bench/tc1/tc1_reduce.py`): the `qwen3fqkv` family, `fqkv_why`, `score_fqkv` and its render section. Self-test case 125
-reads GAIN on the host-bound fixture, and checks the other branches:
+**The reducer** (`bench/tc1/tc1_reduce.py`): the `qwen3fqkv` family, `fqkv_why`, `weights_commit_why`, `score_fqkv` and its render
+section.
+
+Self-test case 126 covers the weight pin:
+- a draw loaded from another commit is VOID, in `qwen3fqkv` and in an older family;
+- a `qwen3fqkv` draw without the record is VOID;
+- an older family's receipt without it keeps its verdict.
+
+Self-test case 125 reads GAIN on the host-bound fixture, and checks the other branches:
 - a −5 % recount is VOID;
 - a GPU-bound `q0` is VOID;
 - walls of 0.99 read NO_GAIN;

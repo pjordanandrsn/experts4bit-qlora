@@ -1745,9 +1745,11 @@ def load_e4b(a):
          "structural_expected_n_attn4": None, "detector_version": detector_version(_lora_mod, experts4bit_qlora.__version__)}
     with PH("load_weights"):
         model, cfg = load_moe_4bit_streaming(a.model, "cuda", torch.bfloat16, a.r, a.alpha,
-                                             offload=bool(a.offload), pin=True, prefetch=False, quant_type="nf4")
+                                             offload=bool(a.offload), pin=True, prefetch=False, quant_type="nf4",
+                                             revision=a.revision)     # P129 Amendment 2: the weights at the pinned revision (config and snapshot)
         if not a.offload:
             model.to("cuda")
+    x["weights_commit"] = getattr(cfg, "_commit_hash", None)          # P129 Amendment 2: the commit the weights actually loaded from
     x["n_layers"], x["model_type"] = n_layers_of(cfg)
     with PH("verify"):
         try:
@@ -4014,6 +4016,7 @@ def run_arm(a, load_fn, sampler=True):
     steady = step_ms[10:] if len(step_ms) > 10 else step_ms
     cell = {
         "framework": a.framework, "fam": a.fam, "model": a.model, "revision": a.revision, "model_type": x.get("model_type"), "n_layers": x.get("n_layers"),
+        "weights_commit": x.get("weights_commit"),                                                                   # P129 Amendment 2 (e4b's loader)
         "snapshot_dir": x.get("snapshot_dir"), "arm": a.arm, "tag": a.tag,
         "status": "ok" if c1_ok else "c1_failed", "steps": a.steps, "seq": a.seq, "accum": a.accum, "micro_batch": M, "autocast": bool(a.autocast),
         "r": a.r, "alpha": a.alpha, "lr": a.lr, "seed": a.seed, "offload": bool(a.offload),
