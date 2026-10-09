@@ -12,5 +12,6 @@
  "nemotron_h": "reference-ok",
  "olmoe": "reference-ok",
  "qwen3_5_moe": "reference-ok",
+ "qwen3_5_moe_text": "none",
  "qwen3_moe": "reference-ok"
 }
