@@ -21,7 +21,8 @@ def load(name):
     return mod
 
 
-for name in ("ra_env", "ra_stage", "ra_reduce", "ra_normalize", "ra_process", "ra_training", "ra_quality", "ra_fallback", "ra_routes", "ra_serving"):
+for name in ("ra_env", "ra_stage", "ra_reduce", "ra_normalize", "ra_process", "ra_training", "ra_quality",
+             "ra_fallback", "ra_routes", "ra_serving", "ra_trace"):
     load(name)
 capacity = load("ra_capacity")
 server_wrapper = load("ra_capacity_server")
@@ -136,7 +137,7 @@ def test_drained_distinguishes_loading_from_permanent_failure(monkeypatch):
         capacity.drained("http://127.0.0.1:1", None, 1)
 
 
-@pytest.mark.parametrize("mutant", [None, "request", "health", "inputs", "driver", "trace"])
+@pytest.mark.parametrize("mutant", [None, "request", "health", "inputs", "driver", "trace", "close", "binding", "wait", "driver_wait"])
 def test_owned_socket_sequence_retention_and_failure_cleanup(tmp_path, monkeypatch, mutant):
     s, stage, _ = prepared(tmp_path)
     model, pf, _, _, driver = capacity.prepared(s, stage)
@@ -174,6 +175,8 @@ def test_owned_socket_sequence_retention_and_failure_cleanup(tmp_path, monkeypat
             return self.returncode
 
         def wait(self, timeout):
+            if mutant in ("wait", "driver_wait"):
+                raise capacity.subprocess.TimeoutExpired("synthetic owned server", timeout)
             self.returncode = -signal.SIGKILL
 
     monkeypatch.setattr(capacity.subprocess, "Popen", Process)
@@ -190,7 +193,7 @@ def test_owned_socket_sequence_retention_and_failure_cleanup(tmp_path, monkeypat
         Path(options["--out"]).write_text(json.dumps(row))
         calls.append(point[0])
         admitted[0] += point[3]
-        if mutant == "driver":
+        if mutant in ("driver", "driver_wait"):
             raise RuntimeError("synthetic driver failure")
         if mutant == "inputs":
             Path(s["prompts"]["path"]).write_text("mutated input")
@@ -207,18 +210,38 @@ def test_owned_socket_sequence_retention_and_failure_cleanup(tmp_path, monkeypat
 
     monkeypatch.setattr(capacity.ra_process, "run", client)
     monkeypatch.setattr(capacity, "get_json", get)
+    def close(*_):
+        assert calls == ["warm", "burst", "end"] and admitted[0] == 188
+        if mutant == "close":
+            raise TimeoutError("synthetic trace close timeout")
+        return {"closed": True, "synthetic": True}
+
+    monkeypatch.setattr(capacity, "close_trace", close)
+    # This suite tests process composition; native joins have their own mutation
+    # and production-engine tests in test_ra_trace.py.
+    def bind(*_):
+        if mutant == "binding":
+            raise ValueError("synthetic trace join failure")
+        return {"synthetic": True}
+
+    monkeypatch.setattr(capacity.ra_trace, "bind", bind)
     out = tmp_path / "out"
     try:
-        if mutant:
-            with pytest.raises((ValueError, RuntimeError, capacity.ra_normalize.reducer.Invalid)):
+        if mutant and mutant != "wait":
+            with pytest.raises((ValueError, RuntimeError, TimeoutError, capacity.ra_normalize.reducer.Invalid)) as error:
                 capacity.execute(s, stage, out)
+            if mutant == "driver_wait":
+                assert type(error.value) is RuntimeError
+                assert str(error.value) == "synthetic driver failure"
         else:
             result = capacity.execute(s, stage, out)
             assert result["status"] == "NATIVE_RECORDED_PENDING_ENGAGEMENT"
             assert result["proves_gpu_engagement"] is False
             assert calls == ["warm", "burst", "end"]
         rec = json.loads((out / "server.json").read_bytes())
-        assert rec["status"] == ("FAILED" if mutant else "NATIVE_RECORDED_PENDING_ENGAGEMENT")
+        assert rec["status"] == ("FAILED" if mutant and mutant != "wait" else "NATIVE_RECORDED_PENDING_ENGAGEMENT")
+        assert rec["kill_wait_timeout"] is (mutant in ("wait", "driver_wait"))
+        assert rec["returncode"] == (None if mutant in ("wait", "driver_wait") else -signal.SIGKILL)
         assert rec["attempts"] == 1 and killed == [(Process.pid, signal.SIGKILL)]
         assert (out / "capacity_warm.json").is_file() and (out / "server.log").is_file()
         assert foreign.getsockname() == foreign_address
@@ -233,6 +256,7 @@ def test_server_hooks_before_capture_builds_once_and_redacts_token(monkeypatch):
     cfg = types.SimpleNamespace(token="synthetic-secret", graphs=True)
     app = types.SimpleNamespace(routes={})
     app.get = lambda path: lambda fn: app.routes.setdefault(path, fn)
+    app.post = app.get
     parts = types.SimpleNamespace(info={"fusion_modes": {"graph": "auto"}, "census": 1})
     def original(cfg):
         return parts

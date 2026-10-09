@@ -14,6 +14,7 @@ from pathlib import Path
 import ra_env
 import ra_serving
 import ra_stage
+import ra_trace
 
 
 def parent_death_guard(parent_pid):
@@ -39,6 +40,10 @@ def instrumented_app(server, instrument, cfg, *, listener=None):
 
     server.build_engine = build
     app = server.create_app(cfg)
+
+    @app.post("/_ra/close-trace")
+    def close_trace(timeout: float):
+        return ra_trace.close_engine(app.state.engine, timeout)
 
     @app.get("/_ra/evidence")
     def evidence():

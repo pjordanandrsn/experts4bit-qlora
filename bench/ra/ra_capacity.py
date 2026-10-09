@@ -23,6 +23,7 @@ import ra_normalize
 import ra_process
 import ra_stage
 import ra_training
+import ra_trace
 
 POINTS = (("warm", "serial", 0, 4, 999), ("burst", "poisson", 1000, 64, 998),
           ("end", "poisson", 12, 120, 112))
@@ -105,6 +106,17 @@ def drained(base, process, timeout):
     raise TimeoutError("owned capacity server did not become drained/ready")
 
 
+def close_trace(base, process, timeout):
+    if process.poll() is not None:
+        raise RuntimeError("owned capacity server exited")
+    if not ra_trace.number(timeout) or timeout <= 0:
+        raise TimeoutError("no phase budget for native trace closure")
+    request = urllib.request.Request(base + "/_ra/close-trace?timeout=" + str(min(10, timeout / 2)), method="POST")
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(request, timeout=timeout) as response:
+        return json.load(response)
+
+
 def driver_command(python, stage, base, model, prompt_path, point, output):
     _, mode, rate, n, seed = point
     return [str(python), "-B", str(stage / "sc2_driver.py"), "run", "--base", base, "--model", model,
@@ -150,7 +162,7 @@ def execute(spec, stage, out):
                                        stdin=subprocess.DEVNULL, start_new_session=True, pass_fds=(listener.fileno(),))
             record["pid"] = process.pid
             (out / "health_start.json").write_text(json.dumps(drained(base, process, spec["startup_s"]), indent=2) + "\n")
-            raw = {}
+            raw, workloads = {}, []
             for point in POINTS:
                 label = point[0]
                 name = "capacity" if label == "end" else "capacity_" + label
@@ -162,6 +174,7 @@ def execute(spec, stage, out):
                                deadline=spec["deadline_epoch_s"], timeout=spec["driver_s"])
                 native = json.loads((out / f"{name}.json").read_bytes())
                 check_native(native, point, driver, base, model, pf)
+                workloads.append(native)
                 remaining = spec["driver_s"] - (time.monotonic() - started)
                 if remaining <= 0:
                     raise TimeoutError("no phase budget for capacity health retrieval")
@@ -176,6 +189,10 @@ def execute(spec, stage, out):
                     raise ValueError("capacity counter instrumentation not ready")
                 (out / f"capacity_evidence_{label}.json").write_text(json.dumps(evidence, indent=2) + "\n")
             ra_normalize.capacity_health(raw)
+            remaining = spec["driver_s"] - (time.monotonic() - started)
+            closed = close_trace(base, process, remaining)
+            (out / "trace-close.json").write_text(json.dumps(closed, indent=2, allow_nan=False) + "\n")
+            ra_trace.bind(out, workloads, closed, raw["capacity_health_end"])
             ra_process.check_input(spec["prompts"])
             ra_stage.verify(stage)
             for filename in ("request-trace.jsonl", "step-trace.jsonl"):
@@ -194,8 +211,16 @@ def execute(spec, stage, out):
                 os.killpg(process.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
-            process.wait(timeout=10)
-            record["returncode"] = process.returncode
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                # Retain the failure receipt and any original exception even if
+                # the owned child is stuck during GPU-driver teardown.
+                record["returncode"] = None
+                record["kill_wait_timeout"] = True
+            else:
+                record["returncode"] = process.returncode
+                record["kill_wait_timeout"] = False
         record["finished_at"] = ra_process.clock()
         if (out / "server.log").is_file():
             record["log_sha256"] = ra_process.file_digest(out / "server.log")
