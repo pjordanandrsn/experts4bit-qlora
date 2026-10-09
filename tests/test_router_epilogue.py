@@ -836,3 +836,51 @@ def test_each_fused_forward_hands_the_kernel_the_logits_unwidened(monkeypatch, c
     assert logits.dtype == torch.bfloat16, f"{cls.__name__}: a host widening launched again ({logits.dtype})"
     widened = inner(logits.float(), k, norm, **kw)
     assert all(torch.equal(a, b) for a, b in zip(out, widened)), cls.__name__
+
+
+def _wdt_stub(monkeypatch, handed):
+    """``_stub``'s kernel, plus ``weights_dtype``: the store's round to nearest even is torch's ``.to``. Records each
+    call's ``weights_dtype`` and returns its output, so a test can tell the forward did not cast again."""
+    _stub(monkeypatch, {"fused": 0})
+    stub = sys.modules["int4_b32"]
+    inner = stub.router_epilogue
+
+    def router_epilogue(logits, k, norm, *, select_on_logits=False, bias=None, weights_dtype=torch.float32):
+        first, w, idx = inner(logits, k, norm, select_on_logits=select_on_logits, bias=bias)
+        out = (first, w.to(weights_dtype), idx)
+        handed.append((weights_dtype, out))
+        return out
+    stub.router_epilogue = router_epilogue
+
+
+@pytest.mark.parametrize("cls,cast", [(Qwen3LikeRouter, None), (Qwen3LikeRouter, True), (Qwen3LikeRouter, False),
+                                      (GptOssLikeRouter, True), (GptOssLikeRouter, None)])
+def test_a_weights_dtype_kernel_does_the_cast_bitwise(monkeypatch, cls, cast):
+    """With a kernel taking ``weights_dtype`` (grouped-nf4-gemm#526), a forward that casts asks the kernel for the
+    logits' dtype and returns the kernel's tensor as it is (no cast launch after it); one that does not cast asks for
+    fp32. Either way the weights are bitwise what a kernel without the option, plus the host cast, gives (e4b#1313,
+    P127 b1)."""
+    from experts4bit_qlora.engines import router_epilogue as re_mod
+    monkeypatch.setenv("E4B_FUSE_ROUTER_EPI", "1")
+    monkeypatch.setattr(re_mod, "CAST_WEIGHTS", [cast])
+    torch.manual_seed(37)
+    x = torch.randn(4, HID, dtype=torch.bfloat16)
+    outs = []
+    for wdt in (False, True):
+        handed = []
+        if wdt:
+            _wdt_stub(monkeypatch, handed)
+        else:
+            _stub(monkeypatch, {"fused": 0})
+        torch.manual_seed(38)
+        m = torch.nn.Module()
+        m.gate = cls().to(torch.bfloat16)
+        assert fuse_router_epilogue(m) == 1
+        handed.clear()
+        out = m.gate(x)
+        outs.append(out)
+        if wdt:
+            casts = re_mod._cast_for("softmax_topk" if cls is Qwen3LikeRouter else "topk_softmax")
+            assert len(handed) == 1 and handed[0][0] == (torch.bfloat16 if casts else torch.float32), handed
+            assert any(o is handed[0][1][1] for o in out), "the kernel's weights, not a cast of them"
+    assert all(a.dtype == b.dtype and torch.equal(a, b) for a, b in zip(*outs))

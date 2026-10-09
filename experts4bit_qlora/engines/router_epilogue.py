@@ -335,6 +335,21 @@ def _kernel_supports_select_on_logits(router_epilogue) -> bool:
         return False
 
 
+#: The weights dtypes a ``weights_dtype`` kernel stores (grouped-nf4-gemm#526): the cast the fused forwards ask it for.
+_KERNEL_WEIGHT_DTYPES = (torch.float32, torch.bfloat16, torch.float16)
+
+
+def _kernel_supports_weights_dtype(router_epilogue) -> bool:
+    """Whether the kernel stores the routing weights in a caller's dtype (``weights_dtype=``, grouped-nf4-gemm#526):
+    its store rounds the fp32 weights to nearest even, bitwise torch's ``.to``, so a forward that casts asks it
+    instead of launching the cast (e4b#1313, lane P127's Phase 2, item b1)."""
+    import inspect
+    try:
+        return "weights_dtype" in inspect.signature(router_epilogue).parameters
+    except (TypeError, ValueError):
+        return False
+
+
 def fuse_router_epilogue(model, mode: str | None = None, report: dict | None = None) -> int:
     """Patch every structurally-matched, probe-licensed router.
 
@@ -357,6 +372,7 @@ def fuse_router_epilogue(model, mode: str | None = None, report: dict | None = N
             "router_epilogue; install the matching cut or unset the flag"
         ) from e
     has_sol = _kernel_supports_select_on_logits(router_epilogue)
+    has_wdt = _kernel_supports_weights_dtype(router_epilogue)
     n = 0
     fp32_upstream = 0
     skipped = 0
@@ -398,24 +414,34 @@ def fuse_router_epilogue(model, mode: str | None = None, report: dict | None = N
                 return _assemble(_pos, logits if _raw else probs, w.to(hidden_states.dtype), idx)
         elif kind == "softmax_topk":
             def _fwd(hidden_states, _m=mod, _orig=orig, _k=k, _h=hidden, _pos=pos, _norm=spec["norm"], _raw=raw_first,
-                     _casts=spec["casts"]):
+                     _casts=spec["casts"], _wdt=has_wdt):
                 rows = hidden_states.reshape(-1, _h)
                 if rows.shape[0] > _MAX_DECODE_ROWS:
                     return _orig(hidden_states)
                 logits = torch.nn.functional.linear(rows, _m.weight)
-                first, w, idx = router_epilogue(logits, _k, _norm)                # the kernel widens on load
-                if _casts and _cast_for("softmax_topk"):
+                if not (_casts and _cast_for("softmax_topk")):
+                    first, w, idx = router_epilogue(logits, _k, _norm)            # the kernel widens on load
+                elif _wdt and logits.dtype in _KERNEL_WEIGHT_DTYPES:
+                    # the kernel's store rounds to the logits' dtype: bitwise the cast below, one launch fewer
+                    first, w, idx = router_epilogue(logits, _k, _norm, weights_dtype=logits.dtype)
+                else:
+                    first, w, idx = router_epilogue(logits, _k, _norm)
                     w = w.to(logits.dtype)
                 return _assemble(_pos, logits if _raw else first, w, idx)
         else:
             def _fwd(hidden_states, _m=mod, _orig=orig, _k=k, _h=hidden, _pos=pos,
-                     _has_bias=spec["bias"] is not None, _raw=raw_first, _casts=spec["casts"]):
+                     _has_bias=spec["bias"] is not None, _raw=raw_first, _casts=spec["casts"], _wdt=has_wdt):
                 rows = hidden_states.reshape(-1, _h)
                 if rows.shape[0] > _MAX_DECODE_ROWS:
                     return _orig(hidden_states)
                 logits = _topk_softmax_logits(_m, rows, _has_bias)
-                first, w, idx = router_epilogue(logits, _k, False, select_on_logits=True)  # widened on load
-                if _casts and _cast_for("topk_softmax"):
+                if not (_casts and _cast_for("topk_softmax")):
+                    first, w, idx = router_epilogue(logits, _k, False, select_on_logits=True)  # widened on load
+                elif _wdt and logits.dtype in _KERNEL_WEIGHT_DTYPES:
+                    # the kernel's store rounds to the logits' dtype: bitwise the cast below, one launch fewer
+                    first, w, idx = router_epilogue(logits, _k, False, select_on_logits=True, weights_dtype=logits.dtype)
+                else:
+                    first, w, idx = router_epilogue(logits, _k, False, select_on_logits=True)
                     w = w.to(logits.dtype)
                 return _assemble(_pos, logits if _raw else first, w, idx)
         mod.forward = _fwd

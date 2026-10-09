@@ -280,6 +280,18 @@ def _lean_glue_supported(builder, k19) -> bool:
     return _LEAN_GLUE_SUPPORT[key]
 
 
+_GATHER_DIV_SUPPORT: dict = {}
+
+
+def _nf4_takes_gather_div(gemm) -> bool:
+    """Whether the installed ``gemm_4bit_grouped`` takes ``gather_div=`` (grouped-nf4-gemm#530: the NF4 singleton route
+    reads the token rows itself). Read once per function, not per call."""
+    if gemm not in _GATHER_DIV_SUPPORT:
+        import inspect
+        _GATHER_DIV_SUPPORT[gemm] = "gather_div" in inspect.signature(gemm).parameters
+    return _GATHER_DIV_SUPPORT[gemm]
+
+
 def _k21_mode_env() -> str:
     """``E4B_MXFP4_GROUPED_SMALLM`` (K21, grouped-nf4-gemm#422): serves the native MXFP4 store's device-grouped decode
     rows through K21 -- K19's grouped small-M tensor-core GEMM on the store's own bytes, over the 16-row device tile
@@ -659,10 +671,19 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                 "E4B_INT4_PREFILL=k19 needs grouped-nf4-gemm with K19 "
                 "(int4_smallm.gemm_int4_b32_grouped_smallm, grouped-nf4-gemm#419)") from e
     _tok = None
+    _gd = None
     if x_rows is None:
         x_t, row_token, top_k = x_tokens
         if _lean and _CALIB_SINK is None:
             _tok = (x_t, top_k)           # K23: K19's (or K25's) gate_up reads the token rows itself (gather_div)
+        elif (x_t.shape[0] == 1 and singleton_groups and not device_grouping and int4_stores is None
+              and not _mxfp4_store and _CALIB_SINK is None and _nf4_takes_gather_div(gemm_4bit_grouped)):
+            # ONE token, on the NF4 singleton route (the last branch below): gemm_4bit_grouped's gate_up reads row
+            # r's token r // top_k -- token 0 for every row -- itself (gather_div, grouped-nf4-gemm#530), so the
+            # (token, slot) copy is not made: bitwise the copied rows' result, one launch a layer fewer at T == 1
+            # (e4b#1313, lane P127's Phase 2, item b2). One token only: gather_div assumes token-major rows, which
+            # _row_index builds, but with one token the row order cannot matter at all.
+            _gd = (x_t, top_k)
         else:
             x_rows = x_t.index_select(0, row_token)
     if _mxfp4_store and _k21 is None:
@@ -793,8 +814,8 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         # what a device-grouped one would.
         order = None
         sorted_ids = local_ids
-        x_sorted = x_rows.contiguous()
-        sizes = [1] * x_rows.shape[0]
+        x_sorted = x_rows.contiguous() if _gd is None else _gd[0].contiguous()   # _gd: the TOKEN rows (item b2)
+        sizes = [1] * R_rows
         eids = local_ids
     else:
         order = torch.argsort(local_ids)
@@ -812,6 +833,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         # Measured at B=16 decode: this plus gnf4's tile-build memo took
         # to_device_i32 traffic /4 and the step 1.206x, tokens identical.
         eids = uniq
+    _gu_kw = {}                           # gate_up's extra kernel arguments: only the NF4 route's gather_div
     if device_grouping and int4_stores is None and _k25 is not None:
         _route = "nf4_k25"
         # K25 (opt-in): the grouped small-M tensor-core GEMM on the NF4 stacks against the SAME 16-row device tiles. The
@@ -1031,12 +1053,17 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             _route = "int4_prefill_batched" if _batched else "int4_prefill_loop"
     else:
         _route = "nf4_singleton" if singleton_groups else "nf4_mtile_host"
-        # gemm_4bit_grouped casts the expert ids to int32 on every call (a no-op on int32): cast them once for both
-        # calls -- the same ids, one launch a layer fewer at T == 1 (e4b#1313, lane P127's Phase 1), as the int4 and
-        # MXFP4 routes above already do
-        _eids = eids.to(torch.int32) if torch.is_tensor(eids) else eids
+        # Expert ids in a dtype the kernel package reads as they are (nf4_grouped.EXPERT_ID_DTYPES, int64 included
+        # since grouped-nf4-gemm#529: every NF4 kernel widens its id before any stride product) go to it uncast: no
+        # cast launch at all (lane P127's Phase 2, item a1). Otherwise gemm_4bit_grouped would cast them on every
+        # call, so cast them once for both calls (Phase 1), as the int4 and MXFP4 routes above already do.
+        import nf4_grouped
+        _ids_ok = getattr(nf4_grouped, "EXPERT_ID_DTYPES", (torch.int32,))
+        _eids = eids.to(torch.int32) if torch.is_tensor(eids) and eids.dtype not in _ids_ok else eids
+        if _gd is not None:
+            _gu_kw = {"gather_div": _gd[1]}          # gate_up on the token rows (item b2); down gets its own rows
 
-        def _mm(xr, pk, am):
+        def _mm(xr, pk, am, gather_div=1):
             if pk is not None and pk.numel() == 0:
                 raise RuntimeError(
                     "expert stacks are freed (int4 serve lane active) but "
@@ -1044,9 +1071,11 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                     "baseline path reached _fused_over_stack after "
                     "enable_serve_experts_int4. That enable is collapsed-"
                     "path-only; re-enable with all-VRAM placement.")
+            if gather_div != 1:
+                return gemm_4bit_grouped(xr, pk, am, sizes, _eids, gather_div=gather_div)
             return gemm_4bit_grouped(xr, pk, am, sizes, _eids)
     _seen_route(_route, R_rows)
-    gu = _mm(x_sorted, gu_p, gu_a)
+    gu = _mm(x_sorted, gu_p, gu_a, **_gu_kw)
     if gptoss is not None:
         gu_bias, dn_bias, alpha, limit = gptoss
         gu = gu + gu_bias.index_select(0, sorted_ids).to(gu.dtype)  # per-expert bias by local id
