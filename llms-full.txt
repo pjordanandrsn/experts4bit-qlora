@@ -25,6 +25,10 @@ This runtime loads those weights in 4-bit, trains them with QLoRA, and serves th
 and `loggetta plan` to plan supported training.
 Use this package directly when you need control over loading, training, serving, or memory placement.
 
+> **Limits.** GPU execution needs Linux and NVIDIA CUDA; the fast kernels need an sm_80+ GPU. Support varies by model
+> family and execution path. 4-bit saves memory but is not automatically faster than bf16, and vLLM was faster in the
+> measured Qwen decode comparison. [Check the fit](#check-the-fit).
+
 [Install](#install) · [Results](#what-is-measured) · [Model support](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/ARCHITECTURE_SUPPORT.md) · [Task guides](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/SOLUTIONS.md) · [Hugging Face](https://huggingface.co/spaces/pjordanandrsn/research)
 
 <!-- release-block:start -->
