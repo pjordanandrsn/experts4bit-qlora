@@ -303,3 +303,41 @@ def test_thin_layer_routes_dram_to_gpu_statically(arena):
         finally:
             disable_hybrid_tier(model)
         assert not hasattr(model.experts, "_e4b_hybrid_thin_uniq")
+
+
+@needs_stack
+def test_the_served_collapse_takes_the_layer_residual_bitwise(arena, monkeypatch):
+    """P127's item c through the SERVED state class (#1482). On an all-VRAM hybrid tier with the collapse on (the
+    configuration serve_paged.build_engine builds), the experts forward handed the layer's residual hands it to the
+    combine kernel and returns bitwise its plain output plus the residual. p127-prove-1 found this class raising a
+    TypeError on every call, residual or not; this test fails that way on #1477 alone."""
+    from experts4bit_qlora.engines import hot_residency as hr
+    real = hr._combine_kernel()
+    if real is None or not hr._combine_takes_residual(real):
+        pytest.skip("needs grouped-nf4-gemm's combine_rows(..., residual=) (#527)")
+    seen = []
+
+    def ck(dn, w, k, residual=None):
+        seen.append(residual is not None)
+        return real(dn, w, k) if residual is None else real(dn, w, k, residual=residual)
+    monkeypatch.setattr(hr, "_combine_kernel", lambda: ck)
+    _mod, path, _ = arena
+    model = _Wrap(_module().to("cuda"))
+    n = enable_hybrid_tier(model, path, _manifest(vram=list(range(E)), dram=[], nvme=[]), hot_rows=E,
+                           collapse_resident=True, verbose=False)
+    assert n == 1
+    try:
+        torch.manual_seed(9)
+        for T in (1, 4):
+            hidden = torch.randn(T, H, dtype=torch.bfloat16, device="cuda") * 0.3
+            idx = torch.stack([torch.randperm(E, device="cuda")[:K] for _ in range(T)])
+            wts = torch.rand(T, K, device="cuda", dtype=torch.bfloat16)
+            res = torch.randn(T, H, dtype=torch.bfloat16, device="cuda") * 4
+            seen.clear()
+            with torch.no_grad():
+                plain = model.experts(hidden, idx, wts)
+                got = model.experts(hidden, idx, wts, residual=res)
+            assert seen == [False, True], f"the residual reached the combine kernel at {T} rows: {seen}"
+            assert torch.equal(got, plain + res), T
+    finally:
+        disable_hybrid_tier(model)
