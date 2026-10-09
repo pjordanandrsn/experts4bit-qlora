@@ -3,3 +3,5 @@ No reading or capacity result yet. The shipped default and development executor 
 
 [First draw: host egress refusal, no scientific reading](receipts/dq10-5090-1/README.md).
 [Amendment 1: one replacement after a pre-install host refusal](AMENDMENT1-HOST.md).
+
+[Amendment 2: retained frozen-weight pricing and source pin](AMENDMENT2-STRUCTURAL.md).
