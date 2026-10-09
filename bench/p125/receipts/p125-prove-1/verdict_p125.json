@@ -1,0 +1,15 @@
+{
+ "lane": "P125",
+ "proof": true,
+ "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+ "verdict": "VOID",
+ "reasons": [
+  "missing or not ok: ['arm_C1', 'arm_C2']"
+ ],
+ "prior": {
+  "sd_d": 0.01957,
+  "ppl_R": 8.762,
+  "bound": 0.00569,
+  "windows_needed": 107
+ }
+}

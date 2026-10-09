@@ -1,0 +1,34 @@
+Fetching 11 files:   0%|          | 0/11 [00:00<?, ?it/s]Fetching 11 files: 100%|██████████| 11/11 [00:00<00:00, 1315.39it/s]
+[02:18:18]   checkpoint: ibm-granite/granite-3.1-3b-a800m-instruct @ a02780686e08a03fe0d2679a293b5c74a90efa89 (requested a02780686e08a03fe0d2679a293b5c74a90efa89)
+[02:18:18]   fusing + quantizing experts (up to 32x40) to nf4 (streaming)...
+[02:18:18]   quantized experts on 32/32 MoE layers (40 experts each)
+[02:18:18]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[02:18:19]   experts deferred to the arena: 32 module(s), 160 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[02:18:19]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[02:18:20]   hybrid tier active on 32 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] ATTNINT4 calibrated: 128 projections (attn=1 head=0 dense=0; 8 batches of c4; model_type=granitemoe)
+[serve_paged] fusions (q/k/v 0; folds set: none): {'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0}
+[serve_paged] PREFILL_GRAPH auto: refused, prefill stays eager (device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement))
+[serve_paged] ready: {"moe_layers": 32, "experts": 40, "top_k": 8, "model_type": "granitemoe", "int4_expert_layers": 0, "int4_store_kinds": [], "int4_attn_projections": 128, "kv": {"n_kv_heads": 8, "head_dim": 64, "k_groups": "auto", "scratch_slots": 0, "blocks_per_seq": 256, "pool_mib": 2368.5}, "graph_status": null, "grouping": {"device_grouping": false, "force_singleton_groups": false}, "prefill_graph": "auto", "levers_env": {"E4B_SERVE_ATTN_INT4_CALIB": "1"}, "exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 128, "fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0, "fusion_modes": {"E4B_PAGED_FUSE_QKV": "0", "E4B_FUSE_T1_GLUE": "0", "E4B_FUSE_T1_GLUE_R2": "0", "E4B_FUSE_ROUTER_EPI": "0"}, "fusion_sources": {"E4B_PAGED_FUSE_QKV": "default-off", "E4B_FUSE_T1_GLUE": "default-off", "E4B_FUSE_T1_GLUE_R2": "default-off", "E4B_FUSE_ROUTER_EPI": "default-off"}, "fusion_report": {"E4B_FUSE_T1_GLUE": {"mode": "0"}, "E4B_FUSE_T1_GLUE_R2": {"mode": "0"}, "E4B_FUSE_ROUTER_EPI": {"mode": "0"}}, "pinned_cache_released": true, "host_heap_trimmed": true}
+P115_QGROUP on wikitext group 1 of 16 done at 9 s, 4.58 GiB allocated
+P115_QGROUP on wikitext group 2 of 16 done at 18 s, 4.58 GiB allocated
+P115_QGROUP on wikitext group 3 of 16 done at 27 s, 4.58 GiB allocated
+P115_QGROUP on wikitext group 4 of 16 done at 35 s, 4.58 GiB allocated
+P115_QGROUP on wikitext group 5 of 16 done at 43 s, 4.58 GiB allocated
+P115_QGROUP on wikitext group 6 of 16 done at 52 s, 4.58 GiB allocated
+P115_QGROUP on wikitext group 7 of 16 done at 62 s, 4.58 GiB allocated
+P115_QGROUP on wikitext group 8 of 16 done at 70 s, 4.58 GiB allocated
+P115_QGROUP on wikitext group 9 of 16 done at 78 s, 4.58 GiB allocated
+P115_QGROUP on wikitext group 10 of 16 done at 88 s, 4.58 GiB allocated
+P115_QGROUP on wikitext group 11 of 16 done at 97 s, 4.58 GiB allocated
+P115_QGROUP on wikitext group 12 of 16 done at 106 s, 4.58 GiB allocated
+P115_QGROUP on wikitext group 13 of 16 done at 115 s, 4.58 GiB allocated
+P115_QGROUP on wikitext group 14 of 16 done at 123 s, 4.58 GiB allocated
+P115_QGROUP on wikitext group 15 of 16 done at 131 s, 4.58 GiB allocated
+P115_QGROUP on wikitext group 16 of 16 done at 140 s, 4.58 GiB allocated
+P125_GATE B t1 wikitext group=1 windows=16 routes={'bf16:512': 2048, 'gemv:1': 260096} 139.6 s
+P115_QGROUP on wikitext group 1 of 1 done at 12 s, 4.58 GiB allocated
+P125_GATE B k16 wikitext group=16 windows=16 routes={'bf16:512': 2048, 'k16:16': 16256} 11.7 s
+P115_QGROUP on c4val1 group 1 of 1 done at 10 s, 4.58 GiB allocated
+P125_GATE B c4 c4val1 group=16 windows=16 routes={'bf16:512': 2048, 'k16:16': 16256} 9.7 s
+P125_QUALITY {"arm": "B", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 128, "attn_int4_calib_projections": 128, "attn_int4_rtn_projections": 0}, "n_int4_modules": 128, "load_s": 56.81}

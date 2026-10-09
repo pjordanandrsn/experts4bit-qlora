@@ -1,0 +1,8 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-eadc6e4d-d333-c7cd-3507-68ed3bc9a766, 12.0
+power.limit,clocks.max.sm 575.00 W, 3105 MHz
+CPU(s):                                  32
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD Ryzen 9 9950X 16-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             123           2         108           0          12         119
+overlay         320G   39M  320G   1% /

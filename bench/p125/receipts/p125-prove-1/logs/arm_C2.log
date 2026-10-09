@@ -1,0 +1,36 @@
+Fetching 11 files:   0%|          | 0/11 [00:00<?, ?it/s]Fetching 11 files: 100%|██████████| 11/11 [00:00<00:00, 1320.17it/s]
+[02:13:29]   checkpoint: ibm-granite/granite-3.1-3b-a800m-instruct @ a02780686e08a03fe0d2679a293b5c74a90efa89 (requested a02780686e08a03fe0d2679a293b5c74a90efa89)
+[02:13:29]   fusing + quantizing experts (up to 32x40) to nf4 (streaming)...
+[02:13:29]   quantized experts on 32/32 MoE layers (40 experts each)
+[02:13:29]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[02:13:30]   experts deferred to the arena: 32 module(s), 160 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[02:13:30]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[02:13:31]   hybrid tier active on 32 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] ATTNINT4 calibrated: 129 projections (attn=1 head=1 dense=0; 8 batches of c4; model_type=granitemoe)
+[serve_paged] fusions (q/k/v 0; folds set: none): {'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0}
+DECODE_GRAPH bucket=1 captured
+DECODE_GRAPH bucket=2 captured
+DECODE_GRAPH bucket=4 captured
+DECODE_GRAPH bucket=8 captured
+DECODE_GRAPH bucket=16 captured
+Traceback (most recent call last):
+  File "/root/p125/p125_box.py", line 387, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/root/p125/p125_box.py", line 380, in main
+    return speed_main(a)
+           ^^^^^^^^^^^^^
+  File "/root/p125/p125_box.py", line 230, in speed_main
+    parts = build_engine(cfg)
+            ^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/experts4bit_qlora/serve_paged.py", line 1296, in build_engine
+    engage_prefill_graph(runner, cfg)
+  File "/opt/conda/lib/python3.11/site-packages/experts4bit_qlora/serve_paged.py", line 980, in engage_prefill_graph
+    st = runner.enable_prefill_graph(cfg.chunk_tokens, require_headroom=(cfg.prefill_graph == "auto"))
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/paged_runner.py", line 812, in enable_prefill_graph
+    vocab = int(self.model.get_output_embeddings().weight.shape[0])
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1962, in __getattr__
+    raise AttributeError(
+AttributeError: 'Int4Linear' object has no attribute 'weight'

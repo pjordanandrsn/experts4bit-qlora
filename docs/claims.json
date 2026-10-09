@@ -12015,6 +12015,37 @@
         "receipts/experts4bit-qlora/2026-10-09/fam-speed-prove-1/ (receipt.json, the proof)"
       ],
       "notes": "Pre-registered in Amendment 4 (#1436). The prediction: FASTER (about 35 %) hit; the magnitude (ratio about 0.99) missed, the gain larger. The maintainer re-derived the verdict from the store byte for byte and, on the quality and speed reads together, licensed the allowlist flip. That kernels for the linear layers would make the epilogue's share larger is a hypothesis, not read here."
+    },
+    {
+      "id": "e4b.serve.p125.int4-attn-calib-default.qwen3.5090.2026-10-09",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P125, one RTX 5090: on the shipped default serve_paged (Qwen3-30B-A3B NF4, the B=1 fused stack default-allowlisted, the bandwidth GEMV), calibrated int4 attention (E4B_SERVE_ATTN_INT4_CALIB=1, calibrated on the box) is NOT licensed, alone or with the calibrated int4 lm_head: at one window per pass (T == 1, the activation-quantised gemv_int4_b32 path) argmax agreement with the default is 0.9294 (0.9180 with the head) against the registered 0.95, and 0.9270 / 0.9144 in 16-row pieces (K16), while the mean NLL bias sits inside K8's +0.05 ppl budget in nats (-0.0032 / +0.0009 against a 0.0054 bound). A K8-style ppl gate alone would pass a lever that changes about one top-1 token in fourteen. RTN attention fails as predicted (argmax 0.910); a rolled-scales mutant fails every gate. Reported, not ruled: one request decodes 1.154x as fast (1.238x with the head), sixteen 1.023x (1.019x); memory +0.58 / +0.79 GiB with no auto-slot cost; calibration deterministic, 95-225 s a build depending on host. No default change.",
+      "value": 0.9294,
+      "unit": "mean top-1 (argmax) agreement of calibrated int4 attention with the default at T == 1, over 108 wikitext windows x 128 teacher-forced positions (gate >= 0.95)",
+      "hardware": "RTX 5090 (sm_120, driver 595.91.07, 470 W power limit, 32607 MiB), one rented Vast.ai host (instance 54971795), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @4934aba9 (0.50.0 + P125 #1422 and Amendments 1 #1428, 2 #1431, 3 #1439; the int4-head fix #1426) + grouped-nf4-gemm @6ee2e10 (v0.43.0); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0; Qwen/Qwen3-30B-A3B @ad44e77, NF4 arena baked on the box; premise 39 passed; every fusion and GEMV knob unset, 16 slots; the int4 levers calibrated on the box from 32 x 512 tokens of C4 validation shard 0; quality by P115's measure_phase at its registered bytes on P97's wikitext corpus at a 2048-token stride (108 windows at T == 1, 112 in 16-row pieces), bound ln(1 + 0.05 / ppl_A) from A's own windows; speed by P109's W1 / W16 workloads in palindromic arms",
+      "measured_on": "2026-10-09",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p125/RESULTS-p125.md",
+        "bench/p125/PREREG-p125.md",
+        "bench/p125/p125_reduce.py",
+        "bench/p125/receipts/p125-5090-2/verdict_p125.json",
+        "bench/p125/receipts/p125-5090-2/quality_A.json",
+        "bench/p125/receipts/p125-5090-2/quality_B.json",
+        "bench/p125/receipts/p125-5090-2/quality_C.json",
+        "bench/p125/receipts/p125-5090-2/arm_A1.json",
+        "bench/p125/receipts/p125-5090-2/arm_B1.json",
+        "bench/p125/receipts/p125-5090-2/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-09/p125-5090-2/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-09/p125-prove-3/ (receipt.json, the proving run)"
+      ],
+      "notes": "Pre-registered in #1422 with Amendments 1-3. The maintainer re-derived the verdict from the receipt store with main's reducer, byte-identical. The bias half alone was UNDERPOWERED (SE 0.00296 against 0.00179; ~295 windows needed): int4 weights spread the per-window difference wider (SD ~0.031) than the registered prior from an arithmetic-order change (0.0196). The argmax rung decided first."
     }
   ]
 }

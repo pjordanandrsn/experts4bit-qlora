@@ -1,0 +1,31 @@
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 982.45it/s]
+[06:46:55]   checkpoint: Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 (requested ad44e777bcd18fa416d9da3bd8f70d33ebb85d39)
+[06:46:55]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[06:46:55]   quantized experts on 48/48 MoE layers (128 experts each)
+[06:46:55]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[06:46:55]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[06:47:14]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (1307564 > 131072). Running this sequence through the model will result in indexing errors
+[e4b.int4_attn] 17..64-row route OFF: the installed grouped-nf4-gemm's gemm_int4_b32_smallm has no block_m= (grouped-nf4-gemm #522); those rows take the cached-bf16 matmul (E4B_ATTN_INT4_WIDE=1 to require the route, =0 to silence this)
+[serve_paged] ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; 8 batches of c4; model_type=qwen3_moe)
+[serve_paged] fusions (q/k/v auto; folds set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 48, 'fuse_t1_glue_n': 193, 'fuse_t1_glue_r2_n': [48, 48], 'fuse_router_epilogue_n': 48}
+[serve_paged] PREFILL_GRAPH auto: refused, prefill stays eager (device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement))
+[serve_paged] ready: {"moe_layers": 48, "experts": 128, "top_k": 8, "model_type": "qwen3_moe", "int4_expert_layers": 0, "int4_store_kinds": [], "int4_attn_projections": 96, "kv": {"n_kv_heads": 4, "head_dim": 128, "k_groups": "auto", "scratch_slots": 0, "blocks_per_seq": 256, "pool_mib": 3312.8}, "graph_status": null, "grouping": {"device_grouping": false, "force_singleton_groups": false}, "prefill_graph": "auto", "levers_env": {"E4B_SERVE_ATTN_INT4_CALIB": "1"}, "exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 192, "fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48, "fusion_modes": {"E4B_PAGED_FUSE_QKV": "auto", "E4B_FUSE_T1_GLUE": "auto", "E4B_FUSE_T1_GLUE_R2": "auto", "E4B_FUSE_ROUTER_EPI": "auto"}, "fusion_sources": {"E4B_PAGED_FUSE_QKV": "default-allowlisted", "E4B_FUSE_T1_GLUE": "default-allowlisted", "E4B_FUSE_T1_GLUE_R2": "default-allowlisted", "E4B_FUSE_ROUTER_EPI": "default-allowlisted"}, "fusion_report": {"E4B_FUSE_T1_GLUE": {"mode": "auto", "patched": 193, "failed_probe": 0}, "E4B_FUSE_T1_GLUE_R2": {"mode": "auto", "patched": [48, 48], "kernel_gaps": 0}, "E4B_FUSE_ROUTER_EPI": {"mode": "auto", "patched": 48, "failed_probe": 0, "no_kernel_mode": 0, "fp32_upstream": 0}}, "pinned_cache_released": true, "host_heap_trimmed": true}
+P115_QGROUP on wikitext group 1 of 12 done at 6 s, 21.89 GiB allocated
+P115_QGROUP on wikitext group 2 of 12 done at 11 s, 21.89 GiB allocated
+P115_QGROUP on wikitext group 3 of 12 done at 17 s, 21.89 GiB allocated
+P115_QGROUP on wikitext group 4 of 12 done at 22 s, 21.89 GiB allocated
+P115_QGROUP on wikitext group 5 of 12 done at 28 s, 21.89 GiB allocated
+P115_QGROUP on wikitext group 6 of 12 done at 34 s, 21.89 GiB allocated
+P115_QGROUP on wikitext group 7 of 12 done at 39 s, 21.89 GiB allocated
+P115_QGROUP on wikitext group 8 of 12 done at 45 s, 21.89 GiB allocated
+P115_QGROUP on wikitext group 9 of 12 done at 50 s, 21.89 GiB allocated
+P115_QGROUP on wikitext group 10 of 12 done at 56 s, 21.89 GiB allocated
+P115_QGROUP on wikitext group 11 of 12 done at 62 s, 21.89 GiB allocated
+P115_QGROUP on wikitext group 12 of 12 done at 67 s, 21.89 GiB allocated
+P125_GATE K t1 wikitext group=1 windows=12 routes={'bf16:512': 1152, 'gemv:1': 146304} 67.3 s
+P115_QGROUP on wikitext group 1 of 1 done at 10 s, 21.89 GiB allocated
+P125_GATE K k16 wikitext group=16 windows=16 routes={'bf16:512': 1536, 'k16:16': 12192} 9.9 s
+P115_QGROUP on c4val1 group 1 of 1 done at 10 s, 21.89 GiB allocated
+P125_GATE K c4 c4val1 group=16 windows=16 routes={'bf16:512': 1536, 'k16:16': 12192} 9.7 s
+P125_QUALITY {"arm": "K", "fusions": {"fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}, "int4": {"int4_attn_projections": 96, "attn_int4_calib_projections": 192, "attn_int4_rtn_projections": 0}, "n_int4_modules": 96, "load_s": 112.29}

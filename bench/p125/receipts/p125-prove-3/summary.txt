@@ -1,0 +1,60 @@
+KNOBS e4b=e9e59b0fd814b97c2f1e1657484c042de657c897 gnf4=6ee2e10408161a9d3c874975c9191a7f2957e6f4 model=ibm-granite/granite-3.1-3b-a800m-instruct@a02780686e08a03fe0d2679a293b5c74a90efa89 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 prove=1 short=8 long=24 reps=1 cap=16
+CUDA_PROBE ok
+e4b 0.50.0 @e9e59b0fd814b97c2f1e1657484c042de657c897
+gnf4 0.43.0 @6ee2e10408161a9d3c874975c9191a7f2957e6f4
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+datasets 5.1.0
+cc (12, 0)
+sm_count 170
+p125_reduce self-test OK (25 cases)
+p109_box self-test OK (5/5 cases)
+p125_box self-test OK (16 cases)
+premise rc=0: 39 passed, 5 warnings in 17.28s
+premise ok
+FETCH ibm-granite/granite-3.1-3b-a800m-instruct@a02780686e08a03fe0d2679a293b5c74a90efa89 /root/.cache/huggingface/hub/models--ibm-granite--granite-3.1-3b-a800m-instruct/snapshots/a02780686e08a03fe0d2679a293b5c74a90efa89
+C4_FETCH shard 00000: 45576 docs in 2.6 s
+C4_FETCH shard 00001: 45576 docs in 2.0 s
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=891ff238c0b2a0800df0fc0236b9adc36b196a4fec39c896fb62d05438a9fc01
+arm A1 rc=0 P125_ARM {"arm": "A", "tag": "A1", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 0, "attn_int4_calib_projections": 0, "attn_int4_rtn_projections": 0}, "load_s": 15.95, "W16": 2270.31, "W1": 192.24, "slots": {"2048": 64, "4096": 64}}
+
+arm B1 rc=0 P125_ARM {"arm": "B", "tag": "B1", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 128, "attn_int4_calib_projections": 128, "attn_int4_rtn_projections": 0}, "load_s": 60.15, "W16": 2386.28, "W1": 188.75, "slots": {"2048": 64, "4096": 64}}
+
+arm C1 rc=0 P125_ARM {"arm": "C", "tag": "C1", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 129, "attn_int4_calib_projections": 129, "attn_int4_rtn_projections": 0}, "load_s": 58.23, "W16": 2489.06, "W1": 190.16, "slots": {"2048": 64, "4096": 64}}
+
+arm C2 rc=0 P125_ARM {"arm": "C", "tag": "C2", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 129, "attn_int4_calib_projections": 129, "attn_int4_rtn_projections": 0}, "load_s": 61.27, "W16": 2446.02, "W1": 191.07, "slots": {"2048": 64, "4096": 64}}
+
+arm B2 rc=0 P125_ARM {"arm": "B", "tag": "B2", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 128, "attn_int4_calib_projections": 128, "attn_int4_rtn_projections": 0}, "load_s": 54.16, "W16": 2388.51, "W1": 188.79, "slots": {"2048": 64, "4096": 64}}
+
+arm A2 rc=0 P125_ARM {"arm": "A", "tag": "A2", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 0, "attn_int4_calib_projections": 0, "attn_int4_rtn_projections": 0}, "load_s": 7.43, "W16": 2256.3, "W1": 192.05, "slots": {"2048": 64, "4096": 64}}
+
+quality A rc=0 P125_GATE A t1 wikitext group=1 windows=16 routes={} 93.8 s
+P125_GATE A k16 wikitext group=16 windows=16 routes={} 8.7 s
+P125_GATE A c4 c4val1 group=16 windows=16 routes={} 8.4 s
+P125_QUALITY {"arm": "A", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 0, "attn_int4_calib_projections": 0, "attn_int4_rtn_projections": 0}, "n_int4_modules": 0, "load_s": 4.07}
+
+quality B rc=0 P125_GATE B t1 wikitext group=1 windows=16 routes={'bf16:512': 2048, 'gemv:1': 260096} 129.0 s
+P125_GATE B k16 wikitext group=16 windows=16 routes={'bf16:512': 2048, 'k16:16': 16256} 9.9 s
+P125_GATE B c4 c4val1 group=16 windows=16 routes={'bf16:512': 2048, 'k16:16': 16256} 9.6 s
+P125_QUALITY {"arm": "B", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 128, "attn_int4_calib_projections": 128, "attn_int4_rtn_projections": 0}, "n_int4_modules": 128, "load_s": 51.78}
+
+quality C rc=0 P125_GATE C t1 wikitext group=1 windows=16 routes={'bf16:512': 2064, 'gemv:1': 262128} 129.4 s
+P125_GATE C k16 wikitext group=16 windows=16 routes={'bf16:512': 2064, 'k16:16': 16383} 9.9 s
+P125_GATE C c4 c4val1 group=16 windows=16 routes={'bf16:512': 2064, 'k16:16': 16383} 9.4 s
+P125_QUALITY {"arm": "C", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 129, "attn_int4_calib_projections": 129, "attn_int4_rtn_projections": 0}, "n_int4_modules": 129, "load_s": 56.74}
+
+quality M rc=0 P125_GATE M t1 wikitext group=1 windows=16 routes={'bf16:512': 2048, 'gemv:1': 260096} 128.9 s
+P125_GATE M k16 wikitext group=16 windows=16 routes={'bf16:512': 2048, 'k16:16': 16256} 9.9 s
+P125_GATE M c4 c4val1 group=16 windows=16 routes={'bf16:512': 2048, 'k16:16': 16256} 9.9 s
+P125_QUALITY {"arm": "M", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 128, "attn_int4_calib_projections": 0, "attn_int4_rtn_projections": 128}, "n_int4_modules": 128, "load_s": 5.8}
+
+quality K rc=0 P125_GATE K t1 wikitext group=1 windows=12 routes={'bf16:512': 1536, 'gemv:1': 195072} 95.0 s
+P125_GATE K k16 wikitext group=16 windows=16 routes={'bf16:512': 2048, 'k16:16': 16256} 9.8 s
+P125_GATE K c4 c4val1 group=16 windows=16 routes={'bf16:512': 2048, 'k16:16': 16256} 9.7 s
+P125_QUALITY {"arm": "K", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 128, "attn_int4_calib_projections": 128, "attn_int4_rtn_projections": 0}, "n_int4_modules": 128, "load_s": 51.71}
+
+P125_VERDICT READ ["B NOT_LICENSED, C NOT_LICENSED; RTN t1 FAIL; g1_B 0.9818, g1_C 0.9892"]
+PROVE -- the proving run: the whole box on ibm-granite/granite-3.1-3b-a800m-instruct; reducer verdict READ (not a reading)

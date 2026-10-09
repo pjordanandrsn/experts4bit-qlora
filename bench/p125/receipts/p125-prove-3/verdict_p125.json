@@ -1,0 +1,353 @@
+{
+ "lane": "P125",
+ "proof": true,
+ "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+ "verdict": "READ",
+ "reasons": [
+  "B NOT_LICENSED, C NOT_LICENSED; RTN t1 FAIL; g1_B 0.9818, g1_C 0.9892"
+ ],
+ "prior": {
+  "sd_d": 0.01957,
+  "ppl_R": 8.762,
+  "bound": 0.00569,
+  "windows_needed": 107
+ },
+ "gates": {
+  "B": {
+   "t1": {
+    "outcome": "FAIL",
+    "why": "argmax 0.9111 < 0.95",
+    "windows": 16,
+    "d": 0.03688,
+    "sd": 0.039309,
+    "se": 0.009827,
+    "bound": 0.007488,
+    "argmax": 0.91113,
+    "windows_needed": 249
+   },
+   "k16": {
+    "outcome": "FAIL",
+    "why": "argmax 0.9194 < 0.95",
+    "windows": 16,
+    "d": 0.032849,
+    "sd": 0.036538,
+    "se": 0.009135,
+    "bound": 0.00746,
+    "argmax": 0.91943,
+    "windows_needed": 216
+   },
+   "c4": {
+    "outcome": "FAIL",
+    "why": "argmax 0.8970 < 0.95",
+    "windows": 16,
+    "d": 0.033678,
+    "sd": 0.059154,
+    "se": 0.014789,
+    "bound": 0.004099,
+    "argmax": 0.89697,
+    "windows_needed": 1875
+   }
+  },
+  "C": {
+   "t1": {
+    "outcome": "FAIL",
+    "why": "argmax 0.9004 < 0.95",
+    "windows": 16,
+    "d": 0.046045,
+    "sd": 0.039078,
+    "se": 0.00977,
+    "bound": 0.007488,
+    "argmax": 0.90039,
+    "windows_needed": 246
+   },
+   "k16": {
+    "outcome": "FAIL",
+    "why": "argmax 0.9062 < 0.95",
+    "windows": 16,
+    "d": 0.042564,
+    "sd": 0.035409,
+    "se": 0.008852,
+    "bound": 0.00746,
+    "argmax": 0.90625,
+    "windows_needed": 203
+   },
+   "c4": {
+    "outcome": "FAIL",
+    "why": "argmax 0.8862 < 0.95",
+    "windows": 16,
+    "d": 0.042903,
+    "sd": 0.062074,
+    "se": 0.015518,
+    "bound": 0.004099,
+    "argmax": 0.88623,
+    "windows_needed": 2064
+   }
+  },
+  "M": {
+   "t1": {
+    "outcome": "FAIL",
+    "why": "argmax 0.8638 < 0.95",
+    "windows": 16,
+    "d": 0.105816,
+    "sd": 0.054203,
+    "se": 0.013551,
+    "bound": 0.007488,
+    "argmax": 0.86377,
+    "windows_needed": 472
+   },
+   "k16": {
+    "outcome": "FAIL",
+    "why": "argmax 0.8716 < 0.95",
+    "windows": 16,
+    "d": 0.102606,
+    "sd": 0.051229,
+    "se": 0.012807,
+    "bound": 0.00746,
+    "argmax": 0.87158,
+    "windows_needed": 425
+   },
+   "c4": {
+    "outcome": "FAIL",
+    "why": "argmax 0.8506 < 0.95",
+    "windows": 16,
+    "d": 0.037624,
+    "sd": 0.049129,
+    "se": 0.012282,
+    "bound": 0.004099,
+    "argmax": 0.85059,
+    "windows_needed": 1293
+   }
+  },
+  "K": {
+   "t1": {
+    "outcome": "FAIL",
+    "why": "argmax 0.0384 < 0.95",
+    "windows": 12,
+    "d": 7.344452,
+    "sd": 0.91778,
+    "se": 0.26494,
+    "bound": 0.007299,
+    "argmax": 0.03841,
+    "windows_needed": 142292
+   },
+   "k16": {
+    "outcome": "FAIL",
+    "why": "argmax 0.0488 < 0.95",
+    "windows": 16,
+    "d": 7.044968,
+    "sd": 0.981247,
+    "se": 0.245312,
+    "bound": 0.00746,
+    "argmax": 0.04883,
+    "windows_needed": 155716
+   },
+   "c4": {
+    "outcome": "FAIL",
+    "why": "argmax 0.0938 < 0.95",
+    "windows": 16,
+    "d": 5.987949,
+    "sd": 0.754888,
+    "se": 0.188722,
+    "bound": 0.004099,
+    "argmax": 0.09375,
+    "windows_needed": 305218
+   }
+  }
+ },
+ "calibration": {
+  "deterministic": {
+   "B": true,
+   "C": true
+  },
+  "C_attention_equals_B": true,
+  "seconds": {
+   "B": 45.5,
+   "C": 48.1
+  }
+ },
+ "licences": {
+  "B": "NOT_LICENSED",
+  "C": "NOT_LICENSED"
+ },
+ "rtn": {
+  "t1": "FAIL",
+  "predicted": "FAIL",
+  "held": true
+ },
+ "k8_style": {
+  "B": {
+   "wikitext": {
+    "ppl_A": 6.6524,
+    "ppl": 6.9023,
+    "delta": 0.2499,
+    "within_budget": false
+   },
+   "c4val1": {
+    "ppl_A": 12.1725,
+    "ppl": 12.5894,
+    "delta": 0.4169,
+    "within_budget": false
+   }
+  },
+  "C": {
+   "wikitext": {
+    "ppl_A": 6.6524,
+    "ppl": 6.9659,
+    "delta": 0.3135,
+    "within_budget": false
+   },
+   "c4val1": {
+    "ppl_A": 12.1725,
+    "ppl": 12.7061,
+    "delta": 0.5336,
+    "within_budget": false
+   }
+  },
+  "M": {
+   "wikitext": {
+    "ppl_A": 6.6524,
+    "ppl": 7.3949,
+    "delta": 0.7425,
+    "within_budget": false
+   },
+   "c4val1": {
+    "ppl_A": 12.1725,
+    "ppl": 12.6392,
+    "delta": 0.4667,
+    "within_budget": false
+   }
+  }
+ },
+ "speed": {
+  "decode_tok_s": {
+   "A1": {
+    "W1": 192.24,
+    "W16": 2270.31
+   },
+   "B1": {
+    "W1": 188.75,
+    "W16": 2386.28
+   },
+   "C1": {
+    "W1": 190.16,
+    "W16": 2489.06
+   },
+   "C2": {
+    "W1": 191.07,
+    "W16": 2446.02
+   },
+   "B2": {
+    "W1": 188.79,
+    "W16": 2388.51
+   },
+   "A2": {
+    "W1": 192.05,
+    "W16": 2256.3
+   }
+  },
+  "self_pairs": {
+   "A2/A1 W1": 0.999,
+   "A2/A1 W16": 0.9938,
+   "B2/B1 W1": 1.0002,
+   "B2/B1 W16": 1.0009,
+   "C2/C1 W1": 1.0048,
+   "C2/C1 W16": 0.9827
+  },
+  "g1_B": 0.9818,
+  "g16_B": 1.0511,
+  "g1_C": 0.9892,
+  "g16_C": 1.0841,
+  "noisy": []
+ },
+ "memory": {
+  "A1": {
+   "peak_after_build": 4.82,
+   "peak_first_prefill": 4.675,
+   "peak_runs": 4.675,
+   "slots": {
+    "2048": 64,
+    "4096": 64
+   }
+  },
+  "B1": {
+   "peak_after_build": 4.971,
+   "peak_first_prefill": 4.825,
+   "peak_runs": 4.825,
+   "slots": {
+    "2048": 64,
+    "4096": 64
+   }
+  },
+  "C1": {
+   "peak_after_build": 5.571,
+   "peak_first_prefill": 5.019,
+   "peak_runs": 5.019,
+   "slots": {
+    "2048": 64,
+    "4096": 64
+   }
+  },
+  "C2": {
+   "peak_after_build": 5.571,
+   "peak_first_prefill": 5.019,
+   "peak_runs": 5.019,
+   "slots": {
+    "2048": 64,
+    "4096": 64
+   }
+  },
+  "B2": {
+   "peak_after_build": 4.971,
+   "peak_first_prefill": 4.825,
+   "peak_runs": 4.825,
+   "slots": {
+    "2048": 64,
+    "4096": 64
+   }
+  },
+  "A2": {
+   "peak_after_build": 4.82,
+   "peak_first_prefill": 4.675,
+   "peak_runs": 4.675,
+   "slots": {
+    "2048": 64,
+    "4096": 64
+   }
+  }
+ },
+ "slot_cost": {},
+ "predictions": {
+  "g1_B": {
+   "predicted": [
+    1.1,
+    1.3
+   ],
+   "measured": 0.9818,
+   "held": false
+  },
+  "g1_C": {
+   "predicted": [
+    1.15,
+    1.4
+   ],
+   "measured": 0.9892,
+   "held": false
+  },
+  "g16_B": {
+   "predicted": [
+    1.0,
+    1.08
+   ],
+   "measured": 1.0511,
+   "held": true
+  },
+  "g16_C": {
+   "predicted": [
+    1.0,
+    1.1
+   ],
+   "measured": 1.0841,
+   "held": true
+  }
+ }
+}

@@ -1,0 +1,4 @@
+Generating v split: 0 examples [00:00, ? examples/s]Generating v split: 9120 examples [00:00, 61260.13 examples/s]Generating v split: 18229 examples [00:00, 51898.94 examples/s]Generating v split: 27647 examples [00:00, 48195.08 examples/s]Generating v split: 36991 examples [00:00, 49095.59 examples/s]Generating v split: 45576 examples [00:00, 48398.67 examples/s]Generating v split: 45576 examples [00:00, 49428.79 examples/s]
+C4_FETCH shard 00000: 45576 docs in 2.6 s
+Generating v split: 0 examples [00:00, ? examples/s]Generating v split: 9287 examples [00:00, 49228.95 examples/s]Generating v split: 18275 examples [00:00, 48964.59 examples/s]Generating v split: 27432 examples [00:00, 47073.79 examples/s]Generating v split: 36604 examples [00:00, 49164.49 examples/s]Generating v split: 45576 examples [00:00, 48670.04 examples/s]Generating v split: 45576 examples [00:00, 48578.81 examples/s]
+C4_FETCH shard 00001: 45576 docs in 2.0 s
