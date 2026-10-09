@@ -807,3 +807,32 @@ def test_a_router_with_large_logits_keeps_decisive_rows_and_is_licensed():
     fp32 = re_mod._selection_logits_fp32(gate, kind, spec, x)
     keep = re_mod._decisive_rows(fp32, spec["k"], rounding=torch.bfloat16)
     assert len(keep) == 64 and 16 <= int(keep.sum()) < 64, int(keep.sum())
+
+
+@pytest.mark.parametrize("cls", [Qwen3LikeRouter, GptOssLikeRouter, Gemma4TextRouter])
+def test_each_fused_forward_hands_the_kernel_the_logits_unwidened(monkeypatch, cls):
+    """The kernel loads the logits with ``.to(tl.float32)``, so each fused forward hands it the projection's own dtype:
+    no host ``logits.float()`` launch a layer (e4b#1313, lane P127's Phase 1). bf16 -> fp32 is exact, so what the
+    stand-in (which widens on load, as the kernel does) returns is bitwise what the widened logits gave."""
+    monkeypatch.setenv("E4B_FUSE_ROUTER_EPI", "1")
+    _stub(monkeypatch, {"fused": 0})
+    stub = sys.modules["int4_b32"]
+    inner, handed = stub.router_epilogue, []
+
+    def recording(logits, k, norm, *, select_on_logits=False, bias=None):     # the fuser reads these keywords
+        kw = {"select_on_logits": select_on_logits, "bias": bias}
+        out = inner(logits, k, norm, **kw)
+        handed.append((logits, k, norm, kw, out))
+        return out
+    stub.router_epilogue = recording
+    torch.manual_seed(31)
+    m = torch.nn.Module()
+    m.gate = cls().to(torch.bfloat16)
+    assert fuse_router_epilogue(m) == 1
+    handed.clear()
+    m.gate(torch.randn(1, 1, HID, dtype=torch.bfloat16))
+    assert len(handed) == 1
+    logits, k, norm, kw, out = handed[0]
+    assert logits.dtype == torch.bfloat16, f"{cls.__name__}: a host widening launched again ({logits.dtype})"
+    widened = inner(logits.float(), k, norm, **kw)
+    assert all(torch.equal(a, b) for a, b in zip(out, widened)), cls.__name__
