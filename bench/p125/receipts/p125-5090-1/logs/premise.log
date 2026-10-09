@@ -1,0 +1,12 @@
+.......................................                                  [100%]
+=============================== warnings summary ===============================
+test_gemv_bw_served_gpu.py::test_t1_with_the_switch_on_reaches_bw_prmt32_only
+test_gemv_bw_served_gpu.py::test_t1_with_the_switch_off_never_reaches_bw
+test_gemv_bw_served_gpu.py::test_t1_on_and_off_agree_within_the_served_tolerance
+test_gemv_bw_served_gpu.py::test_t1_with_the_switch_on_captures_and_replays_as_eager
+test_gemv_bw_served_gpu.py::test_t_above_1_takes_device_grouping_and_never_the_decode_gemv
+  /root/p125/test_gemv_bw_served_gpu.py:58: DeprecationWarning: enable_hot_residency is superseded by enable_pipelined_residency (same capability; K is config); kept through 0.6 to reproduce the v0 receipts; removal in 0.7
+    assert enable_hot_residency(mod, [torch.arange(E)], device="cuda") == 1
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+39 passed, 5 warnings in 19.99s

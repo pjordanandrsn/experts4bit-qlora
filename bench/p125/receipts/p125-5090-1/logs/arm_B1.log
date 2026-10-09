@@ -1,0 +1,22 @@
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 1545.75it/s]
+[04:41:36]   checkpoint: Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 (requested ad44e777bcd18fa416d9da3bd8f70d33ebb85d39)
+[04:41:36]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[04:41:36]   quantized experts on 48/48 MoE layers (128 experts each)
+[04:41:36]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[04:41:37]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[04:41:37]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[04:42:01]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (1307564 > 131072). Running this sequence through the model will result in indexing errors
+[e4b.int4_attn] 17..64-row route OFF: the installed grouped-nf4-gemm's gemm_int4_b32_smallm has no block_m= (grouped-nf4-gemm #522); those rows take the cached-bf16 matmul (E4B_ATTN_INT4_WIDE=1 to require the route, =0 to silence this)
+[serve_paged] ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; 8 batches of c4; model_type=qwen3_moe)
+[serve_paged] fusions (q/k/v auto; folds set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 48, 'fuse_t1_glue_n': 193, 'fuse_t1_glue_r2_n': [48, 48], 'fuse_router_epilogue_n': 48}
+DECODE_GRAPH bucket=1 captured
+DECODE_GRAPH bucket=2 captured
+DECODE_GRAPH bucket=4 captured
+DECODE_GRAPH bucket=8 captured
+DECODE_GRAPH bucket=16 captured
+[serve_paged] PREFILL_GRAPH on (auto): first chunks of 512 tokens replay one graph (startup check bitwise on two prompts; pool 428 MiB, 6868 MiB free)
+[serve_paged] ready: {"moe_layers": 48, "experts": 128, "top_k": 8, "model_type": "qwen3_moe", "int4_expert_layers": 0, "int4_store_kinds": [], "int4_attn_projections": 96, "kv": {"n_kv_heads": 4, "head_dim": 128, "k_groups": "auto", "scratch_slots": 16, "blocks_per_seq": 256, "pool_mib": 3326.4}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "grouping": {"device_grouping": true, "force_singleton_groups": false}, "prefill_graph": "auto", "levers_env": {"E4B_SERVE_ATTN_INT4_CALIB": "1"}, "exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 192, "fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48, "fusion_modes": {"E4B_PAGED_FUSE_QKV": "auto", "E4B_FUSE_T1_GLUE": "auto", "E4B_FUSE_T1_GLUE_R2": "auto", "E4B_FUSE_ROUTER_EPI": "auto"}, "fusion_sources": {"E4B_PAGED_FUSE_QKV": "default-allowlisted", "E4B_FUSE_T1_GLUE": "default-allowlisted", "E4B_FUSE_T1_GLUE_R2": "default-allowlisted", "E4B_FUSE_ROUTER_EPI": "default-allowlisted"}, "fusion_report": {"E4B_FUSE_T1_GLUE": {"mode": "auto", "patched": 193, "failed_probe": 0}, "E4B_FUSE_T1_GLUE_R2": {"mode": "auto", "patched": [48, 48], "kernel_gaps": 0}, "E4B_FUSE_ROUTER_EPI": {"mode": "auto", "patched": 48, "failed_probe": 0, "no_kernel_mode": 0, "fp32_upstream": 0}}, "pinned_cache_released": true, "host_heap_trimmed": true}
+P125_W B/B1 W16 B=16 decode_tok_s=901.75 walls={'32': [2.72091, 2.71607, 2.71738], '160': [4.98722, 5.00132, 5.006]}
+P125_W B/B1 W1 B=1 decode_tok_s=253.07 walls={'32': [0.25276, 0.25275, 0.25315], '160': [0.75853, 0.759, 0.75938]}
+P125_ARM {"arm": "B", "tag": "B1", "fusions": {"fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}, "int4": {"int4_attn_projections": 96, "attn_int4_calib_projections": 192, "attn_int4_rtn_projections": 0}, "load_s": 249.9, "W16": 901.75, "W1": 253.07, "slots": {"2048": 64, "4096": 32}}

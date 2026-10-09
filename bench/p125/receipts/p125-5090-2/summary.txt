@@ -1,0 +1,60 @@
+KNOBS e4b=4934aba9c88da7ff49e12e4911354538ae0fdf48 gnf4=6ee2e10408161a9d3c874975c9191a7f2957e6f4 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 prove=0 short=32 long=160 reps=3 cap=0
+CUDA_PROBE ok
+e4b 0.50.0 @4934aba9c88da7ff49e12e4911354538ae0fdf48
+gnf4 0.43.0 @6ee2e10408161a9d3c874975c9191a7f2957e6f4
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+datasets 5.1.0
+cc (12, 0)
+sm_count 170
+p125_reduce self-test OK (25 cases)
+p109_box self-test OK (5/5 cases)
+p125_box self-test OK (18 cases)
+premise rc=0: 39 passed, 5 warnings in 10.58s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+C4_FETCH shard 00000: 45576 docs in 5.8 s
+C4_FETCH shard 00001: 45576 docs in 3.7 s
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709
+P125_WINDOWS {"gates": {"t1": {"text": "wikitext", "windows": 108, "full": true}, "k16": {"text": "wikitext", "windows": 112, "full": true}, "c4": {"text": "c4val1", "windows": 16, "full": true}}, "refused": []}
+arm A1 rc=0 P125_ARM {"arm": "A", "tag": "A1", "fusions": {"fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}, "int4": {"int4_attn_projections": 0, "attn_int4_calib_projections": 0, "attn_int4_rtn_projections": 0}, "load_s": 34.15, "W16": 904.29, "W1": 224.87, "slots": {"2048": 64, "4096": 32}}
+
+arm B1 rc=0 P125_ARM {"arm": "B", "tag": "B1", "fusions": {"fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}, "int4": {"int4_attn_projections": 96, "attn_int4_calib_projections": 192, "attn_int4_rtn_projections": 0}, "load_s": 130.42, "W16": 925.31, "W1": 259.45, "slots": {"2048": 64, "4096": 32}}
+
+arm C1 rc=0 P125_ARM {"arm": "C", "tag": "C1", "fusions": {"fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}, "int4": {"int4_attn_projections": 97, "attn_int4_calib_projections": 193, "attn_int4_rtn_projections": 0}, "load_s": 126.44, "W16": 921.68, "W1": 278.42, "slots": {"2048": 64, "4096": 32}}
+
+arm C2 rc=0 P125_ARM {"arm": "C", "tag": "C2", "fusions": {"fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}, "int4": {"int4_attn_projections": 97, "attn_int4_calib_projections": 193, "attn_int4_rtn_projections": 0}, "load_s": 122.98, "W16": 921.27, "W1": 278.45, "slots": {"2048": 64, "4096": 32}}
+
+arm B2 rc=0 P125_ARM {"arm": "B", "tag": "B2", "fusions": {"fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}, "int4": {"int4_attn_projections": 96, "attn_int4_calib_projections": 192, "attn_int4_rtn_projections": 0}, "load_s": 116.91, "W16": 925.68, "W1": 259.58, "slots": {"2048": 64, "4096": 32}}
+
+arm A2 rc=0 P125_ARM {"arm": "A", "tag": "A2", "fusions": {"fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}, "int4": {"int4_attn_projections": 0, "attn_int4_calib_projections": 0, "attn_int4_rtn_projections": 0}, "load_s": 24.08, "W16": 892.15, "W1": 224.6, "slots": {"2048": 64, "4096": 32}}
+
+quality A rc=0 P125_GATE A t1 wikitext group=1 windows=108 routes={} 405.7 s
+P125_GATE A k16 wikitext group=16 windows=112 routes={} 53.8 s
+P125_GATE A c4 c4val1 group=16 windows=16 routes={} 7.7 s
+P125_QUALITY {"arm": "A", "fusions": {"fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}, "int4": {"int4_attn_projections": 0, "attn_int4_calib_projections": 0, "attn_int4_rtn_projections": 0}, "n_int4_modules": 0, "load_s": 21.0}
+
+quality B rc=0 P125_GATE B t1 wikitext group=1 windows=108 routes={'bf16:512': 10368, 'gemv:1': 1316736} 558.4 s
+P125_GATE B k16 wikitext group=16 windows=112 routes={'bf16:512': 10752, 'k16:16': 85344} 56.0 s
+P125_GATE B c4 c4val1 group=16 windows=16 routes={'bf16:512': 1536, 'k16:16': 12192} 7.9 s
+P125_QUALITY {"arm": "B", "fusions": {"fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}, "int4": {"int4_attn_projections": 96, "attn_int4_calib_projections": 192, "attn_int4_rtn_projections": 0}, "n_int4_modules": 96, "load_s": 117.86}
+
+quality C rc=0 P125_GATE C t1 wikitext group=1 windows=108 routes={'bf16:512': 10476, 'gemv:1': 1330452} 463.4 s
+P125_GATE C k16 wikitext group=16 windows=112 routes={'bf16:512': 10864, 'k16:16': 86233} 55.3 s
+P125_GATE C c4 c4val1 group=16 windows=16 routes={'bf16:512': 1552, 'k16:16': 12319} 7.8 s
+P125_QUALITY {"arm": "C", "fusions": {"fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}, "int4": {"int4_attn_projections": 97, "attn_int4_calib_projections": 193, "attn_int4_rtn_projections": 0}, "n_int4_modules": 97, "load_s": 123.54}
+
+quality M rc=0 P125_GATE M t1 wikitext group=1 windows=108 routes={'bf16:512': 10368, 'gemv:1': 1316736} 606.4 s
+P125_GATE M k16 wikitext group=16 windows=112 routes={'bf16:512': 10752, 'k16:16': 85344} 66.9 s
+P125_GATE M c4 c4val1 group=16 windows=16 routes={'bf16:512': 1536, 'k16:16': 12192} 9.4 s
+P125_QUALITY {"arm": "M", "fusions": {"fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}, "int4": {"int4_attn_projections": 96, "attn_int4_calib_projections": 0, "attn_int4_rtn_projections": 192}, "n_int4_modules": 96, "load_s": 28.15}
+
+quality K rc=0 P125_GATE K t1 wikitext group=1 windows=12 routes={'bf16:512': 1152, 'gemv:1': 146304} 67.3 s
+P125_GATE K k16 wikitext group=16 windows=16 routes={'bf16:512': 1536, 'k16:16': 12192} 9.9 s
+P125_GATE K c4 c4val1 group=16 windows=16 routes={'bf16:512': 1536, 'k16:16': 12192} 9.7 s
+P125_QUALITY {"arm": "K", "fusions": {"fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}, "int4": {"int4_attn_projections": 96, "attn_int4_calib_projections": 192, "attn_int4_rtn_projections": 0}, "n_int4_modules": 96, "load_s": 112.29}
+
+P125_VERDICT READ ["B NOT_LICENSED, C NOT_LICENSED; RTN t1 FAIL; g1_B 1.1538, g1_C 1.2381"]

@@ -211,6 +211,13 @@ and launch-bound routing glue at 11 %; the GPU is busy 92 % of the step. At 16 r
 needs a quality bar of its own. Its router census of 48 is the 5090 check of the fp32 router probe on the shipped
 default. `e4b.serve.p123.default-decode-census.qwen3.5090.2026-10-09` ([P123](../bench/p123/RESULTS-p123.md)).
 
+**Calibrated int4 attention is not licensed on the default.** On Qwen3-30B-A3B, `E4B_SERVE_ATTN_INT4_CALIB=1` decodes
+one request 1.154× as fast (1.238× with the int4 lm_head too). The mean NLL bias stays inside K8's budget, but only
+92.9 % of next-token argmaxes agree with the default at one window per pass (91.8 % with the head), against the 0.95
+gate. It stays opt-in. A K8-style ppl gate alone would have passed it. Calibration is deterministic and takes 95–225 s a
+build, depending on the host. `e4b.serve.p125.int4-attn-calib-default.qwen3.5090.2026-10-09`
+([P125](../bench/p125/RESULTS-p125.md)).
+
 **Other opt-ins.** `E4B_PAGED_DECODE_LOOKAHEAD=1` recovers the whole host gap between decode steps, but the gap is
 small: 1.0198× at one request, SLOWER against its 1.02 bar. `E4B_PAGED_LAST_LOGITS=1` projects only the final prompt
 position through the LM head (#1337). `e4b.serve.p118.decode-lookahead.qwen3.5090.2026-10-08`.

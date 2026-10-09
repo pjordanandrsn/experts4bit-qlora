@@ -1910,7 +1910,8 @@ Register: [`../claims.json`](../claims.json). The position, **measured** (receip
     "e4b.serve.p115.fused-stack-quality.granite.5090.2026-10-08",
     "e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07",
     "e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08",
-    "e4b.serve.p123.default-decode-census.qwen3.5090.2026-10-09"
+    "e4b.serve.p123.default-decode-census.qwen3.5090.2026-10-09",
+    "e4b.serve.p125.int4-attn-calib-default.qwen3.5090.2026-10-09"
    ],
    "limitations": [
     "Not a general-purpose vLLM replacement: on the same box with identical prompt token ids vLLM 0.30.0 decodes faster than this package's current int4 stack at both B=1 and B=16 (claims e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b1.5090.2026-09-22, e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b16.5090.2026-09-22), bounded to graph decode on one RTX 5090 box with one prompt set; quality quoted, never equated; the 2026-09-05 comparison against vLLM 0.28.0 and the NF4 control (e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05) is history",
@@ -2289,6 +2290,13 @@ and launch-bound routing glue at 11 %; the GPU is busy 92 % of the step. At 16 r
 69 % of an 18 ms step. The census moves no default: it prices the next single-request lever, the dense GEMVs, which
 needs a quality bar of its own. Its router census of 48 is the 5090 check of the fp32 router probe on the shipped
 default. `e4b.serve.p123.default-decode-census.qwen3.5090.2026-10-09` ([P123](../bench/p123/RESULTS-p123.md)).
+
+**Calibrated int4 attention is not licensed on the default.** On Qwen3-30B-A3B, `E4B_SERVE_ATTN_INT4_CALIB=1` decodes
+one request 1.154× as fast (1.238× with the int4 lm_head too). The mean NLL bias stays inside K8's budget, but only
+92.9 % of next-token argmaxes agree with the default at one window per pass (91.8 % with the head), against the 0.95
+gate. It stays opt-in. A K8-style ppl gate alone would have passed it. Calibration is deterministic and takes 95–225 s a
+build, depending on the host. `e4b.serve.p125.int4-attn-calib-default.qwen3.5090.2026-10-09`
+([P125](../bench/p125/RESULTS-p125.md)).
 
 **Other opt-ins.** `E4B_PAGED_DECODE_LOOKAHEAD=1` recovers the whole host gap between decode steps, but the gap is
 small: 1.0198× at one request, SLOWER against its 1.02 bar. `E4B_PAGED_LAST_LOGITS=1` projects only the final prompt
@@ -3252,6 +3260,7 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.serve.fam.fused-stack-t1.gptoss.5090.2026-10-09 [measured]: Lane FAM (one RTX 5090): on gpt-oss-20b each B=1 fusion knob alone and all three at auto read FAIL at T == 1: ON_glue (engaged 0 / 49 / [0, 0] / 0) fails 3 of 12 gated entries, ON_r2 (0 / 0 / [24, 0] / 0) 1, ON_epi (0 / 0 / [0, 0] / 24) 6, ON_auto (0 / 49 / [24, 0] / 24) 6. …
 - e4b.serve.fam.fused-stack-t1.qw36.5090.2026-10-09 [measured]: Lane FAM (one RTX 5090): the B=1 fused stack at auto on Qwen3.6-35B-A3B, where only the router epilogue engages (0 / 0 / [0, 0] / 40), reads PASS against the family's own neutral floor at T == 1 and T == 12 on both texts, every set: worst-set |bias| at most 0.0012 nats (gates 0.0128-0.0166), argmax agreement at least …
 - e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09 [measured]: Lane FAM Amendment 4 (one RTX 5090): on the default serve_paged graph server (Qwen3.6-35B-A3B NF4, bucketed decode graphs), the fused router epilogue (E4B_FUSE_ROUTER_EPI …
+- e4b.serve.p125.int4-attn-calib-default.qwen3.5090.2026-10-09 [measured]: Lane P125, one RTX 5090: on the shipped default serve_paged (Qwen3-30B-A3B NF4, the B=1 fused stack default-allowlisted, the bandwidth GEMV), calibrated int4 attention (E4B_SERVE_ATTN_INT4_CALIB=1, calibrated on the box) is NOT licensed, alone or with the calibrated int4 lm_head: at one window per pass (T == 1, the …
 
 Open items (no evidence either way):
 
@@ -3259,4 +3268,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 …
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(432 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(433 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

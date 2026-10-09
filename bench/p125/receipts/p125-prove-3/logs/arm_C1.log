@@ -1,0 +1,20 @@
+Fetching 11 files:   0%|          | 0/11 [00:00<?, ?it/s]Fetching 11 files: 100%|██████████| 11/11 [00:00<00:00, 1481.61it/s]
+[04:07:34]   checkpoint: ibm-granite/granite-3.1-3b-a800m-instruct @ a02780686e08a03fe0d2679a293b5c74a90efa89 (requested a02780686e08a03fe0d2679a293b5c74a90efa89)
+[04:07:34]   fusing + quantizing experts (up to 32x40) to nf4 (streaming)...
+[04:07:34]   quantized experts on 32/32 MoE layers (40 experts each)
+[04:07:34]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[04:07:35]   experts deferred to the arena: 32 module(s), 160 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[04:07:36]   hybrid tier active on 32 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[e4b.int4_attn] 17..64-row route OFF: the installed grouped-nf4-gemm's gemm_int4_b32_smallm has no block_m= (grouped-nf4-gemm #522); those rows take the cached-bf16 matmul (E4B_ATTN_INT4_WIDE=1 to require the route, =0 to silence this)
+[serve_paged] ATTNINT4 calibrated: 129 projections (attn=1 head=1 dense=0; 8 batches of c4; model_type=granitemoe)
+[serve_paged] fusions (q/k/v 0; folds set: none): {'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0}
+DECODE_GRAPH bucket=1 captured
+DECODE_GRAPH bucket=2 captured
+DECODE_GRAPH bucket=4 captured
+DECODE_GRAPH bucket=8 captured
+DECODE_GRAPH bucket=16 captured
+[serve_paged] PREFILL_GRAPH on (auto): first chunks of 512 tokens replay one graph (startup check bitwise on two prompts; pool 156 MiB, 25708 MiB free)
+[serve_paged] ready: {"moe_layers": 32, "experts": 40, "top_k": 8, "model_type": "granitemoe", "int4_expert_layers": 0, "int4_store_kinds": [], "int4_attn_projections": 129, "kv": {"n_kv_heads": 8, "head_dim": 64, "k_groups": "auto", "scratch_slots": 16, "blocks_per_seq": 256, "pool_mib": 2378.3}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "grouping": {"device_grouping": true, "force_singleton_groups": false}, "prefill_graph": "auto", "levers_env": {"E4B_SERVE_ATTN_INT4_CALIB": "1", "E4B_SERVE_LMHEAD_INT4_CALIB": "1"}, "exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 129, "fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0, "fusion_modes": {"E4B_PAGED_FUSE_QKV": "0", "E4B_FUSE_T1_GLUE": "0", "E4B_FUSE_T1_GLUE_R2": "0", "E4B_FUSE_ROUTER_EPI": "0"}, "fusion_sources": {"E4B_PAGED_FUSE_QKV": "default-off", "E4B_FUSE_T1_GLUE": "default-off", "E4B_FUSE_T1_GLUE_R2": "default-off", "E4B_FUSE_ROUTER_EPI": "default-off"}, "fusion_report": {"E4B_FUSE_T1_GLUE": {"mode": "0"}, "E4B_FUSE_T1_GLUE_R2": {"mode": "0"}, "E4B_FUSE_ROUTER_EPI": {"mode": "0"}}, "pinned_cache_released": true, "host_heap_trimmed": true}
+P125_W C/C1 W16 B=16 decode_tok_s=2489.06 walls={'8': [0.82267], '24': [0.92552]}
+P125_W C/C1 W1 B=1 decode_tok_s=190.16 walls={'8': [0.08042], '24': [0.16456]}
+P125_ARM {"arm": "C", "tag": "C1", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 129, "attn_int4_calib_projections": 129, "attn_int4_rtn_projections": 0}, "load_s": 58.23, "W16": 2489.06, "W1": 190.16, "slots": {"2048": 64, "4096": 64}}

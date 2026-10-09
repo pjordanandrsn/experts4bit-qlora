@@ -1,0 +1,2 @@
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+P125_WINDOWS {"gates": {"t1": {"text": "wikitext", "windows": 108, "full": true}, "k16": {"text": "wikitext", "windows": 112, "full": true}, "c4": {"text": "c4val1", "windows": 16, "full": true}}, "refused": []}

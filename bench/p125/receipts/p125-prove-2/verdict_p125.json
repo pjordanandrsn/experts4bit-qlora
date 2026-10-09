@@ -1,0 +1,29 @@
+{
+ "lane": "P125",
+ "proof": true,
+ "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+ "verdict": "VOID",
+ "reasons": [
+  "quality_A t1: ('wikitext', 1, {'wikitext': 16}), want (wikitext, 1, 16)",
+  "quality_A k16: ('wikitext', 16, {'wikitext': 16}), want (wikitext, 16, 16)",
+  "quality_A c4: ('c4val1', 16, {'c4val1': 16}), want (c4val1, 16, 16)",
+  "quality_B t1: ('wikitext', 1, {'wikitext': 16}), want (wikitext, 1, 16)",
+  "quality_B k16: ('wikitext', 16, {'wikitext': 16}), want (wikitext, 16, 16)",
+  "quality_B c4: ('c4val1', 16, {'c4val1': 16}), want (c4val1, 16, 16)",
+  "quality_C t1: ('wikitext', 1, {'wikitext': 16}), want (wikitext, 1, 16)",
+  "quality_C k16: ('wikitext', 16, {'wikitext': 16}), want (wikitext, 16, 16)",
+  "quality_C c4: ('c4val1', 16, {'c4val1': 16}), want (c4val1, 16, 16)",
+  "quality_M t1: ('wikitext', 1, {'wikitext': 16}), want (wikitext, 1, 16)",
+  "quality_M k16: ('wikitext', 16, {'wikitext': 16}), want (wikitext, 16, 16)",
+  "quality_M c4: ('c4val1', 16, {'c4val1': 16}), want (c4val1, 16, 16)",
+  "quality_K t1: ('wikitext', 1, {'wikitext': 12}), want (wikitext, 1, 12)",
+  "quality_K k16: ('wikitext', 16, {'wikitext': 16}), want (wikitext, 16, 16)",
+  "quality_K c4: ('c4val1', 16, {'c4val1': 16}), want (c4val1, 16, 16)"
+ ],
+ "prior": {
+  "sd_d": 0.01957,
+  "ppl_R": 8.762,
+  "bound": 0.00569,
+  "windows_needed": 107
+ }
+}

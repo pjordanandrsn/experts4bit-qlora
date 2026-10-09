@@ -1,0 +1,59 @@
+KNOBS e4b=1e5bc75a68fd6e8fc01641572725db38bd970390 gnf4=6ee2e10408161a9d3c874975c9191a7f2957e6f4 model=ibm-granite/granite-3.1-3b-a800m-instruct@a02780686e08a03fe0d2679a293b5c74a90efa89 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 prove=1 short=8 long=24 reps=1 cap=16
+CUDA_PROBE ok
+e4b 0.50.0 @1e5bc75a68fd6e8fc01641572725db38bd970390
+gnf4 0.43.0 @6ee2e10408161a9d3c874975c9191a7f2957e6f4
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+datasets 5.1.0
+cc (12, 0)
+sm_count 170
+p125_reduce self-test OK (25 cases)
+p109_box self-test OK (5/5 cases)
+p125_box self-test OK (16 cases)
+premise rc=0: 39 passed, 5 warnings in 11.09s
+premise ok
+FETCH ibm-granite/granite-3.1-3b-a800m-instruct@a02780686e08a03fe0d2679a293b5c74a90efa89 /root/.cache/huggingface/hub/models--ibm-granite--granite-3.1-3b-a800m-instruct/snapshots/a02780686e08a03fe0d2679a293b5c74a90efa89
+C4_FETCH shard 00000: 45576 docs in 6.0 s
+C4_FETCH shard 00001: 45576 docs in 3.7 s
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=891ff238c0b2a0800df0fc0236b9adc36b196a4fec39c896fb62d05438a9fc01
+arm A1 rc=0 P125_ARM {"arm": "A", "tag": "A1", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 0, "attn_int4_calib_projections": 0, "attn_int4_rtn_projections": 0}, "load_s": 9.5, "W16": 2459.88, "W1": 219.18, "slots": {"2048": 64, "4096": 64}}
+
+arm B1 rc=0 P125_ARM {"arm": "B", "tag": "B1", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 128, "attn_int4_calib_projections": 128, "attn_int4_rtn_projections": 0}, "load_s": 31.21, "W16": 2576.23, "W1": 214.85, "slots": {"2048": 64, "4096": 64}}
+
+arm C1 rc=0 P125_ARM {"arm": "C", "tag": "C1", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 129, "attn_int4_calib_projections": 129, "attn_int4_rtn_projections": 0}, "load_s": 32.45, "W16": 2687.95, "W1": 218.04, "slots": {"2048": 64, "4096": 64}}
+
+arm C2 rc=0 P125_ARM {"arm": "C", "tag": "C2", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 129, "attn_int4_calib_projections": 129, "attn_int4_rtn_projections": 0}, "load_s": 31.42, "W16": 2688.79, "W1": 217.92, "slots": {"2048": 64, "4096": 64}}
+
+arm B2 rc=0 P125_ARM {"arm": "B", "tag": "B2", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 128, "attn_int4_calib_projections": 128, "attn_int4_rtn_projections": 0}, "load_s": 28.08, "W16": 2576.49, "W1": 215.02, "slots": {"2048": 64, "4096": 64}}
+
+arm A2 rc=0 P125_ARM {"arm": "A", "tag": "A2", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 0, "attn_int4_calib_projections": 0, "attn_int4_rtn_projections": 0}, "load_s": 4.92, "W16": 2445.78, "W1": 219.39, "slots": {"2048": 64, "4096": 64}}
+
+quality A rc=0 P125_GATE A t1 wikitext group=1 windows=16 routes={} 44.8 s
+P125_GATE A k16 wikitext group=16 windows=16 routes={} 4.4 s
+P125_GATE A c4 c4val1 group=16 windows=16 routes={} 4.3 s
+P125_QUALITY {"arm": "A", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 0, "attn_int4_calib_projections": 0, "attn_int4_rtn_projections": 0}, "n_int4_modules": 0, "load_s": 2.58}
+
+quality B rc=0 P125_GATE B t1 wikitext group=1 windows=16 routes={'bf16:512': 2048, 'gemv:1': 260096} 60.5 s
+P125_GATE B k16 wikitext group=16 windows=16 routes={'bf16:512': 2048, 'k16:16': 16256} 5.0 s
+P125_GATE B c4 c4val1 group=16 windows=16 routes={'bf16:512': 2048, 'k16:16': 16256} 4.8 s
+P125_QUALITY {"arm": "B", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 128, "attn_int4_calib_projections": 128, "attn_int4_rtn_projections": 0}, "n_int4_modules": 128, "load_s": 25.93}
+
+quality C rc=0 P125_GATE C t1 wikitext group=1 windows=16 routes={'bf16:512': 2064, 'gemv:1': 262128} 60.8 s
+P125_GATE C k16 wikitext group=16 windows=16 routes={'bf16:512': 2064, 'k16:16': 16383} 4.9 s
+P125_GATE C c4 c4val1 group=16 windows=16 routes={'bf16:512': 2064, 'k16:16': 16383} 4.8 s
+P125_QUALITY {"arm": "C", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 129, "attn_int4_calib_projections": 129, "attn_int4_rtn_projections": 0}, "n_int4_modules": 129, "load_s": 29.53}
+
+quality M rc=0 P125_GATE M t1 wikitext group=1 windows=16 routes={'bf16:512': 2048, 'gemv:1': 260096} 61.3 s
+P125_GATE M k16 wikitext group=16 windows=16 routes={'bf16:512': 2048, 'k16:16': 16256} 4.9 s
+P125_GATE M c4 c4val1 group=16 windows=16 routes={'bf16:512': 2048, 'k16:16': 16256} 4.8 s
+P125_QUALITY {"arm": "M", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 128, "attn_int4_calib_projections": 0, "attn_int4_rtn_projections": 128}, "n_int4_modules": 128, "load_s": 3.13}
+
+quality K rc=0 P125_GATE K t1 wikitext group=1 windows=12 routes={'bf16:512': 1536, 'gemv:1': 195072} 45.4 s
+P125_GATE K k16 wikitext group=16 windows=16 routes={'bf16:512': 2048, 'k16:16': 16256} 5.0 s
+P125_GATE K c4 c4val1 group=16 windows=16 routes={'bf16:512': 2048, 'k16:16': 16256} 4.9 s
+P125_QUALITY {"arm": "K", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "int4": {"int4_attn_projections": 128, "attn_int4_calib_projections": 128, "attn_int4_rtn_projections": 0}, "n_int4_modules": 128, "load_s": 26.1}
+
+P125_VERDICT VOID ["quality_A t1: ('wikitext', 1, {'wikitext': 16}), want (wikitext, 1, 16)", "quality_A k16: ('wikitext', 16, {'wikitext': 16}), want (wikitext, 16, 16)", "quality_A c4: ('c4val1', 16, {'c4val1': 16}), want (c4val1, 16, 16)", "quality_B t1: ('wikitext', 1, {'wikitext': 16}), want (wikitext, 1, 16)", "quality_B k16: ('wikitext', 16, {'wikitext': 16}), want (wikitext, 16, 16)", "quality_B c4: ('c4val1', 16, {'c4val1': 16}), want (c4val1, 16, 16)", "quality_C t1: ('wikitext', 1, {'wikitext': 16}), want (wikitext, 1, 16)", "quality_C k16: ('wikitext', 16, {'wikitext': 16}), want (wikitext, 16, 16)"
