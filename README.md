@@ -97,6 +97,23 @@ The offload row uses a different training setup.
 
 [Qwen comparison](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos69.md) · [Packed 4K result](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos68.md) · [All current results](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STATUS.md)
 
+<details>
+<summary>How the two Unsloth rows were measured</summary>
+
+- **Hardware:** one rented RTX 5090 per reading (a Vast.ai verified host). The field-recipe row ran on an AMD EPYC 7713
+  host; the packed row on an AMD engineering-sample CPU with a 30.7-CPU quota.
+- **Software:** torch 2.12.1+cu130 for both frameworks; Unsloth 2026.9.14; e4b and grouped-nf4-gemm at the commits in each
+  run record.
+- **Method:** matched fp32 adapters and initialization, two draws per arm, three profiled steps before the timed window.
+  Validity and scoring by [`bench/tc1/tc1_reduce.py`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/tc1/tc1_reduce.py), under the
+  [pre-registration](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/tc1/TC1-PREREG.md).
+- **Rerun:** the [TC1 harness](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/tc1/README.md) on one RTX 5090, token `qwen3pos69` (field recipe) or `qwen3pos68`
+  (packed rows).
+- **Run records** (versions, host and every arm): [field recipe](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/h2h-2026-10-02/tc1/receipts/tc1-5090-137/RESULTS-tc1.md)
+  · [packed rows](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/h2h-2026-10-02/tc1/receipts/tc1-5090-136/RESULTS-tc1.md)
+
+</details>
+
 ## New in 0.51.0
 
 - **Faster MoE decode by default in `serve_paged`.** On one RTX 5090: the B=1 fused stack decodes one Qwen3-30B-A3B NF4
