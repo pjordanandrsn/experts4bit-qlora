@@ -181,6 +181,23 @@ OPTIMIZERS = {
 }
 
 
+def _loss_chunk(topology, setup: QLoRASetup, tokens: int, vocab: int):
+    """The chunk size the run's training loss will use, or None for the stock loss: what ``enable_fast_train`` decides
+    through :mod:`~experts4bit_qlora.engines.chunked_lm_loss` (its table of supported architectures, its switch and its
+    ``auto`` size gate), read the same way here so the estimate prices the loss the run takes."""
+    if setup.expert_kernel != "grouped_nf4":
+        return None                                        # the reference loop never calls enable_fast_train
+    from .engines.chunked_lm_loss import SUPPORTED, chunked_lm_loss_min_bytes, chunked_lm_loss_requested
+
+    if topology.architecture not in SUPPORTED:
+        return None
+    chunk = chunked_lm_loss_requested()
+    gate = chunked_lm_loss_min_bytes()
+    if chunk is None or (gate is not None and tokens * vocab * 4 < gate):
+        return None
+    return chunk
+
+
 def estimate_qlora_footprint(topology, setup: QLoRASetup, *, tokens_per_microbatch: int,
                              optimizer: str = "adamw") -> Footprint:
     """Price ``setup`` on ``topology`` for micro-batches of ``tokens_per_microbatch`` tokens (padding included),
@@ -189,6 +206,14 @@ def estimate_qlora_footprint(topology, setup: QLoRASetup, *, tokens_per_microbat
     Covers what the PyTorch allocator holds for this process at the training step's peak, by item, plus the
     host RAM the setup pins. It does not cover the CUDA context, the allocator's reserved-but-unallocated
     blocks, or anything another process holds -- those belong to whoever compares the estimate with a device.
+
+    The loss branch of the activation item follows what the run will do. With ``expert_kernel="grouped_nf4"``,
+    ``enable_fast_train`` routes a supported architecture's training forward through the chunked LM loss
+    (:mod:`~experts4bit_qlora.engines.chunked_lm_loss`) under ``E4B_CHUNKED_LM_LOSS``: by default (``auto``) exactly when
+    the stock fp32 logits, ``T x V x 4`` bytes, reach ``AUTO_MIN_LOGITS_BYTES`` (1 GiB -- e.g. ``T >= 1,767`` at
+    Qwen3's 151,936-token vocabulary, ``T >= 5,462`` at granite's 49,155). Then the branch is
+    :func:`~experts4bit_qlora.engines.chunked_lm_loss.chunked_loss_bytes` (one chunk's logits plus the gathered hidden
+    rows); otherwise it is the whole logits at :data:`LOGITS_LOSS_BYTES` per logit.
     """
     refusals = setup_refusals(topology, setup)
     if refusals:
@@ -271,15 +296,22 @@ def estimate_qlora_footprint(topology, setup: QLoRASetup, *, tokens_per_microbat
     # --- activations (gradient checkpointing on; a stated formula, not a measurement) ---------------------
     n_layers = topology.n_layers
     boundaries = n_layers * T * H * 2
-    logits = T * V * LOGITS_LOSS_BYTES
+    chunk = _loss_chunk(topology, setup, T, V)
+    if chunk:
+        from .engines.chunked_lm_loss import chunked_loss_bytes
+
+        logits = chunked_loss_bytes(T, V, hidden=H, chunk=chunk)
+        loss_how = f"the chunked LM loss in {chunk}-token chunks = {logits / 1e9:.2f} GB"
+    else:
+        logits = T * V * LOGITS_LOSS_BYTES
+        loss_how = f"logits and loss, three fp32 logits-sized tensors = {logits / 1e9:.2f} GB"
     st0 = topology.expert_stacks[0]
     first_out0 = _first_out(st0)
     kv = (attn.kv_elements_per_token // max(attn.layers, 1)) if attn else 0
     layer = T * ((H + kv + H) * 2 + (topology.top_k or 0) * (first_out0 + st0.intermediate + H) * 2
                  + st0.n_experts * 4)
     items.append(FootprintItem("activations", "device", boundaries + max(logits, 2 * layer), "heuristic",
-                               f"{n_layers} saved layer inputs (T x H bf16) + max(logits and loss, three "
-                               f"fp32 logits-sized tensors = {logits / 1e9:.2f} GB, 2 x one layer's recompute = "
+                               f"{n_layers} saved layer inputs (T x H bf16) + max({loss_how}, 2 x one layer's recompute = "
                                f"{2 * layer / 1e9:.2f} GB) at T={T}"))
     if setup.keep_moe_layers:
         n_keep = min(setup.keep_moe_layers, len(topology.expert_stacks))

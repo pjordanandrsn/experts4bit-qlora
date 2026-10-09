@@ -122,8 +122,9 @@ _EVAL_ENV = "E4B_CHUNKED_EVAL_LOSS"
 
 
 #: bytes per (supervised token, vocabulary entry) of one chunk's workspace at its backward peak: the bf16 logits, their fp32
-#: upcast and the fp32 gradient. A stated formula -- the coefficient ``recipe.estimate_qlora_footprint`` charges full logits --
-#: not a measurement.
+#: upcast and the fp32 gradient. A stated formula, not a measurement. Whole stock logits are priced at
+#: ``recipe.LOGITS_LOSS_BYTES`` (12: three fp32 tensors, measured by allocator replay); a chunk's own coefficient is not
+#: attributed -- the allocator recorder's Python stacks fail inside the chunk's checkpoint recompute (torch 2.11).
 CHUNK_BYTES_PER_LOGIT = 10
 
 
