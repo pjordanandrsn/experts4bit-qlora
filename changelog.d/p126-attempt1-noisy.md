@@ -5,4 +5,5 @@
   one-program table, which is 17.7 % of the eager 64-row step.
 - **The cause** is one runner's level offset of about 3 % in the box's first block, lasting all 256 steps, so longer
   blocks would not remove it.
-- `E4B_INT4_TILE_PROGRAMS` stays opt-in. `bench/p126/RESULTS-p126.md`; receipts in `bench/p126/receipts/p126-5090-1/`.
+- At attempt 1, no default moved; attempt 2 later licensed P = 4 and #1476 enables `auto` within the measured shape
+  bound. `bench/p126/RESULTS-p126.md`; receipts in `bench/p126/receipts/p126-5090-1/`.

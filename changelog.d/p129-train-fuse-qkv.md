@@ -17,4 +17,5 @@ P129 Phase 1, on an RTX A2000 with a two-layer Qwen3-MoE at Qwen3-30B-A3B's laye
 - the projection within TC1's rounding bar;
 - in Amendment 1, a 30-step run's divergence inside the eager path's own floor.
 
-Speed is unread until P129's rented Phase 2.
+Phase 2 measured lower wall time but read QUALITY_FAIL under the registered step-0 bar; the knob remains opt-in.
+Amendment 3 registers the calibrated re-measure.

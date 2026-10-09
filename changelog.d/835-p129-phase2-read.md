@@ -8,5 +8,5 @@
   - the fused module with serving's forward equals the stock forward fed the same q/k/v, bitwise in every layer;
   - the shift is the base projections' GEMM shape, amplified through 48 layers;
   - a neutral split of q's matmul moves the step-0 loss as much, and the sign differs between cards.
-- **The bar.** TC1's step-0 bar cannot be met by any base-path change on this model. A re-measure needs an amendment with a floor
-  measured on the box.
+- **The bar.** The tested fused and neutral GEMM-shape changes exceeded the original step-0 bar; a re-measure uses an
+  amendment with a floor measured on the box.

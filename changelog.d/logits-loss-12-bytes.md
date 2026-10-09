@@ -13,6 +13,6 @@
     (−69.0 → +127.0 MiB) and both OLMoE reference-kernel receipts (−9.7 → +88.6 MiB).
   - Unchanged: OLMoE with `grouped_nf4`. There the planner's grouped-kernel backward term is the larger branch.
   - Already over and now more so: Qwen3-30B-A3B on the RTX 5090, +296.8 MiB each.
-- **Not modelled.** The chunked LM loss (`enable_fast_train` past 1 GiB of fp32 logits) does not materialize the
-  logits whole. This term still prices them whole there.
+- **Loss branch.** The 12-byte whole-logit term applies to the stock loss branch. In this release, #1491 prices
+  supported `grouped_nf4` chunked-loss runs through `chunked_loss_bytes` using the engine switch and size gate.
 - **Test.** `tests/test_topology_recipe.py::test_logits_and_loss_are_priced_at_three_fp32_tensors_per_logit`.
