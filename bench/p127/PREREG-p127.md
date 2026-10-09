@@ -101,7 +101,7 @@ change between `d1f64ba` and `d769d502`, is either P127's or inert at this subje
 | repo | commit | what | status |
 |---|---|---|---|
 | e4b | `ce3dfb54` (#1448) | Phase 1: three host casts | **P127** |
-| e4b | #1472 | Phase 2 wiring (b1, d, a1, b2) | **P127** |
+| e4b | `1ddcb0ae` (#1472) | Phase 2 wiring (b1, d, a1, b2) | **P127** |
 | e4b | the residual PR | Phase 2 (c), plus `serve_paged.build_engine`'s licence step | **P127** |
 | e4b | `058f98eb` (#1456) | Release 0.51.0: `__init__.__version__` only | inert: a version string |
 | e4b | `f5398962` (#1459) | `E4B_TRAIN_FUSE_QKV` (`engines/fast.py`, `engines/train_qkv_fuse.py`) | inert: training only, nothing without `E4B_TRAIN_FUSE_QKV=1` and the fused training path |

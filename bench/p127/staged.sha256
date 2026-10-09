@@ -1,6 +1,6 @@
 # Names as the BOX sees them after staging (/root/p127). The box runs `sha256sum -c` on this file; p127_drive.sh and
 # tests/test_p127_box.py resolve each name to its source (bench/p127, bench/p109, bench/p39, tests) and compare.
-52da48fc2a797813db30675171c63d67493cbe64ffcc9db9c427c6e83088a381  p127_run.sh
+36a2b4640ebab76c7018976a140c9e0cf719162eceefa6cc0fe20aeafcfb56db  p127_run.sh
 03a80e4f24a3234c300338c967bee5a8c1a4f54c422280db5a4ec5a8592316c0  p127_box.py
 aff0eeeff7a22c5a2d75b950f44e66669aecf5f09d002fb87d7f45e052ec73bb  p127_reduce.py
 b53f94192b4040b6451ceb18f8cd4e3e5629a6e40c4885b40600fcc4205d8248  p109_box.py

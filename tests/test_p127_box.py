@@ -298,7 +298,7 @@ def test_the_runner_runs_the_registered_arms_on_the_registered_stacks():
 
 def test_the_audit_allows_exactly_the_registered_commits():
     prereg = (LANE / "PREREG-p127.md").read_text(encoding="utf-8")
-    for short in ("ce3dfb54", "058f98eb", "f5398962", "abe7d772", "14b1f23", "e21a712", "7d4163b", "18f5bda", "f69adcc",
+    for short in ("ce3dfb54", "1ddcb0ae", "058f98eb", "f5398962", "abe7d772", "14b1f23", "e21a712", "7d4163b", "18f5bda", "f69adcc",
                   "d0a2e56", "b64a39b", "d769d502"):
         assert short in prereg, f"{short} is not in the PREREG's audit table"
         assert re.search(short + r"[0-9a-f]{%d}" % (40 - len(short)), RUN), f"{short} is not a full SHA in the runner"
