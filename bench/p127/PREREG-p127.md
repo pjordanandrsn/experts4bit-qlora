@@ -226,3 +226,38 @@ plus the checkpoint download: about $0.67 for 61 GB at about $0.011/GB, paid by 
 - Nothing about prefill or TTFT beyond the tokens. Prefill is in both walls and cancels.
 - Nothing about quality beyond identity. B is bitwise A, or the verdict is FUNCTION_FAIL.
 - Nothing about which option bought the speed: the arms are all-or-nothing. A per-option split would be its own lane.
+
+## Amendment 1 (2026-10-09, after `p127-prove-1`, before `p127-prove-2`): #1482 joins the audit as P127
+
+**What `p127-prove-1` found.** The run was HARNESS_ERROR, lane rc 27, actual $0.827; receipts are in adertha-receipts
+`0627cbd5`.
+- **What ran.** Everything up to the arms passed: the refusals, both installs, the diff audit, the tripwire, both
+  self-tests, the premise, the fetch, the bake and the prompts. Arms **A1 and A2** ran.
+- **What failed.** Arms **B1, B2 and M1** died in `build_engine` with `TypeError: _HybridTier.forward() got an
+  unexpected keyword argument 'residual'`.
+- **Cause.** #1477's patched experts forward passed `residual=`, even `None`, to the residency state's `forward`.
+  hybrid's `_HybridTier`, this subject's state class, overrides `forward` without it, so every MoE call of B's
+  served build raised. The families lane reproduced it independently in `fam-mixtral-3`.
+
+**The fix is #1482**, merged at `__E4B_1482_SHORT__`. It is part of P127's Phase 2 and changes no arithmetic:
+- no `residual=` keyword when there is none;
+- `_HybridTier` takes the residual and hands it to the base forward;
+- the base residual path does not re-enter a subclass override;
+- a licence probe that raises refuses instead of stopping the build.
+
+On an RTX A2000, the hybrid tier's CUDA tests fail 14 on #1477 alone and pass with #1482, along with a new
+served-collapse residual test.
+
+**What changes here:**
+- **The diff audit** lists #1482's merge as **P127**.
+- **Arm B's e4b** is the launch commit, this amendment's merge, which carries #1482.
+- **The tripwire** also requires #1482's fix: `_HybridTier.forward` takes `residual=`, and
+  `hot_residency._state_forward` exists.
+- **`staged.sha256`** is re-pinned for the runner.
+
+**What does not change:** the arms, the subject, the rule, the predictions and the budget.
+- `p127-prove-2` is priced as `p127-prove-1` was: guard 1.25 h at ≤ $0.85/h plus about $0.67 of download, about
+  $1.73.
+- P127's spend so far is $0.827, inside the $6.00 ceiling.
+- The reading still waits for PROVED and the maintainer's re-derivation. The families lane's Mixtral smoke waits on
+  that same re-derivation (the maintainer's sequencing, 2026-10-09).

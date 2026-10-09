@@ -303,3 +303,14 @@ def test_the_audit_allows_exactly_the_registered_commits():
                   "d0a2e56", "b64a39b", "d769d502"):
         assert short in prereg, f"{short} is not in the PREREG's audit table"
         assert re.search(short + r"[0-9a-f]{%d}" % (40 - len(short)), RUN), f"{short} is not a full SHA in the runner"
+
+
+def test_amendment_1_requires_the_1482_fix_and_lists_it():
+    """p127-prove-1 found #1477's _HybridTier TypeError; Amendment 1 lists #1482's merge as P127 and the tripwire
+    requires the fix on the box."""
+    prereg = (LANE / "PREREG-p127.md").read_text(encoding="utf-8")
+    assert "## Amendment 1" in prereg and "#1482" in prereg
+    assert '"residual" in inspect.signature(_HybridTier.forward).parameters' in RUN
+    assert 'hasattr(_hr, "_state_forward")' in RUN
+    e4b_p127 = re.search(r'^E4B_P127="([^"]+)"', RUN, re.M).group(1).split()
+    assert len(e4b_p127) == 4, "Phase 1, #1472, #1477 and #1482"
