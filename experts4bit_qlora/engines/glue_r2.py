@@ -295,8 +295,11 @@ def _patch_layer(mod, rmsnorm_resid_rows) -> bool:
     return True
 
 
-def _patch_attention(mod, rope_norm_heads) -> bool:
-    """Fold each of q_norm/k_norm plus rotary into one launch."""
+def _patch_attention(mod, rope_norm_heads, rope_norm_qk=None) -> bool:
+    """Fold each of q_norm/k_norm plus rotary into one launch.
+
+    ``rope_norm_qk`` (grouped-nf4-gemm#528, or None): q's and k's heads in one launch, bitwise the two
+    ``rope_norm_heads`` calls it replaces (e4b#1313, lane P127's Phase 2, item d)."""
     if not hasattr(mod, "qkv_proj"):
         return False            # only this package's fused attention
     for attr in ("q_norm", "k_norm", "head_dim", "_fused_nq",
@@ -320,7 +323,7 @@ def _patch_attention(mod, rope_norm_heads) -> bool:
 
     def _fwd(hidden_states, position_embeddings=None,
              attention_mask=None, past_key_values=None, _m=mod,
-             _qn=qn, _kn=kn, _qe=qe, _ke=ke, _orig=orig, **kwargs):
+             _qn=qn, _kn=kn, _qe=qe, _ke=ke, _orig=orig, _qk=rope_norm_qk, **kwargs):
         d = _m.head_dim
         rows = hidden_states.numel() // hidden_states.shape[-1]
         if (position_embeddings is None
@@ -354,13 +357,14 @@ def _patch_attention(mod, rope_norm_heads) -> bool:
                          position_embeddings=position_embeddings,
                          attention_mask=attention_mask,
                          past_key_values=past_key_values, **kwargs)
-        # norm + rotary, one launch per projection
-        query_states = rope_norm_heads(
-            q.reshape(rows, -1, d), _qn.weight, cos2, sin2, _qe
-        ).reshape(*input_shape, -1, d).transpose(1, 2)
-        key_states = rope_norm_heads(
-            k.reshape(rows, -1, d), _kn.weight, cos2, sin2, _ke
-        ).reshape(*input_shape, -1, d).transpose(1, 2)
+        # norm + rotary: one launch for both projections where the kernel has it, else one per projection
+        if _qk is not None:
+            qo, ko = _qk(q.reshape(rows, -1, d), k.reshape(rows, -1, d), _qn.weight, _kn.weight, cos2, sin2, _qe, _ke)
+        else:
+            qo = rope_norm_heads(q.reshape(rows, -1, d), _qn.weight, cos2, sin2, _qe)
+            ko = rope_norm_heads(k.reshape(rows, -1, d), _kn.weight, cos2, sin2, _ke)
+        query_states = qo.reshape(*input_shape, -1, d).transpose(1, 2)
+        key_states = ko.reshape(*input_shape, -1, d).transpose(1, 2)
         value_states = v.view(*input_shape, -1, d).transpose(1, 2)
 
         if past_key_values is not None:
@@ -385,7 +389,7 @@ _UNFUSED_ATTN_CHILDREN = frozenset(
     {"q_proj", "k_proj", "v_proj", "o_proj", "q_norm", "k_norm"})
 
 
-def _patch_attention_unfused(mod, rope_norm_heads) -> bool:
+def _patch_attention_unfused(mod, rope_norm_heads, rope_norm_qk=None) -> bool:
     """The same norm + rotary fold for the STANDARD separate-projection
     attention (Qwen3-MoE-shaped: q/k/v/o projections plus per-head q/k
     norms), which is what every family runs under the calibrated int4
@@ -427,7 +431,7 @@ def _patch_attention_unfused(mod, rope_norm_heads) -> bool:
 
     def _fwd(hidden_states, position_embeddings=None,
              attention_mask=None, past_key_values=None, _m=mod,
-             _qn=qn, _kn=kn, _qe=qe, _ke=ke, _orig=orig, _d=d, **kwargs):
+             _qn=qn, _kn=kn, _qe=qe, _ke=ke, _orig=orig, _d=d, _qk=rope_norm_qk, **kwargs):
         rows = hidden_states.numel() // hidden_states.shape[-1]
         if (position_embeddings is None
                 or hidden_states.dtype != torch.bfloat16
@@ -454,12 +458,14 @@ def _patch_attention_unfused(mod, rope_norm_heads) -> bool:
                          position_embeddings=position_embeddings,
                          attention_mask=attention_mask,
                          past_key_values=past_key_values, **kwargs)
-        query_states = rope_norm_heads(
-            q.reshape(rows, -1, _d), _qn.weight, cos2, sin2, _qe
-        ).reshape(*input_shape, -1, _d).transpose(1, 2)
-        key_states = rope_norm_heads(
-            k.reshape(rows, -1, _d), _kn.weight, cos2, sin2, _ke
-        ).reshape(*input_shape, -1, _d).transpose(1, 2)
+        if _qk is not None:             # q's and k's heads in one launch (grouped-nf4-gemm#528)
+            qo, ko = _qk(q.reshape(rows, -1, _d), k.reshape(rows, -1, _d), _qn.weight, _kn.weight, cos2, sin2, _qe,
+                         _ke)
+        else:
+            qo = rope_norm_heads(q.reshape(rows, -1, _d), _qn.weight, cos2, sin2, _qe)
+            ko = rope_norm_heads(k.reshape(rows, -1, _d), _kn.weight, cos2, sin2, _ke)
+        query_states = qo.reshape(*input_shape, -1, _d).transpose(1, 2)
+        key_states = ko.reshape(*input_shape, -1, _d).transpose(1, 2)
         value_states = v.view(*input_shape, -1, _d).transpose(1, 2)
 
         if past_key_values is not None:
@@ -608,8 +614,9 @@ def fuse_t1_glue_r2(model, mode: str | None = None, report: dict | None = None) 
                 else:
                     layers += bool(_patch_layer_scaled(mod, scale, int4_b32))
             elif name.endswith("Attention"):
-                attns += bool(_patch_attention(mod, rope_norm_heads)
-                              or _patch_attention_unfused(mod, rope_norm_heads)
+                qk = getattr(int4_b32, "rope_norm_qk", None)
+                attns += bool(_patch_attention(mod, rope_norm_heads, qk)
+                              or _patch_attention_unfused(mod, rope_norm_heads, qk)
                               or _patch_attention_rope_only(mod, int4_b32))
         except _KernelGap:
             if mode == "1":
