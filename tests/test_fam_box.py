@@ -195,10 +195,9 @@ def test_the_census_per_knob_on_other_families(monkeypatch, family):
                                                "rope_heads": 4, "router_epilogue": 2})}
     else:
         pytest.importorskip("transformers.models.qwen3_5_moe", reason="needs transformers with Qwen3.5-MoE")
-        monkeypatch.setitem(sys.modules, "causal_conv1d", None)
-        monkeypatch.setitem(sys.modules, "fla", None)
-        from transformers.models.qwen3_5_moe import modeling_qwen3_5_moe as m
+        from hybrid_reference import reference_modeling
         from transformers.models.qwen3_5_moe.configuration_qwen3_5_moe import Qwen3_5MoeTextConfig
+        m = reference_modeling("qwen3_5_moe")
 
         def build():
             cfg = Qwen3_5MoeTextConfig(vocab_size=256, hidden_size=128, num_hidden_layers=4, num_attention_heads=4,

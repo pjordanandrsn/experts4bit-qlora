@@ -44,13 +44,12 @@ def _load(name, lane):
 
 
 @pytest.fixture
-def hybrid(monkeypatch):
+def hybrid():
     """Builds a tiny Qwen3.6-shaped hybrid (three linear layers to one attention layer, by default), seeded, with paged
     attention bound: the same weights on every call."""
-    monkeypatch.setitem(sys.modules, "causal_conv1d", None)     # CUDA-only kernels: the reference path on CPU,
-    monkeypatch.setitem(sys.modules, "fla", None)               # bound when the modeling module is first imported
+    from hybrid_reference import reference_modeling
     from transformers import Qwen3_5MoeTextConfig
-    from transformers.models.qwen3_5_moe import modeling_qwen3_5_moe as q35
+    q35 = reference_modeling("qwen3_5_moe")
 
     from experts4bit_qlora.engines import paged_attention
 
