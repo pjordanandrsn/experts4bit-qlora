@@ -180,7 +180,10 @@ def verify(manifest):
             if not origin or origin.startswith("<"):
                 continue
             path = Path(origin).absolute()
-            if path in (Path(__file__).absolute(), Path(helper.__file__).absolute()):
+            # One adjacent tool implements the same-process continuation;
+            # no manifest may add arbitrary caller modules to this exception.
+            if path in (Path(__file__).absolute(), Path(helper.__file__).absolute(),
+                        Path(__file__).absolute().with_name("ra_handoff.py")):
                 continue
             require((path in hashes and owned[path] not in helper.RELEASES.values()) or
                     (path.resolve().is_relative_to(stdlib) and "site-packages" not in path.parts),
