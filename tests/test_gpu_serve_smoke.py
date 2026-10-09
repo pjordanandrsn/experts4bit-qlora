@@ -61,7 +61,7 @@ def test_worker_preserves_the_real_exception(tmp_path, monkeypatch):
     monkeypatch.setattr(smoke, "run_cell", fail)
     monkeypatch.setattr(smoke, "source_identity", lambda: {})
     args = type("Args", (), dict(family="qwen3_moe", stack="default", output_dir=str(tmp_path),
-                                 result=str(tmp_path / "result.json")))()
+                                 result=str(tmp_path / "result.json"), int4_source="offline-hub"))()
     assert smoke.worker(args) == 1
     row = json.loads((tmp_path / "result.json").read_text())
     assert row["status"] == "FAIL" and "unexpected keyword argument 'residual'" in row["exception"]
@@ -109,3 +109,16 @@ def test_kernel_digest_tracks_imported_source_and_native_c_without_metadata(tmp_
     assert second["imported_source_sha256"] != first["imported_source_sha256"]
     c.write_text("changed native source\n")
     assert smoke.imported_kernel_sources({kernels}, native)["imported_source_sha256"] != second["imported_source_sha256"]
+
+
+def test_local_int4_option_reaches_every_isolated_worker(tmp_path, monkeypatch):
+    calls = []
+
+    def run(cmd, **kwargs):
+        calls.append(cmd[cmd.index("--int4-source") + 1])
+        Path(cmd[cmd.index("--result") + 1]).write_text(json.dumps({"status": "PASS"}))
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(smoke.subprocess, "run", run)
+    assert smoke.run_suite(tmp_path, 300, "local") == 0
+    assert calls == ["local"] * len(smoke.CELLS)
