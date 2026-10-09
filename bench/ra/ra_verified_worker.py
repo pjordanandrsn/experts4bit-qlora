@@ -18,6 +18,8 @@ ra_wheel_lock ra_verified_worker'''.split())
 TOOLS = {n + '.py' for n in PYTOOLS} | {'fallback-adapters.json', 'route-adapters.json', 'source-pins.json',
     'startup-audit-adapters.json', 'startup-execution-proposal.json', 'proof-image.json',
     'proof-wheel-lock.json', 'PREREG-ra.md'}
+NATIVE = {'tc1_training': 'training', 'tc1_training_profile': 'training_profile'}
+CURRENT = None  # Only installed by this module during a verified wrapper continuation.
 TARGETS = {'training': 'ra_training.py', 'training_profile': 'ra_training.py',
            'capacity': 'ra_capacity.py', 'decode': 'ra_serving.py', 'quality': 'ra_serving.py'}
 
@@ -62,9 +64,11 @@ def argv(spec):
 
 
 def execute(spec, spec_path, spec_hash, handoff, handoff_path, manifest):
-    require(set(spec) == {'schema', 'phase', 'tools', 'native_spec', 'stage', 'native_out', 'receipt'} and
-            type(spec['schema']) is int and spec['schema'] == 1 and spec['phase'] in TARGETS,
-            'worker spec fields/phase')
+    native_phase = spec.get('phase') in NATIVE
+    fields = {'schema', 'phase', 'tools', 'native_spec', 'stage', 'native_out', 'receipt'}
+    require(set(spec) == fields | ({'handoff_manifest'} if native_phase else set()) and
+            type(spec['schema']) is int and spec['schema'] == (2 if native_phase else 1) and
+            spec['phase'] in (NATIVE if native_phase else TARGETS), 'worker spec fields/phase')
     require(handoff['status'] == 'PASSED' and handoff['phase'] == 'COMPLETE' and
             handoff['payload']['proves_installed_payload'] and handoff['proves_requested_release_imports'],
             'completed same-process handoff required')
@@ -102,7 +106,11 @@ def execute(spec, spec_path, spec_hash, handoff, handoff_path, manifest):
         ra_env = importlib.import_module('ra_env')
         staged = ra_stage.verify(stage)
         require(digest(stage / 'source-pins.json') == spec['tools']['source-pins.json'], 'worker registered source pins')
-        ra_env.check_current(spec['phase'], os.environ)
+        ra_env.check_current(NATIVE.get(spec['phase'], spec['phase']), os.environ)
+        if native_phase:
+            pin = spec['handoff_manifest']
+            require(set(pin) == {'path', 'sha256'} and digest(pin['path']) == pin['sha256'] and
+                    json.loads(regular(pin['path']).read_bytes()) == manifest, 'nested handoff manifest binding')
         pre = importlib.import_module('ra_handoff').load_prestartup()
         helper = pre.load_provenance()
         sites = {Path(sysconfig.get_path(k, vars={'base': handoff['payload']['venv'],
@@ -131,19 +139,51 @@ def execute(spec, spec_path, spec_hash, handoff, handoff_path, manifest):
         record.update(phase='WORKER', tools_sha256=hashlib.sha256(
             json.dumps(spec['tools'], sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
             nested_workers_verified=False)
-        sys.argv = argv(spec)
+        global CURRENT
+        require(CURRENT is None, 'recursive in-process worker context')
+        if native_phase:
+            training = importlib.import_module('ra_training')
+            native_spec = json.loads(native.read_bytes())
+            generated, _, _ = training.command(native_spec, stage, output,
+                                                profile=spec['phase'] == 'tc1_training_profile')
+            require(Path(generated[0]).resolve() == executable, 'nested selected interpreter')
+            require('tc1_arm.py' in staged['files'] and staged['files']['tc1_arm.py']['registered'],
+                    'nested TC1 frozen instrument required')
+            output.mkdir()
+            (output / 'native').mkdir()
+            (output / 'adapters').mkdir()
+            sys.path.insert(0, str(stage))
+            sys.argv = generated[2:]
+        else:
+            sys.argv = argv(spec)
+            CURRENT = {'spec': spec, 'spec_path': str(spec_path), 'spec_hash': spec_hash,
+                       'manifest': manifest, 'handoff': handoff, 'handoff_path': str(handoff_path)}
         try:
             try:
                 runpy.run_path(sys.argv[0], run_name='__main__')
             except SystemExit as error:
                 require(error.code is None or type(error.code) is int and error.code == 0, 'worker nonzero SystemExit')
         finally:
+            CURRENT = None
             sys.argv = old_argv
+        if native_phase:
+            for key in ('data', 'tokens', 'prereg'):
+                training.ra_process.check_input(native_spec[key])
+            fam, _ = training.MODEL[native_spec['battery']]
+            component = NATIVE[spec['phase']]
+            native_result = output / 'native' / (fam + '_e4b_' + component + '.json')
+            training.check_native(json.loads(native_result.read_bytes()), native_spec,
+                json.loads((stage / 'source-pins.json').read_bytes()), profile=component == 'training_profile')
+            record.update(native_receipt_sha256=digest(native_result), fixed_argv_sha256=hashlib.sha256(
+                json.dumps(generated, separators=(',', ':')).encode()).hexdigest())
         record['phase'] = 'POST_WORKER'
         check_tools(spec['tools'])
         require(digest(spec_path) == spec_hash and digest(native) == spec['native_spec']['sha256'],
                 'worker spec/native bytes changed')
         ra_stage.verify(stage)
+        if native_phase:
+            require(digest(spec['handoff_manifest']['path']) == spec['handoff_manifest']['sha256'],
+                    'nested handoff manifest changed')
         require(output.exists(), 'worker native output missing')
         require(digest(handoff_path) == record['handoff_sha256'] and
                 digest(image) == manifest['payload']['image_sha256'], 'worker bootstrap evidence changed')
@@ -168,3 +208,50 @@ def execute(spec, spec_path, spec_hash, handoff, handoff_path, manifest):
         with receipt.open('x') as stream:
             stream.write(json.dumps(record, sort_keys=True, indent=2) + '\n')
     return record
+
+
+def tc1_child(spec, stage, out, *, profile):
+    """Derive a fresh frozen child from the live verified wrapper, never a command."""
+    require(CURRENT is not None, 'verified TC1 parent context required')
+    parent = CURRENT['spec']
+    component = 'training_profile' if profile else 'training'
+    require(parent['phase'] == component and parent['native_out'] == str(out) and
+            parent['stage']['path'] == str(stage) and
+            json.loads(regular(parent['native_spec']['path']).read_bytes()) == spec and
+            digest(CURRENT['spec_path']) == CURRENT['spec_hash'], 'nested TC1 parent binding')
+    check_tools(parent['tools'])
+    mp = out / 'child-handoff-spec.json'
+    wp = out / 'child-worker-spec.json'
+    hp = out / 'child-handoff.json'
+    rp = out / 'child-worker.json'
+    target = out / 'frozen'
+    with mp.open('x') as stream:
+        stream.write(json.dumps(CURRENT['manifest'], sort_keys=True, indent=2) + '\n')
+    child = {'schema': 2, 'phase': 'tc1_' + component, 'tools': dict(parent['tools']),
+             'native_spec': dict(parent['native_spec']), 'stage': dict(parent['stage']),
+             'native_out': str(target), 'receipt': str(rp),
+             'handoff_manifest': {'path': str(mp), 'sha256': digest(mp)}}
+    with wp.open('x') as stream:
+        stream.write(json.dumps(child, sort_keys=True, indent=2) + '\n')
+    command = [str(Path(sys.executable)), '-I', '-S', '-B', str(HERE / 'ra_handoff.py'),
+               '--manifest', str(mp), '--out', str(hp), '--worker-spec', str(wp), '--worker-sha256', digest(wp)]
+    return command, target, {'manifest': child['handoff_manifest'],
+        'worker_spec': {'path': str(wp), 'sha256': digest(wp)}, 'handoff_receipt': str(hp), 'worker_receipt': str(rp)}
+
+
+def check_tc1_child(binding, process, *, profile):
+    """Do not promote exit zero without its independently joined child receipts."""
+    for name in ('manifest', 'worker_spec'):
+        require(digest(binding[name]['path']) == binding[name]['sha256'], 'nested TC1 input changed')
+    handoff = json.loads(regular(binding['handoff_receipt']).read_bytes())
+    record = json.loads(regular(binding['worker_receipt']).read_bytes())
+    require(process['status'] == 'OK' and process.get('cleanup_complete') and
+            record['status'] == 'WORKER_RETURNED_PENDING_GATES' and record['phase'] == 'COMPLETE' and
+            record['worker_phase'] == ('tc1_training_profile' if profile else 'tc1_training') and
+            record['pid'] == process['pid'] and record['spec_sha256'] == binding['worker_spec']['sha256'] and
+            record['handoff_sha256'] == digest(binding['handoff_receipt']) and
+            handoff['status'] == 'PASSED' and handoff['manifest_sha256'] == binding['manifest']['sha256'] and
+            record['handoff_evidence'] == handoff, 'nested TC1 startup receipt join')
+    return {'status': 'VERIFIED_TC1_CHILD_STARTUP_PENDING_ENGAGEMENT', 'worker_sha256': digest(binding['worker_receipt']),
+            'handoff_sha256': digest(binding['handoff_receipt']), 'pid': process['pid'],
+            'proves_gpu_engagement': False, 'release_cleared': False}
