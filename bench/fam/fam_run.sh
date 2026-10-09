@@ -51,7 +51,8 @@ else
     granite) NEED_FETCH=900;  NEED_BAKE=600; NEED_OFF=6300; NEED_ON=1100; CAP_OFF=7200;  CAP_ON=1800;;
     gptoss)  NEED_FETCH=1200; NEED_BAKE=900; NEED_OFF=6300; NEED_ON=1100; CAP_OFF=7200;  CAP_ON=1800;;
     qw36)    NEED_FETCH=2400; NEED_BAKE=900; NEED_OFF=9500; NEED_ON=1600; CAP_OFF=10800; CAP_ON=2700;;
-    mixtral) NEED_FETCH=3000; NEED_BAKE=1500; NEED_OFF=9500; NEED_ON=1600; CAP_OFF=10800; CAP_ON=2700;;
+    # Amendment 8: Mixtral's reading at fam-mixtral-prove-2's times x Granite's proof-to-reading ratios, x0.80 added
+    mixtral) NEED_FETCH=3000; NEED_BAKE=1500; NEED_OFF=10800; NEED_ON=2000; CAP_OFF=12600; CAP_ON=2700;;
     gemma4)  NEED_FETCH=2400; NEED_BAKE=900;  NEED_OFF=9500; NEED_ON=1600; CAP_OFF=10800; CAP_ON=2700;;
     *) say "refusing: FAM_FAMILY must be granite, gptoss, qw36, mixtral or gemma4 (got '${FAMILY}')"; finish 78;;
   esac
@@ -175,6 +176,8 @@ configs_of(){ case $1 in gptoss|mixtral) echo "OFF ON_glue ON_r2 ON_epi ON_auto"
 # NF4 weights take about 26.8 GiB of the 31.4, so its server pool is sized to the instrument: 16 slots of 768 tokens
 # (>= the 512-token prompt + 128 positions + 16), 0.77 GiB instead of the default 4096 tokens' 4.12 GiB.
 build_env_of(){ case $1 in mixtral) echo "E4B_PAGED_MAX_TOKENS_PER_SEQ=768";; esac; }
+# Amendment 8: Mixtral's gating rungs, x0.90 then x0.80, on every set
+gating_of(){ case $1 in mixtral) echo "--gating mut090,mut080";; esac; }
 # each config's four knobs, named explicitly (fam_box.CONFIGS; the box refuses anything else)
 knobs_of(){ local q=0 g=0 r=0 e=0
   case $1 in ON_glue) g=auto;; ON_r2) r=auto;; ON_epi) e=auto;; ON_auto) q=auto; g=auto; r=auto; e=auto;; esac
@@ -189,7 +192,7 @@ box(){ # tag config path out ref [extra args]
   local al; al=$(step_alarm $cap); say "$tag $config $path (alarm=$al)"
   # shellcheck disable=SC2086  # assignment lists by design
   env PYTHONPATH= $ENGINE_ENV $(knobs_of $config) $env_path E4B_PAGED_GRAPHS=0 E4B_PAGED_MAX_SEQS=16 $(build_env_of $tag) E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA \
-    perl -e "alarm $al; exec @ARGV" python $W/fam_box.py --config $config --path $path --out $W/$out --ref-root $ref --cont $CONT "$@" \
+    perl -e "alarm $al; exec @ARGV" python $W/fam_box.py --config $config --path $path --out $W/$out --ref-root $ref --cont $CONT $(gating_of $tag) "$@" \
     > logs/${out%.json}.log 2>&1
   local rc=$?
   { echo -n "$tag $config $path rc=$rc "; grep -aE "^FAM_BOX" logs/${out%.json}.log | tail -1 | cut -c1-400; echo; } | tee -a summary.txt
