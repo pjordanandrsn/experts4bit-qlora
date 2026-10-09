@@ -50,7 +50,8 @@ def test_real_lfm2_tree_census_counts_attention_layers_only():
                            num_attention_heads=4, num_key_value_heads=2, num_experts=8, num_experts_per_tok=2,
                            num_dense_layers=1, layer_types=["conv", "full_attention", "conv", "full_attention"],
                            max_position_embeddings=64)
-    m = tr.Lfm2MoeForCausalLM(cfg)
+    from hybrid_reference import reference_modeling
+    m = reference_modeling("lfm2_moe").Lfm2MoeForCausalLM(cfg)
     assert detect_attention_projections(m, exact_linear=True).expected_count == 2 * 4
 
 
