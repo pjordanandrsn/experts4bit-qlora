@@ -2894,6 +2894,10 @@ def _family(name: str) -> str:
     return "other"
 
 
+#: The kernel-launch API calls a profiled step makes (P129 Amendment 2's recount; P128's census counted the same four names).
+LAUNCH_API_NAMES = ("cudaLaunchKernel", "cuLaunchKernel", "cuLaunchKernelEx", "cudaLaunchKernelExC")
+
+
 def summarize_profile(prof, wall_s: float, n_steps: int, out_path: str) -> dict:
     """The census P45 registers: device-busy fraction (sum of device-side self time over the profiled steps' wall --
     overlapping streams can push it past 1.0 and that is reported, not clipped), device events (launches + memcpys)
@@ -2902,7 +2906,7 @@ def summarize_profile(prof, wall_s: float, n_steps: int, out_path: str) -> dict:
     profiled steps simply carry the profiler's overhead and are flagged in the receipt."""
     from torch.autograd import DeviceType
     ka = prof.key_averages()
-    dev_ms = 0.0; memcpy_ms = 0.0; n_dev = 0; n_cpu = 0; cpu_ms = 0.0
+    dev_ms = 0.0; memcpy_ms = 0.0; n_dev = 0; n_cpu = 0; cpu_ms = 0.0; n_launch = 0
     by_fam_cpu, by_fam_dev = {}, {}
     rows = []
     for e in ka:
@@ -2920,6 +2924,8 @@ def summarize_profile(prof, wall_s: float, n_steps: int, out_path: str) -> dict:
         else:
             n_cpu += cnt; cpu_ms += cpu_self
             by_fam_cpu[fam] = by_fam_cpu.get(fam, 0.0) + cpu_self
+            if name in LAUNCH_API_NAMES:
+                n_launch += cnt
         rows.append({"name": name[:120], "family": fam, "device": bool(is_dev), "count": cnt,
                      "self_cpu_ms": round(cpu_self, 3), "self_device_ms": round(dev_self, 3)})
     wall_ms = wall_s * 1e3
@@ -2928,6 +2934,7 @@ def summarize_profile(prof, wall_s: float, n_steps: int, out_path: str) -> dict:
         "device_ms": round(dev_ms, 1), "device_busy_fraction": round(dev_ms / wall_ms, 4) if wall_ms else None,
         "memcpy_ms": round(memcpy_ms, 1), "memcpy_fraction_of_device": round(memcpy_ms / dev_ms, 4) if dev_ms else None,
         "device_events_per_step": round(n_dev / max(n_steps, 1)), "cpu_ops_per_step": round(n_cpu / max(n_steps, 1)),
+        "launches_per_step": round(n_launch / max(n_steps, 1)),                         # P129 Amendment 2's recount (the launch APIs)
         "cpu_self_ms": round(cpu_ms, 1), "cpu_self_fraction_of_wall": round(cpu_ms / wall_ms, 4) if wall_ms else None,
         "cpu_self_by_family_fraction": {k: round(v / cpu_ms, 4) for k, v in sorted(by_fam_cpu.items(), key=lambda kv: -kv[1])} if cpu_ms else {},
         "device_by_family_fraction": {k: round(v / dev_ms, 4) for k, v in sorted(by_fam_dev.items(), key=lambda kv: -kv[1])} if dev_ms else {},
@@ -3987,6 +3994,14 @@ def run_arm(a, load_fn, sampler=True):
                              "rows_single": int((_sl or {}).get("rows_single", 0))}
         except Exception:
             single_ladder = {"env": os.environ.get("NF4_QLORA_SINGLE_LADDER"), "gnf4_has_single_ladder": False}
+    train_qkv = None                                   # P129 Amendment 2: e4b's fused q/k/v training projection (E4B_TRAIN_FUSE_QKV): fused, refused, calls
+    if a.framework == "e4b":
+        try:
+            from experts4bit_qlora.engines import train_qkv_fuse as _tq
+            train_qkv = {"env": os.environ.get("E4B_TRAIN_FUSE_QKV"), "e4b_has_train_qkv": True, "fused": int(_tq.TRAIN_QKV_STATS["fused"]),
+                         "refused": len(_tq.TRAIN_QKV_STATS["refused"]), "calls": int(_tq.TRAIN_QKV_STATS["calls"])}
+        except Exception:
+            train_qkv = {"env": os.environ.get("E4B_TRAIN_FUSE_QKV"), "e4b_has_train_qkv": False}
     route_ab = None                                    # TC1c amendment 4: which training GEMM route grouped-nf4-gemm took (GNF4_TRAIN_GEMM), and how often
     if a.framework == "e4b":
         try:
@@ -4071,6 +4086,7 @@ def run_arm(a, load_fn, sampler=True):
         "combine_chunk": combine_chunk,                                                                                  # TC1 amendment 61
         "compact_buckets": compact_buckets,                                                                              # TC1 amendment 66
         "single_ladder": single_ladder,                                                                                  # TC1 amendment 70
+        "train_qkv": train_qkv,                                                                                          # P129 Amendment 2
         "keep_ab": keep_ab,                                                                                              # TC1 amendment 21 (#945)
         "route_ab": route_ab,                                                                                            # TC1c amendment 4
         **({"mem_census": mem_census} if mcen is not None else {}),                                                    # TC1 amendment 23 (only with --mem-census 1)

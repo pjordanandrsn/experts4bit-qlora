@@ -1149,6 +1149,27 @@ SLAUTO_BMM_CPU_MAX = 0.5          # P217: aten::bmm CPU self per call la / l0, m
 SLAUTO_M_DEVICE_MAX = 1.06        # P218: matched device ms per profiled step la / l0 at most this; shipped inside SLAUTO_SHIPPED_BAND
 SLAUTO_STEP0_MAX = 0.0005         # P219: |step-0 held-out la - l0| per draw pair, each arm
 SLAUTO_HELDOUT_MAX = 0.005        # P219: |mean held-out at N, la - l0|, each arm
+# P129 Amendment 2: e4b's fused q/k/v training projection (E4B_TRAIN_FUSE_QKV) 0 (q0) vs 1 (q1) at TC1's field recipe, the shipped and the
+# matched arm, two draws a side in ABBA order, every arm profiled; e4b against itself
+FQKV_FAM = "qwen3fqkv"
+FAMS.append(FQKV_FAM)
+NAMES[FQKV_FAM] = "Qwen3-30B-A3B (P129 Amendment 2: E4B_TRAIN_FUSE_QKV 0 vs 1 at the field recipe, shipped and matched arms; profiled)"
+N_LAYERS[FQKV_FAM] = 48
+ATTN_CENSUS[FQKV_FAM] = 192
+DENSE_PINS[FQKV_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[FQKV_FAM] = ("e4b", "fused_attn4_m_q0")
+EXPECTED[FQKV_FAM] = [("e4b", "fused_attn4_shipped_q0"), ("e4b", "fused_attn4_shipped_q1"), ("e4b", "fused_attn4_m_q0"), ("e4b", "fused_attn4_m_q1"),
+                      ("e4b", "fused_attn4_m_q1_d2"), ("e4b", "fused_attn4_m_q0_d2"), ("e4b", "fused_attn4_shipped_q1_d2"), ("e4b", "fused_attn4_shipped_q0_d2")]
+MATCHED |= {"fused_attn4_m_q0", "fused_attn4_m_q1", "fused_attn4_m_q0_d2", "fused_attn4_m_q1_d2"}
+for _t in ("fused_attn4_m", "fused_attn4_shipped"):
+    for _side in ("q0", "q1"):
+        DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
+FQKV_PHASE1_CUT = 110 / 785       # P129 Phase 1 (re-read): launches per step 785 -> 675 on the A2000's two-layer model
+FQKV_RECOUNT_FRAC = 0.8           # the recount gate: each arm's launch cut at least this share of Phase 1's relative cut
+FQKV_PREMISE_BUSY_MAX = 0.85      # the premise gate: the matched q0's busy_t (median of its draws) at most this
+FQKV_WALL_MAX = 0.98              # GAIN: s/step q1 / q0 at most this on both arms (NO_GAIN above it on either)
+FQKV_STEP0_MAX = 0.0005           # quality: |step-0 held-out q1 - q0| per draw pair, each arm
+FQKV_HELDOUT_MAX = 0.005          # quality: |mean held-out at N, q1 - q0|, each arm (TC1's held-out bar)
 # TC1 amendment 59: the same switch at TC1's field recipe (seq 2048, micro-batch 2), the shipped and the matched arm, before any default
 # (not packed: TC1's no-loop rule applies as written, as on amendments 49 and 50)
 CKPTOFFF_FAM = "qwen3ckptofff"
@@ -2635,6 +2656,114 @@ def score_slauto(F, fam=SLAUTO_FAM):
     return out
 
 
+def fqkv_side(tag):
+    """P129 Amendment 2: (arm, side) of a qwen3fqkv e4b tag, e.g. ("m", "q1") for fused_attn4_m_q1_d2."""
+    m = re.match(r"^fused_attn4_(m|shipped)_(q[01])(?:_d2)?$", tag or "")
+    return (m.group(1), m.group(2)) if m else (None, None)
+
+
+def fqkv_why(tag, r):
+    """P129 Amendment 2's predicates: torch 2.12; e4b's field defaults (the double-quantized absmax, the reentrant checkpoint on all 48
+    layers, E4B_CKPT_OFFLOAD unset); the setting the side names: q1 E4B_TRAIN_FUSE_QKV=1 with all 48 attention modules fused, none refused
+    and fused calls recorded; q0 set to 0 with none fused, on the same build (the module present); a profile with its launch count. Empty
+    string = as registered."""
+    r = r or {}
+    bad = []
+    tv = str((r.get("env") or {}).get("torch") or "")
+    if not tv.startswith("2.12"):
+        bad.append(f"env.torch {tv or 'missing'} is not 2.12*")
+    arm, side = fqkv_side(tag)
+    if side is None:
+        return f"P129 Amendment 2 registers no e4b side for tag {tag}"
+    if r.get("absmax_dq") is not True:
+        bad.append(f"absmax_dq {r.get('absmax_dq')!r}: e4b's default is the double-quantized absmax")
+    ck = (r.get("ckpt_offload_layers"), r.get("ckpt_offload_env") or None, r.get("ckpt_offload_funcs"))
+    if ck != (48, None, ["reentrant_checkpoint"]):
+        bad.append(f"checkpoint {ck!r}: e4b's default is the reentrant checkpoint on all 48 layers, E4B_CKPT_OFFLOAD unset")
+    tq = r.get("train_qkv") or {}
+    env, n, ref, calls = str(tq.get("env")), int(tq.get("fused") or 0), int(tq.get("refused") or 0), int(tq.get("calls") or 0)
+    if side == "q1" and not (tq.get("e4b_has_train_qkv") and env == "1" and n == 48 and ref == 0 and calls > 0):
+        bad.append(f"the fused q/k/v projection did not serve q1 on all 48 attention modules (record {tq})")
+    if side == "q0" and not (tq.get("e4b_has_train_qkv") and env == "0" and n == 0):
+        bad.append(f"E4B_TRAIN_FUSE_QKV={env!r} with {n} fused modules: q0 names 0 and none, on a build that has the module (record {tq})")
+    pr = r.get("profile") or {}
+    if not (_cbk_device_ms(r) and pr.get("launches_per_step")):
+        bad.append("no profile with launches_per_step on the receipt: P129 Amendment 2 profiles every arm (the recount gate reads it)")
+    return "; ".join(bad)
+
+
+def score_fqkv(F, fam=FQKV_FAM):
+    """P129 Amendment 2 (two VALID draws a side, medians), as rows and then one verdict row ("FQKV", the first rung that applies):
+    VOID (the recount gate: each arm's launch cut below FQKV_RECOUNT_FRAC of Phase 1's relative cut; or the premise gate: the matched q0's
+    busy_t above FQKV_PREMISE_BUSY_MAX; or draws missing) / NOISY (a side's two draws more than 5 % apart) / QUALITY_FAIL (held-out off its
+    bars) / NO_GAIN (wall q1 / q0 above FQKV_WALL_MAX on either arm) / GAIN. The device ratio and the peak are reported beside them."""
+    R = F.get(fam)
+    if not R:
+        return []
+    rows = {(x["fw"], x["tag"]): x for x in R["rows"]}
+    def side_rows(arm, sd):
+        rs = [(rows.get(("e4b", f"fused_attn4_{arm}_{sd}{sfx}")) or {}) for sfx in ("", "_d2")]
+        return all(x.get("verdict") == "VALID" for x in rs), [x.get("r") or {} for x in rs]
+    def med(arm, sd, fn):
+        ok, rs = side_rows(arm, sd)
+        v = [fn(x) for x in rs] if ok else [None]
+        return None if None in v else statistics.median(v)
+    launches = lambda r: (r.get("profile") or {}).get("launches_per_step")
+    out, rung = [], None
+    for arm in ("m", "shipped"):
+        l0, l1 = med(arm, "q0", launches), med(arm, "q1", launches)
+        if l0 is None or l1 is None:
+            out.append((f"R_{arm}", fam, "UNTESTED", "two VALID profiled draws a side are registered"))
+            rung = rung or "VOID"
+            continue
+        cut = (l0 - l1) / l0
+        ok = cut >= FQKV_RECOUNT_FRAC * FQKV_PHASE1_CUT
+        out.append((f"R_{arm}", fam, "HELD" if ok else "FALSIFIED",
+                    f"launches per profiled step {l0:.0f} -> {l1:.0f} = -{100 * cut:.1f} % vs >= {100 * FQKV_RECOUNT_FRAC * FQKV_PHASE1_CUT:.1f} % "
+                    f"({FQKV_RECOUNT_FRAC} of Phase 1's {100 * FQKV_PHASE1_CUT:.1f} %)"))
+        rung = rung or (None if ok else "VOID")
+    busy = med("m", "q0", _busy_vs_timed)
+    prem = busy is not None and busy <= FQKV_PREMISE_BUSY_MAX
+    out.append(("PREMISE", fam, "HELD" if prem else ("UNTESTED" if busy is None else "FALSIFIED"),
+                f"matched q0 busy_t {busy if busy is None else round(busy, 3)} vs <= {FQKV_PREMISE_BUSY_MAX}"))
+    rung = rung or (None if prem else "VOID")
+    walls = {}
+    for arm in ("m", "shipped"):
+        D = {sd: R["draws"].get(("e4b", f"fused_attn4_{arm}_{sd}"), {}) for sd in ("q0", "q1")}
+        p = _ckptre_ratio(D, "q1", "q0", f"W_{arm}", fam, lambda x: x <= FQKV_WALL_MAX, f"<= {FQKV_WALL_MAX}")
+        out.append(p)
+        if p[2] == "UNTESTED":
+            rung = rung or ("NOISY" if "UNSTABLE" in p[3] or "stable" in p[3] else "VOID")
+        walls[arm] = p[2]
+    legs = []
+    for arm in ("m", "shipped"):
+        d0, d1 = med(arm, "q0", _cbk_device_ms), med(arm, "q1", _cbk_device_ms)
+        p0, p1 = med(arm, "q0", lambda r: r.get("peak_vram_gb")), med(arm, "q1", lambda r: r.get("peak_vram_gb"))
+        legs.append(f"{arm}: device {d0 if d0 is None else round(d0, 1)} -> {d1 if d1 is None else round(d1, 1)} ms"
+                    + (f" = {d1 / d0:.3f}" if d0 and d1 else "") + f", peak {p0} -> {p1} GB")
+    out.append(("DEVICE", fam, "REPORTED", "; ".join(legs)))
+    qlegs, qbad = [], False
+    for arm in ("m", "shipped"):
+        o0, r0 = side_rows(arm, "q0")
+        o1, r1 = side_rows(arm, "q1")
+        s0 = [(a.get("eval_loss_step0"), b.get("eval_loss_step0")) for a, b in zip(r0, r1)]
+        h0, h1 = [x.get("eval_loss_final") for x in r0], [x.get("eval_loss_final") for x in r1]
+        if not (o0 and o1) or any(a is None or b is None for a, b in s0) or None in h0 + h1:
+            qlegs.append(f"{arm}: held-out missing")
+            continue
+        ds = [b - a for a, b in s0]
+        dn = statistics.mean(h1) - statistics.mean(h0)
+        qbad = qbad or not (all(abs(x) <= FQKV_STEP0_MAX for x in ds) and abs(dn) <= FQKV_HELDOUT_MAX)
+        qlegs.append(f"{arm}: step 0 " + ", ".join(f"{x:+.5f}" for x in ds) + f"; N {dn:+.5f}")
+    out.append(("QUALITY", fam, "FALSIFIED" if qbad else "HELD", "; ".join(qlegs) + f" (step 0 |.| <= {FQKV_STEP0_MAX}, N |.| <= {FQKV_HELDOUT_MAX})"))
+    if rung is None and qbad:
+        rung = "QUALITY_FAIL"
+    if rung is None:
+        rung = "GAIN" if all(v == "HELD" for v in walls.values()) else "NO_GAIN"
+    out.append(("FQKV", fam, rung, "the first rung that applies: VOID / NOISY / QUALITY_FAIL / NO_GAIN / GAIN (DEFAULT_ON needs a second host)"))
+    return out
+
+
 def score_sladder(F, fam=SLADDER_FAM):
     """TC1-PREREG amendment 70 (two VALID draws a side, medians). P210 (matched) / P211 (shipped): s/step l1 / l0 <= SLADDER_SPEED_MAX, read
     only when the matched l0's busy_t <= SLADDER_PREMISE_BUSY_MAX (a host-bound box), else UNTESTED. P212: aten::bmm CPU self ms per call
@@ -3783,6 +3912,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == SLAUTO_FAM:                              # amendment 71: amendment 70's predicates and the setting its side names
         w = slauto_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == FQKV_FAM:                                # P129 Amendment 2: e4b's field defaults, the fused q/k/v its side names, a profile
+        w = fqkv_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if fam == CKPTOFF_FAM:                             # amendment 58: torch 2.12; on e4b its defaults and the checkpoint its side names
@@ -6796,6 +6929,19 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_slauto(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if FQKV_FAM in F:
+        out += ["\n## P129 Amendment 2: E4B_TRAIN_FUSE_QKV 0 vs 1 at the field recipe (descriptive)",
+                "| arm | VERDICT | s/step (11..N) | device ms / profiled step | busy_t | launches / profiled step | fused modules | peak GB | held-out 0 / N |",
+                "|---|---|---|---|---|---|---|---|---|"]
+        for x in F[FQKV_FAM]["rows"]:
+            r = x.get("r") or {}
+            out.append(f"| {x['fw']}/{x['tag']} | {x['verdict']} | {f(r.get('s_per_step_median_11plus'), 3)} | {f(_cbk_device_ms(r), 1)} | "
+                       f"{f(_busy_vs_timed(r), 3)} | {(r.get('profile') or {}).get('launches_per_step')} | {(r.get('train_qkv') or {}).get('fused')} | "
+                       f"{f(r.get('peak_vram_gb'), 3)} | {r.get('eval_loss_step0')} / {r.get('eval_loss_final')} |")
+        out += ["\n## P129 Amendment 2's gates and verdict (scored mechanically)",
+                "| row | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_fqkv(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if CKPTOFFF_FAM in F:
         out += ["\n## Amendment 59: checkpoint inputs on the GPU vs in pinned host memory at the field recipe, peaks by phase (descriptive)",
                 "| arm | VERDICT | s/step (11..N) | run peak GB | setup | eval | train |", "|---|---|---|---|---|---|---|"]
@@ -8106,6 +8252,28 @@ def _slauto_set(s=None, dev=None, sl=None):
                 r["profile"] = dict(r["profile"], top_cpu=[{"name": "aten::bmm", "count": 9228, "self_cpu_ms": 9228 * 28.0 / 1000.0}])
         if sl and nt in sl:
             r["single_ladder"] = sl[nt]
+        R[(fw, nt)] = r
+    return R
+
+
+def _fqkv_set(s=None, dev=None, launches=None, held=None, tq=None):
+    """P129 Amendment 2: amendment 70's fixture with l0/l1 renamed q0/q1 -- `s` / `dev` as _sladder_set's; `launches` side -> launches per
+    profiled step; `held` side -> held-out at N (both arms); `tq` tag -> the train_qkv record."""
+    launches = dict({"q0": 230000, "q1": 197000}, **(launches or {}))
+    held = dict({"q0": 0.7569, "q1": 0.7571}, **(held or {}))
+    s2 = {(a, {"q0": "l0", "q1": "l1"}[sd]): v for (a, sd), v in (s or {}).items()}
+    d2 = {(a, {"q0": "l0", "q1": "l1"}[sd]): v for (a, sd), v in (dev or {}).items()}
+    base = _sladder_set(s=s2 or None, dev=d2 or None)
+    R = {}
+    for (fw, tag), r in base.items():
+        arm, side = sladder_side(tag)
+        q = {"l0": "q0", "l1": "q1"}[side]
+        nt = tag.replace(f"_{side}", f"_{q}")
+        r = dict(r, tag=nt, fam=FQKV_FAM, eval_loss_final=held[q])
+        r.pop("single_ladder", None)
+        r["train_qkv"] = (tq or {}).get(nt, {"env": "1" if q == "q1" else "0", "e4b_has_train_qkv": True, "fused": 48 if q == "q1" else 0,
+                                             "refused": 0, "calls": 9216 if q == "q1" else 0})
+        r["profile"] = dict(r["profile"], launches_per_step=launches[q])
         R[(fw, nt)] = r
     return R
 
@@ -10646,6 +10814,24 @@ def selftest():
     assert SA(_slauto_set(sl=eng))[SLAUTO_FAM]["verdicts"][("e4b", "fused_attn4_shipped_la")] == "VOID"
     assert psa(SA(_slauto_set(s={("shipped", "l1"): (3.02, 3.03)})))["P216"] == "FALSIFIED"
     assert "P219" in render(RSA, "x") and "amendment 71" in render(RSA, "x")
+    cases += 1
+    # 125. P129 Amendment 2 (qwen3fqkv): E4B_TRAIN_FUSE_QKV 0 vs 1 -- VALID; GAIN on the default host-bound fixture (launches -14.3 %, walls
+    #      0.89 / 0.88); a recount of -5 % is VOID; a GPU-bound q0 is VOID; walls of 0.99 read NO_GAIN; a held-out shift of 0.01 reads
+    #      QUALITY_FAIL; a q1 draw with 47 fused modules is VOID, and so is a q0 draw on a build without the module
+    FQ = lambda R: {FQKV_FAM: reduce_family(FQKV_FAM, R, {}, 20)}
+    RFQ = FQ(_fqkv_set())
+    assert all(x["verdict"] == "VALID" for x in RFQ[FQKV_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RFQ[FQKV_FAM]["rows"]]
+    vfq = lambda R: [v for p, _, v, _ in score_fqkv(R) if p == "FQKV"][0]
+    assert vfq(RFQ) == "GAIN", score_fqkv(RFQ)
+    assert vfq(FQ(_fqkv_set(launches={"q1": 218500}))) == "VOID"
+    assert vfq(FQ(_fqkv_set(dev={("m", "q0"): 3320.0}))) == "VOID"
+    assert vfq(FQ(_fqkv_set(s={("m", "q1"): (3.46, 3.47), ("shipped", "q1"): (2.88, 2.89)}))) == "NO_GAIN"
+    assert vfq(FQ(_fqkv_set(held={"q1": 0.7669}))) == "QUALITY_FAIL"
+    bad = {"fused_attn4_m_q1": {"env": "1", "e4b_has_train_qkv": True, "fused": 47, "refused": 1, "calls": 9000}}
+    assert FQ(_fqkv_set(tq=bad))[FQKV_FAM]["verdicts"][("e4b", "fused_attn4_m_q1")] == "VOID"
+    old = {"fused_attn4_shipped_q0": {"env": "0", "e4b_has_train_qkv": False}}
+    assert FQ(_fqkv_set(tq=old))[FQKV_FAM]["verdicts"][("e4b", "fused_attn4_shipped_q0")] == "VOID"
+    assert "P129 Amendment 2" in render(RFQ, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases

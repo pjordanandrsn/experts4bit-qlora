@@ -222,3 +222,91 @@ The first step's gradients, reported as registered: the worst relative differenc
 
 The fused path's step-1 differences are the size of the micro-batch split's, the floor's own largest. A per-step gradient is not a
 measure any reorder-class change can pass, which is why Amendment 1 does not gate it.
+
+## Amendment 2 (2026-10-09T15:03Z, after Amendment 1's PASS, before any box): Phase 2, the speed A/B at TC1's field recipe
+
+**Why.** Amendment 1 passed: launches −14.0 %, Python calls −12.0 %, and the end-to-end read inside the neutral floor. Phase 2's frame
+(above) set the shape. This amendment fixes the token, the validity, the numbers, the host and the predictions. Random tokens barely
+learn, so Phase 2 also carries TC1's held-out bars on the field recipe, where learning shows.
+
+**The build.** e4b main at launch, with the module merged as opt-in code (`engines/train_qkv_fuse.py`, `E4B_TRAIN_FUSE_QKV`, off by
+default), and grouped-nf4-gemm 0.44.0 (whose single-block ladder is `auto` by default, so the matched arm takes it). The manifest pins both
+SHAs.
+
+**The box** (token `qwen3fqkv`, `bench/tc1/tc1_run.sh`):
+- **Recipe:** TC1's field recipe (Alpaca rows, micro-batch 2 × accumulation 4, the reentrant checkpoint on all 48 layers), 60
+  load-gated steps, venv-unsloth (torch 2.12), e4b at its defaults otherwise.
+- **Sides:** `E4B_TRAIN_FUSE_QKV=0` (`q0`) against `=1` (`q1`), on the shipped arm (bf16 adapters, native init) and the matched arm (fp32
+  adapters, matched init).
+- **Draws:** two a side in ABBA order: shipped `q0`, shipped `q1`, matched `q0`, matched `q1`, matched `q1` d2, matched `q0` d2, shipped
+  `q1` d2, shipped `q0` d2.
+- **Profiling:** every arm, with `--phase-peaks 1` and TC1's profile steps.
+- **New receipt fields** (`bench/tc1/tc1_arm.py`):
+  - a `train_qkv` record: the knob, whether e4b has the module, modules fused and refused, fused calls;
+  - `profile.launches_per_step`: the four launch API calls Phase 1 counted, per profiled step.
+
+**Validity** (`fqkv_why`, on top of TC1's):
+- torch 2.12;
+- e4b's field defaults: the double-quantized absmax, the reentrant checkpoint on all 48 layers, `E4B_CKPT_OFFLOAD` unset;
+- `q1`: the knob at `1`, all 48 attention modules fused, none refused, fused calls recorded;
+- `q0`: the knob at `0`, none fused, on the same build (the module present);
+- a profile with its launch count.
+
+**The gates and the verdict** (`score_fqkv`; two VALID draws a side, medians; the first rung that applies):
+- **Recount** (rows `R_m`, `R_shipped`): launches per profiled step must fall from `q0` to `q1` by at least 0.8 of Phase 1's 14.0 %
+  (11.2 %) on each arm. VOID otherwise.
+  - *Narrowed from the frame:* the frame had the box recount Python calls as well, but it does not. TC1's harness has no call counter, and
+    adding a counting step would change what the arms run. The call count belongs to the code path, which Phase 1 counted on the same
+    code (−12.0 %). Launches can move with the card and the recipe (kernel choices, the checkpoint mode, the adapter dtype), so the box
+    recounts those.
+- **Premise** (row `PREMISE`): the matched `q0`'s `busy_t` (device ms per profiled step over the timed s/step, median of its draws) must
+  be at most 0.85. VOID for speed otherwise.
+- **Wall** (rows `W_m`, `W_shipped`): s/step `q1 / q0` per arm, from two stable draws a side (TC1's 5 % rule; NOISY otherwise).
+- **Device** (row `DEVICE`): device ms per profiled step `q1 / q0` and the training-phase peak, per arm. Reported, not gated.
+- **Quality** (row `QUALITY`): on each arm, step-0 held-out within 0.0005 per draw pair, and held-out at N within 0.005.
+- **The rungs:** VOID / NOISY / QUALITY_FAIL / NO_GAIN (wall above 0.98 on either arm) / GAIN (both at most 0.98).
+- **DEFAULT_ON** is read across two boxes on different hosts: one at GAIN, and the second either at GAIN or GPU-bound (`PREMISE`
+  FALSIFIED). A GPU-bound second host counts only with both `R` rows and `QUALITY` HELD and both wall ratios at most 1.01.
+
+**Predictions.** They are priced from the field recipe's own receipts (TC1 amendments 70–72, the same token shape and e4b defaults):
+- **Launches:** `q0` makes about 79,600 a step (matched, the ladder engaged) and 75,800 (shipped).
+  - Phase 1 removed about 55 a layer per micro-batch (110 over two layers, one micro-batch with its recompute). That is about 10,600 a
+    step here (48 layers × 4 micro-batches).
+  - The cut is **12–15 %** on each arm (about 13.3 % matched, 13.9 % shipped): both `R` rows HELD.
+- **Wall, on a host-bound host:** `q1 / q0` in **[0.86, 0.95]** on each arm, about 0.91.
+  - On amendments 70–71's host-bound hosts the field recipe stepped about 3.0 s on 76–80k launches, about 38 µs of wall per launch.
+  - The removed launches are priced between P128's per-op CPU self times (about 20 µs) and that average.
+- **Device:** `q1 / q0` in [0.97, 1.02] on each arm. One wider dequantize and product replaces three, and one LoRA-A product replaces
+  three; the arithmetic is the same.
+- **Peak:** within 0.1 GB. The packed rows replace the bases' own. The expanded fp32 absmax (31 MB over 48 layers) replaces the
+  nested 8 MB, adding about 24 MB.
+- **Quality:** HELD, as Amendment 1's floor read predicts.
+- **The rung, on a host-bound host:** GAIN, about 70 %. NOISY under host load is the main alternative.
+
+**Decision rules.**
+- **GAIN:** the knob stays opt-in until DEFAULT_ON's second host reads. That box is the lane's one replication.
+- **DEFAULT_ON:** e4b makes the fused projection its default in its own PR (unset means on; `0` keeps today's path).
+- **NO_GAIN with the recount HELD on a host-bound host:** the launch cut does not buy wall time at this recipe, and the module stays
+  opt-in. The read says where the host time went, from the profile's CPU self time by family, `q0` against `q1`.
+- **QUALITY_FAIL:** nothing turns on. The read finds out why before anything else.
+- **VOID on the recount:** the field recipe engages the module differently from Phase 1's instrument. The read finds out how.
+- **VOID on the premise** (a GPU-bound host): the box's rows stand as the GPU-bound reading DEFAULT_ON asks for. The lane's one
+  replication then seeks a host-bound host. Two GPU-bound hosts in a row leave the speed question open, with no further re-run on host
+  grounds (TC1 amendment 72's rule for loaded hosts, applied to GPU-bound ones).
+
+**The host.** One RTX 5090 at the policy rate, 4 h guard, TC1's 98 GB host floor.
+- The launcher's machine ranking is off (`ADERTHA_PREFER_MACHINES=0`). It ranks fast host CPUs first, and those run the field recipe
+  GPU-bound: amendment 72's machine 18967 had the matched arm busy 0.884 of its step.
+- The box avoids 18967 and TC1's standing exclusions.
+
+**Budget.** Eight profiled 60-step e4b arms come to about $1–3 a box with the download (amendments 71 and 72 billed $2.75 and $0.80). Two
+boxes at most keep it under $6, and the lane stays under $15.
+
+**The reducer** (`bench/tc1/tc1_reduce.py`): the `qwen3fqkv` family, `fqkv_why`, `score_fqkv` and its render section. Self-test case 125
+reads GAIN on the host-bound fixture, and checks the other branches:
+- a −5 % recount is VOID;
+- a GPU-bound `q0` is VOID;
+- walls of 0.99 read NO_GAIN;
+- a 0.01 held-out shift reads QUALITY_FAIL;
+- a `q1` draw with 47 fused modules is VOID;
+- a `q0` draw on a build without the module is VOID.
