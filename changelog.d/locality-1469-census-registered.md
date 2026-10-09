@@ -12,6 +12,6 @@
   - a box runner and a controller driver derived from K34's, with `staged.sha256` checked in CI.
 - **Where.** One rented RTX A2000. Its sm_86 runs the NF4 host-residency path; the fp8 paged runner does not run there.
   Expert ids are correctness-class data, so no timing is quoted. It is a single run under #846's standing tier: guard
-  3.0 h, at most $1.60 with a 70 GB pull.
+  4.0 h, at most $2.00 with a 70 GB pull.
 - **No rule.** It is a census, and it licenses nothing. Its numbers feed #1469 items 2 and 3 (the bytes model and the
   planner) and #1470's speculative-decoding question.
