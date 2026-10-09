@@ -1,4 +1,4 @@
-# P128 — e4b's host work at TC1's field recipe, and what CUDA graphs or `torch.compile` of the dense parts removes (DRAFT, registered before any run)
+# P128 — e4b's host work at TC1's field recipe, and what CUDA graphs or `torch.compile` of the dense parts removes (registered before any run)
 
 Issue: experts4bit-qlora#835 (the training-systems campaign). The lane number was claimed by `prereg/p128` (2026-10-09). The registration
 is staged:
@@ -83,12 +83,26 @@ The work, in the order the premise found the blockers:
   bf16 and `2**-16` for fp32.
 - **On a fail:** P128 reads **NO_CANDIDATE**, names the blockers it met, and stops. No box runs.
 
+**Constraints on every Phase 1 change (from the review, 2026-10-09):**
+- **Opt-in.** The compile wrapper and any change to the prebound launches are off by default. With the knob unset, training and serving
+  run exactly today's code. Tests assert that bit for bit: the same op sequence, values and gradients with the knob unset as on the
+  commit before the change.
+- **grouped-nf4-gemm first.** Its part (`triton_op` launches, a guardable plan-memo key) lands as its own grouped-nf4-gemm PRs, with
+  bitwise-against-current tests, in the release after 0.44.0. e4b's part pins that release.
+- **Serving untouched.** The wrapper targets the training path (`enable_fast_train`). If any forward body it wraps is one that the
+  serving path's fallback observer fingerprints (`bench/ra/fallback-adapters.json`), its fingerprint is coordinated with that lane before
+  the PR is marked ready.
+
 ## Phase 2 — the rented A/B (registered by amendment once Phase 1 passes; the frame is fixed now)
 
 - **The box:** TC1's field recipe and tokens over 60 load-gated steps, venv-unsloth (torch 2.12), e4b at its defaults, with
   `NF4_QLORA_SINGLE_LADDER=auto` (the default).
 - **The arms:** eager (`c0`) against the Phase 1 candidate (`c1`), on the shipped arm (bf16 adapters) and the matched arm (fp32
   adapters). Two draws a side in ABBA order, every arm profiled. One RTX 5090.
+- **The recount gate.** Launch and Python-call counts can depend on the card: grouped-nf4-gemm and e4b dispatch on SM count and capability
+  (for example the bandwidth GEMV's 160-SM default). So every Phase 2 box recounts both, with and without the candidate, on its own card,
+  over a counted step outside the timed window. The box is **VOID** if Phase 1's reduction does not reproduce there: each count at least
+  0.8 of Phase 1's relative cut.
 - **The premise gate:** the box is **VOID** for speed unless the matched `c0`'s GPU busy share (device ms per profiled step over the timed
   s/step, medians of its draws) is at most **0.85**. A GPU-bound box hides a host remedy. On such a box the read reports the device-time
   ratio and the cost of any compile.
@@ -101,7 +115,7 @@ The work, in the order the premise found the blockers:
   If Phase 1 reaches bit-for-bit values, the bar becomes `torch.equal` on step-0 held-out.
 - **The rule**, the first rung that applies:
   1. **VOID:** a record missing or not ok; a commit, revision or default off; a draw without its profile or the compile census (graphs,
-     breaks, recompiles); or the premise gate unmet.
+     breaks, recompiles); the recount gate unmet; or the premise gate unmet.
   2. **NOISY:** any side's two draws differ by more than 5 %.
   3. **QUALITY_FAIL:** a held-out bar missed.
   4. **NO_GAIN:** wall `c1 / c0` above 0.97 on either arm.
