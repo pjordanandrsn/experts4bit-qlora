@@ -484,10 +484,11 @@ class _HybridTier(_NvmeResidency):
         a["acts_nvme"] += int((~hot_a & ~dram_a).sum())
         a["hist"] += torch.bincount(flat, minlength=a["hist"].numel())
 
-    def forward(self, hidden_states, top_k_index, top_k_weights):
+    def forward(self, hidden_states, top_k_index, top_k_weights, residual=None):
+        # residual (lane P127's item c): handed to the base forward, which folds it into the collapse's combine
         if self.amort is not None:
             self._count_amortization(top_k_index)
-        out = super().forward(hidden_states, top_k_index, top_k_weights)
+        out = super().forward(hidden_states, top_k_index, top_k_weights, residual=residual)
         if (self.pf_enabled and self.pf is not None
                 and hidden_states.shape[0] <= 8):
             self._submit_prefetch(hidden_states)
