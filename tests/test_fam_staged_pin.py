@@ -88,8 +88,8 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 
 def test_the_self_tests_pass():
     base = {"PATH": "/usr/bin:/bin", **{k: os.environ[k] for k in ("SYSTEMROOT",) if k in os.environ}}
-    for script, want in (("fam_reduce.py", "fam_reduce self-test OK (59/59 cases)"),
-                         ("fam_box.py", "fam_box self-test OK (28/28 cases)"),
+    for script, want in (("fam_reduce.py", "fam_reduce self-test OK (68/68 cases)"),
+                         ("fam_box.py", "fam_box self-test OK (38/38 cases)"),
                          ("fam_speed.py", "fam_speed self-test OK (9/9 cases)"),
                          ("fam_speed_reduce.py", "fam_speed_reduce self-test OK (30/30 cases)")):
         out = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True, env=base)
@@ -100,6 +100,8 @@ def test_the_self_tests_pass():
     assert "reducer's self-test now runs 56 cases" in PREREG                               # Amendment 5
     assert "reducer's self-test now runs 58 cases" in PREREG                               # Amendment 6
     assert "reducer's self-test\nnow runs 59 cases" in PREREG                              # Amendment 7
+    flat = " ".join(PREREG[PREREG.index("## Amendment 8"):].split())
+    assert "box's self-test now runs 38 cases" in flat and "reducer's self-test now runs 68 cases" in flat  # Amendment 8
 
 
 def test_the_rule_is_the_registered_rule():
@@ -181,7 +183,7 @@ def test_the_order_puts_every_refusal_before_the_fetch():
 def test_every_time_left_check_fits_inside_its_guard():
     """Amendment 1's guards: Granite 2.5 h, gpt-oss 3.75 h, Qwen3.6 4.0 h, the proof 1.25 h. Every per-step need, plus
     the 600 s fetch-back, fits; and the runner's table is the amendment's."""
-    guards = {"granite": 2.5, "gptoss": 3.75, "qw36": 4.0, "mixtral": 4.0, "gemma4": 4.0}
+    guards = {"granite": 2.5, "gptoss": 3.75, "qw36": 4.0, "mixtral": 6.0, "gemma4": 4.0}     # Mixtral: Amendment 8
     for fam, hours in guards.items():
         line = re.search(rf"^\s*{fam}\)\s+(NEED_FETCH=.*);;$", RUN, re.M).group(1)
         vals = dict(re.findall(r"(NEED_\w+|CAP_\w+)=(\d+)", line))
@@ -301,3 +303,25 @@ def test_mixtral_s_server_pool_is_amendment_7_s():
     need = dict(re.findall(r"(NEED_\w+)=(\d+)", line))
     measured = 2336                                     # fam-mixtral-prove-1: launch to the bake's end, clock-read
     assert measured + int(need["NEED_OFF"]) + 600 <= 2.0 * 3600
+
+
+def test_mixtral_s_gating_is_amendment_8_s():
+    """Amendment 8: after fam-mixtral-prove-2's x0.90 passed the gate on c4val1, Mixtral's OFF process runs x0.90 and
+    x0.80 on every set; the runner, the box and the reducer name the same rungs; the claimed resolution is the weakest
+    rung that fails every gated cell; and the reading's 6.0 h guard holds the measured setup and the scaled steps."""
+    box, r = _load("fam_box"), _load("fam_reduce")
+    assert box.GRADED["mut080"] == 0.80 and box.GATING_MUTANT == "mut090" and box.LADDER == ("mut095", "mut098")
+    assert r.GATING == {"mixtral": ("mut090", "mut080")} and r.gating("gemma4") == ("mut090",)
+    spec = re.search(r'gating_of\(\)\{ case \$1 in mixtral\) echo "--gating ([\w,]+)";; esac; \}', RUN).group(1)
+    assert box.gating_arms(spec) == r.GATING["mixtral"]
+    assert "--cont $CONT $(gating_of $tag) \"$@\"" in RUN
+    assert '"gating": list(gating),' in (LANE / "fam_box.py").read_text()
+    amend = PREREG[PREREG.index("## Amendment 8"):]
+    assert "store `ff615c5c`" in amend and "weakest rung that fails the gate in every gated cell" in amend
+    assert "| Mixtral | 6.0 h | fetch 3000 s, bake 1500 s, OFF 10800 / 12600 s, each ON 2000 / 2700 s |" in amend
+    line = re.search(r"^\s*mixtral\)\s+(NEED_FETCH=.*);;$", RUN, re.M).group(1)
+    v = {k: int(x) for k, x in re.findall(r"(NEED_\w+|CAP_\w+)=(\d+)", line)}
+    off, on = 1513 * 5.33 + 245 * 5.27, 261 * 6.7          # fam-mixtral-prove-2 x Granite's proof-to-reading ratios
+    assert v["CAP_OFF"] >= v["NEED_OFF"] >= off and v["CAP_ON"] >= v["NEED_ON"] >= on
+    setup = 2336                                            # Amendment 7's measured launch-to-bake
+    assert setup + off + 3 * on + v["NEED_ON"] + 600 <= 6.0 * 3600         # the fourth ON still starts

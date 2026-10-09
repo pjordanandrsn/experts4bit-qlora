@@ -19,7 +19,8 @@ Cells. Every (text, shape, set) is one cell with its own reference:
   to bucket 8), ``split1`` (every decode attention forced to ONE KV split, ``n_split=1``: the same sums in another
   order);
 - the mutants: ``mutant_scale`` (P108's: decode softmax scale x0.5, gross) and the graded ``mut090`` (x0.90, the
-  gate's resolution test); the ladder ``mut095`` / ``mut098`` on set A only (reported).
+  gate's resolution test; ``--gating mut090,mut080`` adds x0.80 behind it, Amendment 8); the ladder ``mut095`` /
+  ``mut098`` on set A only (reported).
 ``--config ON_*`` scores ``ON`` against the cell's saved R.
 
 ``split1`` and the graded mutants wrap the decode attention (``Fp8PagedKV.attention``, and P108's stand-in on CPU)
@@ -59,9 +60,10 @@ TEXTS = ("wikitext", "c4val1")
 SHAPES = (1, 12)
 SETS = {"A": (0, 12), "B": (12, 24), "C": (24, 36)}
 FLOOR_ARMS = ("rep", "chunk", "half", "split1")
-GRADED = {"mut090": 0.90, "mut095": 0.95, "mut098": 0.98}
+GRADED = {"mut080": 0.80, "mut090": 0.90, "mut095": 0.95, "mut098": 0.98}   # Amendment 8: mut080
 GATING_MUTANT = "mut090"                              # must fail every gated cell (PREREG "Resolution")
-LADDER_SETS = ("A",)                                  # the ladder, mut095 / mut098, runs on set A only
+LADDER = ("mut095", "mut098")                         # reported, never gated
+LADDER_SETS = ("A",)                                  # the ladder runs on set A only
 CENSUS_KEYS = ("fuse_qkv_n", "fuse_t1_glue_n", "fuse_t1_glue_r2_n", "fuse_router_epilogue_n")
 STORE_KEYS = ("int4_expert_layers", "int4_store_kinds", "levers_env", "grouping", "model_type", "moe_layers", "top_k")
 
@@ -90,9 +92,19 @@ def off_arms(shape: int) -> tuple:
     return ("R", "rep", "chunk") + (("half",) if shape > 1 else ()) + ("mutant_scale",)
 
 
-def extra_arms(set_: str) -> tuple:
+def gating_arms(spec: str) -> tuple:
+    """``--gating``: the gating rungs, weakest first, every one on every set. ``mut090`` leads; Amendment 8 registers
+    ``mut090,mut080`` for Mixtral."""
+    arms = tuple(x for x in spec.split(",") if x)
+    if (not arms or arms[0] != GATING_MUTANT or len(set(arms)) != len(arms) or set(arms) - set(GRADED)
+            or set(arms) & set(LADDER) or any(GRADED[a] <= GRADED[b] for a, b in zip(arms, arms[1:]))):
+        raise ValueError(f"--gating {spec!r}: {GATING_MUTANT} first, then stronger rungs of {tuple(GRADED)}, no ladder")
+    return arms
+
+
+def extra_arms(set_: str, gating: tuple = (GATING_MUTANT,)) -> tuple:
     """The arms scored against the saved R under a wrapper, in the OFF process."""
-    return ("split1", GATING_MUTANT) + (("mut095", "mut098") if set_ in LADDER_SETS else ())
+    return ("split1",) + tuple(gating) + (LADDER if set_ in LADDER_SETS else ())
 
 
 class AttnWrap(contextlib.AbstractContextManager):
@@ -161,7 +173,7 @@ def shape_order(shapes):
 
 
 def run_cells(model, windows, *, config, texts, shapes, sets, prompt, cont, chunk, floor_chunk, device, ref_root,
-              ref_kw=None, stand_in=False, counters=None, fwd=None):
+              ref_kw=None, stand_in=False, counters=None, fwd=None, gating=(GATING_MUTANT,)):
     """Every cell of one process. ``windows[text]`` holds 36 windows; set S takes ``SETS[S]``. Returns
     ``{cell: {"base": measure_phase record, "extra": {arm: (record, wrapped calls)}, "dispatch": ...}}``."""
     import p115_quality as q
@@ -178,7 +190,7 @@ def run_cells(model, windows, *, config, texts, shapes, sets, prompt, cont, chun
                 if config == "OFF":
                     base = q.measure_phase(model, ws, phase="off", group=s, ref_dir=ref, arms=off_arms(s), **kw)
                     extra = {}
-                    for arm in extra_arms(name):
+                    for arm in extra_arms(name, gating):
                         with arm_wrap(arm) as w:
                             rec = q.measure_phase(model, ws, phase="on", group=s, ref_dir=ref, arms=(arm,), **kw)
                         extra[arm] = {"record": rec, "wrapped_calls": w.calls}
@@ -194,6 +206,10 @@ def main_run(a) -> int:
     ok, why = env_ok(a.config, a.path, os.environ)
     if not ok:
         raise SystemExit(f"REFUSED: {why}")
+    try:
+        gating = gating_arms(a.gating)
+    except ValueError as e:
+        raise SystemExit(f"REFUSED: {e}")
     texts = tuple(x for x in a.texts.split(",") if x)
     shapes = tuple(int(x) for x in a.shapes.split(",") if x)
     sets = tuple(x for x in a.sets.split(",") if x)
@@ -221,7 +237,7 @@ def main_run(a) -> int:
     t1 = time.time()
     cells = run_cells(model, windows, config=a.config, texts=texts, shapes=shapes, sets=sets, prompt=a.prompt,
                       cont=a.cont, chunk=a.chunk, floor_chunk=a.floor_chunk, device=cfg.device, ref_root=a.ref_root,
-                      ref_kw=ref_kw, counters=counters, fwd=fwd)
+                      ref_kw=ref_kw, counters=counters, fwd=fwd, gating=gating)
     info = parts.info
     rec = {"config": a.config, "path": a.path, "tag": a.tag, "model": cfg.model, "revision": cfg.revision,
            "e4b_sha": os.environ.get("E4B_SHA"), "gnf4_sha": os.environ.get("GNF4_SHA"),
@@ -230,6 +246,7 @@ def main_run(a) -> int:
            "census": {k: info.get(k) for k in CENSUS_KEYS}, "fusion_modes": info.get("fusion_modes"),
            "fusion_report": info.get("fusion_report"),              # Amendment 5: the router epilogue's fp32_upstream
            "server": {"max_seqs": cfg.max_seqs, "max_tokens_per_seq": cfg.max_tokens_per_seq},   # Amendment 7
+           "gating": list(gating),                                                                # Amendment 8
            "store": {k: info.get(k) for k in STORE_KEYS}, "kv": info.get("kv"), "layers": q_layers(model),
            "counters_wrapped": list(counters.wrapped), "qkv_modules": fwd.qkv_modules, "ref_kw": ref_kw,
            "texts": list(texts), "shapes": list(shapes), "sets": list(sets), "prompt": a.prompt, "cont": a.cont,
@@ -265,10 +282,20 @@ def self_test() -> int:
           off_arms(1) == ("R", "rep", "chunk", "mutant_scale"),
           off_arms(12) == ("R", "rep", "chunk", "half", "mutant_scale"),
           extra_arms("A") == ("split1", "mut090", "mut095", "mut098"), extra_arms("B") == ("split1", "mut090"),
+          extra_arms("A", ("mut090", "mut080")) == ("split1", "mut090", "mut080", "mut095", "mut098"),
+          extra_arms("C", ("mut090", "mut080")) == ("split1", "mut090", "mut080"),
+          gating_arms("mut090") == ("mut090",) and gating_arms("mut090,mut080") == ("mut090", "mut080"),
+          arm_wrap("mut080").factor == 0.80,
           [SETS[k] for k in "ABC"] == [(0, 12), (12, 24), (24, 36)], cell_key("wikitext", 1, "A") == "wikitext|1|A",
           arm_wrap("split1").n_split == 1 and arm_wrap("split1").factor is None,
           arm_wrap("mut090").factor == 0.90 and arm_wrap("mut090").n_split is None, GATING_MUTANT == "mut090",
           shape_order(SHAPES) == (12, 1) and shape_order((12,)) == (12,)]
+    for bad in ("", "mut080", "mut080,mut090", "mut090,mut095", "mut090,mut090", "mut090,mut070"):
+        try:
+            gating_arms(bad)
+            ok.append(False)
+        except ValueError:
+            ok.append(True)
     try:
         arm_wrap("R")
         ok.append(False)
@@ -304,6 +331,7 @@ def main(argv=None) -> int:
     p.add_argument("--chunk", type=int, default=512)
     p.add_argument("--floor-chunk", type=int, default=256)
     p.add_argument("--ref-kw", default="", help="JSON override of P115's REF_KW (the A2000 correctness proof only)")
+    p.add_argument("--gating", default=GATING_MUTANT, help="the gating rungs, weakest first (Amendment 8)")
     a = p.parse_args(argv)
     if a.self_test:
         return self_test()
