@@ -2,8 +2,8 @@
 """Lane P106's in-process kernel switch and comparison helpers (``bench/p106/gdn_toggle.py``, ``bench/p106/p106_box.py``)
 on CPU, before any GPU is rented.
 
-- ``GdnToggle`` reads transformers' fallback closures for the four Gated DeltaNet functions in both Qwen3.5 modules, and
-  without the kernels installed its resolved record is transformers' own functions.
+- ``GdnToggle`` reads transformers' fallback closures for the four Gated DeltaNet functions in both Qwen3.5 modules.
+  With the kernels masked at import (``tests/hybrid_reference.py``) its resolved record is transformers' own functions.
 - With a stand-in "kernel" written into the closures (what the cells hold when fla imports), a tiny Qwen3.5 hybrid's
   forward calls the stand-in under ``use("resolved")`` and never under ``use("torch")``: the model looks the name up at
   call time, and the switch routes it.
@@ -34,9 +34,8 @@ def _load(name):
 
 def _modules():
     pytest.importorskip("transformers.models.qwen3_5", reason="needs transformers with Qwen3.5")
-    import transformers.models.qwen3_5.modeling_qwen3_5 as m_dense
-    import transformers.models.qwen3_5_moe.modeling_qwen3_5_moe as m_moe
-    return m_dense, m_moe
+    from hybrid_reference import reference_modeling
+    return reference_modeling("qwen3_5"), reference_modeling("qwen3_5_moe")
 
 
 @pytest.fixture

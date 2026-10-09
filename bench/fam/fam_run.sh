@@ -38,11 +38,12 @@ if [ "$SPEED" = 1 ]; then
   TAGS="qw36"; CONT_DEF=128; NEED_FETCH=2400; NEED_BAKE=900; NEED_SPEED=1200; CAP_SPEED=1800
   SPEED_STEPS=256; [ "$PROVE" = 1 ] && SPEED_STEPS=32
 elif [ "$PROVE" = 1 ]; then
-  # Amendment 5: a proof is Granite's (the default) or Mixtral's own (FAM_FAMILY=mixtral), at 32 positions
+  # Amendments 5 and 6: a proof is Granite's (the default) or a family's own (mixtral, gemma4), at 32 positions
   case "${FAMILY:-granite}" in
     granite) TAGS="granite"; NEED_FETCH=300; NEED_BAKE=300; NEED_OFF=1800; NEED_ON=400; CAP_OFF=2400; CAP_ON=900;;
     mixtral) TAGS="mixtral"; NEED_FETCH=3000; NEED_BAKE=1500; NEED_OFF=2400; NEED_ON=600; CAP_OFF=3000; CAP_ON=900;;
-    *) say "refusing: a proof is Granite's or Mixtral's (FAM_FAMILY=$FAMILY)"; finish 78;;
+    gemma4)  TAGS="gemma4"; NEED_FETCH=2400; NEED_BAKE=900; NEED_OFF=2400; NEED_ON=600; CAP_OFF=3000; CAP_ON=900;;
+    *) say "refusing: a proof is Granite's, Mixtral's or Gemma-4's (FAM_FAMILY=$FAMILY)"; finish 78;;
   esac
   CONT_DEF=32
 else
@@ -51,7 +52,8 @@ else
     gptoss)  NEED_FETCH=1200; NEED_BAKE=900; NEED_OFF=6300; NEED_ON=1100; CAP_OFF=7200;  CAP_ON=1800;;
     qw36)    NEED_FETCH=2400; NEED_BAKE=900; NEED_OFF=9500; NEED_ON=1600; CAP_OFF=10800; CAP_ON=2700;;
     mixtral) NEED_FETCH=3000; NEED_BAKE=1500; NEED_OFF=9500; NEED_ON=1600; CAP_OFF=10800; CAP_ON=2700;;
-    *) say "refusing: FAM_FAMILY must be granite, gptoss, qw36 or mixtral (got '${FAMILY}')"; finish 78;;
+    gemma4)  NEED_FETCH=2400; NEED_BAKE=900;  NEED_OFF=9500; NEED_ON=1600; CAP_OFF=10800; CAP_ON=2700;;
+    *) say "refusing: FAM_FAMILY must be granite, gptoss, qw36, mixtral or gemma4 (got '${FAMILY}')"; finish 78;;
   esac
   TAGS="$FAMILY"; CONT_DEF=128
 fi
@@ -60,6 +62,9 @@ fi
 # and, after the installs, below FETCH_DISK_GB before the fetch begins.
 DISK_DEF=200; FETCH_DISK_GB=0
 [ "$TAGS" = mixtral ] && { DISK_DEF=220; FETCH_DISK_GB=165; }
+# Amendment 6: Gemma-4's 49.9 GB checkpoint, its NF4 snapshot and arena (about 13 GB each) and the references of a
+# 262,144-token vocabulary (about 19 GB) need about 105 GB: the 200 GB floor holds, and the fetch needs 120 GB free
+[ "$TAGS" = gemma4 ] && FETCH_DISK_GB=120
 GPU_CLASS=${FAM_GPU_CLASS:-5090}; MIN_DISK_GB=${FAM_MIN_DISK_GB:-$DISK_DEF}; MIN_RAM_GB=${FAM_MIN_RAM_GB:-60}
 REHEARSAL=${FAM_REHEARSAL:-0}; CONT=${FAM_CONT:-$CONT_DEF}
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
@@ -161,9 +166,15 @@ fi
 model_of(){ case $1 in gptoss) echo "openai/gpt-oss-20b 6cee5e81ee83917806bbde320786a8fb61efebee";;
   qw36) echo "Qwen/Qwen3.6-35B-A3B 995ad96eacd98c81ed38be0c5b274b04031597b0";;
   granite) echo "ibm-granite/granite-3.1-3b-a800m-instruct a02780686e08a03fe0d2679a293b5c74a90efa89";;
-  mixtral) echo "mistralai/Mixtral-8x7B-Instruct-v0.1 eba92302a2861cdc0098cc54bc9f17cb2c47eb61";; esac; }
-configs_of(){ case $1 in gptoss|mixtral) echo "OFF ON_glue ON_r2 ON_epi ON_auto";; *) echo "OFF ON_auto";; esac; }
+  mixtral) echo "mistralai/Mixtral-8x7B-Instruct-v0.1 eba92302a2861cdc0098cc54bc9f17cb2c47eb61";;
+  gemma4) echo "google/gemma-4-26B-A4B-it 4d7ae4984b7db7de8f8457170b3f1a419ee76d52";; esac; }
+configs_of(){ case $1 in gptoss|mixtral) echo "OFF ON_glue ON_r2 ON_epi ON_auto";; gemma4) echo "OFF ON_glue ON_epi ON_auto";;
+  *) echo "OFF ON_auto";; esac; }
 [ "$PROVE" = 1 ] && configs_of(){ echo "OFF ON_epi ON_auto"; }
+# Amendment 7: the server the box builds keeps its own KV pool, which no paged pass uses (each builds its own). Mixtral's
+# NF4 weights take about 26.8 GiB of the 31.4, so its server pool is sized to the instrument: 16 slots of 768 tokens
+# (>= the 512-token prompt + 128 positions + 16), 0.77 GiB instead of the default 4096 tokens' 4.12 GiB.
+build_env_of(){ case $1 in mixtral) echo "E4B_PAGED_MAX_TOKENS_PER_SEQ=768";; esac; }
 # each config's four knobs, named explicitly (fam_box.CONFIGS; the box refuses anything else)
 knobs_of(){ local q=0 g=0 r=0 e=0
   case $1 in ON_glue) g=auto;; ON_r2) r=auto;; ON_epi) e=auto;; ON_auto) q=auto; g=auto; r=auto; e=auto;; esac
@@ -177,7 +188,7 @@ box(){ # tag config path out ref [extra args]
   can_run $need "$tag $config $path" || return 1
   local al; al=$(step_alarm $cap); say "$tag $config $path (alarm=$al)"
   # shellcheck disable=SC2086  # assignment lists by design
-  env PYTHONPATH= $ENGINE_ENV $(knobs_of $config) $env_path E4B_PAGED_GRAPHS=0 E4B_PAGED_MAX_SEQS=16 E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA \
+  env PYTHONPATH= $ENGINE_ENV $(knobs_of $config) $env_path E4B_PAGED_GRAPHS=0 E4B_PAGED_MAX_SEQS=16 $(build_env_of $tag) E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA \
     perl -e "alarm $al; exec @ARGV" python $W/fam_box.py --config $config --path $path --out $W/$out --ref-root $ref --cont $CONT "$@" \
     > logs/${out%.json}.log 2>&1
   local rc=$?
@@ -247,7 +258,7 @@ if [ "$SPEED" = 1 ]; then
   fi
   finish 0
 fi
-PF="--families $TAGS"; [ "$PROVE" = 1 ] && PF="--proof"; [ "$PROVE" = 1 ] && [ "$TAGS" = mixtral ] && PF="--proof --families mixtral"
+PF="--families $TAGS"; [ "$PROVE" = 1 ] && PF="--proof"; [ "$PROVE" = 1 ] && [ "$TAGS" != granite ] && PF="--proof --families $TAGS"
 say "reduce"; python $W/fam_reduce.py --dir $W --out $W/verdict.json --e4b-sha $E4B_SHA $PF 2>&1 | tee -a summary.txt
 [ "${PIPESTATUS[0]}" = 0 ] && [ -s $W/verdict.json ] || { say "REDUCER FAILED"; finish 22; }
 if [ "$PROVE" = 1 ]; then
