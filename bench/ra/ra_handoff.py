@@ -216,6 +216,10 @@ def main():
         helper.require(args.worker_spec.is_absolute() and
                        helper.digest(args.worker_spec) == args.worker_sha256, "worker spec pin")
         worker = json.loads(args.worker_spec.read_bytes())
+        if worker.get('phase') in ('tc1_training', 'tc1_training_profile'):
+            pin = worker['handoff_manifest']
+            helper.require(set(pin) == {'path', 'sha256'} and Path(pin['path']) == args.manifest and
+                           helper.digest(args.manifest) == pin['sha256'], 'nested manifest pin before startup')
     helper.require(args.out.is_absolute() and not args.out.exists(), "fresh absolute handoff receipt")
     before = helper.digest(args.manifest)
     progress = {"schema": 1, "status": "FAILED", "phase": "PRECONDITIONS", "manifest_sha256": before}

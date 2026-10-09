@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import os
+import sys
 from pathlib import Path
 
 import ra_env
@@ -118,11 +119,16 @@ def execute(spec, stage, out, *, profile=False):
     (out / "native").mkdir()
     (out / "adapters").mkdir()
     (out / "inputs.json").write_text(json.dumps({k: spec[k] for k in ("data", "tokens", "prereg")}, indent=2) + "\n")
+    verified = sys.modules.get('ra_verified_worker')
+    child_binding, native_out = None, out
+    if verified is not None and verified.CURRENT is not None:
+        argv, native_out, child_binding = verified.tc1_child(spec, stage, out, profile=profile)
     process = ra_process.run(argv, env=env, cwd=out, log=out / "process.log", receipt=out / "process.json",
                              deadline=spec["deadline_epoch_s"], timeout=spec["timeout_s"])
     # A changed input or instrument during a run is retained as a failed binding.
-    native_path = out / "native" / f"{fam}_e4b_{component}.json"
+    native_path = native_out / "native" / f"{fam}_e4b_{component}.json"
     try:
+        child_evidence = verified.check_tc1_child(child_binding, process, profile=profile) if child_binding else None
         ra_stage.verify(stage)
         for key in ("data", "tokens", "prereg"):
             ra_process.check_input(spec[key])
@@ -135,7 +141,7 @@ def execute(spec, stage, out, *, profile=False):
         raise
     result = {"status": "NATIVE_RECORDED_PENDING_ENGAGEMENT", "component": component,
               "native_path": str(native_path), "native_sha256": ra_process.file_digest(native_path),
-              "process": process, "removed_environment_keys": removed, "proves_gpu_engagement": False}
+              "process": process, "removed_environment_keys": removed, "verified_child_startup": child_evidence, "proves_gpu_engagement": False}
     (out / "component.json").write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")
     return result
 
