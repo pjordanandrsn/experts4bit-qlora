@@ -254,9 +254,12 @@ def _load(a):
     from transformers import AutoTokenizer
 
     from experts4bit_qlora.loader import load_moe_4bit_streaming
-    tok = AutoTokenizer.from_pretrained(a.model, revision=a.revision)
-    model, _cfg = load_moe_4bit_streaming(a.model, "cuda", torch.bfloat16, r=8, alpha=16, offload=True, pin=True,
-                                          prefetch=True, quant_type="nf4", revision=a.revision)
+    # --model-path: a local snapshot of --model at --revision (e.g. a read-only mounted cache), loaded by path so the
+    # hub cache can stay a separate writable directory for the dataset; the manifest still names repo and revision.
+    src, rev = (a.model_path, None) if a.model_path else (a.model, a.revision)
+    tok = AutoTokenizer.from_pretrained(src, revision=rev)
+    model, _cfg = load_moe_4bit_streaming(src, "cuda", torch.bfloat16, r=8, alpha=16, offload=True, pin=True,
+                                          prefetch=True, quant_type="nf4", revision=rev)
     return model.eval(), tok
 
 
@@ -302,8 +305,13 @@ def run_census(a) -> int:
 
     def counters():
         return {i: (e.traffic()["cold_pcie_bytes"], int(e.row_bytes)) for i, e in enumerate(engines)}
-    from huggingface_hub import snapshot_download
-    snap = snapshot_download(a.model, revision=a.revision, local_files_only=True)
+    if a.model_path:
+        if os.path.basename(os.path.normpath(a.model_path)) != a.revision:
+            raise ValueError(f"--model-path {a.model_path} is not the snapshot of revision {a.revision}")
+        snap = a.model_path
+    else:
+        from huggingface_hub import snapshot_download
+        snap = snapshot_download(a.model, revision=a.revision, local_files_only=True)
     test = wikitext_windows(tok, "test", a.prefill_windows, a.window_width, a.stride)
     calib_meta = json.load(open(a.hot_profile + ".meta.json"))
     extra = {"model": a.model, "revision": a.revision, "env": cr.env_fingerprint(snap, model, a.model),
@@ -418,6 +426,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--model", default="Qwen/Qwen3-30B-A3B")
     ap.add_argument("--revision")
+    ap.add_argument("--model-path", help="a local snapshot directory of --model at --revision")
     ap.add_argument("--trace-dir")
     ap.add_argument("--out-dir")
     ap.add_argument("--steps", type=int, default=512)
