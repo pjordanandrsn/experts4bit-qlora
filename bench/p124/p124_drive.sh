@@ -4,7 +4,8 @@
 # (whose decode bracket, pool and grouping P124's box imports), P117's box (whose windows(), paged_pass() and buckets
 # P124's imports), P108's and P97's boxes (which P117's imports), P39's NF4 bake and host calibration at their registered
 # bytes, the decode-graph premise test, grouped-nf4-gemm's K16 test (a byte copy at the pinned commit) and the route's
-# e4b tests -- all referenced, never copied here -- starts the lane detached under a fresh nonce; polls
+# e4b tests (tests/test_int4_attn.py, and a byte copy of tests/test_int4_attn_wide.py at P124's registered bytes: the
+# route's default moved to auto after the read) -- all referenced, never copied here -- starts the lane detached under a fresh nonce; polls
 # TP_DONE.<nonce> with the tp4-style heartbeat/liveness check; fetches receipts -- never the checkpoint or the arena.
 # Nothing here creates, destroys or approves compute.
 set -uo pipefail
@@ -17,7 +18,7 @@ HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 # and the premise tests.
 # staged.sha256 pins every one by the name the box sees.
 TESTS="$REPO/tests"; P39="$REPO/bench/p39"; P119="$REPO/bench/p119"; P117="$REPO/bench/p117"; P108="$REPO/bench/p108"; P97="$REPO/bench/p97"
-STAGE="$HERE/p124_run.sh $HERE/p124_box.py $HERE/p124_reduce.py $P119/p119_box.py $P117/p117_box.py $P108/p108_box.py $P97/p97_box.py $P39/k8_bake.py $P39/calib.json $TESTS/test_decode_graph_buckets.py $HERE/test_int4_smallm_interp.py $TESTS/test_int4_attn.py $TESTS/test_int4_attn_wide.py $HERE/staged.sha256"
+STAGE="$HERE/p124_run.sh $HERE/p124_box.py $HERE/p124_reduce.py $P119/p119_box.py $P117/p117_box.py $P108/p108_box.py $P97/p97_box.py $P39/k8_bake.py $P39/calib.json $TESTS/test_decode_graph_buckets.py $HERE/test_int4_smallm_interp.py $TESTS/test_int4_attn.py $HERE/test_int4_attn_wide.py $HERE/staged.sha256"
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
 # staged.sha256 names the files as the BOX will see them; resolve each name to its source and compare hashes
 # (the same case as tests/test_p124_staged_pin.py, which runs this check in CI where it costs nothing).
@@ -25,13 +26,13 @@ sha_of(){ (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | cut -d" " -f1; }
 while read -r want name; do
   case "$want" in \#*|"") continue;; esac
   case "$name" in
-    p124_run.sh|p124_box.py|p124_reduce.py|test_int4_smallm_interp.py) src="$HERE/$name";;
+    p124_run.sh|p124_box.py|p124_reduce.py|test_int4_smallm_interp.py|test_int4_attn_wide.py) src="$HERE/$name";;
     p119_box.py) src="$P119/$name";;
     k8_bake.py|calib.json) src="$P39/$name";;
     p117_box.py) src="$P117/$name";;
     p108_box.py) src="$P108/$name";;
     p97_box.py) src="$P97/$name";;
-    test_decode_graph_buckets.py|test_int4_attn.py|test_int4_attn_wide.py) src="$TESTS/$name";;
+    test_decode_graph_buckets.py|test_int4_attn.py) src="$TESTS/$name";;
     *) say "refusing: staged.sha256 names $name, which this driver does not stage"; exit 78;;
   esac
   got=$(sha_of "$src")

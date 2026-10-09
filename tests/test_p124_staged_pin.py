@@ -33,7 +33,7 @@ SOURCES = {
     "test_decode_graph_buckets.py": REPO / "tests" / "test_decode_graph_buckets.py",
     "test_int4_smallm_interp.py": LANE / "test_int4_smallm_interp.py",
     "test_int4_attn.py": REPO / "tests" / "test_int4_attn.py",
-    "test_int4_attn_wide.py": REPO / "tests" / "test_int4_attn_wide.py",
+    "test_int4_attn_wide.py": LANE / "test_int4_attn_wide.py",       # a byte copy: tests/ moved on with the default flip
 }
 # grouped-nf4-gemm's kernel/test_int4_smallm_interp.py at the pinned commit (#522), byte for byte
 K16_TEST_SHA256 = "3d3b834aa0d60361f4b553067e478641ecacd873d00b7bac143e02e305e37b50"
@@ -67,7 +67,7 @@ def test_imported_boxes_and_the_premise_tests_run_at_their_registered_bytes():
     k16 = (LANE / "test_int4_smallm_interp.py").read_text()
     assert 'os.environ.setdefault("TRITON_INTERPRET", "1")' in k16                 # the runner sets 0 explicitly
     assert "def test_at_most_16_rows_is_k16s_launch_bit_for_bit" in k16 and "def test_up_to_64_rows_matches" in k16
-    wide = (REPO / "tests" / "test_int4_attn_wide.py").read_text()
+    wide = (LANE / "test_int4_attn_wide.py").read_text()
     assert "def test_two_modules_of_one_width_in_one_graph_replay_to_their_references" in wide
     assert "def test_two_graphs_on_the_route_replay_in_either_order" in wide
     assert 'pytest.importorskip("test_int4_attn")' in wide                       # why test_int4_attn.py is staged

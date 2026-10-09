@@ -65,7 +65,7 @@ class Int4Linear(nn.Module):
         ``wide=True`` (needs ``smallm``) also routes ``SMALLM_ROWS_MAX < rows <= WIDE_ROWS_MAX`` to the same
         kernel with a 32- or 64-row tile, through a workspace shared by every projection of its width and
         built here, zeroed, before any capture (:func:`_wide_workspace`).
-        Opt-in (:func:`resolve_wide`); callers pass the resolved flag."""
+        Default ``auto`` since the P124 read (see :func:`resolve_wide`); callers pass the resolved flag."""
         super().__init__()
         _gemv, _qx, _dref, pack = _kernels()
         N, K = lin.out_features, lin.in_features
@@ -192,9 +192,10 @@ class Int4Linear(nn.Module):
     # (#561: the bf16 cache holds a second, 4x larger representation of every projection). Opt-in
     # until the K16 lane's 5090 numbers meet its registered decision rule.
     SMALLM_ROWS_MAX = 16
-    # E4B_ATTN_INT4_WIDE (e4b#846, opt-in): the same kernel with a 32- or 64-row M tile serves 17..64 rows -- a batched
-    # decode step above 16 rows -- instead of the cached bf16 copy (P119: 2.05 ms of Qwen3-30B-A3B's 15.64 ms 64-row
-    # step, reading 1.81 GB a step where the int4 grid is 510 MB). Needs grouped-nf4-gemm's block_m= (#522).
+    # E4B_ATTN_INT4_WIDE (e4b#846; ``auto`` by default since P124): the same kernel with a 32- or 64-row M tile serves
+    # 17..64 rows -- a batched decode step above 16 rows -- instead of the cached bf16 copy (P119: 2.05 ms of
+    # Qwen3-30B-A3B's 15.64 ms 64-row step, reading 1.81 GB a step where the int4 grid is 510 MB; P124: the 64- and
+    # 32-row steps 3.2-3.8 % faster within P110's quality bar). Needs grouped-nf4-gemm's block_m= (#522).
     WIDE_ROWS_MAX = 64
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -315,28 +316,46 @@ def _wide_supported(gemm) -> bool:
     return "block_m" in inspect.signature(gemm).parameters
 
 
-def resolve_wide(smallm: bool, wide=None) -> bool:
-    """``E4B_ATTN_INT4_WIDE`` (e4b#846), decided ONCE per enable: ``1`` routes 17..64 rows -- a batched decode step
-    above 16 rows -- to the K16 small-M GEMM with a 32- or 64-row tile, on the same packed bytes, instead of the
-    cached bf16 matmul. ``0`` (the default, also unset or empty) keeps the cached bf16 matmul above 16 rows. ``1``
-    is refused without the K16 route (``E4B_ATTN_INT4_SMALLM=0``, or its kernel absent) and on a kernel package
-    whose ``gemm_int4_b32_smallm`` has no ``block_m=``; anything else is refused. Never a silent fallback."""
+def resolve_wide(smallm: bool, wide=None, *, banner=print) -> bool:
+    """``E4B_ATTN_INT4_WIDE`` (e4b#846), decided ONCE per enable: whether 17..64 rows -- a batched decode step above 16
+    rows -- take the K16 small-M GEMM with a 32- or 64-row tile, on the same packed bytes, instead of the cached bf16
+    matmul.
+
+    - ``auto`` (the default, also unset or empty): the route when the K16 route is on and the installed
+      ``gemm_int4_b32_smallm`` takes ``block_m=`` (grouped-nf4-gemm #522, read from its signature, never from a
+      version); the cached bf16 matmul otherwise, said in one line when the K16 route is on but ``block_m=`` is
+      missing. Lane P124 read DEFAULT_ON: on Qwen3-30B-A3B int4 (SC2e's stack, one RTX 5090) the captured 64- and
+      32-row decode steps are 3.2-3.8 % faster, with the teacher-forced NLL inside P110's bar
+      (``e4b.serve.p124.attn-int4-wide.qwen3-int4.5090.2026-10-09``). Other models ride that read.
+    - ``1`` requires the route: refused without the K16 route (``E4B_ATTN_INT4_SMALLM=0``, or its kernel absent) and
+      on a kernel package without ``block_m=``.
+    - ``0`` keeps the cached bf16 matmul above 16 rows (the way back).
+
+    Anything else is refused. An explicit ``wide`` (``True``/``False``) is ``1``/``0``. Never a silent fallback."""
     import os
-    if wide is None:
-        v = os.environ.get("E4B_ATTN_INT4_WIDE", "0").strip().lower() or "0"
-        if v not in ("0", "1"):
-            raise ValueError(f"E4B_ATTN_INT4_WIDE={v!r}: expected '0' or '1'")
-        wide = v == "1"
-    if not wide:
+    mode = "1" if wide is True else ("0" if wide is False else None)
+    if mode is None:
+        v = os.environ.get("E4B_ATTN_INT4_WIDE", "auto").strip().lower() or "auto"
+        if v not in ("auto", "0", "1"):
+            raise ValueError(f"E4B_ATTN_INT4_WIDE={v!r}: expected 'auto', '0' or '1'")
+        mode = v
+    if mode == "0":
         return False
     if not smallm:
-        raise RuntimeError("E4B_ATTN_INT4_WIDE=1 needs the K16 small-M route, which is off "
-                           "(E4B_ATTN_INT4_SMALLM=0, or the installed grouped-nf4-gemm has no int4_smallm)")
+        if mode == "1":
+            raise RuntimeError("E4B_ATTN_INT4_WIDE=1 needs the K16 small-M route, which is off "
+                               "(E4B_ATTN_INT4_SMALLM=0, or the installed grouped-nf4-gemm has no int4_smallm)")
+        return False
     gemm, _plan, _ws = _smallm_kernels()
     if not _wide_supported(gemm):
-        raise RuntimeError("E4B_ATTN_INT4_WIDE=1 needs grouped-nf4-gemm whose gemm_int4_b32_smallm takes block_m= "
-                           "(rows above 16); install that cut or unset the flag -- the route is never substituted "
-                           "silently")
+        if mode == "1":
+            raise RuntimeError("E4B_ATTN_INT4_WIDE=1 needs grouped-nf4-gemm whose gemm_int4_b32_smallm takes block_m= "
+                               "(rows above 16); install that cut or unset the flag -- the route is never substituted "
+                               "silently")
+        banner("[e4b.int4_attn] 17..64-row route OFF: the installed grouped-nf4-gemm's gemm_int4_b32_smallm has no "
+               "block_m= (grouped-nf4-gemm #522); those rows take the cached-bf16 matmul (E4B_ATTN_INT4_WIDE=1 to "
+               "require the route, =0 to silence this)")
+        return False
     return True
 
 
@@ -388,9 +407,9 @@ def enable_serve_attn_int4(model, smallm: bool | None = None, wide: bool | None 
     ``smallm`` (default: ``E4B_ATTN_INT4_SMALLM``, ``auto``) routes ``1 < rows <= 16``
     to the K16 small-M int4 GEMM when the kernel is installed (see
     :func:`resolve_smallm`); ``=1`` with the kernel absent refuses here, never
-    at forward time. ``wide`` (default: ``E4B_ATTN_INT4_WIDE``, ``0``) routes
-    ``16 < rows <= 64`` to the same kernel (see :func:`resolve_wide`), refused here
-    when it cannot run."""
+    at forward time. ``wide`` (default: ``E4B_ATTN_INT4_WIDE``, ``auto``) routes
+    ``16 < rows <= 64`` to the same kernel where it can run (see :func:`resolve_wide`);
+    ``=1`` that cannot run refuses here."""
     try:
         _kernels()
     except ImportError as e:
