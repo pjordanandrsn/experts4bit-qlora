@@ -2267,15 +2267,15 @@ together; serial output is unchanged. `e4b.serve.sc2e.64-slots-buckets-auto.qwen
 16 unchanged, within P110's quality bar; it is grouped-nf4-gemm's default from 0.43.0 at Qwen3's NF4 expert shapes on
 GPUs with 160 or more SMs. `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`.
 
-**The B=1 fused stack is the default on Qwen3-MoE.** On top of grouped-nf4-gemm 0.43.0's bandwidth GEMV, fused q/k/v
+**The B=1 fused stack is the default on Qwen3-MoE and Qwen3.5/3.6-MoE.** On top of grouped-nf4-gemm 0.43.0's
+bandwidth GEMV, fused q/k/v
 plus three glue folds decode one request 1.5902× and 16 requests 1.1644× as fast on Qwen3-30B-A3B NF4, and P115 Phase
-D's SANE read at T == 1 passes (bias +0.00541 nats, argmax agreement 0.9674). The four knobs resolve to `auto` on the one
-family with that read and stay off elsewhere. Lane FAM read the others at T == 1, each against its own neutral floor
+D's SANE read at T == 1 passes (bias +0.00541 nats, argmax agreement 0.9674). The four knobs resolve to `auto` on the
+families with such reads and stay off elsewhere. Lane FAM read the others at T == 1, each against its own neutral floor
 (#1362). Granite-MoE fails on one gated entry of 12, by 2 positions in 1536. gpt-oss-20b fails on every knob, because its
 own floor sits below the 0.90 agreement backstop; that floor also contains Phase C's 0.924, so Phase C's miss was the
 gate, not the knob. Qwen3.6-MoE, where only the router epilogue engages, passes, and the epilogue decodes one request
-there in 0.973 of the step (FAM Amendment 4); adding the family to the allowlist is its own pull request. `0` on each
-knob is the way back.
+there in 0.973 of the step (FAM Amendment 4), so the family joined the allowlist. `0` on each knob is the way back.
 `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`,
 `e4b.serve.p115.fused-stack-quality.qwen3.5090.2026-10-07`, `e4b.serve.fam.fused-stack-t1.granite.5090.2026-10-09`,
 `e4b.serve.fam.fused-stack-t1.gptoss.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.qw36.5090.2026-10-09`,
@@ -2358,7 +2358,7 @@ controls. `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-
 | the one-launch tile table above 256 routed rows, up to the size read (`next_pow2(E) × next_pow2(R) ≤ 128 × 512`; takes effect with a grouped-nf4-gemm release carrying #519's chunked table; the one-piece table read 1.44× slower) | serving | `E4B_INT4_WIDE_TILES=0` | `e4b.serve.p122.wide-tiles-chunked.qwen3-int4.5090.2026-10-08`, `e4b.serve.p120.wide-tiles.qwen3-int4.5090.2026-10-08` |
 | attention projections of 17–64 decode rows on the int4 small-M GEMM, from the int4 grid instead of a cached bf16 copy (with the K16 route on; takes effect with a grouped-nf4-gemm release carrying #522's `block_m=`; Qwen3-30B-A3B's 64- and 32-row steps 3.2–3.8 % faster) | `Int4Linear` (serving) | `E4B_ATTN_INT4_WIDE=0` | `e4b.serve.p124.attn-int4-wide.qwen3-int4.5090.2026-10-09` |
 | router weights cast to bf16 at ≤ 64 rows (`softmax_topk`) | fused router epilogue | `E4B_ROUTER_EPI_CAST=0` | `e4b.serve.p70.qwen3.b1.router-weight-cast.5090.2026-09-25` |
-| B=1 fused stack (fused q/k/v and three glue folds) on Qwen3-MoE | `serve_paged` | `E4B_PAGED_FUSE_QKV=0`, `E4B_FUSE_T1_GLUE=0`, `E4B_FUSE_T1_GLUE_R2=0`, `E4B_FUSE_ROUTER_EPI=0` | `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07` |
+| B=1 fused stack (fused q/k/v and three glue folds) on Qwen3-MoE; its router epilogue, the only fold that engages, on Qwen3.5/3.6-MoE | `serve_paged` | `E4B_PAGED_FUSE_QKV=0`, `E4B_FUSE_T1_GLUE=0`, `E4B_FUSE_T1_GLUE_R2=0`, `E4B_FUSE_ROUTER_EPI=0` | `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`, `e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09` |
 
 ---
 

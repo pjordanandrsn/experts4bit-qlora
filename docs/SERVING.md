@@ -96,9 +96,9 @@ the paged attention, and the fusions at one assembly point as the harness: `fuse
 (`E4B_PAGED_FUSE_QKV=1`), which applies the env-gated folds (`E4B_FUSE_T1_GLUE`, `E4B_FUSE_T1_GLUE_R2`,
 `E4B_FUSE_ROUTER_EPI`) itself -- the registered B=1 fused stack is `--fuse-qkv` with those flags set -- or,
 without it, the three folds called directly. Unset, the four knobs resolve per family at startup: `auto` on
-`qwen3_moe`, the one family with a SANE read at T == 1 at reading size (lane P115 Phase D, #1379), and `0`
-elsewhere, Qwen3.5/3.6-MoE and Granite-MoE included until lane FAM reads them (#1362); `/health` reports each knob's
-resolution and its source. Explicit `auto` is structural and quality-licensed only on that list: elsewhere it logs one
+`qwen3_moe` (lane P115 Phase D's SANE read at T == 1, #1379) and on Qwen3.5/3.6-MoE (`qwen3_5_moe_text`, lane FAM's
+quality and speed reads, #1362; only the router epilogue engages there), and `0` elsewhere, gpt-oss and Granite-MoE
+included (FAM read both FAIL); `/health` reports each knob's resolution and its source. Explicit `auto` is structural and quality-licensed only on that list: elsewhere it logs one
 warning naming the read the family lacks or failed. `0` on a knob is the way back. A set lever that patches nothing
 refuses at startup, and
 `GET /health` reports the census (int4 expert layers, int4 attention projections, modules each fusion

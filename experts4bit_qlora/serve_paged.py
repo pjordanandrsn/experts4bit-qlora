@@ -140,16 +140,20 @@ FUSE_QKV_ENV = "E4B_PAGED_FUSE_QKV"
 FUSION_KNOBS = (FUSE_QKV_ENV,) + FUSION_ENV
 # Lane P115's family-scoped default (PREREG-p115.md Amendment 3, mechanism (B)): an UNSET fusion knob resolves to
 # ``auto`` on a model_type with a SANE read at T == 1 at reading size (the maintainer's rule, 2026-10-08, #1366) and to
-# ``0`` everywhere else. Explicit ``auto`` stays structural, as Phase C measured it.
+# ``0`` everywhere else. Explicit ``auto`` stays structural, as Phase C measured it. The keys are ``config.model_type``
+# as the served model carries it: serve_paged builds Qwen3.5/3.6-MoE's text tower, ``qwen3_5_moe_text``.
+_FAM_QW36 = ("lane FAM (#1362): T == 1 quality PASS (e4b.serve.fam.fused-stack-t1.qw36.5090.2026-10-09) and the router "
+             "epilogue, the only knob that engages, FASTER at one row (e4b.serve.fam.router-epilogue-speed.qw36.5090."
+             "2026-10-09)")
 FUSION_DEFAULT_FAMILIES = {
     "qwen3_moe": "P115 Phases A and B: speed and quality (#1328); Phase D: SANE at T == 1, COMBINED_SANE (#1379)",
+    "qwen3_5_moe_text": _FAM_QW36,
+    "qwen3_5_moe": _FAM_QW36,           # the composite config, should a build keep it
 }
 # the read each other known family lacks or failed, named in the warning an explicit ``auto`` logs on it
 FUSION_UNLICENSED = {
     "gpt_oss": ("lane FAM at T == 1: every knob FAILs the 0.90 agreement backstop, which the family's own neutral floor "
                 "misses too; Phase C's 0.924 lies inside that floor (#1362)"),
-    "qwen3_5_moe": ("lane FAM at T == 1: quality PASS (#1362); the default waits for FAM Amendment 4's speed read of the "
-                    "router epilogue, the only knob that engages"),
     "granitemoe": "lane FAM at T == 1: ON_auto FAILs one gated entry of 12 (#1362)",
 }
 FUSION_UNSET = "default"          # from_env's value for an unset knob, resolved per family by resolve_fusion_modes
