@@ -1,0 +1,332 @@
+{
+ "amendment": 1,
+ "lane": "P126",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "predictions": {
+  "Q1": {
+   "band": [
+    0.12,
+    0.22
+   ],
+   "result": "HELD",
+   "statistic": "table_share_one",
+   "value": 0.1802
+  },
+  "Q2": {
+   "band": [
+    0.06,
+    0.15
+   ],
+   "result": "HELD",
+   "statistic": "mp_over_one_8",
+   "value": 0.0921
+  },
+  "Q3": {
+   "band": [
+    0.15,
+    0.3
+   ],
+   "result": "HELD",
+   "statistic": "mp_over_one_4",
+   "value": 0.2196
+  },
+  "Q4": {
+   "band": [
+    0.86,
+    0.93
+   ],
+   "result": "MISSED",
+   "statistic": "served_ratios_8",
+   "value": [
+    0.8481,
+    0.8183
+   ]
+  },
+  "Q5": {
+   "band": [
+    0.88,
+    0.95
+   ],
+   "result": "MISSED",
+   "statistic": "served_ratios_4",
+   "value": [
+    0.8442,
+    0.8456
+   ]
+  },
+  "Q6": {
+   "band": [
+    0.9,
+    1.0
+   ],
+   "result": "HELD",
+   "statistic": "busy_min",
+   "value": 0.9698
+  },
+  "Q7": {
+   "band": [
+    0.0,
+    0.01
+   ],
+   "result": "MISSED",
+   "statistic": "block_disagreement_max",
+   "value": 0.0364
+  },
+  "Q8": {
+   "band": [
+    0.5,
+    1.0
+   ],
+   "result": "HELD",
+   "statistic": "mutant_differ_share",
+   "value": 0.9487
+  }
+ },
+ "reasons": [
+  "ON/OFF {'4': [0.8442, 0.8456]}: P=4 has the lower mean of those with both <= 0.98",
+  "ineligible (Amendment 1): P=8: block a 0.8481, block b 0.8183, 0.0364 apart (bound 0.015)"
+ ],
+ "tables": {
+  "block_disagreement_max": 0.0364,
+  "busy_min": 0.9698,
+  "eager_ratio_4": 0.8627,
+  "eager_ratio_8": 0.8393,
+  "host": {
+   "end": {
+    "cpu_count": 64,
+    "gpu_processes": 1,
+    "loadavg": [
+     1.83,
+     3.8,
+     2.98
+    ],
+    "mem_available_gib": 239.1,
+    "mem_total_gib": 251.4,
+    "power_limit_w": 575.0,
+    "power_max_limit_w": 600.0
+   },
+   "start": {
+    "cpu_count": 64,
+    "gpu_processes": 1,
+    "loadavg": [
+     8.32,
+     5.22,
+     3.19
+    ],
+    "mem_available_gib": 239.7,
+    "mem_total_gib": 251.4,
+    "power_limit_w": 575.0,
+    "power_max_limit_w": 600.0
+   }
+  },
+  "mp_over_one_4": 0.2196,
+  "mp_over_one_8": 0.0921,
+  "mutant_differ_share": 0.9487,
+  "noisy_candidates": [
+   "8"
+  ],
+  "profile": {
+   "1": {
+    "device_ms": 17.4454,
+    "table_mp_calls": 0.0,
+    "table_mp_ms": 0.0,
+    "table_one_calls": 48.0,
+    "table_one_ms": 3.1429
+   },
+   "4": {
+    "device_ms": 15.0498,
+    "table_mp_calls": 48.0,
+    "table_mp_ms": 0.6902,
+    "table_one_calls": 0.0,
+    "table_one_ms": 0.0
+   },
+   "8": {
+    "device_ms": 14.6423,
+    "table_mp_calls": 48.0,
+    "table_mp_ms": 0.2895,
+    "table_one_calls": 0.0,
+    "table_one_ms": 0.0
+   }
+  },
+  "served": {
+   "4": {
+    "block_disagreement": 0.0017,
+    "busy": {
+     "a": {
+      "1": 0.9756,
+      "4": 0.971
+     },
+     "b": {
+      "1": 0.9756,
+      "4": 0.9708
+     }
+    },
+    "clock": {
+     "a": {
+      "power_w": [
+       264.19,
+       368.53
+      ],
+      "pstates": [
+       "P1"
+      ],
+      "samples": 2,
+      "sm_mhz": [
+       2130.0,
+       2242.0
+      ],
+      "temp_c": [
+       59.0,
+       61.0
+      ]
+     },
+     "b": {
+      "power_w": [
+       265.7,
+       371.24
+      ],
+      "pstates": [
+       "P1"
+      ],
+      "samples": 2,
+      "sm_mhz": [
+       2130.0,
+       2242.0
+      ],
+      "temp_c": [
+       60.0,
+       63.0
+      ]
+     }
+    },
+    "medians": {
+     "a": {
+      "1": 18.4969,
+      "4": 15.6157
+     },
+     "b": {
+      "1": 18.4693,
+      "4": 15.6181
+     }
+    },
+    "memory": {
+     "a": {
+      "max_allocated_mib": 25323.0,
+      "max_reserved_mib": 26110.0,
+      "wide_workspace_mib": 11.501
+     },
+     "b": {
+      "max_allocated_mib": 25436.7,
+      "max_reserved_mib": 26432.0,
+      "wide_workspace_mib": 11.501
+     }
+    },
+    "pair_ratio_median": {
+     "a": 0.8445,
+     "b": 0.8459
+    },
+    "ratio_a": 0.8442,
+    "ratio_b": 0.8456,
+    "ratios": [
+     0.8442,
+     0.8456
+    ],
+    "saving_ms": 2.8662
+   },
+   "8": {
+    "block_disagreement": 0.0364,
+    "busy": {
+     "a": {
+      "1": 0.9746,
+      "8": 0.9701
+     },
+     "b": {
+      "1": 0.9759,
+      "8": 0.9698
+     }
+    },
+    "clock": {
+     "a": {
+      "power_w": [
+       266.02,
+       383.05
+      ],
+      "pstates": [
+       "P1"
+      ],
+      "samples": 2,
+      "sm_mhz": [
+       2145.0,
+       2242.0
+      ],
+      "temp_c": [
+       60.0,
+       64.0
+      ]
+     },
+     "b": {
+      "power_w": [
+       267.68,
+       377.12
+      ],
+      "pstates": [
+       "P1"
+      ],
+      "samples": 2,
+      "sm_mhz": [
+       2130.0,
+       2242.0
+      ],
+      "temp_c": [
+       61.0,
+       64.0
+      ]
+     }
+    },
+    "medians": {
+     "a": {
+      "1": 17.857,
+      "8": 15.1452
+     },
+     "b": {
+      "1": 18.5183,
+      "8": 15.1528
+     }
+    },
+    "memory": {
+     "a": {
+      "max_allocated_mib": 25461.1,
+      "max_reserved_mib": 26498.0,
+      "wide_workspace_mib": 11.501
+     },
+     "b": {
+      "max_allocated_mib": 25461.1,
+      "max_reserved_mib": 26498.0,
+      "wide_workspace_mib": 11.501
+     }
+    },
+    "pair_ratio_median": {
+     "a": 0.8484,
+     "b": 0.8184
+    },
+    "ratio_a": 0.8481,
+    "ratio_b": 0.8183,
+    "ratios": [
+     0.8481,
+     0.8183
+    ],
+    "saving_ms": 3.0386
+   }
+  },
+  "served_ratios_4": [
+   0.8442,
+   0.8456
+  ],
+  "served_ratios_8": [
+   0.8481,
+   0.8183
+  ],
+  "table_share_one": 0.1802
+ },
+ "verdict": "DEFAULT_ON_4"
+}
