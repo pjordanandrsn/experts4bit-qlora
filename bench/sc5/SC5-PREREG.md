@@ -36,10 +36,20 @@ Every cell is reported, including every cell a competitor wins.
 | vLLM | the current release at registration *(pin then)* | `Qwen/Qwen3-30B-A3B-GPTQ-Int4` @ `9b534e4318b7ebc3c961a839f13eb18b1833f441` | GPTQ 4-bit g128 (Marlin kernels) | the framework's default |
 | SGLang | the current release at registration *(pin then)* | the same GPTQ checkpoint | GPTQ 4-bit g128 (Marlin kernels) | the framework's default |
 
-The GPTQ checkpoint is the official Qwen 4-bit release, and the 4-bit format SC2 served on both vLLM and SGLang.
-Alternatives from the 2026-10-01 census are open question 1: AWQ, compressed-tensors W4A16, and NVFP4 (which is W4A4,
-a different arithmetic class). Quality is measured for every arm, so a format difference shows up in the quality columns
-rather than hiding behind speed.
+**The primary rows** (decided 2026-10-09):
+- vLLM and SGLang on the one shared official checkpoint, `Qwen/Qwen3-30B-A3B-GPTQ-Int4` @ `9b534e43`, the 4-bit format
+  SC2 served on both;
+- e4b at its int4 defaults.
+
+**A framework's native-best row** is added only where that framework serves an AWQ or compressed-tensors W4A16
+checkpoint of the same base faster. It is reported apart and says so, with the checkpoint's repo and revision named at
+registration.
+
+**NVFP4** (`nvidia/Qwen3-30B-A3B-NVFP4`, W4A4) is a different precision class. It is deferred to a follow-up amendment
+with its own quality bar, and is not part of this registration.
+
+Quality is measured for every row, so a format difference shows up in the quality columns rather than hiding behind
+speed.
 
 ## Load
 
@@ -55,8 +65,9 @@ rather than hiding behind speed.
     request's send to the last counted request's end;
   - peak GPU memory, sampled from `nvidia-smi` at 1 Hz;
   - the slots and KV-token capacity the framework reports.
-- **Open loop (optional, open question 2):** SC2e's Poisson ladder (1, 2, 4, 8, 12 and 16 req/s × 120) at the default
-  memory setting only, with SC2's SLO attainment and ceiling.
+- **Open loop (reported only, never gated; budget permitting):** one Poisson point per framework, near its saturation as
+  the closed-loop C = 64 cell shows it, at the default memory setting. It reports SC2's SLO attainment. The closed-loop
+  cells are the gated ones.
 
 ## Memory settings (two per framework)
 
@@ -88,10 +99,12 @@ rather than hiding behind speed.
 
   Each framework has two blocks per draw.
 - **The noise bound.** For each framework, cell and metric, the two same-framework blocks in a draw bound the noise:
-  `|A1 / A2 − 1|`. A cell whose bound exceeds 5 % *(size at registration)* is reported NOISY, and no lead/trail label is
-  drawn from it.
-- **Labels.** A cross-framework comparison per cell is labelled LEADS, TRAILS or WITHIN NOISE against the larger of the
-  two frameworks' bounds.
+  `|A1 / A2 − 1|`.
+- **The bound and N** are sized from SC2e's per-cell spread and written into this file before any SC5 data. They are
+  placeholders here: 5 %, and N = 32 / 128 / 256.
+- **Labels, per cell and metric, between e4b and a competitor:**
+  - **LEADS** or **TRAILS** only when both blocks of each framework clear the bound in the same direction;
+  - **WITHIN NOISE** otherwise.
 
 ## Quality: one common bf16 reference
 
@@ -103,7 +116,9 @@ rather than hiding behind speed.
     host RAM, eager attention and teacher forcing.
   - This follows SC1 box B's oracle (`step_decomp.py --ppl-oracle upstream`). That oracle records only a mean NLL, so the
     new script records **per position** the NLL of the true next token and the argmax id.
-  - It needs about 98 GB of host RAM (SC1's floor), and it is computed once.
+  - It needs about 98 GB of host RAM (SC1's floor). It may run on a separate box (decided 2026-10-09): it is computed
+    **once**, stored with its sha256 in the lane's receipts, and every draw verifies that hash before scoring. What must
+    match is the windows and token ids, not the host.
 - **e4b:** offline teacher forcing through `p117_box.paged_pass` on the **served** int4 pack and every current default
   (graphs and buckets as served). It records per-position NLL and argmax.
 - **vLLM:** through the running server, with `prompt_logprobs=1` on the completions endpoint, one request per window.
@@ -148,17 +163,17 @@ A block or cell is VOID, and is never read, when any of these holds:
 - **#1478's estimate:** about $6–8 for proof plus reading.
 - **The proof:** one draw, one memory setting, C = 1 and 16, and all three quality passes on 8 windows.
 
-## Open questions, for the maintainer before registration
+## Decided before registration (maintainer, 2026-10-09)
 
-1. **Formats.** The default is GPTQ-Int4 on both competitors. Should a vLLM NVFP4 row (`nvidia/Qwen3-30B-A3B-NVFP4`, W4A4)
-   be added, reported apart as a different arithmetic class, if the pinned vLLM serves it on sm_120? Should an AWQ or
-   compressed-tensors W4A16 row be added?
-2. **Open loop.** Should the Poisson ladder run (at the default memory only), or should SC5 be closed-loop only, with
-   SC2e's ladder as the open-loop record?
-3. **The reference host.** Should one box with at least 98 GB of host RAM do both the speed read and the reference, or
-   should the reference run once on a separate box?
-4. **The noise bound and request counts.** 5 % and N = 32/128/256 are placeholders, to be sized from SC2e's per-cell
-   spread.
+1. **Formats.** The shared GPTQ checkpoint is the primary row for vLLM and SGLang, and e4b runs at its int4 defaults.
+   AWQ or W4A16 appears only as a reported native-best row where a framework serves it faster. NVFP4 is deferred to its
+   own amendment.
+2. **Load.** The closed-loop cells at C = 1/16/64 are gated. At most one Poisson point per framework near saturation is
+   reported only.
+3. **The reference** may be computed once on a separate box. It is stored with its sha256, and the hash is verified on
+   every draw.
+4. **Noise.** N and the bound are sized from SC2e's spread and written here before any SC5 data. A cell is WITHIN NOISE
+   unless its blocks clear the bound in the same direction.
 
 ## Work items (zero rental; each lands as reviewed code before registration)
 
