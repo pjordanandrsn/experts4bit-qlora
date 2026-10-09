@@ -41,12 +41,11 @@ def _load(name, lane="fam"):
 
 
 @pytest.fixture
-def hybrid(monkeypatch):
+def hybrid():
     """Builds a tiny Qwen3.6-shaped hybrid, seeded: the same weights on every call."""
-    monkeypatch.setitem(sys.modules, "causal_conv1d", None)     # CUDA-only kernels: the reference path on CPU,
-    monkeypatch.setitem(sys.modules, "fla", None)               # bound when the modeling module is first imported
+    from hybrid_reference import reference_modeling
     from transformers import Qwen3_5MoeTextConfig
-    from transformers.models.qwen3_5_moe import modeling_qwen3_5_moe as q35
+    q35 = reference_modeling("qwen3_5_moe")
 
     def make(layer_types=(LIN, LIN, LIN, ATT)):
         cfg = Qwen3_5MoeTextConfig(vocab_size=128, hidden_size=64, num_hidden_layers=len(layer_types),
