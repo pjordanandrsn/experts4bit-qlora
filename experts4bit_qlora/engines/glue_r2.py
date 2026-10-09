@@ -48,7 +48,7 @@ import torch
 
 from .glue_fuse import _is_rmsnorm, _norm_eps, _note, _probe_matches, fold_mode
 
-__all__ = ["fuse_t1_glue_r2"]
+__all__ = ["fuse_t1_glue_r2", "license_moe_residual"]
 
 # decode rows stay small; prefill keeps the upstream chain
 _MAX_DECODE_ROWS = 64
@@ -282,6 +282,11 @@ def _patch_layer(mod, rmsnorm_resid_rows) -> bool:
         # residual add + post-attention norm, one launch
         hidden_states, residual = rmsnorm_resid_rows(
             hidden_states, residual, _ln.weight, _eps)
+        lic = _m.__dict__.get("_e4b_moe_resid")
+        if lic is not None and hidden_states.numel() // _w in lic:
+            # the MoE block's own composition with the residual add folded into the experts' combine, at a row count
+            # license_moe_residual's probe of this layer AS SERVED found bitwise (e4b#1313, lane P127's item c)
+            return _moe_with_residual(_m.mlp, hidden_states, residual, _w)
         hidden_states = _m.mlp(hidden_states)
         if isinstance(hidden_states, tuple):
             # gpt-oss's MoE block returns (hidden, router_scores) and its
@@ -293,6 +298,76 @@ def _patch_layer(mod, rmsnorm_resid_rows) -> bool:
 
     mod.forward = _fwd
     return True
+
+
+def _moe_with_residual(mlp, h, residual, width):
+    """``residual + mlp(h)`` by the composition :func:`license_moe_residual` licenses: the block's gate, then its
+    experts with the residual handed down (``_, weights, ids = gate(x)``; ``experts(x, ids, weights)``, the
+    transformers 5.x sparse-MoE block's body), reshaped back."""
+    h2 = h.reshape(-1, width)
+    _, w, idx = mlp.gate(h2)
+    return mlp.experts(h2, idx, w, residual=residual.reshape(-1, width)).reshape(residual.shape)
+
+
+def _residual_candidate(mod) -> bool:
+    """A decoder layer under :func:`_patch_layer`'s fold whose MLP is a bare gate + experts block and whose experts
+    forward takes ``residual=`` (hot residency's, :mod:`.hot_residency`)."""
+    fwd = getattr(mod, "forward", None)
+    if getattr(fwd, "__qualname__", "") != "_patch_layer.<locals>._fwd":
+        return False
+    mlp = getattr(mod, "mlp", None)
+    if mlp is None or {n for n, _ in mlp.named_children()} != {"gate", "experts"}:
+        return False
+    return bool(getattr(getattr(mlp.experts, "forward", None), "_e4b_takes_residual", False))
+
+
+def license_moe_residual(model, rows, mode: str | None = None, report: dict | None = None) -> int:
+    """License each folded decoder layer to hand its MoE residual add to the experts' combine (lane P127's item c,
+    e4b#1313; the kernel side's ``combine_rows(..., residual=)``, grouped-nf4-gemm#527), one row count at a time.
+
+    Run on the model AS SERVED -- after residency, the collapse and the batched grouping are configured, before any
+    graph is captured -- with ``rows`` every row count the decode composition may run (the server's decode buckets;
+    1 at least). At each, on distinct finite random bf16 inputs and without grad, the layer's composition
+    (:func:`_moe_with_residual`) must be bitwise the layer's own ``residual + mlp(h)``; the counts that are become
+    the layer's licence, and any other count keeps the layer's own body. Candidates: :func:`_residual_candidate`.
+
+    ``mode`` is the layer fold's own (``E4B_FUSE_T1_GLUE_R2``, :func:`~.glue_fuse.fold_mode`): ``0`` licenses
+    nothing; ``1`` refuses when no layer is licensed at every count. Returns the layers licensed at every count."""
+    mode = fold_mode("E4B_FUSE_T1_GLUE_R2", mode)
+    rows = sorted({int(r) for r in rows} | {1})
+    _note(report, rows=rows)
+    if mode == "0":
+        return 0
+    gen = torch.Generator(device="cpu").manual_seed(0x5127)
+    full = partial = refused = 0
+    for mod in model.modules():
+        if not _residual_candidate(mod):
+            continue
+        width = mod.post_attention_layernorm.weight.numel()
+        dev = mod.post_attention_layernorm.weight.device
+        ok = []
+        with torch.no_grad():
+            for t in rows:
+                h = torch.randn(1, t, width, generator=gen).to(device=dev, dtype=torch.bfloat16)
+                r = (torch.randn(1, t, width, generator=gen) * 4).to(device=dev, dtype=torch.bfloat16)
+                want = mod.mlp(h)
+                want = r + (want[0] if isinstance(want, tuple) else want)
+                got = _moe_with_residual(mod.mlp, h, r, width)
+                if got.dtype == want.dtype and got.shape == want.shape and torch.equal(got, want):
+                    ok.append(t)
+        if ok:
+            mod._e4b_moe_resid = frozenset(ok)
+        else:
+            mod.__dict__.pop("_e4b_moe_resid", None)
+        full += len(ok) == len(rows)
+        partial += 0 < len(ok) < len(rows)
+        refused += not ok
+    _note(report, licensed=full, partial=partial, refused=refused)
+    if mode == "1" and full == 0:
+        raise RuntimeError(
+            "E4B_FUSE_T1_GLUE_R2=1: no folded layer's MoE residual composition was bitwise its own body at every "
+            f"decode row count {rows} -- refusing a vacuous licence")
+    return full
 
 
 def _patch_attention(mod, rope_norm_heads, rope_norm_qk=None) -> bool:
