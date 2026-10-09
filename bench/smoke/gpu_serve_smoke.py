@@ -262,7 +262,7 @@ def check_residual(info):
         raise RuntimeError(f"residual folds did not engage: {info}")
 
 
-def run_cell(family, stack, root):
+def run_cell(family, stack, root, int4_source="offline-hub"):
     import torch
     from experts4bit_qlora.engines.hot_residency import target_modules
     from experts4bit_qlora.serve_paged import PagedServeConfig, build_engine
@@ -286,7 +286,8 @@ def run_cell(family, stack, root):
     # immediately overrides the resulting placement to all-VRAM.
     calib.write_text(json.dumps({"cpu_bench": {"scatter_best": {"gbs": 1}},
                                  "gpu_bench": {"devices": [{"b_vram_triad_gbs": 1}]}}))
-    os.environ.update(E4B_PAGED_MODEL=model_id, E4B_PAGED_ARENA=str(arena),
+    selected_model = str(snapshot) if stack == "int4" and int4_source == "local" else model_id
+    os.environ.update(E4B_PAGED_MODEL=selected_model, E4B_PAGED_ARENA=str(arena),
                       E4B_PAGED_CALIB=str(calib))
     expert_int4_unsupported = None
     if stack == "int4":
@@ -344,6 +345,7 @@ def run_cell(family, stack, root):
     return {"device": torch.cuda.get_device_name(), "capability": list(torch.cuda.get_device_capability()),
             "torch": torch.__version__, "source": source_identity(), "placement": cfg.placement,
             "synthetic_snapshot": {"id": model_id, "content_revision": fixture_revision},
+            "checkpoint_source": cfg.model, "int4_source": int4_source if stack == "int4" else None,
             "residency_states": states, "expert_target_names": target_names, "graph_default_enabled": cfg.graphs,
             "decode_coverage": "graph capture and replay" if cfg.graphs else "eager default; graphs not exercised",
             "graph_status": graph_status, "graph_stats": graph_stats,
@@ -358,7 +360,7 @@ def worker(args):
     row = {"family": args.family, "stack": args.stack, "status": "FAIL"}
     try:
         row["source"] = source_identity()
-        row.update(run_cell(args.family, args.stack, Path(args.output_dir)))
+        row.update(run_cell(args.family, args.stack, Path(args.output_dir), args.int4_source))
         row["status"] = "PASS"
     except Exception as exc:
         row.update(exception=f"{type(exc).__name__}: {exc}", traceback=traceback.format_exc())
@@ -366,7 +368,7 @@ def worker(args):
     return 0 if row["status"] == "PASS" else 1
 
 
-def run_suite(root, timeout):
+def run_suite(root, timeout, int4_source="offline-hub"):
     deadline = time.monotonic() + timeout
     rows = []
     for family in FAMILIES:
@@ -377,7 +379,8 @@ def run_suite(root, timeout):
             cell.mkdir()
             result = cell / "result.json"
             cmd = [sys.executable, str(Path(__file__).resolve()), "--worker", "--family", family,
-                   "--stack", stack, "--output-dir", str(cell), "--result", str(result)]
+                   "--stack", stack, "--output-dir", str(cell), "--result", str(result),
+                   "--int4-source", int4_source]
             row = {"family": family, "stack": stack, "status": "FAIL"}
             try:
                 remaining = deadline - time.monotonic()
@@ -413,6 +416,8 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--output-dir", help="new directory for local assets, worker logs and summary.json")
     p.add_argument("--timeout", type=float, default=300, help="whole-suite deadline in seconds (default: 300)")
+    p.add_argument("--int4-source", choices=("offline-hub", "local"), default="offline-hub",
+                   help="expert-int4 source: synthetic offline Hub fixture (default) or local checkpoint directory")
     p.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--family", choices=FAMILIES, help=argparse.SUPPRESS)
     p.add_argument("--stack", choices=STACKS, help=argparse.SUPPRESS)
@@ -425,9 +430,9 @@ def main():
     if args.output_dir:
         root = Path(args.output_dir).resolve()
         root.mkdir(parents=True, exist_ok=False)
-        return run_suite(root, args.timeout)
+        return run_suite(root, args.timeout, args.int4_source)
     with tempfile.TemporaryDirectory(prefix="e4b-gpu-serve-smoke-") as tmp:
-        return run_suite(Path(tmp), args.timeout)
+        return run_suite(Path(tmp), args.timeout, args.int4_source)
 
 
 if __name__ == "__main__":

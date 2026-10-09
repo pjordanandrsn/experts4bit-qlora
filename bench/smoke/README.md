@@ -21,6 +21,21 @@ five-minute deadline, returns nonzero. `summary.json` records the exceptions,
 source package digest, actual residency classes, lever engagement, graph
 decisions and generated token IDs; each cell also keeps its worker log.
 
+To exercise expert-int4 source reads from an actual local checkpoint directory
+(requires the local-directory reader fix in
+[#1490](https://github.com/pjordanandrsn/experts4bit-qlora/pull/1490)):
+
+```bash
+PYTHONPATH=. python bench/smoke/gpu_serve_smoke.py --int4-source local --output-dir /tmp/e4b-local-int4-smoke
+```
+
+The option applies to int4 cells and is forwarded to every isolated worker.
+Default and fusion cells retain their existing source selection. Every cell
+records the selected checkpoint source; int4 cells also record `int4_source`.
+The default `offline-hub` mode retains the synthetic cache fixture for Hub-reader
+coverage and testing historical source revisions. Both modes use the same
+local random weights and stay offline.
+
 Two additional `folds` cells enable all four fusion knobs at `auto` on
 Qwen3-MoE and Mixtral, for ten cells in all. Both require residual licensing on
 every served MoE layer, no partial licence or probe error, and nonzero glue/r2
