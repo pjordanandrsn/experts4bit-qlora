@@ -136,6 +136,8 @@ assert set(m.values()) == {"0"} and set(s.values()) == {"default-off"}, (m, s)
 # the int4 attention paths the gates read: one row on the activation-quantised GEMV, 2..16 on K16, more on the bf16
 # copy; fused q/k/v on the int4 store; the calibration on the box from C4
 from experts4bit_qlora.engines.int4_attn import Int4Linear
+# Amendment 1: the int4 head builds the graph server only with #1426's fix (the prefill graph read the head's .weight)
+from experts4bit_qlora.engines.paged_runner import _output_width  # noqa: F401
 assert (Int4Linear.GEMV_ROWS_MAX, Int4Linear.SMALLM_ROWS_MAX) == (1, 16), (Int4Linear.GEMV_ROWS_MAX, Int4Linear.SMALLM_ROWS_MAX)
 assert callable(Int4Linear.fuse)
 from experts4bit_qlora.engines.int4_attn_calib import calibrate_attention_hessians, enable_serve_attn_int4_calib  # noqa: F401

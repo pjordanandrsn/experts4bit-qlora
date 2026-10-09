@@ -177,12 +177,13 @@ def test_the_order_puts_every_refusal_before_the_fetch():
     trip = RUN[RUN.index("python - <<'PYT'"):RUN.index("PYT\ncat versions.txt")]
     for s in ('sp.resolve_fusion_modes(dict(unset), "qwen3_moe")', '(Int4Linear.GEMV_ROWS_MAX, Int4Linear.SMALLM_ROWS_MAX) == (1, 16)',
               "calibrate_attention_hessians", "gemv_int4_b32", 'md.version("grouped-nf4-gemm") == "0.43.0"',
-              'transformers.__version__ == "5.17.0"', 'E4B_CALIB_SOURCE") is None'):
+              'transformers.__version__ == "5.17.0"', 'E4B_CALIB_SOURCE") is None',
+              "from experts4bit_qlora.engines.paged_runner import _output_width"):
         assert s in trip, s
 
 
 def test_every_time_left_check_fits_its_own_guard():
-    assert "guard 0.75 h" in PREREG and "guard 2.5 h" in PREREG
+    assert "guard 0.75 h" in PREREG and "guard 3.0 h" in PREREG, "Amendment 1 raised the reading's guard to 3.0 h"
     keys = {"FETCH", "BAKE", "ARM", "QUALITY"}
     prove = dict(re.findall(r"NEED_(FETCH|BAKE|ARM|QUALITY)=(\d+)", RUN[RUN.index('if [ "$PROVE" = 1 ]; then'):RUN.index("else\n")]))
     reading = dict(re.findall(r"NEED_(FETCH|BAKE|ARM|QUALITY)=(\d+)", RUN[RUN.index("else\n"):RUN.index("fi\nGPU_CLASS=")]))
@@ -190,7 +191,7 @@ def test_every_time_left_check_fits_its_own_guard():
     for need in prove.values():
         assert int(need) + 600 <= 0.75 * 3600 - 900, prove
     for need in reading.values():
-        assert int(need) + 600 <= 2.5 * 3600 - 900, reading
+        assert int(need) + 600 <= 3.0 * 3600 - 900, reading
     assert re.findall(r"can_run (\S+)", RUN) == ["$NEED_FETCH", "$NEED_BAKE", "$NEED_ARM", "$NEED_QUALITY"]
 
 
