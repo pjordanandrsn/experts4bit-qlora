@@ -208,7 +208,10 @@ default. `e4b.serve.p123.default-decode-census.qwen3.5090.2026-10-09` ([P123](..
 
 **Other opt-ins.** `E4B_PAGED_DECODE_LOOKAHEAD=1` recovers the whole host gap between decode steps, but the gap is
 small: 1.0198× at one request, SLOWER against its 1.02 bar. `E4B_PAGED_LAST_LOGITS=1` projects only the final prompt
-position through the LM head (#1337). `e4b.serve.p118.decode-lookahead.qwen3.5090.2026-10-08`.
+position through the LM head (#1337). `E4B_ATTN_INT4_WIDE=1` serves the attention projections of a 17–64-row decode step
+from the int4 grid instead of a cached bf16 copy (#1410, grouped-nf4-gemm #522). On Qwen3-30B-A3B int4 it makes the 64-
+and 32-row steps 3.2–3.8 % faster, inside P110's quality bar (P124, DEFAULT_ON); the default flip is its own PR.
+`e4b.serve.p118.decode-lookahead.qwen3.5090.2026-10-08`, `e4b.serve.p124.attn-int4-wide.qwen3-int4.5090.2026-10-09`.
 
 **Qwen3-30B-A3B's licensed int4 stack** (calibrated int4 experts and attention, folds, router epilogue) passes the K8
 gate on both texts loaded by fingerprint (expert pack `sha256:0c9955a9…`; wikitext −0.05275, c4val1 −0.06622 ppl). On

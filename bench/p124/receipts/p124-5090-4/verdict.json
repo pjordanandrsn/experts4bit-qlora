@@ -1,0 +1,451 @@
+{
+ "lane": "P124",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "predictions": {
+  "Q1": {
+   "band": [
+    0.08,
+    0.18
+   ],
+   "result": "HELD",
+   "statistic": "attn_share_off_64",
+   "value": 0.1235
+  },
+  "Q2": {
+   "band": [
+    0.25,
+    0.65
+   ],
+   "result": "MISSED",
+   "statistic": "int4_over_cublas_64",
+   "value": 0.7356
+  },
+  "Q3": {
+   "band": [
+    0.89,
+    0.97
+   ],
+   "result": "HELD",
+   "statistic": "served_ratios_64",
+   "value": [
+    0.9648,
+    0.967
+   ]
+  },
+  "Q4": {
+   "band": [
+    0.86,
+    0.97
+   ],
+   "result": "HELD",
+   "statistic": "served_ratios_32",
+   "value": [
+    0.9616,
+    0.9679
+   ]
+  },
+  "Q5": {
+   "band": [
+    0.9,
+    1.0
+   ],
+   "result": "HELD",
+   "statistic": "busy_min",
+   "value": 0.9694
+  },
+  "Q6": {
+   "band": [
+    0.0,
+    0.005
+   ],
+   "result": "HELD",
+   "statistic": "same_setting_disagreement",
+   "value": 0.0038
+  },
+  "Q7": {
+   "band": [
+    -0.003,
+    0.003
+   ],
+   "result": "HELD",
+   "statistic": "subject_bias",
+   "value": [
+    0.001087,
+    0.00135
+   ]
+  },
+  "Q8": {
+   "band": [
+    0.3,
+    100.0
+   ],
+   "result": "HELD",
+   "statistic": "mutant_bias",
+   "value": [
+    1.149617,
+    0.541914
+   ]
+  },
+  "Q9": {
+   "band": [
+    -64.0,
+    64.0
+   ],
+   "result": "HELD",
+   "statistic": "memory_on_minus_off_mib_64",
+   "value": 11.501
+  }
+ },
+ "reasons": [
+  "ON/OFF {'64': [0.9648, 0.967], '32': [0.9616, 0.9679]} all <= 0.98"
+ ],
+ "tables": {
+  "attn_share_off_64": 0.1235,
+  "busy_min": 0.9694,
+  "int4_over_cublas_64": 0.7356,
+  "memory_on_minus_off_mib_64": 11.501,
+  "mutant_bias": [
+   1.149617,
+   0.541914
+  ],
+  "profile": {
+   "32": {
+    "attn_cublas_ms": 1.3647,
+    "attn_share_off": 0.1248,
+    "eager_on_over_off": 0.9558,
+    "int4_over_cublas": 0.5932,
+    "off": {
+     "dense_gemm_calls": 242.0,
+     "dense_gemm_ms": 2.0009,
+     "device_ms": 10.9392,
+     "smallm_calls": 0.0,
+     "smallm_ms": 0.0
+    },
+    "on": {
+     "dense_gemm_calls": 98.0,
+     "dense_gemm_ms": 0.6362,
+     "device_ms": 10.4556,
+     "smallm_calls": 96.0,
+     "smallm_ms": 0.8096
+    }
+   },
+   "64": {
+    "attn_cublas_ms": 1.8802,
+    "attn_share_off": 0.1235,
+    "eager_on_over_off": 0.9642,
+    "int4_over_cublas": 0.7356,
+    "off": {
+     "dense_gemm_calls": 194.0,
+     "dense_gemm_ms": 2.4742,
+     "device_ms": 15.2199,
+     "smallm_calls": 0.0,
+     "smallm_ms": 0.0
+    },
+    "on": {
+     "dense_gemm_calls": 98.0,
+     "dense_gemm_ms": 0.594,
+     "device_ms": 14.6755,
+     "smallm_calls": 96.0,
+     "smallm_ms": 1.383
+    }
+   }
+  },
+  "quality": {
+   "B_floor": 0.003764,
+   "S_floor": 0.016611,
+   "bias_bound": 0.013764,
+   "floor": [
+    "half",
+    "chunk"
+   ],
+   "function": {
+    "differ": 0,
+    "positions": 8128
+   },
+   "passes": {
+    "ON32": true,
+    "ON64": true,
+    "mutant_scale": false,
+    "mutant_wide": false
+   },
+   "rep_identical": true,
+   "spread_bound": 0.033222,
+   "stats": {
+    "ON32": {
+     "argmax_agree": 0.960205,
+     "bias": 0.00135,
+     "kl": 0.010644,
+     "max_abs": 0.066934,
+     "se": 0.002629,
+     "spread": 0.015473
+    },
+    "ON64": {
+     "argmax_agree": 0.956665,
+     "bias": 0.001087,
+     "kl": 0.010564,
+     "max_abs": 0.04733,
+     "se": 0.002355,
+     "spread": 0.014208
+    },
+    "chunk": {
+     "argmax_agree": 0.953613,
+     "bias": 0.001206,
+     "kl": 0.011709,
+     "max_abs": 0.063375,
+     "se": 0.002747,
+     "spread": 0.016611
+    },
+    "half": {
+     "argmax_agree": 0.954102,
+     "bias": 0.003764,
+     "kl": 0.010806,
+     "max_abs": 0.070091,
+     "se": 0.002574,
+     "spread": 0.015821
+    },
+    "mutant_scale": {
+     "argmax_agree": 0.578857,
+     "bias": 1.149617,
+     "kl": 1.262266,
+     "max_abs": 2.0712,
+     "se": 0.035367,
+     "spread": 1.149617
+    },
+    "mutant_wide": {
+     "argmax_agree": 0.71814,
+     "bias": 0.541914,
+     "kl": 0.573489,
+     "max_abs": 1.870792,
+     "se": 0.030632,
+     "spread": 0.541914
+    },
+    "rep": {
+     "argmax_agree": 1.0,
+     "bias": 0.0,
+     "kl": 0.0,
+     "max_abs": 0.0,
+     "se": 0.0,
+     "spread": 0.0
+    }
+   }
+  },
+  "same_setting_disagreement": 0.0038,
+  "served": {
+   "32": {
+    "block_disagreement": 0.0065,
+    "busy": {
+     "OFF_a": 0.9701,
+     "OFF_b": 0.9707,
+     "ON_a": 0.9694,
+     "ON_b": 0.9696
+    },
+    "clock": {
+     "a": {
+      "mem_mhz": [
+       13801.0,
+       13801.0
+      ],
+      "power_w": [
+       272.63,
+       553.67
+      ],
+      "pstates": [
+       "P1"
+      ],
+      "samples": 2,
+      "sm_mhz": [
+       2805.0,
+       2820.0
+      ],
+      "temp_c": [
+       61.0,
+       70.0
+      ]
+     },
+     "b": {
+      "mem_mhz": [
+       13801.0,
+       13801.0
+      ],
+      "power_w": [
+       275.68,
+       553.32
+      ],
+      "pstates": [
+       "P1"
+      ],
+      "samples": 2,
+      "sm_mhz": [
+       2805.0,
+       2820.0
+      ],
+      "temp_c": [
+       62.0,
+       70.0
+      ]
+     }
+    },
+    "medians": {
+     "OFF_a": 11.8148,
+     "OFF_b": 11.77,
+     "ON_a": 11.3608,
+     "ON_b": 11.3923
+    },
+    "memory": {
+     "a": {
+      "max_allocated_mib": 22769.5,
+      "max_reserved_mib": 23818.0,
+      "wide_workspace_mib": 11.501
+     },
+     "b": {
+      "max_allocated_mib": 22769.5,
+      "max_reserved_mib": 23818.0,
+      "wide_workspace_mib": 11.501
+     }
+    },
+    "off_disagreement": 0.0038,
+    "off_minus_on_ms": 0.4158,
+    "on_disagreement": 0.0028,
+    "pair_ratio_median": {
+     "a": 0.9621,
+     "b": 0.9673
+    },
+    "ratio_a": 0.9616,
+    "ratio_b": 0.9679,
+    "ratios": [
+     0.9616,
+     0.9679
+    ],
+    "replay_ms": {
+     "OFF_a": 11.7279,
+     "OFF_b": 11.7029,
+     "ON_a": 11.3131,
+     "ON_b": 11.3497
+    },
+    "tokens": {
+     "compared": 9376,
+     "on_vs_off_differing": 7714,
+     "on_vs_off_first_diff": [
+      1,
+      27
+     ]
+    },
+    "wide_workspace_mib": 11.501
+   },
+   "64": {
+    "block_disagreement": 0.0023,
+    "busy": {
+     "OFF_a": 0.9714,
+     "OFF_b": 0.9712,
+     "ON_a": 0.9708,
+     "ON_b": 0.9704
+    },
+    "clock": {
+     "a": {
+      "mem_mhz": [
+       13801.0,
+       13801.0
+      ],
+      "power_w": [
+       273.32,
+       511.81
+      ],
+      "pstates": [
+       "P1"
+      ],
+      "samples": 2,
+      "sm_mhz": [
+       2782.0,
+       2812.0
+      ],
+      "temp_c": [
+       62.0,
+       70.0
+      ]
+     },
+     "b": {
+      "mem_mhz": [
+       13801.0,
+       13801.0
+      ],
+      "power_w": [
+       259.41,
+       513.16
+      ],
+      "pstates": [
+       "P1"
+      ],
+      "samples": 2,
+      "sm_mhz": [
+       2782.0,
+       2820.0
+      ],
+      "temp_c": [
+       62.0,
+       70.0
+      ]
+     }
+    },
+    "medians": {
+     "OFF_a": 16.3763,
+     "OFF_b": 16.3699,
+     "ON_a": 15.8004,
+     "ON_b": 15.8302
+    },
+    "memory": {
+     "a": {
+      "max_allocated_mib": 25323.0,
+      "max_reserved_mib": 26110.0,
+      "wide_workspace_mib": 11.501
+     },
+     "b": {
+      "max_allocated_mib": 25436.7,
+      "max_reserved_mib": 26432.0,
+      "wide_workspace_mib": 11.501
+     }
+    },
+    "off_disagreement": 0.0004,
+    "off_minus_on_ms": 0.5578,
+    "on_disagreement": 0.0019,
+    "pair_ratio_median": {
+     "a": 0.9714,
+     "b": 0.9712
+    },
+    "ratio_a": 0.9648,
+    "ratio_b": 0.967,
+    "ratios": [
+     0.9648,
+     0.967
+    ],
+    "replay_ms": {
+     "OFF_a": 16.4114,
+     "OFF_b": 16.4224,
+     "ON_a": 16.0016,
+     "ON_b": 16.0104
+    },
+    "tokens": {
+     "compared": 18752,
+     "on_vs_off_differing": 16035,
+     "on_vs_off_first_diff": [
+      0,
+      41
+     ]
+    },
+    "wide_workspace_mib": 11.501
+   }
+  },
+  "served_ratios_32": [
+   0.9616,
+   0.9679
+  ],
+  "served_ratios_64": [
+   0.9648,
+   0.967
+  ],
+  "subject_bias": [
+   0.001087,
+   0.00135
+  ]
+ },
+ "verdict": "DEFAULT_ON"
+}
