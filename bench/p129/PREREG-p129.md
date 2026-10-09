@@ -175,3 +175,35 @@ The floor of each measure is its **worst draw**: the maximum over F1–F3 × the
 The floor's own magnitude is not predicted; it is read.
 
 **Budget:** the RTX A2000 only: 20 runs of 30 steps. Phase 2's speed A/B is still registered by its own amendment after a PASS.
+
+## Amendment 1 read (RTX A2000, 2026-10-09): PASS
+
+e4b at `590962a` (`p129-train-fuse-qkv`: the module above, committed before the read), grouped-nf4-gemm main at `e21a712`, torch 2.11.
+25 runs, none failed: the baseline, F1, F2, F3 and the fused path, on each of the five registered seeds.
+
+**The end-to-end gate: HELD.**
+
+| measure | fused, worst of 5 | floor, worst of 15 | backstop |
+|---|---|---|---|
+| `D_traj` (max step loss difference) | 0.00311 | 0.00361 (F3, seed 233) | |
+| `D_held` (held-out at step 30) | 0.00064 | 0.00078 (F3, seed 233) | every fused draw ≤ 0.005: held |
+
+The fused draws by seed (`D_traj` / `D_held`):
+- 211: 0.00228 / 0.00050
+- 223: 0.00311 / 0.00048
+- 227: 0.00237 / 0.00041
+- 229: 0.00236 / 0.00041
+- 233: 0.00234 / 0.00064
+
+The floor's draws lie in 0.00171–0.00361 (`D_traj`) and 0.00002–0.00078 (`D_held`). The fused path moves a 30-step run by
+less than the eager path's own equally valid variants do. The prediction (HELD, about 70 %) is met. This instrument's runs barely
+learn (random tokens on random weights: the baseline's training loss went from 8.759 to 8.754), so it measures numerical divergence, which
+is what it was registered for.
+
+**The counts gate, re-read on this build: HELD.** grouped-nf4-gemm's newer main adds 16 launches to both paths:
+- kernel launches 785 → 675 (−110, −14.0 %);
+- Python calls 16,440 → 14,466 (−12.0 %);
+- the dequantize still `torch.equal`.
+
+**By the rule, PASS.** The next step is Phase 2's speed A/B, registered by its own amendment with P128's frame: a recount gate, a
+host-bound premise gate, wall and device ratios separately, and the TC1 held-out bars.
