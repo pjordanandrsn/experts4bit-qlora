@@ -37,7 +37,7 @@ SOURCES = {
 }
 # grouped-nf4-gemm's kernel/test_int4_smallm_interp.py at the pinned commit (#522), byte for byte
 K16_TEST_SHA256 = "3d3b834aa0d60361f4b553067e478641ecacd873d00b7bac143e02e305e37b50"
-GNF4 = "5cff3bdf9d8eaf63505d676168de211e7ddcc7a5"
+GNF4 = "4ed26d962ff03e664785c20413db3360a0f4d648"
 RUN = (LANE / "p124_run.sh").read_text()
 REDUCE = (LANE / "p124_reduce.py").read_text()
 BOX = (LANE / "p124_box.py").read_text()
@@ -151,6 +151,9 @@ def test_the_order_puts_every_refusal_before_the_fetch():
     assert "int4_attn.Int4Linear.SMALLM_ROWS_MAX == 16 and int4_attn.Int4Linear.WIDE_ROWS_MAX == 64" in trip
     assert "int4_attn._wide_supported(int4_smallm.gemm_int4_b32_smallm)" in trip
     assert "from experts4bit_qlora.engines.step_trace import StepTrace" in trip
+    assert '_caps = hot_residency._wide_tiles_caps(int4_b32.build_group_tiles_fused)' in trip
+    assert 'hot_residency._wide_tiles_mode_env() == "auto" and all(_caps)' in trip
+    assert 'md.version("grouped-nf4-gemm") == "0.43.0"' in trip
     assert "default_buckets(64) == (1, 2, 4, 8, 16, 32, 64)" in trip and '"capture" in inspect.signature' in trip
     assert 'hasattr(PagedModelRunner, "disable_decode_graphs")' in trip
     assert "import p119_box" in trip and "import p117_box" in trip and "import p108_box" in trip

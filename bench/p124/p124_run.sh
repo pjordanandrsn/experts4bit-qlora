@@ -30,7 +30,7 @@ trap 'finish 130' INT TERM
 for v in P124_RUN_ID P124_DEADLINE_EPOCH P124_INSTANCE_ID E4B_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
 case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78;; esac
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char sha"; finish 78; }
-GNF4_SHA=5cff3bdf9d8eaf63505d676168de211e7ddcc7a5   # grouped-nf4-gemm #522 (gemm_int4_b32_smallm block_m=), its merge commit; a registered constant
+GNF4_SHA=4ed26d962ff03e664785c20413db3360a0f4d648   # grouped-nf4-gemm #522 (gemm_int4_b32_smallm block_m=), its merge commit; a registered constant
 PROVE=${P124_PROVE:-0}
 if [ "$PROVE" = 1 ]; then
   MODEL=ibm-granite/granite-3.1-3b-a800m-instruct; REV=a02780686e08a03fe0d2679a293b5c74a90efa89   # P94's pin (SC1's proof model)
@@ -120,6 +120,9 @@ assert int4_attn._wide_supported(int4_smallm.gemm_int4_b32_smallm), "E4B_ATTN_IN
 assert callable(int4_attn.resolve_wide) and callable(int4_attn.wide_workspace_bytes)
 from experts4bit_qlora.engines.step_trace import StepTrace  # noqa: F401  (the busy fraction's dec_prep / dec_issue events)
 import int4_b32  # noqa: F401  (K19 and the tile builders: the expert routes)
+_caps = hot_residency._wide_tiles_caps(int4_b32.build_group_tiles_fused)   # (rank=, rchunk=): #515 and #519
+assert hot_residency._wide_tiles_mode_env() == "auto" and all(_caps), "E4B_INT4_WIDE_TILES=auto (#1404): P122's table"
+assert hot_residency._wide_tiles_auto_takes(128, 512)
 assert "DEVICE_GROUPING[0] = True" in inspect.getsource(serve_paged._batched_graph_grouping)
 assert hasattr(PagedModelRunner, "enable_decode_graphs") and isinstance(hot_residency.DEVICE_GROUPING, list)
 assert "capture" in inspect.signature(PagedModelRunner.enable_decode_graphs).parameters, "the padded eager twins (P109)"

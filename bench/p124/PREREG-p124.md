@@ -8,6 +8,10 @@ busy fraction, and the quality bar with a mutant. The code under test:
 - e4b #1410: `E4B_ATTN_INT4_WIDE`, opt-in, which routes 17–64 rows to it through one workspace per width, built
   zeroed when the module is constructed.
 
+grouped-nf4-gemm is pinned at **`4ed26d96`** (#522's merge commit; 0.43.0, which also carries #519's chunked tile
+table). e4b #1410 merged as `170b1532`. `E4B_INT4_WIDE_TILES` defaults to `auto` since #1404 (`0c4da09a`), so with this
+pin the 64-row step builds its tile table the way P122 read it, in both settings.
+
 The box is new (`bench/p124/p124_box.py`). It imports P119's decode bracket and P117's teacher-forced pass at their
 registered bytes; runner and driver are derived from P122's.
 
