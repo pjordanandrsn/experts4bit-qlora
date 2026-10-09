@@ -196,8 +196,9 @@ def enable_serve_attn_int4_calib(model, hessians: Dict[str, torch.Tensor],
     Hessian is NOT silently packed uncalibrated -- that would mix two
     quantisers under one banner and make the quality gate ambiguous; it
     raises instead."""
-    from .int4_attn import resolve_smallm
+    from .int4_attn import resolve_smallm, resolve_wide
     smallm = resolve_smallm(None)          # K16 route (P5 read): auto by default, same rule as the RTN enable
+    wide = resolve_wide(smallm)            # rows 17..64 on the same kernel: opt-in, same rule as the RTN enable
     from .int4_attn import Int4Linear, _kernels
     try:
         _kernels()
@@ -228,7 +229,7 @@ def enable_serve_attn_int4_calib(model, hessians: Dict[str, torch.Tensor],
 
         def packer(w, _H=H):
             return gptq_pack_int4_b32(w, _H)
-        new = Int4Linear(lin, packer=packer, smallm=smallm)
+        new = Int4Linear(lin, packer=packer, smallm=smallm, wide=wide)
         new._e4b_calibrated = True     # recorded per projection by dump_attn_int4_artifact
         setattr(parent, child, new)
         hessians[name] = None          # free the 16-64 MB as we go
@@ -336,7 +337,7 @@ def enable_serve_attn_int4_from_artifact(model, artifact_dir: str, *,
     revision mismatch, a corrupt payload, a live model without ``config._commit_hash``,
     or a projection set that differs from the one the enable flags select on this model
     (a partial licensed load is not a licensed load)."""
-    from .int4_attn import Int4Linear, _kernels, resolve_smallm
+    from .int4_attn import Int4Linear, _kernels, resolve_smallm, resolve_wide
     from .pack_manifest import (
         ATTN_LAYOUT, ATTN_PROVENANCE_ATTR, PackManifestError, int4_store_dims,
         load_named_payload_tensors, parse_fingerprint, verify_artifact,
@@ -365,6 +366,7 @@ def enable_serve_attn_int4_from_artifact(model, artifact_dir: str, *,
     except ImportError as e:
         raise RuntimeError(f"attention-pack load needs grouped-nf4-gemm with int4_b32 (missing: {e})") from e
     smallm = resolve_smallm(None)
+    wide = resolve_wide(smallm)
     # Validate EVERY projection before swapping ANY: a refusal on the last one must not leave
     # the model half-installed from the pack and half on its own bf16 weights.
     staged = []
@@ -389,7 +391,7 @@ def enable_serve_attn_int4_from_artifact(model, artifact_dir: str, *,
     for name, lin, packed, scales, bias, N, K, row in staged:
         dev = lin.weight.device
         new = Int4Linear.from_packed(packed.to(dev), scales.to(dev), N, K,
-                                     bias=None if bias is None else bias.to(dev), smallm=smallm)
+                                     bias=None if bias is None else bias.to(dev), smallm=smallm, wide=wide)
         new._e4b_calibrated = bool(row.get("calibrated"))
         if "." in name:
             parent_name, child = name.rsplit(".", 1)
