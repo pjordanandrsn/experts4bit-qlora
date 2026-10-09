@@ -1046,3 +1046,21 @@ def test_mode_zero_licenses_nothing(monkeypatch):
     m.layer.mlp.experts.calls.clear()
     assert license_moe_residual(m, [1], mode="0") == 0
     assert "_e4b_moe_resid" not in m.layer.__dict__ and m.layer.mlp.experts.calls == []
+
+
+def test_a_probe_that_raises_refuses_the_licence_and_never_stops_the_build(monkeypatch):
+    """p127-prove-1: the probe's own mlp(h) raised inside build_engine. A probe that raises now refuses that layer's
+    licence and says why in the report; under 1 the empty licence is still refused as vacuous."""
+    from experts4bit_qlora.engines import glue_r2
+    m = _moe_layer(monkeypatch)
+
+    def broken(hidden, top_k_index, top_k_weights, residual=None):
+        raise TypeError("forward() got an unexpected keyword argument 'residual'")
+    broken._e4b_takes_residual = True
+    m.layer.mlp.experts.forward = broken
+    rep = {}
+    assert glue_r2.license_moe_residual(m, [1, 4], mode="auto", report=rep) == 0
+    assert "_e4b_moe_resid" not in m.layer.__dict__ and rep["refused"] == 1
+    assert rep["probe_errors"] and "TypeError" in rep["probe_errors"][0]
+    with pytest.raises(RuntimeError, match="vacuous"):
+        glue_r2.license_moe_residual(m, [1], mode="1")
