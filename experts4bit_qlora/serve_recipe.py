@@ -378,14 +378,17 @@ def _int4_expert_stores(topology):
 def _int4_attention_workspaces(linears):
     """``(bytes, exact)`` each ``Int4Linear`` preallocates beside its weight: the single-row GEMV's ``sk x N`` fp32
     partials and expert-id scalar, and the K16 small-M route's ``sk x 16 x N`` fp32 workspace and ``cdiv(N, 64)``
-    counters (priced as if the route is on, its default wherever the kernel package carries it)."""
-    total, exact = 0, True
+    counters (priced as if the route is on, its default wherever the kernel package carries it). Plus, ONCE per
+    projection width, the 17..64-row route's shared ``sk x 64 x N`` fp32 workspace and counters
+    (``E4B_ATTN_INT4_WIDE=auto``, priced the same way; ``engines.int4_attn._wide_workspace``)."""
+    total, exact, widths = 0, True, {}
     for n, k in linears:
         sk, ok = _int4_split_k(n, k)
         sk_sm, ok_sm = _smallm_split_k(n, k)
         total += 4 * sk * n + 4 + 4 * sk_sm * 16 * n + 4 * (-(-n // 64))
+        widths[(n, sk_sm)] = 4 * sk_sm * 64 * n + 4 * (-(-n // 64))
         exact = exact and ok and ok_sm
-    return total, exact
+    return total + sum(widths.values()), exact
 
 
 @functools.lru_cache(maxsize=64)
@@ -527,7 +530,8 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
         ws, exact = _int4_attention_workspaces(attn)
         items.append(FootprintItem("int4 attention workspaces", "device", ws, "derived" if exact else "heuristic",
                                    "each projection's single-row split-K partials and its K16 small-M workspace, "
-                                   "preallocated at the swap" + ("" if exact else
+                                   "preallocated at the swap, and one 64-row workspace per projection width for the "
+                                   "17..64-row route" + ("" if exact else
                                                                  " (split counts at their ceilings: grouped-nf4-gemm's "
                                                                  "int4 kernels not importable)")))
     scratch = max(setup.decode_buckets) if setup.graphs else 0      # what the server captures

@@ -8,10 +8,8 @@ These pin, on the CPU with the kernel package stubbed as ``tests/test_int4_attn.
     construction-time workspace (K16, unchanged), one row the GEMV, more than 64 rows the bf16 matmul;
   - the workspace is ONE per (device, width, plan), shared by every module of that width and built at construction,
     zeroed, before any capture; a lookup that misses under a capture raises rather than allocates;
-  - ``E4B_ATTN_INT4_WIDE``: ``auto`` (the default since lane P124) takes the route when the K16 route is on and the
-    kernel has ``block_m=`` (detected by signature), and says so in one line when only ``block_m=`` is missing; ``1``
-    requires both, refused otherwise; ``0`` keeps the cached bf16 matmul; anything else refused; fuse and enable carry
-    it. (P124's premise ran this file at its registered bytes, before the flip: ``bench/p124/test_int4_attn_wide.py``.)
+  - ``E4B_ATTN_INT4_WIDE``: ``0`` (the default) changes nothing; ``1`` needs the K16 route and a kernel with
+    ``block_m=`` (detected by signature), refused otherwise; anything else refused; fuse and enable carry it.
 And on a CUDA device with the real kernel (the A2000 correctness run; skipped elsewhere): two ``Int4Linear`` of one
 width captured in ONE graph, sharing the workspace, replay to their eager bits and within one bf16 ulp of the dequant
 reference; and two graphs that both take the route (32 rows captured first, 64 second) replay to their eager bits with
@@ -131,27 +129,20 @@ def test_a_lookup_that_misses_under_a_capture_raises(monkeypatch):
 def test_resolve_wide(monkeypatch):
     calls = []
     ia = _stubs(monkeypatch, calls)
-    for v in (None, "", "auto", " AUTO "):                                          # auto, the default since P124
+    for v in (None, "", "0", " 0 "):
         if v is None:
             monkeypatch.delenv("E4B_ATTN_INT4_WIDE", raising=False)
         else:
             monkeypatch.setenv("E4B_ATTN_INT4_WIDE", v)
-        assert ia.resolve_wide(True) is True
-        assert ia.resolve_wide(False) is False                                      # no K16 route: off, no refusal
-    for v in ("0", " 0 "):
-        monkeypatch.setenv("E4B_ATTN_INT4_WIDE", v)
-        assert ia.resolve_wide(True) is False                                       # the way back
+        assert ia.resolve_wide(True) is False
     monkeypatch.setenv("E4B_ATTN_INT4_WIDE", "1")
     assert ia.resolve_wide(True) is True
     with pytest.raises(RuntimeError, match="E4B_ATTN_INT4_WIDE=1 needs the K16 small-M route"):
         ia.resolve_wide(False)
     monkeypatch.setenv("E4B_ATTN_INT4_WIDE", "2")
-    with pytest.raises(ValueError, match="E4B_ATTN_INT4_WIDE='2': expected 'auto', '0' or '1'"):
+    with pytest.raises(ValueError, match="E4B_ATTN_INT4_WIDE='2': expected '0' or '1'"):
         ia.resolve_wide(True)
     assert ia.resolve_wide(True, wide=False) is False                                # an explicit flag wins
-    monkeypatch.delenv("E4B_ATTN_INT4_WIDE")
-    with pytest.raises(RuntimeError, match="needs the K16 small-M route"):
-        ia.resolve_wide(False, wide=True)                                           # explicit True is 1
 
 
 def test_wide_is_refused_on_a_kernel_without_block_m(monkeypatch):
@@ -163,11 +154,7 @@ def test_wide_is_refused_on_a_kernel_without_block_m(monkeypatch):
     with pytest.raises(RuntimeError, match="takes block_m="):
         ia.resolve_wide(True)
     monkeypatch.delenv("E4B_ATTN_INT4_WIDE")
-    said = []
-    assert ia.resolve_wide(True, banner=said.append) is False                        # auto on an older kernel: off ...
-    assert len(said) == 1 and "17..64-row route OFF" in said[0] and "block_m=" in said[0]   # ... and it says so
-    said.clear()
-    assert ia.resolve_wide(False, banner=said.append) is False and said == []       # no K16 route: K16's line suffices
+    assert ia.resolve_wide(True) is False                                            # the default never asks
 
 
 def test_wide_needs_smallm_at_construction(monkeypatch):
@@ -194,19 +181,13 @@ def test_enable_resolves_and_carries_the_flag(monkeypatch):
     monkeypatch.delenv("E4B_ATTN_INT4_SMALLM", raising=False)
     monkeypatch.delenv("E4B_ATTN_INT4_WIDE", raising=False)
     m = M()
-    assert ia.enable_serve_attn_int4(m) == 1 and m.attn.q_proj._wide is True         # default auto: on
-    monkeypatch.setenv("E4B_ATTN_INT4_WIDE", "0")
-    m0 = M()
-    assert ia.enable_serve_attn_int4(m0) == 1 and m0.attn.q_proj._wide is False      # the way back
+    assert ia.enable_serve_attn_int4(m) == 1 and m.attn.q_proj._wide is False        # default: off
     monkeypatch.setenv("E4B_ATTN_INT4_WIDE", "1")
     m1 = M()
     assert ia.enable_serve_attn_int4(m1) == 1 and m1.attn.q_proj._wide is True
     monkeypatch.setenv("E4B_ATTN_INT4_SMALLM", "0")
     with pytest.raises(RuntimeError, match="needs the K16 small-M route"):
         ia.enable_serve_attn_int4(M())
-    monkeypatch.delenv("E4B_ATTN_INT4_WIDE")
-    m2 = M()
-    assert ia.enable_serve_attn_int4(m2) == 1 and m2.attn.q_proj._wide is False      # auto without K16: off
 
 
 def test_fuse_carries_wide_and_refuses_mixed(monkeypatch):

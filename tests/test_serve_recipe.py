@@ -264,6 +264,12 @@ def test_attn_int4_prices_the_grid_and_the_bf16_copy_it_keeps():
                                                                          for n, k in topo.int4_attention_linears)
     assert by["attention projections' bf16 copy (kept from the first prefill)"].bytes == 2 * numel
     assert by["int4 attention workspaces"].bytes > 0
+    from experts4bit_qlora.serve_recipe import _int4_split_k, _smallm_split_k
+    lin = topo.int4_attention_linears
+    each = sum(4 * _int4_split_k(n, k)[0] * n + 4 + 4 * _smallm_split_k(n, k)[0] * 16 * n + 4 * -(-n // 64) for n, k in lin)
+    shared = {(n, _smallm_split_k(n, k)[0]): 4 * _smallm_split_k(n, k)[0] * 64 * n + 4 * -(-n // 64) for n, k in lin}
+    assert len(shared) < len(lin)                                       # projections of one width share one workspace
+    assert by["int4 attention workspaces"].bytes == each + sum(shared.values())   # the 17..64-row route, once per width
     # a speed lever, not a memory one: the attention weights cost more than bf16 once a prompt is served
     assert f.device_bytes > estimate_serve_footprint(topo, st).device_bytes
 
