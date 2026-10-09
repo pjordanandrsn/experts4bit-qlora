@@ -327,7 +327,9 @@ Superseded and retired readings are not repeated here. The register keeps each w
   built a different one is unexplained, and no open issue carries it.
 - **Open register rows:** reproducing the TR2 training receipt from published artifacts (`e4b.open.tr2-repro-gap`);
   int8-offload's best training eval, confounded by an evaluator offset (`e4b.open.int8-offload-confounded`).
-- **Open campaigns:** training #835, serving #846, single-stream decode #1313.
+- **Open campaigns:** training #835, serving #846, single-stream decode #1313. P127 Phase 2 is on main: #1477 folds
+  the MoE residual add into the experts' combine wherever a probe shows it bitwise (fixed by #1482), and #1472's
+  kernel options stay inert until a grouped-nf4-gemm release carries #526–#530. No speed claim until P127 reads.
 - **Older documents' debts:** `POST_AUDIT_WORK_QUEUE.md` (Q1–Q4), `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10),
   `LAYOUT_FACTS.md` (training determinism UNKNOWN), and `support_matrix.md`'s footer hash, which no longer matches its
   bytes and is recorded, not fixed, because the file is anchored.
