@@ -87,10 +87,11 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 def test_the_self_tests_pass():
     base = {"PATH": "/usr/bin:/bin", **{k: os.environ[k] for k in ("SYSTEMROOT",) if k in os.environ}}
     for script, want in (("fam_reduce.py", "fam_reduce self-test OK (45/45 cases)"),
-                         ("fam_box.py", "fam_box self-test OK (27/27 cases)")):
+                         ("fam_box.py", "fam_box self-test OK (28/28 cases)")):
         out = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True, env=base)
         assert out.returncode == 0 and want in out.stdout, out.stdout + out.stderr
     assert "self-tested on 42 cases" in PREREG and "self-test now runs 45 cases" in PREREG     # Amendment 1
+    assert "box's self-test now runs 28 cases" in PREREG                                   # Amendment 2
 
 
 def test_the_rule_is_the_registered_rule():

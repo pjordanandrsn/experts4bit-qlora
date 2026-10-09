@@ -154,6 +154,12 @@ def _delta(after, before):
     return {k: after.get(k, 0) - before.get(k, 0) for k in after}
 
 
+def shape_order(shapes):
+    """The largest group first (Amendment 2). A hybrid's linear-state pool is sized by the first runner on the model
+    and frozen by the padded pass; a later runner may bind fewer slots, never more (``LinearStatePool.ensure_slots``)."""
+    return tuple(sorted(shapes, reverse=True))
+
+
 def run_cells(model, windows, *, config, texts, shapes, sets, prompt, cont, chunk, floor_chunk, device, ref_root,
               ref_kw=None, stand_in=False, counters=None, fwd=None):
     """Every cell of one process. ``windows[text]`` holds 36 windows; set S takes ``SETS[S]``. Returns
@@ -163,7 +169,7 @@ def run_cells(model, windows, *, config, texts, shapes, sets, prompt, cont, chun
               fwd=fwd, stand_in=stand_in, **({"ref_kw": ref_kw} if ref_kw is not None else {}))
     cells = {}
     for t in texts:
-        for s in shapes:
+        for s in shape_order(shapes):
             for name in sets:
                 a, b = SETS[name]
                 ws = {t: windows[t][a:b]}
@@ -259,7 +265,8 @@ def self_test() -> int:
           extra_arms("A") == ("split1", "mut090", "mut095", "mut098"), extra_arms("B") == ("split1", "mut090"),
           [SETS[k] for k in "ABC"] == [(0, 12), (12, 24), (24, 36)], cell_key("wikitext", 1, "A") == "wikitext|1|A",
           arm_wrap("split1").n_split == 1 and arm_wrap("split1").factor is None,
-          arm_wrap("mut090").factor == 0.90 and arm_wrap("mut090").n_split is None, GATING_MUTANT == "mut090"]
+          arm_wrap("mut090").factor == 0.90 and arm_wrap("mut090").n_split is None, GATING_MUTANT == "mut090",
+          shape_order(SHAPES) == (12, 1) and shape_order((12,)) == (12,)]
     try:
         arm_wrap("R")
         ok.append(False)

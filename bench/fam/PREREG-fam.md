@@ -311,3 +311,34 @@ of Granite's 32 routers (`failed_probe: 5` in the build log's fusion report, ON_
 
 The reducer's self-test now runs 45 cases: one family per box, the anchor only on gpt-oss's box, and an unregistered
 family refused.
+
+## Amendment 2 (2026-10-09, after `fam-qw36-1`, before Qwen3.6's rerun)
+
+**What VOIDed.** `fam-qw36-1` ran on one RTX 5090 on an AMD EPYC 7763 host: Vast instance 54930776, launched
+2026-10-08T23:33:38Z, torn down 2026-10-09T00:37:40Z, $1.639. Its OFF process scored wikitext at shape 1 (sets A,
+B and C), then died building the first shape-12 runner. e4b's `LinearStatePool.ensure_slots` refused: "the
+linear-state pool has 17 slots and a captured decode graph holds its tensors' addresses; growing it to 28 ...". No
+record was written, so the reducer VOIDed ("record missing or not ok"). Receipt: the store's `3b11414c`.
+- **Cause: a harness bug in the box, not in e4b.** A runner binds `kv.B` + scratch slots, so 1 + 16 at shape 1 and
+  12 + 16 at shape 12. The padded R's `enable_decode_graphs(capture=False)` freezes the model's one pool, and a frozen
+  pool never grows. e4b documents that refusal: size the first runner for the largest batch. Granite and gpt-oss have
+  no linear layers, and the CPU tests run R unpadded, so nothing before the card reached it.
+
+**Change.** `run_cells` scores the largest shape first, 12 and then 1, so the first runner sizes the pool. The rule,
+cells, arms, windows, gates, mutants, predictions and census tables are unchanged, as is every Granite and gpt-oss
+record already read. The box's self-test now runs 28 cases.
+
+**Why the arithmetic is unchanged** (`tests/test_fam_shape_order.py`, on a tiny Qwen3.5-MoE hybrid on CPU):
+- the refusal reproduced at the box's own slot counts (17, then 28), and the fixed order binding both;
+- a shape-1 R pass bit-identical on a 28-slot and a 17-slot pool;
+- a shape-1 R pass after a shape-12 pass on the same pool bit-identical to one on a fresh pool. The reset it relies on
+  is `PagedModelRunner.bind` → `LinearStatePool.reset`, the call `paged_pass` makes for every window on the card too;
+- the decode-graph bucket selector reading the same rows, bit for bit, from either pool size.
+
+The padded decode itself needs the fused fp8 KV append, which neither CPU nor the seat A2000 (sm_86) has. Shape 1
+decodes in bucket 1, so it has no padding rows and reads only its own, freshly reset slot.
+
+**The rerun.** The registration's one rerun after a VOID is `fam-qw36-2`: Qwen3.6 alone, guard 4.0 h, estimate
+$3.40, inside Qwen3.6's $4.2 ceiling. The lane has spent $4.111 (proofs $0.637, Granite $0.828, gpt-oss $1.007,
+`fam-qw36-1` $1.639). With the rerun it stays under $8.31 plus downloads, inside the $18 lane ceiling. It launches
+from this amendment's merge commit, after review.
