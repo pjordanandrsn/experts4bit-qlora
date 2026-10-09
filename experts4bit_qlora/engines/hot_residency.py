@@ -211,6 +211,31 @@ def _wide_tiles_supported(builder) -> bool:
     return _wide_tiles_caps(builder)[0]
 
 
+def _tile_programs_env() -> int:
+    """``E4B_INT4_TILE_PROGRAMS`` (e4b#846, opt-in): how many programs the one-launch cumsum tile table above 256 routed
+    rows is split over (grouped-nf4-gemm #524's ``build_group_tiles_fused(..., programs=P)``: each program ranks a slice
+    of the experts; the tables are the same integers at every count, so outputs are bit-identical). ``1`` (the default,
+    also unset or empty) is the one-program table, called exactly as before; an integer from 2 to 64 splits it.
+    Anything else is refused; ``P > 1`` on a kernel package without ``programs=`` is refused where the cumsum table is
+    built."""
+    v = os.environ.get("E4B_INT4_TILE_PROGRAMS", "1").strip() or "1"
+    if not v.isdigit() or not 1 <= int(v) <= 64 or str(int(v)) != v:
+        raise ValueError(f"E4B_INT4_TILE_PROGRAMS={v!r}: expected an integer from 1 to 64")
+    return int(v)
+
+
+_TILE_PROGRAMS_SUPPORT: dict = {}
+
+
+def _tile_programs_supported(builder) -> bool:
+    """Whether the installed ``build_group_tiles_fused`` takes ``programs=`` (grouped-nf4-gemm #524). Read once per
+    builder, not per call; kept apart from :func:`_wide_tiles_caps`, whose pair decides ``E4B_INT4_WIDE_TILES=auto``."""
+    if builder not in _TILE_PROGRAMS_SUPPORT:
+        import inspect
+        _TILE_PROGRAMS_SUPPORT[builder] = "programs" in inspect.signature(builder).parameters
+    return _TILE_PROGRAMS_SUPPORT[builder]
+
+
 def _next_pow2(n: int) -> int:
     return 1 << max(0, int(n) - 1).bit_length()
 
@@ -552,6 +577,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     _k19_mode = _k19_mode_env()
     _lean_mode = _lean_glue_mode_env()    # read (and refused if malformed) on every call, like the K19 mode
     _wide_mode = _wide_tiles_mode_env()   # likewise
+    _tile_programs = _tile_programs_env()  # likewise
     _lean = False
     if _int4_gemv_decode and _k19_mode != "0":
         try:
@@ -675,7 +701,14 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                     "E4B_INT4_WIDE_TILES=1 needs grouped-nf4-gemm with build_group_tiles_fused(rank='cumsum')")
             if _wide_mode == "1" or (all(_caps) and _wide_tiles_auto_takes(_n_exp, local_ids.numel())):
                 import functools
-                _fused_tiles = functools.partial(_wide_builder, rank="cumsum")
+                if _tile_programs > 1:
+                    # E4B_INT4_TILE_PROGRAMS: the same table split over P programs (grouped-nf4-gemm #524)
+                    if not _tile_programs_supported(_wide_builder):
+                        raise RuntimeError("E4B_INT4_TILE_PROGRAMS > 1 needs grouped-nf4-gemm with "
+                                           "build_group_tiles_fused(programs=)")
+                    _fused_tiles = functools.partial(_wide_builder, rank="cumsum", programs=_tile_programs)
+                else:
+                    _fused_tiles = functools.partial(_wide_builder, rank="cumsum")
         if _lean:
             # K23: one launch for the table AND the sorted ids
             t_row0, t_rows, t_grp, order, _counts, sorted_ids = _fused_tiles(
