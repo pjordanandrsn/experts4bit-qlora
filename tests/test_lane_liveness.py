@@ -128,6 +128,7 @@ def test_failed_probe_read_is_not_a_definite_zero(tmp_path):
     ([f"1 123 {BOOT_A} 9000.00"], "reboot", 1),
     (["0 - - 10000", None, "0 - - 10001", INITIAL], "complete", 4),
     ([INITIAL, INITIAL, INITIAL, INITIAL], "complete", 4),
+    ([INITIAL, None, None, INITIAL], "complete", 4),
     (["0 - - 10000", "PARTIAL_FAIL:0 - - 10000", "0 - - 10001", INITIAL], "complete", 4),
     (["0 - - 10000 extra", "ssh failed", INITIAL, INITIAL], "complete", 4),
 ])
@@ -176,6 +177,8 @@ SSH=fake_ssh
     assert ("END:0" if expected == "complete" else "END:1") in result.stdout
     if expected == "reboot":
         assert "host rebooted" in result.stdout
+    if sequence == [INITIAL, None, None, INITIAL]:
+        assert re.findall(r"unknown_probes (\d+)", result.stdout) == ["0", "1", "2", "0"]
     assert "pgrep" not in loop and "lane_snapshot_verdict" in loop
 
 
