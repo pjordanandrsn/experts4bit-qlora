@@ -5,8 +5,10 @@
 #
 # The launch-bound glue, before and after, on ONE RTX 5090: the engine built as the shipped server builds it at its
 # defaults (E4B_PAGED_MAX_SEQS=16 fixed), in five arms of their own processes -- A1 B1 B2 A2 M1. A is e4b a8c01d42 +
-# grouped-nf4-gemm v0.44.0; B is the launch commit + gnf4 at #527's merge; M is B with a round-toward-zero router-weight
-# store. Each install is a clone of its own; the box switches the editable installs before each arm.
+# grouped-nf4-gemm v0.44.0; B is e4b 7f044dd9 (pinned by Amendment 2) + gnf4 at #527's merge; M is B with a
+# round-toward-zero router-weight store. Each install is a clone of its own; the box switches the editable installs
+# before each arm. The harness (this runner, the reducer, the box, bench/common/hf_fetch_watchdog.py) is the launch
+# commit (E4B_SHA), checked out by SHA as its own worktree; it is never installed.
 #   order    refusals; install + clones + the diff audit + tripwire; self-tests; premise; fetch; bake; prompts; arms;
 #            reduce
 # Knobs (recorded; any value off its registered default marks the run a REHEARSAL, NOT a reading):
@@ -26,7 +28,8 @@ case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78
 E4B_A=a8c01d426bc3e489c8bd11c7c8ced091da557582     # the last main commit before #1448
 GNF4_A=d1f64ba50afce94533e0166ba3332ef075aa43bb    # grouped-nf4-gemm v0.44.0
 GNF4_B=d769d5022c0fb7a2ada847f69a3cba6e0f45c77f    # grouped-nf4-gemm at #527's merge (carries #526-#530)
-E4B_B=$E4B_SHA                                     # the launch commit: this registration's merge
+E4B_B=7f044dd9570b0f75ac4ebc1742e697256cd2e209     # Amendment 2: pinned at #1488's merge (Amendment 1), by SHA
+E4B_H=$E4B_SHA                                     # the harness: the launch commit, which stages this kit
 E4B_P127="ce3dfb5413a33c780a76eac7a8142a881515a444 1ddcb0aeeae63f32d57ab67fa3f5e48d8c370781 8ea9729608135fb47fa94835258eceecc68bb8b7 508cdd032b03c321d88479feabc175d3f0804bbd"   # Amendment 1: #1482
 E4B_INERT="2384d2c3083b615a0c8f117cb30799e0a59f6171 058f98eb419ff463dd19c21096ecdc6ce1eff1be f539896244bf418ac782ef4257f32d8fbd0c236b abe7d77223ed19a4f18f6f412877982862604213 d14bcb10eac9c18d4c15c40af400873a0d37bd17"   # + Amendment 1: #1465
 GNF4_P127="18f5bdaa491f4ff85c2c984c01499147aacd6267 f69adccf839b5e2dfb8b6eecd957232e1decb4f9 d0a2e56d903dad0385f1a86d7afe225caf363105 b64a39b5067db68e40b1bb365dbe95766c3d5d26 $GNF4_B"
@@ -50,7 +53,7 @@ unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_
       E4B_PAGED_GRAPHS E4B_PAGED_BUCKETS E4B_PAGED_MAX_SEQS E4B_PAGED_MAX_TOKENS_PER_SEQ E4B_PAGED_CHUNK_TOKENS E4B_PAGED_DECODE_LOOKAHEAD \
       E4B_PAGED_MAX_PREFILL_TOKENS E4B_PAGED_PLACEMENT E4B_PAGED_KV_GROUPS E4B_PAGED_FUSE_QKV E4B_PAGED_TORCH_THREADS GNF4_GEMV_BW GNF4_PDL
 : > summary.txt; echo "$P127_INSTANCE_ID" > INSTANCE_ID
-echo "KNOBS e4b_a=$E4B_A e4b_b=$E4B_B gnf4_a=$GNF4_A gnf4_b=$GNF4_B model=$MODEL@$REV gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_ram_gb=$MIN_RAM_GB prove=$PROVE short=$SHORT long=$LONG reps=$REPS" | tee -a summary.txt
+echo "KNOBS e4b_a=$E4B_A e4b_b=$E4B_B e4b_harness=$E4B_H gnf4_a=$GNF4_A gnf4_b=$GNF4_B model=$MODEL@$REV gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_ram_gb=$MIN_RAM_GB prove=$PROVE short=$SHORT long=$LONG reps=$REPS" | tee -a summary.txt
 if [ "$REHEARSAL" != 0 ] || [ "$GPU_CLASS" != 5090 ] || [ "$MIN_DISK_GB" != 150 ] || [ "$MIN_RAM_GB" != 60 ] \
    || [ "$SHORT" != "$SHORT_DEF" ] || [ "$LONG" != "$LONG_DEF" ] || [ "$REPS" != "$REPS_DEF" ]; then
   echo "REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)" | tee -a summary.txt; : > REHEARSAL
@@ -80,7 +83,7 @@ pipx(){ local log=$1 secs=$2; shift 2
 # ---- the dependencies once; then each stack's clone at its commit (blob-less, with the history the audit reads)
 say "install deps (transformers 5.17.0, bitsandbytes 0.50.2; torch held at $TORCH_PIN)"
 pipx logs/pip_deps.log 1800 --prefer-binary "transformers==5.17.0" "bitsandbytes==0.50.2" datasets accelerate sentencepiece \
-  safetensors "huggingface_hub>=0.23" pytest numpy || { tail -4 logs/pip_deps.log; say "PIP FAIL (deps)"; finish 9; }
+  safetensors "huggingface_hub>=1.31,<2" pytest numpy || { tail -4 logs/pip_deps.log; say "PIP FAIL (deps)"; finish 9; }
 clone(){ local url=$1 dir=$2
   [ -d $dir/.git ] || perl -e 'alarm 900; exec @ARGV' git clone -q --filter=blob:none "$url" $dir > logs/clone_$(basename $dir).log 2>&1; }
 clone https://github.com/pjordanandrsn/experts4bit-qlora.git $W/src/e4b || { say "CLONE FAIL (e4b)"; finish 9; }
@@ -90,6 +93,14 @@ for side in A B; do
   git -C $W/src/e4b worktree add -q --detach $W/src/e4b_$side ${!E} > /dev/null 2>&1 || { say "CHECKOUT FAIL e4b_$side ${!E}"; finish 9; }
   git -C $W/src/gnf4 worktree add -q --detach $W/src/gnf4_$side ${!G} > /dev/null 2>&1 || { say "CHECKOUT FAIL gnf4_$side ${!G}"; finish 9; }
 done
+# the harness worktree (Amendment 2): the launch commit, by SHA, only for bench/common/; never installed
+git -C $W/src/e4b worktree add -q --detach $W/src/e4b_H $E4B_H > /dev/null 2>&1 || { say "CHECKOUT FAIL e4b_H $E4B_H"; finish 9; }
+for side in A B H; do
+  E=E4B_$side; got=$(git -C $W/src/e4b_$side rev-parse HEAD)
+  [ "$got" = "${!E}" ] || { say "CHECKOUT FAIL e4b_$side is $got, not ${!E}"; finish 9; }
+done
+WATCHDOG=$W/src/e4b_H/bench/common/hf_fetch_watchdog.py
+[ -s $WATCHDOG ] || { say "HARNESS MISSING: $WATCHDOG (the launch commit predates Amendment 2)"; finish 9; }
 # ---- the served-path diff audit (PREREG): every package commit between the two stacks is P127's or registered inert
 E4B_LIST=$(git -C $W/src/e4b log --format=%H $E4B_A..$E4B_B -- experts4bit_qlora/)
 GNF4_LIST=$(git -C $W/src/gnf4 log --format=%H $GNF4_A..$GNF4_B -- kernel/ gnf4_native/)
@@ -106,7 +117,7 @@ grep -a "" audit.json | head -3 | tee -a summary.txt
 # the install switch: each arm's e4b and gnf4 clones, editable, nothing else moves
 use(){ pipx logs/pip_use_$1.log 600 --no-deps -e $W/src/e4b_$1 -e $W/src/gnf4_$1 || { tail -3 logs/pip_use_$1.log; say "PIP FAIL (use $1)"; finish 9; }; }
 use B
-python - <<'PYT' || { say "TRIPWIRE FAIL"; finish 9; }
+E4B_B=$E4B_B E4B_H=$E4B_H python - <<'PYT' || { say "TRIPWIRE FAIL"; finish 9; }
 import os, inspect, importlib.metadata as md
 import experts4bit_qlora as e, int4_b32, nf4_grouped, transformers, torch, triton
 assert "/src/e4b_B/" in e.__file__ and "/src/gnf4_B/" in int4_b32.__file__, (e.__file__, int4_b32.__file__)
@@ -115,18 +126,21 @@ assert "weights_dtype" in inspect.signature(int4_b32.router_epilogue).parameters
 assert hasattr(int4_b32, "rope_norm_qk") and "residual" in inspect.signature(int4_b32.combine_rows).parameters
 assert torch.int64 in nf4_grouped.EXPERT_ID_DTYPES and "gather_div" in inspect.signature(nf4_grouped.gemm_4bit_grouped).parameters
 from experts4bit_qlora.engines import glue_r2
-assert hasattr(glue_r2, "license_moe_residual"), "the launch commit lacks the residual PR"
+assert hasattr(glue_r2, "license_moe_residual"), "B lacks the residual PR (#1477)"
 from experts4bit_qlora.engines.hybrid import _HybridTier
 from experts4bit_qlora.engines import hot_residency as _hr
 assert "residual" in inspect.signature(_HybridTier.forward).parameters and hasattr(_hr, "_state_forward"), \
-    "the launch commit lacks #1482 (Amendment 1): _HybridTier.forward without residual= raised in p127-prove-1"
+    "B lacks #1482 (Amendment 1): _HybridTier.forward without residual= raised in p127-prove-1"
 import fp8_paged_attn, fp8_kv, nvme_arena  # noqa: F401
-open("/root/p127/versions.txt", "a").write(f"e4b B {e.__version__}\ngnf4 B {md.version('grouped-nf4-gemm')}\ntorch {torch.__version__}\ntriton {triton.__version__}\ntransformers {transformers.__version__}\nbitsandbytes {md.version('bitsandbytes')}\ncc {torch.cuda.get_device_capability()}\n")
+hub = md.version("huggingface_hub")
+assert tuple(int(x) for x in hub.split(".")[:2]) >= (1, 31), f"huggingface_hub {hub} < 1.31 (Amendment 2)"
+open("/root/p127/versions.txt", "a").write(f"e4b B {e.__version__} sha {os.environ['E4B_B']}\nharness sha {os.environ['E4B_H']}\ngnf4 B {md.version('grouped-nf4-gemm')}\ntorch {torch.__version__}\ntriton {triton.__version__}\ntransformers {transformers.__version__}\nbitsandbytes {md.version('bitsandbytes')}\nhuggingface_hub {hub}\ncc {torch.cuda.get_device_capability()}\n")
 print("tripwire OK:", e.__version__, md.version("grouped-nf4-gemm"))
 PYT
 cat versions.txt | tee -a summary.txt
 python $W/p127_reduce.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "REDUCER SELF-TEST FAILED"; finish 21; }
 python $W/p127_box.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "BOX SELF-TEST FAILED"; finish 21; }
+python $WATCHDOG --self-test 2>/dev/null | tail -1 | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "WATCHDOG SELF-TEST FAILED"; finish 21; }
 # ---- the premise, on THIS card at B's stack, before anything is fetched
 (cd $W && PYTHONPATH='' perl -e 'alarm 900; exec @ARGV' python -m pytest test_decode_graph_buckets.py -q -rs -p no:cacheprovider) > logs/premise_graphs.log 2>&1
 rc1=$?; L1=$(tail -1 logs/premise_graphs.log)
@@ -142,7 +156,13 @@ fi
 # ---- the checkpoint, its NF4 arena (P39's k8_bake.py, as SC1 bakes it) and P109's prompts
 can_run $NEED_FETCH fetch || finish 40
 say "fetch $MODEL @ $REV"
-perl -e "alarm $(step_alarm 2700); exec @ARGV" python -c "from huggingface_hub import snapshot_download as s; print(s('$MODEL', revision='$REV', allow_patterns=['*.safetensors','*.json','tokenizer*','*.model','*.txt','merges.txt','vocab.json'], max_workers=8))" > logs/fetch.log 2>&1 || { tail -2 logs/fetch.log; say "DL FAIL"; finish 11; }
+# Amendment 2: the fetch runs under the byte-growth watchdog (its own process group; 180 s without growth -> kill, prune
+# the orphan .incomplete files, rerun, at most 3 restarts; no .incomplete may remain). The alarm is the backstop.
+FA=$(step_alarm 2700)
+HF_HUB_VERBOSITY=info perl -e "alarm $((FA + 90)); exec @ARGV" python $WATCHDOG --repo "$MODEL" --revision "$REV" \
+  --allow '*.safetensors' --allow '*.json' --allow 'tokenizer*' --allow '*.model' --allow '*.txt' --allow merges.txt \
+  --allow vocab.json --max-workers 8 --poll-s 30 --stall-s 180 --max-restarts 3 --budget-s $FA \
+  > logs/fetch.log 2>&1 || { tail -2 logs/fetch.log; say "DL FAIL"; finish 11; }
 SNAP=$(tail -1 logs/fetch.log); echo "FETCH $MODEL@$REV $SNAP" | tee -a summary.txt
 [ -d "$SNAP" ] || { say "DL FAIL: no snapshot dir"; finish 11; }
 can_run $NEED_BAKE bake || finish 40

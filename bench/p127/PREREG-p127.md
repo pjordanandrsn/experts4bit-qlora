@@ -271,3 +271,45 @@ knobs 0. No GPU we own runs the sm_89+ decode-graph path; `p127-prove-2` is that
 - P127's spend so far is $0.827, inside the $6.00 ceiling.
 - The reading still waits for PROVED and the maintainer's re-derivation. The families lane's Mixtral smoke waits on
   that same re-derivation (the maintainer's sequencing, 2026-10-09).
+
+## Amendment 2 (2026-10-09, after `p127-prove-2`): B is pinned at `7f044dd9`; the fetch runs under a watchdog
+
+**What `p127-prove-2` found.** The run was HARNESS_ERROR with no lane exit code, actual $0.966; receipts are in
+adertha-receipts `b04735a3`.
+- **Before the fetch, everything passed** on the RTX 5090 (cc 12.0): the audit, the tripwire at B, both self-tests and
+  the premise.
+- **The host rebooted** at about 20:49:33Z, 7.5 minutes into the model fetch. The kernel's uptime was 3,125 s at
+  21:41:37Z, and the lane's processes were gone.
+- **What followed.** The lane wrote no exit code, its fetch alarm was never due, and the driver waited to the
+  deadline.
+- **Not a P127 finding.** It was a box fault, and B never reached `build_engine`.
+
+**What changes here.**
+- **B's e4b is pinned at `7f044dd9`**, #1488's merge (Amendment 1), checked out by SHA. It no longer follows the launch
+  commit.
+- **The claim.** The proof and the reading test identical B code. The P127 reading measures the P127 delta at
+  `7f044dd9`. Later main commits (#1490, #1491, #1498, #1506 and onward) are outside its claim; it is not a claim about
+  whatever main holds at a release.
+- **The audit's range is fixed** at `a8c01d42..7f044dd9` (9 package commits, all registered by Amendment 1). It needs
+  no further rows.
+- **The harness is the launch commit.** That covers `p127_run.sh`, the reducer, the box and
+  `bench/common/hf_fetch_watchdog.py`. The staged files are pinned by `staged.sha256` as before. The watchdog runs from
+  a worktree of the launch commit, checked out by SHA and never installed.
+- **The box verifies all three worktrees** (A, B and the harness) by `rev-parse HEAD` against their SHAs, and refuses
+  (rc 9) otherwise. `versions.txt` records B's SHA, the harness SHA and the `huggingface_hub` version.
+- **The fetch.**
+  - `huggingface_hub>=1.31,<2` is pinned and checked in the tripwire; the plain-HTTP resume fixes are hub#4826 and
+    #4351.
+  - The fetch runs with `HF_HUB_VERBOSITY=info` under the byte-growth watchdog, in its own process group. Every 30 s
+    it sums the repo's `blobs/` bytes. After 180 s without growth it kills the group, prunes the orphaned
+    `*.incomplete` files and reruns, at most 3 restarts.
+  - On an exit 0, the watchdog refuses while any `*.incomplete` remains.
+  - Its budget is the old step alarm (2,700 s, or less near the deadline). The alarm stays as a backstop 90 s later.
+  - Its self-test (7 cases on POSIX, including the group kill of a grandchild) runs with the other self-tests and
+    fails the lane with rc 21.
+
+**What does not change:** arm A, the arms, the subject, the rule, the predictions and the budget. The tripwire still
+requires #1477's licence step and #1482's fix in B.
+- **Spend.** P127's spend is $1.793 before `p127-prove-3`; at most $3.52 of the $6.00 ceiling after it.
+- **The reading** still waits for PROVED and the maintainer's re-derivation with main's `p127_reduce.py`.
+- **The driver's dead-lane detection**, which let `p127-prove-2` idle to its deadline, is a separate harness fix.
