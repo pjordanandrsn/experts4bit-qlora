@@ -65,6 +65,42 @@ the smoke. Prefill graph capture or its refusal is reported as the server
 resolves it. This is a build/generation correctness check with random weights,
 not a quality, capacity or speed result.
 
+## Tiny backward and alternate-family smoke
+
+The sibling controller exercises three paths outside the serving smoke:
+
+```bash
+PYTHONPATH=. python bench/smoke/gpu_path_smoke.py --output-dir /tmp/e4b-path-smoke
+```
+
+It runs the existing tests' numerical oracles and unchanged tolerances on tiny
+local fixtures: mixed VRAM/DRAM/NVMe adapter gradients (E8/H128), fused backward
+under a pinned-host checkpoint (E8/H256/T64), and gpt-oss bias / DeepSeek-V4
+clamp residency (E8/H128). It requires CUDA sm80+, pytest, the grouped kernels,
+and the hybrid tier's native CPU kernels. Missing dependencies and test skips
+fail admission. No checkpoint download is needed.
+
+Each cell has a passing baseline and a planted mutation in an isolated process:
+wrong hybrid input gradients, bypassed pinned-host checkpoint storage, dropped
+gpt-oss biases, and dropped V4 clamps. The third cell has two mutations, giving
+seven workers in all. A control passes only when its mutation is actually
+called and the selected contract rejects it. The checkpoint bypass deliberately
+preserves numerical gradients; a separate observation of real pinned CPU input
+save and CUDA restoration must reject it. Observers call the real implementations;
+only mutation workers change a runtime function, without editing package files.
+
+`summary.json` records the expected and observed outcome separately: a detected
+mutation has `observed: FAIL`, `verdict: MUTATION_DETECTED`, and controller
+`status: PASS`. It retains every test failure, engagement counters, source and
+instrument hashes, and actual imported GNF4 sources. Missing results, crashes,
+corrupt result files, and the five-minute whole-suite deadline fail the suite.
+Workers clear inherited `E4B_*` knobs and disable Hub downloads.
+
+This is correctness only, with the same resource-claim requirement as the serving
+smoke. These cells do not exercise graphs. The serving smoke's sm89+ padded fp8
+decode/graph rows remain hardware-blocked on the sm86 A2000. Keep run receipts in
+a separate change from the controller code.
+
 ## Container recipe
 
 Use a CUDA-capable host, Docker's NVIDIA runtime, and a C compiler for the
