@@ -30,7 +30,8 @@ verified listening loopback socket; other config fields still match the native
 factory. It reconciles observed
 glue forward coverage with native census and rejects auto kernel gaps. Nine baseline 0.50.0 bodies plus the two main router cast variants and
 the three router forwards that hand the kernel unwidened logits (#1313, P127's
-Phase 1) carry source commits in the adapter registry. They bind complete native forward bodies; changed
+Phase 1), and P127's Phase 2 bodies (the two casting router forwards asking the kernel for
+the cast, the two attention folds' one-launch q+k rotary) carry source commits in the adapter registry. They bind complete native forward bodies; changed
 bodies require a reviewed adapter. Private clones observe retained-original
 calls without changing installed function defaults. Small-row fallbacks and
 large-row prefill fallbacks are separate, with per-pass and per-module counts.
