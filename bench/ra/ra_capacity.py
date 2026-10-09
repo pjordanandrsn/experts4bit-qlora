@@ -211,8 +211,16 @@ def execute(spec, stage, out):
                 os.killpg(process.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
-            process.wait(timeout=10)
-            record["returncode"] = process.returncode
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                # Retain the failure receipt and any original exception even if
+                # the owned child is stuck during GPU-driver teardown.
+                record["returncode"] = None
+                record["kill_wait_timeout"] = True
+            else:
+                record["returncode"] = process.returncode
+                record["kill_wait_timeout"] = False
         record["finished_at"] = ra_process.clock()
         if (out / "server.log").is_file():
             record["log_sha256"] = ra_process.file_digest(out / "server.log")
