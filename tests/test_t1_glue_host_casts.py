@@ -166,3 +166,42 @@ def test_expert_sorted_rows_at_two_tokens_keep_the_copied_rows(monkeypatch):
         assert all(s_["gather_div"] == 1 for s_ in seen), "no gather_div with two tokens"
     want = hr._fused_over_stack(c["x_t"].index_select(0, row_token), *args, singleton_groups=True)
     assert torch.equal(outs[0], want) and torch.equal(outs[1], want)
+
+
+
+def test_the_combine_takes_the_layer_residual_only_where_the_kernel_would(monkeypatch):
+    """P127 item c: ``_combine_topk(..., residual=)`` is ``combine + residual``, bitwise the layer's bf16 add. The
+    residual goes into the kernel's epilogue (``combine_rows(..., residual=)``) only when it is bf16 ``[T, H]`` and the
+    kernel takes it; a kernel without the option, a residual it would refuse, and the torch chain add it in torch."""
+    T, k, H = 2, 4, 16
+    torch.manual_seed(5)
+    dn = torch.randn(T * k, H, dtype=torch.bfloat16)
+    tw = torch.softmax(torch.randn(T, k), dim=-1).to(torch.bfloat16)
+    res = (torch.randn(T, H) * 4).to(torch.bfloat16)
+    handed = []
+
+    def _sum(dn_, w_, k_):
+        return (dn_.float() * w_.float()[:, None]).view(-1, k_, dn_.shape[1]).sum(1).to(torch.bfloat16)
+
+    def ck(dn_, w_, k_, residual=None):                  # the epilogue: bf16(bf16(acc) + r)
+        handed.append(residual)
+        y = _sum(dn_, w_, k_)
+        return y if residual is None else (y.float() + residual.float()).to(torch.bfloat16)
+    monkeypatch.setattr(hr, "_combine_kernel", lambda: ck)
+    monkeypatch.setattr(hr, "_kernel_tensor", lambda t: True)
+    plain = hr._combine_topk(dn, tw, k, T, H, torch.bfloat16, "cpu")
+    handed.clear()
+    out = hr._combine_topk(dn, tw, k, T, H, torch.bfloat16, "cpu", residual=res)
+    assert len(handed) == 1 and handed[0] is res and torch.equal(out, plain + res)
+    for bad in (res.to(torch.float16), res[:1]):           # a residual the kernel would refuse: never handed to it
+        handed.clear()
+        out = hr._combine_topk(dn, tw, k, T, H, torch.bfloat16, "cpu", residual=bad)
+        assert handed == [None] and torch.equal(out, plain + bad)
+
+    def ck_old(dn_, w_, k_):                               # a kernel package before grouped-nf4-gemm#527
+        return _sum(dn_, w_, k_)
+    monkeypatch.setattr(hr, "_combine_kernel", lambda: ck_old)
+    assert torch.equal(hr._combine_topk(dn, tw, k, T, H, torch.bfloat16, "cpu", residual=res), plain + res)
+    monkeypatch.setattr(hr, "_combine_kernel", lambda: None)              # the torch chain
+    chain = hr._combine_topk(dn, tw, k, T, H, torch.bfloat16, "cpu")
+    assert torch.equal(hr._combine_topk(dn, tw, k, T, H, torch.bfloat16, "cpu", residual=res), chain + res)
