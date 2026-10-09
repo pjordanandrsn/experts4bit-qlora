@@ -36,7 +36,7 @@ import os
 import sys
 from pathlib import Path
 
-GNF4_SHA = "0000000000000000000000000000000000000000"     # grouped-nf4-gemm #524's merge commit: pinned at registration
+GNF4_SHA = "e21a71242b361dd0a3f72cdf4152de94633891a8"     # grouped-nf4-gemm main after #524 and #525 (v0.44.0 + #524)
 REVS = {"Qwen/Qwen3-30B-A3B": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
         "ibm-granite/granite-3.1-3b-a800m-instruct": "a02780686e08a03fe0d2679a293b5c74a90efa89"}
 READING_MODEL = "Qwen/Qwen3-30B-A3B"

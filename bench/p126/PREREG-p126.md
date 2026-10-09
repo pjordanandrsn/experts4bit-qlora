@@ -1,6 +1,6 @@
 # P126 — does splitting the one-launch cumsum tile table over P programs (`E4B_INT4_TILE_PROGRAMS=P`) make SC2e's 64-row decode step faster, with identical tokens? One RTX 5090 (registered 2026-10-09, before any run)
 
-Issue: experts4bit-qlora#846 (the serving campaign; the owner's no-ask tier for a single run under $15). Lane number
+Issue: experts4bit-qlora#846 (the serving campaign; its standing no-ask tier covers a single run under $15). Lane number
 claimed by `prereg/p126` (pushed 2026-10-09T04:15:33Z). Follows P122 (#1393) and P124 (#1415, #1421, #1427). The
 maintainer's GO for this lever (bus, 2026-10-09T03:38Z) set its conditions:
 - a fixed set of P chosen before any data: **P ∈ {1, 4, 8}**;
@@ -11,7 +11,7 @@ The code under test:
 - grouped-nf4-gemm #524 (`build_group_tiles_fused(..., rank="cumsum", programs=P)`: `_tile_table_cumsum_mp`);
 - e4b #1433 (`E4B_INT4_TILE_PROGRAMS`, opt-in).
 
-grouped-nf4-gemm is pinned at **`<#524's merge commit>`**, after the 0.44.0 tag.
+grouped-nf4-gemm is pinned at **`e21a71242b361dd0a3f72cdf4152de94633891a8`**: main after #524 (`14b1f23`) and #525, on the v0.44.0 tag (`d1f64ba`).
 
 ## Why this lane
 
@@ -137,7 +137,7 @@ does not apply to the proof's model; its numbers are not a reading.
 - **Proof:** one RTX 5090 (Vast verified/secure), guard 0.75 h at ≤ $0.75/h, estimate $0.5625.
 - **Reading:** one RTX 5090, guard 1.5 h at ≤ $0.75/h, estimate $1.125. Expected about 40 minutes, most of it the
   61 GB fetch; the box itself about 10.
-- **Lane ceiling:** $3.00, inside the owner's $15 no-ask tier. A pre-flight NOT_RUN is retried under the maintainer's
+- **Lane ceiling:** $3.00, inside the campaign's $15 no-ask tier. A pre-flight NOT_RUN is retried under the maintainer's
   standing rule.
 - **STOP-1:** the refusals run before any install: dud box (10), card class (15), disk < 150 GB (13), host RAM < 60 GiB
   (16). The premise runs before the fetch (25), each none skipped:

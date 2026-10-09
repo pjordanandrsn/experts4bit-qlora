@@ -26,7 +26,7 @@ trap 'finish 130' INT TERM
 for v in P126_RUN_ID P126_DEADLINE_EPOCH P126_INSTANCE_ID E4B_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
 case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78;; esac
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char sha"; finish 78; }
-GNF4_SHA=0000000000000000000000000000000000000000   # grouped-nf4-gemm #524 (programs=), its merge commit; a registered constant
+GNF4_SHA=e21a71242b361dd0a3f72cdf4152de94633891a8   # grouped-nf4-gemm main after #524 (programs=) and #525; a registered constant
 PROVE=${P126_PROVE:-0}
 if [ "$PROVE" = 1 ]; then
   MODEL=ibm-granite/granite-3.1-3b-a800m-instruct; REV=a02780686e08a03fe0d2679a293b5c74a90efa89   # P94's pin (SC1's proof model)
@@ -97,7 +97,7 @@ d = json.loads(md.distribution("experts4bit-qlora").read_text("direct_url.json")
 assert d.get("vcs_info", {}).get("commit_id") == os.environ["WANT_E4B"], f"installed e4b is not the launch commit: {d}"
 dg = json.loads(md.distribution("grouped-nf4-gemm").read_text("direct_url.json") or "{}")
 assert dg.get("vcs_info", {}).get("commit_id") == os.environ["WANT_GNF4"], f"installed gnf4 is not the pinned commit: {dg}"
-assert md.version("grouped-nf4-gemm") == "0.43.0", md.version("grouped-nf4-gemm")
+assert md.version("grouped-nf4-gemm") == "0.44.0", md.version("grouped-nf4-gemm")
 import transformers
 assert transformers.__version__ == "5.17.0", transformers.__version__
 from experts4bit_qlora import serve_paged
