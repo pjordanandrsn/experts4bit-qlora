@@ -446,10 +446,10 @@ NO_GAIN about 55 %, SLOWER or NOISY about 10 %.
 
 ## Amendment 5 (2026-10-09, before any Mixtral data): Mixtral-8x7B, its own registration
 
-Jordan asked for the Mixtral and Gemma-4 readings; the brief makes each its own registration. The maintainer approved
-this design on the bus (2026-10-09T13:43Z), raised the lane ceiling, and asked for the disk sizing and the fp32 router
-check below. The instrument, the cells, the arms, the rule, the gates and margins, the mutants and the verdict ladder
-are unchanged; this amendment adds Mixtral's pins and tables, a per-family proof, and two checks.
+The Mixtral and Gemma-4 readings were requested for this lane; the brief makes each its own registration. The
+maintainer approved this design on the bus (2026-10-09T13:43Z), raised the lane ceiling, and asked for the disk sizing
+and the fp32 router check below. The instrument, the cells, the arms, the rule, the gates and margins, the mutants and
+the verdict ladder are unchanged; this amendment adds Mixtral's pins and tables, a per-family proof, and two checks.
 
 **The family.** `mistralai/Mixtral-8x7B-Instruct-v0.1` @ `eba92302a2861cdc0098cc54bc9f17cb2c47eb61`: 32 layers, 8
 experts, top-2, no sliding window (its config.json at that revision). The arena is baked by P39's `k8_bake.py`, as
@@ -494,7 +494,7 @@ only after its proof is re-derived.
 - Each check plus 600 s of fetch-back fits inside its guard (`tests/test_fam_staged_pin.py`).
 - Run ceilings: the proof $1.28, the reading $3.40. The lane has spent $7.720; with these two it stays under $12.40.
 - **lane ceiling $26.00** (was $18.00), which also covers Amendment 6's Gemma-4 proof and reading; every run stays
-  under the owner's $15 no-ask tier.
+  under the $15 no-ask tier.
 
 **Predictions** (written before any data):
 
