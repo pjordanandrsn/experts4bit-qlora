@@ -250,3 +250,15 @@ def test_the_reducer_reads_the_record_with_only_the_step_counts_lowered(run, mon
     assert box.SETTINGS == red.SETTINGS and box.CANDIDATES == red.CANDIDATES and box.BLOCKS == red.BLOCKS
     assert box.WARM == red.WARM and box.MUTANT_STEPS == red.MUTANT_STEPS and tuple(box.B64) == red.B64
     assert box.TABLE_ONE == red.TABLE_ONE and box.TABLE_MP == red.TABLE_MP
+
+
+def test_the_record_carries_amendment_1_and_the_host_at_start_and_end(run):
+    box, rec, *_ = run
+    red = _load("p126_reduce")
+    assert rec["amendment"] == box.AMENDMENT == 1 and 1 in red.AMENDMENTS
+    for when in ("start", "end"):
+        h = rec["host"][when]
+        assert set(red.HOST_KEYS) <= set(h), sorted(h)
+        assert h["cpu_count"] == os.cpu_count()
+    # the stood-in nvidia-smi answers every query with one line: its first two fields read as the power cap, one process
+    assert rec["host"]["start"]["power_limit_w"] == 2800.0 and rec["host"]["start"]["gpu_processes"] == 1
