@@ -90,6 +90,12 @@ def test_uptime_reset_detects_reboot_before_it_falls_below_lane_age():
     assert verdict("1 123 - 9000.00", "1 123 - 10000.00", age=10) == "reboot"
 
 
+def test_lxcfs_uptime_reset_with_same_boot_id_is_rebooted():
+    # lxcfs can reset its exposed uptime while the boot UUID/PID/ticks stay equal.
+    # The registered driver contract treats that backwards clock as a reboot.
+    assert verdict(f"1 123 {BOOT_A} 9000.00", INITIAL, age=10) == "reboot"
+
+
 @pytest.mark.parametrize("corrupt", ["", "ssh: connection lost", "0 - bad 10000", "1 123 - nope",
                                     "0 - - 10000 extra", "999 123 - 10000"])
 def test_malformed_probe_is_unknown_and_resets_missing_streak(corrupt):
@@ -119,6 +125,7 @@ def test_failed_probe_read_is_not_a_definite_zero(tmp_path):
     ([f"1 999 {BOOT_A} 10000", f"1 999 {BOOT_A} 10001"], "dead", 2),
     ([f"1 123 {BOOT_B} 20000"], "reboot", 1),
     (["1 123 - 3124.65"], "reboot", 1),
+    ([f"1 123 {BOOT_A} 9000.00"], "reboot", 1),
     (["0 - - 10000", None, "0 - - 10001", INITIAL], "complete", 4),
     ([INITIAL, INITIAL, INITIAL, INITIAL], "complete", 4),
     (["0 - - 10000", "PARTIAL_FAIL:0 - - 10000", "0 - - 10001", INITIAL], "complete", 4),
