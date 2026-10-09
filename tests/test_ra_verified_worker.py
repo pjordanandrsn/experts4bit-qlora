@@ -16,6 +16,9 @@ spec.loader.exec_module(fixtures)
 spec = importlib.util.spec_from_file_location('worker_controls', ROOT / 'bench/ra/ra_verified_worker.py')
 worker = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(worker)
+spec = importlib.util.spec_from_file_location('worker_test_environment', ROOT / 'bench/ra/ra_env.py')
+worker_environment = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(worker_environment)
 
 
 def sha(path):
@@ -59,11 +62,16 @@ def setup(tmp_path, *, phase='decode', effect='', hook=True, copies=False):
 
 def run(tmp_path, manifest, job, python, tool, *, env=None, expected=None, after_load=None):
     if env is None:
-        env = dict(os.environ)
+        fixture = {}
         if job['phase'] == 'quality':
-            env['E4B_PAGED_GRAPHS'] = '0'
+            fixture['E4B_PAGED_GRAPHS'] = '0'
         elif job['phase'] == 'capacity':
-            env.update(E4B_PAGED_MAX_TOKENS_PER_SEQ='2048', E4B_PAGED_CHUNK_TOKENS='512')
+            fixture.update(E4B_PAGED_MAX_TOKENS_PER_SEQ='2048', E4B_PAGED_CHUNK_TOKENS='512')
+        # Use the production spawn boundary; conftest's rental guards belong
+        # to the test parent, not the independently checked worker fixture.
+        env, _ = worker_environment.clean(os.environ, component=job['phase'], fixture=fixture,
+            venv=Path(manifest['payload']['venv']), cache=tmp_path / 'worker-cache',
+            threads=1, allocator='expandable_segments:True')
     m = tmp_path / 'handoff-spec.json'
     m.write_text(json.dumps(manifest))
     s = tmp_path / 'worker-spec.json'
@@ -153,6 +161,10 @@ def test_refusals_before_target(tmp_path, mutation):
         stage.rename(owned)
         stage.symlink_to(owned, target_is_directory=True)
     elif mutation == 'phase':
+        # Clean the original decode fixture, then mutate only the pinned job.
+        env, _ = worker_environment.clean(os.environ, component='decode', fixture={},
+            venv=Path(manifest['payload']['venv']), cache=tmp_path / 'worker-cache',
+            threads=1, allocator='expandable_segments:True')
         job['phase'] = 'external-command'
     elif mutation in ('native_fields', 'stage_fields'):
         job['native_spec' if mutation == 'native_fields' else 'stage']['extra'] = True
@@ -198,3 +210,27 @@ def test_post_target_mutations_retain_failed_worker_and_passed_handoff(tmp_path,
     if "joinpath('handoff.json')" not in effect:
         assert json.loads((tmp_path / 'handoff.json').read_bytes())['status'] == 'PASSED'
     assert Path(job['native_out']).exists() or effect == "Path(a.out).unlink()"
+
+
+def test_parent_rental_guards_are_removed_by_production_spawn_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv('E4B_NO_LIVE', '1')
+    monkeypatch.setenv('E4B_RENT_LIVE', '0')
+    manifest, job, python, tool, marker = setup(tmp_path, effect=
+        "assert 'E4B_NO_LIVE' not in os.environ and 'E4B_RENT_LIVE' not in os.environ")
+    assert not {'E4B_NO_LIVE', 'E4B_RENT_LIVE'} & worker_environment.allowed('decode')
+    p = run(tmp_path, manifest, job, python, tool)
+    assert p.returncode == 0, p.stderr
+    assert json.loads((tmp_path / 'worker.json').read_text())['status'] == 'WORKER_RETURNED_PENDING_GATES'
+
+
+def test_unclean_explicit_worker_environment_still_refuses_rental_guards(tmp_path):
+    manifest, job, python, tool, marker = setup(tmp_path)
+    env, _ = worker_environment.clean(os.environ, component='decode', fixture={},
+        venv=Path(manifest['payload']['venv']), cache=tmp_path / 'worker-cache',
+        threads=1, allocator='expandable_segments:True')
+    env.update(E4B_NO_LIVE='1', E4B_RENT_LIVE='0')
+    p = run(tmp_path, manifest, job, python, tool, env=env)
+    assert p.returncode != 0
+    receipt = json.loads((tmp_path / 'worker.json').read_text())
+    assert receipt['phase'] == 'PRECONDITIONS' and 'unregistered' in receipt['error']
+    assert not Path(job['native_out']).exists()
