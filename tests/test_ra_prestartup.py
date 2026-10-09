@@ -20,9 +20,9 @@ fixtures = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fixtures)
 
 
-def setup(tmp_path, *, startup=False, pip=False):
+def setup(tmp_path, *, startup=False, pip=False, copies=False):
     prefix = tmp_path / "venv"
-    venv.EnvBuilder(with_pip=False, symlinks=True).create(prefix)
+    venv.EnvBuilder(with_pip=False, symlinks=not copies).create(prefix)
     python = prefix / "bin/python"
     code = ("import sys,sysconfig,json,platform,hashlib; from pathlib import Path; "
             "print(json.dumps({'image':{'os':sys.platform,'architecture':"
@@ -61,6 +61,66 @@ def setup(tmp_path, *, startup=False, pip=False):
                 "startup_registry_sha256": fixtures.provenance.digest(tool / "startup-audit-adapters.json"),
                 "wheels": wheels}
     return manifest, python, site, tool, hook_marker, import_marker
+
+
+@pytest.mark.parametrize("copies", [False, True])
+def test_selected_and_base_interpreters_are_independently_bound(tmp_path, copies):
+    manifest, python, site, tool, hook_marker, import_marker = setup(tmp_path, copies=copies)
+    result = run(tmp_path, manifest, python, tool)
+    assert result.returncode == 0, result.stderr
+    receipt = json.loads((tmp_path / "result.json").read_bytes())
+    assert receipt["copied_executable"] is copies
+    assert receipt["executable_sha256"] == receipt["base_executable_sha256"] == \
+        json.loads(Path(manifest["image"]).read_bytes())["python"]["executable_sha256"]
+    assert not hook_marker.exists() and not import_marker.exists()
+
+
+@pytest.mark.parametrize("mutation", ["selected_bytes", "base_identity", "cfg_executable"])
+def test_copied_interpreter_mutants_refuse(tmp_path, mutation):
+    manifest, python, site, tool, hook_marker, import_marker = setup(tmp_path, copies=True)
+    if mutation == "selected_bytes":
+        with python.open("ab") as dst:
+            dst.write(b"unregistered trailing bytes")
+        result = run(tmp_path, manifest, python, tool)
+    elif mutation == "cfg_executable":
+        config = python.parent.parent / "pyvenv.cfg"
+        lines = [line if not line.startswith("executable =") else "executable = /foreign/python"
+                 for line in config.read_text().splitlines()]
+        config.write_text("\n".join(lines) + "\n")
+        result = run(tmp_path, manifest, python, tool)
+    else:
+        path = tmp_path / "manifest.json"
+        path.write_text(json.dumps(manifest))
+        code = ("import sys,runpy; sys._base_executable='/foreign/python'; sys.argv=" +
+                repr([str(tool / "ra_prestartup.py"), "--manifest", str(path), "--out", str(tmp_path / "result.json")]) +
+                "; runpy.run_path(" + repr(str(tool / "ra_prestartup.py")) + ",run_name='__main__')")
+        result = subprocess.run([str(python), "-I", "-S", "-B", "-c", code], capture_output=True, text=True, timeout=45)
+    assert result.returncode != 0 and not import_marker.exists() and not hook_marker.exists()
+
+
+def test_resealed_config_cannot_hide_changed_base_binary(tmp_path):
+    manifest, python, site, tool, hook_marker, import_marker = setup(tmp_path, copies=True)
+    base_dir = tmp_path / "owned-base-mutant"
+    base_dir.mkdir()
+    base = base_dir / "python"
+    original = subprocess.check_output([str(python), "-I", "-S", "-B", "-c",
+                                        "import sys;print(sys._base_executable)"], text=True).strip()
+    base.write_bytes(Path(original).resolve().read_bytes() + b"base binary mutant")
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(manifest))
+    config = python.parent.parent / "pyvenv.cfg"
+    # Change only owned fixture state after interpreter bootstrap: selected
+    # binary stays image-identical while home/base are consistently resealed.
+    code = ("import sys,runpy,pathlib; p=pathlib.Path(" + repr(str(config)) + "); "
+            "p.write_text('\\n'.join('home = " + str(base_dir) + "' if x.startswith('home =') else "
+            "'executable = " + str(base) + "' if x.startswith('executable =') else x "
+            "for x in p.read_text().splitlines())+'\\n'); sys._base_executable=" + repr(str(base)) +
+            "; sys.argv=" + repr([str(tool / "ra_prestartup.py"), "--manifest", str(path),
+                                   "--out", str(tmp_path / "result.json")]) +
+            "; runpy.run_path(" + repr(str(tool / "ra_prestartup.py")) + ",run_name='__main__')")
+    result = subprocess.run([str(python), "-I", "-S", "-B", "-c", code], capture_output=True, text=True, timeout=45)
+    assert result.returncode != 0 and "image interpreter binary/ABI/platform" in result.stderr
+    assert not import_marker.exists() and not hook_marker.exists()
 
 
 def run(tmp_path, manifest, python, tool, *, flags=("-I", "-S", "-B")):

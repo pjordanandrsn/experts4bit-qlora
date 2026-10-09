@@ -44,8 +44,10 @@ def layout(manifest, helper):
             cfg.keys() <= {"home", "include-system-site-packages", "version", "executable", "command", "prompt"},
             "venv config fields")
     real = executable.resolve(strict=True)
+    base = Path(sys._base_executable).resolve(strict=True)
     require(cfg["include-system-site-packages"] == "false" and cfg["version"] == platform.python_version() and
-            Path(cfg["home"]).resolve() == real.parent, "venv base/system-site identity")
+            Path(cfg["home"]).resolve() == base.parent and
+            ("executable" not in cfg or Path(cfg["executable"]).resolve() == base), "venv base/system-site identity")
     # <=3.13 -S leaves sys.prefix at the base. Derive sites from the verified
     # venv location, rather than rewriting interpreter globals or invoking site.
     sites = {Path(sysconfig.get_path(k, vars={"base": str(prefix), "platbase": str(prefix)}))
@@ -58,6 +60,7 @@ def layout(manifest, helper):
     require(image["python"]["version"] == platform.python_version() and
             image["python"]["soabi"] == sysconfig.get_config_var("SOABI") and
             image["python"]["executable_sha256"] == helper.digest(real) and
+            image["python"]["executable_sha256"] == helper.digest(base) and
             image["image"]["os"] == sys.platform and image["image"]["architecture"] == architecture,
             "image interpreter binary/ABI/platform")
     return prefix, sites, config, real, helper.digest(real)
@@ -67,6 +70,8 @@ def verify(manifest):
     helper = load_provenance()
     require = helper.require
     prefix, sites, config, real_executable, executable_hash = layout(manifest, helper)
+    base_executable = Path(sys._base_executable).resolve(strict=True)
+    base_hash = helper.digest(base_executable)
     config_hash = helper.digest(config)
     registry_path = Path(__file__).absolute().with_name("startup-audit-adapters.json")
     require(helper.digest(registry_path) == manifest["startup_registry_sha256"], "reviewed startup registry bytes")
@@ -190,6 +195,8 @@ def verify(manifest):
             sys.path.remove(str(site))
     require(Path(sys.executable).resolve() == real_executable and helper.digest(real_executable) == executable_hash,
             "interpreter changed")
+    require(Path(sys._base_executable).resolve() == base_executable and
+            helper.digest(base_executable) == base_hash, "base interpreter changed")
     require(helper.digest(config) == config_hash and helper.digest(Path(manifest["image"])) == manifest["image_sha256"] and
             helper.digest(registry_path) == manifest["startup_registry_sha256"], "bootstrap inputs changed")
     common = {n: {"version": p["version"], "wheel_sha256": p["wheel_sha256"], "tree_sha256": trees[n]}
@@ -198,6 +205,7 @@ def verify(manifest):
     return {"schema": 1, "venv": str(prefix), "python": platform.python_version(),
             "image_sha256": manifest["image_sha256"], "startup_registry_sha256": manifest["startup_registry_sha256"],
             "pyvenv_cfg_sha256": config_hash, "executable_sha256": executable_hash, "installed_files": len(hashes),
+            "base_executable_sha256": base_hash, "copied_executable": real_executable != base_executable,
             "distributions": {n: {"version": p["version"], "wheel_sha256": p["wheel_sha256"],
                                    "tree_sha256": trees[n], "startup": p["startup"]} for n, p in packages.items()},
             "wheel_lock_sha256": common_hash, "proves_installed_payload": True, "startup_activated": False,
