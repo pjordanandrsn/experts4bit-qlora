@@ -392,6 +392,78 @@ registration error of the same kind as Phase 1's: an exactness expectation appli
 Held-out at N held on both arms. The last training step's loss lies in 0.8153–0.8206 across all eight draws. Nothing turns on. A
 re-measure needs an amendment that sets the step-0 clause against a floor measured on the box, before any new box.
 
+## Amendment 3 (2026-10-09T21:20Z, after the Phase 2 read, before any new box): the step-0 clause against a floor measured on the box
+
+**Why.** `tc1-5090-146` read QUALITY_FAIL on TC1's step-0 bar (0.0005), and it stays QUALITY_FAIL. The investigation showed that no
+change to the base projections' GEMM shape can meet that bar on this model:
+- the fused path is the stock forward with one GEMM shape;
+- a neutral split of q's matmul moves the step-0 loss as much;
+- the sign follows the card.
+
+This amendment registers a step-0 clause that a rounding-class change can pass only by staying inside the rounding family. It does not
+re-read box 146. A fresh box reads it.
+
+**The box** (token `qwen3fqkv3`): Amendment 2's box unchanged, with the same arms, order, steps, load gate, profiling, host rule (ranking
+off, machine 18967 avoided) and policy rate. Each q0 arm also runs the step-0 floor (`TC1_QKV_FLOOR=1`), in the same process before any
+training step. The build is e4b main carrying the harness (`tc1_arm.qkv_floor_rows`, `tc1_reduce.py`'s `qwen3fqkv3`) and this page,
+with grouped-nf4-gemm v0.44.0 `d1f64ba`. The manifest pins both.
+
+**The floor.** The step-0 held-out per row on the q0 arm under registered bf16 schedules of the same q/k/v base projections:
+- **A:** the stock path (its step-0 rows);
+- **A0:** the stock arithmetic through the floor's hook, a self-check that must equal A row for row;
+- **D1:** the three matmuls in fp32, rounded to bf16 (the reference);
+- **D2:** q's matmul split in two along N;
+- **D3:** k and v as one matmul;
+- **D4:** q's matmul split in four.
+
+The fused path B is the q1 arm's step-0 rows. Only each projection's 4-bit base is swapped, so the adapters add their delta the stock
+way.
+
+**The clause.** For each arm, e_x is the mean over the held-out rows of |x − D1|. Step 0 passes when e_B ≤ max(e_A, e_D2, e_D3, e_D4):
+the fused path is no farther from fp32 than the worst registered schedule of the same projections. There is no margin. It is an
+envelope test, so the schedules set the bar. The per-row absolute error also removes the sign difference between cards.
+
+**Validity** (`fqkv3_why`): Amendment 2's predicates. On each q0 arm, the floor record must:
+- carry every mode for every row;
+- have A0 equal to the stock step-0 rows;
+- show D3 sharing k's matmul on every call.
+
+A missing or broken floor VOIDs the draw, and an incomplete floor makes the rung VOID.
+
+**Everything else as Amendment 2:**
+- held-out at N within 0.005 on each arm;
+- the recount (11.2 %);
+- the premise (matched `q0` busy_t ≤ 0.85);
+- the wall and device ratios;
+- the rungs VOID / NOISY / QUALITY_FAIL / NO_GAIN / GAIN;
+- DEFAULT_ON needs a second host.
+
+**Calibration, not a reading** (the numbers this rule and the old clause give on data already in hand):
+
+| data | e_A | e_D2 | e_D3 | e_D4 | e_B | max(e_A, e_D2, e_D3, e_D4) | this rule | the old clause (\|B − A\| ≤ 0.0005) |
+|---|---|---|---|---|---|---|---|---|
+| RTX A2000, the real model at the pin, box 146's eight rows (`records/a2/`; D3 and D4 not run there) | 0.0132 | 0.0255 | — | — | 0.0170 | ≥ 0.0255 | PASS | FAIL (0.0231) |
+| RTX A2000, the two-layer random model, `lora_B` zero (`records/a3/`) | 0.0022 | 0.0017 | 0.0020 | 0.0017 | 0.0013 | 0.0022 | PASS | FAIL (0.00077) |
+| the same, `lora_B` non-zero | 0.0019 | 0.0025 | 0.0017 | 0.0018 | 0.0016 | 0.0025 | PASS | PASS (0.00037) |
+
+**Predictions** for the new box:
+- **The step-0 ratio:** e_B / max(e_A, e_D2, e_D3, e_D4) on each arm in [0.35, 1.10], about 0.65.
+  - If the fused path is one more member of the rounding family, the chance that it lies beyond the worst of four others is about one
+    in five.
+  - So step 0 passes on an arm with about 80 % probability.
+  - Both arms share the base projections at init (`lora_B` is zero on both), so the two arms' ratios should be close.
+- **Held-out at N:** within 0.005 on each arm.
+- **The other rows:** as Amendment 2 predicted, which box 146 met.
+- **The rung:** GAIN on a host-bound host, about 70 %.
+
+**Decision rules** (Amendment 2's):
+- **GAIN:** the knob stays opt-in until DEFAULT_ON's second host reads, and that box is the lane's one replication.
+- **QUALITY_FAIL under this clause:** the fused path lies outside the rounding family on the box's card. Nothing turns on, and the read
+  says on which rows.
+
+**Budget.** One RTX 5090 at the policy rate: about $2–3 with the download. The floor adds five held-out passes of eight rows to each
+q0 arm before training, seconds per pass. The lane has spent $2.085 so far and stays under $15.
+
 ## Box log
 
 - **`tc1-5090-142`** (2026-10-09, $0): refused before any instance existed. The cheapest eligible RTX 5090 billed $0.93/h with storage,
