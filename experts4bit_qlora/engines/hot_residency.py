@@ -1005,6 +1005,10 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             _route = "int4_prefill_batched" if _batched else "int4_prefill_loop"
     else:
         _route = "nf4_singleton" if singleton_groups else "nf4_mtile_host"
+        # gemm_4bit_grouped casts the expert ids to int32 on every call (a no-op on int32): cast them once for both
+        # calls -- the same ids, one launch a layer fewer at T == 1 (e4b#1313, lane P127's Phase 1), as the int4 and
+        # MXFP4 routes above already do
+        _eids = eids.to(torch.int32) if torch.is_tensor(eids) else eids
 
         def _mm(xr, pk, am):
             if pk is not None and pk.numel() == 0:
@@ -1014,7 +1018,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                     "baseline path reached _fused_over_stack after "
                     "enable_serve_experts_int4. That enable is collapsed-"
                     "path-only; re-enable with all-VRAM placement.")
-            return gemm_4bit_grouped(xr, pk, am, sizes, eids)
+            return gemm_4bit_grouped(xr, pk, am, sizes, _eids)
     _seen_route(_route, R_rows)
     gu = _mm(x_sorted, gu_p, gu_a)
     if gptoss is not None:
@@ -1060,6 +1064,34 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     out = torch.empty_like(dn)
     out.index_copy_(0, order, dn)  # unsort back to caller's row order
     return out
+
+
+def _kernel_tensor(t) -> bool:
+    """Whether ``t`` lives where the kernel side runs (a CUDA device); a seam the CPU tests stand in for."""
+    return bool(t.is_cuda)
+
+
+def _combine_topk(dn, top_k_weights, k, T, H, input_dtype, input_dev):
+    """The top-k weighted sum of the down projections back to the token rows: the kernel side's ``combine_rows`` in one
+    launch when it applies, else the torch chain. The kernel loads the weights with ``.to(tl.float32)`` (every
+    grouped-nf4-gemm since e4b's floor, 0.30.0), so it takes them in the router's dtype: a host ``.to(torch.float32)``
+    was one launch a layer for an exact bf16 -> fp32 widening (e4b#1313, lane P127's Phase 1). The torch chain keeps
+    its fp32 weights."""
+    wk = top_k_weights.reshape(-1)
+    ck = _combine_kernel()
+    if (ck is not None and _kernel_tensor(dn) and dn.dtype == torch.bfloat16
+            and input_dtype == torch.bfloat16
+            and dn.device == torch.device(input_dev)):
+        # one launch: fp32 weight-and-sum over the k slots, bf16 out.
+        # NOT bitwise the chain below: the kernel sums in slot order
+        # (with a fused multiply-add, exactly so on sm_86), the chain
+        # rounds each product and sums in torch's order. Both are within the error bound of a
+        # correct fp32 sum (grouped-nf4-gemm lane B393, #393: 144/144
+        # census cases, RTX 5090); E4B_FUSE_COMBINE=0 is the chain.
+        return ck(dn, wk, k)
+    w = wk.to(torch.float32)
+    out = (dn.to(torch.float32) * w[:, None]).view(T, k, H)
+    return out.sum(dim=1).to(device=input_dev, dtype=input_dtype)
 
 
 def _partition_by_mask(hot_row):
@@ -1364,20 +1396,7 @@ class _HotResidency:
                                int4_stores=getattr(self, "_int4_stores",
                                                    None),
                                x_tokens=xtok)
-        w = top_k_weights.reshape(-1).to(torch.float32)
-        ck = _combine_kernel()
-        if (ck is not None and dn.is_cuda and dn.dtype == torch.bfloat16
-                and input_dtype == torch.bfloat16
-                and dn.device == torch.device(input_dev)):
-            # one launch: fp32 weight-and-sum over the k slots, bf16 out.
-            # NOT bitwise the chain below: the kernel sums in slot order
-            # (with a fused multiply-add, exactly so on sm_86), the chain
-            # rounds each product and sums in torch's order. Both are within the error bound of a
-            # correct fp32 sum (grouped-nf4-gemm lane B393, #393: 144/144
-            # census cases, RTX 5090); E4B_FUSE_COMBINE=0 is the chain.
-            return ck(dn, w, k)
-        out = (dn.to(torch.float32) * w[:, None]).view(T, k, H)
-        return out.sum(dim=1).to(device=input_dev, dtype=input_dtype)
+        return _combine_topk(dn, top_k_weights, k, T, H, input_dtype, input_dev)
 
     def _forward_diet(self, x, flat, top_k_weights, T, k, H, dev,
                       input_dev, input_dtype):

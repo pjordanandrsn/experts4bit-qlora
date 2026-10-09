@@ -28,8 +28,9 @@ retain their direct modes. This avoids mistaking the build's capacity resolution
 for a configuration override. Capacity may replace host/port only with a
 verified listening loopback socket; other config fields still match the native
 factory. It reconciles observed
-glue forward coverage with native census and rejects auto kernel gaps. Nine baseline 0.50.0 bodies plus the two main router cast variants carry
-source commits in the adapter registry. They bind complete native forward bodies; changed
+glue forward coverage with native census and rejects auto kernel gaps. Nine baseline 0.50.0 bodies plus the two main router cast variants and
+the three router forwards that hand the kernel unwidened logits (#1313, P127's
+Phase 1) carry source commits in the adapter registry. They bind complete native forward bodies; changed
 bodies require a reviewed adapter. Private clones observe retained-original
 calls without changing installed function defaults. Small-row fallbacks and
 large-row prefill fallbacks are separate, with per-pass and per-module counts.

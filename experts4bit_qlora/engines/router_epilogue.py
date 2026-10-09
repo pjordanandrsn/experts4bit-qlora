@@ -393,7 +393,7 @@ def fuse_router_epilogue(model, mode: str | None = None, report: dict | None = N
                 if rows.shape[0] > _MAX_DECODE_ROWS:
                     return _orig(hidden_states)
                 logits = torch.nn.functional.linear(_gemma4_pre(_m, rows), _m.proj.weight)
-                probs, w, idx = router_epilogue(logits.float(), _k, True)
+                probs, w, idx = router_epilogue(logits, _k, True)                 # the kernel widens on load
                 w = w * _m.per_expert_scale.float()[idx]
                 return _assemble(_pos, logits if _raw else probs, w.to(hidden_states.dtype), idx)
         elif kind == "softmax_topk":
@@ -403,7 +403,7 @@ def fuse_router_epilogue(model, mode: str | None = None, report: dict | None = N
                 if rows.shape[0] > _MAX_DECODE_ROWS:
                     return _orig(hidden_states)
                 logits = torch.nn.functional.linear(rows, _m.weight)
-                first, w, idx = router_epilogue(logits.float(), _k, _norm)
+                first, w, idx = router_epilogue(logits, _k, _norm)                # the kernel widens on load
                 if _casts and _cast_for("softmax_topk"):
                     w = w.to(logits.dtype)
                 return _assemble(_pos, logits if _raw else first, w, idx)
@@ -414,12 +414,15 @@ def fuse_router_epilogue(model, mode: str | None = None, report: dict | None = N
                 if rows.shape[0] > _MAX_DECODE_ROWS:
                     return _orig(hidden_states)
                 logits = _topk_softmax_logits(_m, rows, _has_bias)
-                first, w, idx = router_epilogue(logits.float(), _k, False, select_on_logits=True)
+                first, w, idx = router_epilogue(logits, _k, False, select_on_logits=True)  # widened on load
                 if _casts and _cast_for("topk_softmax"):
                     w = w.to(logits.dtype)
                 return _assemble(_pos, logits if _raw else first, w, idx)
         mod.forward = _fwd
         n += 1
+        # The kernel loads the logits with ``.to(tl.float32)`` (every grouped-nf4-gemm since e4b's floor, 0.30.0), so
+        # the forwards above hand it the projection's own dtype: a host ``logits.float()`` was one launch a layer for
+        # an exact bf16 -> fp32 widening the kernel does anyway (e4b#1313, lane P127's Phase 1).
         fp32_upstream += kind != "gemma4" and not spec["casts"]
     _note(report, patched=n, failed_probe=skipped, no_kernel_mode=no_kernel_mode, fp32_upstream=fp32_upstream)
     if n == 0 and mode == "1":
