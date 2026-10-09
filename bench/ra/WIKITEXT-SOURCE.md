@@ -43,3 +43,9 @@ discover or admit it as an extra helper. Any future expansion and invocation
 must be explicit and reviewed. The baseline, battery, bounds and all19 frozen
 instrument pins remain unchanged. No full-image installation, rental, GPU
 proof or release clearance is requested.
+
+The proposed schema-6 composition in ABBA-WIKITEXT.md explicitly expands its
+worker inventory to 36 files and invokes eight fixed gates. The standalone
+branch's 35-file statement above remains its historical boundary. The pure
+retained-record audit supports parent re-evaluation; CLI verification still
+requires `-I -S -B` and provides no decoding or consumption evidence.

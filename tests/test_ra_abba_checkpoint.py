@@ -357,7 +357,7 @@ def test_checkpoint_deadline_budget_and_protected_inputs(checkpointed, tmp_path,
 def test_fixed_worker_expands_only_to_checkpoint(tmp_path, mutation):
     import test_ra_verified_worker as worker_fixture
 
-    assert len(worker_fixture.worker.TOOLS) == 35
+    assert len(worker_fixture.worker.TOOLS) == 36
     assert "ra_checkpoint.py" in worker_fixture.worker.TOOLS
     manifest, job, python, tool, _ = worker_fixture.setup(tmp_path)
     if mutation == "missing":

@@ -145,8 +145,8 @@ def check(manifest):
     return spec, lock, common, authority
 
 
-def verify(manifest, fetch):
-    require(sys.flags.isolated and sys.flags.no_site and sys.dont_write_bytecode, 'python -I -S -B required')
+def audit(manifest, fetch):
+    """Pure retained-record/byte audit for independent parent evaluation."""
     inputs, _ = peers()
     base = Path(__file__).absolute().parent
     paths = [base / (n + '.py') for n in PEERS] + [base / 'source-pins.json']
@@ -175,6 +175,11 @@ def verify(manifest, fetch):
             'proves_tokenizer_execution': False, 'proves_runtime_consumption': False,
             'proves_native_loader_revision_binding': False, 'proves_publisher_signature': False,
             'proves_gpu_engagement': False, 'launch_authority': False}
+
+
+def verify(manifest, fetch):
+    require(sys.flags.isolated and sys.flags.no_site and sys.dont_write_bytecode, 'python -I -S -B required')
+    return audit(manifest, fetch)
 
 
 def main():
