@@ -443,3 +443,75 @@ NO_GAIN about 55 %, SLOWER or NOISY about 10 %.
 - In the same change, `FUSION_UNLICENSED`'s reasons for `gpt_oss`, `qwen3_5_moe` and `granitemoe` cite FAM's reads.
 
 **Unchanged:** the quality instrument, its rule, the readings and their verdicts.
+
+## Amendment 5 (2026-10-09, before any Mixtral data): Mixtral-8x7B, its own registration
+
+Jordan asked for the Mixtral and Gemma-4 readings; the brief makes each its own registration. The maintainer approved
+this design on the bus (2026-10-09T13:43Z), raised the lane ceiling, and asked for the disk sizing and the fp32 router
+check below. The instrument, the cells, the arms, the rule, the gates and margins, the mutants and the verdict ladder
+are unchanged; this amendment adds Mixtral's pins and tables, a per-family proof, and two checks.
+
+**The family.** `mistralai/Mixtral-8x7B-Instruct-v0.1` @ `eba92302a2861cdc0098cc54bc9f17cb2c47eb61`: 32 layers, 8
+experts, top-2, no sliding window (its config.json at that revision). The arena is baked by P39's `k8_bake.py`, as
+Granite's and gpt-oss's are. Mixtral has been served all-vram on an RTX 5090 at NF4 before
+(`e4b.serve.census.bo7.mixtral.b1.5090.2026-09-05`).
+
+**Configs and tables** (one knob per arm, as gpt-oss; measured on CPU with P115's stand-in kernels on a tiny Mixtral at
+the real depth, `tests/test_fam_box.py`):
+
+| config | census (q/k/v / glue / r2 / router) | glue-kernel calls per decode-shaped forward |
+|---|---|---|
+| OFF | `0 / 0 / [0, 0] / 0` | none |
+| ON_glue | `0 / 65 / [0, 0] / 0` | `rmsnorm_rows` 65 |
+| ON_r2 | `0 / 0 / [32, 32] / 0` | `rmsnorm_resid_rows` 32, `rope_heads` 64 |
+| ON_epi | `0 / 0 / [0, 0] / 32` | `router_epilogue` 32 |
+| ON_auto | `0 / 65 / [32, 32] / 32` | `rmsnorm_rows` 33, `rmsnorm_resid_rows` 32, `rope_heads` 64, `router_epilogue` 32 |
+
+Decode attention calls are 127 × 32 per pass (× 2 for `half`), and there is no warm-up forward (no linear layers).
+
+**Two checks the reducer adds.**
+- **The router weights stay fp32.** Mixtral's router returns fp32 weights, and the fused epilogue keeps them fp32 since
+  the cast guard (#1372). The box now records the build's `fusion_report`. Wherever the epilogue engages (ON_epi,
+  ON_auto), its `E4B_FUSE_ROUTER_EPI` entry must read `fp32_upstream` 32, every patched router; anything else VOIDs, so
+  ON_epi is read on that path.
+- **The disk, refused up front.** Mixtral's checkpoint is 93.4 GB of safetensors (the `consolidated*` files are
+  excluded from the fetch). With its NF4 snapshot and arena (about 25 GB each), the environment and the cells'
+  references it needs about 157 GB. The box refuses with exit 13 below 220 GB free at the start (`DISK_DEF`, which
+  replaces the fixed 200 GB floor for Mixtral) and again below 165 GB free just before the fetch (`FETCH_DISK_GB`),
+  after the installs, so a short volume never stops it mid-fetch.
+
+**A proof per family.** Mixtral's own proof (`FAM_PROVE=1 FAM_FAMILY=mixtral`; `fam_reduce.py --proof --families
+mixtral`) runs OFF, ON_epi and ON_auto at 32 positions, with no anchor; Granite's proof is unchanged. A reading follows
+only after its proof is re-derived.
+
+**Runs and budget** (the policy rate, $0.85 an hour; sized from FAM's measured walls, Qwen3.6's needs for a 47B model):
+
+| run | guard | the box's checks (need / alarm cap) |
+|---|---|---|
+| Mixtral | 4.0 h | fetch 3000 s, bake 1500 s, OFF 9500 / 10800 s, each ON 1600 / 2700 s |
+| Mixtral's proof | 1.5 h | fetch 3000 s, bake 1500 s, OFF 2400 / 3000 s, each ON 600 / 900 s |
+
+- Each check plus 600 s of fetch-back fits inside its guard (`tests/test_fam_staged_pin.py`).
+- Run ceilings: the proof $1.28, the reading $3.40. The lane has spent $7.720; with these two it stays under $12.40.
+- **lane ceiling $26.00** (was $18.00), which also covers Amendment 6's Gemma-4 proof and reading; every run stays
+  under the owner's $15 no-ask tier.
+
+**Predictions** (written before any data):
+
+| # | prediction |
+|---|---|
+| X1 | census, every engagement count and the fp32 router path exact; no VOID, about 85 % |
+| X2 | Mixtral's floor A_f at (wikitext, 12) in [0.93, 0.97] |
+| X3 | `mut090` fails every gated cell, about 80 % |
+| X4 | ON_epi PASS about 70 %; ON_glue and ON_r2 about 60 % each; ON_auto about 50 % (Granite, with the same fold structure, missed by one entry) |
+| X5 | peak memory ≤ 30 GiB on every process |
+
+**Consequence.** As registered, with the maintainer's rule from Amendment 4: a PASS licenses an allowlist pull request
+only together with a speed read of what the passing knobs buy on Mixtral (Amendment 4's interleaved method). A FAIL
+keeps the knob off; UNRESOLVED and VOID read as registered.
+
+**What this cannot say:** the knobs' speed (no speed arm runs); Mixtral's other checkpoints; the int4 route.
+
+**Code.** The reducer's self-test now runs 56 cases (Mixtral's clean pass and proof; the fp32 path cast off, and the
+report missing, each VOID; a proof names one registered family). `tests/test_fam_box.py` pins the table above at the
+real depth, with the fp32 router path. The box's self-test is unchanged.

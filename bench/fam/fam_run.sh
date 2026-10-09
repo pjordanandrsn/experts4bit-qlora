@@ -38,18 +38,29 @@ if [ "$SPEED" = 1 ]; then
   TAGS="qw36"; CONT_DEF=128; NEED_FETCH=2400; NEED_BAKE=900; NEED_SPEED=1200; CAP_SPEED=1800
   SPEED_STEPS=256; [ "$PROVE" = 1 ] && SPEED_STEPS=32
 elif [ "$PROVE" = 1 ]; then
-  [ -z "$FAMILY" ] || [ "$FAMILY" = granite ] || { say "refusing: the proof is Granite's (FAM_FAMILY=$FAMILY)"; finish 78; }
-  TAGS="granite"; CONT_DEF=32; NEED_FETCH=300; NEED_BAKE=300; NEED_OFF=1800; NEED_ON=400; CAP_OFF=2400; CAP_ON=900
+  # Amendment 5: a proof is Granite's (the default) or Mixtral's own (FAM_FAMILY=mixtral), at 32 positions
+  case "${FAMILY:-granite}" in
+    granite) TAGS="granite"; NEED_FETCH=300; NEED_BAKE=300; NEED_OFF=1800; NEED_ON=400; CAP_OFF=2400; CAP_ON=900;;
+    mixtral) TAGS="mixtral"; NEED_FETCH=3000; NEED_BAKE=1500; NEED_OFF=2400; NEED_ON=600; CAP_OFF=3000; CAP_ON=900;;
+    *) say "refusing: a proof is Granite's or Mixtral's (FAM_FAMILY=$FAMILY)"; finish 78;;
+  esac
+  CONT_DEF=32
 else
   case "$FAMILY" in
     granite) NEED_FETCH=900;  NEED_BAKE=600; NEED_OFF=6300; NEED_ON=1100; CAP_OFF=7200;  CAP_ON=1800;;
     gptoss)  NEED_FETCH=1200; NEED_BAKE=900; NEED_OFF=6300; NEED_ON=1100; CAP_OFF=7200;  CAP_ON=1800;;
     qw36)    NEED_FETCH=2400; NEED_BAKE=900; NEED_OFF=9500; NEED_ON=1600; CAP_OFF=10800; CAP_ON=2700;;
-    *) say "refusing: FAM_FAMILY must be granite, gptoss or qw36 (got '${FAMILY}')"; finish 78;;
+    mixtral) NEED_FETCH=3000; NEED_BAKE=1500; NEED_OFF=9500; NEED_ON=1600; CAP_OFF=10800; CAP_ON=2700;;
+    *) say "refusing: FAM_FAMILY must be granite, gptoss, qw36 or mixtral (got '${FAMILY}')"; finish 78;;
   esac
   TAGS="$FAMILY"; CONT_DEF=128
 fi
-GPU_CLASS=${FAM_GPU_CLASS:-5090}; MIN_DISK_GB=${FAM_MIN_DISK_GB:-200}; MIN_RAM_GB=${FAM_MIN_RAM_GB:-60}
+# Amendment 5: the disk floor is the family's. Mixtral's 93.4 GB checkpoint, its NF4 snapshot and arena (about 25 GB
+# each), the environment and the cells' references need about 157 GB, so its box refuses below 220 GB free at the start
+# and, after the installs, below FETCH_DISK_GB before the fetch begins.
+DISK_DEF=200; FETCH_DISK_GB=0
+[ "$TAGS" = mixtral ] && { DISK_DEF=220; FETCH_DISK_GB=165; }
+GPU_CLASS=${FAM_GPU_CLASS:-5090}; MIN_DISK_GB=${FAM_MIN_DISK_GB:-$DISK_DEF}; MIN_RAM_GB=${FAM_MIN_RAM_GB:-60}
 REHEARSAL=${FAM_REHEARSAL:-0}; CONT=${FAM_CONT:-$CONT_DEF}
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_SERVE_ATTN_INT4 E4B_FUSE_T1_GLUE E4B_FUSE_T1_GLUE_R2 \
@@ -62,7 +73,7 @@ unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_
       GNF4_GEMV_DOTPAD GNF4_DECODE_PLAN GNF4_GEMV_SPLITK GNF4_GEMV_BW GNF4_TRITON_PREBIND E4B_INT4_WIDE_TILES
 : > summary.txt; echo "$FAM_INSTANCE_ID" > INSTANCE_ID
 echo "KNOBS e4b=$E4B_SHA gnf4=$GNF4_SHA family=${FAMILY:-proof} models=$TAGS gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_ram_gb=$MIN_RAM_GB prove=$PROVE speed=$SPEED cont=$CONT" | tee -a summary.txt
-if [ "$REHEARSAL" != 0 ] || [ "$GPU_CLASS" != 5090 ] || [ "$MIN_DISK_GB" != 200 ] || [ "$MIN_RAM_GB" != 60 ] || [ "$CONT" != "$CONT_DEF" ]; then
+if [ "$REHEARSAL" != 0 ] || [ "$GPU_CLASS" != 5090 ] || [ "$MIN_DISK_GB" != "$DISK_DEF" ] || [ "$MIN_RAM_GB" != 60 ] || [ "$CONT" != "$CONT_DEF" ]; then
   echo "REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)" | tee -a summary.txt; : > REHEARSAL
 fi
 # ---- staged pieces, byte-for-byte
@@ -96,7 +107,7 @@ lscpu | grep -E "Model name|^Vendor ID|^CPU\(s\)" | tee -a forensics.txt; free -
 GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
 case "$GPU_NAME" in *"$GPU_CLASS"*) ;; *) say "REFUSED: card is '$GPU_NAME', the lane registers the RTX $GPU_CLASS class"; echo "refused: class $GPU_NAME" > REFUSAL; finish 15;; esac
 FREE_GB=$(df -BG --output=avail $W 2>/dev/null | tail -1 | tr -dc 0-9)
-[ "${FREE_GB:-0}" -ge "$MIN_DISK_GB" ] || { say "REFUSED: ${FREE_GB:-?} GB free < ${MIN_DISK_GB} GB (three checkpoints, their NF4 snapshots and arenas)"; echo "refused: disk ${FREE_GB:-?} GB" > REFUSAL; finish 13; }
+[ "${FREE_GB:-0}" -ge "$MIN_DISK_GB" ] || { say "REFUSED: ${FREE_GB:-?} GB free < ${MIN_DISK_GB} GB (the checkpoint, its NF4 snapshot and arena)"; echo "refused: disk ${FREE_GB:-?} GB" > REFUSAL; finish 13; }
 RAM_GB=$(awk '/^MemTotal:/{print int($2/1048576)}' /proc/meminfo)
 [ "${RAM_GB:-0}" -ge "$MIN_RAM_GB" ] || { say "REFUSED: ${RAM_GB:-?} GiB host RAM < ${MIN_RAM_GB} GiB"; echo "refused: ram ${RAM_GB:-?} GiB" > REFUSAL; finish 16; }
 can_run(){ local need=$1 now; now=$(date +%s); [ $((now + need + 600)) -le "$FAM_DEADLINE_EPOCH" ] || { say "STOP-2: $2 needs ${need}s, only $((FAM_DEADLINE_EPOCH - now))s left -- skipped (host-limited)"; echo "SKIPPED $2 host-limited deadline" >> summary.txt; return 1; }; }
@@ -149,8 +160,9 @@ else
 fi
 model_of(){ case $1 in gptoss) echo "openai/gpt-oss-20b 6cee5e81ee83917806bbde320786a8fb61efebee";;
   qw36) echo "Qwen/Qwen3.6-35B-A3B 995ad96eacd98c81ed38be0c5b274b04031597b0";;
-  granite) echo "ibm-granite/granite-3.1-3b-a800m-instruct a02780686e08a03fe0d2679a293b5c74a90efa89";; esac; }
-configs_of(){ case $1 in gptoss) echo "OFF ON_glue ON_r2 ON_epi ON_auto";; *) echo "OFF ON_auto";; esac; }
+  granite) echo "ibm-granite/granite-3.1-3b-a800m-instruct a02780686e08a03fe0d2679a293b5c74a90efa89";;
+  mixtral) echo "mistralai/Mixtral-8x7B-Instruct-v0.1 eba92302a2861cdc0098cc54bc9f17cb2c47eb61";; esac; }
+configs_of(){ case $1 in gptoss|mixtral) echo "OFF ON_glue ON_r2 ON_epi ON_auto";; *) echo "OFF ON_auto";; esac; }
 [ "$PROVE" = 1 ] && configs_of(){ echo "OFF ON_epi ON_auto"; }
 # each config's four knobs, named explicitly (fam_box.CONFIGS; the box refuses anything else)
 knobs_of(){ local q=0 g=0 r=0 e=0
@@ -176,6 +188,8 @@ box(){ # tag config path out ref [extra args]
 for M in $TAGS; do
   read -r MODEL REV <<< "$(model_of $M)"
   can_run $NEED_FETCH "fetch $M" || { harness "fetch skipped: deadline"; continue; }
+  FREE_GB=$(df -BG --output=avail $W 2>/dev/null | tail -1 | tr -dc 0-9)   # Amendment 5: refuse before the fetch, not mid-way
+  [ "${FREE_GB:-0}" -ge "$FETCH_DISK_GB" ] || { say "REFUSED: ${FREE_GB:-?} GB free before the fetch < ${FETCH_DISK_GB} GB ($M's checkpoint, NF4 snapshot, arena and references)"; echo "refused: disk before fetch ${FREE_GB:-?} GB" > REFUSAL; finish 13; }
   say "fetch $M $MODEL @ $REV"
   perl -e "alarm $(step_alarm 3600); exec @ARGV" python -c "from huggingface_hub import snapshot_download as s; print(s('$MODEL', revision='$REV', ignore_patterns=['original/*', 'metal/*', 'consolidated*'], max_workers=8))" > logs/fetch_$M.log 2>&1 \
     || { tail -2 logs/fetch_$M.log; harness "fetch failed"; continue; }
@@ -213,7 +227,7 @@ for M in $TAGS; do
   done
   # The anchor (gpt-oss in the reading; Granite in the proof, which runs every process kind): Phase C's setting on
   # SC2g's path -- wikitext, shape 12, set A -- reported, never gated.
-  if [ "$M" = gptoss ] || [ "$PROVE" = 1 ]; then
+  if [ "$M" = gptoss ] || { [ "$PROVE" = 1 ] && [ "$M" = granite ]; }; then   # Amendment 5: not in Mixtral's proof
     box $M OFF sc2g fam_${M}_anchor_OFF.json $W/work_$M/aref --tag anchor --texts wikitext --shapes 12 --sets A \
       && box $M ON_auto sc2g fam_${M}_anchor_ON_auto.json $W/work_$M/aref --tag anchor --texts wikitext --shapes 12 --sets A
   fi
@@ -233,13 +247,13 @@ if [ "$SPEED" = 1 ]; then
   fi
   finish 0
 fi
-PF="--families $TAGS"; [ "$PROVE" = 1 ] && PF="--proof"
+PF="--families $TAGS"; [ "$PROVE" = 1 ] && PF="--proof"; [ "$PROVE" = 1 ] && [ "$TAGS" = mixtral ] && PF="--proof --families mixtral"
 say "reduce"; python $W/fam_reduce.py --dir $W --out $W/verdict.json --e4b-sha $E4B_SHA $PF 2>&1 | tee -a summary.txt
 [ "${PIPESTATUS[0]}" = 0 ] && [ -s $W/verdict.json ] || { say "REDUCER FAILED"; finish 22; }
 if [ "$PROVE" = 1 ]; then
   python -c "import json,sys; v=json.load(open('$W/verdict.json')); sys.exit(1 if any(x == 'VOID' for f in v['families'].values() for x in f['verdict'].values()) else 0)" \
     || { say "PROVE: the reducer VOIDed the proof -- not proved"; finish 27; }
-  echo "PROVE -- the proving run: the whole box on granite; reducer verdicts (not a reading) above" | tee -a summary.txt
+  echo "PROVE -- the proving run: the whole box on $TAGS; reducer verdicts (not a reading) above" | tee -a summary.txt
   : > PROVED
 fi
 finish 0

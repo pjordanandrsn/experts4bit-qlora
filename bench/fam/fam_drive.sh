@@ -54,7 +54,7 @@ PASS="FAM_RUN_ID=$RUN_ID FAM_RUN_NONCE=$NONCE FAM_DEADLINE_EPOCH=$DEADLINE FAM_I
 # Only the proving-run switch and the run's family travel (Amendment 1: one family per box): a rental is the registered
 # run, so the knobs that change HOW it is measured are not forwarded -- a rehearsal sets them on its own box and the
 # runner marks it REHEARSAL.
-case "${FAM_FAMILY:-}" in ""|granite|gptoss|qw36) ;; *) say "refusing: FAM_FAMILY must be granite, gptoss or qw36"; exit 78;; esac
+case "${FAM_FAMILY:-}" in ""|granite|gptoss|qw36|mixtral) ;; *) say "refusing: FAM_FAMILY must be granite, gptoss, qw36 or mixtral"; exit 78;; esac
 [ "${FAM_PROVE:-0}" = 1 ] || [ -n "${FAM_FAMILY:-}" ] || { say "refusing: a reading names its family (FAM_FAMILY)"; exit 78; }
 case "${FAM_SPEED:-0}" in 0) ;; 1) [ "${FAM_FAMILY:-}" = qw36 ] || { say "refusing: FAM_SPEED=1 is Qwen3.6's (FAM_FAMILY=qw36)"; exit 78; };;
   *) say "refusing: FAM_SPEED must be 0 or 1"; exit 78;; esac

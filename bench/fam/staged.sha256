@@ -1,9 +1,9 @@
 # Names as the BOX sees them after staging (/root/fam). The box runs `sha256sum -c` on this file; fam_drive.sh and
 # tests/test_fam_staged_pin.py resolve each name to its source (bench/fam, bench/p115, bench/p110, bench/p108, bench/p97,
 # bench/p39, bench/p98, tests) and compare.
-6f7ea62ea2b66ba15d4d8223c686c9dffef0e78a595f9a8dabd8ffefda9ef474  fam_run.sh
-d5e40b403f34741d4e2ca9db31fd60d02ce49308ed4f602df5a72fec074e5884  fam_box.py
-944755c5e9e2aebdf8063eea70981748367dcfff4a34c4dbd901c7848f0f27e2  fam_reduce.py
+6ab1040ffc70a992423d9f8efe77e8cc9247e7e7cf42ea9d3b00f095620b7ad2  fam_run.sh
+c0ab1f805b23e8cb720845ec64007a9647b0c8434277be47c8d0b98572bae449  fam_box.py
+1cecfc3b8bcacde7c9fcb44ae5c388e370d18757ee5a4b90d712cff2cfc3e928  fam_reduce.py
 b1cfc8bd7a1564920496a637d21ea25a16c634ca46b762f8805581a24e8b85b6  fam_speed.py
 da4f17823d725f61d62d9c43e907563fe793605f71033c7a373c04db7a7665e5  fam_speed_reduce.py
 f1500a26404284fbb14cce214c548d73b3889e9db5ef1faf5ef63bf74449b574  p115_quality.py
