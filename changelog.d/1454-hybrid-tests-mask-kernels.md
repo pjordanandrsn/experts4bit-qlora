@@ -14,9 +14,8 @@
   every CPU hybrid test in the session then failed with `Expected x.is_cuda() to be true` (14 tests across these four
   files). CI installs neither package, so CI stayed green.
 - **Who is affected.** Contributors running the suite where either package is installed. Package code is unchanged.
-  Where `causal_conv1d` is installed, `test_moe_keep.py` still skips its two hybrid cases and `test_chunked_lm_loss.py`
-  still fails its two Qwen3.5-MoE cases. Their shared builders also cover `lfm2_moe` and other families this helper
-  does not mask, so they are left for a follow-up.
+  The remaining family builders were subsequently migrated to the generalized helper in #1480; those known CPU
+  skips and failures are fixed in this release.
 - **Tests (`tests/test_hybrid_reference.py`):**
   - In a fresh process, a stand-in `causal_conv1d` shadows whatever is installed. A plain import binds it and a CPU
     forward raises from it. `reference_modeling` refuses that module, names both functions, and runs the forward on a
