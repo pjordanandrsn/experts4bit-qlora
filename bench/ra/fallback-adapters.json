@@ -128,6 +128,13 @@
       "ast_sha256": "09de3fc03d75db9aca109937867bd4ed87c1f224dc7a949f7fa9dd5393c903db",
       "feature": "rope_glue",
       "source_commit": "41d72d33d7d994d85c96e676cb4fb5d67bb65532"
+    },
+    {
+      "module": "experts4bit_qlora.engines.glue_r2",
+      "qualname": "_patch_layer.<locals>._fwd",
+      "ast_sha256": "4c2ed1c0f0f8673509c7955f1a739e850056b2de15608ab3fe01b8f986d7aee6",
+      "feature": "residual_glue",
+      "source_commit": "4e1959a5bf4c99f41dd5deb1b8562076e9664d11"
     }
   ]
 }
