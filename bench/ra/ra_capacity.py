@@ -15,6 +15,7 @@ import socket
 import subprocess
 import sys
 import time
+import threading
 import types
 import urllib.error
 import urllib.request
@@ -120,6 +121,38 @@ def close_trace(base, process, timeout):
         return json.load(response)
 
 
+def normal_shutdown(base, process, timeout):
+    if process.poll() is not None or not ra_trace.number(timeout) or timeout <= 0:
+        raise RuntimeError("owned server unavailable for normal shutdown")
+    started = time.monotonic()
+    request = urllib.request.Request(base + "/_ra/shutdown?parent_pid=" + str(os.getpid()), method="POST")
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(request, timeout=timeout) as response:
+        result = json.load(response)
+    if result != {"accepted": True, "pid": process.pid, "parent_pid": os.getpid()}:
+        raise ValueError("owned server shutdown acknowledgment differs")
+    remaining = timeout - (time.monotonic() - started)
+    if remaining <= 0:
+        raise TimeoutError("no phase budget for server return")
+    if process.wait(timeout=remaining) != 0:
+        raise RuntimeError("server did not return normally")
+    try:
+        os.killpg(process.pid, 0)
+    except ProcessLookupError:
+        return result
+    raise RuntimeError("owned server process group still exists")
+
+
+def guarded_server(argv, receipt, record):
+    if sys.platform != "linux" or threading.current_thread() is not threading.main_thread():
+        raise ValueError("verified server requires Linux parent main thread")
+    guard = Path(ra_process.__file__).with_name("ra_child_guard.py")
+    evidence = receipt.with_name(receipt.name + ".guard.json")
+    record["parent_death_guard"] = {"required": True, "script_sha256": ra_process.file_digest(guard),
+        "evidence_path": str(evidence), "expected_parent": os.getpid()}
+    return [argv[0], "-I", "-S", "-B", str(guard), str(os.getpid()), str(evidence), "--", *argv], guard, evidence
+
+
 def driver_command(python, stage, base, model, prompt_path, point, output):
     _, mode, rate, n, seed = point
     return [str(python), "-B", str(stage / "sc2_driver.py"), "run", "--base", base, "--model", model,
@@ -160,6 +193,9 @@ def execute(spec, stage, out):
               "removed_environment_keys": removed, "proves_gpu_engagement": False}
     (out / "server.json").write_text(json.dumps(record, indent=2) + "\n")
     process = None
+    server_binding = None
+    guard = guard_path = None
+    closed = None
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener, (out / "server.log").open("xb") as log:
             listener.bind(("127.0.0.1", 0))
@@ -168,12 +204,28 @@ def execute(spec, stage, out):
             argv = [str(python), "-B", str(Path(__file__).with_name("ra_capacity_server.py")),
                     "--socket-fd", str(listener.fileno()), "--parent-pid", str(os.getpid()),
                     "--instruments", str(stage)]
+            worker = sys.modules.get("ra_verified_worker")
+            launch = argv
+            if worker is not None and worker.CURRENT is not None:
+                argv, server_binding = worker.server_child(original_spec, stage, out, listener)
+                launch, guard, guard_path = guarded_server(argv, out / "server.json", record)
             record.update(argv=argv, base=base)
             ra_process.window(spec["deadline_epoch_s"], spec["startup_s"] + 3 * spec["driver_s"])
-            process = subprocess.Popen(argv, cwd=out, env=env, stdout=log, stderr=subprocess.STDOUT,
+            startup_started = time.monotonic()
+            process = subprocess.Popen(launch, cwd=out, env=env, stdout=log, stderr=subprocess.STDOUT,
                                        stdin=subprocess.DEVNULL, start_new_session=True, pass_fds=(listener.fileno(),))
             record["pid"] = process.pid
             (out / "health_start.json").write_text(json.dumps(drained(base, process, spec["startup_s"]), indent=2) + "\n")
+            if server_binding is not None:
+                remaining_startup = spec["startup_s"] - (time.monotonic() - startup_started)
+                if remaining_startup <= 0:
+                    raise TimeoutError("no startup budget for server evidence")
+                startup = get_json(base, "/_ra/evidence", process, min(2, remaining_startup))
+                record["status"] = "OK"
+                ra_process.guard_evidence(record, guard, guard_path, record["argv"], process.pid)
+                (out / "server-startup-evidence.json").write_text(json.dumps(startup, indent=2, allow_nan=False) + "\n")
+                record["startup_handoff_sha256"] = worker.check_server_ready(server_binding, record, startup)
+                record["status"] = "STARTING"
             raw, workloads, driver_startups = {}, [], []
             worker = sys.modules.get("ra_verified_worker")
             for point in POINTS:
@@ -221,9 +273,16 @@ def execute(spec, stage, out):
                 if not path.is_file() or path.stat().st_size == 0:
                     raise ValueError("missing native capacity trace")
                 record[filename + "_sha256"] = ra_process.file_digest(path)
+            if server_binding is not None:
+                remaining = spec["driver_s"] - (time.monotonic() - started)
+                normal_shutdown(base, process, remaining)
+                record.update(status="OK", returncode=process.returncode, cleanup_complete=True)
+                ra_process.guard_evidence(record, guard, guard_path, record["argv"], process.pid)
+                traces = {n: record[n + "_sha256"] for n in ("request-trace.jsonl", "step-trace.jsonl")}
+                record["verified_server_startup"] = worker.check_server_child(server_binding, record, closed, traces)
             ra_process.window(spec["deadline_epoch_s"], .001)
             record.update(status="NATIVE_RECORDED_PENDING_ENGAGEMENT", verified_driver_startups=driver_startups,
-                          server_startup_verified=False, nested_workers_verified=False)
+                          server_startup_verified=server_binding is not None, nested_workers_verified=False)
     except Exception as exc:
         record.update(status="FAILED", error_type=type(exc).__name__)
         raise
@@ -233,6 +292,8 @@ def execute(spec, stage, out):
                 os.killpg(process.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
+            except OSError as exc:
+                record["cleanup_signal_error_type"] = type(exc).__name__
             try:
                 process.wait(timeout=10)
             except subprocess.TimeoutExpired:
@@ -240,13 +301,33 @@ def execute(spec, stage, out):
                 # the owned child is stuck during GPU-driver teardown.
                 record["returncode"] = None
                 record["kill_wait_timeout"] = True
+            except OSError as exc:
+                record["returncode"] = None
+                record["kill_wait_timeout"] = False
+                record["cleanup_wait_error_type"] = type(exc).__name__
             else:
                 record["returncode"] = process.returncode
                 record["kill_wait_timeout"] = False
+            record["cleanup_complete"] = False
+            try:
+                os.killpg(process.pid, 0)
+            except ProcessLookupError:
+                record["cleanup_complete"] = process.returncode is not None and not record["kill_wait_timeout"] and not any(
+                    k in record for k in ("cleanup_signal_error_type", "cleanup_wait_error_type"))
+            except OSError as exc:
+                record["cleanup_probe_error_type"] = type(exc).__name__
+            if server_binding is not None:
+                # Verify retained bootstrap evidence on errors and forced cleanup too.
+                ra_process.guard_evidence(record, guard, guard_path, record["argv"], process.pid)
+        if server_binding is not None and record["status"] != "FAILED" and (not record.get("cleanup_complete") or
+                not record["parent_death_guard"].get("verified")):
+            record.update(status="FAILED", error_type="IncompleteServerCleanupOrGuard")
         record["finished_at"] = ra_process.clock()
         if (out / "server.log").is_file():
             record["log_sha256"] = ra_process.file_digest(out / "server.log")
         (out / "server.json").write_text(json.dumps(record, indent=2, allow_nan=False) + "\n")
+    if record["status"] == "FAILED":
+        raise RuntimeError("capacity failed; retained server receipt")
     return record
 
 

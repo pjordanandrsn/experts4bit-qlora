@@ -216,7 +216,7 @@ def main():
         helper.require(args.worker_spec.is_absolute() and
                        helper.digest(args.worker_spec) == args.worker_sha256, "worker spec pin")
         worker = json.loads(args.worker_spec.read_bytes())
-        if worker.get('phase') in ('tc1_training', 'tc1_training_profile', 'sc2_warm', 'sc2_burst', 'sc2_end'):
+        if worker.get('phase') in ('tc1_training', 'tc1_training_profile', 'sc2_warm', 'sc2_burst', 'sc2_end', 'capacity_server'):
             pin = worker['handoff_manifest']
             helper.require(set(pin) == {'path', 'sha256'} and Path(pin['path']) == args.manifest and
                            helper.digest(args.manifest) == pin['sha256'], 'nested manifest pin before startup')

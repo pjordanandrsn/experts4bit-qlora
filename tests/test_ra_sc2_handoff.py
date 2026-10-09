@@ -192,6 +192,7 @@ def test_capacity_wrapper_wires_all_three_fixed_drivers(tmp_path, monkeypatch):
     c = importlib.util.module_from_spec(sp)
     sp.loader.exec_module(c)
     calls = []
+    monkeypatch.setattr(c.capacity, 'guarded_server', lambda argv, receipt, record: (argv, None, None))
     def child(spec, stage, out, *, base, point):
         target = out / (point[0] + '-driver')
         target.mkdir()
@@ -204,7 +205,11 @@ def test_capacity_wrapper_wires_all_three_fixed_drivers(tmp_path, monkeypatch):
         calls.append(point[0])
         return {'synthetic': point[0], 'proves_gpu_engagement': False, 'native_receipt_sha256': sha(native)}
     monkeypatch.setitem(c.sys.modules, 'ra_verified_worker', types.SimpleNamespace(CURRENT={},
-                       sc2_child=child, check_sc2_child=join))
+                       sc2_child=child, check_sc2_child=join,
+                       server_child=lambda spec, stage, out, listener: (
+                           [str(Path(spec['venv']) / 'bin/python'), '-B', str(c.ROOT / 'bench/ra/ra_capacity_server.py'),
+                            '--socket-fd', str(listener.fileno()), '--parent-pid', str(os.getpid()),
+                            '--instruments', str(stage)], None)))
     c.test_owned_socket_sequence_retention_and_failure_cleanup(tmp_path, monkeypatch, None)
     record = json.loads((tmp_path / 'out/server.json').read_text())
     assert calls == ['warm', 'burst', 'end']
