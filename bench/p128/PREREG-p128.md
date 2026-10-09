@@ -169,8 +169,8 @@ attributed by the autograd node they run under.
 
 The serving path already runs some of this sync-free on the device: the router epilogue, the tile tables, the MoE glue, the combine, the
 grouped GEMMs and the norms. That share is about 185 launches (23 %), forward and recompute only, and its backward has no serving
-counterpart. The rest, about 70 %, is training-only:
-- **The attention projections' LoRA on NF4.** Per layer pass: 16 `mm`, 8 casts, 8 bitsandbytes dequantizes and 8 adds; about 27 of the
+counterpart. The rest, 614 launches (77 %), is training-only:
+- **The attention projections' LoRA on NF4.** Per layer pass: 16 `mm`, 8 casts, 8 bitsandbytes dequantizes and 8 adds, about 10 a projection, so about 30 of the
   45 are q, k and v.
 - **The expert LoRA delta.** About 30 per pass: gathers, casts, `bmm`, plan building, fill, `index_copy`.
 
