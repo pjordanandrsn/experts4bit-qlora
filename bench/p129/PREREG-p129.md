@@ -207,3 +207,18 @@ is what it was registered for.
 
 **By the rule, PASS.** The next step is Phase 2's speed A/B, registered by its own amendment with P128's frame: a recount gate, a
 host-bound premise gate, wall and device ratios separately, and the TC1 held-out bars.
+
+**Records and reducer.**
+- `records/a1/`: the 25 runs, the counts, the isolated projection, the first step's gradients and the environment.
+- `p129_reduce.py`: re-derives this verdict from them (`python bench/p129/p129_reduce.py`; `--selftest` runs 6 hand-built cases), into
+  `RESULTS-p129-a1.md`.
+- `instrument/`: the scripts that made the records, with the model builder.
+
+The first step's gradients, reported as registered: the worst relative difference from the baseline, per seed, was
+- 0.009–0.010 for F1;
+- 0.009–0.065 for F2;
+- 0.129–0.149 for F3;
+- 0.110–0.222 for the fused path.
+
+The fused path's step-1 differences are the size of the micro-batch split's, the floor's own largest. A per-step gradient is not a
+measure any reorder-class change can pass, which is why Amendment 1 does not gate it.
