@@ -4,6 +4,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -238,6 +239,9 @@ def test_manifest_overrides_refuse(kind):
 
 
 def setup_audit(sample, monkeypatch):
+    # Collection can reload same-path helpers; bind all synthetic audit peers.
+    monkeypatch.setattr(gate, "peers", lambda: (inputs, cp))
+    monkeypatch.setattr(cp, "load_inputs", lambda: inputs)
     root, _, info, _ = sample
     lock = {"model": info["id"], "revision": info["sha"], "trees": {"checkpoint": inputs.inventory(root)}}
     spec = {"trees": {"checkpoint": str(root)}}
@@ -273,7 +277,12 @@ def test_repeated_index_and_explicit_scope(sample, monkeypatch):
 
 
 @pytest.mark.parametrize("kind", ["authority", "local", "helper"])
-def test_post_binding_drift_refuses(sample, monkeypatch, kind):
+@pytest.mark.parametrize("peer_reload", [False, True])
+def test_post_binding_drift_refuses(sample, monkeypatch, kind, peer_reload):
+    if peer_reload:
+        peer = load("ra_inputs", ROOT / "bench/ra/ra_inputs.py")
+        assert peer is not inputs
+        monkeypatch.setitem(sys.modules, "ra_inputs", peer)
     manifest = setup_audit(sample, monkeypatch)
     rows = responses(sample)
     count = 0
@@ -526,7 +535,14 @@ def test_cli_final_and_failed_prefix_controls(sample, cli_fixture, monkeypatch, 
         assert result["status"] == "FAILED"
         assert len(result["observations"]) == (0 if kind == "host_unprotected" else 4)
         if kind == "host_unprotected":
-            assert ("selected Linux" if sys.platform != "linux" else "expected live parent") in result["error"]
+            isolated_linux = (
+                sys.platform == "linux"
+                and sys.flags.isolated
+                and sys.flags.no_site
+                and sys.dont_write_bytecode
+            )
+            expected = "expected live parent" if isolated_linux else "selected Linux"
+            assert expected in result["error"]
 
 
 def test_local_oversized_asset_refuses_before_read(sample):

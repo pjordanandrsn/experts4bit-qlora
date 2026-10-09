@@ -23,3 +23,7 @@ backend final state, token regeneration, consumer binding, model weight
 consumption, calibration, publisher signatures, GPU engagement or launch
 clearance. It is not wired into the fixed worker inventory or ABBA. A guarded
 runtime caller and any inventory expansion need separate review.
+
+Synthetic controls explicitly bind their helper module objects, including after
+collection reloads. The unprotected CLI control checks the first applicable
+platform/interpreter refusal; production guard behavior is unchanged.
