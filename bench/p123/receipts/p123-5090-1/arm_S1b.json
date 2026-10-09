@@ -1,0 +1,166 @@
+{
+ "mode": "speed",
+ "tag": "S1b",
+ "e4b_sha": "b371053a0f3b43e7874a8fb006cf25644fe615a3",
+ "gnf4_sha": "6ee2e10408161a9d3c874975c9191a7f2957e6f4",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "torch": "2.8.0+cu128",
+ "load_s": 33.85,
+ "knobs": {
+  "E4B_PAGED_FUSE_QKV": null,
+  "E4B_FUSE_T1_GLUE": null,
+  "E4B_FUSE_T1_GLUE_R2": null,
+  "E4B_FUSE_ROUTER_EPI": null,
+  "GNF4_GEMV_BW": null,
+  "GNF4_GEMV_BW_PLAN": null,
+  "GNF4_GEMV_BW_DECODE": null
+ },
+ "fusions": {
+  "fuse_qkv_n": 48,
+  "fuse_t1_glue_n": 193,
+  "fuse_t1_glue_r2_n": [
+   48,
+   48
+  ],
+  "fuse_router_epilogue_n": 48
+ },
+ "fusion_modes": {
+  "E4B_PAGED_FUSE_QKV": "auto",
+  "E4B_FUSE_T1_GLUE": "auto",
+  "E4B_FUSE_T1_GLUE_R2": "auto",
+  "E4B_FUSE_ROUTER_EPI": "auto"
+ },
+ "fusion_sources": {
+  "E4B_PAGED_FUSE_QKV": "default-allowlisted",
+  "E4B_FUSE_T1_GLUE": "default-allowlisted",
+  "E4B_FUSE_T1_GLUE_R2": "default-allowlisted",
+  "E4B_FUSE_ROUTER_EPI": "default-allowlisted"
+ },
+ "model_type": "qwen3_moe",
+ "graph_status": {
+  "1": "graph",
+  "2": "graph",
+  "4": "graph",
+  "8": "graph",
+  "16": "graph"
+ },
+ "max_seqs": 16,
+ "buckets": [
+  1,
+  2,
+  4,
+  8,
+  16
+ ],
+ "dispatch_build": {
+  "dotpad": 0,
+  "dotpad_splitk": 0,
+  "scalar": 0,
+  "scalar_splitk": 0,
+  "bw_tree": 0,
+  "bw_prmt32": 288,
+  "bw_splitk": 0
+ },
+ "prompts_sha256": "21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709",
+ "short": 32,
+ "long": 160,
+ "reps": 3,
+ "mem_after_load": {
+  "max_memory_allocated": 24227871232,
+  "memory_allocated": 23383636480,
+  "memory_reserved": 24494735360,
+  "free": 8400863232,
+  "total": 33670758400
+ },
+ "workloads": {
+  "W16": {
+   "batch": 16,
+   "walls": {
+    "32": [
+     2.77026,
+     2.76461,
+     2.76171
+    ],
+    "160": [
+     5.11704,
+     5.1369,
+     5.14131
+    ]
+   },
+   "decode_tok_s": 869.52,
+   "decode_tok_s_median": 863.3,
+   "decode_ms_per_step": 18.401,
+   "status": "ok"
+  },
+  "W1": {
+   "batch": 1,
+   "walls": {
+    "32": [
+     0.2731,
+     0.27389,
+     0.27372
+    ],
+    "160": [
+     0.85942,
+     0.85996,
+     0.86038
+    ]
+   },
+   "decode_tok_s": 218.31,
+   "decode_tok_s_median": 218.34,
+   "decode_ms_per_step": 4.5806,
+   "status": "ok"
+  }
+ },
+ "status": "ok",
+ "graph_stats": {
+  "1": {
+   "replays": 776,
+   "eager_steps": 0,
+   "rows": 776,
+   "pad_rows": 0
+  },
+  "2": {
+   "replays": 16,
+   "eager_steps": 0,
+   "rows": 32,
+   "pad_rows": 0
+  },
+  "4": {
+   "replays": 32,
+   "eager_steps": 0,
+   "rows": 112,
+   "pad_rows": 16
+  },
+  "8": {
+   "replays": 64,
+   "eager_steps": 0,
+   "rows": 416,
+   "pad_rows": 96
+  },
+  "16": {
+   "replays": 752,
+   "eager_steps": 0,
+   "rows": 11584,
+   "pad_rows": 448
+  }
+ },
+ "dispatch_total": {
+  "dotpad": 0,
+  "dotpad_splitk": 0,
+  "scalar": 0,
+  "scalar_splitk": 0,
+  "bw_tree": 0,
+  "bw_prmt32": 288,
+  "bw_splitk": 0
+ },
+ "mem_after_runs": {
+  "max_memory_allocated": 24227871232,
+  "memory_allocated": 23383637504,
+  "memory_reserved": 24494735360,
+  "free": 8400863232,
+  "total": 33670758400
+ },
+ "nvidia_smi": "NVIDIA GeForce RTX 5090, 24100 MiB, 32607 MiB, 595.71.05"
+}

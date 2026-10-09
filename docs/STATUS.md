@@ -198,6 +198,14 @@ Qwen3.5/3.6-MoE and Granite-MoE wait for lane FAM's reads at T == 1 (#1362). `0`
 `e4b.serve.p115.fused-stack-engagement.gptoss-qwen36.5090.2026-10-08`,
 `e4b.serve.p115.fused-stack-quality.granite.5090.2026-10-08` ([P115](../bench/p115/RESULTS-p115.md)).
 
+**Where the default single-request step goes.** A kernel-class census of the shipped default on Qwen3-30B-A3B NF4,
+run on a 5090 with the fused stack and the bandwidth GEMV both on, puts the one-request step at 4.75 ms. The dense bf16
+GEMVs (attention projections, router logits, lm_head) lead at 38 %, then the NF4 experts at 26 %, attention at 15 %
+and launch-bound routing glue at 11 %; the GPU is busy 92 % of the step. At 16 requests the small-M grouped NF4 GEMM is
+69 % of an 18 ms step. The census moves no default: it prices the next single-request lever, the dense GEMVs, which
+needs a quality bar of its own. Its router census of 48 is the 5090 check of the fp32 router probe on the shipped
+default. `e4b.serve.p123.default-decode-census.qwen3.5090.2026-10-09` ([P123](../bench/p123/RESULTS-p123.md)).
+
 **Other opt-ins.** `E4B_PAGED_DECODE_LOOKAHEAD=1` recovers the whole host gap between decode steps, but the gap is
 small: 1.0198× at one request, SLOWER against its 1.02 bar. `E4B_PAGED_LAST_LOGITS=1` projects only the final prompt
 position through the LM head (#1337). `e4b.serve.p118.decode-lookahead.qwen3.5090.2026-10-08`.

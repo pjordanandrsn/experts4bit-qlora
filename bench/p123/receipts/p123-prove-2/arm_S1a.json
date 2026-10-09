@@ -1,0 +1,158 @@
+{
+ "mode": "speed",
+ "tag": "S1a",
+ "e4b_sha": "b371053a0f3b43e7874a8fb006cf25644fe615a3",
+ "gnf4_sha": "6ee2e10408161a9d3c874975c9191a7f2957e6f4",
+ "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+ "revision": "a02780686e08a03fe0d2679a293b5c74a90efa89",
+ "torch": "2.8.0+cu128",
+ "load_s": 16.55,
+ "knobs": {
+  "E4B_PAGED_FUSE_QKV": null,
+  "E4B_FUSE_T1_GLUE": null,
+  "E4B_FUSE_T1_GLUE_R2": null,
+  "E4B_FUSE_ROUTER_EPI": null,
+  "GNF4_GEMV_BW": null,
+  "GNF4_GEMV_BW_PLAN": null,
+  "GNF4_GEMV_BW_DECODE": null
+ },
+ "fusions": {
+  "fuse_qkv_n": 0,
+  "fuse_t1_glue_n": 0,
+  "fuse_t1_glue_r2_n": [
+   0,
+   0
+  ],
+  "fuse_router_epilogue_n": 0
+ },
+ "fusion_modes": {
+  "E4B_PAGED_FUSE_QKV": "0",
+  "E4B_FUSE_T1_GLUE": "0",
+  "E4B_FUSE_T1_GLUE_R2": "0",
+  "E4B_FUSE_ROUTER_EPI": "0"
+ },
+ "fusion_sources": {
+  "E4B_PAGED_FUSE_QKV": "default-off",
+  "E4B_FUSE_T1_GLUE": "default-off",
+  "E4B_FUSE_T1_GLUE_R2": "default-off",
+  "E4B_FUSE_ROUTER_EPI": "default-off"
+ },
+ "model_type": "granitemoe",
+ "graph_status": {
+  "1": "graph",
+  "2": "graph",
+  "4": "graph",
+  "8": "graph",
+  "16": "graph"
+ },
+ "max_seqs": 16,
+ "buckets": [
+  1,
+  2,
+  4,
+  8,
+  16
+ ],
+ "dispatch_build": {
+  "dotpad": 0,
+  "dotpad_splitk": 0,
+  "scalar": 192,
+  "scalar_splitk": 0,
+  "bw_tree": 0,
+  "bw_prmt32": 0,
+  "bw_splitk": 0
+ },
+ "prompts_sha256": "891ff238c0b2a0800df0fc0236b9adc36b196a4fec39c896fb62d05438a9fc01",
+ "short": 8,
+ "long": 24,
+ "reps": 1,
+ "mem_after_load": {
+  "max_memory_allocated": 5175933952,
+  "memory_allocated": 4905905152,
+  "memory_reserved": 5509218304,
+  "free": 27390574592,
+  "total": 33670758400
+ },
+ "workloads": {
+  "W16": {
+   "batch": 16,
+   "walls": {
+    "8": [
+     0.81152
+    ],
+    "24": [
+     0.92145
+    ]
+   },
+   "decode_tok_s": 2328.75,
+   "decode_tok_s_median": 2328.75,
+   "decode_ms_per_step": 6.8706,
+   "status": "ok"
+  },
+  "W1": {
+   "batch": 1,
+   "walls": {
+    "8": [
+     0.07644
+    ],
+    "24": [
+     0.1513
+    ]
+   },
+   "decode_tok_s": 213.73,
+   "decode_tok_s_median": 213.73,
+   "decode_ms_per_step": 4.6787,
+   "status": "ok"
+  }
+ },
+ "status": "ok",
+ "graph_stats": {
+  "1": {
+   "replays": 68,
+   "eager_steps": 0,
+   "rows": 68,
+   "pad_rows": 0
+  },
+  "2": {
+   "replays": 8,
+   "eager_steps": 0,
+   "rows": 16,
+   "pad_rows": 0
+  },
+  "4": {
+   "replays": 16,
+   "eager_steps": 0,
+   "rows": 56,
+   "pad_rows": 8
+  },
+  "8": {
+   "replays": 44,
+   "eager_steps": 0,
+   "rows": 288,
+   "pad_rows": 64
+  },
+  "16": {
+   "replays": 44,
+   "eager_steps": 0,
+   "rows": 592,
+   "pad_rows": 112
+  }
+ },
+ "dispatch_total": {
+  "dotpad": 0,
+  "dotpad_splitk": 0,
+  "scalar": 192,
+  "scalar_splitk": 0,
+  "bw_tree": 0,
+  "bw_prmt32": 0,
+  "bw_splitk": 0
+ },
+ "mem_after_runs": {
+  "max_memory_allocated": 5175933952,
+  "memory_allocated": 4905905664,
+  "memory_reserved": 5509218304,
+  "free": 27390574592,
+  "total": 33670758400
+ },
+ "nvidia_smi": "NVIDIA GeForce RTX 5090, 5990 MiB, 32607 MiB, 595.71.05"
+}

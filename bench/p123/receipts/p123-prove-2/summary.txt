@@ -1,0 +1,38 @@
+KNOBS e4b=b371053a0f3b43e7874a8fb006cf25644fe615a3 gnf4=6ee2e10408161a9d3c874975c9191a7f2957e6f4 model=ibm-granite/granite-3.1-3b-a800m-instruct@a02780686e08a03fe0d2679a293b5c74a90efa89 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 prove=1 short=8 long=24 reps=1 moe_layers=32
+CUDA_PROBE ok
+e4b 0.50.0 @b371053a0f3b43e7874a8fb006cf25644fe615a3
+gnf4 0.43.0 @6ee2e10408161a9d3c874975c9191a7f2957e6f4
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p123_reduce self-test OK (23 cases)
+p123_box self-test OK (9 cases)
+self-test OK (43 checks)
+selftest OK (3 cases)
+premise rc=0: 19 passed, 5 warnings in 19.34s
+premise ok
+FETCH ibm-granite/granite-3.1-3b-a800m-instruct@a02780686e08a03fe0d2679a293b5c74a90efa89 /root/.cache/huggingface/hub/models--ibm-granite--granite-3.1-3b-a800m-instruct/snapshots/a02780686e08a03fe0d2679a293b5c74a90efa89
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=891ff238c0b2a0800df0fc0236b9adc36b196a4fec39c896fb62d05438a9fc01
+arm S1a rc=0 P123_ARM {"tag": "S1a", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "load_s": 16.55, "W16_ms": 6.8706, "W1_ms": 4.6787}
+
+arm S1b rc=0 P123_ARM {"tag": "S1b", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "load_s": 7.95, "W16_ms": 6.7819, "W1_ms": 4.6525}
+
+routers rc=0 P123_ROUTERS {"fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 32}, "moe_layers": 32, "router_report": {"mode": "auto", "patched": 32, "failed_probe": 0, "no_kernel_mode": 0, "fp32_upstream": 0}}
+
+nsys NVIDIA Nsight Systems version 2025.6.1.190-256136895201v0 at /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/nsys
+capture census_e4b_b1_graph rc=0 P123_CENSUS {"batch": 1, "steps_bracketed": 64, "profiled_ms_per_step": 4.9135}
+
+capture census_e4b_b1_node rc=0 P123_CENSUS {"batch": 1, "steps_bracketed": 64, "profiled_ms_per_step": 6.2823}
+
+SC1B {"engine": "e4b", "comparator": null, "batch": 1, "status": "labelled", "reading": null, "named_cause": null, "labels": ["PROFILER_INFLATED", "NODE_TRACE_INFLATED"]}
+capture census_e4b_b16_graph rc=0 P123_CENSUS {"batch": 16, "steps_bracketed": 64, "profiled_ms_per_step": 6.8411}
+
+capture census_e4b_b16_node rc=0 P123_CENSUS {"batch": 16, "steps_bracketed": 64, "profiled_ms_per_step": 8.1068}
+
+SC1B {"engine": "e4b", "comparator": null, "batch": 16, "status": "labelled", "reading": null, "named_cause": null, "labels": ["NODE_TRACE_INFLATED"]}
+P123_VERDICT READ ["B=1: P 4.9056 ms, largest class moe_expert (35%), RESIDUAL 7.3%, busy None"]
+PROVE -- the proving run: the whole box on ibm-granite/granite-3.1-3b-a800m-instruct; reducer verdict READ (not a reading)

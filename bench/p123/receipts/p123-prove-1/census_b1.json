@@ -1,0 +1,256 @@
+{
+ "engine": "e4b",
+ "batch": 1,
+ "graph": {
+  "status": "ok",
+  "delim": "graph",
+  "steps_kept": 61,
+  "dropped": {},
+  "steady_graph_exec": 2,
+  "other_graph_replays": 0,
+  "P": {
+   "median_ms": 4.943529,
+   "iqr_ms": 0.015296
+  },
+  "S": {
+   "median_ms": 4.486764,
+   "iqr_ms": 0.006272
+  },
+  "D_out": {
+   "median_ms": 0.01008,
+   "iqr_ms": 0.00016
+  },
+  "idle_out": {
+   "median_ms": 0.447262,
+   "iqr_ms": 0.012576
+  }
+ },
+ "node": {
+  "status": "ok",
+  "steps_kept": 61,
+  "dropped": {},
+  "kernels_per_graph_modal": 1656,
+  "other_launches": 0,
+  "U_in": {
+   "median_ms": 4.495084,
+   "iqr_ms": 0.005953
+  },
+  "span": {
+   "median_ms": 4.658731,
+   "iqr_ms": 0.0064
+  },
+  "I_in_node": {
+   "median_ms": 0.163392,
+   "iqr_ms": 0.000896
+  },
+  "segments": {
+   "replays_broken": 0,
+   "starts_modal": 32,
+   "ends_modal": 32,
+   "moe_layers": 32
+  },
+  "kernels_in_graph": 1655,
+  "overlap_in": {
+   "median_ms": 0.0,
+   "iqr_ms": 0.0
+  },
+  "overlap_pairs_same_stream_fraction": 0.0,
+  "kernels_out_graph": 6,
+  "class": {
+   "moe_expert": {
+    "median_ms": 1.722168,
+    "iqr_ms": 0.001889
+   },
+   "moe_route": {
+    "median_ms": 0.451133,
+    "iqr_ms": 0.003843
+   },
+   "attn": {
+    "median_ms": 0.439358,
+    "iqr_ms": 0.001856
+   },
+   "dense_gemm": {
+    "median_ms": 0.70755,
+    "iqr_ms": 0.001502
+   },
+   "norm_elem": {
+    "median_ms": 1.064634,
+    "iqr_ms": 0.000769
+   },
+   "sample": {
+    "median_ms": 0.008928,
+    "iqr_ms": 9.6e-05
+   },
+   "input_prep": {
+    "median_ms": 0.008544,
+    "iqr_ms": 9.6e-05
+   },
+   "memcpy": {
+    "median_ms": 0.002176,
+    "iqr_ms": 3.2e-05
+   },
+   "residual": {
+    "median_ms": 0.09888,
+    "iqr_ms": 0.000416
+   }
+  },
+  "class_in_graph_median_ms": {
+   "moe_expert": 1.722168,
+   "moe_route": 0.451133,
+   "attn": 0.439358,
+   "dense_gemm": 0.70755,
+   "norm_elem": 1.064634,
+   "sample": 0.008928,
+   "input_prep": 0.0,
+   "memcpy": 0.000832,
+   "residual": 0.09888
+  },
+  "residual_fraction": 0.022,
+  "name_map": {
+   "CatArrayBatchedCopy": {
+    "residual": 4032
+   },
+   "CatArrayBatchedCopy_alignedK_contig": {
+    "residual": 63
+   },
+   "_combine_rows": {
+    "moe_route": 2016
+   },
+   "_fp8_append_bt1_side": {
+    "attn": 4032
+   },
+   "_fp8_paged_decode_split": {
+    "attn": 2016
+   },
+   "_gemv_nf4_grouped": {
+    "moe_expert": 4032
+   },
+   "_swiglu_rows": {
+    "moe_expert": 2016
+   },
+   "bitonicSortKVInPlace": {
+    "moe_route": 2016
+   },
+   "elementwise_kernel": {
+    "norm_elem": 16191
+   },
+   "gatherTopK": {
+    "moe_route": 2016
+   },
+   "gemmk1_kernel": {
+    "dense_gemm": 63
+   },
+   "indexFuncSmallIndex": {
+    "input_prep": 63
+   },
+   "indexSelectSmallIndex": {
+    "norm_elem": 63,
+    "moe_route": 2016,
+    "input_prep": 126
+   },
+   "index_elementwise_kernel": {
+    "input_prep": 63
+   },
+   "kernel": {
+    "dense_gemm": 10143
+   },
+   "memcpy": {
+    "memcpy": 315
+   },
+   "reduce_kernel": {
+    "norm_elem": 4095,
+    "sample": 63
+   },
+   "softmax_warp_forward": {
+    "moe_route": 2016
+   },
+   "unrolled_elementwise_kernel": {
+    "norm_elem": 6174,
+    "moe_route": 6048,
+    "input_prep": 63
+   },
+   "vectorized_elementwise_kernel": {
+    "norm_elem": 33138,
+    "moe_route": 2016,
+    "input_prep": 63
+   }
+  },
+  "top_residual_kernels": [
+   "CatArrayBatchedCopy",
+   "CatArrayBatchedCopy_alignedK_contig"
+  ]
+ },
+ "unprofiled_ms": 4.6425,
+ "positions": null,
+ "clocks_mhz": null,
+ "gates": {
+  "inflate": 0.0648,
+  "node_union_over_span": 1.0019,
+  "node_span_over_span": 1.0383,
+  "map_residual_fraction": 0.022
+ },
+ "labels": [
+  "PROFILER_INFLATED",
+  "NODE_TRACE_INFLATED",
+  "CLASS_MAP_INCOMPLETE"
+ ],
+ "nsys_diagnostics": [
+  "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_1010114/streams/pid_10125_stdout.log and stderr.log for program output",
+  "Common injection library initialized successfully.",
+  "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+  "Loaded CUPTI library: /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/libcupti.so.13.1",
+  "Installed CUDA driver version (13.2) is not supported by this build of Nsight Systems. CUDA trace will be collected using libraries for driver version 13.1",
+  "Enabling trace for device graph launch",
+  "CUDA injection initialized successfully.",
+  "Common injection library initialized successfully.",
+  "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+  "Loaded CUPTI library: /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/libcupti.so.13.1",
+  "Installed CUDA driver version (13.2) is not supported by this build of Nsight Systems. CUDA trace will be collected using libraries for driver version 13.1",
+  "Enabling trace for device graph launch",
+  "CUDA injection initialized successfully.",
+  "NVTX injection initialized successfully.",
+  "Profiling has started.",
+  "Not all NVTX events might have been collected.",
+  "No NVTX events collected. Does the process use NVTX?",
+  "Not all NVTX events might have been collected.",
+  "Number of NVTX events collected: \t1.",
+  "Not all CUDA events might have been collected."
+ ],
+ "node_band": {
+  "omega_ms": 0.171967,
+  "dk_lo_ms": 0.00832
+ },
+ "P_ms": 4.943529,
+ "terms": {
+  "moe_expert": 1.722168,
+  "moe_route": 0.451133,
+  "attn": 0.439358,
+  "dense_gemm": 0.70755,
+  "norm_elem": 1.064634,
+  "sample": 0.008928,
+  "input_prep": 0.008544,
+  "memcpy": 0.002176,
+  "residual": 0.09888,
+  "I_in": -0.00832,
+  "idle_out": 0.447262,
+  "overlap_in": -0.0,
+  "O": -0.001216
+ },
+ "noise_iqr": {
+  "moe_expert": 0.001889,
+  "moe_route": 0.003843,
+  "attn": 0.001856,
+  "dense_gemm": 0.001502,
+  "norm_elem": 0.000769,
+  "sample": 9.6e-05,
+  "input_prep": 9.6e-05,
+  "memcpy": 3.2e-05,
+  "residual": 0.000416,
+  "I_in": 0.012225,
+  "idle_out": 0.012576,
+  "overlap_in": 0.0,
+  "O": null
+ },
+ "I_in_node_ms": 0.163392,
+ "status": "labelled"
+}

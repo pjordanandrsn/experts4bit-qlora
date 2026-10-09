@@ -1,0 +1,72 @@
+{
+ "engine": "e4b",
+ "batch": 16,
+ "mode": "census",
+ "e4b_sha": "e691dbe7cfd78e0d277830cec273387d365166ef",
+ "gnf4_sha": "6ee2e10408161a9d3c874975c9191a7f2957e6f4",
+ "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+ "revision": "a02780686e08a03fe0d2679a293b5c74a90efa89",
+ "load_s": 9.2,
+ "torch": "2.8.0+cu128",
+ "fusions": {
+  "fuse_qkv_n": 0,
+  "fuse_t1_glue_n": 0,
+  "fuse_t1_glue_r2_n": [
+   0,
+   0
+  ],
+  "fuse_router_epilogue_n": 0
+ },
+ "fusion_sources": {
+  "E4B_PAGED_FUSE_QKV": "default-off",
+  "E4B_FUSE_T1_GLUE": "default-off",
+  "E4B_FUSE_T1_GLUE_R2": "default-off",
+  "E4B_FUSE_ROUTER_EPI": "default-off"
+ },
+ "prompts_sha256": "891ff238c0b2a0800df0fc0236b9adc36b196a4fec39c896fb62d05438a9fc01",
+ "ramp_steps": 17,
+ "skip": 32,
+ "steps_bracketed": 64,
+ "row_tokens": 160,
+ "window_decode_positions": [
+  35,
+  113
+ ],
+ "profiled_wall_s": 0.524627,
+ "profiled_ms_per_step": 8.1973,
+ "note": "profiled wall: never a speed reading (SC1's unprofiled arm is the speed)",
+ "graph_stats": {
+  "1": {
+   "replays": 4,
+   "eager_steps": 0,
+   "rows": 4,
+   "pad_rows": 0
+  },
+  "2": {
+   "replays": 4,
+   "eager_steps": 0,
+   "rows": 8,
+   "pad_rows": 0
+  },
+  "4": {
+   "replays": 8,
+   "eager_steps": 0,
+   "rows": 28,
+   "pad_rows": 4
+  },
+  "8": {
+   "replays": 16,
+   "eager_steps": 0,
+   "rows": 104,
+   "pad_rows": 24
+  },
+  "16": {
+   "replays": 188,
+   "eager_steps": 0,
+   "rows": 2896,
+   "pad_rows": 112
+  }
+ },
+ "max_memory_allocated": 5175933952,
+ "max_memory_reserved": 5509218304
+}

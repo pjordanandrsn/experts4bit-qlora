@@ -1,0 +1,24 @@
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 1267.66it/s]
+[00:19:25]   checkpoint: Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 (requested ad44e777bcd18fa416d9da3bd8f70d33ebb85d39)
+[00:19:25]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[00:19:25]   quantized experts on 48/48 MoE layers (128 experts each)
+[00:19:25]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[00:19:27]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[00:19:27]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[00:19:49]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] fusions (q/k/v auto; folds set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 48, 'fuse_t1_glue_n': 193, 'fuse_t1_glue_r2_n': [48, 48], 'fuse_router_epilogue_n': 48}
+DECODE_GRAPH bucket=1 captured
+DECODE_GRAPH bucket=2 captured
+DECODE_GRAPH bucket=4 captured
+DECODE_GRAPH bucket=8 captured
+DECODE_GRAPH bucket=16 captured
+[serve_paged] PREFILL_GRAPH on (auto): first chunks of 512 tokens replay one graph (startup check bitwise on two prompts; pool 428 MiB, 7998 MiB free)
+[serve_paged] ready: {"moe_layers": 48, "experts": 128, "top_k": 8, "model_type": "qwen3_moe", "int4_expert_layers": 0, "int4_store_kinds": [], "int4_attn_projections": 0, "kv": {"n_kv_heads": 4, "head_dim": 128, "k_groups": "auto", "scratch_slots": 16, "blocks_per_seq": 256, "pool_mib": 3326.4}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "grouping": {"device_grouping": true, "force_singleton_groups": false}, "prefill_graph": "auto", "levers_env": {}, "exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 0, "fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48, "fusion_modes": {"E4B_PAGED_FUSE_QKV": "auto", "E4B_FUSE_T1_GLUE": "auto", "E4B_FUSE_T1_GLUE_R2": "auto", "E4B_FUSE_ROUTER_EPI": "auto"}, "fusion_sources": {"E4B_PAGED_FUSE_QKV": "default-allowlisted", "E4B_FUSE_T1_GLUE": "default-allowlisted", "E4B_FUSE_T1_GLUE_R2": "default-allowlisted", "E4B_FUSE_ROUTER_EPI": "default-allowlisted"}, "fusion_report": {"E4B_FUSE_T1_GLUE": {"mode": "auto", "patched": 193, "failed_probe": 0}, "E4B_FUSE_T1_GLUE_R2": {"mode": "auto", "patched": [48, 48], "kernel_gaps": 0}, "E4B_FUSE_ROUTER_EPI": {"mode": "auto", "patched": 48, "failed_probe": 0, "no_kernel_mode": 0, "fp32_upstream": 0}}, "pinned_cache_released": true, "host_heap_trimmed": true}
+Capture range started in the application.
+Capture range ended in the application.
+Generating '/tmp/nsys-report-fd5a.qdstrm'
+[1/1] [0%                          ] census_e4b_b1_node.nsys-repProcessing events...
+[1/1] [0%                          ] census_e4b_b1_node.nsys-rep[1/1] [===========51%              ] census_e4b_b1_node.nsys-rep[1/1] [====25%                     ] census_e4b_b1_node.nsys-rep[1/1] [===========50%              ] census_e4b_b1_node.nsys-rep[1/1] [======33%                   ] census_e4b_b1_node.nsys-rep[1/1] [====25%                     ] census_e4b_b1_node.nsys-rep[1/1] [==20%                       ] census_e4b_b1_node.nsys-rep[1/1] [=17%                        ] census_e4b_b1_node.nsys-rep[1/1] [=16%                        ] census_e4b_b1_node.nsys-rep[1/1] [===24%                      ] census_e4b_b1_node.nsys-rep[1/1] [=====32%                    ] census_e4b_b1_node.nsys-rep[1/1] [========40%                 ] census_e4b_b1_node.nsys-rep[1/1] [==========48%               ] census_e4b_b1_node.nsys-rep[1/1] [===========50%              ] census_e4b_b1_node.nsys-rep[1/1] [========================100%] census_e4b_b1_node.nsys-rep[1/1] [========================100%] census_e4b_b1_node.nsys-rep
+P123_CENSUS {"batch": 1, "steps_bracketed": 64, "profiled_ms_per_step": 5.7511}
+Generated:
+	/root/p123/census/census_e4b_b1_node.nsys-rep
