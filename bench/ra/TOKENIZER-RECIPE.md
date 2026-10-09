@@ -14,8 +14,10 @@ retained text with two newlines, tokenizes the complete text with
 `return_tensors="pt"`, and returns the full IDs plus every fixed window.
 
 Focused CPU controls use explicit tokenizer and tensor doubles. They compare
-against functions extracted from the registered instrument commit without
-importing the complete instruments or any release. Those controls do not
+against selected functions from complete registered source fixtures, checked
+offline against the registered SHA256 and pinned Git blob IDs. The tests need
+neither Git history nor network access and do not import the complete
+instruments or any release. Those controls do not
 authenticate a caller tokenizer, model revision, dataset label, or tensor.
 
 This foundation is an unreviewed proposal. It adds no CLI, worker inventory

@@ -6,7 +6,6 @@ import hashlib
 import importlib.util
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,6 +13,12 @@ from types import SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+REGISTERED_FIXTURE_ROOT = ROOT / "tests/fixtures/ra_tokenizer_registered"
+REGISTERED_FIXTURES = {
+    "bench/tc1/tc1_arm.py": ("tc1_arm.py.txt", "bffc607d68df97acc1e86a20ea837e79fdc6b3fe"),
+    "bench/p109/p109_box.py": ("p109_box.py.txt", "ba1d65cf888f4f1509b8852f66990a167a1d859f"),
+    "bench/p97/p97_box.py": ("p97_box.py.txt", "4bc69ec5989a6a64baac955325f909ba7c7834de"),
+}
 spec = importlib.util.spec_from_file_location("ra_tokenizer_recipe", ROOT / "bench/ra/ra_tokenizer_recipe.py")
 recipe = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(recipe)
@@ -62,18 +67,29 @@ class TokenizerDouble:
         return SimpleNamespace(input_ids=ids)
 
 
+def registered_source(path):
+    """Verify complete committed fixture bytes offline before parsing any source."""
+    pins = json.loads((ROOT / "bench/ra/source-pins.json").read_bytes())
+    filename, expected_blob = REGISTERED_FIXTURES[path]
+    raw = (REGISTERED_FIXTURE_ROOT / filename).read_bytes()
+    if hashlib.sha256(raw).hexdigest() != pins["instruments"][path]:
+        raise ValueError("registered source SHA256 mismatch")
+    blob = b"blob " + str(len(raw)).encode() + b"\0" + raw
+    if hashlib.sha1(blob).hexdigest() != expected_blob:
+        raise ValueError("registered Git blob identity mismatch")
+    return raw
+
+
 @pytest.fixture(scope="module")
 def registered():
-    """Read only registered Git blobs; compile selected functions in isolation."""
-    pins = json.loads((ROOT / "bench/ra/source-pins.json").read_bytes())
+    """Read pinned offline fixtures; compile selected functions in isolation."""
     result = {}
     for path, functions in [
         ("bench/tc1/tc1_arm.py", {"render_row", "encode_rows", "prepare"}),
         ("bench/p109/p109_box.py", {"wikitext_rows"}),
         ("bench/p97/p97_box.py", {"wikitext_windows"}),
     ]:
-        raw = subprocess.check_output(["git", "-C", str(ROOT), "show", pins["source_commit"] + ":" + path], timeout=30)
-        assert hashlib.sha256(raw).hexdigest() == pins["instruments"][path]
+        raw = registered_source(path)
         tree = ast.parse(raw)
         values = {}
         for node in tree.body:
@@ -101,6 +117,25 @@ def registered():
         exec(compile(ast.Module(body=selected, type_ignores=[]), "<registered-functions-only>", "exec"), env)
         result[path] = env
     return result
+
+
+@pytest.mark.parametrize("path", list(REGISTERED_FIXTURES))
+def test_registered_fixture_byte_mutant_refuses_before_parsing(path, tmp_path, monkeypatch):
+    filename, _ = REGISTERED_FIXTURES[path]
+    raw = bytearray(registered_source(path))
+    raw[-1] ^= 1
+    (tmp_path / filename).write_bytes(raw)
+    monkeypatch.setitem(registered_source.__globals__, "REGISTERED_FIXTURE_ROOT", tmp_path)
+    with pytest.raises(ValueError, match="registered source SHA256 mismatch"):
+        registered_source(path)
+
+
+def test_registered_fixture_git_blob_identity_is_independently_required(monkeypatch):
+    path = "bench/tc1/tc1_arm.py"
+    filename, _ = REGISTERED_FIXTURES[path]
+    monkeypatch.setitem(REGISTERED_FIXTURES, path, (filename, "0" * 40))
+    with pytest.raises(ValueError, match="registered Git blob identity mismatch"):
+        registered_source(path)
 
 
 @pytest.fixture
