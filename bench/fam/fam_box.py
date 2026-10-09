@@ -229,6 +229,7 @@ def main_run(a) -> int:
            "transformers": transformers.__version__, "torch": torch.__version__, "load_s": round(load_s, 1),
            "census": {k: info.get(k) for k in CENSUS_KEYS}, "fusion_modes": info.get("fusion_modes"),
            "fusion_report": info.get("fusion_report"),              # Amendment 5: the router epilogue's fp32_upstream
+           "server": {"max_seqs": cfg.max_seqs, "max_tokens_per_seq": cfg.max_tokens_per_seq},   # Amendment 7
            "store": {k: info.get(k) for k in STORE_KEYS}, "kv": info.get("kv"), "layers": q_layers(model),
            "counters_wrapped": list(counters.wrapped), "qkv_modules": fwd.qkv_modules, "ref_kw": ref_kw,
            "texts": list(texts), "shapes": list(shapes), "sets": list(sets), "prompt": a.prompt, "cont": a.cont,

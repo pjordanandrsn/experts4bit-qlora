@@ -579,3 +579,34 @@ int4 route.
 
 **Code.** The reducer's self-test now runs 58 cases (Gemma-4's clean pass and its proof). `tests/test_fam_box.py` pins
 the table above at the real depth and pattern, and that ON_r2 engages nothing.
+
+## Amendment 7 (2026-10-09, after `fam-mixtral-prove-1`, before any Mixtral reading)
+
+**What happened.** `fam-mixtral-prove-1` (store `bfc1cd3b`, $1.115) fetched Mixtral's 93 GB in 1986 s and baked it in
+about 190 s, both OK. Its OFF process then ran out of GPU memory building the server: the server's own KV pool, the
+default 16 slots × 4096 tokens (4.12 GiB for K and V), did not fit beside the NF4 weights (about 26.8 GiB of the card's
+31.36). No record was written, and the proof was NOT PROVED (rc 27). The instrument never uses that pool: every paged
+pass builds its own, at most 12 + 16 scratch slots × 656 tokens (1.15 GiB). Resizing it therefore leaves the read
+unchanged.
+
+**Changes** (Mixtral only; the rule, gates, tables, predictions and every other family are unchanged):
+- Mixtral's processes build the server at `E4B_PAGED_MAX_TOKENS_PER_SEQ=768` (≥ the 512-token prompt + 128 positions +
+  16), still 16 slots: its pool is 0.77 GiB. The budget is then about 26.8 + 0.77 + 1.15 = 28.7 GiB plus the context,
+  about 1.7 GiB below the card. X5 (peak ≤ 30 GiB) stands as registered.
+- Every arm record carries the server it was built with (`server`: `max_seqs`, `max_tokens_per_seq`), and the reducer
+  VOIDs a Mixtral record built at any length but 768 (`SERVER_TOKENS`).
+- The proof and the reading stay separate rentals: the second 93 GB fetch (about $0.47) buys the re-derive between
+  them.
+- Mixtral's proof is guarded 2.0 h, sized from that run: launch to the bake's end took 2336 s, and OFF needs 2400 + 600.
+  The reading stays at 4.0 h.
+
+| run | guard | the box's checks (need / alarm cap) |
+|---|---|---|
+| Mixtral's proof | 2.0 h | fetch 3000 s, bake 1500 s, OFF 2400 / 3000 s, each ON 600 / 900 s |
+
+**Budget.** The lane has spent $8.835. `fam-mixtral-prove-2` ≤ $1.70, the reading ≤ $3.40, and Gemma-4's proof and
+reading ≤ $1.07 + $3.40 bring it to at most about $18.42, inside $26.00.
+
+**Code.** `fam_run.sh`'s `build_env_of` sets the length for Mixtral, and the box records it. The reducer's self-test
+now runs 59 cases (a Mixtral record built at the default length VOIDs). `tests/test_fam_staged_pin.py` pins the env,
+that 768 covers the instrument, and that the proof's guard holds the measured setup.
