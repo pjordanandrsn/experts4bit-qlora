@@ -6,6 +6,8 @@ This library has no launch CLI until that handoff is implemented and reviewed.
 from __future__ import annotations
 
 import copy
+import datetime
+import re
 import email.parser
 import hashlib
 import zipfile
@@ -30,8 +32,8 @@ def pinned(pin):
 
 def check(plan, *, all_timeouts=True):
     if set(plan) != {"schema", "battery", "stage", "inputs", "versions", "deadline_epoch_s"} | (
-            {"startup"} if plan.get("schema") == 2 else set()) or \
-            type(plan["schema"]) is not int or plan["schema"] not in (1, 2) or plan["battery"] not in ("proof", "reading"):
+            {"startup"} | ({"source_publication"} if plan.get("schema") == 3 else set()) if plan.get("schema") in (2, 3) else set()) or \
+            type(plan["schema"]) is not int or plan["schema"] not in (1, 2, 3) or plan["battery"] not in ("proof", "reading"):
         raise ValueError("ABBA plan fields/battery")
     if set(plan["stage"]) != {"path", "sha256"} or set(plan["inputs"]) != {"spec", "lock"}:
         raise ValueError("stage/input bindings")
@@ -119,10 +121,14 @@ def check(plan, *, all_timeouts=True):
     caches = [Path(v["cache"]) for v in plan["versions"].values()]
     if caches[0] == caches[1] or caches[0] in caches[1].parents or caches[1] in caches[0].parents:
         raise ValueError("separate release output caches required")
+    if plan["schema"] == 3:
+        total += 8 * plan["source_publication"]["timeout_s"]
     if all_timeouts:
         ra_process.window(plan["deadline_epoch_s"], total)
-    if plan["schema"] == 2:
+    if plan["schema"] in (2, 3):
         evidence["startup"] = check_startup(plan)
+    if plan["schema"] == 3:
+        evidence["source_publication"] = check_publication(plan)
     return evidence
 
 
@@ -291,6 +297,156 @@ def native_joins(lock, phase, output):
     return result
 
 
+def release_archives(manifest):
+    """Derive names from bounded metadata; the isolated source probe checks payloads."""
+    result = {}
+    for pin in manifest['payload']['wheels']:
+        path = ra_inputs.absolute(pin['path'])
+        with zipfile.ZipFile(path) as archive:
+            entries = [i for i in archive.infolist() if i.filename.count('/') == 1 and
+                       i.filename.endswith('.dist-info/METADATA')]
+            require(len(entries) == 1 and entries[0].file_size <= 1024 * 1024, 'publication archive metadata')
+            meta = email.parser.BytesParser().parsebytes(archive.read(entries[0]))
+        require(len(meta.get_all('Name', [])) == len(meta.get_all('Version', [])) == 1,
+                'publication archive identity')
+        name = meta['Name'].lower().replace('_', '-').replace('.', '-')
+        if name in ('experts4bit-qlora', 'grouped-nf4-gemm'):
+            require(name not in result, 'duplicate publication release archive')
+            result[name] = {'version': meta['Version'], 'wheel': pin, 'filename': path.name}
+    require(set(result) == {'experts4bit-qlora', 'grouped-nf4-gemm'}, 'publication release pair required')
+    return result
+
+
+def check_publication(plan):
+    gate = plan['source_publication']
+    require(set(gate) == {'manifests', 'timeout_s'} and set(gate['manifests']) == {'old', 'new'},
+            'ABBA publication fields/slots')
+    ra_process.window(plan['deadline_epoch_s'], gate['timeout_s'])
+    lock = json.loads((HERE / 'proof-wheel-lock.json').read_bytes())
+    parser = [p for p in lock['wheels'] if p['name'] == 'packaging']
+    require(len(parser) == 1, 'publication parser lock')
+    baseline_pins = pinned({'path': str(HERE / 'source-pins.json'),
+                            'sha256': plan['startup']['tools']['source-pins.json']})['baseline']
+    expected = {}
+    for slot in ('old', 'new'):
+        manifest = pinned(gate['manifests'][slot])
+        require(set(manifest) == {'schema', 'releases', 'parser', 'parser_lock_sha256'} and
+                type(manifest['schema']) is int and manifest['schema'] == 1 and
+                manifest['parser_lock_sha256'] == plan['startup']['tools']['proof-wheel-lock.json'] and
+                isinstance(manifest['releases'], list) and len(manifest['releases']) == 2,
+                'ABBA publication manifest/lock')
+        require(ra_process.check_input(manifest['parser']).name == parser[0]['filename'] and
+                manifest['parser']['sha256'] == parser[0]['sha256'], 'publication retained parser differs')
+        archives = release_archives(pinned(plan['startup']['manifests'][slot]))
+        selected = {}
+        for row in manifest['releases']:
+            require(set(row) == {'repo', 'commit', 'version', 'wheel'}, 'publication source row')
+            require(isinstance(row['commit'], str) and re.fullmatch(r'[0-9a-f]{40}', row['commit']) and
+                    isinstance(row['version'], str) and re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', row['version']),
+                    'publication final version/commit')
+            repo = ra_inputs.absolute(row['repo'])
+            require(repo.is_dir(), 'publication source repository missing')
+            names = [n for n, a in archives.items() if a['wheel'] == row['wheel']]
+            require(len(names) == 1 and names[0] not in selected, 'publication archive differs from startup')
+            name = names[0]
+            require(row['version'] == archives[name]['version'], 'publication/startup version differs')
+            ra_process.check_input(row['wheel'])
+            if plan['battery'] == 'proof':
+                baseline = [p for p in lock['wheels'] if p['name'] == name]
+                require(len(baseline) == 1 and baseline[0]['version'] == row['version'] and
+                        baseline[0]['sha256'] == row['wheel']['sha256'] and
+                        baseline_pins['e4b' if name == 'experts4bit-qlora' else 'gnf4'] ==
+                        {'version': row['version'], 'commit': row['commit']},
+                        'proof requires retained baseline releases/source pins')
+            selected[name] = {'version': row['version'], 'commit': row['commit'],
+                              'wheel_sha256': row['wheel']['sha256'], 'wheel_filename': archives[name]['filename']}
+        require(set(selected) == set(archives), 'publication complete release source pair')
+        expected[slot] = selected
+    return expected
+
+
+def publication_gate(plan, slot, output):
+    """Eight fixed no-site probes bracket the four measured ABBA positions."""
+    checked = check(plan, all_timeouts=False)
+    pin = plan['source_publication']['manifests'][slot]
+    manifest = pinned(pin)
+    # ra_publication exclusively creates this directory, including failed raw records.
+    output.parent.mkdir(parents=True, exist_ok=True)
+    argv = [plan['versions'][slot]['python']['path'], '-I', '-S', '-B', str(HERE / 'ra_publication.py'),
+            '--manifest', pin['path'], '--out', str(output)]
+    env, _ = ra_env.clean(os.environ, component='decode', fixture={},
+                          venv=Path(plan['versions'][slot]['venv']), cache=Path(plan['versions'][slot]['cache']),
+                          threads=plan['versions'][slot]['threads'], allocator=plan['versions'][slot]['allocator'])
+    process = ra_process.run(argv, env=env, cwd=output.parent, log=output.with_suffix('.log'),
+                             receipt=output.with_suffix('.process.json'), deadline=plan['deadline_epoch_s'],
+                             timeout=plan['source_publication']['timeout_s'])
+    require(process.get('status') == 'OK' and process.get('returncode') == 0 and
+            process.get('cleanup_complete') is True and
+            process.get('parent_death_guard', {}).get('verified') is True,
+            'publication process/guard/cleanup incomplete')
+    require(pinned(pin) == manifest and checked == check(plan, all_timeouts=False),
+            'publication manifest/tools/common inputs changed during probe')
+    result = ra_inputs.read_json(output / 'result.json')
+    require(result.get('schema') == 1 and result.get('status') == 'PASS' and
+            result.get('manifest_sha256') == pin['sha256'] and
+            result.get('proves_published_release_index_binding') is True and
+            all(result.get(k) is False for k in ('proves_local_signature_verification', 'proves_reproducible_build',
+                'proves_release_authorization', 'proves_installation', 'startup_activated',
+                'proves_release_imports', 'proves_gpu_engagement')), 'publication result scope/manifest')
+    expected = check_publication(plan)[slot]
+    publications, metadata = result['publications'], result['source_binding']
+    runtime = metadata['runtime_source_binding']
+    require(set(publications) == set(metadata['releases']) == set(expected) and
+            metadata['proves_dependency_metadata_source_binding'] is True and
+            runtime['proves_runtime_source_binding'] is True and len(runtime['releases']) == 2 and
+            metadata['parser_wheel_sha256'] == manifest['parser']['sha256'] and
+            metadata['parser_lock_sha256'] == manifest['parser_lock_sha256'], 'publication source/parser joins')
+    sources = {r['name']: r for r in runtime['releases']}
+    require(set(sources) == set(expected), 'publication runtime source pair')
+    urls = []
+    for name, identity in expected.items():
+        pub, source, meta = publications[name], sources[name], metadata['releases'][name]
+        require(pub['project'] == name and all(pub[k] == v for k, v in identity.items()) and
+                pub['github_reports_verified_tag'] is True and
+                all(source[k] == identity[k] for k in ('version', 'commit', 'wheel_sha256')) and
+                all(meta[k] == identity[k] for k in ('commit', 'wheel_sha256')), 'publication source/archive identity')
+        api = 'https://api.github.com/repos/pjordanandrsn/' + name
+        urls += [api + '/releases/tags/v' + identity['version'], api + '/git/ref/tags/v' + identity['version'],
+                 api + '/git/tags/' + pub['tag_oid'],
+                 'https://pypi.org/pypi/' + name + '/' + identity['version'] + '/json']
+    records = result['observations']
+    require(len(records) == 16 and sorted(r['url'] for r in records) == sorted(urls * 2),
+            'publication raw response coverage')
+    files = {'result.json'}
+    for index, row in enumerate(records):
+        require(row['file'] == f'response-{index:02d}.json' and type(row['bytes']) is int and
+                0 < row['bytes'] <= 4 * 1024 * 1024, 'publication bounded sequential response')
+        path = output / row['file']
+        require(ra_process.file_digest(path) == row['sha256'] and path.stat().st_size == row['bytes'],
+                'publication raw response bytes changed')
+        start, end = [datetime.datetime.fromisoformat(row[k]) for k in ('started_at', 'finished_at')]
+        require(start.utcoffset() == end.utcoffset() == datetime.timedelta(0) and start <= end,
+                'publication response clock reads')
+        files.add(row['file'])
+    require({p.name for p in output.iterdir()} == files and all(p.is_file() and not p.is_symlink()
+            for p in output.iterdir()), 'publication receipt inventory')
+    return {'identity': {'publications': publications, 'source_binding': metadata},
+            'result_sha256': ra_process.file_digest(output / 'result.json'), 'process': process,
+            'release_archives': expected, 'proves_gpu_engagement': False, 'release_cleared': False}
+
+
+def join_published_worker(binding, authority):
+    receipt = ra_inputs.read_json(ra_inputs.absolute(binding['handoff_receipt']))
+    installed = receipt['payload']['distributions']
+    for name, identity in authority['release_archives'].items():
+        require(name in installed and installed[name]['version'] == identity['version'] and
+                installed[name]['wheel_sha256'] == identity['wheel_sha256'],
+                'installed release differs from source/publication archive')
+    return {'publication_result_sha256': authority['result_sha256'],
+            'source_publication_identity_sha256': hashlib.sha256(json.dumps(authority['identity'], sort_keys=True,
+                 separators=(',', ':')).encode()).hexdigest()}
+
+
 def supervise(plan, output, lock_path):
     """Invoke the six existing wrappers in each ABBA position, with no retries.
 
@@ -300,7 +456,7 @@ def supervise(plan, output, lock_path):
     """
     plan = copy.deepcopy(plan)
     checked = check(plan)
-    verified = plan["schema"] == 2
+    verified = plan["schema"] in (2, 3)
     output, lock_path = ra_inputs.absolute(output), ra_inputs.absolute(lock_path)
     spec = pinned(plan["inputs"]["spec"])
     protected = [Path(plan["stage"]["path"]), *map(Path, spec["trees"].values()),
@@ -319,18 +475,35 @@ def supervise(plan, output, lock_path):
             protected += [Path(manifest['payload']['image']), *[Path(p['path']) for p in manifest['payload']['wheels']]]
         require(not any(a == b or a in b.parents or b in a.parents for a in (output, lock_path) for b in protected),
                 'ABBA verified output/lock overlaps protected inputs')
+    if plan['schema'] == 3:
+        for pin in plan['source_publication']['manifests'].values():
+            manifest = pinned(pin)
+            protected += [Path(pin['path']), Path(manifest['parser']['path'])]
+            protected += [Path(row['repo']) for row in manifest['releases']]
+        require(not any(a == b or a in b.parents or b in a.parents for a in (output, lock_path) for b in protected),
+                'publication output/lock overlaps protected inputs')
     fd = os.open(lock_path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         output.mkdir(parents=True, exist_ok=False)
         (output / "plan.json").write_text(json.dumps(plan, indent=2, allow_nan=False) + "\n")
         record = {"status": "RUNNING", "started_at": ra_process.clock(), "attempts": 1,
-                  "completed": [], "proves_gpu_engagement": False, "release_cleared": False,
+                  "completed": [], "publication_gates": [], "proves_gpu_engagement": False, "release_cleared": False,
                   "verified_wrapper_startup": False, "source_publication_verified": False,
                   "runtime_consumption_verified": False, "native_context_absence_verified": False}
         journal = output / "supervisor.json"
         try:
+            identities = {}
             for tag, slot in POSITIONS:
+                authority = None
+                if plan['schema'] == 3:
+                    record['active'] = {'tag': tag, 'phase': 'publication_before'}
+                    journal.write_text(json.dumps(record, indent=2) + '\n')
+                    authority = publication_gate(plan, slot, output / 'publication' / tag / 'before')
+                    require(identities.get(slot, authority['identity']) == authority['identity'],
+                            'publication/source identity changed between repeated positions')
+                    identities[slot] = authority['identity']
+                    record['publication_gates'].append({'tag': tag, 'side': 'before', **authority})
                 version = plan["versions"][slot]
                 for phase in PHASES:
                     record["active"] = {"tag": tag, "phase": phase}
@@ -367,9 +540,18 @@ def supervise(plan, output, lock_path):
                         require(record.get('common_dependency_sha256', common_hash) == common_hash,
                                 'ABBA installed common payload changed across positions')
                         record['common_dependency_sha256'] = common_hash
+                        if authority is not None:
+                            joins['publication'] = join_published_worker(binding, authority)
                         joins['native'] = native_joins(pinned(plan['inputs']['lock']), phase, destination)
                     record["completed"].append({"tag": tag, "phase": phase, "process": result,
                                                 "removed_environment_keys": removed, "joins": joins})
+                if authority is not None:
+                    record['active'] = {'tag': tag, 'phase': 'publication_after'}
+                    journal.write_text(json.dumps(record, indent=2) + '\n')
+                    after = publication_gate(plan, slot, output / 'publication' / tag / 'after')
+                    require(after['identity'] == authority['identity'], 'publication/source changed during position')
+                    record['publication_gates'].append({'tag': tag, 'side': 'after', **after})
+            record['source_publication_verified'] = plan['schema'] == 3
             record["status"] = "ORDERED_COMPONENTS_RECORDED_PENDING_GATES"
             record["verified_wrapper_startup"] = verified
         except BaseException as exc:
