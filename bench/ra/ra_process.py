@@ -72,13 +72,30 @@ def run(argv, *, env, cwd, log, receipt, deadline, timeout):
         record["error_type"] = type(exc).__name__
         raise
     finally:
+        record["cleanup_complete"] = process is None
         if process is not None:
             try:
                 os.killpg(process.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
-            process.wait(timeout=10)
+            except OSError as exc:
+                record["cleanup_error_type"] = type(exc).__name__
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                record["kill_wait_timeout"] = True
+            except OSError as exc:
+                record["cleanup_wait_error_type"] = type(exc).__name__
             record["returncode"] = process.returncode
+            try:
+                os.killpg(process.pid, 0)
+            except ProcessLookupError:
+                record["cleanup_complete"] = process.returncode is not None and not any(k in record for k in
+                    ("kill_wait_timeout", "cleanup_error_type", "cleanup_wait_error_type"))
+            except OSError as exc:
+                record["cleanup_probe_error_type"] = type(exc).__name__
+            if not record["cleanup_complete"] and record["status"] == "OK":
+                record["status"] = "CLEANUP_INCOMPLETE"
         record["finished_at"] = clock()
         if log.is_file():
             record["log_sha256"] = file_digest(log)
