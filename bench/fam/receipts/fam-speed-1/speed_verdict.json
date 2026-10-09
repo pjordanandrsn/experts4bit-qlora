@@ -1,0 +1,52 @@
+{
+ "proof": false,
+ "constants": {
+  "FAST": 0.98,
+  "SLOW": 1.02,
+  "NOISE": 0.015,
+  "steps": 256
+ },
+ "verdict": "FASTER",
+ "reasons": [],
+ "report": {
+  "medians": {
+   "OFF_a": 12.643,
+   "ON_a": 12.2975,
+   "OFF_b": 12.627,
+   "ON_b": 12.2892
+  },
+  "ratio_a": 0.9727,
+  "ratio_b": 0.9732,
+  "block_disagreement": 0.0006,
+  "pair_ratio_median": {
+   "a": 0.9728,
+   "b": 0.9732
+  },
+  "on_off_tokens": {
+   "a": {
+    "same": 293,
+    "of": 293,
+    "first_divergence": null
+   },
+   "b": {
+    "same": 293,
+    "of": 293,
+    "first_divergence": null
+   }
+  },
+  "sm_clock_mhz": [
+   2542.0,
+   2917.0
+  ],
+  "memory": {
+   "a": {
+    "max_allocated_mib": 23575.8,
+    "max_reserved_mib": 24354.0
+   },
+   "b": {
+    "max_allocated_mib": 23657.1,
+    "max_reserved_mib": 24604.0
+   }
+  }
+ }
+}

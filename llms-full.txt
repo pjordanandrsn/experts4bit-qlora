@@ -2273,11 +2273,13 @@ D's SANE read at T == 1 passes (bias +0.00541 nats, argmax agreement 0.9674). Th
 family with that read and stay off elsewhere. Lane FAM read the others at T == 1, each against its own neutral floor
 (#1362). Granite-MoE fails on one gated entry of 12, by 2 positions in 1536. gpt-oss-20b fails on every knob, because its
 own floor sits below the 0.90 agreement backstop; that floor also contains Phase C's 0.924, so Phase C's miss was the
-gate, not the knob. Qwen3.6-MoE, where only the router epilogue engages, passes; adding it to the allowlist is its own
-pull request. `0` on each knob is the way back.
+gate, not the knob. Qwen3.6-MoE, where only the router epilogue engages, passes, and the epilogue decodes one request
+there in 0.973 of the step (FAM Amendment 4); adding the family to the allowlist is its own pull request. `0` on each
+knob is the way back.
 `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`,
 `e4b.serve.p115.fused-stack-quality.qwen3.5090.2026-10-07`, `e4b.serve.fam.fused-stack-t1.granite.5090.2026-10-09`,
-`e4b.serve.fam.fused-stack-t1.gptoss.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.qw36.5090.2026-10-09`
+`e4b.serve.fam.fused-stack-t1.gptoss.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.qw36.5090.2026-10-09`,
+`e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`
 ([P115](../bench/p115/RESULTS-p115.md), [FAM](../bench/fam/RESULTS-fam.md)).
 
 **Where the default single-request step goes.** A kernel-class census of the shipped default on Qwen3-30B-A3B NF4,
@@ -3249,6 +3251,7 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.serve.fam.fused-stack-t1.granite.5090.2026-10-09 [measured]: Lane FAM (one RTX 5090): the B=1 fused stack at auto on Granite-3.1-3b-a800m (engaged 0 / 65 / [32, 32] / 32) reads FAIL against the family's own neutral floor at T == 1. One gated entry of 12 misses: c4val1, shape 1, set C, argmax agreement 0.95117 (1461 of 1536) against A_f - 0.005 = 0.95195. …
 - e4b.serve.fam.fused-stack-t1.gptoss.5090.2026-10-09 [measured]: Lane FAM (one RTX 5090): on gpt-oss-20b each B=1 fusion knob alone and all three at auto read FAIL at T == 1: ON_glue (engaged 0 / 49 / [0, 0] / 0) fails 3 of 12 gated entries, ON_r2 (0 / 0 / [24, 0] / 0) 1, ON_epi (0 / 0 / [0, 0] / 24) 6, ON_auto (0 / 49 / [24, 0] / 24) 6. …
 - e4b.serve.fam.fused-stack-t1.qw36.5090.2026-10-09 [measured]: Lane FAM (one RTX 5090): the B=1 fused stack at auto on Qwen3.6-35B-A3B, where only the router epilogue engages (0 / 0 / [0, 0] / 40), reads PASS against the family's own neutral floor at T == 1 and T == 12 on both texts, every set: worst-set |bias| at most 0.0012 nats (gates 0.0128-0.0166), argmax agreement at least …
+- e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09 [measured]: Lane FAM Amendment 4 (one RTX 5090): on the default serve_paged graph server (Qwen3.6-35B-A3B NF4, bucketed decode graphs), the fused router epilogue (E4B_FUSE_ROUTER_EPI …
 
 Open items (no evidence either way):
 
@@ -3256,4 +3259,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 …
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(431 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(432 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

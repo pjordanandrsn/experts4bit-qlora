@@ -1,7 +1,7 @@
-# FAM — results: the B=1 fused stack at T == 1 beyond Qwen3. Granite ON_auto **FAIL**; gpt-oss-20b **FAIL** on every knob (its own floor sits below the backstop; Phase C's 0.924 was the gate, not the knob); Qwen3.6-35B-A3B ON_auto **PASS**. One RTX 5090 per family
+# FAM — results: the B=1 fused stack at T == 1 beyond Qwen3. Granite ON_auto **FAIL**; gpt-oss-20b **FAIL** on every knob (its own floor sits below the backstop; Phase C's 0.924 was the gate, not the knob); Qwen3.6-35B-A3B ON_auto **PASS**, and its router epilogue **FASTER** at one row (ratio 0.973). One RTX 5090 per family
 
-Registration: `bench/fam/PREREG-fam.md` (#1380, `9629874f`; Amendments 1 in #1403, 2 in #1420 and 3 in #1432). Issue:
-#1362.
+Registration: `bench/fam/PREREG-fam.md` (#1380, `9629874f`; Amendments 1 in #1403, 2 in #1420, 3 in #1432 and 4 in
+#1436). Issue: #1362.
 
 Code under test, on every box:
 - e4b 0.50.0 at `9766fb4c` (#1403's merge, carrying #1395 and #1398); Qwen3.6's rerun at `98d59921` (#1420's merge);
@@ -20,8 +20,10 @@ cell, or the family is UNRESOLVED; `mutant_scale` (×0.5) must fail, or the read
 | gpt-oss-20b | `fam-gptoss-1` | AMD engineering sample, 64 CPUs | $1.007 | ON_glue, ON_r2, ON_epi, ON_auto **FAIL**; anchor: 0.924 inside the floor |
 | Qwen3.6-35B-A3B | `fam-qw36-1` | EPYC 7763, 256 CPUs | $1.639 | VOID (a harness bug; Amendment 2) |
 | Qwen3.6-35B-A3B | `fam-qw36-2` | EPYC 7C13, 256 CPUs | $2.345 | ON_auto **PASS** (Amendment 3's re-reduction) |
+| Qwen3.6, speed proof | `fam-speed-prove-1` | EPYC 7713, 128 CPUs | $0.632 | PROVED (Amendment 4) |
+| Qwen3.6, speed | `fam-speed-1` | EPYC 7713, 128 CPUs | $0.632 | the router epilogue **FASTER** (Amendment 4) |
 
-The lane spent $6.456 of its $18 ceiling.
+The lane spent $7.720 of its $18 ceiling.
 
 ## Granite-3.1-3b-a800m (`fam-granite-1`)
 
@@ -101,8 +103,32 @@ The maintainer re-derived the verdict from the store independently.
   not. On the ladder (set A), `mut095` and `mut098` passed 4 of 4: at these window counts the gate does not resolve
   a ×0.95 temperature change on Qwen3.6, and ON sits well inside even that.
 - **Process walls:** OFF 5966 s, ON_auto 922 s. Peak 24.38 GB.
-- **What PASS licenses:** a separate default pull request adding the family to the knobs' allowlist, reviewed on its
-  own. On this family that turns on only the router epilogue, so that pull request must also name the speed it buys.
+- **What PASS licenses:** a separate default pull request adding the family to the knobs' allowlist. On this family
+  that turns on only the router epilogue, so Amendment 4 first read the speed it buys (next section).
+
+## Qwen3.6: what the router epilogue buys at one row (`fam-speed-1`, Amendment 4)
+
+**FASTER.** On the default graph server, one request decodes in 12.30 ms a step with the router epilogue fused, against
+12.64 ms without it: ratios 0.9727 and 0.9732 in the two interleaved blocks, about 2.7 % faster. The maintainer
+re-derived it from the store and, on both reads, licensed the allowlist flip.
+
+| block | OFF median step | ON median step | ON / OFF | per-pair median |
+|---|---:|---:|---:|---:|
+| a (OFF first) | 12.643 ms | 12.298 ms | **0.9727** | 0.9728 |
+| b (ON first) | 12.627 ms | 12.289 ms | **0.9732** | 0.9732 |
+
+- **The method** was P124 Amendment 1's. One model served both settings (the box swaps each fused router's `forward`
+  for its original). Each block held a live runner per setting, with graphs captured under that setting, decoding in
+  strict lockstep: 256 timed steps each, 0.06 % between the blocks. Each runner bound its own slot of the hybrid's one
+  linear-state pool.
+- **The instrument held.** The census read `0 / 0 / [0, 0] / 40`, and each setting swapped 40 routers. Every runner
+  replayed bucket 1 exactly 293 times, with no eager step. Each setting was deterministic across blocks, and ON's tokens
+  matched OFF's, 293 of 293.
+- **The prediction:** FASTER (about 35 %) hit; the magnitude (ratio about 0.99) missed, as the gain was larger.
+- **The default install.** The image has no `causal_conv1d` or `flash-linear-attention`, so Qwen3.6's linear layers ran
+  transformers' reference path in both settings. This is the default server as e4b installs it. With those kernels the
+  step would be shorter, and the epilogue's share possibly larger; that is a hypothesis, not a finding.
+- **Peak** 23.1 GiB allocated; SM clock 2542–2917 MHz.
 
 ## Predictions, graded
 
@@ -122,6 +148,8 @@ The maintainer re-derived the verdict from the store independently.
 
 `bench/fam/receipts/fam-granite-1/`, `fam-gptoss-1/`, `fam-qw36-1/` and `fam-qw36-2/` each hold the process records,
 `verdict.json`, `summary.txt`, `forensics.txt`, `versions.txt`, the bake, `logs/`, the teardown proof, a README and
-`SHA256SUMS`. `fam-qw36-2/` adds `verdict-amendment-3.json`. The launcher receipts and ledger rows are in the receipt
-store. Claims: `e4b.serve.fam.fused-stack-t1.granite.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.gptoss.5090.2026-10-09`,
-`e4b.serve.fam.fused-stack-t1.qw36.5090.2026-10-09`.
+`SHA256SUMS`. `fam-qw36-2/` adds `verdict-amendment-3.json`. `fam-speed-prove-1/` and `fam-speed-1/` hold the speed
+record (`speed_qw36.json`), `speed_verdict.json` and the same companions. The launcher receipts and ledger rows are in
+the receipt store. Claims: `e4b.serve.fam.fused-stack-t1.granite.5090.2026-10-09`,
+`e4b.serve.fam.fused-stack-t1.gptoss.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.qw36.5090.2026-10-09`,
+`e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`.

@@ -11986,6 +11986,35 @@
         "receipts/experts4bit-qlora/2026-10-08/fam-qw36-1/ (receipt.json, teardown-proof.json; VOID)"
       ],
       "notes": "Pre-registered in #1380 with Amendments 1 (#1403), 2 (#1420) and 3 (#1432). F7 (Qwen3.6 ON_auto PASS, about 85 %) HIT. fam-qw36-1 ($1.639) VOIDed on a harness crash (the shape-1 runner froze the linear-state pool); fam-qw36-2's box reduction VOIDed on the warm-up count; no gate statistic was computed before Amendment 3 merged, and the maintainer re-derived the verdict from the store. ON_auto bias at (wikitext, 1) by set: -0.0005 / +0.0004 / -0.0003."
+    },
+    {
+      "id": "e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3.6-35B-A3B",
+      "claim": "Lane FAM Amendment 4 (one RTX 5090): on the default serve_paged graph server (Qwen3.6-35B-A3B NF4, bucketed decode graphs), the fused router epilogue (E4B_FUSE_ROUTER_EPI; 40 routers, the only B=1 fusion that engages on this family) decodes one request FASTER: median step 12.643 -> 12.298 ms (block a) and 12.627 -> 12.289 ms (block b), ON/OFF 0.9727 and 0.9732, both under the registered 0.98, the blocks 0.06 % apart (P124 Amendment 1's interleaved method, 256 timed steps a setting). ON's tokens matched OFF's, 293 of 293. With FAM's T == 1 quality PASS (e4b.serve.fam.fused-stack-t1.qw36.5090.2026-10-09) it licenses adding qwen3_5_moe to the fusion allowlist.",
+      "value": 0.9732,
+      "unit": "ratio, median ON / median OFF one-row decode step, the larger of the two interleaved blocks' (block b; block a 0.9727)",
+      "hardware": "RTX 5090 (sm_120, driver 580.126.09), one rented Vast.ai host (instance 54968853, verified-secure, AMD EPYC 7713, 128 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @48cfccaa (0.50.0, #1436's merge) + grouped-nf4-gemm @6ee2e10 (0.43.0); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0; premise 36 passed on the card; Qwen/Qwen3.6-35B-A3B @995ad96, NF4 arena baked on the box; the default install (no causal_conv1d or flash-linear-attention: the linear layers run transformers' reference path in both settings); one model, both settings via EpiRoute; two blocks of a live runner per setting, graphs captured on buckets 1-16 under each setting, OFF on linear-state slot 0 and ON on slot 1; a 512-token wikitext prompt, 5 warm + 256 timed + 32 more greedy steps in strict lockstep",
+      "measured_on": "2026-10-09",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/fam/RESULTS-fam.md",
+        "bench/fam/PREREG-fam.md",
+        "bench/fam/fam_speed.py",
+        "bench/fam/fam_speed_reduce.py",
+        "bench/fam/receipts/fam-speed-1/speed_verdict.json",
+        "bench/fam/receipts/fam-speed-1/speed_qw36.json",
+        "bench/fam/receipts/fam-speed-1/SHA256SUMS",
+        "bench/fam/receipts/fam-speed-prove-1/speed_verdict.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-09/fam-speed-1/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-09/fam-speed-prove-1/ (receipt.json, the proof)"
+      ],
+      "notes": "Pre-registered in Amendment 4 (#1436). The prediction: FASTER (about 35 %) hit; the magnitude (ratio about 0.99) missed, the gain larger. The maintainer re-derived the verdict from the store byte for byte and, on the quality and speed reads together, licensed the allowlist flip. That kernels for the linear layers would make the epilogue's share larger is a hypothesis, not read here."
     }
   ]
 }
