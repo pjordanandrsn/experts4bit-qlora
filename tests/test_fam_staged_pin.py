@@ -325,3 +325,20 @@ def test_mixtral_s_gating_is_amendment_8_s():
     assert v["CAP_OFF"] >= v["NEED_OFF"] >= off and v["CAP_ON"] >= v["NEED_ON"] >= on
     setup = 2336                                            # Amendment 7's measured launch-to-bake
     assert setup + off + 3 * on + v["NEED_ON"] + 600 <= 6.0 * 3600         # the fourth ON still starts
+
+
+def test_amendment_9_launches_past_1482():
+    """Amendment 9: after fam-mixtral-3 hit #1477's served-path TypeError, the remaining runs launch past #1482; the rule,
+    tables and pins are unchanged, and the measured per-step counts it states are Amendment 5's table at four layers."""
+    r = _load("fam_reduce")
+    flat = " ".join(PREREG[PREREG.index("## Amendment 9"):].split())
+    for s_ in ("#1482 (`508cdd03`) fixed it", "`staged.sha256` is unchanged", "No second Mixtral proof",
+               "at most $23.14 of $26.00", "`da17bbc5` and at `508cdd03`"):
+        assert s_ in flat, s_
+    big = r.PER_STEP[("mixtral", "ON_auto")]
+    layers = r.ATTN_LAYERS["mixtral"]
+    assert big == {"rmsnorm_rows": layers + 1, "rmsnorm_resid_rows": layers, "rope_heads": 2 * layers,
+                   "router_epilogue": layers}
+    small = 4
+    assert (f"ON_auto reads `rmsnorm_rows` {small + 1}, `rmsnorm_resid_rows` {small}, `rope_heads` {2 * small} "
+            f"and `router_epilogue` {small}") in flat
