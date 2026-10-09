@@ -1,0 +1,31 @@
+KNOBS e4b=9766fb4c5cf64fbf63566de22708b281c4edfcb7 gnf4=6ee2e10408161a9d3c874975c9191a7f2957e6f4 family=gptoss models=gptoss gpu_class=5090 min_disk_gb=200 min_ram_gb=60 prove=0 cont=128
+CUDA_PROBE ok
+e4b 0.50.0 @9766fb4c5cf64fbf63566de22708b281c4edfcb7
+gnf4 0.43.0 @6ee2e10408161a9d3c874975c9191a7f2957e6f4
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+cc (12, 0)
+fam_reduce self-test OK (45/45 cases)
+fam_box self-test OK (27/27 cases)
+p115_quality self-test OK (11/11 cases)
+premise run rc=0: 36 passed in 9.31s
+premise ok
+FETCH gptoss openai/gpt-oss-20b@6cee5e81ee83917806bbde320786a8fb61efebee /root/.cache/huggingface/hub/models--openai--gpt-oss-20b/snapshots/6cee5e81ee83917806bbde320786a8fb61efebee
+gptoss BAKE OK
+gptoss OFF default rc=0 FAM_BOX OFF/default census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0} store=[] cells=12 mem=15.77 GB 2024.5 s
+
+gptoss ON_glue default rc=0 FAM_BOX ON_glue/default census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 49, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0} store=[] cells=12 mem=15.77 GB 320.7 s
+
+gptoss ON_r2 default rc=0 FAM_BOX ON_r2/default census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [24, 0], 'fuse_router_epilogue_n': 0} store=[] cells=12 mem=15.77 GB 329.1 s
+
+gptoss ON_epi default rc=0 FAM_BOX ON_epi/default census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 24} store=[] cells=12 mem=15.77 GB 338.4 s
+
+gptoss ON_auto default rc=0 FAM_BOX ON_auto/default census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 49, 'fuse_t1_glue_r2_n': [24, 0], 'fuse_router_epilogue_n': 24} store=[] cells=12 mem=15.77 GB 336.2 s
+
+gptoss OFF sc2g rc=0 FAM_BOX OFF/sc2g census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0} store=['mxfp4'] cells=1 mem=25.22 GB 69.5 s
+
+gptoss ON_auto sc2g rc=0 FAM_BOX ON_auto/sc2g census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 49, 'fuse_t1_glue_r2_n': [24, 0], 'fuse_router_epilogue_n': 24} store=['mxfp4'] cells=1 mem=25.22 GB 8.4 s
+
+FAM_VERDICT gptoss {'ON_glue': 'FAIL', 'ON_r2': 'FAIL', 'ON_epi': 'FAIL', 'ON_auto': 'FAIL'}
+FAM_ANCHOR {"B": 0.019236, "S": 0.033669, "A": 0.903646, "K": 0.033039, "draws": [{"arm": "chunk", "set": "A", "bias": -0.0192362688258072, "spread": 0.033668739771807545, "agree": 0.9036458333333334, "kl": 0.033039026413822135}, {"arm": "half", "set": "A", "bias": -0.013928723476813806, "spread": 0.0262899501
