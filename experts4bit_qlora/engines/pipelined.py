@@ -550,13 +550,13 @@ class _GptOssPipelined(_PipelinedResidency):
         self.alpha = float(mod.alpha)
         self.limit = float(mod.limit)
 
-    def forward(self, hidden_states, router_indices, router_scores):
+    def forward(self, hidden_states, top_k_index, top_k_weights):
         from nf4_grouped import gemm_4bit_grouped
 
         cd = self.mod.compute_dtype if self.mod.compute_dtype is not None else hidden_states.dtype
         in_dtype, in_dev = hidden_states.dtype, hidden_states.device
         x = hidden_states.to(device=self.device, dtype=cd)
-        want = router_indices.reshape(-1).to(device=self.device, dtype=torch.long)
+        want = top_k_index.reshape(-1).to(device=self.device, dtype=torch.long)
         k = self.k
         self._fetch(want)
         if self.a_buf is None or self.a_buf.dtype != cd:
@@ -570,7 +570,7 @@ class _GptOssPipelined(_PipelinedResidency):
         h = (up + 1) * (gate * torch.sigmoid(gate * self.alpha))
         dn = gemm_4bit_grouped(h.contiguous(), self.dn_p_v, self.dn_a_v, self.sizes, self.row_idx)
         dn = dn.to(torch.float32) + self.down_bias.index_select(0, self.want_buf).to(torch.float32)
-        w = router_scores.reshape(-1).to(device=self.device, dtype=torch.float32)
+        w = top_k_weights.reshape(-1).to(device=self.device, dtype=torch.float32)
         out = (dn * w[:, None]).sum(0, keepdim=True)
         return out.to(device=in_dev, dtype=in_dtype)
 
