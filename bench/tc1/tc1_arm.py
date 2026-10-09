@@ -931,6 +931,80 @@ def eval_loss(model, rows, fwd_kwargs, autocast):
     return (sum(per_row) / max(len(per_row), 1)), per_row
 
 
+#: P129 Amendment 3: the registered bf16 schedules of the q/k/v base projections (A0 the stock arithmetic through this hook, a self-check),
+#: D1 fp32 matmuls rounded to bf16 (the reference), D2 q's matmul split in two along N, D3 k and v as one matmul, D4 q split in four.
+QKV_FLOOR_MODES = ("A0", "D1", "D2", "D3", "D4")
+
+
+class _QkvFloorBase(nn.Module):
+    """A q/k/v ``LoRALinear``'s base for one floor mode: the bitsandbytes NF4 weight dequantized (bitsandbytes' own dequantize) and
+    multiplied by the mode's schedule. The ``LoRALinear`` around it still adds its adapter delta the stock way."""
+
+    def __init__(self, fn):
+        super().__init__()
+        self.fn = fn
+
+    def forward(self, x):
+        return self.fn(x)
+
+
+def qkv_floor_rows(model, rows, fwd_kwargs, autocast):
+    """P129 Amendment 3: the step-0 held-out per row under each QKV_FLOOR_MODES schedule, on every Qwen3MoeAttention whose q/k/v are
+    ``LoRALinear`` around a 4-bit base; the bases are restored afterwards. Returns {"rows": {mode: per-row losses}, "d3_hits": the D3
+    calls whose v reused k's matmul, "d3_expected": layers x rows, "n_attention": modules hooked}."""
+    import torch.nn.functional as F
+    from bitsandbytes.functional import dequantize_4bit
+    from experts4bit_qlora.lora import LoRALinear
+    attns = [m for m in model.modules() if type(m).__name__ == "Qwen3MoeAttention"
+             and all(isinstance(getattr(m, n, None), LoRALinear) for n in ("q_proj", "k_proj", "v_proj"))]
+    if not attns:
+        return {"rows": {}, "d3_hits": 0, "d3_expected": 0, "n_attention": 0, "why": "no Qwen3MoeAttention with LoRALinear q/k/v"}
+    saved = [(a, a.q_proj.base, a.k_proj.base, a.v_proj.base) for a in attns]
+    hits = {"n": 0}
+    def deq(lin, dtype):
+        return dequantize_4bit(lin.weight.data, lin.weight.quant_state).to(dtype)
+    def split_mm(x, w, parts):
+        return torch.cat([F.linear(x, c) for c in w.chunk(parts, 0)], -1)
+    def bases(mode, bq, bk, bv):
+        shared = {}
+        def q(x):
+            w = deq(bq, x.dtype)
+            if mode == "D1":
+                return F.linear(x.float(), w.float()).to(x.dtype)
+            return split_mm(x, w, {"D2": 2, "D4": 4}.get(mode, 1))
+        def k(x):
+            wk = deq(bk, x.dtype)
+            if mode == "D1":
+                return F.linear(x.float(), wk.float()).to(x.dtype)
+            if mode == "D3":
+                kv = F.linear(x, torch.cat([wk, deq(bv, x.dtype)]))
+                shared["x"], shared["v"] = x, kv[..., wk.shape[0]:]
+                return kv[..., :wk.shape[0]]
+            return F.linear(x, wk)
+        def v(x):
+            if mode == "D3" and shared.get("x") is x:
+                hits["n"] += 1
+                return shared.pop("v")
+            wv = deq(bv, x.dtype)
+            if mode == "D1":
+                return F.linear(x.float(), wv.float()).to(x.dtype)
+            return F.linear(x, wv)
+        return _QkvFloorBase(q), _QkvFloorBase(k), _QkvFloorBase(v)
+    out, d3_hits = {}, 0
+    try:
+        for mode in QKV_FLOOR_MODES:
+            for a, bq, bk, bv in saved:
+                a.q_proj.base, a.k_proj.base, a.v_proj.base = bases(mode, bq, bk, bv)
+            hits["n"] = 0
+            out[mode] = eval_loss(model, rows, fwd_kwargs, autocast)[1]
+            if mode == "D3":
+                d3_hits = hits["n"]
+    finally:
+        for a, bq, bk, bv in saved:
+            a.q_proj.base, a.k_proj.base, a.v_proj.base = bq, bk, bv
+    return {"rows": out, "d3_hits": d3_hits, "d3_expected": len(attns) * len(rows), "n_attention": len(attns)}
+
+
 def control_flip_fires(h):
     """Positive control: the comparison must DETECT a single flipped byte."""
     if not h:
@@ -3572,6 +3646,10 @@ def run_arm(a, load_fn, sampler=True):
     phase_mark("setup")                             # amendment 56: load to here is "setup"
     with PH("eval0"):                               # #548: also the first forward -- any JIT / autotune on the forward path lands here
         ev0, rows0 = eval_loss(model, ev, fwd_kwargs, a.autocast)
+    qkv_floor = None                                # P129 Amendment 3: the q/k/v schedules' step-0 rows, before any training step
+    if a.framework == "e4b" and os.environ.get("TC1_QKV_FLOOR") == "1":
+        with PH("qkv_floor"):
+            qkv_floor = dict(qkv_floor_rows(model, ev, fwd_kwargs, a.autocast), env="1")
     phase_mark("eval")
     curve = [{"step": 0, "heldout_loss": round(ev0, 5), "train_wall_s": 0.0, "row_losses": rows0}]
     _opt_phase = PH("optimizer")                    # #548
@@ -4090,6 +4168,7 @@ def run_arm(a, load_fn, sampler=True):
         "compact_buckets": compact_buckets,                                                                              # TC1 amendment 66
         "single_ladder": single_ladder,                                                                                  # TC1 amendment 70
         "train_qkv": train_qkv,                                                                                          # P129 Amendment 2
+        "qkv_floor": qkv_floor,                                                                                          # P129 Amendment 3
         "keep_ab": keep_ab,                                                                                              # TC1 amendment 21 (#945)
         "route_ab": route_ab,                                                                                            # TC1c amendment 4
         **({"mem_census": mem_census} if mcen is not None else {}),                                                    # TC1 amendment 23 (only with --mem-census 1)

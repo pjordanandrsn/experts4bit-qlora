@@ -1584,6 +1584,27 @@ tc1_fqkv_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   can_run 600 $FAM/e4b/shipped_q0_d2  && TC1_ARM_EXTRA_ENV="$Q0" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_q0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE $PP
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_fqkv3_family FAM MID REV FETCH_AL E4B_AL -- P129 Amendment 3 (2026-10-09): Amendment 2's box, the q0 arms also computing the
+# step-0 floor (TC1_QKV_FLOOR=1: tc1_arm.qkv_floor_rows, before any training step); the step-0 clause reads the fp32-anchored envelope. As Amendment 2: e4b's fused q/k/v training projection (E4B_TRAIN_FUSE_QKV)
+# 0 (q0) vs 1 (q1) at TC1's field recipe, e4b at its defaults otherwise, the shipped and the matched arm, two draws a side in ABBA order,
+# venv-unsloth, every arm profiled with --phase-peaks 1. e4b against itself.
+tc1_fqkv3_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_shipped_q0:fused e4b:fused_attn4_shipped_q1:fused e4b:fused_attn4_m_q0:fused e4b:fused_attn4_m_q1:fused e4b:fused_attn4_m_q1_d2:fused e4b:fused_attn4_m_q0_d2:fused e4b:fused_attn4_shipped_q1_d2:fused e4b:fused_attn4_shipped_q0_d2:fused"
+  say "===== FUSED Q/K/V family $FAM ($MID @ $REV; E4B_TRAIN_FUSE_QKV 0 vs 1, field recipe, e4b defaults; profiled; P129 Amendment 3)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local NATIVE="--adapter-dtype native --lora-init native"
+  local PP="--phase-peaks 1 --profile-steps $PROFILE_STEPS --profile-warm $PROFILE_WARM" Q0="E4B_TRAIN_FUSE_QKV=0 TC1_QKV_FLOOR=1" Q1="E4B_TRAIN_FUSE_QKV=1"
+  can_run 600 $FAM/e4b/shipped_q0     && TC1_ARM_EXTRA_ENV="$Q0" E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_q0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE $PP
+  can_run 600 $FAM/e4b/shipped_q1     && TC1_ARM_EXTRA_ENV="$Q1" E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_q1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE $PP
+  can_run 600 $FAM/e4b/m_q0           && TC1_ARM_EXTRA_ENV="$Q0" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_q0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  can_run 600 $FAM/e4b/m_q1           && TC1_ARM_EXTRA_ENV="$Q1" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_q1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  can_run 600 $FAM/e4b/m_q1_d2        && TC1_ARM_EXTRA_ENV="$Q1" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_q1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  can_run 600 $FAM/e4b/m_q0_d2        && TC1_ARM_EXTRA_ENV="$Q0" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_q0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  can_run 600 $FAM/e4b/shipped_q1_d2  && TC1_ARM_EXTRA_ENV="$Q1" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_q1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE $PP
+  can_run 600 $FAM/e4b/shipped_q0_d2  && TC1_ARM_EXTRA_ENV="$Q0" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_q0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE $PP
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_slauto_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 71 (2026-10-08): NF4_QLORA_SINGLE_LADDER 0 (l0) vs auto (la: the ladder
 # exactly when the adapters are fp32, grouped-nf4-gemm#514) at TC1's field recipe, e4b at its defaults otherwise, the shipped (bf16 adapters) and
 # the matched (fp32 adapters) arm, two draws a side in ABBA order, venv-unsloth, every arm profiled with --phase-peaks 1.
@@ -2244,6 +2265,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3sladder) tc1_sladder_family qwen3sladder Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 70: the single-block ladder 0 vs 1, field recipe
   qwen3slauto) tc1_slauto_family qwen3slauto Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 71: the single-block ladder 0 vs auto, field recipe
   qwen3fqkv) tc1_fqkv_family qwen3fqkv Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # P129 Amendment 2: the fused q/k/v training projection 0 vs 1, field recipe
+  qwen3fqkv3) tc1_fqkv3_family qwen3fqkv3 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # P129 Amendment 3: Amendment 2's box, q0 arms add the step-0 floor
   qwen3dqpack) tc1_dqpack_family qwen3dqpack Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 56: the double-quantized absmax on packed rows, phase peaks
   qwen3ckptoff) tc1_ckptoff_family qwen3ckptoff Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 58: checkpoint inputs in pinned host memory, off vs on, packed rows
   qwen3evalce) tc1_evalce_family qwen3evalce Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 60: the held-out loss from the logits in chunks, packed rows

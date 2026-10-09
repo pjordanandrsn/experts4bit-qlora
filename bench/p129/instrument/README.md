@@ -10,3 +10,7 @@
 
 `../p129_reduce.py` re-derives Amendment 1's verdict from `../records/a1`. The records were made with e4b `590962a` and
 grouped-nf4-gemm `e21a712`; the environment is in `../records/a1/env.json`.
+
+- `p129_floor_check.py` (Amendment 3's harness): on the two-layer model set up as TC1's e4b arm, with `lora_B` zero and non-zero, checks
+  `tc1_arm.qkv_floor_rows`. Every mode covers every row; A0 reproduces the stock rows exactly; D3 shares k's matmul with v on every call;
+  the bases come back. It also reports the envelope numbers for the fused path. Record: `records/a3/floor_harness_2layer.json`.

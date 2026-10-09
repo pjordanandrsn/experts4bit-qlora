@@ -1170,6 +1170,21 @@ FQKV_PREMISE_BUSY_MAX = 0.85      # the premise gate: the matched q0's busy_t (m
 FQKV_WALL_MAX = 0.98              # GAIN: s/step q1 / q0 at most this on both arms (NO_GAIN above it on either)
 FQKV_STEP0_MAX = 0.0005           # quality: |step-0 held-out q1 - q0| per draw pair, each arm
 FQKV_HELDOUT_MAX = 0.005          # quality: |mean held-out at N, q1 - q0|, each arm (TC1's held-out bar)
+# P129 Amendment 3: Amendment 2's box (same arms, order and gates) with the step-0 clause read against a floor the box measures: each q0
+# arm also computes, before any training step, the step-0 held-out per row under registered bf16 schedules of the q/k/v base projections
+# (tc1_arm.qkv_floor_rows; TC1_QKV_FLOOR=1). e_x = mean over rows of |x - D1| (D1: the fp32-matmul reference); the fused path passes when
+# e_B <= max(e_A, e_D2, e_D3, e_D4) -- no farther from fp32 than the worst registered schedule of the same projections
+FQKV3_FAM = "qwen3fqkv3"
+FAMS.append(FQKV3_FAM)
+NAMES[FQKV3_FAM] = ("Qwen3-30B-A3B (P129 Amendment 3: E4B_TRAIN_FUSE_QKV 0 vs 1 at the field recipe, shipped and matched arms; profiled; "
+                    "the step-0 clause against the box's fp32-anchored floor)")
+N_LAYERS[FQKV3_FAM] = 48
+ATTN_CENSUS[FQKV3_FAM] = 192
+DENSE_PINS[FQKV3_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[FQKV3_FAM] = ("e4b", "fused_attn4_m_q0")
+EXPECTED[FQKV3_FAM] = list(EXPECTED[FQKV_FAM])
+FQKV3_MODES = ("A0", "D1", "D2", "D3", "D4")     # tc1_arm.QKV_FLOOR_MODES
+FQKV3_ENVELOPE = ("A", "D2", "D3", "D4")         # the schedules whose distance from D1 bounds the fused path's
 # TC1 amendment 59: the same switch at TC1's field recipe (seq 2048, micro-batch 2), the shipped and the matched arm, before any default
 # (not packed: TC1's no-loop rule applies as written, as on amendments 49 and 50)
 CKPTOFFF_FAM = "qwen3ckptofff"
@@ -2709,6 +2724,46 @@ def fqkv_why(tag, r):
     return "; ".join(bad)
 
 
+def fqkv3_floor_why(tag, r):
+    """P129 Amendment 3, on a q0 arm: the floor record is there, ran at TC1_QKV_FLOOR=1 on every attention module, carries every registered
+    schedule for every held-out row, its A0 (the stock arithmetic through the hook) reproduces the stock step-0 rows exactly, and D3 reused
+    k's matmul for every v. Empty string = as registered."""
+    _, side = fqkv_side(tag)
+    if side != "q0":
+        return ""
+    fl = (r or {}).get("qkv_floor") or {}
+    rows0 = (((r or {}).get("eval_curve") or [{}])[0] or {}).get("row_losses") or []
+    if fl.get("env") != "1" or not fl.get("n_attention"):
+        return f"no step-0 floor on a q0 arm (qkv_floor {fl or None}): P129 Amendment 3 registers it on every q0 arm"
+    got = fl.get("rows") or {}
+    missing = [m for m in FQKV3_MODES if len(got.get(m) or []) != len(rows0) or not rows0]
+    if missing:
+        return f"the step-0 floor lacks {missing} for the {len(rows0)} held-out rows"
+    if list(got["A0"]) != list(rows0):
+        return "the floor hook's stock arithmetic (A0) does not reproduce the stock step-0 rows: the floor is not the stock path's"
+    if fl.get("d3_hits") != fl.get("d3_expected"):
+        return f"D3 shared k's matmul with v on {fl.get('d3_hits')} of {fl.get('d3_expected')} calls"
+    return ""
+
+
+def fqkv3_why(tag, r):
+    """P129 Amendment 3: Amendment 2's predicates, and on the q0 arms the floor record (fqkv3_floor_why)."""
+    return "; ".join(w for w in (fqkv_why(tag, r), fqkv3_floor_why(tag, r)) if w)
+
+
+def fqkv3_envelope(r0, r1):
+    """P129 Amendment 3's step-0 statistic on one arm: from the q0 draw's floor and step-0 rows (A) and the q1 draw's step-0 rows (B),
+    e_x = mean over rows of |x - D1|. Returns (e by schedule, the envelope max(e_A, e_D2, e_D3, e_D4), e_B) or None when a part is missing."""
+    rows = lambda r: (((r or {}).get("eval_curve") or [{}])[0] or {}).get("row_losses") or []
+    fl = ((r0 or {}).get("qkv_floor") or {}).get("rows") or {}
+    A, B, D1 = rows(r0), rows(r1), fl.get("D1") or []
+    parts = {"A": A, **{m: fl.get(m) or [] for m in ("D2", "D3", "D4")}, "B": B}
+    if not D1 or any(len(v) != len(D1) for v in parts.values()):
+        return None
+    e = {k: sum(abs(x - d) for x, d in zip(v, D1)) / len(D1) for k, v in parts.items()}
+    return e, max(e[k] for k in FQKV3_ENVELOPE), e["B"]
+
+
 def score_fqkv(F, fam=FQKV_FAM):
     """P129 Amendment 2 (two VALID draws a side, medians), as rows and then one verdict row ("FQKV", the first rung that applies):
     VOID (the recount gate: each arm's launch cut below FQKV_RECOUNT_FRAC of Phase 1's relative cut; or the premise gate: the matched q0's
@@ -2759,7 +2814,7 @@ def score_fqkv(F, fam=FQKV_FAM):
         legs.append(f"{arm}: device {d0 if d0 is None else round(d0, 1)} -> {d1 if d1 is None else round(d1, 1)} ms"
                     + (f" = {d1 / d0:.3f}" if d0 and d1 else "") + f", peak {p0} -> {p1} GB")
     out.append(("DEVICE", fam, "REPORTED", "; ".join(legs)))
-    qlegs, qbad = [], False
+    qlegs, qbad, qmiss = [], False, False
     for arm in ("m", "shipped"):
         o0, r0 = side_rows(arm, "q0")
         o1, r1 = side_rows(arm, "q1")
@@ -2767,12 +2822,28 @@ def score_fqkv(F, fam=FQKV_FAM):
         h0, h1 = [x.get("eval_loss_final") for x in r0], [x.get("eval_loss_final") for x in r1]
         if not (o0 and o1) or any(a is None or b is None for a, b in s0) or None in h0 + h1:
             qlegs.append(f"{arm}: held-out missing")
+            qmiss = True
+            continue
+        dn = statistics.mean(h1) - statistics.mean(h0)
+        if fam == FQKV3_FAM:                       # P129 Amendment 3: the fp32-anchored envelope, on the first draw of each side
+            env = fqkv3_envelope(r0[0], r1[0])
+            if env is None:
+                qlegs.append(f"{arm}: the step-0 floor is incomplete")
+                qmiss = True
+                continue
+            e, bound, eb = env
+            qbad = qbad or not (eb <= bound + 1e-12 and abs(dn) <= FQKV_HELDOUT_MAX)
+            qlegs.append(f"{arm}: step 0 e_B {eb:.5f} vs max(e_A, e_D2, e_D3, e_D4) {bound:.5f} (" +
+                         ", ".join(f"e_{k} {v:.5f}" for k, v in e.items() if k != "B") + f"); N {dn:+.5f}")
             continue
         ds = [b - a for a, b in s0]
-        dn = statistics.mean(h1) - statistics.mean(h0)
         qbad = qbad or not (all(abs(x) <= FQKV_STEP0_MAX for x in ds) and abs(dn) <= FQKV_HELDOUT_MAX)
         qlegs.append(f"{arm}: step 0 " + ", ".join(f"{x:+.5f}" for x in ds) + f"; N {dn:+.5f}")
-    out.append(("QUALITY", fam, "FALSIFIED" if qbad else "HELD", "; ".join(qlegs) + f" (step 0 |.| <= {FQKV_STEP0_MAX}, N |.| <= {FQKV_HELDOUT_MAX})"))
+    bars = ("step 0 e_B <= max(e_A, e_D2, e_D3, e_D4), e_x = mean |row - D1|" if fam == FQKV3_FAM else f"step 0 |.| <= {FQKV_STEP0_MAX}")
+    out.append(("QUALITY", fam, "UNTESTED" if qmiss and fam == FQKV3_FAM else ("FALSIFIED" if qbad else "HELD"),
+                "; ".join(qlegs) + f" ({bars}, N |.| <= {FQKV_HELDOUT_MAX})"))
+    if qmiss and fam == FQKV3_FAM:
+        rung = rung or "VOID"
     if rung is None and qbad:
         rung = "QUALITY_FAIL"
     if rung is None:
@@ -3936,6 +4007,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == FQKV_FAM:                                # P129 Amendment 2: e4b's field defaults, the fused q/k/v its side names, a profile
         w = fqkv_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == FQKV3_FAM:                               # P129 Amendment 3: Amendment 2's predicates and, on the q0 arms, the step-0 floor
+        w = fqkv3_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if fam == CKPTOFF_FAM:                             # amendment 58: torch 2.12; on e4b its defaults and the checkpoint its side names
@@ -6949,18 +7024,20 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_slauto(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
-    if FQKV_FAM in F:
-        out += ["\n## P129 Amendment 2: E4B_TRAIN_FUSE_QKV 0 vs 1 at the field recipe (descriptive)",
+    for _ffam, _fam_title in ((FQKV_FAM, "P129 Amendment 2"), (FQKV3_FAM, "P129 Amendment 3")):
+        if _ffam not in F:
+            continue
+        out += [f"\n## {_fam_title}: E4B_TRAIN_FUSE_QKV 0 vs 1 at the field recipe (descriptive)",
                 "| arm | VERDICT | s/step (11..N) | device ms / profiled step | busy_t | launches / profiled step | fused modules | peak GB | held-out 0 / N |",
                 "|---|---|---|---|---|---|---|---|---|"]
-        for x in F[FQKV_FAM]["rows"]:
+        for x in F[_ffam]["rows"]:
             r = x.get("r") or {}
             out.append(f"| {x['fw']}/{x['tag']} | {x['verdict']} | {f(r.get('s_per_step_median_11plus'), 3)} | {f(_cbk_device_ms(r), 1)} | "
                        f"{f(_busy_vs_timed(r), 3)} | {(r.get('profile') or {}).get('launches_per_step')} | {(r.get('train_qkv') or {}).get('fused')} | "
                        f"{f(r.get('peak_vram_gb'), 3)} | {r.get('eval_loss_step0')} / {r.get('eval_loss_final')} |")
-        out += ["\n## P129 Amendment 2's gates and verdict (scored mechanically)",
+        out += [f"\n## {_fam_title}'s gates and verdict (scored mechanically)",
                 "| row | family | verdict | evidence |", "|---|---|---|---|"]
-        for pid, fam, v, ev in score_fqkv(F):
+        for pid, fam, v, ev in score_fqkv(F, _ffam):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if CKPTOFFF_FAM in F:
         out += ["\n## Amendment 59: checkpoint inputs on the GPU vs in pinned host memory at the field recipe, peaks by phase (descriptive)",
@@ -8295,6 +8372,39 @@ def _fqkv_set(s=None, dev=None, launches=None, held=None, tq=None):
                                              "refused": 0, "calls": 9216 if q == "q1" else 0})
         r["profile"] = dict(r["profile"], launches_per_step=launches[q])
         R[(fw, nt)] = r
+    return R
+
+
+#: P129 Amendment 3's calibration rows (RTX A2000, the real Qwen3-30B-A3B at the pin, the box's eight held-out rows; bench/p129/records/a2):
+#: the stock path (A), the fp32 reference (D1), q split in two (D2) and the fused path (B). D3 and D4 here are fixture rows, not measurements.
+FQKV3_CAL = {"A": [2.16599, 2.38269, 2.11384, 1.04165, 1.835, 2.58641, 1.86796, 1.58288],
+             "D1": [2.19277, 2.38606, 2.10926, 1.05878, 1.8638, 2.59057, 1.87834, 1.57232],
+             "D2": [2.15662, 2.41275, 2.12995, 1.04648, 1.8948, 2.61206, 1.91923, 1.58673],
+             "B": [2.21727, 2.37957, 2.11314, 1.05736, 1.85847, 2.6091, 1.92028, 1.60625]}
+
+
+def _fqkv3_set(B=None, drop=None, a0=None, **kw):
+    """P129 Amendment 3: _fqkv_set renamed to qwen3fqkv3, with step-0 rows on every draw (q0: FQKV3_CAL's A; q1: `B`, default the
+    calibration's B) and the floor on the q0 draws (FQKV3_CAL's D1 and D2, D3 and D4 between them). `drop` removes a floor mode;
+    `a0` replaces A0's rows."""
+    B = B or FQKV3_CAL["B"]
+    D1, D2 = FQKV3_CAL["D1"], FQKV3_CAL["D2"]
+    floor = {"A0": list(FQKV3_CAL["A"]), "D1": list(D1), "D2": list(D2),
+             "D3": [round((a + d) / 2, 5) for a, d in zip(FQKV3_CAL["A"], D1)], "D4": [round((x + d) / 2, 5) for x, d in zip(D2, D1)]}
+    if a0 is not None:
+        floor["A0"] = a0
+    if drop:
+        floor.pop(drop)
+    R = {}
+    for (fw, tag), r in _fqkv_set(**kw).items():
+        _, side = fqkv_side(tag)
+        rows0 = list(FQKV3_CAL["A"]) if side == "q0" else list(B)
+        curve = list(r.get("eval_curve") or [{"step": 0, "heldout_loss": r.get("eval_loss_step0")}])
+        curve[0] = dict(curve[0], row_losses=rows0)
+        r = dict(r, fam=FQKV3_FAM, eval_curve=curve)
+        if side == "q0":
+            r["qkv_floor"] = {"env": "1", "rows": floor, "d3_hits": 48 * len(D1), "d3_expected": 48 * len(D1), "n_attention": 48}
+        R[(fw, tag)] = r
     return R
 
 
@@ -10871,6 +10981,28 @@ def selftest():
     S[k0]["weights_commit"] = S[k0]["revision"]
     assert reduce_family(SLADDER_FAM, S, {}, 20)["verdicts"][k0] == "VALID"
     assert weights_commit_why("qwen3", {"revision": "main", "weights_commit": "a" * 40}) == ""
+    cases += 1
+    # 127. P129 Amendment 3 (qwen3fqkv3): the step-0 clause against the fp32-anchored envelope -- the calibration rows read GAIN (e_B 0.0170
+    #      inside max(e_A, e_D2, e_D3, e_D4) = e_D2 0.0255); a B outside the envelope reads QUALITY_FAIL; a B equal to the envelope's max
+    #      passes; a missing floor mode, an A0 that does not reproduce the stock rows, or a short D3 VOIDs the draw; Amendment 2's
+    #      family reads the same rows under its own clause, unchanged
+    F3 = lambda R: {FQKV3_FAM: reduce_family(FQKV3_FAM, R, {}, 20)}
+    v3 = lambda R: [v for p, _, v, _ in score_fqkv(R, FQKV3_FAM) if p == "FQKV"][0]
+    q3 = lambda R: [ev for p, _, v, ev in score_fqkv(R, FQKV3_FAM) if p == "QUALITY"][0]
+    R3 = F3(_fqkv3_set())
+    assert all(x["verdict"] == "VALID" for x in R3[FQKV3_FAM]["rows"]), [(x["tag"], x["why"]) for x in R3[FQKV3_FAM]["rows"]]
+    assert v3(R3) == "GAIN", score_fqkv(R3, FQKV3_FAM)
+    assert "e_B 0.01700" in q3(R3) and "0.02545" in q3(R3), q3(R3)
+    assert v3(F3(_fqkv3_set(B=[d + 0.03 for d in FQKV3_CAL["D1"]]))) == "QUALITY_FAIL"
+    assert v3(F3(_fqkv3_set(B=list(FQKV3_CAL["D2"])))) == "GAIN"
+    for bad in (_fqkv3_set(drop="D4"), _fqkv3_set(a0=[x + 0.001 for x in FQKV3_CAL["A"]])):
+        RB = F3(bad)
+        assert RB[FQKV3_FAM]["verdicts"][("e4b", "fused_attn4_m_q0")] == "VOID", RB[FQKV3_FAM]["verdicts"]
+        assert v3(RB) == "VOID"
+    S3 = _fqkv3_set()
+    S3[("e4b", "fused_attn4_shipped_q0")]["qkv_floor"]["d3_hits"] = 10
+    assert F3(S3)[FQKV3_FAM]["verdicts"][("e4b", "fused_attn4_shipped_q0")] == "VOID"
+    assert "P129 Amendment 3" in render(R3, "x")
     assert "P129 Amendment 2" in render(RFQ, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
