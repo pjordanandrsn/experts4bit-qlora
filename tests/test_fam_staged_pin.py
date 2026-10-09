@@ -88,7 +88,7 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 
 def test_the_self_tests_pass():
     base = {"PATH": "/usr/bin:/bin", **{k: os.environ[k] for k in ("SYSTEMROOT",) if k in os.environ}}
-    for script, want in (("fam_reduce.py", "fam_reduce self-test OK (56/56 cases)"),
+    for script, want in (("fam_reduce.py", "fam_reduce self-test OK (58/58 cases)"),
                          ("fam_box.py", "fam_box self-test OK (28/28 cases)"),
                          ("fam_speed.py", "fam_speed self-test OK (9/9 cases)"),
                          ("fam_speed_reduce.py", "fam_speed_reduce self-test OK (30/30 cases)")):
@@ -98,6 +98,7 @@ def test_the_self_tests_pass():
     assert "box's self-test now runs 28 cases" in PREREG                                   # Amendment 2
     assert "reducer's self-test now runs 50 cases" in PREREG                               # Amendment 3
     assert "reducer's self-test now runs 56 cases" in PREREG                               # Amendment 5
+    assert "reducer's self-test now runs 58 cases" in PREREG                               # Amendment 6
 
 
 def test_the_rule_is_the_registered_rule():
@@ -109,11 +110,14 @@ def test_the_rule_is_the_registered_rule():
     assert (r.CONT, r.PROOF["cont"], r.WINDOWS_PER_SET) == (128, 32, 12)
     assert r.FAMILY_CONFIGS == {"granite": ("OFF", "ON_auto"), "gptoss": ("OFF", "ON_glue", "ON_r2", "ON_epi", "ON_auto"),
                                 "qw36": ("OFF", "ON_auto"),
-                                "mixtral": ("OFF", "ON_glue", "ON_r2", "ON_epi", "ON_auto")}       # Amendment 5
-    assert r.PROOF["configs"] == {"granite": ("OFF", "ON_epi", "ON_auto"), "mixtral": ("OFF", "ON_epi", "ON_auto")}
+                                "mixtral": ("OFF", "ON_glue", "ON_r2", "ON_epi", "ON_auto"),       # Amendment 5
+                                "gemma4": ("OFF", "ON_glue", "ON_epi", "ON_auto")}                 # Amendment 6
+    assert r.PROOF["configs"] == {"granite": ("OFF", "ON_epi", "ON_auto"), "mixtral": ("OFF", "ON_epi", "ON_auto"),
+                                  "gemma4": ("OFF", "ON_epi", "ON_auto")}
     assert r.PROOF["anchor_family"] == "granite"
-    assert r.ATTN_LAYERS == {"granite": 32, "gptoss": 24, "qw36": 10, "mixtral": 32}
-    assert r.WARMUP_FORWARDS == {"granite": 0, "gptoss": 0, "qw36": 1, "mixtral": 0} and r.FIRST_CELL == "wikitext|12|A"
+    assert r.ATTN_LAYERS == {"granite": 32, "gptoss": 24, "qw36": 10, "mixtral": 32, "gemma4": 30}
+    assert r.WARMUP_FORWARDS == {"granite": 0, "gptoss": 0, "qw36": 1, "mixtral": 0, "gemma4": 0}
+    assert r.FIRST_CELL == "wikitext|12|A"
 
     def text(c):
         return f"`{c[0]} / {c[1]} / [{c[2][0]}, {c[2][1]}] / {c[3]}`"
@@ -123,7 +127,7 @@ def test_the_rule_is_the_registered_rule():
                 assert text(c) in PREREG, (fam, config, text(c))
     rows = {"granite": "Granite", "gptoss": "gpt-oss", "qw36": "Qwen3.6"}
     for (fam, config), step in r.PER_STEP.items():
-        if (fam, config) == ("granite", "ON_epi") or fam == "mixtral":
+        if (fam, config) == ("granite", "ON_epi") or fam in ("mixtral", "gemma4"):
             continue                    # the proof's config; Mixtral's rows are Amendment 5's table (its own test)
         line = next(x for x in PREREG.splitlines() if x.startswith(f"| {rows[fam]} {config} |"))
         cells = [x.strip() for x in line.strip("|").split("|")][1:]
@@ -176,7 +180,7 @@ def test_the_order_puts_every_refusal_before_the_fetch():
 def test_every_time_left_check_fits_inside_its_guard():
     """Amendment 1's guards: Granite 2.5 h, gpt-oss 3.75 h, Qwen3.6 4.0 h, the proof 1.25 h. Every per-step need, plus
     the 600 s fetch-back, fits; and the runner's table is the amendment's."""
-    guards = {"granite": 2.5, "gptoss": 3.75, "qw36": 4.0, "mixtral": 4.0}
+    guards = {"granite": 2.5, "gptoss": 3.75, "qw36": 4.0, "mixtral": 4.0, "gemma4": 4.0}
     for fam, hours in guards.items():
         line = re.search(rf"^\s*{fam}\)\s+(NEED_FETCH=.*);;$", RUN, re.M).group(1)
         vals = dict(re.findall(r"(NEED_\w+|CAP_\w+)=(\d+)", line))
@@ -185,8 +189,8 @@ def test_every_time_left_check_fits_inside_its_guard():
             if k.startswith("NEED_"):
                 assert int(v) + 600 <= hours * 3600, (fam, k, v)
         assert int(vals["CAP_OFF"]) >= int(vals["NEED_OFF"]) and int(vals["CAP_ON"]) >= int(vals["NEED_ON"]), fam
-    for fam, hours in (("granite", 1.25), ("mixtral", 1.5)):                    # the proofs (Amendment 5: Mixtral's own)
-        line = re.search(rf'^\s*{fam}\) TAGS="{fam}"; (NEED_FETCH=.*);;$', RUN, re.M).group(1)
+    for fam, hours in (("granite", 1.25), ("mixtral", 1.5), ("gemma4", 1.25)):  # the proofs (Amendments 5, 6)
+        line = re.search(rf'^\s*{fam}\)\s+TAGS="{fam}"; (NEED_FETCH=.*);;$', RUN, re.M).group(1)
         proof = dict(re.findall(r"(NEED_\w+|CAP_\w+)=(\d+)", line))
         assert set(proof) == {"NEED_FETCH", "NEED_BAKE", "NEED_OFF", "NEED_ON", "CAP_OFF", "CAP_ON"}, fam
         for k, v in proof.items():
@@ -252,9 +256,30 @@ def test_mixtral_is_amendment_5_s():
     assert "fp32_upstream" in amend
     assert 'DISK_DEF=220; FETCH_DISK_GB=165' in RUN and '"$MIN_DISK_GB" != "$DISK_DEF"' in RUN
     assert RUN.index("FETCH_DISK_GB\" ] ||") < RUN.index('say "fetch $M $MODEL @ $REV"')
-    assert '{ [ "$PROVE" = 1 ] && [ "$M" = granite ]; }' in RUN and 'PF="--proof --families mixtral"' in RUN
-    assert "qw36|mixtral) ;;" in DRIVE
+    assert '{ [ "$PROVE" = 1 ] && [ "$M" = granite ]; }' in RUN and 'PF="--proof --families $TAGS"' in RUN
+    assert "qw36|mixtral|gemma4) ;;" in DRIVE
     for s_ in ("| Mixtral | 4.0 h | fetch 3000 s, bake 1500 s, OFF 9500 / 10800 s, each ON 1600 / 2700 s |",
                "| Mixtral's proof | 1.5 h | fetch 3000 s, bake 1500 s, OFF 2400 / 3000 s, each ON 600 / 900 s |",
                "**lane ceiling $26.00**"):
+        assert s_ in amend, s_
+
+
+def test_gemma4_is_amendment_6_s():
+    """Amendment 6: Gemma-4's pin, configs (no r2 arm) and tables are the registration's; its fetch floor; the cannot-say
+    on the sliding window."""
+    r = _load("fam_reduce")
+    assert r.MODELS["gemma4"] == ("google/gemma-4-26B-A4B-it", "4d7ae4984b7db7de8f8457170b3f1a419ee76d52")
+    assert 'gemma4) echo "google/gemma-4-26B-A4B-it 4d7ae4984b7db7de8f8457170b3f1a419ee76d52"' in RUN
+    assert 'gemma4) echo "OFF ON_glue ON_epi ON_auto"' in RUN
+    assert (r.ATTN_LAYERS["gemma4"], r.WARMUP_FORWARDS["gemma4"]) == (30, 0) and "gemma4" not in r.FP32_ROUTERS
+    amend = PREREG[PREREG.index("## Amendment 6"):]
+    assert '`google/gemma-4-26B-A4B-it` @ `4d7ae4984b7db7de8f8457170b3f1a419ee76d52`' in amend
+    for config in r.FAMILY_CONFIGS["gemma4"][1:]:
+        c = r.CENSUS[("gemma4", config)]
+        step = ", ".join(f"`{n}` {v}" for n, v in r.PER_STEP[("gemma4", config)].items())
+        assert f"| {config} | `{c[0]} / {c[1]} / [{c[2][0]}, {c[2][1]}] / {c[3]}` | {step} |" in amend, (config, step)
+    assert '[ "$TAGS" = gemma4 ] && FETCH_DISK_GB=120' in RUN
+    for s_ in ("| Gemma-4 | 4.0 h | fetch 2400 s, bake 900 s, OFF 9500 / 10800 s, each ON 1600 / 2700 s |",
+               "| Gemma-4's proof | 1.25 h | fetch 2400 s, bake 900 s, OFF 2400 / 3000 s, each ON 600 / 900 s |",
+               "sliding window never binds"):
         assert s_ in amend, s_
