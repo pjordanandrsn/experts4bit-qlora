@@ -81,7 +81,7 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 
 def test_the_reducer_self_tests_and_pins_its_constants():
     out = subprocess.run([sys.executable, str(LANE / "p126_reduce.py"), "--self-test"], capture_output=True, text=True)
-    assert out.returncode == 0 and "self-test OK (35 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "self-test OK (45 cases)" in out.stdout, out.stdout + out.stderr
     gnf4 = re.search(r'GNF4_SHA = "([0-9a-f]{40})"', REDUCE).group(1)
     assert f"GNF4_SHA={gnf4}" in RUN
     for model, rev in re.findall(r'"([\w./-]+)": "([0-9a-f]{40})"', REDUCE):
@@ -92,7 +92,7 @@ def test_the_reducer_self_tests_and_pins_its_constants():
                   'CANDIDATES = ("4", "8")'):
         assert const in REDUCE, const
     prereg = (LANE / "PREREG-p126.md").read_text(encoding="utf-8")
-    for words in ("under **5 %**", "more than **1.5 %**", "at most **0.98**", "**256 timed steps**", "35 cases",
+    for words in ("under **5 %**", "more than **1.5 %**", "at most **0.98**", "**256 timed steps**", "35 cases", "**45 cases**", "## Amendment 1",
                   "exactly 293 times (5 + 256 + 32)", "P ∈ {1, 4, 8}"):
         assert words in prereg, words
 

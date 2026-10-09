@@ -165,3 +165,77 @@ Fetched to the run directory's `p126/` and committed to `bench/p126/receipts/<ru
 - `SHA256SUMS`.
 
 `RESULTS-p126.md` is written from those files.
+
+## Amendment 1 (2026-10-09, after attempt 1, before attempt 2)
+
+**Why.** Attempt 1 (`p126-5090-1`) read **NOISY**: P = 4's block ratios were 0.9304 and 0.9090, 2.35 % apart against
+the 1.5 % bound. P = 8's were 0.8959 and 0.8974. `RESULTS-p126.md` reads it, and it stays NOISY. The per-step record
+shows why:
+- **Each block's two runners moved together.** The per-pair ratio drifted smoothly by 0.5–0.8 % across each block as
+  attention grew with the context.
+- **The fault is one runner's level.** P = 1's runner in the box's first block sat about 0.5 ms (3 %) below P = 1 in the
+  other three blocks in every quarter of its 256 steps; its lockstep partner moved 0.1 ms.
+- **Longer blocks cannot remove a level that lasts a runner's whole life,** although they are the remedy registered for
+  NOISY. 256 steps already resolve a block's ratio far inside the bound: each block's per-pair median equals its median
+  ratio within 0.0004.
+
+The change follows from that failure mode, not from which candidate looked better. It loosens no candidate's own check.
+The maintainer approved it before attempt 2.
+
+**What changes, from attempt 2 on:**
+
+1. **NOISY is per candidate.**
+   - A candidate whose two block ratios differ by more than **1.5 %** is ineligible.
+   - **DEFAULT_ON_<P>** picks among the eligible candidates whose two block ratios are both at most **0.98**: the lower
+     mean, ties to the smaller P.
+   - **SLOWER** (every eligible ratio above 1) and **NO_GAIN** read the eligible candidates only.
+   - The verdict is **NOISY** only when no candidate is eligible.
+   - A noisy candidate is never selected, even when its mean is lower.
+2. **Another host, recorded.**
+   - Attempt 2 (`p126-5090-2`) may not run on attempt 1's machine (Vast 37367). The launch cites attempt 1's committed
+     receipt with the launcher's `--avoid-vast-machine-receipt`.
+   - The box writes `"amendment": 1` and `host.start` / `host.end` into `box.json`. Each holds the card's power cap and
+     maximum, the host's RAM total and available, its CPU count, the GPU's compute processes and the load average.
+   - Attempt 1's host was shared (496 of 1007 GiB in use) and its card capped at 400 W.
+   - A record that names Amendment 1 without those keys is **VOID**. An unregistered amendment number is **VOID**.
+3. **The rule is keyed on the record.**
+   - A `box.json` without `amendment` reduces under the registered rule, so attempt 1 is never re-reduced. The amended
+     reducer reproduces attempt 1's `verdict.json` byte for byte.
+   - The reducer self-tests on **45 cases**: the registered 35 plus ten for this amendment. The ten include:
+     - a clean candidate plus a noisy one licenses the clean one;
+     - both noisy reads NOISY;
+     - a noisy candidate is never selected, even with the lower mean;
+     - a clean candidate above 0.98 with the other noisy reads NO_GAIN, and SLOWER when it is slower;
+     - a record without an amendment still reads NOISY under the registered rule;
+     - a missing host record, a missing power cap and an unregistered amendment each read VOID.
+
+**What does not change:**
+- the box and its arms; P ∈ {1, 4, 8}; the 0.98 and 1.5 % bars;
+- the 5 % premise share, the token gate and the mutant;
+- 256 timed steps per runner, and the pins: grouped-nf4-gemm `e21a712`, Qwen3-30B-A3B `ad44e777`.
+
+The e4b launch commit is this amendment's merge.
+
+**Predictions for attempt 2** (written before it; evaluated by the reducer as Amendment 1's bands, never gated):
+
+| # | prediction | if it holds | if it misses |
+|---|---|---|---|
+| Q1 | P = 1's table share in [0.12, 0.22] (attempt 1: 0.177) | the premise is the host-independent share it read | low: a faster host shrinks the table less than the step |
+| Q2 | P = 8's split / one in [0.06, 0.15] (attempt 1: 0.092) | the split scales as it did | high: the histogram or launch bounds it on this host |
+| Q3 | P = 4's in [0.15, 0.30] (attempt 1: 0.225) | as Q2 | as Q2 |
+| Q4 | both P = 8 block ratios in [0.86, 0.93] | about 1.8 ms saved of a 14–17 ms step | high: the captured step hides more of the table |
+| Q5 | both P = 4 block ratios in [0.88, 0.95] | as Q4 | as Q4 |
+| Q6 | every busy fraction ≥ 0.90 | device-bound, as attempt 1 (0.967) | host work bounds the step; RESULTS says which |
+| Q7 | each candidate's block ratios within 1 % | no runner offset this time | an offset recurred; per-candidate NOISY decides |
+| Q8 | the mutant differs at ≥ 50 % of positions | the token gate can fail | the instrument lost sensitivity |
+
+The expected verdict is **DEFAULT_ON_8**.
+
+**Budget.**
+- **Spent:** $1.058 of the lane's $3.00 (`p126-prove-1` $0.000, `p126-prove-2` $0.184, `p126-5090-1` $0.874), so
+  **$1.942 remains**.
+- **Attempt 2:** one RTX 5090, guard 1.5 h. Attempt 1 cost $0.874.
+- **The launcher's worst case** must fit the remainder. It launches with `--max-download-usd-per-gb 0.0109`, so the
+  estimate is $1.940 (1.5 h × $0.85 plus 61 GB × $0.0109). A launch whose estimate would exceed the remainder is not
+  made.
+- **If attempt 2 reads NOISY or VOID, the lane stops:** no default, and no attempt 3 without a new decision.
