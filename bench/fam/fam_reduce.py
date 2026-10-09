@@ -72,6 +72,9 @@ WARMUP_FORWARDS = {"granite": 0, "gptoss": 0, "qw36": 1, "mixtral": 0, "gemma4":
 #: routers whose upstream weights are fp32 and stay fp32 through the fused epilogue (its report's ``fp32_upstream``):
 #: wherever the epilogue engages on such a family, every patched router must be on that path (Amendment 5)
 FP32_ROUTERS = {"mixtral": 32}
+#: Amendment 7: the server's own KV pool length (``E4B_PAGED_MAX_TOKENS_PER_SEQ``) a family's processes must have built
+#: at; the pool is unused by the instrument, so the read is unchanged. Mixtral's 4096 default did not fit its weights
+SERVER_TOKENS = {"mixtral": 768}
 FIRST_CELL = fam_box.cell_key(fam_box.TEXTS[0], fam_box.shape_order(fam_box.SHAPES)[0], "A")
 CENSUS = {
     ("granite", "OFF"): [0, 0, [0, 0], 0], ("granite", "ON_auto"): [0, 65, [32, 32], 32],
@@ -204,6 +207,9 @@ def family_checks(fam, recs, e4b_sha, cells, why, configs=None, cont=CONT):
             why.append(f"{config}: the default path carries an int4 / MXFP4 store {store.get('int4_store_kinds')}")
         if not isinstance(rec.get("max_mem_gb"), (int, float)):
             why.append(f"{config}: no peak memory")
+        if fam in SERVER_TOKENS and (rec.get("server") or {}).get("max_tokens_per_seq") != SERVER_TOKENS[fam]:
+            why.append(f"{config}: the server was built at {(rec.get('server') or {}).get('max_tokens_per_seq')} tokens a "
+                       f"slot, registered {SERVER_TOKENS[fam]} (Amendment 7)")
         if fam in FP32_ROUTERS and CENSUS.get((fam, config), [0, 0, [0, 0], 0])[3]:
             epi = (rec.get("fusion_report") or {}).get("E4B_FUSE_ROUTER_EPI") or {}
             if epi.get("fp32_upstream") != FP32_ROUTERS[fam]:
@@ -447,6 +453,7 @@ def _synthetic(fam, config, *, floor_d=0.002, floor_agree=0.95, on_d=0.0, on_agr
     epi = {"patched": routers, "fp32_upstream": routers if fam in FP32_ROUTERS else 0} if routers else {"mode": "0"}
     return {"config": config, "path": "default", "model": model, "revision": rev, "e4b_sha": e4b, "gnf4_sha": "G",
             "census": census, "fusion_report": {"E4B_FUSE_ROUTER_EPI": epi},
+            "server": {"max_seqs": 16, "max_tokens_per_seq": SERVER_TOKENS.get(fam, 4096)},
             "store": {"int4_expert_layers": 0, "int4_store_kinds": {}}, "max_mem_gb": 20.0, "cells": cells, "status": "ok"}
 
 
@@ -478,6 +485,9 @@ def self_test() -> int:
     r = _fam_recs("mixtral")
     r["ON_auto"].pop("fusion_report")
     case("mixtral with no fusion report VOIDs", "mixtral", r, "VOID")
+    r = _fam_recs("mixtral")
+    r["OFF"]["server"]["max_tokens_per_seq"] = 4096
+    case("mixtral's server built at the default length VOIDs (Amendment 7)", "mixtral", r, "VOID")
     got = reduce_family("mixtral", _fam_recs("mixtral", PROOF["configs"]["mixtral"], cont=PROOF["cont"]), "E",
                         proof=True)["verdict"]
     cases.append(("mixtral's own proof at 32 positions", got == {"ON_epi": "PASS", "ON_auto": "PASS"}, got))
