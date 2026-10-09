@@ -258,3 +258,30 @@ def test_an_architecture_outside_the_chunked_table_keeps_the_stock_loss(monkeypa
     monkeypatch.delenv("E4B_CHUNKED_LM_LOSS", raising=False)
     topo = describe_moe(_qwen3(vocab_size=V, architectures=["SomeOtherMoeForCausalLM"]))
     assert _activations(topo, T).bytes - L * T * H * 2 == T * V * LOGITS_LOSS_BYTES
+
+
+def test_estimate_env_reports_the_switches_the_estimate_reads(monkeypatch):
+    """Every switch ``estimate_env`` reports changes the estimate somewhere, and it reports this process's value."""
+    from experts4bit_qlora import estimate_env
+    from experts4bit_qlora.engines.chunked_lm_loss import AUTO_MIN_LOGITS_BYTES
+
+    from experts4bit_qlora.engines.chunked_lm_loss import DEFAULT_CHUNK
+
+    monkeypatch.delenv("E4B_CHUNKED_LM_LOSS", raising=False)
+    unset = estimate_env()
+    assert unset == {"E4B_CHUNKED_LM_LOSS": {"chunk": DEFAULT_CHUNK, "auto_gate_bytes": AUTO_MIN_LOGITS_BYTES}}
+    for same in ("", "auto", "AUTO"):                      # the engine treats these as unset: no spurious difference
+        monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", same)
+        assert estimate_env() == unset, same
+    monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", "1")        # every forward chunks: the gate is off
+    assert estimate_env() == {"E4B_CHUNKED_LM_LOSS": {"chunk": DEFAULT_CHUNK, "auto_gate_bytes": None}}
+    monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", "0")
+    assert estimate_env() == {"E4B_CHUNKED_LM_LOSS": {"chunk": None, "auto_gate_bytes": None}}
+    V = 50_000
+    topo = describe_moe(_qwen3(vocab_size=V, architectures=["Qwen3MoeForCausalLM"]))
+    T = -(-AUTO_MIN_LOGITS_BYTES // (V * 4))
+    for switch in estimate_env():
+        monkeypatch.setenv(switch, "auto")
+        on = _activations(topo, T).bytes
+        monkeypatch.setenv(switch, "0")
+        assert _activations(topo, T).bytes != on, switch

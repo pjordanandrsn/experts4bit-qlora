@@ -170,6 +170,7 @@ from .arch.topology import MoETopology, describe_moe  # noqa: E402
 from .recipe import (  # noqa: E402
     Footprint,
     QLoRASetup,
+    estimate_env,
     estimate_qlora_footprint,
     prepare_qlora_training,
     setup_refusals,
@@ -181,6 +182,7 @@ __all__ = [
     "MoETopology",
     "QLoRASetup",
     "Footprint",
+    "estimate_env",
     "estimate_qlora_footprint",
     "setup_refusals",
     "prepare_qlora_training",
