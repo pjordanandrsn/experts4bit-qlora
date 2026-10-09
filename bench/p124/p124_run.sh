@@ -8,7 +8,8 @@
 # GEMM, #522 + e4b #1410, instead of a cached bf16 copy on cuBLAS) make SC2e's 64- and 32-row decode steps faster without
 # costing teacher-forced quality? On ONE RTX 5090: SC2e's int4 server built by build_engine (eager, one slot, the route
 # enabled; NF4 arena baked on the box); p124_box.py profiles the eager twins at 64 and 32 rows with the route off and on,
-# times four captured-graph arms OFF, ON, ON, OFF at each depth (and their GPU busy fraction and peak memory), and runs
+# times two interleaved blocks at each depth (Amendment 1: one captured runner per setting, both alive, decoded in strict
+# alternation, OFF first in block a and ON first in block b; their GPU busy fraction, peak memory and clock log), and runs
 # P117's teacher-forced passes with the route off (the reference and the floor) and on (the subjects), two mutants and a
 # captured function check; p124_reduce.py applies the registered rule.
 #   premise  on THIS card, before anything is fetched: tests/test_decode_graph_buckets.py, 7 passed; grouped-nf4-gemm's
@@ -178,7 +179,7 @@ env PYTHONPATH= $ENGINE_ENV E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA \
   perl -e "alarm $AL; exec @ARGV" python $W/p124_box.py --out $W/box.json --rows $WINDOWS --cont $CONT > logs/box.log 2>&1
 rc=$?
 { echo -n "box rc=$rc "; grep -aE "^P124_BOX" logs/box.log | tail -1 | cut -c1-1500; echo; } | tee -a summary.txt
-grep -aE "^P124_(ARM|QUALITY)" logs/box.log | tee -a summary.txt
+grep -aE "^P124_(BLOCK|QUALITY)" logs/box.log | tee -a summary.txt
 [ "$rc" = 0 ] || { tail -8 logs/box.log | cut -c1-300 | tee -a summary.txt; say "BOX FAILED"; finish 26; }
 say "reduce"; python $W/p124_reduce.py --dir $W --out $W/verdict.json --e4b-sha $E4B_SHA 2>&1 | tee -a summary.txt
 [ "${PIPESTATUS[0]}" = 0 ] && [ -s $W/verdict.json ] || { say "REDUCER FAILED"; finish 22; }

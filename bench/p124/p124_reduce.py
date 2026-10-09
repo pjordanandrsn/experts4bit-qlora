@@ -6,26 +6,30 @@ In order, the first that fires is the verdict:
 - **NO_READING**: no box record.
 - **VOID**: the e4b or grouped-nf4-gemm commit or the model revision is not the registered one; the reading's stack is
   not SC2e's, or the engine was not built with the route enabled; a profile arm did not profile 8 padded eager steps of
-  its bucket under its setting; a served arm is missing, was not captured under its setting, or did not replay its
-  bucket exactly ``warm + steps + busy`` times with no eager step and no other bucket; KV bookkeeping is not bulk; a
-  step, token or traced-step count is short; a quality arm is missing, short of windows, or ran other than its
+  its bucket under its setting; a served block (Amendment 1: one runner per setting, interleaved step by step) is
+  missing or out of its registered order, or one of its runners was not captured under its setting or did not replay
+  its bucket exactly ``warm + steps + busy`` times with no eager step and no other bucket; KV bookkeeping is not bulk;
+  a step, token or traced-step count is short; a quality arm is missing, short of windows, or ran other than its
   registered split, grouping, decode attention calls or graph status; **not engaged**: the route counts or the profile
   show a projection on the other route (with ``1``: no cached-bf16 call at 32 or 64 rows, one wide call per projection
   per step, one ``_gemm_int4_b32_smallm`` launch per projection per profiled step; with ``0``: no wide call), or ON64
-  scored bit-equal to R in every window; **nondeterministic**: a setting's two served arms emit different tokens;
+  scored bit-equal to R in every window; **nondeterministic**: a setting emits different tokens in blocks a and b;
   **FUNCTION**: G64on's replayed tokens differ from ON64's eager ones; **a mutant survived**: ``mutant_scale`` or
   ``mutant_wide`` passes the bar.
 - **PREMISE_ABSENT** (the reading only): with ``0`` the cuBLAS GEMMs the route replaces (the ``dense_gemm`` class, OFF
   minus ON) are under ``PREMISE_SHARE`` of the 64-row eager step's device time.
 - **QUALITY_FAIL**: ON64 or ON32 fails P110's bar against the floor (``half``, ``chunk``; ``rep`` if R did not repeat).
-- **NOISY**: at either depth, the two OFF arms' medians, or the two ON arms', differ by more than ``NOISE``.
-- **DEFAULT_ON**: at both depths, ``ON_a / OFF_a`` and ``ON_b / OFF_b`` (median served step) are at most ``BAR``.
+- **NOISY** (Amendment 1): at either depth, block a's ON/OFF ratio and block b's differ by more than ``NOISE``.
+- **DEFAULT_ON**: at both depths, ``ON_a / OFF_a`` and ``ON_b / OFF_b`` (median served step within each block) are at
+  most ``BAR``.
   **DEFAULT_ON_64** / **DEFAULT_ON_32**: at that depth only (the route is licensed for 33-64 or for 17-32 rows).
 - **SLOWER**: all four ratios above 1. **NO_GAIN**: otherwise.
 
 Reported, never gated: the predictions (Q1-Q9), every quality arm's statistics, the GPU busy fraction of every served
-arm (the replay's device time over the step's wall), its peak memory and the shared workspace, and ON-against-OFF token
-agreement. Floats are summed with ``math.fsum`` and medians taken by sorting, so the output is byte-identical on any
+runner (the replay's device time over the step's wall), each block's peak memory, its GPU clock, power and temperature
+log, the median of its per-pair ON/OFF ratios, the shared workspace, and ON-against-OFF token agreement. Q9 is graded on
+the route's workspace (``wide_workspace_mib``): it is built at enable, so it exists in both settings, and an interleaved
+block holds both settings at once, so no ON - OFF difference can show it. Floats are summed with ``math.fsum`` and medians taken by sorting, so the output is byte-identical on any
 Python.
 
     p124_reduce.py --dir RUN --out verdict.json [--e4b-sha SHA]
@@ -45,7 +49,9 @@ REVS = {"Qwen/Qwen3-30B-A3B": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
         "ibm-granite/granite-3.1-3b-a800m-instruct": "a02780686e08a03fe0d2679a293b5c74a90efa89"}
 READING_MODEL = "Qwen/Qwen3-30B-A3B"
 B32, B64 = (1, 2, 4, 8, 16, 32), (1, 2, 4, 8, 16, 32, 64)
-SERVED = ("OFF_a", "ON_a", "ON_b", "OFF_b")
+BLOCKS = ("a", "b")        # Amendment 1: block a runs OFF first in every pair, block b ON first
+SETTINGS = ("OFF", "ON")
+ORDER = {"a": ["OFF", "ON"], "b": ["ON", "OFF"]}
 DEPTHS = ("64", "32")
 WARM, STEPS, BUSY, PROFILED, PROFILE_WARM = 5, 256, 32, 8, 3
 FLOORS = ("half", "chunk")
@@ -57,7 +63,7 @@ Q_BUCKETS = {"R": B64, "rep": B64, "half": B32, "chunk": B64, "ON64": B64, "ON32
 Q_WIDE = {a: a in SUBJECTS + MUTANTS + ("G64on",) for a in QUALITY}
 SMALLM = "_gemm_int4_b32_smallm"
 PREMISE_SHARE = 0.05      # the cuBLAS GEMMs the route replaces, as a share of the 64-row eager step (P119: 0.131)
-NOISE = 0.015             # same-setting medians must agree within this, at each depth
+NOISE = 0.015             # the two blocks' ON/OFF ratios must agree within this, at each depth (Amendment 1)
 BAR = 0.98                # ON / OFF in both ABBA pairs at a depth at most this licenses that depth
 BIAS_SLACK, SPREAD_FLOOR = 0.01, 0.005     # P110's bar
 # (name, statistic, lo, hi): written before the data; evaluated beside the verdict
@@ -164,37 +170,47 @@ def faults(box: dict, e4b_sha: str) -> list:
                 out.append(f"profile {label}{d}: graph status {p.get('graph_status')}")
             if not p.get("device_ms"):
                 out.append(f"profile {label}{d}: the profiler saw no device kernel")
-        arms = srv.get(d) or {}
+        blocks = srv.get(d) or {}
         total = WARM + STEPS + BUSY
-        for label in SERVED:
-            s = arms.get(label)
-            if s is None:
-                out.append(f"served d{d} {label} missing")
+        for bk in BLOCKS:
+            blk = blocks.get(bk)
+            if blk is None:
+                out.append(f"served d{d} block {bk} missing")
                 continue
-            if s.get("wide") is not label.startswith("ON") or s.get("rows") != n:
-                out.append(f"served d{d} {label} ran wide={s.get('wide')} rows={s.get('rows')}")
-            if s.get("bulk_kv") is not True:
-                out.append(f"served d{d} {label}: KV bookkeeping not bulk (the server's default)")
-            gs = s.get("graph_status") or {}
-            if sorted(gs, key=int) != [str(x) for x in B64] or any(v != "graph" for v in gs.values()):
-                out.append(f"served d{d} {label}: graph status {gs}")
-            st = (s.get("graph_stats") or {}).get(d) or {}
-            want = (total, 0, n * total, (b - n) * total)
-            if (st.get("replays"), st.get("eager_steps"), st.get("rows"), st.get("pad_rows")) != want:
-                out.append(f"served d{d} {label}: bucket {d} ran {st}, registered {want} (replays, eager, rows, pad)")
-            other = [k for k, g in (s.get("graph_stats") or {}).items() if k != d and (g.get("eager_steps") or g.get("replays"))]
-            if other:
-                out.append(f"served d{d} {label}: buckets {other} ran")
-            if len(s.get("step_ms") or ()) != STEPS or not all(float(x) > 0 for x in s.get("step_ms") or ()):
-                out.append(f"served d{d} {label}: {len(s.get('step_ms') or ())} timed steps, registered {STEPS}")
-            toks = s.get("tokens") or []
-            if len(toks) != total or any(len(t) != n for t in toks):
-                out.append(f"served d{d} {label}: tokens for {len(toks)} steps, registered {total} x {n} rows")
-            busy = s.get("busy") or []
-            if len(busy) != BUSY or not all(x[0] and x[0] > 0 and x[1] and x[1] > 0 for x in busy):
-                out.append(f"served d{d} {label}: {len(busy)} traced steps, registered {BUSY}")
-            if not (s.get("memory") or {}).get("max_allocated_mib"):
-                out.append(f"served d{d} {label}: no peak memory recorded")
+            if blk.get("order") != ORDER[bk] or blk.get("rows") != n:
+                out.append(f"served d{d} block {bk} ran order {blk.get('order')} rows {blk.get('rows')}, registered "
+                           f"{ORDER[bk]} rows {n}")
+            if blk.get("bulk_kv") is not True:
+                out.append(f"served d{d} block {bk}: KV bookkeeping not bulk (the server's default)")
+            if not (blk.get("memory") or {}).get("max_allocated_mib"):
+                out.append(f"served d{d} block {bk}: no peak memory recorded")
+            for st in SETTINGS:
+                s = (blk.get("arms") or {}).get(st)
+                label = f"served d{d} {st}_{bk}"
+                if s is None:
+                    out.append(f"{label} missing")
+                    continue
+                if s.get("wide") is not (st == "ON"):
+                    out.append(f"{label} ran wide={s.get('wide')}")
+                gs = s.get("graph_status") or {}
+                if sorted(gs, key=int) != [str(x) for x in B64] or any(v != "graph" for v in gs.values()):
+                    out.append(f"{label}: graph status {gs}")
+                g = (s.get("graph_stats") or {}).get(d) or {}
+                want = (total, 0, n * total, (b - n) * total)
+                if (g.get("replays"), g.get("eager_steps"), g.get("rows"), g.get("pad_rows")) != want:
+                    out.append(f"{label}: bucket {d} ran {g}, registered {want} (replays, eager, rows, pad)")
+                other = [k for k, x in (s.get("graph_stats") or {}).items()
+                         if k != d and (x.get("eager_steps") or x.get("replays"))]
+                if other:
+                    out.append(f"{label}: buckets {other} ran")
+                if len(s.get("step_ms") or ()) != STEPS or not all(float(x) > 0 for x in s.get("step_ms") or ()):
+                    out.append(f"{label}: {len(s.get('step_ms') or ())} timed steps, registered {STEPS}")
+                toks = s.get("tokens") or []
+                if len(toks) != total or any(len(x) != n for x in toks):
+                    out.append(f"{label}: tokens for {len(toks)} steps, registered {total} x {n} rows")
+                busy = s.get("busy") or []
+                if len(busy) != BUSY or not all(x[0] and x[0] > 0 and x[1] and x[1] > 0 for x in busy):
+                    out.append(f"{label}: {len(busy)} traced steps, registered {BUSY}")
     q = box.get("quality") or {}
     w = int(q.get("windows") or 0)
     if w != rows:
@@ -246,7 +262,7 @@ def engagement(box: dict) -> list:
     out, n_lin = [], int(box["int4_linears"])
     for d in DEPTHS:
         b = int(d)
-        for label, s in box["served"][d].items():
+        for label, s in ((f"{st}_{bk}", blk["arms"][st]) for bk, blk in box["served"][d].items() for st in SETTINGS):
             r = s.get("capture_route") or {}
             for bb in (32, 64):
                 wide_c, bf16_c = r.get(f"wide:{bb}", 0), r.get(f"bf16:{bb}", 0)
@@ -329,21 +345,26 @@ def tabulate(box: dict) -> dict:
         row["eager_on_over_off"] = round(row["on"]["device_ms"] / row["off"]["device_ms"], 4)
         t["profile"][d] = row
         srv = box["served"][d]
-        m = {k: median(srv[k]["step_ms"]) for k in SERVED}
-        s = {"medians": {k: round(v, 4) for k, v in m.items()},
-             "ratio_a": round(m["ON_a"] / m["OFF_a"], 4), "ratio_b": round(m["ON_b"] / m["OFF_b"], 4),
-             "off_disagreement": round(abs(m["OFF_b"] / m["OFF_a"] - 1), 4),
-             "on_disagreement": round(abs(m["ON_b"] / m["ON_a"] - 1), 4),
-             "off_minus_on_ms": round(math.fsum([m["OFF_a"], m["OFF_b"], -m["ON_a"], -m["ON_b"]]) / 2, 4),
-             "busy": {k: round(median([x[0] / x[1] for x in srv[k]["busy"]]), 4) for k in SERVED},
-             "replay_ms": {k: round(median([x[0] for x in srv[k]["busy"]]), 4) for k in SERVED},
-             "memory": {k: srv[k]["memory"] for k in SERVED}}
+        arm = {(bk, st): srv[bk]["arms"][st] for bk in BLOCKS for st in SETTINGS}
+        m = {k: median(a["step_ms"]) for k, a in arm.items()}
+        pair = {bk: median([on / off for off, on in zip(arm[(bk, "OFF")]["step_ms"], arm[(bk, "ON")]["step_ms"])])
+                for bk in BLOCKS}
+        s = {"medians": {f"{st}_{bk}": round(m[(bk, st)], 4) for bk in BLOCKS for st in SETTINGS},
+             "ratio_a": round(m[("a", "ON")] / m[("a", "OFF")], 4), "ratio_b": round(m[("b", "ON")] / m[("b", "OFF")], 4),
+             "pair_ratio_median": {bk: round(pair[bk], 4) for bk in BLOCKS},
+             "off_disagreement": round(abs(m[("b", "OFF")] / m[("a", "OFF")] - 1), 4),
+             "on_disagreement": round(abs(m[("b", "ON")] / m[("a", "ON")] - 1), 4),
+             "off_minus_on_ms": round(math.fsum([m[("a", "OFF")], m[("b", "OFF")], -m[("a", "ON")], -m[("b", "ON")]]) / 2, 4),
+             "busy": {f"{st}_{bk}": round(median([x[0] / x[1] for x in a["busy"]]), 4) for (bk, st), a in arm.items()},
+             "replay_ms": {f"{st}_{bk}": round(median([x[0] for x in a["busy"]]), 4) for (bk, st), a in arm.items()},
+             "memory": {bk: srv[bk]["memory"] for bk in BLOCKS},
+             "clock": {bk: clock_summary(srv[bk].get("clock") or []) for bk in BLOCKS}}
         s["ratios"] = [s["ratio_a"], s["ratio_b"]]
-        mem = {k: float(srv[k]["memory"]["max_allocated_mib"]) for k in SERVED}
-        s["memory_on_minus_off_mib"] = round(math.fsum([mem["ON_a"], mem["ON_b"], -mem["OFF_a"], -mem["OFF_b"]]) / 2, 1)
-        s["tokens"] = {"on_vs_off_differing": _differing(srv["ON_a"]["tokens"], srv["OFF_a"]["tokens"]),
-                       "on_vs_off_first_diff": _first_diff(srv["ON_a"]["tokens"], srv["OFF_a"]["tokens"]),
-                       "compared": sum(len(x) for x in srv["OFF_a"]["tokens"])}
+        s["block_disagreement"] = round(abs(s["ratio_a"] / s["ratio_b"] - 1), 4)
+        s["wide_workspace_mib"] = max(float(srv[bk]["memory"].get("wide_workspace_mib") or 0.0) for bk in BLOCKS)
+        s["tokens"] = {"on_vs_off_differing": _differing(arm[("a", "ON")]["tokens"], arm[("a", "OFF")]["tokens"]),
+                       "on_vs_off_first_diff": _first_diff(arm[("a", "ON")]["tokens"], arm[("a", "OFF")]["tokens"]),
+                       "compared": sum(len(x) for x in arm[("a", "OFF")]["tokens"])}
         t["served"][d] = s
     t["attn_share_off_64"] = t["profile"]["64"]["attn_share_off"]
     t["int4_over_cublas_64"] = t["profile"]["64"]["int4_over_cublas"]
@@ -351,11 +372,25 @@ def tabulate(box: dict) -> dict:
     t["served_ratios_32"] = t["served"]["32"]["ratios"]
     t["busy_min"] = min(v for d in DEPTHS for v in t["served"][d]["busy"].values())
     t["same_setting_disagreement"] = max(t["served"][d][k] for d in DEPTHS for k in ("off_disagreement", "on_disagreement"))
-    t["memory_on_minus_off_mib_64"] = t["served"]["64"]["memory_on_minus_off_mib"]
+    t["memory_on_minus_off_mib_64"] = t["served"]["64"]["wide_workspace_mib"]     # Q9: the route's workspace (see above)
     t["quality"] = quality_table(box["quality"])
     t["subject_bias"] = [t["quality"]["stats"][a]["bias"] for a in SUBJECTS]
     t["mutant_bias"] = [t["quality"]["stats"][a]["bias"] for a in MUTANTS]
     return t
+
+
+def clock_summary(rows) -> dict:
+    """The block's GPU log, ``[t, sm MHz, mem MHz, power W, temp C, pstate]`` every 5 s: ranges, never a gate."""
+    def col(i):
+        out = []
+        for r in rows:
+            try:
+                out.append(float(r[i]))
+            except (IndexError, TypeError, ValueError):
+                pass
+        return [min(out), max(out)] if out else None
+    return {"samples": len(rows), "sm_mhz": col(1), "mem_mhz": col(2), "power_w": col(3), "temp_c": col(4),
+            "pstates": sorted({str(r[5]) for r in rows if len(r) > 5})}
 
 
 def predictions(t: dict) -> dict:
@@ -377,8 +412,9 @@ def reduce_obj(box: dict, e4b_sha: str) -> dict:
     t = tabulate(box)
     for d in DEPTHS:
         srv = box["served"][d]
-        if srv["OFF_a"]["tokens"] != srv["OFF_b"]["tokens"] or srv["ON_a"]["tokens"] != srv["ON_b"]["tokens"]:
-            void.append(f"nondeterministic at d{d}: a setting's two arms emitted different tokens")
+        for st in SETTINGS:
+            if srv["a"]["arms"][st]["tokens"] != srv["b"]["arms"][st]["tokens"]:
+                void.append(f"nondeterministic at d{d}: {st} emitted different tokens in blocks a and b")
     fn = box["quality"].get("function") or {}
     if not fn.get("positions") or fn.get("differ"):
         void.append(f"FUNCTION: G64on's replayed tokens against ON64's eager ones: {fn}")
@@ -399,10 +435,10 @@ def reduce_obj(box: dict, e4b_sha: str) -> dict:
         return {**base, "verdict": "QUALITY_FAIL",
                 "reasons": [f"{a}: bias {qt['stats'][a]['bias']} (bound {qt['bias_bound']}), spread "
                             f"{qt['stats'][a]['spread']} (bound {qt['spread_bound']})" for a in failed]}
-    if t["same_setting_disagreement"] > NOISE:
+    if any(t["served"][d]["block_disagreement"] > NOISE for d in DEPTHS):
         return {**base, "verdict": "NOISY",
-                "reasons": [f"d{d}: OFF pair {t['served'][d]['off_disagreement']}, ON pair "
-                            f"{t['served'][d]['on_disagreement']} (bound {NOISE})" for d in DEPTHS]}
+                "reasons": [f"d{d}: block a ON/OFF {t['served'][d]['ratio_a']}, block b {t['served'][d]['ratio_b']}, "
+                            f"{t['served'][d]['block_disagreement']} apart (bound {NOISE})" for d in DEPTHS]}
     lic = [d for d in DEPTHS if all(r <= BAR for r in t["served"][d]["ratios"])]
     rs = {d: t["served"][d]["ratios"] for d in DEPTHS}
     if len(lic) == 2:
@@ -452,23 +488,25 @@ def _box(model=READING_MODEL, e4b="a" * 40, rows=64, ms64=(17.0, 15.9, 15.92, 17
     def toks(n, salt=0):
         return [[(i * 131 + r * 7 + salt) % 1000 for r in range(n)] for i in range(total)]
 
-    def served(label, med, n, b):
-        wide = label.startswith("ON")
-        steps = [round(med + 0.01 * ((i % 5) - 2), 4) for i in range(STEPS)]
-        cap = {}
-        for bb in B64:
-            k = f"{_route_of(bb, wide)}:{bb}"
-            cap[k] = cap.get(k, 0) + 3 * N_LIN
-        return {"wide": wide, "rows": n, "steps": STEPS, "warm": WARM, "busy_steps": BUSY, "bulk_kv": True,
-                "graph_status": {str(x): "graph" for x in B64},
-                "graph_stats": {str(x): ({"replays": total, "eager_steps": 0, "rows": n * total, "pad_rows": (b - n) * total}
-                                         if x == b else {"replays": 0, "eager_steps": 0, "rows": 0, "pad_rows": 0})
-                                for x in B64},
-                "capture_route": cap, "step_ms": steps, "median_ms": med,
-                "busy": [[round(med * 0.95, 4), med] for _ in range(BUSY)],
-                "memory": {"max_allocated_mib": 23000.0 + (7.3 if wide else 0.0), "max_reserved_mib": 24000.0,
-                           "wide_workspace_mib": 7.3 if wide else 0.0},
-                "tokens": toks(n, 1 if wide else 0)}
+    def block(bk, med_off, med_on, n, b):
+        def arm(st, med):
+            wide = st == "ON"
+            cap = {}
+            for bb in B64:
+                k = f"{_route_of(bb, wide)}:{bb}"
+                cap[k] = cap.get(k, 0) + 3 * N_LIN
+            return {"wide": wide, "graph_status": {str(x): "graph" for x in B64},
+                    "graph_stats": {str(x): ({"replays": total, "eager_steps": 0, "rows": n * total,
+                                              "pad_rows": (b - n) * total}
+                                             if x == b else {"replays": 0, "eager_steps": 0, "rows": 0, "pad_rows": 0})
+                                    for x in B64},
+                    "capture_route": cap, "step_ms": [round(med + 0.01 * ((i % 5) - 2), 4) for i in range(STEPS)],
+                    "median_ms": med, "busy": [[round(med * 0.95, 4), med] for _ in range(BUSY)],
+                    "tokens": toks(n, 1 if wide else 0)}
+        return {"block": bk, "order": list(ORDER[bk]), "rows": n, "steps": STEPS, "warm": WARM, "busy_steps": BUSY,
+                "bulk_kv": True, "arms": {"OFF": arm("OFF", med_off), "ON": arm("ON", med_on)},
+                "memory": {"max_allocated_mib": 25500.0, "max_reserved_mib": 26000.0, "wide_workspace_mib": 7.3},
+                "clock": [[0.0, "2797", "14001", "512.3", "61", "P1"], [5.0, "2790", "14001", "530.1", "63", "P1"]]}
 
     def prof(wide, n, b, dms, cub):
         ks = _kernels(wide, dms, cub)
@@ -508,8 +546,8 @@ def _box(model=READING_MODEL, e4b="a" * 40, rows=64, ms64=(17.0, 15.9, 15.92, 17
                             "fuse_t1_glue_n": 193, "fuse_router_epilogue_n": 48},
            "profile": {"off64": prof(False, rows, 64, 15.64, 2.05), "on64": prof(True, rows, 64, 15.64, 2.05),
                        "off32": prof(False, 32, 32, 10.99, 1.9), "on32": prof(True, 32, 32, 10.99, 1.9)},
-           "served": {"64": {k: served(k, m, rows, 64) for k, m in zip(SERVED, ms64)},
-                      "32": {k: served(k, m, 32, 32) for k, m in zip(SERVED, ms32)}},
+           "served": {"64": {"a": block("a", ms64[0], ms64[1], rows, 64), "b": block("b", ms64[3], ms64[2], rows, 64)},
+                      "32": {"a": block("a", ms32[0], ms32[1], 32, 32), "b": block("b", ms32[3], ms32[2], 32, 32)}},
            "quality": {"windows": rows, "prompt": 512, "cont": cont, "chunk": 512, "floor_chunk": 256, "layers": LAYERS,
                        "rep_identical": True, "function": {"positions": rows * (cont - 1), "differ": 0},
                        "per_window": per, "engagement": q_eng}}
@@ -530,7 +568,11 @@ def self_test() -> int:
     cases.append(("the premise share from the cuBLAS class, OFF minus ON", t.get("attn_share_off_64") == 0.1311))
     cases.append(("int4 over cuBLAS", t.get("int4_over_cublas_64") == 0.45))
     cases.append(("busy fraction", t.get("busy_min") == 0.95))
-    cases.append(("memory ON minus OFF", t.get("memory_on_minus_off_mib_64") == 7.3))
+    cases.append(("Q9 graded on the route's workspace", t.get("memory_on_minus_off_mib_64") == 7.3))
+    cases.append(("the per-pair ratio median", t["served"]["64"]["pair_ratio_median"] == {"a": 0.9353, "b": 0.9354}))
+    cases.append(("the clock log summarised", t["served"]["64"]["clock"]["a"] == {
+        "samples": 2, "sm_mhz": [2790.0, 2797.0], "mem_mhz": [14001.0, 14001.0], "power_w": [512.3, 530.1],
+        "temp_c": [61.0, 63.0], "pstates": ["P1"]}))
     cases.append(("predictions all held", all(v["result"] == "HELD" for v in ok.get("predictions", {}).values())))
     cases.append(("median of an even count", median([1, 4, 2, 3]) == 2.5 and median([3, 1, 2]) == 2))
     cases.append(("the expected route of a 40-window pass on 32-row buckets",
@@ -549,16 +591,16 @@ def self_test() -> int:
     b["profile"]["on32"]["profiled"]["32"]["eager_steps"] = 7
     cases.append(("a profiled step missing", run(b)["verdict"] == "VOID"))
     b = _box()
-    b["served"]["64"]["ON_b"]["graph_status"]["64"] = "eager: RuntimeError: capture"
+    b["served"]["64"]["b"]["arms"]["ON"]["graph_status"]["64"] = "eager: RuntimeError: capture"
     cases.append(("bucket 64 not captured", run(b)["verdict"] == "VOID"))
     b = _box()
-    b["served"]["32"]["OFF_a"]["graph_stats"]["32"]["eager_steps"] = 1
+    b["served"]["32"]["a"]["arms"]["OFF"]["graph_stats"]["32"]["eager_steps"] = 1
     cases.append(("an eager step in a served arm", run(b)["verdict"] == "VOID"))
     b = _box()
-    b["served"]["64"]["ON_a"]["busy"] = b["served"]["64"]["ON_a"]["busy"][:-1]
+    b["served"]["64"]["a"]["arms"]["ON"]["busy"] = b["served"]["64"]["a"]["arms"]["ON"]["busy"][:-1]
     cases.append(("a traced step missing", run(b)["verdict"] == "VOID"))
     b = _box()
-    b["served"]["64"]["OFF_a"]["memory"] = {}
+    b["served"]["64"]["a"]["memory"] = {}
     cases.append(("no peak memory", run(b)["verdict"] == "VOID"))
     b = _box()
     del b["quality"]["engagement"]["mutant_wide"]
@@ -567,7 +609,7 @@ def self_test() -> int:
     b["quality"]["engagement"]["ON32"]["decode_calls"] -= 1
     cases.append(("decode attention calls off the split", run(b)["verdict"] == "VOID"))
     b = _box()
-    b["served"]["64"]["ON_a"]["capture_route"]["bf16:64"] = N_LIN
+    b["served"]["64"]["a"]["arms"]["ON"]["capture_route"]["bf16:64"] = N_LIN
     r = run(b)
     cases.append(("not engaged: a captured projection stayed on cuBLAS", r["verdict"] == "VOID" and "captures" in r["reasons"][0]))
     b = _box()
@@ -583,7 +625,7 @@ def self_test() -> int:
     r = run(b)
     cases.append(("ON64 bit-equal to R", r["verdict"] == "VOID" and "bit-equal" in " ".join(r["reasons"])))
     b = _box()
-    b["served"]["32"]["OFF_b"]["tokens"][100][3] += 1
+    b["served"]["32"]["b"]["arms"]["OFF"]["tokens"][100][3] += 1
     r = run(b)
     cases.append(("nondeterministic", r["verdict"] == "VOID" and "nondeterministic" in " ".join(r["reasons"])))
     b = _box()
@@ -610,7 +652,13 @@ def self_test() -> int:
     r = run(b)
     cases.append(("rep joins the floor when R does not repeat", r["tables"]["quality"]["floor"] == ["half", "chunk", "rep"]
                   and r["tables"]["quality"]["B_floor"] == 0.004))
-    cases.append(("noisy", run(_box(ms32=(12.0, 11.0, 11.01, 12.4)))["verdict"] == "NOISY"))
+    cases.append(("noisy: the blocks' ratios disagree", run(_box(ms32=(12.0, 11.0, 11.01, 12.4)))["verdict"] == "NOISY"))
+    r = run(_box(ms64=(16.4, 15.85, 16.33, 16.9)))
+    cases.append(("a level shift shared by both settings of a block is not noisy", r["verdict"] == "DEFAULT_ON"
+                  and r["predictions"]["Q6"]["result"] == "MISSED"))
+    b = _box()
+    b["served"]["64"]["b"]["order"] = ["OFF", "ON"]
+    cases.append(("a block out of its registered order", run(b)["verdict"] == "VOID"))
     cases.append(("only the 64-row depth", run(_box(ms32=(12.0, 11.9, 11.91, 12.02)))["verdict"] == "DEFAULT_ON_64"))
     cases.append(("only the 32-row depth", run(_box(ms64=(17.0, 16.9, 16.91, 17.02)))["verdict"] == "DEFAULT_ON_32"))
     r = run(_box(ms64=(17.0, 16.9, 16.91, 17.02), ms32=(12.0, 11.9, 11.91, 12.02)))

@@ -13,11 +13,13 @@ On ONE RTX 5090, SC2e's int4 stack built eager with one slot (P117's, P119's and
 - **profile** ``off`` / ``on`` at 64 and at 32 rows: P119's ``decode_bracket`` (buckets up to 64, 3 warm + 8 profiled
   padded eager steps under ``torch.profiler``), at its registered bytes: the premise (with ``0``, the cuBLAS class
   carries the projections) and the mechanism (with ``1``, one ``_gemm_int4_b32_smallm`` launch per projection);
-- **served** ``OFF_a``, ``ON_a``, ``ON_b``, ``OFF_b`` (ABBA) at 64 rows, then again at 32 rows: each a fresh pool and
-  runner whose bucket graphs are CAPTURED under its setting, the windows prefilled, 5 warm steps, ``--steps`` (256)
-  timed decode steps (each ``run_decode``'s synchronised wall, P120's method), then ``BUSY`` (32) more with the
-  runner's ``StepTrace`` attached: the replay's device time over the step's wall is the GPU busy fraction. Every
-  decode step's tokens are recorded, and the arm's peak allocated and reserved memory;
+- **served**, interleaved (Amendment 1), at 64 rows, then at 32: blocks ``a`` and ``b``, each with ONE runner per
+  setting, both alive, each with its own pool and its bucket graphs CAPTURED under its setting. Both are prefilled,
+  then they decode in strict alternation, step by step in lockstep: 5 warm pairs, ``--steps`` (256) timed pairs (each
+  step ``run_decode``'s synchronised wall, P120's method), then ``BUSY`` (32) traced pairs with each runner's
+  ``StepTrace`` attached (the replay's device time over the step's wall is the GPU busy fraction). Block ``a`` runs
+  OFF first in every pair, block ``b`` ON first. Every decode step's tokens are recorded, the block's peak memory, and
+  the GPU's SM and memory clocks, power, temperature and performance state every 5 s (reported, never gated);
 - **quality**: teacher-forced passes of 64 windows through P117's ``paged_pass`` (at its registered bytes): ``R``
   (route off, one 64-row piece a step: today's served arithmetic), ``rep``, the floor ``half`` (route off, two 32-row
   pieces) and ``chunk`` (route off, prefill in 256-token pieces), the subjects ``ON64`` (route on, one 64-row piece)
@@ -44,7 +46,9 @@ import hashlib
 import json
 import os
 import statistics
+import subprocess
 import sys
+import threading
 import time
 
 import torch
@@ -55,7 +59,8 @@ import p117_box  # noqa: E402  (staged at P117's registered bytes: windows(), pa
 import p108_box  # noqa: E402  (staged at P108's registered bytes: _score, _kl, _release; imported by P117's box)
 
 B32, B64 = p117_box.B32, p117_box.B64
-SERVED = ("OFF_a", "ON_a", "ON_b", "OFF_b")
+BLOCKS = ("a", "b")        # Amendment 1: block a runs OFF first in every pair, block b ON first
+SETTINGS = ("OFF", "ON")
 DEPTHS = ("64", "32")      # the step's bucket: ``rows`` rows (33-64, one bucket-64 piece), then 32 (one bucket-32 piece)
 WARM = 5
 BUSY = 32                  # steps after the timed ones, with the runner's StepTrace attached
@@ -167,64 +172,119 @@ def _busy(trace_path: str) -> list:
     return out
 
 
-def served_arm(model, ws, P, device, *, on: bool, rows: int, steps: int, bulk_kv: bool, trace_path: str):
-    """A fresh pool and runner whose bucket graphs are captured under the setting; ``rows`` windows prefilled; WARM
-    untimed decode steps, ``steps`` timed ones (each ``run_decode`` synchronised: its wall is the replay and the step's
-    host work), then BUSY traced ones. Every decode step's tokens are recorded, warm ones first."""
+class _Clock:
+    """Samples the GPU's SM and memory clocks, power, temperature and performance state every PERIOD seconds while a
+    block runs (Amendment 1; reported, never gated). Without ``nvidia-smi`` (the CPU tests) it records nothing."""
+
+    PERIOD = 5.0
+    QUERY = "clocks.sm,clocks.mem,power.draw,temperature.gpu,pstate"
+
+    def __init__(self):
+        self.rows, self._stop = [], threading.Event()
+
+    def _run(self):
+        t0 = time.time()
+        while not self._stop.is_set():
+            try:
+                out = subprocess.run(["nvidia-smi", f"--query-gpu={self.QUERY}", "--format=csv,noheader,nounits"],
+                                     capture_output=True, text=True, timeout=10)
+            except (OSError, subprocess.SubprocessError):
+                return
+            line = out.stdout.strip().splitlines()[:1]
+            if out.returncode == 0 and line:
+                self.rows.append([round(time.time() - t0, 1)] + [x.strip() for x in line[0].split(",")])
+            self._stop.wait(self.PERIOD)
+
+    def __enter__(self):
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        self._stop.set()
+        self._thread.join(timeout=15)
+        return False
+
+
+def interleaved_block(model, ws, P, device, *, block: str, rows: int, steps: int, bulk_kv: bool, trace_dir: str,
+                      depth: str):
+    """Amendment 1: ONE runner per setting, both alive, each with its own pool and its bucket graphs captured under its
+    setting; both prefilled; then WARM, ``steps`` timed and BUSY traced decode steps of each in strict alternation, step
+    by step in lockstep (block ``a``: OFF then ON in every pair; ``b``: ON then OFF), so the two steps of a pair share
+    the context length and the GPU's state. Each timed step is ``run_decode``'s synchronised wall (P120's method).
+    Every decode step's tokens are recorded, warm ones first."""
     from experts4bit_qlora.engines.paged_runner import PagedModelRunner
     from experts4bit_qlora.engines.step_trace import StepTrace
     _reset_peak(device)
-    kv, _layers = p119_box._pool(model, rows, P + WARM + steps + BUSY + 16, max(B64), device)
-    runner = PagedModelRunner(model, kv, device=device, bulk_kv=bulk_kv)
-    rec = {"wide": on, "rows": rows, "steps": steps, "warm": WARM, "busy_steps": BUSY, "bulk_kv": bool(bulk_kv)}
-    ms, toks = [], []
+    first = ("OFF", "ON") if block == "a" else ("ON", "OFF")
+    rec = {"block": block, "order": list(first), "rows": rows, "steps": steps, "warm": WARM, "busy_steps": BUSY,
+           "bulk_kv": bool(bulk_kv), "arms": {}}
+    run, kvs, traces = {}, [], {}
     try:
-        with Route(model, on) as route, p119_box._Grouped(), torch.no_grad():
-            rec["graph_status"] = {str(k): v for k, v in
-                                   runner.enable_decode_graphs(B64, capture=True, verbose=False).items()}
-            rec["capture_route"] = dict(sorted(route.counts.items()))
-            for rid in range(rows):
-                runner.bind(rid, rid, ws[rid][:P])
-                runner.run_prefill([(rid, 0, P)])
+        with p119_box._Grouped(), torch.no_grad():
+            for st in first:                                     # each runner captured under its own setting
+                kv, _layers = p119_box._pool(model, rows, P + WARM + steps + BUSY + 16, max(B64), device)
+                kvs.append(kv)
+                runner = PagedModelRunner(model, kv, device=device, bulk_kv=bulk_kv)
+                run[st] = runner
+                with Route(model, st == "ON") as route:
+                    gs = {str(k): v for k, v in runner.enable_decode_graphs(B64, capture=True, verbose=False).items()}
+                rec["arms"][st] = {"wide": st == "ON", "graph_status": gs,
+                                   "capture_route": dict(sorted(route.counts.items())), "step_ms": [], "tokens": []}
+            for st in first:
+                for rid in range(rows):
+                    run[st].bind(rid, rid, ws[rid][:P])
+                    run[st].run_prefill([(rid, 0, P)])
             order = list(range(rows))
-            for i in range(WARM + steps):
-                p119_box._sync(device)
-                t0 = time.perf_counter()
-                got = runner.run_decode(order)
-                p119_box._sync(device)
-                if i >= WARM:
-                    ms.append((time.perf_counter() - t0) * 1e3)
-                toks.append([int(got[r]) for r in order])
-            if os.path.exists(trace_path):
-                os.remove(trace_path)
-            tr = StepTrace(trace_path, cuda=str(device).startswith("cuda"), flush_every=10**6)
-            runner.tracer = tr
-            try:
-                for _ in range(BUSY):
-                    p119_box._sync(device)
-                    tr.begin()
-                    got = runner.run_decode(order)
-                    tr.end()
-                    toks.append([int(got[r]) for r in order])
-            finally:
-                runner.tracer = None
-                tr.close()
-        gs = getattr(runner, "graph_stats", None) or {}
-        rec["graph_stats"] = {str(k): dict(v) for k, v in gs.items()}
+            with _Clock() as clock:
+                for i in range(WARM + steps):
+                    for st in first:                             # strict alternation, one step of each per pair
+                        p119_box._sync(device)
+                        t0 = time.perf_counter()
+                        got = run[st].run_decode(order)
+                        p119_box._sync(device)
+                        arm = rec["arms"][st]
+                        if i >= WARM:
+                            arm["step_ms"].append(round((time.perf_counter() - t0) * 1e3, 4))
+                        arm["tokens"].append([int(got[r]) for r in order])
+                for st in first:
+                    path = os.path.join(trace_dir, f"trace_d{depth}_{block}_{st}.jsonl")
+                    if os.path.exists(path):
+                        os.remove(path)
+                    traces[st] = (path, StepTrace(path, cuda=str(device).startswith("cuda"), flush_every=10**6))
+                    run[st].tracer = traces[st][1]
+                try:
+                    for _ in range(BUSY):
+                        for st in first:
+                            p119_box._sync(device)
+                            tr = traces[st][1]
+                            tr.begin()
+                            got = run[st].run_decode(order)
+                            tr.end()
+                            rec["arms"][st]["tokens"].append([int(got[r]) for r in order])
+                finally:
+                    for st in first:
+                        run[st].tracer = None
+                        traces[st][1].close()
+            rec["clock"] = clock.rows
+        for st in first:
+            gs = getattr(run[st], "graph_stats", None) or {}
+            rec["arms"][st]["graph_stats"] = {str(k): dict(v) for k, v in gs.items()}
         rec["memory"] = _mem(device)
     finally:
-        dis = getattr(runner, "disable_decode_graphs", None)
-        if dis is not None:
-            dis()
-        del runner, kv
+        for runner in run.values():
+            dis = getattr(runner, "disable_decode_graphs", None)
+            if dis is not None:
+                dis()
+        del run, kvs
         gc.collect()
         if str(device).startswith("cuda"):
             torch.cuda.empty_cache()
-    rec["step_ms"] = [round(x, 4) for x in ms]
-    rec["median_ms"] = round(statistics.median(ms), 4)
-    rec["busy"] = _busy(trace_path)
-    rec["tokens"] = toks
-    rec["tokens_sha256"] = hashlib.sha256(json.dumps(toks).encode()).hexdigest()
+    for st in first:
+        arm = rec["arms"][st]
+        arm["median_ms"] = round(statistics.median(arm["step_ms"]), 4)
+        arm["busy"] = _busy(traces[st][0])
+        arm["tokens_sha256"] = hashlib.sha256(json.dumps(arm["tokens"]).encode()).hexdigest()
     return rec
 
 
@@ -300,11 +360,12 @@ def measure(model, ws, *, prompt, cont, device, rows=64, steps=256, chunk=512, f
         for label, on in (("off", False), ("on", True)):
             rec["profile"][f"{label}{d}"] = profile_arm(model, ws, prompt, device, on=on, rows=n, bulk_kv=bulk_kv)
         rec["served"][d] = {}
-        for label in SERVED:
-            s = served_arm(model, ws, prompt, device, on=label.startswith("ON"), rows=n, steps=steps, bulk_kv=bulk_kv,
-                           trace_path=os.path.join(trace_dir, f"trace_d{d}_{label}.jsonl"))
-            rec["served"][d][label] = s
-            print(f"P124_ARM d{d} {label} median {s['median_ms']} ms at {time.time() - t0:.0f} s", flush=True)
+        for b in BLOCKS:
+            blk = interleaved_block(model, ws, prompt, device, block=b, rows=n, steps=steps, bulk_kv=bulk_kv,
+                                    trace_dir=trace_dir, depth=d)
+            rec["served"][d][b] = blk
+            meds = " ".join(f"{st} {blk['arms'][st]['median_ms']} ms" for st in SETTINGS)
+            print(f"P124_BLOCK d{d} {b} ({'-'.join(blk['order'])}) {meds} at {time.time() - t0:.0f} s", flush=True)
     rec["quality"] = quality(model, ws[:rows], prompt=prompt, cont=cont, chunk=chunk, floor_chunk=floor_chunk,
                              device=device, stand_in=stand_in)
     rec["seconds"] = round(time.time() - t0, 1)
@@ -345,7 +406,8 @@ def main() -> int:
            **rec, "gpu": torch.cuda.get_device_name(0), "max_mem_gb": round(torch.cuda.max_memory_allocated() / 2**30, 2)}
     open(a.out, "w").write(json.dumps(rec, indent=1))
     s = rec["served"]
-    line = " | ".join(f"d{d} {k} {v['median_ms']} ms" for d, arms in s.items() for k, v in arms.items())
+    line = " | ".join(f"d{d} {b} {st} {blk['arms'][st]['median_ms']} ms" for d, blocks in s.items()
+                      for b, blk in blocks.items() for st in SETTINGS)
     print(f"P124_BOX: {line} | int4 linears {rec['int4_linears']} | rep identical {rec['quality']['rep_identical']} | "
           f"function {rec['quality']['function']} | load {load_s:.0f}s | {rec['seconds']} s", flush=True)
     return 0
