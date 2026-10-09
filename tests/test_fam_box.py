@@ -149,6 +149,37 @@ def test_the_wrappers_change_what_they_name(gptoss_records):
         d(c["extra"]["mut098"]["record"]["per_window"]["wikitext"]["mut098"]) > 0
 
 
+def test_the_x080_rung_runs_on_every_set(tmp_path):
+    """Amendment 8: with ``gating=("mut090", "mut080")`` the OFF process scores both rungs on every set, each wrapper
+    touches every decode attention call, and x0.80 is its own perturbation (off R and off x0.90). Its size is not
+    asserted here: on a random tiny model the NLL need not move monotonically with the scale (the self-tests pin the
+    factor and the scale the wrapper applies)."""
+    box = _load("fam_box")
+    q = _load("p115_quality", "p115")
+    gating = box.gating_arms("mut090,mut080")
+    mp = pytest.MonkeyPatch()
+    g = torch.Generator().manual_seed(3)
+    windows = {"wikitext": [torch.randint(0, 256, (P + C,), generator=g).tolist() for _ in range(36)]}
+    try:
+        mp.setitem(sys.modules, "int4_b32", _stub())
+        counters = q.KernelCounters().install()
+        model = _gpt_oss(L)
+        _apply(model, "OFF", box)
+        cells = box.run_cells(model, windows, config="OFF", texts=("wikitext",), shapes=(1,), sets=("A", "B"),
+                              prompt=P, cont=C, chunk=CHUNK, floor_chunk=FLOOR_CHUNK, device="cpu",
+                              ref_root=str(tmp_path), ref_kw=UNPADDED, stand_in=True, counters=counters,
+                              fwd=q.ForwardCounter(model), gating=gating)
+    finally:
+        mp.undo()
+    for cell, c in cells.items():
+        assert tuple(c["extra"]) == box.extra_arms(cell.split("|")[2], gating), cell
+        for arm, x in c["extra"].items():
+            assert x["wrapped_calls"] == sum(e["decode_calls"] for e in x["record"]["engagement"]["wikitext"][arm]) > 0
+        nll = {a: [x["nll"] for x in c["extra"][a]["record"]["per_window"]["wikitext"][a]] for a in gating}
+        R = [x["nll"] for x in c["base"]["per_window"]["wikitext"]["R"]]
+        assert nll["mut080"] != R and nll["mut080"] != nll["mut090"] and nll["mut090"] != R, cell
+
+
 def test_the_census_and_per_step_calls_per_knob(gptoss_records):
     box, recs = gptoss_records
     red = _tiny_reducer(_load("fam_reduce"))

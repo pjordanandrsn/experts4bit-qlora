@@ -610,3 +610,65 @@ reading ≤ $1.07 + $3.40 bring it to at most about $18.42, inside $26.00.
 **Code.** `fam_run.sh`'s `build_env_of` sets the length for Mixtral, and the box records it. The reducer's self-test
 now runs 59 cases (a Mixtral record built at the default length VOIDs). `tests/test_fam_staged_pin.py` pins the env,
 that 768 covers the instrument, and that the proof's guard holds the measured setup.
+
+## Amendment 8 (2026-10-09, after `fam-mixtral-prove-2`, before any Mixtral reading): Mixtral gates on × 0.90, then × 0.80
+
+**The trigger: an instrument property, not an outcome.** `fam-mixtral-prove-2` (store `ff615c5c`, $1.775) PROVED the box on
+Mixtral, and its reducer read UNRESOLVED. At proof scale, `mut090` passed the gate on c4val1 at both shapes, and it
+failed on wikitext:
+
+| cell | `mut090` agree (A / B / C) | bar (A_f − 0.005) | `mut090` \|bias\| max | bar (B_f + 0.010) |
+|---|---|---|---|---|
+| c4val1, 1 | 0.956 / 0.964 / 0.971 | 0.948 | 0.0033 | 0.0167 |
+| c4val1, 12 | 0.953 / 0.964 / 0.956 | 0.946 | 0.0068 | 0.0207 |
+
+Mixtral barely moves under × 0.90: its agreement with R sits on the reorder floor's. This is a property of the
+instrument on this family, the mutant's sensitivity, and not of ON against OFF. The registration fixed the next rung
+before any data ("Any amendment gates on × 0.80 at the same windows"). The maintainer ruled on the bus to amend now,
+Mixtral only, before the reading.
+
+**Changes** (Mixtral only; the rule, gates, margins, cells, windows and every other family are unchanged):
+- `GRADED` gains `mut080` (decode softmax scale × 0.80). Mixtral's OFF process scores `mut090` **and** `mut080` on
+  every set of every cell (the box's `--gating mut090,mut080`, from `fam_run.sh`'s `gating_of`). The ladder is
+  unchanged.
+- **The claimed resolution is the weakest rung that fails the gate in every gated cell:** × 0.90 if the reading
+  resolves it, else × 0.80, else UNRESOLVED. A stronger claim is never given away for a weaker rung.
+- **A PASS is a null read of that size:** no effect on Mixtral as large as a × 0.80 (or, if × 0.90 resolves, a × 0.90)
+  change of the decode softmax scale. RESULTS and the claim state which.
+- The reducer reports `resolution` for every family (`mut090` wherever × 0.90 resolves). It VOIDs a Mixtral OFF
+  record that did not run both rungs (`GATING`), as it VOIDs any arm short of its windows.
+
+**Predictions** (written before any Mixtral reading):
+
+| # | prediction |
+|---|---|
+| X3a | `mut090` fails every gated cell at reading scale (resolution × 0.90), about 25 % |
+| X3b | `mut080` fails every gated cell (resolution at least × 0.80), about 75 % |
+
+X3 is superseded by these; X1, X2, X4 and X5 stand.
+
+**The reading's guard: 6.0 h, sized from measurements.** `fam-mixtral-prove-2` timed OFF at 1513 s, 245 s of it
+`mut090`, and ON_epi and ON_auto at 261 and 234 s. Granite's proof-to-reading ratios (`fam-prove-2` against
+`fam-granite-1`) are × 5.33 for OFF, × 5.27 for `mut090` and × 6.7 for an ON process. Scaled by those, Mixtral's
+reading needs:
+- setup: 2336 s (Amendment 7);
+- OFF: 1513 × 5.33 + 245 × 5.27 ≈ 9360 s, the second figure for `mut080`;
+- four ON processes: about 1700 s each.
+
+That totals about 18,500 s (5.1 h). Amendment 5's 4.0 h would have skipped the last two ON configs, ON_epi and
+ON_auto.
+
+| run | guard | the box's checks (need / alarm cap) |
+|---|---|---|
+| Mixtral | 6.0 h | fetch 3000 s, bake 1500 s, OFF 10800 / 12600 s, each ON 2000 / 2700 s |
+
+**Budget.** The lane has spent $10.61. The Mixtral reading is at most $6.10 (6.0 h at $0.85, plus about $1.00 for the
+93 GB download). Gemma-4's proof and reading add at most about $1.61 and $3.95, downloads included. That brings the
+lane to at most about $22.27, inside $26.00.
+
+**Code.** The box's self-test now runs 38 cases: the arms with and without × 0.80, and refusals of a gating list that
+does not lead with × 0.90, repeats a rung, names a ladder or unregistered rung, or does not strengthen. The reducer's
+self-test now runs 68 cases: resolution at × 0.90 and at × 0.80, UNRESOLVED with both passing in any one cell, the
+weakest failing rung claimed whatever × 0.80 does, a FAIL still FAILing at × 0.80, and VOID without × 0.80. The merged
+readings re-derive identically apart from the new `resolution` field (`fam-granite-1`, `fam-gptoss-1`, `fam-qw36-2`
+against Amendment 3's verdict, and Granite's two proofs).
