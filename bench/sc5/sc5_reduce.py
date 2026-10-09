@@ -25,11 +25,11 @@ parse refusal, such as a full-vocabulary V+1 slot, or an incomplete pass) is tha
 rows stand.
 
 **The noise bound and labels.**
-- Per framework, cell and metric in one draw, the bound is ``|A1 / A2 - 1|`` from its two blocks. A framework whose own
-  bound exceeds ``NOISE`` is NOISY there.
+- Per framework, cell and metric in one draw, the spread is ``|A1 / A2 - 1|`` from its two blocks. A framework whose own
+  spread exceeds the metric's bound (``METRICS``: 10 % for TTFT, 5 % for TPOT and throughput) is NOISY there.
 - e4b against a competitor X, per draw, pairs the blocks by occurrence: ``r_k = metric(e4b, block k) / metric(X, block
   k)``, for k = 1, 2.
-  - **LEADS** when both ``r_k`` are better than 1 by more than ``NOISE``;
+  - **LEADS** when both ``r_k`` are better than 1 by more than the metric's bound;
   - **TRAILS** when both are worse by more than it;
   - **WITHIN NOISE** otherwise, including when either framework is NOISY there.
 - "Better" is lower for TTFT and TPOT, and higher for output tok/s.
@@ -52,9 +52,11 @@ import sys
 CONCURRENCIES = ("1", "16", "64")
 MEMORY = ("default", "matched")
 MATCHED_KV_TOKENS = 64 * 1024
-NOISE = 0.05                      # placeholder: sized from SC2e's per-cell spread before any SC5 data
-METRICS = {"ttft_p50_s": "lower", "ttft_p95_s": "lower", "tpot_p50_s": "lower", "tpot_p95_s": "lower",
-           "output_tok_s": "higher"}
+# (direction, noise bound), sized from SC2e before any SC5 data. Between cold-started e4b servers with identical request
+# plans, TPOT p50 moved <= 1.5 %, output tok/s <= 1.1 %, and TTFT p50/p90 <= 4.2 / 4.9 %. A captured runner can also carry
+# a whole-life level offset of 3-3.6 % (P124 and P126). So 5 % for TPOT and throughput, and 10 % for TTFT.
+METRICS = {"ttft_p50_s": ("lower", 0.10), "ttft_p95_s": ("lower", 0.10), "tpot_p50_s": ("lower", 0.05),
+           "tpot_p95_s": ("lower", 0.05), "output_tok_s": ("higher", 0.05)}
 
 
 def block_faults(b: dict, memory: str) -> list:
@@ -81,13 +83,13 @@ def block_faults(b: dict, memory: str) -> list:
     return out
 
 
-def _better(direction: str, r: float) -> int:
-    """+1 when ratio r (e4b over X) is better for e4b by more than NOISE, -1 when worse by more, else 0."""
+def _better(direction: str, bound: float, r: float) -> int:
+    """+1 when ratio r (e4b over X) is better for e4b by more than ``bound``, -1 when worse by more, else 0."""
     if r is None:
         return 0
     if direction == "lower":
-        return 1 if r < 1 - NOISE else (-1 if r > 1 + NOISE else 0)
-    return 1 if r > 1 + NOISE else (-1 if r < 1 - NOISE else 0)
+        return 1 if r < 1 - bound else (-1 if r > 1 + bound else 0)
+    return 1 if r > 1 + bound else (-1 if r < 1 - bound else 0)
 
 
 def _ratio(a, b):
@@ -109,7 +111,7 @@ def reduce_obj(rec: dict) -> dict:
     noisy, labels, per_draw = [], {}, {}
     for m in MEMORY:
         for c in CONCURRENCIES:
-            for metric, direction in METRICS.items():
+            for metric, (direction, bound) in METRICS.items():
                 for x in others:
                     votes = []
                     for d in rec["draws"]:
@@ -120,14 +122,14 @@ def reduce_obj(rec: dict) -> dict:
                         noisy_here = []
                         for f, (v1, v2) in vals.items():
                             r = _ratio(v1, v2)
-                            if r is None or abs(r - 1) > NOISE:
+                            if r is None or abs(r - 1) > bound:
                                 noisy_here.append(f)
                                 noisy.append(f"draw {d} {m} C={c} {metric}: {f} blocks {v1} / {v2}")
                         rs = [_ratio(vals[me][k], vals[x][k]) for k in (0, 1)]
                         if noisy_here:
                             vote = "WITHIN NOISE"
                         else:
-                            s = {_better(direction, r) for r in rs}
+                            s = {_better(direction, bound, r) for r in rs}
                             vote = "LEADS" if s == {1} else ("TRAILS" if s == {-1} else "WITHIN NOISE")
                         per_draw[f"{m}|{c}|{metric}|{x}|{d}"] = {"label": vote, "ratios": [None if r is None else round(r, 4)
                                                                                            for r in rs]}
@@ -146,7 +148,7 @@ def reduce_obj(rec: dict) -> dict:
                 qrows[name] = row
     losing = sorted(k for k, v in labels.items() if v == "TRAILS")
     counts = {v: sum(1 for x in labels.values() if x == v) for v in ("LEADS", "TRAILS", "WITHIN NOISE")}
-    return {"lane": "SC5", "frameworks": fws, "noise_bound": NOISE, "matched_kv_tokens": MATCHED_KV_TOKENS,
+    return {"lane": "SC5", "frameworks": fws, "noise_bounds": {m: b for m, (_d, b) in METRICS.items()}, "matched_kv_tokens": MATCHED_KV_TOKENS,
             "void": void, "noisy": sorted(set(noisy)), "labels": labels, "per_draw": per_draw,
             "losing_cells": losing, "counts": counts, "quality": qrows, "quality_void": qvoid,
             "verdict": "READ" if labels else "NO_READING"}
@@ -191,6 +193,17 @@ def self_test() -> int:
     ok.append("matched|64|tpot_p50_s|sglang" in r["losing_cells"])                     # every losing cell listed
     ok.append(r["labels"]["default|1|output_tok_s|vllm"] == "WITHIN NOISE")             # equal throughput
     ok.append(set(r["quality"]) == {"e4b", "vllm", "sglang", "e4b_decode", "floor"} and not r["quality_void"])
+    rec = _record()
+    for d in rec["draws"].values():
+        for m in MEMORY:
+            for b in d[m]:
+                if b["framework"] == "vllm":
+                    b["cells"]["16"]["ttft_p50_s"] = 0.056                 # e4b 0.050: 11 % better, past the 10 % bound
+                if b["framework"] == "sglang":
+                    b["cells"]["16"]["ttft_p50_s"] = 0.054                 # 7.4 %: inside it
+    rt = reduce_obj(rec)
+    ok.append(rt["labels"]["default|16|ttft_p50_s|vllm"] == "LEADS"
+              and rt["labels"]["default|16|ttft_p50_s|sglang"] == "WITHIN NOISE")
     rc = reduce_obj(_record(e4b_tpot=(0.0100, 0.0112)))                                 # e4b's own blocks 12 % apart
     ok.append(rc["labels"]["default|16|tpot_p50_s|vllm"] == "WITHIN NOISE" and bool(rc["noisy"]))
     rc = reduce_obj(_record(vllm_tpot=(0.0104, 0.0106)))       # vllm's own blocks 1.9 % apart; pairs 0.962 and 0.943

@@ -57,7 +57,8 @@ speed.
 - **Requests:** every request is greedy, with `max_tokens` = 256 *(size at registration)*, `ignore_eos`, and streaming.
   A request is VALID only when it returns exactly `max_tokens` tokens with finish reason `length` (SC2's rule).
 - **Closed loop (a new driver, `bench/sc5/sc5_driver.py`).** C ∈ {1, 16, 64} workers each send their next request as soon as the last one
-  finishes, until N requests have completed. N is 32 at C = 1, 128 at C = 16 and 256 at C = 64 *(size at registration)*.
+  finishes, until N requests have completed. N is **48 at C = 1, 160 at C = 16 and 320 at C = 64** (sized 2026-10-09,
+  before any SC5 data). Every p95 then rests on at least 47 counted requests, and C = 64 runs five waves.
   The first C requests of each cell are warm-up, excluded from every statistic.
 - **Reported per cell:**
   - TTFT p50 and p95, and TPOT p50 and p95 (SC2's definitions);
@@ -100,8 +101,17 @@ speed.
   Each framework has two blocks per draw.
 - **The noise bound.** For each framework, cell and metric, the two same-framework blocks in a draw bound the noise:
   `|A1 / A2 − 1|`.
-- **The bound and N** are sized from SC2e's per-cell spread and written into this file before any SC5 data. They are
-  placeholders here: 5 %, and N = 32 / 128 / 256.
+- **The bounds**, sized 2026-10-09 before any SC5 data:
+  - **5 % for TPOT p50/p95 and output tok/s;**
+  - **10 % for TTFT p50/p95.**
+- **The basis.** Between cold-started e4b servers running identical request plans, SC2e's two draws moved:
+  - TPOT p50 by at most 1.5 % (at most 0.2 % serially, 0.4–1.5 % in 64-request bursts);
+  - output tok/s by at most 1.1 %;
+  - TTFT p50 and p90 by at most 4.2 % and 4.9 %.
+- **Why not tighter.** A captured runner can also carry a whole-life level offset of 3–3.6 % (P124 attempt 1, P126 both
+  attempts). The 5 % bound turns such a block into NOISY rather than a label.
+- **What does not apply.** SC2e's Poisson rates moved far more (up to 76 %) because each draw drew different arrival
+  times. SC5's closed-loop plans are identical across blocks, so that source does not apply here.
 - **Labels, per cell and metric, between e4b and a competitor:**
   - **LEADS** or **TRAILS** only when both blocks of each framework clear the bound in the same direction;
   - **WITHIN NOISE** otherwise.
