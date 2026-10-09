@@ -45,14 +45,17 @@ MODELS = {
     "gptoss": ("openai/gpt-oss-20b", "6cee5e81ee83917806bbde320786a8fb61efebee"),
     "qw36": ("Qwen/Qwen3.6-35B-A3B", "995ad96eacd98c81ed38be0c5b274b04031597b0"),
     "mixtral": ("mistralai/Mixtral-8x7B-Instruct-v0.1", "eba92302a2861cdc0098cc54bc9f17cb2c47eb61"),   # Amendment 5
+    "gemma4": ("google/gemma-4-26B-A4B-it", "4d7ae4984b7db7de8f8457170b3f1a419ee76d52"),             # Amendment 6
 }
 FAMILY_CONFIGS = {"granite": ("OFF", "ON_auto"), "gptoss": ("OFF", "ON_glue", "ON_r2", "ON_epi", "ON_auto"),
-                  "qw36": ("OFF", "ON_auto"), "mixtral": ("OFF", "ON_glue", "ON_r2", "ON_epi", "ON_auto")}
+                  "qw36": ("OFF", "ON_auto"), "mixtral": ("OFF", "ON_glue", "ON_r2", "ON_epi", "ON_auto"),
+                  "gemma4": ("OFF", "ON_glue", "ON_epi", "ON_auto")}          # Amendment 6: r2 engages nothing
 ANCHOR = {"family": "gptoss", "configs": ("OFF", "ON_auto"), "cell": ("wikitext", 12, "A")}
 #: the proving rental (PREREG "The premise and the proving rental"): Granite alone, every process kind, 32 positions.
 #: Amendment 5: a family's own proof (``--proof --families mixtral``) runs that family's OFF, ON_epi and ON_auto, no anchor
 PROOF = {"families": ("granite",), "configs": {"granite": ("OFF", "ON_epi", "ON_auto"),
-                                               "mixtral": ("OFF", "ON_epi", "ON_auto")},
+                                               "mixtral": ("OFF", "ON_epi", "ON_auto"),
+                                               "gemma4": ("OFF", "ON_epi", "ON_auto")},
          "anchor_family": "granite", "cont": 32}
 CONT = 128                                    # registered teacher-forced positions per window (the reading)
 #: registered prompt, prefill chunk and floor chunk: every prefill forward carries more than 64 rows, so only the decode
@@ -60,12 +63,12 @@ CONT = 128                                    # registered teacher-forced positi
 PREFILL = (512, 512, 256)
 PHASE_C_ANCHOR_AGREE = 0.924                  # Phase C's SANE argmax agreement on gpt-oss (SC2g path, T == 12, set A)
 
-ATTN_LAYERS = {"granite": 32, "gptoss": 24, "qw36": 10, "mixtral": 32}
+ATTN_LAYERS = {"granite": 32, "gptoss": 24, "qw36": 10, "mixtral": 32, "gemma4": 30}
 #: decode-shaped forwards beyond the decode steps: a hybrid's one-token linear-state warm-up
 #: (``PagedModelRunner._warm_linear_state``), ONCE PER PROCESS -- on its first padded pass, while the model's pool is
 #: unallocated (Amendment 3; Phase C ran one pass a process, so it could not tell the two apart). That pass is the first
 #: arm (R on OFF, ON otherwise) of the first cell the box visits; every other pass carries none.
-WARMUP_FORWARDS = {"granite": 0, "gptoss": 0, "qw36": 1, "mixtral": 0}
+WARMUP_FORWARDS = {"granite": 0, "gptoss": 0, "qw36": 1, "mixtral": 0, "gemma4": 0}
 #: routers whose upstream weights are fp32 and stay fp32 through the fused epilogue (its report's ``fp32_upstream``):
 #: wherever the epilogue engages on such a family, every patched router must be on that path (Amendment 5)
 FP32_ROUTERS = {"mixtral": 32}
@@ -80,6 +83,8 @@ CENSUS = {
     ("mixtral", "OFF"): [0, 0, [0, 0], 0], ("mixtral", "ON_glue"): [0, 65, [0, 0], 0],
     ("mixtral", "ON_r2"): [0, 0, [32, 32], 0], ("mixtral", "ON_epi"): [0, 0, [0, 0], 32],
     ("mixtral", "ON_auto"): [0, 65, [32, 32], 32],
+    ("gemma4", "OFF"): [0, 0, [0, 0], 0], ("gemma4", "ON_glue"): [0, 271, [0, 0], 0],
+    ("gemma4", "ON_epi"): [0, 0, [0, 0], 30], ("gemma4", "ON_auto"): [0, 271, [0, 0], 30],
 }
 #: glue-kernel calls per decode-shaped forward (P115's KernelCounters names)
 PER_STEP = {
@@ -95,6 +100,9 @@ PER_STEP = {
     ("mixtral", "ON_r2"): {"rmsnorm_resid_rows": 32, "rope_heads": 64},
     ("mixtral", "ON_epi"): {"router_epilogue": 32},
     ("mixtral", "ON_auto"): {"rmsnorm_rows": 33, "rmsnorm_resid_rows": 32, "rope_heads": 64, "router_epilogue": 32},
+    ("gemma4", "ON_glue"): {"rmsnorm_rows": 271},
+    ("gemma4", "ON_epi"): {"router_epilogue": 30},
+    ("gemma4", "ON_auto"): {"rmsnorm_rows": 271, "router_epilogue": 30},
 }
 CENSUS_KEYS = fam_box.CENSUS_KEYS
 
@@ -473,6 +481,10 @@ def self_test() -> int:
     got = reduce_family("mixtral", _fam_recs("mixtral", PROOF["configs"]["mixtral"], cont=PROOF["cont"]), "E",
                         proof=True)["verdict"]
     cases.append(("mixtral's own proof at 32 positions", got == {"ON_epi": "PASS", "ON_auto": "PASS"}, got))
+    case("gemma4 clean pass (Amendment 6)", "gemma4", _fam_recs("gemma4"), "PASS")
+    got = reduce_family("gemma4", _fam_recs("gemma4", PROOF["configs"]["gemma4"], cont=PROOF["cont"]), "E",
+                        proof=True)["verdict"]
+    cases.append(("gemma4's own proof at 32 positions", got == {"ON_epi": "PASS", "ON_auto": "PASS"}, got))
     cases.append(("a proof names one registered family", _families(True, ["mixtral"]) == ("mixtral",)
                   and _families(True, None) == ("granite",), None))
     try:
