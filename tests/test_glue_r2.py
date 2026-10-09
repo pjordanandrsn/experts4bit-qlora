@@ -634,7 +634,7 @@ def test_fused_attention_still_takes_the_fused_fold(monkeypatch):
     seen = []
     orig = glue_r2._patch_attention_unfused
     monkeypatch.setattr(glue_r2, "_patch_attention_unfused",
-                        lambda mod, k: seen.append(type(mod).__name__) or orig(mod, k))
+                        lambda mod, k, *a: seen.append(type(mod).__name__) or orig(mod, k, *a))
     m = torch.nn.Module()
     m.attn = ToyFusedAttention()
     assert fuse_t1_glue_r2(m) == (0, 1)
@@ -895,3 +895,43 @@ def test_real_qwen3_moe_attention_stays_licensed_for_the_unfused_fold():
     from experts4bit_qlora.engines import glue_r2
     attn = _tiny_attention("qwen3_moe", "Qwen3MoeConfig", "Qwen3MoeAttention")
     assert glue_r2.rotary_is_rotate_half(attn, H)
+
+
+@pytest.mark.parametrize("cls", ["fused", "unfused"])
+def test_rope_norm_qk_is_one_launch_and_bitwise_the_two(monkeypatch, cls):
+    """With the kernel's ``rope_norm_qk`` (grouped-nf4-gemm#528) each attention fold makes ONE norm + rotary call for
+    q and k, handed each projection's own weight and eps, and its output is bitwise the two-call fold's (e4b#1313,
+    P127 d). The stand-in runs the stub's ``rope_norm_heads`` per projection, as the kernel runs one helper."""
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    toy = {"fused": ToyFusedAttention, "unfused": ToyUnfusedAttention}[cls]
+    x, pe = _rope_inputs(2, 3)
+    outs = []
+    for with_qk in (False, True):
+        calls = {"resid": 0, "rope": 0, "qk": 0}
+        _stub(monkeypatch, calls)
+        if with_qk:
+            stub = sys.modules["int4_b32"]
+            heads = stub.rope_norm_heads
+
+            def rope_norm_qk(q, k, qw, kw, cos, sin, qe, ke):
+                calls["qk"] += 1
+                calls["qk_eps"] = (qe, ke)
+                return heads(q, qw, cos, sin, qe), heads(k, kw, cos, sin, ke)
+            stub.rope_norm_qk = rope_norm_qk
+        torch.manual_seed(23)
+        m = torch.nn.Module()
+        m.attn = toy()
+        with torch.no_grad():                   # distinct q/k weights and eps, so a swap shows
+            m.attn.q_norm.weight.uniform_(0.5, 1.5)
+            m.attn.k_norm.weight.uniform_(0.5, 1.5)
+        m.attn.k_norm.variance_epsilon = 1e-5
+        assert fuse_t1_glue_r2(m) == (0, 1)
+        calls["rope"] = 0
+        got, _ = m.attn(x, position_embeddings=pe)
+        outs.append(got)
+        if with_qk:
+            assert calls["qk"] == 1 and calls["rope"] == 2, "one qk launch (running the two heads inside the stand-in)"
+            assert calls["qk_eps"] == (1e-6, 1e-5), calls["qk_eps"]
+        else:
+            assert calls["qk"] == 0 and calls["rope"] == 2
+    assert torch.equal(outs[0], outs[1])
