@@ -155,6 +155,16 @@ lane. With all four knobs off, eager runs 901 launches and 998 device kernels pe
 attributed by profiler ranges on the layer's modules and on e4b's and grouped-nf4-gemm's MoE entry points. Backward launches are
 attributed by the autograd node they run under.
 
+**Why 799 here and 769 above:** this step includes an AdamW update; the premise's and the compile counts ran forward and backward only.
+A recount on one build (2026-10-09, same model and inputs) gives 777 launches without the update and 807 with it. The 30 split as
+follows:
+- **16** are the update itself (the optimizer row).
+- **14** are the expert LoRA delta rebuilding per-step state in the first forward after the parameters change, 7 a layer. That is why
+  the row's forward exceeds its recompute by 14.
+
+The census's profiler labels add no launch. That later build runs 8 more launches than the one counted here, both with and without the
+update.
+
 | component | forward | recompute | backward | total |
 |---|---|---|---|---|
 | attention (NF4 projections with fp32 LoRA, norms, rope, flash) | 90 | 90 | 50 | 230 |
