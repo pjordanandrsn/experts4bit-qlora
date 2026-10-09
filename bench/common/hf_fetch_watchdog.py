@@ -212,18 +212,42 @@ if mode == "grandchild":
 '''
 
 
-def self_test() -> int:
-    fast = {"poll_s": 0.1, "stall_s": 0.8, "grace_s": 1.0}
-    cases = [  # (mode, run kwargs, expected rc, expected restarts or None)
-        ("steady", {"max_restarts": 3, "budget_s": 30}, EXIT_OK, 0),
-        ("stall_once", {"max_restarts": 3, "budget_s": 30}, EXIT_OK, 1),
-        ("stall_always", {"max_restarts": 2, "budget_s": 60}, EXIT_GAVE_UP, 2),
-        ("error_once", {"max_restarts": 3, "budget_s": 30}, EXIT_OK, 1),
-        ("partial_ok_once", {"max_restarts": 3, "budget_s": 30}, EXIT_OK, 1),
+def _gone(pid: int, within_s: float) -> bool:
+    """True once ``pid`` no longer runs. A zombie counts as gone: the kill reached it, and its reaping is up to PID 1. In
+    a container PID 1 is often a shell that reaps late or never."""
+    deadline = time.monotonic() + within_s
+    while True:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        try:
+            if pathlib.Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0] == "Z":
+                return True
+        except (OSError, IndexError):
+            pass
+        if time.monotonic() > deadline:
+            return False
+        time.sleep(0.05)
+
+
+def self_test(stall_s: float = 8.0) -> int:
+    """Deterministic under load. The stall timer starts at spawn, so an attempt meant to finish must finish well inside
+    ``stall_s`` even when the fake's interpreter starts slowly on a busy host. A fake writes for about 0.1 s after
+    startup, so 8 s leaves orders of magnitude for scheduling delay. Only the fakes built to stall (they write once,
+    then sleep for an hour) can reach it. A case therefore never gains an unplanned restart, and the counts asserted
+    are exact. The budget case is time-bound by design: a trickle never stalls and never ends."""
+    fast = {"poll_s": 0.1, "stall_s": stall_s, "grace_s": 1.0}
+    cases = [  # (mode, run kwargs, expected rc, expected restarts)
+        ("steady", {"max_restarts": 3, "budget_s": 120}, EXIT_OK, 0),
+        ("stall_once", {"max_restarts": 3, "budget_s": 120}, EXIT_OK, 1),
+        ("stall_always", {"max_restarts": 1, "budget_s": 120}, EXIT_GAVE_UP, 1),
+        ("error_once", {"max_restarts": 3, "budget_s": 120}, EXIT_OK, 1),
+        ("partial_ok_once", {"max_restarts": 3, "budget_s": 120}, EXIT_OK, 1),
         ("trickle", {"max_restarts": 3, "budget_s": 1.5}, EXIT_BUDGET, 0),
     ]
     if os.name == "posix":
-        cases.append(("grandchild", {"max_restarts": 0, "budget_s": 30}, EXIT_GAVE_UP, 0))
+        cases.append(("grandchild", {"max_restarts": 0, "budget_s": 120}, EXIT_GAVE_UP, 0))
     bad = 0
     for mode, kw, want_rc, want_restarts in cases:
         with tempfile.TemporaryDirectory() as td:
@@ -240,13 +264,7 @@ def self_test() -> int:
                 ok = ok and not (blobs / "shard.0.incomplete").exists()          # the orphan was pruned
             if mode == "grandchild":
                 gpid = int((td / "grandchild.pid").read_text())
-                time.sleep(0.2)
-                try:
-                    os.kill(gpid, 0)
-                    alive = True
-                except ProcessLookupError:
-                    alive = False
-                ok = ok and not alive                                               # the group kill reached it
+                ok = ok and _gone(gpid, within_s=10.0)                              # the group kill reached it
             print(f"{'ok  ' if ok else 'FAIL'} {mode}: rc={rc} restarts={rec['restarts']} attempts={len(rec['attempts'])}")
             bad += not ok
     n = len(cases)

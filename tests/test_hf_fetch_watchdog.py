@@ -26,7 +26,7 @@ spec.loader.exec_module(wd)
 
 
 def test_the_self_test_passes():
-    p = subprocess.run([sys.executable, str(SRC), "--self-test"], capture_output=True, text=True, timeout=180)
+    p = subprocess.run([sys.executable, str(SRC), "--self-test"], capture_output=True, text=True, timeout=300)
     assert p.returncode == 0, p.stdout + p.stderr
     assert "hf_fetch_watchdog self-test OK" in p.stdout.splitlines()[-1]
 
@@ -38,7 +38,7 @@ def test_the_snapshot_is_the_last_stdout_line_and_logs_go_to_stderr(tmp_path):
     fake = tmp_path / "fake.py"
     fake.write_text(wd.FAKE)
     cmd = [sys.executable, str(fake), "steady", str(blobs), str(snap), str(tmp_path / "state")]
-    rc, rec = wd.run(cmd, blobs, poll_s=0.1, stall_s=2.0, max_restarts=0, budget_s=30, grace_s=1.0)
+    rc, rec = wd.run(cmd, blobs, poll_s=0.1, stall_s=30.0, max_restarts=0, budget_s=120, grace_s=1.0)
     assert rc == wd.EXIT_OK and rec["snapshot"] == str(snap) and rec["restarts"] == 0
     assert [a["outcome"] for a in rec["attempts"]] == ["exit"] and rec["attempts"][0]["partials"] == 0
 
