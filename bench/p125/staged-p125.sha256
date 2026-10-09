@@ -3,8 +3,9 @@
 # bench/p97, bench/p109, bench/p39, tests) and compare.
 # Re-pinned 2026-10-09 for Amendment 1 (the tripwire's #1426 fix check), after p125-prove-1, before p125-prove-2.
 # Re-pinned 2026-10-09 for Amendment 2 (the box's gate_record: its own keys over measure_phase's), after p125-prove-2.
-6f2ce3bb9b9ed649e62b674c73e894cd196a13e09a58156f8654f8c7b08cdb54  p125_run.sh
-54419373071ae69ed2525f48ec468cd07d3b20ad1e0e924b956721bdb94b4352  p125_box.py
+# Re-pinned 2026-10-09 for Amendment 3 (P125's wikitext loader at stride 2048; the windows preflight), after p125-5090-1.
+a6f37dcc4d0eecab95b2f6e1ce0eeb3f3a3ddb66e0dffa88a27bfa2c39c93ec1  p125_run.sh
+80ba70d8604442b849b445317822e6c0a6183acf26675b8e2359b9974c0af4c2  p125_box.py
 4f0e25071f93c8739cca33598b858fc5c963c79deb3976dd5a7c81b69c84c796  p125_reduce.py
 f1500a26404284fbb14cce214c548d73b3889e9db5ef1faf5ef63bf74449b574  p115_quality.py
 02d82d88259c169060f78e47c219e7dfd82d146dd80e0c7c3b0e3acdfca252cf  p110_box.py

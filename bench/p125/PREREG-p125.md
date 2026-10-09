@@ -342,3 +342,44 @@ gates' paths (1, 16 and 512 rows) are unchanged.
 
 **Re-pinned before `p125-prove-3`:** `p125_box.py` and `p125_reduce.py`. Every gate, bound, window count, prediction,
 arm and rung is unchanged.
+
+## Amendment 3 (2026-10-09, after `p125-5090-1`; the windows fit their corpus; before the rerun reading)
+
+**What happened.** `p125-5090-1` VOIDed (OK rc 0, $1.067; adertha-receipts `560a2a00`; the maintainer re-derived it
+byte-identical).
+- **The cause:** quality arm A refused at its window load, because `p97_box.wikitext_windows` asserted
+  `window 73 has 0 tokens`.
+- **Why:** wikitext-2-raw test is **298,938 tokens** under Qwen3-30B-A3B's tokenizer, and P97's loader starts a window
+  every 4096 tokens. That fits only **73** windows of 640, and the registration asked for 108 (`t1`) and 112 (`k16`).
+  The proofs' 16 windows fit, so they never reached it.
+- **The consequence:** with no reference, the other quality arms could not score, and the reducer VOIDed on the missing
+  quality records.
+- **Whose error:** the registration's corpus capacity was never checked. It was my error, and the maintainer's review
+  did not ask for it either (bus 2026-10-09T05:09Z).
+
+**Attempt 1's speed arms, as history only.** Nothing is decided by them, and the rerun measures speed again:
+- every arm built on shape: census 48 / 193 / [48, 48] / 48, and 96 and 97 `Int4Linear` modules;
+- g1_B 1.153, g1_C 1.224, g16_B 1.037, g16_C 1.044, with self-pairs 0.992–1.001;
+- the calibration took 206 s (B) and 225 s (C) a build on Qwen3, with digests equal across builds;
+- auto slots stayed 64 / 32 in every arm;
+- **the predictions above are unedited.**
+
+**The amendment (the maintainer's ACK, bus 2026-10-09T05:09Z):**
+1. **P125's own wikitext loader** for `t1` and `k16` (`p125_box.wikitext_windows`). It uses P97's corpus, join and
+   tokenisation, and starts a window every **2048** tokens: non-overlapping, capacity **146** ≥ 112.
+   - The c4 gate keeps P115's c4val1 loader (4096 stride; 866,460 tokens, capacity 212 ≥ 16).
+   - The registered corpus sizes and strides are `CORPUS_TOKENS` and `STRIDE` in the box.
+2. **A windows preflight before any arm.** `p125_box.py --windows-check` runs right after the prompts step. It loads
+   every gate's windows from the real corpora and tokenizer, and refuses with **rc 19** if any does not fit.
+3. **Tests in place of a fourth proof:**
+   - **At P97's stride**, P125's loader reproduces `p97_box.wikitext_windows` token for token. In CI this runs on a
+     deterministic stand-in corpus; on the real corpus with the pinned tokenizer, all 73 windows were identical
+     (`P125_REAL_CORPUS=1`). Mutation-checked: a one-newline join fails it.
+   - **At 2048,** every window is full and non-overlapping, and every gate fits its corpus.
+4. **The prior is unchanged.** Phase D's per-window SD came from windows of the same corpus.
+
+**The rerun.** The reading reruns from this amendment's merge at **guard 3.0 h**, within ≤ $5.34 of the $5.50 ceiling
+(lane spend $2.12 so far). There is no fourth proof.
+
+**Re-pinned:** `p125_box.py` (the loader, preflight and self-test, now 18 cases) and `p125_run.sh` (the preflight). Every
+gate, bound, window count, prediction, arm and rung is unchanged.

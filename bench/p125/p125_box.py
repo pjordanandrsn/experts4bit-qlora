@@ -56,6 +56,57 @@ INT4_KEYS = ("int4_attn_projections", "attn_int4_calib_projections", "attn_int4_
 #: the quality gates: (name, text, group, windows for every arm but K, windows for K)
 GATES = (("t1", "wikitext", 1, 108, 12), ("k16", "wikitext", 16, 112, 16), ("c4", "c4val1", 16, 16, 16))
 SLOT_TOKENS = (2048, 4096)
+#: Amendment 3: the corpora's sizes under Qwen3-30B-A3B's tokenizer (measured on p125-5090-1's box and offline with the
+#: pinned tokenizer) and each text's window stride. P97's loader starts a window every 4096 tokens, so wikitext-2-raw
+#: test holds 73 windows of 640, fewer than the 108 and 112 the gates registered; P125's own wikitext loader takes P97's
+#: corpus, join and tokenisation byte for byte and starts a window every 2048 tokens (capacity 146). c4val1 keeps
+#: P115's loader (4096; capacity 212).
+CORPUS_TOKENS = {"wikitext": 298938, "c4val1": 866460}
+STRIDE = {"wikitext": 2048, "c4val1": 4096}
+WINDOW = 512 + 128
+
+
+def capacity(text: str, tokens=None) -> int:
+    """Windows of 640 tokens that fit ``text`` at its stride."""
+    tokens = CORPUS_TOKENS[text] if tokens is None else tokens
+    return (tokens - WINDOW) // STRIDE[text] + 1 if tokens >= WINDOW else 0
+
+
+def wikitext_windows(tok, n, prompt, cont, stride=STRIDE["wikitext"]):
+    """P97's wikitext-2-raw test corpus, joined and tokenised as P97 does; window k starts at token k * ``stride``."""
+    from datasets import load_dataset
+    ds = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1", split="test")
+    text = "\n\n".join(t for t in ds["text"] if t.strip())
+    ids = tok(text, return_tensors="pt").input_ids[0]
+    out = []
+    for k in range(n):
+        w = ids[k * stride:k * stride + prompt + cont]
+        assert w.numel() == prompt + cont, f"wikitext window {k} has {w.numel()} tokens (stride {stride}, {ids.numel()} tokens)"
+        out.append(w.tolist())
+    return out
+
+
+def loaders():
+    import p115_quality as q
+    return {"wikitext": wikitext_windows, "c4val1": q.LOADERS["c4val1"]}
+
+
+def windows_check(a) -> int:
+    """Amendment 3's preflight, before any arm: every gate's windows load, full, from the real corpora and tokenizer."""
+    from transformers import AutoTokenizer
+    tok = AutoTokenizer.from_pretrained(a.model, revision=a.revision or None)
+    out, bad = {}, []
+    for name, text, _group, n, n_k in GATES:
+        want = max(n, n_k)
+        want = min(want, a.max_windows) if a.max_windows else want
+        try:
+            ws = loaders()[text](tok, want, a.prompt, a.cont)
+            out[name] = {"text": text, "windows": len(ws), "full": all(len(w) == a.prompt + a.cont for w in ws)}
+        except AssertionError as e:
+            bad.append(f"{name}: {e}")
+            out[name] = {"text": text, "windows": 0, "error": str(e)[:200]}
+    print("P125_WINDOWS " + json.dumps({"gates": out, "refused": bad}), flush=True)
+    return 1 if bad else 0
 
 
 def arm_env_ok(arm: str, env):
@@ -313,7 +364,7 @@ def quality_main(a) -> int:
     for name, text, group, n, n_k in GATES[:a.gates]:
         n = n_k if arm == "K" else n
         n = min(n, a.max_windows) if a.max_windows else n
-        windows = {text: q.LOADERS[text](parts.tokenizer, n, a.prompt, a.cont)}
+        windows = {text: loaders()[text](parts.tokenizer, n, a.prompt, a.cont)}
         c1 = _counts()
         with Route([m for _n, m in mods]) as rt:
             r = q.measure_phase(model, windows, phase="off" if arm == "A" else "on", prompt=a.prompt, cont=a.cont,
@@ -352,6 +403,9 @@ def self_test() -> int:
         ("the gates", [g[:3] for g in GATES] == [("t1", "wikitext", 1), ("k16", "wikitext", 16), ("c4", "c4val1", 16)]
          and all(n % g == 0 and k % g == 0 for _, _, g, n, k in GATES)),
         ("the window counts (the registered arithmetic)", [g[3] for g in GATES] == [108, 112, 16]),
+        ("Amendment 3: every gate's windows fit its corpus", all(max(n, k) <= capacity(t) for _, t, _, n, k in GATES)),
+        ("Amendment 3: P97's 4096 stride would not (73 windows)",
+         (CORPUS_TOKENS["wikitext"] - WINDOW) // 4096 + 1 == 73 and capacity("wikitext") == 146),
     ]
     bad = [name for name, ok in cases if not ok]
     print(f"p125_box self-test {'OK' if not bad else 'FAILED: ' + '; '.join(bad)} ({len(cases)} cases)")
@@ -362,6 +416,7 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--self-test", action="store_true")
     p.add_argument("--prompts-only", action="store_true")
+    p.add_argument("--windows-check", action="store_true", help="Amendment 3's preflight: every gate's windows fit")
     p.add_argument("--mode", choices=("speed", "quality"))
     p.add_argument("--model")
     p.add_argument("--revision", default="")
@@ -382,6 +437,8 @@ def main(argv=None) -> int:
         return self_test()
     if a.prompts_only:
         return p109_box.prompts_main(a)
+    if a.windows_check:
+        return windows_check(a)
     if a.mode == "speed":
         return speed_main(a)
     if a.mode == "quality":
