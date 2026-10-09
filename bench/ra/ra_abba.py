@@ -31,9 +31,15 @@ def pinned(pin):
 
 
 def check(plan, *, all_timeouts=True):
-    if set(plan) != {"schema", "battery", "stage", "inputs", "versions", "deadline_epoch_s"} | (
-            {"startup"} | ({"source_publication"} if plan.get("schema") == 3 else set()) if plan.get("schema") in (2, 3) else set()) or \
-            type(plan["schema"]) is not int or plan["schema"] not in (1, 2, 3) or plan["battery"] not in ("proof", "reading"):
+    fields = {"schema", "battery", "stage", "inputs", "versions", "deadline_epoch_s"}
+    if plan.get("schema") in (2, 3, 4):
+        fields.add("startup")
+    if plan.get("schema") in (3, 4):
+        fields.add("source_publication")
+    if plan.get("schema") == 4:
+        fields.add("checkpoint_authority")
+    if set(plan) != fields or type(plan["schema"]) is not int or \
+            plan["schema"] not in (1, 2, 3, 4) or plan["battery"] not in ("proof", "reading"):
         raise ValueError("ABBA plan fields/battery")
     if set(plan["stage"]) != {"path", "sha256"} or set(plan["inputs"]) != {"spec", "lock"}:
         raise ValueError("stage/input bindings")
@@ -121,13 +127,16 @@ def check(plan, *, all_timeouts=True):
     caches = [Path(v["cache"]) for v in plan["versions"].values()]
     if caches[0] == caches[1] or caches[0] in caches[1].parents or caches[1] in caches[0].parents:
         raise ValueError("separate release output caches required")
-    if plan["schema"] == 3:
+    if plan["schema"] in (3, 4):
         total += 8 * plan["source_publication"]["timeout_s"]
+    if plan["schema"] == 4:
+        check_checkpoint(plan)
+        total += 8 * plan["checkpoint_authority"]["timeout_s"]
     if all_timeouts:
         ra_process.window(plan["deadline_epoch_s"], total)
-    if plan["schema"] in (2, 3):
+    if plan["schema"] in (2, 3, 4):
         evidence["startup"] = check_startup(plan)
-    if plan["schema"] == 3:
+    if plan["schema"] in (3, 4):
         evidence["source_publication"] = check_publication(plan)
     return evidence
 
@@ -447,6 +456,105 @@ def join_published_worker(binding, authority):
                  separators=(',', ':')).encode()).hexdigest()}
 
 
+def checkpoint_manifest(plan):
+    """Derive the standalone gate inputs; no caller manifest or command."""
+    return {'schema': 1, 'input_spec': plan['inputs']['spec']['path'], 'stage': plan['stage']['path'],
+            'input_lock': plan['inputs']['lock']['path'], 'input_lock_sha256': plan['inputs']['lock']['sha256']}
+
+
+def check_checkpoint(plan):
+    gate = plan['checkpoint_authority']
+    require(set(gate) == {'timeout_s'}, 'checkpoint gate fields')
+    ra_process.window(plan['deadline_epoch_s'], gate['timeout_s'])
+    lock = pinned(plan['inputs']['lock'])
+    pins = ra_inputs.read_json(HERE / 'source-pins.json')
+    require(lock['model'] in pins['models'] and pins['models'][lock['model']] == lock['revision'],
+            'checkpoint registered model/revision')
+    for name in ('ra_checkpoint.py', 'ra_inputs.py', 'ra_stage.py', 'source-pins.json'):
+        require(ra_process.file_digest(HERE / name) == plan['startup']['tools'][name],
+                'checkpoint fixed helper/pins changed')
+
+
+def checkpoint_gate(plan, slot, output):
+    """Join guarded fixed checkpoint execution and independently reparse raw indexes."""
+    import ra_checkpoint as checkpoint
+    require(Path(checkpoint.__file__).resolve() == HERE / 'ra_checkpoint.py', 'checkpoint helper owner')
+    before = check(plan, all_timeouts=False)
+    manifest = checkpoint_manifest(plan)
+    output = ra_inputs.absolute(output)
+    # The supervisor protects its entire output/lock. Direct gate calls also
+    # refuse overlapping output before creating even the derived manifest.
+    spec = pinned(plan['inputs']['spec'])
+    protected = [HERE, Path(plan['stage']['path']), *map(Path, spec['trees'].values()),
+                 *map(Path, spec['files'].values()), *[Path(p['path']) for p in plan['inputs'].values()]]
+    for v in plan['versions'].values():
+        protected += [Path(v['venv']), Path(v['cache'])]
+    for pin in plan['startup']['manifests'].values():
+        m = pinned(pin)
+        protected += [Path(pin['path']), Path(m['payload']['image']), *[Path(p['path']) for p in m['payload']['wheels']]]
+    for pin in plan['source_publication']['manifests'].values():
+        m = pinned(pin)
+        protected += [Path(pin['path']), Path(m['parser']['path']), *[Path(row['repo']) for row in m['releases']]]
+    candidates = [output, output.with_suffix('.manifest.json'), output.with_suffix('.log'),
+                  output.with_suffix('.process.json')]
+    require(all(not a.exists() and not any(a == b or a in b.parents or b in a.parents for b in protected)
+                for a in candidates), 'checkpoint fresh protected output')
+    output.parent.mkdir(parents=True, exist_ok=True)
+    mp = candidates[1]
+    with mp.open('x') as stream:
+        stream.write(json.dumps(manifest, sort_keys=True, indent=2, allow_nan=False) + '\n')
+    manifest_sha = ra_process.file_digest(mp)
+    version = plan['versions'][slot]
+    env, _ = ra_env.clean(os.environ, component='decode', fixture={}, venv=Path(version['venv']),
+                         cache=Path(version['cache']), threads=version['threads'], allocator=version['allocator'])
+    process = ra_process.run([version['python']['path'], '-I', '-S', '-B', str(HERE / 'ra_checkpoint.py'),
+                             '--manifest', str(mp), '--out', str(output)], env=env, cwd=output.parent,
+                            log=candidates[2], receipt=candidates[3], deadline=plan['deadline_epoch_s'],
+                            timeout=plan['checkpoint_authority']['timeout_s'])
+    require(process.get('status') == 'OK' and process.get('returncode') == 0 and
+            process.get('cleanup_complete') is True and process.get('parent_death_guard', {}).get('verified') is True,
+            'checkpoint process/guard/cleanup incomplete')
+    require(ra_process.file_digest(mp) == manifest_sha and before == check(plan, all_timeouts=False),
+            'checkpoint manifest/common/tool drift')
+    result = ra_inputs.read_json(output / 'result.json')
+    require(result.get('schema') == 1 and type(result['schema']) is int and result.get('status') == 'PASS' and
+            type(result.get('pid')) is int and result['pid'] == process['pid'] and
+            result.get('manifest_sha256') == manifest_sha and result.get('proves_hub_index_checkpoint_equality') is True,
+            'checkpoint receipt identity/status')
+    for key in ('proves_dataset_authority', 'proves_calibration_authority', 'proves_tokenizer_execution',
+                'proves_runtime_consumption', 'proves_publisher_signature', 'proves_gpu_engagement', 'launch_authority'):
+        require(result.get(key) is False, 'checkpoint receipt scope')
+    lock = pinned(plan['inputs']['lock'])
+    rows = result['observations']
+    urls = checkpoint.urls(lock['model'], lock['revision']) * 2
+    require(len(rows) == 4 and [row['url'] for row in rows] == list(urls), 'checkpoint raw response coverage')
+    files, raw = {'result.json'}, []
+    for index, row in enumerate(rows):
+        require(row['file'] == f'response-{index:02d}.json' and type(row['bytes']) is int and
+                0 < row['bytes'] <= checkpoint.LIMIT, 'checkpoint bounded sequential response')
+        path = output / row['file']
+        require(path.is_file() and not path.is_symlink() and ra_process.file_digest(path) == row['sha256'] and
+                path.stat().st_size == row['bytes'], 'checkpoint raw bytes changed')
+        start, end = [datetime.datetime.fromisoformat(row[k]) for k in ('started_at', 'finished_at')]
+        require(start.utcoffset() == end.utcoffset() == datetime.timedelta(0) and start <= end,
+                'checkpoint response clock reads')
+        raw.append(ra_inputs.read_json(path))
+        files.add(row['file'])
+    require({p.name for p in output.iterdir()} == files and all(p.is_file() and not p.is_symlink()
+            for p in output.iterdir()), 'checkpoint receipt inventory')
+    values = iter(raw)
+    authority = checkpoint.observe(lock['model'], lock['revision'], lambda url: next(values))
+    require(checkpoint.observe(lock['model'], lock['revision'], lambda url: next(values)) == authority == result['authority'],
+            'checkpoint raw/result authority differs')
+    materialized = checkpoint.bind(Path(spec['trees']['checkpoint']), authority, lock['trees']['checkpoint'])
+    common = ra_inputs.verify(spec, plan['stage']['path'], plan['inputs']['lock']['path'], plan['inputs']['lock']['sha256'])
+    require(materialized == result['checkpoint'] and common == result['common_inputs'] and
+            before == check(plan, all_timeouts=False), 'checkpoint local inventory/common receipt differs')
+    return {'identity': {'authority': authority, 'checkpoint': materialized, 'common_inputs': common},
+            'result_sha256': ra_process.file_digest(output / 'result.json'), 'process': process,
+            'proves_gpu_engagement': False, 'release_cleared': False}
+
+
 def supervise(plan, output, lock_path):
     """Invoke the six existing wrappers in each ABBA position, with no retries.
 
@@ -456,7 +564,7 @@ def supervise(plan, output, lock_path):
     """
     plan = copy.deepcopy(plan)
     checked = check(plan)
-    verified = plan["schema"] in (2, 3)
+    verified = plan["schema"] in (2, 3, 4)
     output, lock_path = ra_inputs.absolute(output), ra_inputs.absolute(lock_path)
     spec = pinned(plan["inputs"]["spec"])
     protected = [Path(plan["stage"]["path"]), *map(Path, spec["trees"].values()),
@@ -475,7 +583,7 @@ def supervise(plan, output, lock_path):
             protected += [Path(manifest['payload']['image']), *[Path(p['path']) for p in manifest['payload']['wheels']]]
         require(not any(a == b or a in b.parents or b in a.parents for a in (output, lock_path) for b in protected),
                 'ABBA verified output/lock overlaps protected inputs')
-    if plan['schema'] == 3:
+    if plan['schema'] in (3, 4):
         for pin in plan['source_publication']['manifests'].values():
             manifest = pinned(pin)
             protected += [Path(pin['path']), Path(manifest['parser']['path'])]
@@ -488,15 +596,17 @@ def supervise(plan, output, lock_path):
         output.mkdir(parents=True, exist_ok=False)
         (output / "plan.json").write_text(json.dumps(plan, indent=2, allow_nan=False) + "\n")
         record = {"status": "RUNNING", "started_at": ra_process.clock(), "attempts": 1,
-                  "completed": [], "publication_gates": [], "proves_gpu_engagement": False, "release_cleared": False,
+                  "completed": [], "publication_gates": [], "checkpoint_gates": [],
+                  "checkpoint_authority_verified": False, "proves_gpu_engagement": False, "release_cleared": False,
                   "verified_wrapper_startup": False, "source_publication_verified": False,
                   "runtime_consumption_verified": False, "native_context_absence_verified": False}
         journal = output / "supervisor.json"
         try:
             identities = {}
+            checkpoint_identity = None
             for tag, slot in POSITIONS:
                 authority = None
-                if plan['schema'] == 3:
+                if plan['schema'] in (3, 4):
                     record['active'] = {'tag': tag, 'phase': 'publication_before'}
                     journal.write_text(json.dumps(record, indent=2) + '\n')
                     authority = publication_gate(plan, slot, output / 'publication' / tag / 'before')
@@ -504,6 +614,15 @@ def supervise(plan, output, lock_path):
                             'publication/source identity changed between repeated positions')
                     identities[slot] = authority['identity']
                     record['publication_gates'].append({'tag': tag, 'side': 'before', **authority})
+                checkpoint_before = None
+                if plan['schema'] == 4:
+                    record['active'] = {'tag': tag, 'phase': 'checkpoint_before'}
+                    journal.write_text(json.dumps(record, indent=2) + '\n')
+                    checkpoint_before = checkpoint_gate(plan, slot, output / 'checkpoint' / tag / 'before')
+                    require(checkpoint_identity in (None, checkpoint_before['identity']),
+                            'checkpoint identity changed across ABBA positions')
+                    checkpoint_identity = checkpoint_before['identity']
+                    record['checkpoint_gates'].append({'tag': tag, 'side': 'before', **checkpoint_before})
                 version = plan["versions"][slot]
                 for phase in PHASES:
                     record["active"] = {"tag": tag, "phase": phase}
@@ -551,7 +670,15 @@ def supervise(plan, output, lock_path):
                     after = publication_gate(plan, slot, output / 'publication' / tag / 'after')
                     require(after['identity'] == authority['identity'], 'publication/source changed during position')
                     record['publication_gates'].append({'tag': tag, 'side': 'after', **after})
-            record['source_publication_verified'] = plan['schema'] == 3
+                if checkpoint_before is not None:
+                    record['active'] = {'tag': tag, 'phase': 'checkpoint_after'}
+                    journal.write_text(json.dumps(record, indent=2) + '\n')
+                    checkpoint_after = checkpoint_gate(plan, slot, output / 'checkpoint' / tag / 'after')
+                    require(checkpoint_after['identity'] == checkpoint_before['identity'],
+                            'checkpoint identity changed during position')
+                    record['checkpoint_gates'].append({'tag': tag, 'side': 'after', **checkpoint_after})
+            record['checkpoint_authority_verified'] = plan['schema'] == 4
+            record['source_publication_verified'] = plan['schema'] in (3, 4)
             record["status"] = "ORDERED_COMPONENTS_RECORDED_PENDING_GATES"
             record["verified_wrapper_startup"] = verified
         except BaseException as exc:
