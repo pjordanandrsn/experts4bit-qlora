@@ -1,0 +1,3 @@
+# Names as the BOX sees them after staging ($W). The box runs `sha256sum -c` on this file and the controller resolves
+# each name to its source (k34_drive.sh's case) and compares.
+fe7b8b96d6f1c9e47d67f55d3b5891d7f0f550d1c6f00923baf36f68e69b9bfb  k34_run.sh
