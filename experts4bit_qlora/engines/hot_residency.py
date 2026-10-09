@@ -211,16 +211,32 @@ def _wide_tiles_supported(builder) -> bool:
     return _wide_tiles_caps(builder)[0]
 
 
-def _tile_programs_env() -> int:
-    """``E4B_INT4_TILE_PROGRAMS`` (e4b#846, opt-in): how many programs the one-launch cumsum tile table above 256 routed
-    rows is split over (grouped-nf4-gemm #524's ``build_group_tiles_fused(..., programs=P)``: each program ranks a slice
-    of the experts; the tables are the same integers at every count, so outputs are bit-identical). ``1`` (the default,
-    also unset or empty) is the one-program table, called exactly as before; an integer from 2 to 64 splits it.
-    Anything else is refused; ``P > 1`` on a kernel package without ``programs=`` is refused where the cumsum table is
-    built."""
-    v = os.environ.get("E4B_INT4_TILE_PROGRAMS", "1").strip() or "1"
+#: ``E4B_INT4_TILE_PROGRAMS=auto`` (the default) splits the one-launch cumsum table over this many programs, inside the
+#: size lane P126 read. P126 (``e4b.serve.p126.tile-programs.qwen3-int4.5090.2026-10-09``) read DEFAULT_ON_4 on
+#: Qwen3-30B-A3B's 64-row step (128 experts x 512 routed rows): 0.8442 / 0.8456, tokens identical. P = 8 was
+#: ineligible (its blocks disagreed), so it is not the default.
+_TILE_PROGRAMS_AUTO = 4
+
+
+def _tile_programs_env():
+    """``E4B_INT4_TILE_PROGRAMS`` (e4b#846): how many programs the one-launch cumsum tile table above 256 routed rows is
+    split over (grouped-nf4-gemm #524's ``build_group_tiles_fused(..., programs=P)``: each program ranks a slice of the
+    experts; the tables are the same integers at every count, so outputs are bit-identical).
+
+    - ``auto`` (the default, also unset or empty): :data:`_TILE_PROGRAMS_AUTO` programs when the installed builder takes
+      ``programs=`` (detected by capability, never by version) AND the table is no larger than the one read
+      (:func:`_wide_tiles_auto_takes`, lanes P122 and P126); the one-program table otherwise. On a grouped-nf4-gemm
+      without ``programs=`` (0.44.0 and older) it changes nothing.
+    - ``1``: the one-program table, called exactly as before P126 (no ``programs=`` keyword).
+    - an integer from 2 to 64: that many programs at any table size; refused where the cumsum table is built on a kernel
+      package without ``programs=``.
+
+    Anything else is refused. Returns ``"auto"`` or the integer."""
+    v = os.environ.get("E4B_INT4_TILE_PROGRAMS", "auto").strip().lower() or "auto"
+    if v == "auto":
+        return "auto"
     if not v.isdigit() or not 1 <= int(v) <= 64 or str(int(v)) != v:
-        raise ValueError(f"E4B_INT4_TILE_PROGRAMS={v!r}: expected an integer from 1 to 64")
+        raise ValueError(f"E4B_INT4_TILE_PROGRAMS={v!r}: expected 'auto' or an integer from 1 to 64")
     return int(v)
 
 
@@ -243,6 +259,14 @@ def _next_pow2(n: int) -> int:
 def _wide_tiles_auto_takes(n_exp: int, rows: int) -> bool:
     """Whether ``auto``'s shape bound admits a table of ``n_exp`` experts and ``rows`` routed rows (lane P122)."""
     return _next_pow2(n_exp) * _next_pow2(rows) <= _WIDE_TILES_AUTO_MAX_TILE
+
+
+def _tile_programs_for(mode, builder, n_exp: int, rows: int) -> int:
+    """The program count for one cumsum tile table: ``auto`` takes :data:`_TILE_PROGRAMS_AUTO` when ``builder`` takes
+    ``programs=`` and the table is inside the size read, else 1; an explicit integer is returned as set."""
+    if mode == "auto":
+        return _TILE_PROGRAMS_AUTO if (_tile_programs_supported(builder) and _wide_tiles_auto_takes(n_exp, rows)) else 1
+    return mode
 
 
 def _lean_glue_supported(builder, k19) -> bool:
@@ -701,12 +725,14 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                     "E4B_INT4_WIDE_TILES=1 needs grouped-nf4-gemm with build_group_tiles_fused(rank='cumsum')")
             if _wide_mode == "1" or (all(_caps) and _wide_tiles_auto_takes(_n_exp, local_ids.numel())):
                 import functools
-                if _tile_programs > 1:
-                    # E4B_INT4_TILE_PROGRAMS: the same table split over P programs (grouped-nf4-gemm #524)
+                _programs = _tile_programs_for(_tile_programs, _wide_builder, _n_exp, local_ids.numel())
+                if _programs > 1:
+                    # E4B_INT4_TILE_PROGRAMS: the same table split over P programs (grouped-nf4-gemm #524); auto only
+                    # chooses P > 1 when the builder takes programs=, so the refusal is an explicit integer's
                     if not _tile_programs_supported(_wide_builder):
                         raise RuntimeError("E4B_INT4_TILE_PROGRAMS > 1 needs grouped-nf4-gemm with "
                                            "build_group_tiles_fused(programs=)")
-                    _fused_tiles = functools.partial(_wide_builder, rank="cumsum", programs=_tile_programs)
+                    _fused_tiles = functools.partial(_wide_builder, rank="cumsum", programs=_programs)
                 else:
                     _fused_tiles = functools.partial(_wide_builder, rank="cumsum")
         if _lean:
