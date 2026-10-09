@@ -100,6 +100,41 @@
       "ast_sha256": "fe1233ad3bbc56cd61172b2c886350bf48bfe38a8ca59539ce52e48fd07a2619",
       "feature": "router_epilogue",
       "source_commit": "8666dee43dad743366026067692d082a3a5a05d8"
+    },
+    {
+      "module": "experts4bit_qlora.engines.router_epilogue",
+      "qualname": "fuse_router_epilogue.<locals>._fwd",
+      "ast_sha256": "8dfe917076bba93dcea0a41f2ece56f4220c709ab6507f5099344b4e45601860",
+      "feature": "router_epilogue",
+      "source_commit": "41d72d33d7d994d85c96e676cb4fb5d67bb65532"
+    },
+    {
+      "module": "experts4bit_qlora.engines.router_epilogue",
+      "qualname": "fuse_router_epilogue.<locals>._fwd",
+      "ast_sha256": "9a6dd7a25e1d8499b5390beb353d0a0b238a41d7b8e27d7aa8fb1964df597273",
+      "feature": "router_epilogue",
+      "source_commit": "41d72d33d7d994d85c96e676cb4fb5d67bb65532"
+    },
+    {
+      "module": "experts4bit_qlora.engines.glue_r2",
+      "qualname": "_patch_attention.<locals>._fwd",
+      "ast_sha256": "ea04d2d672ffd577edad70ee5e155e45fcdcb7f5d4bee640fa175b70ef61cede",
+      "feature": "rope_glue",
+      "source_commit": "41d72d33d7d994d85c96e676cb4fb5d67bb65532"
+    },
+    {
+      "module": "experts4bit_qlora.engines.glue_r2",
+      "qualname": "_patch_attention_unfused.<locals>._fwd",
+      "ast_sha256": "09de3fc03d75db9aca109937867bd4ed87c1f224dc7a949f7fa9dd5393c903db",
+      "feature": "rope_glue",
+      "source_commit": "41d72d33d7d994d85c96e676cb4fb5d67bb65532"
+    },
+    {
+      "module": "experts4bit_qlora.engines.glue_r2",
+      "qualname": "_patch_layer.<locals>._fwd",
+      "ast_sha256": "4c2ed1c0f0f8673509c7955f1a739e850056b2de15608ab3fe01b8f986d7aee6",
+      "feature": "residual_glue",
+      "source_commit": "4e1959a5bf4c99f41dd5deb1b8562076e9664d11"
     }
   ]
 }

@@ -23,8 +23,9 @@ import pytest
 import torch
 
 pytest.importorskip("transformers.cache_utils", reason="needs transformers")
-q35 = pytest.importorskip("transformers.models.qwen3_5_moe.modeling_qwen3_5_moe",
-                          reason="needs transformers with Qwen3.5-MoE")
+pytest.importorskip("transformers.models.qwen3_5_moe.configuration_qwen3_5_moe",
+                    reason="needs transformers with Qwen3.5-MoE")
+from hybrid_reference import reference_modeling  # noqa: E402
 from transformers import Qwen3_5MoeTextConfig  # noqa: E402
 from transformers.cache_utils import DynamicCache  # noqa: E402
 
@@ -44,7 +45,7 @@ def _model(layer_types, seed=0):
                                linear_value_head_dim=16, linear_conv_kernel_dim=4, layer_types=list(layer_types),
                                max_position_embeddings=256)
     torch.manual_seed(seed)
-    return q35.Qwen3_5MoeForCausalLM(cfg).eval()
+    return reference_modeling("qwen3_5_moe").Qwen3_5MoeForCausalLM(cfg).eval()
 
 
 def _prompts():

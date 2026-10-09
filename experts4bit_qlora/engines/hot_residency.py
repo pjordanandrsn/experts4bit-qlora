@@ -211,16 +211,32 @@ def _wide_tiles_supported(builder) -> bool:
     return _wide_tiles_caps(builder)[0]
 
 
-def _tile_programs_env() -> int:
-    """``E4B_INT4_TILE_PROGRAMS`` (e4b#846, opt-in): how many programs the one-launch cumsum tile table above 256 routed
-    rows is split over (grouped-nf4-gemm #524's ``build_group_tiles_fused(..., programs=P)``: each program ranks a slice
-    of the experts; the tables are the same integers at every count, so outputs are bit-identical). ``1`` (the default,
-    also unset or empty) is the one-program table, called exactly as before; an integer from 2 to 64 splits it.
-    Anything else is refused; ``P > 1`` on a kernel package without ``programs=`` is refused where the cumsum table is
-    built."""
-    v = os.environ.get("E4B_INT4_TILE_PROGRAMS", "1").strip() or "1"
+#: ``E4B_INT4_TILE_PROGRAMS=auto`` (the default) splits the one-launch cumsum table over this many programs, inside the
+#: size lane P126 read. P126 (``e4b.serve.p126.tile-programs.qwen3-int4.5090.2026-10-09``) read DEFAULT_ON_4 on
+#: Qwen3-30B-A3B's 64-row step (128 experts x 512 routed rows): 0.8442 / 0.8456, tokens identical. P = 8 was
+#: ineligible (its blocks disagreed), so it is not the default.
+_TILE_PROGRAMS_AUTO = 4
+
+
+def _tile_programs_env():
+    """``E4B_INT4_TILE_PROGRAMS`` (e4b#846): how many programs the one-launch cumsum tile table above 256 routed rows is
+    split over (grouped-nf4-gemm #524's ``build_group_tiles_fused(..., programs=P)``: each program ranks a slice of the
+    experts; the tables are the same integers at every count, so outputs are bit-identical).
+
+    - ``auto`` (the default, also unset or empty): :data:`_TILE_PROGRAMS_AUTO` programs when the installed builder takes
+      ``programs=`` (detected by capability, never by version) AND the table is no larger than the one read
+      (:func:`_wide_tiles_auto_takes`, lanes P122 and P126); the one-program table otherwise. On a grouped-nf4-gemm
+      without ``programs=`` (0.44.0 and older) it changes nothing.
+    - ``1``: the one-program table, called exactly as before P126 (no ``programs=`` keyword).
+    - an integer from 2 to 64: that many programs at any table size; refused where the cumsum table is built on a kernel
+      package without ``programs=``.
+
+    Anything else is refused. Returns ``"auto"`` or the integer."""
+    v = os.environ.get("E4B_INT4_TILE_PROGRAMS", "auto").strip().lower() or "auto"
+    if v == "auto":
+        return "auto"
     if not v.isdigit() or not 1 <= int(v) <= 64 or str(int(v)) != v:
-        raise ValueError(f"E4B_INT4_TILE_PROGRAMS={v!r}: expected an integer from 1 to 64")
+        raise ValueError(f"E4B_INT4_TILE_PROGRAMS={v!r}: expected 'auto' or an integer from 1 to 64")
     return int(v)
 
 
@@ -245,6 +261,14 @@ def _wide_tiles_auto_takes(n_exp: int, rows: int) -> bool:
     return _next_pow2(n_exp) * _next_pow2(rows) <= _WIDE_TILES_AUTO_MAX_TILE
 
 
+def _tile_programs_for(mode, builder, n_exp: int, rows: int) -> int:
+    """The program count for one cumsum tile table: ``auto`` takes :data:`_TILE_PROGRAMS_AUTO` when ``builder`` takes
+    ``programs=`` and the table is inside the size read, else 1; an explicit integer is returned as set."""
+    if mode == "auto":
+        return _TILE_PROGRAMS_AUTO if (_tile_programs_supported(builder) and _wide_tiles_auto_takes(n_exp, rows)) else 1
+    return mode
+
+
 def _lean_glue_supported(builder, k19) -> bool:
     """Whether the installed kernel package carries K23's options (``lean=`` / ``sorted_ids=`` on the builder,
     ``scatter=`` / ``gather_div=`` on K19). Read once per function pair, not per call."""
@@ -254,6 +278,18 @@ def _lean_glue_supported(builder, k19) -> bool:
         _LEAN_GLUE_SUPPORT[key] = ({"lean", "sorted_ids"} <= set(inspect.signature(builder).parameters)
                                    and {"scatter", "gather_div"} <= set(inspect.signature(k19).parameters))
     return _LEAN_GLUE_SUPPORT[key]
+
+
+_GATHER_DIV_SUPPORT: dict = {}
+
+
+def _nf4_takes_gather_div(gemm) -> bool:
+    """Whether the installed ``gemm_4bit_grouped`` takes ``gather_div=`` (grouped-nf4-gemm#530: the NF4 singleton route
+    reads the token rows itself). Read once per function, not per call."""
+    if gemm not in _GATHER_DIV_SUPPORT:
+        import inspect
+        _GATHER_DIV_SUPPORT[gemm] = "gather_div" in inspect.signature(gemm).parameters
+    return _GATHER_DIV_SUPPORT[gemm]
 
 
 def _k21_mode_env() -> str:
@@ -635,10 +671,19 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                 "E4B_INT4_PREFILL=k19 needs grouped-nf4-gemm with K19 "
                 "(int4_smallm.gemm_int4_b32_grouped_smallm, grouped-nf4-gemm#419)") from e
     _tok = None
+    _gd = None
     if x_rows is None:
         x_t, row_token, top_k = x_tokens
         if _lean and _CALIB_SINK is None:
             _tok = (x_t, top_k)           # K23: K19's (or K25's) gate_up reads the token rows itself (gather_div)
+        elif (x_t.shape[0] == 1 and singleton_groups and not device_grouping and int4_stores is None
+              and not _mxfp4_store and _CALIB_SINK is None and _nf4_takes_gather_div(gemm_4bit_grouped)):
+            # ONE token, on the NF4 singleton route (the last branch below): gemm_4bit_grouped's gate_up reads row
+            # r's token r // top_k -- token 0 for every row -- itself (gather_div, grouped-nf4-gemm#530), so the
+            # (token, slot) copy is not made: bitwise the copied rows' result, one launch a layer fewer at T == 1
+            # (e4b#1313, lane P127's Phase 2, item b2). One token only: gather_div assumes token-major rows, which
+            # _row_index builds, but with one token the row order cannot matter at all.
+            _gd = (x_t, top_k)
         else:
             x_rows = x_t.index_select(0, row_token)
     if _mxfp4_store and _k21 is None:
@@ -701,12 +746,14 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                     "E4B_INT4_WIDE_TILES=1 needs grouped-nf4-gemm with build_group_tiles_fused(rank='cumsum')")
             if _wide_mode == "1" or (all(_caps) and _wide_tiles_auto_takes(_n_exp, local_ids.numel())):
                 import functools
-                if _tile_programs > 1:
-                    # E4B_INT4_TILE_PROGRAMS: the same table split over P programs (grouped-nf4-gemm #524)
+                _programs = _tile_programs_for(_tile_programs, _wide_builder, _n_exp, local_ids.numel())
+                if _programs > 1:
+                    # E4B_INT4_TILE_PROGRAMS: the same table split over P programs (grouped-nf4-gemm #524); auto only
+                    # chooses P > 1 when the builder takes programs=, so the refusal is an explicit integer's
                     if not _tile_programs_supported(_wide_builder):
                         raise RuntimeError("E4B_INT4_TILE_PROGRAMS > 1 needs grouped-nf4-gemm with "
                                            "build_group_tiles_fused(programs=)")
-                    _fused_tiles = functools.partial(_wide_builder, rank="cumsum", programs=_tile_programs)
+                    _fused_tiles = functools.partial(_wide_builder, rank="cumsum", programs=_programs)
                 else:
                     _fused_tiles = functools.partial(_wide_builder, rank="cumsum")
         if _lean:
@@ -767,8 +814,8 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         # what a device-grouped one would.
         order = None
         sorted_ids = local_ids
-        x_sorted = x_rows.contiguous()
-        sizes = [1] * x_rows.shape[0]
+        x_sorted = x_rows.contiguous() if _gd is None else _gd[0].contiguous()   # _gd: the TOKEN rows (item b2)
+        sizes = [1] * R_rows
         eids = local_ids
     else:
         order = torch.argsort(local_ids)
@@ -786,6 +833,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         # Measured at B=16 decode: this plus gnf4's tile-build memo took
         # to_device_i32 traffic /4 and the step 1.206x, tokens identical.
         eids = uniq
+    _gu_kw = {}                           # gate_up's extra kernel arguments: only the NF4 route's gather_div
     if device_grouping and int4_stores is None and _k25 is not None:
         _route = "nf4_k25"
         # K25 (opt-in): the grouped small-M tensor-core GEMM on the NF4 stacks against the SAME 16-row device tiles. The
@@ -1005,12 +1053,17 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             _route = "int4_prefill_batched" if _batched else "int4_prefill_loop"
     else:
         _route = "nf4_singleton" if singleton_groups else "nf4_mtile_host"
-        # gemm_4bit_grouped casts the expert ids to int32 on every call (a no-op on int32): cast them once for both
-        # calls -- the same ids, one launch a layer fewer at T == 1 (e4b#1313, lane P127's Phase 1), as the int4 and
-        # MXFP4 routes above already do
-        _eids = eids.to(torch.int32) if torch.is_tensor(eids) else eids
+        # Expert ids in a dtype the kernel package reads as they are (nf4_grouped.EXPERT_ID_DTYPES, int64 included
+        # since grouped-nf4-gemm#529: every NF4 kernel widens its id before any stride product) go to it uncast: no
+        # cast launch at all (lane P127's Phase 2, item a1). Otherwise gemm_4bit_grouped would cast them on every
+        # call, so cast them once for both calls (Phase 1), as the int4 and MXFP4 routes above already do.
+        import nf4_grouped
+        _ids_ok = getattr(nf4_grouped, "EXPERT_ID_DTYPES", (torch.int32,))
+        _eids = eids.to(torch.int32) if torch.is_tensor(eids) and eids.dtype not in _ids_ok else eids
+        if _gd is not None:
+            _gu_kw = {"gather_div": _gd[1]}          # gate_up on the token rows (item b2); down gets its own rows
 
-        def _mm(xr, pk, am):
+        def _mm(xr, pk, am, gather_div=1):
             if pk is not None and pk.numel() == 0:
                 raise RuntimeError(
                     "expert stacks are freed (int4 serve lane active) but "
@@ -1018,9 +1071,11 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                     "baseline path reached _fused_over_stack after "
                     "enable_serve_experts_int4. That enable is collapsed-"
                     "path-only; re-enable with all-VRAM placement.")
+            if gather_div != 1:
+                return gemm_4bit_grouped(xr, pk, am, sizes, _eids, gather_div=gather_div)
             return gemm_4bit_grouped(xr, pk, am, sizes, _eids)
     _seen_route(_route, R_rows)
-    gu = _mm(x_sorted, gu_p, gu_a)
+    gu = _mm(x_sorted, gu_p, gu_a, **_gu_kw)
     if gptoss is not None:
         gu_bias, dn_bias, alpha, limit = gptoss
         gu = gu + gu_bias.index_select(0, sorted_ids).to(gu.dtype)  # per-expert bias by local id
@@ -1071,12 +1126,52 @@ def _kernel_tensor(t) -> bool:
     return bool(t.is_cuda)
 
 
-def _combine_topk(dn, top_k_weights, k, T, H, input_dtype, input_dev):
+_COMBINE_RESIDUAL_SUPPORT: dict = {}
+_STATE_RESIDUAL_SUPPORT: dict = {}
+
+
+def _state_takes_residual(cls) -> bool:
+    """Whether a residency state class's ``forward`` takes ``residual=``. Read once per class."""
+    if cls not in _STATE_RESIDUAL_SUPPORT:
+        import inspect
+        try:
+            _STATE_RESIDUAL_SUPPORT[cls] = "residual" in inspect.signature(cls.forward).parameters
+        except (TypeError, ValueError):
+            _STATE_RESIDUAL_SUPPORT[cls] = False
+    return _STATE_RESIDUAL_SUPPORT[cls]
+
+
+def _state_forward(st, hidden, top_k_index, top_k_weights, residual):
+    """``st.forward`` with the decoder layer's residual (lane P127's item c). With no residual, no ``residual=`` keyword
+    at all, so a state class that overrides ``forward`` without it still runs: p127-prove-1 found hybrid's
+    ``_HybridTier`` raising a TypeError on every MoE call of the served all-resident build. The keyword goes where the
+    class takes it; otherwise the residual is the layer's own add."""
+    if residual is None:
+        return st.forward(hidden, top_k_index, top_k_weights)
+    if _state_takes_residual(type(st)):
+        return st.forward(hidden, top_k_index, top_k_weights, residual=residual)
+    return st.forward(hidden, top_k_index, top_k_weights) + residual
+
+
+def _combine_takes_residual(ck) -> bool:
+    """Whether the kernel side's ``combine_rows`` takes ``residual=`` (grouped-nf4-gemm#527). Read once per function."""
+    if ck not in _COMBINE_RESIDUAL_SUPPORT:
+        import inspect
+        _COMBINE_RESIDUAL_SUPPORT[ck] = "residual" in inspect.signature(ck).parameters
+    return _COMBINE_RESIDUAL_SUPPORT[ck]
+
+
+def _combine_topk(dn, top_k_weights, k, T, H, input_dtype, input_dev, residual=None):
     """The top-k weighted sum of the down projections back to the token rows: the kernel side's ``combine_rows`` in one
     launch when it applies, else the torch chain. The kernel loads the weights with ``.to(tl.float32)`` (every
     grouped-nf4-gemm since e4b's floor, 0.30.0), so it takes them in the router's dtype: a host ``.to(torch.float32)``
     was one launch a layer for an exact bf16 -> fp32 widening (e4b#1313, lane P127's Phase 1). The torch chain keeps
-    its fp32 weights."""
+    its fp32 weights.
+
+    ``residual`` (the decoder layer's residual, lane P127's item c): the result is ``combine + residual``, bitwise the
+    layer's own bf16 add. It goes into the kernel's epilogue (``combine_rows(..., residual=)``: the combine rounded to
+    bf16, one fp32 add, rounded, which is torch's add of two bf16 tensors) only where the kernel takes it and the
+    residual is bf16 ``[T, H]`` on the kernel's device; anywhere else it is that torch add."""
     wk = top_k_weights.reshape(-1)
     ck = _combine_kernel()
     if (ck is not None and _kernel_tensor(dn) and dn.dtype == torch.bfloat16
@@ -1088,10 +1183,16 @@ def _combine_topk(dn, top_k_weights, k, T, H, input_dtype, input_dev):
         # rounds each product and sums in torch's order. Both are within the error bound of a
         # correct fp32 sum (grouped-nf4-gemm lane B393, #393: 144/144
         # census cases, RTX 5090); E4B_FUSE_COMBINE=0 is the chain.
-        return ck(dn, wk, k)
+        if residual is None:
+            return ck(dn, wk, k)
+        if (residual.dtype == torch.bfloat16 and tuple(residual.shape) == (T, H) and residual.device == dn.device
+                and _combine_takes_residual(ck)):
+            return ck(dn, wk, k, residual=residual)
+        return ck(dn, wk, k) + residual
     w = wk.to(torch.float32)
     out = (dn.to(torch.float32) * w[:, None]).view(T, k, H)
-    return out.sum(dim=1).to(device=input_dev, dtype=input_dtype)
+    out = out.sum(dim=1).to(device=input_dev, dtype=input_dtype)
+    return out if residual is None else out + residual
 
 
 def _partition_by_mask(hot_row):
@@ -1288,7 +1389,7 @@ class _HotResidency:
         self.g2h = g2h.to(self.device)
         self.g2c_cpu = g2c  # cold local ids resolved on CPU (stack is on CPU)
 
-    def forward(self, hidden_states, top_k_index, top_k_weights):
+    def forward(self, hidden_states, top_k_index, top_k_weights, residual=None):
         input_dtype = hidden_states.dtype
         input_dev = hidden_states.device
         # read compute_dtype LIVE off the module (a later change must be honored)
@@ -1306,7 +1407,12 @@ class _HotResidency:
             # per-bus event bracket lives there); the collapse serves
             # the production shape
             return self._forward_collapsed(x, flat, top_k_weights, T, k,
-                                           H, dev, input_dev, input_dtype)
+                                           H, dev, input_dev, input_dtype, residual=residual)
+        if residual is not None:
+            # only the collapse folds the residual into its combine; every other path adds it as the layer does. The
+            # base forward by name, never self.forward: a subclass override (hybrid's prefetch submit and amortization
+            # count) has already run once for this call
+            return _HotResidency.forward(self, hidden_states, top_k_index, top_k_weights) + residual
         if self.dispatch_diet:
             return self._forward_diet(x, flat, top_k_weights, T, k, H, dev,
                                       input_dev, input_dtype)
@@ -1368,7 +1474,7 @@ class _HotResidency:
         return out.sum(dim=1).to(device=input_dev, dtype=input_dtype)
 
     def _forward_collapsed(self, x, flat, top_k_weights, T, k, H, dev,
-                           input_dev, input_dtype):
+                           input_dev, input_dtype, residual=None):
         """The all-resident collapse (PREREG-b1c). Fires only under the
         placement-static `_all_hot()` predicate, so `flat` IS the local
         id (identity g2h, asserted at cache time) and every row lands in
@@ -1396,7 +1502,7 @@ class _HotResidency:
                                int4_stores=getattr(self, "_int4_stores",
                                                    None),
                                x_tokens=xtok)
-        return _combine_topk(dn, top_k_weights, k, T, H, input_dtype, input_dev)
+        return _combine_topk(dn, top_k_weights, k, T, H, input_dtype, input_dev, residual=residual)
 
     def _forward_diet(self, x, flat, top_k_weights, T, k, H, dev,
                       input_dev, input_dtype):
@@ -1730,17 +1836,19 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
         mod._e4b_hot_ref = mod.forward
         mod._hot_residency = state
 
-        def _fwd(hidden, top_k_index, top_k_weights, _m=mod):
+        def _fwd(hidden, top_k_index, top_k_weights, residual=None, _m=mod):
+            # residual (lane P127's item c): the decoder layer's residual, returned added -- into the combine's
+            # epilogue on the collapse, as the layer's own bf16 add everywhere else
             st = _m._hot_residency
             cd = _m.compute_dtype if _m.compute_dtype is not None else hidden.dtype
-            if cd not in (torch.bfloat16, torch.float16):
-                return _m._e4b_hot_ref(hidden, top_k_index, top_k_weights)
-            if torch.is_grad_enabled() and (
+            if cd not in (torch.bfloat16, torch.float16) or (torch.is_grad_enabled() and (
                 hidden.requires_grad or any(p.requires_grad for p in _m.parameters())
-            ):
-                return _m._e4b_hot_ref(hidden, top_k_index, top_k_weights)
-            return st.forward(hidden, top_k_index, top_k_weights)
+            )):
+                out = _m._e4b_hot_ref(hidden, top_k_index, top_k_weights)
+                return out if residual is None else out + residual
+            return _state_forward(st, hidden, top_k_index, top_k_weights, residual)
 
+        _fwd._e4b_takes_residual = True
         mod.forward = _fwd
         patched += 1
     return patched

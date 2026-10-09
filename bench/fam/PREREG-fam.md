@@ -443,3 +443,232 @@ NO_GAIN about 55 %, SLOWER or NOISY about 10 %.
 - In the same change, `FUSION_UNLICENSED`'s reasons for `gpt_oss`, `qwen3_5_moe` and `granitemoe` cite FAM's reads.
 
 **Unchanged:** the quality instrument, its rule, the readings and their verdicts.
+
+## Amendment 5 (2026-10-09, before any Mixtral data): Mixtral-8x7B, its own registration
+
+The Mixtral and Gemma-4 readings were requested for this lane; the brief makes each its own registration. The
+maintainer approved this design on the bus (2026-10-09T13:43Z), raised the lane ceiling, and asked for the disk sizing
+and the fp32 router check below. The instrument, the cells, the arms, the rule, the gates and margins, the mutants and
+the verdict ladder are unchanged; this amendment adds Mixtral's pins and tables, a per-family proof, and two checks.
+
+**The family.** `mistralai/Mixtral-8x7B-Instruct-v0.1` @ `eba92302a2861cdc0098cc54bc9f17cb2c47eb61`: 32 layers, 8
+experts, top-2, no sliding window (its config.json at that revision). The arena is baked by P39's `k8_bake.py`, as
+Granite's and gpt-oss's are. Mixtral has been served all-vram on an RTX 5090 at NF4 before
+(`e4b.serve.census.bo7.mixtral.b1.5090.2026-09-05`).
+
+**Configs and tables** (one knob per arm, as gpt-oss; measured on CPU with P115's stand-in kernels on a tiny Mixtral at
+the real depth, `tests/test_fam_box.py`):
+
+| config | census (q/k/v / glue / r2 / router) | glue-kernel calls per decode-shaped forward |
+|---|---|---|
+| OFF | `0 / 0 / [0, 0] / 0` | none |
+| ON_glue | `0 / 65 / [0, 0] / 0` | `rmsnorm_rows` 65 |
+| ON_r2 | `0 / 0 / [32, 32] / 0` | `rmsnorm_resid_rows` 32, `rope_heads` 64 |
+| ON_epi | `0 / 0 / [0, 0] / 32` | `router_epilogue` 32 |
+| ON_auto | `0 / 65 / [32, 32] / 32` | `rmsnorm_rows` 33, `rmsnorm_resid_rows` 32, `rope_heads` 64, `router_epilogue` 32 |
+
+Decode attention calls are 127 × 32 per pass (× 2 for `half`), and there is no warm-up forward (no linear layers).
+
+**Two checks the reducer adds.**
+- **The router weights stay fp32.** Mixtral's router returns fp32 weights, and the fused epilogue keeps them fp32 since
+  the cast guard (#1372). The box now records the build's `fusion_report`. Wherever the epilogue engages (ON_epi,
+  ON_auto), its `E4B_FUSE_ROUTER_EPI` entry must read `fp32_upstream` 32, every patched router; anything else VOIDs, so
+  ON_epi is read on that path.
+- **The disk, refused up front.** Mixtral's checkpoint is 93.4 GB of safetensors (the `consolidated*` files are
+  excluded from the fetch). With its NF4 snapshot and arena (about 25 GB each), the environment and the cells'
+  references it needs about 157 GB. The box refuses with exit 13 below 220 GB free at the start (`DISK_DEF`, which
+  replaces the fixed 200 GB floor for Mixtral) and again below 165 GB free just before the fetch (`FETCH_DISK_GB`),
+  after the installs, so a short volume never stops it mid-fetch.
+
+**A proof per family.** Mixtral's own proof (`FAM_PROVE=1 FAM_FAMILY=mixtral`; `fam_reduce.py --proof --families
+mixtral`) runs OFF, ON_epi and ON_auto at 32 positions, with no anchor; Granite's proof is unchanged. A reading follows
+only after its proof is re-derived.
+
+**Runs and budget** (the policy rate, $0.85 an hour; sized from FAM's measured walls, Qwen3.6's needs for a 47B model):
+
+| run | guard | the box's checks (need / alarm cap) |
+|---|---|---|
+| Mixtral | 4.0 h | fetch 3000 s, bake 1500 s, OFF 9500 / 10800 s, each ON 1600 / 2700 s |
+| Mixtral's proof | 1.5 h | fetch 3000 s, bake 1500 s, OFF 2400 / 3000 s, each ON 600 / 900 s |
+
+- Each check plus 600 s of fetch-back fits inside its guard (`tests/test_fam_staged_pin.py`).
+- Run ceilings: the proof $1.28, the reading $3.40. The lane has spent $7.720; with these two it stays under $12.40.
+- **lane ceiling $26.00** (was $18.00), which also covers Amendment 6's Gemma-4 proof and reading; every run stays
+  under the $15 no-ask tier.
+
+**Predictions** (written before any data):
+
+| # | prediction |
+|---|---|
+| X1 | census, every engagement count and the fp32 router path exact; no VOID, about 85 % |
+| X2 | Mixtral's floor A_f at (wikitext, 12) in [0.93, 0.97] |
+| X3 | `mut090` fails every gated cell, about 80 % |
+| X4 | ON_epi PASS about 70 %; ON_glue and ON_r2 about 60 % each; ON_auto about 50 % (Granite, with the same fold structure, missed by one entry) |
+| X5 | peak memory ≤ 30 GiB on every process |
+
+**Consequence.** As registered, with the maintainer's rule from Amendment 4: a PASS licenses an allowlist pull request
+only together with a speed read of what the passing knobs buy on Mixtral (Amendment 4's interleaved method). A FAIL
+keeps the knob off; UNRESOLVED and VOID read as registered.
+
+**What this cannot say:** the knobs' speed (no speed arm runs); Mixtral's other checkpoints; the int4 route.
+
+**Code.** The reducer's self-test now runs 56 cases (Mixtral's clean pass and proof; the fp32 path cast off, and the
+report missing, each VOID; a proof names one registered family). `tests/test_fam_box.py` pins the table above at the
+real depth, with the fp32 router path. The box's self-test is unchanged.
+
+## Amendment 6 (2026-10-09, before any Gemma-4 data): Gemma-4-26B-A4B, its own registration
+
+The second of the two requested readings, designed with the maintainer on the bus (2026-10-09T13:43Z) and
+registered separately from Mixtral's. Everything Amendment 5 left unchanged stays unchanged; its per-family proof and
+the lane ceiling ($26.00) cover this family too.
+
+**The family.** `google/gemma-4-26B-A4B-it` @ `4d7ae4984b7db7de8f8457170b3f1a419ee76d52`: 30 layers (five sliding to
+one full, 25 and 5), 128 experts, top-8, a 1024-token sliding window, K = V on the full layers (head_dim 512 there,
+256 on the sliding ones), a final-logit softcap of 30 (its config.json at that revision). The arena is baked by P39's
+`k8_bake.py`. The paged path is at parity on this family (P108, #359).
+
+**Configs and tables** (measured on CPU with P115's stand-in kernels on a tiny Gemma-4 at the real depth and layer
+pattern, `tests/test_fam_box.py`). The r2 fold refuses Gemma-4's extra norms (`layer_scalar`, `v_norm`) and engages
+nothing, so there is no ON_r2 arm:
+
+| config | census (q/k/v / glue / r2 / router) | glue-kernel calls per decode-shaped forward |
+|---|---|---|
+| OFF | `0 / 0 / [0, 0] / 0` | none |
+| ON_glue | `0 / 271 / [0, 0] / 0` | `rmsnorm_rows` 271 |
+| ON_epi | `0 / 0 / [0, 0] / 30` | `router_epilogue` 30 |
+| ON_auto | `0 / 271 / [0, 0] / 30` | `rmsnorm_rows` 271, `router_epilogue` 30 |
+
+The glue fold takes nine norms a layer and the final one. Decode attention calls are 127 × 30 per pass (× 2 for
+`half`); there is no warm-up forward. The epilogue's `gemma4` kind applies `per_expert_scale` and is not on the
+`fp32_upstream` path, so Amendment 5's fp32 check does not apply here.
+
+**Disk.** The checkpoint is 49.9 GB. With its NF4 snapshot and arena (about 13 GB each), the environment and the
+references of a 262,144-token vocabulary (about 19 GB) it needs about 105 GB. The 200 GB start floor holds, and the box
+refuses below 120 GB free just before the fetch (`FETCH_DISK_GB`).
+
+**Gemma-4's own proof** (`FAM_PROVE=1 FAM_FAMILY=gemma4`): OFF, ON_epi and ON_auto at 32 positions, no anchor. It also
+checks on the card what CPU cannot: the load (#344 is open, though unreproduced on the current loader) and `split1`
+(`n_split=1`) on the 512-dim full layers.
+
+**Runs and budget:**
+
+| run | guard | the box's checks (need / alarm cap) |
+|---|---|---|
+| Gemma-4 | 4.0 h | fetch 2400 s, bake 900 s, OFF 9500 / 10800 s, each ON 1600 / 2700 s |
+| Gemma-4's proof | 1.25 h | fetch 2400 s, bake 900 s, OFF 2400 / 3000 s, each ON 600 / 900 s |
+
+Run ceilings: the proof $1.07, the reading $3.40. With Amendment 5's two runs the lane stays under $16.90, inside
+$26.00.
+
+**Predictions** (written before any data):
+
+| # | prediction |
+|---|---|
+| G1 | census and every engagement count exact; no VOID, about 80 % (#344 and the 512-dim `split1` are the risks) |
+| G2 | Gemma-4's floor A_f at (wikitext, 12) in [0.90, 0.96] |
+| G3 | `mut090` fails every gated cell, about 80 % |
+| G4 | ON_epi PASS about 65 %; ON_glue about 50 %; ON_auto about 45 % |
+| G5 | peak memory ≤ 24 GiB on every process |
+
+**Consequence.** As Amendment 5's: a PASS licenses an allowlist pull request only with a speed read of what the passing
+knobs buy on Gemma-4; a FAIL keeps the knob off.
+
+**What this cannot say:** at 512 + 128 tokens Gemma-4's 1024-token sliding window never binds, so the read says nothing
+about the folds where it does (P108's parity read, with the window binding, stands on its own); the knobs' speed; the
+int4 route.
+
+**Code.** The reducer's self-test now runs 58 cases (Gemma-4's clean pass and its proof). `tests/test_fam_box.py` pins
+the table above at the real depth and pattern, and that ON_r2 engages nothing.
+
+## Amendment 7 (2026-10-09, after `fam-mixtral-prove-1`, before any Mixtral reading)
+
+**What happened.** `fam-mixtral-prove-1` (store `bfc1cd3b`, $1.115) fetched Mixtral's 93 GB in 1986 s and baked it in
+about 190 s, both OK. Its OFF process then ran out of GPU memory building the server: the server's own KV pool, the
+default 16 slots × 4096 tokens (4.12 GiB for K and V), did not fit beside the NF4 weights (about 26.8 GiB of the card's
+31.36). No record was written, and the proof was NOT PROVED (rc 27). The instrument never uses that pool: every paged
+pass builds its own, at most 12 + 16 scratch slots × 656 tokens (1.15 GiB). Resizing it therefore leaves the read
+unchanged.
+
+**Changes** (Mixtral only; the rule, gates, tables, predictions and every other family are unchanged):
+- Mixtral's processes build the server at `E4B_PAGED_MAX_TOKENS_PER_SEQ=768` (≥ the 512-token prompt + 128 positions +
+  16), still 16 slots: its pool is 0.77 GiB. The budget is then about 26.8 + 0.77 + 1.15 = 28.7 GiB plus the context,
+  about 1.7 GiB below the card. X5 (peak ≤ 30 GiB) stands as registered.
+- Every arm record carries the server it was built with (`server`: `max_seqs`, `max_tokens_per_seq`), and the reducer
+  VOIDs a Mixtral record built at any length but 768 (`SERVER_TOKENS`).
+- The proof and the reading stay separate rentals: the second 93 GB fetch (about $0.47) buys the re-derive between
+  them.
+- Mixtral's proof is guarded 2.0 h, sized from that run: launch to the bake's end took 2336 s, and OFF needs 2400 + 600.
+  The reading stays at 4.0 h.
+
+| run | guard | the box's checks (need / alarm cap) |
+|---|---|---|
+| Mixtral's proof | 2.0 h | fetch 3000 s, bake 1500 s, OFF 2400 / 3000 s, each ON 600 / 900 s |
+
+**Budget.** The lane has spent $8.835. `fam-mixtral-prove-2` ≤ $1.70, the reading ≤ $3.40, and Gemma-4's proof and
+reading ≤ $1.07 + $3.40 bring it to at most about $18.42, inside $26.00.
+
+**Code.** `fam_run.sh`'s `build_env_of` sets the length for Mixtral, and the box records it. The reducer's self-test
+now runs 59 cases (a Mixtral record built at the default length VOIDs). `tests/test_fam_staged_pin.py` pins the env,
+that 768 covers the instrument, and that the proof's guard holds the measured setup.
+
+## Amendment 8 (2026-10-09, after `fam-mixtral-prove-2`, before any Mixtral reading): Mixtral gates on × 0.90, then × 0.80
+
+**The trigger: an instrument property, not an outcome.** `fam-mixtral-prove-2` (store `ff615c5c`, $1.775) PROVED the box on
+Mixtral, and its reducer read UNRESOLVED. At proof scale, `mut090` passed the gate on c4val1 at both shapes, and it
+failed on wikitext:
+
+| cell | `mut090` agree (A / B / C) | bar (A_f − 0.005) | `mut090` \|bias\| max | bar (B_f + 0.010) |
+|---|---|---|---|---|
+| c4val1, 1 | 0.956 / 0.964 / 0.971 | 0.948 | 0.0033 | 0.0167 |
+| c4val1, 12 | 0.953 / 0.964 / 0.956 | 0.946 | 0.0068 | 0.0207 |
+
+Mixtral barely moves under × 0.90: its agreement with R sits on the reorder floor's. This is a property of the
+instrument on this family, the mutant's sensitivity, and not of ON against OFF. The registration fixed the next rung
+before any data ("Any amendment gates on × 0.80 at the same windows"). The maintainer ruled on the bus to amend now,
+Mixtral only, before the reading.
+
+**Changes** (Mixtral only; the rule, gates, margins, cells, windows and every other family are unchanged):
+- `GRADED` gains `mut080` (decode softmax scale × 0.80). Mixtral's OFF process scores `mut090` **and** `mut080` on
+  every set of every cell (the box's `--gating mut090,mut080`, from `fam_run.sh`'s `gating_of`). The ladder is
+  unchanged.
+- **The claimed resolution is the weakest rung that fails the gate in every gated cell:** × 0.90 if the reading
+  resolves it, else × 0.80, else UNRESOLVED. A stronger claim is never given away for a weaker rung.
+- **A PASS is a null read of that size:** no effect on Mixtral as large as a × 0.80 (or, if × 0.90 resolves, a × 0.90)
+  change of the decode softmax scale. RESULTS and the claim state which.
+- The reducer reports `resolution` for every family (`mut090` wherever × 0.90 resolves). It VOIDs a Mixtral OFF
+  record that did not run both rungs (`GATING`), as it VOIDs any arm short of its windows.
+
+**Predictions** (written before any Mixtral reading):
+
+| # | prediction |
+|---|---|
+| X3a | `mut090` fails every gated cell at reading scale (resolution × 0.90), about 25 % |
+| X3b | `mut080` fails every gated cell (resolution at least × 0.80), about 75 % |
+
+X3 is superseded by these; X1, X2, X4 and X5 stand.
+
+**The reading's guard: 6.0 h, sized from measurements.** `fam-mixtral-prove-2` timed OFF at 1513 s, 245 s of it
+`mut090`, and ON_epi and ON_auto at 261 and 234 s. Granite's proof-to-reading ratios (`fam-prove-2` against
+`fam-granite-1`) are × 5.33 for OFF, × 5.27 for `mut090` and × 6.7 for an ON process. Scaled by those, Mixtral's
+reading needs:
+- setup: 2336 s (Amendment 7);
+- OFF: 1513 × 5.33 + 245 × 5.27 ≈ 9360 s, the second figure for `mut080`;
+- four ON processes: about 1700 s each.
+
+That totals about 18,500 s (5.1 h). Amendment 5's 4.0 h would have skipped the last two ON configs, ON_epi and
+ON_auto.
+
+| run | guard | the box's checks (need / alarm cap) |
+|---|---|---|
+| Mixtral | 6.0 h | fetch 3000 s, bake 1500 s, OFF 10800 / 12600 s, each ON 2000 / 2700 s |
+
+**Budget.** The lane has spent $10.61. The Mixtral reading is at most $6.10 (6.0 h at $0.85, plus about $1.00 for the
+93 GB download). Gemma-4's proof and reading add at most about $1.61 and $3.95, downloads included. That brings the
+lane to at most about $22.27, inside $26.00.
+
+**Code.** The box's self-test now runs 38 cases: the arms with and without × 0.80, and refusals of a gating list that
+does not lead with × 0.90, repeats a rung, names a ladder or unregistered rung, or does not strengthen. The reducer's
+self-test now runs 68 cases: resolution at × 0.90 and at × 0.80, UNRESOLVED with both passing in any one cell, the
+weakest failing rung claimed whatever × 0.80 does, a FAIL still FAILing at × 0.80, and VOID without × 0.80. The merged
+readings re-derive identically apart from the new `resolution` field (`fam-granite-1`, `fam-gptoss-1`, `fam-qw36-2`
+against Amendment 3's verdict, and Granite's two proofs).

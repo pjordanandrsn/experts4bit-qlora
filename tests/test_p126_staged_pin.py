@@ -1,0 +1,193 @@
+"""The p126 lane's staged-file pin must match the repo (the e4b#642 check, mirrored for P126 from P124's).
+
+`bench/p126/p126_drive.sh` refuses to run when a staged file's sha256 differs from `bench/p126/staged.sha256`; this test
+runs the same comparison in CI. It also runs the reducer's self-test and pins the lane's shape:
+- P124's (as amended), P120's, P119's, P117's, P108's and P97's boxes, P39's bake and the bucket test at their
+  registered bytes; grouped-nf4-gemm's multi-program table test at the bytes of the pinned commit;
+- the order: refusals, install and tripwire, the self-test, both premise tests, then (and only then) the fetch, the
+  bake, the box and the reducer;
+- the subject: SC2e's int4 stack built eager with one slot, every tile and attention knob unset until the box sets
+  ``E4B_INT4_TILE_PROGRAMS`` per runner, and the arms the box and the reducer register;
+- the rule's constants, every time-left check inside its own guard, and the exit codes.
+"""
+import hashlib
+import importlib.util
+import pathlib
+import re
+import subprocess
+import sys
+
+REPO = pathlib.Path(__file__).resolve().parents[1]
+LANE = REPO / "bench" / "p126"
+PIN = LANE / "staged.sha256"
+SOURCES = {
+    "p126_run.sh": LANE / "p126_run.sh",
+    "p126_box.py": LANE / "p126_box.py",
+    "p126_reduce.py": LANE / "p126_reduce.py",
+    "p124_box.py": REPO / "bench" / "p124" / "p124_box.py",
+    "p120_box.py": REPO / "bench" / "p120" / "p120_box.py",
+    "p119_box.py": REPO / "bench" / "p119" / "p119_box.py",
+    "p117_box.py": REPO / "bench" / "p117" / "p117_box.py",
+    "p108_box.py": REPO / "bench" / "p108" / "p108_box.py",
+    "p97_box.py": REPO / "bench" / "p97" / "p97_box.py",
+    "k8_bake.py": REPO / "bench" / "p39" / "k8_bake.py",
+    "calib.json": REPO / "bench" / "p39" / "calib.json",
+    "test_decode_graph_buckets.py": REPO / "tests" / "test_decode_graph_buckets.py",
+    "test_tile_table_programs_interp.py": LANE / "test_tile_table_programs_interp.py",
+}
+RUN = (LANE / "p126_run.sh").read_text()
+REDUCE = (LANE / "p126_reduce.py").read_text()
+BOX = (LANE / "p126_box.py").read_text()
+
+
+def _entries(pin=PIN):
+    for line in pin.read_text().splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        want, name = line.split(None, 1)
+        yield want, name.strip()
+
+
+def test_staged_files_match_their_pins():
+    for want, name in _entries():
+        got = hashlib.sha256(SOURCES[name].read_bytes()).hexdigest()
+        assert got == want, f"{name} changed without re-pinning ({got[:12]} vs {want[:12]}); the next p126 launch refuses ON A RENTED BOX"
+
+
+def test_imported_boxes_and_the_premise_tests_run_at_their_registered_bytes():
+    mine = dict((n, w) for w, n in _entries())
+    p124 = dict((n, w) for w, n in _entries(REPO / "bench" / "p124" / "staged.sha256"))
+    for name in ("p124_box.py", "p119_box.py", "p117_box.py", "p108_box.py", "p97_box.py", "k8_bake.py", "calib.json",
+                 "test_decode_graph_buckets.py"):
+        assert mine[name] == p124[name], name
+    p122 = dict((n, w) for w, n in _entries(REPO / "bench" / "p122" / "staged.sha256"))
+    assert mine["p120_box.py"] == p122["p120_box.py"], "P120's box, at P120's registered bytes"
+    progs = (LANE / "test_tile_table_programs_interp.py").read_text()
+    assert 'os.environ.setdefault("TRITON_INTERPRET", "1")' in progs                 # the runner sets 0 explicitly
+    assert "def test_every_row_has_exactly_one_owner" in progs
+
+
+def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
+    assert {n for _w, n in _entries()} == set(SOURCES)
+    driver = (LANE / "p126_drive.sh").read_text()
+    for name in SOURCES:
+        assert name in driver, name
+    staged = RUN[RUN.index("# ---- staged pieces"):RUN.index("# ---- refusals")]
+    for name in list(SOURCES) + ["staged.sha256"]:
+        if name != "p126_run.sh":
+            assert name in staged, name
+    assert "--include 'work/bake.json' --exclude 'work/*'" in driver           # the arena stays on the box
+
+
+def test_the_reducer_self_tests_and_pins_its_constants():
+    out = subprocess.run([sys.executable, str(LANE / "p126_reduce.py"), "--self-test"], capture_output=True, text=True)
+    assert out.returncode == 0 and "self-test OK (45 cases)" in out.stdout, out.stdout + out.stderr
+    gnf4 = re.search(r'GNF4_SHA = "([0-9a-f]{40})"', REDUCE).group(1)
+    assert f"GNF4_SHA={gnf4}" in RUN
+    for model, rev in re.findall(r'"([\w./-]+)": "([0-9a-f]{40})"', REDUCE):
+        assert f"MODEL={model}; REV={rev}" in RUN, model
+    assert "math.fsum" in REDUCE
+    for const in ("PREMISE_SHARE = 0.05", "NOISE = 0.015", "BAR = 0.98",
+                  "WARM, STEPS, BUSY, PROFILED, MUTANT_STEPS = 5, 256, 32, 8, 16", 'SETTINGS = ("1", "4", "8")',
+                  'CANDIDATES = ("4", "8")'):
+        assert const in REDUCE, const
+    prereg = (LANE / "PREREG-p126.md").read_text(encoding="utf-8")
+    for words in ("under **5 %**", "more than **1.5 %**", "at most **0.98**", "**256 timed steps**", "35 cases", "**45 cases**", "## Amendment 1",
+                  "exactly 293 times (5 + 256 + 32)", "P ∈ {1, 4, 8}"):
+        assert words in prereg, words
+
+
+def _mods():
+    sys.path[:0] = [str(LANE), str(REPO / "bench" / "p124"), str(REPO / "bench" / "p120"), str(REPO / "bench" / "p119"),
+                    str(REPO / "bench" / "p117"), str(REPO / "bench" / "p108"), str(REPO / "bench" / "p97")]
+    try:
+        mods = {}
+        for name in ("p126_box", "p126_reduce"):
+            sp = importlib.util.spec_from_file_location(name, LANE / f"{name}.py")
+            m = importlib.util.module_from_spec(sp)
+            sp.loader.exec_module(m)
+            mods[name] = m
+    finally:
+        del sys.path[:7]
+    return mods["p126_box"], mods["p126_reduce"]
+
+
+def test_the_box_and_the_reducer_register_the_same_arms_and_kernels():
+    box, red = _mods()
+    assert box.SETTINGS == red.SETTINGS == ("1", "4", "8")
+    assert box.CANDIDATES == red.CANDIDATES == ("4", "8") and box.BLOCKS == red.BLOCKS == ("a", "b")
+    assert box.WARM == red.WARM and box.BUSY == red.BUSY and box.MUTANT_STEPS == red.MUTANT_STEPS
+    assert box.TABLE_ONE == red.TABLE_ONE == "_tile_table_r1" and box.TABLE_MP == red.TABLE_MP == "_tile_table_cumsum_mp"
+    assert tuple(box.B64) == red.B64
+    assert "warm=3, steps=8" in BOX and red.PROFILED == 8
+    assert '"--steps", type=int, default=256' in BOX and red.STEPS == 256
+    assert [q[0] for q in red.PREDICTIONS] == [f"Q{i}" for i in range(1, 9)]
+
+
+def test_the_order_puts_every_refusal_before_the_fetch():
+    order = ["REFUSED: card is", "REFUSED: ${FREE_GB", "REFUSED: ${RAM_GB", 'say "install e4b @', "python - <<'PYT'",
+             "p126_reduce.py --self-test", "python -m pytest test_decode_graph_buckets.py",
+             "TRITON_INTERPRET=0 perl -e 'alarm 1800; exec @ARGV' python -m pytest test_tile_table_programs_interp.py",
+             'echo "premise ok"', 'say "fetch $MODEL @ $REV"', "python $W/k8_bake.py",
+             "python $W/p126_box.py --out $W/box.json --rows $WINDOWS", "python $W/p126_reduce.py --dir $W --out $W/verdict.json"]
+    at = [RUN.index(s) for s in order]
+    assert at == sorted(at), list(zip(order, at))
+    assert 'grep -q "7 passed" && ! echo "$LASTL" | grep -q skipped' in RUN
+    assert 'grep -q "202 passed" && ! echo "$LASTR" | grep -q skipped' in RUN
+    trip = RUN[RUN.index("python - <<'PYT'"):RUN.index("PYT\ncat versions.txt")]
+    assert '"programs" in inspect.signature(int4_b32.build_group_tiles_fused).parameters' in trip
+    assert "int4_b32._programs_slice(128, 8) == 16" in trip
+    assert 'hot_residency._wide_tiles_mode_env() == "auto"' in trip and "hot_residency._wide_tiles_auto_takes(128, 512)" in trip
+    assert "hot_residency._tile_programs_env() == 1 and hot_residency._tile_programs_supported(" in trip
+    assert "import p120_box" in trip and "import p124_box" in trip and "import p119_box" in trip
+    assert "VOID|NO_READING|TOKENS_DIFFER) say \"PROVE:" in RUN
+
+
+def test_the_subject_is_sc2es_int4_stack_with_every_tile_knob_unset():
+    unset = RUN[RUN.index("unset E4B_SERVE_EXP_INT4"):RUN.index(': > summary.txt')]
+    for knob in ("E4B_INT4_TILE_PROGRAMS", "E4B_INT4_WIDE_TILES", "E4B_ATTN_INT4_WIDE", "E4B_ATTN_INT4_SMALLM",
+                 "E4B_PAGED_GRAPHS", "E4B_PAGED_MAX_SEQS", "E4B_PAGED_BUCKETS", "E4B_PAGED_PREFILL_GRAPH",
+                 "E4B_PAGED_BULK_KV", "E4B_SERVE_EXP_INT4", "E4B_PAGED_FUSE_QKV", "E4B_INT4_PREFILL"):
+        assert knob in unset, knob
+    sc1 = (REPO / "bench" / "sc1" / "sc1_run.sh").read_text()
+    for var in ("FOLDS", "SPEEDENV", "ROUTEENV"):                      # SC2e's stack, byte for byte
+        line = next(x for x in sc1.splitlines() if x.startswith(f"{var}="))
+        assert line.split("   #")[0] in RUN, var
+    assert 'else LEVERS="$ROUTEENV $SPEEDENV E4B_PAGED_FUSE_QKV=1"; fi' in RUN
+    assert 'ENGINE_KNOBS="E4B_PAGED_GRAPHS=0 E4B_PAGED_MAX_SEQS=1 E4B_PAGED_MAX_TOKENS_PER_SEQ=768 E4B_PAGED_PREFILL_GRAPH=0"' in RUN
+    assert "$ENGINE_KNOBS $LEVERS\"" in RUN
+    assert 'cfg.graphs or cfg.placement != "all-vram" or cfg.max_seqs != 1' in BOX and "model = parts.runner.model" in BOX
+    assert "runner.enable_decode_graphs(B64, capture=True, verbose=False)" in BOX
+    assert 'os.environ["E4B_INT4_TILE_PROGRAMS"] = str(p)' in BOX and "_set_programs(None)" in BOX
+    assert '"tile_programs_env": os.environ.get("E4B_INT4_TILE_PROGRAMS")' in BOX
+    for flag in ('"--rows", type=int, default=64', '"--prompt", type=int, default=512', '"--stride", type=int, default=3072'):
+        assert flag in BOX, flag
+    assert "WINDOWS_DEF=64\n" in RUN and "WINDOWS_DEF=40\n" in RUN
+
+
+def test_every_time_left_check_fits_its_own_guard():
+    prereg = (LANE / "PREREG-p126.md").read_text(encoding="utf-8")
+    assert "guard 0.75 h" in prereg and "guard 1.5 h" in prereg
+    prove = dict(re.findall(r"NEED_(FETCH|BAKE|BOX)=(\d+)", RUN[RUN.index('if [ "$PROVE" = 1 ]; then'):RUN.index("else\n")]))
+    reading = dict(re.findall(r"NEED_(FETCH|BAKE|BOX)=(\d+)", RUN[RUN.index("else\n"):RUN.index("fi\nGPU_CLASS=")]))
+    assert set(prove) == set(reading) == {"FETCH", "BAKE", "BOX"}
+    for need in prove.values():
+        assert int(need) + 600 <= 0.75 * 3600 - 900, prove
+    for need in reading.values():
+        assert int(need) + 600 <= 1.5 * 3600 - 900, reading
+    assert re.findall(r"can_run (\S+)", RUN) == ["$NEED_FETCH", "$NEED_BAKE", "$NEED_BOX"]
+
+
+def test_lane_failures_avoid_the_machine_exclusion_codes():
+    codes = {int(c) for c in re.findall(r"(?:finish|return) (\d+)", RUN)}
+    assert codes & {13, 14, 17, 18} == {13}, codes
+    assert {16, 25, 26, 27} <= codes
+
+
+def test_the_driver_runs_to_its_dry_run(tmp_path):
+    env = {"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", "HOME": str(tmp_path), "E4B_RENT_SSH_HOST": "h",
+           "E4B_RENT_SSH_PORT": "1", "E4B_RENT_SSH_OPTS": "-o UserKnownHostsFile=/run/known_hosts",
+           "E4B_RENT_RUN_DIR": str(tmp_path), "E4B_RENT_RUN_ID": "p126-dry", "E4B_RENT_DEADLINE_EPOCH": "1",
+           "E4B_RENT_INSTANCE_ID": "0", "E4B_SHA": "0" * 40, "P126_DRIVE_DRYRUN": "1"}
+    out = subprocess.run(["bash", str(LANE / "p126_drive.sh")], capture_output=True, text=True, env=env)
+    assert out.returncode == 0 and out.stdout.startswith("DRYRUN stage -> root@h:/root/p126"), out.stdout + out.stderr

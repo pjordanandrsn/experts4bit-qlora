@@ -1297,6 +1297,12 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
                     batched_append=True, device=cfg.device, scratch_slots=scratch)
     runner = PagedModelRunner(model, kv, device=cfg.device, bulk_kv=cfg.bulk_kv, last_logits=cfg.last_logits)
     grouping = _batched_graph_grouping(cfg)          # before capture: the batched lane's sync-free grouping
+    # P127 item c: license the folded layers' MoE residual add into the combine on the model as served -- after the
+    # residency, collapse and grouping above, before capture -- at every decode row count
+    from .engines.glue_r2 import license_moe_residual
+    moe_resid: dict = {}
+    license_moe_residual(model, sorted({1, *cfg.buckets}),
+                         mode=(fusion_report.get("modes") or {}).get("E4B_FUSE_T1_GLUE_R2"), report=moe_resid)
     graph_status = runner.enable_decode_graphs(cfg.buckets) if cfg.graphs else None
     engage_prefill_graph(runner, cfg)
     sched = ContinuousScheduler(runner=runner, max_seqs=cfg.max_seqs, kv_slots=cfg.max_seqs,
@@ -1306,7 +1312,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
             "int4_expert_layers": int4_layers, "int4_store_kinds": kinds, "int4_attn_projections": int4_attn,
             "kv": {"n_kv_heads": hkv, "head_dim": hd, "k_groups": cfg.kv_groups, "scratch_slots": scratch,
                    "blocks_per_seq": getattr(kv, "blocks_per_seq", None), "pool_mib": _kv_pool_mib(kv, cfg)},
-            "graph_status": graph_status, "grouping": grouping, "prefill_graph": cfg.prefill_graph, "levers_env": {k_: env(k_) for k_ in LEVER_ENV if env(k_) is not None}}
+            "graph_status": graph_status, "grouping": grouping, "moe_residual": moe_resid, "prefill_graph": cfg.prefill_graph, "levers_env": {k_: env(k_) for k_ in LEVER_ENV if env(k_) is not None}}
     info.update(levers)
     info.update(fusions)
     info["fusion_modes"] = fusion_report.get("modes")

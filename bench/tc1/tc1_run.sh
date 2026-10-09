@@ -110,6 +110,7 @@ case " $FAMILIES " in " qwen3dqab "|" mixtraldqab ") NEED_UNSLOTH=0;; esac   # T
 case " $FAMILIES " in " qwen3tritonab ") NEED_UNSLOTH=0;; esac   # TC1 amendment 32: an e4b-only A/B
 case " $FAMILIES " in " olmoedecab "|" qwen3decab "|" olmoedecab qwen3decab "|" qwen3decab olmoedecab ") NEED_UNSLOTH=0;; esac   # TC1 amendment 46: e4b-only A/Bs in venv-e4b
 : > summary.txt; echo "$TC1_INSTANCE_ID" > INSTANCE_ID
+FETCH_OK_N=0; FETCH_FAILED_N=0   # families whose model staged / did not (tc1_prepare); none staged and one failed = rc 15 at the end
 echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST matched_seed=$MATCHED_SEED pack=$PACK" | tee -a summary.txt
 case " $FAMILIES " in *" qwen3curve "*)
   echo "FIXTURE curve (TC1b): steps=$CURVE_STEPS eval_every=$CURVE_EVAL_EVERY eval_n=$CURVE_EVAL_N; t1: micro_batch=$T1_MB accum=$T1_ACCUM; r64: r=$R64_R alpha=$R64_ALPHA" | tee -a summary.txt
@@ -260,7 +261,12 @@ if [ "$TC1_LOCAL_BOX" = 1 ] && ! $PY_E4B -c "import torch; assert torch.cuda.is_
 fi
 perl -e 'alarm 2400; exec @ARGV' $PY_E4B -m pip install -q --no-input --prefer-binary \
   "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA" \
-  "transformers==$TF_VER" "bitsandbytes==$BNB_VER" "peft==$PEFT_VER" accelerate safetensors "huggingface_hub>=0.23" sentencepiece tiktoken > logs/pip_e4b.log 2>&1
+  "transformers==$TF_VER" "bitsandbytes==$BNB_VER" "peft==$PEFT_VER" accelerate safetensors "huggingface_hub>=0.23" sentencepiece tiktoken \
+  "brotli>=1.2.0" > logs/pip_e4b.log 2>&1
+# brotli>=1.2.0 (2026-10-09, tc1-5090-143): venv-e4b sees the base image's site-packages, whose brotli predates 1.2. huggingface_hub 2.x
+# downloads through httpx2, which advertises brotli whenever it imports and passes output_buffer_limit= to Decompressor.process (brotli
+# >= 1.2 only); a brotli-encoded response then failed the model fetch with "process() takes no keyword arguments". The tripwire below
+# refuses an older brotli before the fetch.
 rc=$?; echo "pip(e4b) rc=$rc"; [ $rc -ne 0 ] && { tail -6 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
 E4B_SHA="$E4B_SHA" GNF4_SHA="$GNF4_SHA" TF_VER="$TF_VER" $PY_E4B - <<'PYT' > logs/tripwire_e4b.log 2>&1 || { tail -5 logs/tripwire_e4b.log; say "TRIPWIRE FAIL (e4b)"; finish 9; }
 import importlib.metadata as md, inspect, json, os
@@ -279,12 +285,37 @@ assert ce == os.environ["E4B_SHA"], f"e4b installed from {ce}, wanted {os.enviro
 assert cg == os.environ["GNF4_SHA"], f"gnf4 installed from {cg}, wanted {os.environ['GNF4_SHA']}"
 assert transformers.__version__ == os.environ["TF_VER"], transformers.__version__
 assert torch.cuda.is_available(), "no CUDA in venv-e4b"
+def _ver(dist):
+    try:
+        return md.version(dist)
+    except md.PackageNotFoundError:
+        return None
+_bv = _ver("brotli")                                      # httpx2 (huggingface_hub 2.x) needs brotli >= 1.2 whenever brotli imports
+assert _bv is None or tuple(int(x) for x in _bv.split(".")[:2]) >= (1, 2), f"brotli {_bv} < 1.2.0: huggingface_hub's httpx2 cannot decode brotli responses"
 print("tc1 tripwire OK (e4b):", e.__version__, "@", ce[:12], "gnf4", md.version("grouped-nf4-gemm"), "@", cg[:12], "torch", torch.__version__, "triton", triton.__version__,
       "transformers", transformers.__version__, "bnb", bitsandbytes.__version__, "peft", peft.__version__)
 open(os.path.join(os.environ.get("TC1_W", "/root/tc1"), "versions.txt"), "a").write(f"e4b {e.__version__} @{ce} (GitHub main)\ngnf4 {md.version('grouped-nf4-gemm')} @{cg} (GitHub main)\ntorch(e4b/hf) {torch.__version__}\ntriton(e4b/hf) {triton.__version__}\n"
-                                          f"transformers(e4b/hf) {transformers.__version__}\nbitsandbytes(e4b/hf) {bitsandbytes.__version__}\npeft(hf) {peft.__version__}\n")
+                                          f"transformers(e4b/hf) {transformers.__version__}\nbitsandbytes(e4b/hf) {bitsandbytes.__version__}\npeft(hf) {peft.__version__}\n"
+                                          f"huggingface_hub(e4b/hf) {_ver('huggingface_hub')}\nhttpx2(e4b/hf) {_ver('httpx2')}\nbrotli(e4b/hf) {_bv}\n")
 PYT
 tail -1 logs/tripwire_e4b.log
+# The fetch probe (2026-10-09, tc1-5090-143): the model fetch runs in venv-e4b's hub client, and a client that cannot download measures
+# nothing. Before the other venvs are built, fetch the registered Qwen3 pin's small files (config, tokenizer, index; no weights) through
+# the same client and settings the family fetch uses. A failure refuses the box here (rc 15), minutes in, instead of after every install
+# with every arm a stub. TC1_FETCH_PROBE=0 skips it; a box staging a local snapshot (TC1_LOCAL_SNAPSHOT) has nothing to fetch.
+if [ "${TC1_FETCH_PROBE:-1}" = 1 ] && [ -z "${TC1_LOCAL_SNAPSHOT:-}" ]; then
+  perl -e 'alarm 600; exec @ARGV' $PY_E4B - <<'PYP' > logs/fetch_probe.log 2>&1
+import os, time
+from huggingface_hub import snapshot_download
+t0 = time.time()
+p = snapshot_download("Qwen/Qwen3-30B-A3B", revision="ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", allow_patterns=["*.json", "*.txt", "tokenizer*"],
+                      max_workers=4)
+print(f"FETCH PROBE OK in {time.time() - t0:.1f} s:", " ".join(sorted(os.listdir(p))))
+PYP
+  prc=$?; tail -1 logs/fetch_probe.log
+  [ $prc -eq 0 ] || { say "BOX REFUSED: the fetch probe failed rc=$prc (logs/fetch_probe.log): $(tail -1 logs/fetch_probe.log | cut -c1-200)"
+                      echo "BOX_REFUSED fetch_probe rc=$prc: $(tail -1 logs/fetch_probe.log | cut -c1-200)" >> summary.txt; finish 15; }
+fi
 # Unsloth: the REGISTERED versions (TC1-PREREG "Environments": unsloth 2026.9.14 + unsloth_zoo 2026.9.9), NO transformers/bnb/peft
 # pins from us (P38 amendment 1); torchao removed on the ScalingType tripwire (P38 amendment 2). TWO venvs (phase 2):
 #   venv-unsloth-t28  unsloth[cu128-torch280]  -- tp4's install on the image's torch 2.8.0+cu128 (the field-image row, `ckpt_unsloth_t28`)
@@ -703,7 +734,8 @@ tc1_prepare(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 ALL=$5 EVN=${6:-$EVAL_N}      #
   if skip $FAM; then say "skip family $FAM (TC1_SKIP)"; stub_all not_run "family skipped by TC1_SKIP"; return 1; fi
   FETCH_REASON=""; local frc
   if [ -n "${TC1_LOCAL_SNAPSHOT:-}" ]; then local_snapshot $FAM $MID $REV; frc=$?; else fetch $FAM $MID $REV $FAL; frc=$?; fi   # TC3: the owned box's directory, never a fetch
-  if [ $frc -ne 0 ]; then local st=not_run; [ $frc -eq 2 ] && st=load_fault; stub_all $st "$FETCH_REASON"; free_family $FAM ${MID//\//--}; return 1; fi
+  if [ $frc -ne 0 ]; then local st=not_run; [ $frc -eq 2 ] && st=load_fault; stub_all $st "$FETCH_REASON"; free_family $FAM ${MID//\//--}; FETCH_FAILED_N=$((FETCH_FAILED_N + 1)); return 1; fi
+  FETCH_OK_N=$((FETCH_OK_N + 1))
   TOK=$W/tokens_$FAM.json
   # TC1 amendment 39: on a packing box, rows of exactly SEQ tokens from the registered text extended in its own order (tp4_alpaca.py left its
   # source beside ds_alpaca.json), at least steps x micro-batch x accum of them -- the rows the arms read, none twice
@@ -1532,6 +1564,26 @@ tc1_cbk_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
   can_run 600 $FAM/unsloth/m_kk       && arm $FAM unsloth ckpt_unsloth_m_kk unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH $PP
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_fqkv_family FAM MID REV FETCH_AL E4B_AL -- P129 Amendment 2 (2026-10-09): e4b's fused q/k/v training projection (E4B_TRAIN_FUSE_QKV)
+# 0 (q0) vs 1 (q1) at TC1's field recipe, e4b at its defaults otherwise, the shipped and the matched arm, two draws a side in ABBA order,
+# venv-unsloth, every arm profiled with --phase-peaks 1. e4b against itself.
+tc1_fqkv_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_shipped_q0:fused e4b:fused_attn4_shipped_q1:fused e4b:fused_attn4_m_q0:fused e4b:fused_attn4_m_q1:fused e4b:fused_attn4_m_q1_d2:fused e4b:fused_attn4_m_q0_d2:fused e4b:fused_attn4_shipped_q1_d2:fused e4b:fused_attn4_shipped_q0_d2:fused"
+  say "===== FUSED Q/K/V family $FAM ($MID @ $REV; E4B_TRAIN_FUSE_QKV 0 vs 1, field recipe, e4b defaults; profiled; P129 Amendment 2)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local NATIVE="--adapter-dtype native --lora-init native"
+  local PP="--phase-peaks 1 --profile-steps $PROFILE_STEPS --profile-warm $PROFILE_WARM" Q0="E4B_TRAIN_FUSE_QKV=0" Q1="E4B_TRAIN_FUSE_QKV=1"
+  can_run 600 $FAM/e4b/shipped_q0     && TC1_ARM_EXTRA_ENV="$Q0" E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_q0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE $PP
+  can_run 600 $FAM/e4b/shipped_q1     && TC1_ARM_EXTRA_ENV="$Q1" E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_q1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE $PP
+  can_run 600 $FAM/e4b/m_q0           && TC1_ARM_EXTRA_ENV="$Q0" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_q0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  can_run 600 $FAM/e4b/m_q1           && TC1_ARM_EXTRA_ENV="$Q1" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_q1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  can_run 600 $FAM/e4b/m_q1_d2        && TC1_ARM_EXTRA_ENV="$Q1" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_q1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  can_run 600 $FAM/e4b/m_q0_d2        && TC1_ARM_EXTRA_ENV="$Q0" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_q0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  can_run 600 $FAM/e4b/shipped_q1_d2  && TC1_ARM_EXTRA_ENV="$Q1" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_q1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE $PP
+  can_run 600 $FAM/e4b/shipped_q0_d2  && TC1_ARM_EXTRA_ENV="$Q0" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_q0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE $PP
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_slauto_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 71 (2026-10-08): NF4_QLORA_SINGLE_LADDER 0 (l0) vs auto (la: the ladder
 # exactly when the adapters are fp32, grouped-nf4-gemm#514) at TC1's field recipe, e4b at its defaults otherwise, the shipped (bf16 adapters) and
 # the matched (fp32 adapters) arm, two draws a side in ABBA order, venv-unsloth, every arm profiled with --phase-peaks 1.
@@ -2191,6 +2243,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3pos69) tc1_pos69_family qwen3pos69 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 69: the field recipe's same-stack position profiled
   qwen3sladder) tc1_sladder_family qwen3sladder Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 70: the single-block ladder 0 vs 1, field recipe
   qwen3slauto) tc1_slauto_family qwen3slauto Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 71: the single-block ladder 0 vs auto, field recipe
+  qwen3fqkv) tc1_fqkv_family qwen3fqkv Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # P129 Amendment 2: the fused q/k/v training projection 0 vs 1, field recipe
   qwen3dqpack) tc1_dqpack_family qwen3dqpack Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 56: the double-quantized absmax on packed rows, phase peaks
   qwen3ckptoff) tc1_ckptoff_family qwen3ckptoff Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 58: checkpoint inputs in pinned host memory, off vs on, packed rows
   qwen3evalce) tc1_evalce_family qwen3evalce Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 60: the held-out loss from the logits in chunks, packed rows
@@ -2237,4 +2290,7 @@ echo "----- summary.txt -----"; cat summary.txt; echo "----- versions.txt -----"
 [ "$NEED_UNSLOTH" != 1 ] || [ "$UNS_T28_OK" = 1 ] || echo "NO torch-2.8 UNSLOTH ROW on this box (venv-unsloth-t28 did not install/import)" | tee -a summary.txt
 [ "$AX_OK" = 1 ] || echo "NO AXOLOTL on this box: $AX_REASON" | tee -a summary.txt
 case " $FAMILIES " in *" qwen3frontier "*) echo "AXOLOTL[deepspeed] extra installed=$AX_DS_OK (TC3 arm 10 is a refused row either way; its stub records the deepspeed version)" | tee -a summary.txt;; esac
+# 2026-10-09 (tc1-5090-143): a box on which no family's model staged measured nothing; it ends HARNESS_ERROR (rc 15), not OK with stubs
+if [ "$FETCH_OK_N" = 0 ] && [ "$FETCH_FAILED_N" -gt 0 ]; then say "NO MODEL STAGED: $FETCH_FAILED_N family fetch(es) failed, none succeeded -- every arm is a stub"
+  echo "NO_MODEL_STAGED fetch_failed=$FETCH_FAILED_N" >> summary.txt; finish 15; fi
 finish 0

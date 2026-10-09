@@ -45,8 +45,9 @@ def _gpt_oss(layers=2):
 
 def _qwen3_5_moe(layers=4):
     pytest.importorskip("transformers.models.qwen3_5_moe", reason="needs transformers with Qwen3.5-MoE")
-    from transformers.models.qwen3_5_moe import modeling_qwen3_5_moe as m
+    from hybrid_reference import reference_modeling
     from transformers.models.qwen3_5_moe.configuration_qwen3_5_moe import Qwen3_5MoeTextConfig
+    m = reference_modeling("qwen3_5_moe")
     cfg = Qwen3_5MoeTextConfig(vocab_size=256, hidden_size=128, num_hidden_layers=layers, num_attention_heads=4,
                                num_key_value_heads=2, head_dim=32, num_experts=4, num_experts_per_tok=2,
                                moe_intermediate_size=64, shared_expert_intermediate_size=64,

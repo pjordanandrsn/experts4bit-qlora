@@ -83,3 +83,125 @@ def test_the_real_kernels_are_bitwise_with_the_host_casts_gone():
             dn = torch.randn(rows * k_, H, device=dev, dtype=torch.bfloat16)
             w = torch.softmax(torch.randn(rows, k_, device=dev), dim=-1).to(torch.bfloat16).reshape(-1)
             assert torch.equal(int4_b32.combine_rows(dn, w, k_), int4_b32.combine_rows(dn, w.float(), k_)), (rows, k_, H)
+
+
+def _nf4_stub(monkeypatch, seen, *, ids_dtypes=None, gather=False):
+    """A stand-in ``nf4_grouped`` whose GEMM is real arithmetic over float weight stacks (``pk [G, N, K]``), so routes
+    can be compared value for value: row r reads token r // gather_div. ``ids_dtypes`` sets ``EXPERT_ID_DTYPES``
+    (grouped-nf4-gemm#529); ``gather`` gives the GEMM ``gather_div=`` (#530)."""
+    stub = types.ModuleType("nf4_grouped")
+
+    def _gemm(xr, pk, am, sizes, eids, gather_div=1):
+        seen.append({"xr": xr, "eids": eids, "gather_div": gather_div})
+        rows = xr.repeat_interleave(gather_div, dim=0).float()
+        w = pk.index_select(0, eids.long()).float()                   # [R, N, K]
+        return torch.einsum("rk,rnk->rn", rows, w).to(torch.bfloat16)
+    if gather:
+        stub.gemm_4bit_grouped = _gemm
+    else:
+        def gemm_4bit_grouped(xr, pk, am, sizes, eids):
+            return _gemm(xr, pk, am, sizes, eids)
+        stub.gemm_4bit_grouped = gemm_4bit_grouped
+    if ids_dtypes is not None:
+        stub.EXPERT_ID_DTYPES = ids_dtypes
+    monkeypatch.setitem(sys.modules, "nf4_grouped", stub)
+
+
+def _singleton_call(T=2, k=4, G=6, inter=8, H=16, seed=3):
+    torch.manual_seed(seed)
+    x_t = torch.randn(T, H, dtype=torch.bfloat16)
+    row_token = torch.arange(T * k) // k
+    local_ids = torch.randint(0, G, (T * k,), dtype=torch.int64)
+    gu_w = torch.randn(G, 2 * inter, H) / H ** 0.5
+    dn_w = torch.randn(G, H, inter) / inter ** 0.5
+    am = torch.ones(1)
+    return dict(x_t=x_t, row_token=row_token, k=k, local_ids=local_ids,
+                args=(local_ids, gu_w, am, dn_w, am, (2 * inter, H, H, inter), True, F.silu))
+
+
+def test_the_nf4_route_hands_int64_ids_over_uncast(monkeypatch):
+    """With a kernel package that reads int64 ids as they are (``EXPERT_ID_DTYPES``, grouped-nf4-gemm#529) both NF4
+    calls get the caller's int64 ids themselves: no cast launch (P127 Phase 2, item a1)."""
+    seen = []
+    _nf4_stub(monkeypatch, seen, ids_dtypes=(torch.int32, torch.int64))
+    c = _singleton_call()
+    hr._fused_over_stack(c["x_t"].index_select(0, c["row_token"]), *c["args"], singleton_groups=True)
+    assert len(seen) == 2 and seen[0]["eids"] is c["local_ids"] and seen[1]["eids"] is c["local_ids"]
+
+
+@pytest.mark.parametrize("ids_dtypes", [None, (torch.int32, torch.int64)])
+def test_the_nf4_singleton_route_reads_the_token_rows_bitwise(monkeypatch, ids_dtypes):
+    """With ``gather_div`` in the kernel package (grouped-nf4-gemm#530) the NF4 singleton route, at ONE token, hands
+    gate_up the TOKEN row with ``gather_div=top_k`` -- no (token, slot) copy -- and down its own rows; the output is
+    bitwise the copied rows' (P127 Phase 2, item b2)."""
+    c = _singleton_call(T=1, k=8)
+    outs = []
+    for gather in (False, True):
+        seen = []
+        _nf4_stub(monkeypatch, seen, ids_dtypes=ids_dtypes, gather=gather)
+        outs.append(hr._fused_over_stack(None, *c["args"], singleton_groups=True,
+                                         x_tokens=(c["x_t"], c["row_token"], c["k"])))
+        if gather:
+            assert seen[0]["xr"] is c["x_t"] and seen[0]["gather_div"] == c["k"], "gate_up reads the token rows"
+            assert seen[1]["gather_div"] == 1 and seen[1]["xr"].shape[0] == c["local_ids"].numel()
+        else:
+            assert seen[0]["xr"].shape[0] == c["local_ids"].numel(), "the copied (token, slot) rows"
+    assert outs[0].shape == (c["local_ids"].numel(), 16)
+    assert torch.equal(outs[0], outs[1])
+
+def test_expert_sorted_rows_at_two_tokens_keep_the_copied_rows(monkeypatch):
+    """``gather_div`` assumes token-major rows (row r is token r // top_k). With more than one token the route does not
+    use it at all: rows that arrive expert-sorted are copied by their own map, and the output is bitwise that copy's
+    (gnf4 #530's review)."""
+    c = _singleton_call(T=2, k=4)
+    order = torch.argsort(c["local_ids"], stable=True)              # the rows sorted by expert, not by token
+    row_token, local_ids = c["row_token"][order], c["local_ids"][order]
+    assert not torch.equal(row_token, torch.arange(8) // 4), "the fixture must not be token-major"
+    args = (local_ids,) + c["args"][1:]
+    outs = []
+    for gather in (False, True):
+        seen = []
+        _nf4_stub(monkeypatch, seen, gather=gather)
+        outs.append(hr._fused_over_stack(None, *args, singleton_groups=True, x_tokens=(c["x_t"], row_token, c["k"])))
+        assert all(s_["gather_div"] == 1 for s_ in seen), "no gather_div with two tokens"
+    want = hr._fused_over_stack(c["x_t"].index_select(0, row_token), *args, singleton_groups=True)
+    assert torch.equal(outs[0], want) and torch.equal(outs[1], want)
+
+
+
+def test_the_combine_takes_the_layer_residual_only_where_the_kernel_would(monkeypatch):
+    """P127 item c: ``_combine_topk(..., residual=)`` is ``combine + residual``, bitwise the layer's bf16 add. The
+    residual goes into the kernel's epilogue (``combine_rows(..., residual=)``) only when it is bf16 ``[T, H]`` and the
+    kernel takes it; a kernel without the option, a residual it would refuse, and the torch chain add it in torch."""
+    T, k, H = 2, 4, 16
+    torch.manual_seed(5)
+    dn = torch.randn(T * k, H, dtype=torch.bfloat16)
+    tw = torch.softmax(torch.randn(T, k), dim=-1).to(torch.bfloat16)
+    res = (torch.randn(T, H) * 4).to(torch.bfloat16)
+    handed = []
+
+    def _sum(dn_, w_, k_):
+        return (dn_.float() * w_.float()[:, None]).view(-1, k_, dn_.shape[1]).sum(1).to(torch.bfloat16)
+
+    def ck(dn_, w_, k_, residual=None):                  # the epilogue: bf16(bf16(acc) + r)
+        handed.append(residual)
+        y = _sum(dn_, w_, k_)
+        return y if residual is None else (y.float() + residual.float()).to(torch.bfloat16)
+    monkeypatch.setattr(hr, "_combine_kernel", lambda: ck)
+    monkeypatch.setattr(hr, "_kernel_tensor", lambda t: True)
+    plain = hr._combine_topk(dn, tw, k, T, H, torch.bfloat16, "cpu")
+    handed.clear()
+    out = hr._combine_topk(dn, tw, k, T, H, torch.bfloat16, "cpu", residual=res)
+    assert len(handed) == 1 and handed[0] is res and torch.equal(out, plain + res)
+    for bad in (res.to(torch.float16), res[:1]):           # a residual the kernel would refuse: never handed to it
+        handed.clear()
+        out = hr._combine_topk(dn, tw, k, T, H, torch.bfloat16, "cpu", residual=bad)
+        assert handed == [None] and torch.equal(out, plain + bad)
+
+    def ck_old(dn_, w_, k_):                               # a kernel package before grouped-nf4-gemm#527
+        return _sum(dn_, w_, k_)
+    monkeypatch.setattr(hr, "_combine_kernel", lambda: ck_old)
+    assert torch.equal(hr._combine_topk(dn, tw, k, T, H, torch.bfloat16, "cpu", residual=res), plain + res)
+    monkeypatch.setattr(hr, "_combine_kernel", lambda: None)              # the torch chain
+    chain = hr._combine_topk(dn, tw, k, T, H, torch.bfloat16, "cpu")
+    assert torch.equal(hr._combine_topk(dn, tw, k, T, H, torch.bfloat16, "cpu", residual=res), chain + res)

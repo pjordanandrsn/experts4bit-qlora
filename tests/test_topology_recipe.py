@@ -204,3 +204,17 @@ def test_attention_that_cannot_be_wrapped_is_refused_not_silently_skipped():
     assert any("no attention projection" in r for r in setup_refusals(none, QLoRASetup()))
     fp = estimate_qlora_footprint(none, QLoRASetup(train_attention=False), tokens_per_microbatch=64)
     assert any("mix tokens without q/k/v attention" in u for u in fp.unmodelled)
+
+
+def test_logits_and_loss_are_priced_at_three_fp32_tensors_per_logit():
+    """The loss branch of the activation item is three fp32 logits-sized tensors, 12 B per logit: an allocator replay
+    of granite-3.1-3b-a800m training on an RTX A2000 found them live together at the loss peak (loggetta#49), where 10 B
+    left the peak short by 2 x T x V bytes. A large vocabulary makes the loss the larger branch."""
+    from experts4bit_qlora.recipe import LOGITS_LOSS_BYTES
+
+    T, V = 256, 50_000
+    topo = describe_moe(_qwen3(vocab_size=V))
+    act = {i.name: i for i in estimate_qlora_footprint(topo, QLoRASetup(), tokens_per_microbatch=T).items}["activations"]
+    assert LOGITS_LOSS_BYTES == 12
+    assert act.bytes - L * T * H * 2 == T * V * 12            # saved layer inputs + the loss branch
+    assert "three fp32 logits-sized tensors" in act.detail

@@ -634,7 +634,7 @@ def test_fused_attention_still_takes_the_fused_fold(monkeypatch):
     seen = []
     orig = glue_r2._patch_attention_unfused
     monkeypatch.setattr(glue_r2, "_patch_attention_unfused",
-                        lambda mod, k: seen.append(type(mod).__name__) or orig(mod, k))
+                        lambda mod, k, *a: seen.append(type(mod).__name__) or orig(mod, k, *a))
     m = torch.nn.Module()
     m.attn = ToyFusedAttention()
     assert fuse_t1_glue_r2(m) == (0, 1)
@@ -895,3 +895,172 @@ def test_real_qwen3_moe_attention_stays_licensed_for_the_unfused_fold():
     from experts4bit_qlora.engines import glue_r2
     attn = _tiny_attention("qwen3_moe", "Qwen3MoeConfig", "Qwen3MoeAttention")
     assert glue_r2.rotary_is_rotate_half(attn, H)
+
+
+@pytest.mark.parametrize("cls", ["fused", "unfused"])
+def test_rope_norm_qk_is_one_launch_and_bitwise_the_two(monkeypatch, cls):
+    """With the kernel's ``rope_norm_qk`` (grouped-nf4-gemm#528) each attention fold makes ONE norm + rotary call for
+    q and k, handed each projection's own weight and eps, and its output is bitwise the two-call fold's (e4b#1313,
+    P127 d). The stand-in runs the stub's ``rope_norm_heads`` per projection, as the kernel runs one helper."""
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    toy = {"fused": ToyFusedAttention, "unfused": ToyUnfusedAttention}[cls]
+    x, pe = _rope_inputs(2, 3)
+    outs = []
+    for with_qk in (False, True):
+        calls = {"resid": 0, "rope": 0, "qk": 0}
+        _stub(monkeypatch, calls)
+        if with_qk:
+            stub = sys.modules["int4_b32"]
+            heads = stub.rope_norm_heads
+
+            def rope_norm_qk(q, k, qw, kw, cos, sin, qe, ke):
+                calls["qk"] += 1
+                calls["qk_eps"] = (qe, ke)
+                return heads(q, qw, cos, sin, qe), heads(k, kw, cos, sin, ke)
+            stub.rope_norm_qk = rope_norm_qk
+        torch.manual_seed(23)
+        m = torch.nn.Module()
+        m.attn = toy()
+        with torch.no_grad():                   # distinct q/k weights and eps, so a swap shows
+            m.attn.q_norm.weight.uniform_(0.5, 1.5)
+            m.attn.k_norm.weight.uniform_(0.5, 1.5)
+        m.attn.k_norm.variance_epsilon = 1e-5
+        assert fuse_t1_glue_r2(m) == (0, 1)
+        calls["rope"] = 0
+        got, _ = m.attn(x, position_embeddings=pe)
+        outs.append(got)
+        if with_qk:
+            assert calls["qk"] == 1 and calls["rope"] == 2, "one qk launch (running the two heads inside the stand-in)"
+            assert calls["qk_eps"] == (1e-6, 1e-5), calls["qk_eps"]
+        else:
+            assert calls["qk"] == 0 and calls["rope"] == 2
+    assert torch.equal(outs[0], outs[1])
+
+
+# ---------------------------------------------- P127 item c: the MoE residual add folded into the experts' combine --
+class ToyGate(torch.nn.Module):
+    def __init__(self, e=4, k=2):
+        super().__init__()
+        self.weight = torch.nn.Parameter(torch.randn(e, H, dtype=torch.bfloat16))
+        self.k = k
+
+    def forward(self, x):
+        logits = torch.nn.functional.linear(x, self.weight)
+        p = torch.softmax(logits.float(), -1)
+        w, i = torch.topk(p, self.k, -1)
+        return logits, (w / w.sum(-1, keepdim=True)).to(x.dtype), i
+
+
+class ToyResidualExperts(torch.nn.Module):
+    """Hot residency's patched experts, in miniature: a per-expert map combined in fp32 and rounded to bf16, and a
+    ``residual=`` returned added -- the kernel epilogue's bf16(bf16(acc) + r), which is torch's bf16 add. Records
+    whether each call was handed a residual."""
+
+    def __init__(self, e=4, takes_residual=True):
+        super().__init__()
+        self.w = torch.nn.Parameter(torch.randn(e, H, H, dtype=torch.bfloat16) / H ** 0.5)
+        self.calls = []
+
+        def _fwd(hidden, top_k_index, top_k_weights, residual=None, _m=self):
+            _m.calls.append(residual is not None)
+            y = torch.einsum("th,tkoh->tko", hidden.float(), _m.w[top_k_index].float())
+            out = (y * top_k_weights.float()[..., None]).sum(1).to(torch.bfloat16)
+            return out if residual is None else out + residual
+        if takes_residual:
+            _fwd._e4b_takes_residual = True
+        self.forward = _fwd
+
+
+class ToyMoE(torch.nn.Module):
+    """The transformers 5.x sparse-MoE block's body (gate, experts, reshape); ``scale`` makes it something else under
+    the same two children, as a block that scales its output would be."""
+
+    def __init__(self, scale=None, takes_residual=True, shared=False):
+        super().__init__()
+        self.gate = ToyGate()
+        self.experts = ToyResidualExperts(takes_residual=takes_residual)
+        if shared:
+            self.shared_expert = torch.nn.Linear(H, H, bias=False, dtype=torch.bfloat16)
+        self.scale = scale
+
+    def forward(self, x):
+        b, s, h = x.shape
+        x2 = x.view(-1, h)
+        _, w, i = self.gate(x2)
+        out = self.experts(x2, i, w).reshape(b, s, h)
+        return out if self.scale is None else out * self.scale
+
+
+def _moe_layer(monkeypatch, **kw):
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    _stub(monkeypatch, {"resid": 0, "rope": 0})
+    torch.manual_seed(41)
+    m = torch.nn.Module()
+    m.layer = ToyDecoderLayer()
+    m.layer.mlp = ToyMoE(**kw)
+    assert fuse_t1_glue_r2(m) == (1, 0)
+    return m
+
+
+def test_the_moe_residual_is_licensed_per_row_count_and_bitwise(monkeypatch):
+    """At each probed row count the folded layer hands its residual to the experts (one call, the residual down) and
+    its output is bitwise the layer's own ``residual + mlp(h)``; an unprobed count keeps the layer's own body."""
+    from experts4bit_qlora.engines.glue_r2 import license_moe_residual
+    m = _moe_layer(monkeypatch)
+    rep = {}
+    assert license_moe_residual(m, [4], mode="1", report=rep) == 1
+    assert m.layer._e4b_moe_resid == frozenset({1, 4}) and rep["rows"] == [1, 4] and rep["licensed"] == 1
+    calls = m.layer.mlp.experts.calls
+    for t in (1, 4):
+        x = (torch.randn(1, t, H) * 2).to(torch.bfloat16)
+        calls.clear()
+        got = m.layer(x)
+        assert calls == [True], "the residual went down to the experts"
+        lic = m.layer.__dict__.pop("_e4b_moe_resid")
+        want = m.layer(x)                                   # the layer's own body
+        m.layer._e4b_moe_resid = lic
+        assert torch.equal(got, want), t
+    calls.clear()
+    m.layer((torch.randn(1, 2, H) * 2).to(torch.bfloat16))
+    assert calls == [False], "2 rows were not probed: the layer's own body"
+
+
+@pytest.mark.parametrize("kw,candidate", [({"scale": 2.0}, True), ({"shared": True}, False),
+                                          ({"takes_residual": False}, False)])
+def test_a_block_that_is_not_the_bare_composition_is_not_licensed(monkeypatch, kw, candidate):
+    """A block that scales its output under the same two children fails the probe; one with another child, or whose
+    experts do not take ``residual=``, is not a candidate. Neither is licensed; ``1`` refuses the vacuous licence."""
+    from experts4bit_qlora.engines import glue_r2
+    m = _moe_layer(monkeypatch, **kw)
+    assert glue_r2._residual_candidate(m.layer) is candidate
+    rep = {}
+    assert glue_r2.license_moe_residual(m, [1], mode="auto", report=rep) == 0
+    assert "_e4b_moe_resid" not in m.layer.__dict__ and rep["refused"] == int(candidate)
+    with pytest.raises(RuntimeError, match="vacuous"):
+        glue_r2.license_moe_residual(m, [1], mode="1")
+
+
+def test_mode_zero_licenses_nothing(monkeypatch):
+    from experts4bit_qlora.engines.glue_r2 import license_moe_residual
+    m = _moe_layer(monkeypatch)
+    m.layer.mlp.experts.calls.clear()
+    assert license_moe_residual(m, [1], mode="0") == 0
+    assert "_e4b_moe_resid" not in m.layer.__dict__ and m.layer.mlp.experts.calls == []
+
+
+def test_a_probe_that_raises_refuses_the_licence_and_never_stops_the_build(monkeypatch):
+    """p127-prove-1: the probe's own mlp(h) raised inside build_engine. A probe that raises now refuses that layer's
+    licence and says why in the report; under 1 the empty licence is still refused as vacuous."""
+    from experts4bit_qlora.engines import glue_r2
+    m = _moe_layer(monkeypatch)
+
+    def broken(hidden, top_k_index, top_k_weights, residual=None):
+        raise TypeError("forward() got an unexpected keyword argument 'residual'")
+    broken._e4b_takes_residual = True
+    m.layer.mlp.experts.forward = broken
+    rep = {}
+    assert glue_r2.license_moe_residual(m, [1, 4], mode="auto", report=rep) == 0
+    assert "_e4b_moe_resid" not in m.layer.__dict__ and rep["refused"] == 1
+    assert rep["probe_errors"] and "TypeError" in rep["probe_errors"][0]
+    with pytest.raises(RuntimeError, match="vacuous"):
+        glue_r2.license_moe_residual(m, [1], mode="1")

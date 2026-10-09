@@ -88,11 +88,10 @@ def test_a_qwen3_6_text_model_resolves_auto_and_patches_only_its_routers(monkeyp
     from pathlib import Path
     torch = pytest.importorskip("torch")
     pytest.importorskip("transformers.models.qwen3_5_moe.configuration_qwen3_5_moe")
-    monkeypatch.setitem(sys.modules, "causal_conv1d", None)
-    monkeypatch.setitem(sys.modules, "fla", None)
     from transformers import Qwen3_5MoeTextConfig
-    from transformers.models.qwen3_5_moe import modeling_qwen3_5_moe as q35
     sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from hybrid_reference import reference_modeling
+    q35 = reference_modeling("qwen3_5_moe")
     import test_p115_quality_box as t
     monkeypatch.setitem(sys.modules, "int4_b32", t._kernel_stub())
     lin, att = "linear_attention", "full_attention"

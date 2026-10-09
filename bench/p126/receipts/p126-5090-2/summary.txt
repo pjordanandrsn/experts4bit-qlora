@@ -1,0 +1,24 @@
+KNOBS e4b=f1cfcf2fe7f64e68e6b4c7242a3df33664d327de gnf4=e21a71242b361dd0a3f72cdf4152de94633891a8 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 prove=0 windows=64
+e4b 0.51.0 @f1cfcf2fe7f64e68e6b4c7242a3df33664d327de
+gnf4 0.44.0 @e21a71242b361dd0a3f72cdf4152de94633891a8
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+p126_reduce self-test OK (45 cases)
+premise run rc=0: 7 passed in 8.78s
+premise programs rc=0: 202 passed in 87.16s (0:01:27)
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+box rc=0 P126_BOX: P=4 a 1:18.4969 4:15.6157 | P=4 b 4:15.6181 1:18.4693 | P=8 a 1:17.857 8:15.1452 | P=8 b 8:15.1528 1:18.5183 | load 112s | 162.1 s
+
+P126_PROFILE P=1 table one 3.1429 ms mp 0 ms at 12 s
+P126_PROFILE P=4 table one 0 ms mp 0.6902 ms at 20 s
+P126_PROFILE P=8 table one 0 ms mp 0.2895 ms at 28 s
+P126_BLOCK P=4 a P=1 18.4969 ms P=4 15.6157 ms at 67 s
+P126_BLOCK P=4 b P=4 15.6181 ms P=1 18.4693 ms at 95 s
+P126_BLOCK P=8 a P=1 17.857 ms P=8 15.1452 ms at 124 s
+P126_BLOCK P=8 b P=8 15.1528 ms P=1 18.5183 ms at 152 s
+P126_VERDICT DEFAULT_ON_4 ["ON/OFF {'4': [0.8442, 0.8456]}: P=4 has the lower mean of those with both <= 0.98", "ineligible (Amendment 1): P=8: block a 0.8481, block b 0.8183, 0.0364 apart (bound 0.015)"]

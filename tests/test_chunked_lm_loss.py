@@ -36,6 +36,7 @@ import warnings
 
 import pytest
 import torch
+from hybrid_reference import reference_modeling
 
 from experts4bit_qlora.engines import chunked_lm_loss as C
 
@@ -75,7 +76,7 @@ def _config(family):
             **c, intermediate_size=64, shared_intermediate_size=32, num_local_experts=4, num_experts_per_tok=2,
             num_hidden_layers=2, logits_scaling=6.0, router_aux_loss_coef=0.01)
     if family == "granitemoehybrid":
-        return tr.GraniteMoeHybridForCausalLM, tr.GraniteMoeHybridConfig(
+        return reference_modeling("granitemoehybrid").GraniteMoeHybridForCausalLM, tr.GraniteMoeHybridConfig(
             **c, intermediate_size=64, shared_intermediate_size=32, num_local_experts=4, num_experts_per_tok=2,
             num_hidden_layers=2, logits_scaling=6.0, router_aux_loss_coef=0.01, layer_types=["mamba", "attention"],
             mamba_n_heads=4, mamba_d_head=32, mamba_d_state=16, mamba_n_groups=1, mamba_chunk_size=8)
@@ -88,16 +89,16 @@ def _config(family):
                                                                  moe_num_experts=8, moe_k=2, num_hidden_layers=2,
                                                                  moe_layer_start_index=0, router_aux_loss_coef=0.01)
     if family == "lfm2_moe":
-        return tr.Lfm2MoeForCausalLM, tr.Lfm2MoeConfig(**c, intermediate_size=128, moe_intermediate_size=32, num_hidden_layers=4,
-                                                       num_experts=8, num_experts_per_tok=2, num_dense_layers=1,
-                                                       layer_types=["conv", "full_attention", "conv", "full_attention"])
+        return reference_modeling("lfm2_moe").Lfm2MoeForCausalLM, tr.Lfm2MoeConfig(
+            **c, intermediate_size=128, moe_intermediate_size=32, num_hidden_layers=4, num_experts=8, num_experts_per_tok=2,
+            num_dense_layers=1, layer_types=["conv", "full_attention", "conv", "full_attention"])
     if family == "qwen3_5_moe":
-        return tr.Qwen3_5MoeForCausalLM, tr.Qwen3_5MoeTextConfig(
+        return reference_modeling("qwen3_5_moe").Qwen3_5MoeForCausalLM, tr.Qwen3_5MoeTextConfig(
             **c, moe_intermediate_size=32, shared_expert_intermediate_size=32, num_hidden_layers=2, head_dim=16, num_experts=8,
             num_experts_per_tok=2, linear_num_value_heads=4, linear_num_key_heads=2, linear_key_head_dim=16,
             linear_value_head_dim=16, layer_types=["linear_attention", "full_attention"], router_aux_loss_coef=0.01)
     if family == "nemotron_h":
-        return tr.NemotronHForCausalLM, tr.NemotronHConfig(
+        return reference_modeling("nemotron_h").NemotronHForCausalLM, tr.NemotronHConfig(
             **c, intermediate_size=64, num_hidden_layers=3, head_dim=16, layers_block_type=["mamba", "moe", "attention"],
             n_routed_experts=4, num_experts_per_tok=2, moe_intermediate_size=32, moe_shared_expert_intermediate_size=32,
             n_groups=1, n_group=1, topk_group=1, mamba_num_heads=4, mamba_head_dim=16, ssm_state_size=16, chunk_size=8)
