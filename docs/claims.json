@@ -10387,6 +10387,37 @@
       "notes": "Pre-registered in #1386 and reviewed by the maintainer before any box. Vast invoiced $0.837 for the reading; the lane cost $0.930 with the proof. The chunked table is 4.2x faster than P120's one-piece table but still 1.75x the chained builder's named kernels (Q2 missed high): a multi-program table is the next lever. The default flip is a separate PR, scoped to tables no larger than the one read (next_pow2(E) x next_pow2(R) <= 128 x 512)."
     },
     {
+      "id": "e4b.serve.p124.attn-int4-wide.qwen3-int4.5090.2026-10-09",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P124, one RTX 5090: on SC2e's served stack (Qwen3-30B-A3B int4 experts and int4 RTN attention, the folds, fused q/k/v), E4B_ATTN_INT4_WIDE=1 serves the attention projections of a 32- or 64-row decode step from the int4 grid with grouped-nf4-gemm #522's 32- or 64-row small-M tile instead of a cached bf16 copy on cuBLAS. It makes the captured 64-row step 3.3-3.5 % faster (16.38 -> 15.80 ms in block a) and the 32-row step 3.2-3.8 % faster (11.82 -> 11.36 ms), read in two interleaved blocks per depth (one runner per setting, both alive, alternating step by step), and the teacher-forced NLL moves +0.0011 nats at 64 rows and +0.0014 at 32, inside P110's bar against the arithmetic's own floor. DEFAULT_ON by the registered rule (both blocks' ratios <= 0.98 at both depths, the blocks within 1.5 %, quality passing).",
+      "value": 0.9648,
+      "unit": "ratio of the served 64-row decode step, E4B_ATTN_INT4_WIDE=1 over 0 (median of 256 captured bucket-64 replays of each setting in strict alternation, block a OFF-first; block b 0.9670; 32 rows 0.9616 / 0.9679)",
+      "hardware": "RTX 5090 (sm_120, driver 595.84), one rented Vast.ai host (instance 54950831, AMD EPYC 7B13, 256 threads), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @2ed9c11 (0.50.0 + P124's registration #1415 and Amendment 1 #1421; the route #1410) + grouped-nf4-gemm @4ed26d96 (0.43.0 + #522's block_m=; #519's chunked tile table, which E4B_INT4_WIDE_TILES=auto takes in both settings); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0; Qwen/Qwen3-30B-A3B @ad44e77, NF4 arena baked on the box, int4 stores repacked at load, built eager with one slot and E4B_ATTN_INT4_WIDE=1; premise tests/test_decode_graph_buckets.py 7, #522's K16 tests compiled for the card 25 and tests/test_int4_attn_wide.py 11 passed; bench/p124/p124_box.py: eager profiles off/on at 64 and 32 rows, two interleaved blocks per depth x 256 timed + 32 traced steps of each setting, P117's teacher-forced passes over 64 windows (R, rep, half, chunk, ON64, ON32, two mutants that must fail, a captured function check); verdict by bench/p124/p124_reduce.py",
+      "measured_on": "2026-10-09",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p124/RESULTS-p124.md",
+        "bench/p124/PREREG-p124.md",
+        "bench/p124/p124_reduce.py",
+        "bench/p124/p124_box.py",
+        "bench/p124/receipts/p124-5090-4/verdict.json",
+        "bench/p124/receipts/p124-5090-4/box.json",
+        "bench/p124/receipts/p124-5090-4/summary.txt",
+        "bench/p124/receipts/p124-5090-4/SHA256SUMS",
+        "bench/p124/receipts/p124-5090-1/verdict.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-09/p124-5090-4/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-09/p124-prove-2/ (receipt.json, the proving run under Amendment 1)",
+        "receipts/experts4bit-qlora/2026-10-09/p124-5090-1/ (attempt 1, NOISY)"
+      ],
+      "notes": "Pre-registered in #1415 and amended in #1421 after attempt 1 read NOISY (a level shift of one ABBA arm); both reviewed by the maintainer before any box. Vast invoiced $0.787 for the reading; the lane cost $2.285 with two proofs, attempt 1 and two pre-flight NOT_RUN hosts. The 64-row tile still costs 0.74 of the cuBLAS time it replaces (Q2 missed high; 0.59 at 32 rows): a plan census for it is the next lever. The default flip (E4B_ATTN_INT4_WIDE=auto for 17-64 rows, capability-detected) is a separate PR. The route's shared workspace is 11.5 MiB."
+    },
+    {
       "id": "e4b.serve.p121.k25-w16.qwen3.5090.2026-10-08",
       "package": "experts4bit-qlora",
       "area": "serve",

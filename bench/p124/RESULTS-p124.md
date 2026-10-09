@@ -1,24 +1,135 @@
-# P124 — results so far: attempt 1 read **NOISY**; Amendment 1 interleaves the served arms, and attempt 2 decides
+# P124 — results: **DEFAULT_ON**. With grouped-nf4-gemm #522's 32- and 64-row tiles, `E4B_ATTN_INT4_WIDE=1` makes SC2e's 64- and 32-row decode steps about 3.4 % and 3.5 % faster on Qwen3-30B-A3B int4, within P110's quality bar (one RTX 5090, 2026-10-09)
 
-Registration: `bench/p124/PREREG-p124.md` (#1415, reviewed by the maintainer, merged `ee91522`, the launch commit), with
-its Amendment 1 section. Issue: #846. Code under test:
+Registration: `bench/p124/PREREG-p124.md` (#1415, merged `ee91522`), with Amendment 1 (#1421, merged `2ed9c11`, the launch
+commit of the reading below). Issue: #846. Code under test:
 - grouped-nf4-gemm #522 (`4ed26d96`, `block_m=`);
 - e4b #1410 (`170b1532`, `E4B_ATTN_INT4_WIDE`).
 
-**Nothing below decides anything.** The registered rule read attempt 1 NOISY, so no default moves and no claim is made.
-Attempt 2, under Amendment 1, decides.
-
-## Proof (`p124-prove-1`)
-
-**PROVED** on Granite-3.1-3B-A800M with int4 RTN attention ($0.175):
-- the premise held on the card: 7, 25 and 11 tests passed, none skipped;
-- engagement was exact over 128 projections;
-- G64on matched ON64 at 1,240 of 1,240 positions;
+**Verdict by `p124_reduce.py` on attempt 2 (`p124-5090-4`): `DEFAULT_ON`.** Every ON/OFF ratio is ≤ 0.98 at both
+depths, the two blocks agree, and both subjects pass the quality bar. No VOID condition fired:
+- the commits, revision and stack are the registered ones; the engine was built with the route enabled;
+- every profile arm ran 8 eager steps of its bucket;
+- every block ran in its registered order, and each of its two runners captured every bucket and replayed its bucket
+  293 times with no eager step;
+- engagement was exact:
+  - one `_gemm_int4_b32_smallm` launch per projection (96) per profiled step with the route on, and none off;
+  - the captures took the route at 32 and 64 rows with the route on, and the cached copy with it off;
+  - every quality pass's decode calls were on its registered route;
+  - ON64 did not score bit-equal to R;
+- each setting emitted the same tokens in blocks a and b;
+- G64on matched ON64 at 8,128 of 8,128 positions;
 - both mutants failed the bar.
 
-The reducer read DEFAULT_ON_32 there. That is not a reading.
+The premise held: the cuBLAS GEMMs the route replaces are 12.4 % of the 64-row eager step. The verdict re-derives byte
+for byte on Python 3.9 and 3.13.
 
-## Attempt 1 (`p124-5090-1`): NOISY
+## Runs
+
+| run | what | cost | outcome |
+|---|---|---:|---|
+| `p124-prove-1` | proof, Granite with int4 attention | $0.175 | PROVED |
+| `p124-5090-1` | attempt 1 (ABBA arms) | $1.003 | **NOISY**: one arm's level shift (section below); led to Amendment 1 |
+| `p124-prove-2` | proof under Amendment 1 | $0.170 | PROVED |
+| `p124-5090-2` | attempt 2 | $0.096 | NOT_RUN: the launcher's pre-flight refused the host (HF CDN 4.2 MB/s < 20) |
+| `p124-5090-3` | attempt 2 | $0.054 | NOT_RUN: the same (13.6 MB/s) |
+| `p124-5090-4` | **attempt 2, the reading** | $0.787 | **DEFAULT_ON** |
+
+The lane spent **$2.285**, against its $3.00 ceiling. The two NOT_RUN hosts were retried under the maintainer's standing
+rule for pre-flight refusals, which measure nothing.
+
+## The reading (`p124-5090-4`)
+
+**Host:** one RTX 5090 (sm_120, driver 595.84) on an AMD EPYC 7B13 (256 threads), Vast instance 54950831.
+
+**Cost:** $0.787. Teardown proven at 02:47:07Z.
+
+**Stack:**
+- e4b 0.50.0 at `2ed9c11`; grouped-nf4-gemm 0.43.0 at `4ed26d96`;
+- torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0;
+- `Qwen/Qwen3-30B-A3B` at `ad44e77`: SC2e's served stack (int4 experts on 48 layers, 96 int4 RTN attention
+  projections after the q/k/v fusion, the folds), built with `E4B_ATTN_INT4_WIDE=1`;
+- `E4B_INT4_WIDE_TILES` at its default (`auto`, #1404), so both settings build P122's chunked tile table;
+- the box: load 161 s, arms 507 s.
+
+**Served steps, interleaved** (Amendment 1). Each block has one captured runner per setting, both alive, decoding in
+strict alternation. Each figure is `run_decode`'s synchronised wall, the median of 256 timed steps:
+
+| depth | block | order | OFF | ON | ON/OFF | median of the per-pair ratios |
+|---|---|---|---:|---:|---:|---:|
+| 64 | a | OFF, ON | 16.376 ms | 15.800 ms | **0.9648** | 0.9714 |
+| 64 | b | ON, OFF | 16.370 ms | 15.830 ms | **0.9670** | 0.9712 |
+| 32 | a | OFF, ON | 11.815 ms | 11.361 ms | **0.9616** | 0.9621 |
+| 32 | b | ON, OFF | 11.770 ms | 11.392 ms | **0.9679** | 0.9673 |
+
+- **Saving per step:** the route saves 0.56 ms at 64 rows and 0.42 ms at 32.
+- **The blocks agree:** within 0.23 % at 64 rows and 0.65 % at 32, against the 1.5 % bound. The same setting agrees
+  across blocks within 0.38 %. Attempt 1's single-arm level shift did not recur.
+- **The traced steps' replay device time** at 64 rows is 16.41 / 16.42 ms off and 16.00 / 16.01 ms on; at 32 rows,
+  11.73 / 11.70 off and 11.31 / 11.35 on.
+- **Tokens:** ON emits a different token from OFF at 16,035 of 18,752 positions at 64 rows. That is reported, not
+  gated: the arithmetic changes, and quality is the gate.
+
+**Eager twins** (`torch.profiler`, 8 steps; the route's mechanism, read from the class map frozen in P119):
+
+| depth | step device ms, off → on | cuBLAS the route replaces | its `_gemm_int4_b32_smallm` time |
+|---|---|---:|---:|
+| 64 | 15.22 → 14.68 (−3.6 %) | 1.88 ms (12.4 % of the step) | 1.38 ms (**0.74** of it) |
+| 32 | 10.94 → 10.46 (−4.4 %) | 1.36 ms (12.5 %) | 0.81 ms (0.59) |
+
+The 64-row tile is the weaker of the two. It reads a quarter of the cuBLAS path's bytes and still costs 0.74 of its time
+(Q2 missed high). At 32 rows the tile costs 0.59. A plan census for the 64-row tile (`block_n`, split-K, warps) is the
+lever this read names.
+
+**Quality** (P117's teacher-forced passes, 64 windows of 512 + 128; the same numbers as attempt 1, because the passes are
+deterministic):
+
+| arm | mean d (nats) | mean \|d\| | max \|d\| | mean KL | argmax agreement |
+|---|---:|---:|---:|---:|---:|
+| `half` (floor) | +0.0038 | 0.0158 | 0.070 | 0.0108 | 0.954 |
+| `chunk` (floor) | +0.0012 | 0.0166 | 0.063 | 0.0117 | 0.954 |
+| **`ON64`** | **+0.0011** | 0.0142 | 0.047 | 0.0106 | 0.957 |
+| **`ON32`** | **+0.0014** | 0.0155 | 0.067 | 0.0106 | 0.960 |
+| `mutant_scale` | +1.150 | 1.150 | 2.07 | 1.262 | 0.579 |
+| `mutant_wide` | +0.542 | 0.542 | 1.87 | 0.573 | 0.718 |
+
+- R repeats bit for bit.
+- The bar: bias ≤ 0.0138, spread ≤ 0.0332. Both subjects pass and both mutants fail.
+
+**Memory and the GPU:**
+- **The route's workspace is 11.5 MiB** (Q9). It is built at enable, so it exists with the route on and off, and an
+  interleaved block holds both settings at once. Q9 is therefore graded on the workspace itself, as the maintainer
+  ruled; no ON − OFF difference could show it.
+- **Peak allocated with two live runners:** 25.3–25.4 GB at 64 rows and 22.8 GB at 32.
+- **Busy fraction:** 0.969–0.971 in every runner.
+- **The GPU log** (`nvidia-smi` every 5 s) holds only 1–2 samples per block: a timed block lasts about 9 s. They read P1,
+  SM clock 2,782–2,820 MHz, memory clock 13,801 MHz, and 61–70 °C.
+
+**Predictions** (registered; evaluated by the reducer, none gates the verdict):
+
+| # | statistic | read | band | result |
+|---|---|---:|---|---|
+| Q1 | replaced cuBLAS share | 0.124 | [0.08, 0.18] | HELD |
+| Q2 | K16 / cuBLAS at 64 rows | 0.736 | [0.25, 0.65] | **MISSED** (high) |
+| Q3 | 64-row ratios | 0.9648, 0.9670 | [0.89, 0.97] | HELD |
+| Q4 | 32-row ratios | 0.9616, 0.9679 | [0.86, 0.97] | HELD |
+| Q5 | busy fraction | ≥ 0.969 | ≥ 0.90 | HELD |
+| Q6 | same setting across blocks | 0.38 % | ≤ 0.5 % | HELD |
+| Q7 | subjects' bias | +0.0011, +0.0014 | ±0.003 | HELD |
+| Q8 | mutants' bias | +1.15, +0.54 | ≥ +0.3 | HELD |
+| Q9 | the route's workspace | 11.5 MiB | ±64 MiB | HELD |
+
+**What it means:**
+- **The route is faster at both depths, at no measured quality cost.** On SC2e's served stack it serves the attention
+  projections of a 32- or 64-row decode step from the int4 grid instead of a cached bf16 copy. That makes the captured
+  step 3.2–3.8 % faster, with quality inside P110's bar against the arithmetic's own floor.
+- **The consequence registered for DEFAULT_ON** is a separate e4b PR. It gives `E4B_ATTN_INT4_WIDE` an `auto` default
+  taking 17–64 rows, when the K16 route is on and the installed grouped-nf4-gemm takes `block_m=` (capability).
+  `E4B_ATTN_INT4_WIDE=0` restores the cached copy, and the serve estimate prices the shared workspace. The claims row
+  `e4b.serve.p124.attn-int4-wide.qwen3-int4.5090.2026-10-09` carries the 64-row ratio.
+- **Not read here:** other models, cards, prompt lengths or tile plans. Serving attainment, for which the step ratios are
+  inputs to `serve_capacity`.
+
+## Attempt 1 (`p124-5090-1`): NOISY (decides nothing; kept as the amendment's evidence)
 
 **Host:** one RTX 5090 (sm_120, driver 595.91.07) on an AMD EPYC 7763 (256 threads), Vast instance 54939679.
 
@@ -111,9 +222,14 @@ registered rule read NOISY. Attempt 2 interleaves the settings so that a shift i
 ## Reproduce
 
 ```
-python bench/p124/p124_reduce.py --dir bench/p124/receipts/p124-5090-1 --e4b-sha ee91522968f2560bb04c0eb2ede9dc7e8194f9f2
+python bench/p124/p124_reduce.py --dir bench/p124/receipts/p124-5090-4 --e4b-sha 2ed9c11f098e279dda8b506d75d9df1b2f1a9dd6
 ```
 
-Run it with `p124_reduce.py` as merged at `ee91522` (`git show ee91522:bench/p124/p124_reduce.py`). The amended
-reducer reads attempt 2's block layout. Receipts are checked by `SHA256SUMS`, and logs are committed past the `*.log`
-ignore.
+Attempt 1 is read by the reducer as merged at `ee91522` (`git show ee91522:bench/p124/p124_reduce.py`). It uses the ABBA
+layout, which the amended reducer no longer reads:
+
+```
+python <that file> --dir bench/p124/receipts/p124-5090-1 --e4b-sha ee91522968f2560bb04c0eb2ede9dc7e8194f9f2
+```
+
+Receipts are checked by each directory's `SHA256SUMS`, and logs are committed past the `*.log` ignore.
