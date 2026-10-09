@@ -304,7 +304,7 @@ _KNOWN_UNCLAIMED = {
     "kimi_k25",
     # OCR / multimodal composites whose text tower is not separately validated;
     # and pre-release / obscure types not yet checked against a real checkpoint:
-    "deepseek_ocr2", "qwen3_5_moe_text", "axk1", "axk2", "mimo_v2_flash",
+    "deepseek_ocr2", "axk1", "axk2", "mimo_v2_flash",
     # Appeared in transformers between 2026-08-26 10:35 and 13:34 UTC,
     # mapped to the qwen2_moe converter. NOT aliased: sharing a
     # converter is not evidence of sharing e4b's expert-fusion or
@@ -472,11 +472,12 @@ def test_adjudicated_released_type_resolves_to_its_convention(model_type, expect
 
 
 def test_qwen3_5_moe_is_native_prefused_passthrough_no_transpose():
-    """qwen3_5_moe's converter is EMPTY (native) — unlike qwen3_vl_moe it has no
+    """qwen3_5_moe's native expert layout — unlike qwen3_vl_moe it has no
     Transpose, so the pre-fused stacks match the tree as-is. Never per-expert,
     nothing transposed. Pinned so it is not confused with its transposed sibling."""
     from experts4bit_qlora.arch.moe_conventions import QWEN3_5_MOE, QWEN3_VL_MOE
     assert convention_for("qwen3_5_moe") is QWEN3_5_MOE
+    assert convention_for("qwen3_5_moe_text") is QWEN3_5_MOE
     assert QWEN3_5_MOE is not QWEN3_VL_MOE
     assert not QWEN3_5_MOE.roles
     assert QWEN3_5_MOE.transpose_re is None       # native: no transpose (the sibling has one)
