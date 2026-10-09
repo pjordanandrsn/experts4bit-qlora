@@ -1,0 +1,102 @@
+Fetching 12 files:   0%|          | 0/12 [00:00<?, ?it/s]Fetching 12 files: 100%|██████████| 12/12 [00:00<00:00, 2038.71it/s]
+[00:27:00]   checkpoint: openai/gpt-oss-20b @ 6cee5e81ee83917806bbde320786a8fb61efebee (requested 6cee5e81ee83917806bbde320786a8fb61efebee)
+[00:27:00]   fusing + quantizing experts (up to 24x32) to nf4 (streaming)...
+[00:27:01]   quantized experts on 24/24 MoE layers (32 experts each)
+[00:27:01]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[00:27:02]   experts deferred to the arena: 24 module(s), 120 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[00:27:09]   hybrid tier active on 24 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] WARNING E4B_FUSE_ROUTER_EPI=auto on model_type 'gpt_oss': P115 Phase C: SANE argmax agreement 0.924 < 0.95 (#1342). Explicit auto is structural; it is quality-licensed only on ['qwen3_moe'] (lane P115)
+[serve_paged] fusions (q/k/v 0; folds set: ['E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 24}
+[serve_paged] PREFILL_GRAPH auto: refused, prefill stays eager (device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement))
+[serve_paged] ready: {"moe_layers": 24, "experts": 32, "top_k": 4, "model_type": "gpt_oss", "int4_expert_layers": 0, "int4_store_kinds": [], "int4_attn_projections": 0, "kv": {"n_kv_heads": 8, "head_dim": 64, "k_groups": "auto", "scratch_slots": 0, "blocks_per_seq": 256, "pool_mib": 1776.4}, "graph_status": null, "grouping": {"device_grouping": false, "force_singleton_groups": false}, "prefill_graph": "auto", "levers_env": {"E4B_FUSE_T1_GLUE": "0", "E4B_FUSE_T1_GLUE_R2": "0", "E4B_FUSE_ROUTER_EPI": "auto"}, "exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 24, "fusion_modes": {"E4B_PAGED_FUSE_QKV": "0", "E4B_FUSE_T1_GLUE": "0", "E4B_FUSE_T1_GLUE_R2": "0", "E4B_FUSE_ROUTER_EPI": "auto"}, "fusion_sources": {"E4B_PAGED_FUSE_QKV": "explicit", "E4B_FUSE_T1_GLUE": "explicit", "E4B_FUSE_T1_GLUE_R2": "explicit", "E4B_FUSE_ROUTER_EPI": "explicit"}, "fusion_report": {"E4B_FUSE_T1_GLUE": {"mode": "0"}, "E4B_FUSE_T1_GLUE_R2": {"mode": "0"}, "E4B_FUSE_ROUTER_EPI": {"mode": "auto", "patched": 24, "failed_probe": 0, "no_kernel_mode": 0, "fp32_upstream": 0}}, "pinned_cache_released": true, "host_heap_trimmed": true}
+P115_QGROUP on wikitext group 1 of 12 done at 5 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 2 of 12 done at 9 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 3 of 12 done at 13 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 4 of 12 done at 17 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 5 of 12 done at 21 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 6 of 12 done at 25 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 7 of 12 done at 29 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 8 of 12 done at 33 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 9 of 12 done at 38 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 10 of 12 done at 42 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 11 of 12 done at 46 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 12 of 12 done at 50 s, 15.13 GiB allocated
+FAM_CELL ON_epi wikitext|1|A done
+P115_QGROUP on wikitext group 1 of 12 done at 4 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 2 of 12 done at 8 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 3 of 12 done at 12 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 4 of 12 done at 16 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 5 of 12 done at 20 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 6 of 12 done at 24 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 7 of 12 done at 29 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 8 of 12 done at 33 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 9 of 12 done at 37 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 10 of 12 done at 41 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 11 of 12 done at 45 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 12 of 12 done at 49 s, 15.13 GiB allocated
+FAM_CELL ON_epi wikitext|1|B done
+P115_QGROUP on wikitext group 1 of 12 done at 4 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 2 of 12 done at 8 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 3 of 12 done at 12 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 4 of 12 done at 16 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 5 of 12 done at 20 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 6 of 12 done at 24 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 7 of 12 done at 29 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 8 of 12 done at 33 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 9 of 12 done at 37 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 10 of 12 done at 41 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 11 of 12 done at 45 s, 15.13 GiB allocated
+P115_QGROUP on wikitext group 12 of 12 done at 49 s, 15.13 GiB allocated
+FAM_CELL ON_epi wikitext|1|C done
+P115_QGROUP on wikitext group 1 of 1 done at 8 s, 15.13 GiB allocated
+FAM_CELL ON_epi wikitext|12|A done
+P115_QGROUP on wikitext group 1 of 1 done at 7 s, 15.13 GiB allocated
+FAM_CELL ON_epi wikitext|12|B done
+P115_QGROUP on wikitext group 1 of 1 done at 7 s, 15.13 GiB allocated
+FAM_CELL ON_epi wikitext|12|C done
+P115_QGROUP on c4val1 group 1 of 12 done at 4 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 2 of 12 done at 8 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 3 of 12 done at 12 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 4 of 12 done at 16 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 5 of 12 done at 20 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 6 of 12 done at 24 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 7 of 12 done at 29 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 8 of 12 done at 33 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 9 of 12 done at 37 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 10 of 12 done at 41 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 11 of 12 done at 45 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 12 of 12 done at 49 s, 15.13 GiB allocated
+FAM_CELL ON_epi c4val1|1|A done
+P115_QGROUP on c4val1 group 1 of 12 done at 4 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 2 of 12 done at 8 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 3 of 12 done at 12 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 4 of 12 done at 16 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 5 of 12 done at 20 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 6 of 12 done at 25 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 7 of 12 done at 29 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 8 of 12 done at 33 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 9 of 12 done at 37 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 10 of 12 done at 41 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 11 of 12 done at 45 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 12 of 12 done at 49 s, 15.13 GiB allocated
+FAM_CELL ON_epi c4val1|1|B done
+P115_QGROUP on c4val1 group 1 of 12 done at 4 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 2 of 12 done at 8 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 3 of 12 done at 12 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 4 of 12 done at 16 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 5 of 12 done at 20 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 6 of 12 done at 24 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 7 of 12 done at 29 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 8 of 12 done at 33 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 9 of 12 done at 37 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 10 of 12 done at 41 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 11 of 12 done at 45 s, 15.13 GiB allocated
+P115_QGROUP on c4val1 group 12 of 12 done at 49 s, 15.13 GiB allocated
+FAM_CELL ON_epi c4val1|1|C done
+P115_QGROUP on c4val1 group 1 of 1 done at 8 s, 15.13 GiB allocated
+FAM_CELL ON_epi c4val1|12|A done
+P115_QGROUP on c4val1 group 1 of 1 done at 7 s, 15.13 GiB allocated
+FAM_CELL ON_epi c4val1|12|B done
+P115_QGROUP on c4val1 group 1 of 1 done at 7 s, 15.13 GiB allocated
+FAM_CELL ON_epi c4val1|12|C done
+FAM_BOX ON_epi/default census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 24} store=[] cells=12 mem=15.77 GB 338.4 s

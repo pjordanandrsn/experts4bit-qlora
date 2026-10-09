@@ -191,12 +191,15 @@ GPUs with 160 or more SMs. `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`.
 **The B=1 fused stack is the default on Qwen3-MoE.** On top of grouped-nf4-gemm 0.43.0's bandwidth GEMV, fused q/k/v
 plus three glue folds decode one request 1.5902× and 16 requests 1.1644× as fast on Qwen3-30B-A3B NF4, and P115 Phase
 D's SANE read at T == 1 passes (bias +0.00541 nats, argmax agreement 0.9674). The four knobs resolve to `auto` on the one
-family with that read and stay off elsewhere: gpt-oss-20b failed Phase C's argmax gate (0.924 against 0.95), and
-Qwen3.5/3.6-MoE and Granite-MoE wait for lane FAM's reads at T == 1 (#1362). `0` on each knob is the way back.
+family with that read and stay off elsewhere. Lane FAM read the others at T == 1, each against its own neutral floor
+(#1362). Granite-MoE fails on one gated entry of 12, by 2 positions in 1536. gpt-oss-20b fails on every knob, because its
+own floor sits below the 0.90 agreement backstop; that floor also contains Phase C's 0.924, so Phase C's miss was the
+gate, not the knob. Qwen3.6-MoE, where only the router epilogue engages, passes; adding it to the allowlist is its own
+pull request. `0` on each knob is the way back.
 `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`,
-`e4b.serve.p115.fused-stack-quality.qwen3.5090.2026-10-07`,
-`e4b.serve.p115.fused-stack-engagement.gptoss-qwen36.5090.2026-10-08`,
-`e4b.serve.p115.fused-stack-quality.granite.5090.2026-10-08` ([P115](../bench/p115/RESULTS-p115.md)).
+`e4b.serve.p115.fused-stack-quality.qwen3.5090.2026-10-07`, `e4b.serve.fam.fused-stack-t1.granite.5090.2026-10-09`,
+`e4b.serve.fam.fused-stack-t1.gptoss.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.qw36.5090.2026-10-09`
+([P115](../bench/p115/RESULTS-p115.md), [FAM](../bench/fam/RESULTS-fam.md)).
 
 **Where the default single-request step goes.** A kernel-class census of the shipped default on Qwen3-30B-A3B NF4,
 run on a 5090 with the fused stack and the bandwidth GEMV both on, puts the one-request step at 4.75 ms. The dense bf16

@@ -11898,6 +11898,94 @@
         "receipts/experts4bit-qlora/2026-10-08/p123-prove-2/ (receipt.json, the proving run)"
       ],
       "notes": "Pre-registered in #1394 with Amendments 1 (#1405, the proof's router check) and 2 (#1411, the class map names torch.cat after p123-prove-1 VOIDed on it). The maintainer re-derived the verdict from the receipt store with main's reducer, byte-identical. The proofs' router builds licensed 32 of 32 Granite routers twice on a 5090 (fam-prove-1 read 27 before #1398). The host's RTX 5090 ran at a 450 W power limit."
+    },
+    {
+      "id": "e4b.serve.fam.fused-stack-t1.granite.5090.2026-10-09",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+      "claim": "Lane FAM (one RTX 5090): the B=1 fused stack at auto on Granite-3.1-3b-a800m (engaged 0 / 65 / [32, 32] / 32) reads FAIL against the family's own neutral floor at T == 1. One gated entry of 12 misses: c4val1, shape 1, set C, argmax agreement 0.95117 (1461 of 1536) against A_f - 0.005 = 0.95195. In that entry |bias| 0.0026 (gate 0.0144), spread 0.0084 (gate 0.0248) and KL 0.0081 are inside the floor. Every other entry passes; mut090 and mutant_scale fail every cell. Granite's knobs stay off by default; no re-read under this registration.",
+      "value": 0.00087,
+      "unit": "nats, mean per-window NLL difference ON - R at (wikitext, shape 1), the mean of sets A, B and C (36 windows x 128 teacher-forced positions)",
+      "hardware": "RTX 5090 (sm_120, driver 595.71.05), one rented Vast.ai host (instance 54930667, verified-secure, AMD EPYC 7C13, 256 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @9766fb4c (0.50.0, #1403's merge) + grouped-nf4-gemm @6ee2e10 (0.43.0); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0; premise 36 passed on the card; the default serve_paged server built eager at all-vram, the four fusion knobs at 0 (OFF) or the config's values; the NF4 arena baked on the box; quality teacher-forced in fp32 at 128 positions, 12 windows per set, sets A/B/C, wikitext and c4val1, shapes 1 and 12, the floor from chunk, half and split1 (n_split=1); ibm-granite/granite-3.1-3b-a800m-instruct @a027806",
+      "measured_on": "2026-10-09",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/fam/RESULTS-fam.md",
+        "bench/fam/PREREG-fam.md",
+        "bench/fam/fam_reduce.py",
+        "bench/fam/fam_box.py",
+        "bench/fam/receipts/fam-granite-1/verdict.json",
+        "bench/fam/receipts/fam-granite-1/SHA256SUMS",
+        "bench/fam/receipts/fam-granite-1/fam_granite_OFF.json",
+        "bench/fam/receipts/fam-granite-1/fam_granite_ON_auto.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-08/fam-granite-1/ (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #1380 with Amendment 1 (#1403). F6 (Granite ON_auto PASS, about 70 %) MISSED. The maintainer re-derived the verdict from the store byte for byte. Supersedes nothing: P115 Phase C's Granite read (e4b.serve.p115.fused-stack-quality.granite.5090.2026-10-08) was at T == 12 on another instrument."
+    },
+    {
+      "id": "e4b.serve.fam.fused-stack-t1.gptoss.5090.2026-10-09",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "openai/gpt-oss-20b",
+      "claim": "Lane FAM (one RTX 5090): on gpt-oss-20b each B=1 fusion knob alone and all three at auto read FAIL at T == 1: ON_glue (engaged 0 / 49 / [0, 0] / 0) fails 3 of 12 gated entries, ON_r2 (0 / 0 / [24, 0] / 0) 1, ON_epi (0 / 0 / [0, 0] / 24) 6, ON_auto (0 / 49 / [24, 0] / 24) 6. Every failing entry fails only the absolute backstop (agreement >= 0.90, or ON_r2's |bias| 0.0201 > 0.020), never a gate relative to the family's floor: gpt-oss's own neutral draws read A_f 0.874-0.884, so the backstop cannot be cleared by anything touching its arithmetic. The anchor (SC2g's path, wikitext, shape 12, set A) places Phase C's 0.924 inside the family's own floor (A_f 0.9036; ON_auto 0.9238): Phase C's miss was the gate, not the knob. gpt-oss's knobs stay off by default.",
+      "value": 0.00493,
+      "unit": "nats, mean per-window NLL difference ON - R at (wikitext, shape 1), the mean of sets A, B and C (36 windows x 128 teacher-forced positions); ON_auto",
+      "hardware": "RTX 5090 (sm_120, driver 610.57.04), one rented Vast.ai host (instance 54930717, verified-secure, AMD engineering sample 100-000000897-03, 64 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @9766fb4c (0.50.0, #1403's merge) + grouped-nf4-gemm @6ee2e10 (0.43.0); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0; premise 36 passed on the card; the default serve_paged server built eager at all-vram, the four fusion knobs at 0 (OFF) or the config's values; the NF4 arena baked on the box; quality teacher-forced in fp32 at 128 positions, 12 windows per set, sets A/B/C, wikitext and c4val1, shapes 1 and 12, the floor from chunk, half and split1 (n_split=1); openai/gpt-oss-20b @6cee5e8; the anchor on SC2g's path (MXFP4 store on 24 layers)",
+      "measured_on": "2026-10-09",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/fam/RESULTS-fam.md",
+        "bench/fam/PREREG-fam.md",
+        "bench/fam/fam_reduce.py",
+        "bench/fam/fam_box.py",
+        "bench/fam/receipts/fam-gptoss-1/verdict.json",
+        "bench/fam/receipts/fam-gptoss-1/SHA256SUMS",
+        "bench/fam/receipts/fam-gptoss-1/fam_gptoss_OFF.json",
+        "bench/fam/receipts/fam-gptoss-1/fam_gptoss_ON_auto.json",
+        "bench/fam/receipts/fam-gptoss-1/fam_gptoss_anchor_ON_auto.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-08/fam-gptoss-1/ (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #1380 with Amendment 1 (#1403). F3 (A_f at wikitext 12 in [0.88, 0.94]) MISSED at 0.8737; F4 (the anchor) HIT; F8 MISSED on all four knobs. ON_auto bias at (wikitext, 1) by set: +0.0120 / +0.0094 / -0.0066. The maintainer re-derived the verdicts from the store byte for byte and ruled no new registration now; the route, if gpt-oss at B=1 matters, is a registered NLL statistic with a power-sized window count."
+    },
+    {
+      "id": "e4b.serve.fam.fused-stack-t1.qw36.5090.2026-10-09",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3.6-35B-A3B",
+      "claim": "Lane FAM (one RTX 5090): the B=1 fused stack at auto on Qwen3.6-35B-A3B, where only the router epilogue engages (0 / 0 / [0, 0] / 40), reads PASS against the family's own neutral floor at T == 1 and T == 12 on both texts, every set: worst-set |bias| at most 0.0012 nats (gates 0.0128-0.0166), argmax agreement at least 0.9876 (gates 0.9527-0.9611), KL at most 0.0010. mut090 and mutant_scale fail every cell. The verdict is Amendment 3's re-reduction of fam-qw36-2's records (the box's original VOID, on a mis-registered warm-up count, is kept beside it). It licenses a separate allowlist pull request.",
+      "value": -0.00013,
+      "unit": "nats, mean per-window NLL difference ON - R at (wikitext, shape 1), the mean of sets A, B and C (36 windows x 128 teacher-forced positions)",
+      "hardware": "RTX 5090 (sm_120, driver 595.71.05), one rented Vast.ai host (instance 54944654, verified-secure, AMD EPYC 7C13, 256 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @98d59921 (0.50.0, #1420's merge) + grouped-nf4-gemm @6ee2e10 (0.43.0); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0; premise 36 passed on the card; the default serve_paged server built eager at all-vram, the four fusion knobs at 0 (OFF) or the config's values; the NF4 arena baked on the box; quality teacher-forced in fp32 at 128 positions, 12 windows per set, sets A/B/C, wikitext and c4val1, shapes 1 and 12, the floor from chunk, half and split1 (n_split=1); Qwen/Qwen3.6-35B-A3B @995ad96; the largest shape first (Amendment 2); reduced by fam_reduce at 2ead4627 (Amendment 3)",
+      "measured_on": "2026-10-09",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/fam/RESULTS-fam.md",
+        "bench/fam/PREREG-fam.md",
+        "bench/fam/fam_reduce.py",
+        "bench/fam/fam_box.py",
+        "bench/fam/receipts/fam-qw36-2/verdict-amendment-3.json",
+        "bench/fam/receipts/fam-qw36-2/verdict.json",
+        "bench/fam/receipts/fam-qw36-2/SHA256SUMS",
+        "bench/fam/receipts/fam-qw36-2/fam_qw36_OFF.json",
+        "bench/fam/receipts/fam-qw36-2/fam_qw36_ON_auto.json",
+        "bench/fam/receipts/fam-qw36-1/verdict.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-09/fam-qw36-2/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-08/fam-qw36-1/ (receipt.json, teardown-proof.json; VOID)"
+      ],
+      "notes": "Pre-registered in #1380 with Amendments 1 (#1403), 2 (#1420) and 3 (#1432). F7 (Qwen3.6 ON_auto PASS, about 85 %) HIT. fam-qw36-1 ($1.639) VOIDed on a harness crash (the shape-1 runner froze the linear-state pool); fam-qw36-2's box reduction VOIDed on the warm-up count; no gate statistic was computed before Amendment 3 merged, and the maintainer re-derived the verdict from the store. ON_auto bias at (wikitext, 1) by set: -0.0005 / +0.0004 / -0.0003."
     }
   ]
 }
