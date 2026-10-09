@@ -288,7 +288,8 @@ def test_the_runner_runs_the_registered_arms_on_the_registered_stacks():
     assert "E4B_A=a8c01d426bc3e489c8bd11c7c8ced091da557582" in RUN
     assert "GNF4_A=d1f64ba50afce94533e0166ba3332ef075aa43bb" in RUN
     assert re.search(r"^GNF4_B=d769d5022c0fb7a2ada847f69a3cba6e0f45c77f", RUN, re.M)
-    assert "E4B_B=$E4B_SHA" in RUN
+    assert re.search(r"^E4B_B=7f044dd9570b0f75ac4ebc1742e697256cd2e209 ", RUN, re.M), "Amendment 2 pins B by SHA"
+    assert re.search(r"^E4B_H=\$E4B_SHA ", RUN, re.M), "the harness is the launch commit"
     assert 'case "$GNF4_B $E4B_P127" in *__*) say "refusing: a registered SHA is still a placeholder"' in RUN
     assert "finish 31" in RUN and "audit.json" in RUN
     assert '-k real_kernels' in RUN and '"7 passed"' in RUN
@@ -319,3 +320,39 @@ def test_amendment_1_requires_the_1482_fix_and_lists_it():
     assert e4b_inert[-1] == "d14bcb10eac9c18d4c15c40af400873a0d37bd17" and "`d14bcb10` (#1465)" in prereg, \
         "#1465 changes engines/train_qkv_fuse.py (training only); unlisted, the audit refuses the launch"
     assert "__" not in " ".join(e4b_p127 + e4b_inert) and "__E4B" not in prereg
+
+
+def test_amendment_2_pins_b_and_fetches_under_the_watchdog():
+    """p127-prove-2 lost its host mid-fetch. Amendment 2 pins B at 7f044dd9 (proof and reading test the same B), takes
+    the harness from the launch commit by SHA, and runs the fetch under bench/common/hf_fetch_watchdog.py."""
+    prereg = (LANE / "PREREG-p127.md").read_text(encoding="utf-8")
+    amend2 = prereg[prereg.index("## Amendment 2"):]
+    assert "`7f044dd9`" in amend2 and "#1490, #1491, #1498, #1506" in amend2 and "outside its claim" in amend2
+    # every worktree is checked out by SHA and verified; the watchdog comes from the harness worktree
+    assert "worktree add -q --detach $W/src/e4b_H $E4B_H" in RUN
+    assert re.search(r'for side in A B H; do\n\s+E=E4B_\$side; got=\$\(git -C \$W/src/e4b_\$side rev-parse HEAD\)', RUN)
+    assert "WATCHDOG=$W/src/e4b_H/bench/common/hf_fetch_watchdog.py" in RUN
+    assert "snapshot_download" not in RUN, "the fetch goes through the watchdog only"
+    fetch = RUN[RUN.index('say "fetch $MODEL'):RUN.index("SNAP=$(tail -1 logs/fetch.log)")]
+    for flag in ("HF_HUB_VERBOSITY=info", "--poll-s 30", "--stall-s 180", "--max-restarts 3", "--budget-s $FA",
+                 'alarm $((FA + 90))', "> logs/fetch.log 2>&1", "finish 11"):
+        assert flag in fetch, flag
+    assert '"huggingface_hub>=1.31,<2"' in RUN and '>= (1, 31)' in RUN
+    assert "harness sha {os.environ['E4B_H']}" in RUN and "sha {os.environ['E4B_B']}" in RUN and "huggingface_hub {hub}" in RUN
+    order = [RUN.index(s) for s in ("BOX SELF-TEST FAILED", "WATCHDOG SELF-TEST FAILED", "PREMISE FAILED", 'say "fetch $MODEL')]
+    assert order == sorted(order), "the watchdog's self-test runs with the others, before the premise and the fetch"
+
+
+def test_the_pinned_b_audit_range_is_fully_registered():
+    """The box's audit, replayed here: every package commit in a8c01d42..7f044dd9 is P127's or registered inert. The
+    range is fixed by Amendment 2, so this holds for every later launch commit."""
+    e4b_b = re.search(r"^E4B_B=([0-9a-f]{40})", RUN, re.M).group(1)
+    have = subprocess.run(["git", "-C", str(REPO), "cat-file", "-e", e4b_b + "^{commit}"], capture_output=True)
+    base = subprocess.run(["git", "-C", str(REPO), "cat-file", "-e", "a8c01d426bc3e489c8bd11c7c8ced091da557582^{commit}"],
+                          capture_output=True)
+    if have.returncode or base.returncode:
+        pytest.skip("this checkout lacks the history the audit reads (shallow clone)")
+    listed = subprocess.run(["git", "-C", str(REPO), "log", "--format=%H", f"a8c01d426bc3e489c8bd11c7c8ced091da557582..{e4b_b}",
+                             "--", "experts4bit_qlora/"], capture_output=True, text=True, check=True).stdout.split()
+    ok = (re.search(r'^E4B_P127="([^"]+)"', RUN, re.M).group(1) + " " + re.search(r'^E4B_INERT="([^"]+)"', RUN, re.M).group(1)).split()
+    assert listed and not [c for c in listed if c not in ok], [c for c in listed if c not in ok]
