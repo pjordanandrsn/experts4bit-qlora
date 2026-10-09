@@ -110,8 +110,11 @@ evidence=w.check_sc2_child(binding,process,point=point,native=native)
 
 
 def run(tmp_path, manifest, job, python, tool):
-    return f.run(tmp_path, manifest, job, python, tool, env=dict(os.environ,
-                 E4B_PAGED_MAX_TOKENS_PER_SEQ='2048', E4B_PAGED_CHUNK_TOKENS='512'))
+    env, _ = f.worker_environment.clean(os.environ, component='capacity',
+        fixture={'E4B_PAGED_MAX_TOKENS_PER_SEQ': '2048', 'E4B_PAGED_CHUNK_TOKENS': '512'},
+        venv=Path(manifest['payload']['venv']), cache=tmp_path / 'worker-cache',
+        threads=1, allocator='expandable_segments:True')
+    return f.run(tmp_path, manifest, job, python, tool, env=env)
 
 
 @pytest.mark.parametrize('label', ['warm', 'burst', 'end'])
