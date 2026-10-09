@@ -7,6 +7,10 @@
 
 **Quantize the experts. Train adapters. Move weights to RAM or SSD when GPU memory runs out.**
 
+**On a 12 GB card:** with `OFFLOAD_EXPERTS=1`, Qwen3-30B-A3B QLoRA-trains at 7.16 GB peak GPU memory while the other
+~13–15 GB of packed experts stay in pinned CPU RAM (`e4b.offload.fits-30b-class`). [The command](#load-a-model-and-check-it) ·
+[how to read the number](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STORAGE-MODES.md#reading-the-headline-memory-numbers)
+
 Mixture-of-Experts (MoE) models keep many expert networks but activate only a few per token.
 Their fused expert weights can escape ordinary `load_in_4bit=True` loading and stay in full precision.
 This runtime loads those weights in 4-bit, trains them with QLoRA, and serves the model.
