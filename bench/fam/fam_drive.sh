@@ -14,7 +14,7 @@ HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 # FAM's staging: its runner, box and reducer, P115's quality box, P110's, P108's and P97's boxes, P39's k8_bake.py and
 # calib.json, P98's p98_bake.py, and the premise tests from tests/. staged.sha256 pins every one by the name the box sees.
 TESTS="$REPO/tests"; P39="$REPO/bench/p39"; P98="$REPO/bench/p98"; P115="$REPO/bench/p115"; P110="$REPO/bench/p110"; P108="$REPO/bench/p108"; P97="$REPO/bench/p97"
-STAGE="$HERE/fam_run.sh $HERE/fam_box.py $HERE/fam_reduce.py $P115/p115_quality.py $P110/p110_box.py $P108/p108_box.py $P97/p97_box.py $P39/k8_bake.py $P39/calib.json $P98/p98_bake.py $TESTS/test_fam_split1_gpu.py $TESTS/test_fusion_modes.py $HERE/staged.sha256"
+STAGE="$HERE/fam_run.sh $HERE/fam_box.py $HERE/fam_reduce.py $HERE/fam_speed.py $HERE/fam_speed_reduce.py $P115/p115_quality.py $P110/p110_box.py $P108/p108_box.py $P97/p97_box.py $P39/k8_bake.py $P39/calib.json $P98/p98_bake.py $TESTS/test_fam_split1_gpu.py $TESTS/test_fusion_modes.py $HERE/staged.sha256"
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
 # staged.sha256 names the files as the BOX will see them; resolve each name to its source and compare hashes
 # (the same check as tests/test_fam_staged_pin.py, which runs it in CI where it costs nothing).
@@ -22,7 +22,7 @@ sha_of(){ (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | cut -d" " -f1; }
 while read -r want name; do
   case "$want" in \#*|"") continue;; esac
   case "$name" in
-    fam_run.sh|fam_box.py|fam_reduce.py) src="$HERE/$name";;
+    fam_run.sh|fam_box.py|fam_reduce.py|fam_speed.py|fam_speed_reduce.py) src="$HERE/$name";;
     p115_quality.py) src="$P115/$name";;
     p110_box.py) src="$P110/$name";;
     p108_box.py) src="$P108/$name";;
@@ -56,7 +56,9 @@ PASS="FAM_RUN_ID=$RUN_ID FAM_RUN_NONCE=$NONCE FAM_DEADLINE_EPOCH=$DEADLINE FAM_I
 # runner marks it REHEARSAL.
 case "${FAM_FAMILY:-}" in ""|granite|gptoss|qw36) ;; *) say "refusing: FAM_FAMILY must be granite, gptoss or qw36"; exit 78;; esac
 [ "${FAM_PROVE:-0}" = 1 ] || [ -n "${FAM_FAMILY:-}" ] || { say "refusing: a reading names its family (FAM_FAMILY)"; exit 78; }
-for v in FAM_PROVE FAM_FAMILY; do [ -n "${!v:-}" ] && PASS="$PASS $v=$(printf %q "${!v}")"; done
+case "${FAM_SPEED:-0}" in 0) ;; 1) [ "${FAM_FAMILY:-}" = qw36 ] || { say "refusing: FAM_SPEED=1 is Qwen3.6's (FAM_FAMILY=qw36)"; exit 78; };;
+  *) say "refusing: FAM_SPEED must be 0 or 1"; exit 78;; esac
+for v in FAM_PROVE FAM_FAMILY FAM_SPEED; do [ -n "${!v:-}" ] && PASS="$PASS $v=$(printf %q "${!v}")"; done
 if [ "${FAM_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash fam_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/fam"; exit 0; fi
 say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; launch e4b $E4B_SHA (from $REPO); stacks are the runner's constants; receipts -> $RUN_DIR/fam; deadline $DEADLINE"
 $SSH "rm -rf -- $W && mkdir -p $W/logs /root/.cache/huggingface" || { say "stage failed: remote cleanup"; exit 20; }

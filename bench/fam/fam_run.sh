@@ -30,7 +30,14 @@ PROVE=${FAM_PROVE:-0}
 # process (OFF 1024 s, an ON config about 170 s at 32 positions; x 127/31 at 128) with a 1.5x margin, Qwen3.6 at 1.5x
 # Granite's step. Each NEED + 600 s of fetch-back fits inside the family's guard (2.5 h / 3.75 h / 4.0 h; proof 1.25 h).
 FAMILY=${FAM_FAMILY:-}
-if [ "$PROVE" = 1 ]; then
+# Amendment 4: FAM_SPEED=1 times the router epilogue on Qwen3.6 at one row (fam_speed.py) instead of the quality read;
+# with FAM_PROVE=1 it is the speed proof (32 timed steps). Guard 1.5 h (proof 0.75 h): fetch, bake, one speed process.
+SPEED=${FAM_SPEED:-0}
+if [ "$SPEED" = 1 ]; then
+  [ "$FAMILY" = qw36 ] || { say "refusing: the speed read is Qwen3.6's (FAM_FAMILY=${FAMILY})"; finish 78; }
+  TAGS="qw36"; CONT_DEF=128; NEED_FETCH=2400; NEED_BAKE=900; NEED_SPEED=1200; CAP_SPEED=1800
+  SPEED_STEPS=256; [ "$PROVE" = 1 ] && SPEED_STEPS=32
+elif [ "$PROVE" = 1 ]; then
   [ -z "$FAMILY" ] || [ "$FAMILY" = granite ] || { say "refusing: the proof is Granite's (FAM_FAMILY=$FAMILY)"; finish 78; }
   TAGS="granite"; CONT_DEF=32; NEED_FETCH=300; NEED_BAKE=300; NEED_OFF=1800; NEED_ON=400; CAP_OFF=2400; CAP_ON=900
 else
@@ -54,13 +61,13 @@ unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_
       E4B_KV_STEP_SELECT E4B_PAGED_BULK_KV E4B_PAGED_PREFILL_GRAPH E4B_FUSE_SWIGLU E4B_FUSE_COMBINE GNF4_PDL GNF4_PDL_MAX_ROWS \
       GNF4_GEMV_DOTPAD GNF4_DECODE_PLAN GNF4_GEMV_SPLITK GNF4_GEMV_BW GNF4_TRITON_PREBIND E4B_INT4_WIDE_TILES
 : > summary.txt; echo "$FAM_INSTANCE_ID" > INSTANCE_ID
-echo "KNOBS e4b=$E4B_SHA gnf4=$GNF4_SHA family=${FAMILY:-proof} models=$TAGS gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_ram_gb=$MIN_RAM_GB prove=$PROVE cont=$CONT" | tee -a summary.txt
+echo "KNOBS e4b=$E4B_SHA gnf4=$GNF4_SHA family=${FAMILY:-proof} models=$TAGS gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_ram_gb=$MIN_RAM_GB prove=$PROVE speed=$SPEED cont=$CONT" | tee -a summary.txt
 if [ "$REHEARSAL" != 0 ] || [ "$GPU_CLASS" != 5090 ] || [ "$MIN_DISK_GB" != 200 ] || [ "$MIN_RAM_GB" != 60 ] || [ "$CONT" != "$CONT_DEF" ]; then
   echo "REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)" | tee -a summary.txt; : > REHEARSAL
 fi
 # ---- staged pieces, byte-for-byte
-for f in fam_box.py fam_reduce.py p115_quality.py p110_box.py p108_box.py p97_box.py k8_bake.py p98_bake.py calib.json \
-         test_fam_split1_gpu.py test_fusion_modes.py staged.sha256; do
+for f in fam_box.py fam_reduce.py fam_speed.py fam_speed_reduce.py p115_quality.py p110_box.py p108_box.py p97_box.py k8_bake.py \
+         p98_bake.py calib.json test_fam_split1_gpu.py test_fusion_modes.py staged.sha256; do
   [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
 (cd $W && sha256sum -c staged.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/fam/staged.sha256"; finish 9; }
 # ---- refusals before anything is installed or fetched (P115 Amendment 1's host floor: 18 names the machine)
@@ -128,6 +135,8 @@ PYT
 cat versions.txt | tee -a summary.txt
 python $W/fam_reduce.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "REDUCER SELF-TEST FAILED"; finish 21; }
 python $W/fam_box.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "BOX SELF-TEST FAILED"; finish 21; }
+python $W/fam_speed.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "SPEED BOX SELF-TEST FAILED"; finish 21; }
+python $W/fam_speed_reduce.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "SPEED REDUCER SELF-TEST FAILED"; finish 21; }
 python $W/p115_quality.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "QUALITY SELF-TEST FAILED"; finish 21; }
 # ---- the premise, on THIS card, before anything is fetched
 (cd $W && PYTHONPATH='' perl -e 'alarm 1200; exec @ARGV' python -m pytest test_fam_split1_gpu.py test_fusion_modes.py -q -rs -p no:cacheprovider) > logs/premise.log 2>&1
@@ -184,6 +193,18 @@ for M in $TAGS; do
   python -c "import json,sys; sys.exit(0 if json.load(open('$W/work_$M/bake.json')).get('status') == 'OK' else 1)" || { harness "bake failed: bake.json status is not OK"; continue; }
   grep -a "BAKE" logs/bake_$M.log | tail -1 | cut -c1-200 | sed "s/^/$M /" | tee -a summary.txt
   ENGINE_ENV="E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$REV E4B_PAGED_ARENA=$W/work_$M/nf4.arena E4B_PAGED_CALIB=$W/calib.json"
+  if [ "$SPEED" = 1 ]; then  # Amendment 4: one process, both settings on one model, the runners capture their own graphs
+    can_run $NEED_SPEED "speed $M" || { harness "speed skipped: deadline"; break; }
+    al=$(step_alarm $CAP_SPEED); say "$M speed (alarm=$al)"
+    # shellcheck disable=SC2086  # assignment list by design
+    env PYTHONPATH= $ENGINE_ENV E4B_PAGED_FUSE_QKV=0 E4B_FUSE_T1_GLUE=0 E4B_FUSE_T1_GLUE_R2=0 E4B_FUSE_ROUTER_EPI=1 \
+      E4B_PAGED_GRAPHS=0 E4B_PAGED_MAX_SEQS=2 E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA \
+      perl -e "alarm $al; exec @ARGV" python $W/fam_speed.py --out $W/speed_$M.json --steps $SPEED_STEPS > logs/speed_$M.log 2>&1
+    rc=$?
+    { echo -n "$M speed rc=$rc "; grep -aE "^FAM_SPEED" logs/speed_$M.log | tail -1 | cut -c1-400; echo; } | tee -a summary.txt
+    [ "$rc" = 0 ] || tail -4 logs/speed_$M.log | cut -c1-300 | tee -a summary.txt
+    break
+  fi
   # OFF first: it writes every cell's reference; an ON config with no reference refuses.
   box $M OFF default fam_${M}_OFF.json $W/work_$M/ref || { harness "OFF failed"; continue; }
   for C in $(configs_of $M); do
@@ -198,6 +219,20 @@ for M in $TAGS; do
   fi
   rm -rf $W/work_$M/nf4snap                                # the snapshot is not needed after the model's processes (disk)
 done
+if [ "$SPEED" = 1 ]; then
+  PS=""; [ "$PROVE" = 1 ] && PS="--proof"
+  say "reduce (speed)"
+  # shellcheck disable=SC2086  # an optional flag
+  python $W/fam_speed_reduce.py --rec $W/speed_qw36.json --out $W/speed_verdict.json --e4b-sha $E4B_SHA $PS 2>&1 | tee -a summary.txt
+  [ "${PIPESTATUS[0]}" = 0 ] && [ -s $W/speed_verdict.json ] || { say "REDUCER FAILED"; finish 22; }
+  if [ "$PROVE" = 1 ]; then
+    python -c "import json,sys; sys.exit(1 if json.load(open('$W/speed_verdict.json'))['verdict'] == 'VOID' else 0)" \
+      || { say "PROVE: the speed reducer VOIDed the proof -- not proved"; finish 27; }
+    echo "PROVE -- the speed proof on qw36: the reducer's verdict (not a reading) above" | tee -a summary.txt
+    : > PROVED
+  fi
+  finish 0
+fi
 PF="--families $TAGS"; [ "$PROVE" = 1 ] && PF="--proof"
 say "reduce"; python $W/fam_reduce.py --dir $W --out $W/verdict.json --e4b-sha $E4B_SHA $PF 2>&1 | tee -a summary.txt
 [ "${PIPESTATUS[0]}" = 0 ] && [ -s $W/verdict.json ] || { say "REDUCER FAILED"; finish 22; }

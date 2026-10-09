@@ -368,3 +368,78 @@ pass, missing from the ON process, or twice in the OFF process (each VOID).
 result. The count is an integrity check fixed by e4b's code and read off the engagement records. It was decided before
 anyone computed a gate statistic from `fam-qw36-2`, and nobody computes one until this amendment merges. After the
 merge, the maintainer re-derives the verdict from the store before it counts. The lane stays at $6.456.
+
+## Amendment 4 (2026-10-09, after the readings, before any speed data): what the router epilogue buys on Qwen3.6
+
+Designed with the maintainer on the bus (2026-10-09T04:13Z). Qwen3.6's T == 1 read passed, and this registration lets
+a PASS license an allowlist pull request. On `qwen3_5_moe` the census is `0 / 0 / [0, 0] / 40`, so the flip turns on
+only the router epilogue. A default that changes arithmetic should buy something, and no claim times the epilogue on
+this family (P115 Phase C read its engagement and quality only). This amendment registers that timing, before the flip.
+
+**The instrument** (`bench/fam/fam_speed.py`; `FAM_SPEED=1 FAM_FAMILY=qw36`). This is P124 Amendment 1's interleaved
+method at one row.
+- **One model, both settings.** The default `serve_paged` build on Qwen3.6 NF4, eager at all-vram, with
+  `E4B_FUSE_ROUTER_EPI=1` and the other three knobs at 0. `EpiRoute` puts each fused router's original `forward` back
+  (OFF) or keeps the fused one (ON). Two copies of the model would not fit on 32 GB.
+- **Two blocks.** In block `a` OFF goes first in every pair; in block `b` ON does. Each block has one runner per
+  setting, both alive, each with its own KV pool and its bucket graphs (`serve_paged.DEFAULT_BUCKETS`) captured under
+  its own setting. Both are prefilled with the same 512-token wikitext prompt. They then decode greedily in strict
+  alternation, one step each in lockstep: 5 warm, 256 timed and 32 more. A timed step is `run_decode`'s synchronised
+  wall. Each step runs under its own setting, and the swap happens before its clock starts.
+- **The hybrid's one linear-state pool.** Every runner on the model shares that pool, so two live runners both binding
+  slot 0 would overwrite each other's recurrent state on alternate steps. Each runner's KV holds 2 sequences, and OFF
+  binds slot 0, ON slot 1.
+
+**The rule** (`bench/fam/fam_speed_reduce.py`). `ratio_x` is median(ON) / median(OFF) of the timed steps within block
+x. The verdict is the first that applies:
+1. **VOID**, if any of these holds:
+   - the record is not ok;
+   - another model, revision or e4b commit;
+   - other knobs;
+   - a census other than `0 / 0 / [0, 0] / 40`, or a setting that touched other than 40 routers;
+   - a block missing, out of its order or on other slots;
+   - wrong step or token counts;
+   - a runner that did not capture every bucket, replayed bucket 1 other than 293 times (69 in the proof), replayed
+     another bucket, or stepped eagerly;
+   - a setting whose two blocks emit different tokens.
+2. **NOISY**, if the two blocks' ratios differ by more than **1.5 %**.
+3. **FASTER** if both ratios ≤ **0.98**; **SLOWER** if both ≥ **1.02**; otherwise **NO_GAIN**.
+
+ON's tokens may part from OFF's: the epilogue changes arithmetic, and FAM's quality read licensed that. The reducer
+reports ON-against-OFF token agreement and the first step they part, never gated. It also reports the medians, each
+block's median per-pair ratio, the GPU clock log's range and peak memory.
+
+**Prediction** (written before any data, as posted on the bus): a small gain, ratio about 0.99. One fused kernel
+replaces softmax, top-k and normalisation on 40 routers, against a one-row step of roughly 10 ms. FASTER about 35 %,
+NO_GAIN about 55 %, SLOWER or NOISY about 10 %.
+
+**Consequence.**
+- **FASTER, with FAM's PASS:** licenses the allowlist pull request that adds `qwen3_5_moe` to
+  `FUSION_DEFAULT_FAMILIES`. The maintainer decides it on both reads.
+- **NO_GAIN or SLOWER:** the knobs stay off on Qwen3.6, since a default that changes arithmetic and buys nothing does
+  not ship.
+- **NOISY or VOID:** one rerun inside the ceiling, then an amendment.
+
+**Runs and budget** (the policy rate, $0.85 an hour):
+
+| run | guard | the box's checks (need / alarm cap) |
+|---|---|---|
+| the reading | 1.5 h | fetch 2400 s, bake 900 s, speed 1200 / 1800 s |
+| the proof | 1.0 h | fetch 2400 s, bake 900 s, speed 1200 / 1800 s |
+
+- **The proof** is `fam-speed-prove-1`, with `FAM_PROVE=1` and 32 timed steps: the whole box end to end on the card.
+  It is proved when the speed reducer does not VOID; its verdict is not a reading.
+- **The reading** is `fam-speed-1`, on the maintainer's go after the proof.
+- **Cost:** at most $0.85 + $1.28. The lane has spent $6.456, so it stays under $8.60 plus downloads, inside $18.
+
+**Code and tests.**
+- The speed box's self-test runs 9 cases, and the speed reducer's self-test runs 30 cases.
+- `tests/test_fam_speed.py`, on CPU:
+  - `EpiRoute(on=False)` reproduces the unfused model's logits bit for bit on a tiny fused Qwen3.5-MoE;
+  - two alternating runners on their own slots leave each slot's recurrent state bit-identical to one runner alone,
+    and emit its tokens;
+  - on one shared slot the state is not identical, which is the hazard the slots avoid.
+- What CPU cannot run is the captured graphs, so the proof runs them on the card.
+- In the same change, `FUSION_UNLICENSED`'s reasons for `gpt_oss`, `qwen3_5_moe` and `granitemoe` cite FAM's reads.
+
+**Unchanged:** the quality instrument, its rule, the readings and their verdicts.
