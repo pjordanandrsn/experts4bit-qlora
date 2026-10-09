@@ -119,6 +119,7 @@ import asyncio
 import collections
 import json
 import os
+from pathlib import Path
 import threading
 import time
 import uuid
@@ -1030,8 +1031,10 @@ def _apply_levers(model, cfg: PagedServeConfig, tok) -> dict:
     if env("E4B_SERVE_EXP_INT4", "0") == "1":
         from huggingface_hub import snapshot_download
         from .engines.int4_experts import enable_serve_experts_int4
-        src = snapshot_download(cfg.model, allow_patterns=["*.json", "*.safetensors"],
-                                revision=cfg.revision or None)
+        # The initial loader accepts local checkpoints. Repack experts from the
+        # same local source rather than validating its path as a Hub repo ID.
+        src = cfg.model if Path(cfg.model).is_dir() else snapshot_download(
+            cfg.model, allow_patterns=["*.json", "*.safetensors"], revision=cfg.revision or None)
         if env("E4B_SERVE_EXP_INT4_CALIB", "0") == "1":
             from .engines.int4_experts import enable_serve_experts_int4_calibrated
             batches = _calib_batches(tok)
