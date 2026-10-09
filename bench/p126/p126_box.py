@@ -33,6 +33,7 @@ import hashlib
 import json
 import os
 import statistics
+import subprocess
 import sys
 import time
 
@@ -178,11 +179,56 @@ def mutant_arm(model, ws, P, device, *, rows: int, bulk_kv: bool):
             "graph_status": rec["graph_status"], "graph_stats": rec["graph_stats"], "tokens": rec["tokens"]}
 
 
+AMENDMENT = 1   # PREREG-p126.md Amendment 1: per-candidate NOISY; the record carries the host's power cap and co-tenancy
+
+
+def _num(x):
+    try:
+        return float(str(x).strip())
+    except ValueError:
+        return None
+
+
+def host_record() -> dict:
+    """Amendment 1: the card's power cap and the host's co-tenancy, as the box sees them (null where unreadable).
+    p126-5090-1 ran on a shared host (496 of 1007 GiB in use) with the card capped at 400 W."""
+    rec = {"power_limit_w": None, "power_max_limit_w": None, "mem_total_gib": None, "mem_available_gib": None,
+           "cpu_count": os.cpu_count(), "gpu_processes": None, "loadavg": None}
+    try:
+        q = subprocess.run(["nvidia-smi", "--query-gpu=power.limit,power.max_limit", "--format=csv,noheader,nounits"],
+                           capture_output=True, text=True, timeout=20)
+        vals = (q.stdout or "").splitlines()[0].split(",") if q.returncode == 0 and q.stdout else []
+        if len(vals) >= 2:
+            rec["power_limit_w"], rec["power_max_limit_w"] = _num(vals[0]), _num(vals[1])
+        q = subprocess.run(["nvidia-smi", "--query-compute-apps=pid", "--format=csv,noheader"],
+                           capture_output=True, text=True, timeout=20)
+        if q.returncode == 0:
+            rec["gpu_processes"] = sum(1 for line in (q.stdout or "").splitlines() if line.strip())
+    except (OSError, subprocess.SubprocessError, IndexError):
+        pass
+    try:
+        mi = {}
+        for line in open("/proc/meminfo", encoding="utf-8"):
+            k, _, v = line.partition(":")
+            mi[k] = v.split()[0] if v.split() else ""
+        rec["mem_total_gib"] = round(int(mi["MemTotal"]) / 2**20, 1)
+        rec["mem_available_gib"] = round(int(mi["MemAvailable"]) / 2**20, 1)
+    except (OSError, KeyError, ValueError):
+        pass
+    try:
+        rec["loadavg"] = [round(x, 2) for x in os.getloadavg()]
+    except (OSError, AttributeError):
+        pass
+    return rec
+
+
 def measure(model, ws, *, prompt, device, rows=64, steps=256, bulk_kv=True, trace_dir="."):
     if not 32 < rows <= 64:
         raise SystemExit(f"REFUSED: rows {rows}: the step is one bucket-64 piece (33 to 64 rows)")
     t0 = time.time()
-    rec = {"prompt": prompt, "rows": rows, "steps": steps, "profile": {}, "served": {}}
+    rec = {"prompt": prompt, "rows": rows, "steps": steps, "profile": {}, "served": {}, "amendment": AMENDMENT,
+           "host": {"start": host_record()}}
+    print(f"P126_HOST start {json.dumps(rec['host']['start'])}", flush=True)
     for p in SETTINGS:
         rec["profile"][p] = profile_arm(model, ws, prompt, device, programs=p, rows=rows, bulk_kv=bulk_kv)
         print(f"P126_PROFILE P={p} table one {rec['profile'][p]['table_one_ms']} ms mp "
@@ -196,6 +242,7 @@ def measure(model, ws, *, prompt, device, rows=64, steps=256, bulk_kv=True, trac
             meds = " ".join(f"P={st} {blk['arms'][st]['median_ms']} ms" for st in blk["order"])
             print(f"P126_BLOCK P={c} {b} {meds} at {time.time() - t0:.0f} s", flush=True)
     rec["mutant"] = mutant_arm(model, ws, prompt, device, rows=rows, bulk_kv=bulk_kv)
+    rec["host"]["end"] = host_record()
     rec["seconds"] = round(time.time() - t0, 1)
     return rec
 

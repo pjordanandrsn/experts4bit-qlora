@@ -19,6 +19,12 @@ In order, the first that fires is the verdict:
   ratio (ties to the smaller P).
 - **SLOWER**: every ratio above 1. **NO_GAIN**: otherwise.
 
+Amendment 1 (PREREG-p126.md; for a record carrying ``"amendment": 1``, attempt 2 on): NOISY is per candidate. A
+candidate whose two block ratios differ by more than ``NOISE`` is ineligible. DEFAULT_ON_<P> picks among the eligible
+candidates with both block ratios at most ``BAR``; SLOWER and NO_GAIN read the eligible candidates only; the verdict is
+NOISY only when no candidate is eligible. The record must carry the host's power cap and co-tenancy (``host``), and
+the amendment's own predictions apply. A record without ``amendment`` (attempt 1) reduces under the registered rule.
+
 Reported, never gated: the predictions (Q1-Q8), the median per-pair ratio, every runner's busy fraction, each block's
 peak memory and GPU log, the profile tables. Floats are summed with ``math.fsum`` and medians taken by sorting, so the
 output is byte-identical on any Python.
@@ -58,6 +64,17 @@ PREDICTIONS = (("Q1", "table_share_one", 0.10, 0.22),
                ("Q6", "busy_min", 0.90, 1.0),
                ("Q7", "block_disagreement_max", 0.0, 0.005),
                ("Q8", "mutant_differ_share", 0.5, 1.0))
+AMENDMENTS = (0, 1)       # 0: the registered rule (attempt 1); 1: Amendment 1, per-candidate NOISY (attempt 2 on)
+HOST_KEYS = ("power_limit_w", "power_max_limit_w", "mem_total_gib", "mem_available_gib", "cpu_count", "gpu_processes")
+# Amendment 1's predictions, written before attempt 2 (PREREG-p126.md, Amendment 1)
+PREDICTIONS_A1 = (("Q1", "table_share_one", 0.12, 0.22),
+                  ("Q2", "mp_over_one_8", 0.06, 0.15),
+                  ("Q3", "mp_over_one_4", 0.15, 0.30),
+                  ("Q4", "served_ratios_8", 0.86, 0.93),
+                  ("Q5", "served_ratios_4", 0.88, 0.95),
+                  ("Q6", "busy_min", 0.90, 1.0),
+                  ("Q7", "block_disagreement_max", 0.0, 0.01),
+                  ("Q8", "mutant_differ_share", 0.5, 1.0))
 
 
 def _fsum(xs) -> float:
@@ -247,9 +264,9 @@ def tabulate(box: dict) -> dict:
     return t
 
 
-def predictions(t: dict) -> dict:
+def predictions(t: dict, amendment: int = 0) -> dict:
     out = {}
-    for name, stat, lo, hi in PREDICTIONS:
+    for name, stat, lo, hi in (PREDICTIONS_A1 if amendment >= 1 else PREDICTIONS):
         v = t.get(stat)
         vs = v if isinstance(v, list) else [v]
         held = None if any(x is None for x in vs) else all(lo <= x <= hi for x in vs)
@@ -258,10 +275,25 @@ def predictions(t: dict) -> dict:
     return out
 
 
+def host_faults(box: dict) -> list:
+    """Amendment 1: the record names a registered amendment and, from Amendment 1 on, carries the host's power cap and
+    co-tenancy at the box's start and end (a value may be null where the host cannot report it; every key is there)."""
+    am = box.get("amendment", 0)
+    if am not in AMENDMENTS:
+        return [f"amendment {am!r} is not registered (registered: {list(AMENDMENTS)})"]
+    if am == 0:
+        return []
+    host = box.get("host")
+    if not isinstance(host, dict) or any(not isinstance(host.get(w), dict) for w in ("start", "end")):
+        return ["Amendment 1: the host's power cap and co-tenancy are not recorded (host.start / host.end)"]
+    return [f"Amendment 1: host.{w} lacks {k}" for w in ("start", "end") for k in HOST_KEYS if k not in host[w]]
+
+
 def reduce_obj(box: dict, e4b_sha: str) -> dict:
-    void = faults(box, e4b_sha)
+    void = faults(box, e4b_sha) + host_faults(box)
     if void:
         return {"lane": "P126", "verdict": "VOID", "reasons": void}
+    am = box.get("amendment", 0)
     void = engagement(box)
     srv = box["served"]
     ref = srv[CANDIDATES[0]]["a"]["arms"]["1"]["tokens"]
@@ -274,10 +306,14 @@ def reduce_obj(box: dict, e4b_sha: str) -> dict:
     if box["mutant"]["tokens"] == ref[:WARM + MUTANT_STEPS]:
         void.append("the mutant survived: its tokens equal P = 1's, so the token gate could not fail")
     t = tabulate(box)
+    if am >= 1:
+        t["host"] = box["host"]
     base = {"lane": "P126", "model": box["model"], "tables": t}
+    if am >= 1:
+        base["amendment"] = am
     if void:
         return {**base, "verdict": "VOID", "reasons": void}
-    base["predictions"] = predictions(t)
+    base["predictions"] = predictions(t, am)
     if box["model"] == READING_MODEL and t["table_share_one"] < PREMISE_SHARE:
         return {**base, "verdict": "PREMISE_ABSENT",
                 "reasons": [f"premise: the one-program table is {t['table_share_one']} of the eager step "
@@ -289,19 +325,24 @@ def reduce_obj(box: dict, e4b_sha: str) -> dict:
                 "reasons": [f"P={c} block {bk} differs from P=1 at [step, row] "
                             f"{_first_diff(srv[c][bk]['arms'][c]['tokens'], srv[c][bk]['arms']['1']['tokens'])}"]}
     noisy = [c for c in CANDIDATES if t["served"][c]["block_disagreement"] > NOISE]
-    if noisy:
-        return {**base, "verdict": "NOISY",
-                "reasons": [f"P={c}: block a {t['served'][c]['ratio_a']}, block b {t['served'][c]['ratio_b']}, "
-                            f"{t['served'][c]['block_disagreement']} apart (bound {NOISE})" for c in noisy]}
-    lic = [c for c in CANDIDATES if all(r <= BAR for r in t["served"][c]["ratios"])]
-    rs = {c: t["served"][c]["ratios"] for c in CANDIDATES}
+    why = [f"P={c}: block a {t['served'][c]['ratio_a']}, block b {t['served'][c]['ratio_b']}, "
+           f"{t['served'][c]['block_disagreement']} apart (bound {NOISE})" for c in noisy]
+    if noisy and (am == 0 or len(noisy) == len(CANDIDATES)):
+        return {**base, "verdict": "NOISY", "reasons": why}
+    # Amendment 1: a noisy candidate is ineligible, and the rest of the rule reads the eligible candidates only.
+    eligible = [c for c in CANDIDATES if c not in noisy]
+    if am >= 1:
+        t["noisy_candidates"] = noisy
+    note = [f"ineligible (Amendment 1): {w}" for w in why]
+    lic = [c for c in eligible if all(r <= BAR for r in t["served"][c]["ratios"])]
+    rs = {c: t["served"][c]["ratios"] for c in eligible}
     if lic:
         best = min(lic, key=lambda c: (math.fsum(rs[c]) / 2, int(c)))
         return {**base, "verdict": f"DEFAULT_ON_{best}", "reasons": [f"ON/OFF {rs}: P={best} has the lower mean of "
-                                                                      f"those with both <= {BAR}"]}
-    if all(r > 1 for c in CANDIDATES for r in rs[c]):
-        return {**base, "verdict": "SLOWER", "reasons": [f"ON/OFF {rs} all > 1"]}
-    return {**base, "verdict": "NO_GAIN", "reasons": [f"ON/OFF {rs}: no candidate has both <= {BAR}"]}
+                                                                      f"those with both <= {BAR}"] + note}
+    if all(r > 1 for c in eligible for r in rs[c]):
+        return {**base, "verdict": "SLOWER", "reasons": [f"ON/OFF {rs} all > 1"] + note}
+    return {**base, "verdict": "NO_GAIN", "reasons": [f"ON/OFF {rs}: no candidate has both <= {BAR}"] + note}
 
 
 def reduce(run: Path, e4b_sha: str) -> dict:
@@ -322,7 +363,7 @@ def _kernels(p: str, device_ms: float, one_ms: float, mp_ms: float):
 
 
 def _box(model=READING_MODEL, e4b="a" * 40, rows=64, ms4=(16.4, 15.6, 15.62, 16.42), ms8=(16.4, 15.0, 15.03, 16.41),
-         mp=(None, 0.9, 0.5)):
+         mp=(None, 0.9, 0.5), amendment=None):
     total = WARM + STEPS + BUSY
 
     def toks(salt=0):
@@ -359,6 +400,11 @@ def _box(model=READING_MODEL, e4b="a" * 40, rows=64, ms4=(16.4, 15.6, 15.62, 16.
     box["mutant"] = {"programs": "8", "mutant": True, "rows": rows, "steps": MUTANT_STEPS, "warm": WARM,
                      "graph_status": {}, "graph_stats": {},
                      "tokens": [[(x + 1) % 1000 for x in row] for row in toks()[:WARM + MUTANT_STEPS]]}
+    if amendment is not None:
+        h = {"power_limit_w": 575.0, "power_max_limit_w": 600.0, "mem_total_gib": 251.0, "mem_available_gib": 240.0,
+             "cpu_count": 48, "gpu_processes": 1}
+        box["amendment"] = amendment
+        box["host"] = {"start": dict(h), "end": dict(h)}
     return box
 
 
@@ -456,6 +502,31 @@ def self_test() -> int:
     b = _box()
     del b["served"]["4"]["b"]
     cases.append(("a block missing", run(b)["verdict"] == "VOID"))
+    # Amendment 1 (attempt 2 on): NOISY per candidate
+    noisy8, noisy4 = (16.4, 14.9, 15.4, 16.41), (16.4, 15.3, 15.75, 16.42)
+    r = run(_box(ms8=noisy8, amendment=1))
+    cases.append(("A1: a clean candidate and a noisy one license the clean one", r["verdict"] == "DEFAULT_ON_4"
+                  and r["tables"]["noisy_candidates"] == ["8"] and "ineligible" in r["reasons"][-1]))
+    cases.append(("A1: both noisy reads NOISY", run(_box(ms4=noisy4, ms8=noisy8, amendment=1))["verdict"] == "NOISY"))
+    r = run(_box(ms4=(16.4, 15.9, 15.92, 16.42), ms8=(16.4, 14.5, 15.0, 16.41), amendment=1))
+    cases.append(("A1: a noisy candidate is never selected, even with the lower mean", r["verdict"] == "DEFAULT_ON_4"))
+    r = run(_box(ms4=(16.4, 16.3, 16.31, 16.42), ms8=noisy8, amendment=1))
+    cases.append(("A1: a clean candidate above the bar with the other noisy reads NO_GAIN", r["verdict"] == "NO_GAIN"))
+    r = run(_box(ms4=(16.4, 16.5, 16.52, 16.42), ms8=noisy8, amendment=1))
+    cases.append(("A1: a clean slower candidate with the other noisy reads SLOWER", r["verdict"] == "SLOWER"))
+    cases.append(("the registered rule still reads a record without an amendment NOISY",
+                  run(_box(ms8=noisy8))["verdict"] == "NOISY"))
+    b = _box(amendment=1)
+    del b["host"]["end"]
+    cases.append(("A1: the host record missing", run(b)["verdict"] == "VOID"))
+    b = _box(amendment=1)
+    del b["host"]["start"]["power_limit_w"]
+    cases.append(("A1: the power cap missing", run(b)["verdict"] == "VOID"))
+    cases.append(("an unregistered amendment", run(_box(amendment=2))["verdict"] == "VOID"))
+    r = run(_box(amendment=1))
+    cases.append(("A1: its own predictions and the host in the tables", r["verdict"] == "DEFAULT_ON_8"
+                  and r["predictions"]["Q2"]["band"] == [0.06, 0.15] and r["tables"]["host"]["start"]["power_limit_w"] == 575.0
+                  and r["amendment"] == 1))
     bad = [n for n, okk in cases if not okk]
     if bad:
         print("p126_reduce self-test FAILED:", bad)
