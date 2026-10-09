@@ -1,0 +1,645 @@
+{
+ "artifacts": {
+  "adapter": {
+   "format": "backend-adapter/1",
+   "manifest": "adapter_manifest.json",
+   "path": "/workspace/chunk-attr/runs/P1/granite-3.1-3b-a800m-instruct-device-grouped_nf4-t1024-20261009T202312Z-38dc16aa/adapter",
+   "sha256": "630faea7daa396f168f1e24a83ccf155d5fe2890ff7d5493062f88b9595192e8",
+   "tensor_count": 384,
+   "trainable_numel": 49807360,
+   "weights": "adapter.safetensors"
+  }
+ },
+ "backend": "experts4bit",
+ "comparison": {
+  "device_allocator": {
+   "derived_part": 2654943232,
+   "estimated": 3258953728,
+   "heuristic_part": 604010496,
+   "measured": 3129196032,
+   "ratio": 0.9602,
+   "residual": -129757696,
+   "what": "PyTorch allocator peak during training vs the estimate without the context and reserve lines"
+  },
+  "device_driver": {
+   "estimated": 4447615385,
+   "measured": 3456106496,
+   "ratio": 0.7771,
+   "residual": -991508889,
+   "what": "driver-reported process peak vs the full device estimate"
+  },
+  "host": {
+   "estimated": 3221225472,
+   "measured": 1937752064,
+   "ratio": 0.6016,
+   "residual": -1283473408,
+   "what": "peak of anonymous + shared RSS (pinned memory included, mapped checkpoint pages excluded; load transients included) vs the host estimate"
+  }
+ },
+ "correctness": {
+  "adapter_B_norm_after": 15.620257914066315,
+  "adapter_B_norm_before": 0.0,
+  "adapters_moved": true,
+  "all_finite": true,
+  "frozen_expert_bytes_unchanged": true,
+  "frozen_expert_checked_stacks": [
+   "stack[0]",
+   "stack[-1]"
+  ],
+  "frozen_expert_digest": {
+   "stack[-1]": "71d76244749dfdecb73b9cfd6bff87d5dfd25f60b161980d254d1801c1945af5",
+   "stack[0]": "ef08ef6bc41c901cfbbbf0cb798f34f7e7282d6996f686285c273c814c6e8d7b"
+  },
+  "loss_decreased": true,
+  "loss_first_third_mean": 1.637067198753357,
+  "loss_last_third_mean": 1.3391591310501099,
+  "losses": [
+   1.637067198753357,
+   1.1544151306152344,
+   1.3391591310501099
+  ],
+  "steps_without_trained_tokens": 0
+ },
+ "data": {
+  "blocks": 6,
+  "dataset": "tatsu-lab/alpaca",
+  "discarded_tail_tokens": 142,
+  "examples_used": 26,
+  "format": "alpaca",
+  "loss": "full-sequence, including prompts",
+  "options": {
+   "config": null,
+   "format": "alpaca",
+   "input_field": "input",
+   "instruction_field": "instruction",
+   "loss": "all",
+   "messages_field": "messages",
+   "output_field": "output",
+   "packing": "concat",
+   "repeat": true,
+   "revision": null,
+   "shuffle": false,
+   "source": "tatsu-lab/alpaca",
+   "split": "train",
+   "text_field": "text"
+  },
+  "packing": "concatenated examples separated by EOS; attention is not isolated between examples",
+  "passes": 1,
+  "repeated": false,
+  "seed": 0,
+  "seq_len": 512,
+  "shuffled": false,
+  "source": {
+   "config": null,
+   "dataset_fingerprint": "a5048bbbf302198f",
+   "id": "tatsu-lab/alpaca",
+   "kind": "hub",
+   "requested_revision": null,
+   "revision_note": "pin --dataset-revision for a reproducible Hub revision"
+  },
+  "source_rows": 52002,
+  "split": "train",
+  "token_cache_bytes": 24576,
+  "token_encoding": "little-endian int64",
+  "token_stream_sha256": "0464108a8d0b5d585a3d7c567e0cfb28fdda0f8cf7541a4f489c081818075536",
+  "tokenizer": {
+   "class": "TokenizersBackend",
+   "eos_token_id": 0,
+   "name": "ibm-granite/granite-3.1-3b-a800m-instruct"
+  },
+  "tokens": 3072
+ },
+ "engaged": {
+  "attention_lora_projections": 128,
+  "commit": "a02780686e08a03fe0d2679a293b5c74a90efa89",
+  "dgrad": true,
+  "env_moe_keep_layers": null,
+  "fused_expert_modules": 32,
+  "fused_rmsnorm": true,
+  "fused_rope": true,
+  "setup": {
+   "adapter_dtype": "bf16",
+   "alpha": 16,
+   "attn_4bit": false,
+   "blocksize": 64,
+   "dgrad": true,
+   "expert_kernel": "grouped_nf4",
+   "expert_residency": "device",
+   "keep_moe_layers": 0,
+   "pin": true,
+   "quant_type": "nf4",
+   "r": 8,
+   "train_attention": true,
+   "train_experts": true
+  },
+  "train_gemm_route": "fused",
+  "trainable_numel": 49807360
+ },
+ "hardware": {
+  "cpu": "Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz",
+  "cpus": 12,
+  "gpu": {
+   "compute_capability": [
+    8,
+    6
+   ],
+   "driver": "575.64.05",
+   "index": 0,
+   "memory_free": 10883170304,
+   "memory_free_source": "reported",
+   "memory_total": 12878610432,
+   "name": "NVIDIA RTX A2000 12GB",
+   "pcie": [
+    1,
+    8,
+    3,
+    16
+   ],
+   "uuid": "GPU-01aa94f1-4004-9932-0b37-2051081a2a9d"
+  },
+  "gpus": 1,
+  "platform": "Linux x86_64",
+  "ram_available": 54616731648,
+  "ram_available_source": "reported",
+  "ram_limit": null
+ },
+ "measured": {
+  "adapter_save_seconds": 0.45771005999995396,
+  "cuda_context_bytes": 142606336,
+  "data_prepare_seconds": 0.42786939899087884,
+  "data_token_cache_bytes": 24576,
+  "device_peak_bytes": 3129196032,
+  "device_reserved_peak_bytes": 3313500160,
+  "driver_peak_before_training_bytes": 2508193792,
+  "driver_process_peak_bytes": 3456106496,
+  "driver_samples": 41,
+  "host_anon_after_load_bytes": 750641152,
+  "host_anon_peak_bytes": 1424080896,
+  "host_baseline_bytes": 831209472,
+  "host_file_peak_bytes": 6358261760,
+  "host_peak_bytes": 8027586560,
+  "host_required_peak_bytes": 1937752064,
+  "host_shmem_peak_bytes": 513671168,
+  "link_h2d_gbps": 6.249798162364972,
+  "link_h2d_probe": "256 MiB pinned x5, median",
+  "load_device_peak_bytes": 2356221952,
+  "load_seconds": 3.78236985206604,
+  "lr_first": 0.0002,
+  "lr_last": 2e-05,
+  "lr_peak": 0.0002,
+  "lr_schedule": "learning rate 0.0002: linear warmup over 1 step(s), then cosine decay to 2e-05",
+  "s_per_step_median": 1.6502857208251953,
+  "step_seconds": [
+   3.2926177978515625,
+   1.6367356777191162,
+   1.6502857208251953
+  ],
+  "timed_steps": "3..3",
+  "tokens_per_s": 620.4986124996389
+ },
+ "model": {
+  "convention": "granitemoe",
+  "dense_params": 278894592,
+  "expert_params": 3019898880,
+  "loader_refusal": null,
+  "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+  "model_type": "granitemoe",
+  "moe_layers": 32,
+  "n_experts": 40,
+  "n_layers": 32,
+  "provenance": {
+   "config": "ibm-granite/granite-3.1-3b-a800m-instruct",
+   "int4_attention_linears": "engines.int4_attn.attention_linears (the serving swap's rule) on the meta tree",
+   "kv": "serve_paged._kv_geometry + paged_runner.kv_layers over decoder_layers (the paged server's rules)",
+   "paged_state_refusal": "engines.paged_runner.paged_state_refusal (the runner's own rules) on the meta tree",
+   "structure": "module tree built on meta from the config (no weights read)",
+   "tied_embeddings": "config tie_word_embeddings (the loader's rule when no lm_head.weight ships)",
+   "top_k": "config: first of ROUTED_TOP_K_KEYS present",
+   "transformers": "5.19.0"
+  },
+  "revision": null,
+  "summary": "ibm-granite/granite-3.1-3b-a800m-instruct (granitemoe, granitemoe): 32/32 MoE layers, E=40 H=1536 I=512, top-8; 3.02B expert + 0.28B dense params",
+  "top_k": 8
+ },
+ "plan": {
+  "alternatives": [
+   {
+    "backend": "experts4bit",
+    "bounds": {},
+    "device_bytes": 4089061376,
+    "feasible": true,
+    "host_bytes": 3221225472,
+    "label_text": "experts on device, grouped_nf4 kernel, NF4 attention",
+    "lines": [
+     {
+      "basis": "derived",
+      "bytes": 1698695168,
+      "detail": "32 stacks in nf4, blocksize 64 (packed + absmax)",
+      "name": "frozen expert stacks",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 103858176,
+      "detail": "128 projections, bitsandbytes nested statistics",
+      "name": "attention projections (NF4)",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 155136000,
+      "detail": "embeddings, attention, norms, routers, dense/shared MLPs; tied head counted once",
+      "name": "dense weights (bf16)",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 94371840,
+      "detail": "ExpertsLoRA r=8, bf16",
+      "name": "expert LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 5242880,
+      "detail": "128 projections, r=8, bf16",
+      "name": "attention LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 99614720,
+      "detail": "one gradient per trainable parameter, in its dtype",
+      "name": "adapter gradients",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 199229440,
+      "detail": "exp_avg + exp_avg_sq per trainable parameter, in its dtype (torch.optim.AdamW)",
+      "name": "optimizer state (adamw)",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 604010496,
+      "detail": "32 saved layer inputs (T x H bf16) + max(logits and loss in bf16+fp32+fp32 = 0.50 GB, 2 x one layer's recompute = 0.12 GB) at T=1024",
+      "name": "activations",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 592031744,
+      "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver",
+      "name": "allocator reserve (cached, unallocated blocks)",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 536870912,
+      "detail": "default; no receipt on file measured this GPU + driver",
+      "name": "CUDA context + library workspaces",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 3221225472,
+      "detail": "default; no receipt on file measured this host",
+      "name": "process baseline (torch, CUDA, libraries, model objects)",
+      "where": "host"
+     }
+    ],
+    "rank": [
+     0,
+     0,
+     1,
+     0,
+     0
+    ],
+    "rank_note": "objective speed: ordered by measured evidence (see Why)",
+    "rejected": [],
+    "setup": {
+     "adapter_dtype": "bf16",
+     "alpha": 16,
+     "attn_4bit": true,
+     "blocksize": 64,
+     "dgrad": true,
+     "expert_kernel": "grouped_nf4",
+     "expert_residency": "device",
+     "keep_moe_layers": 0,
+     "pin": true,
+     "quant_type": "nf4",
+     "r": 8,
+     "train_attention": true,
+     "train_experts": true
+    },
+    "unmodelled": [
+     "load-time transients (the streaming loader's per-tensor quantize; host page cache)",
+     "grouped_nf4 LoRA-delta overrides read at run time and not by this estimate: NF4_QLORA_LORA_PATH, NF4_QLORA_PAD_BYTES_LIMIT, NF4_QLORA_PAD_WASTE_LIMIT, NF4_QLORA_PAD_BUCKETS(_MIN_ROWS), NF4_QLORA_PAD_BUCKETS_LADDER, NF4_QLORA_SINGLE_LADDER, NF4_QLORA_COMPACT_DELTA"
+    ]
+   }
+  ],
+  "budget": {
+   "device": 10883170304,
+   "device_source": "reported: free now",
+   "headroom": 544158515,
+   "host": 54616731648,
+   "host_source": "reported: available now"
+  },
+  "constraints": {
+   "device": 0,
+   "expert_residency": [
+    "device"
+   ],
+   "fixed": {
+    "expert_kernel": "grouped_nf4"
+   },
+   "headroom": null,
+   "objective": "speed",
+   "ram_budget": null,
+   "target_s_per_step": null,
+   "vram_budget": null
+  },
+  "hardware": {
+   "cpu": "Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz",
+   "cpus": 12,
+   "gpu": {
+    "compute_capability": [
+     8,
+     6
+    ],
+    "driver": "575.64.05",
+    "index": 0,
+    "memory_free": 10883170304,
+    "memory_free_source": "reported",
+    "memory_total": 12878610432,
+    "name": "NVIDIA RTX A2000 12GB",
+    "pcie": [
+     1,
+     8,
+     3,
+     16
+    ],
+    "uuid": "GPU-01aa94f1-4004-9932-0b37-2051081a2a9d"
+   },
+   "gpus": 1,
+   "platform": "Linux x86_64",
+   "ram_available": 54616731648,
+   "ram_available_source": "reported",
+   "ram_limit": null
+  },
+  "model": {
+   "convention": "granitemoe",
+   "dense_params": 278894592,
+   "expert_params": 3019898880,
+   "loader_refusal": null,
+   "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+   "model_type": "granitemoe",
+   "moe_layers": 32,
+   "n_experts": 40,
+   "n_layers": 32,
+   "provenance": {
+    "config": "ibm-granite/granite-3.1-3b-a800m-instruct",
+    "int4_attention_linears": "engines.int4_attn.attention_linears (the serving swap's rule) on the meta tree",
+    "kv": "serve_paged._kv_geometry + paged_runner.kv_layers over decoder_layers (the paged server's rules)",
+    "paged_state_refusal": "engines.paged_runner.paged_state_refusal (the runner's own rules) on the meta tree",
+    "structure": "module tree built on meta from the config (no weights read)",
+    "tied_embeddings": "config tie_word_embeddings (the loader's rule when no lm_head.weight ships)",
+    "top_k": "config: first of ROUTED_TOP_K_KEYS present",
+    "transformers": "5.19.0"
+   },
+   "revision": null,
+   "summary": "ibm-granite/granite-3.1-3b-a800m-instruct (granitemoe, granitemoe): 32/32 MoE layers, E=40 H=1536 I=512, top-8; 3.02B expert + 0.28B dense params",
+   "top_k": 8
+  },
+  "performance": {
+   "estimate": null,
+   "statement": "not predicted: no performance model is calibrated for this backend yet; the ordering below rests on measured relative speeds, not on a time estimate"
+  },
+  "provenance": {
+   "backend_versions": {
+    "bitsandbytes": "0.50.2",
+    "experts4bit-qlora": "0.51.0",
+    "grouped-nf4-gemm": "0.44.0",
+    "torch": "2.11.0+cu128",
+    "transformers": "5.19.0"
+   }
+  },
+  "reasons": [
+   "experts resident on the device: 4.14 GiB estimated + 0.51 GiB headroom fits the 10.14 GiB budget",
+   "expert kernel grouped_nf4: grouped-nf4-gemm 0.44.0 (training route 'fused': auto: compute capability 8.6 is not 9.0 (a call with 1 to 16 present groups takes the dense route))",
+   "ordering, expert_kernel: grouped_nf4 before reference: e4b.train.h2h.unsloth.olmoe.5090.2026-09-19 (1.39 vs 14.88 s/step), gnf4.kernel.e2e-training-real-prose (4.50x on a 4090)",
+   "ordering, expert_residency: device before host: host residency adds a per-layer host-to-device copy in every forward and every recompute (structural; the register has no same-card resident/offload ratio)",
+   "ordering, attn_4bit: bf16 attention before NF4: NF4 attention measured 1.013x step cost for -1.34 GB (experts4bit_qlora.lora.quantize_attention_projections_4bit, audit VRAMCENSUS)",
+   "ordering, pin: pinned host homes before pageable: a pageable copy is staged through a bounce buffer (CUDA), so it is slower per byte; pinned requests round up to a power of two (grouped-nf4-gemm#71), pageable ones do not",
+   "fixed by the caller: {'expert_kernel': 'grouped_nf4'}",
+   "activation policy: every decoder layer checkpointed (recomputed in backward); no MoE activations kept (keep_moe_layers is a dial the planner does not choose yet)"
+  ],
+  "refusal": null,
+  "schema": "execution-plan/1",
+  "selected": {
+   "backend": "experts4bit",
+   "bounds": {},
+   "device_bytes": 4447615385,
+   "feasible": true,
+   "host_bytes": 3221225472,
+   "label_text": "experts on device, grouped_nf4 kernel",
+   "lines": [
+    {
+     "basis": "derived",
+     "bytes": 1698695168,
+     "detail": "32 stacks in nf4, blocksize 64 (packed + absmax)",
+     "name": "frozen expert stacks",
+     "where": "device"
+    },
+    {
+     "basis": "derived",
+     "bytes": 557789184,
+     "detail": "embeddings, attention, norms, routers, dense/shared MLPs; tied head counted once",
+     "name": "dense weights (bf16)",
+     "where": "device"
+    },
+    {
+     "basis": "derived",
+     "bytes": 94371840,
+     "detail": "ExpertsLoRA r=8, bf16",
+     "name": "expert LoRA adapters",
+     "where": "device"
+    },
+    {
+     "basis": "derived",
+     "bytes": 5242880,
+     "detail": "128 projections, r=8, bf16",
+     "name": "attention LoRA adapters",
+     "where": "device"
+    },
+    {
+     "basis": "derived",
+     "bytes": 99614720,
+     "detail": "one gradient per trainable parameter, in its dtype",
+     "name": "adapter gradients",
+     "where": "device"
+    },
+    {
+     "basis": "derived",
+     "bytes": 199229440,
+     "detail": "exp_avg + exp_avg_sq per trainable parameter, in its dtype (torch.optim.AdamW)",
+     "name": "optimizer state (adamw)",
+     "where": "device"
+    },
+    {
+     "basis": "heuristic",
+     "bytes": 604010496,
+     "detail": "32 saved layer inputs (T x H bf16) + max(logits and loss in bf16+fp32+fp32 = 0.50 GB, 2 x one layer's recompute = 0.12 GB) at T=1024",
+     "name": "activations",
+     "where": "device"
+    },
+    {
+     "basis": "inferred",
+     "bytes": 651790745,
+     "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver",
+     "name": "allocator reserve (cached, unallocated blocks)",
+     "where": "device"
+    },
+    {
+     "basis": "inferred",
+     "bytes": 536870912,
+     "detail": "default; no receipt on file measured this GPU + driver",
+     "name": "CUDA context + library workspaces",
+     "where": "device"
+    },
+    {
+     "basis": "inferred",
+     "bytes": 3221225472,
+     "detail": "default; no receipt on file measured this host",
+     "name": "process baseline (torch, CUDA, libraries, model objects)",
+     "where": "host"
+    }
+   ],
+   "rank": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "rank_note": "objective speed: ordered by measured evidence (see Why)",
+   "rejected": [],
+   "setup": {
+    "adapter_dtype": "bf16",
+    "alpha": 16,
+    "attn_4bit": false,
+    "blocksize": 64,
+    "dgrad": true,
+    "expert_kernel": "grouped_nf4",
+    "expert_residency": "device",
+    "keep_moe_layers": 0,
+    "pin": true,
+    "quant_type": "nf4",
+    "r": 8,
+    "train_attention": true,
+    "train_experts": true
+   },
+   "unmodelled": [
+    "load-time transients (the streaming loader's per-tensor quantize; host page cache)",
+    "grouped_nf4 LoRA-delta overrides read at run time and not by this estimate: NF4_QLORA_LORA_PATH, NF4_QLORA_PAD_BYTES_LIMIT, NF4_QLORA_PAD_WASTE_LIMIT, NF4_QLORA_PAD_BUCKETS(_MIN_ROWS), NF4_QLORA_PAD_BUCKETS_LADDER, NF4_QLORA_SINGLE_LADDER, NF4_QLORA_COMPACT_DELTA"
+   ]
+  },
+  "status": "feasible",
+  "warnings": [
+   "1.86 GiB of NVIDIA RTX A2000 12GB is already in use by other processes"
+  ],
+  "workload": {
+   "concurrency": null,
+   "context_len": null,
+   "grad_accum": 1,
+   "kind": "train",
+   "lr_schedule": "cosine",
+   "micro_batch": 2,
+   "optimizer": "adamw",
+   "phase": null,
+   "seq_len": 512,
+   "steps": 3
+  }
+ },
+ "provenance": {
+  "argv": [
+   "/workspace/chunk-attr/venv/bin/loggetta",
+   "train",
+   "ibm-granite/granite-3.1-3b-a800m-instruct",
+   "--seq",
+   "512",
+   "--micro-batch",
+   "2",
+   "--steps",
+   "3",
+   "--experts",
+   "device",
+   "--fix",
+   "expert_kernel=grouped_nf4",
+   "--out",
+   "/workspace/chunk-attr/runs/P1"
+  ],
+  "changed_during_run": [],
+  "python": "3.10.12",
+  "runtime_seconds": 13.038197994232178,
+  "seed": 0,
+  "sources": {
+   "experts4bit_qlora": {
+    "file": "/workspace/chunk-attr/venv/lib/python3.10/site-packages/experts4bit_qlora/__init__.py"
+   },
+   "loggetta": {
+    "file": "/workspace/chunk-attr/venv/lib/python3.10/site-packages/loggetta/__init__.py"
+   },
+   "nf4_grouped": {
+    "file": "/workspace/chunk-attr/venv/lib/python3.10/site-packages/nf4_grouped.py"
+   }
+  },
+  "started_at": "2026-10-09T20:23:06Z",
+  "taken": "at process start, before the measured code was imported",
+  "versions": {
+   "accelerate": "1.15.0",
+   "bitsandbytes": "0.50.2",
+   "experts4bit-qlora": "0.51.0",
+   "grouped-nf4-gemm": "0.44.0",
+   "torch": "2.11.0+cu128",
+   "transformers": "5.19.0",
+   "triton": "3.6.0"
+  }
+ },
+ "run_id": "granite-3.1-3b-a800m-instruct-device-grouped_nf4-t1024-20261009T202312Z-38dc16aa",
+ "schema": "execution-receipt/1",
+ "setup": {
+  "adapter_dtype": "bf16",
+  "alpha": 16,
+  "attn_4bit": false,
+  "blocksize": 64,
+  "dgrad": true,
+  "expert_kernel": "grouped_nf4",
+  "expert_residency": "device",
+  "keep_moe_layers": 0,
+  "pin": true,
+  "quant_type": "nf4",
+  "r": 8,
+  "train_attention": true,
+  "train_experts": true
+ },
+ "status": "OK",
+ "workload": {
+  "concurrency": null,
+  "context_len": null,
+  "data": null,
+  "epochs": null,
+  "grad_accum": 1,
+  "kind": "train",
+  "learning_rate": 0.0002,
+  "lr_schedule": "cosine",
+  "micro_batch": 2,
+  "optimizer": "adamw",
+  "phase": null,
+  "seq_len": 512,
+  "steps": 3,
+  "tokens_per_microbatch": 1024,
+  "warmup_steps": null
+ }
+}

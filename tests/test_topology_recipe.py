@@ -218,3 +218,43 @@ def test_logits_and_loss_are_priced_at_three_fp32_tensors_per_logit():
     assert LOGITS_LOSS_BYTES == 12
     assert act.bytes - L * T * H * 2 == T * V * 12            # saved layer inputs + the loss branch
     assert "three fp32 logits-sized tensors" in act.detail
+
+
+def _activations(topo, T, **setup):
+    return {i.name: i for i in estimate_qlora_footprint(topo, QLoRASetup(**setup), tokens_per_microbatch=T).items}[
+        "activations"]
+
+
+def test_the_loss_branch_is_chunked_exactly_when_the_run_chunks_it(monkeypatch):
+    """``enable_fast_train`` routes a supported architecture's training loss through the chunked LM loss when the stock
+    fp32 logits reach ``AUTO_MIN_LOGITS_BYTES`` (``auto``, the default); the estimate prices that branch with the
+    engine's own ``chunked_loss_bytes``, and the stock branch everywhere else."""
+    from experts4bit_qlora.engines.chunked_lm_loss import AUTO_MIN_LOGITS_BYTES, DEFAULT_CHUNK, chunked_loss_bytes
+    from experts4bit_qlora.recipe import LOGITS_LOSS_BYTES
+
+    V = 50_000
+    topo = describe_moe(_qwen3(vocab_size=V, architectures=["Qwen3MoeForCausalLM"]))
+    gate_T = -(-AUTO_MIN_LOGITS_BYTES // (V * 4))                    # the first T whose stock fp32 logits reach the gate
+    boundaries = lambda T: L * T * H * 2                            # noqa: E731
+    monkeypatch.delenv("E4B_CHUNKED_LM_LOSS", raising=False)          # auto, the default
+    above, below = gate_T, gate_T - 1
+    assert _activations(topo, above).bytes - boundaries(above) == chunked_loss_bytes(above, V, hidden=H)
+    assert "chunked LM loss in %d-token chunks" % DEFAULT_CHUNK in _activations(topo, above).detail
+    assert _activations(topo, below).bytes - boundaries(below) == below * V * LOGITS_LOSS_BYTES
+    # the reference loop never calls enable_fast_train: stock, whatever T
+    assert _activations(topo, above, expert_kernel="reference").bytes - boundaries(above) == above * V * LOGITS_LOSS_BYTES
+    monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", "0")                   # off
+    assert _activations(topo, above).bytes - boundaries(above) == above * V * LOGITS_LOSS_BYTES
+    monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", "256")                 # on at any size, in 256-token chunks
+    assert _activations(topo, 600).bytes - boundaries(600) == chunked_loss_bytes(600, V, hidden=H, chunk=256)
+
+
+def test_an_architecture_outside_the_chunked_table_keeps_the_stock_loss(monkeypatch):
+    from experts4bit_qlora.engines.chunked_lm_loss import AUTO_MIN_LOGITS_BYTES
+    from experts4bit_qlora.recipe import LOGITS_LOSS_BYTES
+
+    V = 50_000
+    T = -(-AUTO_MIN_LOGITS_BYTES // (V * 4))
+    monkeypatch.delenv("E4B_CHUNKED_LM_LOSS", raising=False)
+    topo = describe_moe(_qwen3(vocab_size=V, architectures=["SomeOtherMoeForCausalLM"]))
+    assert _activations(topo, T).bytes - L * T * H * 2 == T * V * LOGITS_LOSS_BYTES
