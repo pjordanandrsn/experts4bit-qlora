@@ -1,0 +1,24 @@
+KNOBS e4b=26cafb9c3b4564e1c7b0c393efafe4d779cd886f gnf4=e21a71242b361dd0a3f72cdf4152de94633891a8 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 prove=0 windows=64
+e4b 0.51.0 @26cafb9c3b4564e1c7b0c393efafe4d779cd886f
+gnf4 0.44.0 @e21a71242b361dd0a3f72cdf4152de94633891a8
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+p126_reduce self-test OK (35 cases)
+premise run rc=0: 7 passed in 10.00s
+premise programs rc=0: 202 passed in 100.81s (0:01:40)
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+box rc=0 P126_BOX: P=4 a 1:16.5128 4:15.3636 | P=4 b 4:15.4728 1:17.0213 | P=8 a 1:17.0626 8:15.2862 | P=8 b 8:15.3385 1:17.0913 | load 167s | 193.9 s
+
+P126_PROFILE P=1 table one 2.6294 ms mp 0 ms at 15 s
+P126_PROFILE P=4 table one 0 ms mp 0.5918 ms at 27 s
+P126_PROFILE P=8 table one 0 ms mp 0.2408 ms at 38 s
+P126_BLOCK P=4 a P=1 16.5128 ms P=4 15.3636 ms at 81 s
+P126_BLOCK P=4 b P=4 15.4728 ms P=1 17.0213 ms at 115 s
+P126_BLOCK P=8 a P=1 17.0626 ms P=8 15.2862 ms at 148 s
+P126_BLOCK P=8 b P=8 15.3385 ms P=1 17.0913 ms at 181 s
+P126_VERDICT NOISY ["P=4: block a 0.9304, block b 0.909, 0.0235 apart (bound 0.015)"]
