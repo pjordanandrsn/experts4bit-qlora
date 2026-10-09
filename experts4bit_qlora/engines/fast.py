@@ -987,9 +987,21 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False, absmax_
                                enable_checkpoint_offload)
     if patched and checkpoint_offload_requested():
         enable_checkpoint_offload(model, verbose=verbose, explicit=checkpoint_offload_explicit(), mode=checkpoint_offload_mode())
+    # Opt-in (E4B_TRAIN_FUSE_QKV=1, P129): each eligible attention module's q/k/v as one fused NF4 + LoRA projection
+    # (engines/train_qkv_fuse.py). Unset runs today's attention, op for op.
+    _maybe_fuse_train_qkv(model, patched, verbose)
     # On by default since TC1 amendment 56 (E4B_ABSMAX_DQ=0 turns it off): the frozen expert absmax double-quantized.
     FAST_TRAIN_STATS["absmax_dq"] = _default_absmax_dq(model, absmax_dq, patched, verbose)
     return patched
+
+
+def _maybe_fuse_train_qkv(model, patched, verbose=False) -> int:
+    """``enable_fast_train``'s hook for P129's fused q/k/v projection: nothing unless ``E4B_TRAIN_FUSE_QKV=1`` and the fused MoE path
+    is on. Returns the number of attention modules fused."""
+    from .train_qkv_fuse import enable_train_fuse_qkv, train_fuse_qkv_requested
+    if not (patched and train_fuse_qkv_requested()):
+        return 0
+    return enable_train_fuse_qkv(model, verbose=verbose)
 
 
 #: The unset-``E4B_ABSMAX_DQ`` default for ``enable_fast_train`` (TC1 amendment 56). The test suite pins it False (tests/conftest.py) so
