@@ -58,9 +58,12 @@ PREFILL = (512, 512, 256)
 PHASE_C_ANCHOR_AGREE = 0.924                  # Phase C's SANE argmax agreement on gpt-oss (SC2g path, T == 12, set A)
 
 ATTN_LAYERS = {"granite": 32, "gptoss": 24, "qw36": 10}
-#: decode-shaped forwards per pass beyond the decode steps: a hybrid's one-token linear-state warm-up, once per padded
-#: pass (``PagedModelRunner._warm_linear_state``; Phase C's qw36 receipts: 128 router-epilogue forwards a pass)
-EXTRA_DECODE_FORWARDS = {"granite": 0, "gptoss": 0, "qw36": 1}
+#: decode-shaped forwards beyond the decode steps: a hybrid's one-token linear-state warm-up
+#: (``PagedModelRunner._warm_linear_state``), ONCE PER PROCESS -- on its first padded pass, while the model's pool is
+#: unallocated (Amendment 3; Phase C ran one pass a process, so it could not tell the two apart). That pass is the first
+#: arm (R on OFF, ON otherwise) of the first cell the box visits; every other pass carries none.
+WARMUP_FORWARDS = {"granite": 0, "gptoss": 0, "qw36": 1}
+FIRST_CELL = fam_box.cell_key(fam_box.TEXTS[0], fam_box.shape_order(fam_box.SHAPES)[0], "A")
 CENSUS = {
     ("granite", "OFF"): [0, 0, [0, 0], 0], ("granite", "ON_auto"): [0, 65, [32, 32], 32],
     ("granite", "ON_epi"): [0, 0, [0, 0], 32],
@@ -122,6 +125,13 @@ def _per_window(rec, cell, arm):
     return c["base"]["per_window"][text].get(arm), c["base"]["engagement"][text].get(arm), None, c["base"]
 
 
+def _warm(fam, config, cell, arm, i):
+    """The decode-shaped forwards the warm-up adds to pass ``i`` of ``arm`` in ``cell``: the family's once-per-process
+    count on the process's first pass, else none (Amendment 3)."""
+    first = cell == FIRST_CELL and arm == ("R" if config == "OFF" else "ON") and i == 0
+    return WARMUP_FORWARDS[fam] if first else 0
+
+
 def _check_engagement(fam, config, rec, cell, arm, why):
     """Every pass of ``arm`` in ``cell``: decode attention calls, decode-shaped forwards and glue-kernel calls."""
     rows, eng, wrapped, sub = _per_window(rec, cell, arm)
@@ -133,13 +143,13 @@ def _check_engagement(fam, config, rec, cell, arm, why):
     per_pass_windows = shape
     step = PER_STEP.get((fam, config), {}) if config != "OFF" else {}
     total_decode = 0
-    for e in eng or []:
+    for i, e in enumerate(eng or []):
         want_calls = (C - 1) * ATTN_LAYERS[fam] * halves
         if e.get("decode_calls") != want_calls:
             why.append(f"{config} {cell} {arm}: decode attention calls {e.get('decode_calls')} != {want_calls}")
         prefill = per_pass_windows * math.ceil(P / chunk)
         dec = e.get("forwards", -1) - prefill
-        want_dec = (C - 1) * halves + EXTRA_DECODE_FORWARDS[fam]
+        want_dec = (C - 1) * halves + _warm(fam, config, cell, arm, i)
         if dec != want_dec:
             why.append(f"{config} {cell} {arm}: decode-shaped forwards {dec} != {want_dec}")
         k = {n: v for n, v in (e.get("kernels") or {}).items() if v}
@@ -357,19 +367,22 @@ def _synthetic(fam, config, *, floor_d=0.002, floor_agree=0.95, on_d=0.0, on_agr
         return [{"window": w, "nll": 2.0 + d + (rng.uniform(-1, 1) * abs(d) * 0.5 if d else 0.0),
                  "argmax_agree": agree, "kl": kl} for w in range(n)]
 
-    def eng(n_pass, arm, shape):
+    def eng(n_pass, arm, shape, cell):
         halves = 2 if arm == "half" else 1
         ch = floor_chunk if arm == "chunk" else chunk
-        dec = (C - 1) * halves + EXTRA_DECODE_FORWARDS[fam]
         step = PER_STEP.get((fam, config), {}) if config != "OFF" else {}
-        k = dict.fromkeys(("rmsnorm_rows", "rmsnorm_resid_rows", "scaled_resid_add_rows", "rope_norm_heads",
-                           "rope_heads", "router_epilogue"), 0)
-        k.update({n: v * dec for n, v in step.items()})
-        return [{"decode_calls": (C - 1) * ATTN_LAYERS[fam] * halves, "forwards": shape * math.ceil(P / ch) + dec,
-                 "kernels": k} for _ in range(n_pass)]
+        out = []
+        for i in range(n_pass):
+            dec = (C - 1) * halves + _warm(fam, config, cell, arm, i)
+            k = dict.fromkeys(("rmsnorm_rows", "rmsnorm_resid_rows", "scaled_resid_add_rows", "rope_norm_heads",
+                               "rope_heads", "router_epilogue"), 0)
+            k.update({n: v * dec for n, v in step.items()})
+            out.append({"decode_calls": (C - 1) * ATTN_LAYERS[fam] * halves,
+                        "forwards": shape * math.ceil(P / ch) + dec, "kernels": k})
+        return out
 
     for t in fam_box.TEXTS:
-        for s in fam_box.SHAPES:
+        for s in fam_box.shape_order(fam_box.SHAPES):
             for name in fam_box.SETS:
                 cell = fam_box.cell_key(t, s, name)
                 npass = WINDOWS_PER_SET // s
@@ -381,19 +394,19 @@ def _synthetic(fam, config, *, floor_d=0.002, floor_agree=0.95, on_d=0.0, on_agr
                     if s > 1:
                         arms["half"] = rows(12, -floor_d, floor_agree + 0.005, 0.008)
                     base = {**sub, "per_window": {t: arms},
-                            "engagement": {t: {a: eng(1 if a == "rep" else npass, a, s) for a in arms}}}
+                            "engagement": {t: {a: eng(1 if a == "rep" else npass, a, s, cell) for a in arms}}}
                     extra = {}
                     for arm in fam_box.extra_arms(name):
                         d, ag = (floor_d / 2, floor_agree + 0.01) if arm == "split1" else (graded_d, graded_agree)
                         if arm in ("mut095", "mut098"):                       # the ladder: smaller than the gating rung
                             d, ag = graded_d / 3, min(1.0, graded_agree + 0.05)
-                        e = eng(npass, arm, s)
+                        e = eng(npass, arm, s, cell)
                         extra[arm] = {"record": {**sub, "per_window": {t: {arm: rows(12, d, ag, 0.01)}},
                                                  "engagement": {t: {arm: e}}},
                                       "wrapped_calls": sum(x["decode_calls"] for x in e)}
                 else:
                     base = {**sub, "per_window": {t: {"ON": rows(12, on_d, on_agree, 0.009)}},
-                            "engagement": {t: {"ON": eng(npass, "ON", s)}}}
+                            "engagement": {t: {"ON": eng(npass, "ON", s, cell)}}}
                     extra = {}
                 cells[cell] = {"base": base, "extra": extra, "dispatch": None}
     model, rev = MODELS[fam]
@@ -424,7 +437,29 @@ def self_test() -> int:
     cases.append(("the proof at the reading's positions VOIDs", set(got.values()) == {"VOID"}, got))
     case("a reading at the proof's positions VOIDs", "granite", _fam_recs("granite", cont=PROOF["cont"]), "VOID")
     case("granite clean pass", "granite", _fam_recs("granite"), "PASS")
-    case("qw36 clean pass (an extra decode-shaped forward)", "qw36", _fam_recs("qw36"), "PASS")
+    case("qw36: the warm-up on both processes' first passes", "qw36", _fam_recs("qw36"), "PASS")
+
+    def warm_at(where):
+        """qw36's records with the warm-up forward moved to the passes ``where(config, cell, arm, i)`` names."""
+        r = _fam_recs("qw36")
+        for rec in r.values():
+            for cell, c in rec["cells"].items():
+                for sub in [c["base"]] + [x["record"] for x in c["extra"].values()]:
+                    for arm, passes in next(iter(sub["engagement"].values())).items():
+                        for i, e in enumerate(passes):
+                            e["forwards"] += int(where(rec["config"], cell, arm, i)) - _warm("qw36", rec["config"], cell, arm, i)
+        return r
+
+    def first(config, cell, arm, i, at=FIRST_CELL):
+        return cell == at and arm == ("R" if config == "OFF" else "ON") and i == 0
+    later = FIRST_CELL[:-1] + "B"                                   # the next cell the box visits
+    for name, where in (("on every pass", lambda *a: True),
+                        ("on a later cell's first pass", lambda *a: first(*a, at=later)),
+                        ("on no pass", lambda *a: False),
+                        ("missing from the ON process", lambda cfg, *a: cfg == "OFF" and first(cfg, *a)),
+                        ("twice in the OFF process", lambda cfg, *a: first(cfg, *a)
+                         or (cfg == "OFF" and first(cfg, *a, at=later)))):
+        case(f"qw36 with the warm-up {name} VOIDs", "qw36", warm_at(where), "VOID")
     r = copy.deepcopy(base)
     on = r["ON_glue"]
     rows = on["cells"]["wikitext|1|B"]["base"]["per_window"]["wikitext"]["ON"]
