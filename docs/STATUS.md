@@ -224,7 +224,8 @@ position through the LM head (#1337). `e4b.serve.p118.decode-lookahead.qwen3.509
 
 **The tile table over 4 programs.** `E4B_INT4_TILE_PROGRAMS=4` splits the one-launch cumsum tile table over 4 programs
 (#1433, grouped-nf4-gemm #524). On Qwen3-30B-A3B int4 it makes the captured 64-row step about 15.5 % faster with identical
-tokens: P126 read DEFAULT_ON_4 on attempt 2, under its Amendment 1. The default flip is its own PR.
+tokens: P126 read DEFAULT_ON_4 on attempt 2, under its Amendment 1. It is the default (`auto`) since #1476; see the
+defaults table.
 `e4b.serve.p126.tile-programs.qwen3-int4.5090.2026-10-09` ([P126](../bench/p126/RESULTS-p126.md)).
 
 **Qwen3-30B-A3B's licensed int4 stack** (calibrated int4 experts and attention, folds, router epilogue) passes the K8
@@ -289,6 +290,7 @@ controls. `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-
 | bandwidth-targeted NF4 decode GEMV | grouped-nf4-gemm | `GNF4_GEMV_BW=0` | `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07` |
 | grouped small-M routes above T == 1 (K19, K23, K21, K25; K25 read on Granite, OLMoE and Qwen3's W16 step) | serving | `E4B_INT4_GROUPED_SMALLM=0`, `E4B_INT4_LEAN_GLUE=0`, `E4B_MXFP4_GROUPED_SMALLM=0`, `E4B_NF4_GROUPED_SMALLM=0` | `e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01`, `e4b.serve.p89.qwen3.int4.k23-lean-glue-b16.5090.2026-10-01`, `e4b.serve.p90.gptoss.mxfp4.k21-b16.5090.2026-10-01`, `e4b.serve.p96.nf4-families.k25-windowed-k8.5090.2026-10-02`, `e4b.serve.p121.k25-w16.qwen3.5090.2026-10-08` |
 | the one-launch tile table above 256 routed rows, up to the size read (`next_pow2(E) × next_pow2(R) ≤ 128 × 512`; takes effect with a grouped-nf4-gemm release carrying #519's chunked table; the one-piece table read 1.44× slower) | serving | `E4B_INT4_WIDE_TILES=0` | `e4b.serve.p122.wide-tiles-chunked.qwen3-int4.5090.2026-10-08`, `e4b.serve.p120.wide-tiles.qwen3-int4.5090.2026-10-08` |
+| the one-launch tile table over 4 programs, inside the size read (`next_pow2(E) × next_pow2(R) ≤ 128 × 512`; takes effect with a grouped-nf4-gemm release carrying #524's `programs=`; Qwen3-30B-A3B's 64-row step about 15.5 % faster) | serving | `E4B_INT4_TILE_PROGRAMS=1` | `e4b.serve.p126.tile-programs.qwen3-int4.5090.2026-10-09` |
 | attention projections of 17–64 decode rows on the int4 small-M GEMM, from the int4 grid instead of a cached bf16 copy (with the K16 route on; takes effect with a grouped-nf4-gemm release carrying #522's `block_m=`; Qwen3-30B-A3B's 64- and 32-row steps 3.2–3.8 % faster) | `Int4Linear` (serving) | `E4B_ATTN_INT4_WIDE=0` | `e4b.serve.p124.attn-int4-wide.qwen3-int4.5090.2026-10-09` |
 | router weights cast to bf16 at ≤ 64 rows (`softmax_topk`) | fused router epilogue | `E4B_ROUTER_EPI_CAST=0` | `e4b.serve.p70.qwen3.b1.router-weight-cast.5090.2026-09-25` |
 | B=1 fused stack (fused q/k/v and three glue folds) on Qwen3-MoE; its router epilogue, the only fold that engages, on Qwen3.5/3.6-MoE | `serve_paged` | `E4B_PAGED_FUSE_QKV=0`, `E4B_FUSE_T1_GLUE=0`, `E4B_FUSE_T1_GLUE_R2=0`, `E4B_FUSE_ROUTER_EPI=0` | `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`, `e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09` |
