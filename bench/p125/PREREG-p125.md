@@ -236,15 +236,17 @@ The reference log-probs stay on the box.
 
 ## The consequence
 
-- **B LICENSED, and g1_B ≥ 1.05:** a separate PR may propose `E4B_SERVE_ATTN_INT4_CALIB` as the default on `qwen3_moe`,
-  family-scoped like the fused stack. **It must name the trades, not only the B=1 speed:**
-  - **startup:** the calibration seconds per build, **and a C4 fetch through `datasets` at every startup.** A server
-    without network access cannot calibrate, so the flip PR must also carry an offline answer: a pinned attention pack
-    installed by fingerprint, or the lever staying opt-in where offline. The maintainer weighs startup against speed;
-  - **memory:** the measured rest and first-prefill peaks;
-  - **slots:** a flip that costs auto slots at 2048 or 4096 tokens a slot names that trade against the B=1 gain. The
-    arithmetic says none;
-  - **16 requests:** g16 as measured.
+- **B LICENSED, g1_B ≥ 1.05, and the speed READ** (every self-pair inside [0.97, 1.03]): a separate PR may propose
+  `E4B_SERVE_ATTN_INT4_CALIB` as the default on `qwen3_moe`, family-scoped like the fused stack.
+  - **A NOISY speed leaves the licence standing but allows no flip PR** until a speed-only rerun reads it.
+  - **The flip PR must name the trades, not only the B=1 speed:**
+    - **startup:** the calibration seconds per build, **and a C4 fetch through `datasets` at every startup.** A server
+      without network access cannot calibrate, so the flip PR must also carry an offline answer: a pinned attention pack
+      installed by fingerprint, or the lever staying opt-in where offline. The maintainer weighs startup against speed;
+    - **memory:** the measured rest and first-prefill peaks;
+    - **slots:** a flip that costs auto slots at 2048 or 4096 tokens a slot names that trade against the B=1 gain. The
+      arithmetic says none;
+    - **16 requests:** g16 as measured.
 - **C LICENSED** (only with B): the same, for the head.
 - **NOT_LICENSED or UNDERPOWERED:** no flip. The next single-request lever is the launch-bound glue (P123: 635 launches
   in 0.88 ms).
