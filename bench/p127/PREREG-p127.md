@@ -56,7 +56,7 @@ imported.
 | arm | e4b | grouped-nf4-gemm | box-side change |
 |---|---|---|---|
 | A (before P127) | `a8c01d42`, the last main commit before #1448 | `d1f64ba`, v0.44.0 | none |
-| B (after P127) | the launch commit: this registration's merge, which carries #1448, #1472 and the residual PR | `<GNF4_B>`, the merge commit of gnf4 #527, which carries #526–#530 | none |
+| B (after P127) | the launch commit: this registration's merge, which carries #1448, #1472 and the residual PR | `d769d502`, the merge commit of gnf4 #527, which carries #526–#530 | none |
 | M (blindness check) | B's | B's | the router kernel's bf16 weight store **rounds toward zero** instead of to nearest even: a box-side wrapper of `int4_b32.router_epilogue` keeps its signature |
 
 **Order:** A1, B1, B2, A2, then M1. A and B alternate in a palindrome, so drift lands on both.
@@ -76,7 +76,10 @@ records each row's tokens and, at every decode step, a SHA-256 digest of that ro
   reference to the step's `out.logits[:, -1]`. That is graph-owned memory, so a replay overwrites it in place, and no
   kernel is added.
 - **When they are read.** The box also wraps `run_decode` to read that view for the step's rows after the step's own
-  token read has synchronized. The read runs only during the identity pass.
+  token read has synchronized, and before `run_decode` returns.
+  - **Ordering.** Nothing can replay before the read finishes. `tests/test_p127_box.py` asserts this ordering against a
+    runner whose next step overwrites the same storage.
+  - **Timed passes.** They do no digest work at all; the wrapper's switch is off.
 - **Prefill.** Prefill logits are not digested; the first generated token covers them.
 
 **Engagement.** The box wraps, before the build, each kernel entry point P127 changed: `router_epilogue`,
@@ -93,7 +96,7 @@ eager warm-ups, the captures and prefill. A path counted once is in the captured
 ## The served-path diff audit
 
 Every change to the `experts4bit_qlora` package between `a8c01d42` and the launch commit, and every grouped-nf4-gemm
-change between `d1f64ba` and `<GNF4_B>`, is either P127's or inert at this subject's settings:
+change between `d1f64ba` and `d769d502`, is either P127's or inert at this subject's settings:
 
 | repo | commit | what | status |
 |---|---|---|---|
@@ -105,10 +108,10 @@ change between `d1f64ba` and `<GNF4_B>`, is either P127's or inert at this subje
 | e4b | `abe7d772` (#1467) | `recipe.py` training memory estimate | inert: not on the serving path |
 | gnf4 | `14b1f23` (#524) | `build_group_tiles_fused(..., programs=P)` | inert: e4b passes `programs` only for `E4B_INT4_TILE_PROGRAMS > 1`; at the default, the launch is the unchanged `_tile_table_r1[(1,)]` with the same arguments |
 | gnf4 | `e21a712` (#525), `7d4163b` (#531) | K34's prereg, bench and receipts | inert: no served module |
-| gnf4 | `18f5bda` (#526), `f69adcc` (#528), `d0a2e56` (#529), `b64a39b` (#530), `<GNF4_B>` (#527) | the five options | **P127** |
+| gnf4 | `18f5bda` (#526), `f69adcc` (#528), `d0a2e56` (#529), `b64a39b` (#530), `d769d502` (#527) | the five options | **P127** |
 
 **The launch-time check.** `p127_run.sh` lists `git log a8c01d42..E4B_SHA -- experts4bit_qlora/` and
-`git log d1f64ba..GNF4_B -- kernel/ gnf4_native/` on the box. It refuses (VOID, rc 31) a commit not in this table. If a
+`git log d1f64ba..d769d502 -- kernel/ gnf4_native/` on the box. It refuses (VOID, rc 31) a commit not in this table. If a
 non-P127 served-path change lands before the launch, it is added here by amendment, with its reason, or the launch
 waits.
 
@@ -120,6 +123,7 @@ The verdict is the first that applies.
    - an arm is missing or not ok;
    - a receipt names another e4b or gnf4 commit or model revision, or an arm imported the other arm's install;
    - the arms read different prompts or ran different lengths;
+   - an arm resolved a `max_seqs` other than 16, or the arms resolved different ones (each record carries its own);
    - a slope is void;
    - **not engaged**, any of:
      - B or M counts zero for any of the five P127 call paths: the router `weights_dtype`, `rope_norm_qk`, the combine
@@ -129,8 +133,8 @@ The verdict is the first that applies.
        count is expected: before #1448 the NF4 route handed torch's int64 ids to the wrapper, which cast them;
    - **nondeterministic**: A1 and A2, or B1 and B2, differ in any token or identity-pass logits digest;
    - the diff audit refused;
-   - **the instrument is blind**: M's logits digests equal A's at fewer than **50 %** of the identity pass's decode
-     positions. That is P126's Q8 bar, here on logits: at least half of M's positions must differ.
+   - **the instrument is blind**: M's logits digests differ from A1's at fewer than **50 %** of the identity pass's
+     decode positions (P126's Q8 bar, here on logits).
 2. **FUNCTION_FAIL**, any of:
    - B1 differs from A1 in any token of any row of either workload at either length, timed or identity pass;
    - B1 differs from A1 in any logits digest of the identity pass;
@@ -190,7 +194,8 @@ engages every P127 path: the fusions' family default is `qwen3_moe`. It covers:
 - the self-tests and the premise;
 - fetch, bake, prompts, the five arms and the reducer.
 
-**PROVED** iff the lane exits 0 with a verdict other than VOID. The proof's speed is not a reading.
+**PROVED** iff the lane exits 0 with a verdict other than VOID. The proof's speed is not a reading. Its guard is
+sized from SC1-era fetch times on this checkpoint, about 15 minutes for the 61 GB.
 
 **The premise, on the card before anything is fetched:**
 - `tests/test_decode_graph_buckets.py`: 7 passed, none skipped;
