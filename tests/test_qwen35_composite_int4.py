@@ -9,7 +9,7 @@ import pytest
 torch = pytest.importorskip("torch")
 pytest.importorskip("transformers")
 pytest.importorskip("safetensors")
-from safetensors.torch import save_file  # noqa: E402
+from safetensors.torch import load_file, save_file  # noqa: E402
 
 from experts4bit_qlora.arch.moe_conventions import MoEConventionError  # noqa: E402
 from experts4bit_qlora.arch.moe_plan import plan_moe_checkpoint  # noqa: E402
@@ -121,3 +121,81 @@ def test_actual_cpu_repack_is_bitwise_equal_to_plain_text(checkpoints, monkeypat
             for field in ("packed", "scales"):
                 assert x[field].device.type == y[field].device.type == "cpu"
                 assert torch.equal(x[field], y[field]), (role, field)
+
+
+
+def test_upstream_prefix_conversion_preserves_native_tensors_and_packed_bytes(checkpoints, tmp_path, monkeypatch):
+    """Execute upstream's rename and tensor conversion before actual CPU packing."""
+    from transformers.conversion_mapping import get_checkpoint_conversion_mapping
+
+    pytest.importorskip("int4_b32")
+    monkeypatch.setenv("E4B_INT4_KEEP_NF4", "1")
+    model, composite, plain = checkpoints
+    mapping = get_checkpoint_conversion_mapping("qwen3_5_moe_text")
+    native = {}
+    for source, tensor in load_file(str(composite / "model.safetensors")).items():
+        if source != "lm_head.weight" and not source.startswith("model.language_model."):
+            continue
+        rename = next(c for c in mapping if type(c).__name__ == "PrefixChange")
+        target, pattern = rename.rename_source_key(source)
+        if pattern is not None:
+            rename.add_tensor(target, source, pattern, tensor)
+            converted = rename.convert(target, model=model, config=model.config)
+            values = list(converted.values())
+            assert len(values) == 1 and len(values[0]) == 1
+            assert values[0][0] is tensor  # actual upstream conversion does not transpose/copy
+            tensor = values[0][0]
+        else:
+            assert source == "lm_head.weight" and target == source
+        assert torch.equal(tensor, model.state_dict()[target])
+        for converter in mapping:
+            assert converter.rename_source_key(target) == (target, None)
+        native[target] = tensor
+    assert set(native) == set(model.state_dict())
+    converted_path = tmp_path / "upstream_native"
+    converted_path.mkdir()
+    save_file(native, str(converted_path / "model.safetensors"))
+    model.config.save_pretrained(converted_path)
+    trees = [_cpu_residency_tree(model.config) for _ in range(3)]
+    for (tree, _), checkpoint in zip(trees, (composite, plain, converted_path), strict=True):
+        assert enable_serve_experts_int4(tree, str(checkpoint), plan_model=model) == 2
+    for layer in range(model.config.num_hidden_layers):
+        for role in ("gu", "dn"):
+            stores = [states[layer]._int4_stores[role] for _, states in trees]
+            assert len({(x["N"], x["K"]) for x in stores}) == 1
+            for field in ("packed", "scales"):
+                assert all(torch.equal(stores[0][field], x[field]) for x in stores[1:])
+
+
+@pytest.mark.parametrize("composite_root", (False, True))
+def test_legacy_per_expert_checkpoint_refuses_before_packing(checkpoints, tmp_path, composite_root):
+    """Legacy gate/up/down weights are real tensors, but are outside native support."""
+    model, _, _ = checkpoints
+    tensors = {}
+    for key, value in model.state_dict().items():
+        if composite_root and key.startswith("model."):
+            key = "model.language_model." + key.removeprefix("model.")
+        if key.endswith("experts.gate_up_proj"):
+            prefix = key.removesuffix("gate_up_proj")
+            for expert, stack in enumerate(value):
+                for role, tensor in zip(("gate_proj", "up_proj"), stack.chunk(2, dim=0), strict=True):
+                    tensors[f"{prefix}{expert}.{role}.weight"] = tensor.contiguous().clone()
+        elif key.endswith("experts.down_proj"):
+            prefix = key.removesuffix("down_proj")
+            for expert, tensor in enumerate(value):
+                tensors[f"{prefix}{expert}.down_proj.weight"] = tensor.contiguous().clone()
+        else:
+            tensors[key] = value.contiguous().clone()
+    legacy = tmp_path / "legacy"
+    legacy.mkdir()
+    save_file(tensors, str(legacy / "model.safetensors"))
+    model.config.save_pretrained(legacy)
+    keys, _ = safetensors_reader(str(legacy))
+    with pytest.raises(MoEConventionError, match="do not map|missing|unclaimed|unknown"):
+        plan_moe_checkpoint(keys, model, model.config.model_type, skip_extra_layers=True)
+    # Planning refusal above always executes, even without the optional packer.
+    pytest.importorskip("int4_b32")
+    tree, states = _cpu_residency_tree(model.config)
+    with pytest.raises(MoEConventionError, match="do not map|missing|unclaimed|unknown"):
+        enable_serve_experts_int4(tree, str(legacy), plan_model=model)
+    assert all(not hasattr(state, "_int4_stores") for state in states)
