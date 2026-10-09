@@ -171,6 +171,10 @@ model_of(){ case $1 in gptoss) echo "openai/gpt-oss-20b 6cee5e81ee83917806bbde32
 configs_of(){ case $1 in gptoss|mixtral) echo "OFF ON_glue ON_r2 ON_epi ON_auto";; gemma4) echo "OFF ON_glue ON_epi ON_auto";;
   *) echo "OFF ON_auto";; esac; }
 [ "$PROVE" = 1 ] && configs_of(){ echo "OFF ON_epi ON_auto"; }
+# Amendment 7: the server the box builds keeps its own KV pool, which no paged pass uses (each builds its own). Mixtral's
+# NF4 weights take about 26.8 GiB of the 31.4, so its server pool is sized to the instrument: 16 slots of 768 tokens
+# (>= the 512-token prompt + 128 positions + 16), 0.77 GiB instead of the default 4096 tokens' 4.12 GiB.
+build_env_of(){ case $1 in mixtral) echo "E4B_PAGED_MAX_TOKENS_PER_SEQ=768";; esac; }
 # each config's four knobs, named explicitly (fam_box.CONFIGS; the box refuses anything else)
 knobs_of(){ local q=0 g=0 r=0 e=0
   case $1 in ON_glue) g=auto;; ON_r2) r=auto;; ON_epi) e=auto;; ON_auto) q=auto; g=auto; r=auto; e=auto;; esac
@@ -184,7 +188,7 @@ box(){ # tag config path out ref [extra args]
   can_run $need "$tag $config $path" || return 1
   local al; al=$(step_alarm $cap); say "$tag $config $path (alarm=$al)"
   # shellcheck disable=SC2086  # assignment lists by design
-  env PYTHONPATH= $ENGINE_ENV $(knobs_of $config) $env_path E4B_PAGED_GRAPHS=0 E4B_PAGED_MAX_SEQS=16 E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA \
+  env PYTHONPATH= $ENGINE_ENV $(knobs_of $config) $env_path E4B_PAGED_GRAPHS=0 E4B_PAGED_MAX_SEQS=16 $(build_env_of $tag) E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA \
     perl -e "alarm $al; exec @ARGV" python $W/fam_box.py --config $config --path $path --out $W/$out --ref-root $ref --cont $CONT "$@" \
     > logs/${out%.json}.log 2>&1
   local rc=$?

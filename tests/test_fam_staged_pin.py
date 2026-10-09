@@ -88,7 +88,7 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 
 def test_the_self_tests_pass():
     base = {"PATH": "/usr/bin:/bin", **{k: os.environ[k] for k in ("SYSTEMROOT",) if k in os.environ}}
-    for script, want in (("fam_reduce.py", "fam_reduce self-test OK (58/58 cases)"),
+    for script, want in (("fam_reduce.py", "fam_reduce self-test OK (59/59 cases)"),
                          ("fam_box.py", "fam_box self-test OK (28/28 cases)"),
                          ("fam_speed.py", "fam_speed self-test OK (9/9 cases)"),
                          ("fam_speed_reduce.py", "fam_speed_reduce self-test OK (30/30 cases)")):
@@ -99,6 +99,7 @@ def test_the_self_tests_pass():
     assert "reducer's self-test now runs 50 cases" in PREREG                               # Amendment 3
     assert "reducer's self-test now runs 56 cases" in PREREG                               # Amendment 5
     assert "reducer's self-test now runs 58 cases" in PREREG                               # Amendment 6
+    assert "reducer's self-test\nnow runs 59 cases" in PREREG                              # Amendment 7
 
 
 def test_the_rule_is_the_registered_rule():
@@ -283,3 +284,20 @@ def test_gemma4_is_amendment_6_s():
                "| Gemma-4's proof | 1.25 h | fetch 2400 s, bake 900 s, OFF 2400 / 3000 s, each ON 600 / 900 s |",
                "sliding window never binds"):
         assert s_ in amend, s_
+
+
+def test_mixtral_s_server_pool_is_amendment_7_s():
+    """Amendment 7: after fam-mixtral-prove-1 ran out of GPU memory building the server's own KV pool (16 slots x 4096
+    tokens beside 26.8 GiB of NF4 weights), Mixtral's processes build it at 768 tokens a slot -- enough for the
+    instrument's prompt, positions and margin -- and Mixtral's proof is guarded 2.0 h, sized from that run."""
+    r = _load("fam_reduce")
+    assert 'build_env_of(){ case $1 in mixtral) echo "E4B_PAGED_MAX_TOKENS_PER_SEQ=768";; esac; }' in RUN
+    assert "E4B_PAGED_GRAPHS=0 E4B_PAGED_MAX_SEQS=16 $(build_env_of $tag) E4B_SHA=$E4B_SHA" in RUN
+    assert 768 >= r.PREFILL[0] + r.CONT + 16 and r.SERVER_TOKENS == {"mixtral": 768}
+    assert '"server": {"max_seqs": cfg.max_seqs, "max_tokens_per_seq": cfg.max_tokens_per_seq}' in (LANE / "fam_box.py").read_text()
+    amend = PREREG[PREREG.index("## Amendment 7"):]
+    assert "| Mixtral's proof | 2.0 h | fetch 3000 s, bake 1500 s, OFF 2400 / 3000 s, each ON 600 / 900 s |" in amend
+    line = re.search(r'^\s*mixtral\)\s+TAGS="mixtral"; (NEED_FETCH=.*);;$', RUN, re.M).group(1)
+    need = dict(re.findall(r"(NEED_\w+)=(\d+)", line))
+    measured = 2336                                     # fam-mixtral-prove-1: launch to the bake's end, clock-read
+    assert measured + int(need["NEED_OFF"]) + 600 <= 2.0 * 3600
