@@ -82,7 +82,7 @@ These are specific workloads, with public results and controls. The table is che
 | Workload and evidence | Result | Status |
 | :--- | :--- | :--- |
 | Qwen3-30B-A3B QLoRA · RTX 5090 · TC1's field recipe, both frameworks on one stack, e4b at every default (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio`) | Unsloth spends **1.92×** e4b's GPU time per step; wall-clock **2.80×** on an AMD EPYC 7713. Comparable held-out loss. Peak **26.16 vs 24.27 GB** (Unsloth lower). | measured |
-| Packed 4,096-token Qwen3 training · RTX 5090 · e4b at its defaults (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio`) | Unsloth spends **1.160×** e4b's GPU time per step; wall-clock **1.472×** on that box's host. | measured |
+| Packed 4,096-token Qwen3 training · RTX 5090 · e4b at its defaults (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio`) | Unsloth spends **1.160×** e4b's GPU time per step; the wall-clock ratio varies with the host (below). | measured |
 | Expert-offload training on a 12 GB card (`e4b.offload.fits-30b-class`) | Qwen3-30B-A3B: **7.16 GB** peak; Gemma-4-26B-A4B: **8.47 GB**. | measured |
 
 The speed rows profile both frameworks on one stack (torch 2.12.1). The GPU-time ratio is the host-independent figure; the
