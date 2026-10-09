@@ -1,0 +1,7 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 610.57.04, GPU-6609428c-fe71-fd5d-1a4d-866bd6a44761, 12.0
+CPU(s):                                  64
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD Eng Sample: 100-000000897-03
+               total        used        free      shared  buff/cache   available
+Mem:             251           6         202           0          42         241
+overlay         320G   53M  320G   1% /
