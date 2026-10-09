@@ -21,6 +21,12 @@ five-minute deadline, returns nonzero. `summary.json` records the exceptions,
 source package digest, actual residency classes, lever engagement, graph
 decisions and generated token IDs; each cell also keeps its worker log.
 
+Two additional `folds` cells enable all four fusion knobs at `auto` on
+Qwen3-MoE and Mixtral, for ten cells in all. Both require residual licensing on
+every served MoE layer, no partial licence or probe error, and nonzero glue/r2
+engagement. Qwen3's shipped default and int4 cells also assert that licence;
+its default allowlist already enables these folds.
+
 Every cell creates a tiny seeded random checkpoint, tokenizer and NF4 arena.
 The synthetic checkpoint lives in a private, content-addressed offline HF cache
 fixture because the server's int4 reader uses `snapshot_download`. These fixture
@@ -32,6 +38,9 @@ that both layers use `_HybridTier`, then finishes two requests, each with a
 512-token prefill and four output tokens. The second request exercises slot
 reset, including the hybrid's linear state. No server implementations are
 mocked or replaced.
+The composite Qwen3.5 checkpoint also includes visual and MTP distractor tensors,
+including a full MTP decoder block with its own experts. Both the arena bake and
+the served build must see exactly the text tower's two MoE layers.
 
 **Graph coverage depends on the GPU.** The shipped `auto` default resolves to
 eager decode on the sm_86 A2000: its result explicitly says graphs were not

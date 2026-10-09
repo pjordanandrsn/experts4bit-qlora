@@ -47,8 +47,8 @@ def test_one_bad_worker_fails_the_suite_and_other_cells_still_report(tmp_path, m
     assert smoke.run_suite(tmp_path, 300) == 1
     summary = json.loads((tmp_path / "summary.json").read_text())
     assert summary["status"] == "FAIL"
-    assert calls == [(f, s) for f in smoke.FAMILIES for s in smoke.STACKS]
-    assert len(summary["cells"]) == 8
+    assert calls == list(smoke.CELLS)
+    assert len(summary["cells"]) == 10
     failures = [r for r in summary["cells"] if r["status"] == "FAIL"]
     assert len(failures) == 1 and failures[0]["exception"]
 
@@ -64,3 +64,16 @@ def test_worker_preserves_the_real_exception(tmp_path, monkeypatch):
     row = json.loads((tmp_path / "result.json").read_text())
     assert row["status"] == "FAIL" and "unexpected keyword argument 'residual'" in row["exception"]
     assert "TypeError" in row["traceback"]
+
+
+def test_partial_or_failed_residual_licence_cannot_pass():
+    good = {"moe_residual": {"licensed": 2, "partial": 0, "probe_errors": []},
+            "fuse_t1_glue_n": 9, "fuse_t1_glue_r2_n": [2, 2]}
+    smoke.check_residual(good)
+    for residual in ({"licensed": 0, "partial": 0, "probe_errors": []},
+                     {"licensed": 2, "partial": 1, "probe_errors": []},
+                     {"licensed": 2, "partial": 0, "probe_errors": ["TypeError: residual"]}):
+        with pytest.raises(RuntimeError, match="not fully licensed"):
+            smoke.check_residual(dict(good, moe_residual=residual))
+    with pytest.raises(RuntimeError, match="did not engage"):
+        smoke.check_residual(dict(good, fuse_t1_glue_r2_n=[0, 0]))

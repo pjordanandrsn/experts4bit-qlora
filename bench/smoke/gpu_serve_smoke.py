@@ -22,7 +22,9 @@ import time
 import traceback
 
 FAMILIES = ("qwen3_moe", "granitemoe", "mixtral", "qwen3_5_moe")
-STACKS = ("default", "int4")
+STACKS = ("default", "int4", "folds")
+CELLS = tuple((f, s) for f in FAMILIES for s in STACKS
+              if s != "folds" or f in ("qwen3_moe", "mixtral"))
 PROMPT_TOKENS, NEW_TOKENS = 512, 4
 
 
@@ -95,6 +97,14 @@ def write_checkpoint(model, path):
                 tensors[f"{base}{e}.{role}.weight"] = value[e].contiguous().clone()
         else:
             tensors[name] = value.contiguous().clone()
+    if family == "qwen3_5_moe_text":
+        import torch
+        tensors["model.visual.patch_embed.proj.weight"] = torch.full((4, 3, 2, 2, 2), 42, dtype=torch.bfloat16)
+        # Distracting MTP experts and a full decoder block must never join the
+        # text tower's two MoE layers or its arena.
+        for name, value in model.state_dict().items():
+            if name.startswith("model.layers.1."):
+                tensors["mtp.layers.0." + name.removeprefix("model.layers.1.")] = value.contiguous().clone()
     save_file(tensors, str(path / "model.safetensors"))
     (path / "model.safetensors.index.json").write_text(json.dumps(
         {"weight_map": dict.fromkeys(tensors, "model.safetensors")}))
@@ -123,8 +133,8 @@ def bake_arena(snapshot, root):
     model, _ = load_moe_4bit_streaming(str(snapshot), "cuda", torch.bfloat16, 8, 16)
     tensors = {}
     mods = target_modules(model)
-    if not mods:
-        raise RuntimeError("random checkpoint loaded no quantized expert layers")
+    if len(mods) != 2:
+        raise RuntimeError(f"random checkpoint loaded {len(mods)} expert layers, expected the two text layers")
     for layer, mod in enumerate(mods):
         e = mod.num_experts
         n1, k1 = mod._gate_up_shape
@@ -198,6 +208,14 @@ def check_graphs(capability, enabled, status, stats):
             raise RuntimeError("default decode graphs never replayed")
 
 
+def check_residual(info):
+    residual = info.get("moe_residual") or {}
+    if residual.get("licensed") != 2 or residual.get("partial") != 0 or residual.get("probe_errors") != []:
+        raise RuntimeError(f"MoE residual was not fully licensed on both served layers: {residual}")
+    if not info.get("fuse_t1_glue_n") or not all(info.get("fuse_t1_glue_r2_n") or (0,)):
+        raise RuntimeError(f"residual folds did not engage: {info}")
+
+
 def run_cell(family, stack, root):
     import torch
     from experts4bit_qlora.engines.hot_residency import target_modules
@@ -239,6 +257,9 @@ def run_cell(family, stack, root):
         os.environ["E4B_SERVE_ATTN_INT4"] = "1"
         if expert_int4_unsupported is None:
             os.environ["E4B_SERVE_EXP_INT4"] = "1"
+    elif stack == "folds":
+        os.environ.update({k: "auto" for k in
+                           ("E4B_PAGED_FUSE_QKV", "E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")})
     cfg = PagedServeConfig.from_env()
     parts = build_engine(cfg)
     states = [type(m._hot_residency).__name__ for m in target_modules(parts.runner.model)]
@@ -249,6 +270,8 @@ def run_cell(family, stack, root):
     expected_int4_layers = 0 if expert_int4_unsupported is not None else 2
     if stack == "int4" and (parts.info["int4_expert_layers"] != expected_int4_layers or parts.info["int4_attn_projections"] < 1):
         raise RuntimeError(f"int4 stack did not engage: {parts.info}")
+    if family == "qwen3_moe" or stack == "folds":
+        check_residual(parts.info)
     # One complete default-size prefill and three decode steps. A second
     # request also checks that slot reset survives a real hybrid state reuse.
     prompt = [4 + i % 252 for i in range(PROMPT_TOKENS)]
@@ -278,6 +301,7 @@ def run_cell(family, stack, root):
             "graph_status": graph_status, "graph_stats": graph_stats,
             "prefill_graph": parts.runner.prefill_graph_stats(), "int4_expert_layers": parts.info["int4_expert_layers"],
             "expert_int4_unsupported": expert_int4_unsupported,
+            "moe_residual": parts.info["moe_residual"], "fusion_report": parts.info["fusion_report"],
             "int4_attn_projections": parts.info["int4_attn_projections"],
             "generated": [r.out for r in parts.scheduler.done], "requests_completed": len(parts.scheduler.done)}
 
@@ -299,6 +323,8 @@ def run_suite(root, timeout):
     rows = []
     for family in FAMILIES:
         for stack in STACKS:
+            if (family, stack) not in CELLS:
+                continue
             cell = root / f"{family}-{stack}"
             cell.mkdir()
             result = cell / "result.json"
