@@ -2,6 +2,7 @@
 import hashlib
 import importlib.util
 import json
+import os
 import time
 from pathlib import Path
 
@@ -83,11 +84,20 @@ def setup(tmp_path, *, profile=False, nested=False, effect=''):
     return manifest, job, python, tool, marker
 
 
+def run(tmp_path, manifest, job, python, tool):
+    # TC1's fixed entry phases are worker-spec values. Both training fixtures
+    # use the production empty feature environment, even when the job mutates.
+    env, _ = f.worker_environment.clean(os.environ, component='training', fixture={},
+        venv=Path(manifest['payload']['venv']), cache=tmp_path / 'worker-cache',
+        threads=1, allocator='expandable_segments:True')
+    return f.run(tmp_path, manifest, job, python, tool, env=env)
+
+
 @pytest.mark.parametrize('profile', [False, True])
 @pytest.mark.parametrize('nested', [False, True])
 def test_fixed_tc1_after_verified_startup_same_pid_and_nested_receipt(tmp_path, profile, nested):
     manifest, job, python, tool, _ = setup(tmp_path, profile=profile, nested=nested)
-    p = f.run(tmp_path, manifest, job, python, tool)
+    p = run(tmp_path, manifest, job, python, tool)
     assert p.returncode == 0, p.stderr
     out = Path(job['native_out'])
     target = out / 'frozen' if nested else out
@@ -130,7 +140,7 @@ def test_native_entry_mutants_refuse(tmp_path, mutation):
         data['extra_flags' if mutation == 'extra_flag' else 'venv'] = ['--steps', '1'] if mutation == 'extra_flag' else '/foreign'
         path.write_text(json.dumps(data))
         job['native_spec']['sha256'] = sha(path)
-    p = f.run(tmp_path, manifest, job, python, tool)
+    p = run(tmp_path, manifest, job, python, tool)
     assert p.returncode != 0
     assert not (Path(job['native_out']) / 'target-pid.json').exists()
 
@@ -140,7 +150,7 @@ def test_native_entry_mutants_refuse(tmp_path, mutation):
     "Path(__file__).write_text('mutated')"])
 def test_nested_failures_preserve_handoff_and_refuse_parent_success(tmp_path, effect):
     manifest, job, python, tool, _ = setup(tmp_path, nested=True, effect=effect)
-    p = f.run(tmp_path, manifest, job, python, tool)
+    p = run(tmp_path, manifest, job, python, tool)
     assert p.returncode != 0
     out = Path(job['native_out'])
     assert json.loads((out / 'child-handoff.json').read_text())['status'] == 'PASSED'
