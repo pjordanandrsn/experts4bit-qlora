@@ -157,3 +157,30 @@ def test_stats_read_off_until_enabled_and_cpu_refuses():
         r.enable_prefill_graph(T)
     assert e.value.why.startswith("needs a CUDA device")
     assert r.prefill_graph_stats() == {"status": "off"}
+
+
+def test_the_capture_reads_the_head_s_width_on_a_dense_and_an_int4_head():
+    """The capture's warm-up prompts are drawn below the head's output width. The int4 head
+    (``E4B_SERVE_LMHEAD_INT4_CALIB=1``) is an ``Int4Linear``: its packed grid and ``N``, never a ``weight``. Reading
+    ``.weight`` crashed the default graph server's build with that head (lane P125's proof, ``p125-prove-1``)."""
+    import inspect
+
+    from experts4bit_qlora.engines import paged_runner
+    from experts4bit_qlora.engines.int4_attn import Int4Linear
+
+    class Headed(torch.nn.Module):
+        def __init__(self, head):
+            super().__init__()
+            self.lm_head = head
+
+        def get_output_embeddings(self):
+            return self.lm_head
+
+    assert paged_runner._output_width(Headed(torch.nn.Linear(8, 50, bias=False))) == 50
+    int4 = Int4Linear.__new__(Int4Linear)       # the real class; its constructor needs grouped-nf4-gemm's kernels
+    torch.nn.Module.__init__(int4)
+    int4.N, int4.K = 151936, 2048
+    assert not hasattr(int4, "weight"), "the int4 head carries no weight: the read this fixes"
+    assert paged_runner._output_width(Headed(int4)) == 151936
+    src = inspect.getsource(paged_runner.PagedModelRunner.enable_prefill_graph)
+    assert "_output_width(self.model)" in src and ".weight.shape" not in src

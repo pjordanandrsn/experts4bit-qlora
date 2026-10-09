@@ -161,6 +161,15 @@ def chunk_rows(rids, max_bucket: int):
     return [rids[i:i + max_bucket] for i in range(0, len(rids), max_bucket)]
 
 
+def _output_width(model) -> int:
+    """The LM head's output width (the vocabulary it scores). A dense head has a ``weight``; the int4 head
+    (``E4B_SERVE_LMHEAD_INT4_CALIB=1``, ``engines.int4_attn.Int4Linear``) carries its packed grid and ``N`` instead,
+    so reading ``.weight`` crashed the default graph server's build with that head (lane P125's proof)."""
+    head = model.get_output_embeddings()
+    n = getattr(head, "N", None)
+    return int(n) if n is not None else int(head.weight.shape[0])
+
+
 def _last_logits_kwargs(model, enabled: bool) -> dict:
     """An explicitly supported last-position LM-head keyword, or refuse.
 
@@ -809,7 +818,7 @@ class PagedModelRunner(StepRunner):
             why = "a hybrid model's linear-attention state is per slot, and prefill mutates it"
         if why:
             raise PrefillGraphRefused(why)
-        vocab = int(self.model.get_output_embeddings().weight.shape[0])
+        vocab = _output_width(self.model)
         gen = torch.Generator().manual_seed(seed)
         prompts = [torch.randint(0, vocab, (1, T), generator=gen) for _ in range(2)]
         pg = self._capture_prefill_graph(T, prompts[0], warmup)
