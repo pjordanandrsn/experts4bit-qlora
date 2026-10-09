@@ -200,8 +200,24 @@ A block or cell is VOID, and is never read, when any of these holds:
 - **`bench/sc5/sc5_driver.py`:** a closed-loop mode, `closed C N`, with tests. It imports `bench/sc2/sc2_driver.py`'s
   request, streaming and summary code and leaves that file byte-identical, because `bench/sc1/staged.sha256` and RA's
   `bench/ra/source-pins.json` both pin it.
-- **`bench/sc5/sc5_box.sh`:** the box. It reuses SC2's install, start, stop and readiness pieces with the pinned versions,
-  the two memory settings, the ABBA blocks, the GPU memory sampler and the capacity readout.
+- **The box: `bench/sc5/sc5_box_m.sh`, as SC1 box M.**
+  - **Why box M.** It follows the precedent of SC2's box E and SC2e's box L. `sc2_box_e.sh`'s server helpers rely on SC1's
+    common setup (`say`, `can_run`, `arm_alarm`, `quiesce`, the samplers, `bake_qwen3`, `sglang_server_start`), so a
+    standalone lane would duplicate it.
+  - **Wiring, at registration time** with the final pins, on main after the release train. It covers every site that
+    enumerates box letters:
+    - `bench/sc1/sc1_run.sh`: the box gate (:50), the GNF4 pin (:58), the default-route boxes (:90), BASEPY (:168), the
+      tripwire's box lists (:210, :219), the sourcing (:288), PROVE_NEEDS (:596) and the dispatch (:827);
+    - `bench/sc1/sc1_drive.sh` (:11, :17, :25) and `bench/sc1/make_pin.sh` (:24), with a regenerated `staged.sha256`;
+    - the tests that enumerate letters: `test_sc1_run_shape`, `test_sc1_staged_pin`, `test_sc2_box`, `test_sc2d_box`,
+      `test_sc2e_box`, `test_sc1b`, `test_sc1g_box`, `test_sc1g_a6` and `test_rd1_lane`.
+  - **What it carries:**
+    - e4b and grouped-nf4-gemm as release wheels by sha256 (not git SHAs);
+    - vLLM and SGLang through `bench/sc1/{vllm,sglang}/install.sh` at the registration's versions with hash locks;
+    - the two memory settings and the ABBA blocks with cold starts;
+    - the capacity readout per framework (e4b `/health` `levers.kv`, vLLM `num_gpu_blocks × block_size`, SGLang
+      `server_info.max_total_num_tokens`) and the 1 Hz memory sampler;
+    - the quality passes after the speed blocks, verifying the reference's sha256 first.
 - **`bench/sc5/sc5_ref.py`:** the bf16 reference, per-position NLL and argmax.
 - **`bench/sc5/sc5_quality.py`:** the vLLM and SGLang server scorers (`prompt_logprobs=1`, `top_logprobs_num=1`), with
   fixture tests for both entry shapes and for the V+1 trap.
