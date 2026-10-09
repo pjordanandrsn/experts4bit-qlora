@@ -53,6 +53,10 @@ lane_snapshot_verdict() {  # current-snapshot initial-snapshot lane-age-seconds
   esac
 }
 
+lane_unknown_streak() {  # live-verdict prior-count -> reported-only consecutive unknowns
+  if [ -z "${1:-}" ]; then echo "$(( ${2:-0} + 1 ))"; else echo 0; fi
+}
+
 lane_two_missing() { [ "${1:-}" = 0 ] && [ "${2:-}" = 0 ] && echo dead; }
 
 # bash -s -- --probe PID executes the same probe via SSH stdin; production uses /proc.

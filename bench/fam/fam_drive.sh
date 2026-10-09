@@ -65,11 +65,20 @@ if [ "${FAM_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W 
 say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; launch e4b $E4B_SHA (from $REPO); stacks are the runner's constants; receipts -> $RUN_DIR/fam; deadline $DEADLINE"
 $SSH "rm -rf -- $W && mkdir -p $W/logs /root/.cache/huggingface" || { say "stage failed: remote cleanup"; exit 20; }
 $SCP $STAGE "root@$HOST:$W/" || { say "stage failed: scp"; exit 20; }
-if [ -s "$HF_TOKEN_FILE" ]; then   # authenticated pulls (unauthenticated shards throttle); the token never appears on a command line
-  $SCP "$HF_TOKEN_FILE" "root@$HOST:/root/.cache/huggingface/token" && $SSH "chmod 600 /root/.cache/huggingface/token" || { say "stage failed: hf token"; exit 20; }
-  say "hf token staged"
+if [ -s "$HF_TOKEN_FILE" ]; then
+  if python3 "$REPO/bench/common/token_scope.py" --token-file "$HF_TOKEN_FILE"; then
+    $SCP "$HF_TOKEN_FILE" "root@$HOST:/root/.cache/huggingface/token" && $SSH "chmod 600 /root/.cache/huggingface/token" || { say "stage failed: hf token"; exit 20; }
+    say "hf token staged"
+  else
+    token_rc=$?
+    [ "$token_rc" != 78 ] || { say "refusing: token read-only: no"; exit 78; }
+    # Ignore cached box credentials too when verification is unavailable.
+    PASS="$PASS HF_HUB_DISABLE_IMPLICIT_TOKEN=1"
+    say "token unverified, staging none"
+  fi
 else
-  say "no hf token file at $HF_TOKEN_FILE -- pulls run unauthenticated (every checkpoint is ungated)"
+  PASS="$PASS HF_HUB_DISABLE_IMPLICIT_TOKEN=1"
+  say "no token file, staging none"
 fi
 LANE_STARTED_AT=$(date +%s)
 LAUNCH_REPLY=$({ cat "$LANE_HELPER"; printf '%s\n' "cd $W || exit 20; nohup env $PASS bash fam_run.sh > outer.log 2>&1 < /dev/null & child=\$!; identity=\$(lane_proc_snapshot \$child); end=\$((\$(date +%s)+30)); while [ \$(date +%s) -lt \$end ]; do [ \"\$(cat FAM_RUN_NONCE 2>/dev/null)\" = '$NONCE' ] && { echo started:\$child; echo identity:\$identity; exit 0; }; kill -0 \$child 2>/dev/null || { wait \$child; echo child-exited-early:rc=\$? >&2; exit 125; }; sleep 1; done; echo nonce-handshake-timeout >&2; exit 124"; } | $SSH bash -s) || { say "start failed: child did not bind the nonce"; exit 21; }
@@ -94,7 +103,7 @@ progress_verdict() {  # idle_s stall_s util dfk_now dfk_prev du_now du_prev -> "
 }
 lane_dead() { lane_two_missing "$@"; }
 say "lane started; polling TP_DONE every ${POLL}s with a heartbeat (stall reported after ${STALL_S}s; never acted on; a lane whose process is gone for two polls ends the wait)"
-LAST=""; LAST_CHANGE=$(date +%s); LAST_DFK=""; LAST_DU=""; LAST_LIVE=""; LANE_DEAD=0
+LAST=""; LAST_CHANGE=$(date +%s); LAST_DFK=""; LAST_DU=""; LAST_LIVE=""; UNKNOWN_PROBES=0; LANE_DEAD=0
 while :; do
   now=$(date +%s)
   $SSH "test -f $W/TP_DONE.$NONCE" 2>/dev/null && { say "TP_DONE seen"; break; }
@@ -104,7 +113,8 @@ while :; do
   dfk=$(echo "$hb" | sed -n 's/.*| dfk \([0-9]*\).*/\1/p'); duM=$(echo "$hb" | sed -n 's/.*| du \([0-9]*\)M.*/\1/p')
   snapshot=$($SSH "bash -s -- --probe $LANE_PID" < "$LANE_HELPER" 2>/dev/null) || snapshot=""
   live=$(lane_snapshot_verdict "$snapshot" "$LANE_INITIAL" "$((now - LANE_STARTED_AT))")
-  hb="$hb | live ${live:-unknown} | pid $LANE_PID"
+  UNKNOWN_PROBES=$(lane_unknown_streak "$live" "$UNKNOWN_PROBES")
+  hb="$hb | live ${live:-unknown} | pid $LANE_PID | unknown_probes $UNKNOWN_PROBES"
   if [ "$live" = reboot ]; then
     say "LANE DEAD: host rebooted (boot identity changed or uptime below lane age/baseline); fetching what exists"
     LANE_DEAD=1; break
