@@ -165,6 +165,15 @@ FUSION_UNLICENSED = {
     "granitemoe": "lane FAM at T == 1: ON_auto FAILs one gated entry of 12 (#1362)",
 }
 FUSION_UNSET = "default"          # from_env's value for an unset knob, resolved per family by resolve_fusion_modes
+# Lane P130's family-scoped default for ``E4B_FUSE_PREFILL_GLUE`` (P1, #1583; bench/p130/RESULTS-p130.md): an UNSET knob
+# resolves to ``1`` -- the decode folds also take prefill rows, with decode's single rounding -- on a model_type read
+# here, and to ``0`` everywhere else. The library's fold functions keep unset = ``0``: bench harnesses call them
+# directly, and their reference arms must not move. ``1`` / ``0`` stay explicit.
+PREFILL_GLUE_ENV = "E4B_FUSE_PREFILL_GLUE"
+PREFILL_GLUE_DEFAULT_FAMILIES = {
+    "qwen3_moe": "P130 (#1588, read #1605): x1.118 [1.116, 1.119] per 512-token first-chunk prefill replay on one RTX "
+                 "5090, AT_PARITY on P117's teacher-forced instrument (bias -0.0035 nats)",
+}
 _FUSION_WARNED: set = set()
 
 
@@ -387,6 +396,28 @@ def _fuse_qkv_health(cfg, info: dict):
     return None if mode == FUSION_UNSET else mode != "0"
 
 
+def _prefill_glue_env(value: str) -> str:
+    """``E4B_FUSE_PREFILL_GLUE`` as the server reads it: ``0`` or ``1`` pass through; unset or empty is ``default``,
+    resolved per family at the build (:data:`PREFILL_GLUE_DEFAULT_FAMILIES`, lane P130). Anything else is refused."""
+    v = (value or "").strip()
+    if not v:
+        return FUSION_UNSET
+    if v in ("0", "1"):
+        return v
+    raise ValueError(f"{PREFILL_GLUE_ENV}={value!r}: expected '0' or '1' (unset: per family, lane P130)")
+
+
+def resolve_prefill_glue(value: str, model_type) -> tuple:
+    """``(mode, source)``: an explicit ``0`` / ``1`` passes through (``explicit``); ``default`` resolves to ``1`` on a
+    ``model_type`` in :data:`PREFILL_GLUE_DEFAULT_FAMILIES` (``default-allowlisted``) and to ``0`` elsewhere
+    (``default-off``)."""
+    if value != FUSION_UNSET:
+        return value, "explicit"
+    if model_type in PREFILL_GLUE_DEFAULT_FAMILIES:
+        return "1", "default-allowlisted"
+    return "0", "default-off"
+
+
 def _fusion_env(name: str, value: str) -> str:
     """One fusion knob (``E4B_PAGED_FUSE_QKV``, ``E4B_FUSE_T1_GLUE``, ``E4B_FUSE_T1_GLUE_R2``, ``E4B_FUSE_ROUTER_EPI``),
     one of three settings (:func:`~.engines.glue_fuse.fold_mode`):
@@ -438,6 +469,7 @@ class PagedServeConfig:
     hot_rows: int = 64                   # E4B_PAGED_HOT_ROWS
     kv_groups: str = "auto"              # E4B_PAGED_KV_GROUPS: auto | <int>
     fuse_qkv: bool = False               # E4B_PAGED_FUSE_QKV not 0 (fuse_qkv applies the env-gated folds itself)
+    prefill_glue: str = FUSION_UNSET     # E4B_FUSE_PREFILL_GLUE: 0 | 1, or "default" when unset (per family, P130)
     fusion_modes: dict = field(default_factory=dict)   # FUSION_KNOBS -> auto | 0 | 1 (_fusion_env), or "default" when
                                                        # unset (resolved per family at the build); a knob not named keeps
                                                        # its old reading: fuse_qkv, or the fold's own env var
@@ -489,6 +521,7 @@ class PagedServeConfig:
             kv_groups=env("E4B_PAGED_KV_GROUPS", "auto"),
             fuse_qkv=modes[FUSE_QKV_ENV] != "0",
             fusion_modes=modes,
+            prefill_glue=_prefill_glue_env(env(PREFILL_GLUE_ENV, "")),
             torch_threads=int(env("E4B_PAGED_TORCH_THREADS", "8")),
             max_tokens_cap=int(env("E4B_PAGED_MAX_TOKENS", "0")),
             max_queue=int(env("E4B_PAGED_MAX_QUEUE", "0")),
@@ -1141,6 +1174,29 @@ def _count(v):
 
 
 def _apply_fusions(model, cfg: PagedServeConfig, report: dict | None = None) -> dict:
+    """The fusions (:func:`_assemble_fusions`) with ``E4B_FUSE_PREFILL_GLUE`` resolved for this model (lane P130:
+    :func:`resolve_prefill_glue`). The decode folds read that knob when they patch (``glue_fuse.rows_cap``), so it is
+    set to the resolved ``0`` / ``1`` for the assembly alone and restored afterwards. ``report`` (when given) also
+    receives ``prefill_glue``: the resolved mode and its source."""
+    model_type = getattr(getattr(model, "config", None), "model_type", None)
+    mode, source = resolve_prefill_glue(getattr(cfg, "prefill_glue", FUSION_UNSET), model_type)
+    saved = os.environ.get(PREFILL_GLUE_ENV)
+    os.environ[PREFILL_GLUE_ENV] = mode
+    try:
+        out = _assemble_fusions(model, cfg, report=report)
+    finally:
+        if saved is None:
+            os.environ.pop(PREFILL_GLUE_ENV, None)
+        else:
+            os.environ[PREFILL_GLUE_ENV] = saved
+    if report is not None:
+        report["prefill_glue"] = {"mode": mode, "source": source}
+    if mode == "1":
+        log(f"PREFILL_GLUE on ({source}, model_type {model_type!r}): the decode folds also take prefill rows")
+    return out
+
+
+def _assemble_fusions(model, cfg: PagedServeConfig, report: dict | None = None) -> dict:
     """One assembly point, as the harness: ``qkv_fuse.fuse_qkv`` imports and calls ``fuse_t1_glue``,
     ``fuse_t1_glue_r2`` and ``fuse_router_epilogue`` itself after fusing (so the env flags are live on the
     fused path -- the registered B=1 stack is ``--fuse-qkv`` WITH the fold flags set); the unfused branch
@@ -1435,6 +1491,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     info["fusion_modes"] = fusion_report.get("modes")
     info["fusion_sources"] = fusion_report.get("sources")
     info["fusion_report"] = fusion_report.get("folds")
+    info["prefill_glue"] = fusion_report.get("prefill_glue")
     # The build churns through host buffers it frees (the hybrid tier's setup tier, the stacks' one-shot reads), and
     # glibc keeps freed blocks under its mmap threshold resident for the life of the server: 0.34 GB on OLMoE-1B-7B
     # (RTX A2000 host, the one place it was measured). The loader alone leaves ~4 MB.

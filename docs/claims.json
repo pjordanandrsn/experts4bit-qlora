@@ -10302,6 +10302,66 @@
       "notes": "Pre-registered in #1588 (e4b#846) with Amendment 1 (#1590); read #1605. Licenses E4B_PREFILL_LEAN_DISPATCH=auto as the default (this row's PR): the lean dispatch wherever the installed K19 takes scatter=/gather_div=, else the gather; =0 restores the gather. Read on one model and card; other families on the int4 K19 prefill route ride its bitwise contract. The same lane licensed E4B_FUSE_PREFILL_GLUE separately."
     },
     {
+      "id": "e4b.serve.p130.prefill-glue-speed.qwen3.5090.2026-10-10",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P130, one RTX 5090: on SC2e's served stack (Qwen3-30B-A3B int4 experts and int4 RTN attention, the T=1 folds, fused q/k/v), the decode folds on prefill rows (E4B_FUSE_PREFILL_GLUE: the RMSNorm, residual-and-norm and q/k-norm-and-rotary folds above 64 rows) make the served first-chunk prefill graph (T = 512) x1.118 faster: 95 % t-interval [1.116, 1.119] over 4 ABBA process pairs, against a registered x1.03 bar; 4.02 ms of 38.2 ms per replay. Engagement exact (prefill folds norm 245 / layer 240 / attention 240 per 5-forward capture). With the lean dispatch, 38.17 -> 32.99 ms. P1_LICENSED with the quality row.",
+      "value": 1.1176687464822703,
+      "unit": "first-chunk prefill graph replay speedup, folds on prefill rows off / on, T = 512, mean over 4 process pairs",
+      "hardware": "RTX 5090 (sm_120, driver 595.91.07, 32607 MiB), one rented Vast.ai host (instance 55252018, AMD Ryzen 9 9950X, 32 threads, 123 GiB RAM), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @b14f593 (0.53.0 + #1583's knobs + P130's registration #1588, #1590, #1595) + grouped-nf4-gemm @724ccc4 (v0.45.0); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0; Qwen/Qwen3-30B-A3B @ad44e77, NF4 arena baked on the box, int4 stores repacked at load; premise tests/test_prefill_graph_gpu.py 9 passed on the card; 8 processes with E4B_FUSE_PREFILL_GLUE per process in the order 0 1 1 0 0 1 1 0; verdict by bench/p130/p130_reduce.py; rule FASTER iff the 95 % t-interval's lower end of mean ln(gain) >= ln 1.03",
+      "measured_on": "2026-10-10",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p130/RESULTS-p130.md",
+        "bench/p130/PREREG-p130.md",
+        "bench/p130/p130_reduce.py",
+        "bench/p130/p130_box.py",
+        "bench/p130/receipts/p130-5090-1/verdict.json",
+        "bench/p130/receipts/p130-5090-1/summary.txt",
+        "bench/p130/receipts/p130-5090-1/SHA256SUMS",
+        "bench/p130/receipts/p130-5090-1/proc_1.json",
+        "bench/p130/receipts/p130-5090-1/proc_2.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-10/p130-5090-1/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-10/p130-prove-3/ (receipt.json, the proving run)"
+      ],
+      "notes": "Pre-registered in #1588 (e4b#846) with Amendment 1 (#1590); read #1605. With the quality row, licenses E4B_FUSE_PREFILL_GLUE=1 as serve_paged's default on qwen3_moe only (this row's PR); =0 restores the eager chain; other families keep 0 until a read of their own."
+    },
+    {
+      "id": "e4b.serve.p130.prefill-glue-quality.qwen3.5090.2026-10-10",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P130, one RTX 5090: the decode folds on prefill rows (E4B_FUSE_PREFILL_GLUE, decode's single bf16 rounding in place of transformers' two) cost no measurable quality on SC2e's served stack. On P117's teacher-forced instrument (64 wikitext windows, 512 prompt tokens prefilled in one chunk, 128 positions, decoded together at buckets 1-16) the subject reads bias -0.0035 nats and spread 0.0144 against R, inside R's own neutral perturbations (half-batch -0.0025, prefill split -0.0007; B_floor 0.0025, S_floor 0.0148: bars 0.0125 / 0.0296); a halved decode scale reads +1.147. AT_PARITY.",
+      "value": -0.0034676673635340716,
+      "unit": "mean NLL bias of the prefill-folds model against R (folds off on prefill rows), nats, over 64 windows x 128 positions",
+      "hardware": "RTX 5090 (sm_120, driver 595.91.07, 32607 MiB), one rented Vast.ai host (instance 55252018, AMD Ryzen 9 9950X, 32 threads, 123 GiB RAM), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @b14f593 (0.53.0 + #1583's knobs + P130's registration #1588, #1590, #1595) + grouped-nf4-gemm @724ccc4 (v0.45.0); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0; Qwen/Qwen3-30B-A3B @ad44e77, NF4 arena baked on the box, int4 stores repacked at load; premise tests/test_prefill_graph_gpu.py 9 passed on the card; 8 processes with E4B_FUSE_PREFILL_GLUE per process in the order 0 1 1 0 0 1 1 0; verdict by bench/p130/p130_reduce.py; Phase B: R, rep and the floor (half, chunk, rev) and mutant_scale in process 1, the subject in process 2 scored against R's saved fp32 log-probs; rule AT_PARITY iff bias <= B_floor + 0.01 and spread <= 2 x max(S_floor, 0.005)",
+      "measured_on": "2026-10-10",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p130/RESULTS-p130.md",
+        "bench/p130/PREREG-p130.md",
+        "bench/p130/p130_reduce.py",
+        "bench/p130/p130_box.py",
+        "bench/p130/receipts/p130-5090-1/verdict.json",
+        "bench/p130/receipts/p130-5090-1/summary.txt",
+        "bench/p130/receipts/p130-5090-1/SHA256SUMS",
+        "bench/p130/receipts/p130-5090-1/proc_1.json",
+        "bench/p130/receipts/p130-5090-1/proc_2.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-10/p130-5090-1/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-10/p130-prove-3/ (receipt.json, the proving run)"
+      ],
+      "notes": "Pre-registered in #1588 (e4b#846); read #1605. P117's floor reproduces exactly on the same windows. The subject reaches the scored positions only through the K/V its prompt wrote and the first position's logits (decode rows are at most 16). With the speed row, licenses the qwen3_moe default."
+    },
+    {
       "id": "e4b.serve.sc2e.64-slots-default-buckets.qwen3.5090.2026-10-07",
       "package": "experts4bit-qlora",
       "area": "serve",

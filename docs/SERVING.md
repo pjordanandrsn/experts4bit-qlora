@@ -124,14 +124,19 @@ so it keeps the explicit mask. **`prefill_routes.seen` is what ran.**
 All are counted in the Python forward, so eager calls and graph captures count and graph replays do not. A count
 says the route ran, not how often a replayed graph did. An engagement check should assert on `seen`.
 
-**Prefill glue (`E4B_FUSE_PREFILL_GLUE`, opt-in; `E4B_PREFILL_LEAN_DISPATCH`, default `auto`).** The design is
-`bench/prefill-glue/DESIGN.md`; lane P130 read both knobs (`bench/p130/RESULTS-p130.md`, one RTX 5090, Qwen3-30B-A3B
-int4).
-- `E4B_FUSE_PREFILL_GLUE=1` lifts the decode folds' 64-row gate, read once at startup. A prefill's norm,
+**Prefill glue (`E4B_FUSE_PREFILL_GLUE`, on by default for `qwen3_moe`; `E4B_PREFILL_LEAN_DISPATCH`, default `auto`).**
+The design is `bench/prefill-glue/DESIGN.md`; lane P130 read both knobs (`bench/p130/RESULTS-p130.md`, one RTX 5090,
+Qwen3-30B-A3B int4).
+- `E4B_FUSE_PREFILL_GLUE` lifts the decode folds' 64-row gate, read once at startup. A prefill's norm,
   residual-and-norm and q/k-norm-and-rotary calls then run the fused kernels decode already uses, instead of
   transformers' eager chain. The router epilogue keeps its gate.
-  - It changes prefill arithmetic: decode's single bf16 rounding replaces transformers' two.
-  - Its licence is a teacher-forced prefill read.
+  - It changes prefill arithmetic: decode's single bf16 rounding replaces transformers' two. P130 read it ×1.118
+    [1.116, 1.119] per 512-token first-chunk prefill replay, and at parity on P117's teacher-forced instrument (bias
+    −0.0035 nats, inside the floor's bar 0.0125).
+  - **`serve_paged`'s default is per family:** unset means `1` on `qwen3_moe`, the family read, and `0` on every
+    other. `1` or `0` is explicit everywhere. `/health`'s `engine.prefill_glue` reports the resolved mode and its
+    source (`default-allowlisted`, `default-off`, `explicit`).
+  - The library's fold functions keep unset = `0`, so bench harnesses that call them directly do not move.
 - `E4B_PREFILL_LEAN_DISPATCH` (default `auto`) changes K19's prefill rows (`E4B_INT4_PREFILL=k19`, above 256 routed
   rows):
   - gate_up reads the token rows itself (`gather_div`), and down stores into the caller's row order
