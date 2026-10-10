@@ -81,6 +81,61 @@ def test_tiny_mode_cannot_be_combined(sealed, monkeypatch):
         quality.mode(root)
 
 
+@pytest.mark.parametrize("sharded", [False, True])
+@pytest.mark.parametrize("padding_idx", [None, 0])
+def test_loader_pad_zeroing_refuses_and_checkpoint_restore_matches_without_changing_L(sealed, sharded, padding_idx):
+    import torch
+    from safetensors.torch import save_file
+
+    from dq11_arm import restore_padding_embedding
+    from dq11_common import base_census, value_identity
+
+    class Tiny(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.embed_tokens = torch.nn.Embedding(8, 4, padding_idx=padding_idx, dtype=torch.bfloat16)
+            self.lm_head = torch.nn.Linear(4, 8, bias=False, dtype=torch.bfloat16)
+            self.requires_grad_(False)
+
+        def get_input_embeddings(self):
+            return self.embed_tokens
+
+    root, marker = sealed
+    models = {arm: Tiny() for arm in ("L", "U", "U0")}
+    original = torch.arange(1, 33, dtype=torch.bfloat16).reshape(8, 4)
+    with torch.no_grad():
+        models["L"].embed_tokens.weight.copy_(original)
+    for arm in ("U", "U0"):
+        models[arm].load_state_dict(models["L"].state_dict())
+        with torch.no_grad():
+            models[arm].embed_tokens.weight[0].zero_()
+    snapshot = root / "cpu-tiny-checkpoint"
+    snapshot.mkdir()
+    name = "model-00001-of-00001.safetensors" if sharded else "model.safetensors"
+    save_file({"model.embed_tokens.weight": original}, str(snapshot / name))
+    if sharded:
+        (snapshot / "model.safetensors.index.json").write_text(
+            json.dumps({"weight_map": {"model.embed_tokens.weight": name}})
+        )
+    rows = initial_rows_fixture(root, marker)
+    for arm in rows:
+        rows[arm]["base"] = base_census(models[arm])
+    write_initial_rows(root, rows)
+    with pytest.raises(ValueError, match="matched receipt identity"):
+        quality.report(root)
+    before_L = base_census(models["L"])
+    for arm in ("U", "U0"):
+        before_head = models[arm].lm_head.weight.detach().clone()
+        restored = restore_padding_embedding(models[arm], snapshot)
+        assert restored["row"] == 0
+        assert torch.equal(models[arm].lm_head.weight, before_head)
+        rows[arm]["base"] = base_census(models[arm])
+        assert value_identity(rows[arm]["base"]) == value_identity(before_L)
+    assert base_census(models["L"]) == before_L
+    write_initial_rows(root, rows)
+    assert quality.report(root)["status"] == "INITIAL_QUALITY_PASS"
+
+
 @pytest.mark.parametrize("mutation", ["none", "name", "sm", "cuda", "torch", "count", "free", "total"])
 def test_fake_hardware_requires_registered_identity_and_bounded_memory(sealed, monkeypatch, mutation):
     root, _ = sealed
@@ -403,7 +458,10 @@ def test_owned_pipeline_preserves_required_result_before_optional_work(sealed, m
 
 
 @pytest.mark.parametrize("gradient", [False, True])
-def test_worker_calls_original_preparation_initializer_and_scorer_without_updates(sealed, monkeypatch, gradient):
+@pytest.mark.parametrize("selected_arm", ["L", "U", "U0"])
+def test_worker_calls_original_preparation_initializer_and_scorer_without_updates(
+    sealed, monkeypatch, gradient, selected_arm
+):
     from contextlib import nullcontext
 
     import dq11_arm
@@ -412,13 +470,14 @@ def test_worker_calls_original_preparation_initializer_and_scorer_without_update
 
     root, marker = sealed
     rows = initial_rows_fixture(root, marker)
-    row = rows["L"]
+    row = rows[selected_arm]
     monkeypatch.setenv("DQ11_GPU_CLAIM_CONFIRMED", "1")
-    model, tokens = object(), object()
+    model = object()
+    tokens = {"alpaca-heldout": [[1, 0, 2], [0, 3, 4]], "wikitext-test": [[1, 2, 3]]}
     calls = []
 
     def prepare(directory, arm, *, quality_read):
-        assert directory == root and arm == "L" and quality_read is True
+        assert directory == root and arm == selected_arm and quality_read is True
         calls.append("prepare")
         return model, None, None, row["engaged"]
 
@@ -448,9 +507,13 @@ def test_worker_calls_original_preparation_initializer_and_scorer_without_update
     monkeypatch.setattr(dq11_proof_policy, "settings", lambda: row["execution_settings"])
     if gradient:
         with pytest.raises(ValueError, match="produced gradients"):
-            quality.worker(root, "L")
+            quality.worker(root, selected_arm)
     else:
-        result = quality.worker(root, "L")
+        result = quality.worker(root, selected_arm)
         assert result["optimizer_updates"] == 0 and result["science_eligible"] is False
         assert result["initial_quality"] == row["initial_quality"]
+        if selected_arm in ("U", "U0"):
+            assert result["engaged"]["token_0_scored_inputs"] == {"alpaca-heldout": 2, "wikitext-test": 0}
+        else:
+            assert "token_0_scored_inputs" not in result["engaged"]
     assert calls == ["prepare", "install_initial", "score"]

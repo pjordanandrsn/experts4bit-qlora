@@ -49,6 +49,25 @@ def runtime(directory):
     return versions
 
 
+def restore_padding_embedding(model, snapshot):
+    """Restore registered Mistral/Tiny unk row 0, regardless of pad metadata."""
+    embedding = model.get_input_embeddings()
+    from safetensors import safe_open
+    import torch
+
+    key = "model.embed_tokens.weight"
+    path = snapshot / "model.safetensors"
+    if not path.is_file():
+        index = json.loads((snapshot / "model.safetensors.index.json").read_text())
+        path = snapshot / index["weight_map"][key]
+    row = 0
+    with safe_open(str(path), framework="pt", device="cpu") as source:
+        original = source.get_slice(key)[row:row + 1]
+    with torch.no_grad():
+        embedding.weight[row:row + 1].copy_(original)
+    return {"row": row, "checkpoint_tensor": key, "source_row_sha256": tensor_sha(original, values=True)}
+
+
 def prepare(directory, arm, *, quality_read=False):
     if type(quality_read) is not bool:
         raise ValueError("explicit initial-quality mode must be boolean")
@@ -113,6 +132,7 @@ def prepare(directory, arm, *, quality_read=False):
         model, _ = FastLanguageModel.from_pretrained(model_name=str(snapshot), max_seq_length=2048,
                                                      dtype=torch.bfloat16, load_in_4bit=True,
                                                      quantization_config=config, local_files_only=True)
+        restored_pad_row = restore_padding_embedding(model, snapshot)
         model = FastLanguageModel.get_peft_model(model, r=16, lora_alpha=32, lora_dropout=0,
                                                 target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
                                                                 "gate_proj", "up_proj", "down_proj"],
@@ -135,6 +155,10 @@ def prepare(directory, arm, *, quality_read=False):
         model.config.use_cache = False
         trainable = list(adapter_slots(model)[0].values())
         report = {"placement": "device", "compile_disable": True, "return_logits": True}
+        report["pad_row_restored"] = restored_pad_row
+        report["default_deviation"] = (
+            "pad row restored (Unsloth's patch_tokenizer maps absent pad to unk 0 and zeroes embedding row 0)"
+        )
     checkpoints = [module for module in model.modules() if getattr(module, "gradient_checkpointing", False)]
     if not checkpoints or any(getattr(getattr(module, "_gradient_checkpointing_func", None), "keywords", {}).get("use_reentrant") is not False
                               for module in checkpoints):
@@ -180,6 +204,11 @@ def _run(args):
 
     with DriverMemorySampler() as load_sampler:
         model, trainable, workload, report = prepare(directory, args.arm)
+    if args.arm in ("U", "U0"):
+        report["token_0_scored_inputs"] = {
+            name: sum(block.count(0) for block in tokens[name])
+            for name in ("alpaca-heldout", "wikitext-test")
+        }
     import torch
     from loggetta.backends import dense_train
 
