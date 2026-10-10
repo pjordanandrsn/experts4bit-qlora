@@ -83,6 +83,24 @@ def sha(value):
     return hashlib.sha256(value).hexdigest()
 
 
+def fixture_attention(row, kind, settings, policy=None):
+    """Synthetic reducer metadata only; actual dispatch is exercised separately."""
+    import dq11_attention as attention
+
+    events = [{"operator": op, "parent": parent} for op, parent in (
+        ("aten::_scaled_dot_product_attention_math", "aten::scaled_dot_product_attention"),
+        ("SafeSoftmaxBackward0", None), ("aten::_softmax_backward_data", "SafeSoftmaxBackward0"),
+        ("BmmBackward0", None), ("aten::bmm", "BmmBackward0"))]
+    row["engaged"] = {"attention_deviation": attention.DEVIATION, "attention": {
+        "schema": "dq11-attention-canary/1", "arm": row["arm"], "kind": kind, "shape": attention.SHAPE,
+        "source": row["runtime"]["experts4bit-qlora"], "nonce": row["nonce"], "science_eligible": True,
+        "optional_packages_absent": {"xformers": True, "flash_attn": True}, "selector": "sdpa",
+        "finite_gradients": {"query": True, "key": True, "value": True}, "profiler_removed": True,
+        "named_deviation": attention.DEVIATION, "bindings": {"fixture": "synthetic CPU metadata"},
+        "settings": copy.deepcopy(settings), "policy": copy.deepcopy(policy), "native_events": events,
+        "dispatch": attention.dispatched(events, math_required=kind == "proof")}}
+
+
 def fixture_receipts():
     """Synthetic values with actual registration metadata; never written as run evidence."""
     slots = {
@@ -163,8 +181,12 @@ def fixture_receipts():
                                     flash_sdp=False, mem_efficient_sdp=False, cudnn_sdp=False),
             "warnings": [], "warned_ops": [], "restored": True,
         }
+        if arm in ("U", "U0"):
+            fixture_attention(row, "proof", row["observer_policy"]["settings_actual"], row["observer_policy"])
         shipped = copy.deepcopy(row)
         shipped.update(kind="spread", execution_settings=default_settings)
+        if arm in ("U", "U0"):
+            fixture_attention(shipped, "spread", default_settings)
         shipped.pop("observer_policy")
         shipped["spread"] = {"schema": "dq11-shipped-spread/1", "train_block": 0, "optimizer_updates": 0,
                              "gate": False, "tolerance": None, "settings": default_settings,
@@ -182,6 +204,8 @@ def fixture_receipts():
         row = copy.deepcopy(next(p for p in proofs if p["arm"] == arm))
         row.update(kind="read", repetition=rep, final_quality=copy.deepcopy(quality), final_adapters_sha256=slots)
         row["execution_settings"] = copy.deepcopy(row["shipped_spread"]["spread"]["settings"])
+        if arm in ("U", "U0"):
+            fixture_attention(row, "read", row["execution_settings"])
         seconds = {"L": 2.0, "U": 1.0, "U0": 1.1}[arm]
         row["training"] = {
             "status": "OK",
@@ -225,6 +249,35 @@ def test_registered_reducer_requires_teardown_before_recommendation():
     assert result["scope"] == reducer.SCOPE and result["default_unsloth_position"] is False
     assert result["capacity_licensed"] is result["shipping_licensed"] is False
     assert len(result["pairs"]) == 2
+
+
+@pytest.mark.parametrize("phase", ["proof", "read", "spread"])
+@pytest.mark.parametrize("failure", ["missing", "source", "nonce", "forward_only", "xformers", "kind", "settings"])
+def test_reducer_refuses_missing_or_forged_matched_attention(phase, failure):
+    proofs, reads, _ = fixture_receipts()
+    proof = next(row for row in proofs if row["arm"] == "U")
+    row = proof if phase == "proof" else (next(row for row in reads if row["arm"] == "U")
+                                         if phase == "read" else proof["shipped_spread"])
+    witness = row["engaged"]["attention"]
+    if failure == "missing":
+        del row["engaged"]["attention"]
+    elif failure in ("source", "nonce"):
+        witness[failure] = "forged"
+    elif failure == "forward_only":
+        witness["native_events"] = [event for event in witness["native_events"] if "Backward" not in event["operator"]]
+    elif failure == "xformers":
+        witness["native_events"].append({"operator": "xformers::backward", "parent": None})
+    elif failure == "kind":
+        witness["kind"] = "spread" if phase != "spread" else "proof"
+    else:
+        witness["settings"]["math_sdp"] = False
+    with pytest.raises((ValueError, KeyError)):
+        if phase == "proof":
+            reducer.validate_proofs(proofs)
+        elif phase == "read":
+            reducer.validate_read(row, proof)
+        else:
+            reducer.validate_spread(row, proof)
 
 
 @pytest.mark.parametrize("phase", ["initial", "trained"])
@@ -609,6 +662,7 @@ elif name=='timeout':os.execvp(args[1],args[1:])
 elif name=='apt-get':sys.exit(5)
 elif args and args[0]=='dq3_vram_probe.py':sys.exit(3 if fail=='vram' else 0)
 elif args and args[0]=='dq3_egress_probe.py':sys.exit(4 if fail=='egress' else 0)
+elif args and args[0]=='dq11_attention.py':sys.exit(1 if fail=='canary' else 0)
 elif args[:2]==['-m','venv']:Path(args[2]+'/bin').mkdir(parents=True)
 elif args and args[0]=='dq11_arm.py':
  kind=args[args.index('--kind')+1]; arm=args[args.index('--arm')+1]
@@ -660,7 +714,7 @@ elif args and args[0]=='dq11_reduce.py':
 
 @pytest.mark.parametrize(
     "failure,rc",
-    [("git", 20), ("vram", 18), ("egress", 14), ("proof", 11), ("initial", 12), ("deadline", 11), ("none", 0)],
+    [("git", 20), ("vram", 18), ("egress", 14), ("canary", 11), ("proof", 11), ("initial", 12), ("deadline", 11), ("none", 0)],
 )
 def test_actual_box_shell_phase_order_refusals_and_nonce_markers(tmp_path, monkeypatch, failure, rc):
     result, work, calls = box_fixture(tmp_path, monkeypatch, failure)
@@ -674,6 +728,9 @@ def test_actual_box_shell_phase_order_refusals_and_nonce_markers(tmp_path, monke
             assert "apt-get update" in calls
             assert "dq3_vram_probe" not in calls and "dq3_egress_probe" not in calls
             assert "dq11_bootstrap" not in calls and "dq11_prepare" not in calls
+        if failure == "canary":
+            assert "dq11_bootstrap" in calls and "dq11_attention" in calls
+            assert "dq11_prepare" not in calls and "dq11_arm" not in calls
     else:
         assert sum(line.startswith("python dq11_arm.py --kind read") for line in calls.splitlines()) == 6
         assert calls.index("--initial-only") < calls.index("--kind read")
@@ -693,7 +750,7 @@ def test_every_staged_deadline_cap_fits_two_hour_guard_after_install():
     assert reserve == 300
     caps = [int(n) for n in re.findall(r"^budget_cap (\d+)$", run, re.M)]
     caps += [int(n) for n in re.findall(r'^\s*phase (?:(?:"[^"\n]+")|(?:[\w-]+)) (\d+) ', run, re.M)]
-    assert sorted(caps) == [60, 120, 120, 240, 900, 900, 1800, 1800]
+    assert sorted(caps) == [60, 120, 120, 120, 240, 900, 900, 1800, 1800]
     # P109 pattern: each cap + fetch/teardown margin must fit even after
     # a conservative 900 s install/startup allowance, versus 210 s observed CPU.
     assert all(cap + reserve <= 2 * 3600 - 900 for cap in caps)
@@ -816,7 +873,7 @@ def test_committed_science_closure_and_selected_wheel_lock():
     assert len(names) == len(set(names)) and "science.sha256" not in names
     packages = json.loads((LANE / "wheels.json").read_text())["packages"]
     lock = (LANE / "requirements.lock").read_text()
-    assert len(packages) == 101
+    assert len(packages) == 100
     for package in packages:
         assert package["url"] in lock and "--hash=sha256:" + package["sha256"] in lock
 
@@ -828,7 +885,7 @@ def test_every_committed_wheel_url_has_an_allowlisted_origin():
         for line in (LANE / "requirements.lock").read_text().splitlines()
         if " @ " in line
     ]
-    assert len(lock_urls) == len(packages) == 101
+    assert len(lock_urls) == len(packages) == 100
     assert set(lock_urls) == {row["url"] for row in packages}
     assert all(urlparse(url).scheme == "https" for url in lock_urls)
     bootstrap.validate_wheel_origins([{"url": url} for url in lock_urls])
@@ -974,8 +1031,8 @@ def test_actual_launch_controller_checks_all_urls_before_guard(tmp_path, monkeyp
             assert marker.read_text().splitlines() == [str(repo), str(manifest), "fixture approval"]
     assert called == [row["url"] for row in packages]
     report = json.loads(output.read_text())
-    assert report["count"] == 101 and report["passed"] == (failure is None)
-    assert len(report["results"]) == 101
+    assert report["count"] == 100 and report["passed"] == (failure is None)
+    assert len(report["results"]) == 100
     if failure:
         refused = [row for row in report["results"] if "error" in row]
         assert len(refused) == 1 and refused[0]["url"] == failing and refused[0]["status"] == 403
@@ -1102,6 +1159,14 @@ def test_unset_rehearsal_executes_identical_science_commands_and_environment(tmp
             assert len(remove) == 3
             final_reduce = max(i for i, command in enumerate(commands) if command[:2] == ["python", "dq11_reduce.py"])
             assert min(remove) > final_reduce
+        canaries = [i for i, command in enumerate(commands) if command[:2] == ["python", "dq11_attention.py"]]
+        assert len(canaries) <= 1
+        for i in canaries:
+            assert commands[i - 3:i] == [["date", "+%s"], ["date", "-u", "+%FT%TZ"],
+                                        ["perl", "-e", "alarm shift; exec @ARGV", "120", "python", "dq11_attention.py"]]
+            assert commands[i - 4] == ["python", "dq11_bootstrap.py"]
+            assert commands[i + 4] == ["python", "dq11_prepare.py"]
+            remove.update(range(i - 3, i + 1))
         return [line for i, line in enumerate(lines) if i not in remove]
 
     filtered = []
@@ -1146,7 +1211,7 @@ def test_rehearsal_receipts_are_void_in_science_reducer():
 def test_rehearsal_lock_retains_every_available_python_version_and_declares_deviations():
     lock = json.loads((LANE / "rehearsal/wheels.json").read_text())
     science = json.loads((LANE / "wheels.json").read_text())
-    assert lock["science_eligible"] is False and len(lock["packages"]) == 101
+    assert lock["science_eligible"] is False and len(lock["packages"]) == 100
     before = {row["name"]: row for row in science["packages"]}
     deviations = {row["name"] for row in lock["deviations"]}
     retained = 0
@@ -1157,9 +1222,8 @@ def test_rehearsal_lock_retains_every_available_python_version_and_declares_devi
         else:
             assert row["name"] in deviations
         assert re.fullmatch("[0-9a-f]{64}", row["sha256"])
-    assert retained == 80
-    assert common.file_sha(LANE / "wheels.json") == sha(
-        subprocess.check_output(
+    assert retained == 79
+    original = json.loads(subprocess.check_output(
             [
                 "git",
                 "-C",
@@ -1167,8 +1231,8 @@ def test_rehearsal_lock_retains_every_available_python_version_and_declares_devi
                 "show",
                 "858e7f6956f56d6b489deb93a0526be61cf61c0a:bench/dq11/wheels.json",
             ]
-        )
-    )
+        ))
+    assert science["packages"] == [row for row in original["packages"] if row["name"] != "xformers"]
 
 
 def test_rehearsal_marker_binds_model_configuration_and_runtime_lock(tmp_path, monkeypatch):
@@ -1777,7 +1841,7 @@ def test_science_launch_cpu_policy_refusal_precedes_guard_and_retains_evidence(t
         launch_controller.launch(manifest, "fixture approval", output, repository=repo)
     assert not marker.exists()
     report = json.loads(output.read_text())
-    assert report["passed"] is False and report["count"] == 101 and report["cpu_policy"]["passed"] is False
+    assert report["passed"] is False and report["count"] == 100 and report["cpu_policy"]["passed"] is False
 
 
 @pytest.mark.parametrize("key", ["DQ11_REHEARSAL", "DQ11_REHEARSAL_TINY_MODEL", "CUBLAS_WORKSPACE_CONFIG"])
@@ -1917,6 +1981,8 @@ def test_rehearsal_reports_fifth_quality_failure_but_same_science_inputs_still_r
     (tmp_path / "receipts").mkdir()
     for row in proofs:
         row.update(schema="dq11-rehearsal-arm/1", science_eligible=False)
+        if row["arm"] in ("U", "U0"):
+            row["engaged"]["attention"]["science_eligible"] = False
         rehearsal.write_json(tmp_path / f"receipts/proof-{row['arm']}.json", row)
     checked = rehearsal.correctness(tmp_path)
     assert checked["initial_quality"] == report

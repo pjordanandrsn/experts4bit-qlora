@@ -39,6 +39,9 @@ def worker(directory, arm):
     if "CUBLAS_WORKSPACE_CONFIG" in os.environ:
         raise ValueError("inherited proof workspace refused by CPU policy probe")
     if arm in {"U", "U0"}:
+        from dq11_attention import require_install_set
+
+        require_install_set()
         os.environ.update(UNSLOTH_ALLOW_CPU="1", UNSLOTH_COMPILE_DISABLE="1", UNSLOTH_RETURN_LOGITS="1")
         from unsloth import FastLanguageModel  # noqa: F401 -- actual locked import, no model call
     import torch
@@ -70,8 +73,8 @@ def probe(directory, source, nonce):
         raise ValueError("exact science wheel policy probe requires Linux x86_64 Python 3.11")
     wheels = json.loads((directory / "wheels.json").read_text())["packages"]
     versions = {row["name"]: importlib.metadata.version(row["name"]) for row in wheels}
-    if len(wheels) != 101 or any(versions[row["name"]] != row["version"] for row in wheels):
-        raise ValueError("CPU policy runtime differs from the full 101-package science lock")
+    if len(wheels) != 100 or any(versions[row["name"]] != row["version"] for row in wheels):
+        raise ValueError("CPU policy runtime differs from the full 100-package science lock")
     authority = json.loads((directory / "source_authority.json").read_text())
     if authority["e4b_sha"] != source or authority["wheel_lock_sha256"] != file_sha(directory / "wheels.json"):
         raise ValueError("CPU policy source authority does not bind the requested science source")

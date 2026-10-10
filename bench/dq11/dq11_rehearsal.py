@@ -349,6 +349,7 @@ def orchestrate():
         # closure. This workspace's science.sha256 is explicitly NOT the science seal.
         payloads = [p for p in directory.iterdir() if p.is_file() and p.name not in {"science.sha256", "canonical-tokens.json"}]
         (directory / "science.sha256").write_text("".join(digest(p) + "  " + p.name + "\n" for p in sorted(payloads)))
+        phase("attention-canary", 120, "python", "dq11_attention.py")
         phase("prepare", 1800, "python", "dq11_prepare.py")
         for arm in ("L", "U", "U0"):
             phase("proof-" + arm, 900, "python", "dq11_arm.py", "--kind", "proof", "--arm", arm,

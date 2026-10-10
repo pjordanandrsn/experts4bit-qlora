@@ -5,11 +5,12 @@ bitwise loss/gradient removal proof, scoring and shipped forty-update loop.
 It produces `dq11-rehearsal-*` receipts. The scientific reducer refuses them;
 no rehearsal timing or quality value licenses a DQ11 result or replacement draw.
 
-The separate 101-wheel cu128 lock retains 80 scientific package versions.
+The separate 100-wheel cu128 lock retains 79 scientific package versions.
 `wheels.json` lists every changed or removed CUDA package/version. Torch 2.12.1,
 torchvision 0.27.1 and torchao 0.18.0 have no cu128 build in the official index;
 the coherent set is Torch 2.11.0+cu128, torchvision 0.26.0+cu128, torchao
-0.17.0+cu128 and Torch's required Triton 3.6.0. Scientific locks are unchanged.
+0.17.0+cu128 and Torch's required Triton 3.6.0. Both locks omit xformers to
+select Unsloth's SDPA fallback, as registered in Amendment 7.
 
 During the real Loggetta preparation only, a scoped adapter delegates to the
 real `experts4bit_qlora.engines.dense_offload.enable_dense_offload` with

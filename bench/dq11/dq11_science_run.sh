@@ -54,6 +54,7 @@ VENV="$W/venv-dq11"
 phase create-venv 120 python3.11 -m venv "$VENV"
 export PATH="$VENV/bin:$PATH"
 phase bootstrap 1800 python dq11_bootstrap.py
+phase attention-canary 120 python dq11_attention.py
 phase prepare 1800 python dq11_prepare.py
 nvidia-smi --query-gpu=name,memory.total,driver_version,pcie.link.gen.max,pcie.link.width.max,power.limit --format=csv,noheader > forensics.txt
 for arm in L U U0; do

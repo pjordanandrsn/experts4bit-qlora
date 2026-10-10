@@ -57,10 +57,10 @@ def preflight_urls(directory):
     validate_wheel_origins(packages)
     urls = [line.split(" @ ", 1)[1].split()[0]
             for line in (directory / "requirements.lock").read_text().splitlines() if " @ " in line]
-    if (len(urls) != 101 or len(packages) != 101 or len(set(urls)) != 101
+    if (len(urls) != 100 or len(packages) != 100 or len(set(urls)) != 100
             or set(urls) != {row["url"] for row in packages}
             or any(urlparse(url).scheme != "https" for url in urls)):
-        raise ValueError("pre-rental gate requires all 101 matching HTTPS locked wheel URLs")
+        raise ValueError("pre-rental gate requires all 100 matching HTTPS locked wheel URLs")
     results = []
     for row in packages:
         result = {"name": row["name"], "url": row["url"]}

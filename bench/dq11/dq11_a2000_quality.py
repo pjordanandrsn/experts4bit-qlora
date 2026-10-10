@@ -13,7 +13,7 @@ SCHEMA = "dq11-a2000-real-initial-quality/1"
 PINS = {
     "model_files.json": "c21aac15939dd1c6a8c8c367b2887c44668335927f81368afa996690470a0ff5",
     "locked_inputs.json": "9937024a50d3d44b28016d47b85e3e2feba159ce9d50f82403120e17581a4144",
-    "wheels.json": "8adb525bfe995969eec9dfa3afd5c7c9f68d4ed2cc1fb15781057a6b170152c1",
+    "wheels.json": "f4a30ad274c9ff42aa9c6e76c7cb0538ecfb8c2508caa66223f4eeace74ab3e9",
 }
 
 
@@ -196,6 +196,9 @@ def report(directory, *, include_U0=True):
         ):
             raise ValueError("initial-only matched receipt identity changed")
         validate_shipped_policy(row["execution_settings"])
+        from dq11_attention import validate_receipt
+
+        validate_receipt(dict(row, kind="read"))
         hardware = row["engaged"]["a2000_initial_quality"]
         if (
             hardware["schema"] != SCHEMA

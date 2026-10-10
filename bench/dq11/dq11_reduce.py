@@ -10,12 +10,15 @@ import statistics
 
 from dq11_common import HERE, file_sha, object_sha, value_identity
 
-SCOPE = "against Unsloth in this matched, eager, full-logits configuration, not Unsloth's default"
+SCOPE = "against Unsloth in this matched SDPA, eager, full-logits configuration, not Unsloth's default"
 ORDER = ((1, "L"), (1, "U"), (1, "U0"), (2, "U0"), (2, "U"), (2, "L"))
 TEXTS = ("alpaca-heldout", "wikitext-test")
 
 
 def registered_identity(row, *, rehearsal=False):
+    from dq11_attention import validate_receipt
+
+    validate_receipt(row)
     if rehearsal:
         from dq11_rehearsal import mode
 
@@ -235,6 +238,9 @@ def validate_proofs(proofs, *, rehearsal=False):
 
 
 def validate_read(row, proof, *, rehearsal=False):
+    from dq11_attention import validate_receipt
+
+    validate_receipt(row)
     schema = "dq11-rehearsal-arm/1" if rehearsal else "dq11-arm/1"
     if row.get("schema", "dq11-arm/1") != schema or row.get("science_eligible", True) is not (not rehearsal):
         raise ValueError("reading science/rehearsal mode changed")
