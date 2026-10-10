@@ -115,6 +115,21 @@ PER_STEP = {
     ("gemma4", "ON_epi"): {"router_epilogue": 30},
     ("gemma4", "ON_auto"): {"rmsnorm_rows": 271, "router_epilogue": 30},
 }
+#: Amendment 10: glue-kernel calls that depend on the rows a decode-shaped forward carries. The glue fold
+#: (engines/glue_fuse.py) folds a norm only at <= 64 rows, and Gemma-4's per-head q/k norms see sequences x heads rows. At
+#: T == 12 the sliding q (12 x 16) and k (12 x 8) norms and the full q norm (12 x 16) keep their own torch forward, and the
+#: full k norm (12 x 2) folds: 271 - (25 + 25 + 5) = 216 per step. At T == 1 every per-head count is at most 16: 271.
+PER_STEP_BY_SHAPE = {("gemma4", "ON_glue"): {12: {"rmsnorm_rows": 216}},
+                     ("gemma4", "ON_auto"): {12: {"rmsnorm_rows": 216, "router_epilogue": 30}}}
+
+
+def per_step(fam, config, shape):
+    """Glue-kernel calls per decode-shaped forward of ``config`` at ``shape`` (OFF calls none)."""
+    if config == "OFF":
+        return {}
+    return PER_STEP_BY_SHAPE.get((fam, config), {}).get(int(shape), PER_STEP.get((fam, config), {}))
+
+
 CENSUS_KEYS = fam_box.CENSUS_KEYS
 
 BIAS_MARGIN, SPREAD_MULT, SPREAD_MIN, AGREE_MARGIN = 0.010, 2.0, 0.005, 0.005
@@ -173,7 +188,7 @@ def _check_engagement(fam, config, rec, cell, arm, why):
     chunk = sub["floor_chunk"] if arm == "chunk" else sub["chunk"]
     halves = 2 if arm == "half" else 1
     per_pass_windows = shape
-    step = PER_STEP.get((fam, config), {}) if config != "OFF" else {}
+    step = per_step(fam, config, shape)
     total_decode = 0
     for i, e in enumerate(eng or []):
         want_calls = (C - 1) * ATTN_LAYERS[fam] * halves
@@ -421,7 +436,7 @@ def _synthetic(fam, config, *, floor_d=0.002, floor_agree=0.95, on_d=0.0, on_agr
     def eng(n_pass, arm, shape, cell):
         halves = 2 if arm == "half" else 1
         ch = floor_chunk if arm == "chunk" else chunk
-        step = PER_STEP.get((fam, config), {}) if config != "OFF" else {}
+        step = per_step(fam, config, shape)
         out = []
         for i in range(n_pass):
             dec = (C - 1) * halves + _warm(fam, config, cell, arm, i)
@@ -535,6 +550,17 @@ def self_test() -> int:
         c["extra"].pop("mut080")
     case("mixtral's x0.80 arm missing VOIDs", "mixtral", r, "VOID")
     case("gemma4 clean pass (Amendment 6)", "gemma4", _fam_recs("gemma4"), "PASS")
+
+    def gemma4_norms_at(shape, per_step_norms):
+        """gemma4's records with ON_auto's rmsnorm_rows set to ``per_step_norms`` a decode step in its ``shape`` cells."""
+        r = _fam_recs("gemma4")
+        for cell, c in r["ON_auto"]["cells"].items():
+            if cell.split("|")[1] == str(shape):
+                for e in next(iter(c["base"]["engagement"].values()))["ON"]:
+                    e["kernels"]["rmsnorm_rows"] = per_step_norms * (e["kernels"]["router_epilogue"] // 30)
+        return r
+    case("gemma4 at T == 12 with Amendment 6's 271 a step VOIDs (Amendment 10)", "gemma4", gemma4_norms_at(12, 271), "VOID")
+    case("gemma4 at T == 1 with T == 12's 216 a step VOIDs (Amendment 10)", "gemma4", gemma4_norms_at(1, 216), "VOID")
     got = reduce_family("gemma4", _fam_recs("gemma4", PROOF["configs"]["gemma4"], cont=PROOF["cont"]), "E",
                         proof=True)["verdict"]
     cases.append(("gemma4's own proof at 32 positions", got == {"ON_epi": "PASS", "ON_auto": "PASS"}, got))

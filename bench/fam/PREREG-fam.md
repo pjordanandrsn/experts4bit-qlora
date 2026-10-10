@@ -725,3 +725,54 @@ and four things already cover what it would check:
 - The A2000 smokes on #1482 cover the served eager build, on a real Granite arena and a tiny Mixtral.
 - `p127-prove-2` covers the 5090's decode-graph path with the residual fold.
 - A harness crash in the reading surfaces at the first forward, for about $0.9, not after 6 h (`fam-mixtral-3`).
+
+## Amendment 10 (2026-10-10, after `fam-gemma4-prove-1`, before any Gemma-4 reading): Gemma-4's per-step norms by shape
+
+**What happened.** `fam-gemma4-prove-1` (store `37e7f190`, $1.13) ran every process to rc 0 on e4b `68845bfc`.
+- The census was exact: OFF `0 / 0 / [0, 0] / 0`, ON_epi 30, ON_auto `0 / 271 / [0, 0] / 30`.
+- The reducer VOIDed the proof on engagement in the shape-12 cells. ON_auto called `rmsnorm_rows` 216 times per
+  decode step against Amendment 6's 271; `router_epilogue` matched at 30.
+
+**The cause: a re-route, not a skip.** The glue fold (`engines/glue_fuse.py`) folds a norm only on decode shapes, at
+most 64 rows; above that the norm runs its own torch forward. Gemma-4's per-head q and k norms see sequences × heads
+rows. At T == 12:
+
+| layer type | norm | rows | path |
+|---|---|---:|---|
+| sliding (25 layers) | q norm | 12 × 16 = 192 | torch |
+| sliding (25 layers) | k norm | 12 × 8 = 96 | torch |
+| full (5 layers) | q norm | 12 × 16 = 192 | torch |
+| full (5 layers) | k norm | 12 × 2 = 24 | folded |
+
+So 271 − (25 + 25 + 5) = 216 per step. At T == 1 no per-head norm exceeds 16 rows, and the count is 271.
+Amendment 6 measured its table on CPU with four heads, which never crossed the bound.
+
+**Evidence** (the seat's RTX A2000; a served tiny Gemma-4 at the real depth, layer pattern and head counts):
+- **Every norm runs.** All 331 norm modules are called once per forward in OFF, ON_glue and ON_auto, at 1 and at 12
+  sequences. `rmsnorm_rows` reads 271 and 216 respectively.
+- **The outputs stay where a re-route leaves them.** With routing pinned (so expert flips in random weights cannot
+  confound), ON_glue's logits differ from OFF's by a relative 0 to 0.07, with argmax agreement 0.96–1.00.
+- **A skipped norm would show.** Deliberately skipping the q and k norms gives a relative 1.15 and argmax agreement
+  0.09–0.25.
+
+**Changes** (Gemma-4 only; the rule, gates, census, predictions and every other family are unchanged):
+- The reducer's `per_step` reads `PER_STEP_BY_SHAPE`. Gemma-4's ON_glue and ON_auto call `rmsnorm_rows` 216 times
+  per step at T == 12, and 271 at T == 1 (Amendment 6's value). `router_epilogue` stays at 30.
+- The 64-row rule is the fold's own decode-shape bound, and it is not changed here. At five or more sequences,
+  Gemma-4's q norms never fold.
+
+**`fam-gemma4-prove-1`'s records** (proposed, for the maintainer's ruling):
+- They are re-reduced under this amendment once it merges, as Amendment 3 did for `fam-qw36-2`.
+- No gate statistic is computed from them before that.
+- If the re-reduction does not VOID, the proof stands as PROVED and the reading follows without a second proof
+  rental.
+
+**Budget and guard.** The lane has spent $15.20. The proof timed setup at about 680 s, OFF at 1535 s, and ON_epi and
+ON_auto at 254 and 240 s. Mixtral's measured proof-to-reading ratios (× 2.85 OFF, × 2.4 ON) put Gemma-4's reading at
+about 1.9 h. Amendment 6's 4.0 h guard stands. The reading is at most $3.95, which brings the lane to at most about
+$19.15 of $26.00.
+
+**Code.**
+- The reducer's self-test now runs 70 cases: Gemma-4 VOIDs with 271 a step at T == 12, and with 216 at T == 1.
+- `tests/test_fam_box.py` measures 216 at 12 rows and 271 at 1 row on CPU. It uses a tiny Gemma-4 with the real head
+  counts, the real fold and P115's kernel counters.
