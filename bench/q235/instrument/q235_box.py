@@ -214,51 +214,67 @@ def run(a):
         opt, opt_name = bnb.optim.AdamW8bit(list(params.values()), lr=a.lr, weight_decay=a.weight_decay), "bitsandbytes AdamW8bit"
     else:                                                       # the CPU rehearsal: mechanics only, not the registered optimizer
         opt, opt_name = torch.optim.AdamW(list(params.values()), lr=a.lr, weight_decay=a.weight_decay), "torch AdamW (CPU rehearsal)"
-    before = {n: p.detach().float().clone() for n, p in params.items()}
-    if cuda:
-        torch.cuda.reset_peak_memory_stats()
-    os.environ["E4B_OFFLOAD_STATS"] = "1"
     from experts4bit_qlora.engines import offload as off
-    off.reset_offload_stats()
-    d1 = diskstats()
-    t_step = time.time()
-    loss, grads, t_fwd, t_bwd = fwd_bwd()
-    sync()
-    t_o = time.time()
-    opt.step()
-    sync()
-    t_opt = time.time() - t_o
-    out["step"] = {
-        "loss": loss, "forward_s": round(t_fwd, 3), "backward_s": round(t_bwd, 3), "optimizer_s": round(t_opt, 3),
-        "elapsed_s": round(time.time() - t_step, 3),
-        "h2d_bytes_offload": int(sum(c[2] for c in off._stats().copies)), "h2d_copies_offload": len(off._stats().copies),
-        "nvme": disk_delta(d1, diskstats()),
-        "max_memory_allocated": torch.cuda.max_memory_allocated() if cuda else None,
-        "max_memory_reserved": torch.cuda.max_memory_reserved() if cuda else None,
-        "host_peak_rss": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * (1 if platform.system() == "Darwin" else 1024),
-        "lr": a.lr, "weight_decay": a.weight_decay, "optimizer": opt_name, "instrumented": "E4B_OFFLOAD_STATS=1 during the step",
-    }
-    os.environ["E4B_OFFLOAD_STATS"] = "0"
-    gstats = {n: {"finite": bool(torch.isfinite(g).all()), "nonzero": int((g != 0).sum()), "numel": g.numel()} for n, g in grads.items()}
-    gnorm = float(torch.sqrt(sum((g.double() ** 2).sum() for g in grads.values())))
-    delta = {n: float((p.detach().float() - before[n]).abs().max()) for n, p in params.items()}
-    # LoRA's B starts at zero, so at step 0 every A's gradient is exactly zero (it flows through B) and only weight decay can move
-    # an A (below bf16's resolution at lr 2e-4, wd 0.001). The checks are therefore by factor: every B nonzero and changed, every A
-    # finite and exactly zero -- a nonzero A gradient at step 0 would mean B was not zero-initialized.
-    is_a = {n: ".lora_A" in n or n.endswith("lora_A") or "_lora_A" in n for n in gstats}
-    zero = sorted(n for n, v in gstats.items() if v["nonzero"] == 0)
-    unchanged = sorted(n for n, v in delta.items() if v == 0)
-    b_names = [n for n in gstats if not is_a[n]]
-    a_names = [n for n in gstats if is_a[n]]
-    out["gradients"] = {"global_norm": gnorm, "all_finite": all(v["finite"] for v in gstats.values()), "tensors": len(gstats),
-                        "lora_B": len(b_names), "lora_A": len(a_names),
-                        "every_B_nonzero": all(gstats[n]["nonzero"] > 0 for n in b_names),
-                        "every_A_zero_at_step0": all(gstats[n]["nonzero"] == 0 for n in a_names),
-                        "zero_tensors": zero, "missing": sorted(set(params) - set(grads))}
-    out["optimizer_delta"] = {"every_B_changed": all(delta[n] > 0 for n in b_names), "A_changed": sum(delta[n] > 0 for n in a_names),
-                              "unchanged_tensors": unchanged, "min_max_abs_delta_B": min(delta[n] for n in b_names)}
+    is_a = {n: n.endswith("lora_A") for n in params}
+    a_names = [n for n in params if is_a[n]]
+    b_names = [n for n in params if not is_a[n]]
+
+    def one_step():
+        """One forward-backward and optimizer step at the registered shape, instrumented: its record, gradients and deltas."""
+        before = {n: p.detach().float().clone() for n, p in params.items()}
+        if cuda:
+            torch.cuda.reset_peak_memory_stats()
+        os.environ["E4B_OFFLOAD_STATS"] = "1"
+        off.reset_offload_stats()
+        d1 = diskstats()
+        t_step = time.time()
+        loss, grads, t_fwd, t_bwd = fwd_bwd()
+        sync()
+        t_o = time.time()
+        opt.step()
+        sync()
+        t_opt = time.time() - t_o
+        rec = {
+            "loss": loss, "forward_s": round(t_fwd, 3), "backward_s": round(t_bwd, 3), "optimizer_s": round(t_opt, 3),
+            "elapsed_s": round(time.time() - t_step, 3),
+            "h2d_bytes_offload": int(sum(c[2] for c in off._stats().copies)), "h2d_copies_offload": len(off._stats().copies),
+            "nvme": disk_delta(d1, diskstats()),
+            "max_memory_allocated": torch.cuda.max_memory_allocated() if cuda else None,
+            "max_memory_reserved": torch.cuda.max_memory_reserved() if cuda else None,
+            "host_peak_rss": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * (1 if platform.system() == "Darwin" else 1024),
+            "lr": a.lr, "weight_decay": a.weight_decay, "optimizer": opt_name, "instrumented": "E4B_OFFLOAD_STATS=1 during the step",
+        }
+        os.environ["E4B_OFFLOAD_STATS"] = "0"
+        nonzero = {n: int((g != 0).sum()) for n, g in grads.items()}
+        delta = {n: float((p.detach().float() - before[n]).abs().max()) for n, p in params.items()}
+        rec["gradients"] = {
+            "global_norm": float(torch.sqrt(sum((g.double() ** 2).sum() for g in grads.values()))),
+            "all_finite": all(bool(torch.isfinite(g).all()) for g in grads.values()), "tensors": len(grads),
+            "lora_A": len(a_names), "lora_B": len(b_names), "missing": sorted(set(params) - set(grads)),
+            "every_B_nonzero": all(nonzero.get(n, 0) > 0 for n in b_names),
+            "every_A_nonzero": all(nonzero.get(n, 0) > 0 for n in a_names),
+            "every_A_zero": all(nonzero.get(n, 0) == 0 for n in a_names),
+            "zero_tensors": sorted(n for n, v in nonzero.items() if v == 0)}
+        rec["optimizer_delta"] = {
+            "every_B_changed": all(delta[n] > 0 for n in b_names), "every_A_changed": all(delta[n] > 0 for n in a_names),
+            "A_changed": sum(delta[n] > 0 for n in a_names), "unchanged_tensors": sorted(n for n, v in delta.items() if v == 0)}
+        return rec
+
+    # Amendment 2. Step 0: B starts at zero, so every A's gradient is exactly zero (it flows through B) -- a nonzero one means B was
+    # not zero-initialized (VOID, a harness error); B's gradients are nonzero and every B changes. Step 1, after step 0 has moved B:
+    # every A's gradient is nonzero and every A changes (a broken A path cannot pass), and B's rules repeat. The frozen base's hashes
+    # hold across both steps.
+    s0 = one_step()
+    s1 = one_step()
+    out["step"], out["step1"] = s0, s1
+    out["rules"] = {
+        "step0_all_finite": s0["gradients"]["all_finite"], "step0_every_B_nonzero": s0["gradients"]["every_B_nonzero"],
+        "step0_every_A_zero": s0["gradients"]["every_A_zero"], "step0_every_B_changed": s0["optimizer_delta"]["every_B_changed"],
+        "step1_all_finite": s1["gradients"]["all_finite"], "step1_every_A_nonzero": s1["gradients"]["every_A_nonzero"],
+        "step1_every_B_nonzero": s1["gradients"]["every_B_nonzero"], "step1_every_A_changed": s1["optimizer_delta"]["every_A_changed"],
+        "step1_every_B_changed": s1["optimizer_delta"]["every_B_changed"]}
     after = frozen_hashes(model)
-    out["frozen_sha256_after_step_equal"] = after == out["frozen_sha256_after_load"]
+    out["frozen_sha256_after_both_steps_equal"] = after == out["frozen_sha256_after_load"]
     out["frozen_tensors"] = len(after)
     out["frozen_sha256_after_load"] = hashlib.sha256(json.dumps(out["frozen_sha256_after_load"], sort_keys=True).encode()).hexdigest()
     return out, layer_out
@@ -295,9 +311,10 @@ def main():
     loss = out["repeat"]["loss"] if a.repeat else out["in_process"]["loss_0"]
     json.dump({"loss": loss}, open(os.path.join(a.out, "nf4.json"), "w"))
     json.dump(out, open(os.path.join(a.out, "box.json"), "w"), indent=1, default=str)
-    brief = {k: out[k] for k in ("plant", "in_process", "gradients", "optimizer_delta", "frozen_sha256_after_step_equal") if k in out}
-    if "step" in out:
-        brief["step"] = {k: out["step"][k] for k in ("loss", "elapsed_s", "h2d_bytes_offload", "max_memory_allocated", "host_peak_rss")}
+    brief = {k: out[k] for k in ("plant", "in_process", "rules", "frozen_sha256_after_both_steps_equal") if k in out}
+    for k in ("step", "step1"):
+        if k in out:
+            brief[k] = {f: out[k][f] for f in ("loss", "elapsed_s", "h2d_bytes_offload", "max_memory_allocated", "host_peak_rss")}
     if "repeat" in out:
         brief["repeat"] = out["repeat"]
     print(json.dumps(brief, default=str))

@@ -2,8 +2,9 @@
 """Q235's box script (``bench/q235/instrument/q235_box.py``) on the CPU: the mechanics of the registered step on a small 4-layer
 Qwen3-MoE, on the reference path (the fused kernels need CUDA; the RTX A2000 rehearsal runs those).
 
-- The step: every adapter gradient finite; every LoRA-B gradient nonzero and every B changed by the optimizer; every LoRA-A gradient
-  exactly zero at step 0 (B starts at zero); the frozen base's hashes equal after the step; the in-process repeat recorded.
+- The steps (Amendment 2): at step 0 every LoRA-A gradient is exactly zero (B starts at zero) and every B gradient nonzero and every B
+  changed; at step 1 every A gradient is nonzero and every A changed, and B's rules repeat; the frozen base's hashes equal after both
+  steps; the in-process repeat recorded.
 - The fresh-process repeat (``--repeat``) reproduces step 0's loss.
 - Each planted error (Amendment 1: routing, epilogue) changes the planted layer's output and leaves the layers before it untouched,
   so an inert plant cannot pass for a band result.
@@ -62,11 +63,11 @@ def step(tiny):
 
 def test_the_step_records_every_registered_check(step):
     rec, out = step
-    g, d = rec["gradients"], rec["optimizer_delta"]
-    assert g["all_finite"] and not g["missing"] and g["lora_A"] == g["lora_B"] > 0
-    assert g["every_B_nonzero"] and g["every_A_zero_at_step0"]     # B starts at zero, so A's step-0 gradient is exactly zero
-    assert d["every_B_changed"]
-    assert rec["frozen_sha256_after_step_equal"] and rec["frozen_tensors"] > 0
+    assert all(rec["rules"].values()), rec["rules"]                 # Amendment 2: by factor, step 0 then step 1
+    g0 = rec["step"]["gradients"]
+    assert not g0["missing"] and g0["lora_A"] == g0["lora_B"] > 0 and g0["every_A_zero"]   # B starts at zero
+    assert rec["step1"]["gradients"]["every_A_nonzero"] and rec["step1"]["optimizer_delta"]["every_A_changed"]
+    assert rec["frozen_sha256_after_both_steps_equal"] and rec["frozen_tensors"] > 0
     assert rec["in_process"]["loss_equal"]                          # the CPU reference path is deterministic
     assert rec["step"]["optimizer"].startswith("torch AdamW") and rec["step"]["lr"] == 2e-4
     assert len(rec["layer_sha256"]) == 4 and (out / "nf4.pt").exists()
