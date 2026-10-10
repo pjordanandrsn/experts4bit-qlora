@@ -575,8 +575,9 @@ and read **PROVED** under rule `a2`. The maintainer re-derived it with main's re
 The proof's three runs cost $1.387 in all ($0.046 + $0.66 + $0.681).
 
 **The target** (merged main, not the proven `539a2d26`):
-- e4b at `__READ_TARGET__`: main after the five build PRs merged in order at their proven heads (#1553, #1554, #1556,
-  #1558, #1559);
+- e4b at `88ae1cfd8fbe3477189f5a42d8448f395e974345`: main at #1559's merge, after the five build PRs merged in order at their proven heads (#1553,
+  #1554, #1556, #1558, #1559). The 17 files the builds touch are byte-identical there to the proven `539a2d26`; #1558
+  and #1559 were retargeted by merging main into them, never rebased;
 - grouped-nf4-gemm v0.45.0 `724ccc45`, the model at `ad44e77`, and the head as pinned, all unchanged;
 - the server: the shipped default as in Amendment 1, with `E4B_PAGED_MAX_SEQS=16` and `E4B_INT4_TILE_PROGRAMS=1`, and
   speculation per stage.

@@ -27,7 +27,7 @@ case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char sha"; finish 78; }
 # ---- the target (Amendment 1): the integration commit and its build heads, the kernel package, the model, the head
 E4B_T_PROVE=539a2d2694096a81c6b272b335e26d818647cd95   # the proof's: sd2/serve-wiring, main aa47af8b + builds 1-5 (#1553 #1554 #1556 #1558 #1559)
-E4B_T_READ=__READ_TARGET__                            # the read's (Amendment 3): main after the five builds merged
+E4B_T_READ=88ae1cfd8fbe3477189f5a42d8448f395e974345   # the read's (Amendment 3): main at #1559's merge, after the five builds
 GNF4_T=724ccc454f006c1a46836e434e997f31f293747f    # grouped-nf4-gemm v0.45.0, the CI pin
 E4B_H=$E4B_SHA                                     # the harness: the launch commit, which stages this kit
 MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
