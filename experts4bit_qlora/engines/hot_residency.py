@@ -190,6 +190,44 @@ def _prefill_lean_dispatch_env() -> str:
 _K19_DISPATCH_SUPPORT: dict = {}
 
 
+#: ``E4B_K19_PREFILL_BIG_M`` (opt-in, e4b#846; default 0): K19's PREFILL calls (``E4B_INT4_PREFILL=k19``) above
+#: :data:`K19_SPLIT_ROWS_MIN` routed rows over a SPLIT tile table (grouped-nf4-gemm#542's
+#: ``nf4_grouped.build_group_tiles_split``): each expert's full ``big_m``-row tiles in one launch at ``block_m=big_m``,
+#: its remainder in 16-row tiles in a second launch into the same result. A prefill chunk's rows are bimodal on
+#: Qwen3-30B-A3B (one expert takes a median 398 of a 512-token chunk's 4,096 routed rows), so on the 16-row table that
+#: expert runs as ~25 tiles, each re-reading its weight slice; the split keeps the 16-row table's padding. ``32`` or ``64``
+#: is the tall tile; ``0`` keeps the 16-row table. Not licensed by any read yet: its speed and its FUNCTION gate are a
+#: registration's to read. :data:`K19_DISPATCH_SEEN` names the split calls' table ``split``.
+K19_PREFILL_BIG_M_ENV = "E4B_K19_PREFILL_BIG_M"
+#: The split applies only ABOVE this many routed rows. A 64-row decode step routes 64 x top-8 = 512 rows on Qwen3 and
+#: takes the prefill route's chained table, so every decode bucket up to 64 keeps its 16-row table; a 512-token first
+#: chunk routes 4,096. (A model with top-k above 8 routes more than 512 rows on a 64-row step: the knob is scoped to
+#: top-8 models, as read.)
+K19_SPLIT_ROWS_MIN = 512
+
+
+def _k19_prefill_big_m_env() -> int:
+    """``E4B_K19_PREFILL_BIG_M``: ``0`` (also unset or empty), ``32`` or ``64``. Anything else is refused rather than
+    read as one of these. Read on every call, like the other route knobs."""
+    raw = os.environ.get(K19_PREFILL_BIG_M_ENV, "")
+    v = (raw or "").strip() or "0"
+    if v not in ("0", "32", "64"):
+        raise ValueError(f"{K19_PREFILL_BIG_M_ENV}={raw!r}: expected 0, 32 or 64")
+    return int(v)
+
+
+def _k19_split_impl():
+    """``(build_group_tiles_split, gemm_int4_b32_grouped_split)`` from the installed kernel package. The knob is an
+    explicit opt-in, so a package without them is refused rather than silently kept on the 16-row table."""
+    try:
+        from int4_smallm import gemm_int4_b32_grouped_split
+        from nf4_grouped import build_group_tiles_split
+    except ImportError as e:
+        raise RuntimeError(f"{K19_PREFILL_BIG_M_ENV} needs grouped-nf4-gemm with nf4_grouped.build_group_tiles_split "
+                           "and int4_smallm.gemm_int4_b32_grouped_split (grouped-nf4-gemm#542)") from e
+    return build_group_tiles_split, gemm_int4_b32_grouped_split
+
+
 def _k19_takes_lean_dispatch(k19) -> bool:
     """Whether the installed K19 takes ``scatter=`` and ``gather_div=`` (K23's options). Read once per function."""
     if k19 not in _K19_DISPATCH_SUPPORT:
@@ -707,6 +745,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         else:
             _fused_tiles = None           # auto: the kernel package predates K23 -> the separate launches, as before
     _pf_lean = False
+    _pf_split = None                      # E4B_K19_PREFILL_BIG_M: (builder, split launch, big_m) on prefill rows
     if (_k19 is None and device_grouping and int4_stores is not None and not _mxfp4_store and R_rows > 256
             and _int4_prefill_mode_env() == "k19"):
         # E4B_INT4_PREFILL=k19 (e4b#916): K19 serves the device-grouped PREFILL rows too, over the chained 16-row tile
@@ -728,6 +767,9 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             elif _pf_mode == "1":
                 raise RuntimeError(
                     "E4B_PREFILL_LEAN_DISPATCH=1 needs grouped-nf4-gemm whose K19 takes scatter=/gather_div= (K23)")
+        _big_m = _k19_prefill_big_m_env()
+        if _big_m and R_rows > K19_SPLIT_ROWS_MIN:
+            _pf_split = (*_k19_split_impl(), _big_m)
     _tok = None
     _gd = None
     if x_rows is None:
@@ -791,7 +833,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                 from int4_b32 import build_group_tiles_fused as _fused_tiles
             except ImportError:
                 _fused_tiles = None
-        elif not _lean and _wide_mode != "0" and local_ids.numel() <= _WIDE_TILES_MAX:
+        elif not _lean and _pf_split is None and _wide_mode != "0" and local_ids.numel() <= _WIDE_TILES_MAX:
             # E4B_INT4_WIDE_TILES: the one-launch table above 256 rows, through the cumsum rank (same integers).
             # ``1`` forces it; ``auto`` takes it with #519's chunked build and inside the size lane P122 read.
             try:
@@ -818,6 +860,11 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             # K23: one launch for the table AND the sorted ids
             t_row0, t_rows, t_grp, order, _counts, sorted_ids = _fused_tiles(
                 local_ids, _n_exp, 16, lean=True, sorted_ids=True)
+        elif _pf_split is not None:
+            # E4B_K19_PREFILL_BIG_M: the two tables of one grouping over ONE order (full big_m-row tiles, then the
+            # 16-row remainders); t_* name the remainder table, which no other route reads on this path
+            _big_t, _small_t, order, _counts = _pf_split[0](local_ids, _n_exp, _pf_split[2])
+            t_row0, t_rows, t_grp = _small_t
         elif _fused_tiles is not None:
             t_row0, t_rows, t_grp, order, _counts = _fused_tiles(
                 local_ids, _n_exp, 16)
@@ -988,7 +1035,8 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                                      e32d, st["N"], st["K"])
         elif device_grouping and _k19 is not None:
             _route = "int4_k19"
-            _seen_k19_dispatch("one_launch" if (_lean or _fused_tiles is not None) else "chained",
+            _seen_k19_dispatch("split" if _pf_split is not None else
+                               "one_launch" if (_lean or _fused_tiles is not None) else "chained",
                                "lean" if (_lean or _pf_lean) else "gather", R_rows)
             # K19 (opt-in): the grouped small-M tensor-core GEMM against the SAME 16-row device tiles. The first
             # call gets the UNSORTED x_rows and gathers through `order` in the kernel; the epilogue output is
@@ -998,6 +1046,15 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             def _mm(xr, pk, am):
                 slot = "gu" if pk is gu_p else "dn"
                 st = int4_stores[slot]
+                if _pf_split is not None:
+                    # E4B_K19_PREFILL_BIG_M: the tall tiles, then the 16-row remainders, into one result; the gather,
+                    # scatter and gather_div exactly as on the 16-row table
+                    kw = {"scatter": order} if (_pf_lean and slot == "dn") else {}
+                    if slot == "gu" and _tok is not None:
+                        return _pf_split[1](_tok[0].to(torch.bfloat16), st["packed"], st["scales"], _big_t, _small_t,
+                                            _pf_split[2], order, gather_div=_tok[1])
+                    return _pf_split[1](xr.to(torch.bfloat16), st["packed"], st["scales"], _big_t, _small_t,
+                                        _pf_split[2], order if xr is x_rows else None, **kw)
                 if slot == "gu" and _tok is not None:
                     # K23: sorted row i reads token row order[i] // top_k, no [T * top_k, H] expansion
                     return _k19(_tok[0].to(torch.bfloat16), st["packed"], st["scales"], t_row0, t_rows, t_grp,
