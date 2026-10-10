@@ -1,0 +1,60 @@
+{
+  "model": "mistralai/Mistral-7B-v0.1",
+  "revision": "27d67f1b5f57dc0953326b2601d68371d40ea8da",
+  "files": [
+    {
+      "name": "config.json",
+      "size": 571,
+      "sha256": "cf25cdf4719f181d1d1d371973285d9afe9afde0d0c6a6fd48de857555ce1e0d",
+      "evidence": "CPU downloaded metadata/tokenizer bytes"
+    },
+    {
+      "name": "generation_config.json",
+      "size": 116,
+      "sha256": "afcf2a1da583dbeb66bb367a759713901e23ce19ed83ed8f5a21b0e877addd5b",
+      "evidence": "CPU downloaded metadata/tokenizer bytes"
+    },
+    {
+      "name": "model-00001-of-00002.safetensors",
+      "size": 9942981696,
+      "sha256": "9742cb4764964155b7a5f35eefad651f590006091ddeb536863d6c5865cca1b9",
+      "evidence": "hub-reported LFS SHA256; verify downloaded bytes before load"
+    },
+    {
+      "name": "model-00002-of-00002.safetensors",
+      "size": 4540516344,
+      "sha256": "9bcf56354ec0c68b5f8e97b4f3b02d16af899a65b0868d6dba5a51c1b30f01cb",
+      "evidence": "hub-reported LFS SHA256; verify downloaded bytes before load"
+    },
+    {
+      "name": "model.safetensors.index.json",
+      "size": 25125,
+      "sha256": "c94ab46aaf5fcca44720c10bcc498c1b0d9759d47534a396e3512edc451ebd06",
+      "evidence": "CPU downloaded metadata/tokenizer bytes"
+    },
+    {
+      "name": "special_tokens_map.json",
+      "size": 414,
+      "sha256": "6fa06efa2785e450051989a6f8fb4416b10149ded485ddd3f127a40734f5cfd0",
+      "evidence": "CPU downloaded metadata/tokenizer bytes"
+    },
+    {
+      "name": "tokenizer.json",
+      "size": 1795188,
+      "sha256": "11c08db21487c885d8c792180f0be237f6a261b89a46f128a6a80a3aa4bd1720",
+      "evidence": "CPU downloaded metadata/tokenizer bytes"
+    },
+    {
+      "name": "tokenizer.model",
+      "size": 493443,
+      "sha256": "dadfd56d766715c61d2ef780a525ab43b8e6da4de6865bda3d95fdef5e134055",
+      "evidence": "CPU downloaded tokenizer bytes"
+    },
+    {
+      "name": "tokenizer_config.json",
+      "size": 996,
+      "sha256": "ddb008229511e51607002ffe28925001c4a9ca4177dc4de3a655d085cc610b99",
+      "evidence": "CPU downloaded metadata/tokenizer bytes"
+    }
+  ]
+}

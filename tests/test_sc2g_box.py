@@ -108,18 +108,15 @@ def test_every_box_script_sources_under_set_u_with_only_what_sc1_run_defines_fir
     assert out.returncode == 0 and "SOURCED" in out.stdout, out.stderr
 
 
-def test_the_heartbeat_live_count_does_not_count_itself():
-    """A1: the controller counts the lane's process inside an ssh shell whose own command line holds the pattern. Run the
-    exact expression that way with no lane running: it must read 0 (the plain 'bash sc1_run.sh' read 1, forever)."""
+def test_the_heartbeat_liveness_cannot_count_itself():
+    """A1: a process-name count run inside the probing ssh shell matched its own command line, so LANE DEAD never fired.
+    sc1_drive.sh now probes the launch PID's identity (bench/common/lane_liveness.sh, #1512), which no probe can match;
+    tests/test_lane_liveness.py runs sc1_drive.sh's own poll loop and launch handshake with the other rental drivers."""
     drive = (REPO / "bench" / "sc1" / "sc1_drive.sh").read_text()
-    expr = "pgrep -f '[b]ash sc1_run.sh' | wc -l"
-    assert expr in drive and "pgrep -f 'bash sc1_run.sh'" not in drive
-    out = subprocess.run(["bash", "-c", f"echo live $({expr} | tr -d ' ')"], capture_output=True, text=True, timeout=30)
-    assert out.stdout.strip() == "live 0", out.stdout
-    if sys.platform.startswith("linux"):   # BSD pgrep (macOS) leaves out its own ancestors; procps (the box, CI) does not
-        plain = subprocess.run(["bash", "-c", "echo live $(pgrep -f 'bash sc1_run.sh' | wc -l | tr -d ' ')"], capture_output=True,
-                               text=True, timeout=30)
-        assert plain.stdout.strip() != "live 0", plain.stdout              # the old form counts its own shell
+    assert "pgrep" not in drive
+    assert "lane_snapshot_verdict" in drive and 'bash -s -- --probe $LANE_PID' in drive
+    liveness = (REPO / "tests" / "test_lane_liveness.py").read_text()
+    assert '("sc1", "sc1")' in liveness
 
 
 def _run_head_then(tmp_path, tail):

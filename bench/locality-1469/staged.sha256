@@ -1,5 +1,5 @@
 # Names as the BOX sees them after staging (/root/loc). The box runs `sha256sum -c` on this file and the controller
 # resolves each name to its source (locality_drive.sh's case) and compares.
-06cd1467505612f49bab4cb612a4ac76be4f12b1e9a04d2a50f436879d850231  locality_run.sh
-fdc43628684a0510636628979a539f9e65b4714854d6b54d551b26c28e21ed02  locality_capture.py
+123eda4c7c1cb466deaa686a0de7de2849ed43e5567698b71092cdaea3ea98d9  locality_run.sh
+2fc8ae8a6e6a61fbd3936ba79edf7f605a67bce053bd9cb02b29e3037dedae3d  locality_capture.py
 e6da774c2f69b80cd39f58e562d42770a43fa4d6244790e4b433977b30911a02  locality_summary.py

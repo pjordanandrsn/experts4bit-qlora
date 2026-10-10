@@ -1,0 +1,11 @@
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LANGUAGE = (unset),
+	LC_ALL = (unset),
+	LANG = "en_US.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files:  17%|█▋        | 4/23 [02:28<11:46, 37.20s/it]Fetching 23 files:  22%|██▏       | 5/23 [02:31<08:27, 28.21s/it]Fetching 23 files:  26%|██▌       | 6/23 [02:36<06:10, 21.78s/it]Fetching 23 files:  30%|███       | 7/23 [02:48<05:02, 18.91s/it]Fetching 23 files:  35%|███▍      | 8/23 [04:46<11:51, 47.46s/it]Fetching 23 files:  39%|███▉      | 9/23 [05:13<09:38, 41.34s/it]Fetching 23 files:  43%|████▎     | 10/23 [05:15<06:30, 30.06s/it]Fetching 23 files:  48%|████▊     | 11/23 [05:25<04:48, 24.03s/it]Fetching 23 files:  52%|█████▏    | 12/23 [07:02<08:22, 45.71s/it]Fetching 23 files:  57%|█████▋    | 13/23 [07:46<07:32, 45.24s/it]Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 23 files:  61%|██████    | 14/23 [07:57<05:13, 34.79s/it]Fetching 23 files:  65%|██████▌   | 15/23 [08:23<04:19, 32.45s/it]Fetching 23 files:  70%|██████▉   | 16/23 [09:07<04:10, 35.79s/it]Fetching 23 files:  91%|█████████▏| 21/23 [09:12<00:24, 12.11s/it]Fetching 23 files:  96%|█████████▌| 22/23 [09:44<00:15, 15.36s/it]Fetching 23 files: 100%|██████████| 23/23 [10:06<00:00, 16.54s/it]Fetching 23 files: 100%|██████████| 23/23 [10:06<00:00, 26.37s/it]
+staged in 10.1 min at /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+STAGED ad44e777bcd18fa416d9da3bd8f70d33ebb85d39

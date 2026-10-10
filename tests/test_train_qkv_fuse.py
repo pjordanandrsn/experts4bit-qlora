@@ -1,15 +1,30 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
-"""P129: E4B_TRAIN_FUSE_QKV=1, one fused q/k/v projection for training attention.
+"""P129: one fused q/k/v projection for training attention, on by default (``E4B_TRAIN_FUSE_QKV=0`` keeps the three projections).
 
-- Off by default: with the knob unset ``enable_fast_train``'s hook does nothing.
+- On by default: unset, ``enable_fast_train``'s hook fuses; ``0`` / ``false`` / ``off`` / ``no`` keep today's path, and an
+  unpatched model is never touched.
 - Refusals keep today's path, with the reason recorded.
-- A released projection called on its own raises a clear ``RuntimeError`` naming the fusion.
+- ``disable_fast_train`` on a model with nothing fused changes nothing.
 - On CUDA with bitsandbytes NF4 bases (the last two with fp32 and with bf16 adapters, the dtypes training runs):
   - the fused dequantize is bit for bit the three dequantized weights stacked;
   - the fused projection is within TC1's rounding bar of the three ``LoRALinear`` modules on outputs, the input gradient and every
     adapter gradient (``2**-6`` of the largest entry for bf16, ``2**-16`` for fp32);
   - the patched attention forward is within the reorder bar of the unfused one;
-  - the adapters stay the parameters.
+  - the adapters stay the parameters;
+  - at the default (knob unset) the hook fuses, and the fused attention's forward and backward are within the same bars of the
+    unfused one; with the knob at ``0`` the module is untouched;
+  - the q/k/v bases stay registered, re-pointed at the fused copy (views, a non-nested fp32 absmax), and a direct call to one is
+    bit for bit what it was before the fusion;
+  - ``state_dict``: a fused model's carries every key an unfused model's does except each q/k/v base's two nested-statistics keys.
+    torch's ``load_state_dict`` reads only ``weight`` from a bitsandbytes 4-bit module and reports its quant-state keys as
+    unexpected, an unfused model's own dict included, so ``strict=True`` refuses every 4-bit dict and resumes load with
+    ``strict=False`` (as the Hugging Face Trainer does). Loaded that way into a freshly loaded unfused model, a fused model's dict
+    misses nothing and leaves unexpected exactly the quant-state keys an unfused dict leaves, less those two; the model's forward is
+    then bit for bit the fused-then-disabled one. Loaded into a fused model (a resume), it round-trips and writes through the views
+    into the fused bytes;
+  - a move of the fused module's bytes re-points the bases at the moved copy;
+  - ``disable_fast_train`` is a round trip: the projections and the attention compute bit for bit what they did before the
+    fusion; a second enable fuses again, bit for bit as the first, and an enable of a fused module changes nothing.
 """
 from __future__ import annotations
 
@@ -54,7 +69,8 @@ def _lora_wrap(attn, r=4, dtype=torch.float32, seed=5):
 
 # --- CPU: the knob, the hook, the refusals ---
 
-@pytest.mark.parametrize("val,on", [(None, False), ("", False), ("0", False), ("true", False), ("on", False), ("1", True)])
+@pytest.mark.parametrize("val,on", [(None, True), ("", True), ("1", True), ("true", True), ("on", True), ("0", False), ("false", False),
+                                    ("FALSE", False), ("off", False), ("no", False), (" 0 ", False)])
 def test_knob(monkeypatch, val, on):
     if val is None:
         monkeypatch.delenv("E4B_TRAIN_FUSE_QKV", raising=False)
@@ -63,15 +79,15 @@ def test_knob(monkeypatch, val, on):
     assert tq.train_fuse_qkv_requested() is on
 
 
-def test_hook_does_nothing_unset_or_unpatched(monkeypatch):
+def test_hook_fuses_by_default_and_not_when_off_or_unpatched(monkeypatch):
     called = []
     monkeypatch.setattr(tq, "enable_train_fuse_qkv", lambda m, verbose=False: called.append(m) or 7)
-    monkeypatch.delenv("E4B_TRAIN_FUSE_QKV", raising=False)
+    monkeypatch.setenv("E4B_TRAIN_FUSE_QKV", "0")
     assert fast._maybe_fuse_train_qkv(object(), patched=3) == 0
-    monkeypatch.setenv("E4B_TRAIN_FUSE_QKV", "1")
+    monkeypatch.delenv("E4B_TRAIN_FUSE_QKV", raising=False)
     assert fast._maybe_fuse_train_qkv(object(), patched=0) == 0
     assert called == []
-    assert fast._maybe_fuse_train_qkv("m", patched=3) == 7 and called == ["m"]
+    assert fast._maybe_fuse_train_qkv("m", patched=3) == 7 and called == ["m"]       # unset: the default fuses
 
 
 def test_refusals_keep_todays_path():
@@ -96,15 +112,6 @@ def test_other_attention_classes_untouched():
             self.q_proj, self.k_proj, self.v_proj = nn.Linear(8, 8), nn.Linear(8, 8), nn.Linear(8, 8)
     m = _Holder(Other())
     assert tq.enable_train_fuse_qkv(m) == 0 and not hasattr(m.attn, "qkv_proj")
-
-
-def test_a_released_projection_raises_a_clear_error():
-    m = LoRALinear(nn.Linear(16, 8, bias=False), 4, 4, torch.float32)
-    tq._release_base(m, "model.layers.0.self_attn.q_proj")
-    assert m.base is None and m._e4b_fused_into_qkv
-    assert [n for n, _ in m.named_parameters()] == ["lora_A", "lora_B"]
-    with pytest.raises(RuntimeError, match=r"model\.layers\.0\.self_attn\.q_proj was fused .* E4B_TRAIN_FUSE_QKV=1"):
-        m(torch.randn(2, 16))
 
 
 # --- CUDA: NF4 bases ---
@@ -178,9 +185,10 @@ def test_patched_attention_within_reorder_bar_and_adapters_stay_params(adapter_d
     names = {n: id(p) for n, p in holder.named_parameters() if "lora" in n}
     assert tq.enable_train_fuse_qkv(holder) == 1 and tq.TRAIN_QKV_STATS["refused"] == {}
     assert {n: id(p) for n, p in holder.named_parameters() if "lora" in n} == names
-    assert all(getattr(attn, n).base is None for n in ("q_proj", "k_proj", "v_proj"))
-    with pytest.raises(RuntimeError, match="E4B_TRAIN_FUSE_QKV"):
-        attn.k_proj(torch.randn(1, 3, cfg.hidden_size, device="cuda").to(torch.bfloat16))
+    _assert_views(attn)
+    xk = torch.randn(1, 3, cfg.hidden_size, device="cuda").to(torch.bfloat16)
+    with torch.no_grad():                                          # a direct call still works, bit for bit as before
+        assert all(torch.equal(getattr(attn, n)(xk), getattr(ref_attn, n)(xk)) for n in ("q_proj", "k_proj", "v_proj"))
     torch.manual_seed(9)
     x = torch.randn(1, 7, cfg.hidden_size, device="cuda").to(torch.bfloat16)
     rot = qmod.Qwen3MoeRotaryEmbedding(cfg).cuda()
@@ -191,3 +199,204 @@ def test_patched_attention_within_reorder_bar_and_adapters_stay_params(adapter_d
     assert d <= want.float().abs().max().item() * 2.0 ** -6, d
     got.float().sum().backward()
     assert all(getattr(getattr(attn, n), w).grad is not None for n in ("q_proj", "k_proj", "v_proj") for w in ("lora_A", "lora_B"))
+
+
+@needs_nf4
+@ADAPTER_DTYPES
+def test_the_default_fuses_through_the_hook_within_the_bars(monkeypatch, adapter_dtype):
+    """The new default end to end through ``enable_fast_train``'s hook: knob unset, the attention is fused and its forward output
+    and the adapters' gradients stay within the bars of the unfused module; knob at 0, the module is untouched."""
+    cfg, attn = _nf4_attn(adapter_dtype=adapter_dtype)
+    ref_attn = copy.deepcopy(attn)
+    kept = copy.deepcopy(attn)
+    monkeypatch.setenv("E4B_TRAIN_FUSE_QKV", "0")
+    assert fast._maybe_fuse_train_qkv(_Holder(kept), patched=1) == 0
+    assert all(getattr(kept, n).base is not None for n in ("q_proj", "k_proj", "v_proj")) and not hasattr(kept, "qkv_proj")
+    monkeypatch.delenv("E4B_TRAIN_FUSE_QKV", raising=False)
+    assert fast._maybe_fuse_train_qkv(_Holder(attn), patched=1) == 1 and hasattr(attn, "qkv_proj")
+    torch.manual_seed(9)
+    x = torch.randn(1, 7, cfg.hidden_size, device="cuda").to(torch.bfloat16)
+    rot = qmod.Qwen3MoeRotaryEmbedding(cfg).cuda()
+    cos, sin = rot(x, torch.arange(7, device="cuda")[None])
+    outs, grads = [], []
+    for a in (ref_attn, attn):
+        o, _ = a(x, (cos, sin), None)
+        o.float().sum().backward()
+        outs.append(o.detach())
+        grads.append([getattr(getattr(a, n), w).grad.detach().clone() for n in ("q_proj", "k_proj", "v_proj") for w in ("lora_A", "lora_B")])
+    d = (outs[0].float() - outs[1].float()).abs().max().item()
+    assert d <= outs[0].float().abs().max().item() * 2.0 ** -6, d
+    for g0, g1 in zip(*grads):
+        dg, tol = _bar(g1, g0)
+        assert dg <= max(tol, 2.0 ** -6 * g0.float().abs().max().item()), (dg, tol)
+
+
+def test_disable_on_a_model_with_nothing_fused_changes_nothing():
+    attn = _lora_wrap(qmod.Qwen3MoeAttention(_cfg(), layer_idx=0))
+    holder = _Holder(attn)
+    before = {n: id(m) for n, m in holder.named_modules()}
+    stats = copy.deepcopy(tq.TRAIN_QKV_STATS)
+    assert tq.disable_train_fuse_qkv(holder) == 0
+    assert {n: id(m) for n, m in holder.named_modules()} == before and tq.TRAIN_QKV_STATS == stats
+
+
+@needs_nf4
+@ADAPTER_DTYPES
+def test_disable_restores_the_three_projections_bit_for_bit(monkeypatch, adapter_dtype):
+    """enable then disable is a round trip (TC1's attn_only arm probes enable_fast_train, then disables it and trains): the bases,
+    views of the fused bytes with the expanded fp32 absmax, and the attention compute bit for bit what they did before the fusion. A
+    second enable fuses again, bit for bit as the first, and an enable of a fused module changes nothing."""
+    monkeypatch.delenv("E4B_TRAIN_FUSE_QKV", raising=False)
+    cfg, attn = _nf4_attn(adapter_dtype=adapter_dtype)
+    names = ("q_proj", "k_proj", "v_proj")
+    torch.manual_seed(9)
+    x = torch.randn(1, 7, cfg.hidden_size, device="cuda").to(torch.bfloat16)
+    rot = qmod.Qwen3MoeRotaryEmbedding(cfg).cuda()
+    pe = rot(x, torch.arange(7, device="cuda")[None])
+    with torch.no_grad():
+        proj0 = [getattr(attn, n)(x) for n in names]
+        out0 = attn(x, pe, None)[0]
+    holder = _Holder(attn)
+    assert fast._maybe_fuse_train_qkv(holder, patched=1) == 1
+    with torch.no_grad():
+        fused0 = attn(x, pe, None)[0]
+    assert tq.disable_train_fuse_qkv(holder) == 1 and tq.TRAIN_QKV_STATS["fused"] == 0
+    assert not hasattr(attn, "qkv_proj") and "forward" not in attn.__dict__
+    for n in names:
+        m = getattr(attn, n)
+        assert m.base is not None and "forward" not in m.__dict__ and not m.base.weight.quant_state.nested
+    with torch.no_grad():
+        assert all(torch.equal(getattr(attn, n)(x), want) for n, want in zip(names, proj0))
+        assert torch.equal(attn(x, pe, None)[0], out0)
+    o, _ = attn(x, pe, None)
+    o.float().sum().backward()
+    assert all(getattr(getattr(attn, n), w).grad is not None for n in names for w in ("lora_A", "lora_B"))
+    assert fast._maybe_fuse_train_qkv(holder, patched=1) == 1
+    with torch.no_grad():
+        assert torch.equal(attn(x, pe, None)[0], fused0)
+    fq, fwd = attn.qkv_proj, attn.forward
+    assert tq.enable_train_fuse_qkv(holder) == 1 and attn.qkv_proj is fq and attn.forward == fwd   # fused already: unchanged
+
+
+def _assert_views(attn):
+    """Each q/k/v base holds a view of the fused bytes and a non-nested quant state over the fused absmax."""
+    fq = attn.qkv_proj
+    for n in ("q_proj", "k_proj", "v_proj"):
+        w = getattr(attn, n).base.weight
+        assert w.untyped_storage().data_ptr() == fq.packed.untyped_storage().data_ptr(), n
+        assert not w.quant_state.nested and w.quant_state.absmax.untyped_storage().data_ptr() == fq.absmax.untyped_storage().data_ptr()
+
+
+NESTED_KEYS = ("weight.nested_absmax", "weight.nested_quant_map")
+
+
+def _clone_sd(m):
+    return {k: v.detach().clone() for k, v in m.state_dict().items()}
+
+
+def _scramble_adapters(attn, seed):
+    g = torch.Generator().manual_seed(seed)
+    with torch.no_grad():
+        for n, p in attn.named_parameters():
+            if "lora" in n:
+                p.copy_(torch.randn(p.shape, generator=g).to(p.device, p.dtype))
+
+
+@needs_nf4
+@ADAPTER_DTYPES
+def test_a_fused_state_dict_loads_strict_into_an_unfused_model_bit_for_bit(monkeypatch, adapter_dtype):
+    """A full-model save of a fused model (a Trainer checkpoint, ``save_pretrained``) carries every q/k/v base; a freshly loaded unfused
+    model takes it as it takes an unfused model's own, and then computes bit for bit what the fused model computes once disabled. The
+    key sets differ only by each q/k/v base's two nested-statistics keys: the fused bases' quant state is the non-nested fp32 form."""
+    monkeypatch.delenv("E4B_TRAIN_FUSE_QKV", raising=False)
+    cfg, attn = _nf4_attn(adapter_dtype=adapter_dtype)
+    holder = _Holder(attn)
+    unfused_sd = _clone_sd(holder)
+    _, ref = _nf4_attn(adapter_dtype=adapter_dtype)
+    ref_res = _Holder(ref).load_state_dict(unfused_sd, strict=False)    # today's own round trip: the baseline
+    assert not ref_res.missing_keys and ref_res.unexpected_keys
+    assert all(".base.weight." in k for k in ref_res.unexpected_keys)    # bitsandbytes' quant-state keys, and only those
+    assert tq.enable_train_fuse_qkv(holder) == 1
+    sd = _clone_sd(holder)
+    nested = {f"attn.{n}.base.{k}" for n in ("q_proj", "k_proj", "v_proj") for k in NESTED_KEYS}
+    assert nested <= set(unfused_sd) and set(sd) == set(unfused_sd) - nested
+    _, fresh = _nf4_attn(adapter_dtype=adapter_dtype)
+    _scramble_adapters(fresh, 11)
+    res = _Holder(fresh).load_state_dict(sd, strict=False)
+    assert not res.missing_keys and set(res.unexpected_keys) == set(ref_res.unexpected_keys) - nested
+    assert all(torch.equal(p, sd[f"attn.{n}"]) for n, p in fresh.named_parameters())
+    assert tq.disable_train_fuse_qkv(holder) == 1
+    torch.manual_seed(9)
+    x = torch.randn(1, 7, cfg.hidden_size, device="cuda").to(torch.bfloat16)
+    pe = qmod.Qwen3MoeRotaryEmbedding(cfg).cuda()(x, torch.arange(7, device="cuda")[None])
+    with torch.no_grad():
+        assert torch.equal(fresh(x, pe, None)[0], attn(x, pe, None)[0])
+
+
+@needs_nf4
+@ADAPTER_DTYPES
+def test_a_resume_into_a_fused_model_round_trips_through_the_views(monkeypatch, adapter_dtype):
+    """``load_state_dict`` into a fused model (a resume): the adapters take the saved values, the fused forward is bit for bit the
+    saved model's, and a loaded q/k/v weight writes through its view into the fused bytes."""
+    monkeypatch.delenv("E4B_TRAIN_FUSE_QKV", raising=False)
+    cfg, a = _nf4_attn(adapter_dtype=adapter_dtype)
+    ha = _Holder(a)
+    assert tq.enable_train_fuse_qkv(ha) == 1
+    sd = _clone_sd(ha)
+    _, b = _nf4_attn(adapter_dtype=adapter_dtype)
+    hb = _Holder(b)
+    assert tq.enable_train_fuse_qkv(hb) == 1
+    _scramble_adapters(b, 12)
+    res = hb.load_state_dict(sd, strict=False)
+    assert not res.missing_keys and all(".base.weight." in k for k in res.unexpected_keys)
+    _assert_views(b)
+    assert all(torch.equal(p, sd[n]) for n, p in hb.named_parameters() if "lora" in n)
+    torch.manual_seed(9)
+    x = torch.randn(1, 7, cfg.hidden_size, device="cuda").to(torch.bfloat16)
+    pe = qmod.Qwen3MoeRotaryEmbedding(cfg).cuda()(x, torch.arange(7, device="cuda")[None])
+    with torch.no_grad():
+        assert torch.equal(b(x, pe, None)[0], a(x, pe, None)[0])
+    sd2 = dict(sd)
+    k = "attn.k_proj.base.weight"
+    sd2[k] = sd[k] ^ 0x11                                              # different NF4 codes: the load must reach the fused bytes
+    hb.load_state_dict(sd2, strict=False)
+    nq = sd["attn.q_proj.base.weight"].numel()
+    assert torch.equal(b.qkv_proj.packed[nq:nq + sd[k].numel()].view(sd[k].shape), sd2[k])
+
+
+@needs_nf4
+def test_a_checkpoint_saved_while_fused_rebuilds_as_a_plain_quant_state_bit_for_bit():
+    """A checkpoint saved while fused stores each q/k/v absmax in fp32, not nested. bitsandbytes rebuilds it (``QuantState.from_dict``,
+    the path a pre-quantized load takes) as a plain quant state that dequantizes bit for bit as the original nested one."""
+    from bitsandbytes.functional import QuantState, dequantize_4bit
+    _, attn = _nf4_attn()
+    qkv = ("q_proj", "k_proj", "v_proj")
+    want = {n: dequantize_4bit(getattr(attn, n).base.weight.data, getattr(attn, n).base.weight.quant_state) for n in qkv}
+    assert all(getattr(attn, n).base.weight.quant_state.nested for n in qkv)
+    holder = _Holder(attn)
+    assert tq.enable_train_fuse_qkv(holder) == 1
+    sd = _clone_sd(holder)
+    for n in qkv:
+        pre = f"attn.{n}.base.weight."
+        qs = QuantState.from_dict({k[len(pre):]: v for k, v in sd.items() if k.startswith(pre)}, device=torch.device("cuda"))
+        assert not qs.nested and qs.absmax.dtype == torch.float32
+        assert torch.equal(dequantize_4bit(sd[f"attn.{n}.base.weight"], qs), want[n]), n
+
+@needs_nf4
+def test_a_move_of_the_fused_bytes_re_points_the_bases():
+    """``_apply`` (``.to`` / ``.cuda`` / ``.cpu``) gives the fused module new bytes; the bases follow, so nothing is held twice and the
+    projections and the fused forward compute what they did."""
+    cfg, attn = _nf4_attn()
+    holder = _Holder(attn)
+    assert tq.enable_train_fuse_qkv(holder) == 1
+    torch.manual_seed(9)
+    x = torch.randn(1, 7, cfg.hidden_size, device="cuda").to(torch.bfloat16)
+    pe = qmod.Qwen3MoeRotaryEmbedding(cfg).cuda()(x, torch.arange(7, device="cuda")[None])
+    with torch.no_grad():
+        before, k_before = attn(x, pe, None)[0], attn.k_proj(x)
+    old = attn.qkv_proj.packed.untyped_storage().data_ptr()
+    attn.qkv_proj._apply(lambda t: t.clone())
+    assert attn.qkv_proj.packed.untyped_storage().data_ptr() != old
+    _assert_views(attn)
+    with torch.no_grad():
+        assert torch.equal(attn(x, pe, None)[0], before) and torch.equal(attn.k_proj(x), k_before)

@@ -19,3 +19,7 @@ grouped-nf4-gemm `e21a712`; the environment is in `../records/a1/env.json`.
 - `p129_floor_check.py` (Amendment 3's harness): on the two-layer model set up as TC1's e4b arm, with `lora_B` zero and non-zero, checks
   `tc1_arm.qkv_floor_rows`. Every mode covers every row; A0 reproduces the stock rows exactly; D3 shares k's matmul with v on every call;
   the bases come back. It also reports the envelope numbers for the fused path. Record: `records/a3/floor_harness_2layer.json`.
+
+- `p129_routing.py` (report-only, after Amendment 3): on the real Qwen3-30B-A3B at the pin, the router's top-8 expert set per token and
+  layer at step 0 for the stock path, q split in two and the fused path. Then the fused path with every layer's router output replaced by
+  the stock path's, which shows how much of the step-0 shift routing flips carry. Record: `records/a3/routing_step0.json`.

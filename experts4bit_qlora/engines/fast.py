@@ -987,8 +987,8 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False, absmax_
                                enable_checkpoint_offload)
     if patched and checkpoint_offload_requested():
         enable_checkpoint_offload(model, verbose=verbose, explicit=checkpoint_offload_explicit(), mode=checkpoint_offload_mode())
-    # Opt-in (E4B_TRAIN_FUSE_QKV=1, P129): each eligible attention module's q/k/v as one fused NF4 + LoRA projection
-    # (engines/train_qkv_fuse.py). Unset runs today's attention, op for op.
+    # On by default since P129: each eligible attention module's q/k/v as one fused NF4 + LoRA projection
+    # (engines/train_qkv_fuse.py). E4B_TRAIN_FUSE_QKV=0 runs the three projections, op for op as before.
     _maybe_fuse_train_qkv(model, patched, verbose)
     # On by default since TC1 amendment 56 (E4B_ABSMAX_DQ=0 turns it off): the frozen expert absmax double-quantized.
     FAST_TRAIN_STATS["absmax_dq"] = _default_absmax_dq(model, absmax_dq, patched, verbose)
@@ -996,8 +996,8 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False, absmax_
 
 
 def _maybe_fuse_train_qkv(model, patched, verbose=False) -> int:
-    """``enable_fast_train``'s hook for P129's fused q/k/v projection: nothing unless ``E4B_TRAIN_FUSE_QKV=1`` and the fused MoE path
-    is on. Returns the number of attention modules fused."""
+    """``enable_fast_train``'s hook for P129's fused q/k/v projection: on by default when the fused MoE path is on;
+    ``E4B_TRAIN_FUSE_QKV=0`` (or false / off / no) keeps the three projections. Returns the number of attention modules fused."""
     from .train_qkv_fuse import enable_train_fuse_qkv, train_fuse_qkv_requested
     if not (patched and train_fuse_qkv_requested()):
         return 0
@@ -1071,4 +1071,6 @@ def disable_fast_train(model) -> int:
         disable_chunked_lm_loss(model)                   # ... and the chunked LM loss
         from .ckpt_offload import disable_checkpoint_offload
         disable_checkpoint_offload(model)                # ... and the host-memory checkpoint inputs
+        from .train_qkv_fuse import disable_train_fuse_qkv
+        disable_train_fuse_qkv(model)                    # ... and the fused q/k/v projection (its bases stay views of the fused bytes)
     return n

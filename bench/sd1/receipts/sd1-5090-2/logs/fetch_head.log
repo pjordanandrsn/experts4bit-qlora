@@ -1,0 +1,2 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+/root/.cache/huggingface/hub/models--RedHatAI--Qwen3-30B-A3B-speculator.eagle3/snapshots/6afc5aa2477b923467fb9a8d906782b984a9a6ba/model.safetensors

@@ -1,0 +1,102 @@
+{
+ "model_dir": "/workspace/qwen3moe-2l",
+ "fp32": {
+  "default_fused": 2,
+  "default_refused": {},
+  "default_losses": [
+   8.682537078857422,
+   8.578141212463379,
+   8.476335525512695
+  ],
+  "off_fused": 0,
+  "off_bases_kept": true,
+  "off_losses": [
+   8.682557106018066,
+   8.577112197875977,
+   8.475985527038574
+  ],
+  "rt_fused_before_disable": 2,
+  "rt_after_disable": {
+   "fused_stat": 0,
+   "bases_kept": true,
+   "qkv_proj_left": 0
+  },
+  "rt_loss": 8.68263053894043,
+  "rt_loss_off": 8.68263053894043,
+  "rt_loss_bitwise": true,
+  "rt_logits_bitwise": true,
+  "rt_n_grads": 24,
+  "off_n_grads": 24,
+  "rt_grads_bitwise": false,
+  "off_spread_max_rel": 0.003787878787878788,
+  "rt_max_rel": 0.003787878787878788,
+  "reenable_fused": 2,
+  "reenable_loss": 8.682537078857422,
+  "reenable_loss_bitwise_default_step0": true,
+  "loss_rel_diff": [
+   2.306597054299821e-06,
+   0.00011997214956068401,
+   4.129295325063866e-05
+  ],
+  "checks": {
+   "default fuses every layer, refuses none": true,
+   "off fuses nothing and keeps every base": true,
+   "losses finite": true,
+   "each step's loss within 2**-6 of off": true,
+   "disable restores every layer": true,
+   "round trip forward bit for bit (loss, logits)": true,
+   "round trip grads within 2x the off side's own spread": true,
+   "re-enable fuses every layer, step 0 bit for bit": true
+  }
+ },
+ "bf16": {
+  "default_fused": 2,
+  "default_refused": {},
+  "default_losses": [
+   8.680248260498047,
+   8.585304260253906,
+   8.490796089172363
+  ],
+  "off_fused": 0,
+  "off_bases_kept": true,
+  "off_losses": [
+   8.681832313537598,
+   8.585610389709473,
+   8.490943908691406
+  ],
+  "rt_fused_before_disable": 2,
+  "rt_after_disable": {
+   "fused_stat": 0,
+   "bases_kept": true,
+   "qkv_proj_left": 0
+  },
+  "rt_loss": 8.681876182556152,
+  "rt_loss_off": 8.681876182556152,
+  "rt_loss_bitwise": true,
+  "rt_logits_bitwise": true,
+  "rt_n_grads": 24,
+  "off_n_grads": 24,
+  "rt_grads_bitwise": false,
+  "off_spread_max_rel": 0.006493506493506494,
+  "rt_max_rel": 0.006493506493506494,
+  "reenable_fused": 2,
+  "reenable_loss": 8.680248260498047,
+  "reenable_loss_bitwise_default_step0": true,
+  "loss_rel_diff": [
+   0.0001824560740571739,
+   3.565610849676179e-05,
+   1.7409079677426602e-05
+  ],
+  "checks": {
+   "default fuses every layer, refuses none": true,
+   "off fuses nothing and keeps every base": true,
+   "losses finite": true,
+   "each step's loss within 2**-6 of off": true,
+   "disable restores every layer": true,
+   "round trip forward bit for bit (loss, logits)": true,
+   "round trip grads within 2x the off side's own spread": true,
+   "re-enable fuses every layer, step 0 bit for bit": true
+  }
+ },
+ "PASS": true
+}

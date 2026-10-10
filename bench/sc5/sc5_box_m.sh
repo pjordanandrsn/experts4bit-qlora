@@ -21,9 +21,12 @@
 SC5_CS="1 16 64"; SC5_MAXTOK=256; SC5_DRAWS=2; SC5_MEMS="default matched"   # registered constants, not knobs
 SC5_MATCHED_SEQS=64; SC5_MATCHED_TPS=1024; SC5_MATCHED_KV=65536; SC5_VLLM_BLOCK=16
 SC5_VLLM_VERSION=0.31.0; SC5_SGLANG_VERSION=0.5.21; SC5_SGLANG_TAG_COMMIT=e00930c5489053f26d86b179cee0d087f846acbb
-SC5_REF_SHA256=""   # the registered reference's sha256: set by the amendment that commits bench/sc5/ref/ (empty: quality UNREAD)
+SC5_REF_SHA256="783e1443bd05e09cec0eb28de99c739977bef19f84b8c01eca963270181a45a3"   # bench/sc5/ref/sc5_ref.json (sc5-ref-1; the reference amendment)
 SC5_D=$W/sc5; mkdir -p "$SC5_D/blocks" "$SC5_D/quality"
 sc5_n(){ case "$1" in 1) echo 48;; 16) echo 160;; 64) echo 320;; *) return 1;; esac; }
+# the model name each server answers to: serve_paged serves its model id and refuses any other ("unknown model 'sc5'",
+# sc5-prove-4); vLLM and SGLang serve --served-model-name sc5
+sc5_model(){ case "$1" in e4b) echo "$MID";; *) echo sc5;; esac; }
 
 # ---- installs ------------------------------------------------------------------------------------------------------
 # m_install_e4b: venv-e4b (--system-site-packages, as SC1's), torch 2.8.0 cu128 (as boxes C-L), then the two release
@@ -117,8 +120,14 @@ PYC
             "$PY" - "$BD/server_info.json" <<'PYC'
 import json, sys
 s = json.load(open(sys.argv[1]))
-s = s.get("internal_states", [s])[0] if isinstance(s.get("internal_states"), list) else s
-print(int(s["max_total_num_tokens"]), int(s.get("page_size", 1) or 1))
+# SGLang 0.5.21's /get_server_info reports the KV pool at the top level (max_total_num_tokens) and per scheduler as
+# internal_states[i].memory_usage.token_capacity; internal_states[0] has no max_total_num_tokens (sc5-prove-5: "?").
+st = s["internal_states"] if isinstance(s.get("internal_states"), list) and s["internal_states"] else [{}]
+cap = (st[0].get("memory_usage") or {}).get("token_capacity")
+kv = s.get("max_total_num_tokens", st[0].get("max_total_num_tokens", cap))
+if kv is None or (cap is not None and int(cap) != int(kv)):
+    sys.exit(f"sglang capacity: max_total_num_tokens={kv}, token_capacity={cap}")
+print(int(kv), int(s.get("page_size") or st[0].get("page_size") or 1))
 PYC
             ;;
   esac; }
@@ -126,22 +135,25 @@ PYC
 # m_cell FW PORT BD C -- one closed-loop cell into BD/cC.json; the plan is identical across blocks (seed = C)
 m_cell(){ local FW=$1 PORT=$2 BD=$3 C=$4 N AL rc
   N=$(sc5_n "$C"); AL=$(arm_alarm 2400)
-  perl -e "alarm $AL; exec @ARGV" "$PY" $W/sc5_driver.py run --base "http://127.0.0.1:$PORT" --model sc5 --prompts $W/sc2/prompts.json \
+  perl -e "alarm $AL; exec @ARGV" "$PY" $W/sc5_driver.py run --base "http://127.0.0.1:$PORT" --model "$(sc5_model "$FW")" --prompts $W/sc2/prompts.json \
       --concurrency "$C" --n "$N" --seed "$C" --max-tokens $SC5_MAXTOK --profile "$FW" --out "$BD/c$C.json" > "$BD/c$C.log" 2>&1
   rc=$?; line "SC5 $(basename "$BD") C=$C rc=$rc $(grep -a '^SC5_RUN' "$BD/c$C.log" | tail -1 | cut -c1-300)"; return $rc; }
 
 # m_block NN DRAW MEM FW K -- one cold-started block: quiescence gate, start, capacity, a warm-up, the three cells, stop
 m_block(){ local NN=$1 D=$2 MEM=$3 FW=$4 K=$5 BD PORT ready=False kv="" rnd=0 smp c vok
+  M_KV="" M_RND=0 M_READY=0   # the block's capacity readout and rounding, and whether its server came up (prove_m, box_m)
   BD=$SC5_D/blocks/$(printf %02d "$NN")_d${D}_${MEM}_${FW}_b${K}; mkdir -p "$BD"
   case "$FW" in e4b) PORT=$PORT_E4B; vok=True;; vllm) PORT=$PORT_VLLM; vok=$( [ "${OK[vllm]:-0}" = 1 ] && echo True || echo False );;
                 sglang) PORT=$PORT_SGL; vok=$( [ "${OK[sglang]:-0}" = 1 ] && echo True || echo False );; esac
   phase "SC5_$NN" "draw $D, $MEM memory, $FW block $K"
-  if gpu_free 180 && quiesce "sc5_$NN" && can_run 1500 "sc5 block $NN"; then
+  # SC1's quiesce records quiesced=true|false in quiesce_<tag>.json and always returns 0, so the gate reads the record:
+  # a block whose card or host never quiesced is VOID (SC5-PREREG.md "Order and noise" / VOID), never run.
+  if gpu_free 180 && quiesce "sc5_$NN" && grep -q '"quiesced": true' "quiesce_sc5_$NN.json" && can_run 1500 "sc5 block $NN"; then
     nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits -lms 1000 > "$BD/mem.csv" 2>/dev/null & smp=$!
     if "m_${FW/sglang/sgl}_start" "$MEM" "$BD/server.log"; then
-      ready=True; read -r kv rnd < <(m_capacity "$FW" "$BD") || kv=""
-      line "SC5 $(basename "$BD") ready: kv_tokens=${kv:-?} rounding=$rnd"
-      perl -e "alarm 900; exec @ARGV" "$PY" $W/sc5_driver.py run --base "http://127.0.0.1:$PORT" --model sc5 --prompts $W/sc2/prompts.json \
+      ready=True; M_READY=1; read -r kv rnd < <(m_capacity "$FW" "$BD") || kv=""
+      line "SC5 $(basename "$BD") ready: kv_tokens=${kv:-?} rounding=$rnd"; M_KV=${kv:-}; M_RND=${rnd:-0}
+      perl -e "alarm 900; exec @ARGV" "$PY" $W/sc5_driver.py run --base "http://127.0.0.1:$PORT" --model "$(sc5_model "$FW")" --prompts $W/sc2/prompts.json \
           --concurrency 1 --n 4 --seed 999 --max-tokens $SC5_MAXTOK --profile "$FW" --out "$BD/warm.json" > "$BD/warm.log" 2>&1
       for c in $SC5_CS; do m_cell "$FW" "$PORT" "$BD" "$c"; done
     fi
@@ -165,6 +177,9 @@ PYB
 
 # m_draw_order DRAW -> the ABBA order (draw 1: e4b vLLM SGLang SGLang vLLM e4b; draw 2 the reverse)
 m_draw_order(){ case "$1" in 1) echo "e4b:1 vllm:1 sglang:1 sglang:2 vllm:2 e4b:2";; *) echo "sglang:1 vllm:1 e4b:1 e4b:2 vllm:2 sglang:2";; esac; }
+
+# m_matched_ok -- the last block's capacity readout is the registered matched capacity, within its rounding
+m_matched_ok(){ local off; [ -n "$M_KV" ] || return 1; off=$(( M_KV - SC5_MATCHED_KV )); [ "${off#-}" -le "${M_RND:-0}" ]; }
 
 # ---- quality: the windows and the reference verified by sha256, then one pass per framework at the default setting --
 m_quality(){ local q=$SC5_D/quality
@@ -190,14 +205,20 @@ m_quality(){ local q=$SC5_D/quality
   return 0; }
 
 # ---- the reading -------------------------------------------------------------------------------------------------------
-box_m(){ local d m nn=0 fk
+box_m(){ local d m nn=0 fk k miss
   phase 0 "fetches (bf16 for the bake, the GPTQ checkpoint), bake, SC2's prompt pool; installs above"
   fetch_common || finish 11; fetch gptq "$GPTQ_MID" "$GPTQ_REV" 1800 || finish 11; bake_qwen3 || finish 12; sc2_prompts || finish 19
   phase SG0 "SGLang's first JIT before any timing"; m_sgl_start default "$W/logs/sc5_sglang_jit.log" && m_stop sglang
   for d in $(seq 1 "$SC5_DRAWS"); do
-    for m in $SC5_MEMS; do
+    for m in $SC5_MEMS; do k=0; miss=""
       for fk in $(m_draw_order "$d"); do
-        nn=$((nn + 1)); m_block "$nn" "$d" "$m" "${fk%%:*}" "${fk##*:}"
+        nn=$((nn + 1)); k=$((k + 1)); m_block "$nn" "$d" "$m" "${fk%%:*}" "${fk##*:}"
+        # Cost guard (SC5-PREREG.md "Box log"): draw 1's first three matched blocks are one per framework. When a server
+        # that came up read a capacity off the registered one, the reading stops; the reducer VOIDs those blocks anyway.
+        if [ "$d:$m" = 1:matched ] && [ "$k" -le 3 ]; then
+          [ "$M_READY" = 1 ] && ! m_matched_ok && miss="$miss ${fk%%:*}=${M_KV:-unread}"
+          [ "$k" = 3 ] && [ -n "$miss" ] && { line "SC5_MATCHED_STOP draw 1 matched capacity off $SC5_MATCHED_KV:$miss -- the reading stops (cost guard)"; finish 35; }
+        fi
       done
     done
   done
@@ -218,15 +239,21 @@ box_m_ref(){ local q=$SC5_D/quality
   cat $q/ref.json.sha256 $q/ref_chunked.json.sha256 | tee -a summary.txt; }
 
 # ---- the proof (SC1_PROVE=1): every install from its lock, every server at the default setting, one block each at C = 1
-# and 16, the capacity readouts, and every quality scorer on 8 windows (complete positions, no reference compare)
+# and 16, the capacity readouts, and every quality scorer on 8 windows (complete positions, no reference compare).
+# A failed capacity readout fails the proof: sc5-prove-5 printed "kv_tokens=?" for SGLang and still proved, and at the
+# matched setting the reducer VOIDs a block whose kv_tokens is missing.
 prove_m(){ local ok=0 fw nn=0 q=$SC5_D/quality
   have sc2client || { say "PROVE: aiohttp / fastapi / uvicorn did not install -- NOT PROVED"; rec 23; return; }
   for t in sc5_driver sc5_quality sc5_e4b_quality sc5_reduce sc5_record; do
     "$PY" $W/$t.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "PROVE: $t self-test failed"; ok=1; }
   done
-  fetch_common || finish 11; fetch gptq "$GPTQ_MID" "$GPTQ_REV" 1800 || finish 11; bake_qwen3 || finish 12; sc2_prompts || finish 19
+  # sc1_run.sh's proof block runs before it defines fetch_common / bake_qwen3 (sc5-prove-3: rc 11, "fetch_common:
+  # command not found"), so the proof calls the earlier-defined fetch / bake, as every other box's proof does.
+  fetch qwen3 "$MID" "$REV" 4800 || finish 11; fetch gptq "$GPTQ_MID" "$GPTQ_REV" 1800 || finish 11
+  bake qwen3 "$MID" 5400 || finish 12; QA=$W/work_qwen3/nf4.arena; sc2_prompts || finish 19
   SC5_CS="1 16"
   for fw in e4b vllm sglang; do nn=$((nn + 1)); m_block "$nn" 1 default "$fw" 1
+    [ -n "$M_KV" ] || { say "PROVE: $fw capacity readout failed (kv_tokens unread)"; ok=1; }
     for c in 1 16; do [ -s "$SC5_D/blocks/$(printf %02d $nn)_d1_default_${fw}_b1/c$c.json" ] || { say "PROVE: $fw C=$c missing"; ok=1; }; done
   done
   PYTHONPATH=$W "$PY" -c "import json, sc5_ref; w = json.load(open('$W/sc5_windows_w64.json')); w['windows'] = w['windows'][:8]; w['windows_sha256'] = sc5_ref.windows_sha256(w['windows']); json.dump(w, open('$q/windows8.json', 'w'))" || ok=1

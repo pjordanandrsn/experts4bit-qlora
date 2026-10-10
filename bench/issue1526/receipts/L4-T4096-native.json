@@ -1,0 +1,140 @@
+{
+ "probe": "e4b#1526",
+ "model": "q3red-L4",
+ "reduced": {
+  "source": "Qwen/Qwen3-30B-A3B",
+  "revision": "ad44e777bcd1",
+  "num_hidden_layers": 4,
+  "weights": "random, seed 0"
+ },
+ "tokens_per_microbatch": 4096,
+ "packing": "one full row per micro-batch (random ids, labels = ids)",
+ "adapters": "native",
+ "accum": 4,
+ "steps": 3,
+ "lora_dtypes": {
+  "torch.float32": 32,
+  "torch.bfloat16": 16
+ },
+ "cast_to_fp32": 0,
+ "n_attn4": 16,
+ "n_patched": 4,
+ "load_allocated_bytes": 2641408000,
+ "peak_allocated_bytes_per_step": [
+  3982919680,
+  4091821568,
+  4092101120
+ ],
+ "e4b_estimate_device_bytes": 3985008896,
+ "e4b_items": [
+  {
+   "name": "frozen expert stacks",
+   "where": "device",
+   "bytes": 1358954752
+  },
+  {
+   "name": "attention projections (NF4)",
+   "where": "device",
+   "bytes": 38946816
+  },
+  {
+   "name": "dense weights (bf16)",
+   "where": "device",
+   "bytes": 1246795776
+  },
+  {
+   "name": "expert LoRA adapters",
+   "where": "device",
+   "bytes": 104857600
+  },
+  {
+   "name": "attention LoRA adapters",
+   "where": "device",
+   "bytes": 2228224
+  },
+  {
+   "name": "adapter gradients",
+   "where": "device",
+   "bytes": 107085824
+  },
+  {
+   "name": "optimizer state (adamw_8bit)",
+   "where": "device",
+   "bytes": 108759040
+  },
+  {
+   "name": "activations",
+   "where": "device",
+   "bytes": 1017380864
+  }
+ ],
+ "loggetta": {
+  "status": "feasible",
+  "lines": [
+   {
+    "name": "frozen expert stacks",
+    "basis": "derived",
+    "bytes": 1358954752
+   },
+   {
+    "name": "attention projections (NF4)",
+    "basis": "derived",
+    "bytes": 38946816
+   },
+   {
+    "name": "dense weights (bf16)",
+    "basis": "derived",
+    "bytes": 1246795776
+   },
+   {
+    "name": "expert LoRA adapters",
+    "basis": "derived",
+    "bytes": 104857600
+   },
+   {
+    "name": "attention LoRA adapters",
+    "basis": "derived",
+    "bytes": 2228224
+   },
+   {
+    "name": "adapter gradients",
+    "basis": "derived",
+    "bytes": 107085824
+   },
+   {
+    "name": "optimizer state (adamw_8bit)",
+    "basis": "derived",
+    "bytes": 108759040
+   },
+   {
+    "name": "activations",
+    "basis": "heuristic",
+    "bytes": 1017380864
+   },
+   {
+    "name": "grouped_nf4 MoE backward (above the activation item)",
+    "basis": "heuristic",
+    "bytes": 123469824
+   },
+   {
+    "name": "allocator reserve (cached, unallocated blocks)",
+    "basis": "inferred",
+    "bytes": 821695744
+   },
+   {
+    "name": "CUDA context + library workspaces",
+    "basis": "inferred",
+    "bytes": 536870912
+   }
+  ],
+  "allocator_estimate_bytes": 4108478720
+ },
+ "versions": {
+  "torch": "2.12.1+cu129",
+  "experts4bit-qlora": "0.52.0",
+  "bitsandbytes": "0.50.2",
+  "transformers": "5.18.0"
+ },
+ "gpu": "NVIDIA RTX A2000 12GB",
+ "at": "2026-10-10T03:04:05Z"
+}

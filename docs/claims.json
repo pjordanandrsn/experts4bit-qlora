@@ -12080,6 +12080,34 @@
       "notes": "Pre-registered in #1380 with Amendments 5 (#1457), 7 (#1468), 8 (#1479) and 9 (#1487). X1 MISSED (fam-mixtral-3 VOIDed on #1477's serving regression); X2, X3a, X3b, X4 and X5 HIT. fam-mixtral-prove-1 ($1.115) ran out of GPU memory on the server pool; fam-mixtral-1 and -2 were refused at the provider ($0); fam-mixtral-3 ($0.87) crashed on its first forward before #1482. The maintainer re-derived the verdict from the store (identical except the last ulp of two floor KL values). ON_auto bias at (wikitext, 1) by set: +0.0025 / -0.0020 / -0.0014."
     },
     {
+      "id": "e4b.serve.fam.fused-stack-t1.gemma4.5090.2026-10-10",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "google/gemma-4-26B-A4B-it",
+      "claim": "Lane FAM, Gemma-4-26B-A4B's own proof (one RTX 5090, 32 teacher-forced positions; not a reading): no B=1 fusion knob is licensable on Gemma-4's NF4 stack with this instrument, because the family's own neutral floor sits below the absolute backstop. ON_epi (router epilogue, 30) and ON_auto (glue 271 + router epilogue 30) pass the RELATIVE gate in every cell -- worst agreement 0.81-0.86, inside the floor (A_f 0.737-0.766, B_f up to 0.51 nats) -- and fail only the 0.90 agreement backstop, so nothing here shows the knobs harm Gemma-4. The reducer's x0.90 resolution holds only through the backstop: on wikitext x0.90 passes the relative gate. The box's own reduction VOIDed on Amendment 6's per-step count (a re-route of the per-head q/k norms above 64 rows at T == 12); this verdict is Amendment 10's re-reduction of the same records. The maintainer closed the family at this proof, with no reading.",
+      "value": -0.051,
+      "unit": "nats, mean per-window NLL difference ON_auto - R at (wikitext, shape 1), the mean of sets A, B and C (proof scale: 36 windows x 32 teacher-forced positions)",
+      "hardware": "RTX 5090 (sm_120, driver 595.71.05), one rented Vast.ai host (instance 55124966, verified-secure, AMD EPYC 7C13, 256 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @68845bfc (0.51.0, #1487's merge) + grouped-nf4-gemm @6ee2e10 (0.43.0); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0; premise 36 passed on the card; the default serve_paged server built eager at all-vram, the four fusion knobs at 0 (OFF) or the config's values; the NF4 arena baked on the box; quality teacher-forced in fp32 at 32 positions (the proof), 12 windows per set, sets A/B/C, wikitext and c4val1, shapes 1 and 12, the floor from chunk, half and split1; google/gemma-4-26B-A4B-it @4d7ae49; reduced by fam_reduce at a15c8d22 (Amendment 10)",
+      "measured_on": "2026-10-10",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/fam/RESULTS-fam.md",
+        "bench/fam/PREREG-fam.md",
+        "bench/fam/fam_reduce.py",
+        "bench/fam/receipts/fam-gemma4-prove-1/verdict-amendment-10.json",
+        "bench/fam/receipts/fam-gemma4-prove-1/verdict.json",
+        "bench/fam/receipts/fam-gemma4-prove-1/SHA256SUMS",
+        "bench/fam/receipts/fam-gemma4-prove-1/fam_gemma4_OFF.json",
+        "bench/fam/receipts/fam-gemma4-prove-1/fam_gemma4_ON_auto.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-10/fam-gemma4-prove-1/ (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #1380 with Amendments 6 (#1460) and 10 (#1529). G1 MISSED (the box VOIDed on Amendment 6's count), G2 MISSED (A_f at (wikitext, 12) 0.750), G3 HIT only by the backstop, G4 not read, G5 MISSED (peak 26.18 GiB). Consistent with the register: Gemma-4's NF4 stack is 1.077 nats of KL from bf16 (e4b.serve.p44.gemma4.nf4-vs-bf16) and its arithmetic-order floor is 5-25 times other families' (e4b.parity.gemma4.chunk-free). The maintainer re-derived the re-reduction byte-identical. ON_auto bias at (wikitext, 1) by set: -0.0843 / -0.0872 / +0.0184."
+    },
+    {
       "id": "e4b.serve.p125.int4-attn-calib-default.qwen3.5090.2026-10-09",
       "package": "experts4bit-qlora",
       "area": "serve",
@@ -12138,6 +12166,59 @@
         "receipts/experts4bit-qlora/2026-10-09/p127-prove-3/ (receipt.json, the proving run)"
       ],
       "notes": "Pre-registered in #1474 with Amendments 1 (#1488) and 2 (#1511). The maintainer re-derived the verdict from the receipt store with main's reducer, byte-identical (FASTER, reasons []). The claim is A to B: Phase 1 + Phase 2 against the stack before #1448, not Phase 2 alone; it covers the P127 delta at 7f044dd9, and later main commits are outside it. The blindness arm M (round-toward-zero router weights) differs from A in its logits at 100 % of positions. Predictions: Q1 (g1 in 1.03-1.12) missed high; Q3 missed because M's tokens agree with A's on only 32.4 % of W16's (the check is more sensitive than predicted); Q2, Q4 and Q5 held. Self-pairs within 0.38 %. The arms are all-or-nothing, so no per-option attribution."
+    },
+    {
+      "id": "e4b.train.p129.fused-qkv.qwen3.5090.2026-10-10",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane P129 Amendment 3 (#835), one RTX 5090 (tc1-5090-147, AMD EPYC 7B13, Vast machine 27708, host-bound: the matched q0's GPU busy 0.464 of its step): e4b's opt-in fused q/k/v training projection (E4B_TRAIN_FUSE_QKV=1: one NF4 dequantize and matmul over the concatenated packed rows, one LoRA-A product, serving's fused attention forward) against the three projections, at TC1's field recipe over 60 load-gated steps. Launches per step fell 13.9 % (matched, fp32 adapters) and 14.6 % (shipped, bf16 adapters); the step took 0.895 and 0.868 of the time (two draws a side, cross-draw ranges [0.890, 0.901] and [0.862, 0.875]); device time 0.987 on each arm. Quality: the step-0 held-out lies within the box's fp32-anchored envelope (e_B 0.02313 against max over the stock and three registered bf16 schedules 0.03905, ratio 0.59), held-out at N within 0.0007. Every standing attempt ran above the 6.0 load gate (host load 12.3-32.0); the wall ratios match the first box's on another host (tc1-5090-146: 0.896 / 0.879). The knob stays opt-in until a second host reads.",
+      "value": 0.895,
+      "unit": "ratio, s/step E4B_TRAIN_FUSE_QKV=1 / 0, e4b matched arm (fp32 adapters) at TC1's field recipe on a host-bound box (medians of two draws); shipped arm (bf16 adapters) 0.868",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai host (tc1-5090-147: instance 55102607, AMD EPYC 7B13, 128 threads, Vast machine 27708); e4b @ 51e5ae1 + grouped-nf4-gemm @ d1f64ba (v0.44.0), torch 2.12.1+cu130",
+      "conditions": "bench/tc1 token qwen3fqkv3 (P129 Amendments 2 and 3): TC1's tokens and field recipe, TC1_STEPS=60, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_shipped_q0 / _q1 and fused_attn4_m_q0 / _q1 (+ _d2) in ABBA order, --phase-peaks 1 and the profile instrument on every arm, the step-0 floor (tc1_arm.qkv_floor_rows: A0, D1 fp32, D2 q/2, D3 k+v, D4 q/4) on the q0 arms; validity (fqkv3_why) and scoring (score_fqkv, the envelope rule) in bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-10",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p129/PREREG-p129.md",
+        "bench/p129/RESULTS-p129-a3.md",
+        "bench/p129/receipts/tc1-5090-147/RESULTS-tc1.md",
+        "bench/p129/receipts/tc1-5090-146/RESULTS-tc1.md",
+        "bench/p129/records/a3/routing_step0.json",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-09/tc1-5090-147/tc1/"
+      ],
+      "notes": "Vast invoiced $2.759. 14 draws were voided for host load and run again; the last draw's re-runs were skipped by the host-limited deadline. On this card D2 equalled the stock rows. The step-0 shift is the router's top-8 choice amplifying sub-ulp q/k/v rounding (records/a3/routing_step0.json: pinning the routing removes it). tc1-5090-146 read QUALITY_FAIL under Amendment 2's 0.0005 step-0 clause, which no base-path change can meet."
+    },
+    {
+      "id": "e4b.train.p129.fused-qkv.second-host.5090.2026-10-10",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane P129 Amendment 4 (#835), DEFAULT_ON's second host: e4b's fused q/k/v training projection (E4B_TRAIN_FUSE_QKV=1) against the three projections at TC1's field recipe over 60 load-gated steps, on two RTX 5090 hosts, each read on its own. Second host tc1-5090-150 (AMD EPYC 7K62, Vast machine 152440, host-bound: the matched q0's GPU busy 0.539; no draw voided for host load): s/step q1 / q0 0.906 [0.903, 0.909] with fp32 adapters and 0.884 [0.870, 0.898] with bf16 (two draws a side, medians and cross-draw ranges); launches per step -13.9 % and -14.6 %; device time 0.988 on each arm; step-0 held-out within the box's fp32-anchored envelope (e_B 0.02313 against 0.03905); held-out at N +0.00182 and +0.00071. First host tc1-5090-147 (AMD EPYC 7B13, Vast machine 27708, matched q0 busy 0.464; every standing attempt above the 6.0 load gate): 0.895 [0.890, 0.901] and 0.868 [0.862, 0.875]; the same step-0 numbers; held-out at N -0.00001 and +0.00063 (e4b.train.p129.fused-qkv.qwen3.5090.2026-10-10). Both GAIN, which meets P129's DEFAULT_ON rule.",
+      "value": 0.906,
+      "unit": "ratio, s/step E4B_TRAIN_FUSE_QKV=1 / 0, e4b matched arm (fp32 adapters) at TC1's field recipe on the second host tc1-5090-150 (medians of two draws); the other readings are quoted per host in the claim",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai host (tc1-5090-150: instance 55149329, AMD EPYC 7K62, 96 threads, Vast machine 152440); e4b @ 2d0ed91 + grouped-nf4-gemm @ d1f64ba (v0.44.0), torch 2.12.1+cu130",
+      "conditions": "bench/tc1 token qwen3fqkv3 (P129 Amendments 3 and 4): TC1's tokens and field recipe, TC1_STEPS=60, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, the shipped and matched arms in ABBA order, every arm profiled, the step-0 floor on the q0 arms; the package diff against the first host's build (51e5ae1) audited to seven files off the Qwen3-30B-A3B training path; scoring by bench/tc1/tc1_reduce.py's score_fqkv (the envelope rule)",
+      "measured_on": "2026-10-10",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p129/PREREG-p129.md",
+        "bench/p129/RESULTS-p129-a4.md",
+        "bench/p129/RESULTS-p129-a3.md",
+        "bench/p129/receipts/tc1-5090-150/RESULTS-tc1.md",
+        "bench/p129/receipts/tc1-5090-147/RESULTS-tc1.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-10/tc1-5090-150/tc1/",
+        "receipts/experts4bit-qlora/2026-10-09/tc1-5090-147/tc1/"
+      ],
+      "notes": "Vast invoiced $1.326 (tc1-5090-150) and $2.759 (tc1-5090-147). The hosts are quoted separately, not pooled."
     }
   ]
 }

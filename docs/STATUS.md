@@ -1,6 +1,6 @@
 # Status — what this package does, what is current, what is open
 
-**As of 2026-10-10, version 0.52.0** (the version of record is `pyproject.toml`'s). This page states the current
+**As of 2026-10-10, version 0.53.0** (the version of record is `pyproject.toml`'s). This page states the current
 position in each area, with the claim id behind each number; [`docs/claims.json`](claims.json) holds every claim's full
 text and evidence. The dated narrative behind these positions, with the readings they replaced and why, is
 [`STATUS-RECORD.md`](STATUS-RECORD.md).
@@ -198,11 +198,13 @@ own floor sits below the 0.90 agreement backstop; that floor also contains Phase
 gate, not the knob. Qwen3.6-MoE, where only the router epilogue engages, passes, and the epilogue decodes one request
 there in 0.973 of the step (FAM Amendment 4), so the family joined the allowlist. Mixtral-8x7B passes on every knob,
 resolved at a ×0.90 softmax-scale change, but stays off by default until a speed read of what the knobs buy there
-(FAM Amendment 5). `0` on each knob is the way back.
+(FAM Amendment 5). Gemma-4-26B-A4B's knobs stay off too: the family's own neutral floor sits below the
+agreement backstop, so the instrument cannot license any knob on its NF4 stack (closed at its proof; the knobs pass
+the relative gate). `0` on each knob is the way back.
 `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`,
 `e4b.serve.p115.fused-stack-quality.qwen3.5090.2026-10-07`, `e4b.serve.fam.fused-stack-t1.granite.5090.2026-10-09`,
 `e4b.serve.fam.fused-stack-t1.gptoss.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.qw36.5090.2026-10-09`,
-`e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.mixtral.5090.2026-10-09`
+`e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.mixtral.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.gemma4.5090.2026-10-10`
 ([P115](../bench/p115/RESULTS-p115.md), [FAM](../bench/fam/RESULTS-fam.md)).
 
 **Where the default single-request step goes.** A kernel-class census of the shipped default on Qwen3-30B-A3B NF4,
@@ -295,6 +297,7 @@ controls. `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-
 | PyTorch's reentrant checkpoint | `enable_fast_train` (a `Trainer` with `gradient_checkpointing=True` re-enables Hugging Face's) | `E4B_CKPT_OFFLOAD=0` | `e4b.train.ckpt-flavour.default.5090.2026-10-07` |
 | chunked held-out loss | `enable_fast_train` | `E4B_CHUNKED_EVAL_LOSS=0` | `e4b.train.chunked-eval-loss.packed-4k.5090.2026-10-07` |
 | expert combine over row chunks | `enable_fast_train` | `E4B_COMBINE_CHUNK=0` | `e4b.train.combine-row-chunks.packed-4k.5090.2026-10-07` |
+| fused q/k/v training projection (Qwen3-MoE, NF4 attention with adapters; 0.868–0.906 of the step on two RTX 5090 hosts, 13.9–14.6 % fewer launches, about 24 MB; `disable_fast_train` restores the three projections) | `enable_fast_train` | `E4B_TRAIN_FUSE_QKV=0` | `e4b.train.p129.fused-qkv.qwen3.5090.2026-10-10`, `e4b.train.p129.fused-qkv.second-host.5090.2026-10-10` |
 | bucketed LoRA-delta padding, compact | grouped-nf4-gemm | `NF4_QLORA_PAD_BUCKETS=0`, `NF4_QLORA_COMPACT_BUCKETS=0` | `e4b.train.pad-buckets.auto.default-decision.5090.2026-10-06`, `e4b.train.compact-buckets.packed-4k.5090.2026-10-07` |
 | bucketed CUDA-graph decode (sm_89+) | `serve_paged` | `E4B_PAGED_GRAPHS=0` | `e4b.serve.p109.decode-graphs-vs-eager-default.qwen3.5090.2026-10-03`, `e4b.serve.p110.graph-arithmetic-quality.qwen3.5090.2026-10-03` |
 | estimate-sized slots | `serve_paged` | `E4B_PAGED_MAX_SEQS=16` | `e4b.serve.sc2e.64-slots-default-buckets.qwen3.5090.2026-10-07` |

@@ -77,7 +77,7 @@ def test_the_proof_fetches_no_qwen3():
     assert 'sched_smoke granite_b$B $B "$GR_ENV" 0 "$GR" "$GR_REV" "$GA"' in block and "for B in 1 16" in block
     assert "finish 23" in block and "SC1_PROVE_SGLANG_MODEL" in block
     assert "GR=ibm-granite/granite-3.1-3b-a800m-instruct; GR_REV=a02780686e08a03fe0d2679a293b5c74a90efa89" in RUN and "GR_REV=a02780686e08a03fe0d2679a293b5c74a90efa89" in P94
-    assert 'GR_ENV="E4B_SERVE_EXP_INT4=0 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1"' in RUN and 'GR_ENV="E4B_SERVE_EXP_INT4=0' in P94
+    assert 'GR_ENV="E4B_SERVE_EXP_INT4=0 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=auto E4B_FUSE_ROUTER_EPI=1"' in RUN and 'GR_ENV="E4B_SERVE_EXP_INT4=0' in P94
     # the smoke's own gate: --smoke exits 0 only when every SET lever counts nonzero and every bucket captured
     assert "def lever_census" in SCHED and 'return 0 if ok else 1' in SCHED
 

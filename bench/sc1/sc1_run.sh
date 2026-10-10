@@ -300,7 +300,8 @@ FOLDS="E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1"
 SPEEDENV="E4B_SERVE_EXP_INT4=1 E4B_SERVE_ATTN_INT4=1 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 $FOLDS"
 LICENV="E4B_SERVE_EXP_INT4=1 E4B_SERVE_EXP_INT4_CALIB=1 E4B_SERVE_ATTN_INT4_CALIB=1 E4B_SERVE_ATTN_INT4=0 E4B_CALIB_SOURCE=c4 E4B_CALIB_NSEQ=$NSEQ $FOLDS"
 NF4ENV="E4B_SERVE_EXP_INT4=0 E4B_SERVE_ATTN_INT4=0 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=0 E4B_FUSE_T1_GLUE_R2=0 E4B_FUSE_ROUTER_EPI=0"
-GR_ENV="E4B_SERVE_EXP_INT4=0 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1"   # P94's Granite env (the unfused set)
+# Granite has no residual-in-experts licence: auto preserves supported R2 folds without forcing a vacuous licence.
+GR_ENV="E4B_SERVE_EXP_INT4=0 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=auto E4B_FUSE_ROUTER_EPI=1"   # P94's Granite env (the unfused set)
 ROUTEENV="E4B_INT4_GROUPED_SMALLM=auto E4B_INT4_LEAN_GLUE=auto E4B_NF4_GROUPED_SMALLM=0 E4B_MXFP4_GROUPED_SMALLM=auto"   # pinned main's defaults as of 2026-10-02 (P94: NF4 stays 0)
 K8ARGS="--placement-override all-vram --amort off --batch 1 --prompt-len 512 --gen-tokens 16 --ppl-steps 2048 --b1d-loop eager --no-fuse-qkv --ppl-source wikitext"
 PACKENV=""; QA=""; GA=""
@@ -604,7 +605,11 @@ if [ "$PROVE" = 1 ]; then
   case "$BOX" in A) PROVE_NEEDS="vllm";; B) PROVE_NEEDS="vllm llamacpp exl3";; C) PROVE_NEEDS="vllm exl3 sglang";; D) PROVE_NEEDS="vllm sglang llamacpp nsys";; E) PROVE_NEEDS="vllm sglang llamacpp sc2client";; F) PROVE_NEEDS="sc2client";; G) PROVE_NEEDS="vllm sglang llamacpp sc2client";; H) PROVE_NEEDS="sc2client";; I) PROVE_NEEDS="vllm llamacpp";; J) PROVE_NEEDS="";; K) PROVE_NEEDS="sc2client";; L) PROVE_NEEDS="sc2client";; M) PROVE_NEEDS="vllm sglang sc2client";; esac   # = the install dispatch's sets
   for E in $PROVE_NEEDS; do have $E || { say "PROVE: $E did not install -- NOT PROVED"; rec 23; }; done
   quiesce prove
-  if fetch granite "$GR" "$GR_REV" 900 && bake granite "$GR" 1500; then
+  if [ "$BOX" = M ]; then
+    # SC5 (box M): prove_m runs e4b's served int4 engine on Qwen3 at C = 1 and 16 -- SC5-PREREG.md's proof.
+    # The Granite smokes stay outside M's registered proof (sc5-prove-3); boxes A-L use the corrected GR_ENV above.
+    echo "PROVE box M: SC1's Granite smokes skipped -- prove_m proves e4b on Qwen3 (SC5-PREREG.md)" | tee -a summary.txt
+  elif fetch granite "$GR" "$GR_REV" 900 && bake granite "$GR" 1500; then
     GA=$W/work_granite/nf4.arena
     for B in 1 16; do if can_run 600 smoke_granite_b$B; then sched_smoke granite_b$B $B "$GR_ENV" 0 "$GR" "$GR_REV" "$GA"; rec $?; else say "PROVE: smoke_granite_b$B NOT RUN (deadline) -- a skipped smoke is not a proof (A2)"; rec 23; fi; done
   else rec 12; fi
@@ -640,7 +645,7 @@ if [ "$PROVE" = 1 ]; then
   [ "$BOX" = M ] && prove_m                                                   # SC5: every install from its lock, every server, the scorers
   [ "$BOX" = E ] && prove_e                                                   # SC2: every server answers the driver, all VALID
   [ "$rc_any" = 0 ] || { say "PROVE: NOT PROVED (rc_any=$rc_any)"; finish 23; }
-  echo "PROVED box=$BOX installs=[$PROVE_NEEDS] smokes=[granite_b1 granite_b16]$([ "$BOX" = C ] && echo ' sglang_jit=ran')$([ "$BOX" = B ] && echo " comparators=[${PB_STEPS# }]")$([ "$BOX" = D ] && echo ' census=[toy e4b_granite_b16_graph vllm_b1_node sglang_b1_node llamacpp_b16_graph]')$([ "$BOX" = E ] && echo ' servers=[e4b_granite vllm sglang llamacpp]')$([ "$BOX" = F ] && echo ' sc2b=[routes graph_engaged identity]')$([ "$BOX" = G ] && echo ' servers=[e4b_gptoss vllm sglang llamacpp]')$([ "$BOX" = H ] && echo ' sc2c=[routes bulk_engaged identity step_trace]')$([ "$BOX" = K ] && echo ' sc2d=[prompts arch both_servers engaged determinism identity]')$([ "$BOX" = L ] && echo ' sc2e=[routes slots burst engaged identity wide_steps]')$([ "$BOX" = I ] && echo ' kl_full=[e4b_serve vllm llamacpp_q8] (A5; SGLang UNREAD by registration)')" | tee -a summary.txt
+  echo "PROVED box=$BOX installs=[$PROVE_NEEDS] smokes=[$([ "$BOX" = M ] && echo "none: prove_m runs e4b on Qwen3" || echo "granite_b1 granite_b16")]$([ "$BOX" = C ] && echo ' sglang_jit=ran')$([ "$BOX" = B ] && echo " comparators=[${PB_STEPS# }]")$([ "$BOX" = D ] && echo ' census=[toy e4b_granite_b16_graph vllm_b1_node sglang_b1_node llamacpp_b16_graph]')$([ "$BOX" = E ] && echo ' servers=[e4b_granite vllm sglang llamacpp]')$([ "$BOX" = F ] && echo ' sc2b=[routes graph_engaged identity]')$([ "$BOX" = G ] && echo ' servers=[e4b_gptoss vllm sglang llamacpp]')$([ "$BOX" = H ] && echo ' sc2c=[routes bulk_engaged identity step_trace]')$([ "$BOX" = K ] && echo ' sc2d=[prompts arch both_servers engaged determinism identity]')$([ "$BOX" = L ] && echo ' sc2e=[routes slots burst engaged identity wide_steps]')$([ "$BOX" = I ] && echo ' kl_full=[e4b_serve vllm llamacpp_q8] (A5; SGLang UNREAD by registration)')" | tee -a summary.txt
   : > PROVED; finish 0
 fi
 # ============================================================================ the REAL lane: common Phase 0 pieces

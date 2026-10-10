@@ -1,0 +1,207 @@
+{
+ "capture_routing_sha256": "d6cc33b2e763f9d19072605f6419612c4a3ee9df49ca8e4ac5ed2eb2341c1bbb",
+ "command": "/root/loc/locality_capture.py --phase census --revision ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 --model-path /root/loc/hf/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 --out-dir /root/loc/out --trace-dir /root/loc/gnf4/bench/cold-engine/routing-trace --hot-profile /root/loc/out/calibration_profile.jsonl --steps 512",
+ "decode": {
+  "batch": 1,
+  "prompt_tokens": 64,
+  "prompts": {
+   "code": {
+    "distinct_tokens": 146,
+    "prompt_ids_sha256": "b5c687caf1bb23fcb56e480591a20c6da1d2336ac3fd26b68936488e3bfca17c",
+    "wall_s": 89.2
+   },
+   "dialogue": {
+    "distinct_tokens": 89,
+    "prompt_ids_sha256": "117b295cac378c4437d8a4cf54ef114ec4c9b09a56cd6258eaf5c1990ef43288",
+    "wall_s": 88.6
+   },
+   "math": {
+    "distinct_tokens": 54,
+    "prompt_ids_sha256": "014a09b9c65946a2114f4db2137f38c2c445c5f3a8400feed6c7eb01fad2e323",
+    "wall_s": 88.3
+   },
+   "prose": {
+    "distinct_tokens": 47,
+    "prompt_ids_sha256": "396cd38a0847150ec12d08d77f812944034d7f1b04a03ad60128482b9734d694",
+    "wall_s": 87.9
+   }
+  },
+  "shape": [
+   2048,
+   48,
+   8
+  ],
+  "steps_per_prompt": 512
+ },
+ "env": {
+  "architectures": [
+   "Qwen3MoeForCausalLM"
+  ],
+  "config": "config.json:2850ddb3bf7aecad",
+  "cuda": "12.8",
+  "model_path": "/root/loc/hf/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+  "name_or_path": "/root/loc/hf/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+  "python": "3.11.13",
+  "repo_id": "Qwen/Qwen3-30B-A3B",
+  "torch": "2.8.0+cu128",
+  "transformers": "5.16.1",
+  "weight_index": "model.safetensors.index.json:df0d481ec595c55a"
+ },
+ "geometry": {
+  "n_experts": 128,
+  "n_layers": 48,
+  "routers": [
+   "model.layers.0.mlp.gate",
+   "model.layers.1.mlp.gate"
+  ],
+  "top_k": 8
+ },
+ "model": "Qwen/Qwen3-30B-A3B",
+ "prefill": {
+  "batch": 1,
+  "shape": [
+   10256,
+   48,
+   8
+  ],
+  "window_ids_sha256": "c63230d32347e1d1caf9ca7f189184ed215fdb47145306a68d23012423b0e293",
+  "windows": 16
+ },
+ "residency": {
+  "decode_only": "the engine serves T == 1; prefill takes the offload reference path",
+  "engine": "pipelined (enable_pipelined_residency)",
+  "engines": 48,
+  "hot_per_layer": 8,
+  "hot_sets_from": "hot_sets_from_profile over the calibration windows (wikitext validation, out of sample), profiled in a separate process",
+  "offload": true,
+  "pin": true,
+  "prefetch": true
+ },
+ "residency_counters": {
+  "cold_pcie_bytes": {
+   "0": 39560970240,
+   "1": 37344706560,
+   "10": 39008894976,
+   "11": 39505231872,
+   "12": 39863549952,
+   "13": 36912070656,
+   "14": 37461491712,
+   "15": 38639960064,
+   "16": 36643995648,
+   "17": 38125043712,
+   "18": 37697716224,
+   "19": 37864931328,
+   "2": 37833080832,
+   "20": 39348633600,
+   "21": 36723621888,
+   "22": 38714277888,
+   "23": 39640596480,
+   "24": 39465418752,
+   "25": 35911434240,
+   "26": 38316146688,
+   "27": 38982352896,
+   "28": 37644632064,
+   "29": 37533155328,
+   "3": 37257117696,
+   "30": 37703024640,
+   "31": 37628706816,
+   "32": 37695062016,
+   "33": 38180782080,
+   "34": 39547699200,
+   "35": 39181418496,
+   "36": 38647922688,
+   "37": 36418387968,
+   "38": 38244483072,
+   "39": 37854314496,
+   "4": 38791249920,
+   "40": 34504704000,
+   "41": 35263807488,
+   "42": 37142986752,
+   "43": 38249791488,
+   "44": 38483361792,
+   "45": 37424332800,
+   "46": 37525192704,
+   "47": 36285677568,
+   "5": 38401081344,
+   "6": 37015584768,
+   "7": 35683172352,
+   "8": 38472744960,
+   "9": 37501304832
+  },
+  "row_bytes": {
+   "0": 2654208,
+   "1": 2654208,
+   "10": 2654208,
+   "11": 2654208,
+   "12": 2654208,
+   "13": 2654208,
+   "14": 2654208,
+   "15": 2654208,
+   "16": 2654208,
+   "17": 2654208,
+   "18": 2654208,
+   "19": 2654208,
+   "2": 2654208,
+   "20": 2654208,
+   "21": 2654208,
+   "22": 2654208,
+   "23": 2654208,
+   "24": 2654208,
+   "25": 2654208,
+   "26": 2654208,
+   "27": 2654208,
+   "28": 2654208,
+   "29": 2654208,
+   "3": 2654208,
+   "30": 2654208,
+   "31": 2654208,
+   "32": 2654208,
+   "33": 2654208,
+   "34": 2654208,
+   "35": 2654208,
+   "36": 2654208,
+   "37": 2654208,
+   "38": 2654208,
+   "39": 2654208,
+   "4": 2654208,
+   "40": 2654208,
+   "41": 2654208,
+   "42": 2654208,
+   "43": 2654208,
+   "44": 2654208,
+   "45": 2654208,
+   "46": 2654208,
+   "47": 2654208,
+   "5": 2654208,
+   "6": 2654208,
+   "7": 2654208,
+   "8": 2654208,
+   "9": 2654208
+  },
+  "steps": 2048
+ },
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "text": {
+  "calibration": {
+   "command": "/root/loc/locality_capture.py --phase calibrate --revision ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 --model-path /root/loc/hf/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 --out-dir /root/loc/out --hot-profile /root/loc/out/calibration_profile.jsonl",
+   "split": "validation",
+   "stride": 3072,
+   "width": 641,
+   "window_ids_sha256": "072195bc333f62bb701022187189fee6528ffb87d282b7a95a421e4bc08c9ed5",
+   "windows": 8
+  },
+  "decode_prompts": "capture_routing.PROMPTS (prose, code, math, dialogue)",
+  "prefill": {
+   "dataset": "Salesforce/wikitext wikitext-2-raw-v1",
+   "join": "non-blank lines joined by a blank line (P117)",
+   "split": "test",
+   "stride": 3072,
+   "width": 641
+  }
+ },
+ "versions": {
+  "experts4bit_qlora": "0.52.0",
+  "gpu": "NVIDIA RTX A4000",
+  "torch": "2.8.0+cu128"
+ }
+}

@@ -16,6 +16,10 @@ for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR 
 done
 case "$SC1_BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M) ;; *) say "refusing: SC1_BOX must be A, B, C, D, E, F, G, H, I, J, K, L or M (SC1b, SC2, SC2b, SC2g, SC2c, SC1g, SC1g-diag, SC2d, SC2e, SC5)"; exit 78;; esac
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
+# Lane liveness by PID identity and host uptime (#1512) and the host-fault marker (#1517): the helper is sourced here and
+# streamed to the box over ssh stdin for the launch and each probe; it is never staged (staged.sha256 does not list it).
+LANE_HELPER="$REPO/bench/common/lane_liveness.sh"
+source "$LANE_HELPER" || { say "refusing: missing lane liveness helper"; exit 78; }
 P39="$REPO/bench/p39"; P42="$REPO/bench/p42"; TESTS="$REPO/tests"
 # flat pieces (box sees them in $W); the reducer joins when it exists (staged.sha256 pins it then: "pinned at integration")
 STAGE="$HERE/sc1_run.sh $HERE/sc1_e4b_sched.py $HERE/sc1_prompts.py $HERE/sc1_sampler.sh $P39/step_decomp.py $P39/k8_bake.py $P39/calib.json $TESTS/test_k19_row_exact_gpu.py $HERE/staged.sha256"
@@ -28,7 +32,7 @@ P98="$REPO/bench/p98"; STAGE="$STAGE $P98/p98_bake.py"   # SC2d (box K): P98's Q
 # quality pass; the reference files when the amendment that registers them has committed them
 SC5="$REPO/bench/sc5"; for f in sc5_box_m.sh sc5_driver.py sc5_quality.py sc5_e4b_quality.py sc5_ref.py sc5_windows.py sc5_reduce.py sc5_record.py sc5_windows_w64.json; do STAGE="$STAGE $SC5/$f"; done
 for f in vllm.lock.txt sglang.lock.txt e4b-wheels.lock; do STAGE="$STAGE $SC5/locks/$f"; done
-STAGE="$STAGE $REPO/bench/p117/p117_box.py"
+STAGE="$STAGE $REPO/bench/p117/p117_box.py $REPO/bench/p108/p108_box.py $REPO/bench/p97/p97_box.py"   # p117 imports p108, which imports p97
 for f in sc5_ref.json sc5_ref_chunked.json; do [ -s "$SC5/ref/$f" ] && STAGE="$STAGE $SC5/ref/$f"; done
 HOOK="$P42/hook/usercustomize.py"
 COMP_DIRS=""; for d in vllm sglang llamacpp exl3 lmdeploy sc1g_ref; do [ -d "$HERE/$d" ] && COMP_DIRS="$COMP_DIRS $d"; done
@@ -51,6 +55,8 @@ while read -r want name; do
     sc5_*) src="$SC5/$name";;
     vllm.lock.txt|sglang.lock.txt|e4b-wheels.lock) src="$SC5/locks/$name";;
     p117_box.py) src="$REPO/bench/p117/$name";;
+    p108_box.py) src="$REPO/bench/p108/$name";;
+    p97_box.py) src="$REPO/bench/p97/$name";;
     *) src="$P39/$name";;
   esac
   [ -s "$src" ] || { say "refusing: pinned file $name resolves to $src, which is missing"; exit 78; }
@@ -106,7 +112,13 @@ if [ -s "$HF_TOKEN_FILE" ]; then   # authenticated pulls (unauthenticated shards
 else
   say "no hf token file at $HF_TOKEN_FILE -- pulls run unauthenticated (every registered checkpoint is ungated)"
 fi
-$SSH "cd $W || exit 20; nohup env $PASS bash sc1_run.sh > outer.log 2>&1 < /dev/null & child=\$!; end=\$((\$(date +%s)+30)); while [ \$(date +%s) -lt \$end ]; do [ \"\$(cat SC1_RUN_NONCE 2>/dev/null)\" = '$NONCE' ] && { echo started:\$child; exit 0; }; kill -0 \$child 2>/dev/null || { wait \$child; echo child-exited-early:rc=\$? >&2; exit 125; }; sleep 1; done; echo nonce-handshake-timeout >&2; exit 124" || { say "start failed: child did not bind the nonce"; exit 21; }
+LANE_STARTED_AT=$(date +%s)
+LAUNCH_REPLY=$({ cat "$LANE_HELPER"; printf '%s\n' "cd $W || exit 20; nohup env $PASS bash sc1_run.sh > outer.log 2>&1 < /dev/null & child=\$!; identity=\$(lane_proc_snapshot \$child); end=\$((\$(date +%s)+30)); while [ \$(date +%s) -lt \$end ]; do [ \"\$(cat SC1_RUN_NONCE 2>/dev/null)\" = '$NONCE' ] && { echo started:\$child; echo identity:\$identity; exit 0; }; kill -0 \$child 2>/dev/null || { wait \$child; echo child-exited-early:rc=\$? >&2; exit 125; }; sleep 1; done; echo nonce-handshake-timeout >&2; exit 124"; } | $SSH bash -s) || { say "start failed: child did not bind the nonce"; exit 21; }
+printf '%s\n' "$LAUNCH_REPLY"
+LANE_PID=$(printf '%s\n' "$LAUNCH_REPLY" | sed -n 's/^started:\([0-9][0-9]*\)$/\1/p')
+[[ "$LANE_PID" =~ ^[1-9][0-9]*$ ]] || { say "start failed: malformed child PID"; exit 21; }
+LANE_INITIAL=$(printf '%s\n' "$LAUNCH_REPLY" | sed -n 's/^identity://p')
+say "lane identity: pid=$LANE_PID snapshot=${LANE_INITIAL:-unknown}"
 # ---- heartbeat + liveness (e4b#641, from tp4_drive.sh / p58_drive.sh): a stall is REPORTED, never acted on; two consecutive
 # definite zeros on the lane's own process with no TP_DONE end the wait with their own exit code (25).
 SC1_MIN_PROGRESS_MB=${SC1_MIN_PROGRESS_MB:-16}
@@ -121,10 +133,11 @@ progress_verdict() {  # idle_s stall_s util dfk_now dfk_prev du_now du_prev -> "
   fi
   if [ "$idle_s" -ge "$stall_s" ] && [ "${util:-0}" -eq 0 ] 2>/dev/null; then echo "stall:$idle_s"; fi
 }
-lane_dead() { [ "${1:-}" = "0" ] && [ "${2:-}" = "0" ] && echo dead; }   # live_now live_prev: two DEFINITE zeros
-# SC2g A1: the heartbeat counts '[b]ash sc1_run.sh', not 'bash sc1_run.sh'. The count runs inside an ssh shell whose OWN command
-# line carries the pattern, so the plain form always counted itself, `live` was never 0, and LANE DEAD never fired: a lane that
-# died under set -u (sc2g-prove-1) waited out its whole deadline. The bracket still matches the process, never this text.
+lane_dead() { lane_two_missing "$@"; }   # live_now live_prev: two DEFINITE zeros
+# SC2g A1 found that a process-name count run inside the probing ssh shell can match its own command line: LANE DEAD never
+# fired, and sc2g-prove-1 waited out its whole deadline. Liveness is now the launch PID's identity (its /proc start time,
+# which survives exec and cannot match the probe or a reused PID) plus the host's boot id and uptime (#1512). A reboot
+# writes the launcher's host-fault marker (#1517).
 # A10: one pull for both uses (the same keep/leave rules). Keep: every receipt / log / sample csv / summary / quiesce / energy
 # json, the pack's manifest.json (payloads stay), work_*/bake.json (k8_bake.py's failure record travels; p57-5090-1 lost the only
 # text that said WHY). Leave: venvs, caches, arenas, snapshots, the llama.cpp tree and GGUFs, the pack payloads, SC1g's staged
@@ -146,18 +159,30 @@ pull_box() { local -a low=(); [ "${2:-}" = low ] && low=(--rsync-path="nice -n 1
 # receipt's sc1/ only when the final fetch fails, and is labelled so.
 PULL_EVERY_S=${SC1_PULL_EVERY_S:-1200}; LAST_PULL=$(date +%s); PARTIAL_AT=""
 say "lane started; polling TP_DONE every ${POLL}s with a heartbeat (stall reported after ${STALL_S}s of no change, idle GPU AND no disk movement; never acted on; a lane whose process is gone for two polls ends the wait)"
-LAST=""; LAST_CHANGE=$(date +%s); LAST_DFK=""; LAST_DU=""; LAST_LIVE=""; LANE_DEAD=0
+LAST=""; LAST_CHANGE=$(date +%s); LAST_DFK=""; LAST_DU=""; LAST_LIVE=""; UNKNOWN_PROBES=0; LANE_DEAD=0
 while :; do
   now=$(date +%s)
   $SSH "test -f $W/TP_DONE.$NONCE" 2>/dev/null && { say "TP_DONE seen"; break; }
   [ "$now" -ge $((DEADLINE - POLL)) ] && { say "deadline reached without TP_DONE -- fetching what exists"; break; }
-  hb=$($SSH "echo \"\$(grep -v '^[[:space:]]*$' $W/summary.txt 2>/dev/null | tail -n 1 | cut -c1-160) | gpu \$(nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits 2>/dev/null | tr -d ' ') | du \$(du -sm $W 2>/dev/null | cut -f1)M | disk \$(df -h /root | tail -1 | awk '{print \$4}') | dfk \$(df -k /root | tail -1 | awk '{print \$4}') | live \$(pgrep -f '[b]ash sc1_run.sh' | wc -l | tr -d ' ')\"" 2>/dev/null)
+  hb=$($SSH "echo \"\$(grep -v '^[[:space:]]*$' $W/summary.txt 2>/dev/null | tail -n 1 | cut -c1-160) | gpu \$(nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits 2>/dev/null | tr -d ' ') | du \$(du -sm $W 2>/dev/null | cut -f1)M | disk \$(df -h /root | tail -1 | awk '{print \$4}') | dfk \$(df -k /root | tail -1 | awk '{print \$4}')\"" 2>/dev/null)
   line=${hb%% | gpu*}; util=$(echo "$hb" | sed -n 's/.*| gpu \([0-9]*\),.*/\1/p')
   dfk=$(echo "$hb" | sed -n 's/.*| dfk \([0-9]*\).*/\1/p'); duM=$(echo "$hb" | sed -n 's/.*| du \([0-9]*\)M.*/\1/p')
-  live=$(echo "$hb" | sed -n 's/.*| live \([0-9]*\).*/\1/p')
+  snapshot=$($SSH "bash -s -- --probe $LANE_PID" < "$LANE_HELPER" 2>/dev/null) || snapshot=""
+  live=$(lane_snapshot_verdict "$snapshot" "$LANE_INITIAL" "$((now - LANE_STARTED_AT))")
+  UNKNOWN_PROBES=$(lane_unknown_streak "$live" "$UNKNOWN_PROBES")
+  hb="$hb | live ${live:-unknown} | pid $LANE_PID | unknown_probes $UNKNOWN_PROBES"
+  if [ "$live" = reboot ]; then
+    say "LANE DEAD: host rebooted (boot identity changed or uptime below lane age/baseline); fetching what exists"
+    if lane_write_host_fault "${E4B_RENT_RUN_DIR:-}" reboot "$(lane_reboot_evidence "$snapshot" "$LANE_INITIAL" "$((now - LANE_STARTED_AT))")"; then
+      say "host-fault.json written (kind reboot) for the receipt"
+    else
+      say "host-fault.json NOT written (no run directory)"
+    fi
+    LANE_DEAD=1; break
+  fi
   if [ "$line" != "$LAST" ]; then [ -n "$line" ] && say "box: $line"; LAST=$line; LAST_CHANGE=$now; fi
   if [ -n "$(lane_dead "$live" "$LAST_LIVE")" ]; then
-    say "LANE DEAD: no 'bash sc1_run.sh' on the box for two consecutive polls and no TP_DONE -- the remote process exited without writing its markers; not waiting out the deadline"
+    say "LANE DEAD: launch PID $LANE_PID gone/reused on the box for two consecutive polls and no TP_DONE -- the remote process exited without writing its markers; not waiting out the deadline"
     LANE_DEAD=1; break
   fi
   LAST_LIVE=$live

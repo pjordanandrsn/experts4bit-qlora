@@ -88,7 +88,7 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 
 def test_the_self_tests_pass():
     base = {"PATH": "/usr/bin:/bin", **{k: os.environ[k] for k in ("SYSTEMROOT",) if k in os.environ}}
-    for script, want in (("fam_reduce.py", "fam_reduce self-test OK (68/68 cases)"),
+    for script, want in (("fam_reduce.py", "fam_reduce self-test OK (70/70 cases)"),
                          ("fam_box.py", "fam_box self-test OK (38/38 cases)"),
                          ("fam_speed.py", "fam_speed self-test OK (9/9 cases)"),
                          ("fam_speed_reduce.py", "fam_speed_reduce self-test OK (30/30 cases)")):
@@ -342,3 +342,19 @@ def test_amendment_9_launches_past_1482():
     small = 4
     assert (f"ON_auto reads `rmsnorm_rows` {small + 1}, `rmsnorm_resid_rows` {small}, `rope_heads` {2 * small} "
             f"and `router_epilogue` {small}") in flat
+
+
+def test_gemma4_s_per_step_by_shape_is_amendment_10_s():
+    """Amendment 10: after fam-gemma4-prove-1 read 216 glue norms a step at T == 12 against Amendment 6's 271, Gemma-4's
+    ON_glue and ON_auto count per shape: the glue fold's 64-row bound sends the per-head q/k norms with more rows to
+    their own torch forward. Every other family and T == 1 keep their tables."""
+    r = _load("fam_reduce")
+    assert r.PER_STEP_BY_SHAPE == {("gemma4", "ON_glue"): {12: {"rmsnorm_rows": 216}},
+                                   ("gemma4", "ON_auto"): {12: {"rmsnorm_rows": 216, "router_epilogue": 30}}}
+    for config in ("ON_glue", "ON_auto"):
+        assert r.per_step("gemma4", config, 1) == r.PER_STEP[("gemma4", config)]
+    assert r.per_step("gemma4", "OFF", 12) == {} and r.per_step("mixtral", "ON_auto", 12) == r.PER_STEP[("mixtral", "ON_auto")]
+    flat = " ".join(PREREG[PREREG.index("## Amendment 10"):].split())
+    for s_ in ("store `37e7f190`", "271 − (25 + 25 + 5) = 216", "reducer's self-test now runs 70 cases",
+               "Amendment 6's 4.0 h guard stands"):
+        assert s_ in flat, s_

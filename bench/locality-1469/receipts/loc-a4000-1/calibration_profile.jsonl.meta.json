@@ -1,0 +1,8 @@
+{
+ "windows": 8,
+ "width": 641,
+ "stride": 3072,
+ "split": "validation",
+ "window_ids_sha256": "072195bc333f62bb701022187189fee6528ffb87d282b7a95a421e4bc08c9ed5",
+ "command": "/root/loc/locality_capture.py --phase calibrate --revision ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 --model-path /root/loc/hf/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 --out-dir /root/loc/out --hot-profile /root/loc/out/calibration_profile.jsonl"
+}

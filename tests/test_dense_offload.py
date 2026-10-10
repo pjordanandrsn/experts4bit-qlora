@@ -151,6 +151,29 @@ def test_evicted_then_staged_restores_exactly():
 cuda = pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
 
 
+def test_cpu_inference_with_default_prefetch_matches_resident_without_cuda(monkeypatch):
+    """Public CPU adapter reload leaves prefetch enabled; it must stage synchronously."""
+    torch.manual_seed(19)
+    model = Toy(n=2).eval().requires_grad_(False)
+    inputs = [torch.randn(batch, H) for batch in (1, 3)]
+    with torch.no_grad():
+        expected = [model(x).clone() for x in inputs]
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("CPU inference attempted a CUDA stream/event call")
+
+    for name in ("Stream", "Event", "stream", "current_stream"):
+        monkeypatch.setattr(torch.cuda, name, forbidden)
+    handles = enable_dense_offload(model, "cpu", pin=False)  # default prefetch=True
+    assert len(handles) == 2 and sum(handle.bytes for handle in handles) > 0
+    assert all(handle._prefetch_next is not None for handle in handles)
+    for _ in range(2):
+        with torch.no_grad():
+            for x, reference in zip(inputs, expected):
+                assert torch.equal(model(x), reference)
+        assert not any(handle.staged or handle.ready_event is not None for handle in handles)
+
+
 @cuda
 def test_staged_weights_are_bit_identical_on_device():
     m = _model("cuda")

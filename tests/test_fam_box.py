@@ -287,6 +287,40 @@ def test_mixtral_at_full_depth_is_the_registered_census_per_step_and_fp32_router
             assert epi["patched"] == epi["fp32_upstream"] == red.FP32_ROUTERS["mixtral"], (config, epi)
 
 
+def test_gemma4_s_per_step_follows_the_rows_its_per_head_norms_see(monkeypatch):
+    """Amendment 10: with Gemma-4's real head counts (16 query heads; 8 KV heads on sliding layers, 2 on full ones), the
+    glue fold's 64-row bound sends a per-head norm to its own torch forward once sequences x heads > 64. A 12-row
+    decode-shaped forward then calls rmsnorm_rows 216 times and a 1-row one 271 times: the reducer's per_step."""
+    pytest.importorskip("transformers.models.gemma4", reason="needs transformers with Gemma-4")
+    from transformers import Gemma4ForCausalLM, Gemma4TextConfig
+
+    from experts4bit_qlora.serve_paged import FUSION_KNOBS, PagedServeConfig, _apply_fusions
+    box, red = _load("fam_box"), _load("fam_reduce")
+    q = _load("p115_quality", "p115")
+    for config in ("ON_glue", "ON_auto"):
+        monkeypatch.setitem(sys.modules, "int4_b32", _stub())
+        counters = q.KernelCounters().install()
+        cfg = Gemma4TextConfig(vocab_size=256, hidden_size=128, intermediate_size=128, num_hidden_layers=30,
+                               num_attention_heads=16, num_key_value_heads=8, head_dim=32, global_head_dim=64,
+                               num_global_key_value_heads=2,
+                               layer_types=(["sliding_attention"] * 5 + ["full_attention"]) * 5, sliding_window=1024,
+                               enable_moe_block=True, num_experts=4, top_k_experts=2, moe_intermediate_size=64,
+                               attention_k_eq_v=True, hidden_size_per_layer_input=0, vocab_size_per_layer_input=256,
+                               final_logit_softcapping=30.0)
+        torch.manual_seed(0)
+        model = Gemma4ForCausalLM(cfg).to(torch.bfloat16).eval()
+        _apply_fusions(model, PagedServeConfig(fusion_modes={k: box.CONFIGS[config][k] for k in FUSION_KNOBS}))
+        for shape in (12, 1):
+            with torch.no_grad():
+                before = counters.snapshot()
+                model(input_ids=torch.randint(0, 256, (shape, 1)), position_ids=torch.full((shape, 1), 32),
+                      use_cache=False)
+            got = {k: v - before[k] for k, v in counters.snapshot().items() if v - before[k]}
+            assert got == red.per_step("gemma4", config, shape), (config, shape, got)
+    assert red.per_step("gemma4", "ON_auto", 12)["rmsnorm_rows"] == 271 - (25 * (12 * 16 > 64) + 25 * (12 * 8 > 64)
+                                                                           + 5 * (12 * 16 > 64) + 5 * (12 * 2 > 64))
+
+
 def test_gemma4_at_full_depth_is_the_registered_census_and_per_step(monkeypatch):
     """Amendment 6: a tiny Gemma-4 at the real depth and layer pattern (30 layers, five sliding to one full, K = V on the
     full layers, the logit softcap) reads exactly the registered census and per-step glue calls for each config. The

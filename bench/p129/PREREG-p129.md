@@ -464,6 +464,121 @@ A missing or broken floor VOIDs the draw, and an incomplete floor makes the rung
 **Budget.** One RTX 5090 at the policy rate: about $2–3 with the download. The floor adds five held-out passes of eight rows to each
 q0 arm before training, seconds per pass. The lane has spent $2.085 so far and stays under $15.
 
+## Amendment 3 read (`tc1-5090-147`, 2026-10-10): GAIN
+
+**The box.**
+- **Host:** machine 27708 (AMD EPYC 7B13, RTX 5090) at $0.689/h; $2.759. All eight arms are VALID.
+- **Build:** e4b `51e5ae1` (Amendment 3 and its harness on main), grouped-nf4-gemm v0.44.0 `d1f64ba`.
+- **Floor:** both q0 arms carry the full record. Every mode covers every row, A0 equals the stock rows, D3 shared on 384 of 384 calls
+  (48 layers × 8 rows), and 48 attention modules were hooked.
+- **Reduction:** main's `tc1_reduce.py` at `19bfbe1` (`RESULTS-p129-a3.md`).
+
+**Load.** The host was heavily shared. The load gate voided 14 draws and ran them again, and every attempt that stands was above the
+6.0 gate (loads 12.3–32.0). The last draw (shipped `q0` d2, load 29.4) had its re-runs skipped by the host-limited deadline. Its first
+attempt stands, as registered. The wall rows were read under that contention. They agree with box 146's on a different host (0.896 and
+0.879 there).
+
+| row | verdict | reading | prediction |
+|---|---|---|---|
+| `R_m` | HELD | launches per step 79,576 → 68,513, −13.9 % | 12–15 %: held |
+| `R_shipped` | HELD | 75,833 → 64,761, −14.6 % | held |
+| `PREMISE` | HELD | matched `q0` busy_t 0.464 | |
+| `W_m` | HELD | `q1 / q0` 0.895 [0.890, 0.901] | [0.86, 0.95]: held |
+| `W_shipped` | HELD | 0.868 [0.862, 0.875] | held |
+| `DEVICE` | reported | 0.987 on each arm; peak +0.005 / +0.023 GB | [0.97, 1.02]: held |
+| `QUALITY` | HELD | step 0, both arms: e_B 0.02313 against max(e_A 0.03138, e_D2 0.03138, e_D3 0.03523, e_D4 0.03905) = 0.03905; at N −0.00001 matched, +0.00063 shipped | HELD: held |
+| `FQKV` | **GAIN** | | GAIN about 70 %: held |
+
+- **The step-0 ratio:** e_B / max is 0.59 on each arm, against a prediction of [0.35, 1.10], about 0.65.
+- **Identical across arms and hosts:** the two arms read the same step 0, because `lora_B` is zero on both. The step-0 held-out values
+  equal box 146's on another host (1.95917 knob off, 1.94684 fused).
+- **D2 was not a distinct schedule on this card:** splitting q's matmul in two reproduced the stock rows exactly (e_D2 = e_A). The
+  envelope's maximum came from D4.
+
+**What the envelope measures** (report-only, RTX A2000, the real model at the pin, the box-146 rows; `instrument/p129_routing.py`,
+`records/a3/routing_step0.json`):
+- **Routing flips:** the fused path changes which experts the router picks. At layer 0, 3.4 % of tokens get a different top-8 set from
+  the stock path's. That rises to 14–22 % in the deepest layers, about 15 % on average, and the q split does the same.
+- **The causal check:** with every layer's router output replaced by the stock path's, the fused path's step-0 held-out is 1.94455,
+  against the stock path's 1.94705 and the unpinned fused path's 1.97018. Pinning the routing removes 111 % of the mean shift. Per row,
+  the mean |fused − stock| falls from 0.0241 to 0.0038.
+
+The step-0 shift is the router's discrete top-8 choice amplifying sub-ulp q/k/v rounding. That is what the fp32-anchored envelope bounds.
+
+**Decision** (Amendment 2's rules): GAIN. The knob stays opt-in until DEFAULT_ON's second host reads, and that box is the lane's one
+replication. Box 146 cannot serve as the second host: it carries no floor, so it cannot be read under this clause.
+
+## Amendment 4 (2026-10-10T04:40Z, after `tc1-5090-148`, before its rerun): the DEFAULT_ON second-host box on current main
+
+**Why.** `tc1-5090-148`, DEFAULT_ON's second-host box at `51e5ae1`, measured nothing:
+- About three minutes into the run, the container restarted: its first process started after the lane had begun, and no lane process
+  remained.
+- The driver at that commit counted the lane with a `pgrep` that matched its own ssh shell, so it never declared the lane dead. The box
+  waited 2.3 h until the driver was stopped; it ended as a harness error at $1.809.
+- Main has since replaced that check (#1512: lane identity and host uptime; #1517: a host reboot recorded as a host fault).
+
+The replication therefore moves to a build that carries that driver. Its kernel side stays box 147's.
+
+**The build.**
+- **e4b:** main at launch, read from git, carrying this amendment. The manifest pins it.
+- **grouped-nf4-gemm:** v0.44.0 `d1f64ba`, as box 147.
+- **The package-diff audit against `51e5ae1`, box 147's build.** The manifest generator lists every `experts4bit_qlora` file changed
+  between `51e5ae1` and the pin. It refuses the launch if any changed file is not in the list below, each read as off the Qwen3-30B-A3B
+  training path:
+
+| file | the change (as of main `f088be1`) | why it is off the measured path |
+|---|---|---|
+| `__init__.py` | the version, 0.52.0 | metadata |
+| `arch/moe_conventions.py` | Qwen3.5-MoE's native composite text root | other families only |
+| `arch/moe_plan.py` | the composite text-root scope | runs only for a convention with a text checkpoint prefix; Qwen3-MoE has none |
+| `engines/chunked_lm_loss.py` | the chunk workspace's bytes per logit, 10 → 12 | priced only by `recipe`'s estimate; the runtime chunking decision does not read it |
+| `engines/pipelined.py` | gpt-oss routing keyword names | gpt-oss only |
+| `loader.py` | one module-path entry for `qwen3_5_moe_text` | other families only |
+| `recipe.py` | memory-estimate terms | estimates; no measured path calls them |
+
+The manifest's preregistration text records the audit's `git diff --stat` and this reason.
+
+**The host.** Avoid machine 27708, box 147's, under the replication rule. Avoid machine 46990, which restarted box 148's container. Also
+avoid 18967 and TC1's standing lists, with the launcher's ranking off, at the $0.85/h policy rate.
+
+**Everything else as Amendment 3:** the token `qwen3fqkv3`, the arms, the floor, the clauses, the predictions and the decision rules.
+DEFAULT_ON needs this box at GAIN, or GPU-bound with the recount and quality held and both wall ratios at most 1.01. If every standing
+attempt again sits above the load gate, the read says so and does not call DEFAULT_ON on contention alone.
+
+**Budget.** The lane has spent $6.653 ($0.211 + $1.874 + $2.759 + $1.809 for boxes 143, 146, 147 and 148), with $8.347 left under
+the $15 cap. This box is about $2–3.
+
+## Amendment 4 read (`tc1-5090-150`, 2026-10-10): GAIN on a second host, so DEFAULT_ON
+
+**The box.**
+- **Host:** machine 152440 (AMD EPYC 7K62, RTX 5090) at $0.659/h; $1.326.
+- **Build:** e4b `2d0ed91` (main with Amendment 4; its package diff against `51e5ae1` is the seven cleared files), grouped-nf4-gemm
+  v0.44.0 `d1f64ba`.
+- **Validity:** all eight arms are VALID, and both q0 floors are complete.
+- **Load:** no draw was voided. Every draw ran at its first attempt, under the gate.
+- **Reduction:** main's `tc1_reduce.py` at `d7ba80d` (`RESULTS-p129-a4.md`).
+
+| row | verdict | reading |
+|---|---|---|
+| `R_m` | HELD | launches per step 79,593 → 68,521, −13.9 % |
+| `R_shipped` | HELD | 75,833 → 64,761, −14.6 % |
+| `PREMISE` | HELD | matched `q0` busy_t 0.539 |
+| `W_m` | HELD | `q1 / q0` 0.906 [0.903, 0.909] |
+| `W_shipped` | HELD | 0.884 [0.870, 0.898] |
+| `DEVICE` | reported | 0.988 on each arm; peak +0.005 / +0.023 GB |
+| `QUALITY` | HELD | step 0, both arms: e_B 0.02313 against 0.03905 (e_A 0.03138, e_D2 0.03138, e_D3 0.03523, e_D4 0.03905); at N +0.00182 matched, +0.00071 shipped |
+| `FQKV` | **GAIN** | |
+
+The step-0 numbers equal box 147's bit for bit on another host. D2 again reproduced the stock rows.
+
+**DEFAULT_ON.** By Amendment 2's decision rules:
+- box 147 read GAIN on machine 27708;
+- this box reads GAIN on a second host, 152440.
+
+DEFAULT_ON does not rest on contention. This box ran with no load voids, and its wall ratios agree with box 147's under heavy load
+(0.895 / 0.868) and box 146's (0.896 / 0.879). As the rule states, e4b makes the fused projection its default in its own PR: unset means
+on, and `0` keeps today's path.
+
 ## Box log
 
 - **`tc1-5090-142`** (2026-10-09, $0): refused before any instance existed. The cheapest eligible RTX 5090 billed $0.93/h with storage,
@@ -482,3 +597,10 @@ q0 arm before training, seconds per pass. The lane has spent $2.085 so far and s
 - A $0.95/h ceiling for box 1 was set after those refusals and then found not to apply: the launcher's policy fixes RTX 5090s at
   $0.85/h whatever a manifest declares. Box 1 ran inside the policy rate.
 - **`tc1-5090-146`** (2026-10-09, $1.874, machine 152440 at $0.659/h): the Phase 2 read above.
+- **`tc1-5090-147`** (2026-10-10, $2.759, machine 27708 at $0.689/h): the Amendment 3 read above.
+- **`tc1-5090-148`** (2026-10-10, $1.809, machine 46990): DEFAULT_ON's second-host box, a harness failure with nothing measured. The
+  container restarted about three minutes in. The driver at `51e5ae1` did not see the lane die, so the box was stopped by hand after
+  2.3 h. Amendment 4 reruns it.
+- **`tc1-5090-149`** (2026-10-10, $0): refused before any instance existed. The launcher takes only completed same-class runs as avoid
+  receipts, and box 148's ended as a harness error. Machine 46990 was kept out by the offer filter instead.
+- **`tc1-5090-150`** (2026-10-10, $1.326, machine 152440 at $0.659/h): the Amendment 4 read above.

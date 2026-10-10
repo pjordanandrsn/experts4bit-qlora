@@ -1,0 +1,170 @@
+KNOBS box=M e4b=53abde3464a75333d9d5dd5cc82ee5f0b7723942 gnf4=724ccc454f006c1a46836e434e997f31f293747f model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gptq=9b534e4318b7ebc3c961a839f13eb18b1833f441 gpu_class=5090 min_disk_gb=320 min_driver=580 cpu_vendor=AuthenticAMD calib_nseq=128 quiesce_s=900 prove=0
+wheel grouped-nf4-gemm 0.45.0 grouped_nf4_gemm-0.45.0-py3-none-any.whl sha256 12de3738ad96d7cd273e3c5525d2df5f89c45ffe6acd400b1b196e65c127af51
+wheel experts4bit-qlora 0.52.0 experts4bit_qlora-0.52.0-py3-none-any.whl sha256 fd1f544c3440c733f3ab421d8ab14bb746d90704926c1631f8aeb17492694d4a
+e4b 0.52.0 (wheel)
+gnf4 0.45.0 (wheel)
+torch(e4b) 2.8.0+cu128 cuda 12.8
+transformers(e4b) 5.16.1
+[install-vllm 08:16:32] vllm==0.31.0 ready in /root/sc1/venv-vllm
+SGLANG_INSTALL OK
+aiohttp 3.14.3 fastapi 0.141.1 uvicorn 0.54.0
+PHASE 0 fetches (bf16 for the bake, the GPTQ checkpoint), bake, SC2's prompt pool; installs above at=2026-10-10T08:19:20Z nproc=32 cpu.max=1536000/100000 load=2.37/2.10/2.19
+FETCH qwen3 Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+FETCH gptq Qwen/Qwen3-30B-A3B-GPTQ-Int4@9b534e4318b7ebc3c961a839f13eb18b1833f441 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B-GPTQ-Int4/snapshots/9b534e4318b7ebc3c961a839f13eb18b1833f441
+FETCH gptq Qwen/Qwen3-30B-A3B-GPTQ-Int4@9b534e4318b7ebc3c961a839f13eb18b1833f441 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B-GPTQ-Int4/snapshots/9b534e4318b7ebc3c961a839f13eb18b1833f441
+BAKE qwen3 BAKE OK
+SC2_PROMPTS rows=64 prompt=512 sha256=de63bb35245fad5630580af0a54db04364d2e7e2a5aba72e2d18a61aee8f9fc0
+PHASE SG0 SGLang's first JIT before any timing at=2026-10-10T08:29:59Z nproc=32 cpu.max=1536000/100000 load=2.97/2.35/2.28
+PHASE SC5_1 draw 1, default memory, e4b block 1 at=2026-10-10T08:37:07Z nproc=32 cpu.max=1536000/100000 load=1.35/1.79/2.06
+QUIESCE sc5_1 quiesced=yes waited=0s busy_procs=0 load1=1.35 nproc=32 cpu.max=1536000/100000 at=2026-10-10T08:37:07Z
+SC5 01_d1_default_e4b_b1 ready: kv_tokens=131072 rounding=0
+SC5 01_d1_default_e4b_b1 C=1 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.043546, "ttft_p95_s": 0.043843, "tpot_p50_s": 0.004113, "tpot_p95_s": 0.004129, "output_tok_s": 234.244}
+SC5 01_d1_default_e4b_b1 C=16 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.102396, "ttft_p95_s": 0.103448, "tpot_p50_s": 0.01172, "tpot_p95_s": 0.011959, "output_tok_s": 1316.51}
+SC5 01_d1_default_e4b_b1 C=64 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 4.533025, "ttft_p95_s": 4.611484, "tpot_p50_s": 0.017295, "tpot_p95_s": 0.017666, "output_tok_s": 1616.995}
+PHASE SC5_2 draw 1, default memory, vllm block 1 at=2026-10-10T08:43:25Z nproc=32 cpu.max=1536000/100000 load=2.23/3.17/2.73
+QUIESCE sc5_2 quiesced=yes waited=0s busy_procs=0 load1=2.23 nproc=32 cpu.max=1536000/100000 at=2026-10-10T08:43:25Z
+SC5 02_d1_default_vllm_b1 ready: kv_tokens=128160 rounding=16
+SC5 02_d1_default_vllm_b1 C=1 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.055203, "ttft_p95_s": 0.05847, "tpot_p50_s": 0.004224, "tpot_p95_s": 0.004229, "output_tok_s": 226.079}
+SC5 02_d1_default_vllm_b1 C=16 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.152777, "ttft_p95_s": 0.222832, "tpot_p50_s": 0.009007, "tpot_p95_s": 0.009259, "output_tok_s": 1665.253}
+SC5 02_d1_default_vllm_b1 C=64 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 0.269985, "ttft_p95_s": 0.358234, "tpot_p50_s": 0.017166, "tpot_p95_s": 0.017695, "output_tok_s": 3473.522}
+PHASE SC5_3 draw 1, default memory, sglang block 1 at=2026-10-10T08:50:16Z nproc=32 cpu.max=1536000/100000 load=1.38/2.03/2.36
+QUIESCE sc5_3 quiesced=yes waited=0s busy_procs=0 load1=1.38 nproc=32 cpu.max=1536000/100000 at=2026-10-10T08:50:16Z
+SC5 03_d1_default_sglang_b1 ready: kv_tokens=88303 rounding=1
+SC5 03_d1_default_sglang_b1 C=1 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.033194, "ttft_p95_s": 0.033788, "tpot_p50_s": 0.003677, "tpot_p95_s": 0.003679, "output_tok_s": 263.568}
+SC5 03_d1_default_sglang_b1 C=16 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.190732, "ttft_p95_s": 0.30548, "tpot_p50_s": 0.008657, "tpot_p95_s": 0.009235, "output_tok_s": 1678.56}
+SC5 03_d1_default_sglang_b1 C=64 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 0.687993, "ttft_p95_s": 1.131773, "tpot_p50_s": 0.048375, "tpot_p95_s": 0.05044, "output_tok_s": 1258.67}
+PHASE SC5_4 draw 1, default memory, sglang block 2 at=2026-10-10T08:53:33Z nproc=32 cpu.max=1536000/100000 load=1.75/2.16/2.37
+QUIESCE sc5_4 quiesced=yes waited=0s busy_procs=0 load1=1.75 nproc=32 cpu.max=1536000/100000 at=2026-10-10T08:53:33Z
+SC5 04_d1_default_sglang_b2 ready: kv_tokens=88303 rounding=1
+SC5 04_d1_default_sglang_b2 C=1 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.033364, "ttft_p95_s": 0.03382, "tpot_p50_s": 0.003677, "tpot_p95_s": 0.00368, "output_tok_s": 263.526}
+SC5 04_d1_default_sglang_b2 C=16 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.190855, "ttft_p95_s": 0.305663, "tpot_p50_s": 0.008515, "tpot_p95_s": 0.009134, "output_tok_s": 1685.01}
+SC5 04_d1_default_sglang_b2 C=64 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 0.687239, "ttft_p95_s": 1.13242, "tpot_p50_s": 0.048412, "tpot_p95_s": 0.050545, "output_tok_s": 1257.678}
+PHASE SC5_5 draw 1, default memory, vllm block 2 at=2026-10-10T08:56:50Z nproc=32 cpu.max=1536000/100000 load=1.90/2.18/2.34
+QUIESCE sc5_5 quiesced=yes waited=0s busy_procs=0 load1=1.90 nproc=32 cpu.max=1536000/100000 at=2026-10-10T08:56:50Z
+SC5 05_d1_default_vllm_b2 ready: kv_tokens=131888 rounding=16
+SC5 05_d1_default_vllm_b2 C=1 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.054822, "ttft_p95_s": 0.056548, "tpot_p50_s": 0.004205, "tpot_p95_s": 0.004212, "output_tok_s": 227.145}
+SC5 05_d1_default_vllm_b2 C=16 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.153472, "ttft_p95_s": 0.225534, "tpot_p50_s": 0.00899, "tpot_p95_s": 0.009237, "output_tok_s": 1668.881}
+SC5 05_d1_default_vllm_b2 C=64 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 0.270275, "ttft_p95_s": 0.358356, "tpot_p50_s": 0.017161, "tpot_p95_s": 0.017693, "output_tok_s": 3477.036}
+PHASE SC5_6 draw 1, default memory, e4b block 2 at=2026-10-10T08:59:37Z nproc=32 cpu.max=1536000/100000 load=1.68/1.98/2.24
+QUIESCE sc5_6 quiesced=yes waited=0s busy_procs=0 load1=1.68 nproc=32 cpu.max=1536000/100000 at=2026-10-10T08:59:37Z
+SC5 06_d1_default_e4b_b2 ready: kv_tokens=131072 rounding=0
+SC5 06_d1_default_e4b_b2 C=1 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.043496, "ttft_p95_s": 0.043714, "tpot_p50_s": 0.004124, "tpot_p95_s": 0.004132, "output_tok_s": 233.641}
+SC5 06_d1_default_e4b_b2 C=16 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.10247, "ttft_p95_s": 0.103913, "tpot_p50_s": 0.011765, "tpot_p95_s": 0.011938, "output_tok_s": 1314.24}
+SC5 06_d1_default_e4b_b2 C=64 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 4.522901, "ttft_p95_s": 4.597904, "tpot_p50_s": 0.017278, "tpot_p95_s": 0.017611, "output_tok_s": 1618.664}
+PHASE SC5_7 draw 1, matched memory, e4b block 1 at=2026-10-10T09:05:36Z nproc=32 cpu.max=1536000/100000 load=2.66/3.44/2.94
+QUIESCE sc5_7 quiesced=yes waited=0s busy_procs=0 load1=2.66 nproc=32 cpu.max=1536000/100000 at=2026-10-10T09:05:37Z
+SC5 07_d1_matched_e4b_b1 ready: kv_tokens=65536 rounding=0
+SC5 07_d1_matched_e4b_b1 C=1 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.043415, "ttft_p95_s": 0.043881, "tpot_p50_s": 0.003952, "tpot_p95_s": 0.004005, "output_tok_s": 243.101}
+SC5 07_d1_matched_e4b_b1 C=16 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.102032, "ttft_p95_s": 0.103126, "tpot_p50_s": 0.011869, "tpot_p95_s": 0.012048, "output_tok_s": 1309.05}
+SC5 07_d1_matched_e4b_b1 C=64 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 0.113409, "ttft_p95_s": 0.115093, "tpot_p50_s": 0.025437, "tpot_p95_s": 0.025528, "output_tok_s": 2405.428}
+PHASE SC5_8 draw 1, matched memory, vllm block 1 at=2026-10-10T09:11:26Z nproc=32 cpu.max=1536000/100000 load=2.76/3.97/3.45
+QUIESCE sc5_8 quiesced=yes waited=0s busy_procs=0 load1=2.76 nproc=32 cpu.max=1536000/100000 at=2026-10-10T09:11:26Z
+SC5 08_d1_matched_vllm_b1 ready: kv_tokens=65536 rounding=16
+SC5 08_d1_matched_vllm_b1 C=1 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.054486, "ttft_p95_s": 0.056508, "tpot_p50_s": 0.004231, "tpot_p95_s": 0.004234, "output_tok_s": 225.819}
+SC5 08_d1_matched_vllm_b1 C=16 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.153545, "ttft_p95_s": 0.223527, "tpot_p50_s": 0.008974, "tpot_p95_s": 0.009197, "output_tok_s": 1670.241}
+SC5 08_d1_matched_vllm_b1 C=64 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 0.2705, "ttft_p95_s": 0.358636, "tpot_p50_s": 0.017161, "tpot_p95_s": 0.017707, "output_tok_s": 3475.665}
+PHASE SC5_9 draw 1, matched memory, sglang block 1 at=2026-10-10T09:14:10Z nproc=32 cpu.max=1536000/100000 load=1.53/2.97/3.15
+QUIESCE sc5_9 quiesced=yes waited=0s busy_procs=0 load1=1.53 nproc=32 cpu.max=1536000/100000 at=2026-10-10T09:14:10Z
+SC5 09_d1_matched_sglang_b1 ready: kv_tokens=65536 rounding=1
+SC5 09_d1_matched_sglang_b1 C=1 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.03319, "ttft_p95_s": 0.033899, "tpot_p50_s": 0.003681, "tpot_p95_s": 0.003688, "output_tok_s": 263.223}
+SC5 09_d1_matched_sglang_b1 C=16 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.191479, "ttft_p95_s": 0.306441, "tpot_p50_s": 0.008716, "tpot_p95_s": 0.009266, "output_tok_s": 1680.765}
+SC5 09_d1_matched_sglang_b1 C=64 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 0.685415, "ttft_p95_s": 1.198192, "tpot_p50_s": 0.049013, "tpot_p95_s": 0.051193, "output_tok_s": 1242.182}
+PHASE SC5_10 draw 1, matched memory, sglang block 2 at=2026-10-10T09:17:28Z nproc=32 cpu.max=1536000/100000 load=2.09/2.53/2.93
+QUIESCE sc5_10 quiesced=yes waited=0s busy_procs=0 load1=2.09 nproc=32 cpu.max=1536000/100000 at=2026-10-10T09:17:28Z
+SC5 10_d1_matched_sglang_b2 ready: kv_tokens=65536 rounding=1
+SC5 10_d1_matched_sglang_b2 C=1 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.033302, "ttft_p95_s": 0.034099, "tpot_p50_s": 0.003681, "tpot_p95_s": 0.003688, "output_tok_s": 263.239}
+SC5 10_d1_matched_sglang_b2 C=16 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.192489, "ttft_p95_s": 0.306462, "tpot_p50_s": 0.008621, "tpot_p95_s": 0.009232, "output_tok_s": 1681.452}
+SC5 10_d1_matched_sglang_b2 C=64 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 0.677483, "ttft_p95_s": 1.200161, "tpot_p50_s": 0.04895, "tpot_p95_s": 0.051151, "output_tok_s": 1245.177}
+PHASE SC5_11 draw 1, matched memory, vllm block 2 at=2026-10-10T09:20:46Z nproc=32 cpu.max=1536000/100000 load=1.63/2.18/2.72
+QUIESCE sc5_11 quiesced=yes waited=0s busy_procs=0 load1=1.63 nproc=32 cpu.max=1536000/100000 at=2026-10-10T09:20:46Z
+SC5 11_d1_matched_vllm_b2 ready: kv_tokens=65536 rounding=16
+SC5 11_d1_matched_vllm_b2 C=1 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.054894, "ttft_p95_s": 0.057315, "tpot_p50_s": 0.004229, "tpot_p95_s": 0.004234, "output_tok_s": 225.766}
+SC5 11_d1_matched_vllm_b2 C=16 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.153258, "ttft_p95_s": 0.222293, "tpot_p50_s": 0.008984, "tpot_p95_s": 0.009215, "output_tok_s": 1668.016}
+SC5 11_d1_matched_vllm_b2 C=64 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 0.270367, "ttft_p95_s": 0.358418, "tpot_p50_s": 0.017168, "tpot_p95_s": 0.017695, "output_tok_s": 3476.406}
+PHASE SC5_12 draw 1, matched memory, e4b block 2 at=2026-10-10T09:23:30Z nproc=32 cpu.max=1536000/100000 load=1.69/1.97/2.55
+QUIESCE sc5_12 quiesced=yes waited=0s busy_procs=0 load1=1.69 nproc=32 cpu.max=1536000/100000 at=2026-10-10T09:23:30Z
+SC5 12_d1_matched_e4b_b2 ready: kv_tokens=65536 rounding=0
+SC5 12_d1_matched_e4b_b2 C=1 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.043397, "ttft_p95_s": 0.043703, "tpot_p50_s": 0.003955, "tpot_p95_s": 0.004007, "output_tok_s": 242.791}
+SC5 12_d1_matched_e4b_b2 C=16 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.101643, "ttft_p95_s": 0.102859, "tpot_p50_s": 0.01176, "tpot_p95_s": 0.011902, "output_tok_s": 1316.692}
+SC5 12_d1_matched_e4b_b2 C=64 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 0.113594, "ttft_p95_s": 0.115101, "tpot_p50_s": 0.025531, "tpot_p95_s": 0.02559, "output_tok_s": 2403.309}
+PHASE SC5_13 draw 2, default memory, sglang block 1 at=2026-10-10T09:29:15Z nproc=32 cpu.max=1536000/100000 load=2.21/3.22/3.05
+QUIESCE sc5_13 quiesced=yes waited=0s busy_procs=0 load1=2.21 nproc=32 cpu.max=1536000/100000 at=2026-10-10T09:29:16Z
+SC5 13_d2_default_sglang_b1 ready: kv_tokens=88303 rounding=1
+SC5 13_d2_default_sglang_b1 C=1 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.033282, "ttft_p95_s": 0.033732, "tpot_p50_s": 0.003678, "tpot_p95_s": 0.003686, "output_tok_s": 263.38}
+SC5 13_d2_default_sglang_b1 C=16 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.279401, "ttft_p95_s": 0.305979, "tpot_p50_s": 0.00856, "tpot_p95_s": 0.009287, "output_tok_s": 1677.399}
+SC5 13_d2_default_sglang_b1 C=64 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 0.689645, "ttft_p95_s": 1.115136, "tpot_p50_s": 0.048273, "tpot_p95_s": 0.050462, "output_tok_s": 1259.843}
+PHASE SC5_14 draw 2, default memory, vllm block 1 at=2026-10-10T09:32:33Z nproc=32 cpu.max=1536000/100000 load=1.54/2.45/2.78
+QUIESCE sc5_14 quiesced=yes waited=0s busy_procs=0 load1=1.54 nproc=32 cpu.max=1536000/100000 at=2026-10-10T09:32:33Z
+SC5 14_d2_default_vllm_b1 ready: kv_tokens=131888 rounding=16
+SC5 14_d2_default_vllm_b1 C=1 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.054428, "ttft_p95_s": 0.057353, "tpot_p50_s": 0.004226, "tpot_p95_s": 0.004229, "output_tok_s": 226.045}
+SC5 14_d2_default_vllm_b1 C=16 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.154301, "ttft_p95_s": 0.226171, "tpot_p50_s": 0.00899, "tpot_p95_s": 0.009272, "output_tok_s": 1666.96}
+SC5 14_d2_default_vllm_b1 C=64 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 0.270379, "ttft_p95_s": 0.358467, "tpot_p50_s": 0.01718, "tpot_p95_s": 0.017698, "output_tok_s": 3476.171}
+PHASE SC5_15 draw 2, default memory, e4b block 1 at=2026-10-10T09:35:17Z nproc=32 cpu.max=1536000/100000 load=1.36/2.05/2.57
+QUIESCE sc5_15 quiesced=yes waited=0s busy_procs=0 load1=1.36 nproc=32 cpu.max=1536000/100000 at=2026-10-10T09:35:17Z
+SC5 15_d2_default_e4b_b1 ready: kv_tokens=131072 rounding=0
+SC5 15_d2_default_e4b_b1 C=1 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.043762, "ttft_p95_s": 0.044175, "tpot_p50_s": 0.00412, "tpot_p95_s": 0.004174, "output_tok_s": 233.387}
+SC5 15_d2_default_e4b_b1 C=16 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.102408, "ttft_p95_s": 0.103681, "tpot_p50_s": 0.011783, "tpot_p95_s": 0.011978, "output_tok_s": 1307.406}
+SC5 15_d2_default_e4b_b1 C=64 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 4.503141, "ttft_p95_s": 4.568067, "tpot_p50_s": 0.017242, "tpot_p95_s": 0.017494, "output_tok_s": 1621.341}
+PHASE SC5_16 draw 2, default memory, e4b block 2 at=2026-10-10T09:41:13Z nproc=32 cpu.max=1536000/100000 load=2.03/2.91/2.91
+QUIESCE sc5_16 quiesced=yes waited=0s busy_procs=0 load1=2.03 nproc=32 cpu.max=1536000/100000 at=2026-10-10T09:41:13Z
+SC5 16_d2_default_e4b_b2 ready: kv_tokens=131072 rounding=0
+SC5 16_d2_default_e4b_b2 C=1 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.043446, "ttft_p95_s": 0.043728, "tpot_p50_s": 0.004167, "tpot_p95_s": 0.004219, "output_tok_s": 231.548}
+SC5 16_d2_default_e4b_b2 C=16 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.102528, "ttft_p95_s": 0.103646, "tpot_p50_s": 0.011687, "tpot_p95_s": 0.011982, "output_tok_s": 1315.826}
+SC5 16_d2_default_e4b_b2 C=64 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 4.536348, "ttft_p95_s": 4.601796, "tpot_p50_s": 0.017334, "tpot_p95_s": 0.017626, "output_tok_s": 1611.71}
+PHASE SC5_17 draw 2, default memory, vllm block 2 at=2026-10-10T09:47:09Z nproc=32 cpu.max=1536000/100000 load=1.81/3.13/3.11
+QUIESCE sc5_17 quiesced=yes waited=0s busy_procs=0 load1=1.81 nproc=32 cpu.max=1536000/100000 at=2026-10-10T09:47:09Z
+SC5 17_d2_default_vllm_b2 ready: kv_tokens=131888 rounding=16
+SC5 17_d2_default_vllm_b2 C=1 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.054364, "ttft_p95_s": 0.055694, "tpot_p50_s": 0.004229, "tpot_p95_s": 0.004231, "output_tok_s": 225.961}
+SC5 17_d2_default_vllm_b2 C=16 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.154113, "ttft_p95_s": 0.224718, "tpot_p50_s": 0.009001, "tpot_p95_s": 0.009254, "output_tok_s": 1665.499}
+SC5 17_d2_default_vllm_b2 C=64 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 0.270724, "ttft_p95_s": 0.358869, "tpot_p50_s": 0.017175, "tpot_p95_s": 0.017694, "output_tok_s": 3472.08}
+PHASE SC5_18 draw 2, default memory, sglang block 2 at=2026-10-10T09:49:53Z nproc=32 cpu.max=1536000/100000 load=1.28/2.52/2.89
+QUIESCE sc5_18 quiesced=yes waited=0s busy_procs=0 load1=1.28 nproc=32 cpu.max=1536000/100000 at=2026-10-10T09:49:53Z
+SC5 18_d2_default_sglang_b2 ready: kv_tokens=88303 rounding=1
+SC5 18_d2_default_sglang_b2 C=1 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.033248, "ttft_p95_s": 0.033995, "tpot_p50_s": 0.003679, "tpot_p95_s": 0.003686, "output_tok_s": 263.291}
+SC5 18_d2_default_sglang_b2 C=16 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.279278, "ttft_p95_s": 0.306605, "tpot_p50_s": 0.00859, "tpot_p95_s": 0.009308, "output_tok_s": 1676.616}
+SC5 18_d2_default_sglang_b2 C=64 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 0.688816, "ttft_p95_s": 1.136921, "tpot_p50_s": 0.049082, "tpot_p95_s": 0.051103, "output_tok_s": 1243.916}
+PHASE SC5_19 draw 2, matched memory, sglang block 1 at=2026-10-10T09:53:12Z nproc=32 cpu.max=1536000/100000 load=2.82/2.31/2.71
+QUIESCE sc5_19 quiesced=yes waited=0s busy_procs=0 load1=2.82 nproc=32 cpu.max=1536000/100000 at=2026-10-10T09:53:12Z
+SC5 19_d2_matched_sglang_b1 ready: kv_tokens=65536 rounding=1
+SC5 19_d2_matched_sglang_b1 C=1 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.033218, "ttft_p95_s": 0.033653, "tpot_p50_s": 0.003682, "tpot_p95_s": 0.003689, "output_tok_s": 263.192}
+SC5 19_d2_matched_sglang_b1 C=16 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.265116, "ttft_p95_s": 0.308729, "tpot_p50_s": 0.008616, "tpot_p95_s": 0.009235, "output_tok_s": 1678.195}
+SC5 19_d2_matched_sglang_b1 C=64 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 0.676134, "ttft_p95_s": 1.197507, "tpot_p50_s": 0.048477, "tpot_p95_s": 0.050517, "output_tok_s": 1256.824}
+PHASE SC5_20 draw 2, matched memory, vllm block 1 at=2026-10-10T09:56:30Z nproc=32 cpu.max=1536000/100000 load=1.69/2.10/2.56
+QUIESCE sc5_20 quiesced=yes waited=0s busy_procs=0 load1=1.69 nproc=32 cpu.max=1536000/100000 at=2026-10-10T09:56:30Z
+SC5 20_d2_matched_vllm_b1 ready: kv_tokens=65536 rounding=16
+SC5 20_d2_matched_vllm_b1 C=1 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.054351, "ttft_p95_s": 0.056706, "tpot_p50_s": 0.004232, "tpot_p95_s": 0.004235, "output_tok_s": 225.728}
+SC5 20_d2_matched_vllm_b1 C=16 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.153692, "ttft_p95_s": 0.224926, "tpot_p50_s": 0.009006, "tpot_p95_s": 0.009265, "output_tok_s": 1667.794}
+SC5 20_d2_matched_vllm_b1 C=64 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 0.269919, "ttft_p95_s": 0.357767, "tpot_p50_s": 0.017165, "tpot_p95_s": 0.017681, "output_tok_s": 3478.525}
+PHASE SC5_21 draw 2, matched memory, e4b block 1 at=2026-10-10T09:59:14Z nproc=32 cpu.max=1536000/100000 load=1.01/1.68/2.32
+QUIESCE sc5_21 quiesced=yes waited=0s busy_procs=0 load1=1.01 nproc=32 cpu.max=1536000/100000 at=2026-10-10T09:59:14Z
+SC5 21_d2_matched_e4b_b1 ready: kv_tokens=65536 rounding=0
+SC5 21_d2_matched_e4b_b1 C=1 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.043597, "ttft_p95_s": 0.044118, "tpot_p50_s": 0.003953, "tpot_p95_s": 0.004007, "output_tok_s": 242.819}
+SC5 21_d2_matched_e4b_b1 C=16 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.102, "ttft_p95_s": 0.103325, "tpot_p50_s": 0.011772, "tpot_p95_s": 0.011889, "output_tok_s": 1318.833}
+SC5 21_d2_matched_e4b_b1 C=64 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 0.113478, "ttft_p95_s": 0.114849, "tpot_p50_s": 0.025522, "tpot_p95_s": 0.025593, "output_tok_s": 2400.28}
+PHASE SC5_22 draw 2, matched memory, e4b block 2 at=2026-10-10T10:04:56Z nproc=32 cpu.max=1536000/100000 load=2.30/2.97/2.79
+QUIESCE sc5_22 quiesced=yes waited=0s busy_procs=0 load1=2.30 nproc=32 cpu.max=1536000/100000 at=2026-10-10T10:04:56Z
+SC5 22_d2_matched_e4b_b2 ready: kv_tokens=65536 rounding=0
+SC5 22_d2_matched_e4b_b2 C=1 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.043886, "ttft_p95_s": 0.044275, "tpot_p50_s": 0.003953, "tpot_p95_s": 0.003977, "output_tok_s": 243.09}
+SC5 22_d2_matched_e4b_b2 C=16 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.101941, "ttft_p95_s": 0.103022, "tpot_p50_s": 0.011643, "tpot_p95_s": 0.012, "output_tok_s": 1317.333}
+SC5 22_d2_matched_e4b_b2 C=64 rc=0 SC5_RUN {"profile": "e4b", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 0.113609, "ttft_p95_s": 0.115821, "tpot_p50_s": 0.025584, "tpot_p95_s": 0.025688, "output_tok_s": 2389.454}
+PHASE SC5_23 draw 2, matched memory, vllm block 2 at=2026-10-10T10:10:39Z nproc=32 cpu.max=1536000/100000 load=1.93/3.35/3.13
+QUIESCE sc5_23 quiesced=yes waited=0s busy_procs=0 load1=1.93 nproc=32 cpu.max=1536000/100000 at=2026-10-10T10:10:39Z
+SC5 23_d2_matched_vllm_b2 ready: kv_tokens=65536 rounding=16
+SC5 23_d2_matched_vllm_b2 C=1 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.054796, "ttft_p95_s": 0.056667, "tpot_p50_s": 0.004231, "tpot_p95_s": 0.004235, "output_tok_s": 225.788}
+SC5 23_d2_matched_vllm_b2 C=16 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.153292, "ttft_p95_s": 0.223896, "tpot_p50_s": 0.009003, "tpot_p95_s": 0.009258, "output_tok_s": 1664.744}
+SC5 23_d2_matched_vllm_b2 C=64 rc=0 SC5_RUN {"profile": "vllm", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 0.270768, "ttft_p95_s": 0.358742, "tpot_p50_s": 0.017163, "tpot_p95_s": 0.017685, "output_tok_s": 3478.026}
+PHASE SC5_24 draw 2, matched memory, sglang block 2 at=2026-10-10T10:13:24Z nproc=32 cpu.max=1536000/100000 load=1.94/2.93/3.02
+QUIESCE sc5_24 quiesced=yes waited=0s busy_procs=0 load1=1.94 nproc=32 cpu.max=1536000/100000 at=2026-10-10T10:13:24Z
+SC5 24_d2_matched_sglang_b2 ready: kv_tokens=65536 rounding=1
+SC5 24_d2_matched_sglang_b2 C=1 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 1, "valid": 48, "invalid": 0, "peak_in_flight": 1, "ttft_p50_s": 0.033292, "ttft_p95_s": 0.033885, "tpot_p50_s": 0.003685, "tpot_p95_s": 0.003689, "output_tok_s": 263.041}
+SC5 24_d2_matched_sglang_b2 C=16 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 16, "valid": 160, "invalid": 0, "peak_in_flight": 16, "ttft_p50_s": 0.234419, "ttft_p95_s": 0.303133, "tpot_p50_s": 0.008641, "tpot_p95_s": 0.009238, "output_tok_s": 1676.016}
+SC5 24_d2_matched_sglang_b2 C=64 rc=0 SC5_RUN {"profile": "sglang", "concurrency": 64, "valid": 320, "invalid": 0, "peak_in_flight": 64, "ttft_p50_s": 0.676853, "ttft_p95_s": 1.200688, "tpot_p50_s": 0.048555, "tpot_p95_s": 0.050604, "output_tok_s": 1253.852}
+PHASE SC5_Q quality passes (windows sha256 5f6e00d8c4f7c01f9b6f165feb85288948fceba94911c2bb2dd21bac52417a86) at=2026-10-10T10:16:41Z nproc=32 cpu.max=1536000/100000 load=1.63/2.33/2.76
+SC5_QUALITY vllm windows=64 positions=8192
+SC5_QUALITY sglang windows=64 positions=8192
+[serve_paged] ready: {"moe_layers": 48, "experts": 128, "top_k": 8, "model_type": "qwen3_moe", "int4_expert_layers": 48, "int4_store_kinds": ["int4_b32"], "int4_attn_projections": 96, "kv": {"n_kv_heads": 4, "head_dim": 128, "k_groups": "auto", "scratch_slots": 32, "blocks_per_seq": 256, "pool_mib": 6652.9}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph", "32": "graph"}, "grouping": {"device_grouping": true, "force_singleton_groups": false}, "moe_residual": {"rows": [1, 2, 4, 8, 16, 32], "licensed": 48, "partial": 0, "refused": 0, "probe_errors": []}, "prefill_graph": "auto", "levers_env": {"E4B_SERVE_EXP_INT4": "1", "E4B_SERVE_ATTN_INT4": "1", "E4B_SERVE_ATTN_INT4_CALIB": "0", "E4B_CALIB_SOURCE": "c4", "E4B_FUSE_T1_GLUE": "1", "E4B_FUSE_T1_GLUE_R2": "1", "E4B_FUSE_ROUTER_EPI": "1"}, "exp_int4_layers_enabled": 48, "attn_int4_rtn_projections": 192, "attn_int4_calib_projections": 0, "fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48, "fusion_modes": {"E4B_PAGED_FUSE_QKV": "1", "E4B_FUSE_T1_GLUE": "1", "E4B_FUSE_T1_GLUE_R2": "1", "E4B_FUSE_ROUTER_EPI": "1"}, "fusion_sources": {"E4B_PAGED_FUSE_QKV": "explicit", "E4B_FUSE_T1_GLUE": "explicit", "E4B_FUSE_T1_GLUE_R2": "explicit", "E4B_FUSE_ROUTER_EPI": "explicit"}, "fusion_report": {"E4B_FUSE_T1_GLUE": {"mode": "1", "patched": 193, "failed_probe": 0}, "E4B_FUSE_T1_GLUE_R2": {"mode": "1", "patched": [48, 48], "kernel_gaps": 0}, "E4B_FUSE_ROUTER_EPI": {"mode": "1", "patched": 48, "failed_probe": 0, "no_kernel_mode": 0, "fp32_upstream": 0}}, "pinned_cache_released": true, "host_heap_trimmed": true}
+SC5_E4B_QUALITY prefill-shaped positions=8192
+SC5_E4B_QUALITY decode-shaped, positions=8192
+PHASE RD the record and the reading at=2026-10-10T10:23:39Z nproc=32 cpu.max=1536000/100000 load=3.16/3.51/3.14
+SC5_RECORD draws=['1', '2'] blocks=24 quality_rows=['e4b', 'e4b_decode', 'floor', 'sglang', 'vllm']
+SC5_VERDICT READ {"LEADS": 24, "TRAILS": 30, "WITHIN NOISE": 6} losing=30 void=0

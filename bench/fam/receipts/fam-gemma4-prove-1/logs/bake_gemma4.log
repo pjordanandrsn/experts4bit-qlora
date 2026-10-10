@@ -1,0 +1,14 @@
+[01:18:40]   checkpoint: local directory /root/.cache/huggingface/hub/models--google--gemma-4-26B-A4B-it/snapshots/4d7ae4984b7db7de8f8457170b3f1a419ee76d52
+[01:18:40]   fusing + quantizing experts (up to 30x128) to nf4 (streaming)...
+[01:18:53]   quantized experts on 30/30 MoE layers (128 experts each)
+[01:18:53]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+layers=30 experts=128
+  shard 0/30  0.4 GiB  2s
+  shard 8/30  3.6 GiB  11s
+  shard 16/30  6.8 GiB  21s
+  shard 24/30  10.0 GiB  29s
+snapshot done 11.96 GiB in 34.0s
+expert-tensor bake: L=30 E=128 (baking 128) row=3345408 stride=3346432 total=12.9 GB workers=8
+  2048/3840 rows (7 GB, 1s)
+bake complete: 3840 rows (12.9 GB) in 5s
+BAKE OK

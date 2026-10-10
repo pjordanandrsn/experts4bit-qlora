@@ -24,7 +24,7 @@ P98 = ("p98_bake.py",)                                     # bench/p98: P98's Qw
 SC5 = tuple("sc5_box_m.sh sc5_driver.py sc5_quality.py sc5_e4b_quality.py sc5_ref.py sc5_windows.py sc5_reduce.py sc5_record.py sc5_windows_w64.json".split())   # bench/sc5, staged flat on every box (SC5, box M)
 SC5_LOCKS = ("vllm.lock.txt", "sglang.lock.txt", "e4b-wheels.lock")   # bench/sc5/locks: SC5's provenance locks
 SC5_REF = ("sc5_ref.json", "sc5_ref_chunked.json")   # bench/sc5/ref: pinned and staged once the amendment commits them
-P117 = ("p117_box.py",)                                   # bench/p117: SC5's decode-shaped quality pass imports it
+PBOX = {"p117_box.py": "p117", "p108_box.py": "p108", "p97_box.py": "p97"}   # SC5's decode-shaped quality pass and its imports
 
 
 def resolve(name: str) -> pathlib.Path:
@@ -49,8 +49,8 @@ def resolve(name: str) -> pathlib.Path:
         return REPO / "bench" / "sc5" / name
     if name in SC5_LOCKS:
         return REPO / "bench" / "sc5" / "locks" / name
-    if name in P117:
-        return REPO / "bench" / "p117" / name
+    if name in PBOX:
+        return REPO / "bench" / PBOX[name] / name
     return REPO / "bench" / "p39" / name
 
 
@@ -64,7 +64,7 @@ def _entries(pin=PIN):
 def staged_names() -> set:
     """What make_pin.sh pins and sc1_drive.sh stages: the lane's own files, the reducer when present, P39's pieces, the hook,
     the premise test, and every file under each comparator directory that exists."""
-    names = (set(OWN) | set(P39) | set(P98) | set(SC1B) | set(SC2) | set(SC5) | set(SC5_LOCKS) | set(P117)
+    names = (set(OWN) | set(P39) | set(P98) | set(SC1B) | set(SC2) | set(SC5) | set(SC5_LOCKS) | set(PBOX)
              | {"hook/usercustomize.py", "test_k19_row_exact_gpu.py"})
     names |= {n for n in SC5_REF if (REPO / "bench" / "sc5" / "ref" / n).is_file()}
     if (LANE / "sc1_reduce.py").is_file() and any(n == "sc1_reduce.py" for _w, n in _entries()):
@@ -112,7 +112,8 @@ def test_every_pinned_name_is_staged_by_the_driver_and_resolves_the_same_way():
     assert 'sc5_ref.json|sc5_ref_chunked.json) src="$SC5/ref/$name"' in case and 'sc5_*) src="$SC5/$name"' in case
     assert case.index("sc5_ref.json|") < case.index("sc5_*)")   # the reference files resolve before the flat sc5_* files
     assert 'vllm.lock.txt|sglang.lock.txt|e4b-wheels.lock) src="$SC5/locks/$name"' in case
-    assert 'p117_box.py) src="$REPO/bench/p117/$name"' in case
+    for n, d in PBOX.items():
+        assert f'{n}) src="$REPO/bench/{d}/$name"' in case, n
     assert '*) src="$P39/$name"' in case
     # the box checks the same file with sha256sum -c (strict: a pinned file missing on the box is a stop)
     run = (LANE / "sc1_run.sh").read_text()
