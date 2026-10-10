@@ -50,7 +50,8 @@ class ExpertStack:
     first_name: str
     first_shape: tuple
     down_shape: tuple
-    #: per-expert input width of the first projection (the model's hidden size) and of ``down_proj``
+    #: per-expert input width of the first projection (the model's hidden size; a latent MoE's latent width) and of
+    #: ``down_proj``
     hidden: int
     intermediate: int
 
@@ -163,6 +164,27 @@ def _shape(t) -> tuple:
     return tuple(int(d) for d in t.shape)
 
 
+def _stack_widths(first, down, hidden_size, gated) -> tuple[int, int, bool]:
+    """``(input width, intermediate, from_shape)`` of one expert stack.
+
+    The input width is the model's ``hidden_size`` whenever ``down_proj`` carries it, which holds for every family
+    whose experts read the residual stream. A latent MoE (Nemotron-3 Super/Ultra, ``moe_latent_size``) projects the
+    residual to a narrower latent before the experts, so its stacks never carry ``hidden_size``; reading it there
+    priced Super's ``[512, 2688, 1024]`` stack as 4096 wide with intermediate 672. Such a stack is read in transformers'
+    fused ``[E, out, in]`` layout, the one :class:`~experts4bit_qlora.Experts4bit` stores (first ``[E, m*I, W]``, down
+    ``[E, W, I]``); shapes alone cannot tell a non-gated stack's layouts apart, and the ``[E, in, out]`` families
+    (gpt-oss) carry ``hidden_size``. A stack that fits neither rule raises.
+    """
+    E = int(down.shape[0])
+    if hidden_size and hidden_size in tuple(down.shape[1:]):
+        return hidden_size, (down.numel() // (E * hidden_size) if E else 0), False
+    (f0, f1), (d0, d1), m = _shape(first)[1:], _shape(down)[1:], 2 if gated else 1
+    if f1 == d0 and f0 == m * d1:
+        return d0, d1, True
+    raise ValueError(f"expert stack {_shape(first)} / {_shape(down)} carries neither hidden_size {hidden_size} nor "
+                     f"the fused [E, out, in] layout")
+
+
 def describe_moe(model, *, revision=None, trust_remote_code=False) -> MoETopology:
     """Describe ``model`` -- a hub id, a local snapshot directory or a ``PretrainedConfig`` -- without its weights.
 
@@ -216,7 +238,7 @@ def describe_moe(model, *, revision=None, trust_remote_code=False) -> MoETopolog
     with init_empty_weights():
         tree = AutoModelForCausalLM.from_config(lm_config, dtype=torch.bfloat16, trust_remote_code=trust_remote_code)
 
-    stacks, expert_param_ids, bias_tensors = [], set(), set()
+    stacks, expert_param_ids, bias_tensors, latent = [], set(), set(), {}
     first_name = "gate_up_proj" if has_gate else "up_proj"
     for i in range(common["n_layers"]):
         try:
@@ -227,8 +249,9 @@ def describe_moe(model, *, revision=None, trust_remote_code=False) -> MoETopolog
         if not (isinstance(first, torch.Tensor) and isinstance(down, torch.Tensor) and first.dim() == 3):
             continue
         E = int(down.shape[0])
-        H = common["hidden_size"]
-        inter = down.numel() // (E * H) if E and H else 0
+        H, inter, from_shape = _stack_widths(first, down, common["hidden_size"], has_gate)
+        if from_shape:
+            latent.setdefault(H, []).append(i)
         stacks.append(ExpertStack(layer=i, n_experts=E, first_name=first_name, first_shape=_shape(first),
                                   down_shape=_shape(down), hidden=H, intermediate=int(inter)))
         expert_param_ids.update(id(p) for p in mod.parameters())
@@ -244,6 +267,10 @@ def describe_moe(model, *, revision=None, trust_remote_code=False) -> MoETopolog
     if tied and head.weight is not emb.weight:
         dense -= head.weight.numel()
     prov["tied_embeddings"] = "config tie_word_embeddings (the loader's rule when no lm_head.weight ships)"
+    if latent:
+        prov["expert_width"] = "; ".join(
+            f"layers {ls[0]}..{ls[-1]} ({len(ls)}): experts take a {w}-wide latent, not hidden_size "
+            f"{common['hidden_size']} (read from the stack shape)" for w, ls in latent.items())
     try:
         census = detect_attention_projections(tree, exact_linear=False)
     except SystemExit as e:                            # the detector refuses cross-layer KV reuse by exiting

@@ -477,7 +477,7 @@ def estimate_qlora_footprint(topology, setup: QLoRASetup, *, tokens_per_microbat
     st0 = topology.expert_stacks[0]
     first_out0 = _first_out(st0)
     kv = (attn.kv_elements_per_token // max(attn.layers, 1)) if attn else 0
-    layer = T * ((H + kv + H) * 2 + (topology.top_k or 0) * (first_out0 + st0.intermediate + H) * 2
+    layer = T * ((H + kv + H) * 2 + (topology.top_k or 0) * (first_out0 + st0.intermediate + st0.hidden) * 2
                  + st0.n_experts * 4)
     backward, backward_how = _grouped_nf4_backward(topology, setup, T, layer)
     branches = f"{loss_how}, 2 x one layer's recompute = {2 * layer / 1e9:.2f} GB" + (f", {backward_how}" if backward else "")
