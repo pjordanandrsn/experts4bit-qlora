@@ -97,16 +97,43 @@ def _call(st, T, k, seed=8):
                                 x_tokens=(x_t, row_token, k))
 
 
-def test_the_knob_reads_zero_or_one_and_refuses_anything_else(monkeypatch):
+def test_the_knob_defaults_to_auto_and_refuses_anything_else(monkeypatch):
     monkeypatch.delenv("E4B_PREFILL_LEAN_DISPATCH", raising=False)
-    assert hr._prefill_lean_dispatch_env() is False
-    for v, want in (("0", False), ("", False), (" 1 ", True)):
+    assert hr._prefill_lean_dispatch_env() == "auto"                # licensed by P130 (bench/p130/RESULTS-p130.md)
+    for v, want in (("0", "0"), ("", "auto"), (" 1 ", "1"), ("AUTO", "auto")):
         monkeypatch.setenv("E4B_PREFILL_LEAN_DISPATCH", v)
-        assert hr._prefill_lean_dispatch_env() is want, v
-    for bad in ("auto", "yes", "2"):
+        assert hr._prefill_lean_dispatch_env() == want, v
+    for bad in ("yes", "2", "on"):
         monkeypatch.setenv("E4B_PREFILL_LEAN_DISPATCH", bad)
         with pytest.raises(ValueError, match="E4B_PREFILL_LEAN_DISPATCH"):
             hr._prefill_lean_dispatch_env()
+
+
+def test_the_default_takes_the_lean_dispatch_bitwise(monkeypatch):
+    st = _stores()
+    T, k = 50, 6
+    out, calls = {}, {}
+    for env in (None, "0"):
+        calls[env] = []
+        _install(monkeypatch, calls[env])
+        monkeypatch.setattr(hr, "K19_DISPATCH_SEEN", {})
+        if env is None:
+            monkeypatch.delenv("E4B_PREFILL_LEAN_DISPATCH", raising=False)
+        else:
+            monkeypatch.setenv("E4B_PREFILL_LEAN_DISPATCH", env)
+        out[env] = _call(st, T, k)
+        want = "chained|lean|gt256" if env is None else "chained|gather|gt256"
+        assert hr.K19_DISPATCH_SEEN == {want: 1}, (env, hr.K19_DISPATCH_SEEN)
+    assert calls[None][0]["gather_div"] == k and calls[None][1]["scatter"] is True
+    assert torch.equal(out[None], out["0"])
+
+
+def test_the_default_keeps_the_gather_on_a_k19_without_the_options(monkeypatch):
+    st = _stores()
+    _install(monkeypatch, [], lean_options=False)
+    monkeypatch.delenv("E4B_PREFILL_LEAN_DISPATCH", raising=False)   # auto: an older kernel package serves as before
+    _call(st, 50, 6)
+    assert hr.K19_DISPATCH_SEEN == {"chained|gather|gt256": 1}
 
 
 def test_prefill_rows_take_the_lean_dispatch_bitwise_over_the_chained_table(monkeypatch):
