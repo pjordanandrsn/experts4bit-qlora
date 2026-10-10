@@ -4,8 +4,11 @@ adapters.
 - default: ``E4B_TRAIN_FUSE_QKV`` unset, ``enable_fast_train`` fuses every layer, refuses none; three AdamW steps, losses finite.
 - off: ``E4B_TRAIN_FUSE_QKV=0``, nothing fused, every q/k/v base kept; the same three steps. Each step's loss within 2**-6 of the
   off side's (a semantic error moves it by far more; rounding by far less).
-- round trip, the ``attn_only`` arm's shape: default, ``enable_fast_train`` then ``disable_fast_train``, one step. Bit for bit the
-  off side's ``enable`` then ``disable`` step: the loss and every adapter gradient.
+- round trip, the ``attn_only`` arm's shape: default, ``enable_fast_train`` then ``disable_fast_train``, one step. The forward is
+  bit for bit the off side's ``enable`` then ``disable`` step (loss and logits). The adapter gradients are compared with the off
+  side's own run-to-run spread, measured here on a second off build: the reference MoE backward accumulates with atomics, so two
+  identical builds of today's path already differ there. The round trip's largest relative gradient difference must stay within
+  twice that spread.
 - re-enable: the round-tripped model enabled again fuses every layer, and its first step's loss is bit for bit the default's.
 """
 import json
@@ -47,14 +50,19 @@ def build(adapter_dtype):
     return model
 
 
-def step(m, opt=None):
+def step(m, opt=None, keep_logits=False):
     m.zero_grad(set_to_none=True)
     out = m(input_ids=IDS, labels=IDS)
     out.loss.backward()
     if opt is not None:
         opt.step()
     torch.cuda.synchronize()
-    return out.loss.detach().float().item()
+    loss = out.loss.detach().float().item()
+    return (loss, out.logits.detach().clone()) if keep_logits else loss
+
+
+def max_rel(ga, gb):
+    return max((ga[n].float() - gb[n].float()).abs().max().item() / max(gb[n].float().abs().max().item(), 1e-30) for n in gb)
 
 
 def grads(m):
@@ -88,12 +96,16 @@ for dt_name, dt in (("fp32", torch.float32), ("bf16", torch.bfloat16)):
     r["off_losses"] = train3(m)
     del m
     torch.cuda.empty_cache()
-    m = build(dt)                                                   # off side, enable then disable: today's attn_only arm
-    enable_fast_train(m)
-    disable_fast_train(m)
-    off_rt_loss, off_rt_g = step(m), grads(m)
-    del m
-    torch.cuda.empty_cache()
+    off = []
+    for _ in range(2):                                              # off side, enable then disable: today's attn_only arm, twice
+        m = build(dt)
+        enable_fast_train(m)
+        disable_fast_train(m)
+        loss, logits = step(m, keep_logits=True)
+        off.append((loss, logits, grads(m)))
+        del m
+        torch.cuda.empty_cache()
+    (off_rt_loss, off_rt_logits, off_rt_g), (_, _, off_b_g) = off
     knob(None)
     m = build(dt)                                                   # default, enable then disable
     enable_fast_train(m)
@@ -101,11 +113,16 @@ for dt_name, dt in (("fp32", torch.float32), ("bf16", torch.bfloat16)):
     disable_fast_train(m)
     r["rt_after_disable"] = {"fused_stat": tq.TRAIN_QKV_STATS["fused"], "bases_kept": bases_kept(m),
                              "qkv_proj_left": sum(hasattr(L.self_attn, "qkv_proj") for L in m.model.layers)}
-    rt_loss, rt_g = step(m), grads(m)
+    rt_loss, rt_logits = step(m, keep_logits=True)
+    rt_g = grads(m)
     r["rt_loss"], r["rt_loss_off"] = rt_loss, off_rt_loss
     r["rt_loss_bitwise"] = rt_loss == off_rt_loss
+    r["rt_logits_bitwise"] = bool(torch.equal(rt_logits, off_rt_logits))
+    del rt_logits, off_rt_logits, off
+    r["rt_n_grads"], r["off_n_grads"] = len(rt_g), len(off_rt_g)
     r["rt_grads_bitwise"] = rt_g.keys() == off_rt_g.keys() and all(torch.equal(rt_g[k], off_rt_g[k]) for k in rt_g)
-    r["rt_n_grads"] = len(rt_g)
+    r["off_spread_max_rel"] = max_rel(off_b_g, off_rt_g)            # today's path against itself
+    r["rt_max_rel"] = max_rel(rt_g, off_rt_g)
     m.zero_grad(set_to_none=True)
     enable_fast_train(m)                                            # re-enable: fuses again
     r["reenable_fused"] = tq.TRAIN_QKV_STATS["fused"]
@@ -122,7 +139,9 @@ for dt_name, dt in (("fp32", torch.float32), ("bf16", torch.bfloat16)):
         "each step's loss within 2**-6 of off": all(x <= 2.0 ** -6 for x in rel),
         "disable restores every layer": r["rt_fused_before_disable"] == nl and r["rt_after_disable"] == {
             "fused_stat": 0, "bases_kept": True, "qkv_proj_left": 0},
-        "round trip bit for bit (loss, every adapter grad)": r["rt_loss_bitwise"] and r["rt_grads_bitwise"] and r["rt_n_grads"] > 0,
+        "round trip forward bit for bit (loss, logits)": r["rt_loss_bitwise"] and r["rt_logits_bitwise"],
+        "round trip grads within 2x the off side's own spread": (r["rt_n_grads"] == r["off_n_grads"] > 0
+                                                                 and r["rt_max_rel"] <= 2 * r["off_spread_max_rel"]),
         "re-enable fuses every layer, step 0 bit for bit": r["reenable_fused"] == nl and r["reenable_loss_bitwise_default_step0"],
     }
 res["PASS"] = all(all(res[k]["checks"].values()) for k in ("fp32", "bf16"))
