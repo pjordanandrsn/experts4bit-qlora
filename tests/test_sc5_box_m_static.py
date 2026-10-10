@@ -9,14 +9,22 @@ sc5-prove-4 (2026-10-10, $0.905) failed on three of them:
   imports, where some bench/ directory provides it, must itself be staged.
 * **arguments:** box M drove e4b with the model name "sc5", which serve_paged refuses ("unknown model"). Every
   ``--flag`` box M passes to an SC5 script must be one that script's argparse defines, and the name box M sends e4b
-  must be one serve_paged's own config serves."""
+  must be one serve_paged's own config serves.
+
+sc5-prove-5 (2026-10-10, $1.531) proved, but one readout failed silently:
+* **readouts:** SGLang's capacity printed "kv_tokens=?". The parser read internal_states[0], where SGLang 0.5.21 keeps
+  no max_total_num_tokens; the top level and internal_states[0].memory_usage.token_capacity carry it. Every capacity
+  parser must run on its framework's response shape (copied from sc5-prove-5's receipts) and, at the matched setting,
+  yield a capacity the reducer accepts."""
 import ast
 import importlib.util
+import json
 import os
 import pathlib
 import re
 import shutil
 import subprocess
+import sys
 
 import pytest
 
@@ -175,3 +183,85 @@ def test_the_model_name_box_m_sends_e4b_is_one_serve_paged_serves():
         os.environ.update(old)
     assert names["e4b"] in cfg.model_names, f"box M sends e4b {names['e4b']!r}; serve_paged serves {cfg.model_names}"
     assert "sc5" not in cfg.model_names                        # sc5-prove-4's request name is refused, as it was
+
+
+# ---- (d) readouts --------------------------------------------------------------------------------------------------
+# The responses as sc5-prove-5 recorded them (trimmed to the fields around each capacity), at the default setting, and the
+# same shapes at the matched setting (box M's flags: e4b 64 x 1024, vLLM 4096 blocks of 16, SGLang 65536 tokens).
+def _e4b_health(seqs: int, tps: int) -> str:
+    return json.dumps({"status": "ready", "error": None, "model": "Qwen/Qwen3-30B-A3B", "served_model_names": ["Qwen/Qwen3-30B-A3B"],
+                       "engine": {"max_seqs": seqs, "max_tokens_per_seq": tps}})
+
+
+def _vllm_metrics(blocks: int) -> str:
+    labels = ('_block_size_resolved="True",block_size="16",cache_dtype="auto",effective_attention_block_size="16",'
+              'enable_prefix_caching="False",engine="0",gpu_memory_utilization="0.92",kv_cache_size_tokens="%d",'
+              'mamba_block_size="None",num_cpu_blocks="None",num_gpu_blocks="%d",num_gpu_blocks_override="%s"'
+              % (blocks * 16, blocks, "None" if blocks == 8001 else blocks))
+    return ("# HELP vllm:cache_config_info Information of the LLMEngine CacheConfig\n# TYPE vllm:cache_config_info gauge\n"
+            "vllm:cache_config_info{%s} 1.0\nvllm:num_requests_running{engine=\"0\"} 0.0\n" % labels)
+
+
+def _sglang_info(tokens: int, flag) -> str:
+    state = {"tokenizer_path": "Qwen/Qwen3-30B-A3B-GPTQ-Int4", "page_size": 1, "max_total_tokens": flag,
+             "max_running_requests": 64, "memory_usage": {"kvcache": 8.063, "token_capacity": tokens, "token_capacity_swa": None},
+             "effective_max_running_requests_per_dp": 64}
+    return json.dumps({"tokenizer_path": "Qwen/Qwen3-30B-A3B-GPTQ-Int4", "page_size": 1, "max_total_tokens": flag,
+                       "max_running_requests": 64, "max_total_num_tokens": tokens, "internal_states": [state], "kv_events": None})
+
+
+READOUTS = {   # framework -> (default response, its readout as sc5-prove-5 logged or should have, matched response)
+    "e4b": (_e4b_health(32, 4096), (131072, 0), _e4b_health(64, 1024)),
+    "vllm": (_vllm_metrics(8001), (128016, 16), _vllm_metrics(4096)),
+    "sglang": (_sglang_info(88066, None), (88066, 1), _sglang_info(65536, 65536)),
+}
+
+
+def _parser(fw: str) -> str:
+    """The python heredoc m_capacity runs for framework ``fw``."""
+    body = BOX[BOX.index("m_capacity(){"):BOX.index("m_cell(){")]
+    m = re.search(rf"^\s+{fw}\)\s.*?<<'PYC'\n(.*?)\nPYC$", body, re.M | re.S)
+    assert m, f"m_capacity has no {fw} parser"
+    return m.group(1)
+
+
+def _readout(code: str, response: str, tmp_path: pathlib.Path):
+    f = tmp_path / "response"
+    f.write_text(response, encoding="utf-8")
+    out = subprocess.run([sys.executable, "-", str(f)], input=code, capture_output=True, text=True, encoding="utf-8")
+    words = out.stdout.split()
+    return (int(words[0]), int(words[1])) if out.returncode == 0 and len(words) == 2 else None
+
+
+@pytest.mark.parametrize("fw", sorted(READOUTS))
+def test_every_capacity_parser_reads_its_frameworks_response(fw, tmp_path):
+    default, want, matched = READOUTS[fw]
+    assert _readout(_parser(fw), default, tmp_path) == want
+    # the matched setting: the reducer VOIDs a block whose kv_tokens is missing or off the registration by more than kv_rounding
+    reduce = importlib.util.spec_from_file_location("sc5_reduce", SC5 / "sc5_reduce.py")
+    mod = importlib.util.module_from_spec(reduce)
+    reduce.loader.exec_module(mod)
+    assert int(_const("SC5_MATCHED_KV")) == mod.MATCHED_KV_TOKENS
+    got = _readout(_parser(fw), matched, tmp_path)
+    assert got is not None and abs(got[0] - mod.MATCHED_KV_TOKENS) <= got[1], (fw, got)
+
+
+def test_the_sglang_parser_refuses_what_it_cannot_read_and_sc5_prove_5s_parser_is_caught(tmp_path):
+    code = _parser("sglang")
+    split = json.loads(_sglang_info(88066, None))
+    split["internal_states"][0]["memory_usage"]["token_capacity"] = 65536   # two reports of one pool that disagree
+    assert _readout(code, json.dumps(split), tmp_path) is None
+    bare = json.loads(_sglang_info(88066, None))
+    del bare["max_total_num_tokens"], bare["internal_states"][0]["memory_usage"]
+    assert _readout(code, json.dumps(bare), tmp_path) is None
+    # the mutant: sc5-prove-5's own parser, which read internal_states[0], reads nothing from SGLang 0.5.21's response
+    prove5 = ('import json, sys\ns = json.load(open(sys.argv[1]))\n'
+              's = s.get("internal_states", [s])[0] if isinstance(s.get("internal_states"), list) else s\n'
+              'print(int(s["max_total_num_tokens"]), int(s.get("page_size", 1) or 1))\n')
+    assert _readout(prove5, READOUTS["sglang"][0], tmp_path) is None
+
+
+def test_the_proof_gates_on_every_capacity_readout():
+    prove = BOX[BOX.index("prove_m(){"):]
+    assert 'M_KV=""' in BOX[BOX.index("m_block(){"):BOX.index("box_m(){")] and "M_KV=${kv:-}" in BOX
+    assert '[ -n "$M_KV" ] || { say "PROVE: $fw capacity readout failed' in prove

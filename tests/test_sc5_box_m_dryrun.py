@@ -97,6 +97,7 @@ m_sgl_start(){ dry m_sgl_start "$@"; return 0; }
 sglang_server_stop(){ :; }
 gpu_free(){ return 0; }
 quiesce(){ dry quiesce "$1"; printf '{"tag": "%s", "quiesced": true}\n' "$1" > "quiesce_$1.json"; }
+m_capacity(){ dry m_capacity "$1"; [ "$1" = "${DRY_NO_CAPACITY:-none}" ] && return 1; echo "65536 0"; }
 install_llamacpp(){ dry install_llamacpp; OK[llamacpp]=1; LLAMACPP_BIN=$W/llamacpp/bin; mkdir -p "$LLAMACPP_BIN"; cp "$DRY_PY" "$LLAMACPP_BIN/nll_teacher_forced"; }
 install_exl3(){ dry install_exl3; OK[exl3]=1; }
 install_nsys(){ dry install_nsys; OK[nsys]=1; NSYS=nsys; }
@@ -279,3 +280,23 @@ def test_the_dry_run_catches_a_proof_that_calls_a_function_defined_after_the_pro
     mut = subprocess.run([BASH, str(w / "sc1_run.sh")], capture_output=True, text=True, env=env, timeout=300)
     assert mut.returncode != 0 and not (w / "PROVED").exists()
     assert "fetch_common: command not found" in mut.stdout + mut.stderr
+
+
+@pytest.mark.skipif(sys.platform == "win32" or BASH is None, reason="the box script needs a POSIX bash >= 4 with executable stubs")
+def test_the_dry_run_catches_a_proof_that_passes_with_a_failed_capacity_readout(tmp_path):
+    """The mutant is sc5-prove-5's readout: SGLang's capacity read as "?", and the proof still proved. The parsers
+    themselves run on each framework's response shape in test_sc5_box_m_static.py; here the readout is stubbed."""
+    w, out = _run(tmp_path, (SC1 / "sc1_run.sh").read_text())
+    assert (w / "PROVED").exists(), (out.stdout + out.stderr)[-3000:]
+    assert "m_capacity sglang" in (w / "dryrun.log").read_text()
+    stubs = tmp_path / "bin"
+    env = {"PATH": f"{stubs}:{os.environ.get('PATH', '/usr/bin:/bin')}", "HOME": str(tmp_path), "LANG": "C",
+           "SC1_RUN_NONCE": "c" * 64, "SC1_RUN_ID": "sc5-dryrun-capacity", "SC1_DEADLINE_EPOCH": "4102444800",
+           "SC1_INSTANCE_ID": "0", "SC1_BOX": "M", "E4B_SHA": "0" * 40, "SC1_PROVE": "1", "SC1_QUIESCE_S": "1",
+           "DRY_PY": str(stubs / "python"), "DRY_CALLS": str(w / "python_calls.log"), "DRY_NO_CAPACITY": "sglang"}
+    for f in ("PROVED", "summary.txt"):
+        (w / f).unlink(missing_ok=True)
+    mut = subprocess.run([BASH, str(w / "sc1_run.sh")], capture_output=True, text=True, env=env, timeout=300)
+    assert mut.returncode != 0 and not (w / "PROVED").exists()
+    summary = (w / "summary.txt").read_text()
+    assert "PROVE: sglang capacity readout failed" in summary and "SC5_PROVE ok" not in summary, summary[-2000:]
