@@ -1,0 +1,88 @@
+# Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
+"""Q235's box script (``bench/q235/instrument/q235_box.py``) on the CPU: the mechanics of the registered step on a small 4-layer
+Qwen3-MoE, on the reference path (the fused kernels need CUDA; the RTX A2000 rehearsal runs those).
+
+- The step: every adapter gradient finite; every LoRA-B gradient nonzero and every B changed by the optimizer; every LoRA-A gradient
+  exactly zero at step 0 (B starts at zero); the frozen base's hashes equal after the step; the in-process repeat recorded.
+- The fresh-process repeat (``--repeat``) reproduces step 0's loss.
+- Each planted error (Amendment 1: routing, epilogue) changes the planted layer's output and leaves the layers before it untouched,
+  so an inert plant cannot pass for a band result.
+"""
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+torch = pytest.importorskip("torch")
+pytest.importorskip("transformers")
+pytest.importorskip("bitsandbytes")
+
+ROOT = Path(__file__).resolve().parents[1]
+BOX = ROOT / "bench" / "q235" / "instrument" / "q235_box.py"
+
+
+@pytest.fixture(scope="module")
+def tiny(tmp_path_factory):
+    from transformers import Qwen3MoeConfig, Qwen3MoeForCausalLM
+    cfg = Qwen3MoeConfig(vocab_size=256, hidden_size=128, intermediate_size=256, moe_intermediate_size=64, num_hidden_layers=4,
+                         num_attention_heads=4, num_key_value_heads=2, head_dim=32, num_experts=8, num_experts_per_tok=2,
+                         decoder_sparse_step=1, mlp_only_layers=[], norm_topk_prob=True, tie_word_embeddings=False,
+                         max_position_embeddings=128)
+    torch.manual_seed(0)
+    root = tmp_path_factory.mktemp("q235box")
+    Qwen3MoeForCausalLM(cfg).to(torch.bfloat16).save_pretrained(root / "model")
+    g = torch.Generator().manual_seed(1)
+    ids = torch.randint(3, 256, (2, 24), generator=g)
+    mask = torch.ones(2, 24, dtype=torch.long)
+    mask[1, 17:] = 0
+    ids = ids.masked_fill(mask == 0, 0)
+    torch.save({"input_ids": ids, "attention_mask": mask, "labels": ids.masked_fill(mask == 0, -100)}, root / "tokens.pt")
+    return root
+
+
+def _box(root, name, *extra):
+    out = root / name
+    r = subprocess.run([sys.executable, str(BOX), str(root / "model"), str(root / "tokens.pt"), "--out", str(out), "--device", "cpu",
+                        "--enabler", "reference", *extra], capture_output=True, text=True, cwd=ROOT,
+                       env={**__import__("os").environ, "PYTHONPATH": str(ROOT)})
+    if r.returncode != 0:
+        pytest.skip(f"box could not run here: {r.stderr[-400:]}") if "quantize" in r.stderr and "backend" in r.stderr else None
+        raise AssertionError(r.stderr[-2000:])
+    return json.load(open(out / "box.json")), out
+
+
+@pytest.fixture(scope="module")
+def step(tiny):
+    return _box(tiny, "step")
+
+
+def test_the_step_records_every_registered_check(step):
+    rec, out = step
+    g, d = rec["gradients"], rec["optimizer_delta"]
+    assert g["all_finite"] and not g["missing"] and g["lora_A"] == g["lora_B"] > 0
+    assert g["every_B_nonzero"] and g["every_A_zero_at_step0"]     # B starts at zero, so A's step-0 gradient is exactly zero
+    assert d["every_B_changed"]
+    assert rec["frozen_sha256_after_step_equal"] and rec["frozen_tensors"] > 0
+    assert rec["in_process"]["loss_equal"]                          # the CPU reference path is deterministic
+    assert rec["step"]["optimizer"].startswith("torch AdamW") and rec["step"]["lr"] == 2e-4
+    assert len(rec["layer_sha256"]) == 4 and (out / "nf4.pt").exists()
+
+
+def test_the_fresh_process_repeat_reproduces_step_0(tiny, step):
+    rec, _ = _box(tiny, "repeat", "--repeat")
+    assert rec["repeat"]["loss"] == step[0]["in_process"]["loss_0"]
+    assert rec["layer_sha256"] == step[0]["layer_sha256"]
+
+
+@pytest.mark.parametrize("kind", ["routing", "epilogue"])
+def test_each_planted_error_changes_its_layer_and_nothing_before_it(tiny, step, kind):
+    rec, _ = _box(tiny, f"plant_{kind}", "--plant", kind)
+    i = rec["plant"]["layer"]
+    assert i == 2
+    clean = step[0]["layer_sha256"]
+    assert rec["layer_sha256"][:i] == clean[:i], "a plant must not touch the layers before it"
+    assert rec["layer_sha256"][i] != clean[i], f"the {kind} plant was inert at its layer"
