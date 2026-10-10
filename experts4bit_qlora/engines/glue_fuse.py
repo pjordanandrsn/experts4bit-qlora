@@ -18,7 +18,39 @@ import os
 
 import torch
 
-__all__ = ["fuse_t1_glue"]
+__all__ = ["fuse_t1_glue", "prefill_glue_on", "PREFILL_FOLD_SEEN"]
+
+#: ``E4B_FUSE_PREFILL_GLUE`` (default ``0``): the decode folds' 64-row gates (here and in :mod:`.glue_r2`) are lifted, so
+#: a prefill's norm, residual-and-norm and q/k-norm-and-rotary calls run the same fused kernels as decode instead of
+#: transformers' eager chain (bench/prefill-glue/DESIGN.md, option B: one function for prompt and decode K/V). Read at
+#: patch time. Not licensed by any read yet: the teacher-forced prefill read in DESIGN.md section 4 is its licence.
+PREFILL_GLUE_ENV = "E4B_FUSE_PREFILL_GLUE"
+#: The decode folds' row gate when ``E4B_FUSE_PREFILL_GLUE`` is off: a call above this many rows keeps the eager chain.
+DECODE_ROWS_MAX = 64
+#: Calls above :data:`DECODE_ROWS_MAX` rows that took a fused fold, by fold (``norm``, ``layer``, ``attention``), counted
+#: in the Python forward like :data:`.hot_residency.ROUTE_SEEN`: eager calls and graph captures count, replays do not.
+#: Engagement evidence for ``E4B_FUSE_PREFILL_GLUE``; ``/health`` reports it under ``seen``.
+PREFILL_FOLD_SEEN: dict = {}
+
+
+def prefill_glue_on(value: str | None = None) -> bool:
+    """``E4B_FUSE_PREFILL_GLUE``: ``0`` (also unset or empty) keeps the decode folds' 64-row gates, ``1`` lifts them.
+    Anything else is refused rather than read as one of these. ``value`` overrides the environment."""
+    raw = os.environ.get(PREFILL_GLUE_ENV, "") if value is None else value
+    v = (raw or "").strip() or "0"
+    if v not in ("0", "1"):
+        raise ValueError(f"{PREFILL_GLUE_ENV}={raw!r}: expected '0' or '1'")
+    return v == "1"
+
+
+def rows_cap(value: str | None = None):
+    """The decode folds' row cap at patch time: :data:`DECODE_ROWS_MAX`, or ``None`` (no cap) under
+    ``E4B_FUSE_PREFILL_GLUE=1``."""
+    return None if prefill_glue_on(value) else DECODE_ROWS_MAX
+
+
+def _seen_prefill(fold: str) -> None:
+    PREFILL_FOLD_SEEN[fold] = PREFILL_FOLD_SEEN.get(fold, 0) + 1
 
 _EPS_ATTRS = ("variance_epsilon", "eps")
 
@@ -151,7 +183,8 @@ def fuse_t1_glue(model, mode: str | None = None, report: dict | None = None) -> 
     refuses loudly on a missing kernel or a zero-match enable; ``auto`` returns 0 there instead and says why in
     ``report`` (a dict, when given)."""
     mode = fold_mode("E4B_FUSE_T1_GLUE", mode)
-    _note(report, mode=mode)
+    cap = rows_cap()
+    _note(report, mode=mode, prefill="on" if cap is None else "off")
     if mode == "0":
         return 0
     try:
@@ -175,14 +208,17 @@ def fuse_t1_glue(model, mode: str | None = None, report: dict | None = None) -> 
             continue
         orig = mod.forward
 
-        def _fwd(hidden_states, _m=mod, _orig=orig, _eps=eps):
+        def _fwd(hidden_states, _m=mod, _orig=orig, _eps=eps, _cap=cap):
             # decode shapes only: few rows, bf16, last-dim matches the
-            # weight. Prefill and exotic dtypes keep the original chain.
+            # weight. Prefill (unless E4B_FUSE_PREFILL_GLUE=1) and exotic
+            # dtypes keep the original chain.
             if (hidden_states.dtype != torch.bfloat16
                     or hidden_states.shape[-1] != _m.weight.numel()
-                    or hidden_states.numel()
-                    > 64 * hidden_states.shape[-1]):
+                    or (_cap is not None
+                        and hidden_states.numel() > _cap * hidden_states.shape[-1])):
                 return _orig(hidden_states)
+            if hidden_states.numel() > DECODE_ROWS_MAX * hidden_states.shape[-1]:
+                _seen_prefill("norm")
             return rmsnorm_rows(hidden_states, _m.weight, _eps)
 
         mod.forward = _fwd

@@ -46,11 +46,12 @@ import inspect
 
 import torch
 
-from .glue_fuse import _is_rmsnorm, _norm_eps, _note, _probe_matches, fold_mode
+from .glue_fuse import _is_rmsnorm, _norm_eps, _note, _probe_matches, _seen_prefill, fold_mode, rows_cap
 
 __all__ = ["fuse_t1_glue_r2", "license_moe_residual"]
 
-# decode rows stay small; prefill keeps the upstream chain
+# decode rows stay small; prefill keeps the upstream chain unless E4B_FUSE_PREFILL_GLUE=1 lifts the cap
+# (glue_fuse.rows_cap, resolved once per fuse_t1_glue_r2 call and passed to each fold as ``cap``)
 _MAX_DECODE_ROWS = 64
 
 
@@ -100,10 +101,11 @@ def rotary_is_rotate_half(mod, d: int) -> bool:
     return _ROTARY_PROBED[(fn, d)]
 
 
-def _decode_rows(x: torch.Tensor, width: int) -> bool:
+def _decode_rows(x: torch.Tensor, width: int, cap=_MAX_DECODE_ROWS) -> bool:
+    """bf16 rows of ``width`` within the fold's row cap (``None``: no cap, under ``E4B_FUSE_PREFILL_GLUE=1``)."""
     return (x.dtype == torch.bfloat16
             and x.shape[-1] == width
-            and x.numel() <= _MAX_DECODE_ROWS * width)
+            and (cap is None or x.numel() <= cap * width))
 
 
 _PLAIN_LAYER_CHILDREN = frozenset(
@@ -169,7 +171,7 @@ def _kernel_has_scaled_fold(int4_b32) -> bool:
         return False
 
 
-def _patch_layer_scaled(mod, scale, int4_b32) -> bool:
+def _patch_layer_scaled(mod, scale, int4_b32, cap=_MAX_DECODE_ROWS) -> bool:
     """Fold GraniteMoe's ``resid + attn * m`` into the post-attention
     norm and its tail ``resid + moe * m`` into one launch. Mirrors the
     upstream forward (transformers 5.5 source) line for line; only the
@@ -198,12 +200,14 @@ def _patch_layer_scaled(mod, scale, int4_b32) -> bool:
 
     def _fwd(hidden_states, attention_mask=None, past_key_values=None,
              position_embeddings=None, _m=mod, _ln=ln, _eps=eps,
-             _orig=orig, _w=width, _s=scale, _add=scaled_add, **kwargs):
-        if not _decode_rows(hidden_states, _w):
+             _orig=orig, _w=width, _s=scale, _add=scaled_add, _cap=cap, **kwargs):
+        if not _decode_rows(hidden_states, _w, _cap):
             return _orig(hidden_states, attention_mask=attention_mask,
                          past_key_values=past_key_values,
                          position_embeddings=position_embeddings,
                          **kwargs)
+        if hidden_states.numel() > _MAX_DECODE_ROWS * _w:
+            _seen_prefill("layer")
         residual = hidden_states
         hidden_states = _m.input_layernorm(hidden_states)
         hidden_states, _ = _m.self_attn(
@@ -231,7 +235,7 @@ def _patch_layer_scaled(mod, scale, int4_b32) -> bool:
     return True
 
 
-def _patch_layer(mod, rmsnorm_resid_rows) -> bool:
+def _patch_layer(mod, rmsnorm_resid_rows, cap=_MAX_DECODE_ROWS) -> bool:
     """Fold ``residual + attn_out`` into the post-attention norm.
 
     Mirrors the upstream forward (transformers 5.5 source) line for
@@ -260,14 +264,16 @@ def _patch_layer(mod, rmsnorm_resid_rows) -> bool:
     def _fwd(hidden_states, attention_mask=None, position_ids=None,
              past_key_values=None, use_cache=False,
              position_embeddings=None, _m=mod, _ln=ln, _eps=eps,
-             _orig=orig, _w=width, **kwargs):
-        if not _decode_rows(hidden_states, _w):
+             _orig=orig, _w=width, _cap=cap, **kwargs):
+        if not _decode_rows(hidden_states, _w, _cap):
             return _orig(hidden_states, attention_mask=attention_mask,
                          position_ids=position_ids,
                          past_key_values=past_key_values,
                          use_cache=use_cache,
                          position_embeddings=position_embeddings,
                          **kwargs)
+        if hidden_states.numel() > _MAX_DECODE_ROWS * _w:
+            _seen_prefill("layer")
         residual = hidden_states
         hidden_states = _m.input_layernorm(hidden_states)
         hidden_states, _ = _m.self_attn(
@@ -375,7 +381,7 @@ def license_moe_residual(model, rows, mode: str | None = None, report: dict | No
     return full
 
 
-def _patch_attention(mod, rope_norm_heads, rope_norm_qk=None) -> bool:
+def _patch_attention(mod, rope_norm_heads, rope_norm_qk=None, cap=_MAX_DECODE_ROWS) -> bool:
     """Fold each of q_norm/k_norm plus rotary into one launch.
 
     ``rope_norm_qk`` (grouped-nf4-gemm#528, or None): q's and k's heads in one launch, bitwise the two
@@ -403,16 +409,18 @@ def _patch_attention(mod, rope_norm_heads, rope_norm_qk=None) -> bool:
 
     def _fwd(hidden_states, position_embeddings=None,
              attention_mask=None, past_key_values=None, _m=mod,
-             _qn=qn, _kn=kn, _qe=qe, _ke=ke, _orig=orig, _qk=rope_norm_qk, **kwargs):
+             _qn=qn, _kn=kn, _qe=qe, _ke=ke, _orig=orig, _qk=rope_norm_qk, _cap=cap, **kwargs):
         d = _m.head_dim
         rows = hidden_states.numel() // hidden_states.shape[-1]
         if (position_embeddings is None
                 or hidden_states.dtype != torch.bfloat16
-                or rows > _MAX_DECODE_ROWS):
+                or (_cap is not None and rows > _cap)):
             return _orig(hidden_states,
                          position_embeddings=position_embeddings,
                          attention_mask=attention_mask,
                          past_key_values=past_key_values, **kwargs)
+        if rows > _MAX_DECODE_ROWS:
+            _seen_prefill("attention")
         from transformers.models.qwen3_moe.modeling_qwen3_moe import (
             ALL_ATTENTION_FUNCTIONS, eager_attention_forward)
 
@@ -469,7 +477,7 @@ _UNFUSED_ATTN_CHILDREN = frozenset(
     {"q_proj", "k_proj", "v_proj", "o_proj", "q_norm", "k_norm"})
 
 
-def _patch_attention_unfused(mod, rope_norm_heads, rope_norm_qk=None) -> bool:
+def _patch_attention_unfused(mod, rope_norm_heads, rope_norm_qk=None, cap=_MAX_DECODE_ROWS) -> bool:
     """The same norm + rotary fold for the STANDARD separate-projection
     attention (Qwen3-MoE-shaped: q/k/v/o projections plus per-head q/k
     norms), which is what every family runs under the calibrated int4
@@ -511,15 +519,17 @@ def _patch_attention_unfused(mod, rope_norm_heads, rope_norm_qk=None) -> bool:
 
     def _fwd(hidden_states, position_embeddings=None,
              attention_mask=None, past_key_values=None, _m=mod,
-             _qn=qn, _kn=kn, _qe=qe, _ke=ke, _orig=orig, _d=d, _qk=rope_norm_qk, **kwargs):
+             _qn=qn, _kn=kn, _qe=qe, _ke=ke, _orig=orig, _d=d, _qk=rope_norm_qk, _cap=cap, **kwargs):
         rows = hidden_states.numel() // hidden_states.shape[-1]
         if (position_embeddings is None
                 or hidden_states.dtype != torch.bfloat16
-                or rows > _MAX_DECODE_ROWS):
+                or (_cap is not None and rows > _cap)):
             return _orig(hidden_states,
                          position_embeddings=position_embeddings,
                          attention_mask=attention_mask,
                          past_key_values=past_key_values, **kwargs)
+        if rows > _MAX_DECODE_ROWS:
+            _seen_prefill("attention")
         from transformers.models.qwen3_moe.modeling_qwen3_moe import (
             ALL_ATTENTION_FUNCTIONS, eager_attention_forward)
 
@@ -569,7 +579,7 @@ def _patch_attention_unfused(mod, rope_norm_heads, rope_norm_qk=None) -> bool:
 _NONORM_ATTN_CHILDREN = frozenset({"q_proj", "k_proj", "v_proj", "o_proj"})
 
 
-def _patch_attention_rope_only(mod, int4_b32) -> bool:
+def _patch_attention_rope_only(mod, int4_b32, cap=_MAX_DECODE_ROWS) -> bool:
     """The rotary chain folded for attention WITHOUT a head norm (the
     Llama-shaped q/k/v/o module GraniteMoe and Mixtral use): exactly the
     four projections, nothing of the module's own, the usual attributes,
@@ -609,15 +619,17 @@ def _patch_attention_rope_only(mod, int4_b32) -> bool:
 
     def _fwd(hidden_states, position_embeddings=None,
              attention_mask=None, past_key_values=None, _m=mod,
-             _orig=orig, _d=d, **kwargs):
+             _orig=orig, _d=d, _cap=cap, **kwargs):
         rows = hidden_states.numel() // hidden_states.shape[-1]
         if (position_embeddings is None
                 or hidden_states.dtype != torch.bfloat16
-                or rows > _MAX_DECODE_ROWS):
+                or (_cap is not None and rows > _cap)):
             return _orig(hidden_states,
                          position_embeddings=position_embeddings,
                          attention_mask=attention_mask,
                          past_key_values=past_key_values, **kwargs)
+        if rows > _MAX_DECODE_ROWS:
+            _seen_prefill("attention")
         from transformers.models.qwen3_moe.modeling_qwen3_moe import (
             ALL_ATTENTION_FUNCTIONS, eager_attention_forward)
 
@@ -668,7 +680,8 @@ def fuse_t1_glue_r2(model, mode: str | None = None, report: dict | None = None) 
     get it or an error, never a quiet no-op. Under ``auto`` those modules stay unpatched and ``report`` (a dict, when
     given) counts them."""
     mode = fold_mode("E4B_FUSE_T1_GLUE_R2", mode)
-    _note(report, mode=mode)
+    cap = rows_cap()
+    _note(report, mode=mode, prefill="on" if cap is None else "off")
     if mode == "0":
         return (0, 0)
     try:
@@ -690,14 +703,14 @@ def fuse_t1_glue_r2(model, mode: str | None = None, report: dict | None = None) 
             if name.endswith("DecoderLayer"):
                 scale = _layer_scale(mod)
                 if scale is None:
-                    layers += bool(_patch_layer(mod, rmsnorm_resid_rows))
+                    layers += bool(_patch_layer(mod, rmsnorm_resid_rows, cap=cap))
                 else:
-                    layers += bool(_patch_layer_scaled(mod, scale, int4_b32))
+                    layers += bool(_patch_layer_scaled(mod, scale, int4_b32, cap=cap))
             elif name.endswith("Attention"):
                 qk = getattr(int4_b32, "rope_norm_qk", None)
-                attns += bool(_patch_attention(mod, rope_norm_heads, qk)
-                              or _patch_attention_unfused(mod, rope_norm_heads, qk)
-                              or _patch_attention_rope_only(mod, int4_b32))
+                attns += bool(_patch_attention(mod, rope_norm_heads, qk, cap=cap)
+                              or _patch_attention_unfused(mod, rope_norm_heads, qk, cap=cap)
+                              or _patch_attention_rope_only(mod, int4_b32, cap=cap))
         except _KernelGap:
             if mode == "1":
                 raise

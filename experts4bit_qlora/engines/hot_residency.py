@@ -163,6 +163,50 @@ def _lean_glue_env() -> bool:
 
 _LEAN_GLUE_SUPPORT: dict = {}
 
+#: ``E4B_PREFILL_LEAN_DISPATCH`` (default ``0``; bench/prefill-glue/DESIGN.md, P2): K19's PREFILL rows
+#: (``E4B_INT4_PREFILL=k19``, above 256 routed rows) take K23's dispatch -- gate_up reads token row ``order[i] // top_k``
+#: itself (``gather_div``), so the ``[T * top_k, H]`` ``index_select`` is not made, and down stores each row at
+#: ``order[i]`` (``scatter=order``), so the ``index_copy_`` unsort is not run -- over the SAME chained 16-row tile table
+#: (K23's one-launch builder stays a decode-shape builder). Bit-identical by construction on that kernel and table
+#: (grouped-nf4-gemm's K23 contract); its default flips only after an on-card ``torch.equal`` read that asserts the route
+#: (:data:`K19_DISPATCH_SEEN`).
+PREFILL_LEAN_DISPATCH_ENV = "E4B_PREFILL_LEAN_DISPATCH"
+
+
+def _prefill_lean_dispatch_env() -> bool:
+    """``E4B_PREFILL_LEAN_DISPATCH``: ``0`` (also unset or empty) keeps the gather and unsort, ``1`` takes the lean
+    dispatch on K19's prefill rows (a kernel package without K19's ``scatter=`` / ``gather_div=`` is refused). Anything
+    else is refused rather than read as one of these. Read on every call, like the other route knobs."""
+    raw = os.environ.get(PREFILL_LEAN_DISPATCH_ENV, "")
+    v = (raw or "").strip() or "0"
+    if v not in ("0", "1"):
+        raise ValueError(f"{PREFILL_LEAN_DISPATCH_ENV}={raw!r}: expected '0' or '1'")
+    return v == "1"
+
+
+_K19_DISPATCH_SUPPORT: dict = {}
+
+
+def _k19_takes_lean_dispatch(k19) -> bool:
+    """Whether the installed K19 takes ``scatter=`` and ``gather_div=`` (K23's options). Read once per function."""
+    if k19 not in _K19_DISPATCH_SUPPORT:
+        import inspect
+        _K19_DISPATCH_SUPPORT[k19] = {"scatter", "gather_div"} <= set(inspect.signature(k19).parameters)
+    return _K19_DISPATCH_SUPPORT[k19]
+
+
+#: K19's calls by tile table and dispatch, as ``{"<table>|<dispatch>|<rows>": calls}``: ``<table>`` is ``chained``
+#: (``build_group_tiles_device``, the 16-row tiles) or ``one_launch`` (``build_group_tiles_fused``, K23's or the wide
+#: table); ``<dispatch>`` is ``gather`` (``index_select`` in, ``index_copy_`` unsort out) or ``lean`` (``gather_div=`` in,
+#: ``scatter=order`` out); ``<rows>`` is ``le256`` or ``gt256``. Counted like :data:`ROUTE_SEEN` (eager calls and graph
+#: captures, not replays). It is what an ``E4B_PREFILL_LEAN_DISPATCH`` read asserts: ``chained|...|gt256`` on both arms.
+K19_DISPATCH_SEEN: dict = {}
+
+
+def _seen_k19_dispatch(table: str, dispatch: str, rows: int) -> None:
+    key = f"{table}|{dispatch}|{'le256' if rows <= 256 else 'gt256'}"
+    K19_DISPATCH_SEEN[key] = K19_DISPATCH_SEEN.get(key, 0) + 1
+
 #: The most routed rows the one-launch tile table takes with grouped-nf4-gemm's cumsum rank
 #: (``build_group_tiles_fused(..., rank="cumsum")``); wider calls (prefill chunks) keep the chained builder.
 _WIDE_TILES_MAX = 1024
@@ -659,6 +703,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                 "gemm_int4_b32_grouped_smallm scatter=/gather_div=)")
         else:
             _fused_tiles = None           # auto: the kernel package predates K23 -> the separate launches, as before
+    _pf_lean = False
     if (_k19 is None and device_grouping and int4_stores is not None and not _mxfp4_store and R_rows > 256
             and _int4_prefill_mode_env() == "k19"):
         # E4B_INT4_PREFILL=k19 (e4b#916): K19 serves the device-grouped PREFILL rows too, over the chained 16-row tile
@@ -670,11 +715,18 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             raise RuntimeError(
                 "E4B_INT4_PREFILL=k19 needs grouped-nf4-gemm with K19 "
                 "(int4_smallm.gemm_int4_b32_grouped_smallm, grouped-nf4-gemm#419)") from e
+        if _prefill_lean_dispatch_env():
+            # E4B_PREFILL_LEAN_DISPATCH=1: K23's dispatch on these rows, the chained table kept. Not under a calibration
+            # sink (it reads x_sorted) nor gpt-oss's epilogue (it reads the sorted down output), as K23 itself.
+            if not _k19_takes_lean_dispatch(_k19):
+                raise RuntimeError(
+                    "E4B_PREFILL_LEAN_DISPATCH=1 needs grouped-nf4-gemm whose K19 takes scatter=/gather_div= (K23)")
+            _pf_lean = _CALIB_SINK is None and gptoss is None
     _tok = None
     _gd = None
     if x_rows is None:
         x_t, row_token, top_k = x_tokens
-        if _lean and _CALIB_SINK is None:
+        if (_lean or _pf_lean) and _CALIB_SINK is None:
             _tok = (x_t, top_k)           # K23: K19's (or K25's) gate_up reads the token rows itself (gather_div)
         elif (x_t.shape[0] == 1 and singleton_groups and not device_grouping and int4_stores is None
               and not _mxfp4_store and _CALIB_SINK is None and _nf4_takes_gather_div(gemm_4bit_grouped)):
@@ -930,6 +982,8 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                                      e32d, st["N"], st["K"])
         elif device_grouping and _k19 is not None:
             _route = "int4_k19"
+            _seen_k19_dispatch("one_launch" if (_lean or _fused_tiles is not None) else "chained",
+                               "lean" if (_lean or _pf_lean) else "gather", R_rows)
             # K19 (opt-in): the grouped small-M tensor-core GEMM against the SAME 16-row device tiles. The first
             # call gets the UNSORTED x_rows and gathers through `order` in the kernel; the epilogue output is
             # already in sorted order. bf16 activations, no quantise; outputs in sorted order, as K14's.
@@ -942,7 +996,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                     # K23: sorted row i reads token row order[i] // top_k, no [T * top_k, H] expansion
                     return _k19(_tok[0].to(torch.bfloat16), st["packed"], st["scales"], t_row0, t_rows, t_grp,
                                 order, gather_div=_tok[1])
-                kw = {"scatter": order} if (_lean and slot == "dn") else {}
+                kw = {"scatter": order} if ((_lean or _pf_lean) and slot == "dn") else {}
                 return _k19(xr.to(torch.bfloat16), st["packed"], st["scales"], t_row0, t_rows, t_grp,
                             order if xr is x_rows else None, **kw)
         elif device_grouping:
@@ -1114,7 +1168,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         dn = _mm(h.contiguous(), dn_p, dn_a)
     if order is None:                  # singleton path: input order kept
         return dn
-    if _lean:                          # K23: K19's (or K25's) down already stored each row at order[i]
+    if _lean or _pf_lean:              # K23 (or P2 on prefill): K19's down already stored each row at order[i]
         return dn
     out = torch.empty_like(dn)
     out.index_copy_(0, order, dn)  # unsort back to caller's row order

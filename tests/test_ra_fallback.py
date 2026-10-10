@@ -91,7 +91,12 @@ def test_partial_or_false_native_census_is_rejected(monkeypatch, n):
 def test_unreviewed_body_does_not_get_zero_fallback_claim(monkeypatch):
     model = patched(monkeypatch)
     adapters = json.loads((ROOT / "bench/ra/fallback-adapters.json").read_text())
-    adapters["adapters"][0]["ast_sha256"] = "0" * 64
+    # every reviewed body of the RMSNorm fold, not row 0: the list keeps earlier bodies beside the current one (a fold
+    # that changes appends its new body), so row 0 need not be the body this build runs
+    rows = [r for r in adapters["adapters"] if r["qualname"] == "fuse_t1_glue.<locals>._fwd"]
+    assert len(rows) >= 1
+    for i, r in enumerate(rows):
+        r["ast_sha256"] = f"{i:064x}"
     with pytest.raises(ValueError, match="unreviewed"):
         fallback.GlueObserver(adapters).install(model)
 
