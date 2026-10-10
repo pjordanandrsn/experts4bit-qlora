@@ -232,14 +232,25 @@ class Fp8PagedKV:
                  batch: int, max_tokens_per_seq: int,
                  k_groups: int | None = None,
                  batched_append: bool = True, device: str = "cuda",
-                 scratch_slots: int = 0):
+                 scratch_slots: int = 0, alias_slots: int = 0):
         """``scratch_slots`` (#511) adds that many slots AFTER the ``batch``
         real ones (ids ``batch .. batch + scratch_slots - 1``), each backed
         by ONE block rather than a full sequence's worth. They exist for the
         bucketed decode graphs (``PagedModelRunner.enable_decode_graphs``):
         a bucket is captured on scratch slots only, so warm-up forwards never
         advance a live sequence, and at replay they are the padding rows. A
-        scheduler must never be given them (``kv_slots = batch``)."""
+        scheduler must never be given them (``kv_slots = batch``).
+
+        ``alias_slots`` (lane SD2, ``bench/sd2/PREREG-sd2.md`` B1) adds that
+        many slots after the scratch ones, backed by NO block of their own.
+        A speculative verify of ``k + 1`` rows runs as a decode bucket whose
+        rows 1..k are alias slots: :meth:`alias_bind` copies the speculating
+        slot's block-table row into each and sets alias ``i``'s length to
+        the slot's plus ``i``, so the batch append writes row ``i`` into the
+        slot's own blocks at its position plus ``i``. They are never padding
+        rows (a padding row writes its slot's position 0, which through an
+        aliased table is the speculating slot's first token), so they sit
+        outside ``scratch``, and that is asserted."""
         from fp8_kv import kv_block_bytes
         from row_pool import RowPool
 
@@ -280,7 +291,14 @@ class Fp8PagedKV:
         if self.n_scratch < 0:
             raise ValueError(f"scratch_slots must be >= 0, got {scratch_slots}")
         self.scratch = list(range(batch, batch + self.n_scratch))
-        slots_total = batch + self.n_scratch
+        self.n_alias = int(alias_slots)
+        if self.n_alias < 0:
+            raise ValueError(f"alias_slots must be >= 0, got {alias_slots}")
+        self.alias = list(range(batch + self.n_scratch, batch + self.n_scratch + self.n_alias))
+        if set(self.alias) & set(self.scratch):
+            raise AssertionError("alias slots must sit outside the scratch (padding) slots")
+        slots_total = batch + self.n_scratch + self.n_alias
+        self._alias_set = frozenset(self.alias)
         self.bt = BLOCK_TOKENS
         self.kgs = kgs
         # the uniform value when there is one (what callers used to read);
@@ -371,6 +389,11 @@ class Fp8PagedKV:
         self._scratch_idx = (torch.tensor(self.scratch, dtype=torch.long,
                                           device=self.device)
                              if self.scratch else None)
+        # alias slots (SD2): no rows of their own; their table rows and lengths are written by alias_bind each verify
+        self._alias_idx = (torch.tensor(self.alias, dtype=torch.long, device=self.device)
+                           if self.alias else None)
+        self._alias_off = (torch.arange(1, self.n_alias + 1, dtype=self.seq_lens.dtype, device=self.device)
+                           if self.alias else None)
         self._g_sel = None           # a bound decode-graph bucket's selector
         self._g_buckets: dict[int, dict] = {}
         self._step_select = _step_select_env(os.environ.get("E4B_KV_STEP_SELECT", "1"))   # on unless set to 0 (P111)
@@ -490,6 +513,7 @@ class Fp8PagedKV:
 
     def append(self, layer: int, seq: int, k: torch.Tensor, v: torch.Tensor):
         """k, v: [T, H, D] new tokens for one sequence at one layer."""
+        self._refuse_alias(seq)
         H, D = self.Hs[layer], self.Ds[layer]
         if k.shape != v.shape or k.shape[1:] != (H, D):
             raise ValueError(f"expected [T, {H}, {D}] at layer {layer}, got "
@@ -540,6 +564,8 @@ class Fp8PagedKV:
         leaves a prefix of sequences appended — fatal to the run, as a
         mid-batch OOM is today.
         """
+        if self._alias_set and not self._alias_set.isdisjoint(seqs):
+            self._refuse_alias(next(s_ for s_ in seqs if s_ in self._alias_set))
         H, D = self.Hs[layer], self.Ds[layer]
         if k.shape != v.shape or k.dim() != 4 \
                 or k.shape[2:] != (H, D):
@@ -613,6 +639,7 @@ class Fp8PagedKV:
 
     def _ensure_blocks(self, layer: int, seq: int, upto_blk: int) -> None:
         """Back every block up to ``upto_blk`` with a pool row."""
+        self._refuse_alias(seq)
         rows = self._rows.setdefault((layer, seq), [])
         tbl = self.block_table[layer]
         while len(rows) <= upto_blk:
@@ -633,6 +660,7 @@ class Fp8PagedKV:
         Rows return in ascending order so a fresh run reuses them
         deterministically — a scheduler's block assignment is part of
         what makes a serving run reproducible."""
+        self._refuse_alias(seq)
         for layer in range(self.L):
             rows = self._rows.pop((layer, seq), [])
             if rows:
@@ -654,6 +682,7 @@ class Fp8PagedKV:
     def reset_all_layers(self, seq: int) -> None:
         """:meth:`reset` for every layer with its device writes in two launches: the slot's lengths and its
         block-table rows. The host mirrors are returned exactly as :meth:`reset` returns them."""
+        self._refuse_alias(seq)
         for layer in range(self.L):
             rows = self._rows.pop((layer, seq), [])
             if rows:
@@ -698,6 +727,7 @@ class Fp8PagedKV:
         ``layers`` (default all) with pool rows. Rows are popped from each layer's free list lowest first, as
         :meth:`_ensure_blocks` pops them, and land in the device tables with ONE async host-to-device copy. Layers
         holding different block counts for the slot take the per-layer path."""
+        self._refuse_alias(seq)
         layers = list(range(self.L)) if layers is None else list(layers)
         if not layers:
             return
@@ -750,6 +780,7 @@ class Fp8PagedKV:
 
         Returns True when the bulk path wrote the prompt (or there was nothing to write), False when it took the
         per-layer path, so a caller can count what actually ran."""
+        self._refuse_alias(seq)
         layers = list(layers)
         if len(ks) != len(layers) or len(vs) != len(layers):
             raise ValueError(f"{len(ks)} K / {len(vs)} V tensors for {len(layers)} layers")
@@ -1077,6 +1108,51 @@ class Fp8PagedKV:
         if self._scratch_idx is not None:
             self.seq_lens.index_fill_(1, self._scratch_idx, 0)
 
+    # ------------------------------------------------ speculative verify (SD2, bench/sd2/PREREG-sd2.md B1, B2) --
+    def _refuse_alias(self, seq) -> None:
+        """Alias slots are addressed only on the device, through a bucket bound by :meth:`alias_bind`. A
+        host-addressed path would give one rows of its own (overwriting the table row the bind copied in), or write
+        its host mirror, so every such entry point refuses an alias id."""
+        if seq in self._alias_set:
+            raise ValueError(f"slot {seq} is an alias slot (SD2): only a bucket bound by alias_bind addresses it")
+
+    def alias_bind(self, slot: int, n: int) -> list:
+        """Point alias slots ``0..n-1`` at ``slot`` for one verify step and return their ids. Every layer's
+        block-table row of ``slot`` is copied into each, and alias ``i`` gets the length ``seq_lens[slot] + i + 1``:
+        two launches, no host read. A decode bucket over ``[slot] + aliases`` then appends verify row ``i`` at the
+        slot's length plus ``i``, into the slot's own blocks, and reads ``i + 1`` past it.
+
+        Call it before :meth:`graph_bucket_load`, whose step selection reads these rows. The lengths are rewritten
+        every step, so a stale alias is never read. The slot must already own every block the verify can reach (a
+        graphed slot does from its first decode, ``PagedModelRunner._ensure_graph_ready``): an alias owns no row, and
+        an append through it never allocates.
+
+        The slot's host mirror ``_seen`` is stale from the verify's append until :meth:`note_len`: a bound bucket
+        moves only the device lengths. Nothing host-addressed may run on the slot between :meth:`set_len_device`
+        and :meth:`note_len`."""
+        if not 0 <= n <= self.n_alias:
+            raise ValueError(f"a verify of {n} alias rows; the pool has {self.n_alias} alias slots")
+        if not 0 <= slot < self.B:
+            raise ValueError(f"alias_bind needs a real slot, got {slot} (real slots are 0..{self.B - 1})")
+        if n == 0:
+            return []
+        idx = self._alias_idx[:n]
+        self._bt_all.index_copy_(1, idx, self._bt_all[:, slot:slot + 1].expand(-1, n, -1).contiguous())
+        self.seq_lens.index_copy_(1, idx, self.seq_lens[:, slot:slot + 1] + self._alias_off[:n])
+        return self.alias[:n]
+
+    def set_len_device(self, slot: int, n: torch.Tensor) -> None:
+        """Set ``slot``'s length on every layer to the device scalar ``n``, with no host read: after a verify,
+        ``base + accepted + 1``. It must be the step's LAST length write, after :meth:`graph_bucket_publish`, which
+        adds one to every bound row. The caller guarantees ``n`` does not pass what the step appended (no check is
+        possible without a sync) and sets the host mirror with :meth:`note_len` once it reads the accept back."""
+        self.seq_lens[:, slot].copy_(n.reshape(()).to(self.seq_lens.dtype).expand(self.L))
+
+    def note_len(self, slot: int, n: int) -> None:
+        """The host mirror ``_seen`` of a length :meth:`set_len_device` wrote on the device."""
+        for layer in range(self.L):
+            self._seen[layer][slot] = int(n)
+
     def kernel_args(self, layer: int, slots=None):
         """What the fused kernel consumes: flat pool bytes, block table,
         per-sequence lengths.
@@ -1095,7 +1171,7 @@ class Fp8PagedKV:
             # E4B_KV_STEP_SELECT: this layer's slice of the step's selection (no launch); the lengths already count
             # this layer's appended token
             return (self.kp.dev[layer].flatten(), self.vp.dev[layer].flatten(), st["tbl"][layer], st["lens"][layer])
-        if slots is None and self.n_scratch:
+        if slots is None and (self.n_scratch or self.n_alias):
             # scratch slots trail the real ones; the no-slots form keeps
             # meaning "the batch", exactly as before they existed
             tbl, lens = tbl[:self.B], lens[:self.B]
@@ -1194,6 +1270,7 @@ class Fp8PagedKV:
         under stream capture. Callers inside a capture (or timing a
         capture's replays) use :meth:`rewind_nosync`, which does the
         same length writes with no read-back."""
+        self._refuse_alias(seq)
         for layer in range(self.L):
             cur = self.seen_device(layer, seq)
             if to_tokens > cur:
@@ -1210,6 +1287,7 @@ class Fp8PagedKV:
         check it, so the check happens once outside (Bugbot-adjacent:
         found live when the S2 timing arm's rewind hit
         cudaErrorStreamCaptureUnsupported through ``.item()``)."""
+        self._refuse_alias(seq)
         for layer in range(self.L):
             self._seen[layer][seq] = to_tokens
             # fill_ keeps this async (see append's seq_lens note)
