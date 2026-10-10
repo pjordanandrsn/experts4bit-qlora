@@ -443,7 +443,7 @@ def depth_report(src) -> dict:
     cells, the max radial drift, and at each of FLOORS the cells and [p50, p90, p99, max] of |angle|, overall and per
     layer. Needs torch only to read the file; a record whose raw tensors failed soft is passed through."""
     import torch
-    raw = torch.load(src, map_location="cpu")
+    raw = torch.load(src, map_location="cpu", weights_only=True)
     out = {}
     for key, r in raw.items():
         if not isinstance(r, dict) or "angle" not in r:

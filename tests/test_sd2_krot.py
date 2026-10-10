@@ -155,3 +155,21 @@ def test_the_offline_depth_report_separates_small_noisy_cells_from_large_ones():
     torch.save(failed, buf)
     buf.seek(0)
     assert RED.depth_report(buf) == failed                     # a record that failed soft at the box passes through
+
+
+class _NotATensor:
+    """A pickled object that is neither a tensor nor a plain container: what weights_only=True refuses to build."""
+
+
+def test_the_offline_depth_report_reads_tensors_only(monkeypatch):
+    """Re-derivations read v_angles.pt from a receipt; loading it must never run pickled code. The reducer asks for
+    weights_only=True explicitly, so a file carrying any other object is refused before anything in it is built, even
+    where torch's own default is off: before torch 2.6, or under TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1, set here."""
+    import io
+    import pickle
+    monkeypatch.setenv("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD", "1")
+    buf = io.BytesIO()
+    torch.save({"R1_k1": _NotATensor()}, buf)
+    buf.seek(0)
+    with pytest.raises(pickle.UnpicklingError):
+        RED.depth_report(buf)
