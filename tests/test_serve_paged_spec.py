@@ -118,6 +118,27 @@ def test_enable_spec_sets_the_runner_up_before_any_graph(monkeypatch):
     assert runner.speculative and runner.spec.k == 2 and runner.spec.aux.mode == "decode"
 
 
+@pytest.mark.parametrize("buckets,k,rows", [((1, 2, 4, 8, 16), 1, 16), ((1, 2, 4, 8, 16), 3, 16), ((1, 2), 3, 4)])
+def test_the_aux_buffers_hold_every_captured_bucket_and_a_whole_slot(monkeypatch, buckets, k, rows):
+    """The hooks run in every captured bucket while speculation is on, plain ones included: ``dec`` must hold the
+    largest's rows, or that bucket's capture fails on the copy and falls back to eager (the maintainer's review of
+    #1558). ``pre`` must hold a whole slot's prompt."""
+    from experts4bit_qlora.engines import eagle3_draft
+    from experts4bit_qlora.engines.fp8_paged_kv import Fp8PagedKV
+    from experts4bit_qlora.engines.paged_runner import PagedModelRunner
+    monkeypatch.setattr(eagle3_draft, "load_head", lambda path: _fake_head())
+    model = _tiny()
+    kv = Fp8PagedKV(L, 2, 8, batch=2, max_tokens_per_seq=100, device="cpu",
+                    scratch_slots=max(max(buckets), k + 1), alias_slots=k)
+    runner = PagedModelRunner(model, kv, device="cpu")
+    sp._enable_spec(model, kv, runner, _cfg(spec_k=k, buckets=buckets, max_seqs=max(buckets), device="cpu",
+                                            max_tokens_per_seq=100))
+    captured = sorted(set(buckets) | set(runner._verify_buckets))
+    aux = runner.spec.aux
+    assert aux.dec.shape[0] == rows == captured[-1]
+    assert aux.pre.shape[0] == kv.blocks_per_seq * kv.bt >= 100
+
+
 @pytest.mark.parametrize("head,why", [(dict(hidden=16), "wide"), (dict(vocab=32), "embeds")])
 def test_enable_spec_refuses_a_head_that_does_not_fit_the_target(monkeypatch, head, why):
     from experts4bit_qlora.engines import eagle3_draft
