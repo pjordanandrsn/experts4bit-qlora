@@ -1,0 +1,12 @@
+KNOBS e4b=d7ba80da13403aa85056ed3190ab29d34c8d6f29 gnf4=d769d5022c0fb7a2ada847f69a3cba6e0f45c77f model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=A4000 min_disk_gb=150 steps=512
+CUDA_PROBE ok
+experts4bit-qlora 0.52.0
+grouped-nf4-gemm 0.44.0
+torch 2.8.0+cu128 transformers 5.16.1 cc (8, 6)
+FETCH /root/loc/hf/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+locality_capture self-test OK (9/9 cases)
+locality_summary self-test OK (9/9 cases)
+LOCALITY_CALIBRATE profile -> /root/loc/out/calibration_profile.jsonl
+LOCALITY_CAPTURE done -> /root/loc/out
+LOCALITY_SUMMARY decode layers=48 tokens=2048 sequences=4
+LOCALITY_SUMMARY prefill layers=48 tokens=10256 sequences=16

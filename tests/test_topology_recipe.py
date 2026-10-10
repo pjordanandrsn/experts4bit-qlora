@@ -268,19 +268,35 @@ def test_estimate_env_reports_the_switches_the_estimate_reads(monkeypatch):
     from experts4bit_qlora.engines.chunked_lm_loss import DEFAULT_CHUNK
 
     monkeypatch.delenv("E4B_CHUNKED_LM_LOSS", raising=False)
+    monkeypatch.delenv("E4B_TRAIN_FUSE_QKV", raising=False)
     unset = estimate_env()
-    assert unset == {"E4B_CHUNKED_LM_LOSS": {"chunk": DEFAULT_CHUNK, "auto_gate_bytes": AUTO_MIN_LOGITS_BYTES}}
+    assert unset == {"E4B_CHUNKED_LM_LOSS": {"chunk": DEFAULT_CHUNK, "auto_gate_bytes": AUTO_MIN_LOGITS_BYTES},
+                     "E4B_TRAIN_FUSE_QKV": True}
     for same in ("", "auto", "AUTO"):                      # the engine treats these as unset: no spurious difference
         monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", same)
         assert estimate_env() == unset, same
     monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", "1")        # every forward chunks: the gate is off
-    assert estimate_env() == {"E4B_CHUNKED_LM_LOSS": {"chunk": DEFAULT_CHUNK, "auto_gate_bytes": None}}
+    assert estimate_env()["E4B_CHUNKED_LM_LOSS"] == {"chunk": DEFAULT_CHUNK, "auto_gate_bytes": None}
     monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", "0")
-    assert estimate_env() == {"E4B_CHUNKED_LM_LOSS": {"chunk": None, "auto_gate_bytes": None}}
+    assert estimate_env()["E4B_CHUNKED_LM_LOSS"] == {"chunk": None, "auto_gate_bytes": None}
+    monkeypatch.delenv("E4B_CHUNKED_LM_LOSS", raising=False)
+    for off in ("0", "false", "off", "no"):
+        monkeypatch.setenv("E4B_TRAIN_FUSE_QKV", off)
+        assert estimate_env()["E4B_TRAIN_FUSE_QKV"] is False, off
+    monkeypatch.delenv("E4B_TRAIN_FUSE_QKV", raising=False)
     V = 50_000
     topo = describe_moe(_qwen3(vocab_size=V, architectures=["Qwen3MoeForCausalLM"]))
     T = -(-AUTO_MIN_LOGITS_BYTES // (V * 4))
     for switch in estimate_env():
+        if switch == "E4B_TRAIN_FUSE_QKV":     # its own item, present when the attention is NF4 with trained adapters
+            def device():
+                return estimate_qlora_footprint(topo, QLoRASetup(attn_4bit=True), tokens_per_microbatch=T).device_bytes
+            monkeypatch.delenv(switch, raising=False)
+            on = device()
+            monkeypatch.setenv(switch, "0")
+            assert device() != on, switch
+            monkeypatch.delenv(switch, raising=False)
+            continue
         monkeypatch.setenv(switch, "auto")
         on = _activations(topo, T).bytes
         monkeypatch.setenv(switch, "0")
@@ -297,3 +313,29 @@ def test_whole_and_chunked_logits_are_priced_at_one_measured_coefficient():
     assert recipe.LOGITS_LOSS_BYTES is chunked_lm_loss.LOGITS_LOSS_BYTES
     assert chunked_lm_loss.CHUNK_BYTES_PER_LOGIT == chunked_lm_loss.LOGITS_LOSS_BYTES
     assert chunked_lm_loss.chunked_loss_bytes(4096, 1000, hidden=8) == 512 * 1000 * 12 + 4096 * 8 * 2
+
+
+def test_the_fused_qkv_absmax_is_priced_exactly_when_the_run_fuses(monkeypatch):
+    """P129's fused q/k/v training projection (on by default) keeps its absmax in fp32: 3 bytes per 64 q/k/v values more than
+    the nested statistics. The estimate prices it only where the run fuses: the grouped path, NF4 attention with trained
+    adapters, the knob on, an attention class the fusion takes."""
+    monkeypatch.delenv("E4B_TRAIN_FUSE_QKV", raising=False)
+    name = "fused q/k/v training projection (fp32 absmax)"
+
+    def item(topo, **setup):
+        return {i.name: i for i in estimate_qlora_footprint(topo, QLoRASetup(**setup), tokens_per_microbatch=32).items}.get(name)
+
+    cfg = _qwen3()
+    topo = describe_moe(cfg)
+    qkv = L * H * (cfg.num_attention_heads + 2 * cfg.num_key_value_heads) * cfg.head_dim
+    assert topo.attention.fused_qkv_numel == qkv
+    got = item(topo, attn_4bit=True)
+    assert got is not None and got.bytes == 3 * qkv // 64 and got.where == "device"
+    assert item(topo) is None                                          # bf16 attention: nothing to fuse
+    assert item(topo, attn_4bit=True, train_attention=False) is None   # no attention adapters: nothing to fuse
+    assert item(topo, attn_4bit=True, expert_kernel="reference") is None
+    monkeypatch.setenv("E4B_TRAIN_FUSE_QKV", "0")
+    assert item(topo, attn_4bit=True) is None
+    monkeypatch.delenv("E4B_TRAIN_FUSE_QKV", raising=False)
+    olmoe = describe_moe(_olmoe())                                     # an attention class the fusion refuses
+    assert olmoe.attention.fused_qkv_numel == 0 and item(olmoe, attn_4bit=True) is None

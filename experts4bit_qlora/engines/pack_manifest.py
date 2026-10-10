@@ -97,7 +97,8 @@ def tensor_payload_bytes(t) -> bytes:
     header = json.dumps({"dtype": dtype, "shape": list(t.shape)},
                         separators=(",", ":")).encode("utf-8")
     if t.dtype == torch.bfloat16:
-        body = t.view(torch.uint8).numpy().tobytes()
+        # flattened first: a byte view of a rank-0 tensor refuses; a ranked contiguous tensor's bytes are the same
+        body = t.reshape(-1).view(torch.uint8).numpy().tobytes()
     else:
         body = t.numpy().tobytes()
     return struct.pack("<I", len(header)) + header + body
@@ -115,7 +116,7 @@ def tensor_from_payload_bytes(data: bytes):
     shape = tuple(header["shape"])
     if dtype_name == "bfloat16":
         t = torch.empty(shape, dtype=torch.bfloat16)
-        t.view(torch.uint8).view(-1).copy_(
+        t.view(-1).view(torch.uint8).copy_(
             torch.frombuffer(bytearray(body), dtype=torch.uint8))
         return t
     np_dtype = getattr(np, dtype_name, None)

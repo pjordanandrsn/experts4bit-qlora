@@ -21,7 +21,7 @@
 SC5_CS="1 16 64"; SC5_MAXTOK=256; SC5_DRAWS=2; SC5_MEMS="default matched"   # registered constants, not knobs
 SC5_MATCHED_SEQS=64; SC5_MATCHED_TPS=1024; SC5_MATCHED_KV=65536; SC5_VLLM_BLOCK=16
 SC5_VLLM_VERSION=0.31.0; SC5_SGLANG_VERSION=0.5.21; SC5_SGLANG_TAG_COMMIT=e00930c5489053f26d86b179cee0d087f846acbb
-SC5_REF_SHA256=""   # the registered reference's sha256: set by the amendment that commits bench/sc5/ref/ (empty: quality UNREAD)
+SC5_REF_SHA256="783e1443bd05e09cec0eb28de99c739977bef19f84b8c01eca963270181a45a3"   # bench/sc5/ref/sc5_ref.json (sc5-ref-1; the reference amendment)
 SC5_D=$W/sc5; mkdir -p "$SC5_D/blocks" "$SC5_D/quality"
 sc5_n(){ case "$1" in 1) echo 48;; 16) echo 160;; 64) echo 320;; *) return 1;; esac; }
 # the model name each server answers to: serve_paged serves its model id and refuses any other ("unknown model 'sc5'",

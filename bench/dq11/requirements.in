@@ -1,0 +1,10 @@
+torch==2.12.1+cu130
+torchvision==0.27.1+cu130
+transformers==5.5.0
+bitsandbytes==0.50.2
+peft==0.21.2
+unsloth==2026.9.14
+unsloth-zoo==2026.9.9
+safetensors
+accelerate
+pyarrow

@@ -1,0 +1,92 @@
+{
+ "model_dir": "/workspace/qwen3moe-2l",
+ "fp32": {
+  "default_fused": 2,
+  "default_refused": {},
+  "default_losses": [
+   8.682537078857422,
+   8.57781982421875,
+   8.475930213928223
+  ],
+  "off_fused": 0,
+  "off_bases_kept": true,
+  "off_losses": [
+   8.682557106018066,
+   8.578063011169434,
+   8.475790977478027
+  ],
+  "rt_fused_before_disable": 2,
+  "rt_after_disable": {
+   "fused_stat": 0,
+   "bases_kept": true,
+   "qkv_proj_left": 0
+  },
+  "rt_loss": 8.68263053894043,
+  "rt_loss_off": 8.68263053894043,
+  "rt_loss_bitwise": true,
+  "rt_grads_bitwise": false,
+  "rt_n_grads": 24,
+  "reenable_fused": 2,
+  "reenable_loss": 8.682537078857422,
+  "reenable_loss_bitwise_default_step0": true,
+  "loss_rel_diff": [
+   2.306597054299821e-06,
+   2.834986760611828e-05,
+   1.6427546475047963e-05
+  ],
+  "checks": {
+   "default fuses every layer, refuses none": true,
+   "off fuses nothing and keeps every base": true,
+   "losses finite": true,
+   "each step's loss within 2**-6 of off": true,
+   "disable restores every layer": true,
+   "round trip bit for bit (loss, every adapter grad)": false,
+   "re-enable fuses every layer, step 0 bit for bit": true
+  }
+ },
+ "bf16": {
+  "default_fused": 2,
+  "default_refused": {},
+  "default_losses": [
+   8.680248260498047,
+   8.585501670837402,
+   8.490293502807617
+  ],
+  "off_fused": 0,
+  "off_bases_kept": true,
+  "off_losses": [
+   8.681832313537598,
+   8.585837364196777,
+   8.491379737854004
+  ],
+  "rt_fused_before_disable": 2,
+  "rt_after_disable": {
+   "fused_stat": 0,
+   "bases_kept": true,
+   "qkv_proj_left": 0
+  },
+  "rt_loss": 8.681876182556152,
+  "rt_loss_off": 8.681876182556152,
+  "rt_loss_bitwise": true,
+  "rt_grads_bitwise": false,
+  "rt_n_grads": 24,
+  "reenable_fused": 2,
+  "reenable_loss": 8.680248260498047,
+  "reenable_loss_bitwise_default_step0": true,
+  "loss_rel_diff": [
+   0.0001824560740571739,
+   3.9098499672827756e-05,
+   0.00012792209039296117
+  ],
+  "checks": {
+   "default fuses every layer, refuses none": true,
+   "off fuses nothing and keeps every base": true,
+   "losses finite": true,
+   "each step's loss within 2**-6 of off": true,
+   "disable restores every layer": true,
+   "round trip bit for bit (loss, every adapter grad)": false,
+   "re-enable fuses every layer, step 0 bit for bit": true
+  }
+ },
+ "PASS": false
+}

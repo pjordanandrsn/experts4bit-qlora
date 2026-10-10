@@ -1,0 +1,6 @@
+NVIDIA RTX A4000, 16376 MiB, 565.57.01, GPU-1fd87bba-6a53-8cfc-397e-c6d112dd3559, 8.6
+Vendor ID:                            GenuineIntel
+Model name:                           Intel(R) Xeon(R) CPU E5-2683 v4 @ 2.10GHz
+               total        used        free      shared  buff/cache   available
+Mem:             125           5          14           0         105         118
+overlay         320G  1.3M  320G   1% /
