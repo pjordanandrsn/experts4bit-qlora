@@ -1067,16 +1067,18 @@ _TOKENIZER_FILES = ("tokenizer.json", "tokenizer_config.json", "tokenizer.model"
 
 
 def _hub_offline() -> bool:
-    """HF_HUB_OFFLINE as huggingface_hub reads it (1/true/yes/on)."""
-    return os.environ.get("HF_HUB_OFFLINE", "").strip().lower() in ("1", "true", "yes", "on")
+    """huggingface_hub's own offline flag (``constants.HF_HUB_OFFLINE``), so the truthiness rules match it exactly."""
+    from huggingface_hub import constants as _hub_constants
+    return bool(getattr(_hub_constants, "HF_HUB_OFFLINE", False))
 
 
 def _pinned_snapshot_offline(model_id: str, revision) -> str | None:
     """The local snapshot of a full-sha `revision`, verified complete, when the Hub is offline; else None.
 
-    huggingface_hub 1.26.0 through 2.1.1 (1.25.0 and 2.2.0 are unaffected) list the repo tree online inside
-    ``snapshot_download(..., revision=<commit sha>)`` even with ``HF_HUB_OFFLINE=1``, and raise
-    ``OfflineModeIsEnabled`` although the pinned snapshot is complete in the cache. Offline, with a full 40-hex
+    Some huggingface_hub releases list the repo tree online inside ``snapshot_download(..., revision=<commit sha>)``
+    even with ``HF_HUB_OFFLINE=1``, and raise ``OfflineModeIsEnabled`` although the pinned snapshot is complete in the
+    cache. Observed on 1.26.0, 1.27.0, 1.28.0, 1.29.0, 1.30.0, 1.31.0, 1.32.0, 1.33.0, 2.0.0, 2.1.0 and 2.1.1; 0.36.0,
+    1.0.0, 1.20.0, 1.25.0 and 2.2.0 resolve locally (releases not listed were not tested). Offline, with a full 40-hex
     commit whose snapshot directory exists, this resolves the snapshot locally with no Hub call and then CHECKS it:
     ``config.json``, the safetensors index and every shard it names (or a single ``model.safetensors``), and a
     tokenizer file must all be present. A missing file is refused by name -- a partial snapshot is never loaded.

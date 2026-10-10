@@ -1,8 +1,10 @@
 """A pinned, complete local cache loads offline (no Hub call); a partial one is refused by name.
 
-huggingface_hub 1.26.0 through 2.1.1 list the repo tree online inside snapshot_download(..., revision=<sha>) even with
-HF_HUB_OFFLINE=1. These tests patch snapshot_download to RAISE, so they hold under any hub version: offline with a
-pinned sha the loader must not call it at all (the previous inline call always did, so these tests fail on it)."""
+Some huggingface_hub releases list the repo tree online inside snapshot_download(..., revision=<sha>) even with
+HF_HUB_OFFLINE=1: observed on 1.26.0, 1.27.0, 1.28.0, 1.29.0, 1.30.0, 1.31.0, 1.32.0, 1.33.0, 2.0.0, 2.1.0 and 2.1.1;
+1.25.0 and 2.2.0 resolve locally.
+These tests patch snapshot_download to RAISE, so they hold under any hub version: offline with a pinned sha the loader
+must not call it at all (the previous inline call always did, so these tests fail on it)."""
 import json
 
 import pytest
@@ -32,6 +34,7 @@ def _cache(tmp_path, files=None, index_shards=("model-00001-of-00002.safetensors
 def offline(monkeypatch, tmp_path):
     from huggingface_hub import constants
     monkeypatch.setenv("HF_HUB_OFFLINE", "1")
+    monkeypatch.setattr(constants, "HF_HUB_OFFLINE", True)
     monkeypatch.setattr(constants, "HF_HUB_CACHE", str(tmp_path))
     calls = []
 
@@ -78,6 +81,7 @@ def test_a_branch_revision_offline_keeps_snapshot_downloads_behaviour(monkeypatc
     """Documented: a branch name is never guessed into a ref here; snapshot_download resolves refs/<branch>."""
     from huggingface_hub import constants
     monkeypatch.setenv("HF_HUB_OFFLINE", "1")
+    monkeypatch.setattr(constants, "HF_HUB_OFFLINE", True)
     monkeypatch.setattr(constants, "HF_HUB_CACHE", str(tmp_path))
     seen = []
     monkeypatch.setattr(loader, "snapshot_download", lambda *a, **kw: seen.append(kw) or "from-hub-resolver")
@@ -89,6 +93,7 @@ def test_a_branch_revision_offline_keeps_snapshot_downloads_behaviour(monkeypatc
 def test_online_behaviour_is_unchanged(monkeypatch, tmp_path):
     from huggingface_hub import constants
     monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
+    monkeypatch.setattr(constants, "HF_HUB_OFFLINE", False)
     monkeypatch.setattr(constants, "HF_HUB_CACHE", str(tmp_path))
     seen = []
     monkeypatch.setattr(loader, "snapshot_download", lambda *a, **kw: seen.append((a, kw)) or "online")
