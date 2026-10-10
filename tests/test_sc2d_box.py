@@ -92,7 +92,7 @@ def test_the_reducer_passes_its_self_test():
 def test_box_k_is_wired_like_box_h():
     assert 'case "$BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M) ;;' in RUN
     assert 'case "$BOX" in K) GNF4_SHA=dc8f94abfd868f149178623f6eb403dc8b892b02;; esac' in RUN    # v0.41.0, as H
-    assert '[ "$BOX" = J ] || [ "$BOX" = K ] || [ "$BOX" = L ]; then   # SC2g (box G), SC2c (box H), SC1g (boxes I, J), SC2d' in RUN
+    assert '[ "$BOX" = J ] || [ "$BOX" = K ] || [ "$BOX" = L ] || [ "$BOX" = M ]; then   # SC2g (box G), SC2c (box H), SC1g (boxes I, J), SC2d' in RUN
     assert "C|D|E|F|G|H|I|J|K|L|M) BASEPY=python3;;" in RUN
     torch = next(x for x in RUN.splitlines() if '"torch==2.8.0"' in x and "pipx logs/pip_torch.log" in x)
     assert '[ "$BOX" = K ]' in torch                                     # A1's lesson: every python3 box pins torch
