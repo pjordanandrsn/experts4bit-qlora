@@ -5,7 +5,7 @@
 # Amendment 2 (the logit gate); Amendment 3 (the read sd2-5090-N: its stages, the audit, Q's instrument at its bytes).
 # Amendment 4 (the key-row position gate, rule a3); Amendment 5 (the gate at layer 0, rule a4).
 18ef88c3fa6115a783378e9f78f144701264dadbeeea7f3d4781bd1d9bcc5182  sd2_run.sh
-24dcdaffd924f92a7a71e44b6141da30369bfe1efc0f0d64a7ed16ac47fbc1ec  sd2_box.py
+07f4bc124624f60d9d5a441063942f20f9812b1e5fc3f1debeeb1fb74fb2958d  sd2_box.py
 2062508b1852dd19c27a73be3fab959a8d469f309300ec98e260b585be441206  sd2_reduce.py
 f08da3f29751c91e05e91415141fcd7207d5c8324d17cdcdcda071d7e8574400  sd2_audit.py
 a33030d2160ae66eec7277c9d195c547c3546b7c8c41510fb8d277fdf6f88151  audit_read.tsv
