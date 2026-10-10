@@ -6,6 +6,13 @@ Changes merged since the last release are one file each in [`changelog.d/`](chan
 
 ## 0.53.0 — 2026-10-10 — the fused q/k/v training projection on by default, and the grouped_nf4 MoE backward priced in the training estimate
 
+**0.53.0.** QLoRA training of Qwen3-MoE now fuses each attention layer's q, k and v into one NF4 + LoRA projection
+by default. On RTX 5090, at TC1's field recipe on two hosts, a training step took 0.87–0.91 of the time, with held-out
+loss within 0.002. The training estimate now prices the grouped_nf4 MoE backward, so estimates rise for grouped_nf4
+callers, and streamed dense adapters no longer crash CPU inference. Upgrade if you train Qwen3-MoE or rely on the
+training estimate; `E4B_TRAIN_FUSE_QKV=0` keeps the previous attention path. Everything else in this release is
+benchmark records, harnesses and CI.
+
 ### The fused q/k/v training projection is on by default (P129 DEFAULT_ON)
 
 - **What changes:** `enable_fast_train` now fuses each eligible attention module's q, k and v (NF4 base, LoRA adapters)
