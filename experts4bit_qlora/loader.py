@@ -1063,7 +1063,6 @@ _FULL_SHA = re.compile(r"[0-9a-f]{40}")
 
 #: what the streaming loader needs from a snapshot (the same files its ``allow_patterns`` select)
 _SNAPSHOT_PATTERNS = ["*.safetensors", "*.json", "tokenizer*", "*.model", "*.txt"]
-_TOKENIZER_FILES = ("tokenizer.json", "tokenizer_config.json", "tokenizer.model")
 
 
 def _hub_offline() -> bool:
@@ -1075,13 +1074,15 @@ def _hub_offline() -> bool:
 def _pinned_snapshot_offline(model_id: str, revision) -> str | None:
     """The local snapshot of a full-sha `revision`, verified complete, when the Hub is offline; else None.
 
-    Some huggingface_hub releases list the repo tree online inside ``snapshot_download(..., revision=<commit sha>)``
-    even with ``HF_HUB_OFFLINE=1``, and raise ``OfflineModeIsEnabled`` although the pinned snapshot is complete in the
-    cache. Observed on 1.26.0, 1.27.0, 1.28.0, 1.29.0, 1.30.0, 1.31.0, 1.32.0, 1.33.0, 2.0.0, 2.1.0 and 2.1.1; 0.36.0,
-    1.0.0, 1.20.0, 1.25.0 and 2.2.0 resolve locally (releases not listed were not tested). Offline, with a full 40-hex
-    commit whose snapshot directory exists, this resolves the snapshot locally with no Hub call and then CHECKS it:
-    ``config.json``, the safetensors index and every shard it names (or a single ``model.safetensors``), and a
-    tokenizer file must all be present. A missing file is refused by name -- a partial snapshot is never loaded.
+    Offline, some huggingface_hub releases resolve ``snapshot_download(..., revision=<commit sha>)`` from the
+    ``trees/<sha>.json`` listing a download writes next to the snapshot. A cache that holds the complete snapshot but
+    no listing (written by an older release, or assembled by hand) makes them list the repo tree online, and they
+    raise ``OfflineModeIsEnabled``. Observed on 1.26.0, 1.27.0, 1.28.0, 1.29.0, 1.30.0, 1.31.0, 1.32.0, 1.33.0, 2.0.0,
+    2.1.0 and 2.1.1; 0.36.0, 1.0.0, 1.20.0, 1.25.0 and 2.2.0 resolve such a cache locally (releases not listed were
+    not tested). Offline, with a full 40-hex commit whose snapshot directory exists, this resolves the snapshot
+    locally with no Hub call and then CHECKS it: ``config.json`` and the safetensors index plus every shard it names
+    (or a single ``model.safetensors``) must be present -- the files the loader reads; it loads no tokenizer. A
+    missing file is refused by name -- a partial snapshot is never loaded.
     A pinned commit with no snapshot in the cache is refused (offline cannot fetch it). Any other case -- online,
     or a branch-name revision -- returns None and keeps ``snapshot_download``'s own behaviour (offline, a branch
     name resolves through ``refs/<branch>`` there; the ref is never guessed here)."""
@@ -1102,8 +1103,6 @@ def _pinned_snapshot_offline(model_id: str, revision) -> str | None:
         missing += [s for s in shards if not os.path.exists(os.path.join(snap, s))]
     elif not os.path.exists(os.path.join(snap, "model.safetensors")):
         missing.append("model.safetensors.index.json or model.safetensors")
-    if not any(os.path.exists(os.path.join(snap, t)) for t in _TOKENIZER_FILES):
-        missing.append("a tokenizer file (" + " / ".join(_TOKENIZER_FILES) + ")")
     if missing:
         raise FileNotFoundError(
             f"{model_id!r}@{revision}: the pinned snapshot {snap} is incomplete offline, missing {missing}; "

@@ -1,8 +1,10 @@
 """A pinned, complete local cache loads offline (no Hub call); a partial one is refused by name.
 
-Some huggingface_hub releases list the repo tree online inside snapshot_download(..., revision=<sha>) even with
-HF_HUB_OFFLINE=1: observed on 1.26.0, 1.27.0, 1.28.0, 1.29.0, 1.30.0, 1.31.0, 1.32.0, 1.33.0, 2.0.0, 2.1.0 and 2.1.1;
-1.25.0 and 2.2.0 resolve locally.
+Offline, some huggingface_hub releases resolve snapshot_download(..., revision=<sha>) from the trees/<sha>.json
+listing a download writes; a cache with the complete snapshot and no listing (an older release's, or one assembled by
+hand) makes them list the repo tree online: observed on 1.26.0, 1.27.0, 1.28.0, 1.29.0, 1.30.0, 1.31.0, 1.32.0,
+1.33.0, 2.0.0, 2.1.0 and 2.1.1; 1.25.0 and 2.2.0 resolve such a cache locally. The fixtures here write no listing,
+the layout that fails (test_loader_architectures covers the listed layout through the real hub).
 These tests patch snapshot_download to RAISE, so they hold under any hub version: offline with a pinned sha the loader
 must not call it at all (the previous inline call always did, so these tests fail on it)."""
 import json
@@ -53,7 +55,7 @@ def test_complete_pinned_snapshot_resolves_offline_without_the_hub(offline, tmp_
 
 
 def test_single_file_checkpoint_resolves_offline(offline, tmp_path):
-    snap = _cache(tmp_path, files=["config.json", "tokenizer_config.json", "model.safetensors"], with_index=False)
+    snap = _cache(tmp_path, files=["config.json", "model.safetensors"], with_index=False)
     assert loader._resolve_snapshot(MODEL, SHA) == str(snap)
 
 
@@ -63,13 +65,18 @@ def test_a_missing_shard_is_refused_by_name(offline, tmp_path):
         loader._resolve_snapshot(MODEL, SHA)
 
 
-@pytest.mark.parametrize("drop", ["config.json", "tokenizer.json"])
-def test_missing_config_or_tokenizer_is_refused(offline, tmp_path, drop):
-    files = [f for f in ["config.json", "tokenizer.json", "model-00001-of-00002.safetensors",
-                         "model-00002-of-00002.safetensors"] if f != drop]
-    _cache(tmp_path, files=files)
-    with pytest.raises(FileNotFoundError, match="config.json" if drop == "config.json" else "tokenizer"):
+def test_a_missing_config_is_refused(offline, tmp_path):
+    _cache(tmp_path, files=["tokenizer.json", "model-00001-of-00002.safetensors", "model-00002-of-00002.safetensors"])
+    with pytest.raises(FileNotFoundError, match="config.json"):
         loader._resolve_snapshot(MODEL, SHA)
+
+
+def test_no_tokenizer_is_required(offline, tmp_path):
+    """The streaming loader reads config and weights only; a weights-only snapshot is complete."""
+    snap = _cache(tmp_path, files=["config.json", "model-00001-of-00002.safetensors",
+                                   "model-00002-of-00002.safetensors"])
+    assert loader._resolve_snapshot(MODEL, SHA) == str(snap)
+    assert offline == []
 
 
 def test_a_pinned_sha_not_in_the_cache_is_refused_offline(offline, tmp_path):

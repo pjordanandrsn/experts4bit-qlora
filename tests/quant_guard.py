@@ -94,6 +94,8 @@ LOADER_REFUSALS = (
     "unmaterialized meta tensors remain",     # something never got materialized
     "quantize_layers excludes",               # excluded layer's experts are packed on disk
     "collides with another checkpoint key",   # a convention prefix rename would shadow a key
+    "cannot be fetched offline",              # offline, a pinned commit with no snapshot in the cache
+    "refusing to load a partial checkpoint",  # offline, a pinned snapshot missing config or a shard
 )
 
 
