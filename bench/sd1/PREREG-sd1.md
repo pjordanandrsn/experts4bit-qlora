@@ -128,7 +128,14 @@ P + N − 1 forwarded positions per row, or the box refuses (rc 19).
 ## PREMISE, VOID and the tripwire
 
 - **VOID if** EAGLE-3's τ(k = 1) on C-think, the head's own training mode, is below **1.40**. The card reads 1.66–1.84
-  there; below 1.40 the capture convention is suspect, not the head.
+  there.
+- **What a premise miss means.** It is read as a fault in the instrument, not the head. The suspects come first, in this
+  order:
+  1. the plain-torch EAGLE-3 reimplementation (`sd1_eagle3.py`);
+  2. the auxiliary-layer convention (layers 2 / 24 / 45, the residual stream entering them).
+
+  Only after both are cleared would the head itself be suspected. A miss is reported, never read as "the head does not
+  work on this model".
 - **The box refuses:**
   - rc 19: a capture whose position count does not match;
   - rc 11: a head file whose size or sha256 differs;
@@ -172,10 +179,9 @@ The box recomputes it on its own B = 1 R tokens, and on C-think and C-nothink.
 
 - **One run.** One RTX 5090 at ≤ $0.85/h (the policy rate), with a guard of 1.25 h, plus about 62 GB of download (the
   61 GB checkpoint and the 1.04 GB head, at about $0.011/GB, so about $0.68).
-- **Ceiling about $1.75.**
-  - The maintainer's sizing was about $1.50. A 1.0 h guard does not fit the measured 28-minute fetch of
-    `p127-prove-3` together with the bake and three captures, so the step allowances would skip a workload.
-  - The guard, and with it the ceiling, is the maintainer's to set at review.
+- **Ceiling about $1.75,** approved by the maintainer at review (bus, 2026-10-10T03:44:47Z). A 1.0 h guard does not fit
+  the measured 28-minute fetch of `p127-prove-3` together with the bake and three captures, so the step allowances would
+  skip a workload.
 - **No retry is pre-authorised.** Any rerun is an amendment.
 - **Steps that do not fit the deadline** are skipped and recorded (STOP-2). Without all three captures the reducer
   refuses, and the run is VOID.
