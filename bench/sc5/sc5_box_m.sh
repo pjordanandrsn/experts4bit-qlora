@@ -136,7 +136,9 @@ m_block(){ local NN=$1 D=$2 MEM=$3 FW=$4 K=$5 BD PORT ready=False kv="" rnd=0 sm
   case "$FW" in e4b) PORT=$PORT_E4B; vok=True;; vllm) PORT=$PORT_VLLM; vok=$( [ "${OK[vllm]:-0}" = 1 ] && echo True || echo False );;
                 sglang) PORT=$PORT_SGL; vok=$( [ "${OK[sglang]:-0}" = 1 ] && echo True || echo False );; esac
   phase "SC5_$NN" "draw $D, $MEM memory, $FW block $K"
-  if gpu_free 180 && quiesce "sc5_$NN" && can_run 1500 "sc5 block $NN"; then
+  # SC1's quiesce records quiesced=true|false in quiesce_<tag>.json and always returns 0, so the gate reads the record:
+  # a block whose card or host never quiesced is VOID (SC5-PREREG.md "Order and noise" / VOID), never run.
+  if gpu_free 180 && quiesce "sc5_$NN" && grep -q '"quiesced": true' "quiesce_sc5_$NN.json" && can_run 1500 "sc5 block $NN"; then
     nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits -lms 1000 > "$BD/mem.csv" 2>/dev/null & smp=$!
     if "m_${FW/sglang/sgl}_start" "$MEM" "$BD/server.log"; then
       ready=True; read -r kv rnd < <(m_capacity "$FW" "$BD") || kv=""
@@ -224,7 +226,10 @@ prove_m(){ local ok=0 fw nn=0 q=$SC5_D/quality
   for t in sc5_driver sc5_quality sc5_e4b_quality sc5_reduce sc5_record; do
     "$PY" $W/$t.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "PROVE: $t self-test failed"; ok=1; }
   done
-  fetch_common || finish 11; fetch gptq "$GPTQ_MID" "$GPTQ_REV" 1800 || finish 11; bake_qwen3 || finish 12; sc2_prompts || finish 19
+  # sc1_run.sh's proof block runs before it defines fetch_common / bake_qwen3 (sc5-prove-3: rc 11, "fetch_common:
+  # command not found"), so the proof calls the earlier-defined fetch / bake, as every other box's proof does.
+  fetch qwen3 "$MID" "$REV" 4800 || finish 11; fetch gptq "$GPTQ_MID" "$GPTQ_REV" 1800 || finish 11
+  bake qwen3 "$MID" 5400 || finish 12; QA=$W/work_qwen3/nf4.arena; sc2_prompts || finish 19
   SC5_CS="1 16"
   for fw in e4b vllm sglang; do nn=$((nn + 1)); m_block "$nn" 1 default "$fw" 1
     for c in 1 16; do [ -s "$SC5_D/blocks/$(printf %02d $nn)_d1_default_${fw}_b1/c$c.json" ] || { say "PROVE: $fw C=$c missing"; ok=1; }; done
