@@ -1,7 +1,11 @@
-"""Fake whoami metadata and actual driver staging blocks; no credentials/network."""
+"""Fake whoami metadata and actual driver staging blocks; no credentials/network.
+
+The helper is standard library only (one GET of whoami-v2). Subprocess tests put a sitecustomize.py on PYTHONPATH that
+replaces urllib.request.urlopen with a fake asserting the exact URL and the Bearer header, so nothing reaches the network."""
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import subprocess
 import time
@@ -18,6 +22,38 @@ Scope = helper.Scope
 TOKEN = "FAKE_TOKEN_ONLY_FOR_TESTS"
 READ_PERMISSION = "repo.content.read"
 
+
+def fake_net(tmp_path, *, response=None, mode="ok", status=200, body=None, block_hub=False):
+    """A PYTHONPATH dir whose sitecustomize.py fakes urllib.request.urlopen (and, with block_hub, makes huggingface_hub
+    unimportable). mode "ok" answers with `response` as JSON or a raw `body`; "fail" raises URLError carrying the token."""
+    d = tmp_path / "fake-net"
+    d.mkdir(exist_ok=True)
+    payload = body if body is not None else json.dumps(response)
+    src = [
+        "import urllib.error, urllib.request",
+        f"TOKEN, MODE, STATUS, BODY = {TOKEN!r}, {mode!r}, {status!r}, {payload!r}",
+        "class _R:",
+        "    status = STATUS",
+        "    def read(self, n=-1):",
+        "        return BODY.encode()",
+        "    def __enter__(self):",
+        "        return self",
+        "    def __exit__(self, *a):",
+        "        return False",
+        "def _fake(req, timeout=None):",
+        "    assert req.full_url == 'https://huggingface.co/api/whoami-v2', req.full_url",
+        "    assert req.get_header('Authorization') == 'Bearer ' + TOKEN",
+        "    assert timeout is not None and timeout <= 20",
+        "    if MODE == 'fail':",
+        "        raise urllib.error.URLError(TOKEN + ' private-scope')",
+        "    return _R()",
+        "urllib.request.urlopen = _fake",
+    ]
+    (d / "sitecustomize.py").write_text("\n".join(src) + "\n")
+    if block_hub:
+        (d / "huggingface_hub").mkdir(exist_ok=True)
+        (d / "huggingface_hub" / "__init__.py").write_text("raise ImportError('huggingface_hub is not installed here')\n")
+    return d
 
 def who(role="read", *, global_permissions=None, scoped_permissions=None):
     access = {"role": role, "displayName": "never log this name"}
@@ -107,19 +143,39 @@ def test_api_deadline_is_not_swallowed_by_generic_http_retry(tmp_path):
 def test_actual_cli_outputs_only_decision(tmp_path, role, code, message):
     token_file = tmp_path / "fake-token"
     token_file.write_text(TOKEN)
-    package = tmp_path / "fake-api"
-    package.mkdir()
-    (package / "huggingface_hub.py").write_text(
-        "class HfApi:\n    def __init__(self, *, endpoint):\n        assert endpoint == 'https://huggingface.co'\n    def whoami(self, *, token):\n"
-        f"        assert token == {TOKEN!r}\n        print(token, 'private-scope')\n"
-        f"        return {who(role)!r}\n")
+    package = fake_net(tmp_path, response=who(role))
     result = subprocess.run(["python3", str(PATH), "--token-file", str(token_file)], capture_output=True, text=True,
                             env={**os.environ, "PYTHONPATH": str(package)}, timeout=5)
     assert result.returncode == code and result.stdout.strip() == message and result.stderr == ""
     assert TOKEN not in result.stdout and "private-scope" not in result.stdout
 
 
-@pytest.mark.parametrize("folder,script", [("tc1", "tc1"), ("p127", "p127"), ("fam", "fam")])
+def test_no_huggingface_hub_is_needed(tmp_path):
+    """The controllers' python has no huggingface_hub; the check must still verify (it is standard library only)."""
+    token_file = tmp_path / "fake-token"
+    token_file.write_text(TOKEN)
+    package = fake_net(tmp_path, response=who("read"), block_hub=True)
+    probe = subprocess.run(["python3", "-c", "import huggingface_hub"], capture_output=True, text=True,
+                           env={**os.environ, "PYTHONPATH": str(package)}, timeout=5)
+    assert probe.returncode != 0, "the blocker must make huggingface_hub unimportable"
+    result = subprocess.run(["python3", str(PATH), "--token-file", str(token_file)], capture_output=True, text=True,
+                            env={**os.environ, "PYTHONPATH": str(package)}, timeout=5)
+    assert result.returncode == 0 and result.stdout.strip() == "token read-only: yes" and result.stderr == ""
+
+
+@pytest.mark.parametrize("kw", [{"mode": "fail"}, {"status": 401, "body": TOKEN + " private-scope"},
+                                {"body": "not json " + TOKEN + " private-scope"}])
+def test_network_failure_or_a_bad_answer_is_unverified_and_never_echoed(tmp_path, kw):
+    token_file = tmp_path / "fake-token"
+    token_file.write_text(TOKEN)
+    package = fake_net(tmp_path, **kw)
+    result = subprocess.run(["python3", str(PATH), "--token-file", str(token_file)], capture_output=True, text=True,
+                            env={**os.environ, "PYTHONPATH": str(package)}, timeout=5)
+    assert result.returncode == 3 and result.stdout.strip() == "token unverified, staging none" and result.stderr == ""
+    assert TOKEN not in result.stdout + result.stderr and "private-scope" not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("folder,script", [("tc1", "tc1"), ("p127", "p127"), ("fam", "fam"), ("sd1", "sd1")])
 @pytest.mark.parametrize("role,exit_code,staged", [("read", 0, True), ("fineGrained", 0, True), ("write", 78, False), ("futureRole", 0, False),
                                                ("NETWORK_FAIL", 0, False)])
 def test_actual_driver_stages_only_verified_read_token(tmp_path, folder, script, role, exit_code, staged):
@@ -129,12 +185,8 @@ def test_actual_driver_stages_only_verified_read_token(tmp_path, folder, script,
     block = text[start:end]
     token_file = tmp_path / "fake-token"
     token_file.write_text(TOKEN)
-    package = tmp_path / "fake-api"
-    package.mkdir()
-    (package / "huggingface_hub.py").write_text(
-        "class HfApi:\n    def __init__(self, *, endpoint):\n        assert endpoint == 'https://huggingface.co'\n    def whoami(self, *, token):\n"
-        + ("        raise RuntimeError(token + ' private-scope')\n" if role == "NETWORK_FAIL" else
-           f"        return {who(role, scoped_permissions=[READ_PERMISSION])!r}\n"))
+    package = (fake_net(tmp_path, mode="fail") if role == "NETWORK_FAIL"
+               else fake_net(tmp_path, response=who(role, scoped_permissions=[READ_PERMISSION])))
     calls = tmp_path / "calls"
     setup = f'''REPO="{ROOT}"; HF_TOKEN_FILE="{token_file}"; PASS="KNOWN=1"
 say(){{ printf '%s\\n' "$*"; }}

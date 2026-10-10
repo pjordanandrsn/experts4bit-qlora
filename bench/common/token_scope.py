@@ -1,13 +1,23 @@
-"""Controller-only token scope check; never echo credentials or permission data."""
+"""Controller-only token scope check; never echo credentials or permission data.
+
+Standard library only (e4b#1313). The controllers' own python has no huggingface_hub: on the Mac mini, Homebrew
+python 3.14.8 raised ModuleNotFoundError. The guarded block turned that into UNVERIFIED, so every lane launched from
+there staged no token. The check is one GET of the Hub's whoami-v2 endpoint with the token as a Bearer header -- what
+HfApi.whoami does -- under the same 20 s deadline, the same metadata rules and the same refusal / unverified semantics."""
 from __future__ import annotations
 
 import argparse
 import contextlib
 import io
+import json
 import logging
 from pathlib import Path
 import signal
+import urllib.request
 from enum import Enum
+
+WHOAMI_URL = "https://huggingface.co/api/whoami-v2"
+MAX_BODY = 1 << 20
 
 
 class Scope(Enum):
@@ -59,6 +69,23 @@ class _VerificationDeadline(BaseException):
     """Avoid being swallowed by HTTP retry handlers catching Exception."""
 
 
+def whoami_v2(*, token: str, timeout_s: float = 20) -> object:
+    """GET the Hub's whoami-v2 with the token as a Bearer header; the parsed JSON, or an exception. Never a body in an
+    error: a non-200 status or a body that is not JSON raises without its content."""
+    req = urllib.request.Request(WHOAMI_URL, headers={"Authorization": f"Bearer {token}", "Accept": "application/json",
+                                                      "User-Agent": "e4b-token-scope/1"})
+    with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # looked up at call time: tests patch it
+        if getattr(resp, "status", 200) != 200:
+            raise RuntimeError("whoami-v2: non-200 status")
+        body = resp.read(MAX_BODY + 1)
+    if len(body) > MAX_BODY:
+        raise RuntimeError("whoami-v2: oversized response")
+    try:
+        return json.loads(body)
+    except ValueError:
+        raise RuntimeError("whoami-v2: not JSON") from None
+
+
 def check_file(path: Path, *, whoami=None, timeout_s=20) -> Scope:
     """Bound API verification and suppress library diagnostics, including errors."""
     old_level = logging.root.manager.disable
@@ -78,8 +105,7 @@ def check_file(path: Path, *, whoami=None, timeout_s=20) -> Scope:
             if not token:
                 return Scope.UNVERIFIED
             if whoami is None:
-                from huggingface_hub import HfApi
-                whoami = HfApi(endpoint="https://huggingface.co").whoami
+                return token_scope(whoami_v2(token=token, timeout_s=timeout_s))
             return token_scope(whoami(token=token))
     except (Exception, _VerificationDeadline):
         return Scope.UNVERIFIED  # no exception text: it could include credentials
