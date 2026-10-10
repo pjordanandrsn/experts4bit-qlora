@@ -163,6 +163,88 @@ def _first_out(stack) -> int:
     return n // (stack.n_experts * stack.hidden)
 
 
+# --- grouped_nf4 training: the MoE layer backward's working set (experts4bit-qlora#1526) ---------------------------------
+# With grouped-nf4-gemm the training peak sits in one MoE layer's backward: the kernel's padded LoRA delta, its fused
+# workspaces and that layer's recomputed tensors are live together on top of the saved layer inputs. The routing that sizes
+# the padded delta is data-dependent, so it is priced as a BOUND in shape. grouped-nf4-gemm's rules are mirrored here from
+# kernel/nf4_qlora.py; tests/test_grouped_nf4_backward_estimate.py pins them against the installed package.
+
+#: ``_PAD_BYTES_LIMIT``: the ``auto`` route takes the per-expert loop (nothing padded) when the padded block,
+#: ``G x widest x (K + N)`` at the activations' itemsize, would exceed this
+GNF4_PAD_BYTES_LIMIT = 2 * 2 ** 30
+#: ``_PAD_BUCKETS_AUTO_MIN_ROWS``: a call with at least this many routed rows (T x top_k) pads by buckets (0.42.0+)
+GNF4_PAD_BUCKETS_MIN_ROWS = 16384
+#: ``_PAD_BUCKET_RATIO``: within a bucket the widest group has at most this many times the narrowest's rows, so the
+#: buckets hold at most this many times the routed rows
+GNF4_PAD_BUCKET_RATIO = 2
+#: ``T x top_k x first_out`` bf16 buffers live at the grouped kernel's backward peak (fused_experts_train_forward,
+#: fused_grouped_lora, gemm_4bit_grouped, _scaled and nf4_qlora's forward; OLMoE on an RTX A2000)
+GNF4_FUSED_WORKSPACES = 5
+
+
+def _ladder_up(n: int) -> int:
+    """grouped-nf4-gemm's ``_ladder_up``: the smallest rung >= ``n``, every integer up to 4 and then four rungs per
+    octave (``{4, 5, 6, 7} x 2**k``), so a rung is under 1.25 x ``n``."""
+    n = int(n)
+    if n <= 4:
+        return max(n, 0)
+    step = 1 << (n.bit_length() - 3)
+    return -(-n // step) * step
+
+
+def grouped_nf4_padded_rows_bound(*, n_experts: int, top_k: int, tokens: int, hidden: int, first_out: int,
+                                  intermediate: int, adapter_dtype: str) -> tuple:
+    """``(rows, how)``: an upper bound on grouped-nf4-gemm's padded LoRA delta rows in one MoE layer pass of ``tokens``.
+
+    The single padded block is ``G x widest`` rows: ``G`` routed-to experts, at most ``min(E, T x top_k)``, each padded to
+    the hottest one's rows, at most ``T`` (an expert sees a token once). Then:
+
+    * the ``auto`` route pads only while ``G x widest x (K + N) x 2`` stays under ``GNF4_PAD_BYTES_LIMIT``; the smaller
+      ``K + N`` of the two projections (gate_up: H + first_out; down: I + H) gives the widest cap any padded call has;
+    * fp32 adapters take the single-block ladder (grouped-nf4-gemm 0.44.0+): ``G`` and ``widest`` each rounded up to a
+      rung, at most 1.5625 x the single block;
+    * a call with at least ``GNF4_PAD_BUCKETS_MIN_ROWS`` routed rows pads by buckets instead, at most
+      ``GNF4_PAD_BUCKET_RATIO x T x top_k`` rows.
+    """
+    routed = tokens * top_k
+    if routed >= GNF4_PAD_BUCKETS_MIN_ROWS:
+        return (GNF4_PAD_BUCKET_RATIO * routed,
+                f"bucketed (T x top_k = {routed} >= {GNF4_PAD_BUCKETS_MIN_ROWS}): at most {GNF4_PAD_BUCKET_RATIO} x T x top_k")
+    g, w = min(n_experts, routed), tokens
+    cap = GNF4_PAD_BYTES_LIMIT // (min(hidden + first_out, intermediate + hidden) * 2)
+    single = min(g * w, cap)
+    how = f"single block: min(E, T x top_k) x T = {g} x {w}" + (f", capped at {cap} by the pad route" if cap < g * w else "")
+    if adapter_dtype == "fp32":
+        rows = min(_ladder_up(g) * _ladder_up(w), -(-single * 25 // 16))
+        return rows, how + f", on the fp32 single-block ladder: {rows}"
+    return single, how
+
+
+def _grouped_nf4_backward(topology, setup, tokens: int, layer: int) -> tuple:
+    """``(bytes, how)`` of the grouped kernel's MoE-backward branch above the saved layer inputs: the padded LoRA delta
+    (bound), the fused workspaces and one layer's recompute set, for the stack that makes it largest. ``(0, None)`` when
+    the setup does not train experts through the grouped kernel."""
+    k = topology.top_k or 0
+    if setup.expert_kernel != "grouped_nf4" or not setup.train_experts or not k or not topology.expert_stacks:
+        return 0, None
+    ab = _ADAPTER_BYTES[setup.adapter_dtype]
+    best = None
+    for st in topology.expert_stacks:
+        first_out = _first_out(st)
+        rows, how = grouped_nf4_padded_rows_bound(n_experts=st.n_experts, top_k=k, tokens=tokens, hidden=st.hidden,
+                                                  first_out=first_out, intermediate=st.intermediate,
+                                                  adapter_dtype=setup.adapter_dtype)
+        padded = rows * (st.hidden + first_out + st.intermediate) * ab
+        ws = GNF4_FUSED_WORKSPACES * tokens * k * first_out * 2
+        if best is None or padded + ws > best[0] + best[1]:
+            best = (padded, ws, rows, how, st, first_out)
+    padded, ws, rows, how, st, first_out = best
+    return padded + ws + layer, (f"the grouped_nf4 MoE backward = padded LoRA delta {padded / 1e9:.2f} GB ({rows} rows x "
+                                 f"(H + first_out + I = {st.hidden} + {first_out} + {st.intermediate}) x {ab} B; {how}) + "
+                                 f"fused workspaces {ws / 1e9:.2f} GB ({GNF4_FUSED_WORKSPACES} x T x top_k x first_out bf16) + "
+                                 f"one layer's recompute {layer / 1e9:.2f} GB")
+
+
 def _pinned_cost(n: int) -> int:
     """PyTorch's caching host allocator rounds each pinned request up to a power of two (grouped-nf4-gemm#71)."""
     return 1 << (int(n) - 1).bit_length() if n > 0 else 0
@@ -326,9 +408,10 @@ def estimate_qlora_footprint(topology, setup: QLoRASetup, *, tokens_per_microbat
     kv = (attn.kv_elements_per_token // max(attn.layers, 1)) if attn else 0
     layer = T * ((H + kv + H) * 2 + (topology.top_k or 0) * (first_out0 + st0.intermediate + H) * 2
                  + st0.n_experts * 4)
-    items.append(FootprintItem("activations", "device", boundaries + max(logits, 2 * layer), "heuristic",
-                               f"{n_layers} saved layer inputs (T x H bf16) + max({loss_how}, 2 x one layer's recompute = "
-                               f"{2 * layer / 1e9:.2f} GB) at T={T}"))
+    backward, backward_how = _grouped_nf4_backward(topology, setup, T, layer)
+    branches = f"{loss_how}, 2 x one layer's recompute = {2 * layer / 1e9:.2f} GB" + (f", {backward_how}" if backward else "")
+    items.append(FootprintItem("activations", "device", boundaries + max(logits, 2 * layer, backward), "heuristic",
+                               f"{n_layers} saved layer inputs (T x H bf16) + max({branches}) at T={T}"))
     if setup.keep_moe_layers:
         n_keep = min(setup.keep_moe_layers, len(topology.expert_stacks))
         items.append(FootprintItem("kept MoE activations", "device", n_keep * keep_bytes_per_layer, "heuristic",

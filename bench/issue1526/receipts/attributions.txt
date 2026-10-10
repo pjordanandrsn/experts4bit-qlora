@@ -1,0 +1,74 @@
+== receipts/L4-T4096-fp32.pickle: replayed peak 4755.2 MiB
+     2739.0 MiB  (allocated before the recorded step)
+      366.2 MiB  nf4_qlora.py:845 backward
+      366.2 MiB  nf4_qlora.py:847 backward
+      308.2 MiB  torch/utils/checkpoint.py:331 backward
+      274.6 MiB  nf4_qlora.py:834 backward
+      161.0 MiB  experts4bit_qlora/lora.py:787 forward
+      128.0 MiB  experts4bit_qlora/engines/fast.py:752 fused_experts_train_forward
+      112.0 MiB  nf4_qlora.py:876 backward
+       88.0 MiB  nf4_qlora.py:867 backward
+       40.0 MiB  experts4bit_qlora/lora.py:788 forward
+       36.0 MiB  experts4bit_qlora/engines/rope_train.py:89 _launch
+       32.5 MiB  transformers/integrations/sdpa_attention.py:158 sdpa_attention_forward
+       16.0 MiB  torch/nn/functional.py:2567 embedding
+       16.0 MiB  transformers/models/qwen3_moe/modeling_qwen3_moe.py:341 forward
+       16.0 MiB  transformers/models/qwen3_moe/modeling_qwen3_moe.py:347 forward
+       16.0 MiB  nf4_qlora.py:830 backward
+       16.0 MiB  nf4_qlora.py:853 backward
+       12.0 MiB  nf4_qlora.py:842 backward
+== receipts/L4-T4096-native.pickle: replayed peak 3902.5 MiB
+     2639.0 MiB  (allocated before the recorded step)
+      256.0 MiB  experts4bit_qlora/engines/fast.py:465 forward
+      224.0 MiB  nf4_qlora.py:1042 fused_grouped_lora
+      161.0 MiB  experts4bit_qlora/lora.py:787 forward
+      128.0 MiB  experts4bit_qlora/engines/fast.py:752 fused_experts_train_forward
+       64.0 MiB  experts4bit_qlora/engines/fast.py:428 _scatter_fill
+       56.0 MiB  nf4_qlora.py:876 backward
+       48.0 MiB  transformers/models/qwen3_moe/modeling_qwen3_moe.py:347 forward
+       48.0 MiB  torch/nn/functional.py:2397 silu
+       48.0 MiB  experts4bit_qlora/lora.py:200 _epilogue
+       44.0 MiB  nf4_qlora.py:867 backward
+       40.0 MiB  experts4bit_qlora/lora.py:788 forward
+       36.0 MiB  experts4bit_qlora/engines/rope_train.py:89 _launch
+       32.5 MiB  transformers/integrations/sdpa_attention.py:158 sdpa_attention_forward
+       16.0 MiB  torch/nn/functional.py:2567 embedding
+       16.0 MiB  experts4bit_qlora/engines/rmsnorm_train.py:124 backward
+       16.0 MiB  transformers/models/qwen3_moe/modeling_qwen3_moe.py:341 forward
+       16.0 MiB  experts4bit_qlora/engines/rmsnorm_train.py:108 forward
+== receipts/L4-T2048-fp32.pickle: replayed peak 3890.7 MiB
+     3340.5 MiB  (allocated before the recorded step)
+      296.8 MiB  torch/nn/functional.py:3507 cross_entropy
+      112.0 MiB  nf4_qlora.py:876 backward
+       88.0 MiB  nf4_qlora.py:867 backward
+       32.0 MiB  transformers/models/qwen3_moe/modeling_qwen3_moe.py:347 forward
+        8.0 MiB  experts4bit_qlora/engines/chunked_lm_loss.py:253 chunked_causal_lm_loss
+        8.0 MiB  torch/nn/functional.py:2567 embedding
+        4.2 MiB  torch/utils/checkpoint.py:331 backward
+        1.0 MiB  transformers/models/qwen3_moe/modeling_qwen3_moe.py:435 forward
+        0.1 MiB  nf4_qlora.py:697 _lora_delta_grouped_bucketed
+        0.0 MiB  (no frame)
+        0.0 MiB  transformers/models/qwen3_moe/modeling_qwen3_moe.py:480 forward
+        0.0 MiB  experts4bit_qlora/engines/chunked_lm_loss.py:251 chunked_causal_lm_loss
+        0.0 MiB  nf4_grouped.py:519 stage
+        0.0 MiB  experts4bit_qlora/engines/rmsnorm_train.py:109 forward
+        0.0 MiB  nf4_qlora.py:693 _lora_delta_grouped_bucketed
+        0.0 MiB  experts4bit_qlora/engines/chunked_lm_loss.py:261 chunked_causal_lm_loss
+== receipts/L4-T2048-native.pickle: replayed peak 3690.7 MiB
+     3240.5 MiB  (allocated before the recorded step)
+      296.8 MiB  torch/nn/functional.py:3507 cross_entropy
+       56.0 MiB  nf4_qlora.py:876 backward
+       44.0 MiB  nf4_qlora.py:867 backward
+       32.0 MiB  transformers/models/qwen3_moe/modeling_qwen3_moe.py:347 forward
+        8.0 MiB  experts4bit_qlora/engines/chunked_lm_loss.py:253 chunked_causal_lm_loss
+        8.0 MiB  torch/nn/functional.py:2567 embedding
+        4.2 MiB  torch/utils/checkpoint.py:331 backward
+        1.0 MiB  transformers/models/qwen3_moe/modeling_qwen3_moe.py:435 forward
+        0.1 MiB  nf4_qlora.py:697 _lora_delta_grouped_bucketed
+        0.0 MiB  (no frame)
+        0.0 MiB  transformers/models/qwen3_moe/modeling_qwen3_moe.py:480 forward
+        0.0 MiB  experts4bit_qlora/engines/chunked_lm_loss.py:251 chunked_causal_lm_loss
+        0.0 MiB  nf4_grouped.py:519 stage
+        0.0 MiB  experts4bit_qlora/engines/rmsnorm_train.py:109 forward
+        0.0 MiB  nf4_qlora.py:693 _lora_delta_grouped_bucketed
+        0.0 MiB  experts4bit_qlora/engines/chunked_lm_loss.py:261 chunked_causal_lm_loss
