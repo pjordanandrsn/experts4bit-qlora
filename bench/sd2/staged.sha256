@@ -1,0 +1,12 @@
+# Names as the BOX sees them after staging (/root/sd2). The box runs `sha256sum -c` on this file; sd2_drive.sh and
+# tests/test_sd2.py resolve each name to its source (bench/sd2, bench/sd1, bench/p109, bench/p39) and compare.
+# Pinned 2026-10-10 for Amendment 1 (the CUDA proof sd2-prove-N).
+854ac1182380cdb828a83a0ce4c1134e7092f6f3e06c3296d5f716b361cbd994  sd2_run.sh
+0f7688ee1e8c3cc9948b099787ff86edb768a6da8a5bfe4622df57e3d85506a8  sd2_box.py
+8fa2c7e90319c282a29a604dfb411ea0dcd124942bfee9d053ff5ddaef5cf5bf  sd2_reduce.py
+cd3e73aa5e3de7a8eb5824ba9a2973d1d9e1e2b0cd87652a9c7f472d6f5a0b95  sd1_box.py
+c73d6e71d7e2a3eb91a43fc29e265c484e0bf0899cf5884bf79bed26f63d18e6  sd1_eagle3.py
+8e92881e6fdcd848ae3c8147c03d89cadfc5e34c5465fdfb7ca5dea85db7ea66  chat_prompts.json
+b53f94192b4040b6451ceb18f8cd4e3e5629a6e40c4885b40600fcc4205d8248  p109_box.py
+e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
