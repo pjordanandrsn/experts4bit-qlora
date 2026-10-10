@@ -502,3 +502,48 @@ ACK and the relay on #1313.
 
 **Unchanged:** the target `539a2d26` (the builds are untouched, so no re-proof question arises), every gate and its
 rule. The next run is `sd2-prove-2`, and it launches on the maintainer's ACK and a new relay on #1313.
+
+## Amendment 2 (2026-10-10): V0's addressing gate is a logit gate, after `sd2-prove-2`
+
+**What happened.** `sd2-prove-2` (vast instance 55184960, **$0.66**, teardown complete) ran in full. Under Amendment 1's
+rule its verdict is **FAILED** with one item, `GATE_TOO_WEAK:c`. The maintainer re-derived it with main's reducer and got
+the box's verdict exactly. That verdict stands.
+- **Every other item held:**
+  - the GPU tests: 123 passed, none skipped;
+  - the census;
+  - the capture, bitwise at 2, 3 and 4 rows;
+  - V0 addressing on the real build;
+  - mutants (a) and (b);
+  - the draft: 766 of 768;
+  - the transition.
+- **What failed was the gate's sensitivity, not the build.** Mutant (c), the RoPE shift, kept argmax agreement at
+  0.94 on its rows and 0.91 on its continuations: the 0.90 agreement bar cannot see it. Its row 0's mean |Δ log p| was
+  1.18 nats, against at most 0.037 anywhere on the real build.
+
+**The tightened gate** (`sd2_reduce.py --rule a2`, now the default):
+- **The logit gate decides.** V0 passes a (row, k) when the largest per-row mean |Δ log p| of the oracle's token (the
+  verify step against the sequential T == 1 oracle) is at most **0.25 nats**. A mutant is caught when its largest
+  exceeds 0.25, and is `GATE_TOO_WEAK` otherwise.
+- **Argmax agreement is reported, no longer gated.** On chat the real build's continuations sat at 0.906 (C0, k = 3),
+  where near-ties flip, so the agreement bar had no margin left.
+- **The bound is calibrated on `sd2-prove-2`.** 0.25 is 6.8× the real build's largest value (0.037) and 4.7× below the
+  smallest mutant maximum, (c)'s 1.18. Mutant (a)'s maximum is 2.79 and (b)'s 5.34.
+- **The registered verdict stays reproducible.** `--rule a1` keeps Amendment 1's rule, so `sd2-prove-2` re-derives as
+  registered: FAILED, `GATE_TOO_WEAK:c`. Under `a2` the same receipt reads PROVED. That is the calibration, not an
+  out-of-sample test, and the self-test pins both.
+
+**Out of sample: the read's V0 runs the mutants again.** Because the bound was calibrated on `sd2-prove-2`, the read's
+stage V0 (Amendment 3's harness) runs the three addressing mutants on its own box, after the real build's V0 and before
+any timing:
+- each at 8 positions at k = 3, about a minute of the rental;
+- each must exceed the bound;
+- a mutant inside the bound makes the read **VOID** before anything is timed.
+
+**No fresh proof is proposed.** The build failed no item of `sd2-prove-2`; what failed was a property of the
+instrument, which the read re-checks on fresh data before it times anything. This is the maintainer's to decide; a fresh
+proof would cost about $0.66 at the same target.
+
+**What follows:**
+- The build PRs merge after this amendment's review, in order and at their proven heads.
+- Amendment 3 then registers the read's harness (stages V, E and Q, the mutants in V0, and the rule above) and pins the
+  merged commits. Amendment 1's text calls the read's harness "Amendment 2"; it is now Amendment 3.
