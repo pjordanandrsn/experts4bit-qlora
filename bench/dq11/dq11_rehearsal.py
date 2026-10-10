@@ -19,7 +19,7 @@ import time
 HERE = Path(__file__).resolve().parent
 MODEL_CONFIG = {"hidden_size": 128, "intermediate_size": 256, "num_hidden_layers": 32,
                 "num_attention_heads": 4, "num_key_value_heads": 2, "head_dim": 32,
-                "vocab_size": 64, "max_position_embeddings": 4096, "sliding_window": 4096,
+                "vocab_size": 32000, "max_position_embeddings": 4096, "sliding_window": 4096,
                 "bos_token_id": 1, "eos_token_id": 2, "pad_token_id": 0,
                 "tie_word_embeddings": False}
 SCHEMA = "dq11-rehearsal/1"
@@ -105,6 +105,11 @@ def prepare_log(directory, plan, prepare):
         if not invocations:
             raise ValueError("tiny rehearsal streaming adapter was not invoked")
         prepared.report["rehearsal_tiny_stream"] = invocations
+        # A later scoring/proof refusal must not discard the preparation witness.
+        write_json(Path(directory) / "receipts" / f"tiny-stream-prepare-{os.getpid()}.json",
+                   {"schema": "dq11-rehearsal-stream/1", "science_eligible": False,
+                    "source": os.environ.get("E4B_SHA"), "nonce": os.environ.get("TC1_RUN_NONCE"),
+                    "invocations": invocations})
         return prepared
     finally:
         dense_offload.enable_dense_offload = original
@@ -132,16 +137,18 @@ def build_inputs(directory, canonical_tokens):
     model.save_pretrained(target)
     del model
     vocabulary = {"<pad>": 0, "<s>": 1, "</s>": 2, "<unk>": 3}
-    vocabulary.update({f"word{i}": i for i in range(4, 64)})
+    vocabulary.update({f"word{i}": i for i in range(4, MODEL_CONFIG["vocab_size"])})
     tokenizer = Tokenizer(WordLevel(vocabulary, unk_token="<unk>"))
     tokenizer.pre_tokenizer = Whitespace()
     PreTrainedTokenizerFast(tokenizer_object=tokenizer, pad_token="<pad>", bos_token="<s>",
                            eos_token="</s>", unk_token="<unk>", model_max_length=2048).save_pretrained(target)
     raw = json.loads(Path(canonical_tokens).read_text())
-    blocks = {key: [[int(token) % 64 for token in block] for block in rows] for key, rows in raw.items()}
+    blocks = {key: [[int(token) for token in block] for block in rows] for key, rows in raw.items()}
     if (set(blocks) != {"train", "alpaca-heldout", "wikitext-test"}
             or any(len(rows) != (40 if key == "train" else 8) for key, rows in blocks.items())
-            or any(len(block) != 2048 for rows in blocks.values() for block in rows)):
+            or any(len(block) != 2048 for rows in blocks.values() for block in rows)
+            or any(not 0 <= token < MODEL_CONFIG["vocab_size"]
+                   for rows in blocks.values() for block in rows for token in block)):
         raise ValueError("rehearsal requires the original ordered block lengths")
     tokens = directory / "data/tokens.json"
     tokens.write_text(json.dumps(blocks, separators=(",", ":")) + "\n")
@@ -164,7 +171,7 @@ def build_inputs(directory, canonical_tokens):
     save_file(tensors, str(adapter))
     locked = {"schema": "dq11-rehearsal-inputs/1", "science_eligible": False,
               "model": "local random tiny Mistral", "revision": "rehearsal-only",
-              "mapping": "original ordered token IDs modulo 64; synthetic text, never scientific quality",
+              "mapping": "original ordered token IDs retained; synthetic word tokenizer/random model, never scientific quality",
               "canonical_tokens_sha256": digest(canonical_tokens), "model_config": MODEL_CONFIG,
               "initializer_source_sha256": digest(inspect.getsourcefile(LoraLayer.reset_lora_parameters)),
               "assets": {p.name: {"sha256": digest(p), "bytes": p.stat().st_size} for p in (adapter, tokens)},
@@ -202,7 +209,7 @@ def correctness(directory):
             "recommendation": None, "proofs": [{"arm": p["arm"], "observer_same_arm_bitwise": True} for p in proofs],
             "reads": reads, "complete": len(reads) == 6,
             "limitations": ["cu128 and sm_86 cannot cover cu130 wheel loading or sm_120 kernels",
-                            "local random tiny model and mapped synthetic tokens cannot license DQ11 quality or speed"]}
+                            "local random tiny model and synthetic word tokenizer cannot license DQ11 quality or speed"]}
 
 
 def orchestrate():
@@ -218,7 +225,7 @@ def orchestrate():
     canonical = Path(os.environ["DQ11_REHEARSAL_TOKENS"]).resolve()
     reference = json.loads((HERE / "locked_inputs.json").read_text())["assets"]["tokens.json"]
     if digest(canonical) != reference["sha256"] or canonical.stat().st_size != reference["bytes"]:
-        raise ValueError("canonical token source changed before synthetic mapping")
+        raise ValueError("canonical token source changed before rehearsal input build")
     directory.mkdir(parents=True)
     for name in ("logs", "receipts", "adapters", "data", "hf-cache", "tmp"):
         (directory / name).mkdir()

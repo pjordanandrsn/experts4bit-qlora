@@ -1163,6 +1163,7 @@ def test_tiny_stream_adapter_delegates_actual_log_import_and_restores_after_prep
     handles = [SimpleNamespace(bytes=123), SimpleNamespace(bytes=456)]
     prepared = SimpleNamespace(report={})
     root_export = e4b.enable_dense_offload
+    (tmp_path / "receipts").mkdir()
 
     def real_offloader(*args, **kwargs):
         calls.append((args, kwargs))
@@ -1184,9 +1185,15 @@ def test_tiny_stream_adapter_delegates_actual_log_import_and_restores_after_prep
         with pytest.raises(RuntimeError, match="fixture prepare failure"):
             rehearsal.prepare_log(tmp_path, plan, prepare)
         assert prepared.report == {}
+        assert not list((tmp_path / "receipts").glob("tiny-stream-prepare-*.json"))
     else:
         assert rehearsal.prepare_log(tmp_path, plan, prepare) is prepared
         assert prepared.report["rehearsal_tiny_stream"] == [{"min_bytes": 0, "handles": 2, "streamed_bytes": 579}]
+        paths = list((tmp_path / "receipts").glob("tiny-stream-prepare-*.json"))
+        assert len(paths) == 1
+        witness = json.loads(paths[0].read_text())
+        assert witness["schema"] == "dq11-rehearsal-stream/1" and witness["science_eligible"] is False
+        assert witness["invocations"] == prepared.report["rehearsal_tiny_stream"]
     assert calls == [(("fixture model",), {"device": "fixture device", "train_prefetch": True, "min_bytes": 0})]
     assert dense_offload.enable_dense_offload is real_offloader
     assert e4b.enable_dense_offload is root_export
@@ -1233,3 +1240,32 @@ def test_science_mode_never_installs_tiny_stream_adapter(monkeypatch, tmp_path):
         rehearsal.prepare_log(tmp_path, object(), lambda plan: pytest.fail("science called rehearsal prepare"))
     assert dense_offload.enable_dense_offload is original
     assert e4b.enable_dense_offload is root_export
+
+
+def test_rehearsal_vocabulary_matches_unchanged_full_logit_scorer(monkeypatch):
+    from types import SimpleNamespace
+
+    import dq11_rehearsal as rehearsal
+
+    assert rehearsal.MODEL_CONFIG["vocab_size"] == 32000
+    real_tensor = torch.tensor
+
+    def cpu_tensor(*args, **kwargs):
+        if kwargs.get("device") == "cuda":
+            kwargs["device"] = "cpu"
+        return real_tensor(*args, **kwargs)
+
+    monkeypatch.setattr(torch, "tensor", cpu_tensor)
+
+    class FullLogits:
+        def eval(self):
+            pass
+
+        def train(self):
+            pass
+
+        def __call__(self, input_ids, use_cache):
+            return SimpleNamespace(logits=torch.zeros((*input_ids.shape, rehearsal.MODEL_CONFIG["vocab_size"])))
+
+    scored = common.score(FullLogits(), {name: [[0, 31999, 1]] for name in ("alpaca-heldout", "wikitext-test")})
+    assert all(row["targets"] == 2 and row["ppl"] == pytest.approx(32000, rel=1e-6) for row in scored.values())
