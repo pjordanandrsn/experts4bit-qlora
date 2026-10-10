@@ -1,0 +1,112 @@
+Fetching 26 files:   0%|          | 0/26 [00:00<?, ?it/s]Fetching 26 files: 100%|██████████| 26/26 [00:00<00:00, 2351.57it/s]
+[19:13:38]   checkpoint: mistralai/Mixtral-8x7B-Instruct-v0.1 @ eba92302a2861cdc0098cc54bc9f17cb2c47eb61 (requested eba92302a2861cdc0098cc54bc9f17cb2c47eb61)
+[19:13:38]   fusing + quantizing experts (up to 32x8) to nf4 (streaming)...
+[19:13:38]   quantized experts on 32/32 MoE layers (8 experts each)
+[19:13:38]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[19:13:38]   applied 32 transformers checkpoint-key renaming(s) (this checkpoint's layout differs from the module tree)
+[19:13:38]   experts deferred to the arena: 32 module(s), 160 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[19:14:03]   hybrid tier active on 32 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] fusions (q/k/v 0; folds set: none): {'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0}
+[serve_paged] PREFILL_GRAPH auto: refused, prefill stays eager (device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement))
+[serve_paged] ready: {"moe_layers": 32, "experts": 8, "top_k": 2, "model_type": "mixtral", "int4_expert_layers": 0, "int4_store_kinds": [], "int4_attn_projections": 0, "kv": {"n_kv_heads": 8, "head_dim": 128, "k_groups": "auto", "scratch_slots": 0, "blocks_per_seq": 48, "pool_mib": 828.1}, "graph_status": null, "grouping": {"device_grouping": false, "force_singleton_groups": false}, "moe_residual": {"rows": [1, 2, 4, 8, 16]}, "prefill_graph": "auto", "levers_env": {"E4B_FUSE_T1_GLUE": "0", "E4B_FUSE_T1_GLUE_R2": "0", "E4B_FUSE_ROUTER_EPI": "0"}, "exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0, "fusion_modes": {"E4B_PAGED_FUSE_QKV": "0", "E4B_FUSE_T1_GLUE": "0", "E4B_FUSE_T1_GLUE_R2": "0", "E4B_FUSE_ROUTER_EPI": "0"}, "fusion_sources": {"E4B_PAGED_FUSE_QKV": "explicit", "E4B_FUSE_T1_GLUE": "explicit", "E4B_FUSE_T1_GLUE_R2": "explicit", "E4B_FUSE_ROUTER_EPI": "explicit"}, "fusion_report": {"E4B_FUSE_T1_GLUE": {"mode": "0"}, "E4B_FUSE_T1_GLUE_R2": {"mode": "0"}, "E4B_FUSE_ROUTER_EPI": {"mode": "0"}}, "pinned_cache_released": true, "host_heap_trimmed": true}
+Generating test split:   0%|          | 0/4358 [00:00<?, ? examples/s]Generating test split: 100%|██████████| 4358/4358 [00:00<00:00, 370188.08 examples/s]
+Generating train split:   0%|          | 0/36718 [00:00<?, ? examples/s]Generating train split: 100%|██████████| 36718/36718 [00:00<00:00, 662587.14 examples/s]
+Generating validation split:   0%|          | 0/3760 [00:00<?, ? examples/s]Generating validation split: 100%|██████████| 3760/3760 [00:00<00:00, 489830.51 examples/s]
+Generating v split: 0 examples [00:00, ? examples/s]Generating v split: 9287 examples [00:00, 57087.40 examples/s]Generating v split: 18275 examples [00:00, 57358.16 examples/s]Generating v split: 27432 examples [00:00, 55830.27 examples/s]Generating v split: 36604 examples [00:00, 56325.11 examples/s]Generating v split: 45576 examples [00:00, 56902.15 examples/s]Generating v split: 45576 examples [00:00, 56713.03 examples/s]
+Traceback (most recent call last):
+  File "/root/fam/fam_box.py", line 348, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/root/fam/fam_box.py", line 344, in main
+    return main_run(a)
+           ^^^^^^^^^^^
+  File "/root/fam/fam_box.py", line 238, in main_run
+    cells = run_cells(model, windows, config=a.config, texts=texts, shapes=shapes, sets=sets, prompt=a.prompt,
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/fam/fam_box.py", line 191, in run_cells
+    base = q.measure_phase(model, ws, phase="off", group=s, ref_dir=ref, arms=off_arms(s), **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/fam/p115_quality.py", line 190, in measure_phase
+    refs = run(t, "R", ws, chunk)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/fam/p115_quality.py", line 179, in run
+    lps, e = p110_box.paged_pass(model, ws, P, C, ch, device, stand_in=stand_in, **arm_kw(arm, ref_kw))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/fam/p110_box.py", line 96, in paged_pass
+    runner.run_prefill([(rid, s, min(chunk, P - s))])
+  File "/opt/conda/lib/python3.11/site-packages/torch/utils/_contextlib.py", line 120, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/paged_runner.py", line 308, in run_prefill
+    out = self._prefill_forward(ids[None], pos[None])
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/utils/_contextlib.py", line 120, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/paged_runner.py", line 267, in _prefill_forward
+    out = self.model(input_ids=ids, position_ids=positions, use_cache=False, **self._last_logits_kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1879, in _call_impl
+    return inner()
+           ^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1827, in inner
+    result = forward_call(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/fam/p110_box.py", line 78, in keep
+    o = inner(*a, **kw)
+        ^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/transformers/utils/generic.py", line 939, in wrapper
+    output = func(self, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/transformers/models/mixtral/modeling_mixtral.py", line 616, in forward
+    outputs: MoeModelOutputWithPast = self.model(
+                                      ^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/transformers/utils/generic.py", line 1068, in wrapper
+    output = func(self, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/transformers/utils/output_capturing.py", line 286, in wrapper
+    outputs = func(self, *args, **kwargs)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/transformers/models/mixtral/modeling_mixtral.py", line 467, in forward
+    hidden_states = decoder_layer(
+                    ^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/transformers/modeling_layers.py", line 109, in __call__
+    return super().__call__(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/transformers/models/mixtral/modeling_mixtral.py", line 374, in forward
+    hidden_states = self.mlp(hidden_states)
+                    ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/transformers/models/mixtral/modeling_mixtral.py", line 128, in forward
+    hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/hot_residency.py", line 1823, in _fwd
+    return st.forward(hidden, top_k_index, top_k_weights, residual=residual)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _HybridTier.forward() got an unexpected keyword argument 'residual'

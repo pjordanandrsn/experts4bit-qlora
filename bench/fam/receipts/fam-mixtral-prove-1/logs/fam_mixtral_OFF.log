@@ -1,0 +1,30 @@
+Fetching 26 files:   0%|          | 0/26 [00:00<?, ?it/s]Fetching 26 files: 100%|██████████| 26/26 [00:00<00:00, 1356.92it/s]
+[15:29:41]   checkpoint: mistralai/Mixtral-8x7B-Instruct-v0.1 @ eba92302a2861cdc0098cc54bc9f17cb2c47eb61 (requested eba92302a2861cdc0098cc54bc9f17cb2c47eb61)
+[15:29:41]   fusing + quantizing experts (up to 32x8) to nf4 (streaming)...
+[15:29:41]   quantized experts on 32/32 MoE layers (8 experts each)
+[15:29:41]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[15:29:43]   applied 32 transformers checkpoint-key renaming(s) (this checkpoint's layout differs from the module tree)
+[15:29:43]   experts deferred to the arena: 32 module(s), 160 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[15:29:53]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[15:30:28]   hybrid tier active on 32 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] fusions (q/k/v 0; folds set: none): {'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0}
+Traceback (most recent call last):
+  File "/root/fam/fam_box.py", line 319, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/root/fam/fam_box.py", line 315, in main
+    return main_run(a)
+           ^^^^^^^^^^^
+  File "/root/fam/fam_box.py", line 213, in main_run
+    parts = build_engine(cfg)
+            ^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/experts4bit_qlora/serve_paged.py", line 1295, in build_engine
+    kv = Fp8PagedKV(kv_layers(model, decoder_layers(model.config)), hkv, hd, batch=cfg.max_seqs, max_tokens_per_seq=cfg.max_tokens_per_seq,
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/fp8_paged_kv.py", line 305, in __init__
+    self.vp = RowPool(n_layers, rows, 0, self.v_row, device=device)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/row_pool.py", line 67, in __init__
+    self.dev = torch.zeros(partitions, device_rows, row_bytes,
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.06 GiB. GPU 0 has a total capacity of 31.36 GiB of which 1.86 GiB is free. Including non-PyTorch memory, this process has 29.47 GiB memory in use. Of the allocated memory 28.87 GiB is allocated by PyTorch, and 5.43 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)

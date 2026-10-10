@@ -196,11 +196,13 @@ families with such reads and stay off elsewhere. Lane FAM read the others at T =
 (#1362). Granite-MoE fails on one gated entry of 12, by 2 positions in 1536. gpt-oss-20b fails on every knob, because its
 own floor sits below the 0.90 agreement backstop; that floor also contains Phase C's 0.924, so Phase C's miss was the
 gate, not the knob. Qwen3.6-MoE, where only the router epilogue engages, passes, and the epilogue decodes one request
-there in 0.973 of the step (FAM Amendment 4), so the family joined the allowlist. `0` on each knob is the way back.
+there in 0.973 of the step (FAM Amendment 4), so the family joined the allowlist. Mixtral-8x7B passes on every knob,
+resolved at a ×0.90 softmax-scale change, but stays off by default until a speed read of what the knobs buy there
+(FAM Amendment 5). `0` on each knob is the way back.
 `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`,
 `e4b.serve.p115.fused-stack-quality.qwen3.5090.2026-10-07`, `e4b.serve.fam.fused-stack-t1.granite.5090.2026-10-09`,
 `e4b.serve.fam.fused-stack-t1.gptoss.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.qw36.5090.2026-10-09`,
-`e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`
+`e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.mixtral.5090.2026-10-09`
 ([P115](../bench/p115/RESULTS-p115.md), [FAM](../bench/fam/RESULTS-fam.md)).
 
 **Where the default single-request step goes.** A kernel-class census of the shipped default on Qwen3-30B-A3B NF4,

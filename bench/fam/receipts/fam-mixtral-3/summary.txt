@@ -1,0 +1,23 @@
+KNOBS e4b=4b9954f59031f3934397cbe0793eb3e41e0702ae gnf4=6ee2e10408161a9d3c874975c9191a7f2957e6f4 family=mixtral models=mixtral gpu_class=5090 min_disk_gb=220 min_ram_gb=60 prove=0 speed=0 cont=128
+CUDA_PROBE ok
+e4b 0.51.0 @4b9954f59031f3934397cbe0793eb3e41e0702ae
+gnf4 0.43.0 @6ee2e10408161a9d3c874975c9191a7f2957e6f4
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+cc (12, 0)
+fam_reduce self-test OK (68/68 cases)
+fam_box self-test OK (38/38 cases)
+fam_speed self-test OK (9/9 cases)
+fam_speed_reduce self-test OK (30/30 cases)
+p115_quality self-test OK (11/11 cases)
+premise run rc=0: 36 passed in 9.09s
+premise ok
+FETCH mixtral mistralai/Mixtral-8x7B-Instruct-v0.1@eba92302a2861cdc0098cc54bc9f17cb2c47eb61 /root/.cache/huggingface/hub/models--mistralai--Mixtral-8x7B-Instruct-v0.1/snapshots/eba92302a2861cdc0098cc54bc9f17cb2c47eb61
+mixtral BAKE OK
+mixtral OFF default rc=1 
+  File "/opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/hot_residency.py", line 1823, in _fwd
+    return st.forward(hidden, top_k_index, top_k_weights, residual=residual)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _HybridTier.forward() got an unexpected keyword argument 'residual'
+FAM_VERDICT mixtral {'ON_glue': 'VOID', 'ON_r2': 'VOID', 'ON_epi': 'VOID', 'ON_auto': 'VOID'} -- ['OFF: record missing or not ok', 'ON_glue: record missing or not ok', 'ON_r2: record missing or not ok']

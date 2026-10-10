@@ -1,10 +1,11 @@
-# FAM — results: the B=1 fused stack at T == 1 beyond Qwen3. Granite ON_auto **FAIL**; gpt-oss-20b **FAIL** on every knob (its own floor sits below the backstop; Phase C's 0.924 was the gate, not the knob); Qwen3.6-35B-A3B ON_auto **PASS**, and its router epilogue **FASTER** at one row (ratio 0.973). One RTX 5090 per family
+# FAM — results: the B=1 fused stack at T == 1 beyond Qwen3. Granite ON_auto **FAIL**; gpt-oss-20b **FAIL** on every knob (its own floor sits below the backstop; Phase C's 0.924 was the gate, not the knob); Qwen3.6-35B-A3B ON_auto **PASS**, and its router epilogue **FASTER** at one row (ratio 0.973); Mixtral-8x7B **PASS** on every knob, resolved at × 0.90. One RTX 5090 per family
 
-Registration: `bench/fam/PREREG-fam.md` (#1380, `9629874f`; Amendments 1 in #1403, 2 in #1420, 3 in #1432 and 4 in
-#1436). Issue: #1362.
+Registration: `bench/fam/PREREG-fam.md` (#1380, `9629874f`; Amendments 1 in #1403, 2 in #1420, 3 in #1432, 4 in
+#1436, and Mixtral's 5 in #1457, 7 in #1468, 8 in #1479 and 9 in #1487). Issue: #1362.
 
 Code under test, on every box:
 - e4b 0.50.0 at `9766fb4c` (#1403's merge, carrying #1395 and #1398); Qwen3.6's rerun at `98d59921` (#1420's merge);
+  Mixtral's reading on e4b 0.51.0 at `68845bfc` (#1487's merge, past #1482);
 - grouped-nf4-gemm 0.43.0 at `6ee2e10`;
 - torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0.
 
@@ -12,7 +13,8 @@ The instrument is the same on every family. Each ON config is scored against its
 fp32. The comparison uses four cells (wikitext and c4val1, at shapes 1 and 12), each read on three disjoint window
 sets. The gate is relative to the family's worst neutral draw (chunk, half, `split1`), with an absolute backstop. A
 config passes only if every (cell, set) entry passes. `mut090` (a ×0.90 softmax temperature) must fail every gated
-cell, or the family is UNRESOLVED; `mutant_scale` (×0.5) must fail, or the reading is VOID.
+cell, or the family is UNRESOLVED; `mutant_scale` (×0.5) must fail, or the reading is VOID. Mixtral gates on ×0.90,
+then ×0.80, and claims the weakest rung that fails every gated cell (Amendment 8).
 
 | family | run | host | cost | verdict |
 |---|---|---|---:|---|
@@ -22,8 +24,14 @@ cell, or the family is UNRESOLVED; `mutant_scale` (×0.5) must fail, or the read
 | Qwen3.6-35B-A3B | `fam-qw36-2` | EPYC 7C13, 256 CPUs | $2.345 | ON_auto **PASS** (Amendment 3's re-reduction) |
 | Qwen3.6, speed proof | `fam-speed-prove-1` | EPYC 7713, 128 CPUs | $0.632 | PROVED (Amendment 4) |
 | Qwen3.6, speed | `fam-speed-1` | EPYC 7713, 128 CPUs | $0.632 | the router epilogue **FASTER** (Amendment 4) |
+| Mixtral-8x7B, proof | `fam-mixtral-prove-1` | Xeon E5-2699 v3, 72 CPUs | $1.115 | NOT PROVED (server KV pool out of memory; Amendment 7) |
+| Mixtral-8x7B, proof | `fam-mixtral-prove-2` | EPYC 7763, 256 CPUs | $1.775 | PROVED; UNRESOLVED at proof scale (Amendment 8) |
+| Mixtral-8x7B | `fam-mixtral-1`, `-2` | none | $0 | refused at the provider before any instance existed |
+| Mixtral-8x7B | `fam-mixtral-3` | EPYC 9454, 96 CPUs | $0.87 | VOID (#1477's serving regression; Amendment 9) |
+| Mixtral-8x7B | `fam-mixtral-4` | EPYC 7C13, 256 CPUs | $2.59 | ON_glue, ON_r2, ON_epi, ON_auto **PASS**, resolved at ×0.90 |
 
-The lane spent $7.720 of its $18 ceiling.
+The lane has spent $14.07 of its $26 ceiling (raised from $18 in Amendment 5). Gemma-4's runs are reported
+separately.
 
 ## Granite-3.1-3b-a800m (`fam-granite-1`)
 
@@ -130,6 +138,44 @@ re-derived it from the store and, on both reads, licensed the allowlist flip.
   step would be shorter, and the epilogue's share possibly larger; that is a hypothesis, not a finding.
 - **Peak** 23.1 GiB allocated; SM clock 2542–2917 MHz.
 
+## Mixtral-8x7B-Instruct (`fam-mixtral-4`)
+
+**PASS on every knob, resolved at × 0.90.** `mut090` failed the gate in every gated cell, so the read is the stronger
+null read Amendment 8 allowed: no effect on Mixtral as large as a × 0.90 change of the decode softmax scale. The
+maintainer re-derived the verdict from the store independently.
+
+| cell | floor B / S / A | gate: abs bias / spread / agree | ON_auto worst set: abs bias / spread / agree |
+|---|---|---|---|
+| wikitext, 1 | 0.0039 / 0.0090 / 0.9694 | ≤ 0.0139 / ≤ 0.0181 / ≥ 0.9644 | 0.0025 / 0.0080 / 0.9727 |
+| wikitext, 12 | 0.0062 / 0.0109 / 0.9694 | ≤ 0.0162 / ≤ 0.0218 / ≥ 0.9644 | 0.0054 / 0.0092 / 0.9707 |
+| c4val1, 1 | 0.0043 / 0.0110 / 0.9661 | ≤ 0.0143 / ≤ 0.0221 / ≥ 0.9611 | 0.0021 / 0.0112 / 0.9661 |
+| c4val1, 12 | 0.0039 / 0.0091 / 0.9661 | ≤ 0.0139 / ≤ 0.0182 / ≥ 0.9611 | 0.0029 / 0.0100 / 0.9694 |
+
+| config | census (q/k/v / glue / r2 / router) | worst abs bias | worst agree | max KL |
+|---|---|---:|---:|---:|
+| ON_glue | `0 / 65 / [0, 0] / 0` | 0.0041 | 0.9668 | 0.0051 |
+| ON_r2 | `0 / 0 / [32, 32] / 0` | 0.0069 | 0.9694 | 0.0061 |
+| ON_epi | `0 / 0 / [0, 0] / 32` | 0.0094 | 0.9674 | 0.0049 |
+| ON_auto | `0 / 65 / [32, 32] / 32` | 0.0054 | 0.9661 | 0.0062 |
+
+- **The resolution.** ×0.90's worst-set agreement was 0.951–0.958, below every cell's gate (0.961–0.964). At proof
+  scale (32 positions) it had passed on c4val1, which triggered Amendment 8's ×0.80 rung. The reading's 128 positions
+  resolved ×0.90. ×0.80 also failed everywhere (agreement 0.921–0.932).
+- **The instrument held.** The census was exact on all five processes, and every glue-kernel count matched Amendment
+  5's table. `mutant_scale` failed every cell. `rep` was bit-identical; `split1` was not. On the ladder (set A), ×0.95
+  passed 3 of 4 cells (it failed c4val1 at shape 1) and ×0.98 passed all four.
+- **Three tries came first.**
+  - `fam-mixtral-prove-1` ran out of GPU memory building the server's own KV pool (Amendment 7).
+  - `fam-mixtral-1` and `-2` were refused at the provider ($0). No verified 5090 was offered at the policy's $0.85/h.
+    The reading then launched through a read-only price waiter.
+  - `fam-mixtral-3` VOIDed on its first forward: #1477's MoE residual fold raised a TypeError in the hybrid tier the
+    default server installs. #1482 fixed it, and Amendment 9 moved the reading past it. On a tiny Mixtral, the
+    glue-kernel counts per decode step were identical before and after that change.
+- **Walls:** about 830 s from launch to the bake's end; OFF 4314 s; each ON 555–603 s. Peak 28.19 GiB.
+- **What PASS licenses** (Amendment 5): an allowlist pull request, but only together with a speed read of what the
+  passing knobs buy on Mixtral (Amendment 4's interleaved method). None is proposed here; the four knobs stay off on
+  Mixtral by default.
+
 ## Predictions, graded
 
 | # | prediction | outcome |
@@ -143,6 +189,12 @@ re-derived it from the store and, on both reads, licensed the allowlist flip.
 | F7 | Qwen3.6 ON_auto PASS, about 85 % | **HIT** |
 | F8 | gpt-oss: ON_epi PASS about 75 %; ON_glue and ON_r2 about 65 % each; ON_auto about 55 % | **MISSED** on all four |
 | F9 | peak memory ≤ 26 GiB on every process | **HIT**: 25.22 GiB at most (gpt-oss on SC2g) |
+| X1 | Mixtral: census, every engagement count and the fp32 router path exact; no VOID, about 85 % | **MISSED**: `fam-mixtral-3` VOIDed (a serving regression on main, not the instrument); the reading itself was exact, with no VOID |
+| X2 | Mixtral's floor A_f at (wikitext, 12) in [0.93, 0.97] | **HIT**: 0.9694 |
+| X3a | `mut090` fails every gated cell at reading scale (resolution ×0.90), about 25 % | **HIT** |
+| X3b | `mut080` fails every gated cell, about 75 % | **HIT** |
+| X4 | ON_epi PASS about 70 %; ON_glue and ON_r2 about 60 % each; ON_auto about 50 % | **HIT** on all four |
+| X5 | peak memory ≤ 30 GiB on every Mixtral process | **HIT**: 28.19 GiB |
 
 ## Receipts
 
@@ -150,6 +202,7 @@ re-derived it from the store and, on both reads, licensed the allowlist flip.
 `verdict.json`, `summary.txt`, `forensics.txt`, `versions.txt`, the bake, `logs/`, the teardown proof, a README and
 `SHA256SUMS`. `fam-qw36-2/` adds `verdict-amendment-3.json`. `fam-speed-prove-1/` and `fam-speed-1/` hold the speed
 record (`speed_qw36.json`), `speed_verdict.json` and the same companions. The launcher receipts and ledger rows are in
-the receipt store. Claims: `e4b.serve.fam.fused-stack-t1.granite.5090.2026-10-09`,
+the receipt store. `fam-mixtral-prove-1/`, `fam-mixtral-prove-2/`, `fam-mixtral-3/` and `fam-mixtral-4/` hold the same
+companions for each Mixtral run that rented an instance. Claims: `e4b.serve.fam.fused-stack-t1.granite.5090.2026-10-09`,
 `e4b.serve.fam.fused-stack-t1.gptoss.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.qw36.5090.2026-10-09`,
-`e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`.
+`e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.mixtral.5090.2026-10-09`.
