@@ -57,6 +57,7 @@ CONT = 4                          # T == 1 steps after each verify
 TRUNC_POINTS = 8                  # draft-gate truncation points per prompt
 BAR_ADDRESS, BAR_DRAFT = 0.90, 0.99
 BUCKETS_WANTED = (1, 2, 3, 4, 8, 16)
+INFORMATIVE = 2.0 ** -7           # Amendment 4: a key cell counts when |pair 0| >= 2^-7 x its scale groups' amax
 
 
 def digest(obj) -> str:
@@ -83,6 +84,42 @@ def dlogp(logits_a, logits_b, toks):
     lb = torch.log_softmax(logits_b.float(), -1)
     idx = torch.as_tensor(toks, device=la.device).view(-1, 1)
     return (la.gather(1, idx) - lb.gather(1, idx)).abs().view(-1).tolist()
+
+
+def pair0_rotation(zo, zv, amax, floor=INFORMATIVE):
+    """Amendment 4's key-row statistic, pure. ``zo`` / ``zv``: RoPE pair 0 of the stored keys (x[0] + i x[D/2]) that the
+    T == 1 oracle and the verify step wrote at the same positions, complex, any shape; ``amax``: the larger amax of the
+    two scale groups holding that pair in the oracle's row. Pair 0 turns 1 rad per position at any RoPE base, so a key
+    written one position off is rotated by 1 rad. Returns (the angle of zv / zo in (-pi, pi], the informative mask,
+    the radial drift | |zv| / |zo| - 1 |)."""
+    import torch
+    mag = zo.abs()
+    return (torch.angle(zv * zo.conj()), mag >= floor * amax,
+            (zv.abs() / mag.clamp_min(1e-30) - 1.0).abs())
+
+
+def rot_summary(cells):
+    """``cells``: [(angle, informative, drift)] tensors shaped [L, rows, H]. The max |angle| over informative cells,
+    overall, at layer 0 and per layer; the informative count; the max radial drift."""
+    import torch
+    a = torch.cat([c[0] for c in cells], 1).abs()
+    inf = torch.cat([c[1] for c in cells], 1)
+    dr = torch.cat([c[2] for c in cells], 1)
+    masked = torch.where(inf, a, torch.full_like(a, -1.0))
+    per_layer = [round(float(x), 6) if x >= 0 else None for x in masked.flatten(1).amax(1).tolist()]
+    live = [x for x in per_layer if x is not None]
+    return {"max_abs_angle": max(live) if live else None, "max_abs_angle_layer0": per_layer[0],
+            "per_layer_max": per_layer, "informative": int(inf.sum()), "cells": int(inf.numel()),
+            "radial_drift_max": round(float(dr[inf].max()), 6) if bool(inf.any()) else None}
+
+
+def rope_inv_freq0(model):
+    """The first rotary frequency the model holds (pair 0's radians per position); Amendment 4's gate assumes 1."""
+    for m in model.modules():
+        f = getattr(m, "inv_freq", None)
+        if f is not None and getattr(f, "numel", lambda: 0)() > 0:
+            return float(f.flatten()[0])
+    return None
 
 
 class LogitsTap:
@@ -181,12 +218,35 @@ class Gate:
         r.tokens[rid] = r.tokens[rid][:base + 1] + list(drafts) + [int(g_last)]
         r.pos_of[rid] = base + n + 1
 
+    def k_pair0(self, slot, start, n):
+        """RoPE pair 0 of the keys stored for ``slot`` at positions start .. start + n - 1, every pool layer, by the pool's
+        reference dequant: complex [L, n, H] (x[0] + i x[D/2]), and the larger amax of the two scale groups holding
+        the pair, [L, n, H]. Reads only the blocks those positions occupy."""
+        torch, kv = self.torch, self.kv
+        from fp8_kv import dequant_kv_fp8_ref, unpack_kv_block_grouped
+        zs, ams = [], []
+        for layer in range(kv.L):
+            H, D, bt, kg = kv.Hs[layer], kv.Ds[layer], kv.bt, kv.kgs[layer]
+            first = start // bt
+            rows = []
+            for blk in range(first, (start + n - 1) // bt + 1):
+                qk, sk = unpack_kv_block_grouped(kv.kp.dev[layer, int(kv.block_table[layer][slot, blk])], bt, H, D, kg)
+                rows.append(dequant_kv_fp8_ref(qk, sk, dtype=torch.float32))
+            key = torch.cat(rows)[start - first * bt:][:n]                      # [n, H, D]
+            half, gw = D // 2, D // kg
+            zs.append(torch.complex(key[..., 0], key[..., half]))
+            g_hi = (half // gw) * gw
+            ams.append(torch.maximum(key[..., 0:gw].abs().amax(-1), key[..., g_hi:g_hi + gw].abs().amax(-1)))
+        return torch.stack(zs), torch.stack(ams)
+
     def addressing(self, prompt, k, positions):
         """S2-lite's construction at ``positions`` positions: (row agreement, continuation agreement, mean |Δ log p|
-        per verify row index)."""
+        per verify row index), and Amendment 4's key rows: pair 0 of the keys the verify step wrote against the keys
+        the T == 1 oracle wrote at the same positions, as a rotation (``rot_summary``)."""
         rid, slot = self.begin(prompt)
         rows_a, rows_b, cont_a, cont_b = [], [], [], []
         dl = [[] for _ in range(k + 1)]
+        cells = []
         try:
             for _ in range(positions):
                 base = self.runner.pos_of[rid] - 1
@@ -195,8 +255,11 @@ class Gate:
                     t, lg = self.plain(rid)
                     oracle.append(t)
                     ologits.append(lg)
+                zo, amax = self.k_pair0(slot, base, k + 1)                 # the oracle's keys, before the rewind
                 self.rewind(rid, slot, base)
                 g, vlogits = self.verify(rid, slot, base, oracle[:k])
+                zv, _ = self.k_pair0(slot, base, k + 1)                    # the verify's keys, same positions
+                cells.append(pair0_rotation(zo, zv, amax))
                 rows_a += g
                 rows_b += oracle[:k + 1]
                 d = dlogp(vlogits, self.torch.stack([x[0] for x in ologits[:k + 1]]), oracle[:k + 1])
@@ -211,7 +274,8 @@ class Gate:
             self.end(rid)
         return {"rows_agree": agreement(rows_a, rows_b), "rows": len(rows_a),
                 "cont_agree": agreement(cont_a, cont_b), "cont": len(cont_a),
-                "mean_abs_dlogp": [round(sum(v) / len(v), 6) if v else None for v in dl]}
+                "mean_abs_dlogp": [round(sum(v) / len(v), 6) if v else None for v in dl],
+                "k_rot": rot_summary(cells) if cells else None}
 
     def capture_bitwise(self, prompt):
         """Each verify bucket's replay against its padded eager step at the same position, logits bit for bit."""
@@ -356,7 +420,8 @@ def prove_main(a) -> int:
                                                               for k, v in vars(cfg).items() if k != "token"}}
     runner = parts.runner
     gs = parts.info.get("graph_status") or {}
-    rec["census"] = {"graph_status": {str(b): gs.get(b) for b in BUCKETS_WANTED},
+    rec["census"] = {"rope_inv_freq0": rope_inv_freq0(runner.model),
+                     "graph_status": {str(b): gs.get(b) for b in BUCKETS_WANTED},
                      "post_graphs": {str(n): v for n, v in (getattr(runner, "spec_graph_status", None) or {}).items()},
                      "spec_build": parts.info.get("spec")}
     gate = Gate(parts, tap)
@@ -550,7 +615,8 @@ def read_v_main(a) -> int:
     gs = parts.info.get("graph_status") or {}
     rec = {"stage": "V", "load_s": load_s, "e4b_sha": os.environ.get("E4B_SHA"), "gnf4_sha": os.environ.get("GNF4_SHA"),
            "config": conf,
-           "census": {"graph_status": {str(b): gs.get(b) for b in BUCKETS_WANTED},
+           "census": {"rope_inv_freq0": rope_inv_freq0(runner.model),
+                      "graph_status": {str(b): gs.get(b) for b in BUCKETS_WANTED},
                       "post_graphs": {str(n): v for n, v in (getattr(runner, "spec_graph_status", None) or {}).items()},
                       "spec_build": parts.info.get("spec")}}
     gate = Gate(parts, tap)
@@ -849,10 +915,15 @@ def self_test() -> int:
         bad.append("verify plan")
     if median([3, 1, 2]) != 2 or median([4, 1, 2, 3]) != 2.5:
         bad.append("median")
+    zo = torch.tensor([1 + 1j, 0.001 + 0j, -2 + 0.5j], dtype=torch.complex64)
+    ang, inf, dr = pair0_rotation(zo, zo * torch.exp(torch.tensor(1j)), torch.tensor([1.0, 1.0, 2.0]))
+    summ = rot_summary([(ang.view(1, 3, 1), inf.view(1, 3, 1), dr.view(1, 3, 1))])
+    if inf.tolist() != [True, False, True] or abs(summ["max_abs_angle"] - 1.0) > 1e-5 or summ["informative"] != 2:
+        bad.append("pair-0 rotation")
     if bad:
         print("sd2_box self-test FAILED:", bad)
         return 1
-    print("sd2_box self-test OK (agreement, dlogp, digest, logits tap, verify plan and assembly, median)")
+    print("sd2_box self-test OK (agreement, dlogp, digest, logits tap, verify plan and assembly, median, pair-0 rotation)")
     return 0
 
 

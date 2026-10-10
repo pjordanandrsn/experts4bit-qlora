@@ -43,7 +43,9 @@ import sys
 
 BAR_ADDRESS, BAR_DRAFT = 0.90, 0.99
 BOUND_DLOGP = 0.25          # Amendment 2: nats; calibrated on sd2-prove-2 (real <= 0.037, every mutant >= 0.89)
-RULES = ("a2", "a1")
+BOUND_ROT = 0.5             # Amendment 4: radians of RoPE pair 0, which turns 1 rad per position: the midpoint between a
+#                             key at its position and a key one position off (derived, not fitted; PREREG Amendment 4)
+RULES = ("a3", "a2", "a1")
 BUCKETS = ("1", "2", "3", "4", "8", "16")
 POSTS = ("2", "3", "4")
 
@@ -54,8 +56,15 @@ def logit_max(x):
     return max(v) if v else None
 
 
-def judge(prove: dict, gpu: dict, rule: str = "a2", rows=("R0", "C0"), mutant_keys=("a", "b", "c")) -> dict:
-    """The proof's items; ``rows`` and ``mutant_keys`` default to the proof's, and the read's V0 passes its own."""
+def rot_max(x):
+    """Amendment 4: the largest |pair-0 rotation| (rad) of a record's key rows over informative cells, or None."""
+    return ((x or {}).get("k_rot") or {}).get("max_abs_angle")
+
+
+def judge(prove: dict, gpu: dict, rule: str = "a3", rows=("R0", "C0"), mutant_keys=("a", "b", "c")) -> dict:
+    """The proof's items; ``rows`` and ``mutant_keys`` default to the proof's, and the read's V0 passes its own.
+    Rule a3 (Amendment 4) is a2's logit gate AND the key-row gate: a (row, k) passes when both hold, a mutant is caught
+    when either fails, and every record must carry its key rows."""
     if rule not in RULES:
         raise ValueError(f"rule {rule!r}: expected one of {RULES}")
     fails = []
@@ -68,6 +77,8 @@ def judge(prove: dict, gpu: dict, rule: str = "a2", rows=("R0", "C0"), mutant_ke
             fails.append(f"census:post_{n}")
     if ((c.get("spec_build") or {}).get("hooks")) != 3:
         fails.append("census:hooks")
+    if rule == "a3" and c.get("rope_inv_freq0") != 1.0:
+        fails.append("census:rope")                      # the key-row gate's 1 rad per position
     cap = prove.get("capture_bitwise") or {}
     for n in POSTS:
         if cap.get(n) is not True:
@@ -81,6 +92,9 @@ def judge(prove: dict, gpu: dict, rule: str = "a2", rows=("R0", "C0"), mutant_ke
         else:
             lm = logit_max(x)
             ok = lm is not None and lm <= BOUND_DLOGP
+            if rule == "a3":
+                rm = rot_max(x)
+                ok = ok and rm is not None and ((x or {}).get("k_rot") or {}).get("informative", 0) > 0 and rm < BOUND_ROT
         if not ok:
             fails.append(f"addressing:{key}")
     muts = prove.get("mutants") or {}
@@ -92,10 +106,10 @@ def judge(prove: dict, gpu: dict, rule: str = "a2", rows=("R0", "C0"), mutant_ke
             if x.get("rows_agree", 1.0) >= BAR_ADDRESS and x.get("cont_agree", 1.0) >= BAR_ADDRESS:
                 fails.append(f"GATE_TOO_WEAK:{m}")
         else:
-            lm = logit_max(x)
-            if lm is None:
+            lm, rm = logit_max(x), rot_max(x)
+            if lm is None or (rule == "a3" and rm is None):
                 fails.append(f"mutant:{m}:missing")
-            elif lm <= BOUND_DLOGP:
+            elif lm <= BOUND_DLOGP and (rule != "a3" or rm < BOUND_ROT):
                 fails.append(f"GATE_TOO_WEAK:{m}")
     d = prove.get("draft") or {}
     if d.get("of", 0) <= 0 or d.get("agree", 0) < BAR_DRAFT:
@@ -108,22 +122,23 @@ def judge(prove: dict, gpu: dict, rule: str = "a2", rows=("R0", "C0"), mutant_ke
         fails.append("gpu_tests")
     fields = ("rows_agree", "cont_agree", "mean_abs_dlogp")
     return {"verdict": "PROVED" if not fails else "FAILED", "fails": fails, "rule": rule,
-            "bound_dlogp": BOUND_DLOGP if rule == "a2" else None,
-            "addressing": {k: dict({kk: addr[k].get(kk) for kk in fields}, logit_max=logit_max(addr[k]))
-                           for k in want if k in addr},
-            "mutants": {m: dict({kk: (muts.get(m) or {}).get(kk) for kk in fields}, logit_max=logit_max(muts.get(m)))
-                        for m in mutant_keys},
+            "bound_dlogp": BOUND_DLOGP if rule in ("a2", "a3") else None, "bound_rot": BOUND_ROT if rule == "a3" else None,
+            "addressing": {k: dict({kk: addr[k].get(kk) for kk in fields}, logit_max=logit_max(addr[k]),
+                                   rot_max=rot_max(addr[k])) for k in want if k in addr},
+            "mutants": {m: dict({kk: (muts.get(m) or {}).get(kk) for kk in fields}, logit_max=logit_max(muts.get(m)),
+                                rot_max=rot_max(muts.get(m))) for m in mutant_keys},
             "draft": d, "transition": t}
 
 
 def _good() -> tuple:
     prove = {"census": {"graph_status": {b: "graph" for b in BUCKETS}, "post_graphs": {n: "graph" for n in POSTS},
-                        "spec_build": {"hooks": 3}},
+                        "spec_build": {"hooks": 3}, "rope_inv_freq0": 1.0},
              "capture_bitwise": {n: True for n in POSTS},
-             "addressing": {f"{r}_k{k}": {"rows_agree": 0.98, "cont_agree": 0.97, "mean_abs_dlogp": [0.01] * (k + 1)}
+             "addressing": {f"{r}_k{k}": {"rows_agree": 0.98, "cont_agree": 0.97, "mean_abs_dlogp": [0.01] * (k + 1),
+                                          "k_rot": {"max_abs_angle": 0.02, "informative": 500}}
                             for r in ("R0", "C0") for k in (1, 2, 3)},
-             "mutants": {m: {"rows_agree": 0.3, "cont_agree": 0.3, "mean_abs_dlogp": [0.02, 2.0, 2.0, 2.0]}
-                         for m in ("a", "b", "c")},
+             "mutants": {m: {"rows_agree": 0.3, "cont_agree": 0.3, "mean_abs_dlogp": [0.02, 2.0, 2.0, 2.0],
+                             "k_rot": {"max_abs_angle": 1.0, "informative": 500}} for m in ("a", "b", "c")},
              "draft": {"agree": 0.995, "same": 764, "of": 768},
              "transition": {"spec_steps_alone": 4, "dropped_batched": 1, "len_a": 64, "len_b": 16, "want": [64, 16],
                             "mirror_mismatches": 0, "state_left": 0}}
@@ -146,6 +161,28 @@ def _sd2_prove_2() -> dict:
         "c": {"rows_agree": 0.9375, "cont_agree": 0.90625, "mean_abs_dlogp": [1.179762, 0.005705, 0.010378, 0.011125]}}
     p["draft"] = {"agree": 766 / 768, "same": 766, "of": 768}
     return p
+
+
+def _sd2_5090_1() -> dict:
+    """sd2-5090-1's V0 (store 0d5ef1fe): rows outside calibration, logits only (no key rows before Amendment 4)."""
+    d = {"R1_k1": [0.025219, 0.043277], "R1_k2": [0.036084, 0.064719, 0.039262],
+         "R1_k3": [0.028627, 0.060006, 0.024966, 0.052269], "R2_k1": [0.021129, 0.024321],
+         "R2_k2": [0.017333, 0.056657, 0.011747], "R2_k3": [0.007979, 0.020161, 0.019904, 0.01927],
+         "R3_k1": [0.031772, 0.019798], "R3_k2": [0.018041, 0.035883, 0.029474],
+         "R3_k3": [0.031126, 0.032648, 0.045468, 0.083335], "C1_k1": [0.004489, 0.003249],
+         "C1_k2": [0.010827, 0.003212, 0.011847], "C1_k3": [0.025976, 0.000245, 0.01161, 0.041531],
+         "C2_k1": [0.010714, 0.009607], "C2_k2": [0.001053, 0.029544, 0.017953],
+         "C2_k3": [0.037663, 0.031775, 0.060925, 0.042926], "C3_k1": [0.017378, 0.006664],
+         "C3_k2": [0.002733, 0.020732, 0.012022], "C3_k3": [0.024143, 0.01626, 0.01438, 0.024963]}
+    m = {"a_R1": [0.050126, 2.019036, 2.590643, 2.007038], "a_C1": [0.008349, 6.430217, 1.248539, 2.007453],
+         "b_R1": [5.100194, 3.67947, 7.746335, 1.082224], "b_C1": [6.315396, 11.53528, 4.115705, 0.847681],
+         "c_R1": [0.160934, 0.034099, 0.020618, 0.09007], "c_C1": [0.011872, 0.003952, 0.064417, 0.039685]}
+    p, _ = _good()
+    return {"census": {kk: v for kk, v in p["census"].items() if kk != "rope_inv_freq0"},
+            "v0": {"capture_bitwise": p["capture_bitwise"], "draft": {"agree": 574 / 576, "same": 574, "of": 576},
+                   "transition": p["transition"],
+                   "addressing": {kk: {"mean_abs_dlogp": v} for kk, v in d.items()},
+                   "mutants": {kk: {"mean_abs_dlogp": v} for kk, v in m.items()}}}
 
 
 def self_test() -> int:
@@ -198,6 +235,20 @@ def self_test() -> int:
            "agreement below 0.90 with the logits inside the bound")
     proved(lambda x: x["mutants"]["c"].update({"rows_agree": 0.99, "cont_agree": 0.99,
                                                "mean_abs_dlogp": [1.18, 0.0, 0.0, 0.0]}), "a2", "caught by logits")
+    # a3 (Amendment 4): the logit gate AND the key-row gate; a2 ignores the key rows
+    weak_c = {"mean_abs_dlogp": [0.16, 0.03, 0.02, 0.09], "k_rot": {"max_abs_angle": 0.3, "informative": 9}}
+    case(lambda x: x["addressing"]["R0_k1"]["k_rot"].update({"max_abs_angle": 0.6}), "addressing:R0_k1", "a3")
+    case(lambda x: x["addressing"]["C0_k2"].pop("k_rot"), "addressing:C0_k2", "a3")
+    case(lambda x: x["addressing"]["C0_k3"]["k_rot"].update({"informative": 0}), "addressing:C0_k3", "a3")
+    case(lambda x: x["census"].update({"rope_inv_freq0": 0.5}), "census:rope", "a3")
+    case(lambda x: x["mutants"]["c"].update(copy.deepcopy(weak_c)), "GATE_TOO_WEAK:c", "a3")
+    case(lambda x: x["mutants"]["b"].pop("k_rot"), "mutant:b:missing", "a3")
+    case(lambda x: x["mutants"]["c"].update(dict(copy.deepcopy(weak_c), k_rot={"max_abs_angle": 1.0, "informative": 9})),
+         "GATE_TOO_WEAK:c", "a2")
+    proved(lambda x: x["mutants"]["c"].update(dict(copy.deepcopy(weak_c), k_rot={"max_abs_angle": 1.0, "informative": 9})),
+           "a3", "(c) inside the logit bound, caught by the key rows")
+    proved(lambda x: x["addressing"]["R0_k1"]["k_rot"].update({"max_abs_angle": 0.49}), "a3", "just inside 0.5 rad")
+    proved(lambda x: x["census"].pop("rope_inv_freq0"), "a2", "a2 does not read the rope census")
     # the calibration set
     cal = _sd2_prove_2()
     v1, v2 = judge(cal, g, "a1"), judge(cal, g, "a2")
@@ -205,8 +256,13 @@ def self_test() -> int:
         bad.append(f"sd2-prove-2 under a1: {v1['fails']}")
     if v2["verdict"] != "PROVED":
         bad.append(f"sd2-prove-2 under a2: {v2['fails']}")
+    r51 = _sd2_5090_1()
+    if v0_fails(r51, g, rule="a2") != ["GATE_TOO_WEAK:c_R1", "GATE_TOO_WEAK:c_C1"]:
+        bad.append(f"sd2-5090-1 under a2: {v0_fails(r51, g, rule='a2')}")
+    if "census:rope" not in v0_fails(r51, g) or "mutant:c_C1:missing" not in v0_fails(r51, g):
+        bad.append("sd2-5090-1 under a3 lacks its key rows and its rope census")
     try:
-        judge(p, g, "a3")
+        judge(p, g, "a4")
         bad.append("an unknown rule was accepted")
     except ValueError:
         pass
@@ -214,7 +270,8 @@ def self_test() -> int:
     if bad:
         print("sd2_reduce self-test FAILED:", bad)
         return 1
-    print("sd2_reduce self-test OK (39 proof cases: both rules, and sd2-prove-2's calibration; 37 read cases: every verdict, every VOID item, the stage gate)")
+    print("sd2_reduce self-test OK (64 proof cases: all three rules, sd2-prove-2's calibration and sd2-5090-1's V0; "
+          "38 read cases: every verdict, every VOID item, the stage gate)")
     return 0
 
 
@@ -241,11 +298,11 @@ def _mean(xs):
     return math.fsum(xs) / len(xs) if xs else None
 
 
-def v0_fails(v: dict, gpu: dict | None = None) -> list:
+def v0_fails(v: dict, gpu: dict | None = None, rule: str = "a3") -> list:
     """V0 by the proof's rule a2 on the read's rows (outside calibration). ``gpu`` None leaves out the GPU-test item
     (the box's own check before V1)."""
     rec = dict(v.get("v0") or {}, census=v.get("census") or {})
-    fails = judge(rec, gpu or {}, "a2", rows=READ_ROWS, mutant_keys=READ_MUTANTS)["fails"]
+    fails = judge(rec, gpu or {}, rule, rows=READ_ROWS, mutant_keys=READ_MUTANTS)["fails"]
     return [f for f in fails if gpu is not None or f != "gpu_tests"]
 
 
@@ -263,10 +320,10 @@ def verify_cost(v1: dict) -> dict:
                       for k in (1, 2, 3)}}
 
 
-def stage_gate(v: dict, gpu: dict) -> str:
+def stage_gate(v: dict, gpu: dict, rule: str = "a3") -> str:
     """The box's decision after stage V: VOID (V0 failed or V1 missing: stop, no timing read), E_ONLY
     (VERIFY_COST_REFUTES without V_NOISY: the stop rule, E runs and Q is skipped) or ALL."""
-    if v0_fails(v, gpu) or not v.get("v1"):
+    if v0_fails(v, gpu, rule) or not v.get("v1"):
         return "VOID"
     vc = verify_cost(v["v1"])
     return "E_ONLY" if vc["refutes"] and not vc["v_noisy"] else "ALL"
@@ -320,7 +377,7 @@ def speed_bar(g: dict, pairs: dict, k: int) -> bool:
     return sum(1 for w in WORKLOADS if g[(k, w)] >= G_BAR and min(pairs[(k, w)]) > 1.0) >= 2
 
 
-def judge_read(gpu, v, e: dict, q, expect: dict, w1=None) -> dict:
+def judge_read(gpu, v, e: dict, q, expect: dict, w1=None, rule: str = "a3") -> dict:
     """The registered rule, first that applies: VOID, VERIFY_COST_REFUTES, NOISY, QUALITY_FAIL, FASTER, NOT_FASTER.
     ``e``: {arm: record}; ``q`` None when the box skipped Q; ``expect``: {"e4b", "gnf4", "rev"}; ``w1``: the tripwire's
     expected tokens (reported)."""
@@ -344,7 +401,7 @@ def judge_read(gpu, v, e: dict, q, expect: dict, w1=None) -> dict:
     if v:
         if (v.get("config") or {}).get("max_seqs") != 16:
             void.append("default:V:max_seqs")
-        void += [f"V0:{f}" for f in v0_fails(v, gpu or {})]
+        void += [f"V0:{f}" for f in v0_fails(v, gpu or {}, rule)]
         if not v.get("v1"):
             void.append("missing:V1")
         else:
@@ -459,9 +516,11 @@ def _read_fixture():
     spec_on = {"mode": "eagle3", "hooks": 3, "head_sha256": HEAD_SHA256}
     p, _ = _good()
     v0 = {"capture_bitwise": p["capture_bitwise"], "draft": p["draft"], "transition": p["transition"],
-          "addressing": {f"{r}_k{k}": {"rows_agree": 1.0, "cont_agree": 1.0, "mean_abs_dlogp": [0.01] * (k + 1)}
+          "addressing": {f"{r}_k{k}": {"rows_agree": 1.0, "cont_agree": 1.0, "mean_abs_dlogp": [0.01] * (k + 1),
+                                       "k_rot": {"max_abs_angle": 0.02, "informative": 500}}
                          for r in READ_ROWS for k in (1, 2, 3)},
-          "mutants": {m: {"rows_agree": 0.5, "cont_agree": 0.5, "mean_abs_dlogp": [0.02, 2.0, 2.0, 2.0]} for m in READ_MUTANTS}}
+          "mutants": {m: {"rows_agree": 0.5, "cont_agree": 0.5, "mean_abs_dlogp": [0.02, 2.0, 2.0, 2.0],
+                          "k_rot": {"max_abs_angle": 1.0, "informative": 500}} for m in READ_MUTANTS}}
     v = dict(base, config={"max_seqs": 16, "revision": expect["rev"]}, v0=v0,
              census=dict(p["census"], spec_build=spec_on),
              v1={"anchor_a_ms": 7.40, "anchor_b_ms": 7.45,
@@ -531,8 +590,11 @@ def read_self_test() -> list:
     want("VOID", lambda G, V, E, Q: E["ON2-a"]["graph_status"].pop("3"), "default:ON2-a:bucket_3")
     want("VOID", lambda G, V, E, Q: V["v0"]["addressing"]["C3_k2"].update(mean_abs_dlogp=[0.01, 0.3, 0.01]),
          "V0:addressing:C3_k2")
-    want("VOID", lambda G, V, E, Q: V["v0"]["mutants"]["c_C1"].update(mean_abs_dlogp=[0.2, 0.01, 0.01, 0.01]),
-         "V0:GATE_TOO_WEAK:c_C1", "a mutant inside the bound on a fresh row")
+    want("VOID", lambda G, V, E, Q: V["v0"]["mutants"]["c_C1"].update(mean_abs_dlogp=[0.2, 0.01, 0.01, 0.01],
+                                                                       k_rot={"max_abs_angle": 0.3, "informative": 9}),
+         "V0:GATE_TOO_WEAK:c_C1", "a mutant inside both bounds on a fresh row")
+    want("FASTER", lambda G, V, E, Q: V["v0"]["mutants"]["c_C1"].update(mean_abs_dlogp=[0.2, 0.01, 0.01, 0.01]),
+         why="a mutant inside the logit bound, caught by the key rows (a3)")
     want("VOID", lambda G, V, E, Q: V["v0"]["addressing"].pop("R2_k3"), "V0:addressing:R2_k3")
     want("VOID", lambda G, V, E, Q: V["v0"]["draft"].update(agree=0.98), "V0:draft")
     want("VOID", lambda G, V, E, Q: V.pop("v1"), "missing:V1")
@@ -597,7 +659,7 @@ def main(argv=None) -> int:
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--prove")
     ap.add_argument("--gpu-tests")
-    ap.add_argument("--rule", choices=RULES, default="a2")
+    ap.add_argument("--rule", choices=RULES, default="a3")
     ap.add_argument("--read", metavar="DIR", help="the read's records: gpu_tests.json, v.json, e_<arm>.json, q.json")
     ap.add_argument("--gate-v", metavar="DIR", help="after stage V: print SD2_GATE VOID | E_ONLY | ALL")
     ap.add_argument("--expect-e4b")
@@ -610,7 +672,7 @@ def main(argv=None) -> int:
         return self_test()
     if a.gate_v:
         gate = stage_gate(json.load(open(os.path.join(a.gate_v, "v.json"))),
-                          json.load(open(os.path.join(a.gate_v, "gpu_tests.json"))))
+                          json.load(open(os.path.join(a.gate_v, "gpu_tests.json"))), a.rule)
         print(f"SD2_GATE {gate}", flush=True)
         return 0
     if a.read:
@@ -619,7 +681,7 @@ def main(argv=None) -> int:
             return json.load(open(path)) if os.path.exists(path) else None
         w1 = json.load(open(a.expect_w1))["tokens"] if a.expect_w1 else None
         out = judge_read(rec("gpu_tests.json"), rec("v.json"), {x: rec(f"e_{x}.json") for x in ARMS}, rec("q.json"),
-                         {"e4b": a.expect_e4b, "gnf4": a.expect_gnf4, "rev": a.expect_rev}, w1)
+                         {"e4b": a.expect_e4b, "gnf4": a.expect_gnf4, "rev": a.expect_rev}, w1, a.rule)
         json.dump(out, open(a.out, "w"), indent=1, sort_keys=True, default=str)
         print("SD2_READ_VERDICT " + json.dumps({"verdict": out["verdict"], "void": out["void"][:12],
                                                 "faster_at": out.get("faster_at"), "conflict": out.get("conflict")}),

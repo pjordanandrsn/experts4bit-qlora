@@ -3,9 +3,10 @@
 # bench/p108, bench/p97, bench/p39) and compare.
 # Pinned 2026-10-10 for Amendment 1 (the CUDA proof sd2-prove-N). Re-pinned for Amendment 1b (the proof's time budget);
 # Amendment 2 (the logit gate); Amendment 3 (the read sd2-5090-N: its stages, the audit, Q's instrument at its bytes).
+# Amendment 4 (the key-row position gate, rule a3).
 18ef88c3fa6115a783378e9f78f144701264dadbeeea7f3d4781bd1d9bcc5182  sd2_run.sh
-53612849cfbb97c1968a766a7ce271cc1a137876c97f36e5635a64a5c5e1dd16  sd2_box.py
-af146ece1f3e3bcfddac6cae74651aa5f6aa0ca907e09b1504c3780c0d0f66a3  sd2_reduce.py
+6a281fb48a1f801a7264bf4e1b1834d69d7e45fb54703ee70fbd9c26d4515c09  sd2_box.py
+557a971b0e0d86aea1fc892ebc9ee11826a9ef30d4e54a6503627744c0e11f1e  sd2_reduce.py
 f08da3f29751c91e05e91415141fcd7207d5c8324d17cdcdcda071d7e8574400  sd2_audit.py
 a33030d2160ae66eec7277c9d195c547c3546b7c8c41510fb8d277fdf6f88151  audit_read.tsv
 cd3e73aa5e3de7a8eb5824ba9a2973d1d9e1e2b0cd87652a9c7f472d6f5a0b95  sd1_box.py
