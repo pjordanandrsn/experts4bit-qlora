@@ -17,7 +17,7 @@ SGL = REPO / "bench" / "sc1" / "sglang" / "server.sh"
 
 
 def test_box_i_is_wired_on_box_g_s_image_and_kernel_package():
-    assert 'case "$BOX" in A|B|C|D|E|F|G|H|I|J|K|L) ;;' in RUN and "I) box_i;; J) box_j;; K) box_k;; L) box_l;; esac" in RUN and '[ "$BOX" = I ] && prove_i' in RUN
+    assert 'case "$BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M) ;;' in RUN and "I) box_i;; J) box_j;; K) box_k;; L) box_l;; M) case "${SC1_SC5_PHASE:-read}" in ref) box_m_ref;; *) box_m;; esac;; esac" in RUN and '[ "$BOX" = I ] && prove_i' in RUN
     assert "G|I|J) GNF4_SHA=dc8f94abfd868f149178623f6eb403dc8b892b02;; esac" in RUN
     assert "I) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; . $W/sc1g_box_i.sh; install_vllm; install_llamacpp ;;" in RUN
     assert 'I) PROVE_NEEDS="vllm llamacpp";;' in RUN   # A5: SGLang has no KL arm, so the proof does not require it
@@ -267,7 +267,7 @@ def test_box_j_is_the_e4b_only_diagnostic_box_with_its_decisive_arms_first():
     """A2/A3: box J installs no comparator, needs no proof (guard <= 1 h), runs A3's split in priority order -- conv1's K1/K2/K5
     rows, e4b#1175's attention check, the K2/K5 triple on conv2-conv4, then the controls -- and builds four conversations."""
     assert "  J) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; . $W/sc1g_box_i.sh ;;" in RUN
-    assert 'J) PROVE_NEEDS="";;' in RUN and "J) box_j;; K) box_k;; L) box_l;; esac" in RUN and "G|I|J) GNF4_SHA=" in RUN
+    assert 'J) PROVE_NEEDS="";;' in RUN and "J) box_j;; K) box_k;; L) box_l;; M) case "${SC1_SC5_PHASE:-read}" in ref) box_m_ref;; *) box_m;; esac;; esac" in RUN and "G|I|J) GNF4_SHA=" in RUN
     body = BOX[BOX.index("box_j_a3(){"):BOX.index("i_arms_a6(){")]   # A3's box J, kept for the record (box J now runs A6)
     assert "install_" not in body and "fetch_gptoss_gguf" not in body
     order = [body.index(s) for s in ("e4b_serve_v1_conv1 ", "e4b_mxpre_prefill128_conv1 ", "e4b_nf4_prefill128_conv1 ",
