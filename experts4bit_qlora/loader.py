@@ -1061,6 +1061,63 @@ def _place_unquantized_experts(model, epfx, layer, weight_map, get, n_exp, model
 _FULL_SHA = re.compile(r"[0-9a-f]{40}")
 
 
+#: what the streaming loader needs from a snapshot (the same files its ``allow_patterns`` select)
+_SNAPSHOT_PATTERNS = ["*.safetensors", "*.json", "tokenizer*", "*.model", "*.txt"]
+_TOKENIZER_FILES = ("tokenizer.json", "tokenizer_config.json", "tokenizer.model")
+
+
+def _hub_offline() -> bool:
+    """HF_HUB_OFFLINE as huggingface_hub reads it (1/true/yes/on)."""
+    return os.environ.get("HF_HUB_OFFLINE", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _pinned_snapshot_offline(model_id: str, revision) -> str | None:
+    """The local snapshot of a full-sha `revision`, verified complete, when the Hub is offline; else None.
+
+    huggingface_hub 1.26.0 through 2.1.1 (1.25.0 and 2.2.0 are unaffected) list the repo tree online inside
+    ``snapshot_download(..., revision=<commit sha>)`` even with ``HF_HUB_OFFLINE=1``, and raise
+    ``OfflineModeIsEnabled`` although the pinned snapshot is complete in the cache. Offline, with a full 40-hex
+    commit whose snapshot directory exists, this resolves the snapshot locally with no Hub call and then CHECKS it:
+    ``config.json``, the safetensors index and every shard it names (or a single ``model.safetensors``), and a
+    tokenizer file must all be present. A missing file is refused by name -- a partial snapshot is never loaded.
+    A pinned commit with no snapshot in the cache is refused (offline cannot fetch it). Any other case -- online,
+    or a branch-name revision -- returns None and keeps ``snapshot_download``'s own behaviour (offline, a branch
+    name resolves through ``refs/<branch>`` there; the ref is never guessed here)."""
+    if not (_hub_offline() and revision and _FULL_SHA.fullmatch(str(revision))):
+        return None
+    from huggingface_hub import constants as _hub_constants
+    repo_dir = os.path.join(_hub_constants.HF_HUB_CACHE, "models--" + model_id.replace("/", "--"))
+    snap = os.path.join(repo_dir, "snapshots", str(revision))
+    if not os.path.isdir(snap):
+        raise FileNotFoundError(
+            f"{model_id!r}@{revision}: offline (HF_HUB_OFFLINE) and the pinned snapshot is not in the cache "
+            f"({snap}); it cannot be fetched offline")
+    missing = [f for f in ("config.json",) if not os.path.exists(os.path.join(snap, f))]
+    index = os.path.join(snap, "model.safetensors.index.json")
+    if os.path.exists(index):
+        with open(index) as f:
+            shards = sorted(set(json.load(f)["weight_map"].values()))
+        missing += [s for s in shards if not os.path.exists(os.path.join(snap, s))]
+    elif not os.path.exists(os.path.join(snap, "model.safetensors")):
+        missing.append("model.safetensors.index.json or model.safetensors")
+    if not any(os.path.exists(os.path.join(snap, t)) for t in _TOKENIZER_FILES):
+        missing.append("a tokenizer file (" + " / ".join(_TOKENIZER_FILES) + ")")
+    if missing:
+        raise FileNotFoundError(
+            f"{model_id!r}@{revision}: the pinned snapshot {snap} is incomplete offline, missing {missing}; "
+            "refusing to load a partial checkpoint")
+    return snap
+
+
+def _resolve_snapshot(model_id: str, revision) -> str:
+    """The directory the shards are streamed from: a local directory as given; offline with a pinned full sha, the
+    verified local snapshot (:func:`_pinned_snapshot_offline`, no Hub call); otherwise ``snapshot_download``."""
+    if os.path.isdir(model_id):
+        return model_id
+    return _pinned_snapshot_offline(model_id, revision) or snapshot_download(
+        model_id, allow_patterns=_SNAPSHOT_PATTERNS, revision=revision)
+
+
 def _record_checkpoint_revision(model_id, revision, config, snap):
     """Log which checkpoint commit is being loaded and refuse a pinned one that did not resolve.
 
@@ -1302,15 +1359,7 @@ def load_moe_4bit_streaming(
         model = AutoModelForCausalLM.from_config(
             lm_config, dtype=dtype, trust_remote_code=trust_remote_code, **remote_code_kwargs)
 
-    snap = (
-        model_id
-        if os.path.isdir(model_id)
-        else snapshot_download(
-            model_id,
-            allow_patterns=["*.safetensors", "*.json", "tokenizer*", "*.model", "*.txt"],
-            revision=revision,
-        )
-    )
+    snap = _resolve_snapshot(model_id, revision)
     _record_checkpoint_revision(model_id, revision, config, snap)
     index_path = os.path.join(snap, "model.safetensors.index.json")
     if os.path.exists(index_path):
