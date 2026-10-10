@@ -1,0 +1,9 @@
+e4b B 0.51.0 sha 7f044dd9570b0f75ac4ebc1742e697256cd2e209
+harness sha 2332492e918f2472cf5264caf36dd0cb4d497e2d
+gnf4 B 0.44.0
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+huggingface_hub 1.33.0
+cc (12, 0)

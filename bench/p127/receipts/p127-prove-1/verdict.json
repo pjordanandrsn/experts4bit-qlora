@@ -1,0 +1,26 @@
+{
+ "counts": {
+  "A1": {
+   "combine_residual": 0,
+   "gather_div": 0,
+   "int64_ids": 288,
+   "rope_norm_qk": 0,
+   "router_weights_dtype": 0
+  },
+  "A2": {
+   "combine_residual": 0,
+   "gather_div": 0,
+   "int64_ids": 288,
+   "rope_norm_qk": 0,
+   "router_weights_dtype": 0
+  }
+ },
+ "predictions": {},
+ "reasons": [
+  "arm B1 missing or not ok",
+  "arm B2 missing or not ok",
+  "arm M1 missing or not ok"
+ ],
+ "report": {},
+ "verdict": "VOID"
+}

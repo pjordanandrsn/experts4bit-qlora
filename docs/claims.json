@@ -12077,6 +12077,35 @@
         "receipts/experts4bit-qlora/2026-10-09/p125-prove-3/ (receipt.json, the proving run)"
       ],
       "notes": "Pre-registered in #1422 with Amendments 1-3. The maintainer re-derived the verdict from the receipt store with main's reducer, byte-identical. The bias half alone was UNDERPOWERED (SE 0.00296 against 0.00179; ~295 windows needed): int4 weights spread the per-window difference wider (SD ~0.031) than the registered prior from an arithmetic-order change (0.0196). The argmax rung decided first."
+    },
+    {
+      "id": "e4b.serve.p127.launch-bound-glue.qwen3.5090.2026-10-09",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P127, one RTX 5090: on the shipped default serve_paged (Qwen3-30B-A3B NF4, decode graphs at buckets 1-16, 16 slots), P127's launch-bound glue changes (Phase 1: three host casts gone, #1448; Phase 2: the router weights' dtype, the fused q+k rotary, the MoE residual folded into the experts' combine, the one-token gather/div and int64 expert ids, #1472/#1477/#1482 with grouped-nf4-gemm #526-#530) decode one request 1.1321x as fast as the stack before #1448 (226 -> 256 tok/s; 516.7 us saved per step) and 16 requests 1.0156x (254.4 us per step), with tokens and per-step logits bitwise identical in every arm and no added memory.",
+      "value": 1.1321,
+      "unit": "decode tok/s ratio B/A (P127 Phase 1 + Phase 2 against the stack before #1448), one request (W1; mean of the B1/A1 and B2/A2 pairs, 1.1316 and 1.1326)",
+      "hardware": "RTX 5090 (sm_120, driver 595.91.07, 32607 MiB), one rented Vast.ai host (machine 153193, instance 55112740, AMD Ryzen 9 9950X, 32 threads, 123 GB RAM), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "A: e4b @a8c01d42 (the last main commit before #1448) + grouped-nf4-gemm @d1f64ba (v0.44.0); B: e4b @7f044dd9 (#1488's merge, pinned by Amendment 2) + grouped-nf4-gemm @d769d502; harness @2332492e (#1511); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0, bitsandbytes 0.50.2, huggingface_hub 1.33.0; Qwen/Qwen3-30B-A3B @ad44e77, NF4 arena baked on the box; the default server with every lever unset except E4B_PAGED_MAX_SEQS=16 and E4B_INT4_TILE_PROGRAMS=1 (fixed in every arm); P109's W1 / W16 workloads, 512-token prompts, 32 and 160 new tokens, 3 timed passes, decode-only slopes; arms A1 B1 B2 A2 in fresh processes, M1 identity only; the diff audit a8c01d42..7f044dd9 with every package commit registered",
+      "measured_on": "2026-10-09",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p127/RESULTS-p127.md",
+        "bench/p127/PREREG-p127.md",
+        "bench/p127/p127_reduce.py",
+        "bench/p127/p127_box.py",
+        "bench/p127/receipts/p127-5090-1/verdict.json",
+        "bench/p127/receipts/p127-5090-1/arm_A1.json",
+        "bench/p127/receipts/p127-5090-1/arm_B1.json",
+        "bench/p127/receipts/p127-5090-1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-09/p127-5090-1/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-09/p127-prove-3/ (receipt.json, the proving run)"
+      ],
+      "notes": "Pre-registered in #1474 with Amendments 1 (#1488) and 2 (#1511). The maintainer re-derived the verdict from the receipt store with main's reducer, byte-identical (FASTER, reasons []). The claim is A to B: Phase 1 + Phase 2 against the stack before #1448, not Phase 2 alone; it covers the P127 delta at 7f044dd9, and later main commits are outside it. The blindness arm M (round-toward-zero router weights) differs from A in its logits at 100 % of positions. Predictions: Q1 (g1 in 1.03-1.12) missed high; Q3 missed because M's tokens agree with A's on only 32.4 % of W16's (the check is more sensitive than predicted); Q2, Q4 and Q5 held. Self-pairs within 0.38 %. The arms are all-or-nothing, so no per-option attribution."
     }
   ]
 }

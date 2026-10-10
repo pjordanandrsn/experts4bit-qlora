@@ -218,6 +218,17 @@ gate. It stays opt-in. A K8-style ppl gate alone would have passed it. Calibrati
 build, depending on the host. `e4b.serve.p125.int4-attn-calib-default.qwen3.5090.2026-10-09`
 ([P125](../bench/p125/RESULTS-p125.md)).
 
+**The launch-bound glue is cut, bitwise.**
+- **What changed.** P127 fused or removed the small launches around the MoE routing and rotary on the default decode
+  path: three host casts (#1448), and five grouped-nf4-gemm options (#526–#530) wired in by #1472, #1477 and #1482.
+- **What it buys.** On Qwen3-30B-A3B the default now decodes one request 1.132× as fast as the stack before #1448 (226
+  → 256 tok/s, 0.52 ms saved per step), and 16 requests 1.016× as fast.
+- **What it costs.** Tokens and per-step logits are bitwise identical, and memory does not change.
+- **In context.** The saving is about the size of the launch-bound routing glue that P123 priced at 11 % of a 4.75 ms
+  step.
+- **Scope.** The claim is the P127 delta at `7f044dd9`.
+`e4b.serve.p127.launch-bound-glue.qwen3.5090.2026-10-09` ([P127](../bench/p127/RESULTS-p127.md)).
+
 **Other opt-ins.** `E4B_PAGED_DECODE_LOOKAHEAD=1` recovers the whole host gap between decode steps, but the gap is
 small: 1.0198× at one request, SLOWER against its 1.02 bar. `E4B_PAGED_LAST_LOGITS=1` projects only the final prompt
 position through the LM head (#1337). `e4b.serve.p118.decode-lookahead.qwen3.5090.2026-10-08`.
