@@ -298,5 +298,5 @@ def test_the_dry_run_catches_a_proof_that_passes_with_a_failed_capacity_readout(
         (w / f).unlink(missing_ok=True)
     mut = subprocess.run([BASH, str(w / "sc1_run.sh")], capture_output=True, text=True, env=env, timeout=300)
     assert mut.returncode != 0 and not (w / "PROVED").exists()
-    summary = (w / "summary.txt").read_text()
-    assert "PROVE: sglang capacity readout failed" in summary and "SC5_PROVE ok" not in summary, summary[-2000:]
+    assert "PROVE: sglang capacity readout failed" in mut.stdout + mut.stderr, (mut.stdout + mut.stderr)[-3000:]
+    assert "SC5_PROVE ok" not in (w / "summary.txt").read_text()
