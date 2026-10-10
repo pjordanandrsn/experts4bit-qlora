@@ -19,7 +19,15 @@ position yields (the true token's fp32 NLL, the argmax id), the same pair ``sc5_
 The model is the one ``serve_paged``'s ``build_engine`` serves at every default, built by the SC5 box. This module only
 scores it. ``pairs`` and ``rows_for`` are pure and CPU-tested; the passes need the card.
 
+The box's command, run with the SAME environment the server was started with (the E4B_PAGED_* knobs, the arena, the
+calibration), and no server running:
+
+    sc5_e4b_quality.py run --windows windows.json --prefill-out q_e4b.json [--decode-out q_e4b_decode.json]
     sc5_e4b_quality.py --self-test
+
+``run`` builds the engine through ``serve_paged.build_engine(PagedServeConfig.from_env())``, so the weights, kernels,
+chunk size and buckets are what the server serves, then scores the runner's model. Each output has the shape
+``sc5_quality.score`` writes (``windows_sha256``, ``prompt_len``, ``steps``, ``positions``, or ``error``).
 """
 from __future__ import annotations
 
@@ -105,6 +113,43 @@ def decode_pass(model, ws: list, prompt_len: int, steps: int, chunk: int, device
     return [pairs(list(lp), w[prompt_len + 1:prompt_len + steps + 1]) for lp, w in zip(lps, ws)]
 
 
+def _record(wf: dict, order: str, fn) -> dict:
+    out = {"framework": "e4b", "windows_sha256": wf["windows_sha256"], "prompt_len": int(wf["prompt_len"]),
+           "steps": int(wf["steps"]), "windows": len(wf["windows"]), "order": order}
+    try:
+        out["positions"] = [[(round(float(a), 6), int(b)) for a, b in w] for w in fn()]
+    except Exception as e:  # noqa: BLE001 - an incomplete pass is that row's VOID, recorded with its reason
+        out["error"] = f"{type(e).__name__}: {e}"[:500]
+    return out
+
+
+def run(windows: str, prefill_out: str, decode_out: str | None) -> int:
+    import json
+
+    import torch
+    from experts4bit_qlora.serve_paged import PagedServeConfig, build_engine
+    wf = json.load(open(windows))
+    pl, st, ws = int(wf["prompt_len"]), int(wf["steps"]), [list(w) for w in wf["windows"]]
+    cfg = PagedServeConfig.from_env()
+    parts = build_engine(cfg)
+    model, device = parts.runner.model, torch.device(cfg.device)
+    served = f"served chunk {cfg.chunk_tokens}, buckets {list(cfg.buckets)}, max_seqs {cfg.max_seqs}"
+    rc = 0
+    for path, order, fn in (
+            (prefill_out, f"prefill-shaped ({served})",
+             lambda: prefill_pass(model, ws, pl, st, cfg.chunk_tokens, device)),
+            (decode_out, f"decode-shaped, P117 paged_pass ({served})",
+             lambda: decode_pass(model, ws, pl, st, cfg.chunk_tokens, device, list(cfg.buckets)))):
+        if not path:
+            continue
+        rec = _record(wf, order, fn)
+        json.dump(rec, open(path, "w"), separators=(",", ":"), sort_keys=True)
+        print(f"SC5_E4B_QUALITY {order.split(' ')[0]} " + (f"ERROR {rec['error']}" if "error" in rec
+              else f"positions={sum(len(x) for x in rec['positions'])}"), flush=True)
+        rc |= 1 if "error" in rec else 0
+    return rc
+
+
 def self_test() -> int:
     import torch
     ok = []
@@ -140,7 +185,22 @@ def self_test() -> int:
     return 0 if all(ok) else 1
 
 
+def main(argv=None) -> int:
+    import argparse
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("cmd", nargs="?", choices=("run",))
+    ap.add_argument("--windows")
+    ap.add_argument("--prefill-out")
+    ap.add_argument("--decode-out")
+    ap.add_argument("--self-test", action="store_true")
+    a = ap.parse_args(argv)
+    if a.self_test:
+        return self_test()
+    if a.cmd == "run" and a.windows and a.prefill_out:
+        return run(a.windows, a.prefill_out, a.decode_out)
+    ap.error("run --windows --prefill-out [--decode-out] | --self-test")
+    return 2
+
+
 if __name__ == "__main__":
-    if "--self-test" in sys.argv[1:]:
-        sys.exit(self_test())
-    sys.exit("sc5_e4b_quality.py is a library for the SC5 box; run it with --self-test")
+    sys.exit(main())

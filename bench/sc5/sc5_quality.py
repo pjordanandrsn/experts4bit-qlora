@@ -30,7 +30,17 @@ The reference (``sc5_ref.py``) records the same pair from bf16 Qwen3-30B-A3B. ``
 - ``meta_info.input_top_logprobs[j]`` is a one-element list ``[[logprob, token_id, text]]``: the argmax.
 - Entry 0 carries no logprob (SC1's ``sc1_sglang_nll._lp`` convention).
 
+**The box's two commands:**
+
+    sc5_quality.py score --framework vllm|sglang --base URL [--model NAME] --windows windows.json --out q.json
+    sc5_quality.py compare --ref ref.json --ref-sha256 HEX --got q.json [--got-key positions] --out cmp.json
     sc5_quality.py --self-test
+
+``score`` sends one request per window (the window's first ``prompt_len + steps + 1`` ids) and keeps the pinned parse
+of each response, positions ``prompt_len + 1 .. prompt_len + steps``. A window whose response the parser refuses
+fails the whole pass: the record then carries ``error`` and no positions, which the reducer reads as that row's VOID.
+``compare`` refuses a reference whose bytes do not hash to ``--ref-sha256`` (the registration's), and windows that
+differ from the reference's.
 """
 from __future__ import annotations
 
@@ -141,6 +151,93 @@ def compare(ref: list, got: list) -> dict:
             "argmax_agreement": round(agree / n, 6), "label": label}
 
 
+def score(framework: str, wf: dict, post, model: str = "sc5") -> dict:
+    """One server pass over the windows file; ``post(path, body) -> dict`` is the HTTP call (injected for tests)."""
+    pl, st = int(wf["prompt_len"]), int(wf["steps"])
+    end = pl + st + 1
+    out = {"framework": framework, "windows_sha256": wf["windows_sha256"], "prompt_len": pl, "steps": st,
+           "windows": len(wf["windows"]), "order": "server prompt pass (prefill-shaped)"}
+    pos = []
+    try:
+        for k, w in enumerate(wf["windows"]):
+            ids = list(w[:end])
+            if len(ids) != end:
+                raise ValueError(f"window {k} holds {len(w)} ids, needs {end}")
+            if framework == "vllm":
+                r = post("/v1/completions", vllm_request(model, ids))
+                pos.append(vllm_positions(r["choices"][0]["prompt_logprobs"], ids, pl + 1, st))
+            elif framework == "sglang":
+                r = post("/generate", sglang_request(ids))
+                pos.append(sglang_positions(r["meta_info"], ids, pl + 1, st))
+            else:
+                raise ValueError(f"unknown framework {framework!r}")
+    except (KeyError, IndexError, TypeError, ValueError) as e:
+        out["error"] = f"{type(e).__name__}: {e}"[:500]
+        return out
+    out["positions"] = pos
+    return out
+
+
+def _http_post(base: str, timeout: float = 600.0):
+    import urllib.request
+
+    def post(path: str, body: dict) -> dict:
+        req = urllib.request.Request(base.rstrip("/") + path, data=json.dumps(body).encode(),
+                                     headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode())
+    return post
+
+
+def compare_files(ref_path: str, ref_sha256: str, got: dict) -> dict:
+    """``compare`` over files: the reference is verified by its bytes' sha256 first, then its windows against ``got``'s."""
+    import hashlib
+    body = open(ref_path, "rb").read()
+    have = hashlib.sha256(body).hexdigest()
+    if have != ref_sha256:
+        return {"error": f"reference sha256 {have} is not the registered {ref_sha256}"}
+    ref = json.loads(body)
+    if ref.get("windows_sha256") != got.get("windows_sha256"):
+        return {"error": "the scored windows are not the reference's (windows_sha256 differs)"}
+    if "error" in got:
+        return {"error": got["error"]}
+    try:
+        return compare(ref["positions"], got["positions"])
+    except (KeyError, ValueError) as e:
+        return {"error": f"{type(e).__name__}: {e}"[:500]}
+
+
+def main(argv=None) -> int:
+    import argparse
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("cmd", nargs="?", choices=("score", "compare"))
+    ap.add_argument("--framework", choices=("vllm", "sglang"))
+    ap.add_argument("--base")
+    ap.add_argument("--model", default="sc5")
+    ap.add_argument("--windows")
+    ap.add_argument("--ref")
+    ap.add_argument("--ref-sha256")
+    ap.add_argument("--got")
+    ap.add_argument("--out")
+    ap.add_argument("--self-test", action="store_true")
+    a = ap.parse_args(argv)
+    if a.self_test:
+        return self_test()
+    if a.cmd == "score" and a.framework and a.base and a.windows and a.out:
+        rec = score(a.framework, json.load(open(a.windows)), _http_post(a.base), a.model)
+        json.dump(rec, open(a.out, "w"), separators=(",", ":"), sort_keys=True)
+        print(f"SC5_QUALITY {a.framework} windows={rec['windows']} " + (f"ERROR {rec['error']}" if "error" in rec
+              else f"positions={sum(len(p) for p in rec['positions'])}"), flush=True)
+        return 1 if "error" in rec else 0
+    if a.cmd == "compare" and a.ref and a.ref_sha256 and a.got and a.out:
+        res = compare_files(a.ref, a.ref_sha256, json.load(open(a.got)))
+        json.dump(res, open(a.out, "w"), indent=1, sort_keys=True)
+        print(f"SC5_COMPARE {a.got} {json.dumps(res, sort_keys=True)[:300]}", flush=True)
+        return 1 if "error" in res else 0
+    ap.error("score --framework --base --windows --out | compare --ref --ref-sha256 --got --out | --self-test")
+    return 2
+
+
 def self_test() -> int:
     ok = []
     ids = [11, 22, 33, 44, 55]
@@ -195,11 +292,33 @@ def self_test() -> int:
               and c["nll_delta_window_max"] == 0.005 and c["nll_delta_window_min"] == 0.0)
     ok.append(compare(ref, [[(1.05, 5), (2.05, 6)], [(0.55, 7), (0.3, 8)]])["label"] == "FAR")
     ok.append(refused(compare, ref, ref[:1]))
+    # score(): the server pass over a two-window file, through a stub server that answers with the pinned shapes
+    wf = {"windows": [[1, 2, 3, 4, 9], [5, 6, 7, 8, 9]], "prompt_len": 1, "steps": 2, "windows_sha256": "w"}
+
+    def vllm_stub(path, body):
+        ids = body["prompt"]
+        slots = [None] + [{str(t): {"logprob": -0.5, "rank": 1, "decoded_token": "x"}} for t in ids[1:]]
+        return {"choices": [{"prompt_logprobs": slots}]}
+
+    def sglang_stub(path, body):
+        ids = body["input_ids"]
+        return {"meta_info": {"input_token_logprobs": [[None, ids[0], ""]] + [[-0.25, t, ""] for t in ids[1:]],
+                              "input_top_logprobs": [None] + [[[-0.25, t, ""]] for t in ids[1:]]}}
+    sv = score("vllm", wf, vllm_stub)
+    ok.append(sv["positions"] == [[(0.5, 3), (0.5, 4)], [(0.5, 7), (0.5, 8)]] and "error" not in sv)
+    sg = score("sglang", wf, sglang_stub)
+    ok.append(sg["positions"] == [[(0.25, 3), (0.25, 4)], [(0.25, 7), (0.25, 8)]])
+
+    def vplus1(path, body):                                          # the V+1 trap: refused, recorded as the pass's error
+        r = vllm_stub(path, body)
+        r["choices"][0]["prompt_logprobs"][2] = {str(t): {"logprob": -1.0, "rank": t} for t in range(1, 5)}
+        return r
+    sx = score("vllm", wf, vplus1)
+    ok.append("error" in sx and "positions" not in sx and "4 entries" in sx["error"])
+    ok.append("error" in score("vllm", {**wf, "windows": [[1, 2]]}, vllm_stub))   # a window shorter than its width
     print(f"sc5_quality self-test {'OK' if all(ok) else 'FAILED'} ({sum(ok)}/{len(ok)} cases)")
     return 0 if all(ok) else 1
 
 
 if __name__ == "__main__":
-    if "--self-test" in sys.argv[1:]:
-        sys.exit(self_test())
-    sys.exit("sc5_quality.py is a library for the SC5 box and reducer; run it with --self-test")
+    sys.exit(main())
