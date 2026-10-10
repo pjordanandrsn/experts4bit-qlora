@@ -58,7 +58,7 @@ esac
 exit 0''',
     "python": r'''echo "python $*" >> "$PWD/dryrun.log"
 case "${1:-}" in
-  -m) exit 0;;
+  -m) [ "${2:-}" = pytest ] && exit "${DRYRUN_PYTEST_RC:-0}"; exit 0;;
   -c) case "$2" in
         *"print(torch.__version__"*) echo "2.8.0+cu128";;
         *hf_hub_download*) mkdir -p "$PWD/hf/blobs" "$PWD/hf/head"
@@ -97,7 +97,7 @@ def test_ci_runs_the_dry_run_rather_than_skipping_it():
     assert sys.platform != "win32" and shutil.which("bash"), "CI found no bash: the SD2 dry run would be skipped"
 
 
-def _run(tmp_path, run_text, nonce="a" * 64):
+def _run(tmp_path, run_text, nonce="a" * 64, deadline="4102444800", extra_env=None):
     w = tmp_path / "w"
     w.mkdir(exist_ok=True)
     (tmp_path / "meminfo").write_text("MemTotal:       129000000 kB\n")
@@ -117,8 +117,8 @@ def _run(tmp_path, run_text, nonce="a" * 64):
         p.write_text("#!/bin/bash\n" + body + "\n")
         p.chmod(p.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     env = {"PATH": f"{b}:{os.environ.get('PATH', '/usr/bin:/bin')}", "HOME": str(tmp_path), "LANG": "C",
-           "SD2_RUN_NONCE": nonce, "SD2_RUN_ID": "sd2-dryrun", "SD2_DEADLINE_EPOCH": "4102444800", "SD2_INSTANCE_ID": "0",
-           "E4B_SHA": HARNESS}
+           "SD2_RUN_NONCE": nonce, "SD2_RUN_ID": "sd2-dryrun", "SD2_DEADLINE_EPOCH": deadline, "SD2_INSTANCE_ID": "0",
+           "E4B_SHA": HARNESS, **(extra_env or {})}
     out = subprocess.run(["bash", str(w / "sd2_run.sh")], capture_output=True, text=True, env=env, timeout=300, cwd=w)
     return w, out
 
@@ -166,3 +166,24 @@ def test_the_dry_run_catches_a_size_check_that_does_not_follow_the_cache_symlink
     assert RUN.count(anchor) == 1
     w, out = _run(tmp_path, RUN.replace(anchor, '[ "$(stat -c %s "$HEAD")" = "$HEAD_BYTES" ]'), nonce="d" * 64)
     assert out.returncode == 11 and "HEAD MISMATCH" in out.stdout + out.stderr
+
+
+@needs_bash
+def test_a_deadline_shorter_than_the_registered_guard_is_refused_at_once(tmp_path):
+    """Amendment 1b: sd2-prove-1 launched under a 0.75 h guard and stopped before the fetch. A launch whose deadline
+    leaves less than the registered guard now refuses before anything is installed (rc 17)."""
+    import time
+    w, out = _run(tmp_path, RUN, nonce="e" * 64, deadline=str(int(time.time()) + 2700))
+    assert out.returncode == 17 and "REFUSED: the deadline leaves" in out.stdout + out.stderr
+    calls = (w / "dryrun.log").read_text() if (w / "dryrun.log").exists() else ""
+    assert "pip install" not in calls and "hf_fetch_watchdog" not in calls
+
+
+@needs_bash
+def test_failing_gpu_tests_stop_the_lane_before_the_fetch(tmp_path):
+    """Amendment 1b: the GPU tests need no checkpoint, so they run first; a failure stops the lane (rc 24) with their
+    record kept and no 62 GB download."""
+    w, out = _run(tmp_path, RUN, nonce="f" * 64, extra_env={"DRYRUN_PYTEST_RC": "1"})
+    assert out.returncode == 24 and "GPU TESTS FAILED" in out.stdout + out.stderr
+    assert (w / "gpu_tests.json").is_file()
+    assert "--repo Qwen/Qwen3-30B-A3B" not in (w / "dryrun.log").read_text()      # no checkpoint fetch
