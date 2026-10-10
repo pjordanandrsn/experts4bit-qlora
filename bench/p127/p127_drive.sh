@@ -75,6 +75,9 @@ else
   say "no token file, staging none"
 fi
 LANE_STARTED_AT=$(date +%s)
+# NOTE (P130, after p130-prove-1): if this start's connection drops, the child may already have started. This driver
+# fails (21) without resending, which is safe; bench/p130/p130_drive.sh now probes the nonce on a fresh connection and
+# adopts a start that happened. A later P127 launch should take the same probe before it runs again.
 LAUNCH_REPLY=$({ cat "$LANE_HELPER"; printf '%s\n' "cd $W || exit 20; nohup env $PASS bash p127_run.sh > outer.log 2>&1 < /dev/null & child=\$!; identity=\$(lane_proc_snapshot \$child); end=\$((\$(date +%s)+30)); while [ \$(date +%s) -lt \$end ]; do [ \"\$(cat P127_RUN_NONCE 2>/dev/null)\" = '$NONCE' ] && { echo started:\$child; echo identity:\$identity; exit 0; }; kill -0 \$child 2>/dev/null || { wait \$child; echo child-exited-early:rc=\$? >&2; exit 125; }; sleep 1; done; echo nonce-handshake-timeout >&2; exit 124"; } | $SSH bash -s) || { say "start failed: child did not bind the nonce"; exit 21; }
 printf '%s\n' "$LAUNCH_REPLY"
 LANE_PID=$(printf '%s\n' "$LAUNCH_REPLY" | sed -n 's/^started:\([0-9][0-9]*\)$/\1/p')
