@@ -20,7 +20,7 @@ REPO = HERE.parents[1]
 CLOSURE = ("bench/q235/q235_run.sh", "bench/q235/q235_bootstrap.py", "bench/q235/q235_fetch.py", "bench/q235/q235_tiny.py",
            "bench/q235/wheels.json", "bench/q235/model_files.json", "bench/q235/instrument/q235_box.py",
            "bench/q235/instrument/q235_tokens.py", "bench/q235/instrument/mk_slice.py", "bench/tc1/tc1_arm.py",
-           "bench/dq11/dq11_bootstrap.py", "bench/dq11/dq11_common.py", "bench/dq11/dq11_require_git.sh")
+           "bench/dq11/dq11_require_git.sh")
 MANIFEST = HERE / "q235.sha256"
 
 

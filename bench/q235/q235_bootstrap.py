@@ -1,8 +1,8 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
 """Q235's box install (bench/q235/PREREG-q235.md, "Before any rental", gates 3-4). Never creates compute.
 
-1. Every wheel in the hash-locked ``wheels.json`` is fetched with DQ11's checked opener (allowlisted origins only), its
-   sha256 and size checked, and the set installed by pip with ``--require-hashes --no-index --no-deps --only-binary=:all:``.
+1. Every wheel in the hash-locked ``wheels.json`` is fetched from an allowlisted origin (DQ11's list), its sha256 and size
+   checked, and the set installed by pip with ``--require-hashes --no-index --no-deps --only-binary=:all:``.
 2. grouped-nf4-gemm and this repository are installed from git at their pinned commits (git is provided first by
    ``dq11_require_git.sh``), and pip's recorded commit for each must equal the pin.
 3. ``install.json`` records the lock's sha256, the commits and the versions the interpreter then imports.
@@ -12,20 +12,52 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 
-from dq11_bootstrap import fetch_wheel, read_wheel, validate_wheel_origins
-from dq11_common import file_sha
+ALLOWED_WHEEL_ORIGINS = frozenset({"files.pythonhosted.org", "download.pytorch.org", "download-r2.pytorch.org", "pypi.nvidia.com"})
+USER_AGENT = "q235-bootstrap/1"
 
 GIT = {"grouped-nf4-gemm": ("https://github.com/pjordanandrsn/grouped-nf4-gemm.git", "GNF4_SHA", "grouped_nf4_gemm"),
        "experts4bit-qlora": ("https://github.com/pjordanandrsn/experts4bit-qlora.git", "E4B_SHA", "experts4bit_qlora")}
 VERSIONS = ("torch", "transformers", "bitsandbytes", "accelerate", "huggingface_hub", "safetensors", "tokenizers", "numpy",
             "triton", "grouped-nf4-gemm", "experts4bit-qlora")
+
+
+def file_sha(path: Path) -> str:
+    h = hashlib.sha256()
+    with Path(path).open("rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def validate_wheel_origins(rows: list) -> None:
+    for r in rows:
+        host = urlparse(r["url"]).hostname
+        if host not in ALLOWED_WHEEL_ORIGINS:
+            raise ValueError(f"{r.get('name')}: unregistered wheel origin {host}")
+
+
+def fetch_wheel(url: str, *, probe: bool = False):
+    """One opener for the pre-rental probe (one byte) and the full download; any non-2xx or transport error raises."""
+    headers = {"User-Agent": USER_AGENT, **({"Range": "bytes=0-0"} if probe else {})}
+    try:
+        response = urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=60)
+    except (HTTPError, URLError, OSError) as e:
+        raise RuntimeError(f"wheel fetch refused: {url}: {e}") from e
+    if not 200 <= response.status < 300:
+        response.close()
+        raise RuntimeError(f"wheel fetch refused: {url}: status {response.status}")
+    return response
 
 
 def check_lock(lock: dict) -> list:
@@ -58,7 +90,7 @@ def fetch(rows: list, cache: Path) -> None:
         if not (path.is_file() and path.stat().st_size == r["size"] and file_sha(path) == r["sha256"]):
             part = path.with_suffix(".partial")
             with fetch_wheel(r["url"]) as source, part.open("wb") as target:
-                while block := read_wheel(source, r["url"], 1 << 20):
+                while block := source.read(1 << 20):
                     target.write(block)
             part.replace(path)
         if path.stat().st_size != r["size"] or file_sha(path) != r["sha256"]:

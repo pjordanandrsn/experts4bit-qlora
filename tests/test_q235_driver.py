@@ -53,11 +53,7 @@ def test_staging_refuses_an_asset_that_is_not_the_locked_bytes(tmp_path):
 
 
 def test_the_wheel_lock_is_complete_hashed_and_from_allowlisted_origins():
-    sys.path.insert(0, str(ROOT / "bench" / "dq11"))
-    try:
-        boot = _mod("q235_bootstrap", Q / "q235_bootstrap.py")
-    finally:
-        sys.path.remove(str(ROOT / "bench" / "dq11"))
+    boot = _mod("q235_bootstrap", Q / "q235_bootstrap.py")
     lock = json.loads((Q / "wheels.json").read_text())
     rows = boot.check_lock(lock)
     versions = {r["name"]: r["version"] for r in rows}
