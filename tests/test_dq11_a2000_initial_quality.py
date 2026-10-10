@@ -82,7 +82,8 @@ def test_tiny_mode_cannot_be_combined(sealed, monkeypatch):
 
 
 @pytest.mark.parametrize("sharded", [False, True])
-def test_loader_pad_zeroing_refuses_and_checkpoint_restore_matches_without_changing_L(sealed, sharded):
+@pytest.mark.parametrize("padding_idx", [None, 0])
+def test_loader_pad_zeroing_refuses_and_checkpoint_restore_matches_without_changing_L(sealed, sharded, padding_idx):
     import torch
     from safetensors.torch import save_file
 
@@ -92,7 +93,7 @@ def test_loader_pad_zeroing_refuses_and_checkpoint_restore_matches_without_chang
     class Tiny(torch.nn.Module):
         def __init__(self):
             super().__init__()
-            self.embed_tokens = torch.nn.Embedding(8, 4, padding_idx=0, dtype=torch.bfloat16)
+            self.embed_tokens = torch.nn.Embedding(8, 4, padding_idx=padding_idx, dtype=torch.bfloat16)
             self.lm_head = torch.nn.Linear(4, 8, bias=False, dtype=torch.bfloat16)
             self.requires_grad_(False)
 
@@ -133,17 +134,6 @@ def test_loader_pad_zeroing_refuses_and_checkpoint_restore_matches_without_chang
     assert base_census(models["L"]) == before_L
     write_initial_rows(root, rows)
     assert quality.report(root)["status"] == "INITIAL_QUALITY_PASS"
-
-
-def test_checkpoint_restore_without_padding_does_not_read_a_checkpoint(tmp_path):
-    import torch
-
-    from dq11_arm import restore_padding_embedding
-
-    embedding = torch.nn.Embedding(8, 4)
-    before = embedding.weight.detach().clone()
-    assert restore_padding_embedding(SimpleNamespace(get_input_embeddings=lambda: embedding), tmp_path) is None
-    assert torch.equal(embedding.weight, before)
 
 
 @pytest.mark.parametrize("mutation", ["none", "name", "sm", "cuda", "torch", "count", "free", "total"])

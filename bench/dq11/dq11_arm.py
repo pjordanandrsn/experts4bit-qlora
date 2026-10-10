@@ -50,10 +50,8 @@ def runtime(directory):
 
 
 def restore_padding_embedding(model, snapshot):
-    """Undo the loader's pad-row zeroing so frozen values match the checkpoint."""
+    """Restore registered Mistral/Tiny unk row 0, regardless of pad metadata."""
     embedding = model.get_input_embeddings()
-    if embedding.padding_idx is None:
-        return
     from safetensors import safe_open
     import torch
 
@@ -62,7 +60,7 @@ def restore_padding_embedding(model, snapshot):
     if not path.is_file():
         index = json.loads((snapshot / "model.safetensors.index.json").read_text())
         path = snapshot / index["weight_map"][key]
-    row = embedding.padding_idx
+    row = 0
     with safe_open(str(path), framework="pt", device="cpu") as source:
         original = source.get_slice(key)[row:row + 1]
     with torch.no_grad():
@@ -157,11 +155,10 @@ def prepare(directory, arm, *, quality_read=False):
         model.config.use_cache = False
         trainable = list(adapter_slots(model)[0].values())
         report = {"placement": "device", "compile_disable": True, "return_logits": True}
-        if restored_pad_row is not None:
-            report["pad_row_restored"] = restored_pad_row
-            report["default_deviation"] = (
-                "pad row restored (Unsloth's patch_tokenizer maps absent pad to unk 0 and zeroes embedding row 0)"
-            )
+        report["pad_row_restored"] = restored_pad_row
+        report["default_deviation"] = (
+            "pad row restored (Unsloth's patch_tokenizer maps absent pad to unk 0 and zeroes embedding row 0)"
+        )
     checkpoints = [module for module in model.modules() if getattr(module, "gradient_checkpointing", False)]
     if not checkpoints or any(getattr(getattr(module, "_gradient_checkpointing_func", None), "keywords", {}).get("use_reentrant") is not False
                               for module in checkpoints):

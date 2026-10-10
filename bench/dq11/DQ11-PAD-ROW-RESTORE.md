@@ -19,7 +19,9 @@ embedding row. The equality check correctly rejected those different values.
 The matched configuration restores that row from the original local checkpoint
 immediately after loading U or U0, before installing adapters. A safetensors
 slice reads only the original row, from the indexed real-model shard or the
-single-file Tiny checkpoint. L does not call the restore. Full frozen-value
+single-file Tiny checkpoint. The registered row is 0, independent of whether
+the loaded embedding's `padding_idx` is set or absent; restoration never silently
+skips because of that metadata. L does not call the restore. Full frozen-value
 equality, the canonical initializer, original inputs and the 0.05 absolute PPL
 budget remain unchanged.
 
