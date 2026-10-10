@@ -795,3 +795,68 @@ pins `sd2-5090-1`'s own V0: under a2 it is `GATE_TOO_WEAK:c_R1, c_C1`, and under
 
 **Unchanged:** the logit gate and its 0.25 bound, every other V0 item, the read's stages, its rule, its target, its
 audit and its budget.
+
+## Amendment 5 (2026-10-10): the key-row gate at layer 0, after `sd2-prove-4`
+
+The maintainer ruled on this amendment before any code (option B).
+
+**What happened.** `sd2-prove-4` (**$0.784**, teardown complete) read **FAILED** under rule a3. The maintainer
+re-derived it from the receipts with main's reducer. The failing items are `addressing:R0_k1` .. `C0_k3`: all six
+real-build records fail the key-row gate, and every one of them is inside the logit gate.
+- **At layer 0 the gate came out exactly as Amendment 4 derived it:**
+  - the real build at most **0.00093** rad (bound 0.142);
+  - (c) at **1.058** (bound ≥ 0.858);
+  - (b) at 3.07;
+  - (a) at 0.0, since its fault is on the read side, and the logits catch it.
+- **At depth the real build's stored keys move away from the T == 1 keys.** The per-layer maxima climb from about 0 at
+  layer 0, through 0.1–0.5 rad mid-stack, to spikes near π, with a radial drift of up to 6.9.
+  - The informative floor (2⁻⁷ × amax) admitted about 99 % of cells. So a per-layer maximum is set by a few
+    small-magnitude cells, where the arithmetic difference T > 1 accumulates becomes a large relative error.
+  - Amendment 4 registered that the margin "is NOT analytic" at depth. That caveat came true, and its prediction
+    (≤ 0.25 rad at any layer) missed.
+- **Everything else held:**
+  - the GPU tests (123 passed, none skipped), the census and the capture;
+  - the draft (766 of 768) and the transition.
+- **The logit numbers reproduce `sd2-prove-3`'s bit for bit** on the same host (machine 145701) in 11 of 12 records. That
+  covers the six real-build records, (a), (c), the capture, the draft and the transition, so the key capture leaves the
+  real verify unchanged.
+  - **A note on (b):** it differs between the two runs (row-0 mean |Δ log p| 2.41 → 1.00). It writes each verify row one
+    position low, so its rows read stale or unwritten key memory, and the new key reads perturb that state. (b) is still
+    caught by both gates.
+
+**The change, stated plainly as post hoc.** It is prompted by Amendment 4's own registered caveat, and it is made after
+seeing `sd2-prove-4`'s result:
+- **The key-row gate reads layer 0 only.**
+  - Layer 0 is where its derivation is analytic: both paths feed the same token's embedding.
+  - A position error enters every layer's write, layer 0 included, so layer 0 catches (c) by construction.
+- **The bound stays 0.5 rad.**
+- **The logit gate is unchanged.** (a), a read-side fault, stays its job.
+- **Depth is reported and never gated:**
+  - the per-layer maxima;
+  - the cell quantiles (p50, p90, p99 and the max), overall and per layer;
+  - the same statistics at higher magnitude floors, 2⁻⁵ and 2⁻³ × amax. These separate small-cell noise from
+    disagreement in large cells. If large cells at depth ever rotate a lot, the read says so.
+- **Nothing is fitted.** The real build's median-of-layer-maxima at depth (0.23–0.59) is far from the mutants'
+  (2.2–3.0), but that distribution is not turned into a threshold after seeing it.
+
+**Rule a4** (`sd2_reduce.py`, now the default for `--prove`, `--gate-v` and `--read`):
+- a (row, k) passes when its logit max is ≤ 0.25 and its layer-0 key-row max is < 0.5 rad;
+- a mutant is caught when its logit max is > 0.25 or its layer-0 key-row max is ≥ 0.5 rad;
+- the derivation is checked on both sides, as the maintainer set it for the read's out-of-sample test:
+  - a real (row, k) whose layer-0 max exceeds **0.142** fails `derivation:<key>`;
+  - a shift mutant (c) whose layer-0 max is below **0.858** fails `derivation:<key>`;
+- every record must carry its key rows, and the census must show θ₀ = 1;
+- rules a3, a2 and a1 stay, so every earlier receipt re-derives as registered;
+- the self-test pins `sd2-prove-4`'s own receipt: PROVED under a4, and FAILED under a3 with exactly the six addressing
+  items.
+
+**No `sd2-prove-5`** (the maintainer's ruling). The layer-0 values were registered predictions and landed exactly. Same-host
+reproduction is bit for bit, so a new proof on R0 and C0 would add nothing in sample.
+
+**The out-of-sample test is `sd2-5090-2`.** It is Amendment 3's read, unchanged, at target `88ae1cfd` with the same audit.
+Its V0 runs on fresh rows under rule a4 and fails closed before any timing. It must show:
+- (c) at or above 0.858 rad at layer 0 on R1 and on C1;
+- the real build at or below 0.142 rad at layer 0 on every (row, k).
+
+The ceiling is $3.66. The read needs the maintainer's separate ACK after this amendment merges, and it takes the rental
+slot after P130's proof. SD2's total so far is $2.737.

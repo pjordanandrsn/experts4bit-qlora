@@ -45,7 +45,9 @@ BAR_ADDRESS, BAR_DRAFT = 0.90, 0.99
 BOUND_DLOGP = 0.25          # Amendment 2: nats; calibrated on sd2-prove-2 (real <= 0.037, every mutant >= 0.89)
 BOUND_ROT = 0.5             # Amendment 4: radians of RoPE pair 0, which turns 1 rad per position: the midpoint between a
 #                             key at its position and a key one position off (derived, not fitted; PREREG Amendment 4)
-RULES = ("a3", "a2", "a1")
+BOUND_L0_REAL = 0.142      # Amendment 5: the real build's derived layer-0 bound, arcsin(2^-6 + 2^-3 + 2^-10)
+BOUND_L0_SHIFT = 0.858     # ... and a one-position error's, 1 - 0.142 (both registered in Amendment 4)
+RULES = ("a4", "a3", "a2", "a1")
 BUCKETS = ("1", "2", "3", "4", "8", "16")
 POSTS = ("2", "3", "4")
 
@@ -61,10 +63,22 @@ def rot_max(x):
     return ((x or {}).get("k_rot") or {}).get("max_abs_angle")
 
 
-def judge(prove: dict, gpu: dict, rule: str = "a3", rows=("R0", "C0"), mutant_keys=("a", "b", "c")) -> dict:
+def rot_l0(x):
+    """Amendment 5: the same at layer 0 only, or None (no key rows, or no informative cell at layer 0)."""
+    return ((x or {}).get("k_rot") or {}).get("max_abs_angle_layer0")
+
+
+def _is_shift(m):
+    """Mutant (c), the RoPE position shift: "c" in the proof, "c_R1" / "c_C1" in the read."""
+    return m == "c" or m.startswith("c_")
+
+
+def judge(prove: dict, gpu: dict, rule: str = "a4", rows=("R0", "C0"), mutant_keys=("a", "b", "c")) -> dict:
     """The proof's items; ``rows`` and ``mutant_keys`` default to the proof's, and the read's V0 passes its own.
-    Rule a3 (Amendment 4) is a2's logit gate AND the key-row gate: a (row, k) passes when both hold, a mutant is caught
-    when either fails, and every record must carry its key rows."""
+    Rule a3 (Amendment 4) is a2's logit gate AND the key-row gate over every layer. Rule a4 (Amendment 5, the default)
+    takes the key-row gate at layer 0 only, where its derivation is analytic, and checks that derivation on both sides:
+    the real build at or below 0.142 rad and the shift mutant (c) at or above 0.858 (``derivation:<key>``). A (row, k)
+    passes when both gates hold; a mutant is caught when either fails; every record must carry its key rows."""
     if rule not in RULES:
         raise ValueError(f"rule {rule!r}: expected one of {RULES}")
     fails = []
@@ -77,7 +91,7 @@ def judge(prove: dict, gpu: dict, rule: str = "a3", rows=("R0", "C0"), mutant_ke
             fails.append(f"census:post_{n}")
     if ((c.get("spec_build") or {}).get("hooks")) != 3:
         fails.append("census:hooks")
-    if rule == "a3" and c.get("rope_inv_freq0") != 1.0:
+    if rule in ("a3", "a4") and c.get("rope_inv_freq0") != 1.0:
         fails.append("census:rope")                      # the key-row gate's 1 rad per position
     cap = prove.get("capture_bitwise") or {}
     for n in POSTS:
@@ -95,6 +109,11 @@ def judge(prove: dict, gpu: dict, rule: str = "a3", rows=("R0", "C0"), mutant_ke
             if rule == "a3":
                 rm = rot_max(x)
                 ok = ok and rm is not None and ((x or {}).get("k_rot") or {}).get("informative", 0) > 0 and rm < BOUND_ROT
+            elif rule == "a4":
+                r0 = rot_l0(x)
+                ok = ok and r0 is not None and r0 < BOUND_ROT
+                if r0 is not None and r0 > BOUND_L0_REAL:
+                    fails.append(f"derivation:{key}")
         if not ok:
             fails.append(f"addressing:{key}")
     muts = prove.get("mutants") or {}
@@ -106,10 +125,15 @@ def judge(prove: dict, gpu: dict, rule: str = "a3", rows=("R0", "C0"), mutant_ke
             if x.get("rows_agree", 1.0) >= BAR_ADDRESS and x.get("cont_agree", 1.0) >= BAR_ADDRESS:
                 fails.append(f"GATE_TOO_WEAK:{m}")
         else:
-            lm, rm = logit_max(x), rot_max(x)
-            if lm is None or (rule == "a3" and rm is None):
+            lm, rm, r0 = logit_max(x), rot_max(x), rot_l0(x)
+            if lm is None or (rule in ("a3", "a4") and not (x or {}).get("k_rot")):
                 fails.append(f"mutant:{m}:missing")
-            elif lm <= BOUND_DLOGP and (rule != "a3" or rm < BOUND_ROT):
+            elif rule == "a4":
+                if lm <= BOUND_DLOGP and not (r0 is not None and r0 >= BOUND_ROT):
+                    fails.append(f"GATE_TOO_WEAK:{m}")
+                if _is_shift(m) and not (r0 is not None and r0 >= BOUND_L0_SHIFT):
+                    fails.append(f"derivation:{m}")
+            elif lm <= BOUND_DLOGP and (rule != "a3" or rm is None or rm < BOUND_ROT):
                 fails.append(f"GATE_TOO_WEAK:{m}")
     d = prove.get("draft") or {}
     if d.get("of", 0) <= 0 or d.get("agree", 0) < BAR_DRAFT:
@@ -122,11 +146,13 @@ def judge(prove: dict, gpu: dict, rule: str = "a3", rows=("R0", "C0"), mutant_ke
         fails.append("gpu_tests")
     fields = ("rows_agree", "cont_agree", "mean_abs_dlogp")
     return {"verdict": "PROVED" if not fails else "FAILED", "fails": fails, "rule": rule,
-            "bound_dlogp": BOUND_DLOGP if rule in ("a2", "a3") else None, "bound_rot": BOUND_ROT if rule == "a3" else None,
+            "bound_dlogp": BOUND_DLOGP if rule in ("a2", "a3", "a4") else None,
+            "bound_rot": BOUND_ROT if rule in ("a3", "a4") else None,
+            "bounds_l0": [BOUND_L0_REAL, BOUND_L0_SHIFT] if rule == "a4" else None,
             "addressing": {k: dict({kk: addr[k].get(kk) for kk in fields}, logit_max=logit_max(addr[k]),
-                                   rot_max=rot_max(addr[k])) for k in want if k in addr},
+                                   rot_max=rot_max(addr[k]), rot_l0=rot_l0(addr[k])) for k in want if k in addr},
             "mutants": {m: dict({kk: (muts.get(m) or {}).get(kk) for kk in fields}, logit_max=logit_max(muts.get(m)),
-                                rot_max=rot_max(muts.get(m))) for m in mutant_keys},
+                                rot_max=rot_max(muts.get(m)), rot_l0=rot_l0(muts.get(m))) for m in mutant_keys},
             "draft": d, "transition": t}
 
 
@@ -135,10 +161,12 @@ def _good() -> tuple:
                         "spec_build": {"hooks": 3}, "rope_inv_freq0": 1.0},
              "capture_bitwise": {n: True for n in POSTS},
              "addressing": {f"{r}_k{k}": {"rows_agree": 0.98, "cont_agree": 0.97, "mean_abs_dlogp": [0.01] * (k + 1),
-                                          "k_rot": {"max_abs_angle": 0.02, "informative": 500}}
+                                          "k_rot": {"max_abs_angle": 0.02, "max_abs_angle_layer0": 0.001,
+                                                    "informative": 500}}
                             for r in ("R0", "C0") for k in (1, 2, 3)},
              "mutants": {m: {"rows_agree": 0.3, "cont_agree": 0.3, "mean_abs_dlogp": [0.02, 2.0, 2.0, 2.0],
-                             "k_rot": {"max_abs_angle": 1.0, "informative": 500}} for m in ("a", "b", "c")},
+                             "k_rot": {"max_abs_angle": 1.0, "max_abs_angle_layer0": l0, "informative": 500}}
+                         for m, l0 in (("a", 0.0), ("b", 3.0), ("c", 1.0))},
              "draft": {"agree": 0.995, "same": 764, "of": 768},
              "transition": {"spec_steps_alone": 4, "dropped_batched": 1, "len_a": 64, "len_b": 16, "want": [64, 16],
                             "mirror_mismatches": 0, "state_left": 0}}
@@ -161,6 +189,54 @@ def _sd2_prove_2() -> dict:
         "c": {"rows_agree": 0.9375, "cont_agree": 0.90625, "mean_abs_dlogp": [1.179762, 0.005705, 0.010378, 0.011125]}}
     p["draft"] = {"agree": 766 / 768, "same": 766, "of": 768}
     return p
+
+
+def _sd2_prove_4() -> tuple:
+    """sd2-prove-4's judged fields (store 7f204829): FAILED under a3 (the key rows at depth), PROVED under a4."""
+    fx = {'census': {'graph_status': {'1': 'graph',
+                                       '2': 'graph',
+                                       '3': 'graph',
+                                       '4': 'graph',
+                                       '8': 'graph',
+                                       '16': 'graph'},
+                      'post_graphs': {'2': 'graph', '3': 'graph', '4': 'graph'},
+                      'hooks': 3,
+                      'rope_inv_freq0': 1.0},
+           'capture_bitwise': {'2': True, '3': True, '4': True},
+           'draft': {'agree': 0.9973958333333334, 'same': 766, 'of': 768},
+           'transition': {'spec_steps_alone': 4,
+                          'dropped_batched': 1,
+                          'len_a': 64,
+                          'len_b': 16,
+                          'want': [64, 16],
+                          'mirror_mismatches': 0,
+                          'state_left': 0},
+           'gpu': {'rc': 0, 'passed': 123, 'skipped_for_card': 0},
+           'addressing': {'R0_k1': {'d': [0.002939, 0.002148], 'rot': 2.771732, 'l0': 7.9e-05, 'inf': 6081},
+                          'R0_k2': {'d': [0.006527, 0.00338, 0.003902], 'rot': 3.10298, 'l0': 7.9e-05, 'inf': 9127},
+                          'R0_k3': {'d': [0.005385, 0.002219, 0.000969, 0.002394],
+                                    'rot': 3.122048,
+                                    'l0': 7.9e-05,
+                                    'inf': 12171},
+                          'C0_k1': {'d': [0.019688, 0.026519], 'rot': 3.085023, 'l0': 0.00093, 'inf': 6108},
+                          'C0_k2': {'d': [0.016608, 0.013777, 0.033104], 'rot': 3.051326, 'l0': 0.0, 'inf': 9168},
+                          'C0_k3': {'d': [0.01489, 0.007156, 0.006616, 0.036915],
+                                    'rot': 3.127353,
+                                    'l0': 0.0,
+                                    'inf': 12221}},
+           'mutants': {'a': {'d': [0.023935, 2.149183, 2.789426, 2.469237], 'rot': 3.141573, 'l0': 0.0, 'inf': 6088},
+                       'b': {'d': [0.997966, 3.54668, 3.781091, 0.006588], 'rot': 3.136522, 'l0': 3.066406, 'inf': 6086},
+                       'c': {'d': [1.179762, 0.005705, 0.010378, 0.011125],
+                             'rot': 3.097427,
+                             'l0': 1.057866,
+                             'inf': 6081}}}
+    p = {"census": {"graph_status": fx["census"]["graph_status"], "post_graphs": fx["census"]["post_graphs"],
+                     "spec_build": {"hooks": fx["census"]["hooks"]}, "rope_inv_freq0": fx["census"]["rope_inv_freq0"]},
+         "capture_bitwise": fx["capture_bitwise"], "draft": fx["draft"], "transition": fx["transition"]}
+    for grp in ("addressing", "mutants"):
+        p[grp] = {k: {"mean_abs_dlogp": v["d"], "k_rot": {"max_abs_angle": v["rot"], "max_abs_angle_layer0": v["l0"],
+                                                          "informative": v["inf"]}} for k, v in fx[grp].items()}
+    return p, fx["gpu"]
 
 
 def _sd2_5090_1() -> dict:
@@ -249,6 +325,21 @@ def self_test() -> int:
            "a3", "(c) inside the logit bound, caught by the key rows")
     proved(lambda x: x["addressing"]["R0_k1"]["k_rot"].update({"max_abs_angle": 0.49}), "a3", "just inside 0.5 rad")
     proved(lambda x: x["census"].pop("rope_inv_freq0"), "a2", "a2 does not read the rope census")
+    # a4 (Amendment 5): the key-row gate at layer 0, with its derivation checked on both sides
+    deep = {"max_abs_angle": 3.1, "max_abs_angle_layer0": 0.001, "informative": 500}
+    proved(lambda x: x["addressing"]["R0_k3"].update({"k_rot": dict(deep)}), "a4", "depth is reported, not gated")
+    case(lambda x: x["addressing"]["R0_k3"].update({"k_rot": dict(deep)}), "addressing:R0_k3", "a3")
+    case(lambda x: x["addressing"]["C0_k1"]["k_rot"].update({"max_abs_angle_layer0": 0.6}), "addressing:C0_k1", "a4")
+    case(lambda x: x["addressing"]["C0_k1"]["k_rot"].update({"max_abs_angle_layer0": 0.3}), "derivation:C0_k1", "a4")
+    case(lambda x: x["addressing"]["R0_k2"]["k_rot"].pop("max_abs_angle_layer0"), "addressing:R0_k2", "a4")
+    case(lambda x: x["census"].update({"rope_inv_freq0": 0.5}), "census:rope", "a4")
+    case(lambda x: x["mutants"]["c"].update({"mean_abs_dlogp": [0.1, 0.01, 0.01, 0.01],
+                                             "k_rot": {"max_abs_angle": 3.0, "max_abs_angle_layer0": 0.3, "informative": 9}}),
+         "GATE_TOO_WEAK:c", "a4")
+    case(lambda x: x["mutants"]["c"]["k_rot"].update({"max_abs_angle_layer0": 0.7}), "derivation:c", "a4")
+    case(lambda x: x["mutants"]["a"].pop("k_rot"), "mutant:a:missing", "a4")
+    proved(lambda x: x["mutants"]["a"]["k_rot"].update({"max_abs_angle_layer0": 0.0}), "a4",
+           "(a) is read-side: inside at layer 0, caught by the logits")
     # the calibration set
     cal = _sd2_prove_2()
     v1, v2 = judge(cal, g, "a1"), judge(cal, g, "a2")
@@ -256,13 +347,18 @@ def self_test() -> int:
         bad.append(f"sd2-prove-2 under a1: {v1['fails']}")
     if v2["verdict"] != "PROVED":
         bad.append(f"sd2-prove-2 under a2: {v2['fails']}")
+    p4, g4 = _sd2_prove_4()
+    if judge(p4, g4, "a4")["verdict"] != "PROVED":
+        bad.append(f"sd2-prove-4 under a4: {judge(p4, g4, 'a4')['fails']}")
+    if judge(p4, g4, "a3")["fails"] != [f"addressing:{r}_k{k}" for r in ("R0", "C0") for k in (1, 2, 3)]:
+        bad.append(f"sd2-prove-4 under a3: {judge(p4, g4, 'a3')['fails']}")
     r51 = _sd2_5090_1()
     if v0_fails(r51, g, rule="a2") != ["GATE_TOO_WEAK:c_R1", "GATE_TOO_WEAK:c_C1"]:
         bad.append(f"sd2-5090-1 under a2: {v0_fails(r51, g, rule='a2')}")
     if "census:rope" not in v0_fails(r51, g) or "mutant:c_C1:missing" not in v0_fails(r51, g):
         bad.append("sd2-5090-1 under a3 lacks its key rows and its rope census")
     try:
-        judge(p, g, "a4")
+        judge(p, g, "a5")
         bad.append("an unknown rule was accepted")
     except ValueError:
         pass
@@ -270,8 +366,8 @@ def self_test() -> int:
     if bad:
         print("sd2_reduce self-test FAILED:", bad)
         return 1
-    print("sd2_reduce self-test OK (64 proof cases: all three rules, sd2-prove-2's calibration and sd2-5090-1's V0; "
-          "38 read cases: every verdict, every VOID item, the stage gate)")
+    print("sd2_reduce self-test OK (89 proof cases: all four rules, sd2-prove-2's calibration, sd2-5090-1's V0 and "
+          "sd2-prove-4; 40 read cases: every verdict, every VOID item, the stage gate)")
     return 0
 
 
@@ -298,7 +394,7 @@ def _mean(xs):
     return math.fsum(xs) / len(xs) if xs else None
 
 
-def v0_fails(v: dict, gpu: dict | None = None, rule: str = "a3") -> list:
+def v0_fails(v: dict, gpu: dict | None = None, rule: str = "a4") -> list:
     """V0 by the proof's rule a2 on the read's rows (outside calibration). ``gpu`` None leaves out the GPU-test item
     (the box's own check before V1)."""
     rec = dict(v.get("v0") or {}, census=v.get("census") or {})
@@ -320,7 +416,7 @@ def verify_cost(v1: dict) -> dict:
                       for k in (1, 2, 3)}}
 
 
-def stage_gate(v: dict, gpu: dict, rule: str = "a3") -> str:
+def stage_gate(v: dict, gpu: dict, rule: str = "a4") -> str:
     """The box's decision after stage V: VOID (V0 failed or V1 missing: stop, no timing read), E_ONLY
     (VERIFY_COST_REFUTES without V_NOISY: the stop rule, E runs and Q is skipped) or ALL."""
     if v0_fails(v, gpu, rule) or not v.get("v1"):
@@ -377,7 +473,7 @@ def speed_bar(g: dict, pairs: dict, k: int) -> bool:
     return sum(1 for w in WORKLOADS if g[(k, w)] >= G_BAR and min(pairs[(k, w)]) > 1.0) >= 2
 
 
-def judge_read(gpu, v, e: dict, q, expect: dict, w1=None, rule: str = "a3") -> dict:
+def judge_read(gpu, v, e: dict, q, expect: dict, w1=None, rule: str = "a4") -> dict:
     """The registered rule, first that applies: VOID, VERIFY_COST_REFUTES, NOISY, QUALITY_FAIL, FASTER, NOT_FASTER.
     ``e``: {arm: record}; ``q`` None when the box skipped Q; ``expect``: {"e4b", "gnf4", "rev"}; ``w1``: the tripwire's
     expected tokens (reported)."""
@@ -517,10 +613,11 @@ def _read_fixture():
     p, _ = _good()
     v0 = {"capture_bitwise": p["capture_bitwise"], "draft": p["draft"], "transition": p["transition"],
           "addressing": {f"{r}_k{k}": {"rows_agree": 1.0, "cont_agree": 1.0, "mean_abs_dlogp": [0.01] * (k + 1),
-                                       "k_rot": {"max_abs_angle": 0.02, "informative": 500}}
+                                       "k_rot": {"max_abs_angle": 0.02, "max_abs_angle_layer0": 0.001, "informative": 500}}
                          for r in READ_ROWS for k in (1, 2, 3)},
           "mutants": {m: {"rows_agree": 0.5, "cont_agree": 0.5, "mean_abs_dlogp": [0.02, 2.0, 2.0, 2.0],
-                          "k_rot": {"max_abs_angle": 1.0, "informative": 500}} for m in READ_MUTANTS}}
+                          "k_rot": {"max_abs_angle": 1.0, "informative": 500,
+                                    "max_abs_angle_layer0": {"a": 0.0, "b": 3.0, "c": 1.0}[m[0]]}} for m in READ_MUTANTS}}
     v = dict(base, config={"max_seqs": 16, "revision": expect["rev"]}, v0=v0,
              census=dict(p["census"], spec_build=spec_on),
              v1={"anchor_a_ms": 7.40, "anchor_b_ms": 7.45,
@@ -594,7 +691,11 @@ def read_self_test() -> list:
                                                                        k_rot={"max_abs_angle": 0.3, "informative": 9}),
          "V0:GATE_TOO_WEAK:c_C1", "a mutant inside both bounds on a fresh row")
     want("FASTER", lambda G, V, E, Q: V["v0"]["mutants"]["c_C1"].update(mean_abs_dlogp=[0.2, 0.01, 0.01, 0.01]),
-         why="a mutant inside the logit bound, caught by the key rows (a3)")
+         why="a mutant inside the logit bound, caught by the key rows at layer 0 (a4)")
+    want("VOID", lambda G, V, E, Q: V["v0"]["mutants"]["c_R1"]["k_rot"].update(max_abs_angle_layer0=0.7),
+         "V0:derivation:c_R1", "(c) caught at layer 0 but short of its derived 0.858")
+    want("VOID", lambda G, V, E, Q: V["v0"]["addressing"]["R2_k2"]["k_rot"].update(max_abs_angle_layer0=0.2),
+         "V0:derivation:R2_k2", "the real build past its derived 0.142 at layer 0")
     want("VOID", lambda G, V, E, Q: V["v0"]["addressing"].pop("R2_k3"), "V0:addressing:R2_k3")
     want("VOID", lambda G, V, E, Q: V["v0"]["draft"].update(agree=0.98), "V0:draft")
     want("VOID", lambda G, V, E, Q: V.pop("v1"), "missing:V1")
@@ -659,7 +760,7 @@ def main(argv=None) -> int:
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--prove")
     ap.add_argument("--gpu-tests")
-    ap.add_argument("--rule", choices=RULES, default="a3")
+    ap.add_argument("--rule", choices=RULES, default="a4")
     ap.add_argument("--read", metavar="DIR", help="the read's records: gpu_tests.json, v.json, e_<arm>.json, q.json")
     ap.add_argument("--gate-v", metavar="DIR", help="after stage V: print SD2_GATE VOID | E_ONLY | ALL")
     ap.add_argument("--expect-e4b")
