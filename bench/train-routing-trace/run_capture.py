@@ -2,13 +2,16 @@
 
 The harness is not edited. This wrapper:
   * wraps `tc1_arm.load_e4b` so the loaded model gets a RoutingRecorder on every `layers.<i>.mlp.gate`;
-  * wraps `torch.Tensor.backward` so router calls inside backward (the checkpoint recompute) are labelled `recompute`;
+  * wraps `torch.Tensor.backward` AND `torch.autograd.backward` so router calls inside any backward (the checkpoint
+    recompute) are labelled `recompute`;
   * registers a global optimizer step post-hook so each optimizer step closes a step in the trace;
-then runs `tc1_arm.main()` with the harness's own arguments, and writes the trace when the harness returns.
+then runs `tc1_arm.main()` with the harness's own arguments, and writes the trace when the harness returns, with a
+verdict: VOID (exit 3) unless every step holds exactly --expect-mb micro-batches, each with every layer in both passes,
+and every recompute routed as its forward did.
 
 Counts and expert ids only: the wrapper records no timings and the trace carries none.
 
-    python bench/train-routing-trace/run_capture.py --trace-out /path/trace.npz -- <tc1_arm.py arguments ...>
+    python bench/train-routing-trace/run_capture.py --trace-out /path/trace.npz --expect-mb 8 -- <tc1_arm.py args>
 
 The plan this implements (model, recipe, sizes, replay) is in this directory's README.
 """
@@ -79,6 +82,8 @@ def environment(model) -> dict:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--trace-out", required=True, help="the .npz to write (a .meta.json lands beside it)")
+    ap.add_argument("--expect-mb", type=int, required=True,
+                    help="micro-batches per optimizer step (the harness's accumulation); the completeness guard")
     ap.add_argument("harness_args", nargs=argparse.REMAINDER, help="-- then the tc1_arm.py arguments")
     a = ap.parse_args(argv)
     harness_args = a.harness_args[1:] if a.harness_args[:1] == ["--"] else a.harness_args
@@ -101,32 +106,27 @@ def main(argv=None) -> int:
 
     tc1.load_e4b = load_e4b_hooked
 
-    orig_backward = torch.Tensor.backward
-
-    def backward_labelled(self, *args, **kw):
-        with rec.backward_phase():
-            return orig_backward(self, *args, **kw)
-
-    torch.Tensor.backward = backward_labelled
+    undo_backward = recorder_mod.install_backward_labelling(rec)
     step_hook = torch.optim.optimizer.register_optimizer_step_post_hook(lambda *_: rec.end_step())
 
-    rc = 0
+    rc, void = 0, False
     try:
         sys.argv = [str(REPO / "bench" / "tc1" / "tc1_arm.py"), *harness_args]
         rc = tc1.main() or 0
     finally:
         step_hook.remove()
-        torch.Tensor.backward = orig_backward
+        undo_backward()
         if state["model"] is not None:
             summary = rec.save(a.trace_out, {"environment": environment(state["model"]),
-                                             "harness_args": harness_args, "plan": "README.md"})
-            print(f"ROUTING-TRACE wrote {a.trace_out}: {summary['records']} records over {summary['steps']} steps; "
-                  f"fwd/recompute differ {len(summary['fwd_recompute_mismatches']['differ'])}, "
-                  f"forward-only {len(summary['fwd_recompute_mismatches']['no_recompute'])}; "
-                  f"incomplete passes {len(summary['missing_layers'])}", flush=True)
+                                             "harness_args": harness_args, "plan": "README.md"},
+                               expect_mb=a.expect_mb)
+            print(f"ROUTING-TRACE {summary['verdict']} wrote {a.trace_out}: {summary['records']} records over "
+                  f"{summary['steps']} steps; reasons {summary['reasons'][:5]}", flush=True)
+            void = summary["verdict"] != "OK"
         else:
-            print("ROUTING-TRACE no model was loaded: nothing written", flush=True)
-    return int(rc)
+            print("ROUTING-TRACE VOID no model was loaded: nothing written", flush=True)
+            void = True
+    return 3 if void else int(rc)
 
 
 if __name__ == "__main__":

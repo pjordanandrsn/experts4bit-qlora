@@ -2,23 +2,25 @@
 
 A training step routes every micro-batch twice under gradient checkpointing: the forward, and the recompute inside
 backward. The dgrad of a layer's experts runs on the recompute's routing, so the recompute set is also the dgrad set
-(by construction, not separately hooked). This module records the forward and the recompute, and checks that they agree.
+(by construction, not separately hooked). This module records the forward and the recompute, checks that they agree,
+and refuses (VOID) a trace that does not contain what it claims: no records, a step with the wrong number of
+micro-batches, a pass missing a layer, or a forward whose recompute never arrived.
 
-Counts and expert ids only. No timings are recorded: the trace answers "which rows would a residency tier have to
-hold", not "how fast".
+Counts and expert ids only. No timings are recorded.
 
-Usage (see run_capture.py for the training-harness wrapper)::
+Usage (run_capture.py wraps the training harness this way)::
 
     rec = RoutingRecorder()
-    rec.attach(model)            # hooks every `*.layers.<i>.mlp.gate` router
-    with rec.backward_phase():   # around loss.backward(): router calls inside are the recompute
-        loss.backward()
-    rec.end_step()               # after optimizer.step()
-    rec.save("trace.npz", meta)
+    rec.attach(model)                       # hooks every `*.layers.<i>.mlp.gate` router
+    undo = install_backward_labelling(rec)  # router calls inside any backward are the recompute
+    ...train...                             # call rec.end_step() after each optimizer step
+    undo()
+    summary = rec.save("trace.npz", meta, expect_mb=8)   # summary["verdict"] is "OK" or "VOID"
 """
 from __future__ import annotations
 
 import contextlib
+import functools
 import json
 import re
 
@@ -103,9 +105,9 @@ class RoutingRecorder:
     def check_fwd_equals_recompute(self) -> dict[str, list[tuple[int, int, int]]]:
         """Compare each (step, micro-batch, layer)'s recompute ids with its forward ids.
 
-        `differ`: the recompute exists and disagrees -- a VOID result for the census (or itself the finding).
-        `no_recompute`: a forward with no backward after it (a probe, a forward-only pass) -- excluded from replay.
-        Both empty means every training micro-batch routed identically in its forward and its recompute."""
+        `differ`: the recompute exists and disagrees.
+        `no_recompute`: a forward with no recompute recorded after it.
+        Both empty means every recorded micro-batch routed identically in its forward and its recompute."""
         differ, missing = [], []
         for (step, mb, phase, layer), fwd in self.records.items():
             if phase != FWD:
@@ -125,16 +127,81 @@ class RoutingRecorder:
         want = set(self.layers)
         return sorted(k for k, v in seen.items() if v != want)
 
+    def completeness(self, expect_mb: int) -> list[str]:
+        """Why this trace does not contain what a training trace of `self.step` steps x `expect_mb` micro-batches
+        claims to contain. Empty means complete. Any reason makes the trace VOID."""
+        return completeness_reasons(self.records, self.layers, self.step, expect_mb)
+
     # -- output -------------------------------------------------------------------------------------------------
-    def save(self, path: str, meta: dict) -> dict:
-        """Write the trace as one .npz (one array per key) plus the meta, and return the summary written."""
+    def save(self, path: str, meta: dict, expect_mb: int) -> dict:
+        """Write the trace (one array per key) and its meta, ALWAYS, with a verdict: "OK" only if the completeness
+        check and the forward/recompute check both pass; otherwise "VOID" with the reasons. Returns the summary."""
         arrays = {f"s{s}_mb{m}_{p}_L{layer}": a for (s, m, p, layer), a in sorted(self.records.items())}
-        summary = {
-            "steps": self.step, "layers": self.layers, "records": len(self.records),
-            "fwd_recompute_mismatches": self.check_fwd_equals_recompute(),
-            "missing_layers": self.check_every_layer_fired(),
-        }
+        fr = self.check_fwd_equals_recompute()
+        reasons = self.completeness(expect_mb)
+        if fr["differ"]:
+            reasons.append(f"{len(fr['differ'])} (step, micro-batch, layer) whose recompute routed differently "
+                           f"from its forward, first {fr['differ'][:3]}")
+        summary = {"verdict": "VOID" if reasons else "OK", "reasons": reasons, "expect_mb": expect_mb,
+                   "steps": self.step, "layers": self.layers, "records": len(self.records),
+                   "fwd_recompute": fr, "missing_layers": self.check_every_layer_fired()}
         np.savez_compressed(path, **arrays)
         with open(path + ".meta.json", "w") as f:
             json.dump({"meta": meta, "summary": summary}, f, indent=1, default=list)
         return summary
+
+
+def completeness_reasons(records, layers, steps: int, expect_mb: int) -> list[str]:
+    """The completeness guard, usable on a recorder's records or on a loaded trace (replay.py re-checks the file).
+
+    `records`: {(step, mb, pass, layer): ids}. A training trace of `steps` optimizer steps must hold exactly
+    `expect_mb` micro-batches per step, numbered 0..expect_mb-1, each with every layer in BOTH passes, and nothing
+    recorded after the last optimizer step."""
+    reasons = []
+    if not records:
+        return ["no records: the routers never called the hooked modules (or nothing trained)"]
+    if steps <= 0:
+        reasons.append("no optimizer step was observed")
+    want_layers = set(layers)
+    by_mb: dict[tuple[int, int], dict[str, set[int]]] = {}
+    for (s, m, p, layer) in records:
+        by_mb.setdefault((s, m), {FWD: set(), RECOMPUTE: set()}).setdefault(p, set()).add(layer)
+    for s in range(steps):
+        mbs = sorted(m for (ss, m) in by_mb if ss == s)
+        if mbs != list(range(expect_mb)):
+            reasons.append(f"step {s}: micro-batches {mbs[:12]}{'...' if len(mbs) > 12 else ''}, expected "
+                           f"0..{expect_mb - 1}")
+    late = sorted({s for (s, _m) in by_mb if s >= steps})
+    if late:
+        reasons.append(f"records after the last optimizer step (step index {late[:3]}): a forward that never stepped")
+    for (s, m), passes in sorted(by_mb.items()):
+        for p in (FWD, RECOMPUTE):
+            if passes.get(p, set()) != want_layers:
+                missing = sorted(want_layers - passes.get(p, set()))
+                reasons.append(f"step {s} micro-batch {m}: pass {p} is missing layers {missing[:6]}")
+                break
+    return reasons
+
+
+def install_backward_labelling(rec: RoutingRecorder):
+    """Label router calls inside ANY backward as the recompute: `torch.Tensor.backward` AND `torch.autograd.backward`
+    (the function Tensor.backward calls, and the one a harness may call directly). Returns the undo function."""
+    orig_tensor, orig_autograd = torch.Tensor.backward, torch.autograd.backward
+
+    @functools.wraps(orig_tensor)
+    def tensor_backward(self, *args, **kw):
+        with rec.backward_phase():
+            return orig_tensor(self, *args, **kw)
+
+    @functools.wraps(orig_autograd)
+    def autograd_backward(*args, **kw):
+        with rec.backward_phase():
+            return orig_autograd(*args, **kw)
+
+    torch.Tensor.backward = tensor_backward
+    torch.autograd.backward = autograd_backward
+
+    def undo():
+        torch.Tensor.backward = orig_tensor
+        torch.autograd.backward = orig_autograd
+    return undo
