@@ -58,7 +58,6 @@ TRUNC_POINTS = 8                  # draft-gate truncation points per prompt
 BAR_ADDRESS, BAR_DRAFT = 0.90, 0.99
 BUCKETS_WANTED = (1, 2, 3, 4, 8, 16)
 INFORMATIVE = 2.0 ** -7           # Amendment 4: a key cell counts when |pair 0| >= 2^-7 x its scale groups' amax
-FLOORS = (("2^-7", 2.0 ** -7), ("2^-5", 2.0 ** -5), ("2^-3", 2.0 ** -3))   # Amendment 5: depth, reported at each floor
 
 
 def digest(obj) -> str:
@@ -99,45 +98,27 @@ def pair0_rotation(zo, zv, amax, floor=INFORMATIVE):
             (zv.abs() / mag.clamp_min(1e-30) - 1.0).abs())
 
 
-def _quantiles(v):
-    """[p50, p90, p99, max] of a 1-d tensor on any device, or None when it is empty. Computed on the host: the angles
-    live on the GPU in the box, and quantile() refuses a q on another device (sd2-5090-2, rc 23)."""
-    import torch
-    if not v.numel():
-        return None
-    v = v.detach().double().cpu()
-    q = torch.quantile(v, torch.tensor([0.5, 0.9, 0.99], dtype=torch.float64)).tolist()
-    return [round(x, 6) for x in q] + [round(float(v.max()), 6)]
-
-
 def rot_summary(cells):
-    """``cells``: [(angle, informative, drift[, rel])] tensors shaped [L, rows, H], ``rel`` = |pair 0| / its groups'
-    amax. The max |angle| over informative cells, overall, at layer 0 (Amendment 5's gate) and per layer; the
-    informative counts; the max radial drift. With ``rel``, depth is reported at each of FLOORS: the cells at or
-    above the floor, and [p50, p90, p99, max] of |angle| over all of them and per layer (never gated)."""
+    """``cells``: [(angle, informative, drift, rel)] tensors shaped [L, rows, H]. V0's strict values only (Amendment
+    5b): the max |angle| over informative cells at layer 0 (Amendment 5's gate) and the informative counts. Depth --
+    every layer, the magnitude floors, the radial drift -- is the reducer's, offline, from ``raw_cells``."""
     import torch
-    a = torch.cat([c[0] for c in cells], 1).abs()
-    inf = torch.cat([c[1] for c in cells], 1)
-    dr = torch.cat([c[2] for c in cells], 1)
-    masked = torch.where(inf, a, torch.full_like(a, -1.0))
-    per_layer = [round(float(x), 6) if x >= 0 else None for x in masked.flatten(1).amax(1).tolist()]
-    live = [x for x in per_layer if x is not None]
-    out = {"max_abs_angle": max(live) if live else None, "max_abs_angle_layer0": per_layer[0],
-           "per_layer_max": per_layer, "informative": int(inf.sum()), "informative_layer0": int(inf[0].sum()),
-           "cells": int(inf.numel()),
-           "radial_drift_max": round(float(dr[inf].max()), 6) if bool(inf.any()) else None}
-    if all(len(c) > 3 for c in cells):
-        out["floors"] = soft(lambda: _floors(a, torch.cat([c[3] for c in cells], 1)))   # reported, never gated: soft
-    return out
+    a0 = torch.cat([c[0][0] for c in cells], 0).abs()
+    i0 = torch.cat([c[1][0] for c in cells], 0)
+    m0 = round(float(a0[i0].max()), 6) if bool(i0.any()) else None
+    return {"max_abs_angle_layer0": m0, "informative_layer0": int(i0.sum()),
+            "informative": sum(int(c[1].sum()) for c in cells), "cells": sum(int(c[1].numel()) for c in cells)}
 
 
-def _floors(a, rel):
-    out = {}
-    for name, f in FLOORS:
-        m = rel >= f
-        out[name] = {"cells": int(m.sum()), "quantiles": _quantiles(a[m]),
-                     "per_layer": [_quantiles(a[layer][m[layer]]) for layer in range(a.shape[0])]}
-    return out
+def raw_cells(cells):
+    """The raw key-row tensors of one V0 record, on the host, for the offline depth report: [L, rows, H] each, float16
+    angle / drift / rel and the bool informative mask (a few hundred KB a record). Reporting only."""
+    import torch
+
+    def cat(j, half=True):
+        t = torch.cat([c[j] for c in cells], 1).detach().cpu()
+        return t.half() if half else t
+    return {"angle": cat(0), "informative": cat(1, half=False), "drift": cat(2), "rel": cat(3)}
 
 
 def rope_inv_freq0(model):
@@ -190,6 +171,7 @@ class Gate:
         self.kv = self.runner.kv
         self.spec = self.runner.spec
         self.rid = 10_000
+        self.raw = {}                                   # tag -> raw_cells (the read's V0; reporting only)
 
     def begin(self, prompt):
         """Bind and prefill one request alone; returns (rid, slot). The prompt completes alone, so the draft starts."""
@@ -266,7 +248,7 @@ class Gate:
             ams.append(torch.maximum(key[..., 0:gw].abs().amax(-1), key[..., g_hi:g_hi + gw].abs().amax(-1)))
         return torch.stack(zs), torch.stack(ams)
 
-    def addressing(self, prompt, k, positions):
+    def addressing(self, prompt, k, positions, tag=None):
         """S2-lite's construction at ``positions`` positions: (row agreement, continuation agreement, mean |Δ log p|
         per verify row index), and Amendment 4's key rows: pair 0 of the keys the verify step wrote against the keys
         the T == 1 oracle wrote at the same positions, as a rotation (``rot_summary``)."""
@@ -299,6 +281,8 @@ class Gate:
                     cont_b.append(oracle[k + 1 + j])
         finally:
             self.end(rid)
+        if tag is not None and cells:
+            self.raw[tag] = soft(raw_cells, cells)       # reporting only: the offline depth report reads these
         return {"rows_agree": agreement(rows_a, rows_b), "rows": len(rows_a),
                 "cont_agree": agreement(cont_a, cont_b), "cont": len(cont_a),
                 "mean_abs_dlogp": [round(sum(v) / len(v), 6) if v else None for v in dl],
@@ -490,8 +474,8 @@ E_WORKLOADS = {"R": 160, "C-think": 256, "C-nothink": 256}   # LONG per workload
 SHORT, E_REPS = 32, 3
 Q_BUCKETS = (1, 2, 4, 8, 16)       # P110's BUCKETS (a test pins them equal)
 W16 = 16                           # Q's reported w16 draw: windows a pass
-#: Amendment 5b (operational): the canary's sizes -- every read code path once, at minimal size, results discarded
-CANARY = {"timed": 2, "warm": 1, "e_rows": 2, "short": 4, "long": 8, "reps": 1}
+#: Amendment 5b (operational): the canary's sizes -- the long paths (one E arm, one Q window) once, results discarded
+CANARY = {"e_rows": 2, "short": 4, "long": 8, "reps": 1}
 
 
 def soft(fn, *args, **kwargs):
@@ -650,9 +634,18 @@ def _build_v(tap=None):
     return cfg, parts, rec
 
 
-def read_v0_main(a) -> int:
-    """Stage V's correctness gate, V0, in its own process: on rows outside calibration, judged by rule a4 (the reducer
-    VOIDs the read on any failure; no timing follows a failure)."""
+def _save_raw(raw, path):
+    """The raw key-row tensors of every V0 record, for the offline depth report; returns the file's name and size."""
+    import torch
+    torch.save(raw, path)
+    return {"file": os.path.basename(path), "bytes": os.path.getsize(path)}
+
+
+def read_v_main(a) -> int:
+    """Stage V in one process: V0 on rows outside calibration, written and judged by rule a4 before any timing (the
+    reducer VOIDs the read on any failure); then, when V0 holds, V1's timed terms on R row 0. The raw key-row tensors
+    go to ``v_angles.pt`` beside the record for the reducer's offline depth report (reporting only, fail-soft)."""
+    import torch
     from safetensors.torch import load_file
 
     import sd1_eagle3 as ref_mod
@@ -668,7 +661,7 @@ def read_v0_main(a) -> int:
     for name, rows in (("R", R), ("C", C)):
         for i in GATE_ROWS:
             for k in (1, 2, 3):
-                res = gate.addressing(rows[i], k, POSITIONS)
+                res = gate.addressing(rows[i], k, POSITIONS, tag=f"{name}{i}_k{k}")
                 v0["addressing"][f"{name}{i}_k{k}"] = res
                 print(f"SD2_V0 addressing {name}{i} k={k} " + json.dumps({kk: res.get(kk) for kk in
                       ("rows_agree", "cont_agree", "mean_abs_dlogp")})
@@ -677,7 +670,7 @@ def read_v0_main(a) -> int:
         for name, rows in (("R", R), ("C", C)):
             undo = mutant(m, gate)
             try:
-                res = gate.addressing(rows[GATE_ROWS[0]], 3, MUTANT_POSITIONS)
+                res = gate.addressing(rows[GATE_ROWS[0]], 3, MUTANT_POSITIONS, tag=f"{m}_{name}{GATE_ROWS[0]}")
             finally:
                 undo()
             v0["mutants"][f"{m}_{name}{GATE_ROWS[0]}"] = res
@@ -690,9 +683,16 @@ def read_v0_main(a) -> int:
     print("SD2_V0 transition " + json.dumps(v0["transition"]), flush=True)
     rec["v0"] = v0
     rec["v0_fails"] = sd2_reduce.v0_fails(rec)                  # rule a4 on these rows; the GPU tests are the runner's
-    rec["modules_loaded_v0"] = soft(_modules)
+    rec["raw_angles"] = soft(_save_raw, gate.raw, os.path.join(os.path.dirname(os.path.abspath(a.out)), "v_angles.pt"))
     json.dump(rec, open(a.out, "w"), indent=1, default=str)     # V0 on disk before any timing
-    print("SD2_V0 " + ("VOID (" + ", ".join(rec["v0_fails"]) + "); no timing" if rec["v0_fails"] else "done"), flush=True)
+    if rec["v0_fails"]:
+        print("SD2_V VOID (V0 failed: " + ", ".join(rec["v0_fails"]) + "); no timing", flush=True)
+        return 0
+    rec["v1"] = v1_terms(parts.runner, gate, R[0], TIMED, WARM)
+    rec["max_memory_allocated"] = soft(lambda: int(torch.cuda.max_memory_allocated()))
+    rec["modules_loaded"] = soft(_modules)
+    json.dump(rec, open(a.out, "w"), indent=1, default=str)
+    print("SD2_V done", flush=True)
     return 0
 
 
@@ -787,34 +787,6 @@ def v1_terms(runner, gate, row, timed, warm):
     v1["anchor_b_ms"] = anchor()                        # the A/A brackets the k terms
     print(f"SD2_V1 anchors {v1['anchor_a_ms']} {v1['anchor_b_ms']} ms", flush=True)
     return v1
-
-
-def read_v1_main(a) -> int:
-    """Stage V's timed terms, V1, in its own process on R row 0. ``--canary``: CANARY's sizes, written to ``--out`` and
-    discarded (Amendment 5b). Otherwise V1 is added to V0's record (``--v-json``), which must carry no V0 failure."""
-    import torch
-    R = load_rows(a.prompts_r)
-    _cfg, parts, rec = _build_v()
-    gate = Gate(parts, None)
-    if a.canary:
-        v1 = v1_terms(parts.runner, gate, R[0], CANARY["timed"], CANARY["warm"])
-        json.dump({"stage": "V1", "canary": True, "v1": v1}, open(a.out, "w"), default=str)
-        print("SD2_CANARY v1 ok", flush=True)
-        return 0
-    v = json.load(open(a.v_json))
-    if v.get("v0_fails") or not v.get("v0"):
-        raise SystemExit(f"REFUSED: V1 after a failed or missing V0 ({v.get('v0_fails')})")
-    if (v.get("e4b_sha"), v.get("gnf4_sha")) != (rec["e4b_sha"], rec["gnf4_sha"]):
-        raise SystemExit("REFUSED: V1's build is not V0's")
-    v["v1"] = v1_terms(parts.runner, gate, R[0], TIMED, WARM)
-    v["max_memory_allocated"] = soft(lambda: int(torch.cuda.max_memory_allocated()))
-    v["modules_loaded"] = soft(_modules)
-    v["load_s_v1"] = rec["load_s"]
-    tmp = a.v_json + ".tmp"
-    json.dump(v, open(tmp, "w"), indent=1, default=str)
-    os.replace(tmp, a.v_json)
-    print("SD2_V done", flush=True)
-    return 0
 
 
 def read_e_main(a) -> int:
@@ -998,34 +970,46 @@ def self_test() -> int:
     if median([3, 1, 2]) != 2 or median([4, 1, 2, 3]) != 2.5:
         bad.append("median")
     zo = torch.tensor([1 + 1j, 0.001 + 0j, -2 + 0.5j], dtype=torch.complex64)
-    ang, inf, dr = pair0_rotation(zo, zo * torch.exp(torch.tensor(1j)), torch.tensor([1.0, 1.0, 2.0]))
-    rel = (zo.abs() / torch.tensor([1.0, 1.0, 2.0])).view(1, 3, 1)
-    summ = rot_summary([(ang.view(1, 3, 1), inf.view(1, 3, 1), dr.view(1, 3, 1), rel)])
-    if inf.tolist() != [True, False, True] or abs(summ["max_abs_angle"] - 1.0) > 1e-5 or summ["informative"] != 2:
+    amax = torch.tensor([1.0, 1.0, 2.0])
+
+    def one_cell(dev):
+        ang, inf, dr = pair0_rotation(zo.to(dev), (zo * torch.exp(torch.tensor(1j))).to(dev), amax.to(dev))
+        rel = zo.abs().to(dev) / amax.to(dev)
+        return ang, inf, (ang.view(1, 3, 1), inf.view(1, 3, 1), dr.view(1, 3, 1), rel.view(1, 3, 1))
+    ang, inf, cell = one_cell("cpu")
+    summ = rot_summary([cell])
+    if inf.tolist() != [True, False, True] or abs(summ["max_abs_angle_layer0"] - 1.0) > 1e-5 or summ["informative"] != 2:
         bad.append("pair-0 rotation")
-    if summ["informative_layer0"] != 2 or summ["floors"]["2^-3"]["cells"] != 2 or summ["floors"]["2^-7"]["per_layer"][0][3] < 0.99:
-        bad.append("rotation floors")
     if soft(lambda: 1 / 0) != {"report_unavailable": "ZeroDivisionError: division by zero"} or soft(lambda: 3) != 3:
         bad.append("soft")
-    if "report_unavailable" not in rot_summary([(ang.view(1, 3, 1), inf.view(1, 3, 1), dr.view(1, 3, 1),
-                                                 rel.view(3))])["floors"]:
-        bad.append("floors fail soft")                    # a malformed rel: the summary survives, the floors say why
-    if torch.cuda.is_available():                     # the box: the same summary on the device the angles live on
-        dev = "cuda"
-        ang_d, inf_d, dr_d = pair0_rotation(zo.to(dev), (zo * torch.exp(torch.tensor(1j))).to(dev),
-                                            torch.tensor([1.0, 1.0, 2.0], device=dev))
-        summ_d = rot_summary([(ang_d.view(1, 3, 1), inf_d.view(1, 3, 1), dr_d.view(1, 3, 1), rel.to(dev))])
-        if summ_d["floors"] != summ["floors"] or summ_d["max_abs_angle_layer0"] != summ["max_abs_angle_layer0"]:
+
+    def depth_roundtrip(c):
+        """raw_cells -> torch.save -> the reducer's offline depth report, as the box and the reducer use them."""
+        import io
+
+        import sd2_reduce
+        raw = raw_cells([c])
+        if any(t.device.type != "cpu" for t in raw.values()):
+            return None
+        buf = io.BytesIO()
+        torch.save({"R1_k1": raw}, buf)
+        buf.seek(0)
+        return sd2_reduce.depth_report(buf)["R1_k1"]
+    rep_cpu = depth_roundtrip(cell)
+    if not rep_cpu or abs(rep_cpu["per_layer_max"][0] - 1.0) > 2e-3 or rep_cpu["2^-3"]["cells"] != 2:
+        bad.append(f"offline depth report: {rep_cpu}")
+    if torch.cuda.is_available():                     # the box: the same, from tensors on the device they live on
+        _a, _i, cell_d = one_cell("cuda")
+        if rot_summary([cell_d]) != summ:
             bad.append("rotation summary on the GPU")
-        if "report_unavailable" not in rot_summary([(ang_d.view(1, 3, 1), inf_d.view(1, 3, 1), dr_d.view(1, 3, 1),
-                                                     rel.view(3).to(dev))])["floors"]:
-            bad.append("floors fail soft on the GPU")
+        if depth_roundtrip(cell_d) != rep_cpu:
+            bad.append("raw tensors and the depth report from the GPU")
     if bad:
         print("sd2_box self-test FAILED:", bad)
         return 1
     print("sd2_box self-test OK (agreement, dlogp, digest, logits tap, verify plan and assembly, median, pair-0 rotation, "
-          "fail-soft reports"
-          + (", and its summary on the GPU)" if torch.cuda.is_available() else ")"))
+          "fail-soft reports, the offline depth report"
+          + (", and both from the GPU)" if torch.cuda.is_available() else ")"))
     return 0
 
 
@@ -1033,10 +1017,8 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--prove", action="store_true")
-    ap.add_argument("--read-v0", action="store_true")
-    ap.add_argument("--read-v1", action="store_true")
-    ap.add_argument("--canary", action="store_true", help="Amendment 5b: minimal sizes, results discarded")
-    ap.add_argument("--v-json", help="--read-v1: V0's record, which V1 is added to")
+    ap.add_argument("--read-v", action="store_true")
+    ap.add_argument("--canary", action="store_true", help="Amendment 5b: --read-e / --read-q at minimal sizes, discarded")
     ap.add_argument("--read-e", dest="arm")
     ap.add_argument("--read-q", action="store_true")
     ap.add_argument("--prompts-r")
@@ -1053,10 +1035,8 @@ def main(argv=None) -> int:
         return self_test()
     if a.prove:
         return prove_main(a)
-    if a.read_v0:
-        return read_v0_main(a)
-    if a.read_v1:
-        return read_v1_main(a)
+    if a.read_v:
+        return read_v_main(a)
     if a.arm:
         return read_e_main(a)
     if a.read_q:

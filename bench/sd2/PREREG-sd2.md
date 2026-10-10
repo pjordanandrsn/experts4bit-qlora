@@ -861,57 +861,74 @@ Its V0 runs on fresh rows under rule a4 and fails closed before any timing. It m
 The ceiling is $3.66. The read needs the maintainer's separate ACK after this amendment merges, and it takes the rental
 slot after P130's proof. SD2's total so far is $2.737.
 
-## Amendment 5b (2026-10-10, operational): a canary and fail-soft reporting, after `sd2-5090-2`
+## Amendment 5b (2026-10-10, operational): canary for E/Q, fail-soft reporting offline, V re-joined
 
-This amendment changes neither the rule nor any verdict input. The maintainer ruled on it before any code.
+This amendment changes neither the rule nor any verdict input. The maintainer ruled on it under the project's operating
+guidance, which sets out two classes of check and the two-strikes rule.
 
 **What happened.** `sd2-5090-2` (**$0.713**, teardown complete) ended as **HARNESS_ERROR, rc 23**.
-- The box's depth reporting (`_quantiles`, Amendment 5) passed a host-side quantile tensor against key-row angles on the
-  GPU, so V0 crashed after its capture check. No V0 verdict was read, and nothing was timed.
-- Everything before the crash held: the audit, the self-tests, the GPU tests (123 passed), the fetch, the head, the bake
+- **The crash.** A reporting-only diagnostic, the depth quantiles Amendment 5 added to V0, mixed a host and a device
+  tensor. V0 crashed after its capture check, so no V0 verdict was read and nothing was timed.
+- **Everything before it held:** the audit, the self-tests, the GPU tests (123 passed), the fetch, the head, the bake
   and the prompts.
-- **The fix** (#1599) computes the quantiles on the host. The box's self-test, which runs on the card before the fetch,
-  now also runs the rotation summary on the GPU.
-- It was checked on the project A2000 at $0. The self-test passed on a CUDA tensor. The same file with only the fix
-  reverted reproduced the paid error on the same card.
-- The project now holds a standing rule: box-side code must see a CUDA tensor before a paid run.
+- **The fix (#1599)** computes on the host. It was checked at $0 on the project A2000, where the same file with the fix
+  reverted reproduced the paid error.
 
-**The canary.** V1, E and Q have never executed on a card, because V0 ended both earlier reads before them. So right
-after V0 passes, each later path runs once at minimal size, each in its own process:
-- V1 with 2 timed steps and 1 warm-up step per term;
-- one E arm (ON2) with 2 rows per workload, SHORT 4 and LONG 8, and one round;
-- Q with one window per text and 16 continuation positions.
+**Two strikes, root causes.** SD2's last two reads produced no verdict, so renting stopped until this simplification was
+ruled on. The root causes are kept apart:
+- `sd2-5090-1` VOID was **science**: the logit gate cannot see a uniform RoPE shift out of sample, which Amendments 4
+  and 5 answered.
+- `sd2-prove-4` FAILED was **science and design**: Amendment 4's registered "not analytic at depth" caveat came true.
+- `sd2-5090-2` was **fragility**: a reporting diagnostic ran inside a strict stage and had never seen a CUDA tensor.
 
-The canary's records (`canary_*.json`) are discarded: no verdict reads them. A canary that fails stops the lane with
-rc 26, before V1's registered run, E and Q. Stage V is split to make room for it:
-- V0 runs in its own process (`--read-v0`), followed by its gate (`sd2_reduce.py --gate-v0`: VOID or OK);
-- then the canary;
-- then V1 in its own process (`--read-v1`), which adds V1 to V0's record;
-- then the registered gate (VOID, E_ONLY or ALL), E and Q, as Amendment 3 registered them.
+**The design, simplified.** It is a net deletion, with no new guard.
+1. **Depth reporting leaves V0.**
+   - V0 computes only its strict values: per (row, k), the logit max, the layer-0 key-row max and the informative counts.
+   - The raw pair-0 tensors (angle, the informative mask, radial drift and relative magnitude; [L, rows, H], float16
+     and bool, a few MB) are saved beside the record as `v_angles.pt`.
+   - The reducer computes the depth report from that file offline, after the run: per-layer maxima, the radial drift,
+     and at the 2⁻⁷, 2⁻⁵ and 2⁻³ × amax floors the cells and [p50, p90, p99, max], overall and per layer. It is
+     fail-soft, never a verdict input, and needs torch only to read the file. A re-derivation without torch reproduces
+     the verdict and marks the depth report unavailable.
+2. **V0 and V1 stay in one process,** as Amendment 3 registered. There is no V1 canary: V1 is short and runs right after
+   V0.
+3. **The canary covers the two long paths.** Once stage V passes, one E arm (ON2: 2 rows per workload, SHORT 4 and
+   LONG 8, one round) and, when Q will run, one Q window (16 positions) each run once in their own process. Their
+   records are discarded. A canary that fails stops the lane with rc 26, before E's arms and Q.
+4. **Fail-soft reporting.** Every other reporting-only value goes through `soft()`, which records
+   `{"report_unavailable": "<error>"}` on an error:
+   - E's identity tokens, its LONG-rep agreement, memory and modules;
+   - Q's w16 draw, its ON graph statistics, memory and modules;
+   - in the reducer: the identity, the tripwire, ms per token, the τ_live report, the model error and the memory.
 
-**Fail-soft reporting.** Every reporting-only value is computed through `soft()`. On an error it records
-`{"report_unavailable": "<error>"}` and the stage continues, so a statistics bug can never again void a read.
-- **The values covered:**
-  - the depth floors and quantiles;
-  - V1's per-k census;
-  - E's identity tokens, its LONG-rep agreement, memory and loaded modules;
-  - Q's w16 draw, its ON graph statistics, memory and modules;
-  - in the reducer: the identity, the tripwire, ms per token, the τ_live report, the model error and the memory.
-- **The w16 windows check** applies only when the draw is present.
-- **Verdict inputs stay strict:** V0's records, V1's anchors and full step, E's rates, census and bucket counters, Q's
-  per-window statistics and windows.
+   The w16 windows check applies only when the draw is present.
+5. **Rule a3 (every layer) retires** to a re-derivation branch: it re-derives `sd2-prove-4` (FAILED) and nothing else.
 
-**The budget: a guard of 3.75 h (13500 s), a ceiling of $3.87.** That is 3.75 h × $0.85 + 62 GB × $0.011. The slow-host
-walk with the split stage V costs:
-- V0 at 3 min (`sd2-5090-1` ran it, build included, in under 2);
-- the canary at 7 min;
-- V1 at 3 min.
+**Unchanged and strict:**
+- the audit;
+- V0: rule a2's logits, a4's layer-0 key rows, and both derivation checks (the real build ≤ 0.142 rad, the shift
+  mutant ≥ 0.858);
+- the gate and its stop rule;
+- E's rates, census and bucket counters;
+- Q's per-window statistics and windows;
+- the verdict.
 
-Under the earlier 3.5 h guard, Q would start with only about 3 min to spare. A host a few percent slow would then VOID the
-read at Q and waste about $3, against $0.21 for the margin, so the maintainer chose the longer guard. Q now starts with
-about 18 min to spare. The time-left checks are `NEED_V` 900 s, `NEED_CANARY` 900 s, `NEED_V1` 600 s, `NEED_E` 600 s
-an arm, and `NEED_Q` 6300 s. SD2's maximum is $3.450 + $3.87 = $7.32, under the tier.
+**The paid sequence:** the audit, the GPU tests, the fetch, the bake and the prompts; then V (V0, then V1); the gate;
+the canary (E, and Q when Q will run); E's six arms; Q; and the verdict, with the depth report computed last.
 
-**Before the next paid launch,** this box runs once on the A2000 for every path that does not need the FP8 pool: its
-self-test, including the GPU rotation summary and the fail-soft path on CUDA, and the reducer's self-test. The read then
-reruns as `sd2-5090-3` on the maintainer's ACK. SD2's total so far is $3.450.
+**The budget: a guard of 3.75 h (13500 s) and a ceiling of $3.87,** that is 3.75 h × $0.85 + 62 GB × $0.011. The slow-host
+walk:
+- V (V0 and V1) at 5 min (`sd2-5090-1` ran V0, build included, in under 2);
+- the canary at 5 min (two builds, tiny work, Q's datasets fetched once);
+- each E arm at 5 min;
+- Q at its 6300 s need.
+
+Q starts with about 21 min to spare. At 3.5 h it would be 6 min, too thin for a host a few percent slow. The time-left
+checks are `NEED_V` 900 s, `NEED_CANARY` 600 s, `NEED_E` 600 s an arm, and `NEED_Q` 6300 s. SD2's maximum is $3.450 +
+$3.87 = $7.32, under the tier.
+
+**The shakedown before paying.** The final box and reducer bytes run on the project A2000 first:
+- the box's self-test, including the layer-0 summary, the raw tensors and the offline depth report from CUDA tensors;
+- the reducer's self-test.
+
+Then the read reruns as `sd2-5090-3` on the maintainer's ACK.

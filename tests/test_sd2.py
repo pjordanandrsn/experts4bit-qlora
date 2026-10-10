@@ -74,8 +74,7 @@ def _budget(mode="prove"):
 
 @pytest.mark.parametrize("mode, guard, hours, needs", [
     ("prove", 4500, "1.25", ("NEED_TESTS", "NEED_FETCH", "NEED_BAKE", "NEED_PROVE")),
-    ("read", 13500, "3.75", ("NEED_TESTS", "NEED_FETCH", "NEED_BAKE", "NEED_V", "NEED_CANARY", "NEED_V1", "NEED_E",
-                             "NEED_Q"))])
+    ("read", 13500, "3.75", ("NEED_TESTS", "NEED_FETCH", "NEED_BAKE", "NEED_V", "NEED_CANARY", "NEED_E", "NEED_Q"))])
 def test_every_time_left_check_fits_its_own_guard(mode, guard, hours, needs):
     """P109's rule (p109-prove-1; tests/test_p109_staged_pin.py), after sd2-prove-1 stopped before its fetch: every
     can_run need plus its 600 s margin fits its OWN mode's guard after 15 min of install, and the checks use exactly the
@@ -87,7 +86,7 @@ def test_every_time_left_check_fits_its_own_guard(mode, guard, hours, needs):
     for k in needs:
         assert b[k] + 600 <= b["GUARD_S"] - 900, (k, b)
     assert re.findall(r"can_run (\S+)", run) == ["$NEED_TESTS", "$NEED_FETCH", "$NEED_BAKE", "$NEED_PROVE",
-                                                  "$NEED_V", "$NEED_CANARY", "$NEED_V1", "$NEED_E", "$NEED_Q"]
+                                                  "$NEED_V", "$NEED_CANARY", "$NEED_E", "$NEED_Q"]
 
 
 def test_the_step_budget_fits_the_registered_guard():
@@ -108,20 +107,18 @@ def test_the_step_budget_fits_the_registered_guard():
 
 
 def test_the_reads_step_budget_fits_its_guard():
-    """Amendment 3, by the same rule at the same slow host, with each stage at its receipt-based cost, and Amendment 5b's
-    split of V around the canary: V0 3 min (sd2-5090-1: V0 with its build in under 2), the canary 7 min (three builds,
-    tiny work, Q's datasets fetched once), V1 3 min (a build and seconds of timing), each E arm 5 min (P127-5090-1's W1:
-    a 31 s load, 4.4 ms a token, about 38k tokens), then Q's 6300 s (12.6 s per eager window pass at one window a pass:
-    p115d-5090-1 and p121-5090-1). Q must still start: it does, with about 18 min to spare under Amendment 5b's 3.75 h."""
+    """Amendment 3, by the same rule at the same slow host, with each stage at its receipt-based cost and Amendment 5b's
+    canary: V (V0 and V1, one process) 5 min (sd2-5090-1: V0 with its build in under 2), the canary 5 min (two builds,
+    tiny work, Q's datasets fetched once), each E arm 5 min (P127-5090-1's W1: a 31 s load, 4.4 ms a token, about 38k
+    tokens), then Q's 6300 s (12.6 s per eager window pass at one window a pass: p115d-5090-1 and p121-5090-1). Q must
+    still start: it does, with about 21 min to spare under 3.75 h (6 min under 3.5 h, which is too thin)."""
     b = _budget("read")
     guard, reserve = b["GUARD_S"], 600
     t = 600 + 300 + 28 * 60 + 120 + 120 + 120                 # setup, GPU tests, the slow fetch, the head, bake, prompts
     assert t + b["NEED_V"] + reserve <= guard
-    t += 180                                                  # V0
+    t += 300                                                  # V: V0 and V1
     assert t + b["NEED_CANARY"] + reserve <= guard
-    t += 420                                                  # the canary
-    assert t + b["NEED_V1"] + reserve <= guard
-    t += 180                                                  # V1
+    t += 300                                                  # the canary: E and Q
     for arm in range(6):
         assert t + b["NEED_E"] + reserve <= guard, f"arm {arm} would be skipped at t={t}s"
         t += 300

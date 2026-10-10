@@ -367,7 +367,7 @@ def self_test() -> int:
         print("sd2_reduce self-test FAILED:", bad)
         return 1
     print("sd2_reduce self-test OK (89 proof cases: all four rules, sd2-prove-2's calibration, sd2-5090-1's V0 and "
-          "sd2-prove-4; 44 read cases: every verdict, every VOID item, the stage gates, reports that fail soft)")
+          "sd2-prove-4; 43 read cases: every verdict, every VOID item, the stage gate, reports that fail soft)")
     return 0
 
 
@@ -424,9 +424,42 @@ def verify_cost(v1: dict) -> dict:
                                    for k in (1, 2, 3)})}
 
 
-def stage_gate_v0(v: dict, gpu: dict, rule: str = "a4") -> str:
-    """Amendment 5b: after V0's own process, before the canary and V1 -- VOID when V0 fails, else OK."""
-    return "VOID" if v0_fails(v, gpu, rule) else "OK"
+FLOORS = (("2^-7", 2.0 ** -7), ("2^-5", 2.0 ** -5), ("2^-3", 2.0 ** -3))   # the depth report's magnitude floors
+
+
+def _quantiles(v):
+    """[p50, p90, p99, max] of a 1-d host tensor, or None when it is empty."""
+    import torch
+    if not v.numel():
+        return None
+    v = v.double()
+    q = torch.quantile(v, torch.tensor([0.5, 0.9, 0.99], dtype=torch.float64)).tolist()
+    return [round(x, 6) for x in q] + [round(float(v.max()), 6)]
+
+
+def depth_report(src) -> dict:
+    """Reported only (Amendment 5b): from the box's raw key-row tensors (``v_angles.pt``: per V0 record, [L, rows, H]
+    angle / informative / drift / rel), offline, after the run -- per record the max |angle| per layer over informative
+    cells, the max radial drift, and at each of FLOORS the cells and [p50, p90, p99, max] of |angle|, overall and per
+    layer. Needs torch only to read the file; a record whose raw tensors failed soft is passed through."""
+    import torch
+    raw = torch.load(src, map_location="cpu")
+    out = {}
+    for key, r in raw.items():
+        if not isinstance(r, dict) or "angle" not in r:
+            out[key] = r
+            continue
+        a, inf = r["angle"].float().abs(), r["informative"].bool()
+        rel, dr = r["rel"].float(), r["drift"].float()
+        masked = torch.where(inf, a, torch.full_like(a, -1.0)).flatten(1).amax(1).tolist()
+        rec = {"per_layer_max": [round(x, 6) if x >= 0 else None for x in masked],
+               "radial_drift_max": round(float(dr[inf].max()), 6) if bool(inf.any()) else None}
+        for name, f in FLOORS:
+            m = rel >= f
+            rec[name] = {"cells": int(m.sum()), "quantiles": _quantiles(a[m]),
+                         "per_layer": [_quantiles(a[layer][m[layer]]) for layer in range(a.shape[0])]}
+        out[key] = rec
+    return out
 
 
 def stage_gate(v: dict, gpu: dict, rule: str = "a4") -> str:
@@ -741,8 +774,6 @@ def read_self_test() -> list:
     want("FASTER", lambda G, V, E, Q: V["v1"].update(slow, anchor_b_ms=7.40 * 1.04), why="V_NOISY: the rule cannot fire")
     want("VOID", lambda G, V, E, Q: (V["v1"].update(slow, anchor_b_ms=7.40 * 1.04), Q.clear()), "missing:Q",
          "V_NOISY needs Q")
-    if stage_gate_v0(v, gpu) != "OK" or stage_gate_v0(dict(v, v0=dict(v["v0"], draft={"agree": 0.5, "of": 576})), gpu) != "VOID":
-        bad.append("stage gate V0")
     want("FASTER", lambda G, V, E, Q: Q.pop("w16"), why="the w16 draw is reported: missing, it fails soft")
     want("FASTER", lambda G, V, E, Q: E["ON1-a"]["workloads"]["R"].update(identity_tokens={"report_unavailable": "x"}),
          why="identity tokens are reported: unavailable, they fail soft")
@@ -785,7 +816,6 @@ def main(argv=None) -> int:
     ap.add_argument("--rule", choices=RULES, default="a4")
     ap.add_argument("--read", metavar="DIR", help="the read's records: gpu_tests.json, v.json, e_<arm>.json, q.json")
     ap.add_argument("--gate-v", metavar="DIR", help="after stage V: print SD2_GATE VOID | E_ONLY | ALL")
-    ap.add_argument("--gate-v0", metavar="DIR", help="after V0 (Amendment 5b): print SD2_GATE0 VOID | OK")
     ap.add_argument("--expect-e4b")
     ap.add_argument("--expect-gnf4")
     ap.add_argument("--expect-rev")
@@ -794,11 +824,6 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     if a.self_test:
         return self_test()
-    if a.gate_v0:
-        gate = stage_gate_v0(json.load(open(os.path.join(a.gate_v0, "v.json"))),
-                             json.load(open(os.path.join(a.gate_v0, "gpu_tests.json"))), a.rule)
-        print(f"SD2_GATE0 {gate}", flush=True)
-        return 0
     if a.gate_v:
         gate = stage_gate(json.load(open(os.path.join(a.gate_v, "v.json"))),
                           json.load(open(os.path.join(a.gate_v, "gpu_tests.json"))), a.rule)
@@ -811,6 +836,8 @@ def main(argv=None) -> int:
         w1 = json.load(open(a.expect_w1))["tokens"] if a.expect_w1 else None
         out = judge_read(rec("gpu_tests.json"), rec("v.json"), {x: rec(f"e_{x}.json") for x in ARMS}, rec("q.json"),
                          {"e4b": a.expect_e4b, "gnf4": a.expect_gnf4, "rev": a.expect_rev}, w1, a.rule)
+        angles = os.path.join(a.read, "v_angles.pt")         # reported only: never a verdict input, fails soft
+        out["depth"] = soft(depth_report, angles) if os.path.exists(angles) else None
         json.dump(out, open(a.out, "w"), indent=1, sort_keys=True, default=str)
         print("SD2_READ_VERDICT " + json.dumps({"verdict": out["verdict"], "void": out["void"][:12],
                                                 "faster_at": out.get("faster_at"), "conflict": out.get("conflict")}),

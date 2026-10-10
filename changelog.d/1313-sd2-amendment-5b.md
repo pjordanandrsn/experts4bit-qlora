@@ -1,8 +1,9 @@
-### SD2 Amendment 5b (#1313, operational): a canary and fail-soft reporting, after `sd2-5090-2`
+### SD2 Amendment 5b (#1313, operational): canary for E/Q, fail-soft reporting offline, V re-joined
 
-- **The canary.** Right after V0 passes, V1, one E arm and one Q window each run once at minimal size in their own
-  process. Their records are discarded. A canary that fails stops the lane (rc 26) before the paid stages. Stage V
-  splits into V0 (`--read-v0`, `--gate-v0`) and V1 (`--read-v1`) around it.
-- **Fail-soft reporting.** Every reporting-only value goes through `soft()` and records `report_unavailable` on an
-  error, so a statistics bug cannot void a read. Verdict inputs stay strict.
-- **Unchanged:** the rule and the verdict inputs. The guard grows to 3.75 h (ceiling $3.87), so Q starts with about 18 min to spare on the slow-host walk.
+- **Why.** `sd2-5090-2` ($0.713) crashed in V0 on a reporting-only statistic. Under the two-strikes rule the read path
+  is simplified, with a net deletion and no new guard.
+- **Depth reporting leaves V0.** V0 keeps only its strict values; the raw key-row tensors go to `v_angles.pt`; the
+  reducer computes the depth report offline and fail-soft. V0 and V1 stay in one process.
+- **The canary** runs only the long paths: one E arm, and one Q window when Q will run. A failure stops the lane at
+  rc 26 before the paid stages.
+- **Unchanged:** the rule and every verdict input. The guard is 3.75 h, with a ceiling of $3.87.
