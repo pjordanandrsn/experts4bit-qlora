@@ -209,7 +209,7 @@ blocks first (they run last).
 
 ## Decided before registration (maintainer, 2026-10-09)
 
-1. **Formats.** The shared GPTQ checkpoint is the primary row for vLLM and SGLang, and e4b runs at its int4 defaults.
+1. **Formats.** The shared GPTQ checkpoint is the primary row for vLLM and SGLang, and e4b runs at its documented int4 serving configuration (the arm row above).
    AWQ or W4A16 appears only as a reported native-best row where a framework serves it faster. NVFP4 is deferred to its
    own amendment.
 2. **Load.** The closed-loop cells at C = 1/16/64 are gated. At most one Poisson point per framework near saturation is
