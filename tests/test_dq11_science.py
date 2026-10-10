@@ -1434,7 +1434,7 @@ def test_rehearsal_checker_requires_l_read_live_route_witness(live_route_fixture
     rehearsal.write_json(directory / "receipts/read-1-L.json", row)
     delegated = []
     monkeypatch.setattr(reducer, "validate_proofs", lambda rows, rehearsal: delegated.append(("proofs", rehearsal)))
-    monkeypatch.setattr(reducer, "initial_gate", lambda rows: True)
+    monkeypatch.setattr(rehearsal, "initial_quality_report", lambda directory, rows: {"fixture": True})
     monkeypatch.setattr(reducer, "validate_read", lambda reading, proof, **kw: delegated.append(("read", proof["arm"])))
     if present:
         assert rehearsal.correctness(directory)["complete"] is False
@@ -1876,3 +1876,82 @@ def test_observer_policy_requires_actual_boolean_flags(integer):
     else:
         policy["configuration"]["warn_only"] = 1
     assert reducer.reduce(proofs, reads, teardown=teardown, instance_id="fixture-no-instance")["verdict"] == "VOID"
+
+
+def high_perplexity_initial_fixture():
+    """CPU fixture using fifth rehearsal scores; not a new model measurement."""
+    proofs, _, _ = fixture_receipts()
+    for row in proofs:
+        nlls = ((170444.33203125, 170297.07421875) if row["arm"] == "L"
+                else (170443.8828125, 170297.265625))
+        row["initial_quality"] = {
+            text: {"nll": nll, "targets": 16376, "ppl": math.exp(nll / 16376)}
+            for text, nll in zip(reducer.TEXTS, nlls)
+        }
+    return proofs
+
+
+def test_rehearsal_reports_fifth_quality_failure_but_same_science_inputs_still_refuse(tmp_path, monkeypatch):
+    import dq11_arm as arm
+    import dq11_rehearsal as rehearsal
+
+    proofs = high_perplexity_initial_fixture()
+    assert reducer.initial_gate(proofs) is False
+    result = reducer.reduce(proofs, [], initial_only=True)
+    assert result["verdict"] == "QUALITY_FAIL" and result["recommendation"] is None
+    assert result["phase"] == "initial"
+    monkeypatch.setattr(rehearsal, "mode", lambda directory: False)
+    with pytest.raises(ValueError, match="science mode"):
+        rehearsal.initial_quality_report(tmp_path, proofs)
+    for failure in ("global initial quality gate failed before training", "clean process initial quality failed before training"):
+        with pytest.raises(ValueError, match=failure):
+            arm.check_initial_quality(tmp_path, proofs, failure=failure)
+    monkeypatch.setattr(rehearsal, "mode", lambda directory: True)
+    report = arm.check_initial_quality(tmp_path, proofs, failure="must not gate finite L/U rehearsal")
+    assert report["science_eligible"] is report["k8_gate_applied"] is False
+    assert report["k8_reported_pass"] == {"L/U": False, "U0/U": True}
+    assert report["u0_u_exact"] is True and report["k8_absolute_ppl_budget"] == 0.05
+    assert report["scores"] == {row["arm"]: row["initial_quality"] for row in proofs}
+    # Exercise the actual initial/final checker with its proof validator; no reads
+    # exist, so passing this check does not masquerade as a complete instrument.
+    (tmp_path / "receipts").mkdir()
+    for row in proofs:
+        row.update(schema="dq11-rehearsal-arm/1", science_eligible=False)
+        rehearsal.write_json(tmp_path / f"receipts/proof-{row['arm']}.json", row)
+    checked = rehearsal.correctness(tmp_path)
+    assert checked["initial_quality"] == report
+    assert checked["complete"] is False and checked["reads"] == [] and checked["recommendation"] is None
+    assert reducer.reduce(proofs, [], initial_only=True)["verdict"] == "VOID"
+
+
+@pytest.mark.parametrize("mutation", ["nan_L", "inf_U0", "bool_L", "inconsistent", "targets", "tokens", "u0_near", "duplicate"])
+def test_rehearsal_initial_report_refuses_invalid_scores_or_nonexact_u0(tmp_path, monkeypatch, mutation):
+    import dq11_arm as arm
+    import dq11_rehearsal as rehearsal
+
+    monkeypatch.setattr(rehearsal, "mode", lambda directory: True)
+    proofs = high_perplexity_initial_fixture()
+    by_arm = {row["arm"]: row for row in proofs}
+    text = reducer.TEXTS[0]
+    if mutation == "nan_L":
+        by_arm["L"]["initial_quality"][text]["ppl"] = float("nan")
+    elif mutation == "inf_U0":
+        by_arm["U0"]["initial_quality"][text]["nll"] = float("inf")
+    elif mutation == "bool_L":
+        by_arm["L"]["initial_quality"][text]["ppl"] = True
+    elif mutation == "inconsistent":
+        by_arm["L"]["initial_quality"][text]["ppl"] += 1
+    elif mutation == "targets":
+        by_arm["U"]["initial_quality"][text]["targets"] -= 1
+    elif mutation == "tokens":
+        by_arm["U0"]["tokens"] = copy.deepcopy(by_arm["U0"]["tokens"])
+        by_arm["U0"]["tokens"][text]["sha256"] = sha(b"different")
+    elif mutation == "u0_near":
+        q = by_arm["U0"]["initial_quality"][text]
+        q["nll"] += 1e-5
+        q["ppl"] = math.exp(q["nll"] / q["targets"])
+        assert reducer.quality(by_arm["U0"], by_arm["U"], "initial_quality")
+    else:
+        proofs[0] = copy.deepcopy(proofs[1])
+    with pytest.raises(ValueError):
+        arm.check_initial_quality(tmp_path, proofs, failure="science failure")
