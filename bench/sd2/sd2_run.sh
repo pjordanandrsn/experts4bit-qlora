@@ -8,7 +8,8 @@
 # E4B_PAGED_SPEC=eagle3, k = 3 and the pinned head. The target's own GPU tests run on the card, then sd2_box.py --prove
 # (census, capture bitwise, V0 addressing at k = 1..3 with its three mutants, the draft gate, the transition), then the
 # reducer. The harness is the launch commit (E4B_SHA), checked out by SHA as its own worktree; it is never installed.
-#   order    refusals; install + clones + tripwire; self-tests; fetch (model, head); bake; prompts; GPU tests; prove; reduce
+#   order    refusals (incl. the guard); install + clones + tripwire; self-tests; GPU tests; fetch (model, head); bake;
+#            prompts; prove; reduce
 set -uo pipefail
 W=/root/sd2; mkdir -p $W/logs $W/src; cd $W || exit 78
 say(){ echo "[$(date -u +%FT%TZ)] sd2: $*"; }
@@ -26,7 +27,14 @@ MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
 HEAD_REPO=RedHatAI/Qwen3-30B-A3B-speculator.eagle3; HEAD_REV=6afc5aa2477b923467fb9a8d906782b984a9a6ba
 HEAD_SHA256=d2d6e2e63e09dc755053ae5c98cdececae3611ae5e202d4fa5411126dd3b1dfa; HEAD_BYTES=1044539336
 GPU_CLASS=${SD2_GPU_CLASS:-5090}; MIN_DISK_GB=${SD2_MIN_DISK_GB:-150}; MIN_RAM_GB=${SD2_MIN_RAM_GB:-60}
-NEED_FETCH=2100; NEED_BAKE=600; NEED_TESTS=900; NEED_PROVE=1500   # seconds
+# Every time-left check is a per-mode variable sized to that mode's own registered guard (Amendment 1b, P109's rule:
+# tests/test_sd2.py holds each check plus its 600 s margin inside the guard after 15 min of install). sd2-prove-1 ran
+# under 0.75 h and stopped before the fetch: 2100 + 600 s did not fit what the guard left after the installs.
+MODE=${SD2_MODE:-prove}
+case "$MODE" in
+  prove) GUARD_S=4500; NEED_TESTS=600; NEED_FETCH=2100; NEED_BAKE=600; NEED_PROVE=900;;   # seconds; --wallclock-h 1.25
+  *) say "refusing: SD2_MODE=$MODE (the read's mode is Amendment 2's)"; finish 78;;
+esac
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 # every serving lever and engine knob starts unset: the default server is the subject (fixed knobs below)
 unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_SERVE_ATTN_INT4 E4B_FUSE_T1_GLUE E4B_FUSE_T1_GLUE_R2 \
@@ -57,6 +65,9 @@ RAM_GB=$(awk '/^MemTotal:/{print int($2/1048576)}' /proc/meminfo)
 [ "${RAM_GB:-0}" -ge "$MIN_RAM_GB" ] || { say "REFUSED: ${RAM_GB:-?} GiB host RAM < ${MIN_RAM_GB} GiB"; echo "refused: ram ${RAM_GB:-?} GiB" > REFUSAL; finish 16; }
 can_run(){ local need=$1 now; now=$(date +%s); [ $((now + need + 600)) -le "$SD2_DEADLINE_EPOCH" ] || { say "STOP-2: $2 needs ${need}s, only $((SD2_DEADLINE_EPOCH - now))s left -- skipped (host-limited)"; echo "SKIPPED $2 host-limited deadline" >> summary.txt; return 1; }; }
 step_alarm(){ local cap=$1 left=$(( SD2_DEADLINE_EPOCH - $(date +%s) - 600 )); [ "$left" -gt "$cap" ] && left=$cap; [ "$left" -lt 600 ] && left=600; echo "$left"; }
+# a launch whose deadline is shorter than the registered guard is refused here, before anything is installed or fetched
+LEFT=$(( SD2_DEADLINE_EPOCH - $(date +%s) ))
+[ "$LEFT" -ge $(( GUARD_S - 900 )) ] || { say "REFUSED: the deadline leaves ${LEFT}s; the registered guard is ${GUARD_S}s"; echo "refused: guard ${LEFT}s" > REFUSAL; finish 17; }
 export DEBIAN_FRONTEND=noninteractive
 TORCH_PIN=$(python -c "import torch; print(torch.__version__.split('+')[0])"); echo "torch==$TORCH_PIN" > $W/constraints.txt
 pipx(){ local log=$1 secs=$2; shift 2
@@ -100,6 +111,27 @@ python $W/sd2_reduce.py --self-test | tail -1 | tee -a summary.txt; [ "${PIPESTA
 python $W/sd2_box.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "BOX SELF-TEST FAILED"; finish 21; }
 python $W/sd1_box.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "SD1 BOX SELF-TEST FAILED"; finish 21; }
 python $WATCHDOG --self-test 2>/dev/null | tail -1 | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "WATCHDOG SELF-TEST FAILED"; finish 21; }
+# ---- the target's own GPU tests, on the card (CI cannot run them: sm_89+). They need no checkpoint, so they run
+# before the 62 GB fetch, and a failure stops the lane there (rc 24, gpu_tests.json kept): the proof is FAILED anyway.
+can_run $NEED_TESTS "gpu tests" || finish 40
+GPU_TESTS="tests/test_spec_decode_gpu.py tests/test_spec_decode.py tests/test_kv_alias_verify.py tests/test_eagle3_draft.py tests/test_scheduler_speculative.py tests/test_serve_paged_spec.py tests/test_decode_graph_buckets.py tests/test_kv_step_select.py"
+say "gpu tests"
+(cd $W/src/e4b_T && perl -e "alarm $(step_alarm 1500); exec @ARGV" python -m pytest -q -rs -p no:cacheprovider $GPU_TESTS) > logs/gpu_tests.log 2>&1
+GT_RC=$?
+python - "$GT_RC" <<'PYG' | tee -a summary.txt
+import json, re, sys
+log = open("/root/sd2/logs/gpu_tests.log", encoding="utf-8", errors="replace").read()
+last = [ln for ln in log.splitlines() if re.search(r"\d+ (passed|failed)", ln)]
+tail = last[-1] if last else ""
+num = lambda w: int((re.search(rf"(\d+) {w}", tail) or [0, 0])[1])
+card = sum(1 for ln in log.splitlines() if ln.startswith("SKIPPED") and "e4m3" in ln)
+rec = {"rc": int(sys.argv[1]), "passed": num("passed"), "failed": num("failed"), "skipped": num("skipped"),
+       "skipped_for_card": card, "summary": tail.strip()}
+json.dump(rec, open("/root/sd2/gpu_tests.json", "w"))
+print("SD2_GPU_TESTS " + json.dumps(rec))
+PYG
+[ "${PIPESTATUS[0]}" = 0 ] && [ -s $W/gpu_tests.json ] || { say "GPU TESTS RECORD FAIL"; finish 22; }
+[ "$GT_RC" = 0 ] || { say "GPU TESTS FAILED (rc=$GT_RC) -- stopping before the fetch"; finish 24; }
 # ---- the checkpoint (under the watchdog), the head (pinned by revision and sha256, with its config), the NF4 arena
 can_run $NEED_FETCH fetch || finish 40
 say "fetch $MODEL @ $REV"
@@ -130,25 +162,6 @@ perl -e "alarm 1200; exec @ARGV" python $W/p109_box.py --prompts-only --model "$
 perl -e "alarm 600; exec @ARGV" python $W/sd1_box.py --chat-prompts $W/chat_prompts.json --snapshot "$SNAP" --outdir $W > logs/prompts_C.log 2>&1 \
   || { tail -4 logs/prompts_C.log; say "PROMPTS FAIL (C)"; finish 19; }
 grep -a "PROMPTS" logs/prompts_R.log logs/prompts_C.log | tee -a summary.txt
-# ---- the target's own GPU tests, on the card (CI cannot run them: sm_89+)
-can_run $NEED_TESTS "gpu tests" || finish 40
-GPU_TESTS="tests/test_spec_decode_gpu.py tests/test_spec_decode.py tests/test_kv_alias_verify.py tests/test_eagle3_draft.py tests/test_scheduler_speculative.py tests/test_serve_paged_spec.py tests/test_decode_graph_buckets.py tests/test_kv_step_select.py"
-say "gpu tests"
-(cd $W/src/e4b_T && perl -e "alarm $(step_alarm 1500); exec @ARGV" python -m pytest -q -rs -p no:cacheprovider $GPU_TESTS) > logs/gpu_tests.log 2>&1
-GT_RC=$?
-python - "$GT_RC" <<'PYG' | tee -a summary.txt
-import json, re, sys
-log = open("/root/sd2/logs/gpu_tests.log", encoding="utf-8", errors="replace").read()
-last = [ln for ln in log.splitlines() if re.search(r"\d+ (passed|failed)", ln)]
-tail = last[-1] if last else ""
-num = lambda w: int((re.search(rf"(\d+) {w}", tail) or [0, 0])[1])
-card = sum(1 for ln in log.splitlines() if ln.startswith("SKIPPED") and "e4m3" in ln)
-rec = {"rc": int(sys.argv[1]), "passed": num("passed"), "failed": num("failed"), "skipped": num("skipped"),
-       "skipped_for_card": card, "summary": tail.strip()}
-json.dump(rec, open("/root/sd2/gpu_tests.json", "w"))
-print("SD2_GPU_TESTS " + json.dumps(rec))
-PYG
-[ "${PIPESTATUS[0]}" = 0 ] && [ -s $W/gpu_tests.json ] || { say "GPU TESTS RECORD FAIL"; finish 22; }
 # ---- the proof: the shipped default with speculation on, k = 3, graphs on
 can_run $NEED_PROVE prove || finish 40
 ENGINE_ENV="E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$REV E4B_PAGED_ARENA=$W/work/nf4.arena E4B_PAGED_CALIB=$W/calib.json E4B_PAGED_MAX_SEQS=16 E4B_INT4_TILE_PROGRAMS=1 E4B_PAGED_SPEC=eagle3 E4B_PAGED_SPEC_K=3 E4B_PAGED_SPEC_HEAD=$HEAD_DIR"

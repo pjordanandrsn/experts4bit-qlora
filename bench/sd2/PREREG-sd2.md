@@ -465,3 +465,40 @@ ACK and the relay on #1313.
 - A later change to package code needs a new proof, and a change to docs or tests alone does not.
 - Amendment 2 then registers the read's harness (stages V, E and Q, and the rule above in `sd2_reduce.py`) and pins
   the merged commits.
+
+## Amendment 1b (2026-10-10): the proof's time budget, after `sd2-prove-1`
+
+**What happened.** `sd2-prove-1` (vast instance 55178430, **$0.046**, teardown complete) ended as **HARNESS_ERROR, rc
+40**: STOP-2 before the fetch.
+- **The box was healthy.** The tripwire passed, so the target imported with SD2's build (e4b 0.52.0 at `539a2d26`).
+  All four self-tests passed.
+- **The defect.** The runner kept SD1's fetch budget (2100 s plus the 600 s margin) under a 0.75 h guard, which the
+  installs had already eaten into. This is P109's trap (`p109-prove-1`), and the review should have asked for the guard.
+
+**The fix:**
+- **Per-mode checks.** Every time-left check is a per-mode variable (`SD2_MODE`; `prove` only until Amendment 2).
+  `tests/test_sd2.py` holds P109's rule: every check plus its 600 s margin fits its mode's guard after 15 min of install,
+  and the checks use exactly those variables, in order. A second test walks a slow host through every check.
+- **The guard, from the real steps.**
+
+  | step | time |
+  |---|---|
+  | installs, clones, tripwire and self-tests | about 10 min |
+  | the build's GPU tests | about 5 min |
+  | the checkpoint fetch | 9 min on `sd1-5090-2`'s host, 28 min on `p127-prove-3`'s |
+  | the head, the bake and the prompts | about 6 min |
+  | the proof | about 10 min |
+
+  - **At 1.0 h,** each check passes P109's per-check rule. But a 28-minute fetch puts the bake's check past the
+    deadline, a STOP-2 after the download has been paid for.
+  - **At 1.25 h,** every check passes on the slow host (`test_the_step_budget_fits_the_registered_guard`).
+
+  So the guard of 1.25 h is SD1's. The ceiling is 1.25 h × $0.85 + 62 GB × $0.011 = $1.0625 + $0.682 = **$1.75**. The
+  expected cost is unchanged, at about $1.10.
+- **A short deadline refuses at once.** A launch whose deadline leaves less than the guard minus 15 min refuses before
+  anything is installed (rc 17).
+- **The GPU tests come first.** They need no checkpoint, so they now run before the 62 GB fetch. A failure stops the
+  lane there (rc 24) with `gpu_tests.json` kept, and the proof is FAILED on `gpu_tests`.
+
+**Unchanged:** the target `539a2d26` (the builds are untouched, so no re-proof question arises), every gate and its
+rule. The next run is `sd2-prove-2`, and it launches on the maintainer's ACK and a new relay on #1313.
