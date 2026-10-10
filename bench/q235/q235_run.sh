@@ -57,6 +57,9 @@ CAP_GIT=240 CAP_VENV=120 CAP_INSTALL=1800 CAP_HOSTRATE=600 CAP_FETCH=12000 CAP_T
 # dominant part is the host-side expert assembly) and its load's effective read rate. The box measures all three (the disk with
 # O_DIRECT) before the checkpoint fetch and refuses below any. A rehearsal records only.
 MIN_H2D_GBS=5.8 MIN_DISK_GBS=0.743 MIN_HOST_COPY_GBS=5.14
+# The pull-rate floor (GB/s): the rate at which the checkpoint, hashed at the rehearsal's rate, still fits CAP_FETCH / 1.5. The fetch
+# times its first slice (the small files and 8 shards, ~32 GB) with its own client and refuses (14) below it, before pulling the rest.
+MIN_FETCH_GBS=0.062
 ROWS=8          # TC1's field-text rows in the one micro-batch (the 30B calibration's and gate 1's); the registering amendment fixes it
 PY=python3.11
 if [ "$MODE" != science ]; then
@@ -105,7 +108,13 @@ case "$PHASE_RC" in
 esac
 
 case "$MODE" in
-  science) must fetch "$CAP_FETCH" python q235_fetch.py --lock model_files.json --dest "$W/hf-cache/model" --out receipts/fetch.json
+  science) phase fetch "$CAP_FETCH" python q235_fetch.py --lock model_files.json --dest "$W/hf-cache/model" --out receipts/fetch.json \
+             --min-gb-s "$MIN_FETCH_GBS"
+           case "$PHASE_RC" in
+             0) ;;
+             14) tail -3 logs/fetch.log; echo 'pull rate floor' > REFUSAL; say 'refusing: the checkpoint pulls slower than the fit'"'"'s floor'; finish 14 ;;
+             *) tail -30 logs/fetch.log; say "VOID: fetch (rc $PHASE_RC)"; finish 11 ;;
+           esac
            MODEL="$W/hf-cache/model" DEVICE=cuda ENABLER=fast ;;
   a2000)   must fetch "$CAP_FETCH" python q235_fetch.py --lock model_files.json --dest "$W/hf-cache/model" --slice 4 --slice-dir "$W/hf-cache/slice4" --out receipts/fetch.json
            MODEL="$W/hf-cache/slice4" DEVICE=cuda ENABLER=fast ;;

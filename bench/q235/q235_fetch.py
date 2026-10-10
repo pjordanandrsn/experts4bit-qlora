@@ -8,9 +8,17 @@
   every non-layer tensor (from the locked index), then ``mk_slice.py`` builds the depth-truncated view beside them.
 - **only GLOB...** (the CPU rehearsal): the same, for the locked files the patterns name (the tokenizer's).
 
-Records ``fetch.json``: files, bytes, the download and hashing seconds, and any refusal. Exits 0 when every file matches.
+**The pull rate is measured on the fetch itself.** The fetch starts with a timed first slice -- the non-shard files and the first
+``--probe-shards`` shards, through the same ``snapshot_download`` and workers, in a child process -- and records its bytes, seconds
+and rate. The slice has a deadline, its bytes over ``--min-gb-s``: a host that has not finished it by then is refused at once, and so
+is one that finished below the rate; either exits 14 (the launcher's host code for a pull rate under the floor) before paying for the
+rest. Above it, the fetch goes on and skips what the slice already holds.
+
+Records ``fetch.json``: files, bytes, the slice's rate, the download and hashing seconds, and any refusal. Exits 0 when every file
+matches.
 
     python q235_fetch.py --lock model_files.json --dest DIR [--slice N --slice-dir DIR | --only GLOB...] [--workers 8]
+                         [--min-gb-s X --probe-shards 8]
 """
 from __future__ import annotations
 
@@ -47,6 +55,12 @@ def slice_files(lock: dict, index: dict, n: int) -> list:
     return [f["file"] for f in lock["files"] if not f["file"].endswith(".safetensors") or f["file"] in need]
 
 
+def probe_names(names: list, shards: int) -> list:
+    """The fetch's timed first slice: every non-shard file, and the first ``shards`` shards in name order."""
+    first = sorted(n for n in names if n.endswith(".safetensors"))[:max(0, shards)]
+    return [n for n in names if not n.endswith(".safetensors")] + first
+
+
 def verify(lock: dict, dest: Path, names: list, workers: int) -> list:
     """Refusals for ``names`` under ``dest`` against the lock (size first, then content; hashlib releases the GIL on large
     buffers, so the files hash in parallel on threads)."""
@@ -74,6 +88,8 @@ def main():
     ap.add_argument("--slice-dir", type=Path, default=None)
     ap.add_argument("--only", nargs="+", default=None, help="CPU rehearsal: only the locked files these patterns name")
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--min-gb-s", type=float, default=0.0, help="refuse (exit 14) when the first slice pulls slower than this")
+    ap.add_argument("--probe-shards", type=int, default=8)
     ap.add_argument("--out", type=Path, default=Path("fetch.json"))
     a = ap.parse_args()
     lock = json.loads(a.lock.read_text())
@@ -96,6 +112,33 @@ def main():
         names = [n for n in names if any(fnmatch.fnmatch(n, g) for g in a.only)]
         if not names:
             sys.exit("refusing: --only names no locked file")
+    sizes = {f["file"]: f["size"] for f in lock["files"]}
+    first = probe_names(names, a.probe_shards)
+    slice_bytes = sum(sizes[n] for n in first)
+    deadline = slice_bytes / (a.min_gb_s * 1e9) if a.min_gb_s else None
+    child = ("import json, sys; from huggingface_hub import snapshot_download; a = json.loads(sys.argv[1]); "
+             "snapshot_download(a['repo'], revision=a['rev'], local_dir=a['dest'], allow_patterns=a['names'], max_workers=a['workers'])")
+    arg = json.dumps({"repo": lock["repo"], "rev": lock["revision"], "dest": str(a.dest), "names": first, "workers": a.workers})
+    tp = time.time()
+    try:
+        r = subprocess.run([sys.executable, "-c", child, arg], timeout=deadline)
+        finished, rc = True, r.returncode
+    except subprocess.TimeoutExpired:
+        finished, rc = False, None
+    dt = max(time.time() - tp, 1e-3)
+    done = sum(sizes[n] for n in first if (a.dest / n).is_file() and (a.dest / n).stat().st_size == sizes[n])
+    rec["probe"] = {"files": len(first), "slice_bytes": slice_bytes, "completed_bytes": done, "seconds": round(dt, 1),
+                    "gb_s": round(done / dt / 1e9, 4), "finished": finished, "deadline_s": round(deadline, 1) if deadline else None,
+                    "floor_gb_s": a.min_gb_s}
+    if finished and rc != 0:
+        sys.exit(f"the first slice's download failed (rc {rc})")
+    if a.min_gb_s and (not finished or rec["probe"]["gb_s"] < a.min_gb_s):
+        why = (f"the first {len(first)} files ({slice_bytes / 1e9:.1f} GB) were not done by the {deadline:.0f} s deadline "
+               f"({done / 1e9:.1f} GB complete)" if not finished else f"pull rate {rec['probe']['gb_s']} GB/s < {a.min_gb_s}")
+        rec.update(ok=False, refusals=[why])
+        a.out.write_text(json.dumps(rec, indent=1) + "\n")
+        print(json.dumps({"refused": why}))
+        sys.exit(14)
     snapshot_download(lock["repo"], revision=lock["revision"], local_dir=a.dest, allow_patterns=names, max_workers=a.workers)
     rec["download_seconds"] = round(time.time() - t0, 1)
     t1 = time.time()

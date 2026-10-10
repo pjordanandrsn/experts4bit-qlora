@@ -12,6 +12,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -195,3 +196,53 @@ def test_the_host_rate_probe_refuses_below_its_floors_and_without_o_direct_when_
     rec = json.loads((tmp_path / "d.json").read_text())
     assert (r.returncode == 0 and rec["disk_method"].startswith("O_DIRECT")) or (r.returncode == 13 and rec["disk_read_gb_s"] is None)
     assert not list(tmp_path.glob(".q235-hostrate.bin"))                 # the probe file never outlives the probe
+
+
+def _fake_hub(tmp_path):
+    """A stand-in huggingface_hub for the fetch (parent and child process): it copies locked files from FAKE_SRC, after FAKE_SLEEP s."""
+    pkg = tmp_path / "fakehub" / "huggingface_hub"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text(
+        "import os, shutil, time\n"
+        "def snapshot_download(repo, revision=None, local_dir=None, allow_patterns=None, max_workers=8):\n"
+        "    time.sleep(float(os.environ.get('FAKE_SLEEP', '0')))\n"
+        "    for n in allow_patterns:\n"
+        "        shutil.copyfile(os.path.join(os.environ['FAKE_SRC'], n), os.path.join(str(local_dir), n))\n"
+        "def hf_hub_download(*a, **k):\n"
+        "    raise RuntimeError('not used')\n")
+    return pkg.parent
+
+
+def _fake_checkpoint(tmp_path):
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "config.json").write_text('{"a": 1}\n')
+    files = [{"file": "config.json", "size": (src / "config.json").stat().st_size, "lfs_sha256": None,
+              "blob_id": subprocess.run(["git", "hash-object", str(src / "config.json")], capture_output=True, text=True).stdout.strip()}]
+    for i in (1, 2):
+        name = f"model-0000{i}-of-00002.safetensors"
+        (src / name).write_bytes(os.urandom(1 << 20))
+        files.append({"file": name, "size": 1 << 20, "blob_id": "x", "lfs_sha256": hashlib.sha256((src / name).read_bytes()).hexdigest()})
+    lock = {"schema": "q235-model-files/1", "repo": "r/m", "revision": "0" * 40, "n_files": len(files), "files": files}
+    (tmp_path / "lock.json").write_text(json.dumps(lock))
+    return src
+
+
+def test_the_fetch_times_its_first_slice_and_refuses_a_slow_pull_by_its_deadline(tmp_path):
+    src = _fake_checkpoint(tmp_path)
+    env = {**os.environ, "PYTHONPATH": str(_fake_hub(tmp_path)), "FAKE_SRC": str(src)}
+    run = [sys.executable, str(Q / "q235_fetch.py"), "--lock", str(tmp_path / "lock.json"), "--probe-shards", "1", "--workers", "2"]
+    dest = tmp_path / "fast"
+    dest.mkdir()
+    r = subprocess.run(run + ["--dest", str(dest), "--out", str(tmp_path / "fast.json"), "--min-gb-s", "1e-6"], env=env,
+                       capture_output=True, text=True, timeout=120)
+    rec = json.loads((tmp_path / "fast.json").read_text())
+    assert r.returncode == 0 and rec["ok"] and rec["probe"]["finished"] and rec["probe"]["files"] == 2, (r.stdout, r.stderr[-400:])
+    dest = tmp_path / "slow"
+    dest.mkdir()
+    t0 = time.time()
+    r = subprocess.run(run + ["--dest", str(dest), "--out", str(tmp_path / "slow.json"), "--min-gb-s", "0.002"],
+                       env={**env, "FAKE_SLEEP": "30"}, capture_output=True, text=True, timeout=120)
+    rec = json.loads((tmp_path / "slow.json").read_text())
+    assert r.returncode == 14 and not rec["probe"]["finished"] and "deadline" in rec["refusals"][0], (r.stdout, r.stderr[-400:])
+    assert time.time() - t0 < 25                                          # refused at the ~0.5 s deadline, not after the 30 s pull

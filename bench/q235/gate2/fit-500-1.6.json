@@ -86,8 +86,10 @@
   "sealed": {
    "h2d_gb_s": 5.8,
    "disk_read_gb_s": 0.743,
-   "host_copy_gb_s": 5.14
+   "host_copy_gb_s": 5.14,
+   "fetch_gb_s": 0.062
   },
+  "fetch_gb_s": 0.062,
   "sealed_match": true
  },
  "rehearsal": {

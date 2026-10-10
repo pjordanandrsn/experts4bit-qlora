@@ -72,7 +72,7 @@ def test_the_floors_are_the_rehearsal_s_link_and_its_load_s_effective_disk_rate(
     prof = {"read": 30.12, "assemble": 65.68, "quantize": 1.14, "offload": 7.38, "other_s": 11.51, "read_bytes": 22391367680}
     fl = f.floors(hr, 126.2, prof)                                             # with the load profile: the reads' own rate
     assert fl["disk_read_gb_s"] == round(22391367680 / 30.12 / 1e9, 3) and fl["basis"]["dominant"] == "assemble"
-    assert set(f.sealed_floors(Q / "q235_run.sh")) == {"h2d_gb_s", "disk_read_gb_s", "host_copy_gb_s"}
+    assert set(f.sealed_floors(Q / "q235_run.sh")) == {"h2d_gb_s", "disk_read_gb_s", "host_copy_gb_s", "fetch_gb_s"}
 
 
 def test_the_fit_refuses_a_rehearsal_that_is_not_a_clean_a2000_run(tmp_path):
@@ -82,3 +82,14 @@ def test_the_fit_refuses_a_rehearsal_that_is_not_a_clean_a2000_run(tmp_path):
     r = subprocess.run([sys.executable, str(Q / "q235_fit.py"), "--rehearsal", str(tmp_path), "--warm-install-s", "1",
                         "--bandwidth-mbps", "500", "--usd-per-hour", "2"], capture_output=True, text=True, timeout=60)
     assert r.returncode != 0 and "not a clean A2000 rehearsal" in r.stderr
+
+
+def test_the_pull_floor_is_the_rate_that_fits_the_fetch_cap():
+    f = _fit()
+    fetch = {"bytes": 27_047_001_621, "hash_seconds": 23.7}
+    model = 470_211_497_053
+    floor = f.fetch_floor(model, fetch, 12000)
+    hash_s = model / (fetch["bytes"] / fetch["hash_seconds"])
+    assert floor >= model / (12000 / f.MARGIN - hash_s) / 1e9 and floor - model / (12000 / f.MARGIN - hash_s) / 1e9 < 1e-3
+    assert f.fetch_floor(model, fetch, 300) == float("inf")                  # no time left after hashing: no rate fits
+    assert f.sealed_floors(Q / "q235_run.sh")["fetch_gb_s"] >= floor           # the sealed floor is at least the fitted one

@@ -20,6 +20,8 @@ work, so the fit reads the box's load profile (``q235_box.LoadProfile``: read, a
 floor for each host-bound part, which the box checks before the fetch (``q235_hostrate.py``):
 - the link (the step's staging, the offload and the stacks' copy in): the rehearsal's measured pinned host-to-device rate;
 - the host memory (the expert assembly): the rehearsal's measured host-copy rate;
+- the pull (the checkpoint fetch): the rate at which its bytes, hashed at the rehearsal's rate, fit the fetch cap / ``MARGIN``; the
+  fetch's timed first slice enforces it;
 - the disk (the shard reads): the rehearsal load's effective read rate, the bytes its reads returned over their seconds (without a
   profile, the slice's tensor bytes over the whole load). The rehearsal's own O_DIRECT figure is reported beside it; on a cached
   filesystem it overstates the disk, which is why it is not the floor.
@@ -78,9 +80,18 @@ def floors(hostrate: dict, load_s: float, profile: dict | None = None) -> dict:
 
 def sealed_floors(run_sh: Path) -> dict:
     """The host-rate floors q235_run.sh seals for a science box."""
-    found = dict(re.findall(r"\b(MIN_H2D_GBS|MIN_DISK_GBS|MIN_HOST_COPY_GBS)=([0-9.]+)\b", run_sh.read_text()))
+    found = dict(re.findall(r"\b(MIN_H2D_GBS|MIN_DISK_GBS|MIN_HOST_COPY_GBS|MIN_FETCH_GBS)=([0-9.]+)\b", run_sh.read_text()))
     return {"h2d_gb_s": float(found.get("MIN_H2D_GBS", 0)), "disk_read_gb_s": float(found.get("MIN_DISK_GBS", 0)),
-            "host_copy_gb_s": float(found.get("MIN_HOST_COPY_GBS", 0))}
+            "host_copy_gb_s": float(found.get("MIN_HOST_COPY_GBS", 0)), "fetch_gb_s": float(found.get("MIN_FETCH_GBS", 0))}
+
+
+def fetch_floor(model_bytes: int, fetch: dict, fetch_cap_s: int) -> float:
+    """The pull rate (GB/s, rounded up to 1e-3) at which the checkpoint, hashed at the rehearsal's rate, fits ``fetch_cap_s`` / MARGIN."""
+    hash_s = model_bytes / (fetch["bytes"] / max(fetch["hash_seconds"], 1e-9))
+    left = fetch_cap_s / MARGIN - hash_s
+    if left <= 0:
+        return math.inf
+    return math.ceil(model_bytes / left / 1e9 * 1000) / 1000
 
 
 def fit(timings: dict, warm_install_s: float, fetch: dict, wheel_bytes: int, model_bytes: int, bandwidth_mbps: float,
@@ -131,7 +142,10 @@ def main():
     rep["floors"] = floors(hostrate, float(box["load"]["seconds"]), box["load"].get("profile"))
     sealed = sealed_floors(HERE / "q235_run.sh")
     rep["floors"]["sealed"] = sealed
-    rep["floors"]["sealed_match"] = all(sealed.get(k) == rep["floors"][k] for k in ("h2d_gb_s", "host_copy_gb_s", "disk_read_gb_s"))
+    caps = sealed_caps(HERE / "q235_run.sh")
+    rep["floors"]["fetch_gb_s"] = fetch_floor(model["total_bytes"], fetch, caps["fetch"])
+    rep["floors"]["sealed_match"] = (all(sealed.get(k) == rep["floors"][k] for k in ("h2d_gb_s", "host_copy_gb_s", "disk_read_gb_s"))
+                                     and sealed.get("fetch_gb_s", 0) >= rep["floors"]["fetch_gb_s"])
     rep["fits"] = rep["fits"] and rep["floors"]["sealed_match"]
     rep["rehearsal"] = {"nonce": run.get("nonce"), "e4b_sha": run.get("e4b_sha"), "timings": timings}
     text = json.dumps(rep, indent=1)

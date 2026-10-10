@@ -15,7 +15,8 @@ The A2000 leg of gate 1 ran `q235_run.sh` with `Q235_REHEARSAL=a2000` (a 4-layer
   - other 11.5 s; offload 7.4 s; quantize 1.1 s.
 - `fit-500-2.2.json`, `fit-500-1.6.json`: `q235_fit.py` for a host listing 500 Mbps at $2.20 and $1.60 an hour. Both fit:
   - each sealed cap covers its budget (box 8,820 s for 8,813; repeat 4,620 s for 4,583; fetch 12,000 s for 11,904);
-  - the sealed floors equal their derivation (H2D 5.8 GB/s, host copy 5.14 GB/s, disk 0.743 GB/s).
+  - the sealed floors equal their derivation (H2D 5.8 GB/s, host copy 5.14 GB/s, disk 0.743 GB/s), and the sealed pull floor
+    (0.062 GB/s) is at least the rate at which the checkpoint, hashed at the rehearsal's rate, fits the fetch cap / 1.5.
 
   The worst-case wallclock is 8.25 h: $18.15 at $2.20 (above the $15 no-ask tier) and $13.20 at $1.60 (within it).
 
