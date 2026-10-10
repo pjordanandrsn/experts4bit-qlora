@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import time
+from urllib.parse import urlparse
 
 import pytest
 import torch
@@ -21,6 +22,7 @@ ROOT = Path(__file__).parents[1]
 LANE = ROOT / "bench/dq11"
 sys.path.insert(0, str(LANE))
 import dq11_common as common  # noqa: E402
+import dq11_bootstrap as bootstrap  # noqa: E402
 from dq11_observe import Observer  # noqa: E402
 import dq11_reduce as reducer  # noqa: E402
 from dq11_science_stage import stage  # noqa: E402
@@ -603,6 +605,37 @@ def test_committed_science_closure_and_selected_wheel_lock():
     assert len(packages) == 101
     for package in packages:
         assert package["url"] in lock and "--hash=sha256:" + package["sha256"] in lock
+
+
+def test_every_committed_wheel_url_has_an_allowlisted_origin():
+    packages = json.loads((LANE / "wheels.json").read_text())["packages"]
+    lock_urls = [
+        line.split(" @ ", 1)[1].split()[0]
+        for line in (LANE / "requirements.lock").read_text().splitlines()
+        if " @ " in line
+    ]
+    assert len(lock_urls) == len(packages) == 101
+    assert set(lock_urls) == {row["url"] for row in packages}
+    assert all(urlparse(url).scheme == "https" for url in lock_urls)
+    bootstrap.validate_wheel_origins([{"url": url} for url in lock_urls])
+
+
+@pytest.mark.parametrize(
+    "missing", ["files.pythonhosted.org", "download.pytorch.org", "download-r2.pytorch.org", "pypi.nvidia.com"]
+)
+def test_missing_locked_origin_refuses_before_network_or_install(tmp_path, monkeypatch, missing):
+    packages = json.loads((LANE / "wheels.json").read_text())["packages"]
+    (tmp_path / "wheels.json").write_text(json.dumps({"packages": packages}))
+    monkeypatch.setattr(bootstrap, "ALLOWED_WHEEL_ORIGINS", bootstrap.ALLOWED_WHEEL_ORIGINS - {missing})
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("origin refusal must precede network and installation")
+
+    monkeypatch.setattr(bootstrap.urllib.request, "urlopen", forbidden)
+    monkeypatch.setattr(bootstrap.subprocess, "run", forbidden)
+    with pytest.raises(ValueError, match="unregistered wheel origin: " + missing):
+        bootstrap.install(tmp_path, tmp_path / "cache")
+    assert not (tmp_path / "cache").exists()
 
 
 def test_actual_science_controller_dry_run_with_small_sealed_fixture(tmp_path):
