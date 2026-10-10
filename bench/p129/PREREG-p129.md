@@ -548,6 +548,37 @@ attempt again sits above the load gate, the read says so and does not call DEFAU
 **Budget.** The lane has spent $6.653 ($0.211 + $1.874 + $2.759 + $1.809 for boxes 143, 146, 147 and 148), with $8.347 left under
 the $15 cap. This box is about $2–3.
 
+## Amendment 4 read (`tc1-5090-150`, 2026-10-10): GAIN on a second host, so DEFAULT_ON
+
+**The box.**
+- **Host:** machine 152440 (AMD EPYC 7K62, RTX 5090) at $0.659/h; $1.326.
+- **Build:** e4b `2d0ed91` (main with Amendment 4; its package diff against `51e5ae1` is the seven cleared files), grouped-nf4-gemm
+  v0.44.0 `d1f64ba`.
+- **Validity:** all eight arms are VALID, and both q0 floors are complete.
+- **Load:** no draw was voided. Every draw ran at its first attempt, under the gate.
+- **Reduction:** main's `tc1_reduce.py` at `d7ba80d` (`RESULTS-p129-a4.md`).
+
+| row | verdict | reading |
+|---|---|---|
+| `R_m` | HELD | launches per step 79,593 → 68,521, −13.9 % |
+| `R_shipped` | HELD | 75,833 → 64,761, −14.6 % |
+| `PREMISE` | HELD | matched `q0` busy_t 0.539 |
+| `W_m` | HELD | `q1 / q0` 0.906 [0.903, 0.909] |
+| `W_shipped` | HELD | 0.884 [0.870, 0.898] |
+| `DEVICE` | reported | 0.988 on each arm; peak +0.005 / +0.023 GB |
+| `QUALITY` | HELD | step 0, both arms: e_B 0.02313 against 0.03905 (e_A 0.03138, e_D2 0.03138, e_D3 0.03523, e_D4 0.03905); at N +0.00182 matched, +0.00071 shipped |
+| `FQKV` | **GAIN** | |
+
+The step-0 numbers equal box 147's bit for bit on another host. D2 again reproduced the stock rows.
+
+**DEFAULT_ON.** By Amendment 2's decision rules:
+- box 147 read GAIN on machine 27708;
+- this box reads GAIN on a second host, 152440.
+
+DEFAULT_ON does not rest on contention. This box ran with no load voids, and its wall ratios agree with box 147's under heavy load
+(0.895 / 0.868) and box 146's (0.896 / 0.879). As the rule states, e4b makes the fused projection its default in its own PR: unset means
+on, and `0` keeps today's path.
+
 ## Box log
 
 - **`tc1-5090-142`** (2026-10-09, $0): refused before any instance existed. The cheapest eligible RTX 5090 billed $0.93/h with storage,
@@ -570,3 +601,6 @@ the $15 cap. This box is about $2–3.
 - **`tc1-5090-148`** (2026-10-10, $1.809, machine 46990): DEFAULT_ON's second-host box, a harness failure with nothing measured. The
   container restarted about three minutes in. The driver at `51e5ae1` did not see the lane die, so the box was stopped by hand after
   2.3 h. Amendment 4 reruns it.
+- **`tc1-5090-149`** (2026-10-10, $0): refused before any instance existed. The launcher takes only completed same-class runs as avoid
+  receipts, and box 148's ended as a harness error. Machine 46990 was kept out by the offer filter instead.
+- **`tc1-5090-150`** (2026-10-10, $1.326, machine 152440 at $0.659/h): the Amendment 4 read above.

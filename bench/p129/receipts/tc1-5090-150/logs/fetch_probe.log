@@ -1,0 +1,10 @@
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LANGUAGE = (unset),
+	LC_ALL = (unset),
+	LANG = "en_US.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+Fetching 7 files:   0%|          | 0/7 [00:00<?, ?it/s]Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 7 files:  14%|█▍        | 1/7 [00:00<00:01,  5.42it/s]Fetching 7 files:  43%|████▎     | 3/7 [00:00<00:00, 10.75it/s]Fetching 7 files:  71%|███████▏  | 5/7 [00:00<00:00, 12.90it/s]Fetching 7 files: 100%|██████████| 7/7 [00:01<00:00,  3.83it/s]Fetching 7 files: 100%|██████████| 7/7 [00:01<00:00,  4.81it/s]
+FETCH PROBE OK in 1.8 s: config.json generation_config.json merges.txt model.safetensors.index.json tokenizer.json tokenizer_config.json vocab.json
