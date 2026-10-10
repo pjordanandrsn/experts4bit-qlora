@@ -207,6 +207,20 @@ the launcher's default download ceiling ($0.011/GB). Each is a single run under 
 The lane ceiling is $10.84; the expected spend is $6–8, as #1478 estimated. The deadline drops the second draw's matched
 blocks first (they run last).
 
+## Box log (harness changes after registration)
+
+None of these changes an arm, a cell, a metric, a noise bound, a VOID rule or a verdict rule.
+- **#1530** (sc5-prove-3): the proof fetches and bakes with the functions defined before SC1's proof block. Box M skips
+  SC1's Granite smokes. The quiescence gate reads quiesce's record.
+- **#1536** (sc5-prove-4): e4b is driven with the model id serve_paged serves. SGLang's engagement check takes its version
+  from the installer's knob. `p108_box.py` and `p97_box.py` are staged.
+- **#1547** (sc5-prove-5): SGLang's capacity readout reads SGLang 0.5.21's top-level `max_total_num_tokens`, and the proof
+  fails on an empty readout. **Cost guard:** the proof serves the default setting only, so the matched setting first runs
+  in the reading. Draw 1's first matched block of each framework (blocks 7 to 9) is checked. When a framework whose server
+  came up reads a capacity other than 65,536 tokens within its rounding, the reading stops with rc 35. Those blocks are
+  VOID under "a matched block's KV capacity is off" whether or not the reading goes on. The guard therefore changes no
+  verdict; it saves roughly $3 of the reading's $5.67 when a matched flag does not take.
+
 ## Decided before registration (maintainer, 2026-10-09)
 
 1. **Formats.** The shared GPTQ checkpoint is the primary row for vLLM and SGLang, and e4b runs at its documented int4 serving configuration (the arm row above).
