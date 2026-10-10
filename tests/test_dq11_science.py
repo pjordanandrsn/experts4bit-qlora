@@ -1141,45 +1141,95 @@ def test_rehearsal_marker_binds_model_configuration_and_runtime_lock(tmp_path, m
         rehearsal.mode(tmp_path)
 
 
+def pinned_loggetta_offloader_import():
+    """Execute the import extracted from real pinned Log prepare, at call time."""
+    fixture = json.loads((ROOT / "tests/fixtures/dq11_loggetta_offloader_import.json").read_text())
+    assert fixture["commit"] == "34ecb6cec6f43a6f8607ff9f192749fdc7b587e9"
+    namespace = {}
+    exec(compile(fixture["statement"], fixture["path"], "exec"), namespace)
+    return namespace["enable_dense_offload"]
+
+
 @pytest.mark.parametrize("fail", [False, True])
-def test_tiny_stream_adapter_delegates_and_restores_real_export_after_prepare(monkeypatch, tmp_path, fail):
+def test_tiny_stream_adapter_delegates_actual_log_import_and_restores_after_prepare(monkeypatch, tmp_path, fail):
+    from types import SimpleNamespace
+
     import dq11_rehearsal as rehearsal
     import experts4bit_qlora as e4b
+    from experts4bit_qlora.engines import dense_offload
 
     monkeypatch.setattr(rehearsal, "mode", lambda directory: True)
     calls = []
-    result = object()
+    handles = [SimpleNamespace(bytes=123), SimpleNamespace(bytes=456)]
+    prepared = SimpleNamespace(report={})
+    root_export = e4b.enable_dense_offload
 
     def real_offloader(*args, **kwargs):
         calls.append((args, kwargs))
-        return result
+        return handles
 
-    monkeypatch.setattr(e4b, "enable_dense_offload", real_offloader)
+    monkeypatch.setattr(dense_offload, "enable_dense_offload", real_offloader)
     plan = object()
 
     def prepare(actual):
         assert actual is plan
-        handle = e4b.enable_dense_offload("fixture model", device="fixture device", train_prefetch=True)
-        assert handle is result
+        assert e4b.enable_dense_offload is root_export
+        offloader = pinned_loggetta_offloader_import()
+        assert offloader("fixture model", device="fixture device", train_prefetch=True) is handles
         if fail:
             raise RuntimeError("fixture prepare failure")
-        return handle
+        return prepared
 
     if fail:
         with pytest.raises(RuntimeError, match="fixture prepare failure"):
             rehearsal.prepare_log(tmp_path, plan, prepare)
+        assert prepared.report == {}
     else:
-        assert rehearsal.prepare_log(tmp_path, plan, prepare) is result
+        assert rehearsal.prepare_log(tmp_path, plan, prepare) is prepared
+        assert prepared.report["rehearsal_tiny_stream"] == [{"min_bytes": 0, "handles": 2, "streamed_bytes": 579}]
     assert calls == [(("fixture model",), {"device": "fixture device", "train_prefetch": True, "min_bytes": 0})]
-    assert e4b.enable_dense_offload is real_offloader
+    assert dense_offload.enable_dense_offload is real_offloader
+    assert e4b.enable_dense_offload is root_export
+
+
+@pytest.mark.parametrize("failure", ["missed", "empty", "zero", "conflict"])
+def test_tiny_stream_adapter_refuses_missing_engagement_and_restores(monkeypatch, tmp_path, failure):
+    from types import SimpleNamespace
+
+    import dq11_rehearsal as rehearsal
+    from experts4bit_qlora.engines import dense_offload
+
+    monkeypatch.setattr(rehearsal, "mode", lambda directory: True)
+    calls = []
+
+    def real_offloader(*args, **kwargs):
+        calls.append((args, kwargs))
+        return [] if failure == "empty" else [SimpleNamespace(bytes=0)]
+
+    monkeypatch.setattr(dense_offload, "enable_dense_offload", real_offloader)
+
+    def prepare(plan):
+        if failure != "missed":
+            kwargs = {"min_bytes": 1} if failure == "conflict" else {}
+            pinned_loggetta_offloader_import()("fixture model", **kwargs)
+        return SimpleNamespace(report={})
+
+    expected = {"missed": "was not invoked", "conflict": "conflicting"}.get(failure, "no streamed bytes")
+    with pytest.raises(ValueError, match=expected):
+        rehearsal.prepare_log(tmp_path, object(), prepare)
+    assert dense_offload.enable_dense_offload is real_offloader
+    assert len(calls) == (1 if failure in ("empty", "zero") else 0)
 
 
 def test_science_mode_never_installs_tiny_stream_adapter(monkeypatch, tmp_path):
     import dq11_rehearsal as rehearsal
     import experts4bit_qlora as e4b
+    from experts4bit_qlora.engines import dense_offload
 
     monkeypatch.setattr(rehearsal, "mode", lambda directory: False)
-    original = e4b.enable_dense_offload
+    original = dense_offload.enable_dense_offload
+    root_export = e4b.enable_dense_offload
     with pytest.raises(ValueError, match="refused in science mode"):
         rehearsal.prepare_log(tmp_path, object(), lambda plan: pytest.fail("science called rehearsal prepare"))
-    assert e4b.enable_dense_offload is original
+    assert dense_offload.enable_dense_offload is original
+    assert e4b.enable_dense_offload is root_export
