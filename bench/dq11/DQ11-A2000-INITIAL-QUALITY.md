@@ -3,10 +3,11 @@
 Prospective, initial-only supplement to experts4bit-qlora#1083, authorized
 by the maintainer on 2026-10-10 (bus messages
 `20261010T173132Z-86316-119774bdbc58` and
-`20261010T180251Z-5403-755bf6bda96a`). The later clarification
-`20261010T182644Z-27149-a83a7a8837ec` permits CPU review now, with the PR
-unlabelled. Merge and execute only after the sixth tiny rehearsal at
-`047efb36e81c56d0e176b7cc1e79c6ab34b8c323`.
+`20261010T180251Z-5403-755bf6bda96a`). CPU review was authorized by
+`20261010T182644Z-27149-a83a7a8837ec`. The later ruling
+`20261010T183245Z-30915-42c9dfedaf6e` approves this instrument in substance
+and permits merge on green before the sixth rehearsal.
+Execute only after the sixth tiny rehearsal on the merged head.
 
 Use the original Mistral revision, canonical 448 FP32 adapter tensors,
 canonical token bytes, original scorer and unchanged absolute 0.05 PPL K8
@@ -37,4 +38,5 @@ The new helper and this note join the transport closure. Reseal the two
 preparation modules; preserve the original scorer, reducer, inputs,
 initializer, scientific runtime, runners and prior amendments byte for
 byte. Since paid execution imports preparation, the actual merged candidate
-head requires a new full short $0 path before a paid amendment.
+head requires a full short $0 path before a paid amendment. The sixth
+rehearsal supplies that path when it runs on this actual merged head.
