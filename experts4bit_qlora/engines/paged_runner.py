@@ -234,6 +234,11 @@ class PagedModelRunner(StepRunner):
         self._pg_refused = None      # why an `auto` prefill graph stood down (see note_prefill_graph_refused)
         self._pg_stats = {"replays": 0, "eager_chunks": 0, "eager_reasons": {"later_chunk": 0, "short_chunk": 0}}
         self._la = None              # decode lookahead state (issue_decode / collect_decode), built at first use
+        # speculative decode (E4B_PAGED_SPEC, lane SD2): see enable_speculation
+        self.spec = None
+        self.speculative = False
+        self._verify_buckets: tuple = ()
+        self._budgets: dict[int, int] = {}
 
     # ------------------------------------------------------------ intake --
     def bind(self, rid: int, slot: int, prompt) -> None:
@@ -290,6 +295,8 @@ class PagedModelRunner(StepRunner):
                 self.ctx.slots = [slot]
                 done = start + take >= len(self.tokens[rid])
                 pg = self._prefill_graph
+                if self.spec is not None:
+                    self.spec.aux.mode = ("prefill", start)   # SD2: this chunk's states, at their positions
                 if self.tracer is not None:
                     self.tracer.count("prefill_chunks")
                     self.tracer.count("prefill_tokens", take)
@@ -340,9 +347,14 @@ class PagedModelRunner(StepRunner):
                     first[rid] = tok
                     self.tokens[rid].append(tok)
                     self.pos_of[rid] += 1
+                    if self.spec is not None and len(self.slot_of) == 1:
+                        # SD2: the prompt completed with its request the only one bound; it speculates while alone
+                        self.spec.start(rid, slot, self.tokens[rid])
         finally:
             self.ctx.mode = "decode"
             self._mode(False)
+            if self.spec is not None:
+                self.spec.aux.mode = "decode"
         return first
 
     def _flush_bulk(self, rid: int, slot: int) -> None:
@@ -365,12 +377,85 @@ class PagedModelRunner(StepRunner):
             self._kv_counts["flush_bulk_fallback"] += 1     # append_prompt took its per-layer path (same bytes)
         self._kv_counts["flush_bulk"] += 1
 
+    # ------------------------------------------------- speculative decode (SD2) --
+    def enable_speculation(self, spec) -> int:
+        """Speculative decode for a request decoding alone (``engines.spec_decode.SpecDecoder``, lane SD2,
+        ``bench/sd2/PREREG-sd2.md``). Call it BEFORE :meth:`enable_decode_graphs` and the prefill graph: the auxiliary
+        hooks' copies are captured into those graphs, and the verify buckets (2 .. k + 1 rows) are captured beside the
+        decode buckets. Plain batched steps keep :func:`bucket_for` over the decode buckets alone (the maintainer's
+        aliasing condition 4). Needs a pool with at least k alias slots. Returns k, or raises."""
+        if self._graphs is not None or self._prefill_graph is not None:
+            raise RuntimeError("enable_speculation must come before the decode and prefill graphs are captured")
+        if int(getattr(self.kv, "n_alias", 0)) < spec.k:
+            raise ValueError(f"speculation at k = {spec.k} needs {spec.k} alias slots in the KV pool "
+                             f"(Fp8PagedKV(alias_slots=...)); it has {getattr(self.kv, 'n_alias', 0)}")
+        spec.verify = self._spec_verify
+        spec.aux.mode = "decode"
+        self.spec, self.speculative = spec, True
+        self._verify_buckets = tuple(range(2, spec.k + 2))
+        return spec.k
+
+    def decode_budgets(self, left: dict) -> None:
+        """How many tokens each request may still emit (the scheduler's, before each decode)."""
+        self._budgets = dict(left)
+
+    def _spec_verify(self, slot: int, n: int, ids, pos):
+        """The target's verify of ``n`` rows at ``slot``: the decode bucket of ``n`` rows, row 0 on the slot and rows
+        1..n-1 on alias slots bound to it, so each row appends at its own position and reads the stagger. The
+        auxiliary states land in ``spec.aux.dec[:n]``. Returns the argmax per row (device)."""
+        kv, buf = self.kv, self._bufs[n]
+        self._ensure_graph_ready(slot)
+        rows = [slot] + kv.alias_bind(slot, n - 1)       # before the load: the step selection reads these rows
+        buf["ids"].copy_(ids.view(n, 1))
+        buf["pos"].copy_(pos.view(n, 1))
+        kv.graph_bucket_load(buf["st"], rows)
+        g = self._graphs[n]
+        stats = self.graph_stats[n]
+        if g is not None:
+            g.replay()
+            stats["replays"] += 1
+        else:
+            self._bind(n, rows)
+            prev = set_context(self.ctx)
+            try:
+                self._padded_step(n)
+            finally:
+                set_context(prev)
+                kv.graph_bucket_unbind()
+            stats["eager_steps"] += 1
+        kv.graph_bucket_publish(buf["st"])
+        stats["rows"] += n
+        return buf["tok"][:n]
+
+    def _run_decode_spec(self, rid: int):
+        """One speculative step for the request decoding alone, or None (it decodes at T == 1 from now on)."""
+        if self._graphs is None:
+            raise RuntimeError("speculative decode needs the decode graphs' buckets (E4B_PAGED_GRAPHS)")
+        out = self.spec.step(rid, self._budgets.get(rid, 1 << 30))
+        if out is None:
+            return None
+        self.tokens[rid].extend(out)
+        self.pos_of[rid] += len(out)
+        ctrl = getattr(self, "slot_controller", None)
+        if ctrl is not None:
+            ctrl.on_decode_step()
+        return {rid: out}
+
     @torch.no_grad()
     def run_decode(self, rids):
         if not rids:
             return {}
         if self._la is not None and any(r["open"] for r in self._la["ring"]):
             raise RuntimeError("run_decode while a lookahead decode step is queued: collect_decode it first")
+        spec = self.spec
+        if spec is not None:
+            if len(rids) == 1 and len(self.slot_of) == 1 and spec.eligible(rids[0]):
+                got = self._run_decode_spec(rids[0])
+                if got is not None:
+                    return got
+            for r in rids:                               # not alone any more: T == 1 for the rest of its life (B5)
+                if spec.eligible(r):
+                    spec.drop(r, "batched")
         if self._graphs is not None:
             return self._run_decode_bucketed(rids)
         tr = self.tracer
@@ -422,12 +507,14 @@ class PagedModelRunner(StepRunner):
         buckets = tuple(sorted({int(b) for b in buckets}))
         if not buckets or buckets[0] < 1:
             raise ValueError(f"buckets must be positive, got {buckets}")
+        # SD2: the verify buckets are captured beside the decode buckets; plain steps never pick one (condition 4)
+        captured = tuple(sorted(set(buckets) | set(self._verify_buckets)))
         scratch = list(getattr(self.kv, "scratch", ()) or ())
-        if len(scratch) < buckets[-1]:
+        if len(scratch) < captured[-1]:
             raise ValueError(
-                f"decode graphs need scratch_slots >= the largest bucket ({buckets[-1]}); "
+                f"decode graphs need scratch_slots >= the largest bucket ({captured[-1]}); "
                 f"the KV cache has {len(scratch)} -- build Fp8PagedKV(..., scratch_slots="
-                f"{buckets[-1]})")
+                f"{captured[-1]})")
         kv, dev = self.kv, self.device
         if self.linear_state is not None:
             # a hybrid's per-slot linear state is gathered and scattered through the bucket's device selector
@@ -439,9 +526,9 @@ class PagedModelRunner(StepRunner):
         self._buckets = buckets
         self._bufs, self._graphs, self.graph_status = {}, {}, {}
         self.graph_stats = {b: {"replays": 0, "eager_steps": 0, "rows": 0, "pad_rows": 0}
-                            for b in buckets}
+                            for b in captured}
         self._graph_ready = set()
-        for b in buckets:
+        for b in captured:
             st = kv.graph_bucket(b)
             buf = {"ids": torch.zeros(b, 1, dtype=torch.long, device=dev),
                    "pos": torch.zeros(b, 1, dtype=torch.long, device=dev),
@@ -460,9 +547,20 @@ class PagedModelRunner(StepRunner):
                 self.graph_status[b] = f"eager: {type(e).__name__}: {str(e)[:160]}"
             if verbose:
                 s = self.graph_status[b]
-                print(f"DECODE_GRAPH bucket={b} " + ("captured" if s == "graph" else f"EAGER ({s})"),
-                      flush=True)
+                print(f"DECODE_GRAPH bucket={b} " + ("captured" if s == "graph" else f"EAGER ({s})")
+                      + (" (verify only)" if b not in buckets else ""), flush=True)
         kv.reset_scratch_lens()
+        if self.spec is not None and capture:
+            # SD2: the post-verify step (accept, length, draft) per verified row count; a failure leaves it eager.
+            # Kept apart from graph_status, whose keys are buckets.
+            self.spec_graph_status = {}
+            for n in self._verify_buckets:
+                try:
+                    self.spec.capture_post(n)
+                    self.spec_graph_status[n] = "graph"
+                except Exception as e:       # noqa: BLE001 -- recorded, like a bucket's
+                    torch.cuda.synchronize(dev)
+                    self.spec_graph_status[n] = f"eager: {type(e).__name__}: {str(e)[:160]}"
         return dict(self.graph_status)
 
     @torch.no_grad()
@@ -858,12 +956,16 @@ class PagedModelRunner(StepRunner):
         self._mode(True)
         ctx.mode, ctx.slots = "prefill", [self._PG_KEY]
         prev = set_context(ctx)
+        if self.spec is not None:
+            self.spec.aux.mode = ("prefill", 0)      # SD2: a first chunk's states at positions 0..T-1, in the graph
 
         def restore():
             ctx.drop(self._PG_KEY)
             set_context(prev)
             ctx.slots, ctx.mode = saved_slots, "decode"
             self._mode(False)
+            if self.spec is not None:
+                self.spec.aux.mode = "decode"
         return restore
 
     def _capture_prefill_graph(self, T: int, first_ids, warmup: int) -> dict:
@@ -1001,6 +1103,8 @@ class PagedModelRunner(StepRunner):
         return {"bulk": self.bulk_kv, **self._kv_counts}
 
     def free_slot(self, rid: int) -> None:
+        if self.spec is not None:
+            self.spec.drop(rid, "freed")
         if self._la is not None:
             if self._la["inflight"].get(rid):
                 raise RuntimeError(f"free_slot: rid {rid} has a decode step in flight; collect it first")
