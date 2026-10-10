@@ -54,8 +54,10 @@ def test_fused_append_refuses_amd_whatever_the_tuple():
         assert why and "AMD" in why, cap
 
 
-def test_fused_append_control_nvidia_same_tuple_is_allowed():
-    assert fp8_paged_kv.fused_append_unsupported(GFX942, vendor="nvidia") is None
+def test_fused_append_control_nvidia_same_tuples_are_allowed():
+    """Every tuple the AMD test above refuses, as an NVIDIA sm number: none is refused (and an sm_86 still is)."""
+    for cap in (GFX942, (9, 0), (11, 0), (12, 0), None):
+        assert fp8_paged_kv.fused_append_unsupported(cap, vendor="nvidia") is None, cap
     assert "sm_89" in fp8_paged_kv.fused_append_unsupported((8, 6), vendor="nvidia")
 
 
@@ -74,6 +76,7 @@ def test_resolve_degrades_by_default_and_refuses_an_explicit_request_on_rocm(roc
 
 def test_resolve_control_nvidia(nvidia):
     assert fp8_paged_kv._resolve_fused_append(None, "cuda", lambda: True, GFX942) is True
+    assert fp8_paged_kv._resolve_fused_append("1", "cuda", lambda: True, GFX942) is True
 
 
 def test_decode_graphs_auto_stays_eager_and_an_explicit_request_is_refused_on_rocm(rocm):
@@ -85,6 +88,7 @@ def test_decode_graphs_auto_stays_eager_and_an_explicit_request_is_refused_on_ro
 
 def test_decode_graphs_control_nvidia(nvidia):
     assert serve_paged._graphs_env("auto", "cuda", "all-vram", GFX942) is True
+    assert serve_paged._graphs_env("1", "cuda", "all-vram", GFX942) is True
 
 
 def _runner(**kw):
@@ -121,6 +125,19 @@ def test_capture_decode_refuses_on_rocm_before_touching_the_model(rocm):
         capture.capture_decode(None, None, 8)
 
 
+class _Sentinel(Exception):
+    """Raised by a mocked first CUDA-side step: the control reached past the vendor check without touching CUDA."""
+
+
+def test_capture_decode_control_nvidia_reaches_its_first_step(nvidia, monkeypatch):
+    def first_step(*a, **k):
+        raise _Sentinel
+
+    monkeypatch.setattr(capture, "_static_cache", first_step)
+    with pytest.raises(_Sentinel):
+        capture.capture_decode(None, None, 8)
+
+
 def test_spec_post_stays_eager_on_rocm(rocm):
     drafter = SimpleNamespace(state={}, device=torch.device("cuda", 0), _post_graphs={})
     assert spec_decode.SpecDecoder.capture_post(drafter, 1) is None
@@ -147,3 +164,13 @@ def test_prebind_is_refused_on_rocm_even_when_forced(monkeypatch):
     assert tp.prebind(_k, force=True) is _k
     monkeypatch.setenv("E4B_TRITON_PREBIND", "1")
     assert tp.prebind(_k) is _k
+
+
+def test_spec_post_control_nvidia_reaches_its_capture(nvidia, monkeypatch):
+    def first_step(*a, **k):
+        raise _Sentinel
+
+    monkeypatch.setattr(torch.cuda, "Stream", first_step)
+    drafter = SimpleNamespace(state={}, device=torch.device("cuda", 0), _post_graphs={})
+    with pytest.raises(_Sentinel):
+        spec_decode.SpecDecoder.capture_post(drafter, 1)
