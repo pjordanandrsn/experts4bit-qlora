@@ -1,0 +1,9 @@
+{
+ "argmax_agreement": 0.972168,
+ "label": "CLOSE",
+ "nll_delta": 0.000483,
+ "nll_delta_window_max": 0.055005,
+ "nll_delta_window_min": -0.06906,
+ "positions": 8192,
+ "windows": 64
+}

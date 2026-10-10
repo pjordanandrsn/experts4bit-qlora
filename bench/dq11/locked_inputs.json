@@ -1,0 +1,72 @@
+{
+  "schema": "dq11-inputs/1",
+  "model": "mistralai/Mistral-7B-v0.1",
+  "revision": "27d67f1b5f57dc0953326b2601d68371d40ea8da",
+  "builder": {
+    "torch": "2.12.1",
+    "peft": "0.21.2",
+    "transformers": "5.5.0",
+    "tokenizers": "0.22.2",
+    "safetensors": "0.8.0",
+    "pyarrow": "26.0.0"
+  },
+  "initializer_source_sha256": "9a2688af69fd16cef94fdb08ab0e973b37d7b2a672e64ba2057a01df7e98b7d8",
+  "sources": {
+    "config.json": {
+      "url": "https://huggingface.co/mistralai/Mistral-7B-v0.1/resolve/27d67f1b5f57dc0953326b2601d68371d40ea8da/config.json",
+      "sha256": "cf25cdf4719f181d1d1d371973285d9afe9afde0d0c6a6fd48de857555ce1e0d",
+      "bytes": 571
+    },
+    "tokenizer.json": {
+      "url": "https://huggingface.co/mistralai/Mistral-7B-v0.1/resolve/27d67f1b5f57dc0953326b2601d68371d40ea8da/tokenizer.json",
+      "sha256": "11c08db21487c885d8c792180f0be237f6a261b89a46f128a6a80a3aa4bd1720",
+      "bytes": 1795188
+    },
+    "tokenizer_config.json": {
+      "url": "https://huggingface.co/mistralai/Mistral-7B-v0.1/resolve/27d67f1b5f57dc0953326b2601d68371d40ea8da/tokenizer_config.json",
+      "sha256": "ddb008229511e51607002ffe28925001c4a9ca4177dc4de3a655d085cc610b99",
+      "bytes": 996
+    },
+    "alpaca_data_cleaned.json": {
+      "url": "https://huggingface.co/datasets/yahma/alpaca-cleaned/resolve/12567cabf869d7c92e573c7c783905fc160e9639/alpaca_data_cleaned.json",
+      "sha256": "bd844b8247a0f543804b6ce0882b0aaec4bbf5e8d66167df6213a0f1e4fe878b",
+      "bytes": 44307561
+    },
+    "wikitext-test.parquet": {
+      "url": "https://huggingface.co/datasets/Salesforce/wikitext/resolve/b08601e04326c79dfdd32d625aee71d232d685c3/wikitext-2-raw-v1/test-00000-of-00001.parquet",
+      "sha256": "5f1bea067869d04849c0f975a2b29c4ff47d867f484f5010ea5e861eab246d91",
+      "bytes": 732610
+    }
+  },
+  "alpaca_rows": 51760,
+  "holdout_rows": 512,
+  "adapter_tensor_count": 448,
+  "adapter_elements": 41943040,
+  "assets": {
+    "tokens.json": {
+      "sha256": "078bc61ccdbb15e8b679663f4714583c6996cd4c51f95e250c5372890bd0f396",
+      "bytes": 554866
+    },
+    "adapter_init.safetensors": {
+      "sha256": "d481abefae51719e0f45111b3a404e97549fbe9db5d16556aafa313e7730515c",
+      "bytes": 167816528
+    }
+  },
+  "tokens": {
+    "train": {
+      "blocks": 40,
+      "targets": 81880,
+      "sha256": "377aa43ddb6a7cff41edaef87c281a6a230c9384e8c8ae6dcf6d005acad7543b"
+    },
+    "alpaca-heldout": {
+      "blocks": 8,
+      "targets": 16376,
+      "sha256": "587197f30f4b5c5d8c8ed4f351680a51500249c718139b001dc55320b0c8c160"
+    },
+    "wikitext-test": {
+      "blocks": 8,
+      "targets": 16376,
+      "sha256": "a776399be44da42d4291238eb01d842da74623f333be486061ab5efc914a2e5e"
+    }
+  }
+}

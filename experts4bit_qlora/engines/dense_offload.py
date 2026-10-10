@@ -67,6 +67,19 @@ MIN_BYTES = 1 << 20
 _LAYER_RE = re.compile(r"(^|\.)layers\.\d+$")
 
 
+def _placed_param(t: torch.nn.Parameter, moved: torch.Tensor) -> torch.nn.Parameter:
+    """The parameter to store for a frozen ``t`` that the kept-small branch moved to this device as ``moved``.
+
+    A plain ``Parameter``'s ``.to()`` onto another device returns a plain tensor, re-wrapped here with ``t``'s ``requires_grad``
+    as before. A ``Parameter`` subclass whose ``.to()`` returns the subclass -- bitsandbytes' ``Params4bit``, carrying its
+    quantization state (and quantizing on the move when it was not yet) -- is stored as returned: ``torch.nn.Parameter``
+    refuses to re-wrap a subclass whose ``detach()`` returns a plain tensor, and ``Params4bit``'s does (a 4-bit projection
+    under ``MIN_BYTES`` reached this branch and raised)."""
+    if isinstance(moved, torch.nn.Parameter):
+        return moved
+    return torch.nn.Parameter(moved, requires_grad=t.requires_grad)
+
+
 def _is_expert_module(mod) -> bool:
     """Expert modules are somebody else's problem — `_ExpertOffload` owns the
     resident ones and `nvme_experts` leaves the tiered ones on `meta`."""
@@ -174,8 +187,7 @@ class _DenseOffload:
                                 if t.grad is not None:
                                     t.grad = t.grad.to(self.device)
                             elif is_param:
-                                store[attr] = torch.nn.Parameter(
-                                    moved, requires_grad=t.requires_grad)
+                                store[attr] = _placed_param(t, moved)
                             else:
                                 store[attr] = moved
                             self.placed += 1

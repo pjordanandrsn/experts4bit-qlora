@@ -1,6 +1,6 @@
 # Status — what this package does, what is current, what is open
 
-**As of 2026-10-10, version 0.52.0** (the version of record is `pyproject.toml`'s). This page states the current
+**As of 2026-10-10, version 0.53.0** (the version of record is `pyproject.toml`'s). This page states the current
 position in each area, with the claim id behind each number; [`docs/claims.json`](claims.json) holds every claim's full
 text and evidence. The dated narrative behind these positions, with the readings they replaced and why, is
 [`STATUS-RECORD.md`](STATUS-RECORD.md).
@@ -164,12 +164,6 @@ host reuse) each stepped the field recipe at 0.847–0.968 of the code before, h
   With fp32 adapters it stepped 0.797 of the time on a host-bound box and 1.031 on a GPU-bound one (registered bound
   1.05). With bf16 adapters, the shipped arm, it does not engage (1.002). `e4b.train.single-ladder.field.5090.2026-10-08`,
   `e4b.train.single-ladder-auto.gpu-bound.5090.2026-10-08`
-- `E4B_TRAIN_FUSE_QKV=1` (P129): one fused q/k/v training projection, 13.9–14.6 % fewer launches per step.
-  - **Speed:** 0.895 of the step with fp32 adapters and 0.868 with bf16 on a host-bound, heavily shared box. On a second host, with no
-    draw voided for load, 0.906 / 0.884.
-  - **Quality:** step-0 held-out inside the box's fp32-anchored rounding envelope on both hosts, held-out at N within 0.002.
-  - **Status:** DEFAULT_ON is met, and the default flips in its own change. `e4b.train.p129.fused-qkv.qwen3.5090.2026-10-10`,
-    `e4b.train.p129.fused-qkv.second-host.5090.2026-10-10`
 
 **Energy: on a card that already fits the model, 4-bit costs energy.** `bnb.matmul_4bit` costs 1.748× native bf16's
 J/op at decode, 1.601× at prefill and 1.965× in training. The fused 4-bit MoE forward's J/token at batch 4096 is 0.063
@@ -303,6 +297,7 @@ controls. `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-
 | PyTorch's reentrant checkpoint | `enable_fast_train` (a `Trainer` with `gradient_checkpointing=True` re-enables Hugging Face's) | `E4B_CKPT_OFFLOAD=0` | `e4b.train.ckpt-flavour.default.5090.2026-10-07` |
 | chunked held-out loss | `enable_fast_train` | `E4B_CHUNKED_EVAL_LOSS=0` | `e4b.train.chunked-eval-loss.packed-4k.5090.2026-10-07` |
 | expert combine over row chunks | `enable_fast_train` | `E4B_COMBINE_CHUNK=0` | `e4b.train.combine-row-chunks.packed-4k.5090.2026-10-07` |
+| fused q/k/v training projection (Qwen3-MoE, NF4 attention with adapters; 0.868–0.906 of the step on two RTX 5090 hosts, 13.9–14.6 % fewer launches, about 24 MB; `disable_fast_train` restores the three projections) | `enable_fast_train` | `E4B_TRAIN_FUSE_QKV=0` | `e4b.train.p129.fused-qkv.qwen3.5090.2026-10-10`, `e4b.train.p129.fused-qkv.second-host.5090.2026-10-10` |
 | bucketed LoRA-delta padding, compact | grouped-nf4-gemm | `NF4_QLORA_PAD_BUCKETS=0`, `NF4_QLORA_COMPACT_BUCKETS=0` | `e4b.train.pad-buckets.auto.default-decision.5090.2026-10-06`, `e4b.train.compact-buckets.packed-4k.5090.2026-10-07` |
 | bucketed CUDA-graph decode (sm_89+) | `serve_paged` | `E4B_PAGED_GRAPHS=0` | `e4b.serve.p109.decode-graphs-vs-eager-default.qwen3.5090.2026-10-03`, `e4b.serve.p110.graph-arithmetic-quality.qwen3.5090.2026-10-03` |
 | estimate-sized slots | `serve_paged` | `E4B_PAGED_MAX_SEQS=16` | `e4b.serve.sc2e.64-slots-default-buckets.qwen3.5090.2026-10-07` |

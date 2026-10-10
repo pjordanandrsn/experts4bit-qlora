@@ -322,3 +322,16 @@ def test_the_guard_ignores_draw_2_and_blocks_whose_server_never_came_up():
     # block 8's server never came up (VOID under its own rule, no readout to judge); block 21 is draw 2's matched e4b
     rc, blocks, stop = _box_m({8: "", 21: "131072"}, ready={8: 0})
     assert rc == 0 and stop is None and len(blocks) == 24
+
+
+# ---- (e) the registered reference: the constant is the committed file's sha256, and both files are complete --------------
+def test_the_registered_reference_is_the_committed_file():
+    import hashlib
+    ref = SC5 / "ref" / "sc5_ref.json"
+    assert _const("SC5_REF_SHA256") == hashlib.sha256(ref.read_bytes()).hexdigest()
+    windows = json.loads((SC5 / "sc5_windows_w64.json").read_text(encoding="utf-8"))
+    for name, order in (("sc5_ref.json", "full forward"), ("sc5_ref_chunked.json", "chunked 256")):
+        d = json.loads((SC5 / "ref" / name).read_text(encoding="utf-8"))
+        assert d["order"] == order and d["windows_sha256"] == windows["windows_sha256"]
+        assert d["revision"] == "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39" and d["windows"] == 64 and d["steps"] == 128
+        assert len(d["positions"]) == 64 and all(len(row) == 128 for row in d["positions"])

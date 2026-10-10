@@ -108,6 +108,10 @@ No claims row is added here: S is modelled. A claim waits for Phase 1's measured
 - **Nothing about quality,** sampling (temperature > 0), batch > 1, or other families.
 - **Not the shipped serving path's acceptance.** τ is the acceptance of this head against the eager capture path, which
   equals the served path's tokens on R row 0.
+- **A known gap in the registration.** PREREG-sd1 did not cite this repository's own S2-lite and S3
+  (`bench/hybrid-g9/s2/`, `s3/`, 2026-08-25). They built a verify step on this model and card, and refuted prompt-lookup
+  speculation at 17–65 verify rows: 36.4–43.7 ms against a 7.39 ms anchor. SD1's model priced a verify from batched
+  decode steps and never measured a verify-shaped one. SD2 (#1549) measures it first.
 
 ## Receipts
 

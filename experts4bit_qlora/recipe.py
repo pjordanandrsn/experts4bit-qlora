@@ -271,8 +271,22 @@ def estimate_env() -> dict:
     the modules that read them, so neither is kept twice."""
     from .engines.chunked_lm_loss import _ENV as chunked_loss_switch
     from .engines.chunked_lm_loss import chunked_lm_loss_min_bytes, chunked_lm_loss_requested
+    from .engines.train_qkv_fuse import train_fuse_qkv_requested
 
-    return {chunked_loss_switch: {"chunk": chunked_lm_loss_requested(), "auto_gate_bytes": chunked_lm_loss_min_bytes()}}
+    return {chunked_loss_switch: {"chunk": chunked_lm_loss_requested(), "auto_gate_bytes": chunked_lm_loss_min_bytes()},
+            "E4B_TRAIN_FUSE_QKV": train_fuse_qkv_requested()}
+
+
+def _fused_qkv_absmax_bytes(topology, setup: QLoRASetup) -> int:
+    """The fused q/k/v training projection's extra device bytes (``engines.train_qkv_fuse``, on by default since P129): it keeps
+    each fused projection's absmax in fp32, 4 bytes per 64 values where the nested statistics hold 1, so 3 more per 64 q/k/v values.
+    Priced only where the run fuses: ``enable_fast_train``'s path, NF4 attention with trained adapters and no bias, the knob on."""
+    attn = topology.attention
+    if setup.expert_kernel != "grouped_nf4" or attn is None or attn.any_bias or not (setup.attn_4bit and setup.train_attention):
+        return 0
+    from .engines.train_qkv_fuse import train_fuse_qkv_requested
+
+    return 3 * int(attn.fused_qkv_numel) // 64 if train_fuse_qkv_requested() else 0
 
 
 def _loss_chunk(topology, setup: QLoRASetup, tokens: int, vocab: int):
@@ -373,6 +387,11 @@ def estimate_qlora_footprint(topology, setup: QLoRASetup, *, tokens_per_microbat
         q4 = attn.numel // 2 + attn.numel // 64 + (attn.numel // (64 * 256)) * 4
         items.append(FootprintItem("attention projections (NF4)", "device", q4, "derived",
                                    f"{attn.count} projections, bitsandbytes nested statistics"))
+        fq = _fused_qkv_absmax_bytes(topology, setup)
+        if fq:
+            items.append(FootprintItem("fused q/k/v training projection (fp32 absmax)", "device", fq, "derived",
+                                       f"{attn.fused_qkv_numel} q/k/v values, 3 B per 64 over the nested statistics "
+                                       "(E4B_TRAIN_FUSE_QKV, on by default)"))
     items.append(FootprintItem("dense weights (bf16)", "device", 2 * dense, "derived",
                                "embeddings, attention, norms, routers, dense/shared MLPs; tied head counted once"))
 
