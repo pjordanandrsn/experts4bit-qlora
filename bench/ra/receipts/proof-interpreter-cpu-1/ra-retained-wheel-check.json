@@ -1,0 +1,14 @@
+{
+  "common_archive_lock_sha256": "cea342c6695a98a5063c25dc58a714c6cfe78f316d5fa1e79ebfc93531dc4bf9",
+  "common_dependencies": 85,
+  "proves_dependency_closure": false,
+  "proves_gpu_engagement": false,
+  "proves_installation": false,
+  "schema": 1,
+  "startup_adapters_required": {
+    "setuptools": [
+      "distutils-precedence.pth"
+    ]
+  },
+  "verified_archives": 87
+}
