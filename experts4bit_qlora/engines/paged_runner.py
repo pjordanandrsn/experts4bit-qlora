@@ -383,9 +383,15 @@ class PagedModelRunner(StepRunner):
         ``bench/sd2/PREREG-sd2.md``). Call it BEFORE :meth:`enable_decode_graphs` and the prefill graph: the auxiliary
         hooks' copies are captured into those graphs, and the verify buckets (2 .. k + 1 rows) are captured beside the
         decode buckets. Plain batched steps keep :func:`bucket_for` over the decode buckets alone (the maintainer's
-        aliasing condition 4). Needs a pool with at least k alias slots. Returns k, or raises."""
+        aliasing condition 4). Needs a pool with at least k alias slots. Returns k, or raises.
+
+        A hybrid model is refused: the rollback is a length, which cannot undo a linear-attention layer's per-slot
+        state, so after a rejected draft that state would carry the rejected tokens."""
         if self._graphs is not None or self._prefill_graph is not None:
             raise RuntimeError("enable_speculation must come before the decode and prefill graphs are captured")
+        if self.linear_state is not None:
+            raise ValueError("speculative decode refuses a hybrid model: its rollback is a KV length, which cannot "
+                             "undo a linear-attention layer's per-slot state")
         if int(getattr(self.kv, "n_alias", 0)) < spec.k:
             raise ValueError(f"speculation at k = {spec.k} needs {spec.k} alias slots in the KV pool "
                              f"(Fp8PagedKV(alias_slots=...)); it has {getattr(self.kv, 'n_alias', 0)}")
@@ -551,6 +557,9 @@ class PagedModelRunner(StepRunner):
                       + (" (verify only)" if b not in buckets else ""), flush=True)
         kv.reset_scratch_lens()
         if self.spec is not None and capture:
+            if self.spec.state:
+                # the post-verify capture writes the draft's live state (drafts, last token, cache entries)
+                raise RuntimeError("the post-verify graphs cannot be captured while a request speculates")
             # SD2: the post-verify step (accept, length, draft) per verified row count; a failure leaves it eager.
             # Kept apart from graph_status, whose keys are buckets.
             self.spec_graph_status = {}

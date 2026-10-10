@@ -120,7 +120,10 @@ class SpecDecoder:
 
     def capture_post(self, n: int, warmup: int = 2) -> None:
         """Capture :meth:`_post` for ``n`` verified rows as a CUDA graph (on scratch state: the inputs are whatever the
-        buffers hold, and the draft cache's entries it writes are overwritten by the next real step)."""
+        buffers hold, and the draft cache's entries it writes are overwritten by the next real step). It writes the
+        draft's live state, so it refuses while a request speculates."""
+        if self.state:
+            raise RuntimeError("capture_post while a request speculates would overwrite its drafts and draft cache")
         if self.device.type != "cuda":
             return
         side = torch.cuda.Stream(self.device)

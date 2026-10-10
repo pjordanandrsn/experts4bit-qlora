@@ -345,3 +345,64 @@ def test_the_verify_buckets_are_captured_but_plain_steps_never_pick_one():
     r.enable_decode_graphs((1, 2, 4), capture=False, verbose=False)
     assert r._buckets == (1, 2, 4) and sorted(r._bufs) == [1, 2, 3, 4] and 3 in r.graph_stats
     assert bucket_for(3, r._buckets) == 4
+
+
+def test_enable_speculation_refuses_a_hybrid_model():
+    """The rollback is a KV length; a linear-attention layer's per-slot state cannot be rolled back, so after a rejected
+    draft it would carry the rejected tokens (the maintainer's review of #1558)."""
+    r, _ = _runner()
+    r.linear_state = object()
+    with pytest.raises(ValueError, match="hybrid"):
+        r.enable_speculation(FakeSpec())
+    assert r.spec is None and not r.speculative
+
+
+def test_capture_post_refuses_while_a_request_speculates():
+    """The post-verify capture writes the draft's live state (drafts, last token, cache entries)."""
+    dec, _, _ = _spec(2, [1, 2, 3, 4, 5, 6], [0])
+    dec.start(0, 1, [1, 2, 3])
+    with pytest.raises(RuntimeError, match="speculates"):
+        dec.capture_post(3)
+
+
+def test_a_prompt_in_chunks_lands_in_the_aux_buffer_at_its_offsets():
+    """run_prefill's eager path: each chunk's states land at its positions (AuxStates' ``("prefill", start)``), and a
+    prompt that completes alone starts the draft with all of them. The reference is one full forward's
+    ``output_hidden_states`` at the auxiliary layers."""
+    from transformers.models.qwen3.configuration_qwen3 import Qwen3Config
+    from transformers.models.qwen3.modeling_qwen3 import Qwen3ForCausalLM
+
+    from experts4bit_qlora.engines import paged_attention
+    from experts4bit_qlora.engines.eagle3_draft import AuxStates
+    from experts4bit_qlora.engines.fp8_paged_kv import Fp8PagedKV
+
+    torch.manual_seed(0)
+    model = Qwen3ForCausalLM(Qwen3Config(hidden_size=32, intermediate_size=48, num_hidden_layers=8, num_attention_heads=4,
+                                         num_key_value_heads=2, head_dim=8, vocab_size=64,
+                                         max_position_embeddings=128)).eval()
+    paged_attention.register(model)
+    kv = Fp8PagedKV(8, 2, 8, batch=2, max_tokens_per_seq=64, device="cpu", alias_slots=2)
+    r = PagedModelRunner(model, kv, device="cpu")
+    aux = AuxStates(model, max_rows=4, max_prompt=64, dtype=torch.float32)
+    got = {}
+
+    class Recording:
+        def prefill(self, tok, aux_pre):
+            got["tok"], got["aux"] = tok.clone(), aux_pre.clone()
+            return torch.zeros(2, dtype=torch.long)
+
+    dec = SpecDecoder(drafter=Recording(), aux=aux, kv=kv, k=2, capacity=64, device="cpu")
+    r.enable_speculation(dec)
+    assert aux.install() == 3
+    prompt = torch.randint(0, 64, (11,), generator=torch.Generator().manual_seed(5)).tolist()
+    r.bind(0, 0, prompt)
+    assert r.run_prefill([(0, 0, 4)]) == {} and r.run_prefill([(0, 4, 4)]) == {}
+    first = r.run_prefill([(0, 8, 3)])
+    assert list(first) == [0] and aux.mode == "decode"
+    assert dec.eligible(0) and got["aux"].shape == (11, 3 * 32)
+    assert got["tok"].tolist() == prompt[1:] + [first[0]]
+    paged_attention.set_context(None)
+    with torch.no_grad():
+        hs = model(input_ids=torch.tensor([prompt]), output_hidden_states=True).hidden_states
+    want = torch.cat([hs[i][0] for i in aux.layers_idx], -1)
+    torch.testing.assert_close(got["aux"], want, rtol=1e-4, atol=1e-5)
