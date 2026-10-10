@@ -150,11 +150,38 @@ def fixture_receipts():
             },
         )
         row["identity_sha256"] = common.object_sha({"initial": slots, "tokens": tokens, "runtime": versions})
+        from dq11_proof_policy import CONFIGURATION_C
+
+        default_settings = {"cublas_workspace_config": None, "deterministic_algorithms": False,
+                            "warn_only": False, "flash_sdp": True, "mem_efficient_sdp": True,
+                            "math_sdp": True, "cudnn_sdp": True, "tf32_matmul": False, "tf32_cudnn": False}
+        row["execution_settings"] = dict(default_settings, cublas_workspace_config=":4096:8")
+        row["observer_policy"] = {
+            "configuration": dict(CONFIGURATION_C),
+            "settings_actual": dict(default_settings, cublas_workspace_config=":4096:8",
+                                    deterministic_algorithms=True, warn_only=True,
+                                    flash_sdp=False, mem_efficient_sdp=False, cudnn_sdp=False),
+            "warnings": [], "warned_ops": [], "restored": True,
+        }
+        shipped = copy.deepcopy(row)
+        shipped.update(kind="spread", execution_settings=default_settings)
+        shipped.pop("observer_policy")
+        shipped["spread"] = {"schema": "dq11-shipped-spread/1", "train_block": 0, "optimizer_updates": 0,
+                             "gate": False, "tolerance": None, "settings": default_settings,
+                             "passes": [{"ordinal": i, "loss": 1.0, "loss_sha256": sha(b"fixture loss"),
+                                         "gradient_hashes": dict(slots), "gradient_file": f"spread-{arm}-{i}.safetensors",
+                                         "gradient_file_bytes": 1234, "gradient_file_sha256": sha(b"fixture gradient file")}
+                                        for i in range(1, 5)],
+                             "pairs": [{"x": x, "y": y, "loss_bitwise_equal": True,
+                                        "loss_abs_difference": 0.0, "gradient_differences": {}}
+                                       for x, y in [(1, 2), (1, 3), (1, 4), (2, 3), (2, 4), (3, 4)]]}
+        row["shipped_spread"] = shipped
         proofs.append(copy.deepcopy(row))
     reads = []
     for rep, arm in reducer.ORDER:
         row = copy.deepcopy(next(p for p in proofs if p["arm"] == arm))
         row.update(kind="read", repetition=rep, final_quality=copy.deepcopy(quality), final_adapters_sha256=slots)
+        row["execution_settings"] = copy.deepcopy(row["shipped_spread"]["spread"]["settings"])
         seconds = {"L": 2.0, "U": 1.0, "U0": 1.1}[arm]
         row["training"] = {
             "status": "OK",
@@ -167,6 +194,14 @@ def fixture_receipts():
             },
             "measured": {"step_seconds": [seconds] * 40, "timed_steps": "6..40"},
         }
+        if arm == "L":
+            counts = {"uses": 100, "fwd_prefetch_issued": 50, "bwd_prefetch_issued": 50}
+            row["train_prefetch"] = {
+                "schema": "dq11-train-prefetch/1", "science_eligible": True, "status": "PASS",
+                "source": versions["experts4bit-qlora"], "nonce": row["nonce"], "updates": 40,
+                "before": {"handles": 32, "streamed_bytes": 4096, "devices": {"cuda:0": dict.fromkeys(counts, 0)}},
+                "after": {"handles": 32, "streamed_bytes": 4096, "devices": {"cuda:0": counts}},
+                "delta": {"cuda:0": counts}}
         reads.append(row)
     teardown = {
         "complete": True,
@@ -658,7 +693,7 @@ def test_every_staged_deadline_cap_fits_two_hour_guard_after_install():
     assert reserve == 300
     caps = [int(n) for n in re.findall(r"^budget_cap (\d+)$", run, re.M)]
     caps += [int(n) for n in re.findall(r'^\s*phase (?:(?:"[^"\n]+")|(?:[\w-]+)) (\d+) ', run, re.M)]
-    assert sorted(caps) == [60, 120, 120, 240, 900, 900, 1800, 1800]
+    assert sorted(caps) == [60, 120, 120, 240, 900, 900, 900, 1800, 1800]
     # P109 pattern: each cap + fetch/teardown margin must fit even after
     # a conservative 900 s install/startup allowance, versus 210 s observed CPU.
     assert all(cap + reserve <= 2 * 3600 - 900 for cap in caps)
@@ -1060,8 +1095,31 @@ def test_unset_rehearsal_executes_identical_science_commands_and_environment(tmp
         raw = (work / "environment-trace.jsonl").read_text()
         traces.append(raw.replace(str(run_dir), "<fixture-root>"))
         outcomes.append((result.returncode, calls.replace(str(run_dir), "<fixture-root>")))
-    assert traces[0] == traces[1]
-    assert outcomes[0] == outcomes[1]
+    def omit_registered_spread_blocks(lines, commands):
+        remove = set()
+        for i, command in enumerate(commands):
+            if command[:2] == ["python", "dq11_arm.py"] and "spread" in command:
+                assert commands[i - 3] == ["date", "+%s"]
+                assert commands[i - 2] == ["date", "-u", "+%FT%TZ"]
+                assert commands[i - 1][0] == "perl" and "spread" in commands[i - 1]
+                assert commands[i - 1][4:] == command
+                remove.update(range(i - 3, i + 1))
+        return [line for i, line in enumerate(lines) if i not in remove]
+
+    filtered = []
+    for trace in traces:
+        rows = [json.loads(line) for line in trace.splitlines()]
+        filtered.append(omit_registered_spread_blocks(rows, [r["command"] for r in rows]))
+    assert filtered[0] == filtered[1]
+    filtered_outcomes = []
+    for rc, calls in outcomes:
+        lines = calls.splitlines()
+        # perl's code argument includes spaces; derive command arrays from the same trace.
+        rows = [json.loads(line) for line in traces[len(filtered_outcomes)].splitlines()]
+        assert len(lines) == len(rows)
+        filtered_outcomes.append((rc, omit_registered_spread_blocks(lines, [r["command"] for r in rows])))
+    assert filtered_outcomes[0] == filtered_outcomes[1]
+
 
 
 def test_rehearsal_model_override_is_refused_without_explicit_mode(tmp_path, monkeypatch):
@@ -1379,10 +1437,279 @@ def test_rehearsal_checker_requires_l_read_live_route_witness(live_route_fixture
     delegated = []
     monkeypatch.setattr(reducer, "validate_proofs", lambda rows, rehearsal: delegated.append(("proofs", rehearsal)))
     monkeypatch.setattr(reducer, "initial_gate", lambda rows: True)
-    monkeypatch.setattr(reducer, "validate_read", lambda reading, proof: delegated.append(("read", proof["arm"])))
+    monkeypatch.setattr(reducer, "validate_read", lambda reading, proof, **kw: delegated.append(("read", proof["arm"])))
     if present:
         assert rehearsal.correctness(directory)["complete"] is False
     else:
         with pytest.raises(ValueError, match="route witness refused"):
             rehearsal.correctness(directory)
     assert delegated == [("proofs", True), ("read", "L")]
+
+
+@pytest.mark.parametrize("refuse", [False, True])
+def test_observer_C_restores_flags_and_keeps_warning_operators(monkeypatch, refuse):
+    import warnings
+    import dq11_proof_policy as policy
+
+    monkeypatch.delenv("CUBLAS_WORKSPACE_CONFIG", raising=False)
+    before = policy.settings()
+    record = None
+    try:
+        with policy.process_environment("proof"):
+            with policy.observer_policy() as record:
+                assert record["settings_actual"]["cublas_workspace_config"] == ":4096:8"
+                assert record["settings_actual"]["deterministic_algorithms"]
+                assert record["settings_actual"]["warn_only"]
+                assert record["settings_actual"]["math_sdp"]
+                assert not record["settings_actual"]["flash_sdp"]
+                assert not record["settings_actual"]["mem_efficient_sdp"]
+                warnings.warn("fixture_atomic does not have a deterministic implementation", UserWarning)
+                warnings.warn("fixture unrelated warning", UserWarning)
+                if refuse:
+                    raise ValueError("fixture bitwise refusal")
+    except ValueError as error:
+        assert refuse and str(error) == "fixture bitwise refusal"
+    assert policy.settings() == before and record["restored"]
+    assert len(record["warnings"]) == 2
+    assert record["warned_ops"] == [{"operator": "fixture_atomic",
+                                     "message": "fixture_atomic does not have a deterministic implementation"}]
+
+
+@pytest.mark.parametrize("kind", ["proof", "read", "spread"])
+def test_fresh_process_policy_refuses_inherited_workspace(monkeypatch, kind):
+    import dq11_proof_policy as policy
+
+    monkeypatch.setenv("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+    with pytest.raises(ValueError, match="inherited"):
+        with policy.process_environment(kind):
+            pytest.fail("inherited policy reached execution")
+
+
+def test_proof_workspace_refuses_late_cuda_initialization(monkeypatch):
+    import dq11_proof_policy as policy
+
+    monkeypatch.delenv("CUBLAS_WORKSPACE_CONFIG", raising=False)
+    monkeypatch.setattr(torch.cuda, "is_initialized", lambda: True)
+    with pytest.raises(ValueError, match="before CUDA"):
+        with policy.process_environment("proof"):
+            pytest.fail("late workspace reached execution")
+
+
+@pytest.mark.parametrize("scales", [[1.0, 1.0, 1.0, 1.0], [1.0, 2.0, 3.0, 4.0], [-0.0, 0.0, -0.0, 0.0]])
+def test_shipped_spread_records_all_six_pairs_without_updates(monkeypatch, scales):
+    from types import SimpleNamespace
+    import dq11_proof_policy as policy
+
+    monkeypatch.delenv("CUBLAS_WORKSPACE_CONFIG", raising=False)
+
+    class Fixture(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.weight = nn.Parameter(torch.tensor(1.0))
+            self.count = 0
+
+        def forward(self, **kwargs):
+            scale = scales[self.count]
+            self.count += 1
+            return SimpleNamespace(loss=self.weight * scale)
+
+    model = Fixture()
+    row = policy.spread(model, {"fixture.B": model.weight}, torch.tensor([[1]]))
+    assert model.weight.item() == 1.0 and model.weight.grad is None
+    assert row["optimizer_updates"] == 0 and row["gate"] is False and row["tolerance"] is None
+    assert len(row["passes"]) == 4
+    assert [(p["x"], p["y"]) for p in row["pairs"]] == [(1, 2), (1, 3), (1, 4), (2, 3), (2, 4), (3, 4)]
+    pair = row["pairs"][0]
+    if scales[0] == scales[1] and math.copysign(1.0, scales[0]) == math.copysign(1.0, scales[1]):
+        assert not pair["gradient_differences"]
+    else:
+        delta = pair["gradient_differences"]["fixture.B"]
+        assert delta["max_abs_difference"] == abs(scales[0] - scales[1])
+        if scales[0] == 0:
+            assert delta["relative_to_larger_max"] == 0
+
+
+@pytest.mark.parametrize("mutation", ["configuration", "warn_only", "restore", "warning_omitted",
+                                       "spread_missing", "spread_gate", "spread_tolerance", "spread_count",
+                                       "spread_identity", "spread_nonfinite", "read_C"])
+def test_amendment4_reducer_refuses_incomplete_or_changed_policy(mutation):
+    proofs, reads, teardown = fixture_receipts()
+    row = proofs[0]
+    if mutation == "configuration":
+        row["observer_policy"]["configuration"]["sdpa"] = "flash"
+    elif mutation == "warn_only":
+        row["observer_policy"]["settings_actual"]["warn_only"] = False
+    elif mutation == "restore":
+        row["observer_policy"]["restored"] = False
+    elif mutation == "warning_omitted":
+        row["observer_policy"]["warnings"].append({"category": "UserWarning", "message": "fixture_atomic does not have a deterministic implementation", "filename": "fixture", "lineno": 1})
+    elif mutation == "spread_missing":
+        row.pop("shipped_spread")
+    elif mutation == "spread_gate":
+        row["shipped_spread"]["spread"]["gate"] = True
+    elif mutation == "spread_tolerance":
+        row["shipped_spread"]["spread"]["tolerance"] = 0.01
+    elif mutation == "spread_count":
+        row["shipped_spread"]["spread"]["passes"].pop()
+    elif mutation == "spread_identity":
+        row["shipped_spread"]["nonce"] = "wrong-copy"
+    elif mutation == "spread_nonfinite":
+        row["shipped_spread"]["spread"]["passes"][0]["loss"] = float("nan")
+    elif mutation == "read_C":
+        reads[0]["execution_settings"]["cublas_workspace_config"] = ":4096:8"
+    result = reducer.reduce(proofs, reads, teardown=teardown, instance_id="fixture-no-instance")
+    assert result["verdict"] == "VOID" and result["recommendation"] is None
+
+
+def test_large_shipped_spread_is_reported_and_never_replaces_registered_gates():
+    proofs, reads, teardown = fixture_receipts()
+    row = proofs[0]["shipped_spread"]["spread"]
+    key = next(iter(row["passes"][0]["gradient_hashes"]))
+    row["passes"][0]["gradient_hashes"][key] = sha(b"synthetic arbitrarily large gradient")
+    for pair in row["pairs"]:
+        if pair["x"] == 1:
+            pair["gradient_differences"][key] = {"max_abs_difference": 1e20, "relative_to_larger_max": 1.0}
+    result = reducer.reduce(proofs, reads, teardown=teardown, instance_id="fixture-no-instance")
+    assert result["verdict"] == "VALID_CONTROLLED_READ"
+    assert result["shipped_run_to_run_spread"]["L"]["pairs"][0]["gradient_differences"][key]["max_abs_difference"] == 1e20
+
+
+@pytest.mark.parametrize("left,fail", [(1800, False), (20, False), (1800, True), (0, False)])
+def test_rehearsal_phase_time_record_uses_actual_remaining_reserve_and_retains_failure(tmp_path, monkeypatch, left, fail):
+    import dq11_rehearsal as rehearsal
+
+    (tmp_path / "logs").mkdir()
+    (tmp_path / "receipts").mkdir()
+    clock = {"wall": 1000.0, "monotonic": 200.0}
+    monkeypatch.setattr(rehearsal.time, "time", lambda: clock["wall"])
+    monkeypatch.setattr(rehearsal.time, "monotonic", lambda: clock["monotonic"])
+    calls = []
+
+    def fake_run(*args, **kwargs):
+        calls.append(kwargs["timeout"])
+        clock["wall"] += 7.5
+        clock["monotonic"] += 7.5
+        if fail:
+            raise subprocess.CalledProcessError(11, args[0])
+
+    monkeypatch.setattr(rehearsal.subprocess, "run", fake_run)
+    env = {"TC1_RUN_NONCE": "fixture-phase-no-GPU", "TC1_DEADLINE_EPOCH": str(int(1300 + left))}
+    if fail or left == 0:
+        with pytest.raises((subprocess.CalledProcessError, TimeoutError)):
+            rehearsal.timed_phase(tmp_path, env, "spread-L", 900, "fixture-no-GPU")
+    else:
+        rehearsal.timed_phase(tmp_path, env, "spread-L", 900, "fixture-no-GPU")
+    record = json.loads((tmp_path / "receipts/phase-timings.json").read_text())
+    assert record["science_eligible"] is False and record["reserve_seconds"] == 300
+    row = record["phases"][0]
+    assert row["status"] == ("REFUSED" if fail or left == 0 else "OK")
+    assert calls == ([] if left == 0 else [min(900, left)])
+    assert row["elapsed_seconds"] == (0 if left == 0 else 7.5)
+    assert row["time_left_after_reserve_seconds"] == left - row["elapsed_seconds"]
+
+
+def test_spread_phase_time_exhaustion_stops_before_observer_proofs_and_reads(tmp_path, monkeypatch):
+    result, work, calls = box_fixture(tmp_path, monkeypatch, "none", elapsed={"dq11_arm.py": 2300})
+    assert result.returncode == 11
+    assert [json.loads(line)["command"] for line in (work / "alarms.jsonl").read_text().splitlines()
+            if "spread" in json.loads(line)["command"]]
+    assert "--kind proof" not in calls and "--kind read" not in calls
+    assert not (work / "TC1_SUCCESS.fixture-science").exists()
+
+
+@pytest.mark.parametrize("key", ["DQ11_REHEARSAL", "DQ11_REHEARSAL_TINY_MODEL", "CUBLAS_WORKSPACE_CONFIG"])
+def test_science_controller_refuses_overrides_before_any_network_or_quote(tmp_path, monkeypatch, key):
+    monkeypatch.setenv(key, "1")
+    with pytest.raises(ValueError, match="BEFORE gate/quote/rental"):
+        launch_controller.launch(tmp_path / "no-manifest", "no-approval", tmp_path / "no-gate")
+    assert not list(tmp_path.iterdir())
+
+
+def test_science_live_route_witness_has_its_own_schema_and_identity(live_route_fixture, monkeypatch):
+    _, model, schedule, _, directory = live_route_fixture
+    import dq11_stream_witness as route
+
+    monkeypatch.setenv("E4B_SHA", "a" * 40)
+    monkeypatch.setenv("TC1_RUN_NONCE", "fixture-science-route")
+    before = route.train_prefetch_snapshot(model)
+    schedule.counts.update(uses=100, fwd_prefetch_issued=50, bwd_prefetch_issued=50)
+    witness = route.require_train_prefetch(directory, model, before, 40)
+    assert witness["schema"] == "dq11-train-prefetch/1" and witness["science_eligible"] is True
+    assert witness["source"] == "a" * 40 and witness["nonce"] == "fixture-science-route"
+    route.validate_train_prefetch_witness(witness)
+    with pytest.raises(ValueError, match="witness refused"):
+        route.validate_train_prefetch_witness(witness, rehearsal=True)
+
+
+@pytest.mark.parametrize("mutation", ["missing", "zero_delta", "rehearsal", "source", "nonce"])
+def test_science_reducer_requires_live_streaming_for_each_L_read(mutation):
+    proofs, reads, teardown = fixture_receipts()
+    row = next(r for r in reads if r["arm"] == "L")
+    if mutation == "missing":
+        row.pop("train_prefetch")
+    elif mutation == "zero_delta":
+        row["train_prefetch"]["after"]["devices"]["cuda:0"]["bwd_prefetch_issued"] = 0
+        row["train_prefetch"]["delta"]["cuda:0"]["bwd_prefetch_issued"] = 0
+    elif mutation == "rehearsal":
+        row["train_prefetch"].update(schema="dq11-rehearsal-train-prefetch/1", science_eligible=False)
+    else:
+        row["train_prefetch"][mutation] = "wrong-binding"
+    result = reducer.reduce(proofs, reads, teardown=teardown, instance_id="fixture-no-instance")
+    assert result["verdict"] == "VOID" and result["recommendation"] is None
+
+
+def test_live_route_refusal_keeps_a_sidecar_when_the_schedule_disappears(live_route_fixture):
+    _, model, _, handles, directory = live_route_fixture
+    import dq11_stream_witness as route
+
+    before = route.train_prefetch_snapshot(model)
+    for handle in handles:
+        handle._train = None
+    with pytest.raises(ValueError, match="all 32 handles"):
+        route.require_train_prefetch(directory, model, before, 40)
+    row = json.loads(next((directory / "receipts").glob("train-prefetch-read-*.json")).read_text())
+    assert row["status"] == "REFUSED" and row["after"] is None and row["before"] == before
+
+
+def test_spread_raw_cpu_gradients_match_recorded_hashes_and_sizes(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from safetensors.torch import load_file
+    import dq11_proof_policy as policy
+
+    monkeypatch.delenv("CUBLAS_WORKSPACE_CONFIG", raising=False)
+    model = nn.Module()
+    model.weight = nn.Parameter(torch.tensor(2.0))
+    model.forward = lambda **kwargs: SimpleNamespace(loss=model.weight.square())
+    row = policy.spread(model, {"fixture.B": model.weight}, torch.tensor([[1]]), output=tmp_path, arm="L")
+    for run in row["passes"]:
+        path = tmp_path / run["gradient_file"]
+        assert path.stat().st_size == run["gradient_file_bytes"]
+        assert common.file_sha(path) == run["gradient_file_sha256"]
+        tensors = load_file(str(path), device="cpu")
+        assert {key: common.tensor_sha(value) for key, value in tensors.items()} == run["gradient_hashes"]
+        assert tensors["fixture.B"].item() == 4
+    assert model.weight.item() == 2 and model.weight.grad is None
+
+
+def test_flash_backward_warning_names_its_operator_and_keeps_full_message(monkeypatch):
+    import warnings
+    import dq11_proof_policy as policy
+
+    monkeypatch.delenv("CUBLAS_WORKSPACE_CONFIG", raising=False)
+    message = "Flash Attention defaults to a non-deterministic algorithm. To explicitly enable determinism call torch.use_deterministic_algorithms(True, warn_only=False)."
+    with policy.process_environment("proof"):
+        with policy.observer_policy() as record:
+            warnings.warn(message, UserWarning)
+    assert record["warned_ops"] == [{"operator": "Flash Attention", "message": message}]
+    assert record["configuration"]["warn_only"] is True and record["restored"]
+
+
+@pytest.mark.parametrize("integer", [False, True])
+def test_observer_policy_requires_actual_boolean_flags(integer):
+    proofs, reads, teardown = fixture_receipts()
+    policy = proofs[0]["observer_policy"]
+    if integer:
+        policy["settings_actual"]["deterministic_algorithms"] = 1
+    else:
+        policy["configuration"]["warn_only"] = 1
+    assert reducer.reduce(proofs, reads, teardown=teardown, instance_id="fixture-no-instance")["verdict"] == "VOID"

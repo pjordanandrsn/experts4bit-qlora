@@ -57,6 +57,9 @@ phase bootstrap 1800 python dq11_bootstrap.py
 phase prepare 1800 python dq11_prepare.py
 nvidia-smi --query-gpu=name,memory.total,driver_version,pcie.link.gen.max,pcie.link.width.max,power.limit --format=csv,noheader > forensics.txt
 for arm in L U U0; do
+  phase "spread-$arm" 900 python dq11_arm.py --kind spread --arm "$arm" --repetition 0 --out "receipts/spread-$arm.json"
+done
+for arm in L U U0; do
   phase "proof-$arm" 900 python dq11_arm.py --kind proof --arm "$arm" --repetition 0 --out "receipts/proof-$arm.json"
 done
 python dq11_reduce.py receipts --initial-only > receipts/initial-gate.json 2> logs/initial-gate.log || { say 'QUALITY_FAIL/VOID: initial gate; no updates'; finish 12; }
