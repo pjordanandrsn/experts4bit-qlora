@@ -90,12 +90,37 @@ else
   say "no token file, staging none"
 fi
 LANE_STARTED_AT=$(date +%s)
-LAUNCH_REPLY=$({ cat "$LANE_HELPER"; printf '%s\n' "cd $W || exit 20; nohup env $PASS bash p130_run.sh > outer.log 2>&1 < /dev/null & child=\$!; identity=\$(lane_proc_snapshot \$child); end=\$((\$(date +%s)+30)); while [ \$(date +%s) -lt \$end ]; do [ \"\$(cat P130_RUN_NONCE 2>/dev/null)\" = '$NONCE' ] && { echo started:\$child; echo identity:\$identity; exit 0; }; kill -0 \$child 2>/dev/null || { wait \$child; echo child-exited-early:rc=\$? >&2; exit 125; }; sleep 1; done; echo nonce-handshake-timeout >&2; exit 124"; } | $SSH bash -s) || { say "start failed: child did not bind the nonce"; exit 21; }
+LAUNCH_REPLY=$({ cat "$LANE_HELPER"; printf '%s\n' "cd $W || exit 20; nohup env $PASS bash p130_run.sh > outer.log 2>&1 < /dev/null & child=\$!; identity=\$(lane_proc_snapshot \$child); end=\$((\$(date +%s)+30)); while [ \$(date +%s) -lt \$end ]; do [ \"\$(cat P130_RUN_NONCE 2>/dev/null)\" = '$NONCE' ] && { echo started:\$child; echo identity:\$identity; exit 0; }; kill -0 \$child 2>/dev/null || { wait \$child; echo child-exited-early:rc=\$? >&2; exit 125; }; sleep 1; done; echo nonce-handshake-timeout >&2; exit 124"; } | $SSH bash -s) || START_RC=$?
+SKIP_POLL=0
+if [ "${START_RC:-0}" != 0 ]; then
+  case "$START_RC" in
+    20|124|125) say "start failed (rc=$START_RC): child did not bind the nonce"; exit 21;;
+  esac
+  # The start's own connection failed (p130-prove-1: the proxy closed it after its banner). The child may have started
+  # before the drop, so the start is NEVER sent again: fresh, read-only connections probe for THIS run's nonce instead.
+  # A child that bound it is adopted; one that bound it and is already gone leaves its files to fetch; anything else is
+  # the old failure (21). The launcher tears the box down either way, so nothing outlives the rental.
+  say "start's connection failed (rc=$START_RC): probing for the nonce on a fresh connection; the start is not resent"
+  PROBE_WAIT=${P130_START_PROBE_WAIT_S:-20}
+  LAUNCH_REPLY=""
+  for attempt in 1 2 3; do
+    sleep "$PROBE_WAIT"
+    LAUNCH_REPLY=$({ cat "$LANE_HELPER"; printf '%s\n' "cd $W 2>/dev/null || { echo no-dir; exit 0; }; [ \"\$(cat P130_RUN_NONCE 2>/dev/null)\" = '$NONCE' ] || { echo no-nonce; exit 0; }; pid=\$(pgrep -o -f 'bash p130_run.sh'); if [ -n \"\$pid\" ]; then echo started:\$pid; echo identity:\$(lane_proc_snapshot \$pid); else echo nonce-bound-gone; fi"; } | $SSH bash -s 2>/dev/null) && break
+    LAUNCH_REPLY=""
+  done
+  case "$LAUNCH_REPLY" in
+    started:*) say "the child bound the nonce before the drop: adopting it (probe attempt $attempt)";;
+    nonce-bound-gone*) say "the child bound the nonce and has already exited: fetching what exists"; SKIP_POLL=1;;
+    *) say "start failed: no child bound the nonce (probe: ${LAUNCH_REPLY:-no answer after 3 attempts})"; exit 21;;
+  esac
+fi
 printf '%s\n' "$LAUNCH_REPLY"
-LANE_PID=$(printf '%s\n' "$LAUNCH_REPLY" | sed -n 's/^started:\([0-9][0-9]*\)$/\1/p')
-[[ "$LANE_PID" =~ ^[1-9][0-9]*$ ]] || { say "start failed: malformed child PID"; exit 21; }
-LANE_INITIAL=$(printf '%s\n' "$LAUNCH_REPLY" | sed -n 's/^identity://p')
-say "lane identity: pid=$LANE_PID snapshot=${LANE_INITIAL:-unknown}"
+if [ "$SKIP_POLL" = 0 ]; then
+  LANE_PID=$(printf '%s\n' "$LAUNCH_REPLY" | sed -n 's/^started:\([0-9][0-9]*\)$/\1/p')
+  [[ "$LANE_PID" =~ ^[1-9][0-9]*$ ]] || { say "start failed: malformed child PID"; exit 21; }
+  LANE_INITIAL=$(printf '%s\n' "$LAUNCH_REPLY" | sed -n 's/^identity://p')
+  say "lane identity: pid=$LANE_PID snapshot=${LANE_INITIAL:-unknown}"
+fi
 # ---- heartbeat + liveness (e4b#641, tp4_drive.sh's): a stall is REPORTED, never acted on; two consecutive definite
 # zeros for the lane's own process with no TP_DONE end the wait with their own code (25).
 STALL_S=${P130_STALL_S:-900}; P130_MIN_PROGRESS_MB=${P130_MIN_PROGRESS_MB:-16}
@@ -113,7 +138,7 @@ progress_verdict() {  # idle_s stall_s util dfk_now dfk_prev du_now du_prev -> "
 lane_dead() { lane_two_missing "$@"; }
 say "lane started; polling TP_DONE every ${POLL}s with a heartbeat (stall reported after ${STALL_S}s; never acted on; a lane whose process is gone for two polls ends the wait)"
 LAST=""; LAST_CHANGE=$(date +%s); LAST_DFK=""; LAST_DU=""; LAST_LIVE=""; UNKNOWN_PROBES=0; LANE_DEAD=0
-while :; do
+while [ "$SKIP_POLL" = 0 ]; do
   now=$(date +%s)
   $SSH "test -f $W/TP_DONE.$NONCE" 2>/dev/null && { say "TP_DONE seen"; break; }
   [ "$now" -ge $((DEADLINE - POLL)) ] && { say "deadline reached without TP_DONE -- fetching what exists"; break; }
