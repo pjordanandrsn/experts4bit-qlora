@@ -464,6 +464,50 @@ A missing or broken floor VOIDs the draw, and an incomplete floor makes the rung
 **Budget.** One RTX 5090 at the policy rate: about $2–3 with the download. The floor adds five held-out passes of eight rows to each
 q0 arm before training, seconds per pass. The lane has spent $2.085 so far and stays under $15.
 
+## Amendment 3 read (`tc1-5090-147`, 2026-10-10): GAIN
+
+**The box.**
+- **Host:** machine 27708 (AMD EPYC 7B13, RTX 5090) at $0.689/h; $2.759. All eight arms are VALID.
+- **Build:** e4b `51e5ae1` (Amendment 3 and its harness on main), grouped-nf4-gemm v0.44.0 `d1f64ba`.
+- **Floor:** both q0 arms carry the full record. Every mode covers every row, A0 equals the stock rows, D3 shared on 384 of 384 calls
+  (48 layers × 8 rows), and 48 attention modules were hooked.
+- **Reduction:** main's `tc1_reduce.py` at `19bfbe1` (`RESULTS-p129-a3.md`).
+
+**Load.** The host was heavily shared. The load gate voided 14 draws and ran them again, and every attempt that stands was above the
+6.0 gate (loads 12.3–32.0). The last draw (shipped `q0` d2, load 29.4) had its re-runs skipped by the host-limited deadline. Its first
+attempt stands, as registered. The wall rows were read under that contention. They agree with box 146's on a different host (0.896 and
+0.879 there).
+
+| row | verdict | reading | prediction |
+|---|---|---|---|
+| `R_m` | HELD | launches per step 79,576 → 68,513, −13.9 % | 12–15 %: held |
+| `R_shipped` | HELD | 75,833 → 64,761, −14.6 % | held |
+| `PREMISE` | HELD | matched `q0` busy_t 0.464 | |
+| `W_m` | HELD | `q1 / q0` 0.895 [0.890, 0.901] | [0.86, 0.95]: held |
+| `W_shipped` | HELD | 0.868 [0.862, 0.875] | held |
+| `DEVICE` | reported | 0.987 on each arm; peak +0.005 / +0.023 GB | [0.97, 1.02]: held |
+| `QUALITY` | HELD | step 0, both arms: e_B 0.02313 against max(e_A 0.03138, e_D2 0.03138, e_D3 0.03523, e_D4 0.03905) = 0.03905; at N −0.00001 matched, +0.00063 shipped | HELD: held |
+| `FQKV` | **GAIN** | | GAIN about 70 %: held |
+
+- **The step-0 ratio:** e_B / max is 0.59 on each arm, against a prediction of [0.35, 1.10], about 0.65.
+- **Identical across arms and hosts:** the two arms read the same step 0, because `lora_B` is zero on both. The step-0 held-out values
+  equal box 146's on another host (1.95917 knob off, 1.94684 fused).
+- **D2 was not a distinct schedule on this card:** splitting q's matmul in two reproduced the stock rows exactly (e_D2 = e_A). The
+  envelope's maximum came from D4.
+
+**What the envelope measures** (report-only, RTX A2000, the real model at the pin, the box-146 rows; `instrument/p129_routing.py`,
+`records/a3/routing_step0.json`):
+- **Routing flips:** the fused path changes which experts the router picks. At layer 0, 3.4 % of tokens get a different top-8 set from
+  the stock path's. That rises to 14–22 % in the deepest layers, about 15 % on average, and the q split does the same.
+- **The causal check:** with every layer's router output replaced by the stock path's, the fused path's step-0 held-out is 1.94455,
+  against the stock path's 1.94705 and the unpinned fused path's 1.97018. Pinning the routing removes 111 % of the mean shift. Per row,
+  the mean |fused − stock| falls from 0.0241 to 0.0038.
+
+The step-0 shift is the router's discrete top-8 choice amplifying sub-ulp q/k/v rounding. That is what the fp32-anchored envelope bounds.
+
+**Decision** (Amendment 2's rules): GAIN. The knob stays opt-in until DEFAULT_ON's second host reads, and that box is the lane's one
+replication. Box 146 cannot serve as the second host: it carries no floor, so it cannot be read under this clause.
+
 ## Box log
 
 - **`tc1-5090-142`** (2026-10-09, $0): refused before any instance existed. The cheapest eligible RTX 5090 billed $0.93/h with storage,
@@ -482,3 +526,4 @@ q0 arm before training, seconds per pass. The lane has spent $2.085 so far and s
 - A $0.95/h ceiling for box 1 was set after those refusals and then found not to apply: the launcher's policy fixes RTX 5090s at
   $0.85/h whatever a manifest declares. Box 1 ran inside the policy rate.
 - **`tc1-5090-146`** (2026-10-09, $1.874, machine 152440 at $0.659/h): the Phase 2 read above.
+- **`tc1-5090-147`** (2026-10-10, $2.759, machine 27708 at $0.689/h): the Amendment 3 read above.

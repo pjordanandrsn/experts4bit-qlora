@@ -1,0 +1,38 @@
+e4b 0.51.0 @be7a88d3cc3dbe4b2902059abc43cf92c6d1dd32 (GitHub main)
+gnf4 0.44.0 @d1f64ba50afce94533e0166ba3332ef075aa43bb (GitHub main)
+torch(e4b/hf) 2.8.0+cu128
+triton(e4b/hf) 3.4.0
+transformers(e4b/hf) 5.18.0
+bitsandbytes(e4b/hf) 0.50.2
+peft(hf) 0.21.2
+huggingface_hub(e4b/hf) 2.2.0
+httpx2(e4b/hf) 2.13.1
+brotli(e4b/hf) 1.2.0
+unsloth(unsloth-t28) 2026.9.14
+unsloth_zoo(unsloth-t28) 2026.9.9
+torch(unsloth-t28) 2.8.0+cu128
+triton(unsloth-t28) 3.4.0
+transformers(unsloth-t28) 5.5.0
+bitsandbytes(unsloth-t28) 0.50.2
+peft(unsloth-t28) 0.21.2
+torchao(unsloth-t28) None
+moe_backend(unsloth-t28) native_torch
+unsloth(unsloth) 2026.9.14
+unsloth_zoo(unsloth) 2026.9.9
+torch(unsloth) 2.12.1+cu130
+triton(unsloth) 3.7.1
+transformers(unsloth) 5.5.0
+bitsandbytes(unsloth) 0.50.2
+peft(unsloth) 0.21.2
+torchao(unsloth) 0.18.0+cu130
+moe_backend(unsloth) grouped_mm
+e4b(t212) 0.51.0 @be7a88d3cc3dbe4b2902059abc43cf92c6d1dd32
+gnf4(t212) 0.44.0 @d1f64ba50afce94533e0166ba3332ef075aa43bb
+torch(e4b-t212) 2.12.1+cu130
+axolotl 0.20.0
+torch(axolotl) 2.14.0+cu130
+transformers(axolotl) 5.17.0
+peft(axolotl) 0.21.0
+bitsandbytes(axolotl) 0.50.2
+python(axolotl) 3.12.15
+deepspeed(axolotl) None
