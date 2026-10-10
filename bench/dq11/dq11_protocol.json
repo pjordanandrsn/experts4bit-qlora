@@ -1,0 +1,23 @@
+{
+  "schema": "dq11-draft/1",
+  "status": "DRAFT_NOT_LAUNCHABLE",
+  "arms": ["L", "U", "U0", "U0", "U", "L"],
+  "updates": 40,
+  "timing_warmup": 5,
+  "sequence": 2048,
+  "micro_batch": 1,
+  "grad_accum": 1,
+  "rank": 16,
+  "alpha": 32,
+  "seed": 3407,
+  "adapter_storage": "float32",
+  "quality": {"gate": "K8_uncalibrated", "absolute_ppl_budget": 0.05, "texts": ["alpaca-heldout", "wikitext-test"]},
+  "decision": {"minimum_headroom": 0.05, "require_both_repetitions": true},
+  "budget": {"gpu": "RTX 5090", "wallclock_seconds": 7200, "storage_gb": 320, "transport_gb": 100, "max_total_usd": 2.8},
+  "model": {"id": "mistralai/Mistral-7B-v0.1", "revision": "27d67f1b5f57dc0953326b2601d68371d40ea8da"},
+  "loggetta_sha": "34ecb6cec6f43a6f8607ff9f192749fdc7b587e9",
+  "unsloth_wheels": {
+    "unsloth-2026.9.14-py3-none-any.whl": "e4cf7f2fc74e0b618ad6fc8b09b43e2181569333018965918256f93c02c3820e",
+    "unsloth_zoo-2026.9.9-py3-none-any.whl": "4ae0cabb93c8d6755af541767a4243eee511f2ce41e36b56a8c80f15591e0663"
+  }
+}
