@@ -98,7 +98,7 @@ def test_box_k_is_wired_like_box_h():
     assert '[ "$BOX" = K ]' in torch                                     # A1's lesson: every python3 box pins torch
     assert RUN.count('os.environ["TRIP_BOX"] in ("F", "G", "H", "I", "J", "K", "L")') == 2
     assert "  K) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; . $W/sc2d_box_k.sh; install_sc2_client ;;" in RUN
-    assert 'K) PROVE_NEEDS="sc2client";;' in RUN and '[ "$BOX" = K ] && prove_k' in RUN and "K) box_k;; L) box_l;; M) case "${SC1_SC5_PHASE:-read}" in ref) box_m_ref;; *) box_m;; esac;; esac" in RUN
+    assert 'K) PROVE_NEEDS="sc2client";;' in RUN and '[ "$BOX" = K ] && prove_k' in RUN and "K) box_k;; L) box_l;; M) case \"${SC1_SC5_PHASE:-read}\" in ref) box_m_ref;; *) box_m;; esac;; esac" in RUN
     assert 'case "$SC1_BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M) ;;' in DRIVE
     assert "sc2d_box_k.sh sc2d_reduce.py sc2e_box_l.sh" in DRIVE and "; do STAGE=" in DRIVE and 'STAGE="$STAGE $P98/p98_bake.py"' in DRIVE
     assert 'sc2c_*|sc2d_*|sc2e_*) src="$SC2/$name";;' in DRIVE and 'p98_bake.py) src="$P98/$name";;' in DRIVE

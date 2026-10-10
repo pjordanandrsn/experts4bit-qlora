@@ -35,7 +35,7 @@ def test_box_e_is_wired_into_sc1s_box_script_and_controller():
     assert 'case "$BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M) ;;' in RUN and "C|D|E|F|G|H|I|J|K|L|M) BASEPY=python3;;" in RUN
     assert "E) . $W/sc2_box_e.sh; install_vllm; install_sglang; install_llamacpp; install_sc2_client ;;" in RUN
     assert 'E) PROVE_NEEDS="vllm sglang llamacpp sc2client";;' in RUN and '[ "$BOX" = E ] && prove_e' in RUN
-    assert "D) box_d;; E) box_e;; F) box_f;; G) box_g;; H) box_h;; I) box_i;; J) box_j;; K) box_k;; L) box_l;; M) case "${SC1_SC5_PHASE:-read}" in ref) box_m_ref;; *) box_m;; esac;; esac" in RUN
+    assert "D) box_d;; E) box_e;; F) box_f;; G) box_g;; H) box_h;; I) box_i;; J) box_j;; K) box_k;; L) box_l;; M) case \"${SC1_SC5_PHASE:-read}\" in ref) box_m_ref;; *) box_m;; esac;; esac" in RUN
     drive = (SC1 / "sc1_drive.sh").read_text()
     assert 'case "$SC1_BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M) ;;' in drive and 'sc2_*|sc2b_*|sc2g_*|sc1g_*|sc2c_*|sc2d_*|sc2e_*) src="$SC2/$name";;' in drive
     pinned = {ln.split()[1] for ln in (SC1 / "staged.sha256").read_text().splitlines() if ln.strip() and not ln.startswith("#")}
