@@ -11,6 +11,7 @@ adapters.
   twice that spread.
 - re-enable: the round-tripped model enabled again fuses every layer, and its first step's loss is bit for bit the default's.
 """
+import gc
 import json
 import os
 
@@ -25,6 +26,12 @@ QKV = ("q_proj", "k_proj", "v_proj")
 torch.autograd.set_multithreading_enabled(False)
 g = torch.Generator().manual_seed(2)
 IDS = torch.randint(0, 4096, (2, 270), generator=g).cuda()
+
+
+def free():
+    """A patched model holds reference cycles (forwards bound to their modules): collect them before releasing the cache."""
+    gc.collect()
+    torch.cuda.empty_cache()
 
 
 def knob(v):
@@ -88,14 +95,14 @@ for dt_name, dt in (("fp32", torch.float32), ("bf16", torch.bfloat16)):
     r["default_fused"], r["default_refused"] = tq.TRAIN_QKV_STATS["fused"], dict(tq.TRAIN_QKV_STATS["refused"])
     r["default_losses"] = train3(m)
     del m
-    torch.cuda.empty_cache()
+    free()
     knob("0")
     m = build(dt)
     enable_fast_train(m)
     r["off_fused"], r["off_bases_kept"] = sum(hasattr(L.self_attn, "qkv_proj") for L in m.model.layers), bases_kept(m)
     r["off_losses"] = train3(m)
     del m
-    torch.cuda.empty_cache()
+    free()
     off = []
     for _ in range(2):                                              # off side, enable then disable: today's attn_only arm, twice
         m = build(dt)
@@ -104,7 +111,7 @@ for dt_name, dt in (("fp32", torch.float32), ("bf16", torch.bfloat16)):
         loss, logits = step(m, keep_logits=True)
         off.append((loss, logits, grads(m)))
         del m
-        torch.cuda.empty_cache()
+        free()
     (off_rt_loss, off_rt_logits, off_rt_g), (_, _, off_b_g) = off
     knob(None)
     m = build(dt)                                                   # default, enable then disable
@@ -129,7 +136,7 @@ for dt_name, dt in (("fp32", torch.float32), ("bf16", torch.bfloat16)):
     r["reenable_loss"] = step(m)
     r["reenable_loss_bitwise_default_step0"] = r["reenable_loss"] == r["default_losses"][0]
     del m
-    torch.cuda.empty_cache()
+    free()
     rel = [abs(a - b) / abs(b) for a, b in zip(r["default_losses"], r["off_losses"])]
     r["loss_rel_diff"] = rel
     r["checks"] = {
