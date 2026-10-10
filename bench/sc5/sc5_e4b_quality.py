@@ -11,7 +11,7 @@ position yields (the true token's fp32 NLL, the argmax id), the same pair ``sc5_
   piece at their default chunk sizes. That is e4b's served prefill arithmetic, stated in the registration.
   The scoring runner takes the first piece eagerly. The server replays that piece through its first-chunk prefill CUDA
   graph, which replays the captured forward's kernels, so the arithmetic is expected to be identical. That is an
-  expectation, not a measurement, and the proof run checks it (graph against eager on the first piece's last row).
+  expectation, not a measurement; the registration lists it under cannot-say.
 - **Decode-shaped**, reported as the served arithmetic: ``bench/p117/p117_box.paged_pass`` at its registered bytes, with
   P = ``prompt_len + 1`` and C = ``steps``. The prefill's last logit predicts ``ids[prompt_len + 1]``, and each decode
   step predicts the next.

@@ -1,11 +1,13 @@
-# SC5 — same-box serving head-to-head on one RTX 5090: `serve_paged` against current vLLM and SGLang on Qwen3-30B-A3B, at 1, 16 and 64 concurrent requests, with quality against one common bf16 reference — **DRAFT, not registered**
+# SC5 — same-box serving head-to-head on one RTX 5090: `serve_paged` against current vLLM and SGLang on Qwen3-30B-A3B, at 1, 16 and 64 concurrent requests, with quality against one common bf16 reference — **registered on merge**
 
-> **Status: DRAFT.** This file is a design draft for experts4bit-qlora#1478 item 4. It registers nothing.
-> - It is registered only after the grouped-nf4-gemm 0.45.0 / experts4bit-qlora 0.52.0 release train, so every arm
->   names a pip-installable version.
-> - No rental happens before that, and none until the maintainer approves the registration.
-> - Numbers marked *(size at registration)* are placeholders.
-> - The open questions at the end are decided before registration.
+> **Status: registered when this file merges** (experts4bit-qlora#1478 item 4; the serving campaign #846).
+> - Every arm names a pip-installable release: grouped-nf4-gemm 0.45.0 and experts4bit-qlora 0.52.0 (the wheels, by
+>   sha256), vLLM 0.31.0 and SGLang 0.5.21 (hash-locked closures). Nothing is spent before this merges.
+> - **The sequence:** the proof (`SC1_BOX=M SC1_PROVE=1`), then the reference (`SC1_SC5_PHASE=ref`, once), then an
+>   amendment that commits the reference under `bench/sc5/ref/` and sets its sha256 in `sc5_box_m.sh`
+>   (`SC5_REF_SHA256`), then the reading (`SC1_BOX=M`). The reading never launches before that amendment merges.
+> - **e4b's out-of-box serving (pip install, no environment) is NF4, and it is not measured here.** The e4b arm is the
+>   documented int4 serving configuration below, and every result says so in one plain line.
 
 Issue: experts4bit-qlora#1478 (item 4), the serving campaign #846.
 
@@ -32,14 +34,16 @@ Every cell is reported, including every cell a competitor wins.
 
 | framework | version | weights (repo @ revision) | 4-bit format | KV cache |
 |---|---|---|---|---|
-| e4b `serve_paged` | experts4bit-qlora 0.52.0 + grouped-nf4-gemm 0.45.0, every serving default (int4 experts and int4 attention; the tile-table, wide-tile and slot/bucket `auto` defaults) | `Qwen/Qwen3-30B-A3B` @ `ad44e777bcd18fa416d9da3bd8f70d33ebb85d39` (bf16), packed on the box | int4-b32, 4.50 bpw (`bench/sc1/UPSTREAM-NOTES.md` census) | FP8 paged |
-| vLLM | the current release at registration *(pin then)* | `Qwen/Qwen3-30B-A3B-GPTQ-Int4` @ `9b534e4318b7ebc3c961a839f13eb18b1833f441` | GPTQ 4-bit g128 (Marlin kernels) | the framework's default |
-| SGLang | the current release at registration *(pin then)* | the same GPTQ checkpoint | GPTQ 4-bit g128 (Marlin kernels) | the framework's default |
+| e4b `serve_paged`, **int4 (documented serving configuration)** | experts4bit-qlora 0.52.0 + grouped-nf4-gemm 0.45.0, the release wheels by sha256 (`locks/e4b-wheels.lock`); SC1's `SPEEDENV` (`E4B_SERVE_EXP_INT4=1 E4B_SERVE_ATTN_INT4=1 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1`) + `E4B_PAGED_FUSE_QKV=1`; every other knob at its 0.52.0 default (slots and buckets `auto`, tile programs `auto`, bulk KV, the prefill graph) | `Qwen/Qwen3-30B-A3B` @ `ad44e777bcd18fa416d9da3bd8f70d33ebb85d39` (bf16), packed on the box | int4-b32, 4.50 bpw (`bench/sc1/UPSTREAM-NOTES.md` census) | FP8 paged |
+| vLLM | 0.31.0 (tag commit `db9527a4`), `locks/vllm.lock.txt` | `Qwen/Qwen3-30B-A3B-GPTQ-Int4` @ `9b534e4318b7ebc3c961a839f13eb18b1833f441` | GPTQ 4-bit g128 (Marlin kernels) | the framework's default |
+| SGLang | 0.5.21 (tag commit `e00930c5`), `locks/sglang.lock.txt` | the same GPTQ checkpoint | GPTQ 4-bit g128 (Marlin kernels) | the framework's default |
 
 **The primary rows** (decided 2026-10-09):
 - vLLM and SGLang on the one shared official checkpoint, `Qwen/Qwen3-30B-A3B-GPTQ-Int4` @ `9b534e43`, the 4-bit format
   SC2 served on both;
-- e4b at its int4 defaults.
+- e4b at its documented int4 serving configuration (corrected 2026-10-10: at 0.52.0 `E4B_SERVE_EXP_INT4`,
+  `E4B_SERVE_ATTN_INT4` and `E4B_PAGED_FUSE_QKV` all default off, so "its int4 defaults" named no configuration;
+  `serve_paged.py:265-266, :409`).
 
 **A framework's native-best row** is added only where that framework serves an AWQ or compressed-tensors W4A16
 checkpoint of the same base faster. It is reported apart and says so, with the checkpoint's repo and revision named at
@@ -54,7 +58,7 @@ speed.
 ## Load
 
 - **Prompts:** SC2's 64 distinct 512-token wikitext-2 rows (`bench/sc2/sc2_prompts.py`).
-- **Requests:** every request is greedy, with `max_tokens` = 256 *(size at registration)*, `ignore_eos`, and streaming.
+- **Requests:** every request is greedy, with `max_tokens` = 256, `ignore_eos`, and streaming.
   A request is VALID only when it returns exactly `max_tokens` tokens with finish reason `length` (SC2's rule).
 - **Closed loop (a new driver, `bench/sc5/sc5_driver.py`).** C ∈ {1, 16, 64} workers each send their next request as soon as the last one
   finishes, until N requests have completed. N is **48 at C = 1, 160 at C = 16 and 320 at C = 64** (sized 2026-10-09,
@@ -75,7 +79,7 @@ speed.
 | setting | e4b | vLLM | SGLang |
 |---|---|---|---|
 | **default** | `E4B_PAGED_MAX_SEQS=auto`, `E4B_PAGED_MAX_TOKENS_PER_SEQ` default (4096) | default `--gpu-memory-utilization` (0.9), default context length, `--max-num-seqs 64` | default `--mem-fraction-static`, `--max-running-requests 64` |
-| **matched** | `E4B_PAGED_MAX_SEQS=64`, `E4B_PAGED_MAX_TOKENS_PER_SEQ=1024` | `--max-num-seqs 64` with KV capped at **65,536 tokens** through the release's KV-size flag *(verify the flag at registration)* | `--max-running-requests 64 --max-total-tokens 65536` |
+| **matched** | `E4B_PAGED_MAX_SEQS=64`, `E4B_PAGED_MAX_TOKENS_PER_SEQ=1024` | `--max-num-seqs 64 --block-size 16 --num-gpu-blocks-override 4096` (**65,536 tokens**; both flags in v0.31.0's `vllm/engine/arg_utils.py`) | `--max-running-requests 64 --max-total-tokens 65536` (v0.5.21's `arg_groups/fields/schedule.py`) |
 
 - **Matched means 65,536 KV tokens:** 64 slots × 1,024 tokens.
 - **Why that size:** it holds every request (512 + 256). It also fits beside the 15.8 GiB GPTQ weights on 32 GiB:
@@ -84,6 +88,13 @@ speed.
 - **A matched block whose reported capacity differs from 65,536 tokens is VOID,** beyond its block-size rounding, which
   is stated per framework.
 - **Default-against-default and matched rows are both reported.**
+- **The capacity readout and its rounding:** e4b `/health` (`max_seqs × max_tokens_per_seq`, rounding 0); vLLM
+  `/metrics` `vllm:cache_config_info` (`num_gpu_blocks × block_size`, rounding one block); SGLang server info
+  `max_total_num_tokens` (rounding its `page_size`).
+- **Prefix caching is off for vLLM (`--no-enable-prefix-caching`) and SGLang (`--disable-radix-cache`),** as in SC2.
+  The closed-loop plans reuse SC2's 64 prompts across up to 320 requests, and e4b has no prefix cache, so a cache hit
+  would be prefill that only the competitors skip. vLLM runs with `--seed 0` and SGLang with `--random-seed 0`.
+- SGLang serves the GPTQ checkpoint with `--dtype float16`, the checkpoint's need, as in SC2.
 
 ## Order and noise
 
@@ -119,8 +130,10 @@ speed.
 ## Quality: one common bf16 reference
 
 - **Text:** W windows of wikitext-2-raw-v1 test, each 512 prompt tokens plus 128 scored positions, taken exactly as
-  `bench/p117/p117_box.windows()` takes them. W = 64 *(size at registration)*. The same token ids go to every framework.
-  The windows and their sha256 are committed before the run.
+  `bench/p117/p117_box.windows()` takes them. **W = 64.** The same token ids go to every framework.
+  The windows are committed here: `bench/sc5/sc5_windows_w64.json`, windows sha256
+  `5f6e00d8c4f7c01f9b6f165feb85288948fceba94911c2bb2dd21bac52417a86`, dataset `Salesforce/wikitext` @ `b08601e0`,
+  tokenizer `Qwen/Qwen3-30B-A3B` @ `ad44e777`.
 - **The reference (new, `sc5_ref.py`).**
   - It is `Qwen/Qwen3-30B-A3B` @ `ad44e777` in bf16 through transformers, with `device_map="auto"` over the card and the
     host RAM, eager attention and teacher forcing.
@@ -149,7 +162,7 @@ speed.
   - e4b's decode-shaped row (`p117_box.paged_pass` through its served graphs) is **reported**, labelled as the served
     arithmetic.
   - **Cannot-say:** the competitors' decode-shaped arithmetic is not measured.
-- **The ordering floor (proposed).** `sc5_ref.py --chunked 256` scores the same windows through the bf16 cache in chunks.
+- **The ordering floor.** `sc5_ref.py --chunked 256` scores the same windows through the bf16 cache in chunks.
   Its NLL delta and argmax agreement against the full forward are the floor that every argmax agreement is read against.
   Chunking reorders an MoE's arithmetic and flips a few percent of Qwen3's router choices (6.77 %, METHODOLOGY 13.1), so
   even a correct implementation agrees below 100 %.
@@ -162,9 +175,13 @@ speed.
   `--require-hashes`, a list of every wheel and its sha256.
   - The release-anchor tooling (`bench/ra/`) covers e4b and grouped-nf4-gemm only, so these locks are new.
   - Each tripwire writes the installed versions of torch, triton, flashinfer and the framework.
-- **The image** is pinned by digest *(choose at registration; SC2 used `nvidia/cuda:13.0.3-cudnn-devel-ubuntu24.04`)*.
-- **The pins carried over from SC2 are `max_model_len` and seeds.** Everything else either runs at the framework's own
-  default or is stated here.
+- **The locks** are regenerated from PyPI alone by `bench/sc5/make_locks.sh` (`uv pip compile --generate-hashes` for
+  x86_64 manylinux_2_34, CPython 3.12; the e4b wheels' sha256 read from PyPI's JSON). Both competitor closures carry
+  torch 2.13.0 (CUDA 13), so the host needs an R580+ driver; the e4b venv keeps SC1's torch 2.8.0 cu128.
+- **The image** is `nvidia/cuda:13.0.3-cudnn-devel-ubuntu24.04@sha256:0230b7f243483cb15969fa3cc724a9459599604427052fc2a0d4291c7c0647dd`
+  (its system Python is 3.12, the locks' interpreter). The proof checks that the provider pulls it by digest.
+- **The pins carried over from SC2 are the seeds and prefix caching off.** Everything else, including the context
+  length at the default setting, runs at the framework's own default or is stated here.
 
 ## VOID
 
@@ -176,12 +193,19 @@ A block or cell is VOID, and is never read, when any of these holds:
 - the quiescence gate fails;
 - the quality pass is incomplete for a framework (its quality columns are VOID; its speed rows stand, labelled).
 
-## Budget *(size at registration)*
+## Budget
 
-- **The reading:** one RTX 5090 on a host with at least 98 GB of RAM (for the reference), on the scale of 3–4 h for
-  2 draws × 2 memory settings × 6 blocks, plus the reference and three quality passes.
-- **#1478's estimate:** about $6–8 for proof plus reading.
-- **The proof:** one draw, one memory setting, C = 1 and 16, and all three quality passes on 8 windows.
+Every run is one RTX 5090 at the policy's fixed $0.85/h, on a host with at least 98 GB of RAM (the policy's floor), with
+the launcher's default download ceiling ($0.011/GB). Each is a single run under #846's standing tier.
+
+| run | what | guard | ceiling |
+|---|---|---|---|
+| proof | `SC1_PROVE=1`: every install from its lock, one default-setting block per framework at C = 1 and 16, the capacity readouts, every scorer on 8 windows | 2.5 h | $2.13 + 90 GB × $0.011 = **$3.12** |
+| reference | `SC1_SC5_PHASE=ref`: the bf16 reference, full and chunked, over the 64 windows | 1.5 h | $1.28 + 70 GB × $0.011 = **$2.05** |
+| reading | 2 draws × 2 memory settings × 6 cold-started blocks, then the quality passes | 5.5 h | $4.68 + 90 GB × $0.011 = **$5.67** |
+
+The lane ceiling is $10.84; the expected spend is $6–8, as #1478 estimated. The deadline drops the second draw's matched
+blocks first (they run last).
 
 ## Decided before registration (maintainer, 2026-10-09)
 
@@ -195,33 +219,36 @@ A block or cell is VOID, and is never read, when any of these holds:
 4. **Noise.** N and the bound are sized from SC2e's spread and written here before any SC5 data. A cell is WITHIN NOISE
    unless its blocks clear the bound in the same direction.
 
-## Work items (zero rental; each lands as reviewed code before registration)
+## What the registration carries (all CPU-tested; nothing has run on a GPU)
 
-- **`bench/sc5/sc5_driver.py`:** a closed-loop mode, `closed C N`, with tests. It imports `bench/sc2/sc2_driver.py`'s
-  request, streaming and summary code and leaves that file byte-identical, because `bench/sc1/staged.sha256` and RA's
-  `bench/ra/source-pins.json` both pin it.
-- **The box: `bench/sc5/sc5_box_m.sh`, as SC1 box M.**
-  - **Why box M.** It follows the precedent of SC2's box E and SC2e's box L. `sc2_box_e.sh`'s server helpers rely on SC1's
-    common setup (`say`, `can_run`, `arm_alarm`, `quiesce`, the samplers, `bake_qwen3`, `sglang_server_start`), so a
-    standalone lane would duplicate it.
-  - **Wiring, at registration time** with the final pins, on main after the release train. It covers every site that
-    enumerates box letters:
-    - `bench/sc1/sc1_run.sh`: the box gate (:50), the GNF4 pin (:58), the default-route boxes (:90), BASEPY (:168), the
-      tripwire's box lists (:210, :219), the sourcing (:288), PROVE_NEEDS (:596) and the dispatch (:827);
-    - `bench/sc1/sc1_drive.sh` (:11, :17, :25) and `bench/sc1/make_pin.sh` (:24), with a regenerated `staged.sha256`;
-    - the tests that enumerate letters: `test_sc1_run_shape`, `test_sc1_staged_pin`, `test_sc2_box`, `test_sc2d_box`,
-      `test_sc2e_box`, `test_sc1b`, `test_sc1g_box`, `test_sc1g_a6` and `test_rd1_lane`.
-  - **What it carries:**
-    - e4b and grouped-nf4-gemm as release wheels by sha256 (not git SHAs);
-    - vLLM and SGLang through `bench/sc1/{vllm,sglang}/install.sh` at the registration's versions with hash locks;
-    - the two memory settings and the ABBA blocks with cold starts;
-    - the capacity readout per framework (e4b `/health` `levers.kv`, vLLM `num_gpu_blocks × block_size`, SGLang
-      `server_info.max_total_num_tokens`) and the 1 Hz memory sampler;
-    - the quality passes after the speed blocks, verifying the reference's sha256 first.
-- **`bench/sc5/sc5_ref.py`:** the bf16 reference, per-position NLL and argmax.
-- **`bench/sc5/sc5_quality.py`:** the vLLM and SGLang server scorers (`prompt_logprobs=1`, `top_logprobs_num=1`), with
-  fixture tests for both entry shapes and for the V+1 trap.
-- **e4b quality:** a thin wrapper on `p117_box.paged_pass` at served defaults, with per-position NLL and argmax.
-- **`bench/sc5/sc5_reduce.py`:** cells, noise bounds, labels and quality, with a self-test whose mutants include a noisy
-  pair, a capacity mismatch, an invalid request, a missing quality pass and a V+1 response.
-- **The rest:** the staged pins and wiring tests, and a changelog fragment.
+- **`bench/sc5/sc5_driver.py`:** the closed-loop mode, `run --concurrency C --n N`. It imports
+  `bench/sc2/sc2_driver.py`'s request, streaming and summary code and leaves that file byte-identical, because
+  `bench/sc1/staged.sha256` and RA's `bench/ra/source-pins.json` both pin it.
+- **`bench/sc5/sc5_box_m.sh`, SC1 box M,** sourced after `sc2_box_e.sh` (SC2's box E and SC2e's box L are the precedent):
+  - `m_install_e4b`: the two release wheels downloaded and verified by sha256 before pip sees them, e4b's `[train]` extra
+    with SC1's transformers 5.16.1 pin, and a tripwire of its own. `sc1_run.sh` runs it in place of the git-SHA install,
+    whose tripwire asserts the cuts the other boxes registered.
+  - `m_install_competitors`: SC1's installers in their lock mode (`SC1_VLLM_WHEEL=lock`, `SGLANG_LOCK`), which install
+    the whole closure with `pip install --require-hashes --no-deps`; every other box's install is unchanged.
+  - `m_block`: one cold-started block: the quiescence gate (`gpu_free`, `quiesce`), the server, the capacity readout, a
+    4-request warm-up excluded from every statistic, the three cells, a 1 Hz `nvidia-smi` memory sampler, `block.json`.
+  - `box_m` (the reading, in the ABBA order above), `box_m_ref` (`SC1_SC5_PHASE=ref`) and `prove_m` (`SC1_PROVE=1`).
+- **The wiring** at every site that enumerates box letters: `sc1_run.sh` (the gate, the GNF4 record pin, the default
+  routes, BASEPY, the install branch, the sourcing, PROVE_NEEDS, the proof and the dispatch), `sc1_drive.sh` (the gate,
+  the staging list, the name-to-source case, the forwarded `SC1_SC5_PHASE`), `make_pin.sh` and a regenerated
+  `staged.sha256`, and the tests that pin letters (`test_sc1_run_shape`, `test_sc1_staged_pin`, `test_sc2_box`,
+  `test_sc2b_box`, `test_sc2g_box`, `test_sc2d_box`, `test_sc2e_box`, `test_sc1b`, `test_sc1g_box`, `test_sc1g_a6`).
+- **Quality:** `sc5_windows.py` and the committed windows; `sc5_ref.py` (full forward and `--chunked 256`);
+  `sc5_quality.py` (`score` through a running vLLM or SGLang server with the pinned parsers, `compare` against a
+  reference verified by its sha256); `sc5_e4b_quality.py` (`run`: the engine `serve_paged.build_engine` builds from the
+  server's own environment, prefill-shaped and decode-shaped).
+- **The record and the reading:** `sc5_record.py` assembles the box's files into the record `sc5_reduce.py` reads; the
+  reducer's self-test covers a noisy pair, a capacity mismatch, an invalid request, a missing cell, a missing quality
+  pass and a V+1 response.
+- **Provenance:** `bench/sc5/make_locks.sh` and `bench/sc5/locks/`.
+
+**Cannot-say, stated before any data:**
+- the competitors' decode-shaped arithmetic (not measured);
+- whether e4b's server replays its first prefill piece through the same kernels as the eager scoring pass. It is
+  expected, because the prefill graph replays the captured forward, but this registration does not measure it;
+- e4b's NF4 out-of-box serving.

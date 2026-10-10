@@ -293,7 +293,7 @@ case "$BOX" in
   J) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; . $W/sc1g_box_i.sh ;;   # SC1g A2: the e4b-only diagnostic box, no comparators (bench/sc2)
   K) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; . $W/sc2d_box_k.sh; install_sc2_client ;;   # SC2d: the bulk-KV default's engagement reads, gpt-oss + Qwen3.6, e4b only (bench/sc2)
   L) . $W/sc2_box_e.sh; . $W/sc2c_box_h.sh; . $W/sc2e_box_l.sh; install_sc2_client ;;
-  M) m_install_competitors ;;   # SC5: vLLM 0.31.0 and SGLang 0.5.21 from their locks, the SC2 client (box M sourced above; bench/sc5)   # SC2e: 16 / 32 / 64 slots, buckets auto against the default list, e4b only (bench/sc2)
+  M) [ "${SC1_SC5_PHASE:-read}" = ref ] || m_install_competitors ;;   # SC5: vLLM 0.31.0 and SGLang 0.5.21 from their locks, the SC2 client (box M sourced above; the ref phase needs neither; bench/sc5)   # SC2e: 16 / 32 / 64 slots, buckets auto against the default list, e4b only (bench/sc2)
 esac
 # ---- environments (P88, byte for byte) + SC1's explicit route knobs (v3 "Fixture": never inherited)
 FOLDS="E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1"
