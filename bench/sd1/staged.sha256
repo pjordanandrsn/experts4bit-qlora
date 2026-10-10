@@ -1,8 +1,9 @@
 # Names as the BOX sees them after staging (/root/sd1). The box runs `sha256sum -c` on this file; sd1_drive.sh and
 # tests/test_sd1.py resolve each name to its source (bench/sd1, bench/p109, bench/p39) and compare.
-278b15a22d3918a7e017b2db412dc160bf9664e69f3d5c8e7e98792868bfca55  sd1_run.sh
-f9c954c708a970caf6aeb2dc94475e8dadb04ae0bdda4f29d3e648470c28fb0c  sd1_box.py
-ce8bb2ec377cf8c31f9ce6255d63ccebc76d7f1b066d855acbc5fd1d858ac4b9  sd1_eagle3.py
+# Re-pinned 2026-10-10 for Amendment 1 (stat -L on the head; shared-context attention; the capture's extra-forward and chat-template ids).
+3ee22445ceb11c75965a8c197b3bbe99e95aad4193ec5df9c1a5c17c7b1d3817  sd1_run.sh
+cd3e73aa5e3de7a8eb5824ba9a2973d1d9e1e2b0cd87652a9c7f472d6f5a0b95  sd1_box.py
+c73d6e71d7e2a3eb91a43fc29e265c484e0bf0899cf5884bf79bed26f63d18e6  sd1_eagle3.py
 9e91b331c5dc473a0a1129887a0e4ac386354b8541361f704241a919d3a0b191  sd1_reduce.py
 8e92881e6fdcd848ae3c8147c03d89cadfc5e34c5465fdfb7ca5dea85db7ea66  chat_prompts.json
 583eba25a66cac4cae6bc718cdd046538ca76ae83bb6706d0c35839531321628  expect_w1.json

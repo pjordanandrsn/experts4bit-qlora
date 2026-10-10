@@ -111,8 +111,8 @@ say "fetch the head $HEAD_REPO @ $HEAD_REV"
 perl -e "alarm 1200; exec @ARGV" python -c "from huggingface_hub import hf_hub_download as d; print(d('$HEAD_REPO', 'model.safetensors', revision='$HEAD_REV'))" \
   > logs/fetch_head.log 2>&1 || { tail -2 logs/fetch_head.log; say "DL FAIL (head)"; finish 11; }
 HEAD=$(tail -1 logs/fetch_head.log)
-[ "$(stat -c %s "$HEAD")" = "$HEAD_BYTES" ] && [ "$(sha256sum "$HEAD" | cut -d' ' -f1)" = "$HEAD_SHA256" ] \
-  || { say "HEAD MISMATCH: $(stat -c %s "$HEAD") B, $(sha256sum "$HEAD" | cut -c1-16)"; finish 11; }
+[ "$(stat -L -c %s "$HEAD")" = "$HEAD_BYTES" ] && [ "$(sha256sum "$HEAD" | cut -d' ' -f1)" = "$HEAD_SHA256" ] \
+  || { say "HEAD MISMATCH: $(stat -L -c %s "$HEAD") B, $(sha256sum "$HEAD" | cut -c1-16)"; finish 11; }
 echo "HEAD $HEAD_REPO@$HEAD_REV sha256 $HEAD_SHA256" | tee -a summary.txt
 can_run $NEED_BAKE bake || finish 40
 say "bake the NF4 arena"; mkdir -p $W/work

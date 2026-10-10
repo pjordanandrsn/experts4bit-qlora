@@ -154,3 +154,27 @@ def test_the_pinned_inputs_carry_their_provenance():
               "92a7a4fa8f0467960cb37ab837629814b79cd17ef28b7a8e969dfda03af0da4b",
               "d2d6e2e63e09dc755053ae5c98cdececae3611ae5e202d4fa5411126dd3b1dfa", "8049631c", "**1.40**", "**1.15**", "**1.05**"):
         assert v in PREREG, v
+
+
+def test_chains_at_the_real_attention_shape_stay_small_and_match_the_reference():
+    """Amendment 1: the batched path never builds N x M x heads x head_dim. The first cut did, about 50 GB at a
+    1,750-position chat row on the box; here 1,024 positions at the head's real attention shape (32 heads of 128, 4 kv
+    heads, hidden 2048) would need about 17 GB. A small MLP and vocabulary keep the test fast."""
+    g = torch.Generator().manual_seed(3)
+    H, NH, HD, NKV, V, DV, INTER = 2048, 32, 128, 4, 64, 32, 64
+    r = lambda *s: torch.randn(*s, generator=g) / 32  # noqa: E731
+    t = {"d2t": torch.randint(0, V - DV, (DV,), generator=g), "embed_tokens.weight": r(V, H), "fc.weight": r(H, 3 * H),
+         "layers.0.hidden_norm.weight": torch.ones(H), "layers.0.input_layernorm.weight": torch.ones(H),
+         "layers.0.mlp.down_proj.weight": r(H, INTER), "layers.0.mlp.gate_proj.weight": r(INTER, H),
+         "layers.0.mlp.up_proj.weight": r(INTER, H), "layers.0.post_attention_layernorm.weight": torch.ones(H),
+         "layers.0.self_attn.k_proj.weight": r(NKV * HD, 2 * H), "layers.0.self_attn.o_proj.weight": r(H, NH * HD),
+         "layers.0.self_attn.q_proj.weight": r(NH * HD, 2 * H), "layers.0.self_attn.v_proj.weight": r(NKV * HD, 2 * H),
+         "lm_head.weight": r(DV, H), "norm.weight": torch.ones(H)}
+    d = e3.Eagle3Draft(t, dtype=torch.float32)
+    n = 1024
+    tokens = torch.randint(0, V, (n + 1,), generator=g)
+    aux = torch.randn(n, 3 * H, generator=g)
+    ch = d.chains(tokens, aux, K=5)
+    assert tuple(ch.shape) == (n, 5)
+    for tt in (0, 511, 1023):
+        assert ch[tt].tolist() == d.chain_at(tokens, aux, tt, K=5), tt

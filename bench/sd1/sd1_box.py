@@ -85,12 +85,24 @@ def chat_main(a) -> int:
     for w, think in (("C-think", True), ("C-nothink", False)):
         rows = [tok.apply_chat_template([{"role": "user", "content": t}], add_generation_prompt=True,
                                         enable_thinking=think, tokenize=True) for t in texts]
-        rows = [list(map(int, r if isinstance(r, list) else r["input_ids"])) for r in rows]
+        rows = [_ids(r) for r in rows]
         json.dump({"workload": w, "enable_thinking": think, "rows": rows, "prompts_sha256": digest(rows),
                    "source_sha256": src["prompts_sha256"]}, open(os.path.join(a.outdir, f"prompts_{w}.json"), "w"))
         print(f"SD1_PROMPTS {w} rows={len(rows)} min_len={min(map(len, rows))} max_len={max(map(len, rows))} "
               f"sha256={digest(rows)}", flush=True)
     return 0
+
+
+def _ids(r) -> list:
+    """apply_chat_template(tokenize=True) returns a list, or (transformers 5) a dict-like with input_ids, possibly batched."""
+    x = r if isinstance(r, list) else r["input_ids"]
+    if hasattr(x, "tolist"):
+        x = x.tolist()
+    if x and isinstance(x[0], list):
+        if len(x) != 1:
+            raise SystemExit(f"REFUSED: a chat template returned {len(x)} sequences for one conversation")
+        x = x[0]
+    return [int(t) for t in x]
 
 
 def digest_list(texts) -> str:
@@ -131,12 +143,15 @@ def capture_main(a) -> int:
             raise SystemExit(f"REFUSED: row {ri} produced {len(gen)} tokens, expected {n_new}")
         aux = cap.take()
         L = len(row) + n_new
+        extra = aux.shape[0] == L                 # Amendment 1: one benign extra forward of the last token is dropped
+        if extra:
+            aux = aux[:L - 1]
         if aux.shape[0] != L - 1:
             print(f"CAPTURE FAIL row {ri}: {aux.shape[0]} positions captured, expected {L - 1}", flush=True)
             return 19
         tokens = torch.tensor(list(row) + gen)
         chains = head.chains(tokens, aux, K=5)
-        out_rows.append({"prompt_len": len(row), "tokens": list(row) + gen, "chains": chains.tolist()})
+        out_rows.append({"prompt_len": len(row), "tokens": list(row) + gen, "chains": chains.tolist(), "extra_forward": extra})
         print(f"SD1_ROW {w} {ri} prompt={len(row)} new={n_new} positions={aux.shape[0]}", flush=True)
     cap.close()
     rec = {"workload": w, "new_tokens": n_new, "rows": out_rows, "prompts_sha256": pf["prompts_sha256"],
@@ -182,10 +197,14 @@ def self_test() -> int:
     if not torch.equal(aux[0, :4], torch.full((4,), 2.0)) or not torch.equal(aux[0, 8:], torch.full((4,), 45.0)):
         bad.append("layer order or values")
     cap.close()
+    for got, want in ((_ids([1, 2]), [1, 2]), (_ids({"input_ids": [3, 4]}), [3, 4]), (_ids({"input_ids": [[5, 6]]}), [5, 6]),
+                      (_ids({"input_ids": torch.tensor([[7, 8]])}), [7, 8])):
+        if got != want:
+            bad.append(f"_ids {got} != {want}")
     if bad:
         print("sd1_box self-test FAILED:", bad)
         return 1
-    print("sd1_box self-test OK (capture bookkeeping)")
+    print("sd1_box self-test OK (capture bookkeeping, chat-template ids)")
     return 0
 
 
