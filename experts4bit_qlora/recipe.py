@@ -245,6 +245,42 @@ def _grouped_nf4_backward(topology, setup, tokens: int, layer: int) -> tuple:
                                  f"one layer's recompute {layer / 1e9:.2f} GB")
 
 
+def _absmax_dq_in_force(setup: QLoRASetup) -> bool:
+    """Whether the run stores the expert absmax double-quantized (``absmax_dq.compress_expert_absmax_``): the
+    ``enable_fast_train`` default (``engines.fast.absmax_dq_policy``, unset ``E4B_ABSMAX_DQ``), which compresses only
+    resident ExpertsLoRA-wrapped NF4/FP4 stacks at blocksize 64 (``absmax_dq._why_not``). Expert offload keeps the fp32
+    absmax by name, and the reference loop never calls ``enable_fast_train``, so both stay at fp32 here."""
+    if setup.expert_kernel != "grouped_nf4" or setup.expert_residency != "device" or setup.quant_type not in ("nf4", "fp4"):
+        return False
+    if setup.blocksize != 64:
+        return False
+    from .engines.fast import absmax_dq_policy
+
+    return absmax_dq_policy(None)[0]
+
+
+def _compressed_absmax_bytes(n: int) -> int:
+    """Bytes ``absmax_dq._compress_one`` stores for one projection's ``n`` fp32 absmax values: ``_q`` uint8 [n],
+    ``_s`` fp32 one per 256 (bitsandbytes ``quantize_blockwise(blocksize=256)``), ``_off`` fp32 [1], ``_code`` fp32 [256]
+    (bitsandbytes' dynamic map). Pinned against real stacks in tests/test_estimate_absmax_and_family.py."""
+    from .absmax_dq import NESTED_BLOCKSIZE
+
+    return n + 4 * (-(-n // NESTED_BLOCKSIZE)) + 4 + 4 * 256
+
+
+def _stack_device_bytes(base, setup: QLoRASetup) -> int:
+    """One stack's device bytes as the run stores them: packed weights + absmax, the absmax compressed where
+    :func:`_absmax_dq_in_force` says the run compresses it."""
+    total = _module_bytes(base)
+    if not _absmax_dq_in_force(setup):
+        return total
+    for which in ("gate_up", "down"):
+        t = getattr(base, f"{which}_absmax", None)
+        if isinstance(t, torch.Tensor):
+            total += _compressed_absmax_bytes(t.numel()) - t.numel() * t.element_size()
+    return total
+
+
 def _pinned_cost(n: int) -> int:
     """PyTorch's caching host allocator rounds each pinned request up to a power of two (grouped-nf4-gemm#71)."""
     return 1 << (int(n) - 1).bit_length() if n > 0 else 0
@@ -273,8 +309,11 @@ def estimate_env() -> dict:
     from .engines.chunked_lm_loss import chunked_lm_loss_min_bytes, chunked_lm_loss_requested
     from .engines.train_qkv_fuse import train_fuse_qkv_requested
 
+    from .engines.fast import absmax_dq_policy
+
     return {chunked_loss_switch: {"chunk": chunked_lm_loss_requested(), "auto_gate_bytes": chunked_lm_loss_min_bytes()},
-            "E4B_TRAIN_FUSE_QKV": train_fuse_qkv_requested()}
+            "E4B_TRAIN_FUSE_QKV": train_fuse_qkv_requested(),
+            "E4B_ABSMAX_DQ": absmax_dq_policy(None)[0]}
 
 
 def _fused_qkv_absmax_bytes(topology, setup: QLoRASetup) -> int:
@@ -289,15 +328,26 @@ def _fused_qkv_absmax_bytes(topology, setup: QLoRASetup) -> int:
     return 3 * int(attn.fused_qkv_numel) // 64 if train_fuse_qkv_requested() else 0
 
 
+def _loss_family(topology):
+    """The ``chunked_lm_loss.SUPPORTED`` key the run's model class will have, or None. The run keys on the instantiated
+    class's name, which transformers takes from ``config.architectures`` or, when a config carries none, from its
+    ``model_type`` (the causal-LM auto mapping); each SUPPORTED entry names its ``model_type`` first, so both are read."""
+    from .engines.chunked_lm_loss import SUPPORTED
+
+    if topology.architecture:
+        return topology.architecture if topology.architecture in SUPPORTED else None
+    return next((name for name, entry in SUPPORTED.items() if entry[0] == topology.model_type), None)
+
+
 def _loss_chunk(topology, setup: QLoRASetup, tokens: int, vocab: int):
     """The chunk size the run's training loss will use, or None for the stock loss: what ``enable_fast_train`` decides
     through :mod:`~experts4bit_qlora.engines.chunked_lm_loss` (its table of supported architectures, its switch and its
     ``auto`` size gate), read the same way here so the estimate prices the loss the run takes."""
     if setup.expert_kernel != "grouped_nf4":
         return None                                        # the reference loop never calls enable_fast_train
-    from .engines.chunked_lm_loss import SUPPORTED, chunked_lm_loss_min_bytes, chunked_lm_loss_requested
+    from .engines.chunked_lm_loss import chunked_lm_loss_min_bytes, chunked_lm_loss_requested
 
-    if topology.architecture not in SUPPORTED:
+    if _loss_family(topology) is None:
         return None
     chunk = chunked_lm_loss_requested()
     gate = chunked_lm_loss_min_bytes()
@@ -339,7 +389,7 @@ def estimate_qlora_footprint(topology, setup: QLoRASetup, *, tokens_per_microbat
     slab, slab_max_layer, host_pinned, lora_numel, keep_bytes_per_layer = 0, 0, 0, 0, 0
     for st in topology.expert_stacks:
         base, lora = _stack_modules(st, setup)
-        b = _module_bytes(base)
+        b = _stack_device_bytes(base, setup)
         slab += b
         slab_max_layer = max(slab_max_layer, b)
         if setup.expert_residency == "host":
@@ -354,7 +404,9 @@ def estimate_qlora_footprint(topology, setup: QLoRASetup, *, tokens_per_microbat
     qdesc = f"{setup.quant_type}, blocksize {setup.blocksize}"
     if setup.expert_residency == "device":
         items.append(FootprintItem("frozen expert stacks", "device", slab, "derived",
-                                   f"{len(topology.expert_stacks)} stacks in {qdesc} (packed + absmax)"))
+                                   f"{len(topology.expert_stacks)} stacks in {qdesc} (packed + absmax"
+                                   + (", absmax double-quantized: the enable_fast_train default, E4B_ABSMAX_DQ=0 keeps fp32)"
+                                      if _absmax_dq_in_force(setup) else ", absmax fp32)")))
     else:
         items.append(FootprintItem("frozen expert stacks, one layer staged", "device", slab_max_layer, "derived",
                                    "offload streams one layer's stack to the GPU at a time"))
@@ -438,6 +490,10 @@ def estimate_qlora_footprint(topology, setup: QLoRASetup, *, tokens_per_microbat
     if attn is not None and attn.layers < n_layers:
         unmodelled.append(f"{n_layers - attn.layers} of {n_layers} layers mix tokens without q/k/v attention "
                           "(state-space, convolution or linear attention): their recompute working set")
+    if setup.expert_kernel == "grouped_nf4" and not topology.architecture and _loss_family(topology) is None:
+        unmodelled.append(f"the LM loss branch: the config names no architecture and its model_type {topology.model_type!r} "
+                          "is not in chunked_lm_loss.SUPPORTED, so whether the run chunks its loss cannot be told; priced "
+                          "the stock loss (the larger)")
     unmodelled += ["CUDA context, cuBLAS/Triton workspaces and allocator fragmentation (the caller's to add)",
                    "load-time transients (the streaming loader's per-tensor quantize; host page cache)"]
     return Footprint(items=tuple(items), unmodelled=tuple(unmodelled))
