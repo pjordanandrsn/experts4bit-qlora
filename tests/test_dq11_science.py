@@ -3,14 +3,17 @@
 import copy
 import hashlib
 import importlib.util
+import io
 import json
 import math
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
 import sys
 import time
+from urllib.error import HTTPError
 from urllib.parse import urlparse
 
 import pytest
@@ -23,6 +26,7 @@ LANE = ROOT / "bench/dq11"
 sys.path.insert(0, str(LANE))
 import dq11_common as common  # noqa: E402
 import dq11_bootstrap as bootstrap  # noqa: E402
+import dq11_launch as launch_controller  # noqa: E402
 from dq11_observe import Observer  # noqa: E402
 import dq11_reduce as reducer  # noqa: E402
 from dq11_science_stage import stage  # noqa: E402
@@ -487,11 +491,13 @@ def test_observer_cleanup_on_exception():
     assert all("forward" not in module.__dict__ for module in modules.values())
 
 
-def box_fixture(tmp_path, monkeypatch, failure):
+def box_fixture(tmp_path, monkeypatch, failure, *, elapsed=None, guard_seconds=7200):
     """Run the actual shell with clearly synthetic external commands, no GPU/network."""
     work, commands = tmp_path / "work", tmp_path / "bin"
     work.mkdir()
     commands.mkdir()
+    shutil.copy(LANE / "dq11_require_git.sh", work)
+    (work / "fixture-clock").write_text("0")
     for name in ("adapter_init.safetensors", "tokens.json"):
         (work / name).write_bytes(b"fixture payload")
     (work / "science.sha256").write_text(sha(b"fixture payload") + "  tokens.json\n")
@@ -507,7 +513,17 @@ if name=='sha256sum':
   h,p=line.split(); assert hashlib.sha256(Path(p).read_bytes()).hexdigest()==h
 elif name=='nvidia-smi':print('NVIDIA GeForce RTX 5090, 32607')
 elif name=='df':print('Filesystem 1024-blocks Used Available Capacity Mounted on\\nfixture 999999999 0 999999999 0% /')
-elif name=='perl':os.execvp(args[3],args[3:])
+elif name=='date':
+ if args==['+%s']:print(Path('fixture-clock').read_text())
+ else:os.execv(os.environ['FIXTURE_REAL_DATE'],[os.environ['FIXTURE_REAL_DATE'],*args])
+elif name=='perl':
+ now=int(Path('fixture-clock').read_text()); left=int(os.environ['TC1_DEADLINE_EPOCH'])-now-300
+ with Path('alarms.jsonl').open('a') as f:f.write(json.dumps({'command':args[3:],'cap':int(args[2]),'left':left})+'\\n')
+ advance=json.loads(os.environ.get('FIXTURE_ELAPSED','{}')).get(args[4] if len(args)>4 else args[3],0)
+ Path('fixture-clock').write_text(str(now+advance))
+ os.execvp(args[3],args[3:])
+elif name=='timeout':os.execvp(args[1],args[1:])
+elif name=='apt-get':sys.exit(5)
 elif args and args[0]=='dq3_vram_probe.py':sys.exit(3 if fail=='vram' else 0)
 elif args and args[0]=='dq3_egress_probe.py':sys.exit(4 if fail=='egress' else 0)
 elif args[:2]==['-m','venv']:Path(args[2]+'/bin').mkdir(parents=True)
@@ -520,17 +536,35 @@ elif args and args[0]=='dq11_reduce.py':
  print(json.dumps({'fixture':True,'scientific_evidence':False}))
 """
     )
-    for name in ("sha256sum", "nvidia-smi", "df", "python3", "python3.11", "python", "perl"):
+    for name in (
+        "sha256sum",
+        "nvidia-smi",
+        "df",
+        "python3",
+        "python3.11",
+        "python",
+        "perl",
+        "timeout",
+        "apt-get",
+        "date",
+    ):
         p = commands / name
         p.write_text(program)
         p.chmod(0o755)
-    monkeypatch.setenv("PATH", str(commands) + os.pathsep + os.environ["PATH"])
+    if failure == "git":
+        for name in ("bash", "mkdir", "mv", "tee", "tail", "awk", "cat"):
+            (commands / name).symlink_to(shutil.which(name))
+        monkeypatch.setenv("PATH", str(commands))
+    else:
+        monkeypatch.setenv("PATH", str(commands) + os.pathsep + os.environ["PATH"])
     env = dict(
         os.environ,
         FIXTURE_FAIL=failure,
         DQ11_W=str(work),
         TC1_RUN_NONCE="fixture-science",
-        TC1_DEADLINE_EPOCH=str(int(time.time()) + (1 if failure == "deadline" else 7200)),
+        TC1_DEADLINE_EPOCH=str(1 if failure == "deadline" else guard_seconds),
+        FIXTURE_REAL_DATE=shutil.which("date", path=os.defpath),
+        FIXTURE_ELAPSED=json.dumps(elapsed or {}),
         E4B_SHA="0" * 40,
     )
     result = subprocess.run(
@@ -540,7 +574,8 @@ elif args and args[0]=='dq11_reduce.py':
 
 
 @pytest.mark.parametrize(
-    "failure,rc", [("vram", 18), ("egress", 14), ("proof", 11), ("initial", 12), ("deadline", 11), ("none", 0)]
+    "failure,rc",
+    [("git", 20), ("vram", 18), ("egress", 14), ("proof", 11), ("initial", 12), ("deadline", 11), ("none", 0)],
 )
 def test_actual_box_shell_phase_order_refusals_and_nonce_markers(tmp_path, monkeypatch, failure, rc):
     result, work, calls = box_fixture(tmp_path, monkeypatch, failure)
@@ -550,10 +585,104 @@ def test_actual_box_shell_phase_order_refusals_and_nonce_markers(tmp_path, monke
     assert (work / "TC1_SUCCESS.fixture-science").exists() == (rc == 0)
     if rc:
         assert "--kind read" not in calls
+        if failure == "git":
+            assert "apt-get update" in calls
+            assert "dq3_vram_probe" not in calls and "dq3_egress_probe" not in calls
+            assert "dq11_bootstrap" not in calls and "dq11_prepare" not in calls
     else:
         assert sum(line.startswith("python dq11_arm.py --kind read") for line in calls.splitlines()) == 6
         assert calls.index("--initial-only") < calls.index("--kind read")
         assert "PROVISIONAL" in result.stdout
+
+
+def test_every_staged_deadline_cap_fits_two_hour_guard_after_install():
+    run = (LANE / "dq11_science_run.sh").read_text()
+    assert (
+        dict(line.split() for line in (LANE / "science.sha256").read_text().splitlines())[
+            sha((LANE / "dq11_science_run.sh").read_bytes())
+        ]
+        == "dq11_science_run.sh"
+    )
+    assert "for two hours" in (LANE / "DQ11-AMENDMENT-3.md").read_text()
+    reserve = int(re.search(r"TC1_DEADLINE_EPOCH - \$\(date \+%s\) - (\d+)", run)[1])
+    assert reserve == 300
+    caps = [int(n) for n in re.findall(r"^budget_cap (\d+)$", run, re.M)]
+    caps += [int(n) for n in re.findall(r'^\s*phase (?:(?:"[^"\n]+")|(?:[\w-]+)) (\d+) ', run, re.M)]
+    assert sorted(caps) == [60, 120, 120, 240, 900, 900, 1800, 1800]
+    # P109 pattern: each cap + fetch/teardown margin must fit even after
+    # a conservative 900 s install/startup allowance, versus 210 s observed CPU.
+    assert all(cap + reserve <= 2 * 3600 - 900 for cap in caps)
+    alarms = re.findall(r"^perl -e 'alarm shift; exec @ARGV' (\S+)", run, re.M)
+    alarms += re.findall(r"^  perl -e 'alarm shift; exec @ARGV' (\S+)", run, re.M)
+    assert alarms == ['"$PHASE_CAP"'] * 4
+    assert 'budget_cap "$requested"' in run
+    assert '[ "$left" -ge "$requested" ] || PHASE_CAP=$left' in run
+
+
+@pytest.mark.parametrize("bootstrap_elapsed,expected_rc", [(210, 0), (1800, 0), (6400, 0), (6500, 11)])
+def test_actual_runner_clamps_all_alarms_after_install_and_preserves_reserve(
+    tmp_path, monkeypatch, bootstrap_elapsed, expected_rc
+):
+    result, work, calls = box_fixture(
+        tmp_path,
+        monkeypatch,
+        "none",
+        elapsed={
+            "dq11_require_git.sh": 240,
+            "dq3_vram_probe.py": 120,
+            "dq3_egress_probe.py": 60,
+            "dq11_bootstrap.py": bootstrap_elapsed,
+        },
+    )
+    assert result.returncode == expected_rc, result.stdout + result.stderr
+    alarms = [json.loads(line) for line in (work / "alarms.jsonl").read_text().splitlines()]
+    assert all(0 < row["cap"] <= row["left"] for row in alarms)
+    assert alarms[0]["cap"] == 240
+    if bootstrap_elapsed == 6400:
+        assert next(row for row in alarms if "dq11_prepare.py" in row["command"])["cap"] == 80
+    if bootstrap_elapsed == 6500:
+        assert "dq11_prepare.py" not in calls and "--kind read" not in calls
+    assert (work / "TC1_SUCCESS.fixture-science").exists() == (expected_rc == 0)
+
+
+@pytest.mark.parametrize("guard_seconds,caps", [(310, [10, 10, 10]), (360, [60, 60, 60])])
+def test_actual_runner_clamps_git_and_both_probes_near_deadline(tmp_path, monkeypatch, guard_seconds, caps):
+    result, work, _ = box_fixture(tmp_path, monkeypatch, "none", guard_seconds=guard_seconds)
+    assert result.returncode == 0, result.stdout + result.stderr
+    alarms = [json.loads(line) for line in (work / "alarms.jsonl").read_text().splitlines()]
+    assert [row["cap"] for row in alarms[:3]] == caps
+    assert all(0 < row["cap"] <= row["left"] for row in alarms)
+
+
+@pytest.mark.parametrize("installer", ["fails", "false_success", "supplies_git"])
+def test_git_tool_step_is_bounded_and_checks_actual_availability(tmp_path, installer):
+    commands = tmp_path / "bin"
+    commands.mkdir()
+    (commands / "timeout").write_text('#!/bin/bash\necho "$*" >> "$FIXTURE_CALLS"\nshift\nexec "$@"\n')
+    (commands / "env").symlink_to(shutil.which("env"))
+    (commands / "apt-get").write_text(
+        f"#!{sys.executable}\n"
+        "import os,sys\nfrom pathlib import Path\n"
+        "if sys.argv[1]=='update':sys.exit(0)\n"
+        "if os.environ['FIXTURE_INSTALLER']=='fails':sys.exit(7)\n"
+        "if os.environ['FIXTURE_INSTALLER']=='supplies_git':\n"
+        " p=Path(os.environ['PATH'])/'git';p.write_text('#!/bin/sh\\nexit 0\\n');p.chmod(0o755)\n"
+    )
+    for name in ("timeout", "apt-get"):
+        (commands / name).chmod(0o755)
+    calls = tmp_path / "calls"
+    result = subprocess.run(
+        [shutil.which("bash"), str(LANE / "dq11_require_git.sh")],
+        env=dict(os.environ, PATH=str(commands), FIXTURE_INSTALLER=installer, FIXTURE_CALLS=str(calls)),
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == (0 if installer == "supplies_git" else 20)
+    assert calls.read_text().splitlines() == [
+        "120 apt-get update",
+        "120 env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git",
+    ]
 
 
 def test_actual_controller_refuses_dirty_unreviewed_source_before_transport(tmp_path):
@@ -636,6 +765,161 @@ def test_missing_locked_origin_refuses_before_network_or_install(tmp_path, monke
     with pytest.raises(ValueError, match="unregistered wheel origin: " + missing):
         bootstrap.install(tmp_path, tmp_path / "cache")
     assert not (tmp_path / "cache").exists()
+
+
+class WheelResponse(io.BytesIO):
+    def __init__(self, status=206):
+        super().__init__(b"wheel fixture")
+        self.status = status
+
+
+@pytest.mark.parametrize("probe", [False, True])
+def test_shared_fetch_uses_honest_ua_for_probe_and_download(monkeypatch, probe):
+    def open_fixture(request, timeout):
+        assert request.get_header("User-agent") == "dq11-bootstrap/1"
+        assert request.get_header("Range") == ("bytes=0-0" if probe else None)
+        assert timeout == 60
+        return WheelResponse()
+
+    monkeypatch.setattr(bootstrap.urllib.request, "urlopen", open_fixture)
+    with bootstrap.fetch_wheel("https://download-r2.pytorch.org/fixture.whl", probe=probe) as response:
+        assert bootstrap.read_wheel(response, "https://download-r2.pytorch.org/fixture.whl", 1) == b"w"
+
+
+@pytest.mark.parametrize("status", [403, 503, 302])
+def test_fetch_refusal_names_exact_url_and_status(monkeypatch, status):
+    url = "https://download-r2.pytorch.org/fixture.whl"
+
+    def refusal(request, timeout):
+        if status != 302:
+            raise HTTPError(request.full_url, status, "fixture refusal", {}, None)
+        return WheelResponse(status)
+
+    monkeypatch.setattr(bootstrap.urllib.request, "urlopen", refusal)
+    with pytest.raises(bootstrap.WheelFetchError, match=f"URL={url} status={status}"):
+        bootstrap.fetch_wheel(url)
+
+
+def test_installer_uses_shared_fetch(monkeypatch, tmp_path):
+    row = json.loads((LANE / "wheels.json").read_text())["packages"][0]
+    (tmp_path / "wheels.json").write_text(json.dumps({"packages": [row]}))
+
+    def refusal(url, *, probe=False):
+        assert url == row["url"] and not probe
+        raise bootstrap.WheelFetchError(url, 403, "shared opener fixture")
+
+    monkeypatch.setattr(bootstrap, "fetch_wheel", refusal)
+    with pytest.raises(bootstrap.WheelFetchError, match="shared opener fixture"):
+        bootstrap.install(tmp_path, tmp_path / "cache")
+
+
+def launch_fixture(tmp_path, monkeypatch):
+    repo = tmp_path / "source"
+    here, assets = fixture_stage(repo)
+    for name in ("dq11_bootstrap.py", "dq11_launch.py", "wheels.json", "requirements.lock"):
+        shutil.copy(LANE / name, here)
+    names = (
+        "subject.py",
+        "locked_inputs.json",
+        "dq11_bootstrap.py",
+        "dq11_launch.py",
+        "wheels.json",
+        "requirements.lock",
+    )
+    (here / "science.sha256").write_text("".join(common.file_sha(here / name) + "  " + name + "\n" for name in names))
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "-qm",
+            "fixture",
+        ],
+        check=True,
+    )
+    head = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+    subprocess.run(["git", "-C", str(repo), "update-ref", "refs/remotes/origin/main", head], check=True)
+    guard = tmp_path / "guard/tools"
+    guard.mkdir(parents=True)
+    marker = tmp_path / "guard-invoked"
+    (guard / "pod-launch.sh").write_text('#!/bin/bash\nprintf "%s\\n" "$E4B_REPO" "$1" "$2" > "$FIXTURE_MARKER"\n')
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({"heads": {"e4b": head}}))
+    monkeypatch.setenv("ADERTHA_REPO", str(guard.parent))
+    monkeypatch.setenv("DQ11_ASSET_DIR", str(assets))
+    monkeypatch.setenv("FIXTURE_MARKER", str(marker))
+    return repo, manifest, tmp_path / "gate.json", marker
+
+
+@pytest.mark.parametrize("failure,gate_only", [(None, False), ("torch", False), (None, True), ("torch", True)])
+def test_actual_launch_controller_checks_all_urls_before_guard(tmp_path, monkeypatch, failure, gate_only):
+    repo, manifest, output, marker = launch_fixture(tmp_path, monkeypatch)
+    packages = json.loads((LANE / "wheels.json").read_text())["packages"]
+    failing = next(row["url"] for row in packages if row["name"] == "torch")
+    called = []
+
+    def probe(request, timeout):
+        called.append(request.full_url)
+        assert request.get_header("User-agent") == "dq11-bootstrap/1"
+        assert request.get_header("Range") == "bytes=0-0"
+        if failure and request.full_url == failing:
+            raise HTTPError(request.full_url, 403, "fixture refusal", {}, None)
+        return WheelResponse()
+
+    monkeypatch.setattr(bootstrap.urllib.request, "urlopen", probe)
+    if failure:
+        with pytest.raises(ValueError, match="BEFORE quote/rental"):
+            launch_controller.launch(manifest, "fixture approval", output, repository=repo, gate_only=gate_only)
+        assert not marker.exists()
+    else:
+        assert (
+            launch_controller.launch(manifest, "fixture approval", output, repository=repo, gate_only=gate_only) == 0
+        )
+        if gate_only:
+            assert not marker.exists()
+        else:
+            assert marker.read_text().splitlines() == [str(repo), str(manifest), "fixture approval"]
+    assert called == [row["url"] for row in packages]
+    report = json.loads(output.read_text())
+    assert report["count"] == 101 and report["passed"] == (failure is None)
+    assert len(report["results"]) == 101
+    if failure:
+        refused = [row for row in report["results"] if "error" in row]
+        assert len(refused) == 1 and refused[0]["url"] == failing and refused[0]["status"] == 403
+
+
+@pytest.mark.parametrize("mutation", ["dirty", "unmerged", "wrong_manifest", "changed_asset", "output_inside_source"])
+def test_launch_source_refusals_precede_network_and_guard(tmp_path, monkeypatch, mutation):
+    repo, manifest, output, marker = launch_fixture(tmp_path, monkeypatch)
+    if mutation == "dirty":
+        (repo / "dirty").write_text("fixture")
+    elif mutation == "unmerged":
+        subprocess.run(["git", "-C", str(repo), "update-ref", "-d", "refs/remotes/origin/main"], check=True)
+    elif mutation == "wrong_manifest":
+        manifest.write_text(json.dumps({"heads": {"e4b": "0" * 40}}))
+    elif mutation == "changed_asset":
+        # Keep source clean while replacing the external canonical fixture asset.
+        assets = tmp_path / "external-assets"
+        shutil.copytree(repo / "payload", assets)
+        (assets / "tokens.json").write_text("changed")
+        monkeypatch.setenv("DQ11_ASSET_DIR", str(assets))
+    else:
+        output = repo / "gate.json"
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("source refusal must precede network")
+
+    monkeypatch.setattr(bootstrap.urllib.request, "urlopen", forbidden)
+    with pytest.raises(ValueError):
+        launch_controller.launch(manifest, "fixture approval", output, repository=repo)
+    assert not marker.exists() and not output.exists()
 
 
 def test_actual_science_controller_dry_run_with_small_sealed_fixture(tmp_path):
