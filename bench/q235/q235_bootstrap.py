@@ -124,7 +124,8 @@ def install(directory: Path, cache: Path) -> dict:
     subprocess.run(pip + ["--no-deps", "--no-index", "--only-binary=:all:", "--require-hashes", "--find-links", str(cache), "-r", str(req)],
                    check=True)
     for repo, (url, sha) in commits.items():
-        subprocess.run(pip + ["--no-deps", "--no-build-isolation", f"git+{url}@{sha}"], check=True)
+        # --force-reinstall: pip treats the same version from another commit as satisfied, which would leave an older commit in place
+        subprocess.run(pip + ["--no-deps", "--no-build-isolation", "--force-reinstall", f"git+{url}@{sha}"], check=True)
         got = installed_commit(repo)
         if got != sha:
             raise ValueError(f"{repo}: pip recorded commit {got}, not the pin {sha}")
