@@ -116,3 +116,61 @@ def test_compare_reads_only_real_tokens_and_the_router_sets(tmp_path):
     assert r["router_set_agree"][0] == 1.0 and abs(r["router_set_agree"][1] - 4 / 5) < 1e-6
     assert abs(r["router_overlap"][1] - (4 + 0.5) / 5) < 1e-6
     assert r["loss_gap"] == 0.25
+
+
+def _assembled_both_ways(path, device, layer=0):
+    """Layer ``layer`` built from host-assembled tensors (the reference's path since the 235B slice) and from device-assembled
+    ones (the path Amendment 1's 30B calibration ran): returns the two state dicts' equality and the two outputs on one input."""
+    import os
+    from transformers import AutoConfig, AutoModelForCausalLM
+    from transformers.masking_utils import create_causal_mask
+    t = _tool()
+    cfg = AutoConfig.from_pretrained(path)
+    if not os.path.exists(os.path.join(path, "model.safetensors.index.json")) and not os.path.exists(
+            os.path.join(path, "model.safetensors")):
+        pytest.skip(f"no safetensors checkpoint at {path}")
+    dev = torch.device(device)
+    shards = t.Shards(path)
+    with torch.device("meta"):
+        model = AutoModelForCausalLM.from_config(cfg, dtype=torch.bfloat16)
+    g = torch.Generator().manual_seed(2)
+    h = (torch.randn(1, 16, cfg.hidden_size, generator=g) * 0.5).to(torch.bfloat16).to(dev)
+    position_ids = torch.arange(16, device=dev).unsqueeze(0)
+    pe = type(model.model.rotary_emb)(config=cfg).to(dev)(h, position_ids)
+    mask = create_causal_mask(config=cfg, inputs_embeds=h, attention_mask=torch.ones(1, 16, dtype=torch.long, device=dev),
+                              past_key_values=None, position_ids=position_ids)
+    outs, sds = [], []
+    for where in ("cpu", dev):
+        sd = t.layer_state(shards, layer, cfg.num_experts, where, torch.bfloat16)
+        sds.append({k: v.to("cpu") for k, v in sd.items()})
+        lay = model.model.layers[layer]
+        lay.to_empty(device=dev)
+        lay.load_state_dict(sd, strict=True)
+        del sd
+        with torch.no_grad():
+            o = lay(h, attention_mask=mask, position_ids=position_ids, position_embeddings=pe)
+        outs.append((o[0] if isinstance(o, tuple) else o).to("cpu"))
+        lay.to("meta")
+        if dev.type == "cuda":
+            torch.cuda.empty_cache()
+    same_sd = sds[0].keys() == sds[1].keys() and all(torch.equal(sds[0][k], sds[1][k]) for k in sds[0])
+    return same_sd, outs
+
+
+def test_host_and_device_layer_assembly_are_the_same_bits(tiny):
+    """The reference assembles each layer on the host and copies it in (a 12 GB card cannot hold a 235B layer's experts twice);
+    Amendment 1's calibration assembled on the device. Stacking and concatenation are copies, so the weights and the layer's
+    output must agree bit for bit; on a CUDA host this is the device comparison, elsewhere it checks the mechanics."""
+    dev = "cuda" if torch.cuda.is_available() else "cpu"
+    same_sd, (a, b) = _assembled_both_ways(tiny[0], dev)
+    assert same_sd and torch.equal(a, b)
+
+
+def test_host_and_device_layer_assembly_on_a_real_checkpoint():
+    """The same check on a real Qwen3-MoE checkpoint (``Q235_ASSEMBLY_CHECKPOINT``; layer 0), on CUDA."""
+    import os
+    path = os.environ.get("Q235_ASSEMBLY_CHECKPOINT")
+    if not path or not torch.cuda.is_available():
+        pytest.skip("set Q235_ASSEMBLY_CHECKPOINT on a CUDA host")
+    same_sd, (a, b) = _assembled_both_ways(path, "cuda")
+    assert same_sd and torch.equal(a, b)
