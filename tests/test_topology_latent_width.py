@@ -1,8 +1,9 @@
 """describe_moe reads a latent MoE's expert width from the stack itself, and nothing else moves (#1597).
 
 The controls are the released ``config.json`` of every tested family at the revision its support row read, plus the
-Qwen3-235B anchor, under ``fixtures/topology_controls`` (``SOURCES.json``: repo, revision, sha256). The latent subject
-is Nemotron-3-Super-120B-A12B's. Everything builds on meta: no weights, no network.
+Qwen3-235B anchor, under ``fixtures/topology_controls`` (``SOURCES.json``: repo, revision, sha256, licence; each file
+stays under its own licence, see ``NOTICE``). The latent subject is Nemotron-3-Super-120B-A12B's. Everything builds on
+meta: no weights, no network.
 """
 import hashlib
 import json
@@ -50,6 +51,7 @@ def _tiny_latent():
 def test_the_fixtures_are_the_released_bytes():
     for slug, src in SOURCES.items():
         assert hashlib.sha256((FIX / slug / "config.json").read_bytes()).hexdigest() == src["sha256"], slug
+        assert src["license"] and (FIX / src["license_file"]).is_file(), slug        # see fixtures/.../NOTICE
 
 
 @pytest.mark.parametrize("slug", CONTROLS)

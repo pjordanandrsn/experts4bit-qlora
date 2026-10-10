@@ -1,0 +1,22 @@
+Third-party files in tests/fixtures/topology_controls
+
+Each <slug>/config.json is a model configuration file copied unmodified from the Hugging Face repository and revision
+named in SOURCES.json, whose sha256 the tests check. These files are NOT covered by this repository's MIT licence. Each
+stays under its own licence, as declared on its model card, with a copy of that licence under LICENSES/:
+
+- Apache-2.0 (LICENSES/Apache-2.0.txt):
+  allenai/OLMoE-1B-7B-0924-Instruct, Qwen/Qwen3-30B-A3B, Qwen/Qwen3-235B-A22B-Instruct-2507, Qwen/Qwen3.6-35B-A3B,
+  google/gemma-4-26B-A4B-it (licence link: https://ai.google.dev/gemma/docs/gemma_4_license),
+  ibm-granite/granite-3.1-3b-a800m-instruct, ibm-granite/granite-4.0-h-tiny, mistralai/Mixtral-8x7B-Instruct-v0.1,
+  baidu/ERNIE-4.5-21B-A3B-PT, openai/gpt-oss-20b.
+- LFM Open License v1.0 (LICENSES/LFM-Open-License-1.0.txt): LiquidAI/LFM2-8B-A1B. Licensor: Liquid AI, Inc.
+- OpenMDW License 1.1 (LICENSES/OpenMDW-1.1.txt, https://openmdw.ai/license/1-1/):
+  nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16. Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+- NVIDIA Nemotron Open Model License (LICENSES/NVIDIA-Nemotron-Open-Model-License.txt,
+  https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-nemotron-open-model-license/):
+  nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16. Licensed by NVIDIA Corporation under the NVIDIA Nemotron Open Model
+  License.
+
+Every licence above permits redistributing these files with a copy of the licence. None of the source repositories
+ships a NOTICE file of its own. The files are used only to build model trees on PyTorch's meta device in tests: no
+weights are included or read.

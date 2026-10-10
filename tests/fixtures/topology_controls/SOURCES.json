@@ -3,78 +3,124 @@
     "repo": "allenai/OLMoE-1B-7B-0924-Instruct",
     "revision": "7f1c97f440f06ce36705e4f2b843edb5925f4498",
     "sha256": "42ea6f5fe31e9243290ba3c348a4ad615b88a6fbc6e10544e21a87b6dff5da6c",
-    "role": "control"
+    "role": "control",
+    "license": "Apache-2.0",
+    "license_card_id": "apache-2.0",
+    "license_file": "LICENSES/Apache-2.0.txt"
   },
   "qwen3-30b-a3b": {
     "repo": "Qwen/Qwen3-30B-A3B",
     "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
     "sha256": "2850ddb3bf7aecad20b611e2d44f3077fc8193f4827c93beddd4c02ad63c2297",
-    "role": "control"
+    "role": "control",
+    "license": "Apache-2.0",
+    "license_card_id": "apache-2.0",
+    "license_file": "LICENSES/Apache-2.0.txt"
   },
   "qwen3-235b-a22b-instruct-2507": {
     "repo": "Qwen/Qwen3-235B-A22B-Instruct-2507",
     "revision": "ac9c66cc9b46af7306746a9250f23d47083d689e",
     "sha256": "ad59a339665ee1c68cbff06ac72c9e59f5183ebfaf3698c98737e003a870e9e2",
-    "role": "control"
+    "role": "control",
+    "license": "Apache-2.0",
+    "license_card_id": "apache-2.0",
+    "license_file": "LICENSES/Apache-2.0.txt"
   },
   "gemma-4-26b-a4b-it": {
     "repo": "google/gemma-4-26B-A4B-it",
     "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52",
     "sha256": "ed0c1eb3633de771906e9ba004a44cc5635bcc06ee2062077c3d2e88a50707d3",
-    "role": "control"
+    "role": "control",
+    "license": "Apache-2.0",
+    "license_card_id": "apache-2.0",
+    "license_link": "https://ai.google.dev/gemma/docs/gemma_4_license",
+    "license_file": "LICENSES/Apache-2.0.txt"
   },
   "granite-3.1-3b-a800m-instruct": {
     "repo": "ibm-granite/granite-3.1-3b-a800m-instruct",
     "revision": "a02780686e08a03fe0d2679a293b5c74a90efa89",
     "sha256": "b431a9f3059a59f60ca3e30b345fab29ea5789523c89e798b61ac96a201f2279",
-    "role": "control"
+    "role": "control",
+    "license": "Apache-2.0",
+    "license_card_id": "apache-2.0",
+    "license_file": "LICENSES/Apache-2.0.txt"
   },
   "mixtral-8x7b-instruct-v0.1": {
     "repo": "mistralai/Mixtral-8x7B-Instruct-v0.1",
     "revision": "eba92302a2861cdc0098cc54bc9f17cb2c47eb61",
     "sha256": "9d56d04b36d0fd12ff54ae4c5bac769cc176e254e64ff71144614b6318b40793",
-    "role": "control"
+    "role": "control",
+    "license": "Apache-2.0",
+    "license_card_id": "apache-2.0",
+    "license_file": "LICENSES/Apache-2.0.txt"
   },
   "lfm2-8b-a1b": {
     "repo": "LiquidAI/LFM2-8B-A1B",
     "revision": "c1c44ff9fc00db3ebf4516970563f5f383d23670",
     "sha256": "3a63e1ee647926ef3c5eabb7d3a4b5feb38ccece9c624679fa34289692464fa4",
-    "role": "control"
+    "role": "control",
+    "license": "LFM Open License v1.0",
+    "license_card_id": "other",
+    "license_name": "lfm1.0",
+    "license_link": "https://huggingface.co/LiquidAI/LFM2-8B-A1B/blob/c1c44ff9fc00db3ebf4516970563f5f383d23670/LICENSE",
+    "license_file": "LICENSES/LFM-Open-License-1.0.txt"
   },
   "granite-4.0-h-tiny": {
     "repo": "ibm-granite/granite-4.0-h-tiny",
     "revision": "791e0d3d28c86e106c9b6e0b4cecdee0375b6124",
     "sha256": "bda8fd574ace7d968d82397f59ea6b9a702a077bbeab279a65b9dad7386a82c6",
-    "role": "control"
+    "role": "control",
+    "license": "Apache-2.0",
+    "license_card_id": "apache-2.0",
+    "license_file": "LICENSES/Apache-2.0.txt"
   },
   "ernie-4.5-21b-a3b-pt": {
     "repo": "baidu/ERNIE-4.5-21B-A3B-PT",
     "revision": "87db95487941cb39592ee0abca3b9155a6d19c5c",
     "sha256": "7383c7387390746c1fa0327f8cab3d5c6b078a60bbf0841d4f42277eece5a5f6",
-    "role": "control"
+    "role": "control",
+    "license": "Apache-2.0",
+    "license_card_id": "apache-2.0",
+    "license_file": "LICENSES/Apache-2.0.txt"
   },
   "nemotron-3.5-lightning-30b-a3b": {
     "repo": "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16",
     "revision": "a9904d24bcc1d289a1950fa9d2b978c47cf903b9",
     "sha256": "a3827a0f5e311547b40943dc081e3ff2f8a277466e8c1a3df2291e8db8a7617c",
-    "role": "control"
+    "role": "control",
+    "license": "OpenMDW License 1.1",
+    "license_card_id": "other",
+    "license_name": "openmdw-1.1",
+    "license_link": "https://openmdw.ai/license/1-1/",
+    "license_file": "LICENSES/OpenMDW-1.1.txt"
   },
   "qwen3.6-35b-a3b": {
     "repo": "Qwen/Qwen3.6-35B-A3B",
     "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0",
     "sha256": "93a4693fa9d8392fbfccd4b3c9873f4bfdcb14fdede978b123d07d19675efe99",
-    "role": "control"
+    "role": "control",
+    "license": "Apache-2.0",
+    "license_card_id": "apache-2.0",
+    "license_file": "LICENSES/Apache-2.0.txt"
   },
   "gpt-oss-20b": {
     "repo": "openai/gpt-oss-20b",
     "revision": "6cee5e81ee83917806bbde320786a8fb61efebee",
     "sha256": "3a2a26ded679375b7928ddeca59764df7cea83220c1961035f6d6e232659e9ce",
-    "role": "control"
+    "role": "control",
+    "license": "Apache-2.0",
+    "license_card_id": "apache-2.0",
+    "license_file": "LICENSES/Apache-2.0.txt"
   },
   "nemotron-3-super-120b-a12b": {
     "repo": "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16",
     "revision": "2dc98e2afe4face0e4ce40972a915c45368bd34a",
     "sha256": "699f34f0fc645d29ebffa5767fb59e6ae6ec98e3a4605485eb9913256d0df7e6",
-    "role": "latent subject"
+    "role": "latent subject",
+    "license": "NVIDIA Nemotron Open Model License",
+    "license_card_id": "other",
+    "license_name": "nvidia-nemotron-open-model-license",
+    "license_link": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-nemotron-open-model-license/",
+    "license_file": "LICENSES/NVIDIA-Nemotron-Open-Model-License.txt"
   }
 }
