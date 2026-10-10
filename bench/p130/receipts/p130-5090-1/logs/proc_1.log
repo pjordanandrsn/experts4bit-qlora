@@ -1,0 +1,25 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 4409.81it/s]
+[17:56:16]   checkpoint: Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 (requested ad44e777bcd18fa416d9da3bd8f70d33ebb85d39)
+[17:56:16]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[17:56:16]   quantized experts on 48/48 MoE layers (128 experts each)
+[17:56:16]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[17:56:16]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[17:56:34]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Fetching 22 files:   0%|          | 0/22 [00:00<?, ?it/s]Fetching 22 files: 100%|██████████| 22/22 [00:00<00:00, 4332.96it/s]
+[serve_paged] INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+[serve_paged] ATTNINT4 rtn: 192 projections (uncalibrated; model_type=qwen3_moe)
+[serve_paged] fusions (q/k/v 1; folds set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 48, 'fuse_t1_glue_n': 193, 'fuse_t1_glue_r2_n': [48, 48], 'fuse_router_epilogue_n': 48}
+[serve_paged] ready: {"moe_layers": 48, "experts": 128, "top_k": 8, "model_type": "qwen3_moe", "int4_expert_layers": 48, "int4_store_kinds": ["int4_b32"], "int4_attn_projections": 96, "kv": {"n_kv_heads": 4, "head_dim": 128, "k_groups": "auto", "scratch_slots": 0, "blocks_per_seq": 48, "pool_mib": 38.8}, "graph_status": null, "spec": {"mode": "off"}, "grouping": {"device_grouping": false, "force_singleton_groups": false}, "moe_residual": {"rows": [1], "licensed": 48, "partial": 0, "refused": 0, "probe_errors": []}, "prefill_graph": "0", "levers_env": {"E4B_SERVE_EXP_INT4": "1", "E4B_SERVE_ATTN_INT4": "1", "E4B_SERVE_ATTN_INT4_CALIB": "0", "E4B_CALIB_SOURCE": "c4", "E4B_FUSE_T1_GLUE": "1", "E4B_FUSE_T1_GLUE_R2": "1", "E4B_FUSE_ROUTER_EPI": "1"}, "exp_int4_layers_enabled": 48, "attn_int4_rtn_projections": 192, "attn_int4_calib_projections": 0, "fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48, "fusion_modes": {"E4B_PAGED_FUSE_QKV": "1", "E4B_FUSE_T1_GLUE": "1", "E4B_FUSE_T1_GLUE_R2": "1", "E4B_FUSE_ROUTER_EPI": "1"}, "fusion_sources": {"E4B_PAGED_FUSE_QKV": "explicit", "E4B_FUSE_T1_GLUE": "explicit", "E4B_FUSE_T1_GLUE_R2": "explicit", "E4B_FUSE_ROUTER_EPI": "explicit"}, "fusion_report": {"E4B_FUSE_T1_GLUE": {"mode": "1", "prefill": "off", "patched": 193, "failed_probe": 0}, "E4B_FUSE_T1_GLUE_R2": {"mode": "1", "prefill": "off", "patched": [48, 48], "kernel_gaps": 0}, "E4B_FUSE_ROUTER_EPI": {"mode": "1", "patched": 48, "failed_probe": 0, "no_kernel_mode": 0, "fp32_upstream": 0}}, "pinned_cache_released": true, "host_heap_trimmed": true}
+Generating test split:   0%|          | 0/4358 [00:00<?, ? examples/s]Generating test split: 100%|██████████| 4358/4358 [00:00<00:00, 916413.16 examples/s]
+Generating train split:   0%|          | 0/36718 [00:00<?, ? examples/s]Generating train split: 100%|██████████| 36718/36718 [00:00<00:00, 1629715.17 examples/s]
+Generating validation split:   0%|          | 0/3760 [00:00<?, ? examples/s]Generating validation split: 100%|██████████| 3760/3760 [00:00<00:00, 1128162.46 examples/s]
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+P130_SPEED proc 1 p1 0 | graphs [('p2_off', 'on'), ('p2_on', 'on')] | median ms {'p2_off': 38.17305, 'p2_on': 37.02775} | P2 differs on 0 windows | eager ms {'p2_off': 47.5295, 'p2_on': 46.682} | 24 s
+P130_ARM R done at 32 s
+P130_ARM rep done at 57 s
+P130_ARM half done at 99 s
+P130_ARM chunk done at 127 s
+P130_ARM rev done at 153 s
+P130_ARM mutant_scale done at 178 s
+P130_BOX proc 1 p1 0 | load 94s | mem 21.28 GB | quality off windows 64 178.2 s
