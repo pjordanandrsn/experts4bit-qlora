@@ -35,7 +35,10 @@ Counts and bytes only.
   `torch.Tensor.backward` and `torch.autograd.backward`.
   - The dgrad runs on the recompute's routing, so the recompute set is also the dgrad set. This is by construction, not
     separately hooked.
-  - A forward with gradients on and no backward after it is reported as `no_recompute`, and it makes the trace VOID.
+  - A training forward with no backward after it is reported as `no_recompute`, and it makes the trace VOID.
+  - A forward is an eval forward, and is not recorded, when the router module is in `eval()` mode (the harness's
+    `eval_loss` switches the model). Grad mode is not the test: reentrant gradient checkpointing runs the training
+    forward under `no_grad`.
 - `run_capture.py`: runs `bench/tc1/tc1_arm.py` **unchanged**, with the recorder attached to the model `load_e4b`
   returns. Router calls inside any backward are labelled `recompute`, and the optimizer step closes a step. It writes
   `trace.npz` plus `trace.npz.meta.json`, which holds the environment, the model's config and index hashes, the

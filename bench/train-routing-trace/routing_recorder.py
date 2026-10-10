@@ -89,8 +89,11 @@ class RoutingRecorder:
 
     def _hook(self, layer: int):
         def hook(_module, _inputs, output):
-            if self.phase == FWD and not torch.is_grad_enabled():
-                return                                # an eval forward (no_grad): not part of a training step
+            if self.phase == FWD and not _module.training:
+                return                                # an eval forward (module in eval()): not part of a training step
+            # Grad mode cannot tell the two apart: reentrant gradient checkpointing runs the TRAINING forward under
+            # no_grad (engines/offload.py documents the same trap), so a no_grad forward of a train()-mode router
+            # is recorded as the forward it is.
             if self.phase == FWD and layer == self.layers[0]:
                 self.mb += 1                          # the first router of a training forward opens a micro-batch
             ids = router_indices(output).detach()
