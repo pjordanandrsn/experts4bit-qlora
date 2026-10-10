@@ -14,6 +14,8 @@ from dq11_science_stage import stage
 
 
 def launch(manifest_path, approval, gate_output, *, repository=None, gate_only=False):
+    if any(key.startswith("DQ11_REHEARSAL") for key in os.environ) or "CUBLAS_WORKSPACE_CONFIG" in os.environ:
+        raise ValueError("science launch refuses inherited rehearsal/proof overrides BEFORE gate/quote/rental")
     repository = Path(repository or Path(__file__).resolve().parents[2]).resolve()
     manifest_path, gate_output = Path(manifest_path).resolve(), Path(gate_output).resolve()
     if gate_output.is_relative_to(repository):

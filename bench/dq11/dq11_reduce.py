@@ -69,12 +69,137 @@ def quality(base, candidate, field):
     return verdict(pairs, calibrated=False)[0]
 
 
+def validate_observer_policy(policy):
+    from dq11_proof_policy import CONFIGURATION_C
+
+    expected = {"cublas_workspace_config": ":4096:8", "deterministic_algorithms": True,
+                "warn_only": True, "flash_sdp": False, "mem_efficient_sdp": False,
+                "math_sdp": True, "cudnn_sdp": False, "tf32_matmul": False, "tf32_cudnn": False}
+    if (any(type(policy["settings_actual"].get(key)) is not bool for key in expected if key != "cublas_workspace_config")
+            or type(policy["configuration"].get("deterministic_algorithms")) is not bool
+            or type(policy["configuration"].get("warn_only")) is not bool
+            or policy["configuration"] != CONFIGURATION_C or policy["settings_actual"] != expected
+            or policy["restored"] is not True or not isinstance(policy["warnings"], list)
+            or not isinstance(policy["warned_ops"], list)):
+        raise ValueError("observer proof did not use configuration C or restore its policy")
+    for warning in policy["warnings"]:
+        if not all(isinstance(warning[key], str) for key in ("category", "message", "filename")):
+            raise ValueError("malformed observer warning")
+    expected_messages = [w["message"] for w in policy["warnings"] if "determin" in w["message"].lower()]
+    if ([w["message"] for w in policy["warned_ops"]] != expected_messages
+            or any(not isinstance(w["operator"], str) or not w["operator"] for w in policy["warned_ops"])):
+        raise ValueError("observer determinism warning operators were omitted")
+
+
+def validate_spread(row, proof, *, rehearsal=False):
+    registered_identity(row, rehearsal=rehearsal)
+    if (row["kind"] != "spread" or row["repetition"] != 0 or row["arm"] != proof["arm"]
+            or not row["frozen_unchanged"] or row["path_before"] != row["path_after"]):
+        raise ValueError("shipped spread binding changed")
+    for key in ("runtime", "initial", "tokens", "nonce", "input_seal_sha256", "identity_sha256",
+                "base", "provenance", "path_before"):
+        if row[key] != proof[key]:
+            raise ValueError("shipped spread differs from proof: " + key)
+    spread = row["spread"]
+    if (spread["schema"] != "dq11-shipped-spread/1" or spread["train_block"] != 0
+            or spread["optimizer_updates"] != 0 or spread["gate"] is not False
+            or spread["tolerance"] is not None):
+        raise ValueError("spread must be zero-update reporting without a tolerance or gate")
+    setting = spread["settings"]
+    if row["execution_settings"] != setting:
+        raise ValueError("shipped spread execution-setting record is inconsistent")
+    if (setting["cublas_workspace_config"] is not None or setting["deterministic_algorithms"] is not False
+            or setting["tf32_matmul"] is not False or setting["tf32_cudnn"] is not False):
+        raise ValueError("spread execution settings changed")
+    if [p["ordinal"] for p in spread["passes"]] != [1, 2, 3, 4]:
+        raise ValueError("incomplete shipped spread passes")
+    for run in spread["passes"]:
+        if (run["gradient_file"] != f"spread-{row['arm']}-{run['ordinal']}.safetensors"
+                or type(run["gradient_file_bytes"]) is not int or run["gradient_file_bytes"] <= 0
+                or not re.fullmatch("[0-9a-f]{64}", run["gradient_file_sha256"])):
+            raise ValueError("invalid raw shipped spread gradient file identity")
+        if (not isinstance(run["loss"], (float, int)) or isinstance(run["loss"], bool)
+                or not math.isfinite(run["loss"]) or not re.fullmatch("[0-9a-f]{64}", run["loss_sha256"])
+                or set(run["gradient_hashes"]) != set(proof["initial"])
+                or any(not re.fullmatch("[0-9a-f]{64}", h) for h in run["gradient_hashes"].values())):
+            raise ValueError("invalid shipped spread loss or gradient hashes")
+    if [(p["x"], p["y"]) for p in spread["pairs"]] != [(1, 2), (1, 3), (1, 4), (2, 3), (2, 4), (3, 4)]:
+        raise ValueError("incomplete shipped spread pairs")
+    for pair in spread["pairs"]:
+        x, y = (spread["passes"][pair[k] - 1] for k in ("x", "y"))
+        expected_keys = {key for key in proof["initial"] if x["gradient_hashes"][key] != y["gradient_hashes"][key]}
+        if (set(pair["gradient_differences"]) != expected_keys
+                or pair["loss_bitwise_equal"] != (x["loss_sha256"] == y["loss_sha256"])
+                or pair["loss_abs_difference"] != abs(x["loss"] - y["loss"])):
+            raise ValueError("shipped spread pair inconsistent with passes")
+        for difference in pair["gradient_differences"].values():
+            for key in ("max_abs_difference", "relative_to_larger_max"):
+                value = difference[key]
+                if not isinstance(value, (float, int)) or isinstance(value, bool) or not math.isfinite(value) or value < 0:
+                    raise ValueError("nonfinite/malformed shipped spread difference")
+        # No comparison against a magnitude threshold: spread is reported, never a quality/headroom gate.
+
+
+def report_spreads(proofs, reads, spreads, *, rehearsal=False):
+    """Optional reports cannot invalidate science, including missing or malformed raw evidence."""
+    reports = {}
+    for proof in proofs:
+        arm = proof["arm"]
+        entry = spreads.get(arm)
+        if entry is None:
+            reports[arm] = {"status": "incomplete", "reason": "no spread receipt or process status",
+                            "policy_reference": "registered shipped policy"}
+            continue
+        if isinstance(entry, dict) and entry.get("status") in {"spread: skipped for time", "incomplete"}:
+            reports[arm] = entry
+            continue
+        try:
+            validate_spread(entry, proof, rehearsal=rehearsal)
+            for reading in reads:
+                if reading["arm"] == arm and reading["execution_settings"] != entry["spread"]["settings"]:
+                    raise ValueError("read policy differs from recorded spread policy")
+            reports[arm] = {"status": "complete", **entry["spread"], "policy_reference": "recorded spread policy"}
+        except (KeyError, TypeError, ValueError, OverflowError, AttributeError) as error:
+            reports[arm] = {"status": "incomplete", "reason": str(error), "policy_reference": "registered shipped policy"}
+    return reports
+
+
+def load_spreads(directory):
+    """Retain optional process failures and verify available raw gradients without gating science."""
+    rows = {}
+    for arm in ("L", "U", "U0"):
+        path = directory / f"spread-{arm}.json"
+        try:
+            status = directory / f"spread-status-{arm}.json"
+            if status.exists():
+                phase = json.loads(status.read_text())
+                if phase.get("status") in {"spread: skipped for time", "incomplete"}:
+                    rows[arm] = phase
+                    continue
+            if not path.exists():
+                if status.exists():
+                    rows[arm] = phase
+                continue
+            row = json.loads(path.read_text())
+            for run in row["spread"]["passes"]:
+                if run["gradient_file"] != f"spread-{arm}-{run['ordinal']}.safetensors":
+                    raise ValueError("raw shipped-spread gradient filename changed")
+                raw = directory / run["gradient_file"]
+                if raw.stat().st_size != run["gradient_file_bytes"] or file_sha(raw) != run["gradient_file_sha256"]:
+                    raise ValueError("raw shipped-spread gradients changed")
+            rows[arm] = row
+        except (OSError, KeyError, TypeError, ValueError, AttributeError) as error:
+            rows[arm] = {"status": "incomplete", "reason": str(error)}
+    return rows
+
+
 def validate_proofs(proofs, *, rehearsal=False):
     if len(proofs) != 3 or {row["arm"] for row in proofs} != {"L", "U", "U0"}:
         raise ValueError("missing or duplicate proof")
     anchor = proofs[0]
     for row in proofs:
         registered_identity(row, rehearsal=rehearsal)
+        validate_observer_policy(row["observer_policy"])
         if (row["kind"] != "proof" or row["repetition"] != 0 or not row["observer_same_arm_bitwise"]
                 or not row["execution"]["observer_removed"] or not row["frozen_unchanged"]
                 or row["path_before"] != row["path_after"]):
@@ -109,7 +234,20 @@ def validate_proofs(proofs, *, rehearsal=False):
                 raise ValueError("forward adapter GEMM precision not witnessed")
 
 
-def validate_read(row, proof):
+def validate_read(row, proof, *, rehearsal=False):
+    schema = "dq11-rehearsal-arm/1" if rehearsal else "dq11-arm/1"
+    if row.get("schema", "dq11-arm/1") != schema or row.get("science_eligible", True) is not (not rehearsal):
+        raise ValueError("reading science/rehearsal mode changed")
+    if row["arm"] == "L":
+        from dq11_stream_witness import validate_train_prefetch_witness
+
+        witness = row.get("rehearsal_train_prefetch" if rehearsal else "train_prefetch")
+        validate_train_prefetch_witness(witness, rehearsal=rehearsal)
+        if witness["source"] != row["runtime"]["experts4bit-qlora"] or witness["nonce"] != row["nonce"]:
+            raise ValueError("streaming route witness source/nonce changed")
+    from dq11_proof_policy import validate_shipped_policy
+
+    validate_shipped_policy(row["execution_settings"])
     if row["kind"] != "read" or row["path_before"] != row["path_after"] or row["path_before"] != proof["path_before"]:
         raise ValueError("read path differs from proof")
     for key in ("runtime", "initial", "tokens", "nonce", "input_seal_sha256", "identity_sha256", "base", "provenance"):
@@ -143,11 +281,13 @@ def teardown_valid(teardown, instance_id):
             and instance_id not in evidence.get("list_after", []))
 
 
-def reduce(proofs, reads, *, initial_only=False, teardown=None, instance_id=None):
+def reduce(proofs, reads, *, initial_only=False, teardown=None, instance_id=None, spreads=None):
     result = {"schema": "dq11-read/1", "scope": SCOPE, "default_unsloth_position": False,
               "capacity_licensed": False, "shipping_licensed": False}
     try:
         validate_proofs(proofs)
+        result["shipped_run_to_run_spread"] = report_spreads(proofs, reads, spreads or {})
+        result["observer_policy"] = {p["arm"]: p["observer_policy"] for p in proofs}
         if not initial_gate(proofs):
             return {**result, "verdict": "QUALITY_FAIL", "phase": "initial", "recommendation": None}
         if initial_only:
@@ -190,7 +330,7 @@ if __name__ == "__main__":
         proofs = [json.loads((args.directory / f"proof-{arm}.json").read_text()) for arm in ("L", "U", "U0")]
         reads = [] if args.initial_only else [json.loads((args.directory / f"read-{rep}-{arm}.json").read_text()) for rep, arm in ORDER]
         teardown = json.loads(args.teardown.read_text()) if args.teardown else None
-        result = reduce(proofs, reads, initial_only=args.initial_only, teardown=teardown, instance_id=args.instance_id)
+        result = reduce(proofs, reads, initial_only=args.initial_only, teardown=teardown, instance_id=args.instance_id, spreads=load_spreads(args.directory))
     except (OSError, ValueError) as error:
         result = {"schema": "dq11-read/1", "scope": SCOPE, "verdict": "VOID", "reason": str(error), "recommendation": None}
     print(json.dumps(result, indent=2))

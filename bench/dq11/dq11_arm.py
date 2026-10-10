@@ -133,8 +133,15 @@ def read_inputs(directory):
 
 
 def run(args):
-    if (args.kind == "proof") != (args.repetition == 0):
+    if (args.kind in ("proof", "spread")) != (args.repetition == 0):
         raise ValueError("unregistered phase/repetition pair")
+    from dq11_proof_policy import process_environment
+
+    with process_environment(args.kind):
+        return _run(args)
+
+
+def _run(args):
     started = time.perf_counter()
     directory = args.directory
     versions = runtime(directory)
@@ -171,31 +178,56 @@ def run(args):
               "provenance": {name: file_sha(directory / name) for name in
                              ("science.sha256", "wheels.json", "model_files.json", "source_authority.json")},
               "load_measured": load_measured}
+    from dq11_proof_policy import settings
+
+    result["execution_settings"] = settings()
     slots, _ = adapter_slots(model)
     if args.kind == "proof":
         from dq11_observe import Observer
 
         ids = torch.tensor([tokens["train"][0]], device="cuda", dtype=torch.long)
-        model.zero_grad(set_to_none=True)
-        observer = Observer(model, args.arm)
-        with observer.active():
-            loss = model(input_ids=ids, labels=ids, use_cache=False).loss
-            loss.backward()
-        observed = {key: tensor_sha(p.grad) for key, p in slots.items()}
-        if not torch.isfinite(loss):
-            raise ValueError("nonfinite proof loss")
-        result["execution"] = observer.receipt()
-        observed_loss = tensor_sha(loss)
-        del loss
-        model.zero_grad(set_to_none=True)
-        loss = model(input_ids=ids, labels=ids, use_cache=False).loss
-        loss.backward()
-        clean = {key: tensor_sha(p.grad) for key, p in slots.items()}
-        if observed != clean or observed_loss != tensor_sha(loss):
-            raise ValueError("observer changed same-arm loss or gradients")
-        result["observer_same_arm_bitwise"] = True
-        model.zero_grad(set_to_none=True)
-        result["proof_gradients_sha256"] = clean
+        from dq11_proof_policy import observer_policy
+
+        policy = None
+        try:
+            with observer_policy() as policy:
+                model.zero_grad(set_to_none=True)
+                observer = Observer(model, args.arm)
+                with observer.active():
+                    loss = model(input_ids=ids, labels=ids, use_cache=False).loss
+                    loss.backward()
+                observed = {key: tensor_sha(p.grad) for key, p in slots.items()}
+                if not torch.isfinite(loss) or not all(torch.isfinite(p.grad).all() for p in slots.values()):
+                    raise ValueError("nonfinite proof loss")
+                result["execution"] = observer.receipt()
+                observed_loss = tensor_sha(loss)
+                del loss
+                model.zero_grad(set_to_none=True)
+                loss = model(input_ids=ids, labels=ids, use_cache=False).loss
+                loss.backward()
+                clean = {key: tensor_sha(p.grad) for key, p in slots.items()}
+                if not torch.isfinite(loss) or not all(torch.isfinite(p.grad).all() for p in slots.values()):
+                    raise ValueError("nonfinite clean proof loss or gradient")
+                if observed != clean or observed_loss != tensor_sha(loss):
+                    raise ValueError("observer changed same-arm loss or gradients")
+                result["observer_same_arm_bitwise"] = True
+                model.zero_grad(set_to_none=True)
+                result["proof_gradients_sha256"] = clean
+        finally:
+            # Retain warn_only suspects even when the bitwise comparison refuses.
+            (directory / f"receipts/observer-policy-{args.arm}.json").write_text(json.dumps({
+                "schema": "dq11-observer-policy/1", "arm": args.arm,
+                "nonce": os.environ["TC1_RUN_NONCE"], "source": os.environ["E4B_SHA"],
+                "science_eligible": os.environ.get("DQ11_REHEARSAL") != "1", "policy": policy,
+                "bitwise_pass": result.get("observer_same_arm_bitwise", False)}, indent=2) + "\n")
+        result["observer_policy"] = policy
+    elif args.kind == "spread":
+        from dq11_proof_policy import spread
+
+        ids = torch.tensor([tokens["train"][0]], device="cuda", dtype=torch.long)
+        result["spread"] = spread(model, slots, ids, output=directory / "receipts", arm=args.arm)
+        if {key: tensor_sha(p) for key, p in slots.items()} != initial:
+            raise ValueError("spread changed canonical initializer")
     else:
         from dq11_reduce import initial_gate
 
@@ -203,6 +235,9 @@ def run(args):
         if not initial_gate(proofs):
             raise ValueError("global initial quality gate failed before training")
         proof = next(row for row in proofs if row["arm"] == args.arm)
+        from dq11_proof_policy import validate_shipped_policy
+
+        validate_shipped_policy(result["execution_settings"])
         if census != proof["path_before"] or base != proof["base"]:
             raise ValueError("clean process differs from untimed proof")
         initial_rows = [dict(row, initial_quality=initial_quality) if row["arm"] == args.arm else row for row in proofs]
@@ -210,10 +245,11 @@ def run(args):
             raise ValueError("clean process initial quality failed before training")
         from loggetta.backends.experts4bit_train import train_loop
         route_before = None
-        if args.arm == "L" and os.environ.get("DQ11_REHEARSAL") == "1":
-            from dq11_rehearsal import train_prefetch_snapshot, require_train_prefetch
+        rehearsal = os.environ.get("DQ11_REHEARSAL") == "1"
+        if args.arm == "L":
+            from dq11_stream_witness import train_prefetch_snapshot, require_train_prefetch
 
-            route_before = train_prefetch_snapshot(directory, model)
+            route_before = train_prefetch_snapshot(model)
         data = SimpleNamespace(blocks=tokens["train"], info={"source": "DQ11 sealed tokens", "tokens": locked["tokens"]["train"]})
         with DriverMemorySampler() as sampler:
             result["training"] = train_loop(model, trainable, str(directory / "hf-cache/model"), workload,
@@ -222,10 +258,12 @@ def run(args):
         if result["training"]["status"] != "OK":
             raise ValueError("shipped loop failed integrity")
         if route_before is not None:
-            result["rehearsal_train_prefetch"] = require_train_prefetch(
-                directory, model, route_before, len(result["training"]["correctness"]["losses"]))
+            result["rehearsal_train_prefetch" if rehearsal else "train_prefetch"] = require_train_prefetch(
+                directory, model, route_before, len(result["training"]["correctness"]["losses"]), rehearsal=rehearsal)
         result["final_quality"] = score(model, tokens)
         result["final_adapters_sha256"] = {key: tensor_sha(p) for key, p in slots.items()}
+    if settings() != result["execution_settings"]:
+        raise ValueError("execution policy changed during arm")
     after = path_census(model, args.arm, sources)
     if after != census or base_census(model) != base:
         raise ValueError("loaded callables or frozen weights changed")
@@ -245,7 +283,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--directory", type=Path, default=Path.cwd())
     parser.add_argument("--arm", choices=("L", "U", "U0"), required=True)
-    parser.add_argument("--kind", choices=("proof", "read"), required=True)
+    parser.add_argument("--kind", choices=("proof", "read", "spread"), required=True)
     parser.add_argument("--repetition", type=int, choices=(0, 1, 2), required=True)
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
