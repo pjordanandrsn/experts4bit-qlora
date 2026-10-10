@@ -111,6 +111,11 @@ while :; do
   hb="$hb | live ${live:-unknown} | pid $LANE_PID | unknown_probes $UNKNOWN_PROBES"
   if [ "$live" = reboot ]; then
     say "LANE DEAD: host rebooted (boot identity changed or uptime below lane age/baseline); fetching what exists"
+    if lane_write_host_fault "${E4B_RENT_RUN_DIR:-}" reboot "$(lane_reboot_evidence "$snapshot" "$LANE_INITIAL" "$((now - LANE_STARTED_AT))")"; then
+      say "host-fault.json written (kind reboot) for the receipt"
+    else
+      say "host-fault.json NOT written (no run directory)"
+    fi
     LANE_DEAD=1; break
   fi
   if [ "$line" != "$LAST" ]; then [ -n "$line" ] && say "box: $line"; LAST=$line; LAST_CHANGE=$now; fi
