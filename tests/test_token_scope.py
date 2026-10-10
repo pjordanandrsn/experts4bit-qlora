@@ -1,12 +1,15 @@
 """Fake whoami metadata and actual driver staging blocks; no credentials/network.
 
 The helper is standard library only (one GET of whoami-v2). Subprocess tests put a sitecustomize.py on PYTHONPATH that
-replaces urllib.request.urlopen with a fake asserting the exact URL and the Bearer header, so nothing reaches the network."""
+replaces urllib.request.build_opener with a fake asserting the exact URL, the UNREDIRECTED Bearer header and the
+deadline, so nothing reaches the network. Two in-process tests use real urllib against local servers."""
 from __future__ import annotations
 
+import http.server
 import importlib.util
 import json
 import os
+import threading
 import subprocess
 import time
 from pathlib import Path
@@ -24,7 +27,7 @@ READ_PERMISSION = "repo.content.read"
 
 
 def fake_net(tmp_path, *, response=None, mode="ok", status=200, body=None, block_hub=False):
-    """A PYTHONPATH dir whose sitecustomize.py fakes urllib.request.urlopen (and, with block_hub, makes huggingface_hub
+    """A PYTHONPATH dir whose sitecustomize.py fakes urllib.request.build_opener (and, with block_hub, makes huggingface_hub
     unimportable). mode "ok" answers with `response` as JSON or a raw `body`; "fail" raises URLError carrying the token."""
     d = tmp_path / "fake-net"
     d.mkdir(exist_ok=True)
@@ -40,14 +43,16 @@ def fake_net(tmp_path, *, response=None, mode="ok", status=200, body=None, block
         "        return self",
         "    def __exit__(self, *a):",
         "        return False",
-        "def _fake(req, timeout=None):",
-        "    assert req.full_url == 'https://huggingface.co/api/whoami-v2', req.full_url",
-        "    assert req.get_header('Authorization') == 'Bearer ' + TOKEN",
-        "    assert timeout is not None and timeout <= 20",
-        "    if MODE == 'fail':",
-        "        raise urllib.error.URLError(TOKEN + ' private-scope')",
-        "    return _R()",
-        "urllib.request.urlopen = _fake",
+        "class _Opener:",
+        "    def open(self, req, timeout=None):",
+        "        assert req.full_url == 'https://huggingface.co/api/whoami-v2', req.full_url",
+        "        assert req.unredirected_hdrs.get('Authorization') == 'Bearer ' + TOKEN",
+        "        assert 'Authorization' not in req.headers, 'the token header must be unredirected'",
+        "        assert timeout is not None and timeout <= 20",
+        "        if MODE == 'fail':",
+        "            raise urllib.error.URLError(TOKEN + ' private-scope')",
+        "        return _R()",
+        "urllib.request.build_opener = lambda *handlers: _Opener()",
     ]
     (d / "sitecustomize.py").write_text("\n".join(src) + "\n")
     if block_hub:
@@ -212,3 +217,66 @@ def test_locality_never_stages_a_token():
     text = (ROOT / "bench/locality-1469/locality_drive.sh").read_text()
     assert "HF_TOKEN_FILE" not in text and "token_scope.py" not in text
     assert "unknown_probes" in text
+
+
+def _server(handler_cls):
+    srv = http.server.HTTPServer(("127.0.0.1", 0), handler_cls)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
+def test_a_redirect_is_refused_and_never_carries_the_token(tmp_path, monkeypatch):
+    """Real urllib, two local servers: A answers 302 to B. The check must come out UNVERIFIED with nothing sent to B."""
+    seen = []
+
+    class B(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            seen.append(dict(self.headers))
+            body = json.dumps(who("read")).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    b = _server(B)
+
+    class A(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(302)
+            self.send_header("Location", f"http://127.0.0.1:{b.server_port}/api/whoami-v2")
+            self.end_headers()
+
+        def log_message(self, *a):
+            pass
+
+    a = _server(A)
+    try:
+        monkeypatch.setattr(helper, "WHOAMI_URL", f"http://127.0.0.1:{a.server_port}/api/whoami-v2")
+        token_file = tmp_path / "fake-token"
+        token_file.write_text(TOKEN)
+        assert helper.check_file(token_file, timeout_s=5) is Scope.UNVERIFIED
+        assert all("Authorization" not in h and TOKEN not in json.dumps(h) for h in seen), seen
+        assert seen == [], "the redirect must be refused, not followed"
+    finally:
+        a.shutdown()
+        b.shutdown()
+
+
+def test_the_token_header_is_unredirected(monkeypatch):
+    """urllib copies Request(headers=...) onto a redirected request; an unredirected header it never copies."""
+    captured = []
+
+    class Opener:
+        def open(self, req, timeout=None):
+            captured.append(req)
+            raise OSError("stop here")
+
+    monkeypatch.setattr(helper.urllib.request, "build_opener", lambda *handlers: Opener())
+    with pytest.raises(OSError):
+        helper.whoami_v2(token=TOKEN, timeout_s=5)
+    (req,) = captured
+    assert req.unredirected_hdrs.get("Authorization") == "Bearer " + TOKEN
+    assert "Authorization" not in req.headers

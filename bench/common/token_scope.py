@@ -13,6 +13,7 @@ import json
 import logging
 from pathlib import Path
 import signal
+import urllib.error
 import urllib.request
 from enum import Enum
 
@@ -69,12 +70,23 @@ class _VerificationDeadline(BaseException):
     """Avoid being swallowed by HTTP retry handlers catching Exception."""
 
 
+class _RefuseRedirect(urllib.request.HTTPRedirectHandler):
+    """Any 3xx is refused (and so UNVERIFIED): the check never follows the token anywhere."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, "redirect refused", None, None)
+
+
 def whoami_v2(*, token: str, timeout_s: float = 20) -> object:
     """GET the Hub's whoami-v2 with the token as a Bearer header; the parsed JSON, or an exception. Never a body in an
-    error: a non-200 status or a body that is not JSON raises without its content."""
-    req = urllib.request.Request(WHOAMI_URL, headers={"Authorization": f"Bearer {token}", "Accept": "application/json",
-                                                      "User-Agent": "e4b-token-scope/1"})
-    with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # looked up at call time: tests patch it
+    error: a non-200 status or a body that is not JSON raises without its content.
+
+    Two guards keep the token on the Hub. The Authorization header is UNREDIRECTED (urllib never copies it onto a
+    redirect), and the opener refuses redirects outright."""
+    req = urllib.request.Request(WHOAMI_URL, headers={"Accept": "application/json", "User-Agent": "e4b-token-scope/1"})
+    req.add_unredirected_header("Authorization", f"Bearer {token}")
+    opener = urllib.request.build_opener(_RefuseRedirect)  # looked up at call time: tests patch build_opener
+    with opener.open(req, timeout=timeout_s) as resp:
         if getattr(resp, "status", 200) != 200:
             raise RuntimeError("whoami-v2: non-200 status")
         body = resp.read(MAX_BODY + 1)
