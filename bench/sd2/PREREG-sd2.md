@@ -393,3 +393,71 @@ ceiling. Each launch waits on the maintainer's ACK and a relay on #1313.
 - **VERIFY_COST_REFUTES:** the verify step's measured cost and E's direct check close EAGLE-3 at B = 1 for this
   model, card and stack. The build stays off.
 - **QUALITY_FAIL:** nothing ships at the failing k. The arithmetic gap is reported.
+
+## Amendment 1 (2026-10-10): the CUDA proof `sd2-prove-1` -- its target and its harness
+
+Registered before the proof. The maintainer reviewed the build PRs and approved them for the stacked proof (bus,
+2026-10-10T07:17-07:38Z). This amendment registers what the proof runs, on what, and how it is read. The read
+(`sd2-5090-N`) is unchanged by it; its harness and the merged commits it pins are Amendment 2's.
+
+**The target** (not on main, the maintainer's explicit override):
+- e4b at the integration commit `539a2d2694096a81c6b272b335e26d818647cd95`. That is main `aa47af8b` with the build PRs
+  at their reviewed heads, stacked:
+  - #1553 `461272ee`, #1554 `5825c13d` and #1556 `f9c1f867` (merged into `sd2/stack` `5c11d58e`);
+  - #1558 `4737cb55`;
+  - #1559 `539a2d26`.
+- grouped-nf4-gemm v0.45.0, `724ccc454f006c1a46836e434e997f31f293747f`, CI's pin. The build changes no kernel.
+- `Qwen/Qwen3-30B-A3B` at `ad44e77` and the head as SD1 pinned it, its `config.json` fetched beside its weights.
+- The server is the shipped default with `E4B_PAGED_SPEC=eagle3`, `E4B_PAGED_SPEC_K=3` and graphs on. Every other knob
+  is unset, with `E4B_PAGED_MAX_SEQS=16` and `E4B_INT4_TILE_PROGRAMS=1` as SD1 ran it. k = 3 captures every verify
+  bucket the read can use (2, 3, 4).
+
+**The override is recorded.** The runner holds the integration commit as a constant, and the receipts carry it in
+`summary.txt`'s `KNOBS e4b_target=` line. The relay on #1313 that precedes the launch names it, with each PR's head.
+
+**The harness** is the launch commit, this amendment's merge, checked out by SHA beside the target and never installed:
+- `bench/sd2/sd2_run.sh` (box) and `sd2_drive.sh` (controller), derived from SD1's by named substitution;
+- `sd2_box.py --prove` and `sd2_reduce.py --prove`, each with a self-test;
+- `staged.sha256`;
+- `tests/test_sd2.py` and `tests/test_sd2_dryrun.py`. The dry run runs the runner's own text with every heavy step
+  stubbed and must reach success. A misnamed function, a head digest that does not match, and a size check that does
+  not follow the cache symlink must each fail it.
+
+**What the proof runs, in order** (correctness only; nothing is timed, and nothing it prints is ever quoted as speed):
+1. **The target's own GPU tests**, on the card that CI cannot provide: `tests/test_spec_decode_gpu.py` and the build's
+   CPU suites with the decode-graph and step-select suites. None may skip for want of the card.
+2. **`sd2_box.py --prove`:**
+   - **the census:** buckets 1, 2, 3, 4, 8 and 16 and the post-verify graphs 2, 3 and 4 all captured; three hooks;
+   - **capture, bitwise:** each verify bucket's replay against its padded eager step, logits bit for bit;
+   - **V0 addressing:** S2-lite's construction at 16 positions on R row 0 and on C-think row 0, at k = 1, 2, 3, with
+     each verify row's mean |Δ log p| of the oracle's token reported;
+   - **the three addressing mutants** (the maintainer's): (a) the stagger one low, (b) the alias append one position
+     low with the reads restored, and (c) the verify rows' RoPE positions shifted +1, each at 8 positions, k = 3;
+   - **the draft:** the in-engine drafter against `sd1_eagle3.chain_at` on the states the served prefill captured, at 8
+     truncation points of 16 R and 16 C-think prompts (768 drafted ids);
+   - **the transition:** R row 1 speculates alone, and R row 2 is admitted mid-flight. One drop is counted, both
+     requests finish at their lengths, the device lengths equal the host mirror after every plain step, and no state is
+     left.
+
+**The proof's verdict** (`sd2_reduce.py --prove`, self-tested on 16 cases). It is **PROVED** when every item holds:
+- the census;
+- the capture, bitwise;
+- V0 addressing at ≥ 0.90 on the rows and on the continuations, for every (row, k);
+- every mutant below 0.90;
+- the draft at ≥ 0.99;
+- the transition;
+- the GPU tests.
+
+Otherwise it is **FAILED**, with every failing item named. A mutant at or above 0.90 is named `GATE_TOO_WEAK:<m>`.
+Then, as registered, Amendment 2 tightens V0 before any read, for example with a logit-level check against the
+batched arithmetic's floor.
+
+**The budget.** One RTX 5090 at ≤ $0.85/h, a guard of 0.75 h, about 62 GB of download: about $1.10, with a ceiling of
+**$1.25**. The launch waits on the maintainer's ACK and the relay on #1313.
+
+**After PROVED:**
+- The build PRs merge in order (1, 2, 3, 4, 5) at their proven heads; a stacked PR is retargeted to main as its base
+  merges.
+- A later change to package code needs a new proof, and a change to docs or tests alone does not.
+- Amendment 2 then registers the read's harness (stages V, E and Q, and the rule above in `sd2_reduce.py`) and pins
+  the merged commits.
