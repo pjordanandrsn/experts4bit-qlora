@@ -13,14 +13,25 @@ import zipfile
 
 from dq11_common import file_sha
 
+ALLOWED_WHEEL_ORIGINS = frozenset({"files.pythonhosted.org", "download.pytorch.org",
+                                 "download-r2.pytorch.org", "pypi.nvidia.com"})
+
+
+def validate_wheel_origins(wheels, allowed=None):
+    """Validate the entire committed lock before any download or installation."""
+    allowed = ALLOWED_WHEEL_ORIGINS if allowed is None else allowed
+    for row in wheels:
+        origin = urlparse(row["url"]).hostname
+        if origin not in allowed:
+            raise ValueError("unregistered wheel origin: " + str(origin))
+
 
 def install(directory, cache):
     wheels = json.loads((directory / "wheels.json").read_text())["packages"]
+    validate_wheel_origins(wheels)
     cache.mkdir(parents=True, exist_ok=True)
     authority, local_requirements = set(), []
     for row in wheels:
-        if urlparse(row["url"]).hostname not in {"files.pythonhosted.org", "download.pytorch.org", "download-r2.pytorch.org"}:
-            raise ValueError("unregistered wheel origin")
         if Path(row["filename"]).name != row["filename"]:
             raise ValueError("unsafe wheel filename")
         path = cache / row["filename"]
