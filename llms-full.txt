@@ -1919,7 +1919,8 @@ Register: [`../claims.json`](../claims.json). The position, **measured** (receip
     "e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07",
     "e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08",
     "e4b.serve.p123.default-decode-census.qwen3.5090.2026-10-09",
-    "e4b.serve.p125.int4-attn-calib-default.qwen3.5090.2026-10-09"
+    "e4b.serve.p125.int4-attn-calib-default.qwen3.5090.2026-10-09",
+    "e4b.serve.p127.launch-bound-glue.qwen3.5090.2026-10-09"
    ],
    "limitations": [
     "Not a general-purpose vLLM replacement: on the same box with identical prompt token ids vLLM 0.30.0 decodes faster than this package's current int4 stack at both B=1 and B=16 (claims e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b1.5090.2026-09-22, e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b16.5090.2026-09-22), bounded to graph decode on one RTX 5090 box with one prompt set; quality quoted, never equated; the 2026-09-05 comparison against vLLM 0.28.0 and the NF4 control (e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05) is history",
@@ -2305,6 +2306,18 @@ one request 1.154× as fast (1.238× with the int4 lm_head too). The mean NLL bi
 gate. It stays opt-in. A K8-style ppl gate alone would have passed it. Calibration is deterministic and takes 95–225 s a
 build, depending on the host. `e4b.serve.p125.int4-attn-calib-default.qwen3.5090.2026-10-09`
 ([P125](../bench/p125/RESULTS-p125.md)).
+
+**The launch-bound glue is cut, bitwise.**
+- **What changed.** P127 fused or removed the small launches around the MoE routing and rotary on the default decode
+  path: three host casts (#1448), and five grouped-nf4-gemm options (#526–#530) wired in by #1472, #1477 and #1482.
+- **What it buys.** On Qwen3-30B-A3B, with grouped-nf4-gemm 0.45.0 or later, the default now decodes one request 1.132×
+  as fast as the stack before #1448 (226 → 256 tok/s, 0.52 ms saved per step), and 16 requests 1.016× as fast. With
+  0.44.0 or older, only Phase 1 runs.
+- **What it costs.** Tokens and per-step logits are bitwise identical, and memory does not change.
+- **In context.** The saving is about the size of the launch-bound routing glue that P123 priced at 11 % of a 4.75 ms
+  step.
+- **Scope.** The claim is the P127 delta at `7f044dd9`.
+`e4b.serve.p127.launch-bound-glue.qwen3.5090.2026-10-09` ([P127](../bench/p127/RESULTS-p127.md)).
 
 **Other opt-ins.** `E4B_PAGED_DECODE_LOOKAHEAD=1` recovers the whole host gap between decode steps, but the gap is
 small: 1.0198× at one request, SLOWER against its 1.02 bar. `E4B_PAGED_LAST_LOGITS=1` projects only the final prompt
@@ -3279,6 +3292,7 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.serve.fam.fused-stack-t1.qw36.5090.2026-10-09 [measured]: Lane FAM (one RTX 5090): the B=1 fused stack at auto on Qwen3.6-35B-A3B, where only the router epilogue engages (0 / 0 / [0, 0] / 40), reads PASS against the family's own neutral floor at T == 1 and T == 12 on both texts, every set: worst-set |bias| at most 0.0012 nats (gates 0.0128-0.0166), argmax agreement at least …
 - e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09 [measured]: Lane FAM Amendment 4 (one RTX 5090): on the default serve_paged graph server (Qwen3.6-35B-A3B NF4, bucketed decode graphs), the fused router epilogue (E4B_FUSE_ROUTER_EPI …
 - e4b.serve.p125.int4-attn-calib-default.qwen3.5090.2026-10-09 [measured]: Lane P125, one RTX 5090: on the shipped default serve_paged (Qwen3-30B-A3B NF4, the B=1 fused stack default-allowlisted, the bandwidth GEMV), calibrated int4 attention (E4B_SERVE_ATTN_INT4_CALIB=1, calibrated on the box) is NOT licensed, alone or with the calibrated int4 lm_head: at one window per pass (T == 1, the …
+- e4b.serve.p127.launch-bound-glue.qwen3.5090.2026-10-09 [measured]: Lane P127, one RTX 5090: on the shipped default serve_paged (Qwen3-30B-A3B NF4, decode graphs at buckets 1-16, 16 slots), P127's launch-bound glue changes (Phase 1: three host casts gone, #1448 …
 
 Open items (no evidence either way):
 
@@ -3286,4 +3300,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 …
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(434 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(435 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

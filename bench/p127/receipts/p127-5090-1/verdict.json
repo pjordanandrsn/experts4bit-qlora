@@ -1,0 +1,67 @@
+{
+ "counts": {
+  "A1": {
+   "combine_residual": 0,
+   "gather_div": 0,
+   "int64_ids": 288,
+   "rope_norm_qk": 0,
+   "router_weights_dtype": 0
+  },
+  "A2": {
+   "combine_residual": 0,
+   "gather_div": 0,
+   "int64_ids": 288,
+   "rope_norm_qk": 0,
+   "router_weights_dtype": 0
+  },
+  "B1": {
+   "combine_residual": 960,
+   "gather_div": 240,
+   "int64_ids": 480,
+   "rope_norm_qk": 720,
+   "router_weights_dtype": 1200
+  },
+  "B2": {
+   "combine_residual": 960,
+   "gather_div": 240,
+   "int64_ids": 480,
+   "rope_norm_qk": 720,
+   "router_weights_dtype": 1200
+  },
+  "M1": {
+   "combine_residual": 960,
+   "gather_div": 240,
+   "int64_ids": 480,
+   "rope_norm_qk": 720,
+   "router_weights_dtype": 1200
+  }
+ },
+ "predictions": {
+  "Q1_g1_in_1.03_1.12": false,
+  "Q2_g16_in_0.99_1.04": true,
+  "Q3_m_differs_ge_90pct_tokens_agree_ge_50pct": false,
+  "Q4_self_pairs_within_1pct": true,
+  "Q5_peak_mem_within_64MiB": true
+ },
+ "reasons": [],
+ "report": {
+  "g_W1": 1.1321,
+  "g_W16": 1.0156,
+  "interval_W1": [
+   1.1316,
+   1.1326
+  ],
+  "interval_W16": [
+   1.0153,
+   1.0159
+  ],
+  "m_logits_differ_frac": 1.0,
+  "saving_us_per_step_W1": 516.7,
+  "saving_us_per_step_W16": 254.4,
+  "self_A2/A1_W1": 0.997,
+  "self_A2/A1_W16": 0.9962,
+  "self_B2/B1_W1": 0.9979,
+  "self_B2/B1_W16": 0.9968
+ },
+ "verdict": "FASTER"
+}

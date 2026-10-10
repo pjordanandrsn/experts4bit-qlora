@@ -1,0 +1,33 @@
+KNOBS e4b_a=a8c01d426bc3e489c8bd11c7c8ced091da557582 e4b_b=7f044dd9570b0f75ac4ebc1742e697256cd2e209 e4b_harness=2332492e918f2472cf5264caf36dd0cb4d497e2d gnf4_a=d1f64ba50afce94533e0166ba3332ef075aa43bb gnf4_b=d769d5022c0fb7a2ada847f69a3cba6e0f45c77f model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 prove=0 short=32 long=160 reps=3
+{
+ "ok": true,
+ "unlisted": [],
+e4b B 0.51.0 sha 7f044dd9570b0f75ac4ebc1742e697256cd2e209
+harness sha 2332492e918f2472cf5264caf36dd0cb4d497e2d
+gnf4 B 0.44.0
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+huggingface_hub 1.33.0
+cc (12, 0)
+p127_reduce self-test OK (23/23 cases)
+p127_box self-test OK (8/8 cases)
+hf_fetch_watchdog self-test OK (7/7 cases)
+premise graphs rc=0: 7 passed in 6.25s
+premise kernels rc=0: 1 passed, 7 deselected in 4.86s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+P127_PROMPTS rows=16 prompt=512 sha256=21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709
+arm A1 rc=0 P127_ARM {"arm": "A", "tag": "A1", "load_s": 31.33, "max_seqs": 16, "counts": {"router_weights_dtype": 0, "rope_norm_qk": 0, "combine_residual": 0, "gather_div": 0, "int64_ids": 288}, "W16": 967.03, "W1": 226.14}
+
+arm B1 rc=0 P127_ARM {"arm": "B", "tag": "B1", "load_s": 25.15, "max_seqs": 16, "counts": {"router_weights_dtype": 1200, "rope_norm_qk": 720, "combine_residual": 960, "gather_div": 240, "int64_ids": 480}, "W16": 981.8, "W1": 255.91}
+
+arm B2 rc=0 P127_ARM {"arm": "B", "tag": "B2", "load_s": 22.97, "max_seqs": 16, "counts": {"router_weights_dtype": 1200, "rope_norm_qk": 720, "combine_residual": 960, "gather_div": 240, "int64_ids": 480}, "W16": 978.7, "W1": 255.36}
+
+arm A2 rc=0 P127_ARM {"arm": "A", "tag": "A2", "load_s": 22.98, "max_seqs": 16, "counts": {"router_weights_dtype": 0, "rope_norm_qk": 0, "combine_residual": 0, "gather_div": 0, "int64_ids": 288}, "W16": 963.38, "W1": 225.47}
+
+arm M1 rc=0 P127_ARM {"arm": "M", "tag": "M1", "load_s": 23.02, "max_seqs": 16, "counts": {"router_weights_dtype": 1200, "rope_norm_qk": 720, "combine_residual": 960, "gather_div": 240, "int64_ids": 480}, "W16": null, "W1": null}
+
+P127_VERDICT {"verdict": "FASTER", "reasons": [], "m_logits_differ_frac": 1.0, "self_A2/A1_W16": 0.9962, "self_A2/A1_W1": 0.997, "self_B2/B1_W16": 0.9968, "self_B2/B1_W1": 0.9979, "g_W16": 1.0156, "interval_W16": [1.0153, 1.0159], "saving_us_per_step_W16": 254.4, "g_W1": 1.1321, "interval_W1": [1.1316, 1.1326], "saving_us_per_step_W1": 516.7}

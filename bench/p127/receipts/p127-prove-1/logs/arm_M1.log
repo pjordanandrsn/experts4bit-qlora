@@ -1,0 +1,43 @@
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 1646.26it/s]
+[18:56:36]   checkpoint: Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 (requested ad44e777bcd18fa416d9da3bd8f70d33ebb85d39)
+[18:56:36]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[18:56:36]   quantized experts on 48/48 MoE layers (128 experts each)
+[18:56:36]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[18:56:37]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[18:56:38]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[18:57:02]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] fusions (q/k/v auto; folds set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 48, 'fuse_t1_glue_n': 193, 'fuse_t1_glue_r2_n': [48, 48], 'fuse_router_epilogue_n': 48}
+Traceback (most recent call last):
+  File "/root/p127/p127_box.py", line 338, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/root/p127/p127_box.py", line 334, in main
+    return arm_main(a)
+           ^^^^^^^^^^^
+  File "/root/p127/p127_box.py", line 233, in arm_main
+    parts = build_engine(cfg)
+            ^^^^^^^^^^^^^^^^^
+  File "/root/p127/src/e4b_B/experts4bit_qlora/serve_paged.py", line 1304, in build_engine
+    license_moe_residual(model, sorted({1, *cfg.buckets}),
+  File "/root/p127/src/e4b_B/experts4bit_qlora/engines/glue_r2.py", line 353, in license_moe_residual
+    want = mod.mlp(h)
+           ^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py", line 280, in forward
+    final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/p127/src/e4b_B/experts4bit_qlora/engines/hot_residency.py", line 1823, in _fwd
+    return st.forward(hidden, top_k_index, top_k_weights, residual=residual)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _HybridTier.forward() got an unexpected keyword argument 'residual'
