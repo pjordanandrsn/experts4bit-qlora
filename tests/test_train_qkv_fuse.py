@@ -1,15 +1,21 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
-"""P129: E4B_TRAIN_FUSE_QKV=1, one fused q/k/v projection for training attention.
+"""P129: one fused q/k/v projection for training attention, on by default (``E4B_TRAIN_FUSE_QKV=0`` keeps the three projections).
 
-- Off by default: with the knob unset ``enable_fast_train``'s hook does nothing.
+- On by default: unset, ``enable_fast_train``'s hook fuses; ``0`` / ``false`` / ``off`` / ``no`` keep today's path, and an
+  unpatched model is never touched.
 - Refusals keep today's path, with the reason recorded.
-- A released projection called on its own raises a clear ``RuntimeError`` naming the fusion.
+- A released projection called on its own raises a clear ``RuntimeError`` naming the fusion; its emptied base is kept outside the
+  module tree, and ``disable_fast_train`` on a model with nothing fused changes nothing.
 - On CUDA with bitsandbytes NF4 bases (the last two with fp32 and with bf16 adapters, the dtypes training runs):
   - the fused dequantize is bit for bit the three dequantized weights stacked;
   - the fused projection is within TC1's rounding bar of the three ``LoRALinear`` modules on outputs, the input gradient and every
     adapter gradient (``2**-6`` of the largest entry for bf16, ``2**-16`` for fp32);
   - the patched attention forward is within the reorder bar of the unfused one;
-  - the adapters stay the parameters.
+  - the adapters stay the parameters;
+  - at the default (knob unset) the hook fuses, and the fused attention's forward and backward are within the same bars of the
+    unfused one; with the knob at ``0`` the module is untouched;
+  - ``disable_fast_train`` is a round trip: the bases come back, and the projections and the attention compute bit for bit what
+    they did before the fusion; a second enable fuses again, bit for bit as the first.
 """
 from __future__ import annotations
 
@@ -54,7 +60,8 @@ def _lora_wrap(attn, r=4, dtype=torch.float32, seed=5):
 
 # --- CPU: the knob, the hook, the refusals ---
 
-@pytest.mark.parametrize("val,on", [(None, False), ("", False), ("0", False), ("true", False), ("on", False), ("1", True)])
+@pytest.mark.parametrize("val,on", [(None, True), ("", True), ("1", True), ("true", True), ("on", True), ("0", False), ("false", False),
+                                    ("FALSE", False), ("off", False), ("no", False), (" 0 ", False)])
 def test_knob(monkeypatch, val, on):
     if val is None:
         monkeypatch.delenv("E4B_TRAIN_FUSE_QKV", raising=False)
@@ -63,15 +70,15 @@ def test_knob(monkeypatch, val, on):
     assert tq.train_fuse_qkv_requested() is on
 
 
-def test_hook_does_nothing_unset_or_unpatched(monkeypatch):
+def test_hook_fuses_by_default_and_not_when_off_or_unpatched(monkeypatch):
     called = []
     monkeypatch.setattr(tq, "enable_train_fuse_qkv", lambda m, verbose=False: called.append(m) or 7)
-    monkeypatch.delenv("E4B_TRAIN_FUSE_QKV", raising=False)
+    monkeypatch.setenv("E4B_TRAIN_FUSE_QKV", "0")
     assert fast._maybe_fuse_train_qkv(object(), patched=3) == 0
-    monkeypatch.setenv("E4B_TRAIN_FUSE_QKV", "1")
+    monkeypatch.delenv("E4B_TRAIN_FUSE_QKV", raising=False)
     assert fast._maybe_fuse_train_qkv(object(), patched=0) == 0
     assert called == []
-    assert fast._maybe_fuse_train_qkv("m", patched=3) == 7 and called == ["m"]
+    assert fast._maybe_fuse_train_qkv("m", patched=3) == 7 and called == ["m"]       # unset: the default fuses
 
 
 def test_refusals_keep_todays_path():
@@ -103,7 +110,8 @@ def test_a_released_projection_raises_a_clear_error():
     tq._release_base(m, "model.layers.0.self_attn.q_proj")
     assert m.base is None and m._e4b_fused_into_qkv
     assert [n for n, _ in m.named_parameters()] == ["lora_A", "lora_B"]
-    with pytest.raises(RuntimeError, match=r"model\.layers\.0\.self_attn\.q_proj was fused .* E4B_TRAIN_FUSE_QKV=1"):
+    assert m._e4b_released[0].weight.numel() == 0                     # kept for disable_train_fuse_qkv, its bytes freed
+    with pytest.raises(RuntimeError, match=r"model\.layers\.0\.self_attn\.q_proj was fused .*E4B_TRAIN_FUSE_QKV.*disable_fast_train"):
         m(torch.randn(2, 16))
 
 
@@ -191,3 +199,79 @@ def test_patched_attention_within_reorder_bar_and_adapters_stay_params(adapter_d
     assert d <= want.float().abs().max().item() * 2.0 ** -6, d
     got.float().sum().backward()
     assert all(getattr(getattr(attn, n), w).grad is not None for n in ("q_proj", "k_proj", "v_proj") for w in ("lora_A", "lora_B"))
+
+
+@needs_nf4
+@ADAPTER_DTYPES
+def test_the_default_fuses_through_the_hook_within_the_bars(monkeypatch, adapter_dtype):
+    """The new default end to end through ``enable_fast_train``'s hook: knob unset, the attention is fused and its forward output
+    and the adapters' gradients stay within the bars of the unfused module; knob at 0, the module is untouched."""
+    cfg, attn = _nf4_attn(adapter_dtype=adapter_dtype)
+    ref_attn = copy.deepcopy(attn)
+    kept = copy.deepcopy(attn)
+    monkeypatch.setenv("E4B_TRAIN_FUSE_QKV", "0")
+    assert fast._maybe_fuse_train_qkv(_Holder(kept), patched=1) == 0
+    assert all(getattr(kept, n).base is not None for n in ("q_proj", "k_proj", "v_proj")) and not hasattr(kept, "qkv_proj")
+    monkeypatch.delenv("E4B_TRAIN_FUSE_QKV", raising=False)
+    assert fast._maybe_fuse_train_qkv(_Holder(attn), patched=1) == 1 and hasattr(attn, "qkv_proj")
+    torch.manual_seed(9)
+    x = torch.randn(1, 7, cfg.hidden_size, device="cuda").to(torch.bfloat16)
+    rot = qmod.Qwen3MoeRotaryEmbedding(cfg).cuda()
+    cos, sin = rot(x, torch.arange(7, device="cuda")[None])
+    outs, grads = [], []
+    for a in (ref_attn, attn):
+        o, _ = a(x, (cos, sin), None)
+        o.float().sum().backward()
+        outs.append(o.detach())
+        grads.append([getattr(getattr(a, n), w).grad.detach().clone() for n in ("q_proj", "k_proj", "v_proj") for w in ("lora_A", "lora_B")])
+    d = (outs[0].float() - outs[1].float()).abs().max().item()
+    assert d <= outs[0].float().abs().max().item() * 2.0 ** -6, d
+    for g0, g1 in zip(*grads):
+        dg, tol = _bar(g1, g0)
+        assert dg <= max(tol, 2.0 ** -6 * g0.float().abs().max().item()), (dg, tol)
+
+
+def test_disable_on_a_model_with_nothing_fused_changes_nothing():
+    attn = _lora_wrap(qmod.Qwen3MoeAttention(_cfg(), layer_idx=0))
+    holder = _Holder(attn)
+    before = {n: id(m) for n, m in holder.named_modules()}
+    stats = copy.deepcopy(tq.TRAIN_QKV_STATS)
+    assert tq.disable_train_fuse_qkv(holder) == 0
+    assert {n: id(m) for n, m in holder.named_modules()} == before and tq.TRAIN_QKV_STATS == stats
+
+
+@needs_nf4
+@ADAPTER_DTYPES
+def test_disable_restores_the_three_projections_bit_for_bit(monkeypatch, adapter_dtype):
+    """enable then disable is a round trip (TC1's attn_only arm probes enable_fast_train, then disables it and trains): the bases
+    come back as views of the fused bytes with the expanded fp32 absmax, and the projections and the attention compute bit for bit
+    what they did before the fusion. A second enable fuses again, bit for bit as the first."""
+    monkeypatch.delenv("E4B_TRAIN_FUSE_QKV", raising=False)
+    cfg, attn = _nf4_attn(adapter_dtype=adapter_dtype)
+    names = ("q_proj", "k_proj", "v_proj")
+    torch.manual_seed(9)
+    x = torch.randn(1, 7, cfg.hidden_size, device="cuda").to(torch.bfloat16)
+    rot = qmod.Qwen3MoeRotaryEmbedding(cfg).cuda()
+    pe = rot(x, torch.arange(7, device="cuda")[None])
+    with torch.no_grad():
+        proj0 = [getattr(attn, n)(x) for n in names]
+        out0 = attn(x, pe, None)[0]
+    holder = _Holder(attn)
+    assert fast._maybe_fuse_train_qkv(holder, patched=1) == 1
+    with torch.no_grad():
+        fused0 = attn(x, pe, None)[0]
+    assert tq.disable_train_fuse_qkv(holder) == 1 and tq.TRAIN_QKV_STATS["fused"] == 0
+    assert not hasattr(attn, "qkv_proj") and "forward" not in attn.__dict__
+    for n in names:
+        m = getattr(attn, n)
+        assert m.base is not None and "forward" not in m.__dict__ and not hasattr(m, "_e4b_fused_into_qkv")
+        assert not m.base.weight.quant_state.nested
+    with torch.no_grad():
+        assert all(torch.equal(getattr(attn, n)(x), want) for n, want in zip(names, proj0))
+        assert torch.equal(attn(x, pe, None)[0], out0)
+    o, _ = attn(x, pe, None)
+    o.float().sum().backward()
+    assert all(getattr(getattr(attn, n), w).grad is not None for n in names for w in ("lora_A", "lora_B"))
+    assert fast._maybe_fuse_train_qkv(holder, patched=1) == 1
+    with torch.no_grad():
+        assert torch.equal(attn(x, pe, None)[0], fused0)

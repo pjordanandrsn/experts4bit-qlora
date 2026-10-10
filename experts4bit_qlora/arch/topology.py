@@ -78,6 +78,9 @@ class AttentionProjections:
     #: K and V output width summed over attention layers (V counted as K where a layer has no ``v_proj``): the KV
     #: cache holds this many elements per token. Sliding windows and latent (MLA) caches are NOT modelled here.
     kv_elements_per_token: int
+    #: q/k/v weight elements in the attention classes the fused training projection takes (``engines.train_qkv_fuse``:
+    #: Qwen3-MoE attention); the estimate prices that projection's fp32 absmax over them
+    fused_qkv_numel: int = 0
 
 
 @dataclass(frozen=True)
@@ -246,12 +249,15 @@ def describe_moe(model, *, revision=None, trust_remote_code=False) -> MoETopolog
     except SystemExit as e:                            # the detector refuses cross-layer KV reuse by exiting
         census = None
         prov["attention"] = f"not described: {e}"
-    attn_mods, in_out, numel, bias, kv = set(), 0, 0, False, 0
+    from ..engines.train_qkv_fuse import FUSED_ATTENTION_CLASSES   # the classes the fused training projection takes (P129)
+    attn_mods, in_out, numel, bias, kv, fqkv = set(), 0, 0, False, 0, 0
     for mod, pname in (census.candidates if census else ()):
         lin = getattr(mod, pname)
         attn_mods.add(id(mod))
         in_out += lin.in_features + lin.out_features
         numel += lin.weight.numel()
+        if pname in ("q_proj", "k_proj", "v_proj") and type(mod).__name__ in FUSED_ATTENTION_CLASSES:
+            fqkv += lin.weight.numel()
         bias = bias or lin.bias is not None
         if pname == "k_proj":
             kv += lin.out_features * (1 if isinstance(getattr(mod, "v_proj", None), torch.nn.Linear) else 2)
@@ -283,5 +289,6 @@ def describe_moe(model, *, revision=None, trust_remote_code=False) -> MoETopolog
         embedding_numel=int(emb.weight.numel()) if emb is not None else 0,
         lm_head_numel=0 if tied or head is None else int(head.weight.numel()),
         attention=None if census is None else AttentionProjections(count=census.expected_count, layers=len(attn_mods), in_plus_out=int(in_out),
-                                       numel=int(numel), any_bias=bias, kv_elements_per_token=int(kv)),
+                                       numel=int(numel), any_bias=bias, kv_elements_per_token=int(kv),
+                                       fused_qkv_numel=int(fqkv)),
         expert_bias_tensors=tuple(sorted(bias_tensors)), int4_attention_linears=int4_attn, provenance=prov, **common)
