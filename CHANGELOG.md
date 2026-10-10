@@ -4,6 +4,514 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
+## 0.52.0 — 2026-10-10 — int4 decode's tile table over 4 programs by default, five fewer kinds of T == 1 launch, and the loss priced as measured
+
+**0.52.0.** With grouped-nf4-gemm 0.45.0 installed, int4 decode builds its tile table over 4 programs by default, and
+the T == 1 decode skips five kinds of launch with bitwise-identical output. Paged serving reads more checkpoints, and the
+training estimate prices the loss as measured:
+- **The int4 tile table over 4 programs, by default** (`E4B_INT4_TILE_PROGRAMS=auto`). On one RTX 5090 the captured
+  64-row decode step of Qwen3-30B-A3B int4 is 15.5 % faster (P126), every token identical. On grouped-nf4-gemm 0.44.0
+  and older nothing changes; `E4B_INT4_TILE_PROGRAMS=1` turns it off.
+- **Five kinds of launch fewer at T == 1** (P127 Phase 2): the router's weight cast, one of the two q/k
+  norm-and-rotary calls, the int64 id cast, the gate_up row copy, and the MoE residual add (on layers it licenses), each
+  where the installed grouped-nf4-gemm offers it. Each is bitwise the launches it replaces; P127 prices them.
+- **Expert-int4 paged serving** reads local checkpoint directories and Qwen3.5's native composite text checkpoints.
+- **The training estimate** prices logits and loss at the measured 12 bytes per logit, and prices the chunked LM loss
+  where the run chunks it. `estimate_env()` reports the switches the estimate reads.
+- **`E4B_TRAIN_FUSE_QKV=1`** (opt-in) fuses training attention's q/k/v projection. P129's read failed its step-0
+  quality bar on GEMM-shape rounding, so it stays off by default.
+
+Upgrade with grouped-nf4-gemm 0.45.0 for the decode changes; a fresh install resolves it. The `[fast]` floor stays at
+0.30.0.
+
+### Rental drivers report unknown probes and check token scope before staging
+
+Heartbeats now report consecutive unknown probes without using that count to stop
+a lane. TC1, P127 and FAM check token scope on the controller before copying it;
+read-only tokens pass, verified unsafe tokens refuse, and failed or unrecognized
+verification continues without staging a token or using implicit authentication.
+Locality keeps staging no token. Credentials and permission data are never logged.
+
+### Fixed supplied-pin captured asset collection
+
+Add an unwired fixed tokenizer asset collection helper with full source rechecks, sealed copy readback and aggregate reverse cleanup. Supplied pins and labels carry no source, runtime, native-read or consumer authority; no constructor, worker or ABBA wiring is added.
+
+### The chunked LM loss's workspace is priced at the measured 12 bytes per chunk logit
+
+- **What changed.** `CHUNK_BYTES_PER_LOGIT` was a stated 10 (bf16 logits + fp32 upcast + fp32 gradient). It now equals
+  `LOGITS_LOSS_BYTES`, 12, defined once in `engines/chunked_lm_loss.py`, which `recipe` imports. This raises
+  `chunked_loss_bytes` by `2 × chunk × V`.
+- **Why.** Peak allocated around `chunked_causal_lm_loss`, measured with no recorder (it cannot run inside the chunk's
+  checkpoint recompute, #1504): 12.0, 12.06 and 12.07 B per chunk logit at T = 1024, 2048 and 4096 (512-token chunks,
+  V = 49,155, H = 1536, RTX A2000). A chunk holds three fp32 logits-sized tensors, as whole logits do.
+- **Effect.**
+  - **MoE training estimate:** the four granite points are unchanged. Where the chunk term applies, the `grouped_nf4`
+    backward branch exceeds it.
+  - **loggetta's dense estimate:** it reads `chunked_loss_bytes`. Its chunked-loss plans rise by 178.1 MiB at Qwen3's
+    vocabulary. But three Qwen3-32B plans at 2,048 tokens fall by 185.1 MiB: the dense activation formula compares
+    unscaled layer work with the loss workspace, so a larger loss term can switch it to a smaller branch. Merging waits
+    on that formula's fix in loggetta.
+- **Test.** `tests/test_topology_recipe.py::test_whole_and_chunked_logits_are_priced_at_one_measured_coefficient`.
+
+### Rental drivers detect dead processes and rebooted hosts
+
+TC1, P127, FAM and locality drivers now share a probe of the launched PID and
+its Linux start time, boot identity and uptime. It avoids self-matching process
+counts and detects PID reuse, zombies and reboots. Two definite missing polls
+end the wait; failed or malformed probes remain unknown and never stop a lane.
+The shared controller helper is sent over SSH stdin, separate from staged pins.
+
+### Qwen3.5 text serving reads expert-int4 sources from native composite checkpoints
+
+The native Qwen3.5-MoE convention now covers the served text configuration.
+For a text-only tree, source planning maps the declared composite text root,
+records unused tensors outside that root, and excludes auxiliary expert stacks
+by structure. Unknown text tensors, missing weights, and mixed plain/composite
+text roots refuse before repacking. Native gate/up orientation is unchanged.
+
+The streaming loader also admits the native text model type with the same expert layout. A direct plain-text checkpoint test exercises admission and both quantized and unquantized CPU loading.
+
+### Tiny CUDA backward and alternate-family correctness smoke
+
+Add an offline smoke for mixed-tier adapter gradients, pinned-host checkpoint
+backward, and gpt-oss bias / DeepSeek-V4 clamp residency. Every cell requires
+real execution and path engagement, then rejects a planted path mutation;
+skips, missing backends, and undetected mutations fail the controller.
+
+### Add unwired supplied-pin file capture controls
+
+Add a bounded no-follow regular file capture helper with complete byte pins, repeated descriptor/path checks and retained cleanup refusals. Supplied pins do not authenticate source provenance, native reads or consumers; executor wiring remains separate.
+
+### Gpt-oss pipelined residency follows its base routing keyword names
+
+The gpt-oss pipelined forward now accepts `top_k_index` and `top_k_weights`,
+matching its residency base. Existing positional callers and the numerical
+body are unchanged. The CPU signature guard is strict for every residency
+class; its former named exception is removed and obsolete caller keywords
+are checked from source.
+
+### P129 Amendment 3 (#835): the step-0 clause against a floor measured on the box
+
+- **The box.** Token `qwen3fqkv3`: Amendment 2's box, with each q0 arm also computing the step-0 held-out per row under registered bf16
+  schedules of the q/k/v base projections. They are A0 (a self-check), D1 (fp32, the reference), D2 (q split in two), D3 (k and v as one
+  matmul) and D4 (q split in four).
+- **The clause.** e_x is the mean over rows of |x − D1|. The fused path passes when e_B ≤ max(e_A, e_D2, e_D3, e_D4).
+- **Unchanged.** Everything else as Amendment 2. `tc1-5090-146` stays QUALITY_FAIL.
+- **Calibration.** On the A2000 real-model data the rule passes and the old clause fails.
+- **Predictions.** e_B / max in [0.35, 1.10], about 0.65; step 0 passes per arm with about 80 % probability.
+
+### TC1 harness for P129 Amendment 3 (#835): the step-0 floor, measured on the box
+
+- **The floor block.** `tc1_arm.qkv_floor_rows` (`TC1_QKV_FLOOR=1`): on the q0 arms, before any training step, the step-0 held-out per
+  row under registered bf16 schedules of the q/k/v base projections. They are A0 (the stock arithmetic through the hook, a self-check),
+  D1 (fp32 matmuls, the reference), D2 (q split in two), D3 (k and v as one matmul) and D4 (q split in four). Only each projection's base
+  is swapped; the adapters add their delta the stock way. The receipt gains `qkv_floor`.
+- **The family.** `qwen3fqkv3` in `tc1_run.sh`: Amendment 2's box with the floor on its q0 arms.
+- **The reducer.** `tc1_reduce.py` reads its step-0 clause as an envelope: e_x is the mean over rows of |x − D1|, and the fused path
+  passes when e_B ≤ max(e_A, e_D2, e_D3, e_D4). A q0 draw whose floor is incomplete, whose A0 misses the stock rows, or whose D3 did not
+  share is VOID. Self-test case 127. Amendment 2's family reads as before.
+- **Tested** on an RTX A2000 on the two-layer model (`bench/p129/instrument/p129_floor_check.py`).
+
+### RA sealed captured byte views
+
+- Add an unwired RA sealed captured-byte copy helper with full independent readback and owned descriptor cleanup receipts. Supplied bytes and copy paths do not authenticate source, tokenizer reads, runtime or consumers; worker/ABBA wiring remains separate.
+
+### `recipe.estimate_env()`: the environment switches the training estimate reads
+
+- **What changed.** `estimate_env()` (also `experts4bit_qlora.estimate_env`) returns the environment switches
+  `estimate_qlora_footprint` reads, each valued as the engine interprets it in this process. Today that is
+  `E4B_CHUNKED_LM_LOSS`, which decides whether the loss branch is priced chunked or whole (#1491), reported as
+  `{"chunk", "auto_gate_bytes"}` from the chunked-loss module's own accessors. Unset, empty and `auto` therefore report
+  the same value, so a planner comparing two processes warns only on a real difference.
+- **Why.** A planner that prices in one process and runs in another can record this beside its plan and compare it
+  before the run. loggetta does (loggetta#52): its plans record it, and `execute` warns when the running process
+  differs.
+- **Test.** `tests/test_topology_recipe.py::test_estimate_env_reports_the_switches_the_estimate_reads`. Every switch it
+  reports changes the estimate in the chunked regime.
+
+### #1469 item 1 registered: the expert-locality census on Qwen3-30B-A3B, a routing trace through NF4 host residency on one rented RTX A2000 (bench and tests only)
+
+- **What it reports**, per MoE layer:
+  - the distinct experts per W-token window, for W ∈ {1, 16, 32, 64, 128};
+  - the churn of the routed ids from one token to the next;
+  - the hit rate of an 8-hot-per-layer residency, from the pipelined engine's own counters.
+- **The traces.** Decode: four prompt kinds × 512 greedy steps, through grouped-nf4-gemm's `capture_routing.py`
+  reused unchanged at a pinned commit. Prefill: 16 wikitext-2 test windows of 641 tokens.
+- **The tools** (`bench/locality-1469/`):
+  - `locality_capture.py` (calibrate, then census; 9 self-test cases);
+  - `locality_summary.py` (numpy only; 9 cases);
+  - a box runner and a controller driver derived from K34's, with `staged.sha256` checked in CI.
+- **Where.** One rented RTX A2000. Its sm_86 runs the NF4 host-residency path; the fp8 paged runner does not run there.
+  Expert ids are correctness-class data, so no timing is quoted. It is a single run under #846's standing tier: guard
+  4.0 h, at most $2.00 with a 70 GB pull.
+- **No rule.** It is a census, and it licenses nothing. Its numbers feed #1469 items 2 and 3 (the bytes model and the
+  planner) and #1470's speculative-decoding question.
+
+### P129 Phase 2 read (#835): QUALITY_FAIL, as registered; the cause is GEMM-shape rounding
+
+- **The box** (`tc1-5090-146`, one RTX 5090). The fused q/k/v training projection cut launches per step by 13.9–14.6 %. It stepped at
+  0.896 (matched) and 0.879 (shipped) of the knob-off time on a host-bound host, with device time 0.985–0.987.
+- **Why it failed.** The step-0 held-out loss moved by −0.01233 on both arms, against TC1's 0.0005 bar. Held-out at N held. By the
+  rule nothing turns on.
+- **The investigation** (RTX A2000, the real model at the pin, `bench/p129/instrument/p129_step0.py`):
+  - the fused module with serving's forward equals the stock forward fed the same q/k/v, bitwise in every layer;
+  - the shift is the base projections' GEMM shape, amplified through 48 layers;
+  - a neutral split of q's matmul moves the step-0 loss as much, and the sign differs between cards.
+- **The bar.** The tested fused and neutral GEMM-shape changes exceeded the original step-0 bar; a re-measure uses an
+  amendment with a floor measured on the box.
+
+### CUDA serving smoke can test local expert-int4 source reads
+
+`--int4-source local` selects each int4 cell's synthetic checkpoint directory
+directly and records the source selection. The existing offline-Hub fixture
+mode remains the default; both modes use local random weights without downloads.
+
+### Complete supplied tokenizer transcript comparison
+
+Add a pure bounded JSON evaluator that compares every train/eval and Wiki call,
+full ID streams and complete chained backend states. Supplied transcript equality
+does not authenticate a tokenizer runtime, native file reads or consumers.
+
+### Training estimate: the loss branch is priced as the chunked LM loss where the run chunks it
+
+- **What changed.** `estimate_qlora_footprint`'s activation item now prices its loss branch as the run will take it.
+  With `expert_kernel="grouped_nf4"`, `enable_fast_train` routes a supported architecture's training loss through the
+  chunked LM loss under `E4B_CHUNKED_LM_LOSS`. By default (`auto`) that happens once the stock fp32 logits reach
+  `AUTO_MIN_LOGITS_BYTES`, 1 GiB: T ≥ 1,767 at Qwen3's vocabulary, T ≥ 5,462 at granite's. There the branch is now
+  `chunked_loss_bytes` (one chunk's logits plus the gathered hidden rows), read from the engine's own table, switch and
+  gate. Everywhere else it is unchanged: whole logits at `LOGITS_LOSS_BYTES`.
+- **Why.** Measured on an RTX A2000 with granite-3.1-3b-a800m (`grouped_nf4`, resident) at T = 6144 under `auto`: the
+  allocated peak is 4105.3 MiB, against 6522.7 MiB with the loss stock. The estimate charged whole logits either way
+  and sat 2458.9 MiB over the chunked run. It is now 58.7 MiB over. Stock points are unchanged (+41.5 and +72.5 MiB).
+- **Not covered.** Forced chunking at a small T (`E4B_CHUNKED_LM_LOSS=1` at T = 1024, an opt-in setting) is now
+  36.2 MiB under at the allocator. loggetta's plan for that run, reserve included, still covers its driver peak
+  (0.814 with no receipts on file, 0.869 with them). The auto point's plan sits at 0.827 and 0.863. A chunk's own coefficient (`CHUNK_BYTES_PER_LOGIT`, 10) is a stated formula. The allocator replay
+  that would attribute it fails inside the chunk's checkpoint recompute, and the coefficient is unchanged here.
+- **Evidence.** `bench/chunked-lm-loss/estimate-a2000-granite/`: four receipts and the evaluation. In sample: one
+  model, one card.
+- **Tests.** `tests/test_topology_recipe.py`: the chunked branch above the gate and the stock branch below it, under
+  the reference kernel, with the switch off, with a fixed chunk size, and for an architecture outside the table.
+
+### Local checkpoints work with expert-int4 paged serving
+
+The expert-int4 source reader now uses an existing local model directory directly,
+for both RTN and calibrated repacking. Hub model IDs retain their revision and
+download-pattern handling; missing sources and zero patched layers still refuse.
+
+### CUDA smoke for the default MoE paged server
+
+Add a reusable offline correctness gate that builds the real default paged
+server for four tiny random MoE families, exercises prefill and decode with
+NF4 and int4, and fails loudly on build, generation or supported decode-graph
+capture/replay failures. A2000 output explicitly labels eager-default coverage.
+
+### FAM Amendment 9 (#1362): Mixtral's and Gemma-4's runs launch past #1482
+
+`fam-mixtral-3` VOIDed on its first forward: #1477's MoE residual fold raised a TypeError in the hybrid tier that the
+default server installs, and #1482 fixed it. The remaining FAM runs now launch from this amendment's merge. The rule,
+tables and pins are unchanged. On a tiny Mixtral's served build, the glue-kernel calls per decode step are identical
+before and after the change and match the registered table. No second Mixtral proof is planned.
+
+### Proposed indexed tokenizer asset/config gate
+
+Add a standalone gate for repeated registered Hub index/local tokenizer asset
+byte equality and declared configuration joins, with an inherited parent guard
+and independent retained-receipt evaluation. No tokenizer execution, native
+asset-read, consumer, worker/ABBA or launch authority is added.
+
+Bind synthetic test helper objects across collection reloads and make the
+unprotected CLI expectation account for interpreter flags on Linux.
+
+### Fix: every residency state class serves the MoE residual, or never sees it (#1313, found by `p127-prove-1`)
+
+- **The bug.** #1477's patched experts forward handed `residual=` (even `None`) to the residency state's `forward`.
+  hybrid's `_HybridTier`, the state class of the served all-resident build, overrides `forward` without it. So since
+  #1477, every MoE call of `serve_paged`'s default GPU build raised a TypeError, the licence probe in `build_engine`
+  first. The CPU tests had used a toy experts module. P127's proving rental caught it before any reading.
+- **The fix.**
+  - `hot_residency._state_forward` passes no `residual=` keyword when there is none. It passes the keyword where the
+    state class takes it (signature, read once per class), and otherwise the residual is the layer's own add.
+  - `_HybridTier.forward` takes `residual=` and hands it to the base forward, so the fold engages on the served path.
+  - The base forward's non-collapsed residual path calls `_HotResidency.forward` by name. A subclass override (hybrid's
+    prefetch submit and amortization count) therefore runs once per call, not twice.
+  - `glue_r2.license_moe_residual` turns a probe that raises into a refused licence, with the error in
+    `info["moe_residual"]["probe_errors"]`. A probe can no longer stop a build.
+- **Tests.**
+  - The real `_HybridTier` signature and its pass-through.
+  - A state class without `residual=`.
+  - The no-re-entry path.
+  - A guard: every `_HotResidency` subclass in the package that overrides `forward` takes `residual=`.
+  - A probe that raises.
+  - Each test is mutation-checked.
+
+### Tests: every CPU hybrid builder imports its modeling module with the CUDA-only kernels masked (#1454 follow-up)
+
+- **What changed.** `tests/hybrid_reference.py` masks `mamba_ssm` too. `reference_modeling(family)` now takes any
+  family, and `bound_kernels` reads a binding from the fallback closure, not from a function name. The builders in
+  `test_moe_keep.py`, `test_chunked_lm_loss.py`, `test_moegen_structural.py` and `test_fusions_default.py` import
+  through it. `test_moe_keep.py` no longer skips a hybrid that fails to run.
+- **Why.** Where `causal_conv1d` is installed, ten cases failed or skipped. `test_chunked_lm_loss.py` failed its two
+  tests on each of `granitemoehybrid`, `lfm2_moe`, `qwen3_5_moe` and `nemotron_h`, and `test_moe_keep.py` skipped
+  `lfm2_moe` and `qwen3_5_moe` with `Expected x.is_cuda()`. CI installs none of these packages.
+- **Who is affected.** Contributors running the suite where `causal_conv1d`, `fla` or `mamba_ssm` is installed.
+  Package code is unchanged.
+- **Tests (`tests/test_hybrid_reference.py`):**
+  - In a fresh process, stand-ins for all three packages shadow whatever is installed. On Qwen3.5 and
+    GraniteMoeHybrid, a plain import binds every stand-in function and a CPU forward raises. `reference_modeling`
+    refuses the module and names every bound function. On Qwen3.5-MoE, LFM2-MoE and Nemotron-H, the helper's import
+    binds none and the forward runs.
+  - No test module imports a kernel-binding modeling module, or one of its model classes, at collection. The family
+    list is read from the installed transformers' source.
+
+### FAM Amendment 8 (#1362): Mixtral gates on × 0.90, then × 0.80
+
+`fam-mixtral-prove-2` showed that × 0.90 barely moves Mixtral: it passed the gate on c4val1 at proof scale. Mixtral's
+OFF process now also scores the pre-registered × 0.80 rung on every set. The claimed resolution is the weakest rung
+that fails every gated cell, so a PASS reads as "no effect as large as a × 0.90 (or × 0.80) softmax-scale change". The
+reducer reports the resolution for every family. Mixtral's reading guard is now 6.0 h, sized from the proof's measured
+times.
+
+### The decoder layer's MoE residual add moves into the experts' combine, where it is licensed (#1313, lane P127's Phase 2, item c)
+
+- **What.** With grouped-nf4-gemm's `combine_rows(..., residual=)` (grouped-nf4-gemm#527), the glue fold's decoder layer
+  runs its sparse-MoE block's own composition: the gate, then the experts with the layer's residual handed down. On
+  the all-resident collapse the residual goes into the combine's epilogue, one launch fewer per layer. Every other
+  experts path adds it as the layer did.
+- **Licence.** `glue_r2.license_moe_residual` licenses each folded layer, one row count at a time.
+  - It probes the model as served: `serve_paged.build_engine` calls it after the residency, the collapse and the
+    batched grouping are set, and before any graph is captured.
+  - It probes at every decode bucket.
+  - A layer is licensed at T rows only where the composition is bitwise the layer's own `residual + mlp(h)` on
+    distinct random bf16 inputs.
+  - A block with any other body or child is refused, and an unprobed row count keeps the layer's own body.
+  - `info["moe_residual"]` reports it.
+- **Residuals the kernel would refuse.** The kernel is handed only a bf16 `[T, H]` residual on its own device, and only
+  when it takes `residual=`; anything else is the torch add.
+- **Knob.** It shares the layer fold's knob, `E4B_FUSE_T1_GLUE_R2`.
+- **No speed claim.** P127's read prices it with the rest of Phase 1 and Phase 2 under the bitwise gate.
+
+### Add a pure fixed RA tokenizer recipe foundation
+
+Reproduce unpacked Alpaca preparation and complete WikiText ID/window
+projections with explicit value refusals and CPU tokenizer doubles. This
+does not bind caller tokenizer provenance, native consumption or launch
+authority and does not expand worker or ABBA inventories.
+
+Reference controls use complete source fixtures checked offline against the
+registered SHA256 and Git blob IDs, so shallow checkouts need no history fetch.
+
+### `E4B_INT4_TILE_PROGRAMS` defaults to `auto`: the one-launch tile table over 4 programs, inside the size P126 read (#846)
+
+- **What `auto` does.** It is the default, also when the variable is unset or empty. On the existing cumsum route
+  above 256 routed rows, it splits the tile table over **4 programs** when the installed grouped-nf4-gemm's
+  `build_group_tiles_fused` takes `programs=`, detected by capability, and the table is within
+  `next_pow2(E) × next_pow2(R) ≤ 128 × 512`. Otherwise that route keeps the one-program table; smaller tables keep
+  their existing builder.
+- **The evidence.** Lane P126 read DEFAULT_ON_4 on Qwen3-30B-A3B int4 on an RTX 5090: about 15.5 % lower measured captured
+  64-row decode-step time with every token identical (`e4b.serve.p126.tile-programs.qwen3-int4.5090.2026-10-09`). P = 8 was
+  not licensed.
+- **When it takes effect.** With a grouped-nf4-gemm release carrying #524. On 0.44.0 and older, `auto` changes nothing.
+- **The way back.** `E4B_INT4_TILE_PROGRAMS=1` restores the one-program table, called exactly as before. An integer
+  from 2 to 64 still forces that many programs at any size.
+
+### P126 read (#846): DEFAULT_ON_4 — about 15.5 % lower measured captured 64-row decode-step time on Qwen3-30B-A3B
+
+Attempt 2 (`p126-5090-2`, under Amendment 1, on another host) read **DEFAULT_ON_4**:
+- **P = 4 is licensed.** Its blocks read 0.8442 and 0.8456, and every token was identical to P = 1's.
+- **P = 8 was ineligible.** Its blocks disagreed by 3.64 %, through the same one-runner level offset as attempt 1.
+- **The premise.** The one-program table was 18.0 % of the eager step.
+
+The recurring offset is recorded as an open measurement question, with a proposed check for future interleaved lanes.
+The default flip is its own PR. Register row `e4b.serve.p126.tile-programs.qwen3-int4.5090.2026-10-09`;
+`bench/p126/RESULTS-p126.md`.
+
+### Four more launches gone from the T == 1 decode, where the kernel package offers them (#1313, lane P127's Phase 2)
+
+- **What.** Each of these uses a grouped-nf4-gemm option when the installed kernel package has it (detected by
+  signature or a capability constant), and otherwise does exactly what it did before:
+  - **Router.** A fused router forward that casts its weights to the logits' dtype asks `router_epilogue(...,
+    weights_dtype=)` for that dtype (grouped-nf4-gemm#526). The kernel's store rounds to nearest even, bitwise
+    torch's cast, so the cast's launch goes.
+  - **Attention.** Both attention folds make one `rope_norm_qk` call for q's and k's heads (grouped-nf4-gemm#528)
+    instead of two `rope_norm_heads` calls. The outputs are bitwise the two calls'.
+  - **Expert ids.** The NF4 route hands the int64 expert ids over uncast when `nf4_grouped.EXPERT_ID_DTYPES` lists
+    int64 (grouped-nf4-gemm#529), since every NF4 kernel widens its id itself.
+  - **Token rows.** At ONE token, the NF4 singleton route hands gate_up the token row with `gather_div=top_k`
+    (grouped-nf4-gemm#530) instead of copying it `top_k` times. With one token every row is token 0, so row order
+    cannot matter; at more tokens the copy stays.
+- **Why it is value-preserving.** Every change is bitwise by construction, and each has a CPU test on a kernel
+  stand-in. Each test is mutation-checked: removing the change, or mis-wiring it, fails it. That includes
+  expert-sorted rows at two tokens, which must keep the copy.
+- **No speed claim.** P127's read prices these with Phase 1 under the bitwise gate.
+
+### TC1's model fetch: brotli>=1.2.0 in venv-e4b, a fetch probe, and rc 15 when nothing staged (#835)
+
+- **What happened.** On `tc1-5090-143` (P129 Phase 2's first box) the model fetch failed, every arm was written as a `not_run` stub,
+  and the box still ended OK. venv-e4b sees the base image's site-packages, whose brotli predates 1.2. huggingface_hub 2.x downloads
+  through httpx2, which advertises brotli whenever it can import it, and passes `output_buffer_limit=` to `Decompressor.process`. Only
+  brotli 1.2 or later accepts that, so a brotli-encoded response failed with `process() takes no keyword arguments`.
+- **The fix.**
+  - venv-e4b installs `brotli>=1.2.0`, which shadows the base image's copy.
+  - The e4b tripwire refuses a visible brotli older than 1.2, and records the hub, httpx2 and brotli versions.
+- **Two guards.**
+  - A fetch probe downloads the registered Qwen3 pin's small files through the same client right after venv-e4b's tripwire, before any
+    other venv is built. A failure refuses the box with rc 15 (`TC1_FETCH_PROBE=0` skips it).
+  - A box on which no family's model staged ends rc 15, so its receipt reads HARNESS_ERROR, not OK.
+
+### Propose guarded source-bound WikiText text projections
+
+Bind complete decoded rows and registered joined text to reviewed raw archive
+bytes and repeated Hub indexes. Retain source/input drift failures and support
+independent parent receipt re-audit. Worker expansion and ABBA composition require
+separate review; tokenizer, consumption and launch gates remain open.
+
+### Training estimate: logits and loss at 12 bytes per logit, three fp32 tensors
+
+- **What changed.** `estimate_qlora_footprint`'s activation item prices the loss branch at `T × V × 12` bytes
+  (`recipe.LOGITS_LOSS_BYTES`), up from 10 (bf16 + fp32 + fp32). Its detail line now reads "three fp32 logits-sized
+  tensors".
+- **Why.** An allocator replay of granite-3.1-3b-a800m training on an RTX A2000 found three fp32 logits-sized tensors
+  live together at the loss peak, 3 × 192.0 MiB at T = 1024 and V = 49,155 (loggetta#49). OLMoE-1B-7B's
+  reference-kernel replay found the same, 3 × 196.5 MiB (loggetta#44). At 10 B per logit the estimate was 2 × T × V
+  bytes short wherever the loss is the larger branch.
+- **Which receipts it now covers.** In sample: the committed loggetta MoE training receipts, priced with their own
+  setup and workload.
+  - Now covered (were under the allocated peak): granite-3.1-3b-a800m (−56.0 → +40.0 MiB), granite-4.0-h-tiny
+    (−69.0 → +127.0 MiB) and both OLMoE reference-kernel receipts (−9.7 → +88.6 MiB).
+  - Unchanged: OLMoE with `grouped_nf4`. There the planner's grouped-kernel backward term is the larger branch.
+  - Already over and now more so: Qwen3-30B-A3B on the RTX 5090, +296.8 MiB each.
+- **Loss branch.** The 12-byte whole-logit term applies to the stock loss branch. In this release, #1491 prices
+  supported `grouped_nf4` chunked-loss runs through `chunked_loss_bytes` using the engine switch and size gate.
+- **Test.** `tests/test_topology_recipe.py::test_logits_and_loss_are_priced_at_three_fp32_tensors_per_logit`.
+
+### P126 Amendment 1 (#846): NOISY is per candidate from attempt 2 on; attempt 2 runs on another host and records it
+
+Attempt 1 read NOISY because one runner carried a level offset of about 3 % for its whole life, which longer blocks
+cannot remove. From attempt 2 on:
+- **The rule.** A candidate whose blocks disagree by more than 1.5 % is ineligible, and the verdict picks among the
+  eligible ones under the same 0.98 bar. NOISY is read only when no candidate is eligible.
+- **Attempt 1 is untouched.** The reducer keys the rule on the record's `amendment`, so attempt 1 reduces as registered,
+  byte for byte.
+- **The host.** `box.json` records the card's power cap and the host's co-tenancy. Attempt 2 avoids attempt 1's machine.
+- **The rest.** New predictions, a 45-case self-test, and a budget that fits the lane's remaining $1.942.
+
+### P126 attempt 1 (#846): NOISY — no default moves; the rerun is Amendment 1's
+
+`p126-5090-1` (one RTX 5090, $0.874) read **NOISY**: P = 4's two interleaved blocks disagree by 2.35 % (bound 1.5 %).
+- **P = 8's blocks agree** at 0.8959 / 0.8974. The split table runs at 0.092× (P = 8) and 0.225× (P = 4) of the
+  one-program table, which is 17.7 % of the eager 64-row step.
+- **The cause** is one runner's level offset of about 3 % in the box's first block, lasting all 256 steps, so longer
+  blocks would not remove it.
+- At attempt 1, no default moved; attempt 2 later licensed P = 4 and #1476 enables `auto` within the measured shape
+  bound. `bench/p126/RESULTS-p126.md`; receipts in `bench/p126/receipts/p126-5090-1/`.
+
+### FAM Amendment 7 (#1362): Mixtral's server pool sized to the instrument
+
+`fam-mixtral-prove-1` ran out of GPU memory building the server's own KV pool, which the instrument never uses, beside
+Mixtral's 26.8 GiB of NF4 weights. Mixtral's processes now build that pool at 768 tokens a slot, which still covers the
+instrument's prompt and positions, and its proof is guarded 2.0 h, sized from the failed run's measured fetch and bake.
+
+### P129 Amendment 2 (#835): the fused q/k/v projection's speed A/B at TC1's field recipe
+
+- **The box.** Token `qwen3fqkv`: `E4B_TRAIN_FUSE_QKV` 0 against 1 on the shipped (bf16) and matched (fp32) adapter arms, two
+  draws a side in ABBA order, every arm profiled, on a host-bound RTX 5090 with the launcher's machine ranking off.
+- **The gates.**
+  - A recount: the box's own launch cut is at least 0.8 of Phase 1's 14.0 %.
+  - A premise: the matched arm's GPU busy share is at most 0.85.
+  - Wall and device ratios, read separately.
+  - TC1's held-out bars on both arms.
+- **The weight pin.** TC1's e4b arm now passes the registered revision to `load_moe_4bit_streaming`, which it did not before, and
+  records the commit the weights loaded from (`weights_commit`). The reducer VOIDs a draw loaded from any other commit, in every family.
+- **The harness.** The receipt gains a `train_qkv` record and `profile.launches_per_step`. `tc1_reduce.py` scores the family
+  (`fqkv_why`, `score_fqkv`), with a self-test case for each rung.
+- **The predictions.** Launches −12 to −15 % on each arm, and wall `q1 / q0` in [0.86, 0.95] on a host-bound host.
+
+### Tests: CPU hybrid tests import transformers' Gated DeltaNet modules with the CUDA-only kernels masked (fix; #1454)
+
+- **What changed.** `tests/hybrid_reference.py` (`reference_modeling`) imports the Qwen3.5-MoE, Qwen3.5 and
+  Qwen3-Next modeling modules with `causal_conv1d` and `fla` masked. The first import then binds transformers' torch
+  functions. If a family was already imported with a kernel bound, the helper refuses it and names the functions.
+  - `tests/test_linear_state.py` no longer imports the modeling module at module scope. It gets the module from the
+    helper and keeps a module-level `importorskip` on the configuration module only.
+  - The fixtures in `test_fam_shape_order.py`, `test_fam_speed.py` and `test_fam_box.py` now use the helper instead
+    of their own masks.
+  - `test_p97_box.py`, `test_p115c_sane_families.py` and `test_p106_box.py` imported these modules unmasked inside
+    their builders. Run alone where `causal_conv1d` is installed, each failed one test. They now use the helper too.
+- **Why.** transformers binds those kernels when a modeling module is first imported. Both are CUDA-only. The
+  collection-time import in `test_linear_state.py` came before any mask. On a machine with `causal_conv1d` installed,
+  every CPU hybrid test in the session then failed with `Expected x.is_cuda() to be true` (14 tests across these four
+  files). CI installs neither package, so CI stayed green.
+- **Who is affected.** Contributors running the suite where either package is installed. Package code is unchanged.
+  The remaining family builders were subsequently migrated to the generalized helper in #1480; those known CPU
+  skips and failures are fixed in this release.
+- **Tests (`tests/test_hybrid_reference.py`):**
+  - In a fresh process, a stand-in `causal_conv1d` shadows whatever is installed. A plain import binds it and a CPU
+    forward raises from it. `reference_modeling` refuses that module, names both functions, and runs the forward on a
+    family it imports itself.
+  - No test module imports one of these modeling modules, or a model class that lazily imports one, at collection.
+
+### Propose a bounded WikiText text parser
+
+Add a pure decoder proposal for single-column Snappy dictionary/V1 Parquet,
+with explicit refusals and complete row/text projections. Source/guard/receipt
+execution and ABBA composition remain unfinished; the helper is outside the
+existing reviewed worker inventories. No tokenizer, consumption or launch
+authority is implied.
+
+### `E4B_TRAIN_FUSE_QKV=1`: one fused q/k/v projection for training attention (opt-in, P129)
+
+Each eligible attention module's q, k and v (`LoRALinear` around bitsandbytes NF4 `Linear4bit`) can run as one fused projection:
+- the packed NF4 rows concatenated, with the nested absmax expanded once to fp32, so the fused dequantize is bit for bit the three
+  stacked;
+- one cast and one LoRA-A matmul over the concatenated A, then three B matmuls;
+- serving's fused attention forward (`qkv_fuse._fused_forward`).
+
+The adapters stay the parameters, under their own names. Anything that does not match is refused and keeps today's path
+(`TRAIN_QKV_STATS["refused"]` says why). It is off by default: unset, `enable_fast_train` runs today's attention. Serving is not changed.
+
+Memory: the q/k/v NF4 bases are released, and the expanded fp32 absmax adds about 3 bytes per 64-element block (roughly 24 MB on
+Qwen3-30B-A3B). A released projection called on its own raises a `RuntimeError` naming the fusion, not a `TypeError` on `None`.
+
+P129 Phase 1, on an RTX A2000 with a two-layer Qwen3-MoE at Qwen3-30B-A3B's layer dimensions:
+- 110 fewer kernel launches and 12 % fewer Python calls per training step;
+- the projection within TC1's rounding bar;
+- in Amendment 1, a 30-step run's divergence inside the eager path's own floor.
+
+Phase 2 measured lower wall time but read QUALITY_FAIL under the registered step-0 bar; the knob remains opt-in.
+Amendment 3 registers the calibrated re-measure.
+
+### FAM Amendment 6 (#1362): Gemma-4-26B-A4B joins the T == 1 read, as its own registration
+
+`bench/fam/` gains Gemma-4-26B-A4B (pinned `4d7ae498`) with ON_glue, ON_epi and ON_auto. The r2 fold refuses Gemma-4's
+extra norms and engages nothing, so there is no r2 arm. Its census (`0 / 271 / [0, 0] / 30` at auto) and per-step glue
+calls are pinned on CPU at the real depth and layer pattern. A Gemma-4 proof runs before its reading, and its box
+refuses before the fetch below 120 GB free. The read cannot speak to the 1024-token sliding window, which never binds
+at 640 tokens.
+
+### P126 registered (#846): the one-launch cumsum tile table split over P programs on SC2e's 64-row step, P ∈ {1, 4, 8}, tokens identical (bench and tests only)
+
+- **Why.** P122 read the one-program chunked table at 2.51 ms of Qwen3-30B-A3B's 64-row eager step. grouped-nf4-gemm
+  #524 splits it over P programs, giving the same integers, and #1433 passes `programs=P` under
+  `E4B_INT4_TILE_PROGRAMS=P`.
+- **The box** (`bench/p126/p126_box.py`):
+  - profiles the eager 64-row step at P = 1, 4 and 8;
+  - for each candidate, times two interleaved blocks against P = 1, as in P124's Amendment 1 (one runner per setting,
+    both alive, strict alternation, both orders; 256 timed and 32 traced steps of each);
+  - runs a mutant that must move the tokens.
+- **The rule** (`p126_reduce.py`, 35 self-test cases): VOID on any engagement, determinism or mutant fault;
+  TOKENS_DIFFER on any token; NOISY when a candidate's blocks differ by more than 1.5 %; DEFAULT_ON_4 or DEFAULT_ON_8
+  for the better candidate whose block ratios are both ≤ 0.98.
+- **Budget.** Proof on Granite (guard 0.75 h), reading guard 1.5 h, lane ceiling $3.00.
+
+### FAM Amendment 5 (#1362): Mixtral-8x7B joins the T == 1 read, as its own registration
+
+`bench/fam/` gains Mixtral-8x7B-Instruct (pinned `eba92302`) with one knob per arm (ON_glue, ON_r2, ON_epi, ON_auto).
+Its census and per-step glue calls are pinned at the real depth on CPU. The box records the build's `fusion_report`,
+and the reducer VOIDs unless every fused router keeps fp32 weights (`fp32_upstream` 32). A family's own proof
+(`--proof --families mixtral`) runs before its reading. Mixtral's box refuses on disk at the start (220 GB) and again
+before its 93 GB fetch (165 GB). The lane ceiling rises to $26. The rule, gates and predictions for the other families
+are unchanged.
+
 ## 0.51.0 — 2026-10-09 — faster MoE decode by default: Qwen3's fused stack, Qwen3.5/3.6's router epilogue, int4 wide tiles and int4 attention projections
 
 **0.51.0.** `serve_paged` decodes MoE models faster by default. All figures are on one RTX 5090:
