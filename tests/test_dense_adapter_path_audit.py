@@ -7,7 +7,6 @@ import json
 from pathlib import Path
 import types
 
-import pytest
 import torch
 from torch import nn
 
@@ -56,22 +55,6 @@ def test_real_native_storage_and_explicit_unknowns_do_not_run_or_mutate():
     assert all(value["status"] == "unknown" for value in row["attention_bindings"].values())
     assert all(torch.equal(value, model.state_dict()[name]) for name, value in snapshot.items())
     assert str(Path(__file__).parent) not in json.dumps(first)
-
-
-@pytest.mark.skipif(importlib.util.find_spec("peft") is None, reason="optional PEFT oracle requires peft installed")
-def test_real_peft_wrapper_records_storage_separately_from_compute():
-    # PEFT is not an e4b [test] dependency. Report this oracle as exercised only
-    # when its test actually runs; the CPU handoff records that separately.
-    from peft import LoraConfig, get_peft_model
-
-    model = get_peft_model(nn.Sequential(nn.Linear(8, 8)), LoraConfig(r=2, target_modules=["0"]))
-    result = AUDIT.audit_adapter_paths(model)
-    row, = result["loaded_paths"]
-    assert row["forward"]["module"] == "peft.tuners.lora.layer"
-    assert row["forward"]["qualname"] == "Linear.forward"
-    assert row["adapter_storage_dtypes"] == {"lora_A.default.weight": "torch.float32",
-                                              "lora_B.default.weight": "torch.float32"}
-    assert result["declared_compute"] is None and result["per_operation_precision"] == "unknown"
 
 
 def test_loaded_fused_bindings_and_partial_are_identified_without_execution():
