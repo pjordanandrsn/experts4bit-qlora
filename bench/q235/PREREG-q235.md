@@ -86,11 +86,18 @@ with experts in pinned host RAM ran on 15.1–15.2 GB of VRAM. They say nothing 
 - The milestone step runs at a constant lr of 2e-4. This deviates from TC1's warm-up, which holds lr at 0 for steps 0 and 1 and would
   leave no optimizer delta to record. The deviation is stated in every receipt.
 
-**Adapter dtype.** fp32 (TC1's matched arm) or bf16 (the shipped default). The registering amendment names one per box.
+**Adapter dtype.** The first box trains **bf16 adapters**, the shipped default, because the milestone is the release as shipped. An fp32
+arm (TC1's matched arm) is optional on the same box, only within the cap, and is labelled matched-to-TC1.
 
 **Reproducibility.**
-- In the same process, two forward-backward passes on the same tokens (no optimizer step) give the path's run-to-run spread.
-- A fresh process on the same box repeats step 0. Its loss must fall within that spread, and its frozen-base hashes must be equal.
+- In the same process, two forward-backward passes on the same tokens (no optimizer step) give the path's run-to-run spread. That spread
+  can be exactly 0.
+- A fresh process on the same box repeats step 0, and its frozen-base hashes must be equal.
+- **Tolerance:** the larger of the in-process spread and a **floor**. Amendment 1 fixes the floor from the 30B calibration's
+  fresh-process repeats (below), before any 235B box. With a floor, one unit in the last place of fresh-process nondeterminism does not
+  fail the check by construction.
+- A fresh-process difference above the tolerance is **reported as a finding with its size**. It is not a silent VOID, and it does not
+  pass.
 
 ## Fidelity: how a bf16 reference is made at this size
 
@@ -112,9 +119,18 @@ It records, for the step's exact token ids:
 - the per-layer relative error of the outputs (median and maximum over the 94 layers);
 - per-layer agreement of the router's top-8 sets.
 
-**Calibration before any box.**
-- The same procedure runs on Qwen3-30B-A3B (48 layers), where a resident bf16 reference also exists. The streamed reference is checked
-  against the resident one, and the 30B NF4-against-bf16 values are measured.
+**Calibration before any box** (on the RTX A2000 and the host CPU beside it, at $0). A full-depth resident bf16 reference of
+Qwen3-30B-A3B (about 61 GB) fits neither the RTX A2000 (12 GB) nor the CPU host, which has about 53 GB free beside its services. The
+calibration therefore splits the question in three:
+1. **Streaming mechanics.** A **depth-truncated** resident reference: the first 6 decoder layers of Qwen3-30B-A3B in bf16 (6 × about
+   1.25 GB, plus the embedding and head at 0.62 GB each: about 8.7 GB), resident on the RTX A2000. It is compared with the layer-streamed
+   path over the same 6 layers on the same card. Same ops on the same device, so they are expected to agree bit for bit.
+2. **CPU against CUDA.** The same 6 layers in bf16, resident on the host CPU: PyTorch's CPU bf16 matmuls, 6 intra-op threads (the host's
+   6 cores, under `nice 19`). The CPU-against-CUDA reference difference is measured and stated. It is part of the calibration, not
+   assumed away.
+3. **The NF4-against-bf16 values, full depth.** The layer-streamed bf16 forward over all 48 layers on the RTX A2000, against e4b's NF4
+   path with experts in pinned host RAM on the same card. That is the path the 235B box runs, at the step's shapes. It gives the 30B loss
+   gap, per-layer relative error and router agreement. The fresh-process repeats behind the reproducibility floor run here too.
 - Amendment 1 sets the fidelity bands from that calibration, before any 235B box. The bands cover the per-layer relative error and the
   router agreement, where a semantic error and rounding differ by orders of magnitude. The loss gap is reported, not gated.
 
@@ -171,6 +187,9 @@ loss.)
    by PyTorch's caching host allocator, plus a 3.0 GiB process baseline. With `pin=False` the homes are 118.97 GiB, about 122 in total,
    at a speed cost. 161.6 GiB is 173.5 GB. With the OS and the loader's unmodelled transients on top, **the registration requires at
    least 192 GB of host RAM.** That rule, not the arithmetic alone, excludes one H100 NVL offer at 188 GB.
+   The host homes carry the **fp32** expert absmax, which is correct for this path:
+   absmax double-quantization is refused under expert offload (see "The step"). An estimator that prices the absmax by the setting in
+   force must still price fp32 here, so this figure is not to be "corrected" downward.
 5. Disk: the shards alone are 437.9 GiB (470 GB). The training planner has no NVMe tier, the streaming loader reads the shards
    directly, and no arena is planned. **The registration requires at least 550 GB free**: the shards plus the wheels, the
    workspace and the receipts.
@@ -191,17 +210,15 @@ least 192 GB of host RAM and enough disk. The time model:
 - plus the 470 GB fetch at the offer's listed download bandwidth;
 - plus the offer's per-GB download charge (RunPod bills none).
 
-| class (offer) | $/h | host RAM | link (listed) | fetch | ≈ $ for the box |
-|---|---|---|---|---|---|
-| RTX 5090 (gen4 ×16) | 0.89 | 251 GB | 26.6 GB/s | 23 min | ≈ 3 |
-| RTX PRO 6000 S (gen5 ×16) | 2.11 | 283 GB | 54.3 GB/s | 8 min | ≈ 4 |
-| RTX PRO 6000 WS (gen4 ×16) | 1.71 | 251 GB | 26.6 GB/s | 14 min | ≈ 7 |
-| H100 NVL (gen5 ×16) | 3.10 | 314 GB | 55.0 GB/s | 2 min | ≈ 3 |
-| H100 PCIe (gen4 ×16) | 2.38 | 251 GB | 20.1 GB/s | 67 min | ≈ 6 |
-| H200 NVL (gen5 ×16) | 4.32 | 362 GB | 55.1 GB/s | 13 min | ≈ 8 |
+| class | fitting offers, $/h | PCIe generation offered | ≈ $ per box, over those offers |
+|---|---|---|---|
+| RTX 5090 | 0.76–0.97 | gen4 ×16 | 3–8 |
+| RTX PRO 6000 | 1.6–2.2 | gen3 to gen5 ×16 | 4–9 |
+| H100 (PCIe / NVL) | 2.4–3.1 | gen4 / gen5 ×16 | 3–6 |
+| H200 NVL | 4.3–4.4 | gen4 / gen5 ×16 | 6–23 |
 
-Each is within the $35 per-run cap. The 5090 offer is above the class's $0.85 policy rate. An offer at the rate ($0.76) lists an 81-minute
-fetch, about $5 with its download charge. Every class other than the 5090 needs its rate approved.
+The spread within a class comes mostly from the fetch time and the per-GB download charge, which vary by host. The H200 NVL's
+upper end is one host charging about $0.04 per GB for the 470 GB fetch. Each is within the $35 per-run cap. An RTX 5090 offer under the class's $0.85 policy rate exists; its slow fetch puts it at about $5. Every class other than the 5090 needs its rate approved.
 
 **The class to register first: an RTX PRO 6000 (96 GB, sm_120).**
 - It fits every shape and dtype with room (90.81 GiB after headroom against 45.08 at most), and is offered at $1.6–2.2/h.
@@ -209,6 +226,9 @@ fetch, about $5 with its download charge. Every class other than the 5090 needs 
 - sm_90 classes (H100, H200) take grouped-nf4-gemm's `grouped_mm` route under `auto`. That route is a second code path, worth a later
   cross-check, not the first box.
 - The RTX 5090 stays a stretch class until the staging transient is measured.
+
+This draft approves no rate and rents nothing. The registering amendment approves the class's rate, after SD2 and DQ11 close and gates
+1–5 pass.
 
 ## Decision rules for the eventual box
 
@@ -218,7 +238,8 @@ fetch, about $5 with its download charge. Every class other than the 5090 needs 
 3. Every adapter tensor's gradient is finite, and each has at least one nonzero element.
 4. Every trained adapter tensor changes under `optimizer.step()`, and no frozen tensor does.
 5. The frozen-base hashes after the step equal those after load.
-6. The fresh-process repeat of step 0 is within the in-process run-to-run spread.
+6. The fresh-process repeat of step 0 is within the tolerance: the larger of the in-process spread and Amendment 1's floor. A miss is
+   reported as a finding with its size.
 7. Fidelity is within the bands Amendment 1 sets.
 
 **VOID** (no reading; the box log says why):
