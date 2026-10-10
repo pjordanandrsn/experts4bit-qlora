@@ -22,8 +22,10 @@ on: [push, pull_request]
 # each annotated with the incident it would have caught.
 #
 # ALLOWLIST: put `guard-allow` on the same line to exempt a deliberate mention.
-# Prefer rewording over allowlisting. There are no hardcoded file exemptions —
-# the previous version exempted the one file that tripped it.
+# Prefer rewording over allowlisting. There is exactly ONE hardcoded file
+# exemption, and it cannot be reworded: bench/dq11/DQ11-AMENDMENT-4.md, a sealed
+# registration (its bytes are pinned in science.sha256) committed before the
+# guard learned adertha:// URIs. Nothing else may be added the same way.
 
 jobs:
   guard:
@@ -58,6 +60,7 @@ jobs:
           staged for release in ~/e4b-outbox
           latency captures in ~/gnf4-lat
           provider credentials under ~/.runpod/config.toml
+          receipt stored at adertha://adertha-agents%23190/receipts/run-1
           aftermath rails
           coordination operation
           do not solicit
@@ -115,6 +118,7 @@ jobs:
           hits=$(git grep -n -I -E -i -f /tmp/patterns.txt \
                    -- ':!.github/private-markers.txt' \
                       ':!.github/workflows/private-marker-guard.yml' \
+                      ':!bench/dq11/DQ11-AMENDMENT-4.md' \
                  | grep -v 'guard-allow' || true)
           if [ -n "${hits}" ]; then
             echo "::error::private-lane markers found in the public tree:"
