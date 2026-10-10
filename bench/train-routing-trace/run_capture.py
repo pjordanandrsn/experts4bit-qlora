@@ -26,6 +26,7 @@ import sys
 from pathlib import Path
 
 import torch
+from torch.optim.optimizer import register_optimizer_step_post_hook  # not reachable as torch.optim.optimizer.<name>
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
@@ -58,10 +59,14 @@ def _sha16(path: str) -> str | None:
 
 def environment(model) -> dict:
     """What the trace needs in order to be regenerable: library versions, commits, and the model's identity by hash."""
-    import transformers
+    try:
+        import transformers
+        tf_version = transformers.__version__
+    except Exception:                                       # absent: recorded as unknown, never a reason to lose the trace
+        tf_version = None
     cfg = getattr(model, "config", None)
     path = getattr(cfg, "_name_or_path", "") or ""
-    env = {"torch": torch.__version__, "transformers": transformers.__version__, "python": sys.version.split()[0],
+    env = {"torch": torch.__version__, "transformers": tf_version, "python": sys.version.split()[0],
            "cuda": torch.version.cuda, "e4b_commit": _git(REPO), "name_or_path": path,
            "config_sha16": _sha16(os.path.join(path, "config.json")),
            "index_sha16": _sha16(os.path.join(path, "model.safetensors.index.json"))}
@@ -107,7 +112,7 @@ def main(argv=None) -> int:
     tc1.load_e4b = load_e4b_hooked
 
     undo_backward = recorder_mod.install_backward_labelling(rec)
-    step_hook = torch.optim.optimizer.register_optimizer_step_post_hook(lambda *_: rec.end_step())
+    step_hook = register_optimizer_step_post_hook(lambda *_: rec.end_step())
 
     rc, void = 0, False
     try:
