@@ -1,0 +1,3 @@
+# SC5 e4b wheels: <name> <version> <filename> <sha256> <url>, read from https://pypi.org/pypi/<name>/<version>/json
+grouped-nf4-gemm 0.45.0 grouped_nf4_gemm-0.45.0-py3-none-any.whl 12de3738ad96d7cd273e3c5525d2df5f89c45ffe6acd400b1b196e65c127af51 https://files.pythonhosted.org/packages/b5/a7/3cbaaf8555c337416d0edf6cb5e5dda5c6c9f85af9bcdf6998dd8bdafc7e/grouped_nf4_gemm-0.45.0-py3-none-any.whl
+experts4bit-qlora 0.52.0 experts4bit_qlora-0.52.0-py3-none-any.whl fd1f544c3440c733f3ab421d8ab14bb746d90704926c1631f8aeb17492694d4a https://files.pythonhosted.org/packages/35/5b/41bd72228a9be820138ec2f9c92e07298acf501bf4ce6e988a56f42771ee/experts4bit_qlora-0.52.0-py3-none-any.whl
