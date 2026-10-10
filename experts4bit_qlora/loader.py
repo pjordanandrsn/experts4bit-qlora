@@ -1229,6 +1229,11 @@ def admission_refusal(config):
     return None
 
 
+def _stage_expert_rows_on_host(device, offload):
+    """Whether the streaming loader fuses per-expert rows in host memory (see ``load_moe_4bit_streaming``)."""
+    return bool(offload) and torch.device(device).type == "cuda"
+
+
 def load_moe_4bit_streaming(
     model_id, device, dtype, r, alpha, offload=False, pin=True, prefetch=False, quant_type="nf4",
     trust_remote_code=None, arena=None, quantize_layers=None, arena_train=False,
@@ -1462,10 +1467,15 @@ def load_moe_4bit_streaming(
     trace.sync("map shard handles")
 
     raw_readers = {}
+    host_handles = {}              # host-side handles, opened on first use (see `stage_on_host`)
 
-    def _read(name):
+    def _read(name, host=False):
         fn = weight_map[name]
         try:
+            if host:
+                if fn not in host_handles:
+                    host_handles[fn] = safe_open(os.path.join(snap, fn), framework="pt", device="cpu")
+                return host_handles[fn].get_tensor(orig_key[name])
             return handles[fn].get_tensor(orig_key[name])
         except AttributeError:
             # The shard declares a dtype this torch build has no name for (see
@@ -1475,9 +1485,10 @@ def load_moe_4bit_streaming(
                 raw_readers[fn] = _RawShardReader(os.path.join(snap, fn))
                 log(f"  {fn}: holds a dtype this torch ({torch.__version__}) cannot "
                     f"name; reading those tensors as raw uint8")
-            return raw_readers[fn].u8(orig_key[name]).to(device)
+            raw = raw_readers[fn].u8(orig_key[name])
+            return raw if host else raw.to(device)
 
-    def get(name):
+    def get(name, host=False):
         # EVERY shard read funnels through here, which is why the diagnosis hangs off it:
         # #344's two recorded host failures both surfaced at this call, at two unrelated
         # points in the load (the first expert read on one host, the non-expert pass on
@@ -1486,7 +1497,7 @@ def load_moe_4bit_streaming(
         # right here and were never printed. Costs nothing until something raises.
         trace.enter(f"read {name!r} from {weight_map[name]}")
         try:
-            tensor = _read(name)
+            tensor = _read(name, host)
         except Exception as exc:
             _explain_shard_failure(exc, name, weight_map[name], snap, weight_map, device, trace)
             raise
@@ -1503,6 +1514,12 @@ def load_moe_4bit_streaming(
     bare_logged = False            # the one-time NOTE for a family built without an adapter
     offload_handles = []
     n_moe = 0
+    # With offload on CUDA the per-expert rows are read into host memory and fused there, and only the fused stacks go to
+    # the device to be quantized. Read straight to the device, a layer's rows and its fused stacks coexist there (about
+    # twice the layer's experts in the checkpoint dtype), more than a card sized for one layer's experts at a time holds.
+    # Stacking and concatenation are copies and the quantization still runs on the device, so the stored bytes are the
+    # same; the resident (no-offload) path reads to the device exactly as before.
+    stage_on_host = _stage_expert_rows_on_host(device, offload)
     for i in range(n_layers):
         # MODULE side: where this layer's fused experts are PLACED in the built tree.
         # Not a checkpoint prefix — for the mixtral family the checkpoint keys live
@@ -1738,11 +1755,12 @@ def load_moe_4bit_streaming(
             for role in (("gate", "up", "down") if has_gate else ("up", "down")):
                 byidx = layer_experts.get(role, {})
                 expert_keys.update(byidx[e] for e in range(n_exp) if e in byidx)
-                rows[role] = [get(byidx[e]) if e in byidx else None for e in range(n_exp)]
+                rows[role] = [get(byidx[e], host=stage_on_host) if e in byidx else None for e in range(n_exp)]
             gate_up, down = (fuse_experts(rows["gate"], rows["up"], rows["down"]) if has_gate
                              else stack_experts(rows["up"], rows["down"]))
-            gate_up = gate_up.to(dtype)
-            down = down.to(dtype)
+            del rows
+            gate_up = gate_up.to(device=device, dtype=dtype)
+            down = down.to(device=device, dtype=dtype)
         elif f"{epfx}0.gate_proj.weight" in weight_map:
             # Same per-expert shape, reached WITHOUT a convention: the dedicated-quant
             # families (gemma4, kimi_k3, deepseek_v4) predate the convention system and
