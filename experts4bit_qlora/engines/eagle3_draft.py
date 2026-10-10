@@ -234,8 +234,10 @@ class AuxStates:
     - ``pre`` [max_prompt, 3 * hidden]: a prefill chunk's positions (input ``[1, T, hidden]``) at its offset.
 
     ``mode`` selects the target: ``"decode"``, ``("prefill", start)``, or None (nothing copied). The copies are
-    ordinary ops, so a CUDA graph captured with ``mode`` set records them. :meth:`install` returns the hook count or
-    raises."""
+    ordinary ops, so a CUDA graph captured with ``mode`` set records them, offset included: the prefill graph is
+    captured at ``("prefill", 0)``, which is the only offset it is ever replayed at
+    (:meth:`~.paged_runner.PagedModelRunner.run_prefill` replays it for first chunks only); every later chunk runs eager
+    with its own ``start``. :meth:`install` returns the hook count or raises."""
 
     def __init__(self, model, *, max_rows: int, max_prompt: int, device=None, dtype=torch.bfloat16):
         layers = getattr(getattr(model, "model", None), "layers", None)
