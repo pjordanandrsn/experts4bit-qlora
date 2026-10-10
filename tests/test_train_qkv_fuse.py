@@ -365,6 +365,24 @@ def test_a_resume_into_a_fused_model_round_trips_through_the_views(monkeypatch, 
 
 
 @needs_nf4
+def test_a_checkpoint_saved_while_fused_rebuilds_as_a_plain_quant_state_bit_for_bit():
+    """A checkpoint saved while fused stores each q/k/v absmax in fp32, not nested. bitsandbytes rebuilds it (``QuantState.from_dict``,
+    the path a pre-quantized load takes) as a plain quant state that dequantizes bit for bit as the original nested one."""
+    from bitsandbytes.functional import QuantState, dequantize_4bit
+    _, attn = _nf4_attn()
+    qkv = ("q_proj", "k_proj", "v_proj")
+    want = {n: dequantize_4bit(getattr(attn, n).base.weight.data, getattr(attn, n).base.weight.quant_state) for n in qkv}
+    assert all(getattr(attn, n).base.weight.quant_state.nested for n in qkv)
+    holder = _Holder(attn)
+    assert tq.enable_train_fuse_qkv(holder) == 1
+    sd = _clone_sd(holder)
+    for n in qkv:
+        pre = f"attn.{n}.base.weight."
+        qs = QuantState.from_dict({k[len(pre):]: v for k, v in sd.items() if k.startswith(pre)}, device=torch.device("cuda"))
+        assert not qs.nested and qs.absmax.dtype == torch.float32
+        assert torch.equal(dequantize_4bit(sd[f"attn.{n}.base.weight"], qs), want[n]), n
+
+@needs_nf4
 def test_a_move_of_the_fused_bytes_re_points_the_bases():
     """``_apply`` (``.to`` / ``.cuda`` / ``.cpu``) gives the fused module new bytes; the bases follow, so nothing is held twice and the
     projections and the fused forward compute what they did."""

@@ -20,8 +20,10 @@
     one over its slice of the expanded fp32 absmax, which dequantizes bit for bit as the nested statistics did. Nothing is
     duplicated, and a device move re-points the bases at the moved bytes;
   - `state_dict` carries every q/k/v weight. The base quant state is the non-nested form, so `weight.nested_absmax` and
-    `weight.nested_quant_map` are absent for those bases. A fused model's dict loads strict into an unfused model, and a resume
-    into a fused one writes through the views;
+    `weight.nested_quant_map` are absent for those bases. A checkpoint saved while fused therefore stores the q/k/v absmax in fp32,
+    not nested; bitsandbytes rebuilds it as a plain quant state, which dequantizes bit for bit. Resumes load with `strict=False`
+    (torch's strict check refuses every bitsandbytes 4-bit dict, an unfused one included): a fused model's dict loads into an
+    unfused model, and a resume into a fused one writes through the views;
   - a direct call to a projection computes what it computed before the fusion;
   - `disable_fast_train` gives the attention its own forward back, the three projections compute what they did before, and a
     second `enable_fast_train` fuses again. The 3 bytes per 64 values stay until the model is reloaded.
