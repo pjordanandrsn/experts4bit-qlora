@@ -1,0 +1,96 @@
+{
+ "source": {
+  "dataset": "HuggingFaceH4/ultrachat_200k",
+  "revision": "8049631c405ae6576f93f445c6b8166f76f5505a",
+  "config": "default",
+  "split": "test_sft",
+  "offset": 0,
+  "length": 16,
+  "field": "prompt",
+  "license": "MIT (the dataset card; UltraChat 200k by HuggingFaceH4, derived from UltraChat)",
+  "fetched_via": "datasets-server.huggingface.co/rows, 2026-10-10"
+ },
+ "prompts": [
+  {
+   "row_idx": 0,
+   "prompt_id": "9fb649a870769f4881c647d20d178656f67fc881b2dc0b65d4860237c2c8da6c",
+   "prompt": "How does the author propose to fix the problem of science alienation in our educational system? What changes does she suggest should be made to science education? Answer according to: Science education should be split into two tracks.\nSplit K-12 science education into two tracks, for majors and nonmajors.\nThose who want to specialize in science could take math and complex chemistry. Nonmajors would focus on science of the everyday\u2014things like kitchen chemistry and CSI-style crime investigations.\nSome years ago, when I was working as a newspaper science writer in California, I fell into a rather idle conversation with a physicist on the subject of science education. Idle for him, at least, because what he said\u2014the way he defined the American system of teaching K-12 students about science\u2014has stayed with me since.\nThis conversation has returned to me many times over the years. On the day my older son, who spent his childhood joyfully chasing insects and reading natural history books, came home from high school to announce that \u201cbiology is the most boring subject in the world.\u201d The time the student adviser at the University of Wisconsin journalism school, where I teach, told me that undergrads don\u2019t want to take science-writing classes because they already felt \u201cbeaten up by science.\u201d Even on days when I read science literacy statistics and am startled by the percentage of people who think that antibiotics kill viruses as well as bacteria or that the sun revolves around the Earth.\nIt\u2019s easy for me to join with the chorus of concern over whether we are keeping up as a science-literate country. But even so, science literacy is the wrong term for the worried point I\u2019m making here. I\u2019m concerned about science alienation. The way we teach K-12 science, with its emphasis on the intricacies of formula and mathematical structure necessary for the next generation of scientists and engineers, shuts too many people out. I don\u2019t mean just shut out of the priesthood here; there\u2019s no reason for everyone to become a scientist. But shut out of the comfort zone, of the ability to think of science as something useful in daily life.\nAnd it\u2019s the science-alienated who matter to me. Partly because as a science writer I find them the most interesting audience\u2014I love the idea of seducing someone convinced that science is boring or meaningless into reading a research-centered story. Partly because I worry that what The New Yorker\u2019s Michael Specter describes as a culture of science denialism is having a profound\u2014possibly dangerous\u2014effect on public policies. Think, for instance, of recent moves in Virginia, Texas, and North Carolina to deny that sea level rise is related to global climate change. And partly I just think that the filtered-out are cheated. They endure the mandatory classes, but they never really learn the main lesson\u2014the way that science helps us understand ourselves and the world around us.\nThe great psychologist and philosopher William James wrote more than 100 years ago that the science establishment would face consequences if it dismissed the importance of the lay public. In the year 1909, he said, it was easy to find people who no longer paid attention to the teachings of researchers. \u201cThey are indifferent to science,\u201d he explained, \u201cbecause science is so callously indifferent to their experiences.\u201d Today, this is very relevant to K-12 science education: Our system breeds that indifference.\nHow can we fix it? By requiring even more science education\u2014but changing it dramatically. All high school students should have to take four years of science, instead of the minimal two usually required for graduation. Along with that, we should also offer separate \u201cscience tracks\u201d\u2014something like the old tracks for vocational or college-bound students. Those who want to specialize in science could take math, physics, and complex chemistry (and the kind of genetically detailed biology that my son disliked). Nonmajors, by contrast, would focus on what I think of as science of the everyday\u2014things like kitchen chemistry, CSI-style crime investigation, the biology of health, and a class in the physics of sports that would include playing the games.\nMy tracking system could easily build on existing science electives. My son\u2019s school, for instance, teaches a forensic science unit which uses the classroom as an ever changing \u201ccrime scene,\u201d exploring everything from DNA analysis to blood typing. It\u2019s a way of putting science in context. More students would take such classes; more would be exposed to these ideas as they did the coursework needed to complete each track. Ideally, the tracks could be coordinated with the science classes offered for majors and nonmajors at the college level. Of course, occasionally a student might want to switch tracks\u2014and we should allow for that, too. It could go both ways: Would-be scientists might realize that the field isn\u2019t really for them and switch to the nonmajor track, while some students might be inspired by the CSI class to move into the more difficult sciences.\nWe need to stop trying to teach every child as either a future scientist or a future failed scientist. We don\u2019t want or need every student to be a scientist, but we do want each one to be a success. And success includes a solid understanding and appreciation of science, one that will remain useful to both themselves and society throughout their lives.\nAlso in Slate\u2019s special issue on science education: Fred Kaplan explains why another \u201cSputnik moment\u201d would be impossible; Philip Plait explains why he became the \u201cBad Astronomer\u201d; Paul Plotz describes how almost blowing up his parents\u2019 basement made him a scientist; Tom Kalil says that the Obama administration is using the Make movement to encourage science education; and Dana Goldstein explains why you should make your daughter play video games. Also, share your ideas for fixing science education in the Hive. This article arises from Future Tense, a joint partnership of Slate, the New America Foundation, and Arizona State University."
+  },
+  {
+   "row_idx": 1,
+   "prompt_id": "26afb4f9bffc82fbbfdcaa8f0eec0833780e411799dceed12d639c71ce08da25",
+   "prompt": "Rice tolerance to suboptimal low temperatures relies on the maintenance of the photosynthetic capacity.\nGazquez, A., Vilas, J. M., Colman Lerner, J. E., Maiale, S. J., Calzadilla, P. I., Menendez, A. B. and Rodriguez, A. A.\nLaboratorio de Fisiologia de Estres Abiotico en Plantas, Unidad de Biotecnologia 1, IIB-INTECH, CONICET, UNSAM, Chascomus, Argentina.\nCentro de Investigaciones y Desarrollo en Ciencias Aplicadas, FCEx, UNLP, Argentina.\nDepartamento de Biodiversidad y Biologia Experimental, FCEyN - UBA, INMIBO-CONICET, Buenos Aires, Argentina.\nLaboratorio de Fisiologia de Estres Abiotico en Plantas, Unidad de Biotecnologia 1, IIB-INTECH, CONICET, UNSAM, Chascomus, Argentina. Electronic address: andresrodriguez@conicet.gov.ar.\nThe purpose of this research was to identify differences between two contrasting rice cultivars in their response to suboptimal low temperatures stress. A transcriptomic analysis of the seedlings was performed and results were complemented with biochemical and physiological analyses. The microarray analysis showed downregulation of many genes related with PSII and particularly with the oxygen evolving complex in the sensitive cultivar IR50. Complementary studies indicated that the PSII performance, the degree of oxygen evolving complex coupling with the PSII core and net photosynthetic rate diminished in this cultivar in response to the stress. However, the tolerant cultivar Koshihikari was able to maintain its energy equilibrium by sustaining the photosynthetic capacity. The increase of oleic acid in Koshihikari could be related with membrane remodelling of the chloroplasts and hence contribute to tolerance. Overall, these results work as a ground for future analyses that look forward to characterize possible mechanisms to tolerate this stress. How did the tolerant rice cultivar Koshihikari maintain its photosynthetic capacity under suboptimal low temperatures stress, and what possible mechanisms could contribute to its tolerance?"
+  },
+  {
+   "row_idx": 2,
+   "prompt_id": "3ab0d0c24777248cbc4aa33971d34e8de9393db1ea0cc1f963585788ca827ca1",
+   "prompt": "Write a free verse poem about the power of the human spirit to overcome adversity, using vivid imagery and sensory language to depict a specific moment or event where someone has faced a major challenge and risen above it. Consider the emotions, thoughts, and actions that led to this triumph and use these to craft a powerful and inspiring message about resilience and inner strength. Be sure to employ literary devices such as metaphor, repetition, and symbolism to enhance the poem's impact and meaning."
+  },
+  {
+   "row_idx": 3,
+   "prompt_id": "5dac3c072ba477af9ed0c71a31a806f307d7ea839a7977e3befa7d9b060d5bee",
+   "prompt": "Compose a speech about the need for more affordable dental care."
+  },
+  {
+   "row_idx": 4,
+   "prompt_id": "b750ea229635aa6683e0018abd17f92804376c1b0c474dc4b3a636dd2beebece",
+   "prompt": "Write a historical fiction story that is set during the World War II, emphasizing the individuals and their experiences. Consider including themes such as bravery, sacrifice, and perseverance. Ensure that your story contains accurate historical details and that your characters are true to the time period. Also, pay attention to your style of writing, using descriptive language to bring your story to life."
+  },
+  {
+   "row_idx": 5,
+   "prompt_id": "7d86ffeefdea030c92138e0b964c304508bfebed4b23261c8a741630823e6f96",
+   "prompt": "Create a recipe book for a gourmet catering business that includes detailed instructions for preparing and presenting dishes, as well as information on sourcing high-quality ingredients and selecting appropriate wine pairings. The book should feature visually appealing photos of each dish, as well as tips and tricks for streamlining the cooking process during large events. Additionally, consider including personal touches such as stories about the inspiration behind each recipe or anecdotes about successful events where the dishes were served. The recipe book should aim to showcase the expertise and unique offerings of the catering business while also serving as a useful resource for home cooks looking to recreate gourmet meals at home."
+  },
+  {
+   "row_idx": 6,
+   "prompt_id": "548934adb3470a43b62c4e81daf1a547dff90d3535ee846e8b5395cbdf21e1de",
+   "prompt": "Create a t-shirt design that raises awareness for animal rights by including a bold statement or message advocating for animal welfare, using animal prints or illustrations, or portraying animals in a positive way. Incorporate bright and eye-catching colors to make the design stand out and potentially attract more attention to the cause. The design should be visually appealing and memorable, leaving a lasting impression on the viewer."
+  },
+  {
+   "row_idx": 7,
+   "prompt_id": "f52366b6b6d4fb79bcca917a155b4ed53341ce3c596dae297a4f9deeb2397bc2",
+   "prompt": "Offer additional services for each episode of your podcast production business, such as social media promotion or video clips."
+  },
+  {
+   "row_idx": 8,
+   "prompt_id": "17705fb3dead237045246c9b0276bd30906793adb1a1e76437836a65cc431aa7",
+   "prompt": "Write a fiction story in the first person point of view about a character who discovers their ability to communicate with supernatural beings, and explore how they navigate this unique gift to help others in their community. Ensure that the story has a clear plot, character development, and a resolution. In terms of style, use descriptive language to create a vivid setting and evoke emotions in the reader. Additionally, consider how the character's experiences and interactions with supernatural beings impact their personal beliefs and values."
+  },
+  {
+   "row_idx": 9,
+   "prompt_id": "e085d7783d36b7d4161e5b8d62b4878e44557a1925d829f813dcadf571ecac81",
+   "prompt": "Write a comprehensive character analysis of a favorite historical figure focusing on their personality traits, motivations, and impact on history. Use primary sources and historical evidence to support your analysis and include examples of how their actions and decisions shaped their legacy. Pay attention to their strengths and weaknesses, and consider the social and cultural context of their time. Use a formal and analytical tone, and make sure to include a clear thesis statement and conclusion."
+  },
+  {
+   "row_idx": 10,
+   "prompt_id": "a7d455bdc14741b56d8752a7fa806ee7593aea1c597dc7425334bfd90744e616",
+   "prompt": "Develop a comprehensive guide that provides actionable tips and techniques on how individuals can cultivate self-love, self-awareness, and self-compassion to establish a strong and healthy relationship with themselves. Your guide should cover areas like the importance of setting boundaries, identifying negative self-talk patterns, practicing self-care, building confidence and resilience, and maintaining a growth mindset. Additionally, ensure that your guide is easy to read, engaging, informative, and offers real-life examples and exercises that readers can apply in their daily lives."
+  },
+  {
+   "row_idx": 11,
+   "prompt_id": "609d506f31f5a0c1e40cd8b3a074ed486f2daab49e3663f457518de8dda872b8",
+   "prompt": "How did the fall of the Soviet Union impact the economies of Eastern Europe?"
+  },
+  {
+   "row_idx": 12,
+   "prompt_id": "b0de2e6833f6086605b68eb3af4936840fffe4a92721e45a528c4402913d1b7f",
+   "prompt": "Write a report on the most effective ways to retain employees."
+  },
+  {
+   "row_idx": 13,
+   "prompt_id": "5716606eaf8a48410e49b74a57726cf00a9605e8514b646159acfdd42daf84a4",
+   "prompt": "Increased System Speed \u2013 We\u2019ve upgraded the system to lessen your wait time when using Beehively, particularly within gradebook. You\u2019ll notice faster page loading and report generation to help you get the information you need when you need it.\nVoice Recorded Urgent Alerts \u2013 Knowing how important it is for you to quickly and easily communicate with your school community in urgent situations, we\u2019ve increased voice, text, and email speeds and added the ability to use a voice recorded message to communicate with your community. Voice recorded alert messages are being rolled out school by school upon request. If you\u2019d like to update your Urgent Alerts with voice capabilities, let us know at support@beehively.com.\nDarker Grid Lines on Rosters \u2013 Did you know that you can print a student roster for your class or any subject? Use this roster to track forms as they are submitted, keep running records, or record scores when you are away from your computer or mobile device. We\u2019ve improved the roster with darker, easier to see grid lines, making it even more convenient for your daily use. For information on downloading your class and subject rosters, visit our Help Desk.\nMany of our updates come from client suggestions, and we are always interested to hear your ideas. If you have an improvement or feature suggestion, please share it with us at support@beehively.com.\nThis entry was posted in Product Updates and tagged alerts, Beehively, product updates, rosters, updates. Bookmark the permalink.\n\u2190 Welcome to the Beehively Blog! What is the process for requesting voice recorded alert messages for urgent situations?"
+  },
+  {
+   "row_idx": 14,
+   "prompt_id": "4f76db4eedfd03c47e8c9ed5576378cd4d639ea384bbe42728a87bb2211b049c",
+   "prompt": "- The left child should have a value less than the parent node's value, and the right child should have a value greater than the parent node's value."
+  },
+  {
+   "row_idx": 15,
+   "prompt_id": "0c6ac5b4625fd60f5dc023d58a6ed8f240b6d111739862b0843849b216cfc78a",
+   "prompt": "Is the 14-day return policy applicable to all TAG Heuer watches sold by the retailer?: This is a pre-owned ladies TAG Heuer WAU2211 from the Formula 1 collection. The Swiss-made timepiece is powered by an Automatic movement with 38 hour power reserve, and is water resistant to 200 metres. Buy it today for only \u00a31,700.\nThe elegant 37mm white ceramic top ring is set with 48 diamonds, with the crisp white dial and index markers set with 49 diamonds. The bracelet is white ceramic and stainless steel. Date display appears at 6 o'clock position. Presented in a TAG Heuer box, and includes extra bracelet links, tags, operating instructions and International Warranty Card dated December 2010.\nThe watch appears to be in excellent condition, with very few marks and scratches to the case and bracelet as pictured above. The box shows signs of wear and tear. This TAG has been fully tested for its time keeping and accuracy over a 48-hour period, keeping perfect timing throughout with the date ticking over nicely. Qualifies for free, next day delivery and is also covered by our 14-day return policy."
+  }
+ ],
+ "prompts_sha256": "72721951e17825496f9f9779cd6704432b317dd0994c3e8bc8304592cfa24858"
+}
