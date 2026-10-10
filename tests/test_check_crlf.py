@@ -26,7 +26,7 @@ def repo(tmp_path):
     return tmp_path, git(tmp_path, "rev-parse", "HEAD")
 
 
-@pytest.mark.parametrize("contents, expected", [(b"one\ntwo\n", 0), (b"one\r\ntwo\r\n", 1), (b"one\rtwo\r", 1)])
+@pytest.mark.parametrize("contents, expected", [(b"one\ntwo\n", 0), (b"one\r\ntwo\r\n", 1), (b"one\rtwo\r", 0)])
 def test_added_file_lf_passes_and_cr_endings_fail(repo, contents, expected, capsys):
     root, base = repo
     path = root / "new file.md"
@@ -36,7 +36,7 @@ def test_added_file_lf_passes_and_cr_endings_fail(repo, contents, expected, caps
     assert guard.main(["--root", str(root), "--base", base]) == expected
     assert path.read_bytes() == contents
     output = capsys.readouterr()
-    assert ("new file.md: CR line endings" in output.err) == bool(expected)
+    assert ("new file.md: CRLF line endings" in output.err) == bool(expected)
     assert "old.md" not in output.err
 
 
@@ -64,7 +64,7 @@ def test_untracked_addition_refuses_and_ignored_file_is_excluded(repo):
     (root / "new.md").write_bytes(b"new\r\n")
     checked, failures = guard.check(root, base)
     assert checked == 2
-    assert failures == ["new.md: CR line endings on line(s) 1"]
+    assert failures == ["new.md: CRLF line endings on line(s) 1"]
 
 
 def test_missing_base_fails_instead_of_skipping(repo):
@@ -72,6 +72,6 @@ def test_missing_base_fails_instead_of_skipping(repo):
     assert guard.main(["--root", str(root), "--base", "missing-ref"]) == 2
 
 
-def test_without_base_scans_tracked_files(repo):
+def test_without_base_refuses_instead_of_scanning_history(repo):
     root, _ = repo
-    assert guard.main(["--root", str(root)]) == 1
+    assert guard.main(["--root", str(root)]) == 2
