@@ -8,13 +8,13 @@
 # checks every pin against its source before anything is sent; starts the box script detached under a fresh nonce;
 # polls TP_DONE.<nonce>; fetches receipts, logs, samples and bake.json -- never the venvs, caches, arenas, checkpoints or
 # the pack's payloads (its manifest.json rides along). Nothing here creates, destroys or approves compute.
-# SC1_BOX=A|B|C|D|E|F|G|H|I|J|K|L is required (D = SC1b's census box, E = SC2's serving box, F = SC2b's prefill-graph box, G = SC2g's gpt-oss box, H = SC2c's bulk-KV box, I = SC1g's gpt-oss quality box, J = SC1g's e4b-only diagnostic box, K = SC2d's engagement box, L = SC2e's slots box). SC1_PROVE=1 runs the proving rental. SC1_DRIVE_DRYRUN=1 prints the plan and exits 0.
+# SC1_BOX=A|B|C|D|E|F|G|H|I|J|K|L|M is required (D = SC1b's census box, E = SC2's serving box, F = SC2b's prefill-graph box, G = SC2g's gpt-oss box, H = SC2c's bulk-KV box, I = SC1g's gpt-oss quality box, J = SC1g's e4b-only diagnostic box, K = SC2d's engagement box, L = SC2e's slots box, M = SC5's same-box head-to-head). SC1_PROVE=1 runs the proving rental. SC1_DRIVE_DRYRUN=1 prints the plan and exits 0.
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [sc1_drive] $*"; }
 for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID SC1_BOX; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set -- run as rent.py --command after a live pre-flight"; exit 78; }
 done
-case "$SC1_BOX" in A|B|C|D|E|F|G|H|I|J|K|L) ;; *) say "refusing: SC1_BOX must be A, B, C, D, E, F, G, H, I, J, K or L (SC1b, SC2, SC2b, SC2g, SC2c, SC1g, SC1g-diag, SC2d, SC2e)"; exit 78;; esac
+case "$SC1_BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M) ;; *) say "refusing: SC1_BOX must be A, B, C, D, E, F, G, H, I, J, K, L or M (SC1b, SC2, SC2b, SC2g, SC2c, SC1g, SC1g-diag, SC2d, SC2e, SC5)"; exit 78;; esac
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 P39="$REPO/bench/p39"; P42="$REPO/bench/p42"; TESTS="$REPO/tests"
 # flat pieces (box sees them in $W); the reducer joins when it exists (staged.sha256 pins it then: "pinned at integration")
@@ -24,6 +24,12 @@ STAGE="$HERE/sc1_run.sh $HERE/sc1_e4b_sched.py $HERE/sc1_prompts.py $HERE/sc1_sa
 SC1B="$REPO/bench/sc1b"; for f in sc1b_census.py sc1b_e4b_census.py sc1b_vllm_census.py sc1b_serve_census.py sc1b_toy.py kernel_classes.json sc1b_box_d.sh; do STAGE="$STAGE $SC1B/$f"; done
 SC2="$REPO/bench/sc2"; for f in sc2_driver.py sc2_prompts.py sc2_reduce.py sc2_box_e.sh sc2_identity.py sc2b_box_f.sh sc2b_reduce.py sc2_trace.py sc2g_box_g.sh sc2g_reduce.py sc1g_box_i.sh sc1g_reduce.py sc1g_k8.py sc1g_gemv_check.py sc1g_attn_check.py sc1g_kl.py sc2c_box_h.sh sc2c_reduce.py sc2c_census.py sc2d_box_k.sh sc2d_reduce.py sc2e_box_l.sh sc2e_reduce.py sc2e_census.py sc2e_basis.py; do STAGE="$STAGE $SC2/$f"; done
 P98="$REPO/bench/p98"; STAGE="$STAGE $P98/p98_bake.py"   # SC2d (box K): P98's Qwen3.6 arena bake, staged flat on every box
+# SC5 (box M, bench/sc5): its scripts, the three locks and the committed windows, flat; P117's box for the decode-shaped
+# quality pass; the reference files when the amendment that registers them has committed them
+SC5="$REPO/bench/sc5"; for f in sc5_box_m.sh sc5_driver.py sc5_quality.py sc5_e4b_quality.py sc5_ref.py sc5_windows.py sc5_reduce.py sc5_record.py sc5_windows_w64.json; do STAGE="$STAGE $SC5/$f"; done
+for f in vllm.lock.txt sglang.lock.txt e4b-wheels.lock; do STAGE="$STAGE $SC5/locks/$f"; done
+STAGE="$STAGE $REPO/bench/p117/p117_box.py"
+for f in sc5_ref.json sc5_ref_chunked.json; do [ -s "$SC5/ref/$f" ] && STAGE="$STAGE $SC5/ref/$f"; done
 HOOK="$P42/hook/usercustomize.py"
 COMP_DIRS=""; for d in vllm sglang llamacpp exl3 lmdeploy sc1g_ref; do [ -d "$HERE/$d" ] && COMP_DIRS="$COMP_DIRS $d"; done
 for f in $STAGE $HOOK; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
@@ -41,6 +47,10 @@ while read -r want name; do
     sc1b_*|kernel_classes.json) src="$SC1B/$name";;
     sc2_*|sc2b_*|sc2g_*|sc1g_*|sc2c_*|sc2d_*|sc2e_*) src="$SC2/$name";;
     p98_bake.py) src="$P98/$name";;
+    sc5_ref.json|sc5_ref_chunked.json) src="$SC5/ref/$name";;
+    sc5_*) src="$SC5/$name";;
+    vllm.lock.txt|sglang.lock.txt|e4b-wheels.lock) src="$SC5/locks/$name";;
+    p117_box.py) src="$REPO/bench/p117/$name";;
     *) src="$P39/$name";;
   esac
   [ -s "$src" ] || { say "refusing: pinned file $name resolves to $src, which is missing"; exit 78; }
@@ -72,7 +82,7 @@ PASS="SC1_BOX=$SC1_BOX SC1_RUN_ID=$RUN_ID SC1_RUN_NONCE=$NONCE SC1_DEADLINE_EPOC
 # this list against every `${SC1_*` sc1_run.sh reads. Only host-limit knobs, the proving-run switches and install flavours
 # travel: a rental is the registered run, and a value off its default marks the box run REHEARSAL.
 for v in SC1_PROVE SC1_PROVE_SGLANG_MODEL SC1_GPU_CLASS SC1_MIN_DISK_GB SC1_MIN_DRIVER SC1_CPU_VENDOR SC1_CALIB_NSEQ SC1_REHEARSAL \
-         SC1_QUIESCE_S SC1_VLLM_WHEEL; do
+         SC1_QUIESCE_S SC1_VLLM_WHEEL SC1_SC5_PHASE; do
   # %q: a value with spaces would otherwise become the remote COMMAND (tp4-b-p46cut-3: rc=127 before the nonce was bound)
   [ -n "${!v:-}" ] && PASS="$PASS $v=$(printf %q "${!v}")"
 done

@@ -88,7 +88,7 @@ def main(argv=None) -> int:
     from transformers import AutoTokenizer
     ds = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1", split="test", revision=a.dataset_revision)
     tok = AutoTokenizer.from_pretrained(a.tokenizer, revision=a.tokenizer_revision)
-    ids = tok(join_text(ds["text"]), return_tensors="pt").input_ids[0].tolist()
+    ids = list(tok(join_text(ds["text"])).input_ids)          # the same ids as P117's return_tensors="pt" path, without torch
     ws = cut(ids, a.n, a.prompt_len, a.steps, a.stride)
     rec = {"windows": ws, "prompt_len": a.prompt_len, "steps": a.steps, "stride": a.stride, "n": a.n,
            "windows_sha256": windows_sha256(ws), "tokenizer": {"repo": a.tokenizer, "revision": a.tokenizer_revision},

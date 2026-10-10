@@ -47,7 +47,7 @@ trap 'rc=$?; [ -e "$W/TP_DONE.$NONCE" ] || { say "exit without finish (rc=$rc)";
 for v in SC1_RUN_ID SC1_DEADLINE_EPOCH SC1_INSTANCE_ID SC1_BOX E4B_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
 case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78;; esac
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char sha"; finish 78; }
-BOX=$SC1_BOX; case "$BOX" in A|B|C|D|E|F|G|H|I|J|K|L) ;; *) say "refusing: SC1_BOX must be A, B, C, D, E, F, G, H, I, J, K or L (SC1b, SC2, SC2b, SC2g, SC2c, SC1g, SC1g-diag, SC2d, SC2e)"; finish 78;; esac
+BOX=$SC1_BOX; case "$BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M) ;; *) say "refusing: SC1_BOX must be A, B, C, D, E, F, G, H, I, J, K, L or M (SC1b, SC2, SC2b, SC2g, SC2c, SC1g, SC1g-diag, SC2d, SC2e, SC5)"; finish 78;; esac
 # ---- registered constants (v3 "Fixture"); E4B_SHA is the launch commit the driver derived from its checkout
 GNF4_SHA=34da93d6fe8d2a401b7001705658ce00b2b18213   # grouped-nf4-gemm v0.34.1 -- the COMMIT the tag points to (`git rev-parse v0.34.1^{commit}`; the tag OBJECT is e7ae8e2e)
 # SC2b (box F) runs TODAY's serving stack: grouped-nf4-gemm v0.38.0 (its capped-PDL default from 0.37.0; nothing in 0.38.0
@@ -56,6 +56,7 @@ case "$BOX" in F) GNF4_SHA=5a887c48acc90207fdd30f2e9b23d21d62102b14;; G|I|J) GNF
 case "$BOX" in H) GNF4_SHA=dc8f94abfd868f149178623f6eb403dc8b892b02;; esac   # H: v0.41.0 as G (SC2c)
 case "$BOX" in K) GNF4_SHA=dc8f94abfd868f149178623f6eb403dc8b892b02;; esac   # K: v0.41.0 as H (SC2d)
 case "$BOX" in L) GNF4_SHA=b4f93f1c62d1e3436ed45bec8ccd608c90433737;; esac   # L: v0.42.0, e4b CI's pin at registration (SC2e)
+case "$BOX" in M) GNF4_SHA=724ccc454f006c1a46836e434e997f31f293747f;; esac   # M: v0.45.0's commit, RECORDED only: box M installs the release WHEEL by sha256 (SC5)
 MID=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
 GPTQ_MID=Qwen/Qwen3-30B-A3B-GPTQ-Int4; GPTQ_REV=9b534e4318b7ebc3c961a839f13eb18b1833f441
 GGUF_REPO=unsloth/Qwen3-30B-A3B-GGUF; GGUF_REV=d5b1d57bd0b504ac62ae6c725904e96ef228dc74
@@ -87,7 +88,7 @@ unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_
 # SC1b: the paged prefill attention route every SC1 box ran (#960 adds the knob; its default flips to flash afterwards);
 # exported like A13's pin, after the scrub, before the tripwire and every arm.
 # SC2b (box F) runs main's defaults, so it exports NEITHER pin (SC2's correction, #1061: box E inherited both).
-if [ "$BOX" = F ] || [ "$BOX" = G ] || [ "$BOX" = H ] || [ "$BOX" = I ] || [ "$BOX" = J ] || [ "$BOX" = K ] || [ "$BOX" = L ]; then   # SC2g (box G), SC2c (box H), SC1g (boxes I, J), SC2d (box K) and SC2e (box L) run main's defaults too
+if [ "$BOX" = F ] || [ "$BOX" = G ] || [ "$BOX" = H ] || [ "$BOX" = I ] || [ "$BOX" = J ] || [ "$BOX" = K ] || [ "$BOX" = L ] || [ "$BOX" = M ]; then   # SC2g (box G), SC2c (box H), SC1g (boxes I, J), SC2d (box K), SC2e (box L) and SC5 (box M) run main's defaults too
   unset E4B_INT4_PREFILL E4B_PAGED_PREFILL_ATTN
 else
 # A13's pin, on its own line (tests/test_sc1_a13.py), for boxes A-E only
@@ -165,7 +166,7 @@ line(){ echo "$*" >> summary.txt; }
 # ---- the python that runs e4b: a venv WITH --system-site-packages (a plain venv sets site.ENABLE_USER_SITE=False and the
 # P42 hook -- usercustomize via PYTHONPATH -- silently never loads; measured 2026-10-01). Box C builds it on python 3.12
 # with torch 2.8 cu128 wheels; boxes A/B inherit the image's torch 2.8 cu12.9.
-case "$BOX" in A|B) BASEPY=python;; C|D|E|F|G|H|I|J|K|L) BASEPY=python3;; esac
+case "$BOX" in A|B) BASEPY=python;; C|D|E|F|G|H|I|J|K|L|M) BASEPY=python3;; esac
 ensure_tools(){ local need=0 t; for t in git cmake curl; do command -v $t >/dev/null 2>&1 || need=1; done
   "$BASEPY" -c "import venv, ensurepip" 2>/dev/null || need=1
   [ "$BOX" = C ] && { command -v python >/dev/null 2>&1 || need=1; }
@@ -180,6 +181,11 @@ pipx(){ local log=$1 secs=$2; shift 2
   perl -e "alarm $secs; exec @ARGV" "$PY" -m pip install -q --no-input "$@" > "$log" 2>&1 && return 0
   say "pip failed ($(tail -1 "$log" | cut -c1-120)) -- one retry in 20 s"; sleep 20
   perl -e "alarm $secs; exec @ARGV" "$PY" -m pip install -q --no-input "$@" >> "$log" 2>&1; }
+# SC5 (box M): the e4b and gnf4 RELEASE WHEELS by sha256 and box M's own tripwire (bench/sc5/sc5_box_m.sh), in place of
+# the git-SHA install and its tripwire below, whose assertions describe the cuts the other boxes registered.
+if [ "$BOX" = M ]; then
+  . $W/sc2_box_e.sh; . $W/sc5_box_m.sh; m_install_e4b || finish 9
+else
 say "install e4b @$E4B_SHA + gnf4 @$GNF4_SHA (venv-e4b --system-site-packages; P58 pins transformers 5.16.1 / bitsandbytes 0.50.1)"
 "$BASEPY" -m venv --system-site-packages $W/venv-e4b > logs/venv_e4b.log 2>&1 || { tail -3 logs/venv_e4b.log; say "VENV FAIL (e4b)"; finish 9; }
 PY=$W/venv-e4b/bin/python
@@ -249,6 +255,7 @@ assert torch.cuda.is_available(), "torch sees no CUDA device in venv-e4b"
 open("/root/sc1/versions.txt", "a").write(f"e4b {e.__version__} @{os.environ['WANT_E4B']}\ngnf4 {md.version('grouped-nf4-gemm')} @{os.environ['WANT_GNF4']}\ntorch(e4b) {torch.__version__} cuda {torch.version.cuda}\ntriton(e4b) {triton.__version__}\ntransformers {transformers.__version__}\nbitsandbytes {md.version('bitsandbytes')}\ncc {torch.cuda.get_device_capability()}\n")
 print("tripwire OK (e4b):", e.__version__, "gnf4", md.version("grouped-nf4-gemm"), "torch", torch.__version__, "K19/K23 defaults auto, K25 0, serve_paged + stop_ids present")
 PYT
+fi
 cat versions.txt | tee -a summary.txt
 # ---- comparator installs for the box, each under its alarm; a failure is an UNSUPPORTED row and the lane continues
 install_vllm(){ say "install vllm (bench/sc1/vllm/install.sh)"; SC1_PIP_LOG=$W/logs/pip_vllm.log bash $W/vllm/install.sh 2700 $W/versions.txt $W/venv-vllm > logs/install_vllm.log 2>&1
@@ -285,7 +292,8 @@ case "$BOX" in
   I) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; . $W/sc1g_box_i.sh; install_vllm; install_llamacpp ;;   # SC1g A5: gpt-oss-20b full-vocab KL -- e4b, vLLM, llama.cpp (SGLang has no A5 arm: UNREAD by registration, not installed)
   J) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; . $W/sc1g_box_i.sh ;;   # SC1g A2: the e4b-only diagnostic box, no comparators (bench/sc2)
   K) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; . $W/sc2d_box_k.sh; install_sc2_client ;;   # SC2d: the bulk-KV default's engagement reads, gpt-oss + Qwen3.6, e4b only (bench/sc2)
-  L) . $W/sc2_box_e.sh; . $W/sc2c_box_h.sh; . $W/sc2e_box_l.sh; install_sc2_client ;;   # SC2e: 16 / 32 / 64 slots, buckets auto against the default list, e4b only (bench/sc2)
+  L) . $W/sc2_box_e.sh; . $W/sc2c_box_h.sh; . $W/sc2e_box_l.sh; install_sc2_client ;;
+  M) m_install_competitors ;;   # SC5: vLLM 0.31.0 and SGLang 0.5.21 from their locks, the SC2 client (box M sourced above; bench/sc5)   # SC2e: 16 / 32 / 64 slots, buckets auto against the default list, e4b only (bench/sc2)
 esac
 # ---- environments (P88, byte for byte) + SC1's explicit route knobs (v3 "Fixture": never inherited)
 FOLDS="E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1"
@@ -593,7 +601,7 @@ reduce(){ if [ -s $W/sc1_reduce.py ]; then say "reduce"; "$PY" $W/sc1_reduce.py 
 # ============================================================================ the PROVING RENTAL (SC1_PROVE=1): no bf16 Qwen3 fetch
 if [ "$PROVE" = 1 ]; then
   echo "PROVE -- the proving rental: pre-flight passed; installs + tripwires above; the e4b paged engine end to end on Granite" | tee -a summary.txt
-  case "$BOX" in A) PROVE_NEEDS="vllm";; B) PROVE_NEEDS="vllm llamacpp exl3";; C) PROVE_NEEDS="vllm exl3 sglang";; D) PROVE_NEEDS="vllm sglang llamacpp nsys";; E) PROVE_NEEDS="vllm sglang llamacpp sc2client";; F) PROVE_NEEDS="sc2client";; G) PROVE_NEEDS="vllm sglang llamacpp sc2client";; H) PROVE_NEEDS="sc2client";; I) PROVE_NEEDS="vllm llamacpp";; J) PROVE_NEEDS="";; K) PROVE_NEEDS="sc2client";; L) PROVE_NEEDS="sc2client";; esac   # = the install dispatch's sets
+  case "$BOX" in A) PROVE_NEEDS="vllm";; B) PROVE_NEEDS="vllm llamacpp exl3";; C) PROVE_NEEDS="vllm exl3 sglang";; D) PROVE_NEEDS="vllm sglang llamacpp nsys";; E) PROVE_NEEDS="vllm sglang llamacpp sc2client";; F) PROVE_NEEDS="sc2client";; G) PROVE_NEEDS="vllm sglang llamacpp sc2client";; H) PROVE_NEEDS="sc2client";; I) PROVE_NEEDS="vllm llamacpp";; J) PROVE_NEEDS="";; K) PROVE_NEEDS="sc2client";; L) PROVE_NEEDS="sc2client";; M) PROVE_NEEDS="vllm sglang sc2client";; esac   # = the install dispatch's sets
   for E in $PROVE_NEEDS; do have $E || { say "PROVE: $E did not install -- NOT PROVED"; rec 23; }; done
   quiesce prove
   if fetch granite "$GR" "$GR_REV" 900 && bake granite "$GR" 1500; then
@@ -629,6 +637,7 @@ if [ "$PROVE" = 1 ]; then
   [ "$BOX" = H ] && prove_h                                                   # SC2c: both knobs engage as registered, identity, a step trace
   [ "$BOX" = K ] && prove_k                                                   # SC2d: box K's flow on Granite, engaged and identical
   [ "$BOX" = L ] && prove_l                                                   # SC2e: every arm on Granite, slots, burst, identity, wide steps
+  [ "$BOX" = M ] && prove_m                                                   # SC5: every install from its lock, every server, the scorers
   [ "$BOX" = E ] && prove_e                                                   # SC2: every server answers the driver, all VALID
   [ "$rc_any" = 0 ] || { say "PROVE: NOT PROVED (rc_any=$rc_any)"; finish 23; }
   echo "PROVED box=$BOX installs=[$PROVE_NEEDS] smokes=[granite_b1 granite_b16]$([ "$BOX" = C ] && echo ' sglang_jit=ran')$([ "$BOX" = B ] && echo " comparators=[${PB_STEPS# }]")$([ "$BOX" = D ] && echo ' census=[toy e4b_granite_b16_graph vllm_b1_node sglang_b1_node llamacpp_b16_graph]')$([ "$BOX" = E ] && echo ' servers=[e4b_granite vllm sglang llamacpp]')$([ "$BOX" = F ] && echo ' sc2b=[routes graph_engaged identity]')$([ "$BOX" = G ] && echo ' servers=[e4b_gptoss vllm sglang llamacpp]')$([ "$BOX" = H ] && echo ' sc2c=[routes bulk_engaged identity step_trace]')$([ "$BOX" = K ] && echo ' sc2d=[prompts arch both_servers engaged determinism identity]')$([ "$BOX" = L ] && echo ' sc2e=[routes slots burst engaged identity wide_steps]')$([ "$BOX" = I ] && echo ' kl_full=[e4b_serve vllm llamacpp_q8] (A5; SGLang UNREAD by registration)')" | tee -a summary.txt
@@ -824,6 +833,6 @@ box_c(){ SCHED_NAME=int4; SCHED_STACK="$SPEEDENV"
   for B in 16 1; do can_run 900 e4bsched_int4_sched_b${B}_r2 && { arm_int4_sched r2 $B; rec $?; }; done
   for B in 16 1; do can_run 900 vllm_gptq_graph_b${B}_r2 && { arm_vllm_gptq r2 $B; rec $?; }; done
   reduce; }
-case "$BOX" in A) box_a;; B) box_b;; C) box_c;; D) box_d;; E) box_e;; F) box_f;; G) box_g;; H) box_h;; I) box_i;; J) box_j;; K) box_k;; L) box_l;; esac
+case "$BOX" in A) box_a;; B) box_b;; C) box_c;; D) box_d;; E) box_e;; F) box_f;; G) box_g;; H) box_h;; I) box_i;; J) box_j;; K) box_k;; L) box_l;; M) case "${SC1_SC5_PHASE:-read}" in ref) box_m_ref;; *) box_m;; esac;; esac
 say "----- summary -----"; cat summary.txt; echo "----- versions -----"; cat versions.txt
 finish "$rc_any"
