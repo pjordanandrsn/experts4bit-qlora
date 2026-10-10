@@ -1,13 +1,21 @@
 # Names as the BOX sees them after staging (/root/sd2). The box runs `sha256sum -c` on this file; sd2_drive.sh and
-# tests/test_sd2.py resolve each name to its source (bench/sd2, bench/sd1, bench/p109, bench/p39) and compare.
-# Pinned 2026-10-10 for Amendment 1 (the CUDA proof sd2-prove-N). Re-pinned for Amendment 1b (the proof's time budget); Amendment 2 (the logit gate).
-# Re-pinned for Amendment 3, part 1 (the read's box and reducer; the proof's paths unchanged).
-45eebdcd5d7c215b33aad97bb8a3bbefb5ea4f3f636a34522268e44e1db5be7c  sd2_run.sh
+# tests/test_sd2.py resolve each name to its source (bench/sd2, bench/sd1, bench/p109, bench/p115, bench/p110,
+# bench/p108, bench/p97, bench/p39) and compare.
+# Pinned 2026-10-10 for Amendment 1 (the CUDA proof sd2-prove-N). Re-pinned for Amendment 1b (the proof's time budget);
+# Amendment 2 (the logit gate); Amendment 3 (the read sd2-5090-N: its stages, the audit, Q's instrument at its bytes).
+64d0ae7e3dfb9e257c74ac83892bb9140b46dd3fd312f7a4d4832eb0a990521a  sd2_run.sh
 53612849cfbb97c1968a766a7ce271cc1a137876c97f36e5635a64a5c5e1dd16  sd2_box.py
 af146ece1f3e3bcfddac6cae74651aa5f6aa0ca907e09b1504c3780c0d0f66a3  sd2_reduce.py
+f08da3f29751c91e05e91415141fcd7207d5c8324d17cdcdcda071d7e8574400  sd2_audit.py
+2b8bae34048b364413f7dd936e27b5d707e906476059662c1389e72f045b9486  audit_read.tsv
 cd3e73aa5e3de7a8eb5824ba9a2973d1d9e1e2b0cd87652a9c7f472d6f5a0b95  sd1_box.py
 c73d6e71d7e2a3eb91a43fc29e265c484e0bf0899cf5884bf79bed26f63d18e6  sd1_eagle3.py
 8e92881e6fdcd848ae3c8147c03d89cadfc5e34c5465fdfb7ca5dea85db7ea66  chat_prompts.json
+583eba25a66cac4cae6bc718cdd046538ca76ae83bb6706d0c35839531321628  expect_w1.json
 b53f94192b4040b6451ceb18f8cd4e3e5629a6e40c4885b40600fcc4205d8248  p109_box.py
+f1500a26404284fbb14cce214c548d73b3889e9db5ef1faf5ef63bf74449b574  p115_quality.py
+02d82d88259c169060f78e47c219e7dfd82d146dd80e0c7c3b0e3acdfca252cf  p110_box.py
+b57dff71cba30d9c649bae05df28f8c5376de9f7ac7ae5759157e57475b83e4b  p108_box.py
+608c1a20136393495ebb482afc58a24880e053a2caab6152fa3eb87183063a31  p97_box.py
 e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
 15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json

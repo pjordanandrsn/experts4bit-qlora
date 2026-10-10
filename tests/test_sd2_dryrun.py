@@ -1,5 +1,5 @@
-"""SD2's proof: the WHOLE box path of bench/sd2/sd2_run.sh, run under bash with the heavy steps stubbed, must reach
-SD2_SUCCESS with no command-not-found and no unexpected exit (SD1's pattern, tests/test_sd1_dryrun.py, after SC5 lost three
+"""SD2's proof and read: the WHOLE box path of bench/sd2/sd2_run.sh in each mode, run under bash with the heavy steps
+stubbed, must reach SD2_SUCCESS with no command-not-found and no unexpected exit (SD1's pattern, tests/test_sd1_dryrun.py, after SC5 lost three
 proofs to harness defects a dry run catches).
 
 The test runs the script's OWN text, relocated from /root/sd2 to a temporary directory and with /proc/meminfo faked.
@@ -32,7 +32,10 @@ SD1 = REPO / "bench" / "sd1"
 RUN = (LANE / "sd2_run.sh").read_text(encoding="utf-8")
 HEAD_SHA = re.search(r"HEAD_SHA256=([0-9a-f]{64})", RUN).group(1)
 HEAD_BYTES = re.search(r"HEAD_BYTES=(\d+)", RUN).group(1)
-E4B_T = re.search(r"^E4B_T=([0-9a-f]{40})", RUN, re.M).group(1)
+E4B_T = re.search(r"^E4B_T_PROVE=([0-9a-f]{40})", RUN, re.M).group(1)
+_READ = re.search(r"^E4B_T_READ=(\S+)", RUN, re.M).group(1)
+E4B_T_READ = _READ if re.fullmatch(r"[0-9a-f]{40}", _READ) else "2" * 40
+RUN_READ = RUN if _READ == E4B_T_READ else RUN.replace("E4B_T_READ=" + _READ, "E4B_T_READ=" + E4B_T_READ)
 GNF4_T = re.search(r"^GNF4_T=([0-9a-f]{40})", RUN, re.M).group(1)
 HARNESS = "1" * 40
 
@@ -53,7 +56,7 @@ case "${1:-}" in
   clone) for a; do last=$a; done; mkdir -p "$last/.git";;
   worktree) for a; do args="$args $a"; done; set -- $args; path=$5; mkdir -p "$path"
             case "$path" in *e4b_H) mkdir -p "$path/bench/common"; echo "# dryrun" > "$path/bench/common/hf_fetch_watchdog.py";; esac;;
-  rev-parse) case "$dir" in *e4b_T) echo ''' + E4B_T + r''';; *gnf4_T) echo ''' + GNF4_T + r''';; *e4b_H) echo "$E4B_SHA";; *) echo 0;; esac;;
+  rev-parse) case "$dir" in *e4b_T) echo "$DRYRUN_E4B_T";; *gnf4_T) echo ''' + GNF4_T + r''';; *e4b_H) echo "$E4B_SHA";; *) echo 0;; esac;;
 esac
 exit 0''',
     "python": r'''echo "python $*" >> "$PWD/dryrun.log"
@@ -81,8 +84,15 @@ case "$script" in
   sd1_box.py) case " $* " in
       *" --chat-prompts "*) for w in C-think C-nothink; do printf '{"rows": []}\n' > "$outdir/prompts_$w.json"; done; echo "SD1_PROMPTS dryrun";;
     esac;;
-  sd2_box.py) case " $* " in *" --prove "*) printf '{"dryrun": true}\n' > "$out"; echo "SD2_PROVE done";; esac;;
-  sd2_reduce.py) printf '{"verdict": "DRYRUN"}\n' > "$out"; echo "SD2_PROVE_VERDICT {\"verdict\": \"DRYRUN\"}";;
+  sd2_box.py) printf '{"dryrun": true}\n' > "$out"
+    case " $* " in *" --prove "*) echo "SD2_PROVE done";; *" --read-v "*) echo "SD2_V done";; *" --read-e "*) echo "SD2_E done";;
+                   *" --read-q "*) echo "SD2_Q done";; esac;;
+  sd2_audit.py) [ -n "$out" ] && printf '{"ok": true}\n' > "$out"; echo "SD2_AUDIT dryrun"; exit "${DRYRUN_AUDIT_RC:-0}";;
+  sd2_reduce.py) case " $* " in
+      *" --gate-v "*) echo "SD2_GATE ${DRYRUN_GATE:-ALL}";;
+      *" --read "*) printf '{"verdict": "DRYRUN"}\n' > "$out"; echo "SD2_READ_VERDICT {\"verdict\": \"DRYRUN\"}";;
+      *) printf '{"verdict": "DRYRUN"}\n' > "$out"; echo "SD2_PROVE_VERDICT {\"verdict\": \"DRYRUN\"}";;
+    esac;;
 esac
 exit 0''',
 }
@@ -103,11 +113,13 @@ def _run(tmp_path, run_text, nonce="a" * 64, deadline="4102444800", extra_env=No
     (tmp_path / "meminfo").write_text("MemTotal:       129000000 kB\n")
     text = run_text.replace("/root/sd2", str(w)).replace("/proc/meminfo", str(tmp_path / "meminfo"))
     assert text != run_text
-    for name in ("sd2_box.py", "sd2_reduce.py", "staged.sha256"):
+    for name in ("sd2_box.py", "sd2_reduce.py", "sd2_audit.py", "audit_read.tsv", "staged.sha256"):
         shutil.copyfile(LANE / name, w / name)
-    for name in ("sd1_box.py", "sd1_eagle3.py", "chat_prompts.json"):
+    for name in ("sd1_box.py", "sd1_eagle3.py", "chat_prompts.json", "expect_w1.json"):
         shutil.copyfile(SD1 / name, w / name)
-    for src in (REPO / "bench" / "p109" / "p109_box.py", REPO / "bench" / "p39" / "k8_bake.py", REPO / "bench" / "p39" / "calib.json"):
+    for rel in ("p109/p109_box.py", "p115/p115_quality.py", "p110/p110_box.py", "p108/p108_box.py", "p97/p97_box.py",
+                "p39/k8_bake.py", "p39/calib.json"):
+        src = REPO / "bench" / rel
         shutil.copyfile(src, w / src.name)
     (w / "sd2_run.sh").write_text(text)
     b = tmp_path / "bin"
@@ -118,7 +130,8 @@ def _run(tmp_path, run_text, nonce="a" * 64, deadline="4102444800", extra_env=No
         p.chmod(p.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     env = {"PATH": f"{b}:{os.environ.get('PATH', '/usr/bin:/bin')}", "HOME": str(tmp_path), "LANG": "C",
            "SD2_RUN_NONCE": nonce, "SD2_RUN_ID": "sd2-dryrun", "SD2_DEADLINE_EPOCH": deadline, "SD2_INSTANCE_ID": "0",
-           "E4B_SHA": HARNESS, **(extra_env or {})}
+           "E4B_SHA": HARNESS, "DRYRUN_E4B_T": E4B_T_READ if (extra_env or {}).get("SD2_MODE") == "read" else E4B_T,
+           **(extra_env or {})}
     out = subprocess.run(["bash", str(w / "sd2_run.sh")], capture_output=True, text=True, env=env, timeout=300, cwd=w)
     return w, out
 
@@ -187,3 +200,86 @@ def test_failing_gpu_tests_stop_the_lane_before_the_fetch(tmp_path):
     assert out.returncode == 24 and "GPU TESTS FAILED" in out.stdout + out.stderr
     assert (w / "gpu_tests.json").is_file()
     assert "--repo Qwen/Qwen3-30B-A3B" not in (w / "dryrun.log").read_text()      # no checkpoint fetch
+
+
+READ = {"SD2_MODE": "read"}
+ARMS = ("OFF-a", "ON1-a", "ON2-a", "ON2-b", "ON1-b", "OFF-b")
+
+
+def _calls(w):
+    calls = (w / "dryrun.log").read_text()
+    tests_log = w / "src" / "e4b_T" / "dryrun.log"
+    return calls + (tests_log.read_text() if tests_log.exists() else "")
+
+
+@needs_bash
+def test_the_read_path_reaches_success_with_every_heavy_step_stubbed(tmp_path):
+    """Amendment 3: the read's audit, stage V, the gate, E's six arms in their registered order, Q, and the verdict."""
+    w, out = _run(tmp_path, RUN_READ, nonce="1" * 64, extra_env=READ)
+    log = out.stdout + out.stderr
+    assert "command not found" not in log, log[-3000:]
+    assert out.returncode == 0, log[-3000:]
+    assert (w / ("SD2_SUCCESS." + "1" * 64)).exists(), log[-3000:]
+    summary = (w / "summary.txt").read_text()
+    for line in ("KNOBS e4b_target=" + E4B_T_READ, "SD2_AUDIT", "v rc=0", "SD2_V done", "SD2_GATE ALL", "q rc=0",
+                 "SD2_READ_VERDICT"):
+        assert line in summary, (line, summary[-2000:])
+    assert "prove rc=" not in summary
+    for arm in ARMS:
+        assert f"e_{arm} rc=0" in summary and (w / f"e_{arm}.json").is_file(), arm
+    calls = _calls(w)
+    order = [calls.index(f"--read-e {arm} ") for arm in ARMS]
+    assert order == sorted(order), "E's arms ran out of the registered palindrome"
+    for step in ("sd2_audit.py --repo ", "sd2_box.py --read-v ", "--prompts-cn ", "sd2_box.py --read-q --windows 48 --prompt 512 --cont 128 ",
+                 "sd2_reduce.py --gate-v ", "sd2_reduce.py --read ", "--expect-e4b " + E4B_T_READ, "-m pytest "):
+        assert step in calls, (step, calls[-2000:])
+    assert calls.index("sd2_audit.py --repo ") < calls.index("hf_fetch_watchdog"), "the audit runs before the fetch"
+
+
+@needs_bash
+def test_a_void_gate_runs_neither_e_nor_q(tmp_path):
+    """V0 fails closed: the gate's VOID skips E and Q, and the reducer still writes the (VOID) verdict."""
+    w, out = _run(tmp_path, RUN_READ, nonce="2" * 64, extra_env={**READ, "DRYRUN_GATE": "VOID"})
+    assert out.returncode == 0, (out.stdout + out.stderr)[-3000:]
+    calls = _calls(w)
+    assert "--read-e " not in calls and "--read-q " not in calls and "sd2_reduce.py --read " in calls
+
+
+@needs_bash
+def test_the_stop_rule_runs_e_and_skips_q(tmp_path):
+    w, out = _run(tmp_path, RUN_READ, nonce="3" * 64, extra_env={**READ, "DRYRUN_GATE": "E_ONLY"})
+    assert out.returncode == 0, (out.stdout + out.stderr)[-3000:]
+    calls = _calls(w)
+    assert all(f"--read-e {arm} " in calls for arm in ARMS) and "--read-q " not in calls
+    assert "stage Q skipped: the stop rule" in (w / "summary.txt").read_text()
+
+
+@needs_bash
+def test_a_failed_audit_stops_the_read_before_the_fetch(tmp_path):
+    w, out = _run(tmp_path, RUN_READ, nonce="4" * 64, extra_env={**READ, "DRYRUN_AUDIT_RC": "31"})
+    assert out.returncode == 31 and "AUDIT FAIL" in out.stdout + out.stderr
+    assert "hf_fetch_watchdog" not in (w / "dryrun.log").read_text()
+
+
+@needs_bash
+def test_the_read_refuses_a_deadline_shorter_than_its_own_guard(tmp_path):
+    """The proof's guard would admit this deadline; the read's 3.5 h does not (rc 17, before any install)."""
+    import time
+    w, out = _run(tmp_path, RUN_READ, nonce="5" * 64, deadline=str(int(time.time()) + 6000), extra_env=READ)
+    assert out.returncode == 17 and "REFUSED: the deadline leaves" in out.stdout + out.stderr
+
+
+@needs_bash
+def test_the_read_refuses_an_unpinned_target(tmp_path):
+    w, out = _run(tmp_path, RUN.replace("E4B_T_READ=" + _READ, "E4B_T_READ=__READ_TARGET__"), nonce="6" * 64,
+                  extra_env=READ)
+    assert out.returncode == 78 and "the read target is not a sha" in out.stdout + out.stderr
+
+
+@needs_bash
+def test_the_dry_run_catches_a_misnamed_function_on_the_read_path(tmp_path):
+    anchor = "stage q $? $W/q.json"
+    assert RUN_READ.count(anchor) == 1
+    w, out = _run(tmp_path, RUN_READ.replace(anchor, "stagex q $? $W/q.json"), nonce="7" * 64, extra_env=READ)
+    assert out.returncode != 0 and not (w / ("SD2_SUCCESS." + "7" * 64)).exists()
+    assert "stagex: command not found" in out.stdout + out.stderr

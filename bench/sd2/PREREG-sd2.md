@@ -554,3 +554,135 @@ condition is PROVED under a rule fixed in advance, so it is registered here, bef
   has re-derived.
 - Amendment 3 then registers the read's harness (stages V, E and Q, the mutants in V0, and the rule above) and pins the
   merged commits. Amendment 1's text calls the read's harness "Amendment 2"; it is now Amendment 3.
+
+## Amendment 3 (2026-10-10): the read `sd2-5090-N` -- its target, its harness and its budget
+
+Registered before the read, after `sd2-prove-3` and the build merges. Amendment 1's text calls this the read's
+"Amendment 2"; it is this one.
+
+**The proof that licensed the merges.** `sd2-prove-3` (**$0.681**, teardown complete) ran Amendment 2's registration
+and read **PROVED** under rule `a2`. The maintainer re-derived it with main's reducer and got the same verdict.
+- The GPU tests: 123 passed, none skipped. The census held, and the capture was bitwise at 2, 3 and 4 rows.
+- **The real build's largest per-row mean |Δ log p|** at k = 1, 2, 3:
+  - R0: 0.0029, 0.0065 and 0.0054;
+  - C0: 0.0265, 0.0331 and 0.0369.
+- **The mutants' maxima:** (a) 2.79, (b) 4.94, (c) 1.18.
+- The draft: 766 of 768. The transition was clean.
+- **Its numbers equal `sd2-prove-2`'s bit for bit, on another host.** The kernels are deterministic across hosts. That
+  shows reproducibility, not out-of-sample evidence about the 0.25 bound, because the rows are the calibration's. So the
+  read's V0 runs on rows outside calibration (below).
+
+The proof's three runs cost $1.387 in all ($0.046 + $0.66 + $0.681).
+
+**The target** (merged main, not the proven `539a2d26`):
+- e4b at `__READ_TARGET__`: main after the five build PRs merged in order at their proven heads (#1553, #1554, #1556,
+  #1558, #1559);
+- grouped-nf4-gemm v0.45.0 `724ccc45`, the model at `ad44e77`, and the head as pinned, all unchanged;
+- the server: the shipped default as in Amendment 1, with `E4B_PAGED_MAX_SEQS=16` and `E4B_INT4_TILE_PROGRAMS=1`, and
+  speculation per stage.
+
+**The package-diff audit** (the maintainer's addition, P129 Amendment 4's pattern). `bench/sd2/audit_read.tsv` lists
+every `experts4bit_qlora` file that differs between `539a2d26` and the target, each with the reason it is off the SD2
+serve path. `sd2_audit.py` refuses a launch (rc 31 on the box, 78 in the driver) on a changed file that is not listed,
+or on a listed file that no longer differs. It runs in the driver before anything is staged, and again on the box's own
+clone, which keeps `git diff --stat` in `audit.json`.
+
+| file | the change | why it is off the SD2 serve path |
+|---|---|---|
+| `__init__.py` | the version, 0.52.0 → 0.53.0 | metadata |
+| `arch/topology.py` | a `fused_qkv_numel` field, counted in `describe_moe` | the server calls `describe_moe` only for `E4B_PAGED_MAX_SEQS=auto`, and the read pins 16. `routed_top_k`, which it does call, is unchanged |
+| `engines/fast.py` | the fused q/k/v training projection on by default in `enable_fast_train` / `disable_fast_train` | training only. The module is imported with the package, but the server calls neither function |
+| `engines/train_qkv_fuse.py` | the fused q/k/v training projection | imported only by the training paths above and by `recipe`'s estimates, none of which the server runs |
+| `recipe.py` | training memory-estimate terms | `serve_recipe` imports only `Footprint`, `FootprintItem`, `QLoRASetup`, `_module_bytes` and `_stack_modules`, all unchanged |
+
+The audit argues; the box re-proves. Stage 0 (the target's GPU tests) and V0 run on the real target, and every stage's
+record lists the package modules its process loaded (`modules_loaded`).
+
+**The harness** is this amendment's merge commit, checked out by SHA beside the target and never installed:
+- `sd2_run.sh` in `SD2_MODE=read`;
+- `sd2_drive.sh`, where the run id names the mode: `sd2-prove-N` is the proof and `sd2-5090-N` the read;
+- `sd2_box.py --read-v` / `--read-e ARM` / `--read-q`, and `sd2_reduce.py --gate-v` / `--read`;
+- `sd2_audit.py` and `audit_read.tsv`;
+- P115 Phase B's `p115_quality.py`, with P110's, P108's and P97's boxes at their registered bytes;
+- SD1's `expect_w1.json`;
+- `staged.sha256` over all sixteen pieces.
+
+**What the read runs, in order.** Each stage is its own process and builds the shipped server from the environment
+(`PagedServeConfig.from_env()` + `build_engine`).
+0. **The audit, then the target's GPU tests** (Amendment 1's suites). A failure stops the lane before the fetch.
+1. **Stage V** (k = 3, graphs on).
+   - **V0,** on rows outside calibration (the maintainer's ruling):
+     - capture bitwise on R1;
+     - the logit gate (rule `a2`) on R1..R3 and C-think C1..C3 at k = 1, 2, 3, 16 positions each;
+     - mutants (a), (b) and (c) on R1 and on C1, 8 positions at k = 3, each of the six above the bound;
+     - the draft on R4..R15 and C4..C15, 576 drafted ids;
+     - the transition, R1 alone and then R2 admitted.
+
+     V0 is written to `v.json` and judged on the box before any timing. **A failure stops the stage**: no V1, no E,
+     no Q, and the read is VOID.
+   - **V1,** on R row 0's live slot at moving positions, with 8 warm-up steps and the median of 64:
+     - the anchor, the T == 1 step's wall including its host read. It is measured twice, before and after the k terms,
+       so the A/A brackets them;
+     - per k, a drafter and spec decoder of its own on the same head weights:
+       - verify(k), by CUDA events around the verify bucket's replay;
+       - post(k), by CUDA events around the post-verify graph (the accept, the length, the last token, and the draft's
+         extend and chain);
+       - full(k), the whole speculative step's wall including its one host read;
+       - loop(k) = full(k) − verify(k) − post(k).
+
+     **c(k) = full(k)**, so S_V(k, w) = τ_SD1(k, w) × anchor / full(k), where the anchor is the A/A's mean. The PREREG's
+     "by CUDA events" is kept for the device terms. The anchor and the whole step are walls, because each includes the
+     host read that a real step pays.
+2. **The gate** (`sd2_reduce.py --gate-v`):
+   - VOID: V0 failed or V1 is missing. Stop.
+   - E_ONLY: VERIFY_COST_REFUTES without V_NOISY. This is the stop rule: E runs and Q is skipped.
+   - ALL otherwise.
+3. **Stage E,** as registered: OFF-a, ON1-a, ON2-a, ON2-b, ON1-b, OFF-b, each a fresh process. For each workload, all 16
+   rows run one request at a time; one warm pass at SHORT, then three rounds of SHORT and LONG. Decode tok/s is P109's
+   slope.
+   - **The identity tokens are the timed LONG passes' own.** These are the same greedy streams, and whether all three
+     rounds agree is recorded. This replaces the separate untimed pass and saves one LONG pass per workload.
+   - **Engagement,** per ON arm and workload, from the census and the bucket counters:
+     - every verify bucket replayed, never eager;
+     - no post-verify step eager and no batched drop;
+     - T == 1 steps no more than the end-of-budget drops.
+4. **Stage Q,** as registered, built eager with spec off:
+   - P115 Phase B's `measure_phase` at its bytes: R, rep, chunk and mutant_scale, wikitext-2 and c4val1, **48 windows
+     each**, 512 + 128, one window a pass;
+   - then **ON1 and ON2,** scored against R's saved log-probs on the same windows and positions. Each window gets a
+     fresh runner of P110's construction (padded eager buckets, device grouping) with k alias slots. It prefills the
+     prompt, then runs teacher-forced verify steps through the runner's own `_spec_verify`, fed the true tokens, every
+     row accepted, the length moving k + 1 a step.
+     - **Every step feeds k + 1 rows.** The last step pads past the window's end with its last token and discards those
+       rows, which are causal after every kept row. So every scored position after the prompt is a (k + 1)-row verify.
+     - **A CPU test checks the construction first** (the maintainer's condition): on a causal toy target whose
+       arithmetic is row-count independent, the pass equals a T == 1 teacher-forced pass, and its two mutants (rows
+       reading one short; steps fed one token late) do not.
+   - **The w16 draw** (reported): R at 16 windows a pass.
+5. **The verdict** (`sd2_reduce.py --read`). The registered rule, unchanged, first that applies: VOID,
+   VERIFY_COST_REFUTES (the V_NOISY flag, the conflict clause), NOISY, QUALITY_FAIL, FASTER, NOT_FASTER.
+   - It is self-tested on every verdict and every VOID item.
+   - Q's statistics are P115's (a test pins them).
+   - τ_SD1 and SD1's modelled S are `sd1-5090-2`'s receipt (a test pins them).
+   - VOID also covers another commit, revision or head digest in any stage's record.
+
+**The budget** (the maintainer's ruling, after the receipts below corrected an 18-minute estimate for Q):
+
+| step | slow host | source |
+|---|---|---|
+| installs, clones, the audit, tripwire, self-tests | 10 min | Amendment 1b |
+| the GPU tests | 5 min | about 1 min on `sd2-prove-3` |
+| the checkpoint and the head | 30 min | `p127-prove-3`'s 28-minute fetch |
+| the bake and the prompts | 4 min | |
+| stage V | 10 min | |
+| stage E, six arms | 30 min | `p127-5090-1`: a 31 s load, 4.4 ms a token at W1; about 38k tokens an arm |
+| stage Q | about 100 min | one eager window-pass is 12.6 s (`p115d-5090-1`: 147.5 s for 12 windows; `p121-5090-1`: 151.2 s). Four OFF arms × 96 windows is 81 min; ON1 + ON2 add about 17 |
+
+- **The guard of 3.5 h** (12600 s) holds every check on that host. `test_the_reads_step_budget_fits_its_guard` walks
+  it, and Q still starts with about 6 min to spare.
+- **The time-left checks:**
+  - `NEED_V` 900 s, `NEED_E` 600 s an arm, `NEED_Q` 6300 s;
+  - each fits P109's per-check rule under the read's own guard (`test_every_time_left_check_fits_its_own_guard`).
+- **The cost:** a ceiling of 3.5 h × $0.85 + 62 GB × $0.011 = **$3.66**, about $3.0 expected. The read was registered at
+  1.75 h and about $2.20. Q at one window a pass is what grew; its sample of 48 windows per text is kept.
+- **The launch** waits on the maintainer's ACK and a relay on #1313.
