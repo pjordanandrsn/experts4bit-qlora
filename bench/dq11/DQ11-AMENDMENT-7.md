@@ -71,8 +71,33 @@ certify 5090/cu130 kernels, speed, capacity or shipping.
 ## Remaining budget and unchanged decisions
 
 Aggregate actual spend is $0.459 of the original $2.800 ceiling, leaving
-**$2.341**. Preserve the $1.100 transport reservation: two-hour runtime plus
-320 GB storage must cost at most **$0.6205/hour**. Retain the two-hour guard,
+**$2.341**. Replace the previous 100 GB/$1.100 transport reservation with the
+exact sealed input bytes, a 1.5× margin and the registered $0.011/GB cap:
+
+| Input | Exact bytes | Evidence |
+| --- | ---: | --- |
+| Full registered model, all nine files | 14,485,813,893 | `model_files.json` |
+| All 100 cu130 wheels | 2,954,832,429 | Actual cached file sizes; every SHA-256 matches `wheels.json` |
+| Canonical tokens | 554,866 | `locked_inputs.json`, verified canonical asset |
+| Canonical initializer | 167,816,528 | `locked_inputs.json`, verified canonical asset |
+| Total | **17,609,017,716** | Sum of the four exact inputs |
+
+The per-wheel byte/hash receipt is
+`adertha://experts4bit-qlora%231083/reviews/dq11-sdpa-100-wheel-bytes.json`,
+SHA-256 `9b911fb101a0a91ec52205d116dbbbbd0f1d955cc337710647691595578d75e3`;
+an independent bus readback matches. It records the exact 100 science-lock
+filenames, actual file sizes and verified hashes.
+
+Use decimal GB (1,000,000,000 bytes):
+17,609,017,716 × 1.5 / 1,000,000,000 = 26.413526574 GB.
+At $0.011/GB this is $0.290548792314; round the reservation **up to $0.291**.
+The two-hour runtime plus 320 GB storage must therefore cost at most
+($2.341 − $0.291) / 2 = **$1.025/hour** combined. The draw-4b provider receipt
+recorded 16.8 GB downloaded and $0.131 at $0.0078/GB; that observation is
+context, not the reservation basis. The new margin is prospective and does
+not change either historical receipts or the aggregate ceiling.
+
+Retain the two-hour guard,
 300-second receipt/teardown reserve, normal 32 GB RTX 5090, driver at least
 580, excluded machine 45511, secure provider and exact machine/offer pins.
 Require a fresh all-100-URL and actual CPU policy gate at merged source before
