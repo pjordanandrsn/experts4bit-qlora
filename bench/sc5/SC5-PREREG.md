@@ -6,6 +6,8 @@
 > - **The sequence:** the proof (`SC1_BOX=M SC1_PROVE=1`), then the reference (`SC1_SC5_PHASE=ref`, once), then an
 >   amendment that commits the reference under `bench/sc5/ref/` and sets its sha256 in `sc5_box_m.sh`
 >   (`SC5_REF_SHA256`), then the reading (`SC1_BOX=M`). The reading never launches before that amendment merges.
+> - **Done so far:** the proof (sc5-prove-5, PROVED). The reference (sc5-ref-1) is committed by the reference amendment
+>   below.
 > - **e4b's out-of-box serving (pip install, no environment) is NF4, and it is not measured here.** The e4b arm is the
 >   documented int4 serving configuration below, and every result says so in one plain line.
 
@@ -41,9 +43,13 @@ Every cell is reported, including every cell a competitor wins.
 **The primary rows** (decided 2026-10-09):
 - vLLM and SGLang on the one shared official checkpoint, `Qwen/Qwen3-30B-A3B-GPTQ-Int4` @ `9b534e43`, the 4-bit format
   SC2 served on both;
-- e4b at its documented int4 serving configuration (corrected 2026-10-10: at 0.52.0 `E4B_SERVE_EXP_INT4`,
-  `E4B_SERVE_ATTN_INT4` and `E4B_PAGED_FUSE_QKV` all default off, so "its int4 defaults" named no configuration;
-  `serve_paged.py:265-266, :409`).
+- e4b at its documented int4 serving configuration (corrected 2026-10-10: at 0.52.0 `E4B_SERVE_EXP_INT4` and
+  `E4B_SERVE_ATTN_INT4` default off, so "its int4 defaults" named no configuration; `serve_paged.py:265-266`).
+  **Erratum (the reference amendment):** the same correction also listed `E4B_PAGED_FUSE_QKV` as off by default. It is
+  not off on this model. Left unset, the q|k|v fuse and the three folds resolve to `auto` on `qwen3_moe`
+  (`FUSION_DEFAULT_FAMILIES`, `serve_paged.py:149`; `resolve_fusion_modes`, :326). The `fuse_qkv: bool = False` at :409
+  is the dataclass field, not the served default. The arm's explicit `1`s therefore change one thing: a fold that cannot
+  apply refuses instead of being skipped. The arm, its environment and every rule are unchanged.
 
 **A framework's native-best row** is added only where that framework serves an AWQ or compressed-tensors W4A16
 checkpoint of the same base faster. It is reported apart and says so, with the checkpoint's repo and revision named at
@@ -206,6 +212,27 @@ the launcher's default download ceiling ($0.011/GB). Each is a single run under 
 
 The lane ceiling is $10.84; the expected spend is $6–8, as #1478 estimated. The deadline drops the second draw's matched
 blocks first (they run last).
+
+## The reference amendment (2026-10-10): the bf16 reference, committed
+
+sc5-ref-1 computed the reference once, as registered:
+- the run: `SC1_SC5_PHASE=ref` from main `d7ba80da` on one RTX 5090 (machine 13828); rc 0, $0.367;
+- the receipt: committed in the lane's private receipt store.
+
+Each pass covers the committed 64 windows (sha256 `5f6e00d8`), each with 512 prompt tokens and 128 scored positions,
+8,192 positions in all, every one finite. The stack was `Qwen/Qwen3-30B-A3B` @ `ad44e777`, torch 2.8.0+cu128 and
+transformers 5.16.1.
+
+| file | order | sha256 |
+|---|---|---|
+| `bench/sc5/ref/sc5_ref.json` | full forward (the reference) | `783e1443bd05e09cec0eb28de99c739977bef19f84b8c01eca963270181a45a3` |
+| `bench/sc5/ref/sc5_ref_chunked.json` | chunked 256 (the ordering floor) | `6f7626454e595f741f902772de68d8c0da74c5ad0904ac6a4039a56c9bdce924` |
+
+The reference's sha256 is registered as `SC5_REF_SHA256` in `sc5_box_m.sh`. Each draw:
+- verifies the reference against `SC5_REF_SHA256` before any comparison;
+- receives both files through the staged pin (`bench/sc1/staged.sha256`).
+
+No reference number is read here; the reading compares against it.
 
 ## Box log (harness changes after registration)
 
