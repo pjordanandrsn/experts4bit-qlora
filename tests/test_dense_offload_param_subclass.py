@@ -7,10 +7,12 @@ re-wrapped the moved tensor in ``torch.nn.Parameter``, which refuses a subclass 
 raised at ``enable_dense_offload``. ``_placed_param`` stores such a subclass as ``.to()`` returned it, with its quantization
 state; a plain ``Parameter`` is re-wrapped as before, bit for bit.
 
-- CPU (CI): the helper on a plain parameter (re-wrapped, values and ``requires_grad`` kept) and on a ``Params4bit`` (stored
-  as returned, quantization state intact).
-- CUDA: ``enable_dense_offload`` onto CUDA of a model whose small 4-bit projections sit on the CPU, packed already and
-  quantizing on the move. The forward is bit for bit the same model moved with ``Module.to``.
+- CPU (CI): the branch itself, reached without a GPU by offloading onto ``cpu:0`` (``torch.device("cpu")`` is not
+  ``torch.device("cpu", 0)``, so a CPU tensor counts as elsewhere): a model whose small 4-bit projections are packed
+  already, and one that quantizes on the move. Before the fix this raised; now the projections are ``Params4bit`` with
+  their quantization state and the forward is bit for bit the same model moved with ``Module.to``. Also the helper on a
+  plain parameter (re-wrapped, values and ``requires_grad`` kept) and on a ``Params4bit`` (stored as returned).
+- CUDA: the same onto CUDA from the CPU, the way a model staged on the host reaches it.
 """
 from __future__ import annotations
 
@@ -56,9 +58,9 @@ def test_a_params4bit_is_stored_as_returned_with_its_quant_state():
     assert p.quant_state is t.quant_state and p.requires_grad is False and p.bnb_quantized
 
 
-# --- CUDA: the branch itself ----------------------------------------------------------------------------------------------
+# --- the branch itself ----------------------------------------------------------------------------------------------------
 
-needs_cuda = pytest.mark.skipif(not torch.cuda.is_available(), reason="the kept-small branch moves CPU tensors to CUDA")
+needs_cuda = pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
 
 
 class Block(nn.Module):
@@ -106,25 +108,27 @@ def _clean_class_state():
     _DenseOffload._resident.clear()
 
 
-@needs_cuda
+@pytest.mark.parametrize("device", [
+    "cpu:0", pytest.param("cuda", marks=needs_cuda)], ids=["cpu-to-cpu0", "cpu-to-cuda"])
 @pytest.mark.parametrize("packed", [True, False], ids=["packed-on-cpu", "quantized-on-the-move"])
-def test_small_4bit_projections_are_placed_and_compute_as_module_to(packed):
-    ref = _toy(packed).to("cuda")
+def test_small_4bit_projections_are_placed_and_compute_as_module_to(packed, device):
+    ref = _toy(packed).to(device)
     m = _toy(packed)
     sizes = [lin.weight.numel() * lin.weight.element_size() for lin in m.modules() if isinstance(lin, bnb.nn.Linear4bit)]
     assert sizes and max(sizes) < do.MIN_BYTES                     # every projection takes the kept-small branch
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        enable_dense_offload(m, "cuda", pin=False, prefetch=False)
+        enable_dense_offload(m, device, pin=False, prefetch=False)
+    dev_type = torch.device(device).type
     for lin in (mod for mod in m.modules() if isinstance(mod, bnb.nn.Linear4bit)):
         w = lin.weight
-        assert isinstance(w, bnb.nn.Params4bit) and w.is_cuda and w.bnb_quantized
-        assert w.quant_state.absmax.is_cuda and not w.requires_grad
+        assert isinstance(w, bnb.nn.Params4bit) and w.device.type == dev_type and w.bnb_quantized
+        assert w.quant_state.absmax.device.type == dev_type and not w.requires_grad
     for blk_m, blk_r in zip(m.layers, ref.layers):
-        assert type(blk_m.norm) is nn.Parameter and blk_m.norm.is_cuda and not blk_m.norm.requires_grad
+        assert type(blk_m.norm) is nn.Parameter and blk_m.norm.device.type == dev_type and not blk_m.norm.requires_grad
         assert torch.equal(blk_m.norm, blk_r.norm)
         for name in ("up", "down"):
             assert torch.equal(getattr(blk_m, name).weight, getattr(blk_r, name).weight)
-    x = torch.randn(5, 64, dtype=torch.bfloat16, device="cuda")
+    x = torch.randn(5, 64, dtype=torch.bfloat16, device=device)
     with torch.no_grad():
         assert torch.equal(m(x), ref(x))
