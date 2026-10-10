@@ -17,7 +17,13 @@ sha256sum -c inputs.sha256 > logs/input-tripwire.log 2>&1 || finish 9
 [ -n "${E4B_SHA:-}" ] && [ -n "${TC1_DEADLINE_EPOCH:-}" ] || finish 78
 case "$TC1_DEADLINE_EPOCH" in *[!0-9]*|"") finish 78;; esac
 export E4B_SHA TC1_DEADLINE_EPOCH
-[ "$((TC1_DEADLINE_EPOCH - $(date +%s) - 300))" -gt 0 ] || { say 'VOID: deadline reserve before probes'; finish 11; }
+git_cap=$((TC1_DEADLINE_EPOCH - $(date +%s) - 300))
+[ "$git_cap" -gt 0 ] || { say 'VOID: deadline reserve before probes'; finish 11; }
+[ "$git_cap" -le 240 ] || git_cap=240
+perl -e 'alarm shift; exec @ARGV' "$git_cap" bash dq11_require_git.sh > logs/git-prerequisite.log 2>&1 || {
+  say 'VOID: git prerequisite; no wheel/model fetch'
+  finish 20
+}
 link=$(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits)
 case "$link" in "NVIDIA GeForce RTX 5090, "3[0-3][0-9][0-9][0-9]) ;; *) say "VOID: unregistered card/VRAM $link"; finish 19;; esac
 unset PYTORCH_CUDA_ALLOC_CONF PYTORCH_ALLOC_CONF

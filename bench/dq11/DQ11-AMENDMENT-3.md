@@ -32,6 +32,15 @@ Every fetch refusal identifies its URL and HTTP status (or UNKNOWN for a
 transport failure). Full downloads retain the same SHA-256 verification before
 installation and source-authority construction.
 
+The base devel image also lacks Git, which the pinned VCS source installation
+requires. The box runner now checks for Git before any wheel/model fetch and
+calls the sealed `dq11_require_git.sh` when needed: apt update and installation
+each have a 120-second timeout, additionally capped by the runner's remaining
+deadline reserve. A missing installer, failed/timed-out install or still-missing
+Git exits with the distinct refusal code 20. No host-side manual provisioning
+substitutes for this step. Mandatory CPU fixtures cover a failed installation
+before bootstrap and an installer that reports success without supplying Git.
+
 ## Mandatory launch-host gate
 
 `dq11_launch.py` is the required pre-rental controller. It verifies clean merged

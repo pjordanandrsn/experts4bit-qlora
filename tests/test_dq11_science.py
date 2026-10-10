@@ -495,6 +495,7 @@ def box_fixture(tmp_path, monkeypatch, failure):
     work, commands = tmp_path / "work", tmp_path / "bin"
     work.mkdir()
     commands.mkdir()
+    shutil.copy(LANE / "dq11_require_git.sh", work)
     for name in ("adapter_init.safetensors", "tokens.json"):
         (work / name).write_bytes(b"fixture payload")
     (work / "science.sha256").write_text(sha(b"fixture payload") + "  tokens.json\n")
@@ -511,6 +512,8 @@ if name=='sha256sum':
 elif name=='nvidia-smi':print('NVIDIA GeForce RTX 5090, 32607')
 elif name=='df':print('Filesystem 1024-blocks Used Available Capacity Mounted on\\nfixture 999999999 0 999999999 0% /')
 elif name=='perl':os.execvp(args[3],args[3:])
+elif name=='timeout':os.execvp(args[1],args[1:])
+elif name=='apt-get':sys.exit(5)
 elif args and args[0]=='dq3_vram_probe.py':sys.exit(3 if fail=='vram' else 0)
 elif args and args[0]=='dq3_egress_probe.py':sys.exit(4 if fail=='egress' else 0)
 elif args[:2]==['-m','venv']:Path(args[2]+'/bin').mkdir(parents=True)
@@ -523,11 +526,16 @@ elif args and args[0]=='dq11_reduce.py':
  print(json.dumps({'fixture':True,'scientific_evidence':False}))
 """
     )
-    for name in ("sha256sum", "nvidia-smi", "df", "python3", "python3.11", "python", "perl"):
+    for name in ("sha256sum", "nvidia-smi", "df", "python3", "python3.11", "python", "perl", "timeout", "apt-get"):
         p = commands / name
         p.write_text(program)
         p.chmod(0o755)
-    monkeypatch.setenv("PATH", str(commands) + os.pathsep + os.environ["PATH"])
+    if failure == "git":
+        for name in ("bash", "date", "mkdir", "mv", "tee", "tail", "awk", "cat"):
+            (commands / name).symlink_to(shutil.which(name))
+        monkeypatch.setenv("PATH", str(commands))
+    else:
+        monkeypatch.setenv("PATH", str(commands) + os.pathsep + os.environ["PATH"])
     env = dict(
         os.environ,
         FIXTURE_FAIL=failure,
@@ -543,7 +551,8 @@ elif args and args[0]=='dq11_reduce.py':
 
 
 @pytest.mark.parametrize(
-    "failure,rc", [("vram", 18), ("egress", 14), ("proof", 11), ("initial", 12), ("deadline", 11), ("none", 0)]
+    "failure,rc",
+    [("git", 20), ("vram", 18), ("egress", 14), ("proof", 11), ("initial", 12), ("deadline", 11), ("none", 0)],
 )
 def test_actual_box_shell_phase_order_refusals_and_nonce_markers(tmp_path, monkeypatch, failure, rc):
     result, work, calls = box_fixture(tmp_path, monkeypatch, failure)
@@ -553,10 +562,45 @@ def test_actual_box_shell_phase_order_refusals_and_nonce_markers(tmp_path, monke
     assert (work / "TC1_SUCCESS.fixture-science").exists() == (rc == 0)
     if rc:
         assert "--kind read" not in calls
+        if failure == "git":
+            assert "apt-get update" in calls
+            assert "dq3_vram_probe" not in calls and "dq3_egress_probe" not in calls
+            assert "dq11_bootstrap" not in calls and "dq11_prepare" not in calls
     else:
         assert sum(line.startswith("python dq11_arm.py --kind read") for line in calls.splitlines()) == 6
         assert calls.index("--initial-only") < calls.index("--kind read")
         assert "PROVISIONAL" in result.stdout
+
+
+@pytest.mark.parametrize("installer", ["fails", "false_success", "supplies_git"])
+def test_git_tool_step_is_bounded_and_checks_actual_availability(tmp_path, installer):
+    commands = tmp_path / "bin"
+    commands.mkdir()
+    (commands / "timeout").write_text('#!/bin/bash\necho "$*" >> "$FIXTURE_CALLS"\nshift\nexec "$@"\n')
+    (commands / "env").symlink_to(shutil.which("env"))
+    (commands / "apt-get").write_text(
+        f"#!{sys.executable}\n"
+        "import os,sys\nfrom pathlib import Path\n"
+        "if sys.argv[1]=='update':sys.exit(0)\n"
+        "if os.environ['FIXTURE_INSTALLER']=='fails':sys.exit(7)\n"
+        "if os.environ['FIXTURE_INSTALLER']=='supplies_git':\n"
+        " p=Path(os.environ['PATH'])/'git';p.write_text('#!/bin/sh\\nexit 0\\n');p.chmod(0o755)\n"
+    )
+    for name in ("timeout", "apt-get"):
+        (commands / name).chmod(0o755)
+    calls = tmp_path / "calls"
+    result = subprocess.run(
+        [shutil.which("bash"), str(LANE / "dq11_require_git.sh")],
+        env=dict(os.environ, PATH=str(commands), FIXTURE_INSTALLER=installer, FIXTURE_CALLS=str(calls)),
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == (0 if installer == "supplies_git" else 20)
+    assert calls.read_text().splitlines() == [
+        "120 apt-get update",
+        "120 env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git",
+    ]
 
 
 def test_actual_controller_refuses_dirty_unreviewed_source_before_transport(tmp_path):
