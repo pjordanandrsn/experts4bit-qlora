@@ -34,6 +34,14 @@ the outputs are in [`results-2026-10-10/`](results-2026-10-10/).
 
 By the rule as registered, the verdict is INCONCLUSIVE. Its named next experiment is a 235B-slice trace.
 
+## Decision: training-side expert residency is not worth building now
+
+The registered verdict stays INCONCLUSIVE; this is a separate decision, not a relabel. Every number above was
+re-derived independently from the trace. The 235B-slice trace is **not** run, for two reasons:
+- The frozen metric's own ceiling is 1.09x the null on 30B, which has the same 128-expert top-8 routing as 235B. So no
+  frozen-set residency policy can buy more than about 9% over random at the 1/8 budget, and LFU is already there.
+- A 4-layer slice would not represent depth anyway.
+
 ## What the rule could not see (reporting; it does not change the verdict)
 
 1. **Belady is not this metric's ceiling.** Belady is optimal for the live cache over the whole sequence, not for a
@@ -69,6 +77,22 @@ By the rule as registered, the verdict is INCONCLUSIVE. Its named next experimen
    - At the observed touch rate, a tier that staged only the routed rows would move about 35% fewer bytes than
      whole-layer staging, before any residency (1 - 82.9/128).
    - That is a separate lever from caching. It is not measured here and carries no timing.
+
+## Lessons for the next registered bar
+
+- **Register the metric's own oracle ceiling before the bar,** not a ceiling borrowed from a related metric. Belady
+  bounds the live cache, not a set frozen at a step boundary.
+- **Register each clause's value on the null before the bar.** The step-level Jaccard clause reads 1.0 on the null, so
+  it could never discriminate.
+
+## The lever that survives: routed-only staging (an untimed candidate)
+
+A training micro-batch touches about 82.9 of 128 experts per (micro-batch, layer). A staging path that moved only the
+routed experts would cut about 35% of host-to-device expert bytes, independent of any residency. It is a stronger
+lever than residency, because the 235B training step is link-bound.
+- It is **hypothetical**: nothing here measures or times it, and `OFFLOAD_EXPERTS` stages whole layer stacks today.
+- It joins the transfer-side levers already on the model-family ladder.
+- Nothing is built before that ladder's escalation gate.
 
 ## Scope
 
