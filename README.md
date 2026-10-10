@@ -118,16 +118,13 @@ The offload row uses a different training setup.
 
 </details>
 
-## New in 0.52.0
+## New in 0.53.0
 
-- **Faster int4 decode by default with grouped-nf4-gemm 0.45.0.** On one RTX 5090 the captured 64-row decode step of
-  Qwen3-30B-A3B int4 is 15.5 % faster with the tile table over 4 programs, every token identical
-  (`E4B_INT4_TILE_PROGRAMS=1` turns it off). The T == 1 decode skips five kinds of launch, bitwise the same output.
-- **Paged serving reads more checkpoints:** local expert-int4 directories and Qwen3.5's native composite text checkpoints.
-- **The training estimate prices the loss as measured:** 12 bytes per logit, and the chunked LM loss where the run
-  chunks it. `estimate_env()` reports the switches it reads.
-- **Opt-in:** `E4B_TRAIN_FUSE_QKV=1` fuses training attention's q/k/v projection; it failed P129's step-0 quality bar, so
-  it is off by default ([CHANGELOG](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/CHANGELOG.md)).
+- **Faster Qwen3-MoE QLoRA training by default.** `enable_fast_train` fuses each attention layer's q, k and v into one
+  NF4 + LoRA projection. On RTX 5090 a training step took 0.87–0.91 of the time on two hosts, with held-out loss within
+  0.002. `E4B_TRAIN_FUSE_QKV=0` keeps the three projections.
+- **The training estimate prices the grouped_nf4 MoE backward,** so estimates rise for grouped_nf4 callers.
+- **Streamed dense adapters run on CPU** for inference; they no longer try to create a CUDA prefetch stream.
 
 ## Check the fit
 
