@@ -1,0 +1,443 @@
+{
+ "schema": "p130-fetch-gate/1",
+ "generated_at": 1791642002,
+ "e4b_sha": "7b451ab98bad68cb5b333a80528220cf09cddcf6",
+ "user_agent": "p130-fetch-gate/1",
+ "clients": {
+  "python": "3.14.8",
+  "huggingface_hub": "1.33.0",
+  "git": "git version 2.54.0 (Apple Git-157)",
+  "pip": "pip 26.2.1"
+ },
+ "refusals": [],
+ "model": {
+  "repo": "Qwen/Qwen3-30B-A3B",
+  "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+  "files": 23,
+  "bytes": 61084157680,
+  "listing": [
+   {
+    "file": ".gitattributes",
+    "size": 1570,
+    "blob_id": "52373fe24473b1aa44333d318f578ae6bf04b49b",
+    "lfs_sha256": null
+   },
+   {
+    "file": "LICENSE",
+    "size": 11343,
+    "blob_id": "6634c8cc3133b3848ec74b9f275acaaa1ea618ab",
+    "lfs_sha256": null
+   },
+   {
+    "file": "README.md",
+    "size": 16798,
+    "blob_id": "244f89a345bb18c4ddd4bd52f1cc3cda5a467270",
+    "lfs_sha256": null
+   },
+   {
+    "file": "config.json",
+    "size": 963,
+    "blob_id": "2703739b9cfc422a3a0a6c932140db18533a8d1a",
+    "lfs_sha256": null
+   },
+   {
+    "file": "generation_config.json",
+    "size": 239,
+    "blob_id": "20a8a9156fc8c3f25295ca067f61fdf120d517c5",
+    "lfs_sha256": null
+   },
+   {
+    "file": "merges.txt",
+    "size": 1671853,
+    "blob_id": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7",
+    "lfs_sha256": null
+   },
+   {
+    "file": "model-00001-of-00016.safetensors",
+    "size": 3999417504,
+    "blob_id": "88aa84ec794b99780b6259b584494a400321ee3b",
+    "lfs_sha256": "454e77b346a61bfb201d54df60e15158838cf930617ee135113556204f2802b5"
+   },
+   {
+    "file": "model-00002-of-00016.safetensors",
+    "size": 3999974192,
+    "blob_id": "06769fbc625fb94f736937d84b1327dbc4d4c7ac",
+    "lfs_sha256": "47f015d6e5bb1782a834d75c06113c5e8c77ddca1cb7daf89686a4ec0deda19e"
+   },
+   {
+    "file": "model-00003-of-00016.safetensors",
+    "size": 3997360832,
+    "blob_id": "89a707ff0b631ead55385715aa9557ce4aa51a5c",
+    "lfs_sha256": "ac0bf5990f2da995c1e8b77a3149dee71900b4fe1b8a614231dea9647193d96b"
+   },
+   {
+    "file": "model-00004-of-00016.safetensors",
+    "size": 3999975056,
+    "blob_id": "356ea26e50b1a7ba792326d98cf4d7e011f67d65",
+    "lfs_sha256": "89b01fd34a683c70fdb7f22c2e7090538d65063335ba0db46f3654642b17d1e5"
+   },
+   {
+    "file": "model-00005-of-00016.safetensors",
+    "size": 3999975400,
+    "blob_id": "16ee319ca5f35aa0fc32bdfb302f40d6c9f33004",
+    "lfs_sha256": "9849eb3584d928e35bf5956ccfd91b64207467e1fad8304aae68dc4d92d6d6d9"
+   },
+   {
+    "file": "model-00006-of-00016.safetensors",
+    "size": 3999975400,
+    "blob_id": "4235d55ad793a5a89b214597d968235e8c2235d2",
+    "lfs_sha256": "f7a0f1525557d740158fb692986ad43506e1b5901e7406ae65808c6457bc53ad"
+   },
+   {
+    "file": "model-00007-of-00016.safetensors",
+    "size": 3999975472,
+    "blob_id": "2e985019212322b5566a9661dda042a711645030",
+    "lfs_sha256": "920702a50f27a009e5f676da3b02978dbd794f6ad7854f301d709136154c1a84"
+   },
+   {
+    "file": "model-00008-of-00016.safetensors",
+    "size": 3997362064,
+    "blob_id": "d328ec9ace73b15a89f9feb87d5c8007048f9e9c",
+    "lfs_sha256": "a85bf0cc8a8047c116172d4c08cf4792eb59d4375032708ba3e1a7ffca0f708a"
+   },
+   {
+    "file": "model-00009-of-00016.safetensors",
+    "size": 3999975408,
+    "blob_id": "cc54b787023cbc71eff8217310adf8ef0383cffb",
+    "lfs_sha256": "25cd8aaed86b8e17685efb152912f92448ea3fffb1bdc247f257f04d05907604"
+   },
+   {
+    "file": "model-00010-of-00016.safetensors",
+    "size": 3999975400,
+    "blob_id": "9191a813914fff68559de5c197659f9c0a4a774f",
+    "lfs_sha256": "7c3307ee214797c4bc61c0994f81d690e768150df5f14d18edf84e53ba4810dc"
+   },
+   {
+    "file": "model-00011-of-00016.safetensors",
+    "size": 3999975408,
+    "blob_id": "4fb04ba78a1b8262a860d8cf163768dce93e2e56",
+    "lfs_sha256": "c658cad2842d36fa4c7c7f726f8515dc5670a3d80c94e13257d4e322ffe61988"
+   },
+   {
+    "file": "model-00012-of-00016.safetensors",
+    "size": 3987400496,
+    "blob_id": "57afcc904fa3b70fd1fc045981b177c268e83928",
+    "lfs_sha256": "8cb898bc5e78492600053d1105c9ff61d7a719f5cc2802df63e41535a652cc26"
+   },
+   {
+    "file": "model-00013-of-00016.safetensors",
+    "size": 3997353632,
+    "blob_id": "d2829a36b696b71a70a2d387628f7e8fd4e7eb41",
+    "lfs_sha256": "599594421f314cb8e8ab4474db0eb490cc6310585067e82d73821254b93319ce"
+   },
+   {
+    "file": "model-00014-of-00016.safetensors",
+    "size": 3999975400,
+    "blob_id": "b9221df774be5635367694e2a3471ce55199b4a0",
+    "lfs_sha256": "66d3294e9976b5f01d117a0a0bed768f128a8898eb6937e224d051de2961d363"
+   },
+   {
+    "file": "model-00015-of-00016.safetensors",
+    "size": 3999975400,
+    "blob_id": "da678f4a6beb17b456a9803e651200dc95329f1a",
+    "lfs_sha256": "2fe000da4fc7399ff6303bb0daec8c415a5d850f5ea53863392758c77fc37664"
+   },
+   {
+    "file": "model-00016-of-00016.safetensors",
+    "size": 1087928584,
+    "blob_id": "ffdcbc5a76713795f166169d3c197c3f33ce0d6d",
+    "lfs_sha256": "0c979e314faf06e94a5e1841abd285d4e26e763c79c1abe7710d543192d9da48"
+   },
+   {
+    "file": "model.safetensors.index.json",
+    "size": 1699758,
+    "blob_id": "9c1f15f44d45f6a4108ceb239ecec7b22f5c18a4",
+    "lfs_sha256": null
+   },
+   {
+    "file": "tokenizer.json",
+    "size": 11422654,
+    "blob_id": "cd71f61a15a522601badb3dc960d800d9cb3766c",
+    "lfs_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
+   },
+   {
+    "file": "tokenizer_config.json",
+    "size": 9732,
+    "blob_id": "417d038a63fa3de29cfde265caedae14d1a58d92",
+    "lfs_sha256": null
+   },
+   {
+    "file": "vocab.json",
+    "size": 2776833,
+    "blob_id": "4783fe10ac3adce15ac8f358ef5462739852c569",
+    "lfs_sha256": null
+   }
+  ],
+  "heads": {
+   "config.json": {
+    "commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "size": 963,
+    "etag": "2703739b9cfc422a3a0a6c932140db18533a8d1a"
+   },
+   "generation_config.json": {
+    "commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "size": 239,
+    "etag": "20a8a9156fc8c3f25295ca067f61fdf120d517c5"
+   },
+   "merges.txt": {
+    "commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "size": 1671853,
+    "etag": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7"
+   },
+   "model-00001-of-00016.safetensors": {
+    "commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "size": 3999417504,
+    "etag": "454e77b346a61bfb201d54df60e15158838cf930617ee135113556204f2802b5"
+   },
+   "model-00002-of-00016.safetensors": {
+    "commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "size": 3999974192,
+    "etag": "47f015d6e5bb1782a834d75c06113c5e8c77ddca1cb7daf89686a4ec0deda19e"
+   },
+   "model-00003-of-00016.safetensors": {
+    "commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "size": 3997360832,
+    "etag": "ac0bf5990f2da995c1e8b77a3149dee71900b4fe1b8a614231dea9647193d96b"
+   },
+   "model-00004-of-00016.safetensors": {
+    "commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "size": 3999975056,
+    "etag": "89b01fd34a683c70fdb7f22c2e7090538d65063335ba0db46f3654642b17d1e5"
+   },
+   "model-00005-of-00016.safetensors": {
+    "commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "size": 3999975400,
+    "etag": "9849eb3584d928e35bf5956ccfd91b64207467e1fad8304aae68dc4d92d6d6d9"
+   },
+   "model-00006-of-00016.safetensors": {
+    "commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "size": 3999975400,
+    "etag": "f7a0f1525557d740158fb692986ad43506e1b5901e7406ae65808c6457bc53ad"
+   },
+   "model-00007-of-00016.safetensors": {
+    "commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "size": 3999975472,
+    "etag": "920702a50f27a009e5f676da3b02978dbd794f6ad7854f301d709136154c1a84"
+   },
+   "model-00008-of-00016.safetensors": {
+    "commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "size": 3997362064,
+    "etag": "a85bf0cc8a8047c116172d4c08cf4792eb59d4375032708ba3e1a7ffca0f708a"
+   },
+   "model-00009-of-00016.safetensors": {
+    "commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "size": 3999975408,
+    "etag": "25cd8aaed86b8e17685efb152912f92448ea3fffb1bdc247f257f04d05907604"
+   },
+   "model-00010-of-00016.safetensors": {
+    "commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "size": 3999975400,
+    "etag": "7c3307ee214797c4bc61c0994f81d690e768150df5f14d18edf84e53ba4810dc"
+   },
+   "model-00011-of-00016.safetensors": {
+    "commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "size": 3999975408,
+    "etag": "c658cad2842d36fa4c7c7f726f8515dc5670a3d80c94e13257d4e322ffe61988"
+   },
+   "model-00012-of-00016.safetensors": {
+    "commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "size": 3987400496,
+    "etag": "8cb898bc5e78492600053d1105c9ff61d7a719f5cc2802df63e41535a652cc26"
+   },
+   "model-00013-of-00016.safetensors": {
+    "commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "size": 3997353632,
+    "etag": "599594421f314cb8e8ab4474db0eb490cc6310585067e82d73821254b93319ce"
+   },
+   "model-00014-of-00016.safetensors": {
+    "commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "size": 3999975400,
+    "etag": "66d3294e9976b5f01d117a0a0bed768f128a8898eb6937e224d051de2961d363"
+   },
+   "model-00015-of-00016.safetensors": {
+    "commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "size": 3999975400,
+    "etag": "2fe000da4fc7399ff6303bb0daec8c415a5d850f5ea53863392758c77fc37664"
+   },
+   "model-00016-of-00016.safetensors": {
+    "commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "size": 1087928584,
+    "etag": "0c979e314faf06e94a5e1841abd285d4e26e763c79c1abe7710d543192d9da48"
+   },
+   "model.safetensors.index.json": {
+    "commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "size": 1699758,
+    "etag": "9c1f15f44d45f6a4108ceb239ecec7b22f5c18a4"
+   },
+   "tokenizer.json": {
+    "commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "size": 11422654,
+    "etag": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
+   },
+   "tokenizer_config.json": {
+    "commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "size": 9732,
+    "etag": "417d038a63fa3de29cfde265caedae14d1a58d92"
+   },
+   "vocab.json": {
+    "commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "size": 2776833,
+    "etag": "4783fe10ac3adce15ac8f358ef5462739852c569"
+   }
+  },
+  "refusals": []
+ },
+ "corpus": {
+  "repo": "Salesforce/wikitext",
+  "config": "wikitext-2-raw-v1",
+  "main": "b08601e04326c79dfdd32d625aee71d232d685c3",
+  "files": [
+   "README.md",
+   "wikitext-2-raw-v1/test-00000-of-00001.parquet",
+   "wikitext-2-raw-v1/train-00000-of-00001.parquet",
+   "wikitext-2-raw-v1/validation-00000-of-00001.parquet"
+  ],
+  "heads": {
+   "README.md": {
+    "commit": "b08601e04326c79dfdd32d625aee71d232d685c3",
+    "size": 10464,
+    "etag": "2a4fec2bc8df76c9d4da1c8e8865b625eb221c76"
+   },
+   "wikitext-2-raw-v1/test-00000-of-00001.parquet": {
+    "commit": "b08601e04326c79dfdd32d625aee71d232d685c3",
+    "size": 732610,
+    "etag": "5f1bea067869d04849c0f975a2b29c4ff47d867f484f5010ea5e861eab246d91"
+   },
+   "wikitext-2-raw-v1/train-00000-of-00001.parquet": {
+    "commit": "b08601e04326c79dfdd32d625aee71d232d685c3",
+    "size": 6357543,
+    "etag": "e83889baabc497075506f91975be5fac0d45c5290b6b20582c8cd1e853d0c9f7"
+   },
+   "wikitext-2-raw-v1/validation-00000-of-00001.parquet": {
+    "commit": "b08601e04326c79dfdd32d625aee71d232d685c3",
+    "size": 657209,
+    "etag": "204929b7ff9d6184953f867dedb860e40aa69c078fc1e54b3baaa8fb28511c4c"
+   }
+  },
+  "refusals": []
+ },
+ "git": {
+  "want": {
+   "e4b": "7b451ab98bad68cb5b333a80528220cf09cddcf6",
+   "gnf4": "724ccc454f006c1a46836e434e997f31f293747f"
+  },
+  "got": {
+   "e4b": "7b451ab98bad68cb5b333a80528220cf09cddcf6",
+   "gnf4": "724ccc454f006c1a46836e434e997f31f293747f"
+  }
+ },
+ "pypi": {
+  "specs": [
+   "transformers==5.17.0",
+   "bitsandbytes==0.50.2",
+   "datasets",
+   "accelerate",
+   "sentencepiece",
+   "safetensors",
+   "huggingface_hub>=1.31,<2",
+   "pytest"
+  ],
+  "box_python": "3.11",
+  "platforms": [
+   "manylinux_2_28_x86_64",
+   "manylinux_2_24_x86_64",
+   "manylinux2014_x86_64",
+   "manylinux_2_17_x86_64"
+  ],
+  "picked": [
+   {
+    "name": "transformers",
+    "version": "5.17.0",
+    "url": "https://files.pythonhosted.org/packages/e8/d0/c502b60d684adbd98a8dc7d5bb866842772b816ac4354e4608be240041ae/transformers-5.17.0-py3-none-any.whl",
+    "sha256": "78ec1ce21579b38dfb83950a0658cd119f87212a2fcfdff478096ce9d6c03801"
+   },
+   {
+    "name": "bitsandbytes",
+    "version": "0.50.2",
+    "url": "https://files.pythonhosted.org/packages/a5/6e/e4e8b75716dbe5e50964f070266e06f4e6806ce051bfb97f52ee162b9310/bitsandbytes-0.50.2-py3-none-manylinux_2_24_x86_64.whl",
+    "sha256": "55348a9a4a21bfd99cf8c7b32fe67b4030ae5c2a05738e03c1747f65fa6ec283"
+   },
+   {
+    "name": "huggingface_hub",
+    "version": "1.33.0",
+    "url": "https://files.pythonhosted.org/packages/fc/16/963096d224b80909432dc16561a615fd33d2d13beef3ce4c63fa25e40867/huggingface_hub-1.33.0-py3-none-any.whl",
+    "sha256": "04e434b06e100eddbce9a6e817d72693a7884b10a79bd67ab48080d5c07eb899"
+   },
+   {
+    "name": "datasets",
+    "version": "5.1.0",
+    "url": "https://files.pythonhosted.org/packages/24/cc/7f624629846c709ef1c68aa61bfb8d0ae2638cbe265104a1c2f7a630949e/datasets-5.1.0-py3-none-any.whl",
+    "sha256": "86fd08b280485aab82894d2c81842c4151d93b575efea0054315104cb7bc3cec"
+   },
+   {
+    "name": "accelerate",
+    "version": "1.15.0",
+    "url": "https://files.pythonhosted.org/packages/8a/4c/34f0450479d01195027260da68d8a3880683f1640c3ca5adf64acb3185f1/accelerate-1.15.0-py3-none-any.whl",
+    "sha256": "97eacca0b73e45cb867dbf8c5d5d4dc32219544300e0c8992c7334dc2ef33cec"
+   },
+   {
+    "name": "sentencepiece",
+    "version": "0.2.2",
+    "url": "https://files.pythonhosted.org/packages/06/5f/9117bf854aef817ad0d0ee9310eed0308a7e529e7eaf2e80ad9cd281ef82/sentencepiece-0.2.2-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+    "sha256": "1416b92f2f010333786fe6306ed2631121d5ea492219b0841e967b6765e64107"
+   },
+   {
+    "name": "safetensors",
+    "version": "0.8.0",
+    "url": "https://files.pythonhosted.org/packages/28/50/f203ff3a3ddfe19308efc83c5a3a29ed02bf786732ec35e68bf9162f3365/safetensors-0.8.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+    "sha256": "fd6f3f93c9a0a7cc2788ee63fb763353d4bd2e89b0751bc78fcf7dda00bea774"
+   },
+   {
+    "name": "pytest",
+    "version": "9.1.1",
+    "url": "https://files.pythonhosted.org/packages/24/25/1de2678b631f5a49215c6c96fff41ba892b0a34df68d6d80292b1b48aa7f/pytest-9.1.1-py3-none-any.whl",
+    "sha256": "37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c"
+   }
+  ],
+  "probes": {
+   "https://files.pythonhosted.org/packages/e8/d0/c502b60d684adbd98a8dc7d5bb866842772b816ac4354e4608be240041ae/transformers-5.17.0-py3-none-any.whl": {
+    "status": 206,
+    "bytes": 1
+   },
+   "https://files.pythonhosted.org/packages/a5/6e/e4e8b75716dbe5e50964f070266e06f4e6806ce051bfb97f52ee162b9310/bitsandbytes-0.50.2-py3-none-manylinux_2_24_x86_64.whl": {
+    "status": 206,
+    "bytes": 1
+   },
+   "https://files.pythonhosted.org/packages/fc/16/963096d224b80909432dc16561a615fd33d2d13beef3ce4c63fa25e40867/huggingface_hub-1.33.0-py3-none-any.whl": {
+    "status": 206,
+    "bytes": 1
+   },
+   "https://files.pythonhosted.org/packages/24/cc/7f624629846c709ef1c68aa61bfb8d0ae2638cbe265104a1c2f7a630949e/datasets-5.1.0-py3-none-any.whl": {
+    "status": 206,
+    "bytes": 1
+   },
+   "https://files.pythonhosted.org/packages/8a/4c/34f0450479d01195027260da68d8a3880683f1640c3ca5adf64acb3185f1/accelerate-1.15.0-py3-none-any.whl": {
+    "status": 206,
+    "bytes": 1
+   },
+   "https://files.pythonhosted.org/packages/06/5f/9117bf854aef817ad0d0ee9310eed0308a7e529e7eaf2e80ad9cd281ef82/sentencepiece-0.2.2-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl": {
+    "status": 206,
+    "bytes": 1
+   },
+   "https://files.pythonhosted.org/packages/28/50/f203ff3a3ddfe19308efc83c5a3a29ed02bf786732ec35e68bf9162f3365/safetensors-0.8.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl": {
+    "status": 206,
+    "bytes": 1
+   },
+   "https://files.pythonhosted.org/packages/24/25/1de2678b631f5a49215c6c96fff41ba892b0a34df68d6d80292b1b48aa7f/pytest-9.1.1-py3-none-any.whl": {
+    "status": 206,
+    "bytes": 1
+   }
+  }
+ },
+ "passed": true
+}
