@@ -1,7 +1,7 @@
 # Training routing trace: which experts a QLoRA step touches, and what a residency tier would hold
 
-**Status:** the harness only. No trace has been captured yet and no number is claimed. The capture runs once this
-lands, from the merged commit, on the project's RTX A2000 12 GB, with no rental and no timings.
+**Status:** captured and read: see [`RESULTS-qwen3-30b-a2000.md`](RESULTS-qwen3-30b-a2000.md) (INCONCLUSIVE by the
+registered bar). No rental and no timings.
 
 ## Why
 
@@ -44,6 +44,9 @@ Counts and bytes only.
   `trace.npz` plus `trace.npz.meta.json`, which holds the environment, the model's config and index hashes, the
   harness arguments and the summary with its verdict. It exits 3 on VOID.
 - `replay.py`: replays a training trace or a #1469 decode trace through the four policies at the six budgets. CPU only.
+- `cross_step_bar.py`: the bar registered before the capture. A policy is frozen at each step boundary and scored on
+  the next step's forward, against the shuffled null, with the reporting reads (saturation, the frozen ceiling, skew).
+- `RESULTS-qwen3-30b-a2000.md` and `results-2026-10-10/`: the Qwen3-30B-A3B read and its outputs.
 - `tests/test_train_routing_trace.py`: CPU tests.
   - **The forward/recompute check is armed:** a toy router whose recompute of one micro-batch routes differently is
     reported as exactly that micro-batch and layer.

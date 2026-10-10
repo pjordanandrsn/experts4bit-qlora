@@ -1,0 +1,764 @@
+{
+ "census": {
+  "steps": 17,
+  "layers": 48,
+  "distinct_per_step_layer": {
+   "mean": 112.18014705882354,
+   "min": 90,
+   "max": 128
+  },
+  "jaccard_step_to_step": {
+   "mean": 0.9107658531480919,
+   "min": 0.7818181818181819
+  }
+ },
+ "row_bytes": 2654208,
+ "layout": {
+  "format": "nf4",
+  "blocksize": 64,
+  "absmax_dtype": "float32",
+  "absmax_bytes": 4,
+  "double_quant": false,
+  "sources": [
+   "experts4bit_qlora/engines/offload.py:4-5,251",
+   "experts4bit_qlora/engines/offload.py:737-743",
+   "experts4bit_qlora/loader.py:1177"
+  ]
+ },
+ "fit_steps": 5,
+ "scored_steps": 12,
+ "cells": [
+  {
+   "budget": 128,
+   "policy": "profile",
+   "passes": {
+    "fwd": {
+     "hits": 12281,
+     "touches": 383571,
+     "hit_rate": 0.03201754042928167,
+     "staged_bytes_per_step": 82123407360.0
+    },
+    "recompute": {
+     "hits": 12281,
+     "touches": 383571,
+     "hit_rate": 0.03201754042928167,
+     "staged_bytes_per_step": 82123407360.0
+    },
+    "dgrad": {
+     "hits": 12281,
+     "touches": 383571,
+     "hit_rate": 0.03201754042928167,
+     "staged_bytes_per_step": 82123407360.0
+    },
+    "pooled": {
+     "hits": 36843,
+     "touches": 1150713,
+     "hit_rate": 0.03201754042928167,
+     "staged_bytes_per_step": 246370222080.0
+    }
+   }
+  },
+  {
+   "budget": 128,
+   "policy": "lfu",
+   "passes": {
+    "fwd": {
+     "hits": 7518,
+     "touches": 383571,
+     "hit_rate": 0.01960002189946581,
+     "staged_bytes_per_step": 83176906752.0
+    },
+    "recompute": {
+     "hits": 10061,
+     "touches": 383571,
+     "hit_rate": 0.02622982446535322,
+     "staged_bytes_per_step": 82614435840.0
+    },
+    "dgrad": {
+     "hits": 10061,
+     "touches": 383571,
+     "hit_rate": 0.02622982446535322,
+     "staged_bytes_per_step": 82614435840.0
+    },
+    "pooled": {
+     "hits": 27640,
+     "touches": 1150713,
+     "hit_rate": 0.024019890276724083,
+     "staged_bytes_per_step": 248405778432.0
+    }
+   }
+  },
+  {
+   "budget": 128,
+   "policy": "lru",
+   "passes": {
+    "fwd": {
+     "hits": 9550,
+     "touches": 383571,
+     "hit_rate": 0.024897606961944464,
+     "staged_bytes_per_step": 82727460864.0
+    },
+    "recompute": {
+     "hits": 8210,
+     "touches": 383571,
+     "hit_rate": 0.021404120749483148,
+     "staged_bytes_per_step": 83023847424.0
+    },
+    "dgrad": {
+     "hits": 383571,
+     "touches": 383571,
+     "hit_rate": 1.0,
+     "staged_bytes_per_step": 0.0
+    },
+    "pooled": {
+     "hits": 401331,
+     "touches": 1150713,
+     "hit_rate": 0.34876724257047587,
+     "staged_bytes_per_step": 165751308288.0
+    }
+   }
+  },
+  {
+   "budget": 128,
+   "policy": "belady",
+   "passes": {
+    "fwd": {
+     "hits": 11596,
+     "touches": 383571,
+     "hit_rate": 0.03023169113410555,
+     "staged_bytes_per_step": 82274918400.0
+    },
+    "recompute": {
+     "hits": 12288,
+     "touches": 383571,
+     "hit_rate": 0.03203578998412289,
+     "staged_bytes_per_step": 82121859072.0
+    },
+    "dgrad": {
+     "hits": 383571,
+     "touches": 383571,
+     "hit_rate": 1.0,
+     "staged_bytes_per_step": 0.0
+    },
+    "pooled": {
+     "hits": 407455,
+     "touches": 1150713,
+     "hit_rate": 0.3540891603727428,
+     "staged_bytes_per_step": 164396777472.0
+    }
+   }
+  },
+  {
+   "budget": 384,
+   "policy": "profile",
+   "passes": {
+    "fwd": {
+     "hits": 36665,
+     "touches": 383571,
+     "hit_rate": 0.09558856117902552,
+     "staged_bytes_per_step": 76730056704.0
+    },
+    "recompute": {
+     "hits": 36665,
+     "touches": 383571,
+     "hit_rate": 0.09558856117902552,
+     "staged_bytes_per_step": 76730056704.0
+    },
+    "dgrad": {
+     "hits": 36665,
+     "touches": 383571,
+     "hit_rate": 0.09558856117902552,
+     "staged_bytes_per_step": 76730056704.0
+    },
+    "pooled": {
+     "hits": 109995,
+     "touches": 1150713,
+     "hit_rate": 0.09558856117902552,
+     "staged_bytes_per_step": 230190170112.0
+    }
+   }
+  },
+  {
+   "budget": 384,
+   "policy": "lfu",
+   "passes": {
+    "fwd": {
+     "hits": 34510,
+     "touches": 383571,
+     "hit_rate": 0.08997030536719408,
+     "staged_bytes_per_step": 77206708224.0
+    },
+    "recompute": {
+     "hits": 34565,
+     "touches": 383571,
+     "hit_rate": 0.09011369472666078,
+     "staged_bytes_per_step": 77194543104.0
+    },
+    "dgrad": {
+     "hits": 34565,
+     "touches": 383571,
+     "hit_rate": 0.09011369472666078,
+     "staged_bytes_per_step": 77194543104.0
+    },
+    "pooled": {
+     "hits": 103640,
+     "touches": 1150713,
+     "hit_rate": 0.09006589827350521,
+     "staged_bytes_per_step": 231595794432.0
+    }
+   }
+  },
+  {
+   "budget": 384,
+   "policy": "lru",
+   "passes": {
+    "fwd": {
+     "hits": 26712,
+     "touches": 383571,
+     "hit_rate": 0.06964030127407964,
+     "staged_bytes_per_step": 78931501056.0
+    },
+    "recompute": {
+     "hits": 33248,
+     "touches": 383571,
+     "hit_rate": 0.08668017133724916,
+     "staged_bytes_per_step": 77485842432.0
+    },
+    "dgrad": {
+     "hits": 383571,
+     "touches": 383571,
+     "hit_rate": 1.0,
+     "staged_bytes_per_step": 0.0
+    },
+    "pooled": {
+     "hits": 443531,
+     "touches": 1150713,
+     "hit_rate": 0.3854401575371096,
+     "staged_bytes_per_step": 156417343488.0
+    }
+   }
+  },
+  {
+   "budget": 384,
+   "policy": "belady",
+   "passes": {
+    "fwd": {
+     "hits": 36172,
+     "touches": 383571,
+     "hit_rate": 0.09430327110235133,
+     "staged_bytes_per_step": 76839100416.0
+    },
+    "recompute": {
+     "hits": 36864,
+     "touches": 383571,
+     "hit_rate": 0.09610736995236867,
+     "staged_bytes_per_step": 76686041088.0
+    },
+    "dgrad": {
+     "hits": 383571,
+     "touches": 383571,
+     "hit_rate": 1.0,
+     "staged_bytes_per_step": 0.0
+    },
+    "pooled": {
+     "hits": 456607,
+     "touches": 1150713,
+     "hit_rate": 0.39680354701824,
+     "staged_bytes_per_step": 153525141504.0
+    }
+   }
+  },
+  {
+   "budget": 768,
+   "policy": "profile",
+   "passes": {
+    "fwd": {
+     "hits": 73271,
+     "touches": 383571,
+     "hit_rate": 0.19102330468153222,
+     "staged_bytes_per_step": 68633395200.0
+    },
+    "recompute": {
+     "hits": 73271,
+     "touches": 383571,
+     "hit_rate": 0.19102330468153222,
+     "staged_bytes_per_step": 68633395200.0
+    },
+    "dgrad": {
+     "hits": 73271,
+     "touches": 383571,
+     "hit_rate": 0.19102330468153222,
+     "staged_bytes_per_step": 68633395200.0
+    },
+    "pooled": {
+     "hits": 219813,
+     "touches": 1150713,
+     "hit_rate": 0.19102330468153222,
+     "staged_bytes_per_step": 205900185600.0
+    }
+   }
+  },
+  {
+   "budget": 768,
+   "policy": "lfu",
+   "passes": {
+    "fwd": {
+     "hits": 71169,
+     "touches": 383571,
+     "hit_rate": 0.18554322407064142,
+     "staged_bytes_per_step": 69098323968.0
+    },
+    "recompute": {
+     "hits": 72176,
+     "touches": 383571,
+     "hit_rate": 0.18816855288851347,
+     "staged_bytes_per_step": 68875591680.0
+    },
+    "dgrad": {
+     "hits": 72176,
+     "touches": 383571,
+     "hit_rate": 0.18816855288851347,
+     "staged_bytes_per_step": 68875591680.0
+    },
+    "pooled": {
+     "hits": 215521,
+     "touches": 1150713,
+     "hit_rate": 0.18729344328255612,
+     "staged_bytes_per_step": 206849507328.0
+    }
+   }
+  },
+  {
+   "budget": 768,
+   "policy": "lru",
+   "passes": {
+    "fwd": {
+     "hits": 55701,
+     "touches": 383571,
+     "hit_rate": 0.1452169220300805,
+     "staged_bytes_per_step": 72519598080.0
+    },
+    "recompute": {
+     "hits": 69694,
+     "touches": 383571,
+     "hit_rate": 0.18169778215767093,
+     "staged_bytes_per_step": 69424570368.0
+    },
+    "dgrad": {
+     "hits": 383571,
+     "touches": 383571,
+     "hit_rate": 1.0,
+     "staged_bytes_per_step": 0.0
+    },
+    "pooled": {
+     "hits": 508966,
+     "touches": 1150713,
+     "hit_rate": 0.44230490139591716,
+     "staged_bytes_per_step": 141944168448.0
+    }
+   }
+  },
+  {
+   "budget": 768,
+   "policy": "belady",
+   "passes": {
+    "fwd": {
+     "hits": 73036,
+     "touches": 383571,
+     "hit_rate": 0.19041064105472,
+     "staged_bytes_per_step": 68685373440.0
+    },
+    "recompute": {
+     "hits": 73728,
+     "touches": 383571,
+     "hit_rate": 0.19221473990473734,
+     "staged_bytes_per_step": 68532314112.0
+    },
+    "dgrad": {
+     "hits": 383571,
+     "touches": 383571,
+     "hit_rate": 1.0,
+     "staged_bytes_per_step": 0.0
+    },
+    "pooled": {
+     "hits": 530335,
+     "touches": 1150713,
+     "hit_rate": 0.46087512698648575,
+     "staged_bytes_per_step": 137217687552.0
+    }
+   }
+  },
+  {
+   "budget": 1024,
+   "policy": "profile",
+   "passes": {
+    "fwd": {
+     "hits": 97588,
+     "touches": 383571,
+     "hit_rate": 0.254419651120653,
+     "staged_bytes_per_step": 63254863872.0
+    },
+    "recompute": {
+     "hits": 97588,
+     "touches": 383571,
+     "hit_rate": 0.254419651120653,
+     "staged_bytes_per_step": 63254863872.0
+    },
+    "dgrad": {
+     "hits": 97588,
+     "touches": 383571,
+     "hit_rate": 0.254419651120653,
+     "staged_bytes_per_step": 63254863872.0
+    },
+    "pooled": {
+     "hits": 292764,
+     "touches": 1150713,
+     "hit_rate": 0.254419651120653,
+     "staged_bytes_per_step": 189764591616.0
+    }
+   }
+  },
+  {
+   "budget": 1024,
+   "policy": "lfu",
+   "passes": {
+    "fwd": {
+     "hits": 96576,
+     "touches": 383571,
+     "hit_rate": 0.25178128690646584,
+     "staged_bytes_per_step": 63478702080.0
+    },
+    "recompute": {
+     "hits": 95972,
+     "touches": 383571,
+     "hit_rate": 0.2502066110315952,
+     "staged_bytes_per_step": 63612297216.0
+    },
+    "dgrad": {
+     "hits": 95972,
+     "touches": 383571,
+     "hit_rate": 0.2502066110315952,
+     "staged_bytes_per_step": 63612297216.0
+    },
+    "pooled": {
+     "hits": 288520,
+     "touches": 1150713,
+     "hit_rate": 0.2507315029898854,
+     "staged_bytes_per_step": 190703296512.0
+    }
+   }
+  },
+  {
+   "budget": 1024,
+   "policy": "lru",
+   "passes": {
+    "fwd": {
+     "hits": 72778,
+     "touches": 383571,
+     "hit_rate": 0.18973801460485804,
+     "staged_bytes_per_step": 68742438912.0
+    },
+    "recompute": {
+     "hits": 93770,
+     "touches": 383571,
+     "hit_rate": 0.2444658224944013,
+     "staged_bytes_per_step": 64099344384.0
+    },
+    "dgrad": {
+     "hits": 383571,
+     "touches": 383571,
+     "hit_rate": 1.0,
+     "staged_bytes_per_step": 0.0
+    },
+    "pooled": {
+     "hits": 550119,
+     "touches": 1150713,
+     "hit_rate": 0.4780679456997531,
+     "staged_bytes_per_step": 132841783296.0
+    }
+   }
+  },
+  {
+   "budget": 1024,
+   "policy": "belady",
+   "passes": {
+    "fwd": {
+     "hits": 97612,
+     "touches": 383571,
+     "hit_rate": 0.25448222102296575,
+     "staged_bytes_per_step": 63249555456.0
+    },
+    "recompute": {
+     "hits": 98304,
+     "touches": 383571,
+     "hit_rate": 0.2562863198729831,
+     "staged_bytes_per_step": 63096496128.0
+    },
+    "dgrad": {
+     "hits": 383571,
+     "touches": 383571,
+     "hit_rate": 1.0,
+     "staged_bytes_per_step": 0.0
+    },
+    "pooled": {
+     "hits": 579487,
+     "touches": 1150713,
+     "hit_rate": 0.5035895136319829,
+     "staged_bytes_per_step": 126346051584.0
+    }
+   }
+  },
+  {
+   "budget": 3216,
+   "policy": "profile",
+   "passes": {
+    "fwd": {
+     "hits": 294647,
+     "touches": 383571,
+     "hit_rate": 0.7681680836142462,
+     "staged_bytes_per_step": 19668566016.0
+    },
+    "recompute": {
+     "hits": 294647,
+     "touches": 383571,
+     "hit_rate": 0.7681680836142462,
+     "staged_bytes_per_step": 19668566016.0
+    },
+    "dgrad": {
+     "hits": 294647,
+     "touches": 383571,
+     "hit_rate": 0.7681680836142462,
+     "staged_bytes_per_step": 19668566016.0
+    },
+    "pooled": {
+     "hits": 883941,
+     "touches": 1150713,
+     "hit_rate": 0.7681680836142462,
+     "staged_bytes_per_step": 59005698048.0
+    }
+   }
+  },
+  {
+   "budget": 3216,
+   "policy": "lfu",
+   "passes": {
+    "fwd": {
+     "hits": 296564,
+     "touches": 383571,
+     "hit_rate": 0.7731658545614762,
+     "staged_bytes_per_step": 19244556288.0
+    },
+    "recompute": {
+     "hits": 297014,
+     "touches": 383571,
+     "hit_rate": 0.7743390402298401,
+     "staged_bytes_per_step": 19145023488.0
+    },
+    "dgrad": {
+     "hits": 297016,
+     "touches": 383571,
+     "hit_rate": 0.7743442543883662,
+     "staged_bytes_per_step": 19144581120.0
+    },
+    "pooled": {
+     "hits": 890594,
+     "touches": 1150713,
+     "hit_rate": 0.7739497163932275,
+     "staged_bytes_per_step": 57534160896.0
+    }
+   }
+  },
+  {
+   "budget": 3216,
+   "policy": "lru",
+   "passes": {
+    "fwd": {
+     "hits": 229399,
+     "touches": 383571,
+     "hit_rate": 0.5980613758600103,
+     "staged_bytes_per_step": 34100379648.0
+    },
+    "recompute": {
+     "hits": 304888,
+     "touches": 383571,
+     "hit_rate": 0.7948671823469449,
+     "staged_bytes_per_step": 17403420672.0
+    },
+    "dgrad": {
+     "hits": 383571,
+     "touches": 383571,
+     "hit_rate": 1.0,
+     "staged_bytes_per_step": 0.0
+    },
+    "pooled": {
+     "hits": 917858,
+     "touches": 1150713,
+     "hit_rate": 0.7976428527356517,
+     "staged_bytes_per_step": 51503800320.0
+    }
+   }
+  },
+  {
+   "budget": 3216,
+   "policy": "belady",
+   "passes": {
+    "fwd": {
+     "hits": 306816,
+     "touches": 383571,
+     "hit_rate": 0.7998936311660684,
+     "staged_bytes_per_step": 16976977920.0
+    },
+    "recompute": {
+     "hits": 308736,
+     "touches": 383571,
+     "hit_rate": 0.8048992233510875,
+     "staged_bytes_per_step": 16552304640.0
+    },
+    "dgrad": {
+     "hits": 383571,
+     "touches": 383571,
+     "hit_rate": 1.0,
+     "staged_bytes_per_step": 0.0
+    },
+    "pooled": {
+     "hits": 999123,
+     "touches": 1150713,
+     "hit_rate": 0.8682642848390519,
+     "staged_bytes_per_step": 33529282560.0
+    }
+   }
+  },
+  {
+   "budget": 6144,
+   "policy": "profile",
+   "passes": {
+    "fwd": {
+     "hits": 383139,
+     "touches": 383571,
+     "hit_rate": 0.9988737417583706,
+     "staged_bytes_per_step": 95551488.0
+    },
+    "recompute": {
+     "hits": 383139,
+     "touches": 383571,
+     "hit_rate": 0.9988737417583706,
+     "staged_bytes_per_step": 95551488.0
+    },
+    "dgrad": {
+     "hits": 383139,
+     "touches": 383571,
+     "hit_rate": 0.9988737417583706,
+     "staged_bytes_per_step": 95551488.0
+    },
+    "pooled": {
+     "hits": 1149417,
+     "touches": 1150713,
+     "hit_rate": 0.9988737417583706,
+     "staged_bytes_per_step": 286654464.0
+    }
+   }
+  },
+  {
+   "budget": 6144,
+   "policy": "lfu",
+   "passes": {
+    "fwd": {
+     "hits": 383455,
+     "touches": 383571,
+     "hit_rate": 0.9996975788054884,
+     "staged_bytes_per_step": 25657344.0
+    },
+    "recompute": {
+     "hits": 383571,
+     "touches": 383571,
+     "hit_rate": 1.0,
+     "staged_bytes_per_step": 0.0
+    },
+    "dgrad": {
+     "hits": 383571,
+     "touches": 383571,
+     "hit_rate": 1.0,
+     "staged_bytes_per_step": 0.0
+    },
+    "pooled": {
+     "hits": 1150597,
+     "touches": 1150713,
+     "hit_rate": 0.9998991929351628,
+     "staged_bytes_per_step": 25657344.0
+    }
+   }
+  },
+  {
+   "budget": 6144,
+   "policy": "lru",
+   "passes": {
+    "fwd": {
+     "hits": 383455,
+     "touches": 383571,
+     "hit_rate": 0.9996975788054884,
+     "staged_bytes_per_step": 25657344.0
+    },
+    "recompute": {
+     "hits": 383571,
+     "touches": 383571,
+     "hit_rate": 1.0,
+     "staged_bytes_per_step": 0.0
+    },
+    "dgrad": {
+     "hits": 383571,
+     "touches": 383571,
+     "hit_rate": 1.0,
+     "staged_bytes_per_step": 0.0
+    },
+    "pooled": {
+     "hits": 1150597,
+     "touches": 1150713,
+     "hit_rate": 0.9998991929351628,
+     "staged_bytes_per_step": 25657344.0
+    }
+   }
+  },
+  {
+   "budget": 6144,
+   "policy": "belady",
+   "passes": {
+    "fwd": {
+     "hits": 383455,
+     "touches": 383571,
+     "hit_rate": 0.9996975788054884,
+     "staged_bytes_per_step": 25657344.0
+    },
+    "recompute": {
+     "hits": 383571,
+     "touches": 383571,
+     "hit_rate": 1.0,
+     "staged_bytes_per_step": 0.0
+    },
+    "dgrad": {
+     "hits": 383571,
+     "touches": 383571,
+     "hit_rate": 1.0,
+     "staged_bytes_per_step": 0.0
+    },
+    "pooled": {
+     "hits": 1150597,
+     "touches": 1150713,
+     "hit_rate": 0.9998991929351628,
+     "staged_bytes_per_step": 25657344.0
+    }
+   }
+  }
+ ],
+ "trace_info": {
+  "capture_verdict": "VOID",
+  "complete_steps": 17,
+  "capture_reasons": [
+   "records after the last optimizer step (step index [17]): a forward that never stepped",
+   "step 17 micro-batch 5: pass recompute is missing layers [0, 1, 2]"
+  ],
+  "truncated_from": 20,
+  "reason": "OOM at step 18 (index 17): the A2000 carried ~1.5 GiB of other resident tenants; the cut is set by micro-batch length, not routing; decided before any hit rate"
+ },
+ "source": "trace.npz",
+ "null_seed": null
+}

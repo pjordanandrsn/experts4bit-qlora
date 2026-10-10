@@ -1,0 +1,467 @@
+{
+ "census": {
+  "steps": 512,
+  "layers": 48,
+  "distinct_per_step_layer": {
+   "mean": 8.0,
+   "min": 8,
+   "max": 8
+  },
+  "jaccard_step_to_step": {
+   "mean": 0.27700283064764475,
+   "min": 0.0
+  }
+ },
+ "row_bytes": 2654208,
+ "layout": {
+  "format": "nf4",
+  "blocksize": 64,
+  "absmax_dtype": "float32",
+  "absmax_bytes": 4,
+  "double_quant": false,
+  "sources": [
+   "experts4bit_qlora/engines/offload.py:4-5,251",
+   "experts4bit_qlora/engines/offload.py:737-743",
+   "experts4bit_qlora/loader.py:1177"
+  ]
+ },
+ "fit_steps": 128,
+ "scored_steps": 384,
+ "cells": [
+  {
+   "budget": 128,
+   "policy": "profile",
+   "passes": {
+    "decode": {
+     "hits": 23078,
+     "touches": 147456,
+     "hit_rate": 0.15650770399305555,
+     "staged_bytes_per_step": 859700736.0
+    },
+    "pooled": {
+     "hits": 23078,
+     "touches": 147456,
+     "hit_rate": 0.15650770399305555,
+     "staged_bytes_per_step": 859700736.0
+    }
+   }
+  },
+  {
+   "budget": 128,
+   "policy": "lfu",
+   "passes": {
+    "decode": {
+     "hits": 23915,
+     "touches": 147456,
+     "hit_rate": 0.16218397352430555,
+     "staged_bytes_per_step": 853915392.0
+    },
+    "pooled": {
+     "hits": 23915,
+     "touches": 147456,
+     "hit_rate": 0.16218397352430555,
+     "staged_bytes_per_step": 853915392.0
+    }
+   }
+  },
+  {
+   "budget": 128,
+   "policy": "lru",
+   "passes": {
+    "decode": {
+     "hits": 0,
+     "touches": 147456,
+     "hit_rate": 0.0,
+     "staged_bytes_per_step": 1019215872.0
+    },
+    "pooled": {
+     "hits": 0,
+     "touches": 147456,
+     "hit_rate": 0.0,
+     "staged_bytes_per_step": 1019215872.0
+    }
+   }
+  },
+  {
+   "budget": 128,
+   "policy": "belady",
+   "passes": {
+    "decode": {
+     "hits": 45188,
+     "touches": 147456,
+     "hit_rate": 0.3064507378472222,
+     "staged_bytes_per_step": 706876416.0
+    },
+    "pooled": {
+     "hits": 45188,
+     "touches": 147456,
+     "hit_rate": 0.3064507378472222,
+     "staged_bytes_per_step": 706876416.0
+    }
+   }
+  },
+  {
+   "budget": 384,
+   "policy": "profile",
+   "passes": {
+    "decode": {
+     "hits": 41099,
+     "touches": 147456,
+     "hit_rate": 0.2787204318576389,
+     "staged_bytes_per_step": 735139584.0
+    },
+    "pooled": {
+     "hits": 41099,
+     "touches": 147456,
+     "hit_rate": 0.2787204318576389,
+     "staged_bytes_per_step": 735139584.0
+    }
+   }
+  },
+  {
+   "budget": 384,
+   "policy": "lfu",
+   "passes": {
+    "decode": {
+     "hits": 45489,
+     "touches": 147456,
+     "hit_rate": 0.3084920247395833,
+     "staged_bytes_per_step": 704795904.0
+    },
+    "pooled": {
+     "hits": 45489,
+     "touches": 147456,
+     "hit_rate": 0.3084920247395833,
+     "staged_bytes_per_step": 704795904.0
+    }
+   }
+  },
+  {
+   "budget": 384,
+   "policy": "lru",
+   "passes": {
+    "decode": {
+     "hits": 41257,
+     "touches": 147456,
+     "hit_rate": 0.2797919379340278,
+     "staged_bytes_per_step": 734047488.0
+    },
+    "pooled": {
+     "hits": 41257,
+     "touches": 147456,
+     "hit_rate": 0.2797919379340278,
+     "staged_bytes_per_step": 734047488.0
+    }
+   }
+  },
+  {
+   "budget": 384,
+   "policy": "belady",
+   "passes": {
+    "decode": {
+     "hits": 87418,
+     "touches": 147456,
+     "hit_rate": 0.5928412543402778,
+     "staged_bytes_per_step": 414982656.0
+    },
+    "pooled": {
+     "hits": 87418,
+     "touches": 147456,
+     "hit_rate": 0.5928412543402778,
+     "staged_bytes_per_step": 414982656.0
+    }
+   }
+  },
+  {
+   "budget": 768,
+   "policy": "profile",
+   "passes": {
+    "decode": {
+     "hits": 58408,
+     "touches": 147456,
+     "hit_rate": 0.3961046006944444,
+     "staged_bytes_per_step": 615499776.0
+    },
+    "pooled": {
+     "hits": 58408,
+     "touches": 147456,
+     "hit_rate": 0.3961046006944444,
+     "staged_bytes_per_step": 615499776.0
+    }
+   }
+  },
+  {
+   "budget": 768,
+   "policy": "lfu",
+   "passes": {
+    "decode": {
+     "hits": 66738,
+     "touches": 147456,
+     "hit_rate": 0.4525960286458333,
+     "staged_bytes_per_step": 557922816.0
+    },
+    "pooled": {
+     "hits": 66738,
+     "touches": 147456,
+     "hit_rate": 0.4525960286458333,
+     "staged_bytes_per_step": 557922816.0
+    }
+   }
+  },
+  {
+   "budget": 768,
+   "policy": "lru",
+   "passes": {
+    "decode": {
+     "hits": 77396,
+     "touches": 147456,
+     "hit_rate": 0.5248752170138888,
+     "staged_bytes_per_step": 484254720.0
+    },
+    "pooled": {
+     "hits": 77396,
+     "touches": 147456,
+     "hit_rate": 0.5248752170138888,
+     "staged_bytes_per_step": 484254720.0
+    }
+   }
+  },
+  {
+   "budget": 768,
+   "policy": "belady",
+   "passes": {
+    "decode": {
+     "hits": 109343,
+     "touches": 147456,
+     "hit_rate": 0.7415296766493056,
+     "staged_bytes_per_step": 263437056.0
+    },
+    "pooled": {
+     "hits": 109343,
+     "touches": 147456,
+     "hit_rate": 0.7415296766493056,
+     "staged_bytes_per_step": 263437056.0
+    }
+   }
+  },
+  {
+   "budget": 1024,
+   "policy": "profile",
+   "passes": {
+    "decode": {
+     "hits": 68910,
+     "touches": 147456,
+     "hit_rate": 0.4673258463541667,
+     "staged_bytes_per_step": 542909952.0
+    },
+    "pooled": {
+     "hits": 68910,
+     "touches": 147456,
+     "hit_rate": 0.4673258463541667,
+     "staged_bytes_per_step": 542909952.0
+    }
+   }
+  },
+  {
+   "budget": 1024,
+   "policy": "lfu",
+   "passes": {
+    "decode": {
+     "hits": 77665,
+     "touches": 147456,
+     "hit_rate": 0.5266994900173612,
+     "staged_bytes_per_step": 482395392.0
+    },
+    "pooled": {
+     "hits": 77665,
+     "touches": 147456,
+     "hit_rate": 0.5266994900173612,
+     "staged_bytes_per_step": 482395392.0
+    }
+   }
+  },
+  {
+   "budget": 1024,
+   "policy": "lru",
+   "passes": {
+    "decode": {
+     "hits": 91201,
+     "touches": 147456,
+     "hit_rate": 0.6184963650173612,
+     "staged_bytes_per_step": 388834560.0
+    },
+    "pooled": {
+     "hits": 91201,
+     "touches": 147456,
+     "hit_rate": 0.6184963650173612,
+     "staged_bytes_per_step": 388834560.0
+    }
+   }
+  },
+  {
+   "budget": 1024,
+   "policy": "belady",
+   "passes": {
+    "decode": {
+     "hits": 118552,
+     "touches": 147456,
+     "hit_rate": 0.8039822048611112,
+     "staged_bytes_per_step": 199784448.0
+    },
+    "pooled": {
+     "hits": 118552,
+     "touches": 147456,
+     "hit_rate": 0.8039822048611112,
+     "staged_bytes_per_step": 199784448.0
+    }
+   }
+  },
+  {
+   "budget": 3216,
+   "policy": "profile",
+   "passes": {
+    "decode": {
+     "hits": 129313,
+     "touches": 147456,
+     "hit_rate": 0.8769599066840278,
+     "staged_bytes_per_step": 125404416.0
+    },
+    "pooled": {
+     "hits": 129313,
+     "touches": 147456,
+     "hit_rate": 0.8769599066840278,
+     "staged_bytes_per_step": 125404416.0
+    }
+   }
+  },
+  {
+   "budget": 3216,
+   "policy": "lfu",
+   "passes": {
+    "decode": {
+     "hits": 134069,
+     "touches": 147456,
+     "hit_rate": 0.9092135959201388,
+     "staged_bytes_per_step": 92530944.0
+    },
+    "pooled": {
+     "hits": 134069,
+     "touches": 147456,
+     "hit_rate": 0.9092135959201388,
+     "staged_bytes_per_step": 92530944.0
+    }
+   }
+  },
+  {
+   "budget": 3216,
+   "policy": "lru",
+   "passes": {
+    "decode": {
+     "hits": 138595,
+     "touches": 147456,
+     "hit_rate": 0.9399074978298612,
+     "staged_bytes_per_step": 61247232.0
+    },
+    "pooled": {
+     "hits": 138595,
+     "touches": 147456,
+     "hit_rate": 0.9399074978298612,
+     "staged_bytes_per_step": 61247232.0
+    }
+   }
+  },
+  {
+   "budget": 3216,
+   "policy": "belady",
+   "passes": {
+    "decode": {
+     "hits": 143614,
+     "touches": 147456,
+     "hit_rate": 0.9739447699652778,
+     "staged_bytes_per_step": 26555904.0
+    },
+    "pooled": {
+     "hits": 143614,
+     "touches": 147456,
+     "hit_rate": 0.9739447699652778,
+     "staged_bytes_per_step": 26555904.0
+    }
+   }
+  },
+  {
+   "budget": 6144,
+   "policy": "profile",
+   "passes": {
+    "decode": {
+     "hits": 143394,
+     "touches": 147456,
+     "hit_rate": 0.9724527994791666,
+     "staged_bytes_per_step": 28076544.0
+    },
+    "pooled": {
+     "hits": 143394,
+     "touches": 147456,
+     "hit_rate": 0.9724527994791666,
+     "staged_bytes_per_step": 28076544.0
+    }
+   }
+  },
+  {
+   "budget": 6144,
+   "policy": "lfu",
+   "passes": {
+    "decode": {
+     "hits": 146795,
+     "touches": 147456,
+     "hit_rate": 0.9955173068576388,
+     "staged_bytes_per_step": 4568832.0
+    },
+    "pooled": {
+     "hits": 146795,
+     "touches": 147456,
+     "hit_rate": 0.9955173068576388,
+     "staged_bytes_per_step": 4568832.0
+    }
+   }
+  },
+  {
+   "budget": 6144,
+   "policy": "lru",
+   "passes": {
+    "decode": {
+     "hits": 146795,
+     "touches": 147456,
+     "hit_rate": 0.9955173068576388,
+     "staged_bytes_per_step": 4568832.0
+    },
+    "pooled": {
+     "hits": 146795,
+     "touches": 147456,
+     "hit_rate": 0.9955173068576388,
+     "staged_bytes_per_step": 4568832.0
+    }
+   }
+  },
+  {
+   "budget": 6144,
+   "policy": "belady",
+   "passes": {
+    "decode": {
+     "hits": 146795,
+     "touches": 147456,
+     "hit_rate": 0.9955173068576388,
+     "staged_bytes_per_step": 4568832.0
+    },
+    "pooled": {
+     "hits": 146795,
+     "touches": 147456,
+     "hit_rate": 0.9955173068576388,
+     "staged_bytes_per_step": 4568832.0
+    }
+   }
+  }
+ ],
+ "trace_info": null,
+ "source": "qwen3_code.jsonl",
+ "null_seed": null
+}
