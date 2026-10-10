@@ -4,7 +4,7 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
-## 0.52.0 — 2026-10-09 — int4 decode's tile table over 4 programs by default, five fewer kinds of T == 1 launch, and the loss priced as measured
+## 0.52.0 — 2026-10-10 — int4 decode's tile table over 4 programs by default, five fewer kinds of T == 1 launch, and the loss priced as measured
 
 **0.52.0.** With grouped-nf4-gemm 0.45.0 installed, int4 decode builds its tile table over 4 programs by default, and
 the T == 1 decode skips five kinds of launch with bitwise-identical output. Paged serving reads more checkpoints, and the

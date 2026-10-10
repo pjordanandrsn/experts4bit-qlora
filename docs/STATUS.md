@@ -1,6 +1,6 @@
 # Status — what this package does, what is current, what is open
 
-**As of 2026-10-09, version 0.52.0** (the version of record is `pyproject.toml`'s). This page states the current
+**As of 2026-10-10, version 0.52.0** (the version of record is `pyproject.toml`'s). This page states the current
 position in each area, with the claim id behind each number; [`docs/claims.json`](claims.json) holds every claim's full
 text and evidence. The dated narrative behind these positions, with the readings they replaced and why, is
 [`STATUS-RECORD.md`](STATUS-RECORD.md).
