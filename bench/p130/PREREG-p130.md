@@ -338,3 +338,20 @@ Fetched to the run directory's `p130/` and committed to `bench/p130/receipts/<ru
 - `SHA256SUMS`.
 
 R's log-probs (`work/ref`, about 5 GB) stay on the box. `RESULTS-p130.md` is written from those files.
+
+## Amendment 1 (2026-10-10, in review of the registration, before any box): the corpus commit the box read
+
+The fetch gate records the commit `main` names for the windows' corpus (wikitext-2-raw-v1). P117's box does not pin
+that corpus, so a drift between the gate and the run would otherwise go unseen. This amendment makes it visible:
+- **The box** (`corpus_commits()`) records, in every process record, the commit or commits it actually read. `datasets`
+  keys its arrow cache of the config by the hub commit it resolved (`Salesforce___wikitext/wikitext-2-raw-v1/<version>/<commit>`),
+  and huggingface_hub keys the files' snapshot by the same commit.
+- **The driver** passes the gate report's `corpus.main` to the box as `P130_GATE_CORPUS`.
+- **The runner** writes it to `summary.txt` (`GATE_CORPUS`) and hands it to the reducer.
+- **The reducer** reports `corpus: {gate, box_arrow, box_snapshots, same}` in `verdict.json`.
+
+It is **reported, never gated**: the windows digest already gates that every process read the same windows. A drift is
+stated in the read. Its self-test grows from 40 to 42 cases.
+
+Nothing else changes: no arm, gate, bar, prediction, size, budget or sequencing rule. `staged.sha256` is re-pinned for
+the runner, the box and the reducer.

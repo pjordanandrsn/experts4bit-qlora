@@ -66,6 +66,9 @@ PASS="P130_RUN_ID=$RUN_ID P130_RUN_NONCE=$NONCE P130_DEADLINE_EPOCH=$DEADLINE P1
 # is the proving rental the pre-registration names: the whole box end to end on Qwen3-30B-A3B itself at the proof's sizes
 # (no other family takes the int4 K19 prefill route P2 changes), because no local card runs the fp8 paged KV.
 for v in P130_PROVE; do [ -n "${!v:-}" ] && PASS="$PASS $v=$(printf %q "${!v}")"; done
+# Amendment 1: the corpus commit the gate resolved travels to the box, which reports it beside the one it read
+GATE_CORPUS=$(python3 -c 'import json, sys; print((json.load(open(sys.argv[1])).get("corpus") or {}).get("main") or "")' "$P130_FETCH_GATE" 2>/dev/null)
+case "$GATE_CORPUS" in ""|*[!0-9a-f]*) ;; *) [ ${#GATE_CORPUS} -eq 40 ] && PASS="$PASS P130_GATE_CORPUS=$GATE_CORPUS";; esac
 cp "$P130_FETCH_GATE" "$E4B_RENT_RUN_DIR/p130_fetch_gate.json" 2>/dev/null || say "note: could not copy the fetch gate report to the run directory" 1>&2
 if [ "${P130_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash p130_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p130"; exit 0; fi
 say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; launch e4b $E4B_SHA (from $REPO); stacks are the runner's constants; receipts -> $RUN_DIR/p130; deadline $DEADLINE"

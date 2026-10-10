@@ -193,6 +193,14 @@ def test_a_refused_p2_capture_still_times_the_default(box, clean_env):
     assert rec["function_p2"] is None and set(rec["replay_ms"]) == {"p2_off"} and len(rec["digests_p2_off"]) == NW
 
 
+def test_the_corpus_commit_the_box_read_is_taken_from_both_caches(box, tmp_path):
+    c = "b08601e04326c79dfdd32d625aee71d232d685c3"
+    (tmp_path / "ds" / "Salesforce___wikitext" / "wikitext-2-raw-v1" / "0.0.0" / c).mkdir(parents=True)
+    (tmp_path / "hub" / "datasets--Salesforce--wikitext" / "snapshots" / c).mkdir(parents=True)
+    assert box.corpus_commits(tmp_path / "ds", tmp_path / "hub") == {"arrow": [c], "snapshots": [c]}
+    assert box.corpus_commits(tmp_path / "none", tmp_path / "none") == {"arrow": [], "snapshots": []}
+
+
 def test_a_refused_default_capture_times_nothing(box, clean_env):
     rec = _speed(box, _PrefillStandIn(_tiny(), refuse=("p2_off",)))
     assert rec["graphs"]["p2_off"]["status"] == "refused" and "replay_ms" not in rec and "function_p2" not in rec

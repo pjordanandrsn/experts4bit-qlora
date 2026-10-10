@@ -231,7 +231,16 @@ def _pred(value, lo_hi):
     return {"value": value, "range": [lo, hi], "held": value is not None and lo <= value <= hi}
 
 
-def reduce(run: Path, e4b_sha: str, prove: bool = False) -> dict:
+def corpus_report(recs: dict, gate_corpus: str | None) -> dict:
+    """Amendment 1: the corpus commit the fetch gate resolved beside the one(s) the box read. Reported, never gated (the
+    windows digest already gates that every process read the same windows)."""
+    arrow = sorted({c for r in recs.values() for c in ((r.get("corpus") or {}).get("arrow") or [])})
+    snaps = sorted({c for r in recs.values() for c in ((r.get("corpus") or {}).get("snapshots") or [])})
+    same = None if not gate_corpus else (arrow == [gate_corpus] and snaps in ([], [gate_corpus]))
+    return {"gate": gate_corpus or None, "box_arrow": arrow, "box_snapshots": snaps, "same": same}
+
+
+def reduce(run: Path, e4b_sha: str, prove: bool = False, gate_corpus: str | None = None) -> dict:
     mode = "proof" if prove else "reading"
     size = MODES[mode]
     N = size["procs"]
@@ -377,6 +386,7 @@ def reduce(run: Path, e4b_sha: str, prove: bool = False) -> dict:
         "function_and_determinism": {"held": not fn_fail and not det_fail},
         "verdict": {"value": out["verdict"], "held": out["verdict"] == "P1_LICENSED P2_LICENSED"}}
     out["ceilings_ms"] = CEILING_MS
+    out["corpus"] = corpus_report(recs, gate_corpus)
     out["eager_median_ms"] = {n: sp.get("eager", {}).get("median_ms") for n, sp in sorted(timed.items())}
     return out
 
@@ -448,6 +458,7 @@ def _run_recs(mode="reading", e4b="a" * 40, L=4, off_ms=40.0, p1_ms=36.5, p2_rat
         r = {"proc": n, "p1": p1, "phase_b": PHASE_B.get(n, "none"), "model": "Qwen/Qwen3-30B-A3B",
              "revision": REVS["Qwen/Qwen3-30B-A3B"], "e4b_sha": e4b, "gnf4_sha": GNF4_SHA, "layers": L,
              "windows_digest": "w", "census": {"fusion_report": {"E4B_FUSE_T1_GLUE": {"prefill": "on" if p1 else "off"}}},
+             "corpus": {"arrow": ["b" * 40], "snapshots": ["b" * 40]},
              "speed": _speed(p1, size, L, off_ms=base * jitter, on_ms=base * jitter * p2_ratio, digest=f"d{p1}")}
         if n in PHASE_B:
             r["quality"] = _quality(PHASE_B[n], size, L, d)
@@ -462,13 +473,13 @@ def self_test() -> int:
     E = "a" * 40
     cases = []
 
-    def run(recs, premise=True, prove=False):
+    def run(recs, premise=True, prove=False, gate_corpus="b" * 40):
         with tempfile.TemporaryDirectory() as t:
             p = Path(t)
             (p / "summary.txt").write_text("premise ok\n" if premise else "premise failed\n")
             for n, r in (recs or {}).items():
                 (p / f"proc_{n}.json").write_text(json.dumps(r))
-            return reduce(p, E, prove)
+            return reduce(p, E, prove, gate_corpus)
 
     big = {"mutant_scale": 0.8}
 
@@ -482,6 +493,11 @@ def self_test() -> int:
 
     r = v()
     cases.append(("both licensed", r["verdict"] == "P1_LICENSED P2_LICENSED" and r["predictions"]["verdict"]["held"]))
+    cases.append(("the corpus the box read is the gate's", r["corpus"] == {"gate": "b" * 40, "box_arrow": ["b" * 40],
+                                                                       "box_snapshots": ["b" * 40], "same": True}))
+    r = run(_run_recs(d=big), gate_corpus="c" * 40)
+    cases.append(("a corpus drift is reported, not gated", r["corpus"]["same"] is False
+                  and r["verdict"] == "P1_LICENSED P2_LICENSED"))
     cases.append(("the savings are scored", r["predictions"]["p1_saving_ms"]["held"]
                   and r["predictions"]["p2_saving_ms"]["held"] and r["predictions"]["both_saving_ms"]["held"]))
     cases.append(("no premise", run(_run_recs(d=big), premise=False)["verdict"] == "NO_READING"))
@@ -628,13 +644,14 @@ def main(argv=None) -> int:
     p.add_argument("--out")
     p.add_argument("--e4b-sha", default=os.environ.get("E4B_SHA", ""))
     p.add_argument("--prove", action="store_true")
+    p.add_argument("--gate-corpus", default="", help="the fetch gate's corpus.main (Amendment 1; reported)")
     a = p.parse_args(argv)
     if a.self_test:
         return self_test()
-    v = reduce(Path(a.dir), a.e4b_sha, a.prove)
+    v = reduce(Path(a.dir), a.e4b_sha, a.prove, a.gate_corpus or None)
     json.dump(v, open(a.out, "w"), indent=1)
     print(f"P130_VERDICT {v['verdict']} {json.dumps(v['reasons'])}")
-    for k in ("p2_speed", "p1_speed", "spans", "function_p2", "determinism", "predictions"):
+    for k in ("p2_speed", "p1_speed", "spans", "function_p2", "determinism", "corpus", "predictions"):
         if k in v:
             print(f"  {k}: {json.dumps(v[k])}")
     q = v.get("quality") or {}

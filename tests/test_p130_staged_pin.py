@@ -78,7 +78,7 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 
 def test_the_reducer_applies_the_registered_rule():
     out = subprocess.run([sys.executable, str(LANE / "p130_reduce.py"), "--self-test"], capture_output=True, text=True)
-    assert out.returncode == 0 and "self-test OK (40 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "self-test OK (42 cases)" in out.stdout, out.stdout + out.stderr
     for line in ("TOL, SPREAD_X, SPREAD_MIN = 0.01, 2.0, 0.005", "P2_MARGIN, P1_MIN_GAIN, NOISY_SPAN = 1.01, 1.03, 1.02",
                  "CAPTURE_FORWARDS = 5", 'FLOORS = ("half", "chunk", "rev")', 'SUBJECT = "P1"',
                  "PAIRS = ((1, 2), (4, 3), (5, 6), (8, 7))", 'PHASE_B = {1: "off", 2: "on"}',
@@ -190,6 +190,15 @@ def test_the_driver_runs_to_its_dry_run(tmp_path):
     out = _drive(tmp_path, gate={})
     assert out.returncode == 0 and out.stdout.startswith("DRYRUN stage -> root@h:/root/p130"), out.stdout + out.stderr
     assert json.loads((tmp_path / "p130_fetch_gate.json").read_text())["passed"] is True   # the report travels
+    assert "P130_GATE_CORPUS" not in out.stdout
+
+
+def test_the_gates_corpus_commit_travels_to_the_box(tmp_path):
+    c = "b08601e04326c79dfdd32d625aee71d232d685c3"
+    out = _drive(tmp_path, gate={"corpus": {"main": c}})
+    assert out.returncode == 0 and f"P130_GATE_CORPUS={c}" in out.stdout, out.stdout + out.stderr
+    assert '--gate-corpus "$GATE_CORPUS"' in RUN and 'echo "GATE_CORPUS ${GATE_CORPUS:-none}"' in RUN
+    assert '"corpus": corpus_commits()' in BOX and "def corpus_report(recs: dict, gate_corpus" in REDUCE
 
 
 def test_the_driver_refuses_without_a_passing_fresh_gate_for_the_launch_commit(tmp_path):
