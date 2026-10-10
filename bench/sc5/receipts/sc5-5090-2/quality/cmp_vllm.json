@@ -1,0 +1,9 @@
+{
+ "argmax_agreement": 0.896362,
+ "label": "FAR",
+ "nll_delta": 0.049781,
+ "nll_delta_window_max": 0.274761,
+ "nll_delta_window_min": -0.086317,
+ "positions": 8192,
+ "windows": 64
+}
