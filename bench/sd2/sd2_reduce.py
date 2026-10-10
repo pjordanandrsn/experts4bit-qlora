@@ -367,7 +367,7 @@ def self_test() -> int:
         print("sd2_reduce self-test FAILED:", bad)
         return 1
     print("sd2_reduce self-test OK (89 proof cases: all four rules, sd2-prove-2's calibration, sd2-5090-1's V0 and "
-          "sd2-prove-4; 40 read cases: every verdict, every VOID item, the stage gate)")
+          "sd2-prove-4; 44 read cases: every verdict, every VOID item, the stage gates, reports that fail soft)")
     return 0
 
 
@@ -387,6 +387,14 @@ E_BUCKETS = ("1", "2", "4", "8", "16")
 SV_BAR, G_BAR, PAIR_LO, PAIR_HI, ANCHOR_TOL, TAU_DROP = 1.00, 1.05, 0.97, 1.03, 0.03, 0.20
 TOL, SPREAD_X, SPREAD_MIN = 0.01, 2.0, 0.005                          # P110's bar
 TEXTS = ("wikitext", "c4val1")
+
+
+def soft(fn, *args, **kwargs):
+    """A reported (never ruled) value, or {"report_unavailable": "<error>"} (Amendment 5b; sd2_box.soft's twin)."""
+    try:
+        return fn(*args, **kwargs)
+    except Exception as e:  # noqa: BLE001 -- recorded, by design
+        return {"report_unavailable": f"{type(e).__name__}: {str(e)[:200]}"}
 
 
 def _mean(xs):
@@ -411,9 +419,14 @@ def verify_cost(v1: dict) -> dict:
     noisy = abs(b / a - 1.0) > ANCHOR_TOL
     return {"anchor_ms": anchor, "anchor_ratio": b / a, "v_noisy": noisy, "S_V": sv, "best_S_V": best,
             "refutes": all(best[w] < SV_BAR for w in WORKLOADS),
-            "model_error": {w: {k: sv[w][k] / S_SD1[w][k] - 1.0 for k in (1, 2, 3)} for w in WORKLOADS},
-            "terms": {f"k{k}": {t: v1[f"k{k}"].get(t) for t in ("full_ms", "verify_ms", "post_ms", "loop_ms")}
-                      for k in (1, 2, 3)}}
+            "model_error": soft(lambda: {w: {k: sv[w][k] / S_SD1[w][k] - 1.0 for k in (1, 2, 3)} for w in WORKLOADS}),
+            "terms": soft(lambda: {f"k{k}": {t: v1[f"k{k}"].get(t) for t in ("full_ms", "verify_ms", "post_ms", "loop_ms")}
+                                   for k in (1, 2, 3)})}
+
+
+def stage_gate_v0(v: dict, gpu: dict, rule: str = "a4") -> str:
+    """Amendment 5b: after V0's own process, before the canary and V1 -- VOID when V0 fails, else OK."""
+    return "VOID" if v0_fails(v, gpu, rule) else "OK"
 
 
 def stage_gate(v: dict, gpu: dict, rule: str = "a4") -> str:
@@ -449,7 +462,7 @@ def quality(q: dict) -> dict:
         st = {a: _q_stats(q["per_window"][t], a, ref) for a in ("rep", "chunk", "mutant_scale")}
         for k in (1, 2):
             st[f"ON{k}"] = _q_stats(q["on"]["per_window"][f"ON{k}"], t, ref)
-        st["w16"] = _q_stats(q["w16"]["per_window"][t], "R", ref)
+        st["w16"] = soft(lambda: _q_stats(q["w16"]["per_window"][t], "R", ref))   # reported only
         draws = ["chunk"] + ([] if (q.get("rep_identical") or {}).get(t) else ["rep"])
         fl = {"draws": draws, "B_floor": max(abs(st[f]["bias"]) for f in draws), "S_floor": max(st[f]["spread"] for f in draws)}
         out[t] = {"stats": st, "floor": fl, "bias_bar": fl["B_floor"] + TOL, "spread_bar": SPREAD_X * max(fl["S_floor"], SPREAD_MIN),
@@ -540,9 +553,10 @@ def judge_read(gpu, v, e: dict, q, expect: dict, w1=None, rule: str = "a4") -> d
                 void.append(f"mechanism:{a}:{w}")
     qr = None
     if q:
-        if q.get("windows_sha256") != (q.get("on") or {}).get("windows_sha256") \
-                or q.get("windows_sha256") != (q.get("w16") or {}).get("windows_sha256"):
-            void.append("Q:windows")
+        w16 = q.get("w16") or {}
+        w16_differs = "windows_sha256" in w16 and q.get("windows_sha256") != w16["windows_sha256"]
+        if q.get("windows_sha256") != (q.get("on") or {}).get("windows_sha256") or w16_differs:
+            void.append("Q:windows")                     # the w16 draw is reported: checked only when it is there
         try:
             qr = quality(q)
         except (KeyError, TypeError, ValueError) as ex:
@@ -570,18 +584,19 @@ def judge_read(gpu, v, e: dict, q, expect: dict, w1=None, rule: str = "a4") -> d
     out = {"verdict": None, "void": void, "stop_rule": stop_rule, "verify_cost": vc, "quality": qr,
            "g": {f"k{k}": {w: {"g": g[(k, w)], "pairs": list(pairs[(k, w)])} for w in WORKLOADS} for k in (1, 2)} if g else None,
            "self_pairs": {f"{x}:{w}": r for (x, w), r in self_pairs.items()},
-           "ms_per_token": {f"{a}:{w}": 1000.0 / r for (a, w), r in rate.items() if r},
-           "tau_live": {f"{a}:{w}": {"tau_live": c.get("tau_live"), "tau_sd1": TAU_SD1[w][int(a[2])],
-                                      "acceptance": c.get("acceptance")} for (a, w), c in census.items()},
-           "memory": {a: {"allocated": (e.get(a) or {}).get("max_memory_allocated"),
-                          "reserved": (e.get(a) or {}).get("max_memory_reserved")} for a in ARMS}}
+           "ms_per_token": soft(lambda: {f"{a}:{w}": 1000.0 / r for (a, w), r in rate.items() if r}),
+           "tau_live": soft(lambda: {f"{a}:{w}": {"tau_live": c.get("tau_live"), "tau_sd1": TAU_SD1[w][int(a[2])],
+                                                  "acceptance": c.get("acceptance")} for (a, w), c in census.items()}),
+           "memory": soft(lambda: {a: {"allocated": (e.get(a) or {}).get("max_memory_allocated"),
+                                       "reserved": (e.get(a) or {}).get("max_memory_reserved")} for a in ARMS})}
     if all(e.get(a) for a in ARMS):
-        out["identity"] = {f"{a}:{w}": _first_diff(e[a]["workloads"][w]["identity_tokens"],
-                                                   e[f"OFF-{a[-1]}"]["workloads"][w]["identity_tokens"])
-                           for a in ARMS if a.startswith("ON") for w in WORKLOADS if w in (e[a].get("workloads") or {})}
+        out["identity"] = soft(lambda: {f"{a}:{w}": _first_diff(e[a]["workloads"][w]["identity_tokens"],
+                                                                e[f"OFF-{a[-1]}"]["workloads"][w]["identity_tokens"])
+                                        for a in ARMS if a.startswith("ON") for w in WORKLOADS
+                                        if w in (e[a].get("workloads") or {})})
         if w1 is not None:
-            out["tripwire_w1"] = {a: _first_diff([e[a]["workloads"]["R"]["identity_tokens"][0]], [w1])[0]
-                                  for a in ("OFF-a", "OFF-b") if "R" in (e[a].get("workloads") or {})}
+            out["tripwire_w1"] = soft(lambda: {a: _first_diff([e[a]["workloads"]["R"]["identity_tokens"][0]], [w1])[0]
+                                               for a in ("OFF-a", "OFF-b") if "R" in (e[a].get("workloads") or {})})
     if void:
         out["verdict"] = "VOID"
         return out
@@ -726,6 +741,13 @@ def read_self_test() -> list:
     want("FASTER", lambda G, V, E, Q: V["v1"].update(slow, anchor_b_ms=7.40 * 1.04), why="V_NOISY: the rule cannot fire")
     want("VOID", lambda G, V, E, Q: (V["v1"].update(slow, anchor_b_ms=7.40 * 1.04), Q.clear()), "missing:Q",
          "V_NOISY needs Q")
+    if stage_gate_v0(v, gpu) != "OK" or stage_gate_v0(dict(v, v0=dict(v["v0"], draft={"agree": 0.5, "of": 576})), gpu) != "VOID":
+        bad.append("stage gate V0")
+    want("FASTER", lambda G, V, E, Q: Q.pop("w16"), why="the w16 draw is reported: missing, it fails soft")
+    want("FASTER", lambda G, V, E, Q: E["ON1-a"]["workloads"]["R"].update(identity_tokens={"report_unavailable": "x"}),
+         why="identity tokens are reported: unavailable, they fail soft")
+    want("FASTER", lambda G, V, E, Q: [E[a].pop("max_memory_allocated") for a in ARMS],
+         why="memory is reported: missing, it fails soft")
     if stage_gate(v, gpu) != "ALL":
         bad.append("stage gate: ALL")
     v2 = copy.deepcopy(v)
@@ -763,6 +785,7 @@ def main(argv=None) -> int:
     ap.add_argument("--rule", choices=RULES, default="a4")
     ap.add_argument("--read", metavar="DIR", help="the read's records: gpu_tests.json, v.json, e_<arm>.json, q.json")
     ap.add_argument("--gate-v", metavar="DIR", help="after stage V: print SD2_GATE VOID | E_ONLY | ALL")
+    ap.add_argument("--gate-v0", metavar="DIR", help="after V0 (Amendment 5b): print SD2_GATE0 VOID | OK")
     ap.add_argument("--expect-e4b")
     ap.add_argument("--expect-gnf4")
     ap.add_argument("--expect-rev")
@@ -771,6 +794,11 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     if a.self_test:
         return self_test()
+    if a.gate_v0:
+        gate = stage_gate_v0(json.load(open(os.path.join(a.gate_v0, "v.json"))),
+                             json.load(open(os.path.join(a.gate_v0, "gpu_tests.json"))), a.rule)
+        print(f"SD2_GATE0 {gate}", flush=True)
+        return 0
     if a.gate_v:
         gate = stage_gate(json.load(open(os.path.join(a.gate_v, "v.json"))),
                           json.load(open(os.path.join(a.gate_v, "gpu_tests.json"))), a.rule)

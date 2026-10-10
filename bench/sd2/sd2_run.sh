@@ -40,7 +40,7 @@ GPU_CLASS=${SD2_GPU_CLASS:-5090}; MIN_DISK_GB=${SD2_MIN_DISK_GB:-150}; MIN_RAM_G
 MODE=${SD2_MODE:-prove}
 case "$MODE" in
   prove) GUARD_S=4500; NEED_TESTS=600; NEED_FETCH=2100; NEED_BAKE=600; NEED_PROVE=900; E4B_T=$E4B_T_PROVE;;   # seconds; --wallclock-h 1.25
-  read) GUARD_S=12600; NEED_TESTS=600; NEED_FETCH=2100; NEED_BAKE=600; NEED_V=900; NEED_E=600; NEED_Q=6300; E4B_T=$E4B_T_READ;;   # --wallclock-h 3.5
+  read) GUARD_S=12600; NEED_TESTS=600; NEED_FETCH=2100; NEED_BAKE=600; NEED_V=900; NEED_CANARY=900; NEED_V1=600; NEED_E=600; NEED_Q=6300; E4B_T=$E4B_T_READ;;   # --wallclock-h 3.5
   *) say "refusing: SD2_MODE=$MODE"; finish 78;;
 esac
 case "$E4B_T" in *[!0-9a-f]*|"") say "refusing: the $MODE target is not a sha ($E4B_T)"; finish 78;; esac
@@ -204,15 +204,49 @@ SPEC3="E4B_PAGED_SPEC=eagle3 E4B_PAGED_SPEC_K=3 E4B_PAGED_SPEC_HEAD=$HEAD_DIR"
 stage(){ local tag=$1 rc=$2 out=$3
   { echo "$tag rc=$rc"; grep -a "^SD2_" logs/$tag.log | cut -c1-400; } | tee -a summary.txt
   [ "$rc" = 0 ] && [ -s "$out" ] || { tail -8 logs/$tag.log | cut -c1-300 | tee -a summary.txt; say "STAGE $tag FAILED (rc=$rc)"; finish 23; }; }
-can_run $NEED_V "stage V" || finish 40
-AL=$(step_alarm 2400); say "stage V (alarm=$AL)"
+# Amendment 5b (operational): a canary checks every later read path once, at minimal size, in its own process, right
+# after V0 passes; its records are discarded. A canary that fails stops the lane (rc 26) before the paid stages.
+canary(){ local tag=$1 rc=$2 out=$3
+  { echo "canary $tag rc=$rc"; grep -a "^SD2_CANARY" logs/canary_$tag.log | cut -c1-200; } | tee -a summary.txt
+  [ "$rc" = 0 ] && [ -s "$out" ] || { tail -8 logs/canary_$tag.log | cut -c1-300 | tee -a summary.txt; say "CANARY $tag FAILED (rc=$rc)"; finish 26; }; }
+can_run $NEED_V "stage V0" || finish 40
+AL=$(step_alarm 1800); say "stage V0 (alarm=$AL)"
 # shellcheck disable=SC2086  # the env lists are assignment lists by design
 env PYTHONPATH= $BASE_ENV $SPEC3 E4B_SHA=$E4B_T GNF4_SHA=$GNF4_T \
-  perl -e "alarm $AL; exec @ARGV" python $W/sd2_box.py --read-v --prompts-r $W/prompts_R.json --prompts-c $W/prompts_C-think.json \
-    --head-dir "$HEAD_DIR" --out $W/v.json > logs/v.log 2>&1
-stage v $? $W/v.json || finish 23
-GATE=$(python $W/sd2_reduce.py --gate-v $W | sed -n 's/^SD2_GATE //p'); echo "SD2_GATE $GATE" | tee -a summary.txt
-case "$GATE" in VOID|E_ONLY|ALL) ;; *) say "GATE FAILED"; finish 22;; esac
+  perl -e "alarm $AL; exec @ARGV" python $W/sd2_box.py --read-v0 --prompts-r $W/prompts_R.json --prompts-c $W/prompts_C-think.json \
+    --head-dir "$HEAD_DIR" --out $W/v.json > logs/v0.log 2>&1
+stage v0 $? $W/v.json || finish 23
+GATE0=$(python $W/sd2_reduce.py --gate-v0 $W | sed -n 's/^SD2_GATE0 //p'); echo "SD2_GATE0 $GATE0" | tee -a summary.txt
+case "$GATE0" in VOID|OK) ;; *) say "GATE FAILED"; finish 22;; esac
+GATE=VOID
+if [ "$GATE0" = OK ]; then
+  can_run $NEED_CANARY "the canary" || finish 40
+  say "canary: V1, E (ON2), Q (one window), minimal sizes, discarded"
+  # shellcheck disable=SC2086
+  env PYTHONPATH= $BASE_ENV $SPEC3 E4B_SHA=$E4B_T GNF4_SHA=$GNF4_T \
+    perl -e "alarm $(step_alarm 900); exec @ARGV" python $W/sd2_box.py --read-v1 --canary --prompts-r $W/prompts_R.json \
+      --out $W/canary_v1.json > logs/canary_v1.log 2>&1
+  canary v1 $? $W/canary_v1.json || finish 26
+  # shellcheck disable=SC2086
+  env PYTHONPATH= $BASE_ENV E4B_PAGED_SPEC=eagle3 E4B_PAGED_SPEC_K=2 E4B_PAGED_SPEC_HEAD=$HEAD_DIR E4B_SHA=$E4B_T GNF4_SHA=$GNF4_T \
+    perl -e "alarm $(step_alarm 900); exec @ARGV" python $W/sd2_box.py --read-e ON2-canary --canary --prompts-r $W/prompts_R.json \
+      --prompts-c $W/prompts_C-think.json --prompts-cn $W/prompts_C-nothink.json --out $W/canary_e.json > logs/canary_e.log 2>&1
+  canary e $? $W/canary_e.json || finish 26
+  # shellcheck disable=SC2086
+  env PYTHONPATH= $BASE_ENV E4B_PAGED_GRAPHS=0 E4B_SHA=$E4B_T GNF4_SHA=$GNF4_T \
+    perl -e "alarm $(step_alarm 1200); exec @ARGV" python $W/sd2_box.py --read-q --canary --windows 1 --prompt $Q_PROMPT --cont 16 \
+      --ref-dir $W/work/qref-canary --out $W/canary_q.json > logs/canary_q.log 2>&1
+  canary q $? $W/canary_q.json || finish 26
+  can_run $NEED_V1 "stage V1" || finish 40
+  AL=$(step_alarm 1800); say "stage V1 (alarm=$AL)"
+  # shellcheck disable=SC2086
+  env PYTHONPATH= $BASE_ENV $SPEC3 E4B_SHA=$E4B_T GNF4_SHA=$GNF4_T \
+    perl -e "alarm $AL; exec @ARGV" python $W/sd2_box.py --read-v1 --prompts-r $W/prompts_R.json --v-json $W/v.json \
+      > logs/v1.log 2>&1
+  stage v1 $? $W/v.json || finish 23
+  GATE=$(python $W/sd2_reduce.py --gate-v $W | sed -n 's/^SD2_GATE //p'); echo "SD2_GATE $GATE" | tee -a summary.txt
+  case "$GATE" in VOID|E_ONLY|ALL) ;; *) say "GATE FAILED"; finish 22;; esac
+fi
 if [ "$GATE" != VOID ]; then
   for ARM in OFF-a ON1-a ON2-a ON2-b ON1-b OFF-b; do
     case "$ARM" in

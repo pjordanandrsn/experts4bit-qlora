@@ -860,3 +860,55 @@ Its V0 runs on fresh rows under rule a4 and fails closed before any timing. It m
 
 The ceiling is $3.66. The read needs the maintainer's separate ACK after this amendment merges, and it takes the rental
 slot after P130's proof. SD2's total so far is $2.737.
+
+## Amendment 5b (2026-10-10, operational): a canary and fail-soft reporting, after `sd2-5090-2`
+
+This amendment changes neither the rule nor any verdict input. The maintainer ruled on it before any code.
+
+**What happened.** `sd2-5090-2` (**$0.713**, teardown complete) ended as **HARNESS_ERROR, rc 23**.
+- The box's depth reporting (`_quantiles`, Amendment 5) passed a host-side quantile tensor against key-row angles on the
+  GPU, so V0 crashed after its capture check. No V0 verdict was read, and nothing was timed.
+- Everything before the crash held: the audit, the self-tests, the GPU tests (123 passed), the fetch, the head, the bake
+  and the prompts.
+- **The fix** (#1599) computes the quantiles on the host. The box's self-test, which runs on the card before the fetch,
+  now also runs the rotation summary on the GPU.
+- It was checked on the project A2000 at $0. The self-test passed on a CUDA tensor. The same file with only the fix
+  reverted reproduced the paid error on the same card.
+- The project now holds a standing rule: box-side code must see a CUDA tensor before a paid run.
+
+**The canary.** V1, E and Q have never executed on a card, because V0 ended both earlier reads before them. So right
+after V0 passes, each later path runs once at minimal size, each in its own process:
+- V1 with 2 timed steps and 1 warm-up step per term;
+- one E arm (ON2) with 2 rows per workload, SHORT 4 and LONG 8, and one round;
+- Q with one window per text and 16 continuation positions.
+
+The canary's records (`canary_*.json`) are discarded: no verdict reads them. A canary that fails stops the lane with
+rc 26, before V1's registered run, E and Q. Stage V is split to make room for it:
+- V0 runs in its own process (`--read-v0`), followed by its gate (`sd2_reduce.py --gate-v0`: VOID or OK);
+- then the canary;
+- then V1 in its own process (`--read-v1`), which adds V1 to V0's record;
+- then the registered gate (VOID, E_ONLY or ALL), E and Q, as Amendment 3 registered them.
+
+**Fail-soft reporting.** Every reporting-only value is computed through `soft()`. On an error it records
+`{"report_unavailable": "<error>"}` and the stage continues, so a statistics bug can never again void a read.
+- **The values covered:**
+  - the depth floors and quantiles;
+  - V1's per-k census;
+  - E's identity tokens, its LONG-rep agreement, memory and loaded modules;
+  - Q's w16 draw, its ON graph statistics, memory and modules;
+  - in the reducer: the identity, the tripwire, ms per token, the τ_live report, the model error and the memory.
+- **The w16 windows check** applies only when the draw is present.
+- **Verdict inputs stay strict:** V0's records, V1's anchors and full step, E's rates, census and bucket counters, Q's
+  per-window statistics and windows.
+
+**The budget is unchanged: 3.5 h, a ceiling of $3.66.** The slow-host walk with the split stage V still starts Q in time:
+- V0 at 3 min (`sd2-5090-1` ran it, build included, in under 2);
+- the canary at 7 min;
+- V1 at 3 min.
+
+Q starts with about 3 min to spare. The time-left checks are `NEED_V` 900 s, `NEED_CANARY` 900 s, `NEED_V1` 600 s,
+`NEED_E` 600 s an arm, and `NEED_Q` 6300 s.
+
+**Before the next paid launch,** this box runs once on the A2000 for every path that does not need the FP8 pool: its
+self-test, including the GPU rotation summary and the fail-soft path on CUDA, and the reducer's self-test. The read then
+reruns as `sd2-5090-3` on the maintainer's ACK. SD2's total so far is $3.450.

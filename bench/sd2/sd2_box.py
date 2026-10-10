@@ -127,12 +127,16 @@ def rot_summary(cells):
            "cells": int(inf.numel()),
            "radial_drift_max": round(float(dr[inf].max()), 6) if bool(inf.any()) else None}
     if all(len(c) > 3 for c in cells):
-        rel = torch.cat([c[3] for c in cells], 1)
-        out["floors"] = {}
-        for name, f in FLOORS:
-            m = rel >= f
-            out["floors"][name] = {"cells": int(m.sum()), "quantiles": _quantiles(a[m]),
-                                   "per_layer": [_quantiles(a[layer][m[layer]]) for layer in range(a.shape[0])]}
+        out["floors"] = soft(lambda: _floors(a, torch.cat([c[3] for c in cells], 1)))   # reported, never gated: soft
+    return out
+
+
+def _floors(a, rel):
+    out = {}
+    for name, f in FLOORS:
+        m = rel >= f
+        out[name] = {"cells": int(m.sum()), "quantiles": _quantiles(a[m]),
+                     "per_layer": [_quantiles(a[layer][m[layer]]) for layer in range(a.shape[0])]}
     return out
 
 
@@ -486,6 +490,17 @@ E_WORKLOADS = {"R": 160, "C-think": 256, "C-nothink": 256}   # LONG per workload
 SHORT, E_REPS = 32, 3
 Q_BUCKETS = (1, 2, 4, 8, 16)       # P110's BUCKETS (a test pins them equal)
 W16 = 16                           # Q's reported w16 draw: windows a pass
+#: Amendment 5b (operational): the canary's sizes -- every read code path once, at minimal size, results discarded
+CANARY = {"timed": 2, "warm": 1, "e_rows": 2, "short": 4, "long": 8, "reps": 1}
+
+
+def soft(fn, *args, **kwargs):
+    """A reporting-only value: ``fn(...)``, or ``{"report_unavailable": "<error>"}`` when it raises. Never used for a
+    verdict input (Amendment 5b: a statistics bug must never again void a read)."""
+    try:
+        return fn(*args, **kwargs)
+    except Exception as e:  # noqa: BLE001 -- recorded, by design
+        return {"report_unavailable": f"{type(e).__name__}: {str(e)[:200]}"}
 
 
 def median(xs):
@@ -587,7 +602,7 @@ def paged_verify_pass(model, w, P, C, k, device, chunk=512):
                 kv.note_len(0, base + n)
                 return lp
             out = assemble_verify(first, step, w, P, C, k).cpu()
-        stats = {str(b): dict(v) for b, v in runner.graph_stats.items()}
+        stats = soft(lambda: {str(b): dict(v) for b, v in runner.graph_stats.items()})
         return out, stats
     finally:
         model.forward = inner
@@ -619,18 +634,8 @@ def _build(env_ok, tap=None):
     return cfg, parts, conf, round(time.perf_counter() - t0, 2)
 
 
-def read_v_main(a) -> int:
-    """Stage V. V0 on rows outside calibration, written before any timing (the reducer VOIDs the read on any failure),
-    then V1's timed terms on R row 0's live slot."""
-    import torch
-    from safetensors.torch import load_file
-
-    import sd1_eagle3 as ref_mod
-    from experts4bit_qlora.engines.eagle3_draft import Eagle3Drafter
-    from experts4bit_qlora.engines.spec_decode import SpecDecoder
-
-    R, C = load_rows(a.prompts_r), load_rows(a.prompts_c)
-    tap = LogitsTap()
+def _build_v(tap=None):
+    """Stage V's server: the shipped default with speculation on at k = 3, graphs on; its census record."""
     cfg, parts, conf, load_s = _build(lambda c: None if (c.spec == "eagle3" and c.spec_k == K_SERVER and c.graphs)
                                       else f"stage V needs E4B_PAGED_SPEC=eagle3, K={K_SERVER} and graphs (got "
                                            f"{c.spec}, {c.spec_k}, graphs={c.graphs})", tap)
@@ -642,6 +647,20 @@ def read_v_main(a) -> int:
                       "graph_status": {str(b): gs.get(b) for b in BUCKETS_WANTED},
                       "post_graphs": {str(n): v for n, v in (getattr(runner, "spec_graph_status", None) or {}).items()},
                       "spec_build": parts.info.get("spec")}}
+    return cfg, parts, rec
+
+
+def read_v0_main(a) -> int:
+    """Stage V's correctness gate, V0, in its own process: on rows outside calibration, judged by rule a4 (the reducer
+    VOIDs the read on any failure; no timing follows a failure)."""
+    from safetensors.torch import load_file
+
+    import sd1_eagle3 as ref_mod
+    import sd2_reduce
+
+    R, C = load_rows(a.prompts_r), load_rows(a.prompts_c)
+    tap = LogitsTap()
+    cfg, parts, rec = _build_v(tap)
     gate = Gate(parts, tap)
     v0 = {"gate_rows": list(GATE_ROWS), "draft_rows": list(DRAFT_ROWS),
           "capture_bitwise": gate.capture_bitwise(R[GATE_ROWS[0]]), "addressing": {}, "mutants": {}}
@@ -651,7 +670,9 @@ def read_v_main(a) -> int:
             for k in (1, 2, 3):
                 res = gate.addressing(rows[i], k, POSITIONS)
                 v0["addressing"][f"{name}{i}_k{k}"] = res
-                print(f"SD2_V0 addressing {name}{i} k={k} " + json.dumps(res), flush=True)
+                print(f"SD2_V0 addressing {name}{i} k={k} " + json.dumps({kk: res.get(kk) for kk in
+                      ("rows_agree", "cont_agree", "mean_abs_dlogp")})
+                      + f" layer0={(res.get('k_rot') or {}).get('max_abs_angle_layer0')}", flush=True)
     for m in ("a", "b", "c"):
         for name, rows in (("R", R), ("C", C)):
             undo = mutant(m, gate)
@@ -660,31 +681,38 @@ def read_v_main(a) -> int:
             finally:
                 undo()
             v0["mutants"][f"{m}_{name}{GATE_ROWS[0]}"] = res
-            print(f"SD2_V0 mutant {m} {name}{GATE_ROWS[0]} " + json.dumps(res), flush=True)
+            print(f"SD2_V0 mutant {m} {name}{GATE_ROWS[0]} mean_abs_dlogp={res.get('mean_abs_dlogp')}"
+                  f" layer0={(res.get('k_rot') or {}).get('max_abs_angle_layer0')}", flush=True)
     ref = ref_mod.Eagle3Draft(load_file(os.path.join(a.head_dir, "model.safetensors")), device="cuda")
     v0["draft"] = gate.draft_gate([R[i] for i in DRAFT_ROWS] + [C[i] for i in DRAFT_ROWS], ref)
     print("SD2_V0 draft " + json.dumps(v0["draft"]), flush=True)
     v0["transition"] = gate.transition(R[GATE_ROWS[0]], R[GATE_ROWS[1]])
     print("SD2_V0 transition " + json.dumps(v0["transition"]), flush=True)
     rec["v0"] = v0
-    import sd2_reduce
-    rec["v0_fails"] = sd2_reduce.v0_fails(rec)                  # rule a2 on these rows; the GPU tests are the runner's
+    rec["v0_fails"] = sd2_reduce.v0_fails(rec)                  # rule a4 on these rows; the GPU tests are the runner's
+    rec["modules_loaded_v0"] = soft(_modules)
     json.dump(rec, open(a.out, "w"), indent=1, default=str)     # V0 on disk before any timing
-    if rec["v0_fails"]:
-        print("SD2_V VOID (V0 failed: " + ", ".join(rec["v0_fails"]) + "); no timing", flush=True)
-        return 0
+    print("SD2_V0 " + ("VOID (" + ", ".join(rec["v0_fails"]) + "); no timing" if rec["v0_fails"] else "done"), flush=True)
+    return 0
 
-    # ---- V1: the timed terms, on R row 0's live slot at moving positions (timing, not addressing)
+
+def v1_terms(runner, gate, row, timed, warm):
+    """V1's timed terms on ``row``'s live slot at moving positions (timing, not addressing): the anchor twice
+    bracketing, per k, the verify and the post-verify graph by CUDA events and the whole step by wall."""
+    import torch
+
+    from experts4bit_qlora.engines.eagle3_draft import Eagle3Drafter
+    from experts4bit_qlora.engines.spec_decode import SpecDecoder
     spec3 = runner.spec
     d3 = spec3.drafter
 
     def anchor():
-        rid, _slot = gate.begin(R[0])
+        rid, _slot = gate.begin(row)
         try:
-            for _ in range(WARM):
+            for _ in range(warm):
                 runner._run_decode_bucketed([rid])
             walls = []
-            for _ in range(TIMED):
+            for _ in range(timed):
                 t0 = time.perf_counter()
                 runner._run_decode_bucketed([rid])      # its host read synchronizes
                 walls.append(time.perf_counter() - t0)
@@ -705,7 +733,7 @@ def read_v_main(a) -> int:
             e.record()
             self.ev.append((s, e))
 
-    v1 = {"timed": TIMED, "warm": WARM, "anchor_a_ms": anchor()}
+    v1 = {"timed": timed, "warm": warm, "anchor_a_ms": anchor()}
     for k in (1, 2, 3):
         drafter = Eagle3Drafter(d3.w, k=k, max_positions=d3.max_positions, n_heads=d3.nh, n_kv=d3.nkv, head_dim=d3.hd,
                                 rope_theta=d3.theta, eps=d3.eps, device="cuda")      # the same weights, its own cache
@@ -731,13 +759,13 @@ def read_v_main(a) -> int:
             spec._post_graphs[k + 1] = _Timed(spec._post_graphs[k + 1], ev_p)
         runner.spec = spec
         try:
-            rid, _slot = gate.begin(R[0])               # the prompt completes alone: this spec starts
+            rid, _slot = gate.begin(row)                # the prompt completes alone: this spec starts
             try:
-                for _ in range(WARM):
+                for _ in range(warm):
                     runner._run_decode_spec(rid)
                 del ev_v[:], ev_p[:]
                 walls = []
-                for _ in range(TIMED):
+                for _ in range(timed):
                     t0 = time.perf_counter()
                     runner._run_decode_spec(rid)        # its one host read synchronizes
                     walls.append(time.perf_counter() - t0)
@@ -753,15 +781,38 @@ def read_v_main(a) -> int:
                        "post_ms": None if post is None else round(post, 4),
                        "loop_ms": None if post is None else round(full - ver - post, 4),
                        "verify_events": len(ev_v), "post_events": len(ev_p), "post_status": post_status,
-                       "census": spec.census()}
+                       "census": soft(spec.census)}
         print(f"SD2_V1 k={k} " + json.dumps(v1[f"k{k}"], default=str), flush=True)
         del spec, drafter
     v1["anchor_b_ms"] = anchor()                        # the A/A brackets the k terms
     print(f"SD2_V1 anchors {v1['anchor_a_ms']} {v1['anchor_b_ms']} ms", flush=True)
-    rec["v1"] = v1
-    rec["max_memory_allocated"] = int(torch.cuda.max_memory_allocated())
-    rec["modules_loaded"] = _modules()
-    json.dump(rec, open(a.out, "w"), indent=1, default=str)
+    return v1
+
+
+def read_v1_main(a) -> int:
+    """Stage V's timed terms, V1, in its own process on R row 0. ``--canary``: CANARY's sizes, written to ``--out`` and
+    discarded (Amendment 5b). Otherwise V1 is added to V0's record (``--v-json``), which must carry no V0 failure."""
+    import torch
+    R = load_rows(a.prompts_r)
+    _cfg, parts, rec = _build_v()
+    gate = Gate(parts, None)
+    if a.canary:
+        v1 = v1_terms(parts.runner, gate, R[0], CANARY["timed"], CANARY["warm"])
+        json.dump({"stage": "V1", "canary": True, "v1": v1}, open(a.out, "w"), default=str)
+        print("SD2_CANARY v1 ok", flush=True)
+        return 0
+    v = json.load(open(a.v_json))
+    if v.get("v0_fails") or not v.get("v0"):
+        raise SystemExit(f"REFUSED: V1 after a failed or missing V0 ({v.get('v0_fails')})")
+    if (v.get("e4b_sha"), v.get("gnf4_sha")) != (rec["e4b_sha"], rec["gnf4_sha"]):
+        raise SystemExit("REFUSED: V1's build is not V0's")
+    v["v1"] = v1_terms(parts.runner, gate, R[0], TIMED, WARM)
+    v["max_memory_allocated"] = soft(lambda: int(torch.cuda.max_memory_allocated()))
+    v["modules_loaded"] = soft(_modules)
+    v["load_s_v1"] = rec["load_s"]
+    tmp = a.v_json + ".tmp"
+    json.dump(v, open(tmp, "w"), indent=1, default=str)
+    os.replace(tmp, a.v_json)
     print("SD2_V done", flush=True)
     return 0
 
@@ -775,6 +826,7 @@ def read_e_main(a) -> int:
     import p109_box
     arm = a.arm.split("-")[0]
     want = {"OFF": ("off", 0), "ON1": ("eagle3", 1), "ON2": ("eagle3", 2)}[arm]
+    short, reps, n_rows = (CANARY["short"], CANARY["reps"], CANARY["e_rows"]) if a.canary else (SHORT, E_REPS, None)
     cfg, parts, conf, load_s = _build(
         lambda c: None if ((c.spec, int(c.spec_k or 0)) == want and c.graphs and c.max_seqs == 16)
         else f"arm {a.arm} needs spec {want}, graphs and max_seqs 16 (got {c.spec}, {c.spec_k}, graphs={c.graphs}, "
@@ -792,27 +844,30 @@ def read_e_main(a) -> int:
     def graph_stats():
         return {str(b): dict(v) for b, v in (getattr(runner, "graph_stats", None) or {}).items()}
 
-    rec = {"stage": "E", "arm": a.arm, "spec": cfg.spec, "k": cfg.spec_k, "load_s": load_s, "config": conf,
+    rec = {"stage": "E", "arm": a.arm, "canary": bool(a.canary), "spec": cfg.spec, "k": cfg.spec_k, "load_s": load_s,
+           "config": conf,
            "e4b_sha": os.environ.get("E4B_SHA"), "gnf4_sha": os.environ.get("GNF4_SHA"),
            "graph_status": {str(b): s for b, s in (parts.info.get("graph_status") or {}).items()},
            "post_graphs": {str(n): v for n, v in (getattr(runner, "spec_graph_status", None) or {}).items()},
            "spec_build": parts.info.get("spec"), "workloads": {}}
     for w, long_ in E_WORKLOADS.items():
-        rows = rows_of[w]
+        rows = rows_of[w][:n_rows] if n_rows else rows_of[w]
+        long_ = CANARY["long"] if a.canary else long_
         c0 = dict(spec.census()) if spec is not None else None
         g0 = graph_stats()
-        one_pass(rows, SHORT)                                       # warm, untimed
-        walls, longs = {str(SHORT): [], str(long_): []}, []
-        for _ in range(E_REPS):
-            walls[str(SHORT)].append(one_pass(rows, SHORT)[0])
+        one_pass(rows, short)                                       # warm, untimed
+        walls, longs = {str(short): [], str(long_): []}, []
+        for _ in range(reps):
+            walls[str(short)].append(one_pass(rows, short)[0])
             wall, toks = one_pass(rows, long_)
             walls[str(long_)].append(wall)
             longs.append(toks)
-        s = p109_box.slope(walls[str(SHORT)], walls[str(long_)], len(rows), SHORT, long_)
+        s = p109_box.slope(walls[str(short)], walls[str(long_)], len(rows), short, long_)
         g1 = graph_stats()
-        wrec = {"walls": walls, **s, "short": SHORT, "long": long_, "rows": len(rows),
+        wrec = {"walls": walls, **s, "short": short, "long": long_, "rows": len(rows),
                 "graph_stats_delta": {b: {kk: g1[b][kk] - g0.get(b, {}).get(kk, 0) for kk in g1[b]} for b in g1},
-                "identity_tokens": longs[0], "long_reps_identical": all(t == longs[0] for t in longs[1:])}
+                "identity_tokens": soft(lambda: longs[0]),
+                "long_reps_identical": soft(lambda: all(t == longs[0] for t in longs[1:]))}
         if spec is not None:
             c1 = dict(spec.census())
             d = {kk: c1[kk] - c0[kk] for kk in ("prefills", "steps", "drafted", "accepted", "emitted", "short_steps",
@@ -823,11 +878,11 @@ def read_e_main(a) -> int:
         rec["workloads"][w] = wrec
         print(f"SD2_E {a.arm} {w} decode_tok_s={s.get('decode_tok_s')}"
               + (f" tau_live={wrec['spec_census']['tau_live']}" if spec is not None else ""), flush=True)
-    rec["max_memory_allocated"] = int(torch.cuda.max_memory_allocated())
-    rec["max_memory_reserved"] = int(torch.cuda.max_memory_reserved())
-    rec["modules_loaded"] = _modules()
+    rec["max_memory_allocated"] = soft(lambda: int(torch.cuda.max_memory_allocated()))
+    rec["max_memory_reserved"] = soft(lambda: int(torch.cuda.max_memory_reserved()))
+    rec["modules_loaded"] = soft(_modules)
     json.dump(rec, open(a.out, "w"), default=str)
-    print(f"SD2_E done {a.arm}", flush=True)
+    print(f"SD2_CANARY e ok {a.arm}" if a.canary else f"SD2_E done {a.arm}", flush=True)
     return 0
 
 
@@ -866,14 +921,18 @@ def read_q_main(a) -> int:
             print(f"SD2_Q {arm} {t} done ({len(wins)} windows)", flush=True)
     rec["on"] = {"per_window": on, "graph_stats": on_eng, "plan": {f"ON{k}": verify_plan(P, C, k) for k in (1, 2)},
                  "windows_sha256": {t: pq.windows_sha(w) for t, w in windows.items()}}
-    w16 = pq.measure_phase(model, windows, phase="off", prompt=P, cont=C, chunk=512, floor_chunk=256, group=W16,
-                           device=cfg.device, ref_dir=a.ref_dir + "-w16", arms=("R",))
-    rec["w16"] = {"per_window": w16["per_window"], "windows_sha256": w16["windows_sha256"], "group": W16}
-    rec.update({"stage": "Q", "load_s": load_s, "config": conf, "e4b_sha": os.environ.get("E4B_SHA"),
-                "gnf4_sha": os.environ.get("GNF4_SHA"), "max_mem_gb": round(torch.cuda.max_memory_allocated() / 2**30, 2),
-                "modules_loaded": _modules()})
+
+    def w16_draw():
+        w16 = pq.measure_phase(model, windows, phase="off", prompt=P, cont=C, chunk=512, floor_chunk=256, group=W16,
+                               device=cfg.device, ref_dir=a.ref_dir + "-w16", arms=("R",))
+        return {"per_window": w16["per_window"], "windows_sha256": w16["windows_sha256"], "group": W16}
+    rec["w16"] = soft(w16_draw)                                 # reported, never gated
+    rec.update({"stage": "Q", "canary": bool(a.canary), "load_s": load_s, "config": conf,
+                "e4b_sha": os.environ.get("E4B_SHA"), "gnf4_sha": os.environ.get("GNF4_SHA"),
+                "max_mem_gb": soft(lambda: round(torch.cuda.max_memory_allocated() / 2**30, 2)),
+                "modules_loaded": soft(_modules)})
     json.dump(rec, open(a.out, "w"), default=str)
-    print("SD2_Q done", flush=True)
+    print("SD2_CANARY q ok" if a.canary else "SD2_Q done", flush=True)
     return 0
 
 
@@ -946,6 +1005,11 @@ def self_test() -> int:
         bad.append("pair-0 rotation")
     if summ["informative_layer0"] != 2 or summ["floors"]["2^-3"]["cells"] != 2 or summ["floors"]["2^-7"]["per_layer"][0][3] < 0.99:
         bad.append("rotation floors")
+    if soft(lambda: 1 / 0) != {"report_unavailable": "ZeroDivisionError: division by zero"} or soft(lambda: 3) != 3:
+        bad.append("soft")
+    if "report_unavailable" not in rot_summary([(ang.view(1, 3, 1), inf.view(1, 3, 1), dr.view(1, 3, 1),
+                                                 rel.view(3))])["floors"]:
+        bad.append("floors fail soft")                    # a malformed rel: the summary survives, the floors say why
     if torch.cuda.is_available():                     # the box: the same summary on the device the angles live on
         dev = "cuda"
         ang_d, inf_d, dr_d = pair0_rotation(zo.to(dev), (zo * torch.exp(torch.tensor(1j))).to(dev),
@@ -953,10 +1017,14 @@ def self_test() -> int:
         summ_d = rot_summary([(ang_d.view(1, 3, 1), inf_d.view(1, 3, 1), dr_d.view(1, 3, 1), rel.to(dev))])
         if summ_d["floors"] != summ["floors"] or summ_d["max_abs_angle_layer0"] != summ["max_abs_angle_layer0"]:
             bad.append("rotation summary on the GPU")
+        if "report_unavailable" not in rot_summary([(ang_d.view(1, 3, 1), inf_d.view(1, 3, 1), dr_d.view(1, 3, 1),
+                                                     rel.view(3).to(dev))])["floors"]:
+            bad.append("floors fail soft on the GPU")
     if bad:
         print("sd2_box self-test FAILED:", bad)
         return 1
-    print("sd2_box self-test OK (agreement, dlogp, digest, logits tap, verify plan and assembly, median, pair-0 rotation"
+    print("sd2_box self-test OK (agreement, dlogp, digest, logits tap, verify plan and assembly, median, pair-0 rotation, "
+          "fail-soft reports"
           + (", and its summary on the GPU)" if torch.cuda.is_available() else ")"))
     return 0
 
@@ -965,7 +1033,10 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--prove", action="store_true")
-    ap.add_argument("--read-v", action="store_true")
+    ap.add_argument("--read-v0", action="store_true")
+    ap.add_argument("--read-v1", action="store_true")
+    ap.add_argument("--canary", action="store_true", help="Amendment 5b: minimal sizes, results discarded")
+    ap.add_argument("--v-json", help="--read-v1: V0's record, which V1 is added to")
     ap.add_argument("--read-e", dest="arm")
     ap.add_argument("--read-q", action="store_true")
     ap.add_argument("--prompts-r")
@@ -982,8 +1053,10 @@ def main(argv=None) -> int:
         return self_test()
     if a.prove:
         return prove_main(a)
-    if a.read_v:
-        return read_v_main(a)
+    if a.read_v0:
+        return read_v0_main(a)
+    if a.read_v1:
+        return read_v1_main(a)
     if a.arm:
         return read_e_main(a)
     if a.read_q:
