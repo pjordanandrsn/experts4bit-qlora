@@ -5,7 +5,7 @@
 #
 # One rented RTX A2000 (sm_86: e4b's NF4 host-residency path, not the fp8 paged runner). Expert ids are correctness-class
 # data; no timing from this box is quoted. Steps:
-#   install   experts4bit-qlora at E4B_SHA (the census branch) + datasets; grouped-nf4-gemm cloned at GNF4_SHA and
+#   install   experts4bit-qlora[train] at E4B_SHA + transformers 5.16.1 + datasets; grouped-nf4-gemm cloned at GNF4_SHA and
 #             installed over the released one (its bench/cold-engine/routing-trace/capture_routing.py is reused)
 #   tripwire  the loader, the pipelined residency engine and the expert profile import; versions.txt
 #   fetch     Qwen/Qwen3-30B-A3B at its pinned revision (bf16, ~61 GB; quantized to NF4 on load)
@@ -72,8 +72,10 @@ pipx(){ local log=$1 secs=$2; shift 2
   perl -e "alarm $secs; exec @ARGV" python -m pip install -q --no-input "$@" > $log 2>&1 && return 0
   say "pip failed ($(tail -1 $log | cut -c1-120)) -- one retry in 20 s"; sleep 20
   perl -e "alarm $secs; exec @ARGV" python -m pip install -q --no-input "$@" >> $log 2>&1; }
-say "install experts4bit-qlora @$E4B_SHA + datasets, then grouped-nf4-gemm @$GNF4_SHA (as SC1's runner)"
-pipx logs/pip_e4b.log 1800 --prefer-binary "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" datasets \
+# e4b's [train] extra carries transformers (loc-a2000-4 refused at the tripwire without it); transformers is pinned to
+# SC1's Qwen3 version, as SC1's runner pins it.
+say "install experts4bit-qlora[train] @$E4B_SHA + transformers 5.16.1 + datasets, then grouped-nf4-gemm @$GNF4_SHA (as SC1's runner)"
+pipx logs/pip_e4b.log 1800 --prefer-binary "experts4bit-qlora[train] @ git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" "transformers==5.16.1" datasets \
   || { tail -3 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
 perl -e 'alarm 600; exec @ARGV' git clone -q https://github.com/pjordanandrsn/grouped-nf4-gemm.git $W/gnf4 > logs/clone.log 2>&1 \
   && git -C $W/gnf4 checkout -q $GNF4_SHA || { say "CLONE FAIL"; finish 9; }
