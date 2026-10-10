@@ -118,8 +118,9 @@ a fresh process.
 
 - **FASTER:** this PR adds the claims row, with g1 and g16 and their pair intervals, and STATUS records the
   one-request gain.
-- **The defaults do not change.** Phase 1 and Phase 2 are already the default and bitwise, and the coming e4b 0.52.0
-  (#1516) ships them default-on.
+- **The defaults do not change.** With grouped-nf4-gemm 0.45.0 or later, Phase 1 and Phase 2 are already the default
+  and bitwise, and the coming e4b 0.52.0 (#1516) ships them default-on. Phase 2 engages only where the installed
+  grouped-nf4-gemm has #526–#530; with 0.44.0 or older, only Phase 1 runs.
 
 ## What this reading cannot say
 

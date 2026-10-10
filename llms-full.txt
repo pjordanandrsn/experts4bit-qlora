@@ -2302,8 +2302,9 @@ build, depending on the host. `e4b.serve.p125.int4-attn-calib-default.qwen3.5090
 **The launch-bound glue is cut, bitwise.**
 - **What changed.** P127 fused or removed the small launches around the MoE routing and rotary on the default decode
   path: three host casts (#1448), and five grouped-nf4-gemm options (#526–#530) wired in by #1472, #1477 and #1482.
-- **What it buys.** On Qwen3-30B-A3B the default now decodes one request 1.132× as fast as the stack before #1448 (226
-  → 256 tok/s, 0.52 ms saved per step), and 16 requests 1.016× as fast.
+- **What it buys.** On Qwen3-30B-A3B, with grouped-nf4-gemm 0.45.0 or later, the default now decodes one request 1.132×
+  as fast as the stack before #1448 (226 → 256 tok/s, 0.52 ms saved per step), and 16 requests 1.016× as fast. With
+  0.44.0 or older, only Phase 1 runs.
 - **What it costs.** Tokens and per-step logits are bitwise identical, and memory does not change.
 - **In context.** The saving is about the size of the launch-bound routing glue that P123 priced at 11 % of a 4.75 ms
   step.
