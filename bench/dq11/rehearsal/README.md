@@ -19,16 +19,19 @@ below the default 1 MiB threshold, leaving no streamed bytes and failing the
 engagement assertion. The adapter is refused in science mode and the original
 module attribute is restored immediately, including on preparation errors. The
 preparation refuses unless the adapter actually ran and returned nonzero
-streamed bytes; its real handle count and byte count enter the engagement report.
+streamed bytes; its real handle count and byte count enter the engagement report
+and a per-process `receipts/tiny-stream-prepare-*.json` file written immediately
+after successful preparation, before later scoring or proof can refuse.
 Science keeps
 its default threshold. This makes the tiny L arm exercise the same streaming
 branch as full Mistral without changing Loggetta's API or production code.
 
 The local random Mistral has 32 layers, hidden size 128, intermediate size 256,
-64 vocabulary entries and all 224 seven-projection modules / 448 FP32 rank-16
-adapter slots. Original ordered blocks are mapped modulo 64 into synthetic
-tokens, retaining sequence length 2048, forty training blocks and eight blocks
-for each quality check. This is explicitly synthetic correctness work.
+32000 vocabulary entries and all 224 seven-projection modules / 448 FP32 rank-16
+adapter slots. The vocabulary size matches the original scorer without changing
+its full-logits checks or math. Original ordered token IDs are retained with
+sequence length 2048, forty training blocks and eight blocks for each quality
+check. The word tokenizer and random weights remain synthetic correctness work.
 
 Run only from the reviewed source closure in an owned QNAP Pool 2 checkout,
 with a new workspace and the original canonical tokens file:
