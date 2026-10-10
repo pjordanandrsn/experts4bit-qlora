@@ -209,6 +209,11 @@ def run(args):
         if not initial_gate(initial_rows):
             raise ValueError("clean process initial quality failed before training")
         from loggetta.backends.experts4bit_train import train_loop
+        route_before = None
+        if args.arm == "L" and os.environ.get("DQ11_REHEARSAL") == "1":
+            from dq11_rehearsal import train_prefetch_snapshot, require_train_prefetch
+
+            route_before = train_prefetch_snapshot(directory, model)
         data = SimpleNamespace(blocks=tokens["train"], info={"source": "DQ11 sealed tokens", "tokens": locked["tokens"]["train"]})
         with DriverMemorySampler() as sampler:
             result["training"] = train_loop(model, trainable, str(directory / "hf-cache/model"), workload,
@@ -216,6 +221,9 @@ def run(args):
                                              frozen_digest=dense_train.frozen_digest, frozen_kind="dense")
         if result["training"]["status"] != "OK":
             raise ValueError("shipped loop failed integrity")
+        if route_before is not None:
+            result["rehearsal_train_prefetch"] = require_train_prefetch(
+                directory, model, route_before, len(result["training"]["correctness"]["losses"]))
         result["final_quality"] = score(model, tokens)
         result["final_adapters_sha256"] = {key: tensor_sha(p) for key, p in slots.items()}
     after = path_census(model, args.arm, sources)
