@@ -336,6 +336,24 @@ def windows_digest(ws) -> str:
     return hashlib.sha256(json.dumps(ws).encode()).hexdigest()
 
 
+def corpus_commits(datasets_cache=None, hub_cache=None) -> dict:
+    """The wikitext commit(s) this box actually read (Amendment 1): ``datasets`` keys its arrow cache of the config by the
+    hub commit it resolved (``Salesforce___wikitext/wikitext-2-raw-v1/<version>/<commit>``), and huggingface_hub keys the
+    downloaded files' snapshot by the same commit. Reported beside the fetch gate's ``corpus.main``, never gated."""
+    import glob
+    if datasets_cache is None:
+        import datasets
+        datasets_cache = datasets.config.HF_DATASETS_CACHE
+    if hub_cache is None:
+        from huggingface_hub import constants
+        hub_cache = constants.HF_HUB_CACHE
+    arrow = sorted({os.path.basename(p) for p in glob.glob(os.path.join(str(datasets_cache), "Salesforce___wikitext",
+                                                                         "wikitext-2-raw-v1", "*", "*")) if os.path.isdir(p)})
+    snaps = sorted(os.path.basename(p) for p in glob.glob(os.path.join(str(hub_cache), "datasets--Salesforce--wikitext",
+                                                                        "snapshots", "*")) if os.path.isdir(p))
+    return {"arrow": arrow, "snapshots": snaps}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
@@ -382,7 +400,7 @@ def main() -> int:
     rec = {"proc": a.proc, "p1": int(a.p1), "phase_b": a.phase_b, "model": cfg.model, "revision": cfg.revision,
            "e4b_sha": os.environ.get("E4B_SHA"), "gnf4_sha": os.environ.get("GNF4_SHA"),
            "transformers": transformers.__version__, "load_s": round(load_s, 1), "stride": a.stride,
-           "layers": int(cfgm.num_hidden_layers), "windows_digest": windows_digest(ws),
+           "layers": int(cfgm.num_hidden_layers), "windows_digest": windows_digest(ws), "corpus": corpus_commits(),
            "census": {k: parts.info.get(k) for k in ("moe_layers", "experts", "top_k", "model_type", "int4_expert_layers",
                                                      "int4_attn_projections", "int4_store_kinds", "fuse_qkv_n",
                                                      "fuse_t1_glue_n", "fuse_t1_glue_r2_n", "fuse_router_epilogue_n",

@@ -184,7 +184,9 @@ for P1 in $ORDER; do
   [ "$rc" = 0 ] || { tail -8 logs/proc_$n.log | cut -c1-300 | tee -a summary.txt; say "PROCESS $n FAILED (rc=$rc) -- the reducer will VOID"; }
 done
 PROVEFLAG=""; [ "$PROVE" = 1 ] && PROVEFLAG="--prove"
-say "reduce"; python $W/p130_reduce.py --dir $W --out $W/verdict.json --e4b-sha $E4B_SHA $PROVEFLAG 2>&1 | tee -a summary.txt
+GATE_CORPUS=${P130_GATE_CORPUS:-}; case "$GATE_CORPUS" in *[!0-9a-f]*) GATE_CORPUS="";; esac   # Amendment 1: reported only
+echo "GATE_CORPUS ${GATE_CORPUS:-none}" | tee -a summary.txt
+say "reduce"; python $W/p130_reduce.py --dir $W --out $W/verdict.json --e4b-sha $E4B_SHA $PROVEFLAG --gate-corpus "$GATE_CORPUS" 2>&1 | tee -a summary.txt
 [ "${PIPESTATUS[0]}" = 0 ] && [ -s $W/verdict.json ] || { say "REDUCER FAILED"; finish 22; }
 if [ "$PROVE" = 1 ]; then
   V=$(python -c "import json; v = json.load(open('$W/verdict.json')); print(v['verdict'], (v.get('quality') or {}).get('verdict'))")

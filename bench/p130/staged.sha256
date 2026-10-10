@@ -1,9 +1,9 @@
 # Names as the BOX sees them after staging (/root/p130). The box runs `sha256sum -c` on this file; p130_drive.sh and
 # tests/test_p130_staged_pin.py resolve each name to its source (bench/p130, bench/p117, bench/p108, bench/p97,
 # bench/p39, tests, bench/common).
-3be4ea9e2b47a9f026eb321e8d3c38537b87ca61ae0a6a61344b020e732e9d6b  p130_run.sh
-d2b1f85903bf2e2f562144ce6d9e999e9b0ec138d2f093a950185723bb0714a6  p130_box.py
-3a3976323835b9015737f625a2bae7fb0196410b378ccf5a61fc439e29cec19b  p130_reduce.py
+cd2aeb92eb119ad6d110fda9abcbfc8e94568dedad4956dd71ef1daba9dc7fa1  p130_run.sh
+d7071cce7084f56d59c8d30de6712c9ed5b3eb3f8edf5cdf293512ebd2095e98  p130_box.py
+9708ed460603b1093ab6fd099944e49bcc22e9bb5306c9bd7c46963b040ed20d  p130_reduce.py
 f93a38c21a08ee49e0ef68a2d1e513852b2b94d04ad3e8e5ddd99508037c0049  p117_box.py
 b57dff71cba30d9c649bae05df28f8c5376de9f7ac7ae5759157e57475b83e4b  p108_box.py
 608c1a20136393495ebb482afc58a24880e053a2caab6152fa3eb87183063a31  p97_box.py
