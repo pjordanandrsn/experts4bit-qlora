@@ -28,7 +28,8 @@ has an invalid request, else VALID; it *meets capacity* iff every server attains
 largest ladder rate whose row is VALID and meets capacity (None if a row is UNREAD or INVALID). A server's **knee** is its
 mean attainment over the knee block's 15 runs (12, 13 and 14 req/s; the ladder seed and four more each). Per draw,
 **gain** = mean knee of the draw's two ``on`` servers minus that of its two ``off`` servers, and **noise** = the larger
-same-arm replicate difference |a - b| in the draw; **bar** = max(0.03, noise).
+same-arm replicate difference |a - b| in the draw; **bar** = max(0.03, noise); **headroom** = 1 - the mean knee of the
+draw's two ``off`` servers, the most gain the block can show (reported always).
 
 **Outcome**, decoupled from Q1-Q6:
 - VOID if a server fails a gate; UNREAD if a needed number is missing;
@@ -36,7 +37,10 @@ same-arm replicate difference |a - b| in the draw; **bar** = max(0.03, noise).
   ``off`` server minus 0.05, or gain <= -bar in both draws;
 - FASTER if gain >= bar in both draws. The capacity number moves to ``on``'s ceiling iff that ceiling is above SC2e's 12
   (``readme_number``; None otherwise: the number stays 12);
+- KNEE_SATURATED if the outcome would be FLAT and headroom < bar in either draw: the instrument could not have shown the
+  gain, so FLAT's consequences do not fire, the number stays 12 and ``on``'s ceiling is reported with no claim;
 - FLAT otherwise.
+REGRESSED and its trigger are reported with the knee gains beside them (``outcome.why``).
 
 **Predictions** (each per draw, means over the draw's servers of an arm; HOLDS / MISSED / UNREAD; no outcome reads them):
   Q1  prefill forward device time p50 (``sc2e_census``): on - off in [-7.0, -3.5] ms.
@@ -268,16 +272,17 @@ def reduce(d: str) -> dict:
         rows = {r: row(d, arm, r) for r in LADDER}
         out["arms"][arm] = {"rows": {str(r): v for r, v in rows.items()}, "ceiling": ceiling(rows)}
     kn = {t: knee(d, t) for t, _, _ in srv}
-    gain, noise, bar = {}, {}, {}
+    gain, noise, bar, headroom = {}, {}, {}, {}
     for k in DRAWS:
         on, off = [kn[f"e4b_on_d{k}{x}"] for x in "ab"], [kn[f"e4b_off_d{k}{x}"] for x in "ab"]
         if None in on + off:
-            gain[k] = noise[k] = bar[k] = None
+            gain[k] = noise[k] = bar[k] = headroom[k] = None
             continue
         gain[k] = round(statistics.fmean(on) - statistics.fmean(off), 4)
         noise[k] = round(max(abs(on[0] - on[1]), abs(off[0] - off[1])), 4)
         bar[k] = round(max(KNEE_MIN, noise[k]), 4)
-    out["knee"] = {"server": kn, "gain": gain, "noise": noise, "bar": bar}
+        headroom[k] = round(1 - statistics.fmean(off), 4)       # the most gain the knee block can show
+    out["knee"] = {"server": kn, "gain": gain, "noise": noise, "bar": bar, "headroom": headroom}
     cen = out["census"] = census(d)
 
     def per_draw(arm, k, fn):
@@ -332,19 +337,30 @@ def reduce(d: str) -> dict:
     if noreg is not None:
         noreg = not nr_why
     out["no_regression"] = {"holds": noreg, "why": nr_why}
-    readme = None
+    readme, why = None, []
     if void:
         verdict = "VOID"
     elif con is None or coff is None or noreg is None or None in gain.values():
         verdict = "UNREAD"
     elif con < coff or not noreg or all(gain[k] <= -bar[k] for k in DRAWS):
         verdict = "REGRESSED"
+        kg = f"knee gain per draw {gain}, bar {bar}"
+        if con < coff:
+            why.append(f"on's ceiling {con} below off's {coff} ({kg})")
+        if not noreg:
+            why.append(f"an on server below off at 4 or 8 req/s: {nr_why} ({kg})")
+        if all(gain[k] <= -bar[k] for k in DRAWS):
+            why.append(f"the knee lost in both draws ({kg})")
     elif all(gain[k] >= bar[k] for k in DRAWS):
         verdict = "FASTER"
         readme = con if con > SC2E_CEILING else None
+    elif any(headroom[k] < bar[k] for k in DRAWS):
+        verdict = "KNEE_SATURATED"
+        why.append(f"headroom {headroom} below the bar {bar} in a draw: the knee block could not show the gain "
+                   f"(gain {gain}); on's ceiling {con} is reported with no claim")
     else:
         verdict = "FLAT"
-    out["outcome"] = {"verdict": verdict, "readme_number": readme, "void": void}
+    out["outcome"] = {"verdict": verdict, "readme_number": readme, "void": void, "why": why}
     return out
 
 
@@ -442,7 +458,7 @@ def self_test() -> int:
             _fixture(d, **kw)
             return reduce(d)
     o = run()
-    cases.append(("faster, the number stays 12", o["outcome"] == {"verdict": "FASTER", "readme_number": None, "void": []}
+    cases.append(("faster, the number stays 12", o["outcome"] == {"verdict": "FASTER", "readme_number": None, "void": [], "why": []}
                   and o["knee"]["gain"] == {1: 0.04, 2: 0.04} and o["knee"]["bar"] == {1: 0.03, 2: 0.03}))
     cases.append(("predictions hold", all(o["predictions"][q]["verdict"] == "HOLDS" for q in ("Q1", "Q2", "Q3", "Q4", "Q5", "Q6"))
                   and o["predictions"]["Q1"]["on_minus_off_ms"] == [-5.2, -5.2]))
@@ -453,9 +469,22 @@ def self_test() -> int:
                   and o["outcome"]["readme_number"] is None))
     o = run(knee_att={"on": 0.90})
     cases.append(("flat", o["outcome"]["verdict"] == "FLAT" and o["predictions"]["Q4"]["verdict"] == "MISSED"))
+    o = run(ceil={"on": 14, "off": 14}, knee_att={"on": 0.99, "off": 0.975})
+    cases.append(("saturated: off at the knee leaves less headroom than the bar", o["outcome"]["verdict"] == "KNEE_SATURATED"
+                  and o["knee"]["headroom"] == {1: 0.02, 2: 0.02} and o["knee"]["gain"] == {1: 0.012, 2: 0.012}
+                  and o["outcome"]["readme_number"] is None))
+    o = run(ceil={"on": 14, "off": 14}, knee_att={"on": 0.95, "off": 0.94})
+    cases.append(("FLAT with headroom: the gain below the bar the block could have shown",
+                  o["outcome"]["verdict"] == "FLAT" and o["knee"]["headroom"] == {1: 0.048, 2: 0.048}
+                  and o["knee"]["gain"] == {1: 0.008, 2: 0.008}))
+    o = run(ceil={"on": 14, "off": 14}, knee_att={"on": 1.0, "off": 0.9625})
+    cases.append(("FASTER at the edge: gain = headroom = bar", o["outcome"]["verdict"] == "FASTER"
+                  and o["knee"]["gain"] == {1: 0.03, 2: 0.03} and o["knee"]["headroom"] == {1: 0.03, 2: 0.03}
+                  and o["outcome"]["readme_number"] == 14))
     o = run(ceil={"on": 8})
     cases.append(("regressed: on's ceiling below off's", o["outcome"]["verdict"] == "REGRESSED"
-                  and o["predictions"]["Q5"]["verdict"] == "MISSED"))
+                  and o["predictions"]["Q5"]["verdict"] == "MISSED"
+                  and "knee gain per draw" in o["outcome"]["why"][0]))
     o = run(knee_att={"on": 0.84})
     cases.append(("regressed: the knee in both draws", o["outcome"]["verdict"] == "REGRESSED"))
     o = run(att={("e4b_on_d2b", 8): 0.80})
@@ -547,7 +576,7 @@ def main(argv=None) -> int:
     print("SC2F_OUTCOME " + json.dumps(out["outcome"]))
     for q, v in out["predictions"].items():
         print(f"SC2F_{q} {v['verdict']} " + json.dumps({k: x for k, x in v.items() if k != "verdict"}))
-    print("SC2F_KNEE " + json.dumps({k: out["knee"][k] for k in ("gain", "noise", "bar")}))
+    print("SC2F_KNEE " + json.dumps({k: out["knee"][k] for k in ("gain", "noise", "bar", "headroom")}))
     print("SC2F_CEILINGS " + json.dumps({arm: out["arms"][arm]["ceiling"] for arm in ARMS}))
     print("SC2F_GATES " + json.dumps({k: v["ok"] for k, v in out["gates"].items()}))
     return 0

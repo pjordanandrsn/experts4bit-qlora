@@ -111,7 +111,7 @@ model assumes; the next lane is then chosen from this lane's census, not from mo
   are new, between SC2e's 12 and 16. 1 and 2 req/s are dropped: every SC2e server held 1.000 at both, and the serial
   run reads the unloaded path.
 
-## The rule (`bench/sc2/sc2f_reduce.py`, 27 self-test cases)
+## The rule (`bench/sc2/sc2f_reduce.py`, 30 self-test cases)
 
 **Gates, per server.** A failure names the server and VOIDs the reading: ROUTES (`sc2c_reduce.routes_bad`), SLOTS
 (`sc2e_reduce.slots_bad`, s64a), FLIPS (above), ENGAGED (`sc2e_reduce.engagement` at 64 slots, with every request the
@@ -125,17 +125,24 @@ server admitted counted: warm, burst, serial, ladder and knee), PROMPTS (512 pro
   four more each).
 - Per draw: **gain** = the mean knee of its two `on` servers minus that of its two `off` servers; **noise** = the larger
   of |on_a − on_b| and |off_a − off_b|; **bar** = max(0.03, noise).
+- Per draw: **headroom** = 1 − the mean knee of its two `off` servers: the most gain the knee block can show, reported
+  always. SC2e's s64a measured above the model at the knee (0.967 at 12 req/s in draw 2, against 0.892 modelled), so a
+  real `off` near 0.97 would leave less headroom than the bar.
 
 **Outcome**, decoupled from Q1–Q6:
 - **VOID** if a server fails a gate; **UNREAD** if a number the outcome needs is missing.
 - **REGRESSED** if `on`'s ceiling is below `off`'s; or, at 4 or 8 req/s, an `on` server attains less than the draw's lower
   `off` server minus 0.05; or gain ≤ −bar in both draws. Consequence: to the maintainer, since the release then ships a
   serving regression. `E4B_FUSE_PREFILL_GLUE=0` and `E4B_PREFILL_LEAN_DISPATCH=0` restore the old path; whether to
-  revert a default is the maintainer's call.
+  revert a default is the maintainer's call. The read prints the knee gains beside the trigger: a ceiling inversion
+  alone can come from one server's 3–3.6 % offset flipping a single-seed row at 13 or 14 req/s.
 - **FASTER** if gain ≥ bar in both draws. Consequence: **the claim moves.** A serving claim row for the P130 defaults
   records the knee gain and the paired TTFT and TPOT ratios on this box. **The STATUS / README capacity number** moves to
   `on`'s ceiling iff that ceiling is above SC2e's 12 (`readme_number`), stated with its host; the claim attributes to the
   flips only the paired difference against `off`. Otherwise the number stays 12 and the claim states the knee gain.
+- **KNEE_SATURATED** if the outcome would be FLAT and headroom < bar in either draw. The instrument could not have shown
+  the gain, so this is not a measurement of FLAT: FLAT's consequences do not fire, the capacity number stays 12, `on`'s
+  ceiling is reported with no claim, and the next step is the maintainer's.
 - **FLAT** otherwise. Consequence: **the next lever is not prefill glue.** P3 (more prefill glue) stays parked; the next
   lane is chosen from this census and the prefill expert-GEMM shape census (the $0 row beside this one); STATUS says the
   P130 defaults did not measurably move serving capacity at 64 slots.

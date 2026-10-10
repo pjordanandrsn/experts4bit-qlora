@@ -8,9 +8,10 @@
   replicate in every draw. Per server: warm, the 64-request burst, a FLIPS check of the start `/health` (rc 43), serial,
   a ladder at 4, 8, 12, 13, 14 and 16 req/s, and a knee block of four more seeds at 12, 13 and 14. A tripwire refuses an
   e4b without both defaults.
-- **The rule** (`bench/sc2/sc2f_reduce.py`, 27 self-test cases): per-server gates ROUTES, SLOTS, FLIPS, ENGAGED, PROMPTS;
+- **The rule** (`bench/sc2/sc2f_reduce.py`, 30 self-test cases): per-server gates ROUTES, SLOTS, FLIPS, ENGAGED, PROMPTS;
   FASTER iff the knee gain clears max(0.03, the same-seed replicate spread) in both draws, REGRESSED on a lower ceiling or
-  a loss at 4–8 req/s, FLAT otherwise; predictions Q1–Q6 (prefill forward, serial and loaded TTFT/TPOT, the knee gain,
+  a loss at 4–8 req/s, KNEE_SATURATED when the off arm's knee leaves less headroom than the
+  bar, FLAT otherwise; predictions Q1–Q6 (prefill forward, serial and loaded TTFT/TPOT, the knee gain,
   the ceilings, the 64-row decode step) reported beside it.
 - **Harness.** `sc1_run.sh` and `sc1_drive.sh` gain box N; `staged.sha256` regenerated; the box tests that enumerate the
   box letters now include N.
