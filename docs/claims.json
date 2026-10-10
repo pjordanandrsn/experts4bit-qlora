@@ -12048,6 +12048,38 @@
       "notes": "Pre-registered in Amendment 4 (#1436). The prediction: FASTER (about 35 %) hit; the magnitude (ratio about 0.99) missed, the gain larger. The maintainer re-derived the verdict from the store byte for byte and, on the quality and speed reads together, licensed the allowlist flip. That kernels for the linear layers would make the epilogue's share larger is a hypothesis, not read here."
     },
     {
+      "id": "e4b.serve.fam.fused-stack-t1.mixtral.5090.2026-10-09",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+      "claim": "Lane FAM (one RTX 5090): on Mixtral-8x7B-Instruct each B=1 fusion knob alone (glue 0 / 65 / [0, 0] / 0, r2 0 / 0 / [32, 32] / 0, router epilogue 0 / 0 / [0, 0] / 32) and all at auto (0 / 65 / [32, 32] / 32) read PASS against the family's own neutral floor at T == 1 and T == 12 on both texts, every set: worst-set |bias| at most 0.0094 nats (gates 0.0139-0.0162), argmax agreement at least 0.9661 (gates 0.9611-0.9644), KL at most 0.0062. Resolved at x0.90 (Amendment 8): mut090 failed every gated cell (worst agreement 0.951-0.958), so the claim is a null read of that size, no effect as large as a x0.90 change of the decode softmax scale; mut080 and mutant_scale failed every cell. Per Amendment 5 a PASS licenses an allowlist pull request only together with a speed read; none is claimed here.",
+      "value": -0.0003,
+      "unit": "nats, mean per-window NLL difference ON_auto - R at (wikitext, shape 1), the mean of sets A, B and C (36 windows x 128 teacher-forced positions)",
+      "hardware": "RTX 5090 (sm_120, driver 595.71.05), one rented Vast.ai host (instance 55108544, verified-secure, AMD EPYC 7C13, 256 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @68845bfc (0.51.0, #1487's merge, past #1482) + grouped-nf4-gemm @6ee2e10 (0.43.0); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0; premise 36 passed on the card; the default serve_paged server built eager at all-vram (server pool 16 slots x 768 tokens, Amendment 7), the four fusion knobs at 0 (OFF) or the config's values; the NF4 arena baked on the box; quality teacher-forced in fp32 at 128 positions, 12 windows per set, sets A/B/C, wikitext and c4val1, shapes 1 and 12, the floor from chunk, half and split1 (n_split=1); gating rungs mut090 then mut080 on every set (Amendment 8); mistralai/Mixtral-8x7B-Instruct-v0.1 @eba9230; the router epilogue's fp32 upstream path checked on all 32 routers",
+      "measured_on": "2026-10-09",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/fam/RESULTS-fam.md",
+        "bench/fam/PREREG-fam.md",
+        "bench/fam/fam_reduce.py",
+        "bench/fam/fam_box.py",
+        "bench/fam/receipts/fam-mixtral-4/verdict.json",
+        "bench/fam/receipts/fam-mixtral-4/SHA256SUMS",
+        "bench/fam/receipts/fam-mixtral-4/fam_mixtral_OFF.json",
+        "bench/fam/receipts/fam-mixtral-4/fam_mixtral_ON_auto.json",
+        "bench/fam/receipts/fam-mixtral-prove-2/verdict.json",
+        "bench/fam/receipts/fam-mixtral-3/verdict.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-09/fam-mixtral-4/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-09/fam-mixtral-prove-2/ (receipt.json, the proof)",
+        "receipts/experts4bit-qlora/2026-10-09/fam-mixtral-3/ (receipt.json, teardown-proof.json; VOID)"
+      ],
+      "notes": "Pre-registered in #1380 with Amendments 5 (#1457), 7 (#1468), 8 (#1479) and 9 (#1487). X1 MISSED (fam-mixtral-3 VOIDed on #1477's serving regression); X2, X3a, X3b, X4 and X5 HIT. fam-mixtral-prove-1 ($1.115) ran out of GPU memory on the server pool; fam-mixtral-1 and -2 were refused at the provider ($0); fam-mixtral-3 ($0.87) crashed on its first forward before #1482. The maintainer re-derived the verdict from the store (identical except the last ulp of two floor KL values). ON_auto bias at (wikitext, 1) by set: +0.0025 / -0.0020 / -0.0014."
+    },
+    {
       "id": "e4b.serve.p125.int4-attn-calib-default.qwen3.5090.2026-10-09",
       "package": "experts4bit-qlora",
       "area": "serve",

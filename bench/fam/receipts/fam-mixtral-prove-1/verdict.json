@@ -1,0 +1,27 @@
+{
+ "proof": true,
+ "families": {
+  "mixtral": {
+   "verdict": {
+    "ON_epi": "VOID",
+    "ON_auto": "VOID"
+   },
+   "why": [
+    "OFF: record missing or not ok",
+    "ON_epi: record missing or not ok",
+    "ON_auto: record missing or not ok"
+   ],
+   "report": {
+    "configs": {}
+   }
+  }
+ },
+ "constants": {
+  "BIAS_MARGIN": 0.01,
+  "SPREAD_MULT": 2.0,
+  "SPREAD_MIN": 0.005,
+  "AGREE_MARGIN": 0.005,
+  "BACKSTOP_BIAS": 0.02,
+  "BACKSTOP_AGREE": 0.9
+ }
+}

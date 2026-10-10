@@ -1,0 +1,23 @@
+KNOBS e4b=f0f8e2d772e61efbf6daa94d39870357d8164959 gnf4=6ee2e10408161a9d3c874975c9191a7f2957e6f4 family=mixtral models=mixtral gpu_class=5090 min_disk_gb=220 min_ram_gb=60 prove=1 speed=0 cont=32
+CUDA_PROBE ok
+e4b 0.51.0 @f0f8e2d772e61efbf6daa94d39870357d8164959
+gnf4 0.43.0 @6ee2e10408161a9d3c874975c9191a7f2957e6f4
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+cc (12, 0)
+fam_reduce self-test OK (56/56 cases)
+fam_box self-test OK (28/28 cases)
+fam_speed self-test OK (9/9 cases)
+fam_speed_reduce self-test OK (30/30 cases)
+p115_quality self-test OK (11/11 cases)
+premise run rc=0: 36 passed in 15.54s
+premise ok
+FETCH mixtral mistralai/Mixtral-8x7B-Instruct-v0.1@eba92302a2861cdc0098cc54bc9f17cb2c47eb61 /root/.cache/huggingface/hub/models--mistralai--Mixtral-8x7B-Instruct-v0.1/snapshots/eba92302a2861cdc0098cc54bc9f17cb2c47eb61
+mixtral BAKE OK
+mixtral OFF default rc=1 
+  File "/opt/conda/lib/python3.11/site-packages/row_pool.py", line 67, in __init__
+    self.dev = torch.zeros(partitions, device_rows, row_bytes,
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.06 GiB. GPU 0 has a total capacity of 31.36 GiB of which 1.86 GiB is free. Including non-PyTorch memory, this process has 29.47 GiB memory in use. Of the allocated memory 28.87 GiB is allocated by PyTorch, and 5.43 MiB is reserved by Py
+FAM_VERDICT mixtral {'ON_epi': 'VOID', 'ON_auto': 'VOID'} -- ['OFF: record missing or not ok', 'ON_epi: record missing or not ok', 'ON_auto: record missing or not ok']

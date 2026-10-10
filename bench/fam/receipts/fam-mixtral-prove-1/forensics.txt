@@ -1,0 +1,7 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.71.05, GPU-7ce6b87e-de19-c621-f142-cae5a7f06f76, 12.0
+CPU(s):                                  72
+Vendor ID:                               GenuineIntel
+Model name:                              Intel(R) Xeon(R) CPU E5-2699 v3 @ 2.30GHz
+               total        used        free      shared  buff/cache   available
+Mem:             141           5          49           0          87         134
+overlay         320G   56M  320G   1% /

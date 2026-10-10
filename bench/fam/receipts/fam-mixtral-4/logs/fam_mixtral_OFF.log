@@ -1,0 +1,393 @@
+Fetching 26 files:   0%|          | 0/26 [00:00<?, ?it/s]Fetching 26 files: 100%|██████████| 26/26 [00:00<00:00, 1105.71it/s]
+[23:07:42]   checkpoint: mistralai/Mixtral-8x7B-Instruct-v0.1 @ eba92302a2861cdc0098cc54bc9f17cb2c47eb61 (requested eba92302a2861cdc0098cc54bc9f17cb2c47eb61)
+[23:07:42]   fusing + quantizing experts (up to 32x8) to nf4 (streaming)...
+[23:07:42]   quantized experts on 32/32 MoE layers (8 experts each)
+[23:07:42]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[23:07:43]   applied 32 transformers checkpoint-key renaming(s) (this checkpoint's layout differs from the module tree)
+[23:07:43]   experts deferred to the arena: 32 module(s), 160 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[23:07:53]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[23:08:38]   hybrid tier active on 32 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] fusions (q/k/v 0; folds set: none): {'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0}
+[serve_paged] PREFILL_GRAPH auto: refused, prefill stays eager (device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement))
+[serve_paged] ready: {"moe_layers": 32, "experts": 8, "top_k": 2, "model_type": "mixtral", "int4_expert_layers": 0, "int4_store_kinds": [], "int4_attn_projections": 0, "kv": {"n_kv_heads": 8, "head_dim": 128, "k_groups": "auto", "scratch_slots": 0, "blocks_per_seq": 48, "pool_mib": 828.1}, "graph_status": null, "grouping": {"device_grouping": false, "force_singleton_groups": false}, "moe_residual": {"rows": [1, 2, 4, 8, 16]}, "prefill_graph": "auto", "levers_env": {"E4B_FUSE_T1_GLUE": "0", "E4B_FUSE_T1_GLUE_R2": "0", "E4B_FUSE_ROUTER_EPI": "0"}, "exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0, "fusion_modes": {"E4B_PAGED_FUSE_QKV": "0", "E4B_FUSE_T1_GLUE": "0", "E4B_FUSE_T1_GLUE_R2": "0", "E4B_FUSE_ROUTER_EPI": "0"}, "fusion_sources": {"E4B_PAGED_FUSE_QKV": "explicit", "E4B_FUSE_T1_GLUE": "explicit", "E4B_FUSE_T1_GLUE_R2": "explicit", "E4B_FUSE_ROUTER_EPI": "explicit"}, "fusion_report": {"E4B_FUSE_T1_GLUE": {"mode": "0"}, "E4B_FUSE_T1_GLUE_R2": {"mode": "0"}, "E4B_FUSE_ROUTER_EPI": {"mode": "0"}}, "pinned_cache_released": true, "host_heap_trimmed": true}
+Generating test split:   0%|          | 0/4358 [00:00<?, ? examples/s]Generating test split: 100%|██████████| 4358/4358 [00:00<00:00, 397866.37 examples/s]
+Generating train split:   0%|          | 0/36718 [00:00<?, ? examples/s]Generating train split: 100%|██████████| 36718/36718 [00:00<00:00, 1008245.36 examples/s]
+Generating validation split:   0%|          | 0/3760 [00:00<?, ? examples/s]Generating validation split: 100%|██████████| 3760/3760 [00:00<00:00, 688190.92 examples/s]
+Generating v split: 0 examples [00:00, ? examples/s]Generating v split: 4707 examples [00:00, 44363.27 examples/s]Generating v split: 13720 examples [00:00, 51621.08 examples/s]Generating v split: 22851 examples [00:00, 54500.66 examples/s]Generating v split: 31844 examples [00:00, 51863.59 examples/s]Generating v split: 41229 examples [00:00, 50866.86 examples/s]Generating v split: 45576 examples [00:00, 51203.73 examples/s]
+P115_QGROUP off wikitext group 1 of 1 done at 92 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 1 of 1 done at 17 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 1 of 1 done at 16 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 1 of 1 done at 16 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 1 of 1 done at 16 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 1 of 1 done at 16 s, 27.43 GiB allocated
+FAM_CELL OFF wikitext|12|A done
+P115_QGROUP off wikitext group 1 of 1 done at 88 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 1 of 1 done at 16 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 1 of 1 done at 16 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 1 of 1 done at 16 s, 27.43 GiB allocated
+FAM_CELL OFF wikitext|12|B done
+P115_QGROUP off wikitext group 1 of 1 done at 86 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 1 of 1 done at 16 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 1 of 1 done at 16 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 1 of 1 done at 16 s, 27.43 GiB allocated
+FAM_CELL OFF wikitext|12|C done
+P115_QGROUP off wikitext group 1 of 12 done at 29 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 2 of 12 done at 49 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 3 of 12 done at 69 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 4 of 12 done at 90 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 5 of 12 done at 110 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 6 of 12 done at 130 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 7 of 12 done at 150 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 8 of 12 done at 171 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 9 of 12 done at 192 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 10 of 12 done at 212 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 11 of 12 done at 232 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 12 of 12 done at 253 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 1 of 12 done at 8 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 2 of 12 done at 16 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 3 of 12 done at 23 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 4 of 12 done at 30 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 5 of 12 done at 37 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 6 of 12 done at 44 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 7 of 12 done at 51 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 8 of 12 done at 58 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 9 of 12 done at 65 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 10 of 12 done at 72 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 11 of 12 done at 78 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 12 of 12 done at 85 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 1 of 12 done at 7 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 2 of 12 done at 14 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 3 of 12 done at 22 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 4 of 12 done at 30 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 5 of 12 done at 38 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 6 of 12 done at 45 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 7 of 12 done at 52 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 8 of 12 done at 59 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 9 of 12 done at 66 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 10 of 12 done at 72 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 11 of 12 done at 79 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 12 of 12 done at 86 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 1 of 12 done at 7 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 2 of 12 done at 14 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 3 of 12 done at 21 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 4 of 12 done at 27 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 5 of 12 done at 34 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 6 of 12 done at 42 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 7 of 12 done at 50 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 8 of 12 done at 56 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 9 of 12 done at 63 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 10 of 12 done at 70 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 11 of 12 done at 77 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 12 of 12 done at 84 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 1 of 12 done at 7 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 2 of 12 done at 14 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 3 of 12 done at 21 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 4 of 12 done at 28 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 5 of 12 done at 35 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 6 of 12 done at 42 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 7 of 12 done at 50 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 8 of 12 done at 57 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 9 of 12 done at 64 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 10 of 12 done at 71 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 11 of 12 done at 78 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 12 of 12 done at 84 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 1 of 12 done at 7 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 2 of 12 done at 14 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 3 of 12 done at 21 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 4 of 12 done at 27 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 5 of 12 done at 34 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 6 of 12 done at 41 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 7 of 12 done at 48 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 8 of 12 done at 55 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 9 of 12 done at 62 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 10 of 12 done at 69 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 11 of 12 done at 76 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 12 of 12 done at 83 s, 27.43 GiB allocated
+FAM_CELL OFF wikitext|1|A done
+P115_QGROUP off wikitext group 1 of 12 done at 29 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 2 of 12 done at 50 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 3 of 12 done at 71 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 4 of 12 done at 94 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 5 of 12 done at 116 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 6 of 12 done at 136 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 7 of 12 done at 156 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 8 of 12 done at 176 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 9 of 12 done at 197 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 10 of 12 done at 217 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 11 of 12 done at 237 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 12 of 12 done at 257 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 1 of 12 done at 7 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 2 of 12 done at 14 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 3 of 12 done at 21 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 4 of 12 done at 27 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 5 of 12 done at 34 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 6 of 12 done at 41 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 7 of 12 done at 48 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 8 of 12 done at 55 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 9 of 12 done at 62 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 10 of 12 done at 69 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 11 of 12 done at 76 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 12 of 12 done at 82 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 1 of 12 done at 7 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 2 of 12 done at 14 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 3 of 12 done at 21 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 4 of 12 done at 27 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 5 of 12 done at 34 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 6 of 12 done at 41 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 7 of 12 done at 48 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 8 of 12 done at 55 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 9 of 12 done at 62 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 10 of 12 done at 68 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 11 of 12 done at 75 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 12 of 12 done at 82 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 1 of 12 done at 7 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 2 of 12 done at 14 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 3 of 12 done at 21 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 4 of 12 done at 28 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 5 of 12 done at 35 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 6 of 12 done at 43 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 7 of 12 done at 50 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 8 of 12 done at 57 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 9 of 12 done at 64 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 10 of 12 done at 70 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 11 of 12 done at 78 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 12 of 12 done at 85 s, 27.43 GiB allocated
+FAM_CELL OFF wikitext|1|B done
+P115_QGROUP off wikitext group 1 of 12 done at 27 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 2 of 12 done at 48 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 3 of 12 done at 68 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 4 of 12 done at 88 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 5 of 12 done at 108 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 6 of 12 done at 128 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 7 of 12 done at 154 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 8 of 12 done at 175 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 9 of 12 done at 195 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 10 of 12 done at 216 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 11 of 12 done at 236 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 12 of 12 done at 258 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 1 of 12 done at 7 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 2 of 12 done at 14 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 3 of 12 done at 22 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 4 of 12 done at 29 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 5 of 12 done at 36 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 6 of 12 done at 43 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 7 of 12 done at 50 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 8 of 12 done at 58 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 9 of 12 done at 65 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 10 of 12 done at 72 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 11 of 12 done at 79 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 12 of 12 done at 86 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 1 of 12 done at 7 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 2 of 12 done at 14 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 3 of 12 done at 21 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 4 of 12 done at 28 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 5 of 12 done at 35 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 6 of 12 done at 42 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 7 of 12 done at 49 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 8 of 12 done at 56 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 9 of 12 done at 63 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 10 of 12 done at 69 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 11 of 12 done at 76 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 12 of 12 done at 84 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 1 of 12 done at 7 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 2 of 12 done at 14 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 3 of 12 done at 20 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 4 of 12 done at 27 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 5 of 12 done at 34 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 6 of 12 done at 41 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 7 of 12 done at 48 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 8 of 12 done at 55 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 9 of 12 done at 62 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 10 of 12 done at 70 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 11 of 12 done at 77 s, 27.43 GiB allocated
+P115_QGROUP on wikitext group 12 of 12 done at 84 s, 27.43 GiB allocated
+FAM_CELL OFF wikitext|1|C done
+P115_QGROUP off c4val1 group 1 of 1 done at 85 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 1 of 1 done at 16 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 1 of 1 done at 16 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 1 of 1 done at 16 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 1 of 1 done at 16 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 1 of 1 done at 16 s, 27.43 GiB allocated
+FAM_CELL OFF c4val1|12|A done
+P115_QGROUP off c4val1 group 1 of 1 done at 86 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 1 of 1 done at 16 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 1 of 1 done at 16 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 1 of 1 done at 16 s, 27.43 GiB allocated
+FAM_CELL OFF c4val1|12|B done
+P115_QGROUP off c4val1 group 1 of 1 done at 86 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 1 of 1 done at 16 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 1 of 1 done at 16 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 1 of 1 done at 16 s, 27.43 GiB allocated
+FAM_CELL OFF c4val1|12|C done
+P115_QGROUP off c4val1 group 1 of 12 done at 30 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 2 of 12 done at 51 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 3 of 12 done at 73 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 4 of 12 done at 96 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 5 of 12 done at 119 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 6 of 12 done at 141 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 7 of 12 done at 163 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 8 of 12 done at 185 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 9 of 12 done at 206 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 10 of 12 done at 227 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 11 of 12 done at 249 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 12 of 12 done at 271 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 1 of 12 done at 7 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 2 of 12 done at 14 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 3 of 12 done at 21 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 4 of 12 done at 29 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 5 of 12 done at 36 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 6 of 12 done at 43 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 7 of 12 done at 50 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 8 of 12 done at 57 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 9 of 12 done at 64 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 10 of 12 done at 71 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 11 of 12 done at 79 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 12 of 12 done at 86 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 1 of 12 done at 7 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 2 of 12 done at 14 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 3 of 12 done at 21 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 4 of 12 done at 28 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 5 of 12 done at 35 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 6 of 12 done at 42 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 7 of 12 done at 49 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 8 of 12 done at 56 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 9 of 12 done at 63 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 10 of 12 done at 70 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 11 of 12 done at 77 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 12 of 12 done at 84 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 1 of 12 done at 7 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 2 of 12 done at 14 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 3 of 12 done at 21 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 4 of 12 done at 28 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 5 of 12 done at 35 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 6 of 12 done at 42 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 7 of 12 done at 49 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 8 of 12 done at 57 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 9 of 12 done at 64 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 10 of 12 done at 71 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 11 of 12 done at 78 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 12 of 12 done at 85 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 1 of 12 done at 7 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 2 of 12 done at 15 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 3 of 12 done at 22 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 4 of 12 done at 29 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 5 of 12 done at 36 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 6 of 12 done at 44 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 7 of 12 done at 51 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 8 of 12 done at 58 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 9 of 12 done at 66 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 10 of 12 done at 73 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 11 of 12 done at 80 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 12 of 12 done at 88 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 1 of 12 done at 7 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 2 of 12 done at 14 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 3 of 12 done at 22 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 4 of 12 done at 29 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 5 of 12 done at 36 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 6 of 12 done at 43 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 7 of 12 done at 50 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 8 of 12 done at 57 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 9 of 12 done at 64 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 10 of 12 done at 72 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 11 of 12 done at 79 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 12 of 12 done at 86 s, 27.43 GiB allocated
+FAM_CELL OFF c4val1|1|A done
+P115_QGROUP off c4val1 group 1 of 12 done at 30 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 2 of 12 done at 51 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 3 of 12 done at 72 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 4 of 12 done at 93 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 5 of 12 done at 114 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 6 of 12 done at 135 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 7 of 12 done at 157 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 8 of 12 done at 178 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 9 of 12 done at 199 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 10 of 12 done at 221 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 11 of 12 done at 242 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 12 of 12 done at 263 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 1 of 12 done at 7 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 2 of 12 done at 14 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 3 of 12 done at 21 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 4 of 12 done at 28 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 5 of 12 done at 36 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 6 of 12 done at 44 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 7 of 12 done at 51 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 8 of 12 done at 58 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 9 of 12 done at 66 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 10 of 12 done at 73 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 11 of 12 done at 80 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 12 of 12 done at 87 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 1 of 12 done at 7 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 2 of 12 done at 15 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 3 of 12 done at 23 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 4 of 12 done at 31 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 5 of 12 done at 38 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 6 of 12 done at 46 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 7 of 12 done at 53 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 8 of 12 done at 60 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 9 of 12 done at 67 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 10 of 12 done at 74 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 11 of 12 done at 82 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 12 of 12 done at 89 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 1 of 12 done at 7 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 2 of 12 done at 14 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 3 of 12 done at 22 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 4 of 12 done at 29 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 5 of 12 done at 36 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 6 of 12 done at 43 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 7 of 12 done at 50 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 8 of 12 done at 58 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 9 of 12 done at 65 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 10 of 12 done at 72 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 11 of 12 done at 79 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 12 of 12 done at 86 s, 27.43 GiB allocated
+FAM_CELL OFF c4val1|1|B done
+P115_QGROUP off c4val1 group 1 of 12 done at 29 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 2 of 12 done at 53 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 3 of 12 done at 74 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 4 of 12 done at 96 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 5 of 12 done at 116 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 6 of 12 done at 137 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 7 of 12 done at 158 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 8 of 12 done at 179 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 9 of 12 done at 200 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 10 of 12 done at 221 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 11 of 12 done at 242 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 12 of 12 done at 264 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 1 of 12 done at 7 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 2 of 12 done at 14 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 3 of 12 done at 21 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 4 of 12 done at 28 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 5 of 12 done at 35 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 6 of 12 done at 43 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 7 of 12 done at 50 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 8 of 12 done at 57 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 9 of 12 done at 64 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 10 of 12 done at 71 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 11 of 12 done at 78 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 12 of 12 done at 85 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 1 of 12 done at 7 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 2 of 12 done at 14 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 3 of 12 done at 21 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 4 of 12 done at 28 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 5 of 12 done at 35 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 6 of 12 done at 41 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 7 of 12 done at 48 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 8 of 12 done at 55 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 9 of 12 done at 62 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 10 of 12 done at 69 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 11 of 12 done at 76 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 12 of 12 done at 83 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 1 of 12 done at 7 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 2 of 12 done at 14 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 3 of 12 done at 21 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 4 of 12 done at 28 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 5 of 12 done at 35 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 6 of 12 done at 42 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 7 of 12 done at 49 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 8 of 12 done at 56 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 9 of 12 done at 64 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 10 of 12 done at 70 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 11 of 12 done at 77 s, 27.43 GiB allocated
+P115_QGROUP on c4val1 group 12 of 12 done at 84 s, 27.43 GiB allocated
+FAM_CELL OFF c4val1|1|C done
+FAM_BOX OFF/default census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0} store=[] cells=12 mem=28.19 GB 4314.2 s

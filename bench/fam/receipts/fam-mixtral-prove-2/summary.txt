@@ -1,0 +1,25 @@
+KNOBS e4b=da17bbc59132c83d0eb823db6ff5ff6041b90995 gnf4=6ee2e10408161a9d3c874975c9191a7f2957e6f4 family=mixtral models=mixtral gpu_class=5090 min_disk_gb=220 min_ram_gb=60 prove=1 speed=0 cont=32
+CUDA_PROBE ok
+e4b 0.51.0 @da17bbc59132c83d0eb823db6ff5ff6041b90995
+gnf4 0.43.0 @6ee2e10408161a9d3c874975c9191a7f2957e6f4
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+cc (12, 0)
+fam_reduce self-test OK (59/59 cases)
+fam_box self-test OK (28/28 cases)
+fam_speed self-test OK (9/9 cases)
+fam_speed_reduce self-test OK (30/30 cases)
+p115_quality self-test OK (11/11 cases)
+premise run rc=0: 36 passed in 11.53s
+premise ok
+FETCH mixtral mistralai/Mixtral-8x7B-Instruct-v0.1@eba92302a2861cdc0098cc54bc9f17cb2c47eb61 /root/.cache/huggingface/hub/models--mistralai--Mixtral-8x7B-Instruct-v0.1/snapshots/eba92302a2861cdc0098cc54bc9f17cb2c47eb61
+mixtral BAKE OK
+mixtral OFF default rc=0 FAM_BOX OFF/default census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0} store=[] cells=12 mem=28.12 GB 1513.4 s
+
+mixtral ON_epi default rc=0 FAM_BOX ON_epi/default census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 32} store=[] cells=12 mem=28.11 GB 260.8 s
+
+mixtral ON_auto default rc=0 FAM_BOX ON_auto/default census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 65, 'fuse_t1_glue_r2_n': [32, 32], 'fuse_router_epilogue_n': 32} store=[] cells=12 mem=28.11 GB 234.3 s
+
+FAM_VERDICT mixtral {'ON_epi': 'UNRESOLVED', 'ON_auto': 'UNRESOLVED'} -- ["mut090 passes the gate in ['c4val1|1', 'c4val1|12']: no gate licensed for mixtral"]
+PROVE -- the proving run: the whole box on mixtral; reducer verdicts (not a reading) above
