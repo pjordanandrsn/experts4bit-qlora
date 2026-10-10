@@ -189,6 +189,12 @@ stores in the caller's order, so the 4,096-row gather and the unsort are gone. I
 ×0.968 [0.966, 0.970] per 512-token first-chunk prefill replay (Qwen3-30B-A3B int4, one RTX 5090, P130).
 `e4b.serve.p130.prefill-lean-dispatch.qwen3.5090.2026-10-10` ([results](../bench/p130/RESULTS-p130.md)).
 
+**Prefill: the decode folds take prompt rows on Qwen3-MoE.** On `qwen3_moe`, a prefill's norms, residual-and-norm and
+q/k norm with the rotary run decode's fused kernels: ×1.118 [1.116, 1.119] per 512-token first-chunk prefill replay, at
+parity on a teacher-forced read (bias −0.0035 nats; Qwen3-30B-A3B int4, one RTX 5090, P130). Other families keep the
+eager chain until a read of their own. `e4b.serve.p130.prefill-glue-speed.qwen3.5090.2026-10-10`,
+`e4b.serve.p130.prefill-glue-quality.qwen3.5090.2026-10-10` ([results](../bench/p130/RESULTS-p130.md)).
+
 **Single-request decode.** grouped-nf4-gemm's bandwidth-targeted NF4 decode GEMV decodes one request 1.2417× as fast,
 16 unchanged, within P110's quality bar; it is grouped-nf4-gemm's default from 0.43.0 at Qwen3's NF4 expert shapes on
 GPUs with 160 or more SMs. `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`.
@@ -308,6 +314,7 @@ controls. `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-
 | estimate-sized slots | `serve_paged` | `E4B_PAGED_MAX_SEQS=16` | `e4b.serve.sc2e.64-slots-default-buckets.qwen3.5090.2026-10-07` |
 | one graph per decode step | `serve_paged` | `E4B_PAGED_BUCKETS=1,2,4,8,16` | `e4b.serve.sc2e.64-slots-buckets-auto.qwen3.5090.2026-10-07`, `e4b.serve.p117.wide-bucket-quality.qwen3.5090.2026-10-08` |
 | K19's lean dispatch on prefill rows (`auto`: wherever the installed K19 takes `scatter=` / `gather_div=`; bitwise) | serving | `E4B_PREFILL_LEAN_DISPATCH=0` | `e4b.serve.p130.prefill-lean-dispatch.qwen3.5090.2026-10-10` |
+| the decode folds on prefill rows (`qwen3_moe` only; changes prefill arithmetic, read at parity) | `serve_paged` | `E4B_FUSE_PREFILL_GLUE=0` | `e4b.serve.p130.prefill-glue-speed.qwen3.5090.2026-10-10`, `e4b.serve.p130.prefill-glue-quality.qwen3.5090.2026-10-10` |
 | one KV-table selection per step | decode graphs | `E4B_KV_STEP_SELECT=0` | `e4b.serve.p111.kv-step-select.qwen3.5090.2026-10-04` |
 | programmatic dependent launch, capped at 8 rows | grouped-nf4-gemm | `GNF4_PDL=0` | `e4b.serve.p113.gnf4-pdl-capped.qwen3-int4.5090.2026-10-04` |
 | bandwidth-targeted NF4 decode GEMV | grouped-nf4-gemm | `GNF4_GEMV_BW=0` | `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07` |

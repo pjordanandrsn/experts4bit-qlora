@@ -208,7 +208,8 @@ def test_the_registered_fused_stack_patches_and_calls_the_per_step_counts(monkey
     counters = q.KernelCounters().install()            # before the fusions, as the box does
     from experts4bit_qlora.serve_paged import PagedServeConfig, _apply_fusions
     model = _tiny(torch.bfloat16, layers) if family == "qwen3" else _tiny_granite(layers)
-    census = _apply_fusions(model, PagedServeConfig(fuse_qkv=fused))
+    # P115's registered stack keeps prefill unfused: E4B_FUSE_PREFILL_GLUE's per-family default (P130) is pinned off here
+    census = _apply_fusions(model, PagedServeConfig(fuse_qkv=fused, prefill_glue="0"))
     assert {k: census[k] for k in q.CENSUS_KEYS} == red.census_for(family, layers, fused=fused), census
     fwd = q.ForwardCounter(model)
     assert fwd.qkv_modules == (layers if fused else 0)
