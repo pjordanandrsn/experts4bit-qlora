@@ -269,9 +269,11 @@ def test_estimate_env_reports_the_switches_the_estimate_reads(monkeypatch):
 
     monkeypatch.delenv("E4B_CHUNKED_LM_LOSS", raising=False)
     monkeypatch.delenv("E4B_TRAIN_FUSE_QKV", raising=False)
+    monkeypatch.delenv("E4B_ABSMAX_DQ", raising=False)
     unset = estimate_env()
+    # tests/conftest.py pins enable_fast_train's absmax default off, so unset reads False here (True as shipped)
     assert unset == {"E4B_CHUNKED_LM_LOSS": {"chunk": DEFAULT_CHUNK, "auto_gate_bytes": AUTO_MIN_LOGITS_BYTES},
-                     "E4B_TRAIN_FUSE_QKV": True}
+                     "E4B_TRAIN_FUSE_QKV": True, "E4B_ABSMAX_DQ": False}
     for same in ("", "auto", "AUTO"):                      # the engine treats these as unset: no spurious difference
         monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", same)
         assert estimate_env() == unset, same
@@ -295,6 +297,16 @@ def test_estimate_env_reports_the_switches_the_estimate_reads(monkeypatch):
             on = device()
             monkeypatch.setenv(switch, "0")
             assert device() != on, switch
+            monkeypatch.delenv(switch, raising=False)
+            continue
+        if switch == "E4B_ABSMAX_DQ":          # the expert stacks' absmax, double-quantized on the resident grouped path
+            def stacks():
+                fp = estimate_qlora_footprint(topo, QLoRASetup(expert_residency="device"), tokens_per_microbatch=T)
+                return next(i.bytes for i in fp.items if i.name == "frozen expert stacks")
+            monkeypatch.setenv(switch, "1")
+            on = stacks()
+            monkeypatch.setenv(switch, "0")
+            assert stacks() > on, switch                  # fp32 (off) costs more than double-quantized (on)
             monkeypatch.delenv(switch, raising=False)
             continue
         monkeypatch.setenv(switch, "auto")
