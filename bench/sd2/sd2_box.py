@@ -58,6 +58,7 @@ TRUNC_POINTS = 8                  # draft-gate truncation points per prompt
 BAR_ADDRESS, BAR_DRAFT = 0.90, 0.99
 BUCKETS_WANTED = (1, 2, 3, 4, 8, 16)
 INFORMATIVE = 2.0 ** -7           # Amendment 4: a key cell counts when |pair 0| >= 2^-7 x its scale groups' amax
+FLOORS = (("2^-7", 2.0 ** -7), ("2^-5", 2.0 ** -5), ("2^-3", 2.0 ** -3))   # Amendment 5: depth, reported at each floor
 
 
 def digest(obj) -> str:
@@ -98,9 +99,20 @@ def pair0_rotation(zo, zv, amax, floor=INFORMATIVE):
             (zv.abs() / mag.clamp_min(1e-30) - 1.0).abs())
 
 
+def _quantiles(v):
+    """[p50, p90, p99, max] of a 1-d tensor, or None when it is empty."""
+    import torch
+    if not v.numel():
+        return None
+    q = torch.quantile(v.double(), torch.tensor([0.5, 0.9, 0.99], dtype=torch.float64)).tolist()
+    return [round(x, 6) for x in q] + [round(float(v.max()), 6)]
+
+
 def rot_summary(cells):
-    """``cells``: [(angle, informative, drift)] tensors shaped [L, rows, H]. The max |angle| over informative cells,
-    overall, at layer 0 and per layer; the informative count; the max radial drift."""
+    """``cells``: [(angle, informative, drift[, rel])] tensors shaped [L, rows, H], ``rel`` = |pair 0| / its groups'
+    amax. The max |angle| over informative cells, overall, at layer 0 (Amendment 5's gate) and per layer; the
+    informative counts; the max radial drift. With ``rel``, depth is reported at each of FLOORS: the cells at or
+    above the floor, and [p50, p90, p99, max] of |angle| over all of them and per layer (never gated)."""
     import torch
     a = torch.cat([c[0] for c in cells], 1).abs()
     inf = torch.cat([c[1] for c in cells], 1)
@@ -108,9 +120,18 @@ def rot_summary(cells):
     masked = torch.where(inf, a, torch.full_like(a, -1.0))
     per_layer = [round(float(x), 6) if x >= 0 else None for x in masked.flatten(1).amax(1).tolist()]
     live = [x for x in per_layer if x is not None]
-    return {"max_abs_angle": max(live) if live else None, "max_abs_angle_layer0": per_layer[0],
-            "per_layer_max": per_layer, "informative": int(inf.sum()), "cells": int(inf.numel()),
-            "radial_drift_max": round(float(dr[inf].max()), 6) if bool(inf.any()) else None}
+    out = {"max_abs_angle": max(live) if live else None, "max_abs_angle_layer0": per_layer[0],
+           "per_layer_max": per_layer, "informative": int(inf.sum()), "informative_layer0": int(inf[0].sum()),
+           "cells": int(inf.numel()),
+           "radial_drift_max": round(float(dr[inf].max()), 6) if bool(inf.any()) else None}
+    if all(len(c) > 3 for c in cells):
+        rel = torch.cat([c[3] for c in cells], 1)
+        out["floors"] = {}
+        for name, f in FLOORS:
+            m = rel >= f
+            out["floors"][name] = {"cells": int(m.sum()), "quantiles": _quantiles(a[m]),
+                                   "per_layer": [_quantiles(a[layer][m[layer]]) for layer in range(a.shape[0])]}
+    return out
 
 
 def rope_inv_freq0(model):
@@ -259,7 +280,7 @@ class Gate:
                 self.rewind(rid, slot, base)
                 g, vlogits = self.verify(rid, slot, base, oracle[:k])
                 zv, _ = self.k_pair0(slot, base, k + 1)                    # the verify's keys, same positions
-                cells.append(pair0_rotation(zo, zv, amax))
+                cells.append(pair0_rotation(zo, zv, amax) + (zo.abs() / amax.clamp_min(1e-30),))
                 rows_a += g
                 rows_b += oracle[:k + 1]
                 d = dlogp(vlogits, self.torch.stack([x[0] for x in ologits[:k + 1]]), oracle[:k + 1])
@@ -917,9 +938,12 @@ def self_test() -> int:
         bad.append("median")
     zo = torch.tensor([1 + 1j, 0.001 + 0j, -2 + 0.5j], dtype=torch.complex64)
     ang, inf, dr = pair0_rotation(zo, zo * torch.exp(torch.tensor(1j)), torch.tensor([1.0, 1.0, 2.0]))
-    summ = rot_summary([(ang.view(1, 3, 1), inf.view(1, 3, 1), dr.view(1, 3, 1))])
+    rel = (zo.abs() / torch.tensor([1.0, 1.0, 2.0])).view(1, 3, 1)
+    summ = rot_summary([(ang.view(1, 3, 1), inf.view(1, 3, 1), dr.view(1, 3, 1), rel)])
     if inf.tolist() != [True, False, True] or abs(summ["max_abs_angle"] - 1.0) > 1e-5 or summ["informative"] != 2:
         bad.append("pair-0 rotation")
+    if summ["informative_layer0"] != 2 or summ["floors"]["2^-3"]["cells"] != 2 or summ["floors"]["2^-7"]["per_layer"][0][3] < 0.99:
+        bad.append("rotation floors")
     if bad:
         print("sd2_box self-test FAILED:", bad)
         return 1

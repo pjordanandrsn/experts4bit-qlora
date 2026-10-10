@@ -122,3 +122,24 @@ def test_a_reversed_shift_reads_as_minus_one_radian():
     zm, _ = _pair0(_fp8(_rope(k, pos - 1)))
     ang, inf, _ = BOX.pair0_rotation(zo, zm, amax)
     assert (ang[inf] + 1.0).abs().max() <= _bound(0.0) + 1e-6
+
+
+def test_depth_floors_separate_small_noisy_cells_from_large_ones():
+    """Amendment 5 reports depth at three magnitude floors. Small cells carrying a large relative error (what drove
+    sd2-prove-4's per-layer maxima to about pi) drop out at 2^-5 and 2^-3, while large cells stay; layer 0 is the gate."""
+    gen = torch.Generator().manual_seed(11)
+    L, n = 4, 256
+    amax = torch.ones(L, n, H)
+    rel = torch.where(torch.rand(L, n, H, generator=gen) < 0.05, torch.full((L, n, H), 0.01), torch.full((L, n, H), 0.5))
+    zo = rel * torch.exp(1j * torch.rand(L, n, H, generator=gen) * 6.283)
+    noise = torch.where(rel < 0.02, 3.0, 0.02) * torch.exp(1j * torch.rand(L, n, H, generator=gen) * 6.283)
+    zv = zo + noise * zo.abs()
+    zv[0] = zo[0]                                              # layer 0 clean
+    ang, inf, dr = BOX.pair0_rotation(zo, zv, amax)
+    summ = BOX.rot_summary([(ang, inf, dr, zo.abs() / amax)])
+    assert summ["max_abs_angle_layer0"] == 0.0 and summ["informative_layer0"] == n * H
+    assert summ["max_abs_angle"] > 2.0                         # the small cells, at depth
+    f7, f5, f3 = (summ["floors"][k] for k in ("2^-7", "2^-5", "2^-3"))
+    assert f7["cells"] > f5["cells"] == f3["cells"]            # 0.01 < 2^-5: the small cells leave at 2^-5
+    assert f7["quantiles"][3] > 2.0 and f3["quantiles"][3] < 0.03
+    assert f3["per_layer"][0][3] == 0.0 and all(p[3] < 0.03 for p in f3["per_layer"][1:])
