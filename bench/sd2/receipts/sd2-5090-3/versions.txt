@@ -1,0 +1,9 @@
+e4b target 0.53.0 sha 88ae1cfd8fbe3477189f5a42d8448f395e974345
+harness sha af924eab5a566fea254d64a38d06490fbb3056e8
+gnf4 target 0.45.0
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+huggingface_hub 1.33.0
+cc (12, 0)

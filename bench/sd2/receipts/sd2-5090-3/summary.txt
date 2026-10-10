@@ -1,0 +1,91 @@
+KNOBS e4b_target=88ae1cfd8fbe3477189f5a42d8448f395e974345 gnf4_target=724ccc454f006c1a46836e434e997f31f293747f e4b_harness=af924eab5a566fea254d64a38d06490fbb3056e8 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 head=RedHatAI/Qwen3-30B-A3B-speculator.eagle3@6afc5aa2477b923467fb9a8d906782b984a9a6ba gpu_class=5090 min_disk_gb=150 min_ram_gb=60
+SD2_AUDIT ok {"changed": 7, "unlisted": [], "stale": []}
+e4b target 0.53.0 sha 88ae1cfd8fbe3477189f5a42d8448f395e974345
+harness sha af924eab5a566fea254d64a38d06490fbb3056e8
+gnf4 target 0.45.0
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+huggingface_hub 1.33.0
+cc (12, 0)
+sd2_reduce self-test OK (89 proof cases: all four rules, sd2-prove-2's calibration, sd2-5090-1's V0 and sd2-prove-4; 43 read cases: every verdict, every VOID item, the stage gate, reports that fail soft)
+sd2_box self-test OK (agreement, dlogp, digest, logits tap, verify plan and assembly, median, pair-0 rotation, fail-soft reports, the offline depth report, and both from the GPU)
+sd2_audit self-test OK (equal, unlisted, stale, the list's format)
+sd1_box self-test OK (capture bookkeeping, chat-template ids)
+hf_fetch_watchdog self-test OK (7/7 cases)
+SD2_GPU_TESTS {"rc": 0, "passed": 123, "failed": 0, "skipped": 0, "skipped_for_card": 0, "summary": "123 passed in 26.52s"}
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+HEAD RedHatAI/Qwen3-30B-A3B-speculator.eagle3@6afc5aa2477b923467fb9a8d906782b984a9a6ba sha256 d2d6e2e63e09dc755053ae5c98cdececae3611ae5e202d4fa5411126dd3b1dfa dir /root/.cache/huggingface/hub/models--RedHatAI--Qwen3-30B-A3B-speculator.eagle3/snapshots/6afc5aa2477b923467fb9a8d906782b984a9a6ba
+BAKE OK
+logs/prompts_R.log:P109_PROMPTS rows=16 prompt=512 sha256=21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709
+logs/prompts_C.log:SD1_PROMPTS C-think rows=16 min_len=20 max_len=1200 sha256=70111e682c7c02e64bf4c7087e9d691af5e4c93843dafd5346347de15974ad1d
+logs/prompts_C.log:SD1_PROMPTS C-nothink rows=16 min_len=24 max_len=1204 sha256=afcaae9b273a9ff0e92df4abdbbefe824ad7303fd904efaedce335311c397b7d
+v rc=0
+SD2_V0 capture_bitwise {"2": true, "3": true, "4": true}
+SD2_V0 addressing R1 k=1 {"rows_agree": 0.90625, "cont_agree": 0.875, "mean_abs_dlogp": [0.025219, 0.043277]} layer0=0.0
+SD2_V0 addressing R1 k=2 {"rows_agree": 0.9375, "cont_agree": 0.953125, "mean_abs_dlogp": [0.036084, 0.064719, 0.039262]} layer0=0.0
+SD2_V0 addressing R1 k=3 {"rows_agree": 1.0, "cont_agree": 0.859375, "mean_abs_dlogp": [0.028627, 0.060006, 0.024966, 0.052269]} layer0=0.0
+SD2_V0 addressing R2 k=1 {"rows_agree": 0.96875, "cont_agree": 0.9375, "mean_abs_dlogp": [0.021129, 0.024321]} layer0=0.002139
+SD2_V0 addressing R2 k=2 {"rows_agree": 0.9583333333333334, "cont_agree": 1.0, "mean_abs_dlogp": [0.017333, 0.056657, 0.011747]} layer0=0.0
+SD2_V0 addressing R2 k=3 {"rows_agree": 1.0, "cont_agree": 0.984375, "mean_abs_dlogp": [0.007979, 0.020161, 0.019904, 0.01927]} layer0=0.0
+SD2_V0 addressing R3 k=1 {"rows_agree": 1.0, "cont_agree": 0.921875, "mean_abs_dlogp": [0.031772, 0.019798]} layer0=0.002447
+SD2_V0 addressing R3 k=2 {"rows_agree": 1.0, "cont_agree": 0.859375, "mean_abs_dlogp": [0.018041, 0.035883, 0.029474]} layer0=0.000681
+SD2_V0 addressing R3 k=3 {"rows_agree": 0.953125, "cont_agree": 0.90625, "mean_abs_dlogp": [0.031126, 0.032648, 0.045468, 0.083335]} layer0=0.0
+SD2_V0 addressing C1 k=1 {"rows_agree": 1.0, "cont_agree": 0.953125, "mean_abs_dlogp": [0.004489, 0.003249]} layer0=0.0
+SD2_V0 addressing C1 k=2 {"rows_agree": 1.0, "cont_agree": 1.0, "mean_abs_dlogp": [0.010827, 0.003212, 0.011847]} layer0=0.0
+SD2_V0 addressing C1 k=3 {"rows_agree": 0.96875, "cont_agree": 0.84375, "mean_abs_dlogp": [0.025976, 0.000245, 0.01161, 0.041531]} layer0=0.0
+SD2_V0 addressing C2 k=1 {"rows_agree": 1.0, "cont_agree": 0.984375, "mean_abs_dlogp": [0.010714, 0.009607]} layer0=0.0
+SD2_V0 addressing C2 k=2 {"rows_agree": 1.0, "cont_agree": 1.0, "mean_abs_dlogp": [0.001053, 0.029544, 0.017953]} layer0=0.0
+SD2_V0 addressing C2 k=3 {"rows_agree": 0.953125, "cont_agree": 0.9375, "mean_abs_dlogp": [0.037663, 0.031775, 0.060925, 0.042926]} layer0=0.0
+SD2_V0 addressing C3 k=1 {"rows_agree": 1.0, "cont_agree": 0.984375, "mean_abs_dlogp": [0.017378, 0.006664]} layer0=0.0
+SD2_V0 addressing C3 k=2 {"rows_agree": 1.0, "cont_agree": 0.984375, "mean_abs_dlogp": [0.002733, 0.020732, 0.012022]} layer0=0.003294
+SD2_V0 addressing C3 k=3 {"rows_agree": 0.984375, "cont_agree": 0.9375, "mean_abs_dlogp": [0.024143, 0.01626, 0.01438, 0.024963]} layer0=0.0
+SD2_V0 mutant a R1 mean_abs_dlogp=[0.050126, 2.019036, 2.590643, 2.007038] layer0=0.0
+SD2_V0 mutant a C1 mean_abs_dlogp=[0.008349, 6.430217, 1.248539, 2.007453] layer0=0.0
+SD2_V0 mutant b R1 mean_abs_dlogp=[5.372666, 3.799901, 2.411845, 0.240867] layer0=3.061335
+SD2_V0 mutant b C1 mean_abs_dlogp=[6.106574, 14.238357, 4.38182, 0.721652] layer0=2.772696
+SD2_V0 mutant c R1 mean_abs_dlogp=[0.160934, 0.034099, 0.020618, 0.09007] layer0=1.038327
+SD2_V0 mutant c C1 mean_abs_dlogp=[0.011872, 0.003952, 0.064417, 0.039685] layer0=1.041625
+SD2_V0 draft {"agree": 0.9965277777777778, "same": 574, "of": 576}
+SD2_V0 transition {"spec_steps_alone": 4, "dropped_batched": 1, "len_a": 64, "len_b": 16, "want": [64, 16], "mirror_mismatches": 0, "state_left": 0}
+SD2_V1 k=1 {"full_ms": 8.9166, "verify_ms": 8.3016, "post_ms": 0.513, "loop_ms": 0.102, "verify_events": 64, "post_events": 64, "post_status": "graph", "census": {"prefills": 1, "steps": 72, "drafted": 72, "accepted": 65, "emitted": 137, "short_steps": 0, "dropped_batched": 0, "dropped_end": 0, "post_replays": 72, "post_eager": 0, "k": 1, "tau_live": 1.9027777777777777, "acceptance": 0.90277777777
+SD2_V1 k=2 {"full_ms": 9.7852, "verify_ms": 8.7415, "post_ms": 0.9421, "loop_ms": 0.1016, "verify_events": 64, "post_events": 64, "post_status": "graph", "census": {"prefills": 1, "steps": 72, "drafted": 144, "accepted": 111, "emitted": 183, "short_steps": 0, "dropped_batched": 0, "dropped_end": 0, "post_replays": 72, "post_eager": 0, "k": 2, "tau_live": 2.5416666666666665, "acceptance": 0.7708333
+SD2_V1 k=3 {"full_ms": 10.5617, "verify_ms": 9.0799, "post_ms": 1.3824, "loop_ms": 0.0994, "verify_events": 64, "post_events": 64, "post_status": "graph", "census": {"prefills": 1, "steps": 72, "drafted": 216, "accepted": 148, "emitted": 220, "short_steps": 0, "dropped_batched": 0, "dropped_end": 0, "post_replays": 72, "post_eager": 0, "k": 3, "tau_live": 3.0555555555555554, "acceptance": 0.685185
+SD2_V1 anchors 4.1845 4.1805 ms
+SD2_V done
+SD2_GATE E_ONLY
+canary e rc=0
+SD2_CANARY e ok ON2-canary
+e_OFF-a rc=0
+SD2_E OFF-a R decode_tok_s=238.43
+SD2_E OFF-a C-think decode_tok_s=238.69
+SD2_E OFF-a C-nothink decode_tok_s=237.32
+SD2_E done OFF-a
+e_ON1-a rc=0
+SD2_E ON1-a R decode_tok_s=181.58 tau_live=1.555302166476625
+SD2_E ON1-a C-think decode_tok_s=188.34 tau_live=1.7246924107686685
+SD2_E ON1-a C-nothink decode_tok_s=186.16 tau_live=1.6691054991739438
+SD2_E done ON1-a
+e_ON2-a rc=0
+SD2_E ON2-a R decode_tok_s=200.16 tau_live=1.8324707686409814
+SD2_E ON2-a C-think decode_tok_s=216.09 tau_live=2.211658354114713
+SD2_E ON2-a C-nothink decode_tok_s=210.16 tau_live=2.0639042894660053
+SD2_E done ON2-a
+e_ON2-b rc=0
+SD2_E ON2-b R decode_tok_s=200.35 tau_live=1.8324707686409814
+SD2_E ON2-b C-think decode_tok_s=216.4 tau_live=2.211658354114713
+SD2_E ON2-b C-nothink decode_tok_s=209.69 tau_live=2.0639042894660053
+SD2_E done ON2-b
+e_ON1-b rc=0
+SD2_E ON1-b R decode_tok_s=181.91 tau_live=1.555302166476625
+SD2_E ON1-b C-think decode_tok_s=188.56 tau_live=1.7246924107686685
+SD2_E ON1-b C-nothink decode_tok_s=185.27 tau_live=1.6691054991739438
+SD2_E done ON1-b
+e_OFF-b rc=0
+SD2_E OFF-b R decode_tok_s=238.69
+SD2_E OFF-b C-think decode_tok_s=233.28
+SD2_E OFF-b C-nothink decode_tok_s=237.84
+SD2_E done OFF-b
+stage Q skipped: the stop rule (VERIFY_COST_REFUTES without V_NOISY)
+SD2_READ_VERDICT {"verdict": "VERIFY_COST_REFUTES", "void": [], "faster_at": null, "conflict": false}
