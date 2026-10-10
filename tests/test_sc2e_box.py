@@ -136,17 +136,17 @@ def test_the_lane_tools_pass_their_self_tests(script):
 
 
 def test_box_l_is_wired_like_box_h():
-    assert 'case "$BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M) ;;' in RUN
+    assert 'case "$BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M|N) ;;' in RUN
     assert 'case "$BOX" in L) GNF4_SHA=b4f93f1c62d1e3436ed45bec8ccd608c90433737;; esac' in RUN     # v0.42.0, CI's pin
-    assert "C|D|E|F|G|H|I|J|K|L|M) BASEPY=python3;;" in RUN
+    assert "C|D|E|F|G|H|I|J|K|L|M|N) BASEPY=python3;;" in RUN
     torch = next(x for x in RUN.splitlines() if '"torch==2.8.0"' in x and "pipx logs/pip_torch.log" in x)
     assert '[ "$BOX" = L ]' in torch                                     # SC2c A1's lesson: every python3 box pins torch
-    assert RUN.count('os.environ["TRIP_BOX"] in ("F", "G", "H", "I", "J", "K", "L")') == 2   # main's routes, no pins
+    assert RUN.count('os.environ["TRIP_BOX"] in ("F", "G", "H", "I", "J", "K", "L", "N")') == 2   # main's routes, no pins
     assert "  L) . $W/sc2_box_e.sh; . $W/sc2c_box_h.sh; . $W/sc2e_box_l.sh; install_sc2_client ;;" in RUN
     assert 'L) PROVE_NEEDS="sc2client";;' in RUN and '[ "$BOX" = L ] && prove_l' in RUN and "L) box_l;; M)" in RUN
-    assert 'case "$SC1_BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M) ;;' in DRIVE
-    assert "sc2e_box_l.sh sc2e_reduce.py sc2e_census.py sc2e_basis.py; do STAGE=" in DRIVE
-    assert 'sc2c_*|sc2d_*|sc2e_*) src="$SC2/$name";;' in DRIVE
+    assert 'case "$SC1_BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M|N) ;;' in DRIVE
+    assert "sc2e_box_l.sh sc2e_reduce.py sc2e_census.py sc2e_basis.py sc2f_box_n.sh sc2f_reduce.py sc2f_basis.py; do STAGE=" in DRIVE
+    assert 'sc2c_*|sc2d_*|sc2e_*|sc2f_*) src="$SC2/$name";;' in DRIVE
     pin = (REPO / "bench" / "sc1" / "staged.sha256").read_text()
     for name in ("sc2e_box_l.sh", "sc2e_reduce.py", "sc2e_census.py", "sc2e_basis.py"):
         assert re.search(rf"^[0-9a-f]{{64}}  {re.escape(name)}$", pin, re.M), name
