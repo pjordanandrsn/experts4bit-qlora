@@ -227,7 +227,7 @@ def adapter_globals(source_hashes):
                                   ("matmul_lora", "get_lora_parameters", "fast_dequantize",
                                    "_has_multiple_active_adapters", "_maybe_fake_quantize_activations")}, source_hashes)
     utils_names = ("matmul_lora", "get_lora_parameters", "fast_dequantize", "_has_multiple_active_adapters",
-                   "_maybe_fake_quantize_activations", "_packed_base", "_quant_state_dtype")
+                   "_maybe_fake_quantize_activations", "_packed_base", "_is_packed_state", "_quant_state_dtype")
     result = {"fast_lora": aliases,
               "utils": verify_named_callees(utils, {name: (utils, name) for name in utils_names}, source_hashes),
               "swiglu": verify_named_callees(fast_lora, {name: (swiglu, name) for name in
