@@ -15,6 +15,9 @@ MAX_SCALAR_BYTES = 65536
 MAX_ITEMS = 4096
 MAX_DEPTH = 16
 MAX_CODE_OBJECTS = 256
+# Format 2 encodes values without reference-count-dependent object references.
+# Code fields still depend on the running interpreter; this is not portability.
+MARSHAL_FORMAT = 2
 
 
 def _require(ok, message):
@@ -85,7 +88,7 @@ def _code(code):
 
     visit(code)
     try:
-        raw = marshal.dumps(code)
+        raw = marshal.dumps(code, MARSHAL_FORMAT)
     except (ValueError, TypeError, RecursionError) as error:
         raise ValueError("Python function snapshot: unsupported code serialization") from error
     _require(len(raw) <= MAX_BYTES, "complete code byte bound")
@@ -119,7 +122,7 @@ def _snapshot(function):
         set(),
     )
     try:
-        raw = marshal.dumps(metadata)
+        raw = marshal.dumps(metadata, MARSHAL_FORMAT)
     except (ValueError, TypeError, RecursionError) as error:
         raise ValueError("Python function snapshot: unsupported metadata serialization") from error
     _require(len(raw) <= MAX_BYTES, "complete metadata byte bound")

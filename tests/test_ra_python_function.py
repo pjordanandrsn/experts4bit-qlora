@@ -102,6 +102,54 @@ def test_complete_code_not_only_executed_body(mutate):
         binding.check(live)
 
 
+@pytest.mark.parametrize("hold_alias", [False, True])
+def test_qualified_name_mutation_refuses_metadata_with_or_without_code_alias(hold_alias):
+    live, _, binding = pair()
+    code = live.__code__
+    held = [live.__qualname__] if hold_alias else []
+    live.__qualname__ = "changed.qualname"
+    assert live.__code__ is code
+    with pytest.raises(ValueError, match="complete typed metadata drift"):
+        binding.check(live)
+    with pytest.raises(ValueError, match="terminal refusal"):
+        binding.check(live)
+    assert len(held) == int(hold_alias)
+
+
+def test_external_code_and_metadata_references_do_not_change_snapshot_hashes():
+    live, reference, binding = pair()
+    initial = binding.check(live)
+    held = [
+        live.__code__,
+        live.__code__.co_consts,
+        live.__code__.co_filename,
+        live.__name__,
+        live.__qualname__,
+        live.__defaults__,
+        live.__annotations__["value"],
+        live.details["tuple"][0],
+        reference.__code__,
+        reference.__qualname__,
+    ]
+    assert binding.check(live) == initial
+    held.clear()
+    assert binding.check(live) == initial
+
+
+@pytest.mark.parametrize("field", ["co_qualname", "co_linetable", "co_exceptiontable"])
+def test_additional_interpreter_code_fields_are_bound(field):
+    live, _, binding = pair()
+    if hasattr(live.__code__, field):
+        value = getattr(live.__code__, field)
+        changed = value + (".changed" if type(value) is str else b"\x00")
+        live.__code__ = live.__code__.replace(**{field: changed})
+        with pytest.raises(ValueError, match="complete code drift"):
+            binding.check(live)
+    else:
+        # Python 3.10 has no qualified-name or exception-table code fields.
+        assert binding.check(live)["original_object_preserved"]
+
+
 def test_nested_code_body_is_in_complete_code():
     text = "def original():\n    def nested(): return 1\n    return nested\n"
     live, reference = fixture(text), fixture(text)

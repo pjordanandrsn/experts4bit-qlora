@@ -19,3 +19,10 @@ site, native-extension, native-read or consumer authentication, execution wrappe
 worker inventory expansion or ABBA wiring. Cooperating serialized callers are
 required; the binding's private fields do not authenticate arbitrary same-process
 tampering or close races between checks.
+
+Snapshots explicitly use marshal format 2, which encodes values without object
+reference sharing. Holding or dropping an external reference cannot change the
+snapshot bytes. A function qualified-name change therefore refuses as metadata
+drift even when it changes the reference count of an unchanged code field. Code
+fields, nested bodies and typed metadata remain bound; hashes remain specific to
+the running interpreter and are not cross-version compiled-code equivalence.
