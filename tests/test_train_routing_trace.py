@@ -282,3 +282,44 @@ def test_dgrad_is_reported_separately_from_the_inflating_pooled_rate():
     assert passes["fwd"]["hit_rate"] < 1.0
     assert passes["pooled"]["hit_rate"] > passes["fwd"]["hit_rate"]
     assert passes["pooled"]["touches"] == sum(passes[p]["touches"] for p in ("fwd", "recompute", "dgrad"))
+
+
+def test_run_capture_main_end_to_end_with_a_stub_harness(tmp_path):
+    """Drives run_capture.main() itself: the wrapper's load_e4b hook, its backward labelling, and the optimizer
+    step hook (an attribute lookup `torch.optim.optimizer.<name>` here failed at startup on real torch), then save."""
+    import types
+
+    rc_mod = _load("run_capture")
+
+    def stub_main():
+        model, _ = stub.load_e4b(None)
+        opt = torch.optim.SGD(model.parameters(), lr=1e-3)
+        torch.manual_seed(0)
+        with torch.no_grad():
+            model(torch.randn(6, H))                       # an eval forward: ignored by the recorder
+        for _step in range(2):
+            for _mb in range(3):
+                model(torch.randn(6, H)).backward()
+            opt.step()
+            opt.zero_grad()
+        return 0
+
+    stub = types.ModuleType("tc1_arm")
+    stub.load_e4b = lambda a: (Toy(), None)
+    stub.main = stub_main
+    real_load = rc_mod._load
+    rc_mod._load = lambda name, path: stub if name == "tc1_arm" else real_load(name, path)
+    before = (torch.Tensor.backward, torch.autograd.backward)
+    out = tmp_path / "trace.npz"
+    try:
+        rc = rc_mod.main(["--trace-out", str(out), "--expect-mb", "3", "--", "--steps", "2"])
+    finally:
+        rc_mod._load = real_load
+    assert rc == 0
+    assert (torch.Tensor.backward, torch.autograd.backward) == before          # both entry points restored
+    import json
+    meta = json.loads(open(str(out) + ".meta.json").read())
+    assert meta["summary"]["verdict"] == "OK", meta["summary"]["reasons"]
+    assert meta["summary"]["steps"] == 2
+    assert meta["meta"]["harness_args"] == ["--steps", "2"]
+    assert sorted(rp.load_train_trace(str(out), expect_mb=3)) == [(s, m) for s in range(2) for m in range(3)]
