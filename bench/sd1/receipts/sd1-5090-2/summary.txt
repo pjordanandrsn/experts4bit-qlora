@@ -1,0 +1,23 @@
+KNOBS e4b_target=7f044dd9570b0f75ac4ebc1742e697256cd2e209 gnf4_target=d769d5022c0fb7a2ada847f69a3cba6e0f45c77f e4b_harness=e29c1af39a735585f1ca711c0e1971d8b948f36c model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 head=RedHatAI/Qwen3-30B-A3B-speculator.eagle3@6afc5aa2477b923467fb9a8d906782b984a9a6ba gpu_class=5090 min_disk_gb=150 min_ram_gb=60
+e4b target 0.51.0 sha 7f044dd9570b0f75ac4ebc1742e697256cd2e209
+harness sha e29c1af39a735585f1ca711c0e1971d8b948f36c
+gnf4 target 0.44.0
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+huggingface_hub 1.33.0
+cc (12, 0)
+sd1_reduce self-test OK (14/14 cases)
+sd1_box self-test OK (capture bookkeeping, chat-template ids)
+hf_fetch_watchdog self-test OK (7/7 cases)
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+HEAD RedHatAI/Qwen3-30B-A3B-speculator.eagle3@6afc5aa2477b923467fb9a8d906782b984a9a6ba sha256 d2d6e2e63e09dc755053ae5c98cdececae3611ae5e202d4fa5411126dd3b1dfa
+BAKE OK
+logs/prompts_R.log:P109_PROMPTS rows=16 prompt=512 sha256=21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709
+logs/prompts_C.log:SD1_PROMPTS C-think rows=16 min_len=20 max_len=1200 sha256=70111e682c7c02e64bf4c7087e9d691af5e4c93843dafd5346347de15974ad1d
+logs/prompts_C.log:SD1_PROMPTS C-nothink rows=16 min_len=24 max_len=1204 sha256=afcaae9b273a9ff0e92df4abdbbefe824ad7303fd904efaedce335311c397b7d
+capture R rc=0 SD1_TRIPWIRE R row0 equals p127-5090-1 W1: True (160/160) SD1_CAPTURE {"workload": "R", "rows": 16, "load_s": 28.51} 
+capture C-think rc=0 SD1_CAPTURE {"workload": "C-think", "rows": 16, "load_s": 20.59} 
+capture C-nothink rc=0 SD1_CAPTURE {"workload": "C-nothink", "rows": 16, "load_s": 20.76} 
+SD1_VERDICT {"verdict": "PROCEED_EAGLE3", "reasons": [], "best_S_eagle3": {"R": 1.0964, "C-think": 1.2303, "C-nothink": 1.1758}, "best_S_ngram_R": 1.0844}
