@@ -62,13 +62,15 @@ The observer/clean proof tensors were not retained; their same-arm bitwise
 metadata was checked, with separate optional raw gradient pairs re-derived.
 The maintainer independently reran `dq11_rehearsal.py check` on the raw
 receipts and accepted the full path
-(`20261010T220329Z-86612-a0d6caaac7d0`); his check omitted optional gradient
+(`20261010T220329Z-86612-a0d6caaac7d0`); that check omitted optional gradient
 packets, which the CPU audit covers.
 
-## Immutable private handoffs and limit
+## Private review packets and limit
 
-- Real index: `adertha://experts4bit-qlora%231083/reviews/dq11-real-quality-e672f984-index.json`, SHA-256 `de18f2c44179847d017136187f09647741690c105e749c17439179b31f86acaf`.
-- Seventh index: `adertha://experts4bit-qlora%231083/reviews/dq11-seventh-e672f984-index.json`, SHA-256 `382d58a2535d80940cd34812eee1ba38500c27bbb3cad0f398ed6a254644a9ea`.
+Private review packets (SHA-256 below):
+
+- Real index: `de18f2c44179847d017136187f09647741690c105e749c17439179b31f86acaf`.
+- Seventh index: `382d58a2535d80940cd34812eee1ba38500c27bbb3cad0f398ed6a254644a9ea`.
 
 Both indexes and their review packets passed fresh hash-bound readback.
 They retain source/nonce, raw ledgers, logs, scores and independent checks.
