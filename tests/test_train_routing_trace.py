@@ -1,9 +1,11 @@
 """bench/train-routing-trace: the training routing recorder and the residency replay (CPU only)."""
 import importlib.util
+import os
 import random
 from pathlib import Path
 
 import numpy as np
+
 import pytest
 import torch
 from torch.utils.checkpoint import checkpoint
@@ -235,6 +237,66 @@ def test_replay_refuses_a_wrong_expect_mb_and_a_tampered_file(tmp_path):
     np.savez_compressed(path, **data)
     with pytest.raises(rp.IncompleteTrace):
         rp.load_train_trace(path, expect_mb=2)
+
+
+def _early_ending_capture(tmp_path, perturb_at=None):
+    """3 complete optimizer steps of a planned 5, then a forward that never stepped (what an OOM mid-step leaves)."""
+    torch.manual_seed(0)
+    model, rec = Toy(), rr.RoutingRecorder(n_experts=E)
+    rec.attach(model)
+    _train(model, rec, steps=3, perturb_at=perturb_at)
+    model(torch.randn(6, H))                                            # step index 3 starts and never finishes
+    path = str(tmp_path / "t.npz")
+    summary = rec.save(path, {"harness_args": ["--steps", "5", "--accum", "2"]}, expect_mb=2)
+    assert summary["verdict"] == "VOID" and summary["steps"] == 3
+    return path
+
+
+def test_complete_steps_scores_the_kept_steps_of_an_early_ending_capture(tmp_path):
+    path = _early_ending_capture(tmp_path)
+    with pytest.raises(rp.IncompleteTrace):
+        rp.load_train_trace(path, expect_mb=2)                         # whole capture: VOID, refused
+    mbs, info = rp.load_train_trace_info(path, expect_mb=2, complete_steps=3, reason="OOM in step 4")
+    assert sorted(mbs) == [(s, m) for s in range(3) for m in range(2)]
+    assert info["capture_verdict"] == "VOID" and info["truncated_from"] == 5 and info["complete_steps"] == 3
+    assert info["reason"] == "OOM in step 4" and info["capture_reasons"]
+
+
+def test_complete_steps_still_refuses_a_fault_inside_the_cut(tmp_path):
+    path = _early_ending_capture(tmp_path)
+    data = dict(np.load(path))
+    del data["s1_mb0_recompute_L2"]                                     # a missing layer INSIDE the kept steps
+    np.savez_compressed(path, **data)
+    with pytest.raises(rp.IncompleteTrace, match="missing layers"):
+        rp.load_train_trace(path, expect_mb=2, complete_steps=3, reason="OOM")
+
+
+def test_complete_steps_still_refuses_a_divergent_recompute_inside_the_cut(tmp_path):
+    path = _early_ending_capture(tmp_path, perturb_at=(1, 0))
+    with pytest.raises(rp.IncompleteTrace, match="routed differently"):
+        rp.load_train_trace(path, expect_mb=2, complete_steps=3, reason="OOM")
+    rp.load_train_trace(path, expect_mb=2, complete_steps=1, reason="OOM")   # the cut before it is clean
+
+
+def test_complete_steps_refuses_beyond_the_completed_steps_without_a_reason_or_without_meta(tmp_path):
+    path = _early_ending_capture(tmp_path)
+    with pytest.raises(rp.IncompleteTrace, match="completed 3"):
+        rp.load_train_trace(path, expect_mb=2, complete_steps=4, reason="OOM")
+    with pytest.raises(rp.IncompleteTrace, match="reason"):
+        rp.load_train_trace(path, expect_mb=2, complete_steps=3)
+    os.remove(path + ".meta.json")
+    with pytest.raises(rp.IncompleteTrace, match="meta"):
+        rp.load_train_trace(path, expect_mb=2, complete_steps=3, reason="OOM")
+
+
+def test_replay_cli_records_the_cut(tmp_path):
+    import json
+    path = _early_ending_capture(tmp_path)
+    out = tmp_path / "r.json"
+    assert rp.main(["--trace", path, "--expect-mb", "2", "--complete-steps", "3", "--truncation-reason", "OOM",
+                    "--fit-steps", "1", "--n-experts", str(E), "--out", str(out)]) == 0
+    info = json.loads(out.read_text())["trace_info"]
+    assert info["truncated_from"] == 5 and info["complete_steps"] == 3 and info["capture_verdict"] == "VOID"
 
 
 def test_expert_row_bytes_qwen3_shape_and_layout_is_cited():

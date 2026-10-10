@@ -63,6 +63,9 @@ python bench/train-routing-trace/run_capture.py --trace-out /path/trace.npz --ex
 python bench/train-routing-trace/replay.py --trace /path/trace.npz --expect-mb 8 --fit-steps 5 --out replay.json
 python bench/train-routing-trace/replay.py --trace /path/trace.npz --expect-mb 8 --fit-steps 5 --null-seed 1 \
     --out null.json
+# a capture that ended early: score its first N complete optimizer steps (re-checked; recorded in trace_info)
+python bench/train-routing-trace/replay.py --trace /path/trace.npz --expect-mb 8 --complete-steps 17 \
+    --truncation-reason "OOM at step 18" --fit-steps 5 --out replay.json
 python bench/train-routing-trace/replay.py --decode <gnf4>/bench/cold-engine/routing-trace/qwen3_prose.jsonl \
     --fit-steps 128 --out decode-prose.json
 ```
