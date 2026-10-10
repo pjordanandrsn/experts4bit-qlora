@@ -1,11 +1,13 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
-"""A bf16 reference forward for a Qwen3-MoE checkpoint that does not fit the device: one decoder layer resident at a time.
+"""A bf16 reference forward for a MoE checkpoint that does not fit the device: one decoder layer resident at a time.
 
 Q235's fidelity reference (bench/q235/PREREG-q235.md). The model is transformers' own modeling, built on ``meta``; each layer is
 assembled on the host from the checkpoint's shards, copied to the device, applied, and released, so the device holds one layer's
-weights (about 5 GB at Qwen3-235B-A22B, 1.25 GB at Qwen3-30B-A3B) plus the activations. The checkpoint's per-expert tensors are
-fused exactly as transformers' loader fuses them (``conversion_mapping``'s qwen2_moe rule: each expert's gate and up stacked, then
-concatenated along dim 1; down stacked), so the layer computes what the resident model computes.
+weights (about 5 GB at Qwen3-235B-A22B or Mixtral-8x22B, 1.25 GB at Qwen3-30B-A3B) plus the activations. Each checkpoint key is
+converted exactly as ``from_pretrained`` converts it, by transformers' own conversion mapping (qwen2_moe's rule for Qwen3: each
+expert's gate and up stacked, then concatenated along dim 1, down stacked; mixtral's: ``.block_sparse_moe.`` renamed to ``.mlp.``,
+w1/w3/w2 as gate/up/down). That way the layer computes what the resident model computes. The mapping is never e4b's: a reference
+that borrowed the system under test's mapping would agree with it on a shared mistake, such as a swapped gate/up role.
 
 ``--resident`` loads every layer first and keeps them (the depth-truncated resident reference, ``--layers k``); the forward is the
 same code in the same order, so streamed and resident are expected to agree bit for bit on one device.
@@ -51,22 +53,46 @@ class Shards:
         return name in self.where
 
 
-def layer_state(shards, i, num_experts, device, dtype):
-    """Layer ``i``'s state dict in the modeling's layout: per-expert gate/up/down fused as transformers' loader does."""
+class Conversions:
+    """transformers' checkpoint-to-module conversion for ``model``: the renamings and converters ``from_pretrained`` applies
+    (``get_model_conversion_mapping``), split as ``core_model_loading`` splits them, with the meta state dict the loader checks
+    renamed keys against."""
+
+    def __init__(self, model):
+        from transformers.conversion_mapping import get_model_conversion_mapping
+        from transformers.core_model_loading import WeightConverter, WeightRenaming
+        mapping = get_model_conversion_mapping(model)
+        self.renamings = [m for m in mapping if isinstance(m, WeightRenaming)]
+        self.converters = [m for m in mapping if isinstance(m, WeightConverter)]
+        self.by_pattern = {p: c for c in self.converters for p in c.source_patterns}
+        self.meta = model.state_dict()
+        self.prefix = model.base_model_prefix
+        self.model = model
+
+
+def layer_state(shards, i, conv, device, dtype):
+    """Layer ``i``'s state dict in the modeling's layout, converted from the checkpoint's own spelling as ``from_pretrained`` converts
+    it (``conv``: :class:`Conversions`). Keys are taken in ``dot_natural_key`` order and renamed by ``rename_source_key``. The keys a
+    ``WeightConverter`` claims (per-expert gate/up/down) are gathered into that converter's own operations (stack, then gate before
+    up). A key that lands nowhere in the module tree raises."""
+    from copy import deepcopy
+    from transformers.core_model_loading import dot_natural_key, rename_source_key
     pre = f"model.layers.{i}."
-    sd = {}
-    for name in [k for k in shards.where if k.startswith(pre) and ".mlp.experts." not in k]:
-        sd[name[len(pre):]] = shards.get(name, device).to(dtype)
-    if shards.has(pre + "mlp.experts.gate_up_proj"):                       # already fused in the checkpoint
-        sd["mlp.experts.gate_up_proj"] = shards.get(pre + "mlp.experts.gate_up_proj", device).to(dtype)
-        sd["mlp.experts.down_proj"] = shards.get(pre + "mlp.experts.down_proj", device).to(dtype)
-    elif shards.has(pre + "mlp.experts.0.gate_proj.weight"):
-        g = torch.stack([shards.get(f"{pre}mlp.experts.{e}.gate_proj.weight", device) for e in range(num_experts)])
-        u = torch.stack([shards.get(f"{pre}mlp.experts.{e}.up_proj.weight", device) for e in range(num_experts)])
-        sd["mlp.experts.gate_up_proj"] = torch.cat([g, u], dim=1).to(dtype)
-        del g, u
-        sd["mlp.experts.down_proj"] = torch.stack(
-            [shards.get(f"{pre}mlp.experts.{e}.down_proj.weight", device) for e in range(num_experts)]).to(dtype)
+    sd, pending = {}, {}
+    for key in sorted((k for k in shards.where if k.startswith(pre)), key=dot_natural_key):
+        name, pattern = rename_source_key(key, conv.renamings, conv.converters, conv.prefix, conv.meta)
+        if name not in conv.meta and key in conv.meta:                    # the loader's fallback: keep the key as it is
+            name, pattern = key, None
+        if not name.startswith(pre) or name not in conv.meta:
+            raise KeyError(f"checkpoint key {key!r} converts to {name!r}, which the module tree does not have")
+        tensor = shards.get(key, device)
+        if pattern is None:
+            sd[name[len(pre):]] = tensor.to(dtype)
+        else:
+            pending.setdefault(name, deepcopy(conv.by_pattern[pattern])).add_tensor(name, key, pattern, tensor)
+    for name, converter in pending.items():
+        for full, tensor in converter.convert(name, model=conv.model, config=conv.model.config).items():
+            sd[full[len(pre):]] = tensor.to(dtype)
     return sd
 
 
@@ -76,6 +102,7 @@ def run(path, token_ids, attention_mask, labels, device, *, layers=None, residen
     with torch.device("meta"):
         model = AutoModelForCausalLM.from_config(cfg, dtype=dtype)
     shards = Shards(path)
+    conv = Conversions(model)
     dev = torch.device(device)
     t0 = time.time()
     emb = shards.get("model.embed_tokens.weight", dev).to(dtype)
@@ -94,7 +121,7 @@ def run(path, token_ids, attention_mask, labels, device, *, layers=None, residen
         layer = model.model.layers[i]
         layer.to_empty(device=dev)
         # assembled on the host and copied in, so the device never holds a second (stacked) copy of the layer's experts
-        missing, unexpected = layer.load_state_dict(layer_state(shards, i, cfg.num_experts, "cpu", dtype), strict=True)
+        missing, unexpected = layer.load_state_dict(layer_state(shards, i, conv, "cpu", dtype), strict=True)
         assert not missing and not unexpected, (missing, unexpected)
         return layer
 

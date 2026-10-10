@@ -1,8 +1,10 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
 """Q235's layer-streamed bf16 reference (``bench/q235/instrument/layer_stream_ref.py``) computes what transformers' resident model
-computes: on a small random Qwen3-MoE saved by ``save_pretrained``, the streamed forward and the resident forward agree bit for bit
-(per-layer outputs, router top-k, loss), and both match the model loaded by ``from_pretrained`` (its per-layer hidden states, its
-router's top-k and its loss) on padded, variable-length rows."""
+computes. On a small random Qwen3-MoE and a small random Mixtral, each saved by ``save_pretrained`` in its released per-expert
+spelling, the streamed forward and the resident forward agree bit for bit (per-layer outputs, router top-k, loss). Both also match the
+model loaded by ``from_pretrained`` (its per-layer hidden states, its router's top-k and its loss) on padded, variable-length rows.
+The checkpoint is read through transformers' own conversion mapping; the Qwen3 path is byte-identical to the original
+Qwen3-only assembly."""
 from __future__ import annotations
 
 import importlib.util
@@ -24,16 +26,24 @@ def _tool():
     return mod
 
 
-@pytest.fixture(scope="module")
-def tiny(tmp_path_factory):
-    from transformers import Qwen3MoeConfig, Qwen3MoeForCausalLM
-    cfg = Qwen3MoeConfig(vocab_size=256, hidden_size=64, intermediate_size=128, moe_intermediate_size=32, num_hidden_layers=3,
-                         num_attention_heads=4, num_key_value_heads=2, head_dim=16, num_experts=8, num_experts_per_tok=2,
-                         decoder_sparse_step=1, mlp_only_layers=[], norm_topk_prob=True, tie_word_embeddings=False,
-                         max_position_embeddings=128)
+def _tiny_model(family):
+    if family == "qwen3_moe":
+        from transformers import Qwen3MoeConfig, Qwen3MoeForCausalLM
+        return Qwen3MoeForCausalLM(Qwen3MoeConfig(
+            vocab_size=256, hidden_size=64, intermediate_size=128, moe_intermediate_size=32, num_hidden_layers=3,
+            num_attention_heads=4, num_key_value_heads=2, head_dim=16, num_experts=8, num_experts_per_tok=2, decoder_sparse_step=1,
+            mlp_only_layers=[], norm_topk_prob=True, tie_word_embeddings=False, max_position_embeddings=128))
+    from transformers import MixtralConfig, MixtralForCausalLM
+    return MixtralForCausalLM(MixtralConfig(
+        vocab_size=256, hidden_size=64, intermediate_size=96, num_hidden_layers=3, num_attention_heads=4, num_key_value_heads=2,
+        head_dim=16, num_local_experts=8, num_experts_per_tok=2, tie_word_embeddings=False, max_position_embeddings=128))
+
+
+@pytest.fixture(scope="module", params=["qwen3_moe", "mixtral"])
+def tiny(tmp_path_factory, request):
     torch.manual_seed(0)
-    path = tmp_path_factory.mktemp("q3tiny")
-    Qwen3MoeForCausalLM(cfg).to(torch.bfloat16).save_pretrained(path)
+    path = tmp_path_factory.mktemp(f"tiny_{request.param}")
+    _tiny_model(request.param).to(torch.bfloat16).save_pretrained(path)
     g = torch.Generator().manual_seed(1)
     ids = torch.randint(3, 256, (2, 24), generator=g)
     mask = torch.ones(2, 24, dtype=torch.long)
@@ -141,7 +151,7 @@ def _assembled_both_ways(path, device, layer=0):
                               past_key_values=None, position_ids=position_ids)
     outs, sds = [], []
     for where in ("cpu", dev):
-        sd = t.layer_state(shards, layer, cfg.num_experts, where, torch.bfloat16)
+        sd = t.layer_state(shards, layer, t.Conversions(model), where, torch.bfloat16)
         sds.append({k: v.to("cpu") for k, v in sd.items()})
         lay = model.model.layers[layer]
         lay.to_empty(device=dev)
@@ -174,3 +184,50 @@ def test_host_and_device_layer_assembly_on_a_real_checkpoint():
         pytest.skip("set Q235_ASSEMBLY_CHECKPOINT on a CUDA host")
     same_sd, (a, b) = _assembled_both_ways(path, "cuda")
     assert same_sd and torch.equal(a, b)
+
+
+def test_the_checkpoints_are_in_their_released_per_expert_spelling(tiny):
+    """The conversion is exercised, not skipped: each tiny checkpoint carries its family's per-expert keys, not the fused tree's."""
+    from safetensors import safe_open
+    keys = set(safe_open(str(Path(tiny[0]) / "model.safetensors"), "pt").keys())
+    assert not any(k.endswith("experts.gate_up_proj") for k in keys)
+    assert ("model.layers.0.block_sparse_moe.experts.0.w1.weight" in keys) or ("model.layers.0.mlp.experts.0.gate_proj.weight" in keys)
+
+
+def _legacy_layer_state(shards, i, num_experts, device, dtype):
+    """The Qwen3-only assembly this tool shipped with until the conversion-mapping version, verbatim: the byte-identity target."""
+    pre = f"model.layers.{i}."
+    sd = {}
+    for name in [k for k in shards.where if k.startswith(pre) and ".mlp.experts." not in k]:
+        sd[name[len(pre):]] = shards.get(name, device).to(dtype)
+    if shards.has(pre + "mlp.experts.gate_up_proj"):
+        sd["mlp.experts.gate_up_proj"] = shards.get(pre + "mlp.experts.gate_up_proj", device).to(dtype)
+        sd["mlp.experts.down_proj"] = shards.get(pre + "mlp.experts.down_proj", device).to(dtype)
+    elif shards.has(pre + "mlp.experts.0.gate_proj.weight"):
+        g = torch.stack([shards.get(f"{pre}mlp.experts.{e}.gate_proj.weight", device) for e in range(num_experts)])
+        u = torch.stack([shards.get(f"{pre}mlp.experts.{e}.up_proj.weight", device) for e in range(num_experts)])
+        sd["mlp.experts.gate_up_proj"] = torch.cat([g, u], dim=1).to(dtype)
+        sd["mlp.experts.down_proj"] = torch.stack(
+            [shards.get(f"{pre}mlp.experts.{e}.down_proj.weight", device) for e in range(num_experts)]).to(dtype)
+    return sd
+
+
+def test_the_qwen3_path_is_byte_identical_to_the_original_assembly(tmp_path):
+    """Every layer's state dict, key for key and bit for bit, against the Qwen3-only code the 30B calibration and the 235B slice
+    reference ran. The real-weight check (Qwen3-30B against the calibration's per-layer sha256) is a recorded receipt, not this."""
+    from transformers import AutoConfig, AutoModelForCausalLM
+    torch.manual_seed(0)
+    _tiny_model("qwen3_moe").to(torch.bfloat16).save_pretrained(tmp_path)
+    t = _tool()
+    cfg = AutoConfig.from_pretrained(tmp_path)
+    with torch.device("meta"):
+        model = AutoModelForCausalLM.from_config(cfg, dtype=torch.bfloat16)
+    shards, conv = t.Shards(str(tmp_path)), t.Conversions(model)
+    for i in range(cfg.num_hidden_layers):
+        new = t.layer_state(shards, i, conv, "cpu", torch.bfloat16)
+        old = _legacy_layer_state(shards, i, cfg.num_experts, "cpu", torch.bfloat16)
+        assert new.keys() == old.keys(), i
+        for k in old:
+            assert new[k].dtype == old[k].dtype and new[k].shape == old[k].shape, (i, k)
+            assert torch.equal(new[k].view(torch.uint8), old[k].view(torch.uint8)), (i, k)
+
