@@ -65,7 +65,7 @@ def step(m, opt=None, keep_logits=False):
         opt.step()
     torch.cuda.synchronize()
     loss = out.loss.detach().float().item()
-    return (loss, out.logits.detach().clone()) if keep_logits else loss
+    return (loss, out.logits.detach().to("cpu", copy=True)) if keep_logits else loss   # on the host: the card is shared
 
 
 def max_rel(ga, gb):
