@@ -139,8 +139,10 @@ def test_every_flag_box_m_passes_an_sc5_script_is_one_its_argparse_defines(scrip
 
 def test_the_model_name_box_m_sends_e4b_is_one_serve_paged_serves():
     """serve_paged answers to E4B_PAGED_MODEL and E4B_PAGED_SERVED_NAME's extras, and refuses any other name with 404."""
+    in_ci = os.environ.get("CI") == "true" or os.environ.get("GITHUB_ACTIONS") == "true"
     bash = shutil.which("bash")
     if bash is None:
+        assert not in_ci, "CI must run this test, but found no bash"   # in CI a skip would be a silent pass
         pytest.skip("needs bash to evaluate sc5_model")
     mid = re.search(r"^MID=(\S+);", (REPO / "bench" / "sc1" / "sc1_run.sh").read_text(encoding="utf-8"), re.M).group(1)
     fn = re.search(r"^sc5_model\(\)\{.*\}$", BOX, re.M)
@@ -156,7 +158,11 @@ def test_the_model_name_box_m_sends_e4b_is_one_serve_paged_serves():
         served = re.search(r"--served-model-name (\S+)", m.group(1))
         assert served, f"{fn_name} passes no --served-model-name"
         assert names[fw] == served.group(1), f"box M sends {fw} {names[fw]!r}; {fn_name} serves {served.group(1)!r}"
-    sp = pytest.importorskip("experts4bit_qlora.serve_paged")
+    try:
+        import experts4bit_qlora.serve_paged as sp
+    except ImportError as e:   # torch is absent on a developer machine; CI installs it, so there this must not skip
+        assert not in_ci, f"CI must run this test, but serve_paged did not import: {e}"
+        pytest.skip(f"serve_paged did not import: {e}")
     env = {k: v for k, v in os.environ.items() if not k.startswith("E4B_PAGED_")}
     env.update({"E4B_PAGED_MODEL": mid})                      # what m_e4b_start sets; E4B_PAGED_SERVED_NAME is not set
     old = dict(os.environ)
