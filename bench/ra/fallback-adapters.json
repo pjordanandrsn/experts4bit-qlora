@@ -135,6 +135,48 @@
       "ast_sha256": "4c2ed1c0f0f8673509c7955f1a739e850056b2de15608ab3fe01b8f986d7aee6",
       "feature": "residual_glue",
       "source_commit": "4e1959a5bf4c99f41dd5deb1b8562076e9664d11"
+    },
+    {
+      "module": "experts4bit_qlora.engines.glue_fuse",
+      "qualname": "fuse_t1_glue.<locals>._fwd",
+      "ast_sha256": "69a8677b428dbf5ceb49a82632815f8a6dc114a3fd240d6c3c531d4411c1243a",
+      "feature": "rms_glue",
+      "source_commit": "8f035d498dad2bd7a12e3207589186814ec3c737"
+    },
+    {
+      "module": "experts4bit_qlora.engines.glue_r2",
+      "qualname": "_patch_layer_scaled.<locals>._fwd",
+      "ast_sha256": "4d52e2730623cfd91fc93a0cf9e9d747ced9938073cae04d89cf9abd8628ca1b",
+      "feature": "residual_glue",
+      "source_commit": "8f035d498dad2bd7a12e3207589186814ec3c737"
+    },
+    {
+      "module": "experts4bit_qlora.engines.glue_r2",
+      "qualname": "_patch_layer.<locals>._fwd",
+      "ast_sha256": "ffb588f8888f60aade80b4168369b0c65475d636b6404f9d9719dd8091a30ff1",
+      "feature": "residual_glue",
+      "source_commit": "8f035d498dad2bd7a12e3207589186814ec3c737"
+    },
+    {
+      "module": "experts4bit_qlora.engines.glue_r2",
+      "qualname": "_patch_attention.<locals>._fwd",
+      "ast_sha256": "a5a52c51801d4d867ae1d2916fc1b613f6981597ff35fdddaf51e7bc5eb8af79",
+      "feature": "rope_glue",
+      "source_commit": "8f035d498dad2bd7a12e3207589186814ec3c737"
+    },
+    {
+      "module": "experts4bit_qlora.engines.glue_r2",
+      "qualname": "_patch_attention_unfused.<locals>._fwd",
+      "ast_sha256": "d4dc04e9b98c8f225f0ceee5946e79c295259cd2c66a13580381c26cb80ff725",
+      "feature": "rope_glue",
+      "source_commit": "8f035d498dad2bd7a12e3207589186814ec3c737"
+    },
+    {
+      "module": "experts4bit_qlora.engines.glue_r2",
+      "qualname": "_patch_attention_rope_only.<locals>._fwd",
+      "ast_sha256": "911a6cb91cdd0954ecf5046b3e0853cb73db15394d027633cdf764a8e87bd1c3",
+      "feature": "rope_glue",
+      "source_commit": "8f035d498dad2bd7a12e3207589186814ec3c737"
     }
   ]
 }
