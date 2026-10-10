@@ -91,14 +91,35 @@ class Eagle3Draft:
         did = logits.float().argmax(-1)
         return did + w["d2t"][did], prenorm
 
-    def _attend(self, q, keys, vals, mask):
-        """q [N, H, hd]; keys/vals [N, M, kv, hd]; mask [N, M] True = visible. GQA by repeating kv heads."""
+    def _attend_ref(self, q, keys, vals, mask):
+        """The reference (chain_at only, N = 1): q [N, H, hd]; keys/vals [N, M, kv, hd], explicit per row; mask [N, M]."""
         rep = self.nh // self.nkv
         k = keys.repeat_interleave(rep, dim=2).float()
         v = vals.repeat_interleave(rep, dim=2).float()
         s = torch.einsum("nhd,nmhd->nhm", q.float(), k) / math.sqrt(self.hd)
         s = s.masked_fill(~mask[:, None, :], float("-inf"))
         return torch.einsum("nhm,nmhd->nhd", s.softmax(-1), v).to(self.dtype)
+
+    def _attend_shared(self, q, kc, vc, ctx_mask, k_extra=None, v_extra=None):
+        """The batched path (Amendment 1). The context keys/values kc/vc [M, kv, hd] are SHARED by every query row
+        (ctx_mask [N, M]); k_extra/v_extra [N, S, kv, hd] are each row's own chain steps, all visible. The scores are
+        [N, H, M + S] and nothing of size N x M x H x hd is built. The first cut built it, about 50 GB at a
+        1,750-position chat row."""
+        rep, scale = self.nh // self.nkv, 1.0 / math.sqrt(self.hd)
+        qf = q.float()
+        K = kc.repeat_interleave(rep, dim=1).float()
+        V = vc.repeat_interleave(rep, dim=1).float()
+        s = torch.einsum("nhd,mhd->nhm", qf, K) * scale
+        s = s.masked_fill(~ctx_mask[:, None, :], float("-inf"))
+        if k_extra is not None:
+            Ke = k_extra.repeat_interleave(rep, dim=2).float()
+            s = torch.cat([s, torch.einsum("nhd,nshd->nhs", qf, Ke) * scale], -1)
+        p = s.softmax(-1)
+        M = kc.shape[0]
+        out = torch.einsum("nhm,mhd->nhd", p[..., :M], V)
+        if k_extra is not None:
+            out = out + torch.einsum("nhs,nshd->nhd", p[..., M:], v_extra.repeat_interleave(rep, dim=2).float())
+        return out.to(self.dtype)
 
     # ---- batched chains (the box) -------------------------------------------------------------------------------
     @torch.no_grad()
@@ -113,18 +134,15 @@ class Eagle3Draft:
         pos = torch.arange(n, device=self.device)
         q, kc, vc, h = self._qkv(tok, self.fc(aux.to(self.device)), pos)
         causal = torch.ones(n, n, dtype=torch.bool, device=self.device).tril()
-        attn = self._attend(q, kc[None].expand(n, -1, -1, -1), vc[None].expand(n, -1, -1, -1), causal)
-        ids, prenorm = self._after_attn(attn, h)
+        ids, prenorm = self._after_attn(self._attend_shared(q, kc, vc, causal), h)
         out = [ids]
         ck, cv = [], []                                  # the chain's own keys/values, steps 2..s
         for s in range(2, K + 1):
             q, k, v, h = self._qkv(out[-1], prenorm, pos + (s - 1))
             ck.append(k)
             cv.append(v)
-            keys = torch.cat([kc[None].expand(n, -1, -1, -1), torch.stack(ck, 1)], 1)
-            vals = torch.cat([vc[None].expand(n, -1, -1, -1), torch.stack(cv, 1)], 1)
-            mask = torch.cat([causal, torch.ones(n, len(ck), dtype=torch.bool, device=self.device)], 1)
-            ids, prenorm = self._after_attn(self._attend(q, keys, vals, mask), h)
+            a = self._attend_shared(q, kc, vc, causal, torch.stack(ck, 1), torch.stack(cv, 1))
+            ids, prenorm = self._after_attn(a, h)
             out.append(ids)
         return torch.stack(out, 1).cpu()
 
@@ -137,7 +155,7 @@ class Eagle3Draft:
         q, k, v, h = self._qkv(tok, self.fc(aux[:t + 1].to(self.device)), pos)
         keys, vals = [k], [v]
         mask = torch.ones(1, t + 1, dtype=torch.bool, device=self.device)
-        a = self._attend(q[t:t + 1], k[None, :t + 1], v[None, :t + 1], mask)
+        a = self._attend_ref(q[t:t + 1], k[None, :t + 1], v[None, :t + 1], mask)
         did, prenorm = self._after_attn(a, h[t:t + 1])
         out = [int(did)]
         for s in range(2, K + 1):
@@ -146,7 +164,7 @@ class Eagle3Draft:
             vals.append(v1)
             kk = torch.cat(keys, 0)[None]
             vv = torch.cat(vals, 0)[None]
-            a = self._attend(q, kk, vv, torch.ones(1, kk.shape[1], dtype=torch.bool, device=self.device))
+            a = self._attend_ref(q, kk, vv, torch.ones(1, kk.shape[1], dtype=torch.bool, device=self.device))
             did, prenorm = self._after_attn(a, h)
             out.append(int(did))
         return out

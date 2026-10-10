@@ -193,3 +193,37 @@ The box recomputes it on its own B = 1 R tokens, and on C-think and C-nothink.
 - **Nothing about quality.** Greedy speculative decoding on the T > 1 verify path is not bitwise the T == 1 path.
   Phase 1 needs its own quality gate.
 - **Nothing about other families, sampling (temperature > 0) or batch > 1.**
+
+## Amendment 1 (2026-10-10, after `sd1-5090-1`): the head's size check follows the cache symlink; the box's attention is shared
+
+**What `sd1-5090-1` found.** The run was HARNESS_ERROR, lane rc 11, actual $0.751, mostly its 62.5 GB download. The
+receipts are in adertha-receipts `ae152849` (vast machine 45511).
+- **What passed first:** the tripwire, all three self-tests, and the target at `7f044dd9` + `d769d502`. The model fetch
+  took about 5 minutes under the watchdog.
+- **The defect.** The head check printed `HEAD MISMATCH: 76 B, d2d6e2e63e09dc75`. The sha256 matched the registered value,
+  but the size did not. The Hugging Face cache's snapshot entry is a symlink into `blobs/`: `sha256sum` follows it, and
+  `stat -c %s` without `-L` measures the link itself. It is a harness defect, with no measurement.
+
+**A second defect, found in review before any rerun.** `sd1_eagle3.py`'s batched attention repeated the shared context
+keys for every query row. That built N × M × heads × head_dim floats: about 50 GB at a 1,750-position chat row, and so an
+out-of-memory error on the box at the first long C prompt. The CPU tests' tiny shapes could not show it.
+
+**What changes:**
+- **`sd1_run.sh`:** the head's size check uses `stat -L`.
+- **`sd1_eagle3.py`:** the batched path, `_attend_shared`, scores every row against the SHARED context keys once
+  ([N, heads, M]), plus each row's own chain steps. The explicit per-row form remains only as the step-by-step
+  reference (`_attend_ref`, N = 1). A test at the head's real attention shape (32 heads of 128, 4 kv heads, hidden 2048)
+  over 1,024 positions must finish, and must match the reference.
+- **`sd1_box.py`.** One extra forward of the last token (L positions instead of L − 1) is dropped and recorded
+  (`extra_forward`) rather than refused. The chat template's token ids are normalised: a list, or transformers 5's
+  dict-like `input_ids`, flat or batched.
+- **`tests/test_sd1_dryrun.py`.** The head now arrives as the cache lays it out: a snapshot symlink to a sparse blob of
+  the registered size, read by the real `stat`. `sd1-5090-1`'s own defect, `stat` without `-L`, is a mutant the dry run
+  must catch (rc 11).
+- **`staged.sha256`** is re-pinned.
+
+**What does not change:** the head, the target, the workloads, the reducer, the premise, the decision and the
+predictions.
+
+**The rerun.** `sd1-5090-2` is the same single run: one RTX 5090 at ≤ $0.85/h, guard 1.25 h, about $1.75 all in. SD1's
+spend is then at most about $2.50, against $0.751 so far.

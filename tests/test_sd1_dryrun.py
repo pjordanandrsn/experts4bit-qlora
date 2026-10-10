@@ -9,7 +9,10 @@ External commands are stubbed on PATH:
   reducer write the files the runner checks; each self-test passes);
 - perl's alarm wrapper;
 - git (clones and worktrees made, rev-parse answers each worktree's registered SHA);
-- df, free, lscpu, stat and sha256sum (the head's registered size and digest).
+- df, free, lscpu and sha256sum (the head's registered digest).
+
+The head arrives as the Hugging Face cache lays it out: a snapshot SYMLINK to a sparse blob of the registered size, read
+by the real `stat`. sd1-5090-1 died there (Amendment 1): `stat -c %s` without -L measured the link, 76 B.
 
 Every shell function and every check in the runner runs as written. It runs nothing on a GPU and fetches nothing; what it
 proves is that the control flow reaches success."""
@@ -42,7 +45,6 @@ esac''',
     "lscpu": r'''printf 'Vendor ID:  AuthenticAMD\nModel name:  AMD Ryzen 9 9950X (dryrun)\nCPU(s):  32\n' ''',
     "free": r'''printf '              total        used        free\nMem:            123           4         100\n' ''',
     "df": r'''case "$*" in *--output=avail*) printf 'Avail\n500G\n';; *) printf 'Filesystem Size Used Avail Use%% Mounted\noverlay 500G 1G 499G 1%% /\n';; esac''',
-    "stat": "echo " + HEAD_BYTES,
     "sha256sum": r'''case "${1:-}" in -c) exit 0;; esac
 for f; do case "$(basename "$f")" in model.safetensors) echo "''' + HEAD_SHA + r'''  $f";; *) echo "0000000000000000000000000000000000000000000000000000000000000000  $f";; esac; done''',
     "git": r'''dir=""; [ "${1:-}" = -C ] && { dir=$2; shift 2; }
@@ -58,7 +60,9 @@ case "${1:-}" in
   -m) exit 0;;
   -c) case "$2" in
         *"print(torch.__version__"*) echo "2.8.0+cu128";;
-        *hf_hub_download*) mkdir -p "$PWD/hf/head"; : > "$PWD/hf/head/model.safetensors"; echo "$PWD/hf/head/model.safetensors";;
+        *hf_hub_download*) mkdir -p "$PWD/hf/blobs" "$PWD/hf/head"
+          dd if=/dev/zero of="$PWD/hf/blobs/headblob" bs=1 count=0 seek=''' + HEAD_BYTES + r''' 2>/dev/null
+          ln -sf ../blobs/headblob "$PWD/hf/head/model.safetensors"; echo "$PWD/hf/head/model.safetensors";;
       esac; exit 0;;
   -) cat > /dev/null; echo "e4b target dryrun" >> "$PWD/versions.txt"; exit 0;;
 esac
@@ -144,4 +148,13 @@ def test_the_dry_run_catches_a_misnamed_function(tmp_path):
 @needs_bash
 def test_the_dry_run_catches_a_head_digest_mismatch(tmp_path):
     w, out = _run(tmp_path, RUN.replace(HEAD_SHA, "f" * 64), nonce="c" * 64)
+    assert out.returncode == 11 and "HEAD MISMATCH" in out.stdout + out.stderr
+
+
+@needs_bash
+def test_the_dry_run_catches_a_size_check_that_does_not_follow_the_cache_symlink(tmp_path):
+    """sd1-5090-1's own defect (Amendment 1): stat without -L reads the snapshot symlink, not the blob."""
+    anchor = '[ "$(stat -L -c %s "$HEAD")" = "$HEAD_BYTES" ]'
+    assert RUN.count(anchor) == 1
+    w, out = _run(tmp_path, RUN.replace(anchor, '[ "$(stat -c %s "$HEAD")" = "$HEAD_BYTES" ]'), nonce="d" * 64)
     assert out.returncode == 11 and "HEAD MISMATCH" in out.stdout + out.stderr
