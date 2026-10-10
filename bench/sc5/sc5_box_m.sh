@@ -141,7 +141,7 @@ m_cell(){ local FW=$1 PORT=$2 BD=$3 C=$4 N AL rc
 
 # m_block NN DRAW MEM FW K -- one cold-started block: quiescence gate, start, capacity, a warm-up, the three cells, stop
 m_block(){ local NN=$1 D=$2 MEM=$3 FW=$4 K=$5 BD PORT ready=False kv="" rnd=0 smp c vok
-  M_KV=""   # the block's capacity readout (kv_tokens), or empty: prove_m gates on it
+  M_KV="" M_RND=0 M_READY=0   # the block's capacity readout and rounding, and whether its server came up (prove_m, box_m)
   BD=$SC5_D/blocks/$(printf %02d "$NN")_d${D}_${MEM}_${FW}_b${K}; mkdir -p "$BD"
   case "$FW" in e4b) PORT=$PORT_E4B; vok=True;; vllm) PORT=$PORT_VLLM; vok=$( [ "${OK[vllm]:-0}" = 1 ] && echo True || echo False );;
                 sglang) PORT=$PORT_SGL; vok=$( [ "${OK[sglang]:-0}" = 1 ] && echo True || echo False );; esac
@@ -151,8 +151,8 @@ m_block(){ local NN=$1 D=$2 MEM=$3 FW=$4 K=$5 BD PORT ready=False kv="" rnd=0 sm
   if gpu_free 180 && quiesce "sc5_$NN" && grep -q '"quiesced": true' "quiesce_sc5_$NN.json" && can_run 1500 "sc5 block $NN"; then
     nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits -lms 1000 > "$BD/mem.csv" 2>/dev/null & smp=$!
     if "m_${FW/sglang/sgl}_start" "$MEM" "$BD/server.log"; then
-      ready=True; read -r kv rnd < <(m_capacity "$FW" "$BD") || kv=""
-      line "SC5 $(basename "$BD") ready: kv_tokens=${kv:-?} rounding=$rnd"; M_KV=${kv:-}
+      ready=True; M_READY=1; read -r kv rnd < <(m_capacity "$FW" "$BD") || kv=""
+      line "SC5 $(basename "$BD") ready: kv_tokens=${kv:-?} rounding=$rnd"; M_KV=${kv:-}; M_RND=${rnd:-0}
       perl -e "alarm 900; exec @ARGV" "$PY" $W/sc5_driver.py run --base "http://127.0.0.1:$PORT" --model "$(sc5_model "$FW")" --prompts $W/sc2/prompts.json \
           --concurrency 1 --n 4 --seed 999 --max-tokens $SC5_MAXTOK --profile "$FW" --out "$BD/warm.json" > "$BD/warm.log" 2>&1
       for c in $SC5_CS; do m_cell "$FW" "$PORT" "$BD" "$c"; done
@@ -178,6 +178,9 @@ PYB
 # m_draw_order DRAW -> the ABBA order (draw 1: e4b vLLM SGLang SGLang vLLM e4b; draw 2 the reverse)
 m_draw_order(){ case "$1" in 1) echo "e4b:1 vllm:1 sglang:1 sglang:2 vllm:2 e4b:2";; *) echo "sglang:1 vllm:1 e4b:1 e4b:2 vllm:2 sglang:2";; esac; }
 
+# m_matched_ok -- the last block's capacity readout is the registered matched capacity, within its rounding
+m_matched_ok(){ local off; [ -n "$M_KV" ] || return 1; off=$(( M_KV - SC5_MATCHED_KV )); [ "${off#-}" -le "${M_RND:-0}" ]; }
+
 # ---- quality: the windows and the reference verified by sha256, then one pass per framework at the default setting --
 m_quality(){ local q=$SC5_D/quality
   cp $W/sc5_windows_w64.json $q/windows.json
@@ -202,14 +205,20 @@ m_quality(){ local q=$SC5_D/quality
   return 0; }
 
 # ---- the reading -------------------------------------------------------------------------------------------------------
-box_m(){ local d m nn=0 fk
+box_m(){ local d m nn=0 fk k miss
   phase 0 "fetches (bf16 for the bake, the GPTQ checkpoint), bake, SC2's prompt pool; installs above"
   fetch_common || finish 11; fetch gptq "$GPTQ_MID" "$GPTQ_REV" 1800 || finish 11; bake_qwen3 || finish 12; sc2_prompts || finish 19
   phase SG0 "SGLang's first JIT before any timing"; m_sgl_start default "$W/logs/sc5_sglang_jit.log" && m_stop sglang
   for d in $(seq 1 "$SC5_DRAWS"); do
-    for m in $SC5_MEMS; do
+    for m in $SC5_MEMS; do k=0; miss=""
       for fk in $(m_draw_order "$d"); do
-        nn=$((nn + 1)); m_block "$nn" "$d" "$m" "${fk%%:*}" "${fk##*:}"
+        nn=$((nn + 1)); k=$((k + 1)); m_block "$nn" "$d" "$m" "${fk%%:*}" "${fk##*:}"
+        # Cost guard (SC5-PREREG.md "Box log"): draw 1's first three matched blocks are one per framework. When a server
+        # that came up read a capacity off the registered one, the reading stops; the reducer VOIDs those blocks anyway.
+        if [ "$d:$m" = 1:matched ] && [ "$k" -le 3 ]; then
+          [ "$M_READY" = 1 ] && ! m_matched_ok && miss="$miss ${fk%%:*}=${M_KV:-unread}"
+          [ "$k" = 3 ] && [ -n "$miss" ] && { line "SC5_MATCHED_STOP draw 1 matched capacity off $SC5_MATCHED_KV:$miss -- the reading stops (cost guard)"; finish 35; }
+        fi
       done
     done
   done
