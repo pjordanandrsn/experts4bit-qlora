@@ -246,3 +246,77 @@ def test_the_fetch_times_its_first_slice_and_refuses_a_slow_pull_by_its_deadline
     rec = json.loads((tmp_path / "slow.json").read_text())
     assert r.returncode == 14 and not rec["probe"]["finished"] and "deadline" in rec["refusals"][0], (r.stdout, r.stderr[-400:])
     assert time.time() - t0 < 25                                          # refused at the ~0.5 s deadline, not after the 30 s pull
+
+# ---- the pre-rental fetch gate (gates 3 and 5) -------------------------------------------------------------------------
+
+def _gate():
+    return _mod("q235_fetch_gate", Q / "q235_fetch_gate.py")
+
+
+def test_the_gate_compares_the_hub_listing_with_the_lock_row_for_row():
+    g = _gate()
+    lock = {"files": [{"file": "a.json", "size": 3, "blob_id": "b1", "lfs_sha256": None},
+                      {"file": "m.safetensors", "size": 9, "blob_id": "b2", "lfs_sha256": "s2"}]}
+    assert g.check_against_lock([dict(r) for r in lock["files"]], lock) == []
+    listing = [dict(lock["files"][0], size=4), {"file": "extra.txt", "size": 1, "blob_id": "x", "lfs_sha256": None}]
+    out = g.check_against_lock(listing, lock)
+    assert any("m.safetensors: locked, not listed" in x for x in out) and any("extra.txt: listed" in x for x in out)
+    assert any("a.json: size 4" in x for x in out)
+
+
+def test_the_gate_needs_every_wheel_to_answer_its_one_byte_probe():
+    g = _gate()
+    rows = [{"name": "a", "url": "https://files.pythonhosted.org/a.whl"}, {"name": "b", "url": "https://files.pythonhosted.org/b.whl"}]
+    ok = {r["url"]: {"status": 206, "bytes": 1} for r in rows}
+    assert g.check_probes(rows, ok) == []
+    bad = {**ok, rows[1]["url"]: {"status": 404, "error": "Not Found"}}
+    assert g.check_probes(rows, bad) == ["b: 404 Not Found"]
+    assert g.check_probes(rows, {}) and len(g.check_probes(rows, {})) == 2
+
+
+def test_the_placeholder_scan_finds_unfilled_values_and_the_registration_has_none(tmp_path):
+    g = _gate()
+    f = tmp_path / "x.sh"
+    f.write_text("CAP=TBD\nSHA=<E4B_SHA>\nok=1\nname={{ run_id }}\nnote='a placeholder in prose'\n")
+    out = _scan_outside_repo(g, f)
+    assert len(out) == 3 and all("unfilled value" in x for x in out), out
+    files = g.placeholder_files()
+    names = {p.name for p in files}
+    assert {"q235_run.sh", "wheels.json", "model_files.json", "q235.sha256", "PREREG-q235.md", "q235_drive.sh"} <= names
+    assert g.scan_placeholders(files) == [], "an unfilled value in a file the box runs or the registration"
+
+
+def _scan_outside_repo(g, path):
+    """scan_placeholders reports paths relative to the repository; a fixture outside it is scanned line by line here."""
+    return [f"{path.name}:{i}: unfilled value {m.group(0)!r}" for i, line in enumerate(path.read_text().splitlines(), 1)
+            for m in g.PLACEHOLDER.finditer(line)]
+
+
+def test_a_gate_report_admits_only_its_own_commit_passed_and_fresh():
+    g = _gate()
+    now = 1_000_000.0
+    rep = {"schema": g.SCHEMA, "passed": True, "refusals": [], "e4b_sha": "a" * 40, "generated_at": now - 60}
+    assert g.report_ok(rep, "a" * 40, now) is None
+    assert "not " in g.report_ok(rep, "b" * 40, now)
+    assert "old" in g.report_ok({**rep, "generated_at": now - g.MAX_AGE_S - 1}, "a" * 40, now)
+    assert "refused" in g.report_ok({**rep, "passed": False, "refusals": ["x"]}, "a" * 40, now)
+    assert "schema" in g.report_ok({**rep, "schema": "p130-fetch-gate/1"}, "a" * 40, now)
+
+
+def test_the_gnf4_pin_is_one_value_in_the_drive_the_gate_and_the_lock():
+    g = _gate()
+    lock = json.loads((Q / "wheels.json").read_text())
+    drive = (Q / "q235_drive.sh").read_text()
+    assert lock["git"]["grouped-nf4-gemm"]["sha"] == g.GNF4_SHA and f"GNF4_SHA={g.GNF4_SHA}" in drive
+
+
+def test_the_drive_refuses_to_launch_without_a_gate_report(tmp_path):
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("Q235_", "TC1_", "E4B_"))}
+    env.update(TC1_DRIVE_DRYRUN="1", E4B_RENT_RUN_DIR=str(tmp_path))
+    r = subprocess.run(["bash", str(Q / "q235_drive.sh")], env=env, capture_output=True, text=True, timeout=60)
+    assert r.returncode == 78 and "Q235_FETCH_GATE unset" in r.stdout, (r.returncode, r.stdout, r.stderr)
+    stale = tmp_path / "gate.json"
+    stale.write_text(json.dumps({"schema": "q235-fetch-gate/1", "passed": True, "refusals": [], "e4b_sha": "0" * 40, "generated_at": 0}))
+    r = subprocess.run(["bash", str(Q / "q235_drive.sh")], env={**env, "Q235_FETCH_GATE": str(stale)}, capture_output=True, text=True,
+                       timeout=60)
+    assert r.returncode == 78 and "does not let" in r.stdout, (r.returncode, r.stdout, r.stderr)
