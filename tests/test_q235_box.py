@@ -120,8 +120,12 @@ def test_the_frozen_hashes_refuse_a_placeholder_and_a_missing_stack(tiny):
 
 def test_a_strict_failure_names_itself():
     box = _box_module()
-    ok = {"rules": {"step0_all_finite": True, "step1_every_A_changed": True}, "frozen_sha256_after_both_steps_equal": True}
+    ok = {"rules": {k: True for k in box.STRICT_RULES}, "frozen_sha256_after_both_steps_equal": True}
     assert box.strict_failures(ok) == []
-    bad = {"rules": {"step0_all_finite": True, "step1_every_A_changed": False}, "frozen_sha256_after_both_steps_equal": False}
+    bad = {"rules": {**ok["rules"], "step1_every_A_changed": False}, "frozen_sha256_after_both_steps_equal": False}
     assert box.strict_failures(bad) == ["step1_every_A_changed", "frozen_sha256_after_both_steps_equal"]
-    assert box.strict_failures({"repeat": {"loss": 1.0}}) == []          # the repeat runs step 0's forward only
+    assert box.strict_failures({"repeat": {"loss": 1.0}}, repeat=True) == []   # the repeat runs step 0's forward only
+    # fail CLOSED outside --repeat: a record that stopped early (no rules, no frozen equality) is not clean
+    assert set(box.strict_failures({})) == set(box.STRICT_RULES) | {"frozen_sha256_after_both_steps_equal"}
+    assert "step1_every_B_changed" in box.strict_failures({"rules": {k: True for k in box.STRICT_RULES[:-1]},
+                                                          "frozen_sha256_after_both_steps_equal": True})

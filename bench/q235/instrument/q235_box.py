@@ -104,10 +104,20 @@ def frozen_hashes(model):
     return out
 
 
-def strict_failures(out):
-    """The STRICT checks a box record fails, by name: Amendment 2's rules and the frozen base across both steps. Empty = none."""
-    bad = [k for k, v in (out.get("rules") or {}).items() if v is not True]
-    if "frozen_sha256_after_both_steps_equal" in out and out["frozen_sha256_after_both_steps_equal"] is not True:
+STRICT_RULES = ("step0_all_finite", "step0_every_B_nonzero", "step0_every_A_zero", "step0_every_B_changed", "step1_all_finite",
+                "step1_every_A_nonzero", "step1_every_B_nonzero", "step1_every_A_changed", "step1_every_B_changed")
+
+
+def strict_failures(out, repeat=False):
+    """The STRICT checks a box record fails, by name: Amendment 2's rules and the frozen base across both steps. Empty = none.
+    Fails CLOSED: outside --repeat (step 0's forward only, which records neither), a rule or the frozen-base equality that is
+    absent or not exactly True is a failure, so a record that stopped early never reads as clean."""
+    if repeat:
+        return []
+    rules = out.get("rules") or {}
+    bad = [k for k in STRICT_RULES if rules.get(k) is not True]
+    bad += [k for k, v in rules.items() if k not in STRICT_RULES and v is not True]
+    if out.get("frozen_sha256_after_both_steps_equal") is not True:
         bad.append("frozen_sha256_after_both_steps_equal")
     return bad
 
@@ -168,7 +178,7 @@ def run(a):
     out = {"argv": vars(a), "host": host_facts(), "versions": versions(), "t_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
     dev = a.device
     cuda = dev == "cuda"
-    tokens = torch.load(a.tokens)
+    tokens = torch.load(a.tokens, weights_only=True)
     out["tokens_sha256"] = {k: hashlib.sha256(v.contiguous().numpy().tobytes()).hexdigest() for k, v in tokens.items()}
     d0, t0 = diskstats(), time.time()
     model, rec = build(a.checkpoint, dev, a.r, a.alpha, a.adapter_dtype, a.enabler)
@@ -341,7 +351,7 @@ def main():
     if "repeat" in out:
         brief["repeat"] = out["repeat"]
     print(json.dumps(brief, default=str))
-    bad = strict_failures(out)
+    bad = strict_failures(out, repeat=a.repeat)
     if bad:
         print(f"STRICT FAIL: {', '.join(bad)}", file=sys.stderr)
         sys.exit(3)

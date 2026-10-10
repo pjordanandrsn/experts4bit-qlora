@@ -150,7 +150,7 @@ def main():
     a = ap.parse_args()
     if a.threads:
         torch.set_num_threads(a.threads)
-    t = torch.load(a.tokens)
+    t = torch.load(a.tokens, weights_only=True)
     os.makedirs(a.out, exist_ok=True)
     r = run(a.checkpoint, t["input_ids"], t["attention_mask"], t["labels"], a.device, layers=a.layers, resident=a.resident, out_dir=a.out)
     torch.save({"per_token_loss": r.pop("per_token_loss"), "router_topk": r.pop("router_topk")}, os.path.join(a.out, "reference.pt"))

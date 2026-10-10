@@ -1,6 +1,7 @@
 #!/bin/bash
 # Q235 gate 1 on one CUDA card: the box script on a depth-truncated slice of the registered checkpoint (real weights, the box's layer
-# shapes), the step and its repeat, both planted errors, and the fidelity read of each against the layer-streamed bf16 reference.
+# shapes), the step and its repeat, both planted errors, the fidelity read of each against the layer-streamed bf16 reference, and
+# the mechanical verdict (q235_gate1.py), whose exit code this script exits with.
 # usage: rehearse.sh WORKDIR SLICE_DIR DS_ALPACA_JSON PYTHON   (this repository on PYTHONPATH; the card claimed for the run)
 set -u
 B=${1:?work directory}; M=${2:?depth-truncated checkpoint}; DS=${3:?tp4_alpaca.py output}; PY=${4:-python}
@@ -18,4 +19,5 @@ for p in routing epilogue; do log "plant $p"; $PY "$I/q235_box.py" "$M" "$B/toke
 log "fidelity reads"
 for x in box plant_routing plant_epilogue; do $PY "$I/q235_compare.py" "$B/$x" "$B/ref" "$B/tokens.pt" --out "$B/cmp_$x.json"; done
 $PY "$I/q235_compare.py" "$B/repeat" "$B/box" "$B/tokens.pt" --out "$B/cmp_repeat.json"
-log "done"
+log "verdict"; $PY "$I/q235_gate1.py" "$B" --tokens "$B/tokens.pt" --out "$B/gate1.json"; rc=$?
+log "done (rc=$rc)"; exit $rc
