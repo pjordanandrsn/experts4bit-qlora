@@ -63,6 +63,16 @@ what is measured-private and what is open, is [`STATUS.md`](STATUS.md).
   `batched_fallback_stats(model)` reports `fallback_calls == 0`; the tp1
   training-parity lane (real weights, 2026-09-05) marked OLMoE's batched
   run VOID for exactly this (`e4b.train.parity.tp1.olmoe.batched.2026-09-05`).
+- Training gradients on GPU are not bitwise reproducible from run to run:
+  PyTorch's default flash-attention backward is nondeterministic. On a small
+  test model, repeated backward passes over the same batch differed on the
+  LoRA B gradients by more than rounding noise. Neither
+  `CUBLAS_WORKSPACE_CONFIG` nor
+  `torch.use_deterministic_algorithms(True, warn_only=True)` removes this
+  (with `warn_only=False` that backward raises). For bitwise-reproducible
+  gradients, run forward and backward under
+  `torch.nn.attention.sdpa_kernel(SDPBackend.MATH)`, which is slower and
+  uses more memory.
 - A model that already fits in bf16 with headroom gains nothing here:
   4-bit is a memory trade, and on the measured comparator it cost energy
   (`e4b.train.energy-honest.5090.2026-10-05`: one RTX 5090, one
