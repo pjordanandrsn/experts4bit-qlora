@@ -203,11 +203,13 @@ own floor sits below the 0.90 agreement backstop; that floor also contains Phase
 gate, not the knob. Qwen3.6-MoE, where only the router epilogue engages, passes, and the epilogue decodes one request
 there in 0.973 of the step (FAM Amendment 4), so the family joined the allowlist. Mixtral-8x7B passes on every knob,
 resolved at a ×0.90 softmax-scale change, but stays off by default until a speed read of what the knobs buy there
-(FAM Amendment 5). `0` on each knob is the way back.
+(FAM Amendment 5). Gemma-4-26B-A4B's knobs stay off too: the family's own neutral floor sits below the
+agreement backstop, so the instrument cannot license any knob on its NF4 stack (closed at its proof; the knobs pass
+the relative gate). `0` on each knob is the way back.
 `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`,
 `e4b.serve.p115.fused-stack-quality.qwen3.5090.2026-10-07`, `e4b.serve.fam.fused-stack-t1.granite.5090.2026-10-09`,
 `e4b.serve.fam.fused-stack-t1.gptoss.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.qw36.5090.2026-10-09`,
-`e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.mixtral.5090.2026-10-09`
+`e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.mixtral.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.gemma4.5090.2026-10-10`
 ([P115](../bench/p115/RESULTS-p115.md), [FAM](../bench/fam/RESULTS-fam.md)).
 
 **Where the default single-request step goes.** A kernel-class census of the shipped default on Qwen3-30B-A3B NF4,

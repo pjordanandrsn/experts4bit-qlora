@@ -1,0 +1,24 @@
+KNOBS e4b=68845bfc14917c5d4e47c3d3b8f1a5478c9fc6d3 gnf4=6ee2e10408161a9d3c874975c9191a7f2957e6f4 family=gemma4 models=gemma4 gpu_class=5090 min_disk_gb=200 min_ram_gb=60 prove=1 speed=0 cont=32
+CUDA_PROBE ok
+e4b 0.51.0 @68845bfc14917c5d4e47c3d3b8f1a5478c9fc6d3
+gnf4 0.43.0 @6ee2e10408161a9d3c874975c9191a7f2957e6f4
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+cc (12, 0)
+fam_reduce self-test OK (68/68 cases)
+fam_box self-test OK (38/38 cases)
+fam_speed self-test OK (9/9 cases)
+fam_speed_reduce self-test OK (30/30 cases)
+p115_quality self-test OK (11/11 cases)
+premise run rc=0: 36 passed in 11.41s
+premise ok
+FETCH gemma4 google/gemma-4-26B-A4B-it@4d7ae4984b7db7de8f8457170b3f1a419ee76d52 /root/.cache/huggingface/hub/models--google--gemma-4-26B-A4B-it/snapshots/4d7ae4984b7db7de8f8457170b3f1a419ee76d52
+gemma4 BAKE OK
+gemma4 OFF default rc=0 FAM_BOX OFF/default census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0} store=[] cells=12 mem=26.18 GB 1535.2 s
+
+gemma4 ON_epi default rc=0 FAM_BOX ON_epi/default census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 30} store=[] cells=12 mem=26.18 GB 253.8 s
+
+gemma4 ON_auto default rc=0 FAM_BOX ON_auto/default census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 271, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 30} store=[] cells=12 mem=26.18 GB 240.3 s
+
+FAM_VERDICT gemma4 {'ON_epi': 'VOID', 'ON_auto': 'VOID'} -- ["ON_auto wikitext|12|A ON: glue-kernel calls {'rmsnorm_rows': 6696, 'router_epilogue': 930} != {'rmsnorm_rows': 8401, 'router_epilogue': 930}", "ON_auto wikitext|12|B ON: glue-kernel calls {'rmsnorm_rows': 6696, 'router_epilogue': 930} != {'rmsnorm_rows': 8401, 'router_epilogue': 930}", "ON_auto wikitext|12|C ON: glue-kernel calls {'rmsnorm_rows': 6696, 'router_epilogue': 930} != {'rmsnorm_rows': 8401, 'router_epilogue': 930}"]
