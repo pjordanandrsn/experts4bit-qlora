@@ -17,9 +17,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Changed text files use LF line endings (CSV exempt)
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
+        run: python scripts/check_crlf.py --base "$BASE"
       - name: Install (CPU torch — GPU loader tests auto-skip on a CPU runner)
         run: |
           # ruff is PINNED: 0.16.0 (2026-07-22..26 window) introduced TRY004 /
