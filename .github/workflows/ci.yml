@@ -59,6 +59,10 @@ jobs:
         run: ruff check experts4bit_qlora tests scripts tools
       - name: DQ11 draft box dry run (mandatory CPU, no science or optional skips)
         run: pytest tests/test_dq11_draft.py -q
+      - name: DQ11 science instrument contract (mandatory CPU fixtures, no optional skips)
+        run: |
+          ruff check bench/dq11 tests/test_dq11_science.py
+          pytest tests/test_dq11_science.py -q
       - name: Test
         run: pytest tests/ -q
       - name: census cross-check (grouped-nf4-gemm#353 -- every claimed family the kernel's shape census covered is still covered, against the census of the exact kernel commit installed above)
