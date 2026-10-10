@@ -1,0 +1,9 @@
+# Indexed captured views
+
+`ra_indexed_views.IndexedViews(manifest, fetch)` derives the five Qwen or seven Granite capture pins exclusively from the complete `ra_tokenizer_assets` gate. Two original guarded verifies bracket construction, using eight fixed model-index responses. Before exposing copy paths, it independently joins every complete copied byte sequence to the indexed Git/LFS identity and regenerates the complete declared configuration.
+
+The manifest has only the existing schema, input spec, stage, reviewed input lock/hash, and expected-parent fields. Root, model, revision, file set, and pins come from those checked inputs. Selected Linux Python `-I -S -B` and an inherited SIGKILL parent guard are required.
+
+The object owns all captured views until explicit close or context exit. `check()` and `close()` repeat complete common-input, original asset/config, helper-byte, guard, and sealed-copy checks without further HTTP. Refusal is terminal; known-owned copies close even after a partial construction, and unknown cleanup stays unproven. An original context exception is preserved. The fetch caller owns its raw-response receipts, including failures; this object retains completed binding prefixes and copy/cleanup records.
+
+This is a component proposal, with no CLI, receipt parent, constructor role map, library activation, worker inventory expansion, or ABBA wiring. Supplied transport and references can be forged. Helper byte stability detects drift, not runtime/class/site/native-extension or publisher authentication. Kernel records from a cooperating process do not authenticate arbitrary same-process mutation or syscall races. Copy paths do not prove native reads from the original asset path. Actual tokenizer execution, final wrapper state, full calls/IDs, tensor consumption, GPU, and launch authority remain false.
