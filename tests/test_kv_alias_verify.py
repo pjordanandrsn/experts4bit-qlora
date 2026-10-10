@@ -55,6 +55,48 @@ def test_no_alias_slots_by_default():
     assert kv.alias_bind(0, 0) == []
 
 
+def test_the_batch_form_of_kernel_args_excludes_aliases_without_scratch_slots():
+    """The no-slots form means "the batch". With aliases and no scratch slots it once returned the alias rows too
+    (the maintainer's review of #1554)."""
+    kv = Fp8PagedKV(2, H, D, batch=3, max_tokens_per_seq=32, device="cpu", scratch_slots=0, alias_slots=2)
+    assert kv.alias == [3, 4]
+    _k, _v, tbl, lens = kv.kernel_args(0)
+    assert tbl.shape[0] == 3 and lens.shape[0] == 3
+
+
+@pytest.mark.parametrize("path", ["append", "append_many", "_ensure_blocks", "reset", "reset_all_layers",
+                                  "claim_blocks", "append_prompt", "rewind", "rewind_nosync", "graph_mode_init"])
+def test_every_host_addressed_path_refuses_an_alias(path):
+    """Through a host-addressed path an alias would get rows of its own, overwriting the table row alias_bind copied
+    in, or have its host mirror written. Only a bound bucket's device-addressed append may touch one."""
+    kv = _kv()
+    a = kv.alias[0]
+    one = torch.zeros(1, H, D)
+    calls = {
+        "append": lambda: kv.append(0, a, one, one),
+        "append_many": lambda: kv.append_many(0, [0, a], torch.zeros(2, 1, H, D), torch.zeros(2, 1, H, D)),
+        "_ensure_blocks": lambda: kv._ensure_blocks(0, a, 0),
+        "reset": lambda: kv.reset(a),
+        "reset_all_layers": lambda: kv.reset_all_layers(a),
+        "claim_blocks": lambda: kv.claim_blocks(a, 0),
+        "append_prompt": lambda: kv.append_prompt(a, [0], [one], [one]),
+        "rewind": lambda: kv.rewind(a, 0),
+        "rewind_nosync": lambda: kv.rewind_nosync(a, 0),
+        "graph_mode_init": lambda: kv.graph_mode_init(seq=a),
+    }
+    rows_before = {key: list(v) for key, v in kv._rows.items()}
+    with pytest.raises(ValueError, match="alias slot"):
+        calls[path]()
+    assert kv._rows == rows_before and all((layer, a) not in kv._rows for layer in range(kv.L))
+
+
+def test_real_and_scratch_slots_pass_the_guard():
+    kv = _kv()
+    kv.append(0, 0, torch.zeros(2, H, D), torch.zeros(2, H, D))
+    kv.reset(0)
+    kv._ensure_blocks(0, kv.scratch[0], 0)
+
+
 def test_alias_bind_refuses_too_many_rows_and_a_slot_that_is_not_real():
     kv = _kv()
     with pytest.raises(ValueError, match="alias rows"):
