@@ -1,0 +1,26 @@
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 2204.45it/s]
+[06:22:02]   checkpoint: Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 (requested ad44e777bcd18fa416d9da3bd8f70d33ebb85d39)
+[06:22:02]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[06:22:02]   quantized experts on 48/48 MoE layers (128 experts each)
+[06:22:02]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[06:22:03]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[06:22:19]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] fusions (q/k/v auto; folds set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 48, 'fuse_t1_glue_n': 193, 'fuse_t1_glue_r2_n': [48, 48], 'fuse_router_epilogue_n': 48}
+[serve_paged] ready: {"moe_layers": 48, "experts": 128, "top_k": 8, "model_type": "qwen3_moe", "int4_expert_layers": 0, "int4_store_kinds": [], "int4_attn_projections": 0, "kv": {"n_kv_heads": 4, "head_dim": 128, "k_groups": "auto", "scratch_slots": 0, "blocks_per_seq": 256, "pool_mib": 3312.8}, "graph_status": null, "grouping": {"device_grouping": false, "force_singleton_groups": false}, "moe_residual": {"rows": [1, 2, 4, 8, 16], "licensed": 48, "partial": 0, "refused": 0, "probe_errors": []}, "prefill_graph": "0", "levers_env": {}, "exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 0, "fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48, "fusion_modes": {"E4B_PAGED_FUSE_QKV": "auto", "E4B_FUSE_T1_GLUE": "auto", "E4B_FUSE_T1_GLUE_R2": "auto", "E4B_FUSE_ROUTER_EPI": "auto"}, "fusion_sources": {"E4B_PAGED_FUSE_QKV": "default-allowlisted", "E4B_FUSE_T1_GLUE": "default-allowlisted", "E4B_FUSE_T1_GLUE_R2": "default-allowlisted", "E4B_FUSE_ROUTER_EPI": "default-allowlisted"}, "fusion_report": {"E4B_FUSE_T1_GLUE": {"mode": "auto", "patched": 193, "failed_probe": 0}, "E4B_FUSE_T1_GLUE_R2": {"mode": "auto", "patched": [48, 48], "kernel_gaps": 0}, "E4B_FUSE_ROUTER_EPI": {"mode": "auto", "patched": 48, "failed_probe": 0, "no_kernel_mode": 0, "fp32_upstream": 0}}, "pinned_cache_released": true, "host_heap_trimmed": true}
+SD1_ROW C-nothink 0 prompt=1204 new=256 positions=1459
+SD1_ROW C-nothink 1 prompt=483 new=256 positions=738
+SD1_ROW C-nothink 2 prompt=105 new=256 positions=360
+SD1_ROW C-nothink 3 prompt=24 new=256 positions=279
+SD1_ROW C-nothink 4 prompt=84 new=256 positions=339
+SD1_ROW C-nothink 5 prompt=134 new=256 positions=389
+SD1_ROW C-nothink 6 prompt=88 new=256 positions=343
+SD1_ROW C-nothink 7 prompt=33 new=256 positions=288
+SD1_ROW C-nothink 8 prompt=107 new=256 positions=362
+SD1_ROW C-nothink 9 prompt=96 new=256 positions=351
+SD1_ROW C-nothink 10 prompt=114 new=256 positions=369
+SD1_ROW C-nothink 11 prompt=27 new=256 positions=282
+SD1_ROW C-nothink 12 prompt=24 new=256 positions=279
+SD1_ROW C-nothink 13 prompt=336 new=256 positions=591
+SD1_ROW C-nothink 14 prompt=44 new=256 positions=299
+SD1_ROW C-nothink 15 prompt=263 new=256 positions=518
+SD1_CAPTURE {"workload": "C-nothink", "rows": 16, "load_s": 20.76}
