@@ -2798,21 +2798,48 @@ def _slot_record(deq, regime, method, source, control_deq):
             "dtype": _dtype_label(deq.dtype), "method": method, "source": source, "control_sha": sha2, "control_detects_flip": sha != sha2}
 
 
-def _probe_e4b_stack(inner, slot, pk, am, shp):
+def expert_offload_handle(mod, inner):
+    """e4b's expert-offload handle for the frozen base `inner`, found on the wrapper chain from `mod` (PEFT `base_layer`s, then
+    ExpertsLoRA's `_offload`), or None when the stack is resident."""
+    m, seen = mod, set()
+    while m is not None and id(m) not in seen:
+        seen.add(id(m))
+        h = getattr(m, "_offload", None)
+        if h is not None and getattr(h, "base", None) is inner and isinstance(getattr(h, "home", None), dict):
+            return h
+        m = getattr(m, "base_layer", None) or getattr(m, "base", None)
+    return None
+
+
+def _probe_e4b_stack(inner, slot, pk, am, shp, offload=None):
     """e4b: the library's own per-expert dequant (Experts4bit._dequantize_expert, the function its forward recomputes
-    with) on expert 0, to bf16; the control re-dequantises a 1-row COPY of the packed storage with one byte flipped."""
+    with) on expert 0, to bf16; the control re-dequantises a 1-row COPY of the packed storage with one byte flipped.
+
+    Under expert offload (`offload`, the handle) the base holds 0-element placeholders between forwards, so the packed storage
+    and absmax are the handle's HOME copies (the bytes every forward stages), moved to the handle's device and dequantised
+    there, as the staged forward does. (Offload refuses a double-quantized absmax, so the two never meet.)"""
     dq = "_e4b_absmax_dq" in getattr(inner, "__dict__", {})     # ABSMAX-DQ: the absmax is stored double-quantized
-    if dq:                                          # ... so it is read the way the library's per-expert loop reads it
-        from experts4bit_qlora.absmax_dq import expert_absmax_rows
-        absmax = expert_absmax_rows(inner, slot)
+    if offload is not None:
+        if dq:
+            raise RuntimeError(f"{slot}: an offloaded stack carries a double-quantized absmax, which offload refuses")
+        dev = offload.device
+        packed, absmax = offload.home[pk].to(dev), offload.home[am].to(dev)
+        source = f"{pk}[0] (offload home, staged to {dev})"
     else:
-        absmax = getattr(inner, am)
-    packed, shape = getattr(inner, pk), tuple(int(v) for v in getattr(inner, shp))
+        if dq:                                          # ... so it is read the way the library's per-expert loop reads it
+            from experts4bit_qlora.absmax_dq import expert_absmax_rows
+            absmax = expert_absmax_rows(inner, slot)
+        else:
+            absmax = getattr(inner, am)
+        packed, source = getattr(inner, pk), f"{pk}[0]"
+    if packed.numel() == 0 or absmax is None or (torch.is_tensor(absmax) and absmax.numel() == 0):   # a dq absmax is a row view
+        raise RuntimeError(f"{slot}: {pk} / {am} hold no bytes (an offload placeholder with no handle found?)")
+    shape = tuple(int(v) for v in getattr(inner, shp))
     deq = inner._dequantize_expert(packed, absmax, shape, 0, torch.bfloat16)
     deq2 = inner._dequantize_expert(flip_first_byte(packed[0:1]), absmax, shape, 0, torch.bfloat16)
     bits = int(getattr(inner, "bits", 4))
     regime = (f"{inner.quant_type}/{inner.blocksize}" + ("+dq" if dq else "")) if bits != 16 else f"{_dtype_label(packed.dtype)} passthrough"
-    return _slot_record(deq, regime, f"e4b {type(inner).__name__}._dequantize_expert(expert 0) -> bf16", f"{pk}[0]", deq2)
+    return _slot_record(deq, regime, f"e4b {type(inner).__name__}._dequantize_expert(expert 0) -> bf16", source, deq2)
 
 
 def _probe_stack_param(p, inner, attr):
@@ -2908,8 +2935,10 @@ def frozen_base_probe(model, framework):
                 out["experts_module"] = name
                 inner = innermost_experts(mod)
                 if hasattr(inner, "_dequantize_expert") and hasattr(inner, "gate_up_absmax"):
-                    out["slots"]["gate_up"] = _probe_e4b_stack(inner, "gate_up", "gate_up_proj", "gate_up_absmax", "_gate_up_shape")
-                    out["slots"]["down"] = _probe_e4b_stack(inner, "down", "down_proj", "down_absmax", "_down_shape")
+                    h = expert_offload_handle(mod, inner)
+                    out["experts_offloaded"] = h is not None
+                    out["slots"]["gate_up"] = _probe_e4b_stack(inner, "gate_up", "gate_up_proj", "gate_up_absmax", "_gate_up_shape", h)
+                    out["slots"]["down"] = _probe_e4b_stack(inner, "down", "down_proj", "down_absmax", "_down_shape", h)
                 else:
                     hidden, _ = hidden_size_of(model)
                     cands = [n for n, _ in inner.named_parameters(recurse=False)]
