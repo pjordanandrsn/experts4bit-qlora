@@ -82,10 +82,9 @@ exact sealed input bytes, a 1.5× margin and the registered $0.011/GB cap:
 | Canonical initializer | 167,816,528 | `locked_inputs.json`, verified canonical asset |
 | Total | **17,609,017,716** | Sum of the four exact inputs |
 
-The per-wheel byte/hash receipt is
-`adertha://experts4bit-qlora%231083/reviews/dq11-sdpa-100-wheel-bytes.json`,
+The per-wheel byte/hash receipt is a private review packet,
 SHA-256 `9b911fb101a0a91ec52205d116dbbbbd0f1d955cc337710647691595578d75e3`;
-an independent bus readback matches. It records the exact 100 science-lock
+an independent readback matches. It records the exact 100 science-lock
 filenames, actual file sizes and verified hashes.
 
 Use decimal GB (1,000,000,000 bytes):
