@@ -9,8 +9,19 @@ quantities per MoE layer:
 It feeds #1469 items 2 and 3 (the bytes model and the planner decision, owned by `loggetta-e4b-gnf4`), #1470's
 speculative-decoding cost question, and the next decode lever (K19 above 256 routed rows).
 
-**Where it runs.** On one rented RTX A2000, a single run under the #846 standing tier (under $15). Expert ids are
-correctness-class data, so the A2000 is enough, and no timing from it is quoted. The A2000 (sm_86) cannot run the fp8
+**Where it runs.** On one rented RTX A4000 (16 GB), a single run under the #846 standing tier (under $15). Expert ids
+are correctness-class data, so the A4000 is enough, and no timing from it is quoted.
+
+**Amendment 1 (2026-10-10): RTX A4000, not A2000.** The registration named one rented RTX A2000:
+- `loc-a2000-4` and `-5` ran on the 6 GB variant and failed on harness defects, since fixed (#1520, #1527);
+- the census then needs about 1.8 GB more GPU memory than calibration used, so the next launch required 12 GB
+  (`--vast-min-gpu-ram-gb 12`), and no 12 GB A2000 was offered in 3 h (36 checks).
+
+The RTX A4000 is sm_86 like the A2000, so the census runs the same NF4 host-residency path and kernels. The launch
+requires its 16 GB (`--vast-min-gpu-ram-gb 16`). The runner's host-RAM floor is 48 GB, down from 64: the pinned NF4
+experts are about 15 GB, and the bf16 checkpoint streams one shard at a time.
+
+The A4000 (sm_86) cannot run the fp8
 paged runner, so the trace goes through e4b's NF4 host-residency path: `load_moe_4bit_streaming(offload=True, pin=True, prefetch=True)` and the
 pipelined residency engine.
 
