@@ -28,7 +28,7 @@ P98="$REPO/bench/p98"; STAGE="$STAGE $P98/p98_bake.py"   # SC2d (box K): P98's Q
 # quality pass; the reference files when the amendment that registers them has committed them
 SC5="$REPO/bench/sc5"; for f in sc5_box_m.sh sc5_driver.py sc5_quality.py sc5_e4b_quality.py sc5_ref.py sc5_windows.py sc5_reduce.py sc5_record.py sc5_windows_w64.json; do STAGE="$STAGE $SC5/$f"; done
 for f in vllm.lock.txt sglang.lock.txt e4b-wheels.lock; do STAGE="$STAGE $SC5/locks/$f"; done
-STAGE="$STAGE $REPO/bench/p117/p117_box.py"
+STAGE="$STAGE $REPO/bench/p117/p117_box.py $REPO/bench/p108/p108_box.py $REPO/bench/p97/p97_box.py"   # p117 imports p108, which imports p97
 for f in sc5_ref.json sc5_ref_chunked.json; do [ -s "$SC5/ref/$f" ] && STAGE="$STAGE $SC5/ref/$f"; done
 HOOK="$P42/hook/usercustomize.py"
 COMP_DIRS=""; for d in vllm sglang llamacpp exl3 lmdeploy sc1g_ref; do [ -d "$HERE/$d" ] && COMP_DIRS="$COMP_DIRS $d"; done
@@ -51,6 +51,8 @@ while read -r want name; do
     sc5_*) src="$SC5/$name";;
     vllm.lock.txt|sglang.lock.txt|e4b-wheels.lock) src="$SC5/locks/$name";;
     p117_box.py) src="$REPO/bench/p117/$name";;
+    p108_box.py) src="$REPO/bench/p108/$name";;
+    p97_box.py) src="$REPO/bench/p97/$name";;
     *) src="$P39/$name";;
   esac
   [ -s "$src" ] || { say "refusing: pinned file $name resolves to $src, which is missing"; exit 78; }

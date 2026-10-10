@@ -24,6 +24,9 @@ SC5_VLLM_VERSION=0.31.0; SC5_SGLANG_VERSION=0.5.21; SC5_SGLANG_TAG_COMMIT=e00930
 SC5_REF_SHA256=""   # the registered reference's sha256: set by the amendment that commits bench/sc5/ref/ (empty: quality UNREAD)
 SC5_D=$W/sc5; mkdir -p "$SC5_D/blocks" "$SC5_D/quality"
 sc5_n(){ case "$1" in 1) echo 48;; 16) echo 160;; 64) echo 320;; *) return 1;; esac; }
+# the model name each server answers to: serve_paged serves its model id and refuses any other ("unknown model 'sc5'",
+# sc5-prove-4); vLLM and SGLang serve --served-model-name sc5
+sc5_model(){ case "$1" in e4b) echo "$MID";; *) echo sc5;; esac; }
 
 # ---- installs ------------------------------------------------------------------------------------------------------
 # m_install_e4b: venv-e4b (--system-site-packages, as SC1's), torch 2.8.0 cu128 (as boxes C-L), then the two release
@@ -126,7 +129,7 @@ PYC
 # m_cell FW PORT BD C -- one closed-loop cell into BD/cC.json; the plan is identical across blocks (seed = C)
 m_cell(){ local FW=$1 PORT=$2 BD=$3 C=$4 N AL rc
   N=$(sc5_n "$C"); AL=$(arm_alarm 2400)
-  perl -e "alarm $AL; exec @ARGV" "$PY" $W/sc5_driver.py run --base "http://127.0.0.1:$PORT" --model sc5 --prompts $W/sc2/prompts.json \
+  perl -e "alarm $AL; exec @ARGV" "$PY" $W/sc5_driver.py run --base "http://127.0.0.1:$PORT" --model "$(sc5_model "$FW")" --prompts $W/sc2/prompts.json \
       --concurrency "$C" --n "$N" --seed "$C" --max-tokens $SC5_MAXTOK --profile "$FW" --out "$BD/c$C.json" > "$BD/c$C.log" 2>&1
   rc=$?; line "SC5 $(basename "$BD") C=$C rc=$rc $(grep -a '^SC5_RUN' "$BD/c$C.log" | tail -1 | cut -c1-300)"; return $rc; }
 
@@ -143,7 +146,7 @@ m_block(){ local NN=$1 D=$2 MEM=$3 FW=$4 K=$5 BD PORT ready=False kv="" rnd=0 sm
     if "m_${FW/sglang/sgl}_start" "$MEM" "$BD/server.log"; then
       ready=True; read -r kv rnd < <(m_capacity "$FW" "$BD") || kv=""
       line "SC5 $(basename "$BD") ready: kv_tokens=${kv:-?} rounding=$rnd"
-      perl -e "alarm 900; exec @ARGV" "$PY" $W/sc5_driver.py run --base "http://127.0.0.1:$PORT" --model sc5 --prompts $W/sc2/prompts.json \
+      perl -e "alarm 900; exec @ARGV" "$PY" $W/sc5_driver.py run --base "http://127.0.0.1:$PORT" --model "$(sc5_model "$FW")" --prompts $W/sc2/prompts.json \
           --concurrency 1 --n 4 --seed 999 --max-tokens $SC5_MAXTOK --profile "$FW" --out "$BD/warm.json" > "$BD/warm.log" 2>&1
       for c in $SC5_CS; do m_cell "$FW" "$PORT" "$BD" "$c"; done
     fi
