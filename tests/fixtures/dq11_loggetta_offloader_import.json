@@ -1,0 +1,9 @@
+{
+  "schema": "dq11-pinned-loggetta-import/1",
+  "commit": "34ecb6cec6f43a6f8607ff9f192749fdc7b587e9",
+  "path": "loggetta/backends/dense_train.py",
+  "source_file_sha256": "cdb3cca6927298f789516742d231fd2cb9709efc00c6fbddd598783a8ea3c3a3",
+  "line": 83,
+  "statement": "from experts4bit_qlora.engines.dense_offload import dense_offload_report, enable_dense_offload",
+  "method": "exact import statement extracted from pinned Git object inside prepare function; test executes this statement at call time"
+}

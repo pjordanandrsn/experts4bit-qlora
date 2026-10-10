@@ -12,10 +12,15 @@ the coherent set is Torch 2.11.0+cu128, torchvision 0.26.0+cu128, torchao
 0.17.0+cu128 and Torch's required Triton 3.6.0. Scientific locks are unchanged.
 
 During the real Loggetta preparation only, a scoped adapter delegates to the
-real `enable_dense_offload` with `min_bytes=0`. Tiny projections otherwise fall
+real `experts4bit_qlora.engines.dense_offload.enable_dense_offload` with
+`min_bytes=0`, at the defining-module attribute Loggetta imports inside prepare.
+Tiny projections otherwise fall
 below the default 1 MiB threshold, leaving no streamed bytes and failing the
 engagement assertion. The adapter is refused in science mode and the original
-export is restored immediately, including on preparation errors. Science keeps
+module attribute is restored immediately, including on preparation errors. The
+preparation refuses unless the adapter actually ran and returned nonzero
+streamed bytes; its real handle count and byte count enter the engagement report.
+Science keeps
 its default threshold. This makes the tiny L arm exercise the same streaming
 branch as full Mistral without changing Loggetta's API or production code.
 

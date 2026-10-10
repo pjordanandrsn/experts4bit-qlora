@@ -82,21 +82,32 @@ def prepare_log(directory, plan, prepare):
     """
     if not mode(directory):
         raise ValueError("tiny streaming adapter refused in science mode")
-    import experts4bit_qlora as e4b
+    from experts4bit_qlora.engines import dense_offload
 
-    original = e4b.enable_dense_offload
+    original = dense_offload.enable_dense_offload
+    invocations = []
 
     @functools.wraps(original)
     def tiny_stream(*args, **kwargs):
         if "min_bytes" in kwargs and kwargs["min_bytes"] != 0:
             raise ValueError("conflicting tiny rehearsal streaming threshold")
-        return original(*args, **dict(kwargs, min_bytes=0))
+        handles = original(*args, **dict(kwargs, min_bytes=0))
+        streamed_bytes = sum(handle.bytes for handle in handles)
+        if not handles or streamed_bytes <= 0:
+            raise ValueError("tiny rehearsal offloader returned no streamed bytes")
+        invocations.append({"min_bytes": 0, "handles": len(handles), "streamed_bytes": streamed_bytes})
+        return handles
 
-    e4b.enable_dense_offload = tiny_stream
+    # Pinned Loggetta imports this defining module's attribute inside prepare.
+    dense_offload.enable_dense_offload = tiny_stream
     try:
-        return prepare(plan)
+        prepared = prepare(plan)
+        if not invocations:
+            raise ValueError("tiny rehearsal streaming adapter was not invoked")
+        prepared.report["rehearsal_tiny_stream"] = invocations
+        return prepared
     finally:
-        e4b.enable_dense_offload = original
+        dense_offload.enable_dense_offload = original
 
 
 def build_inputs(directory, canonical_tokens):
