@@ -415,3 +415,51 @@ def test_run_capture_main_end_to_end_with_a_stub_harness(tmp_path):
     assert meta["summary"]["steps"] == 2
     assert meta["meta"]["harness_args"] == ["--steps", "2"]
     assert sorted(rp.load_train_trace(str(out), expect_mb=3)) == [(s, m) for s in range(2) for m in range(3)]
+
+
+# -- the pre-registered cross-step bar (cross_step_bar.py) -------------------------------------------------------
+csb = _load("cross_step_bar")
+
+
+@pytest.mark.parametrize("policy", ["lfu", "lru", "belady"])
+@pytest.mark.parametrize("budget", [4, 10, 40])
+def test_bar_policies_make_replays_decisions(policy, budget):
+    """The bar re-states the policies only to freeze them at step boundaries: they must hit/miss as replay.simulate."""
+    seq = _random_seq()
+    pol = csb.make_policy(policy, budget, seq)
+    assert sum(pol.touch(row) for _s, _p, row in seq) == rp.simulate(seq, budget, policy, 0)["pooled"][0]
+
+
+def test_bar_scores_the_next_steps_forward_against_a_frozen_set_only():
+    """Reuse inside step s+1 (its later micro-batches, its recompute) never counts: the set is frozen at the end of s."""
+    seq = [(0, "fwd", (0, 1)), (1, "fwd", (0, 2)), (1, "fwd", (0, 2)), (1, "recompute", (0, 2)), (2, "fwd", (0, 2))]
+    r = csb.cross_step(seq, 10, "lfu", 1)
+    assert (r["hits"], r["touches"]) == (1, 3)                          # step 1: 0 of 2; step 2: 1 of 1
+
+
+def test_bar_oracle_bounds_every_frozen_policy():
+    seq = _random_seq()
+    ceiling = csb.oracle_frozen(seq, 10, 2)
+    assert all(csb.cross_step(seq, 10, p, 2)["hit_rate"] <= ceiling + 1e-12 for p in ("lfu", "lru", "belady"))
+
+
+def test_bar_verdict_is_armed_both_ways(tmp_path):
+    """Sticky routing reads BUILD-SIGNAL against its shuffled null; uniform routing reads NO-BUILD."""
+    rng = np.random.default_rng(0)
+    for sticky, want in ((True, "BUILD-SIGNAL"), (False, "NO-BUILD")):
+        rec = rr.RoutingRecorder()
+        rec.layers, rec.step = [0, 1, 2, 3], 8
+        hot = {layer: rng.choice(32, 6, replace=False) for layer in rec.layers}
+        for s in range(8):
+            for m in range(2):
+                for layer in rec.layers:
+                    ids = (rng.choice(hot[layer], (6, 2)) if sticky else rng.integers(0, 32, (6, 2))).astype(np.uint8)
+                    rec.records[(s, m, "fwd", layer)] = ids
+                    rec.records[(s, m, "recompute", layer)] = ids.copy()
+        path = str(tmp_path / f"t{sticky}.npz")
+        rec.save(path, {}, expect_mb=2)
+        out = tmp_path / f"b{sticky}.json"
+        assert csb.main(["--trace", path, "--expect-mb", "2", "--budget", "12", "--first-scored", "2",
+                         "--n-experts", "32", "--out", str(out)]) == 0
+        import json
+        assert json.loads(out.read_text())["verdict"] == want
