@@ -10,6 +10,7 @@ import marshal
 from pathlib import Path
 import re
 import sys
+import textwrap
 import types
 
 HERE = Path(__file__).resolve().parent
@@ -174,7 +175,91 @@ def verify_callable(function, source_hashes):
             closure.append(value)
         else:
             raise ValueError("unknown callable closure binding")
-    return {"callable": audit.callable_identity(function), "closure": closure}
+    bound_context = None
+    if inspect.ismethod(function):
+        owner = function.__self__
+        # torch.inference_mode's decorator captures a bound clone factory. Its
+        # code alone does not seal whether that factory enables inference mode.
+        if type(owner).__module__ == "torch.autograd.grad_mode" and type(owner).__name__ == "inference_mode":
+            if getattr(owner, "mode", None) is not True:
+                raise ValueError("inference context factory binding changed")
+            bound_context = {"kind": "torch.inference_mode", "mode": True}
+    return {"callable": audit.callable_identity(function), "closure": closure, "bound_context": bound_context}
+
+
+def verify_named_callees(namespace, expected, source_hashes):
+    """Seal named global helper bindings even when their caller code is unchanged.
+
+    Each expected value is (defining module, original function qualname).
+    Identity with another mutable alias is insufficient; check the actual defining
+    source file, qualified code and compiled executable bytes of the callee.
+    """
+    result = {}
+    for name, (defining, qualname) in expected.items():
+        function = getattr(namespace, name)
+        target = inspect.unwrap(function)
+        if (not inspect.isfunction(target) or target.__code__.co_qualname != qualname
+                or target.__globals__.get("__name__") != defining.__name__
+                or file_sha(inspect.getsourcefile(target)) != file_sha(defining.__file__)):
+            raise ValueError("named global callee binding changed: " + name)
+        result[name] = verify_callable(function, source_hashes)
+    return result
+
+
+def verify_jit_source(kernel, source_hashes, *, defining=None, qualname=None):
+    # Triton's executable source is separate from the Python function object.
+    if defining is not None:
+        verify_named_callees(kernel, {"fn": (defining, qualname)}, source_hashes)
+    identity = verify_callable(kernel.fn, source_hashes)
+    reference = textwrap.dedent(inspect.getsource(kernel.fn))
+    reference = reference[re.search(r"^def\s+\w+\s*\(", reference, re.MULTILINE).start():].strip()
+    if kernel.src.strip() != reference:
+        raise ValueError("JIT source differs from authorized function")
+    return {"function": identity, "jit_source_sha256": hashlib.sha256(kernel.src.encode()).hexdigest()}
+
+
+def adapter_globals(source_hashes):
+    import torch
+    from triton.runtime.jit import JITFunction
+    from unsloth.kernels import fast_lora, swiglu, utils
+
+    aliases = verify_named_callees(fast_lora, {name: (utils, name) for name in
+                                  ("matmul_lora", "get_lora_parameters", "fast_dequantize",
+                                   "_has_multiple_active_adapters", "_maybe_fake_quantize_activations")}, source_hashes)
+    utils_names = ("matmul_lora", "get_lora_parameters", "fast_dequantize", "_has_multiple_active_adapters",
+                   "_maybe_fake_quantize_activations", "_packed_base", "_quant_state_dtype")
+    result = {"fast_lora": aliases,
+              "utils": verify_named_callees(utils, {name: (utils, name) for name in utils_names}, source_hashes),
+              "swiglu": verify_named_callees(fast_lora, {name: (swiglu, name) for name in
+                        ("swiglu_fg_kernel", "swiglu_DWf_DW_dfg_kernel")}, source_hashes)}
+    for name in ("swiglu_fg_kernel", "swiglu_DWf_DW_dfg_kernel"):
+        result["swiglu"][name + ".defining"] = verify_callable(getattr(swiglu, name), source_hashes)
+    for name in ("_fg_kernel", "_DWf_DW_dfg_kernel"):
+        kernel = getattr(swiglu, name)
+        if not isinstance(kernel, JITFunction):
+            raise ValueError("unknown SwiGLU kernel binding")
+        result["swiglu"][name] = verify_jit_source(kernel, source_hashes, defining=swiglu, qualname=name)
+    if utils.DEVICE_TYPE != "cuda" or utils.HAS_CUDA_STREAM is not True:
+        raise ValueError("registered CUDA dequantization branch unavailable")
+    bnb_dequant = utils._fast_dequantize_bnb
+    target = inspect.unwrap(bnb_dequant)
+    # The CUDA-stream definition in the pinned 2026.9.14 wheel starts at
+    # its @torch.inference_mode decorator on line 616; XPU/slow branches refuse.
+    if (target.__code__.co_firstlineno != 616 or target.__code__.co_qualname != "fast_dequantize"
+            or file_sha(inspect.getsourcefile(target)) != file_sha(utils.__file__)):
+        raise ValueError("dequantization helper branch changed")
+    result["utils"]["_fast_dequantize_bnb"] = verify_callable(bnb_dequant, source_hashes)
+    for alias, name in (("torch_matmul", "matmul"), ("torch_mm", "mm"), ("torch_addmm", "addmm")):
+        expected = getattr(torch._C._VariableFunctions, name)
+        if getattr(utils, alias) is not expected or getattr(torch, name) is not expected:
+            raise ValueError("Torch matmul alias binding changed")
+        result["utils"][alias] = {"kind": "locked-torch-builtin", "operator": name}
+    for name in ("BLOCK_SIZE", "NUM_INT32_ELEMENTS", "SAFE_INT32_BUFFER_MULTIPLIER", "INT32_SAFETY_BUFFER"):
+        result["swiglu"][name] = getattr(swiglu, name)
+    if tuple(result["swiglu"][name] for name in
+             ("BLOCK_SIZE", "NUM_INT32_ELEMENTS", "SAFE_INT32_BUFFER_MULTIPLIER", "INT32_SAFETY_BUFFER")) != (1024, 2**31, 4, 2**31 - 4096):
+        raise ValueError("SwiGLU launch constants changed")
+    return result
 
 
 def path_census(model, arm, source_hashes):
@@ -186,9 +271,12 @@ def path_census(model, arm, source_hashes):
     result = audit.audit_adapter_paths(model, declared_compute={"autocast": False, "tf32": False,
                                                                 "base_compute": "bfloat16", "arm": arm})
     identities = {}
+    globals_seal = None
     if arm in ("U", "U0"):
         from unsloth.kernels import fast_lora
         from unsloth.models.llama import original_apply_o, original_apply_qkv
+
+        globals_seal = adapter_globals(source_hashes)
 
         attention = [module for name, module in model.named_modules() if name.endswith(".self_attn")]
         mlps = [module for name, module in model.named_modules() if name.endswith(".mlp")]
@@ -219,7 +307,7 @@ def path_census(model, arm, source_hashes):
         identities[key + ".forward"] = verify_callable(module.forward, source_hashes)
     if not result["loaded_paths"] or not identities:
         raise ValueError("empty adapter binding audit")
-    return {"helper": result, "verified_callables": identities}
+    return {"helper": result, "verified_callables": identities, "adapter_globals": globals_seal}
 
 
 def score(model, tokens):

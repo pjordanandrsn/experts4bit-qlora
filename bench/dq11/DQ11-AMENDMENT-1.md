@@ -84,6 +84,15 @@ backward, adapter GEMM operand/result dtype and all 448 FP32 gradient witnesses.
 Source authority comes from verified wheel source members and pinned Git blobs.
 Loaded Python code is compared with compilation of those authorized source bytes
 without executing a reference file; unknown closure or partial bindings refuse.
+The named global adapter helpers are sealed independently of their callers:
+`matmul_lora`, `get_lora_parameters`, `fast_dequantize`, eligibility/QAT helpers,
+the SwiGLU forward/backward helpers and both JIT kernels, and Torch matmul aliases.
+The actual callee's defining source, qualified code and executable bytes must
+match; comparing two mutable aliases is insufficient. The CUDA-stream bnb
+dequantization definition from the pinned wheel must engage, including its
+inference-mode factory. SwiGLU's executable JIT source must match the authorized
+Python definition and its fixed launch constants; the Torch aliases must be the
+locked builtins. These seals are rechecked before and after proof and reading.
 The audit does not infer execution from a qualified name. U must execute every
 layer's fused QKV, O and MLP forward/backward. L/U0 must execute all 224 adapter
 projections. The operand witness must observe BF16 forward rank GEMMs for U and
@@ -134,6 +143,9 @@ receipt collection can finish; it cannot replace guard proof or license a claim.
 
 Mandatory CPU tests exercise the real reducer, closure/staging, shell lifecycle,
 source-code mutation refusal and checkpoint-safe observer cleanup with synthetic
-fixtures. Those fixtures are test data, not scientific evidence. Local CPU
+fixtures, including an unchanged caller whose global callee is mutated and a
+JIT source changed independently of its Python function. All such mutants refuse.
+The suite also seals the inference-mode factory's bound mode. These fixtures
+are test data, not scientific evidence. Local CPU
 validation does not prove that the registered GPU path ran. This amendment
 publishes no timing, quality, capacity or competitive result.

@@ -317,6 +317,73 @@ def test_runtime_code_mutation_cannot_pass_source_identity(tmp_path):
         common.verify_callable(module.function, authority)
 
 
+@pytest.mark.parametrize("mutation", ["callee_code", "callee_alias"])
+def test_unchanged_caller_cannot_hide_changed_global_callee(tmp_path, mutation):
+    path = tmp_path / "global_source.py"
+    path.write_text(
+        "def helper(x):\n    return x + 1\ndef other(x):\n    return x + 2\ndef caller(x):\n    return helper(x)\n"
+    )
+    spec = importlib.util.spec_from_file_location("dq11_global_fixture", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    authority = {common.file_sha(path)}
+    expected = {"helper": (module, "helper")}
+    common.verify_named_callees(module, expected, authority)
+    caller_identity = common.verify_callable(module.caller, authority)
+    assert module.caller(3) == 4
+    if mutation == "callee_code":
+        replacement = compile("def helper(x):\n    return x + 2\n", str(path), "exec")
+        module.helper.__code__ = next(c for c in replacement.co_consts if isinstance(c, type(module.helper.__code__)))
+    else:
+        module.helper = module.other
+    # The old caller-only check still passes, while executed semantics changed.
+    assert common.verify_callable(module.caller, authority) == caller_identity
+    assert module.caller(3) == 5
+    with pytest.raises(ValueError, match="runtime code|callee binding"):
+        common.verify_named_callees(module, expected, authority)
+
+
+@pytest.mark.parametrize("mutation", ["src", "fn"])
+def test_changed_jit_source_or_named_function_refuses(tmp_path, mutation):
+    from types import SimpleNamespace
+
+    path = tmp_path / "kernel_source.py"
+    path.write_text("def kernel(x):\n    return x + 1\ndef other(x):\n    return x + 2\n")
+    spec = importlib.util.spec_from_file_location("dq11_kernel_fixture", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    kernel = SimpleNamespace(fn=module.kernel, src="def kernel(x):\n    return x + 1\n")
+    authority = {common.file_sha(path)}
+    common.verify_jit_source(kernel, authority, defining=module, qualname="kernel")
+    if mutation == "src":
+        kernel.src = kernel.src.replace("x + 1", "x + 2")
+    else:
+        kernel.fn = module.other
+    with pytest.raises(ValueError, match="JIT source|callee binding"):
+        common.verify_jit_source(kernel, authority, defining=module, qualname="kernel")
+
+
+@pytest.mark.parametrize("decorator", ["@torch.inference_mode", "@torch.inference_mode()"])
+def test_inference_decorator_factory_mode_is_sealed(tmp_path, decorator):
+    import inspect
+    import torch.autograd.grad_mode as grad_mode
+    import torch.utils._contextlib as contextlib
+
+    path = tmp_path / "context_source.py"
+    path.write_text("import torch\n" + decorator + "\ndef function(x):\n    return x + 1\n")
+    spec = importlib.util.spec_from_file_location("dq11_context_fixture", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    authority = {
+        common.file_sha(p) for p in (path, inspect.getsourcefile(grad_mode), inspect.getsourcefile(contextlib))
+    }
+    common.verify_callable(module.function, authority)
+    factory = next(cell.cell_contents for cell in module.function.__closure__ if inspect.ismethod(cell.cell_contents))
+    factory.__self__.mode = False
+    with pytest.raises(ValueError, match="context factory"):
+        common.verify_callable(module.function, authority)
+
+
 class Projection(nn.Module):
     def __init__(self):
         super().__init__()
