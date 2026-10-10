@@ -67,7 +67,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--adapter-dtype", default="bf16", choices=("bf16", "fp32"))
     a = ap.parse_args()
-    rec = run(a.checkpoint, torch.load(a.tokens), a.out, adapter_dtype=a.adapter_dtype)
+    rec = run(a.checkpoint, torch.load(a.tokens, weights_only=True), a.out, adapter_dtype=a.adapter_dtype)
     print(json.dumps({k: rec[k] for k in ("loss", "layers", "patched", "load_s", "forward_s")}))
 
 

@@ -2,10 +2,10 @@
 """A bf16 reference forward for a Qwen3-MoE checkpoint that does not fit the device: one decoder layer resident at a time.
 
 Q235's fidelity reference (bench/q235/PREREG-q235.md). The model is transformers' own modeling, built on ``meta``; each layer is
-materialized on the device from the checkpoint's shards, applied, and released, so the device holds one layer's weights (about 5 GB
-at Qwen3-235B-A22B, 1.25 GB at Qwen3-30B-A3B) plus the activations. The checkpoint's per-expert tensors are fused exactly as
-transformers' loader fuses them (``conversion_mapping``'s qwen2_moe rule: each expert's gate and up stacked, then concatenated
-along dim 1; down stacked), so the layer computes what the resident model computes.
+assembled on the host from the checkpoint's shards, copied to the device, applied, and released, so the device holds one layer's
+weights (about 5 GB at Qwen3-235B-A22B, 1.25 GB at Qwen3-30B-A3B) plus the activations. The checkpoint's per-expert tensors are
+fused exactly as transformers' loader fuses them (``conversion_mapping``'s qwen2_moe rule: each expert's gate and up stacked, then
+concatenated along dim 1; down stacked), so the layer computes what the resident model computes.
 
 ``--resident`` loads every layer first and keeps them (the depth-truncated resident reference, ``--layers k``); the forward is the
 same code in the same order, so streamed and resident are expected to agree bit for bit on one device.
@@ -93,7 +93,8 @@ def run(path, token_ids, attention_mask, labels, device, *, layers=None, residen
     def load(i):
         layer = model.model.layers[i]
         layer.to_empty(device=dev)
-        missing, unexpected = layer.load_state_dict(layer_state(shards, i, cfg.num_experts, dev, dtype), strict=True)
+        # assembled on the host and copied in, so the device never holds a second (stacked) copy of the layer's experts
+        missing, unexpected = layer.load_state_dict(layer_state(shards, i, cfg.num_experts, "cpu", dtype), strict=True)
         assert not missing and not unexpected, (missing, unexpected)
         return layer
 
@@ -149,7 +150,7 @@ def main():
     a = ap.parse_args()
     if a.threads:
         torch.set_num_threads(a.threads)
-    t = torch.load(a.tokens)
+    t = torch.load(a.tokens, weights_only=True)
     os.makedirs(a.out, exist_ok=True)
     r = run(a.checkpoint, t["input_ids"], t["attention_mask"], t["labels"], a.device, layers=a.layers, resident=a.resident, out_dir=a.out)
     torch.save({"per_token_loss": r.pop("per_token_loss"), "router_topk": r.pop("router_topk")}, os.path.join(a.out, "reference.pt"))

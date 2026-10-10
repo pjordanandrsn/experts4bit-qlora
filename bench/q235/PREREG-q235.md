@@ -368,3 +368,37 @@ not move. Offload keeps the fp32 absmax, as the capacity section says, so the RT
 - **The streamed bf16 reference** over Qwen3-30B-A3B's 48 layers took 1,124 s from a disk-pool cache, about 55 MB/s with per-expert
   tensor reads. At the same rate the 235B reference (470 GB) takes about 2.4 hours of RTX A2000 time.
 - **e4b's NF4 side** with experts in host RAM loaded in 1,370 s and 1,798 s, and peaked at 5.55 GB of device memory on the RTX A2000.
+
+## Amendment 2 (2026-10-10, before any 235B box): the gradient and optimizer rules by LoRA factor, and a second step
+
+**Found by the box script's CPU rehearsal** (`bench/q235/instrument/q235_box.py`; `tests/test_q235_box.py`, a 4-layer Qwen3-MoE on
+the reference path). The decision rules' 3 and 4 cannot pass as registered:
+- LoRA's B is zero-initialized, and each A's gradient flows through its B. So at step 0 **every LoRA-A gradient is exactly zero**: 24 of
+  the test's 48 adapter tensors, all of them A and none B.
+- With a zero gradient, only weight decay moves an A, by about 2e-7 relative at lr 2e-4 and weight decay 0.001. That is below bf16's
+  resolution, so **step 0's optimizer leaves every A unchanged**.
+
+The same holds at any scale. Rules 3 and 4 are replaced by the rules below. The milestone becomes **two optimizer steps** at the
+registered shape.
+
+**Step 0:**
+- every adapter gradient is finite;
+- every LoRA-B gradient has a nonzero element, and every B changes under `optimizer.step()`;
+- every LoRA-A gradient is exactly zero. A nonzero A gradient at step 0 means B was not zero-initialized, and the box is VOID as a
+  harness error.
+
+**Step 1** (after step 0 has moved B; same tokens, same shape, same box):
+- every adapter gradient is finite;
+- every LoRA-A gradient has a nonzero element, and every A changes under `optimizer.step()`;
+- B's rules repeat.
+
+Requiring step 0's A gradients to be zero cannot, alone, tell a zero-initialized B from a broken A path. Step 1 is what can: a bug that
+zeroed A's gradient forever would fail it.
+
+**Both steps:**
+- no frozen tensor changes; the frozen-base hashes after step 1 equal those after load;
+- each step's records are kept: loss, elapsed time, bytes moved, memory peaks, gradients and deltas.
+
+**What else changes:**
+- **Time-left fit (gate 2):** it includes step 1, which is one more forward, backward and update at the same shape.
+- **Unchanged:** the fidelity read (step 0's forward) and the reproducibility floor (step 0's loss).

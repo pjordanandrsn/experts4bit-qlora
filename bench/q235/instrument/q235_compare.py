@@ -19,7 +19,7 @@ def _topk(d):
     for name in ("reference.pt", "nf4.pt"):
         p = os.path.join(d, name)
         if os.path.exists(p):
-            return torch.load(p)["router_topk"]
+            return torch.load(p, weights_only=True)["router_topk"]
     raise FileNotFoundError(f"no router top-k file in {d}")
 
 
@@ -38,8 +38,8 @@ def compare(a_dir, b_dir, mask):
     assert la == lb, "the two runs hold different layer sets"
     rel = []
     for f in la:
-        a = torch.load(os.path.join(a_dir, f)).float()[m]
-        b = torch.load(os.path.join(b_dir, f)).float()[m]
+        a = torch.load(os.path.join(a_dir, f), weights_only=True).float()[m]
+        b = torch.load(os.path.join(b_dir, f), weights_only=True).float()[m]
         rel.append(float((a - b).norm() / b.norm().clamp_min(1e-30)))
     ta, tb = _topk(a_dir), _topk(b_dir)
     exact, overlap = [], []
@@ -64,7 +64,7 @@ def main():
     ap.add_argument("tokens")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
-    r = compare(a.a, a.b, torch.load(a.tokens)["attention_mask"])
+    r = compare(a.a, a.b, torch.load(a.tokens, weights_only=True)["attention_mask"])
     json.dump(r, open(a.out, "w"), indent=1)
     print(json.dumps({k: r[k] for k in ("layers", "rel_err_median", "rel_err_max", "router_set_agree_min", "router_overlap_min", "loss_gap")}))
 
