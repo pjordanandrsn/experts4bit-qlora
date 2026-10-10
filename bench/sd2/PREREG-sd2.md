@@ -117,10 +117,21 @@ step of k + 1 rows, every row mapped to the speculating slot:
   block-table rows are copied from the speculating slot's (`Fp8PagedKV._bt_all`, one copy per step) and whose lengths
   are base + i. The fused append then writes into the speculating slot's own blocks at base + i, and step-select's
   per-step gather reads base + i + 1, with no kernel change.
-  - The alias slots are never padding rows: a padding row writes at its slot's position 0, which on an aliased table
-    would be the speculating slot's first token.
   - The alternative, a per-row offset in grouped-nf4-gemm's append with its bitwise test against the per-row loop, is
     kept if aliasing fails review. The PR says which it took.
+
+**Aliasing's four conditions** (the maintainer's, each with a CPU test):
+1. **The alias slots sit outside `kv.scratch`, and that is asserted.** A padding row writes at its slot's position 0,
+   which on an aliased table would be the speculating slot's first token. So a padding row never lands on an alias slot.
+2. **The order of the length writes.** `graph_bucket_publish` adds 1 to every bound slot after the replay.
+   - B2's rollback to base + a + 1 is the **last** length write of the step, after the publish.
+   - The alias lengths are set again at every step.
+   - A test holds the order.
+3. **The sequence's end.** If base + k would pass the slot's last position or the request's `max_tokens`, k shrinks for
+   that step, or the step runs at T == 1. Blocks are claimed to `blocks_per_seq` − 1 at the first decode, so a boundary
+   costs no allocation. A test holds a verify that straddles a block boundary to writing into the right block.
+4. **Bucket 3 is for the verify only.** Plain batched steps keep `bucket_for` over (1, 2, 4, 8, 16), so ON2's batched
+   path is the shipped default's.
 
 The MoE side is the batched path the shipped default already serves at B > 1: device grouping and K25 (P121's license).
 The verify step replays the bucket graphs the server already captures, buckets 2 and 4 for k = 1 and 3. For k = 2 the
@@ -184,12 +195,21 @@ server is greedy only; any change to a default. A default change would be its ow
 
 **The CUDA smoke, before the build merges.** The build PRs change the serve path, and CPU review cannot see CUDA-only
 behaviour. An RTX A2000 is sm_86 and cannot run the FP8 paged pool. So the reviewed build PRs are smoked together, at
-their heads, on one short RTX 5090 proof (`sd2-prove-N`), before they merge:
-- stage V's correctness gate only, no timing;
+their heads, on one short RTX 5090 proof (`sd2-prove-N`), before they merge. It runs:
+- stage V's correctness gate, V0, with its three mutants (below), and no timing;
 - the batching transition on CUDA;
 - every census engaged.
 
-The proof is correctness only, and its numbers are never quoted as speed.
+The maintainer's conditions:
+- **This registration merges first.** The merged-registration rule is about the registration, so a stacked-head proof
+  does not break it.
+- **One integration commit.** The proof runs one pushed commit, the build heads merged onto main. Its manifest pins
+  that commit and each PR's head SHA.
+- **The override is explicit.** The launcher's override for running unmerged build code is explicit, and the receipt
+  records it.
+- **Correctness only.** Its numbers are never quoted as speed.
+- **Merge at the proven heads.** The build PRs merge only at the heads the proof ran. A later change to package code
+  needs a new proof; a change to docs or tests alone does not.
 
 ## The run (`sd2-5090-N`): one RTX 5090, stages V, E and Q, in that order
 
@@ -214,11 +234,22 @@ one C-think row:
   stagger, length or position reads the wrong context and collapses agreement. Different arithmetic only moves
   near-ties: T > 1 runs K25 and the dense GEMMs at M = k + 1, where T == 1 runs the bandwidth GEMV. S2-lite and S3
   read 17 / 17 at K = 16. Agreement below 1 is reported.
+  Beside agreement, each row reports the mean |Δ log p| of the oracle's token.
 - **The draft.** The in-engine chains equal `sd1_eagle3.chain_at` on the gate's captured states at ≥ 99 % of drafted
   ids.
 - **The batching transition** on CUDA: no fault, consistent lengths, the draft state dropped.
 
 A failure is VOID, and no timing is read.
+
+**The gate must show it can fail** (the maintainer's condition). Three addressing mutants run on the proof box, and
+each must fail V0's addressing check:
+- **(a)** the stagger one low, so row i reads base + i;
+- **(b)** the alias append one position low;
+- **(c)** the verify rows' RoPE positions shifted +1.
+
+If any passes, the 0.90 gate is too weak, and Amendment 1 tightens it before the read. A logit-level check against the
+batched arithmetic's floor is one option. (c) is the likeliest to slip, since a uniform shift moves attention only
+slightly.
 
 **V1, timed.** On a live slot after R row 0's prompt, at moving positions, each step a graph replay:
 - the T == 1 decode step (bucket 1), the anchor, twice for an A/A;
@@ -298,14 +329,17 @@ The first that applies is the verdict.
    - **the mechanism check:** τ_live(k, w) below τ_SD1(k, w) − 0.20 on any arm and workload, the size of drop a stale
      auxiliary state or a wrong position gives;
    - Q's `mutant_scale` passing the bar, or Q's phases scoring different windows.
-2. **V_NOISY:** V's two anchors differ by more than 3 %. V then refutes nothing, and its terms are reported.
-3. **VERIFY_COST_REFUTES** (stage V, above). E is reported beside it.
-4. **NOISY:** OFF-b / OFF-a, ON1-b / ON1-a or ON2-b / ON2-a outside [0.97, 1.03] on any workload.
-5. **QUALITY_FAIL:** neither ON1 nor ON2 passes the bar on both texts. A k that fails on either text cannot be
+2. **VERIFY_COST_REFUTES** (stage V, above). E is reported beside it.
+   - **The V_NOISY flag.** If V's two anchors differ by more than 3 %, the flag is raised and this rule cannot fire. The
+     read goes on from rule 3, with Q run, because the stop rule applies only on VERIFY_COST_REFUTES.
+   - **The conflict.** If this rule fires while E's g meets FASTER's speed bar (rule 5's), the read names the conflict:
+     the model is in question, not E. Nothing is licensed, because Q did not run.
+3. **NOISY:** OFF-b / OFF-a, ON1-b / ON1-a or ON2-b / ON2-a outside [0.97, 1.03] on any workload.
+4. **QUALITY_FAIL:** neither ON1 nor ON2 passes the bar on both texts. A k that fails on either text cannot be
    licensed, whatever its speed.
-6. **FASTER:** for some k that passed Q on both texts, g_k ≥ **1.05** on at least two of the three workloads, with both
+5. **FASTER:** for some k that passed Q on both texts, g_k ≥ **1.05** on at least two of the three workloads, with both
    of that workload's pair ratios above 1.
-7. **NOT_FASTER** otherwise.
+6. **NOT_FASTER** otherwise.
 
 **Reported beside the verdict:**
 - every g with its pairs, and ms per emitted token;
@@ -334,12 +368,12 @@ about 5 %.
 
 ## Budget
 
-- **The proof** (`sd2-prove-N`, the CUDA smoke): one RTX 5090 at ≤ $0.85/h, a guard of 0.75 h, about 62 GB of download.
-  About $1.10.
+- **The proof** (`sd2-prove-1`, the CUDA smoke): one RTX 5090 at ≤ $0.85/h, a guard of 0.75 h, about 62 GB of
+  download. About $1.10, **ceiling $1.25** (the maintainer's).
 - **The read** (`sd2-5090-N`): one RTX 5090 at ≤ $0.85/h, a guard of 1.75 h, the same download. About $2.20.
 
-Within the maintainer's tier (bus, 2026-10-10T06:40:43Z). Amendment 1 firms each ceiling, and the launches wait on the
-maintainer's ACK and a relay on #1313.
+About $3.30 across the two, within the maintainer's tier (bus, 2026-10-10T06:55:22Z). Amendment 1 firms the read's
+ceiling. Each launch waits on the maintainer's ACK and a relay on #1313.
 
 ## What this lane cannot say
 
