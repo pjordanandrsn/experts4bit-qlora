@@ -22,8 +22,14 @@ preparation refuses unless the adapter actually ran and returned nonzero
 streamed bytes; its real handle count and byte count enter the engagement report
 and a per-process `receipts/tiny-stream-prepare-*.json` file written immediately
 after successful preparation, before later scoring or proof can refuse.
-Science keeps
-its default threshold. This makes the tiny L arm exercise the same streaming
+Each L reading also snapshots the real CUDA train-prefetch schedule immediately
+before the shipped training loop and after all forty updates, before final
+scoring. The increases in `uses`, `fwd_prefetch_issued`, and `bwd_prefetch_issued`
+must each be positive. A preparation-time report is not this execution witness.
+The route gate saves both snapshots and the deltas in a per-process
+`receipts/train-prefetch-read-*.json` file even when it refuses, and the final
+rehearsal checker validates the same witness in each L reading.
+Science keeps its default threshold. This makes the tiny L arm exercise the same streaming
 branch as full Mistral without changing Loggetta's API or production code.
 
 The local random Mistral has 32 layers, hidden size 128, intermediate size 256,

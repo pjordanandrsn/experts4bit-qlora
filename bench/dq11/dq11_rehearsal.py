@@ -115,6 +115,83 @@ def prepare_log(directory, plan, prepare):
         dense_offload.enable_dense_offload = original
 
 
+
+ROUTE_COUNTERS = ("uses", "fwd_prefetch_issued", "bwd_prefetch_issued")
+
+
+def train_prefetch_snapshot(directory, model):
+    """Read live counters from the real CUDA schedule, never a prepare report."""
+    if not mode(directory):
+        raise ValueError("CUDA route snapshot refused in science mode")
+    from experts4bit_qlora.engines.dense_offload import decoder_layers, dense_offload_report
+
+    handles = [getattr(layer, "_dense_offload", None) for _, layer in decoder_layers(model)]
+    if (len(handles) != 32 or any(h is None or h.device.type != "cuda" or h._train is None for h in handles)
+            or len({id(h._train) for h in handles}) != 1):
+        raise ValueError("rehearsal requires all 32 handles on one live CUDA train-prefetch schedule")
+    schedules = dense_offload_report(handles)["train_prefetch"]
+    if not isinstance(schedules, dict) or len(schedules) != 1:
+        raise ValueError("missing live CUDA train-prefetch counters")
+    return {"handles": len(handles), "streamed_bytes": sum(h.bytes for h in handles),
+            "devices": {device: {key: counts.get(key) for key in ROUTE_COUNTERS}
+                        for device, counts in schedules.items()}}
+
+
+def validate_train_prefetch_witness(witness):
+    """The worker and final checker use the same strictly positive delta gate."""
+    if (not isinstance(witness, dict) or witness.get("schema") != "dq11-rehearsal-train-prefetch/1"
+            or witness.get("science_eligible") is not False or witness.get("status") != "PASS"
+            or type(witness.get("updates")) is not int or witness["updates"] != 40):
+        raise ValueError("CUDA train-prefetch route witness refused")
+    before, after = witness.get("before", {}), witness.get("after", {})
+    if not isinstance(before, dict) or not isinstance(after, dict):
+        raise ValueError("malformed CUDA train-prefetch snapshots")
+    devices = before.get("devices", {})
+    if (not isinstance(devices, dict) or not isinstance(after.get("devices"), dict)
+            or not isinstance(witness.get("delta"), dict)):
+        raise ValueError("malformed CUDA train-prefetch counters")
+    if (before.get("handles") != 32 or after.get("handles") != 32
+            or type(before.get("streamed_bytes")) is not int or before["streamed_bytes"] <= 0
+            or after.get("streamed_bytes") != before["streamed_bytes"]
+            or len(devices) != 1 or set(devices) != set(after.get("devices", {}))
+            or set(devices) != set(witness.get("delta", {}))):
+        raise ValueError("CUDA train-prefetch live schedule changed or was empty")
+    for device, counts in devices.items():
+        if not isinstance(device, str) or not re.fullmatch(r"cuda(?::0)?", device):
+            raise ValueError("train-prefetch route witness is not the single CUDA device")
+        if (not isinstance(counts, dict) or not isinstance(after["devices"][device], dict)
+                or not isinstance(witness["delta"][device], dict)):
+            raise ValueError("malformed CUDA train-prefetch per-device counters")
+        for key in ROUTE_COUNTERS:
+            old, new = counts.get(key), after["devices"][device].get(key)
+            if (type(old) is not int or type(new) is not int or old < 0 or new <= old
+                    or witness["delta"][device].get(key) != new - old):
+                raise ValueError("CUDA train-prefetch did not execute during the forty training updates")
+
+
+def require_train_prefetch(directory, model, before, updates):
+    after = train_prefetch_snapshot(directory, model)
+    delta = {}
+    for device, counts in after["devices"].items():
+        old_counts = before.get("devices", {}).get(device, {})
+        delta[device] = {}
+        for key in ROUTE_COUNTERS:
+            old, new = old_counts.get(key), counts.get(key)
+            delta[device][key] = new - old if type(new) is int and type(old) is int else None
+    witness = {"schema": "dq11-rehearsal-train-prefetch/1", "science_eligible": False, "status": "PASS",
+               "source": os.environ.get("E4B_SHA"), "nonce": os.environ.get("TC1_RUN_NONCE"),
+               "phase": "after forty training updates, before final evaluation",
+               "updates": updates, "before": before, "after": after, "delta": delta}
+    path = Path(directory) / "receipts" / f"train-prefetch-read-{os.getpid()}.json"
+    try:
+        validate_train_prefetch_witness(witness)
+    except ValueError as error:
+        witness.update(status="REFUSED", reason=str(error))
+        write_json(path, witness)
+        raise
+    write_json(path, witness)
+    return witness
+
 def build_inputs(directory, canonical_tokens):
     """Local random Mistral and synthetic mapped tokens; no pretrained weights."""
     mode(directory)
@@ -204,6 +281,8 @@ def correctness(directory):
         if row.get("schema") != "dq11-rehearsal-arm/1" or row.get("science_eligible") is not False:
             raise ValueError("unmarked rehearsal reading")
         validate_read(row, next(p for p in proofs if p["arm"] == arm))
+        if arm == "L":
+            validate_train_prefetch_witness(row.get("rehearsal_train_prefetch"))
         reads.append({"arm": arm, "repetition": rep, "sha256": digest(path)})
     return {"schema": "dq11-rehearsal-correctness/1", "science_eligible": False,
             "recommendation": None, "proofs": [{"arm": p["arm"], "observer_same_arm_bitwise": True} for p in proofs],

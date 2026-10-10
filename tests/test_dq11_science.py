@@ -1269,3 +1269,120 @@ def test_rehearsal_vocabulary_matches_unchanged_full_logit_scorer(monkeypatch):
 
     scored = common.score(FullLogits(), {name: [[0, 31999, 1]] for name in ("alpaca-heldout", "wikitext-test")})
     assert all(row["targets"] == 2 and row["ppl"] == pytest.approx(32000, rel=1e-6) for row in scored.values())
+
+
+@pytest.fixture
+def live_route_fixture(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    import dq11_rehearsal as rehearsal
+    from experts4bit_qlora.engines import dense_offload
+
+    monkeypatch.setattr(rehearsal, "mode", lambda directory: True)
+    (tmp_path / "receipts").mkdir()
+    # Real report/schedule objects, fixture device metadata; no GPU execution.
+    handles = [SimpleNamespace(device=torch.device("cuda:0"), bytes=1024, host_bytes=1024,
+                               disk_bytes=0, slots=[], verified=0, pinned=True) for _ in range(32)]
+    schedule = dense_offload._TrainPrefetch(handles)
+    for handle in handles:
+        handle._train = schedule
+    layers = [SimpleNamespace(_dense_offload=handle) for handle in handles]
+    monkeypatch.setattr(dense_offload, "decoder_layers", lambda model: [(str(i), layer) for i, layer in enumerate(layers)])
+    return rehearsal, object(), schedule, handles, tmp_path
+
+
+def test_rehearsal_live_route_deltas_are_taken_after_steps_and_persisted(live_route_fixture):
+    rehearsal, model, schedule, _, directory = live_route_fixture
+    before = rehearsal.train_prefetch_snapshot(directory, model)
+    schedule.counts.update(uses=1280, fwd_prefetch_issued=620, bwd_prefetch_issued=620)
+    witness = rehearsal.require_train_prefetch(directory, model, before, 40)
+    assert before["devices"]["cuda:0"] == {key: 0 for key in rehearsal.ROUTE_COUNTERS}
+    assert witness["delta"]["cuda:0"] == {"uses": 1280, "fwd_prefetch_issued": 620, "bwd_prefetch_issued": 620}
+    assert witness["before"]["streamed_bytes"] == 32768
+    rehearsal.validate_train_prefetch_witness(witness)
+    paths = list((directory / "receipts").glob("train-prefetch-read-*.json"))
+    assert len(paths) == 1 and json.loads(paths[0].read_text()) == witness
+
+
+@pytest.mark.parametrize("missing", ["uses", "fwd_prefetch_issued", "bwd_prefetch_issued"])
+def test_rehearsal_live_route_refuses_historical_counts_without_step_delta(live_route_fixture, missing):
+    rehearsal, model, schedule, _, directory = live_route_fixture
+    schedule.counts.update({key: 10 for key in rehearsal.ROUTE_COUNTERS})
+    before = rehearsal.train_prefetch_snapshot(directory, model)
+    schedule.counts.update({key: 20 if key != missing else 10 for key in rehearsal.ROUTE_COUNTERS})
+    with pytest.raises(ValueError, match="did not execute"):
+        rehearsal.require_train_prefetch(directory, model, before, 40)
+    path = next((directory / "receipts").glob("train-prefetch-read-*.json"))
+    refused = json.loads(path.read_text())
+    assert refused["status"] == "REFUSED" and refused["delta"]["cuda:0"][missing] == 0
+    with pytest.raises(ValueError, match="witness refused"):
+        rehearsal.validate_train_prefetch_witness(refused)
+
+
+@pytest.mark.parametrize("failure", ["cpu", "partial", "disabled"])
+def test_rehearsal_live_route_refuses_missing_cuda_schedule(live_route_fixture, failure):
+    rehearsal, model, schedule, handles, directory = live_route_fixture
+    if failure == "cpu":
+        handles[0].device = torch.device("cpu")
+    elif failure == "partial":
+        handles[0]._train = type(schedule)([handles[0]])
+    else:
+        for handle in handles:
+            handle._train = None
+    with pytest.raises(ValueError, match="all 32 handles"):
+        rehearsal.train_prefetch_snapshot(directory, model)
+
+
+@pytest.mark.parametrize("failure", ["delta", "updates", "float_counter", "device", "empty_bytes"])
+def test_rehearsal_checker_refuses_tampered_route_witness(live_route_fixture, failure):
+    rehearsal, model, schedule, _, directory = live_route_fixture
+    before = rehearsal.train_prefetch_snapshot(directory, model)
+    schedule.counts.update({key: 10 for key in rehearsal.ROUTE_COUNTERS})
+    witness = rehearsal.require_train_prefetch(directory, model, before, 40)
+    if failure == "delta":
+        witness["delta"]["cuda:0"]["uses"] = 99
+    elif failure == "updates":
+        witness["updates"] = 39
+    elif failure == "float_counter":
+        witness["after"]["devices"]["cuda:0"]["uses"] = 10.0
+    elif failure == "device":
+        for snapshot in (witness["before"], witness["after"], {"devices": witness["delta"]}):
+            snapshot["devices"]["cpu"] = snapshot["devices"].pop("cuda:0")
+    else:
+        witness["before"]["streamed_bytes"] = witness["after"]["streamed_bytes"] = 0
+    with pytest.raises(ValueError):
+        rehearsal.validate_train_prefetch_witness(witness)
+
+
+def test_science_mode_never_takes_rehearsal_route_snapshot(monkeypatch, tmp_path):
+    import dq11_rehearsal as rehearsal
+
+    monkeypatch.setattr(rehearsal, "mode", lambda directory: False)
+    with pytest.raises(ValueError, match="refused in science mode"):
+        rehearsal.train_prefetch_snapshot(tmp_path, object())
+
+
+@pytest.mark.parametrize("present", [False, True])
+def test_rehearsal_checker_requires_l_read_live_route_witness(live_route_fixture, monkeypatch, present):
+    # Isolate the new orchestration requirement after the existing validators;
+    # these synthetic CPU rows are not binding proofs or measured readings.
+    rehearsal, model, schedule, _, directory = live_route_fixture
+    before = rehearsal.train_prefetch_snapshot(directory, model)
+    schedule.counts.update({key: 10 for key in rehearsal.ROUTE_COUNTERS})
+    witness = rehearsal.require_train_prefetch(directory, model, before, 40)
+    for arm in ("L", "U", "U0"):
+        rehearsal.write_json(directory / f"receipts/proof-{arm}.json", {"arm": arm})
+    row = {"schema": "dq11-rehearsal-arm/1", "science_eligible": False, "arm": "L"}
+    if present:
+        row["rehearsal_train_prefetch"] = witness
+    rehearsal.write_json(directory / "receipts/read-1-L.json", row)
+    delegated = []
+    monkeypatch.setattr(reducer, "validate_proofs", lambda rows, rehearsal: delegated.append(("proofs", rehearsal)))
+    monkeypatch.setattr(reducer, "initial_gate", lambda rows: True)
+    monkeypatch.setattr(reducer, "validate_read", lambda reading, proof: delegated.append(("read", proof["arm"])))
+    if present:
+        assert rehearsal.correctness(directory)["complete"] is False
+    else:
+        with pytest.raises(ValueError, match="route witness refused"):
+            rehearsal.correctness(directory)
+    assert delegated == [("proofs", True), ("read", "L")]
