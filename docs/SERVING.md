@@ -116,9 +116,30 @@ so it keeps the explicit mask. **`prefill_routes.seen` is what ran.**
   `nf4_mtile_captured|gt256`.
 - `seen.prefill_attn` counts each prefill attention call's path: `flash`, or `explicit_mask:` with `sinks`, `window`
   or `env`.
+- `seen.moe_k19_dispatch` counts K19's calls by tile table and dispatch, for example `chained|gather|gt256` or
+  `chained|lean|gt256` (`E4B_PREFILL_LEAN_DISPATCH`'s evidence, below).
+- `seen.prefill_folds` counts the fused fold calls above 64 rows, by fold (`norm`, `layer`, `attention`;
+  `E4B_FUSE_PREFILL_GLUE`'s evidence, below).
 
-Both are counted in the Python forward, so eager calls and graph captures count and graph replays do not. A count
+All are counted in the Python forward, so eager calls and graph captures count and graph replays do not. A count
 says the route ran, not how often a replayed graph did. An engagement check should assert on `seen`.
+
+**Prefill glue (opt-in, not licensed: `E4B_FUSE_PREFILL_GLUE`, `E4B_PREFILL_LEAN_DISPATCH`, both `0` by default).**
+The design is `bench/prefill-glue/DESIGN.md`. Neither knob is licensed by any read yet, and neither changes anything
+at its default.
+- `E4B_FUSE_PREFILL_GLUE=1` lifts the decode folds' 64-row gate, read once at startup. A prefill's norm,
+  residual-and-norm and q/k-norm-and-rotary calls then run the fused kernels decode already uses, instead of
+  transformers' eager chain. The router epilogue keeps its gate.
+  - It changes prefill arithmetic: decode's single bf16 rounding replaces transformers' two.
+  - Its licence is a teacher-forced prefill read.
+- `E4B_PREFILL_LEAN_DISPATCH=1` changes K19's prefill rows (`E4B_INT4_PREFILL=k19`, above 256 routed rows):
+  - gate_up reads the token rows itself (`gather_div`), and down stores into the caller's row order
+    (`scatter=order`);
+  - the chained 16-row tile table is kept;
+  - it is bit-identical by construction on that kernel and table; its read asserts the route through
+    `seen.moe_k19_dispatch`;
+  - a kernel package without K19's `scatter=` / `gather_div=` is refused.
+- Anything but `0` or `1` is refused for either knob.
 
 **First-chunk prefill graph (`E4B_PAGED_PREFILL_GRAPH`, `auto` by default since lane SC2b).** Every first chunk of
 exactly `E4B_PAGED_CHUNK_TOKENS` tokens replays one CUDA graph of the prefill forward instead of launching it kernel by

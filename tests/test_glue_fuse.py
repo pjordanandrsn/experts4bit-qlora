@@ -123,3 +123,43 @@ def test_serve_assembly_point_invokes_glue(monkeypatch):
                         rec)
     qkv_fuse.fuse_qkv(torch.nn.Module())
     assert called.get("yes")
+
+
+def test_prefill_glue_lifts_the_norm_gate_and_counts(monkeypatch):
+    """E4B_FUSE_PREFILL_GLUE (bench/prefill-glue/DESIGN.md, P1): off (the default), a prefill-size norm call keeps the
+    eager chain, as test_patches_and_falls_through pins; at 1 it takes the fused kernel and is counted. A decode row is
+    fused either way and never counted."""
+    from experts4bit_qlora.engines import glue_fuse
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE", "1")
+    for env, fused, seen in (("0", 0, {}), ("1", 1, {"norm": 1})):
+        monkeypatch.setenv("E4B_FUSE_PREFILL_GLUE", env)
+        monkeypatch.setattr(glue_fuse, "PREFILL_FOLD_SEEN", {})
+        calls = {"fused": 0}
+        _stub(monkeypatch, calls)
+        m = torch.nn.Module()
+        m.n = ToyRMSNorm()
+        report = {}
+        assert fuse_t1_glue(m, report=report) == 1 and report["prefill"] == ("on" if env == "1" else "off")
+        big = torch.randn(1, 512, 32, dtype=torch.bfloat16)
+        y = m.n(big)
+        assert calls["fused"] == fused and glue_fuse.PREFILL_FOLD_SEEN == seen, env
+        assert torch.allclose(y.float(), ToyRMSNorm()(big).float(), rtol=2 ** -6, atol=2 ** -8)
+        m.n(torch.randn(1, 1, 32, dtype=torch.bfloat16))
+        assert calls["fused"] == fused + 1 and glue_fuse.PREFILL_FOLD_SEEN == seen, env
+
+
+def test_prefill_glue_knob_reads_zero_or_one_and_refuses_anything_else(monkeypatch):
+    from experts4bit_qlora.engines.glue_fuse import DECODE_ROWS_MAX, prefill_glue_on, rows_cap
+    monkeypatch.delenv("E4B_FUSE_PREFILL_GLUE", raising=False)
+    assert prefill_glue_on() is False and rows_cap() == DECODE_ROWS_MAX == 64
+    assert prefill_glue_on("") is False and prefill_glue_on("0") is False and prefill_glue_on("1") is True
+    assert rows_cap("1") is None
+    for bad in ("auto", "yes", "2", "on"):
+        with pytest.raises(ValueError, match="E4B_FUSE_PREFILL_GLUE"):
+            prefill_glue_on(bad)
+    monkeypatch.setenv("E4B_FUSE_PREFILL_GLUE", "auto")
+    m = torch.nn.Module()
+    m.n = ToyRMSNorm()
+    with pytest.raises(ValueError, match="E4B_FUSE_PREFILL_GLUE"):     # refused at patch time, not read as off
+        fuse_t1_glue(m, mode="1")
+

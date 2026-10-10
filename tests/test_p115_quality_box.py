@@ -147,6 +147,39 @@ def _kernel_stub():
     return stub
 
 
+def test_prefill_glue_fuses_the_prefill_shaped_call_except_the_router(monkeypatch):
+    """E4B_FUSE_PREFILL_GLUE=1 (bench/prefill-glue/DESIGN.md, P1): the 128-row prefill-shaped call that the test below
+    keeps unfused now takes the norm, residual-and-norm and q/k-norm-and-rotary kernels. The router epilogue (P3, out
+    of this round) still keeps its eager chain above 64 rows. PREFILL_FOLD_SEEN counts each fold."""
+    pytest.importorskip("transformers.models.qwen3_moe", reason="needs transformers with Qwen3-MoE")
+    from experts4bit_qlora.engines import glue_fuse
+    q = _load("p115_quality")
+    monkeypatch.setitem(sys.modules, "int4_b32", _kernel_stub())
+    for k in ("E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI", "E4B_FUSE_PREFILL_GLUE"):
+        monkeypatch.setenv(k, "1")
+    monkeypatch.setattr(glue_fuse, "PREFILL_FOLD_SEEN", {})
+    counters = q.KernelCounters().install()            # before the fusions, as the box does
+    from experts4bit_qlora.serve_paged import PagedServeConfig, _apply_fusions
+    layers = 2
+    model = _tiny(torch.bfloat16, layers)
+    _apply_fusions(model, PagedServeConfig(fuse_qkv=True))
+    with torch.no_grad():
+        before = counters.snapshot()
+        model(input_ids=torch.randint(0, 256, (1, 128)), use_cache=False)      # a served prefill: one prompt, 128 rows
+        got = {k: v - before[k] for k, v in counters.snapshot().items()}
+        assert got["router_epilogue"] == 0, got                                 # P3 is out: the router stays eager
+        assert got["rmsnorm_rows"] == layers + 1, got                           # each input norm and the final norm
+        assert got["rmsnorm_resid_rows"] == layers and got["rope_norm_heads"] == 2 * layers, got
+        assert glue_fuse.PREFILL_FOLD_SEEN == {"norm": layers + 1, "layer": layers, "attention": layers}
+        # four prompts sharing one position vector hand the attention a cos of [1, T, d] for 4 * T rows: the fold's
+        # layout guard keeps the upstream chain (it never rotates with the wrong positions), so the q/k norms go
+        # through the fused norm instead and no rotary kernel runs
+        before = counters.snapshot()
+        model(input_ids=torch.randint(0, 256, (4, 32)), use_cache=False)
+        got = {k: v - before[k] for k, v in counters.snapshot().items()}
+        assert got["rope_norm_heads"] == 0 and got["rmsnorm_rows"] == 3 * layers + 1, got
+
+
 def _tiny_granite(layers):
     from transformers import GraniteMoeConfig
     from transformers.models.granitemoe.modeling_granitemoe import GraniteMoeForCausalLM

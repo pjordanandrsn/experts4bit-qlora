@@ -953,11 +953,16 @@ def prefill_routes() -> dict:
     every layer has sinks, so it keeps the explicit mask. ``seen`` is what ran: ``moe`` is
     :data:`~.engines.hot_residency.ROUTE_SEEN` (route and row class per expert-GEMM call) and ``prefill_attn`` is
     :data:`~.engines.paged_attention.ATTN_SEEN` (path per prefill attention call), both counted in the Python
-    forward, so eager calls and graph captures count and graph replays do not. Cite ``seen`` as engagement evidence."""
-    from .engines import hot_residency, paged_attention
+    forward, so eager calls and graph captures count and graph replays do not. Cite ``seen`` as engagement evidence.
+    ``moe_k19_dispatch`` is :data:`~.engines.hot_residency.K19_DISPATCH_SEEN` (K19's tile table and dispatch,
+    ``E4B_PREFILL_LEAN_DISPATCH``'s evidence) and ``prefill_folds`` is
+    :data:`~.engines.glue_fuse.PREFILL_FOLD_SEEN` (fused fold calls above 64 rows, ``E4B_FUSE_PREFILL_GLUE``'s)."""
+    from .engines import glue_fuse, hot_residency, paged_attention
 
     out: dict = {"int4_prefill_env": os.environ.get("E4B_INT4_PREFILL", "") or None,
                  "prefill_attn_env": os.environ.get("E4B_PAGED_PREFILL_ATTN", "") or None,
+                 "prefill_glue_env": os.environ.get("E4B_FUSE_PREFILL_GLUE", "") or None,
+                 "prefill_lean_dispatch_env": os.environ.get("E4B_PREFILL_LEAN_DISPATCH", "") or None,
                  "device_grouping": bool(hot_residency.DEVICE_GROUPING[0])}
     try:
         mode = hot_residency._int4_prefill_mode_env()
@@ -971,7 +976,9 @@ def prefill_routes() -> dict:
     except ValueError as e:
         out["prefill_attn"] = f"invalid: {e}"
     out["seen"] = {"moe": dict(sorted(hot_residency.ROUTE_SEEN.items())),
-                   "prefill_attn": dict(sorted(paged_attention.ATTN_SEEN.items()))}
+                   "prefill_attn": dict(sorted(paged_attention.ATTN_SEEN.items())),
+                   "moe_k19_dispatch": dict(sorted(hot_residency.K19_DISPATCH_SEEN.items())),
+                   "prefill_folds": dict(sorted(glue_fuse.PREFILL_FOLD_SEEN.items()))}
     return out
 
 

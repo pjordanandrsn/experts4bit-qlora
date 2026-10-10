@@ -133,9 +133,14 @@ def test_prefill_attention_path_is_counted_by_what_ran(monkeypatch):
 
 def test_prefill_routes_reports_both_counters(monkeypatch):
     from experts4bit_qlora import serve_paged
+    from experts4bit_qlora.engines import glue_fuse
     monkeypatch.setattr(hr, "ROUTE_SEEN", {"mxfp4_k21|le256": 2, "nf4_mtile_captured|gt256": 1})
     monkeypatch.setattr(pa, "ATTN_SEEN", {"explicit_mask:sinks": 24})
+    monkeypatch.setattr(hr, "K19_DISPATCH_SEEN", {"chained|lean|gt256": 48})
+    monkeypatch.setattr(glue_fuse, "PREFILL_FOLD_SEEN", {"norm": 97, "layer": 48})
     r = serve_paged.prefill_routes()
     assert r["seen"] == {"moe": {"mxfp4_k21|le256": 2, "nf4_mtile_captured|gt256": 1},
-                         "prefill_attn": {"explicit_mask:sinks": 24}}
+                         "prefill_attn": {"explicit_mask:sinks": 24},
+                         "moe_k19_dispatch": {"chained|lean|gt256": 48},     # E4B_PREFILL_LEAN_DISPATCH's evidence
+                         "prefill_folds": {"layer": 48, "norm": 97}}         # E4B_FUSE_PREFILL_GLUE's
     assert {"int4_prefill", "prefill_attn", "device_grouping"} <= set(r)   # the env-resolved fields stay

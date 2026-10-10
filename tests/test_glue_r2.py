@@ -1085,3 +1085,46 @@ def test_a_probe_that_raises_refuses_the_licence_and_never_stops_the_build(monke
     assert rep["probe_errors"] and "TypeError" in rep["probe_errors"][0]
     with pytest.raises(RuntimeError, match="vacuous"):
         glue_r2.license_moe_residual(m, [1], mode="1")
+
+
+def test_prefill_glue_lifts_the_layer_and_attention_gates(monkeypatch):
+    """E4B_FUSE_PREFILL_GLUE (bench/prefill-glue/DESIGN.md, P1): off (the default), prefill-size calls keep the upstream
+    chain, as test_layer_fold_matches_and_falls_through and test_unfused_attention_with_head_norms_folds_and_matches
+    pin; at 1 the layer fold and the attention fold take them, match the module's own forward, and are counted."""
+    from experts4bit_qlora.engines import glue_fuse, glue_r2
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    for env in ("0", "1"):
+        monkeypatch.setenv("E4B_FUSE_PREFILL_GLUE", env)
+        monkeypatch.setattr(glue_fuse, "PREFILL_FOLD_SEEN", {})
+        calls = {"resid": 0, "rope": 0}
+        _stub(monkeypatch, calls)
+        torch.manual_seed(31)
+        m = torch.nn.Module()
+        m.layer = ToyDecoderLayer()
+        m.attn = ToyUnfusedAttention()
+        x, pe = _rope_inputs(1, 128)                       # 128 rows: above the decode cap
+        want, _ = m.attn(x, position_embeddings=pe)
+        big = (torch.randn(1, 128, H) * 2).to(torch.bfloat16)
+        want_layer = ToyDecoderLayer().forward(big)
+        report = {}
+        assert glue_r2.fuse_t1_glue_r2(m, report=report) == (1, 1)
+        assert report["prefill"] == ("on" if env == "1" else "off")
+        got_layer = m.layer(big)
+        got, _ = m.attn(x, position_embeddings=pe)
+        on = env == "1"
+        assert calls["resid"] == int(on) and calls["rope"] == 2 * int(on), (env, calls)
+        assert glue_fuse.PREFILL_FOLD_SEEN == ({"layer": 1, "attention": 1} if on else {}), env
+        assert torch.allclose(got_layer.float(), want_layer.float(), rtol=2 ** -6, atol=2 ** -8)
+        assert torch.allclose(got.float(), want.float(), rtol=2 ** -6, atol=2 ** -7), (got.float() - want.float()).abs().max()
+
+
+def test_patch_functions_keep_the_decode_cap_when_called_directly():
+    """A fold patched without ``cap`` (as tests and older callers do) keeps today's 64-row gate."""
+    from experts4bit_qlora.engines import glue_r2
+    import inspect
+    for fn in (glue_r2._patch_layer, glue_r2._patch_layer_scaled, glue_r2._patch_attention,
+               glue_r2._patch_attention_unfused, glue_r2._patch_attention_rope_only):
+        assert inspect.signature(fn).parameters["cap"].default == glue_r2._MAX_DECODE_ROWS == 64, fn.__name__
+    assert glue_r2._decode_rows(torch.zeros(65, H, dtype=torch.bfloat16), H) is False
+    assert glue_r2._decode_rows(torch.zeros(65, H, dtype=torch.bfloat16), H, None) is True
+
