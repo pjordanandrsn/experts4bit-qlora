@@ -1072,5 +1072,5 @@ def disable_fast_train(model) -> int:
         from .ckpt_offload import disable_checkpoint_offload
         disable_checkpoint_offload(model)                # ... and the host-memory checkpoint inputs
         from .train_qkv_fuse import disable_train_fuse_qkv
-        disable_train_fuse_qkv(model)                    # ... and the fused q/k/v projection (its bases come back as views)
+        disable_train_fuse_qkv(model)                    # ... and the fused q/k/v projection (its bases stay views of the fused bytes)
     return n

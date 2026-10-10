@@ -11,11 +11,19 @@
   - the step-0 held-out inside the box's fp32-anchored rounding envelope, and held-out at N within 0.002.
 
   Claims: `e4b.train.p129.fused-qkv.qwen3.5090.2026-10-10`, `e4b.train.p129.fused-qkv.second-host.5090.2026-10-10`.
-- **`disable_fast_train` undoes it.** Each projection gets its base back as a view of the fused bytes, with its slice of the
-  expanded fp32 absmax, which dequantizes bit for bit as the nested statistics did. The three projections then compute what they
-  computed before the fusion, and a second `enable_fast_train` fuses again. Before this change, a disable left the attention fused
-  with its bases released. Under the opt-in that reached only runs that asked for it; under the default it would reach every
-  enable-then-disable caller, among them TC1's and tp4's `attn_only` arms, which probe `enable_fast_train` before training without
-  it. The 3 bytes per 64 values stay until the model is reloaded.
+- **The q/k/v bases stay in the model.** The fusion used to release them, so while fused a full `state_dict` had no q/k/v base
+  weights (a Trainer checkpoint, `save_pretrained`), a resume met unexpected keys, a direct call to a projection raised, and
+  `disable_fast_train` left the attention fused. Under the opt-in that reached only runs that asked for it; as the default it would
+  reach every Qwen3-MoE trainer, and every enable-then-disable caller, among them TC1's and tp4's `attn_only` arms, which probe
+  `enable_fast_train` before training without it. Now:
+  - each base is re-pointed at the fused copy: its packed weight is a view of the fused bytes, and its quant state is a non-nested
+    one over its slice of the expanded fp32 absmax, which dequantizes bit for bit as the nested statistics did. Nothing is
+    duplicated, and a device move re-points the bases at the moved bytes;
+  - `state_dict` carries every q/k/v weight. The base quant state is the non-nested form, so `weight.nested_absmax` and
+    `weight.nested_quant_map` are absent for those bases. A fused model's dict loads strict into an unfused model, and a resume
+    into a fused one writes through the views;
+  - a direct call to a projection computes what it computed before the fusion;
+  - `disable_fast_train` gives the attention its own forward back, the three projections compute what they did before, and a
+    second `enable_fast_train` fuses again. The 3 bytes per 64 values stay until the model is reloaded.
 - **Memory.** The training estimate prices the fused projection's fp32 absmax: 3 bytes per 64 fused q/k/v values, about 24 MB on
   Qwen3-30B-A3B. The boxes measured a peak change of +0.005 / +0.023 GB. `estimate_env()` reports the knob.

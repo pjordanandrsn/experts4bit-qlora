@@ -19,13 +19,21 @@ Concatenating changes the GEMM shapes, and cuBLAS may then pick another algorith
 equal to rounding, not bit for bit. The forward is serving's fused attention forward (``qkv_fuse._fused_forward``), which looks
 the modeling module's rotary up at call time, so e4b's fused training rope and RMSNorm stay in force.
 
-Memory: the q/k/v NF4 bases are released once the fused copy holds their bytes, so the packed weights are not duplicated. The
-expanded fp32 absmax replaces the nested 8-bit one, about 3 bytes more per 64-element block: roughly 24 MB over Qwen3-30B-A3B's
-48 layers. A released projection called on its own raises a ``RuntimeError`` that names the fusion.
+Memory and state: the q/k/v NF4 bases stay where they are, each re-pointed at the fused copy: its packed weight becomes a view of
+the fused bytes and its quant state a non-nested one over its slice of the expanded fp32 absmax, which dequantizes bit for bit as
+the nested statistics did. Nothing is duplicated. The expanded fp32 absmax replaces the nested 8-bit one, about 3 bytes more per
+64-element block: roughly 24 MB over Qwen3-30B-A3B's 48 layers. Because the bases stay registered:
 
-``disable_fast_train`` undoes it (:func:`disable_train_fuse_qkv`): each projection gets its base back as a view of the fused bytes
-with its slice of the expanded fp32 absmax, which dequantizes bit for bit as the nested statistics did, so the three projections
-compute what they computed before the fusion. The 3 bytes per 64 values stay until the model is reloaded.
+- ``state_dict`` carries every q/k/v weight. Its quant state is the non-nested form: ``weight.absmax`` in fp32, and no
+  ``weight.nested_absmax`` or ``weight.nested_quant_map``. torch's loader reads only ``weight`` from a 4-bit module, so the dict
+  loads strict into an unfused model, and an unfused model's into a fused one; a load writes through the views into the fused
+  bytes.
+- A direct call to a projection computes what it computed before the fusion.
+- A device move keeps the views: the fused module re-points the bases at its moved bytes.
+
+``disable_fast_train`` undoes it (:func:`disable_train_fuse_qkv`): the attention module gets its own forward back, and its
+projections, already re-pointed, compute what they computed before the fusion. The 3 bytes per 64 values stay until the model is
+reloaded.
 
 Anything that does not match is refused and keeps today's path (``TRAIN_QKV_STATS["refused"]`` says why).
 
@@ -120,18 +128,46 @@ class FusedQKVLoRA(nn.Module):
         K = int(qss[0].shape[1])
         packed = torch.cat([b.weight.data.reshape(-1) for b in bases]).reshape(-1, 1)
         absmaxes = [_expanded_absmax(qs) for qs in qss]
-        absmax = torch.cat(absmaxes)
-        #: Per projection, what :func:`disable_train_fuse_qkv` needs to hand each base its bytes back.
-        self.parts = tuple((tuple(b.weight.data.shape), int(b.weight.data.numel()), int(a.numel()), qs.shape)
-                           for b, a, qs in zip(bases, absmaxes, qss))
         self.register_buffer("packed", packed, persistent=False)
-        self.register_buffer("absmax", absmax, persistent=False)
+        #: The expanded fp32 absmax: an attribute, not a buffer, so a module-wide dtype cast cannot reach it (as a Linear4bit's
+        #: quant state is out of its reach); :meth:`_apply` moves it with ``packed``.
+        self.absmax = torch.cat(absmaxes)
         self.qs = QuantState(absmax=self.absmax, shape=torch.Size([sum(self.ns), K]), code=qss[0].code,
                              blocksize=qss[0].blocksize, quant_type=qss[0].quant_type, dtype=qss[0].dtype)
+        #: Per projection: its packed shape and size, its absmax size, and its own quant-state fields, for :meth:`_repoint`.
+        self.parts = tuple((tuple(b.weight.data.shape), int(b.weight.data.numel()), int(a.numel()), qs.shape, qs.code, qs.blocksize,
+                            qs.quant_type, qs.dtype) for b, a, qs in zip(bases, absmaxes, qss))
         self.compute_dtype = getattr(bases[0], "compute_dtype", None)
         self.scaling = float(parts[0].scaling)
         self.r = int(parts[0].lora_A.shape[0])
         self._attn = [attn]                      # a list, so the attention module is not registered as a child (no cycle)
+        self._repoint()
+
+    def _repoint(self) -> None:
+        """Point each q/k/v base at the fused copy: its packed weight a view of ``packed``, its quant state a non-nested one over
+        its slice of ``absmax``. The bytes and nested statistics it held before are freed."""
+        from bitsandbytes.functional import QuantState
+        attn = self._attn[0]
+        po = ao = 0
+        for pn, (shape, n_p, n_a, qs_shape, code, blocksize, quant_type, dtype) in zip(("q_proj", "k_proj", "v_proj"), self.parts):
+            base = getattr(attn, pn).base
+            base.weight.data = self.packed[po:po + n_p].view(shape)
+            qs = QuantState(absmax=self.absmax[ao:ao + n_a], shape=qs_shape, code=code.to(self.packed.device), blocksize=blocksize,
+                            quant_type=quant_type, dtype=dtype)
+            base.weight.quant_state = qs
+            if hasattr(base, "quant_state"):         # Linear4bit keeps a second reference
+                base.quant_state = qs
+            po, ao = po + n_p, ao + n_a
+
+    def _apply(self, fn, recurse=True):
+        # The attention module moves its projections' bases (each view on its own) before this child, then this module's
+        # bytes; the absmax follows the bytes' device, and the bases are re-pointed at the moved copy, so nothing stays doubled.
+        super()._apply(fn, recurse)
+        if self.absmax.device != self.packed.device:
+            self.absmax = self.absmax.to(self.packed.device)
+            self.qs.absmax, self.qs.code = self.absmax, self.qs.code.to(self.packed.device)
+        self._repoint()
+        return self
 
     def dequantized(self) -> torch.Tensor:
         from bitsandbytes.functional import dequantize_4bit
@@ -152,56 +188,18 @@ class FusedQKVLoRA(nn.Module):
         return base.to(x.dtype) + _scaled(delta, self.scaling).to(x.dtype)
 
 
-def _fused_away_forward(self, x):
-    raise RuntimeError(f"{self._e4b_fused_name} was fused into its attention module's qkv_proj by enable_fast_train "
-                       "(E4B_TRAIN_FUSE_QKV, on by default) and its NF4 base released; call the attention module, which runs the "
-                       "fused projection, or disable_fast_train to restore the projection")
-
-
-def _release_base(p, name: str) -> None:
-    """Mark a q/k/v ``LoRALinear`` as fused: drop its NF4 base (the fused copy holds those bytes) and make a direct call fail with a
-    clear error instead of a ``TypeError`` on ``None``. Its adapters stay the parameters. The emptied base module is kept, outside
-    the module tree, for :func:`disable_train_fuse_qkv`."""
-    base = p.base
-    base.weight.data = base.weight.data.new_empty(0)
-    for holder in (base.weight, base):                   # the nested statistics go with the bytes (Linear4bit keeps both refs)
-        if getattr(holder, "quant_state", None) is not None:
-            holder.quant_state = None
-    p._e4b_released = [base, p.__dict__.get("forward")]  # a list: the base must not be a registered child
-    p._e4b_fused_into_qkv = True
-    p._e4b_fused_name = name
-    p.base = None
-    p.forward = types.MethodType(_fused_away_forward, p)
-
-
-def _restore_base(p, packed: torch.Tensor, absmax: torch.Tensor, part, like) -> None:
-    """Give a released projection its base back: the fused bytes ``packed`` (a view) with its expanded fp32 ``absmax`` slice."""
-    from bitsandbytes.functional import QuantState
-    base, forward = p._e4b_released
-    shape, _, _, qs_shape = part
-    base.weight.data = packed.view(shape)
-    qs = QuantState(absmax=absmax, shape=qs_shape, code=like.code, blocksize=like.blocksize, quant_type=like.quant_type,
-                    dtype=like.dtype)
-    base.weight.quant_state = qs
-    if hasattr(base, "quant_state"):
-        base.quant_state = qs
-    p.base = base
-    del p._e4b_released, p._e4b_fused_into_qkv, p._e4b_fused_name
-    if forward is None:
-        del p.forward                                    # the instance override goes; the class forward runs again
-    else:
-        p.forward = forward
-
-
 def enable_train_fuse_qkv(model, verbose: bool = False) -> int:
     """Fuse every eligible attention module's q/k/v for training; returns the number fused. Refused modules keep today's path, with
-    the reason in ``TRAIN_QKV_STATS["refused"]``. The q/k/v ``LoRALinear`` modules stay (their adapters are the parameters); their
-    NF4 bases are released, since only the fused copy runs."""
+    the reason in ``TRAIN_QKV_STATS["refused"]``. The q/k/v ``LoRALinear`` modules and their NF4 bases stay (the adapters are the
+    parameters); each base is re-pointed at the fused copy, so nothing is duplicated. A module fused already counts as fused."""
     from .qkv_fuse import _fused_forward
     TRAIN_QKV_STATS["refused"] = {}
     n = 0
     for name, mod in model.named_modules():
         if type(mod).__name__ not in FUSED_ATTENTION_CLASSES:
+            continue
+        if isinstance(getattr(mod, "qkv_proj", None), FusedQKVLoRA):   # fused already: re-fusing would capture the fused forward
+            n += 1
             continue
         why = _refusal(mod)
         if why is not None:
@@ -209,8 +207,6 @@ def enable_train_fuse_qkv(model, verbose: bool = False) -> int:
             continue
         mod.qkv_proj = FusedQKVLoRA(mod)
         mod._fused_nq, mod._fused_nk, mod._fused_nv = mod.qkv_proj.ns
-        for pn in ("q_proj", "k_proj", "v_proj"):
-            _release_base(getattr(mod, pn), f"{name}.{pn}" if name else pn)
         mod._e4b_unfused_forward = mod.__dict__.get("forward")      # None: the class forward
         mod.forward = types.MethodType(_fused_forward, mod)
         n += 1
@@ -221,18 +217,13 @@ def enable_train_fuse_qkv(model, verbose: bool = False) -> int:
 
 
 def disable_train_fuse_qkv(model) -> int:
-    """Undo :func:`enable_train_fuse_qkv` (``disable_fast_train`` calls it): every fused attention module gets its q/k/v bases back,
-    as views of the fused bytes with their slices of the expanded fp32 absmax, and its own forward. Returns the number restored."""
+    """Undo :func:`enable_train_fuse_qkv` (``disable_fast_train`` calls it): every fused attention module gets its own forward back.
+    Its q/k/v bases keep the fused bytes as views and their slices of the expanded fp32 absmax, which dequantize bit for bit as
+    before. Returns the number restored."""
     n = 0
     for mod in list(model.modules()):
-        fq = getattr(mod, "qkv_proj", None)
-        if not isinstance(fq, FusedQKVLoRA):
+        if not isinstance(getattr(mod, "qkv_proj", None), FusedQKVLoRA):
             continue
-        po = ao = 0
-        for pn, part in zip(("q_proj", "k_proj", "v_proj"), fq.parts):
-            _, np_, na, _ = part
-            _restore_base(getattr(mod, pn), fq.packed[po:po + np_], fq.absmax[ao:ao + na], part, fq.qs)
-            po, ao = po + np_, ao + na
         forward = mod._e4b_unfused_forward
         del mod.qkv_proj, mod._fused_nq, mod._fused_nk, mod._fused_nv, mod._e4b_unfused_forward
         if forward is None:
