@@ -300,7 +300,8 @@ FOLDS="E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1"
 SPEEDENV="E4B_SERVE_EXP_INT4=1 E4B_SERVE_ATTN_INT4=1 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 $FOLDS"
 LICENV="E4B_SERVE_EXP_INT4=1 E4B_SERVE_EXP_INT4_CALIB=1 E4B_SERVE_ATTN_INT4_CALIB=1 E4B_SERVE_ATTN_INT4=0 E4B_CALIB_SOURCE=c4 E4B_CALIB_NSEQ=$NSEQ $FOLDS"
 NF4ENV="E4B_SERVE_EXP_INT4=0 E4B_SERVE_ATTN_INT4=0 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=0 E4B_FUSE_T1_GLUE_R2=0 E4B_FUSE_ROUTER_EPI=0"
-GR_ENV="E4B_SERVE_EXP_INT4=0 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1"   # P94's Granite env (the unfused set)
+# Granite has no residual-in-experts licence: auto preserves supported R2 folds without forcing a vacuous licence.
+GR_ENV="E4B_SERVE_EXP_INT4=0 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=auto E4B_FUSE_ROUTER_EPI=1"   # P94's Granite env (the unfused set)
 ROUTEENV="E4B_INT4_GROUPED_SMALLM=auto E4B_INT4_LEAN_GLUE=auto E4B_NF4_GROUPED_SMALLM=0 E4B_MXFP4_GROUPED_SMALLM=auto"   # pinned main's defaults as of 2026-10-02 (P94: NF4 stays 0)
 K8ARGS="--placement-override all-vram --amort off --batch 1 --prompt-len 512 --gen-tokens 16 --ppl-steps 2048 --b1d-loop eager --no-fuse-qkv --ppl-source wikitext"
 PACKENV=""; QA=""; GA=""
@@ -605,9 +606,8 @@ if [ "$PROVE" = 1 ]; then
   for E in $PROVE_NEEDS; do have $E || { say "PROVE: $E did not install -- NOT PROVED"; rec 23; }; done
   quiesce prove
   if [ "$BOX" = M ]; then
-    # SC5 (box M): SC1's Granite smokes are not box M's proof. GR_ENV's explicit E4B_FUSE_T1_GLUE_R2=1 is refused on Granite by
-    # e4b 0.52.0's license_moe_residual ("refusing a vacuous licence", sc5-prove-3), and prove_m runs e4b's served int4 engine
-    # on Qwen3 at C = 1 and 16 -- the proof SC5-PREREG.md registers.
+    # SC5 (box M): prove_m runs e4b's served int4 engine on Qwen3 at C = 1 and 16 -- SC5-PREREG.md's proof.
+    # The Granite smokes stay outside M's registered proof (sc5-prove-3); boxes A-L use the corrected GR_ENV above.
     echo "PROVE box M: SC1's Granite smokes skipped -- prove_m proves e4b on Qwen3 (SC5-PREREG.md)" | tee -a summary.txt
   elif fetch granite "$GR" "$GR_REV" 900 && bake granite "$GR" 1500; then
     GA=$W/work_granite/nf4.arena
