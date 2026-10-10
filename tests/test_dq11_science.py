@@ -899,6 +899,7 @@ def test_installer_uses_shared_fetch(monkeypatch, tmp_path):
 
 
 def launch_fixture(tmp_path, monkeypatch):
+    monkeypatch.setattr(launch_controller, "preflight_policy", lambda directory, source: {"passed": True, "fixture": "synthetic CPU policy, no science evidence"})
     repo = tmp_path / "source"
     here, assets = fixture_stage(repo)
     for name in ("dq11_bootstrap.py", "dq11_launch.py", "wheels.json", "requirements.lock"):
@@ -1674,6 +1675,109 @@ def test_truncated_spread_status_is_retained_even_if_child_wrote_a_receipt(tmp_p
     phase = {"status": "incomplete", "reason": "child truncated after receipt write"}
     (tmp_path / "spread-status-L.json").write_text(json.dumps(phase))
     assert reducer.load_spreads(tmp_path)["L"] == phase
+
+
+def synthetic_policy_report(source="a" * 40, nonce="fixture-no-import"):
+    """CPU-only validator fixture; no real framework import, GPU work or evidence claim."""
+    import dq11_proof_policy as policy
+    arm_sha = common.file_sha(LANE / "dq11_arm.py")
+    return {"schema": "dq11-cpu-policy-gate/1", "source": source, "nonce": nonce, "passed": True,
+            "cpu_only": True, "gpu_work": False, "science_sha256": common.file_sha(LANE / "science.sha256"),
+            "wheel_lock_sha256": common.file_sha(LANE / "wheels.json"),
+            "preflight_sha256": common.file_sha(LANE / "dq11_policy_preflight.py"), "arm_sha256": arm_sha,
+            "source_commits": {"experts4bit-qlora": source, "loggetta": "34ecb6cec6f43a6f8607ff9f192749fdc7b587e9"},
+            "packages": {r["name"]: r["version"] for r in json.loads((LANE / "wheels.json").read_text())["packages"]},
+            "arms": [{"arm": arm, "returncode": 0, "result": {"arm": arm, "status": "PASS", "torch": "2.12.1+cu130",
+                       "cuda_build": "13.0", "cpu_only": True, "cuda_initialized": False,
+                       "unsloth_cpu_supported_import": arm in ("U", "U0"),
+                       "tf32_assignments": {"source_sha256": arm_sha}, "execution_settings": dict(policy.SHIPPED_POLICY)}}
+                     for arm in ("L", "U", "U0")]}
+
+
+@pytest.mark.parametrize("mutation", [None, "source", "nonce", "seal", "code", "arm_source", "package", "missing_arm",
+                                      "returncode", "torch", "cuda", "initialized", "gpu_work", "cudnn_tf32", "sdp", "typed_bool", "commit", "import_mode"])
+def test_prequote_policy_binds_fresh_exact_build_runtime_source_and_flags(mutation):
+    import dq11_policy_preflight as gate
+    report = synthetic_policy_report()
+    if mutation in {"source", "nonce"}:
+        report[mutation] = "wrong"
+    elif mutation == "seal":
+        report["science_sha256"] = "0" * 64
+    elif mutation == "code":
+        report["preflight_sha256"] = "0" * 64
+    elif mutation == "arm_source":
+        report["arm_sha256"] = "0" * 64
+    elif mutation == "package":
+        report["packages"]["torch"] = "2.12.1+cpu"
+    elif mutation == "missing_arm":
+        report["arms"].pop()
+    elif mutation == "returncode":
+        report["arms"][0]["returncode"] = 78
+    elif mutation in {"torch", "cuda"}:
+        report["arms"][0]["result"]["torch" if mutation == "torch" else "cuda_build"] = "wrong"
+    elif mutation == "initialized":
+        report["arms"][0]["result"]["cuda_initialized"] = True
+    elif mutation == "gpu_work":
+        report["gpu_work"] = True
+    elif mutation == "commit":
+        report["source_commits"]["experts4bit-qlora"] = "b" * 40
+    elif mutation == "import_mode":
+        report["arms"][1]["result"]["unsloth_cpu_supported_import"] = False
+    elif mutation in {"cudnn_tf32", "sdp", "typed_bool"}:
+        key, value = {"cudnn_tf32": ("tf32_cudnn", True), "sdp": ("cudnn_sdp", False), "typed_bool": ("math_sdp", 1)}[mutation]
+        report["arms"][0]["result"]["execution_settings"][key] = value
+    if mutation:
+        with pytest.raises(ValueError):
+            gate.validate_report(report, LANE, "a" * 40, "fixture-no-import")
+    else:
+        gate.validate_report(report, LANE, "a" * 40, "fixture-no-import")
+
+
+def test_cpu_policy_executes_the_actual_two_sealed_tf32_assignments(tmp_path):
+    from types import SimpleNamespace
+    import dq11_policy_preflight as gate
+    fake = SimpleNamespace(backends=SimpleNamespace(cuda=SimpleNamespace(matmul=SimpleNamespace(allow_tf32=True)),
+                                                   cudnn=SimpleNamespace(allow_tf32=True)))
+    result = gate.apply_registered_tf32(LANE, fake)
+    assert fake.backends.cuda.matmul.allow_tf32 is False and fake.backends.cudnn.allow_tf32 is False
+    assert result["source_sha256"] == common.file_sha(LANE / "dq11_arm.py")
+    source = (LANE / "dq11_arm.py").read_text().replace("torch.backends.cudnn.allow_tf32 = False", "torch.backends.cudnn.allow_tf32 = True")
+    (tmp_path / "dq11_arm.py").write_text(source)
+    with pytest.raises(ValueError, match="assignments changed"):
+        gate.apply_registered_tf32(tmp_path, fake)
+
+
+@pytest.mark.parametrize("response", ["pass", "stale_nonce", "wrong_source", "bad_json", "import_refusal"])
+def test_prequote_policy_runs_a_fresh_child_and_refuses_replayed_or_failed_evidence(monkeypatch, response):
+    import dq11_policy_preflight as gate
+    monkeypatch.delenv("DQ11_POLICY_COMMAND", raising=False)
+    calls = []
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        nonce = command[-1]
+        report = synthetic_policy_report(nonce=nonce)
+        if response == "stale_nonce":
+            report["nonce"] = "previous-probe"
+        elif response == "wrong_source":
+            report["source"] = "b" * 40
+        stdout = "not json" if response == "bad_json" else json.dumps(report)
+        return subprocess.CompletedProcess(command, 78 if response == "import_refusal" else 0, stdout, "fixture")
+    monkeypatch.setattr(gate.subprocess, "run", fake_run)
+    first = gate.preflight_policy(LANE, "a" * 40)
+    second = gate.preflight_policy(LANE, "a" * 40)
+    assert first["passed"] is (response == "pass") and second["passed"] == first["passed"]
+    assert len(calls) == 2 and first["nonce"] != second["nonce"]
+
+
+def test_science_launch_cpu_policy_refusal_precedes_guard_and_retains_evidence(tmp_path, monkeypatch):
+    repo, manifest, output, marker = launch_fixture(tmp_path, monkeypatch)
+    monkeypatch.setattr(bootstrap.urllib.request, "urlopen", lambda request, timeout: WheelResponse())
+    monkeypatch.setattr(launch_controller, "preflight_policy", lambda directory, source: {"passed": False, "reason": "fixture exact-wheel import refusal"})
+    with pytest.raises(ValueError, match="CPU policy gate refused BEFORE quote/rental"):
+        launch_controller.launch(manifest, "fixture approval", output, repository=repo)
+    assert not marker.exists()
+    report = json.loads(output.read_text())
+    assert report["passed"] is False and report["count"] == 101 and report["cpu_policy"]["passed"] is False
 
 
 @pytest.mark.parametrize("key", ["DQ11_REHEARSAL", "DQ11_REHEARSAL_TINY_MODEL", "CUBLAS_WORKSPACE_CONFIG"])

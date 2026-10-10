@@ -11,6 +11,7 @@ import subprocess
 from dq11_bootstrap import preflight_urls
 from dq11_common import file_sha
 from dq11_science_stage import stage
+from dq11_policy_preflight import preflight_policy
 
 
 def launch(manifest_path, approval, gate_output, *, repository=None, gate_only=False):
@@ -31,11 +32,17 @@ def launch(manifest_path, approval, gate_output, *, repository=None, gate_only=F
     directory = repository / "bench/dq11"
     stage(directory, Path(os.environ["DQ11_ASSET_DIR"]))
     report = preflight_urls(directory)
+    try:
+        policy = preflight_policy(directory, head)
+    except (ValueError, OSError, subprocess.SubprocessError) as error:
+        policy = {"passed": False, "error": str(error)}
+    report["cpu_policy"] = policy
+    report["passed"] = report["passed"] and policy["passed"]
     report.update(e4b_sha=head, utc=datetime.now(timezone.utc).isoformat(),
                   manifest_sha256=file_sha(manifest_path), science_sha256=file_sha(directory / "science.sha256"))
     gate_output.write_text(json.dumps(report, indent=2) + "\n")
     if not report["passed"]:
-        raise ValueError("DQ11 wheel fetch gate refused BEFORE quote/rental; see " + str(gate_output))
+        raise ValueError("DQ11 wheel fetch or CPU policy gate refused BEFORE quote/rental; see " + str(gate_output))
     if gate_only:
         return 0
     guard = Path(os.environ.get("ADERTHA_REPO", str(Path.home() / "code/adertha-main"))) / "tools/pod-launch.sh"
