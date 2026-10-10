@@ -12,7 +12,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / "bench/common/lane_liveness.sh"
 DRIVERS = [ROOT / f"bench/{folder}/{script}_drive.sh" for folder, script in
-           [("tc1", "tc1"), ("p127", "p127"), ("fam", "fam"), ("locality-1469", "locality")]]
+           [("tc1", "tc1"), ("p127", "p127"), ("fam", "fam"), ("locality-1469", "locality"), ("sc1", "sc1")]]
 BOOT_A, BOOT_B = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 INITIAL = f"1 123 {BOOT_A} 10000.00"
 
@@ -152,7 +152,7 @@ def test_actual_driver_poll_loop(driver, sequence, expected, polls, tmp_path):
     prelude = f'''
 source "{HELPER}"
 LANE_HELPER="{HELPER}"; LANE_PID=4242; LANE_INITIAL="{INITIAL}"; LANE_STARTED_AT=0
-DEADLINE=999999; POLL=0; STALL_S=900; TC1_MIN_PROGRESS_MB=16; P127_MIN_PROGRESS_MB=16; FAM_MIN_PROGRESS_MB=16; LOC_MIN_PROGRESS_MB=16
+DEADLINE=999999; POLL=0; STALL_S=900; TC1_MIN_PROGRESS_MB=16; P127_MIN_PROGRESS_MB=16; FAM_MIN_PROGRESS_MB=16; LOC_MIN_PROGRESS_MB=16; SC1_MIN_PROGRESS_MB=16
 W=/fake; NONCE=nonce; RUN_DIR=/unused; E4B_RENT_RUN_DIR="{run_dir}"
 say(){{ printf '%s\\n' "$*"; }}
 date(){{ echo 4000; }}
@@ -191,7 +191,7 @@ SSH=fake_ssh
     assert "pgrep" not in loop and "lane_snapshot_verdict" in loop
 
 
-def test_all_four_launches_capture_pid_and_snapshot_without_staging_helper():
+def test_every_launch_captures_pid_and_snapshot_without_staging_helper():
     for driver in DRIVERS:
         text = driver.read_text()
         assert 'identity=\\$(lane_proc_snapshot \\$child)' in text
@@ -211,7 +211,7 @@ def test_actual_launch_handshake_captures_linux_child_identity(driver, tmp_path)
     end = text.index('\nsay "lane identity:', start)
     launch = text[start:end]
     runner = driver.name.replace('_drive.sh', '_run.sh')
-    prefix = {'tc1': 'TC1', 'p127': 'P127', 'fam': 'FAM', 'locality-1469': 'LOC'}[driver.parent.name]
+    prefix = {'tc1': 'TC1', 'p127': 'P127', 'fam': 'FAM', 'locality-1469': 'LOC', 'sc1': 'SC1'}[driver.parent.name]
     (tmp_path / runner).write_text(f'#!/bin/bash\nprintf nonce > {prefix}_RUN_NONCE\nsleep 2\n')
     (tmp_path / 'guard.sh').write_text(f'#!/bin/bash\nexec bash {runner}\n')
     setup = f'''source "{HELPER}"
