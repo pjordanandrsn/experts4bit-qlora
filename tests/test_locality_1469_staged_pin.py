@@ -37,7 +37,8 @@ def test_the_staged_files_match_their_pin():
 
 
 def test_the_runner_shape():
-    install = RUN.index('say "install experts4bit-qlora @')
+    install = RUN.index('say "install experts4bit-qlora[train] @')
+    assert '"experts4bit-qlora[train] @ git+' in RUN and '"transformers==5.16.1"' in RUN   # loc-a2000-4: rc 9 without it
     for refusal in ("finish 15;", "finish 13;", "finish 16;"):
         assert RUN.index(refusal) < install, refusal
     clone = RUN.index("git clone -q https://github.com/pjordanandrsn/grouped-nf4-gemm.git $W/gnf4")
