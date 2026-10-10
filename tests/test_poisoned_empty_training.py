@@ -302,19 +302,21 @@ def test_cpu_batched_path_is_clean(cpu_model, monkeypatch, left):
 
 
 def test_cpu_control_a_planted_padded_block_bug_is_caught(cpu_model, monkeypatch):
-    """The batched path's padded LoRA block allocated with ``empty_like`` and only its real rows written -- this bug class,
-    planted. The audit must call it, with a non-finite gradient under the NaN poison."""
+    """The batched path's padded block allocated with ``new_empty`` instead of ``new_zeros`` -- only its real rows written --
+    this bug class, planted where it would live. The audit must call it, with a non-finite gradient under the NaN poison."""
     import experts4bit_qlora.engines.batched as batched
-    real = batched._lora_delta_padded
+    real = batched.batched_experts_train_forward
 
-    def planted(x_pad, *a, **k):
-        rows = x_pad.abs().sum(-1) != 0
-        bad = torch.empty_like(x_pad)
-        bad[rows] = x_pad[rows]
-        return real(bad, *a, **k)
+    def planted(*a, **k):
+        zeros = torch.Tensor.new_zeros
+        torch.Tensor.new_zeros = torch.Tensor.new_empty     # x_pad: the padded rows are never written
+        try:
+            return real(*a, **k)
+        finally:
+            torch.Tensor.new_zeros = zeros
 
     r = _audit(_builder(cpu_model, "cpu", monkeypatch, attn4=False, enabler="batched",
-                        patch=lambda: monkeypatch.setattr(batched, "_lora_delta_padded", planted)), "cpu", 48)
+                        patch=lambda: monkeypatch.setattr(batched, "batched_experts_train_forward", planted)), "cpu", 48)
     assert r["engaged"]["batched_calls"] > 0, r["engaged"]
     assert not r["clean"] and not r["finite_P"], r
 
