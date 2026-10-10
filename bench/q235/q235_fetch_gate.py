@@ -8,7 +8,9 @@ listing checks are lane P130's (``bench/p130/p130_fetch_gate.py``); the locks ar
 - **The checkpoint.** ``model_info(files_metadata=True)`` at the locked revision must list exactly ``model_files.json``'s rows
   (name, size, blob id, LFS sha256). Each file's resolve HEAD must answer with that commit, size and etag (P130's
   ``check_listing``), and every shard the index names must be locked (``check_shards``).
-- **The wheels.** Every ``wheels.json`` URL, all from allowlisted origins, must answer a one-byte range GET.
+- **The wheels.** Every ``wheels.json`` URL, all from allowlisted origins, must answer a one-byte range GET made with the box's
+  own opener (``q235_bootstrap.fetch_wheel``: its User-Agent and its refusals), so a host that serves one client and refuses
+  the other cannot pass here and fail on the box.
 - **The git pins.** grouped-nf4-gemm at ``GNF4_SHA`` and this repository at the launch commit must each fetch, by sha, exactly
   that commit.
 - **No placeholders.** The sealed closure, the locks, the drive and the registration (``PREREG-q235.md``) must carry no unfilled
@@ -43,6 +45,27 @@ def _p130():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def _bootstrap():
+    """The box's own installer module (stdlib-only at import), whose opener the wheel probes use."""
+    spec = importlib.util.spec_from_file_location("q235_bootstrap_for_gate", HERE / "q235_bootstrap.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def probe_wheels(rows: list, boot=None) -> dict:
+    """url -> {status, bytes} or {status, error}: one byte of each locked wheel, through the box's own ``fetch_wheel``."""
+    boot = boot or _bootstrap()
+    out = {}
+    for r in rows:
+        try:
+            with boot.fetch_wheel(r["url"], probe=True) as resp:
+                out[r["url"]] = {"status": resp.status, "bytes": len(resp.read(1))}
+        except Exception as e:  # noqa: BLE001 -- every failure is a refusal, with its words
+            out[r["url"]] = {"status": None, "error": f"{type(e).__name__}: {str(e)[:200]}"}
+    return out
 
 
 def _stage():
@@ -115,8 +138,10 @@ def gate(e4b_sha: str) -> dict:
         from huggingface_hub import hf_hub_download
         idx = json.loads(Path(hf_hub_download(lock["repo"], "model.safetensors.index.json", revision=lock["revision"])).read_text())
         refusals += p130.check_shards(idx, selected)
-    probes = {r["url"]: p130._probe(r["url"]) for r in wheels["packages"]}
-    refusals += check_probes(wheels["packages"], probes)
+    boot = _bootstrap()
+    rows = boot.check_lock(wheels)                                       # the box's own lock checks, before any probe
+    probes = probe_wheels(rows, boot)
+    refusals += check_probes(rows, probes)
     rep["wheels"] = {"count": len(wheels["packages"]), "failed": sum(1 for r in wheels["packages"] if "error" in probes[r["url"]])}
     got = {"gnf4": p130._git(GIT["gnf4"], GNF4_SHA), "e4b": p130._git(GIT["e4b"], e4b_sha)}
     rep["git"] = got

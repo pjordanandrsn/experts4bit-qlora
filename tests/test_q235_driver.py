@@ -320,3 +320,39 @@ def test_the_drive_refuses_to_launch_without_a_gate_report(tmp_path):
     r = subprocess.run(["bash", str(Q / "q235_drive.sh")], env={**env, "Q235_FETCH_GATE": str(stale)}, capture_output=True, text=True,
                        timeout=60)
     assert r.returncode == 78 and "does not let" in r.stdout, (r.returncode, r.stdout, r.stderr)
+
+
+def test_the_gate_probes_wheels_with_the_box_s_own_opener(monkeypatch):
+    """A host that answers only the box's client (its User-Agent) must pass the gate, and one that refuses it must fail it."""
+    import urllib.request
+    g = _gate()
+    boot = g._bootstrap()
+    box_ua, seen = boot.USER_AGENT, []
+
+    class _Resp:
+        status = 206
+
+        def read(self, n=-1):
+            return b"x"
+
+        def close(self):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def urlopen(req, timeout=None):
+        seen.append(req.get_header("User-agent"))
+        if req.get_header("User-agent") != box_ua:                       # this host serves the box's client only
+            raise urllib.error.HTTPError(req.full_url, 403, "Forbidden", {}, None)
+        return _Resp()
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    rows = [{"name": "a", "url": "https://files.pythonhosted.org/a.whl"}]
+    assert g.check_probes(rows, g.probe_wheels(rows, boot)) == [] and seen == [box_ua]
+    monkeypatch.setattr(boot, "USER_AGENT", "someone-else/1")
+    out = g.check_probes(rows, g.probe_wheels(rows, boot))
+    assert len(out) == 1 and "403" in out[0], out
