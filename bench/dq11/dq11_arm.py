@@ -49,7 +49,13 @@ def runtime(directory):
     return versions
 
 
-def prepare(directory, arm):
+def prepare(directory, arm, *, quality_read=False):
+    if type(quality_read) is not bool:
+        raise ValueError("explicit initial-quality mode must be boolean")
+    if quality_read:
+        from dq11_a2000_quality import require_ownership
+
+        require_ownership(directory)
     # Import Unsloth first, only in its arms. L never imports its global patches.
     if any(key.startswith("UNSLOTH_") for key in os.environ):
         raise ValueError("inherited Unsloth switches are not registered")
@@ -67,7 +73,11 @@ def prepare(directory, arm):
     torch.manual_seed(3407)
     if not torch.cuda.is_available() or torch.cuda.device_count() != 1:
         raise ValueError("DQ11 requires exactly one CUDA device")
-    if os.environ.get("DQ11_REHEARSAL") == "1":
+    if quality_read:
+        from dq11_a2000_quality import require_hardware
+
+        quality_hardware = require_hardware(directory)
+    elif os.environ.get("DQ11_REHEARSAL") == "1":
         from dq11_rehearsal import require_hardware
 
         require_hardware(directory)
@@ -130,6 +140,8 @@ def prepare(directory, arm):
                               for module in checkpoints):
         raise ValueError("non-reentrant checkpointing did not engage")
     model.train()
+    if quality_read:
+        report["a2000_initial_quality"] = quality_hardware
     return model, trainable, workload, report
 
 

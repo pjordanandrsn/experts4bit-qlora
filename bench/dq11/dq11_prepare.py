@@ -11,7 +11,13 @@ from dq11_arm import read_inputs, runtime
 from dq11_common import file_sha
 
 
-def prepare(directory):
+def prepare(directory, *, quality_read=False):
+    if type(quality_read) is not bool:
+        raise ValueError("explicit initial-quality mode must be boolean")
+    if quality_read:
+        from dq11_a2000_quality import require_ownership
+
+        require_ownership(directory)
     runtime(directory)
     read_inputs(directory)
     import torch
@@ -25,7 +31,11 @@ def prepare(directory):
     hardware = probe()
     gpu = hardware.gpu()
     rehearsal = os.environ.get("DQ11_REHEARSAL") == "1"
-    if rehearsal:
+    if quality_read:
+        from dq11_a2000_quality import require_hardware
+
+        quality_hardware = require_hardware(directory)
+    elif rehearsal:
         from dq11_rehearsal import require_hardware
 
         require_hardware(directory)
@@ -54,7 +64,11 @@ def prepare(directory):
 
     validate_plan(admission)
     admission_receipt = asdict(admission)
-    if rehearsal:
+    if quality_read:
+        from dq11_a2000_quality import SCHEMA
+
+        admission_receipt = {"schema": SCHEMA, "science_eligible": False, "plan": admission_receipt}
+    elif rehearsal:
         admission_receipt = {"schema": "dq11-rehearsal-admission/1", "science_eligible": False,
                              "plan": admission_receipt}
     (directory / "receipts/admission.json").write_text(json.dumps(admission_receipt, indent=2) + "\n")
@@ -72,7 +86,9 @@ def prepare(directory):
     receipt = {"schema": "dq11-prepared/1", "nonce": os.environ["TC1_RUN_NONCE"],
                "model_manifest_sha256": file_sha(directory / "model_files.json"),
                "input_seal_sha256": file_sha(directory / "locked_inputs.json"), "hardware": hardware.to_dict()}
-    if rehearsal:
+    if quality_read:
+        receipt.update(schema=SCHEMA, science_eligible=False, optimizer_updates=0, quality_hardware=quality_hardware)
+    elif rehearsal:
         receipt.update(schema="dq11-rehearsal-prepared/1", science_eligible=False)
     (directory / "receipts/prepared.json").write_text(json.dumps(receipt, indent=2) + "\n")
 

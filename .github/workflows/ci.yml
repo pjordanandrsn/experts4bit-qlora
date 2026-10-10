@@ -67,8 +67,8 @@ jobs:
         run: pytest tests/test_dq11_draft.py -q
       - name: DQ11 science instrument contract (mandatory CPU fixtures, no optional skips)
         run: |
-          ruff check bench/dq11 tests/test_dq11_science.py
-          pytest tests/test_dq11_science.py -q
+          ruff check bench/dq11 tests/test_dq11_science.py tests/test_dq11_a2000_initial_quality.py
+          pytest tests/test_dq11_science.py tests/test_dq11_a2000_initial_quality.py -q
       - name: Test
         run: pytest tests/ -q
       - name: census cross-check (grouped-nf4-gemm#353 -- every claimed family the kernel's shape census covered is still covered, against the census of the exact kernel commit installed above)
