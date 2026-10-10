@@ -439,21 +439,25 @@ Registered before the proof. The maintainer reviewed the build PRs and approved 
      requests finish at their lengths, the device lengths equal the host mirror after every plain step, and no state is
      left.
 
-**The proof's verdict** (`sd2_reduce.py --prove`, self-tested on 16 cases). It is **PROVED** when every item holds:
+**The proof's verdict** (`sd2_reduce.py --prove`, self-tested on 17 cases). It is **PROVED** when every item holds:
 - the census;
 - the capture, bitwise;
 - V0 addressing at ≥ 0.90 on the rows and on the continuations, for every (row, k);
-- every mutant below 0.90;
+- every mutant caught by V0's own rule: its row agreement OR its continuation agreement below 0.90. A RoPE shift writes
+  rotated keys that the continuations read, so the continuations are where (c) most likely shows (the maintainer's);
 - the draft at ≥ 0.99;
 - the transition;
 - the GPU tests.
 
-Otherwise it is **FAILED**, with every failing item named. A mutant at or above 0.90 is named `GATE_TOO_WEAK:<m>`.
+Otherwise it is **FAILED**, with every failing item named. A mutant at or above 0.90 on both its rows and its
+continuations is named `GATE_TOO_WEAK:<m>`.
 Then, as registered, Amendment 2 tightens V0 before any read, for example with a logit-level check against the
 batched arithmetic's floor.
 
-**The budget.** One RTX 5090 at ≤ $0.85/h, a guard of 0.75 h, about 62 GB of download: about $1.10, with a ceiling of
-**$1.25**. The launch waits on the maintainer's ACK and the relay on #1313.
+**The budget.** One RTX 5090 at ≤ $0.85/h, a guard of 0.75 h, about 62 GB of download: about $1.10 expected, with a
+ceiling of **$1.35**. That is the worst case at the policy caps (0.75 h × $0.85 + 62 GB × $0.011 = $1.32), which the
+maintainer raised from $1.25 so that admission does not refuse an in-policy offer. The launch waits on the maintainer's
+ACK and the relay on #1313.
 
 **After PROVED:**
 - The build PRs merge in order (1, 2, 3, 4, 5) at their proven heads; a stacked PR is retargeted to main as its base

@@ -2,14 +2,15 @@
 """sd2_reduce.py -- lane SD2 (e4b#1313): the proof's verdict (bench/sd2/PREREG-sd2.md, Amendment 1).
 
 `--prove prove.json --gpu-tests gpu_tests.json` -> `verdict_prove.json`. **PROVED** when every item holds; otherwise
-**FAILED** with every failing item named. A mutant that PASSES the 0.90 addressing bar is named GATE_TOO_WEAK:<m>: the
-gate cannot see that mutant, and Amendment 1's rule is that the gate is tightened before the read.
+**FAILED** with every failing item named. A mutant that PASSES V0's own rule (rows AND continuations >= 0.90) is named
+GATE_TOO_WEAK:<m>: the gate cannot see that mutant, and Amendment 1's rule is that the gate is tightened before the read.
 
 The items:
 - `census`: buckets 1, 2, 3, 4, 8 and 16 each "graph"; post-verify graphs 2, 3 and 4 each "graph"; three hooks;
 - `capture`: every verify bucket's replay bitwise its padded eager step;
 - `addressing`: every (row, k) at row agreement and continuation agreement >= 0.90;
-- `mutants`: every mutant's row agreement < 0.90;
+- `mutants`: every mutant caught by V0's rule: row agreement < 0.90 OR continuation agreement < 0.90 (the
+  maintainer's: a RoPE shift writes rotated keys that the continuations read);
 - `draft`: in-engine drafts against chain_at at >= 0.99 of drafted ids;
 - `transition`: one drop counted, both requests at their lengths, no mirror mismatch, no state left;
 - `gpu_tests`: the target's GPU tests exited 0 with none skipped for want of the card.
@@ -54,7 +55,7 @@ def judge(prove: dict, gpu: dict) -> dict:
         x = muts.get(m)
         if not x:
             fails.append(f"mutant:{m}:missing")
-        elif x.get("rows_agree", 1.0) >= BAR_ADDRESS:
+        elif x.get("rows_agree", 1.0) >= BAR_ADDRESS and x.get("cont_agree", 1.0) >= BAR_ADDRESS:
             fails.append(f"GATE_TOO_WEAK:{m}")
     d = prove.get("draft") or {}
     if d.get("of", 0) <= 0 or d.get("agree", 0) < BAR_DRAFT:
@@ -68,7 +69,8 @@ def judge(prove: dict, gpu: dict) -> dict:
     return {"verdict": "PROVED" if not fails else "FAILED", "fails": fails,
             "addressing": {k: {kk: addr[k].get(kk) for kk in ("rows_agree", "cont_agree", "mean_abs_dlogp")}
                            for k in want if k in addr},
-            "mutants": {m: (muts.get(m) or {}).get("rows_agree") for m in ("a", "b", "c")},
+            "mutants": {m: {kk: (muts.get(m) or {}).get(kk) for kk in ("rows_agree", "cont_agree")}
+                        for m in ("a", "b", "c")},
             "draft": d, "transition": t}
 
 
@@ -107,7 +109,11 @@ def self_test() -> int:
     case(lambda x: x["addressing"]["R0_k2"].update({"rows_agree": 0.89}), "addressing:R0_k2")
     case(lambda x: x["addressing"]["C0_k3"].update({"cont_agree": 0.5}), "addressing:C0_k3")
     case(lambda x: x["addressing"].pop("C0_k1"), "addressing:C0_k1")
-    case(lambda x: x["mutants"]["c"].update({"rows_agree": 0.95}), "GATE_TOO_WEAK:c")
+    case(lambda x: x["mutants"]["c"].update({"rows_agree": 0.95, "cont_agree": 0.95}), "GATE_TOO_WEAK:c")
+    p3 = copy.deepcopy(p)                         # caught by its continuations only: caught, PROVED
+    p3["mutants"]["c"] = {"rows_agree": 0.97, "cont_agree": 0.40}
+    if judge(p3, g)["verdict"] != "PROVED":
+        bad.append(f"continuations-only catch -> {judge(p3, g)['fails']}")
     case(lambda x: x["mutants"].pop("b"), "mutant:b:missing")
     case(lambda x: x["draft"].update({"agree": 0.98}), "draft")
     case(lambda x: x["transition"].update({"dropped_batched": 0}), "transition")
@@ -118,7 +124,7 @@ def self_test() -> int:
     if bad:
         print("sd2_reduce self-test FAILED:", bad)
         return 1
-    print("sd2_reduce self-test OK (16 cases)")
+    print("sd2_reduce self-test OK (17 cases)")
     return 0
 
 

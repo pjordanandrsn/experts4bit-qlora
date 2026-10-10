@@ -11,4 +11,4 @@
   - the batching transition on the real target.
 - **The harness.** `bench/sd2/` (`sd2_run.sh`, `sd2_drive.sh`, `sd2_box.py --prove`, `sd2_reduce.py --prove`,
   `staged.sha256`), `tests/test_sd2.py`, and the dry run `tests/test_sd2_dryrun.py`.
-- **The ceiling** is $1.25. The read's harness is Amendment 2's.
+- **The ceiling** is $1.35, the worst case at the policy caps. The read's harness is Amendment 2's.
