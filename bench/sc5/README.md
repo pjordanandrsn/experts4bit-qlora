@@ -222,3 +222,18 @@ committed record and requires the committed verdict, or by hand:
 python bench/sc5/sc5_reduce.py --record bench/sc5/receipts/sc5-5090-2/sc5.json --out /tmp/verdict.json
 cmp <(python -m json.tool /tmp/verdict.json) <(python -m json.tool bench/sc5/receipts/sc5-5090-2/verdict.json)
 ```
+
+## Addendum (2026-10-10, after the read): SGLang's C = 64 cells
+
+The read above calls SGLang's C = 64 TPOT not diagnosed. A later zero-rental source read accounts for it, and it changes
+no label: every cell stands as measured.
+- **The source.** SGLang 0.5.21's locked wheel (`sglang-0.5.21-cp312-cp312-manylinux_2_34_x86_64.whl`, sha256
+  `ac300998…`) sets the default decode CUDA-graph `max_bs` to 48 in `sglang/srt/arg_groups/memory_hook.py` (lines
+  100–116). That default applies on a card with 20 to 35 GiB at tensor parallel below 4, and the code's comment names
+  the RTX 5090.
+- **The box.** This reading's server info reports `cuda_graph_config.decode.max_bs` 48, with graphs captured for batch
+  sizes 1–48.
+- **The logs.** In blocks 3 and 9 (default and matched), every decode batch of 16 or fewer ran with the graph, and every
+  batch above 48 ran without it. At C = 64, SGLang therefore decodes eagerly at its default setting.
+
+The full trace is the appendix of `bench/decode-census/README.md`.
