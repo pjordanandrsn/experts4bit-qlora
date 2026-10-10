@@ -17,11 +17,12 @@
  "git": {
   "grouped-nf4-gemm": {
    "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm.git",
-   "sha": "724ccc454f006c1a46836e434e997f31f293747f"
+   "sha": "724ccc454f006c1a46836e434e997f31f293747f",
+   "pinned_by": "GNF4_SHA (q235_drive.sh), checked on the box against pip's record"
   },
   "experts4bit-qlora": {
    "url": "https://github.com/pjordanandrsn/experts4bit-qlora.git",
-   "sha": "the launch commit (E4B_SHA)"
+   "pinned_by": "E4B_SHA: the launching checkout's merged HEAD (q235_drive.sh), checked on the box against pip's record"
   }
  },
  "packages": [

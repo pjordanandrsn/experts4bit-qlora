@@ -12,6 +12,11 @@ if [ "${TC1_DRIVE_DRYRUN:-0}" != 1 ]; then
 fi
 export E4B_SHA=${E4B_SHA:-$HEAD}
 [ "$E4B_SHA" = "$HEAD" ] || { echo 'Q235: E4B_SHA differs from the launching checkout'; exit 78; }
+# Gates 3 and 5 (PREREG "Before any rental"): a passing fetch gate for this commit, under a day old, or no launch.
+[ -n "${Q235_FETCH_GATE:-}" ] || { echo 'Q235 refuses: Q235_FETCH_GATE unset -- run bench/q235/q235_fetch_gate.py before quoting'; exit 78; }
+python3 "$HERE/q235_fetch_gate.py" --e4b-sha "$E4B_SHA" --check-report "$Q235_FETCH_GATE" \
+  || { echo "Q235 refuses: the fetch gate report $Q235_FETCH_GATE does not let $E4B_SHA launch"; exit 78; }
+cp "$Q235_FETCH_GATE" "${E4B_RENT_RUN_DIR:?}/q235_fetch_gate.json"
 export TC1_BOX=A TC1_RUNNER=q235_run.sh
 TC1_EXTRA_STAGE=$(python3 "$HERE/q235_stage.py" --assets "${Q235_ASSET_DIR:?the directory holding the locked input assets}")
 export TC1_EXTRA_STAGE
