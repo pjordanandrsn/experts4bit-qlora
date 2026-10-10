@@ -1,8 +1,10 @@
 #!/bin/bash
-# bench/sd2/sd2_drive.sh -- lane SD2, CONTROLLER side: the launcher's --command (bench/sd2/PREREG-sd2.md, Amendment 1;
-# e4b#1313). Derived from bench/sd1/sd1_drive.sh by named substitutions. It stages SD2's runner, box and reducer, SD1's
-# box (the chat prompts), draft reference and pinned chat prompts, P109's box (its prompts), and P39's NF4 bake and host
-# calibration -- all referenced, never copied. It starts the lane detached under a fresh nonce, polls TP_DONE.<nonce> with the shared PID-identity
+# bench/sd2/sd2_drive.sh -- lane SD2, CONTROLLER side: the launcher's --command (bench/sd2/PREREG-sd2.md, Amendments 1
+# and 3; e4b#1313). Derived from bench/sd1/sd1_drive.sh by named substitutions. It stages SD2's runner, box, reducer,
+# audit and audit list, SD1's box (the chat prompts), draft reference, pinned chat prompts and W1 tripwire, P109's box
+# (its prompts), P115's quality instrument with P110's, P108's and P97's boxes at their bytes, and P39's NF4 bake and
+# host calibration -- all referenced, never copied. The run id names the mode: sd2-prove-N runs the proof, sd2-5090-N
+# the read, which is refused unless the package-diff audit passes here first. It starts the lane detached under a fresh nonce, polls TP_DONE.<nonce> with the shared PID-identity
 # liveness check (bench/common/lane_liveness.sh), and fetches receipts -- never the checkpoint, the head or the arena.
 # Nothing here creates, destroys or approves compute.
 set -uo pipefail
@@ -15,7 +17,8 @@ LANE_HELPER="$REPO/bench/common/lane_liveness.sh"
 source "$LANE_HELPER" || { say "refusing: missing lane liveness helper"; exit 78; }
 # SD2's staging. staged.sha256 pins every piece by the name the box sees.
 P39="$REPO/bench/p39"; P109="$REPO/bench/p109"; SD1="$REPO/bench/sd1"
-STAGE="$HERE/sd2_run.sh $HERE/sd2_box.py $HERE/sd2_reduce.py $SD1/sd1_box.py $SD1/sd1_eagle3.py $SD1/chat_prompts.json $P109/p109_box.py $P39/k8_bake.py $P39/calib.json $HERE/staged.sha256"
+P115="$REPO/bench/p115"; P110="$REPO/bench/p110"; P108="$REPO/bench/p108"; P97="$REPO/bench/p97"
+STAGE="$HERE/sd2_run.sh $HERE/sd2_box.py $HERE/sd2_reduce.py $HERE/sd2_audit.py $HERE/audit_read.tsv $SD1/sd1_box.py $SD1/sd1_eagle3.py $SD1/chat_prompts.json $SD1/expect_w1.json $P109/p109_box.py $P115/p115_quality.py $P110/p110_box.py $P108/p108_box.py $P97/p97_box.py $P39/k8_bake.py $P39/calib.json $HERE/staged.sha256"
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
 # staged.sha256 names the files as the BOX will see them; resolve each name to its source and compare hashes
 # (the same check as tests/test_sd2.py, which runs it in CI where it costs nothing).
@@ -23,9 +26,13 @@ sha_of(){ (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | cut -d" " -f1; }
 while read -r want name; do
   case "$want" in \#*|"") continue;; esac
   case "$name" in
-    sd2_run.sh|sd2_box.py|sd2_reduce.py) src="$HERE/$name";;
-    sd1_box.py|sd1_eagle3.py|chat_prompts.json) src="$SD1/$name";;
+    sd2_run.sh|sd2_box.py|sd2_reduce.py|sd2_audit.py|audit_read.tsv) src="$HERE/$name";;
+    sd1_box.py|sd1_eagle3.py|chat_prompts.json|expect_w1.json) src="$SD1/$name";;
     p109_box.py) src="$P109/$name";;
+    p115_quality.py) src="$P115/$name";;
+    p110_box.py) src="$P110/$name";;
+    p108_box.py) src="$P108/$name";;
+    p97_box.py) src="$P97/$name";;
     k8_bake.py|calib.json) src="$P39/$name";;
     *) say "refusing: staged.sha256 names $name, which this driver does not stage"; exit 78;;
   esac
@@ -39,15 +46,32 @@ if [ -z "${E4B_SHA:-}" ]; then
 fi
 case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not a 40-char hex sha ($E4B_SHA)"; exit 78;; esac
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char hex sha ($E4B_SHA)"; exit 78; }
-# The target (the integration commit + gnf4 v0.45.0), the model and the head are constants in the runner.
+# The target (per mode, + gnf4 v0.45.0), the model and the head are constants in the runner. The run id names the mode.
+case "$E4B_RENT_RUN_ID" in
+  sd2-prove-*) MODE=prove;;
+  sd2-5090-*) MODE=read;;
+  *) say "refusing: run id $E4B_RENT_RUN_ID is neither sd2-prove-N (the proof) nor sd2-5090-N (the read)"; exit 78;;
+esac
+if [ "$MODE" = read ]; then
+  # the package-diff audit (Amendment 3), before anything is staged: the read's target against the proven build
+  T_PROVE=$(sed -n 's/^E4B_T_PROVE=\([0-9a-f]\{40\}\).*/\1/p' "$HERE/sd2_run.sh")
+  T_READ=$(sed -n 's/^E4B_T_READ=\([0-9a-f]\{40\}\).*/\1/p' "$HERE/sd2_run.sh")
+  [ ${#T_PROVE} -eq 40 ] && [ ${#T_READ} -eq 40 ] || { say "refusing: the runner does not pin both targets by sha"; exit 78; }
+  git -C "$REPO" cat-file -e "$T_PROVE^{commit}" 2>/dev/null || git -C "$REPO" fetch -q origin refs/pull/1559/head 2>/dev/null
+  for c in $T_PROVE $T_READ; do
+    git -C "$REPO" cat-file -e "$c^{commit}" 2>/dev/null || { say "refusing: $c is not in $REPO (fetch it)"; exit 78; }
+  done
+  python3 "$HERE/sd2_audit.py" --repo "$REPO" --from "$T_PROVE" --to "$T_READ" --list "$HERE/audit_read.tsv" \
+    || { say "refusing: the package-diff audit failed (a changed file is unlisted, or the list is stale)"; exit 78; }
+fi
 HOST=$E4B_RENT_SSH_HOST; PORT=$E4B_RENT_SSH_PORT; RUN_DIR=$E4B_RENT_RUN_DIR; RUN_ID=$E4B_RENT_RUN_ID; DEADLINE=$E4B_RENT_DEADLINE_EPOCH
 SSH="ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -o ServerAliveInterval=30 -p $PORT root@$HOST"
 SCP="scp -q -o BatchMode=yes $E4B_RENT_SSH_OPTS -P $PORT"
 POLL=${SD2_POLL_S:-60}; W=/root/sd2
 HF_TOKEN_FILE=${HF_TOKEN_FILE:-$HOME/.config/hf/token}
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
-PASS="SD2_RUN_ID=$RUN_ID SD2_RUN_NONCE=$NONCE SD2_DEADLINE_EPOCH=$DEADLINE SD2_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA"
-# Nothing that changes WHAT is measured is forwarded: a rental is the registered run.
+PASS="SD2_RUN_ID=$RUN_ID SD2_RUN_NONCE=$NONCE SD2_DEADLINE_EPOCH=$DEADLINE SD2_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA SD2_MODE=$MODE"
+# Nothing else that changes WHAT is measured is forwarded: a rental is the registered run, and its id names its mode.
 if [ "${SD2_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash sd2_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/sd2"; exit 0; fi
 say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; launch e4b $E4B_SHA (from $REPO); the target is the runner's constant; receipts -> $RUN_DIR/sd2; deadline $DEADLINE"
 $SSH "rm -rf -- $W && mkdir -p $W/logs /root/.cache/huggingface" || { say "stage failed: remote cleanup"; exit 20; }
@@ -127,8 +151,8 @@ while :; do
   sleep "$POLL"
 done
 rm -rf "$RUN_DIR/sd2" && mkdir -p "$RUN_DIR/sd2" || { say "fetch failed: local dir"; exit 22; }
-# The checkpoint and the head stay on the box (the hub cache, outside $W), and so does the arena (work/: only its
-# bake.json travels); the proof's record, the GPU tests' record, logs and the verdict travel.
+# The checkpoint and the head stay on the box (the hub cache, outside $W), and so do the arena and Q's saved log-probs
+# (work/: only its bake.json travels); the stage records, the GPU tests' record, the audit, logs and the verdict travel.
 rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" \
   --include 'work/' --include 'work/bake.json' --exclude 'work/*' \
   --exclude '__pycache__' --exclude 'venv*' --exclude '.cache' --exclude 'hf' --exclude 'src' \

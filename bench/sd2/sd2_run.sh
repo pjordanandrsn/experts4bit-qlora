@@ -1,7 +1,13 @@
 #!/bin/bash
-# bench/sd2/sd2_run.sh -- lane SD2, BOX side of the CUDA proof sd2-prove-N (bench/sd2/PREREG-sd2.md, Amendment 1;
-# e4b#1313). Started detached by sd2_drive.sh with the run's nonce; SD2_RUN_NONCE first, then SD2_EXIT_CODE.<nonce> +
-# TP_DONE.<nonce> on every exit and SD2_SUCCESS.<nonce> only when the reducer ran.
+# bench/sd2/sd2_run.sh -- lane SD2, BOX side of the CUDA proof sd2-prove-N (SD2_MODE=prove; bench/sd2/PREREG-sd2.md,
+# Amendment 1) and of the read sd2-5090-N (SD2_MODE=read; Amendment 3); e4b#1313. Started detached by sd2_drive.sh with
+# the run's nonce; SD2_RUN_NONCE first, then SD2_EXIT_CODE.<nonce> + TP_DONE.<nonce> on every exit and
+# SD2_SUCCESS.<nonce> only when the reducer ran.
+#
+# The read (Amendment 3): its target is merged main (E4B_T_READ), re-proven on the card by the package-diff audit
+# (sd2_audit.py against audit_read.tsv), the target's GPU tests and V0, which fails closed. Then stage V (V0, then V1's
+# timed terms), the reducer's gate (VOID: stop; E_ONLY: the stop rule; ALL), stage E's six arms (each its own process),
+# stage Q (eager, P115 Phase B's instrument plus the verify-shaped ON1 / ON2), and sd2_reduce.py --read.
 #
 # Correctness only, ONE RTX 5090, nothing timed. The target is the stacked integration commit (main + SD2's build
 # PRs 1-5 at their reviewed heads) + grouped-nf4-gemm v0.45.0 (CI's pin), served as the shipped default with
@@ -20,7 +26,8 @@ for v in SD2_RUN_ID SD2_DEADLINE_EPOCH SD2_INSTANCE_ID E4B_SHA; do [ -n "${!v:-}
 case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78;; esac
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char sha"; finish 78; }
 # ---- the target (Amendment 1): the integration commit and its build heads, the kernel package, the model, the head
-E4B_T=539a2d2694096a81c6b272b335e26d818647cd95     # sd2/serve-wiring: main aa47af8b + builds 1-5 (#1553 #1554 #1556 #1558 #1559)
+E4B_T_PROVE=539a2d2694096a81c6b272b335e26d818647cd95   # the proof's: sd2/serve-wiring, main aa47af8b + builds 1-5 (#1553 #1554 #1556 #1558 #1559)
+E4B_T_READ=88ae1cfd8fbe3477189f5a42d8448f395e974345   # the read's (Amendment 3): main at #1559's merge, after the five builds
 GNF4_T=724ccc454f006c1a46836e434e997f31f293747f    # grouped-nf4-gemm v0.45.0, the CI pin
 E4B_H=$E4B_SHA                                     # the harness: the launch commit, which stages this kit
 MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
@@ -32,9 +39,12 @@ GPU_CLASS=${SD2_GPU_CLASS:-5090}; MIN_DISK_GB=${SD2_MIN_DISK_GB:-150}; MIN_RAM_G
 # under 0.75 h and stopped before the fetch: 2100 + 600 s did not fit what the guard left after the installs.
 MODE=${SD2_MODE:-prove}
 case "$MODE" in
-  prove) GUARD_S=4500; NEED_TESTS=600; NEED_FETCH=2100; NEED_BAKE=600; NEED_PROVE=900;;   # seconds; --wallclock-h 1.25
-  *) say "refusing: SD2_MODE=$MODE (the read's mode is Amendment 2's)"; finish 78;;
+  prove) GUARD_S=4500; NEED_TESTS=600; NEED_FETCH=2100; NEED_BAKE=600; NEED_PROVE=900; E4B_T=$E4B_T_PROVE;;   # seconds; --wallclock-h 1.25
+  read) GUARD_S=12600; NEED_TESTS=600; NEED_FETCH=2100; NEED_BAKE=600; NEED_V=900; NEED_E=600; NEED_Q=6300; E4B_T=$E4B_T_READ;;   # --wallclock-h 3.5
+  *) say "refusing: SD2_MODE=$MODE"; finish 78;;
 esac
+case "$E4B_T" in *[!0-9a-f]*|"") say "refusing: the $MODE target is not a sha ($E4B_T)"; finish 78;; esac
+Q_WINDOWS=48; Q_PROMPT=512; Q_CONT=128                # stage Q's registered sample (Amendment 3 keeps 48 windows per text)
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 # every serving lever and engine knob starts unset: the default server is the subject (fixed knobs below)
 unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_SERVE_ATTN_INT4 E4B_FUSE_T1_GLUE E4B_FUSE_T1_GLUE_R2 \
@@ -50,7 +60,8 @@ if [ "$GPU_CLASS" != 5090 ] || [ "$MIN_DISK_GB" != 150 ] || [ "$MIN_RAM_GB" != 6
   echo "REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)" | tee -a summary.txt; : > REHEARSAL
 fi
 # ---- staged pieces, byte-for-byte
-for f in sd2_box.py sd2_reduce.py sd1_box.py sd1_eagle3.py p109_box.py k8_bake.py calib.json chat_prompts.json staged.sha256; do
+for f in sd2_box.py sd2_reduce.py sd2_audit.py audit_read.tsv sd1_box.py sd1_eagle3.py p109_box.py p115_quality.py p110_box.py \
+         p108_box.py p97_box.py k8_bake.py calib.json chat_prompts.json expect_w1.json staged.sha256; do
   [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
 (cd $W && sha256sum -c staged.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/sd2/staged.sha256"; finish 9; }
 # ---- refusals before anything is installed or fetched: the card class, the disk, the host RAM
@@ -90,6 +101,14 @@ for pair in "e4b_T $E4B_T" "gnf4_T $GNF4_T" "e4b_H $E4B_H"; do
 done
 WATCHDOG=$W/src/e4b_H/bench/common/hf_fetch_watchdog.py
 [ -s $WATCHDOG ] || { say "HARNESS MISSING: $WATCHDOG"; finish 9; }
+if [ "$MODE" = read ]; then
+  # the package-diff audit (Amendment 3) on the box's own clone: every package file that differs from the proven build
+  # is listed in audit_read.tsv; the proven commit is #1559's head, fetched by its PR ref if no branch carries it
+  git -C $W/src/e4b cat-file -e "$E4B_T_PROVE^{commit}" 2>/dev/null \
+    || perl -e 'alarm 300; exec @ARGV' git -C $W/src/e4b fetch -q origin refs/pull/1559/head > /dev/null 2>&1
+  python $W/sd2_audit.py --repo $W/src/e4b --from $E4B_T_PROVE --to $E4B_T --list $W/audit_read.tsv --out $W/audit.json \
+    | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "AUDIT FAIL: a package file differs from the proven build unlisted"; finish 31; }
+fi
 pipx logs/pip_target.log 600 --no-deps -e $W/src/e4b_T -e $W/src/gnf4_T || { tail -3 logs/pip_target.log; say "PIP FAIL (target)"; finish 9; }
 E4B_T=$E4B_T E4B_H=$E4B_H python - <<'PYT' || { say "TRIPWIRE FAIL"; finish 9; }
 import os, importlib.metadata as md
@@ -109,6 +128,7 @@ PYT
 cat versions.txt | tee -a summary.txt
 python $W/sd2_reduce.py --self-test | tail -1 | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "REDUCER SELF-TEST FAILED"; finish 21; }
 python $W/sd2_box.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "BOX SELF-TEST FAILED"; finish 21; }
+python $W/sd2_audit.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "AUDIT SELF-TEST FAILED"; finish 21; }
 python $W/sd1_box.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "SD1 BOX SELF-TEST FAILED"; finish 21; }
 python $WATCHDOG --self-test 2>/dev/null | tail -1 | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "WATCHDOG SELF-TEST FAILED"; finish 21; }
 # ---- the target's own GPU tests, on the card (CI cannot run them: sm_89+). They need no checkpoint, so they run
@@ -163,6 +183,7 @@ perl -e "alarm 600; exec @ARGV" python $W/sd1_box.py --chat-prompts $W/chat_prom
   || { tail -4 logs/prompts_C.log; say "PROMPTS FAIL (C)"; finish 19; }
 grep -a "PROMPTS" logs/prompts_R.log logs/prompts_C.log | tee -a summary.txt
 # ---- the proof: the shipped default with speculation on, k = 3, graphs on
+if [ "$MODE" = prove ]; then
 can_run $NEED_PROVE prove || finish 40
 ENGINE_ENV="E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$REV E4B_PAGED_ARENA=$W/work/nf4.arena E4B_PAGED_CALIB=$W/calib.json E4B_PAGED_MAX_SEQS=16 E4B_INT4_TILE_PROGRAMS=1 E4B_PAGED_SPEC=eagle3 E4B_PAGED_SPEC_K=3 E4B_PAGED_SPEC_HEAD=$HEAD_DIR"
 AL=$(step_alarm 2400); say "prove (alarm=$AL)"
@@ -175,4 +196,52 @@ rc=$?
 [ "$rc" = 0 ] && [ -s $W/prove.json ] || { tail -8 logs/prove.log | cut -c1-300 | tee -a summary.txt; say "PROVE FAILED (rc=$rc)"; finish 23; }
 say "reduce"; python $W/sd2_reduce.py --prove $W/prove.json --gpu-tests $W/gpu_tests.json --out $W/verdict_prove.json 2>&1 | tee -a summary.txt
 [ "${PIPESTATUS[0]}" = 0 ] && [ -s $W/verdict_prove.json ] || { say "REDUCER FAILED"; finish 22; }
+finish 0
+fi
+# ---- the read (Amendment 3). Every stage builds the shipped default from the environment, as the proof does.
+BASE_ENV="E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$REV E4B_PAGED_ARENA=$W/work/nf4.arena E4B_PAGED_CALIB=$W/calib.json E4B_PAGED_MAX_SEQS=16 E4B_INT4_TILE_PROGRAMS=1"
+SPEC3="E4B_PAGED_SPEC=eagle3 E4B_PAGED_SPEC_K=3 E4B_PAGED_SPEC_HEAD=$HEAD_DIR"
+stage(){ local tag=$1 rc=$2 out=$3
+  { echo "$tag rc=$rc"; grep -a "^SD2_" logs/$tag.log | cut -c1-400; } | tee -a summary.txt
+  [ "$rc" = 0 ] && [ -s "$out" ] || { tail -8 logs/$tag.log | cut -c1-300 | tee -a summary.txt; say "STAGE $tag FAILED (rc=$rc)"; finish 23; }; }
+can_run $NEED_V "stage V" || finish 40
+AL=$(step_alarm 2400); say "stage V (alarm=$AL)"
+# shellcheck disable=SC2086  # the env lists are assignment lists by design
+env PYTHONPATH= $BASE_ENV $SPEC3 E4B_SHA=$E4B_T GNF4_SHA=$GNF4_T \
+  perl -e "alarm $AL; exec @ARGV" python $W/sd2_box.py --read-v --prompts-r $W/prompts_R.json --prompts-c $W/prompts_C-think.json \
+    --head-dir "$HEAD_DIR" --out $W/v.json > logs/v.log 2>&1
+stage v $? $W/v.json || finish 23
+GATE=$(python $W/sd2_reduce.py --gate-v $W | sed -n 's/^SD2_GATE //p'); echo "SD2_GATE $GATE" | tee -a summary.txt
+case "$GATE" in VOID|E_ONLY|ALL) ;; *) say "GATE FAILED"; finish 22;; esac
+if [ "$GATE" != VOID ]; then
+  for ARM in OFF-a ON1-a ON2-a ON2-b ON1-b OFF-b; do
+    case "$ARM" in
+      OFF-*) SPEC="";;
+      ON1-*) SPEC="E4B_PAGED_SPEC=eagle3 E4B_PAGED_SPEC_K=1 E4B_PAGED_SPEC_HEAD=$HEAD_DIR";;
+      ON2-*) SPEC="E4B_PAGED_SPEC=eagle3 E4B_PAGED_SPEC_K=2 E4B_PAGED_SPEC_HEAD=$HEAD_DIR";;
+    esac
+    can_run $NEED_E "stage E $ARM" || finish 40
+    AL=$(step_alarm 1500); say "stage E $ARM (alarm=$AL)"
+    # shellcheck disable=SC2086
+    env PYTHONPATH= $BASE_ENV $SPEC E4B_SHA=$E4B_T GNF4_SHA=$GNF4_T \
+      perl -e "alarm $AL; exec @ARGV" python $W/sd2_box.py --read-e $ARM --prompts-r $W/prompts_R.json \
+        --prompts-c $W/prompts_C-think.json --prompts-cn $W/prompts_C-nothink.json --out $W/e_$ARM.json > logs/e_$ARM.log 2>&1
+    stage e_$ARM $? $W/e_$ARM.json || finish 23
+  done
+  if [ "$GATE" = ALL ]; then
+    can_run $NEED_Q "stage Q" || finish 40
+    AL=$(step_alarm 7500); say "stage Q (alarm=$AL)"
+    # shellcheck disable=SC2086
+    env PYTHONPATH= $BASE_ENV E4B_PAGED_GRAPHS=0 E4B_SHA=$E4B_T GNF4_SHA=$GNF4_T \
+      perl -e "alarm $AL; exec @ARGV" python $W/sd2_box.py --read-q --windows $Q_WINDOWS --prompt $Q_PROMPT --cont $Q_CONT \
+        --ref-dir $W/work/qref --out $W/q.json > logs/q.log 2>&1
+    stage q $? $W/q.json || finish 23
+  else
+    echo "stage Q skipped: the stop rule (VERIFY_COST_REFUTES without V_NOISY)" | tee -a summary.txt
+  fi
+fi
+say "reduce"
+python $W/sd2_reduce.py --read $W --expect-e4b $E4B_T --expect-gnf4 $GNF4_T --expect-rev $REV --expect-w1 $W/expect_w1.json \
+  --out $W/verdict_read.json 2>&1 | tee -a summary.txt
+[ "${PIPESTATUS[0]}" = 0 ] && [ -s $W/verdict_read.json ] || { say "REDUCER FAILED"; finish 22; }
 finish 0
