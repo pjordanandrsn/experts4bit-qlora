@@ -100,11 +100,13 @@ def pair0_rotation(zo, zv, amax, floor=INFORMATIVE):
 
 
 def _quantiles(v):
-    """[p50, p90, p99, max] of a 1-d tensor, or None when it is empty."""
+    """[p50, p90, p99, max] of a 1-d tensor on any device, or None when it is empty. Computed on the host: the angles
+    live on the GPU in the box, and quantile() refuses a q on another device (sd2-5090-2, rc 23)."""
     import torch
     if not v.numel():
         return None
-    q = torch.quantile(v.double(), torch.tensor([0.5, 0.9, 0.99], dtype=torch.float64)).tolist()
+    v = v.detach().double().cpu()
+    q = torch.quantile(v, torch.tensor([0.5, 0.9, 0.99], dtype=torch.float64)).tolist()
     return [round(x, 6) for x in q] + [round(float(v.max()), 6)]
 
 
@@ -944,10 +946,18 @@ def self_test() -> int:
         bad.append("pair-0 rotation")
     if summ["informative_layer0"] != 2 or summ["floors"]["2^-3"]["cells"] != 2 or summ["floors"]["2^-7"]["per_layer"][0][3] < 0.99:
         bad.append("rotation floors")
+    if torch.cuda.is_available():                     # the box: the same summary on the device the angles live on
+        dev = "cuda"
+        ang_d, inf_d, dr_d = pair0_rotation(zo.to(dev), (zo * torch.exp(torch.tensor(1j))).to(dev),
+                                            torch.tensor([1.0, 1.0, 2.0], device=dev))
+        summ_d = rot_summary([(ang_d.view(1, 3, 1), inf_d.view(1, 3, 1), dr_d.view(1, 3, 1), rel.to(dev))])
+        if summ_d["floors"] != summ["floors"] or summ_d["max_abs_angle_layer0"] != summ["max_abs_angle_layer0"]:
+            bad.append("rotation summary on the GPU")
     if bad:
         print("sd2_box self-test FAILED:", bad)
         return 1
-    print("sd2_box self-test OK (agreement, dlogp, digest, logits tap, verify plan and assembly, median, pair-0 rotation)")
+    print("sd2_box self-test OK (agreement, dlogp, digest, logits tap, verify plan and assembly, median, pair-0 rotation"
+          + (", and its summary on the GPU)" if torch.cuda.is_available() else ")"))
     return 0
 
 
