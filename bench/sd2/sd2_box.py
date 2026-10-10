@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""sd2_box.py -- lane SD2 (e4b#1313), the box side of the CUDA proof `sd2-prove-N` (bench/sd2/PREREG-sd2.md, Amendment 1).
+"""sd2_box.py -- lane SD2 (e4b#1313), the box side of the CUDA proof `sd2-prove-N` (bench/sd2/PREREG-sd2.md, Amendment 1)
+and of the read `sd2-5090-N` (Amendment 3).
 
 **`--prove`** builds the engine as the shipped server builds it (`PagedServeConfig.from_env()` + `build_engine`), with
 `E4B_PAGED_SPEC=eagle3`, `E4B_PAGED_SPEC_K=3` and the pinned head, graphs on. The build under test is the stacked
@@ -20,9 +21,22 @@ integration commit. Then, in this order, it writes `prove.json`:
 - **the transition:** R row 1 speculates alone; R row 2 is admitted mid-flight. Row 1's draft is dropped, the census
   counts it, both finish at their lengths, and after every plain step the device lengths equal the host mirror.
 
-Nothing here is timed: the proof is correctness only, and its numbers are never quoted as speed.
+Nothing in the proof is timed: it is correctness only, and its numbers are never quoted as speed.
 
-**`--self-test`** checks the agreement and Δ log p arithmetic and the prompt digests on CPU.
+**The read** (`sd2-5090-N`, Amendment 3), one process per stage, each the shipped server from the environment:
+- **`--read-v`** (k = 3, graphs on): V0 on rows outside calibration (capture bitwise on R1; the logit gate on R1..R3 and
+  C1..C3 at k = 1..3; mutants a/b/c on R1 and C1; the draft on R4..R15 and C4..C15; the transition R1 then R2). It is
+  written and judged (`sd2_reduce.v0_fails`) before any timing; a failure stops the stage. Then V1 on R row 0's live
+  slot: the T == 1 step's wall twice (an A/A that brackets the k terms) and, per k, its own drafter and spec decoder on
+  the same weights: the verify and the post-verify graph by CUDA events, the whole step by wall; each the median of 64.
+- **`--read-e ARM`** (OFF, ON1 or ON2; graphs on): each workload's 16 rows one request at a time, a warm pass at SHORT,
+  then 3 rounds of SHORT and LONG; P109's slope; the speculative census and the verify buckets' replays per workload.
+- **`--read-q`** (graphs off, spec off): P115 Phase B's `measure_phase` at its bytes (R, rep, chunk, mutant_scale; one
+  window a pass), then ON1 and ON2 by `paged_verify_pass`: teacher-forced verify steps of k + 1 rows through the
+  runner's own `_spec_verify`, scored against R's saved log-probs; then the reported w16 draw.
+
+**`--self-test`** checks the agreement and Δ log p arithmetic, the prompt digests, the verify plan, and the verify
+assembly against a T == 1 pass on a toy causal target (with its stagger and plan mutants), on CPU.
 """
 from __future__ import annotations
 
@@ -244,7 +258,7 @@ class Gate:
         """Row A speculates alone; row B is admitted mid-flight; both finish; lengths equal the mirror after every
         plain step; the census counts one drop."""
         from experts4bit_qlora.engines import paged_runner as pr
-        sched, r, kv = self.parts.scheduler, self.runner, self.kv
+        sched, kv = self.parts.scheduler, self.kv
         before = dict(self.spec.census())
         mismatches = []
         real = pr.PagedModelRunner._run_decode_bucketed
@@ -375,6 +389,441 @@ def prove_main(a) -> int:
     return 0
 
 
+# ===================================================================================== the read (Amendment 3) ==
+
+GATE_ROWS = (1, 2, 3)              # V0's gate rows, R and C-think, outside sd2-prove-2/3's calibration rows (R0, C0)
+DRAFT_ROWS = tuple(range(4, 16))   # V0's draft-gate prompts, R and C-think
+TIMED, WARM = 64, 8                # V1: steps timed per term, and warm-up steps before them
+E_WORKLOADS = {"R": 160, "C-think": 256, "C-nothink": 256}   # LONG per workload (SD1's lengths)
+SHORT, E_REPS = 32, 3
+Q_BUCKETS = (1, 2, 4, 8, 16)       # P110's BUCKETS (a test pins them equal)
+W16 = 16                           # Q's reported w16 draw: windows a pass
+
+
+def median(xs):
+    s = sorted(xs)
+    n = len(s)
+    return (s[n // 2] if n % 2 else 0.5 * (s[n // 2 - 1] + s[n // 2])) if s else None
+
+
+def verify_plan(P, C, k):
+    """The verify steps of a teacher-forced pass scoring positions P .. P + C - 1 of a window. The prefill's last row
+    scores P. Each step (base, use) feeds k + 1 tokens at positions base .. base + k and keeps its first ``use`` rows,
+    which score base + 1 .. base + use; only the last step keeps fewer than k + 1. So every scored position after P
+    comes from a verify of k + 1 rows."""
+    plan, base, end = [], P, P + C - 1
+    while base < end:
+        plan.append((base, min(k + 1, end - base)))
+        base += k + 1
+    return plan
+
+
+def step_ids(w, base, k):
+    """The k + 1 tokens a step at ``base`` feeds: w[base .. base + k], the last repeated past the window's end (those
+    rows are causal after every kept row, and are discarded)."""
+    ids = [int(t) for t in w[base:base + k + 1]]
+    return ids + [ids[-1]] * (k + 1 - len(ids))
+
+
+def assemble_verify(first_lp, step, w, P, C, k):
+    """``first_lp`` [V]: the prefill's log-probs for position P. ``step(ids, base) -> [k + 1, V]``: the log-probs for
+    positions base + 1 .. base + k + 1, given ``ids`` fed at positions base .. base + k, every row accepted. Returns
+    [C, V], row i scoring w[P + i]."""
+    import torch
+    rows = [first_lp.reshape(1, -1)]
+    for base, use in verify_plan(P, C, k):
+        rows.append(step(step_ids(w, base, k), base)[:use])
+    out = torch.cat(rows, 0)
+    if out.shape[0] != C:
+        raise AssertionError(f"the verify pass scored {out.shape[0]} positions, expected {C}")
+    return out
+
+
+class _VerifyOnly:
+    """What ``enable_speculation`` and the prefill need from a spec, for a runner that only verifies (Q's ON passes):
+    k, an aux whose mode the prefill sets (no hooks are installed), and no draft state."""
+
+    def __init__(self, k):
+        import types
+        self.k, self.aux, self.state = k, types.SimpleNamespace(mode=None), {}
+
+    def start(self, rid, slot, tokens):
+        pass
+
+    def drop(self, rid, why):
+        pass
+
+
+def paged_verify_pass(model, w, P, C, k, device, chunk=512):
+    """Q's ON pass for ONE window, P110's ``paged_pass`` construction (padded eager buckets, device grouping) with k
+    alias slots: prefill w[:P], then the verify steps of :func:`verify_plan` through the runner's own ``_spec_verify``,
+    each fed the true tokens, every row accepted (the length moves to base + k + 1). Returns fp32 log-probs [C, V]
+    and the runner's graph stats. The caller runs ``p108_box._release`` after it, as ``measure_phase`` does."""
+    import torch
+
+    import p108_box
+    from experts4bit_qlora.engines import hot_residency as hr
+    from experts4bit_qlora.engines.fp8_paged_kv import Fp8PagedKV
+    from experts4bit_qlora.engines.paged_runner import PagedModelRunner, kv_layers
+    from experts4bit_qlora.serve_paged import _kv_geometry
+    cfg = getattr(model.config, "text_config", None) or model.config
+    hkv, hd = _kv_geometry(model.config)
+    kv = Fp8PagedKV(kv_layers(model, int(cfg.num_hidden_layers)), hkv, hd, batch=1, max_tokens_per_seq=P + C + 16,
+                    device=device, scratch_slots=max(Q_BUCKETS), alias_slots=k)
+    runner = PagedModelRunner(model, kv, device=device)
+    runner.enable_speculation(_VerifyOnly(k))
+    saved = (hr.DEVICE_GROUPING[0], hr.FORCE_SINGLETON_GROUPS[0])
+    last, inner = {}, model.forward
+
+    def keep(*a, **kw):
+        o = inner(*a, **kw)
+        last["logits"] = o.logits
+        return o
+    try:
+        hr.DEVICE_GROUPING[0], hr.FORCE_SINGLETON_GROUPS[0] = True, False
+        status = runner.enable_decode_graphs(Q_BUCKETS, capture=False, verbose=False)
+        if k + 1 not in status:
+            raise RuntimeError(f"no verify bucket of {k + 1} rows: {sorted(status)}")
+        model.forward = keep
+        with p108_box.Attention(False), torch.no_grad():
+            runner.bind(0, 0, [int(t) for t in w[:P]])
+            for s in range(0, P, chunk):
+                runner.run_prefill([(0, s, min(chunk, P - s))])
+            first = last["logits"][0, -1].float().log_softmax(-1)
+
+            def step(ids, base):
+                n = len(ids)
+                runner._spec_verify(0, n, torch.tensor(ids, device=device), torch.arange(base, base + n, device=device))
+                lp = last["logits"][:n, -1].float().log_softmax(-1)
+                kv.set_len_device(0, torch.tensor(base + n, device=device))
+                kv.note_len(0, base + n)
+                return lp
+            out = assemble_verify(first, step, w, P, C, k).cpu()
+        stats = {str(b): dict(v) for b, v in runner.graph_stats.items()}
+        return out, stats
+    finally:
+        model.forward = inner
+        hr.DEVICE_GROUPING[0], hr.FORCE_SINGLETON_GROUPS[0] = saved
+
+
+def _modules():
+    """The package modules this process loaded: the audit's evidence that a lazily imported file stayed off the path."""
+    return sorted(m for m in sys.modules if m.startswith("experts4bit_qlora"))
+
+
+def _build(env_ok, tap=None):
+    """The shipped server's build (``PagedServeConfig.from_env()`` + ``build_engine``), refused unless ``env_ok(cfg)``
+    returns None. V0 needs the logits tap; E and Q build without it."""
+    import torch
+
+    from experts4bit_qlora.engines import paged_runner as pr
+    from experts4bit_qlora.serve_paged import PagedServeConfig, build_engine
+    cfg = PagedServeConfig.from_env()
+    why = env_ok(cfg)
+    if why:
+        raise SystemExit(f"REFUSED: {why}")
+    if tap is not None:
+        install_tap(pr, tap)
+    t0 = time.perf_counter()
+    parts = build_engine(cfg)
+    torch.cuda.synchronize()
+    conf = {k: (list(v) if isinstance(v, tuple) else v) for k, v in vars(cfg).items() if k != "token"}
+    return cfg, parts, conf, round(time.perf_counter() - t0, 2)
+
+
+def read_v_main(a) -> int:
+    """Stage V. V0 on rows outside calibration, written before any timing (the reducer VOIDs the read on any failure),
+    then V1's timed terms on R row 0's live slot."""
+    import torch
+    from safetensors.torch import load_file
+
+    import sd1_eagle3 as ref_mod
+    from experts4bit_qlora.engines.eagle3_draft import Eagle3Drafter
+    from experts4bit_qlora.engines.spec_decode import SpecDecoder
+
+    R, C = load_rows(a.prompts_r), load_rows(a.prompts_c)
+    tap = LogitsTap()
+    cfg, parts, conf, load_s = _build(lambda c: None if (c.spec == "eagle3" and c.spec_k == K_SERVER and c.graphs)
+                                      else f"stage V needs E4B_PAGED_SPEC=eagle3, K={K_SERVER} and graphs (got "
+                                           f"{c.spec}, {c.spec_k}, graphs={c.graphs})", tap)
+    runner = parts.runner
+    gs = parts.info.get("graph_status") or {}
+    rec = {"stage": "V", "load_s": load_s, "e4b_sha": os.environ.get("E4B_SHA"), "gnf4_sha": os.environ.get("GNF4_SHA"),
+           "config": conf,
+           "census": {"graph_status": {str(b): gs.get(b) for b in BUCKETS_WANTED},
+                      "post_graphs": {str(n): v for n, v in (getattr(runner, "spec_graph_status", None) or {}).items()},
+                      "spec_build": parts.info.get("spec")}}
+    gate = Gate(parts, tap)
+    v0 = {"gate_rows": list(GATE_ROWS), "draft_rows": list(DRAFT_ROWS),
+          "capture_bitwise": gate.capture_bitwise(R[GATE_ROWS[0]]), "addressing": {}, "mutants": {}}
+    print("SD2_V0 capture_bitwise " + json.dumps(v0["capture_bitwise"]), flush=True)
+    for name, rows in (("R", R), ("C", C)):
+        for i in GATE_ROWS:
+            for k in (1, 2, 3):
+                res = gate.addressing(rows[i], k, POSITIONS)
+                v0["addressing"][f"{name}{i}_k{k}"] = res
+                print(f"SD2_V0 addressing {name}{i} k={k} " + json.dumps(res), flush=True)
+    for m in ("a", "b", "c"):
+        for name, rows in (("R", R), ("C", C)):
+            undo = mutant(m, gate)
+            try:
+                res = gate.addressing(rows[GATE_ROWS[0]], 3, MUTANT_POSITIONS)
+            finally:
+                undo()
+            v0["mutants"][f"{m}_{name}{GATE_ROWS[0]}"] = res
+            print(f"SD2_V0 mutant {m} {name}{GATE_ROWS[0]} " + json.dumps(res), flush=True)
+    ref = ref_mod.Eagle3Draft(load_file(os.path.join(a.head_dir, "model.safetensors")), device="cuda")
+    v0["draft"] = gate.draft_gate([R[i] for i in DRAFT_ROWS] + [C[i] for i in DRAFT_ROWS], ref)
+    print("SD2_V0 draft " + json.dumps(v0["draft"]), flush=True)
+    v0["transition"] = gate.transition(R[GATE_ROWS[0]], R[GATE_ROWS[1]])
+    print("SD2_V0 transition " + json.dumps(v0["transition"]), flush=True)
+    rec["v0"] = v0
+    import sd2_reduce
+    rec["v0_fails"] = sd2_reduce.v0_fails(rec)                  # rule a2 on these rows; the GPU tests are the runner's
+    json.dump(rec, open(a.out, "w"), indent=1, default=str)     # V0 on disk before any timing
+    if rec["v0_fails"]:
+        print("SD2_V VOID (V0 failed: " + ", ".join(rec["v0_fails"]) + "); no timing", flush=True)
+        return 0
+
+    # ---- V1: the timed terms, on R row 0's live slot at moving positions (timing, not addressing)
+    spec3 = runner.spec
+    d3 = spec3.drafter
+
+    def anchor():
+        rid, _slot = gate.begin(R[0])
+        try:
+            for _ in range(WARM):
+                runner._run_decode_bucketed([rid])
+            walls = []
+            for _ in range(TIMED):
+                t0 = time.perf_counter()
+                runner._run_decode_bucketed([rid])      # its host read synchronizes
+                walls.append(time.perf_counter() - t0)
+        finally:
+            gate.end(rid)
+        return round(median(walls) * 1e3, 4)
+
+    class _Timed:
+        """A post-verify graph whose replays are bracketed by CUDA events."""
+
+        def __init__(self, g, ev):
+            self.g, self.ev = g, ev
+
+        def replay(self):
+            s, e = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+            s.record()
+            self.g.replay()
+            e.record()
+            self.ev.append((s, e))
+
+    v1 = {"timed": TIMED, "warm": WARM, "anchor_a_ms": anchor()}
+    for k in (1, 2, 3):
+        drafter = Eagle3Drafter(d3.w, k=k, max_positions=d3.max_positions, n_heads=d3.nh, n_kv=d3.nkv, head_dim=d3.hd,
+                                rope_theta=d3.theta, eps=d3.eps, device="cuda")      # the same weights, its own cache
+        spec = SpecDecoder(drafter=drafter, aux=spec3.aux, kv=runner.kv, k=k, capacity=spec3.capacity, device="cuda",
+                           verify=runner._spec_verify)
+        try:
+            spec.capture_post(k + 1)
+            post_status = "graph"
+        except Exception as e:                  # noqa: BLE001 -- recorded; the reducer VOIDs an eager post
+            torch.cuda.synchronize()
+            post_status = f"eager: {type(e).__name__}: {str(e)[:160]}"
+        ev_v, ev_p = [], []
+
+        def timed_verify(slot, n, ids, pos, _real=runner._spec_verify, _ev=ev_v):
+            s, e = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+            s.record()
+            tok = _real(slot, n, ids, pos)
+            e.record()
+            _ev.append((s, e))
+            return tok
+        spec.verify = timed_verify
+        if post_status == "graph":
+            spec._post_graphs[k + 1] = _Timed(spec._post_graphs[k + 1], ev_p)
+        runner.spec = spec
+        try:
+            rid, _slot = gate.begin(R[0])               # the prompt completes alone: this spec starts
+            try:
+                for _ in range(WARM):
+                    runner._run_decode_spec(rid)
+                del ev_v[:], ev_p[:]
+                walls = []
+                for _ in range(TIMED):
+                    t0 = time.perf_counter()
+                    runner._run_decode_spec(rid)        # its one host read synchronizes
+                    walls.append(time.perf_counter() - t0)
+                torch.cuda.synchronize()
+            finally:
+                gate.end(rid)
+        finally:
+            runner.spec = spec3
+        full = median(walls) * 1e3
+        ver = median([s.elapsed_time(e) for s, e in ev_v])
+        post = median([s.elapsed_time(e) for s, e in ev_p]) if ev_p else None
+        v1[f"k{k}"] = {"full_ms": round(full, 4), "verify_ms": round(ver, 4),
+                       "post_ms": None if post is None else round(post, 4),
+                       "loop_ms": None if post is None else round(full - ver - post, 4),
+                       "verify_events": len(ev_v), "post_events": len(ev_p), "post_status": post_status,
+                       "census": spec.census()}
+        print(f"SD2_V1 k={k} " + json.dumps(v1[f"k{k}"], default=str), flush=True)
+        del spec, drafter
+    v1["anchor_b_ms"] = anchor()                        # the A/A brackets the k terms
+    print(f"SD2_V1 anchors {v1['anchor_a_ms']} {v1['anchor_b_ms']} ms", flush=True)
+    rec["v1"] = v1
+    rec["max_memory_allocated"] = int(torch.cuda.max_memory_allocated())
+    rec["modules_loaded"] = _modules()
+    json.dump(rec, open(a.out, "w"), indent=1, default=str)
+    print("SD2_V done", flush=True)
+    return 0
+
+
+def read_e_main(a) -> int:
+    """Stage E, one arm in its own process: each workload's 16 rows one request at a time (W1's shape) on the 16-slot
+    server; one warm pass at SHORT, then E_REPS rounds of SHORT and LONG; decode tok/s is P109's slope. The identity
+    tokens are the timed LONG passes' own (whether all three agree is recorded)."""
+    import torch
+
+    import p109_box
+    arm = a.arm.split("-")[0]
+    want = {"OFF": ("off", 0), "ON1": ("eagle3", 1), "ON2": ("eagle3", 2)}[arm]
+    cfg, parts, conf, load_s = _build(
+        lambda c: None if ((c.spec, int(c.spec_k or 0)) == want and c.graphs and c.max_seqs == 16)
+        else f"arm {a.arm} needs spec {want}, graphs and max_seqs 16 (got {c.spec}, {c.spec_k}, graphs={c.graphs}, "
+             f"max_seqs={c.max_seqs})")
+    runner = parts.runner
+    spec = getattr(runner, "spec", None)
+    rows_of = {"R": load_rows(a.prompts_r), "C-think": load_rows(a.prompts_c), "C-nothink": load_rows(a.prompts_cn)}
+
+    def one_pass(rows, n_new):
+        torch.cuda.synchronize()
+        t0 = time.perf_counter()
+        toks = [p109_box.run_pass(parts, torch, [row], n_new)[2][0] for row in rows]   # alone; exact lengths asserted
+        return time.perf_counter() - t0, toks
+
+    def graph_stats():
+        return {str(b): dict(v) for b, v in (getattr(runner, "graph_stats", None) or {}).items()}
+
+    rec = {"stage": "E", "arm": a.arm, "spec": cfg.spec, "k": cfg.spec_k, "load_s": load_s, "config": conf,
+           "e4b_sha": os.environ.get("E4B_SHA"), "gnf4_sha": os.environ.get("GNF4_SHA"),
+           "graph_status": {str(b): s for b, s in (parts.info.get("graph_status") or {}).items()},
+           "post_graphs": {str(n): v for n, v in (getattr(runner, "spec_graph_status", None) or {}).items()},
+           "spec_build": parts.info.get("spec"), "workloads": {}}
+    for w, long_ in E_WORKLOADS.items():
+        rows = rows_of[w]
+        c0 = dict(spec.census()) if spec is not None else None
+        g0 = graph_stats()
+        one_pass(rows, SHORT)                                       # warm, untimed
+        walls, longs = {str(SHORT): [], str(long_): []}, []
+        for _ in range(E_REPS):
+            walls[str(SHORT)].append(one_pass(rows, SHORT)[0])
+            wall, toks = one_pass(rows, long_)
+            walls[str(long_)].append(wall)
+            longs.append(toks)
+        s = p109_box.slope(walls[str(SHORT)], walls[str(long_)], len(rows), SHORT, long_)
+        g1 = graph_stats()
+        wrec = {"walls": walls, **s, "short": SHORT, "long": long_, "rows": len(rows),
+                "graph_stats_delta": {b: {kk: g1[b][kk] - g0.get(b, {}).get(kk, 0) for kk in g1[b]} for b in g1},
+                "identity_tokens": longs[0], "long_reps_identical": all(t == longs[0] for t in longs[1:])}
+        if spec is not None:
+            c1 = dict(spec.census())
+            d = {kk: c1[kk] - c0[kk] for kk in ("prefills", "steps", "drafted", "accepted", "emitted", "short_steps",
+                                                  "dropped_batched", "dropped_end", "post_replays", "post_eager")}
+            d["tau_live"] = d["emitted"] / d["steps"] if d["steps"] else None
+            d["acceptance"] = d["accepted"] / d["drafted"] if d["drafted"] else None
+            wrec["spec_census"] = d
+        rec["workloads"][w] = wrec
+        print(f"SD2_E {a.arm} {w} decode_tok_s={s.get('decode_tok_s')}"
+              + (f" tau_live={wrec['spec_census']['tau_live']}" if spec is not None else ""), flush=True)
+    rec["max_memory_allocated"] = int(torch.cuda.max_memory_allocated())
+    rec["max_memory_reserved"] = int(torch.cuda.max_memory_reserved())
+    rec["modules_loaded"] = _modules()
+    json.dump(rec, open(a.out, "w"), default=str)
+    print(f"SD2_E done {a.arm}", flush=True)
+    return 0
+
+
+def read_q_main(a) -> int:
+    """Stage Q: P115 Phase B's instrument at its bytes (R, rep, chunk, mutant_scale; one window a pass), then ON1 and
+    ON2 at the verify shape against R's saved log-probs, then the reported w16 draw."""
+    import torch
+
+    import p108_box
+    import p115_quality as pq
+    cfg, parts, conf, load_s = _build(
+        lambda c: None if (not c.graphs and c.spec == "off" and c.placement == "all-vram")
+        else f"stage Q builds the default server eager, spec off, all-vram (got graphs={c.graphs}, {c.spec}, "
+             f"{c.placement})")
+    model = parts.runner.model
+    model.eval()
+    P, C = a.prompt, a.cont
+    windows = {t: pq.LOADERS[t](parts.tokenizer, a.windows, P, C) for t in pq.TEXTS}
+    rec = pq.measure_phase(model, windows, phase="off", prompt=P, cont=C, chunk=512, floor_chunk=256, group=1,
+                           device=cfg.device, ref_dir=a.ref_dir, arms=("R", "rep", "chunk", "mutant_scale"))
+    on, on_eng = {}, {}
+    for k in (1, 2):
+        arm = f"ON{k}"
+        on[arm], on_eng[arm] = {t: [] for t in windows}, {t: [] for t in windows}
+        for t, wins in windows.items():
+            for i, w in enumerate(wins):
+                ref = torch.load(os.path.join(a.ref_dir, f"R_{t}_g{i}.pt"))[0]
+                lp, stats = paged_verify_pass(model, w, P, C, k, cfg.device)
+                p108_box._release(cfg.device)          # the pass's pool, once its frame is gone (P108 Amendment 3)
+                nll, am = p108_box._score(lp, w[P:P + C])
+                kl = p108_box._kl(ref, lp)
+                on[arm][t].append({"window": i, "nll": sum(nll) / len(nll),
+                                   "argmax_agree": sum(int(x == y) for x, y in zip(am, ref.argmax(-1).tolist())) / len(am),
+                                   "kl": sum(kl) / len(kl)})
+                on_eng[arm][t].append(stats)
+            print(f"SD2_Q {arm} {t} done ({len(wins)} windows)", flush=True)
+    rec["on"] = {"per_window": on, "graph_stats": on_eng, "plan": {f"ON{k}": verify_plan(P, C, k) for k in (1, 2)},
+                 "windows_sha256": {t: pq.windows_sha(w) for t, w in windows.items()}}
+    w16 = pq.measure_phase(model, windows, phase="off", prompt=P, cont=C, chunk=512, floor_chunk=256, group=W16,
+                           device=cfg.device, ref_dir=a.ref_dir + "-w16", arms=("R",))
+    rec["w16"] = {"per_window": w16["per_window"], "windows_sha256": w16["windows_sha256"], "group": W16}
+    rec.update({"stage": "Q", "load_s": load_s, "config": conf, "e4b_sha": os.environ.get("E4B_SHA"),
+                "gnf4_sha": os.environ.get("GNF4_SHA"), "max_mem_gb": round(torch.cuda.max_memory_allocated() / 2**30, 2),
+                "modules_loaded": _modules()})
+    json.dump(rec, open(a.out, "w"), default=str)
+    print("SD2_Q done", flush=True)
+    return 0
+
+
+def _toy_target(V=11):
+    """A causal toy target for the CPU checks: the log-probs at position p are a fixed function of w[:p]. Returns
+    (lp_at(prefix), make_step(cache, stagger)): a verify step over a position-indexed cache that the step writes
+    before its rows read it, as the alias rows do; ``stagger`` -1 reads one short (mutant a's shape)."""
+    import torch
+
+    def lp_at(prefix):
+        h = torch.zeros(V)
+        for i, t in enumerate(prefix):
+            h[(t * 7 + i * 3) % V] += 1.0 + 0.1 * i
+            h = h.roll(1)
+        return h.log_softmax(-1)
+
+    def make_step(cache, stagger=0):
+        def step(ids, base):
+            for i, t in enumerate(ids):
+                cache[base + i] = t
+            return torch.stack([lp_at([cache[p] for p in range(base + i + 1 + stagger)]) for i in range(len(ids))])
+        return step
+    return lp_at, make_step
+
+
+def verify_assembly_check(P=9, C=13, k=2, stagger=0, plan_shift=0):
+    """The toy check the maintainer asked for: the verify pass's per-position log-probs against a T == 1
+    teacher-forced pass, on a target whose arithmetic is row-count independent. True when they are equal."""
+    import torch
+    lp_at, make_step = _toy_target()
+    w = [(5 * i + 3) % 11 for i in range(P + C)]
+    t1 = torch.stack([lp_at(w[:p]) for p in range(P, P + C)])
+    cache = {p: w[p] for p in range(P)}
+    step = make_step(cache, stagger)
+    shifted = (lambda ids, base: step(step_ids(w, base + plan_shift, k), base)) if plan_shift else step
+    got = assemble_verify(lp_at(w[:P]), shifted, w, P, C, k)
+    return bool(torch.equal(got, t1))
+
+
 def self_test() -> int:
     import torch
     bad = []
@@ -394,10 +843,16 @@ def self_test() -> int:
     tap.hook(None, None, out)
     if tuple(tap.get(3, graphed=False).shape) != (3, 5):
         bad.append("tap")
+    if not verify_assembly_check() or verify_assembly_check(stagger=-1) or verify_assembly_check(plan_shift=1):
+        bad.append("verify assembly")
+    if [use for _b, use in verify_plan(512, 128, 2)][-1:] != [1] or sum(u for _b, u in verify_plan(512, 128, 2)) != 127:
+        bad.append("verify plan")
+    if median([3, 1, 2]) != 2 or median([4, 1, 2, 3]) != 2.5:
+        bad.append("median")
     if bad:
         print("sd2_box self-test FAILED:", bad)
         return 1
-    print("sd2_box self-test OK (agreement, dlogp, digest, logits tap)")
+    print("sd2_box self-test OK (agreement, dlogp, digest, logits tap, verify plan and assembly, median)")
     return 0
 
 
@@ -405,15 +860,29 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--prove", action="store_true")
+    ap.add_argument("--read-v", action="store_true")
+    ap.add_argument("--read-e", dest="arm")
+    ap.add_argument("--read-q", action="store_true")
     ap.add_argument("--prompts-r")
     ap.add_argument("--prompts-c")
+    ap.add_argument("--prompts-cn")
     ap.add_argument("--head-dir")
+    ap.add_argument("--ref-dir")
+    ap.add_argument("--windows", type=int, default=48)
+    ap.add_argument("--prompt", type=int, default=512)
+    ap.add_argument("--cont", type=int, default=128)
     ap.add_argument("--out")
     a = ap.parse_args(argv)
     if a.self_test:
         return self_test()
     if a.prove:
         return prove_main(a)
+    if a.read_v:
+        return read_v_main(a)
+    if a.arm:
+        return read_e_main(a)
+    if a.read_q:
+        return read_q_main(a)
     ap.print_usage()
     return 2
 
