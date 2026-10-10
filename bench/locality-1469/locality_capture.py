@@ -298,7 +298,8 @@ def run_census(a) -> int:
     os.environ.pop("E4B_EXPERT_PROFILE", None)
     model, tok = _load(a)
     hot = hot_sets_from_profile(a.hot_profile, a.hot_per_layer)
-    n_eng = enable_pipelined_residency(model, hot, "cuda")
+    top_k = int((getattr(model.config, "text_config", None) or model.config).num_experts_per_tok)
+    n_eng = enable_pipelined_residency(model, hot, "cuda", k_slots=top_k)   # required (loc-a2000-5: rc 34)
     engines = [m._pipelined for _n, m in model.named_modules() if getattr(m, "_pipelined", None) is not None]
     if not engines:
         raise RuntimeError("enable_pipelined_residency engaged no module")
