@@ -1,0 +1,6 @@
+FAILED tests/test_train_qkv_fuse.py::test_a_fused_state_dict_loads_strict_into_an_unfused_model_bit_for_bit[fp32]
+FAILED tests/test_train_qkv_fuse.py::test_a_fused_state_dict_loads_strict_into_an_unfused_model_bit_for_bit[bf16]
+FAILED tests/test_train_qkv_fuse.py::test_a_resume_into_a_fused_model_round_trips_through_the_views[fp32]
+FAILED tests/test_train_qkv_fuse.py::test_a_resume_into_a_fused_model_round_trips_through_the_views[bf16]
+FAILED tests/test_fast_v4.py::test_gptoss_inside_lora_is_still_skipped - expe...
+5 failed, 416 passed, 2 skipped, 21 warnings in 258.33s (0:04:18)
