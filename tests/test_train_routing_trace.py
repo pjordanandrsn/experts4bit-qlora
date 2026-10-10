@@ -61,15 +61,23 @@ class Layer(torch.nn.Module):
 
 
 class Toy(torch.nn.Module):
-    def __init__(self, n_layers=3):
+    """`reentrant=True` checkpoints the reentrant way, whose training forward runs under no_grad."""
+
+    def __init__(self, n_layers=3, reentrant=False):
         super().__init__()
         self.model = torch.nn.Module()
         self.model.layers = torch.nn.ModuleList([Layer() for _ in range(n_layers)])
+        self.reentrant = reentrant
 
     def forward(self, x):
         h = x
+        if self.reentrant and self.training and torch.is_grad_enabled():
+            h = h.detach().requires_grad_()               # what enable_input_require_grads does for a real model
         for layer in self.model.layers:
-            h = checkpoint(layer, h, use_reentrant=False)  # gradient checkpointing: the router runs again in backward
+            if not self.training:
+                h = layer(h)
+            else:                                         # gradient checkpointing: the router runs again in backward
+                h = checkpoint(layer, h, use_reentrant=self.reentrant)
         return h.square().mean()
 
 
@@ -124,11 +132,31 @@ def test_eval_forward_is_not_recorded_and_forward_only_is_reported():
     torch.manual_seed(0)
     model, rec = Toy(), rr.RoutingRecorder(n_experts=E)
     rec.attach(model)
+    model.eval()
     with torch.no_grad():
-        model(torch.randn(6, H))                           # an eval forward: ignored
+        model(torch.randn(6, H))                           # an eval forward (eval mode, as eval_loss runs it): ignored
+    model.train()
     assert rec.records == {}
     model(torch.randn(6, H))                               # a grad-enabled forward with no backward: forward-only
     assert len(rec.check_fwd_equals_recompute()["no_recompute"]) == 3
+
+
+def test_reentrant_checkpointing_records_the_no_grad_training_forward(tmp_path):
+    """Reentrant checkpointing runs the training forward under no_grad. A recorder that keyed "eval" on grad mode
+    dropped every forward and kept only the recomputes, all under micro-batch -1 (the first A2000 capture was VOID
+    for exactly this). Keyed on the module's eval() mode, the forward is recorded and the trace is complete."""
+    torch.manual_seed(0)
+    model, rec = Toy(reentrant=True), rr.RoutingRecorder(n_experts=E)
+    rec.attach(model)
+    undo = rr.install_backward_labelling(rec)
+    try:
+        _train(model, rec, backward=lambda loss: loss.backward())
+    finally:
+        undo()
+    assert rec.completeness(expect_mb=2) == []
+    assert rec.check_fwd_equals_recompute() == {"differ": [], "no_recompute": []}
+    assert {p for (_s, _m, p, _l) in rec.records} == {"fwd", "recompute"}
+    assert rec.save(str(tmp_path / "t.npz"), {}, expect_mb=2)["verdict"] == "OK"
 
 
 def test_router_output_that_is_not_logits_scores_indices_is_refused():
@@ -295,8 +323,10 @@ def test_run_capture_main_end_to_end_with_a_stub_harness(tmp_path):
         model, _ = stub.load_e4b(None)
         opt = torch.optim.SGD(model.parameters(), lr=1e-3)
         torch.manual_seed(0)
+        model.eval()
         with torch.no_grad():
             model(torch.randn(6, H))                       # an eval forward: ignored by the recorder
+        model.train()
         for _step in range(2):
             for _mb in range(3):
                 model(torch.randn(6, H)).backward()
