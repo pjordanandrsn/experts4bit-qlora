@@ -251,3 +251,35 @@ def test_host_fault_marker_refuses_what_the_launcher_would_not_accept(tmp_path, 
 def test_reboot_evidence_names_both_boot_ids_and_the_uptimes():
     out = bash(f'lane_reboot_evidence "1 123 {BOOT_B} 20.5" "{INITIAL}" 3668').stdout.strip()
     assert out == f"boot_id {BOOT_A} -> {BOOT_B}; uptime 20.5s at lane age 3668s (10000.00s at launch)"
+
+
+def test_command_error_line_carries_the_rc_the_drive_and_the_box(tmp_path):
+    """adertha-agents#209: one line for the receipt's notes; control characters dropped (the launcher cleans it again)."""
+    out = bash(f'lane_write_command_error "{tmp_path}" 3 "lane exit rc=3 without success marker" "$(printf \'OOM\\033[0m here\')"')
+    assert out.returncode == 0, out.stderr
+    line = (tmp_path / "command-error.txt").read_text()
+    assert line == "rc=3; drive: lane exit rc=3 without success marker; box: OOM[0m here\n", repr(line)
+    assert bash(f'lane_write_command_error "{tmp_path / "absent"}" 3 x y').returncode != 0
+
+
+def test_box_error_line_reads_outer_log_first_then_the_newest_log(tmp_path):
+    box = tmp_path / "tc1"
+    (box / "logs").mkdir(parents=True)
+    assert bash(f'printf "[%s]" "$(lane_box_error_line "{box}")"').stdout == "[]"
+    old, new = box / "logs/a.log", box / "logs/b.log"
+    old.write_text("torch.OutOfMemoryError: old\n")
+    new.write_text("step 3\nRuntimeError: newest\nstep 4\n")
+    os.utime(old, (1, 1))
+    assert bash(f'lane_box_error_line "{box}"').stdout == "RuntimeError: newest"
+    (box / "outer.log").write_text("start\ntc1/boxA: arm refused: no wheel\ndone\n")
+    assert bash(f'lane_box_error_line "{box}"').stdout == "tc1/boxA: arm refused: no wheel"
+
+
+def test_tc1_drive_names_its_refusal_in_the_run_dir(tmp_path):
+    """The drive's EXIT trap writes the error line on a refusal and leaves the exit code alone."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("E4B_RENT_", "TC1_"))}
+    env["E4B_RENT_RUN_DIR"] = str(tmp_path)
+    r = subprocess.run(["bash", str(ROOT / "bench/tc1/tc1_drive.sh")], env=env, text=True, capture_output=True, timeout=30)
+    assert r.returncode == 78, (r.returncode, r.stdout, r.stderr)
+    line = (tmp_path / "command-error.txt").read_text().strip()
+    assert line.startswith("rc=78; drive: refusing: E4B_RENT_SSH_HOST is not set"), line

@@ -81,5 +81,28 @@ lane_write_host_fault() {  # run-dir kind evidence -> run-dir/host-fault.json, t
     mv -f "$tmp" "$dir/host-fault.json"
 }
 
+lane_box_error_line() {  # fetched-box-dir -> the last error-looking line of the box's logs (outer.log first, else the newest log)
+  local dir=${1:-} f line=""
+  [ -n "$dir" ] && [ -d "$dir" ] || return 0
+  for f in "$dir/outer.log" $(ls -t "$dir"/logs/*.log 2>/dev/null); do
+    [ -f "$f" ] || continue
+    line=$(grep -aE 'Error|Traceback|[Rr]efus|FAIL|Killed|exited|rc=[1-9]|No space' "$f" 2>/dev/null | tail -n 1)
+    [ -n "$line" ] && break
+  done
+  printf '%s' "$line"
+}
+
+lane_write_command_error() {  # run-dir rc drive-message box-line -> run-dir/command-error.txt, the rental launcher's error line
+  # adertha-agents#209: on a non-zero exit rent.py appends this file's last line to the receipt's notes after
+  # "command exited N" (control characters dropped, classifier phrases defanged, 300 characters at most).
+  local dir=${1:-} rc=${2:-} msg=${3:-} box=${4:-} line tmp
+  [ -n "$dir" ] && [ -d "$dir" ] || return 1
+  line="rc=$rc"
+  [ -n "$msg" ] && line="$line; drive: $msg"
+  [ -n "$box" ] && line="$line; box: $box"
+  tmp="$dir/.command-error.txt.$$"
+  printf '%s\n' "$line" | tr -d '\000-\010\013-\037' > "$tmp" && mv -f "$tmp" "$dir/command-error.txt"
+}
+
 # bash -s -- --probe PID executes the same probe via SSH stdin; production uses /proc.
 if [ "${1:-}" = --probe ]; then lane_proc_snapshot "${2:-}" "${3:-/proc}"; fi

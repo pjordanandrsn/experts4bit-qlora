@@ -1610,6 +1610,57 @@ def test_load_e4b_compresses_after_attn4_and_before_the_lora_wrap(monkeypatch):
     assert arm.c1_control(model, h)["detects"]
 
 
+def test_frozen_base_probe_reads_an_offloaded_stack_from_its_home():
+    """Under e4b's expert offload the base holds 0-element placeholders between forwards, and T21 used to record
+    `experts: IndexError ...` and probe q_proj alone. It now reads the handle's home copy of layer 0 / expert 0, staged to the
+    handle's device and dequantised there: the same bf16 bytes as the resident probe, with a control that detects its flip."""
+    pytest.importorskip("bitsandbytes")
+    import torch
+
+    from experts4bit_qlora.engines.offload import enable_expert_offload
+    arm = _load_arm_module()
+    dev = "cuda" if torch.cuda.is_available() else "cpu"
+    try:
+        model = _tiny_e4b_model(n_layers=2)
+    except Exception as e:
+        pytest.skip(f"bitsandbytes 4-bit quantisation unavailable: {type(e).__name__}: {e}")
+    lora = [model.layers[i].mlp.experts for i in range(2)]
+    if dev == "cuda":
+        for m in lora:
+            torch.nn.Module.to(m, dev)
+    resident = arm.frozen_base_probe(model, "e4b")
+    assert not resident["errors"] and resident["experts_offloaded"] is False, resident
+    for m in lora:
+        enable_expert_offload(m, dev, pin=False)
+    base = lora[0].base
+    assert base.gate_up_proj.numel() == 0 and base.down_absmax.numel() == 0          # evicted: placeholders only
+    off = arm.frozen_base_probe(model, "e4b")
+    assert not off["errors"] and off["experts_offloaded"] is True and off["control_detects_flip"] is True, off
+    for k in ("gate_up", "down"):
+        r, o = resident["slots"][k], off["slots"][k]
+        assert o["sha"] == r["sha"] and o["regime"] == r["regime"] == "nf4/64" and o["n_bytes"] == r["n_bytes"] > 0, (k, r, o)
+        assert o["control_detects_flip"] is True and "offload home" in o["source"], o
+    assert base.gate_up_proj.numel() == 0                                               # the probe staged nothing into the module
+
+
+def test_frozen_base_probe_refuses_a_placeholder_it_cannot_resolve():
+    """A 0-element stack with no offload handle on the wrapper chain is an error row for the slot, never a probe of nothing."""
+    pytest.importorskip("bitsandbytes")
+    import torch
+
+    from experts4bit_qlora.engines.offload import enable_expert_offload
+    arm = _load_arm_module()
+    try:
+        model = _tiny_e4b_model(n_layers=1)
+    except Exception as e:
+        pytest.skip(f"bitsandbytes 4-bit quantisation unavailable: {type(e).__name__}: {e}")
+    enable_expert_offload(model.layers[0].mlp.experts, "cpu", pin=False)
+    del model.layers[0].mlp.experts._offload                                             # the handle is no longer reachable
+    out = arm.frozen_base_probe(model, "e4b")
+    assert "gate_up" not in out["slots"] and any("hold no bytes" in e for e in out["errors"]), out
+    assert "q_proj" in out["slots"] and torch.is_tensor(model.layers[0].mlp.experts.base.gate_up_proj)
+
+
 def test_frozen_base_probe_reads_a_compressed_stack_as_bnbs_nested_path_does():
     """SAME-BYTES with double-quant on both sides: e4b's compressed stack and bitsandbytes' whole-stack Params4bit with
     compress_statistics=True (what a double-quant bnb load holds) dequantise expert 0 to the same bf16 bytes."""

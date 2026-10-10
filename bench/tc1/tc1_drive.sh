@@ -10,7 +10,14 @@
 # TC2 (TC1_FAMILIES=tc2small on TC1_BOX=A; TC1_BOX=B defaults to tc2big) stages the same pieces and forwards the TC1_SMALL_* instrument knobs.
 # TC1_BOX=A (required; TC1's only registered box) or B (lane TC2's box B).   Nothing here creates, destroys or approves compute.
 set -uo pipefail
-say(){ echo "[$(date -u +%FT%TZ)] [tc1_drive] $*"; }
+LAST_SAY=""
+say(){ LAST_SAY="$*"; echo "[$(date -u +%FT%TZ)] [tc1_drive] $*"; }
+# On any non-zero exit the receipt names a reason (adertha-agents#209): the drive's last message and, once the box's artifacts are
+# fetched, the box's last error line. Reporting only: it never changes the exit code.
+drive_exit_note(){ local rc=$? d=${E4B_RENT_RUN_DIR:-}; [ "$rc" = 0 ] && return 0; [ -n "$d" ] && [ -d "$d" ] || return 0
+  if declare -F lane_write_command_error >/dev/null; then lane_write_command_error "$d" "$rc" "$LAST_SAY" "$(lane_box_error_line "$d/tc1")" || true
+  else printf 'rc=%s; drive: %s\n' "$rc" "$LAST_SAY" | tr -d '\000-\010\013-\037' > "$d/command-error.txt" || true; fi; return 0; }   # helper not yet sourced
+trap drive_exit_note EXIT
 for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID TC1_BOX; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set -- run as rent.py --command after a live pre-flight"; exit 78; }
 done
