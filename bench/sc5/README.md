@@ -7,6 +7,12 @@ on its own, and every losing cell is listed below.
 **e4b's out-of-box serving (pip install, no environment) is NF4, and it is not measured here.** The e4b arm is the
 documented int4 serving configuration in the registration's arm table.
 
+**Formats, on which the quality rows depend.**
+- vLLM and SGLang serve the one shared official checkpoint, `Qwen/Qwen3-30B-A3B-GPTQ-Int4` @ `9b534e43` (GPTQ 4-bit
+  g128, Marlin kernels), the 4-bit format SC2 served on both.
+- e4b serves its documented int4 serving configuration: int4-b32 at 4.50 bpw, packed on the box from the same bf16
+  weights, `Qwen/Qwen3-30B-A3B` @ `ad44e777`.
+
 ## Runs
 
 | run | what | outcome | cost |
