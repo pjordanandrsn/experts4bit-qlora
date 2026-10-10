@@ -122,7 +122,8 @@ class StepRunner(Protocol):
         this call (that token is their first output)."""
 
     def run_decode(self, rids: list[int]) -> dict[int, int]:
-        """One token for each rid."""
+        """One token for each rid. A speculative runner (``speculative = True``, ``E4B_PAGED_SPEC``) may return a
+        list of tokens for a rid instead, emitted in order (:meth:`ContinuousScheduler._emit_tokens`)."""
 
     def bind(self, rid: int, slot: int, prompt) -> None:
         """Optional: told when a sequence is admitted to ``slot``. A
@@ -136,6 +137,10 @@ class StepRunner(Protocol):
     # Optional, for ContinuousScheduler(lookahead=True):
     # issue_decode(rids) -> handle   enqueue one token for each rid, without waiting
     # collect_decode(handle) -> {rid: token}   wait for that step; steps are collected in issue order
+    #
+    # Optional, for a speculative runner (``speculative = True``):
+    # decode_budgets({rid: tokens left})   told before each run_decode how many tokens each rid may still emit, so a
+    #                                       verify never runs past a request's length
 
 
 class ContinuousScheduler:
@@ -200,6 +205,15 @@ class ContinuousScheduler:
         self._pending_rids: frozenset = frozenset()
         self._inflight: dict[int, int] = {}     # rid -> tokens issued, not yet collected
         self.lookahead_discarded = 0            # tokens collected for a sequence that had already finished
+        # a speculative runner (E4B_PAGED_SPEC, lane SD2) returns several tokens a step; the ones after the token that
+        # finishes a sequence (a stop id, or its length) are dropped and counted here
+        self.speculative = bool(getattr(runner, "speculative", False))
+        if self.speculative and not callable(getattr(runner, "decode_budgets", None)):
+            raise ValueError("a speculative runner needs decode_budgets: a verify must not run past a request's length")
+        if self.speculative and self.lookahead:
+            raise ValueError("the decode lookahead and a speculative runner do not combine: each speculative step "
+                             "reads its accepted tokens back before the next is planned")
+        self.spec_dropped = 0
 
     # ------------------------------------------------------------ intake --
     def add_request(self, prompt: Sequence[int], max_new_tokens: int = 16,
@@ -314,8 +328,11 @@ class ContinuousScheduler:
             if tr is not None:
                 tr.mark("pf_emit")
         if plan.decode:
-            for rid, tok in self.runner.run_decode(plan.decode).items():
-                self._emit(self.active[rid], tok)
+            if self.speculative:
+                self.runner.decode_budgets({rid: self.active[rid].max_new_tokens - len(self.active[rid].out)
+                                            for rid in plan.decode})
+            for rid, got in self.runner.run_decode(plan.decode).items():
+                self._emit_tokens(self.active[rid], got)
             if tr is not None:
                 tr.mark("dec_emit")
         self._retire()
@@ -421,6 +438,20 @@ class ContinuousScheduler:
         else:
             req.phase = Phase.DECODE
 
+    def _emit_tokens(self, req: Request, got) -> None:
+        """One decode step's output for ``req``: a token, or a speculative runner's list of tokens, emitted in order.
+        The tokens after the one that finishes the sequence are dropped and counted in ``spec_dropped``."""
+        if not isinstance(got, (list, tuple)):
+            self._emit(req, got)
+            return
+        if not got:
+            raise RuntimeError(f"runner returned no token for rid {req.rid}")
+        for i, tok in enumerate(got):
+            self._emit(req, int(tok))
+            if req.phase is Phase.DONE:
+                self.spec_dropped += len(got) - i - 1
+                return
+
     def _retire(self) -> None:
         # under the lookahead a finished sequence keeps its slot while an issued step still carries it
         for rid in [r for r, q in self.active.items()
@@ -476,4 +507,5 @@ class ContinuousScheduler:
                                       if per_stream else None),
             "kv_slots_free": len(self._free_slots),
             **({"lookahead_discarded": self.lookahead_discarded} if self.lookahead else {}),
+            **({"spec_dropped": self.spec_dropped} if self.speculative else {}),
         }
