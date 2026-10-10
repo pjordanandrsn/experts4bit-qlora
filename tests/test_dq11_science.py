@@ -3,6 +3,7 @@
 import copy
 import hashlib
 import importlib.util
+import io
 import json
 import math
 import os
@@ -11,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import time
+from urllib.error import HTTPError
 from urllib.parse import urlparse
 
 import pytest
@@ -23,6 +25,7 @@ LANE = ROOT / "bench/dq11"
 sys.path.insert(0, str(LANE))
 import dq11_common as common  # noqa: E402
 import dq11_bootstrap as bootstrap  # noqa: E402
+import dq11_launch as launch_controller  # noqa: E402
 from dq11_observe import Observer  # noqa: E402
 import dq11_reduce as reducer  # noqa: E402
 from dq11_science_stage import stage  # noqa: E402
@@ -636,6 +639,161 @@ def test_missing_locked_origin_refuses_before_network_or_install(tmp_path, monke
     with pytest.raises(ValueError, match="unregistered wheel origin: " + missing):
         bootstrap.install(tmp_path, tmp_path / "cache")
     assert not (tmp_path / "cache").exists()
+
+
+class WheelResponse(io.BytesIO):
+    def __init__(self, status=206):
+        super().__init__(b"wheel fixture")
+        self.status = status
+
+
+@pytest.mark.parametrize("probe", [False, True])
+def test_shared_fetch_uses_honest_ua_for_probe_and_download(monkeypatch, probe):
+    def open_fixture(request, timeout):
+        assert request.get_header("User-agent") == "dq11-bootstrap/1"
+        assert request.get_header("Range") == ("bytes=0-0" if probe else None)
+        assert timeout == 60
+        return WheelResponse()
+
+    monkeypatch.setattr(bootstrap.urllib.request, "urlopen", open_fixture)
+    with bootstrap.fetch_wheel("https://download-r2.pytorch.org/fixture.whl", probe=probe) as response:
+        assert bootstrap.read_wheel(response, "https://download-r2.pytorch.org/fixture.whl", 1) == b"w"
+
+
+@pytest.mark.parametrize("status", [403, 503, 302])
+def test_fetch_refusal_names_exact_url_and_status(monkeypatch, status):
+    url = "https://download-r2.pytorch.org/fixture.whl"
+
+    def refusal(request, timeout):
+        if status != 302:
+            raise HTTPError(request.full_url, status, "fixture refusal", {}, None)
+        return WheelResponse(status)
+
+    monkeypatch.setattr(bootstrap.urllib.request, "urlopen", refusal)
+    with pytest.raises(bootstrap.WheelFetchError, match=f"URL={url} status={status}"):
+        bootstrap.fetch_wheel(url)
+
+
+def test_installer_uses_shared_fetch(monkeypatch, tmp_path):
+    row = json.loads((LANE / "wheels.json").read_text())["packages"][0]
+    (tmp_path / "wheels.json").write_text(json.dumps({"packages": [row]}))
+
+    def refusal(url, *, probe=False):
+        assert url == row["url"] and not probe
+        raise bootstrap.WheelFetchError(url, 403, "shared opener fixture")
+
+    monkeypatch.setattr(bootstrap, "fetch_wheel", refusal)
+    with pytest.raises(bootstrap.WheelFetchError, match="shared opener fixture"):
+        bootstrap.install(tmp_path, tmp_path / "cache")
+
+
+def launch_fixture(tmp_path, monkeypatch):
+    repo = tmp_path / "source"
+    here, assets = fixture_stage(repo)
+    for name in ("dq11_bootstrap.py", "dq11_launch.py", "wheels.json", "requirements.lock"):
+        shutil.copy(LANE / name, here)
+    names = (
+        "subject.py",
+        "locked_inputs.json",
+        "dq11_bootstrap.py",
+        "dq11_launch.py",
+        "wheels.json",
+        "requirements.lock",
+    )
+    (here / "science.sha256").write_text("".join(common.file_sha(here / name) + "  " + name + "\n" for name in names))
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "-qm",
+            "fixture",
+        ],
+        check=True,
+    )
+    head = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+    subprocess.run(["git", "-C", str(repo), "update-ref", "refs/remotes/origin/main", head], check=True)
+    guard = tmp_path / "guard/tools"
+    guard.mkdir(parents=True)
+    marker = tmp_path / "guard-invoked"
+    (guard / "pod-launch.sh").write_text('#!/bin/bash\nprintf "%s\\n" "$E4B_REPO" "$1" "$2" > "$FIXTURE_MARKER"\n')
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({"heads": {"e4b": head}}))
+    monkeypatch.setenv("ADERTHA_REPO", str(guard.parent))
+    monkeypatch.setenv("DQ11_ASSET_DIR", str(assets))
+    monkeypatch.setenv("FIXTURE_MARKER", str(marker))
+    return repo, manifest, tmp_path / "gate.json", marker
+
+
+@pytest.mark.parametrize("failure,gate_only", [(None, False), ("torch", False), (None, True), ("torch", True)])
+def test_actual_launch_controller_checks_all_urls_before_guard(tmp_path, monkeypatch, failure, gate_only):
+    repo, manifest, output, marker = launch_fixture(tmp_path, monkeypatch)
+    packages = json.loads((LANE / "wheels.json").read_text())["packages"]
+    failing = next(row["url"] for row in packages if row["name"] == "torch")
+    called = []
+
+    def probe(request, timeout):
+        called.append(request.full_url)
+        assert request.get_header("User-agent") == "dq11-bootstrap/1"
+        assert request.get_header("Range") == "bytes=0-0"
+        if failure and request.full_url == failing:
+            raise HTTPError(request.full_url, 403, "fixture refusal", {}, None)
+        return WheelResponse()
+
+    monkeypatch.setattr(bootstrap.urllib.request, "urlopen", probe)
+    if failure:
+        with pytest.raises(ValueError, match="BEFORE quote/rental"):
+            launch_controller.launch(manifest, "fixture approval", output, repository=repo, gate_only=gate_only)
+        assert not marker.exists()
+    else:
+        assert (
+            launch_controller.launch(manifest, "fixture approval", output, repository=repo, gate_only=gate_only) == 0
+        )
+        if gate_only:
+            assert not marker.exists()
+        else:
+            assert marker.read_text().splitlines() == [str(repo), str(manifest), "fixture approval"]
+    assert called == [row["url"] for row in packages]
+    report = json.loads(output.read_text())
+    assert report["count"] == 101 and report["passed"] == (failure is None)
+    assert len(report["results"]) == 101
+    if failure:
+        refused = [row for row in report["results"] if "error" in row]
+        assert len(refused) == 1 and refused[0]["url"] == failing and refused[0]["status"] == 403
+
+
+@pytest.mark.parametrize("mutation", ["dirty", "unmerged", "wrong_manifest", "changed_asset", "output_inside_source"])
+def test_launch_source_refusals_precede_network_and_guard(tmp_path, monkeypatch, mutation):
+    repo, manifest, output, marker = launch_fixture(tmp_path, monkeypatch)
+    if mutation == "dirty":
+        (repo / "dirty").write_text("fixture")
+    elif mutation == "unmerged":
+        subprocess.run(["git", "-C", str(repo), "update-ref", "-d", "refs/remotes/origin/main"], check=True)
+    elif mutation == "wrong_manifest":
+        manifest.write_text(json.dumps({"heads": {"e4b": "0" * 40}}))
+    elif mutation == "changed_asset":
+        # Keep source clean while replacing the external canonical fixture asset.
+        assets = tmp_path / "external-assets"
+        shutil.copytree(repo / "payload", assets)
+        (assets / "tokens.json").write_text("changed")
+        monkeypatch.setenv("DQ11_ASSET_DIR", str(assets))
+    else:
+        output = repo / "gate.json"
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("source refusal must precede network")
+
+    monkeypatch.setattr(bootstrap.urllib.request, "urlopen", forbidden)
+    with pytest.raises(ValueError):
+        launch_controller.launch(manifest, "fixture approval", output, repository=repo)
+    assert not marker.exists() and not output.exists()
 
 
 def test_actual_science_controller_dry_run_with_small_sealed_fixture(tmp_path):

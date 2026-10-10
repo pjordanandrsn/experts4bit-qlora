@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import subprocess
 from urllib.parse import urlparse
+from urllib.error import HTTPError, URLError
 import urllib.request
 import zipfile
 
@@ -15,6 +16,66 @@ from dq11_common import file_sha
 
 ALLOWED_WHEEL_ORIGINS = frozenset({"files.pythonhosted.org", "download.pytorch.org",
                                  "download-r2.pytorch.org", "pypi.nvidia.com"})
+FETCH_USER_AGENT = "dq11-bootstrap/1"
+
+
+class WheelFetchError(RuntimeError):
+    def __init__(self, url, status, detail):
+        self.url, self.status = url, status
+        super().__init__(f"wheel fetch refused: URL={url} status={status}: {detail}")
+
+
+def fetch_wheel(url, *, probe=False):
+    """One opener for pre-rental probes and full hash-checked downloads."""
+    headers = {"User-Agent": FETCH_USER_AGENT}
+    if probe:
+        headers["Range"] = "bytes=0-0"
+    request = urllib.request.Request(url, headers=headers)
+    try:
+        response = urllib.request.urlopen(request, timeout=60)
+    except HTTPError as error:
+        raise WheelFetchError(url, error.code, str(error)) from error
+    except (URLError, OSError) as error:
+        raise WheelFetchError(url, "UNKNOWN", str(error)) from error
+    if not 200 <= response.status < 300:
+        status = response.status
+        response.close()
+        raise WheelFetchError(url, status, "non-2xx response")
+    return response
+
+
+def read_wheel(response, url, size):
+    try:
+        return response.read(size)
+    except (URLError, OSError) as error:
+        raise WheelFetchError(url, response.status, str(error)) from error
+
+
+def preflight_urls(directory):
+    """Read one byte from ALL locked URLs, without installation or compute."""
+    packages = json.loads((directory / "wheels.json").read_text())["packages"]
+    validate_wheel_origins(packages)
+    urls = [line.split(" @ ", 1)[1].split()[0]
+            for line in (directory / "requirements.lock").read_text().splitlines() if " @ " in line]
+    if (len(urls) != 101 or len(packages) != 101 or len(set(urls)) != 101
+            or set(urls) != {row["url"] for row in packages}
+            or any(urlparse(url).scheme != "https" for url in urls)):
+        raise ValueError("pre-rental gate requires all 101 matching HTTPS locked wheel URLs")
+    results = []
+    for row in packages:
+        result = {"name": row["name"], "url": row["url"]}
+        try:
+            with fetch_wheel(row["url"], probe=True) as response:
+                result.update(status=response.status, bytes_read=len(read_wheel(response, row["url"], 1)))
+            if result["bytes_read"] != 1:
+                result["error"] = "empty wheel response"
+        except WheelFetchError as error:
+            result.update(status=error.status, error=str(error))
+        results.append(result)
+    return {"schema": "dq11-wheel-fetch-gate/1", "user_agent": FETCH_USER_AGENT,
+            "method": "GET bytes=0-0; read one byte then close",
+            "wheel_lock_sha256": file_sha(directory / "wheels.json"), "count": len(results),
+            "passed": all("error" not in row for row in results), "results": results}
 
 
 def validate_wheel_origins(wheels, allowed=None):
@@ -37,8 +98,8 @@ def install(directory, cache):
         path = cache / row["filename"]
         if not path.is_file():
             temporary = path.with_suffix(".partial")
-            with urllib.request.urlopen(row["url"], timeout=60) as source, temporary.open("wb") as target:
-                while block := source.read(1 << 20):
+            with fetch_wheel(row["url"]) as source, temporary.open("wb") as target:
+                while block := read_wheel(source, row["url"], 1 << 20):
                     target.write(block)
             temporary.replace(path)
         if file_sha(path) != row["sha256"]:
@@ -79,5 +140,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--directory", type=Path, default=Path.cwd())
     parser.add_argument("--cache", type=Path, default=Path("/root/.cache/dq11-wheels"))
+    parser.add_argument("--preflight", action="store_true", help="probe all locked URLs; never install or rent")
     args = parser.parse_args()
+    if args.preflight:
+        report = preflight_urls(args.directory)
+        print(json.dumps(report, indent=2))
+        raise SystemExit(0 if report["passed"] else 78)
     install(args.directory, args.cache)
