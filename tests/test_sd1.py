@@ -37,13 +37,13 @@ SOURCES = {
 P127R = REPO / "bench" / "p127" / "receipts" / "p127-5090-1"
 
 
-def _head(seed=0, H=16, NH=4, HD=8, NKV=2, V=50, DV=20, I=24):
+def _head(seed=0, H=16, NH=4, HD=8, NKV=2, V=50, DV=20, INTER=24):
     g = torch.Generator().manual_seed(seed)
     r = lambda *s: torch.randn(*s, generator=g)  # noqa: E731
     return {"d2t": torch.randint(0, V - DV, (DV,), generator=g), "embed_tokens.weight": r(V, H), "fc.weight": r(H, 3 * H) / 4,
             "layers.0.hidden_norm.weight": 1 + 0.1 * r(H), "layers.0.input_layernorm.weight": 1 + 0.1 * r(H),
-            "layers.0.mlp.down_proj.weight": r(H, I) / 4, "layers.0.mlp.gate_proj.weight": r(I, H) / 4,
-            "layers.0.mlp.up_proj.weight": r(I, H) / 4, "layers.0.post_attention_layernorm.weight": 1 + 0.1 * r(H),
+            "layers.0.mlp.down_proj.weight": r(H, INTER) / 4, "layers.0.mlp.gate_proj.weight": r(INTER, H) / 4,
+            "layers.0.mlp.up_proj.weight": r(INTER, H) / 4, "layers.0.post_attention_layernorm.weight": 1 + 0.1 * r(H),
             "layers.0.self_attn.k_proj.weight": r(NKV * HD, 2 * H) / 4, "layers.0.self_attn.o_proj.weight": r(H, NH * HD) / 4,
             "layers.0.self_attn.q_proj.weight": r(NH * HD, 2 * H) / 4, "layers.0.self_attn.v_proj.weight": r(NKV * HD, 2 * H) / 4,
             "lm_head.weight": r(DV, H), "norm.weight": 1 + 0.1 * r(H)}, (H, NH, HD, NKV, V)
@@ -114,7 +114,7 @@ def test_the_box_self_tests():
 
 
 def test_the_staged_pin_matches_the_repo():
-    pin = [l.split() for l in (LANE / "staged.sha256").read_text().splitlines() if l and not l.startswith("#")]
+    pin = [line.split() for line in (LANE / "staged.sha256").read_text().splitlines() if line and not line.startswith("#")]
     names = [n for _, n in pin]
     assert sorted(names) == sorted(SOURCES), names
     for want, name in pin:
