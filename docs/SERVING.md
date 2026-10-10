@@ -142,7 +142,7 @@ int4).
     [0.966, 0.970] per 512-token replay;
   - `auto` takes it wherever the installed K19 takes `scatter=` / `gather_div=` and keeps the gather otherwise; `1`
     refuses a kernel package without them; `0` restores the gather and unsort. `prefill_routes.prefill_lean_dispatch`
-    reports the resolved setting;
+    reports the setting (`auto`, `1` or `0`);
   - scope: read on Qwen3-30B-A3B. Other families on the int4 K19 prefill route take it on its bitwise contract (the
     same kernel and tile table), not on a read of their own.
 - `E4B_FUSE_PREFILL_GLUE` accepts `0` or `1`; `E4B_PREFILL_LEAN_DISPATCH` accepts `auto`, `0` or `1`. Anything else is

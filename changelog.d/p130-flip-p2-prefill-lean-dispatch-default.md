@@ -7,6 +7,6 @@
   served first-chunk prefill graph, and ×0.968 [0.966, 0.970] per 512-token replay (1.15 ms of 38.2).
 - **`auto`** takes it wherever the installed K19 takes `scatter=` / `gather_div=`, and keeps the gather on an older
   kernel package. `1` refuses such a package; `0` restores the gather and unsort. `prefill_routes.prefill_lean_dispatch`
-  reports the resolved setting.
+  reports the setting (`auto`, `1` or `0`).
 - Register row `e4b.serve.p130.prefill-lean-dispatch.qwen3.5090.2026-10-10`. Other families on the int4 K19 prefill
   route take it on its bitwise contract, not on a read of their own.
