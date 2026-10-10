@@ -41,7 +41,7 @@ def tensor_sha(tensor, *, values=False):
     tensor = tensor.detach().cpu().contiguous()
     if values and tensor.is_floating_point():
         tensor = tensor.float()
-    return hashlib.sha256(tensor.view(torch.uint8).numpy().tobytes()).hexdigest()
+    return hashlib.sha256(tensor.reshape(-1).view(torch.uint8).numpy().tobytes()).hexdigest()
 
 
 def adapter_slots(model):
