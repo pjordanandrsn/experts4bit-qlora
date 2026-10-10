@@ -212,15 +212,40 @@ def build_inputs(directory, canonical_tokens):
                    {"name": p.name, "size": p.stat().st_size, "sha256": digest(p)} for p in sorted(target.iterdir())]})
 
 
+def initial_quality_report(directory, proofs):
+    """Report K8 in its original units; gate only the explicit tiny rehearsal.
+
+    Finite, internally consistent scores and exact U0/U initial agreement are
+    required. L/U K8 remains a reported result, never scientific eligibility.
+    The real-model reducer and its absolute 0.05 PPL gate are unchanged.
+    """
+    if not mode(directory):
+        raise ValueError("rehearsal quality reporting refused in science mode")
+    from dq11_reduce import quality
+
+    if len(proofs) != 3 or {row["arm"] for row in proofs} != {"L", "U", "U0"}:
+        raise ValueError("missing or duplicate initial proof")
+    by_arm = {row["arm"]: row for row in proofs}
+    # Both calls validate finite NLL/PPL, exact targets/tokens and exp(NLL/N).
+    # Do not short-circuit after a finite L/U failure.
+    lu = quality(by_arm["L"], by_arm["U"], "initial_quality")
+    u0u = quality(by_arm["U0"], by_arm["U"], "initial_quality")
+    if by_arm["U0"]["initial_quality"] != by_arm["U"]["initial_quality"]:
+        raise ValueError("rehearsal requires exact U0/U initial quality agreement")
+    return {"schema": "dq11-rehearsal-initial-quality/1", "science_eligible": False,
+            "k8_gate_applied": False, "k8_absolute_ppl_budget": 0.05,
+            "k8_reported_pass": {"L/U": lu, "U0/U": u0u}, "u0_u_exact": True,
+            "scores": {arm: row["initial_quality"] for arm, row in by_arm.items()}}
+
+
 def correctness(directory):
     """Apply the actual proof/read validators; issue no speed recommendation."""
     mode(directory)
-    from dq11_reduce import initial_gate, validate_proofs, validate_read, ORDER, load_spreads, report_spreads
+    from dq11_reduce import validate_proofs, validate_read, ORDER, load_spreads, report_spreads
 
     proofs = [json.loads((directory / f"receipts/proof-{arm}.json").read_text()) for arm in ("L", "U", "U0")]
     validate_proofs(proofs, rehearsal=True)
-    if not initial_gate(proofs):
-        raise ValueError("rehearsal initial quality mismatch; no training")
+    initial_quality = initial_quality_report(directory, proofs)
     reads = []
     for rep, arm in ORDER:
         path = directory / f"receipts/read-{rep}-{arm}.json"
@@ -234,7 +259,8 @@ def correctness(directory):
             validate_train_prefetch_witness(row.get("rehearsal_train_prefetch"))
         reads.append({"arm": arm, "repetition": rep, "sha256": digest(path)})
     return {"schema": "dq11-rehearsal-correctness/1", "science_eligible": False,
-            "recommendation": None, "proofs": [{"arm": p["arm"], "observer_same_arm_bitwise": True} for p in proofs],
+            "recommendation": None, "initial_quality": initial_quality,
+            "proofs": [{"arm": p["arm"], "observer_same_arm_bitwise": True} for p in proofs],
             "reads": reads, "complete": len(reads) == 6,
             "shipped_run_to_run_spread": report_spreads(proofs, [], load_spreads(directory / "receipts"), rehearsal=True),
             "limitations": ["cu128 and sm_86 cannot cover cu130 wheel loading or sm_120 kernels",

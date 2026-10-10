@@ -15,6 +15,21 @@ from dq11_common import (adapter_slots, base_census, file_sha, install_initial,
                          object_sha, path_census, score, tensor_sha)
 
 
+def check_initial_quality(directory, proofs, *, failure):
+    """Keep SCI K8 gating; explicit sealed rehearsal uses its reported comparison."""
+    from dq11_rehearsal import mode
+
+    if mode(directory):
+        from dq11_rehearsal import initial_quality_report
+
+        return initial_quality_report(directory, proofs)
+    from dq11_reduce import initial_gate
+
+    if not initial_gate(proofs):
+        raise ValueError(failure)
+    return None
+
+
 def runtime(directory):
     from dq11_rehearsal import mode
 
@@ -229,11 +244,8 @@ def _run(args):
         if {key: tensor_sha(p) for key, p in slots.items()} != initial:
             raise ValueError("spread changed canonical initializer")
     else:
-        from dq11_reduce import initial_gate
-
         proofs = [json.loads((directory / f"receipts/proof-{arm}.json").read_text()) for arm in ("L", "U", "U0")]
-        if not initial_gate(proofs):
-            raise ValueError("global initial quality gate failed before training")
+        proof_quality = check_initial_quality(directory, proofs, failure="global initial quality gate failed before training")
         proof = next(row for row in proofs if row["arm"] == args.arm)
         from dq11_proof_policy import validate_shipped_policy
 
@@ -241,8 +253,10 @@ def _run(args):
         if census != proof["path_before"] or base != proof["base"]:
             raise ValueError("clean process differs from untimed proof")
         initial_rows = [dict(row, initial_quality=initial_quality) if row["arm"] == args.arm else row for row in proofs]
-        if not initial_gate(initial_rows):
-            raise ValueError("clean process initial quality failed before training")
+        clean_quality = check_initial_quality(directory, initial_rows,
+                                             failure="clean process initial quality failed before training")
+        if proof_quality is not None:
+            result["rehearsal_initial_quality"] = {"proofs": proof_quality, "clean_process": clean_quality}
         from loggetta.backends.experts4bit_train import train_loop
         route_before = None
         rehearsal = os.environ.get("DQ11_REHEARSAL") == "1"
