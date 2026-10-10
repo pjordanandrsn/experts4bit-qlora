@@ -26,7 +26,11 @@ ALARM=${1:?usage: install.sh <alarm_s> <versions_file> [work_dir]}
 VERSIONS=${2:?usage: install.sh <alarm_s> <versions_file> [work_dir]}
 W=${3:-$PWD}
 SGLANG_PIN=${SGLANG_PIN:-0.5.20}
-SGLANG_TAG_COMMIT=94602c9c2b7cbdb8efd5c52802dac6a1c180089e
+SGLANG_TAG_COMMIT=${SGLANG_TAG_COMMIT:-94602c9c2b7cbdb8efd5c52802dac6a1c180089e}
+# SGLANG_LOCK=<file> (lane SC5): `pip install --require-hashes --no-deps -r <file>` -- the whole closure by sha256,
+# ninja included -- in place of `sglang==$SGLANG_PIN ninja`; pip itself is then not upgraded (nothing unhashed is
+# installed). The lock must pin sglang==$SGLANG_PIN.
+SGLANG_LOCK=${SGLANG_LOCK:-}
 say(){ echo "[$(date -u +%FT%TZ)] sglang-install: $*"; }
 fail(){ echo "SGLANG_INSTALL FAIL: $1"; exit "${2:-10}"; }
 mkdir -p "$W/logs" "$W/sglang-cache/jit" || fail "cannot create $W" 78
@@ -50,11 +54,18 @@ export CUDA_HOME
 # ---- venv + pip under the alarm
 say "venv $VENV (python -m venv, no system site packages)"
 [ -x "$VENV/bin/python" ] || "$PY" -m venv "$VENV" > "$W/logs/venv_sglang.log" 2>&1 || { tail -3 "$W/logs/venv_sglang.log"; fail "python -m venv" 9; }
+if [ -n "$SGLANG_LOCK" ]; then
+  [ -s "$SGLANG_LOCK" ] || fail "SGLANG_LOCK=$SGLANG_LOCK is not a file" 78
+  grep -q "^sglang==$SGLANG_PIN " "$SGLANG_LOCK" || fail "the lock $SGLANG_LOCK does not pin sglang==$SGLANG_PIN" 78
+  say "pip install --require-hashes --no-deps -r $SGLANG_LOCK (alarm ${ALARM}s; log $W/logs/pip_sglang.log)"
+  perl -e "alarm $ALARM; exec @ARGV" "$VENV/bin/python" -m pip install -q --no-input --require-hashes --no-deps -r "$SGLANG_LOCK" > "$W/logs/pip_sglang.log" 2>&1
+else
 say "pip install sglang==$SGLANG_PIN ninja (alarm ${ALARM}s; log $W/logs/pip_sglang.log)"
 # shellcheck disable=SC2086
 perl -e "alarm $ALARM; exec @ARGV" "$VENV/bin/python" -m pip install -q --no-input --prefer-binary --upgrade pip wheel > "$W/logs/pip_sglang.log" 2>&1
 # shellcheck disable=SC2086
 perl -e "alarm $ALARM; exec @ARGV" "$VENV/bin/python" -m pip install -q --no-input --prefer-binary "sglang==$SGLANG_PIN" ninja ${SGLANG_PIP_EXTRA_ARGS:-} >> "$W/logs/pip_sglang.log" 2>&1
+fi
 rc=$?
 if [ $rc -ne 0 ]; then tail -6 "$W/logs/pip_sglang.log"; [ $rc -eq 142 ] && fail "pip alarm (${ALARM}s)" 142; fail "pip (rc=$rc)" 9; fi
 

@@ -8,7 +8,9 @@
 # docs/getting_started/installation/gpu.cuda.inc.md:327 at the tag; the cu129 GitHub wheel needs R575+).
 #
 # usage: install.sh <alarm_seconds> <versions_out> [venv_dir=$PWD/venv-vllm]
-# env:   SC1_VLLM_VERSION=0.30.0  SC1_VLLM_WHEEL=pypi|cu129  SC1_PIP_LOG=<file>  SC1_REQUIRE_CC=12.0 (optional refusal)
+# env:   SC1_VLLM_VERSION=0.30.0  SC1_VLLM_WHEEL=pypi|cu129|lock  SC1_PIP_LOG=<file>  SC1_REQUIRE_CC=12.0 (optional refusal)
+#        SC1_VLLM_LOCK=<file> (with SC1_VLLM_WHEEL=lock: `pip install --require-hashes --no-deps -r <file>`, the whole
+#        closure by sha256 -- lane SC5's bench/sc5/locks/vllm.lock.txt, a PyPI CUDA 13 build like pypi's floor)
 # rc:    0 ok | 1 venv/pip failed | 2 import tripwire failed | 18 driver below the wheel's floor (checked BEFORE pip) |
 #        19 compute capability != SC1_REQUIRE_CC | 20 torch.cuda unavailable after install | 142 alarm
 set -u
@@ -23,6 +25,7 @@ DRV=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | 
 DRV_MAJOR=${DRV%%.*}
 case "$WHEEL" in
   pypi)  FLOOR=580 ;;      # CUDA 13.0 build (torch 2.13.0+cu130)
+  lock)  FLOOR=580 ;;      # SC5: the PyPI closure, frozen by sha256 (torch 2.13.0, CUDA 13)
   cu129) FLOOR=575 ;;      # vllm-<ver>+cu129 GitHub asset + torch cu129 index (CUDA 12.9 minimum driver)
   *) say "unknown SC1_VLLM_WHEEL=$WHEEL (pypi|cu129)"; exit 2 ;;
 esac
@@ -39,6 +42,11 @@ case "$WHEEL" in
   pypi)
     perl -e "alarm $ALARM; exec @ARGV" "$VENV/bin/python" -m pip install -q --no-input --no-cache-dir \
       "vllm==$VER" "huggingface_hub>=0.23" > "$PIPLOG" 2>&1 ;;
+  lock)
+    [ -s "${SC1_VLLM_LOCK:-}" ] || { say "SC1_VLLM_WHEEL=lock needs SC1_VLLM_LOCK=<file>"; exit 1; }
+    grep -q "^vllm==$VER " "$SC1_VLLM_LOCK" || { say "the lock $SC1_VLLM_LOCK does not pin vllm==$VER"; exit 1; }
+    perl -e "alarm $ALARM; exec @ARGV" "$VENV/bin/python" -m pip install -q --no-input --no-cache-dir \
+      --require-hashes --no-deps -r "$SC1_VLLM_LOCK" > "$PIPLOG" 2>&1 ;;
   cu129)
     URL="https://github.com/vllm-project/vllm/releases/download/v$VER/vllm-$VER+cu129-cp38-abi3-manylinux_2_28_x86_64.whl"
     perl -e "alarm $ALARM; exec @ARGV" "$VENV/bin/python" -m pip install -q --no-input --no-cache-dir \
