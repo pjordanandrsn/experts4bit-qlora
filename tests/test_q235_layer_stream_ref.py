@@ -231,3 +231,32 @@ def test_the_qwen3_path_is_byte_identical_to_the_original_assembly(tmp_path):
             assert new[k].dtype == old[k].dtype and new[k].shape == old[k].shape, (i, k)
             assert torch.equal(new[k].view(torch.uint8), old[k].view(torch.uint8)), (i, k)
 
+
+
+def test_compare_sees_a_one_layer_error_on_the_contribution_that_the_state_dilutes(tmp_path):
+    """Known answers: a residual of norm ~100 with per-layer updates of norm ~1; run a flips the sign of layer 2's update only.
+    The state metric at layer 2 reads ||2u|| / ||h|| (about 2 %), the contribution metric reads exactly 2, and every other
+    layer's contribution error is 0 (layer 0 has no stored input)."""
+    import json
+    mask = torch.ones(1, 4, dtype=torch.long)
+    g = torch.Generator().manual_seed(0)
+    h0 = torch.randn(1, 4, 64, generator=g) * 12.5
+    ups = [torch.randn(1, 4, 64, generator=g) * 0.125 for _ in range(3)]
+    b = [h0, h0 + ups[0], h0 + ups[0] + ups[1], h0 + ups[0] + ups[1] + ups[2]]
+    a = [h0, h0 + ups[0], h0 + ups[0] - ups[1], h0 + ups[0] - ups[1] + ups[2]]
+    a_dir, b_dir = tmp_path / "a", tmp_path / "b"
+    a_dir.mkdir()
+    b_dir.mkdir()
+    for i in range(4):
+        torch.save(b[i], b_dir / f"layer{i:03d}.pt")
+        torch.save(a[i], a_dir / f"layer{i:03d}.pt")
+    topk = [torch.tensor([[0, 1]] * 4)] * 4
+    torch.save({"router_topk": topk}, b_dir / "reference.pt")
+    torch.save({"router_topk": topk}, a_dir / "nf4.pt")
+    json.dump({"loss": 1.0}, open(b_dir / "reference.json", "w"))
+    json.dump({"loss": 1.0}, open(a_dir / "nf4.json", "w"))
+    r = _compare_tool().compare(str(a_dir), str(b_dir), mask)
+    u = r["update_rel_err"]
+    assert u[0] is None and u[1] == 0.0 and abs(u[2] - 2.0) < 1e-5 and u[3] < 1e-5, u
+    state = float((2 * ups[1]).norm() / b[2].norm())
+    assert abs(r["rel_err"][2] - state) < 1e-6 and r["rel_err"][2] < 0.05, r["rel_err"]   # the state reads ~2 %: diluted
