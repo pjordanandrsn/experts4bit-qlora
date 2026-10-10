@@ -2,6 +2,8 @@
 """Round-2 decode folds patch structurally, license semantically, and
 fall through off decode shapes."""
 import os
+import pathlib
+import shlex
 import sys
 import types
 
@@ -380,6 +382,25 @@ class NoisyAttn(torch.nn.Module):
     on real values (a zero attention output makes any scale pass)."""
     def forward(self, hidden_states=None, **kw):
         return torch.tanh(hidden_states.float() * 1.7).to(hidden_states.dtype), None
+
+
+def test_sc1_granite_proof_environment_preserves_folds_without_forcing_a_residual_licence(monkeypatch):
+    """Exercise SC1's actual setting against Granite's structure and the real licence helper (CPU kernel stubs)."""
+    from experts4bit_qlora.engines import glue_r2
+    run = (pathlib.Path(__file__).resolve().parents[1] / "bench/sc1/sc1_run.sh").read_text()
+    line = next(line for line in run.splitlines() if line.startswith("GR_ENV="))
+    env = dict(word.split("=", 1) for word in shlex.split(line.split('"')[1]))
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    _stub(monkeypatch, {"resid": 0, "rope": 0})
+    model = torch.nn.Module()
+    model.layer = GraniteMoeShapedDecoderLayer(0.22)
+    assert fuse_t1_glue_r2(model) == (1, 0), "Granite's supported structural fold stays enabled"
+    report = {}
+    assert glue_r2.license_moe_residual(model, [1, 16], report=report) == 0
+    assert report["licensed"] == 0
+    with pytest.raises(RuntimeError, match="vacuous"):
+        glue_r2.license_moe_residual(model, [1, 16], mode="1")
 
 
 def test_granite_shaped_layer_folds_and_matches(monkeypatch):

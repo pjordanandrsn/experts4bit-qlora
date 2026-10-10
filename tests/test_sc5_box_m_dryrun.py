@@ -1,20 +1,14 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
-"""SC5 box M: the WHOLE proof path of bench/sc1/sc1_run.sh (SC1_BOX=M SC1_PROVE=1), run under bash with the heavy steps
-stubbed, must reach PROVED with no command-not-found and no unexpected exit.
+"""SC1 boxes A-M: run each whole SC1_PROVE=1 path under bash with heavy leaves stubbed.
 
-Three SC5 proofs failed on harness defects a dry run catches (2026-10-10): sc5-prove-3 called fetch_common before
-sc1_run.sh defines it (rc 11), SC1's Granite smokes were refused by e4b 0.52.0, and the quiescence gate could not fail.
-This test runs the script's OWN text, relocated from /root/sc1 to a temporary directory, with three stub hooks inserted
-(after box M's sourcing, before the competitor installs, before the proof block):
+The script's own proof dispatch, prove_* functions and per-cell helpers must reach PROVED without command-not-found.
+Three exact hooks install stubs after M's initial sourcing, before comparator installs and before proof dispatch;
+staged box helpers also reinstall them after defining their heavy leaves. Python, downloads, installs, server starts,
+profilers and sampling are fixtures; reducers and model execution are not validated by this control-flow test.
 
-* external commands on PATH: nvidia-smi, python (a venv, pip, every script: each ``--out`` file is written, each
-  self-test passes), curl, perl's alarm wrapper, setsid, df, free, lscpu, nproc, sha256sum, nvcc, pgrep, git, cmake,
-  apt-get;
-* shell functions: fetch, bake, the four installs, the three server starts, gpu_free, quiesce (which writes the record
-  the gate reads) -- the leaves only. sc1_run.sh's proof block, prove_m, m_block, m_cell, m_capacity, the quality
-  commands and every SC1 / SC2 helper run as written.
-
-It runs nothing on a GPU and fetches nothing; what it proves is that the control flow reaches PROVED."""
+Box M retains its detailed SC5 cells and quality receipts, Granite skip and fetch_common failure mutant. Boxes A-L
+exercise their actual Granite smoke commands and each box's additional proof. CI fails if bash >= 4 is unavailable.
+No GPU or network work runs."""
 import importlib.util
 import os
 import pathlib
@@ -41,21 +35,26 @@ STUBS_BIN = {
 esac''',
     "python": r'''case "${1:-}" in
   -m) case "${2:-}" in
-        venv) mkdir -p "$3/bin" && cp "$0" "$3/bin/python" && chmod +x "$3/bin/python"; exit 0;;
+        venv) d=${@: -1}; mkdir -p "$d/bin" && cp "$0" "$d/bin/python" && chmod +x "$d/bin/python"; exit 0;;
         *) exit 0;; esac;;
-  -c) exit 0;;
+  -c) case "${2:-}" in *'print(json.load(open(sys.argv[1]))[sys.argv[2]])'*) printf '%064d\n' 0;; esac; exit 0;;
   -) cat > /dev/null; exit 0;;
   --version) echo "Python 3.12.3"; exit 0;;
 esac
 script=$(basename "${1:-x}")
+printf '%s\n' "$*" >> "$DRY_CALLS"
+if [ -n "${SC1_OUT:-}" ]; then mkdir -p "$(dirname "$SC1_OUT")"; printf '{"dryrun": true}\n' > "$SC1_OUT"; fi
 prev=""
 for a in "$@"; do
-  case "$prev" in --out|--prefill-out|--decode-out) mkdir -p "$(dirname "$a")"; printf '{"summary": {}, "dryrun": true}\n' > "$a";; esac
+  case "$prev" in --out|--prefill-out|--decode-out|--write-prompts)
+    if [ ! -d "$a" ]; then mkdir -p "$(dirname "$a")"; printf '{"summary": {}, "dryrun": true}\n' > "$a"; fi;; esac
   prev=$a
 done
 case " $* " in *" --self-test "*) echo "${script%.py} self-test OK (dryrun)"; exit 0;; esac
 case "$script" in
   sc2_prompts.py) echo "SC2_PROMPTS dryrun";;
+  sc1_prompts.py) echo "PROMPTS dryrun";;
+  sc1g_k8.py) echo "WINDOW dryrun";;
   sc5_driver.py) echo "SC5_RUN {}";;
   sc5_quality.py) echo "SC5_QUALITY dryrun";;
   sc5_e4b_quality.py) echo "SC5_E4B_QUALITY dryrun";;
@@ -80,6 +79,7 @@ exit 0''',
     "git": "exit 0",
     "cmake": "exit 0",
     "apt-get": "exit 0",
+    "nsys": "exit 0",
 }
 
 FUNCTION_STUBS = r'''
@@ -97,7 +97,31 @@ m_sgl_start(){ dry m_sgl_start "$@"; return 0; }
 sglang_server_stop(){ :; }
 gpu_free(){ return 0; }
 quiesce(){ dry quiesce "$1"; printf '{"tag": "%s", "quiesced": true}\n' "$1" > "quiesce_$1.json"; }
+install_llamacpp(){ dry install_llamacpp; OK[llamacpp]=1; LLAMACPP_BIN=$W/llamacpp/bin; mkdir -p "$LLAMACPP_BIN"; cp "$DRY_PY" "$LLAMACPP_BIN/nll_teacher_forced"; }
+install_exl3(){ dry install_exl3; OK[exl3]=1; }
+install_nsys(){ dry install_nsys; OK[nsys]=1; NSYS=nsys; }
+llamacpp_fetch(){ mkdir -p "$3"; printf 'dryrun GGUF\n' > "$3/$2"; }
+fetch_q4km(){ dry fetch_q4km; mkdir -p "$W/gguf"; printf 'dryrun GGUF\n' > "$W/gguf/$GGUF_Q4KM"; }
+fetch_gptoss(){ fetch gptoss "$@"; }
+bake_gptoss(){ bake gptoss; GA_GPTOSS=$W/work_gptoss/nf4.arena; }
+fetch_gptoss_gguf(){ dry fetch_gptoss_gguf; mkdir -p "$W/gguf"; printf 'dryrun GGUF\n' > "$W/gguf/$SC2G_GGUF"; }
+sampler_start(){ dry sampler_start "$@"; }
+sampler_stop(){ dry sampler_stop "$@"; }
+nsys_export(){ dry nsys_export "$@"; : > "$1.sqlite"; }
+e4b_census(){ dry e4b_census "$@"; }
+vllm_census(){ dry vllm_census "$@"; }
+sglang_census(){ dry sglang_census "$@"; }
+llamacpp_census(){ dry llamacpp_census "$@"; }
+llamacpp_down(){ dry llamacpp_down; }
+llamacpp_server_stop(){ dry llamacpp_server_stop; }
+
 '''
+
+SERVER_STARTS = (
+    "llamacpp_up", "sglang_server_start", "e4b_server_start", "vllm_server_start", "sgl_server_start", "ll_server_start",
+    "f_server_start", "h_server_start", "g_e4b_start", "g_vllm_start", "g_sgl_start", "g_ll_start", "k_server_start", "l_server_start",
+)
+FUNCTION_STUBS += "\n".join(f'{name}(){{ dry {name} "$@"; SRV_PID=""; return 0; }}' for name in SERVER_STARTS) + "\n"
 
 HOOKS = [  # (anchor in sc1_run.sh, what replaces it) -- each must occur exactly once
     ("  . $W/sc2_box_e.sh; . $W/sc5_box_m.sh; m_install_e4b || finish 9",
@@ -130,20 +154,28 @@ BASH = _bash4()
 
 
 def test_ci_runs_the_dry_run_rather_than_skipping_it():
-    """The two dry-run tests skip without a bash >= 4 (a developer's macOS /bin/bash is 3.2). In CI that skip would be a
+    """The shell dry-run tests skip without a bash >= 4 (a developer's macOS /bin/bash is 3.2). In CI that skip would be a
     silent pass, so there it is a failure: Linux CI's bash is 5 and must be found."""
     if not (os.environ.get("CI") == "true" or os.environ.get("GITHUB_ACTIONS") == "true"):
         pytest.skip("checked only in CI")
-    assert sys.platform != "win32" and BASH is not None, "CI found no bash >= 4: the box M dry run would be skipped"
+    assert sys.platform != "win32" and BASH is not None, "CI found no bash >= 4: the SC1 proof dry runs would be skipped"
 
 def _stage(w: pathlib.Path, run_text: str) -> None:
     for name, src in _staged_names_and_sources():
         dst = w / name
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src, dst)
+        if name.endswith(".sh") and ("_box_" in name or name == "llamacpp/llamacpp_box.sh"):
+            with dst.open("a") as f:
+                f.write('\n. "' + str(w / 'dryrun_stubs.sh') + '"\n')
     shutil.copyfile(SC1 / "staged.sha256", w / "staged.sha256")     # stages itself; not one of its own entries
     (w / "sc1_run.sh").write_text(run_text)
     (w / "dryrun_stubs.sh").write_text(FUNCTION_STUBS)
+    # Box I's registered full rows are large; tiny fixture files exercise its actual existence/hash gates.
+    ref = w / "sc1g_ref_full"
+    ref.mkdir(exist_ok=True)
+    (ref / "ref_full_conv1.npy").write_bytes(b"dryrun full rows")
+    (w / "sc1g_ref" / "ref_full_shas.json").write_text('{"conv1": "' + "0" * 64 + '"}')
 
 
 def _stub_bin(d: pathlib.Path) -> pathlib.Path:
@@ -152,12 +184,14 @@ def _stub_bin(d: pathlib.Path) -> pathlib.Path:
         p = d / name
         p.write_text("#!/bin/bash\n" + body + "\n")
         p.chmod(p.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    (d / "bash").write_text(f'#!/bin/sh\nexec "{BASH}" "$@"\n')
+    (d / "bash").chmod(0o755)
     shutil.copyfile(d / "python", d / "python3")
     (d / "python3").chmod(0o755)
     return d
 
 
-def _run(tmp_path: pathlib.Path, run_text: str):
+def _run(tmp_path: pathlib.Path, run_text: str, box="M"):
     w = tmp_path / "w"
     w.mkdir()
     text = run_text.replace("/root/sc1", str(w))
@@ -168,10 +202,41 @@ def _run(tmp_path: pathlib.Path, run_text: str):
     stubs = _stub_bin(tmp_path / "bin")
     env = {"PATH": f"{stubs}:{os.environ.get('PATH', '/usr/bin:/bin')}", "HOME": str(tmp_path), "LANG": "C",
            "SC1_RUN_NONCE": "a" * 64, "SC1_RUN_ID": "sc5-dryrun", "SC1_DEADLINE_EPOCH": "4102444800",
-           "SC1_INSTANCE_ID": "0", "SC1_BOX": "M", "E4B_SHA": "0" * 40, "SC1_PROVE": "1", "SC1_QUIESCE_S": "1",
-           "DRY_PY": str(stubs / "python")}
+           "SC1_INSTANCE_ID": "0", "SC1_BOX": box, "E4B_SHA": "0" * 40, "SC1_PROVE": "1", "SC1_QUIESCE_S": "1",
+           "SC1_PROVE_SGLANG_MODEL": "dryrun/model@" + "0" * 40,
+           "DRY_PY": str(stubs / "python"), "DRY_CALLS": str(w / "python_calls.log")}
     out = subprocess.run([BASH, str(w / "sc1_run.sh")], capture_output=True, text=True, env=env, timeout=300)
     return w, out
+
+
+@pytest.mark.parametrize("box", list("ABCDEFGHIJKL"))
+@pytest.mark.skipif(sys.platform == "win32" or BASH is None, reason="the box script needs a POSIX bash >= 4 with executable stubs")
+def test_each_sc1_proof_path_reaches_proved(tmp_path, box):
+    w, out = _run(tmp_path, (SC1 / "sc1_run.sh").read_text(), box)
+    log = out.stdout + out.stderr
+    assert "command not found" not in log, log[-6000:]
+    assert out.returncode == 0, log[-6000:]
+    assert (w / "PROVED").is_file() and (w / ("SC1_SUCCESS." + "a" * 64)).is_file(), log[-6000:]
+    summary = (w / "summary.txt").read_text()
+    assert f"PROVED box={box}" in summary, summary[-3000:]
+    dry = (w / "dryrun.log").read_text()
+    required_starts = {
+        "B": ("llamacpp_up",), "C": ("sglang_server_start",),
+        "D": ("e4b_census", "vllm_census", "sglang_census", "llamacpp_census"),
+        "E": ("e4b_server_start", "vllm_server_start", "sgl_server_start", "ll_server_start"),
+        "F": ("f_server_start",), "G": ("g_e4b_start", "g_vllm_start", "g_sgl_start", "g_ll_start"),
+        "H": ("h_server_start",), "K": ("k_server_start granite_off", "k_server_start granite_on"),
+        "L": tuple(f"l_server_start prove_{arm}" for arm in ("s16", "s32a", "s64c", "s64a")),
+    }
+    for step in required_starts.get(box, ()):
+        assert step in dry, (step, dry)
+    if box == "I":
+        calls = (w / "python_calls.log").read_text()
+        for step in ("sc1g_k8.py", "sc1_vllm_nll.py", "--mode decode", "--prove-a5"):
+            assert step in calls, (step, calls)
+    for b in (1, 16):
+        assert (w / f"smoke_granite_b{b}.json").is_file(), log[-6000:]
+        assert "E4B_FUSE_T1_GLUE_R2=auto" in (w / "logs" / f"run_smoke_granite_b{b}.log").read_text()
 
 
 @pytest.mark.skipif(sys.platform == "win32" or BASH is None, reason="the box script needs a POSIX bash >= 4 with executable stubs")
@@ -208,7 +273,7 @@ def test_the_dry_run_catches_a_proof_that_calls_a_function_defined_after_the_pro
     env = {"PATH": f"{stubs}:{os.environ.get('PATH', '/usr/bin:/bin')}", "HOME": str(tmp_path), "LANG": "C",
            "SC1_RUN_NONCE": "b" * 64, "SC1_RUN_ID": "sc5-dryrun-mutant", "SC1_DEADLINE_EPOCH": "4102444800",
            "SC1_INSTANCE_ID": "0", "SC1_BOX": "M", "E4B_SHA": "0" * 40, "SC1_PROVE": "1", "SC1_QUIESCE_S": "1",
-           "DRY_PY": str(stubs / "python")}
+           "DRY_PY": str(stubs / "python"), "DRY_CALLS": str(w / "python_calls.log")}
     for f in ("PROVED", "summary.txt"):
         (w / f).unlink(missing_ok=True)
     mut = subprocess.run([BASH, str(w / "sc1_run.sh")], capture_output=True, text=True, env=env, timeout=300)
