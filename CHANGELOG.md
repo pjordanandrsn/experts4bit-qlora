@@ -4,6 +4,314 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
+## 0.53.0 — 2026-10-10 — the fused q/k/v training projection on by default, and the grouped_nf4 MoE backward priced in the training estimate
+
+### The fused q/k/v training projection is on by default (P129 DEFAULT_ON)
+
+- **What changes:** `enable_fast_train` now fuses each eligible attention module's q, k and v (NF4 base, LoRA adapters)
+  into one projection by default. The q/k/v bases stay in the model, so `state_dict`, direct projection calls and
+  `disable_fast_train` behave as before.
+- **Where it applies:** Qwen3-MoE attention whose q/k/v are `LoRALinear` around matching NF4 bases. Everything else is
+  unchanged.
+- **Measured** on Qwen3-30B-A3B, on two RTX 5090 hosts, at TC1's field recipe:
+  - step time 0.895–0.906 of the unfused step with fp32 adapters, 0.868–0.884 with bf16;
+  - launches per step −13.9% / −14.6%;
+  - held-out loss within 0.002.
+
+  Claims: `e4b.train.p129.fused-qkv.qwen3.5090.2026-10-10`, `e4b.train.p129.fused-qkv.second-host.5090.2026-10-10`.
+- **Turning it off:** `E4B_TRAIN_FUSE_QKV=0` keeps the three projections, op for op as before.
+  - Benchmarks that train Qwen3-MoE with e4b (e.g. TC1) now measure the fused attention by default; set the knob to
+    compare against the earlier path.
+  - The training estimate prices the fused fp32 absmax (about 24 MB on Qwen3-30B-A3B), and `estimate_env()` reports
+    the knob.
+- **Checkpoints:** a checkpoint saved while fused stores the q/k/v absmax in fp32 rather than nested. It loads bit for
+  bit, with `strict=False` as for any bitsandbytes 4-bit dict.
+
+### Keep DQ11 bootstrap origins consistent with its wheel lock
+
+Admit the NVIDIA package origin already used by the hash-locked CUDA wheels and
+check every committed origin before any download. Mandatory CPU coverage refuses
+missing-origin mutants. DQ11's sibling amendment preserves the first draw's VOID
+evidence and bounds a reviewed replacement within the original aggregate budget.
+
+### SD2 Amendment 1 (#1313): the CUDA proof `sd2-prove-1` -- its target and its harness
+
+- **The target.** `bench/sd2/PREREG-sd2.md` Amendment 1 registers the correctness-only proof of SD2's stacked build on
+  one RTX 5090. The target is integration commit `539a2d26` (main plus build PRs #1553, #1554, #1556, #1558 and
+  #1559 at their reviewed heads), with grouped-nf4-gemm v0.45.0.
+- **What runs.**
+  - the target's own GPU tests;
+  - the census and the capture's bitwise oracle;
+  - V0's addressing gate at k = 1..3 and the three addressing mutants that must fail it;
+  - the draft gate against SD1's reference;
+  - the batching transition on the real target.
+- **The harness.** `bench/sd2/` (`sd2_run.sh`, `sd2_drive.sh`, `sd2_box.py --prove`, `sd2_reduce.py --prove`,
+  `staged.sha256`), `tests/test_sd2.py`, and the dry run `tests/test_sd2_dryrun.py`.
+- **The ceiling** is $1.35, the worst case at the policy caps. The read's harness is Amendment 2's.
+
+### #1469 item 1 census read: expert locality on Qwen3-30B-A3B (bench, receipts and tests only)
+
+- `loc-a4000-1` (one RTX A4000, $0.241) recorded every routed expert id: decode is four prompt kinds × 512 greedy
+  steps, and prefill is 16 wikitext windows. The receipts are in `bench/locality-1469/receipts/loc-a4000-1/`.
+- Distinct experts per layer in a window, mean over layers: decode 42.4 / 53.5 / 63.9 / 73.0 at W = 16 / 32 / 64 /
+  128; prefill 39.0 / 50.8 / 61.6 / 71.9. Churn is 0.612 for decode and 0.519 for prefill. The hot set of 8 per
+  layer serves 12.9 % of decode's routed slots.
+- `tests/test_locality_1469_read.py` checks the npz format and recomputes both committed summaries from the npz.
+
+### Refuse CR line endings in changed text files
+
+The lint job checks added and changed text files against the PR merge base and
+fails on CRLF line endings. CSV files are exempt, preserving the
+existing generated results. The guard reports affected paths without changing
+files or repository attributes.
+
+### SD2 registered (#1313): SD1 Phase 1, an EAGLE-3 speculative decode path in `serve_paged`, measured end to end
+
+- **The registration.** `bench/sd2/PREREG-sd2.md` registers the build and its read on one RTX 5090. It replaces SD1's
+  modelled speedup with measured terms: the verify step at k + 1 rows, the in-engine EAGLE-3 draft, the loop's own cost,
+  and decode tokens per second with speculation on against off.
+- **The prior work it answers.** It cites S2-lite and S3 (2026-08-25), which refuted prompt-lookup speculation at 17–65
+  verify rows on that stack. SD2 measures 2–4 rows first, and stage V can refute the lane on its own.
+- **The quality gate.** P115 Phase B's instrument at the verify shape, against P110's bar.
+- **The build.** Everything is behind `E4B_PAGED_SPEC` (default off) and lands in reviewed PRs. They are smoked together
+  on a short 5090 proof before they merge.
+
+### SC1's controller detects dead lanes by PID identity and records host reboots (bench and tests only)
+
+- `bench/sc1/sc1_drive.sh` adopts `bench/common/lane_liveness.sh`, as the tc1, p127, fam and census drivers did
+  in #1512 and #1517:
+  - the launch returns the box script's PID and its `/proc` identity;
+  - each poll probes that identity rather than counting `bash sc1_run.sh` processes;
+  - a host reboot (boot id changed, or uptime below the lane's age) ends the wait and writes `host-fault.json`, so
+    the launcher's receipt carries the fault.
+- `tests/test_lane_liveness.py` now runs sc1_drive.sh's own poll loop and launch handshake with the other drivers.
+  `tests/test_sc2g_box.py`'s A1 check asserts that no process-name count remains.
+
+### SD1 results: a known gap named (#1313)
+
+- `bench/sd1/RESULTS-sd1.md` now says that SD1's registration did not cite S2-lite and S3, the repository's own
+  verify-step lanes from 2026-08-25. SD1's speedup was priced from batched decode, and SD2 (#1549) measures a
+  verify-shaped step first.
+
+### DQ11 sealed controlled-comparison instrument
+
+Add the reviewed science instrument amendment for DQ11: resolved wheel hashes,
+canonical CPU-built adapter/token seals, fresh proof/read workers, loaded-code
+and executed precision witnesses, and quality-before-decision reduction requiring
+guard teardown. The comparison is against Unsloth in the matched eager full-logits
+configuration; no GPU run, default-Unsloth position, or new measured claim is included.
+
+### P129 Amendment 4 read (#835): GAIN on a second host -- DEFAULT_ON is met for the fused q/k/v training projection
+
+- **The box** (`tc1-5090-150`, one RTX 5090, host-bound, no draw voided for load). `E4B_TRAIN_FUSE_QKV=1` cut launches per step by
+  13.9 % (fp32 adapters) and 14.6 % (bf16).
+  - **Speed:** it stepped at 0.906 and 0.884 of the knob-off time, with device time 0.988.
+  - **Quality:** the step-0 held-out lies inside the fp32-anchored envelope, bitwise the first host's numbers, and held-out at N is
+    within 0.0019.
+- **The decision.** With box 147's GAIN on another host, this meets P129's DEFAULT_ON rule. The default flips in its own change.
+- **Files.** Receipts for `tc1-5090-150` with logs and SHA256SUMS, RESULTS-p129-a4.md, a claims row and the STATUS line.
+
+### SD1 read (#1313): speculative decoding Phase 0 -- PROCEED_EAGLE3 (measured acceptance; modelled speedup)
+
+- **What is measured.** The draft acceptance of the licensed EAGLE-3 head `RedHatAI/Qwen3-30B-A3B-speculator.eagle3`, on
+  `Qwen/Qwen3-30B-A3B` at e4b's shipped default, from the target's captured hidden states. Tokens per verify step at
+  k = 1 are 1.72 on chat with reasoning on, 1.65 with reasoning off, and 1.54 on raw wikitext.
+- **What is modelled.** The B = 1 speedups are priced with P123's verify-cost model, not timed: ×1.23 (chat, reasoning
+  on, k = 2), ×1.18 (chat, reasoning off, k = 1) and ×1.10 (raw text, k = 1). Prompt-lookup drafting reaches ×1.08 on
+  raw text and about ×1.0 on chat.
+- **The verdict.** PROCEED_EAGLE3, re-derived by the maintainer byte for byte. Phase 1, a measured verify path in
+  `serve_paged`, gets its own registration. Every registered prediction held.
+- **The capture path.** It reproduced the served path's tokens exactly (160 of 160).
+- **Spend.** SD1 spent $1.488 over two runs, one a harness error fixed by Amendment 1.
+
+### #1469 census Amendment 1: one rented RTX A4000 instead of the RTX A2000 (bench and tests only)
+
+- No RTX A2000 with at least 12 GB was offered in 3 h; every A2000 listed was the 6 GB card. The census needs
+  about 1.8 GB more GPU memory than calibration used.
+- The RTX A4000 (16 GB) is sm_86 like the A2000, so the census runs the same NF4 host-residency path and kernels.
+  Expert ids are correctness-class data, and no timing is quoted.
+- `locality_run.sh` now expects the A4000 class, and its host-RAM floor is 48 GB, down from 64 (about 15 GB of
+  pinned NF4 experts, plus one checkpoint shard in flight). `staged.sha256` is regenerated, and the README gains the
+  amendment.
+
+### Rental drivers verify the HF token again: `bench/common/token_scope.py` needs no third-party package (#1313)
+
+- **The defect.** The controllers' token-scope check imported `huggingface_hub`, which the Mac mini controller's python
+  lacks. Every check returned "unverified", and every lane launched from there (TC1, P127, FAM, SD1) staged no token and
+  downloaded unauthenticated. That is safe by default, but slower and rate-limited.
+- **The fix.** The check is now one standard-library GET of the Hub's `whoami-v2` endpoint, with the same 20-second
+  deadline, the same read-only rules and the same refuse / unverified outcomes. It never echoes the token or a response
+  body.
+- **The tests.** They fake the network at `urllib`. One proves the check verifies with `huggingface_hub` unimportable. A
+  network failure, a 401 or a non-JSON answer stays "unverified", and stages nothing.
+
+### Draft DQ11 dense adapter fusion headroom registration
+
+DQ11 prospectively drafts the dense adapter fusion question using the shipped
+Loggetta dense NF4/stream path, pinned Unsloth and a within-Unsloth fusion-off
+ablation. Fix quality, work, arithmetic caveats, decisions and budget before
+data. Add a CPU-only box protocol/staging dry run that refuses live execution;
+a reviewed science instrument amendment remains required before any draw.
+
+### Fix streamed dense adapter inference on CPU
+
+Streamed dense adapters reloaded for CPU inference could attempt to create a CUDA
+prefetch stream and crash. Non-CUDA inference now uses the existing synchronous
+staging path. The CUDA prefetch branch is unchanged.
+
+### SD1 registered (#1313): speculative decoding, Phase 0 -- how many tokens a verify step yields on the shipped default
+
+- **What it measures.** One RTX 5090 run measures greedy acceptance on `Qwen/Qwen3-30B-A3B` at e4b's shipped default
+  (e4b `7f044dd9` + grouped-nf4-gemm `d769d502`), by draft length k, for two draft sources:
+  - the licensed EAGLE-3 head `RedHatAI/Qwen3-30B-A3B-speculator.eagle3` (apache-2.0), pinned at `6afc5aa2` by file hash;
+  - prompt-lookup (n-gram) drafting.
+- **The workloads:** raw wikitext completion, and chat with reasoning on and off.
+- **The price.** Each route's B = 1 speedup comes from e4b's own verify-step model: P123's census, 0.151 ms per distinct
+  expert a verify step reads.
+- **The decision**, registered before any data:
+  - an EAGLE-3 serving lane if S ≥ 1.15 on two of three workloads;
+  - otherwise a prompt-lookup lane if S ≥ 1.05 on raw text;
+  - otherwise stop.
+- **The n-gram floor is already computed** from P127's receipts: 1.08× at k = 1 under independent routing.
+- **The draft head is reimplemented in plain PyTorch** (`bench/sd1/sd1_eagle3.py`) and tested against a step-by-step
+  reference. A stubbed dry run (`tests/test_sd1_dryrun.py`) takes the whole box path to success in CI.
+
+### Record loaded adapter paths for future dense comparisons
+
+Add an opt-in bench helper that records adapter storage dtypes and loaded forward
+and attention-binding identities, source hashes and runtime code hashes. CPU
+controls detect replaced forwards. Execution and per-operation precision remain
+explicitly unobserved; existing TC1 harnesses and receipts are unchanged.
+
+### P129 Amendment 4 (#835): DEFAULT_ON's second-host box reruns on current main
+
+`tc1-5090-148` measured nothing. Its container restarted three minutes in, and the driver at the pinned commit counted its own ssh
+shell as the lane, so the box waited until stopped. Main's driver now checks lane identity and host uptime (#1512, #1517).
+
+The rerun pins e4b main and keeps grouped-nf4-gemm at `d1f64ba`. A package-diff audit against box 147's build lists seven changed files,
+all off the Qwen3-30B-A3B training path, and the generator refuses any other. It avoids machines 27708 and 46990. The lane has spent
+$6.653 of $15.
+
+### SC1 Granite proof smokes and all-box dry runs
+
+Use automatic R2 licensing for Granite proof smokes so e4b 0.52.0 preserves supported folds without forcing an empty residual licence. Exercise the full proof dispatch for SC1 boxes A-M with heavy steps stubbed in CPU CI, retaining box M's detailed receipts, Granite skip, missing-Bash failure and undefined-function mutant.
+
+### FAM Gemma-4 (#1362): closed at its proof, with no knob licensable on its NF4 stack
+
+`fam-gemma4-prove-1` (one RTX 5090, $1.13), re-reduced under Amendment 10, reads ON_epi and ON_auto FAIL at proof
+scale, and only on the absolute agreement backstop. Each knob sits inside Gemma-4's own neutral floor (A_f
+0.737–0.766), which is itself below the backstop. Nothing shows the knobs harm Gemma-4, but this instrument cannot
+license them on its NF4 stack. The maintainer closed the family without a reading. Receipts:
+`bench/fam/receipts/fam-gemma4-prove-1/`; claim `e4b.serve.fam.fused-stack-t1.gemma4.5090.2026-10-10`.
+
+### The training estimate prices the grouped_nf4 MoE backward (#1526): estimates rise for grouped_nf4 callers
+
+`estimate_qlora_footprint` now prices the working set of one MoE layer's backward when experts train through the grouped
+kernel (`expert_kernel="grouped_nf4"`). That working set is:
+- the padded LoRA delta, bounded by grouped-nf4-gemm's bucket and pad rules (mirrored here, pinned against the
+  installed package);
+- the fused workspaces;
+- one layer's recompute set.
+
+It is a third branch of the `activations` item's `max()`, beside the loss and the two-layer recompute. Before this, the
+estimate left that working set to callers. On a reduced Qwen3-30B-A3B at 4,096 packed tokens with fp32 adapters, the
+estimate alone was 19% short of the allocated peak (RTX A2000, `bench/issue1526`).
+
+- **Estimates rise** for every `grouped_nf4` setup where the backward branch is the largest: most at long micro-batches
+  and with fp32 adapters. The `reference` kernel is unchanged.
+- **In sample:** the four probe receipts in `bench/issue1526/receipts` are the points the branch was set against.
+  `tests/test_grouped_nf4_backward_estimate.py` pins estimate >= measured on them.
+- **Callers that priced this themselves:** Loggetta 0.5.0 adds its own line as the excess over the `activations` item.
+  Against this estimate that excess is zero, so nothing is counted twice. Its tests expect the line and need its
+  follow-up.
+
+### FAM Amendment 10 (#1362): Gemma-4's per-step glue norms by shape
+
+`fam-gemma4-prove-1` VOIDed on engagement: at T == 12 Gemma-4 called 216 glue norms per decode step against the
+registered 271. The glue fold's 64-row bound sends the per-head q and k norms to their own torch forward once
+sequences × heads passes 64. That is a re-route, not a skip: every norm still runs, and the outputs stay at rounding
+level. The reducer now counts Gemma-4's ON_glue and ON_auto per shape: 216 at T == 12 and 271 at T == 1.
+
+### P129 Amendment 3 read (#835): GAIN; the fused q/k/v training projection stays opt-in until a second host reads it
+
+- **The box** (`tc1-5090-147`, one RTX 5090, host-bound). `E4B_TRAIN_FUSE_QKV=1` cut launches per step by 13.9 % (fp32 adapters)
+  and 14.6 % (bf16 adapters). It stepped at 0.895 and 0.868 of the knob-off time, with device time 0.987.
+- **Quality.** The step-0 held-out lies within the box's fp32-anchored envelope (0.59 of it), and held-out at N is within 0.0007.
+- **The caveat.** Every standing attempt ran above the 6.0 load gate, so the wall ratios were read under contention. They match the
+  first box's on another host (0.896 / 0.879).
+- **Why step 0 moves.** The router's top-8 choice amplifies sub-ulp q/k/v rounding. Pinning the routing removes the shift
+  (`bench/p129/records/a3/routing_step0.json`).
+- **Files.** Receipts for `tc1-5090-146` and `tc1-5090-147` (with logs and SHA256SUMS), a claims row, and a STATUS line.
+
+### SC5 registered (#1478 item 4): same-box serving head-to-head on one RTX 5090 — e4b int4 against vLLM 0.31.0 and SGLang 0.5.21 on Qwen3-30B-A3B (bench and tests only)
+
+- **The question.** Where `serve_paged` leads, matches or trails vLLM and SGLang, at 1, 16 and 64 concurrent requests,
+  in TTFT, TPOT and throughput. Two memory settings: each framework's default, and 65,536 matched KV tokens. Quality is
+  measured against one common bf16 reference.
+- **The e4b arm is "e4b int4 (documented serving configuration)":** SC1's `SPEEDENV` plus `E4B_PAGED_FUSE_QKV=1`. e4b's
+  out-of-box serving is NF4 and is not measured.
+- **Provenance:** the e4b and grouped-nf4-gemm release wheels by sha256, and the competitors' whole closures
+  hash-locked (`bench/sc5/make_locks.sh`, `bench/sc5/locks/`). SC1's vLLM and SGLang installers gain an opt-in lock
+  mode; every other box installs as before.
+- **The box:** SC1 box M (`bench/sc5/sc5_box_m.sh`):
+  - ABBA cold-started blocks over 2 draws × 2 memory settings, closed-loop cells N = 48/160/320;
+  - capacity readouts, a 1 Hz memory sampler, and the quality passes;
+  - a reference phase and a proof. It is wired at every letter-enumerating site.
+- **The rule** (`sc5_reduce.py`): LEADS or TRAILS only when both ABBA pairs clear the bound, 5 % for TPOT and throughput
+  and 10 % for TTFT; every losing cell is listed.
+- **Budget.** Proof $3.12, reference $2.05, reading $5.67 (ceilings); about $6–8 expected.
+
+### Standalone indexed captured-copy receipts
+
+Add an unwired guarded wrapper and pure retained parent evaluator for complete
+indexed captured-copy exports. Retained copy/index/config bytes are independently
+rechecked; kernel and close snapshots remain child-reported observations, with
+runtime, tokenizer, native-read, consumer and launch authority false.
+
+### FAM Mixtral read (#1362): the B=1 fused stack passes on Mixtral-8x7B, resolved at a ×0.90 softmax-scale change
+
+`fam-mixtral-4` (one RTX 5090, $2.59) reads PASS on ON_glue, ON_r2, ON_epi and ON_auto against Mixtral's own neutral
+floor. At reading scale ×0.90 fails every gated cell, so the result is a null read of that size: no effect as large as
+a ×0.90 change of the decode softmax scale. The knobs stay off on Mixtral by default until a speed read (Amendment 5).
+Receipts: `bench/fam/receipts/fam-mixtral-prove-1/`, `fam-mixtral-prove-2/`, `fam-mixtral-3/`, `fam-mixtral-4/`; claim
+`e4b.serve.fam.fused-stack-t1.mixtral.5090.2026-10-09`.
+
+### #1469 census runner: install e4b's [train] extra with transformers 5.16.1 (bench and tests only)
+
+- `loc-a2000-4` refused at its import tripwire (rc 9, $0.014, before the model fetch). The e4b wheel's base
+  dependencies do not include transformers; it lives in the `[train]` extra.
+- The runner now installs `experts4bit-qlora[train]` at the launch commit, with transformers pinned to 5.16.1, the
+  Qwen3 version SC1's runner pins. `staged.sha256` is regenerated, and the shape test asserts the install line.
+
+### P127 read (#1313): the launch-bound glue is cut, bitwise: one request decodes 1.132× as fast
+
+- **The verdict.** FASTER, re-derived by the maintainer from the receipt store byte for byte. On Qwen3-30B-A3B at the
+  shipped default, P127's Phases 1 and 2 decode one request 1.1321× as fast as the stack before #1448 (226 → 256 tok/s,
+  516.7 µs saved per step) and 16 requests 1.0156× as fast (254.4 µs per step).
+  - Phase 1 (#1448) removes three host casts.
+  - Phase 2 is #1472, #1477 and #1482, with grouped-nf4-gemm #526–#530.
+- **Bitwise.** Tokens and per-step logits are identical in every A and B arm. The blindness arm (round-toward-zero
+  router weights) differs at 100 % of logit positions, so the check is live. Memory does not change.
+- **The served path.** The MoE residual is licensed on all 48 layers, with decode graphs at buckets 1–16 on sm_120. That
+  is the 5090 check of #1482.
+- **Scope.** The claim is A to B at `7f044dd9`: Phase 1 + Phase 2, not Phase 2 alone. Later main commits are outside
+  it. No default changes: with grouped-nf4-gemm 0.45.0 or later, the changes are already the default. With 0.44.0 or
+  older, only Phase 1 runs; Phase 2 engages only where the installed grouped-nf4-gemm has #526–#530.
+- **Receipts.** `bench/p127/receipts/` holds the reading and the three proving runs. Lane spend $3.626 of $6.00.
+
+### Guarded indexed pins to captured asset views
+
+Add an unwired component deriving fixed capture pins from the complete guarded tokenizer-assets gate, with eight bracketing index responses, full copy/config joins and terminal cleanup. Runtime, native tokenizer reads and consumer proof remain separate gates.
+
+### Rental drivers record a detected host reboot as the launcher's host-fault marker (bench and tests only)
+
+- When #1512's liveness check reads a reboot, the TC1, P127, FAM and locality drivers write `host-fault.json` into the
+  launcher's run directory: `kind` reboot, both boot IDs and the uptimes as evidence.
+- The launcher (adertha-agents#204) copies it into the receipt, so a run that dies on a host reboot can exclude that
+  machine from the next launch. p127-prove-3 re-bought the host that rebooted under p127-prove-2.
+- `bench/common/lane_liveness.sh` gains `lane_reboot_evidence` and `lane_write_host_fault`. The marker is written
+  atomically, and its JSON survives quotes, backslashes and control characters.
+
 ## 0.52.0 — 2026-10-10 — int4 decode's tile table over 4 programs by default, five fewer kinds of T == 1 launch, and the loss priced as measured
 
 **0.52.0.** With grouped-nf4-gemm 0.45.0 installed, int4 decode builds its tile table over 4 programs by default, and
