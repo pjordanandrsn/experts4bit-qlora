@@ -6,5 +6,6 @@
   mean |Δ log p| of the oracle's token must be at most 0.25 nats. That bound is calibrated on `sd2-prove-2`: the real
   build peaked at 0.037 and the mutants at 1.18 or more.
 - **The old rule stays reproducible.** `--rule a1` re-derives the registered verdict unchanged.
-- **The read checks the gate out of sample.** Its V0 re-runs the three mutants before any timing, and a mutant inside
-  the bound makes the read VOID.
+- **A fresh proof.** `sd2-prove-3`, at the same target and read by rule `a2`, must be PROVED before the builds merge.
+- **The read also checks the gate out of sample.** Its V0 re-runs the three mutants before any timing, and a mutant
+  inside the bound makes the read VOID.

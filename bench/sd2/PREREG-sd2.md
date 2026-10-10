@@ -539,11 +539,18 @@ any timing:
 - each must exceed the bound;
 - a mutant inside the bound makes the read **VOID** before anything is timed.
 
-**No fresh proof is proposed.** The build failed no item of `sd2-prove-2`; what failed was a property of the
-instrument, which the read re-checks on fresh data before it times anything. This is the maintainer's to decide; a fresh
-proof would cost about $0.66 at the same target.
+**A fresh proof: `sd2-prove-3`** (the maintainer's ruling). `sd2-prove-2`'s registered verdict is FAILED. Its
+reading under `a2` is in-sample by construction, because the bound was calibrated on that same receipt. The merge
+condition is PROVED under a rule fixed in advance, so it is registered here, before the run:
+- **The target** is unchanged: the integration commit `539a2d26` and grouped-nf4-gemm v0.45.0.
+- **The harness** is this amendment's merge commit. The runner and the box are unchanged, and the reducer it stages
+  defaults to rule `a2`.
+- **What runs** is everything Amendment 1 registered, mutants (a), (b) and (c) included, read by rule `a2`.
+- **The guard and the ceiling** are Amendment 1b's: 1.25 h and $1.75. The expected cost is about $0.66.
+- **The read-time recheck stays.** The read's V0 still re-runs the three mutants before any timing.
 
 **What follows:**
-- The build PRs merge after this amendment's review, in order and at their proven heads.
+- The build PRs merge, in order and at their proven heads, only after a PROVED from `sd2-prove-3` that the maintainer
+  has re-derived.
 - Amendment 3 then registers the read's harness (stages V, E and Q, the mutants in V0, and the rule above) and pins the
   merged commits. Amendment 1's text calls the read's harness "Amendment 2"; it is now Amendment 3.
