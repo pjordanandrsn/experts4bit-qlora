@@ -20,6 +20,7 @@ import json
 import os
 import platform
 import resource
+import sys
 import time
 
 import torch
@@ -72,21 +73,43 @@ def versions():
     return out
 
 
+EXPERT_STACK_TENSORS = ("gate_up_proj", "down_proj", "gate_up_absmax", "down_absmax")
+
+
 def frozen_hashes(model):
     """sha256 of every frozen tensor in the model's state dict, by name. The expert offload's state-dict hook puts each evicted
-    tensor's host home in place of its 0-element placeholder, so the hashes cover the frozen bytes wherever they live."""
+    tensor's host home in place of its 0-element placeholder, so the hashes cover the frozen bytes wherever they live.
+
+    STRICT (the bands assume the base does not move): a frozen tensor that reads as 0 elements (a placeholder the hook did not
+    replace) or a 4-bit expert stack whose packed storage or absmax is absent from the hashes raises, and the box fails."""
+    from experts4bit_qlora import ExpertsNbit
     trained = {n for n, p in model.named_parameters() if p.requires_grad}
     out = {}
     for n, t in model.state_dict().items():
         if n in trained or not isinstance(t, torch.Tensor) or t.is_meta:
             continue
+        if t.numel() == 0:
+            raise RuntimeError(f"frozen tensor {n} reads as 0 elements: a placeholder, not the frozen bytes")
         h = hashlib.sha256()
         flat = t.detach().reshape(-1)
         step = 1 << 26
         for s in range(0, flat.numel(), step):
             h.update(flat[s:s + step].to("cpu").contiguous().view(torch.uint8).numpy().tobytes())
         out[n] = h.hexdigest()
+    stacks = [n for n, m in model.named_modules() if isinstance(m, ExpertsNbit) and int(getattr(m, "bits", 4)) < 16]
+    missing = [f"{n}.{k}" for n in stacks for k in EXPERT_STACK_TENSORS          # an absmax may be stored double-quantized
+               if not any(h == f"{n}.{k}" or (k.endswith("absmax") and h.startswith(f"{n}.{k}")) for h in out)]
+    if not stacks or missing:
+        raise RuntimeError(f"the frozen hashes miss expert storage: {len(stacks)} 4-bit stacks, missing {missing[:4]}")
     return out
+
+
+def strict_failures(out):
+    """The STRICT checks a box record fails, by name: Amendment 2's rules and the frozen base across both steps. Empty = none."""
+    bad = [k for k, v in (out.get("rules") or {}).items() if v is not True]
+    if "frozen_sha256_after_both_steps_equal" in out and out["frozen_sha256_after_both_steps_equal"] is not True:
+        bad.append("frozen_sha256_after_both_steps_equal")
+    return bad
 
 
 def adapter_params(model):
@@ -318,6 +341,10 @@ def main():
     if "repeat" in out:
         brief["repeat"] = out["repeat"]
     print(json.dumps(brief, default=str))
+    bad = strict_failures(out)
+    if bad:
+        print(f"STRICT FAIL: {', '.join(bad)}", file=sys.stderr)
+        sys.exit(3)
 
 
 if __name__ == "__main__":

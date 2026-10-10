@@ -87,3 +87,41 @@ def test_each_planted_error_changes_its_layer_and_nothing_before_it(tiny, step, 
     clean = step[0]["layer_sha256"]
     assert rec["layer_sha256"][:i] == clean[:i], "a plant must not touch the layers before it"
     assert rec["layer_sha256"][i] != clean[i], f"the {kind} plant was inert at its layer"
+
+
+def _box_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("q235_box", BOX)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_the_frozen_hashes_refuse_a_placeholder_and_a_missing_stack(tiny):
+    """STRICT: the frozen-base hashes cover every 4-bit expert stack's packed storage and absmax, and a frozen tensor that
+    reads as 0 elements (an offload placeholder the state-dict hook did not replace) is an error, never a hash of nothing."""
+    from experts4bit_qlora import load_moe_4bit_streaming
+    box = _box_module()
+    model, _ = load_moe_4bit_streaming(str(tiny / "model"), "cpu", torch.bfloat16, 4, 8, quant_type="nf4")
+    h = box.frozen_hashes(model)
+    stacks = [n for n, m in model.named_modules() if type(m).__name__ in ("Experts4bit", "ExpertsNbit")]
+    assert len(stacks) == 4 and all(f"{n}.{k}" in h for n in stacks for k in box.EXPERT_STACK_TENSORS), sorted(h)[:8]
+    base = model.get_submodule(stacks[1])
+    keep = base.down_absmax
+    base.down_absmax = torch.empty(0)                                   # what an evicted stack holds without its hook
+    with pytest.raises(RuntimeError, match="0 elements"):
+        box.frozen_hashes(model)
+    del base.down_absmax                                                 # gone from the state dict altogether
+    with pytest.raises(RuntimeError, match="miss expert storage"):
+        box.frozen_hashes(model)
+    base.register_buffer("down_absmax", keep)
+    assert box.frozen_hashes(model) == h
+
+
+def test_a_strict_failure_names_itself():
+    box = _box_module()
+    ok = {"rules": {"step0_all_finite": True, "step1_every_A_changed": True}, "frozen_sha256_after_both_steps_equal": True}
+    assert box.strict_failures(ok) == []
+    bad = {"rules": {"step0_all_finite": True, "step1_every_A_changed": False}, "frozen_sha256_after_both_steps_equal": False}
+    assert box.strict_failures(bad) == ["step1_every_A_changed", "frozen_sha256_after_both_steps_equal"]
+    assert box.strict_failures({"repeat": {"loss": 1.0}}) == []          # the repeat runs step 0's forward only
