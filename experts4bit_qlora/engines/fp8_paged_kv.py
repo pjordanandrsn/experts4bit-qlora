@@ -48,9 +48,17 @@ BULK_GROUP_BYTES = 16 << 20
 FUSED_APPEND_MIN_CAPABILITY = (8, 9)
 
 
-def fused_append_unsupported(capability) -> str | None:
+def fused_append_unsupported(capability, vendor: str | None = None) -> str | None:
     """Why the fused KV append cannot run on a device of ``capability`` ((major, minor)), or None if it can or the
-    capability is unknown. Bucketed decode graphs need the fused append, so this is also why they cannot."""
+    capability is unknown. Bucketed decode graphs need the fused append, so this is also why they cannot.
+
+    ``vendor`` (``"nvidia"``, ``"amd"``, or None for the running torch's) is asked FIRST: an AMD capability is a gfx
+    number (MI300X is (9, 4)), which would pass the sm_89 rule below on hardware whose fp8 is FNUZ or absent."""
+    from .._rocm import vendor_of
+
+    if vendor_of(vendor) == "amd":
+        return ("AMD GPU: the fused FP8 KV append (OCP e4m3 through Triton's tl.float8e4nv) is not yet supported on "
+                "AMD; no AMD card has run the suites, and an AMD compute capability is a gfx number, not an sm number")
     if capability is None or tuple(capability) >= FUSED_APPEND_MIN_CAPABILITY:
         return None
     return (f"the fused FP8 KV append casts to e4m3 in Triton, which needs sm_{FUSED_APPEND_MIN_CAPABILITY[0]}"

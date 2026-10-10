@@ -61,9 +61,20 @@ def _triton_version():
         return None
 
 
+def prebind_unsupported() -> str | None:
+    """Why the prebound launch path cannot be used with this torch, or None. It was read against the CUDA launcher only
+    (:data:`SUPPORTED_TRITON` names Triton releases, not backends), so a ROCm build keeps Triton's own launcher."""
+    from .._rocm import rocm_refusal
+
+    return rocm_refusal("the prebound Triton launch path (read against the CUDA launcher only)")
+
+
 def prebind(fn, force: bool = False):
-    """``fn`` wrapped in :class:`Prebound` unless ``E4B_TRITON_PREBIND=0`` (``force`` wraps regardless), when this Triton is supported; else ``fn``."""
+    """``fn`` wrapped in :class:`Prebound` unless ``E4B_TRITON_PREBIND=0`` (``force`` wraps regardless), when this Triton is supported
+    and this is not a ROCm build (:func:`prebind_unsupported`, which ``force`` does not override); else ``fn``."""
     if not (force or prebind_requested()) or triton is None or _triton_version() not in SUPPORTED_TRITON:
+        return fn
+    if prebind_unsupported():
         return fn
     if not isinstance(fn, JITFunction) or not all(hasattr(fn, a) for a in ("params", "used_global_vals", "pre_run_hooks")):
         return fn                                     # e.g. TRITON_INTERPRET=1's InterpretedFunction

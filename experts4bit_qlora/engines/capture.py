@@ -94,8 +94,14 @@ def capture_decode(model, input_ids, max_length: int, warmup: int = 3):
     Returns ``(CapturedDecoder, first_token)``. Raises if capture is not possible
     on this model -- a host sync or data-dependent launch inside the region makes
     ``torch.cuda.graph`` throw, which is the honest signal that the model is not
-    supported rather than something to work around.
+    supported rather than something to work around. On an AMD GPU (a ROCm build of torch) it refuses before capturing:
+    graph capture and replay have not run on AMD.
     """
+    from .._rocm import rocm_refusal
+
+    why = rocm_refusal("capture_decode (CUDA-graph capture of a decode step)")
+    if why:
+        raise RuntimeError(why)
     cache = _static_cache(model, max_length)
     n = input_ids.shape[-1]
     pos = torch.arange(n, device=model.device)
