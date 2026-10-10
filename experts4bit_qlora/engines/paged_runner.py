@@ -513,6 +513,11 @@ class PagedModelRunner(StepRunner):
         buckets = tuple(sorted({int(b) for b in buckets}))
         if not buckets or buckets[0] < 1:
             raise ValueError(f"buckets must be positive, got {buckets}")
+        from .._rocm import rocm_refusal
+
+        why = rocm_refusal("bucketed decode graphs (CUDA-graph capture and replay of Triton launches)")
+        if why:
+            raise RuntimeError(why)
         # SD2: the verify buckets are captured beside the decode buckets; plain steps never pick one (condition 4)
         captured = tuple(sorted(set(buckets) | set(self._verify_buckets)))
         scratch = list(getattr(self.kv, "scratch", ()) or ())
@@ -896,6 +901,7 @@ class PagedModelRunner(StepRunner):
         ``T`` tokens from it (see the module docstring). Refuses with :class:`PrefillGraphRefused` naming the reason:
 
         * no CUDA device;
+        * an AMD GPU (a ROCm build of torch): capture and replay have not run on AMD;
         * ``hot_residency.DEVICE_GROUPING`` off: host grouping syncs inside the forward;
         * a linear-attention (hybrid) model: its per-slot state is mutated by prefill;
         * a capture that raises (a host sync inside the forward invalidates it);
@@ -914,8 +920,12 @@ class PagedModelRunner(StepRunner):
 
         T = int(T)
         why = None
+        from .._rocm import rocm_refusal
+
         if self.device.type != "cuda":
             why = f"needs a CUDA device, not {self.device}"
+        elif amd := rocm_refusal("the prefill graph (CUDA-graph capture of the prefill forward)"):
+            why = amd
         elif T < 1:
             why = f"T must be positive, got {T}"
         elif not hot_residency.DEVICE_GROUPING[0]:

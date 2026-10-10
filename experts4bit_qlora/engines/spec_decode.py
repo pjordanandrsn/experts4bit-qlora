@@ -121,10 +121,13 @@ class SpecDecoder:
     def capture_post(self, n: int, warmup: int = 2) -> None:
         """Capture :meth:`_post` for ``n`` verified rows as a CUDA graph (on scratch state: the inputs are whatever the
         buffers hold, and the draft cache's entries it writes are overwritten by the next real step). It writes the
-        draft's live state, so it refuses while a request speculates."""
+        draft's live state, so it refuses while a request speculates. Off CUDA, and on an AMD GPU (a ROCm build of torch,
+        where capture has not run), nothing is captured and the step runs eagerly."""
+        from .._rocm import rocm_version
+
         if self.state:
             raise RuntimeError("capture_post while a request speculates would overwrite its drafts and draft cache")
-        if self.device.type != "cuda":
+        if self.device.type != "cuda" or rocm_version():
             return
         side = torch.cuda.Stream(self.device)
         side.wait_stream(torch.cuda.current_stream(self.device))
