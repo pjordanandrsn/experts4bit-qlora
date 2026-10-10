@@ -41,6 +41,40 @@ Git exits with the distinct refusal code 20. No host-side manual provisioning
 substitutes for this step. Mandatory CPU fixtures cover a failed installation
 before bootstrap and an installer that reports success without supplying Git.
 
+Every runner alarm (Git, VRAM/egress probes, venv, bootstrap, preparation, proofs
+and reads) uses the minimum of its original phase cap and the time remaining
+until the two-hour guard minus the unchanged 300-second receipt/teardown reserve.
+Nonpositive remaining time refuses before that phase. The staged-pin CPU test
+checks every cap plus reserve against the guard after a conservative 900-second
+installation/startup allowance; simulated-clock fixtures also exercise a long
+installation, exhausted reserve and both probes/Git close to the deadline. This
+is admission and timeout coverage, not evidence that all phases will finish
+within two hours; a timeout or incomplete draw remains VOID.
+
+The cold CPU bootstrap rehearsal downloaded and hash-checked all 101 wheels,
+installed their exact locked versions and both pinned repositories, and completed
+the source-authority seal. Git setup plus bootstrap took 210 seconds on the
+rehearsal host; this CPU diagnostic is not a model/proof/read timing or a promise
+of completion inside the GPU guard. Imports explicitly exercise `dq11_arm`,
+`dq11_prepare`, e4b's `train`, `recipe`, `engines.dense_offload` and
+`engines.chunked_lm_loss`, and Loggetta's `hardware`, `measure`, `dense_policy`,
+`backends.dense`, `dense_train`, `dense_loader` and `experts4bit_train`.
+The L entry refuses at the required CUDA-device check; U/U0 reach Unsloth's
+explicit no-accelerator refusal. With only the hash-locked 571-byte Mistral
+config, the real dense meta description/setup checks and CPU no-GPU admission
+run, while loader/prepare first calls stop at absent checkpoint weights. The
+real shared `train_loop` also completes 40 steps on a clearly synthetic tiny
+CPU model, as dependency coverage only. No registered model weights or
+scientific readings are created by this rehearsal.
+
+`pip check` reports that Loggetta's package metadata requires
+`grouped-nf4-gemm`, which is absent from the registered lock. It remains absent:
+the exercised dense imports/construction/shared loop succeed without it, with
+any optional availability probe reporting absence. This is a known, harmless
+metadata limitation for this exercised dense path, not evidence of GPU
+execution or binding correctness. No dependency/version/URL/hash is added or
+changed; the actual GPU admission, binding proofs and removal checks still bind.
+
 ## Mandatory launch-host gate
 
 `dq11_launch.py` is the required pre-rental controller. It verifies clean merged

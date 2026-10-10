@@ -7,6 +7,7 @@ import io
 import json
 import math
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -490,12 +491,13 @@ def test_observer_cleanup_on_exception():
     assert all("forward" not in module.__dict__ for module in modules.values())
 
 
-def box_fixture(tmp_path, monkeypatch, failure):
+def box_fixture(tmp_path, monkeypatch, failure, *, elapsed=None, guard_seconds=7200):
     """Run the actual shell with clearly synthetic external commands, no GPU/network."""
     work, commands = tmp_path / "work", tmp_path / "bin"
     work.mkdir()
     commands.mkdir()
     shutil.copy(LANE / "dq11_require_git.sh", work)
+    (work / "fixture-clock").write_text("0")
     for name in ("adapter_init.safetensors", "tokens.json"):
         (work / name).write_bytes(b"fixture payload")
     (work / "science.sha256").write_text(sha(b"fixture payload") + "  tokens.json\n")
@@ -511,7 +513,15 @@ if name=='sha256sum':
   h,p=line.split(); assert hashlib.sha256(Path(p).read_bytes()).hexdigest()==h
 elif name=='nvidia-smi':print('NVIDIA GeForce RTX 5090, 32607')
 elif name=='df':print('Filesystem 1024-blocks Used Available Capacity Mounted on\\nfixture 999999999 0 999999999 0% /')
-elif name=='perl':os.execvp(args[3],args[3:])
+elif name=='date':
+ if args==['+%s']:print(Path('fixture-clock').read_text())
+ else:os.execv(os.environ['FIXTURE_REAL_DATE'],[os.environ['FIXTURE_REAL_DATE'],*args])
+elif name=='perl':
+ now=int(Path('fixture-clock').read_text()); left=int(os.environ['TC1_DEADLINE_EPOCH'])-now-300
+ with Path('alarms.jsonl').open('a') as f:f.write(json.dumps({'command':args[3:],'cap':int(args[2]),'left':left})+'\\n')
+ advance=json.loads(os.environ.get('FIXTURE_ELAPSED','{}')).get(args[4] if len(args)>4 else args[3],0)
+ Path('fixture-clock').write_text(str(now+advance))
+ os.execvp(args[3],args[3:])
 elif name=='timeout':os.execvp(args[1],args[1:])
 elif name=='apt-get':sys.exit(5)
 elif args and args[0]=='dq3_vram_probe.py':sys.exit(3 if fail=='vram' else 0)
@@ -526,12 +536,23 @@ elif args and args[0]=='dq11_reduce.py':
  print(json.dumps({'fixture':True,'scientific_evidence':False}))
 """
     )
-    for name in ("sha256sum", "nvidia-smi", "df", "python3", "python3.11", "python", "perl", "timeout", "apt-get"):
+    for name in (
+        "sha256sum",
+        "nvidia-smi",
+        "df",
+        "python3",
+        "python3.11",
+        "python",
+        "perl",
+        "timeout",
+        "apt-get",
+        "date",
+    ):
         p = commands / name
         p.write_text(program)
         p.chmod(0o755)
     if failure == "git":
-        for name in ("bash", "date", "mkdir", "mv", "tee", "tail", "awk", "cat"):
+        for name in ("bash", "mkdir", "mv", "tee", "tail", "awk", "cat"):
             (commands / name).symlink_to(shutil.which(name))
         monkeypatch.setenv("PATH", str(commands))
     else:
@@ -541,7 +562,9 @@ elif args and args[0]=='dq11_reduce.py':
         FIXTURE_FAIL=failure,
         DQ11_W=str(work),
         TC1_RUN_NONCE="fixture-science",
-        TC1_DEADLINE_EPOCH=str(int(time.time()) + (1 if failure == "deadline" else 7200)),
+        TC1_DEADLINE_EPOCH=str(1 if failure == "deadline" else guard_seconds),
+        FIXTURE_REAL_DATE=shutil.which("date", path=os.defpath),
+        FIXTURE_ELAPSED=json.dumps(elapsed or {}),
         E4B_SHA="0" * 40,
     )
     result = subprocess.run(
@@ -570,6 +593,65 @@ def test_actual_box_shell_phase_order_refusals_and_nonce_markers(tmp_path, monke
         assert sum(line.startswith("python dq11_arm.py --kind read") for line in calls.splitlines()) == 6
         assert calls.index("--initial-only") < calls.index("--kind read")
         assert "PROVISIONAL" in result.stdout
+
+
+def test_every_staged_deadline_cap_fits_two_hour_guard_after_install():
+    run = (LANE / "dq11_science_run.sh").read_text()
+    assert (
+        dict(line.split() for line in (LANE / "science.sha256").read_text().splitlines())[
+            sha((LANE / "dq11_science_run.sh").read_bytes())
+        ]
+        == "dq11_science_run.sh"
+    )
+    assert "for two hours" in (LANE / "DQ11-AMENDMENT-3.md").read_text()
+    reserve = int(re.search(r"TC1_DEADLINE_EPOCH - \$\(date \+%s\) - (\d+)", run)[1])
+    assert reserve == 300
+    caps = [int(n) for n in re.findall(r"^budget_cap (\d+)$", run, re.M)]
+    caps += [int(n) for n in re.findall(r'^\s*phase (?:(?:"[^"\n]+")|(?:[\w-]+)) (\d+) ', run, re.M)]
+    assert sorted(caps) == [60, 120, 120, 240, 900, 900, 1800, 1800]
+    # P109 pattern: each cap + fetch/teardown margin must fit even after
+    # a conservative 900 s install/startup allowance, versus 210 s observed CPU.
+    assert all(cap + reserve <= 2 * 3600 - 900 for cap in caps)
+    alarms = re.findall(r"^perl -e 'alarm shift; exec @ARGV' (\S+)", run, re.M)
+    alarms += re.findall(r"^  perl -e 'alarm shift; exec @ARGV' (\S+)", run, re.M)
+    assert alarms == ['"$PHASE_CAP"'] * 4
+    assert 'budget_cap "$requested"' in run
+    assert '[ "$left" -ge "$requested" ] || PHASE_CAP=$left' in run
+
+
+@pytest.mark.parametrize("bootstrap_elapsed,expected_rc", [(210, 0), (1800, 0), (6400, 0), (6500, 11)])
+def test_actual_runner_clamps_all_alarms_after_install_and_preserves_reserve(
+    tmp_path, monkeypatch, bootstrap_elapsed, expected_rc
+):
+    result, work, calls = box_fixture(
+        tmp_path,
+        monkeypatch,
+        "none",
+        elapsed={
+            "dq11_require_git.sh": 240,
+            "dq3_vram_probe.py": 120,
+            "dq3_egress_probe.py": 60,
+            "dq11_bootstrap.py": bootstrap_elapsed,
+        },
+    )
+    assert result.returncode == expected_rc, result.stdout + result.stderr
+    alarms = [json.loads(line) for line in (work / "alarms.jsonl").read_text().splitlines()]
+    assert all(0 < row["cap"] <= row["left"] for row in alarms)
+    assert alarms[0]["cap"] == 240
+    if bootstrap_elapsed == 6400:
+        assert next(row for row in alarms if "dq11_prepare.py" in row["command"])["cap"] == 80
+    if bootstrap_elapsed == 6500:
+        assert "dq11_prepare.py" not in calls and "--kind read" not in calls
+    assert (work / "TC1_SUCCESS.fixture-science").exists() == (expected_rc == 0)
+
+
+@pytest.mark.parametrize("guard_seconds,caps", [(310, [10, 10, 10]), (360, [60, 60, 60])])
+def test_actual_runner_clamps_git_and_both_probes_near_deadline(tmp_path, monkeypatch, guard_seconds, caps):
+    result, work, _ = box_fixture(tmp_path, monkeypatch, "none", guard_seconds=guard_seconds)
+    assert result.returncode == 0, result.stdout + result.stderr
+    alarms = [json.loads(line) for line in (work / "alarms.jsonl").read_text().splitlines()]
+    assert [row["cap"] for row in alarms[:3]] == caps
+    assert all(0 < row["cap"] <= row["left"] for row in alarms)
 
 
 @pytest.mark.parametrize("installer", ["fails", "false_success", "supplies_git"])
