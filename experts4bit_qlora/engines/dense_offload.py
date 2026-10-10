@@ -372,6 +372,9 @@ class _DenseOffload:
         Prefetch is PERFECT here, unlike for experts: the next layer's weight set
         is known without routing, so there is no speculation and no miss except a
         cold start."""
+        if self.device.type != "cuda":
+            self.stage()
+            return
         cls = type(self)
         if not self.staged:
             if _stats_enabled():
