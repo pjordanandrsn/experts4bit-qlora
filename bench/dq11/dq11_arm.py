@@ -16,6 +16,9 @@ from dq11_common import (adapter_slots, base_census, file_sha, install_initial,
 
 
 def runtime(directory):
+    from dq11_rehearsal import mode
+
+    mode(directory)
     if sys.version_info[:2] != (3, 11):
         raise ValueError("DQ11 requires Python 3.11")
     wheels = json.loads((directory / "wheels.json").read_text())["packages"]
@@ -49,7 +52,11 @@ def prepare(directory, arm):
     torch.manual_seed(3407)
     if not torch.cuda.is_available() or torch.cuda.device_count() != 1:
         raise ValueError("DQ11 requires exactly one CUDA device")
-    if torch.cuda.get_device_name() != "NVIDIA GeForce RTX 5090":
+    if os.environ.get("DQ11_REHEARSAL") == "1":
+        from dq11_rehearsal import require_hardware
+
+        require_hardware(directory)
+    elif torch.cuda.get_device_name() != "NVIDIA GeForce RTX 5090":
         raise ValueError("unregistered GPU")
     snapshot = directory / "hf-cache/model"
     workload = Workload(seq_len=2048, micro_batch=1, grad_accum=1, steps=40,
@@ -65,7 +72,12 @@ def prepare(directory, arm):
         from loggetta.dense_policy import validate_plan
 
         validate_plan(actual)
-        prepared = dense_train.prepare(actual)
+        if os.environ.get("DQ11_REHEARSAL") == "1":
+            from dq11_rehearsal import prepare_log
+
+            prepared = prepare_log(directory, actual, dense_train.prepare)
+        else:
+            prepared = dense_train.prepare(actual)
         model, trainable = prepared.model, prepared.trainable
         report = {"plan": asdict(actual), "engaged": prepared.report}
     else:
@@ -215,6 +227,9 @@ def run(args):
     if runtime(directory) != versions:
         raise ValueError("runtime changed during execution")
     result["process_seconds"] = time.perf_counter() - started
+    if os.environ.get("DQ11_REHEARSAL") == "1":
+        result.update(schema="dq11-rehearsal-arm/1", science_eligible=False,
+                      rehearsal="A2000 cu128 tiny random Mistral; correctness only")
     return result
 
 

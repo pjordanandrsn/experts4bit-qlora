@@ -1,5 +1,9 @@
 #!/bin/bash
 # Real box instrument; TC1 nonce/receipt lifecycle, no provider creation or unguarded replacement draw.
+if [ "${DQ11_REHEARSAL:-}" = 1 ]; then
+  exec python3 "$(dirname "$0")/dq11_rehearsal.py" run
+fi
+case "${DQ11_REHEARSAL:-}${DQ11_REHEARSAL_TINY_MODEL:-}" in "") ;; *) exit 78;; esac
 set -uo pipefail
 W=${DQ11_W:-/root/tc1}; cd "$W" || exit 9
 NONCE=${TC1_RUN_NONCE:?}

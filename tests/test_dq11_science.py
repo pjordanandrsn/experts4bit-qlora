@@ -538,7 +538,7 @@ def test_observer_cleanup_on_exception():
     assert all("forward" not in module.__dict__ for module in modules.values())
 
 
-def box_fixture(tmp_path, monkeypatch, failure, *, elapsed=None, guard_seconds=7200):
+def box_fixture(tmp_path, monkeypatch, failure, *, elapsed=None, guard_seconds=7200, runner=None):
     """Run the actual shell with clearly synthetic external commands, no GPU/network."""
     work, commands = tmp_path / "work", tmp_path / "bin"
     work.mkdir()
@@ -555,6 +555,7 @@ def box_fixture(tmp_path, monkeypatch, failure, *, elapsed=None, guard_seconds=7
 from pathlib import Path
 name=Path(sys.argv[0]).name; args=sys.argv[1:]; fail=os.environ['FIXTURE_FAIL']
 with Path('calls.txt').open('a') as f:f.write(name+' '+' '.join(args)+'\\n')
+with Path('environment-trace.jsonl').open('a') as f:f.write(json.dumps({'command':[name,*args],'env':dict(os.environ)},sort_keys=True)+'\\n')
 if name=='sha256sum':
  for line in Path(args[1]).read_text().splitlines():
   h,p=line.split(); assert hashlib.sha256(Path(p).read_bytes()).hexdigest()==h
@@ -604,8 +605,10 @@ elif args and args[0]=='dq11_reduce.py':
         monkeypatch.setenv("PATH", str(commands))
     else:
         monkeypatch.setenv("PATH", str(commands) + os.pathsep + os.environ["PATH"])
+    # Compare full subprocess environments in a hermetic fixture; do not write
+    # ambient credentials or unrelated developer settings to trace files.
     env = dict(
-        os.environ,
+        {key: os.environ[key] for key in ("PATH", "LANG", "LC_ALL", "TZ") if key in os.environ},
         FIXTURE_FAIL=failure,
         DQ11_W=str(work),
         TC1_RUN_NONCE="fixture-science",
@@ -615,7 +618,7 @@ elif args and args[0]=='dq11_reduce.py':
         E4B_SHA="0" * 40,
     )
     result = subprocess.run(
-        ["bash", str(LANE / "dq11_science_run.sh")], env=env, capture_output=True, text=True, timeout=30
+        ["bash", str(runner or LANE / "dq11_science_run.sh")], env=env, capture_output=True, text=True, timeout=30
     )
     return result, work, (work / "calls.txt").read_text()
 
@@ -1027,3 +1030,156 @@ def test_actual_science_controller_dry_run_with_small_sealed_fixture(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     assert "DRYRUN stage" in result.stdout and "bash dq11_science_run.sh" in result.stdout
     assert "adapter_init.safetensors tokens.json science.sha256" in result.stdout
+
+
+@pytest.mark.parametrize("failure", ["none", "git", "vram", "egress", "proof", "initial", "deadline"])
+def test_unset_rehearsal_executes_identical_science_commands_and_environment(tmp_path, monkeypatch, failure):
+    for key in tuple(os.environ):
+        if key.startswith("DQ11_REHEARSAL"):
+            monkeypatch.delenv(key)
+    original = tmp_path / "sealed-science.sh"
+    original.write_bytes(
+        subprocess.check_output(
+            [
+                "git",
+                "-C",
+                str(ROOT),
+                "show",
+                "858e7f6956f56d6b489deb93a0526be61cf61c0a:bench/dq11/dq11_science_run.sh",
+            ]
+        )
+    )
+    traces = []
+    outcomes = []
+    for label, runner in (("sealed", original), ("current", LANE / "dq11_science_run.sh")):
+        run_dir = tmp_path / label
+        run_dir.mkdir()
+        # Restore a common incoming PATH before each run; box_fixture adds its stubs.
+        monkeypatch.setenv("PATH", os.defpath)
+        result, work, calls = box_fixture(run_dir, monkeypatch, failure, runner=runner)
+        raw = (work / "environment-trace.jsonl").read_text()
+        traces.append(raw.replace(str(run_dir), "<fixture-root>"))
+        outcomes.append((result.returncode, calls.replace(str(run_dir), "<fixture-root>")))
+    assert traces[0] == traces[1]
+    assert outcomes[0] == outcomes[1]
+
+
+def test_rehearsal_model_override_is_refused_without_explicit_mode(tmp_path, monkeypatch):
+    import dq11_rehearsal as rehearsal
+
+    for key in tuple(os.environ):
+        if key.startswith("DQ11_REHEARSAL"):
+            monkeypatch.delenv(key)
+    assert rehearsal.mode(tmp_path) is False
+    monkeypatch.setenv("DQ11_REHEARSAL_TINY_MODEL", "1")
+    with pytest.raises(ValueError, match="refused in science mode"):
+        rehearsal.mode(tmp_path)
+    result = subprocess.run(["bash", str(LANE / "dq11_science_run.sh")], capture_output=True, timeout=5)
+    assert result.returncode == 78
+
+
+def test_rehearsal_receipts_are_void_in_science_reducer():
+    proofs, reads, _ = fixture_receipts()
+    for row in proofs + reads:
+        row.update(schema="dq11-rehearsal-arm/1", science_eligible=False)
+    result = reducer.reduce(proofs, reads)
+    assert result["verdict"] == "VOID" and "rehearsal" in result["reason"]
+    assert result["recommendation"] is None
+
+
+def test_rehearsal_lock_retains_every_available_python_version_and_declares_deviations():
+    lock = json.loads((LANE / "rehearsal/wheels.json").read_text())
+    science = json.loads((LANE / "wheels.json").read_text())
+    assert lock["science_eligible"] is False and len(lock["packages"]) == 101
+    before = {row["name"]: row for row in science["packages"]}
+    deviations = {row["name"] for row in lock["deviations"]}
+    retained = 0
+    for row in lock["packages"]:
+        if row["name"] in before and row["version"] == before[row["name"]]["version"]:
+            assert row == before[row["name"]]
+            retained += 1
+        else:
+            assert row["name"] in deviations
+        assert re.fullmatch("[0-9a-f]{64}", row["sha256"])
+    assert retained == 80
+    assert common.file_sha(LANE / "wheels.json") == sha(
+        subprocess.check_output(
+            [
+                "git",
+                "-C",
+                str(ROOT),
+                "show",
+                "858e7f6956f56d6b489deb93a0526be61cf61c0a:bench/dq11/wheels.json",
+            ]
+        )
+    )
+
+
+def test_rehearsal_marker_binds_model_configuration_and_runtime_lock(tmp_path, monkeypatch):
+    import dq11_rehearsal as rehearsal
+
+    monkeypatch.setenv("DQ11_REHEARSAL", "1")
+    monkeypatch.setenv("DQ11_REHEARSAL_TINY_MODEL", "1")
+    shutil.copy2(LANE / "rehearsal/wheels.json", tmp_path / "wheels.json")
+    marker = {
+        "schema": rehearsal.SCHEMA,
+        "science_eligible": False,
+        "model_config": rehearsal.MODEL_CONFIG,
+        "wheel_lock_sha256": common.file_sha(tmp_path / "wheels.json"),
+    }
+    rehearsal.write_json(tmp_path / "REHEARSAL.json", marker)
+    assert rehearsal.mode(tmp_path)
+    marker["science_eligible"] = True
+    rehearsal.write_json(tmp_path / "REHEARSAL.json", marker)
+    with pytest.raises(ValueError, match="marker/lock changed"):
+        rehearsal.mode(tmp_path)
+    marker["science_eligible"] = False
+    rehearsal.write_json(tmp_path / "REHEARSAL.json", marker)
+    with (tmp_path / "wheels.json").open("a") as changed:
+        changed.write(" ")
+    with pytest.raises(ValueError, match="marker/lock changed"):
+        rehearsal.mode(tmp_path)
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_tiny_stream_adapter_delegates_and_restores_real_export_after_prepare(monkeypatch, tmp_path, fail):
+    import dq11_rehearsal as rehearsal
+    import experts4bit_qlora as e4b
+
+    monkeypatch.setattr(rehearsal, "mode", lambda directory: True)
+    calls = []
+    result = object()
+
+    def real_offloader(*args, **kwargs):
+        calls.append((args, kwargs))
+        return result
+
+    monkeypatch.setattr(e4b, "enable_dense_offload", real_offloader)
+    plan = object()
+
+    def prepare(actual):
+        assert actual is plan
+        handle = e4b.enable_dense_offload("fixture model", device="fixture device", train_prefetch=True)
+        assert handle is result
+        if fail:
+            raise RuntimeError("fixture prepare failure")
+        return handle
+
+    if fail:
+        with pytest.raises(RuntimeError, match="fixture prepare failure"):
+            rehearsal.prepare_log(tmp_path, plan, prepare)
+    else:
+        assert rehearsal.prepare_log(tmp_path, plan, prepare) is result
+    assert calls == [(("fixture model",), {"device": "fixture device", "train_prefetch": True, "min_bytes": 0})]
+    assert e4b.enable_dense_offload is real_offloader
+
+
+def test_science_mode_never_installs_tiny_stream_adapter(monkeypatch, tmp_path):
+    import dq11_rehearsal as rehearsal
+    import experts4bit_qlora as e4b
+
+    monkeypatch.setattr(rehearsal, "mode", lambda directory: False)
+    original = e4b.enable_dense_offload
+    with pytest.raises(ValueError, match="refused in science mode"):
+        rehearsal.prepare_log(tmp_path, object(), lambda plan: pytest.fail("science called rehearsal prepare"))
+    assert e4b.enable_dense_offload is original

@@ -15,7 +15,14 @@ ORDER = ((1, "L"), (1, "U"), (1, "U0"), (2, "U0"), (2, "U"), (2, "L"))
 TEXTS = ("alpaca-heldout", "wikitext-test")
 
 
-def registered_identity(row):
+def registered_identity(row, *, rehearsal=False):
+    if rehearsal:
+        from dq11_rehearsal import mode
+
+        if not mode(HERE) or row.get("schema") != "dq11-rehearsal-arm/1" or row.get("science_eligible") is not False:
+            raise ValueError("unmarked or unauthorized correctness rehearsal")
+    elif row.get("schema", "dq11-arm/1") != "dq11-arm/1" or row.get("science_eligible") is False:
+        raise ValueError("rehearsal receipts cannot enter science reduction")
     locked = json.loads((HERE / "locked_inputs.json").read_text())
     wheels = json.loads((HERE / "wheels.json").read_text())["packages"]
     if (row["tokens"] != locked["tokens"] or row["input_seal_sha256"] != file_sha(HERE / "locked_inputs.json")
@@ -62,12 +69,12 @@ def quality(base, candidate, field):
     return verdict(pairs, calibrated=False)[0]
 
 
-def validate_proofs(proofs):
+def validate_proofs(proofs, *, rehearsal=False):
     if len(proofs) != 3 or {row["arm"] for row in proofs} != {"L", "U", "U0"}:
         raise ValueError("missing or duplicate proof")
     anchor = proofs[0]
     for row in proofs:
-        registered_identity(row)
+        registered_identity(row, rehearsal=rehearsal)
         if (row["kind"] != "proof" or row["repetition"] != 0 or not row["observer_same_arm_bitwise"]
                 or not row["execution"]["observer_removed"] or not row["frozen_unchanged"]
                 or row["path_before"] != row["path_after"]):
