@@ -3,7 +3,8 @@
 # locality_drive.sh with the run's nonce; LOC_RUN_NONCE first, then LOC_EXIT_CODE.<nonce> + TP_DONE.<nonce> on every
 # exit and LOC_SUCCESS.<nonce> only when the census ran. Derived from bench/k34/k34_run.sh (refusals, nonce, markers).
 #
-# One rented RTX A2000 (sm_86: e4b's NF4 host-residency path, not the fp8 paged runner). Expert ids are correctness-class
+# One rented RTX A4000 (Amendment 1; sm_86 like the A2000 it replaces: e4b's NF4 host-residency path, not the fp8 paged
+# runner, the same kernels). Expert ids are correctness-class
 # data; no timing from this box is quoted. Steps:
 #   install   experts4bit-qlora[train] at E4B_SHA + transformers 5.16.1 + datasets; grouped-nf4-gemm cloned at GNF4_SHA and
 #             installed over the released one (its bench/cold-engine/routing-trace/capture_routing.py is reused)
@@ -26,13 +27,15 @@ for v in E4B_SHA GNF4_SHA; do
   val=${!v}; [ ${#val} = 40 ] || { say "refusing: $v must be a 40-char sha"; finish 78; }
 done
 MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
-GPU_CLASS=${LOC_GPU_CLASS:-A2000}; MIN_DISK_GB=${LOC_MIN_DISK_GB:-150}; MIN_RAM_GB=64; STEPS=${LOC_STEPS:-512}
+GPU_CLASS=${LOC_GPU_CLASS:-A4000}; MIN_DISK_GB=${LOC_MIN_DISK_GB:-150}; MIN_RAM_GB=48; STEPS=${LOC_STEPS:-512}
+# 48 GB (Amendment 1, was 64): the NF4 experts pinned in host RAM are ~15 GB and the bf16 checkpoint streams one shard at a
+# time; the one A4000 offered on 2026-10-10 had 62 GB.
 REHEARSAL=${LOC_REHEARSAL:-0}
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True HF_HOME=$W/hf
 unset E4B_EXPERT_PROFILE E4B_RESIDENCY E4B_HOT_PROFILE E4B_HOT_PER_LAYER E4B_K_SLOTS E4B_FUSE_ROUTER_EPI TRITON_INTERPRET
 : > summary.txt; echo "$LOC_INSTANCE_ID" > INSTANCE_ID
 echo "KNOBS e4b=$E4B_SHA gnf4=$GNF4_SHA model=$MODEL@$REV gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB steps=$STEPS" | tee -a summary.txt
-if [ "$REHEARSAL" != 0 ] || [ "$GPU_CLASS" != A2000 ] || [ "$MIN_DISK_GB" != 150 ] || [ "$STEPS" != 512 ]; then
+if [ "$REHEARSAL" != 0 ] || [ "$GPU_CLASS" != A4000 ] || [ "$MIN_DISK_GB" != 150 ] || [ "$STEPS" != 512 ]; then
   echo "REHEARSAL -- NOT the census: a knob is off its default (see KNOBS)" | tee -a summary.txt; : > REHEARSAL
 fi
 [ -s $W/staged.sha256 ] || { say "STAGE MISSING: staged.sha256"; finish 9; }
