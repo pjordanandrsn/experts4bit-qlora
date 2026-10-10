@@ -24,6 +24,7 @@ import os
 import time
 
 import torch
+import transformers
 
 from transformers import AutoConfig, AutoModelForCausalLM
 from transformers.masking_utils import create_causal_mask
@@ -182,6 +183,7 @@ def main():
     r = run(a.checkpoint, t["input_ids"], t["attention_mask"], t["labels"], a.device, layers=a.layers, resident=a.resident, out_dir=a.out)
     torch.save({"per_token_loss": r.pop("per_token_loss"), "router_topk": r.pop("router_topk")}, os.path.join(a.out, "reference.pt"))
     r["torch"] = torch.__version__
+    r["transformers"] = transformers.__version__          # the conversion mapping is transformers' code
     json.dump(r, open(os.path.join(a.out, "reference.json"), "w"), indent=1)
     print(json.dumps({k: r[k] for k in ("layers", "resident", "device", "loss", "seconds")}))
 
