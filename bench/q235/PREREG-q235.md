@@ -317,13 +317,38 @@ not gated.
 
 These bands are a semantic-error detector, not a prediction of the 235B values. A wrong expert fusion, a dropped epilogue or misrouted
 experts is expected to move a layer's output by order 1 and its overlap toward chance (0.06). **That signature is expected, not yet
-measured.** Gate 1's rehearsal therefore plants one such error and must see the bands fail.
+measured.**
+
+**The planted errors.** Gate 1's rehearsal therefore plants **each of these two errors**, named here before any rehearsal runs. Each must
+fail the bands.
+- **Where:** in the NF4 side under test; the bf16 reference stays correct.
+- **The model:** the rehearsal's same-architecture model, with at least 4 decoder layers.
+- **The layer:** the middle one, layer ⌊n / 2⌋. That is layer 47 of 94 at 235B, and layer 2 of a 4-layer rehearsal model.
+
+1. **A routing error: every routed token goes to the wrong expert.** At the planted layer, the router's top-k expert indices are shifted
+   by one (e → (e + 1) mod E) between the router and the experts. Each token is then served by a neighbouring expert's weights at its
+   own routing weight. The router's own top-k at that layer is unchanged.
+   - **Expected signature:** that layer's output relative error is of order 1, above 0.50. The router overlap at the later layers falls
+     well below 0.80, toward chance as their inputs diverge.
+   - **Must fail:** the maximum per-layer relative error exceeds 0.50, or the minimum overlap falls below 0.80.
+2. **An arithmetic error: the expert epilogue is dropped.** At the planted layer, the experts compute `gate * up` instead of
+   `act_fn(gate) * up`: the SiLU is skipped and nothing else changes. This is the error class the epilogue contract (#397) guards.
+   - **Expected signature:** that layer's output relative error is of order 1, above 0.50. The later layers carry it forward.
+   - **Must fail:** the maximum per-layer relative error exceeds 0.50.
+
+If either planted error passes the bands, the bands are void, and a new amendment sets them before any box.
 
 **The reproducibility floor (rule 6).**
 - **Tolerance:** the larger of the in-process spread and **1e-4 relative on the step-0 loss**.
 - **Why this floor.** The 30B fresh-process repeat was exact, so the floor only absorbs last-place nondeterminism on another card class.
   It is about 30× below the 30B NF4-against-bf16 loss gap (2.9e-3 relative), so a difference the floor admits is far too small to be a
   semantic error.
+- **The floor covers the loss only.** The forward is deterministic on this path, so the step-0 loss can be compared across processes.
+  Adapter gradients are not compared across runs.
+  - Under PyTorch's default attention backend, the flash-attention backward is nondeterministic: about 0.9 % relative run to run on
+    LoRA-B gradients (experts4bit-qlora #1592). Math SDPA makes it bitwise.
+  - So the gradient checks are that they are finite and nonzero (rule 3). A bitwise gradient comparison would need the math SDPA
+    backend, and this registration makes none.
 
 **A correction to the capacity section.** e4b's estimate now prices the expert absmax as stored: double-quantized under
 `enable_fast_train`'s default, which this registration's numbers predate. This moves only the rows with **experts on the device**. Each
