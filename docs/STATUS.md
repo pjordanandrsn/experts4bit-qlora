@@ -165,10 +165,11 @@ host reuse) each stepped the field recipe at 0.847–0.968 of the code before, h
   1.05). With bf16 adapters, the shipped arm, it does not engage (1.002). `e4b.train.single-ladder.field.5090.2026-10-08`,
   `e4b.train.single-ladder-auto.gpu-bound.5090.2026-10-08`
 - `E4B_TRAIN_FUSE_QKV=1` (P129): one fused q/k/v training projection, 13.9–14.6 % fewer launches per step.
-  - **Speed:** 0.895 of the step with fp32 adapters and 0.868 with bf16 on a host-bound, heavily shared box (0.896 / 0.879 on
-    another host).
-  - **Quality:** step-0 held-out inside the box's fp32-anchored rounding envelope, held-out at N within 0.0007.
-  - **Status:** it stays opt-in until a second host reads it. `e4b.train.p129.fused-qkv.qwen3.5090.2026-10-10`
+  - **Speed:** 0.895 of the step with fp32 adapters and 0.868 with bf16 on a host-bound, heavily shared box. On a second host, with no
+    draw voided for load, 0.906 / 0.884.
+  - **Quality:** step-0 held-out inside the box's fp32-anchored rounding envelope on both hosts, held-out at N within 0.002.
+  - **Status:** DEFAULT_ON is met, and the default flips in its own change. `e4b.train.p129.fused-qkv.qwen3.5090.2026-10-10`,
+    `e4b.train.p129.fused-qkv.second-host.5090.2026-10-10`
 
 **Energy: on a card that already fits the model, 4-bit costs energy.** `bnb.matmul_4bit` costs 1.748× native bf16's
 J/op at decode, 1.601× at prefill and 1.965× in training. The fused 4-bit MoE forward's J/token at batch 4096 is 0.063
