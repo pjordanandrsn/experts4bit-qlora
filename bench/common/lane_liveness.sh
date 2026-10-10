@@ -59,5 +59,27 @@ lane_unknown_streak() {  # live-verdict prior-count -> reported-only consecutive
 
 lane_two_missing() { [ "${1:-}" = 0 ] && [ "${2:-}" = 0 ] && echo dead; }
 
+lane_reboot_evidence() {  # current-snapshot initial-snapshot lane-age-seconds -> one line of host-fault evidence
+  local live ticks boot uptime extra old_live old_ticks old_boot old_uptime
+  read -r live ticks boot uptime extra <<< "$1"
+  read -r old_live old_ticks old_boot old_uptime extra <<< "$2"
+  printf 'boot_id %s -> %s; uptime %ss at lane age %ss (%ss at launch)\n' \
+    "${old_boot:--}" "${boot:--}" "${uptime:-?}" "${3:-?}" "${old_uptime:-?}"
+}
+
+lane_write_host_fault() {  # run-dir kind evidence -> run-dir/host-fault.json, the rental launcher's host-fault marker
+  # adertha-agents#204: rent.py copies a well-formed marker into the receipt (environment.host_fault), and a committed
+  # HARNESS_ERROR receipt that carries one can exclude its machine (--exclude-vast-host-fault-receipt).
+  local dir=${1:-} kind=${2:-} evidence=${3:-} tmp
+  [ -n "$dir" ] && [ -d "$dir" ] || return 1
+  case "$kind" in reboot|unreachable|gpu-lost) ;; *) return 1;; esac
+  evidence=$(printf '%s' "$evidence" | tr -d '\000-\037')
+  evidence=${evidence//\\/\\\\}; evidence=${evidence//\"/\\\"}
+  [ -n "$evidence" ] || return 1
+  tmp="$dir/.host-fault.json.$$"
+  printf '{"kind": "%s", "evidence": "%s", "at": "%s"}\n' "$kind" "$evidence" "$(command date -u +%FT%TZ)" > "$tmp" &&
+    mv -f "$tmp" "$dir/host-fault.json"
+}
+
 # bash -s -- --probe PID executes the same probe via SSH stdin; production uses /proc.
 if [ "${1:-}" = --probe ]; then lane_proc_snapshot "${2:-}" "${3:-/proc}"; fi

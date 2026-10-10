@@ -1,6 +1,7 @@
 """Execute the shared Linux probe and each driver's poll loop without a rental."""
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -145,12 +146,14 @@ def test_actual_driver_poll_loop(driver, sequence, expected, polls, tmp_path):
     values.write_text("\n".join("TRANSPORT_FAIL" if x is None else x for x in sequence) + "\n")
     count = tmp_path / "count"
     count.write_text("0")
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
     # Each SSH shell gets its own process, so persist poll count in a file.
     prelude = f'''
 source "{HELPER}"
 LANE_HELPER="{HELPER}"; LANE_PID=4242; LANE_INITIAL="{INITIAL}"; LANE_STARTED_AT=0
 DEADLINE=999999; POLL=0; STALL_S=900; TC1_MIN_PROGRESS_MB=16; P127_MIN_PROGRESS_MB=16; FAM_MIN_PROGRESS_MB=16; LOC_MIN_PROGRESS_MB=16
-W=/fake; NONCE=nonce; RUN_DIR=/unused
+W=/fake; NONCE=nonce; RUN_DIR=/unused; E4B_RENT_RUN_DIR="{run_dir}"
 say(){{ printf '%s\\n' "$*"; }}
 date(){{ echo 4000; }}
 sleep(){{ :; }}
@@ -175,8 +178,14 @@ SSH=fake_ssh
     assert result.returncode == 0, (result.stdout, result.stderr)
     assert int(count.read_text()) == polls
     assert ("END:0" if expected == "complete" else "END:1") in result.stdout
+    marker = run_dir / "host-fault.json"
     if expected == "reboot":
-        assert "host rebooted" in result.stdout
+        assert "host rebooted" in result.stdout and "host-fault.json written (kind reboot)" in result.stdout
+        fault = json.loads(marker.read_text())
+        assert fault["kind"] == "reboot" and fault["at"].endswith("Z")
+        assert fault["evidence"].startswith(f"boot_id {BOOT_A} -> ") and "at lane age 4000s" in fault["evidence"]
+    else:
+        assert not marker.exists()
     if sequence == [INITIAL, None, None, INITIAL]:
         assert re.findall(r"unknown_probes (\d+)", result.stdout) == ["0", "1", "2", "0"]
     assert "pgrep" not in loop and "lane_snapshot_verdict" in loop
@@ -220,3 +229,25 @@ SSH=local_ssh
     fields = row.group(2).split()
     assert len(fields) == 4 and fields[1].isdigit() and fields[2] != '-'
     assert verdict(row.group(2), row.group(2), age=0) == '1'
+
+
+def test_host_fault_marker_is_well_formed_json_the_launcher_accepts(tmp_path):
+    """adertha-agents#204's contract: kind in reboot / unreachable / gpu-lost and non-empty evidence text; quotes,
+    backslashes and control characters cannot break the JSON."""
+    out = bash(f'lane_write_host_fault "{tmp_path}" reboot "$(printf \'boot_id a -> b; "quoted" \\\\ x\\tz\')"')
+    assert out.returncode == 0, out.stderr
+    fault = json.loads((tmp_path / "host-fault.json").read_text())
+    assert fault["kind"] == "reboot" and fault["evidence"] == 'boot_id a -> b; "quoted" \\ xz'
+    assert not list(tmp_path.glob(".host-fault.json.*"))
+
+
+@pytest.mark.parametrize("args", ['"{d}" power "evidence"', '"{d}" reboot ""', '"" reboot "evidence"',
+                                  '"{d}/absent" reboot "evidence"'])
+def test_host_fault_marker_refuses_what_the_launcher_would_not_accept(tmp_path, args):
+    assert bash("lane_write_host_fault " + args.format(d=tmp_path)).returncode != 0
+    assert not (tmp_path / "host-fault.json").exists()
+
+
+def test_reboot_evidence_names_both_boot_ids_and_the_uptimes():
+    out = bash(f'lane_reboot_evidence "1 123 {BOOT_B} 20.5" "{INITIAL}" 3668').stdout.strip()
+    assert out == f"boot_id {BOOT_A} -> {BOOT_B}; uptime 20.5s at lane age 3668s (10000.00s at launch)"

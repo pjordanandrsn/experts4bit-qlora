@@ -8,6 +8,8 @@ Two consecutive definite missing observations end the wait. A changed boot ID, u
 
 `tests/test_lane_liveness.py` executes the probe against synthetic `/proc` files and all four actual polling loops with fake SSH. It covers self-matching `pgrep`, PID reuse, zombies, rebooted hosts, partial output from failed transport and healthy long runs. Existing lanes keep the driver they started with; adoption takes effect at the next launch.
 
+On a reboot verdict the driver also writes `host-fault.json` into the launcher's run directory (`E4B_RENT_RUN_DIR`): `kind` reboot, the old and new boot IDs and the uptimes as `evidence`, and the time. The rental launcher copies it into the receipt as `environment.host_fault`, and a committed HARNESS_ERROR receipt that carries it can exclude the machine from later launches (`--exclude-vast-host-fault-receipt`, adertha-agents#204). Without a run directory nothing is written and the driver says so.
+
 The heartbeat's `unknown_probes` counts consecutive unverified probes and resets on a definite observation. It is diagnostic only and never controls lane termination.
 
 ## Token-scope hygiene
