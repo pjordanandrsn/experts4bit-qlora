@@ -110,6 +110,13 @@ never emitted in pieces), ``finish_reason`` on the last token's chunk, a ``usage
   finish reasons are the synchronous path's; a request that ends on a stop id has had one more step computed and
   discarded, and frees its slot one step later.
 
+* **Speculative decode (opt-in, lane SD2).** ``E4B_PAGED_SPEC=eagle3`` with ``E4B_PAGED_SPEC_K`` (1-3) and
+  ``E4B_PAGED_SPEC_HEAD`` serves a request decoding alone with the pinned EAGLE-3 head
+  (:mod:`.engines.spec_decode`, :mod:`.engines.eagle3_draft`). Each step verifies ``k`` drafts as a decode bucket of
+  ``k + 1`` rows on the request's slot and emits the target's own greedy tokens. A request that is batched drops to one
+  token a step for the rest of its life. Off by default; ``/health``'s ``spec`` block reports the census. The T > 1
+  verify is not bitwise the T == 1 step (``bench/sd2/PREREG-sd2.md`` gates its quality); off, nothing is installed.
+
 Not in v1: sampling, logprobs, stop strings, adapters, prefix caching, per-request timeouts.
 Everything above the engine seam is testable on CPU with a fake runner (``tests/test_serve_paged.py``);
 :func:`build_engine` is the one function that needs a GPU, and it was written from the harness
@@ -317,6 +324,30 @@ def _lookahead_env(value: str) -> bool:
     raise ValueError(f"E4B_PAGED_DECODE_LOOKAHEAD={value!r}: expected '0' or '1'")
 
 
+#: ``E4B_PAGED_SPEC``'s modes (lane SD2, ``bench/sd2/PREREG-sd2.md``)
+SPEC_MODES = ("off", "eagle3")
+
+
+def _spec_env(value) -> str:
+    """``E4B_PAGED_SPEC``: ``off`` (the default, also when unset or empty) or ``eagle3``, speculative greedy decode with
+    the EAGLE-3 draft head ``E4B_PAGED_SPEC_HEAD`` at ``E4B_PAGED_SPEC_K`` drafts a step, for a request decoding alone
+    (:mod:`.engines.spec_decode`). Opt-in: lane SD2 reads it. Anything else is refused."""
+    v = (value or "off").strip().lower() or "off"
+    if v not in SPEC_MODES:
+        raise ValueError(f"E4B_PAGED_SPEC={value!r}: expected one of {SPEC_MODES}")
+    return v
+
+
+def _spec_k_env(value) -> int:
+    """``E4B_PAGED_SPEC_K``: the drafts per step, 1-3, required with ``E4B_PAGED_SPEC=eagle3``; 0 when unset."""
+    v = (value or "").strip()
+    if not v:
+        return 0
+    if not v.isdigit():
+        raise ValueError(f"E4B_PAGED_SPEC_K={value!r}: expected 1, 2 or 3")
+    return int(v)
+
+
 def _fusion_knob_from_env(name: str, raw) -> str:
     """One fusion knob as ``from_env`` reads it: unset or empty -> :data:`FUSION_UNSET` (resolved per family at the
     build), otherwise :func:`_fusion_env`'s three settings."""
@@ -421,6 +452,9 @@ class PagedServeConfig:
     step_trace_path: str = ""            # E4B_PAGED_STEP_TRACE: per-step JSONL (engines.step_trace)
     bulk_kv: bool = True                 # E4B_PAGED_BULK_KV: 1 (default since SC2c/SC2d) / 0 (_bulk_kv_env)
     decode_lookahead: bool = False       # E4B_PAGED_DECODE_LOOKAHEAD: 0 (default) / 1 (_lookahead_env)
+    spec: str = "off"                    # E4B_PAGED_SPEC: off (default) / eagle3 (_spec_env; lane SD2)
+    spec_k: int = 0                      # E4B_PAGED_SPEC_K: drafts per step, 1-3 with eagle3
+    spec_head: str = ""                  # E4B_PAGED_SPEC_HEAD: the EAGLE-3 head's directory (checked against the pin)
     device: str = "cuda"
 
     @classmethod
@@ -466,6 +500,9 @@ class PagedServeConfig:
             step_trace_path=env("E4B_PAGED_STEP_TRACE", ""),
             bulk_kv=_bulk_kv_env(env("E4B_PAGED_BULK_KV", "1")),
             decode_lookahead=_lookahead_env(env("E4B_PAGED_DECODE_LOOKAHEAD", "0")),
+            spec=_spec_env(env("E4B_PAGED_SPEC", "")),
+            spec_k=_spec_k_env(env("E4B_PAGED_SPEC_K", "")),
+            spec_head=env("E4B_PAGED_SPEC_HEAD", ""),
             device=env("E4B_PAGED_DEVICE", "cuda"),
         )
         cfg.validate()
@@ -508,6 +545,20 @@ class PagedServeConfig:
         if self.decode_lookahead and not self.graphs:
             raise ValueError("E4B_PAGED_DECODE_LOOKAHEAD=1 needs bucketed decode graphs, and E4B_PAGED_GRAPHS resolved "
                              "to eager decode here")
+        if self.spec == "off":
+            if self.spec_k:
+                raise ValueError("E4B_PAGED_SPEC_K is set but E4B_PAGED_SPEC is off")
+        else:
+            if self.spec_k not in (1, 2, 3):
+                raise ValueError(f"E4B_PAGED_SPEC={self.spec} needs E4B_PAGED_SPEC_K of 1, 2 or 3, got {self.spec_k}")
+            if not self.spec_head:
+                raise ValueError(f"E4B_PAGED_SPEC={self.spec} needs E4B_PAGED_SPEC_HEAD, the head's directory")
+            if not self.graphs:
+                raise ValueError("E4B_PAGED_SPEC needs bucketed decode graphs (its verify is a decode bucket), and "
+                                 "E4B_PAGED_GRAPHS resolved to eager decode here")
+            if self.decode_lookahead:
+                raise ValueError("E4B_PAGED_SPEC and E4B_PAGED_DECODE_LOOKAHEAD do not combine: each speculative step "
+                                 "reads its accepted tokens back before the next is planned")
 
     @property
     def prefill_budget(self) -> int:
@@ -699,6 +750,9 @@ class PagedEngine:
             out["graph_stats"] = ({str(k): dict(v) for k, v in gs.items()} if isinstance(gs, dict) else None)
             st = getattr(runner, "graph_status", None)
             out["graph_status"] = ({str(k): v for k, v in st.items()} if isinstance(st, dict) else None)
+            spec = getattr(runner, "spec", None)
+            if spec is not None:
+                out["spec"] = spec.census()
         return out
 
     # ---------------------------------------------------------------- loop --
@@ -1205,6 +1259,54 @@ def _kv_pool_mib(kv, cfg: PagedServeConfig):
     return round(b / 2**20, 1)
 
 
+def _enable_spec(model, kv, runner, cfg: PagedServeConfig) -> dict:
+    """Lane SD2's speculative decode on the runner (``bench/sd2/PREREG-sd2.md``): the pinned EAGLE-3 head checked
+    and loaded, its draft sized to a slot's positions, the auxiliary hooks installed and the runner's verify buckets
+    set, all before any graph is captured. Returns the build's record for ``/health``; refuses a head that does not fit
+    the target."""
+    import torch
+
+    from .engines.eagle3_draft import HEAD_SHA256, AuxStates, Eagle3Drafter, load_head
+    from .engines.spec_decode import SpecDecoder
+
+    tensors, geo = load_head(cfg.spec_head)
+    c = getattr(model.config, "text_config", None) or model.config
+    hidden, vocab = int(c.hidden_size), int(c.vocab_size)
+    if geo["hidden"] != hidden or tuple(tensors["fc.weight"].shape) != (hidden, 3 * hidden):
+        raise ValueError(f"the EAGLE-3 head is {geo['hidden']} wide with fc {tuple(tensors['fc.weight'].shape)}; "
+                         f"the target is {hidden} wide")
+    if tensors["embed_tokens.weight"].shape[0] != vocab:
+        raise ValueError(f"the EAGLE-3 head embeds {tensors['embed_tokens.weight'].shape[0]} ids; the target has {vocab}")
+    cap = kv.blocks_per_seq * kv.bt
+    k = cfg.spec_k
+    drafter = Eagle3Drafter(tensors, k=k, max_positions=cap + 2 * k + 1, device=cfg.device, dtype=torch.bfloat16, **geo)
+    del tensors
+    aux = AuxStates(model, max_rows=max(max(cfg.buckets), k + 1), max_prompt=cap, device=cfg.device)
+    spec = SpecDecoder(drafter=drafter, aux=aux, kv=kv, k=k, capacity=cap, device=cfg.device)
+    if runner.enable_speculation(spec) != k:
+        raise RuntimeError("enable_speculation did not take k")
+    hooks = aux.install()
+    return {"mode": cfg.spec, "k": k, "head": cfg.spec_head, "head_sha256": HEAD_SHA256,
+            "aux_layers": list(aux.layers_idx), "hooks": hooks, "draft_max_positions": cap + 2 * k + 1,
+            "verify_buckets": list(runner._verify_buckets)}
+
+
+def spec_report(cfg: PagedServeConfig, engine) -> dict:
+    """``/health``'s ``spec`` block: what was asked (``E4B_PAGED_SPEC``, ``_K``) and, once the engine is built, the
+    build's record, the post-verify graphs and the census: steps, drafted, accepted, tau_live, the requests that
+    dropped to T == 1 (``engines.spec_decode.SpecDecoder.census``)."""
+    out = {"requested": cfg.spec, "k": cfg.spec_k or None}
+    parts = getattr(engine, "parts", None)
+    runner = getattr(parts, "runner", None)
+    spec = getattr(runner, "spec", None)
+    if parts is not None:
+        out["build"] = (parts.info or {}).get("spec")
+    if spec is not None:
+        out["post_graphs"] = {str(n): v for n, v in (getattr(runner, "spec_graph_status", None) or {}).items()}
+        out["census"] = spec.census()
+    return out
+
+
 def build_engine(cfg: PagedServeConfig) -> EngineParts:
     """The harness's construction, in its order (see the module docstring). GPU only."""
     cfg.validate()
@@ -1293,18 +1395,22 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
         log(f"WARNING int4 expert stores on {int4_layers}/{L} MoE layers -- a partial stack; see /health")
 
     hkv, hd = _kv_geometry(model.config)
-    scratch = max(cfg.buckets) if cfg.graphs else 0
+    spec_k = cfg.spec_k if cfg.spec != "off" else 0
+    # a verify of k + 1 rows is captured on scratch slots like any bucket; the alias slots carry its rows 1..k (SD2)
+    scratch = max(max(cfg.buckets), spec_k + 1) if cfg.graphs else 0
     # a hybrid model's linear-attention layers keep no K/V: the pool holds its attention layers only
     kv = Fp8PagedKV(kv_layers(model, decoder_layers(model.config)), hkv, hd, batch=cfg.max_seqs, max_tokens_per_seq=cfg.max_tokens_per_seq,
                     k_groups=(None if cfg.kv_groups == "auto" else int(cfg.kv_groups)),
-                    batched_append=True, device=cfg.device, scratch_slots=scratch)
+                    batched_append=True, device=cfg.device, scratch_slots=scratch, alias_slots=spec_k)
     runner = PagedModelRunner(model, kv, device=cfg.device, bulk_kv=cfg.bulk_kv, last_logits=cfg.last_logits)
     grouping = _batched_graph_grouping(cfg)          # before capture: the batched lane's sync-free grouping
+    # SD2: the draft, its hooks and the verify buckets, before any graph is captured
+    spec_info = _enable_spec(model, kv, runner, cfg) if spec_k else {"mode": "off"}
     # P127 item c: license the folded layers' MoE residual add into the combine on the model as served -- after the
     # residency, collapse and grouping above, before capture -- at every decode row count
     from .engines.glue_r2 import license_moe_residual
     moe_resid: dict = {}
-    license_moe_residual(model, sorted({1, *cfg.buckets}),
+    license_moe_residual(model, sorted({1, *cfg.buckets, *runner._verify_buckets}),
                          mode=(fusion_report.get("modes") or {}).get("E4B_FUSE_T1_GLUE_R2"), report=moe_resid)
     graph_status = runner.enable_decode_graphs(cfg.buckets) if cfg.graphs else None
     engage_prefill_graph(runner, cfg)
@@ -1315,7 +1421,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
             "int4_expert_layers": int4_layers, "int4_store_kinds": kinds, "int4_attn_projections": int4_attn,
             "kv": {"n_kv_heads": hkv, "head_dim": hd, "k_groups": cfg.kv_groups, "scratch_slots": scratch,
                    "blocks_per_seq": getattr(kv, "blocks_per_seq", None), "pool_mib": _kv_pool_mib(kv, cfg)},
-            "graph_status": graph_status, "grouping": grouping, "moe_residual": moe_resid, "prefill_graph": cfg.prefill_graph, "levers_env": {k_: env(k_) for k_ in LEVER_ENV if env(k_) is not None}}
+            "graph_status": graph_status, "spec": spec_info, "grouping": grouping, "moe_residual": moe_resid, "prefill_graph": cfg.prefill_graph, "levers_env": {k_: env(k_) for k_ in LEVER_ENV if env(k_) is not None}}
     info.update(levers)
     info.update(fusions)
     info["fusion_modes"] = fusion_report.get("modes")
@@ -1591,6 +1697,7 @@ def create_app(cfg: Optional[PagedServeConfig] = None, engine: Optional[PagedEng
                 if engine.parts is not None and hasattr(engine.parts.runner, "last_logits_stats")
                 else {"status": "off" if not cfg.last_logits else engine.state}, requested=cfg.last_logits),
             "kv_bookkeeping": kv_bookkeeping_report(cfg, engine),
+            "spec": spec_report(cfg, engine),
             "eos_token_ids": sorted(parts.eos_ids) if parts is not None else None,
             "sampling": {"greedy_only": True, "logprobs": False, "stop_strings": False},
             "queue_depth": engine.queue_depth,
