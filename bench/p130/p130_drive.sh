@@ -47,6 +47,12 @@ if [ -z "${E4B_SHA:-}" ]; then
 fi
 case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not a 40-char hex sha ($E4B_SHA)"; exit 78;; esac
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char hex sha ($E4B_SHA)"; exit 78; }
+# The pre-rental fetch gate (PREREG STOP-0): bench/p130/p130_fetch_gate.py ran on the controller, before the rental
+# controller quoted, and resolved everything the box will fetch. Nothing is staged without its passing report for THIS
+# launch commit, under 24 h old; the report travels with the receipts.
+[ -n "${P130_FETCH_GATE:-}" ] || { say "refusing: P130_FETCH_GATE unset -- run bench/p130/p130_fetch_gate.py before quoting"; exit 78; }
+python3 "$HERE/p130_fetch_gate.py" --e4b-sha "$E4B_SHA" --check-report "$P130_FETCH_GATE" 1>&2 \
+  || { say "refusing: the fetch gate report $P130_FETCH_GATE does not let $E4B_SHA stage"; exit 78; }
 # grouped-nf4-gemm's pin is a constant in the runner; the box installs e4b at THIS commit.
 HOST=$E4B_RENT_SSH_HOST; PORT=$E4B_RENT_SSH_PORT; RUN_DIR=$E4B_RENT_RUN_DIR; RUN_ID=$E4B_RENT_RUN_ID; DEADLINE=$E4B_RENT_DEADLINE_EPOCH
 SSH="ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -o ServerAliveInterval=30 -p $PORT root@$HOST"
@@ -60,6 +66,7 @@ PASS="P130_RUN_ID=$RUN_ID P130_RUN_NONCE=$NONCE P130_DEADLINE_EPOCH=$DEADLINE P1
 # is the proving rental the pre-registration names: the whole box end to end on Qwen3-30B-A3B itself at the proof's sizes
 # (no other family takes the int4 K19 prefill route P2 changes), because no local card runs the fp8 paged KV.
 for v in P130_PROVE; do [ -n "${!v:-}" ] && PASS="$PASS $v=$(printf %q "${!v}")"; done
+cp "$P130_FETCH_GATE" "$E4B_RENT_RUN_DIR/p130_fetch_gate.json" 2>/dev/null || say "note: could not copy the fetch gate report to the run directory" 1>&2
 if [ "${P130_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash p130_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p130"; exit 0; fi
 say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; launch e4b $E4B_SHA (from $REPO); stacks are the runner's constants; receipts -> $RUN_DIR/p130; deadline $DEADLINE"
 $SSH "rm -rf -- $W && mkdir -p $W/logs /root/.cache/huggingface" || { say "stage failed: remote cleanup"; exit 20; }

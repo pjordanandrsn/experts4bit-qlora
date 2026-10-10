@@ -11,11 +11,15 @@ runs the same comparison in CI. It also runs the reducer's self-test and pins th
 - the rule's constants, the sizes the box, the runner and the reducer share, every time-left check inside its own guard,
   and the exit codes.
 """
+import ast
 import hashlib
+import json
 import pathlib
 import re
+import shlex
 import subprocess
 import sys
+import time
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 LANE = REPO / "bench" / "p130"
@@ -169,10 +173,56 @@ def test_lane_failures_avoid_the_machine_exclusion_codes():
     assert {10, 16, 21, 25, 27} <= codes
 
 
-def test_the_driver_runs_to_its_dry_run(tmp_path):
+def _drive(tmp_path, gate=None, sha="0" * 40):
     env = {"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", "HOME": str(tmp_path), "E4B_RENT_SSH_HOST": "h",
            "E4B_RENT_SSH_PORT": "1", "E4B_RENT_SSH_OPTS": "-o UserKnownHostsFile=/run/known_hosts",
            "E4B_RENT_RUN_DIR": str(tmp_path), "E4B_RENT_RUN_ID": "p130-dry", "E4B_RENT_DEADLINE_EPOCH": "1",
            "E4B_RENT_INSTANCE_ID": "0", "E4B_SHA": "0" * 40, "P130_DRIVE_DRYRUN": "1"}
-    out = subprocess.run(["bash", str(LANE / "p130_drive.sh")], capture_output=True, text=True, env=env)
+    if gate is not None:
+        report = {"schema": "p130-fetch-gate/1", "passed": True, "refusals": [], "e4b_sha": sha,
+                  "generated_at": int(time.time()) - 60, **gate}
+        (tmp_path / "gate.json").write_text(json.dumps(report))
+        env["P130_FETCH_GATE"] = str(tmp_path / "gate.json")
+    return subprocess.run(["bash", str(LANE / "p130_drive.sh")], capture_output=True, text=True, env=env)
+
+
+def test_the_driver_runs_to_its_dry_run(tmp_path):
+    out = _drive(tmp_path, gate={})
     assert out.returncode == 0 and out.stdout.startswith("DRYRUN stage -> root@h:/root/p130"), out.stdout + out.stderr
+    assert json.loads((tmp_path / "p130_fetch_gate.json").read_text())["passed"] is True   # the report travels
+
+
+def test_the_driver_refuses_without_a_passing_fresh_gate_for_the_launch_commit(tmp_path):
+    for gate, sha in ((None, "0" * 40), ({}, "1" * 40), ({"passed": False, "refusals": ["model x: 403"]}, "0" * 40),
+                      ({"generated_at": int(time.time()) - 25 * 3600}, "0" * 40)):
+        out = _drive(tmp_path, gate=gate, sha=sha)
+        assert out.returncode == 78 and "refusing" in out.stdout and "DRYRUN" not in out.stdout, (gate, out.stdout)
+
+
+def _literal(src, name):
+    """The module-level literal bound to ``name``, also from a tuple assignment (``MODEL, REV = ...``)."""
+    for node in ast.parse(src).body:
+        if not isinstance(node, ast.Assign):
+            continue
+        for t in node.targets:
+            if getattr(t, "id", None) == name:
+                return ast.literal_eval(node.value)
+            names = [getattr(e, "id", None) for e in getattr(t, "elts", [])]
+            if name in names:
+                return ast.literal_eval(node.value)[names.index(name)]
+    raise AssertionError(f"{name} is not a literal assignment")
+
+
+def test_the_fetch_gate_resolves_what_the_box_fetches():
+    out = subprocess.run([sys.executable, str(LANE / "p130_fetch_gate.py"), "--self-test"], capture_output=True, text=True)
+    assert out.returncode == 0 and "self-test OK (20 cases)" in out.stdout, out.stdout + out.stderr
+    gate = (LANE / "p130_fetch_gate.py").read_text()
+    fetch = RUN[RUN.index("hf_fetch_watchdog.py --repo"):RUN.index("> logs/fetch.log")]
+    assert tuple(re.findall(r"--allow '?([^'\s]+)'?", fetch)) == _literal(gate, "ALLOW")          # what the download takes
+    pip = RUN[RUN.index('"git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA"'):RUN.index("|| { tail -4 logs/pip_e4b.log")]
+    assert tuple(shlex.split(pip.replace("\\\n", " "))[1:]) == _literal(gate, "PYPI")           # what pip installs
+    assert _literal(gate, "GNF4_SHA") == re.search(r"GNF4_SHA=([0-9a-f]{40})", RUN).group(1)
+    assert f"MODEL={_literal(gate, 'MODEL')}; REV={_literal(gate, 'REV')}" in RUN
+    assert _literal(gate, "HUB_RANGE") == ((1, 31), (2, 0)) and "\nMAX_AGE_S = 24 * 3600\n" in gate
+    assert "p117_box.windows" in gate and 'load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1", split="test")' in (
+        REPO / "bench" / "p117" / "p117_box.py").read_text()

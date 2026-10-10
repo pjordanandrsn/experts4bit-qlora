@@ -262,12 +262,35 @@ pricing).
   eight processes about 25, Phase B about 10.
 - **Lane ceiling:** **$5.50**, covering the proof and the reading (about $4.10) with room for one pre-flight retry.
 
-**Sequencing.** Nothing rents until this registration merges and the maintainer ACKs it, and not before SD2's
-`sd2-5090-1` read has finished: one rental lane at a time. Then the pre-rental gates run on the controller: the
-driver's dry run (`P130_DRIVE_DRYRUN=1`), the fetch gate (the watchdog's self-test, which also runs on the box before the
-fetch), and the time-left fit (below). The reading rents only after the proof's receipts show PROVED.
+**Sequencing.** Nothing rents until this registration merges and the maintainer explicitly ACKs it, and not before SD2's
+`sd2-5090-1` read has torn down: one rental lane at a time. Then, on the controller, **before the rental controller
+quotes**, three gates run in order:
+1. the driver's dry run (`P130_DRIVE_DRYRUN=1`);
+2. **the pre-rental fetch gate** (STOP-0);
+3. the time-left fit (STOP-2).
+
+The reading rents only after the proof's receipts show PROVED, and the fetch gate runs again for its launch.
 
 **STOP rules:**
+- **STOP-0, the pre-rental fetch gate** (`bench/p130/p130_fetch_gate.py`; DQ11's launch-gate pattern,
+  `bench/dq11/DQ11-AMENDMENT-3.md`). Every locked thing the box will fetch is resolved from a CPU host with the box's own
+  clients (huggingface_hub in the box's range ≥ 1.31, < 2; git; pip). It refuses on any missing, unauthorized (401/403)
+  or mismatched entry, and it never installs, downloads a whole file, quotes or rents:
+  - **the checkpoint:** the revision's file list, with every size, blob id and LFS sha256, from the hub's metadata. Every
+    file `p130_run.sh`'s allow-list selects must be listed, including the safetensors index and every shard it names. A
+    metadata HEAD on each file's resolve URL must answer with the revision's commit, the listed size and the listed
+    hash as its etag;
+  - **the windows' corpus** (wikitext-2-raw-v1): its README and every file under the config resolve the same way at
+    `main`, whose commit is recorded. P117's box does not pin the corpus; the reducer's windows digest carries it;
+  - **e4b at the launch commit and grouped-nf4-gemm at its pin:** `git fetch --depth 1` of each by SHA;
+  - **every PyPI requirement `p130_run.sh` installs:** pip's own resolver (`install --dry-run --report`, wheels only, no
+    dependencies) for the box (CPython 3.11, manylinux x86_64) picks each wheel, which must satisfy its pin and answer a
+    one-byte range GET. Their dependencies resolve on the box, as every lane's do.
+
+  There is no other asset: the staged files travel from the controller under `staged.sha256`. The report goes to the
+  launch as `P130_FETCH_GATE`. `p130_drive.sh` refuses (78) before any connection unless the report passed, is for the
+  launch commit and is under 24 h old, and it copies the report into the run directory. A gate refusal is final for that
+  launch: no retry, no alternative URL.
 - **STOP-1:** the refusals run before any install: the host floor (torch cannot use the GPU: 18; P115 Amendment 1),
   dud box (10), card class (15), disk < 150 GB (13), host RAM < 60 GiB (16), premise (25).
 - **STOP-2:** every time-left check (fetch, bake, each process) fits inside its guard, enforced by
@@ -275,8 +298,9 @@ fetch), and the time-left fit (below). The reading rents only after the proof's 
   VOIDs.
 - **STOP-3:** a VOID, NOISY or QUALITY_VOID reading is not retried inside the same launch.
 - **STOP-4:** the driver refuses a dirty tree or a staged file that differs from `bench/p130/staged.sha256`.
-- **The fetch** runs under P127's byte-growth watchdog (`bench/common/hf_fetch_watchdog.py`, staged as a byte copy). It
-  is killed and restarted after 180 s without growth, at most 3 restarts.
+- **The fetch on the box** runs under P127's byte-growth watchdog (`bench/common/hf_fetch_watchdog.py`, staged as a byte
+  copy, its self-test run before the fetch). It is killed and restarted after 180 s without growth, at most 3 restarts.
+  This is in addition to STOP-0, not instead of it.
 
 ## What was seen before this page (stated, not hidden)
 
@@ -287,6 +311,14 @@ fetch), and the time-left fit (below). The reading rents only after the proof's 
 - **On CPU:** the reducer's self-test (40 cases) passes. `tests/test_p130_box.py` runs both phases' bookkeeping with the
   runners stood in, and passes with grouped-nf4-gemm at the pinned commit. It covers the per-capture deltas, FUNCTION
   catching a K/V-only difference, a refused capture, R's saved log-probs and a corrupted one caught on load.
+- **The fetch gate's pre-review CPU pass** (2026-10-10, against #1583's merge `7b451ab9`, from the controller with
+  huggingface_hub 1.33.0) is `bench/p130/fetch-gate-prereview.json`. It PASSED:
+  - the checkpoint: 23 files, 61.1 GB, every size and hash matched at `ad44e777`;
+  - the corpus: resolved at `main` `b08601e0`;
+  - both commits fetched;
+  - eight wheels picked for the box, each answering 206 with one byte.
+
+  It is not the launch's gate, which must pass again on the launch commit.
 
 ## What this lane cannot say
 
@@ -301,6 +333,7 @@ fetch), and the time-left fit (below). The reading rents only after the proof's 
 
 Fetched to the run directory's `p130/` and committed to `bench/p130/receipts/<run>/`:
 - `proc_1.json` … `proc_8.json`, `verdict.json`, `summary.txt`, `forensics.txt`, `versions.txt`, `bake.json`;
+- `p130_fetch_gate.json`, the launch's STOP-0 report;
 - the logs, and the teardown proof;
 - `SHA256SUMS`.
 

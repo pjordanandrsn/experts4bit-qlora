@@ -15,5 +15,14 @@
   - P1 is licensed iff the interval of its per-pair gain clears ×1.03 AND Phase B is AT_PARITY on P117's bar;
   - a capture refused under a knob, a P2 FUNCTION failure, cross-process nondeterminism or noise holds the knob.
   Each flip is its own later PR. P1's default is scoped to `qwen3_moe`, the family read.
+- **The pre-rental fetch gate** (`bench/p130/p130_fetch_gate.py`, DQ11's launch-gate pattern): before the rental
+  controller quotes, everything the box fetches is resolved from a CPU host with the box's own clients. That covers:
+  - the checkpoint's files, with sizes and hashes;
+  - the corpus;
+  - both commits by SHA;
+  - every PyPI wheel, picked by pip for the box's platform.
+
+  A missing, unauthorized or mismatched entry refuses. `p130_drive.sh` stages nothing without a passing, fresh report
+  for the launch commit.
 - **Proof** on Qwen3-30B-A3B at the proof's sizes (four processes; guard 1.25 h); reading guard 2.0 h; lane ceiling
   $5.50. Nothing rents before this merges, the maintainer ACKs and SD2's `sd2-5090-1` read has finished.
