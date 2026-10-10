@@ -77,3 +77,42 @@ def test_truncated_depth_applies_the_head_after_layer_k(tiny):
     s2 = t.run(path, ids, mask, labels, "cpu", layers=2)
     full = t.run(path, ids, mask, labels, "cpu")
     assert s2["layers"] == 2 and s2["layer_sha256"] == full["layer_sha256"][:2] and s2["loss"] != full["loss"]
+
+
+def _compare_tool():
+    spec = importlib.util.spec_from_file_location("q235_compare", ROOT / "bench" / "q235" / "instrument" / "q235_compare.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_compare_reads_only_real_tokens_and_the_router_sets(tmp_path):
+    """Known answers: run a = reference + 1% on real tokens and garbage on pads; routers equal as sets on all but one real token."""
+    import json
+    mask = torch.tensor([[1, 1, 1, 0], [1, 1, 0, 0]])
+    m = mask.bool()
+    a_dir, b_dir = tmp_path / "a", tmp_path / "b"
+    a_dir.mkdir()
+    b_dir.mkdir()
+    g = torch.Generator().manual_seed(0)
+    for i in range(2):
+        b = torch.randn(2, 4, 8, generator=g)
+        a = b * 1.01
+        a[~m] = 1e6                                               # pads: must not count
+        torch.save(b, b_dir / f"layer{i:03d}.pt")
+        torch.save(a, a_dir / f"layer{i:03d}.pt")
+    top_b = [torch.tensor([[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [5, 6], [7, 0]])] * 2
+    top_a = [t.clone() for t in top_b]
+    top_a[0][1] = torch.tensor([3, 2])                          # same set, other order: agrees
+    top_a[1][4] = torch.tensor([0, 7])                          # real token 4: one of two experts differs
+    top_a[1][3] = torch.tensor([9, 9])                          # a pad token: must not count
+    torch.save({"router_topk": top_b}, b_dir / "reference.pt")
+    torch.save({"router_topk": top_a}, a_dir / "nf4.pt")
+    json.dump({"loss": 2.0}, open(b_dir / "reference.json", "w"))
+    json.dump({"loss": 2.25}, open(a_dir / "nf4.json", "w"))
+    r = _compare_tool().compare(str(a_dir), str(b_dir), mask)
+    assert r["layers"] == 2 and r["real_tokens"] == 5
+    assert all(abs(x - 0.01) < 1e-6 for x in r["rel_err"])
+    assert r["router_set_agree"][0] == 1.0 and abs(r["router_set_agree"][1] - 4 / 5) < 1e-6
+    assert abs(r["router_overlap"][1] - (4 + 0.5) / 5) < 1e-6
+    assert r["loss_gap"] == 0.25
