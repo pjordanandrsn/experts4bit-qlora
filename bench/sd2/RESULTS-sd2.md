@@ -76,8 +76,9 @@ S_V(k, w) = τ_SD1(k, w) × anchor / c(k):
 | C-nothink | 0.772 | 0.869 | **0.895** | 0.895 |
 | C-think | 0.805 | 0.937 | **0.988** | 0.988 |
 
-The best S_V is below 1.00 on every workload: **VERIFY_COST_REFUTES**. SD1's modelled speedup erred by −34%, −24% and
-−15% at k = 1, 2 and 3. One verify of a single draft token costs about twice a plain decode step.
+The best S_V is below 1.00 on every workload: **VERIFY_COST_REFUTES**. The measured-cost speedup came in 34%, 24% and
+15% below SD1's model at k = 1, 2 and 3 (`model_error` = S_V / S_SD1 − 1). One verify of a single draft token costs
+about twice a plain decode step.
 
 **The stop rule held.** Stage E ran as the direct check, reported and not ruled. Stage Q was skipped. The E canary
 (ON2) passed before E.
