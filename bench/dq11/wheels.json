@@ -1,8 +1,7 @@
 {
   "python": "3.11",
   "platform": "manylinux_2_28_x86_64",
-  "resolver": "uv 0.13.0"
-,
+  "resolver": "uv 0.13.0",
   "packages": [
     {"name": "accelerate", "version": "1.15.0", "filename": "accelerate-1.15.0-py3-none-any.whl", "url": "https://files.pythonhosted.org/packages/8a/4c/34f0450479d01195027260da68d8a3880683f1640c3ca5adf64acb3185f1/accelerate-1.15.0-py3-none-any.whl", "sha256": "97eacca0b73e45cb867dbf8c5d5d4dc32219544300e0c8992c7334dc2ef33cec", "size": 394295},
     {"name": "aiohappyeyeballs", "version": "2.7.1", "filename": "aiohappyeyeballs-2.7.1-py3-none-any.whl", "url": "https://files.pythonhosted.org/packages/71/43/1947f06babed6b3f1d7f38b0c767f52df66bfb2bc10b468c4a7de9eceff2/aiohappyeyeballs-2.7.1-py3-none-any.whl", "sha256": "9243213661e29250eb41368e5daa826fc017156c3b8a11440826b2e3ed376472", "size": 15038},
