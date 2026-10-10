@@ -1,0 +1,27 @@
+{
+ "step": "start",
+ "load_s": 17.1,
+ "layers": 30,
+ "experts": 128,
+ "snapshot_gib": 11.96,
+ "snapshot_s": 34.0,
+ "bake_s": 5.0,
+ "arena": "/root/fam/work_gemma4/nf4.arena",
+ "bake_info": {
+  "magic": "gnf4-nvme-arena",
+  "version": 1,
+  "snapshot": "/root/fam/work_gemma4/nf4snap",
+  "prefix": "model.layers.{layer}.mlp.experts.{expert}.{kind}",
+  "align": 4096,
+  "row_bytes": 3345408,
+  "row_stride": 3346432,
+  "n_layers": 30,
+  "n_experts_per_layer": 128,
+  "segments": "[{'suffix': 'nf4.gate_up_blocks', 'seg_off': 0, 'length': 1982464, 'shape_per_expert': [1408, 1408], 'dtype': 'U8'}, {'suffix': 'nf4.gate_up_absmax', 'seg_off': 1982464, 'length': 247808, 'shape_per_e",
+  "rows": "[[0, 0, 0], [0, 1, 3346432], [0, 2, 6692864], [0, 3, 10039296], [0, 4, 13385728], [0, 5, 16732160], [0, 6, 20078592], [0, 7, 23425024], [0, 8, 26771456], [0, 9, 30117888], [0, 10, 33464320], [0, 11, 3",
+  "arena_bytes": 12850298880,
+  "bake_mode": "relocate-expert-tensors",
+  "moe_layers": "[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]"
+ },
+ "status": "OK"
+}

@@ -1,0 +1,30 @@
+{
+ "proof": true,
+ "families": {
+  "gemma4": {
+   "verdict": {
+    "ON_epi": "VOID",
+    "ON_auto": "VOID"
+   },
+   "why": [
+    "ON_auto wikitext|12|A ON: glue-kernel calls {'rmsnorm_rows': 6696, 'router_epilogue': 930} != {'rmsnorm_rows': 8401, 'router_epilogue': 930}",
+    "ON_auto wikitext|12|B ON: glue-kernel calls {'rmsnorm_rows': 6696, 'router_epilogue': 930} != {'rmsnorm_rows': 8401, 'router_epilogue': 930}",
+    "ON_auto wikitext|12|C ON: glue-kernel calls {'rmsnorm_rows': 6696, 'router_epilogue': 930} != {'rmsnorm_rows': 8401, 'router_epilogue': 930}",
+    "ON_auto c4val1|12|A ON: glue-kernel calls {'rmsnorm_rows': 6696, 'router_epilogue': 930} != {'rmsnorm_rows': 8401, 'router_epilogue': 930}",
+    "ON_auto c4val1|12|B ON: glue-kernel calls {'rmsnorm_rows': 6696, 'router_epilogue': 930} != {'rmsnorm_rows': 8401, 'router_epilogue': 930}",
+    "ON_auto c4val1|12|C ON: glue-kernel calls {'rmsnorm_rows': 6696, 'router_epilogue': 930} != {'rmsnorm_rows': 8401, 'router_epilogue': 930}"
+   ],
+   "report": {
+    "configs": {}
+   }
+  }
+ },
+ "constants": {
+  "BIAS_MARGIN": 0.01,
+  "SPREAD_MULT": 2.0,
+  "SPREAD_MIN": 0.005,
+  "AGREE_MARGIN": 0.005,
+  "BACKSTOP_BIAS": 0.02,
+  "BACKSTOP_AGREE": 0.9
+ }
+}

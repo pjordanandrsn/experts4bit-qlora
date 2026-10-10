@@ -1,7 +1,7 @@
-# FAM — results: the B=1 fused stack at T == 1 beyond Qwen3. Granite ON_auto **FAIL**; gpt-oss-20b **FAIL** on every knob (its own floor sits below the backstop; Phase C's 0.924 was the gate, not the knob); Qwen3.6-35B-A3B ON_auto **PASS**, and its router epilogue **FASTER** at one row (ratio 0.973); Mixtral-8x7B **PASS** on every knob, resolved at × 0.90. One RTX 5090 per family
+# FAM — results: the B=1 fused stack at T == 1 beyond Qwen3. Granite ON_auto **FAIL**; gpt-oss-20b **FAIL** on every knob (its own floor sits below the backstop; Phase C's 0.924 was the gate, not the knob); Qwen3.6-35B-A3B ON_auto **PASS**, and its router epilogue **FASTER** at one row (ratio 0.973); Mixtral-8x7B **PASS** on every knob, resolved at × 0.90; Gemma-4-26B-A4B closed at its proof: its own floor sits below the backstop, so no knob is licensable on its NF4 stack. One RTX 5090 per family
 
 Registration: `bench/fam/PREREG-fam.md` (#1380, `9629874f`; Amendments 1 in #1403, 2 in #1420, 3 in #1432, 4 in
-#1436, and Mixtral's 5 in #1457, 7 in #1468, 8 in #1479 and 9 in #1487). Issue: #1362.
+#1436, and Mixtral's 5 in #1457, 7 in #1468, 8 in #1479 and 9 in #1487; Gemma-4's 6 in #1460 and 10 in #1529). Issue: #1362.
 
 Code under test, on every box:
 - e4b 0.50.0 at `9766fb4c` (#1403's merge, carrying #1395 and #1398); Qwen3.6's rerun at `98d59921` (#1420's merge);
@@ -29,9 +29,9 @@ then ×0.80, and claims the weakest rung that fails every gated cell (Amendment 
 | Mixtral-8x7B | `fam-mixtral-1`, `-2` | none | $0 | refused at the provider before any instance existed |
 | Mixtral-8x7B | `fam-mixtral-3` | EPYC 9454, 96 CPUs | $0.87 | VOID (#1477's serving regression; Amendment 9) |
 | Mixtral-8x7B | `fam-mixtral-4` | EPYC 7C13, 256 CPUs | $2.59 | ON_glue, ON_r2, ON_epi, ON_auto **PASS**, resolved at ×0.90 |
+| Gemma-4-26B-A4B, proof | `fam-gemma4-prove-1` | EPYC 7C13, 256 CPUs | $1.13 | VOID on Amendment 6's count; PROVED under Amendment 10 with ON_epi and ON_auto **FAIL** on the backstop; closed, no reading |
 
-The lane has spent $14.07 of its $26 ceiling (raised from $18 in Amendment 5). Gemma-4's runs are reported
-separately.
+The lane closed at $15.20 of its $26 ceiling (raised from $18 in Amendment 5).
 
 ## Granite-3.1-3b-a800m (`fam-granite-1`)
 
@@ -176,6 +176,40 @@ maintainer re-derived the verdict from the store independently.
   passing knobs buy on Mixtral (Amendment 4's interleaved method). None is proposed here; the four knobs stay off on
   Mixtral by default.
 
+## Gemma-4-26B-A4B (`fam-gemma4-prove-1`): closed at the proof
+
+**No knob is licensable on Gemma-4's NF4 stack with this instrument.** The family's own neutral floor sits below the
+absolute backstop. Each ON knob passes the relative gate and fails only the backstop, so nothing here shows the knobs
+harm Gemma-4. The maintainer closed the family at its proof; there is no reading.
+
+| cell | floor B / S / A | ON_epi worst set: abs bias / agree | ON_auto worst set: abs bias / agree | ×0.90 worst agree |
+|---|---|---|---|---:|
+| wikitext, 1 | 0.3633 / 0.4486 / 0.7370 | 0.2126 / 0.8464 | 0.0872 / 0.8594 | 0.7865 |
+| wikitext, 12 | 0.5069 / 0.5486 / 0.7500 | 0.0298 / 0.8516 | 0.0469 / 0.8568 | 0.7604 |
+| c4val1, 1 | 0.1095 / 0.3202 / 0.7656 | 0.0409 / 0.8281 | 0.0562 / 0.8125 | 0.7448 |
+| c4val1, 12 | 0.0967 / 0.2199 / 0.7448 | 0.0671 / 0.8464 | 0.0501 / 0.8229 | 0.7266 |
+
+- **The box's own reduction VOIDed**, on a count Amendment 6 got wrong. At T == 12 the glue fold sends Gemma-4's
+  per-head q and k norms (12 × 16 and 12 × 8 rows) to their own torch forward above 64 rows. So ON_auto calls
+  `rmsnorm_rows` 216 times per step, not 271. That is a re-route, not a skip. On the seat's A2000, every norm module
+  ran, and the logits stayed within 0–0.07 relative of OFF's, against 1.15 for a skipped norm. Amendment 10 counts per
+  shape, and the records were re-reduced under it (`verdict-amendment-10.json`). The maintainer re-derived it
+  byte-identical.
+- **The floor is the finding.** Neutral redraws alone (chunked prefill, halved batches, one KV split) move R's NLL by
+  up to 0.51 nats, with agreement as low as 0.737 and KL up to 0.68. For Mixtral the same arms read about 0.006 nats
+  and 0.97. R's mean NLL is 4.96 nats on wikitext and 5.69 on c4val1. This matches the register: Gemma-4's NF4 stack is
+  1.077 nats of KL from bf16 (`e4b.serve.p44.gemma4.nf4-vs-bf16`), and its arithmetic-order floor is 5–25 times other
+  families' (`e4b.parity.gemma4.chunk-free`).
+- **The relative gate passes; the backstop fails.** ON_epi and ON_auto agree with R at 0.81–0.86, above every cell's
+  A_f − 0.005 and with |bias| inside B_f + 0.010. Both fail only the 0.90 backstop. ON sits 0.04–0.09 below it, and
+  the neutral floor 0.13–0.16 below it. At reading scale the standard error of agreement is about 0.01–0.02, and a PASS
+  needs all 12 entries of a config at or above 0.90. So a reading would have bought the same structural FAIL for up to
+  $3.95.
+- **There is no resolution in substance.** The reducer reports `mut090` failing every cell, so formally the resolution
+  is ×0.90. On the wikitext cells, though, ×0.90 passes the relative gate and fails only the backstop. The floor is
+  wider than a ×0.90 softmax-scale change there.
+- **Walls:** about 680 s from launch to OFF; OFF 1535 s; ON_epi 254 s; ON_auto 240 s, at 32 positions. Peak 26.18 GiB.
+
 ## Predictions, graded
 
 | # | prediction | outcome |
@@ -195,6 +229,11 @@ maintainer re-derived the verdict from the store independently.
 | X3b | `mut080` fails every gated cell, about 75 % | **HIT** |
 | X4 | ON_epi PASS about 70 %; ON_glue and ON_r2 about 60 % each; ON_auto about 50 % | **HIT** on all four |
 | X5 | peak memory ≤ 30 GiB on every Mixtral process | **HIT**: 28.19 GiB |
+| G1 | Gemma-4: census and every engagement count exact; no VOID, about 80 % | **MISSED**: the proof VOIDed on Amendment 6's per-step count (a re-route at T == 12; Amendment 10) |
+| G2 | Gemma-4's floor A_f at (wikitext, 12) in [0.90, 0.96] | **MISSED**: 0.750 at proof scale |
+| G3 | `mut090` fails every gated cell, about 80 % | **HIT only by the backstop**: on wikitext ×0.90 passes the relative gate |
+| G4 | ON_epi PASS about 65 %; ON_glue about 50 %; ON_auto about 45 % | **not read**: closed at the proof, where ON_epi and ON_auto FAIL on the backstop |
+| G5 | peak memory ≤ 24 GiB on every Gemma-4 process | **MISSED**: 26.18 GiB |
 
 ## Receipts
 
@@ -203,6 +242,8 @@ maintainer re-derived the verdict from the store independently.
 `SHA256SUMS`. `fam-qw36-2/` adds `verdict-amendment-3.json`. `fam-speed-prove-1/` and `fam-speed-1/` hold the speed
 record (`speed_qw36.json`), `speed_verdict.json` and the same companions. The launcher receipts and ledger rows are in
 the receipt store. `fam-mixtral-prove-1/`, `fam-mixtral-prove-2/`, `fam-mixtral-3/` and `fam-mixtral-4/` hold the same
-companions for each Mixtral run that rented an instance. Claims: `e4b.serve.fam.fused-stack-t1.granite.5090.2026-10-09`,
+companions for each Mixtral run that rented an instance. `fam-gemma4-prove-1/` holds Gemma-4's proof, with its box
+verdict and Amendment 10's re-reduction (`verdict-amendment-10.json`). Claims: `e4b.serve.fam.fused-stack-t1.granite.5090.2026-10-09`,
 `e4b.serve.fam.fused-stack-t1.gptoss.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.qw36.5090.2026-10-09`,
-`e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.mixtral.5090.2026-10-09`.
+`e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.mixtral.5090.2026-10-09`,
+`e4b.serve.fam.fused-stack-t1.gemma4.5090.2026-10-10`.
