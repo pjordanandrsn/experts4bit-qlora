@@ -128,6 +128,14 @@ def _bash4():
 BASH = _bash4()
 
 
+
+def test_ci_runs_the_dry_run_rather_than_skipping_it():
+    """The two dry-run tests skip without a bash >= 4 (a developer's macOS /bin/bash is 3.2). In CI that skip would be a
+    silent pass, so there it is a failure: Linux CI's bash is 5 and must be found."""
+    if not (os.environ.get("CI") == "true" or os.environ.get("GITHUB_ACTIONS") == "true"):
+        pytest.skip("checked only in CI")
+    assert sys.platform != "win32" and BASH is not None, "CI found no bash >= 4: the box M dry run would be skipped"
+
 def _stage(w: pathlib.Path, run_text: str) -> None:
     for name, src in _staged_names_and_sources():
         dst = w / name
