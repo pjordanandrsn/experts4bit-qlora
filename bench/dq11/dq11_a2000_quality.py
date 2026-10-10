@@ -107,6 +107,11 @@ def worker(directory, arm):
             raise ValueError("installed source authority changed")
         sources = set(authority["sha256"])
         model, _, _, engagement = prepare(directory, arm, quality_read=True)
+        if arm in ("U", "U0"):
+            engagement["token_0_scored_inputs"] = {
+                name: sum(block.count(0) for block in tokens[name])
+                for name in ("alpaca-heldout", "wikitext-test")
+            }
         initial = install_initial(model, directory / "adapters/adapter_init.safetensors")
         before = path_census(model, arm, sources)
         base = base_census(model)
