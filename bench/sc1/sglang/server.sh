@@ -124,7 +124,7 @@ sglang_server_start(){
     || curl -fsS -m 30 "http://127.0.0.1:$PORT/get_server_info" -o "$LOG.server_info.json" 2>/dev/null \
     || { _sgl_say "no /server_info"; sglang_server_stop; return 45; }
   # ---- engagement: resolved args, the gptq_marlin banner, no JIT build failure, the Marlin MoE leaf on disk
-  SC1_MODE=$MODE SC1_MFS=$SC1_SGLANG_MEM_FRACTION_STATIC SC1_LOG=$LOG SC1_STARTUP_S=$startup_s SC1_JIT=$SGLANG_JIT_CACHE_DIR SC1_CMD="${CMD[*]}" "$SGLANG_VENV/bin/python" - <<'PYT'
+  SC1_SGLANG_PIN=${SGLANG_PIN:-0.5.20} SC1_MODE=$MODE SC1_MFS=$SC1_SGLANG_MEM_FRACTION_STATIC SC1_LOG=$LOG SC1_STARTUP_S=$startup_s SC1_JIT=$SGLANG_JIT_CACHE_DIR SC1_CMD="${CMD[*]}" "$SGLANG_VENV/bin/python" - <<'PYT'
 import glob, json, os, re, sys
 mode, log, jit = os.environ["SC1_MODE"], os.environ["SC1_LOG"], os.environ["SC1_JIT"]
 info = json.load(open(log + ".server_info.json"))
@@ -132,7 +132,8 @@ text = open(log, errors="replace").read()
 eng = {"mode": mode, "startup_s": int(os.environ["SC1_STARTUP_S"]), "cmd": os.environ["SC1_CMD"], "errors": []}
 def need(cond, msg):
     if not cond: eng["errors"].append(msg)
-eng["version"] = info.get("version"); need(info.get("version") == "0.5.20", f"server version {info.get('version')} != 0.5.20")
+want_v = os.environ.get("SC1_SGLANG_PIN", "0.5.20")   # the installer's pin (SGLANG_PIN; box M installs 0.5.21 from its lock)
+eng["version"] = info.get("version"); need(info.get("version") == want_v, f"server version {info.get('version')} != {want_v}")
 gptoss = mode in ("gptoss", "gptoss_q", "gptoss_qm")      # SC2g / SC1g: gpt-oss-20b's own MXFP4 checkpoint
 want_attn = "triton" if gptoss else "flashinfer"   # SC2g: SGLang forces its triton kernels for gpt-oss's sinks + window
 eng["attention_backend"] = info.get("attention_backend"); need(info.get("attention_backend") == want_attn, f"attention_backend resolved to {info.get('attention_backend')!r}, not {want_attn}")

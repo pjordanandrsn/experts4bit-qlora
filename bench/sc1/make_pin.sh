@@ -26,6 +26,8 @@ sha_of(){ (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | cut -d" " -f1; }
     echo "$(sha_of "$REPO/bench/sc5/$f")  $f"; done   # SC5 (box M), staged flat on every box
   for f in vllm.lock.txt sglang.lock.txt e4b-wheels.lock; do echo "$(sha_of "$REPO/bench/sc5/locks/$f")  $f"; done   # SC5's provenance locks
   echo "$(sha_of "$REPO/bench/p117/p117_box.py")  p117_box.py"   # SC5: the decode-shaped quality pass imports it
+  echo "$(sha_of "$REPO/bench/p108/p108_box.py")  p108_box.py"   # ... which imports P108's box
+  echo "$(sha_of "$REPO/bench/p97/p97_box.py")  p97_box.py"     # ... which imports P97's box
   for f in sc5_ref.json sc5_ref_chunked.json; do [ -s "$REPO/bench/sc5/ref/$f" ] && echo "$(sha_of "$REPO/bench/sc5/ref/$f")  $f"; done   # once registered
   echo "$(sha_of "$REPO/bench/p98/p98_bake.py")  p98_bake.py"   # SC2d (box K): P98's Qwen3.6 arena bake, staged flat on every box
   for d in vllm sglang llamacpp exl3 lmdeploy sc1g_ref; do
