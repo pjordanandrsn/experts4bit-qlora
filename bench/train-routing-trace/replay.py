@@ -21,7 +21,11 @@ Every policy is scored on the same window (the steps after the fit window); the 
 window first, so they are scored warm.
 
 A training trace is refused unless it is complete: its capture verdict is OK, and every step holds exactly --expect-mb
-micro-batches, each with every layer in both passes (re-checked here from the file, not trusted from the meta).
+micro-batches, each with every layer in both passes, and every forward routes as its recompute (re-checked here from
+the file, not trusted from the meta). A capture that ended early (an OOM in a later step) can be scored on its first N
+optimizer steps with --complete-steps N --truncation-reason TEXT: the same checks run on exactly the kept steps, a
+fault inside the cut still refuses, and the output's trace_info records the capture's verdict, the planned steps and
+the cut.
 
 Controls: `--null-seed` replaces every micro-batch's per-layer set with a random set of the same size (seeded), keeping
 the forward set for the recompute and the dgrad, so within-step reuse stays and cross-micro-batch locality is destroyed.
@@ -81,16 +85,40 @@ class IncompleteTrace(ValueError):
 
 
 # -- building the access sequence --------------------------------------------------------------------------------
-def load_train_trace(path: str, expect_mb: int):
-    """{(step, mb): {"fwd": {layer: ids}, "recompute": {...}}}, after the completeness guard. Raises IncompleteTrace."""
+def _planned_steps(meta: dict):
+    args = meta.get("harness_args") or []
+    return int(args[args.index("--steps") + 1]) if "--steps" in args else None
+
+
+def load_train_trace_info(path: str, expect_mb: int, complete_steps: int | None = None, reason: str | None = None):
+    """(micro-batches, info) after the completeness guard. Raises IncompleteTrace.
+
+    `complete_steps=N` scores only the first N optimizer steps of a capture that ended early (an OOM in a later step):
+    the capture's own verdict may then be VOID, but the guard and the forward == recompute check are re-run on exactly
+    the kept steps, and anything wrong inside the cut still refuses. N cannot exceed the optimizer steps the capture
+    completed, the capture must carry its meta (the provenance of the cut), and `reason` must say why. `info` records
+    the capture's verdict and reasons, the planned steps (`truncated_from`), N and the reason."""
     meta_path = path + ".meta.json"
-    verdict = None
+    meta, summary = {}, {}
     if os.path.exists(meta_path):
         with open(meta_path) as f:
-            summary = json.load(f).get("summary", {})
-        verdict = summary.get("verdict")
-        if verdict != "OK":
+            doc = json.load(f)
+        meta, summary = doc.get("meta", {}), doc.get("summary", {})
+    verdict = summary.get("verdict")
+    info = {"capture_verdict": verdict, "complete_steps": complete_steps}
+    if complete_steps is None:
+        if os.path.exists(meta_path) and verdict != "OK":
             raise IncompleteTrace(f"capture verdict {verdict!r}: {summary.get('reasons', [])[:5]}")
+    else:
+        if not summary:
+            raise IncompleteTrace("--complete-steps needs the capture's meta: the cut must be traceable to the capture")
+        if not reason:
+            raise IncompleteTrace("--complete-steps needs a stated reason for the cut")
+        if not 0 < complete_steps <= int(summary.get("steps", 0)):
+            raise IncompleteTrace(f"--complete-steps {complete_steps}: the capture completed "
+                                  f"{summary.get('steps')} optimizer steps")
+        info.update({"capture_reasons": summary.get("reasons", []), "truncated_from": _planned_steps(meta),
+                     "reason": reason})
     data = np.load(path)
     records, layers, steps = {}, set(), 0
     for k in data.files:
@@ -98,16 +126,30 @@ def load_train_trace(path: str, expect_mb: int):
         if not m:
             continue
         s, mb, p, layer = int(m.group(1)), int(m.group(2)), m.group(3), int(m.group(4))
-        records[(s, mb, p, layer)] = data[k]
         layers.add(layer)
+        if complete_steps is not None and s >= complete_steps:
+            continue
+        records[(s, mb, p, layer)] = data[k]
         steps = max(steps, s + 1)
+    if complete_steps is not None:
+        steps = complete_steps
     reasons = _recorder().completeness_reasons(records, sorted(layers), steps, expect_mb)
+    differ = [(s, mb, layer) for (s, mb, p, layer), ids in records.items()
+              if p == "fwd" and not np.array_equal(ids, records.get((s, mb, "recompute", layer)))]
+    if differ:
+        reasons.append(f"{len(differ)} (step, micro-batch, layer) whose recompute routed differently from its forward, "
+                       f"first {sorted(differ)[:3]}")
     if reasons:
         raise IncompleteTrace(f"refused: {reasons[:5]}")
     mbs: dict = defaultdict(lambda: {"fwd": {}, "recompute": {}})
     for (s, mb, p, layer), ids in records.items():
         mbs[(s, mb)][p][layer] = ids
-    return dict(mbs)
+    return dict(mbs), info
+
+
+def load_train_trace(path: str, expect_mb: int, complete_steps: int | None = None, reason: str | None = None):
+    """{(step, mb): {"fwd": {layer: ids}, "recompute": {...}}}, after the completeness guard. Raises IncompleteTrace."""
+    return load_train_trace_info(path, expect_mb, complete_steps, reason)[0]
 
 
 def train_sequence(mbs, null_seed: int | None = None, n_experts: int = 128):
@@ -258,6 +300,10 @@ def main(argv=None) -> int:
     src.add_argument("--trace", help="a training trace .npz from run_capture.py")
     src.add_argument("--decode", help="a #1469 decode trace .jsonl")
     ap.add_argument("--expect-mb", type=int, help="micro-batches per step; required with --trace (the guard)")
+    ap.add_argument("--complete-steps", type=int, default=None,
+                    help="score only the first N optimizer steps of a capture that ended early (re-checked; see "
+                         "load_train_trace_info)")
+    ap.add_argument("--truncation-reason", default=None, help="why the capture is cut; required with --complete-steps")
     ap.add_argument("--fit-steps", type=int, default=5)
     ap.add_argument("--null-seed", type=int, default=None, help="replay the shuffled-routing null with this seed")
     ap.add_argument("--hidden", type=int, default=2048)
@@ -268,10 +314,14 @@ def main(argv=None) -> int:
     if a.trace:
         if a.expect_mb is None:
             ap.error("--expect-mb is required with --trace")
-        seq = train_sequence(load_train_trace(a.trace, a.expect_mb), null_seed=a.null_seed, n_experts=a.n_experts)
+        mbs, info = load_train_trace_info(a.trace, a.expect_mb, a.complete_steps, a.truncation_reason)
+        seq = train_sequence(mbs, null_seed=a.null_seed, n_experts=a.n_experts)
     else:
-        seq = decode_sequence(a.decode)
+        if a.complete_steps is not None:
+            ap.error("--complete-steps applies to a training trace only")
+        seq, info = decode_sequence(a.decode), None
     res = replay(seq, a.fit_steps, expert_row_bytes(a.hidden, a.moe_intermediate))
+    res["trace_info"] = info
     res["source"] = a.trace or a.decode
     res["null_seed"] = a.null_seed
     with open(a.out, "w") as f:
