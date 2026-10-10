@@ -144,3 +144,4 @@ def test_prefill_routes_reports_both_counters(monkeypatch):
                          "moe_k19_dispatch": {"chained|lean|gt256": 48},     # E4B_PREFILL_LEAN_DISPATCH's evidence
                          "prefill_folds": {"layer": 48, "norm": 97}}         # E4B_FUSE_PREFILL_GLUE's
     assert {"int4_prefill", "prefill_attn", "device_grouping"} <= set(r)   # the env-resolved fields stay
+    assert r["prefill_lean_dispatch"] in ("auto", "0", "1")                # P2's resolved mode (P130: auto)

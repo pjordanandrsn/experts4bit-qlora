@@ -163,25 +163,28 @@ def _lean_glue_env() -> bool:
 
 _LEAN_GLUE_SUPPORT: dict = {}
 
-#: ``E4B_PREFILL_LEAN_DISPATCH`` (default ``0``; bench/prefill-glue/DESIGN.md, P2): K19's PREFILL rows
+#: ``E4B_PREFILL_LEAN_DISPATCH`` (default ``auto``; bench/prefill-glue/DESIGN.md, P2): K19's PREFILL rows
 #: (``E4B_INT4_PREFILL=k19``, above 256 routed rows) take K23's dispatch -- gate_up reads token row ``order[i] // top_k``
 #: itself (``gather_div``), so the ``[T * top_k, H]`` ``index_select`` is not made, and down stores each row at
 #: ``order[i]`` (``scatter=order``), so the ``index_copy_`` unsort is not run -- over the SAME chained 16-row tile table
 #: (K23's one-launch builder stays a decode-shape builder). Bit-identical by construction on that kernel and table
-#: (grouped-nf4-gemm's K23 contract); its default flips only after an on-card ``torch.equal`` read that asserts the route
-#: (:data:`K19_DISPATCH_SEEN`).
+#: (grouped-nf4-gemm's K23 contract). Licensed as the default by lane P130 (bench/p130/RESULTS-p130.md, one RTX 5090,
+#: Qwen3-30B-A3B int4): ``torch.equal`` on every window of the served first-chunk prefill graph, with the route asserted
+#: (:data:`K19_DISPATCH_SEEN`), and x0.968 [0.966, 0.970] per 512-token replay.
 PREFILL_LEAN_DISPATCH_ENV = "E4B_PREFILL_LEAN_DISPATCH"
 
 
-def _prefill_lean_dispatch_env() -> bool:
-    """``E4B_PREFILL_LEAN_DISPATCH``: ``0`` (also unset or empty) keeps the gather and unsort, ``1`` takes the lean
-    dispatch on K19's prefill rows (a kernel package without K19's ``scatter=`` / ``gather_div=`` is refused). Anything
-    else is refused rather than read as one of these. Read on every call, like the other route knobs."""
+def _prefill_lean_dispatch_env() -> str:
+    """``E4B_PREFILL_LEAN_DISPATCH``, one of ``auto`` (also unset or empty: the lean dispatch on K19's prefill rows
+    wherever the installed K19 takes ``scatter=`` / ``gather_div=``, else the gather and unsort), ``1`` (the lean dispatch,
+    and a kernel package without those options is refused rather than silently kept on the gather) or ``0`` (the gather
+    and unsort, as before P130). Anything else is refused rather than read as one of these. Read on every call, like the
+    other route knobs."""
     raw = os.environ.get(PREFILL_LEAN_DISPATCH_ENV, "")
-    v = (raw or "").strip() or "0"
-    if v not in ("0", "1"):
-        raise ValueError(f"{PREFILL_LEAN_DISPATCH_ENV}={raw!r}: expected '0' or '1'")
-    return v == "1"
+    v = (raw or "").strip().lower() or "auto"
+    if v not in ("auto", "0", "1"):
+        raise ValueError(f"{PREFILL_LEAN_DISPATCH_ENV}={raw!r}: expected 'auto', '0' or '1'")
+    return v
 
 
 _K19_DISPATCH_SUPPORT: dict = {}
@@ -715,13 +718,16 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             raise RuntimeError(
                 "E4B_INT4_PREFILL=k19 needs grouped-nf4-gemm with K19 "
                 "(int4_smallm.gemm_int4_b32_grouped_smallm, grouped-nf4-gemm#419)") from e
-        if _prefill_lean_dispatch_env():
-            # E4B_PREFILL_LEAN_DISPATCH=1: K23's dispatch on these rows, the chained table kept. Not under a calibration
-            # sink (it reads x_sorted) nor gpt-oss's epilogue (it reads the sorted down output), as K23 itself.
-            if not _k19_takes_lean_dispatch(_k19):
+        _pf_mode = _prefill_lean_dispatch_env()
+        if _pf_mode != "0":
+            # E4B_PREFILL_LEAN_DISPATCH (auto by default since P130): K23's dispatch on these rows, the chained table
+            # kept. Not under a calibration sink (it reads x_sorted) nor gpt-oss's epilogue (it reads the sorted down
+            # output), as K23 itself. `auto` keeps the gather on a K19 without the options; `1` refuses it.
+            if _k19_takes_lean_dispatch(_k19):
+                _pf_lean = _CALIB_SINK is None and gptoss is None
+            elif _pf_mode == "1":
                 raise RuntimeError(
                     "E4B_PREFILL_LEAN_DISPATCH=1 needs grouped-nf4-gemm whose K19 takes scatter=/gather_div= (K23)")
-            _pf_lean = _CALIB_SINK is None and gptoss is None
     _tok = None
     _gd = None
     if x_rows is None:

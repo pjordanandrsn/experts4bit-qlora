@@ -124,22 +124,29 @@ so it keeps the explicit mask. **`prefill_routes.seen` is what ran.**
 All are counted in the Python forward, so eager calls and graph captures count and graph replays do not. A count
 says the route ran, not how often a replayed graph did. An engagement check should assert on `seen`.
 
-**Prefill glue (opt-in, not licensed: `E4B_FUSE_PREFILL_GLUE`, `E4B_PREFILL_LEAN_DISPATCH`, both `0` by default).**
-The design is `bench/prefill-glue/DESIGN.md`. Neither knob is licensed by any read yet, and neither changes anything
-at its default.
+**Prefill glue (`E4B_FUSE_PREFILL_GLUE`, opt-in; `E4B_PREFILL_LEAN_DISPATCH`, default `auto`).** The design is
+`bench/prefill-glue/DESIGN.md`; lane P130 read both knobs (`bench/p130/RESULTS-p130.md`, one RTX 5090, Qwen3-30B-A3B
+int4).
 - `E4B_FUSE_PREFILL_GLUE=1` lifts the decode folds' 64-row gate, read once at startup. A prefill's norm,
   residual-and-norm and q/k-norm-and-rotary calls then run the fused kernels decode already uses, instead of
   transformers' eager chain. The router epilogue keeps its gate.
   - It changes prefill arithmetic: decode's single bf16 rounding replaces transformers' two.
   - Its licence is a teacher-forced prefill read.
-- `E4B_PREFILL_LEAN_DISPATCH=1` changes K19's prefill rows (`E4B_INT4_PREFILL=k19`, above 256 routed rows):
+- `E4B_PREFILL_LEAN_DISPATCH` (default `auto`) changes K19's prefill rows (`E4B_INT4_PREFILL=k19`, above 256 routed
+  rows):
   - gate_up reads the token rows itself (`gather_div`), and down stores into the caller's row order
     (`scatter=order`);
   - the chained 16-row tile table is kept;
-  - it is bit-identical by construction on that kernel and table; its read asserts the route through
-    `seen.moe_k19_dispatch`;
-  - a kernel package without K19's `scatter=` / `gather_div=` is refused.
-- Anything but `0` or `1` is refused for either knob.
+  - it is bit-identical by construction on that kernel and table. P130 read it `torch.equal` on every window of the
+    served first-chunk prefill graph, with the route asserted through `seen.moe_k19_dispatch`, and ×0.968
+    [0.966, 0.970] per 512-token replay;
+  - `auto` takes it wherever the installed K19 takes `scatter=` / `gather_div=` and keeps the gather otherwise; `1`
+    refuses a kernel package without them; `0` restores the gather and unsort. `prefill_routes.prefill_lean_dispatch`
+    reports the resolved setting;
+  - scope: read on Qwen3-30B-A3B. Other families on the int4 K19 prefill route take it on its bitwise contract (the
+    same kernel and tile table), not on a read of their own.
+- `E4B_FUSE_PREFILL_GLUE` accepts `0` or `1`; `E4B_PREFILL_LEAN_DISPATCH` accepts `auto`, `0` or `1`. Anything else is
+  refused.
 
 **First-chunk prefill graph (`E4B_PAGED_PREFILL_GRAPH`, `auto` by default since lane SC2b).** Every first chunk of
 exactly `E4B_PAGED_CHUNK_TOKENS` tokens replays one CUDA graph of the prefill forward instead of launching it kernel by
