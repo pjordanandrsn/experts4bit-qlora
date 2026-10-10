@@ -12198,9 +12198,9 @@
       "package": "experts4bit-qlora",
       "area": "train",
       "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
-      "claim": "Lane P129 Amendment 4 (#835), DEFAULT_ON's second host: e4b's fused q/k/v training projection (E4B_TRAIN_FUSE_QKV=1) against the three projections on one RTX 5090 (tc1-5090-150, AMD EPYC 7K62, Vast machine 152440, host-bound: the matched q0's GPU busy 0.539; no draw voided for host load) at TC1's field recipe over 60 load-gated steps. Launches per step fell 13.9 % (fp32 adapters) and 14.6 % (bf16); the step took 0.906 and 0.884 of the time (two draws a side, cross-draw ranges [0.903, 0.909] and [0.870, 0.898]); device time 0.988 on each arm. The step-0 held-out lies within the box's fp32-anchored envelope (e_B 0.02313 against 0.03905, bitwise the first host's step-0 numbers); held-out at N within 0.0019. With the first host's GAIN (e4b.train.p129.fused-qkv.qwen3.5090.2026-10-10) this meets P129's DEFAULT_ON rule.",
+      "claim": "Lane P129 Amendment 4 (#835), DEFAULT_ON's second host: e4b's fused q/k/v training projection (E4B_TRAIN_FUSE_QKV=1) against the three projections at TC1's field recipe over 60 load-gated steps, on two RTX 5090 hosts, each read on its own. Second host tc1-5090-150 (AMD EPYC 7K62, Vast machine 152440, host-bound: the matched q0's GPU busy 0.539; no draw voided for host load): s/step q1 / q0 0.906 [0.903, 0.909] with fp32 adapters and 0.884 [0.870, 0.898] with bf16 (two draws a side, medians and cross-draw ranges); launches per step -13.9 % and -14.6 %; device time 0.988 on each arm; step-0 held-out within the box's fp32-anchored envelope (e_B 0.02313 against 0.03905); held-out at N +0.00182 and +0.00071. First host tc1-5090-147 (AMD EPYC 7B13, Vast machine 27708, matched q0 busy 0.464; every standing attempt above the 6.0 load gate): 0.895 [0.890, 0.901] and 0.868 [0.862, 0.875]; the same step-0 numbers; held-out at N -0.00001 and +0.00063 (e4b.train.p129.fused-qkv.qwen3.5090.2026-10-10). Both GAIN, which meets P129's DEFAULT_ON rule.",
       "value": 0.906,
-      "unit": "ratio, s/step E4B_TRAIN_FUSE_QKV=1 / 0, e4b matched arm (fp32 adapters) at TC1's field recipe on a host-bound box (medians of two draws); shipped arm (bf16 adapters) 0.884",
+      "unit": "ratio, s/step E4B_TRAIN_FUSE_QKV=1 / 0, e4b matched arm (fp32 adapters) at TC1's field recipe on the second host tc1-5090-150 (medians of two draws); the other readings are quoted per host in the claim",
       "hardware": "RTX 5090 (sm_120), one rented Vast.ai host (tc1-5090-150: instance 55149329, AMD EPYC 7K62, 96 threads, Vast machine 152440); e4b @ 2d0ed91 + grouped-nf4-gemm @ d1f64ba (v0.44.0), torch 2.12.1+cu130",
       "conditions": "bench/tc1 token qwen3fqkv3 (P129 Amendments 3 and 4): TC1's tokens and field recipe, TC1_STEPS=60, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, the shipped and matched arms in ABBA order, every arm profiled, the step-0 floor on the q0 arms; the package diff against the first host's build (51e5ae1) audited to seven files off the Qwen3-30B-A3B training path; scoring by bench/tc1/tc1_reduce.py's score_fqkv (the envelope rule)",
       "measured_on": "2026-10-10",
@@ -12209,13 +12209,16 @@
       "evidence": [
         "bench/p129/PREREG-p129.md",
         "bench/p129/RESULTS-p129-a4.md",
+        "bench/p129/RESULTS-p129-a3.md",
         "bench/p129/receipts/tc1-5090-150/RESULTS-tc1.md",
+        "bench/p129/receipts/tc1-5090-147/RESULTS-tc1.md",
         "bench/tc1/tc1_reduce.py"
       ],
       "evidence_private": [
-        "receipts/experts4bit-qlora/2026-10-10/tc1-5090-150/tc1/"
+        "receipts/experts4bit-qlora/2026-10-10/tc1-5090-150/tc1/",
+        "receipts/experts4bit-qlora/2026-10-09/tc1-5090-147/tc1/"
       ],
-      "notes": "Vast invoiced $1.326. No draw was voided for host load; the first host's box ran under heavy contention and agrees (0.895 / 0.868)."
+      "notes": "Vast invoiced $1.326 (tc1-5090-150) and $2.759 (tc1-5090-147). The hosts are quoted separately, not pooled."
     }
   ]
 }
