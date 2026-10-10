@@ -689,3 +689,109 @@ record lists the package modules its process loaded (`modules_loaded`).
 - **The cost:** a ceiling of 3.5 h × $0.85 + 62 GB × $0.011 = **$3.66**, about $3.0 expected. The read was registered at
   1.75 h and about $2.20. Q at one window a pass is what grew; its sample of 48 windows per text is kept.
 - **The launch** waits on the maintainer's ACK and a relay on #1313.
+
+## Amendment 4 (2026-10-10): a key-row position gate in V0, after `sd2-5090-1`
+
+Registered before `sd2-prove-4`. The maintainer ruled on it before any code (option B).
+
+**What happened.** `sd2-5090-1` (**$0.566**, teardown complete) read **VOID**, and the maintainer re-derived it from the
+receipts with main's reducer.
+- **Every build item held:**
+  - the audit (7 files);
+  - the GPU tests (123 passed, none skipped);
+  - the capture, bitwise;
+  - the draft (574 of 576);
+  - the transition.
+- **On rows outside calibration** the real build stayed at or below 0.083 nats of mean |Δ log p| (R3, k = 3), and
+  mutants (a) and (b) read 2.0 to 11.5.
+- **Mutant (c), the verify rows' RoPE positions +1,** read 0.161 on R1 and 0.064 on C1. Both are inside the 0.25
+  bound, so V0 failed closed with `GATE_TOO_WEAK:c_R1` and `GATE_TOO_WEAK:c_C1`. No timing was read.
+
+**The finding.** A logit-level gate on short verify rows cannot see a uniform RoPE position shift out of sample:
+- The shift moves both the queries and the keys the verify rows write, so the relative positions among the verify rows
+  are preserved. Each row's distance to the prefix moves by one position, and attention to distant context barely
+  notices.
+- On C1 the mutant sat below the real build's own largest value on another row, so no logit bound on these rows
+  separates the two.
+- Calibration's 1.18 on R0 was a property of that row.
+
+**The key-row gate** (added; the logit gate keeps its 0.25 bound and rule a2 is unchanged). Inside S2-lite's
+construction, at each position and for each verify row i:
+- the keys the T == 1 oracle wrote at positions base .. base + k are read from the pool (`Fp8PagedKV`'s reference
+  dequant) **before** the rewind, and the keys the verify step wrote at the same positions are read after it;
+- for every pool layer and KV head, both are reduced to **RoPE pair 0**, z = x[0] + i·x[D/2] (rotate-half). Pair 0 turns
+  **θ₀ = 1 rad per position at any base** (base⁰ = 1). The box records the model's first rotary frequency, and rule a3
+  requires it to be exactly 1;
+- the statistic is the rotation **φ = arg(z_verify · conj(z_oracle))**, compared as a rotation over the pair, not
+  elementwise;
+- a cell is **informative** when |z_oracle| ≥ 2⁻⁷ × the larger amax of the two scale groups holding the pair. Cells
+  below that are counted and left out;
+- the gate reads the **max |φ|** over positions, rows, heads and layers (informative cells). Layer 0 and each layer's
+  maximum are reported beside it, with the radial drift ||z_v| / |z_o| − 1|.
+
+**The threshold, derived** (written out before the proof, as the maintainer asked):
+- **Under (c),** the verify writes the key at position p rotated by (p + 1)θ: z_v = e^{i}·(z_o + δ), so φ_c = 1 rad up
+  to the same perturbation δ as the real build. |e^{i} − 1| = 0.959.
+- **Under the real build,** z_v = z_o + δ, with two sources for δ:
+  - **the inputs' drift ε:** the verify step's pre-quantization key against the T == 1 key at the same position, as a
+    fraction of |z|;
+  - **the two FP8 roundings.** The pool scales keys per (token, head, 32-wide group), amax / 448, e4m3. e4m3 keeps 3
+    mantissa bits. A GEMM-order difference that flips one rounding moves an element by up to **one ulp, 2⁻³ of it**
+    (not half an ulp), so δ ≤ 2⁻³·|z| from the payload.
+  - In a cell e4m3 keeps subnormal, the absolute step is 2⁻⁹ of the group scale. The informative floor holds that
+    term to 2⁻⁹ × (1/448) × 2⁷ ≈ 0.0006 ≤ 2⁻¹⁰ of |z|.
+  - So |δ| ≤ (ε + 2⁻³ + 2⁻¹⁰)·|z_o|, and **|φ_real| ≤ arcsin(ε + 2⁻³ + 2⁻¹⁰)**, while **|φ_c − 1| ≤ the same**.
+- **The boundary is 0.5 rad,** the midpoint between "the key is at its position" (0) and "one position off" (1). It is
+  not fitted.
+- **Both sides hold whenever ε + 2⁻³ + 2⁻¹⁰ ≤ sin 0.5,** that is, **ε ≤ 0.353**.
+- **At layer 0 the margin is analytic.** Both paths feed the same token's embedding, so ε is only the k_proj GEMM order
+  (M = k + 1 against the M = 1 GEMV), k_norm and the bf16 casts: at most about three bf16 ulps, ε₀ ≤ 2⁻⁶. Then
+  |φ_real| ≤ arcsin(2⁻⁶ + 2⁻³ + 2⁻¹⁰) = **0.142 rad**, and (c) reads at least **0.858 rad**. The margins are 3.5× below
+  the boundary and 1.7× above it. Because (c) shifts every layer's positions, layer 0 alone catches it.
+- **At depth the margin is NOT analytic, and that is said before the proof.** ε grows with the hidden-state drift that
+  T > 1 arithmetic accumulates through the layers. Its only bound is the logit gate's indirect one (≤ 0.083 nats on the
+  fresh rows). The gate still takes the max over every layer, as the maintainer asked, so a deep layer whose ε passed
+  0.353 would fail the real build. That would be a VOID, not a retune. `sd2-prove-4` measures the per-layer maxima and
+  the drift and reports them before the read.
+- **A CPU test checks the derivation with real e4m3** (`tests/test_sd2_krot.py`). Rotate-half keys at Qwen3's base are
+  quantized as the pool quantizes them, and the test asserts:
+  - the real build's φ ≤ the bound, and (c)'s |φ − 1| ≤ the bound, at ε = 0, 2⁻⁷, 0.05 and 0.3;
+  - the boundary separates them at each of these;
+  - a reversed shift reads −1 rad, and uninformative cells are left out.
+
+  Measured there at ε = 2⁻⁷: the real build at most 0.092 rad against its bound of 0.134; (c) at least 0.924.
+
+**Rule a3** (`sd2_reduce.py`, now the default for `--prove`, `--gate-v` and `--read`):
+- a (row, k) passes when its logit max is ≤ 0.25 **and** its key-row max is < 0.5 rad over at least one informative
+  cell;
+- a mutant is caught when its logit max is > 0.25 **or** its key-row max is ≥ 0.5 rad;
+- every record must carry its key rows, and the census must show θ₀ = 1.
+
+`--rule a2` and `--rule a1` keep the earlier rules, so every earlier receipt re-derives as registered. The self-test
+pins `sd2-5090-1`'s own V0: under a2 it is `GATE_TOO_WEAK:c_R1, c_C1`, and under a3 it fails for want of its key rows.
+
+**`sd2-prove-4`** (the maintainer's conditions):
+- **The target:** the proof's, `539a2d26`, the integration commit Amendment 1 registered. The 17 files the builds
+  touch are byte-identical there and at the read's target `88ae1cfd`.
+- **The harness:** this amendment's merge commit. The runner is unchanged, and the box and the reducer add the key rows
+  and rule a3.
+- **What it must show,** on the calibration rows (R0, C0):
+  - the real build under both gates at k = 1, 2, 3;
+  - every mutant, (a), (b) and (c), failing at least one;
+  - the key-row values reported for every record.
+
+  Its logit numbers should reproduce `sd2-prove-3`'s bit for bit (deterministic kernels).
+- **The budget:** Amendment 1b's, a 1.25 h guard and a ceiling of **$1.75**, with about $0.7 expected.
+- **The order:** prove-4, then the maintainer's re-derivation and ACK, then **`sd2-5090-2`**. That is Amendment 3's
+  read, unchanged: target `88ae1cfd`, the same audit, V0 on fresh rows, now under rule a3, and a ceiling of $3.66.
+  Each launch needs the maintainer's ACK. Rentals today run one lane at a time, SD2 first.
+
+**Predictions** (registered before `sd2-prove-4`):
+- the real build's key-row max at layer 0 ≤ 0.142 rad on every (row, k) (the bound), and ≤ 0.25 rad at any layer;
+- (c) ≥ 0.858 rad at layer 0 (the bound);
+- (b) above the boundary, since its rows write one position low;
+- (a) inside it at layer 0, since its keys are written right and its fault is on the read side, and caught by the
+  logits as before.
+
+**Unchanged:** the logit gate and its 0.25 bound, every other V0 item, the read's stages, its rule, its target, its
+audit and its budget.
