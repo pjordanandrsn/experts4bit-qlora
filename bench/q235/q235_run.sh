@@ -50,10 +50,13 @@ must(){ phase "$@"; [ "$PHASE_RC" = 0 ] || { tail -30 "logs/$1.log"; say "VOID: 
 # The registered constants live here, in the sealed closure: tc1_drive.sh forwards only its own TC1_* list, so nothing below can
 # be changed from the controller's environment. A rehearsal may override the caps and the interpreter (Q235_CAP_*, Q235_PYTHON).
 # The phase caps (seconds) are gate 2's: each fitted from the rehearsal's measured phases, scaled to the registered model and class.
-CAP_GIT=240 CAP_VENV=120 CAP_INSTALL=1800 CAP_HOSTRATE=600 CAP_FETCH=14400 CAP_TOKENS=300 CAP_BOX=5400 CAP_REPEAT=3600
-# The host-rate floors (gate 2's premise): the A2000 rehearsal's measured pinned H2D, and the rehearsal load's effective disk read
-# rate; the box measures both (the disk with O_DIRECT) before the checkpoint fetch and refuses below either. A rehearsal records only.
-MIN_H2D_GBS=0 MIN_DISK_GBS=0 MIN_HOST_COPY_GBS=0
+# Fitted (q235_fit.py) from the A2000 rehearsal at 4b301ec3, for a host listing at least 500 Mbps: box 5,875 s and repeat 3,055 s
+# scaled (x 94/4), fetch 7,935 s; each cap is the scaled time x 1.5, rounded up to the minute.
+CAP_GIT=240 CAP_VENV=120 CAP_INSTALL=1800 CAP_HOSTRATE=600 CAP_FETCH=12000 CAP_TOKENS=300 CAP_BOX=8820 CAP_REPEAT=4620
+# The host-rate floors (gate 2's premise), the rehearsal's own: its pinned H2D (PCIe gen 3 x8), its host-copy rate (the load's
+# dominant part is the host-side expert assembly) and its load's effective read rate. The box measures all three (the disk with
+# O_DIRECT) before the checkpoint fetch and refuses below any. A rehearsal records only.
+MIN_H2D_GBS=5.8 MIN_DISK_GBS=0.743 MIN_HOST_COPY_GBS=5.14
 ROWS=8          # TC1's field-text rows in the one micro-batch (the 30B calibration's and gate 1's); the registering amendment fixes it
 PY=python3.11
 if [ "$MODE" != science ]; then

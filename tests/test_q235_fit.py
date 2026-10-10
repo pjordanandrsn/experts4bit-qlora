@@ -63,11 +63,15 @@ def test_the_config_bytes_are_the_locked_checkpoint():
 
 def test_the_floors_are_the_rehearsal_s_link_and_its_load_s_effective_disk_rate():
     f = _fit()
-    fl = f.floors({"h2d_gb_s": 21.5, "disk_read_gb_s": 1.9, "disk_method": "O_DIRECT (dd iflag=direct)", "pcie_gen": "4",
-                   "pcie_width": "16"}, 534.0)
-    assert fl["h2d_gb_s"] == 21.5
+    hr = {"h2d_gb_s": 21.5, "host_copy_gb_s": 5.14, "disk_read_gb_s": 1.9, "disk_method": "O_DIRECT (dd iflag=direct)",
+          "pcie_gen": "4", "pcie_width": "16"}
+    fl = f.floors(hr, 534.0)                                                   # no profile: bytes over the whole load
+    assert fl["h2d_gb_s"] == 21.5 and fl["host_copy_gb_s"] == 5.14
     assert fl["disk_read_gb_s"] == round((4 * f.LAYER_BYTES + f.OUTSIDE_BYTES) / 534.0 / 1e9, 3)
     assert fl["basis"]["rehearsal_direct_read_gb_s"] == 1.9                  # reported beside, never the floor
+    prof = {"read": 30.12, "assemble": 65.68, "quantize": 1.14, "offload": 7.38, "other_s": 11.51, "read_bytes": 22391367680}
+    fl = f.floors(hr, 126.2, prof)                                             # with the load profile: the reads' own rate
+    assert fl["disk_read_gb_s"] == round(22391367680 / 30.12 / 1e9, 3) and fl["basis"]["dominant"] == "assemble"
     assert set(f.sealed_floors(Q / "q235_run.sh")) == {"h2d_gb_s", "disk_read_gb_s", "host_copy_gb_s"}
 
 

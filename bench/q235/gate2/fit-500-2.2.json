@@ -1,0 +1,107 @@
+{
+ "schema": "q235-fit/1",
+ "layers": 94,
+ "slice_layers": 4,
+ "margin": 1.5,
+ "bandwidth_mbps": 500.0,
+ "usd_per_hour": 2.2,
+ "hash_rate_gb_s": 1.141,
+ "phases": {
+  "require-git": {
+   "scaled_s": 0.0,
+   "budget_s": 60,
+   "sealed_cap_s": 240,
+   "fits": true
+  },
+  "create-venv": {
+   "scaled_s": 4.0,
+   "budget_s": 60,
+   "sealed_cap_s": 120,
+   "fits": true
+  },
+  "tokens": {
+   "scaled_s": 12.0,
+   "budget_s": 60,
+   "sealed_cap_s": 300,
+   "fits": true
+  },
+  "hostrate": {
+   "scaled_s": 33.0,
+   "budget_s": 60,
+   "sealed_cap_s": 600,
+   "fits": true
+  },
+  "install": {
+   "scaled_s": 242.6,
+   "budget_s": 364,
+   "sealed_cap_s": 1800,
+   "fits": true
+  },
+  "fetch": {
+   "scaled_s": 7935.4,
+   "budget_s": 11904,
+   "sealed_cap_s": 12000,
+   "fits": true
+  },
+  "box": {
+   "scaled_s": 5875.0,
+   "budget_s": 8813,
+   "sealed_cap_s": 8820,
+   "fits": true
+  },
+  "repeat": {
+   "scaled_s": 3055.0,
+   "budget_s": 4583,
+   "sealed_cap_s": 4620,
+   "fits": true
+  }
+ },
+ "wallclock_h": 8.25,
+ "usd_at_wallclock": 18.15,
+ "run_cap_usd": 35.0,
+ "no_ask_usd": 15.0,
+ "cost_tier": "above the no-ask tier: the ACK needs approval",
+ "fits": true,
+ "floors": {
+  "h2d_gb_s": 5.8,
+  "host_copy_gb_s": 5.14,
+  "disk_read_gb_s": 0.743,
+  "basis": {
+   "slice_tensor_bytes": 22391367680,
+   "rehearsal_load_s": 126.2,
+   "disk_floor_from": "the load's reads: bytes returned over their seconds",
+   "load_profile_s": {
+    "read": 30.12,
+    "assemble": 65.68,
+    "quantize": 1.14,
+    "offload": 7.38,
+    "other_s": 11.51
+   },
+   "dominant": "assemble",
+   "rehearsal_direct_read_gb_s": 1.63,
+   "rehearsal_disk_method": "O_DIRECT (dd iflag=direct)",
+   "rehearsal_host_threads": 6,
+   "rehearsal_pcie": "gen 3 x8"
+  },
+  "sealed": {
+   "h2d_gb_s": 5.8,
+   "disk_read_gb_s": 0.743,
+   "host_copy_gb_s": 5.14
+  },
+  "sealed_match": true
+ },
+ "rehearsal": {
+  "nonce": "a2k1791670314",
+  "e4b_sha": "4b301ec36c8b39d73020fc1a47d2cc5f8c7cfadc",
+  "timings": {
+   "require-git": 0,
+   "create-venv": 4,
+   "install": 58,
+   "hostrate": 33,
+   "fetch": 22,
+   "tokens": 12,
+   "box": 250,
+   "repeat": 130
+  }
+ }
+}

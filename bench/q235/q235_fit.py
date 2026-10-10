@@ -15,12 +15,15 @@ Each phase's budget is the scaled time times ``MARGIN``; a sealed cap in ``q235_
 is the sum of the caps, the runner's 300 s reserve and the controller's staging and receipt fetch; at the host's rate it must be
 within the launcher's per-run cap, and the fit says whether it is also within the no-ask tier (above it, the ACK needs approval).
 
-**The premise is enforced, not assumed.** Scaling A2000 times holds only on a host whose link and disk are no slower than the
-rehearsal's, so the fit derives two floors the box checks before the fetch (``q235_hostrate.py``):
-- the link: the rehearsal's measured pinned host-to-device rate;
-- the disk: the rehearsal load's effective read rate, the slice's tensor bytes over the load's seconds (a box at that rate reads the
-  checkpoint within the scaled load). The rehearsal's own O_DIRECT figure is reported beside it; on a cached filesystem it overstates
-  the disk, which is why it is not the floor.
+**The premise is enforced, not assumed.** Scaling A2000 times holds only on a host no slower than the rehearsal at what bounds the
+work, so the fit reads the box's load profile (``q235_box.LoadProfile``: read, assemble, quantize, offload, other) and derives a
+floor for each host-bound part, which the box checks before the fetch (``q235_hostrate.py``):
+- the link (the step's staging, the offload and the stacks' copy in): the rehearsal's measured pinned host-to-device rate;
+- the host memory (the expert assembly): the rehearsal's measured host-copy rate;
+- the disk (the shard reads): the rehearsal load's effective read rate, the bytes its reads returned over their seconds (without a
+  profile, the slice's tensor bytes over the whole load). The rehearsal's own O_DIRECT figure is reported beside it; on a cached
+  filesystem it overstates the disk, which is why it is not the floor.
+Quantization runs on the card, whose class is registered. The profile's dominant part is named in the report.
 
     python q235_fit.py --rehearsal DIR --warm-install-s S --bandwidth-mbps M --usd-per-hour R [--out FIT.json]
 """
@@ -57,12 +60,19 @@ def sealed_caps(run_sh: Path) -> dict:
     return {phase: int(found[var]) for var, phase in names.items() if var in found}
 
 
-def floors(hostrate: dict, load_s: float) -> dict:
-    """The host-rate floors the box enforces: the rehearsal's pinned H2D, and its load's effective disk read rate."""
+def floors(hostrate: dict, load_s: float, profile: dict | None = None) -> dict:
+    """The host-rate floors the box enforces: the rehearsal's pinned H2D, its host-copy rate, and its load's effective read rate."""
     slice_bytes = SLICE_LAYERS * LAYER_BYTES + OUTSIDE_BYTES
-    return {"h2d_gb_s": hostrate["h2d_gb_s"], "disk_read_gb_s": round(slice_bytes / load_s / 1e9, 3),
-            "basis": {"slice_tensor_bytes": slice_bytes, "rehearsal_load_s": load_s,
+    parts = {k: profile[k] for k in ("read", "assemble", "quantize", "offload", "other_s")} if profile else {}
+    if profile and profile.get("read") and profile.get("read_bytes"):
+        disk, disk_basis = round(profile["read_bytes"] / profile["read"] / 1e9, 3), "the load's reads: bytes returned over their seconds"
+    else:
+        disk, disk_basis = round(slice_bytes / load_s / 1e9, 3), "the slice's tensor bytes over the whole load"
+    return {"h2d_gb_s": hostrate["h2d_gb_s"], "host_copy_gb_s": hostrate.get("host_copy_gb_s", 0.0), "disk_read_gb_s": disk,
+            "basis": {"slice_tensor_bytes": slice_bytes, "rehearsal_load_s": load_s, "disk_floor_from": disk_basis,
+                      "load_profile_s": parts, "dominant": max(parts, key=parts.get) if parts else None,
                       "rehearsal_direct_read_gb_s": hostrate.get("disk_read_gb_s"), "rehearsal_disk_method": hostrate.get("disk_method"),
+                      "rehearsal_host_threads": hostrate.get("host_threads"),
                       "rehearsal_pcie": f"gen {hostrate.get('pcie_gen')} x{hostrate.get('pcie_width')}"}}
 
 
@@ -118,11 +128,10 @@ def main():
               a.usd_per_hour, sealed_caps(HERE / "q235_run.sh"))
     box = json.loads((a.rehearsal / "receipts" / "box" / "box.json").read_text())
     hostrate = json.loads((a.rehearsal / "receipts" / "hostrate.json").read_text())
-    rep["floors"] = floors(hostrate, float(box["load"]["seconds"]))
+    rep["floors"] = floors(hostrate, float(box["load"]["seconds"]), box["load"].get("profile"))
     sealed = sealed_floors(HERE / "q235_run.sh")
     rep["floors"]["sealed"] = sealed
-    rep["floors"]["sealed_match"] = (sealed.get("h2d_gb_s") == rep["floors"]["h2d_gb_s"]
-                                     and sealed.get("disk_read_gb_s") == rep["floors"]["disk_read_gb_s"])
+    rep["floors"]["sealed_match"] = all(sealed.get(k) == rep["floors"][k] for k in ("h2d_gb_s", "host_copy_gb_s", "disk_read_gb_s"))
     rep["fits"] = rep["fits"] and rep["floors"]["sealed_match"]
     rep["rehearsal"] = {"nonce": run.get("nonce"), "e4b_sha": run.get("e4b_sha"), "timings": timings}
     text = json.dumps(rep, indent=1)
