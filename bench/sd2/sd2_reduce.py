@@ -367,7 +367,7 @@ def self_test() -> int:
         print("sd2_reduce self-test FAILED:", bad)
         return 1
     print("sd2_reduce self-test OK (89 proof cases: all four rules, sd2-prove-2's calibration, sd2-5090-1's V0 and "
-          "sd2-prove-4; 40 read cases: every verdict, every VOID item, the stage gate)")
+          "sd2-prove-4; 43 read cases: every verdict, every VOID item, the stage gate, reports that fail soft)")
     return 0
 
 
@@ -387,6 +387,14 @@ E_BUCKETS = ("1", "2", "4", "8", "16")
 SV_BAR, G_BAR, PAIR_LO, PAIR_HI, ANCHOR_TOL, TAU_DROP = 1.00, 1.05, 0.97, 1.03, 0.03, 0.20
 TOL, SPREAD_X, SPREAD_MIN = 0.01, 2.0, 0.005                          # P110's bar
 TEXTS = ("wikitext", "c4val1")
+
+
+def soft(fn, *args, **kwargs):
+    """A reported (never ruled) value, or {"report_unavailable": "<error>"} (Amendment 5b; sd2_box.soft's twin)."""
+    try:
+        return fn(*args, **kwargs)
+    except Exception as e:  # noqa: BLE001 -- recorded, by design
+        return {"report_unavailable": f"{type(e).__name__}: {str(e)[:200]}"}
 
 
 def _mean(xs):
@@ -411,9 +419,47 @@ def verify_cost(v1: dict) -> dict:
     noisy = abs(b / a - 1.0) > ANCHOR_TOL
     return {"anchor_ms": anchor, "anchor_ratio": b / a, "v_noisy": noisy, "S_V": sv, "best_S_V": best,
             "refutes": all(best[w] < SV_BAR for w in WORKLOADS),
-            "model_error": {w: {k: sv[w][k] / S_SD1[w][k] - 1.0 for k in (1, 2, 3)} for w in WORKLOADS},
-            "terms": {f"k{k}": {t: v1[f"k{k}"].get(t) for t in ("full_ms", "verify_ms", "post_ms", "loop_ms")}
-                      for k in (1, 2, 3)}}
+            "model_error": soft(lambda: {w: {k: sv[w][k] / S_SD1[w][k] - 1.0 for k in (1, 2, 3)} for w in WORKLOADS}),
+            "terms": soft(lambda: {f"k{k}": {t: v1[f"k{k}"].get(t) for t in ("full_ms", "verify_ms", "post_ms", "loop_ms")}
+                                   for k in (1, 2, 3)})}
+
+
+FLOORS = (("2^-7", 2.0 ** -7), ("2^-5", 2.0 ** -5), ("2^-3", 2.0 ** -3))   # the depth report's magnitude floors
+
+
+def _quantiles(v):
+    """[p50, p90, p99, max] of a 1-d host tensor, or None when it is empty."""
+    import torch
+    if not v.numel():
+        return None
+    v = v.double()
+    q = torch.quantile(v, torch.tensor([0.5, 0.9, 0.99], dtype=torch.float64)).tolist()
+    return [round(x, 6) for x in q] + [round(float(v.max()), 6)]
+
+
+def depth_report(src) -> dict:
+    """Reported only (Amendment 5b): from the box's raw key-row tensors (``v_angles.pt``: per V0 record, [L, rows, H]
+    angle / informative / drift / rel), offline, after the run -- per record the max |angle| per layer over informative
+    cells, the max radial drift, and at each of FLOORS the cells and [p50, p90, p99, max] of |angle|, overall and per
+    layer. Needs torch only to read the file; a record whose raw tensors failed soft is passed through."""
+    import torch
+    raw = torch.load(src, map_location="cpu")
+    out = {}
+    for key, r in raw.items():
+        if not isinstance(r, dict) or "angle" not in r:
+            out[key] = r
+            continue
+        a, inf = r["angle"].float().abs(), r["informative"].bool()
+        rel, dr = r["rel"].float(), r["drift"].float()
+        masked = torch.where(inf, a, torch.full_like(a, -1.0)).flatten(1).amax(1).tolist()
+        rec = {"per_layer_max": [round(x, 6) if x >= 0 else None for x in masked],
+               "radial_drift_max": round(float(dr[inf].max()), 6) if bool(inf.any()) else None}
+        for name, f in FLOORS:
+            m = rel >= f
+            rec[name] = {"cells": int(m.sum()), "quantiles": _quantiles(a[m]),
+                         "per_layer": [_quantiles(a[layer][m[layer]]) for layer in range(a.shape[0])]}
+        out[key] = rec
+    return out
 
 
 def stage_gate(v: dict, gpu: dict, rule: str = "a4") -> str:
@@ -449,7 +495,7 @@ def quality(q: dict) -> dict:
         st = {a: _q_stats(q["per_window"][t], a, ref) for a in ("rep", "chunk", "mutant_scale")}
         for k in (1, 2):
             st[f"ON{k}"] = _q_stats(q["on"]["per_window"][f"ON{k}"], t, ref)
-        st["w16"] = _q_stats(q["w16"]["per_window"][t], "R", ref)
+        st["w16"] = soft(lambda: _q_stats(q["w16"]["per_window"][t], "R", ref))   # reported only
         draws = ["chunk"] + ([] if (q.get("rep_identical") or {}).get(t) else ["rep"])
         fl = {"draws": draws, "B_floor": max(abs(st[f]["bias"]) for f in draws), "S_floor": max(st[f]["spread"] for f in draws)}
         out[t] = {"stats": st, "floor": fl, "bias_bar": fl["B_floor"] + TOL, "spread_bar": SPREAD_X * max(fl["S_floor"], SPREAD_MIN),
@@ -540,9 +586,10 @@ def judge_read(gpu, v, e: dict, q, expect: dict, w1=None, rule: str = "a4") -> d
                 void.append(f"mechanism:{a}:{w}")
     qr = None
     if q:
-        if q.get("windows_sha256") != (q.get("on") or {}).get("windows_sha256") \
-                or q.get("windows_sha256") != (q.get("w16") or {}).get("windows_sha256"):
-            void.append("Q:windows")
+        w16 = q.get("w16") or {}
+        w16_differs = "windows_sha256" in w16 and q.get("windows_sha256") != w16["windows_sha256"]
+        if q.get("windows_sha256") != (q.get("on") or {}).get("windows_sha256") or w16_differs:
+            void.append("Q:windows")                     # the w16 draw is reported: checked only when it is there
         try:
             qr = quality(q)
         except (KeyError, TypeError, ValueError) as ex:
@@ -570,18 +617,19 @@ def judge_read(gpu, v, e: dict, q, expect: dict, w1=None, rule: str = "a4") -> d
     out = {"verdict": None, "void": void, "stop_rule": stop_rule, "verify_cost": vc, "quality": qr,
            "g": {f"k{k}": {w: {"g": g[(k, w)], "pairs": list(pairs[(k, w)])} for w in WORKLOADS} for k in (1, 2)} if g else None,
            "self_pairs": {f"{x}:{w}": r for (x, w), r in self_pairs.items()},
-           "ms_per_token": {f"{a}:{w}": 1000.0 / r for (a, w), r in rate.items() if r},
-           "tau_live": {f"{a}:{w}": {"tau_live": c.get("tau_live"), "tau_sd1": TAU_SD1[w][int(a[2])],
-                                      "acceptance": c.get("acceptance")} for (a, w), c in census.items()},
-           "memory": {a: {"allocated": (e.get(a) or {}).get("max_memory_allocated"),
-                          "reserved": (e.get(a) or {}).get("max_memory_reserved")} for a in ARMS}}
+           "ms_per_token": soft(lambda: {f"{a}:{w}": 1000.0 / r for (a, w), r in rate.items() if r}),
+           "tau_live": soft(lambda: {f"{a}:{w}": {"tau_live": c.get("tau_live"), "tau_sd1": TAU_SD1[w][int(a[2])],
+                                                  "acceptance": c.get("acceptance")} for (a, w), c in census.items()}),
+           "memory": soft(lambda: {a: {"allocated": (e.get(a) or {}).get("max_memory_allocated"),
+                                       "reserved": (e.get(a) or {}).get("max_memory_reserved")} for a in ARMS})}
     if all(e.get(a) for a in ARMS):
-        out["identity"] = {f"{a}:{w}": _first_diff(e[a]["workloads"][w]["identity_tokens"],
-                                                   e[f"OFF-{a[-1]}"]["workloads"][w]["identity_tokens"])
-                           for a in ARMS if a.startswith("ON") for w in WORKLOADS if w in (e[a].get("workloads") or {})}
+        out["identity"] = soft(lambda: {f"{a}:{w}": _first_diff(e[a]["workloads"][w]["identity_tokens"],
+                                                                e[f"OFF-{a[-1]}"]["workloads"][w]["identity_tokens"])
+                                        for a in ARMS if a.startswith("ON") for w in WORKLOADS
+                                        if w in (e[a].get("workloads") or {})})
         if w1 is not None:
-            out["tripwire_w1"] = {a: _first_diff([e[a]["workloads"]["R"]["identity_tokens"][0]], [w1])[0]
-                                  for a in ("OFF-a", "OFF-b") if "R" in (e[a].get("workloads") or {})}
+            out["tripwire_w1"] = soft(lambda: {a: _first_diff([e[a]["workloads"]["R"]["identity_tokens"][0]], [w1])[0]
+                                               for a in ("OFF-a", "OFF-b") if "R" in (e[a].get("workloads") or {})})
     if void:
         out["verdict"] = "VOID"
         return out
@@ -726,6 +774,11 @@ def read_self_test() -> list:
     want("FASTER", lambda G, V, E, Q: V["v1"].update(slow, anchor_b_ms=7.40 * 1.04), why="V_NOISY: the rule cannot fire")
     want("VOID", lambda G, V, E, Q: (V["v1"].update(slow, anchor_b_ms=7.40 * 1.04), Q.clear()), "missing:Q",
          "V_NOISY needs Q")
+    want("FASTER", lambda G, V, E, Q: Q.pop("w16"), why="the w16 draw is reported: missing, it fails soft")
+    want("FASTER", lambda G, V, E, Q: E["ON1-a"]["workloads"]["R"].update(identity_tokens={"report_unavailable": "x"}),
+         why="identity tokens are reported: unavailable, they fail soft")
+    want("FASTER", lambda G, V, E, Q: [E[a].pop("max_memory_allocated") for a in ARMS],
+         why="memory is reported: missing, it fails soft")
     if stage_gate(v, gpu) != "ALL":
         bad.append("stage gate: ALL")
     v2 = copy.deepcopy(v)
@@ -783,6 +836,8 @@ def main(argv=None) -> int:
         w1 = json.load(open(a.expect_w1))["tokens"] if a.expect_w1 else None
         out = judge_read(rec("gpu_tests.json"), rec("v.json"), {x: rec(f"e_{x}.json") for x in ARMS}, rec("q.json"),
                          {"e4b": a.expect_e4b, "gnf4": a.expect_gnf4, "rev": a.expect_rev}, w1, a.rule)
+        angles = os.path.join(a.read, "v_angles.pt")         # reported only: never a verdict input, fails soft
+        out["depth"] = soft(depth_report, angles) if os.path.exists(angles) else None
         json.dump(out, open(a.out, "w"), indent=1, sort_keys=True, default=str)
         print("SD2_READ_VERDICT " + json.dumps({"verdict": out["verdict"], "void": out["void"][:12],
                                                 "faster_at": out.get("faster_at"), "conflict": out.get("conflict")}),

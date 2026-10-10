@@ -110,8 +110,8 @@ def test_an_uninformative_cell_is_left_out():
     zv = torch.tensor([-1e-6 + 0j, 3.0 + 4.0j], dtype=torch.complex64)
     ang, inf, _ = BOX.pair0_rotation(zo, zv, torch.tensor([10.0, 10.0]))
     assert inf.tolist() == [False, True] and abs(float(ang[0])) > 3.0      # pi, but not counted
-    summ = BOX.rot_summary([(ang.view(1, 2, 1), inf.view(1, 2, 1), torch.zeros(1, 2, 1))])
-    assert summ["max_abs_angle"] == 0.0 and summ["informative"] == 1
+    summ = BOX.rot_summary([(ang.view(1, 2, 1), inf.view(1, 2, 1), torch.zeros(1, 2, 1), torch.ones(1, 2, 1))])
+    assert summ["max_abs_angle_layer0"] == 0.0 and summ["informative"] == 1 and summ["informative_layer0"] == 1
 
 
 def test_a_reversed_shift_reads_as_minus_one_radian():
@@ -124,9 +124,11 @@ def test_a_reversed_shift_reads_as_minus_one_radian():
     assert (ang[inf] + 1.0).abs().max() <= _bound(0.0) + 1e-6
 
 
-def test_depth_floors_separate_small_noisy_cells_from_large_ones():
-    """Amendment 5 reports depth at three magnitude floors. Small cells carrying a large relative error (what drove
-    sd2-prove-4's per-layer maxima to about pi) drop out at 2^-5 and 2^-3, while large cells stay; layer 0 is the gate."""
+def test_the_offline_depth_report_separates_small_noisy_cells_from_large_ones():
+    """Amendment 5b: depth is the reducer's, offline, from the box's raw tensors (``raw_cells`` -> v_angles.pt). Small
+    cells carrying a large relative error (what drove sd2-prove-4's per-layer maxima to about pi) drop out at 2^-5 and
+    2^-3, while large cells stay; layer 0 is V0's strict value."""
+    import io
     gen = torch.Generator().manual_seed(11)
     L, n = 4, 256
     amax = torch.ones(L, n, H)
@@ -136,10 +138,20 @@ def test_depth_floors_separate_small_noisy_cells_from_large_ones():
     zv = zo + noise * zo.abs()
     zv[0] = zo[0]                                              # layer 0 clean
     ang, inf, dr = BOX.pair0_rotation(zo, zv, amax)
-    summ = BOX.rot_summary([(ang, inf, dr, zo.abs() / amax)])
+    cell = (ang, inf, dr, zo.abs() / amax)
+    summ = BOX.rot_summary([cell])
     assert summ["max_abs_angle_layer0"] == 0.0 and summ["informative_layer0"] == n * H
-    assert summ["max_abs_angle"] > 2.0                         # the small cells, at depth
-    f7, f5, f3 = (summ["floors"][k] for k in ("2^-7", "2^-5", "2^-3"))
+    buf = io.BytesIO()
+    torch.save({"R1_k3": BOX.raw_cells([cell])}, buf)
+    buf.seek(0)
+    rep = RED.depth_report(buf)["R1_k3"]
+    assert max(rep["per_layer_max"]) > 2.0 and rep["per_layer_max"][0] < 1e-3   # the small cells, at depth only
+    f7, f5, f3 = (rep[k] for k in ("2^-7", "2^-5", "2^-3"))
     assert f7["cells"] > f5["cells"] == f3["cells"]            # 0.01 < 2^-5: the small cells leave at 2^-5
     assert f7["quantiles"][3] > 2.0 and f3["quantiles"][3] < 0.03
-    assert f3["per_layer"][0][3] == 0.0 and all(p[3] < 0.03 for p in f3["per_layer"][1:])
+    assert f3["per_layer"][0][3] < 1e-3 and all(p[3] < 0.03 for p in f3["per_layer"][1:])
+    failed = {"R1_k1": {"report_unavailable": "x"}}
+    buf = io.BytesIO()
+    torch.save(failed, buf)
+    buf.seek(0)
+    assert RED.depth_report(buf) == failed                     # a record that failed soft at the box passes through

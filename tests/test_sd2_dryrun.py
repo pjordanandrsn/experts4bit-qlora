@@ -84,9 +84,14 @@ case "$script" in
   sd1_box.py) case " $* " in
       *" --chat-prompts "*) for w in C-think C-nothink; do printf '{"rows": []}\n' > "$outdir/prompts_$w.json"; done; echo "SD1_PROMPTS dryrun";;
     esac;;
-  sd2_box.py) printf '{"dryrun": true}\n' > "$out"
-    case " $* " in *" --prove "*) echo "SD2_PROVE done";; *" --read-v "*) echo "SD2_V done";; *" --read-e "*) echo "SD2_E done";;
-                   *" --read-q "*) echo "SD2_Q done";; esac;;
+  sd2_box.py) case " $* " in
+      *" --canary "*) which=$(case " $* " in *" --read-e "*) echo e;; *" --read-q "*) echo q;; esac)
+                      [ "${DRYRUN_CANARY_FAIL:-}" = "$which" ] && { echo "canary $which boom" >&2; exit 1; }
+                      printf '{"canary": true}\n' > "$out"; echo "SD2_CANARY $which ok";;
+      *) printf '{"dryrun": true}\n' > "$out"
+         case " $* " in *" --prove "*) echo "SD2_PROVE done";; *" --read-v "*) echo "SD2_V done";;
+                        *" --read-e "*) echo "SD2_E done";; *" --read-q "*) echo "SD2_Q done";; esac;;
+    esac;;
   sd2_audit.py) [ -n "$out" ] && printf '{"ok": true}\n' > "$out"; echo "SD2_AUDIT dryrun"; exit "${DRYRUN_AUDIT_RC:-0}";;
   sd2_reduce.py) case " $* " in
       *" --gate-v "*) echo "SD2_GATE ${DRYRUN_GATE:-ALL}";;
@@ -221,7 +226,8 @@ def test_the_read_path_reaches_success_with_every_heavy_step_stubbed(tmp_path):
     assert out.returncode == 0, log[-3000:]
     assert (w / ("SD2_SUCCESS." + "1" * 64)).exists(), log[-3000:]
     summary = (w / "summary.txt").read_text()
-    for line in ("KNOBS e4b_target=" + E4B_T_READ, "SD2_AUDIT", "v rc=0", "SD2_V done", "SD2_GATE ALL", "q rc=0",
+    for line in ("KNOBS e4b_target=" + E4B_T_READ, "SD2_AUDIT", "v rc=0", "SD2_V done", "SD2_GATE ALL",
+                 "canary e rc=0", "canary q rc=0", "q rc=0",
                  "SD2_READ_VERDICT"):
         assert line in summary, (line, summary[-2000:])
     assert "prove rc=" not in summary
@@ -230,10 +236,24 @@ def test_the_read_path_reaches_success_with_every_heavy_step_stubbed(tmp_path):
     calls = _calls(w)
     order = [calls.index(f"--read-e {arm} ") for arm in ARMS]
     assert order == sorted(order), "E's arms ran out of the registered palindrome"
+    seq = ["--read-v ", "--gate-v ", "--read-e ON2-canary --canary ", "--read-q --canary --windows 1 ",
+           "--read-e OFF-a ", "--read-q --windows 48 "]
+    at = [calls.index(x) for x in seq]
+    assert at == sorted(at), "V (V0 and V1), the gate, the canary (E, Q), then E and Q"
     for step in ("sd2_audit.py --repo ", "sd2_box.py --read-v ", "--prompts-cn ", "sd2_box.py --read-q --windows 48 --prompt 512 --cont 128 ",
                  "sd2_reduce.py --gate-v ", "sd2_reduce.py --read ", "--expect-e4b " + E4B_T_READ, "-m pytest "):
         assert step in calls, (step, calls[-2000:])
     assert calls.index("sd2_audit.py --repo ") < calls.index("hf_fetch_watchdog"), "the audit runs before the fetch"
+
+
+@needs_bash
+@pytest.mark.parametrize("which", ["e", "q"])
+def test_a_failed_canary_stops_the_lane_before_the_paid_stages(tmp_path, which):
+    """Amendment 5b: a canary that crashes stops the lane (rc 26) before E's arms and Q."""
+    w, out = _run(tmp_path, RUN_READ, nonce="9" * 64, extra_env={**READ, "DRYRUN_CANARY_FAIL": which})
+    assert out.returncode == 26 and f"CANARY {which} FAILED" in out.stdout + out.stderr
+    calls = _calls(w)
+    assert "--read-e OFF-a " not in calls and "--windows 48 " not in calls
 
 
 @needs_bash
@@ -242,7 +262,8 @@ def test_a_void_gate_runs_neither_e_nor_q(tmp_path):
     w, out = _run(tmp_path, RUN_READ, nonce="2" * 64, extra_env={**READ, "DRYRUN_GATE": "VOID"})
     assert out.returncode == 0, (out.stdout + out.stderr)[-3000:]
     calls = _calls(w)
-    assert "--read-e " not in calls and "--read-q " not in calls and "sd2_reduce.py --read " in calls
+    assert "--canary" not in calls and "--read-e " not in calls and "--read-q " not in calls
+    assert "sd2_reduce.py --read " in calls                    # V0 fails closed: no canary, no timing, still a verdict
 
 
 @needs_bash
@@ -251,6 +272,7 @@ def test_the_stop_rule_runs_e_and_skips_q(tmp_path):
     assert out.returncode == 0, (out.stdout + out.stderr)[-3000:]
     calls = _calls(w)
     assert all(f"--read-e {arm} " in calls for arm in ARMS) and "--read-q " not in calls
+    assert "--read-e ON2-canary --canary " in calls             # the stop rule: E's canary runs, Q's does not
     assert "stage Q skipped: the stop rule" in (w / "summary.txt").read_text()
 
 
@@ -263,7 +285,7 @@ def test_a_failed_audit_stops_the_read_before_the_fetch(tmp_path):
 
 @needs_bash
 def test_the_read_refuses_a_deadline_shorter_than_its_own_guard(tmp_path):
-    """The proof's guard would admit this deadline; the read's 3.5 h does not (rc 17, before any install)."""
+    """The proof's guard would admit this deadline; the read's 3.75 h does not (rc 17, before any install)."""
     import time
     w, out = _run(tmp_path, RUN_READ, nonce="5" * 64, deadline=str(int(time.time()) + 6000), extra_env=READ)
     assert out.returncode == 17 and "REFUSED: the deadline leaves" in out.stdout + out.stderr
@@ -283,3 +305,11 @@ def test_the_dry_run_catches_a_misnamed_function_on_the_read_path(tmp_path):
     w, out = _run(tmp_path, RUN_READ.replace(anchor, "stagex q $? $W/q.json"), nonce="7" * 64, extra_env=READ)
     assert out.returncode != 0 and not (w / ("SD2_SUCCESS." + "7" * 64)).exists()
     assert "stagex: command not found" in out.stdout + out.stderr
+
+
+@needs_bash
+def test_the_dry_run_catches_a_misnamed_function_on_the_canary_path(tmp_path):
+    anchor = "canary e $? $W/canary_e.json"
+    assert RUN_READ.count(anchor) == 1
+    w, out = _run(tmp_path, RUN_READ.replace(anchor, "canaryx e $? $W/canary_e.json"), nonce="0" * 64, extra_env=READ)
+    assert out.returncode == 26 and "canaryx: command not found" in out.stdout + out.stderr
