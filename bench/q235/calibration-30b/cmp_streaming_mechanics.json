@@ -1,0 +1,35 @@
+{
+ "layers": 6,
+ "rel_err": [
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0
+ ],
+ "rel_err_median": 0.0,
+ "rel_err_max": 0.0,
+ "router_set_agree": [
+  1.0,
+  1.0,
+  1.0,
+  1.0,
+  1.0,
+  1.0
+ ],
+ "router_set_agree_min": 1.0,
+ "router_overlap": [
+  1.0,
+  1.0,
+  1.0,
+  1.0,
+  1.0,
+  1.0
+ ],
+ "router_overlap_min": 1.0,
+ "loss_a": 12.774665832519531,
+ "loss_b": 12.774665832519531,
+ "loss_gap": 0.0,
+ "real_tokens": 1014
+}

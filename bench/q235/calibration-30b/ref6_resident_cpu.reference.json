@@ -1,0 +1,17 @@
+{
+ "layers": 6,
+ "resident": true,
+ "device": "cpu",
+ "dtype": "torch.bfloat16",
+ "loss": 12.781570434570312,
+ "layer_sha256": [
+  "19dc50137dfce75b65af10e6028686a2df1b6211af55a5fb04c82c25b4a1bee1",
+  "7ad973bcb78604f33ce1a7c053b0dba8ca31229330e9209db50bff0f93f65ec8",
+  "8e3c02cb79913b114fcded4a88e4bc99205cb1a7c9ff33732cfea408bad75564",
+  "c577a87d8112c4b1b5d68703703a357f291834187607191a4ddd88dafd46ca3e",
+  "bb0c76213a9bc830ae378cceb422c23343299b0e6bd02e86d26e12bb24fcd764",
+  "e9b5241c6c2917f9f3509baf76243ad97b4673eac0e79dc4d7e55e62c7052c06"
+ ],
+ "seconds": 76.2,
+ "torch": "2.11.0+cu128"
+}

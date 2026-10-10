@@ -277,3 +277,69 @@ This draft approves no rate and rents nothing. The registering amendment approve
   registered host; the RTX A2000 cannot exercise it.
 - **Serving.**
 - **Hardware not run.** Anything about the card classes in the capacity table that no box runs.
+
+## Amendment 1 (2026-10-10, after the 30B calibration, before any 235B box): the floor, the bands, and one correction
+
+**The calibration.**
+- **Run:** 2026-10-10 on an RTX A2000 and its host CPU, as the "Fidelity" section registers it, on 8 rows of TC1's field text (1,014
+  real tokens).
+- **Receipts and tools:** `bench/q235/calibration-30b/` and `bench/q235/instrument/`.
+- **Exclusions:** padded positions are excluded from every read.
+
+| comparison | layers | per-layer relative error, median / max | router top-8 sets equal (worst layer) | router overlap (worst layer) | loss gap |
+|---|---|---|---|---|---|
+| layer-streamed against resident (CUDA) | 6 | 0 / 0 | 100 % | 100 % | 0 |
+| CPU against CUDA (both resident bf16) | 6 | 0.0067 / 0.0078 | 86.3 % | 98.2 % | +0.0069 |
+| e4b NF4 (experts in host RAM) against streamed bf16 | 48 | 0.107 / 0.204 | 46.4 % | 91.3 % | −0.0055 (loss 1.8592 against 1.8647) |
+| e4b NF4, second fresh process against the first | 48 | 0 / 0 | 100 % | 100 % | 0 |
+
+**What it shows:**
+- **The streamed reference is the resident model**, bit for bit on one device. A CPU-test against transformers' `from_pretrained` model
+  also matches every layer's output by sha256.
+- **The CPU and CUDA references differ** by under 1 % per layer, but exact top-8 set equality falls to 86–92 % from device numerics
+  alone: the router has near-ties. **Exact set agreement is therefore reported, not gated.** The gate is the overlap, |A ∩ B| / 8,
+  which stays at 0.98–0.99 there against about 0.06 for random sets.
+- **The NF4-against-bf16 error does not compound much with depth.** It reaches about 0.106 by layer 3 and stays there to layer 36
+  (0.106–0.112). It is 0.13 at layer 44 and 0.20 at the last layer. A log-linear fit over the 48 layers grows about 1 % a layer,
+  which is about 1.6× over the 46 more layers of the 235B model.
+- **e4b's NF4 forward reproduces exactly in a fresh process** on this path: identical loss and per-layer outputs.
+
+**The fidelity bands (rule 7).** The 235B read passes fidelity iff:
+
+| bound | 30B measured | margin |
+|---|---|---|
+| median per-layer relative error ≤ **0.25** | 0.107 | 2.3× |
+| maximum per-layer relative error ≤ **0.50** | 0.204 | 2.5× |
+| minimum per-layer router overlap ≥ **0.80** | 0.913 | — |
+
+The margins cover the depth growth above (about 1.6×) and the 235B model's doubled hidden and expert widths. The loss gap is reported,
+not gated.
+
+These bands are a semantic-error detector, not a prediction of the 235B values. A wrong expert fusion, a dropped epilogue or misrouted
+experts is expected to move a layer's output by order 1 and its overlap toward chance (0.06). **That signature is expected, not yet
+measured.** Gate 1's rehearsal therefore plants one such error and must see the bands fail.
+
+**The reproducibility floor (rule 6).**
+- **Tolerance:** the larger of the in-process spread and **1e-4 relative on the step-0 loss**.
+- **Why this floor.** The 30B fresh-process repeat was exact, so the floor only absorbs last-place nondeterminism on another card class.
+  It is about 30× below the 30B NF4-against-bf16 loss gap (2.9e-3 relative), so a difference the floor admits is far too small to be a
+  semantic error.
+
+**A correction to the capacity section.** e4b's estimate now prices the expert absmax as stored: double-quantized under
+`enable_fast_train`'s default, which this registration's numbers predate. This moves only the rows with **experts on the device**. Each
+falls by 11.83 GiB in loggetta's plan:
+
+| shape | before | after |
+|---|---|---|
+| A, fp32 | 182.36 | 170.53 |
+| A, bf16 | 170.48 | 158.65 |
+| B, fp32 | 186.33 | 174.49 |
+| B, bf16 | 173.81 | 161.97 |
+
+Every row still refuses on every single card; the H200's budget after headroom is 133.38 GiB. The rows with **experts in host RAM** do
+not move. Offload keeps the fp32 absmax, as the capacity section says, so the RTX 5090 fits only A-bf16, at 29.24 GiB.
+
+**Planning facts from the calibration** (not claims):
+- **The streamed bf16 reference** over Qwen3-30B-A3B's 48 layers took 1,124 s from a disk-pool cache, about 55 MB/s with per-expert
+  tensor reads. At the same rate the 235B reference (470 GB) takes about 2.4 hours of RTX A2000 time.
+- **e4b's NF4 side** with experts in host RAM loaded in 1,370 s and 1,798 s, and peaked at 5.55 GB of device memory on the RTX A2000.

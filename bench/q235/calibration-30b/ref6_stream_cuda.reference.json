@@ -1,0 +1,17 @@
+{
+ "layers": 6,
+ "resident": false,
+ "device": "cuda",
+ "dtype": "torch.bfloat16",
+ "loss": 12.774665832519531,
+ "layer_sha256": [
+  "3fff1cfdddd729686fda7f6aac2291a21041ae03d38a3554554affcb126be56d",
+  "ebef4b5067e23d9d8b6e6139ba82f7a8cdc88241bcfc283d592ddbce550e3d04",
+  "00467e9de7d8d0f1caeeb2dbfd3959da928e9fbf32c70c54fed3622fea89023a",
+  "9beaa30005f5f00f4e97d795e2f2c02f6b829c90e00ba703dae13bccda3ea578",
+  "2fe3cc15ab85e2ce8ff73805aa29694c06864c5ebe99dd2b74f17eed21de9d4c",
+  "1b4b597f15ea430e4d5b26530d6d53c8c8fa9b8bee3ffd77d5d3870537493cf5"
+ ],
+ "seconds": 4.7,
+ "torch": "2.11.0+cu128"
+}
