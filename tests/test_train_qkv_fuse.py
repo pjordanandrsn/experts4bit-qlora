@@ -15,9 +15,13 @@
     unfused one; with the knob at ``0`` the module is untouched;
   - the q/k/v bases stay registered, re-pointed at the fused copy (views, a non-nested fp32 absmax), and a direct call to one is
     bit for bit what it was before the fusion;
-  - ``state_dict``: a fused model's carries every key an unfused model's does except each q/k/v base's two nested-statistics keys;
-    it loads strict into a freshly loaded unfused model, whose forward is then bit for bit the fused-then-disabled one; loaded
-    into a fused model (a resume), it round-trips and writes through the views into the fused bytes;
+  - ``state_dict``: a fused model's carries every key an unfused model's does except each q/k/v base's two nested-statistics keys.
+    torch's ``load_state_dict`` reads only ``weight`` from a bitsandbytes 4-bit module and reports its quant-state keys as
+    unexpected, an unfused model's own dict included, so ``strict=True`` refuses every 4-bit dict and resumes load with
+    ``strict=False`` (as the Hugging Face Trainer does). Loaded that way into a freshly loaded unfused model, a fused model's dict
+    misses nothing and leaves unexpected exactly the quant-state keys an unfused dict leaves, less those two; the model's forward is
+    then bit for bit the fused-then-disabled one. Loaded into a fused model (a resume), it round-trips and writes through the views
+    into the fused bytes;
   - a move of the fused module's bytes re-points the bases at the moved copy;
   - ``disable_fast_train`` is a round trip: the projections and the attention compute bit for bit what they did before the
     fusion; a second enable fuses again, bit for bit as the first, and an enable of a fused module changes nothing.
@@ -302,20 +306,25 @@ def _scramble_adapters(attn, seed):
 @ADAPTER_DTYPES
 def test_a_fused_state_dict_loads_strict_into_an_unfused_model_bit_for_bit(monkeypatch, adapter_dtype):
     """A full-model save of a fused model (a Trainer checkpoint, ``save_pretrained``) carries every q/k/v base; a freshly loaded unfused
-    model takes it strict, and then computes bit for bit what the fused model computes once disabled. The key sets differ only by
-    each q/k/v base's two nested-statistics keys: the fused bases' quant state is the non-nested fp32 form."""
+    model takes it as it takes an unfused model's own, and then computes bit for bit what the fused model computes once disabled. The
+    key sets differ only by each q/k/v base's two nested-statistics keys: the fused bases' quant state is the non-nested fp32 form."""
     monkeypatch.delenv("E4B_TRAIN_FUSE_QKV", raising=False)
     cfg, attn = _nf4_attn(adapter_dtype=adapter_dtype)
-    unfused_keys = set(_Holder(attn).state_dict())
     holder = _Holder(attn)
+    unfused_sd = _clone_sd(holder)
+    _, ref = _nf4_attn(adapter_dtype=adapter_dtype)
+    ref_res = _Holder(ref).load_state_dict(unfused_sd, strict=False)    # today's own round trip: the baseline
+    assert not ref_res.missing_keys and ref_res.unexpected_keys
+    assert all(".base.weight." in k for k in ref_res.unexpected_keys)    # bitsandbytes' quant-state keys, and only those
     assert tq.enable_train_fuse_qkv(holder) == 1
     sd = _clone_sd(holder)
-    want_missing = {f"attn.{n}.base.{k}" for n in ("q_proj", "k_proj", "v_proj") for k in NESTED_KEYS}
-    assert want_missing <= unfused_keys and set(sd) == unfused_keys - want_missing
+    nested = {f"attn.{n}.base.{k}" for n in ("q_proj", "k_proj", "v_proj") for k in NESTED_KEYS}
+    assert nested <= set(unfused_sd) and set(sd) == set(unfused_sd) - nested
     _, fresh = _nf4_attn(adapter_dtype=adapter_dtype)
     _scramble_adapters(fresh, 11)
-    res = _Holder(fresh).load_state_dict(sd, strict=True)
-    assert not res.missing_keys and not res.unexpected_keys
+    res = _Holder(fresh).load_state_dict(sd, strict=False)
+    assert not res.missing_keys and set(res.unexpected_keys) == set(ref_res.unexpected_keys) - nested
+    assert all(torch.equal(p, sd[f"attn.{n}"]) for n, p in fresh.named_parameters())
     assert tq.disable_train_fuse_qkv(holder) == 1
     torch.manual_seed(9)
     x = torch.randn(1, 7, cfg.hidden_size, device="cuda").to(torch.bfloat16)
@@ -338,8 +347,8 @@ def test_a_resume_into_a_fused_model_round_trips_through_the_views(monkeypatch, 
     hb = _Holder(b)
     assert tq.enable_train_fuse_qkv(hb) == 1
     _scramble_adapters(b, 12)
-    res = hb.load_state_dict(sd, strict=True)
-    assert not res.missing_keys and not res.unexpected_keys
+    res = hb.load_state_dict(sd, strict=False)
+    assert not res.missing_keys and all(".base.weight." in k for k in res.unexpected_keys)
     _assert_views(b)
     assert all(torch.equal(p, sd[n]) for n, p in hb.named_parameters() if "lora" in n)
     torch.manual_seed(9)
@@ -350,7 +359,7 @@ def test_a_resume_into_a_fused_model_round_trips_through_the_views(monkeypatch, 
     sd2 = dict(sd)
     k = "attn.k_proj.base.weight"
     sd2[k] = sd[k] ^ 0x11                                              # different NF4 codes: the load must reach the fused bytes
-    hb.load_state_dict(sd2, strict=True)
+    hb.load_state_dict(sd2, strict=False)
     nq = sd["attn.q_proj.base.weight"].numel()
     assert torch.equal(b.qkv_proj.packed[nq:nq + sd[k].numel()].view(sd[k].shape), sd2[k])
 
