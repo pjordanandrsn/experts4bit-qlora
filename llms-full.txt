@@ -2253,6 +2253,11 @@ host reuse) each stepped the field recipe at 0.847–0.968 of the code before, h
   With fp32 adapters it stepped 0.797 of the time on a host-bound box and 1.031 on a GPU-bound one (registered bound
   1.05). With bf16 adapters, the shipped arm, it does not engage (1.002). `e4b.train.single-ladder.field.5090.2026-10-08`,
   `e4b.train.single-ladder-auto.gpu-bound.5090.2026-10-08`
+- `E4B_TRAIN_FUSE_QKV=1` (P129): one fused q/k/v training projection, 13.9–14.6 % fewer launches per step.
+  - **Speed:** 0.895 of the step with fp32 adapters and 0.868 with bf16 on a host-bound, heavily shared box (0.896 / 0.879 on
+    another host).
+  - **Quality:** step-0 held-out inside the box's fp32-anchored rounding envelope, held-out at N within 0.0007.
+  - **Status:** it stays opt-in until a second host reads it. `e4b.train.p129.fused-qkv.qwen3.5090.2026-10-10`
 
 **Energy: on a card that already fits the model, 4-bit costs energy.** `bnb.matmul_4bit` costs 1.748× native bf16's
 J/op at decode, 1.601× at prefill and 1.965× in training. The fused 4-bit MoE forward's J/token at batch 4096 is 0.063
@@ -3296,6 +3301,7 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.serve.fam.fused-stack-t1.mixtral.5090.2026-10-09 [measured]: Lane FAM (one RTX 5090): on Mixtral-8x7B-Instruct each B=1 fusion knob alone (glue 0 / 65 / [0, 0] / 0, r2 0 / 0 / [32, 32] / 0, router epilogue 0 / 0 / [0, 0] / 32) and all at auto (0 / 65 / [32, 32] / 32) read PASS against the family's own neutral floor at T == 1 and T == 12 on both texts, every set: worst-set |bias| …
 - e4b.serve.p125.int4-attn-calib-default.qwen3.5090.2026-10-09 [measured]: Lane P125, one RTX 5090: on the shipped default serve_paged (Qwen3-30B-A3B NF4, the B=1 fused stack default-allowlisted, the bandwidth GEMV), calibrated int4 attention (E4B_SERVE_ATTN_INT4_CALIB=1, calibrated on the box) is NOT licensed, alone or with the calibrated int4 lm_head: at one window per pass (T == 1, the …
 - e4b.serve.p127.launch-bound-glue.qwen3.5090.2026-10-09 [measured]: Lane P127, one RTX 5090: on the shipped default serve_paged (Qwen3-30B-A3B NF4, decode graphs at buckets 1-16, 16 slots), P127's launch-bound glue changes (Phase 1: three host casts gone, #1448 …
+- e4b.train.p129.fused-qkv.qwen3.5090.2026-10-10 [measured]: Lane P129 Amendment 3 (#835), one RTX 5090 (tc1-5090-147, AMD EPYC 7B13, Vast machine 27708, host-bound: the matched q0's GPU busy 0.464 of its step): e4b's opt-in fused q/k/v training projection (E4B_TRAIN_FUSE_QKV=1: one NF4 dequantize and matmul over the concatenated packed rows, one LoRA-A product, serving's fused …
 
 Open items (no evidence either way):
 
@@ -3303,4 +3309,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 …
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(435 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(437 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
