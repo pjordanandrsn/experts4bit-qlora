@@ -72,7 +72,12 @@ def prepare(directory, arm):
         from loggetta.dense_policy import validate_plan
 
         validate_plan(actual)
-        prepared = dense_train.prepare(actual)
+        if os.environ.get("DQ11_REHEARSAL") == "1":
+            from dq11_rehearsal import prepare_log
+
+            prepared = prepare_log(directory, actual, dense_train.prepare)
+        else:
+            prepared = dense_train.prepare(actual)
         model, trainable = prepared.model, prepared.trainable
         report = {"plan": asdict(actual), "engaged": prepared.report}
     else:

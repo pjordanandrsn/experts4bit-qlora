@@ -1139,3 +1139,47 @@ def test_rehearsal_marker_binds_model_configuration_and_runtime_lock(tmp_path, m
         changed.write(" ")
     with pytest.raises(ValueError, match="marker/lock changed"):
         rehearsal.mode(tmp_path)
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_tiny_stream_adapter_delegates_and_restores_real_export_after_prepare(monkeypatch, tmp_path, fail):
+    import dq11_rehearsal as rehearsal
+    import experts4bit_qlora as e4b
+
+    monkeypatch.setattr(rehearsal, "mode", lambda directory: True)
+    calls = []
+    result = object()
+
+    def real_offloader(*args, **kwargs):
+        calls.append((args, kwargs))
+        return result
+
+    monkeypatch.setattr(e4b, "enable_dense_offload", real_offloader)
+    plan = object()
+
+    def prepare(actual):
+        assert actual is plan
+        handle = e4b.enable_dense_offload("fixture model", device="fixture device", train_prefetch=True)
+        assert handle is result
+        if fail:
+            raise RuntimeError("fixture prepare failure")
+        return handle
+
+    if fail:
+        with pytest.raises(RuntimeError, match="fixture prepare failure"):
+            rehearsal.prepare_log(tmp_path, plan, prepare)
+    else:
+        assert rehearsal.prepare_log(tmp_path, plan, prepare) is result
+    assert calls == [(("fixture model",), {"device": "fixture device", "train_prefetch": True, "min_bytes": 0})]
+    assert e4b.enable_dense_offload is real_offloader
+
+
+def test_science_mode_never_installs_tiny_stream_adapter(monkeypatch, tmp_path):
+    import dq11_rehearsal as rehearsal
+    import experts4bit_qlora as e4b
+
+    monkeypatch.setattr(rehearsal, "mode", lambda directory: False)
+    original = e4b.enable_dense_offload
+    with pytest.raises(ValueError, match="refused in science mode"):
+        rehearsal.prepare_log(tmp_path, object(), lambda plan: pytest.fail("science called rehearsal prepare"))
+    assert e4b.enable_dense_offload is original

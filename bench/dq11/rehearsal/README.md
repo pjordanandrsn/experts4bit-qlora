@@ -11,6 +11,14 @@ torchvision 0.27.1 and torchao 0.18.0 have no cu128 build in the official index;
 the coherent set is Torch 2.11.0+cu128, torchvision 0.26.0+cu128, torchao
 0.17.0+cu128 and Torch's required Triton 3.6.0. Scientific locks are unchanged.
 
+During the real Loggetta preparation only, a scoped adapter delegates to the
+real `enable_dense_offload` with `min_bytes=0`. Tiny projections otherwise fall
+below the default 1 MiB threshold, leaving no streamed bytes and failing the
+engagement assertion. The adapter is refused in science mode and the original
+export is restored immediately, including on preparation errors. Science keeps
+its default threshold. This makes the tiny L arm exercise the same streaming
+branch as full Mistral without changing Loggetta's API or production code.
+
 The local random Mistral has 32 layers, hidden size 128, intermediate size 256,
 64 vocabulary entries and all 224 seven-projection modules / 448 FP32 rank-16
 adapter slots. Original ordered blocks are mapped modulo 64 into synthetic

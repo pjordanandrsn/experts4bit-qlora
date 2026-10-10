@@ -6,6 +6,7 @@ unchanged. Only the hardware, cu128 lock and local random model/inputs differ.
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import json
 import os
@@ -70,6 +71,32 @@ def require_hardware(directory):
         raise ValueError("A2000 identity/free-memory rehearsal guard refused")
     # Bound only this process. Never fill the device or disturb household users.
     torch.cuda.set_per_process_memory_fraction(min(0.25, 3 * (1 << 30) / total))
+
+
+def prepare_log(directory, plan, prepare):
+    """Scope the real offloader's tiny streaming threshold to real Log prepare.
+
+    Science keeps its 1 MiB default. Tiny projections must stream too, rather
+    than leaving every layer resident and failing Log's engagement assertion.
+    The real function is delegated to; no model, proof or loop is substituted.
+    """
+    if not mode(directory):
+        raise ValueError("tiny streaming adapter refused in science mode")
+    import experts4bit_qlora as e4b
+
+    original = e4b.enable_dense_offload
+
+    @functools.wraps(original)
+    def tiny_stream(*args, **kwargs):
+        if "min_bytes" in kwargs and kwargs["min_bytes"] != 0:
+            raise ValueError("conflicting tiny rehearsal streaming threshold")
+        return original(*args, **dict(kwargs, min_bytes=0))
+
+    e4b.enable_dense_offload = tiny_stream
+    try:
+        return prepare(plan)
+    finally:
+        e4b.enable_dense_offload = original
 
 
 def build_inputs(directory, canonical_tokens):
