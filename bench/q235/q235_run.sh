@@ -50,7 +50,10 @@ must(){ phase "$@"; [ "$PHASE_RC" = 0 ] || { tail -30 "logs/$1.log"; say "VOID: 
 # The registered constants live here, in the sealed closure: tc1_drive.sh forwards only its own TC1_* list, so nothing below can
 # be changed from the controller's environment. A rehearsal may override the caps and the interpreter (Q235_CAP_*, Q235_PYTHON).
 # The phase caps (seconds) are gate 2's: each fitted from the rehearsal's measured phases, scaled to the registered model and class.
-CAP_GIT=240 CAP_VENV=120 CAP_INSTALL=1800 CAP_FETCH=14400 CAP_TOKENS=300 CAP_BOX=5400 CAP_REPEAT=3600
+CAP_GIT=240 CAP_VENV=120 CAP_INSTALL=1800 CAP_HOSTRATE=600 CAP_FETCH=14400 CAP_TOKENS=300 CAP_BOX=5400 CAP_REPEAT=3600
+# The host-rate floors (gate 2's premise): the A2000 rehearsal's measured pinned H2D, and the rehearsal load's effective disk read
+# rate; the box measures both (the disk with O_DIRECT) before the checkpoint fetch and refuses below either. A rehearsal records only.
+MIN_H2D_GBS=0 MIN_DISK_GBS=0
 ROWS=8          # TC1's field-text rows in the one micro-batch (the 30B calibration's and gate 1's); the registering amendment fixes it
 PY=python3.11
 if [ "$MODE" != science ]; then
@@ -86,6 +89,16 @@ VENV="$W/venv-q235"
 must create-venv "$CAP_VENV" "$PY" -m venv "$VENV"
 export PATH="$VENV/bin:$PATH"
 must install "$CAP_INSTALL" python q235_bootstrap.py --cache "$W/.cache/wheels"
+
+DIRECT=(); FLOORS=(--min-h2d-gbs 0 --min-disk-gbs 0)
+[ "$MODE" = science ] && { DIRECT=(--require-direct); FLOORS=(--min-h2d-gbs "$MIN_H2D_GBS" --min-disk-gbs "$MIN_DISK_GBS"); }
+phase hostrate "$CAP_HOSTRATE" python q235_hostrate.py --out receipts/hostrate.json --dir "$W" "${FLOORS[@]}" "${DIRECT[@]}"
+case "$PHASE_RC" in
+  0) ;;
+  18) tail -3 logs/hostrate.log; echo 'link rate floor' > REFUSAL; say 'refusing: the pinned H2D rate is below the fit'"'"'s floor'; finish 18 ;;
+  13) tail -3 logs/hostrate.log; echo 'disk rate floor' > REFUSAL; say 'refusing: the disk read rate is below the fit'"'"'s floor'; finish 13 ;;
+  *)  tail -30 logs/hostrate.log; say "VOID: hostrate (rc $PHASE_RC)"; finish 11 ;;
+esac
 
 case "$MODE" in
   science) must fetch "$CAP_FETCH" python q235_fetch.py --lock model_files.json --dest "$W/hf-cache/model" --out receipts/fetch.json

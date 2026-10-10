@@ -172,3 +172,26 @@ def test_the_runner_voids_a_closure_that_does_not_match_its_manifest(box):
     (w / "q235_box.py").write_text("# changed\n")
     r = _run(w, env)
     assert r.returncode == 9 and "q235.sha256" in r.stdout
+
+
+def test_the_host_rate_probe_refuses_below_its_floors_and_without_o_direct_when_required(tmp_path):
+    """No CUDA here: the link reads as unmeasured, which a link floor refuses (18); the disk is read back from a fresh file, and
+    --require-direct either reads it with O_DIRECT or refuses (13) -- it never falls back to a possibly cached read."""
+    probe = [sys.executable, str(Q / "q235_hostrate.py"), "--dir", str(tmp_path), "--disk-gib", "1", "--copies", "1"]
+    env = {**os.environ, "CUDA_VISIBLE_DEVICES": ""}
+    r = subprocess.run(probe + ["--out", str(tmp_path / "a.json")], env=env, capture_output=True, text=True, timeout=300)
+    if "No module named 'torch'" in r.stderr:
+        pytest.skip("the link probe needs torch")
+    rec = json.loads((tmp_path / "a.json").read_text())
+    assert r.returncode == 0 and rec["disk_read_gb_s"] > 0 and rec["disk_method"], (r.returncode, r.stderr[-400:])
+    r = subprocess.run(probe + ["--out", str(tmp_path / "b.json"), "--min-h2d-gbs", "1"], env=env, capture_output=True, text=True,
+                       timeout=300)
+    assert r.returncode == 18 and "H2D" in r.stderr
+    r = subprocess.run(probe + ["--out", str(tmp_path / "c.json"), "--min-disk-gbs", "1e9"], env=env, capture_output=True, text=True,
+                       timeout=300)
+    assert r.returncode == 13 and "disk read" in r.stderr
+    r = subprocess.run(probe + ["--out", str(tmp_path / "d.json"), "--require-direct"], env=env, capture_output=True, text=True,
+                       timeout=300)
+    rec = json.loads((tmp_path / "d.json").read_text())
+    assert (r.returncode == 0 and rec["disk_method"].startswith("O_DIRECT")) or (r.returncode == 13 and rec["disk_read_gb_s"] is None)
+    assert not list(tmp_path.glob(".q235-hostrate.bin"))                 # the probe file never outlives the probe

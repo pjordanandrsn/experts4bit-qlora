@@ -27,26 +27,48 @@ def _fit():
 def test_the_fit_reads_every_sealed_cap_from_the_runner():
     f = _fit()
     caps = f.sealed_caps(Q / "q235_run.sh")
-    assert set(caps) == {"require-git", "create-venv", "install", "fetch", "tokens", "box", "repeat"}, caps
+    assert set(caps) == {"require-git", "create-venv", "install", "hostrate", "fetch", "tokens", "box", "repeat"}, caps
     assert all(v > 0 for v in caps.values())
 
 
 def test_the_fit_scales_each_phase_explicitly_and_judges_caps_and_cost():
     f = _fit()
-    timings = {"require-git": 2, "create-venv": 4, "install": 150, "fetch": 30, "tokens": 7, "box": 600, "repeat": 400}
+    timings = {"require-git": 2, "create-venv": 4, "install": 150, "hostrate": 20, "fetch": 30, "tokens": 7, "box": 600, "repeat": 400}
     fetch = {"bytes": 27_047_001_621, "hash_seconds": 23.7}
-    caps = {"require-git": 240, "create-venv": 120, "install": 1800, "fetch": 14400, "tokens": 300, "box": 30000, "repeat": 20000}
-    rep = f.fit(timings, 178.0, fetch, 4_000_000_000, 470_211_497_053, 500.0, 2.2, caps)
+    caps = {"require-git": 240, "create-venv": 120, "install": 1800, "hostrate": 600, "fetch": 14400, "tokens": 300, "box": 30000,
+            "repeat": 20000}
+    rep = f.fit(timings, 178.0, fetch, 4_000_000_000, 470_211_497_053, 500.0, 1.6, caps)
     p = rep["phases"]
     assert p["box"]["scaled_s"] == 600 * 94 / 4 and p["repeat"]["scaled_s"] == 400 * 94 / 4
     assert abs(p["fetch"]["scaled_s"] - (470_211_497_053 / 62.5e6 + 470_211_497_053 / (27_047_001_621 / 23.7))) < 1
     assert p["install"]["scaled_s"] == 4_000_000_000 / 62.5e6 + 178.0
     assert p["tokens"]["scaled_s"] == 7 and p["box"]["budget_s"] == int(-(-600 * 94 / 4 * 1.5 // 1))
-    assert p["box"]["fits"] and rep["usd_at_wallclock"] == round((sum(caps.values()) + 300 + 900) / 3600 * 2.2, 2)
-    short = f.fit(timings, 178.0, fetch, 4_000_000_000, 470_211_497_053, 500.0, 2.2, {**caps, "box": 5400})
+    assert p["box"]["fits"] and rep["usd_at_wallclock"] == round((sum(caps.values()) + 300 + 900) / 3600 * 1.6, 2)
+    short = f.fit(timings, 178.0, fetch, 4_000_000_000, 470_211_497_053, 500.0, 1.6, {**caps, "box": 5400})
     assert not short["phases"]["box"]["fits"] and not short["fits"]
     dear = f.fit(timings, 178.0, fetch, 4_000_000_000, 470_211_497_053, 500.0, 6.0, caps)
-    assert dear["usd_at_wallclock"] > f.RUN_CAP_USD and not dear["fits"]
+    assert dear["usd_at_wallclock"] > f.RUN_CAP_USD and not dear["fits"] and dear["cost_tier"] == "above the per-run cap"
+    assert rep["fits"] and rep["cost_tier"].startswith("above the no-ask tier") and f.NO_ASK_USD < rep["usd_at_wallclock"] <= 35
+    cheap = f.fit(timings, 178.0, fetch, 4_000_000_000, 470_211_497_053, 500.0, 0.5, caps)
+    assert cheap["cost_tier"] == "within the no-ask tier" and cheap["fits"]
+
+
+def test_the_config_bytes_are_the_locked_checkpoint():
+    """The slice and full tensor bytes the disk floor uses come from the config; they must add up to the locked shards."""
+    f = _fit()
+    lock = json.loads((Q / "model_files.json").read_text())
+    full = f.LAYERS * f.LAYER_BYTES + f.OUTSIDE_BYTES
+    assert abs(lock["safetensors_bytes"] - full) / full < 1e-4        # the rest is the shards' safetensors headers
+
+
+def test_the_floors_are_the_rehearsal_s_link_and_its_load_s_effective_disk_rate():
+    f = _fit()
+    fl = f.floors({"h2d_gb_s": 21.5, "disk_read_gb_s": 1.9, "disk_method": "O_DIRECT (dd iflag=direct)", "pcie_gen": "4",
+                   "pcie_width": "16"}, 534.0)
+    assert fl["h2d_gb_s"] == 21.5
+    assert fl["disk_read_gb_s"] == round((4 * f.LAYER_BYTES + f.OUTSIDE_BYTES) / 534.0 / 1e9, 3)
+    assert fl["basis"]["rehearsal_direct_read_gb_s"] == 1.9                  # reported beside, never the floor
+    assert set(f.sealed_floors(Q / "q235_run.sh")) == {"h2d_gb_s", "disk_read_gb_s"}
 
 
 def test_the_fit_refuses_a_rehearsal_that_is_not_a_clean_a2000_run(tmp_path):
