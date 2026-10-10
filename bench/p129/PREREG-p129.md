@@ -508,6 +508,46 @@ The step-0 shift is the router's discrete top-8 choice amplifying sub-ulp q/k/v 
 **Decision** (Amendment 2's rules): GAIN. The knob stays opt-in until DEFAULT_ON's second host reads, and that box is the lane's one
 replication. Box 146 cannot serve as the second host: it carries no floor, so it cannot be read under this clause.
 
+## Amendment 4 (2026-10-10T04:40Z, after `tc1-5090-148`, before its rerun): the DEFAULT_ON second-host box on current main
+
+**Why.** `tc1-5090-148`, DEFAULT_ON's second-host box at `51e5ae1`, measured nothing:
+- About three minutes into the run, the container restarted: its first process started after the lane had begun, and no lane process
+  remained.
+- The driver at that commit counted the lane with a `pgrep` that matched its own ssh shell, so it never declared the lane dead. The box
+  waited 2.3 h until the driver was stopped; it ended as a harness error at $1.809.
+- Main has since replaced that check (#1512: lane identity and host uptime; #1517: a host reboot recorded as a host fault).
+
+The replication therefore moves to a build that carries that driver. Its kernel side stays box 147's.
+
+**The build.**
+- **e4b:** main at launch, read from git, carrying this amendment. The manifest pins it.
+- **grouped-nf4-gemm:** v0.44.0 `d1f64ba`, as box 147.
+- **The package-diff audit against `51e5ae1`, box 147's build.** The manifest generator lists every `experts4bit_qlora` file changed
+  between `51e5ae1` and the pin. It refuses the launch if any changed file is not in the list below, each read as off the Qwen3-30B-A3B
+  training path:
+
+| file | the change (as of main `f088be1`) | why it is off the measured path |
+|---|---|---|
+| `__init__.py` | the version, 0.52.0 | metadata |
+| `arch/moe_conventions.py` | Qwen3.5-MoE's native composite text root | other families only |
+| `arch/moe_plan.py` | the composite text-root scope | runs only for a convention with a text checkpoint prefix; Qwen3-MoE has none |
+| `engines/chunked_lm_loss.py` | the chunk workspace's bytes per logit, 10 → 12 | priced only by `recipe`'s estimate; the runtime chunking decision does not read it |
+| `engines/pipelined.py` | gpt-oss routing keyword names | gpt-oss only |
+| `loader.py` | one module-path entry for `qwen3_5_moe_text` | other families only |
+| `recipe.py` | memory-estimate terms | estimates; no measured path calls them |
+
+The manifest's preregistration text records the audit's `git diff --stat` and this reason.
+
+**The host.** Avoid machine 27708, box 147's, under the replication rule. Avoid machine 46990, which restarted box 148's container. Also
+avoid 18967 and TC1's standing lists, with the launcher's ranking off, at the $0.85/h policy rate.
+
+**Everything else as Amendment 3:** the token `qwen3fqkv3`, the arms, the floor, the clauses, the predictions and the decision rules.
+DEFAULT_ON needs this box at GAIN, or GPU-bound with the recount and quality held and both wall ratios at most 1.01. If every standing
+attempt again sits above the load gate, the read says so and does not call DEFAULT_ON on contention alone.
+
+**Budget.** The lane has spent $6.653 ($0.211 + $1.874 + $2.759 + $1.809 for boxes 143, 146, 147 and 148), with $8.347 left under
+the $15 cap. This box is about $2–3.
+
 ## Box log
 
 - **`tc1-5090-142`** (2026-10-09, $0): refused before any instance existed. The cheapest eligible RTX 5090 billed $0.93/h with storage,
@@ -527,3 +567,6 @@ replication. Box 146 cannot serve as the second host: it carries no floor, so it
   $0.85/h whatever a manifest declares. Box 1 ran inside the policy rate.
 - **`tc1-5090-146`** (2026-10-09, $1.874, machine 152440 at $0.659/h): the Phase 2 read above.
 - **`tc1-5090-147`** (2026-10-10, $2.759, machine 27708 at $0.689/h): the Amendment 3 read above.
+- **`tc1-5090-148`** (2026-10-10, $1.809, machine 46990): DEFAULT_ON's second-host box, a harness failure with nothing measured. The
+  container restarted about three minutes in. The driver at `51e5ae1` did not see the lane die, so the box was stopped by hand after
+  2.3 h. Amendment 4 reruns it.
