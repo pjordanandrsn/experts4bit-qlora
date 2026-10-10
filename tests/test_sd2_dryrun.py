@@ -295,7 +295,7 @@ def test_a_failed_audit_stops_the_read_before_the_fetch(tmp_path):
 
 @needs_bash
 def test_the_read_refuses_a_deadline_shorter_than_its_own_guard(tmp_path):
-    """The proof's guard would admit this deadline; the read's 3.5 h does not (rc 17, before any install)."""
+    """The proof's guard would admit this deadline; the read's 3.75 h does not (rc 17, before any install)."""
     import time
     w, out = _run(tmp_path, RUN_READ, nonce="5" * 64, deadline=str(int(time.time()) + 6000), extra_env=READ)
     assert out.returncode == 17 and "REFUSED: the deadline leaves" in out.stdout + out.stderr

@@ -901,13 +901,16 @@ rc 26, before V1's registered run, E and Q. Stage V is split to make room for it
 - **Verdict inputs stay strict:** V0's records, V1's anchors and full step, E's rates, census and bucket counters, Q's
   per-window statistics and windows.
 
-**The budget is unchanged: 3.5 h, a ceiling of $3.66.** The slow-host walk with the split stage V still starts Q in time:
+**The budget: a guard of 3.75 h (13500 s), a ceiling of $3.87.** That is 3.75 h × $0.85 + 62 GB × $0.011. The slow-host
+walk with the split stage V costs:
 - V0 at 3 min (`sd2-5090-1` ran it, build included, in under 2);
 - the canary at 7 min;
 - V1 at 3 min.
 
-Q starts with about 3 min to spare. The time-left checks are `NEED_V` 900 s, `NEED_CANARY` 900 s, `NEED_V1` 600 s,
-`NEED_E` 600 s an arm, and `NEED_Q` 6300 s.
+Under the earlier 3.5 h guard, Q would start with only about 3 min to spare. A host a few percent slow would then VOID the
+read at Q and waste about $3, against $0.21 for the margin, so the maintainer chose the longer guard. Q now starts with
+about 18 min to spare. The time-left checks are `NEED_V` 900 s, `NEED_CANARY` 900 s, `NEED_V1` 600 s, `NEED_E` 600 s
+an arm, and `NEED_Q` 6300 s. SD2's maximum is $3.450 + $3.87 = $7.32, under the tier.
 
 **Before the next paid launch,** this box runs once on the A2000 for every path that does not need the FP8 pool: its
 self-test, including the GPU rotation summary and the fail-soft path on CUDA, and the reducer's self-test. The read then

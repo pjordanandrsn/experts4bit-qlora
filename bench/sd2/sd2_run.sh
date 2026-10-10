@@ -40,7 +40,7 @@ GPU_CLASS=${SD2_GPU_CLASS:-5090}; MIN_DISK_GB=${SD2_MIN_DISK_GB:-150}; MIN_RAM_G
 MODE=${SD2_MODE:-prove}
 case "$MODE" in
   prove) GUARD_S=4500; NEED_TESTS=600; NEED_FETCH=2100; NEED_BAKE=600; NEED_PROVE=900; E4B_T=$E4B_T_PROVE;;   # seconds; --wallclock-h 1.25
-  read) GUARD_S=12600; NEED_TESTS=600; NEED_FETCH=2100; NEED_BAKE=600; NEED_V=900; NEED_CANARY=900; NEED_V1=600; NEED_E=600; NEED_Q=6300; E4B_T=$E4B_T_READ;;   # --wallclock-h 3.5
+  read) GUARD_S=13500; NEED_TESTS=600; NEED_FETCH=2100; NEED_BAKE=600; NEED_V=900; NEED_CANARY=900; NEED_V1=600; NEED_E=600; NEED_Q=6300; E4B_T=$E4B_T_READ;;   # --wallclock-h 3.75 (Amendment 5b)
   *) say "refusing: SD2_MODE=$MODE"; finish 78;;
 esac
 case "$E4B_T" in *[!0-9a-f]*|"") say "refusing: the $MODE target is not a sha ($E4B_T)"; finish 78;; esac

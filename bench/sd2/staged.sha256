@@ -4,7 +4,7 @@
 # Pinned 2026-10-10 for Amendment 1 (the CUDA proof sd2-prove-N). Re-pinned for Amendment 1b (the proof's time budget);
 # Amendment 2 (the logit gate); Amendment 3 (the read sd2-5090-N: its stages, the audit, Q's instrument at its bytes).
 # Amendment 4 (the key-row position gate, rule a3); Amendment 5 (the gate at layer 0, rule a4).
-bb1572c5ebfadcaf90fc14be598764690f61f49766a16622616b11b7f151bdb9  sd2_run.sh
+42a0ecaa8803f4ca01d9c7fe50c618b1be7a73a69d5de8ee98958dd0b8ce86c1  sd2_run.sh
 e9dd792416173797594769d1adb20cd429a501eddd74eead1ebfe1910c40f91d  sd2_box.py
 08ebc3ccb5eced9dc18df8298d087f68bfd0d13d16e6854803bdd992a54cb4e1  sd2_reduce.py
 f08da3f29751c91e05e91415141fcd7207d5c8324d17cdcdcda071d7e8574400  sd2_audit.py

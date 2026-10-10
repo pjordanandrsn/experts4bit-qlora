@@ -74,7 +74,7 @@ def _budget(mode="prove"):
 
 @pytest.mark.parametrize("mode, guard, hours, needs", [
     ("prove", 4500, "1.25", ("NEED_TESTS", "NEED_FETCH", "NEED_BAKE", "NEED_PROVE")),
-    ("read", 12600, "3.5", ("NEED_TESTS", "NEED_FETCH", "NEED_BAKE", "NEED_V", "NEED_CANARY", "NEED_V1", "NEED_E",
+    ("read", 13500, "3.75", ("NEED_TESTS", "NEED_FETCH", "NEED_BAKE", "NEED_V", "NEED_CANARY", "NEED_V1", "NEED_E",
                              "NEED_Q"))])
 def test_every_time_left_check_fits_its_own_guard(mode, guard, hours, needs):
     """P109's rule (p109-prove-1; tests/test_p109_staged_pin.py), after sd2-prove-1 stopped before its fetch: every
@@ -112,7 +112,7 @@ def test_the_reads_step_budget_fits_its_guard():
     split of V around the canary: V0 3 min (sd2-5090-1: V0 with its build in under 2), the canary 7 min (three builds,
     tiny work, Q's datasets fetched once), V1 3 min (a build and seconds of timing), each E arm 5 min (P127-5090-1's W1:
     a 31 s load, 4.4 ms a token, about 38k tokens), then Q's 6300 s (12.6 s per eager window pass at one window a pass:
-    p115d-5090-1 and p121-5090-1). Q must still start: it does, with about 3 min to spare."""
+    p115d-5090-1 and p121-5090-1). Q must still start: it does, with about 18 min to spare under Amendment 5b's 3.75 h."""
     b = _budget("read")
     guard, reserve = b["GUARD_S"], 600
     t = 600 + 300 + 28 * 60 + 120 + 120 + 120                 # setup, GPU tests, the slow fetch, the head, bake, prompts
@@ -127,7 +127,7 @@ def test_the_reads_step_budget_fits_its_guard():
         t += 300
     assert t + b["NEED_Q"] + reserve <= guard, f"stage Q would be skipped at t={t}s on a slow host"
     assert b["NEED_Q"] >= 4 * 96 * 12.6 + 96 * 10.7          # Q's own arithmetic: four OFF arms, then ON1 + ON2
-    assert guard == 12600                                     # Amendment 3: --wallclock-h 3.5
+    assert guard == 13500                                     # Amendment 5b: --wallclock-h 3.75
 
 
 @pytest.mark.parametrize("script", ["sd2_reduce.py", "sd2_box.py", "sd2_audit.py"])

@@ -5,4 +5,4 @@
   splits into V0 (`--read-v0`, `--gate-v0`) and V1 (`--read-v1`) around it.
 - **Fail-soft reporting.** Every reporting-only value goes through `soft()` and records `report_unavailable` on an
   error, so a statistics bug cannot void a read. Verdict inputs stay strict.
-- **Unchanged:** the rule, the verdict inputs and the budget (3.5 h, $3.66). The slow-host walk with the split stage still starts Q in time.
+- **Unchanged:** the rule and the verdict inputs. The guard grows to 3.75 h (ceiling $3.87), so Q starts with about 18 min to spare on the slow-host walk.
