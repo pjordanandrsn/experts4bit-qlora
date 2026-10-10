@@ -1,0 +1,9 @@
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LANGUAGE = (unset),
+	LC_ALL = (unset),
+	LANG = "en_US.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+Fetching 7 files:   0%|          | 0/7 [00:00<?, ?it/s]Fetching 7 files:  14%|█▍        | 1/7 [00:00<00:00,  9.80it/s]Fetching 7 files:  29%|██▊       | 2/7 [00:00<00:00,  9.24it/s]Fetching 7 files:  71%|███████▏  | 5/7 [00:00<00:00, 17.95it/s]Fetching 7 files: 100%|██████████| 7/7 [00:00<00:00,  7.97it/s]Fetching 7 files: 100%|██████████| 7/7 [00:00<00:00,  9.03it/s]
+FETCH PROBE OK in 1.0 s: config.json generation_config.json merges.txt model.safetensors.index.json tokenizer.json tokenizer_config.json vocab.json
