@@ -1,7 +1,7 @@
 #!/bin/bash
-# bench/p130/p130_run.sh -- lane P130, BOX side (bench/p130/PREREG-p130.md; e4b#1313). Started detached by p130_drive.sh
-# with the run's nonce; P130_RUN_NONCE first, then P130_EXIT_CODE.<nonce> + TP_DONE.<nonce> on every exit and
-# P130_SUCCESS.<nonce> only when the reducer ran.
+# bench/sd1/sd1_run.sh -- lane SD1, BOX side (bench/sd1/PREREG-sd1.md; e4b#1313). Started detached by sd1_drive.sh
+# with the run's nonce; SD1_RUN_NONCE first, then SD1_EXIT_CODE.<nonce> + TP_DONE.<nonce> on every exit and
+# SD1_SUCCESS.<nonce> only when the reducer ran.
 #
 # Speculative decoding's acceptance on the shipped default's target, ONE RTX 5090. The target is e4b 7f044dd9 +
 # grouped-nf4-gemm d769d502 (P127's B; its Amendment 2 pin), built as the shipped server builds it, eager so that hooks
@@ -10,12 +10,12 @@
 # by SHA as its own worktree; it is never installed.
 #   order    refusals; install + clones + tripwire; self-tests; fetch (model, head); bake; prompts; captures; reduce
 set -uo pipefail
-W=/root/p130; mkdir -p $W/logs $W/src; cd $W || exit 78
-say(){ echo "[$(date -u +%FT%TZ)] p130: $*"; }
-NONCE=${P130_RUN_NONCE:?}; printf '%s\n' "$NONCE" > $W/P130_RUN_NONCE.tmp && mv $W/P130_RUN_NONCE.tmp $W/P130_RUN_NONCE
-finish(){ local rc=$1; printf '%s\n' "$rc" > P130_EXIT_CODE.$NONCE; [ "$rc" = 0 ] && : > P130_SUCCESS.$NONCE; say "TP_DONE rc=$rc"; : > TP_DONE.$NONCE; exit "$rc"; }
+W=/root/sd1; mkdir -p $W/logs $W/src; cd $W || exit 78
+say(){ echo "[$(date -u +%FT%TZ)] sd1: $*"; }
+NONCE=${SD1_RUN_NONCE:?}; printf '%s\n' "$NONCE" > $W/SD1_RUN_NONCE.tmp && mv $W/SD1_RUN_NONCE.tmp $W/SD1_RUN_NONCE
+finish(){ local rc=$1; printf '%s\n' "$rc" > SD1_EXIT_CODE.$NONCE; [ "$rc" = 0 ] && : > SD1_SUCCESS.$NONCE; say "TP_DONE rc=$rc"; : > TP_DONE.$NONCE; exit "$rc"; }
 trap 'finish 130' INT TERM
-for v in P130_RUN_ID P130_DEADLINE_EPOCH P130_INSTANCE_ID E4B_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
+for v in SD1_RUN_ID SD1_DEADLINE_EPOCH SD1_INSTANCE_ID E4B_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
 case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78;; esac
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char sha"; finish 78; }
 # ---- the registered target stack (PREREG "Subject") and the head (PREREG "The draft head")
@@ -25,7 +25,7 @@ E4B_H=$E4B_SHA                                     # the harness: the launch com
 MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
 HEAD_REPO=RedHatAI/Qwen3-30B-A3B-speculator.eagle3; HEAD_REV=6afc5aa2477b923467fb9a8d906782b984a9a6ba
 HEAD_SHA256=d2d6e2e63e09dc755053ae5c98cdececae3611ae5e202d4fa5411126dd3b1dfa; HEAD_BYTES=1044539336
-GPU_CLASS=${P130_GPU_CLASS:-5090}; MIN_DISK_GB=${P130_MIN_DISK_GB:-150}; MIN_RAM_GB=${P130_MIN_RAM_GB:-60}
+GPU_CLASS=${SD1_GPU_CLASS:-5090}; MIN_DISK_GB=${SD1_MIN_DISK_GB:-150}; MIN_RAM_GB=${SD1_MIN_RAM_GB:-60}
 NEED_FETCH=2100; NEED_BAKE=600; NEED_CAPTURE=600   # seconds; p127-prove-3: fetch 28 min, bake ~1 min
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 # every serving lever and engine knob starts unset: the default server is the subject (fixed knobs below)
@@ -36,15 +36,15 @@ unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_
       E4B_PAGED_GRAPHS E4B_PAGED_BUCKETS E4B_PAGED_MAX_SEQS E4B_PAGED_MAX_TOKENS_PER_SEQ E4B_PAGED_CHUNK_TOKENS E4B_PAGED_DECODE_LOOKAHEAD \
       E4B_PAGED_MAX_PREFILL_TOKENS E4B_PAGED_PLACEMENT E4B_PAGED_KV_GROUPS E4B_PAGED_FUSE_QKV E4B_PAGED_TORCH_THREADS GNF4_GEMV_BW GNF4_PDL \
       E4B_PAGED_PREFILL_GRAPH
-: > summary.txt; echo "$P130_INSTANCE_ID" > INSTANCE_ID
+: > summary.txt; echo "$SD1_INSTANCE_ID" > INSTANCE_ID
 echo "KNOBS e4b_target=$E4B_T gnf4_target=$GNF4_T e4b_harness=$E4B_H model=$MODEL@$REV head=$HEAD_REPO@$HEAD_REV gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_ram_gb=$MIN_RAM_GB" | tee -a summary.txt
 if [ "$GPU_CLASS" != 5090 ] || [ "$MIN_DISK_GB" != 150 ] || [ "$MIN_RAM_GB" != 60 ]; then
   echo "REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)" | tee -a summary.txt; : > REHEARSAL
 fi
 # ---- staged pieces, byte-for-byte
-for f in p130_box.py p130_eagle3.py p130_reduce.py p109_box.py k8_bake.py calib.json chat_prompts.json expect_w1.json staged.sha256; do
+for f in sd1_box.py sd1_eagle3.py sd1_reduce.py p109_box.py k8_bake.py calib.json chat_prompts.json expect_w1.json staged.sha256; do
   [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
-(cd $W && sha256sum -c staged.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/p130/staged.sha256"; finish 9; }
+(cd $W && sha256sum -c staged.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/sd1/staged.sha256"; finish 9; }
 # ---- refusals before anything is installed or fetched: the card class, the disk, the host RAM
 python -c "import torch; assert torch.cuda.is_available()" 2>/dev/null || { say "DUD BOX"; finish 10; }
 nvidia-smi --query-gpu=name,memory.total,driver_version,uuid,compute_cap --format=csv,noheader | tee forensics.txt
@@ -55,8 +55,8 @@ FREE_GB=$(df -BG --output=avail $W 2>/dev/null | tail -1 | tr -dc 0-9)
 [ "${FREE_GB:-0}" -ge "$MIN_DISK_GB" ] || { say "REFUSED: ${FREE_GB:-?} GB free < ${MIN_DISK_GB} GB"; echo "refused: disk ${FREE_GB:-?} GB" > REFUSAL; finish 13; }
 RAM_GB=$(awk '/^MemTotal:/{print int($2/1048576)}' /proc/meminfo)
 [ "${RAM_GB:-0}" -ge "$MIN_RAM_GB" ] || { say "REFUSED: ${RAM_GB:-?} GiB host RAM < ${MIN_RAM_GB} GiB"; echo "refused: ram ${RAM_GB:-?} GiB" > REFUSAL; finish 16; }
-can_run(){ local need=$1 now; now=$(date +%s); [ $((now + need + 600)) -le "$P130_DEADLINE_EPOCH" ] || { say "STOP-2: $2 needs ${need}s, only $((P130_DEADLINE_EPOCH - now))s left -- skipped (host-limited)"; echo "SKIPPED $2 host-limited deadline" >> summary.txt; return 1; }; }
-step_alarm(){ local cap=$1 left=$(( P130_DEADLINE_EPOCH - $(date +%s) - 600 )); [ "$left" -gt "$cap" ] && left=$cap; [ "$left" -lt 600 ] && left=600; echo "$left"; }
+can_run(){ local need=$1 now; now=$(date +%s); [ $((now + need + 600)) -le "$SD1_DEADLINE_EPOCH" ] || { say "STOP-2: $2 needs ${need}s, only $((SD1_DEADLINE_EPOCH - now))s left -- skipped (host-limited)"; echo "SKIPPED $2 host-limited deadline" >> summary.txt; return 1; }; }
+step_alarm(){ local cap=$1 left=$(( SD1_DEADLINE_EPOCH - $(date +%s) - 600 )); [ "$left" -gt "$cap" ] && left=$cap; [ "$left" -lt 600 ] && left=600; echo "$left"; }
 export DEBIAN_FRONTEND=noninteractive
 TORCH_PIN=$(python -c "import torch; print(torch.__version__.split('+')[0])"); echo "torch==$TORCH_PIN" > $W/constraints.txt
 pipx(){ local log=$1 secs=$2; shift 2
@@ -90,12 +90,12 @@ from experts4bit_qlora.engines import hot_residency as _hr
 assert hasattr(glue_r2, "license_moe_residual") and hasattr(_hr, "_state_forward"), "the target lacks P127 (#1477, #1482)"
 hub = md.version("huggingface_hub")
 assert tuple(int(x) for x in hub.split(".")[:2]) >= (1, 31), f"huggingface_hub {hub} < 1.31"
-open("/root/p130/versions.txt", "a").write(f"e4b target {e.__version__} sha {os.environ['E4B_T']}\nharness sha {os.environ['E4B_H']}\ngnf4 target {md.version('grouped-nf4-gemm')}\ntorch {torch.__version__}\ntriton {triton.__version__}\ntransformers {transformers.__version__}\nbitsandbytes {md.version('bitsandbytes')}\nhuggingface_hub {hub}\ncc {torch.cuda.get_device_capability()}\n")
+open("/root/sd1/versions.txt", "a").write(f"e4b target {e.__version__} sha {os.environ['E4B_T']}\nharness sha {os.environ['E4B_H']}\ngnf4 target {md.version('grouped-nf4-gemm')}\ntorch {torch.__version__}\ntriton {triton.__version__}\ntransformers {transformers.__version__}\nbitsandbytes {md.version('bitsandbytes')}\nhuggingface_hub {hub}\ncc {torch.cuda.get_device_capability()}\n")
 print("tripwire OK:", e.__version__, md.version("grouped-nf4-gemm"))
 PYT
 cat versions.txt | tee -a summary.txt
-python $W/p130_reduce.py --self-test | tail -1 | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "REDUCER SELF-TEST FAILED"; finish 21; }
-python $W/p130_box.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "BOX SELF-TEST FAILED"; finish 21; }
+python $W/sd1_reduce.py --self-test | tail -1 | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "REDUCER SELF-TEST FAILED"; finish 21; }
+python $W/sd1_box.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "BOX SELF-TEST FAILED"; finish 21; }
 python $WATCHDOG --self-test 2>/dev/null | tail -1 | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "WATCHDOG SELF-TEST FAILED"; finish 21; }
 # ---- the checkpoint (under the watchdog), the head (pinned by revision and sha256), the NF4 arena
 can_run $NEED_FETCH fetch || finish 40
@@ -123,7 +123,7 @@ grep -a "BAKE" logs/bake.log | tail -1 | tee -a summary.txt
 # ---- the prompts: R = P109's wikitext rows (the same digest as p127-5090-1); C = the pinned UltraChat rows, chat-templated
 perl -e "alarm 1200; exec @ARGV" python $W/p109_box.py --prompts-only --model "$MODEL" --revision "$REV" --out $W/prompts_R.json > logs/prompts_R.log 2>&1 \
   || { tail -4 logs/prompts_R.log; say "PROMPTS FAIL (R)"; finish 19; }
-perl -e "alarm 600; exec @ARGV" python $W/p130_box.py --chat-prompts $W/chat_prompts.json --snapshot "$SNAP" --outdir $W > logs/prompts_C.log 2>&1 \
+perl -e "alarm 600; exec @ARGV" python $W/sd1_box.py --chat-prompts $W/chat_prompts.json --snapshot "$SNAP" --outdir $W > logs/prompts_C.log 2>&1 \
   || { tail -4 logs/prompts_C.log; say "PROMPTS FAIL (C)"; finish 19; }
 grep -a "PROMPTS" logs/prompts_R.log logs/prompts_C.log | tee -a summary.txt
 # ---- the captures: one request at a time, eager, the default server's fixed knobs
@@ -134,12 +134,12 @@ for WL in R C-think C-nothink; do
   AL=$(step_alarm 2400); say "capture $WL (alarm=$AL)"
   # shellcheck disable=SC2086  # ENGINE_ENV is an assignment list by design
   env PYTHONPATH= $ENGINE_ENV E4B_SHA=$E4B_T GNF4_SHA=$GNF4_T \
-    perl -e "alarm $AL; exec @ARGV" python $W/p130_box.py --capture $WL --prompts $W/prompts_$WL.json --head "$HEAD" \
+    perl -e "alarm $AL; exec @ARGV" python $W/sd1_box.py --capture $WL --prompts $W/prompts_$WL.json --head "$HEAD" \
       $EXP --out $W/capture_$WL.json > logs/capture_$WL.log 2>&1
   rc=$?
-  { echo -n "capture $WL rc=$rc "; grep -a "^P130_CAPTURE\|^P130_TRIPWIRE" logs/capture_$WL.log | tr '\n' ' '; echo; } | tee -a summary.txt
+  { echo -n "capture $WL rc=$rc "; grep -a "^SD1_CAPTURE\|^SD1_TRIPWIRE" logs/capture_$WL.log | tr '\n' ' '; echo; } | tee -a summary.txt
   [ "$rc" = 0 ] || { tail -6 logs/capture_$WL.log | cut -c1-300 | tee -a summary.txt; say "CAPTURE $WL FAILED (rc=$rc)"; finish $(( rc == 19 ? 19 : 23 )); }
 done
-say "reduce"; python $W/p130_reduce.py --caps $W/capture_R.json $W/capture_C-think.json $W/capture_C-nothink.json --out $W/verdict.json 2>&1 | tee -a summary.txt
+say "reduce"; python $W/sd1_reduce.py --caps $W/capture_R.json $W/capture_C-think.json $W/capture_C-nothink.json --out $W/verdict.json 2>&1 | tee -a summary.txt
 [ "${PIPESTATUS[0]}" = 0 ] && [ -s $W/verdict.json ] || { say "REDUCER FAILED"; finish 22; }
 finish 0

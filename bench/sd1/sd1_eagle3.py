@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""p130_eagle3.py -- lane P130 (e4b#1313): an EAGLE-3 draft head's greedy chains, in plain PyTorch (bench/p130/PREREG-p130.md).
+"""sd1_eagle3.py -- lane SD1 (e4b#1313): an EAGLE-3 draft head's greedy chains, in plain PyTorch (bench/sd1/PREREG-sd1.md).
 
 Why not the `speculators` package: speculators 0.8.0 requires torch >= 2.9 and transformers < 5.17. The box's e4b stack is
 torch 2.8.0 + transformers 5.17.0, and installing it would replace the stack under test. The head's own repo ships remote

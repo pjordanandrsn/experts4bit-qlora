@@ -1,4 +1,4 @@
-# P130 (e4b#1313): speculative decoding, Phase 0 -- acceptance on the shipped default's target, and its B = 1 price
+# SD1 (e4b#1313): speculative decoding, Phase 0 -- acceptance on the shipped default's target, and its B = 1 price
 
 ## The question
 
@@ -14,6 +14,21 @@ Phase 0 is a single rental, as the maintainer ruled (bus, 2026-10-10T03:25:35Z):
 - **No τ without the target's live hidden states.** The EAGLE-3 draft needs them, so τ cannot be computed offline.
 - **No owned card serves the target.** It needs the served path on sm_89+.
 - **Distinct experts per verify** come from the #1469 routing census when it lands, not from this box.
+
+**The lane id.** It is SD1 (speculative decoding), not P130, which the maintainer ruled: P130–P133 are TC1 prediction ids,
+and the number would make every citation ambiguous.
+
+**Prior code in e4b.**
+- **The accept loop.** `engines/speculative.py`'s `speculative_greedy_decode` is a model-agnostic greedy accept loop,
+  CPU-tested for stream identity with plain greedy. It is not wired into `serve_paged`, and Phase 1 would reuse its strict
+  accept rule.
+- **A fallback head.** `arch/glimmer_draft.py` is a DFlash drafter. `RedHatAI/Qwen3-30B-A3B-speculator.dflash`
+  (apache-2.0, verifier `Qwen/Qwen3-30B-A3B`) and `Tengyunw/qwen3_30b_moe_eagle3` (MIT) are licensed fallback heads. This
+  lane measures neither.
+
+**The dry run.** `tests/test_sd1_dryrun.py` runs the runner's own text in CI with every heavy step stubbed, and must
+reach success. The pattern is serve-throughput's `tests/test_sc5_box_m_dryrun.py`, after SC5 lost three proofs to harness
+defects a dry run catches. Two mutants must fail it: a misnamed function, and a head digest that does not match.
 
 ## The draft head (pinned)
 
@@ -57,12 +72,12 @@ The config sets `norm_before_residual` and no fc norms.
 - **The harness** is the launch commit, checked out by SHA as its own worktree, as in P127's Amendment 2. The fetch
   runs under `bench/common/hf_fetch_watchdog.py`.
 
-## The draft, implemented (`p130_eagle3.py`)
+## The draft, implemented (`sd1_eagle3.py`)
 
 **Why not the `speculators` package.** speculators 0.8.0 requires torch ≥ 2.9 and transformers < 5.17; installing it
 would replace the stack under test. The head repo's remote code is not executed.
 
-`p130_eagle3.py` implements the inference semantics of vLLM's EAGLE-3 path (`llama_eagle3.py`, `llm_base_proposer.py`,
+`sd1_eagle3.py` implements the inference semantics of vLLM's EAGLE-3 path (`llama_eagle3.py`, `llm_base_proposer.py`,
 read 2026-10-10):
 - **The auxiliary states** are the residual stream entering target decoder layers 2, 24 and 45, vLLM's default
   (2, L // 2, L − 3) for L = 48. They are concatenated low | mid | high → `fc`.
@@ -75,7 +90,7 @@ read 2026-10-10):
   context indices 0..t plus the chain's own steps.
 
 The box computes a greedy chain of K = 5 at every index. Chains are prefix-consistent, so k = 1..5 all come from one
-chain. CPU tests (`tests/test_p130.py`) hold the batched chains equal to a step-by-step reference at every index, in
+chain. CPU tests (`tests/test_sd1.py`) hold the batched chains equal to a step-by-step reference at every index, in
 fp32 and bf16. The PREMISE below catches a residual error in the captured convention as VOID, not as a finding.
 
 ## Workloads
@@ -89,7 +104,7 @@ fp32 and bf16. The PREMISE below catches a residual error in the captured conven
 Each row runs alone, as one request, greedy, to exactly its new-token count. The capture must account for all
 P + N − 1 forwarded positions per row, or the box refuses (rc 19).
 
-## The reducer (`p130_reduce.py`, self-tested)
+## The reducer (`sd1_reduce.py`, self-tested)
 
 - **Accounting.** The prefill emits x[P]. Each verify step whose last emitted token is x[t + 1] proposes up to k drafts
   and accepts their longest matching prefix a. It emits a + 1 tokens. τ = (generated tokens − 1) / verify steps.
@@ -119,7 +134,7 @@ P + N − 1 forwarded positions per row, or the box refuses (rc 19).
   - rc 11: a head file whose size or sha256 differs;
   - rc 9: a target checkout that is not `7f044dd9` / `d769d502`.
 - **The R tripwire (reported, not a gate).** R's row 0, run alone, is compared token for token with `p127-5090-1`'s W1
-  tokens (B arms, graph mode; `bench/p130/expect_w1.json`). "Equal" says the capture path is the served path. τ is a
+  tokens (B arms, graph mode; `bench/sd1/expect_w1.json`). "Equal" says the capture path is the served path. τ is a
   quality quantity either way.
 
 ## The decision (registered now)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""p130_box.py -- lane P130 (e4b#1313), the box side (bench/p130/PREREG-p130.md): speculative decoding's acceptance on the
+"""sd1_box.py -- lane SD1 (e4b#1313), the box side (bench/sd1/PREREG-sd1.md): speculative decoding's acceptance on the
 shipped default's target.
 
 **`--chat-prompts`** turns the 16 pinned UltraChat prompts (`chat_prompts.json`) into token rows. It uses the model's own
@@ -11,7 +11,7 @@ decode and prefill are eager (`E4B_PAGED_GRAPHS=0`, `E4B_PAGED_PREFILL_GRAPH=0`)
   auxiliary states, vLLM's default (2, L // 2, L - 3).
 - **The rows.** Each row runs alone as one request, to exactly N new tokens. Its prefill plus its N - 1 decode steps
   forward L - 1 = P + N - 1 positions, and the capture must account for every one of them, or the box refuses (rc 19).
-- **The draft.** The pinned EAGLE-3 head (`p130_eagle3.py`) then computes a greedy 5-token chain at every index. The
+- **The draft.** The pinned EAGLE-3 head (`sd1_eagle3.py`) then computes a greedy 5-token chain at every index. The
   capture file keeps tokens and chains, not hidden states.
 - **R's tripwire.** R's row 0 must equal `p127-5090-1`'s W1 tokens (B = 7f044dd9 + d769d502, graph mode). This is a
   REPORTED check, not a gate: P109 read W1 identical in every arm, eager included, and SC2b read prefill graphs as
@@ -30,7 +30,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-import p130_eagle3 as e3  # noqa: E402
+import sd1_eagle3 as e3  # noqa: E402
 
 WORKLOADS = {"R": 160, "C-think": 256, "C-nothink": 256}
 HEAD_REPO = "RedHatAI/Qwen3-30B-A3B-speculator.eagle3"
@@ -88,7 +88,7 @@ def chat_main(a) -> int:
         rows = [list(map(int, r if isinstance(r, list) else r["input_ids"])) for r in rows]
         json.dump({"workload": w, "enable_thinking": think, "rows": rows, "prompts_sha256": digest(rows),
                    "source_sha256": src["prompts_sha256"]}, open(os.path.join(a.outdir, f"prompts_{w}.json"), "w"))
-        print(f"P130_PROMPTS {w} rows={len(rows)} min_len={min(map(len, rows))} max_len={max(map(len, rows))} "
+        print(f"SD1_PROMPTS {w} rows={len(rows)} min_len={min(map(len, rows))} max_len={max(map(len, rows))} "
               f"sha256={digest(rows)}", flush=True)
     return 0
 
@@ -137,7 +137,7 @@ def capture_main(a) -> int:
         tokens = torch.tensor(list(row) + gen)
         chains = head.chains(tokens, aux, K=5)
         out_rows.append({"prompt_len": len(row), "tokens": list(row) + gen, "chains": chains.tolist()})
-        print(f"P130_ROW {w} {ri} prompt={len(row)} new={n_new} positions={aux.shape[0]}", flush=True)
+        print(f"SD1_ROW {w} {ri} prompt={len(row)} new={n_new} positions={aux.shape[0]}", flush=True)
     cap.close()
     rec = {"workload": w, "new_tokens": n_new, "rows": out_rows, "prompts_sha256": pf["prompts_sha256"],
            "e4b_sha": os.environ.get("E4B_SHA"), "gnf4_sha": os.environ.get("GNF4_SHA"), "load_s": load_s,
@@ -153,9 +153,9 @@ def capture_main(a) -> int:
         got = out_rows[0]["tokens"][out_rows[0]["prompt_len"]:]
         same = sum(x == y for x, y in zip(got, exp))
         rec["w1_tripwire"] = {"equal": got == exp, "agree": same, "of": len(exp)}
-        print(f"P130_TRIPWIRE R row0 equals p127-5090-1 W1: {got == exp} ({same}/{len(exp)})", flush=True)
+        print(f"SD1_TRIPWIRE R row0 equals p127-5090-1 W1: {got == exp} ({same}/{len(exp)})", flush=True)
     json.dump(rec, open(a.out, "w"))
-    print("P130_CAPTURE " + json.dumps({"workload": w, "rows": len(out_rows), "load_s": load_s}), flush=True)
+    print("SD1_CAPTURE " + json.dumps({"workload": w, "rows": len(out_rows), "load_s": load_s}), flush=True)
     return 0
 
 
@@ -183,9 +183,9 @@ def self_test() -> int:
         bad.append("layer order or values")
     cap.close()
     if bad:
-        print("p130_box self-test FAILED:", bad)
+        print("sd1_box self-test FAILED:", bad)
         return 1
-    print("p130_box self-test OK (capture bookkeeping)")
+    print("sd1_box self-test OK (capture bookkeeping)")
     return 0
 
 

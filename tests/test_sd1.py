@@ -1,9 +1,9 @@
-"""Lane P130's instrument on CPU (bench/p130/PREREG-p130.md; e4b#1313): speculative decoding, Phase 0.
+"""Lane SD1's instrument on CPU (bench/sd1/PREREG-sd1.md; e4b#1313): speculative decoding, Phase 0.
 
 - The EAGLE-3 draft's batched chains equal a step-by-step reference at every index (fp32 and bf16).
 - The reducer self-tests, and reproduces the registered n-gram floor from p127-5090-1's committed receipts.
 - The box's capture bookkeeping self-tests.
-- The staged pin matches the repo, as bench/p130/p130_drive.sh checks before it stages anything.
+- The staged pin matches the repo, as bench/sd1/sd1_drive.sh checks before it stages anything.
 - The runner and driver keep their registered shape, and the PREREG carries every pinned value.
 """
 from __future__ import annotations
@@ -20,17 +20,17 @@ import pytest
 torch = pytest.importorskip("torch")
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
-LANE = REPO / "bench" / "p130"
+LANE = REPO / "bench" / "sd1"
 sys.path.insert(0, str(LANE))
-import p130_eagle3 as e3  # noqa: E402
-import p130_reduce as rd  # noqa: E402
+import sd1_eagle3 as e3  # noqa: E402
+import sd1_reduce as rd  # noqa: E402
 
-RUN = (LANE / "p130_run.sh").read_text(encoding="utf-8")
-DRIVE = (LANE / "p130_drive.sh").read_text(encoding="utf-8")
-PREREG = (LANE / "PREREG-p130.md").read_text(encoding="utf-8")
+RUN = (LANE / "sd1_run.sh").read_text(encoding="utf-8")
+DRIVE = (LANE / "sd1_drive.sh").read_text(encoding="utf-8")
+PREREG = (LANE / "PREREG-sd1.md").read_text(encoding="utf-8")
 SOURCES = {
-    "p130_run.sh": LANE / "p130_run.sh", "p130_box.py": LANE / "p130_box.py", "p130_eagle3.py": LANE / "p130_eagle3.py",
-    "p130_reduce.py": LANE / "p130_reduce.py", "chat_prompts.json": LANE / "chat_prompts.json",
+    "sd1_run.sh": LANE / "sd1_run.sh", "sd1_box.py": LANE / "sd1_box.py", "sd1_eagle3.py": LANE / "sd1_eagle3.py",
+    "sd1_reduce.py": LANE / "sd1_reduce.py", "chat_prompts.json": LANE / "chat_prompts.json",
     "expect_w1.json": LANE / "expect_w1.json", "p109_box.py": REPO / "bench" / "p109" / "p109_box.py",
     "k8_bake.py": REPO / "bench" / "p39" / "k8_bake.py", "calib.json": REPO / "bench" / "p39" / "calib.json",
 }
@@ -77,7 +77,7 @@ def test_draft_ids_map_through_d2t_and_a_missing_tensor_is_refused():
 
 
 def test_the_reducer_self_tests():
-    p = subprocess.run([sys.executable, str(LANE / "p130_reduce.py"), "--self-test"], capture_output=True, text=True)
+    p = subprocess.run([sys.executable, str(LANE / "sd1_reduce.py"), "--self-test"], capture_output=True, text=True)
     assert p.returncode == 0 and "self-test OK" in p.stdout.splitlines()[-1], p.stdout
 
 
@@ -109,7 +109,7 @@ def test_measured_dn_replaces_only_the_reuse_arm():
 
 
 def test_the_box_self_tests():
-    p = subprocess.run([sys.executable, str(LANE / "p130_box.py"), "--self-test"], capture_output=True, text=True)
+    p = subprocess.run([sys.executable, str(LANE / "sd1_box.py"), "--self-test"], capture_output=True, text=True)
     assert p.returncode == 0 and "self-test OK" in p.stdout, p.stdout + p.stderr
 
 
@@ -140,7 +140,7 @@ def test_the_driver_uses_the_shared_liveness_and_token_scope():
     assert 'LANE_HELPER="$REPO/bench/common/lane_liveness.sh"' in DRIVE and "lane_snapshot_verdict" in DRIVE
     assert "lane_write_host_fault" in DRIVE and "token_scope.py" in DRIVE
     assert "pgrep" not in DRIVE, "liveness by PID identity, never a pattern that can match its own probe"
-    assert "P130_RUN_NONCE" in DRIVE and "bash p130_run.sh" in DRIVE
+    assert "SD1_RUN_NONCE" in DRIVE and "bash sd1_run.sh" in DRIVE
 
 
 def test_the_pinned_inputs_carry_their_provenance():

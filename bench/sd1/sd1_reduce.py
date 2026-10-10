@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""p130_reduce.py -- lane P130 (e4b#1313), the reducer: speculative decoding's acceptance on the shipped default's target
-and its priced B = 1 speedup (bench/p130/PREREG-p130.md). It runs on CPU from the box's capture files; no GPU.
+"""sd1_reduce.py -- lane SD1 (e4b#1313), the reducer: speculative decoding's acceptance on the shipped default's target
+and its priced B = 1 speedup (bench/sd1/PREREG-sd1.md). It runs on CPU from the box's capture files; no GPU.
 
 **Accounting.** It is the same for both routes. The prompt's prefill emits the first generated token x[P]. From then on,
 every verify step that starts with x[t + 1] as its last emitted token proposes up to k drafts for x[t + 2 ..]. The step
@@ -163,7 +163,7 @@ def self_test() -> int:
     check("all-perfect -> PROCEED_EAGLE3", reduce(caps)["verdict"] == "PROCEED_EAGLE3")
     caps_v = {w: {"rows": rows_w} for w in ("R", "C-think", "C-nothink")}
     check("C-think tau(1) below the premise -> VOID", reduce(caps_v)["verdict"] == "VOID")
-    print(f"p130_reduce self-test {'OK' if not bad else 'FAILED'} ({n[0] - len(bad)}/{n[0]} cases)")
+    print(f"sd1_reduce self-test {'OK' if not bad else 'FAILED'} ({n[0] - len(bad)}/{n[0]} cases)")
     return 0 if not bad else 1
 
 
@@ -185,7 +185,7 @@ def main(argv=None) -> int:
         return 22
     out = reduce(caps, json.load(open(a.measured_dn)) if a.measured_dn else None)
     json.dump(out, open(a.out, "w"), indent=1)
-    print("P130_VERDICT " + json.dumps({"verdict": out["verdict"], "reasons": out["reasons"],
+    print("SD1_VERDICT " + json.dumps({"verdict": out["verdict"], "reasons": out["reasons"],
                                          "best_S_eagle3": out.get("best_S_eagle3_independent"),
                                          "best_S_ngram_R": out.get("best_S_ngram_R_independent")}))
     return 0
