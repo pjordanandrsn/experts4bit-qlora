@@ -1,0 +1,10 @@
+{
+ "schema": "q235-locked-inputs/1",
+ "assets": {
+  "ds_alpaca.json": {
+   "sha256": "5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb",
+   "bytes": 1017575,
+   "made_by": "bench/tp4/tp4_alpaca.py from unsloth/alpaca-cleaned at 0fe581eb78617869b6e17dd195a3fe4045b3723d (TC1's registered file)"
+  }
+ }
+}

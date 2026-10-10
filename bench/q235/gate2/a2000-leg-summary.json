@@ -1,0 +1,78 @@
+{
+ "schema": "q235-a2000-leg/1",
+ "mode": "a2000 rehearsal (4-layer slice of ac9c66cc), never science-eligible",
+ "load": {
+  "seconds": 126.2,
+  "profile": {
+   "read": 30.12,
+   "assemble": 65.68,
+   "quantize": 1.14,
+   "offload": 7.38,
+   "calls": {
+    "read": 1575,
+    "assemble": 4,
+    "quantize": 4,
+    "offload": 4
+   },
+   "read_bytes": 22391367680,
+   "total_s": 115.83,
+   "other_s": 11.51,
+   "read_gb_s": 0.743
+  },
+  "absmax_dq": 0
+ },
+ "rules_all_true": true,
+ "rules": {
+  "step0_all_finite": true,
+  "step0_every_B_nonzero": true,
+  "step0_every_A_zero": true,
+  "step0_every_B_changed": true,
+  "step1_all_finite": true,
+  "step1_every_A_nonzero": true,
+  "step1_every_B_nonzero": true,
+  "step1_every_A_changed": true,
+  "step1_every_B_changed": true
+ },
+ "frozen_tensors": 111,
+ "frozen_sha256_after_both_steps_equal": true,
+ "frozen_hash_seconds": 29.9,
+ "in_process": {
+  "loss_0": 13.37894344329834,
+  "loss_1": 13.37894344329834,
+  "loss_equal": true,
+  "grad_maxrel": 0.00699300691485405
+ },
+ "steps": {
+  "step": {
+   "loss": 13.37894344329834,
+   "elapsed_s": 7.895,
+   "h2d_bytes_offload": 9512681472,
+   "max_memory_allocated": 7090084864,
+   "max_memory_reserved": 8988393472,
+   "host_peak_rss": 28828348416,
+   "optimizer": "bitsandbytes AdamW8bit"
+  },
+  "step1": {
+   "loss": 12.661137580871582,
+   "elapsed_s": 7.912,
+   "h2d_bytes_offload": 9512681472,
+   "max_memory_allocated": 7316800512,
+   "max_memory_reserved": 8988393472,
+   "host_peak_rss": 28828348416,
+   "optimizer": "bitsandbytes AdamW8bit"
+  }
+ },
+ "repeat": {
+  "loss": 13.37894344329834,
+  "equals_step0_loss": true,
+  "layer_sha256_equal": true,
+  "load_seconds": 112.1
+ },
+ "versions": {
+  "torch": "2.11.0+cu128",
+  "transformers": "5.19.0",
+  "bitsandbytes": "0.50.2",
+  "grouped-nf4-gemm": "0.45.0",
+  "experts4bit-qlora": "0.53.0"
+ }
+}

@@ -71,6 +71,9 @@ def test_the_step_records_every_registered_check(step):
     assert rec["in_process"]["loss_equal"]                          # the CPU reference path is deterministic
     assert rec["step"]["optimizer"].startswith("torch AdamW") and rec["step"]["lr"] == 2e-4
     assert len(rec["layer_sha256"]) == 4 and (out / "nf4.pt").exists()
+    prof = rec["load"]["profile"]                                   # gate 2: where the load's time went
+    assert prof["calls"]["read"] > 0 and prof["read_bytes"] > 0 and prof["calls"]["quantize"] == 4 and prof["calls"]["assemble"] == 4
+    assert prof["total_s"] >= prof["read"] + prof["assemble"] + prof["quantize"] + prof["offload"] - 1e-6
 
 
 def test_the_fresh_process_repeat_reproduces_step_0(tiny, step):

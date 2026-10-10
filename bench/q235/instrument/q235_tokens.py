@@ -16,7 +16,9 @@ HERE = Path(__file__).resolve()
 
 
 def _tc1_arm():
-    spec = importlib.util.spec_from_file_location("tc1_arm_for_q235", HERE.parents[2] / "tc1" / "tc1_arm.py")
+    """TC1's renderer: beside this file on a box (the flat staged closure), else in the repository's bench/tc1."""
+    beside = HERE.with_name("tc1_arm.py")
+    spec = importlib.util.spec_from_file_location("tc1_arm_for_q235", beside if beside.is_file() else HERE.parents[2] / "tc1" / "tc1_arm.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

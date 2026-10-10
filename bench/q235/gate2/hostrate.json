@@ -1,0 +1,19 @@
+{
+ "schema": "q235-hostrate/1",
+ "h2d_gb_s": 5.8,
+ "d2h_gb_s": 6.58,
+ "pcie_gen": "3",
+ "pcie_gen_max": "3",
+ "pcie_width": "8",
+ "pcie_width_max": "16",
+ "host_copy_gb_s": 5.14,
+ "host_threads": 6,
+ "disk_read_gb_s": 1.63,
+ "disk_method": "O_DIRECT (dd iflag=direct)",
+ "disk_bytes": 4294967296,
+ "floors": {
+  "h2d_gb_s": 0.0,
+  "disk_read_gb_s": 0.0,
+  "host_copy_gb_s": 0.0
+ }
+}
