@@ -593,6 +593,7 @@ clone, which keeps `git diff --stat` in `audit.json`.
 | `arch/topology.py` | a `fused_qkv_numel` field, counted in `describe_moe` | the server calls `describe_moe` only for `E4B_PAGED_MAX_SEQS=auto`, and the read pins 16. `routed_top_k`, which it does call, is unchanged |
 | `engines/dense_offload.py` | the kept-small branch stores a `Params4bit` as `.to()` returns it (#1575) | the server never calls `enable_dense_offload`; the module is imported with the package |
 | `engines/fast.py` | the fused q/k/v training projection on by default in `enable_fast_train` / `disable_fast_train` | training only. The module is imported with the package, but the server calls neither function |
+| `engines/pack_manifest.py` | a rank-0 payload flattened before its byte view (#1572) | reached only from `int4_experts` / `int4_attn_calib`, behind `E4B_SERVE_EXP_INT4` / `E4B_SERVE_ATTN_INT4_CALIB`, which the runner unsets; it is imported lazily, so `modules_loaded` shows it absent |
 | `engines/train_qkv_fuse.py` | the fused q/k/v training projection | imported only by the training paths above and by `recipe`'s estimates, none of which the server runs |
 | `recipe.py` | training memory-estimate terms | `serve_recipe` imports only `Footprint`, `FootprintItem`, `QLoRASetup`, `_module_bytes` and `_stack_modules`, all unchanged |
 
