@@ -1,0 +1,62 @@
+KNOBS e4b=b14f59325bc0c21d66a6bb2f17eb9f2609a6cd9c gnf4=724ccc454f006c1a46836e434e997f31f293747f model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 prove=0 procs=8 windows=64 cont=128 speed_windows=16 rounds=12
+CUDA_PROBE ok
+e4b 0.53.0 @b14f59325bc0c21d66a6bb2f17eb9f2609a6cd9c
+gnf4 0.45.0 @724ccc454f006c1a46836e434e997f31f293747f
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+huggingface_hub 1.33.0
+cc (12, 0)
+p130_reduce self-test OK (42 cases)
+hf_fetch_watchdog self-test OK (7/7 cases)
+premise run rc=0: 9 passed in 5.25s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+process 1 rc=0 P130_SPEED proc 1 p1 0 | graphs [('p2_off', 'on'), ('p2_on', 'on')] | median ms {'p2_off': 38.17305, 'p2_on': 37.02775} | P2 differs on 0 windows | eager ms {'p2_off': 47.5295, 'p2_on': 46.682} | 24 s
+
+P130_ARM R done at 32 s
+P130_ARM rep done at 57 s
+P130_ARM half done at 99 s
+P130_ARM chunk done at 127 s
+P130_ARM rev done at 153 s
+P130_ARM mutant_scale done at 178 s
+P130_BOX proc 1 p1 0 | load 94s | mem 21.28 GB | quality off windows 64 178.2 s
+process 2 rc=0 P130_SPEED proc 2 p1 1 | graphs [('p2_off', 'on'), ('p2_on', 'on')] | median ms {'p2_off': 34.184349999999995, 'p2_on': 33.025450000000006} | P2 differs on 0 windows | eager ms {'p2_off': 41.278499999999994, 'p2_on': 40.2495} | 21 s
+
+P130_ARM P1 done at 29 s
+P130_BOX proc 2 p1 1 | load 89s | mem 21.28 GB | quality on windows 64 28.7 s
+process 3 rc=0 P130_SPEED proc 3 p1 1 | graphs [('p2_off', 'on'), ('p2_on', 'on')] | median ms {'p2_off': 34.1586, 'p2_on': 32.9949} | P2 differs on 0 windows | eager ms {'p2_off': 41.483999999999995, 'p2_on': 40.739999999999995} | 21 s
+
+P130_BOX proc 3 p1 1 | load 90s | mem 20.39 GB
+process 4 rc=0 P130_SPEED proc 4 p1 0 | graphs [('p2_off', 'on'), ('p2_on', 'on')] | median ms {'p2_off': 38.17245, 'p2_on': 37.03060000000001} | P2 differs on 0 windows | eager ms {'p2_off': 46.576499999999996, 'p2_on': 45.653} | 23 s
+
+P130_BOX proc 4 p1 0 | load 91s | mem 20.39 GB
+process 5 rc=0 P130_SPEED proc 5 p1 0 | graphs [('p2_off', 'on'), ('p2_on', 'on')] | median ms {'p2_off': 38.1704, 'p2_on': 37.0316} | P2 differs on 0 windows | eager ms {'p2_off': 47.170500000000004, 'p2_on': 46.174499999999995} | 23 s
+
+P130_BOX proc 5 p1 0 | load 87s | mem 20.39 GB
+process 6 rc=0 P130_SPEED proc 6 p1 1 | graphs [('p2_off', 'on'), ('p2_on', 'on')] | median ms {'p2_off': 34.1461, 'p2_on': 32.983900000000006} | P2 differs on 0 windows | eager ms {'p2_off': 42.054500000000004, 'p2_on': 41.1385} | 21 s
+
+P130_BOX proc 6 p1 1 | load 87s | mem 20.39 GB
+process 7 rc=0 P130_SPEED proc 7 p1 1 | graphs [('p2_off', 'on'), ('p2_on', 'on')] | median ms {'p2_off': 34.13955, 'p2_on': 32.981} | P2 differs on 0 windows | eager ms {'p2_off': 41.109, 'p2_on': 40.3305} | 21 s
+
+P130_BOX proc 7 p1 1 | load 86s | mem 20.39 GB
+process 8 rc=0 P130_SPEED proc 8 p1 0 | graphs [('p2_off', 'on'), ('p2_on', 'on')] | median ms {'p2_off': 38.1896, 'p2_on': 37.04185} | P2 differs on 0 windows | eager ms {'p2_off': 47.323499999999996, 'p2_on': 46.344} | 23 s
+
+P130_BOX proc 8 p1 0 | load 84s | mem 20.39 GB
+GATE_CORPUS b08601e04326c79dfdd32d625aee71d232d685c3
+P130_VERDICT P1_LICENSED P2_LICENSED ["P2 ratio 0.9680 [0.9662, 0.9698] vs margin x1.01", "P1 gain 1.1177 [1.1164, 1.1190] vs x1.03", "P1 bias -0.00347 (bar 0.01251), spread 0.01441 (bar 0.02956)"]
+  p2_speed: {"ratios": {"1": 0.9699971576806148, "2": 0.9660985216919442, "3": 0.9659324445381251, "4": 0.9700870654097394, "5": 0.9701653637373461, "6": 0.9659639021733085, "7": 0.9660642861431976, "8": 0.9699460062425371}, "mean": 0.9680297389763163, "ci95": [0.9662274054576662, 0.9698354344427791], "margin": 1.01, "no_slower": true, "saving_ms": 1.1521312499999974}
+  p1_speed: {"gains": {"1/2": 1.1166820489493001, "4/3": 1.1175062795313624, "5/6": 1.117855333405572, "8/7": 1.11863220224051}, "mean": 1.1176687464822703, "ci95": [1.1163823229977088, 1.1189566523312044], "min_gain": 1.03, "faster": true, "saving_ms": 4.019225000000002, "both_saving_ms": 5.1800624999999965}
+  spans: {"0": 1.0005030075660721, "1": 1.0013122609993392}
+  function_p2: {"differ": []}
+  determinism: {"differ": []}
+  corpus: {"gate": "b08601e04326c79dfdd32d625aee71d232d685c3", "box_arrow": ["b08601e04326c79dfdd32d625aee71d232d685c3"], "box_snapshots": ["b08601e04326c79dfdd32d625aee71d232d685c3"], "same": true}
+  predictions: {"p1_saving_ms": {"value": 4.019225000000002, "range": [2.5, 4.5], "held": true}, "p2_saving_ms": {"value": 1.1521312499999974, "range": [0.5, 1.3], "held": true}, "both_saving_ms": {"value": 5.1800624999999965, "range": [3.0, 5.5], "held": true}, "p1_bias": {"value": -0.0034676673635340716, "range": [-0.004, 0.004], "held": true}, "p1_spread": {"value": 0.014410328527892313, "range": [0.0, 0.016], "held": true}, "function_and_determinism": {"held": true}, "verdict": {"value": "P1_LICENSED P2_LICENSED", "held": true}}
+  rep: bias +0.00000 spread 0.00000 se 0.00000 max 0.00000 kl 0.0 agree 1.0000
+  half: bias -0.00251 spread 0.01449 se 0.00224 max 0.04477 kl 0.011032121734057274 agree 0.9583
+  chunk: bias -0.00066 spread 0.01478 se 0.00246 max 0.07201 kl 0.012611336060124654 agree 0.9537
+  rev: bias +0.00000 spread 0.00000 se 0.00000 max 0.00000 kl 0.0 agree 1.0000
+  mutant_scale: bias +1.14657 spread 1.14657 se 0.03653 max 2.03586 kl 1.268608438830565 agree 0.5762
+  P1: bias -0.00347 spread 0.01441 se 0.00218 max 0.05255 kl 0.012237855804370751 agree 0.9557
