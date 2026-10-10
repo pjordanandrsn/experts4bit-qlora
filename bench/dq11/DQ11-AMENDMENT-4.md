@@ -116,7 +116,8 @@ alone do not authorize a tolerance or silently switch to strict mode.
 
 ## Report the shipped-setting spread without gating its magnitude
 
-Before the three observer proofs, three additional fresh untimed processes run
+After all three observer proofs, all six science reads and the provisional
+science reduction have completed, three optional fresh untimed processes run
 L, U and U0 under their shipped settings. Each prepares the same model, installs the
 same initializer, runs the existing initial scorer, and performs four
 same-token forward/backward passes on training block 0 with gradients cleared
@@ -133,10 +134,17 @@ pairwise comparisons, per-tensor maximum absolute difference and relative
 difference using the larger maximum absolute gradient, execution flags, source,
 input/runtime identity, unchanged initializer, frozen census and bindings. Zero
 numerical difference with distinct raw hashes (including signed zero) stays
-visible. Reported values must be finite and receipts complete and consistent;
-**no spread magnitude is a pass/fail gate**. Proof receipts bind these sidecars,
-and the reducer includes the spread and observer warning records in its output.
-Read execution policies must match the shipped spread process for that arm.
+visible. A complete report requires finite values and complete, consistent receipts.
+**Neither spread magnitude nor spread completeness gates the science verdict.**
+Missing, truncated, malformed or inconsistent evidence is reported as incomplete,
+with its reason; raw files already written remain preserved. Proofs do not depend
+on spread sidecars. The reducer reports spread status and observer warnings.
+All reads require the registered shipped policy: no workspace override, disabled
+deterministic algorithms and warn-only mode, all four SDPA backends enabled,
+and TF32 disabled for both matmul and cuDNN. When a complete spread exists, the
+reducer also compares that arm's read policies against its recorded spread policy.
+Otherwise the registered shipped policy remains the reference. A mismatch makes
+the optional report incomplete; it does not turn complete science phases VOID.
 None of this work is inserted into a timed read or changes its 40-update loop.
 
 ## Require live streaming during each scientific L read
@@ -165,9 +173,13 @@ variable before the URL gate, quotes or rental.
 The three added spread processes each have a 900-second requested cap. As for
 all original phases, the effective alarm is the lesser of that cap and remaining
 time until the unchanged two-hour guard minus the unchanged 300-second
-receipt/teardown reserve. Exhausted reserve refuses before the phase; incomplete
-work remains `VOID`. CPU fixtures must include these phases when checking
-ordering, caps and near-deadline refusal.
+receipt/teardown reserve. Optional spread processes run last. Exhausted reserve
+records `spread: skipped for time` without starting the child; a timeout or other
+spread failure records `incomplete` and preserves its log, status and any raw
+files. Each status records actual start/end, duration and remaining reserve.
+These outcomes do not change a science verdict or successful science-phase exit.
+Incomplete required science phases still refuse as `VOID`. CPU fixtures cover
+last ordering, effective caps, skips and truncation without scientific failure.
 
 The fifth rehearsal's actual phase durations, deadline and remaining reserve
 are **pending measurement**, not estimated here. Its durable phase-time record
@@ -189,7 +201,7 @@ versions/URLs/hashes, arms, optimizer, update count, six fresh reads and reverse
 order, K8 quality budget, headroom cutoff, frozen/binding checks and the
 controlled-comparison scope remain unchanged. The rehearsal-specific tiny model,
 cu128 lock, threshold override and receipt schema never enter a scientific draw.
-All changed payloads and the new proof-policy helper/this sibling registration
+All changed payloads and the new proof-policy, optional-report and streaming-witness helpers/this sibling registration
 are resealed in the science closure. Previously reviewed payload repairs remain
 explicit: rank-0 hashing retains exact bits, the defining-module/tiny-model
 adapters stay rehearsal-only, and original ordered token IDs/full vocabulary

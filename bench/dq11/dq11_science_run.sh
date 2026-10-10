@@ -57,9 +57,6 @@ phase bootstrap 1800 python dq11_bootstrap.py
 phase prepare 1800 python dq11_prepare.py
 nvidia-smi --query-gpu=name,memory.total,driver_version,pcie.link.gen.max,pcie.link.width.max,power.limit --format=csv,noheader > forensics.txt
 for arm in L U U0; do
-  phase "spread-$arm" 900 python dq11_arm.py --kind spread --arm "$arm" --repetition 0 --out "receipts/spread-$arm.json"
-done
-for arm in L U U0; do
   phase "proof-$arm" 900 python dq11_arm.py --kind proof --arm "$arm" --repetition 0 --out "receipts/proof-$arm.json"
 done
 python dq11_reduce.py receipts --initial-only > receipts/initial-gate.json 2> logs/initial-gate.log || { say 'QUALITY_FAIL/VOID: initial gate; no updates'; finish 12; }
@@ -68,5 +65,8 @@ for tag in 1-L 1-U 1-U0 2-U0 2-U 2-L; do
   phase "read-$tag" 900 python dq11_arm.py --kind read --arm "$arm" --repetition "$rep" --out "receipts/read-$tag.json"
 done
 python dq11_reduce.py receipts > receipts/provisional-read.json 2> logs/reduce.log || { say 'QUALITY_FAIL/VOID: no recommendation'; finish 12; }
+for arm in L U U0; do
+  python dq11_reported_spread.py --directory "$W" --arm "$arm" >> logs/spread-reports.log 2>&1 || say "spread-$arm: incomplete reporting"
+done
 say 'PROVISIONAL: guard teardown and instance-absence proof still required; no final position yet'
 finish 0

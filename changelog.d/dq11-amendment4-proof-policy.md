@@ -7,3 +7,5 @@ reads on shipped settings, report their same-token spread from separate untimed
 processes without a magnitude gate, require live streaming/prefetch counter
 increases during each scientific L training loop, and require the fifth zero-rental rehearsal
 and measured time-left review before any fourth paid-draw approval.
+
+Run reported-only spread processes after the complete scientific reads and provisional reduction. Deadline skips and incomplete optional evidence remain reported without changing the scientific verdict; reads always require the registered shipped policy.

@@ -140,6 +140,59 @@ def validate_spread(row, proof, *, rehearsal=False):
         # No comparison against a magnitude threshold: spread is reported, never a quality/headroom gate.
 
 
+def report_spreads(proofs, reads, spreads, *, rehearsal=False):
+    """Optional reports cannot invalidate science, including missing or malformed raw evidence."""
+    reports = {}
+    for proof in proofs:
+        arm = proof["arm"]
+        entry = spreads.get(arm)
+        if entry is None:
+            reports[arm] = {"status": "incomplete", "reason": "no spread receipt or process status",
+                            "policy_reference": "registered shipped policy"}
+            continue
+        if isinstance(entry, dict) and entry.get("status") in {"spread: skipped for time", "incomplete"}:
+            reports[arm] = entry
+            continue
+        try:
+            validate_spread(entry, proof, rehearsal=rehearsal)
+            for reading in reads:
+                if reading["arm"] == arm and reading["execution_settings"] != entry["spread"]["settings"]:
+                    raise ValueError("read policy differs from recorded spread policy")
+            reports[arm] = {"status": "complete", **entry["spread"], "policy_reference": "recorded spread policy"}
+        except (KeyError, TypeError, ValueError, OverflowError, AttributeError) as error:
+            reports[arm] = {"status": "incomplete", "reason": str(error), "policy_reference": "registered shipped policy"}
+    return reports
+
+
+def load_spreads(directory):
+    """Retain optional process failures and verify available raw gradients without gating science."""
+    rows = {}
+    for arm in ("L", "U", "U0"):
+        path = directory / f"spread-{arm}.json"
+        try:
+            status = directory / f"spread-status-{arm}.json"
+            if status.exists():
+                phase = json.loads(status.read_text())
+                if phase.get("status") in {"spread: skipped for time", "incomplete"}:
+                    rows[arm] = phase
+                    continue
+            if not path.exists():
+                if status.exists():
+                    rows[arm] = phase
+                continue
+            row = json.loads(path.read_text())
+            for run in row["spread"]["passes"]:
+                if run["gradient_file"] != f"spread-{arm}-{run['ordinal']}.safetensors":
+                    raise ValueError("raw shipped-spread gradient filename changed")
+                raw = directory / run["gradient_file"]
+                if raw.stat().st_size != run["gradient_file_bytes"] or file_sha(raw) != run["gradient_file_sha256"]:
+                    raise ValueError("raw shipped-spread gradients changed")
+            rows[arm] = row
+        except (OSError, KeyError, TypeError, ValueError, AttributeError) as error:
+            rows[arm] = {"status": "incomplete", "reason": str(error)}
+    return rows
+
+
 def validate_proofs(proofs, *, rehearsal=False):
     if len(proofs) != 3 or {row["arm"] for row in proofs} != {"L", "U", "U0"}:
         raise ValueError("missing or duplicate proof")
@@ -147,7 +200,6 @@ def validate_proofs(proofs, *, rehearsal=False):
     for row in proofs:
         registered_identity(row, rehearsal=rehearsal)
         validate_observer_policy(row["observer_policy"])
-        validate_spread(row["shipped_spread"], row, rehearsal=rehearsal)
         if (row["kind"] != "proof" or row["repetition"] != 0 or not row["observer_same_arm_bitwise"]
                 or not row["execution"]["observer_removed"] or not row["frozen_unchanged"]
                 or row["path_before"] != row["path_after"]):
@@ -193,8 +245,9 @@ def validate_read(row, proof, *, rehearsal=False):
         validate_train_prefetch_witness(witness, rehearsal=rehearsal)
         if witness["source"] != row["runtime"]["experts4bit-qlora"] or witness["nonce"] != row["nonce"]:
             raise ValueError("streaming route witness source/nonce changed")
-    if row["execution_settings"] != proof["shipped_spread"]["spread"]["settings"]:
-        raise ValueError("read execution settings differ from shipped settings")
+    from dq11_proof_policy import validate_shipped_policy
+
+    validate_shipped_policy(row["execution_settings"])
     if row["kind"] != "read" or row["path_before"] != row["path_after"] or row["path_before"] != proof["path_before"]:
         raise ValueError("read path differs from proof")
     for key in ("runtime", "initial", "tokens", "nonce", "input_seal_sha256", "identity_sha256", "base", "provenance"):
@@ -228,12 +281,12 @@ def teardown_valid(teardown, instance_id):
             and instance_id not in evidence.get("list_after", []))
 
 
-def reduce(proofs, reads, *, initial_only=False, teardown=None, instance_id=None):
+def reduce(proofs, reads, *, initial_only=False, teardown=None, instance_id=None, spreads=None):
     result = {"schema": "dq11-read/1", "scope": SCOPE, "default_unsloth_position": False,
               "capacity_licensed": False, "shipping_licensed": False}
     try:
         validate_proofs(proofs)
-        result["shipped_run_to_run_spread"] = {p["arm"]: p["shipped_spread"]["spread"] for p in proofs}
+        result["shipped_run_to_run_spread"] = report_spreads(proofs, reads, spreads or {})
         result["observer_policy"] = {p["arm"]: p["observer_policy"] for p in proofs}
         if not initial_gate(proofs):
             return {**result, "verdict": "QUALITY_FAIL", "phase": "initial", "recommendation": None}
@@ -277,7 +330,7 @@ if __name__ == "__main__":
         proofs = [json.loads((args.directory / f"proof-{arm}.json").read_text()) for arm in ("L", "U", "U0")]
         reads = [] if args.initial_only else [json.loads((args.directory / f"read-{rep}-{arm}.json").read_text()) for rep, arm in ORDER]
         teardown = json.loads(args.teardown.read_text()) if args.teardown else None
-        result = reduce(proofs, reads, initial_only=args.initial_only, teardown=teardown, instance_id=args.instance_id)
+        result = reduce(proofs, reads, initial_only=args.initial_only, teardown=teardown, instance_id=args.instance_id, spreads=load_spreads(args.directory))
     except (OSError, ValueError) as error:
         result = {"schema": "dq11-read/1", "scope": SCOPE, "verdict": "VOID", "reason": str(error), "recommendation": None}
     print(json.dumps(result, indent=2))

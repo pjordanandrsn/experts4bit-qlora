@@ -693,7 +693,7 @@ def test_every_staged_deadline_cap_fits_two_hour_guard_after_install():
     assert reserve == 300
     caps = [int(n) for n in re.findall(r"^budget_cap (\d+)$", run, re.M)]
     caps += [int(n) for n in re.findall(r'^\s*phase (?:(?:"[^"\n]+")|(?:[\w-]+)) (\d+) ', run, re.M)]
-    assert sorted(caps) == [60, 120, 120, 240, 900, 900, 900, 1800, 1800]
+    assert sorted(caps) == [60, 120, 120, 240, 900, 900, 1800, 1800]
     # P109 pattern: each cap + fetch/teardown margin must fit even after
     # a conservative 900 s install/startup allowance, versus 210 s observed CPU.
     assert all(cap + reserve <= 2 * 3600 - 900 for cap in caps)
@@ -1096,14 +1096,11 @@ def test_unset_rehearsal_executes_identical_science_commands_and_environment(tmp
         traces.append(raw.replace(str(run_dir), "<fixture-root>"))
         outcomes.append((result.returncode, calls.replace(str(run_dir), "<fixture-root>")))
     def omit_registered_spread_blocks(lines, commands):
-        remove = set()
-        for i, command in enumerate(commands):
-            if command[:2] == ["python", "dq11_arm.py"] and "spread" in command:
-                assert commands[i - 3] == ["date", "+%s"]
-                assert commands[i - 2] == ["date", "-u", "+%FT%TZ"]
-                assert commands[i - 1][0] == "perl" and "spread" in commands[i - 1]
-                assert commands[i - 1][4:] == command
-                remove.update(range(i - 3, i + 1))
+        remove = {i for i, command in enumerate(commands) if command[:2] == ["python", "dq11_reported_spread.py"]}
+        if remove:
+            assert len(remove) == 3
+            final_reduce = max(i for i, command in enumerate(commands) if command[:2] == ["python", "dq11_reduce.py"])
+            assert min(remove) > final_reduce
         return [line for i, line in enumerate(lines) if i not in remove]
 
     filtered = []
@@ -1530,8 +1527,7 @@ def test_shipped_spread_records_all_six_pairs_without_updates(monkeypatch, scale
 
 
 @pytest.mark.parametrize("mutation", ["configuration", "warn_only", "restore", "warning_omitted",
-                                       "spread_missing", "spread_gate", "spread_tolerance", "spread_count",
-                                       "spread_identity", "spread_nonfinite", "read_C"])
+                                       "read_C"])
 def test_amendment4_reducer_refuses_incomplete_or_changed_policy(mutation):
     proofs, reads, teardown = fixture_receipts()
     row = proofs[0]
@@ -1543,18 +1539,6 @@ def test_amendment4_reducer_refuses_incomplete_or_changed_policy(mutation):
         row["observer_policy"]["restored"] = False
     elif mutation == "warning_omitted":
         row["observer_policy"]["warnings"].append({"category": "UserWarning", "message": "fixture_atomic does not have a deterministic implementation", "filename": "fixture", "lineno": 1})
-    elif mutation == "spread_missing":
-        row.pop("shipped_spread")
-    elif mutation == "spread_gate":
-        row["shipped_spread"]["spread"]["gate"] = True
-    elif mutation == "spread_tolerance":
-        row["shipped_spread"]["spread"]["tolerance"] = 0.01
-    elif mutation == "spread_count":
-        row["shipped_spread"]["spread"]["passes"].pop()
-    elif mutation == "spread_identity":
-        row["shipped_spread"]["nonce"] = "wrong-copy"
-    elif mutation == "spread_nonfinite":
-        row["shipped_spread"]["spread"]["passes"][0]["loss"] = float("nan")
     elif mutation == "read_C":
         reads[0]["execution_settings"]["cublas_workspace_config"] = ":4096:8"
     result = reducer.reduce(proofs, reads, teardown=teardown, instance_id="fixture-no-instance")
@@ -1569,7 +1553,8 @@ def test_large_shipped_spread_is_reported_and_never_replaces_registered_gates():
     for pair in row["pairs"]:
         if pair["x"] == 1:
             pair["gradient_differences"][key] = {"max_abs_difference": 1e20, "relative_to_larger_max": 1.0}
-    result = reducer.reduce(proofs, reads, teardown=teardown, instance_id="fixture-no-instance")
+    result = reducer.reduce(proofs, reads, teardown=teardown, instance_id="fixture-no-instance",
+                            spreads={p["arm"]: p["shipped_spread"] for p in proofs})
     assert result["verdict"] == "VALID_CONTROLLED_READ"
     assert result["shipped_run_to_run_spread"]["L"]["pairs"][0]["gradient_differences"][key]["max_abs_difference"] == 1e20
 
@@ -1608,13 +1593,87 @@ def test_rehearsal_phase_time_record_uses_actual_remaining_reserve_and_retains_f
     assert row["time_left_after_reserve_seconds"] == left - row["elapsed_seconds"]
 
 
-def test_spread_phase_time_exhaustion_stops_before_observer_proofs_and_reads(tmp_path, monkeypatch):
-    result, work, calls = box_fixture(tmp_path, monkeypatch, "none", elapsed={"dq11_arm.py": 2300})
-    assert result.returncode == 11
-    assert [json.loads(line)["command"] for line in (work / "alarms.jsonl").read_text().splitlines()
-            if "spread" in json.loads(line)["command"]]
-    assert "--kind proof" not in calls and "--kind read" not in calls
-    assert not (work / "TC1_SUCCESS.fixture-science").exists()
+def test_optional_spread_processes_are_last_after_complete_science(tmp_path, monkeypatch):
+    result, work, calls = box_fixture(tmp_path, monkeypatch, "none", elapsed={"dq11_arm.py": 750})
+    assert result.returncode == 0
+    assert calls.count("--kind proof") == 6  # perl and its executed child
+    assert calls.count("--kind read") == 12
+    assert calls.rindex("dq11_reduce.py") < calls.index("dq11_reported_spread.py")
+    assert (work / "TC1_SUCCESS.fixture-science").exists()
+
+
+@pytest.mark.parametrize("mutation", ["absent", "skipped", "truncated", "passes", "identity", "nonfinite", "gate", "policy", "malformed"])
+def test_optional_spread_completeness_never_changes_science_verdict(mutation):
+    proofs, reads, teardown = fixture_receipts()
+    spreads = {p["arm"]: p.pop("shipped_spread") for p in proofs}
+    if mutation == "absent":
+        spreads.pop("L")
+    elif mutation in {"skipped", "truncated"}:
+        spreads["L"] = {"status": "spread: skipped for time" if mutation == "skipped" else "incomplete"}
+    elif mutation == "passes":
+        spreads["L"]["spread"]["passes"].pop()
+    elif mutation == "identity":
+        spreads["L"]["nonce"] = "wrong-copy"
+    elif mutation == "nonfinite":
+        spreads["L"]["spread"]["passes"][0]["loss"] = float("nan")
+    elif mutation == "gate":
+        spreads["L"]["spread"]["gate"] = True
+    elif mutation == "policy":
+        spreads["L"]["execution_settings"]["flash_sdp"] = False
+        spreads["L"]["spread"]["settings"]["flash_sdp"] = False
+    else:
+        spreads["L"] = []
+    baseline = reducer.reduce(proofs, reads, teardown=teardown, instance_id="fixture-no-instance")
+    result = reducer.reduce(proofs, reads, teardown=teardown, instance_id="fixture-no-instance", spreads=spreads)
+    assert result["verdict"] == baseline["verdict"] == "VALID_CONTROLLED_READ"
+    for key in ("pairs", "quality_pass", "recommendation", "controlled_position"):
+        assert result[key] == baseline[key]
+    assert result["shipped_run_to_run_spread"]["L"]["status"] != "complete"
+
+
+@pytest.mark.parametrize("left,outcome", [(0, "skip"), (20, "timeout"), (1800, "failure"), (1800, "complete")])
+def test_optional_spread_records_skip_timeout_failure_and_cap_without_raising(tmp_path, monkeypatch, left, outcome):
+    import dq11_reported_spread as optional
+
+    (tmp_path / "receipts").mkdir()
+    (tmp_path / "logs").mkdir()
+    clock = {"wall": 1000.0, "monotonic": 200.0}
+    monkeypatch.setattr(optional.time, "time", lambda: clock["wall"])
+    monkeypatch.setattr(optional.time, "monotonic", lambda: clock["monotonic"])
+    calls = []
+    def fake_run(command, **kwargs):
+        calls.append(kwargs["timeout"])
+        duration = min(900, left) if outcome == "timeout" else 7.5
+        clock["wall"] += duration
+        clock["monotonic"] += duration
+        if outcome == "timeout":
+            raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+        if outcome == "failure":
+            raise subprocess.CalledProcessError(11, command)
+        (tmp_path / "receipts/spread-L.json").write_text("{}")
+    monkeypatch.setattr(optional.subprocess, "run", fake_run)
+    env = {"TC1_DEADLINE_EPOCH": str(1300 + left), "TC1_RUN_NONCE": "fixture-optional-no-GPU", "E4B_SHA": "a" * 40}
+    row = optional.reported_spread(tmp_path, env, "L")
+    assert row["status"] == {"skip": "spread: skipped for time", "timeout": "incomplete", "failure": "incomplete", "complete": "complete"}[outcome]
+    assert calls == ([] if left == 0 else [min(900, left)])
+    assert row["time_left_after_reserve_seconds"] == left - row["elapsed_seconds"]
+    assert json.loads((tmp_path / "receipts/spread-status-L.json").read_text()) == row
+
+
+def test_optional_raw_receipt_corruption_is_reported_not_science_void(tmp_path):
+    proofs, reads, teardown = fixture_receipts()
+    (tmp_path / "spread-L.json").write_text(json.dumps(proofs[0].pop("shipped_spread")))
+    spreads = reducer.load_spreads(tmp_path)  # synthetic raw files deliberately absent
+    assert spreads["L"]["status"] == "incomplete"
+    result = reducer.reduce(proofs, reads, teardown=teardown, instance_id="fixture-no-instance", spreads=spreads)
+    assert result["verdict"] == "VALID_CONTROLLED_READ"
+
+
+def test_truncated_spread_status_is_retained_even_if_child_wrote_a_receipt(tmp_path):
+    (tmp_path / "spread-L.json").write_text("{}")
+    phase = {"status": "incomplete", "reason": "child truncated after receipt write"}
+    (tmp_path / "spread-status-L.json").write_text(json.dumps(phase))
+    assert reducer.load_spreads(tmp_path)["L"] == phase
 
 
 @pytest.mark.parametrize("key", ["DQ11_REHEARSAL", "DQ11_REHEARSAL_TINY_MODEL", "CUBLAS_WORKSPACE_CONFIG"])

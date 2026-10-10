@@ -215,7 +215,7 @@ def build_inputs(directory, canonical_tokens):
 def correctness(directory):
     """Apply the actual proof/read validators; issue no speed recommendation."""
     mode(directory)
-    from dq11_reduce import initial_gate, validate_proofs, validate_read, ORDER
+    from dq11_reduce import initial_gate, validate_proofs, validate_read, ORDER, load_spreads, report_spreads
 
     proofs = [json.loads((directory / f"receipts/proof-{arm}.json").read_text()) for arm in ("L", "U", "U0")]
     validate_proofs(proofs, rehearsal=True)
@@ -236,6 +236,7 @@ def correctness(directory):
     return {"schema": "dq11-rehearsal-correctness/1", "science_eligible": False,
             "recommendation": None, "proofs": [{"arm": p["arm"], "observer_same_arm_bitwise": True} for p in proofs],
             "reads": reads, "complete": len(reads) == 6,
+            "shipped_run_to_run_spread": report_spreads(proofs, [], load_spreads(directory / "receipts"), rehearsal=True),
             "limitations": ["cu128 and sm_86 cannot cover cu130 wheel loading or sm_120 kernels",
                             "local random tiny model and synthetic word tokenizer cannot license DQ11 quality or speed"]}
 
@@ -324,9 +325,6 @@ def orchestrate():
         (directory / "science.sha256").write_text("".join(digest(p) + "  " + p.name + "\n" for p in sorted(payloads)))
         phase("prepare", 1800, "python", "dq11_prepare.py")
         for arm in ("L", "U", "U0"):
-            phase("spread-" + arm, 900, "python", "dq11_arm.py", "--kind", "spread", "--arm", arm,
-                  "--repetition", "0", "--out", f"receipts/spread-{arm}.json")
-        for arm in ("L", "U", "U0"):
             phase("proof-" + arm, 900, "python", "dq11_arm.py", "--kind", "proof", "--arm", arm,
                   "--repetition", "0", "--out", f"receipts/proof-{arm}.json")
         phase("initial-correctness", 120, "python", "dq11_rehearsal.py", "check", "--directory", str(directory))
@@ -334,7 +332,14 @@ def orchestrate():
             phase(f"read-{rep}-{arm}", 900, "python", "dq11_arm.py", "--kind", "read", "--arm", arm,
                   "--repetition", str(rep), "--out", f"receipts/read-{rep}-{arm}.json")
         phase("final-correctness", 120, "python", "dq11_rehearsal.py", "check", "--directory", str(directory))
-        rc = 0
+        rc = 0  # Complete science phases are independent of the optional reports below.
+        from dq11_reported_spread import reported_spread
+
+        for arm in ("L", "U", "U0"):
+            try:
+                reported_spread(directory, env, arm)
+            except (OSError, ValueError, TypeError, KeyError) as error:
+                print(f"spread-{arm}: incomplete reporting: {error}", flush=True)
     except (subprocess.SubprocessError, TimeoutError, OSError, ValueError) as error:
         write_json(directory / "receipts/refusal.json", {"schema": SCHEMA, "science_eligible": False,
                    "status": "REFUSED", "error": str(error), "nonce": nonce})

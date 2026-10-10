@@ -221,13 +221,6 @@ def _run(args):
                 "science_eligible": os.environ.get("DQ11_REHEARSAL") != "1", "policy": policy,
                 "bitwise_pass": result.get("observer_same_arm_bitwise", False)}, indent=2) + "\n")
         result["observer_policy"] = policy
-        result["shipped_spread"] = json.loads((directory / f"receipts/spread-{args.arm}.json").read_text())
-        for noise_pass in result["shipped_spread"]["spread"]["passes"]:
-            path = directory / "receipts" / noise_pass["gradient_file"]
-            if (noise_pass["gradient_file"] != f"spread-{args.arm}-{noise_pass['ordinal']}.safetensors"
-                    or path.stat().st_size != noise_pass["gradient_file_bytes"]
-                    or file_sha(path) != noise_pass["gradient_file_sha256"]):
-                raise ValueError("raw shipped-spread gradients changed")
     elif args.kind == "spread":
         from dq11_proof_policy import spread
 
@@ -242,8 +235,9 @@ def _run(args):
         if not initial_gate(proofs):
             raise ValueError("global initial quality gate failed before training")
         proof = next(row for row in proofs if row["arm"] == args.arm)
-        if result["execution_settings"] != proof["shipped_spread"]["spread"]["settings"]:
-            raise ValueError("read execution policy differs from shipped spread")
+        from dq11_proof_policy import validate_shipped_policy
+
+        validate_shipped_policy(result["execution_settings"])
         if census != proof["path_before"] or base != proof["base"]:
             raise ValueError("clean process differs from untimed proof")
         initial_rows = [dict(row, initial_quality=initial_quality) if row["arm"] == args.arm else row for row in proofs]

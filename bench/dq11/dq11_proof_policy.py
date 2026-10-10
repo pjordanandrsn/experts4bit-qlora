@@ -14,6 +14,17 @@ CONFIGURATION_C = {"cublas_workspace_config": ":4096:8", "deterministic_algorith
                    "warn_only": True, "sdpa": "math", "comparison": "bitwise"}
 
 
+SHIPPED_POLICY = {"cublas_workspace_config": None, "deterministic_algorithms": False,
+                  "warn_only": False, "flash_sdp": True, "mem_efficient_sdp": True,
+                  "math_sdp": True, "cudnn_sdp": True, "tf32_matmul": False, "tf32_cudnn": False}
+
+
+def validate_shipped_policy(actual):
+    if (actual != SHIPPED_POLICY
+            or any(type(actual.get(key)) is not bool for key in SHIPPED_POLICY if key != "cublas_workspace_config")):
+        raise ValueError("execution settings differ from registered shipped policy")
+
+
 @contextmanager
 def process_environment(kind):
     """Set workspace before CUDA initialization, only in a fresh proof process."""
