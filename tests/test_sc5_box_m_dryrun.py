@@ -115,11 +115,25 @@ def _staged_names_and_sources():
         yield name, mod.resolve(name)
 
 
+def _bash4():
+    """A bash >= 4 (the box's is 5; sc1_run.sh uses associative arrays): the PATH's, else Homebrew's, else none."""
+    for cand in (shutil.which("bash"), "/opt/homebrew/bin/bash", "/usr/local/bin/bash"):
+        if cand and os.path.exists(cand):
+            v = subprocess.run([cand, "-c", "echo ${BASH_VERSINFO[0]}"], capture_output=True, text=True).stdout.strip()
+            if v.isdigit() and int(v) >= 4:
+                return cand
+    return None
+
+
+BASH = _bash4()
+
+
 def _stage(w: pathlib.Path, run_text: str) -> None:
     for name, src in _staged_names_and_sources():
         dst = w / name
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src, dst)
+    shutil.copyfile(SC1 / "staged.sha256", w / "staged.sha256")     # stages itself; not one of its own entries
     (w / "sc1_run.sh").write_text(run_text)
     (w / "dryrun_stubs.sh").write_text(FUNCTION_STUBS)
 
@@ -148,11 +162,11 @@ def _run(tmp_path: pathlib.Path, run_text: str):
            "SC1_RUN_NONCE": "a" * 64, "SC1_RUN_ID": "sc5-dryrun", "SC1_DEADLINE_EPOCH": "4102444800",
            "SC1_INSTANCE_ID": "0", "SC1_BOX": "M", "E4B_SHA": "0" * 40, "SC1_PROVE": "1", "SC1_QUIESCE_S": "1",
            "DRY_PY": str(stubs / "python")}
-    out = subprocess.run(["bash", str(w / "sc1_run.sh")], capture_output=True, text=True, env=env, timeout=300)
+    out = subprocess.run([BASH, str(w / "sc1_run.sh")], capture_output=True, text=True, env=env, timeout=300)
     return w, out
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="the box script runs under a POSIX bash with executable stubs")
+@pytest.mark.skipif(sys.platform == "win32" or BASH is None, reason="the box script needs a POSIX bash >= 4 with executable stubs")
 def test_box_m_proof_path_reaches_proved_with_every_heavy_step_stubbed(tmp_path):
     w, out = _run(tmp_path, (SC1 / "sc1_run.sh").read_text())
     log = out.stdout + out.stderr
@@ -173,7 +187,7 @@ def test_box_m_proof_path_reaches_proved_with_every_heavy_step_stubbed(tmp_path)
         assert (w / "sc5" / "quality" / f"{q}.json").is_file(), q
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="the box script runs under a POSIX bash with executable stubs")
+@pytest.mark.skipif(sys.platform == "win32" or BASH is None, reason="the box script needs a POSIX bash >= 4 with executable stubs")
 def test_the_dry_run_catches_a_proof_that_calls_a_function_defined_after_the_proof_block(tmp_path):
     """The mutant is sc5-prove-3's own defect: prove_m calling fetch_common, which sc1_run.sh defines after its proof block."""
     box = (REPO / "bench" / "sc5" / "sc5_box_m.sh").read_text()
@@ -189,6 +203,6 @@ def test_the_dry_run_catches_a_proof_that_calls_a_function_defined_after_the_pro
            "DRY_PY": str(stubs / "python")}
     for f in ("PROVED", "summary.txt"):
         (w / f).unlink(missing_ok=True)
-    mut = subprocess.run(["bash", str(w / "sc1_run.sh")], capture_output=True, text=True, env=env, timeout=300)
+    mut = subprocess.run([BASH, str(w / "sc1_run.sh")], capture_output=True, text=True, env=env, timeout=300)
     assert mut.returncode != 0 and not (w / "PROVED").exists()
     assert "fetch_common: command not found" in mut.stdout + mut.stderr
