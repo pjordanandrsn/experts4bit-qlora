@@ -68,8 +68,9 @@ def floors(hostrate: dict, load_s: float) -> dict:
 
 def sealed_floors(run_sh: Path) -> dict:
     """The host-rate floors q235_run.sh seals for a science box."""
-    found = dict(re.findall(r"\b(MIN_H2D_GBS|MIN_DISK_GBS)=([0-9.]+)\b", run_sh.read_text()))
-    return {"h2d_gb_s": float(found.get("MIN_H2D_GBS", 0)), "disk_read_gb_s": float(found.get("MIN_DISK_GBS", 0))}
+    found = dict(re.findall(r"\b(MIN_H2D_GBS|MIN_DISK_GBS|MIN_HOST_COPY_GBS)=([0-9.]+)\b", run_sh.read_text()))
+    return {"h2d_gb_s": float(found.get("MIN_H2D_GBS", 0)), "disk_read_gb_s": float(found.get("MIN_DISK_GBS", 0)),
+            "host_copy_gb_s": float(found.get("MIN_HOST_COPY_GBS", 0))}
 
 
 def fit(timings: dict, warm_install_s: float, fetch: dict, wheel_bytes: int, model_bytes: int, bandwidth_mbps: float,

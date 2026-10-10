@@ -53,7 +53,7 @@ must(){ phase "$@"; [ "$PHASE_RC" = 0 ] || { tail -30 "logs/$1.log"; say "VOID: 
 CAP_GIT=240 CAP_VENV=120 CAP_INSTALL=1800 CAP_HOSTRATE=600 CAP_FETCH=14400 CAP_TOKENS=300 CAP_BOX=5400 CAP_REPEAT=3600
 # The host-rate floors (gate 2's premise): the A2000 rehearsal's measured pinned H2D, and the rehearsal load's effective disk read
 # rate; the box measures both (the disk with O_DIRECT) before the checkpoint fetch and refuses below either. A rehearsal records only.
-MIN_H2D_GBS=0 MIN_DISK_GBS=0
+MIN_H2D_GBS=0 MIN_DISK_GBS=0 MIN_HOST_COPY_GBS=0
 ROWS=8          # TC1's field-text rows in the one micro-batch (the 30B calibration's and gate 1's); the registering amendment fixes it
 PY=python3.11
 if [ "$MODE" != science ]; then
@@ -90,12 +90,13 @@ must create-venv "$CAP_VENV" "$PY" -m venv "$VENV"
 export PATH="$VENV/bin:$PATH"
 must install "$CAP_INSTALL" python q235_bootstrap.py --cache "$W/.cache/wheels"
 
-DIRECT=(); FLOORS=(--min-h2d-gbs 0 --min-disk-gbs 0)
-[ "$MODE" = science ] && { DIRECT=(--require-direct); FLOORS=(--min-h2d-gbs "$MIN_H2D_GBS" --min-disk-gbs "$MIN_DISK_GBS"); }
+DIRECT=(); FLOORS=(--min-h2d-gbs 0 --min-disk-gbs 0 --min-host-copy-gbs 0)
+[ "$MODE" = science ] && { DIRECT=(--require-direct)
+                           FLOORS=(--min-h2d-gbs "$MIN_H2D_GBS" --min-disk-gbs "$MIN_DISK_GBS" --min-host-copy-gbs "$MIN_HOST_COPY_GBS"); }
 phase hostrate "$CAP_HOSTRATE" python q235_hostrate.py --out receipts/hostrate.json --dir "$W" "${FLOORS[@]}" "${DIRECT[@]}"
 case "$PHASE_RC" in
   0) ;;
-  18) tail -3 logs/hostrate.log; echo 'link rate floor' > REFUSAL; say 'refusing: the pinned H2D rate is below the fit'"'"'s floor'; finish 18 ;;
+  18) tail -3 logs/hostrate.log; echo 'host rate floor' > REFUSAL; say 'refusing: the link or host-copy rate is below the fit'"'"'s floor'; finish 18 ;;
   13) tail -3 logs/hostrate.log; echo 'disk rate floor' > REFUSAL; say 'refusing: the disk read rate is below the fit'"'"'s floor'; finish 13 ;;
   *)  tail -30 logs/hostrate.log; say "VOID: hostrate (rc $PHASE_RC)"; finish 11 ;;
 esac

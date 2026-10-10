@@ -68,7 +68,7 @@ def test_the_floors_are_the_rehearsal_s_link_and_its_load_s_effective_disk_rate(
     assert fl["h2d_gb_s"] == 21.5
     assert fl["disk_read_gb_s"] == round((4 * f.LAYER_BYTES + f.OUTSIDE_BYTES) / 534.0 / 1e9, 3)
     assert fl["basis"]["rehearsal_direct_read_gb_s"] == 1.9                  # reported beside, never the floor
-    assert set(f.sealed_floors(Q / "q235_run.sh")) == {"h2d_gb_s", "disk_read_gb_s"}
+    assert set(f.sealed_floors(Q / "q235_run.sh")) == {"h2d_gb_s", "disk_read_gb_s", "host_copy_gb_s"}
 
 
 def test_the_fit_refuses_a_rehearsal_that_is_not_a_clean_a2000_run(tmp_path):

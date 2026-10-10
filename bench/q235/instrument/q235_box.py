@@ -152,18 +152,109 @@ def plant(model, kind):
     return i
 
 
-def build(path, device, r, alpha, adapter_dtype, enabler):
+class LoadProfile:
+    """Where the load's time goes, for gate 2's premise (the time-left fit assumes the rented host is no slower than the rehearsal at
+    whatever bounds the load). For the load's duration it wraps, and then restores:
+    - ``read``: every shard handle's ``get_tensor`` (the loader's ``safe_open``), with the bytes it returned;
+    - ``assemble``: the MoE conventions' ``fuse_experts`` / ``stack_experts`` (the per-expert rows fused into stacks, on the host
+      under offload);
+    - ``quantize``: ``Experts4bit.from_float`` / ``ExpertsNbit.from_float``;
+    - ``offload``: ``enable_expert_offload`` (the quantized stacks copied to their pinned host homes).
+    Each wrapped call synchronizes CUDA at its boundaries, so asynchronous device work is charged to the call that issued it.
+    ``other`` is the rest of the load: the fused stacks' host-to-device copy, the non-expert weights and the bookkeeping."""
+
+    def __init__(self, cuda):
+        self.cuda = cuda
+        self.s = {k: 0.0 for k in ("read", "assemble", "quantize", "offload")}
+        self.n = dict.fromkeys(self.s, 0)
+        self.read_bytes = 0
+        self._undo = []
+
+    def _timed(self, key, fn):
+        def wrap(*a, **k):
+            if self.cuda:
+                torch.cuda.synchronize()
+            t = time.perf_counter()
+            out = fn(*a, **k)
+            if self.cuda:
+                torch.cuda.synchronize()
+            self.s[key] += time.perf_counter() - t
+            self.n[key] += 1
+            if key == "read" and isinstance(out, torch.Tensor):
+                self.read_bytes += out.numel() * out.element_size()
+            return out
+        return wrap
+
+    def _patch(self, obj, name, new):
+        self._undo.append((obj, name, obj.__dict__[name] if isinstance(obj, type) else getattr(obj, name)))
+        setattr(obj, name, new)
+
+    def __enter__(self):
+        import experts4bit_qlora.arch.moe_conventions as conv
+        import experts4bit_qlora.loader as loader
+        from experts4bit_qlora import Experts4bit, ExpertsNbit
+        prof, real_open = self, loader.safe_open
+
+        class _Handle:
+            def __init__(self, h):
+                self._h = h
+
+            def get_tensor(self, name):
+                return prof._timed("read", self._h.get_tensor)(name)
+
+            def __enter__(self):
+                self._h.__enter__()
+                return self
+
+            def __exit__(self, *a):
+                return self._h.__exit__(*a)
+
+            def __getattr__(self, name):
+                return getattr(self._h, name)
+
+        self._patch(loader, "safe_open", lambda *a, **k: _Handle(real_open(*a, **k)))
+        for name in ("fuse_experts", "stack_experts"):
+            self._patch(conv, name, self._timed("assemble", getattr(conv, name)))
+        self._patch(loader, "enable_expert_offload", self._timed("offload", loader.enable_expert_offload))
+        for cls in {Experts4bit, ExpertsNbit}:
+            if "from_float" in cls.__dict__:
+                self._patch(cls, "from_float", classmethod(self._timed("quantize", cls.__dict__["from_float"].__func__)))
+        return self
+
+    def __exit__(self, *a):
+        for obj, name, old in reversed(self._undo):
+            setattr(obj, name, old)
+        return False
+
+    def record(self, total_s):
+        rec = {k: round(v, 2) for k, v in self.s.items()}
+        rec.update(calls=self.n, read_bytes=self.read_bytes, total_s=round(total_s, 2),
+                   other_s=round(total_s - sum(self.s.values()), 2))
+        rec["read_gb_s"] = round(self.read_bytes / self.s["read"] / 1e9, 3) if self.s["read"] else None
+        return rec
+
+
+def build(path, device, r, alpha, adapter_dtype, enabler, profile=None):
     from experts4bit_qlora import load_moe_4bit_streaming
     from experts4bit_qlora.lora import add_attention_lora, quantize_attention_projections_4bit
     torch.manual_seed(0)
     offload = device == "cuda"
-    model, _ = load_moe_4bit_streaming(path, device, torch.bfloat16, r, alpha, offload=offload, pin=offload, prefetch=False,
-                                       quant_type="nf4")
+    t0 = time.perf_counter()
+    if profile is not None:
+        with profile:
+            model, _ = load_moe_4bit_streaming(path, device, torch.bfloat16, r, alpha, offload=offload, pin=offload, prefetch=False,
+                                               quant_type="nf4")
+    else:
+        model, _ = load_moe_4bit_streaming(path, device, torch.bfloat16, r, alpha, offload=offload, pin=offload, prefetch=False,
+                                           quant_type="nf4")
+    load_s = time.perf_counter() - t0
     quantize_attention_projections_4bit(model)
     model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     model.config.use_cache = False
     add_attention_lora(model, r, alpha, {"bf16": torch.bfloat16, "fp32": torch.float32}[adapter_dtype])
     rec = {"offload": offload}
+    if profile is not None:
+        rec["profile"] = profile.record(load_s)
     if enabler == "fast":
         from experts4bit_qlora import enable_fast_train
         import experts4bit_qlora.engines.fast as fast
@@ -181,7 +272,7 @@ def run(a):
     tokens = torch.load(a.tokens, weights_only=True)
     out["tokens_sha256"] = {k: hashlib.sha256(v.contiguous().numpy().tobytes()).hexdigest() for k, v in tokens.items()}
     d0, t0 = diskstats(), time.time()
-    model, rec = build(a.checkpoint, dev, a.r, a.alpha, a.adapter_dtype, a.enabler)
+    model, rec = build(a.checkpoint, dev, a.r, a.alpha, a.adapter_dtype, a.enabler, profile=LoadProfile(cuda))
     out["load"] = {**rec, "seconds": round(time.time() - t0, 1), "nvme": disk_delta(d0, diskstats())}
     planted = plant(model, a.plant) if a.plant else None
     out["plant"] = {"kind": a.plant, "layer": planted}

@@ -6,11 +6,14 @@ checkpoint fetch, so the box can refuse a host slower than the fit assumed.
 - **link**: pinned host-to-device and device-to-host GB/s, timed with CUDA events over ``--copies`` copies of a 1 GiB pinned
   buffer after a warm-up, and the PCIe generation and width the card negotiated (``nvidia-smi``, recorded beside the copy, which
   is the arbiter);
+- **host copy**: the host's memory-copy rate, a multi-threaded tensor copy of 2 GiB (what the loader's host-side expert assembly
+  does), against which a CPU-bound load is checked;
 - **disk**: the read rate of a freshly written file of ``--disk-gib`` random bytes in the working directory, with ``O_DIRECT``
   (``dd iflag=direct``) where the filesystem supports it, else after evicting its pages (``posix_fadvise DONTNEED``). The method
   is recorded; a cache-served read overstates the disk, so ``--require-direct`` (the box) refuses rather than fall back.
 
-    python q235_hostrate.py --out hostrate.json [--min-h2d-gbs X --min-disk-gbs Y]   (exit 18 below the link floor, 13 below the disk's)
+    python q235_hostrate.py --out hostrate.json [--min-h2d-gbs X --min-host-copy-gbs Z --min-disk-gbs Y]
+                                                  (exit 18 below the link or host-copy floor, 13 below the disk's)
 """
 from __future__ import annotations
 
@@ -54,6 +57,17 @@ def link(copies: int) -> dict:
     return out
 
 
+def host_copy(gib: int = 2, copies: int = 3) -> dict:
+    import torch
+    src = torch.ones(gib * GIB, dtype=torch.uint8)
+    dst = torch.empty_like(src)
+    dst.copy_(src)
+    t0 = time.perf_counter()
+    for _ in range(copies):
+        dst.copy_(src)
+    return {"host_copy_gb_s": round(copies * gib * GIB / (time.perf_counter() - t0) / 1e9, 2), "host_threads": torch.get_num_threads()}
+
+
 def disk(directory: Path, gib: int, require_direct: bool = False) -> dict:
     path = directory / ".q235-hostrate.bin"
     block = 16 << 20
@@ -95,14 +109,18 @@ def main():
     ap.add_argument("--disk-gib", type=int, default=4)
     ap.add_argument("--min-h2d-gbs", type=float, default=0.0)
     ap.add_argument("--min-disk-gbs", type=float, default=0.0)
+    ap.add_argument("--min-host-copy-gbs", type=float, default=0.0)
     ap.add_argument("--require-direct", action="store_true", help="the box: an O_DIRECT read or a refusal, never a cached one")
     a = ap.parse_args()
-    rec = {"schema": "q235-hostrate/1", **link(a.copies), **disk(a.dir, a.disk_gib, a.require_direct),
-           "floors": {"h2d_gb_s": a.min_h2d_gbs, "disk_read_gb_s": a.min_disk_gbs}}
+    rec = {"schema": "q235-hostrate/1", **link(a.copies), **host_copy(), **disk(a.dir, a.disk_gib, a.require_direct),
+           "floors": {"h2d_gb_s": a.min_h2d_gbs, "disk_read_gb_s": a.min_disk_gbs, "host_copy_gb_s": a.min_host_copy_gbs}}
     a.out.write_text(json.dumps(rec, indent=1) + "\n")
     print(json.dumps(rec))
     if a.min_h2d_gbs and (rec.get("h2d_gb_s") or 0) < a.min_h2d_gbs:
         print(f"refusing: pinned H2D {rec.get('h2d_gb_s')} GB/s < {a.min_h2d_gbs}", file=sys.stderr)
+        sys.exit(18)
+    if a.min_host_copy_gbs and rec["host_copy_gb_s"] < a.min_host_copy_gbs:
+        print(f"refusing: host copy {rec['host_copy_gb_s']} GB/s < {a.min_host_copy_gbs}", file=sys.stderr)
         sys.exit(18)
     if a.require_direct and rec["disk_read_gb_s"] is None:
         print(f"refusing: no O_DIRECT read of the disk ({rec['disk_method']})", file=sys.stderr)
