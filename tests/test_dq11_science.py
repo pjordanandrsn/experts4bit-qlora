@@ -32,6 +32,53 @@ import dq11_reduce as reducer  # noqa: E402
 from dq11_science_stage import stage  # noqa: E402
 
 
+@pytest.mark.parametrize(
+    "dtype",
+    [torch.float32, torch.float64, torch.float16, torch.bfloat16, torch.int64, torch.int32, torch.uint8, torch.bool],
+)
+@pytest.mark.parametrize("layout", ["scalar", "transpose", "slice", "empty"])
+@pytest.mark.parametrize("values", [False, True])
+def test_tensor_hash_scalar_and_strided_storage_matches_exact_reference_bytes(dtype, layout, values):
+    tensor = torch.arange(12).reshape(3, 4).to(dtype)
+    if layout == "scalar":
+        tensor = tensor[1, 2]
+    elif layout == "transpose":
+        tensor = tensor.T
+    elif layout == "slice":
+        tensor = tensor[:, ::2]
+    else:
+        tensor = tensor[:0]
+    if tensor.is_floating_point():
+        tensor.requires_grad_(True)
+    reference = tensor.detach().cpu().contiguous()
+    if values and reference.is_floating_point():
+        reference = reference.float()
+    # NumPy handles rank-0 directly. BF16's equal-width int16 view preserves
+    # its raw bits without using the different-width byte view being fixed.
+    if reference.dtype == torch.bfloat16:
+        reference = reference.view(torch.int16)
+    expected = hashlib.sha256(reference.numpy().tobytes()).hexdigest()
+    assert common.tensor_sha(tensor, values=values) == expected
+
+
+def test_scalar_loss_hash_preserves_signed_zero_nan_payloads_and_observer_neutrality():
+    import struct
+
+    for bits in (0, 0x80000000, 0x7FC00001, 0x7FC00002):
+        value = torch.tensor([bits], dtype=torch.uint32).view(torch.float32).reshape(())
+        assert common.tensor_sha(value) == hashlib.sha256(struct.pack("=I", bits)).hexdigest()
+    parameter = torch.nn.Parameter(torch.tensor(2.0))
+    loss = parameter.square()
+    loss.backward()
+    first_loss, first_gradient = common.tensor_sha(loss), common.tensor_sha(parameter.grad)
+    parameter.grad = None
+    clean_loss = parameter.square()
+    clean_loss.backward()
+    assert common.tensor_sha(clean_loss) == first_loss
+    assert common.tensor_sha(parameter.grad) == first_gradient
+    assert common.tensor_sha(torch.tensor(0.0)) != common.tensor_sha(torch.tensor(-0.0))
+
+
 def sha(value):
     return hashlib.sha256(value).hexdigest()
 
