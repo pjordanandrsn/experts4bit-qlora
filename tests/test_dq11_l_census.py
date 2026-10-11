@@ -12,8 +12,8 @@ import pytest
 
 LANE = Path(__file__).parents[1] / "bench/dq11"
 sys.path.insert(0, str(LANE))
-import dq11_l_census_reduce as census
-from dq11_l_census_capture import Capture
+import dq11_l_census_reduce as census  # noqa: E402
+from dq11_l_census_capture import Capture  # noqa: E402
 
 
 def cpu(name, start, duration, external, *, cat="cpu_op", seq=None, fwd=0, dims=None):
