@@ -1,0 +1,155 @@
+{
+ "_comment": "P132 class map v1.2 (bench/p132/PREREG-p132.md) = P123's v1.1 (bench/p123/kernel_classes_nf4.json) plus ONE name: _rope_norm_qk (gnf4 0.44.0, #528: one launch for q and k's norm + rope, run by glue_r2 at e4b >= 0.52) joins _rope_norm_heads in norm_elem; v1.1 left it unmapped (residual). Nothing else changes; tests/test_p132.py shows every name in P123's own exports classifies identically under v1.1 and v1.2. P123 class map v1.1 for the e4b NF4 default route (bench/p123/PREREG-p123.md). v1 was frozen before any capture; v1.1 (Amendment 2, after p123-prove-1) names torch.cat's CatArrayBatchedCopy beside v0's 'cat' in input_prep and norm_elem, because SC1b's substring match is case-sensitive and Nsight names the kernel in CamelCase. SC1b's v0 e4b map (bench/sc1b/kernel_classes.json, the int4 route) with the NF4 expert kernels named: grouped-nf4-gemm 6ee2e10 (0.43.0) kernel/nf4_grouped.py's decode GEMVs and grouped GEMMs are moe_expert inside the MoE segment and matmuls for inherit. Everything else -- the rules, their order, the segment anchors (_router_epilogue / topk -> _combine_rows), inherit_next / inherit_prev -- is v0's. Source of the NF4 names: the A2000 kernel inventory of the default decode step on a two-layer random Qwen3-MoE (host and device grouping, B=1 and B=16; names and counts only), and grouped-nf4-gemm's @triton.jit kernel names.",
+ "e4b": {
+  "rules": [
+   {
+    "class": "attn",
+    "match": [
+     "_fp8_paged_decode",
+     "_fp8_combine",
+     "_fp8_append"
+    ]
+   },
+   {
+    "class": "norm_elem",
+    "match": [
+     "_rmsnorm_rows",
+     "_rmsnorm_resid_rows",
+     "_scaled_resid_add_rows",
+     "_rope_heads",
+     "_rope_norm_heads",
+     "_rope_norm_qk"
+    ]
+   },
+   {
+    "class": "moe_route",
+    "match": [
+     "_router_epilogue",
+     "_tile_table_r1",
+     "_combine_rows",
+     "_gather_rows"
+    ]
+   },
+   {
+    "class": "dense_gemm",
+    "match": [
+     "_gemv_int4_b32"
+    ],
+    "where": {
+     "gridY_eq": 1
+    }
+   },
+   {
+    "class": "dense_gemm",
+    "match": [
+     "_gemm_int4_b32_smallm"
+    ]
+   },
+   {
+    "class": "dense_gemm",
+    "match": [
+     "nvjet",
+     "gemm",
+     "gemv",
+     "cutlass",
+     "xmma",
+     "cublas"
+    ]
+   },
+   {
+    "class": "sample",
+    "match": [
+     "ArgMax",
+     "argmax"
+    ]
+   },
+   {
+    "class": "moe_route",
+    "match": [
+     "topk",
+     "TopK",
+     "sort",
+     "Sort"
+    ]
+   },
+   {
+    "class": "input_prep",
+    "match": [
+     "elementwise",
+     "vectorized",
+     "index",
+     "copy",
+     "fill",
+     "cat",
+     "CatArrayBatchedCopy",
+     "unrolled",
+     "reduce_kernel",
+     "DeviceScan",
+     "cumsum",
+     "Cumsum"
+    ],
+    "where": {
+     "in_graph": false
+    }
+   },
+   {
+    "class": "norm_elem",
+    "match": [
+     "elementwise",
+     "vectorized",
+     "index",
+     "copy",
+     "fill",
+     "cat",
+     "CatArrayBatchedCopy",
+     "unrolled",
+     "reduce_kernel"
+    ]
+   }
+  ],
+  "segment": {
+   "start": [
+    "_router_epilogue",
+    "topk",
+    "TopK"
+   ],
+   "end": [
+    "_combine_rows"
+   ]
+  },
+  "expert_names": [
+   "_gemv_nf4_bw",
+   "_gemv_nf4_dotpad",
+   "_gemv_nf4_dotpad_splitk",
+   "_gemv_nf4_grouped",
+   "_gemv_nf4_grouped_splitk",
+   "_gemm_nf4_grouped",
+   "_gemm_nf4_grouped_smallm",
+   "_gemv_int4_b32",
+   "_gemm_int4_b32_grouped",
+   "_swiglu_rows"
+  ],
+  "matmul_names": [
+   "_gemv_nf4_bw",
+   "_gemv_nf4_dotpad",
+   "_gemv_nf4_dotpad_splitk",
+   "_gemv_nf4_grouped",
+   "_gemv_nf4_grouped_splitk",
+   "_gemm_nf4_grouped",
+   "_gemm_nf4_grouped_smallm",
+   "_gemv_int4_b32",
+   "_gemm_int4_b32",
+   "nvjet",
+   "gemm",
+   "gemv",
+   "cutlass",
+   "xmma"
+  ],
+  "inherit_next": [
+   "_quant_x_rows"
+  ],
+  "inherit_prev": [
+   "_reduce_partials"
+  ]
+ }
+}
