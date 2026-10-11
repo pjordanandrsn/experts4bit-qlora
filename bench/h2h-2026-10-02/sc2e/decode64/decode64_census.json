@@ -1,0 +1,414 @@
+{
+ "capacity_model_step_at_64_ms": {
+  "d1": 19.87,
+  "d2": 19.71
+ },
+ "changes_since_sc2e": [
+  {
+   "commit": "0c4da09a",
+   "reaches_64": true,
+   "read_at_64": "P122 p122-5090-1: served 64-row step ON/OFF 0.9568",
+   "what": "E4B_INT4_WIDE_TILES=auto: the one-launch tile table above 256 routed rows (P122)"
+  },
+  {
+   "commit": "a3527276",
+   "reaches_64": true,
+   "read_at_64": "P124 p124-5090-4: served 64-row step 0.9648 / 0.9670",
+   "what": "E4B_ATTN_INT4_WIDE=auto: attention projections of 17-64 rows on K16's int4 tile (P124)"
+  },
+  {
+   "commit": "2384d2c3",
+   "reaches_64": true,
+   "read_at_64": "P126 p126-5090-2: served 64-row step 0.8442 / 0.8456",
+   "what": "E4B_INT4_TILE_PROGRAMS=auto (4): the one-launch table over 4 programs (P126)"
+  },
+  {
+   "commit": "dc2221a3",
+   "note": "not prefill-only: bucket 64 routes 512 rows (the smokeflips record shows one_launch|lean|gt256 on a 512-row call); bitwise by construction; P130 timed the prefill replay only",
+   "reaches_64": true,
+   "read_at_64": null,
+   "what": "E4B_PREFILL_LEAN_DISPATCH=auto (P130's P2): K19's lean dispatch above 256 routed rows"
+  },
+  {
+   "commit": "8ea97296",
+   "note": "bitwise; no speed claim; P127 read T = 1",
+   "reaches_64": true,
+   "read_at_64": null,
+   "what": "P127 Phase 2: the MoE residual add into the experts' combine, licensed per decode bucket"
+  },
+  {
+   "commit": "1ddcb0ae",
+   "note": "the decode folds run up to 64 rows; bitwise; no speed claim",
+   "reaches_64": true,
+   "read_at_64": null,
+   "what": "P127 Phase 2 wiring: the router's cast in-kernel and rope_norm_qk in the attention folds"
+  },
+  {
+   "commit": "451a3703",
+   "note": "adds prefill rows to the folds; decode rows were already folded",
+   "reaches_64": false,
+   "read_at_64": null,
+   "what": "E4B_FUSE_PREFILL_GLUE=1 for qwen3_moe (P130's P1)"
+  }
+ ],
+ "closure": {
+  "d1": {
+   "closes_to_ms": 0.0,
+   "device_by_class_ms": {
+    "attn": 1.675,
+    "dense_gemm": 2.543,
+    "elementwise": 2.666,
+    "expert_int4": 6.811,
+    "memcpy_dtod": 0.118,
+    "memcpy_other": 0.002,
+    "moe_route": 1.413,
+    "norm_glue": 0.324,
+    "other": 0.071,
+    "sample": 0.018
+   },
+   "device_replay_ms": 15.906,
+   "device_residual_ms": 0.265,
+   "host_before_replay_ms": 0.879,
+   "host_segments_ms": {
+    "dec_emit": 0.03,
+    "dec_issue": 0.211,
+    "dec_mirror": 0.182,
+    "dec_prep": 0.795,
+    "dec_ready": 0.021,
+    "dec_sync": 15.747,
+    "dispatch": 1.203,
+    "ops": 0.049,
+    "plan": 0.014,
+    "retire": 0.14
+   },
+   "host_tail_ms": 1.607,
+   "rows_mean": 51.68,
+   "step_ms": 18.392,
+   "step_ms_p50": 18.411,
+   "steps": 601
+  },
+  "d2": {
+   "closes_to_ms": -0.0,
+   "device_by_class_ms": {
+    "attn": 1.675,
+    "dense_gemm": 2.543,
+    "elementwise": 2.666,
+    "expert_int4": 6.811,
+    "memcpy_dtod": 0.118,
+    "memcpy_other": 0.002,
+    "moe_route": 1.413,
+    "norm_glue": 0.324,
+    "other": 0.071,
+    "sample": 0.018
+   },
+   "device_replay_ms": 15.8,
+   "device_residual_ms": 0.16,
+   "host_before_replay_ms": 0.932,
+   "host_segments_ms": {
+    "dec_emit": 0.029,
+    "dec_issue": 0.223,
+    "dec_mirror": 0.177,
+    "dec_prep": 0.845,
+    "dec_ready": 0.022,
+    "dec_sync": 15.63,
+    "dispatch": 1.141,
+    "ops": 0.051,
+    "plan": 0.013,
+    "retire": 0.142
+   },
+   "host_tail_ms": 1.541,
+   "rows_mean": 50.23,
+   "step_ms": 18.273,
+   "step_ms_p50": 18.27,
+   "steps": 670
+  }
+ },
+ "expert_union_per_layer": {
+  "across_sequences_64_mean": 101.2,
+  "across_sequences_64_p10_p90": [
+   98.8,
+   103.5
+  ],
+  "experts": 128,
+  "layers": 48,
+  "one_sequence_64_mean": 64.1,
+  "tokens": 2048,
+  "top_k": 8,
+  "uniform_64": 125.9
+ },
+ "host_fit": {
+  "d1": {
+   "by_bucket": {
+    "1": {
+     "device_ms": 3.855,
+     "dispatch_ms": 0.016,
+     "host_gap_ms": 0.48,
+     "step_ms": 4.335,
+     "steps": 16236
+    },
+    "16": {
+     "device_ms": 8.057,
+     "dispatch_ms": 0.203,
+     "host_gap_ms": 1.237,
+     "step_ms": 9.294,
+     "steps": 1327
+    },
+    "2": {
+     "device_ms": 4.965,
+     "dispatch_ms": 0.024,
+     "host_gap_ms": 0.604,
+     "step_ms": 5.569,
+     "steps": 5564
+    },
+    "32": {
+     "device_ms": 10.898,
+     "dispatch_ms": 0.506,
+     "host_gap_ms": 1.843,
+     "step_ms": 12.741,
+     "steps": 550
+    },
+    "4": {
+     "device_ms": 6.008,
+     "dispatch_ms": 0.038,
+     "host_gap_ms": 0.727,
+     "step_ms": 6.734,
+     "steps": 3416
+    },
+    "64": {
+     "device_ms": 15.906,
+     "dispatch_ms": 1.203,
+     "host_gap_ms": 2.486,
+     "step_ms": 18.392,
+     "steps": 601
+    },
+    "8": {
+     "device_ms": 6.568,
+     "dispatch_ms": 0.088,
+     "host_gap_ms": 0.947,
+     "step_ms": 7.515,
+     "steps": 2631
+    }
+   },
+   "decode_steps": 30325,
+   "dispatch_fit": [
+    -0.0149,
+    0.0178
+   ],
+   "host_gap_fit": [
+    0.5063,
+    0.0353
+   ],
+   "step_fit": [
+    4.6637,
+    0.2376
+   ]
+  },
+  "d2": {
+   "by_bucket": {
+    "1": {
+     "device_ms": 3.858,
+     "dispatch_ms": 0.016,
+     "host_gap_ms": 0.487,
+     "step_ms": 4.346,
+     "steps": 17162
+    },
+    "16": {
+     "device_ms": 8.069,
+     "dispatch_ms": 0.213,
+     "host_gap_ms": 1.289,
+     "step_ms": 9.357,
+     "steps": 692
+    },
+    "2": {
+     "device_ms": 4.978,
+     "dispatch_ms": 0.025,
+     "host_gap_ms": 0.601,
+     "step_ms": 5.579,
+     "steps": 5476
+    },
+    "32": {
+     "device_ms": 11.281,
+     "dispatch_ms": 0.594,
+     "host_gap_ms": 1.965,
+     "step_ms": 13.246,
+     "steps": 491
+    },
+    "4": {
+     "device_ms": 6.024,
+     "dispatch_ms": 0.037,
+     "host_gap_ms": 0.737,
+     "step_ms": 6.761,
+     "steps": 4943
+    },
+    "64": {
+     "device_ms": 15.8,
+     "dispatch_ms": 1.141,
+     "host_gap_ms": 2.473,
+     "step_ms": 18.273,
+     "steps": 670
+    },
+    "8": {
+     "device_ms": 6.529,
+     "dispatch_ms": 0.079,
+     "host_gap_ms": 0.948,
+     "step_ms": 7.478,
+     "steps": 2689
+    }
+   },
+   "decode_steps": 32123,
+   "dispatch_fit": [
+    -0.0142,
+    0.0177
+   ],
+   "host_gap_fit": [
+    0.5139,
+    0.0349
+   ],
+   "step_fit": [
+    4.7095,
+    0.2344
+   ]
+  }
+ },
+ "k19": {
+  "bytes_per_expert": 2654208,
+  "floor_ms_at_union": 8.416,
+  "k19_ms": 6.811
+ },
+ "levers": [
+  {
+   "at_sc2e_ms": [
+    2.486,
+    2.473
+   ],
+   "basis": "SC2e s64a step traces: host before the replay + host tail; P118 read the lookahead at 1 request only",
+   "ceiling_ms": 2.473,
+   "lever": "c",
+   "name": "the exposed host gap (decode lookahead; one stream wakeup a step is a subset)",
+   "needs_fresh_read": "the host path has no default-on change since SC2e; its share of the step grows as the device replay falls (P122, P124, P126, P2)",
+   "realized_since_ms": 0.0,
+   "subset_dispatch_ms": [
+    1.203,
+    1.141
+   ]
+  },
+  {
+   "at_sc2e_ms": 1.88,
+   "basis": "P124 p124-5090-4 profile at 64 rows; int4-b32 bytes of fused q/k/v + o at the K20 copy bandwidth",
+   "ceiling_ms": 1.05,
+   "int4_floor_ms": 0.333,
+   "lever": "a",
+   "name": "Int4Linear above 16 rows (attention projections)",
+   "needs_fresh_read": "read at 64 rows by P124 (DEFAULT_ON); K34 found no better K16 plan of 48",
+   "realized_since_ms": 0.497
+  },
+  {
+   "at_sc2e_ms": 6.811,
+   "basis": "P119 d64 expert_int4; bound = K19 x (1 - K20's best-plan efficiency at 16 rows)",
+   "ceiling_ms": 0.749,
+   "lever": "d",
+   "name": "K19 at 512 routed rows",
+   "needs_fresh_read": "P2's lean dispatch (dc2221a3) and P127 Phase 2's combine (8ea97296) reach this call since SC2e, bitwise and unread at 64 rows",
+   "realized_since_ms": null
+  },
+  {
+   "at_sc2e_ms": 3.143,
+   "basis": "P126 p126-5090-2 profile: one program, then 4 (the default), and 8 (ineligible on block noise)",
+   "ceiling_ms": 0.69,
+   "lever": "b",
+   "name": "the tile table above 256 routed rows",
+   "needs_fresh_read": "read at 64 rows by P122 and P126 (DEFAULT_ON)",
+   "p8_table_ms": 0.289,
+   "realized_since_ms": 2.453
+  }
+ ],
+ "model": {
+  "d1": {
+   "on": {
+    "knee_mean": 0.9533,
+    "mean_attainment": {
+     "12": 0.98,
+     "13": 0.948,
+     "14": 0.88,
+     "15": 0.805,
+     "16": 0.73,
+     "17": 0.673
+    },
+    "rate_at_0.95": 12.95,
+    "step_at_64_ms": 19.87
+   },
+   "on_plus_c": {
+    "knee_mean": 0.9833,
+    "mean_attainment": {
+     "12": 0.992,
+     "13": 0.982,
+     "14": 0.961,
+     "15": 0.904,
+     "16": 0.835,
+     "17": 0.768
+    },
+    "rate_at_0.95": 14.19,
+    "step_at_64_ms": 17.1
+   }
+  },
+  "d2": {
+   "on": {
+    "knee_mean": 0.9544,
+    "mean_attainment": {
+     "12": 0.97,
+     "13": 0.934,
+     "14": 0.867,
+     "15": 0.794,
+     "16": 0.735,
+     "17": 0.669
+    },
+    "rate_at_0.95": 12.55,
+    "step_at_64_ms": 19.71
+   },
+   "on_plus_c": {
+    "knee_mean": 0.9811,
+    "mean_attainment": {
+     "12": 0.997,
+     "13": 0.979,
+     "14": 0.948,
+     "15": 0.893,
+     "16": 0.819,
+     "17": 0.762
+    },
+    "rate_at_0.95": 13.94,
+    "step_at_64_ms": 16.96
+   }
+  },
+  "p130_saving_ms": 5.18,
+  "rates": [
+   12,
+   13,
+   14,
+   15,
+   16,
+   17
+  ],
+  "seeds": 40
+ },
+ "schema": "e4b-decode64-census/1",
+ "sources": {
+  "locality": "loc-a4000-1",
+  "p119": "p119-5090-1 (e4b caac7f08, grouped-nf4-gemm b4f93f1c)",
+  "p122": "p122-5090-1",
+  "p124": "p124-5090-4",
+  "p126": "p126-5090-2",
+  "sc2e": "sc2e-5090-1 (e4b 3bbcb01b, grouped-nf4-gemm b4f93f1c = 0.42.0)"
+ },
+ "tile_table_r1_per_launch": {
+  "d16": {
+   "calls_per_step": 48.0,
+   "ms_per_step": 0.4465,
+   "us_per_launch": 9.3
+  },
+  "d32": {
+   "calls_per_step": 48.0,
+   "ms_per_step": 0.9314,
+   "us_per_launch": 19.4
+  }
+ }
+}
