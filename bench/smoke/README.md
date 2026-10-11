@@ -21,6 +21,10 @@ Any failure, including a missing CUDA device, worker crash or the whole-suite
 five-minute deadline, returns nonzero. `summary.json` records the exceptions,
 source package digest, actual residency classes, lever engagement, graph
 decisions and generated token IDs; each cell also keeps its worker log.
+The source commit is reporting only and never fails a cell. It comes from
+`git rev-parse HEAD`, else `SMOKE_SOURCE_SHA` (set it when the source is an
+archive or the image has no git), else the installed package's PEP 610
+`direct_url.json`; `git_head_source` says which, or `none`.
 
 To exercise expert-int4 source reads from an actual local checkpoint directory
 (requires the local-directory reader fix in
