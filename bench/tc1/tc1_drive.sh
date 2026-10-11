@@ -63,7 +63,7 @@ for v in TC1_FAMILIES TC1_SKIP TC1_UNSLOTH_VERSION TC1_UNSLOTH_ZOO_VERSION TC1_P
          TC1_PREREG TC1_BATCHED_PAD_WASTE_LIMIT TC1_PHASE_BUDGET_S TC1_ANCHOR_JSON TC1_AXOLOTL_VERSION \
          TC1_CURVE_STEPS TC1_CURVE_EVAL_EVERY TC1_CURVE_EVAL_N TC1_T1_MB TC1_T1_ACCUM TC1_R64_R TC1_R64_ALPHA \
          TC1_SMALL_STEPS TC1_SMALL_EVAL_N TC1_SMALL_EVAL_EVERY TC1_E4B_ENV TC1_PACK TC1_FREE_OUTPUTS TC1_PAD_CENSUS \
-         MG1_FAMILIES MG1_STEPS MG1_PROVE MG1_LADDER_ONLY MG1_LADDER_ARGS MG1_P2_ARM RD1_PROVE; do   # TC1b (tc1_run.sh's curve / t1 / r64 knobs); TC2 (the small families' instrument); TC1 amendment 39 (TC1_PACK: the packed regime; TC1_FREE_OUTPUTS: each micro-batch's output released); MG1 (bench/moegen/mg1_run.sh; never MG1_REHEARSAL)
+         MG1_FAMILIES MG1_STEPS MG1_PROVE MG1_LADDER_ONLY MG1_LADDER_ARGS MG1_P2_ARM RD1_PROVE DQ11_REQUIRED_DRIVER; do   # TC1b (tc1_run.sh's curve / t1 / r64 knobs); TC2 (the small families' instrument); TC1 amendment 39 (TC1_PACK: the packed regime; TC1_FREE_OUTPUTS: each micro-batch's output released); MG1 (bench/moegen/mg1_run.sh; never MG1_REHEARSAL)
   # Quoted: run tp4-b-p46cut-3 passed TC1_FAMILIES='qwen3 qwen3_5' and the remote `env ... bash tc1_run.sh` saw the second
   # word as the COMMAND -- rc=127 before the nonce was bound, a HARNESS_ERROR row. %q survives the remote shell's re-parse.
   [ -n "${!v:-}" ] && PASS="$PASS $v=$(printf %q "${!v}")"
@@ -139,9 +139,17 @@ tc1_lane_dead() { lane_two_missing "$@"; }
 # docs/receipts-ab/receipt.json, pulled into a live run's tc1.partial/, failed adertha's reconciler and refused every launch on the account
 # (tc1dec-5090-4, 2026-10-06).
 TC1_RSYNC_EXCLUDES=(--exclude 'venv*' --exclude '.cache' --exclude 'adapters' --exclude 'data/alpaca_data_cleaned.json' --exclude 'unsloth_compiled_cache' --exclude 'hf-cache' --exclude 'gnf4-src')
+if [ "${TC1_L_CENSUS:-}" = 1 ]; then
+  # The census's two raw profiler traces and normalized events may approach
+  # 2 GiB. Partial polls retain small failure evidence but never transfer the
+  # bulk data before the box-side size gate. The final fetch includes it once.
+  TC1_PARTIAL_EXCLUDES=(--exclude 'receipts/proof-trace.json' --exclude 'receipts/capture-trace.json' --exclude 'receipts/normalized.json')
+else
+  TC1_PARTIAL_EXCLUDES=()
+fi
 tc1_partial_fetch() {  # dest_dir -> rc of rsync; never exits the caller
   mkdir -p "$1" || return 1
-  rsync -az --timeout=120 -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -p $PORT" "${TC1_RSYNC_EXCLUDES[@]}" "root@$HOST:$W/" "$1/" >/dev/null 2>&1
+  rsync -az --timeout=120 -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -p $PORT" "${TC1_RSYNC_EXCLUDES[@]}" "${TC1_PARTIAL_EXCLUDES[@]}" "root@$HOST:$W/" "$1/" >/dev/null 2>&1
 }
 
 say "lane started; polling TP_DONE every ${POLL}s with a heartbeat (stall reported after ${STALL_S}s of no change, idle GPU AND no disk movement; never acted on)"
@@ -188,6 +196,18 @@ while :; do
   say "hb: ${hb:-<no answer>} | left $((DEADLINE - now))s$stall"
   sleep "$POLL"
 done
+if [ "${TC1_L_CENSUS:-}" = 1 ]; then
+  # This command only reads files and writes its hash list OUTSIDE the transfer
+  # tree. A failed cap never falls through to the uncapped final rsync.
+  if ! $SSH "python3 $W/dq11_l_census_launch.py size --packet $W --out /root/dq11-l-census-final-size-$NONCE.json"; then
+    say 'CENSUS_REFUSAL: final evidence exceeds 2 GiB or contains unsafe files; raw transfer withheld'
+    tc1_partial_fetch "$RUN_DIR/tc1.partial" || true
+    exit 22
+  fi
+  $SCP "root@$HOST:/root/dq11-l-census-final-size-$NONCE.json" "$RUN_DIR/dq11-l-census-final-size.json" || {
+    say 'CENSUS_REFUSAL: could not fetch final size/hash record; raw transfer withheld'; exit 22;
+  }
+fi
 rm -rf "$RUN_DIR/tc1" && mkdir -p "$RUN_DIR/tc1" || { say "fetch failed: local dir"; exit 22; }
 if ! rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" "${TC1_RSYNC_EXCLUDES[@]}" "root@$HOST:$W/" "$RUN_DIR/tc1/"; then
   if [ -n "$(ls -A "$RUN_DIR/tc1.partial" 2>/dev/null)" ]; then
@@ -204,6 +224,19 @@ if ! rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" "${TC1_RSYN
 fi
 rm -rf "$RUN_DIR/tc1.partial"
 say "fetched $(ls "$RUN_DIR/tc1" | wc -l | tr -d ' ') entries"
+if [ "${TC1_L_CENSUS:-}" = 1 ]; then
+  python3 "$REPO/bench/dq11/dq11_l_census_launch.py" size --packet "$RUN_DIR/tc1" --out "$RUN_DIR/dq11-l-census-local-size.json" || {
+    say 'CENSUS_REFUSAL: fetched packet fails local size/hash validation'; exit 22;
+  }
+  python3 - "$RUN_DIR/dq11-l-census-final-size.json" "$RUN_DIR/dq11-l-census-local-size.json" <<'PY' || {
+import json, sys
+remote, local = (json.load(open(path)) for path in sys.argv[1:])
+if remote['bytes'] != local['bytes'] or remote['files'] != local['files']:
+    raise SystemExit('CENSUS_REFUSAL: transfer differs from box-side SHA-256 manifest')
+PY
+    say 'CENSUS_REFUSAL: transferred packet differs from box-side manifest'; exit 22;
+  }
+fi
 [ "$(cat "$RUN_DIR/tc1/TC1_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }
 [ -f "$RUN_DIR/tc1/TP_DONE.$NONCE" ] || {
   # A lane the box killed is a different fact from a lane that ran out of clock,
