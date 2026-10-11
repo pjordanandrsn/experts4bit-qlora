@@ -4,6 +4,915 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
+## 0.54.0 — 2026-10-11 — two Qwen3-MoE prefill defaults, EAGLE-3 speculative decode measured and closed, the SC5 same-box read
+
+**0.54.0.** Two prefill defaults change for Qwen3-MoE in `serve_paged`. A prefill's norms and rotary now run decode's
+fused kernels (`E4B_FUSE_PREFILL_GLUE`), and K19's prefill rows take the lean dispatch (`E4B_PREFILL_LEAN_DISPATCH=auto`).
+On one RTX 5090 with Qwen3-30B-A3B int4, read separately, they take 4.0 ms and 1.15 ms off a 38.2 ms 512-token prefill
+replay. The first changes prefill arithmetic, at parity on the teacher-forced quality instrument; the second is
+bit-identical. Set either to `0` for the previous path. The training estimate now prices the double-quantized absmax the
+run stores, so it falls by 1.35 GB on Qwen3-30B-A3B. Also in this release: EAGLE-3 speculative decode measured and
+closed at B = 1 (slower than plain decode on this stack), the SC5 same-box read against vLLM and SGLang, an offline fix
+for pinned caches, an offload loader that fits a 12 GB card at Qwen3-235B-A22B shapes, and refusals that name AMD on a
+ROCm build.
+
+### Q235: the milestone verdict, mechanical (bench/q235/instrument)
+
+- `q235_verdict.py` applies the registered decision rules (as Amendments 2 and 3 amend them) to a box's fetched records and the
+  full-depth layer-streamed bf16 reference.
+  - **VOID** for a run that is not science-eligible, a refusal (13, 14, 17 or 18, with its named floor), a host fault, a
+    time-left guard or a harness error. Amendment 3's instrument checks also void, before any band:
+    - the null (the repeat's clean step-0 forward) must be the box, within 1e-3 relative per layer;
+    - each in-process plant must engage only at its layer: its earlier layers within 1e-3 of the null's (bit-for-bit equality is
+      reported), the planted layer differing;
+    - each plant must fail the band.
+  - Otherwise **MILESTONE PASS** iff rules 1-7 hold, else **FAIL** naming each failing rule:
+    1. completed on the registered class;
+    2. finite losses;
+    3-5. Amendment 2's STRICT rules and the frozen base, re-derived from `box.json`, fail-closed;
+    6. the fresh-process repeat within tolerance;
+    7. Amendment 3's band: the contribution error u_i at most 0.775 over the interior class (layers 8-86 of 94).
+  - A STRICT failure (exit 12) stops the run before the repeat: a FAIL on rules 3-5, with rules 6 and 7 not read.
+  - Reported, not gated:
+    - the full u profile;
+    - the full-state profile, with its median (the upper middle) and maximum;
+    - the router overlap, the loss gap and the device peak against the estimate (above 15 % names an estimator issue);
+    - the bytes moved and the step times.
+  - Exit codes: PASS 0, FAIL 1, VOID 2.
+- `milestone_read.sh` is the post-box job: the reference on the box's own tokens (~2.4 h on one card), then the verdict.
+- Tests (CPU, fabricated records):
+  - a pass, a failure for each rule, a void for each cause and for each instrument check;
+  - the band read on the contribution, not the state;
+  - exit 12's FAIL without a repeat;
+  - a rehearsal never counting, and the estimator flag.
+
+### SC2h registered (#846): P118's decode lookahead at 64 slots (bench and tests only; no default moves)
+
+- **Why.** The 64-slot decode-step census (#1639) ranked the exposed host gap first of four levers: up to 2.47 ms of
+  SC2e's 18.4 ms bucket-64 step, most of it the per-stream token dispatch. P118's opt-in lookahead hides that gap and was
+  read only at one request, where the gap is about a twelfth as large.
+- **The box** (`bench/sc2/sc2h_box_o.sh`, box O): eight cold-start s64a servers on 0.54.0's defaults, `la`
+  (`E4B_PAGED_DECODE_LOOKAHEAD=1`) against `base`, two same-seed replicates per arm per draw.
+  - SC2f's ladder plus a knee block that SC2f's reading places, by a rule registered now with every branch defined.
+  - A LOOKAHEAD gate on each server's start `/health` and step trace.
+- **The rule** (`bench/sc2/sc2h_reduce.py`, 38 self-test cases).
+  - The bucket-64 step's saving is read against `base`'s own host gap (the ceiling) and the same-arm replicate spread
+    (the null).
+  - The knee gain is read as SC2f reads it.
+  - Outcomes: FASTER (step and knee in both draws; the default-on flip then comes to the maintainer as its own PR),
+    STEP_ONLY (licenses nothing), KNEE_SATURATED, FLAT, REGRESSED, and TOKENS_DIFFER (serial texts must be identical).
+  - The fallback, not bundled: one event-loop wakeup per step for the token dispatch.
+- **Harness.** `sc1_run.sh` / `sc1_drive.sh` gain box O. The driver runs the knee rule on the controller before any
+  rental and stages SC2f's verdict. `staged.sha256` pins the three new files.
+
+### Register an L-only device census before choosing a dense fusion target
+
+Add the prospective DQ11 L census contract: unchanged Mistral/streamed L path,
+per-class device attribution with explicit overlap and residual, and a fixed
+ceiling gate before a separate BUILD decision. The draft authorizes no rental
+or speed claim; instrument review and a fresh launch ACK remain required.
+
+### Q235 Amendment 3: the depth read, the contribution statistic and the plants on the box (bench/q235)
+
+- **The depth test** (`bench/q235/depth-30b/`): Amendment 1's full-state bands do not see either planted error at layer 24 of
+  Qwen3-30B-A3B's 48 layers (routing max 0.241, epilogue max 0.371). The per-layer contribution error u_i sees both at the planted
+  layer: 3.07× and 24.6× the unplanted box. An attention sink at position 0 carries 97–99.8 % of the reference's squared norm from
+  layer 3, which is why the state statistic dilutes.
+- **Rule 7 for a deep box** is a STRICT band on u_i: at most 0.775 (2 × the 30B box's interior maximum) on layers 8–86 of 94. The
+  full state, the router overlap and the loss gap are reported.
+- **`q235_box.py --repeat --plants`** runs the box's own plants in the fresh-process repeat. The clean step-0 forward is the null,
+  then each planted error follows in the same process. Each plant's earlier layers are checked against the null within 1e-3
+  relative (bit-for-bit equality is reported), and each unplant is checked structurally.
+  On the 30B model at full depth one such process reproduces the three separate runs bit for bit.
+- **`q235_run.sh`** seals `--plants` into the repeat and raises its cap to 4,710 s. `q235_fit.py --plants-from` adds the two
+  measured plant forwards to the repeat's fitted time. The controller's allowance covers about 8.2 GB of receipts. The worst-case
+  wallclock is 8.53 h: $18.76 at $2.20 an hour.
+- **`gate2/capacity-2648.json`**: e4b's estimate at the run's shape, 8 × 331 positions: 24.76 GiB device and 158.62 GiB pinned host
+  for bf16 adapters.
+
+### The 64-slot decode-step census (#846; bench and tests only, no registration)
+
+- `bench/h2h-2026-10-02/sc2e/decode64/`: where SC2e's served bucket-64 decode step goes, from committed receipts. The
+  step closes exactly into host before the replay, the device replay (by P119's classes plus an explicit residual) and
+  the host tail.
+- The four levers, ranked by what each can still save per step:
+  - the exposed host gap, ≤ 2.47 ms;
+  - `Int4Linear` above 16 rows after P124, ≤ 1.05 ms;
+  - K19 at 512 routed rows, ≤ 0.75 ms;
+  - the tile table after P122/P126, ≤ 0.69 ms.
+- In `sc2f_basis`'s model the top one moves the 0.95 knee from 12.95/12.55 to 14.19/13.94 req/s.
+- It lists what reached the 64-row step after SC2e and what of that is unread.
+- `decode64_census.py --check` recomputes it byte for byte, and `tests/test_decode64_census.py` runs that check.
+
+### DQ11 closes with a scoped fusion build candidate
+
+Record DQ11's measured-private `VALID_CONTROLLED_READ` and `BUILD_CANDIDATE`.
+Unsloth (U) was faster than e4b's dense path (L) in this matched SDPA, eager, full-logits configuration,
+not Unsloth's default. The [results](../bench/dq11/RESULTS-dq11.md) name the
+comparator deviations and private evidence; no capacity or shipping claim
+follows. Claim: `e4b.train.dense-adapter.dq11.matched-sdpa.5090.2026-10-11`.
+
+### SC2f (#846): FLIPS is tested on real start-/health records of both arms (tests only)
+
+- `tests/fixtures/smokeflips/summary.json` is the receipt of a record-only smoke on the project's RTX A2000, byte for
+  byte (sha256 checked). It has one fresh process per arm of P130's two knobs, on the smoke's qwen3_moe at top-4, so
+  both of an SC2f startup's K19 row counts are reached: 2,048-row chunks take the chained table, and a 512-row forward
+  takes the one-launch table. Each cell records the two `/health` blocks FLIPS reads, built by the `/health` handler's
+  own expressions.
+- `tests/test_sc2f_real_records.py` (28 tests):
+  - each arm passes FLIPS on its own real record with nothing added and departs on all seven keys under the other;
+  - the rule as first registered refuses both real records;
+  - the synthetic departures start from the real records.
+  The SC2f PREREG's Amendment 1 records the result; the rule is unchanged.
+
+### P132 registered (#1313): where SD2's 1 -> n row verify increment goes, split by kernel class on one RTX 5090
+
+- **The question.** SD2's verify of n rows cost 4.12 / 4.56 / 4.90 ms more than one row (n = 2 / 3 / 4). The A2000
+  inventory showed the expert path switching kernels at T >= 2: the bandwidth GEMV at one row; tile table + K25 at 2-4
+  rows. P132 times that split by kernel class on the read target (e4b `88ae1cfd`, gnf4 0.45.0) with P123's Nsight
+  census, plus SD2's own V1 timing re-run unprofiled.
+- **The prediction, registered before any data.** `bench/p132/desk_prediction.py` bounds every component from existing
+  receipts and leaves a 2.38-3.17 ms hole at n = 2. H, the hypothesis that the expert path holds it, predicts BUILD.
+- **The rule.**
+  - VOID unless the re-run's verify times sit within 5 % of SD2's and the increment within 10 % of the target.
+  - H reads SUPPORT at a share >= 0.70 at every n, REFUTE below 0.50 at every n, INCONCLUSIVE otherwise.
+  - BUILD a 2-4-row expert kernel iff the measured savable part S(n) reaches 2.358 / 1.683 / 1.558 ms, SD2's own FASTER
+    bar solved for full_ms. NO_BUILD closes multi-token B = 1 levers for this stack.
+- **The canary runs first in the box** (buckets 1-4 captured, one replay per condition, a short census through the
+  classifier), so a failure costs minutes. The class map is v1.2: P123's v1.1 plus `_rope_norm_qk`, shown not to move
+  any P123 class.
+- **Budget.** One RTX 5090 pinned by machine and offer, a 1.25 h guard, a ceiling of about $1.40. It waits for DQ11 to
+  close and the maintainer's ACK.
+
+### Added
+
+- `bench/q235/instrument/q235_compare.py` reports, beside the per-layer error of the residual state, each layer's error on its own
+  contribution (`update_rel_err`: ||d_a - d_b|| / ||d_b|| with d_i = h_i - h_(i-1)). Deep in a model a layer adds a few percent
+  to the residual, so an error confined to one layer barely moves the state there; its contribution error reads it at full
+  size. A known-answer test pins both readings (#835).
+
+### SC2f Amendment 1 (#846): FLIPS reads K19's dispatch above 256 rows, not its table (bench and tests only)
+
+- **Why.** SC2f's FLIPS check required K19's calls above 256 rows in each server's start `/health` to be exactly the
+  chained table. Bucket 64's decode capture routes 512 rows, which on Qwen3-30B-A3B take the one-launch table under
+  `E4B_INT4_WIDE_TILES=auto` (lane P122's bound). So the check would have stopped every reading server before its paid
+  runs. #1625's A2000 serve smoke showed the one-launch table at that size. SC2e's committed s64a start `/health` shows
+  bucket 64's 144 extra calls above 256 rows.
+- **The change.** `sc2f_reduce.k19_gt256_bad`:
+  - every call above 256 rows must be on the arm's dispatch (`lean` on, `gather` off);
+  - the prefill capture's `chained` call must be among them;
+  - no `split` table on either arm.
+  The table of the other calls is not read. Self-test 34 cases (30 before); `bench/sc1/staged.sha256` re-pins
+  `sc2f_reduce.py` only.
+- **Real records first.** `tests/test_sc2f_real_records.py` runs the gate on the smoke's `prefill_routes`
+  (`tests/fixtures/smoke1625/pass2_summary.json`, byte-identical to the receipt, sha256 checked) and on SC2e's six start
+  `/health` files (digests checked), then on synthetic departures. Those include the `off` arm, which has no real record
+  yet. The rule as registered fails 5 of its 24 tests.
+- `tests/test_sc2f_box.py` pins the code's table choice rather than the dispatch call's first token, as #1634 does.
+
+### P131 registered (#846): K19 over a split tile table on the served first-chunk prefill graph (bench and tests only)
+
+- **Why.** A $0 shape census of Qwen3-30B-A3B on SC2's prompts found a 512-token chunk's rows bimodal: one expert takes a
+  median 398 of 4,096 routed rows. On K19's 16-row table that expert runs as ~25 tiles. `E4B_K19_PREFILL_BIG_M` (#1625,
+  over grouped-nf4-gemm#542) runs each expert's full 32- or 64-row tiles at a tall M tile and keeps the 16-row padding.
+- **The box** (`bench/p131/p131_box.py`, P130's by named substitution).
+  - Eight identical processes at the release's prefill defaults.
+  - Each process captures the first-chunk prefill graph at the knob's 0, 32 and 64 and times the three interleaved.
+  - It checks FUNCTION against 0 on every window, and that a 64-token forward (a 64-row decode step's 512 routed rows)
+    shows no split and the same K19 calls as m0's, whichever table `E4B_INT4_WIDE_TILES` picks (on Qwen3-30B, the wide
+    one-launch table).
+  - Process 1 also runs P117's teacher-forced instrument with the subjects S32 and S64.
+- **The rule** (`bench/p131/p131_reduce.py`, 37 self-test cases).
+  - An arm is LICENSED iff it is at least x1.02 faster (95 % interval) and its FUNCTION is bitwise, or, failing that, its
+    Phase B subject is at parity.
+  - When both are licensed, the paired m32-vs-m64 interval picks the default, with m32 on a tie.
+  - The predictions come from a weight-pass cost model over f in [0.3, 0.8], with the builder's measured 48-vs-39 ops.
+- **Harness.** P130's run, drive, fetch gate and tests by named substitution; `staged.sha256` pins p131's files and
+  P130's box.
+- **Real records.** `tests/fixtures/smoke1625/pass2_summary.json` is #1625's A2000 serve-smoke receipt, byte for byte
+  (sha256 checked). `tests/test_p131_real_records.py` runs the decode check on its K19 records first, then synthetic
+  departures from them.
+
+### `E4B_K19_PREFILL_BIG_M` (opt-in): K19's prefill rows over a split tile table (#846)
+
+K19's prefill calls above 512 routed rows can run over grouped-nf4-gemm#542's split tile table: each expert's full 32-
+or 64-row tiles in one launch, then its remainder in 16-row tiles. The default (`0`) keeps today's 16-row table.
+
+- **Why.** A $0 shape census of Qwen3-30B-A3B on SC2's prompts found the rows of a 512-token chunk bimodal: one expert
+  takes a median 398 of 4,096 routed rows. On the 16-row table that expert runs as ~25 tiles, each re-reading its weight
+  slice. The split keeps the 16-row table's padding.
+- **Scope.** Decode keeps the 16-row table: a 64-row step routes exactly 512 rows on a top-8 model. The knob composes
+  with P130's lean dispatch (`gather_div`, `scatter`).
+- **Reporting.** `prefill_routes.k19_prefill_big_m` reports the setting and `seen.moe_k19_dispatch` counts `split|...`
+  calls. A kernel package without the split is refused while the knob is set.
+- **Status.** Not licensed by any read. Its speed and a FUNCTION gate are the next registration's to read.
+
+### Added
+
+- The family ladder's R2 Mixtral-8x22B registration (`bench/fam235/PREREG-r2-mixtral.md`, #1630), Phase 0 only. It plans two real
+  full-depth QLoRA steps on one GPU on Q235's harness, cited by commit, and reads fidelity with the per-layer update statistic.
+  The band's form (2 × the Mixtral-8x7B box's interior maximum, must-fail plants at L28 of 56, a fail-closed unplanted pass) is
+  registered before its calibration runs. No rental, budget, default change or claim.
+
+### GPU serve smoke: the source commit is reporting-only and never aborts a cell
+
+`bench/smoke/gpu_serve_smoke.py`'s `source_identity()` ran `git rev-parse HEAD` unguarded. On an image without git (the
+`pytorch/pytorch` CUDA images) every cell raised `FileNotFoundError`, and the run said nothing about the code under test.
+That happened on #1625's A2000 smoke.
+
+The commit now comes from git, else `SMOKE_SOURCE_SHA` from the caller's environment (not an `E4B_*` name, which the suite
+strips from its workers), else the installed package's PEP 610 `direct_url.json`. `git_head_source` records which one, or
+`none`. The installed-version lookups are guarded the same way. Five CPU tests cover each source and the never-raise
+contract.
+
+### SC2f registered (#846): `serve_paged` at 64 slots with P130's two prefill defaults on against both off, box N (bench and tests only)
+
+- **Why.** P130 took 5.18 ms off each 512-token first-chunk prefill replay (#1605; defaults #1608 and #1615). At 64 slots
+  past 12 req/s every prefill step stalls every decoding row, so `serve_capacity` on SC2e's s64a costs puts the gain at
+  the knee: +0.053 / +0.086 mean attainment over 12–14 req/s (`bench/sc2/sc2f_basis.py model`).
+- **The box.** `SC1_BOX=N` (`bench/sc2/sc2f_box_n.sh`): eight SC2e s64a servers, on (both knobs unset: the release's
+  defaults) and off (both 0), ordered on, off, off, on in draw 1 and the reverse in draw 2, so each arm has a same-seed
+  replicate in every draw. Per server: warm, the 64-request burst, a FLIPS check of the start `/health` (rc 43), serial,
+  a ladder at 4, 8, 12, 13, 14 and 16 req/s, and a knee block of four more seeds at 12, 13 and 14. A tripwire refuses an
+  e4b without both defaults.
+- **The rule** (`bench/sc2/sc2f_reduce.py`, 30 self-test cases): per-server gates ROUTES, SLOTS, FLIPS, ENGAGED, PROMPTS;
+  FASTER iff the knee gain clears max(0.03, the same-seed replicate spread) in both draws, REGRESSED on a lower ceiling or
+  a loss at 4–8 req/s, KNEE_SATURATED when the off arm's knee leaves less headroom than the
+  bar, FLAT otherwise; predictions Q1–Q6 (prefill forward, serial and loaded TTFT/TPOT, the knee gain,
+  the ceilings, the 64-row decode step) reported beside it.
+- **Harness.** `sc1_run.sh` and `sc1_drive.sh` gain box N; `staged.sha256` regenerated; the box tests that enumerate the
+  box letters now include N.
+
+### DQ11: match attention and prove backward admission
+
+Register Unsloth SDPA attention matched to e4b after the SM12 deterministic
+xformers backward refusal. Omit xformers from the pinned install sets and add
+an untimed registered-shape backward canary with native dispatch receipts.
+The remaining budget and required verification gate any further rental.
+
+### Q235: the pre-rental fetch gate (gates 3 and 5), enforced by the drive
+
+- `bench/q235/q235_fetch_gate.py` resolves from a CPU host everything the box will fetch:
+  - the hub listing at `ac9c66cc` must equal `model_files.json` row for row, and each file's resolve HEAD must answer the
+    commit, size and etag (lane P130's resolvers and listing checks);
+  - every locked wheel URL must answer a one-byte GET made with the box's own opener (`q235_bootstrap.fetch_wheel`);
+  - grouped-nf4-gemm and this repository must fetch at their pinned commits.
+
+  It also scans the sealed closure, the locks, the drive and the registration for unfilled values.
+- `q235_drive.sh` refuses to launch without a passing report for its own commit under a day old, and copies the report into the
+  run. `wheels.json` names what pins this repository (`E4B_SHA`) instead of carrying a stand-in value.
+
+### Training routing trace: Qwen3-30B-A3B result and the cross-step bar
+
+`bench/train-routing-trace/RESULTS-qwen3-30b-a2000.md` reads the A2000 capture against the bar registered before it:
+INCONCLUSIVE (LFU 1.36x the shuffled null at 768 of 6,144 rows; Belady 1.25x). The best possible frozen set reaches
+only 1.09x the null, so training-side expert residency is not worth building now. A training micro-batch touches
+about 83 of 128 experts per layer, which leaves routed-only staging (about 35% fewer bytes) as an untimed candidate. `cross_step_bar.py` computes
+the bar (a policy frozen at each step boundary, scored on the next step's forward) and its reporting reads; its tests
+check that its policies decide exactly as `replay.py`'s and that the verdict can come out both ways. Counts and bytes
+only, no timings.
+
+### On a ROCm build of torch, the fused FP8 KV append, the CUDA-graph paths and the prebound launcher refuse in words that name AMD
+
+ROCm answers `torch.cuda.get_device_capability` with gfx numbers (MI300X / gfx942 is `(9, 4)`), which pass the
+sm_89 rule the fused FP8 KV append and the bucketed decode graphs were gated on, so the default server would have
+engaged them on hardware whose fp8 is FNUZ or absent. No AMD card has run this package's suites, so the gates ask the
+vendor first (`experts4bit_qlora._rocm`, keyed on `torch.version.hip`):
+
+- `fp8_paged_kv.fused_append_unsupported(capability, vendor=None)` returns an AMD reason (`vendor` is `"nvidia"`,
+  `"amd"`, or `None` for the running torch's). The KV cache then keeps the eager append, and an explicit
+  `E4B_FUSED_KV_APPEND=1` is refused in words.
+- `E4B_PAGED_GRAPHS=auto` decodes eagerly on AMD, and `1` is refused; `PagedModelRunner.enable_decode_graphs`,
+  `enable_prefill_graph` (`E4B_PAGED_PREFILL_GRAPH`, which reports the reason on `/health`) and `capture_decode` refuse
+  on AMD, and the speculative decoder's post step stays eager.
+- The prebound launch path (`E4B_TRITON_PREBIND`) stays off on ROCm even when forced; `prebind_unsupported()` says why.
+
+NVIDIA behaviour is unchanged. `tests/test_rocm_refusals.py` (CPU, mocked ROCm) pairs each refusal with the same call
+under an NVIDIA build at the same capability tuple.
+
+### Q235: the box driver and gate 2's time-left fit (bench/q235)
+
+- **What it adds.** The lifecycle of the registered Q235 box around the already merged step (`q235_box.py`), and the fit that
+  sizes its time-left guards. `q235_drive.sh` runs `bench/tc1/tc1_drive.sh` with a closure that `q235_stage.py` seals against
+  the committed `q235.sha256`; on the box `q235_run.sh`:
+  - re-checks that closure and provides git;
+  - refuses a host below the registered floors with the launcher's host codes (18: card class, VRAM or host RAM; 13: disk);
+  - installs the 56 hash-locked wheels of `wheels.json` (resolved natively for CPython 3.11 on manylinux 2.28 x86_64: torch
+    2.11.0+cu128, transformers 5.19.0, bitsandbytes 0.50.2, gate 1's environment) and grouped-nf4-gemm and this repository
+    at their commits;
+  - fetches the 129 files of `model_files.json` at `ac9c66cc`, each checked by sha256 or git blob id;
+  - renders the tokens and runs the two-step box and its fresh-process repeat.
+
+  Every phase runs under an alarm capped by the deadline and is timed into `receipts/phase-timings.jsonl`.
+- **Rehearsals.** `Q235_REHEARSAL=a2000` (a 4-layer slice of the checkpoint, fetched and verified the same way) and `cpu` (a
+  tiny model with the registered tokenizer) run the same script; neither is ever science-eligible. Science-mode constants live in
+  the sealed closure; overrides apply to rehearsals only.
+- **Gate 2.** `q235_fit.py` scales each measured phase to the registered model (A2000 rates as an upper bound, x 94/4 layers;
+  bytes over the host's listed bandwidth) with a 1.5x margin, and fails when a sealed cap, the wallclock or the cost at the
+  host's rate does not fit.
+
+### DQ11 draw-4 measured readiness
+
+Record the independently accepted real initial comparison and seventh full
+Tiny instrument at e672f984 in a sibling measured supplement. Register the
+unchanged $2.565 remaining ceiling and exact-host paid ACK requirement;
+preserve scientific quality and decision bars. No quote or rental GO.
+
+### Training routing trace: score the complete steps of a capture that ended early
+
+`replay.py --complete-steps N --truncation-reason TEXT` scores the first N optimizer steps of a capture that stopped
+early (for example, an out-of-memory error in a later step). The capture's own verdict may then be VOID; the
+completeness guard and the forward == recompute check are re-run on exactly the kept steps, and a fault inside the cut
+still refuses. N cannot exceed the optimizer steps the capture completed, and the capture's meta and a reason are
+required. The output's `trace_info` records the capture's verdict and reasons, the planned steps, N and the reason. The
+loader now also re-checks forward == recompute on every replayed trace.
+
+### `E4B_FUSE_PREFILL_GLUE` is on by default for `qwen3_moe`: the decode folds take prefill rows (#846, P130)
+
+- On `qwen3_moe`, a prefill's norms, residual-and-norm and q/k norm with the rotary now run the fused kernels decode
+  already uses, instead of transformers' eager chain. This changes prefill arithmetic: decode's single bf16 rounding
+  replaces transformers' two.
+- **The read** (`bench/p130/RESULTS-p130.md`, one RTX 5090, Qwen3-30B-A3B int4): ×1.118 [1.116, 1.119] per 512-token
+  first-chunk prefill replay (4.02 ms of 38.2), and at parity on P117's teacher-forced instrument (bias −0.0035 nats,
+  inside the floor's 0.0125 bar).
+- **`serve_paged`'s default is per family:** unset means `1` on `qwen3_moe` and `0` on every other family. `1` or `0` is
+  explicit, and `0` restores the eager chain. `/health`'s `engine.prefill_glue` reports the mode and its source. The
+  library's fold functions keep unset = `0`, so bench harnesses calling them directly do not move.
+- Register rows `e4b.serve.p130.prefill-glue-speed.qwen3.5090.2026-10-10` and
+  `e4b.serve.p130.prefill-glue-quality.qwen3.5090.2026-10-10`.
+
+### SD2 read (#1313): EAGLE-3 speculative decode measured end to end -- VERIFY_COST_REFUTES
+
+- **What is measured.** The `E4B_PAGED_SPEC=eagle3` path in `serve_paged`, on `Qwen/Qwen3-30B-A3B` at B = 1 on one
+  RTX 5090. On a single draft token, a verify costs 8.30 ms against 4.18 ms for a plain decode step.
+- **The verdict.** VERIFY_COST_REFUTES, re-derived by the maintainer field for field. With SD1's measured acceptance,
+  the best speedup is ×0.773 on raw text, ×0.895 on chat with reasoning off and ×0.988 with reasoning on. The measured
+  speedup came in 15–34% below SD1's model.
+- **The direct check agrees.** Timed end to end, k = 1 runs at ×0.76–0.80 of plain decode and k = 2 at ×0.84–0.92.
+- **Drafting is not the problem.** Live acceptance tracks SD1's offline τ within 1.5%.
+- **The consequence.** EAGLE-3 at B = 1 is closed for this model, card and stack. `E4B_PAGED_SPEC` stays an opt-in, off
+  by default, with no speed claim.
+- **Correctness gate.** V0 (rule a4: the logit gate plus the layer-0 key-row gate) passed the real build and caught all
+  six mutants out of sample. The key-row gate caught the RoPE shift that the logit gate misses.
+- **Spend.** SD2 spent $4.380 over seven rentals. The read itself cost $0.93.
+
+### Changed
+
+- Q235's layer-streamed bf16 reference (`bench/q235/instrument/layer_stream_ref.py`) now reads any MoE checkpoint through
+  transformers' own conversion mapping, the one `from_pretrained` uses, never through this package's MoE conventions, so it stays
+  independent of what it checks. Mixtral (`block_sparse_moe` w1/w3/w2) loads as well as Qwen3, whose path is byte-identical to
+  before. `mk_slice.py`, which builds the depth-truncated checkpoint view gate 1 runs on, is now in the repository (#835).
+
+### DQ11 preserves the checkpoint padding row
+
+The matched DQ11 Unsloth arms restore the original checkpoint padding embedding
+row after loading and record that deviation and scored token-0 counts, preserving
+strict frozen-value equality after a real-model refusal exposed loader zeroing.
+
+### SD2 reducer (#1313): the depth report reads `v_angles.pt` with `weights_only=True`
+
+- **Why.** Re-derivations keep using `bench/sd2/sd2_reduce.py` after the lane closed, and they load a receipt's
+  `v_angles.pt`. Asking for `weights_only=True` explicitly keeps that load from building pickled objects even where
+  torch's own default is off (before torch 2.6, or under `TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1`).
+- **Unchanged.** `sd2-5090-3`'s depth report reproduces exactly from its `v_angles.pt` (24 records). The verdict
+  never read this file. `staged.sha256` re-pins the reducer.
+
+### Training routing trace: record the training forward under reentrant checkpointing
+
+The recorder skipped a router call as an eval forward whenever grad mode was off. Reentrant gradient checkpointing,
+which the `OFFLOAD_EXPERTS` arm uses, runs the training forward under `no_grad`. Every training forward was dropped, and
+only the recomputes were kept, all under micro-batch -1. The completeness guard voided that capture, so no number came
+from it. An eval forward is now recognised by the router module's `eval()` mode, which the harness's `eval_loss` sets.
+A test trains a toy through reentrant checkpointing and requires a complete trace; it fails on the previous predicate.
+
+### `E4B_PREFILL_LEAN_DISPATCH` defaults to `auto`: K19's lean dispatch on prefill rows (#846, P130)
+
+- K19's prefill rows (the int4 route, above 256 routed rows) now take K23's dispatch by default. gate_up reads the token
+  rows through `gather_div`, and down stores in the caller's order through `scatter=order`. The 4,096-row gather and
+  the unsort are gone, and the chained 16-row tile table is kept.
+- **The read** (`bench/p130/RESULTS-p130.md`, one RTX 5090, Qwen3-30B-A3B int4): bit-identical on every window of the
+  served first-chunk prefill graph, and ×0.968 [0.966, 0.970] per 512-token replay (1.15 ms of 38.2).
+- **`auto`** takes it wherever the installed K19 takes `scatter=` / `gather_div=`, and keeps the gather on an older
+  kernel package. `1` refuses such a package; `0` restores the gather and unsort. `prefill_routes.prefill_lean_dispatch`
+  reports the setting (`auto`, `1` or `0`).
+- Register row `e4b.serve.p130.prefill-lean-dispatch.qwen3.5090.2026-10-10`. Other families on the int4 K19 prefill
+  route take it on its bitwise contract, not on a read of their own.
+
+### TC harness: T21 reads an offloaded expert stack; a failed drive names its reason
+
+- **T21 under expert offload.** `frozen_base_probe` dequantised expert 0 from the base module, which holds 0-element
+  placeholders between forwards when the experts are offloaded, so offloaded rows recorded
+  `experts: IndexError: index 0 is out of bounds for dimension 0 with size 0` and probed `q_proj` alone. The probe now finds the
+  offload handle on the wrapper chain and reads its home copy of the packed storage and absmax, staged to the handle's device and
+  dequantised there as the forward does, with the byte-flip control on that copy (`source` says so; `experts_offloaded` records
+  the residency). A 0-element stack with no handle to resolve it is an error row for the slot, not a probe of nothing. Resident
+  rows are unchanged. C1, the frozen hasher, already read the offload homes (TC3 amendment 2), so no registered reading moves.
+- **The drive's error line.** On any non-zero exit `tc1_drive.sh` writes `command-error.txt` in the run directory: the exit code,
+  its own last message and, once the box's artifacts are fetched, the box's last error line (`lane_box_error_line`,
+  `lane_write_command_error` in `bench/common/lane_liveness.sh`). The rental launcher puts that line in the receipt's notes after
+  `command exited N`. Reporting only: the exit code is unchanged.
+- **Tests.** `tests/test_tc1_arm.py`: the offloaded probe reads the same bytes as the resident one, and an unresolvable
+  placeholder is an error. `tests/test_lane_liveness.py`: the line's content and cleaning, the box-log choice, and the drive's
+  refusal written with its exit code intact.
+
+### Add a separate A2000 real-model initial quality instrument
+
+Reuse the registered DQ11 loaders, initializer and scorer for zero-update
+Mistral L/U quality on A2000/cu128. Preserve the scientific hardware guard
+and K8 budget, retain failures, and complete the primary report before
+optional U0 work. This instrument grants no scientific or paid-run licence.
+
+### P130 read (RTX 5090): both prefill knobs licensed on SC2e's int4 stack (#846; bench only)
+
+- **`E4B_PREFILL_LEAN_DISPATCH` (P2):** bit-identical on every window. It is ×0.968 [0.966, 0.970] on the served
+  first-chunk prefill graph, inside the registered ×1.01 no-slower margin.
+- **`E4B_FUSE_PREFILL_GLUE` (P1):** ×1.118 [1.116, 1.119] faster, and at parity on P117's teacher-forced instrument
+  (bias −0.0035 nats, inside the floor's bar 0.0125).
+- **Both together** take the 512-token first-chunk forward from 38.17 to 32.99 ms on this host. The glue map's ceilings
+  were 6.80 ms; the knobs saved 5.18.
+- **The defaults do not move here.** Each flip is its own PR with a $0 A2000 smoke, in the next release wave. P1's flip
+  is scoped to `qwen3_moe`.
+- `bench/p130/RESULTS-p130.md` and `bench/p130/receipts/p130-5090-1/` (with `SHA256SUMS`). The lane cost $1.961 of its
+  $5.50 ceiling.
+
+### SD2 Amendment 5b (#1313, operational): canary for E/Q, fail-soft reporting offline, V re-joined
+
+- **Why.** `sd2-5090-2` ($0.713) crashed in V0 on a reporting-only statistic. Under the two-strikes rule the read path
+  is simplified, with a net deletion and no new guard.
+- **Depth reporting leaves V0.** V0 keeps only its strict values; the raw key-row tensors go to `v_angles.pt`; the
+  reducer computes the depth report offline and fail-soft. V0 and V1 stay in one process.
+- **The canary** runs only the long paths: one E arm, and one Q window when Q will run. A failure stops the lane at
+  rc 26 before the paid stages.
+- **Unchanged:** the rule and every verdict input. The guard is 3.75 h, with a ceiling of $3.87.
+
+### `load_moe_4bit_streaming(offload=True)` on CUDA fuses per-expert rows in host memory
+
+- **What changed.** With `offload=True` on a CUDA device, the streaming loader reads each layer's per-expert rows (Qwen3-MoE,
+  OLMoE, the Mixtral family: the checkpoints the MoE conventions parse) into host memory, fuses them there, and moves only
+  the fused `gate_up` / `down` stacks to the device, where they are quantized as before. Read straight to the device, a
+  layer's rows and its fused stacks coexist there. At Qwen3-235B-A22B shapes that is 4.5 GiB of rows plus 3 GiB per
+  intermediate stack: a 12 GB card ran out of memory in layer 0, against the loader's contract that offload holds one
+  layer's experts on the device at a time.
+- **Same bytes.** Stacking and concatenation are copies, and the quantization still runs on the device from the same input.
+  The packed 4-bit bytes and the absmax are bit for bit the same staged and direct; so is the double-quantized absmax that
+  `compress_expert_absmax_` derives (a resident load, since that compressor refuses offloaded layers).
+- **Unchanged.** The resident (no-offload) path reads to the device exactly as before; the bytes it stores match the previous
+  loader's bit for bit. The per-expert arm without a convention (the dedicated-quant families) and checkpoints that already
+  store fused stacks are not touched.
+- **Cost.** At Qwen3-30B-A3B shapes (a 4-layer slice, warm page cache, RTX A2000) the load took 6.8 s and 6.1 s staged against
+  6.2 s and 5.8 s direct. The host peak RSS was about 0.8 GiB higher (10.1 against 9.4 GiB), and the device peak lower
+  (1.94 against 2.70 GiB).
+- **Test.** `tests/test_loader_host_stage.py`: staged and direct loads of a Qwen3-MoE and a Mixtral checkpoint store the same
+  bits, offload on CUDA and resident on any host, with a spy on the fuser that records where its rows were.
+
+### Report tiny DQ11 initial quality without changing science K8
+
+The explicit sealed A2000 rehearsal reports its initial K8 comparisons and
+requires finite consistent scores plus exact U0/U agreement, including both
+clean-worker checks. Amendment5 retains the failed fifth run, registers a
+sixth rehearsal after review/merge and records unmeasured real-model quality
+as an open draw4 risk. The scientific absolute0.05PPL gate remains unchanged.
+
+### Fixed
+
+- `describe_moe` reads a latent MoE's expert width from the stack itself (#1597). Nemotron-3 Super and Ultra feed
+  their experts a 1024- / 2048-wide latent, and their stacks were sized with `hidden_size` (4096 / 8192). As a result
+  `estimate_qlora_footprint` raised on Super and priced Ultra's adapters and activations on the wrong widths, and the
+  int4 serve recipe split K on them. The real load was never affected. Every family whose stacks carry `hidden_size`
+  is described byte-for-byte as before, checked against the released configs of every tested family.
+
+### SD2: the box's rotation quantiles on any device (#1313)
+
+- **The bug.** `sd2-5090-2` ended as HARNESS_ERROR (rc 23, $0.713) because `sd2_box._quantiles` passed a CPU
+  quantile tensor against angles on the GPU, so V0 crashed after its capture check. The CPU tests could not see it.
+- **The fix.** The quantiles are computed on the host. The box's self-test, which runs before the fetch, now also runs
+  the rotation summary on the GPU when one is present, so a device mismatch there fails cheaply (rc 21) before any download.
+
+### Check the exact DQ11 science policy before quotes
+
+Require a fresh, source-bound CPU import of the locked science Torch build and
+actual arm libraries before any quote or guarded rental. Record the before/after
+flags from the sealed harness TF32 assignments and refuse missing, replayed or
+mismatched evidence. CPU-supported Unsloth imports are labelled as limited
+policy evidence; scientific arm and training code remain unchanged.
+
+### A pinned, complete local cache loads offline without its tree listing
+
+`load_moe_4bit_streaming(model_id, ..., revision=<commit sha>)` with `HF_HUB_OFFLINE=1` failed with
+`OfflineModeIsEnabled` on some caches that held the complete pinned snapshot. Offline, some huggingface_hub releases
+resolve a pinned commit from the `trees/<sha>.json` listing that a download writes next to the snapshot. When a cache
+has the snapshot but no listing, they list the repo tree online instead. Such caches come from an older release, or
+are assembled by hand, for example by linking weights already on disk. This was observed on 1.26.0, 1.27.0, 1.28.0,
+1.29.0, 1.30.0, 1.31.0, 1.32.0, 1.33.0, 2.0.0, 2.1.0 and 2.1.1. 0.36.0, 1.0.0, 1.20.0, 1.25.0 and 2.2.0 resolve such a
+cache locally; releases not listed were not tested. A cache written by a download on an affected release carries the
+listing and already loaded.
+- **Offline with a full 40-hex commit whose snapshot is cached:** the loader now resolves it locally, with no Hub call.
+  It first checks that `config.json` and the safetensors index plus every shard it names (or a single
+  `model.safetensors`) are present: the files the loader reads.
+- **Missing files:** the loader refuses, naming them. A pinned commit with no cached snapshot is refused offline. Both
+  refusals are listed in the test suite's loader-refusal guard, so a test hitting one fails rather than skipping.
+- **Unchanged:** online loads, branch-name revisions (resolved by huggingface_hub through `refs/<branch>`) and local
+  directories behave as before.
+
+### P130's driver probes a dropped start instead of failing blind (bench and tests only)
+
+- **Why.** p130-prove-1 (2026-10-10) cost $0.001 and measured nothing. The box's ssh proxy closed the lane-start
+  connection after its banner, so the driver could not tell whether the child had started, and failed (21).
+- **Now.** `bench/p130/p130_drive.sh` never resends the start. Up to three fresh, read-only connections probe for THIS
+  run's nonce:
+  - a child that bound it is adopted, and the run continues;
+  - one that bound it and already exited leaves its files to fetch;
+  - anything else is the old failure (21).
+
+  A child that exited early (125), a handshake timeout (124) and a failed `cd` (20) fail as before, without a probe.
+- **P127's driver** shares that start step. It gets a note, not the change: it runs no further rental.
+- `tests/test_p130_drive_start.py` runs the real driver against fake `ssh`, `scp` and `rsync` in five cases. The start
+  is sent exactly once in every case. Run against the previous driver, four of the five fail.
+
+### DQ11: retain a bitwise observer proof under registered deterministic controls
+
+Register Amendment 4 after a source-unchanged local control isolated removable
+GPU execution nondeterminism. Apply configuration C only to the observer pair,
+retain its warning operators and restore the scoped flags. Keep scientific
+reads on shipped settings, report their same-token spread from separate untimed
+processes without a magnitude gate, require live streaming/prefetch counter
+increases during each scientific L training loop, and require the fifth zero-rental rehearsal
+and measured time-left review before any fourth paid-draw approval.
+
+Run reported-only spread processes after the complete scientific reads and provisional reduction. Deadline skips and incomplete optional evidence remain reported without changing the scientific verdict; reads always require the registered shipped policy.
+
+### SD2 Amendment 5 (#1313): the key-row gate at layer 0, after `sd2-prove-4`
+
+- **What happened.** `sd2-prove-4` ($0.784) read FAILED under rule a3. At layer 0 the key-row gate landed exactly as
+  derived (the real build 0.00093 rad, the RoPE-shift mutant 1.058), but at depth the real build's stored keys drift
+  from the T == 1 keys. A few small-magnitude cells there carry large relative errors, which is what Amendment 4
+  registered as not analytic.
+- **The change (post hoc, said plainly).** Rule a4, now the default, gates the key rows at layer 0 only, where the
+  derivation is analytic. The 0.5 rad boundary stays, and the derived bounds are checked on both sides: the real
+  build at most 0.142, the shift mutant at least 0.858. Depth is reported and never gated: quantiles at three magnitude floors.
+- **No new proof.** `sd2-prove-4` is pinned PROVED under a4 and FAILED under a3. The out-of-sample test is the read
+  `sd2-5090-2` on fresh rows.
+
+### Docs: training gradients are not bitwise reproducible under flash attention
+
+- The limitations shared by every solution page now say that training
+  gradients on GPU differ from run to run because PyTorch's default
+  flash-attention backward is nondeterministic, that neither
+  `CUBLAS_WORKSPACE_CONFIG` nor `torch.use_deterministic_algorithms(True,
+  warn_only=True)` removes it, and that the math attention backend
+  (`sdpa_kernel(SDPBackend.MATH)`) gives bitwise-reproducible gradients at a
+  cost in speed and memory. Documentation only; no code change.
+
+### P130 Amendment 1 (#846): the box records the wikitext commit it read, beside the fetch gate's (bench and tests only)
+
+- The windows' corpus is not pinned by revision in P117's box. The fetch gate records the commit `main` names; the box
+  now records the commit or commits it actually read, from `datasets`' arrow cache and the hub snapshot, which are both
+  keyed by commit. The driver passes the gate's commit to the box (`P130_GATE_CORPUS`), and the reducer reports both
+  side by side in `verdict.json`. It is reported, never gated: the windows digest already gates the windows themselves.
+- No arm, gate, bar, prediction, size, budget or sequencing rule changes. `staged.sha256` is re-pinned, and the reducer's
+  self-test grows to 42 cases.
+
+### SD2 Amendment 4 (#1313): a key-row position gate in V0, after `sd2-5090-1`
+
+- **What happened.** `sd2-5090-1` ($0.566) read VOID: on rows outside calibration, the RoPE-shift mutant stayed inside
+  the 0.25-nat logit bound (0.161 and 0.064), so V0 failed closed before any timing. Every build item held.
+- **The finding.** A logit-level gate on short verify rows cannot see a uniform RoPE position shift out of sample,
+  because the verify rows keep their relative positions among themselves.
+- **The added gate** (rule a3, now the default). V0 compares the keys the verify step writes with the keys the T == 1
+  path writes at the same positions, as a rotation on RoPE pair 0, which turns 1 rad per position. The boundary is
+  0.5 rad, the midpoint, derived and not fitted: one e4m3 ulp bounds the real build at 0.142 rad at layer 0, and a
+  one-position error reads at least 0.858. A CPU test checks the derivation with real e4m3. The logit gate is
+  unchanged, and rules a1 and a2 still re-derive every earlier receipt.
+- **Next:** `sd2-prove-4` on the calibration rows, then the read reruns as `sd2-5090-2`.
+
+### P130 registered (#846): do #1583's prefill knobs make the served 512-token prefill faster, and does P1's arithmetic cost quality? (bench and tests only)
+
+- **Why.** About a quarter of Qwen3-30B-A3B's 512-token prefill forward on SC2e's int4 stack is eager glue
+  (`bench/decode-census/PREFILL.md`), and every admitted prompt's forward stalls the decoders behind it. #1583 added two
+  opt-in knobs: `E4B_FUSE_PREFILL_GLUE` (P1, the decode folds above 64 rows; it changes bf16 arithmetic) and
+  `E4B_PREFILL_LEAN_DISPATCH` (P2, K19's lean dispatch on prefill rows; bit-identical). Nothing licenses either as a
+  default yet. Not TC1's predictions P130–P133, which used the same labels.
+- **The box** (`bench/p130/p130_box.py`): SC2e's int4 stack in eight processes on one RTX 5090, P1 set per process in
+  the order 0 1 1 0 0 1 1 0. **Phase A** captures the served first-chunk prefill graph (T = 512) with P2 off and on in
+  every process, checks the two bitwise (FUNCTION), digests the default's output across processes (DETERMINISM), and
+  times them interleaved. **Phase B** is P117's teacher-forced instrument with one subject, P1, against R's own floor
+  (half, chunk, rev) and the scale mutant.
+- **The rule** (`bench/p130/p130_reduce.py`, 40 self-test cases):
+  - P2 is licensed iff the 95 % t-interval of its per-process ratio stays under ×1.01;
+  - P1 is licensed iff the interval of its per-pair gain clears ×1.03 AND Phase B is AT_PARITY on P117's bar;
+  - a capture refused under a knob, a P2 FUNCTION failure, cross-process nondeterminism or noise holds the knob.
+  Each flip is its own later PR. P1's default is scoped to `qwen3_moe`, the family read.
+- **The pre-rental fetch gate** (`bench/p130/p130_fetch_gate.py`, DQ11's launch-gate pattern): before the rental
+  controller quotes, everything the box fetches is resolved from a CPU host with the box's own clients. That covers:
+  - the checkpoint's files, with sizes and hashes;
+  - the corpus;
+  - both commits by SHA;
+  - every PyPI wheel, picked by pip for the box's platform.
+
+  A missing, unauthorized or mismatched entry refuses. `p130_drive.sh` stages nothing without a passing, fresh report
+  for the launch commit.
+- **Proof** on Qwen3-30B-A3B at the proof's sizes (four processes; guard 1.25 h); reading guard 2.0 h; lane ceiling
+  $5.50. Nothing rents before this merges, the maintainer ACKs and SD2's `sd2-5090-1` read has finished.
+
+### Training routing trace: the capture wrapper no longer fails at startup
+
+`bench/train-routing-trace/run_capture.py` reached the optimizer step hook as `torch.optim.optimizer.<name>`. That
+submodule is not an attribute of `torch.optim` after a plain `import torch`, so the wrapper raised `AttributeError`
+before loading a model.
+- It now imports `register_optimizer_step_post_hook` from `torch.optim.optimizer`.
+- `environment()` records transformers as unknown if it is absent, instead of failing the save.
+- A new CPU test drives `run_capture.main()` end to end against a stub harness. It fails on the previous code with the
+  same error.
+
+No capture had run, so no data is affected.
+
+### Two opt-in prefill-glue knobs, both off by default: `E4B_FUSE_PREFILL_GLUE` and `E4B_PREFILL_LEAN_DISPATCH`
+
+The design is `bench/prefill-glue/DESIGN.md`, P1 and P2. Neither knob changes anything at its default, and neither is
+licensed yet.
+
+- **`E4B_FUSE_PREFILL_GLUE=1`** lifts the decode folds' 64-row gate in `glue_fuse` and `glue_r2`, resolved at patch
+  time. A prefill's norm, residual-and-norm and q/k-norm-and-rotary calls then run the fused kernels decode uses.
+  - The router epilogue is out of this round, so it keeps its gate.
+  - Its licence will be a teacher-forced prefill read.
+- **`E4B_PREFILL_LEAN_DISPATCH=1`** changes K19's prefill rows:
+  - gate_up reads token rows itself (`gather_div`), and down stores in the caller's order (`scatter=order`);
+  - the chained 16-row tile table is kept;
+  - it is bit-identical by construction there;
+  - a K19 without the options is refused.
+- **Evidence in `/health`:** `prefill_routes.seen` gains `moe_k19_dispatch` (the K19 tile table and dispatch) and
+  `prefill_folds` (fused fold calls above 64 rows), and `prefill_routes` echoes both knobs' raw values.
+- **Tests:**
+  - the glue gates engage above 64 rows only under the knob, and stay as today without it;
+  - the lean dispatch is `torch.equal` to the gather route on CPU with a K19 stand-in, and is recorded as
+    `chained|lean`;
+  - the P115 tiny Qwen3-MoE's served-shape prefill is fused except the router.
+
+### SD2 Amendment 3 (#1313): the read `sd2-5090-N` -- its target, its harness and its budget
+
+- **The target is merged main,** re-proven on the card: a package-diff audit against the proven `539a2d26`
+  (`bench/sd2/sd2_audit.py` over `audit_read.tsv`, which refuses an unlisted or stale file), the target's GPU tests,
+  and V0 on rows outside the gate's calibration, which fails closed.
+- **The runner's read mode** (`SD2_MODE=read`): stage V, the gate (VOID / E_ONLY / ALL), stage E's six arms in the
+  registered palindrome, stage Q unless the stop rule applies, and the registered verdict. The driver takes the mode
+  from the run id (`sd2-prove-N` or `sd2-5090-N`).
+- **The budget,** from receipts: Q at one window a pass is about 100 min (12.6 s per eager window-pass), so the read's
+  guard is 3.5 h and its ceiling $3.66. Q keeps its registered 48 windows per text.
+
+### The training estimate prices the absmax the run stores, and tells the loss branch from model_type
+
+- **Absmax, as stored.** Under `enable_fast_train`'s default (experts resident on the GPU, the grouped kernel, NF4/FP4
+  at blocksize 64, `E4B_ABSMAX_DQ` unset or `1`), the run double-quantizes the expert absmax. It keeps a uint8 per 64
+  weights, plus an fp32 scale per 256, an offset and a 256-entry code, instead of fp32 per 64. The estimate now prices
+  those stored bytes, so it falls for those setups: by 1.35 GB on Qwen3-30B-A3B, matching the 1.34–1.35 GB TC1
+  amendments 28 and 56 measured, and by 10.6 GB on Qwen3-235B-A22B. Expert offload, the reference loop
+  and `E4B_ABSMAX_DQ=0` keep fp32, as before. `estimate_env()` reports the switch.
+  - The bytes are pinned against MEASURED ones: `tests/test_estimate_absmax_and_family.py` quantizes real NF4 stacks
+    on CPU, compresses them (or not) with the run's own code, and requires the estimator's bytes to equal the stored
+    tensors' bytes exactly, including counts that are not a multiple of 256.
+- **The loss branch.** Whether the run chunks its LM loss was read from `config.architectures` alone. A config built
+  without that field (for example `AutoConfig.for_model`) silently priced the stock loss: 1.65 GiB more on
+  Qwen3-235B-A22B at T = 2048. It now falls back to `model_type`, as transformers does when it instantiates the class.
+  Where neither identifies the family, the stock (larger) loss is priced and the estimate says so in `unmodelled`.
+
+### Training routing trace harness (no capture yet)
+
+`bench/train-routing-trace/` records which experts a QLoRA training step routes to, per micro-batch and per pass, and
+replays the trace through residency policies to give hit rates and staged bytes. No timings.
+- `routing_recorder.py` hooks every `layers.<i>.mlp.gate`. It records the forward and the checkpoint recompute,
+  checks that they route identically, and refuses (VOID) a trace that is not complete for the expected micro-batches
+  per step. Tests arm both checks.
+- `run_capture.py` runs the TC1 harness unchanged, with the recorder attached and both `Tensor.backward` and
+  `torch.autograd.backward` labelled.
+- `replay.py` scores profile, LFU, LRU and Belady at six expert-row budgets, per pass (forward, recompute, dgrad) and
+  pooled. Staged bytes come from the cited offload layout. Controls: a shuffled-routing null and the #1469 decode
+  traces.
+
+The Qwen3-30B-A3B capture on the RTX A2000 runs from the merged commit. No number is claimed until then.
+
+### SD2 build 5 (#1313): `E4B_PAGED_SPEC` in the paged server (opt-in)
+
+- **The knobs.** `E4B_PAGED_SPEC=eagle3` with `E4B_PAGED_SPEC_K` (1–3) and `E4B_PAGED_SPEC_HEAD` (the EAGLE-3 head's
+  directory) serves a request decoding alone with speculative greedy decode (lane SD2, `bench/sd2/PREREG-sd2.md` B6).
+  The default is `off`, which installs nothing.
+- **Refusals.** The server refuses a missing K or head, eager decode (the verify is a decode bucket), the decode
+  lookahead, and a K set with speculation off.
+- **The build.**
+  - It checks the head against the pin and against the target's width and vocabulary.
+  - The KV pool gets k alias slots and at least k + 1 scratch slots.
+  - The draft, the auxiliary hooks and the verify buckets are installed before any graph.
+  - The MoE residual license covers the verify row counts.
+- **Reporting.** `/health` and `/stats` report a `spec` block: what was asked, the build, the post-verify graphs and
+  the census (steps, drafted, accepted, τ_live, requests dropped to one token a step).
+
+### Fixed
+
+- DQ11's A2000 rehearsal requires the L reading's live CUDA train-prefetch
+  schedule to issue forward and backward prefetches and be used during the
+  actual forty updates. Before/after counter snapshots and positive deltas are
+  preserved, including on refusal, and checked again by the rehearsal checker.
+
+### SD2 build 4 (#1313): the speculative loop in the paged runner
+
+- **The loop.** `engines/spec_decode.py`'s `SpecDecoder` runs speculative greedy decode for the one request decoding
+  alone (lane SD2, `bench/sd2/PREREG-sd2.md` B1, B2, B5):
+  - `k` shrinks to the request's budget and the slot's capacity;
+  - the verify is a decode bucket whose rows share the slot through alias slots;
+  - on the device: the accept (leading matches only), the length `base + a + 1` written last, and the draft's
+    extend-and-chain;
+  - one host read per step.
+- **The runner.** `PagedModelRunner.enable_speculation` comes before the graphs:
+  - the verify buckets (2 .. k + 1 rows) are captured beside the decode buckets, and plain steps never pick one;
+  - the post-verify step is captured per row count;
+  - the auxiliary hooks write prefill and decode states;
+  - a prompt that completes alone starts the draft.
+- **Leaving speculation.** A request that is no longer alone, or has no room, drops its draft and decodes at T == 1
+  for the rest of its life.
+- **Off by default.** Nothing is engaged unless `enable_speculation` is called. The server's knobs come in build 5.
+
+### Fixed
+
+- DQ11's tiny rehearsal keeps the full 32000-entry vocabulary and original token
+  IDs so the original full-logits scorer can run unchanged. A successful tiny
+  streaming preparation saves its engagement witness before scoring or proof,
+  preserving real handles and streamed bytes even if a later phase refuses.
+
+### Design note: a fused path for norm calls above 64 rows in e4b's prefill (bench and tests only)
+
+- `bench/prefill-glue/DESIGN.md` is zero rental and for review. It maps the eager prefill chain onto the fused kernels
+  that already exist, and proposes two knobs, both default 0:
+  - `E4B_FUSE_PREFILL_GLUE` (P1: norms and rotary, using decode's arithmetic, option B);
+  - `E4B_PREFILL_LEAN_DISPATCH` (P2: the bit-identical MoE dispatch, with its route asserted).
+- The router epilogue (P3) is out of this round.
+- At C = 64, the glue these parts absorb is worth at most about 1.35 ms (P1) and 1.67 ms (P1 + P2) of TPOT. These are
+  ceilings: the fused kernels' own time is not subtracted.
+- The note lists the CPU checks and the checks on the project's own A2000, correctness only.
+- `glue_map.py` assigns every kernel of P119's 512-token prefill profile to its source operation.
+  `tests/test_prefill_glue_map.py` keeps the note equal to the script's output and checks that the map closes.
+
+### Add a supplied Python function snapshot foundation
+
+Add an unwired RA helper for repeated original-object, complete code and bounded
+typed metadata equality against a supplied reference. It never calls either
+function and grants no source, dependency-graph, runtime-read or consumer authority.
+
+Use explicit marshal format 2 so unchanged snapshots do not depend on external
+reference counts. Qualified-name mutations consistently refuse as metadata drift;
+complete code-field and typed metadata checks remain active.
+
+### Lane 2 design note (a): where e4b's 512-token prefill forward spends its time (bench and tests only)
+
+- `bench/decode-census/PREFILL.md` is a zero-rental census, generated by `prefill_census.py` from committed receipts.
+  It splits P119's 512-token prefill profile by P119's own class table, with sub-splits of the eager elementwise kernels
+  and routing, and closes it against SC2e's served prefill and SC5's C = 1 TTFT.
+- It reads the int4 experts at under half the card's achieved dense bf16 rate on the same profile, and about a quarter of
+  the forward as eager PyTorch glue.
+- `tests/test_prefill_census.py` keeps the note equal to the script's output and checks that every split closes.
+
+### SD2 build 3 (#1313): the EAGLE-3 draft and its auxiliary states in the package
+
+- **`engines/eagle3_draft.py`** holds lane SD2's draft for one speculating sequence. It repeats SD1's arithmetic
+  (`bench/sd1/sd1_eagle3.py`, vLLM's EAGLE-3 semantics) with a KV cache:
+  - `Eagle3Drafter.prefill` writes the prompt's context.
+  - `extend_and_draft` writes every verified row at a static shape (SGLang's draft-extend) and chains k drafts from
+    the accepted row. Its inputs, the accept count and the base position included, are device tensors, so it can be
+    captured.
+  - `load_head` checks the pinned head's size (through a symlink), sha256 and config, and refuses an unsupported head.
+- **`AuxStates`** installs forward pre-hooks that copy the residual stream entering layers `(2, L // 2, L − 3)` into
+  static buffers, for prefill chunks and decode rows.
+- **Not wired yet.** Nothing in the server uses it yet. `bench/sd2/PREREG-sd2.md` B3 and B4.
+
+### Fixed
+
+- DQ11's tiny A2000 rehearsal now scopes its streaming threshold to the defining
+  module imported by pinned Loggetta during preparation. It refuses a missing
+  adapter invocation or zero streamed bytes, records the engagement witness,
+  and restores the original offloader on success and failure.
+
+### SD2 Amendment 3, part 1 (#1313): the read's box stages and verdict
+
+- **The box** (`bench/sd2/sd2_box.py`) gains the read's three stages: `--read-v` (V0 on rows outside the gate's
+  calibration, judged before any timing, then V1's timed terms), `--read-e ARM` (one arm of the end-to-end read) and
+  `--read-q` (P115 Phase B's quality instrument plus the verify-shaped ON1 / ON2 passes).
+- **The verify pass is checked on CPU first.** On a causal toy target its per-position log-probs equal a T == 1
+  teacher-forced pass, and its two construction mutants do not (`tests/test_sd2_read.py`).
+- **The reducer** (`bench/sd2/sd2_reduce.py`) gains `--gate-v` (VOID / E_ONLY / ALL after stage V) and `--read`, the
+  registered rule, self-tested on every verdict and every VOID item. The proof's rule and its 39 cases are unchanged.
+- Part 2 (the runner, the driver, the package-diff audit, the amendment text and the target pin) follows once the
+  build PRs have merged.
+
+### SD2 build 2 (#1313): alias slots in the FP8 paged pool, for a speculative verify
+
+- **Alias slots.** `Fp8PagedKV(..., alias_slots=n)` adds n slots after the scratch ones, with no block of their own.
+  Lane SD2's verify of k + 1 rows runs as a decode bucket over the speculating slot and k aliases.
+  - `alias_bind(slot, k)` copies the slot's block-table row into each alias and sets alias i's length to the slot's
+    plus i + 1, in two device launches.
+  - The batch append then writes row i into the slot's own blocks at its position plus i, and step-select reads the
+    stagger.
+- **Safeguards.** The aliases sit outside `scratch`, and that is asserted, so a padding row never lands on one.
+- **After the step.** `set_len_device(slot, n)` sets the slot's length from a device scalar, the step's last length
+  write. `note_len` updates the host mirror.
+- **Unchanged without aliases.** With `alias_slots=0` (the default) nothing changes. `bench/sd2/PREREG-sd2.md` B1 and
+  B2.
+
+### Lane 2 design note: where e4b's batched decode step spends its time at 16, 32 and 64 rows (bench and tests only)
+
+- `bench/decode-census/README.md` is a zero-rental census, generated by `decode_census.py` from committed receipts. It
+  splits the decode step into kernel classes at 16, 32 and 64 rows (P119, P124, P126) with a residual against the served
+  step, and splits SC5's TPOT into the served step plus the prefill stall (SC2e).
+- An appendix traces SGLang 0.5.21's C = 64 TPOT in SC5 to its default decode CUDA-graph cap of 48 on a 32 GB card.
+- `tests/test_decode_census.py` keeps the note equal to the script's output and checks that every breakdown closes.
+
+### Added
+
+- DQ11 has an explicit A2000 cu128 correctness rehearsal using a local tiny dense
+  model and separate package/input locks. It runs the real L/U/U0 binding proofs
+  and training loop; rehearsal receipts are refused by science reduction. CPU
+  execution traces hold the default science runner to its sealed command sequence
+  and environment. This adds no scientific result or replacement-rental approval.
+
+### Pack manifests take a rank-0 bf16 payload
+
+`pack_manifest.tensor_payload_bytes` and `tensor_from_payload_bytes` byte-viewed a bf16 tensor directly. A byte view of
+a rank-0 tensor refuses (`self.dim() cannot be 0 to view BFloat16 as Byte`), so a scalar bf16 payload could not be
+written or read. Both now flatten before the view. A ranked tensor's bytes are the same, so every existing payload and
+fingerprint is unchanged: `tests/test_pack_manifest_rank0.py` pins today's payload hashes for ranked bf16, fp32, fp16,
+int8, uint8 and int32, round-trips each, and writes and reads a rank-0 tensor of each dtype bit for bit.
+
+### `enable_dense_offload` no longer raises on 4-bit projections under `MIN_BYTES`
+
+- **What changed.** A frozen parameter under `MIN_BYTES` (1 MiB) stays resident and is moved to the offload device when it
+  sits elsewhere. That branch re-wrapped the moved tensor in `torch.nn.Parameter`, which refuses a subclass whose `detach()`
+  returns a plain tensor -- bitsandbytes' `Params4bit` does -- so any model whose packed 4-bit projections fall under 1 MiB
+  raised at `enable_dense_offload` when its layers were staged on another device (the host, for instance). Such a subclass
+  is now stored as `.to()` returns it, with its quantization state (quantizing on the move when it was not yet); a plain
+  parameter is re-wrapped as before.
+- **Where it reproduced.** torch 2.11.0, 2.12.1 and 2.14.1 alike, with bitsandbytes 0.50.2: not a torch-version change.
+- **Test.** `tests/test_dense_offload_param_subclass.py`. CPU (in CI) reaches the branch by offloading onto `cpu:0`; CUDA
+  offloads from the host. Both cover packed and quantize-on-move weights, and the forward is bit for bit the same model
+  moved with `Module.to`. Run on torch 2.11.0+cu128 (RTX A2000, CPU and CUDA) and torch 2.14.1 (CPU).
+
+### SD2 build 1 (#1313): the scheduler takes several tokens a step from a speculative runner
+
+- **Several tokens a step.** A runner that sets `speculative = True` may return a list of tokens for a request.
+  `ContinuousScheduler` emits them in order and stops at the token that finishes the sequence: a stop id once
+  `min_tokens` are out, or its length. Later tokens are dropped and counted in `spec_dropped`, which `stats()` reports
+  for a speculative runner only.
+- **Budgets.** Before each decode the scheduler calls the runner's `decode_budgets({rid: tokens left})`, so a verify
+  never runs past a request's length.
+- **Refusals.** A speculative runner without `decode_budgets` is refused, and so is a speculative runner with the decode
+  lookahead.
+- **Unchanged.** A runner without `speculative` behaves exactly as before. Lane SD2 (`bench/sd2/PREREG-sd2.md`, B5).
+
+### Fixed
+
+- DQ11 tensor byte hashes accept scalar losses and preserve the logical contiguous
+  bytes of strided tensors. CPU regression coverage checks scalar loss/gradient
+  neutrality, signed-zero/NaN payloads and stored versus canonical FP32 hashes.
+  The proof recipe and scientific package/input locks are unchanged.
+
+### SC5 read: same-box serving on one RTX 5090, e4b against vLLM 0.31.0 and SGLang 0.5.21 (bench, receipts and tests only)
+
+- `bench/sc5/README.md` reads `sc5-5090-2` by the registered rule. It reports every cell from e4b's side with its
+  per-block ratios (LEADS 24, TRAILS 30, WITHIN NOISE 6, no VOID) and lists every losing cell, with no single headline.
+- The quality rows against the one bf16 reference: mean NLL delta 0.022 nats for e4b (its own int4 format) and 0.050
+  for vLLM and SGLang (the shared GPTQ int4 checkpoint), with argmax agreement about 0.895 for all three. The chunked
+  bf16 floor is 0.972. All three engines are labelled FAR. The label describes divergence from the bf16 reference, not a
+  ranking of correctness.
+- `bench/sc5/receipts/sc5-5090-2/` holds the record, the verdict, the quality rows, the box's summary, versions and
+  forensics, and `SHA256SUMS`. `tests/test_sc5_read.py` re-runs main's reducer on the committed record.
+
+### SD2 Amendment 2 (#1313): V0's addressing gate is a logit gate, after `sd2-prove-2`
+
+- **What happened.** `sd2-prove-2` ($0.66) ran in full and read FAILED with one item, `GATE_TOO_WEAK:c`: the RoPE-shift
+  mutant kept argmax agreement above 0.90. Every build item held.
+- **The new gate.** `bench/sd2/sd2_reduce.py --rule a2` (now the default) makes the logit gate decide: each verify row's
+  mean |Δ log p| of the oracle's token must be at most 0.25 nats. That bound is calibrated on `sd2-prove-2`: the real
+  build peaked at 0.037 and the mutants at 1.18 or more.
+- **The old rule stays reproducible.** `--rule a1` re-derives the registered verdict unchanged.
+- **A fresh proof.** `sd2-prove-3`, at the same target and read by rule `a2`, must be PROVED before the builds merge.
+- **The read also checks the gate out of sample.** Its V0 re-runs the three mutants before any timing, and a mutant
+  inside the bound makes the read VOID.
+
+### Fixed
+
+- DQ11's locked public-wheel downloads use an honest bootstrap user agent
+  accepted by the PyTorch CDN and identify the URL/status on refusal. A required
+  CPU launch controller probes all 101 locked URLs before quoting or renting;
+  the box provisions Git with bounded installation before wheel/model fetches,
+  and every phase/probe alarm preserves the deadline reserve.
+  Amendment 3 keeps the remaining aggregate budget and requires the driver cap fix.
+
+### SD2 Amendment 1b (#1313): the proof's time budget, after `sd2-prove-1`
+
+- **What happened.** `sd2-prove-1` stopped before its fetch (rc 40, $0.046): SD1's fetch budget did not fit a 0.75 h
+  guard after the installs (P109's trap).
+- **Per-mode checks.** Every time-left check in `bench/sd2/sd2_run.sh` is now a per-mode variable.
+  `tests/test_sd2.py` holds P109's rule and a slow-host walk through every check.
+- **The guard and the ceiling.** The guard is 1.25 h and the ceiling $1.75; the expected cost is about $1.10.
+- **A short deadline refuses at once** (rc 17).
+- **The GPU tests come first.** They run before the 62 GB fetch and stop the lane on failure (rc 24).
+
 ## 0.53.0 — 2026-10-10 — the fused q/k/v training projection on by default, and the grouped_nf4 MoE backward priced in the training estimate
 
 **0.53.0.** QLoRA training of Qwen3-MoE now fuses each attention layer's q, k and v into one NF4 + LoRA projection
