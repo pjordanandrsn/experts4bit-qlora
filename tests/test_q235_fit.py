@@ -43,7 +43,7 @@ def test_the_fit_scales_each_phase_explicitly_and_judges_caps_and_cost():
     assert abs(p["fetch"]["scaled_s"] - (470_211_497_053 / 62.5e6 + 470_211_497_053 / (27_047_001_621 / 23.7))) < 1
     assert p["install"]["scaled_s"] == 4_000_000_000 / 62.5e6 + 178.0
     assert p["tokens"]["scaled_s"] == 7 and p["box"]["budget_s"] == int(-(-600 * 94 / 4 * 1.5 // 1))
-    assert p["box"]["fits"] and rep["usd_at_wallclock"] == round((sum(caps.values()) + 300 + 900) / 3600 * 1.6, 2)
+    assert p["box"]["fits"] and rep["usd_at_wallclock"] == round((sum(caps.values()) + 300 + 1800) / 3600 * 1.6, 2)
     short = f.fit(timings, 178.0, fetch, 4_000_000_000, 470_211_497_053, 500.0, 1.6, {**caps, "box": 5400})
     assert not short["phases"]["box"]["fits"] and not short["fits"]
     dear = f.fit(timings, 178.0, fetch, 4_000_000_000, 470_211_497_053, 500.0, 6.0, caps)
