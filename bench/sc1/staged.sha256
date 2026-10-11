@@ -2,7 +2,7 @@
 # The box runs `sha256sum -c` on this file and the controller (sc1_drive.sh's case) and tests/test_sc1_staged_pin.py
 # resolve each name to its source and compare. Regenerate with bench/sc1/make_pin.sh after editing any staged file.
 # sc1_reduce.py is pinned whenever it is present (it is staged by path; the box's sha256sum -c covers it).
-0d72f0984f7f7a33f0dd242a74b4b5ee124f6d1d2014471c9efcf4f0bbd30201  sc1_run.sh
+eaa7719c8c133c16e3693c3b1a3d8107603d123d80d2c7e63b2a71d15396d2f6  sc1_run.sh
 e3964c66997c2c2f39406904ac0cfa37bd083ed1f40f85117eadc1620be9a1ce  sc1_e4b_sched.py
 eae98f666da1337bc1c2bd14b6b19f6c8c6103e9492c025b8d905f197024b1cd  sc1_prompts.py
 f471b9d00f9a36763951fd42b90f73a1da90cac4081d3c31e38fbfd4c97b26f5  sc1_sampler.sh
@@ -47,6 +47,9 @@ fb51a639b3e6fd2476ce019e48999649dfad03c00e6b88dd3a9f07f995cdc149  sc2e_census.py
 362966eb4ec48f00ae7a29c4adab7ddbe1aa9d3fb21448d4efe317d15b473285  sc2f_box_n.sh
 10f0800be754c3b74c3fe804dc4fe680376224a4bef5b6d08c7acd3e2c644bc0  sc2f_reduce.py
 9563c60e88b0fe05a1c5ca78b02c31b71d16e10011d1e3f4734c4d8dcac325f6  sc2f_basis.py
+8c73e52a4c4f2fe36078b7d2218641fe00515c8e8bb66ced327d488fb3862391  sc2h_box_o.sh
+6e72a82c6e1b732889f1772baabe23b5291fa0af71533cd0ca84f38b642b9556  sc2h_reduce.py
+06dd2c20982b260d377055e7a20f48822f8bab7c28b2735129346d5a64e9a918  sc2h_basis.py
 f8c49d74ce885d748b17bed49c48f6a2f68777ad5efd3ead6d20a84643247c5d  sc5_box_m.sh
 9f9e4655184ac5222657b4c7f9e469207465d7cdf055879edf6b8215a3d5675f  sc5_driver.py
 628881f958cfb1628e21d281418e33f4f30b4dcc6bcd7a09bf89cea416202c90  sc5_quality.py
