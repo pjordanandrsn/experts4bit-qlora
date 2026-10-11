@@ -1051,6 +1051,8 @@ def prefill_routes() -> dict:
                  "prefill_glue_env": os.environ.get("E4B_FUSE_PREFILL_GLUE", "") or None,
                  "prefill_lean_dispatch_env": os.environ.get("E4B_PREFILL_LEAN_DISPATCH", "") or None,
                  "prefill_lean_dispatch": hot_residency._prefill_lean_dispatch_env(),
+                 "k19_prefill_big_m_env": os.environ.get("E4B_K19_PREFILL_BIG_M", "") or None,
+                 "k19_prefill_big_m": hot_residency._k19_prefill_big_m_env(),
                  "device_grouping": bool(hot_residency.DEVICE_GROUPING[0])}
     try:
         mode = hot_residency._int4_prefill_mode_env()

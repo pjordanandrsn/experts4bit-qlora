@@ -145,3 +145,4 @@ def test_prefill_routes_reports_both_counters(monkeypatch):
                          "prefill_folds": {"layer": 48, "norm": 97}}         # E4B_FUSE_PREFILL_GLUE's
     assert {"int4_prefill", "prefill_attn", "device_grouping"} <= set(r)   # the env-resolved fields stay
     assert r["prefill_lean_dispatch"] in ("auto", "0", "1")                # P2's resolved mode (P130: auto)
+    assert r["k19_prefill_big_m"] in (0, 32, 64) and "k19_prefill_big_m_env" in r   # E4B_K19_PREFILL_BIG_M (opt-in)
