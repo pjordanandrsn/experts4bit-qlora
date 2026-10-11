@@ -59,7 +59,7 @@ no training-memory remedy. DQ9 licenses neither capacity nor calibration; the op
 remain. `e4b.train.dense-executor.dq9.5090.2026-10-08` ([diagnostic record](../bench/dq9/receipts/dq9-5090-2/README.md));
 `e4b.train.dense-executor.dq7.5090.2026-10-08` ([original VOID reading](../bench/dq7/RESULTS-dq7.md)).
 
-**DQ11 is a fusion build candidate, measured-private.** U is faster than L in this matched SDPA, eager, full-logits
+**DQ11 is a fusion build candidate, measured-private.** Unsloth (U) was faster than e4b's dense path (L) in this matched SDPA, eager, full-logits
 configuration, not Unsloth's default. The registered quality gates pass and the independently rederived decision is
 `BUILD_CANDIDATE`; this licenses a separate fusion investigation and carries no capacity or shipping claim.
 `e4b.train.dense-adapter.dq11.matched-sdpa.5090.2026-10-11` ([results](../bench/dq11/RESULTS-dq11.md)).

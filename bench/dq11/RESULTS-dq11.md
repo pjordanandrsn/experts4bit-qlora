@@ -43,8 +43,8 @@ The profiler was removed before model loading and the timed loop.
 
 The actual merged reducer, supplied with verified teardown and instance
 absence, returns `VALID_CONTROLLED_READ`, `quality_pass=true`,
-`BUILD_CANDIDATE` and `U_FASTER_CONTROLLED`. The maintainer independently
-rederived every deciding field from the raw receipts. `BUILD_CANDIDATE`
+`BUILD_CANDIDATE` and `U_FASTER_CONTROLLED`. Every deciding field was independently
+re-derived from the raw receipts. `BUILD_CANDIDATE`
 licenses a separately reviewed fusion build investigation; it does not mean
 e4b already implements or ships the measured lever. The U0/U ablation measures
 headroom on Unsloth's own backbone, separately from the L/U user-path comparison.
@@ -53,8 +53,7 @@ Optional zero-update shipped-policy gradient spreads ran last and remain
 reporting-only. Their raw files are retained separately in the audit tree;
 they neither retune the bitwise proof nor change the science verdict.
 
-The private operational receipt and ledger were committed together at
-`73a7adc220c61fd05a3ce0a138cb17983fcc238c`. The untouched receipt SHA-256 is
+The untouched receipt SHA-256 is
 `67dc2ad03f924bee68ffb82179412e74f35abbdbc4549a9640edd1cee8cf9029`.
 Earlier refused and failed draws remain preserved in their original records.
 No earlier registration is rewritten by this result.

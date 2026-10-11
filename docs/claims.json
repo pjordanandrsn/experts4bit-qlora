@@ -12313,7 +12313,7 @@
       "id": "e4b.train.dense-adapter.dq11.matched-sdpa.5090.2026-10-11",
       "package": "experts4bit-qlora",
       "area": "train",
-      "claim": "U is faster than L in this matched SDPA, eager, full-logits configuration, not Unsloth's default.",
+      "claim": "Unsloth (U) was faster than e4b's dense path (L) in this matched SDPA, eager, full-logits configuration, not Unsloth's default.",
       "model": "mistralai/Mistral-7B-v0.1 @ 27d67f1b5f57dc0953326b2601d68371d40ea8da",
       "hardware": "One RTX 5090 (SM12.0), one physical host, two reversed-order repetitions of seed 3407",
       "conditions": "DQ11 original registration and Amendments 1-7; source 13b55990433f357d63232f75926ce19f5bda5b42; L is Loggetta streamed PEFT-on-bnb, U/U0 are resident Unsloth with matched SDPA, eager full logits and checkpoint embedding row 0 restored; U0 disables adapter fusion only.",
@@ -12333,7 +12333,7 @@
         "docs/STATUS.md",
         "bench/dq11/RESULTS-dq11.md"
       ],
-      "notes": "VALID_CONTROLLED_READ with initial and trained K8 quality passing in both repetitions; BUILD_CANDIDATE and U_FASTER_CONTROLLED independently rederived by the maintainer with verified teardown. No numerical speed magnitude is published. Fusion headroom is an ablation on Unsloth, not a measurement of a new e4b implementation. Default-Unsloth position, capacity and shipping licenses remain false. Receipt and ledger commit 73a7adc220c61fd05a3ce0a138cb17983fcc238c; raw receipt SHA256 67dc2ad03f924bee68ffb82179412e74f35abbdbc4549a9640edd1cee8cf9029."
+      "notes": "VALID_CONTROLLED_READ with initial and trained K8 quality passing in both repetitions; BUILD_CANDIDATE and U_FASTER_CONTROLLED independently re-derived with verified teardown. No numerical speed magnitude is published. Fusion headroom is an ablation on Unsloth, not a measurement of a new e4b implementation. Default-Unsloth position, capacity and shipping licenses remain false. Raw receipt SHA256 67dc2ad03f924bee68ffb82179412e74f35abbdbc4549a9640edd1cee8cf9029."
     }
   ]
 }
