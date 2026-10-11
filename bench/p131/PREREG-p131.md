@@ -304,8 +304,17 @@ or DECODE_TOUCHED in the proof goes to the maintainer before any reading.
   6 compiled-only skipped. The stacked builder's op count (48 against 39) was taken with the CPU profiler.
 - **e4b#1625 on CPU:** the knob's contract with stand-ins, `torch.equal` to the 16-row route at 32 and 64, decode at 512
   rows chained and 520 split.
+- **e4b#1625's GPU serve smoke on the A2000**, correctness only: the scheduler's path took `split|lean|gt256` at 32 and
+  64, logits `torch.equal` to knob 0 in-process and across processes in `qwen3_moe`, `granitemoe` and `mixtral`; at
+  knob 0 the 1,024-row calls took the wide one-launch table, which is why the decode check reads m0's table as found.
+  Its records are committed as `tests/fixtures/smoke1625/pass2_summary.json` (sha256 `1f4960b1…`, byte-identical to the
+  receipt).
 - **This registration on CPU:**
-  - the reducer's self-test (32 cases) passes;
+  - the reducer's self-test (37 cases) passes;
+  - `tests/test_p131_real_records.py` runs the decode check on that smoke's REAL K19 records first (32 passed): every
+    cell's own-process knob-0 and knob records, untouched at 0 and 0r and touched at 32 and 64; the serve path's
+    records the same; the reducer end to end on real decode records. Then synthetic departures from the real m0
+    record. The lane's first rule (`chained|lean|gt256` x layers) fails 17 of these tests;
   - `tests/test_p131_box.py` runs both phases' bookkeeping with the runners stood in (10 passed): the three captures'
     deltas, the decode check, FUNCTION catching a K/V-only difference on one arm, the rotated order, refused captures,
     Phase B's eight arms in one process.

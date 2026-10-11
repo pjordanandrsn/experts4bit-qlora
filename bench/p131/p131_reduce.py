@@ -102,6 +102,19 @@ def gt256(k19) -> dict:
     return {k: v for k, v in (k19 or {}).items() if k.endswith("|gt256") and v}
 
 
+def decode_touched(arm_k19, m0_k19) -> bool:
+    """Whether an arm's decode-check K19 record shows the knob reaching decode: a split table above 256 rows, or calls
+    above 256 rows other than m0's in the same process (which table m0 takes is E4B_INT4_WIDE_TILES's choice)."""
+    ka = gt256(arm_k19)
+    return any(k.startswith("split|") for k in ka) or ka != gt256(m0_k19)
+
+
+def decode_m0_bad(m0_k19, calls) -> bool:
+    """Whether m0's own decode-check record is off: not ``calls`` lean K19 calls above 256 rows, or a split among them."""
+    k0 = gt256(m0_k19)
+    return any(k.startswith("split|") for k in k0) or sum(k0.values()) != calls or not all("|lean|" in k for k in k0)
+
+
 def _bucket_for(n, buckets):
     return next(b for b in buckets if n <= b)
 
@@ -188,7 +201,7 @@ def speed_faults(n, rec, size) -> list:
         out.append(f"proc {n}: decode check {dc.get('tokens')} tokens over {sorted(dc.get('seen') or {})}")
     else:
         k0 = gt256(dc["seen"]["m0"].get("k19"))
-        if any(k.startswith("split|") for k in k0) or sum(k0.values()) != L or not all("|lean|" in k for k in k0):
+        if decode_m0_bad(dc["seen"]["m0"].get("k19"), L):
             out.append(f"proc {n}: the decode check at m0 reads {k0} (want one lean K19 call a layer, no split)")
     if graphs["m0"].get("status") == "refused":
         return out
@@ -326,7 +339,7 @@ def reduce(run: Path, e4b_sha: str, prove: bool = False, gate_corpus: str | None
         for n, r in sorted(recs.items()):
             seen = r["speed"]["decode_check"]["seen"]
             ka, k0 = gt256(seen[a].get("k19")), gt256(seen["m0"].get("k19"))
-            if any(k.startswith("split|") for k in ka) or ka != k0:
+            if decode_touched(seen[a].get("k19"), seen["m0"].get("k19")):
                 decode[a].append(f"proc {n}: {a} {ka} against m0 {k0}")
     timed = {n: r["speed"] for n, r in recs.items() if "m0" in (r["speed"].get("median_ms") or {})}
     first = timed[min(timed)]["digests_m0"]
