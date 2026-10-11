@@ -14,7 +14,9 @@ rented (bench/fam/PREREG-fam.md; e4b#1362).
 What CPU cannot show: the real decode attention kernel (the stand-in ignores ``n_split``, so ``split1`` repeats R bit for
 bit here and is not a floor draw), the bucket padding, and grouped-nf4-gemm's expert routes.
 """
+import contextlib
 import copy
+import gc
 import importlib.util
 import math
 import sys
@@ -55,6 +57,19 @@ def _gpt_oss(layers=2):
     return GptOssForCausalLM(cfg).to(torch.bfloat16).eval()
 
 
+@contextlib.contextmanager
+def _frozen_heap():
+    """P108's ``_release`` runs a full ``gc.collect()`` after every paged pass, to free the KV pool's reference cycles. In a
+    test process each one walks every object the suite's imports made (about 0.1-0.3 s; a third of this file's run time).
+    Freezing the heap first leaves those objects out of the walk. Cycles made after the freeze are still collected."""
+    gc.collect()
+    gc.freeze()
+    try:
+        yield
+    finally:
+        gc.unfreeze()
+
+
 def test_self_tests():
     assert _load("fam_box").self_test() == 0
     assert _load("fam_reduce").self_test() == 0
@@ -72,6 +87,7 @@ def _apply(model, config, box):
 
 
 @pytest.fixture(scope="module")
+@_frozen_heap()
 def gptoss_records(tmp_path_factory):
     box = _load("fam_box")
     q = _load("p115_quality", "p115")
@@ -149,6 +165,7 @@ def test_the_wrappers_change_what_they_name(gptoss_records):
         d(c["extra"]["mut098"]["record"]["per_window"]["wikitext"]["mut098"]) > 0
 
 
+@_frozen_heap()
 def test_the_x080_rung_runs_on_every_set(tmp_path):
     """Amendment 8: with ``gating=("mut090", "mut080")`` the OFF process scores both rungs on every set, each wrapper
     touches every decode attention call, and x0.80 is its own perturbation (off R and off x0.90). Its size is not
