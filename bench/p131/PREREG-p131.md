@@ -71,6 +71,12 @@ startup check (bit for bit against an eager forward, in logits and every layer's
 - **m0**, with the knob `0`: the 16-row table, the control;
 - **m32** and **m64**, with the knob `32` and `64`.
 
+**The capture order rotates by process:** m0, m32, m64 rotated by (process − 1), so over the eight processes every arm is
+captured first, second and third. A capture-position effect (pool placement, alignment, the cache residency of the
+graph's buffers) is then spread over the arms instead of riding one of them; at m32's predicted low end (×1.033 against
+the ×1.02 bar) a 1 % placement bias would otherwise decide the verdict. Each process records its order, and the rule
+VOIDs a process off it.
+
 A refused capture is recorded with its reason.
 
 **The windows.** P117's wikitext windows. The first 512 tokens of the first **16** windows are the speed windows.
@@ -124,15 +130,15 @@ whether all its windows' log-probs are `torch.equal` to R's.
 Phase B always runs, so the tolerance branch never waits on a second rental. The rule reads it only for an arm whose
 FUNCTION is not bitwise.
 
-## The rule (`bench/p131/p131_reduce.py`, self-tested on 32 cases)
+## The rule (`bench/p131/p131_reduce.py`, self-tested on 34 cases)
 
 **Lane VOID**, any of:
 - a registered process record missing; another e4b or grouped-nf4-gemm commit; another model revision; a process off its
   Phase B role;
 - a process whose build did not resolve P1's release default (`prefill_glue` ≠ {mode 1, default-allowlisted});
 - the processes read different windows, or sizes other than the mode's;
-- wrong engagement on a captured graph (above), the decode check missing, other than 12 × 16 timed replays per graph,
-  or FUNCTION or digests over other than every speed window;
+- wrong engagement on a captured graph (above), a capture order off the rotation, the decode check missing, other than
+  12 × 16 timed replays per graph, or FUNCTION or digests over other than every speed window;
 - the control's (m0) graph refused.
 
 **Per tall arm, the first of these that applies:**

@@ -15,7 +15,8 @@ prefill defaults (``E4B_FUSE_PREFILL_GLUE`` and ``E4B_PREFILL_LEAN_DISPATCH`` un
 
 **Phase A, speed** (every process). A runner made as the server makes its own captures the first-chunk prefill graph at
 ``T`` = 512 three times, through the server's own ``enable_prefill_graph`` (warm-up, capture, startup check), the knob
-set per capture. Then:
+set per capture, in ``capture_order(proc)``: m0 m32 m64 rotated by (proc - 1), so over the processes every arm is
+captured first, second and third (a capture-position effect -- pool placement, alignment -- is not the arm's). Then:
 - **FUNCTION:** on every speed window all three graphs replay, and each tall arm's logits and every pool layer's staged
   K and V are compared with m0's by ``torch.equal``; each window's m0 output is digested (sha256) for DETERMINISM;
 - **timing:** ``--warm`` untimed rounds, then ``--rounds`` timed rounds over the speed windows. In each round every
@@ -82,8 +83,13 @@ def _rotated(k: int) -> tuple:
     return ARMS[k:] + ARMS[:k]
 
 
+def capture_order(proc: int) -> tuple:
+    """The arms' capture order in process ``proc`` (1-based): m0 m32 m64 rotated by (proc - 1)."""
+    return _rotated(proc - 1)
+
+
 def speed(model, prompts, T, device, *, rounds, warm, eager_rounds, eager_windows, decode_tokens=64, bulk_kv=True,
-          last_logits=False, runner=None) -> dict:
+          last_logits=False, runner=None, proc=1) -> dict:
     """Phase A on one process (see the module docstring). ``prompts`` are token lists of at least ``T``."""
     from experts4bit_qlora.engines import hot_residency as hr
     from experts4bit_qlora.engines.paged_runner import PrefillGraphRefused
@@ -99,12 +105,12 @@ def speed(model, prompts, T, device, *, rounds, warm, eager_rounds, eager_window
     saved = (hr.DEVICE_GROUPING[0], hr.FORCE_SINGLETON_GROUPS[0], os.environ.get(ENV))
     rec = {"T": T, "windows": len(prompts), "rounds": rounds, "warm": warm, "eager_rounds": eager_rounds,
            "eager_windows": eager_windows, "decode_tokens": decode_tokens, "bulk_kv": bool(bulk_kv),
-           "last_logits": bool(last_logits), "graphs": {}}
+           "last_logits": bool(last_logits), "capture_order": list(capture_order(proc)), "graphs": {}}
     graphs = {}
     ids = [torch.tensor(p[:T], dtype=torch.long)[None] for p in prompts]
     try:
         hr.DEVICE_GROUPING[0], hr.FORCE_SINGLETON_GROUPS[0] = True, False     # the graph server's grouping
-        for g in ARMS:
+        for g in capture_order(proc):
             _knob(g)
             c0, calls[0] = p130_box._counters(), 0
             try:
@@ -312,7 +318,7 @@ def main() -> int:
     st = time.time()
     rec["speed"] = speed(model, [w[:a.prompt] for w in ws[:a.speed_windows]], a.prompt, cfg.device, rounds=a.rounds,
                          warm=a.warm, eager_rounds=a.eager_rounds, eager_windows=a.eager_windows,
-                         decode_tokens=a.decode_tokens, bulk_kv=cfg.bulk_kv, last_logits=cfg.last_logits)
+                         decode_tokens=a.decode_tokens, bulk_kv=cfg.bulk_kv, last_logits=cfg.last_logits, proc=a.proc)
     sp = rec["speed"]
     fn = sp.get("function") or {}
     print(f"P131_SPEED proc {a.proc} | graphs {[(g, v.get('status')) for g, v in sp['graphs'].items()]} "

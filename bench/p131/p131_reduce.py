@@ -17,7 +17,9 @@ process 1 also runs Phase B. ``--prove`` reads the proof's registered sizes.
 - wrong speed engagement on a captured graph: ``T``, the capture's eager forwards (``CAPTURE_FORWARDS``), and per
   capture the deltas route ``int4_k19|gt256`` = forwards x layers and nothing else, K19's dispatch
   ``chained|lean|gt256`` (m0) or ``split|lean|gt256`` (m32, m64) = forwards x layers and nothing else, and the prefill
-  folds = forwards x ``fold_table``; the decode check missing; a speed record with other than ``rounds`` x windows timed
+  folds = forwards x ``fold_table``; a capture order other than ``capture_order(n)`` (m0 m32 m64 rotated by n - 1, so
+  over the processes every arm is captured in every position); the decode check missing; a speed record with other
+  than ``rounds`` x windows timed
   replays per graph, or FUNCTION or digests over other than every speed window;
 - the control's graph refused (an m0 capture).
 
@@ -73,6 +75,12 @@ OFF_ARMS = ("R", "rep") + FLOORS + ("mutant_scale",)
 SUBJECTS = {"m32": "S32", "m64": "S64"}
 ARMS = ("m0", "m32", "m64")
 TALL = ("m32", "m64")
+
+
+def capture_order(n: int) -> tuple:
+    """Process ``n``'s registered capture order (1-based): m0 m32 m64 rotated by n - 1, as ``p131_box`` captures."""
+    k = (n - 1) % len(ARMS)
+    return ARMS[k:] + ARMS[:k]
 GLUE_DEFAULT = {"mode": "1", "source": "default-allowlisted"}
 # the f-band of the registration's cost model (f in [0.3, 0.8]): gain over m0, saving in ms, m64 over m32
 PREDICT = {"m64_gain": (1.038, 1.159), "m32_gain": (1.033, 1.143), "m64_saving_ms": (1.2, 4.5),
@@ -146,6 +154,8 @@ def speed_faults(n, rec, size) -> list:
     sp, L = rec.get("speed") or {}, rec.get("layers")
     if sp.get("T") != size["prompt"] or sp.get("windows") != size["speed_windows"]:
         out.append(f"proc {n}: speed T {sp.get('T')} windows {sp.get('windows')}")
+    if sp.get("capture_order") != list(capture_order(n)):
+        out.append(f"proc {n}: capture order {sp.get('capture_order')}, registered {list(capture_order(n))}")
     graphs = sp.get("graphs") or {}
     if set(graphs) != set(ARMS):
         out.append(f"proc {n}: graphs {sorted(graphs)}")
@@ -394,7 +404,7 @@ def reduce(run: Path, e4b_sha: str, prove: bool = False, gate_corpus: str | None
 
 # ------------------------------------------------------------------------------------------------ self-test --
 
-def _speed(size, L, *, ms, digest="d0", differ=None, refused=(), decode=None):
+def _speed(size, L, *, ms, digest="d0", differ=None, refused=(), decode=None, n=1):
     nw, rounds = size["speed_windows"], size["rounds"]
     F = CAPTURE_FORWARDS
     graphs = {}
@@ -409,7 +419,7 @@ def _speed(size, L, *, ms, digest="d0", differ=None, refused=(), decode=None):
     dec = {g: {"route": {"int4_k19|gt256": L}, "k19": {"chained|lean|gt256": L}, "folds": {}} for g in ARMS}
     for g, k in (decode or {}).items():
         dec[g]["k19"] = k
-    sp = {"T": size["prompt"], "windows": nw, "rounds": rounds, "graphs": graphs,
+    sp = {"T": size["prompt"], "windows": nw, "rounds": rounds, "graphs": graphs, "capture_order": list(capture_order(n)),
           "decode_check": {"tokens": DECODE_TOKENS, "seen": dec}}
     if "m0" in refused:
         return sp
@@ -459,7 +469,7 @@ def _run_recs(mode="reading", e4b="a" * 40, L=4, m0=33.0, m32=30.9, m64=30.7, d=
              "revision": REVS["Qwen/Qwen3-30B-A3B"], "e4b_sha": e4b, "gnf4_sha": GNF4_SHA, "layers": L,
              "windows_digest": "w", "prefill_glue": dict(GLUE_DEFAULT),
              "corpus": {"arrow": ["b" * 40], "snapshots": ["b" * 40]},
-             "speed": _speed(size, L, ms={"m0": m0 * j, "m32": m32 * j, "m64": m64 * j}, **kw)}
+             "speed": _speed(size, L, ms={"m0": m0 * j, "m32": m32 * j, "m64": m64 * j}, n=n, **kw)}
         if n in PHASE_B:
             r["quality"] = _quality(size, L, d)
         recs[n] = r
@@ -567,6 +577,15 @@ def self_test() -> int:
         recs[8]["speed"]["function"]["m32"]["windows"] = 15
     o = run(tweak=fnwin)
     cases.append(("FUNCTION over fewer windows voids", o["verdict"] == "VOID"))
+
+    def order(recs):
+        recs[2]["speed"]["capture_order"] = list(ARMS)          # process 2 registers m32 m64 m0
+    o = run(tweak=order)
+    cases.append(("a capture order off the rotation voids", o["verdict"] == "VOID"
+                  and any("capture order" in x for x in o["reasons"])))
+    cases.append(("the rotation puts every arm in every position over the reading's processes",
+                  all({capture_order(n).index(a) for n in range(1, MODES["reading"]["procs"] + 1)} == {0, 1, 2}
+                      for a in ARMS)))
 
     def nodec(recs):
         recs[3]["speed"].pop("decode_check")

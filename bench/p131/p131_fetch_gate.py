@@ -16,8 +16,8 @@ What the box fetches, and how each is resolved here:
   The dataset's README and every file under ``wikitext-2-raw-v1/`` at ``main`` resolve the same way. P117's box does not
   pin the corpus by revision, so the commit ``main`` names is recorded and the reducer's windows digest carries the rest;
 - **e4b at the launch commit and grouped-nf4-gemm at its pin** (pip's ``git+`` URLs; the pin is grouped-nf4-gemm#542's
-  head until #542 merges, so it is on no release tag): ``git fetch --depth 1`` of each commit by SHA must fetch exactly
-  that commit;
+  merge commit, on no release tag until grouped-nf4-gemm 0.46.0): ``git fetch --depth 1`` of each commit by SHA must
+  fetch exactly that commit;
 - **the PyPI requirements** ``p131_run.sh`` installs: pip's own resolver (``install --dry-run --report``, no dependencies,
   wheels only) for the box's platform (``BOX_PYTHON`` on manylinux x86_64) picks each one's wheel, which must satisfy its
   pin, and every picked URL must answer a one-byte range GET. Their dependencies resolve on the box, as every lane's do.

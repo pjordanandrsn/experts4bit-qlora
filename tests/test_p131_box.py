@@ -166,6 +166,15 @@ def test_function_digests_and_every_timed_replay(box, clean_env):
     assert _speed(box, _PrefillStandIn(model))["digests_m0"] == rec["digests_m0"]     # the cross-process comparison
 
 
+def test_the_capture_order_rotates_by_process_and_is_recorded(box, clean_env):
+    for proc, want in ((1, ["m0", "m32", "m64"]), (2, ["m32", "m64", "m0"]), (3, ["m64", "m0", "m32"])):
+        rec = box.speed(_tiny(), _prompts(), T, "cpu", rounds=1, warm=0, eager_rounds=0, eager_windows=0,
+                        decode_tokens=DEC, runner=_PrefillStandIn(_tiny()), proc=proc)
+        assert rec["capture_order"] == want and list(rec["graphs"]) == want, proc
+    # over the reading's eight processes every arm is captured first, second and third
+    assert all({box.capture_order(n).index(a) for n in range(1, 9)} == {0, 1, 2} for a in box.ARMS)
+
+
 def test_the_order_rotates_through_every_arm(box):
     assert [box._rotated(k) for k in range(4)] == [("m0", "m32", "m64"), ("m32", "m64", "m0"), ("m64", "m0", "m32"),
                                                    ("m0", "m32", "m64")]
