@@ -94,7 +94,8 @@ def interval(event, *, allow_zero=False):
     duration = finite(event.get("dur"), "duration", positive=not allow_zero)
     if duration < 0:
         fail("invalid duration")
-    ns = lambda x: int((Decimal(str(x)) * 1000).to_integral_value(rounding=ROUND_HALF_EVEN))
+    def ns(value):
+        return int((Decimal(str(value)) * 1000).to_integral_value(rounding=ROUND_HALF_EVEN))
     a, width = ns(start), ns(duration)
     if width < 0 or (width == 0 and not allow_zero):
         fail("event rounds to an empty interval")
