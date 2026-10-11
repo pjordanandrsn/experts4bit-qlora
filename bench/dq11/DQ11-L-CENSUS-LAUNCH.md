@@ -113,7 +113,10 @@ comment on issue #1083 as the **envelope ACK**. The comment body is the exact
 JSON envelope fields without `approval_url`; the local record adds that URL.
 The launcher fetches the comment before discovery and again before paid
 invocation, verifies the `pjordanandrsn` author and exact JSON, and refuses on
-an unreadable or changed comment. Its local record has schema
+an unreadable or changed comment. The JSON `issued_at` must be within 120
+seconds of GitHub's `created_at`, `expires_at` must be exactly 24 hours after
+`issued_at`, and GitHub's `updated_at` must still equal `created_at`; an edited
+comment refuses. Its local record has schema
 `dq11-l-census-envelope-ack/1`, that comment URL, issue and expiry UTC times,
 the exact clean merged e4b and controller heads, the committed manifest
 template SHA-256, `maximum_draws=1`, and the exact criteria in

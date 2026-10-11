@@ -485,8 +485,8 @@ def validate_envelope(envelope: dict, envelope_path: Path, template_path: Path,
     current = at or datetime.now(timezone.utc)
     if (issued.tzinfo is None or expires.tzinfo is None or current.tzinfo is None
             or not issued <= current < expires
-            or not 0 < (expires - issued).total_seconds() <= ENVELOPE_HOURS * 3600):
-        raise ValueError("envelope is not yet valid, expired or longer than 24 hours")
+            or (expires - issued).total_seconds() != ENVELOPE_HOURS * 3600):
+        raise ValueError("envelope is not yet valid, expired or not exactly 24 hours")
     if (json.dumps(envelope.get("criteria"), sort_keys=True) != json.dumps(ENVELOPE_CRITERIA, sort_keys=True)
             or type(envelope.get("maximum_draws")) is not int or envelope["maximum_draws"] != 1):
         raise ValueError("host or budget is outside the exact envelope criteria")
@@ -518,6 +518,18 @@ def verify_envelope_comment(envelope: dict) -> None:
             or not isinstance(user, dict) or user.get("login") != "pjordanandrsn"
             or attested != expected):
         raise ValueError("envelope record differs from the maintainer's GitHub ACK")
+    try:
+        created = datetime.fromisoformat(comment["created_at"].replace("Z", "+00:00"))
+        updated = datetime.fromisoformat(comment["updated_at"].replace("Z", "+00:00"))
+        issued = datetime.fromisoformat(envelope["issued_at"].replace("Z", "+00:00"))
+        expires = datetime.fromisoformat(envelope["expires_at"].replace("Z", "+00:00"))
+    except (KeyError, AttributeError, ValueError) as exc:
+        raise ValueError("envelope ACK lacks authoritative GitHub times") from exc
+    if (created.tzinfo is None or updated.tzinfo is None or updated != created
+            or issued.tzinfo is None or expires.tzinfo is None
+            or abs((issued - created).total_seconds()) > 120
+            or (expires - issued).total_seconds() != ENVELOPE_HOURS * 3600):
+        raise ValueError("envelope ACK was edited, backdated or extended")
 
 
 def bind_manifest(template_path: Path, envelope_path: Path, summary: dict,
