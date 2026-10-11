@@ -402,3 +402,137 @@ zeroed A's gradient forever would fail it.
 **What else changes:**
 - **Time-left fit (gate 2):** it includes step 1, which is one more forward, backward and update at the same shape.
 - **Unchanged:** the fidelity read (step 0's forward) and the reproducibility floor (step 0's loss).
+
+## Amendment 3 (2026-10-11, before any 235B box): the depth read, the contribution statistic, the plants on the box, and the run
+
+**Why.** Gate 1 set and checked Amendment 1's bands on a 4-layer slice. Before any box, a full-depth test asked whether those bands,
+and a per-layer contribution statistic, can see one wrong layer deep in a model. Its reading lines were registered before the runs.
+Receipts: `bench/q235/depth-30b/`.
+
+**The depth test** (2026-10-10, RTX A2000, $0). e4b's NF4 training forward over all 48 layers of Qwen3-30B-A3B, on the calibration
+tokens, in three fresh processes: the box unplanted, and each of Amendment 1's planted errors at layer 24. Each is read against
+Amendment 1's 48-layer streamed bf16 reference.
+
+| run | full state: median / max | full state at L24 | min overlap | u_24 | loss gap |
+|---|---|---|---|---|---|
+| box | 0.107 / 0.204 | 0.107 | 0.913 | 0.346 | −0.0055 |
+| routing plant | 0.112 / 0.241 | 0.112 | 0.890 | 1.063 | +0.0440 |
+| epilogue plant | 0.2555 / 0.371 | 0.287 | 0.834 | 8.505 | +0.1902 |
+
+u_i is defined below. Three independent implementations agree on every quantity to three decimals.
+- **The full-state bands do not see either plant at depth.** The routing plant sits inside all three bands. The epilogue plant's
+  maximum, 0.371, does not reach its must-fail line (> 0.50).
+- **The contribution statistic sees both.** At the planted layer the routing plant reads 3.07× the box and the epilogue plant 24.6×.
+  Both also clear 2 × the box's largest interior u (0.388, at layer 34) anywhere in the model.
+- **Why the state dilutes** (exploratory). Position 0 of each row is an attention sink, with a hidden-state norm of about 1,217
+  against 5–46 elsewhere. From layer 3 it holds 97–99.8 % of the reference's squared norm, so the mid-depth full state measures mostly
+  that one position's error (0.106, set by about layer 3).
+- **The router overlap cannot see the routing plant at its own layer.** The recorded top-k is the router's choice before the plant
+  shifts it: layer 24 reads 0.9275 in all three runs.
+
+**What changes.**
+
+1. **Gate 1.** Its formal PASS stands. Its fidelity evidence covers a 4-layer depth only, and says nothing about the full-state bands
+   at the box's depth.
+2. **The full-state bands are void for any deep box,** under Amendment 1's void rule. The full-state profile, its median and its
+   maximum are reported, not gated. The median is the upper middle, `s[⌊n / 2⌋]` of the n sorted layers, as `q235_compare` computes it.
+3. **Rule 7 for the box: the contribution statistic.**
+   - **Definition.** u_i = ‖d_box,i − d_ref,i‖ / ‖d_ref,i‖, where d_i = h_i − h_(i−1) is layer i's update to the residual. The norm
+     is Frobenius over the real (unpadded) positions, in fp32; layer 0 has no stored input and no u.
+   - **The interior class:** layers ⌈4n / 48⌉ to ⌊44n / 48⌋, the 30B calibration's layers 4–44 scaled to the model's depth. That is
+     layers 8–86 of 94.
+   - **STRICT band:** u_i ≤ **0.775** on every interior layer. This is 2 × the 30B box's largest interior u (0.3876). It is a 30B
+     calibration applied to the 235B model, and (4) below is what makes that safe.
+   - **Reported without a bar:** u_1–u_7 and u_87–u_93, and the box's full u profile.
+   - **The null and the ceiling, before the bar:** on the 30B calibration the unplanted box's interior maximum (0.388) sits below the
+     band (0.775), and both plants sit above it (1.063 and 8.505).
+4. **The box's own plants, at its own depth.** The fresh-process repeat (`q235_box.py --repeat --plants`) runs, in that one process:
+   the clean step-0 forward (the **null**, which is also rule 6's repeat), then the routing plant's forward, then the epilogue
+   plant's forward. Each plant is at layer ⌊n / 2⌋ = 47, as Amendment 1 registers, and is removed before the next forward.
+   - **The null must be the box.** Its per-layer outputs are expected to equal the box's step-0 outputs bit for bit, and did in every
+     rehearsal: on the 30B model at full depth and on the 235B slice. Another card class may differ in the last place, so the registered
+     tolerance is a per-layer relative difference ‖null − box‖ / ‖box‖ ≤ **1e-3** on every layer, about 100× below the box's own
+     NF4-against-bf16 error. Bit-for-bit equality is reported. Beyond the tolerance the instrument broke, and the box is **VOID**,
+     not FAIL.
+   - **Each plant must engage, and only at its layer.** Its layers before 47 must equal the null's bit for bit, and its layer 47 must
+     differ from the null's. Otherwise: VOID.
+   - **The unplant is checked structurally,** in code. After each plant comes off, the planted layer's hooks, instance-level forwards
+     and expert activation must equal their snapshot from before it, by identity. Otherwise the repeat raises, a harness error (VOID).
+     The routing plant cannot leak into the epilogue forward.
+   - **Each plant must fail the band:** its u_47 > 0.775. A plant inside the band means the band cannot see that error on this model:
+     **VOID**. That is the guard against a band too loose for the 235B model.
+   - **The box must pass the band.** An unplanted box above it is a **FAIL**, reported with its full u profile. That is the guard against
+     235B NF4 noise beyond the 30B's.
+   - **Both directions fail closed.**
+   - **Rehearsed, $0.** One such repeat process on Qwen3-30B-A3B at full depth, on the RTX A2000, reproduces the depth test's three
+     separate processes bit for bit: the null is the box, each plant equals its separate run on all 48 layers, and u_24 reads
+     0.346, 1.063 and 8.505 again (`depth-30b/`). Each in-process plant's forward took about 5.5 s.
+5. **The router overlap moves to reporting.** Making it STRICT again needs the top-k actually executed recorded, and a fresh depth test.
+6. **Unchanged:** rules 1–6, Amendment 2's STRICT rules by LoRA factor, and the reproducibility floor (1e-4 relative on step 0's loss).
+   The loss gap is reported, not gated.
+
+**A $0 calibration on the 235B model itself at depth: what it can and cannot give.** A 235B slice fed the streamed bf16 reference's
+hidden state at about layer 45 could run NF4 and bf16 side by side on the RTX A2000. That gives the 235B model's **local** contribution
+error at depth: each layer's NF4 error from an exact input. It does not give the box's u, which also carries the drift of the 44 NF4
+layers before it. Turning the local error into a band would take a local-to-propagated ratio from the 30B model, which is again a 30B
+calibration. It would also need about 45 layers of the 235B bf16 reference on the RTX A2000, plus a slice-input harness that does not
+exist yet. So the band stays as in (3), with (4)'s plants on the box as the 235B model's own sensitivity check. The box's own unplanted
+u profile, reported in full, is the 235B measurement.
+
+**The registered run.**
+- **Host class:** an RTX PRO 6000 96 GB (the box refuses any other card), with at least 192 GB of host RAM and 550 GB of free disk,
+  as registered. The host is pinned by the ACK, and nothing substitutes for it.
+- **Shape A, as run.** The 8 rows of TC1's field text the calibration used (`ds_alpaca.json`, sha256 `5324987a…`), tokenized by the
+  checkpoint's own tokenizer. This is one micro-batch, right-padded to the longest row: 8 × 331 = 2,648 positions, of which 1,014 are
+  real. The 235B tokenizer gives exactly the calibration's token ids. The capacity section's 2,048-token rows describe the planned
+  shape; this is the run's.
+- **Capacity at that shape,** from e4b's estimate on main at 13b55990 (`gate2/capacity-2648.json`), with r 16 / alpha 16, NF4
+  attention, experts in pinned host RAM, the grouped NF4 kernel and AdamW8bit:
+
+  | adapters | device | pinned host | host-to-device per micro-batch |
+  |---|---|---|---|
+  | bf16 (the box) | 24.76 GiB | 158.62 GiB | 237.94 GiB |
+  | fp32 | 34.82 GiB | 158.62 GiB | 237.94 GiB |
+
+  At the planned 2,048 positions e4b's estimate was 23.95 GiB of device memory for A-bf16 (the capacity section). The planner totals
+  there (29.24 GiB for A-bf16) add a CUDA context and the planner's reserve, and are not re-run here; the registered class's budget
+  after headroom is 90.81 GiB.
+- **Pins:** experts4bit-qlora at the launching checkout's merged HEAD, which must contain this amendment; grouped-nf4-gemm at
+  `724ccc45`; every wheel hash-locked (`wheels.json`). Each pin is checked on the box against pip's record.
+- **Sealed caps and floors** (`q235_run.sh`, fitted in `gate2/`). The time-left caps:
+
+  | phase | cap (s) |
+  |---|---|
+  | require-git | 240 |
+  | create-venv | 120 |
+  | install | 1,800 |
+  | hostrate | 600 |
+  | fetch | 12,000 |
+  | tokens | 300 |
+  | box | 8,820 |
+  | repeat (null + two plants) | 4,710 |
+
+  The host floors are a pinned host-to-device rate of 5.8 GB/s, a host copy of 5.14 GB/s, an O_DIRECT disk read of 0.743 GB/s and a
+  checkpoint pull of 0.062 GB/s. A host below any of them is refused before the step.
+- **Cost:** the worst-case wallclock is the caps, the runner's 300 s reserve and 1,800 s for the controller (its receipt fetch now
+  carries about 8.2 GB of per-layer outputs): 8.53 h. That is $18.76 at $2.20 an hour and $13.64 at $1.60. The launcher's per-run
+  cap is $35, and a run above $15 needs its ACK approved.
+
+**Gate status.**
+
+| gate | state |
+|---|---|
+| 1. rehearsal | the core PASS stands (4-layer depth only, as above). The driver's lifecycle passed on CPU and on the RTX A2000, and passed again on both with the in-process plants at f7714702 (`gate2/`) |
+| 2. time-left fit | passes with the caps above: the first A2000 leg's phases plus the two plant forwards (3.38 s on the slice), scaled (`gate2/`) |
+| 3. fetch gate | passed over every locked URL; it re-runs within 24 h of a launch, and the drive refuses without a fresh report |
+| 4. the box installs its own tools | yes (`q235_bootstrap.py`, `dq11_require_git.sh`) |
+| 5. no placeholders | the fetch gate scans the closure, the locks, the drive and this registration |
+| 6. budget | as above |
+
+**After the box** (off the box, $0). The layer-streamed bf16 reference runs on the box's own tokens on the RTX A2000, about 2.4 h.
+`q235_verdict.py` then applies the rules mechanically:
+- PASS iff rules 1–6, Amendment 2's STRICT rules and this amendment's band all hold;
+- FAIL when the box fails any of them;
+- VOID on the instrument checks in (4), a refusal, a host fault, a time-left guard or a harness error.
+
+Nothing is quoted before that verdict is re-derived independently on CPU.

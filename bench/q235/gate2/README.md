@@ -21,3 +21,27 @@ The A2000 leg of gate 1 ran `q235_run.sh` with `Q235_REHEARSAL=a2000` (a 4-layer
   The worst-case wallclock is 8.25 h: $18.15 at $2.20 (above the $15 no-ask tier) and $13.20 at $1.60 (within it).
 
 The fit is re-run for the pinned host's listed bandwidth and rate when the run is requested.
+
+## Amendment 3: the repeat with the in-process null and plants
+
+The repeat now runs the null and both plants in one process (`q235_box.py --repeat --plants`). The A2000 leg ran again at f7714702
+(`run-a3.json`, `phase-timings-a3.jsonl`, `a2000-leg-a3-summary.json`), exit 0:
+- Amendment 2's rules held (9 of 9), and the frozen base was unchanged across both steps.
+- The null equals the box's step-0 output on every layer, bit for bit, at the same loss.
+- Each plant left layers 0–1 bit for bit equal to the null and changed layer 2. The routing plant's forward took 1.689 s and the
+  epilogue plant's 1.693 s.
+
+That leg's load ran on a warm page cache (reads at 1.32 and 2.56 GB/s against the first leg's 0.743), so its phases would understate
+a cold host. The fit therefore keeps the first leg as its basis and adds only the two plant forwards, 3.382 s, to its repeat before
+scaling (`q235_fit.py --plants-from`):
+- the repeat's budget rises from 4,583 s to 4,702 s, and its sealed cap from 4,620 s to **4,710 s**;
+- the controller's allowance rises from 900 s to 1,800 s for the receipts: the box, the null and two plants, each 94 layers of
+  2,648 × 4,096 bf16 outputs, about 8.2 GB.
+
+`fit-a3-500-2.2.json` and `fit-a3-500-1.6.json` both fit, and the sealed floors still equal their derivation. The worst-case wallclock
+is 8.53 h: **$18.76 at $2.20** an hour, above the $15 no-ask tier, and **$13.64 at $1.60**, within it. The first fit's files above
+record the caps before this amendment.
+
+`capacity-2648.json` (from `capacity.py`) is e4b's estimate at the run's shape, on main at 13b55990: 24.76 GiB of device memory and
+158.62 GiB of pinned host memory for bf16 adapters (34.82 GiB of device memory for fp32), and 237.94 GiB host-to-device per
+micro-batch.

@@ -49,8 +49,20 @@ about layer 3 and flat after. Without position 0, the state at layer 24 reads 0.
 and 1.55 for the epilogue plant. That separates the plants better than the full state does, but the routing plant's ratio is still
 below its u_24 ratio (3.07×).
 
+**The in-process plants, rehearsed** (2026-10-11, 00:56–01:29 UTC, the same card). Amendment 3 moves the plants into the fresh-process
+repeat: `q235_box.py --repeat --plants` at c9d28ac9 runs the clean step-0 forward (the null), then each plant in the same process,
+removing it before the next. One such process on the same model and tokens reproduces the three separate processes above **bit for
+bit** (`inproc_check.py`, `inproc_check.json`):
+- the null's 48 layer outputs equal the box's, and its loss is the same (1.85921);
+- each plant's 48 layer outputs and loss equal its separate-process run's;
+- each plant leaves layers 0–23 equal to the null and changes layer 24.
+
+The registered reader over these records (`inproc_read.json`) gives the same u_24: 0.3460, 1.0628 and 8.5047. Each in-process plant's
+forward took about 5.5 s after a load of 1,962 s.
+
 | file | what |
 |---|---|
 | `runs.json` | the three runs: plant, step-0 loss, load time, card, versions, token and per-layer sha256 (host paths removed) |
 | `depth_read.py`, `depth_read.json` | the registered reader and its output |
 | `sink_read.py`, `sink_read.json` | the exploratory per-position read |
+| `inproc_check.py`, `inproc_check.json`, `inproc_read.json` | the in-process rehearsal against the separate runs, and its read |

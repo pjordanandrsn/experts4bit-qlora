@@ -93,3 +93,36 @@ def test_the_pull_floor_is_the_rate_that_fits_the_fetch_cap():
     assert floor >= model / (12000 / f.MARGIN - hash_s) / 1e9 and floor - model / (12000 / f.MARGIN - hash_s) / 1e9 < 1e-3
     assert f.fetch_floor(model, fetch, 300) == float("inf")                  # no time left after hashing: no rate fits
     assert f.sealed_floors(Q / "q235_run.sh")["fetch_gb_s"] >= floor           # the sealed floor is at least the fitted one
+
+
+def _rehearsal_from_receipts(d):
+    """gate2/'s committed A2000 receipts laid out as a rehearsal workspace (the box record carries only its load)."""
+    g = Q / "gate2"
+    (d / "receipts" / "box").mkdir(parents=True)
+    for name in ("run.json", "phase-timings.jsonl", "hostrate.json"):
+        (d / "receipts" / name).write_text((g / name).read_text())
+    (d / "warm-fetch.json").write_text((g / "warm-fetch.json").read_text())
+    load = json.loads((g / "a2000-leg-summary.json").read_text())["load"]
+    (d / "receipts" / "box" / "box.json").write_text(json.dumps({"load": load}))
+    return d
+
+
+def test_the_in_process_plants_add_only_their_measured_forwards_to_the_repeat(tmp_path):
+    """Amendment 3: the repeat's budget is the rehearsal's repeat plus the two plant forwards a later A2000 leg measured, scaled."""
+    reh = _rehearsal_from_receipts(tmp_path / "reh")
+    later = tmp_path / "later"
+    (later / "receipts" / "repeat").mkdir(parents=True)
+    (later / "receipts" / "run.json").write_text(json.dumps({"mode": "a2000", "e4b_sha": "f" * 40, "nonce": "n"}))
+    (later / "receipts" / "repeat" / "box.json").write_text(json.dumps(
+        {"plants": {"routing": {"forward_s": 1.689}, "epilogue": {"forward_s": 1.693}}}))
+    cmd = [sys.executable, str(Q / "q235_fit.py"), "--rehearsal", str(reh), "--warm-install-s", "178", "--bandwidth-mbps", "500",
+           "--usd-per-hour", "1.6"]
+    r = subprocess.run(cmd + ["--plants-from", str(later)], capture_output=True, text=True, timeout=60)
+    rep = json.loads(r.stdout)
+    base = {x["phase"]: x["elapsed_s"] for x in map(json.loads, (Q / "gate2" / "phase-timings.jsonl").read_text().splitlines())}
+    assert abs(rep["phases"]["repeat"]["scaled_s"] - round((base["repeat"] + 3.382) * 94 / 4, 1)) < 0.1, rep["phases"]["repeat"]
+    assert rep["rehearsal"]["in_process_plants"]["added_to_repeat_s"] == 3.382
+    assert r.returncode == 0 and rep["phases"]["repeat"]["fits"], rep["phases"]["repeat"]   # the sealed cap covers the plants
+    (later / "receipts" / "repeat" / "box.json").write_text(json.dumps({"repeat": {"loss": 1.0}}))
+    r = subprocess.run(cmd + ["--plants-from", str(later)], capture_output=True, text=True, timeout=60)
+    assert r.returncode != 0 and "ran both in-process plants" in r.stderr
