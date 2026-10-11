@@ -8,6 +8,9 @@ Qwen3-MoE, on the reference path (the fused kernels need CUDA; the RTX A2000 reh
 - The fresh-process repeat (``--repeat``) reproduces step 0's loss.
 - Each planted error (Amendment 1: routing, epilogue) changes the planted layer's output and leaves the layers before it untouched,
   so an inert plant cannot pass for a band result.
+- The same holds on a small Mixtral saved in its released per-expert spelling (``block_sparse_moe`` w1/w3/w2), and its router's
+  top-k is captured at every layer: the family ladder's R2 subject (#1630) runs this script, and the plants' hooks assume a router
+  that returns its top-k indices third and an expert call that takes them second.
 """
 from __future__ import annotations
 
@@ -132,3 +135,51 @@ def test_a_strict_failure_names_itself():
     assert set(box.strict_failures({})) == set(box.STRICT_RULES) | {"frozen_sha256_after_both_steps_equal"}
     assert "step1_every_B_changed" in box.strict_failures({"rules": {k: True for k in box.STRICT_RULES[:-1]},
                                                           "frozen_sha256_after_both_steps_equal": True})
+
+
+
+@pytest.fixture(scope="module")
+def tiny_mixtral(tmp_path_factory):
+    from transformers import MixtralConfig, MixtralForCausalLM
+    cfg = MixtralConfig(vocab_size=256, hidden_size=128, intermediate_size=128, num_hidden_layers=4, num_attention_heads=4,
+                        num_key_value_heads=2, head_dim=32, num_local_experts=8, num_experts_per_tok=2, tie_word_embeddings=False,
+                        max_position_embeddings=128)
+    torch.manual_seed(0)
+    root = tmp_path_factory.mktemp("q235box_mixtral")
+    MixtralForCausalLM(cfg).to(torch.bfloat16).save_pretrained(root / "model")
+    g = torch.Generator().manual_seed(1)
+    ids = torch.randint(3, 256, (2, 24), generator=g)
+    mask = torch.ones(2, 24, dtype=torch.long)
+    mask[1, 17:] = 0
+    ids = ids.masked_fill(mask == 0, 0)
+    torch.save({"input_ids": ids, "attention_mask": mask, "labels": ids.masked_fill(mask == 0, -100)}, root / "tokens.pt")
+    return root
+
+
+@pytest.fixture(scope="module")
+def mixtral_clean(tiny_mixtral):
+    return _box(tiny_mixtral, "clean", "--repeat")
+
+
+def test_mixtral_is_saved_in_its_released_spelling(tiny_mixtral):
+    from safetensors import safe_open
+    keys = set(safe_open(str(tiny_mixtral / "model" / "model.safetensors"), "pt").keys())
+    assert "model.layers.0.block_sparse_moe.experts.0.w1.weight" in keys and not any("gate_up_proj" in k for k in keys)
+
+
+def test_mixtral_router_top_k_is_captured_at_every_layer(mixtral_clean):
+    rec, out = mixtral_clean
+    topk = torch.load(out / "nf4.pt", weights_only=True)["router_topk"]
+    assert len(topk) == len(rec["layer_sha256"]) == 4
+    for t in topk:
+        assert t is not None and t.shape[-1] == 2 and int(t.min()) >= 0 and int(t.max()) < 8
+
+
+@pytest.mark.parametrize("kind", ["routing", "epilogue"])
+def test_each_planted_error_engages_on_mixtral(tiny_mixtral, mixtral_clean, kind):
+    rec, _ = _box(tiny_mixtral, f"plant_{kind}", "--repeat", "--plant", kind)
+    i = rec["plant"]["layer"]
+    assert i == 2
+    clean = mixtral_clean[0]["layer_sha256"]
+    assert rec["layer_sha256"][:i] == clean[:i], "a plant must not touch the layers before it"
+    assert rec["layer_sha256"][i] != clean[i], f"the {kind} plant was inert at its layer on Mixtral"
