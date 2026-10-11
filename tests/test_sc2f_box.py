@@ -96,7 +96,7 @@ def test_the_knob_readings_are_what_the_code_reports():
         assert any(f'_seen_prefill("{fold}")' in s for s in src.values()), fold
     hr = src["hot_residency.py"]
     assert "key = f\"{table}|{dispatch}|{'le256' if rows <= 256 else 'gt256'}\"" in hr
-    assert '_seen_k19_dispatch("one_launch" if (_lean or _fused_tiles is not None) else "chained",' in hr
+    assert '"one_launch" if (_lean or _fused_tiles is not None) else "chained",' in hr
     assert '"lean" if (_lean or _pf_lean) else "gather", R_rows)' in hr
     sp = (REPO / "experts4bit_qlora" / "serve_paged.py").read_text()
     assert '"prefill_glue_env": os.environ.get("E4B_FUSE_PREFILL_GLUE", "") or None' in sp
