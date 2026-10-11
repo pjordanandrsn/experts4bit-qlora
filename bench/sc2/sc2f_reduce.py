@@ -17,9 +17,12 @@ Every server of a draw runs the same seeds, so the two servers of one arm in a d
   the start /health;
 - FLIPS (``flips_bad``), on the start /health: ``on`` resolves ``E4B_FUSE_PREFILL_GLUE`` to 1 from the family default
   (``levers.prefill_glue`` = {mode 1, source default-allowlisted}), both raw env values null and
-  ``prefill_lean_dispatch`` auto, every K19 call above 256 rows ``chained|lean``, and the norm, layer and attention folds
-  each seen on prefill rows; ``off`` reads mode 0 from an explicit 0, both env values "0", every K19 call above 256 rows
-  ``chained|gather``, and no prefill fold;
+  ``prefill_lean_dispatch`` auto, every K19 call above 256 rows on the ``lean`` dispatch with the prefill capture's
+  ``chained|lean|gt256`` among them, and the norm, layer and attention folds each seen on prefill rows; ``off`` reads
+  mode 0 from an explicit 0, both env values "0", every K19 call above 256 rows on the ``gather`` dispatch with
+  ``chained|gather|gt256`` among them, and no prefill fold. No call above 256 rows on a ``split`` table, on either arm.
+  The TABLE of the other calls above 256 rows is not read (Amendment 1): bucket 64's decode capture routes 512 rows,
+  which take the one-launch table under ``E4B_INT4_WIDE_TILES=auto`` (lane P122's bound) on the arm's dispatch;
 - ENGAGED (``sc2e_reduce.engagement``, arm s64a) on the end /health, with every request the server admitted counted;
 - PROMPTS: every request reports 512 prompt tokens.
 
@@ -86,17 +89,20 @@ Q4_BAND = (0.03, 0.12)
 Q6_BAND = (0.95, 1.02)
 MIN_STEPS = 20
 FOLDS = ("norm", "layer", "attention")
+# Amendment 1: the arm fixes K19's DISPATCH above 256 rows, not its table. The prefill graph's 4,096-row capture takes
+# the chained table; bucket 64's decode capture (512 rows) takes the one-launch table where E4B_INT4_WIDE_TILES=auto
+# does (P122), on the same dispatch.
 WANT_FLIPS = {
     "on": {"glue": {"mode": "1", "source": "default-allowlisted"}, "glue_env": None, "lean_env": None, "lean": "auto",
-           "gt256": {"chained|lean|gt256"}, "folds": True},
+           "dispatch": "lean", "folds": True},
     "off": {"glue": {"mode": "0", "source": "explicit"}, "glue_env": "0", "lean_env": "0", "lean": "0",
-            "gt256": {"chained|gather|gt256"}, "folds": False}}
+            "dispatch": "gather", "folds": False}}
 # the proof's model (Granite NF4) is not qwen3_moe and takes no int4 K19: the knobs resolve, nothing engages
 WANT_FLIPS_PROOF = {
     "on": {"glue": {"mode": "0", "source": "default-off"}, "glue_env": None, "lean_env": None, "lean": "auto",
-           "gt256": None, "folds": False},
+           "dispatch": None, "folds": False},
     "off": {"glue": {"mode": "0", "source": "explicit"}, "glue_env": "0", "lean_env": "0", "lean": "0",
-            "gt256": None, "folds": False}}
+            "dispatch": None, "folds": False}}
 
 
 def _sib(name):
@@ -121,6 +127,19 @@ def servers():
     return [(f"e4b_{s[:-2]}_d{k}{s[-1]}", s[:-2], k) for k in DRAWS for s in ORDER[k]]
 
 
+def k19_gt256_bad(k19, dispatch) -> dict:
+    """Why K19's calls above 256 rows (``"<table>|<dispatch>|gt256": calls``) do not read as one dispatch: a call on
+    another dispatch or a ``split`` table, or no call on the prefill capture's ``chained`` table (empty: as registered)."""
+    gt = {k: n for k, n in (k19 or {}).items() if k.endswith("|gt256") and n}
+    bad = {}
+    off = sorted(k for k in gt if k.split("|")[0] == "split" or k.split("|")[1:2] != [dispatch])
+    if off:
+        bad["seen.moe_k19_dispatch.gt256"] = off
+    if not gt.get(f"chained|{dispatch}|gt256"):
+        bad["seen.moe_k19_dispatch.chained"] = sorted(gt) or "<none>"
+    return bad
+
+
 def flips_bad(health, arm, proof=False) -> dict:
     """Why a server's /health does not read as its arm of P130's two knobs (empty: as registered)."""
     w = (WANT_FLIPS_PROOF if proof else WANT_FLIPS)[arm]
@@ -135,10 +154,8 @@ def flips_bad(health, arm, proof=False) -> dict:
         if r.get(k, "<missing>") != v:
             bad[f"prefill_routes.{k}"] = r.get(k, "<missing>")
     seen = r.get("seen") or {}
-    if w["gt256"] is not None:
-        gt = {k for k, n in (seen.get("moe_k19_dispatch") or {}).items() if k.endswith("|gt256") and n}
-        if gt != w["gt256"]:
-            bad["seen.moe_k19_dispatch.gt256"] = sorted(gt) or "<none>"
+    if w["dispatch"] is not None:
+        bad.update(k19_gt256_bad(seen.get("moe_k19_dispatch"), w["dispatch"]))
     folds = {k: n for k, n in (seen.get("prefill_folds") or {}).items() if n}
     if w["folds"] and not all(folds.get(f) for f in FOLDS):
         bad["seen.prefill_folds"] = folds or "<none>"
@@ -417,8 +434,11 @@ def _fixture(d, *, knee_att=None, ceil=None, att=None, flips=None, slots=None, r
                 dump(f"{tag}_k{r}_{j}.json", {"requests": reqs(120), "summary": summ(0.1, 0.03, a, r)})
         n = (admitted or {}).get(tag, 4 + 64 + 24 + 120 * (len(LADDER) + len(KNEE) * len(KNEE_J)))
         w = WANT_FLIPS[arm]
-        seen = {"moe": {"int4_k19|gt256": 240}, "prefill_attn": {"flash": 240},
-                "moe_k19_dispatch": {next(iter(w["gt256"])): 96, "one_launch|lean|le256": 480},
+        # an s64a start /health: the prefill graph's 5 forwards x 48 layers on the chained table, bucket 64's decode
+        # capture (3 x 48) on the one-launch table, both on the arm's dispatch (SC2e's s64a start: 384 above 256 rows)
+        seen = {"moe": {"int4_k19|gt256": 384, "int4_k19|le256": 720}, "prefill_attn": {"flash": 240},
+                "moe_k19_dispatch": {f"chained|{w['dispatch']}|gt256": 240, f"one_launch|{w['dispatch']}|gt256": 144,
+                                     "one_launch|lean|le256": 720},
                 "prefill_folds": {f: 48 for f in FOLDS} if w["folds"] else {}}
         if routes_seen and tag in routes_seen:
             seen.update(routes_seen[tag])
@@ -503,6 +523,18 @@ def self_test() -> int:
                       and not o["gates"]["flips"]["ok"]))
     o = run(routes_seen={"e4b_off_d2a": {"moe_k19_dispatch": {"chained|lean|gt256": 96}}})
     cases.append(("FLIPS: off took the lean dispatch", o["outcome"]["void"] == ["e4b_off_d2a"]))
+    o = run(routes_seen={"e4b_on_d2a": {"moe_k19_dispatch": {"chained|lean|gt256": 240, "one_launch|gather|gt256": 144}}})
+    cases.append(("FLIPS: on's decode capture took the gather", o["outcome"]["void"] == ["e4b_on_d2a"]))
+    o = run(routes_seen={"e4b_off_d1b": {"moe_k19_dispatch": {"one_launch|gather|gt256": 144}}})
+    cases.append(("FLIPS: no chained prefill capture", o["outcome"]["void"] == ["e4b_off_d1b"]))
+    o = run(routes_seen={"e4b_on_d1a": {"moe_k19_dispatch": {"split|lean|gt256": 240, "one_launch|lean|gt256": 144,
+                                                              "chained|lean|gt256": 1}}})
+    cases.append(("FLIPS: a split table above 256 rows", o["outcome"]["void"] == ["e4b_on_d1a"]))
+    cases.append(("FLIPS: the table of a call is not read, its dispatch is",
+                  k19_gt256_bad({"chained|lean|gt256": 240, "one_launch|lean|gt256": 144}, "lean") == {}
+                  and k19_gt256_bad({"chained|gather|gt256": 240, "one_launch|gather|gt256": 144}, "gather") == {}
+                  and set(k19_gt256_bad({"chained|gather|gt256": 240, "one_launch|lean|gt256": 144}, "gather"))
+                  == {"seen.moe_k19_dispatch.gt256"}))
     o = run(routes_seen={"e4b_on_d1b": {"prefill_folds": {"norm": 48, "layer": 48}}})
     cases.append(("FLIPS: on missed a fold", o["outcome"]["void"] == ["e4b_on_d1b"]))
     o = run(routes_seen={"e4b_off_d1a": {"prefill_folds": {"norm": 2}}})
