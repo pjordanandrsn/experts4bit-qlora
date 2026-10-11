@@ -75,6 +75,22 @@ in the sealed L recipe is `attention|native-sdpa` (96 A2000 nodes).
 are outside registered class scopes and therefore land in `other` at
 `outside-registered-class`. These classes follow creator and scope, regardless
 of their measured durations. A new creator or scope pattern refuses review.
+The sealed DQ11 5090 draw4 L receipts (`proof-L.json`, `read-1-L.json`,
+`read-2-L.json`, `spread-L.json`) record `attn_impl=sdpa`, but do not record
+which native PyTorch SDPA backend executed. Their `flash_attention_2` package
+warning does not identify PyTorch's internal backend. Before any census 5090
+data, the creator table therefore also covers
+`ScaledDotProductEfficientAttentionBackward0` from
+`aten::_scaled_dot_product_efficient_attention` and
+`ScaledDotProductCudnnAttentionBackward0` from
+`aten::_scaled_dot_product_cudnn_attention`. Like the flash variant, both
+must resolve through the deepest `attention|native-sdpa` scope; a different
+class or an unknown backend creator refuses certification.
+`BmmBackward0` from `aten::bmm` and `SafeSoftmaxBackward0` from
+`aten::_safe_softmax` cover the math decomposition inside that same native
+SDPA call in the sealed Mistral attention recipe. Neither appeared in the
+A2000 flash-path capture. Their required class is also `attention` by the
+same scope rule, with no duration-based assignment.
 Kernel names are recorded but never used to choose a class.
 Unbound, ambiguous, duplicate or crossing events refuse certification.
 An unscoped rank-16 adapter GEMM also refuses. Device events outside the

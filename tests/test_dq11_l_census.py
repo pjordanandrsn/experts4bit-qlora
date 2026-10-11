@@ -158,6 +158,28 @@ def test_backward_creator_uses_forward_thread_and_exact_op_under_nested_base():
             True,
             ("attention", "layer0"),
         ),
+        (
+            "ScaledDotProductEfficientAttentionBackward0",
+            "aten::scaled_dot_product_attention",
+            "aten::_scaled_dot_product_efficient_attention",
+            True,
+            ("attention", "layer0"),
+        ),
+        (
+            "ScaledDotProductCudnnAttentionBackward0",
+            "aten::scaled_dot_product_attention",
+            "aten::_scaled_dot_product_cudnn_attention",
+            True,
+            ("attention", "layer0"),
+        ),
+        ("BmmBackward0", "aten::scaled_dot_product_attention", "aten::bmm", True, ("attention", "layer0")),
+        (
+            "SafeSoftmaxBackward0",
+            "aten::scaled_dot_product_attention",
+            "aten::_safe_softmax",
+            True,
+            ("attention", "layer0"),
+        ),
         ("DivBackward0", "aten::ne", "aten::div", False, ("other", "outside-registered-class")),
     ],
 )
@@ -186,6 +208,14 @@ def test_real_l_capture_backward_creators_select_exact_nested_op(backward, outer
     if backward == "DivBackward0":
         events.append(cpu(census.PREFIX + "attention|unexpected", start + 10, 190, 2, cat="user_annotation"))
         with pytest.raises(ValueError, match="changed its registered class scope"):
+            census.normalize_trace({"schemaVersion": 1, "traceEvents": events}, expected_steps=(6,))
+    else:
+        events[3]["name"] = "aten::_scaled_dot_product_unregistered_attention"
+        with pytest.raises(ValueError, match="ambiguous or missing backward creator"):
+            census.normalize_trace({"schemaVersion": 1, "traceEvents": events}, expected_steps=(6,))
+        events[3]["name"] = creator
+        events[4]["name"] = "autograd::engine::evaluate_function: UnregisteredAttentionBackward0"
+        with pytest.raises(ValueError, match="unregistered backward node kind"):
             census.normalize_trace({"schemaVersion": 1, "traceEvents": events}, expected_steps=(6,))
 
 

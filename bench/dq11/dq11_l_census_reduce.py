@@ -28,7 +28,8 @@ MAX_EVENTS = 2000000
 # Kineto's sequence counter also appears on nested operators and on
 # checkpoint recomputation in the autograd worker thread. Resolve the one
 # forward operator that CREATED each backward node, on its recorded forward
-# thread. This table is fixed from the real-L A2000 correctness trace; an
+# thread. The table includes observed real-L A2000 nodes and prospective
+# native SDPA variants for the 5090, all fixed before deciding data. An
 # unrecognized node or multiple matching creators refuse certification.
 BACKWARD_CREATOR = {
     "AddBackward0": ("aten::add", "aten::add_"),
@@ -50,6 +51,8 @@ BACKWARD_CREATOR = {
     "ReshapeAliasBackward0": ("aten::_reshape_alias",),
     "RsqrtBackward0": ("aten::rsqrt",),
     "ScaledDotProductFlashAttentionBackward0": ("aten::_scaled_dot_product_flash_attention",),
+    "ScaledDotProductEfficientAttentionBackward0": ("aten::_scaled_dot_product_efficient_attention",),
+    "ScaledDotProductCudnnAttentionBackward0": ("aten::_scaled_dot_product_cudnn_attention",),
     "SafeSoftmaxBackward0": ("aten::_safe_softmax",),
     "SiluBackward0": ("aten::silu",),
     "SliceBackward0": ("aten::slice",),
@@ -63,6 +66,10 @@ BACKWARD_CREATOR = {
 }
 BACKWARD_EXPECTED_CLASS = {
     "ScaledDotProductFlashAttentionBackward0": "attention",
+    "ScaledDotProductEfficientAttentionBackward0": "attention",
+    "ScaledDotProductCudnnAttentionBackward0": "attention",
+    "BmmBackward0": "attention",
+    "SafeSoftmaxBackward0": "attention",
     "DivBackward0": "other",
 }
 
