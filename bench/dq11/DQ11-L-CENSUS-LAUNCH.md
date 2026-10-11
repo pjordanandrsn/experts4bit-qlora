@@ -111,8 +111,9 @@ with no gap longer than 30 seconds. Its offer IDs may rotate between searches.
 Every ID returned for that machine must belong to the enumerated approved set
 and pass the verified/rentable, normal RTX 5090, driver, disk/RAM, hourly and
 tariff gates. The eligible set is the **union** of IDs seen across the interval;
-the full approved set must equal that union. An outside ID, ineligible offer,
-absent machine, missed search or gap resets the clock. The last quote needs at
+after the ACK that union may be a subset of the full approved set. An outside
+ID, ineligible offer, absent machine, missed search or gap resets the clock.
+The last quote needs at
 least one currently listed approved offer, with no outside or ineligible IDs.
 Before the paid ACK, a read-only discovery interval proposes its observed
 union; after the ACK, the repeated interval enforces that exact approved set.

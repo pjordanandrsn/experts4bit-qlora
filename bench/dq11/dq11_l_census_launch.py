@@ -177,8 +177,8 @@ def stable_ids(samples: list[dict], machine: str, required: list[str] | None = N
             if row.get("driver_version") != previous:
                 raise ValueError("driver changed during stability interval")
         seen.update(eligible)
-    if required is not None and (len(set(required)) != len(required) or set(required) != seen):
-        raise ValueError("ACK offer set differs from observed union")
+    if required is not None and (len(set(required)) != len(required) or not seen <= set(required)):
+        raise ValueError("observed union exceeds ACK offer set")
     return sorted(seen, key=int)
 
 

@@ -69,6 +69,8 @@ def test_stability_is_continuous_machine_with_union_of_approved_rotating_ids():
     for i, sample in enumerate(history):
         sample["offers"] = sample["offers"][i % 2:i % 2 + 1]
     assert launch.stable_ids(history, "200", ["100", "101"]) == ["100", "101"]
+    only_a = samples("100")
+    assert launch.stable_ids(only_a, "200", ["100", "101"]) == ["100"]
     history[7]["offers"] = [launch.offer_row(offer("102"), FakeProvider([]))]
     with pytest.raises(ValueError, match="outside ACK set"):
         launch.stable_ids(history, "200", ["100", "101"])
@@ -152,6 +154,12 @@ def test_final_quote_accepts_one_rotating_id_and_refuses_outside_id(tmp_path):
     gate_path.write_text(json.dumps({"passed": True, "manifest_sha256": launch.sha(manifest_path)}))
     result = launch.quote(manifest_path, history_path, gate_path, FakeProvider([offer("100")]), tmp_path / "quote.json")
     assert result["offer_ids"] == ["100", "101"] and [r["id"] for r in result["offers"]] == ["100"]
+    history_path.write_text(json.dumps({"machine_id": "200", "offer_ids": ["100", "101"],
+                                        "samples": samples("100")}))
+    one_seen = launch.quote(manifest_path, history_path, gate_path, FakeProvider([offer("100")]), tmp_path / "one-seen.json")
+    assert one_seen["offer_ids"] == ["100", "101"] and [r["id"] for r in one_seen["offers"]] == ["100"]
+    history_path.write_text(json.dumps({"machine_id": "200", "offer_ids": ["100", "101"],
+                                        "samples": history}))
     with pytest.raises(ValueError, match="outside or ineligible"):
         launch.quote(manifest_path, history_path, gate_path, FakeProvider([offer("102")]), tmp_path / "outside.json")
     assert not (tmp_path / "outside.json").exists()
