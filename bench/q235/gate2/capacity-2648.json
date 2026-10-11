@@ -1,0 +1,45 @@
+{
+ "schema": "q235-capacity/1",
+ "e4b": "13b55990433f357d63232f75926ce19f5bda5b42",
+ "layers": 94,
+ "tokens_per_microbatch": 2648,
+ "setup": "r 16 / alpha 16, NF4 attention, experts in pinned host RAM, grouped_nf4, AdamW8bit",
+ "rows": {
+  "bf16": {
+   "device_gib": 24.76,
+   "host_pinned_gib": 158.62,
+   "link_gib_per_microbatch": 237.94,
+   "refusals": [],
+   "items": {
+    "frozen expert stacks, one layer staged": 1.266,
+    "attention projections (NF4)": 3.22,
+    "fused q/k/v training projection (fp32 absmax)": 0.155,
+    "dense weights (bf16)": 2.412,
+    "expert LoRA adapters": 4.59,
+    "attention LoRA adapters": 0.095,
+    "adapter gradients": 4.685,
+    "optimizer state (adamw_8bit)": 4.758,
+    "activations": 3.582
+   }
+  },
+  "fp32": {
+   "device_gib": 34.82,
+   "host_pinned_gib": 158.62,
+   "link_gib_per_microbatch": 237.94,
+   "refusals": [],
+   "items": {
+    "frozen expert stacks, one layer staged": 1.266,
+    "attention projections (NF4)": 3.22,
+    "fused q/k/v training projection (fp32 absmax)": 0.155,
+    "dense weights (bf16)": 2.412,
+    "expert LoRA adapters": 9.18,
+    "attention LoRA adapters": 0.189,
+    "adapter gradients": 9.369,
+    "optimizer state (adamw_8bit)": 4.758,
+    "activations": 4.269
+   }
+  }
+ },
+ "estimator": "experts4bit_qlora.recipe.estimate_qlora_footprint (device and pinned-host bytes at the step's peak; link = host-to-device bytes per micro-batch)",
+ "config": "Qwen/Qwen3-235B-A22B-Instruct-2507 config.json at ac9c66cc"
+}

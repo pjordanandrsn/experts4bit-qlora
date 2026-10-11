@@ -117,7 +117,8 @@ so it keeps the explicit mask. **`prefill_routes.seen` is what ran.**
 - `seen.prefill_attn` counts each prefill attention call's path: `flash`, or `explicit_mask:` with `sinks`, `window`
   or `env`.
 - `seen.moe_k19_dispatch` counts K19's calls by tile table and dispatch, for example `chained|gather|gt256` or
-  `chained|lean|gt256` (`E4B_PREFILL_LEAN_DISPATCH`'s evidence, below).
+  `chained|lean|gt256` (`E4B_PREFILL_LEAN_DISPATCH`'s evidence, below), or `split|lean|gt256` under
+  `E4B_K19_PREFILL_BIG_M`.
 - `seen.prefill_folds` counts the fused fold calls above 64 rows, by fold (`norm`, `layer`, `attention`;
   `E4B_FUSE_PREFILL_GLUE`'s evidence, below).
 
@@ -150,8 +151,17 @@ Qwen3-30B-A3B int4).
     reports the setting (`auto`, `1` or `0`);
   - scope: read on Qwen3-30B-A3B. Other families on the int4 K19 prefill route take it on its bitwise contract (the
     same kernel and tile table), not on a read of their own.
-- `E4B_FUSE_PREFILL_GLUE` accepts `0` or `1`; `E4B_PREFILL_LEAN_DISPATCH` accepts `auto`, `0` or `1`. Anything else is
-  refused.
+- `E4B_K19_PREFILL_BIG_M` (opt-in, default `0`; not read yet) runs K19's prefill calls above 512 routed rows over a
+  split tile table (grouped-nf4-gemm#542):
+  - each expert's full 32- or 64-row tiles in one launch, its remainder in 16-row tiles in a second launch into the
+    same result, over the same `order`, so the gather, scatter and `gather_div` are as on the 16-row table;
+  - the padding is the 16-row table's. On Qwen3-30B-A3B a 512-token chunk's rows are bimodal (one expert takes a
+    median 398 of 4,096 routed rows), and on the 16-row table that expert runs as ~25 tiles;
+  - a 64-row decode step routes 512 rows on a top-8 model, so decode keeps the 16-row table;
+  - `prefill_routes.k19_prefill_big_m` reports the setting and `seen.moe_k19_dispatch` counts `split|...` calls. A
+    kernel package without the split is refused while the knob is set.
+- `E4B_FUSE_PREFILL_GLUE` accepts `0` or `1`; `E4B_PREFILL_LEAN_DISPATCH` accepts `auto`, `0` or `1`;
+  `E4B_K19_PREFILL_BIG_M` accepts `0`, `32` or `64`. Anything else is refused.
 
 **First-chunk prefill graph (`E4B_PAGED_PREFILL_GRAPH`, `auto` by default since lane SC2b).** Every first chunk of
 exactly `E4B_PAGED_CHUNK_TOKENS` tokens replays one CUDA graph of the prefill forward instead of launching it kernel by

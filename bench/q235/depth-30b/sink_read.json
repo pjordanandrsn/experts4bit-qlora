@@ -1,0 +1,239 @@
+{
+ "layers": {
+  "3": {
+   "ref_norm_sink": 1216.8341064453125,
+   "ref_norm_median_other": 4.8218231201171875,
+   "ref_sq_share_sink": 0.9979573488235474,
+   "box": {
+    "state": 0.10604721307754517,
+    "state_without_sink": 0.07987029105424881,
+    "err_sq_share_sink": 0.9988415241241455,
+    "sink_rel_err": 0.10609547048807144,
+    "per_token_median_without_sink": 0.07511445879936218
+   },
+   "routing": {
+    "state": 0.10604721307754517,
+    "state_without_sink": 0.07987029105424881,
+    "err_sq_share_sink": 0.9988415241241455,
+    "sink_rel_err": 0.10609547048807144,
+    "per_token_median_without_sink": 0.07511445879936218
+   },
+   "epilogue": {
+    "state": 0.10604721307754517,
+    "state_without_sink": 0.07987029105424881,
+    "err_sq_share_sink": 0.9988415241241455,
+    "sink_rel_err": 0.10609547048807144,
+    "per_token_median_without_sink": 0.07511445879936218
+   }
+  },
+  "10": {
+   "ref_norm_sink": 1216.7537841796875,
+   "ref_norm_median_other": 10.25672721862793,
+   "ref_sq_share_sink": 0.990707516670227,
+   "box": {
+    "state": 0.10600917786359787,
+    "state_without_sink": 0.09713536500930786,
+    "err_sq_share_sink": 0.9922003746032715,
+    "sink_rel_err": 0.10610690712928772,
+    "per_token_median_without_sink": 0.0924251526594162
+   },
+   "routing": {
+    "state": 0.10600917786359787,
+    "state_without_sink": 0.09713536500930786,
+    "err_sq_share_sink": 0.9922003746032715,
+    "sink_rel_err": 0.10610690712928772,
+    "per_token_median_without_sink": 0.0924251526594162
+   },
+   "epilogue": {
+    "state": 0.10600917786359787,
+    "state_without_sink": 0.09713536500930786,
+    "err_sq_share_sink": 0.9922003746032715,
+    "sink_rel_err": 0.10610690712928772,
+    "per_token_median_without_sink": 0.0924251526594162
+   }
+  },
+  "20": {
+   "ref_norm_sink": 1216.6588134765625,
+   "ref_norm_median_other": 15.766766548156738,
+   "ref_sq_share_sink": 0.9790084362030029,
+   "box": {
+    "state": 0.10629342496395111,
+    "state_without_sink": 0.1148732379078865,
+    "err_sq_share_sink": 0.9754941463470459,
+    "sink_rel_err": 0.10612571239471436,
+    "per_token_median_without_sink": 0.10962079465389252
+   },
+   "routing": {
+    "state": 0.10629342496395111,
+    "state_without_sink": 0.1148732379078865,
+    "err_sq_share_sink": 0.9754941463470459,
+    "sink_rel_err": 0.10612571239471436,
+    "per_token_median_without_sink": 0.10962079465389252
+   },
+   "epilogue": {
+    "state": 0.10629342496395111,
+    "state_without_sink": 0.1148732379078865,
+    "err_sq_share_sink": 0.9754941463470459,
+    "sink_rel_err": 0.10612571239471436,
+    "per_token_median_without_sink": 0.10962079465389252
+   }
+  },
+  "23": {
+   "ref_norm_sink": 1216.60009765625,
+   "ref_norm_median_other": 17.7069091796875,
+   "ref_sq_share_sink": 0.9703271389007568,
+   "box": {
+    "state": 0.10661040991544724,
+    "state_without_sink": 0.12099017947912216,
+    "err_sq_share_sink": 0.9617990851402283,
+    "sink_rel_err": 0.1061575785279274,
+    "per_token_median_without_sink": 0.12087710201740265
+   },
+   "routing": {
+    "state": 0.10661040991544724,
+    "state_without_sink": 0.12099017947912216,
+    "err_sq_share_sink": 0.9617990851402283,
+    "sink_rel_err": 0.1061575785279274,
+    "per_token_median_without_sink": 0.12087710201740265
+   },
+   "epilogue": {
+    "state": 0.10661040991544724,
+    "state_without_sink": 0.12099017947912216,
+    "err_sq_share_sink": 0.9617990851402283,
+    "sink_rel_err": 0.1061575785279274,
+    "per_token_median_without_sink": 0.12087710201740265
+   }
+  },
+  "24": {
+   "ref_norm_sink": 1216.6024169921875,
+   "ref_norm_median_other": 18.124042510986328,
+   "ref_sq_share_sink": 0.9703212380409241,
+   "box": {
+    "state": 0.10690437257289886,
+    "state_without_sink": 0.129214346408844,
+    "err_sq_share_sink": 0.9566579461097717,
+    "sink_rel_err": 0.10616239905357361,
+    "per_token_median_without_sink": 0.12669353187084198
+   },
+   "routing": {
+    "state": 0.11151181906461716,
+    "state_without_sink": 0.2224602997303009,
+    "err_sq_share_sink": 0.8818930387496948,
+    "sink_rel_err": 0.10630559921264648,
+    "per_token_median_without_sink": 0.21301957964897156
+   },
+   "epilogue": {
+    "state": 0.28739437460899353,
+    "state_without_sink": 1.552424669265747,
+    "err_sq_share_sink": 0.13355852663516998,
+    "sink_rel_err": 0.10661467909812927,
+    "per_token_median_without_sink": 0.29662877321243286
+   }
+  },
+  "25": {
+   "ref_norm_sink": 1216.5947265625,
+   "ref_norm_median_other": 19.19921112060547,
+   "ref_sq_share_sink": 0.9688153266906738,
+   "box": {
+    "state": 0.10714227706193924,
+    "state_without_sink": 0.13422459363937378,
+    "err_sq_share_sink": 0.9510765671730042,
+    "sink_rel_err": 0.1061682179570198,
+    "per_token_median_without_sink": 0.1271667629480362
+   },
+   "routing": {
+    "state": 0.11243707686662674,
+    "state_without_sink": 0.23291508853435516,
+    "err_sq_share_sink": 0.866191565990448,
+    "sink_rel_err": 0.10630995035171509,
+    "per_token_median_without_sink": 0.21459676325321198
+   },
+   "epilogue": {
+    "state": 0.28520357608795166,
+    "state_without_sink": 1.5013033151626587,
+    "err_sq_share_sink": 0.13542461395263672,
+    "sink_rel_err": 0.10661961883306503,
+    "per_token_median_without_sink": 0.2877166271209717
+   }
+  },
+  "30": {
+   "ref_norm_sink": 1216.5623779296875,
+   "ref_norm_median_other": 23.513607025146484,
+   "ref_sq_share_sink": 0.954928994178772,
+   "box": {
+    "state": 0.10778596252202988,
+    "state_without_sink": 0.13720063865184784,
+    "err_sq_share_sink": 0.9269838929176331,
+    "sink_rel_err": 0.10619831830263138,
+    "per_token_median_without_sink": 0.13033822178840637
+   },
+   "routing": {
+    "state": 0.11254602670669556,
+    "state_without_sink": 0.2034716010093689,
+    "err_sq_share_sink": 0.8526777625083923,
+    "sink_rel_err": 0.10633663088083267,
+    "per_token_median_without_sink": 0.19011935591697693
+   },
+   "epilogue": {
+    "state": 0.27902618050575256,
+    "state_without_sink": 1.2187880277633667,
+    "err_sq_share_sink": 0.13952097296714783,
+    "sink_rel_err": 0.10663744807243347,
+    "per_token_median_without_sink": 0.24864983558654785
+   }
+  },
+  "40": {
+   "ref_norm_sink": 1216.4730224609375,
+   "ref_norm_median_other": 45.86979293823242,
+   "ref_sq_share_sink": 0.8476417660713196,
+   "box": {
+    "state": 0.11779902875423431,
+    "state_without_sink": 0.16798116266727448,
+    "err_sq_share_sink": 0.6900454759597778,
+    "sink_rel_err": 0.10626096278429031,
+    "per_token_median_without_sink": 0.15196281671524048
+   },
+   "routing": {
+    "state": 0.12747503817081451,
+    "state_without_sink": 0.2088610827922821,
+    "err_sq_share_sink": 0.5908128023147583,
+    "sink_rel_err": 0.10639415681362152,
+    "per_token_median_without_sink": 0.18683339655399323
+   },
+   "epilogue": {
+    "state": 0.2669435739517212,
+    "state_without_sink": 0.6357122659683228,
+    "err_sq_share_sink": 0.1354072540998459,
+    "sink_rel_err": 0.10666480660438538,
+    "per_token_median_without_sink": 0.22918345034122467
+   }
+  },
+  "47": {
+   "ref_norm_sink": 219.90933227539062,
+   "ref_norm_median_other": 101.85629272460938,
+   "ref_sq_share_sink": 0.032176289707422256,
+   "box": {
+    "state": 0.2035359889268875,
+    "state_without_sink": 0.18372756242752075,
+    "err_sq_share_sink": 0.21137472987174988,
+    "sink_rel_err": 0.5216338038444519,
+    "per_token_median_without_sink": 0.1794256865978241
+   },
+   "routing": {
+    "state": 0.24050258100032806,
+    "state_without_sink": 0.22630414366722107,
+    "err_sq_share_sink": 0.14308398962020874,
+    "sink_rel_err": 0.50711989402771,
+    "per_token_median_without_sink": 0.20753391087055206
+   },
+   "epilogue": {
+    "state": 0.37062233686447144,
+    "state_without_sink": 0.3642250597476959,
+    "err_sq_share_sink": 0.065296970307827,
+    "sink_rel_err": 0.5279439091682434,
+    "per_token_median_without_sink": 0.2527749240398407
+   }
+  }
+ },
+ "note": "exploratory; position 0 of each row is the attention sink"
+}

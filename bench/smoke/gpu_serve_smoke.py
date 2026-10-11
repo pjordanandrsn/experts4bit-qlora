@@ -208,22 +208,58 @@ def imported_kernel_sources(roots, native_root):
             "native_c_sources": native, "imported_source_sha256": digest.hexdigest()}
 
 
-def source_identity():
+SOURCE_SHA_ENV = "SMOKE_SOURCE_SHA"     # not E4B_*: run_suite strips those from every worker's environment
+
+
+def source_commit(root):
+    """``(sha, how)`` for the e4b source the smoke imported. It is REPORTING-class and never raises: a missing git, a
+    source that is not a repository (an archive, a wheel) or unreadable metadata is labelled, not fatal. In order:
+    ``git rev-parse HEAD`` in ``root`` (``git``); else the caller's own record in ``SMOKE_SOURCE_SHA``
+    (``env:SMOKE_SOURCE_SHA``); else the installed distribution's PEP 610 ``direct_url.json`` commit
+    (``direct_url.json``); else ``(None, "none")``."""
+    try:
+        head = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True, timeout=30)
+        if head.returncode == 0 and head.stdout.strip():
+            return head.stdout.strip(), "git"
+    except (OSError, subprocess.SubprocessError):
+        pass
+    env = (os.environ.get(SOURCE_SHA_ENV) or "").strip()
+    if env:
+        return env, f"env:{SOURCE_SHA_ENV}"
+    try:
+        import importlib.metadata
+        d = json.loads(importlib.metadata.distribution("experts4bit-qlora").read_text("direct_url.json") or "{}")
+        sha = (d.get("vcs_info") or {}).get("commit_id")
+        if sha:
+            return sha, "direct_url.json"
+    except Exception:  # noqa: BLE001 -- reporting only: metadata trouble is labelled, never fatal
+        pass
+    return None, "none"
+
+
+def _installed(name):
     import importlib.metadata
+    try:
+        return importlib.metadata.version(name)
+    except importlib.metadata.PackageNotFoundError:
+        return None
+
+
+def source_identity():
     import experts4bit_qlora
     import gnf4_native
     import nf4_grouped
     import nvme_arena
 
     root = Path(experts4bit_qlora.__file__).resolve().parents[1]
-    head = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True)
+    sha, how = source_commit(root)
     tree = hashlib.sha256()
     for path in sorted((root / "experts4bit_qlora").rglob("*.py")):
         tree.update(str(path.relative_to(root)).encode() + b"\0" + hashlib.sha256(path.read_bytes()).digest())
-    return {"source": str(root), "git_head": head.stdout.strip() if head.returncode == 0 else None,
+    return {"source": str(root), "git_head": sha, "git_head_source": how,
             "package_sha256": tree.hexdigest(),
-            "installed_e4b": importlib.metadata.version("experts4bit-qlora"),
-            "installed_gnf4": importlib.metadata.version("grouped-nf4-gemm"),
+            "installed_e4b": _installed("experts4bit-qlora"),
+            "installed_gnf4": _installed("grouped-nf4-gemm"),
             "gnf4_sources": imported_kernel_sources(
                 {Path(m.__file__).resolve().parent for m in (nf4_grouped, nvme_arena)},
                 Path(gnf4_native.__file__).resolve().parent)}

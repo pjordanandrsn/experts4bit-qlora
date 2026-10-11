@@ -1,0 +1,459 @@
+{
+ "schema": "q235-a2000-leg/1",
+ "mode": "a2000 rehearsal (4-layer slice of ac9c66cc), never science-eligible",
+ "e4b": "f77147025ad835bf6af57b7d4cce5f6b81b160c5",
+ "box": {
+  "load": {
+   "offload": true,
+   "profile": {
+    "read": 16.95,
+    "assemble": 30.48,
+    "quantize": 0.77,
+    "offload": 4.93,
+    "calls": {
+     "read": 1575,
+     "assemble": 4,
+     "quantize": 4,
+     "offload": 4
+    },
+    "read_bytes": 22391367680,
+    "total_s": 61.1,
+    "other_s": 7.96,
+    "read_gb_s": 1.321
+   },
+   "patched": 4,
+   "absmax_dq": {
+    "compressed": 0,
+    "requested": true,
+    "required": false,
+    "kept_fp32": "compress_expert_absmax_ refuses -- nothing was compressed: model.layers.0.mlp.experts.base: expert offload is enabled on this layer (its absmax lives in the offload handle's host home and is staged by name); expert offload cannot carry the compressed form; model.layers.1.mlp.experts.base: expert off"
+   },
+   "seconds": 67.1,
+   "nvme": {
+    "nvme0n1": {
+     "read": 364556288,
+     "written": 680345600
+    },
+    "nvme0n1p1": {
+     "read": 8192,
+     "written": 1759232
+    },
+    "nvme0n1p2": {
+     "read": 77824,
+     "written": 2891776
+    },
+    "nvme0n1p3": {
+     "read": 364437504,
+     "written": 675647488
+    },
+    "nvme0n1p4": {
+     "read": 32768,
+     "written": 0
+    },
+    "nvme0n1p5": {
+     "read": 0,
+     "written": 47104
+    },
+    "nvme1n1": {
+     "read": 348766208,
+     "written": 680345600
+    },
+    "nvme1n1p1": {
+     "read": 32768,
+     "written": 1759232
+    },
+    "nvme1n1p2": {
+     "read": 28672,
+     "written": 2891776
+    },
+    "nvme1n1p3": {
+     "read": 348655616,
+     "written": 675647488
+    },
+    "nvme1n1p4": {
+     "read": 49152,
+     "written": 0
+    },
+    "nvme1n1p5": {
+     "read": 0,
+     "written": 47104
+    },
+    "sdb": {
+     "read": 4932141056,
+     "written": 6817792
+    },
+    "sdb1": {
+     "read": 0,
+     "written": 1759232
+    },
+    "sdb2": {
+     "read": 8192,
+     "written": 2891776
+    },
+    "sdb3": {
+     "read": 4932067328,
+     "written": 2166784
+    },
+    "sdb4": {
+     "read": 65536,
+     "written": 0
+    },
+    "sda": {
+     "read": 4940357632,
+     "written": 6817792
+    },
+    "sda1": {
+     "read": 0,
+     "written": 1759232
+    },
+    "sda2": {
+     "read": 0,
+     "written": 2891776
+    },
+    "sda3": {
+     "read": 4940312576,
+     "written": 2166784
+    },
+    "sda4": {
+     "read": 45056,
+     "written": 0
+    },
+    "sdc": {
+     "read": 4900495360,
+     "written": 7530496
+    },
+    "sdc1": {
+     "read": 0,
+     "written": 1759232
+    },
+    "sdc2": {
+     "read": 13565952,
+     "written": 2891776
+    },
+    "sdc3": {
+     "read": 4886925312,
+     "written": 2879488
+    },
+    "sdc4": {
+     "read": 4096,
+     "written": 0
+    },
+    "sde": {
+     "read": 138100736,
+     "written": 72914944
+    },
+    "sde1": {
+     "read": 0,
+     "written": 1759232
+    },
+    "sde2": {
+     "read": 0,
+     "written": 2891776
+    },
+    "sde3": {
+     "read": 138096640,
+     "written": 68263936
+    },
+    "sde4": {
+     "read": 4096,
+     "written": 0
+    },
+    "sdd": {
+     "read": 4898832384,
+     "written": 7530496
+    },
+    "sdd1": {
+     "read": 0,
+     "written": 1759232
+    },
+    "sdd2": {
+     "read": 176128,
+     "written": 2891776
+    },
+    "sdd3": {
+     "read": 4898635776,
+     "written": 2879488
+    },
+    "sdd4": {
+     "read": 20480,
+     "written": 0
+    },
+    "sdf": {
+     "read": 143810560,
+     "written": 74090496
+    },
+    "sdf1": {
+     "read": 0,
+     "written": 1759232
+    },
+    "sdf2": {
+     "read": 0,
+     "written": 2891776
+    },
+    "sdf3": {
+     "read": 143798272,
+     "written": 69439488
+    },
+    "sdf4": {
+     "read": 12288,
+     "written": 0
+    },
+    "sdg": {
+     "read": 172642304,
+     "written": 75347968
+    },
+    "sdg1": {
+     "read": 0,
+     "written": 1759232
+    },
+    "sdg2": {
+     "read": 0,
+     "written": 2891776
+    },
+    "sdg3": {
+     "read": 172638208,
+     "written": 70696960
+    },
+    "sdg4": {
+     "read": 4096,
+     "written": 0
+    },
+    "sdh": {
+     "read": 174698496,
+     "written": 72185856
+    },
+    "sdh1": {
+     "read": 0,
+     "written": 1759232
+    },
+    "sdh2": {
+     "read": 0,
+     "written": 2891776
+    },
+    "sdh3": {
+     "read": 174690304,
+     "written": 67534848
+    },
+    "sdh4": {
+     "read": 8192,
+     "written": 0
+    },
+    "sdi": {
+     "read": 171855872,
+     "written": 75458560
+    },
+    "sdi1": {
+     "read": 0,
+     "written": 1759232
+    },
+    "sdi2": {
+     "read": 0,
+     "written": 2891776
+    },
+    "sdi3": {
+     "read": 171835392,
+     "written": 70807552
+    },
+    "sdi4": {
+     "read": 20480,
+     "written": 0
+    },
+    "sdj": {
+     "read": 166379520,
+     "written": 73177088
+    },
+    "sdj1": {
+     "read": 0,
+     "written": 1759232
+    },
+    "sdj2": {
+     "read": 0,
+     "written": 2891776
+    },
+    "sdj3": {
+     "read": 166363136,
+     "written": 68526080
+    },
+    "sdj4": {
+     "read": 16384,
+     "written": 0
+    },
+    "sdk": {
+     "read": 175853568,
+     "written": 75696128
+    },
+    "sdk1": {
+     "read": 0,
+     "written": 1759232
+    },
+    "sdk2": {
+     "read": 0,
+     "written": 2891776
+    },
+    "sdk3": {
+     "read": 175812608,
+     "written": 71045120
+    },
+    "sdk4": {
+     "read": 40960,
+     "written": 0
+    },
+    "sdl": {
+     "read": 170315776,
+     "written": 73566208
+    },
+    "sdl1": {
+     "read": 0,
+     "written": 1759232
+    },
+    "sdl2": {
+     "read": 0,
+     "written": 2891776
+    },
+    "sdl3": {
+     "read": 170278912,
+     "written": 68915200
+    },
+    "sdl4": {
+     "read": 36864,
+     "written": 0
+    },
+    "sdm": {
+     "read": 175362048,
+     "written": 72501248
+    },
+    "sdm1": {
+     "read": 0,
+     "written": 1759232
+    },
+    "sdm2": {
+     "read": 0,
+     "written": 2891776
+    },
+    "sdm3": {
+     "read": 175357952,
+     "written": 67850240
+    },
+    "sdm4": {
+     "read": 4096,
+     "written": 0
+    },
+    "sdn": {
+     "read": 172863488,
+     "written": 75610112
+    },
+    "sdn1": {
+     "read": 0,
+     "written": 1759232
+    },
+    "sdn2": {
+     "read": 0,
+     "written": 2891776
+    },
+    "sdn3": {
+     "read": 172859392,
+     "written": 70959104
+    },
+    "sdn4": {
+     "read": 4096,
+     "written": 0
+    },
+    "sdo": {
+     "read": 142921728,
+     "written": 73959424
+    },
+    "sdo1": {
+     "read": 0,
+     "written": 1759232
+    },
+    "sdo2": {
+     "read": 0,
+     "written": 2891776
+    },
+    "sdo3": {
+     "read": 142917632,
+     "written": 69308416
+    },
+    "sdo4": {
+     "read": 4096,
+     "written": 0
+    },
+    "sdp": {
+     "read": 136548352,
+     "written": 73230336
+    },
+    "sdp1": {
+     "read": 0,
+     "written": 1759232
+    },
+    "sdp2": {
+     "read": 0,
+     "written": 2891776
+    },
+    "sdp3": {
+     "read": 136544256,
+     "written": 68579328
+    },
+    "sdp4": {
+     "read": 4096,
+     "written": 0
+    },
+    "md9": {
+     "read": 40960,
+     "written": 1716224
+    },
+    "md13": {
+     "read": 376832,
+     "written": 0
+    },
+    "md321": {
+     "read": 0,
+     "written": 32768
+    }
+   }
+  },
+  "rules_all_true": true,
+  "frozen_sha256_after_both_steps_equal": true,
+  "loss_0": 13.37894344329834
+ },
+ "repeat": {
+  "load_seconds": 41.3,
+  "load_profile": {
+   "read": 8.74,
+   "assemble": 14.48,
+   "quantize": 0.77,
+   "offload": 4.3,
+   "calls": {
+    "read": 1575,
+    "assemble": 4,
+    "quantize": 4,
+    "offload": 4
+   },
+   "read_bytes": 22391367680,
+   "total_s": 35.29,
+   "other_s": 7.01,
+   "read_gb_s": 2.562
+  },
+  "loss": 13.37894344329834,
+  "null_forward_s": 4.117,
+  "null_layer_sha256_equal_box": true,
+  "null_loss_equals_box_step0": true,
+  "plants": {
+   "routing": {
+    "layer": 2,
+    "loss": 13.452516555786133,
+    "forward_s": 1.689,
+    "pre_plant_equal_null": true,
+    "planted_layer_differs": true
+   },
+   "epilogue": {
+    "layer": 2,
+    "loss": 13.437602043151855,
+    "forward_s": 1.693,
+    "pre_plant_equal_null": true,
+    "planted_layer_differs": true
+   }
+  }
+ },
+ "note": "the load ran on a warm page cache (reads 1.32 and 2.56 GB/s); only the plants' forwards enter the fit"
+}

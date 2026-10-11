@@ -80,8 +80,8 @@ model assumes; the next lane is then chosen from this lane's census, not from mo
 
   | arm | `E4B_FUSE_PREFILL_GLUE` | `E4B_PREFILL_LEAN_DISPATCH` | the start `/health` must read (FLIPS) |
   |---|---|---|---|
-  | `on` (the release's defaults) | unset | unset | `levers.prefill_glue` = {mode 1, source default-allowlisted}; both raw env values null; `prefill_lean_dispatch` auto; every K19 call above 256 rows `chained\|lean`; the norm, layer and attention folds each seen on prefill rows |
-  | `off` | 0 | 0 | {mode 0, source explicit}; both raw env values "0"; `prefill_lean_dispatch` 0; every K19 call above 256 rows `chained\|gather`; no prefill fold |
+  | `on` (the release's defaults) | unset | unset | `levers.prefill_glue` = {mode 1, source default-allowlisted}; both raw env values null; `prefill_lean_dispatch` auto; every K19 call above 256 rows on the `lean` dispatch, the prefill capture's `chained\|lean` among them, none on a `split` table (Amendment 1); the norm, layer and attention folds each seen on prefill rows |
+  | `off` | 0 | 0 | {mode 0, source explicit}; both raw env values "0"; `prefill_lean_dispatch` 0; every K19 call above 256 rows on the `gather` dispatch, the prefill capture's `chained\|gather` among them, none on a `split` table (Amendment 1); no prefill fold |
 
   The box unsets both knobs when it is sourced, so only the `off` arm names them. FLIPS (`sc2f_reduce.py --flips`, the
   reducer's own gate) reads what the startup captures took (`prefill_routes.seen`: the first-chunk prefill graph and the
@@ -111,7 +111,7 @@ model assumes; the next lane is then chosen from this lane's census, not from mo
   are new, between SC2e's 12 and 16. 1 and 2 req/s are dropped: every SC2e server held 1.000 at both, and the serial
   run reads the unloaded path.
 
-## The rule (`bench/sc2/sc2f_reduce.py`, 30 self-test cases)
+## The rule (`bench/sc2/sc2f_reduce.py`, 34 self-test cases)
 
 **Gates, per server.** A failure names the server and VOIDs the reading: ROUTES (`sc2c_reduce.routes_bad`), SLOTS
 (`sc2e_reduce.slots_bad`, s64a), FLIPS (above), ENGAGED (`sc2e_reduce.engagement` at 64 slots, with every request the
@@ -214,4 +214,55 @@ deadline drops draw 2's last servers first; a server lost to the deadline makes 
 
 ## Amendments
 
-None yet.
+### Amendment 1 (registered 2026-10-11, before any SC2f run): FLIPS reads K19's dispatch above 256 rows, not its table
+
+**Why.** As registered, FLIPS required the K19 calls above 256 rows in the start `/health` to be exactly
+`chained|lean|gt256` (on) or `chained|gather|gt256` (off). The registration already said that the 64-row decode graph
+calls K19 above 256 rows too. It wrongly assumed those calls take the chained table. Bucket 64's decode capture routes
+64 × 8 = 512 rows. On Qwen3-30B-A3B (128 experts) that is exactly the bound of `E4B_INT4_WIDE_TILES=auto` (lane P122:
+`next_pow2(E) × next_pow2(R) ≤ 128 × 512`), so those calls take the one-launch table: `one_launch|lean|gt256` on `on`
+and `one_launch|gather|gt256` on `off`. FLIPS would have stopped every reading server at rc 43, after the fetch and the
+bake. Two real records show it:
+- #1625's GPU serve smoke on the project's RTX A2000 (correctness only). At knob 0, its 1,024-row calls on 4 experts
+  took `one_launch|lean|gt256`, not the chained table. That smoke's wrapper expected `chained` and failed on its own
+  expectation, which is how this was found.
+- SC2e's committed start `/health` on the RTX 5090 (`sc2e-5090-1`). At 64 slots with buckets up to 64 (s64a, this
+  lane's server shape), the startup captures make 384 K19 calls above 256 rows; with buckets up to 16 (s16, s64c), 240.
+  Bucket 64's capture adds 144 = 48 layers × 3 forwards. That run predates the dispatch counter, so it shows the count,
+  not the table.
+
+**The change: the gate only.** FLIPS (`sc2f_reduce.k19_gt256_bad`) reads the dispatch of every K19 call above 256 rows:
+`lean` on `on`, `gather` on `off`. It requires the prefill capture's `chained|<dispatch>|gt256` among them, and refuses
+a `split` table on either arm (`E4B_K19_PREFILL_BIG_M` is not this lane's knob and stays unset). The table of the other
+calls is `E4B_INT4_WIDE_TILES`'s choice, not P130's, and is not read. The proof's form is unchanged: Granite NF4 takes
+no int4 K19.
+
+**Tested on real records first** (`tests/test_sc2f_real_records.py`, 24 passed):
+- the smoke's `prefill_routes` from `tests/fixtures/smoke1625/pass2_summary.json`, byte-identical to its receipt
+  (sha256 `1f4960b1…`, checked), with `levers.prefill_glue` from `serve_paged.resolve_prefill_glue`, the function
+  `/health` reports it from;
+- SC2e's six start `/health` files, digests checked.
+The real qwen3_moe record reads as `on` on every knob. Its one departure is the prefill capture's chained call, which a
+1,024-row forward never routes. With that one call added, `on` passes, and the rule as registered refuses it. Real
+split records are refused on both arms. Synthetic departures from the real record come second. They include the `off`
+arm, of which no real record exists: its keys follow `hot_residency`, where above 256 rows the dispatch is `lean` iff
+the prefill lean dispatch is on, and `E4B_PREFILL_LEAN_DISPATCH=0` turns that off. Restoring the rule as registered
+fails 5 of the 24 tests. The reducer's self-test gains 4 cases (34), and its fixture's start `/health` now carries an
+s64a startup's calls: 240 chained and 144 one-launch above 256 rows. `tests/test_sc2f_box.py` reads the same shape,
+with three new departures.
+
+**Unchanged:** the arms, both knobs, the ladder, the knee block, the statistics, the predictions, the outcomes, the box,
+the budget, and the rental gate (e4b 0.54.0, DQ11 closed, an ACK naming the machine and the offer).
+`bench/sc1/staged.sha256` re-pins `sc2f_reduce.py` only.
+
+**Both arms on real records** (added 2026-10-11, before any run; the rule is unchanged). The `off` arm, derived from the
+code above, now has a real record: a record-only smoke on the project's RTX A2000, `tests/fixtures/smokeflips/summary.json`
+(sha256 `1eeb6e02…`, checked). It ran one fresh process per arm on the smoke's qwen3_moe at top-4, so both of an SC2f
+startup's row counts are reached at `E4B_INT4_WIDE_TILES=auto`: the serve path's 2,048-row chunks take the chained table,
+and a 512-row forward takes the one-launch table. Each cell's `health` is the two blocks FLIPS reads, built by the
+`/health` handler's own expressions. Above 256 rows, `on` read `chained|lean` and `one_launch|lean`; `off` read
+`chained|gather` and `one_launch|gather`. With nothing added, `flips_bad` passes each arm on its own record and departs
+on all seven keys across arms. The rule as registered refuses both arms' real records for the one-launch call. Decode's
+calls at or below 256 rows read `one_launch|lean|le256` on both arms (the knob governs rows above 256), and FLIPS does
+not read them. The synthetic departures now start from these records: `tests/test_sc2f_real_records.py` (28 passed).
+The rule as registered fails 6 of the 28.

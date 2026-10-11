@@ -122,3 +122,51 @@ def test_local_int4_option_reaches_every_isolated_worker(tmp_path, monkeypatch):
     monkeypatch.setattr(smoke.subprocess, "run", run)
     assert smoke.run_suite(tmp_path, 300, "local") == 0
     assert calls == ["local"] * len(smoke.CELLS)
+
+
+# ---- source_commit: REPORTING-class provenance never aborts a smoke (#1625's A2000 run had no git in its image)
+
+def _no_git(*args, **kwargs):
+    raise FileNotFoundError(2, "No such file or directory: 'git'")
+
+
+def _no_metadata(monkeypatch):
+    import importlib.metadata
+    monkeypatch.setattr(importlib.metadata, "distribution",
+                        lambda name: (_ for _ in ()).throw(importlib.metadata.PackageNotFoundError(name)))
+
+
+def test_source_commit_reads_git_when_it_is_there(tmp_path, monkeypatch):
+    monkeypatch.setattr(smoke.subprocess, "run",
+                        lambda *a, **k: subprocess.CompletedProcess(a[0], 0, stdout="abc123\n", stderr=""))
+    assert smoke.source_commit(tmp_path) == ("abc123", "git")
+
+
+def test_a_missing_git_falls_back_to_the_callers_record_and_says_so(tmp_path, monkeypatch):
+    monkeypatch.setattr(smoke.subprocess, "run", _no_git)
+    monkeypatch.setenv("SMOKE_SOURCE_SHA", " 1d8c5b84 ")
+    assert smoke.source_commit(tmp_path) == ("1d8c5b84", "env:SMOKE_SOURCE_SHA")
+
+
+def test_then_to_the_installed_distributions_direct_url(tmp_path, monkeypatch):
+    import importlib.metadata
+    monkeypatch.setattr(smoke.subprocess, "run", _no_git)
+    monkeypatch.delenv("SMOKE_SOURCE_SHA", raising=False)
+    dist = SimpleNamespace(read_text=lambda name: json.dumps({"url": "https://x", "vcs_info": {"commit_id": "feedbeef"}}))
+    monkeypatch.setattr(importlib.metadata, "distribution", lambda name: dist)
+    assert smoke.source_commit(tmp_path) == ("feedbeef", "direct_url.json")
+
+
+def test_with_nothing_to_read_it_is_labelled_not_raised(tmp_path, monkeypatch):
+    monkeypatch.setattr(smoke.subprocess, "run", _no_git)
+    monkeypatch.delenv("SMOKE_SOURCE_SHA", raising=False)
+    _no_metadata(monkeypatch)
+    assert smoke.source_commit(tmp_path) == (None, "none")
+    monkeypatch.setattr(smoke.subprocess, "run",                       # a git that runs but finds no repository
+                        lambda *a, **k: subprocess.CompletedProcess(a[0], 128, stdout="", stderr="not a git repository"))
+    assert smoke.source_commit(tmp_path) == (None, "none")
+
+
+def test_the_suite_strips_e4b_vars_so_the_record_is_not_one():
+    assert not smoke.SOURCE_SHA_ENV.startswith("E4B_")
+
