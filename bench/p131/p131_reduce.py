@@ -26,7 +26,9 @@ process 1 also runs Phase B. ``--prove`` reads the proof's registered sizes.
 **Per tall arm** (m32, m64), the first of these that applies:
 - **REFUSED:** a capture of the arm refused in any process. A defect: the server's prefill graph would stand down.
 - **DECODE_TOUCHED:** in any process, the 64-token eager forward under the arm (512 routed rows, a 64-row decode step's)
-  shows K19's dispatch other than ``chained|lean|gt256`` x layers. A defect: the knob reaches decode.
+  shows a ``split`` table above 256 rows, or K19 calls above 256 rows other than m0's in the same process. A defect: the
+  knob reaches decode. Which table m0 itself takes is ``E4B_INT4_WIDE_TILES``'s choice (on Qwen3-30B, 128 experts x 512
+  rows is lane P122's ``auto`` bound, so the one-launch table), not this lane's.
 - **HELD_DETERMINISM:** two processes digest a speed window's m0 replay differently.
 - **NOISY:** the processes' m0 medians span more than ``NOISY_SPAN``.
 - **Speed:** per process ``g = median(m0) / median(arm)``; over the processes, the two-sided 95 % t-interval of the mean
@@ -93,6 +95,11 @@ def fold_table(layers: int) -> dict:
 
 def k19_key(arm: str) -> str:
     return f"{'chained' if arm == 'm0' else 'split'}|lean|gt256"
+
+
+def gt256(k19) -> dict:
+    """K19's calls above 256 rows, by table and dispatch."""
+    return {k: v for k, v in (k19 or {}).items() if k.endswith("|gt256") and v}
 
 
 def _bucket_for(n, buckets):
@@ -179,6 +186,10 @@ def speed_faults(n, rec, size) -> list:
     dc = sp.get("decode_check") or {}
     if dc.get("tokens") != DECODE_TOKENS or set(dc.get("seen") or {}) != set(ARMS):
         out.append(f"proc {n}: decode check {dc.get('tokens')} tokens over {sorted(dc.get('seen') or {})}")
+    else:
+        k0 = gt256(dc["seen"]["m0"].get("k19"))
+        if any(k.startswith("split|") for k in k0) or sum(k0.values()) != L or not all("|lean|" in k for k in k0):
+            out.append(f"proc {n}: the decode check at m0 reads {k0} (want one lean K19 call a layer, no split)")
     if graphs["m0"].get("status") == "refused":
         return out
     have = [g for g in ARMS if graphs[g].get("status") != "refused"]
@@ -309,8 +320,14 @@ def reduce(run: Path, e4b_sha: str, prove: bool = False, gate_corpus: str | None
         out.update(verdict="VOID", reasons=void)
         return out
     out["refused"] = refused
-    decode = {a: [f"proc {n}: {r['speed']['decode_check']['seen'][a].get('k19')}" for n, r in sorted(recs.items())
-                  if r["speed"]["decode_check"]["seen"][a].get("k19") != {"chained|lean|gt256": L}] for a in ARMS}
+    decode = {}
+    for a in ARMS:
+        decode[a] = []
+        for n, r in sorted(recs.items()):
+            seen = r["speed"]["decode_check"]["seen"]
+            ka, k0 = gt256(seen[a].get("k19")), gt256(seen["m0"].get("k19"))
+            if any(k.startswith("split|") for k in ka) or ka != k0:
+                decode[a].append(f"proc {n}: {a} {ka} against m0 {k0}")
     timed = {n: r["speed"] for n, r in recs.items() if "m0" in (r["speed"].get("median_ms") or {})}
     first = timed[min(timed)]["digests_m0"]
     det_fail = [f"proc {n} differs from proc {min(timed)}" for n in sorted(timed) if timed[n]["digests_m0"] != first]
@@ -416,7 +433,9 @@ def _speed(size, L, *, ms, digest="d0", differ=None, refused=(), decode=None, n=
         graphs[g] = {"status": "on", "T": size["prompt"], "pool_mib": 3300, "forwards": F,
                      "seen": {"route": {"int4_k19|gt256": F * L}, "k19": {k19_key(g): F * L},
                               "folds": {k: F * v for k, v in fold_table(L).items()}}}
-    dec = {g: {"route": {"int4_k19|gt256": L}, "k19": {"chained|lean|gt256": L}, "folds": {}} for g in ARMS}
+    # what Qwen3-30B's 512-row call takes by default: the wide one-launch table (P122's auto bound)
+    dec = {g: {"route": {"int4_k19|gt256": L}, "k19": {"one_launch|lean|gt256": L, "one_launch|lean|le256": 3},
+               "folds": {}} for g in ARMS}
     for g, k in (decode or {}).items():
         dec[g]["k19"] = k
     sp = {"T": size["prompt"], "windows": nw, "rounds": rounds, "graphs": graphs, "capture_order": list(capture_order(n)),
@@ -526,6 +545,14 @@ def self_test() -> int:
     o = run(decode={"m32": {"split|lean|gt256": 4}})
     cases.append(("the knob reaches decode", o["arms"]["m32"]["verdict"] == "DECODE_TOUCHED"
                   and o["arms"]["m64"]["verdict"] == "LICENSED"))
+    o = run(decode={"m64": {"chained|lean|gt256": 4}})
+    cases.append(("a decode table other than m0's is touched", o["arms"]["m64"]["verdict"] == "DECODE_TOUCHED"
+                  and o["arms"]["m32"]["verdict"] == "LICENSED"))
+    o = run(decode={g: {"chained|lean|gt256": 4} for g in ARMS})
+    cases.append(("whichever table auto picks, the same at every arm, is untouched", o["verdict"].startswith("M32_LICENSED")))
+    o = run(decode={"m0": {"split|lean|gt256": 4}})
+    cases.append(("a split at m0's decode check voids", o["verdict"] == "VOID"
+                  and any("decode check at m0" in x for x in o["reasons"])))
 
     def det(recs):
         recs[5]["speed"]["digests_m0"][3] = "x"

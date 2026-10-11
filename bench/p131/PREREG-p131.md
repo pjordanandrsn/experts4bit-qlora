@@ -90,7 +90,11 @@ order m0, m32, m64 rotated by (round + window), each replay between two CUDA eve
 all 192 replay times and their **median**.
 
 **The decode check.** Per arm, one eager forward of a **64-token** prompt with the knob set. It routes 512 rows, the rows a
-64-row decode step routes, and must show K19's dispatch `chained|lean|gt256` × 48 under every arm.
+64-row decode step routes. Under every arm it must show no `split` table and the same K19 calls above 256 rows as m0's
+in the same process; m0's own must be one `lean` call a layer with no split. Which table m0 takes is
+`E4B_INT4_WIDE_TILES`'s choice, not this lane's: on Qwen3-30B, 128 experts × 512 rows is exactly lane P122's `auto` bound,
+so a 64-row decode step takes the one-launch table (`one_launch|lean|gt256`). #1625's A2000 smoke showed the same at
+1,024 rows on 4 experts.
 
 **Eager (reported, never gated).** 4 windows through the eager first-chunk forward, the three arms rotated, 2 rounds.
 
@@ -130,7 +134,7 @@ whether all its windows' log-probs are `torch.equal` to R's.
 Phase B always runs, so the tolerance branch never waits on a second rental. The rule reads it only for an arm whose
 FUNCTION is not bitwise.
 
-## The rule (`bench/p131/p131_reduce.py`, self-tested on 34 cases)
+## The rule (`bench/p131/p131_reduce.py`, self-tested on 37 cases)
 
 **Lane VOID**, any of:
 - a registered process record missing; another e4b or grouped-nf4-gemm commit; another model revision; a process off its
@@ -143,8 +147,8 @@ FUNCTION is not bitwise.
 
 **Per tall arm, the first of these that applies:**
 1. **REFUSED.** A capture of the arm refused in any process. The server's prefill graph would stand down: a defect.
-2. **DECODE_TOUCHED.** The decode check under the arm shows other than `chained|lean|gt256` × 48 in any process. The knob
-   reaches decode: a defect.
+2. **DECODE_TOUCHED.** The decode check under the arm shows a `split` table, or K19 calls above 256 rows other than m0's,
+   in any process. The knob reaches decode: a defect.
 3. **HELD_DETERMINISM.** Two processes digest a speed window's m0 replay differently.
 4. **NOISY.** The processes' m0 medians span more than ×1.02.
 5. **Speed.** Per process, g = median(m0) / median(arm). The two-sided 95 % t-interval of the mean of ln g over the eight
@@ -204,7 +208,7 @@ A prediction is HELD inside its range and MISSED outside it.
 
 | # | prediction | basis |
 |---|---|---|
-| Q1 | engagement exact in every process and pass; no capture refused; the decode check chained under every arm | e4b#1625's CPU tests; the split builder is capture-legal by construction (on-device ops, static shapes, no host sync) |
+| Q1 | engagement exact in every process and pass; no capture refused; the decode check untouched under every arm (m0's table, no split) | e4b#1625's CPU tests; the split builder is capture-legal by construction (on-device ops, static shapes, no host sync) |
 | Q2 | FUNCTION **bitwise** for both arms on every window of every process, and DETERMINISM holds | a row's reduction order does not depend on the tile's other rows; the A2000 read the split `torch.equal` to the 16-row table at K 768 and 2048 (sm_86). The card's codegen at sm_120 is what this reads |
 | Q3 | **m64: g ∈ [1.038, 1.159]**, saving 1.2–4.5 ms | the net above, f ∈ [0.3, 0.8] |
 | Q4 | **m32: g ∈ [1.033, 1.143]**, saving 1.1–4.1 ms | the same, at 32 |
