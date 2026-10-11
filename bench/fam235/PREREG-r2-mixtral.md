@@ -67,11 +67,11 @@ Shape A = 2,048 × 1 × 1 and B = 2,048 × 2 × 4, as Q235. Device GiB are fp32/
 
 where `h_i` is layer `i`'s output and the reference is `bench/q235/instrument/layer_stream_ref.py`'s layer-streamed bf16
 forward on the same tokens. The reference reads the checkpoint through transformers' own conversion mapping since e4b#1614.
-`u_0` is the state error.
+`u_0` is undefined (no stored input) and reported as none, as `q235_compare` does.
 
-**Depth class.** Interior = layers 4 … n−4 (0-based): 4 … 28 on 8x7B and 4 … 52 on 8x22B. `u_0 … u_3` and the last three layers
-are reported without a bar. This is the rule Q235 applies to Qwen3; if Q235's Amendment 3 registers a different rule, this
-registration amends to match before any box.
+**Depth class.** Interior = layers ceil(4n/48) … floor(44n/48) (0-based), Q235 Amendment 3's 30B interior (4 … 44 of 48) scaled
+by depth: **3 … 29 on 8x7B** and **5 … 51 on 8x22B**. The layers outside it are reported without a bar. If Amendment 3 registers
+a different rule, this registration amends to match, by commit, before any box.
 
 **The band (its form, registered before any number exists).** STRICT, at every interior layer:
 
@@ -98,8 +98,9 @@ every receipt says so.
   profile reported. That covers 8x22B NF4 noise exceeding 8x7B's.
 - **Null forward:** the plants, their placement, the clean null forward they are compared against, and its floor are as Q235
   Amendment 3 registers them, cited by commit before any box. Each plant's L28 output must differ from that null before any band
-  is read; otherwise the result is HARNESS_ERROR.
-- **Engagement:** a plant that does not change its own layer is HARNESS_ERROR, never VOID (e4b#1623's assert).
+  is read.
+- **Engagement:** a plant that does not change its own layer, or changes an earlier one, makes the box VOID (instrument), as
+  e4b#1623's verdict tool records it, before any band is read.
 
 **Reported, not gated:**
 - the state statistic (median taken as the upper middle, as `q235_compare` computes it);
