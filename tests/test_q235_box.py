@@ -8,9 +8,10 @@ Qwen3-MoE, on the reference path (the fused kernels need CUDA; the RTX A2000 reh
 - The fresh-process repeat (``--repeat``) reproduces step 0's loss.
 - Each planted error (Amendment 1: routing, epilogue) changes the planted layer's output and leaves the layers before it untouched,
   so an inert plant cannot pass for a band result.
-- The same holds on a small Mixtral saved in its released per-expert spelling (``block_sparse_moe`` w1/w3/w2), and its router's
-  top-k is captured at every layer: the family ladder's R2 subject (#1630) runs this script, and the plants' hooks assume a router
-  that returns its top-k indices third and an expert call that takes them second.
+- The same holds on a small Mixtral saved in its released per-expert spelling (``block_sparse_moe`` w1/w3/w2), in separate runs
+  and as Amendment 3's in-process plants, and its router's top-k is captured at every layer: the family ladder's R2 subject
+  (#1630) runs this script, and the plants' hooks assume a router that returns its top-k indices third and an expert call that
+  takes them second.
 - Amendment 3's in-process plants (``--repeat --plants``): the repeat's clean forward is the null; each plant run after it in the same
   process reproduces the separate-process plant bit for bit, and an unplant that leaves anything behind raises.
 """
@@ -207,7 +208,7 @@ def tiny_mixtral(tmp_path_factory):
     return root
 
 
-def _box_inproc(root, plant=None):
+def _box_inproc(root, plant=None, plants=False):
     """The box's own ``run()`` in this process, forward-only (``--repeat``), each layer hashed exactly as its ``main()`` hashes it.
     One import and one small load per call instead of a subprocess each: these are engagement checks, not a second process's
     reproducibility (the subprocess tests above cover that)."""
@@ -215,7 +216,7 @@ def _box_inproc(root, plant=None):
     import hashlib
     a = argparse.Namespace(checkpoint=str(root / "model"), tokens=str(root / "tokens.pt"), out=None, device="cpu",
                            enabler="reference", adapter_dtype="bf16", r=16, alpha=16, lr=2e-4, weight_decay=0.001,
-                           plant=plant, repeat=True, plants=False)
+                           plant=plant, repeat=True, plants=plants)
     out, layer_out = _box_module().run(a)
     sha = [hashlib.sha256(t.view(torch.uint8).numpy().tobytes()).hexdigest() for t in layer_out if t is not None]
     return out, sha
@@ -240,11 +241,30 @@ def test_mixtral_router_top_k_is_captured_at_every_layer(mixtral_clean):
         assert t is not None and t.shape[-1] == 2 and int(t.min()) >= 0 and int(t.max()) < 8
 
 
+@pytest.fixture(scope="module")
+def mixtral_plants(tiny_mixtral):
+    return {kind: _box_inproc(tiny_mixtral, plant=kind) for kind in ("routing", "epilogue")}
+
+
 @pytest.mark.parametrize("kind", ["routing", "epilogue"])
-def test_each_planted_error_engages_on_mixtral(tiny_mixtral, mixtral_clean, kind):
-    out, sha = _box_inproc(tiny_mixtral, plant=kind)
+def test_each_planted_error_engages_on_mixtral(mixtral_clean, mixtral_plants, kind):
+    out, sha = mixtral_plants[kind]
     i = out["plant"]["layer"]
     assert i == 2
     clean = mixtral_clean[1]
     assert sha[:i] == clean[:i], "a plant must not touch the layers before it"
     assert sha[i] != clean[i], f"the {kind} plant was inert at its layer on Mixtral"
+
+
+def test_the_in_process_plants_reproduce_the_separate_plants_on_mixtral(tiny_mixtral, mixtral_clean, mixtral_plants):
+    """Amendment 3's ``--repeat --plants`` on R2's subject family: the null is the clean forward, each unplant comes off the
+    Mixtral layer (``in_process_plants`` raises otherwise), and each in-process plant equals its own run bit for bit."""
+    out, null = _box_inproc(tiny_mixtral, plants=True)
+    assert null == mixtral_clean[1], "the null must be the clean forward"
+    for kind in ("routing", "epilogue"):
+        p = out["plants"][kind]
+        assert p["layer"] == 2 and p["pre_plant_equal_null"] and p["planted_layer_differs"], p
+        assert p["pre_plant_max_rel_diff"] == 0.0 and len(p["pre_plant_rel_diff"]) == 2
+        sep_out, sep = mixtral_plants[kind]
+        assert p["layer_sha256"] == sep, f"the in-process {kind} plant differs from its own run on Mixtral"
+        assert p["loss"] == sep_out["repeat"]["loss"]
