@@ -44,9 +44,8 @@ from urllib.error import HTTPError, URLError
 MODEL, REV = "Qwen/Qwen3-30B-A3B", "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39"
 ALLOW = ("*.safetensors", "*.json", "tokenizer*", "*.model", "*.txt", "merges.txt", "vocab.json")   # p131_run.sh's --allow
 CORPUS, CORPUS_CONFIG = "Salesforce/wikitext", "wikitext-2-raw-v1"
-# grouped-nf4-gemm#542's head (not yet merged), as p131_run.sh pins it; re-pinned to #542's merge commit, there and
-# here, before the registration merges
-GNF4_SHA = "4af1b5245d0d606dfb7b02fc367586205015b268"
+# grouped-nf4-gemm#542's merge commit, as p131_run.sh pins it
+GNF4_SHA = "57f53e19fe65eeef4b7ed26f97d7bd8fdd87f0eb"
 REPOS = {"e4b": "https://github.com/pjordanandrsn/experts4bit-qlora.git",
          "gnf4": "https://github.com/pjordanandrsn/grouped-nf4-gemm.git"}
 PYPI = ("transformers==5.17.0", "bitsandbytes==0.50.2", "datasets", "accelerate", "sentencepiece", "safetensors",

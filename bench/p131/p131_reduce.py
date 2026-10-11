@@ -56,7 +56,7 @@ import statistics
 import sys
 from pathlib import Path
 
-GNF4_SHA = "4af1b5245d0d606dfb7b02fc367586205015b268"   # grouped-nf4-gemm #542's head; re-pinned to its merge commit before this registration merges
+GNF4_SHA = "57f53e19fe65eeef4b7ed26f97d7bd8fdd87f0eb"   # grouped-nf4-gemm #542's merge commit
 REVS = {"Qwen/Qwen3-30B-A3B": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39"}
 MODES = {"reading": {"procs": 8, "windows": 64, "cont": 128, "prompt": 512, "speed_windows": 16, "rounds": 12, "warm": 2},
          "proof": {"procs": 4, "windows": 16, "cont": 32, "prompt": 512, "speed_windows": 4, "rounds": 3, "warm": 1}}

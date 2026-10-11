@@ -55,8 +55,9 @@ table's?
 **Pins:**
 - **Model:** `Qwen/Qwen3-30B-A3B` @ `ad44e777bcd18fa416d9da3bd8f70d33ebb85d39`.
 - **e4b:** the launch commit. It must carry #1608, #1615 (e4b 0.54.0) and #1625.
-- **grouped-nf4-gemm:** #542 at `4af1b5245d0d606dfb7b02fc367586205015b268` (its head at registration). It is re-pinned
-  to #542's merge commit, or the release that carries it, before this registration merges.
+- **grouped-nf4-gemm:** #542's merge commit `57f53e19fe65eeef4b7ed26f97d7bd8fdd87f0eb`. #542's own files there are
+  byte-identical to its reviewed head `4af1b524`; the merge also carries #540 (ROCm capability gates, touching
+  `fp8_kv`, `fp8_paged_attn` and `nf4_route`) and #543 (GGUF backward), which landed on main first.
 - **Libraries:** transformers 5.17.0; huggingface_hub ≥ 1.31.
 
 **Processes: eight, identical.** The knob is read on every call, so every process captures all three arms and times them

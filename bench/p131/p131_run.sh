@@ -29,9 +29,8 @@ trap 'finish 130' INT TERM
 for v in P131_RUN_ID P131_DEADLINE_EPOCH P131_INSTANCE_ID E4B_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
 case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78;; esac
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char sha"; finish 78; }
-# grouped-nf4-gemm#542's head (K19 over a split tile table; not yet merged), a registered constant. It is re-pinned to
-# #542's merge commit before this registration merges.
-GNF4_SHA=4af1b5245d0d606dfb7b02fc367586205015b268
+# grouped-nf4-gemm#542's merge commit (K19 over a split tile table), a registered constant
+GNF4_SHA=57f53e19fe65eeef4b7ed26f97d7bd8fdd87f0eb
 PROVE=${P131_PROVE:-0}
 MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39                            # SC1's pin, SC2e's and P117's model
 if [ "$PROVE" = 1 ]; then
