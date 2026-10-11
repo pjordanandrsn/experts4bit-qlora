@@ -155,9 +155,23 @@ def tiny_mixtral(tmp_path_factory):
     return root
 
 
+def _box_inproc(root, plant=None):
+    """The box's own ``run()`` in this process, forward-only (``--repeat``), each layer hashed exactly as its ``main()`` hashes it.
+    One import and one small load per call instead of a subprocess each: these are engagement checks, not a second process's
+    reproducibility (the subprocess tests above cover that)."""
+    import argparse
+    import hashlib
+    a = argparse.Namespace(checkpoint=str(root / "model"), tokens=str(root / "tokens.pt"), out=None, device="cpu",
+                           enabler="reference", adapter_dtype="bf16", r=16, alpha=16, lr=2e-4, weight_decay=0.001,
+                           plant=plant, repeat=True)
+    out, layer_out = _box_module().run(a)
+    sha = [hashlib.sha256(t.view(torch.uint8).numpy().tobytes()).hexdigest() for t in layer_out if t is not None]
+    return out, sha
+
+
 @pytest.fixture(scope="module")
 def mixtral_clean(tiny_mixtral):
-    return _box(tiny_mixtral, "clean", "--repeat")
+    return _box_inproc(tiny_mixtral)
 
 
 def test_mixtral_is_saved_in_its_released_spelling(tiny_mixtral):
@@ -167,18 +181,18 @@ def test_mixtral_is_saved_in_its_released_spelling(tiny_mixtral):
 
 
 def test_mixtral_router_top_k_is_captured_at_every_layer(mixtral_clean):
-    rec, out = mixtral_clean
-    topk = torch.load(out / "nf4.pt", weights_only=True)["router_topk"]
-    assert len(topk) == len(rec["layer_sha256"]) == 4
+    out, sha = mixtral_clean
+    topk = out["_topk"]
+    assert len(topk) == len(sha) == 4
     for t in topk:
         assert t is not None and t.shape[-1] == 2 and int(t.min()) >= 0 and int(t.max()) < 8
 
 
 @pytest.mark.parametrize("kind", ["routing", "epilogue"])
 def test_each_planted_error_engages_on_mixtral(tiny_mixtral, mixtral_clean, kind):
-    rec, _ = _box(tiny_mixtral, f"plant_{kind}", "--repeat", "--plant", kind)
-    i = rec["plant"]["layer"]
+    out, sha = _box_inproc(tiny_mixtral, plant=kind)
+    i = out["plant"]["layer"]
     assert i == 2
-    clean = mixtral_clean[0]["layer_sha256"]
-    assert rec["layer_sha256"][:i] == clean[:i], "a plant must not touch the layers before it"
-    assert rec["layer_sha256"][i] != clean[i], f"the {kind} plant was inert at its layer on Mixtral"
+    clean = mixtral_clean[1]
+    assert sha[:i] == clean[:i], "a plant must not touch the layers before it"
+    assert sha[i] != clean[i], f"the {kind} plant was inert at its layer on Mixtral"
