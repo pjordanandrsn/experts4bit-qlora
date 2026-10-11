@@ -149,6 +149,40 @@ def test_backward_creator_uses_forward_thread_and_exact_op_under_nested_base():
 
 
 @pytest.mark.parametrize(
+    "backward,outer,creator",
+    [
+        (
+            "ScaledDotProductFlashAttentionBackward0",
+            "aten::scaled_dot_product_attention",
+            "aten::_scaled_dot_product_flash_attention",
+        ),
+        ("DivBackward0", "aten::ne", "aten::div"),
+    ],
+)
+def test_real_l_capture_backward_creators_select_exact_nested_op(backward, outer, creator):
+    start = 6 * 2000000
+    events = [cpu(census.STEP_PREFIX + "6", start, 1000, 1, cat="user_annotation")]
+    events += [cpu(census.PREFIX + "attention|layer0", start + 10, 190, 2, cat="user_annotation")]
+    events += [cpu(outer, start + 20, 100, 3, seq=5), cpu(creator, start + 30, 50, 4, seq=5)]
+    events += [cpu(f"autograd::engine::evaluate_function: {backward}", start + 300, 100, 5, seq=5, fwd=1)]
+    events += [cpu("aten::mm", start + 310, 10, 6)]
+    events += [
+        {
+            "ph": "X",
+            "cat": "kernel",
+            "name": "backward-attention",
+            "pid": 0,
+            "tid": 7,
+            "ts": start + 320,
+            "dur": 5,
+            "args": {"External id": 6},
+        }
+    ]
+    normalized = census.normalize_trace({"schemaVersion": 1, "traceEvents": events}, expected_steps=(6,))
+    assert [(e["class"], e["path"]) for e in normalized["events"]] == [("attention", "layer0")]
+
+
+@pytest.mark.parametrize(
     "mutation,match",
     [
         ("missing_step", "missing captured"),

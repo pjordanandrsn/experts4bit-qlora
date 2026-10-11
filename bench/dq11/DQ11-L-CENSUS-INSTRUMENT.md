@@ -65,6 +65,10 @@ the class. `AccumulateGrad` has no forward creator and must be directly
 scoped by its parameter hook. The real-L A2000 correctness proof exposed
 this Kineto behavior before any deciding 5090 data; the first proof refused,
 and this explicit map replaces the ambiguous mapping prospectively.
+The first full A2000 capture then recorded 502,233 events in a 145 MiB trace
+and refused two unregistered autograd creators. Explicit flash-attention and
+division creators were added before any deciding 5090 data; unknown kinds
+still refuse.
 Kernel names are recorded but never used to choose a class.
 Unbound, ambiguous, duplicate or crossing events refuse certification.
 An unscoped rank-16 adapter GEMM also refuses. Device events outside the
