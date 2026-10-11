@@ -2099,7 +2099,7 @@ Register: [`../claims.json`](../claims.json). The position, **measured** (receip
 
 # Status — what this package does, what is current, what is open
 
-**As of 2026-10-10, version 0.53.0** (the version of record is `pyproject.toml`'s). This page states the current
+**As of 2026-10-11, version 0.53.0** (the version of record is `pyproject.toml`'s). This page states the current
 position in each area, with the claim id behind each number; [`docs/claims.json`](claims.json) holds every claim's full
 text and evidence. The dated narrative behind these positions, with the readings they replaced and why, is
 [`STATUS-RECORD.md`](STATUS-RECORD.md).
@@ -2157,6 +2157,11 @@ driver use, by up to 1.14 GB. One setup clear released 32 MiB on one arm and cha
 no training-memory remedy. DQ9 licenses neither capacity nor calibration; the opt-in and enforced streamed margin
 remain. `e4b.train.dense-executor.dq9.5090.2026-10-08` ([diagnostic record](../bench/dq9/receipts/dq9-5090-2/README.md));
 `e4b.train.dense-executor.dq7.5090.2026-10-08` ([original VOID reading](../bench/dq7/RESULTS-dq7.md)).
+
+**DQ11 is a fusion build candidate, measured-private.** Unsloth (U) was faster than e4b's dense path (L) in this matched SDPA, eager, full-logits
+configuration, not Unsloth's default. The registered quality gates pass and the independently rederived decision is
+`BUILD_CANDIDATE`; this licenses a separate fusion investigation and carries no capacity or shipping claim.
+`e4b.train.dense-adapter.dq11.matched-sdpa.5090.2026-10-11` ([results](../bench/dq11/RESULTS-dq11.md)).
 
 ### Training against other frameworks
 
@@ -3328,6 +3333,7 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.serve.p127.launch-bound-glue.qwen3.5090.2026-10-09 [measured]: Lane P127, one RTX 5090: on the shipped default serve_paged (Qwen3-30B-A3B NF4, decode graphs at buckets 1-16, 16 slots), P127's launch-bound glue changes (Phase 1: three host casts gone, #1448 …
 - e4b.train.p129.fused-qkv.qwen3.5090.2026-10-10 [measured]: Lane P129 Amendment 3 (#835), one RTX 5090 (tc1-5090-147, AMD EPYC 7B13, Vast machine 27708, host-bound: the matched q0's GPU busy 0.464 of its step): e4b's opt-in fused q/k/v training projection (E4B_TRAIN_FUSE_QKV=1: one NF4 dequantize and matmul over the concatenated packed rows, one LoRA-A product, serving's fused …
 - e4b.train.p129.fused-qkv.second-host.5090.2026-10-10 [measured]: Lane P129 Amendment 4 (#835), DEFAULT_ON's second host: e4b's fused q/k/v training projection (E4B_TRAIN_FUSE_QKV=1) against the three projections at TC1's field recipe over 60 load-gated steps, on two RTX 5090 hosts, each read on its own. …
+- e4b.train.dense-adapter.dq11.matched-sdpa.5090.2026-10-11 [measured-private] (receipt private): Unsloth (U) was faster than e4b's dense path (L) in this matched SDPA, eager, full-logits configuration, not Unsloth's default.
 
 Open items (no evidence either way):
 
@@ -3335,4 +3341,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 …
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(442 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(443 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
