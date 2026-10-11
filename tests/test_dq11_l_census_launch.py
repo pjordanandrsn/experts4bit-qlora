@@ -275,6 +275,9 @@ def test_envelope_exact_criteria_source_template_and_expiry(tmp_path, monkeypatc
     launch.validate_envelope(envelope, record, template, e4b, controller, at=issued + timedelta(hours=1))
     with pytest.raises(ValueError, match="expired"):
         launch.validate_envelope(envelope, record, template, e4b, controller, at=issued + timedelta(hours=24))
+    shorter = dict(envelope, expires_at=(issued + timedelta(hours=23)).isoformat())
+    with pytest.raises(ValueError, match="exactly 24 hours"):
+        launch.validate_envelope(shorter, record, template, e4b, controller, at=issued + timedelta(hours=1))
     broader = dict(envelope, criteria=dict(launch.ENVELOPE_CRITERIA, minimum_reliability="0.97"))
     with pytest.raises(ValueError, match="outside the exact envelope"):
         launch.validate_envelope(broader, record, template, e4b, controller, at=issued + timedelta(hours=1))
@@ -290,8 +293,10 @@ def test_envelope_exact_criteria_source_template_and_expiry(tmp_path, monkeypatc
 def test_envelope_comment_must_be_maintainer_exact_json(monkeypatch):
     url = "https://github.com/pjordanandrsn/experts4bit-qlora/issues/1083#issuecomment-123"
     envelope = {"approval_url": url, "schema": "dq11-l-census-envelope-ack/1",
-                "maximum_draws": 1}
+                "maximum_draws": 1, "issued_at": "2026-10-11T08:00:00Z",
+                "expires_at": "2026-10-12T08:00:00Z"}
     comment = {"html_url": url, "user": {"login": "pjordanandrsn"},
+               "created_at": "2026-10-11T08:00:00Z", "updated_at": "2026-10-11T08:00:00Z",
                "body": json.dumps({key: value for key, value in envelope.items() if key != "approval_url"})}
 
     def answer(*args, **kwargs):
@@ -306,6 +311,20 @@ def test_envelope_comment_must_be_maintainer_exact_json(monkeypatch):
     comment["user"]["login"] = "pjordanandrsn"
     comment["body"] = "{}"
     with pytest.raises(ValueError, match="differs from the maintainer"):
+        launch.verify_envelope_comment(envelope)
+    comment["body"] = json.dumps({key: value for key, value in envelope.items() if key != "approval_url"})
+    comment["updated_at"] = "2026-10-11T08:00:01Z"
+    with pytest.raises(ValueError, match="edited, backdated or extended"):
+        launch.verify_envelope_comment(envelope)
+    comment["updated_at"] = comment["created_at"]
+    envelope["issued_at"] = "2026-10-11T08:02:01Z"
+    comment["body"] = json.dumps({key: value for key, value in envelope.items() if key != "approval_url"})
+    with pytest.raises(ValueError, match="edited, backdated or extended"):
+        launch.verify_envelope_comment(envelope)
+    envelope["issued_at"] = comment["created_at"]
+    envelope["expires_at"] = "2026-10-12T08:00:01Z"
+    comment["body"] = json.dumps({key: value for key, value in envelope.items() if key != "approval_url"})
+    with pytest.raises(ValueError, match="edited, backdated or extended"):
         launch.verify_envelope_comment(envelope)
 
 
