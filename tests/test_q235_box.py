@@ -137,7 +137,6 @@ def test_a_strict_failure_names_itself():
                                                           "frozen_sha256_after_both_steps_equal": True})
 
 
-
 @pytest.fixture(scope="module")
 def tiny_mixtral(tmp_path_factory):
     from transformers import MixtralConfig, MixtralForCausalLM
