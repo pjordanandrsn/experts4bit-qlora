@@ -46,11 +46,22 @@ def _env(tmp: Path, rc: int = 0) -> dict:
             "FAKE_ARGV": str(tmp / "argv"), "FAKE_RC": str(rc)}
 
 
-def _bash(script: str, tmp: Path, env: dict) -> subprocess.CompletedProcess:
+def _bash(script: str, tmp: Path, env: dict, *, shell: str = "bash") -> subprocess.CompletedProcess:
     prelude = ('say(){ echo "SAY $*"; }\nHOST=box.example; PORT=2222; W=/root/tc1; E4B_RENT_SSH_OPTS="-o UserKnownHostsFile=/x"\n'
                f'RUN_DIR="{tmp}/run"; PARTIAL_AT=2026-10-02T11:30:00Z\n')
-    return subprocess.run(["bash", "-c", prelude + EXCLUDES + FUNC + script], cwd=tmp, env=env, check=False,
+    return subprocess.run([shell, "-c", prelude + EXCLUDES + FUNC + script], cwd=tmp, env=env, check=False,
                           capture_output=True, text=True, timeout=60)
+
+
+def test_partial_fetch_bash32_empty_and_populated_optional_excludes(tmp_path: Path):
+    _box(tmp_path)
+    for values, wanted in (("()", []), ("(--exclude 'receipts/capture-trace.json')", ["--exclude", "receipts/capture-trace.json"])):
+        r = _bash(f'set -uo pipefail; TC1_PARTIAL_EXCLUDES={values}; tc1_partial_fetch "$RUN_DIR/tc1.partial" && echo OK',
+                  tmp_path, _env(tmp_path), shell="/bin/bash")
+        assert r.returncode == 0 and "OK" in r.stdout, r.stderr
+        argv = (tmp_path / "argv").read_text().splitlines()
+        assert all(item in argv for item in wanted)
+        assert ("receipts/capture-trace.json" in argv) == bool(wanted)
 
 
 def _box(tmp: Path) -> None:

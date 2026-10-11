@@ -149,7 +149,8 @@ else
 fi
 tc1_partial_fetch() {  # dest_dir -> rc of rsync; never exits the caller
   mkdir -p "$1" || return 1
-  rsync -az --timeout=120 -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -p $PORT" "${TC1_RSYNC_EXCLUDES[@]}" "${TC1_PARTIAL_EXCLUDES[@]}" "root@$HOST:$W/" "$1/" >/dev/null 2>&1
+  # /bin/bash 3.2 on the controller treats an empty array's [@] as unbound under set -u.
+  rsync -az --timeout=120 -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -p $PORT" "${TC1_RSYNC_EXCLUDES[@]}" ${TC1_PARTIAL_EXCLUDES[@]+"${TC1_PARTIAL_EXCLUDES[@]}"} "root@$HOST:$W/" "$1/" >/dev/null 2>&1
 }
 
 say "lane started; polling TP_DONE every ${POLL}s with a heartbeat (stall reported after ${STALL_S}s of no change, idle GPU AND no disk movement; never acted on)"

@@ -42,6 +42,23 @@ destruction; phase alarms take the lesser of their registered cap and time
 remaining before that reserve. Timeout or missing proof ends in
 `CENSUS_REFUSAL`, evidence retention and teardown, with no automatic retry.
 
+This wall clock is derived from the same 5090/L draw4f receipt rather than a
+phase-cap sum. Instance creation was `01:52:50Z`; `tc1/summary.txt` began
+`proof-L` at `02:01:06Z`, so provisioning, SSH, the 17.6 GB input transfer,
+100-wheel bootstrap and model preparation consumed **496 s** together.
+The draw4f process receipts give `proof-L` **20.346 s**, `read-1-L`
+**50.506 s** and `read-2-L` **50.501 s**. From the `read-2-L` start at
+`02:06:58Z` to the provisional reduction line at `02:09:10Z` was **132 s**;
+using that full tail as the census reduction/closure allowance deliberately
+counts the last L read twice. The conservative measured subtotal is
+`496 + 20.346 + 50.506 + 50.501 + 132 = 749.353 s`.
+At **1.5×**, that is **1124.030 s**; adding the **300 s** reserved for packet
+transfer and teardown gives **1424.030 s = 23.734 min**, leaving **375.970 s**
+within the registered 1800 s wall. The separate 40-update profiler capture is
+budgeted using the second measured L process plus the 1.5× margin; its actual
+5090 overhead is unknown until this draw, and an overrun is a refusal. This
+arithmetic does not turn a timeout into a retry or a BUILD result.
+
 The all-in ceiling is **$0.90 for one draw**, including GPU, ordered storage,
 download, upload and teardown. The manifest's GPU-plus-storage ceiling is
 `$0.85/hour`, so 30 minutes reserves `$0.425`. The exact registered input is
@@ -89,13 +106,17 @@ the final fetched files against the box-side SHA-256 list.
 ## Stable-host packet and final sequence
 
 The **same guarded controller's Vast offer search** must observe the proposed
-machine and every enumerated offer ID through at least five continuous minutes
-of successful searches, no gap longer than 30 seconds. Each returned offer
-must remain verified/rentable, one normal RTX 5090, same driver and host,
-within the disk/RAM, hourly and tariff caps. The intersection of qualifying
-IDs across all observations is the only offer set eligible for the packet.
-Unreturned listings, missing pages or an unavailable/changed ID do not count
-as stable. The record includes each observation time, the exact query/filter,
+machine in every successful search for at least five continuous minutes,
+with no gap longer than 30 seconds. Its offer IDs may rotate between searches.
+Every ID returned for that machine must belong to the enumerated approved set
+and pass the verified/rentable, normal RTX 5090, driver, disk/RAM, hourly and
+tariff gates. The eligible set is the **union** of IDs seen across the interval;
+the full approved set must equal that union. An outside ID, ineligible offer,
+absent machine, missed search or gap resets the clock. The last quote needs at
+least one currently listed approved offer, with no outside or ineligible IDs.
+Before the paid ACK, a read-only discovery interval proposes its observed
+union; after the ACK, the repeated interval enforces that exact approved set.
+The record includes each observation time, the exact query/filter,
 all relevant offer fields and prices, selected machine/IDs, and its SHA-256.
 The `adertha-agents` offer-set pin must be on merged main; the final manifest
 uses `vast_pin_machine` and `vast_pin_offers`, never an unpinned or single-ID

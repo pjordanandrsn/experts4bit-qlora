@@ -64,12 +64,19 @@ def test_registered_budget_and_tariff_refusal():
         assert launch.offer_row(raw, p)["eligible"] is False
 
 
-def test_stability_is_intersection_of_every_search():
+def test_stability_is_continuous_machine_with_union_of_approved_rotating_ids():
     history = samples("100", "101")
+    for i, sample in enumerate(history):
+        sample["offers"] = sample["offers"][i % 2:i % 2 + 1]
     assert launch.stable_ids(history, "200", ["100", "101"]) == ["100", "101"]
-    history[7]["offers"] = history[7]["offers"][:1]
-    assert launch.stable_ids(history, "200") == ["100"]
-    with pytest.raises(ValueError, match="ACK offer set"):
+    history[7]["offers"] = [launch.offer_row(offer("102"), FakeProvider([]))]
+    with pytest.raises(ValueError, match="outside ACK set"):
+        launch.stable_ids(history, "200", ["100", "101"])
+    history[7]["offers"] = []
+    with pytest.raises(ValueError, match="machine absent"):
+        launch.stable_ids(history, "200", ["100", "101"])
+    history[7]["offers"] = [dict(launch.offer_row(offer("101"), FakeProvider([])), eligible=False)]
+    with pytest.raises(ValueError, match="ineligible offer"):
         launch.stable_ids(history, "200", ["100", "101"])
 
 
@@ -131,18 +138,29 @@ def test_read_only_transport_refuses_create():
         transport.request("PUT", "/v0/asks/123/")
 
 
-def test_final_quote_refuses_missing_approved_offer(tmp_path):
+def test_final_quote_accepts_one_rotating_id_and_refuses_outside_id(tmp_path):
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(json.dumps({"vast_pin_machine": "200", "vast_pin_offers": ["100", "101"],
                                          "vast_required_driver": "580.159.03"}))
     history_path = tmp_path / "history.json"
+    history = samples("100", "101")
+    for i, sample in enumerate(history):
+        sample["offers"] = sample["offers"][i % 2:i % 2 + 1]
     history_path.write_text(json.dumps({"machine_id": "200", "offer_ids": ["100", "101"],
-                                        "samples": samples("100", "101")}))
+                                        "samples": history}))
     gate_path = tmp_path / "gate.json"
     gate_path.write_text(json.dumps({"passed": True, "manifest_sha256": launch.sha(manifest_path)}))
-    with pytest.raises(ValueError, match="approved offer set changed"):
-        launch.quote(manifest_path, history_path, gate_path, FakeProvider([offer("100")]), tmp_path / "quote.json")
-    assert not (tmp_path / "quote.json").exists()
+    result = launch.quote(manifest_path, history_path, gate_path, FakeProvider([offer("100")]), tmp_path / "quote.json")
+    assert result["offer_ids"] == ["100", "101"] and [r["id"] for r in result["offers"]] == ["100"]
+    with pytest.raises(ValueError, match="outside or ineligible"):
+        launch.quote(manifest_path, history_path, gate_path, FakeProvider([offer("102")]), tmp_path / "outside.json")
+    assert not (tmp_path / "outside.json").exists()
+    for sample in history[1::2]:
+        sample["offers"][0]["driver_version"] = "595.91.07"
+    history_path.write_text(json.dumps({"machine_id": "200", "offer_ids": ["100", "101"],
+                                        "samples": history}))
+    with pytest.raises(ValueError, match="different exact driver"):
+        launch.quote(manifest_path, history_path, gate_path, FakeProvider([offer("100")]), tmp_path / "mixed-driver.json")
 
 
 def test_paid_controller_refuses_expired_search_before_driver(tmp_path, monkeypatch):

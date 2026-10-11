@@ -147,7 +147,7 @@ def offer_row(offer: dict, provider) -> dict:
 
 
 def stable_ids(samples: list[dict], machine: str, required: list[str] | None = None) -> list[str]:
-    """Only offer IDs present in every successful controller search survive."""
+    """One continuously listed machine; approved qualifying IDs may rotate."""
     if not machine.isdigit() or not samples:
         raise ValueError("machine and successful observations required")
     first, last = samples[0]["monotonic"], samples[-1]["monotonic"]
@@ -156,28 +156,30 @@ def stable_ids(samples: list[dict], machine: str, required: list[str] | None = N
     if any(b["monotonic"] <= a["monotonic"] or b["monotonic"] - a["monotonic"] > MAX_SAMPLE_GAP_SECONDS
            for a, b in zip(samples, samples[1:])):
         raise ValueError("observation gap exceeds 30 seconds")
-    common = None
+    seen = set()
     drivers = {}
     for sample in samples:
         if sample.get("status") != "PASS" or sample.get("machine_id") != machine:
             raise ValueError("failed or foreign controller search in stability interval")
         rows = sample.get("offers")
-        if not isinstance(rows, list):
-            raise ValueError("missing offer list")
-        eligible = {row["id"] for row in rows if row.get("eligible") and row.get("machine_id") == machine}
-        if len(eligible) != len([row for row in rows if row.get("eligible") and row.get("machine_id") == machine]):
+        if not isinstance(rows, list) or not rows:
+            raise ValueError("machine absent from controller search")
+        eligible = {row.get("id") for row in rows}
+        if (any(not row.get("eligible") or row.get("machine_id") != machine or not str(row.get("id", "")).isdigit()
+                for row in rows)):
+            raise ValueError("machine returned an ineligible offer")
+        if len(eligible) != len(rows):
             raise ValueError("duplicate offer identity in a search")
+        if required is not None and (not required or eligible - set(required)):
+            raise ValueError("offer outside ACK set during stability interval")
         for row in rows:
-            if row.get("id") in eligible:
-                previous = drivers.setdefault(row["id"], row.get("driver_version"))
-                if row.get("driver_version") != previous:
-                    raise ValueError("driver changed during stability interval")
-        common = eligible if common is None else common & eligible
-    if not common:
-        raise ValueError("no offer remained eligible across every search")
-    if required is not None and (not required or len(set(required)) != len(required) or set(required) - common):
-        raise ValueError("ACK offer set not continuously present")
-    return sorted(common, key=int)
+            previous = drivers.setdefault(row["id"], row.get("driver_version"))
+            if row.get("driver_version") != previous:
+                raise ValueError("driver changed during stability interval")
+        seen.update(eligible)
+    if required is not None and (len(set(required)) != len(required) or set(required) != seen):
+        raise ValueError("ACK offer set differs from observed union")
+    return sorted(seen, key=int)
 
 
 def packet_files(root: Path) -> tuple[int, dict[str, dict]]:
@@ -400,21 +402,27 @@ def quote(manifest_path: Path, history_path: Path, gate_path: Path, provider, ou
     machine = str(manifest["vast_pin_machine"])
     approved = [str(x) for x in manifest["vast_pin_offers"]]
     stable_ids(history["samples"], machine, approved)
+    if any(row["driver_version"] != manifest.get("vast_required_driver")
+           for sample in history["samples"] for row in sample["offers"]):
+        raise ValueError("approved history includes a different exact driver")
     if (history.get("machine_id") != machine or history.get("offer_ids") != approved
             or gate.get("passed") is not True or gate.get("manifest_sha256") != sha(manifest_path)):
         raise ValueError("history/gate do not bind exact approved manifest")
     sample = observation(provider, machine)
     rows = {r["id"]: r for r in sample["offers"]}
-    if any(oid not in rows or not rows[oid]["eligible"] for oid in approved):
-        raise ValueError("approved offer set changed or exceeded a quote cap")
-    if any(rows[oid]["driver_version"] != manifest.get("vast_required_driver") for oid in approved):
+    if len(rows) != len(sample["offers"]):
+        raise ValueError("duplicate offer identity in final search")
+    live_ids = set(rows)
+    if not live_ids or live_ids - set(approved) or any(not rows[oid]["eligible"] for oid in live_ids):
+        raise ValueError("final search has absent, outside or ineligible offer")
+    if any(rows[oid]["driver_version"] != manifest.get("vast_required_driver") for oid in live_ids):
         raise ValueError("approved offer changed its exact driver")
     result = {
         "schema": "dq11-l-census-quote/1", "mode": "READ_ONLY_CONTROLLER_SEARCH_NO_CREATE",
         "utc": sample["utc"], "monotonic": sample["monotonic"],
         "manifest_sha256": sha(manifest_path), "history_sha256": sha(history_path),
         "gate_sha256": sha(gate_path), "machine_id": machine, "offer_ids": approved,
-        "offers": [rows[oid] for oid in approved], "all_in_cap_usd": str(ALL_IN_CAP),
+        "offers": [rows[oid] for oid in approved if oid in live_ids], "all_in_cap_usd": str(ALL_IN_CAP),
         "worst_registered_reservation_usd": str(reserve(HOURLY_CAP, DOWNLOAD_RATE_CAP, UPLOAD_RATE_CAP)),
     }
     with output.open("x") as stream:
