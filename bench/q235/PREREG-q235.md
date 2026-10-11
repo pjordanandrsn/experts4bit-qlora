@@ -454,8 +454,10 @@ u_i is defined below. Three independent implementations agree on every quantity 
      tolerance is a per-layer relative difference ‖null − box‖ / ‖box‖ ≤ **1e-3** on every layer, about 100× below the box's own
      NF4-against-bf16 error. Bit-for-bit equality is reported. Beyond the tolerance the instrument broke, and the box is **VOID**,
      not FAIL.
-   - **Each plant must engage, and only at its layer.** Its layers before 47 must equal the null's bit for bit, and its layer 47 must
-     differ from the null's. Otherwise: VOID.
+   - **Each plant must engage, and only at its layer.** Its layers before 47 must match the null's within the same tolerance,
+     ‖plant_i − null_i‖ / ‖null_i‖ ≤ 1e-3 for every i < 47. In-process equality was bit for bit in every rehearsal, but the RTX A2000
+     cannot certify the registered card's dispatch: a reduction with atomics could differ in the last bit within one process. Bit-for-bit
+     equality is reported. Its layer 47 must differ from the null's. Otherwise: VOID.
    - **The unplant is checked structurally,** in code. After each plant comes off, the planted layer's hooks, instance-level forwards
      and expert activation must equal their snapshot from before it, by identity. Otherwise the repeat raises, a harness error (VOID).
      The routing plant cannot leak into the epilogue forward.

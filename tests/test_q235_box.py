@@ -101,6 +101,7 @@ def test_the_in_process_plants_reproduce_the_separate_process_plants(tiny, step)
     for kind in ("routing", "epilogue"):
         p = rec["plants"][kind]
         assert p["layer"] == 2 and p["pre_plant_equal_null"] and p["planted_layer_differs"], p
+        assert p["pre_plant_max_rel_diff"] == 0.0 and len(p["pre_plant_rel_diff"]) == 2       # the tolerance's input, recorded
         sep, _ = _box(tiny, f"sep_{kind}", "--repeat", "--plant", kind)
         assert p["layer_sha256"] == sep["layer_sha256"], f"the in-process {kind} plant differs from the separate-process one"
         assert p["loss"] == sep["repeat"]["loss"]

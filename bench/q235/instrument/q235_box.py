@@ -314,10 +314,11 @@ def _sha(t):
     return hashlib.sha256(t.view(torch.uint8).numpy().tobytes()).hexdigest()
 
 
-def in_process_plants(model, forward, null):
+def in_process_plants(model, forward, null, mask=None):
     """Amendment 3: after the repeat's clean step-0 forward (the NULL, ``null``: its layer outputs), each planted error in turn,
-    in this process: plant, forward, unplant. Each plant's record carries its layer outputs and router top-k, its loss, whether the
-    layers before the planted one equal the null bit for bit, and whether the planted layer differs from it (the plant engaged).
+    in this process: plant, forward, unplant. Each plant's record carries its layer outputs and router top-k, its loss, each layer
+    before the planted one's relative difference from the null over the real positions (``mask``; the verdict applies Amendment 3's
+    tolerance) beside whether they are equal bit for bit (reported), and whether the planted layer differs from it (the plant engaged).
     The unplant is checked structurally: the planted layer's hooks, instance forwards and activation must equal their snapshot from
     before the plant, or this raises (a harness error) -- the routing plant cannot leak into the epilogue forward."""
     out = {}
@@ -338,7 +339,13 @@ def in_process_plants(model, forward, null):
         if plant_surface(model, i) != before:
             raise RuntimeError(f"the {kind} plant did not come off layer {i}: its hooks or forwards differ from before it")
         sha, sha_null = [_sha(t) for t in lo], [_sha(t) for t in null]
+        m = mask.bool().cpu() if mask is not None else None
+        rel = []
+        for a, b in zip(lo[:i], null[:i]):
+            a, b = (a.float()[m], b.float()[m]) if m is not None else (a.float(), b.float())
+            rel.append(float((a - b).norm() / b.norm().clamp_min(1e-30)))
         out[kind] = {"layer": i, "loss": loss, "forward_s": round(forward_s, 3), "layer_sha256": sha,
+                     "pre_plant_rel_diff": rel, "pre_plant_max_rel_diff": max(rel, default=0.0),
                      "pre_plant_equal_null": sha[:i] == sha_null[:i], "planted_layer_differs": sha[i] != sha_null[i],
                      "_layers": lo, "_topk": tk}
     return out
@@ -375,7 +382,7 @@ def run(a):
         for h in hooks:
             h.remove()
         if a.plants:
-            out["_plants"] = in_process_plants(model, forward, layer_out)
+            out["_plants"] = in_process_plants(model, forward, layer_out, tokens["attention_mask"])
             out["plants"] = {k: {f: v[f] for f in v if not f.startswith("_")} for k, v in out["_plants"].items()}
         return out, layer_out
 
@@ -515,6 +522,7 @@ def main():
         save_layers(d, rec["_layers"], rec["_topk"])
         json.dump({"loss": rec["loss"]}, open(os.path.join(d, "nf4.json"), "w"))
         json.dump({"plant": {"kind": kind, "layer": rec["layer"]}, "in_process": True, "layer_sha256": rec["layer_sha256"],
+                   "pre_plant_max_rel_diff": rec["pre_plant_max_rel_diff"], "pre_plant_rel_diff": rec["pre_plant_rel_diff"],
                    "pre_plant_equal_null": rec["pre_plant_equal_null"], "planted_layer_differs": rec["planted_layer_differs"],
                    "repeat": {"loss": rec["loss"], "forward_s": rec["forward_s"]}}, open(os.path.join(d, "box.json"), "w"), indent=1)
     loss = out["repeat"]["loss"] if a.repeat else out["in_process"]["loss_0"]
@@ -527,7 +535,8 @@ def main():
     if "repeat" in out:
         brief["repeat"] = out["repeat"]
     if "plants" in out:
-        brief["plants"] = {k: {f: v[f] for f in ("loss", "pre_plant_equal_null", "planted_layer_differs")} for k, v in out["plants"].items()}
+        brief["plants"] = {k: {f: v[f] for f in ("loss", "pre_plant_max_rel_diff", "pre_plant_equal_null", "planted_layer_differs")}
+                           for k, v in out["plants"].items()}
     print(json.dumps(brief, default=str))
     bad = strict_failures(out, repeat=a.repeat)
     if bad:
