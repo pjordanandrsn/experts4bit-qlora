@@ -1,0 +1,186 @@
+{
+ "source": "loggetta evidence/2026-10-10-heldout-cards/rows-posthoc.json (HO1's post-hoc primary rows): Qwen/Qwen3-30B-A3B at ad44e777bcd18fa416d9da3bd8f70d33ebb85d39, seq 4096, micro_batch 1, RTX 5090, grouped_nf4, experts on device, NF4 attention",
+ "config_048": {
+  "E4B_ABSMAX_DQ": "0",
+  "E4B_TRAIN_FUSE_QKV": "0",
+  "E4B_CHUNKED_EVAL_LOSS": "0",
+  "why": "experts4bit-qlora 0.48.0: fp32 absmax, no fused q/k/v training projection (0.53.0), no chunked held-out loss (0.49.0); the training loss chunked under auto, as each receipt records (chunked_lm_loss.patched=1)"
+ },
+ "in_sample": [
+  {
+   "receipt": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-101/qwen3padbk_e4b_fused_attn4_m_pk1.json",
+   "adapters": "fp32"
+  },
+  {
+   "receipt": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-101/qwen3padbk_e4b_fused_attn4_m_pk1_d2.json",
+   "adapters": "fp32"
+  },
+  {
+   "receipt": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-101/qwen3padbk_e4b_fused_attn4_shipped_pk1.json",
+   "adapters": "native"
+  },
+  {
+   "receipt": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-101/qwen3padbk_e4b_fused_attn4_shipped_pk1_d2.json",
+   "adapters": "native"
+  },
+  {
+   "receipt": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-102/qwen3padbk_e4b_fused_attn4_m_pk1.json",
+   "adapters": "fp32"
+  },
+  {
+   "receipt": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-102/qwen3padbk_e4b_fused_attn4_m_pk1_d2.json",
+   "adapters": "fp32"
+  },
+  {
+   "receipt": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-102/qwen3padbk_e4b_fused_attn4_shipped_pk1.json",
+   "adapters": "native"
+  },
+  {
+   "receipt": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-102/qwen3padbk_e4b_fused_attn4_shipped_pk1_d2.json",
+   "adapters": "native"
+  },
+  {
+   "receipt": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-108/qwen3samestack4kd_e4b_fused_attn4_m.json",
+   "adapters": "fp32"
+  },
+  {
+   "receipt": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-108/qwen3samestack4kd_e4b_fused_attn4_m_d2.json",
+   "adapters": "fp32"
+  },
+  {
+   "receipt": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-108/qwen3samestack4kd_e4b_fused_attn4_m_t28.json",
+   "adapters": "fp32"
+  },
+  {
+   "receipt": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-108/qwen3samestack4kd_e4b_fused_attn4_m_t28_d2.json",
+   "adapters": "fp32"
+  },
+  {
+   "receipt": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-110/qwen3prof28_e4b_fused_attn4_m_q212.json",
+   "adapters": "fp32"
+  },
+  {
+   "receipt": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-110/qwen3prof28_e4b_fused_attn4_m_q212_d2.json",
+   "adapters": "fp32"
+  },
+  {
+   "receipt": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-110/qwen3prof28_e4b_fused_attn4_m_q28.json",
+   "adapters": "fp32"
+  },
+  {
+   "receipt": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-110/qwen3prof28_e4b_fused_attn4_m_q28_d2.json",
+   "adapters": "fp32"
+  },
+  {
+   "receipt": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-111/qwen3ladder28_e4b_fused_attn4_m_c0.json",
+   "adapters": "fp32"
+  },
+  {
+   "receipt": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-111/qwen3ladder28_e4b_fused_attn4_m_c0_d2.json",
+   "adapters": "fp32"
+  },
+  {
+   "receipt": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-112/qwen3memc4kb_e4b_fused_attn4_m_p4d.json",
+   "adapters": "fp32"
+  },
+  {
+   "receipt": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-113/qwen3dqpack_e4b_fused_attn4_m_a0.json",
+   "adapters": "fp32"
+  },
+  {
+   "receipt": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-113/qwen3dqpack_e4b_fused_attn4_m_a0_d2.json",
+   "adapters": "fp32"
+  },
+  {
+   "receipt": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-114/qwen3memc4kt_e4b_fused_attn4_m_p4t.json",
+   "adapters": "fp32"
+  }
+ ],
+ "out_of_sample": [
+  {
+   "receipt": "bench/p129/receipts/tc1-5090-147/qwen3fqkv3_e4b_fused_attn4_m_q0.json",
+   "adapters": "fp32",
+   "fuse_qkv": false
+  },
+  {
+   "receipt": "bench/p129/receipts/tc1-5090-147/qwen3fqkv3_e4b_fused_attn4_m_q0_d2.json",
+   "adapters": "fp32",
+   "fuse_qkv": false
+  },
+  {
+   "receipt": "bench/p129/receipts/tc1-5090-147/qwen3fqkv3_e4b_fused_attn4_m_q1.json",
+   "adapters": "fp32",
+   "fuse_qkv": true
+  },
+  {
+   "receipt": "bench/p129/receipts/tc1-5090-147/qwen3fqkv3_e4b_fused_attn4_m_q1_d2.json",
+   "adapters": "fp32",
+   "fuse_qkv": true
+  },
+  {
+   "receipt": "bench/p129/receipts/tc1-5090-147/qwen3fqkv3_e4b_fused_attn4_shipped_q0.json",
+   "adapters": "native",
+   "fuse_qkv": false
+  },
+  {
+   "receipt": "bench/p129/receipts/tc1-5090-147/qwen3fqkv3_e4b_fused_attn4_shipped_q0_d2.json",
+   "adapters": "native",
+   "fuse_qkv": false
+  },
+  {
+   "receipt": "bench/p129/receipts/tc1-5090-147/qwen3fqkv3_e4b_fused_attn4_shipped_q1.json",
+   "adapters": "native",
+   "fuse_qkv": true
+  },
+  {
+   "receipt": "bench/p129/receipts/tc1-5090-147/qwen3fqkv3_e4b_fused_attn4_shipped_q1_d2.json",
+   "adapters": "native",
+   "fuse_qkv": true
+  },
+  {
+   "receipt": "bench/p129/receipts/tc1-5090-150/qwen3fqkv3_e4b_fused_attn4_m_q0.json",
+   "adapters": "fp32",
+   "fuse_qkv": false
+  },
+  {
+   "receipt": "bench/p129/receipts/tc1-5090-150/qwen3fqkv3_e4b_fused_attn4_m_q0_d2.json",
+   "adapters": "fp32",
+   "fuse_qkv": false
+  },
+  {
+   "receipt": "bench/p129/receipts/tc1-5090-150/qwen3fqkv3_e4b_fused_attn4_m_q1.json",
+   "adapters": "fp32",
+   "fuse_qkv": true
+  },
+  {
+   "receipt": "bench/p129/receipts/tc1-5090-150/qwen3fqkv3_e4b_fused_attn4_m_q1_d2.json",
+   "adapters": "fp32",
+   "fuse_qkv": true
+  },
+  {
+   "receipt": "bench/p129/receipts/tc1-5090-150/qwen3fqkv3_e4b_fused_attn4_shipped_q0.json",
+   "adapters": "native",
+   "fuse_qkv": false
+  },
+  {
+   "receipt": "bench/p129/receipts/tc1-5090-150/qwen3fqkv3_e4b_fused_attn4_shipped_q0_d2.json",
+   "adapters": "native",
+   "fuse_qkv": false
+  },
+  {
+   "receipt": "bench/p129/receipts/tc1-5090-150/qwen3fqkv3_e4b_fused_attn4_shipped_q1.json",
+   "adapters": "native",
+   "fuse_qkv": true
+  },
+  {
+   "receipt": "bench/p129/receipts/tc1-5090-150/qwen3fqkv3_e4b_fused_attn4_shipped_q1_d2.json",
+   "adapters": "native",
+   "fuse_qkv": true
+  }
+ ],
+ "out_of_sample_config": {
+  "E4B_ABSMAX_DQ": "1",
+  "tokens_per_microbatch": 1130,
+  "why": "experts4bit-qlora 0.51.0/0.52.0: absmax double-quantized (absmax_dq_fast_train.compressed=48), the fused q/k/v projection as each arm recorded (train_qkv.env), chunked held-out loss on by default; 2048 x 2 micro-batches padded to their longest example, priced at the largest held (1,130 tokens); 48-layer checkpoint offload, which the estimate does not price and which only lowers the peak"
+ }
+}

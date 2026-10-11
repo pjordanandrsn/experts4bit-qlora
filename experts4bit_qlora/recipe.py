@@ -42,6 +42,9 @@ class QLoRASetup:
     alpha: int = 16
     #: dtype of every LoRA adapter, expert and attention ("bf16" is ``train.py``'s; TC1 trains "fp32")
     adapter_dtype: str = "bf16"
+    #: dtype of the attention adapters when it differs from ``adapter_dtype``; None (the default) means ``adapter_dtype``.
+    #: TC1's "native" arm is ``adapter_dtype="bf16", attention_adapter_dtype="fp32"``: bf16 expert adapters, fp32 attention.
+    attention_adapter_dtype: str | None = None
     train_experts: bool = True
     train_attention: bool = True
     #: frozen attention q/k/v/o stored in bitsandbytes NF4 (``TRAIN_ATTN_4BIT``)
@@ -114,6 +117,9 @@ def setup_refusals(topology, setup: QLoRASetup) -> tuple:
         out.append(f"expert_kernel must be one of {EXPERT_KERNELS}, got {setup.expert_kernel!r}")
     if setup.adapter_dtype not in _ADAPTER_BYTES:
         out.append(f"adapter_dtype must be one of {tuple(_ADAPTER_BYTES)}, got {setup.adapter_dtype!r}")
+    if setup.attention_adapter_dtype is not None and setup.attention_adapter_dtype not in _ADAPTER_BYTES:
+        out.append(f"attention_adapter_dtype must be None or one of {tuple(_ADAPTER_BYTES)}, "
+                   f"got {setup.attention_adapter_dtype!r}")
     if setup.train_experts and topology.expert_bias_tensors:
         out.append(f"train_experts: the expert stacks carry {list(topology.expert_bias_tensors)}, an epilogue "
                    "ExpertsLoRA cannot represent (assert_stock_epilogue); the loader builds them bare")
@@ -296,6 +302,49 @@ OPTIMIZERS = {
 }
 
 
+def _attention_adapter_dtype(setup: QLoRASetup) -> str:
+    return setup.attention_adapter_dtype or setup.adapter_dtype
+
+
+#: Bytes per logit live at a stock held-out evaluation's loss: Hugging Face's ``ForCausalLMLoss`` under ``torch.no_grad`` holds
+#: the bf16 logits (2), their fp32 upcast (4) and the log-softmax of that copy (4). Measured: TC1's tc1-5090-112 census at its
+#: ``s20.eval`` peak (Qwen3-30B-A3B, one packed 4,096-token row, V = 151,936): 1.159 + 2 x 2.318 GiB.
+EVAL_STOCK_BYTES_PER_LOGIT = 10
+#: Bytes per (token, hidden unit) of the hidden-state-sized tensors live at that peak: the final norm's input and output and
+#: the head's input (4 + 4 + 2; the same census: 0.031 + 0.031 + 0.016 GiB at T = 4,096, H = 2,048).
+EVAL_HIDDEN_BYTES = 10
+#: Bytes per chunk logit of the chunked held-out loss (``chunked_lm_loss_from_logits``): one chunk's fp32 upcast and its
+#: log-softmax, the full bf16 logits being counted separately. TC1 amendment 60 read the evaluation peak 26.88 -> 22.50 GB on
+#: Qwen3-30B-A3B's packed rows; stock minus chunked at these coefficients is 4.36 GB.
+EVAL_CHUNK_BYTES_PER_LOGIT = 8
+#: Allocations under 1 MiB live at a training or evaluation peak -- kernel scratch, lookup tables, index and staging buffers --
+#: which no item prices one by one. Measured: 0.38 MB (9 allocations) and 2.0 MB (11) at the two TC1 census peaks
+#: (tc1-5090-112, -114); the receipts round their peaks to 0.5 MB. Named so the estimate does not rest on rounding.
+SMALL_ALLOCATIONS_BYTES = 4 << 20
+
+
+def _eval_loss_bytes(topology, setup: QLoRASetup, tokens: int, vocab: int, hidden: int) -> tuple:
+    """``(bytes, how)`` of a held-out evaluation's loss for one ``tokens``-token micro-batch, as the run computes it: chunked
+    from the logits when ``enable_fast_train`` patched the model (``grouped_nf4``, a supported architecture, the training switch
+    not ``0``), ``E4B_CHUNKED_EVAL_LOSS`` is on and the stock fp32 logits reach the eval gate; otherwise stock."""
+    hid = tokens * hidden * EVAL_HIDDEN_BYTES
+    stock = tokens * vocab * EVAL_STOCK_BYTES_PER_LOGIT + hid
+    stock_how = f"the stock loss, bf16 logits + their fp32 upcast + its log-softmax = {stock / 1e9:.2f} GB"
+    if setup.expert_kernel != "grouped_nf4" or _loss_family(topology) is None:
+        return stock, stock_how
+    from .engines.chunked_lm_loss import EVAL_MIN_LOGITS_BYTES, chunked_eval_loss_requested, chunked_lm_loss_requested
+
+    chunk = chunked_lm_loss_requested()
+    if chunk is None:
+        return stock, stock_how + " (E4B_CHUNKED_LM_LOSS=0: the model is not patched)"
+    if not chunked_eval_loss_requested():
+        return stock, stock_how + " (E4B_CHUNKED_EVAL_LOSS=0)"
+    if tokens * vocab * 4 < EVAL_MIN_LOGITS_BYTES:
+        return stock, stock_how + " (under the eval gate)"
+    b = tokens * vocab * 2 + min(tokens, chunk) * vocab * EVAL_CHUNK_BYTES_PER_LOGIT + hid
+    return b, f"the chunked loss: bf16 logits + {chunk}-token fp32 chunks = {b / 1e9:.2f} GB"
+
+
 def estimate_env() -> dict:
     """The environment switches :func:`estimate_qlora_footprint` reads, keyed by name, each valued as the engine that reads
     it interprets it in this process: today ``E4B_CHUNKED_LM_LOSS``, as ``{"chunk": <tokens or None>, "auto_gate_bytes":
@@ -306,14 +355,16 @@ def estimate_env() -> dict:
     before the run, since the run builds what its own process's switches say. The names and the interpretation come from
     the modules that read them, so neither is kept twice."""
     from .engines.chunked_lm_loss import _ENV as chunked_loss_switch
-    from .engines.chunked_lm_loss import chunked_lm_loss_min_bytes, chunked_lm_loss_requested
+    from .engines.chunked_lm_loss import _EVAL_ENV as chunked_eval_switch
+    from .engines.chunked_lm_loss import chunked_eval_loss_requested, chunked_lm_loss_min_bytes, chunked_lm_loss_requested
     from .engines.train_qkv_fuse import train_fuse_qkv_requested
 
     from .engines.fast import absmax_dq_policy
 
     return {chunked_loss_switch: {"chunk": chunked_lm_loss_requested(), "auto_gate_bytes": chunked_lm_loss_min_bytes()},
             "E4B_TRAIN_FUSE_QKV": train_fuse_qkv_requested(),
-            "E4B_ABSMAX_DQ": absmax_dq_policy(None)[0]}
+            "E4B_ABSMAX_DQ": absmax_dq_policy(None)[0],
+            chunked_eval_switch: chunked_eval_loss_requested()}
 
 
 def _fused_qkv_absmax_bytes(topology, setup: QLoRASetup) -> int:
@@ -361,8 +412,11 @@ def estimate_qlora_footprint(topology, setup: QLoRASetup, *, tokens_per_microbat
     """Price ``setup`` on ``topology`` for micro-batches of ``tokens_per_microbatch`` tokens (padding included),
     trained with ``optimizer`` (a key of :data:`OPTIMIZERS`).
 
-    Covers what the PyTorch allocator holds for this process at the training step's peak, by item, plus the
-    host RAM the setup pins. It does not cover the CUDA context, the allocator's reserved-but-unallocated
+    Covers what the PyTorch allocator holds for this process at the larger of two peaks, by item, plus the host RAM the
+    setup pins: the training step's, and a held-out evaluation's -- a no-grad forward of one micro-batch with labels after an
+    optimizer step, priced as the item "held-out evaluation, above the training step" (zero when the step is larger). Under
+    ``E4B_CHUNKED_EVAL_LOSS=0`` or ``E4B_CHUNKED_LM_LOSS=0`` that evaluation takes the stock loss, ``T x V x 10`` bytes,
+    which on long rows at a large vocabulary is the run's peak. It does not cover the CUDA context, the allocator's reserved-but-unallocated
     blocks, or anything another process holds -- those belong to whoever compares the estimate with a device.
 
     The loss branch of the activation item follows what the run will do. With ``expert_kernel="grouped_nf4"``,
@@ -449,18 +503,22 @@ def estimate_qlora_footprint(topology, setup: QLoRASetup, *, tokens_per_microbat
 
     # --- adapters, gradients, optimizer ------------------------------------------------------------------
     attn_lora = setup.r * attn.in_plus_out if (setup.train_attention and attn is not None) else 0
-    trainable = lora_numel + attn_lora
+    attn_dtype = _attention_adapter_dtype(setup)
+    aab = _ADAPTER_BYTES[attn_dtype]
     if lora_numel:
         items.append(FootprintItem("expert LoRA adapters", "device", lora_numel * ab, "derived",
                                    f"ExpertsLoRA r={setup.r}, {setup.adapter_dtype}"))
     if attn_lora:
-        items.append(FootprintItem("attention LoRA adapters", "device", attn_lora * ab, "derived",
-                                   f"{attn.count} projections, r={setup.r}, {setup.adapter_dtype}"))
-    items.append(FootprintItem("adapter gradients", "device", trainable * ab, "derived",
+        items.append(FootprintItem("attention LoRA adapters", "device", attn_lora * aab, "derived",
+                                   f"{attn.count} projections, r={setup.r}, {attn_dtype}"))
+    items.append(FootprintItem("adapter gradients", "device", lora_numel * ab + attn_lora * aab, "derived",
                                "one gradient per trainable parameter, in its dtype"))
     per_param, how = OPTIMIZERS[optimizer]
-    items.append(FootprintItem(f"optimizer state ({optimizer})", "device", int(per_param(ab) * trainable), "derived",
-                               how))
+    items.append(FootprintItem(f"optimizer state ({optimizer})", "device",
+                               int(per_param(ab) * lora_numel + per_param(aab) * attn_lora), "derived", how))
+    items.append(FootprintItem("small allocations", "device", SMALL_ALLOCATIONS_BYTES, "heuristic",
+                               "kernel scratch, lookup tables, index and staging buffers under 1 MiB each "
+                               "(measured 0.4-2.0 MB at TC1's census peaks)"))
 
     # --- activations (gradient checkpointing on; a stated formula, not a measurement) ---------------------
     n_layers = topology.n_layers
@@ -487,6 +545,19 @@ def estimate_qlora_footprint(topology, setup: QLoRASetup, *, tokens_per_microbat
         n_keep = min(setup.keep_moe_layers, len(topology.expert_stacks))
         items.append(FootprintItem("kept MoE activations", "device", n_keep * keep_bytes_per_layer, "heuristic",
                                    f"{n_keep} layers x T x top_k x (first_out + I + H) bf16"))
+    # --- the held-out evaluation: a no-grad forward of one micro-batch with labels, after an optimizer step --------------
+    # No gradients are live (zeroed to None after the step); everything else is. Its loss buffers can exceed the training
+    # step's peak: on TC1's packed 4,096-token Qwen3-30B-A3B rows with stock evaluation they were the run peak.
+    train_total = sum(i.bytes for i in items if i.where == "device")
+    held = sum(i.bytes for i in items if i.where == "device"
+               and i.name not in ("adapter gradients", "activations", "kept MoE activations"))
+    eval_loss, eval_how = _eval_loss_bytes(topology, setup, T, V, H)
+    eval_total = held + max(eval_loss, layer)
+    items.append(FootprintItem("held-out evaluation, above the training step", "device", max(0, eval_total - train_total),
+                               "heuristic",
+                               f"a no-grad forward of one {T}-token micro-batch with labels: {held / 1e9:.2f} GB held "
+                               f"(no gradients) + max({eval_how}, one layer's working set = {layer / 1e9:.2f} GB) = "
+                               f"{eval_total / 1e9:.2f} GB against the training step's {train_total / 1e9:.2f} GB"))
     if attn is not None and attn.layers < n_layers:
         unmodelled.append(f"{n_layers - attn.layers} of {n_layers} layers mix tokens without q/k/v attention "
                           "(state-space, convolution or linear attention): their recompute working set")
@@ -540,7 +611,8 @@ def prepare_qlora_training(model_id, setup: QLoRASetup, *, device="cuda", revisi
     model.enable_input_require_grads()
     dtype = _DTYPES[setup.adapter_dtype]
     if setup.train_attention:
-        report["attention_lora_projections"] = add_attention_lora(model, setup.r, setup.alpha, dtype)
+        report["attention_lora_projections"] = add_attention_lora(model, setup.r, setup.alpha,
+                                                                  _DTYPES[_attention_adapter_dtype(setup)])
     if setup.train_experts and dtype != torch.bfloat16:
         for mod in model.modules():
             if isinstance(mod, ExpertsLoRA):
