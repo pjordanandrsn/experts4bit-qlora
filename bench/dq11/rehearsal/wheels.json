@@ -780,14 +780,6 @@
       "size": 33320
     },
     {
-      "name": "xformers",
-      "version": "0.0.35",
-      "filename": "xformers-0.0.35-py39-none-manylinux_2_28_x86_64.whl",
-      "url": "https://download.pytorch.org/whl/cu130/xformers-0.0.35-py39-none-manylinux_2_28_x86_64.whl",
-      "sha256": "962eb73f7243fb6a6b68ed85ed8f97780070ee35c1be464eefe3299b0382391d",
-      "size": null
-    },
-    {
       "name": "xxhash",
       "version": "4.0.1",
       "filename": "xxhash-4.0.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",

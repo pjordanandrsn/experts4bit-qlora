@@ -293,6 +293,21 @@ def initial_rows_fixture(root, marker):
                 "process_cap_bytes": 9 * (1 << 30),
             }
         }
+        if arm in ("U", "U0"):
+            from dq11_attention import DEVIATION, SHAPE, dispatched
+
+            events = [{"operator": op, "parent": parent} for op, parent in (
+                ("aten::_scaled_dot_product_attention_math", "aten::scaled_dot_product_attention"),
+                ("SafeSoftmaxBackward0", None), ("aten::_softmax_backward_data", "SafeSoftmaxBackward0"),
+                ("BmmBackward0", None), ("aten::bmm", "BmmBackward0"))]
+            row["engaged"].update(attention_deviation=DEVIATION, attention={
+                "schema": "dq11-attention-canary/1", "arm": arm, "kind": "read", "shape": SHAPE,
+                "source": marker["source"], "nonce": marker["nonce"], "science_eligible": False,
+                "optional_packages_absent": {"xformers": True, "flash_attn": True}, "selector": "sdpa",
+                "finite_gradients": {"query": True, "key": True, "value": True}, "profiler_removed": True,
+                "named_deviation": DEVIATION, "bindings": {"fixture": "synthetic CPU metadata"},
+                "settings": copy.deepcopy(SHIPPED_POLICY), "policy": None, "native_events": events,
+                "dispatch": dispatched(events, math_required=False)})
         row["identity_sha256"] = object_sha({"initial": slots, "tokens": tokens, "runtime": versions})
         rows[arm] = row
     return rows
@@ -301,6 +316,24 @@ def initial_rows_fixture(root, marker):
 def write_initial_rows(root, rows):
     for arm, row in rows.items():
         (root / f"receipts/initial-{arm}.json").write_text(json.dumps(row))
+
+
+@pytest.mark.parametrize("field", ["missing", "source", "nonce", "backward", "settings"])
+def test_initial_quality_report_requires_actual_attention_witness(sealed, field):
+    root, marker = sealed
+    rows = initial_rows_fixture(root, marker)
+    witness = rows["U"]["engaged"]["attention"]
+    if field == "missing":
+        del rows["U"]["engaged"]["attention"]
+    elif field in ("source", "nonce"):
+        witness[field] = "forged"
+    elif field == "backward":
+        witness["native_events"] = [event for event in witness["native_events"] if "Backward" not in event["operator"]]
+    else:
+        witness["settings"]["math_sdp"] = False
+    write_initial_rows(root, rows)
+    with pytest.raises((ValueError, KeyError)):
+        quality.report(root)
 
 
 def test_original_k8_is_rederived_and_never_gives_science_or_paid_licence(sealed):

@@ -68,7 +68,7 @@ def restore_padding_embedding(model, snapshot):
     return {"row": row, "checkpoint_tensor": key, "source_row_sha256": tensor_sha(original, values=True)}
 
 
-def prepare(directory, arm, *, quality_read=False):
+def prepare(directory, arm, *, quality_read=False, attention_kind="read"):
     if type(quality_read) is not bool:
         raise ValueError("explicit initial-quality mode must be boolean")
     if quality_read:
@@ -79,6 +79,9 @@ def prepare(directory, arm, *, quality_read=False):
     if any(key.startswith("UNSLOTH_") for key in os.environ):
         raise ValueError("inherited Unsloth switches are not registered")
     if arm in ("U", "U0"):
+        from dq11_attention import require_install_set
+
+        require_install_set()
         os.environ["UNSLOTH_COMPILE_DISABLE"] = "1"
         os.environ["UNSLOTH_RETURN_LOGITS"] = "1"
         from unsloth import FastLanguageModel
@@ -125,8 +128,10 @@ def prepare(directory, arm, *, quality_read=False):
         model, trainable = prepared.model, prepared.trainable
         report = {"plan": asdict(actual), "engaged": prepared.report}
     else:
+        from dq11_attention import DEVIATION, canary
         from transformers import BitsAndBytesConfig
 
+        attention_witness = canary(directory, arm, attention_kind, quality_read=quality_read)
         config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4",
                                    bnb_4bit_use_double_quant=True, bnb_4bit_compute_dtype=torch.bfloat16)
         model, _ = FastLanguageModel.from_pretrained(model_name=str(snapshot), max_seq_length=2048,
@@ -156,6 +161,8 @@ def prepare(directory, arm, *, quality_read=False):
         trainable = list(adapter_slots(model)[0].values())
         report = {"placement": "device", "compile_disable": True, "return_logits": True}
         report["pad_row_restored"] = restored_pad_row
+        report["attention"] = attention_witness
+        report["attention_deviation"] = DEVIATION
         report["default_deviation"] = (
             "pad row restored (Unsloth's patch_tokenizer maps absent pad to unk 0 and zeroes embedding row 0)"
         )
@@ -203,7 +210,7 @@ def _run(args):
     from loggetta.measure import DriverMemorySampler, proc_status
 
     with DriverMemorySampler() as load_sampler:
-        model, trainable, workload, report = prepare(directory, args.arm)
+        model, trainable, workload, report = prepare(directory, args.arm, attention_kind=args.kind)
     if args.arm in ("U", "U0"):
         report["token_0_scored_inputs"] = {
             name: sum(block.count(0) for block in tokens[name])

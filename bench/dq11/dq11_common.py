@@ -273,9 +273,19 @@ def path_census(model, arm, source_hashes):
     identities = {}
     globals_seal = None
     if arm in ("U", "U0"):
+        from dq11_attention import require_install_set
         from unsloth.kernels import fast_lora
         from unsloth.models.llama import original_apply_o, original_apply_qkv
+        from unsloth.models.mistral import MistralAttention_fast_forward
+        from unsloth.utils.attention_dispatch import run_attention, select_attention_backend
 
+        require_install_set()
+        if (MistralAttention_fast_forward.__globals__["run_attention"] is not run_attention
+                or MistralAttention_fast_forward.__globals__["select_attention_backend"] is not select_attention_backend
+                or select_attention_backend(False) != "sdpa"):
+            raise ValueError("matched SDPA dispatcher binding changed")
+        for name, function in (("run_attention", run_attention), ("select_attention_backend", select_attention_backend)):
+            identities[name] = verify_callable(function, source_hashes)
         globals_seal = adapter_globals(source_hashes)
 
         attention = [module for name, module in model.named_modules() if name.endswith(".self_attn")]
@@ -283,6 +293,8 @@ def path_census(model, arm, source_hashes):
         if len(attention) != 32 or len(mlps) != 32:
             raise ValueError("changed decoder layer count")
         for module in attention:
+            if getattr(module.forward, "__func__", None) is not MistralAttention_fast_forward:
+                raise ValueError("matched Mistral attention forward binding changed")
             qkv = fast_lora.apply_lora_qkv if arm == "U" else original_apply_qkv
             out = fast_lora.apply_lora_o if arm == "U" else original_apply_o
             if module.apply_qkv is not qkv or module.apply_o is not out:
