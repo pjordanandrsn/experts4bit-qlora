@@ -259,12 +259,12 @@ def observation(provider, machine: str, *, clock=time.monotonic) -> dict:
 
 def observe(provider, machine: str, required: list[str] | None = None, *, clock=time.monotonic, sleep=time.sleep) -> dict:
     samples = []
-    start = clock()
     while True:
         samples.append(observation(provider, machine, clock=clock))
-        if clock() - start >= MIN_STABLE_SECONDS:
+        elapsed = samples[-1]["monotonic"] - samples[0]["monotonic"]
+        if elapsed >= MIN_STABLE_SECONDS:
             break
-        sleep(min(20, max(0, MIN_STABLE_SECONDS - (clock() - start))))
+        sleep(min(20, MIN_STABLE_SECONDS - elapsed))
     offers = stable_ids(samples, machine, required)
     return {"schema": "dq11-l-census-stable-host/1", "utc": now(), "machine_id": machine,
             "offer_ids": offers if required is None else required, "samples": samples,

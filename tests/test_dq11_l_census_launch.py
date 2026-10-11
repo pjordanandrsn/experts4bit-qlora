@@ -114,6 +114,29 @@ def test_observe_uses_provider_search_and_no_create():
     assert p.calls == 16
 
 
+def test_observe_measures_window_from_first_completed_search():
+    t = [0.0]
+
+    class FirstSearchLatency(FakeProvider):
+        def search_offers(self, gpu):
+            if self.calls == 0:
+                t[0] += 0.5
+            return super().search_offers(gpu)
+
+    def clock():
+        return t[0]
+
+    def sleep(seconds):
+        t[0] += seconds
+
+    p = FirstSearchLatency([offer()])
+    result = launch.observe(p, "200", ["100"], clock=clock, sleep=sleep)
+    assert result["samples"][0]["monotonic"] == 0.5
+    assert result["samples"][-1]["monotonic"] == 300.5
+    assert result["samples"][-1]["monotonic"] - result["samples"][0]["monotonic"] == 300
+    assert p.calls == 16
+
+
 def test_packet_cap_checks_uncompressed_bytes_and_links(tmp_path):
     root = tmp_path / "packet"
     root.mkdir()
