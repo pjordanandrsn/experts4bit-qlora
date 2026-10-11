@@ -68,7 +68,13 @@ and this explicit map replaces the ambiguous mapping prospectively.
 The first full A2000 capture then recorded 502,233 events in a 145 MiB trace
 and refused two unregistered autograd creators. Explicit flash-attention and
 division creators were added before any deciding 5090 data; unknown kinds
-still refuse.
+still refuse. `ScaledDotProductFlashAttentionBackward0` binds exactly to
+`aten::_scaled_dot_product_flash_attention`, whose deepest registered scope
+in the sealed L recipe is `attention|native-sdpa` (96 A2000 nodes).
+`DivBackward0` binds exactly to `aten::div`; its three creators in that recipe
+are outside registered class scopes and therefore land in `other` at
+`outside-registered-class`. These classes follow creator and scope, regardless
+of their measured durations. A new creator or scope pattern refuses review.
 Kernel names are recorded but never used to choose a class.
 Unbound, ambiguous, duplicate or crossing events refuse certification.
 An unscoped rank-16 adapter GEMM also refuses. Device events outside the

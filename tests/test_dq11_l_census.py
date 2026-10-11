@@ -149,20 +149,23 @@ def test_backward_creator_uses_forward_thread_and_exact_op_under_nested_base():
 
 
 @pytest.mark.parametrize(
-    "backward,outer,creator",
+    "backward,outer,creator,scope,expected",
     [
         (
             "ScaledDotProductFlashAttentionBackward0",
             "aten::scaled_dot_product_attention",
             "aten::_scaled_dot_product_flash_attention",
+            True,
+            ("attention", "layer0"),
         ),
-        ("DivBackward0", "aten::ne", "aten::div"),
+        ("DivBackward0", "aten::ne", "aten::div", False, ("other", "outside-registered-class")),
     ],
 )
-def test_real_l_capture_backward_creators_select_exact_nested_op(backward, outer, creator):
+def test_real_l_capture_backward_creators_select_exact_nested_op(backward, outer, creator, scope, expected):
     start = 6 * 2000000
     events = [cpu(census.STEP_PREFIX + "6", start, 1000, 1, cat="user_annotation")]
-    events += [cpu(census.PREFIX + "attention|layer0", start + 10, 190, 2, cat="user_annotation")]
+    if scope:
+        events.append(cpu(census.PREFIX + "attention|layer0", start + 10, 190, 2, cat="user_annotation"))
     events += [cpu(outer, start + 20, 100, 3, seq=5), cpu(creator, start + 30, 50, 4, seq=5)]
     events += [cpu(f"autograd::engine::evaluate_function: {backward}", start + 300, 100, 5, seq=5, fwd=1)]
     events += [cpu("aten::mm", start + 310, 10, 6)]
@@ -179,7 +182,11 @@ def test_real_l_capture_backward_creators_select_exact_nested_op(backward, outer
         }
     ]
     normalized = census.normalize_trace({"schemaVersion": 1, "traceEvents": events}, expected_steps=(6,))
-    assert [(e["class"], e["path"]) for e in normalized["events"]] == [("attention", "layer0")]
+    assert [(e["class"], e["path"]) for e in normalized["events"]] == [expected]
+    if backward == "DivBackward0":
+        events.append(cpu(census.PREFIX + "attention|unexpected", start + 10, 190, 2, cat="user_annotation"))
+        with pytest.raises(ValueError, match="changed its registered class scope"):
+            census.normalize_trace({"schemaVersion": 1, "traceEvents": events}, expected_steps=(6,))
 
 
 @pytest.mark.parametrize(

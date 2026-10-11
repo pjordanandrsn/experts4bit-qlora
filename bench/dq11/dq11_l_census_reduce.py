@@ -61,6 +61,10 @@ BACKWARD_CREATOR = {
     "ViewBackward0": ("aten::view",),
     "_LateBoundMatMul4BitBackward": ("_LateBoundMatMul4Bit",),
 }
+BACKWARD_EXPECTED_CLASS = {
+    "ScaledDotProductFlashAttentionBackward0": "attention",
+    "DivBackward0": "other",
+}
 
 
 def fail(message):
@@ -230,7 +234,10 @@ def normalize_trace(trace, *, expected_steps=STEPS):
         matches = [row for row in forward[key] if row["event"]["name"] in BACKWARD_CREATOR[name]]
         if len(matches) != 1:
             fail("ambiguous or missing backward creator")
-        sequence[key] = direct(matches[0]) or ("other", "outside-registered-class")
+        tag = direct(matches[0]) or ("other", "outside-registered-class")
+        if name in BACKWARD_EXPECTED_CLASS and tag[0] != BACKWARD_EXPECTED_CLASS[name]:
+            fail("backward creator changed its registered class scope")
+        sequence[key] = tag
     output, device_keys = [], set()
     for index, event, bounds in device:
         matches = [n for n, b in steps.items() if contains(b, bounds)]
