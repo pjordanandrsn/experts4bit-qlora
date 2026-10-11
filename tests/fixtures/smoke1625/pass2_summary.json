@@ -1,0 +1,2057 @@
+{
+  "schema": "e4b-1625-split-smoke/1",
+  "status": "FAIL",
+  "cells": [
+    {
+      "family": "qwen3_moe",
+      "knob": "0",
+      "status": "FAIL",
+      "generated": [
+        [
+          149,
+          93,
+          229,
+          149
+        ],
+        [
+          149,
+          93,
+          229,
+          149
+        ]
+      ],
+      "serve_k19_seen": {
+        "one_launch|lean|le256": 24,
+        "one_launch|lean|gt256": 4
+      },
+      "graph_default_enabled": false,
+      "prefill_graph": {
+        "status": "refused",
+        "why": "device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement)"
+      },
+      "seen_knob0": {
+        "one_launch|lean|gt256": 2
+      },
+      "seen_own": {
+        "one_launch|lean|gt256": 2
+      },
+      "routes": {
+        "int4_prefill_env": "k19",
+        "prefill_attn_env": null,
+        "prefill_glue_env": null,
+        "prefill_lean_dispatch_env": null,
+        "prefill_lean_dispatch": "auto",
+        "k19_prefill_big_m_env": "0",
+        "k19_prefill_big_m": 0,
+        "device_grouping": true,
+        "int4_prefill": "k19",
+        "int4_prefill_above_256_rows": "k19",
+        "prefill_attn": "flash",
+        "seen": {
+          "moe": {
+            "int4_k19|gt256": 8,
+            "int4_k19|le256": 24,
+            "int4_singleton_gemv|le256": 16
+          },
+          "prefill_attn": {
+            "flash": 8
+          },
+          "moe_k19_dispatch": {
+            "one_launch|lean|gt256": 2
+          },
+          "prefill_folds": {
+            "attention": 8,
+            "layer": 8,
+            "norm": 12
+          }
+        }
+      },
+      "logits_equal_in_process": true,
+      "logits_max_abs": 0.0,
+      "device": "NVIDIA RTX A2000 12GB",
+      "capability": [
+        8,
+        6
+      ],
+      "source": {
+        "source": "/opt/conda/lib/python3.11/site-packages",
+        "git_head": null,
+        "package_sha256": "d511c213bcbb322edfc6aac8d294e8317110ca0d023d9b4f8ba21cbf1c52a2af",
+        "installed_e4b": "0.53.0",
+        "installed_gnf4": "0.45.0",
+        "gnf4_sources": {
+          "modules": {
+            "_brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_brotli.cpython-311-x86_64-linux-gnu.so",
+              "sha256": "7b45f6d4ae26c939dcf75ca2bdc8ad9c3032ccb51381a22d1cff022391a3f0ae"
+            },
+            "_triton_shim": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_triton_shim.py",
+              "sha256": "f3c3b65730f4b5676a9af94a43f041a9f3dcce5edd18703720748241b8e2e5ba"
+            },
+            "brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/brotli.py",
+              "sha256": "3e71885667851851d23b07ab986c28861776172af8e058607a32d09242081620"
+            },
+            "cold_cpu_view": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cold_cpu_view.py",
+              "sha256": "8a175b300e78136d790812f1c38c1cc7c5c37189850783a1ea52b2ff58ff434c"
+            },
+            "cpu_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cpu_grouped.py",
+              "sha256": "a1a6ca636167c2965fda89be9ef14a6787077f9599e92b874067dc20d1b7b124"
+            },
+            "fp8_kv": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_kv.py",
+              "sha256": "e06dee826f4f63eec087b43a11db6aa3585166b3b8a751e9fdedc1274da07c6f"
+            },
+            "fp8_paged_attn": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_paged_attn.py",
+              "sha256": "dd0af7514ef2a6b6b14d7816fe468d592de6eb5ffcdaba17d19573a988bdf799"
+            },
+            "gnf4_native": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/__init__.py",
+              "sha256": "5f902947f03cd28b267fe0b26f4a04346fafd80c9be41d4aaa4e9815ce4370ca"
+            },
+            "gnf4_native.build": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/build.py",
+              "sha256": "10a6c4d57268b81c26266fe0408485d64d450985aa5295cc0198a4edfd803230"
+            },
+            "int4_b32": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_b32.py",
+              "sha256": "773eff5db7be77dea3d1f9048a6e708a94e79634baf17f452bf2848e24a2072f"
+            },
+            "int4_pack_ref": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_pack_ref.py",
+              "sha256": "c50c26b3895e0c4ec0bfe8b5763dff4d783f32ec408258e98a8a42c390448406"
+            },
+            "int4_smallm": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_smallm.py",
+              "sha256": "dbefe80d6ce73b7cd8f58a3a2074c77ee1a8f899a85a3360a7ee25facfe2225f"
+            },
+            "mxfp4_loader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/mxfp4_loader.py",
+              "sha256": "fce6a65ae8b60f4d3ed57964b3c1be8e39e8116b70f2a632ad4b3d20251457e6"
+            },
+            "nf4_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nf4_grouped.py",
+              "sha256": "57570b4e7c4daa7982dbfcc8ca7ea3bd8a2149f29c5e94e40e0e92db33e10df9"
+            },
+            "nvme_arena": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_arena.py",
+              "sha256": "7d0db538454f04cb8aaf98c5567535f88e18408ff878112bd3f14a02f18fad86"
+            },
+            "nvme_reader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_reader.py",
+              "sha256": "08b3b677c6a809dc079452f5e11485f58e2d001cd030261841626d962b9649ac"
+            },
+            "nvme_residency": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_residency.py",
+              "sha256": "b0df36136495a4e78513e2930e7720ace4f480aa71b19272b69bee215710c0c3"
+            },
+            "row_pool": {
+              "path": "/opt/conda/lib/python3.11/site-packages/row_pool.py",
+              "sha256": "11e8e29869568677e1ebb7e3ba25848aa2e0afcaaa582c4acd404b4875d43a4a"
+            },
+            "six": {
+              "path": "/opt/conda/lib/python3.11/site-packages/six.py",
+              "sha256": "c51c91f703d3d4b3696c923cb5fec213e05e75d9215393befac7f2fa6a3904df"
+            },
+            "typing_extensions": {
+              "path": "/opt/conda/lib/python3.11/site-packages/typing_extensions.py",
+              "sha256": "4040ca1a1ecbee00d1385c12a93084d1c5bd46f0b774f07e5ae7e91c4f55e696"
+            }
+          },
+          "native_source_root": "/opt/conda/lib/python3.11/site-packages/gnf4_native",
+          "native_c_sources": {
+            "cpu_kernels.c": "6e7297766b58dc29e6d69b1d324abbecb822f66d623bb03a7782efac6fc9175c"
+          },
+          "imported_source_sha256": "8adaffdf5ce1375554349f0c2991bdcd69dd78dfc98cf764a3c4d91906c79090"
+        }
+      },
+      "torch": "2.8.0+cu128",
+      "checks_failed": [
+        "knob-0 forward's K19 calls above 256 rows: {'one_launch|lean|gt256': 2}",
+        "knob-0 forward's K19 calls above 256 rows: {'one_launch|lean|gt256': 2}, expected {'chained|lean|gt256': 2}"
+      ],
+      "seconds": 15.2
+    },
+    {
+      "family": "qwen3_moe",
+      "knob": "0r",
+      "status": "FAIL",
+      "generated": [
+        [
+          149,
+          93,
+          229,
+          149
+        ],
+        [
+          149,
+          93,
+          229,
+          149
+        ]
+      ],
+      "serve_k19_seen": {
+        "one_launch|lean|le256": 24,
+        "one_launch|lean|gt256": 4
+      },
+      "graph_default_enabled": false,
+      "prefill_graph": {
+        "status": "refused",
+        "why": "device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement)"
+      },
+      "seen_knob0": {
+        "one_launch|lean|gt256": 2
+      },
+      "seen_own": {
+        "one_launch|lean|gt256": 2
+      },
+      "routes": {
+        "int4_prefill_env": "k19",
+        "prefill_attn_env": null,
+        "prefill_glue_env": null,
+        "prefill_lean_dispatch_env": null,
+        "prefill_lean_dispatch": "auto",
+        "k19_prefill_big_m_env": "0",
+        "k19_prefill_big_m": 0,
+        "device_grouping": true,
+        "int4_prefill": "k19",
+        "int4_prefill_above_256_rows": "k19",
+        "prefill_attn": "flash",
+        "seen": {
+          "moe": {
+            "int4_k19|gt256": 8,
+            "int4_k19|le256": 24,
+            "int4_singleton_gemv|le256": 16
+          },
+          "prefill_attn": {
+            "flash": 8
+          },
+          "moe_k19_dispatch": {
+            "one_launch|lean|gt256": 2
+          },
+          "prefill_folds": {
+            "attention": 8,
+            "layer": 8,
+            "norm": 12
+          }
+        }
+      },
+      "logits_equal_in_process": true,
+      "logits_max_abs": 0.0,
+      "device": "NVIDIA RTX A2000 12GB",
+      "capability": [
+        8,
+        6
+      ],
+      "source": {
+        "source": "/opt/conda/lib/python3.11/site-packages",
+        "git_head": null,
+        "package_sha256": "d511c213bcbb322edfc6aac8d294e8317110ca0d023d9b4f8ba21cbf1c52a2af",
+        "installed_e4b": "0.53.0",
+        "installed_gnf4": "0.45.0",
+        "gnf4_sources": {
+          "modules": {
+            "_brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_brotli.cpython-311-x86_64-linux-gnu.so",
+              "sha256": "7b45f6d4ae26c939dcf75ca2bdc8ad9c3032ccb51381a22d1cff022391a3f0ae"
+            },
+            "_triton_shim": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_triton_shim.py",
+              "sha256": "f3c3b65730f4b5676a9af94a43f041a9f3dcce5edd18703720748241b8e2e5ba"
+            },
+            "brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/brotli.py",
+              "sha256": "3e71885667851851d23b07ab986c28861776172af8e058607a32d09242081620"
+            },
+            "cold_cpu_view": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cold_cpu_view.py",
+              "sha256": "8a175b300e78136d790812f1c38c1cc7c5c37189850783a1ea52b2ff58ff434c"
+            },
+            "cpu_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cpu_grouped.py",
+              "sha256": "a1a6ca636167c2965fda89be9ef14a6787077f9599e92b874067dc20d1b7b124"
+            },
+            "fp8_kv": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_kv.py",
+              "sha256": "e06dee826f4f63eec087b43a11db6aa3585166b3b8a751e9fdedc1274da07c6f"
+            },
+            "fp8_paged_attn": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_paged_attn.py",
+              "sha256": "dd0af7514ef2a6b6b14d7816fe468d592de6eb5ffcdaba17d19573a988bdf799"
+            },
+            "gnf4_native": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/__init__.py",
+              "sha256": "5f902947f03cd28b267fe0b26f4a04346fafd80c9be41d4aaa4e9815ce4370ca"
+            },
+            "gnf4_native.build": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/build.py",
+              "sha256": "10a6c4d57268b81c26266fe0408485d64d450985aa5295cc0198a4edfd803230"
+            },
+            "int4_b32": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_b32.py",
+              "sha256": "773eff5db7be77dea3d1f9048a6e708a94e79634baf17f452bf2848e24a2072f"
+            },
+            "int4_pack_ref": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_pack_ref.py",
+              "sha256": "c50c26b3895e0c4ec0bfe8b5763dff4d783f32ec408258e98a8a42c390448406"
+            },
+            "int4_smallm": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_smallm.py",
+              "sha256": "dbefe80d6ce73b7cd8f58a3a2074c77ee1a8f899a85a3360a7ee25facfe2225f"
+            },
+            "mxfp4_loader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/mxfp4_loader.py",
+              "sha256": "fce6a65ae8b60f4d3ed57964b3c1be8e39e8116b70f2a632ad4b3d20251457e6"
+            },
+            "nf4_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nf4_grouped.py",
+              "sha256": "57570b4e7c4daa7982dbfcc8ca7ea3bd8a2149f29c5e94e40e0e92db33e10df9"
+            },
+            "nvme_arena": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_arena.py",
+              "sha256": "7d0db538454f04cb8aaf98c5567535f88e18408ff878112bd3f14a02f18fad86"
+            },
+            "nvme_reader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_reader.py",
+              "sha256": "08b3b677c6a809dc079452f5e11485f58e2d001cd030261841626d962b9649ac"
+            },
+            "nvme_residency": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_residency.py",
+              "sha256": "b0df36136495a4e78513e2930e7720ace4f480aa71b19272b69bee215710c0c3"
+            },
+            "row_pool": {
+              "path": "/opt/conda/lib/python3.11/site-packages/row_pool.py",
+              "sha256": "11e8e29869568677e1ebb7e3ba25848aa2e0afcaaa582c4acd404b4875d43a4a"
+            },
+            "six": {
+              "path": "/opt/conda/lib/python3.11/site-packages/six.py",
+              "sha256": "c51c91f703d3d4b3696c923cb5fec213e05e75d9215393befac7f2fa6a3904df"
+            },
+            "typing_extensions": {
+              "path": "/opt/conda/lib/python3.11/site-packages/typing_extensions.py",
+              "sha256": "4040ca1a1ecbee00d1385c12a93084d1c5bd46f0b774f07e5ae7e91c4f55e696"
+            }
+          },
+          "native_source_root": "/opt/conda/lib/python3.11/site-packages/gnf4_native",
+          "native_c_sources": {
+            "cpu_kernels.c": "6e7297766b58dc29e6d69b1d324abbecb822f66d623bb03a7782efac6fc9175c"
+          },
+          "imported_source_sha256": "8adaffdf5ce1375554349f0c2991bdcd69dd78dfc98cf764a3c4d91906c79090"
+        }
+      },
+      "torch": "2.8.0+cu128",
+      "checks_failed": [
+        "knob-0 forward's K19 calls above 256 rows: {'one_launch|lean|gt256': 2}",
+        "knob-0 forward's K19 calls above 256 rows: {'one_launch|lean|gt256': 2}, expected {'chained|lean|gt256': 2}"
+      ],
+      "seconds": 14.7
+    },
+    {
+      "family": "qwen3_moe",
+      "knob": "32",
+      "status": "FAIL",
+      "generated": [
+        [
+          149,
+          93,
+          229,
+          149
+        ],
+        [
+          149,
+          93,
+          229,
+          149
+        ]
+      ],
+      "serve_k19_seen": {
+        "one_launch|lean|le256": 24,
+        "split|lean|gt256": 4
+      },
+      "graph_default_enabled": false,
+      "prefill_graph": {
+        "status": "refused",
+        "why": "device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement)"
+      },
+      "seen_knob0": {
+        "one_launch|lean|gt256": 2
+      },
+      "seen_own": {
+        "split|lean|gt256": 2
+      },
+      "routes": {
+        "int4_prefill_env": "k19",
+        "prefill_attn_env": null,
+        "prefill_glue_env": null,
+        "prefill_lean_dispatch_env": null,
+        "prefill_lean_dispatch": "auto",
+        "k19_prefill_big_m_env": "32",
+        "k19_prefill_big_m": 32,
+        "device_grouping": true,
+        "int4_prefill": "k19",
+        "int4_prefill_above_256_rows": "k19",
+        "prefill_attn": "flash",
+        "seen": {
+          "moe": {
+            "int4_k19|gt256": 8,
+            "int4_k19|le256": 24,
+            "int4_singleton_gemv|le256": 16
+          },
+          "prefill_attn": {
+            "flash": 8
+          },
+          "moe_k19_dispatch": {
+            "split|lean|gt256": 2
+          },
+          "prefill_folds": {
+            "attention": 8,
+            "layer": 8,
+            "norm": 12
+          }
+        }
+      },
+      "logits_equal_in_process": true,
+      "logits_max_abs": 0.0,
+      "device": "NVIDIA RTX A2000 12GB",
+      "capability": [
+        8,
+        6
+      ],
+      "source": {
+        "source": "/opt/conda/lib/python3.11/site-packages",
+        "git_head": null,
+        "package_sha256": "d511c213bcbb322edfc6aac8d294e8317110ca0d023d9b4f8ba21cbf1c52a2af",
+        "installed_e4b": "0.53.0",
+        "installed_gnf4": "0.45.0",
+        "gnf4_sources": {
+          "modules": {
+            "_brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_brotli.cpython-311-x86_64-linux-gnu.so",
+              "sha256": "7b45f6d4ae26c939dcf75ca2bdc8ad9c3032ccb51381a22d1cff022391a3f0ae"
+            },
+            "_triton_shim": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_triton_shim.py",
+              "sha256": "f3c3b65730f4b5676a9af94a43f041a9f3dcce5edd18703720748241b8e2e5ba"
+            },
+            "brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/brotli.py",
+              "sha256": "3e71885667851851d23b07ab986c28861776172af8e058607a32d09242081620"
+            },
+            "cold_cpu_view": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cold_cpu_view.py",
+              "sha256": "8a175b300e78136d790812f1c38c1cc7c5c37189850783a1ea52b2ff58ff434c"
+            },
+            "cpu_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cpu_grouped.py",
+              "sha256": "a1a6ca636167c2965fda89be9ef14a6787077f9599e92b874067dc20d1b7b124"
+            },
+            "fp8_kv": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_kv.py",
+              "sha256": "e06dee826f4f63eec087b43a11db6aa3585166b3b8a751e9fdedc1274da07c6f"
+            },
+            "fp8_paged_attn": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_paged_attn.py",
+              "sha256": "dd0af7514ef2a6b6b14d7816fe468d592de6eb5ffcdaba17d19573a988bdf799"
+            },
+            "gnf4_native": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/__init__.py",
+              "sha256": "5f902947f03cd28b267fe0b26f4a04346fafd80c9be41d4aaa4e9815ce4370ca"
+            },
+            "gnf4_native.build": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/build.py",
+              "sha256": "10a6c4d57268b81c26266fe0408485d64d450985aa5295cc0198a4edfd803230"
+            },
+            "int4_b32": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_b32.py",
+              "sha256": "773eff5db7be77dea3d1f9048a6e708a94e79634baf17f452bf2848e24a2072f"
+            },
+            "int4_pack_ref": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_pack_ref.py",
+              "sha256": "c50c26b3895e0c4ec0bfe8b5763dff4d783f32ec408258e98a8a42c390448406"
+            },
+            "int4_smallm": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_smallm.py",
+              "sha256": "dbefe80d6ce73b7cd8f58a3a2074c77ee1a8f899a85a3360a7ee25facfe2225f"
+            },
+            "mxfp4_loader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/mxfp4_loader.py",
+              "sha256": "fce6a65ae8b60f4d3ed57964b3c1be8e39e8116b70f2a632ad4b3d20251457e6"
+            },
+            "nf4_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nf4_grouped.py",
+              "sha256": "57570b4e7c4daa7982dbfcc8ca7ea3bd8a2149f29c5e94e40e0e92db33e10df9"
+            },
+            "nvme_arena": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_arena.py",
+              "sha256": "7d0db538454f04cb8aaf98c5567535f88e18408ff878112bd3f14a02f18fad86"
+            },
+            "nvme_reader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_reader.py",
+              "sha256": "08b3b677c6a809dc079452f5e11485f58e2d001cd030261841626d962b9649ac"
+            },
+            "nvme_residency": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_residency.py",
+              "sha256": "b0df36136495a4e78513e2930e7720ace4f480aa71b19272b69bee215710c0c3"
+            },
+            "row_pool": {
+              "path": "/opt/conda/lib/python3.11/site-packages/row_pool.py",
+              "sha256": "11e8e29869568677e1ebb7e3ba25848aa2e0afcaaa582c4acd404b4875d43a4a"
+            },
+            "six": {
+              "path": "/opt/conda/lib/python3.11/site-packages/six.py",
+              "sha256": "c51c91f703d3d4b3696c923cb5fec213e05e75d9215393befac7f2fa6a3904df"
+            },
+            "typing_extensions": {
+              "path": "/opt/conda/lib/python3.11/site-packages/typing_extensions.py",
+              "sha256": "4040ca1a1ecbee00d1385c12a93084d1c5bd46f0b774f07e5ae7e91c4f55e696"
+            }
+          },
+          "native_source_root": "/opt/conda/lib/python3.11/site-packages/gnf4_native",
+          "native_c_sources": {
+            "cpu_kernels.c": "6e7297766b58dc29e6d69b1d324abbecb822f66d623bb03a7782efac6fc9175c"
+          },
+          "imported_source_sha256": "8adaffdf5ce1375554349f0c2991bdcd69dd78dfc98cf764a3c4d91906c79090"
+        }
+      },
+      "torch": "2.8.0+cu128",
+      "checks_failed": [
+        "knob-0 forward's K19 calls above 256 rows: {'one_launch|lean|gt256': 2}"
+      ],
+      "seconds": 16.0
+    },
+    {
+      "family": "qwen3_moe",
+      "knob": "64",
+      "status": "FAIL",
+      "generated": [
+        [
+          149,
+          93,
+          229,
+          149
+        ],
+        [
+          149,
+          93,
+          229,
+          149
+        ]
+      ],
+      "serve_k19_seen": {
+        "one_launch|lean|le256": 24,
+        "split|lean|gt256": 4
+      },
+      "graph_default_enabled": false,
+      "prefill_graph": {
+        "status": "refused",
+        "why": "device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement)"
+      },
+      "seen_knob0": {
+        "one_launch|lean|gt256": 2
+      },
+      "seen_own": {
+        "split|lean|gt256": 2
+      },
+      "routes": {
+        "int4_prefill_env": "k19",
+        "prefill_attn_env": null,
+        "prefill_glue_env": null,
+        "prefill_lean_dispatch_env": null,
+        "prefill_lean_dispatch": "auto",
+        "k19_prefill_big_m_env": "64",
+        "k19_prefill_big_m": 64,
+        "device_grouping": true,
+        "int4_prefill": "k19",
+        "int4_prefill_above_256_rows": "k19",
+        "prefill_attn": "flash",
+        "seen": {
+          "moe": {
+            "int4_k19|gt256": 8,
+            "int4_k19|le256": 24,
+            "int4_singleton_gemv|le256": 16
+          },
+          "prefill_attn": {
+            "flash": 8
+          },
+          "moe_k19_dispatch": {
+            "split|lean|gt256": 2
+          },
+          "prefill_folds": {
+            "attention": 8,
+            "layer": 8,
+            "norm": 12
+          }
+        }
+      },
+      "logits_equal_in_process": true,
+      "logits_max_abs": 0.0,
+      "device": "NVIDIA RTX A2000 12GB",
+      "capability": [
+        8,
+        6
+      ],
+      "source": {
+        "source": "/opt/conda/lib/python3.11/site-packages",
+        "git_head": null,
+        "package_sha256": "d511c213bcbb322edfc6aac8d294e8317110ca0d023d9b4f8ba21cbf1c52a2af",
+        "installed_e4b": "0.53.0",
+        "installed_gnf4": "0.45.0",
+        "gnf4_sources": {
+          "modules": {
+            "_brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_brotli.cpython-311-x86_64-linux-gnu.so",
+              "sha256": "7b45f6d4ae26c939dcf75ca2bdc8ad9c3032ccb51381a22d1cff022391a3f0ae"
+            },
+            "_triton_shim": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_triton_shim.py",
+              "sha256": "f3c3b65730f4b5676a9af94a43f041a9f3dcce5edd18703720748241b8e2e5ba"
+            },
+            "brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/brotli.py",
+              "sha256": "3e71885667851851d23b07ab986c28861776172af8e058607a32d09242081620"
+            },
+            "cold_cpu_view": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cold_cpu_view.py",
+              "sha256": "8a175b300e78136d790812f1c38c1cc7c5c37189850783a1ea52b2ff58ff434c"
+            },
+            "cpu_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cpu_grouped.py",
+              "sha256": "a1a6ca636167c2965fda89be9ef14a6787077f9599e92b874067dc20d1b7b124"
+            },
+            "fp8_kv": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_kv.py",
+              "sha256": "e06dee826f4f63eec087b43a11db6aa3585166b3b8a751e9fdedc1274da07c6f"
+            },
+            "fp8_paged_attn": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_paged_attn.py",
+              "sha256": "dd0af7514ef2a6b6b14d7816fe468d592de6eb5ffcdaba17d19573a988bdf799"
+            },
+            "gnf4_native": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/__init__.py",
+              "sha256": "5f902947f03cd28b267fe0b26f4a04346fafd80c9be41d4aaa4e9815ce4370ca"
+            },
+            "gnf4_native.build": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/build.py",
+              "sha256": "10a6c4d57268b81c26266fe0408485d64d450985aa5295cc0198a4edfd803230"
+            },
+            "int4_b32": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_b32.py",
+              "sha256": "773eff5db7be77dea3d1f9048a6e708a94e79634baf17f452bf2848e24a2072f"
+            },
+            "int4_pack_ref": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_pack_ref.py",
+              "sha256": "c50c26b3895e0c4ec0bfe8b5763dff4d783f32ec408258e98a8a42c390448406"
+            },
+            "int4_smallm": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_smallm.py",
+              "sha256": "dbefe80d6ce73b7cd8f58a3a2074c77ee1a8f899a85a3360a7ee25facfe2225f"
+            },
+            "mxfp4_loader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/mxfp4_loader.py",
+              "sha256": "fce6a65ae8b60f4d3ed57964b3c1be8e39e8116b70f2a632ad4b3d20251457e6"
+            },
+            "nf4_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nf4_grouped.py",
+              "sha256": "57570b4e7c4daa7982dbfcc8ca7ea3bd8a2149f29c5e94e40e0e92db33e10df9"
+            },
+            "nvme_arena": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_arena.py",
+              "sha256": "7d0db538454f04cb8aaf98c5567535f88e18408ff878112bd3f14a02f18fad86"
+            },
+            "nvme_reader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_reader.py",
+              "sha256": "08b3b677c6a809dc079452f5e11485f58e2d001cd030261841626d962b9649ac"
+            },
+            "nvme_residency": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_residency.py",
+              "sha256": "b0df36136495a4e78513e2930e7720ace4f480aa71b19272b69bee215710c0c3"
+            },
+            "row_pool": {
+              "path": "/opt/conda/lib/python3.11/site-packages/row_pool.py",
+              "sha256": "11e8e29869568677e1ebb7e3ba25848aa2e0afcaaa582c4acd404b4875d43a4a"
+            },
+            "six": {
+              "path": "/opt/conda/lib/python3.11/site-packages/six.py",
+              "sha256": "c51c91f703d3d4b3696c923cb5fec213e05e75d9215393befac7f2fa6a3904df"
+            },
+            "typing_extensions": {
+              "path": "/opt/conda/lib/python3.11/site-packages/typing_extensions.py",
+              "sha256": "4040ca1a1ecbee00d1385c12a93084d1c5bd46f0b774f07e5ae7e91c4f55e696"
+            }
+          },
+          "native_source_root": "/opt/conda/lib/python3.11/site-packages/gnf4_native",
+          "native_c_sources": {
+            "cpu_kernels.c": "6e7297766b58dc29e6d69b1d324abbecb822f66d623bb03a7782efac6fc9175c"
+          },
+          "imported_source_sha256": "8adaffdf5ce1375554349f0c2991bdcd69dd78dfc98cf764a3c4d91906c79090"
+        }
+      },
+      "torch": "2.8.0+cu128",
+      "checks_failed": [
+        "knob-0 forward's K19 calls above 256 rows: {'one_launch|lean|gt256': 2}"
+      ],
+      "seconds": 15.0
+    },
+    {
+      "family": "granitemoe",
+      "knob": "0",
+      "status": "FAIL",
+      "generated": [
+        [
+          149,
+          93,
+          229,
+          149
+        ],
+        [
+          149,
+          93,
+          229,
+          149
+        ]
+      ],
+      "serve_k19_seen": {
+        "one_launch|lean|gt256": 4
+      },
+      "graph_default_enabled": false,
+      "prefill_graph": {
+        "status": "refused",
+        "why": "device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement)"
+      },
+      "seen_knob0": {
+        "one_launch|lean|gt256": 2
+      },
+      "seen_own": {
+        "one_launch|lean|gt256": 2
+      },
+      "routes": {
+        "int4_prefill_env": "k19",
+        "prefill_attn_env": null,
+        "prefill_glue_env": null,
+        "prefill_lean_dispatch_env": null,
+        "prefill_lean_dispatch": "auto",
+        "k19_prefill_big_m_env": "0",
+        "k19_prefill_big_m": 0,
+        "device_grouping": true,
+        "int4_prefill": "k19",
+        "int4_prefill_above_256_rows": "k19",
+        "prefill_attn": "flash",
+        "seen": {
+          "moe": {
+            "int4_k19|gt256": 8,
+            "int4_singleton_gemv|le256": 12
+          },
+          "prefill_attn": {
+            "flash": 8
+          },
+          "moe_k19_dispatch": {
+            "one_launch|lean|gt256": 2
+          },
+          "prefill_folds": {}
+        }
+      },
+      "logits_equal_in_process": true,
+      "logits_max_abs": 0.0,
+      "device": "NVIDIA RTX A2000 12GB",
+      "capability": [
+        8,
+        6
+      ],
+      "source": {
+        "source": "/opt/conda/lib/python3.11/site-packages",
+        "git_head": null,
+        "package_sha256": "d511c213bcbb322edfc6aac8d294e8317110ca0d023d9b4f8ba21cbf1c52a2af",
+        "installed_e4b": "0.53.0",
+        "installed_gnf4": "0.45.0",
+        "gnf4_sources": {
+          "modules": {
+            "_brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_brotli.cpython-311-x86_64-linux-gnu.so",
+              "sha256": "7b45f6d4ae26c939dcf75ca2bdc8ad9c3032ccb51381a22d1cff022391a3f0ae"
+            },
+            "_triton_shim": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_triton_shim.py",
+              "sha256": "f3c3b65730f4b5676a9af94a43f041a9f3dcce5edd18703720748241b8e2e5ba"
+            },
+            "brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/brotli.py",
+              "sha256": "3e71885667851851d23b07ab986c28861776172af8e058607a32d09242081620"
+            },
+            "cold_cpu_view": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cold_cpu_view.py",
+              "sha256": "8a175b300e78136d790812f1c38c1cc7c5c37189850783a1ea52b2ff58ff434c"
+            },
+            "cpu_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cpu_grouped.py",
+              "sha256": "a1a6ca636167c2965fda89be9ef14a6787077f9599e92b874067dc20d1b7b124"
+            },
+            "fp8_kv": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_kv.py",
+              "sha256": "e06dee826f4f63eec087b43a11db6aa3585166b3b8a751e9fdedc1274da07c6f"
+            },
+            "fp8_paged_attn": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_paged_attn.py",
+              "sha256": "dd0af7514ef2a6b6b14d7816fe468d592de6eb5ffcdaba17d19573a988bdf799"
+            },
+            "gnf4_native": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/__init__.py",
+              "sha256": "5f902947f03cd28b267fe0b26f4a04346fafd80c9be41d4aaa4e9815ce4370ca"
+            },
+            "gnf4_native.build": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/build.py",
+              "sha256": "10a6c4d57268b81c26266fe0408485d64d450985aa5295cc0198a4edfd803230"
+            },
+            "int4_b32": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_b32.py",
+              "sha256": "773eff5db7be77dea3d1f9048a6e708a94e79634baf17f452bf2848e24a2072f"
+            },
+            "int4_pack_ref": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_pack_ref.py",
+              "sha256": "c50c26b3895e0c4ec0bfe8b5763dff4d783f32ec408258e98a8a42c390448406"
+            },
+            "int4_smallm": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_smallm.py",
+              "sha256": "dbefe80d6ce73b7cd8f58a3a2074c77ee1a8f899a85a3360a7ee25facfe2225f"
+            },
+            "mxfp4_loader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/mxfp4_loader.py",
+              "sha256": "fce6a65ae8b60f4d3ed57964b3c1be8e39e8116b70f2a632ad4b3d20251457e6"
+            },
+            "nf4_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nf4_grouped.py",
+              "sha256": "57570b4e7c4daa7982dbfcc8ca7ea3bd8a2149f29c5e94e40e0e92db33e10df9"
+            },
+            "nvme_arena": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_arena.py",
+              "sha256": "7d0db538454f04cb8aaf98c5567535f88e18408ff878112bd3f14a02f18fad86"
+            },
+            "nvme_reader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_reader.py",
+              "sha256": "08b3b677c6a809dc079452f5e11485f58e2d001cd030261841626d962b9649ac"
+            },
+            "nvme_residency": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_residency.py",
+              "sha256": "b0df36136495a4e78513e2930e7720ace4f480aa71b19272b69bee215710c0c3"
+            },
+            "row_pool": {
+              "path": "/opt/conda/lib/python3.11/site-packages/row_pool.py",
+              "sha256": "11e8e29869568677e1ebb7e3ba25848aa2e0afcaaa582c4acd404b4875d43a4a"
+            },
+            "six": {
+              "path": "/opt/conda/lib/python3.11/site-packages/six.py",
+              "sha256": "c51c91f703d3d4b3696c923cb5fec213e05e75d9215393befac7f2fa6a3904df"
+            },
+            "typing_extensions": {
+              "path": "/opt/conda/lib/python3.11/site-packages/typing_extensions.py",
+              "sha256": "4040ca1a1ecbee00d1385c12a93084d1c5bd46f0b774f07e5ae7e91c4f55e696"
+            }
+          },
+          "native_source_root": "/opt/conda/lib/python3.11/site-packages/gnf4_native",
+          "native_c_sources": {
+            "cpu_kernels.c": "6e7297766b58dc29e6d69b1d324abbecb822f66d623bb03a7782efac6fc9175c"
+          },
+          "imported_source_sha256": "8adaffdf5ce1375554349f0c2991bdcd69dd78dfc98cf764a3c4d91906c79090"
+        }
+      },
+      "torch": "2.8.0+cu128",
+      "checks_failed": [
+        "knob-0 forward's K19 calls above 256 rows: {'one_launch|lean|gt256': 2}",
+        "knob-0 forward's K19 calls above 256 rows: {'one_launch|lean|gt256': 2}, expected {'chained|lean|gt256': 2}"
+      ],
+      "seconds": 13.4
+    },
+    {
+      "family": "granitemoe",
+      "knob": "0r",
+      "status": "FAIL",
+      "generated": [
+        [
+          149,
+          93,
+          229,
+          149
+        ],
+        [
+          149,
+          93,
+          229,
+          149
+        ]
+      ],
+      "serve_k19_seen": {
+        "one_launch|lean|gt256": 4
+      },
+      "graph_default_enabled": false,
+      "prefill_graph": {
+        "status": "refused",
+        "why": "device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement)"
+      },
+      "seen_knob0": {
+        "one_launch|lean|gt256": 2
+      },
+      "seen_own": {
+        "one_launch|lean|gt256": 2
+      },
+      "routes": {
+        "int4_prefill_env": "k19",
+        "prefill_attn_env": null,
+        "prefill_glue_env": null,
+        "prefill_lean_dispatch_env": null,
+        "prefill_lean_dispatch": "auto",
+        "k19_prefill_big_m_env": "0",
+        "k19_prefill_big_m": 0,
+        "device_grouping": true,
+        "int4_prefill": "k19",
+        "int4_prefill_above_256_rows": "k19",
+        "prefill_attn": "flash",
+        "seen": {
+          "moe": {
+            "int4_k19|gt256": 8,
+            "int4_singleton_gemv|le256": 12
+          },
+          "prefill_attn": {
+            "flash": 8
+          },
+          "moe_k19_dispatch": {
+            "one_launch|lean|gt256": 2
+          },
+          "prefill_folds": {}
+        }
+      },
+      "logits_equal_in_process": true,
+      "logits_max_abs": 0.0,
+      "device": "NVIDIA RTX A2000 12GB",
+      "capability": [
+        8,
+        6
+      ],
+      "source": {
+        "source": "/opt/conda/lib/python3.11/site-packages",
+        "git_head": null,
+        "package_sha256": "d511c213bcbb322edfc6aac8d294e8317110ca0d023d9b4f8ba21cbf1c52a2af",
+        "installed_e4b": "0.53.0",
+        "installed_gnf4": "0.45.0",
+        "gnf4_sources": {
+          "modules": {
+            "_brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_brotli.cpython-311-x86_64-linux-gnu.so",
+              "sha256": "7b45f6d4ae26c939dcf75ca2bdc8ad9c3032ccb51381a22d1cff022391a3f0ae"
+            },
+            "_triton_shim": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_triton_shim.py",
+              "sha256": "f3c3b65730f4b5676a9af94a43f041a9f3dcce5edd18703720748241b8e2e5ba"
+            },
+            "brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/brotli.py",
+              "sha256": "3e71885667851851d23b07ab986c28861776172af8e058607a32d09242081620"
+            },
+            "cold_cpu_view": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cold_cpu_view.py",
+              "sha256": "8a175b300e78136d790812f1c38c1cc7c5c37189850783a1ea52b2ff58ff434c"
+            },
+            "cpu_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cpu_grouped.py",
+              "sha256": "a1a6ca636167c2965fda89be9ef14a6787077f9599e92b874067dc20d1b7b124"
+            },
+            "fp8_kv": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_kv.py",
+              "sha256": "e06dee826f4f63eec087b43a11db6aa3585166b3b8a751e9fdedc1274da07c6f"
+            },
+            "fp8_paged_attn": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_paged_attn.py",
+              "sha256": "dd0af7514ef2a6b6b14d7816fe468d592de6eb5ffcdaba17d19573a988bdf799"
+            },
+            "gnf4_native": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/__init__.py",
+              "sha256": "5f902947f03cd28b267fe0b26f4a04346fafd80c9be41d4aaa4e9815ce4370ca"
+            },
+            "gnf4_native.build": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/build.py",
+              "sha256": "10a6c4d57268b81c26266fe0408485d64d450985aa5295cc0198a4edfd803230"
+            },
+            "int4_b32": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_b32.py",
+              "sha256": "773eff5db7be77dea3d1f9048a6e708a94e79634baf17f452bf2848e24a2072f"
+            },
+            "int4_pack_ref": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_pack_ref.py",
+              "sha256": "c50c26b3895e0c4ec0bfe8b5763dff4d783f32ec408258e98a8a42c390448406"
+            },
+            "int4_smallm": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_smallm.py",
+              "sha256": "dbefe80d6ce73b7cd8f58a3a2074c77ee1a8f899a85a3360a7ee25facfe2225f"
+            },
+            "mxfp4_loader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/mxfp4_loader.py",
+              "sha256": "fce6a65ae8b60f4d3ed57964b3c1be8e39e8116b70f2a632ad4b3d20251457e6"
+            },
+            "nf4_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nf4_grouped.py",
+              "sha256": "57570b4e7c4daa7982dbfcc8ca7ea3bd8a2149f29c5e94e40e0e92db33e10df9"
+            },
+            "nvme_arena": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_arena.py",
+              "sha256": "7d0db538454f04cb8aaf98c5567535f88e18408ff878112bd3f14a02f18fad86"
+            },
+            "nvme_reader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_reader.py",
+              "sha256": "08b3b677c6a809dc079452f5e11485f58e2d001cd030261841626d962b9649ac"
+            },
+            "nvme_residency": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_residency.py",
+              "sha256": "b0df36136495a4e78513e2930e7720ace4f480aa71b19272b69bee215710c0c3"
+            },
+            "row_pool": {
+              "path": "/opt/conda/lib/python3.11/site-packages/row_pool.py",
+              "sha256": "11e8e29869568677e1ebb7e3ba25848aa2e0afcaaa582c4acd404b4875d43a4a"
+            },
+            "six": {
+              "path": "/opt/conda/lib/python3.11/site-packages/six.py",
+              "sha256": "c51c91f703d3d4b3696c923cb5fec213e05e75d9215393befac7f2fa6a3904df"
+            },
+            "typing_extensions": {
+              "path": "/opt/conda/lib/python3.11/site-packages/typing_extensions.py",
+              "sha256": "4040ca1a1ecbee00d1385c12a93084d1c5bd46f0b774f07e5ae7e91c4f55e696"
+            }
+          },
+          "native_source_root": "/opt/conda/lib/python3.11/site-packages/gnf4_native",
+          "native_c_sources": {
+            "cpu_kernels.c": "6e7297766b58dc29e6d69b1d324abbecb822f66d623bb03a7782efac6fc9175c"
+          },
+          "imported_source_sha256": "8adaffdf5ce1375554349f0c2991bdcd69dd78dfc98cf764a3c4d91906c79090"
+        }
+      },
+      "torch": "2.8.0+cu128",
+      "checks_failed": [
+        "knob-0 forward's K19 calls above 256 rows: {'one_launch|lean|gt256': 2}",
+        "knob-0 forward's K19 calls above 256 rows: {'one_launch|lean|gt256': 2}, expected {'chained|lean|gt256': 2}"
+      ],
+      "seconds": 13.7
+    },
+    {
+      "family": "granitemoe",
+      "knob": "32",
+      "status": "FAIL",
+      "generated": [
+        [
+          149,
+          93,
+          229,
+          149
+        ],
+        [
+          149,
+          93,
+          229,
+          149
+        ]
+      ],
+      "serve_k19_seen": {
+        "split|lean|gt256": 4
+      },
+      "graph_default_enabled": false,
+      "prefill_graph": {
+        "status": "refused",
+        "why": "device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement)"
+      },
+      "seen_knob0": {
+        "one_launch|lean|gt256": 2
+      },
+      "seen_own": {
+        "split|lean|gt256": 2
+      },
+      "routes": {
+        "int4_prefill_env": "k19",
+        "prefill_attn_env": null,
+        "prefill_glue_env": null,
+        "prefill_lean_dispatch_env": null,
+        "prefill_lean_dispatch": "auto",
+        "k19_prefill_big_m_env": "32",
+        "k19_prefill_big_m": 32,
+        "device_grouping": true,
+        "int4_prefill": "k19",
+        "int4_prefill_above_256_rows": "k19",
+        "prefill_attn": "flash",
+        "seen": {
+          "moe": {
+            "int4_k19|gt256": 8,
+            "int4_singleton_gemv|le256": 12
+          },
+          "prefill_attn": {
+            "flash": 8
+          },
+          "moe_k19_dispatch": {
+            "split|lean|gt256": 2
+          },
+          "prefill_folds": {}
+        }
+      },
+      "logits_equal_in_process": true,
+      "logits_max_abs": 0.0,
+      "device": "NVIDIA RTX A2000 12GB",
+      "capability": [
+        8,
+        6
+      ],
+      "source": {
+        "source": "/opt/conda/lib/python3.11/site-packages",
+        "git_head": null,
+        "package_sha256": "d511c213bcbb322edfc6aac8d294e8317110ca0d023d9b4f8ba21cbf1c52a2af",
+        "installed_e4b": "0.53.0",
+        "installed_gnf4": "0.45.0",
+        "gnf4_sources": {
+          "modules": {
+            "_brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_brotli.cpython-311-x86_64-linux-gnu.so",
+              "sha256": "7b45f6d4ae26c939dcf75ca2bdc8ad9c3032ccb51381a22d1cff022391a3f0ae"
+            },
+            "_triton_shim": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_triton_shim.py",
+              "sha256": "f3c3b65730f4b5676a9af94a43f041a9f3dcce5edd18703720748241b8e2e5ba"
+            },
+            "brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/brotli.py",
+              "sha256": "3e71885667851851d23b07ab986c28861776172af8e058607a32d09242081620"
+            },
+            "cold_cpu_view": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cold_cpu_view.py",
+              "sha256": "8a175b300e78136d790812f1c38c1cc7c5c37189850783a1ea52b2ff58ff434c"
+            },
+            "cpu_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cpu_grouped.py",
+              "sha256": "a1a6ca636167c2965fda89be9ef14a6787077f9599e92b874067dc20d1b7b124"
+            },
+            "fp8_kv": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_kv.py",
+              "sha256": "e06dee826f4f63eec087b43a11db6aa3585166b3b8a751e9fdedc1274da07c6f"
+            },
+            "fp8_paged_attn": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_paged_attn.py",
+              "sha256": "dd0af7514ef2a6b6b14d7816fe468d592de6eb5ffcdaba17d19573a988bdf799"
+            },
+            "gnf4_native": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/__init__.py",
+              "sha256": "5f902947f03cd28b267fe0b26f4a04346fafd80c9be41d4aaa4e9815ce4370ca"
+            },
+            "gnf4_native.build": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/build.py",
+              "sha256": "10a6c4d57268b81c26266fe0408485d64d450985aa5295cc0198a4edfd803230"
+            },
+            "int4_b32": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_b32.py",
+              "sha256": "773eff5db7be77dea3d1f9048a6e708a94e79634baf17f452bf2848e24a2072f"
+            },
+            "int4_pack_ref": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_pack_ref.py",
+              "sha256": "c50c26b3895e0c4ec0bfe8b5763dff4d783f32ec408258e98a8a42c390448406"
+            },
+            "int4_smallm": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_smallm.py",
+              "sha256": "dbefe80d6ce73b7cd8f58a3a2074c77ee1a8f899a85a3360a7ee25facfe2225f"
+            },
+            "mxfp4_loader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/mxfp4_loader.py",
+              "sha256": "fce6a65ae8b60f4d3ed57964b3c1be8e39e8116b70f2a632ad4b3d20251457e6"
+            },
+            "nf4_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nf4_grouped.py",
+              "sha256": "57570b4e7c4daa7982dbfcc8ca7ea3bd8a2149f29c5e94e40e0e92db33e10df9"
+            },
+            "nvme_arena": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_arena.py",
+              "sha256": "7d0db538454f04cb8aaf98c5567535f88e18408ff878112bd3f14a02f18fad86"
+            },
+            "nvme_reader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_reader.py",
+              "sha256": "08b3b677c6a809dc079452f5e11485f58e2d001cd030261841626d962b9649ac"
+            },
+            "nvme_residency": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_residency.py",
+              "sha256": "b0df36136495a4e78513e2930e7720ace4f480aa71b19272b69bee215710c0c3"
+            },
+            "row_pool": {
+              "path": "/opt/conda/lib/python3.11/site-packages/row_pool.py",
+              "sha256": "11e8e29869568677e1ebb7e3ba25848aa2e0afcaaa582c4acd404b4875d43a4a"
+            },
+            "six": {
+              "path": "/opt/conda/lib/python3.11/site-packages/six.py",
+              "sha256": "c51c91f703d3d4b3696c923cb5fec213e05e75d9215393befac7f2fa6a3904df"
+            },
+            "typing_extensions": {
+              "path": "/opt/conda/lib/python3.11/site-packages/typing_extensions.py",
+              "sha256": "4040ca1a1ecbee00d1385c12a93084d1c5bd46f0b774f07e5ae7e91c4f55e696"
+            }
+          },
+          "native_source_root": "/opt/conda/lib/python3.11/site-packages/gnf4_native",
+          "native_c_sources": {
+            "cpu_kernels.c": "6e7297766b58dc29e6d69b1d324abbecb822f66d623bb03a7782efac6fc9175c"
+          },
+          "imported_source_sha256": "8adaffdf5ce1375554349f0c2991bdcd69dd78dfc98cf764a3c4d91906c79090"
+        }
+      },
+      "torch": "2.8.0+cu128",
+      "checks_failed": [
+        "knob-0 forward's K19 calls above 256 rows: {'one_launch|lean|gt256': 2}"
+      ],
+      "seconds": 13.2
+    },
+    {
+      "family": "granitemoe",
+      "knob": "64",
+      "status": "FAIL",
+      "generated": [
+        [
+          149,
+          93,
+          229,
+          149
+        ],
+        [
+          149,
+          93,
+          229,
+          149
+        ]
+      ],
+      "serve_k19_seen": {
+        "split|lean|gt256": 4
+      },
+      "graph_default_enabled": false,
+      "prefill_graph": {
+        "status": "refused",
+        "why": "device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement)"
+      },
+      "seen_knob0": {
+        "one_launch|lean|gt256": 2
+      },
+      "seen_own": {
+        "split|lean|gt256": 2
+      },
+      "routes": {
+        "int4_prefill_env": "k19",
+        "prefill_attn_env": null,
+        "prefill_glue_env": null,
+        "prefill_lean_dispatch_env": null,
+        "prefill_lean_dispatch": "auto",
+        "k19_prefill_big_m_env": "64",
+        "k19_prefill_big_m": 64,
+        "device_grouping": true,
+        "int4_prefill": "k19",
+        "int4_prefill_above_256_rows": "k19",
+        "prefill_attn": "flash",
+        "seen": {
+          "moe": {
+            "int4_k19|gt256": 8,
+            "int4_singleton_gemv|le256": 12
+          },
+          "prefill_attn": {
+            "flash": 8
+          },
+          "moe_k19_dispatch": {
+            "split|lean|gt256": 2
+          },
+          "prefill_folds": {}
+        }
+      },
+      "logits_equal_in_process": true,
+      "logits_max_abs": 0.0,
+      "device": "NVIDIA RTX A2000 12GB",
+      "capability": [
+        8,
+        6
+      ],
+      "source": {
+        "source": "/opt/conda/lib/python3.11/site-packages",
+        "git_head": null,
+        "package_sha256": "d511c213bcbb322edfc6aac8d294e8317110ca0d023d9b4f8ba21cbf1c52a2af",
+        "installed_e4b": "0.53.0",
+        "installed_gnf4": "0.45.0",
+        "gnf4_sources": {
+          "modules": {
+            "_brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_brotli.cpython-311-x86_64-linux-gnu.so",
+              "sha256": "7b45f6d4ae26c939dcf75ca2bdc8ad9c3032ccb51381a22d1cff022391a3f0ae"
+            },
+            "_triton_shim": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_triton_shim.py",
+              "sha256": "f3c3b65730f4b5676a9af94a43f041a9f3dcce5edd18703720748241b8e2e5ba"
+            },
+            "brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/brotli.py",
+              "sha256": "3e71885667851851d23b07ab986c28861776172af8e058607a32d09242081620"
+            },
+            "cold_cpu_view": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cold_cpu_view.py",
+              "sha256": "8a175b300e78136d790812f1c38c1cc7c5c37189850783a1ea52b2ff58ff434c"
+            },
+            "cpu_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cpu_grouped.py",
+              "sha256": "a1a6ca636167c2965fda89be9ef14a6787077f9599e92b874067dc20d1b7b124"
+            },
+            "fp8_kv": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_kv.py",
+              "sha256": "e06dee826f4f63eec087b43a11db6aa3585166b3b8a751e9fdedc1274da07c6f"
+            },
+            "fp8_paged_attn": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_paged_attn.py",
+              "sha256": "dd0af7514ef2a6b6b14d7816fe468d592de6eb5ffcdaba17d19573a988bdf799"
+            },
+            "gnf4_native": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/__init__.py",
+              "sha256": "5f902947f03cd28b267fe0b26f4a04346fafd80c9be41d4aaa4e9815ce4370ca"
+            },
+            "gnf4_native.build": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/build.py",
+              "sha256": "10a6c4d57268b81c26266fe0408485d64d450985aa5295cc0198a4edfd803230"
+            },
+            "int4_b32": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_b32.py",
+              "sha256": "773eff5db7be77dea3d1f9048a6e708a94e79634baf17f452bf2848e24a2072f"
+            },
+            "int4_pack_ref": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_pack_ref.py",
+              "sha256": "c50c26b3895e0c4ec0bfe8b5763dff4d783f32ec408258e98a8a42c390448406"
+            },
+            "int4_smallm": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_smallm.py",
+              "sha256": "dbefe80d6ce73b7cd8f58a3a2074c77ee1a8f899a85a3360a7ee25facfe2225f"
+            },
+            "mxfp4_loader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/mxfp4_loader.py",
+              "sha256": "fce6a65ae8b60f4d3ed57964b3c1be8e39e8116b70f2a632ad4b3d20251457e6"
+            },
+            "nf4_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nf4_grouped.py",
+              "sha256": "57570b4e7c4daa7982dbfcc8ca7ea3bd8a2149f29c5e94e40e0e92db33e10df9"
+            },
+            "nvme_arena": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_arena.py",
+              "sha256": "7d0db538454f04cb8aaf98c5567535f88e18408ff878112bd3f14a02f18fad86"
+            },
+            "nvme_reader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_reader.py",
+              "sha256": "08b3b677c6a809dc079452f5e11485f58e2d001cd030261841626d962b9649ac"
+            },
+            "nvme_residency": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_residency.py",
+              "sha256": "b0df36136495a4e78513e2930e7720ace4f480aa71b19272b69bee215710c0c3"
+            },
+            "row_pool": {
+              "path": "/opt/conda/lib/python3.11/site-packages/row_pool.py",
+              "sha256": "11e8e29869568677e1ebb7e3ba25848aa2e0afcaaa582c4acd404b4875d43a4a"
+            },
+            "six": {
+              "path": "/opt/conda/lib/python3.11/site-packages/six.py",
+              "sha256": "c51c91f703d3d4b3696c923cb5fec213e05e75d9215393befac7f2fa6a3904df"
+            },
+            "typing_extensions": {
+              "path": "/opt/conda/lib/python3.11/site-packages/typing_extensions.py",
+              "sha256": "4040ca1a1ecbee00d1385c12a93084d1c5bd46f0b774f07e5ae7e91c4f55e696"
+            }
+          },
+          "native_source_root": "/opt/conda/lib/python3.11/site-packages/gnf4_native",
+          "native_c_sources": {
+            "cpu_kernels.c": "6e7297766b58dc29e6d69b1d324abbecb822f66d623bb03a7782efac6fc9175c"
+          },
+          "imported_source_sha256": "8adaffdf5ce1375554349f0c2991bdcd69dd78dfc98cf764a3c4d91906c79090"
+        }
+      },
+      "torch": "2.8.0+cu128",
+      "checks_failed": [
+        "knob-0 forward's K19 calls above 256 rows: {'one_launch|lean|gt256': 2}"
+      ],
+      "seconds": 13.7
+    },
+    {
+      "family": "mixtral",
+      "knob": "0",
+      "status": "FAIL",
+      "generated": [
+        [
+          149,
+          93,
+          229,
+          149
+        ],
+        [
+          149,
+          93,
+          229,
+          149
+        ]
+      ],
+      "serve_k19_seen": {
+        "one_launch|lean|gt256": 4
+      },
+      "graph_default_enabled": false,
+      "prefill_graph": {
+        "status": "refused",
+        "why": "device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement)"
+      },
+      "seen_knob0": {
+        "one_launch|lean|gt256": 2
+      },
+      "seen_own": {
+        "one_launch|lean|gt256": 2
+      },
+      "routes": {
+        "int4_prefill_env": "k19",
+        "prefill_attn_env": null,
+        "prefill_glue_env": null,
+        "prefill_lean_dispatch_env": null,
+        "prefill_lean_dispatch": "auto",
+        "k19_prefill_big_m_env": "0",
+        "k19_prefill_big_m": 0,
+        "device_grouping": true,
+        "int4_prefill": "k19",
+        "int4_prefill_above_256_rows": "k19",
+        "prefill_attn": "flash",
+        "seen": {
+          "moe": {
+            "int4_k19|gt256": 8,
+            "int4_singleton_gemv|le256": 12
+          },
+          "prefill_attn": {
+            "flash": 8
+          },
+          "moe_k19_dispatch": {
+            "one_launch|lean|gt256": 2
+          },
+          "prefill_folds": {}
+        }
+      },
+      "logits_equal_in_process": true,
+      "logits_max_abs": 0.0,
+      "device": "NVIDIA RTX A2000 12GB",
+      "capability": [
+        8,
+        6
+      ],
+      "source": {
+        "source": "/opt/conda/lib/python3.11/site-packages",
+        "git_head": null,
+        "package_sha256": "d511c213bcbb322edfc6aac8d294e8317110ca0d023d9b4f8ba21cbf1c52a2af",
+        "installed_e4b": "0.53.0",
+        "installed_gnf4": "0.45.0",
+        "gnf4_sources": {
+          "modules": {
+            "_brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_brotli.cpython-311-x86_64-linux-gnu.so",
+              "sha256": "7b45f6d4ae26c939dcf75ca2bdc8ad9c3032ccb51381a22d1cff022391a3f0ae"
+            },
+            "_triton_shim": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_triton_shim.py",
+              "sha256": "f3c3b65730f4b5676a9af94a43f041a9f3dcce5edd18703720748241b8e2e5ba"
+            },
+            "brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/brotli.py",
+              "sha256": "3e71885667851851d23b07ab986c28861776172af8e058607a32d09242081620"
+            },
+            "cold_cpu_view": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cold_cpu_view.py",
+              "sha256": "8a175b300e78136d790812f1c38c1cc7c5c37189850783a1ea52b2ff58ff434c"
+            },
+            "cpu_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cpu_grouped.py",
+              "sha256": "a1a6ca636167c2965fda89be9ef14a6787077f9599e92b874067dc20d1b7b124"
+            },
+            "fp8_kv": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_kv.py",
+              "sha256": "e06dee826f4f63eec087b43a11db6aa3585166b3b8a751e9fdedc1274da07c6f"
+            },
+            "fp8_paged_attn": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_paged_attn.py",
+              "sha256": "dd0af7514ef2a6b6b14d7816fe468d592de6eb5ffcdaba17d19573a988bdf799"
+            },
+            "gnf4_native": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/__init__.py",
+              "sha256": "5f902947f03cd28b267fe0b26f4a04346fafd80c9be41d4aaa4e9815ce4370ca"
+            },
+            "gnf4_native.build": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/build.py",
+              "sha256": "10a6c4d57268b81c26266fe0408485d64d450985aa5295cc0198a4edfd803230"
+            },
+            "int4_b32": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_b32.py",
+              "sha256": "773eff5db7be77dea3d1f9048a6e708a94e79634baf17f452bf2848e24a2072f"
+            },
+            "int4_pack_ref": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_pack_ref.py",
+              "sha256": "c50c26b3895e0c4ec0bfe8b5763dff4d783f32ec408258e98a8a42c390448406"
+            },
+            "int4_smallm": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_smallm.py",
+              "sha256": "dbefe80d6ce73b7cd8f58a3a2074c77ee1a8f899a85a3360a7ee25facfe2225f"
+            },
+            "mxfp4_loader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/mxfp4_loader.py",
+              "sha256": "fce6a65ae8b60f4d3ed57964b3c1be8e39e8116b70f2a632ad4b3d20251457e6"
+            },
+            "nf4_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nf4_grouped.py",
+              "sha256": "57570b4e7c4daa7982dbfcc8ca7ea3bd8a2149f29c5e94e40e0e92db33e10df9"
+            },
+            "nvme_arena": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_arena.py",
+              "sha256": "7d0db538454f04cb8aaf98c5567535f88e18408ff878112bd3f14a02f18fad86"
+            },
+            "nvme_reader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_reader.py",
+              "sha256": "08b3b677c6a809dc079452f5e11485f58e2d001cd030261841626d962b9649ac"
+            },
+            "nvme_residency": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_residency.py",
+              "sha256": "b0df36136495a4e78513e2930e7720ace4f480aa71b19272b69bee215710c0c3"
+            },
+            "row_pool": {
+              "path": "/opt/conda/lib/python3.11/site-packages/row_pool.py",
+              "sha256": "11e8e29869568677e1ebb7e3ba25848aa2e0afcaaa582c4acd404b4875d43a4a"
+            },
+            "six": {
+              "path": "/opt/conda/lib/python3.11/site-packages/six.py",
+              "sha256": "c51c91f703d3d4b3696c923cb5fec213e05e75d9215393befac7f2fa6a3904df"
+            },
+            "typing_extensions": {
+              "path": "/opt/conda/lib/python3.11/site-packages/typing_extensions.py",
+              "sha256": "4040ca1a1ecbee00d1385c12a93084d1c5bd46f0b774f07e5ae7e91c4f55e696"
+            }
+          },
+          "native_source_root": "/opt/conda/lib/python3.11/site-packages/gnf4_native",
+          "native_c_sources": {
+            "cpu_kernels.c": "6e7297766b58dc29e6d69b1d324abbecb822f66d623bb03a7782efac6fc9175c"
+          },
+          "imported_source_sha256": "8adaffdf5ce1375554349f0c2991bdcd69dd78dfc98cf764a3c4d91906c79090"
+        }
+      },
+      "torch": "2.8.0+cu128",
+      "checks_failed": [
+        "knob-0 forward's K19 calls above 256 rows: {'one_launch|lean|gt256': 2}",
+        "knob-0 forward's K19 calls above 256 rows: {'one_launch|lean|gt256': 2}, expected {'chained|lean|gt256': 2}"
+      ],
+      "seconds": 15.6
+    },
+    {
+      "family": "mixtral",
+      "knob": "0r",
+      "status": "FAIL",
+      "generated": [
+        [
+          149,
+          93,
+          229,
+          149
+        ],
+        [
+          149,
+          93,
+          229,
+          149
+        ]
+      ],
+      "serve_k19_seen": {
+        "one_launch|lean|gt256": 4
+      },
+      "graph_default_enabled": false,
+      "prefill_graph": {
+        "status": "refused",
+        "why": "device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement)"
+      },
+      "seen_knob0": {
+        "one_launch|lean|gt256": 2
+      },
+      "seen_own": {
+        "one_launch|lean|gt256": 2
+      },
+      "routes": {
+        "int4_prefill_env": "k19",
+        "prefill_attn_env": null,
+        "prefill_glue_env": null,
+        "prefill_lean_dispatch_env": null,
+        "prefill_lean_dispatch": "auto",
+        "k19_prefill_big_m_env": "0",
+        "k19_prefill_big_m": 0,
+        "device_grouping": true,
+        "int4_prefill": "k19",
+        "int4_prefill_above_256_rows": "k19",
+        "prefill_attn": "flash",
+        "seen": {
+          "moe": {
+            "int4_k19|gt256": 8,
+            "int4_singleton_gemv|le256": 12
+          },
+          "prefill_attn": {
+            "flash": 8
+          },
+          "moe_k19_dispatch": {
+            "one_launch|lean|gt256": 2
+          },
+          "prefill_folds": {}
+        }
+      },
+      "logits_equal_in_process": true,
+      "logits_max_abs": 0.0,
+      "device": "NVIDIA RTX A2000 12GB",
+      "capability": [
+        8,
+        6
+      ],
+      "source": {
+        "source": "/opt/conda/lib/python3.11/site-packages",
+        "git_head": null,
+        "package_sha256": "d511c213bcbb322edfc6aac8d294e8317110ca0d023d9b4f8ba21cbf1c52a2af",
+        "installed_e4b": "0.53.0",
+        "installed_gnf4": "0.45.0",
+        "gnf4_sources": {
+          "modules": {
+            "_brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_brotli.cpython-311-x86_64-linux-gnu.so",
+              "sha256": "7b45f6d4ae26c939dcf75ca2bdc8ad9c3032ccb51381a22d1cff022391a3f0ae"
+            },
+            "_triton_shim": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_triton_shim.py",
+              "sha256": "f3c3b65730f4b5676a9af94a43f041a9f3dcce5edd18703720748241b8e2e5ba"
+            },
+            "brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/brotli.py",
+              "sha256": "3e71885667851851d23b07ab986c28861776172af8e058607a32d09242081620"
+            },
+            "cold_cpu_view": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cold_cpu_view.py",
+              "sha256": "8a175b300e78136d790812f1c38c1cc7c5c37189850783a1ea52b2ff58ff434c"
+            },
+            "cpu_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cpu_grouped.py",
+              "sha256": "a1a6ca636167c2965fda89be9ef14a6787077f9599e92b874067dc20d1b7b124"
+            },
+            "fp8_kv": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_kv.py",
+              "sha256": "e06dee826f4f63eec087b43a11db6aa3585166b3b8a751e9fdedc1274da07c6f"
+            },
+            "fp8_paged_attn": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_paged_attn.py",
+              "sha256": "dd0af7514ef2a6b6b14d7816fe468d592de6eb5ffcdaba17d19573a988bdf799"
+            },
+            "gnf4_native": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/__init__.py",
+              "sha256": "5f902947f03cd28b267fe0b26f4a04346fafd80c9be41d4aaa4e9815ce4370ca"
+            },
+            "gnf4_native.build": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/build.py",
+              "sha256": "10a6c4d57268b81c26266fe0408485d64d450985aa5295cc0198a4edfd803230"
+            },
+            "int4_b32": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_b32.py",
+              "sha256": "773eff5db7be77dea3d1f9048a6e708a94e79634baf17f452bf2848e24a2072f"
+            },
+            "int4_pack_ref": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_pack_ref.py",
+              "sha256": "c50c26b3895e0c4ec0bfe8b5763dff4d783f32ec408258e98a8a42c390448406"
+            },
+            "int4_smallm": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_smallm.py",
+              "sha256": "dbefe80d6ce73b7cd8f58a3a2074c77ee1a8f899a85a3360a7ee25facfe2225f"
+            },
+            "mxfp4_loader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/mxfp4_loader.py",
+              "sha256": "fce6a65ae8b60f4d3ed57964b3c1be8e39e8116b70f2a632ad4b3d20251457e6"
+            },
+            "nf4_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nf4_grouped.py",
+              "sha256": "57570b4e7c4daa7982dbfcc8ca7ea3bd8a2149f29c5e94e40e0e92db33e10df9"
+            },
+            "nvme_arena": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_arena.py",
+              "sha256": "7d0db538454f04cb8aaf98c5567535f88e18408ff878112bd3f14a02f18fad86"
+            },
+            "nvme_reader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_reader.py",
+              "sha256": "08b3b677c6a809dc079452f5e11485f58e2d001cd030261841626d962b9649ac"
+            },
+            "nvme_residency": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_residency.py",
+              "sha256": "b0df36136495a4e78513e2930e7720ace4f480aa71b19272b69bee215710c0c3"
+            },
+            "row_pool": {
+              "path": "/opt/conda/lib/python3.11/site-packages/row_pool.py",
+              "sha256": "11e8e29869568677e1ebb7e3ba25848aa2e0afcaaa582c4acd404b4875d43a4a"
+            },
+            "six": {
+              "path": "/opt/conda/lib/python3.11/site-packages/six.py",
+              "sha256": "c51c91f703d3d4b3696c923cb5fec213e05e75d9215393befac7f2fa6a3904df"
+            },
+            "typing_extensions": {
+              "path": "/opt/conda/lib/python3.11/site-packages/typing_extensions.py",
+              "sha256": "4040ca1a1ecbee00d1385c12a93084d1c5bd46f0b774f07e5ae7e91c4f55e696"
+            }
+          },
+          "native_source_root": "/opt/conda/lib/python3.11/site-packages/gnf4_native",
+          "native_c_sources": {
+            "cpu_kernels.c": "6e7297766b58dc29e6d69b1d324abbecb822f66d623bb03a7782efac6fc9175c"
+          },
+          "imported_source_sha256": "8adaffdf5ce1375554349f0c2991bdcd69dd78dfc98cf764a3c4d91906c79090"
+        }
+      },
+      "torch": "2.8.0+cu128",
+      "checks_failed": [
+        "knob-0 forward's K19 calls above 256 rows: {'one_launch|lean|gt256': 2}",
+        "knob-0 forward's K19 calls above 256 rows: {'one_launch|lean|gt256': 2}, expected {'chained|lean|gt256': 2}"
+      ],
+      "seconds": 14.1
+    },
+    {
+      "family": "mixtral",
+      "knob": "32",
+      "status": "FAIL",
+      "generated": [
+        [
+          149,
+          93,
+          229,
+          149
+        ],
+        [
+          149,
+          93,
+          229,
+          149
+        ]
+      ],
+      "serve_k19_seen": {
+        "split|lean|gt256": 4
+      },
+      "graph_default_enabled": false,
+      "prefill_graph": {
+        "status": "refused",
+        "why": "device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement)"
+      },
+      "seen_knob0": {
+        "one_launch|lean|gt256": 2
+      },
+      "seen_own": {
+        "split|lean|gt256": 2
+      },
+      "routes": {
+        "int4_prefill_env": "k19",
+        "prefill_attn_env": null,
+        "prefill_glue_env": null,
+        "prefill_lean_dispatch_env": null,
+        "prefill_lean_dispatch": "auto",
+        "k19_prefill_big_m_env": "32",
+        "k19_prefill_big_m": 32,
+        "device_grouping": true,
+        "int4_prefill": "k19",
+        "int4_prefill_above_256_rows": "k19",
+        "prefill_attn": "flash",
+        "seen": {
+          "moe": {
+            "int4_k19|gt256": 8,
+            "int4_singleton_gemv|le256": 12
+          },
+          "prefill_attn": {
+            "flash": 8
+          },
+          "moe_k19_dispatch": {
+            "split|lean|gt256": 2
+          },
+          "prefill_folds": {}
+        }
+      },
+      "logits_equal_in_process": true,
+      "logits_max_abs": 0.0,
+      "device": "NVIDIA RTX A2000 12GB",
+      "capability": [
+        8,
+        6
+      ],
+      "source": {
+        "source": "/opt/conda/lib/python3.11/site-packages",
+        "git_head": null,
+        "package_sha256": "d511c213bcbb322edfc6aac8d294e8317110ca0d023d9b4f8ba21cbf1c52a2af",
+        "installed_e4b": "0.53.0",
+        "installed_gnf4": "0.45.0",
+        "gnf4_sources": {
+          "modules": {
+            "_brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_brotli.cpython-311-x86_64-linux-gnu.so",
+              "sha256": "7b45f6d4ae26c939dcf75ca2bdc8ad9c3032ccb51381a22d1cff022391a3f0ae"
+            },
+            "_triton_shim": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_triton_shim.py",
+              "sha256": "f3c3b65730f4b5676a9af94a43f041a9f3dcce5edd18703720748241b8e2e5ba"
+            },
+            "brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/brotli.py",
+              "sha256": "3e71885667851851d23b07ab986c28861776172af8e058607a32d09242081620"
+            },
+            "cold_cpu_view": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cold_cpu_view.py",
+              "sha256": "8a175b300e78136d790812f1c38c1cc7c5c37189850783a1ea52b2ff58ff434c"
+            },
+            "cpu_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cpu_grouped.py",
+              "sha256": "a1a6ca636167c2965fda89be9ef14a6787077f9599e92b874067dc20d1b7b124"
+            },
+            "fp8_kv": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_kv.py",
+              "sha256": "e06dee826f4f63eec087b43a11db6aa3585166b3b8a751e9fdedc1274da07c6f"
+            },
+            "fp8_paged_attn": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_paged_attn.py",
+              "sha256": "dd0af7514ef2a6b6b14d7816fe468d592de6eb5ffcdaba17d19573a988bdf799"
+            },
+            "gnf4_native": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/__init__.py",
+              "sha256": "5f902947f03cd28b267fe0b26f4a04346fafd80c9be41d4aaa4e9815ce4370ca"
+            },
+            "gnf4_native.build": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/build.py",
+              "sha256": "10a6c4d57268b81c26266fe0408485d64d450985aa5295cc0198a4edfd803230"
+            },
+            "int4_b32": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_b32.py",
+              "sha256": "773eff5db7be77dea3d1f9048a6e708a94e79634baf17f452bf2848e24a2072f"
+            },
+            "int4_pack_ref": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_pack_ref.py",
+              "sha256": "c50c26b3895e0c4ec0bfe8b5763dff4d783f32ec408258e98a8a42c390448406"
+            },
+            "int4_smallm": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_smallm.py",
+              "sha256": "dbefe80d6ce73b7cd8f58a3a2074c77ee1a8f899a85a3360a7ee25facfe2225f"
+            },
+            "mxfp4_loader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/mxfp4_loader.py",
+              "sha256": "fce6a65ae8b60f4d3ed57964b3c1be8e39e8116b70f2a632ad4b3d20251457e6"
+            },
+            "nf4_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nf4_grouped.py",
+              "sha256": "57570b4e7c4daa7982dbfcc8ca7ea3bd8a2149f29c5e94e40e0e92db33e10df9"
+            },
+            "nvme_arena": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_arena.py",
+              "sha256": "7d0db538454f04cb8aaf98c5567535f88e18408ff878112bd3f14a02f18fad86"
+            },
+            "nvme_reader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_reader.py",
+              "sha256": "08b3b677c6a809dc079452f5e11485f58e2d001cd030261841626d962b9649ac"
+            },
+            "nvme_residency": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_residency.py",
+              "sha256": "b0df36136495a4e78513e2930e7720ace4f480aa71b19272b69bee215710c0c3"
+            },
+            "row_pool": {
+              "path": "/opt/conda/lib/python3.11/site-packages/row_pool.py",
+              "sha256": "11e8e29869568677e1ebb7e3ba25848aa2e0afcaaa582c4acd404b4875d43a4a"
+            },
+            "six": {
+              "path": "/opt/conda/lib/python3.11/site-packages/six.py",
+              "sha256": "c51c91f703d3d4b3696c923cb5fec213e05e75d9215393befac7f2fa6a3904df"
+            },
+            "typing_extensions": {
+              "path": "/opt/conda/lib/python3.11/site-packages/typing_extensions.py",
+              "sha256": "4040ca1a1ecbee00d1385c12a93084d1c5bd46f0b774f07e5ae7e91c4f55e696"
+            }
+          },
+          "native_source_root": "/opt/conda/lib/python3.11/site-packages/gnf4_native",
+          "native_c_sources": {
+            "cpu_kernels.c": "6e7297766b58dc29e6d69b1d324abbecb822f66d623bb03a7782efac6fc9175c"
+          },
+          "imported_source_sha256": "8adaffdf5ce1375554349f0c2991bdcd69dd78dfc98cf764a3c4d91906c79090"
+        }
+      },
+      "torch": "2.8.0+cu128",
+      "checks_failed": [
+        "knob-0 forward's K19 calls above 256 rows: {'one_launch|lean|gt256': 2}"
+      ],
+      "seconds": 14.1
+    },
+    {
+      "family": "mixtral",
+      "knob": "64",
+      "status": "FAIL",
+      "generated": [
+        [
+          149,
+          93,
+          229,
+          149
+        ],
+        [
+          149,
+          93,
+          229,
+          149
+        ]
+      ],
+      "serve_k19_seen": {
+        "split|lean|gt256": 4
+      },
+      "graph_default_enabled": false,
+      "prefill_graph": {
+        "status": "refused",
+        "why": "device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement)"
+      },
+      "seen_knob0": {
+        "one_launch|lean|gt256": 2
+      },
+      "seen_own": {
+        "split|lean|gt256": 2
+      },
+      "routes": {
+        "int4_prefill_env": "k19",
+        "prefill_attn_env": null,
+        "prefill_glue_env": null,
+        "prefill_lean_dispatch_env": null,
+        "prefill_lean_dispatch": "auto",
+        "k19_prefill_big_m_env": "64",
+        "k19_prefill_big_m": 64,
+        "device_grouping": true,
+        "int4_prefill": "k19",
+        "int4_prefill_above_256_rows": "k19",
+        "prefill_attn": "flash",
+        "seen": {
+          "moe": {
+            "int4_k19|gt256": 8,
+            "int4_singleton_gemv|le256": 12
+          },
+          "prefill_attn": {
+            "flash": 8
+          },
+          "moe_k19_dispatch": {
+            "split|lean|gt256": 2
+          },
+          "prefill_folds": {}
+        }
+      },
+      "logits_equal_in_process": true,
+      "logits_max_abs": 0.0,
+      "device": "NVIDIA RTX A2000 12GB",
+      "capability": [
+        8,
+        6
+      ],
+      "source": {
+        "source": "/opt/conda/lib/python3.11/site-packages",
+        "git_head": null,
+        "package_sha256": "d511c213bcbb322edfc6aac8d294e8317110ca0d023d9b4f8ba21cbf1c52a2af",
+        "installed_e4b": "0.53.0",
+        "installed_gnf4": "0.45.0",
+        "gnf4_sources": {
+          "modules": {
+            "_brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_brotli.cpython-311-x86_64-linux-gnu.so",
+              "sha256": "7b45f6d4ae26c939dcf75ca2bdc8ad9c3032ccb51381a22d1cff022391a3f0ae"
+            },
+            "_triton_shim": {
+              "path": "/opt/conda/lib/python3.11/site-packages/_triton_shim.py",
+              "sha256": "f3c3b65730f4b5676a9af94a43f041a9f3dcce5edd18703720748241b8e2e5ba"
+            },
+            "brotli": {
+              "path": "/opt/conda/lib/python3.11/site-packages/brotli.py",
+              "sha256": "3e71885667851851d23b07ab986c28861776172af8e058607a32d09242081620"
+            },
+            "cold_cpu_view": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cold_cpu_view.py",
+              "sha256": "8a175b300e78136d790812f1c38c1cc7c5c37189850783a1ea52b2ff58ff434c"
+            },
+            "cpu_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/cpu_grouped.py",
+              "sha256": "a1a6ca636167c2965fda89be9ef14a6787077f9599e92b874067dc20d1b7b124"
+            },
+            "fp8_kv": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_kv.py",
+              "sha256": "e06dee826f4f63eec087b43a11db6aa3585166b3b8a751e9fdedc1274da07c6f"
+            },
+            "fp8_paged_attn": {
+              "path": "/opt/conda/lib/python3.11/site-packages/fp8_paged_attn.py",
+              "sha256": "dd0af7514ef2a6b6b14d7816fe468d592de6eb5ffcdaba17d19573a988bdf799"
+            },
+            "gnf4_native": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/__init__.py",
+              "sha256": "5f902947f03cd28b267fe0b26f4a04346fafd80c9be41d4aaa4e9815ce4370ca"
+            },
+            "gnf4_native.build": {
+              "path": "/opt/conda/lib/python3.11/site-packages/gnf4_native/build.py",
+              "sha256": "10a6c4d57268b81c26266fe0408485d64d450985aa5295cc0198a4edfd803230"
+            },
+            "int4_b32": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_b32.py",
+              "sha256": "773eff5db7be77dea3d1f9048a6e708a94e79634baf17f452bf2848e24a2072f"
+            },
+            "int4_pack_ref": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_pack_ref.py",
+              "sha256": "c50c26b3895e0c4ec0bfe8b5763dff4d783f32ec408258e98a8a42c390448406"
+            },
+            "int4_smallm": {
+              "path": "/opt/conda/lib/python3.11/site-packages/int4_smallm.py",
+              "sha256": "dbefe80d6ce73b7cd8f58a3a2074c77ee1a8f899a85a3360a7ee25facfe2225f"
+            },
+            "mxfp4_loader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/mxfp4_loader.py",
+              "sha256": "fce6a65ae8b60f4d3ed57964b3c1be8e39e8116b70f2a632ad4b3d20251457e6"
+            },
+            "nf4_grouped": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nf4_grouped.py",
+              "sha256": "57570b4e7c4daa7982dbfcc8ca7ea3bd8a2149f29c5e94e40e0e92db33e10df9"
+            },
+            "nvme_arena": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_arena.py",
+              "sha256": "7d0db538454f04cb8aaf98c5567535f88e18408ff878112bd3f14a02f18fad86"
+            },
+            "nvme_reader": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_reader.py",
+              "sha256": "08b3b677c6a809dc079452f5e11485f58e2d001cd030261841626d962b9649ac"
+            },
+            "nvme_residency": {
+              "path": "/opt/conda/lib/python3.11/site-packages/nvme_residency.py",
+              "sha256": "b0df36136495a4e78513e2930e7720ace4f480aa71b19272b69bee215710c0c3"
+            },
+            "row_pool": {
+              "path": "/opt/conda/lib/python3.11/site-packages/row_pool.py",
+              "sha256": "11e8e29869568677e1ebb7e3ba25848aa2e0afcaaa582c4acd404b4875d43a4a"
+            },
+            "six": {
+              "path": "/opt/conda/lib/python3.11/site-packages/six.py",
+              "sha256": "c51c91f703d3d4b3696c923cb5fec213e05e75d9215393befac7f2fa6a3904df"
+            },
+            "typing_extensions": {
+              "path": "/opt/conda/lib/python3.11/site-packages/typing_extensions.py",
+              "sha256": "4040ca1a1ecbee00d1385c12a93084d1c5bd46f0b774f07e5ae7e91c4f55e696"
+            }
+          },
+          "native_source_root": "/opt/conda/lib/python3.11/site-packages/gnf4_native",
+          "native_c_sources": {
+            "cpu_kernels.c": "6e7297766b58dc29e6d69b1d324abbecb822f66d623bb03a7782efac6fc9175c"
+          },
+          "imported_source_sha256": "8adaffdf5ce1375554349f0c2991bdcd69dd78dfc98cf764a3c4d91906c79090"
+        }
+      },
+      "torch": "2.8.0+cu128",
+      "checks_failed": [
+        "knob-0 forward's K19 calls above 256 rows: {'one_launch|lean|gt256': 2}"
+      ],
+      "seconds": 13.8
+    }
+  ],
+  "cross_process_logits": {
+    "qwen3_moe": {
+      "0_vs_0r": true,
+      "32_vs_0": true,
+      "64_vs_0": true
+    },
+    "granitemoe": {
+      "0_vs_0r": true,
+      "32_vs_0": true,
+      "64_vs_0": true
+    },
+    "mixtral": {
+      "0_vs_0r": true,
+      "32_vs_0": true,
+      "64_vs_0": true
+    }
+  }
+}
