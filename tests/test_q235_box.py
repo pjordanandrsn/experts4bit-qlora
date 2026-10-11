@@ -8,6 +8,8 @@ Qwen3-MoE, on the reference path (the fused kernels need CUDA; the RTX A2000 reh
 - The fresh-process repeat (``--repeat``) reproduces step 0's loss.
 - Each planted error (Amendment 1: routing, epilogue) changes the planted layer's output and leaves the layers before it untouched,
   so an inert plant cannot pass for a band result.
+- Amendment 3's in-process plants (``--repeat --plants``): the repeat's clean forward is the null; each plant run after it in the same
+  process reproduces the separate-process plant bit for bit, and an unplant that leaves anything behind raises.
 """
 from __future__ import annotations
 
@@ -90,6 +92,56 @@ def test_each_planted_error_changes_its_layer_and_nothing_before_it(tiny, step, 
     clean = step[0]["layer_sha256"]
     assert rec["layer_sha256"][:i] == clean[:i], "a plant must not touch the layers before it"
     assert rec["layer_sha256"][i] != clean[i], f"the {kind} plant was inert at its layer"
+
+
+def test_the_in_process_plants_reproduce_the_separate_process_plants(tiny, step):
+    rec, out = _box(tiny, "repeat_plants", "--repeat", "--plants")
+    assert rec["repeat"]["loss"] == step[0]["in_process"]["loss_0"]
+    assert rec["layer_sha256"] == step[0]["layer_sha256"], "the null must be the box's step-0 forward"
+    for kind in ("routing", "epilogue"):
+        p = rec["plants"][kind]
+        assert p["layer"] == 2 and p["pre_plant_equal_null"] and p["planted_layer_differs"], p
+        assert p["pre_plant_max_rel_diff"] == 0.0 and len(p["pre_plant_rel_diff"]) == 2       # the tolerance's input, recorded
+        sep, _ = _box(tiny, f"sep_{kind}", "--repeat", "--plant", kind)
+        assert p["layer_sha256"] == sep["layer_sha256"], f"the in-process {kind} plant differs from the separate-process one"
+        assert p["loss"] == sep["repeat"]["loss"]
+        d = out / f"plant_{kind}"
+        on_disk = json.load(open(d / "box.json"))
+        assert on_disk["plant"] == {"kind": kind, "layer": 2} and on_disk["layer_sha256"] == p["layer_sha256"]
+        assert len(list(d.glob("layer*.pt"))) == 4 and (d / "nf4.pt").exists() and json.load(open(d / "nf4.json"))["loss"] == p["loss"]
+
+
+def test_plants_need_the_repeat(tiny):
+    for extra in (["--plants"], ["--repeat", "--plants", "--plant", "routing"]):
+        r = subprocess.run([sys.executable, str(BOX), str(tiny / "model"), str(tiny / "tokens.pt"), "--out", str(tiny / "x"),
+                            "--device", "cpu", "--enabler", "reference", *extra], capture_output=True, text=True, cwd=ROOT)
+        assert r.returncode == 2 and "--plants rides the fresh-process repeat" in r.stderr, r.stderr[-300:]
+
+
+def test_an_unplant_that_leaves_anything_behind_raises(tiny, monkeypatch):
+    from experts4bit_qlora import load_moe_4bit_streaming
+    box = _box_module()
+    model, _ = load_moe_4bit_streaming(str(tiny / "model"), "cpu", torch.bfloat16, 4, 8, quant_type="nf4")
+    tok = torch.load(tiny / "tokens.pt", weights_only=True)
+
+    def forward():
+        with torch.no_grad():
+            return float(model(input_ids=tok["input_ids"], attention_mask=tok["attention_mask"], labels=tok["labels"]).loss)
+    null, _, hooks = box.capture(model)
+    forward()
+    for h in hooks:
+        h.remove()
+    for kind in ("routing", "epilogue"):                           # the real unplant restores the surface exactly
+        before = box.plant_surface(model, 2)
+        _, undo = box.plant(model, kind)
+        assert box.plant_surface(model, 2) != before
+        undo()
+        assert box.plant_surface(model, 2) == before
+    assert set(box.in_process_plants(model, forward, null)) == {"routing", "epilogue"}
+    real = box.plant
+    monkeypatch.setattr(box, "plant", lambda m, kind: (real(m, kind)[0], lambda: None))   # an unplant that removes nothing
+    with pytest.raises(RuntimeError, match="did not come off layer 2"):
+        box.in_process_plants(model, forward, null)
 
 
 def _box_module():

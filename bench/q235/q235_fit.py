@@ -27,7 +27,11 @@ floor for each host-bound part, which the box checks before the fetch (``q235_ho
   filesystem it overstates the disk, which is why it is not the floor.
 Quantization runs on the card, whose class is registered. The profile's dominant part is named in the report.
 
-    python q235_fit.py --rehearsal DIR --warm-install-s S --bandwidth-mbps M --usd-per-hour R [--out FIT.json]
+Amendment 3's in-process plants add two forwards to the repeat. ``--plants-from DIR`` takes their measured time from a later A2000
+leg (its repeat's ``plants``: each plant's synchronized forward) and adds it to the rehearsal's repeat before the scaling. Only those
+forwards are taken from it: its load ran on a warm page cache, so its phases would understate a cold host.
+
+    python q235_fit.py --rehearsal DIR --warm-install-s S --bandwidth-mbps M --usd-per-hour R [--plants-from DIR2] [--out FIT.json]
 """
 from __future__ import annotations
 
@@ -42,7 +46,8 @@ HERE = Path(__file__).resolve().parent
 LAYERS, SLICE_LAYERS = 94, 4
 MARGIN = 1.5
 RESERVE_S = 300                     # q235_run.sh's deadline reserve
-CONTROLLER_S = 900                  # tc1_drive.sh: staging, the nonce handshake, the receipt fetch (the per-layer outputs, ~2 GB)
+CONTROLLER_S = 1800                 # tc1_drive.sh: staging, the nonce handshake, the receipt fetch (per-layer outputs of the box, the
+                                    # null and two plants: 4 x 94 x 2,648 x 4,096 x 2 B, about 8.2 GB, at >= 4.6 MB/s)
 RUN_CAP_USD = 35.0                  # the launcher's per-run hard cap
 NO_ASK_USD = 15.0                   # above this, a run's ACK needs approval
 FIXED = ("require-git", "create-venv", "tokens", "hostrate")
@@ -125,6 +130,7 @@ def main():
     ap.add_argument("--warm-install-s", type=float, required=True, help="the rehearsal's install from a cold wheel cache")
     ap.add_argument("--bandwidth-mbps", type=float, required=True, help="the pinned host's listed download bandwidth")
     ap.add_argument("--usd-per-hour", type=float, required=True, help="the pinned host's rate")
+    ap.add_argument("--plants-from", type=Path, default=None, help="an A2000 leg whose repeat ran the in-process plants")
     ap.add_argument("--out", type=Path, default=None)
     a = ap.parse_args()
     rows = [json.loads(ln) for ln in (a.rehearsal / "receipts" / "phase-timings.jsonl").read_text().splitlines()]
@@ -132,6 +138,14 @@ def main():
     if run.get("mode") != "a2000" or any(r["rc"] != 0 for r in rows):
         sys.exit("refusing: not a clean A2000 rehearsal (mode a2000, every phase rc 0)")
     timings = {r["phase"]: r["elapsed_s"] for r in rows}
+    plants = None
+    if a.plants_from:
+        later = json.loads((a.plants_from / "receipts" / "repeat" / "box.json").read_text())
+        lrun = json.loads((a.plants_from / "receipts" / "run.json").read_text())
+        if lrun.get("mode") != "a2000" or set(later.get("plants", {})) != {"routing", "epilogue"}:
+            sys.exit("refusing: --plants-from is not an A2000 leg whose repeat ran both in-process plants")
+        plants = {k: v["forward_s"] for k, v in later["plants"].items()}
+        timings["repeat"] = timings["repeat"] + sum(plants.values())
     fetch = json.loads((a.rehearsal / "warm-fetch.json").read_text())       # the cold fetch (the rehearsal's own re-verified warm files)
     wheels = json.loads((HERE / "wheels.json").read_text())["packages"]
     model = json.loads((HERE / "model_files.json").read_text())
@@ -148,6 +162,9 @@ def main():
                                      and sealed.get("fetch_gb_s", 0) >= rep["floors"]["fetch_gb_s"])
     rep["fits"] = rep["fits"] and rep["floors"]["sealed_match"]
     rep["rehearsal"] = {"nonce": run.get("nonce"), "e4b_sha": run.get("e4b_sha"), "timings": timings}
+    if plants is not None:
+        rep["rehearsal"]["in_process_plants"] = {"from_e4b_sha": lrun.get("e4b_sha"), "from_nonce": lrun.get("nonce"),
+                                                 "forward_s": plants, "added_to_repeat_s": round(sum(plants.values()), 3)}
     text = json.dumps(rep, indent=1)
     if a.out:
         a.out.write_text(text + "\n")

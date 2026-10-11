@@ -1,0 +1,28 @@
+{
+ "null_equals_depth_box_bitwise": true,
+ "null_loss": 1.8592109680175781,
+ "depth_box_loss": 1.8592109680175781,
+ "plants": {
+  "routing": {
+   "layer": 24,
+   "equals_depth_plant_bitwise": true,
+   "loss": 1.908713936805725,
+   "depth_loss": 1.908713936805725,
+   "pre_plant_equal_null": true,
+   "planted_layer_differs": true,
+   "forward_s": 5.444
+  },
+  "epilogue": {
+   "layer": 24,
+   "equals_depth_plant_bitwise": true,
+   "loss": 2.0549263954162598,
+   "depth_loss": 2.0549263954162598,
+   "pre_plant_equal_null": true,
+   "planted_layer_differs": true,
+   "forward_s": 5.639
+  }
+ },
+ "null_forward_s": 9.047,
+ "load_seconds": 1962.0,
+ "all_bitwise": true
+}
