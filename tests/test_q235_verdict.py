@@ -34,10 +34,11 @@ def _save_run(d, layers, topk, loss, rec):
 
 
 def _box_run(root, *, code="0", card=PRO6000, mode="science", rules=None, losses=(2.0, 1.9), repeat_loss=2.0, scale=1.01,
-             peak=24.0 * (1 << 30), null_scale=1.0, plant_kick=3.0, plant_from=2, plant_at=2, repeat=True):
+             peak=24.0 * (1 << 30), null_scale=1.0, plant_kick=3.0, plant_from=2, plant_at=2, repeat=True, pre_scale=1.0):
     """A fetched science run (q235_run.sh's layout) and a reference beside it; 4 layers of [2, 6, 8], top-2 of 8 experts. The box
     is the reference's per-layer updates times ``scale`` (u = scale - 1); the repeat's null is the box times ``null_scale``; each plant
-    is the null with ``plant_kick`` x a fixed vector added from layer ``plant_from`` on (u at that layer about plant_kick x 10)."""
+    is the null with ``plant_kick`` x a fixed vector added from layer ``plant_from`` on (u at that layer about plant_kick x 10), and its
+    earlier layers the null's times ``pre_scale``."""
     g = torch.Generator().manual_seed(0)
     w, ref = root / "run", root / "ref"
     (w / "receipts").mkdir(parents=True)
@@ -63,7 +64,8 @@ def _box_run(root, *, code="0", card=PRO6000, mode="science", rules=None, losses
         kick = torch.randn(2, 6, 8, generator=g)
         plants = {}
         for kind in ("routing", "epilogue"):
-            pl = [t + plant_kick * kick if i >= plant_from else t.clone() for i, t in enumerate(null)]
+            pl = [t + plant_kick * kick if i >= plant_from else (t * pre_scale if pre_scale != 1.0 else t.clone())
+                  for i, t in enumerate(null)]
             _save_run(w / "receipts" / "repeat" / f"plant_{kind}", pl, topk, 2.3,
                       {"plant": {"kind": kind, "layer": plant_at}, "in_process": True})
             plants[kind] = {"layer": plant_at}
@@ -125,7 +127,16 @@ def test_the_band_is_the_contribution_not_the_state(tmp_path):
     assert v["reported"]["u_profile"][0] is None and "median_upper_middle" in v["reported"]["full_state"]
     ins = v["instrument"]
     assert ins["null_bitwise"] and ins["null_vs_box_max"] == 0
-    assert all(p["fails_band"] and p["pre_plant_equal_null"] and p["planted_layer_differs"] for p in ins["plants"].values())
+    assert all(p["fails_band"] and p["pre_plant_bitwise"] and p["pre_plant_within_floor"] and p["planted_layer_differs"]
+               for p in ins["plants"].values())
+
+
+def test_a_plant_s_earlier_layers_are_read_with_the_tolerance_not_bit_for_bit(tmp_path):
+    """Last-bit drift before the planted layer (about 1e-6 relative) reads; bit-for-bit is only reported."""
+    rc, v = _verdict(*_box_run(tmp_path, pre_scale=1 + 1e-6))
+    assert (rc, v["verdict"]) == (0, "PASS"), v["why"]
+    p = v["instrument"]["plants"]["routing"]
+    assert p["pre_plant_bitwise"] is False and p["pre_plant_within_floor"] and 0 < p["pre_plant_max_rel_diff"] < 1e-5
 
 
 def test_a_strict_failure_stops_before_the_repeat_and_is_a_fail(tmp_path):
@@ -136,6 +147,7 @@ def test_a_strict_failure_stops_before_the_repeat_and_is_a_fail(tmp_path):
 @pytest.mark.parametrize("kw,cause", [
     ({"null_scale": 1.01}, "instrument: the null is not the box"),
     ({"plant_from": 1}, "instrument: the routing plant touched the layers before it"),
+    ({"pre_scale": 1.01}, "instrument: the routing plant touched the layers before it (max 0.01"),
     ({"plant_kick": 0.0}, "instrument: the routing plant did not engage"),
     ({"plant_kick": 0.05}, "instrument: the routing plant passes the band"),
     ({"plant_at": 3}, "instrument: the routing plant is not at layer 2"),

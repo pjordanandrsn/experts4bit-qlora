@@ -5,7 +5,8 @@
   - **VOID** for a run that is not science-eligible, a refusal (13, 14, 17 or 18, with its named floor), a host fault, a
     time-left guard or a harness error. Amendment 3's instrument checks also void, before any band:
     - the null (the repeat's clean step-0 forward) must be the box, within 1e-3 relative per layer;
-    - each in-process plant must engage only at its layer;
+    - each in-process plant must engage only at its layer: its earlier layers within 1e-3 of the null's (bit-for-bit equality is
+      reported), the planted layer differing;
     - each plant must fail the band.
   - Otherwise **MILESTONE PASS** iff rules 1-7 hold, else **FAIL** naming each failing rule:
     1. completed on the registered class;

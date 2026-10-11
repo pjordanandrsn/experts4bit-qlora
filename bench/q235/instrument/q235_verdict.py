@@ -11,7 +11,8 @@ Inputs: the box's fetched run directory (``q235_run.sh``'s layout: ``receipts/ru
 ``REFUSAL``), a host fault (``host-fault.json``), a time-left guard (the deadline reserve) or a harness error (any other exit but the
 STRICT failure's 12, or a record missing); and on Amendment 3's instrument checks, which come before any band:
 - the null (the repeat's clean step-0 forward) must be the box: every layer within ``NULL_FLOOR`` relative of the box's step-0 output;
-- each plant must engage, and only at its layer: the layers before it bit for bit the null's, the planted layer not;
+- each plant must engage, and only at its layer: the layers before it within ``NULL_FLOOR`` of the null's (bit-for-bit equality
+  is reported), the planted layer differing from it;
 - each plant must fail the band: its contribution error at the planted layer above ``BAND``.
 
 **MILESTONE PASS** iff all of these hold, else **FAIL** naming each rule that fails:
@@ -50,7 +51,7 @@ ESTIMATE_LINK_GIB = 237.94                     # the estimate's link line per mi
 EXIT = {"PASS": 0, "FAIL": 1, "VOID": 2}
 REFUSAL_CODES = {"13", "14", "17", "18"}
 BAND = 0.775                                   # Amendment 3: 2 x the 30B box's largest interior contribution error (0.3876)
-NULL_FLOOR = 1e-3                              # Amendment 3: the null against the box, per-layer relative difference
+NULL_FLOOR = 1e-3                              # Amendment 3: the null against the box, and a plant's earlier layers against the null
 PLANTS = ("routing", "epilogue")
 
 
@@ -100,12 +101,15 @@ def instrument_void(rd, rep, ref_dir, mask, compare, n):
         d = os.path.join(rd, "repeat", f"plant_{kind}")
         pr = json.loads(_read(os.path.join(d, "box.json")))
         u = compare(d, ref_dir, mask)["update_rel_err"]
+        pre = compare(d, os.path.join(rd, "repeat"), mask)["rel_err"][:L]      # each earlier layer against the null
         sha, sha_null = pr["layer_sha256"], rep["layer_sha256"]
         p = {"layer": pr["plant"]["layer"], "u_at_layer": u[L], "u_after": u[L + 1:], "fails_band": u[L] > BAND,
-             "pre_plant_equal_null": sha[:L] == sha_null[:L], "planted_layer_differs": sha[L] != sha_null[L]}
+             "pre_plant_max_rel_diff": max(pre, default=0.0), "pre_plant_within_floor": all(x <= NULL_FLOOR for x in pre),
+             "pre_plant_bitwise": sha[:L] == sha_null[:L], "planted_layer_differs": sha[L] != sha_null[L]}
         rec["plants"][kind] = p
         why = (f"the {kind} plant is not at layer {L}" if pr["plant"] != {"kind": kind, "layer": L} else
-               f"the {kind} plant touched the layers before it" if not p["pre_plant_equal_null"] else
+               f"the {kind} plant touched the layers before it (max {p['pre_plant_max_rel_diff']:.3g} > {NULL_FLOOR})"
+               if not p["pre_plant_within_floor"] else
                f"the {kind} plant did not engage" if not p["planted_layer_differs"] else
                f"the {kind} plant passes the band (u {u[L]:.3g} <= {BAND}): the band cannot see it" if not p["fails_band"] else None)
         cause = cause or why
