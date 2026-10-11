@@ -155,7 +155,7 @@ class Capture:
         self.profiler.stop()
         self.profiler.export_chrome_trace(str(self.trace))
         if self.trace.stat().st_size > MAX_TRACE_BYTES:
-            raise ValueError("CENSUS_REFUSAL: raw trace exceeds128MiB cap")
+            raise ValueError("CENSUS_REFUSAL: raw trace exceeds512MiB cap")
 
     @contextmanager
     def trainer_clock(self, train_loop):

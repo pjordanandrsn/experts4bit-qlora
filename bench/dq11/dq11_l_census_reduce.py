@@ -23,8 +23,42 @@ STEPS = (6, 7, 8)
 PREFIX = "dq11.census.class:"
 STEP_PREFIX = "dq11.census.step:"
 DEVICE_CATEGORIES = {"kernel", "gpu_memcpy", "gpu_memset"}
-MAX_TRACE_BYTES = 128 * 1024 * 1024
-MAX_EVENTS = 500000
+MAX_TRACE_BYTES = 512 * 1024 * 1024
+MAX_EVENTS = 2000000
+# Kineto's sequence counter also appears on nested operators and on
+# checkpoint recomputation in the autograd worker thread. Resolve the one
+# forward operator that CREATED each backward node, on its recorded forward
+# thread. This table is fixed from the real-L A2000 correctness trace; an
+# unrecognized node or multiple matching creators refuse certification.
+BACKWARD_CREATOR = {
+    "AddBackward0": ("aten::add", "aten::add_"),
+    "AliasBackward0": ("aten::alias",),
+    "BackwardHookFunctionBackward": ("BackwardHookFunction",),
+    "BmmBackward0": ("aten::bmm",),
+    "CatBackward0": ("aten::cat",),
+    "CloneBackward0": ("aten::clone",),
+    "ExpandBackward0": ("aten::expand",),
+    "LogSoftmaxBackward0": ("aten::_log_softmax",),
+    "MeanBackward1": ("aten::mean",),
+    "MmBackward0": ("aten::mm",),
+    "MulBackward0": ("aten::mul",),
+    "MulBackward1": ("aten::mul",),
+    "NegBackward0": ("aten::neg",),
+    "NllLossBackward0": ("aten::nll_loss_forward",),
+    "PowBackward0": ("aten::pow",),
+    "ReshapeAliasBackward0": ("aten::_reshape_alias",),
+    "RsqrtBackward0": ("aten::rsqrt",),
+    "SafeSoftmaxBackward0": ("aten::_safe_softmax",),
+    "SiluBackward0": ("aten::silu",),
+    "SliceBackward0": ("aten::slice",),
+    "TBackward0": ("aten::t",),
+    "ToCopyBackward0": ("aten::_to_copy",),
+    "TransposeBackward0": ("aten::transpose",),
+    "UnsafeViewBackward0": ("aten::_unsafe_view",),
+    "UnsqueezeBackward0": ("aten::unsqueeze",),
+    "ViewBackward0": ("aten::view",),
+    "_LateBoundMatMul4BitBackward": ("_LateBoundMatMul4Bit",),
+}
 
 
 def fail(message):
@@ -110,6 +144,8 @@ def normalize_trace(trace, *, expected_steps=STEPS):
             steps[number] = bounds
     if set(steps) != set(expected_steps):
         fail("missing captured step")
+    if not device:
+        fail("no captured device events")
     ordered = sorted(steps.items())
     if any(a[1][1] > b[1][0] for a, b in itertools.pairwise(ordered)):
         fail("overlapping or out-of-order step brackets")
@@ -155,25 +191,44 @@ def normalize_trace(trace, *, expected_steps=STEPS):
                 return candidate
         return None
 
-    # Sequence counters are unique on the one registered forward thread.
-    sequence, forward_threads = {}, set()
+    # The same sequence is visible on unrelated nested ops and on recompute
+    # in a different thread. A backward node's Fwd thread id plus its exact
+    # creator op distinguishes those views without assigning by kernel name.
+    forward, backward_nodes, sequence = defaultdict(list), [], {}
     for row in cpu_list:
         event = row["event"]
         seq = event.get("args", {}).get("Sequence number")
-        if (
-            type(seq) is not int
-            or seq < 0
-            or event["name"].startswith("autograd::engine::evaluate_function:")
-            or event.get("args", {}).get("Fwd thread id", 0) > 0
-        ):
+        if type(seq) is not int or seq < 0:
             continue
-        tag = direct(row) or ("other", "outside-registered-class")
-        forward_threads.add((event["pid"], event["tid"]))
-        if seq in sequence and sequence[seq] != tag:
-            fail("ambiguous forward sequence attribution")
-        sequence[seq] = tag
-    if len(forward_threads) != 1:
-        fail("missing or multiple forward sequence threads")
+        if event["name"].startswith("autograd::engine::evaluate_function: "):
+            backward_nodes.append(row)
+        elif event.get("args", {}).get("Fwd thread id", 0) == 0:
+            forward[(event["pid"], event["tid"], seq)].append(row)
+    if not backward_nodes:
+        fail("missing backward sequence nodes")
+    for node in backward_nodes:
+        event = node["event"]
+        name = event["name"].split(": ", 1)[1]
+        seq = event["args"]["Sequence number"]
+        fwd_thread = event["args"].get("Fwd thread id")
+        if type(fwd_thread) is not int or fwd_thread <= 0:
+            fail("backward node lacks forward thread identity")
+        key = (event["pid"], fwd_thread, seq)
+        if key in sequence:
+            fail("duplicate backward sequence node")
+        if name == "torch::autograd::AccumulateGrad":
+            # Parameter-gradient hooks provide the direct class scope;
+            # AccumulateGrad has no forward creator operator.
+            sequence[key] = None
+            continue
+        if name not in BACKWARD_CREATOR:
+            fail("unregistered backward node kind")
+        if not forward[key]:
+            fail("unbound backward sequence")
+        matches = [row for row in forward[key] if row["event"]["name"] in BACKWARD_CREATOR[name]]
+        if len(matches) != 1:
+            fail("ambiguous or missing backward creator")
+        sequence[key] = direct(matches[0]) or ("other", "outside-registered-class")
     output, device_keys = [], set()
     for index, event, bounds in device:
         matches = [n for n, b in steps.items() if contains(b, bounds)]
@@ -205,9 +260,11 @@ def normalize_trace(trace, *, expected_steps=STEPS):
         node = backward(origin)
         if tag is None and node is not None:
             seq = node["event"].get("args", {}).get("Sequence number")
-            if type(seq) is not int or seq not in sequence:
+            fwd_thread = node["event"].get("args", {}).get("Fwd thread id")
+            key = (node["event"]["pid"], fwd_thread, seq)
+            if type(seq) is not int or key not in sequence or sequence[key] is None:
                 fail("unbound backward sequence")
-            tag = sequence[seq]
+            tag = sequence[key]
             phase = "backward"
         elif node is not None:
             phase = "backward-or-recompute"
@@ -243,7 +300,7 @@ def normalize_trace(trace, *, expected_steps=STEPS):
         "schema": "dq11-l-census-events/1",
         "steps": [{"step": n, "start_ns": b[0], "end_ns": b[1]} for n, b in ordered],
         "events": output,
-        "sequence_classes": {str(k): list(v) for k, v in sequence.items()},
+        "sequence_classes": {"|".join(map(str, k)): list(v) if v else None for k, v in sequence.items()},
         "raw_device_events": len(device),
         "captured_device_events": len(output),
     }

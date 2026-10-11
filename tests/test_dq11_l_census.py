@@ -93,6 +93,61 @@ def test_actual_correlation_backward_mapping_and_clipped_names_not_deduplicated(
     )
 
 
+def test_backward_creator_uses_forward_thread_and_exact_op_under_nested_base():
+    step = 6
+    start = step * 2000000
+    events = [cpu(census.STEP_PREFIX + str(step), start, 1000, 1, cat="user_annotation")]
+    events += [cpu(census.PREFIX + "qkv-adapter|q", start + 10, 190, 2, cat="user_annotation")]
+    events += [cpu("aten::to", start + 20, 10, 3, seq=5)]
+    events += [cpu(census.PREFIX + "base NF4 GEMM|q.base", start + 40, 100, 4, cat="user_annotation")]
+    events += [cpu("aten::clone", start + 50, 10, 5, seq=5)]
+    events += [
+        {
+            "ph": "X",
+            "cat": "kernel",
+            "name": "forward-base",
+            "pid": 0,
+            "tid": 7,
+            "ts": start + 55,
+            "dur": 5,
+            "args": {"External id": 5},
+        }
+    ]
+    recompute = cpu(census.PREFIX + "MLP-adapter|recompute", start + 300, 100, 6, cat="user_annotation")
+    recompute["tid"] = 15
+    events.append(recompute)
+    replay = cpu("aten::clone", start + 310, 10, 7, seq=5)
+    replay["tid"] = 15
+    events.append(replay)
+    backward = cpu("autograd::engine::evaluate_function: CloneBackward0", start + 500, 100, 8, seq=5, fwd=1)
+    backward["tid"] = 15
+    events.append(backward)
+    launch = cpu("aten::mm", start + 510, 10, 9)
+    launch["tid"] = 15
+    events.append(launch)
+    events += [
+        {
+            "ph": "X",
+            "cat": "kernel",
+            "name": "backward-base",
+            "pid": 0,
+            "tid": 7,
+            "ts": start + 520,
+            "dur": 5,
+            "args": {"External id": 9},
+        }
+    ]
+    trace = {"schemaVersion": 1, "traceEvents": events}
+    normalized = census.normalize_trace(trace, expected_steps=(step,))
+    assert [(e["class"], e["path"]) for e in normalized["events"]] == [
+        ("base NF4 GEMM", "q.base"),
+        ("base NF4 GEMM", "q.base"),
+    ]
+    trace["traceEvents"].append(cpu("aten::clone", start + 150, 10, 10, seq=5))
+    with pytest.raises(ValueError, match="ambiguous or missing backward creator"):
+        census.normalize_trace(trace, expected_steps=(step,))
+
+
 @pytest.mark.parametrize(
     "mutation,match",
     [

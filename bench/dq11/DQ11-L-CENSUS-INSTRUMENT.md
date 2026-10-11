@@ -25,10 +25,15 @@ and `with_flops=False`. The 5090 worker requires Torch `2.12.1+cu130`; the
 separate zero-dollar A2000 correctness rehearsal requires Torch
 `2.11.0+cu128`, a single real A2000/sm86, the same real Mistral model and
 forty-update L recipe. A2000 timings cannot establish a 5090 ceiling. Neither
-mode substitutes a tiny model. The raw trace cap is 128 MiB and 500,000
+mode substitutes a tiny model. The raw trace cap is 512 MiB and 2,000,000
 events; exceeding either refuses certification. Trace and run receipts are
 write-once. The launch amendment must separately review transport and total
-size caps before any paid draw.
+size caps before any paid draw. The first real-L A2000 proof trace was 69 MiB
+and 234,943 events for one update; the three-update capture includes trained
+backward and optimizer activity. The cap was raised prospectively from
+128 MiB/500,000 events before any deciding 5090 data. This is a refusal
+limit, not a prediction of captured size or authorization to move raw traces
+through the bus.
 
 The worker first runs configuration C's same-arm observer/removal bitwise
 proof on actual L under native SDPA. The CUDA proof trace must correlate
@@ -51,7 +56,16 @@ Forward recomputation under non-reentrant checkpointing uses the same path
 scope. The CPU operator's `External id` binds each CUDA kernel, copy and
 memset; autograd sequence and forward-thread fields bind backward work.
 The deepest registered scope wins; a base-layer scope overrides its outer
-adapter scope. Kernel names are recorded but never used to choose a class.
+adapter scope. Kineto can repeat one autograd sequence on nested forward
+operators and on the checkpoint worker thread. For backward work, the
+reducer keys the node by its recorded forward thread and sequence, then
+requires exactly one forward creator operator from the fixed
+`BACKWARD_CREATOR` table. That creator's deepest registered scope supplies
+the class. `AccumulateGrad` has no forward creator and must be directly
+scoped by its parameter hook. The real-L A2000 correctness proof exposed
+this Kineto behavior before any deciding 5090 data; the first proof refused,
+and this explicit map replaces the ambiguous mapping prospectively.
+Kernel names are recorded but never used to choose a class.
 Unbound, ambiguous, duplicate or crossing events refuse certification.
 An unscoped rank-16 adapter GEMM also refuses. Device events outside the
 synchronized captured step ranges are profiler startup/shutdown evidence,
