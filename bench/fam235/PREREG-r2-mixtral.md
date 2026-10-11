@@ -145,3 +145,70 @@ uses `u_i`.
 - **Other shapes, models, adapter scopes, or serving.** The paged server's speed knobs for Mixtral are FAM's (PASS at ×0.90, off
   until a speed read).
 - **Hardware not run.**
+
+## Amendment 1 (2026-10-11, before any 8x22B box): the calibration, the band's form void on Mixtral, and a depth-local band
+
+**Why.** The calibration registered above ran, and its separation check failed for the routing plant. The registered band's form is
+therefore void on this family, as registered. A replacement detector was registered before an out-of-sample read
+on new tokens, and that read validated it. Numbers: `bench/fam235/r2-mixtral-a1-numbers.json`.
+
+**The two Mixtral-8x7B reads** (RTX A2000, $0, plants at L16 = ⌊32/2⌋, forward-only `q235_box.py --repeat`):
+
+| read | rows (tokens) | e4b | evidence sha256 | box u_16 | routing u_16 | epilogue u_16 | box interior max |
+|---|---|---|---|---|---|---|---|
+| calibration | 0–7 (8 × 365, 1,192 real) | `a6c60914` | `f8a6aa9b` | 0.237 | 0.670 | 2.471 | 0.353 (L26) |
+| validation | 8–15 (8 × 508, 1,645 real) | `2061cd36` | `d8ab6df7` | 0.220 | 0.678 | 2.435 | 0.311 |
+
+The box script, the reference and the token builder are byte-identical between the two e4b commits. Two implementations of u_i (the
+registration's independent script and `q235_compare`'s update statistic, e4b#1624) agree within 5e-6 on every layer of both reads.
+
+**1. The calibration's outcome.** U = 0.3526 (L26), so 2U = 0.7052. The separation check: epilogue 2.471 > 0.7052, but **routing
+0.670 < 0.7052: FAILED.** The form `u_i ≤ 2U` is void on this family. The routing plant still reads 2.83× the box's own u_16. One band across depth
+is loose at mid-depth: U is set at L26, where the box's u is 1.49× its u_16. (Qwen3's routing plant reads about 1.0 at both depths and
+both sizes, which is why the same form held there.)
+
+**2. The replacement: one depth-local band, used both ways.** For 8x22B layer j:
+
+`band_j = 2 × u_cal(m(j))`,  `m(j) = round(32j / 56) = round(4j / 7)`
+
+- **u_cal** is the calibration's unplanted 8x7B box u at that layer (`depth_local.band` in the numbers file).
+- **The map is tie-free.** 4j/7 has a fractional part k/7, never ½, so no rounding mode needs defining.
+- **The map covers the calibrated interior exactly.** It sends the 8x22B interior 5…51 onto 3…29, hitting every calibrated layer,
+  and L28 onto L16. Floor would send L5 to L2, outside the calibrated interior.
+- **It is still a cross-size calibration:** an 8x7B profile applied to 8x22B, a different model. Every receipt says so. What makes it
+  fail closed is the 8x22B box's own plants, as Q235 Amendment 3's plants do for 30B → 235B.
+- **The plants** (routing, epilogue, at L28) must each read u_28 > band_28 = 2 × 0.2372 = **0.4743**. Otherwise the box is VOID.
+- **The unplanted box** must read u_j ≤ band_j at every interior layer 5…51. Otherwise it is a FAIL, with its full u profile.
+- **One threshold.** At L28 the plants must exceed the same number the box must stay under, so the plants certify the detector that
+  gates the box.
+- **Not chosen:**
+  - A band built from the judged box itself cannot fail that box.
+  - A split form (a global fidelity band, plus sensitivity paired to the box's own u) would let a plant pass under the band that gates
+    the box. A real defect of the routing plant's size would then pass fidelity.
+  - An MoE-block-only statistic is the principled longer-term fix. It is an instrument change, so it is left for later.
+
+**3. The validation read.** Its reading lines were registered at 02:50:07Z UTC, before it ran. The run used the same
+model, rows 8–15 (disjoint from the calibration's), the same three runs, and the identity depth map.
+- **Engagement:** both plants left L0–15 bit-identical to the box and changed L16.
+- **Line F:** the box's u_i ≤ band_i at every interior layer 3…29. The smallest band_i / u_i was 2.006 (L3), with a range of
+  2.01–2.37.
+- **Line S:** routing 0.678 and epilogue 2.435 both exceed band_16 = 0.474.
+- **Verdict: VALIDATED,** applied mechanically. The maintainer re-derived lines F and S from the raw records and confirmed.
+- **Reported:** against the old global band, the routing plant (0.678) would VOID again. The paired ratios were 3.08× / 11.04×
+  (calibration 2.83× / 10.4×).
+
+**4. Residual risk.** Both cases below fail closed, with no wrong PASS:
+- **8x22B NF4 noise beyond 8x7B's at depth:** the unplanted box FAILs. That reads as noise, not as a defect.
+- **The 8x22B routing plant diluted below band_28:** the box is VOID and gives no reading.
+- **Untested margins:** the validation measured row-to-row variation on the same model, not the cross-size margin. The box's own plants
+  and its full profile are the 8x22B measurement.
+
+**5. Gates.**
+- **Gate 3:** Q235 Amendment 3 is merged at `d2480ac6`. Its plant placement (⌊n/2⌋), its in-process null with that null's
+  1e-3 tolerance, its engagement tolerance and its structural unplant check apply to this box. Its interior rule is this
+  registration's. Its 0.775 band is Qwen3's and is not used here.
+- **Gate 4:** met by this amendment.
+- **Gate 5:** e4b#1624 (`71da462a`) and e4b#1623 (`8ff9b1b4`) are merged. #1623's verdict tool applies Q235's single band, so a
+  mechanical verdict for band_j is a Phase 1 deliverable before any box, checked against the numbers file.
+
+**Unchanged:** the statistic, the interior rule, the state statistic and router overlap (reported), and everything else above.
