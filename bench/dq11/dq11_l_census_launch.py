@@ -487,7 +487,8 @@ def validate_envelope(envelope: dict, envelope_path: Path, template_path: Path,
             or not issued <= current < expires
             or not 0 < (expires - issued).total_seconds() <= ENVELOPE_HOURS * 3600):
         raise ValueError("envelope is not yet valid, expired or longer than 24 hours")
-    if envelope.get("criteria") != ENVELOPE_CRITERIA or envelope.get("maximum_draws") != 1:
+    if (json.dumps(envelope.get("criteria"), sort_keys=True) != json.dumps(ENVELOPE_CRITERIA, sort_keys=True)
+            or type(envelope.get("maximum_draws")) is not int or envelope["maximum_draws"] != 1):
         raise ValueError("host or budget is outside the exact envelope criteria")
     if (envelope.get("e4b_head") != merged_clean(e4b)
             or envelope.get("controller_head") != merged_clean(controller)
@@ -767,6 +768,9 @@ def launch(template_path: Path, envelope_path: Path, e4b: Path, controller: Path
                    "from_gate_seconds": invocation - gate_end,
                    "guarded_controller_invoked": True}, stream, indent=2)
         stream.write("\n")
+    if sha(envelope_path) != manifest["authorization_basis"]["envelope_sha256"]:
+        raise ValueError("envelope record changed after manifest binding; nothing created")
+    check_qualifying_window(packet_dir, summary)
     validate_envelope(envelope, envelope_path, template_path, e4b, controller)
     verify_envelope_comment(envelope)
     actual_call = time.monotonic()

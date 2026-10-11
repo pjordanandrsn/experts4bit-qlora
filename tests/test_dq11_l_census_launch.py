@@ -218,6 +218,11 @@ def test_all_host_continuity_selects_first_qualified_and_refuses_outside_envelop
                      "filter": {}, "offers": [below_envelope]})
     assert continuity.resets["100"]["ineligible_or_outside"] == 1
 
+    two_part = launch.offer_row(dict(offer(), driver_version="595.84"), FakeProvider([]))
+    continuity.step({"utc": "test", "monotonic": 40.0, "status": "PASS",
+                     "filter": {}, "offers": [two_part]})
+    assert "200" not in continuity.active
+
     continuity = launch.HostContinuity()
     good = launch.offer_row(offer("100"), FakeProvider([]))
     assert continuity.step({"utc": "test", "monotonic": 0.0, "status": "PASS",
