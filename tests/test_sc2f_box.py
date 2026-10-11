@@ -5,8 +5,11 @@ lane carries, held equal.
 
 Box N stops a server (rc 43) unless its start /health reads as its arm of P130's two knobs. ``on`` leaves both unset
 (the release's defaults): the glue default must resolve from the family allowlist, and the startup captures must have
-taken K19's lean dispatch above 256 rows and all three prefill folds. ``off`` sets both to 0: an explicit 0, the gather
-dispatch, no prefill fold. The box runs ``sc2f_reduce.py --flips``, the reducer's own gate, so the two cannot drift.
+taken K19's lean dispatch on every call above 256 rows, the prefill capture's chained table among them, and all three
+prefill folds. ``off`` sets both to 0: an explicit 0, the gather dispatch, no prefill fold. The table of the other calls
+above 256 rows (bucket 64's decode capture: the one-launch table where ``E4B_INT4_WIDE_TILES=auto`` takes it) is not
+read (Amendment 1); a split table is refused on either arm. ``tests/test_sc2f_real_records.py`` runs the gate on real
+records first. The box runs ``sc2f_reduce.py --flips``, the reducer's own gate, so the two cannot drift.
 """
 import importlib.util
 import json
@@ -37,7 +40,8 @@ RED = _mod("sc2f_reduce")
 
 def _health(arm, **over):
     w = RED.WANT_FLIPS[arm]
-    seen = {"moe_k19_dispatch": {next(iter(w["gt256"])): 96, "one_launch|lean|le256": 480},
+    d = w["dispatch"]          # an s64a start: the prefill capture (chained) and bucket 64's decode capture (one-launch)
+    seen = {"moe_k19_dispatch": {f"chained|{d}|gt256": 240, f"one_launch|{d}|gt256": 144, "one_launch|lean|le256": 720},
             "prefill_folds": {f: 48 for f in RED.FOLDS} if w["folds"] else {}}
     seen.update(over.pop("seen", {}))
     pr = {"prefill_glue_env": w["glue_env"], "prefill_lean_dispatch_env": w["lean_env"], "prefill_lean_dispatch": w["lean"],
@@ -65,10 +69,14 @@ def test_the_flips_check_stops_on_every_departure(tmp_path):
              ("on", {"routes": {"prefill_lean_dispatch_env": "auto"}}),
              ("on", {"seen": {"moe_k19_dispatch": {"chained|gather|gt256": 96}}}),         # the K19 lacks the options
              ("on", {"seen": {"moe_k19_dispatch": {"chained|lean|gt256": 90, "chained|gather|gt256": 6}}}),
+             ("on", {"seen": {"moe_k19_dispatch": {"chained|lean|gt256": 240, "one_launch|gather|gt256": 144}}}),
+             ("on", {"seen": {"moe_k19_dispatch": {"one_launch|lean|gt256": 144}}}),     # no prefill capture above 256
+             ("on", {"seen": {"moe_k19_dispatch": {"chained|lean|gt256": 240, "split|lean|gt256": 4}}}),
              ("on", {"seen": {"prefill_folds": {"norm": 48, "layer": 48}}}),               # one fold never took prefill rows
              ("off", {"glue": {"mode": "1", "source": "default-allowlisted"}}),           # the 0 never reached the build
              ("off", {"routes": {"prefill_lean_dispatch": "auto"}}),
              ("off", {"seen": {"moe_k19_dispatch": {"chained|lean|gt256": 96}}}),
+             ("off", {"seen": {"moe_k19_dispatch": {"chained|gather|gt256": 240, "one_launch|lean|gt256": 144}}}),
              ("off", {"seen": {"prefill_folds": {"attention": 1}}}),
              ("off", {"seen": {"moe_k19_dispatch": {}}})]                                  # nothing above 256 rows ran
     for arm, over in cases:
