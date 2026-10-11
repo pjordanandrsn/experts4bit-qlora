@@ -12,7 +12,7 @@ on:
 
 jobs:
   pypi-publish:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       id-token: write # mint the OIDC token PyPI trusts
     steps:

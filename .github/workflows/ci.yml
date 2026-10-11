@@ -14,7 +14,7 @@ on:
 jobs:
   lint-and-test:
     if: ${{ github.event_name != 'pull_request' || github.event.action == 'ready_for_review' || github.event.label.name == 'ready-to-merge' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -91,7 +91,7 @@ jobs:
     # must equal the wheel's importable surface. scripts/wheel_smoke.py runs
     # from /tmp against a clean-venv wheel install; the link check maps the
     # release tag to main pre-tag (the tag exists only at release time).
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -128,7 +128,7 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || github.event.action == 'ready_for_review' || github.event.label.name == 'ready-to-merge' }}
     # CPU-only, deterministic: the machine-readable contracts and the
     # packaging metadata. Nothing here imports the kernels.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
