@@ -254,3 +254,15 @@ with three new departures.
 **Unchanged:** the arms, both knobs, the ladder, the knee block, the statistics, the predictions, the outcomes, the box,
 the budget, and the rental gate (e4b 0.54.0, DQ11 closed, an ACK naming the machine and the offer).
 `bench/sc1/staged.sha256` re-pins `sc2f_reduce.py` only.
+
+**Both arms on real records** (added 2026-10-11, before any run; the rule is unchanged). The `off` arm, derived from the
+code above, now has a real record: a record-only smoke on the project's RTX A2000, `tests/fixtures/smokeflips/summary.json`
+(sha256 `1eeb6e02…`, checked). It ran one fresh process per arm on the smoke's qwen3_moe at top-4, so both of an SC2f
+startup's row counts are reached at `E4B_INT4_WIDE_TILES=auto`: the serve path's 2,048-row chunks take the chained table,
+and a 512-row forward takes the one-launch table. Each cell's `health` is the two blocks FLIPS reads, built by the
+`/health` handler's own expressions. Above 256 rows, `on` read `chained|lean` and `one_launch|lean`; `off` read
+`chained|gather` and `one_launch|gather`. With nothing added, `flips_bad` passes each arm on its own record and departs
+on all seven keys across arms. The rule as registered refuses both arms' real records for the one-launch call. Decode's
+calls at or below 256 rows read `one_launch|lean|le256` on both arms (the knob governs rows above 256), and FLIPS does
+not read them. The synthetic departures now start from these records: `tests/test_sc2f_real_records.py` (28 passed).
+The rule as registered fails 6 of the 28.

@@ -13,9 +13,12 @@ Real records:
   calls above 256 rows; with buckets up to 16 (s16, s64c) 240. Bucket 64's decode capture adds 144 = 48 layers x 3
   forwards above 256 rows beside the prefill graph's: calls the pre-amendment set had no place for. Those records predate
   the dispatch counter, so they fix the count, not the table.
-No record of the ``off`` arm (both knobs 0) exists: its keys here are departures, from the code. Above 256 rows
-``hot_residency`` records the ``lean`` dispatch iff the prefill lean dispatch is on (K23's glue stays a decode-shape
-route), and ``E4B_PREFILL_LEAN_DISPATCH=0`` turns it off.
+- ``tests/fixtures/smokeflips/summary.json``: both of SC2f's arms on the A2000 (record-only smoke, digest checked), one
+  fresh process each. Each cell's ``health`` is the two blocks FLIPS reads, built by the /health handler's own
+  expressions, after the startup-shaped calls an SC2f server makes. The model is the smoke's qwen3_moe at top-4: the
+  serve path's 2,048-row chunks take the chained table, and a 512-row forward (bucket 64's count) takes the one-launch
+  table. ``on`` and ``off`` each pass their own arm with nothing added.
+The departures start from those real records.
 """
 import copy
 import hashlib
@@ -37,6 +40,8 @@ SC2E_SHA256 = {
     "health_e4b_s64c_d1_start.json": "1c2d6f7f7ad68d758132d1742f2b759dc861850d925860f693f5ec63fd4d9e35",
     "health_e4b_s64c_d2_start.json": "c70ae99af72e3df4aca67b69b2cb0544ef3010c7bd22fab67dc8c05267e4f35c",
 }
+FLIPS_FIX = REPO / "tests" / "fixtures" / "smokeflips" / "summary.json"
+FLIPS_SHA256 = "1eeb6e02670cb63e1d7c28c3b0e8c2f34116575e09d62a7a41435f267166b0de"
 FAMILIES = ("qwen3_moe", "granitemoe", "mixtral")
 LAYERS_30B = 48
 
@@ -53,6 +58,10 @@ RED = _mod("sc2f_reduce")
 
 def _cells() -> dict:
     return {(c["family"], str(c["knob"])): c for c in json.loads(FIX.read_bytes())["cells"]}
+
+
+def _arms() -> dict:
+    return {c["arm"]: c for c in json.loads(FLIPS_FIX.read_bytes())["cells"]}
 
 
 def _health(family, knob, glue_value=None):
@@ -73,11 +82,41 @@ def _pre_amendment(seen, arm) -> bool:
 def test_the_records_are_the_receipts():
     raw = FIX.read_bytes()
     assert hashlib.sha256(raw).hexdigest() == FIX_SHA256 and b"\r" not in raw
+    raw = FLIPS_FIX.read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == FLIPS_SHA256 and b"\r" not in raw
     for name, sha in SC2E_SHA256.items():
         assert hashlib.sha256((SC2E / name).read_bytes()).hexdigest() == sha, name
 
 
 # real records ------------------------------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("arm", ["on", "off"])
+def test_real_start_health_reads_as_its_own_arm_and_not_the_other(arm):
+    cell = _arms()[arm]
+    assert cell["status"] == "RECORDED" and cell["config_top_k"] == 4
+    assert RED.flips_bad(cell["health"], arm) == {}
+    other = RED.flips_bad(cell["health"], {"on": "off", "off": "on"}[arm])
+    assert {"levers.prefill_glue", "prefill_routes.prefill_glue_env", "prefill_routes.prefill_lean_dispatch_env",
+            "prefill_routes.prefill_lean_dispatch", "seen.moe_k19_dispatch.gt256", "seen.moe_k19_dispatch.chained",
+            "seen.prefill_folds"} == set(other)
+
+
+@pytest.mark.parametrize("arm", ["on", "off"])
+def test_real_records_take_both_tables_on_the_arms_dispatch(arm):
+    """The serve path's 2,048-row chunks on the chained table, the 512-row forward on the one-launch table, both on the
+    arm's dispatch: the merged rule refuses either arm for the one-launch call."""
+    cell, d = _arms()[arm], RED.WANT_FLIPS[arm]["dispatch"]
+    assert cell["seen_serve"] == {f"chained|{d}|gt256": 4}
+    assert cell["seen_eager_512_rows"] == {f"one_launch|{d}|gt256": 2}
+    assert _pre_amendment(cell["health"]["prefill_routes"]["seen"], arm)
+
+
+def test_real_decode_calls_stay_lean_on_both_arms_and_are_not_read():
+    """The prefill dispatch knob governs rows above 256 only: decode's small calls are lean under both arms."""
+    for arm, cell in _arms().items():
+        le = {k: n for k, n in cell["health"]["prefill_routes"]["seen"]["moe_k19_dispatch"].items()
+              if k.endswith("|le256")}
+        assert le == {"one_launch|lean|le256": 24}, arm
 
 @pytest.mark.parametrize("family", FAMILIES)
 @pytest.mark.parametrize("knob", ["0", "0r"])
@@ -137,25 +176,11 @@ def test_sc2e_s64a_startup_makes_bucket_64_calls_above_256_rows(draw):
 # synthetic departures from the real record -------------------------------------------------------------------------
 
 def _on():
-    h = _health("qwen3_moe", "0")
-    h["prefill_routes"]["seen"]["moe_k19_dispatch"]["chained|lean|gt256"] = 5 * LAYERS_30B
-    return h
+    return copy.deepcopy(_arms()["on"]["health"])
 
 
 def _off():
-    """The off arm as the code reads it: both knobs 0, the gather dispatch on every call above 256 rows, no fold."""
-    h = _health("qwen3_moe", "0", glue_value="0")
-    pr = h["prefill_routes"]
-    pr.update(prefill_glue_env="0", prefill_lean_dispatch_env="0", prefill_lean_dispatch="0")
-    on_k19 = _on()["prefill_routes"]["seen"]["moe_k19_dispatch"]
-    pr["seen"]["moe_k19_dispatch"] = {k.replace("|lean|", "|gather|"): n for k, n in on_k19.items()}
-    pr["seen"]["prefill_folds"] = {}
-    return h
-
-
-def test_departure_the_off_arm_as_the_code_reads_it_passes():
-    assert RED.flips_bad(_off(), "off") == {}
-    assert RED.flips_bad(_off(), "on") != {}
+    return copy.deepcopy(_arms()["off"]["health"])
 
 
 def test_departure_on_with_a_gather_call_is_refused():
