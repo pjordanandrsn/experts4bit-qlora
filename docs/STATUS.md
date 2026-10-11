@@ -1,6 +1,6 @@
 # Status — what this package does, what is current, what is open
 
-**As of 2026-10-10, version 0.53.0** (the version of record is `pyproject.toml`'s). This page states the current
+**As of 2026-10-11, version 0.53.0** (the version of record is `pyproject.toml`'s). This page states the current
 position in each area, with the claim id behind each number; [`docs/claims.json`](claims.json) holds every claim's full
 text and evidence. The dated narrative behind these positions, with the readings they replaced and why, is
 [`STATUS-RECORD.md`](STATUS-RECORD.md).
@@ -58,6 +58,11 @@ driver use, by up to 1.14 GB. One setup clear released 32 MiB on one arm and cha
 no training-memory remedy. DQ9 licenses neither capacity nor calibration; the opt-in and enforced streamed margin
 remain. `e4b.train.dense-executor.dq9.5090.2026-10-08` ([diagnostic record](../bench/dq9/receipts/dq9-5090-2/README.md));
 `e4b.train.dense-executor.dq7.5090.2026-10-08` ([original VOID reading](../bench/dq7/RESULTS-dq7.md)).
+
+**DQ11 is a fusion build candidate, measured-private.** U is faster than L in this matched SDPA, eager, full-logits
+configuration, not Unsloth's default. The registered quality gates pass and the independently rederived decision is
+`BUILD_CANDIDATE`; this licenses a separate fusion investigation and carries no capacity or shipping claim.
+`e4b.train.dense-adapter.dq11.matched-sdpa.5090.2026-10-11` ([results](../bench/dq11/RESULTS-dq11.md)).
 
 ### Training against other frameworks
 
