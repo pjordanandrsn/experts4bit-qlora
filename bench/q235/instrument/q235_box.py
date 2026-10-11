@@ -3,7 +3,9 @@
 
 The same script runs the registered box, the gate-1 rehearsal (a depth-truncated checkpoint, ``--device cpu`` or the RTX A2000) and
 the rehearsal's planted errors (``--plant routing`` / ``--plant epilogue``, at layer floor(n/2), Amendment 1). ``--repeat`` is the
-fresh-process repeat of step 0: it loads, runs the step-0 forward and records its loss, and stops.
+fresh-process repeat of step 0: it loads, runs the step-0 forward and records its loss, and stops. ``--repeat --plants`` (Amendment 3)
+then runs each planted error in the same process after that clean forward (the null): plant, forward, unplant, each checked against
+the null and structurally unplanted; their records go to ``plant_routing/`` and ``plant_epilogue/`` under ``--out``.
 
 Records (one JSON): host facts; versions; the load (timed); frozen-base sha256 after load and after the step (every frozen parameter and
 buffer, host homes included); the in-process spread (two forward-backward passes, no optimizer step); the step's loss, per-adapter
@@ -127,7 +129,8 @@ def adapter_params(model):
 
 
 def plant(model, kind):
-    """Amendment 1's planted errors, at layer floor(n / 2), on the model under test. Returns the planted layer index."""
+    """Amendment 1's planted errors, at layer floor(n / 2), on the model under test. Returns the planted layer index and a callable
+    that removes the plant again (Amendment 3's in-process plants)."""
     layers = model.model.layers
     i = len(layers) // 2
     mlp = layers[i].mlp
@@ -143,13 +146,33 @@ def plant(model, kind):
                 kwargs["top_k_index"] = (kwargs["top_k_index"] + 1) % E
             return tuple(a), kwargs
 
-        mlp.experts.register_forward_pre_hook(shift, with_kwargs=True)
+        undo = mlp.experts.register_forward_pre_hook(shift, with_kwargs=True).remove
     elif kind == "epilogue":
         base = getattr(mlp.experts, "base", mlp.experts)
+        act = base.act_fn
         base.act_fn = torch.nn.Identity()                           # gate * up: the activation dropped
+
+        def undo():
+            base.act_fn = act
     else:
         raise ValueError(f"unknown plant {kind!r}")
-    return i
+    return i, undo
+
+
+def plant_surface(model, i):
+    """What a plant may touch at layer i, by identity: every hook and instance-level forward on the layer's MLP, its router and
+    its experts (and the experts' base), and the experts' activation. Amendment 3 asserts it equal before and after each in-process
+    plant, so one plant cannot leak into the next forward."""
+    mlp = model.model.layers[i].mlp
+    mods = {"mlp": mlp, "gate": mlp.gate, "experts": mlp.experts, "base": getattr(mlp.experts, "base", mlp.experts)}
+    out = {}
+    for name, m in mods.items():
+        out[name] = {k: tuple((h_id, id(fn)) for h_id, fn in getattr(m, k).items())
+                     for k in ("_forward_pre_hooks", "_forward_pre_hooks_with_kwargs", "_forward_hooks", "_forward_hooks_with_kwargs")
+                     if hasattr(m, k)}
+        out[name]["forward"] = id(m.__dict__["forward"]) if "forward" in m.__dict__ else None
+        out[name]["act_fn"] = id(getattr(m, "act_fn", None))
+    return out
 
 
 class LoadProfile:
@@ -265,21 +288,11 @@ def build(path, device, r, alpha, adapter_dtype, enabler, profile=None):
     return model, rec
 
 
-def run(a):
-    out = {"argv": vars(a), "host": host_facts(), "versions": versions(), "t_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
-    dev = a.device
-    cuda = dev == "cuda"
-    tokens = torch.load(a.tokens, weights_only=True)
-    out["tokens_sha256"] = {k: hashlib.sha256(v.contiguous().numpy().tobytes()).hexdigest() for k, v in tokens.items()}
-    d0, t0 = diskstats(), time.time()
-    model, rec = build(a.checkpoint, dev, a.r, a.alpha, a.adapter_dtype, a.enabler, profile=LoadProfile(cuda))
-    out["load"] = {**rec, "seconds": round(time.time() - t0, 1), "nvme": disk_delta(d0, diskstats())}
-    planted = plant(model, a.plant) if a.plant else None
-    out["plant"] = {"kind": a.plant, "layer": planted}
-    ids, mask, labels = (tokens[k].to(dev) for k in ("input_ids", "attention_mask", "labels"))
-
-    layer_out = [None] * len(model.model.layers)
-    topk = [None] * len(model.model.layers)
+def capture(model):
+    """Forward hooks that keep each decoder layer's output and each router's top-k from the FIRST forward after they are set
+    (gradient checkpointing's recompute calls the layers again in the backward). Returns the two lists and the hook handles."""
+    n = len(model.model.layers)
+    layer_out, topk = [None] * n, [None] * n
 
     def keep(i):
         def h(m, args, o):
@@ -294,19 +307,76 @@ def run(a):
         return h
     hooks = [lay.register_forward_hook(keep(i)) for i, lay in enumerate(model.model.layers)]
     hooks += [lay.mlp.gate.register_forward_hook(route(i)) for i, lay in enumerate(model.model.layers)]
+    return layer_out, topk, hooks
+
+
+def _sha(t):
+    return hashlib.sha256(t.view(torch.uint8).numpy().tobytes()).hexdigest()
+
+
+def in_process_plants(model, forward, null):
+    """Amendment 3: after the repeat's clean step-0 forward (the NULL, ``null``: its layer outputs), each planted error in turn,
+    in this process: plant, forward, unplant. Each plant's record carries its layer outputs and router top-k, its loss, whether the
+    layers before the planted one equal the null bit for bit, and whether the planted layer differs from it (the plant engaged).
+    The unplant is checked structurally: the planted layer's hooks, instance forwards and activation must equal their snapshot from
+    before the plant, or this raises (a harness error) -- the routing plant cannot leak into the epilogue forward."""
+    out = {}
+    for kind in ("routing", "epilogue"):
+        i = len(model.model.layers) // 2
+        before = plant_surface(model, i)
+        layer, undo = plant(model, kind)
+        assert layer == i
+        lo, tk, hooks = capture(model)
+        try:
+            t_f = time.perf_counter()
+            loss = forward()
+            forward_s = time.perf_counter() - t_f
+        finally:
+            for h in hooks:
+                h.remove()
+            undo()
+        if plant_surface(model, i) != before:
+            raise RuntimeError(f"the {kind} plant did not come off layer {i}: its hooks or forwards differ from before it")
+        sha, sha_null = [_sha(t) for t in lo], [_sha(t) for t in null]
+        out[kind] = {"layer": i, "loss": loss, "forward_s": round(forward_s, 3), "layer_sha256": sha,
+                     "pre_plant_equal_null": sha[:i] == sha_null[:i], "planted_layer_differs": sha[i] != sha_null[i],
+                     "_layers": lo, "_topk": tk}
+    return out
+
+
+def run(a):
+    out = {"argv": vars(a), "host": host_facts(), "versions": versions(), "t_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    dev = a.device
+    cuda = dev == "cuda"
+    tokens = torch.load(a.tokens, weights_only=True)
+    out["tokens_sha256"] = {k: hashlib.sha256(v.contiguous().numpy().tobytes()).hexdigest() for k, v in tokens.items()}
+    d0, t0 = diskstats(), time.time()
+    model, rec = build(a.checkpoint, dev, a.r, a.alpha, a.adapter_dtype, a.enabler, profile=LoadProfile(cuda))
+    out["load"] = {**rec, "seconds": round(time.time() - t0, 1), "nvme": disk_delta(d0, diskstats())}
+    planted = plant(model, a.plant)[0] if a.plant else None
+    out["plant"] = {"kind": a.plant, "layer": planted}
+    ids, mask, labels = (tokens[k].to(dev) for k in ("input_ids", "attention_mask", "labels"))
+    layer_out, topk, hooks = capture(model)
     out["_topk"] = topk
 
     def sync():
         if cuda:
             torch.cuda.synchronize()
 
-    if a.repeat:
-        with torch.enable_grad():
+    def forward():
+        with torch.enable_grad():                                  # the step's own forward: gradient checkpointing as trained
             loss = model(input_ids=ids, attention_mask=mask, labels=labels).loss
         sync()
-        out["repeat"] = {"loss": float(loss)}
+        return float(loss.detach())
+
+    if a.repeat:
+        t_f = time.perf_counter()
+        out["repeat"] = {"loss": forward(), "forward_s": round(time.perf_counter() - t_f, 3)}
         for h in hooks:
             h.remove()
+        if a.plants:
+            out["_plants"] = in_process_plants(model, forward, layer_out)
+            out["plants"] = {k: {f: v[f] for f in v if not f.startswith("_")} for k, v in out["_plants"].items()}
         return out, layer_out
 
     t_h = time.time()
@@ -404,6 +474,18 @@ def run(a):
     return out, layer_out
 
 
+def save_layers(d, layer_out, topk):
+    """Each decoder layer's output as ``layerNNN.pt`` and the routers' top-k as ``nf4.pt``; returns the layers' sha256."""
+    sha = []
+    for i, t in enumerate(layer_out):
+        if t is None:
+            continue
+        torch.save(t, os.path.join(d, f"layer{i:03d}.pt"))
+        sha.append(_sha(t))
+    torch.save({"router_topk": topk}, os.path.join(d, "nf4.pt"))
+    return sha
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("checkpoint")
@@ -418,20 +500,23 @@ def main():
     ap.add_argument("--weight-decay", type=float, default=0.001)
     ap.add_argument("--plant", choices=("routing", "epilogue"), default=None)
     ap.add_argument("--repeat", action="store_true")
+    ap.add_argument("--plants", action="store_true", help="with --repeat: Amendment 3's in-process null and planted errors")
     a = ap.parse_args()
     if a.device == "cpu" and a.enabler == "fast":
         ap.error("the fused training kernels need CUDA; use --enabler reference on the CPU")
+    if a.plants and (not a.repeat or a.plant):
+        ap.error("--plants rides the fresh-process repeat (--repeat), and replaces --plant")
     out, layer_out = run(a)
     os.makedirs(a.out, exist_ok=True)
-    sha = []
-    for i, t in enumerate(layer_out):
-        if t is None:
-            continue
-        torch.save(t, os.path.join(a.out, f"layer{i:03d}.pt"))
-        sha.append(hashlib.sha256(t.view(torch.uint8).numpy().tobytes()).hexdigest())
-    out["layer_sha256"] = sha
-    topk = out.pop("_topk")
-    torch.save({"router_topk": topk}, os.path.join(a.out, "nf4.pt"))
+    out["layer_sha256"] = save_layers(a.out, layer_out, out.pop("_topk"))
+    for kind, rec in out.pop("_plants", {}).items():               # Amendment 3: each in-process plant in its own directory
+        d = os.path.join(a.out, f"plant_{kind}")
+        os.makedirs(d, exist_ok=True)
+        save_layers(d, rec["_layers"], rec["_topk"])
+        json.dump({"loss": rec["loss"]}, open(os.path.join(d, "nf4.json"), "w"))
+        json.dump({"plant": {"kind": kind, "layer": rec["layer"]}, "in_process": True, "layer_sha256": rec["layer_sha256"],
+                   "pre_plant_equal_null": rec["pre_plant_equal_null"], "planted_layer_differs": rec["planted_layer_differs"],
+                   "repeat": {"loss": rec["loss"], "forward_s": rec["forward_s"]}}, open(os.path.join(d, "box.json"), "w"), indent=1)
     loss = out["repeat"]["loss"] if a.repeat else out["in_process"]["loss_0"]
     json.dump({"loss": loss}, open(os.path.join(a.out, "nf4.json"), "w"))
     json.dump(out, open(os.path.join(a.out, "box.json"), "w"), indent=1, default=str)
@@ -441,6 +526,8 @@ def main():
             brief[k] = {f: out[k][f] for f in ("loss", "elapsed_s", "h2d_bytes_offload", "max_memory_allocated", "host_peak_rss")}
     if "repeat" in out:
         brief["repeat"] = out["repeat"]
+    if "plants" in out:
+        brief["plants"] = {k: {f: v[f] for f in ("loss", "pre_plant_equal_null", "planted_layer_differs")} for k, v in out["plants"].items()}
     print(json.dumps(brief, default=str))
     bad = strict_failures(out, repeat=a.repeat)
     if bad:
