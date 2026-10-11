@@ -1,29 +1,31 @@
 """Read-only stable-host packet and guarded DQ11 L-census launch admission.
 
 No command in this module creates compute except ``launch``, which requires a
-merged clean source, a bound manifest, an approval permalink, a fresh CPU gate,
-five minutes of provider observations and a final pinned quote before it calls
-the already-reviewed pod-launch controller.
+merged clean source, a time-limited maintainer envelope, a bound manifest, a
+fresh CPU gate, five minutes of provider observations and a final pinned quote
+before it calls the already-reviewed pod-launch controller.
 """
 
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
 import hashlib
 import json
 import os
-from pathlib import Path
 import re
 import subprocess
 import sys
 import time
+from collections import defaultdict
+from copy import deepcopy
+from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
+from itertools import pairwise
+from pathlib import Path
 
 from dq11_bootstrap import preflight_urls
 from dq11_policy_preflight import preflight_policy
 from dq11_science_stage import stage
-
 
 SCIENCE = "13b55990433f357d63232f75926ce19f5bda5b42"
 SCIENCE_MANIFEST_SHA = "4691e7329f12ad2f4b7518b75c4d3e351207fc4e5220aee514fdd42c429fef01"
@@ -36,11 +38,14 @@ PACKET_MAX = 2 * GIB
 MIN_STABLE_SECONDS = 300
 MAX_SAMPLE_GAP_SECONDS = 30
 FRESH_SECONDS = 60
+POLL_SECONDS = 20
+DISCOVERY_CUTOFF_SECONDS = 3 * 60 * 60
+ENVELOPE_HOURS = 24
 WALL_HOURS = Decimal("0.5")
 HOURLY_CAP = Decimal("0.85")
-DOWNLOAD_GB = Decimal("27")
+DOWNLOAD_GB = Decimal(27)
 DOWNLOAD_RATE_CAP = Decimal("0.011")
-UPLOAD_GB = Decimal("3")
+UPLOAD_GB = Decimal(3)
 UPLOAD_RATE_CAP = Decimal("0.05")
 ALL_IN_CAP = Decimal("0.90")
 DISK_GB = 320
@@ -53,6 +58,20 @@ OPERATIONAL_FILES = (
     "dq11_l_census_launch.py", "dq11_l_census_box.sh", "dq11_l_census_drive.sh"
 )
 TRANSPORT_FILE = "bench/tc1/tc1_drive.sh"
+TEMPLATE_FILE = "bench/dq11/dq11_l_census_manifest_template.json"
+ENVELOPE_CRITERIA = {
+    "gpu": "RTX 5090", "num_gpus": 1, "verification": "verified",
+    "rentable": True, "external": False, "minimum_reliability": "0.98",
+    "minimum_driver_major": 580, "exact_driver_components": 3,
+    "minimum_gpu_ram_mb": 30000, "maximum_gpu_ram_mb": 34000,
+    "minimum_host_ram_mb": 98 * 1024, "ordered_disk_gb": DISK_GB,
+    "maximum_gpu_storage_usd_per_hour": str(HOURLY_CAP),
+    "maximum_download_usd_per_gb": str(DOWNLOAD_RATE_CAP),
+    "maximum_upload_usd_per_gb": str(UPLOAD_RATE_CAP),
+    "maximum_all_in_usd": str(ALL_IN_CAP), "maximum_draws": 1,
+    "minimum_continuous_seconds": MIN_STABLE_SECONDS,
+    "maximum_poll_gap_seconds": MAX_SAMPLE_GAP_SECONDS,
+}
 
 
 def sha(path: Path) -> str:
@@ -102,6 +121,13 @@ def offer_row(offer: dict, provider) -> dict:
     if offer.get("gpu_name") != "RTX 5090" or offer.get("num_gpus") != 1:
         reasons.append("not one RTX 5090")
     try:
+        reliability = number(offer.get("reliability2"), "reliability")
+        if reliability < Decimal("0.98") or reliability > 1:
+            reasons.append("reliability below 0.98 or above 1")
+    except ValueError as exc:
+        reasons.append(str(exc))
+        reliability = None
+    try:
         gpu_ram = number(offer.get("gpu_ram"), "gpu RAM")
         cpu_ram = number(offer.get("cpu_ram"), "host RAM")
         disk = number(offer.get("disk_space"), "disk")
@@ -133,6 +159,7 @@ def offer_row(offer: dict, provider) -> dict:
             reasons.append("all-in 30-minute reservation exceeds $0.90")
     return {
         "id": oid, "machine_id": machine, "driver_version": driver,
+        "reliability": str(reliability) if reliability is not None else None,
         "gpu_name": offer.get("gpu_name"), "gpu_ram": offer.get("gpu_ram"),
         "num_gpus": offer.get("num_gpus"), "cpu_ram": offer.get("cpu_ram"),
         "disk_space": offer.get("disk_space"), "verification": offer.get("verification"),
@@ -154,7 +181,7 @@ def stable_ids(samples: list[dict], machine: str, required: list[str] | None = N
     if last - first < MIN_STABLE_SECONDS:
         raise ValueError("less than five continuous minutes of observations")
     if any(b["monotonic"] <= a["monotonic"] or b["monotonic"] - a["monotonic"] > MAX_SAMPLE_GAP_SECONDS
-           for a, b in zip(samples, samples[1:])):
+           for a, b in pairwise(samples)):
         raise ValueError("observation gap exceeds 30 seconds")
     seen = set()
     drivers = {}
@@ -180,6 +207,163 @@ def stable_ids(samples: list[dict], machine: str, required: list[str] | None = N
     if required is not None and (len(set(required)) != len(required) or not seen <= set(required)):
         raise ValueError("observed union exceeds ACK offer set")
     return sorted(seen, key=int)
+
+
+class HostContinuity:
+    """Apply the registered continuous-presence rule independently to every host."""
+
+    def __init__(self) -> None:
+        self.active: dict[str, dict] = {}
+        self.maximum_seconds: dict[str, float] = defaultdict(float)
+        self.resets: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+
+    def _end(self, machine: str, reason: str) -> None:
+        previous = self.active.pop(machine, None)
+        if previous:
+            samples = previous["samples"]
+            self.maximum_seconds[machine] = max(
+                self.maximum_seconds[machine], samples[-1]["monotonic"] - samples[0]["monotonic"])
+            self.resets[machine][reason] += 1
+
+    def step(self, poll: dict) -> tuple[str, list[dict], list[str], str] | None:
+        if poll.get("status") != "PASS":
+            for machine in list(self.active):
+                self._end(machine, "search_failure")
+            return None
+        grouped: dict[str, list[dict]] = defaultdict(list)
+        for row in poll["offers"]:
+            grouped[str(row.get("machine_id", ""))].append(row)
+        for machine in list(self.active):
+            if machine not in grouped:
+                self._end(machine, "absent")
+        qualified = []
+        for machine, rows in grouped.items():
+            ids = [str(row.get("id", "")) for row in rows]
+            if (not machine.isdigit() or machine in EXCLUDED_MACHINES or len(set(ids)) != len(ids)
+                    or any(not row.get("eligible") or row.get("machine_id") != machine or not oid.isdigit()
+                           for row, oid in zip(rows, ids))):
+                self._end(machine, "ineligible_or_outside")
+                continue
+            drivers = {row.get("driver_version") for row in rows}
+            if len(drivers) != 1:
+                self._end(machine, "mixed_driver")
+                continue
+            driver = next(iter(drivers))
+            if (not isinstance(driver, str)
+                    or not re.fullmatch(r"[0-9]{3}\.[0-9]{1,3}\.[0-9]{1,3}", driver)
+                    or int(driver.split(".")[0]) < 580):
+                self._end(machine, "non_exact_driver")
+                continue
+            previous = self.active.get(machine)
+            if previous and (poll["monotonic"] <= previous["samples"][-1]["monotonic"]
+                             or poll["monotonic"] - previous["samples"][-1]["monotonic"] > MAX_SAMPLE_GAP_SECONDS
+                             or driver != previous["driver"]):
+                self._end(machine, "gap_or_driver_change")
+                previous = None
+            if previous is None:
+                previous = {"driver": driver, "samples": []}
+                self.active[machine] = previous
+            previous["samples"].append({
+                "utc": poll["utc"], "monotonic": poll["monotonic"], "status": "PASS",
+                "machine_id": machine, "filter": poll["filter"], "offers": rows,
+            })
+            samples = previous["samples"]
+            span = samples[-1]["monotonic"] - samples[0]["monotonic"]
+            self.maximum_seconds[machine] = max(self.maximum_seconds[machine], span)
+            if span >= MIN_STABLE_SECONDS:
+                qualified.append((machine, samples, stable_ids(samples, machine), driver))
+        if not qualified:
+            return None
+        qualified.sort(key=lambda item: int(item[0]))
+        return qualified[0]
+
+
+def observe_all_hosts(provider, packet_dir: Path, *, clock=time.monotonic,
+                      sleep=time.sleep, cutoff: float = DISCOVERY_CUTOFF_SECONDS) -> dict:
+    """Write every GET-only poll before admitting the first qualifying host."""
+    polls_path = packet_dir / "all-host-polls.jsonl"
+    history_path = packet_dir / "stable-host.json"
+    continuity = HostContinuity()
+    start = clock()
+    due = start
+    count = 0
+    selected = None
+    with polls_path.open("x") as stream:
+        while True:
+            delay = due - clock()
+            if delay > 0:
+                sleep(delay)
+            if clock() - start >= cutoff:
+                break
+            try:
+                offers = provider.search_offers("RTX 5090")
+                poll = {"utc": now(), "monotonic": clock(), "status": "PASS",
+                        "filter": provider._filter("RTX 5090"),
+                        "offers": [offer_row(offer, provider) for offer in offers]}
+            except (RuntimeError, ValueError, OSError, TypeError) as exc:
+                poll = {"utc": now(), "monotonic": clock(), "status": "ERROR",
+                        "filter": provider._filter("RTX 5090"), "offers": [],
+                        "error_type": type(exc).__name__, "error": str(exc)}
+            stream.write(json.dumps(poll, sort_keys=True) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+            count += 1
+            if poll["monotonic"] - start >= cutoff:
+                continuity.step({**poll, "status": "ERROR", "offers": []})
+                break
+            selected = continuity.step(poll)
+            if selected:
+                break
+            due += POLL_SECONDS
+            due = max(due, poll["monotonic"])
+    report = {"schema": "dq11-l-census-all-host-discovery/1", "utc": now(),
+              "status": "PASS" if selected else "CUTOFF_NO_STABLE_HOST",
+              "mode": "READ_ONLY_CONTROLLER_SEARCH_NO_CREATE",
+              "poll_interval_seconds": POLL_SECONDS, "minimum_stable_seconds": MIN_STABLE_SECONDS,
+              "max_gap_seconds": MAX_SAMPLE_GAP_SECONDS, "cutoff_seconds": cutoff,
+              "poll_count": count, "polls_sha256": sha(polls_path),
+              "per_machine_max_continuous_seconds": dict(continuity.maximum_seconds),
+              "per_machine_reset_counts": {k: dict(v) for k, v in continuity.resets.items()},
+              "machine_id": selected[0] if selected else None,
+              "offer_ids": selected[2] if selected else None,
+              "driver": selected[3] if selected else None}
+    if selected:
+        machine, samples, offers, _ = selected
+        history = {"schema": "dq11-l-census-stable-host/1", "utc": now(),
+                   "machine_id": machine, "offer_ids": offers, "samples": samples,
+                   "first_utc": samples[0]["utc"], "last_utc": samples[-1]["utc"],
+                   "minimum_stable_seconds": MIN_STABLE_SECONDS,
+                   "max_gap_seconds": MAX_SAMPLE_GAP_SECONDS,
+                   "mode": "READ_ONLY_CONTROLLER_SEARCH_NO_CREATE",
+                   "all_host_polls_sha256": report["polls_sha256"]}
+        with history_path.open("x") as stream:
+            json.dump(history, stream, indent=2)
+            stream.write("\n")
+        report["stable_history_sha256"] = sha(history_path)
+    with (packet_dir / "all-host-summary.json").open("x") as stream:
+        json.dump(report, stream, indent=2)
+        stream.write("\n")
+    if not selected:
+        raise ValueError("three-hour all-host search ended without a qualifying window")
+    return report
+
+
+def check_qualifying_window(packet_dir: Path, summary: dict) -> dict:
+    """Re-read the sealed poll and selected window before binding the manifest."""
+    history_path = packet_dir / "stable-host.json"
+    if (summary.get("status") != "PASS"
+            or summary.get("polls_sha256") != sha(packet_dir / "all-host-polls.jsonl")
+            or summary.get("stable_history_sha256") != sha(history_path)):
+        raise ValueError("qualifying-window SHA evidence is absent or changed")
+    history = json.loads(history_path.read_text())
+    machine = str(summary["machine_id"])
+    if (history.get("machine_id") != machine or history.get("offer_ids") != summary.get("offer_ids")
+            or history.get("all_host_polls_sha256") != summary["polls_sha256"]
+            or stable_ids(history["samples"], machine) != summary["offer_ids"]
+            or any(row["driver_version"] != summary["driver"]
+                   for sample in history["samples"] for row in sample["offers"])):
+        raise ValueError("selected host window does not match the complete poll record")
+    return history
 
 
 def packet_files(root: Path) -> tuple[int, dict[str, dict]]:
@@ -226,7 +410,7 @@ class ReadOnlyTransport:
         return self.delegate.request(method, path, **kwargs)
 
 
-def live_provider(machine: str, controller: Path, e4b: Path,
+def live_provider(machine: str | None, controller: Path, e4b: Path,
                   required_driver: str | None = None):
     merged_clean(e4b)
     if not (e4b / "bench/dq11/DQ11-L-CENSUS-LAUNCH.md").is_file():
@@ -282,6 +466,108 @@ def merged_clean(repo: Path) -> str:
     return head
 
 
+def validate_envelope(envelope: dict, envelope_path: Path, template_path: Path,
+                      e4b: Path, controller: Path, *, at: datetime | None = None) -> None:
+    """Refuse stale, broader, or differently sourced maintainer approval."""
+    if template_path.resolve() != (e4b / TEMPLATE_FILE).resolve():
+        raise ValueError("envelope template is not the merged census template")
+    if envelope.get("schema") != "dq11-l-census-envelope-ack/1":
+        raise ValueError("missing L-census envelope schema")
+    url = envelope.get("approval_url")
+    if (not isinstance(url, str) or not re.fullmatch(
+            r"https://github\.com/pjordanandrsn/experts4bit-qlora/issues/1083#issuecomment-[0-9]+", url)):
+        raise ValueError("envelope ACK needs the maintainer's citable GitHub comment")
+    try:
+        issued = datetime.fromisoformat(envelope["issued_at"].replace("Z", "+00:00"))
+        expires = datetime.fromisoformat(envelope["expires_at"].replace("Z", "+00:00"))
+    except (KeyError, AttributeError, ValueError) as exc:
+        raise ValueError("envelope lacks valid issue and expiry times") from exc
+    current = at or datetime.now(timezone.utc)
+    if (issued.tzinfo is None or expires.tzinfo is None or current.tzinfo is None
+            or not issued <= current < expires
+            or not 0 < (expires - issued).total_seconds() <= ENVELOPE_HOURS * 3600):
+        raise ValueError("envelope is not yet valid, expired or longer than 24 hours")
+    if (json.dumps(envelope.get("criteria"), sort_keys=True) != json.dumps(ENVELOPE_CRITERIA, sort_keys=True)
+            or type(envelope.get("maximum_draws")) is not int or envelope["maximum_draws"] != 1):
+        raise ValueError("host or budget is outside the exact envelope criteria")
+    if (envelope.get("e4b_head") != merged_clean(e4b)
+            or envelope.get("controller_head") != merged_clean(controller)
+            or envelope.get("manifest_template_sha256") != sha(template_path)):
+        raise ValueError("envelope lapsed after a source or manifest template change")
+    if envelope_path.is_symlink() or not envelope_path.is_file():
+        raise ValueError("envelope record must be a regular file")
+
+
+def verify_envelope_comment(envelope: dict) -> None:
+    """Resolve the ACK URL to the maintainer's current exact JSON on issue #1083."""
+    comment_id = envelope["approval_url"].rsplit("#issuecomment-", 1)[1]
+    result = subprocess.run(
+        ["gh", "api", f"repos/pjordanandrsn/experts4bit-qlora/issues/comments/{comment_id}"],
+        capture_output=True, text=True, check=False, timeout=15)
+    if result.returncode:
+        raise ValueError("maintainer envelope ACK comment could not be read")
+    try:
+        comment = json.loads(result.stdout)
+        attested = json.loads(comment["body"])
+    except (ValueError, KeyError, TypeError) as exc:
+        raise ValueError("maintainer envelope ACK is not exact JSON") from exc
+    expected = {key: value for key, value in envelope.items() if key != "approval_url"}
+    user = comment.get("user") if isinstance(comment, dict) else None
+    if (not isinstance(comment, dict)
+            or comment.get("html_url") != envelope["approval_url"]
+            or not isinstance(user, dict) or user.get("login") != "pjordanandrsn"
+            or attested != expected):
+        raise ValueError("envelope record differs from the maintainer's GitHub ACK")
+
+
+def bind_manifest(template_path: Path, envelope_path: Path, summary: dict,
+                  e4b: Path, controller: Path, assets: Path, output: Path) -> dict:
+    """Pin by inclusion to exactly one qualified machine and its observed union."""
+    if output.exists() or output.is_relative_to(e4b) or output.is_relative_to(controller):
+        raise ValueError("bound manifest must be write-once and outside source")
+    envelope = json.loads(envelope_path.read_text())
+    validate_envelope(envelope, envelope_path, template_path, e4b, controller)
+    if summary.get("status") != "PASS" or not summary.get("offer_ids"):
+        raise ValueError("no qualifying all-host window")
+    machine = str(summary["machine_id"])
+    offers = [str(x) for x in summary["offer_ids"]]
+    driver = summary["driver"]
+    if (not machine.isdigit() or machine in EXCLUDED_MACHINES
+            or len(set(offers)) != len(offers) or not all(x.isdigit() for x in offers)
+            or not isinstance(driver, str)
+            or not re.fullmatch(r"[0-9]{3}\.[0-9]{1,3}\.[0-9]{1,3}", driver)
+            or int(driver.split(".")[0]) < 580):
+        raise ValueError("qualifying host cannot be bound to an exact inclusion pin")
+    template = json.loads(template_path.read_text())
+    manifest = deepcopy(template)
+    manifest["status"] = "ENVELOPE_BOUND_PENDING_FRESH_GATES"
+    manifest["heads"] = {"e4b": merged_clean(e4b), "adertha": merged_clean(controller)}
+    manifest["command"] = (f"DQ11_ASSET_DIR={assets.resolve()} DQ11_REQUIRED_DRIVER={driver} "
+                           "bash bench/dq11/dq11_l_census_drive.sh")
+    manifest["vast_pin_machine"] = machine
+    manifest["vast_pin_offers"] = offers
+    manifest["vast_required_driver"] = driver
+    directory = e4b / "bench/dq11"
+    detail = manifest["l_census"]
+    detail["instrument_sha256"] = {name: sha(directory / name) for name in INSTRUMENT_FILES}
+    detail["operational_sha256"] = {name: sha(directory / name) for name in OPERATIONAL_FILES}
+    detail["transport_sha256"] = sha(e4b / TRANSPORT_FILE)
+    detail["manifest_template_sha256"] = sha(template_path)
+    manifest["authorization_basis"] = {
+        "envelope_ack_url": envelope["approval_url"],
+        "envelope_sha256": sha(envelope_path), "issued_at": envelope["issued_at"],
+        "expires_at": envelope["expires_at"], "maximum_draws": 1,
+        "qualifying_window_sha256": summary["stable_history_sha256"],
+        "all_host_polls_sha256": summary["polls_sha256"],
+    }
+    validate_manifest(manifest, e4b, controller)
+    manifest.pop("_asset_path")  # validation scratch, never a manifest field
+    with output.open("x") as stream:
+        json.dump(manifest, stream, indent=2)
+        stream.write("\n")
+    return manifest
+
+
 def validate_manifest(manifest: dict, e4b: Path, controller: Path) -> None:
     check_static_budget()
     try:
@@ -320,7 +606,7 @@ def validate_manifest(manifest: dict, e4b: Path, controller: Path) -> None:
     manifest["_asset_path"] = match.group(1)
     detail = manifest.get("l_census")
     if not isinstance(detail, dict):
-        raise ValueError("manifest lacks L-census closure")
+        raise TypeError("manifest lacks L-census closure")
     try:
         upload_gb = number(detail.get("upload_gb"), "manifest upload GB")
         upload_rate = number(detail.get("max_upload_usd_per_gb"), "manifest upload tariff")
@@ -335,6 +621,17 @@ def validate_manifest(manifest: dict, e4b: Path, controller: Path) -> None:
             or upload_rate != UPLOAD_RATE_CAP
             or all_in != ALL_IN_CAP):
         raise ValueError("manifest lacks exact L-census science/transfer caps")
+    template_path = e4b / TEMPLATE_FILE
+    if detail.get("manifest_template_sha256") != sha(template_path):
+        raise ValueError("bound manifest template differs from merged source")
+    template = json.loads(template_path.read_text())
+    if manifest.get("status") != "ENVELOPE_BOUND_PENDING_FRESH_GATES":
+        raise ValueError("manifest was not bound under an envelope")
+    if any(manifest.get(key) != value for key, value in template.items()
+           if key not in ("status", "l_census")):
+        raise ValueError("bound manifest changed a registered template field")
+    if any(detail.get(key) != value for key, value in template["l_census"].items()):
+        raise ValueError("bound manifest changed a registered L-census template field")
     machine = str(manifest["vast_pin_machine"])
     offers = [str(x) for x in manifest["vast_pin_offers"]]
     if (not machine.isdigit() or machine in EXCLUDED_MACHINES or len(set(offers)) != len(offers)
@@ -431,32 +728,29 @@ def quote(manifest_path: Path, history_path: Path, gate_path: Path, provider, ou
     return result
 
 
-def launch(manifest_path: Path, e4b: Path, controller: Path, assets: Path,
-           packet_dir: Path, approval: str) -> int:
-    """Fresh five-minute search, CPU gate, quote, then the guarded rental."""
-    manifest = json.loads(manifest_path.read_text())
-    validate_manifest(manifest, e4b, controller)
-    if assets.resolve() != Path(manifest["_asset_path"]).resolve():
-        raise ValueError("launch assets differ from bound command")
-    if not approval or "UNKNOWN" in approval or any(ch.isspace() for ch in approval):
-        raise ValueError("fresh exact-machine/offer-set maintainer approval permalink required")
+def launch(template_path: Path, envelope_path: Path, e4b: Path, controller: Path,
+           assets: Path, packet_dir: Path) -> int:
+    """Under one envelope, bind the first qualified host and launch once."""
+    envelope = json.loads(envelope_path.read_text())
+    validate_envelope(envelope, envelope_path, template_path, e4b, controller)
+    verify_envelope_comment(envelope)
     if packet_dir.exists() or packet_dir.is_relative_to(e4b) or packet_dir.is_relative_to(controller):
         raise ValueError("write-once launch packet must be outside source checkouts")
-    machine = str(manifest["vast_pin_machine"])
-    approved = [str(x) for x in manifest["vast_pin_offers"]]
-    provider = live_provider(machine, controller, e4b, manifest["vast_required_driver"])
+    provider = live_provider(None, controller, e4b)
     packet_dir.mkdir(mode=0o700, parents=False)
+    summary = observe_all_hosts(provider, packet_dir)
+    history = check_qualifying_window(packet_dir, summary)
+    manifest_path = packet_dir / "bound-manifest.json"
     history_path = packet_dir / "stable-host.json"
     gate_path = packet_dir / "fresh-cpu-gate.json"
     quote_path = packet_dir / "final-quote.json"
-    history = observe(provider, machine, approved)
-    with history_path.open("x") as stream:
-        json.dump(history, stream, indent=2)
-        stream.write("\n")
+    manifest = bind_manifest(template_path, envelope_path, summary, e4b, controller,
+                             assets, manifest_path)
     cpu_gate(manifest_path, e4b, controller, assets, gate_path)
     gate_end = time.monotonic()
     quote(manifest_path, history_path, gate_path, provider, quote_path)
     invocation = time.monotonic()
+    validate_envelope(envelope, envelope_path, template_path, e4b, controller)
     if (invocation - history["samples"][-1]["monotonic"] > FRESH_SECONDS
             or invocation - gate_end > FRESH_SECONDS):
         raise ValueError("gate/quote/launch exceeded 60-second stable-host window; nothing created")
@@ -464,13 +758,27 @@ def launch(manifest_path: Path, e4b: Path, controller: Path, assets: Path,
         json.dump({"schema": "dq11-l-census-launch-admission/1", "utc": now(),
                    "manifest_sha256": sha(manifest_path), "history_sha256": sha(history_path),
                    "gate_sha256": sha(gate_path), "quote_sha256": sha(quote_path),
-                   "approved_machine": machine, "approved_offer_ids": approved,
-                   "approval_permalink": approval, "from_last_search_seconds": invocation - history["samples"][-1]["monotonic"],
+                   "envelope_ack_url": envelope["approval_url"],
+                   "envelope_sha256": sha(envelope_path),
+                   "all_host_polls_sha256": summary["polls_sha256"],
+                   "qualifying_window_sha256": summary["stable_history_sha256"],
+                   "selected_machine": manifest["vast_pin_machine"],
+                   "selected_offer_ids": manifest["vast_pin_offers"],
+                   "from_last_search_seconds": invocation - history["samples"][-1]["monotonic"],
                    "from_gate_seconds": invocation - gate_end,
                    "guarded_controller_invoked": True}, stream, indent=2)
         stream.write("\n")
+    if sha(envelope_path) != manifest["authorization_basis"]["envelope_sha256"]:
+        raise ValueError("envelope record changed after manifest binding; nothing created")
+    check_qualifying_window(packet_dir, summary)
+    validate_envelope(envelope, envelope_path, template_path, e4b, controller)
+    verify_envelope_comment(envelope)
+    actual_call = time.monotonic()
+    if (actual_call - history["samples"][-1]["monotonic"] > FRESH_SECONDS
+            or actual_call - gate_end > FRESH_SECONDS):
+        raise ValueError("gate/quote/launch exceeded 60-second stable-host window; nothing created")
     env = dict(os.environ, E4B_REPO=str(e4b), ADERTHA_REPO=str(controller))
-    command = ["bash", str(controller / "tools/pod-launch.sh"), str(manifest_path), approval]
+    command = ["bash", str(controller / "tools/pod-launch.sh"), str(manifest_path), envelope["approval_url"]]
     return subprocess.run(command, env=env, check=False).returncode
 
 
@@ -499,13 +807,13 @@ def main() -> None:
     prices.add_argument("--e4b", type=Path, required=True)
     prices.add_argument("--controller", type=Path, required=True)
     prices.add_argument("--out", type=Path, required=True)
-    paid = sub.add_parser("launch", help="five-minute search and same-minute guarded launch; requires fresh ACK")
-    paid.add_argument("--manifest", type=Path, required=True)
+    paid = sub.add_parser("launch", help="all-host five-minute search and same-minute guarded launch under envelope ACK")
+    paid.add_argument("--template", type=Path, required=True)
+    paid.add_argument("--envelope", type=Path, required=True)
     paid.add_argument("--e4b", type=Path, required=True)
     paid.add_argument("--controller", type=Path, required=True)
     paid.add_argument("--assets", type=Path, required=True)
     paid.add_argument("--packet-dir", type=Path, required=True)
-    paid.add_argument("--approval", required=True)
     args = parser.parse_args()
     try:
         if args.mode == "observe":
@@ -532,8 +840,8 @@ def main() -> None:
                                      args.e4b.resolve())
             quote(args.manifest, args.history, args.gate, provider, args.out)
         else:
-            raise SystemExit(launch(args.manifest.resolve(), args.e4b.resolve(), args.controller.resolve(),
-                                    args.assets.resolve(), args.packet_dir.resolve(), args.approval))
+            raise SystemExit(launch(args.template.resolve(), args.envelope.resolve(), args.e4b.resolve(),
+                                    args.controller.resolve(), args.assets.resolve(), args.packet_dir.resolve()))
     except (ValueError, OSError, KeyError, TypeError, subprocess.SubprocessError) as exc:
         parser.exit(78, str(exc) + "\n")
 

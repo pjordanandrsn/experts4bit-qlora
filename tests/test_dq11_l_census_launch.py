@@ -5,9 +5,10 @@ from __future__ import annotations
 import importlib
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -39,7 +40,7 @@ def offer(oid="100", machine="200", *, down=.011, up=.05, hourly=.85):
         "id": oid, "machine_id": machine, "verification": "verified", "rentable": True,
         "external": False, "gpu_name": "RTX 5090", "num_gpus": 1,
         "gpu_ram": 32607, "cpu_ram": 131072, "disk_space": 1200,
-        "driver_version": "580.159.03", "storage_cost": .2,
+        "driver_version": "580.159.03", "storage_cost": .2, "reliability2": .99,
         "inet_down_cost": down, "inet_up_cost": up, "hourly": hourly,
     }
 
@@ -58,7 +59,7 @@ def test_registered_budget_and_tariff_refusal():
     for changed in (
         {"inet_up_cost": None}, {"inet_down_cost": .012}, {"inet_up_cost": .051},
         {"hourly": .86}, {"storage_cost": None}, {"driver_version": "570.1"},
-        {"gpu_ram": None}, {"rentable": False},
+        {"gpu_ram": None}, {"rentable": False}, {"reliability2": .979},
     ):
         raw = dict(offer(), **changed)
         assert launch.offer_row(raw, p)["eligible"] is False
@@ -194,14 +195,196 @@ def test_final_quote_accepts_one_rotating_id_and_refuses_outside_id(tmp_path):
         launch.quote(manifest_path, history_path, gate_path, FakeProvider([offer("100")]), tmp_path / "mixed-driver.json")
 
 
+def test_all_host_continuity_selects_first_qualified_and_refuses_outside_envelope():
+    continuity = launch.HostContinuity()
+    selected = None
+    for t in range(0, 301, 20):
+        good = launch.offer_row(offer(str(100 + (t // 20) % 2), "200"), FakeProvider([]))
+        low_reliability = launch.offer_row(dict(offer("300", "100"), reliability2=.97), FakeProvider([]))
+        selected = continuity.step({"utc": "test", "monotonic": float(t), "status": "PASS",
+                                    "filter": {}, "offers": [good, low_reliability]})
+        if t < 300:
+            assert selected is None
+    assert selected and selected[0] == "200" and selected[2] == ["100", "101"]
+    assert selected[3] == "580.159.03"
+    assert "100" not in continuity.active
+
+    continuity = launch.HostContinuity()
+    initially_eligible = launch.offer_row(offer("300", "100"), FakeProvider([]))
+    continuity.step({"utc": "test", "monotonic": 0.0, "status": "PASS",
+                     "filter": {}, "offers": [initially_eligible]})
+    below_envelope = launch.offer_row(dict(offer("300", "100"), reliability2=.97), FakeProvider([]))
+    continuity.step({"utc": "test", "monotonic": 20.0, "status": "PASS",
+                     "filter": {}, "offers": [below_envelope]})
+    assert continuity.resets["100"]["ineligible_or_outside"] == 1
+
+    two_part = launch.offer_row(dict(offer(), driver_version="595.84"), FakeProvider([]))
+    continuity.step({"utc": "test", "monotonic": 40.0, "status": "PASS",
+                     "filter": {}, "offers": [two_part]})
+    assert "200" not in continuity.active
+
+    continuity = launch.HostContinuity()
+    good = launch.offer_row(offer("100"), FakeProvider([]))
+    assert continuity.step({"utc": "test", "monotonic": 0.0, "status": "PASS",
+                            "filter": {}, "offers": [good]}) is None
+    assert continuity.step({"utc": "test", "monotonic": 20.0, "status": "PASS",
+                            "filter": {}, "offers": []}) is None
+    assert continuity.resets["200"]["absent"] == 1
+
+
+def test_all_host_collector_seals_first_five_minute_window_without_create(tmp_path):
+    class RotatingProvider(FakeProvider):
+        def search_offers(self, gpu):
+            self.calls += 1
+            return [offer(str(100 + self.calls % 2))]
+
+    tick = [0.0]
+
+    def clock():
+        return tick[0]
+
+    def sleep(seconds):
+        tick[0] += seconds
+
+    provider = RotatingProvider([])
+    summary = launch.observe_all_hosts(provider, tmp_path, clock=clock, sleep=sleep)
+    assert summary["status"] == "PASS" and provider.calls == 16
+    assert summary["machine_id"] == "200" and summary["offer_ids"] == ["100", "101"]
+    history = launch.check_qualifying_window(tmp_path, summary)
+    assert history["samples"][-1]["monotonic"] - history["samples"][0]["monotonic"] == 300
+    assert summary["polls_sha256"] == launch.sha(tmp_path / "all-host-polls.jsonl")
+
+
+def test_envelope_exact_criteria_source_template_and_expiry(tmp_path, monkeypatch):
+    e4b = tmp_path / "e4b"
+    controller = tmp_path / "controller"
+    template = e4b / launch.TEMPLATE_FILE
+    template.parent.mkdir(parents=True)
+    template.write_text("{}")
+    controller.mkdir()
+    record = tmp_path / "envelope.json"
+    record.write_text("{}")
+    monkeypatch.setattr(launch, "merged_clean", lambda path: "e" * 40 if path == e4b else "c" * 40)
+    issued = datetime(2026, 10, 11, 8, tzinfo=timezone.utc)
+    envelope = {"schema": "dq11-l-census-envelope-ack/1",
+                "approval_url": "https://github.com/pjordanandrsn/experts4bit-qlora/issues/1083#issuecomment-123",
+                "issued_at": issued.isoformat(), "expires_at": (issued + timedelta(hours=24)).isoformat(),
+                "e4b_head": "e" * 40, "controller_head": "c" * 40,
+                "manifest_template_sha256": launch.sha(template),
+                "criteria": launch.ENVELOPE_CRITERIA, "maximum_draws": 1}
+    launch.validate_envelope(envelope, record, template, e4b, controller, at=issued + timedelta(hours=1))
+    with pytest.raises(ValueError, match="expired"):
+        launch.validate_envelope(envelope, record, template, e4b, controller, at=issued + timedelta(hours=24))
+    broader = dict(envelope, criteria=dict(launch.ENVELOPE_CRITERIA, minimum_reliability="0.97"))
+    with pytest.raises(ValueError, match="outside the exact envelope"):
+        launch.validate_envelope(broader, record, template, e4b, controller, at=issued + timedelta(hours=1))
+    template.write_text("{\"changed\":true}")
+    with pytest.raises(ValueError, match="source or manifest template change"):
+        launch.validate_envelope(envelope, record, template, e4b, controller, at=issued + timedelta(hours=1))
+    template.write_text("{}")
+    monkeypatch.setattr(launch, "merged_clean", lambda path: "new" if path == e4b else "c" * 40)
+    with pytest.raises(ValueError, match="source or manifest template change"):
+        launch.validate_envelope(envelope, record, template, e4b, controller, at=issued + timedelta(hours=1))
+
+
+def test_envelope_comment_must_be_maintainer_exact_json(monkeypatch):
+    url = "https://github.com/pjordanandrsn/experts4bit-qlora/issues/1083#issuecomment-123"
+    envelope = {"approval_url": url, "schema": "dq11-l-census-envelope-ack/1",
+                "maximum_draws": 1}
+    comment = {"html_url": url, "user": {"login": "pjordanandrsn"},
+               "body": json.dumps({key: value for key, value in envelope.items() if key != "approval_url"})}
+
+    def answer(*args, **kwargs):
+        assert args[0][-1].endswith("/issues/comments/123")
+        return SimpleNamespace(returncode=0, stdout=json.dumps(comment))
+
+    monkeypatch.setattr(launch.subprocess, "run", answer)
+    launch.verify_envelope_comment(envelope)
+    comment["user"]["login"] = "someone-else"
+    with pytest.raises(ValueError, match="differs from the maintainer"):
+        launch.verify_envelope_comment(envelope)
+    comment["user"]["login"] = "pjordanandrsn"
+    comment["body"] = "{}"
+    with pytest.raises(ValueError, match="differs from the maintainer"):
+        launch.verify_envelope_comment(envelope)
+
+
+def test_qualifying_window_makes_one_inclusion_pinned_launch(tmp_path, monkeypatch):
+    e4b = LANE.parents[1]
+    controller = tmp_path / "controller"
+    controller.mkdir()
+    template = e4b / launch.TEMPLATE_FILE
+    envelope = tmp_path / "envelope.json"
+    approval_url = "https://github.com/pjordanandrsn/experts4bit-qlora/issues/1083#issuecomment-123"
+    envelope.write_text(json.dumps({"approval_url": approval_url, "issued_at": "2026-10-11T08:00:00Z",
+                                    "expires_at": "2026-10-12T08:00:00Z"}))
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    packet = tmp_path / "packet"
+    monkeypatch.setattr(launch, "validate_envelope", lambda *args: None)
+    monkeypatch.setattr(launch, "verify_envelope_comment", lambda *args: None)
+    monkeypatch.setattr(launch, "merged_clean", lambda path: "e" * 40 if path == e4b else "c" * 40)
+    monkeypatch.setattr(launch.subprocess, "call", lambda *args: 0)
+    monkeypatch.setattr(launch, "live_provider", lambda *args: FakeProvider([offer()]))
+
+    def discover(_, packet_dir):
+        (packet_dir / "all-host-polls.jsonl").write_text("one synthetic poll\n")
+        latest = launch.time.monotonic()
+        history = samples("100", "101")
+        for index, sample in enumerate(history):
+            sample["monotonic"] = latest - 300 + 20 * index
+        history_record = {"machine_id": "200", "offer_ids": ["100", "101"],
+                          "all_host_polls_sha256": launch.sha(packet_dir / "all-host-polls.jsonl"),
+                          "samples": history}
+        history_path = packet_dir / "stable-host.json"
+        history_path.write_text(json.dumps(history_record))
+        return {"status": "PASS", "machine_id": "200", "offer_ids": ["100", "101"],
+                "driver": "580.159.03", "polls_sha256": history_record["all_host_polls_sha256"],
+                "stable_history_sha256": launch.sha(history_path)}
+
+    monkeypatch.setattr(launch, "observe_all_hosts", discover)
+    monkeypatch.setattr(launch, "cpu_gate", lambda *args: args[-1].write_text("{}"))
+    monkeypatch.setattr(launch, "quote", lambda *args: args[-1].write_text("{}"))
+    calls = []
+
+    def controller_run(command, **kwargs):
+        calls.append(command)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(launch.subprocess, "run", controller_run)
+    assert launch.launch(template, envelope, e4b, controller, assets, packet) == 0
+    assert len(calls) == 1 and calls[0][-1] == approval_url
+    bound = json.loads((packet / "bound-manifest.json").read_text())
+    assert bound["vast_pin_machine"] == "200" and bound["vast_pin_offers"] == ["100", "101"]
+    assert bound["vast_required_driver"] == "580.159.03"
+    assert "_asset_path" not in bound
+    admission = json.loads((packet / "launch-admission.json").read_text())
+    assert admission["selected_offer_ids"] == ["100", "101"]
+    assert admission["from_last_search_seconds"] < 60
+
+
 def test_paid_controller_refuses_expired_search_before_driver(tmp_path, monkeypatch):
-    manifest = tmp_path / "manifest.json"
-    manifest.write_text(json.dumps({"vast_pin_machine": "200", "vast_pin_offers": ["100"],
-                                    "vast_required_driver": "580.159.03"}))
-    monkeypatch.setattr(launch, "validate_manifest", lambda m, *args: m.__setitem__("_asset_path", str(tmp_path)))
+    template = tmp_path / "template.json"
+    template.write_text("{}")
+    envelope = tmp_path / "envelope.json"
+    envelope.write_text(json.dumps({"approval_url": "https://github.com/pjordanandrsn/experts4bit-qlora/issues/1083#issuecomment-1"}))
+    monkeypatch.setattr(launch, "validate_envelope", lambda *args: None)
+    monkeypatch.setattr(launch, "verify_envelope_comment", lambda *args: None)
     monkeypatch.setattr(launch, "live_provider", lambda *args: FakeProvider([offer()]))
     history = {"samples": [{"monotonic": 0.0}]}
-    monkeypatch.setattr(launch, "observe", lambda *args: history)
+
+    def discover(_, packet_dir):
+        (packet_dir / "stable-host.json").write_text(json.dumps(history))
+        return {"polls_sha256": "a" * 64, "stable_history_sha256": "b" * 64}
+
+    monkeypatch.setattr(launch, "observe_all_hosts", discover)
+    monkeypatch.setattr(launch, "check_qualifying_window", lambda *args: history)
+
+    def bind(*args):
+        args[-1].write_text(json.dumps({"vast_pin_machine": "200", "vast_pin_offers": ["100"]}))
+        return {"vast_pin_machine": "200", "vast_pin_offers": ["100"]}
+
+    monkeypatch.setattr(launch, "bind_manifest", bind)
 
     def gate(*args):
         args[-1].write_text(json.dumps({"passed": True}))
@@ -222,7 +405,7 @@ def test_paid_controller_refuses_expired_search_before_driver(tmp_path, monkeypa
     e4b.mkdir()
     controller.mkdir()
     with pytest.raises(ValueError, match="exceeded 60-second"):
-        launch.launch(manifest, e4b, controller, tmp_path, tmp_path / "packet", "https://approval.example/1")
+        launch.launch(template, envelope, e4b, controller, tmp_path, tmp_path / "packet")
 
 
 def test_box_refuses_wrong_science_before_gpu_or_network(tmp_path):
