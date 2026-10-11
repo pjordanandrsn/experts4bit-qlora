@@ -2,11 +2,13 @@
 
 Prospective amendment to [the L-only preregistration](DQ11-L-CENSUS-PREREG.md)
 and [the merged instrument](DQ11-L-CENSUS-INSTRUMENT.md), issue #1083.
-**DRAFT_NOT_LAUNCHABLE.** This amendment fixes the operational limits and
-prelaunch evidence. It changes no model, input, arithmetic, capture window,
-attribution rule, reducer, quality gate or BUILD decision. Merge and a fresh
-maintainer ACK naming the exact machine and enumerated offer IDs are required
-before one paid draw. No quote, rental or 5090 census has occurred under it.
+**PROSPECTIVE; merge alone does not authorize a paid draw.** This amendment
+fixes the operational limits and prelaunch evidence. It changes no model,
+input, arithmetic, capture window, attribution rule, reducer, quality gate or
+BUILD decision. A maintainer envelope ACK, issued after this amendment merges,
+is required before one paid draw. The prior read-only host search qualified a
+five-minute window but the host disappeared before the quote; no rental or
+5090 census occurred.
 
 ## Source and evidence boundary
 
@@ -85,7 +87,8 @@ offer with absent upload pricing is not treated as free. Actual invoice lines
 for GPU, storage, download and upload and a post-destroy empty live list close
 the receipt; the reservation is not represented as actual spend.
 
-The manifest sets `usd_per_hour=0.85`, `wallclock_h=0.5`, `est_usd=0.425`,
+The committed [manifest template](dq11_l_census_manifest_template.json) sets
+`usd_per_hour=0.85`, `wallclock_h=0.5`, `est_usd=0.425`,
 `download_gb=27`, `max_download_usd_per_gb=0.011`, `storage=320`, the
 previously used devel image `pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel`,
 and a command that binds the validated canonical asset path and exact driver to
@@ -103,44 +106,56 @@ closure. The shared driver transfers only after its remote 2 GiB file/sha
 gate; it excludes bulk trace/normalized files from partial polls and checks
 the final fetched files against the box-side SHA-256 list.
 
-## Stable-host packet and final sequence
+## Envelope ACK and final sequence
 
-The **same guarded controller's Vast offer search** must observe the proposed
-machine in every successful search for at least five continuous minutes,
-with no gap longer than 30 seconds. Its offer IDs may rotate between searches.
-Every ID returned for that machine must belong to the enumerated approved set
-and pass the verified/rentable, normal RTX 5090, driver, disk/RAM, hourly and
-tariff gates. The eligible set is the **union** of IDs seen across the interval;
-after the ACK that union may be a subset of the full approved set. An outside
-ID, ineligible offer, absent machine, missed search or gap resets the clock.
-The last quote needs at
-least one currently listed approved offer, with no outside or ineligible IDs.
-Before the paid ACK, a read-only discovery interval proposes its observed
-union; after the ACK, the repeated interval enforces that exact approved set.
-The record includes each observation time, the exact query/filter,
-all relevant offer fields and prices, selected machine/IDs, and its SHA-256.
-The `adertha-agents` offer-set pin must be on merged main; the final manifest
-uses `vast_pin_machine` and `vast_pin_offers`, never an unpinned or single-ID
-fallback. A stale ask can move only among the approved IDs on that machine,
-under every original provider and all-in gate.
-The read-only observer uses the controller's live authentication gate
-(`E4B_RENT_LIVE=1`) and permits only the auth probe and offer-search GETs;
-it has no create method. This environment arming alone does not authorize a
-paid launch.
+After this amendment merges, the maintainer may issue one citable GitHub
+comment on issue #1083 as the **envelope ACK**. The comment body is the exact
+JSON envelope fields without `approval_url`; the local record adds that URL.
+The launcher fetches the comment before discovery and again before paid
+invocation, verifies the `pjordanandrsn` author and exact JSON, and refuses on
+an unreadable or changed comment. Its local record has schema
+`dq11-l-census-envelope-ack/1`, that comment URL, issue and expiry UTC times,
+the exact clean merged e4b and controller heads, the committed manifest
+template SHA-256, `maximum_draws=1`, and the exact criteria in
+`ENVELOPE_CRITERIA` in the launcher. It lapses at the earlier of 24 hours after
+issue or any change to those source/template bytes. An absent, future,
+expired, longer or broader record refuses before a provider search; it is
+checked again immediately before invoking the paid controller. The controller
+records the same GitHub approval URL and its existing run-ID ledger guard
+refuses a second draw. An envelope is not a result or a license to relax any
+registered limit.
 
-First prepare the immutable review packet: merged source and instrument
-hashes, canonical assets, fresh CPU 100-URL fetch/policy gate, five-minute
-controller search record, pinned manifest, read-only quote and `$0.90` ceiling
-walk. The maintainer reviews that packet and issues a **fresh paid ACK for the
-exact machine and complete offer set**. After the ACK, repeat the five-minute
-search on that same set. Then execute a fresh bound CPU gate, read-only quote
-and guarded launch within **60 seconds of the last successful search** and
-within **60 seconds from gate completion to launch invocation**. If either
-clock expires, an offer changes, a source/manifest hash moves or the ACK names
-anything else, refuse before create and return for review. The controller's
-final search and `pod-launch.sh`'s own pinned search must both agree; the latter
-still refuses an absent ask without substitution. Record all UTC and monotonic
-times, gate/quote/manifest hashes and selected offer in the run receipt.
+Under that ACK, one GET-only standing poll searches all eligible offers with
+the same merged controller adapter, every 20 seconds for at most three hours.
+The first machine to remain in **every poll for at least 300 seconds**, with
+gaps no longer than 30 seconds, qualifies. Every returned ID must be eligible:
+one verified rentable, nonexternal normal RTX 5090, reliability at least
+0.98, exact three-component driver at least 580, at least 98 GB host RAM and
+320 GB disk, GPU plus storage at most $0.85/hour, download at most
+$0.011/GB, upload at most $0.05/GB, and the 30-minute all-in reserve at most
+$0.90. The controller's existing GPU memory floor also remains binding. A
+failed search, absent machine, ineligible or outside-class ID, driver change
+or gap resets that machine's clock independently. Offer IDs may rotate; the
+complete observed **union** for the first qualified machine becomes its exact
+inclusion set. Each poll and the selected five-minute window are saved and
+SHA-256 bound. The observer uses only an auth probe and offer-search GETs.
+
+Immediately after qualification, the launcher fills the committed manifest
+template with that machine, exact driver and observed offer union. It pins by
+`vast_pin_machine` **and** `vast_pin_offers`; neither an unpinned fallback nor
+an offer outside the union is permitted. The source and template hashes, all
+sealed inputs and 100 locked wheel URLs, and the CPU-only policy probe are
+checked against that bound manifest. A fresh read-only quote needs at least
+one currently listed approved ID, no outside or ineligible ID, and every
+tariff and all-in cap. The launcher then calls the guarded controller **once**
+only if the last successful search to actual invocation is at most 60 seconds
+and gate completion to invocation is at most 60 seconds. The controller's own
+pinned search must agree or refuse without substitution. A timeout, changed
+source, changed template, expired envelope or market churn refuses before
+create. The receipt records the envelope ACK URL and SHA, every poll SHA,
+qualifying-window SHA, machine and complete offer union, bound manifest,
+gate/quote SHA and freshness clocks. The previous qualified-but-vanished host
+has no reusable paid authority.
 
 The in-box order is source/input/admission, native-SDPA/CUPTI and same-arm
 bitwise canary, fresh unprofiled 40-update reference, fresh 40-update capture

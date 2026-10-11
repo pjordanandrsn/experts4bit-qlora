@@ -1,0 +1,68 @@
+{
+  "status": "ENVELOPE_TEMPLATE_NO_PAID_GO",
+  "run_id": "dq11-l-census-1",
+  "work_id": "experts4bit-qlora#1083",
+  "role": "CTO",
+  "agent_env": "POD_LAUNCH_AGENT",
+  "preregistration": "bench/dq11/DQ11-L-CENSUS-PREREG.md",
+  "hypothesis": "The unchanged DQ11 L path has a certified MLP-adapter device interval union ceiling at least 0.10 of its fresh unprofiled median update T; otherwise rank qkv/o by the same preregistered line or close BUILD.",
+  "expected_result": "Report the seven classes, overlap and host residual with 100% classified events and <=1 us/update wall closure; min of three captured C_j/T values drives only a separate BUILD proposal or lane closure.",
+  "success_criteria": "Unchanged 13b science and merged instrument closures; exact 5090/driver, sealed inputs/wheels, native SDPA and bitwise observer-removal canary; one fresh unprofiled L40 reference plus separate L40 capture at updates 6-8; K8 quality; every event classified and wall closure; hashes, invoice and authenticated teardown with empty list.",
+  "failure_criteria": "Missing source/input/driver/offer identity, timeout, tariff or packet cap, canary or K8 failure, profiler attribution ambiguity, event loss, >1 us closure residual, nonfinite evidence or teardown uncertainty yields CENSUS_REFUSAL; no retry, BUILD choice or new paid draw without review.",
+  "provider": "vast:verified-secure",
+  "gpu": "RTX 5090",
+  "image": "pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+  "model": "mistralai/Mistral-7B-v0.1",
+  "model_revision": "27d67f1b5f57dc0953326b2601d68371d40ea8da",
+  "seed": 3407,
+  "usd_per_hour": 0.85,
+  "wallclock_h": 0.5,
+  "est_usd": 0.425,
+  "role_daily_ceiling": 100,
+  "storage": 320,
+  "download_gb": 27,
+  "max_download_usd_per_gb": 0.011,
+  "preflight_bandwidth": "none",
+  "guards": [
+    {
+      "repo": "e4b",
+      "path": "bench/dq11/dq11_l_census_box.sh",
+      "pattern": "sha256sum -c science.sha256"
+    },
+    {
+      "repo": "e4b",
+      "path": "bench/dq11/dq11_l_census_run.py",
+      "pattern": "capture_steps=[6, 7, 8]"
+    },
+    {
+      "repo": "e4b",
+      "path": "bench/dq11/dq11_l_census_reduce.py",
+      "pattern": "threshold = 0.10 * T"
+    },
+    {
+      "repo": "e4b",
+      "path": "bench/dq11/dq11_l_census_launch.py",
+      "pattern": "MIN_STABLE_SECONDS = 300"
+    },
+    {
+      "repo": "e4b",
+      "path": "bench/dq11/dq11_l_census_drive.sh",
+      "pattern": "dq11-l-census-stage.sha256"
+    },
+    {
+      "repo": "adertha",
+      "path": "tools/pod-launch.sh",
+      "pattern": "vast_pin_offers requires vast_pin_machine"
+    }
+  ],
+  "command_cwd": "e4b",
+  "l_census": {
+    "science_head": "13b55990433f357d63232f75926ce19f5bda5b42",
+    "science_manifest_sha256": "4691e7329f12ad2f4b7518b75c4d3e351207fc4e5220aee514fdd42c429fef01",
+    "raw_trace_max_bytes": 536870912,
+    "packet_max_bytes": 2147483648,
+    "upload_gb": 3,
+    "max_upload_usd_per_gb": 0.05,
+    "all_in_cap_usd": 0.9
+  }
+}
