@@ -1234,6 +1234,39 @@ def _stage_expert_rows_on_host(device, offload):
     return bool(offload) and torch.device(device).type == "cuda"
 
 
+def _release_cached_pinned_blocks(device) -> int | None:
+    """Return the caching host allocator's free pinned blocks to CUDA after a CUDA load; the bytes released, or None.
+
+    safetensors (0.8) reads each tensor opened with ``device="cuda"`` through a pinned host block from torch's caching
+    host allocator. The allocator rounds each block up to a power of two and keeps it cached once the copy is done, so a
+    load leaves one cached block per size class of the dense tensors it read: 2 GiB + 64 + 4 + 1 MiB on Qwen3-235B, whose
+    embedding and head are 1.24 GB each. The release itself is :func:`~experts4bit_qlora.engines.host_heap.
+    release_cached_pinned_memory` (the same call ``serve_paged`` makes after its build); this adds the collection and the
+    synchronisation before it and the logged amount. Live pinned tensors (the offloaded expert homes) are untouched.
+    Measured on the RTX A2000 at 2 layers (bench/pinned-host-cache): Qwen3-235B released 2,219,843,841 B and
+    Mixtral-8x22B 688,013,313 B, with the step-0 loss bitwise unchanged."""
+    if torch.device(device).type != "cuda" or not torch.cuda.is_available():
+        return None
+    import gc
+
+    from .engines.host_heap import release_cached_pinned_memory
+
+    stats = getattr(torch.cuda, "host_memory_stats", None)
+
+    def owned():
+        return stats().get("allocated_bytes.current", 0) if stats is not None else 0
+
+    gc.collect()                    # a pinned tensor kept alive only by a reference cycle frees its block here
+    torch.cuda.synchronize()        # a block whose copy is still in flight is not free yet
+    before = owned()
+    if not release_cached_pinned_memory():
+        return None
+    freed = before - owned()
+    if freed > 0:
+        log(f"  released {freed / 2**30:.2f} GiB of cached pinned host blocks (the load's pinned reads)")
+    return freed
+
+
 def load_moe_4bit_streaming(
     model_id, device, dtype, r, alpha, offload=False, pin=True, prefetch=False, quant_type="nf4",
     trust_remote_code=None, arena=None, quantize_layers=None, arena_train=False,
@@ -1957,6 +1990,7 @@ def load_moe_4bit_streaming(
             f"{deferred} unmaterialized buffer(s) — call "
             f"nvme_experts.{_enabler}() before running this model")
     trace.sync("tie output head + final checks")
+    _release_cached_pinned_blocks(device)
     return model, config
 
 

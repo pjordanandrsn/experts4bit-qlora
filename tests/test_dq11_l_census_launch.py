@@ -38,6 +38,7 @@ class FakeProvider:
 def offer(oid="100", machine="200", *, down=.011, up=.05, hourly=.85):
     return {
         "id": oid, "machine_id": machine, "verification": "verified", "rentable": True,
+        "public_ipaddr": "8.8.8.8", "direct_port_count": 1,
         "external": False, "gpu_name": "RTX 5090", "num_gpus": 1,
         "gpu_ram": 32607, "cpu_ram": 131072, "disk_space": 1200,
         "driver_version": "580.159.03", "storage_cost": .2, "reliability2": .99,
@@ -477,3 +478,9 @@ def test_launch_refuses_missing_or_wrong_executor_before_discovery(tmp_path, mon
     with pytest.raises(ValueError, match="POD_LAUNCH_AGENT must identify"):
         launch.launch(*(tmp_path / name for name in ("template", "envelope", "e4b", "controller", "assets", "packet")))
     assert not (tmp_path / "packet").exists()
+
+
+def test_registered_run3_template_identity_and_sha256():
+    template = LANE / "dq11_l_census_manifest_template.json"
+    assert json.loads(template.read_text())["run_id"] == "dq11-l-census-3"
+    assert launch.sha(template) == "6bcd89828bfb4efa1417d613ddc888228475055d660d8e66717c2bca0a293db7"
