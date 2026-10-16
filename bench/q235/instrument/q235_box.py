@@ -8,6 +8,12 @@ then runs each planted error in the same process after that clean forward (the n
 the null and structurally unplanted; their records go to ``plant_routing/`` and ``plant_epilogue/`` under ``--out``. The fp32 copies
 behind the gradient and delta checks live on the host (Amendment 4), so the device peak is the training step's own.
 
+Shape B (Amendment 6, ``--micro-batch M``): each optimizer step accumulates the rows as ``rows / M`` micro-batches of ``M`` rows, in
+order, each trimmed to its own longest row and weighted by its share of the valid labels (the window's token-weighted mean, as the
+field recipe's trainer normalizes). The same rows as one micro-batch (shape A) give the in-process gradients ``g0``/``g1``; each
+step's accumulated gradient is compared with shape A's at the same parameters (``ga_check``), and two planted accumulation bugs (a
+mean of micro-batch means; each micro-batch's gradient overwriting the last) are compared the same way, before the steps.
+
 Records (one JSON): host facts; versions; the load (timed); frozen-base sha256 after load and after the step (every frozen parameter and
 buffer, host homes included); the in-process spread (two forward-backward passes, no optimizer step); the step's loss, per-adapter
 gradient checks (finite, nonzero count, the global norm) and optimizer delta (every trained tensor changed); device memory (allocated
@@ -142,6 +148,56 @@ def host_copy(t):
     adapters (``g0``, ``g1``, ``before``, ``grads``) here rather than on the device, so the step's device peak measures the training
     step alone. The tensor leaves the device at its own dtype and is widened on the host, so no fp32 temporary lands on the device."""
     return t.detach().to("cpu", copy=True).float()
+
+
+def micro_batches(tokens, m):
+    """Shape B (Amendment 6): the rows as ``len(rows) / m`` micro-batches of ``m`` rows, in order, each trimmed to its longest real row
+    (the rows are right-padded), with each micro-batch's count of valid shifted labels -- its weight in the window's token mean."""
+    ids, mask, labels = tokens["input_ids"], tokens["attention_mask"], tokens["labels"]
+    rows = ids.shape[0]
+    if m < 1 or rows % m:
+        raise ValueError(f"--micro-batch {m} does not divide the {rows} rows")
+    out = []
+    for i in range(0, rows, m):
+        w = int(mask[i:i + m].sum(1).max())
+        lab = labels[i:i + m, :w]
+        out.append({"input_ids": ids[i:i + m, :w], "attention_mask": mask[i:i + m, :w], "labels": lab,
+                    "valid": int((lab[:, 1:] != -100).sum())})
+    return out
+
+
+def compare_grads(ref, got):
+    """Amendment 6's views of a gradient against shape A's at the same parameters: the per-tensor relative difference (the STRICT
+    quantity; over tensors whose reference is nonzero), tensors exactly zero in the reference but not here, the global cosine and the
+    norm ratio of the whole adapter gradient, and the largest relative difference per decoder layer. A tensor with no gradient here
+    (``p.grad`` None: no token reached it) counts as a zero gradient."""
+    rel, zero_mismatch, per_layer = {}, [], {}
+    dot = nr = ng = 0.0
+    for n, r in ref.items():
+        r64 = r.double()
+        g = got.get(n)
+        g64 = torch.zeros_like(r64) if g is None else g.double()
+        rn = float(r64.norm())
+        dot += float((r64 * g64).sum())
+        nr += rn ** 2
+        ng += float(g64.norm()) ** 2
+        if rn == 0.0:
+            if bool((g64 != 0).any()):
+                zero_mismatch.append(n)
+            continue
+        rel[n] = float((g64 - r64).norm()) / rn
+        parts = n.split(".")
+        if "layers" in parts:
+            i = int(parts[parts.index("layers") + 1])
+            per_layer[i] = max(per_layer.get(i, 0.0), rel[n])
+    for n, g in got.items():                                    # a gradient where shape A has none
+        if n not in ref and bool((g != 0).any()):
+            zero_mismatch.append(n)
+            ng += float(g.double().norm()) ** 2
+    worst = max(rel, key=rel.get) if rel else None
+    return {"tensors": len(ref), "compared": len(rel), "max_rel": rel[worst] if worst else None, "max_rel_tensor": worst,
+            "zero_mismatch": sorted(zero_mismatch), "cosine": dot / (nr ** 0.5 * ng ** 0.5) if nr and ng else None,
+            "norm_ratio": (ng / nr) ** 0.5 if nr else None, "per_layer_max_rel": {str(k): per_layer[k] for k in sorted(per_layer)}}
 
 
 def adapter_params(model):
@@ -424,12 +480,47 @@ def run(a):
         grads = {n: host_copy(p.grad) for n, p in params.items() if p.grad is not None}
         return float(loss), grads, tf - t, tb - tf, time.time() - tb
 
+    mb = getattr(a, "micro_batch", None)
+    mbs = [{k: (v.to(dev) if torch.is_tensor(v) else v) for k, v in m.items()} for m in micro_batches(tokens, mb)] if mb else None
+    n_valid = sum(m["valid"] for m in mbs) if mbs else None
+
+    def fwd_bwd_b(mode="token"):
+        """Shape B's accumulation over the micro-batches (Amendment 6). ``token``: each micro-batch's mean loss weighted by its share of
+        the window's valid labels, the gradients accumulating in ``p.grad``. Planted bugs: ``mean`` weights each micro-batch 1 / k (a
+        mean of micro-batch means); ``overwrite`` clears ``p.grad`` before each backward, so only the last micro-batch survives."""
+        model.zero_grad(set_to_none=True)
+        sync()
+        t, tf_sum, total = time.time(), 0.0, 0.0
+        for m in mbs:
+            if mode == "overwrite":
+                model.zero_grad(set_to_none=True)
+            t_m = time.time()
+            loss = model(input_ids=m["input_ids"], attention_mask=m["attention_mask"], labels=m["labels"]).loss
+            sync()
+            tf_sum += time.time() - t_m
+            w = (1.0 / len(mbs)) if mode == "mean" else m["valid"] / n_valid
+            total += w * float(loss)
+            (loss * w).backward()
+            sync()
+        tb = time.time()
+        grads = {n: host_copy(p.grad) for n, p in params.items() if p.grad is not None}
+        return total, grads, tf_sum, tb - t - tf_sum, time.time() - tb
+
     l0, g0, *_ = fwd_bwd()                                     # step-0 forward: the layer outputs are recorded here
     for h in hooks:
         h.remove()
     l1, g1, *_ = fwd_bwd()
     spread = max(((g1[n] - g0[n]).abs().max() / g0[n].abs().max().clamp_min(1e-30)).item() for n in g0)
     out["in_process"] = {"loss_0": l0, "loss_1": l1, "loss_equal": l0 == l1, "grad_maxrel": spread}
+    if mbs:                                                     # Amendment 6: at most four host copies alive at once, as Amendment 5
+        del g1
+        out["shape_b"] = {"micro_batch": mb, "accumulation": len(mbs), "valid_per_micro_batch": [m["valid"] for m in mbs],
+                          "valid_total": n_valid, "widths": [int(m["input_ids"].shape[1]) for m in mbs]}
+        out["ga_plants"] = {}
+        for kind in ("mean", "overwrite"):
+            lp, gp, *_ = fwd_bwd_b(kind)
+            out["ga_plants"][kind] = {"loss": lp, **compare_grads(g0, gp)}
+            del gp
 
     if cuda:
         import bitsandbytes as bnb
@@ -441,8 +532,9 @@ def run(a):
     a_names = [n for n in params if is_a[n]]
     b_names = [n for n in params if not is_a[n]]
 
-    def one_step():
-        """One forward-backward and optimizer step at the registered shape, instrumented: its record, gradients and deltas."""
+    def one_step(ref=None):
+        """One forward-backward and optimizer step at the registered shape, instrumented: its record, gradients and deltas. Under shape
+        B the forward-backward is the accumulation, and ``ref`` (shape A's gradient at the same parameters) is compared with it."""
         before = {n: host_copy(p) for n, p in params.items()}
         if cuda:
             torch.cuda.reset_peak_memory_stats()
@@ -450,7 +542,7 @@ def run(a):
         off.reset_offload_stats()
         d1 = diskstats()
         t_step = time.time()
-        loss, grads, t_fwd, t_bwd, t_copy = fwd_bwd()
+        loss, grads, t_fwd, t_bwd, t_copy = fwd_bwd_b() if mbs else fwd_bwd()
         sync()
         t_o = time.time()
         opt.step()
@@ -468,6 +560,8 @@ def run(a):
             "lr": a.lr, "weight_decay": a.weight_decay, "optimizer": opt_name, "instrumented": "E4B_OFFLOAD_STATS=1 during the step",
         }
         os.environ["E4B_OFFLOAD_STATS"] = "0"
+        if ref is not None:
+            rec["ga_check"] = compare_grads(ref, grads)
         nonzero = {n: int((g != 0).sum()) for n, g in grads.items()}
         delta = {n: float((host_copy(p) - before[n]).abs().max()) for n, p in params.items()}
         rec["gradients"] = {
@@ -487,8 +581,15 @@ def run(a):
     # not zero-initialized (VOID, a harness error); B's gradients are nonzero and every B changes. Step 1, after step 0 has moved B:
     # every A's gradient is nonzero and every A changes (a broken A path cannot pass), and B's rules repeat. The frozen base's hashes
     # hold across both steps.
-    s0 = one_step()
-    s1 = one_step()
+    if mbs:                                                     # Amendment 6: each shape-B step against shape A at its parameters
+        s0 = one_step(ref=g0)
+        del g0
+        _, ga1, *_ = fwd_bwd()                                  # shape A at step 1's parameters, before its accumulation
+        s1 = one_step(ref=ga1)
+        del ga1
+    else:
+        s0 = one_step()
+        s1 = one_step()
     out["step"], out["step1"] = s0, s1
     out["rules"] = {
         "step0_all_finite": s0["gradients"]["all_finite"], "step0_every_B_nonzero": s0["gradients"]["every_B_nonzero"],
@@ -530,11 +631,14 @@ def main():
     ap.add_argument("--plant", choices=("routing", "epilogue"), default=None)
     ap.add_argument("--repeat", action="store_true")
     ap.add_argument("--plants", action="store_true", help="with --repeat: Amendment 3's in-process null and planted errors")
+    ap.add_argument("--micro-batch", type=int, default=None, help="shape B (Amendment 6): rows per micro-batch, accumulated per step")
     a = ap.parse_args()
     if a.device == "cpu" and a.enabler == "fast":
         ap.error("the fused training kernels need CUDA; use --enabler reference on the CPU")
     if a.plants and (not a.repeat or a.plant):
         ap.error("--plants rides the fresh-process repeat (--repeat), and replaces --plant")
+    if a.micro_batch and (a.repeat or a.plant):
+        ap.error("--micro-batch shapes the box's steps; the repeat and the plants run shape A's forward")
     out, layer_out = run(a)
     os.makedirs(a.out, exist_ok=True)
     out["layer_sha256"] = save_layers(a.out, layer_out, out.pop("_topk"))

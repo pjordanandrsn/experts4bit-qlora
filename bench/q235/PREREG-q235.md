@@ -628,3 +628,55 @@ process at 2, 4, 6 and 8 layers of the same checkpoint. The load-end `host_memor
 - The expectation for the box's `host_memory` becomes `RssAnon + RssShmem` at most 220.0 GB at a step end. It is reported, not gated.
 
 **Tests.** `tests/test_q235_driver.py` pins the science floor to this derivation's 239 GB.
+
+## Amendment 6 (2026-10-16, after Q235's PASS, before any Shape B box): Shape B, and the accumulation it rests on
+
+**Why.** The registration names Shape B "for comparability": the field recipe's micro-batch 2 × accumulation 4. The first box ran
+Shape A only, one micro-batch of 8 rows. The question Shape B answers is whether the milestone's step extends to the shape TC1 trains
+at. Under accumulation, every expert crosses the link four times per optimizer step, and four backwards run before `optimizer.step()`.
+Anything in the offload, eviction or fused paths that assumes one backward per step, or that clears or overwrites `p.grad` between
+micro-batches, changes the gradient here and nowhere in the first box.
+
+**The step at Shape B** (`q235_box.py --micro-batch 2`; `q235_run.sh` runs the box at it).
+- The same 8 TC1 rows as four micro-batches of two rows, in order. Each micro-batch is trimmed to its longest row.
+- Each micro-batch's mean loss is weighted by its share of the window's valid labels (125, 252, 480 and 149 of 1,006 on these rows),
+  so the window's loss is the token mean over all 8 rows, as the field recipe's trainer normalizes. Shape A and Shape B are therefore
+  the same gradient in exact arithmetic.
+- Amendment 2's nine STRICT rules and the frozen-base hashes apply to both Shape B steps.
+- Rule 6 (the fresh-process repeat) and rule 7 (Amendment 3's band, on the repeat's null and plants) stay on Shape A's forward,
+  where the band is calibrated.
+
+**Rule 8: the accumulation (STRICT, Shape B only).**
+- **The comparison.** At step 0, the accumulated gradient is compared with the in-process Shape A gradient `g0` at the same
+  parameters; this costs no extra pass. At step 1, it is compared with a Shape A gradient taken at step 1's parameters, just before
+  that step's accumulation.
+- **The STRICT quantity** is the per-tensor relative difference ‖g_B − g_A‖ / ‖g_A‖. It must be at most **BAR** on every tensor
+  whose Shape A gradient is nonzero. A tensor exactly zero in Shape A must be exactly zero in Shape B; at step 0 that covers every
+  LoRA-A gradient.
+- **Reported with it:** the global cosine and the norm ratio of the whole adapter gradient, and the largest relative difference per
+  decoder layer.
+- **Two plants**, run in the box's process before the steps at step 0's parameters, each against `g0`:
+  - **mean of means:** each micro-batch weighted 1/4. On these rows the weights differ from the token weights (0.12 to 0.48 against
+    0.25), so the plant is not inert by construction;
+  - **overwrite:** `p.grad` cleared before each backward, so only the last micro-batch survives.
+
+  Each plant must read above BAR at its largest per-tensor difference. Otherwise BAR cannot see that bug at this depth, and the box
+  is **VOID**.
+- **Host memory.** The extra Shape A gradient at step 1 replaces `g1`, and the plants' gradients are dropped as they are read, so at
+  most four fp32 host copies are alive at once, as Amendment 5 prices.
+
+**BAR, registered before its calibration runs.** Shape A and Shape B differ through bf16 GEMM shapes (a batch of 8 rows against
+batches of 2). In an MoE those differences can flip near-tie routes, and the flips compound with depth. BAR is therefore read from
+the spread against depth, not from one depth:
+1. **Runs** ($0, RTX A2000): `q235_box.py --micro-batch 2` on 2-, 4- and 8-layer cuts of `ac9c66cc`, and on Qwen3-30B-A3B at its
+   full 48 layers (Amendment 1's revision), with the same tokens.
+2. **s(n)** is the larger of the two steps' largest per-tensor difference at depth n. Each run's per-layer profile is reported.
+3. **The fit:** log s(n) against log n over the three 235B cuts, by least squares, extrapolated to n = 94, giving s₉₄. The 30B's
+   s(48) is reported against the fit's value at 48.
+4. **BAR = 3 × max(s₉₄, the 30B's s(48)).**
+5. **The plants:** each plant's difference is reported in units of BAR at every calibration depth. A plant that does not clear BAR
+   by at least 3× at every depth is not registered, and the amendment says so.
+6. **When the fit is soft, the amendment stops.** The fit is soft when its exponent exceeds 0.5, when a point sits more than 30 % off
+   the fit, or when the 30B point sits more than 3× off it. The amendment then proposes the bar's form, for review, before any box.
+
+**The fp32 arm** stays unrun.

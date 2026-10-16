@@ -24,6 +24,13 @@ STRICT failure's 12, or a record missing); and on Amendment 3's instrument check
    the interior class, ceil(4n / 48) to floor(44n / 48).
 Exit 12 stops the run after the box, so a STRICT failure carries no repeat and no plants: it is a FAIL on rules 3-5 with 6 and 7 not read.
 
+**Shape B** (Amendment 6; a box record with ``shape_b``, from ``q235_box.py --micro-batch``) adds:
+8. each step's accumulated gradient against shape A's at the same parameters: the per-tensor relative difference at most ``GA_BAR``
+   on every compared tensor, and no tensor exactly zero in shape A but not in shape B.
+It is VOID while ``GA_BAR`` is unregistered, and on its own instrument check: each planted accumulation bug (a mean of micro-batch
+means; an overwrite that keeps only the last micro-batch) must read above ``GA_BAR``. The global cosine and the norm ratio are reported
+with it. Shape A's records carry no ``shape_b``, so rule 8 does not apply to them and their verdict is unchanged.
+
 **Reported, not gating:** the box's full u profile (the layers outside the interior class without a bar), the full-state profile with
 its median (the upper middle) and maximum, the router overlap and set agreement, the loss gap, each plant's u after its layer, the
 device peak against the registered estimate (a deviation above 15 % names an estimator issue), the bytes moved per step against the
@@ -52,7 +59,30 @@ EXIT = {"PASS": 0, "FAIL": 1, "VOID": 2}
 REFUSAL_CODES = {"13", "14", "17", "18"}
 BAND = 0.775                                   # Amendment 3: 2 x the 30B box's largest interior contribution error (0.3876)
 NULL_FLOOR = 1e-3                              # Amendment 3: the null against the box, and a plant's earlier layers against the null
+GA_BAR = None                                  # Amendment 6: shape B's per-tensor bar, registered from the calibration before any box
+GA_PLANTS = ("mean", "overwrite")
 PLANTS = ("routing", "epilogue")
+
+
+def accumulation(box):
+    """Rule 8 (Amendment 6) and its instrument check: ``(rule record, the VOID's reason or None)``."""
+    if GA_BAR is None:
+        return {"ok": None, "not_read": "Amendment 6's bar is not registered"}, "not registered: Amendment 6's accumulation bar"
+    try:
+        steps = {k: box[k]["ga_check"] for k in ("step", "step1")}
+        plants = box["ga_plants"]
+        over = {k: v["max_rel"] for k, v in steps.items() if not (v["max_rel"] is not None and v["max_rel"] <= GA_BAR)}
+        zero = {k: v["zero_mismatch"] for k, v in steps.items() if v["zero_mismatch"]}
+        rec = {"ok": not over and not zero, "bar": GA_BAR, "over": over, "zero_mismatch": zero,
+               **{f: {k: v[f] for k, v in steps.items()} for f in ("max_rel", "max_rel_tensor", "cosine", "norm_ratio", "compared")},
+               "shape_b": box["shape_b"], "plants": {k: {f: plants[k][f] for f in ("max_rel", "cosine", "norm_ratio")} for k in GA_PLANTS}}
+    except (KeyError, TypeError) as e:
+        return {"ok": None, "not_read": "harness error"}, f"harness error: shape B's record: {type(e).__name__}: {e}"
+    for kind in GA_PLANTS:
+        if not plants[kind]["max_rel"] > GA_BAR:
+            return rec, (f"instrument: the {kind} accumulation plant passes the bar (max_rel {plants[kind]['max_rel']:.3g} <= "
+                         f"{GA_BAR}): the bar cannot see it")
+    return rec, None
 
 
 def interior(n):
@@ -159,6 +189,9 @@ def judge(run_dir, ref_dir):
         r["6_repeat"] = {"ok": repeat_ok, **repeat_rec}
         r["7_band"] = {"ok": not over, "band": BAND, "interior": [interior(n)[0], interior(n)[-1]], "layers_over": over,
                        "u_interior_max": max(u[i] for i in interior(n))}
+    ga_cause = None
+    if "shape_b" in box:                                       # Amendment 6: both steps ran, so rule 8 is read even after exit 12
+        r["8_accumulation"], ga_cause = accumulation(box)
     steps = [box.get(k, {}) for k in ("step", "step1")]
     peak = max((s.get("max_memory_allocated") or 0) for s in steps) / (1 << 30)
     out["reported"] = {
@@ -170,11 +203,12 @@ def judge(run_dir, ref_dir):
         "h2d_gib_per_step": [round((s.get("h2d_bytes_offload") or 0) / (1 << 30), 2) for s in steps],
         "estimate_link_gib": ESTIMATE_LINK_GIB, "step_elapsed_s": [s.get("elapsed_s") for s in steps]}
     failed = [k for k, v in r.items() if v["ok"] is False]
-    if not stopped and instrument:
-        out.update(verdict="VOID", why=f"instrument: {instrument}" + (f" (rules also failing: {', '.join(failed)})" if failed else ""))
+    cause = (f"instrument: {instrument}" if not stopped and instrument else None) or ga_cause
+    if cause:
+        out.update(verdict="VOID", why=cause + (f" (rules also failing: {', '.join(failed)})" if failed else ""))
         return out
     out.update(verdict="FAIL" if failed else "PASS",
-               why=("rules failing: " + ", ".join(failed)) if failed else "rules 1-7 hold")
+               why=("rules failing: " + ", ".join(failed)) if failed else ("rules 1-8 hold" if "8_accumulation" in r else "rules 1-7 hold"))
     return out
 
 
