@@ -477,3 +477,9 @@ def test_launch_refuses_missing_or_wrong_executor_before_discovery(tmp_path, mon
     with pytest.raises(ValueError, match="POD_LAUNCH_AGENT must identify"):
         launch.launch(*(tmp_path / name for name in ("template", "envelope", "e4b", "controller", "assets", "packet")))
     assert not (tmp_path / "packet").exists()
+
+
+def test_registered_run2_template_identity_and_sha256():
+    template = LANE / "dq11_l_census_manifest_template.json"
+    assert json.loads(template.read_text())["run_id"] == "dq11-l-census-2"
+    assert launch.sha(template) == "537ff2bc4bc89131ef74f03a6e09fb8484127547759b4b6166bd22d51b8b5e2d"
