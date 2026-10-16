@@ -328,7 +328,9 @@ def test_envelope_comment_must_be_maintainer_exact_json(monkeypatch):
         launch.verify_envelope_comment(envelope)
 
 
-def test_qualifying_window_makes_one_inclusion_pinned_launch(tmp_path, monkeypatch):
+@pytest.mark.parametrize("validation_rc,controller_rc", [(0, 0), (1, 0), (0, 97)])
+def test_qualifying_window_makes_one_inclusion_pinned_launch(tmp_path, monkeypatch, validation_rc, controller_rc):
+    monkeypatch.setenv("POD_LAUNCH_AGENT", "CTO/codex-desktop/dense")
     e4b = LANE.parents[1]
     controller = tmp_path / "controller"
     controller.mkdir()
@@ -364,15 +366,34 @@ def test_qualifying_window_makes_one_inclusion_pinned_launch(tmp_path, monkeypat
     monkeypatch.setattr(launch, "observe_all_hosts", discover)
     monkeypatch.setattr(launch, "cpu_gate", lambda *args: args[-1].write_text("{}"))
     monkeypatch.setattr(launch, "quote", lambda *args: args[-1].write_text("{}"))
-    calls = []
-
-    def controller_run(command, **kwargs):
-        calls.append(command)
-        return SimpleNamespace(returncode=0)
-
-    monkeypatch.setattr(launch.subprocess, "run", controller_run)
-    assert launch.launch(template, envelope, e4b, controller, assets, packet) == 0
-    assert len(calls) == 1 and calls[0][-1] == approval_url
+    (controller / "tools").mkdir()
+    (controller / "tools/pod-launch.sh").write_text(
+        f'if [ "$1" = "--validate" ]; then\n'
+        f'  echo "validation output"; echo "validation diagnostic" >&2; exit {validation_rc}\n'
+        f'fi\necho "controller output"\n'
+        f'echo "REFUSED[97] exact refusal" >&2\nexit {controller_rc}\n'
+    )
+    if validation_rc:
+        with pytest.raises(ValueError, match="controller --validate refused"):
+            launch.launch(template, envelope, e4b, controller, assets, packet)
+        assert not (packet / "final-quote.json").exists()
+        assert not (packet / "launch-admission.json").exists()
+        assert not (packet / "controller.json").exists()
+        assert (packet / "controller-validate.stderr.txt").read_text() == "validation diagnostic\n"
+        assert json.loads((packet / "controller-validate.json").read_text())["returncode"] == 1
+        return
+    assert launch.launch(template, envelope, e4b, controller, assets, packet) == controller_rc
+    validation = json.loads((packet / "controller-validate.json").read_text())
+    outcome = json.loads((packet / "controller.json").read_text())
+    assert "--validate" in validation["command"] and "--validate" not in outcome["command"]
+    assert validation["command"][-2:] == outcome["command"][-2:] == [str(packet / "bound-manifest.json"), approval_url]
+    assert validation["returncode"] == 0
+    assert validation["stdout_sha256"] == launch.sha(packet / "controller-validate.stdout.txt")
+    assert (packet / "controller-validate.stdout.txt").read_text() == "validation output\n"
+    assert (packet / "controller.stdout.txt").read_text() == "controller output\n"
+    assert outcome["returncode"] == controller_rc
+    assert outcome["stderr_sha256"] == launch.sha(packet / "controller.stderr.txt")
+    assert (packet / "controller.stderr.txt").read_text() == "REFUSED[97] exact refusal\n"
     bound = json.loads((packet / "bound-manifest.json").read_text())
     assert bound["vast_pin_machine"] == "200" and bound["vast_pin_offers"] == ["100", "101"]
     assert bound["vast_required_driver"] == "580.159.03"
@@ -383,6 +404,7 @@ def test_qualifying_window_makes_one_inclusion_pinned_launch(tmp_path, monkeypat
 
 
 def test_paid_controller_refuses_expired_search_before_driver(tmp_path, monkeypatch):
+    monkeypatch.setenv("POD_LAUNCH_AGENT", "CTO/codex-desktop/dense")
     template = tmp_path / "template.json"
     template.write_text("{}")
     envelope = tmp_path / "envelope.json"
@@ -418,7 +440,12 @@ def test_paid_controller_refuses_expired_search_before_driver(tmp_path, monkeypa
     def would_spend(*args, **kwargs):
         raise AssertionError("paid controller was called after freshness expired")
 
-    monkeypatch.setattr(launch.subprocess, "run", would_spend)
+    def validate_only(command, **kwargs):
+        if "--validate" not in command:
+            would_spend()
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(launch.subprocess, "run", validate_only)
     e4b = tmp_path / "e4b"
     controller = tmp_path / "controller"
     e4b.mkdir()
@@ -440,3 +467,13 @@ def test_box_refuses_wrong_science_before_gpu_or_network(tmp_path):
     assert "science source is not 13b" in result.stdout
     assert (tmp_path / f"TC1_EXIT_CODE.{nonce}").read_text().strip() == "78"
     assert not (tmp_path / "logs/hardware-precheck.log").exists()
+
+
+@pytest.mark.parametrize("identity", [None, "", "someone-else"])
+def test_launch_refuses_missing_or_wrong_executor_before_discovery(tmp_path, monkeypatch, identity):
+    monkeypatch.delenv("POD_LAUNCH_AGENT", raising=False)
+    if identity is not None:
+        monkeypatch.setenv("POD_LAUNCH_AGENT", identity)
+    with pytest.raises(ValueError, match="POD_LAUNCH_AGENT must identify"):
+        launch.launch(*(tmp_path / name for name in ("template", "envelope", "e4b", "controller", "assets", "packet")))
+    assert not (tmp_path / "packet").exists()
