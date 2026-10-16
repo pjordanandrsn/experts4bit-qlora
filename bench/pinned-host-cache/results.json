@@ -1,0 +1,59 @@
+{
+ "schema": "e4b-pinned-host-cache/1",
+ "what": "pin_probe.py on 2-layer cuts, RTX A2000 12 GB, one fresh process each; the q235_box.py build at the memslope runs' own environments",
+ "prediction": {
+  "rule": "one cached pinned block per PowerOf2Ceil class of the dense (non-expert) tensors read through safe_open(device='cuda')",
+  "Qwen3-235B-A22B-Instruct-2507": 2219843840,
+  "Mixtral-8x22B-Instruct-v0.1": 688013312
+ },
+ "runs": {
+  "Qwen3-235B-A22B-Instruct-2507": {
+   "receipt_sha256": "e70a53478bf5b06fb182d1b9f6a372278b34522d21c5ff0dfd5da8fc20942d24",
+   "versions": {
+    "torch": "2.11.0+cu128"
+   },
+   "load_seconds": 468.1,
+   "RssShmem": {
+    "load_end": 5854986240,
+    "after_host_emptyCache": 3634233344,
+    "after_forward": 3657170944
+   },
+   "host_allocator_owned_bytes": {
+    "load_end": 5843722497,
+    "after_host_emptyCache": 3623878656,
+    "after_forward": 3644850181
+   },
+   "live_pinned_storages_pow2": 3623878656,
+   "released_by_host_emptyCache": 2219843841,
+   "residual_vs_prediction": 1,
+   "dev_zero_rss_outside_the_allocator_after_release": 10485760,
+   "forward_loss": 12.84375,
+   "memslope_loss": 12.84375,
+   "loss_bitwise_equal": true
+  },
+  "Mixtral-8x22B-Instruct-v0.1": {
+   "receipt_sha256": "c50e17ecdb016622783fd265ba65e29d8bfcc1a390d23d8d911b1bb457870d80",
+   "versions": {
+    "torch": "2.11.0+cu128"
+   },
+   "load_seconds": 247.2,
+   "RssShmem": {
+    "load_end": 4323803136,
+    "after_host_emptyCache": 3633963008,
+    "after_forward": 3657031680
+   },
+   "host_allocator_owned_bytes": {
+    "load_end": 4311891969,
+    "after_host_emptyCache": 3623878656,
+    "after_forward": 3644850181
+   },
+   "live_pinned_storages_pow2": 3623878656,
+   "released_by_host_emptyCache": 688013313,
+   "residual_vs_prediction": 1,
+   "dev_zero_rss_outside_the_allocator_after_release": 10485760,
+   "forward_loss": 8.880563735961914,
+   "memslope_loss": 8.880563735961914,
+   "loss_bitwise_equal": true
+  }
+ }
+}
