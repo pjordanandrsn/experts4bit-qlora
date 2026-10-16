@@ -143,6 +143,14 @@ complete observed **union** for the first qualified machine becomes its exact
 inclusion set. Each poll and the selected five-minute window are saved and
 SHA-256 bound. The observer uses only an auth probe and offer-search GETs.
 
+Before discovery, the launcher requires `POD_LAUNCH_AGENT` to identify
+`CTO/codex-desktop/dense`. After binding the manifest, it runs the merged
+controller's write-free `tools/pod-launch.sh --validate` on that exact file and
+approval URL before the CPU gate and quote. Any validation refusal stops there.
+The packet retains validation and controller stdout, stderr, exit codes and
+output hashes, including a refusal before the controller creates a receipt.
+The existing 60-second final-search clock still includes this validation time.
+
 Immediately after qualification, the launcher fills the committed manifest
 template with that machine, exact driver and observed offer union. It pins by
 `vast_pin_machine` **and** `vast_pin_offers`; neither an unpinned fallback nor

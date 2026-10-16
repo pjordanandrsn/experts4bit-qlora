@@ -740,9 +740,24 @@ def quote(manifest_path: Path, history_path: Path, gate_path: Path, provider, ou
     return result
 
 
+def controller_call(command: list[str], env: dict, packet_dir: Path, name: str) -> int:
+    """Keep exact output even when the controller refuses before making a receipt."""
+    stdout_path = packet_dir / f"{name}.stdout.txt"
+    stderr_path = packet_dir / f"{name}.stderr.txt"
+    with stdout_path.open("x") as stdout, stderr_path.open("x") as stderr:
+        result = subprocess.run(command, env=env, stdout=stdout, stderr=stderr, check=False)
+    with (packet_dir / f"{name}.json").open("x") as stream:
+        json.dump({"utc": now(), "command": command, "returncode": result.returncode,
+                   "stdout_sha256": sha(stdout_path), "stderr_sha256": sha(stderr_path)}, stream, indent=2)
+        stream.write("\n")
+    return result.returncode
+
+
 def launch(template_path: Path, envelope_path: Path, e4b: Path, controller: Path,
            assets: Path, packet_dir: Path) -> int:
     """Under one envelope, bind the first qualified host and launch once."""
+    if os.environ.get("POD_LAUNCH_AGENT") != "CTO/codex-desktop/dense":
+        raise ValueError("POD_LAUNCH_AGENT must identify CTO/codex-desktop/dense before discovery")
     envelope = json.loads(envelope_path.read_text())
     validate_envelope(envelope, envelope_path, template_path, e4b, controller)
     verify_envelope_comment(envelope)
@@ -758,6 +773,11 @@ def launch(template_path: Path, envelope_path: Path, e4b: Path, controller: Path
     quote_path = packet_dir / "final-quote.json"
     manifest = bind_manifest(template_path, envelope_path, summary, e4b, controller,
                              assets, manifest_path)
+    env = dict(os.environ, E4B_REPO=str(e4b), ADERTHA_REPO=str(controller))
+    command = ["bash", str(controller / "tools/pod-launch.sh"), str(manifest_path), envelope["approval_url"]]
+    validation = [*command[:2], "--validate", *command[2:]]
+    if controller_call(validation, env, packet_dir, "controller-validate"):
+        raise ValueError("controller --validate refused; see packet output; nothing created")
     cpu_gate(manifest_path, e4b, controller, assets, gate_path)
     gate_end = time.monotonic()
     quote(manifest_path, history_path, gate_path, provider, quote_path)
@@ -789,9 +809,7 @@ def launch(template_path: Path, envelope_path: Path, e4b: Path, controller: Path
     if (actual_call - history["samples"][-1]["monotonic"] > FRESH_SECONDS
             or actual_call - gate_end > FRESH_SECONDS):
         raise ValueError("gate/quote/launch exceeded 60-second stable-host window; nothing created")
-    env = dict(os.environ, E4B_REPO=str(e4b), ADERTHA_REPO=str(controller))
-    command = ["bash", str(controller / "tools/pod-launch.sh"), str(manifest_path), envelope["approval_url"]]
-    return subprocess.run(command, env=env, check=False).returncode
+    return controller_call(command, env, packet_dir, "controller")
 
 
 def main() -> None:
