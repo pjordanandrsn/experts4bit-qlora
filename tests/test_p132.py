@@ -65,7 +65,8 @@ def test_the_runner_and_the_reducer_pin_the_same_subject():
     assert re.search(rf"^GNF4_T={red.GNF4_T}\b", run, re.M)
     assert re.search(r"^E4B_T_PROVE=539a2d2694096a81c6b272b335e26d818647cd95\b", run, re.M)   # SD2's proven build
     assert f"REV={red.REV}" in run
-    assert re.search(rf"^SKIP=32; STEPS={red.STEPS}; CANARY_STEPS=8; MOE_LAYERS=48$", run, re.M)
+    assert re.search(rf"^SKIP=32; STEPS={red.STEPS}; CANARY_STEPS=12; MOE_LAYERS=48$", run, re.M)   # Amendment 1: 8 -> 12
+    assert "--min-steps $((CANARY_STEPS - 4))" in run                                               # Amendment 1: - 2 -> - 4
     # SD2's read server, as stage V built it
     assert ("E4B_PAGED_MAX_SEQS=16 E4B_INT4_TILE_PROGRAMS=1 E4B_PAGED_SPEC=eagle3 E4B_PAGED_SPEC_K=3 "
             "E4B_PAGED_SPEC_HEAD=$HEAD_DIR") in run
@@ -153,3 +154,88 @@ def test_the_driver_refuses_another_run_id(tmp_path):
            "E4B_RENT_INSTANCE_ID": "0"}
     out = subprocess.run(["bash", str(LANE / "p132_drive.sh")], capture_output=True, text=True, env=env, timeout=120)
     assert out.returncode == 78 and "is not p132-5090-N" in out.stdout + out.stderr
+
+
+# ---- Amendment 1 (2026-10-16): the canary's floor. p132-5090-1 stopped at rc 26 because SC1b keeps at most N - 3 of N
+# bracketed replays (one row per period between consecutive replays, then both edges trimmed) and the registration's
+# floor was N - 2. Real records first: the run's own canary records, byte-identical to its receipt, digests checked.
+FIX = REPO / "tests" / "fixtures" / "p132_canary"
+FIX_SHA256 = {"canary.json": "a5f5068ff57c6f5da5889031e46ba5e305384e1523326f52683a2f5a2f05e316",
+              "canary_census.json": "1467f9d2a388e1d96d1caea8446a0644e89d6f372fccc3ec2c5f2bc42a128ee8",
+              "canary_drv_n2_graph.json": "ba4db33afbd61ba8608c521e3ff0f0fdc6583a40980792a2760a2007b4293c37",
+              "canary_drv_n2_node.json": "862123a5d959a70b62e43f2aec4da256904f7eecddfff7529beeeb0e487ebaf5"}
+REGISTERED_OFFSET = 2          # the registration's `--min-steps $((CANARY_STEPS - 2))` (#1632, 172d8802): the old rule
+
+
+def _record(name):
+    raw = (FIX / name).read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == FIX_SHA256[name], f"{name} is not p132-5090-1's record"
+    return json.loads(raw)
+
+
+def _canary_rule():
+    """(CANARY_STEPS, the floor's offset, STEPS, MOE_LAYERS) as p132_run.sh runs them; the floor is set once."""
+    run = (LANE / "p132_run.sh").read_text(encoding="utf-8")
+    m = re.search(r"^SKIP=\d+; STEPS=(\d+); CANARY_STEPS=(\d+); MOE_LAYERS=(\d+)$", run, re.M)
+    floors = re.findall(r"--min-steps \$\(\(CANARY_STEPS - (\d+)\)\)", run)
+    assert len(floors) == 1 and run.count("--min-steps") == 1, "only the canary's census sets a floor"
+    return int(m.group(2)), int(floors[0]), int(m.group(1)), int(m.group(3))
+
+
+def _bracket(n, long_periods=()):
+    """An export holding n replays of one decode graph (as a census capture brackets them), each a launch with in-graph
+    kernels; a period whose index is in long_periods runs 2x (SC1b drops periods over 1.5x the median)."""
+    graphs, launches, kernels, t = [], [], [], 1_000_000_000
+    for i in range(n):
+        graphs.append({"start": t, "end": t + 9_000_000, "corr": 100 + i, "graph": 7, "exec": 70})
+        launches.append({"start": t - 5_000, "end": t - 1_000, "corr": 100 + i})
+        for j in range(4):
+            a = t + j * 2_250_000
+            kernels.append({"start": a, "end": a + 2_000_000, "stream": 7, "corr": 100 + i, "node": 1 + j,
+                            "name": "_gemv_nf4_bw", "demangled": "_gemv_nf4_bw", "grid": (1, 1, 1), "kind": "kernel"})
+        t += 20_000_000 if i in long_periods else 10_000_000
+    return {"kernels": kernels, "copies": [], "launches": launches, "graphs": graphs, "diagnostics": []}
+
+
+def _read(mode, ex, floor, moe_layers=48):
+    sc = _load("sc1b_census_a1", B / "sc1b" / "sc1b_census.py")       # the staged piece (pinned above)
+    if mode == "graph":
+        return sc.graph_mode(ex, min_steps=floor)
+    return sc.node_mode(ex, sc.load_classes(str(LANE / "kernel_classes_nf4_v1_2.json"), "e4b"), min_steps=floor,
+                        moe_layers=moe_layers)
+
+
+@pytest.mark.parametrize("mode", ["graph", "node"])
+def test_a1_i_the_registered_floor_reproduces_the_runs_void(mode):
+    """The old-rule mutant, on the real record: the record's bracket count read at the registration's floor gives back
+    the run's own `why` string byte for byte, and the census was the canary's only failed check."""
+    canary, census, drv = _record("canary.json"), _record("canary_census.json"), _record(f"canary_drv_n2_{mode}.json")
+    assert canary["status"] == "failed" and canary["missing_buckets"] == [] and set(canary["replays"].values()) == {"ok"}
+    assert canary["census"] == {"status": "void", "labels": [], "blocking": []}
+    assert (drv["status"], drv["n"], drv["capture"], drv["steps_bracketed"]) == ("ok", 2, mode, 8)
+    n = drv["steps_bracketed"]
+    got = _read(mode, _bracket(n), n - REGISTERED_OFFSET)
+    assert got["status"] == census[mode]["status"] == "void"
+    assert got["why"] == census[mode]["why"] and got["dropped"] == census[mode]["dropped"] == {}
+
+
+@pytest.mark.parametrize("mode", ["graph", "node"])
+def test_a1_ii_the_amended_floor_fits_what_the_reader_keeps(mode):
+    canary_steps, offset, _, moe = _canary_rule()
+    for n in (_record(f"canary_drv_n2_{mode}.json")["steps_bracketed"], canary_steps):
+        ceiling = _read(mode, _bracket(n), 1, moe)["steps_kept"]
+        assert ceiling == n - 3                                  # the reader's own rule, read, not assumed
+        assert n - offset <= ceiling and _read(mode, _bracket(n), n - offset, moe)["status"] == "ok"
+    mid = canary_steps // 2
+    one = _read(mode, _bracket(canary_steps, {mid}), canary_steps - offset, moe)
+    assert one["status"] == "ok" and one["dropped"] == {"period_over_1.5x_median": 1}
+    two = _read(mode, _bracket(canary_steps, {mid - 2, mid}), canary_steps - offset, moe)
+    assert two["status"] == "void"                               # a second long period still stops the lane
+
+
+@pytest.mark.parametrize("mode", ["graph", "node"])
+def test_a1_iii_the_main_census_keeps_at_least_sc1bs_floor(mode):
+    sc = _load("sc1b_census_a1m", B / "sc1b" / "sc1b_census.py")
+    _, _, steps, moe = _canary_rule()
+    got = _read(mode, _bracket(steps), sc.MIN_STEPS, moe)
+    assert got["status"] == "ok" and got["steps_kept"] == steps - 3 >= sc.MIN_STEPS

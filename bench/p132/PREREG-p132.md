@@ -75,8 +75,9 @@ skipped then exactly **64** bracketed (`cudaProfilerApi`), in graph mode then no
 **The canary, first, in the box (rc 26).** Before the timing and the census, and before any long phase:
 1. Every bucket 1..4 must be captured as a graph.
 2. One plain replay and one verify replay per n must return.
-3. A short census of 8 verify replays at n = 2, in both trace modes, must read cleanly through SC1b's classifier: status
-   ok and no blocking label.
+3. A short census of 12 verify replays at n = 2, in both trace modes, must read cleanly through SC1b's classifier:
+   status ok and no blocking label, with at least `CANARY_STEPS - 4` = 8 steps kept. The registration said 8 replays and
+   a floor of `CANARY_STEPS - 2`. Amendment 1 changed both.
 
 A failure costs minutes, not the hour. The A2000 cannot capture decode graphs (sm_86), so this in-box canary is the GPU
 shakedown. The $0 parts were exercised off-box:
@@ -158,3 +159,47 @@ P132, claimed at registration by the `prereg/p132` push after checking:
 - bench/ and CHANGELOG on main;
 - PR titles (P131 is #1627);
 - the receipt store's run ids.
+
+## Amendment 1 (2026-10-16, after `p132-5090-1`; the canary's floor; before any relaunch)
+
+**What happened.** `p132-5090-1` (2026-10-11, one RTX 5090) stopped at the canary with rc 26: HARNESS_ERROR, $0.731,
+teardown verified. Every other check in the canary passed:
+- buckets 1..4 were captured as graphs;
+- one plain and one verify replay per n returned;
+- both short captures at n = 2 exited 0, with 8 replays bracketed (10.13 / 10.40 ms per profiled replay) and no period
+  dropped.
+
+SC1b read both trace modes as void: `5 steady steps kept < 6 (dropped {})` and `5 steady launches kept < 6 (dropped {})`.
+
+**The cause: the floor was one higher than the reader can keep.**
+- SC1b's `graph_mode` and `node_mode` make one row for each period between consecutive steady replays, so N bracketed
+  replays give N − 1 rows.
+- `_filter` then trims both edges, so at most N − 3 rows are kept.
+- The registration set the canary's floor to `CANARY_STEPS - 2`. At 8 replays, that is 5 kept against a floor of 6.
+
+The canary could not pass on any host. The error was the registration's: the class map, the box and the card had no
+part in it.
+
+The main census is unaffected. Its 64 bracketed replays keep 61, against SC1b's default floor of 56, and its calls set
+no floor of their own.
+
+**The amendment (the maintainer's ACK, 2026-10-16):**
+1. `CANARY_STEPS` goes from 8 to **12**, and the floor from `CANARY_STEPS - 2` to **`CANARY_STEPS - 4`** = 8. That is
+   N − 1 periods, less the two edge trims, less one long period tolerated. A second long period still voids the canary.
+2. **Tests run on the run's real records first.** The records are in `tests/fixtures/p132_canary/`, byte-identical to
+   the receipt, with their digests checked; the tests are in `tests/test_p132.py`.
+   - (i) **The old rule:** run through the staged `sc1b_census.py` at the record's bracket count, it reproduces both
+     committed `why` strings exactly. The canary's census was its only failed check.
+   - (ii) **The new floor:** at the record's 8 replays and at the new 12, it is at most what the reader keeps. The
+     reader's own count, N − 3, is read, not assumed. At 12 replays, one long period still reads ok and two void.
+   - (iii) **The main census:** its 64 replays keep at least SC1b's `MIN_STEPS`.
+   - **Mutation checks:** the registration's floor (8, − 2) fails (ii) on `(8 - 2) <= 5`. A floor with no tolerance
+     (− 3) fails (ii) because a single long period voids the canary.
+3. **Cost:** four more replays in each short capture, a few seconds.
+
+**Unchanged:** the reducer, the box, the class map, the rule, every prediction and the budget. **Re-pinned:**
+`p132_run.sh` only.
+
+**The relaunch** is a new packet after this merges: a fresh host poll, the machine and offer set, a dry validation of
+the exact launch manifest, and the maintainer's ACK. Nothing paid happens before that. Under the lane's two-strike rule,
+a second paid failure simplifies the lane instead of retrying it.
