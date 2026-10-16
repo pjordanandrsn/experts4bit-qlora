@@ -55,6 +55,16 @@ nvidia-smi --query-gpu=name,memory.total,driver_version,uuid,compute_cap,power.l
 lscpu | grep -E "Model name|^Vendor ID|^CPU\(s\)" | tee -a forensics.txt; free -g | head -2 | tee -a forensics.txt; df -h $W | tail -1 | tee -a forensics.txt
 GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
 case "$GPU_NAME" in *"$GPU_CLASS"*) ;; *) say "REFUSED: card is '$GPU_NAME', the lane registers the RTX $GPU_CLASS class"; echo "refused: class $GPU_NAME" > REFUSAL; finish 15;; esac
+# Amendment 2: the rule's absolute-ms checks are the REFERENCE CARD's (sd2-5090-3 ran on it), and two 5090s differ by
+# 13-15 % at B = 1 on a matched workload (P116), so any other card refuses here, before anything is installed or fetched.
+# The uuid is field 4 of forensics.txt's first line; card.json records it either way.
+REF_UUID=GPU-38c66e15-7fac-e3bc-9760-a49deb41e4d6
+card_uuid(){ awk -F', ' 'NR == 1 {print $4}' "$1"; }
+GPU_UUID=$(card_uuid forensics.txt)
+printf '{"uuid": "%s", "reference": "%s", "match": %s}\n' "$GPU_UUID" "$REF_UUID" \
+  "$([ "$GPU_UUID" = "$REF_UUID" ] && echo true || echo false)" > card.json
+echo "P132_CARD uuid=$GPU_UUID reference=$REF_UUID" | tee -a summary.txt
+[ "$GPU_UUID" = "$REF_UUID" ] || { say "REFUSED: card $GPU_UUID is not the reference card $REF_UUID"; echo "refused: card $GPU_UUID" > REFUSAL; finish 18; }
 FREE_GB=$(df -BG --output=avail $W 2>/dev/null | tail -1 | tr -dc 0-9)
 [ "${FREE_GB:-0}" -ge "$MIN_DISK_GB" ] || { say "REFUSED: ${FREE_GB:-?} GB free < ${MIN_DISK_GB} GB"; echo "refused: disk ${FREE_GB:-?} GB" > REFUSAL; finish 13; }
 RAM_GB=$(awk '/^MemTotal:/{print int($2/1048576)}' /proc/meminfo)
