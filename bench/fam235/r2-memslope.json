@@ -1,0 +1,118 @@
+{
+ "schema": "r2-host-memory-slope/1",
+ "what": "R2-Mixtral Amendment 2 (#1630): the box's load-end host_memory on 2-, 4-, 6- and 8-layer cuts of the subject, by Q235 Amendment 5's method, and the host-RAM floor derived from it as Q235 Amendments 4-5 derive theirs.",
+ "model": "mistralai/Mixtral-8x22B-Instruct-v0.1",
+ "revision": "cc88a6cc19fbd17d9f1c0ee0b0d70a748dce698d",
+ "e4b": "f3f7487b459fbbae60529d6965993e3ff0781885",
+ "device": "RTX A2000 12 GB",
+ "cost_usd": 0,
+ "method": "q235_box.py --repeat (load + the step-0 forward), one fresh process per depth, on mk_slice.py cuts; host_memory (/proc/self/status) at the load end; least squares against depth. Tokens: q235_tokens.py, 8 rows, 8 x 365 positions.",
+ "evidence_sha256": "5bc99c61d2d31a16e88772e375637678e389b0d027c02465df5786f28e8ab04e",
+ "points": [
+  {
+   "layers": 2,
+   "load_seconds": 153.9,
+   "host_memory": {
+    "VmHWM": 17113083904,
+    "VmRSS": 5296795648,
+    "RssAnon": 678952960,
+    "RssFile": 294301696,
+    "RssShmem": 4323540992
+   },
+   "repeat_loss": 8.880563735961914
+  },
+  {
+   "layers": 4,
+   "load_seconds": 225.1,
+   "host_memory": {
+    "VmHWM": 29281079296,
+    "VmRSS": 8859459584,
+    "RssAnon": 714129408,
+    "RssFile": 197910528,
+    "RssShmem": 7947419648
+   },
+   "repeat_loss": 8.349960327148438
+  },
+  {
+   "layers": 6,
+   "load_seconds": 272.0,
+   "host_memory": {
+    "VmHWM": 33617608704,
+    "VmRSS": 12513185792,
+    "RssAnon": 853143552,
+    "RssFile": 88875008,
+    "RssShmem": 11571167232
+   },
+   "repeat_loss": 8.052290916442871
+  },
+  {
+   "layers": 8,
+   "load_seconds": 483.1,
+   "host_memory": {
+    "VmHWM": 34126213120,
+    "VmRSS": 15967629312,
+    "RssAnon": 782483456,
+    "RssFile": 87748608,
+    "RssShmem": 15097397248
+   },
+   "repeat_loss": 8.21678352355957
+  }
+ ],
+ "system_swap_in_use_kib": {
+  "before": 17679440,
+  "after": 17735820
+ },
+ "fit": {
+  "depths_2_6": {
+   "RssShmem": {
+    "intercept_bytes": 699749717,
+    "slope_bytes_per_layer": 1811906560,
+    "max_abs_residual_bytes": 43691
+   },
+   "RssAnon": {
+    "intercept_bytes": 574551381,
+    "slope_bytes_per_layer": 43547648,
+    "max_abs_residual_bytes": 34612565
+   },
+   "RssAnon+RssShmem": {
+    "intercept_bytes": 1274301099,
+    "slope_bytes_per_layer": 1855454208,
+    "max_abs_residual_bytes": 34568875
+   }
+  },
+  "depths_2_8": {
+   "RssShmem": {
+    "intercept_bytes": 748552192,
+    "slope_bytes_per_layer": 1797265818,
+    "max_abs_residual_bytes": 39020134
+   },
+   "RssAnon": {
+    "intercept_bytes": 644775936,
+    "slope_bytes_per_layer": 22480282,
+    "max_abs_residual_bytes": 73485926
+   },
+   "RssAnon+RssShmem": {
+    "intercept_bytes": 1393328128,
+    "slope_bytes_per_layer": 1819746099,
+    "max_abs_residual_bytes": 112506061
+   }
+  }
+ },
+ "estimate": {
+  "pinned_homes_bytes_per_layer": 1811939328,
+  "pinned_homes_bytes_56": 101468602368,
+  "adapters_bf16_bytes": 950534144,
+  "source": "estimate_qlora_footprint at e4b f3f7487b: r 16 / alpha 16, bf16 adapters, NF4 attention, experts in pinned host RAM, grouped_nf4, AdamW8bit, 2,920 tokens"
+ },
+ "floor": {
+  "fit_used": "depths_2_6",
+  "load_end_bytes_56": 105179736747,
+  "check_copies_bytes": 7604273152,
+  "layer_outputs_bytes": 2009333760,
+  "step_end_bytes": 114793343659,
+  "allowance_bytes": 18500000000,
+  "derived_gb": 133.29,
+  "registered_gb": 134,
+  "four_point_fit_step_end_bytes": 112912716584
+ }
+}
