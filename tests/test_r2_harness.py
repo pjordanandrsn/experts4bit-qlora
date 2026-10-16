@@ -194,3 +194,23 @@ def test_the_rehearsal_depth_is_r2_s_own():
         .replace('MODEL="$W/hf-cache/slice4"', 'MODEL="$W/hf-cache/slice8"')
     assert deeper != source and drift.undeclared(deeper, copy, rule) == []
     assert drift.undeclared(source, copy.replace("--slice 4 ", "--slice 8 "), rule)
+
+
+def test_q235_s_fetch_accepts_r2_s_lock(tmp_path):
+    """The lock is Q235's format, read by Q235's fetch unchanged: its own check must pass (here a pattern that names no file then
+    refuses, before any download). The first A2000 leg VOIDed on this check (a lock schema named for R2, not for its format)."""
+    pytest.importorskip("huggingface_hub")
+    r = subprocess.run([sys.executable, str(Q / "q235_fetch.py"), "--lock", str(F / "model_files.json"), "--dest", str(tmp_path / "d"),
+                        "--only", "no-such-file", "--out", str(tmp_path / "f.json")], capture_output=True, text=True, timeout=120)
+    out = r.stdout + r.stderr
+    assert r.returncode != 0 and "--only names no locked file" in out and "not a complete" not in out, out[-400:]
+
+
+def test_the_cpu_rehearsal_s_patterns_each_name_a_locked_file():
+    import fnmatch
+    import re
+    line = next(ln for ln in (F / "r2_run.sh").read_text().splitlines() if ln.startswith("  cpu)     must fetch"))
+    patterns = [p.strip("'") for p in re.search(r"--only (.*?) --out", line).group(1).split()]
+    names = [r["file"] for r in json.loads((F / "model_files.json").read_text())["files"]]
+    assert patterns == ["tokenizer*", "special_tokens_map.json"]
+    assert all(any(fnmatch.fnmatch(n, p) for n in names) for p in patterns), patterns
