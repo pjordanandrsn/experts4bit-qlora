@@ -23,8 +23,13 @@ known-hosts file, matching the controller's existing trust policy; subsequent
 key changes refuse. Endpoint provenance, policy and actual pinned fingerprint
 are retained in `direct-transport.jsonl`. No HF upload or new hosting exists.
 
-Staging copies the largest file first, times it, and projects the complete
-closure duration. Its share of the fixed 180-second staging budget is an
+Staging first authenticates one foreground SSH control connection, records its
+setup duration, then reuses that connection for SCP. A missing control connection
+cannot silently open another one (`ProxyCommand=false`). The largest file is
+copied first and its measured transfer rate excludes handshake time; projection
+adds setup once, then scales only payload time to the whole closure. Setup still
+counts against the fixed 180-second staging budget. The first file's share of
+the remaining budget is an
 external process deadline, so a slow initializer refuses before consuming the
 paid wall. The remaining files share the original remaining staging budget.
 The gate also respects the absolute work deadline minus the teardown reserve.
@@ -36,7 +41,11 @@ per-wheel checks, bounded socket operations and small available-data reads.
 An independent Python supervisor now times each box phase against both its
 existing phase cap and the absolute work deadline minus 300 seconds, killing
 its process group on expiry. Downloader signal changes cannot cancel this
-parent timer. Phase start/end/cap/elapsed records are retained separately.
+parent timer. The supervisor observes child exit with `waitid(WEXITED|WNOWAIT)`,
+signals the group while the unreaped leader still reserves its PID, then reaps.
+This prevents a post-exit group-id reuse signal. Missing deadlines/host keys and
+empty commands produce coded refusals. Phase start/end/cap/elapsed records are
+retained separately.
 
 ## Phase accounting before another envelope
 

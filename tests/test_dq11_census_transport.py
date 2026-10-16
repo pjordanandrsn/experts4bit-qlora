@@ -1,5 +1,6 @@
 """CPU route, staged-rate and real process deadline regressions."""
 import json
+import os
 import signal
 import subprocess
 import sys
@@ -152,3 +153,77 @@ def test_phase_cli_records_named_timing_and_refuses_exhausted_reserve(tmp_path):
     rows = [json.loads(l) for l in (tmp_path / 'receipts/phase-timings.jsonl').read_text().splitlines()]
     assert [r['name'] for r in rows] == ['fixture'] * 4
     assert rows[1]['result'] == 0 and rows[-1]['result'] == 'refused'
+
+
+def test_watchdog_observes_exit_without_reaping_then_kills_group_then_reaps(monkeypatch):
+    from types import SimpleNamespace
+
+    events = []
+
+    class Child:
+        pid = 123
+        returncode = None
+
+        def wait(self):
+            events.append('reap')
+            self.returncode = 0
+
+    monkeypatch.setattr(transport.subprocess, 'Popen', lambda *a, **kw: Child())
+
+    def waitid(kind, pid, flags):
+        assert kind == os.P_PID and pid == 123
+        assert flags & os.WNOWAIT and flags & os.WEXITED
+        events.append('observe-unreaped')
+        return SimpleNamespace(si_pid=123)
+
+    monkeypatch.setattr(transport.os, 'waitid', waitid)
+    monkeypatch.setattr(transport.os, 'killpg', lambda *a: events.append('signal-group'))
+    assert transport.supervised(['fixture'], 1) == 0
+    assert events == ['observe-unreaped', 'signal-group', 'reap']
+
+
+def test_slow_setup_not_multiplied_into_first_bulk_projection(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+
+    a = tmp_path / 'a'; a.write_bytes(b'a' * 100)
+    b = tmp_path / 'b'; b.write_bytes(b'b' * 100)
+    clock = [0.0]
+    monkeypatch.setenv('E4B_RENT_DEADLINE_EPOCH', str(int(time.time()) + 1000))
+
+    @contextmanager
+    def connect(*args):
+        clock[0] = 99
+        yield ['scp'], 99
+
+    def run(*args):
+        clock[0] += 1
+        return 0
+
+    monkeypatch.setattr(transport, 'direct_connection', connect)
+    log = tmp_path / 'log'
+    transport.stage([a, b], ['scp'], 'remote', log, ssh=['ssh'], clock=lambda: clock[0], run=run)
+    rows = [json.loads(l) for l in log.read_text().splitlines()]
+    assert rows[1]['connection_setup_seconds'] == 99
+    assert rows[1]['transfer_seconds'] == 1
+    assert rows[1]['projected_total_seconds'] == 101  # not (99 + 1) * 2
+    assert rows[-1]['phase'] == 'stage-pass'
+
+
+@pytest.mark.parametrize('edge', ['deadline', 'host-key', 'empty-phase'])
+def test_cli_edges_are_coded_refusals_without_tracebacks(tmp_path, edge):
+    file = tmp_path / 'asset'; file.write_bytes(b'x')
+    env = dict(os.environ, E4B_RENT_RUN_DIR=str(tmp_path),
+               E4B_RENT_SSH_KNOWN_HOSTS=str(tmp_path / 'missing'),
+               E4B_RENT_DEADLINE_EPOCH=str(int(time.time()) + 1000))
+    base = [sys.executable, str(LANE / 'dq11_census_transport.py')]
+    if edge == 'empty-phase':
+        args = ['phase', '--seconds', '1', '--deadline', str(int(time.time()) + 1000), '--name', 'empty']
+    elif edge == 'deadline':
+        env.pop('E4B_RENT_DEADLINE_EPOCH', None)
+        args = ['stage', '--scp', 'scp', '--ssh', 'ssh root@8.8.8.8', '--remote', 'unused', str(file)]
+    else:
+        args = ['stage', '--scp', 'scp', '--ssh', 'ssh root@8.8.8.8', '--remote', 'unused', str(file)]
+    result = subprocess.run([*base, *args], cwd=tmp_path, env=env,
+                            capture_output=True, text=True, check=False)
+    assert result.returncode == 11
+    assert 'CENSUS_REFUSAL:' in result.stderr and 'Traceback' not in result.stderr

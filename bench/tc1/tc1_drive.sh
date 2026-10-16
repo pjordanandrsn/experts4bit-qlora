@@ -72,7 +72,7 @@ if [ "${TC1_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage [$(for f in $STAG
 say "run $RUN_ID box $TC1_BOX nonce=$NONCE -> $HOST:$PORT; e4b $E4B_SHA (from $REPO); gnf4 $GNF4_SHA; receipts -> $RUN_DIR/tc1; deadline $DEADLINE"
 $SSH "rm -rf -- $W && mkdir -p $W/logs $W/data /root/.cache/huggingface" || { say "stage failed: remote cleanup"; exit 20; }
 if [ "${TC1_L_CENSUS:-0}" = 1 ]; then
-  python3 "${TC1_CENSUS_STAGE_HELPER:?}" stage --scp "$SCP" --remote "root@$HOST:$W/" $STAGE || { say "stage failed: direct rate gate"; exit 20; }
+  python3 "${TC1_CENSUS_STAGE_HELPER:?}" stage --scp "$SCP" --ssh "$SSH" --remote "root@$HOST:$W/" $STAGE || { say "stage failed: direct rate gate"; exit 20; }
 else
   $SCP $STAGE "root@$HOST:$W/" || { say "stage failed: scp"; exit 20; }
 fi

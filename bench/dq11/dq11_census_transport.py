@@ -9,7 +9,9 @@ import shlex
 import signal
 import subprocess
 import sys
+import tempfile
 import time
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -46,10 +48,11 @@ def direct_endpoint(instance, expected_id):
     return host, int(port)
 
 
-def supervised(command, seconds):
-    """The child cannot cancel this parent's monotonic timeout with SIGALRM."""
-    if seconds <= 0:
-        raise TimeoutError('absolute work deadline exhausted')
+@contextmanager
+def process_group(command):
+    """Keep the leader unreaped until its group is signalled, preventing PGID reuse."""
+    if not command:
+        raise ValueError('empty watchdog command')
     child = subprocess.Popen(command, start_new_session=True)
     previous = {}
 
@@ -59,18 +62,69 @@ def supervised(command, seconds):
     try:
         for sig in (signal.SIGTERM, signal.SIGINT):
             previous[sig] = signal.signal(sig, terminate)
-        return child.wait(timeout=seconds)
+        yield child
     finally:
-        if child.poll() is None:
-            os.killpg(child.pid, signal.SIGKILL)
-            child.wait()
-        # A command may leave descendants after exiting; never leave its group alive.
+        # No poll()/wait() before this signal: even an exited leader remains a
+        # zombie with its PID reserved until wait() below. WNOWAIT observes only.
         try:
             os.killpg(child.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
+        except PermissionError:
+            # Darwin reports EPERM for a group containing only an unreaped
+            # zombie; Linux reports ESRCH. Never suppress it for a live leader.
+            if sys.platform != 'darwin' or not exited_unreaped(child):
+                raise
+            try:
+                os.getpgid(child.pid)
+            except ProcessLookupError:
+                pass
+            else:
+                raise
+        child.wait()
         for sig, handler in previous.items():
             signal.signal(sig, handler)
+
+
+def exited_unreaped(child):
+    status = os.waitid(os.P_PID, child.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG)
+    return status is not None and status.si_pid == child.pid
+
+
+def supervised(command, seconds):
+    """The child cannot cancel this parent's monotonic timeout with SIGALRM."""
+    if seconds <= 0:
+        raise TimeoutError('absolute work deadline exhausted')
+    with process_group(command) as child:
+        deadline = time.monotonic() + seconds
+        while not exited_unreaped(child):
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise subprocess.TimeoutExpired(command, seconds)
+            time.sleep(min(.02, left))
+    return child.returncode
+
+
+@contextmanager
+def direct_connection(ssh, scp, log, budget):
+    """Authenticate once; SCP reuses this master so its rate excludes handshake."""
+    if not ssh:
+        raise ValueError('empty direct SSH command')
+    with tempfile.TemporaryDirectory(prefix='dq11-ssh-') as directory:
+        socket = str(Path(directory) / 'control')
+        command = [*ssh[:-1], '-M', '-S', socket, '-o', 'ControlPersist=no', '-N', ssh[-1]]
+        start = time.monotonic()
+        with process_group(command) as master:
+            while not Path(socket).exists():
+                if exited_unreaped(master):
+                    raise ValueError('direct SSH setup failed')
+                if time.monotonic() - start >= min(30, budget):
+                    raise TimeoutError('direct SSH setup deadline exhausted')
+                time.sleep(.02)
+            setup = time.monotonic() - start
+            record(log, phase='connection-setup', elapsed_seconds=setup)
+            yield [*scp, '-o', f'ControlPath={socket}', '-o', 'ControlMaster=no',
+                   '-o', 'ProxyCommand=false'], setup
 
 
 def projected_seconds(total_bytes, first_bytes, elapsed):
@@ -79,31 +133,45 @@ def projected_seconds(total_bytes, first_bytes, elapsed):
     return elapsed * total_bytes / first_bytes
 
 
-def stage(files, scp, remote, log, *, clock=time.monotonic, run=supervised):
+def staging_time_left():
+    try:
+        return int(os.environ['E4B_RENT_DEADLINE_EPOCH']) - time.time() - RESERVE_SECONDS
+    except (KeyError, ValueError) as exc:
+        raise ValueError('missing or invalid absolute staging deadline') from exc
+
+
+def stage(files, scp, remote, log, *, ssh=None, clock=time.monotonic, run=supervised):
     ordered = sorted((Path(p) for p in files), key=lambda p: p.stat().st_size, reverse=True)
     if not ordered or len({p.name for p in ordered}) != len(ordered):
         raise ValueError('empty or colliding transport closure')
     total = sum(p.stat().st_size for p in ordered)
     first = ordered[0]
     # The entire stage and first bulk file share one deadline, never a retry clock.
-    left = int(os.environ['E4B_RENT_DEADLINE_EPOCH']) - time.time() - RESERVE_SECONDS
+    left = staging_time_left()
     budget = min(STAGING_SECONDS, left)
+    if budget <= 0:
+        raise TimeoutError('absolute staging deadline exhausted')
     started = clock()
     record(log, phase='stage-start', total_bytes=total, first_bytes=first.stat().st_size,
            first_file=first.name, budget_seconds=budget)
     try:
-        rc = run([*scp, str(first), remote], budget * first.stat().st_size / total)
-        elapsed = clock() - started
-        estimate = projected_seconds(total, first.stat().st_size, elapsed)
-        record(log, phase='first-bulk', returncode=rc, elapsed_seconds=elapsed,
-               projected_total_seconds=estimate)
-        if rc or estimate > budget:
-            raise ValueError('direct staging projected time exceeds budget')
-        if len(ordered) > 1:
-            rc = run([*scp, *(str(p) for p in ordered[1:]), remote], budget - elapsed)
-            if rc:
-                raise ValueError('direct staging remainder failed')
-        record(log, phase='stage-pass', elapsed_seconds=clock() - started, bytes=total)
+        connection = direct_connection(ssh, scp, log, budget) if ssh else nullcontext((scp, 0.0))
+        with connection as (connected_scp, setup):
+            transfer_start = clock()
+            remaining = budget - (transfer_start - started)
+            rc = run([*connected_scp, str(first), remote], remaining * first.stat().st_size / total)
+            elapsed = clock() - transfer_start
+            estimate = setup + projected_seconds(total, first.stat().st_size, elapsed)
+            record(log, phase='first-bulk', returncode=rc, transfer_seconds=elapsed,
+                   connection_setup_seconds=setup, projected_total_seconds=estimate)
+            if rc or estimate > budget:
+                raise ValueError('direct staging projected time exceeds budget')
+            if len(ordered) > 1:
+                rc = run([*connected_scp, *(str(p) for p in ordered[1:]), remote],
+                         budget - (clock() - started))
+                if rc:
+                    raise ValueError('direct staging remainder failed')
+            record(log, phase='stage-pass', elapsed_seconds=clock() - started, bytes=total)
     except (subprocess.TimeoutExpired, TimeoutError, ValueError, InterruptedError) as exc:
         record(log, phase='stage-refused', elapsed_seconds=clock() - started, error=str(exc))
         raise
@@ -153,8 +221,11 @@ def main():
     p.add_argument('--name', required=True)
     p.add_argument('command', nargs=argparse.REMAINDER)
     s = sub.add_parser('stage'); s.add_argument('--scp', required=True)
+    s.add_argument('--ssh', required=True)
     s.add_argument('--remote', required=True); s.add_argument('files', nargs='+')
     args = parser.parse_args()
+    if args.mode in ('drive', 'phase') and not args.command:
+        raise ValueError('empty watchdog command')
     if args.mode == 'drive':
         drive(args.command)
     elif args.mode == 'phase':
@@ -170,16 +241,24 @@ def main():
                    elapsed_seconds=time.monotonic() - start)
         sys.exit(result)
     else:
+        staging_time_left()
         root = Path(os.environ['E4B_RENT_RUN_DIR'])
         known = os.environ['E4B_RENT_SSH_KNOWN_HOSTS']
-        keys = subprocess.check_output(['ssh-keygen', '-lf', known], text=True).strip()
+        try:
+            keys = subprocess.check_output(['ssh-keygen', '-lf', known], text=True,
+                                           stderr=subprocess.DEVNULL).strip()
+            if not keys:
+                raise ValueError('no pinned host key')
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise ValueError('no pinned host key') from exc
         record(root / 'direct-transport.jsonl', phase='pinned-host-key', fingerprints=keys)
-        stage(args.files, shlex.split(args.scp), args.remote, root / 'direct-transport.jsonl')
+        stage(args.files, shlex.split(args.scp), args.remote, root / 'direct-transport.jsonl',
+              ssh=shlex.split(args.ssh))
 
 
 if __name__ == '__main__':
     try:
         main()
-    except (ValueError, TimeoutError, subprocess.TimeoutExpired, InterruptedError) as error:
+    except (ValueError, KeyError, OSError, subprocess.TimeoutExpired, InterruptedError) as error:
         print(f'CENSUS_REFUSAL: {error}', file=sys.stderr)
         sys.exit(11)
