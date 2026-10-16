@@ -326,6 +326,15 @@ _KNOWN_UNCLAIMED = {
     # glm5_next composite (Glm5NextTextConfig), mapped to glm5_next's
     # converter. Unclaimed for the same reason as glm5_next.
     "glm5_next_text",
+    # Appeared in transformers 5.20.0 (2026-10-15): qwen2_moe's converter
+    # plus extra renames. bailing_hybrid adds a forget-gated linear-attention
+    # stack; kolibri1 maps a router expert bias to e_score_correction_bias.
+    # NOT aliased: a shared converter is not a shared expert layout.
+    # UNVERIFIED until adjudicated against a real checkpoint.
+    "bailing_hybrid", "kolibri1",
+    # Appeared in transformers 5.20.1 (2026-10-16) as a plain alias of the
+    # qwen2_moe converter. Same rule, same status: UNVERIFIED.
+    "beam",
 }
 
 
