@@ -45,3 +45,20 @@ record the caps before this amendment.
 `capacity-2648.json` (from `capacity.py`) is e4b's estimate at the run's shape, on main at 13b55990: 24.76 GiB of device memory and
 158.62 GiB of pinned host memory for bf16 adapters (34.82 GiB of device memory for fp32), and 237.94 GiB host-to-device per
 micro-batch.
+
+## Amendments 4 and 5: the check copies on the host, and the host-RAM floor measured
+
+The A2000 leg ran again at 9f6e0088 (Amendment 4: the box's fp32 check copies on the host, and a `host_memory` record), exit 0:
+`run-am4.json`, `phase-timings-am4.jsonl` and `a2000-leg-am4-summary.json`.
+- Amendment 2's rules held (9 of 9), and the frozen base was unchanged across both steps (111 tensors).
+- The null equals the box's step 0, and each plant left layers 0–1 bit for bit equal to the null and changed layer 2.
+- The device peak fell by 1.194 GiB at step 0 and 1.195 GiB at step 1, against 1.197 GiB predicted.
+- At the step end, `RssAnon + RssShmem` was 13.53 GB, 1.26 GB above Amendment 4's terms at 4 layers.
+
+`memslope.json` settles whether that excess grows with depth. The box's `--repeat` ran in a fresh process at 2, 4, 6 and 8 layers,
+reading `host_memory` at the load end:
+- shared memory grows 1.8119 GB per layer, the estimator's pinned homes to 4 decimals, with residuals of 52 kB;
+- the excess is fixed: about 2.23 GB of shared memory and about 3.78 GB of anonymous memory, plus 15 MB per layer.
+
+Projected to 94 layers with the check copies and held layer outputs, and assuming no heap reuse, that is 220.02 GB at the step end.
+With the 18.5 GB allowance the science floor is 239 GB (Amendment 5).

@@ -1,0 +1,89 @@
+{
+ "schema": "q235-host-memory-slope/1",
+ "e4b": "9f6e00885b8e7d612d49e8a43cf826c8559ba005",
+ "method": "q235_box.py --repeat (load + the step-0 forward), the A2000 leg's environment, venv, tokens and enabler, one fresh process per depth, on 2-, 4-, 6- and 8-layer cuts of ac9c66cc (mk_slice.py); host_memory at the end of the load; least squares against depth",
+ "points": [
+  {
+   "layers": 2,
+   "load_seconds": 397.1,
+   "host_memory": {
+    "VmHWM": 17698103296,
+    "VmRSS": 9918988288,
+    "RssAnon": 3766722560,
+    "RssFile": 297279488,
+    "RssShmem": 5854986240
+   },
+   "repeat_loss": 12.84375
+  },
+  {
+   "layers": 4,
+   "load_seconds": 484.5,
+   "host_memory": {
+    "VmHWM": 29508739072,
+    "VmRSS": 13501145088,
+    "RssAnon": 3834486784,
+    "RssFile": 188055552,
+    "RssShmem": 9478602752
+   },
+   "repeat_loss": 13.37894344329834
+  },
+  {
+   "layers": 6,
+   "load_seconds": 570.0,
+   "host_memory": {
+    "VmHWM": 33013211136,
+    "VmRSS": 17200783360,
+    "RssAnon": 4011069440,
+    "RssFile": 87363584,
+    "RssShmem": 13102350336
+   },
+   "repeat_loss": 13.31402587890625
+  },
+  {
+   "layers": 8,
+   "load_seconds": 859.2,
+   "host_memory": {
+    "VmHWM": 36314533888,
+    "VmRSS": 20620558336,
+    "RssAnon": 3808100352,
+    "RssFile": 86360064,
+    "RssShmem": 16726097920
+   },
+   "repeat_loss": 13.190062522888184
+  }
+ ],
+ "fit": {
+  "RssShmem": {
+   "intercept_bytes": 2231238656,
+   "slope_bytes_per_layer": 1811854131,
+   "max_abs_residual_bytes": 52429
+  },
+  "RssAnon": {
+   "intercept_bytes": 3779915776,
+   "slope_bytes_per_layer": 15035802,
+   "max_abs_residual_bytes": 140938854
+  },
+  "RssAnon+RssShmem": {
+   "intercept_bytes": 6011154432,
+   "slope_bytes_per_layer": 1826889933,
+   "max_abs_residual_bytes": 140925747
+  }
+ },
+ "estimator": {
+  "pinned_homes_bytes_per_layer": 1811939328,
+  "source": "estimate_qlora_footprint, 'frozen expert stacks, host homes (pinned)': 6.750 GiB at 4 layers, 158.625 GiB at 94",
+  "measured_shmem_slope_over_estimate": 0.99995
+ },
+ "projection_94": {
+  "load_end_bytes": 177738808134,
+  "plus_check_copies_bytes": 40239548596,
+  "plus_layer_outputs_bytes": 2039087104,
+  "step_end_bytes": 220017443834,
+  "note": "no heap reuse assumed: at 4 layers the copies reused about 1.7 GB of heap the load freed, which cannot cover 40 GB at depth"
+ },
+ "floor": {
+  "allowance_bytes": 18500000000.0,
+  "derived_gb": 238.52,
+  "registered_gb": 239
+ }
+}

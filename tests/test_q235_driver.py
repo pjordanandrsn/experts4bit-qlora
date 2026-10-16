@@ -154,10 +154,11 @@ def science_ram_floor_gb():
     return int(re.search(r"^  science\).*MIN_RAM_GB=(\d+);", (Q / "q235_run.sh").read_text(), re.M).group(1))
 
 
-def test_the_science_host_ram_floor_is_amendment_4s():
-    """Amendment 4 derives the floor: 173.5 GB registered (pinned expert homes and the process baseline), plus the four host check
-    copies (40.24 GB) and the step-0 layer outputs held for the fidelity read (2.04 GB), plus the 18.5 GB allowance: 234.3, so 235."""
-    assert science_ram_floor_gb() == 235
+def test_the_science_host_ram_floor_is_amendment_5s():
+    """Amendment 5 derives the floor from the measured scaling read (gate2/memslope.json): 177.74 GB of anonymous and shared host
+    memory at the load end at 94 layers, plus the four host check copies (40.24 GB) and the held layer outputs (2.04 GB), plus the
+    18.5 GB allowance: 238.52, so 239."""
+    assert science_ram_floor_gb() == 239
 
 
 def test_the_runner_refuses_a_host_below_the_ram_floor(box):
