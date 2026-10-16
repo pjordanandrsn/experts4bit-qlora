@@ -1,0 +1,162 @@
+# Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
+"""R2-Mixtral's box harness (bench/fam235/, Amendment 2's decision): R2's lock, closure and tiny model; Q235's Python tools run
+unchanged through thin wrappers; and R2's copies of Q235's bash runner and drive, held to Q235's line for line.
+
+- **Drift.** Each copy differs from its Q235 source at the cited commit only by the declared substitutions (STRICT). A Q235 change
+  after that commit is reported as a warning, never a failure, so an open Q235 amendment cannot turn R2 red.
+- **The science mode refuses** until the amendment that registers the box pins its class, floors and caps.
+- **The wrappers** read R2's files where R2 has them and Q235's everywhere else.
+
+No network and no GPU: the runner is driven to its first refusal with a stand-in ``nvidia-smi``."""
+from __future__ import annotations
+
+import importlib.util
+import json
+import os
+import shutil
+import subprocess
+import sys
+import warnings
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+F = ROOT / "bench" / "fam235"
+Q = ROOT / "bench" / "q235"
+
+
+def _mod(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_the_copies_differ_from_q235_s_only_by_their_declared_substitutions():
+    drift = _mod("r2_drift", F / "r2_drift.py")
+    assert drift.check(drift.CITED) == {copy: [] for copy in drift.PAIRS}
+
+
+def test_a_q235_change_after_the_cited_commit_is_reported_not_failed():
+    drift = _mod("r2_drift", F / "r2_drift.py")
+    moved = {copy: diffs for copy, diffs in drift.check(None).items() if diffs}
+    if moved:
+        warnings.warn(f"Q235's working tree has moved since {drift.CITED[:8]} for {sorted(moved)}: port the change into R2's copy "
+                      "and re-cite (bench/fam235/r2_drift.py)", stacklevel=1)
+
+
+def test_the_drift_check_names_an_undeclared_difference():
+    drift = _mod("r2_drift", F / "r2_drift.py")
+    rule = drift.PAIRS["bench/fam235/r2_run.sh"]
+    source = drift.source_at(rule["source"], drift.CITED)
+    copy = (F / "r2_run.sh").read_text()
+    assert drift.undeclared(source, copy, rule) == []
+    for before, after in (("MIN_RAM_GB=64;", "MIN_RAM_GB=32;"),                # a floor on a line no rule names
+                          ("finish 18; }", "finish 0; }"),                     # a refusal code
+                          ("q235_box.py", "r2_box.py")):                       # a tool no rename names
+        assert drift.undeclared(source, copy.replace(before, after, 1), rule), before
+    science = next(ln for ln in copy.splitlines() if ln.startswith("  science)"))
+    assert drift.undeclared(source, copy.replace(science, "  science) CARD_RE='^NVIDIA'; MIN_RAM_GB=1 ;;"), rule)
+
+
+def test_the_committed_manifest_is_the_closure():
+    stage = _mod("r2_stage", F / "r2_stage.py")
+    q235 = stage.q235_stage()
+    want = dict(reversed(line.split()) for line in (F / "r2.sha256").read_text().splitlines())
+    for p in stage.CLOSURE:
+        assert want[Path(p).name] == q235.sha(ROOT / p), f"{p} changed: rewrite r2.sha256 (r2_stage.py --write) after review"
+    lock = json.loads((Q / "locked_inputs.json").read_text())["assets"]
+    assert set(want) == {Path(p).name for p in stage.CLOSURE} | set(lock)
+
+
+def test_the_lock_is_the_registered_revision():
+    lock = json.loads((F / "model_files.json").read_text())
+    assert (lock["repo"], lock["revision"]) == ("mistralai/Mixtral-8x22B-Instruct-v0.1", "cc88a6cc19fbd17d9f1c0ee0b0d70a748dce698d")
+    shards = [r for r in lock["files"] if r["file"].endswith(".safetensors")]
+    assert lock["n_files"] == len(lock["files"]) == 69 and len(shards) == 59
+    assert lock["safetensors_bytes"] == sum(r["size"] for r in shards) == 281_260_367_720
+    assert all(len(r["lfs_sha256"] or "") == 64 for r in shards) and all(len(r["blob_id"]) == 40 for r in lock["files"])
+
+
+@pytest.fixture
+def box(tmp_path):
+    """A box workspace with R2's sealed closure staged flat, a stand-in nvidia-smi, and the TC1 lifecycle's variables."""
+    stage = _mod("r2_stage", F / "r2_stage.py")
+    w = tmp_path / "w"
+    w.mkdir()
+    for p in stage.CLOSURE:
+        shutil.copy(ROOT / p, w / Path(p).name)
+    lock = json.loads((Q / "locked_inputs.json").read_text())["assets"]
+    lines = [ln for ln in (F / "r2.sha256").read_text().splitlines() if ln.split()[1] not in lock]
+    (w / "r2.sha256").write_text("\n".join(lines) + "\n")
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    (bin_ / "nvidia-smi").write_text("#!/bin/sh\necho 'NVIDIA GeForce RTX 5090, 32607, 575.64.05, 5, 5, 16, 16, 575.00 W'\n")
+    (bin_ / "nvidia-smi").chmod(0o755)
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("Q235_", "TC1_"))}
+    env.update(PATH=f"{bin_}:{env['PATH']}", Q235_W=str(w), TC1_RUN_NONCE="n0nce", E4B_SHA="a" * 40, GNF4_SHA="b" * 40,
+               TC1_DEADLINE_EPOCH=str(int(__import__("time").time()) + 3600))
+    return w, env
+
+
+def _run(w, env):
+    return subprocess.run(["bash", str(w / "r2_run.sh")], env=env, capture_output=True, text=True, timeout=120)
+
+
+def test_the_science_mode_refuses_until_a_box_is_registered(box):
+    w, env = box
+    r = _run(w, env)
+    assert r.returncode == 78 and "no box is registered" in r.stdout, (r.returncode, r.stdout[-800:], r.stderr[-800:])
+    assert (w / "REFUSAL").read_text().strip() == "not registered" and (w / "TC1_EXIT_CODE.n0nce").read_text().strip() == "78"
+    assert not (w / "receipts" / "card.txt").exists()                      # refused before any host probe, install or fetch
+    assert json.loads((w / "receipts" / "run.json").read_text())["schema"] == "r2-run/1"
+
+
+def test_the_runner_voids_a_closure_that_does_not_match_its_manifest(box):
+    w, env = box
+    (w / "q235_box.py").write_text("# changed\n")
+    r = _run(w, env)
+    assert r.returncode == 9 and "r2.sha256" in r.stdout
+
+
+def test_the_fetch_gate_reads_r2_s_lock_and_q235_s_wheels():
+    g = _mod("r2_fetch_gate", F / "r2_fetch_gate.py").gate_module()
+    assert g.HERE / "model_files.json" == F / "model_files.json"
+    assert g.HERE / "wheels.json" == Q / "wheels.json" and g.HERE / "q235_bootstrap.py" == Q / "q235_bootstrap.py"
+    files = g.placeholder_files()
+    names = {p.name for p in files}
+    assert {"r2_run.sh", "r2_tiny.py", "model_files.json", "r2.sha256", "r2_drive.sh", "PREREG-r2-mixtral.md", "wheels.json"} <= names
+    assert not names & {"q235_run.sh", "q235_tiny.py", "PREREG-q235.md"}
+    assert g.scan_placeholders(files) == [], "an unfilled value in a file the box runs or the registration"
+    now = 1_000_000.0
+    rep = {"schema": "r2-fetch-gate/1", "passed": True, "refusals": [], "e4b_sha": "a" * 40, "generated_at": now - 60}
+    assert g.report_ok(rep, "a" * 40, now) is None
+    assert "schema" in g.report_ok({**rep, "schema": "q235-fetch-gate/1"}, "a" * 40, now)    # Q235's report never admits R2
+
+
+def test_the_drive_refuses_to_launch_without_its_own_gate_report(tmp_path):
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("Q235_", "R2_", "TC1_", "E4B_"))}
+    env.update(TC1_DRIVE_DRYRUN="1", E4B_RENT_RUN_DIR=str(tmp_path))
+    r = subprocess.run(["bash", str(F / "r2_drive.sh")], env=env, capture_output=True, text=True, timeout=60)
+    assert r.returncode == 78 and "R2_FETCH_GATE unset" in r.stdout, (r.returncode, r.stdout, r.stderr)
+    q235_report = tmp_path / "gate.json"
+    q235_report.write_text(json.dumps({"schema": "q235-fetch-gate/1", "passed": True, "refusals": [], "e4b_sha": "0" * 40,
+                                       "generated_at": 0}))
+    r = subprocess.run(["bash", str(F / "r2_drive.sh")], env={**env, "R2_FETCH_GATE": str(q235_report)}, capture_output=True,
+                       text=True, timeout=60)
+    assert r.returncode == 78 and "does not let" in r.stdout, (r.returncode, r.stdout, r.stderr)
+
+
+def test_the_tiny_mixtral_is_the_subject_s_architecture(tmp_path):
+    pytest.importorskip("transformers.models.mixtral", reason="needs transformers with Mixtral")
+    src = tmp_path / "tok"
+    src.mkdir()
+    (src / "tokenizer.json").write_text("{}")
+    (src / "special_tokens_map.json").write_text("{}")
+    _mod("r2_tiny", F / "r2_tiny.py").build(tmp_path / "tiny", src)
+    cfg = json.loads((tmp_path / "tiny" / "config.json").read_text())
+    assert cfg["model_type"] == "mixtral" and cfg["num_hidden_layers"] == 4 and cfg["num_local_experts"] == 8
+    assert cfg["num_experts_per_tok"] == 2 and cfg["vocab_size"] == 32768
+    assert {p.name for p in (tmp_path / "tiny").iterdir()} >= {"tokenizer.json", "special_tokens_map.json", "config.json"}
+    sys.modules.pop("r2_tiny", None)
