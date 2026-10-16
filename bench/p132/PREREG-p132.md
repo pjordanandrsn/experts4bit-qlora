@@ -229,7 +229,8 @@ reference card, and the box runs only on that card.
   of `forensics.txt`'s first line).
 - It refuses with **rc 18** unless the uuid is GPU-38c66e15-7fac-e3bc-9760-a49deb41e4d6.
 - It records `card.json` (uuid, reference, match) and a `P132_CARD` line in `summary.txt` either way.
-- A refusal costs a few minutes of rental and reads nothing.
+- A refusal costs a few minutes of rental and reads nothing. A card refusal (rc 18), like the class refusal (rc 15),
+  reads nothing and is not a strike.
 - The launch pins the card itself, beside this check: on machine 55913 the offer id maps to one card. Offer 40421555
   gave GPU-38c66e15 in both `p116-5090-2` and `sd2-5090-3`, and offer 40421556 gave another card in `sd2-5090-1`.
 
