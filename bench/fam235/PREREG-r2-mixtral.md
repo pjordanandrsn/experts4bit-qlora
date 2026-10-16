@@ -212,3 +212,55 @@ model, rows 8–15 (disjoint from the calibration's), the same three runs, and t
   mechanical verdict for band_j is a Phase 1 deliverable before any box, checked against the numbers file.
 
 **Unchanged:** the statistic, the interior rule, the state statistic and router overlap (reported), and everything else above.
+
+## Amendment 2 (2026-10-16, before any 8x22B box): the host-RAM floor, measured (128 → 134 GB)
+
+**Why.** Q235 Amendment 4 moved the box's four fp32 check copies to the host, and Amendment 5 measured Q235's host floor with a
+depth-scaling read. This box runs `q235_box.py` itself, so both apply here. The check copies are anonymous host memory. The
+registered ≥ 128 GB (the estimate's pinned homes, a 3 GiB baseline and headroom) does not carry them, and it would admit hosts too
+small to finish the step. Numbers: `bench/fam235/r2-memslope.json`.
+
+**The scaling read** (2026-10-16 18:35–18:55 UTC, RTX A2000, $0, e4b `f3f7487b`; evidence sha256 `5bc99c61`). It uses Q235
+Amendment 5's method: `q235_box.py --repeat` in a fresh process per depth, on 2-, 4-, 6- and 8-layer `mk_slice.py` cuts of the
+subject checkpoint, with `host_memory` read at the load end and fitted against depth by least squares. Values are in GB:
+
+| depth | `RssShmem` | `RssAnon` | `VmHWM` (reported) |
+|---|---|---|---|
+| 2 | 4.324 | 0.679 | 17.11 |
+| 4 | 7.947 | 0.714 | 29.28 |
+| 6 | 11.571 | 0.853 | 33.62 |
+| 8 | 15.097 | 0.782 | 34.13 |
+
+- **The pinned homes are exact from 2 to 6 layers:** 1.81194 and 1.81187 GB per layer, against the estimate's 1.81194 (94.5 GiB at
+  56 layers). The 2–6 fit's largest residual is 44 kB.
+- **The 6 → 8 step reads 97.6 MB short.** The host had about 18.1 GB of swap in use. Shared pages swapped out leave RSS, so under
+  pressure RSS can undercount, but it cannot overcount. The 2–6 points are therefore the trustworthy ones, and the floor comes
+  from their fit, not from all four points. This read recorded no swap fields. Any further read records the process's `VmSwap` and
+  the system's `SwapTotal − SwapFree`.
+- **The fixed terms are small:** 0.70 GB of shared memory and 0.57 GB of anonymous memory, plus 0.044 GB of anonymous memory per
+  layer (2–6 fit). Q235's were 2.23 and 3.78 GB.
+
+**The floor.** It uses Q235 Amendments 4–5's derivation, assuming no heap reuse:
+- **Load end at 56 layers:** `RssAnon + RssShmem` from the 2–6 fit, 1.274 + 1.8554 × 56 = 105.18 GB.
+- **The four fp32 host check copies:** 4 × 2 × 950,534,144 B, the estimate's bf16 adapters (expert and attention), = 7.604 GB.
+- **The held step-0 layer outputs:** 56 × 2,920 × 6,144 × 2 B = 2.009 GB.
+- **Step end:** 114.79 GB. Adding Q235's 18.5 GB allowance gives 133.29 GB, so **the registration requires ≥ 134 GB of host RAM**
+  (it was ≥ 128 GB).
+- **Reported, not gated:** the box's `host_memory` at a step end is expected at `RssAnon + RssShmem` ≤ 114.8 GB. The four-point fit
+  would give 112.91 GB (131.41 with the allowance).
+- **The device:** Amendment 4's move leaves the copies off the device. The estimate at 8 × 365 positions, bf16 adapters and 56 layers
+  is 13.98 GiB, inside the RTX 5090 class.
+
+**Citations by commit.** Q235 Amendment 4 is at `9f6e0088` (the host check copies and the `host_memory` record), and Amendment 5
+at `f3f7487b` (the method). The box-registering amendment re-cites Q235 at the commit it builds on, and re-runs `r2_verdict.py`'s
+self-test there.
+
+**The harness, decided** (for the box-registering amendment):
+- **Pieces:** R2's own locks; thin wrappers that run Q235's Python tools unchanged, with constants set per call (as
+  `r2_verdict.py` does); and an R2 copy of the bash runner only.
+- **A drift test:** it diffs that runner against `q235_run.sh` at the cited commit. It allows only a declared list of subject lines
+  (the class, the floors, the lock, manifest and closure names, the box's shape argument) and fails on any other difference.
+- **Q235 stays byte-identical.**
+- **Later:** a subject-manifest harness is the refactor for a third subject.
+
+**Unchanged:** everything else above.
