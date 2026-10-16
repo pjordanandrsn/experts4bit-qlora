@@ -53,6 +53,9 @@ WRAPPED = {
                   "q235.sha256": "overridden", "locked_inputs.json": "overridden", "q235_drive.sh": "overridden",
                   "PREREG-q235.md": "overridden", "AMENDMENT*.md": "overridden"},
         "attrs": {"parents", "glob"}},
+    "bench/q235/q235_fit.py": {
+        "names": {"model_files.json": "r2", "q235_run.sh": "r2", "wheels.json": "q235"},
+        "attrs": set()},
     "bench/q235/q235_stage.py": {
         "names": {"q235.sha256": "overridden", "locked_inputs.json": "q235"},
         "attrs": {"parents"}},
