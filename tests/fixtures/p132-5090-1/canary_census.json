@@ -1,0 +1,42 @@
+{
+ "engine": "e4b",
+ "batch": 2,
+ "graph": {
+  "status": "void",
+  "why": "5 steady steps kept < 6 (dropped {})",
+  "dropped": {}
+ },
+ "node": {
+  "status": "void",
+  "why": "5 steady launches kept < 6 (dropped {})",
+  "dropped": {}
+ },
+ "unprofiled_ms": null,
+ "positions": null,
+ "clocks_mhz": null,
+ "gates": {},
+ "labels": [],
+ "nsys_diagnostics": [
+  "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_1010863/streams/pid_10874_stdout.log and stderr.log for program output",
+  "Common injection library initialized successfully.",
+  "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+  "Loaded CUPTI library: /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/libcupti.so.13.1",
+  "Installed CUDA driver version (13.2) is not supported by this build of Nsight Systems. CUDA trace will be collected using libraries for driver version 13.1",
+  "Enabling trace for device graph launch",
+  "CUDA injection initialized successfully.",
+  "Common injection library initialized successfully.",
+  "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+  "Loaded CUPTI library: /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/libcupti.so.13.1",
+  "Installed CUDA driver version (13.2) is not supported by this build of Nsight Systems. CUDA trace will be collected using libraries for driver version 13.1",
+  "Enabling trace for device graph launch",
+  "CUDA injection initialized successfully.",
+  "NVTX injection initialized successfully.",
+  "Profiling has started.",
+  "Not all NVTX events might have been collected.",
+  "Number of NVTX events collected: \t1.",
+  "Not all NVTX events might have been collected.",
+  "No NVTX events collected. Does the process use NVTX?",
+  "Not all CUDA events might have been collected."
+ ],
+ "status": "void"
+}

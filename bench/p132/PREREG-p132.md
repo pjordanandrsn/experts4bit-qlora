@@ -158,3 +158,27 @@ P132, claimed at registration by the `prereg/p132` push after checking:
 - bench/ and CHANGELOG on main;
 - PR titles (P131 is #1627);
 - the receipt store's run ids.
+
+## Amendment 1 (2026-10-16T15:13Z, after `p132-5090-1` stopped at its in-box canary; no timing or census was read)
+
+`p132-5090-1` (2026-10-11, rc 26, HARNESS_ERROR, $0.731, teardown verified) passed everything before SC1b:
+- every bucket 1..4 was captured, and every replay returned;
+- both short captures bracketed 8 replays.
+
+SC1b then read both modes as void: "5 steady steps kept < 6" and "5 steady launches kept < 6", with nothing dropped.
+
+**The cause.** The floor was unreachable. SC1b reads N bracketed replays as the N − 1 periods between them and trims the
+first and the last, so it keeps at most N − 3. The runner demanded N − 2.
+
+**The change.** The canary's floor is `CANARY_MIN_STEPS = CANARY_STEPS − 3` (5 of 8): every step SC1b can keep. One more
+lost step, such as a dropped long period, still voids the canary.
+
+**Unchanged:**
+- SC1b and its class map;
+- the census: 64 replays leave 61 kept steps against SC1b's 56;
+- the timing, the rule, the reducer and every threshold;
+- the staged pins, except `p132_run.sh`'s.
+
+**Evidence.** `tests/test_p132.py` reproduces both of the run's verdicts byte for byte from its records
+(`tests/fixtures/p132-5090-1/`, copied from receipt store commit `814abd9e`). It also shows that the new floor reads ok
+and that one lost step still voids it.

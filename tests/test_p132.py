@@ -153,3 +153,71 @@ def test_the_driver_refuses_another_run_id(tmp_path):
            "E4B_RENT_INSTANCE_ID": "0"}
     out = subprocess.run(["bash", str(LANE / "p132_drive.sh")], capture_output=True, text=True, env=env, timeout=120)
     assert out.returncode == 78 and "is not p132-5090-N" in out.stdout + out.stderr
+
+
+# ---- strike 1 (p132-5090-1): the canary's step floor -------------------------------------------------------------------
+FIX = REPO / "tests" / "fixtures" / "p132-5090-1"
+
+
+def _run_vars():
+    run = (LANE / "p132_run.sh").read_text(encoding="utf-8")
+    steps = int(re.search(r"\bCANARY_STEPS=(\d+)", run).group(1))
+    trim = int(re.search(r"^CANARY_MIN_STEPS=\$\(\(CANARY_STEPS - (\d+)\)\)$", run, re.M).group(1))
+    full = int(re.search(r"\bSTEPS=(\d+)", run).group(1))
+    return steps, steps - trim, full, run
+
+
+def _short_census(tmp, n_replays, long_at=None):
+    """Exports of the canary's shape, built with SC1b's own ``_mkdb``. Graph mode gets ``n_replays`` bracketed replays of
+    one decode graph; node mode gets ``n_replays`` graph launches with their in-graph kernels. ``long_at`` makes one
+    period 2.5x the others."""
+    sc1b = _load("sc1b_census", B / "sc1b" / "sc1b_census.py")
+    us, t = 1000, 0
+    graphs, kernels, launches = [], [], []
+    for i in range(n_replays):
+        t += (2500 if i == long_at else 1000) * us
+        graphs.append((t, t + 600 * us, 100 + i, 5))
+        c = 1000 + i
+        launches.append((t - 20, t - 10, c))
+        kernels += [(t, t + 100 * us, c, 1, "rmsnorm", (1, 1, 1)), (t + 150 * us, t + 350 * us, c, 2, "gemv", (8, 1, 1))]
+    g, n = tmp / "g.sqlite", tmp / "n.sqlite"
+    sc1b._mkdb(str(g), graphs=graphs)
+    sc1b._mkdb(str(n), kernels=kernels, launches=launches)
+    return sc1b, sc1b.load(str(g)), sc1b.load(str(n))
+
+
+def test_strike_1_the_canary_floor_was_unreachable_and_the_classifier_read_it_right(tmp_path):
+    """p132-5090-1 voided at the canary, though everything before the classifier passed. Every bucket was captured, every
+    replay returned (canary.json), and both short captures bracketed 8 replays (the driver records).
+
+    SC1b then kept 5 steady steps of 8 against a floor of 6. That floor could never be met: 8 replays delimit 7 periods,
+    and SC1b trims the first and the last.
+
+    Exports of that shape reproduce both of the record's verdicts byte for byte at the old floor, and read ok at the
+    runner's floor."""
+    rec = json.loads((FIX / "canary.json").read_text(encoding="utf-8"))
+    census = json.loads((FIX / "canary_census.json").read_text(encoding="utf-8"))
+    assert rec["missing_buckets"] == [] and set(rec["replays"].values()) == {"ok"}
+    assert rec["census"] == {"status": "void", "labels": [], "blocking": []}
+    bracketed = {json.loads((FIX / f"canary_drv_n2_{m}.json").read_text(encoding="utf-8"))["steps_bracketed"]
+                 for m in ("graph", "node")}
+    steps, floor, _full, _run = _run_vars()
+    assert bracketed == {steps} == {8}
+    sc1b, g, n = _short_census(tmp_path, steps)
+    spec = sc1b.load_classes(str(LANE / "kernel_classes_nf4_v1_2.json"), "e4b")
+    old = steps - 2                                                    # the floor p132-5090-1 ran with
+    assert sc1b.graph_mode(g, min_steps=old)["why"] == census["graph"]["why"] == "5 steady steps kept < 6 (dropped {})"
+    assert sc1b.node_mode(n, spec, min_steps=old, moe_layers=48)["why"] == census["node"]["why"]
+    ok_g, ok_n = sc1b.graph_mode(g, min_steps=floor), sc1b.node_mode(n, spec, min_steps=floor, moe_layers=48)
+    assert ok_g["status"] == ok_n["status"] == "ok" and ok_g["steps_kept"] == ok_n["steps_kept"] == steps - 3
+
+
+def test_the_canary_floor_is_every_step_the_classifier_can_keep_and_no_fewer(tmp_path):
+    """The fix does not loosen the canary. Its floor is SC1b's structural maximum, so one more lost step (a long period,
+    which SC1b drops) still voids it. The full census keeps its margin: 64 replays leave 61 steps against SC1b's 56."""
+    steps, floor, full, run = _run_vars()
+    assert floor == steps - 3 and "--min-steps $CANARY_MIN_STEPS" in run and "CANARY_STEPS - 2" not in run
+    sc1b, g, _n = _short_census(tmp_path, steps, long_at=4)
+    r = sc1b.graph_mode(g, min_steps=floor)
+    assert r["status"] == "void" and r["dropped"] == {"period_over_1.5x_median": 1}, r
+    assert full - 3 >= sc1b.MIN_STEPS

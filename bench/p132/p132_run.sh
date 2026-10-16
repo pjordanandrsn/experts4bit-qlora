@@ -29,6 +29,9 @@ HEAD_SHA256=d2d6e2e63e09dc755053ae5c98cdececae3611ae5e202d4fa5411126dd3b1dfa; HE
 GPU_CLASS=${P132_GPU_CLASS:-5090}; MIN_DISK_GB=${P132_MIN_DISK_GB:-150}; MIN_RAM_GB=${P132_MIN_RAM_GB:-60}
 GUARD_S=4500; NEED_TESTS=600; NEED_FETCH=2100; NEED_BAKE=600; NEED_CANARY=900; NEED_TIMING=600; NEED_CAPTURE=600   # --wallclock-h 1.25
 SKIP=32; STEPS=64; CANARY_STEPS=8; MOE_LAYERS=48
+# SC1b reads N bracketed replays as the N - 1 periods between them and trims the first and last period, so it keeps N - 3
+# steps at most. The canary demands all of them; p132-5090-1 demanded N - 2 (6 of 8) and voided by construction.
+CANARY_MIN_STEPS=$((CANARY_STEPS - 3))
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 # every serving lever and engine knob starts unset (SD2's list): the SD2 read server is the subject (fixed knobs below)
 unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_SERVE_ATTN_INT4 E4B_FUSE_T1_GLUE E4B_FUSE_T1_GLUE_R2 \
@@ -200,7 +203,7 @@ rc=$?; grep -a "^P132_CANARY" logs/canary.log | tail -1 | cut -c1-400 | tee -a s
 capture 2 graph $CANARY_STEPS 2 canary || { say "CANARY FAILED: the short graph-mode capture"; finish 26; }
 capture 2 node $CANARY_STEPS 2 canary || { say "CANARY FAILED: the short node-mode capture"; finish 26; }
 python $W/sc1b_census.py arm --graph $W/census/canary_n2_graph.sqlite --node $W/census/canary_n2_node.sqlite --engine e4b --batch 2 \
-  --classes $W/kernel_classes_nf4_v1_2.json --delim graph --min-steps $((CANARY_STEPS - 2)) --moe-layers $MOE_LAYERS \
+  --classes $W/kernel_classes_nf4_v1_2.json --delim graph --min-steps $CANARY_MIN_STEPS --moe-layers $MOE_LAYERS \
   --out $W/canary_census.json 2>&1 | tail -1 | tee -a summary.txt
 python - <<'PYC' || { say "CANARY FAILED: the classifier did not read the short census cleanly"; finish 26; }
 import json, sys
