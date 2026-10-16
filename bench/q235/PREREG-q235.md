@@ -538,3 +538,39 @@ u profile, reported in full, is the 235B measurement.
 - VOID on the instrument checks in (4), a refusal, a host fault, a time-left guard or a harness error.
 
 Nothing is quoted before that verdict is re-derived independently on CPU.
+
+## Amendment 4 (2026-10-16, after box `q235-pro6000-2`, before any further 235B box): the check copies move to the host
+
+**Why.** The box's step recorded a device peak (`max_memory_allocated`) of 58.85 GiB at step 0 and 58.91 GiB at step 1. That is
+2.38× the registered 24.76 GiB estimate. The box record and the script show that the gap is not a training-step term:
+`q235_box.py` kept four fp32 copies of every adapter tensor on the device for its checks, all of them alive at the step's peak.
+
+| copy | used by |
+|---|---|
+| `g0`, `g1` | the in-process pair's gradient spread |
+| `before` | the optimizer delta (the parameters before the step) |
+| `grads` | this step's gradient checks (finite, nonzero counts, global norm) |
+
+- **Size.** Each copy is 2 × 4.685 GiB (the bf16 adapters held as fp32), 9.369 GiB; the four together are 37.476 GiB.
+- **Accounting.** The estimate's terms co-resident at that peak are everything but the activations, which are freed after the
+  backward: 21.18 GiB. With the copies that accounts for 58.655 GiB. The residual is +0.195 GiB (0.33 %) at step 0 and +0.255 GiB
+  (0.43 %) at step 1.
+- **Where the peak is.** Step 1 exceeds step 0 by 0.06 GiB, not by the optimizer state's 4.76 GiB, so the peak sits inside the
+  optimizer step in both steps.
+- **Consequence.** The reported device deviation and its estimator-issue flag measured the harness. They fire on any run of the old
+  script at this shape.
+
+**What changes.**
+
+1. **The copies.** `q235_box.py` takes all four with `host_copy`: the tensor leaves the device at its own dtype, is widened to fp32
+   on the host, and never shares storage with its source. The checks compute the same quantities on the host copies, and the
+   optimizer delta is `host_copy(p) − before`. No rule, threshold or verdict line changes.
+2. **The step record** adds `grads_host_copy_s`, the time taken to move `grads` off the device. It falls inside `elapsed_s`, as the
+   device clone did, and is recorded so that step times stay comparable with the first box.
+3. **Expected on the next box** (reported, not gated). The device peak falls by about the copies' 37.5 GiB, to the estimate's
+   co-resident terms plus the residual, and host memory rises by about the same. The launch's host-RAM floor must cover that extra
+   37.5 GiB (40.2 GB).
+4. **Rehearsal.** The rehearsals behind gates 1 and 2 ran the old script. Before any further 235B box, gate 1's rehearsal on the
+   RTX A2000 re-runs with this one, and the closure (`q235.sha256`) carries the new script.
+5. **Tests.** `tests/test_q235_box.py` checks two things. The copies are fp32 host copies that never share storage with their source.
+   `fwd_bwd` and `one_step` contain no `.clone()` or `.float()`, either of which would put a copy back on the device.
