@@ -239,15 +239,34 @@ def test_shape_b_accumulates_to_shape_a_and_its_plants_do_not(shape_b):
         assert ga["max_rel"] < 1e-2 and abs(ga["cosine"] - 1) < 1e-4 and abs(ga["norm_ratio"] - 1) < 1e-2, ga
         assert ga["rel_p50"] <= ga["rel_p99"] <= ga["max_rel"] and len(ga["rel"]) == ga["compared"]
     assert rec["step"]["ga_check"]["compared"] < rec["step1"]["ga_check"]["compared"]   # step 0's A gradients are exactly zero
-    for k in ("step", "step1"):                              # rule 8's quantity: the same shapes, accumulated vs summed apart
-        mb = rec[k]["ga_mb_check"]
-        assert mb["compared"] == rec[k]["ga_check"]["compared"] and not mb["zero_mismatch"] and mb["max_rel"] < 1e-2, mb
-    floor = max(rec[k]["ga_mb_check"]["max_rel"] for k in ("step", "step1"))
+    for k in ("step", "step1"):                              # rule 8: deterministic check passes; the registered step on the default
+        r8 = rec[k]["rule8"]
+        assert (r8["algorithms"], r8["restored"], rec[k]["algorithms"]) == ("deterministic", "default", "default"), (k, r8)
+        assert r8["check"]["compared"] == rec[k]["ga_check"]["compared"] and not r8["check"]["zero_mismatch"]
+        assert r8["check"]["max_rel"] < 1e-2 and r8["floor"]["max_rel"] == 0.0, r8     # two deterministic accumulations agree
+        assert rec[k]["ga_mb_check"]["max_rel"] < 1e-2                                 # the step's own accumulation: reported
+    floor = max(rec[k]["rule8"]["check"]["max_rel"] for k in ("step", "step1"))
     for kind in ("mean", "overwrite"):
+        assert rec["ga_plants"][kind]["algorithms"] == "deterministic"
         assert rec["ga_plants"][kind]["vs_micro_batches"]["max_rel"] > 10 * max(floor, 1e-3), (kind, rec["ga_plants"][kind], floor)
     assert rec["ga_plants"]["overwrite"]["vs_micro_batches"]["norm_ratio"] < 0.9
     rf = rec["route_flips"]                                  # reported: shape A vs B router top-k sets, per layer, real tokens only
     assert len(rf["per_layer"]) == 4 and all(x["real"] == 84 + 8 for x in rf["per_layer"]) and 0 <= rf["flipped"] <= rf["token_layers"]
+
+
+def test_the_deterministic_check_mode_is_always_restored():
+    """Amendment 6: rule 8's check passes run under deterministic algorithms and the previous setting comes back however the block
+    ends, so the registered steps never inherit it."""
+    box = _box_module()
+    before = (torch.are_deterministic_algorithms_enabled(), torch.is_deterministic_algorithms_warn_only_enabled())
+    with box.deterministic():
+        assert box.algorithms() == "deterministic" and torch.is_deterministic_algorithms_warn_only_enabled()
+    assert (torch.are_deterministic_algorithms_enabled(), torch.is_deterministic_algorithms_warn_only_enabled()) == before
+    with pytest.raises(RuntimeError):
+        with box.deterministic():
+            raise RuntimeError("a check pass failed")
+    assert box.algorithms() == "default" and (torch.are_deterministic_algorithms_enabled(),
+                                              torch.is_deterministic_algorithms_warn_only_enabled()) == before
 
 
 def test_shape_b_needs_whole_micro_batches_and_stays_off_the_repeat(tiny8):

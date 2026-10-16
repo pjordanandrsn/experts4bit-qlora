@@ -700,8 +700,56 @@ with the leg's environment; every depth exited 0 with all of Amendment 2's rules
 6. **The SOFT stops are unchanged:** an exponent above 0.5, a point more than 30 % off the fit, or the 30B more than 3× off. Any of
    them stops the amendment, which then proposes a form for review before any box.
 
-**Diagnostic, reported only: the backward's nondeterminism.** Shape A's in-process pair agrees on the loss bit for bit but not on the
-gradient (0.0034 to 0.0294 above). The 4-layer slice runs once under `torch.use_deterministic_algorithms(True, warn_only=True)`, which
-names the backward operations without a deterministic implementation. Nothing changes because of it without a separate review.
+**The diagnostic, as run** (2026-10-16, the 4-layer slice). Under `torch.use_deterministic_algorithms(True, warn_only=True)` with
+`CUBLAS_WORKSPACE_CONFIG=:4096:8`, one warning appeared: memory-efficient attention's backward defaults to a nondeterministic
+algorithm. Shape A's in-process gradient pair became bit for bit equal (spread 0.0, against 0.0053 by default). The same-shapes
+difference fell from 0.0039 to 0.0033. Shape A against Shape B (0.0343) and the router flips (140 of 4,056 token-layers) did not
+change, so those are effects of the batch shape alone.
+
+**The second calibration, as run: one SOFT trigger.** Every depth exited 0, with all of Amendment 2's rules true and no zero mismatch.
+
+| depth | s (same-shapes) | p50 | same-shape in-process spread | plants: mean / overwrite | Shape A vs B | router flips |
+|---|---|---|---|---|---|---|
+| 235B, 2 layers | 0.00309 | 0.00261 | 0.0034 | 0.331 / 0.875 | 0.022 | 2.1 % |
+| 235B, 4 layers | 0.00393 | 0.00291 | 0.0053 | 0.342 / 0.876 | 0.034 | 3.5 % |
+| 235B, 8 layers | 0.00431 | 0.00311 | 0.0069 | 0.341 / 0.894 | 0.056 | 5.2 % |
+| 30B, 48 layers | 0.02663 | 0.00924 | 0.0273 | 0.645 / 1.036 | 1.114 | 16.2 % |
+
+- **The fit.** The exponent is 0.239 ± 0.061 (95 % −0.54 to 1.02) with residuals within 5 %, giving s₉₄ = 0.0079.
+- **The trigger.** The 30B sits 3.93× above the fit at 48 layers: the trigger fired. The other two stops were clean.
+- **What BAR would have been.** The rule gives 0.080, which both plants clear at every depth (mean 4.1× to 8.1×, overwrite 11× to 13×).
+- **The reading.** The 30B's s(48) equals its own same-shape run-to-run spread (0.0273): it measures the backward's nondeterminism
+  compounding over 48 layers, not the accumulation.
+- **Why the bar cannot stand.** At 94 layers that spread extrapolates to about 0.02 to 0.03, so a bar of 0.080 would leave rule 8
+  about a coin flip from a VOID on the box.
+
+**Rule 8, third form: the check passes under deterministic algorithms (STRICT, Shape B only).**
+- **The check passes.** At each step's parameters, before that step, rule 8's check runs under
+  `torch.use_deterministic_algorithms(True, warn_only=True)`:
+  - the host-sum reference;
+  - the device accumulation, a pass of its own, four backwards into `p.grad`;
+  - a second accumulation, for the floor.
+
+  The plants are check passes too. The previous setting is restored when the check ends, however it ends. The registered steps
+  (rules 1 to 7, the fidelity read, the optimizer steps) run on the shipped default path, and every pass records which mode it ran in.
+- **The STRICT quantity** is the per-tensor relative difference between the deterministic accumulation and the deterministic
+  reference: at most **BAR** on every tensor whose reference is nonzero. A tensor exactly zero in the reference must be exactly zero
+  in the accumulation.
+- **Instrument checks (VOID):**
+  - the check ran deterministic, with the default restored for the step;
+  - the floor (the two deterministic accumulations against each other) is at most **BAR / 3**;
+  - each registered plant reads above BAR.
+- **Reported:**
+  - the registered step's own default-mode accumulation against the deterministic reference;
+  - Shape A against Shape B in every view;
+  - the router flips.
+- **Host memory and cost.** At most four fp32 host copies are alive at once. The check adds eight micro-batch passes per step on the
+  box, about 10 minutes in all.
+- **One scoping check before the third calibration.** `CUBLAS_WORKSPACE_CONFIG` is read when cuBLAS creates its handle, so it cannot
+  be limited to the check passes. The calibration session first runs the 4-layer in-process pair under the torch flag alone. If that
+  pair is bit for bit equal, the form stands as written. If not, the amendment stops for review before the calibration.
+
+**BAR, from a third calibration,** read by the rule already registered (the depth fit, 3 × max(s₉₄, the 30B's s(48)), plants at least 3×
+BAR at every depth, the SOFT stops). It uses the third form's quantity, the 235B cuts at 2, 4 and 8 layers, and the 30B at 48.
 
 **The fp32 arm** stays unrun.

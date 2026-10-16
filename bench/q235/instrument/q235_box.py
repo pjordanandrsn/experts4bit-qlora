@@ -24,6 +24,7 @@ times; and each decoder layer's output on the step-0 forward, for the fidelity r
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -393,6 +394,23 @@ def capture(model):
     return layer_out, topk, hooks
 
 
+@contextlib.contextmanager
+def deterministic():
+    """Amendment 6: ``torch.use_deterministic_algorithms(True, warn_only=True)`` for rule 8's check passes only. The previous setting
+    (enabled, warn_only) is restored on exit, however the block ends, so the registered steps run on the shipped default path."""
+    prev = (torch.are_deterministic_algorithms_enabled(), torch.is_deterministic_algorithms_warn_only_enabled())
+    torch.use_deterministic_algorithms(True, warn_only=True)
+    try:
+        yield
+    finally:
+        torch.use_deterministic_algorithms(prev[0], warn_only=prev[1])
+
+
+def algorithms():
+    """Which mode a pass runs in: ``deterministic`` or ``default``."""
+    return "deterministic" if torch.are_deterministic_algorithms_enabled() else "default"
+
+
 def route_flips(topk_a, routes_b, mbs, mask):
     """Amendment 6, reported: per decoder layer, the real tokens whose routed expert SET differs between shape A's forward (``topk_a``,
     one ``[rows x width, k]`` tensor per layer) and shape B's micro-batch forwards at the same parameters (``routes_b``: per
@@ -566,6 +584,22 @@ def run(a):
         grads = acc if mode == "separate" else {n: host_copy(p.grad) for n, p in params.items() if p.grad is not None}
         return total, grads, tf_sum, tb - t - tf_sum, time.time() - tb
 
+    def rule8_check(routes=None):
+        """Rule 8's check at the current parameters, every pass under deterministic algorithms (Amendment 6): the host-sum reference
+        (the micro-batches taken apart), the device accumulation (four backwards into ``p.grad``; a pass of its own, not the
+        registered step) and a second accumulation for the floor. Returns the record and the reference, which the step's own
+        default-mode accumulation is also read against (reported). At most four host copies, with ``g0`` or the step-1 Shape A
+        gradient alive."""
+        with deterministic():
+            mode = algorithms()
+            _, ref, *_ = fwd_bwd_b("separate", routes=routes)
+            _, acc, *_ = fwd_bwd_b("token")
+            _, acc2, *_ = fwd_bwd_b("token")
+            rec = {"algorithms": mode, "check": compare_grads(ref, acc), "floor": compare_grads(acc, acc2)}
+            del acc, acc2
+        rec["restored"] = algorithms()
+        return rec, ref
+
     l0, g0, *_ = fwd_bwd()                                     # step-0 forward: the layer outputs are recorded here
     for h in hooks:
         h.remove()
@@ -578,13 +612,16 @@ def run(a):
                           "valid_total": n_valid, "widths": [int(m["input_ids"].shape[1]) for m in mbs]}
         out["ga_plants"] = {}
         routes_b = []
-        _, ref0, *_ = fwd_bwd_b("separate", routes=routes_b)   # the same-shapes reference at step 0's parameters
-        out["route_flips"] = route_flips(topk, routes_b, mbs, tokens["attention_mask"])
+        check0, ref0 = rule8_check(routes=routes_b)            # rule 8's check at step 0's parameters (deterministic)
+        out["route_flips"] = {**route_flips(topk, routes_b, mbs, tokens["attention_mask"]),
+                              "modes": {"shape_a": "default", "shape_b": "deterministic"}}
         del routes_b
-        for kind in ("mean", "overwrite"):
-            lp, gp, *_ = fwd_bwd_b(kind)
-            out["ga_plants"][kind] = {"loss": lp, **compare_grads(g0, gp), "vs_micro_batches": compare_grads(ref0, gp)}
-            del gp
+        with deterministic():                                   # the plants are check passes too
+            for kind in ("mean", "overwrite"):
+                lp, gp, *_ = fwd_bwd_b(kind)
+                out["ga_plants"][kind] = {"loss": lp, "algorithms": algorithms(), **compare_grads(g0, gp),
+                                          "vs_micro_batches": compare_grads(ref0, gp)}
+                del gp
 
     if cuda:
         import bitsandbytes as bnb
@@ -606,6 +643,7 @@ def run(a):
         off.reset_offload_stats()
         d1 = diskstats()
         t_step = time.time()
+        mode = algorithms()
         loss, grads, t_fwd, t_bwd, t_copy = fwd_bwd_b() if mbs else fwd_bwd()
         sync()
         t_o = time.time()
@@ -613,7 +651,7 @@ def run(a):
         sync()
         t_opt = time.time() - t_o
         rec = {
-            "loss": loss, "forward_s": round(t_fwd, 3), "backward_s": round(t_bwd, 3), "optimizer_s": round(t_opt, 3),
+            "algorithms": mode, "loss": loss, "forward_s": round(t_fwd, 3), "backward_s": round(t_bwd, 3), "optimizer_s": round(t_opt, 3),
             "elapsed_s": round(time.time() - t_step, 3), "grads_host_copy_s": round(t_copy, 3),   # inside elapsed_s (Amendment 4)
             "h2d_bytes_offload": int(sum(c[2] for c in off._stats().copies)), "h2d_copies_offload": len(off._stats().copies),
             "nvme": disk_delta(d1, diskstats()),
@@ -647,12 +685,14 @@ def run(a):
     # not zero-initialized (VOID, a harness error); B's gradients are nonzero and every B changes. Step 1, after step 0 has moved B:
     # every A's gradient is nonzero and every A changes (a broken A path cannot pass), and B's rules repeat. The frozen base's hashes
     # hold across both steps.
-    if mbs:                                                     # Amendment 6: each shape-B step against shape A and the same shapes
+    if mbs:                                                     # Amendment 6: rule 8's check, then the registered step (default mode)
         s0 = one_step(ref=g0, mb_ref=ref0)
+        s0["rule8"] = check0
         del g0, ref0
         _, ga1, *_ = fwd_bwd()                                  # shape A at step 1's parameters, before its accumulation
-        _, ref1, *_ = fwd_bwd_b("separate")
+        check1, ref1 = rule8_check()
         s1 = one_step(ref=ga1, mb_ref=ref1)
+        s1["rule8"] = check1
         del ga1, ref1
     else:
         s0 = one_step()

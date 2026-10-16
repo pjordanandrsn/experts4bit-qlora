@@ -64,8 +64,11 @@ def _box_run(root, *, code="0", card=PRO6000, mode="science", rules=None, losses
             return {"compared": 48, "max_rel": x, "max_rel_tensor": "model.layers.3.mlp.experts.lora_B", "zero_mismatch": list(zero),
                     "cosine": 1 - x * x, "norm_ratio": 1.0, "per_layer_max_rel": {"3": x}}
         box["shape_b"] = {"micro_batch": 2, "accumulation": 4, "valid_per_micro_batch": [125, 252, 480, 149], "valid_total": 1006}
-        box["step"]["ga_mb_check"] = ga(shape_b["ga"][0], shape_b.get("zero", ()))
-        box["step1"]["ga_mb_check"] = ga(shape_b["ga"][1])
+        for k, x, z in (("step", shape_b["ga"][0], shape_b.get("zero", ())), ("step1", shape_b["ga"][1], ())):
+            box[k]["rule8"] = {"algorithms": shape_b.get("ran", "deterministic"), "restored": "default",
+                               "check": ga(x, z), "floor": ga(shape_b.get("floor", 0.0))}
+            box[k]["algorithms"] = "default"
+            box[k]["ga_mb_check"] = ga(x)                     # the registered step's own accumulation: reported only
         box["step"]["ga_check"] = box["step1"]["ga_check"] = {**ga(0.3), "rel_p50": 0.2}       # shape A vs B: reported only
         box["ga_plants"] = {k: {"loss": 2.1, **ga(0.4), "vs_micro_batches": ga(v)} for k, v in zip(("mean", "overwrite"), shape_b["plants"])}
         box["route_flips"] = {"flipped": 12, "token_layers": 4000, "flipped_fraction": 0.003, "per_layer": [], "layers_with_flips": 3}
@@ -216,3 +219,11 @@ def test_shape_b_without_a_registered_bar_is_void_and_shape_a_never_reads_rule_8
     assert v["verdict"] == "VOID" and v["why"] == "not registered: Amendment 6's accumulation bar", v["why"]
     a = _verdict_with(*_box_run(tmp_path / "a"), 0.05)
     assert a["verdict"] == "PASS" and a["why"] == "rules 1-7 hold" and "8_accumulation" not in a["rules"]
+
+
+@pytest.mark.parametrize("extra, cause", [({"floor": 0.02}, "floor at step is 0.02"), ({"ran": "default"}, "ran 'default'")])
+def test_rule_8_cannot_be_read_without_its_deterministic_check(tmp_path, extra, cause):
+    """Amendment 6: the check passes must have run deterministic (default restored for the step), and their floor -- two deterministic
+    accumulations against each other -- must sit at most BAR / 3, or rule 8 is VOID, never a FAIL from noise."""
+    v = _verdict_with(*_box_run(tmp_path, shape_b={"ga": (0.01, 0.02), "plants": (0.6, 0.9), **extra}), 0.05)
+    assert v["verdict"] == "VOID" and cause in v["why"], v["why"]

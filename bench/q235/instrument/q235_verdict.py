@@ -25,13 +25,16 @@ STRICT failure's 12, or a record missing); and on Amendment 3's instrument check
 Exit 12 stops the run after the box, so a STRICT failure carries no repeat and no plants: it is a FAIL on rules 3-5 with 6 and 7 not read.
 
 **Shape B** (Amendment 6; a box record with ``shape_b``, from ``q235_box.py --micro-batch``) adds:
-8. each step's accumulated gradient (the four backwards into ``p.grad``) against the same-shapes reference, the host fp32 sum of the
-   same four micro-batches' gradients taken one at a time at the same parameters (``ga_mb_check``): the per-tensor relative
-   difference at most ``GA_BAR`` on every compared tensor, and no tensor exactly zero in the reference but not in the accumulation.
-It is VOID while ``GA_BAR`` is unregistered, and on its own instrument check: each REGISTERED planted accumulation bug (``GA_PLANTS``;
-a mean of micro-batch means, an overwrite that keeps only the last micro-batch) must read above ``GA_BAR`` against the same reference.
-Reported with it: the global cosine and the norm ratio, shape A against shape B in every view (``ga_check``), and the router top-k
-flips between them. Shape A's records carry no ``shape_b``, so rule 8 does not apply to them and their verdict is unchanged.
+8. at each step's parameters, rule 8's check passes under deterministic algorithms (``rule8``): the device accumulation (four
+   backwards into ``p.grad``) against the same-shapes reference, the host fp32 sum of the same four micro-batches' gradients taken
+   one at a time: the per-tensor relative difference at most ``GA_BAR`` on every compared tensor, and no tensor exactly zero in the
+   reference but not in the accumulation.
+It is VOID while ``GA_BAR`` is unregistered, and on its own instrument checks: the check passes must have run deterministic with the
+default restored after them; the floor (two deterministic accumulations against each other) must sit at most ``GA_BAR / 3``; and each
+REGISTERED planted accumulation bug (``GA_PLANTS``; a mean of micro-batch means, an overwrite that keeps only the last micro-batch)
+must read above ``GA_BAR`` against the same reference. Reported with it: the global cosine and the norm ratio, the registered step's
+own default-mode accumulation against the reference (``ga_mb_check``), shape A against shape B in every view (``ga_check``), and the
+router top-k flips between them. Shape A's records carry no ``shape_b``, so rule 8 does not apply to them and their verdict is unchanged.
 
 **Reported, not gating:** the box's full u profile (the layers outside the interior class without a bar), the full-state profile with
 its median (the upper middle) and maximum, the router overlap and set agreement, the loss gap, each plant's u after its layer, the
@@ -71,18 +74,31 @@ def accumulation(box):
     if GA_BAR is None:
         return {"ok": None, "not_read": "Amendment 6's bar is not registered"}, "not registered: Amendment 6's accumulation bar"
     try:
-        steps = {k: box[k]["ga_mb_check"] for k in ("step", "step1")}
+        r8 = {k: box[k]["rule8"] for k in ("step", "step1")}
+        steps = {k: v["check"] for k, v in r8.items()}
+        floor = {k: v["floor"]["max_rel"] for k, v in r8.items()}
+        modes = {k: (v["algorithms"], v["restored"], box[k]["algorithms"]) for k, v in r8.items()}
         ab = {k: box[k]["ga_check"] for k in ("step", "step1")}
+        step_own = {k: box[k]["ga_mb_check"] for k in ("step", "step1")}
         plants = {k: box["ga_plants"][k]["vs_micro_batches"] for k in GA_PLANTS}
         over = {k: v["max_rel"] for k, v in steps.items() if not (v["max_rel"] is not None and v["max_rel"] <= GA_BAR)}
         zero = {k: v["zero_mismatch"] for k, v in steps.items() if v["zero_mismatch"]}
         rec = {"ok": not over and not zero, "bar": GA_BAR, "over": over, "zero_mismatch": zero,
                **{f: {k: v[f] for k, v in steps.items()} for f in ("max_rel", "max_rel_tensor", "cosine", "norm_ratio", "compared")},
                "shape_b": box["shape_b"], "plants": {k: {f: plants[k][f] for f in ("max_rel", "cosine", "norm_ratio")} for k in GA_PLANTS},
+               "floor": floor, "modes": modes,
+               "reported_step_vs_reference": {k: {f: v[f] for f in ("max_rel", "cosine")} for k, v in step_own.items()},
                "reported_a_vs_b": {k: {f: v[f] for f in ("max_rel", "rel_p50", "cosine", "norm_ratio")} for k, v in ab.items()},
                "reported_route_flips": {f: box["route_flips"][f] for f in ("flipped", "token_layers", "flipped_fraction")}}
     except (KeyError, TypeError) as e:
         return {"ok": None, "not_read": "harness error"}, f"harness error: shape B's record: {type(e).__name__}: {e}"
+    for k, (ran, restored, step_mode) in modes.items():
+        if (ran, restored, step_mode) != ("deterministic", "default", "default"):
+            return rec, (f"instrument: rule 8's check at {k} ran {ran!r}, restored {restored!r}, and the step ran {step_mode!r} "
+                         "(expected deterministic / default / default)")
+    for k, f in floor.items():
+        if f is None or f > GA_BAR / 3:
+            return rec, f"instrument: rule 8's floor at {k} is {f!r}, above BAR / 3 = {GA_BAR / 3:.4g}: the check cannot be read"
     for kind in GA_PLANTS:
         if not plants[kind]["max_rel"] > GA_BAR:
             return rec, (f"instrument: the {kind} accumulation plant passes the bar (max_rel {plants[kind]['max_rel']:.3g} <= "
