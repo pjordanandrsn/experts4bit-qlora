@@ -6,6 +6,7 @@ Each copy is compared with its Q235 source after the declared renames; the leadi
 copy's own; every other difference must be a one-for-one line replacement that a declared rule names on both sides.
 
 - **STRICT** against the source at ``CITED``, the Q235 commit R2 cites (``git show``): any undeclared difference fails.
+- **The Python twin.** Every file a wrapped Q235 module (``WRAPPED``) reads through its ``HERE`` is classified; a new one fails.
 - **REPORTED** against the source in the working tree: a Q235 change after ``CITED`` (a fix R2 has not taken) is listed, not
   failed, so an open Q235 amendment never turns R2 red. R2 takes it by updating its copy and ``CITED`` together.
 
@@ -29,7 +30,10 @@ PAIRS = {
         "renames": [("q235.sha256", "r2.sha256"), ("q235_tiny.py", "r2_tiny.py"), ("] q235: ", "] r2: "),
                     ('"q235-run/1"', '"r2-run/1"'),
                     ("--only 'tokenizer*' vocab.json merges.txt", "--only 'tokenizer*' special_tokens_map.json")],
-        "lines": [(r"^  science\) CARD_RE=", r"^  science\) say 'refusing: no box is registered ")],
+        "lines": [(r"^  science\) CARD_RE=", r"^  science\) say 'refusing: no box is registered "),
+                  # The rehearsal's depth is R2's registration, not plumbing: a Q235 re-cite may move Q235's, never R2's.
+                  (r"^  a2000\)   must fetch ", r"^  a2000\)   must fetch .* --slice 4 --slice-dir \"\$W/hf-cache/slice4\" "),
+                  (r"^           MODEL=\"\$W/hf-cache/slice\d+\" ", r"^           MODEL=\"\$W/hf-cache/slice4\" DEVICE=cuda ENABLER=fast ;;$")],
     },
     "bench/fam235/r2_drive.sh": {
         "source": "bench/q235/q235_drive.sh",
@@ -39,6 +43,46 @@ PAIRS = {
         "lines": [],
     },
 }
+
+# The Q235 modules R2 runs unchanged through a wrapper, and every file each reads relative to its own directory (``HERE``), as of
+# ``CITED``: "r2" (the wrapper maps it to R2's), "q235" (R2 reads Q235's on purpose) or "overridden" (only a function the wrapper
+# replaces reads it). A name Q235 adds later is unclassified until it is declared here, so it cannot reach a box in R2's name.
+WRAPPED = {
+    "bench/q235/q235_fetch_gate.py": {
+        "names": {"model_files.json": "r2", "wheels.json": "q235", "q235_bootstrap.py": "q235", "q235_stage.py": "overridden",
+                  "q235.sha256": "overridden", "locked_inputs.json": "overridden", "q235_drive.sh": "overridden",
+                  "PREREG-q235.md": "overridden", "AMENDMENT*.md": "overridden"},
+        "attrs": {"parents", "glob"}},
+    "bench/q235/q235_stage.py": {
+        "names": {"q235.sha256": "overridden", "locked_inputs.json": "q235"},
+        "attrs": {"parents"}},
+}
+FILE_NAME = re.compile(r"^[\w*.-]+\.[A-Za-z0-9]+$")
+
+
+def here_reads(text: str) -> tuple:
+    """The file names and attributes a module reaches through ``HERE``: every file-like string literal on a code line that uses
+    ``HERE`` (``HERE / "x"``, ``HERE / n for n in (...)``, ``HERE.glob("x")``), and every ``HERE.<attr>``."""
+    names, attrs = set(), set()
+    for line in text.splitlines():
+        code = line.split("#", 1)[0]
+        if not re.search(r"\bHERE\b", code) or re.match(r"\s*HERE\s*=", code):
+            continue
+        names |= {x for x in re.findall(r'"([^"]+)"', code) if FILE_NAME.match(x)}
+        attrs |= set(re.findall(r"\bHERE\.(\w+)", code))
+    return names, attrs
+
+
+def unclassified(text: str, rule: dict) -> list:
+    names, attrs = here_reads(text)
+    out = [f"reads {n!r} through HERE: not classified" for n in sorted(names - set(rule["names"]))]
+    out += [f"declares {n!r}, which it no longer reads" for n in sorted(set(rule["names"]) - names)]
+    out += [f"uses HERE.{a}: not declared" for a in sorted(attrs - rule["attrs"])]
+    return out
+
+
+def check_wrapped(commit: str | None = CITED) -> dict:
+    return {src: unclassified(source_at(src, commit), rule) for src, rule in WRAPPED.items()}
 
 
 def _body(lines):
@@ -87,10 +131,15 @@ def main():
         print(f"strict {copy} against {PAIRS[copy]['source']} at {CITED[:8]}: " + ("ok" if not diffs else f"{len(diffs)} undeclared"))
         for d in diffs:
             print("   ", d)
+    wrapped = check_wrapped(CITED)
+    for src, diffs in wrapped.items():
+        print(f"strict {src}'s HERE reads at {CITED[:8]}: " + ("ok" if not diffs else f"{len(diffs)} unclassified"))
+        for d in diffs:
+            print("   ", d)
     for copy, diffs in check(None).items():
         if diffs:
             print(f"reported {copy}: Q235's working-tree source has moved since {CITED[:8]} ({len(diffs)} differences)")
-    sys.exit(1 if any(strict.values()) else 0)
+    sys.exit(1 if any(strict.values()) or any(wrapped.values()) else 0)
 
 
 if __name__ == "__main__":

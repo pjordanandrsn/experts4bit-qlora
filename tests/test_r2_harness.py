@@ -4,6 +4,8 @@ unchanged through thin wrappers; and R2's copies of Q235's bash runner and drive
 
 - **Drift.** Each copy differs from its Q235 source at the cited commit only by the declared substitutions (STRICT). A Q235 change
   after that commit is reported as a warning, never a failure, so an open Q235 amendment cannot turn R2 red.
+- **The Python twin.** Every file a wrapped Q235 module reads through its ``HERE`` is classified (R2's, Q235's, or read only
+  by a function the wrapper replaces); a new one fails. The rehearsal's depth is R2's own line.
 - **The science mode refuses** until the amendment that registers the box pins its class, floors and caps.
 - **The wrappers** read R2's files where R2 has them and Q235's everywhere else.
 
@@ -160,3 +162,35 @@ def test_the_tiny_mixtral_is_the_subject_s_architecture(tmp_path):
     assert cfg["num_experts_per_tok"] == 2 and cfg["vocab_size"] == 32768
     assert {p.name for p in (tmp_path / "tiny").iterdir()} >= {"tokenizer.json", "special_tokens_map.json", "config.json"}
     sys.modules.pop("r2_tiny", None)
+
+
+def test_every_file_a_wrapped_q235_module_reads_is_classified():
+    """The Python twin of the bash drift check: a file a wrapped Q235 module newly reads through its HERE fails until declared."""
+    drift = _mod("r2_drift", F / "r2_drift.py")
+    assert drift.check_wrapped(drift.CITED) == {src: [] for src in drift.WRAPPED}
+    src = "bench/q235/q235_fetch_gate.py"
+    text = drift.source_at(src, drift.CITED)
+    assert drift.unclassified(text + '\nnew = json.loads((HERE / "new_lock.json").read_text())\n', drift.WRAPPED[src]) == \
+        ["reads 'new_lock.json' through HERE: not classified"]
+    assert "declares 'wheels.json', which it no longer reads" in drift.unclassified(text.replace('"wheels.json"', '"w.json"'),
+                                                                                      drift.WRAPPED[src])
+    assert drift.unclassified(text + "\nx = HERE.parent\n", drift.WRAPPED[src]) == ["uses HERE.parent: not declared"]
+
+
+def test_the_fetch_gate_maps_each_classified_name_where_it_says():
+    drift = _mod("r2_drift", F / "r2_drift.py")
+    g = _mod("r2_fetch_gate", F / "r2_fetch_gate.py").gate_module()
+    for name, where in drift.WRAPPED["bench/q235/q235_fetch_gate.py"]["names"].items():
+        if where in ("r2", "q235"):
+            assert (g.HERE / name).parent == {"r2": F, "q235": Q}[where], name
+
+
+def test_the_rehearsal_depth_is_r2_s_own():
+    """A Q235 re-cite may move Q235's slice; R2's stays 4 layers unless R2 changes it, and then the drift check names it."""
+    drift = _mod("r2_drift", F / "r2_drift.py")
+    rule = drift.PAIRS["bench/fam235/r2_run.sh"]
+    source, copy = drift.source_at(rule["source"], drift.CITED), (F / "r2_run.sh").read_text()
+    deeper = source.replace("--slice 4 --slice-dir \"$W/hf-cache/slice4\"", "--slice 8 --slice-dir \"$W/hf-cache/slice8\"") \
+        .replace('MODEL="$W/hf-cache/slice4"', 'MODEL="$W/hf-cache/slice8"')
+    assert deeper != source and drift.undeclared(deeper, copy, rule) == []
+    assert drift.undeclared(source, copy.replace("--slice 4 ", "--slice 8 "), rule)
