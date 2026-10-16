@@ -23,7 +23,7 @@ def test_offer_and_instance_direct_endpoint_refuse_missing_or_foreign_route():
         assert not transport.direct_available(row)
     row = {'id': 12, 'public_ipaddr': '8.8.8.8', 'ports': {'22/tcp': [{'HostPort': '1234'}]}}
     assert transport.direct_endpoint(row, '12') == ('8.8.8.8', 1234)
-    for bad in [dict(row, id=13), dict(row, ports={}), dict(row, public_ipaddr='10.0.0.1'),
+    for bad in [dict(row, id=13), dict(row, ports={}), dict(row, public_ipaddr='172.31.255.254'),
                 dict(row, ports={'22/tcp': [{'HostPort': '0'}]}),
                 dict(row, ports={'22/tcp': [{'HostPort': '1234'}, {'HostPort': '1235'}]})]:
         with pytest.raises(ValueError):
