@@ -78,6 +78,9 @@ def test_the_step_records_every_registered_check(step):
     assert rec["frozen_sha256_after_both_steps_equal"] and rec["frozen_tensors"] > 0
     assert rec["in_process"]["loss_equal"]                          # the CPU reference path is deterministic
     assert all(0 <= rec[k]["grads_host_copy_s"] <= rec[k]["elapsed_s"] for k in ("step", "step1"))   # Amendment 4, timed apart
+    for hm in (rec["load"]["host_memory"], rec["step"]["host_memory"], rec["step1"]["host_memory"]):   # Amendment 4, reported
+        assert hm == {} if not Path("/proc/self/status").exists() else (
+            set(hm) == {"VmHWM", "VmRSS", "RssAnon", "RssFile", "RssShmem"} and hm["RssAnon"] > 0 and hm["VmHWM"] >= hm["VmRSS"])
     assert rec["step"]["optimizer"].startswith("torch AdamW") and rec["step"]["lr"] == 2e-4
     assert len(rec["layer_sha256"]) == 4 and (out / "nf4.pt").exists()
     prof = rec["load"]["profile"]                                   # gate 2: where the load's time went

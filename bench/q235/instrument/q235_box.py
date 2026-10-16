@@ -125,6 +125,18 @@ def strict_failures(out, repeat=False):
     return bad
 
 
+def host_memory():
+    """This process's host memory from ``/proc/self/status``, in bytes (Amendment 4; reported): the peak and current resident set
+    and its anonymous, file-backed and shared parts. File-backed pages (the checkpoint's mmap) are reclaimable; the anonymous and
+    shared ones (pinned expert homes, the check copies) are what the host-RAM floor covers. Empty where the file does not exist."""
+    keys = ("VmHWM", "VmRSS", "RssAnon", "RssFile", "RssShmem")
+    try:
+        with open("/proc/self/status") as f:
+            return {k: int(v.split()[0]) * 1024 for k, v in (ln.split(":", 1) for ln in f if ":" in ln) if k in keys}
+    except OSError:
+        return {}
+
+
 def host_copy(t):
     """An fp32 copy of ``t`` on the host, never a view of it (Amendment 4). The box's gradient and delta checks hold their copies of the
     adapters (``g0``, ``g1``, ``before``, ``grads``) here rather than on the device, so the step's device peak measures the training
@@ -367,7 +379,7 @@ def run(a):
     out["tokens_sha256"] = {k: hashlib.sha256(v.contiguous().numpy().tobytes()).hexdigest() for k, v in tokens.items()}
     d0, t0 = diskstats(), time.time()
     model, rec = build(a.checkpoint, dev, a.r, a.alpha, a.adapter_dtype, a.enabler, profile=LoadProfile(cuda))
-    out["load"] = {**rec, "seconds": round(time.time() - t0, 1), "nvme": disk_delta(d0, diskstats())}
+    out["load"] = {**rec, "seconds": round(time.time() - t0, 1), "nvme": disk_delta(d0, diskstats()), "host_memory": host_memory()}
     planted = plant(model, a.plant)[0] if a.plant else None
     out["plant"] = {"kind": a.plant, "layer": planted}
     ids, mask, labels = (tokens[k].to(dev) for k in ("input_ids", "attention_mask", "labels"))
@@ -452,6 +464,7 @@ def run(a):
             "max_memory_allocated": torch.cuda.max_memory_allocated() if cuda else None,
             "max_memory_reserved": torch.cuda.max_memory_reserved() if cuda else None,
             "host_peak_rss": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * (1 if platform.system() == "Darwin" else 1024),
+            "host_memory": host_memory(),                            # after opt.step: g0, g1, before and grads all alive
             "lr": a.lr, "weight_decay": a.weight_decay, "optimizer": opt_name, "instrumented": "E4B_OFFLOAD_STATS=1 during the step",
         }
         os.environ["E4B_OFFLOAD_STATS"] = "0"

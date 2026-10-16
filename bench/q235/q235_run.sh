@@ -71,7 +71,7 @@ must require-git "$CAP_GIT" bash dq11_require_git.sh
 
 # Host floors, before any fetch (PREREG "Refusal points" 4-5; the card class is the registering amendment's).
 case "$MODE" in
-  science) CARD_RE='^NVIDIA RTX PRO 6000'; MIN_VRAM_MIB=94000; MIN_RAM_GB=192; MIN_DISK_GB=550 ;;
+  science) CARD_RE='^NVIDIA RTX PRO 6000'; MIN_VRAM_MIB=94000; MIN_RAM_GB=235; MIN_DISK_GB=550 ;;   # host RAM: Amendment 4
   a2000)   CARD_RE='^NVIDIA RTX A2000 12GB$'; MIN_VRAM_MIB=11000; MIN_RAM_GB=64; MIN_DISK_GB=60 ;;
   cpu)     CARD_RE=''; MIN_VRAM_MIB=0; MIN_RAM_GB=8; MIN_DISK_GB=10 ;;
 esac
