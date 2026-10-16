@@ -1,6 +1,6 @@
 # p132_canary: the in-box canary records of `p132-5090-1`
 
-These four files are byte-identical to the records in the receipt of `p132-5090-1`. That run was lane P132's first
+These files are byte-identical to the records in the receipt of `p132-5090-1`. That run was lane P132's first
 box: one RTX 5090 on 2026-10-11, e4b 88ae1cfd plus grouped-nf4-gemm 724ccc45, and SD2's read server. It stopped at the
 canary with rc 26 (HARNESS_ERROR, $0.731, teardown verified). The tests that read these files check their sha256 first:
 
@@ -10,6 +10,10 @@ canary with rc 26 (HARNESS_ERROR, $0.731, teardown verified). The tests that rea
 | `canary_census.json` | `1467f9d2a388e1d96d1caea8446a0644e89d6f372fccc3ec2c5f2bc42a128ee8` |
 | `canary_drv_n2_graph.json` | `ba4db33afbd61ba8608c521e3ff0f0fdc6583a40980792a2760a2007b4293c37` |
 | `canary_drv_n2_node.json` | `862123a5d959a70b62e43f2aec4da256904f7eecddfff7529beeeb0e487ebaf5` |
+| `forensics.txt` | `8937620ac7926dec900fa58d1fe2c6978fcadcc953b2c45bc51c54733dc450eb` |
+
+`forensics.txt` was added by Amendment 2. Its first line names the card, GPU-280958b0, not the reference card
+GPU-38c66e15. `tests/test_p132_card.py` uses it as the record the card-identity check must refuse.
 
 **What they hold:**
 - `canary.json` is `p132_box.py --mode canary`'s record, plus the census verdict that `p132_run.sh` merged into it.

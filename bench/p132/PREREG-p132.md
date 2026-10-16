@@ -203,3 +203,45 @@ no floor of their own.
 **The relaunch** is a new packet after this merges: a fresh host poll, the machine and offer set, a dry validation of
 the exact launch manifest, and the maintainer's ACK. Nothing paid happens before that. Under the lane's two-strike rule,
 a second paid failure simplifies the lane instead of retrying it.
+
+## Amendment 2 (2026-10-16, before any relaunch; the card is the reference card)
+
+**Why.** The rule reads absolute milliseconds against `sd2-5090-3`: verify within 5 %, I_b(n) within 10 % of I(n), and
+the BUILD thresholds. `sd2-5090-3` ran on one card, GPU-38c66e15 on machine 55913. A matched pair in the records shows
+that another RTX 5090 does not reproduce those milliseconds:
+- `p116-5090-1` ran on machine 152440 and `p116-5090-2` on GPU-38c66e15;
+- the e4b package bytes, kernel package, torch, model, prompts and box were the same;
+- per decode step the other card took 0.847–0.867× the time at B = 1 and 0.933–0.938× at 16 rows, with each run's
+  self-pairs within 0.3 %.
+
+On that card the anchor would read about 3.6 ms against 4.1825 ± 5 %: a VOID by host, not by the build.
+
+**Normalizing by the anchor does not rescue it.** The same pair breaks both bands when one B = 1 anchor normalizes a
+multi-row step:
+- the 16-row / 1-row step ratio moves +7.7 to +10.8 % against the 5 % band;
+- the increment ratio moves +15 to +17.7 % against the 10 % band.
+
+The one-row and multi-row phases scale differently between cards. So the registered rule stays in milliseconds on the
+reference card, and the box runs only on that card.
+
+**The amendment (the maintainer's ACK, 2026-10-16).**
+- Right after the card-class refusal, before anything is installed or fetched, `p132_run.sh` reads the uuid (field 4
+  of `forensics.txt`'s first line).
+- It refuses with **rc 18** unless the uuid is GPU-38c66e15-7fac-e3bc-9760-a49deb41e4d6.
+- It records `card.json` (uuid, reference, match) and a `P132_CARD` line in `summary.txt` either way.
+- A refusal costs a few minutes of rental and reads nothing. A card refusal (rc 18), like the class refusal (rc 15),
+  reads nothing and is not a strike.
+- The launch pins the card itself, beside this check: on machine 55913 the offer id maps to one card. Offer 40421555
+  gave GPU-38c66e15 in both `p116-5090-2` and `sd2-5090-3`, and offer 40421556 gave another card in `sd2-5090-1`.
+
+**Tests, real records first** (`tests/test_p132_card.py`):
+- `sd2-5090-3`'s committed `forensics.txt` (its digest checked against that receipt's SHA256SUMS) must pass;
+- `p132-5090-1`'s `forensics.txt` (`tests/fixtures/p132_canary/`, byte-identical to its receipt, from GPU-280958b0)
+  must refuse with rc 18;
+- the bash cases run the runner's own block.
+
+**Unchanged:** the subject, the instrument, the rule, the predictions, the budget and Amendment 1. **Re-pinned:**
+`p132_run.sh` only.
+
+**If the reference card does not return,** the lane cannot run as registered. It would need a new registration that
+takes its reference in the box, not a third amendment.
