@@ -24,7 +24,7 @@ case "${TC1_DEADLINE_EPOCH:-}" in *[!0-9]*|"") say 'CENSUS_REFUSAL: no guard dea
 sha256sum -c science.sha256 > logs/science-tripwire.log 2>&1 || finish 9
 sha256sum -c dq11-l-census-stage.sha256 > logs/instrument-tripwire.log 2>&1 || finish 9
 cp dq11-l-census-stage.sha256 receipts/expected-instrument-and-operational.sha256 || finish 9
-sha256sum dq11_l_census_run.py dq11_l_census_capture.py dq11_l_census_reduce.py dq11_l_census_launch.py dq11_l_census_box.sh dq11_l_census_drive.sh > receipts/instrument-and-operational.sha256 || finish 9
+sha256sum dq11_l_census_run.py dq11_l_census_capture.py dq11_l_census_reduce.py dq11_l_census_launch.py dq11_l_census_box.sh dq11_l_census_drive.sh dq11_wheel_retry.py > receipts/instrument-and-operational.sha256 || finish 9
 mv adapter_init.safetensors adapters/ || finish 9
 mv tokens.json data/ || finish 9
 sha256sum -c inputs.sha256 > logs/input-tripwire.log 2>&1 || finish 9
@@ -72,7 +72,7 @@ free_kb=$(df -Pk . | tail -1 | awk '{print $4}')
 VENV="$W/venv-dq11"
 phase create-venv 120 python3.11 -m venv "$VENV"
 export PATH="$VENV/bin:$PATH"
-phase bootstrap 900 python dq11_bootstrap.py
+phase bootstrap 900 python dq11_wheel_retry.py
 phase cuda-cupti 90 python -c 'import torch; assert torch.__version__ == "2.12.1+cu130" and torch.version.cuda == "13.0"; assert torch.cuda.device_count() == 1 and torch.cuda.get_device_capability() == (12, 0); print(torch.cuda.get_device_name(), torch.__version__, torch.cuda.get_device_capability())'
 phase prepare 600 python dq11_prepare.py
 nvidia-smi --query-gpu=name,memory.total,driver_version,pcie.link.gen.max,pcie.link.width.max,power.limit --format=csv,noheader > forensics.txt
