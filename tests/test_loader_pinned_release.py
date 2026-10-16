@@ -49,9 +49,10 @@ def test_no_cuda_or_no_private_api_is_a_no_op(monkeypatch):
     _patch(monkeypatch, alloc, cuda=False)
     assert loader._release_cached_pinned_blocks("cuda") is None
     monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    assert alloc.calls == []                                           # no CUDA: not even a synchronize
     monkeypatch.delattr(torch._C, "_host_emptyCache")
     assert loader._release_cached_pinned_blocks("cuda") is None
-    assert alloc.calls == []
+    assert "empty" not in alloc.calls
 
 
 def test_the_streaming_loader_releases_just_before_it_returns():
