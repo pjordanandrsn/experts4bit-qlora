@@ -25,11 +25,13 @@ STRICT failure's 12, or a record missing); and on Amendment 3's instrument check
 Exit 12 stops the run after the box, so a STRICT failure carries no repeat and no plants: it is a FAIL on rules 3-5 with 6 and 7 not read.
 
 **Shape B** (Amendment 6; a box record with ``shape_b``, from ``q235_box.py --micro-batch``) adds:
-8. each step's accumulated gradient against shape A's at the same parameters: the per-tensor relative difference at most ``GA_BAR``
-   on every compared tensor, and no tensor exactly zero in shape A but not in shape B.
-It is VOID while ``GA_BAR`` is unregistered, and on its own instrument check: each planted accumulation bug (a mean of micro-batch
-means; an overwrite that keeps only the last micro-batch) must read above ``GA_BAR``. The global cosine and the norm ratio are reported
-with it. Shape A's records carry no ``shape_b``, so rule 8 does not apply to them and their verdict is unchanged.
+8. each step's accumulated gradient (the four backwards into ``p.grad``) against the same-shapes reference, the host fp32 sum of the
+   same four micro-batches' gradients taken one at a time at the same parameters (``ga_mb_check``): the per-tensor relative
+   difference at most ``GA_BAR`` on every compared tensor, and no tensor exactly zero in the reference but not in the accumulation.
+It is VOID while ``GA_BAR`` is unregistered, and on its own instrument check: each REGISTERED planted accumulation bug (``GA_PLANTS``;
+a mean of micro-batch means, an overwrite that keeps only the last micro-batch) must read above ``GA_BAR`` against the same reference.
+Reported with it: the global cosine and the norm ratio, shape A against shape B in every view (``ga_check``), and the router top-k
+flips between them. Shape A's records carry no ``shape_b``, so rule 8 does not apply to them and their verdict is unchanged.
 
 **Reported, not gating:** the box's full u profile (the layers outside the interior class without a bar), the full-state profile with
 its median (the upper middle) and maximum, the router overlap and set agreement, the loss gap, each plant's u after its layer, the
@@ -60,7 +62,7 @@ REFUSAL_CODES = {"13", "14", "17", "18"}
 BAND = 0.775                                   # Amendment 3: 2 x the 30B box's largest interior contribution error (0.3876)
 NULL_FLOOR = 1e-3                              # Amendment 3: the null against the box, and a plant's earlier layers against the null
 GA_BAR = None                                  # Amendment 6: shape B's per-tensor bar, registered from the calibration before any box
-GA_PLANTS = ("mean", "overwrite")
+GA_PLANTS = ("mean", "overwrite")              # Amendment 6: the plants the calibration registers (a plant short of 3 x BAR is dropped)
 PLANTS = ("routing", "epilogue")
 
 
@@ -69,13 +71,16 @@ def accumulation(box):
     if GA_BAR is None:
         return {"ok": None, "not_read": "Amendment 6's bar is not registered"}, "not registered: Amendment 6's accumulation bar"
     try:
-        steps = {k: box[k]["ga_check"] for k in ("step", "step1")}
-        plants = box["ga_plants"]
+        steps = {k: box[k]["ga_mb_check"] for k in ("step", "step1")}
+        ab = {k: box[k]["ga_check"] for k in ("step", "step1")}
+        plants = {k: box["ga_plants"][k]["vs_micro_batches"] for k in GA_PLANTS}
         over = {k: v["max_rel"] for k, v in steps.items() if not (v["max_rel"] is not None and v["max_rel"] <= GA_BAR)}
         zero = {k: v["zero_mismatch"] for k, v in steps.items() if v["zero_mismatch"]}
         rec = {"ok": not over and not zero, "bar": GA_BAR, "over": over, "zero_mismatch": zero,
                **{f: {k: v[f] for k, v in steps.items()} for f in ("max_rel", "max_rel_tensor", "cosine", "norm_ratio", "compared")},
-               "shape_b": box["shape_b"], "plants": {k: {f: plants[k][f] for f in ("max_rel", "cosine", "norm_ratio")} for k in GA_PLANTS}}
+               "shape_b": box["shape_b"], "plants": {k: {f: plants[k][f] for f in ("max_rel", "cosine", "norm_ratio")} for k in GA_PLANTS},
+               "reported_a_vs_b": {k: {f: v[f] for f in ("max_rel", "rel_p50", "cosine", "norm_ratio")} for k, v in ab.items()},
+               "reported_route_flips": {f: box["route_flips"][f] for f in ("flipped", "token_layers", "flipped_fraction")}}
     except (KeyError, TypeError) as e:
         return {"ok": None, "not_read": "harness error"}, f"harness error: shape B's record: {type(e).__name__}: {e}"
     for kind in GA_PLANTS:

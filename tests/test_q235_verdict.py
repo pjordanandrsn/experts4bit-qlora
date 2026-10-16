@@ -64,9 +64,11 @@ def _box_run(root, *, code="0", card=PRO6000, mode="science", rules=None, losses
             return {"compared": 48, "max_rel": x, "max_rel_tensor": "model.layers.3.mlp.experts.lora_B", "zero_mismatch": list(zero),
                     "cosine": 1 - x * x, "norm_ratio": 1.0, "per_layer_max_rel": {"3": x}}
         box["shape_b"] = {"micro_batch": 2, "accumulation": 4, "valid_per_micro_batch": [125, 252, 480, 149], "valid_total": 1006}
-        box["step"]["ga_check"] = ga(shape_b["ga"][0], shape_b.get("zero", ()))
-        box["step1"]["ga_check"] = ga(shape_b["ga"][1])
-        box["ga_plants"] = {k: {"loss": 2.1, **ga(v)} for k, v in zip(("mean", "overwrite"), shape_b["plants"])}
+        box["step"]["ga_mb_check"] = ga(shape_b["ga"][0], shape_b.get("zero", ()))
+        box["step1"]["ga_mb_check"] = ga(shape_b["ga"][1])
+        box["step"]["ga_check"] = box["step1"]["ga_check"] = {**ga(0.3), "rel_p50": 0.2}       # shape A vs B: reported only
+        box["ga_plants"] = {k: {"loss": 2.1, **ga(0.4), "vs_micro_batches": ga(v)} for k, v in zip(("mean", "overwrite"), shape_b["plants"])}
+        box["route_flips"] = {"flipped": 12, "token_layers": 4000, "flipped_fraction": 0.003, "per_layer": [], "layers_with_flips": 3}
     _save_run(w / "receipts" / "box", box_l, topk, 2.0, box)
     if repeat:
         null = [t * null_scale if null_scale != 1.0 else t.clone() for t in box_l]
@@ -194,6 +196,7 @@ def test_shape_b_passes_rule_8_within_the_bar_and_fails_beyond_it(tmp_path):
     assert ok["verdict"] == "PASS" and ok["why"] == "rules 1-8 hold", ok["why"]
     r8 = ok["rules"]["8_accumulation"]
     assert r8["ok"] and r8["bar"] == 0.05 and r8["max_rel"] == {"step": 0.01, "step1": 0.02} and set(r8["cosine"]) == {"step", "step1"}
+    assert r8["reported_a_vs_b"]["step"]["max_rel"] == 0.3 and r8["reported_route_flips"]["flipped"] == 12   # reported, not gating
     bad = _verdict_with(*_box_run(tmp_path / "b", shape_b={"ga": (0.01, 0.2), "plants": (0.6, 0.9)}), 0.05)
     assert bad["verdict"] == "FAIL" and bad["why"] == "rules failing: 8_accumulation" and bad["rules"]["8_accumulation"]["over"] == {"step1": 0.2}
     zero = _verdict_with(*_box_run(tmp_path / "c", shape_b={"ga": (0.01, 0.02), "plants": (0.6, 0.9),

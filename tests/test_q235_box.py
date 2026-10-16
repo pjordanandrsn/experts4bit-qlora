@@ -239,10 +239,15 @@ def test_shape_b_accumulates_to_shape_a_and_its_plants_do_not(shape_b):
         assert ga["max_rel"] < 1e-2 and abs(ga["cosine"] - 1) < 1e-4 and abs(ga["norm_ratio"] - 1) < 1e-2, ga
         assert ga["rel_p50"] <= ga["rel_p99"] <= ga["max_rel"] and len(ga["rel"]) == ga["compared"]
     assert rec["step"]["ga_check"]["compared"] < rec["step1"]["ga_check"]["compared"]   # step 0's A gradients are exactly zero
-    floor = max(rec[k]["ga_check"]["max_rel"] for k in ("step", "step1"))
+    for k in ("step", "step1"):                              # rule 8's quantity: the same shapes, accumulated vs summed apart
+        mb = rec[k]["ga_mb_check"]
+        assert mb["compared"] == rec[k]["ga_check"]["compared"] and not mb["zero_mismatch"] and mb["max_rel"] < 1e-2, mb
+    floor = max(rec[k]["ga_mb_check"]["max_rel"] for k in ("step", "step1"))
     for kind in ("mean", "overwrite"):
-        assert rec["ga_plants"][kind]["max_rel"] > 10 * max(floor, 1e-3), (kind, rec["ga_plants"][kind]["max_rel"], floor)
-    assert rec["ga_plants"]["overwrite"]["norm_ratio"] < 0.9
+        assert rec["ga_plants"][kind]["vs_micro_batches"]["max_rel"] > 10 * max(floor, 1e-3), (kind, rec["ga_plants"][kind], floor)
+    assert rec["ga_plants"]["overwrite"]["vs_micro_batches"]["norm_ratio"] < 0.9
+    rf = rec["route_flips"]                                  # reported: shape A vs B router top-k sets, per layer, real tokens only
+    assert len(rf["per_layer"]) == 4 and all(x["real"] == 84 + 8 for x in rf["per_layer"]) and 0 <= rf["flipped"] <= rf["token_layers"]
 
 
 def test_shape_b_needs_whole_micro_batches_and_stays_off_the_repeat(tiny8):

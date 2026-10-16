@@ -393,6 +393,34 @@ def capture(model):
     return layer_out, topk, hooks
 
 
+def route_flips(topk_a, routes_b, mbs, mask):
+    """Amendment 6, reported: per decoder layer, the real tokens whose routed expert SET differs between shape A's forward (``topk_a``,
+    one ``[rows x width, k]`` tensor per layer) and shape B's micro-batch forwards at the same parameters (``routes_b``: per
+    micro-batch, ``{layer: [m x w, k]}``). The rows are right-padded, so micro-batch ``j``'s row ``r`` and position ``t`` are shape A's
+    row ``j * m + r`` at ``t``."""
+    rows, width = mask.shape
+    per_layer = []
+    for i, a in enumerate(topk_a):
+        if a is None:
+            continue
+        k = a.shape[-1]
+        a = a.reshape(rows, width, k).sort(-1).values
+        flipped = real = 0
+        r0 = 0
+        for j, mb in enumerate(mbs):
+            m, w = mb["input_ids"].shape
+            b = routes_b[j][i].reshape(m, w, k).sort(-1).values
+            sel = mask[r0:r0 + m, :w].bool().cpu()
+            diff = (a[r0:r0 + m, :w] != b).any(-1)
+            flipped += int((diff & sel).sum())
+            real += int(sel.sum())
+            r0 += m
+        per_layer.append({"layer": i, "flipped": flipped, "real": real})
+    tot_f, tot_n = sum(x["flipped"] for x in per_layer), sum(x["real"] for x in per_layer)
+    return {"per_layer": per_layer, "flipped": tot_f, "token_layers": tot_n, "flipped_fraction": tot_f / tot_n if tot_n else None,
+            "layers_with_flips": sum(1 for x in per_layer if x["flipped"])}
+
+
 def _sha(t):
     return hashlib.sha256(t.view(torch.uint8).numpy().tobytes()).hexdigest()
 
@@ -491,15 +519,27 @@ def run(a):
     mbs = [{k: (v.to(dev) if torch.is_tensor(v) else v) for k, v in m.items()} for m in micro_batches(tokens, mb)] if mb else None
     n_valid = sum(m["valid"] for m in mbs) if mbs else None
 
-    def fwd_bwd_b(mode="token"):
+    def fwd_bwd_b(mode="token", routes=None):
         """Shape B's accumulation over the micro-batches (Amendment 6). ``token``: each micro-batch's mean loss weighted by its share of
         the window's valid labels, the gradients accumulating in ``p.grad``. Planted bugs: ``mean`` weights each micro-batch 1 / k (a
-        mean of micro-batch means); ``overwrite`` clears ``p.grad`` before each backward, so only the last micro-batch survives."""
+        mean of micro-batch means); ``overwrite`` clears ``p.grad`` before each backward, so only the last micro-batch survives.
+        ``separate``: the same-shapes reference -- each micro-batch's weighted gradient taken on its own (``p.grad`` cleared before
+        each backward) and summed on the host in fp32, so it differs from ``token`` only in how the four backwards accumulate.
+        ``routes`` (a list) collects each micro-batch's router top-k from its forward (not the checkpoint recompute)."""
+        cur, rhooks = {}, []
+        if routes is not None:
+            def route(i):
+                def h(mod, args, o):
+                    if i not in cur:
+                        cur[i] = o[2].detach().to("cpu")
+                return h
+            rhooks = [lay.mlp.gate.register_forward_hook(route(i)) for i, lay in enumerate(model.model.layers)]
         model.zero_grad(set_to_none=True)
         sync()
-        t, tf_sum, total = time.time(), 0.0, 0.0
+        t, tf_sum, total, acc = time.time(), 0.0, 0.0, None
         for m in mbs:
-            if mode == "overwrite":
+            cur.clear()
+            if mode in ("overwrite", "separate"):
                 model.zero_grad(set_to_none=True)
             t_m = time.time()
             loss = model(input_ids=m["input_ids"], attention_mask=m["attention_mask"], labels=m["labels"]).loss
@@ -509,8 +549,21 @@ def run(a):
             total += w * float(loss)
             (loss * w).backward()
             sync()
+            if routes is not None:
+                routes.append(dict(cur))
+            if mode == "separate":
+                acc = {} if acc is None else acc
+                for n, p in params.items():
+                    if p.grad is not None:
+                        g = host_copy(p.grad)
+                        if n in acc:
+                            acc[n].add_(g)
+                        else:
+                            acc[n] = g
+        for h in rhooks:
+            h.remove()
         tb = time.time()
-        grads = {n: host_copy(p.grad) for n, p in params.items() if p.grad is not None}
+        grads = acc if mode == "separate" else {n: host_copy(p.grad) for n, p in params.items() if p.grad is not None}
         return total, grads, tf_sum, tb - t - tf_sum, time.time() - tb
 
     l0, g0, *_ = fwd_bwd()                                     # step-0 forward: the layer outputs are recorded here
@@ -524,9 +577,13 @@ def run(a):
         out["shape_b"] = {"micro_batch": mb, "accumulation": len(mbs), "valid_per_micro_batch": [m["valid"] for m in mbs],
                           "valid_total": n_valid, "widths": [int(m["input_ids"].shape[1]) for m in mbs]}
         out["ga_plants"] = {}
+        routes_b = []
+        _, ref0, *_ = fwd_bwd_b("separate", routes=routes_b)   # the same-shapes reference at step 0's parameters
+        out["route_flips"] = route_flips(topk, routes_b, mbs, tokens["attention_mask"])
+        del routes_b
         for kind in ("mean", "overwrite"):
             lp, gp, *_ = fwd_bwd_b(kind)
-            out["ga_plants"][kind] = {"loss": lp, **compare_grads(g0, gp)}
+            out["ga_plants"][kind] = {"loss": lp, **compare_grads(g0, gp), "vs_micro_batches": compare_grads(ref0, gp)}
             del gp
 
     if cuda:
@@ -539,7 +596,7 @@ def run(a):
     a_names = [n for n in params if is_a[n]]
     b_names = [n for n in params if not is_a[n]]
 
-    def one_step(ref=None):
+    def one_step(ref=None, mb_ref=None):
         """One forward-backward and optimizer step at the registered shape, instrumented: its record, gradients and deltas. Under shape
         B the forward-backward is the accumulation, and ``ref`` (shape A's gradient at the same parameters) is compared with it."""
         before = {n: host_copy(p) for n, p in params.items()}
@@ -569,6 +626,8 @@ def run(a):
         os.environ["E4B_OFFLOAD_STATS"] = "0"
         if ref is not None:
             rec["ga_check"] = compare_grads(ref, grads)
+        if mb_ref is not None:
+            rec["ga_mb_check"] = compare_grads(mb_ref, grads)
         nonzero = {n: int((g != 0).sum()) for n, g in grads.items()}
         delta = {n: float((host_copy(p) - before[n]).abs().max()) for n, p in params.items()}
         rec["gradients"] = {
@@ -588,12 +647,13 @@ def run(a):
     # not zero-initialized (VOID, a harness error); B's gradients are nonzero and every B changes. Step 1, after step 0 has moved B:
     # every A's gradient is nonzero and every A changes (a broken A path cannot pass), and B's rules repeat. The frozen base's hashes
     # hold across both steps.
-    if mbs:                                                     # Amendment 6: each shape-B step against shape A at its parameters
-        s0 = one_step(ref=g0)
-        del g0
+    if mbs:                                                     # Amendment 6: each shape-B step against shape A and the same shapes
+        s0 = one_step(ref=g0, mb_ref=ref0)
+        del g0, ref0
         _, ga1, *_ = fwd_bwd()                                  # shape A at step 1's parameters, before its accumulation
-        s1 = one_step(ref=ga1)
-        del ga1
+        _, ref1, *_ = fwd_bwd_b("separate")
+        s1 = one_step(ref=ga1, mb_ref=ref1)
+        del ga1, ref1
     else:
         s0 = one_step()
         s1 = one_step()
