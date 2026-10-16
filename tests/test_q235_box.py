@@ -302,3 +302,143 @@ def test_the_in_process_plants_reproduce_the_separate_plants_on_mixtral(tiny_mix
         sep_out, sep = mixtral_plants[kind]
         assert p["layer_sha256"] == sep, f"the in-process {kind} plant differs from its own run on Mixtral"
         assert p["loss"] == sep_out["repeat"]["loss"]
+
+
+def test_the_moe_timing_is_reported_only_and_leaves_the_registered_record_alone(tiny, step):
+    """``--time-moe``: one extra timed forward-backward after both steps, under ``moe_timing``. The registered fields are the
+    untimed run's (the CPU reference path is deterministic, so equal bit for bit), and off, the record carries no trace of it."""
+    rec, _ = _box(tiny, "timed", "--time-moe", "2", "--time-moe-bound")
+    base = step[0]
+    assert not any(k.startswith("time_moe") for k in base["argv"]) and "moe_timing" not in base
+    assert set(rec) - set(base) == {"moe_timing"} and rec["argv"]["time_moe"] == 2 and rec["argv"]["time_moe_bound"]
+    assert rec["rules"] == base["rules"] and rec["in_process"] == base["in_process"]
+    assert rec["layer_sha256"] == base["layer_sha256"] and rec["frozen_sha256_after_load"] == base["frozen_sha256_after_load"]
+    for k in ("step", "step1"):
+        assert rec[k]["loss"] == base[k]["loss"] and rec[k]["gradients"] == base[k]["gradients"]
+        assert rec[k]["optimizer_delta"] == base[k]["optimizer_delta"]
+    t = rec["moe_timing"]
+    assert "error" not in t, t.get("error")
+    assert t["reported_only"] and t["read_by_verdict"] is False and t["sampled_layers"] == [0, 3]
+    assert t["pass_off_s"] > 0 and t["pass_on_s"] > 0 and "overhead" in t
+    for i in ("0", "3"):
+        row = t["layers"][i]
+        assert row["staged_by_offload"] is False                     # the CPU rehearsal has no offload
+        assert row["forward"]["calls"] == 1 and row["recompute"]["calls"] == 1 and row["backward"]["calls"] == 1, row
+        # early stop off: the non-reentrant recompute reaches the module's return, so its compute is observed too
+        assert all(v is not None and v >= 0 for ph in ("forward", "recompute") for f in ("stage_ms", "compute_ms") for v in row[ph][f])
+        bw = row["backward"]
+        assert bw["recompute_inside"] == [True], bw                 # Hugging Face's checkpoint recomputes inside the window
+        assert 0 <= bw["own_ms"][0] <= bw["ms"][0]
+
+
+def test_the_moe_timing_needs_the_stepped_run(tiny):
+    for extra, msg in ((["--time-moe", "2", "--repeat"], "--time-moe N (N >= 1) rides the stepped run"),
+                       (["--time-moe", "-1"], "--time-moe N (N >= 1) rides the stepped run"),
+                       (["--time-moe-bound"], "--time-moe-bound needs --time-moe")):
+        r = subprocess.run([sys.executable, str(BOX), str(tiny / "model"), str(tiny / "tokens.pt"), "--out", str(tiny / "x"),
+                            "--device", "cpu", "--enabler", "reference", *extra], capture_output=True, text=True, cwd=ROOT)
+        assert r.returncode == 2 and msg in r.stderr, (extra, r.stderr[-300:])
+
+
+class _Experts(torch.nn.Module):
+    """A stand-in experts module carrying hooks named and placed as e4b's offload places its own: the staging pre-hook
+    (``_stage_pre_hook``) and the evict post-hook, which skips inside a backward."""
+
+    def __init__(self, log):
+        super().__init__()
+        from experts4bit_qlora.engines.offload import _in_backward
+        self.w, self.log = torch.nn.Parameter(torch.randn(8)), log
+
+        def _stage_pre_hook(module, args):
+            log.append("stage")
+
+        def _evict_post_hook(module, args, output):
+            if not _in_backward():
+                log.append("evict")
+        self.register_forward_pre_hook(_stage_pre_hook)
+        self.register_forward_hook(_evict_post_hook)
+
+    def forward(self, x):
+        self.log.append("compute")
+        return (x * self.w).sin() + 1
+
+
+def _fake_model(n_layers, log):
+    from types import SimpleNamespace
+    layers = [SimpleNamespace(mlp=SimpleNamespace(experts=_Experts(log))) for _ in range(n_layers)]
+    return SimpleNamespace(model=SimpleNamespace(layers=layers))
+
+
+def test_the_moe_timer_brackets_e4bs_staging_and_compute_and_changes_nothing():
+    """The timer's marks sit around e4b's hooks: its stage start before ``_stage_pre_hook``, its stage end after it, its compute
+    end before the evict post-hook. Its hooks change no output or gradient, and they are gone afterwards. With the checkpoint's
+    early stop on (as the registered steps run), a non-reentrant recompute stops inside the module: its compute is not observed,
+    and neither is the module's own backward after it, rather than either being guessed."""
+    from torch.utils.checkpoint import checkpoint
+    box = _box_module()
+    log = []
+    model = _fake_model(5, log)
+    mods = [lay.mlp.experts for lay in model.model.layers]
+    x = torch.randn(8, requires_grad=True)
+
+    def fwd_bwd():
+        for m in mods:
+            m.w.grad = None
+        h = x
+        for m in mods:
+            h = checkpoint(m, h, use_reentrant=False)
+        h.sum().backward()
+        return h.detach(), [m.w.grad.clone() for m in mods]
+    plain = fwd_bwd()
+    hooks_before = [(dict(m._forward_pre_hooks), dict(m._forward_hooks)) for m in mods]
+
+    timer = box.MoETimer(model, 3, cuda=False)
+    assert timer.layers == [0, 2, 4] and all(timer.staged.values())
+    log.clear()
+    real = timer._stamp
+    timer._stamp = lambda: log.append("mark") or real()
+    with torch.no_grad():
+        mods[0](torch.randn(8))
+    assert log == ["mark", "stage", "mark", "compute", "mark", "evict"], log
+    timer._stamp = real
+    timer.marks[0].clear()
+    timed = fwd_bwd()
+    rec = timer.record()
+    timer.remove()
+    assert torch.equal(timed[0], plain[0]) and all(torch.equal(a, b) for a, b in zip(timed[1], plain[1]))
+    assert [(dict(m._forward_pre_hooks), dict(m._forward_hooks)) for m in mods] == hooks_before
+    assert not any(m._backward_hooks or m._backward_pre_hooks for m in mods)
+    assert set(rec) == {"0", "2", "4"}
+    for row in rec.values():
+        assert row["staged_by_offload"] and row["forward"]["calls"] == row["recompute"]["calls"] == row["backward"]["calls"] == 1
+        assert row["forward"]["compute_ms"][0] >= 0
+        assert row["recompute"]["compute_ms"] == [None]             # stopped at the last saved tensor, before the return
+        assert row["backward"]["recompute_inside"] == [True] and row["backward"]["own_ms"] == [None]
+
+
+def test_the_timed_pass_observes_the_recompute_under_either_checkpoint_and_a_failure_never_fails_the_box():
+    """``time_moe`` turns the early stop off, so the non-reentrant recompute returns and the module's own backward is the window
+    after it; the reentrant checkpoint (the fast path's default) recomputes before the window, which is then the module's own."""
+    from torch.utils.checkpoint import checkpoint
+    box = _box_module()
+    model = _fake_model(2, [])
+    mods = [lay.mlp.experts for lay in model.model.layers]
+    for reentrant in (False, True):
+        def fwd_bwd():
+            h = torch.randn(8, requires_grad=True)
+            for m in mods:
+                h = checkpoint(m, h, use_reentrant=reentrant)
+            h.sum().backward()
+        rec = box.time_moe(model, fwd_bwd, 2, cuda=False, sync=lambda: None, bound=True)
+        assert "error" not in rec and rec["sampled_layers"] == [0, 1] and rec["pass_off_s"] >= 0 and "overhead" in rec
+        for row in rec["layers"].values():
+            assert row["recompute"]["calls"] == 1 and row["recompute"]["compute_ms"][0] >= 0, (reentrant, row)
+            bw = row["backward"]
+            assert bw["recompute_inside"] == [not reentrant], (reentrant, bw)
+            assert 0 <= bw["own_ms"][0] <= bw["ms"][0] and (bw["own_ms"] == bw["ms"]) is reentrant
+
+    def boom():
+        raise RuntimeError("out of memory")
+    rec = box.time_moe(model, boom, 2, cuda=False, sync=lambda: None)
+    assert rec["error"] == "RuntimeError: out of memory" and "layers" not in rec
+    assert all(len(m._forward_pre_hooks) == 1 and len(m._forward_hooks) == 1 and not m._backward_hooks for m in mods)
