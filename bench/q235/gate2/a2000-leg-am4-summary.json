@@ -1,0 +1,121 @@
+{
+ "schema": "q235-a2000-leg/1",
+ "mode": "a2000 rehearsal (4-layer slice of ac9c66cc), never science-eligible",
+ "e4b": "9f6e00885b8e7d612d49e8a43cf826c8559ba005",
+ "amendment": 4,
+ "box": {
+  "load": {
+   "seconds": 56.8,
+   "profile": {
+    "read": 17.15,
+    "assemble": 25.1,
+    "quantize": 0.72,
+    "offload": 3.35,
+    "calls": {
+     "read": 1575,
+     "assemble": 4,
+     "quantize": 4,
+     "offload": 4
+    },
+    "read_bytes": 22391367680,
+    "total_s": 52.17,
+    "other_s": 5.85,
+    "read_gb_s": 1.306
+   },
+   "host_memory": {
+    "VmHWM": 29160611840,
+    "VmRSS": 13697257472,
+    "RssAnon": 3930824704,
+    "RssFile": 288092160,
+    "RssShmem": 9478340608
+   }
+  },
+  "rules_all_true": true,
+  "rules": {
+   "step0_all_finite": true,
+   "step0_every_B_nonzero": true,
+   "step0_every_A_zero": true,
+   "step0_every_B_changed": true,
+   "step1_all_finite": true,
+   "step1_every_A_nonzero": true,
+   "step1_every_B_nonzero": true,
+   "step1_every_A_changed": true,
+   "step1_every_B_changed": true
+  },
+  "frozen_sha256_after_both_steps_equal": true,
+  "frozen_tensors": 111,
+  "in_process": {
+   "loss_0": 13.37894344329834,
+   "loss_1": 13.37894344329834,
+   "loss_equal": true,
+   "grad_maxrel": 0.005347593687474728
+  },
+  "steps": {
+   "step": {
+    "loss": 13.37894344329834,
+    "elapsed_s": 7.776,
+    "grads_host_copy_s": 0.083,
+    "max_memory_allocated": 5807594496,
+    "max_memory_reserved": 8988393472,
+    "host_memory": {
+     "VmHWM": 29160611840,
+     "VmRSS": 13848121344,
+     "RssAnon": 4033060864,
+     "RssFile": 319942656,
+     "RssShmem": 9495117824
+    },
+    "device_peak_drop_gib_vs_earlier_legs": 1.194
+   },
+   "step1": {
+    "loss": 12.661398887634277,
+    "elapsed_s": 7.816,
+    "grads_host_copy_s": 0.081,
+    "max_memory_allocated": 6033368576,
+    "max_memory_reserved": 8988393472,
+    "host_memory": {
+     "VmHWM": 29160611840,
+     "VmRSS": 13848383488,
+     "RssAnon": 4033323008,
+     "RssFile": 319942656,
+     "RssShmem": 9495117824
+    },
+    "device_peak_drop_gib_vs_earlier_legs": 1.195
+   }
+  },
+  "predicted_drop_gib": {
+   "value": 1.197,
+   "basis": "three fp32 host copies (g0, g1, before) of the 4-layer adapters, 0.399 GiB each, alive at the backward peak"
+  }
+ },
+ "repeat": {
+  "load_seconds": 60.3,
+  "loss": 13.37894344329834,
+  "null_loss_equals_box_step0": true,
+  "null_layer_sha256_equal_box": true,
+  "plants": {
+   "routing": {
+    "layer": 2,
+    "loss": 13.452516555786133,
+    "forward_s": 1.675,
+    "pre_plant_max_rel_diff": 0.0,
+    "pre_plant_equal_null": true,
+    "planted_layer_differs": true
+   },
+   "epilogue": {
+    "layer": 2,
+    "loss": 13.437602043151855,
+    "forward_s": 1.664,
+    "pre_plant_max_rel_diff": 0.0,
+    "pre_plant_equal_null": true,
+    "planted_layer_differs": true
+   }
+  }
+ },
+ "versions": {
+  "torch": "2.11.0+cu128",
+  "transformers": "5.19.0",
+  "bitsandbytes": "0.50.2",
+  "grouped-nf4-gemm": "0.45.0",
+  "experts4bit-qlora": "0.54.0"
+ }
+}

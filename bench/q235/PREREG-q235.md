@@ -590,3 +590,41 @@ Nothing is quoted before that verdict is re-derived independently on CPU.
      present.
    - `tests/test_q235_driver.py`: the science floor is this derivation's 235 GB, and the RAM-floor refusal test reads the floor from
      the script.
+
+## Amendment 5 (2026-10-16, after Amendment 4's rehearsal, before any further 235B box): the host-RAM floor, measured
+
+**Why.** Amendment 4 derived the science host's RAM floor, 235 GB, from the estimate's pinned expert homes, a 3.0 GiB process
+baseline, the check copies, the held layer outputs and an 18.5 GB allowance. It also registered an expectation for the box's new
+`host_memory` record: at a full-depth step end, `RssAnon + RssShmem` would be at most 215.8 GB, the floor less its allowance.
+
+**The rehearsal** (gate 1's A2000 leg at 9f6e0088, `gate2/a2000-leg-am4-summary.json`). Every phase exited 0, Amendment 2's nine
+rules held, the frozen base was unchanged (111 tensors), and the null and both plants behaved as before.
+- **Device.** Amendment 4's device prediction holds. The step-0 peak fell by 1.194 GiB and the step-1 peak by 1.195 GiB, against
+  1.197 predicted (three 0.399 GiB copies at the backward peak).
+- **Host.** `RssAnon + RssShmem` at the step end was 13.53 GB, against 12.27 GB for Amendment 4's terms at this depth. `RssShmem`
+  alone was 2.25 GB above the estimate's pinned homes.
+
+**The scaling read** (`gate2/memslope.json`, $0 on the RTX A2000). The box's `--repeat`, with the leg's environment, ran in a fresh
+process at 2, 4, 6 and 8 layers of the same checkpoint. The load-end `host_memory` was fitted against depth by least squares:
+
+| term | per layer | fixed | largest residual |
+|---|---|---|---|
+| `RssShmem` (the pinned homes) | 1.8119 GB (1.6874 GiB) | 2.231 GB | 52 kB |
+| `RssAnon` | 0.015 GB | 3.780 GB | 0.14 GB |
+| `RssAnon + RssShmem` | 1.8269 GB | 6.011 GB | 0.14 GB |
+
+- **The estimator's pinned-homes term is exact per layer:** 1.6875 GiB estimated, 1.6874 GiB measured (ratio 0.99995).
+- **The excess is fixed, not per layer.** It is about 2.23 GB of shared memory and an anonymous baseline about 0.56 GB above the
+  3.0 GiB assumed, plus 15 MB of anonymous memory per layer. The estimator does not price these. That is a follow-up for the
+  estimator, not a change here.
+
+**The floor, derived again.**
+- At the load end, at 94 layers: 6.011 + 1.8269 × 94 = 177.74 GB.
+- Add the four check copies (40.24 GB) and the held layer outputs (2.04 GB): **220.02 GB at the step end.**
+- **No heap reuse is assumed. That is the conservative choice.** At 4 layers the copies reused about 1.7 GB of heap that the load had
+  freed, but that cannot cover 40 GB at full depth.
+- 220.02 GB exceeds Amendment 4's 215.8 GB expectation, and 235 GB less the allowance (216.5 GB). With the registered 18.5 GB
+  allowance the floor is 238.52 GB: **`q235_run.sh` now requires 239 GB of host RAM for the science class.**
+- The expectation for the box's `host_memory` becomes `RssAnon + RssShmem` at most 220.0 GB at a step end. It is reported, not gated.
+
+**Tests.** `tests/test_q235_driver.py` pins the science floor to this derivation's 239 GB.
