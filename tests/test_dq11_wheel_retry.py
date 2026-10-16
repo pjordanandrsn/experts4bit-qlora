@@ -12,7 +12,7 @@ import pytest
 
 LANE = Path(__file__).parents[1] / "bench/dq11"
 sys.path.insert(0, str(LANE))
-import dq11_wheel_retry as retry
+import dq11_wheel_retry as retry  # noqa: E402
 
 BASELINE_INSTALL = retry.bootstrap.install
 
