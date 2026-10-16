@@ -24,6 +24,7 @@ from itertools import pairwise
 from pathlib import Path
 
 from dq11_bootstrap import preflight_urls
+from dq11_census_transport import direct_available
 from dq11_policy_preflight import preflight_policy
 from dq11_science_stage import stage
 
@@ -56,12 +57,13 @@ INSTRUMENT_FILES = (
 )
 OPERATIONAL_FILES = (
     "dq11_l_census_launch.py", "dq11_l_census_box.sh", "dq11_l_census_drive.sh",
-    "dq11_wheel_retry.py",
+    "dq11_wheel_retry.py", "dq11_census_transport.py",
 )
 TRANSPORT_FILE = "bench/tc1/tc1_drive.sh"
 TEMPLATE_FILE = "bench/dq11/dq11_l_census_manifest_template.json"
 ENVELOPE_CRITERIA = {
     "gpu": "RTX 5090", "num_gpus": 1, "verification": "verified",
+    "direct_ssh_required": True,
     "rentable": True, "external": False, "minimum_reliability": "0.98",
     "minimum_driver_major": 580, "exact_driver_components": 3,
     "minimum_gpu_ram_mb": 30000, "maximum_gpu_ram_mb": 34000,
@@ -113,6 +115,8 @@ def check_static_budget() -> None:
 def offer_row(offer: dict, provider) -> dict:
     """Quote one raw controller-search offer; absent price evidence is a refusal."""
     reasons = []
+    if not direct_available(offer):
+        reasons.append("direct SSH unavailable")
     machine = str(offer.get("machine_id", ""))
     oid = str(offer.get("id", ""))
     if not machine.isdigit() or not oid.isdigit() or machine in EXCLUDED_MACHINES:
@@ -160,6 +164,8 @@ def offer_row(offer: dict, provider) -> dict:
             reasons.append("all-in 30-minute reservation exceeds $0.90")
     return {
         "id": oid, "machine_id": machine, "driver_version": driver,
+        "direct_port_count": offer.get("direct_port_count"),
+        "public_ipaddr": offer.get("public_ipaddr"),
         "reliability": str(reliability) if reliability is not None else None,
         "gpu_name": offer.get("gpu_name"), "gpu_ram": offer.get("gpu_ram"),
         "num_gpus": offer.get("num_gpus"), "cpu_ram": offer.get("cpu_ram"),

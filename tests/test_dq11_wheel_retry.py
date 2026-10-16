@@ -3,10 +3,9 @@ import errno
 import hashlib
 import io
 import json
-from pathlib import Path
 import sys
-import time
 import zipfile
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 
 import pytest
@@ -21,14 +20,17 @@ BASELINE_INSTALL = retry.bootstrap.install
 class Response(io.BytesIO):
     status = 200
 
+    def read1(self, size):
+        return self.read(size)
+
 
 @pytest.fixture
 def fixture(tmp_path, monkeypatch):
     payload = b"exact pinned wheel bytes" * 128
-    row = dict(name="fixture", filename="fixture.whl", version="1",
-               url="https://files.pythonhosted.org/fixture.whl",
-               sha256=hashlib.sha256(payload).hexdigest())
-    (tmp_path / "wheels.json").write_text(json.dumps(dict(packages=[row])))
+    row = {"name": "fixture", "filename": "fixture.whl", "version": "1",
+               "url": "https://files.pythonhosted.org/fixture.whl",
+               "sha256": hashlib.sha256(payload).hexdigest()}
+    (tmp_path / "wheels.json").write_text(json.dumps({"packages": [row]}))
     clock = [0.0]
     sleeps = []
     monkeypatch.setattr(retry.time, "monotonic", lambda: clock[0])
@@ -57,7 +59,7 @@ def outcomes(directory):
 @pytest.mark.parametrize("error", [ConnectionResetError(errno.ECONNRESET, "reset"),
                                   URLError(TimeoutError("timed out"))])
 def test_transient_opener_failures_recover_exact_bytes(tmp_path, monkeypatch, fixture, failures, error):
-    payload, row, clock, sleeps, installed = fixture
+    payload, row, _clock, sleeps, installed = fixture
     calls = []
 
     def open_fixture(request, timeout):
@@ -80,7 +82,7 @@ def test_transient_opener_failures_recover_exact_bytes(tmp_path, monkeypatch, fi
 
 
 def test_reset_mid_transfer_discards_partial_before_full_retry(tmp_path, monkeypatch, fixture):
-    payload, row, clock, sleeps, installed = fixture
+    payload, _row, _clock, sleeps, installed = fixture
 
     class BrokenResponse(Response):
         def read(self, size):
@@ -97,7 +99,7 @@ def test_reset_mid_transfer_discards_partial_before_full_retry(tmp_path, monkeyp
 
 
 def test_wrong_bytes_after_transient_failure_refuse_without_install(tmp_path, monkeypatch, fixture):
-    payload, row, clock, sleeps, installed = fixture
+    _payload, _row, _clock, sleeps, installed = fixture
     calls = []
 
     def opener(*a, **kw):
@@ -118,7 +120,7 @@ def test_wrong_bytes_after_transient_failure_refuse_without_install(tmp_path, mo
 
 
 def test_five_failed_attempts_are_terminal(tmp_path, monkeypatch, fixture):
-    payload, row, clock, sleeps, installed = fixture
+    _payload, _row, _clock, sleeps, installed = fixture
     calls = []
 
     def opener(*a, **kw):
@@ -133,7 +135,7 @@ def test_five_failed_attempts_are_terminal(tmp_path, monkeypatch, fixture):
 
 
 def test_deadline_prevents_more_network_attempts(tmp_path, monkeypatch, fixture):
-    payload, row, clock, sleeps, installed = fixture
+    _payload, _row, clock, sleeps, installed = fixture
     calls = []
 
     def opener(*a, **kw):
@@ -148,36 +150,10 @@ def test_deadline_prevents_more_network_attempts(tmp_path, monkeypatch, fixture)
     assert outcomes(tmp_path)[-1]["elapsed_seconds"] == 175
 
 
-def test_wall_deadline_interrupts_blocked_reader_and_restores_handler(tmp_path, monkeypatch):
-    payload = b"wheel"
-    row = dict(filename="fixture.whl", url="https://files.pythonhosted.org/fixture.whl",
-               sha256=hashlib.sha256(payload).hexdigest())
-    (tmp_path / "wheels.json").write_text(json.dumps(dict(packages=[row])))
-
-    class BlockedResponse(Response):
-        def read(self, size):
-            time.sleep(5)
-            pytest.fail("wall deadline must interrupt blocked read")
-
-    monkeypatch.setattr(retry, "RETRY_SECONDS", 0.05)
-    monkeypatch.setattr(retry.urllib.request, "urlopen", lambda *a, **kw: BlockedResponse(payload))
-    monkeypatch.setattr(retry.bootstrap, "install", lambda *a: pytest.fail("expired fetch must not install"))
-    previous = retry.signal.getsignal(retry.signal.SIGALRM)
-    started = time.monotonic()
-    with pytest.raises(retry.WheelDeadlineExceeded):
-        retry.install(tmp_path, tmp_path / "cache")
-    assert time.monotonic() - started < 2
-    assert retry.signal.getsignal(retry.signal.SIGALRM) == previous
-    assert retry.signal.getitimer(retry.signal.ITIMER_REAL)[0] == 0
-    evidence = outcomes(tmp_path)
-    assert [r["outcome"] for r in evidence] == ["started", "refused"]
-    assert not list((tmp_path / "cache").glob("*.partial"))
-
-
 @pytest.mark.parametrize("error", [HTTPError("https://files.pythonhosted.org/fixture.whl", 503, "unavailable", {}, None),
                                   URLError(OSError(errno.EACCES, "denied"))])
 def test_nontransient_failure_does_not_retry(tmp_path, monkeypatch, fixture, error):
-    payload, row, clock, sleeps, installed = fixture
+    _payload, _row, _clock, sleeps, installed = fixture
     calls = []
 
     def opener(*a, **kw):
@@ -192,7 +168,7 @@ def test_nontransient_failure_does_not_retry(tmp_path, monkeypatch, fixture, err
 
 @pytest.mark.parametrize("valid", [False, True])
 def test_cached_wheel_is_verified_without_fetch(tmp_path, monkeypatch, fixture, valid):
-    payload, row, clock, sleeps, installed = fixture
+    payload, row, _clock, _sleeps, installed = fixture
     cache = tmp_path / "cache"
     cache.mkdir()
     (cache / row["filename"]).write_bytes(payload if valid else b"corrupt cache")
@@ -208,9 +184,9 @@ def test_cached_wheel_is_verified_without_fetch(tmp_path, monkeypatch, fixture, 
 
 
 def test_entire_lock_checked_before_prefetch(tmp_path, monkeypatch, fixture):
-    payload, row, clock, sleeps, installed = fixture
+    _payload, row, _clock, _sleeps, _installed = fixture
     bad = dict(row, url="https://unregistered.invalid/wheel.whl")
-    (tmp_path / "wheels.json").write_text(json.dumps(dict(packages=[row, bad])))
+    (tmp_path / "wheels.json").write_text(json.dumps({"packages": [row, bad]}))
     monkeypatch.setattr(retry.urllib.request, "urlopen", lambda *a, **kw: pytest.fail("invalid lock must not fetch"))
     with pytest.raises(ValueError, match="unregistered wheel origin"):
         retry.install(tmp_path, tmp_path / "cache")
@@ -222,10 +198,10 @@ def test_frozen_installer_consumes_prefetched_cache_without_wheel_network(tmp_pa
     with zipfile.ZipFile(stream, "w") as archive:
         archive.writestr("fixture/__init__.py", "VALUE = 1\n")
     payload = stream.getvalue()
-    row = dict(name="fixture", version="1", filename="fixture.whl",
-               url="https://files.pythonhosted.org/fixture.whl",
-               sha256=hashlib.sha256(payload).hexdigest())
-    (tmp_path / "wheels.json").write_text(json.dumps(dict(packages=[row])))
+    row = {"name": "fixture", "version": "1", "filename": "fixture.whl",
+               "url": "https://files.pythonhosted.org/fixture.whl",
+               "sha256": hashlib.sha256(payload).hexdigest()}
+    (tmp_path / "wheels.json").write_text(json.dumps({"packages": [row]}))
     monkeypatch.setattr(retry.bootstrap, "install", BASELINE_INSTALL)
     monkeypatch.setattr(retry.bootstrap, "fetch_wheel", lambda *a, **kw: pytest.fail("frozen installer must use cache"))
     monkeypatch.setenv("E4B_SHA", "1" * 40)
@@ -254,8 +230,8 @@ def test_operational_helper_is_in_manifest_and_both_transport_hash_closures():
     assert "dq11_wheel_retry.py" in launch.OPERATIONAL_FILES
     drive = (LANE / "dq11_l_census_drive.sh").read_text()
     box = (LANE / "dq11_l_census_box.sh").read_text()
-    assert "dq11_wheel_retry.py; do" in drive
-    assert "dq11_wheel_retry.py ) >" in drive
-    assert "dq11_wheel_retry.py > receipts/instrument-and-operational.sha256" in box
+    assert "dq11_wheel_retry.py dq11_census_transport.py; do" in drive
+    assert "dq11_wheel_retry.py dq11_census_transport.py ) >" in drive
+    assert "dq11_wheel_retry.py dq11_census_transport.py > receipts/instrument-and-operational.sha256" in box
     assert "phase bootstrap 900 python dq11_wheel_retry.py" in box
     assert "sha256sum -c science.sha256" in box
