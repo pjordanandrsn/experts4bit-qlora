@@ -2,8 +2,8 @@
 # tests/test_p132.py resolve each name to its source (bench/p132, bench/sc1b, bench/sd2, bench/sd1, bench/p109, bench/p115,
 # bench/p110, bench/p108, bench/p97, bench/p39) and compare. SD2's pieces are at their bytes on main: the subject is
 # SD2's read server, built by SD2's own code.
-# Pinned for the registration (bench/p132/PREREG-p132.md).
-c016fb72274c1ec5c7ffaf8d118316304e05c649fed108c791611f85cdb9f298  p132_run.sh
+# Pinned for the registration (bench/p132/PREREG-p132.md); p132_run.sh re-pinned by Amendment 1 (the canary's floor).
+307bcab3d37bded67437656d8f424d4936b56bde2c8b24485fcd3d9bb01a375d  p132_run.sh
 e3872ff1c7a008ffe7a8f4d61ee02d20c89cbacdb3e2a90f96dd961f2582f628  p132_box.py
 ec8bd2af1e84fdce521f6604125e48bb1f9fccfb9d36960d6c3ae0a053b2f9c9  p132_reduce.py
 95c0d90632eccf0efac22eca3365339ae23e2c7ecd49c2aa70cc0fc32a54c943  kernel_classes_nf4_v1_2.json

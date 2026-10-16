@@ -28,7 +28,7 @@ HEAD_REPO=RedHatAI/Qwen3-30B-A3B-speculator.eagle3; HEAD_REV=6afc5aa2477b923467f
 HEAD_SHA256=d2d6e2e63e09dc755053ae5c98cdececae3611ae5e202d4fa5411126dd3b1dfa; HEAD_BYTES=1044539336
 GPU_CLASS=${P132_GPU_CLASS:-5090}; MIN_DISK_GB=${P132_MIN_DISK_GB:-150}; MIN_RAM_GB=${P132_MIN_RAM_GB:-60}
 GUARD_S=4500; NEED_TESTS=600; NEED_FETCH=2100; NEED_BAKE=600; NEED_CANARY=900; NEED_TIMING=600; NEED_CAPTURE=600   # --wallclock-h 1.25
-SKIP=32; STEPS=64; CANARY_STEPS=8; MOE_LAYERS=48
+SKIP=32; STEPS=64; CANARY_STEPS=12; MOE_LAYERS=48
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 # every serving lever and engine knob starts unset (SD2's list): the SD2 read server is the subject (fixed knobs below)
 unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_SERVE_ATTN_INT4 E4B_FUSE_T1_GLUE E4B_FUSE_T1_GLUE_R2 \
@@ -199,8 +199,10 @@ rc=$?; grep -a "^P132_CANARY" logs/canary.log | tail -1 | cut -c1-400 | tee -a s
 [ "$rc" = 0 ] || { tail -6 logs/canary.log | cut -c1-300 | tee -a summary.txt; say "CANARY FAILED (rc=$rc): buckets or replays -- stopping before the census"; finish 26; }
 capture 2 graph $CANARY_STEPS 2 canary || { say "CANARY FAILED: the short graph-mode capture"; finish 26; }
 capture 2 node $CANARY_STEPS 2 canary || { say "CANARY FAILED: the short node-mode capture"; finish 26; }
+# Amendment 1: SC1b reads one row per PERIOD between consecutive replays (N - 1) and trims both edges, so N bracketed
+# replays keep at most N - 3. The floor allows one long period on top: N - 4 (12 -> 8). Registration's N - 2 never passed.
 python $W/sc1b_census.py arm --graph $W/census/canary_n2_graph.sqlite --node $W/census/canary_n2_node.sqlite --engine e4b --batch 2 \
-  --classes $W/kernel_classes_nf4_v1_2.json --delim graph --min-steps $((CANARY_STEPS - 2)) --moe-layers $MOE_LAYERS \
+  --classes $W/kernel_classes_nf4_v1_2.json --delim graph --min-steps $((CANARY_STEPS - 4)) --moe-layers $MOE_LAYERS \
   --out $W/canary_census.json 2>&1 | tail -1 | tee -a summary.txt
 python - <<'PYC' || { say "CANARY FAILED: the classifier did not read the short census cleanly"; finish 26; }
 import json, sys
