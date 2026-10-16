@@ -425,7 +425,9 @@ def estimate_qlora_footprint(topology, setup: QLoRASetup, *, tokens_per_microbat
     the stock fp32 logits, ``T x V x 4`` bytes, reach ``AUTO_MIN_LOGITS_BYTES`` (1 GiB -- e.g. ``T >= 1,767`` at
     Qwen3's 151,936-token vocabulary, ``T >= 5,462`` at granite's 49,155). Then the branch is
     :func:`~experts4bit_qlora.engines.chunked_lm_loss.chunked_loss_bytes` (one chunk's logits plus the gathered hidden
-    rows); otherwise it is the whole logits at :data:`LOGITS_LOSS_BYTES` per logit.
+    rows); otherwise it is the whole logits at :data:`LOGITS_LOSS_BYTES` per logit, plus the item "logits held by the caller"
+    (``T x V x 2``): the bf16 logits the stock loss returns on the model output, live through the backward when the caller
+    keeps that output. A loop that keeps only the loss (HF Trainer) does not pay it.
 
     ``E4B_CHUNKED_LM_LOSS`` is read here, at estimate time, so a plan prices the loss the run takes only if both see the
     same environment. In one process (a plan followed by its run) they do. A plan written in one process and run in
@@ -541,6 +543,15 @@ def estimate_qlora_footprint(topology, setup: QLoRASetup, *, tokens_per_microbat
     branches = f"{loss_how}, 2 x one layer's recompute = {2 * layer / 1e9:.2f} GB" + (f", {backward_how}" if backward else "")
     items.append(FootprintItem("activations", "device", boundaries + max(logits, 2 * layer, backward), "heuristic",
                                f"{n_layers} saved layer inputs (T x H bf16) + max({branches}) at T={T}"))
+    if not chunk:
+        # The stock loss hands its bf16 logits back on the model output, and a loop that keeps the output across the backward
+        # (`out = model(...); out.loss.backward()`) holds them through every branch above. LOGITS_LOSS_BYTES was measured
+        # on the chunked loss, which returns no logits, so it does not include them (#1526: the native T=1024 probe row,
+        # 296.75 MiB of a 304.5 MiB residual). HF Trainer's compute_loss drops the output, so there this over-counts by
+        # exactly this item. The estimate is a capacity bound and cannot tell which loop it prices, so it keeps the term.
+        items.append(FootprintItem("logits held by the caller", "device", T * V * 2, "derived",
+                                   f"the stock loss's bf16 logits, T x V x 2 = {T * V * 2 / 1e9:.2f} GB, live through the "
+                                   "backward while the caller holds the model output (zero if it keeps only the loss)"))
     if setup.keep_moe_layers:
         n_keep = min(setup.keep_moe_layers, len(topology.expert_stacks))
         items.append(FootprintItem("kept MoE activations", "device", n_keep * keep_bytes_per_layer, "heuristic",
@@ -550,7 +561,7 @@ def estimate_qlora_footprint(topology, setup: QLoRASetup, *, tokens_per_microbat
     # step's peak: on TC1's packed 4,096-token Qwen3-30B-A3B rows with stock evaluation they were the run peak.
     train_total = sum(i.bytes for i in items if i.where == "device")
     held = sum(i.bytes for i in items if i.where == "device"
-               and i.name not in ("adapter gradients", "activations", "kept MoE activations"))
+               and i.name not in ("adapter gradients", "activations", "kept MoE activations", "logits held by the caller"))
     eval_loss, eval_how = _eval_loss_bytes(topology, setup, T, V, H)
     eval_total = held + max(eval_loss, layer)
     items.append(FootprintItem("held-out evaluation, above the training step", "device", max(0, eval_total - train_total),
