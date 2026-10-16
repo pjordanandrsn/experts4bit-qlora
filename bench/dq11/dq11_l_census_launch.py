@@ -55,7 +55,8 @@ INSTRUMENT_FILES = (
     "dq11_l_census_run.py", "dq11_l_census_capture.py", "dq11_l_census_reduce.py"
 )
 OPERATIONAL_FILES = (
-    "dq11_l_census_launch.py", "dq11_l_census_box.sh", "dq11_l_census_drive.sh"
+    "dq11_l_census_launch.py", "dq11_l_census_box.sh", "dq11_l_census_drive.sh",
+    "dq11_wheel_retry.py",
 )
 TRANSPORT_FILE = "bench/tc1/tc1_drive.sh"
 TEMPLATE_FILE = "bench/dq11/dq11_l_census_manifest_template.json"
