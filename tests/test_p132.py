@@ -239,3 +239,53 @@ def test_a1_iii_the_main_census_keeps_at_least_sc1bs_floor(mode):
     _, _, steps, moe = _canary_rule()
     got = _read(mode, _bracket(steps), sc.MIN_STEPS, moe)
     assert got["status"] == "ok" and got["steps_kept"] == steps - 3 >= sc.MIN_STEPS
+
+
+# ---- Amendment 1 through SC1b's export route: the same assertions, read from an nsys-shaped sqlite written by SC1b's
+# own _mkdb and parsed by its own load(), so the schema, the column mapping, the sort and the graph-launch rows are the
+# reader's, not this file's. Each case is also read through _bracket and must agree with it exactly.
+def _export(tmp, n, long_periods=()):
+    """_bracket's replays, written as an export with SC1b's _mkdb and read back with SC1b's load()."""
+    sc = _load("sc1b_census_a1x", B / "sc1b" / "sc1b_census.py")
+    ex = _bracket(n, long_periods)
+    path = tmp / f"n{n}_long{'-'.join(map(str, sorted(long_periods))) or 'none'}.sqlite"
+    sc._mkdb(str(path),
+             kernels=[(k["start"], k["end"], k["corr"], k["node"], k["name"], k["grid"]) for k in ex["kernels"]],
+             launches=[(x["start"], x["end"], x["corr"]) for x in ex["launches"]],
+             graphs=[(g["start"], g["end"], g["corr"], g["exec"]) for g in ex["graphs"]])
+    return sc.load(str(path))
+
+
+@pytest.mark.parametrize("mode", ["graph", "node"])
+def test_a1_export_route_reproduces_the_runs_void_byte_for_byte(mode, tmp_path):
+    census, drv = _record("canary_census.json"), _record(f"canary_drv_n2_{mode}.json")
+    n = drv["steps_bracketed"]
+    got = _read(mode, _export(tmp_path, n), n - REGISTERED_OFFSET)
+    assert got["why"] == census[mode]["why"] and got["dropped"] == census[mode]["dropped"] == {}
+    assert got == _read(mode, _bracket(n), n - REGISTERED_OFFSET)
+
+
+@pytest.mark.parametrize("mode", ["graph", "node"])
+def test_a1_export_route_old_floor_voids_and_new_floor_reads_at_8_and_12(mode, tmp_path):
+    canary_steps, offset, _, moe = _canary_rule()
+    n_record = _record(f"canary_drv_n2_{mode}.json")["steps_bracketed"]
+    assert (n_record, canary_steps) == (8, 12)
+    for n in (n_record, canary_steps):
+        ex = _export(tmp_path, n)
+        assert _read(mode, ex, 1, moe)["steps_kept"] == n - 3                  # the reader's ceiling, read from the export
+        old, new = _read(mode, ex, n - REGISTERED_OFFSET, moe), _read(mode, ex, n - offset, moe)
+        assert old["status"] == "void" and new["status"] == "ok" and new["steps_kept"] == n - 3
+        assert old == _read(mode, _bracket(n), n - REGISTERED_OFFSET, moe)
+        assert new == _read(mode, _bracket(n), n - offset, moe)
+
+
+@pytest.mark.parametrize("mode", ["graph", "node"])
+def test_a1_export_route_one_long_period_reads_and_two_void(mode, tmp_path):
+    canary_steps, offset, _, moe = _canary_rule()
+    mid = canary_steps // 2
+    one = _read(mode, _export(tmp_path, canary_steps, {mid}), canary_steps - offset, moe)
+    assert one["status"] == "ok" and one["dropped"] == {"period_over_1.5x_median": 1}
+    two = _read(mode, _export(tmp_path, canary_steps, {mid - 2, mid}), canary_steps - offset, moe)
+    assert two["status"] == "void" and two["dropped"] == {"period_over_1.5x_median": 2}
+    assert one == _read(mode, _bracket(canary_steps, {mid}), canary_steps - offset, moe)
+    assert two == _read(mode, _bracket(canary_steps, {mid - 2, mid}), canary_steps - offset, moe)
