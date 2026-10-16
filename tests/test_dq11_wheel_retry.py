@@ -5,6 +5,7 @@ import io
 import json
 from pathlib import Path
 import sys
+import time
 import zipfile
 from urllib.error import HTTPError, URLError
 
@@ -145,6 +146,32 @@ def test_deadline_prevents_more_network_attempts(tmp_path, monkeypatch, fixture)
         retry.install(tmp_path, tmp_path / "cache")
     assert len(calls) == 1 and not sleeps and not installed
     assert outcomes(tmp_path)[-1]["elapsed_seconds"] == 175
+
+
+def test_wall_deadline_interrupts_blocked_reader_and_restores_handler(tmp_path, monkeypatch):
+    payload = b"wheel"
+    row = dict(filename="fixture.whl", url="https://files.pythonhosted.org/fixture.whl",
+               sha256=hashlib.sha256(payload).hexdigest())
+    (tmp_path / "wheels.json").write_text(json.dumps(dict(packages=[row])))
+
+    class BlockedResponse(Response):
+        def read(self, size):
+            time.sleep(5)
+            pytest.fail("wall deadline must interrupt blocked read")
+
+    monkeypatch.setattr(retry, "RETRY_SECONDS", 0.05)
+    monkeypatch.setattr(retry.urllib.request, "urlopen", lambda *a, **kw: BlockedResponse(payload))
+    monkeypatch.setattr(retry.bootstrap, "install", lambda *a: pytest.fail("expired fetch must not install"))
+    previous = retry.signal.getsignal(retry.signal.SIGALRM)
+    started = time.monotonic()
+    with pytest.raises(retry.WheelDeadlineExceeded):
+        retry.install(tmp_path, tmp_path / "cache")
+    assert time.monotonic() - started < 2
+    assert retry.signal.getsignal(retry.signal.SIGALRM) == previous
+    assert retry.signal.getitimer(retry.signal.ITIMER_REAL)[0] == 0
+    evidence = outcomes(tmp_path)
+    assert [r["outcome"] for r in evidence] == ["started", "refused"]
+    assert not list((tmp_path / "cache").glob("*.partial"))
 
 
 @pytest.mark.parametrize("error", [HTTPError("https://files.pythonhosted.org/fixture.whl", 503, "unavailable", {}, None),
