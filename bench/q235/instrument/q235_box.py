@@ -5,7 +5,8 @@ The same script runs the registered box, the gate-1 rehearsal (a depth-truncated
 the rehearsal's planted errors (``--plant routing`` / ``--plant epilogue``, at layer floor(n/2), Amendment 1). ``--repeat`` is the
 fresh-process repeat of step 0: it loads, runs the step-0 forward and records its loss, and stops. ``--repeat --plants`` (Amendment 3)
 then runs each planted error in the same process after that clean forward (the null): plant, forward, unplant, each checked against
-the null and structurally unplanted; their records go to ``plant_routing/`` and ``plant_epilogue/`` under ``--out``.
+the null and structurally unplanted; their records go to ``plant_routing/`` and ``plant_epilogue/`` under ``--out``. The fp32 copies
+behind the gradient and delta checks live on the host (Amendment 4), so the device peak is the training step's own.
 
 Records (one JSON): host facts; versions; the load (timed); frozen-base sha256 after load and after the step (every frozen parameter and
 buffer, host homes included); the in-process spread (two forward-backward passes, no optimizer step); the step's loss, per-adapter
@@ -122,6 +123,25 @@ def strict_failures(out, repeat=False):
     if out.get("frozen_sha256_after_both_steps_equal") is not True:
         bad.append("frozen_sha256_after_both_steps_equal")
     return bad
+
+
+def host_memory():
+    """This process's host memory from ``/proc/self/status``, in bytes (Amendment 4; reported): the peak and current resident set
+    and its anonymous, file-backed and shared parts. File-backed pages (the checkpoint's mmap) are reclaimable; the anonymous and
+    shared ones (pinned expert homes, the check copies) are what the host-RAM floor covers. Empty where the file does not exist."""
+    keys = ("VmHWM", "VmRSS", "RssAnon", "RssFile", "RssShmem")
+    try:
+        with open("/proc/self/status") as f:
+            return {k: int(v.split()[0]) * 1024 for k, v in (ln.split(":", 1) for ln in f if ":" in ln) if k in keys}
+    except OSError:
+        return {}
+
+
+def host_copy(t):
+    """An fp32 copy of ``t`` on the host, never a view of it (Amendment 4). The box's gradient and delta checks hold their copies of the
+    adapters (``g0``, ``g1``, ``before``, ``grads``) here rather than on the device, so the step's device peak measures the training
+    step alone. The tensor leaves the device at its own dtype and is widened on the host, so no fp32 temporary lands on the device."""
+    return t.detach().to("cpu", copy=True).float()
 
 
 def adapter_params(model):
@@ -359,7 +379,7 @@ def run(a):
     out["tokens_sha256"] = {k: hashlib.sha256(v.contiguous().numpy().tobytes()).hexdigest() for k, v in tokens.items()}
     d0, t0 = diskstats(), time.time()
     model, rec = build(a.checkpoint, dev, a.r, a.alpha, a.adapter_dtype, a.enabler, profile=LoadProfile(cuda))
-    out["load"] = {**rec, "seconds": round(time.time() - t0, 1), "nvme": disk_delta(d0, diskstats())}
+    out["load"] = {**rec, "seconds": round(time.time() - t0, 1), "nvme": disk_delta(d0, diskstats()), "host_memory": host_memory()}
     planted = plant(model, a.plant)[0] if a.plant else None
     out["plant"] = {"kind": a.plant, "layer": planted}
     ids, mask, labels = (tokens[k].to(dev) for k in ("input_ids", "attention_mask", "labels"))
@@ -401,12 +421,13 @@ def run(a):
         loss.backward()
         sync()
         tb = time.time()
-        return float(loss), {n: p.grad.detach().float().clone() for n, p in params.items() if p.grad is not None}, tf - t, tb - tf
+        grads = {n: host_copy(p.grad) for n, p in params.items() if p.grad is not None}
+        return float(loss), grads, tf - t, tb - tf, time.time() - tb
 
-    l0, g0, _, _ = fwd_bwd()                                   # step-0 forward: the layer outputs are recorded here
+    l0, g0, *_ = fwd_bwd()                                     # step-0 forward: the layer outputs are recorded here
     for h in hooks:
         h.remove()
-    l1, g1, _, _ = fwd_bwd()
+    l1, g1, *_ = fwd_bwd()
     spread = max(((g1[n] - g0[n]).abs().max() / g0[n].abs().max().clamp_min(1e-30)).item() for n in g0)
     out["in_process"] = {"loss_0": l0, "loss_1": l1, "loss_equal": l0 == l1, "grad_maxrel": spread}
 
@@ -422,14 +443,14 @@ def run(a):
 
     def one_step():
         """One forward-backward and optimizer step at the registered shape, instrumented: its record, gradients and deltas."""
-        before = {n: p.detach().float().clone() for n, p in params.items()}
+        before = {n: host_copy(p) for n, p in params.items()}
         if cuda:
             torch.cuda.reset_peak_memory_stats()
         os.environ["E4B_OFFLOAD_STATS"] = "1"
         off.reset_offload_stats()
         d1 = diskstats()
         t_step = time.time()
-        loss, grads, t_fwd, t_bwd = fwd_bwd()
+        loss, grads, t_fwd, t_bwd, t_copy = fwd_bwd()
         sync()
         t_o = time.time()
         opt.step()
@@ -437,17 +458,18 @@ def run(a):
         t_opt = time.time() - t_o
         rec = {
             "loss": loss, "forward_s": round(t_fwd, 3), "backward_s": round(t_bwd, 3), "optimizer_s": round(t_opt, 3),
-            "elapsed_s": round(time.time() - t_step, 3),
+            "elapsed_s": round(time.time() - t_step, 3), "grads_host_copy_s": round(t_copy, 3),   # inside elapsed_s (Amendment 4)
             "h2d_bytes_offload": int(sum(c[2] for c in off._stats().copies)), "h2d_copies_offload": len(off._stats().copies),
             "nvme": disk_delta(d1, diskstats()),
             "max_memory_allocated": torch.cuda.max_memory_allocated() if cuda else None,
             "max_memory_reserved": torch.cuda.max_memory_reserved() if cuda else None,
             "host_peak_rss": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * (1 if platform.system() == "Darwin" else 1024),
+            "host_memory": host_memory(),                            # after opt.step: g0, g1, before and grads all alive
             "lr": a.lr, "weight_decay": a.weight_decay, "optimizer": opt_name, "instrumented": "E4B_OFFLOAD_STATS=1 during the step",
         }
         os.environ["E4B_OFFLOAD_STATS"] = "0"
         nonzero = {n: int((g != 0).sum()) for n, g in grads.items()}
-        delta = {n: float((p.detach().float() - before[n]).abs().max()) for n, p in params.items()}
+        delta = {n: float((host_copy(p) - before[n]).abs().max()) for n, p in params.items()}
         rec["gradients"] = {
             "global_norm": float(torch.sqrt(sum((g.double() ** 2).sum() for g in grads.values()))),
             "all_finite": all(bool(torch.isfinite(g).all()) for g in grads.values()), "tensors": len(grads),

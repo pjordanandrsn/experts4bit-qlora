@@ -149,12 +149,24 @@ def test_the_runner_refuses_a_card_that_is_not_the_registered_class(box):
     assert json.loads((w / "receipts" / "run.json").read_text())["science_eligible"] is True
 
 
+def science_ram_floor_gb():
+    import re
+    return int(re.search(r"^  science\).*MIN_RAM_GB=(\d+);", (Q / "q235_run.sh").read_text(), re.M).group(1))
+
+
+def test_the_science_host_ram_floor_is_amendment_4s():
+    """Amendment 4 derives the floor: 173.5 GB registered (pinned expert homes and the process baseline), plus the four host check
+    copies (40.24 GB) and the step-0 layer outputs held for the fidelity read (2.04 GB), plus the 18.5 GB allowance: 234.3, so 235."""
+    assert science_ram_floor_gb() == 235
+
+
 def test_the_runner_refuses_a_host_below_the_ram_floor(box):
     w, bin_, env = box
     with open("/proc/meminfo") if os.path.exists("/proc/meminfo") else open(os.devnull) as f:
         total = next((int(ln.split()[1]) for ln in f if ln.startswith("MemTotal:")), None)
-    if total is None or total * 1024 >= 192e9:
-        pytest.skip("needs a Linux host with less than 192 GB of RAM")
+    floor = science_ram_floor_gb()
+    if total is None or total * 1024 >= floor * 1e9:
+        pytest.skip(f"needs a Linux host with less than {floor} GB of RAM")
     _smi(bin_, "NVIDIA RTX PRO 6000 Blackwell Server Edition, 97887, 575.64.05, 5, 5, 16, 16, 600.00 W")
     r = _run(w, env)
     assert r.returncode == 18 and (w / "REFUSAL").read_text().strip() == "host ram floor", (r.returncode, r.stdout[-800:])

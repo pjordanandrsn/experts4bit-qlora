@@ -14,6 +14,8 @@ Qwen3-MoE, on the reference path (the fused kernels need CUDA; the RTX A2000 reh
   takes them second.
 - Amendment 3's in-process plants (``--repeat --plants``): the repeat's clean forward is the null; each plant run after it in the same
   process reproduces the separate-process plant bit for bit, and an unplant that leaves anything behind raises.
+- Amendment 4: the fp32 copies behind the gradient and delta checks are host copies, never views, and none is made on the device
+  inside the step.
 """
 from __future__ import annotations
 
@@ -75,6 +77,10 @@ def test_the_step_records_every_registered_check(step):
     assert rec["step1"]["gradients"]["every_A_nonzero"] and rec["step1"]["optimizer_delta"]["every_A_changed"]
     assert rec["frozen_sha256_after_both_steps_equal"] and rec["frozen_tensors"] > 0
     assert rec["in_process"]["loss_equal"]                          # the CPU reference path is deterministic
+    assert all(0 <= rec[k]["grads_host_copy_s"] <= rec[k]["elapsed_s"] for k in ("step", "step1"))   # Amendment 4, timed apart
+    for hm in (rec["load"]["host_memory"], rec["step"]["host_memory"], rec["step1"]["host_memory"]):   # Amendment 4, reported
+        assert hm == {} if not Path("/proc/self/status").exists() else (
+            set(hm) == {"VmHWM", "VmRSS", "RssAnon", "RssFile", "RssShmem"} and hm["RssAnon"] > 0 and hm["VmHWM"] >= hm["VmRSS"])
     assert rec["step"]["optimizer"].startswith("torch AdamW") and rec["step"]["lr"] == 2e-4
     assert len(rec["layer_sha256"]) == 4 and (out / "nf4.pt").exists()
     prof = rec["load"]["profile"]                                   # gate 2: where the load's time went
@@ -188,6 +194,34 @@ def test_a_strict_failure_names_itself():
     assert set(box.strict_failures({})) == set(box.STRICT_RULES) | {"frozen_sha256_after_both_steps_equal"}
     assert "step1_every_B_changed" in box.strict_failures({"rules": {k: True for k in box.STRICT_RULES[:-1]},
                                                           "frozen_sha256_after_both_steps_equal": True})
+
+
+def test_the_adapter_copies_are_fp32_host_copies_never_views():
+    """Amendment 4: the gradient and delta checks' copies are fp32, on the host, and never share storage with what they copy."""
+    host_copy = _box_module().host_copy
+    src = torch.randn(3, 5, dtype=torch.bfloat16)
+    c = host_copy(src)
+    assert c.dtype == torch.float32 and c.device.type == "cpu" and torch.equal(c, src.float())   # bf16 -> fp32 is exact
+    w = torch.nn.Parameter(torch.randn(4, 2))                       # already fp32 on the host: still a copy, not the same tensor
+    c = host_copy(w)
+    assert not c.requires_grad and c.data_ptr() != w.data_ptr()
+    with torch.no_grad():
+        w.add_(1.0)
+    assert not torch.equal(c, w.detach())                           # the "before" snapshot does not follow the parameter
+
+
+def test_no_adapter_copy_stays_on_the_device():
+    """Amendment 4: inside the step (``fwd_bwd``, ``one_step``) every copy of an adapter or its gradient goes through ``host_copy``;
+    a ``.clone()`` or ``.float()`` there would put an fp32 copy back on the device and into the step's memory record."""
+    import ast
+    tree = ast.parse(BOX.read_text())
+    funcs = {f.name: f for f in ast.walk(tree) if isinstance(f, ast.FunctionDef) and f.name in ("fwd_bwd", "one_step")}
+    assert set(funcs) == {"fwd_bwd", "one_step"}
+    for name, f in funcs.items():
+        calls = [c for c in ast.walk(f) if isinstance(c, ast.Call)]
+        on_device = [ast.unparse(c) for c in calls if isinstance(c.func, ast.Attribute) and c.func.attr in ("clone", "float")]
+        assert not on_device, (name, on_device)
+        assert any(isinstance(c.func, ast.Name) and c.func.id == "host_copy" for c in calls), name
 
 
 @pytest.fixture(scope="module")
