@@ -227,3 +227,14 @@ def test_rule_8_cannot_be_read_without_its_deterministic_check(tmp_path, extra, 
     accumulations against each other -- must sit at most BAR / 3, or rule 8 is VOID, never a FAIL from noise."""
     v = _verdict_with(*_box_run(tmp_path, shape_b={"ga": (0.01, 0.02), "plants": (0.6, 0.9), **extra}), 0.05)
     assert v["verdict"] == "VOID" and cause in v["why"], v["why"]
+
+
+def test_rule_8_s_bar_is_the_third_calibration_s():
+    """Amendment 6: BAR = 3 x max(s94, the 30B's s(48)) from bench/q235/am6/calibration-3-deterministic.json, rounded to 3 figures."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("q235_verdict_pin", VERDICT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    cal = json.loads((ROOT / "bench" / "q235" / "am6" / "calibration-3-deterministic.json").read_text())
+    assert not cal["soft_any"] and all(cal["plants_registered"].values())
+    assert mod.GA_BAR == round(cal["bar"], 4) == 0.0231 and set(mod.GA_PLANTS) == {"mean", "overwrite"}

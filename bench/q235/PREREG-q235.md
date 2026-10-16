@@ -752,4 +752,37 @@ change, so those are effects of the batch shape alone.
 **BAR, from a third calibration,** read by the rule already registered (the depth fit, 3 × max(s₉₄, the 30B's s(48)), plants at least 3×
 BAR at every depth, the SOFT stops). It uses the third form's quantity, the 235B cuts at 2, 4 and 8 layers, and the 30B at 48.
 
+**The third calibration, as run: BAR = 0.0231, both plants registered** (2026-10-16, RTX A2000, $0; `bench/q235/am6/`).
+- **The scoping check passed.** The 4-layer in-process pair under the torch flag alone, with `CUBLAS_WORKSPACE_CONFIG` unset, was
+  bit for bit equal. The check passes therefore need no process-wide setting, and the registered steps keep the default path.
+- **Modes.** At every depth, the check ran deterministic, the default was restored, and the steps ran on the default. Amendment 2's
+  rules all held, and no tensor was a zero mismatch.
+
+| depth | s (the deterministic check) | p50 | floor (two deterministic accumulations) | plants: mean / overwrite, in BAR |
+|---|---|---|---|---|
+| 235B, 2 layers | 0.00278 | 0.00249 | 0 at both steps | 14.3 / 37.9 |
+| 235B, 4 layers | 0.00332 | 0.00248 | 0 at both steps | 14.8 / 37.9 |
+| 235B, 8 layers | 0.00282 | 0.00247 | 0 at both steps | 14.8 / 38.7 |
+| 30B, 48 layers | 0.00770 | 0.00427 | 0.0079 / 0.0087 | 29.0 / 44.9 |
+
+- **The fit is flat:** exponent 0.010 ± 0.143, residuals within 12.1 %, so s₉₄ = 0.00305. The 30B sits 2.54× the fit at 48, inside 3×.
+  No SOFT stop fired, and the p99 view is clean.
+- **BAR = 3 × max(0.00305, 0.00770) = 0.0231** (`q235_verdict.GA_BAR`). Both plants clear it at least 14× at every depth, so both are
+  registered.
+- **The floor, read plainly.**
+  - It is exactly 0 on the 235B's shapes at every depth measured.
+  - On the 30B's shapes it is not: 0.0079 and 0.0087, just above BAR / 3 = 0.0077, so a 30B box would read rule 8 VOID. Some
+    operation at those shapes stays nondeterministic under the torch flag. It is not identified; `warn_only` leaves
+    memory-efficient attention's backward as it is, and custom kernels sit outside the flag.
+  - The 235B box runs the cuts' layer shapes at 94 layers. Equal inputs stay equal through more layers of the same shapes, so its
+    floor is expected to be 0. If it is not, the instrument check VOIDs rule 8 rather than reading noise as a FAIL.
+- **Reported:**
+  - **Router flips** are 2.1 %, 3.5 %, 5.2 % and 16.2 % of token-layers.
+  - **Shape A against Shape B** reads as in the second calibration.
+  - **The wording.** Shape A and Shape B are the same gradient in exact arithmetic; under bf16, routing differs by a few percent of
+    tokens per layer, growing with depth.
+- **Re-derivation.** `am6/am6_fit.py` re-derives each calibration's figures from its box records. Its per-depth summaries are
+  `am6/calibration-1-a-vs-b.json`, `-2-same-shapes.json` and `-3-deterministic.json`.
+- **The gate-1 rehearsal** on the RTX A2000, after this merges, measures the floor again on the merged code.
+
 **The fp32 arm** stays unrun.

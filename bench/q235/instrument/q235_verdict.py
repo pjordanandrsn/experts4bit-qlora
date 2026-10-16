@@ -64,7 +64,7 @@ EXIT = {"PASS": 0, "FAIL": 1, "VOID": 2}
 REFUSAL_CODES = {"13", "14", "17", "18"}
 BAND = 0.775                                   # Amendment 3: 2 x the 30B box's largest interior contribution error (0.3876)
 NULL_FLOOR = 1e-3                              # Amendment 3: the null against the box, and a plant's earlier layers against the null
-GA_BAR = None                                  # Amendment 6: shape B's per-tensor bar, registered from the calibration before any box
+GA_BAR = 0.0231                                # Amendment 6: 3 x the 30B's s(48) = 3 x 0.00770, third calibration (am6/)
 GA_PLANTS = ("mean", "overwrite")              # Amendment 6: the plants the calibration registers (a plant short of 3 x BAR is dropped)
 PLANTS = ("routing", "epilogue")
 
