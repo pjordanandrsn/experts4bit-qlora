@@ -1,0 +1,288 @@
+{
+ "probe": "e4b#1526",
+ "model": "/work/q3red-L4",
+ "reduced": {
+  "source": "Qwen/Qwen3-30B-A3B",
+  "revision": "ad44e777bcd1",
+  "num_hidden_layers": 4,
+  "weights": "random, seed 0"
+ },
+ "tokens_per_microbatch": 1024,
+ "packing": "one full row per micro-batch (random ids, labels = ids)",
+ "adapters": "native",
+ "accum": 4,
+ "steps": 3,
+ "lora_dtypes": {
+  "torch.float32": 32,
+  "torch.bfloat16": 16
+ },
+ "cast_to_fp32": 0,
+ "n_attn4": 16,
+ "n_patched": 4,
+ "load_allocated_bytes": 2645964800,
+ "peak_allocated_bytes_per_step": [
+  4976652288,
+  5086664704,
+  5088450560
+ ],
+ "e4b_estimate_device_bytes": 4744907040,
+ "e4b_items": [
+  {
+   "name": "frozen expert stacks",
+   "where": "device",
+   "bytes": 1246306592
+  },
+  {
+   "name": "attention projections (NF4)",
+   "where": "device",
+   "bytes": 38946816
+  },
+  {
+   "name": "fused q/k/v training projection (fp32 absmax)",
+   "where": "device",
+   "bytes": 1966080
+  },
+  {
+   "name": "dense weights (bf16)",
+   "where": "device",
+   "bytes": 1246795776
+  },
+  {
+   "name": "expert LoRA adapters",
+   "where": "device",
+   "bytes": 104857600
+  },
+  {
+   "name": "attention LoRA adapters",
+   "where": "device",
+   "bytes": 2228224
+  },
+  {
+   "name": "adapter gradients",
+   "where": "device",
+   "bytes": 107085824
+  },
+  {
+   "name": "optimizer state (adamw_8bit)",
+   "where": "device",
+   "bytes": 108759040
+  },
+  {
+   "name": "small allocations",
+   "where": "device",
+   "bytes": 4194304
+  },
+  {
+   "name": "activations",
+   "where": "device",
+   "bytes": 1883766784
+  },
+  {
+   "name": "held-out evaluation, above the training step",
+   "where": "device",
+   "bytes": 0
+  }
+ ],
+ "loggetta": {
+  "status": "feasible",
+  "lines": [
+   {
+    "name": "frozen expert stacks",
+    "basis": "derived",
+    "bytes": 1246306592
+   },
+   {
+    "name": "attention projections (NF4)",
+    "basis": "derived",
+    "bytes": 38946816
+   },
+   {
+    "name": "fused q/k/v training projection (fp32 absmax)",
+    "basis": "derived",
+    "bytes": 1966080
+   },
+   {
+    "name": "dense weights (bf16)",
+    "basis": "derived",
+    "bytes": 1246795776
+   },
+   {
+    "name": "expert LoRA adapters",
+    "basis": "derived",
+    "bytes": 104857600
+   },
+   {
+    "name": "attention LoRA adapters",
+    "basis": "derived",
+    "bytes": 2228224
+   },
+   {
+    "name": "adapter gradients",
+    "basis": "derived",
+    "bytes": 107085824
+   },
+   {
+    "name": "optimizer state (adamw_8bit)",
+    "basis": "derived",
+    "bytes": 108759040
+   },
+   {
+    "name": "small allocations",
+    "basis": "heuristic",
+    "bytes": 4194304
+   },
+   {
+    "name": "activations",
+    "basis": "heuristic",
+    "bytes": 1883766784
+   },
+   {
+    "name": "held-out evaluation, above the training step",
+    "basis": "heuristic",
+    "bytes": 0
+   },
+   {
+    "name": "allocator reserve (cached, unallocated blocks)",
+    "basis": "inferred",
+    "bytes": 948981408
+   },
+   {
+    "name": "CUDA context + library workspaces",
+    "basis": "inferred",
+    "bytes": 536870912
+   }
+  ],
+  "allocator_estimate_bytes": 4744907040
+ },
+ "versions": {
+  "torch": "2.12.1+cu129",
+  "experts4bit-qlora": "0.54.0",
+  "bitsandbytes": "0.50.2",
+  "transformers": "5.18.0",
+  "grouped-nf4-gemm": "0.46.0"
+ },
+ "gpu": "NVIDIA RTX A2000 12GB",
+ "at": "2026-10-11T08:44:06Z",
+ "census": {
+  "items_bytes": {
+   "dense weights (bf16)": 1246796288,
+   "attention LoRA adapters": 4456448,
+   "attention projections (NF4)": 40907792,
+   "expert LoRA adapters": 104857600,
+   "frozen expert stacks": 1246306592,
+   "optimizer state": 108761088
+  },
+  "grad_bytes_from_params": 109314048,
+  "grad_dtypes": [
+   "torch.bfloat16",
+   "torch.float32"
+  ],
+  "inventory_total": 2752085808,
+  "allocated_after_loop": 2776113664,
+  "unclassified_allocated": 24027856
+ },
+ "e4b_estimate_attention_dtype_corrected": {
+  "setup": {
+   "quant_type": "nf4",
+   "blocksize": 64,
+   "r": 16,
+   "alpha": 16,
+   "adapter_dtype": "bf16",
+   "attention_adapter_dtype": "fp32",
+   "train_experts": true,
+   "train_attention": true,
+   "attn_4bit": true,
+   "expert_residency": "device",
+   "pin": true,
+   "expert_kernel": "grouped_nf4",
+   "dgrad": true,
+   "keep_moe_layers": 0
+  },
+  "device_bytes": 4749363488,
+  "items": [
+   {
+    "name": "frozen expert stacks",
+    "where": "device",
+    "bytes": 1246306592,
+    "detail": "4 stacks in nf4, blocksize 64 (packed + absmax, absmax double-quantized: the enable_fast_train default, E4B_ABSMAX_DQ=0 keeps fp32)"
+   },
+   {
+    "name": "attention projections (NF4)",
+    "where": "device",
+    "bytes": 38946816,
+    "detail": "16 projections, bitsandbytes nested statistics"
+   },
+   {
+    "name": "fused q/k/v training projection (fp32 absmax)",
+    "where": "device",
+    "bytes": 1966080,
+    "detail": "41943040 q/k/v values, 3 B per 64 over the nested statistics (E4B_TRAIN_FUSE_QKV, on by default)"
+   },
+   {
+    "name": "dense weights (bf16)",
+    "where": "device",
+    "bytes": 1246795776,
+    "detail": "embeddings, attention, norms, routers, dense/shared MLPs; tied head counted once"
+   },
+   {
+    "name": "expert LoRA adapters",
+    "where": "device",
+    "bytes": 104857600,
+    "detail": "ExpertsLoRA r=16, bf16"
+   },
+   {
+    "name": "attention LoRA adapters",
+    "where": "device",
+    "bytes": 4456448,
+    "detail": "16 projections, r=16, fp32"
+   },
+   {
+    "name": "adapter gradients",
+    "where": "device",
+    "bytes": 109314048,
+    "detail": "one gradient per trainable parameter, in its dtype"
+   },
+   {
+    "name": "optimizer state (adamw_8bit)",
+    "where": "device",
+    "bytes": 108759040,
+    "detail": "two uint8 states + an fp32 absmax per 256 values each (bitsandbytes.optim.AdamW8bit)"
+   },
+   {
+    "name": "small allocations",
+    "where": "device",
+    "bytes": 4194304,
+    "detail": "kernel scratch, lookup tables, index and staging buffers under 1 MiB each (measured 0.4-2.0 MB at TC1's census peaks)"
+   },
+   {
+    "name": "activations",
+    "where": "device",
+    "bytes": 1883766784,
+    "detail": "4 saved layer inputs (T x H bf16) + max(logits and loss, three fp32 logits-sized tensors = 1.87 GB, 2 x one layer's recompute = 0.16 GB, the grouped_nf4 MoE backward = padded LoRA delta 1.14 GB (131072 rows x (H + first_out + I = 2048 + 1536 + 768) x 2 B; single block: min(E, T x top_k) x T = 128 x 1024) + fused workspaces 0.13 GB (5 x T x top_k x first_out bf16) + one layer's recompute 0.08 GB) at T=1024"
+   },
+   {
+    "name": "held-out evaluation, above the training step",
+    "where": "device",
+    "bytes": 0,
+    "detail": "a no-grad forward of one 1024-token micro-batch with labels: 2.76 GB held (no gradients) + max(the stock loss, bf16 logits + their fp32 upcast + its log-softmax = 1.58 GB (under the eval gate), one layer's working set = 0.08 GB) = 4.33 GB against the training step's 4.75 GB"
+   }
+  ]
+ },
+ "env": {
+  "E4B_ABSMAX_DQ": null,
+  "E4B_TRAIN_FUSE_QKV": null,
+  "E4B_CHUNKED_LM_LOSS": null,
+  "E4B_CHUNKED_EVAL_LOSS": null,
+  "GNF4_TRITON_PREBIND": null
+ },
+ "estimate_env": {
+  "E4B_CHUNKED_LM_LOSS": {
+   "chunk": 512,
+   "auto_gate_bytes": 1073741824
+  },
+  "E4B_TRAIN_FUSE_QKV": true,
+  "E4B_ABSMAX_DQ": true,
+  "E4B_CHUNKED_EVAL_LOSS": true
+ },
+ "sm_count": 26
+}

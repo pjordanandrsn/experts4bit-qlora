@@ -1,0 +1,38 @@
+== /work/out/L4-T4096-fp32.pickle: replayed peak 4746.2 MiB
+     2755.6 MiB  (allocated before the recorded step)
+      366.9 MiB  nf4_qlora.py:845 backward
+      366.9 MiB  nf4_qlora.py:847 backward
+      308.2 MiB  torch/utils/checkpoint.py:331 backward
+      275.2 MiB  nf4_qlora.py:834 backward
+      128.0 MiB  experts4bit_qlora/engines/fast.py:752 fused_experts_train_forward
+      112.0 MiB  nf4_qlora.py:876 backward
+       88.0 MiB  nf4_qlora.py:867 backward
+       64.2 MiB  experts4bit_qlora/lora.py:787 forward
+       40.0 MiB  experts4bit_qlora/engines/train_qkv_fuse.py:188 forward
+       36.0 MiB  experts4bit_qlora/engines/rmsnorm_train.py:104 forward
+       36.0 MiB  experts4bit_qlora/engines/rope_train.py:89 _launch
+       32.8 MiB  experts4bit_qlora/engines/train_qkv_fuse.py:185 forward
+       32.5 MiB  transformers/integrations/sdpa_attention.py:158 sdpa_attention_forward
+       16.0 MiB  torch/nn/functional.py:2567 embedding
+       16.0 MiB  transformers/models/qwen3_moe/modeling_qwen3_moe.py:341 forward
+       16.0 MiB  transformers/models/qwen3_moe/modeling_qwen3_moe.py:347 forward
+       16.0 MiB  nf4_qlora.py:830 backward
+== /work/out/L4-T4096-native.pickle: replayed peak 3883.8 MiB
+     2647.9 MiB  (allocated before the recorded step)
+      256.0 MiB  experts4bit_qlora/engines/fast.py:465 forward
+      224.0 MiB  nf4_qlora.py:1042 fused_grouped_lora
+      128.0 MiB  experts4bit_qlora/engines/fast.py:752 fused_experts_train_forward
+       64.2 MiB  experts4bit_qlora/lora.py:787 forward
+       64.0 MiB  experts4bit_qlora/engines/fast.py:428 _scatter_fill
+       56.0 MiB  nf4_qlora.py:876 backward
+       48.0 MiB  transformers/models/qwen3_moe/modeling_qwen3_moe.py:347 forward
+       48.0 MiB  torch/nn/functional.py:2397 silu
+       48.0 MiB  experts4bit_qlora/lora.py:200 _epilogue
+       44.0 MiB  nf4_qlora.py:867 backward
+       40.0 MiB  experts4bit_qlora/engines/train_qkv_fuse.py:188 forward
+       36.0 MiB  experts4bit_qlora/engines/rmsnorm_train.py:104 forward
+       36.0 MiB  experts4bit_qlora/engines/rope_train.py:89 _launch
+       32.8 MiB  experts4bit_qlora/engines/train_qkv_fuse.py:185 forward
+       32.5 MiB  transformers/integrations/sdpa_attention.py:158 sdpa_attention_forward
+       16.0 MiB  torch/nn/functional.py:2567 embedding
+       16.0 MiB  experts4bit_qlora/engines/rmsnorm_train.py:124 backward
