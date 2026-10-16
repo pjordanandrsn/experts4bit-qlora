@@ -24,7 +24,7 @@ case "${TC1_DEADLINE_EPOCH:-}" in *[!0-9]*|"") say 'CENSUS_REFUSAL: no guard dea
 sha256sum -c science.sha256 > logs/science-tripwire.log 2>&1 || finish 9
 sha256sum -c dq11-l-census-stage.sha256 > logs/instrument-tripwire.log 2>&1 || finish 9
 cp dq11-l-census-stage.sha256 receipts/expected-instrument-and-operational.sha256 || finish 9
-sha256sum dq11_l_census_run.py dq11_l_census_capture.py dq11_l_census_reduce.py dq11_l_census_launch.py dq11_l_census_box.sh dq11_l_census_drive.sh dq11_wheel_retry.py > receipts/instrument-and-operational.sha256 || finish 9
+sha256sum dq11_l_census_run.py dq11_l_census_capture.py dq11_l_census_reduce.py dq11_l_census_launch.py dq11_l_census_box.sh dq11_l_census_drive.sh dq11_wheel_retry.py dq11_census_transport.py > receipts/instrument-and-operational.sha256 || finish 9
 mv adapter_init.safetensors adapters/ || finish 9
 mv tokens.json data/ || finish 9
 sha256sum -c inputs.sha256 > logs/input-tripwire.log 2>&1 || finish 9
@@ -41,14 +41,14 @@ phase(){
   local name=$1 wanted=$2; shift 2
   budget_cap "$wanted"
   say "$name"
-  perl -e 'alarm shift; exec @ARGV' "$PHASE_CAP" "$@" > "logs/$name.log" 2>&1 || {
+  python3 dq11_census_transport.py phase --seconds "$PHASE_CAP" --deadline "$TC1_DEADLINE_EPOCH" --name "$name" "$@" > "logs/$name.log" 2>&1 || {
     tail -30 "logs/$name.log"
     say "CENSUS_REFUSAL: $name"
     finish 11
   }
 }
 budget_cap 240
-perl -e 'alarm shift; exec @ARGV' "$PHASE_CAP" bash dq11_require_git.sh > logs/git-prerequisite.log 2>&1 || {
+python3 dq11_census_transport.py phase --seconds "$PHASE_CAP" --deadline "$TC1_DEADLINE_EPOCH" --name git-prerequisite bash dq11_require_git.sh > logs/git-prerequisite.log 2>&1 || {
   say 'CENSUS_REFUSAL: git prerequisite'; finish 20;
 }
 [[ "${DQ11_REQUIRED_DRIVER:-}" =~ ^[0-9]{3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] || {

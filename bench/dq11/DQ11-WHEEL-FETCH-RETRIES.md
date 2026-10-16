@@ -5,9 +5,11 @@ connection was reset. This operational change retries only connection resets and
 timeouts, including a reset while reading the response. It makes at most five
 attempts at the identical locked URL with 5, 10, 20 and 40 second backoffs and a
 180 second per-wheel budget. Socket operations time out after at most 20 seconds;
-a process timer also interrupts blocked IO or a peer that keeps trickling bytes
-past the overall budget. The existing 900 second bootstrap phase and five-minute
-teardown reserve remain the outer bounds.
+available-data reads return to the monotonic deadline check between chunks. The
+helper does not set or cancel SIGALRM/ITIMER_REAL. A separate supervisor enforces
+the existing 900 second bootstrap phase and absolute five-minute teardown reserve
+even if a downloader blocks or changes its own signal state; see
+[DQ11-DIRECT-STAGING.md](DQ11-DIRECT-STAGING.md).
 
 `dq11_wheel_retry.py` prefetches wheels and verifies each complete SHA256 before
 atomically promoting the partial file into the cache. Partial failed transfers
