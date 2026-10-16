@@ -1,0 +1,201 @@
+"""experts4bit-qlora#1526: measured allocated peak of fused grouped_nf4 QLoRA training on a reduced Qwen3-30B-A3B,
+against experts4bit-qlora's estimate and Loggetta's plan, built the way TC1's e4b arm builds it."""
+import argparse
+import json
+import os
+import time
+
+import torch
+
+ap = argparse.ArgumentParser()
+ap.add_argument("--model", required=True)
+ap.add_argument("--tokens", type=int, required=True)        # packed: one row of this many tokens per micro-batch
+ap.add_argument("--adapters", choices=("fp32", "native"), required=True)
+ap.add_argument("--accum", type=int, default=4)
+ap.add_argument("--steps", type=int, default=3)
+ap.add_argument("--snapshot", help="write the allocator history of the last step here")
+ap.add_argument("--out", required=True)
+ap.add_argument("--drop-output", action="store_true")      # #1526 confirmation: keep only the loss, not the model output
+a = ap.parse_args()
+
+import bitsandbytes as bnb
+import experts4bit_qlora as e4b
+from experts4bit_qlora.lora import add_attention_lora, quantize_attention_projections_4bit
+
+GiB = 1 << 30
+model, cfg = e4b.load_moe_4bit_streaming(a.model, "cuda", torch.bfloat16, 16, 16, offload=False, pin=True,
+                                         prefetch=False, quant_type="nf4")
+model.to("cuda")
+n_attn4 = quantize_attention_projections_4bit(model)
+model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+model.config.use_cache = False
+add_attention_lora(model, 16, 16, torch.float32)
+n_patched = e4b.enable_fast_train(model, dgrad=True)
+cast = 0
+if a.adapters == "fp32":                               # TC1 T19: every LoRA parameter fp32
+    for n, p in model.named_parameters():
+        if "lora" in n and p.dtype != torch.float32:
+            p.data = p.data.float()
+            cast += 1
+params = [p for n, p in model.named_parameters() if p.requires_grad]
+dtypes = {}
+for n, p in model.named_parameters():
+    if "lora" in n:
+        dtypes[str(p.dtype)] = dtypes.get(str(p.dtype), 0) + 1
+opt = bnb.optim.AdamW8bit(params, lr=2e-4, weight_decay=0.001)
+g = torch.Generator(device="cpu").manual_seed(1)
+vocab = cfg.vocab_size
+
+
+def micro():
+    ids = torch.randint(0, vocab, (1, a.tokens), generator=g).cuda()
+    if a.drop_output:
+        loss = model(input_ids=ids, labels=ids).loss            # the output (and its bf16 logits) is freed here
+        (loss / a.accum).backward()
+    else:
+        out = model(input_ids=ids, labels=ids)
+        (out.loss / a.accum).backward()
+
+
+torch.cuda.synchronize()
+load_alloc = torch.cuda.memory_allocated()
+torch.cuda.reset_peak_memory_stats()
+peaks = []
+for step in range(a.steps):
+    if a.snapshot and step == a.steps - 1:
+        torch.cuda.memory._record_memory_history(max_entries=400000, context="all", stacks="python")
+    torch.cuda.reset_peak_memory_stats()
+    for _ in range(a.accum):
+        micro()
+    opt.step()
+    opt.zero_grad(set_to_none=True)       # as TC1 (tc1_arm.py)
+    torch.cuda.synchronize()
+    peaks.append(torch.cuda.max_memory_allocated())
+if a.snapshot:
+    torch.cuda.memory._dump_snapshot(a.snapshot)
+    torch.cuda.memory._record_memory_history(enabled=None)
+
+setup = e4b.QLoRASetup(adapter_dtype="fp32" if a.adapters == "fp32" else "bf16", attn_4bit=True,
+                       expert_kernel="grouped_nf4", r=16, alpha=16)
+topo = e4b.describe_moe(a.model)
+fp = e4b.estimate_qlora_footprint(topo, setup, tokens_per_microbatch=a.tokens, optimizer="adamw_8bit")
+items = [{"name": i.name, "where": i.where, "bytes": i.bytes} for i in fp.items]
+est_device = sum(i["bytes"] for i in items if i["where"] == "device")
+
+loggetta = None
+try:
+    from loggetta import Constraints, Workload, describe_model, plan
+    from loggetta.hardware import GPU, Fact, HardwareProfile, Host
+    f = lambda v: Fact(v, "stated")  # noqa: E731
+    tot = torch.cuda.get_device_properties(0).total_memory
+    gpu = GPU(index=0, vendor="nvidia", name=torch.cuda.get_device_name(0), uuid=None,
+              compute_capability=f(torch.cuda.get_device_capability(0)), memory_total=f(tot), memory_free=f(tot),
+              driver=f(None), pcie_gen_max=f(None), pcie_width_max=f(None), pcie_gen_current=f(None),
+              pcie_width_current=f(None))
+    host = Host(cpu_model=f(None), cpus=f(os.cpu_count()), memory_total=f(64 * GiB), memory_available=f(64 * GiB),
+                memory_limit=f(64 * GiB))
+    p = plan(describe_model(a.model), HardwareProfile(gpus=(gpu,), host=host, platform="Linux"),
+             Workload(kind="train", seq_len=a.tokens, micro_batch=1, grad_accum=a.accum, optimizer="adamw_8bit"),
+             Constraints(fixed={"expert_kernel": "grouped_nf4", "expert_residency": "device", "attn_4bit": True,
+                                "adapter_dtype": setup.adapter_dtype, "r": 16, "alpha": 16}))
+    c = p.selected or p.alternatives[0]
+    lines = [{"name": ln.name, "basis": ln.basis, "bytes": ln.bytes} for ln in c.lines if ln.where == "device"]
+    alloc_est = sum(ln["bytes"] for ln in lines if not ln["name"].startswith(("allocator reserve", "CUDA context")))
+    loggetta = {"status": p.status, "lines": lines, "allocator_estimate_bytes": alloc_est}
+except Exception as ex:                       # report, do not hide
+    loggetta = {"error": repr(ex)}
+
+rec = {"probe": "e4b#1526", "drop_output": a.drop_output, "model": a.model, "reduced": json.load(open(os.path.join(a.model, "REDUCED.json"))),
+       "tokens_per_microbatch": a.tokens, "packing": "one full row per micro-batch (random ids, labels = ids)",
+       "adapters": a.adapters, "accum": a.accum, "steps": a.steps, "lora_dtypes": dtypes, "cast_to_fp32": cast,
+       "n_attn4": n_attn4, "n_patched": n_patched, "load_allocated_bytes": load_alloc,
+       "peak_allocated_bytes_per_step": peaks, "e4b_estimate_device_bytes": est_device, "e4b_items": items,
+       "loggetta": loggetta,
+       "versions": {k: __import__(m).__version__ for k, m in (("torch", "torch"), ("experts4bit-qlora", "experts4bit_qlora"),
+                                                             ("bitsandbytes", "bitsandbytes"), ("transformers", "transformers"))},
+       "gpu": torch.cuda.get_device_name(0), "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+json.dump(rec, open(a.out, "w"), indent=1)
+print(json.dumps({k: rec[k] for k in ("tokens_per_microbatch", "adapters", "peak_allocated_bytes_per_step",
+                                      "e4b_estimate_device_bytes")}))
+
+
+# --- statics census, AFTER the measured loop (nothing above changes): every live tensor classified into the estimate's
+# --- static items, so the L4 statics can be closed item by item against the estimate on main's configuration.
+def _census():
+    from bitsandbytes.nn import Params4bit
+
+    seen, items = set(), {}
+
+    def add(item, t):
+        if not isinstance(t, torch.Tensor) or not t.is_cuda:
+            return
+        key = (t.untyped_storage().data_ptr(), t.untyped_storage().nbytes())
+        if key in seen:
+            return
+        seen.add(key)
+        items[item] = items.get(item, 0) + t.untyped_storage().nbytes()
+
+    def quant_state_tensors(qs):
+        out = []
+        if qs is None:
+            return out
+        for v in vars(qs).values():
+            if isinstance(v, torch.Tensor):
+                out.append(v)
+            elif v is not None and hasattr(v, "absmax"):
+                out += quant_state_tensors(v)
+        return out
+
+    for mname, mod in model.named_modules():
+        cls = type(mod).__name__
+        tensors = list(mod._parameters.items()) + list(mod._buffers.items())
+        tensors += [(k, v) for k, v in vars(mod).items() if isinstance(v, torch.Tensor) and k not in mod._parameters
+                    and k not in mod._buffers]
+        for n, t in tensors:
+            if t is None:
+                continue
+            full = f"{mname}.{n}"
+            if "lora" in n:
+                item = "expert LoRA adapters" if "Experts" in cls else "attention LoRA adapters"
+            elif "Experts" in cls or mname.endswith(".experts"):
+                item = "frozen expert stacks"
+            elif isinstance(t, Params4bit):
+                item = "attention projections (NF4)"
+                for q in quant_state_tensors(getattr(t, "quant_state", None)):
+                    add(item, q)
+            elif "qkv" in full.lower() or "fused" in cls.lower():
+                item = "fused q/k/v training projection"
+            else:
+                item = "dense weights (bf16)"
+            add(item, t)
+    for st in opt.state.values():
+        for v in st.values():
+            add("optimizer state", v)
+    grads = sum(p.numel() * p.element_size() for p in params)     # one gradient per trainable parameter, in its dtype
+    return items, grads
+
+
+torch.cuda.synchronize()
+inv, grad_bytes = _census()
+after_loop = torch.cuda.memory_allocated()
+# one more micro-batch outside the measured loop: the gradients' actual dtype (the census prices them in the param's)
+micro()
+grad_dtypes = sorted({str(p.grad.dtype) for p in params if p.grad is not None})
+opt.zero_grad(set_to_none=True)
+native = a.adapters == "native"
+setup2 = e4b.QLoRASetup(adapter_dtype="fp32" if not native else "bf16", attention_adapter_dtype="fp32" if native else None,
+                        attn_4bit=True, expert_kernel="grouped_nf4", r=16, alpha=16)
+fp2 = e4b.estimate_qlora_footprint(topo, setup2, tokens_per_microbatch=a.tokens, optimizer="adamw_8bit")
+rec["census"] = {"items_bytes": inv, "grad_bytes_from_params": grad_bytes, "grad_dtypes": grad_dtypes,
+                 "inventory_total": sum(inv.values()), "allocated_after_loop": after_loop,
+                 "unclassified_allocated": after_loop - sum(inv.values())}
+rec["e4b_estimate_attention_dtype_corrected"] = {"setup": setup2.to_dict(), "device_bytes": fp2.device_bytes,
+                                                 "items": [{"name": i.name, "where": i.where, "bytes": i.bytes,
+                                                            "detail": i.detail} for i in fp2.items]}
+rec["env"] = {k: os.environ.get(k) for k in ("E4B_ABSMAX_DQ", "E4B_TRAIN_FUSE_QKV", "E4B_CHUNKED_LM_LOSS",
+                                              "E4B_CHUNKED_EVAL_LOSS", "GNF4_TRITON_PREBIND")}
+rec["estimate_env"] = e4b.recipe.estimate_env()
+rec["sm_count"] = torch.cuda.get_device_properties(0).multi_processor_count
+rec["versions"]["grouped-nf4-gemm"] = __import__("importlib.metadata").metadata.version("grouped-nf4-gemm")
+json.dump(rec, open(a.out, "w"), indent=1, default=str)
+print(json.dumps({"census": rec["census"]}, default=str))
