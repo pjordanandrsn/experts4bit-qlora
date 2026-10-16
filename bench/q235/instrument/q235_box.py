@@ -169,8 +169,9 @@ def micro_batches(tokens, m):
 def compare_grads(ref, got):
     """Amendment 6's views of a gradient against shape A's at the same parameters: the per-tensor relative difference (the STRICT
     quantity; over tensors whose reference is nonzero), tensors exactly zero in the reference but not here, the global cosine and the
-    norm ratio of the whole adapter gradient, and the largest relative difference per decoder layer. A tensor with no gradient here
-    (``p.grad`` None: no token reached it) counts as a zero gradient."""
+    norm ratio of the whole adapter gradient, the largest relative difference per decoder layer, and the per-tensor differences in
+    full with their p50 and p99 (nearest rank). A tensor with no gradient here (``p.grad`` None: no token reached it) counts as a zero
+    gradient."""
     rel, zero_mismatch, per_layer = {}, [], {}
     dot = nr = ng = 0.0
     for n, r in ref.items():
@@ -195,7 +196,13 @@ def compare_grads(ref, got):
             zero_mismatch.append(n)
             ng += float(g.double().norm()) ** 2
     worst = max(rel, key=rel.get) if rel else None
+    srt = sorted(rel.values())
+
+    def rank(q):
+        return srt[min(len(srt) - 1, max(0, -(-int(q * 100) * len(srt) // 100) - 1))] if srt else None
+
     return {"tensors": len(ref), "compared": len(rel), "max_rel": rel[worst] if worst else None, "max_rel_tensor": worst,
+            "rel_p50": rank(0.50), "rel_p99": rank(0.99), "rel": rel,
             "zero_mismatch": sorted(zero_mismatch), "cosine": dot / (nr ** 0.5 * ng ** 0.5) if nr and ng else None,
             "norm_ratio": (ng / nr) ** 0.5 if nr else None, "per_layer_max_rel": {str(k): per_layer[k] for k in sorted(per_layer)}}
 

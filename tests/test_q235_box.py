@@ -237,6 +237,7 @@ def test_shape_b_accumulates_to_shape_a_and_its_plants_do_not(shape_b):
         ga = rec[k]["ga_check"]
         assert ga["compared"] > 0 and not ga["zero_mismatch"], ga
         assert ga["max_rel"] < 1e-2 and abs(ga["cosine"] - 1) < 1e-4 and abs(ga["norm_ratio"] - 1) < 1e-2, ga
+        assert ga["rel_p50"] <= ga["rel_p99"] <= ga["max_rel"] and len(ga["rel"]) == ga["compared"]
     assert rec["step"]["ga_check"]["compared"] < rec["step1"]["ga_check"]["compared"]   # step 0's A gradients are exactly zero
     floor = max(rec[k]["ga_check"]["max_rel"] for k in ("step", "step1"))
     for kind in ("mean", "overwrite"):
@@ -263,6 +264,8 @@ def test_the_gradient_comparison_reads_each_view():
     half = cg(ref, {"model.layers.0.a": torch.tensor([3.0, 4.0]), "model.layers.1.z": torch.tensor([0.0, 1.0])})
     assert half["max_rel"] == 1.0 and half["max_rel_tensor"] == "model.layers.1.b" and half["zero_mismatch"] == ["model.layers.1.z"]
     assert half["per_layer_max_rel"] == {"0": 0.0, "1": 1.0}
+    q = cg({f"t{i}": torch.tensor([1.0]) for i in range(100)}, {f"t{i}": torch.tensor([1.0 + i / 100]) for i in range(100)})
+    assert q["rel_p50"] == pytest.approx(0.49) and q["rel_p99"] == pytest.approx(0.98) and q["max_rel"] == pytest.approx(0.99)
 
 
 def test_the_adapter_copies_are_fp32_host_copies_never_views():
