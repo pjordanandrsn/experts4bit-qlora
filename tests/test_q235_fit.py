@@ -126,3 +126,27 @@ def test_the_in_process_plants_add_only_their_measured_forwards_to_the_repeat(tm
     (later / "receipts" / "repeat" / "box.json").write_text(json.dumps({"repeat": {"loss": 1.0}}))
     r = subprocess.run(cmd + ["--plants-from", str(later)], capture_output=True, text=True, timeout=60)
     assert r.returncode != 0 and "ran both in-process plants" in r.stderr
+
+
+def test_the_changed_step_takes_only_the_later_leg_s_non_load_box_time(tmp_path):
+    """Amendments 6 and 7: the box basis is the rehearsal's own (cold) load plus a later leg's box time outside its (warm) load."""
+    reh = _rehearsal_from_receipts(tmp_path / "reh")
+    own_load = json.loads((Q / "gate2" / "a2000-leg-summary.json").read_text())["load"]["seconds"]
+    later = tmp_path / "later"
+    (later / "receipts" / "box").mkdir(parents=True)
+    (later / "receipts" / "run.json").write_text(json.dumps({"mode": "a2000", "e4b_sha": "e" * 40, "nonce": "n2"}))
+    (later / "receipts" / "phase-timings.jsonl").write_text(
+        "\n".join(json.dumps({"phase": p, "elapsed_s": t, "rc": 0}) for p, t in (("box", 300.0), ("repeat", 50.0))) + "\n")
+    (later / "receipts" / "box" / "box.json").write_text(json.dumps({"load": {"seconds": 40.0}}))
+    cmd = [sys.executable, str(Q / "q235_fit.py"), "--rehearsal", str(reh), "--warm-install-s", "178", "--bandwidth-mbps", "500",
+           "--usd-per-hour", "1.6", "--box-from", str(later)]
+    rep = json.loads(subprocess.run(cmd, capture_output=True, text=True, timeout=60).stdout)
+    step = rep["rehearsal"]["changed_step"]
+    assert step["step_s"] == 260.0 and step["own_load_s"] == own_load and step["box_basis_s"] == round(own_load + 260.0, 3)
+    assert abs(rep["phases"]["box"]["scaled_s"] - round((own_load + 260.0) * 94 / 4, 1)) < 0.1, rep["phases"]["box"]
+    (later / "receipts" / "box" / "box.json").write_text(json.dumps({"load": {"seconds": 300.0}}))
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    assert r.returncode != 0 and "not longer than its own load" in r.stderr
+    (later / "receipts" / "run.json").write_text(json.dumps({"mode": "cpu"}))
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    assert r.returncode != 0 and "--box-from is not a clean A2000 leg" in r.stderr

@@ -31,7 +31,13 @@ Amendment 3's in-process plants add two forwards to the repeat. ``--plants-from 
 leg (its repeat's ``plants``: each plant's synchronized forward) and adds it to the rehearsal's repeat before the scaling. Only those
 forwards are taken from it: its load ran on a warm page cache, so its phases would understate a cold host.
 
-    python q235_fit.py --rehearsal DIR --warm-install-s S --bandwidth-mbps M --usd-per-hour R [--plants-from DIR2] [--out FIT.json]
+Amendments 6 and 7 change the box's step: Shape B's accumulation, rule 8's deterministic check passes and the timed MoE pass.
+``--box-from DIR`` takes the box phase's time outside its load (the phase's elapsed seconds less the box's own ``load.seconds``)
+from a later A2000 leg that ran the changed step, and keeps the rehearsal's own load. That later leg's load ran on a warm cache, so
+only the part that the cache does not touch is taken from it: the box basis is the rehearsal's cold load plus the later leg's step.
+
+    python q235_fit.py --rehearsal DIR --warm-install-s S --bandwidth-mbps M --usd-per-hour R [--plants-from DIR2] [--box-from DIR3]
+                       [--out FIT.json]
 """
 from __future__ import annotations
 
@@ -131,6 +137,7 @@ def main():
     ap.add_argument("--bandwidth-mbps", type=float, required=True, help="the pinned host's listed download bandwidth")
     ap.add_argument("--usd-per-hour", type=float, required=True, help="the pinned host's rate")
     ap.add_argument("--plants-from", type=Path, default=None, help="an A2000 leg whose repeat ran the in-process plants")
+    ap.add_argument("--box-from", type=Path, default=None, help="an A2000 leg whose box ran the changed step (Amendments 6 and 7)")
     ap.add_argument("--out", type=Path, default=None)
     a = ap.parse_args()
     rows = [json.loads(ln) for ln in (a.rehearsal / "receipts" / "phase-timings.jsonl").read_text().splitlines()]
@@ -146,6 +153,23 @@ def main():
             sys.exit("refusing: --plants-from is not an A2000 leg whose repeat ran both in-process plants")
         plants = {k: v["forward_s"] for k, v in later["plants"].items()}
         timings["repeat"] = timings["repeat"] + sum(plants.values())
+    box_step = None
+    if a.box_from:
+        brows = [json.loads(ln) for ln in (a.box_from / "receipts" / "phase-timings.jsonl").read_text().splitlines()]
+        brun = json.loads((a.box_from / "receipts" / "run.json").read_text())
+        if brun.get("mode") != "a2000" or any(r["rc"] != 0 for r in brows):
+            sys.exit("refusing: --box-from is not a clean A2000 leg (mode a2000, every phase rc 0)")
+        own_load = float(json.loads((a.rehearsal / "receipts" / "box" / "box.json").read_text())["load"]["seconds"])
+        later_box = json.loads((a.box_from / "receipts" / "box" / "box.json").read_text())
+        later_phase = {r["phase"]: r["elapsed_s"] for r in brows}["box"]
+        step = later_phase - float(later_box["load"]["seconds"])
+        if step <= 0:
+            sys.exit("refusing: --box-from's box phase is not longer than its own load")
+        box_step = {"from_e4b_sha": brun.get("e4b_sha"), "from_nonce": brun.get("nonce"), "later_phase_s": later_phase,
+                    "later_load_s": float(later_box["load"]["seconds"]), "step_s": round(step, 3), "own_load_s": own_load,
+                    "replaced_box_s": timings["box"]}
+        timings["box"] = own_load + step
+        box_step["box_basis_s"] = round(timings["box"], 3)
     fetch = json.loads((a.rehearsal / "warm-fetch.json").read_text())       # the cold fetch (the rehearsal's own re-verified warm files)
     wheels = json.loads((HERE / "wheels.json").read_text())["packages"]
     model = json.loads((HERE / "model_files.json").read_text())
@@ -165,6 +189,8 @@ def main():
     if plants is not None:
         rep["rehearsal"]["in_process_plants"] = {"from_e4b_sha": lrun.get("e4b_sha"), "from_nonce": lrun.get("nonce"),
                                                  "forward_s": plants, "added_to_repeat_s": round(sum(plants.values()), 3)}
+    if box_step is not None:
+        rep["rehearsal"]["changed_step"] = box_step
     text = json.dumps(rep, indent=1)
     if a.out:
         a.out.write_text(text + "\n")
