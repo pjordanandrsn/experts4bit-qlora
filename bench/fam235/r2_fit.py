@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
-"""R2's time-left fit: Q235's (bench/q235/q235_fit.py), run unchanged, with R2's depth and checkpoint in place of Q235's, after one
+"""R2's time-left fit: Q235's (bench/q235/q235_fit.py at the commit R2 cites), run unchanged, with R2's depth and checkpoint in place of Q235's, after one
 R2 pre-step that slows the rehearsal to the registered cold floors.
 
 **Why the pre-step.** Q235's fit takes the rehearsal's measured times as an upper bound for the registered class, and its own host
@@ -27,6 +27,7 @@ Its reads: the lock and the runner are R2's (``model_files.json``, ``r2_run.sh``
 from __future__ import annotations
 
 import argparse
+import functools
 import importlib.util
 import json
 import re
@@ -35,7 +36,6 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-Q235 = REPO / "bench" / "q235"
 LAYERS, SLICE_LAYERS = 56, 4
 H, FF, V, E, KV = 6144, 16384, 32768, 8, 1024           # hidden, expert intermediate, vocabulary, experts, k/v width
 LAYER_BYTES = 2 * (H * H + 2 * KV * H + H * H + E * H + E * 3 * FF * H + 2 * H)
@@ -47,19 +47,30 @@ REPEAT_FORWARDS = 3                                      # the repeat's null and
 BOX_PASSES = 4                                           # the box's in-process pair (g0, g1) and its two steps, each staging the experts
 
 
+def _load(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+@functools.lru_cache(maxsize=None)
+def cited():
+    """Q235's tree at the commit R2 cites (``r2_drift.cited_tree``)."""
+    return _load("r2_drift_for_fit", HERE / "r2_drift.py").cited_tree()
+
+
 class _Here:
-    """Q235's ``HERE`` with R2's own files where R2 has them: the lock and the runner are R2's, the wheels Q235's."""
+    """Q235's ``HERE`` with R2's own files where R2 has them: the lock and the runner are R2's, the wheels Q235's, as cited."""
     own = {"model_files.json": HERE / "model_files.json", "q235_run.sh": HERE / "r2_run.sh"}
 
     def __truediv__(self, name):
-        return self.own.get(name, Q235 / name)
+        return self.own.get(name, cited() / "bench" / "q235" / name)
 
 
 def fit_module():
-    """Q235's fit as a private module instance, with R2's depth, checkpoint bytes and files."""
-    spec = importlib.util.spec_from_file_location("q235_fit_for_r2", Q235 / "q235_fit.py")
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    """Q235's fit at the cited commit as a private module instance, with R2's depth, checkpoint bytes and files."""
+    mod = _load("q235_fit_for_r2", cited() / "bench" / "q235" / "q235_fit.py")
     mod.HERE, mod.LAYERS, mod.SLICE_LAYERS = _Here(), LAYERS, SLICE_LAYERS
     mod.LAYER_BYTES, mod.OUTSIDE_BYTES = LAYER_BYTES, OUTSIDE_BYTES
     return mod

@@ -242,7 +242,8 @@ def test_every_wrapper_runs_q235_at_the_cited_commit():
     drift = _mod("r2_drift", F / "r2_drift.py")
     mods = {"bench/q235/q235_stage.py": _mod("r2_stage", F / "r2_stage.py").q235_stage(),
             "bench/q235/q235_fetch_gate.py": _mod("r2_fetch_gate", F / "r2_fetch_gate.py").gate_module(),
-            "bench/q235/instrument/q235_verdict.py": _mod("r2_verdict", F / "r2_verdict.py").q235_verdict()}
+            "bench/q235/instrument/q235_verdict.py": _mod("r2_verdict", F / "r2_verdict.py").q235_verdict(),
+            "bench/q235/q235_fit.py": _mod("r2_fit", F / "r2_fit.py").fit_module()}
     for path, m in mods.items():
         where = Path(m.__file__).resolve()
         assert ROOT.resolve() not in where.parents and any(p.name.startswith(f"r2-cited-{drift.CITED[:8]}-") for p in where.parents), path
