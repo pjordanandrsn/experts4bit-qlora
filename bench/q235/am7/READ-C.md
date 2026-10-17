@@ -1,8 +1,8 @@
 # Q235 Amendment 7: the PRO 6000 box's C, as read
 
 This records the read of `PREDICTION-C.md` (#1680), which is unchanged. The box is `q235-pro6000-3` (Shape B, RTX PRO 6000,
-PCIe gen 4 x16). Receipts: the store's commit `101cf2c5`, `box/box.json` (`8b19c4c2`), `hostrate.json` (`c82685f9`) and
-`instance.json` (`295f1dc7`).
+PCIe gen 4 x16). Receipts: `q235-pro6000-3` `box/box.json` (`8b19c4c2`), `hostrate.json` (`c82685f9`) and `instance.json`
+(`295f1dc7`).
 
 ## The read
 

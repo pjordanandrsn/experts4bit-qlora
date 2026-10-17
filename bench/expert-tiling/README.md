@@ -117,7 +117,7 @@ The Shape B box `q235-pro6000-3` (RTX PRO 6000, PCIe gen 4 x16) passed its verdi
   - The provider's listing for the machine at launch gave pcie_bw 26.6 GB/s (the run's `instance.json`, `295f1dc7`).
   - The probe copies one 1 GiB buffer. Its D2H (28.29 GB/s) is unaffected while its H2D is low, which points at that
     one source buffer's placement. Which mechanism (NUMA or IOMMU) is not in the receipts.
-  - Receipts: the store's commit `101cf2c5` (`q235-pro6000-3`).
+  - Receipts: `q235-pro6000-3` `box/box.json` (`8b19c4c2`), `hostrate.json` (`c82685f9`), `instance.json` (`295f1dc7`).
 
 **Experts compute** per micro-batch per layer: forward 4.76 ms, recompute 4.62, backward 4.68, so 14.06 against #1680's
 15.13. The split differs from the prediction: the forward is heavier and the backward lighter.
