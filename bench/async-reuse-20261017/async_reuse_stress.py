@@ -12,8 +12,9 @@ B. grouped-nf4-gemm fp8 split-KV paged attention with the in-kernel combine (per
    allocator is pre-poisoned with NaN before every launch, so internal partials land on poisoned memory; each result must
    equal the two-kernel combine. Also two streams racing.
 C. experts4bit-qlora's expert offload (pinned host homes, single-slot staging, record_stream): a reduced Qwen3-30B-A3B,
-   repeated forward-backward passes with the allocator poisoned between them; loss and every adapter gradient must equal
-   the first pass's (and the resident model's, when the resident model is itself deterministic).
+   repeated forward-backward passes with the allocator poisoned before each. The training kernels are not bitwise deterministic
+   run to run, so C reads the SPREAD: the offloaded passes' gradient spread against the same model built resident (same seeds),
+   with no NaN and one loss value. Each build records its absmax state (E4B_ABSMAX_DQ and enable_fast_train's absmax record).
 
     python async_reuse_stress.py --model Q3RED_L4 --out OUT.json [--iters 300 --passes 30]
 """
@@ -219,6 +220,9 @@ def _build_model(path, offload):
                 p.normal_(0, 0.02)
     n = e4b.enable_fast_train(model)
     assert n > 0, "enable_fast_train patched nothing"
+    import os
+    from experts4bit_qlora.engines.fast import FAST_TRAIN_STATS
+    model._absmax_state = {"E4B_ABSMAX_DQ": os.environ.get("E4B_ABSMAX_DQ"), "fast_train_absmax_dq": FAST_TRAIN_STATS.get("absmax_dq")}
     return model, cfg
 
 
@@ -241,12 +245,14 @@ def part_c(path, passes, resident_passes=6):
     g = torch.Generator().manual_seed(11)
     ids = torch.randint(0, 151936, (2, 512), generator=g).cuda()
     res, cfg = _build_model(path, offload=False)
+    absmax_state = {"resident": res._absmax_state}
     r_runs = [_pass(res, ids) for _ in range(resident_passes)]
     r_loss = {lv for lv, _ in r_runs}
     r_spread = max(_maxrel(r_runs[0][1], gr) for _, gr in r_runs[1:])
     del res
     torch.cuda.empty_cache()
     off, _ = _build_model(path, offload=True)
+    absmax_state["offload"] = off._absmax_state
     o_spread, nan_runs, o_loss, vs_res = [], 0, set(), []
     first = None
     for i in range(passes):
@@ -265,7 +271,7 @@ def part_c(path, passes, resident_passes=6):
             "offload": {"passes": passes, "nan_passes": nan_runs, "distinct_losses": sorted(o_loss),
                         "grad_spread_max_rel_vs_its_first_pass": max(o_spread) if o_spread else 0.0,
                         "grad_max_rel_vs_resident_first_pass": {"max": max(vs_res), "min": min(vs_res)}},
-            "losses_equal_resident_vs_offload": sorted(r_loss) == sorted(o_loss)}
+            "losses_equal_resident_vs_offload": sorted(r_loss) == sorted(o_loss), "absmax_state": absmax_state}
 
 
 def main():

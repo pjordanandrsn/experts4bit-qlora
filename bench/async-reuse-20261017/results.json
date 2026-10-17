@@ -411,7 +411,12 @@
     "min": 0.07679115980863571
    }
   },
-  "losses_equal_resident_vs_offload": false
+  "losses_equal_resident_vs_offload": false,
+  "raw_output": "out-C2.json",
+  "env": {
+   "E4B_ABSMAX_DQ": null,
+   "note": "unset: enable_fast_train's default, which double-quantizes a resident stack; an offloaded stack keeps fp32 (refused)"
+  }
  },
  "C_offload_E4B_ABSMAX_DQ_0": {
   "layers": 4,
@@ -438,11 +443,17 @@
     "min": 0.010273972526192665
    }
   },
-  "losses_equal_resident_vs_offload": true
+  "losses_equal_resident_vs_offload": true,
+  "raw_output": "out-C3-dq0.json",
+  "env": {
+   "E4B_ABSMAX_DQ": "0",
+   "note": "fp32 absmax on both builds"
+  }
  },
  "pressure_256MB_copies": {
   "run_AB_C1": 12408,
   "C_default": 8476,
   "C_dq0": 8300
- }
+ },
+ "absmax_state_recorded": "these runs predate the per-build absmax record; the env above is what set it. The script now records E4B_ABSMAX_DQ and enable_fast_train's absmax record per build for any rerun"
 }
