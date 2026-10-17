@@ -35,7 +35,11 @@ def test_the_fit_reads_each_file_where_the_drift_check_classifies_it():
     g = _mod("r2_fit", F / "r2_fit.py").fit_module()
     assert (g.LAYERS, g.SLICE_LAYERS) == (56, 4)
     for name, where in drift.WRAPPED["bench/q235/q235_fit.py"]["names"].items():
-        assert (g.HERE / name).parent == {"r2": F, "q235": Q}[where], name
+        got = g.HERE / name
+        if where == "r2":
+            assert got.parent == F, name
+        else:                                                                 # Q235's, from the tree extracted at the cited commit
+            assert got.parent.name == "q235" and Q not in got.parents and F not in got.parents, name
     assert g.HERE / "q235_run.sh" == F / "r2_run.sh"
     assert g.sealed_caps(g.HERE / "q235_run.sh") == g.sealed_caps(F / "r2_run.sh") != {}
 

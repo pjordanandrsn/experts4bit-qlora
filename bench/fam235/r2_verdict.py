@@ -1,8 +1,8 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
 """R2-Mixtral's milestone verdict (bench/fam235/PREREG-r2-mixtral.md, Amendment 1), applied mechanically, never read by eye.
 
-The decision rules, the VOID causes and Amendment 3's instrument checks are Q235's (``bench/q235/instrument/q235_verdict.py``),
-run unchanged, by citation. Two things differ.
+The decision rules, the VOID causes and Amendment 3's instrument checks are Q235's (``bench/q235/instrument/q235_verdict.py`` at the
+commit R2 cites, ``r2_drift.CITED``), run unchanged, by citation. Two things differ.
 
 **The band.** Q235's single 0.775 is replaced by Amendment 1's depth-local band, one threshold used both ways:
 
@@ -40,7 +40,6 @@ import sys
 from fractions import Fraction
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-Q235 = os.path.join(HERE, "..", "q235", "instrument", "q235_verdict.py")
 NUMBERS = os.path.join(HERE, "r2-mixtral-a1-numbers.json")
 NUMBERS_SHA256 = "5d2bac26b0c5e5dd4c29962d21a95ac3be8292d34322189012b0ca2866d41279"    # as merged in e4b#1643
 N_CAL = 32                                     # Mixtral-8x7B's decoder layers
@@ -50,8 +49,14 @@ EXIT = {"PASS": 0, "FAIL": 1, "VOID": 2}
 
 
 def q235_verdict():
-    """Q235's verdict tool, loaded unchanged as a private module instance (its constants are set per call, never on disk)."""
-    spec = importlib.util.spec_from_file_location("q235_verdict_for_r2", os.path.abspath(Q235))
+    """Q235's verdict tool at the commit R2 cites (``r2_drift.cited_tree``), loaded unchanged as a private module instance (its
+    constants are set per call, never on disk). Its siblings (the gate-1 repeat rule, the box's STRICT rules, the compare) load from
+    the same cited tree."""
+    drift_spec = importlib.util.spec_from_file_location("r2_drift_for_verdict", os.path.join(HERE, "r2_drift.py"))
+    drift = importlib.util.module_from_spec(drift_spec)
+    drift_spec.loader.exec_module(drift)
+    spec = importlib.util.spec_from_file_location("q235_verdict_for_r2",
+                                                  str(drift.cited_tree() / "bench" / "q235" / "instrument" / "q235_verdict.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
