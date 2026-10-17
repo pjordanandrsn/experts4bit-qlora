@@ -3,7 +3,7 @@
     {
       "agent": "fixture",
       "approval_url": "https://github.com/pjordanandrsn/experts4bit-qlora/issues/1083#issuecomment-6234714707",
-      "role": "Jordan",
+      "role": "fixture",
       "usd_estimate": 0.9345
     }
   ],
