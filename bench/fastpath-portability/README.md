@@ -141,8 +141,12 @@ The fused stack, q/k/v, prefill glue and K16 don't depend on the placement in th
    - It says `serve_paged` reads `E4B_SERVE_ATTN_INT4_ARTIFACT`, `_FINGERPRINT` and `_DUMP`. Only `enable_from_env` reads
      them, and nothing in the package calls it.
 5. **The hybrid refusals come after the weights load.** `serve_paged` refuses LFM2, Granite-4.0-h and Nemotron-H
-   correctly, but only at runner build (`paged_state_refusal`, `paged_runner.py:80-101`), after it has read the weights. B2
-   has proposed moving the check before any weight is read; that is the maintainer's call, and nothing is changed here.
+   correctly, but only at runner build (`paged_state_refusal`, `paged_runner.py:80-101`), after it has read the weights. It
+   relies on the config class deriving `layer_types`, so a hybrid config with none is unguarded. The fix is b1-decode's PR
+   (an early refusal before the weight load, plus a guard for configs without `layer_types`), not this note.
+   - The derivation is transformers': in 5.17.0, `NemotronHConfig` maps `layers_block_type` and converts
+     `hybrid_override_pattern` (`configuration_nemotron_h.py:84`, `:157-162`). e4b's floor is `transformers>=5.0`, and
+     whether older 5.x releases do the same is unchecked, so the refusal's safety is version-dependent until checked.
 6. **Only a run closes the remaining gaps** (B2 F6), all on sm_89 or newer, so the A2000 can't close them:
    - served graph traces for Gemma-4 and Mixtral, which have no served record at all;
    - a W16 trace of gpt-oss's non-lean K25;
