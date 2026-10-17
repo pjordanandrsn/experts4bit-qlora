@@ -206,3 +206,36 @@ The B1-against-B0 comparison and the quality deltas stay unread until the readin
 ratios at the proof's lengths, were seen. They are noise diagnostics, per the ruling.
 
 **Spend:** $0.17 of the $3.75 ceiling.
+
+## Amendment 2 (2026-10-17, after `p133-4090-1` was ABORTED ahead of the registered time-left check; nothing read)
+
+**What happened.** `p133-4090-1` ($0.50 billed, Vast instance 56463118 on machine 51617) passed its refusals and premise.
+The 61.1 GB fetch then took about 17 min (23:02:47Z to 23:19:56Z), and the NF4 bake was still running at 23:35Z (about 0.65–1
+GB of arena a minute). At the earliest quality-OFF check the box would have had about 1,900 s left, below `NEED_QOFF` 1500 +
+600, so STOP-2 would have skipped quality and the lane would have exited 40 with no verdict. On the maintainer's ruling it was
+aborted before any arm ran; teardown is verified. No arm or quality record exists.
+
+**The correction** (the reading only; the proof is done):
+- **Guard:** the reading's guard goes from 1.25 h to **2.0 h**. The time-left checks (`NEED_*`) are unchanged: they worked.
+- **Pin rule:** it adds Vast **`inet_down >= 1000` Mbps**. This fetch ran at about 480 Mbps effective; P116's 6–10 min
+  implies about 1 Gbps. Everything else in the host rule is unchanged.
+- **Staged files:** nothing staged changes. The guard is the launcher's wall clock (`wallclock_h`), not a constant in the
+  box, so `staged.sha256` is unchanged.
+
+**Sizing at 2.0 h:**
+
+| step | minutes |
+|---|---|
+| setup | about 10 |
+| fetch at 1 Gbps | about 10 |
+| bake, at this host's rate | up to about 20 |
+| prompts and fit | about 3 |
+| four arms | about 12 |
+| quality OFF | 25–30 |
+| quality ON | about 10 |
+
+That is about 95 min, so quality OFF starts with about an hour left; the check needs 35 min.
+
+**Budget:** the reading's worst is 0.49 × 2.0 + 61.1 × 0.011 = **$1.65**. The lane has billed **$0.67** (the proof $0.17,
+`p133-4090-1` $0.50), so with the rerun **`p133-4090-2`** it is at most **$2.32**, inside the $3.75 ceiling (hard stop $4.50).
+`p133-4090-2` is the last declared id. It launches only after the maintainer's ACK Amendment 2 on #1695.
