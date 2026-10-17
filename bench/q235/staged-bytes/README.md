@@ -58,8 +58,11 @@ for the gen-5 host, whose H2D is unmeasured until its own host-rate phase runs.
 - **(b) cuts the staged bytes 4×: 75 % fewer. (c) cuts them 27 %; together, 78 %.** Those are exact counts.
 - **The step-time effect of (b) is bounded, not known.** With experts compute alone, a Shape B pass would run 3.0× faster at 21.76 GB/s
   (2.4× at 53); that is an upper bound. With Shape A's measured 17.6 s of non-staging time in place of 5.69 s, it would be 2.2× (1.6×
-  at 53). The true figure lies between, and Shape B's own non-staging time would settle it. For comparison, #1680's overlap cap is
-  about 11 % of the experts time.
+  at 53). That low end holds if Shape B's non-staging time is at most Shape A's, and the A2000 legs show it is. On the same card,
+  Shape B's step spent 3.520 + 5.359 − 28 × 0.222 = 2.66 s outside staging (`f17f0744`), against Shape A's 1.443 + 6.226 −
+  7 × 0.2178 = 6.14 s (`9f6e0088`). Shape B computes 1,220 positions against 2,648, which outweighs paying per-micro-batch fixed
+  costs four times. So the true figure lies between the two bounds, and 2.2× is the conservative one. For comparison, #1680's
+  overlap cap is about 11 % of the experts time.
 - **On this one box the saving is small in money.** (b) saves 526 s of staging at 21.76 GB/s: about $0.29 at an illustrative
   $2.00/h, not a quote. The lever matters for training throughput on a staging-bound card, not for Q235's single registered box.
 - **These are staging seconds.** The box's other phases (the load, the frozen hashes, the fetch) don't change.
