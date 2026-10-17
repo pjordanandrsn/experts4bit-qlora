@@ -109,6 +109,7 @@ stream the copy runs on.
 
 from __future__ import annotations
 
+import contextlib
 import os
 
 import time
@@ -269,6 +270,11 @@ class _ExpertOffload:
     # computing layer + the prefetched next layer. A training stage() sweeps this set so leftovers
     # from a generate() (the circularly-prefetched first layer) never linger into a train step.
     _staged_now: set = set()
+
+    # Forward hold (see hold_forward_residency): while True, the evict post-hook keeps the layer staged after its forward,
+    # so a layer-major driver can run every micro-batch through one staging. Read and written as
+    # ``_ExpertOffload._hold`` only, for the same subclass reason as ``_resident``.
+    _hold = False
 
     # Whether routed-only staging may run on a GRAD-ENABLED forward. False here and for every
     # host-RAM home: their bulk path is a cheap whole-layer copy from pinned DRAM, so the
@@ -830,13 +836,59 @@ def enable_expert_offload(experts_lora, device, pin: bool = True,
         # placeholder read); OLMoE, Qwen3-MoE and GraniteMoe happen to stop early and never saw it.
         # Inside a backward the single-resident-slot policy already evicts -- staging the next
         # layer to recompute evicts this one -- so skipping here keeps one-layer residency intact.
-        if _in_backward():
+        # Under hold_forward_residency the forward keeps the layer too; the next layer's stage() evicts it.
+        if _in_backward() or _ExpertOffload._hold:
             return
         handle.evict()
 
     experts_lora.register_forward_pre_hook(_stage_pre_hook)
     experts_lora.register_forward_hook(_evict_post_hook)
     return handle
+
+
+@contextlib.contextmanager
+def hold_forward_residency(handles):
+    """Keep each layer's experts staged across repeated forwards of that layer (default off; opt-in per block).
+
+    A layer-major driver runs every micro-batch through layer L before layer L+1. Without the hold, the evict post-hook
+    drops L after each micro-batch's call and the next call stages it again: M copies per layer per forward instead of
+    one (``bench/q235/staged-bytes``, assumption A1: 470 copies against 187 on the 94-layer toy). Inside the block the
+    post-hook skips its evict, so a repeated forward of the resident layer finds it staged (``stage()`` is idempotent).
+
+    What does NOT change: the single resident slot. Staging layer L+1 still evicts L first (``stage()``), so at most one
+    layer's experts are on the device at any instant, held or not. On exit (normal or exceptional) the resident layer is
+    evicted, so nothing staged in the block outlives it.
+
+    ``handles``: the model's offload handles (:func:`offload_handles`). Refused, by raising, before anything is held:
+    - a routed handle (``enable_routed_staging`` / ``enable_speculative_staging``, or an NVMe arena handle that stages
+      routed rows in training): a held routed stage carries micro-batch k's experts into micro-batch k+1, which routes
+      differently;
+    - an inference policy: prefetch links (``enable_inference_prefetch``) or a pipelined-engine takeover;
+    - a call inside a backward, or a nested hold.
+    """
+    handles = list(handles)
+    if _ExpertOffload._hold:
+        raise RuntimeError("hold_forward_residency: already holding (nested holds are not supported)")
+    if _in_backward():
+        raise RuntimeError("hold_forward_residency: called inside a backward; the hold is for the forward only")
+    for h in handles:
+        if h._routed_only or h._routed_in_train:
+            raise RuntimeError(
+                "hold_forward_residency: a routed offload handle stages only one forward's experts, so holding it "
+                "would serve the next micro-batch's routes from the previous one's rows; use bulk staging"
+            )
+        if h._prefetch_next is not None or getattr(h, "_superseded", False):
+            raise RuntimeError(
+                "hold_forward_residency: inference prefetch or a pipelined takeover is active on this handle; "
+                "the hold is a training-forward policy"
+            )
+    _ExpertOffload._hold = True
+    try:
+        yield
+    finally:
+        _ExpertOffload._hold = False
+        if _ExpertOffload._resident is not None:
+            _ExpertOffload._resident.evict()
 
 
 class _ExpertPool:
