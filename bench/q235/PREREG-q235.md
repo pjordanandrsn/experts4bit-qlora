@@ -813,7 +813,9 @@ answer for the wrong hardware. The box takes the reading at no extra rental.
   - One discarded warm-up pass, then four in ABBA order in the same process: untimed, timed, timed, untimed.
   - `overhead_s` is the mean of the two timed passes minus the mean of the two untimed ones.
   - `half_s`, the read's order and drift noise, is half the difference between the two timed-minus-untimed pairs,
-    |(on₁ − off₁) − (on₂ − off₂)| / 2.
+    |(on₁ − off₁) − (on₂ − off₂)| / 2. Under a linear drift d per pass, the pairs read overhead + d and overhead − d, so their mean
+    is the overhead and half their difference is |d|.
+  - `pairs_s`, both pair differences, is in every record, so the read can be recomputed from it.
   - The read is decision-grade only when `half_s` ≤ `overhead_s` / 2. Otherwise it is reporting-only, and the refit below does not
     use it.
   - ABBA cancels a linear drift, and the warm-up removes the cold-first bias.
