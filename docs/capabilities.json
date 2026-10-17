@@ -877,7 +877,7 @@
     ],
     "special_requirements": [
      "transformers>=5.0 for the streaming loader ([train] extra)",
-     "grouped-nf4-gemm>=0.30.0 ([fast] extra; the floor is pyproject.toml's, validated by CI)",
+     "grouped-nf4-gemm>=0.43.0 ([fast] extra; the floor is pyproject.toml's, validated by CI)",
      "triton>=3.4 (Linux-only distribution)",
      "an expert arena baked with grouped-nf4-gemm (nvme_bake_nf4 for NF4, the MXFP4 relocation bake for native MXFP4)",
      "local NVMe or a fast block device; pinned host RAM for the hot tier"
@@ -951,7 +951,7 @@
      "NVIDIA CUDA GPU, sm_80 or newer (Triton kernels via grouped-nf4-gemm)"
     ],
     "special_requirements": [
-     "grouped-nf4-gemm>=0.30.0 ([fast] extra; the floor is pyproject.toml's, validated by CI)",
+     "grouped-nf4-gemm>=0.43.0 ([fast] extra; the floor is pyproject.toml's, validated by CI)",
      "triton>=3.4 (Linux-only distribution)"
     ]
    },
@@ -1073,7 +1073,7 @@
      "NVIDIA CUDA GPU, sm_80 or newer (Triton kernels via grouped-nf4-gemm)"
     ],
     "special_requirements": [
-     "grouped-nf4-gemm>=0.30.0 ([fast] extra; the floor is pyproject.toml's, validated by CI)",
+     "grouped-nf4-gemm>=0.43.0 ([fast] extra; the floor is pyproject.toml's, validated by CI)",
      "triton>=3.4 (Linux-only distribution)",
      "an expert arena baked with grouped-nf4-gemm (nvme_bake_nf4 for NF4, the MXFP4 relocation bake for native MXFP4)",
      "local NVMe or a fast block device; pinned host RAM for the hot tier"

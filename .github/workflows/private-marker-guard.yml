@@ -26,6 +26,12 @@ on: [push, pull_request]
 # exemption, and it cannot be reworded: bench/dq11/DQ11-AMENDMENT-4.md, a sealed
 # registration (its bytes are pinned in science.sha256) committed before the
 # guard learned adertha:// URIs. Nothing else may be added the same way.
+#
+# FIXTURES that must carry a receipt-store shape (test inputs for code that
+# parses the store's ledger) are exempt only through an "#exempt-fixture:" line
+# in .github/private-markers.txt: a line cap and a sha256 pin, checked by
+# scripts/guard_fixture_pin.sh. A fixture that grows or changes fails the guard
+# instead of being skipped.
 
 jobs:
   guard:
@@ -78,6 +84,9 @@ jobs:
           moved to pjordanandrsn/adertha-agents
           ingested by pjordanandrsn/org-corpus
           the run lock lives at ~/.adertha/rent-live.lock
+          # Append-only ledger: one JSON object per line
+          {"run_id": "canary-1", "external_receipt": {}}
+          {"cost_usd": 0.0, "role": "canary", "date_utc": "2026-01-01", "run_id": "canary-2"}
           CANARY
           grep -vE '^[[:space:]]*(#|$)' .github/private-markers.txt > /tmp/patterns.txt
           np=$(wc -l < /tmp/patterns.txt | tr -d ' ')
@@ -101,6 +110,48 @@ jobs:
             exit 1
           fi
           echo "canary exercises all ${np} patterns"
+          # "#all-of:" rules. Each must match a canary line (the canary row lists
+          # its keys in a different order from the store's) and must NOT match a
+          # line missing one of its terms, or the --and has decayed into an OR.
+          printf '%s\n' '{"run_id": "canary-3", "date_utc": "2026-01-01", "cost_usd": 0.0}' > /tmp/canary-partial.md
+          na=0
+          while IFS= read -r rule; do
+            read -r -a terms <<< "${rule#\#all-of: }"
+            args=()
+            for t in "${terms[@]}"; do
+              [ "${#args[@]}" -eq 0 ] || args+=(--and)
+              args+=(-e "$t")
+            done
+            if ! (cd /tmp && git grep --no-index -q -I -i -E "${args[@]}" -- canary.md); then
+              echo "::error::#all-of rule is not exercised by the canary: ${rule}"
+              exit 1
+            fi
+            if (cd /tmp && git grep --no-index -q -I -i -E "${args[@]}" -- canary-partial.md); then
+              echo "::error::#all-of rule matched a line missing one of its terms: ${rule}"
+              exit 1
+            fi
+            na=$((na + 1))
+          done < <(grep -E '^#all-of: ' .github/private-markers.txt)
+          if [ "${na}" -lt 1 ]; then
+            echo "::error::no #all-of rules found; the ledger-row rule is gone"
+            exit 1
+          fi
+          # "#exempt-fixture:" pins. Each committed fixture must hold its pin, and
+          # the same fixture with one more ledger row appended must not.
+          nf=0
+          while read -r _ path cap pin; do
+            if ! scripts/guard_fixture_pin.sh "$path" "$cap" "$pin" < "$path"; then
+              echo "::error::exempt fixture fails its own pin (or is gone): $path"
+              exit 1
+            fi
+            { cat "$path"; echo '{"run_id": "canary-4", "date_utc": "2026-01-01", "role": "canary", "cost_usd": 0.0}'; } > /tmp/mutant
+            if scripts/guard_fixture_pin.sh "$path" "$cap" "$pin" < /tmp/mutant 2>/dev/null; then
+              echo "::error::a fixture with an added ledger row still passes its pin: $path"
+              exit 1
+            fi
+            nf=$((nf + 1))
+          done < <(grep -E '^#exempt-fixture: ' .github/private-markers.txt)
+          echo "${na} #all-of rule(s) and ${nf} fixture pin(s) exercised"
 
       - name: refuse AGENT-* planning docs at any depth
         run: |
@@ -115,14 +166,41 @@ jobs:
         run: |
           set -euo pipefail
           grep -vE '^[[:space:]]*(#|$)' .github/private-markers.txt > /tmp/patterns.txt
+          # A fixture exemption stands only while the fixture holds its pin.
+          excl=()
+          while read -r _ path cap pin; do
+            [ -e "$path" ] || continue
+            if ! scripts/guard_fixture_pin.sh "$path" "$cap" "$pin" < "$path"; then
+              echo "::error::${path} no longer holds its #exempt-fixture pin"
+              exit 1
+            fi
+            excl+=(":!${path}")
+          done < <(grep -E '^#exempt-fixture: ' .github/private-markers.txt)
           hits=$(git grep -n -I -E -i -f /tmp/patterns.txt \
                    -- ':!.github/private-markers.txt' \
                       ':!.github/workflows/private-marker-guard.yml' \
-                      ':!bench/dq11/DQ11-AMENDMENT-4.md' \
+                      ':!bench/dq11/DQ11-AMENDMENT-4.md' ${excl[@]+"${excl[@]}"} \
                  | grep -v 'guard-allow' || true)
+          # "#all-of:" rules: every term must match the same line.
+          while IFS= read -r rule; do
+            read -r -a terms <<< "${rule#\#all-of: }"
+            args=()
+            for t in "${terms[@]}"; do
+              [ "${#args[@]}" -eq 0 ] || args+=(--and)
+              args+=(-e "$t")
+            done
+            more=$(git grep -n -I -E -i "${args[@]}" \
+                     -- ':!.github/private-markers.txt' \
+                        ':!.github/workflows/private-marker-guard.yml' \
+                        ':!bench/dq11/DQ11-AMENDMENT-4.md' ${excl[@]+"${excl[@]}"} \
+                   | grep -v 'guard-allow' || true)
+            [ -z "${more}" ] || hits="${hits}${hits:+$'\n'}${more}"
+          done < <(grep -E '^#all-of: ' .github/private-markers.txt)
           if [ -n "${hits}" ]; then
             echo "::error::private-lane markers found in the public tree:"
-            printf '%s\n' "${hits}" | head -40
+            # || true: under pipefail, head closing the pipe early would end the
+            # step with SIGPIPE (141) before the guidance below is printed.
+            printf '%s\n' "${hits}" | head -40 || true
             echo ""
             echo "Reword it, move it to the private fork, or append 'guard-allow'"
             echo "on the line if the mention is deliberate and safe."
