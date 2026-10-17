@@ -7,6 +7,7 @@ copy's own; every other difference must be a one-for-one line replacement that a
 
 - **STRICT** against the source at ``CITED``, the Q235 commit R2 cites (``git show``): any undeclared difference fails.
 - **The Python twin.** Every file a wrapped Q235 module (``WRAPPED``) reads through its ``HERE`` is classified; a new one fails.
+- **Cited, not live.** ``cited_tree`` gives the Q235 files R2 runs and seals at ``CITED``; R2's wrappers and its CI read those.
 - **REPORTED** against the source in the working tree: a Q235 change after ``CITED`` (a fix R2 has not taken) is listed, not
   failed, so an open Q235 amendment never turns R2 red. R2 takes it by updating its copy and ``CITED`` together.
 
@@ -14,15 +15,21 @@ copy's own; every other difference must be a one-for-one line replacement that a
 """
 from __future__ import annotations
 
+import atexit
 import difflib
+import functools
+import io
 import re
+import shutil
 import subprocess
 import sys
+import tarfile
+import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-CITED = "eca70aff0807339cca706ec728964079baccd99d"   # e4b main when the copies were made; Q235's latest change in it is Amendment 5
+CITED = "62d6a6bcd96ccd32191c74329bce3b62cb454e89"   # e4b main at Q235 Amendment 6 (#1661), the commit R2 re-cites
 
 PAIRS = {
     "bench/fam235/r2_run.sh": {
@@ -33,7 +40,10 @@ PAIRS = {
         "lines": [(r"^  science\) CARD_RE=", r"^  science\) say 'refusing: no box is registered "),
                   # The rehearsal's depth is R2's registration, not plumbing: a Q235 re-cite may move Q235's, never R2's.
                   (r"^  a2000\)   must fetch ", r"^  a2000\)   must fetch .* --slice 4 --slice-dir \"\$W/hf-cache/slice4\" "),
-                  (r"^           MODEL=\"\$W/hf-cache/slice\d+\" ", r"^           MODEL=\"\$W/hf-cache/slice4\" DEVICE=cuda ENABLER=fast ;;$")],
+                  (r"^           MODEL=\"\$W/hf-cache/slice\d+\" ", r"^           MODEL=\"\$W/hf-cache/slice4\" DEVICE=cuda ENABLER=fast ;;$"),
+                  # The box's shape is R2's registration: Q235 Amendment 6 runs shape B (--micro-batch 2); R2 keeps shape A.
+                  (r"^  extra=\(.*\); cap=\$CAP_BOX; ",
+                   r"^  extra=\(\); cap=\$CAP_BOX; \[ \"\$run\" = repeat \] && \{ extra=\(--repeat --plants\); cap=\$CAP_REPEAT; \}$")],
     },
     "bench/fam235/r2_drive.sh": {
         "source": "bench/q235/q235_drive.sh",
@@ -86,6 +96,29 @@ def unclassified(text: str, rule: dict) -> list:
 
 def check_wrapped(commit: str | None = CITED) -> dict:
     return {src: unclassified(source_at(src, commit), rule) for src, rule in WRAPPED.items()}
+
+
+# What R2 takes of Q235's at ``CITED``: the tools it runs through its wrappers and the files its closure seals, plus the shared files
+# its closure carries. ``cited_tree`` extracts them from git, so a later Q235 change reaches R2 only when R2 re-cites.
+CITED_PATHS = ("bench/q235", "bench/p130", "bench/tc1/tc1_arm.py", "bench/dq11/dq11_require_git.sh")
+
+
+@functools.lru_cache(maxsize=None)
+def cited_tree(commit: str = CITED) -> Path:
+    """``CITED_PATHS`` at ``commit``, from ``git archive`` into a private temporary tree (removed at exit). A missing commit (a
+    shallow clone) raises, naming it: R2 never falls back to the working tree."""
+    arc = subprocess.run(["git", "-C", str(REPO), "archive", "--format=tar", commit, "--", *CITED_PATHS], capture_output=True)
+    if arc.returncode != 0:
+        raise RuntimeError(f"cannot read Q235 at {commit} (a shallow clone, or not a git checkout?): "
+                           f"{arc.stderr.decode(errors='replace').strip()[:200]}")
+    root = Path(tempfile.mkdtemp(prefix=f"r2-cited-{commit[:8]}-"))
+    atexit.register(shutil.rmtree, root, True)
+    with tarfile.open(fileobj=io.BytesIO(arc.stdout)) as t:
+        for m in t.getmembers():
+            if m.name.startswith("/") or ".." in Path(m.name).parts or not (m.isfile() or m.isdir()):
+                raise RuntimeError(f"git archive at {commit} holds an unexpected member {m.name!r}")
+        t.extractall(root, **({"filter": "data"} if hasattr(tarfile, "data_filter") else {}))    # the stdlib's filter too, if any
+    return root
 
 
 def _body(lines):

@@ -63,11 +63,12 @@ def test_the_drift_check_names_an_undeclared_difference():
 
 
 def test_the_committed_manifest_is_the_closure():
+    """R2's own files from the working tree, Q235's at the cited commit: a later Q235 change does not move R2's manifest."""
     stage = _mod("r2_stage", F / "r2_stage.py")
-    q235 = stage.q235_stage()
+    q235, sealed = stage.q235_stage(), stage.sealing_tree()
     want = dict(reversed(line.split()) for line in (F / "r2.sha256").read_text().splitlines())
     for p in stage.CLOSURE:
-        assert want[Path(p).name] == q235.sha(ROOT / p), f"{p} changed: rewrite r2.sha256 (r2_stage.py --write) after review"
+        assert want[Path(p).name] == q235.sha(sealed / p), f"{p} changed: rewrite r2.sha256 (r2_stage.py --write) after review"
     lock = json.loads((Q / "locked_inputs.json").read_text())["assets"]
     assert set(want) == {Path(p).name for p in stage.CLOSURE} | set(lock)
 
@@ -85,10 +86,11 @@ def test_the_lock_is_the_registered_revision():
 def box(tmp_path):
     """A box workspace with R2's sealed closure staged flat, a stand-in nvidia-smi, and the TC1 lifecycle's variables."""
     stage = _mod("r2_stage", F / "r2_stage.py")
+    sealed = stage.sealing_tree()                                          # Q235's files at the cited commit, R2's from the tree
     w = tmp_path / "w"
     w.mkdir()
     for p in stage.CLOSURE:
-        shutil.copy(ROOT / p, w / Path(p).name)
+        shutil.copy(sealed / p, w / Path(p).name)
     lock = json.loads((Q / "locked_inputs.json").read_text())["assets"]
     lines = [ln for ln in (F / "r2.sha256").read_text().splitlines() if ln.split()[1] not in lock]
     (w / "r2.sha256").write_text("\n".join(lines) + "\n")
@@ -125,7 +127,9 @@ def test_the_runner_voids_a_closure_that_does_not_match_its_manifest(box):
 def test_the_fetch_gate_reads_r2_s_lock_and_q235_s_wheels():
     g = _mod("r2_fetch_gate", F / "r2_fetch_gate.py").gate_module()
     assert g.HERE / "model_files.json" == F / "model_files.json"
-    assert g.HERE / "wheels.json" == Q / "wheels.json" and g.HERE / "q235_bootstrap.py" == Q / "q235_bootstrap.py"
+    cq = _mod("r2_drift", F / "r2_drift.py").cited_tree() / "bench" / "q235"
+    assert (g.HERE / "wheels.json").read_bytes() == (cq / "wheels.json").read_bytes()
+    assert (g.HERE / "q235_bootstrap.py").name == "q235_bootstrap.py" and (g.HERE / "q235_bootstrap.py").parent.name == "q235"
     files = g.placeholder_files()
     names = {p.name for p in files}
     assert {"r2_run.sh", "r2_tiny.py", "model_files.json", "r2.sha256", "r2_drive.sh", "PREREG-r2-mixtral.md", "wheels.json"} <= names
@@ -181,8 +185,11 @@ def test_the_fetch_gate_maps_each_classified_name_where_it_says():
     drift = _mod("r2_drift", F / "r2_drift.py")
     g = _mod("r2_fetch_gate", F / "r2_fetch_gate.py").gate_module()
     for name, where in drift.WRAPPED["bench/q235/q235_fetch_gate.py"]["names"].items():
-        if where in ("r2", "q235"):
-            assert (g.HERE / name).parent == {"r2": F, "q235": Q}[where], name
+        if where == "r2":
+            assert (g.HERE / name).parent == F, name
+        elif where == "q235":
+            got = g.HERE / name
+            assert got.parent.name == "q235" and F not in got.parents and Q not in got.parents, name      # the cited tree's
 
 
 def test_the_rehearsal_depth_is_r2_s_own():
@@ -200,7 +207,8 @@ def test_q235_s_fetch_accepts_r2_s_lock(tmp_path):
     """The lock is Q235's format, read by Q235's fetch unchanged: its own check must pass (here a pattern that names no file then
     refuses, before any download). The first A2000 leg VOIDed on this check (a lock schema named for R2, not for its format)."""
     pytest.importorskip("huggingface_hub")
-    r = subprocess.run([sys.executable, str(Q / "q235_fetch.py"), "--lock", str(F / "model_files.json"), "--dest", str(tmp_path / "d"),
+    fetch = _mod("r2_drift", F / "r2_drift.py").cited_tree() / "bench" / "q235" / "q235_fetch.py"
+    r = subprocess.run([sys.executable, str(fetch), "--lock", str(F / "model_files.json"), "--dest", str(tmp_path / "d"),
                         "--only", "no-such-file", "--out", str(tmp_path / "f.json")], capture_output=True, text=True, timeout=120)
     out = r.stdout + r.stderr
     assert r.returncode != 0 and "--only names no locked file" in out and "not a complete" not in out, out[-400:]
@@ -214,3 +222,36 @@ def test_the_cpu_rehearsal_s_patterns_each_name_a_locked_file():
     names = [r["file"] for r in json.loads((F / "model_files.json").read_text())["files"]]
     assert patterns == ["tokenizer*", "special_tokens_map.json"]
     assert all(any(fnmatch.fnmatch(n, p) for n in names) for p in patterns), patterns
+
+
+def test_launch_staging_refuses_a_q235_tree_that_has_moved_past_the_citation(tmp_path):
+    """CI reads Q235 at the cited commit, but launching reads the working tree: once Q235 moves, R2 refuses to stage until it
+    re-cites, so it never ships Q235 bytes it has not cited."""
+    stage = _mod("r2_stage", F / "r2_stage.py")
+    tree = tmp_path / "repo"
+    shutil.copytree(stage.sealing_tree(), tree)
+    stage.q235_stage(tree)                                                   # loads; the sealed tree itself is what r2.sha256 says
+    box = tree / "bench" / "q235" / "instrument" / "q235_box.py"
+    box.write_text(box.read_text() + "\n# a Q235 change after the cited commit\n")
+    with pytest.raises(ValueError, match="q235_box.py differs"):
+        stage.q235_stage(tree).stage(tmp_path / "assets")
+
+
+def test_every_wrapper_runs_q235_at_the_cited_commit():
+    """Each wrapper's Q235 module is loaded from a tree extracted at ``CITED``, never from the working tree, byte for byte."""
+    drift = _mod("r2_drift", F / "r2_drift.py")
+    mods = {"bench/q235/q235_stage.py": _mod("r2_stage", F / "r2_stage.py").q235_stage(),
+            "bench/q235/q235_fetch_gate.py": _mod("r2_fetch_gate", F / "r2_fetch_gate.py").gate_module(),
+            "bench/q235/instrument/q235_verdict.py": _mod("r2_verdict", F / "r2_verdict.py").q235_verdict(),
+            "bench/q235/q235_fit.py": _mod("r2_fit", F / "r2_fit.py").fit_module()}
+    for path, m in mods.items():
+        where = Path(m.__file__).resolve()
+        assert ROOT.resolve() not in where.parents and any(p.name.startswith(f"r2-cited-{drift.CITED[:8]}-") for p in where.parents), path
+        assert where.read_text() == drift.source_at(path, drift.CITED), path
+
+
+def test_a_closure_file_outside_r2_and_the_cited_paths_is_refused(monkeypatch):
+    stage = _mod("r2_stage", F / "r2_stage.py")
+    monkeypatch.setattr(stage, "CLOSURE", stage.CLOSURE + ("bench/p999/somewhere_else.py",))
+    with pytest.raises(ValueError, match="neither R2's own"):
+        stage.sealing_tree()
