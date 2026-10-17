@@ -1,0 +1,293 @@
+{
+ "schema": "q235-a2000-leg/1",
+ "mode": "a2000 rehearsal (4-layer slice of ac9c66cc), never science-eligible",
+ "e4b": "f17f0744d5910248bbe5e51b813f47fad53a6686",
+ "amendment": "6 and 7",
+ "nonce": "a2k1792201668",
+ "box": {
+  "load": {
+   "seconds": 60.0,
+   "profile": {
+    "read": 16.06,
+    "assemble": 26.17,
+    "quantize": 0.72,
+    "offload": 4.18,
+    "calls": {
+     "read": 1575,
+     "assemble": 4,
+     "quantize": 4,
+     "offload": 4
+    },
+    "read_bytes": 22391367680,
+    "total_s": 53.97,
+    "other_s": 6.84,
+    "read_gb_s": 1.394
+   },
+   "host_memory": {
+    "VmHWM": 32901963776,
+    "VmRSS": 11509559296,
+    "RssAnon": 3955105792,
+    "RssFile": 294723584,
+    "RssShmem": 7259729920
+   }
+  },
+  "rules_all_true": true,
+  "rules": {
+   "step0_all_finite": true,
+   "step0_every_B_nonzero": true,
+   "step0_every_A_zero": true,
+   "step0_every_B_changed": true,
+   "step1_all_finite": true,
+   "step1_every_A_nonzero": true,
+   "step1_every_B_nonzero": true,
+   "step1_every_A_changed": true,
+   "step1_every_B_changed": true
+  },
+  "frozen_sha256_after_both_steps_equal": true,
+  "frozen_tensors": 111,
+  "in_process": {
+   "loss_0": 13.37894344329834,
+   "loss_1": 13.37894344329834,
+   "loss_equal": true,
+   "grad_maxrel": 0.00699300691485405
+  },
+  "shape_b": {
+   "micro_batch": 2,
+   "accumulation": 4,
+   "valid_per_micro_batch": [
+    125,
+    252,
+    480,
+    149
+   ],
+   "valid_total": 1006,
+   "widths": [
+    67,
+    133,
+    331,
+    79
+   ]
+  },
+  "steps": {
+   "step": {
+    "loss": 13.378870406634292,
+    "elapsed_s": 8.994,
+    "forward_s": 3.52,
+    "backward_s": 5.359,
+    "optimizer_s": 0.023,
+    "grads_host_copy_s": 0.09,
+    "max_memory_allocated": 5302445056,
+    "max_memory_reserved": 8988393472,
+    "host_memory": {
+     "VmHWM": 32901963776,
+     "VmRSS": 11669073920,
+     "RssAnon": 4058259456,
+     "RssFile": 330113024,
+     "RssShmem": 7280701440
+    },
+    "rule8": {
+     "algorithms": "deterministic",
+     "restored": "default",
+     "check": {
+      "compared": 24,
+      "max_rel": 0.0027772466507497216,
+      "max_rel_tensor": "model.layers.3.self_attn.k_proj.lora_B",
+      "zero_mismatch": [],
+      "cosine": 0.999996871131221,
+      "norm_ratio": 0.9999450774711562
+     },
+     "floor": {
+      "compared": 24,
+      "max_rel": 0.0,
+      "zero_mismatch": []
+     }
+    }
+   },
+   "step1": {
+    "loss": 12.661115132553679,
+    "elapsed_s": 9.013,
+    "forward_s": 3.528,
+    "backward_s": 5.379,
+    "optimizer_s": 0.017,
+    "grads_host_copy_s": 0.088,
+    "max_memory_allocated": 5524719616,
+    "max_memory_reserved": 8988393472,
+    "host_memory": {
+     "VmHWM": 32901963776,
+     "VmRSS": 11669991424,
+     "RssAnon": 4059176960,
+     "RssFile": 330113024,
+     "RssShmem": 7280701440
+    },
+    "rule8": {
+     "algorithms": "deterministic",
+     "restored": "default",
+     "check": {
+      "compared": 48,
+      "max_rel": 0.003927865918884967,
+      "max_rel_tensor": "model.layers.2.mlp.experts.down_lora_A",
+      "zero_mismatch": [],
+      "cosine": 0.9999968922857859,
+      "norm_ratio": 1.0000628748236948
+     },
+     "floor": {
+      "compared": 48,
+      "max_rel": 0.0,
+      "zero_mismatch": []
+     }
+    }
+   }
+  },
+  "moe_timing": {
+   "reported_only": true,
+   "read_by_verdict": false,
+   "pass": "the registered shape's forward-backward after both registered steps, no optimizer step, checkpoint early stop off",
+   "timer": "cuda events",
+   "order": "warm-up, off, on, on, off",
+   "timed_passes": 2,
+   "pass_warmup_s": 8.911,
+   "pass_off_s": [
+    8.9255,
+    8.9628
+   ],
+   "pass_on_s": [
+    8.9877,
+    9.0032
+   ],
+   "pairs_s": [
+    0.0622,
+    0.0404
+   ],
+   "overhead_s": 0.0513,
+   "half_s": 0.0109,
+   "overhead_ratio": 0.0057,
+   "decision_grade": true,
+   "grads_copy_s": {
+    "on": [
+     0.1312,
+     0.1023
+    ],
+    "warmup": 0.0928,
+    "off": [
+     0.0872,
+     0.1151
+    ]
+   },
+   "sampled_layers": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "micro_batches": [
+    {
+     "rows": 2,
+     "width": 67,
+     "valid": 125,
+     "positions": 134
+    },
+    {
+     "rows": 2,
+     "width": 133,
+     "valid": 252,
+     "positions": 266
+    },
+    {
+     "rows": 2,
+     "width": 331,
+     "valid": 480,
+     "positions": 662
+    },
+    {
+     "rows": 2,
+     "width": 79,
+     "valid": 149,
+     "positions": 158
+    }
+   ]
+  },
+  "moe_timing_layers_means": {
+   "0": {
+    "staged_by_offload": true,
+    "forward_calls": 8,
+    "forward_stage_ms_mean": 0.007,
+    "forward_compute_ms_mean": 51.338,
+    "recompute_stage_ms_mean": 222.144,
+    "recompute_compute_ms_mean": 46.369,
+    "backward_ms_mean": 58.179,
+    "backward_own_ms_mean": 58.179,
+    "recompute_inside_backward": [
+     false
+    ]
+   },
+   "1": {
+    "staged_by_offload": true,
+    "forward_calls": 8,
+    "forward_stage_ms_mean": 221.772,
+    "forward_compute_ms_mean": 47.23,
+    "recompute_stage_ms_mean": 222.683,
+    "recompute_compute_ms_mean": 47.371,
+    "backward_ms_mean": 59.904,
+    "backward_own_ms_mean": 59.904,
+    "recompute_inside_backward": [
+     false
+    ]
+   },
+   "2": {
+    "staged_by_offload": true,
+    "forward_calls": 8,
+    "forward_stage_ms_mean": 221.876,
+    "forward_compute_ms_mean": 46.636,
+    "recompute_stage_ms_mean": 220.015,
+    "recompute_compute_ms_mean": 46.373,
+    "backward_ms_mean": 59.257,
+    "backward_own_ms_mean": 59.257,
+    "recompute_inside_backward": [
+     false
+    ]
+   },
+   "3": {
+    "staged_by_offload": true,
+    "forward_calls": 8,
+    "forward_stage_ms_mean": 222.59,
+    "forward_compute_ms_mean": 44.168,
+    "recompute_stage_ms_mean": 221.733,
+    "recompute_compute_ms_mean": 43.662,
+    "backward_ms_mean": 57.567,
+    "backward_own_ms_mean": 57.567,
+    "recompute_inside_backward": [
+     false
+    ]
+   }
+  }
+ },
+ "repeat": {
+  "load_seconds": 70.6,
+  "loss": 13.37894344329834,
+  "plants": {
+   "routing": {
+    "layer": 2,
+    "loss": 13.452516555786133,
+    "forward_s": 1.702,
+    "pre_plant_max_rel_diff": 0.0,
+    "pre_plant_equal_null": true,
+    "planted_layer_differs": true
+   },
+   "epilogue": {
+    "layer": 2,
+    "loss": 13.437602043151855,
+    "forward_s": 1.685,
+    "pre_plant_max_rel_diff": 0.0,
+    "pre_plant_equal_null": true,
+    "planted_layer_differs": true
+   }
+  }
+ },
+ "versions": {
+  "torch": "2.11.0+cu128",
+  "transformers": "5.19.0",
+  "bitsandbytes": "0.50.2",
+  "grouped-nf4-gemm": "0.45.0",
+  "experts4bit-qlora": "0.54.0"
+ }
+}

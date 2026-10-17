@@ -62,3 +62,26 @@ reading `host_memory` at the load end:
 
 Projected to 94 layers with the check copies and held layer outputs, and assuming no heap reuse, that is 220.02 GB at the step end.
 With the 18.5 GB allowance the science floor is 239 GB (Amendment 5).
+
+## Amendments 6 and 7: the Shape B box and the timed pass
+
+The A2000 leg ran at f17f0744 (Amendment 6's Shape B with rule 8's deterministic check, and Amendment 7's timed pass), exit 0:
+`run-a7.json`, `phase-timings-a7.jsonl` and `a2000-leg-a7-summary.json`.
+- Amendment 2's rules held (9 of 9), and the frozen base was unchanged across both steps.
+- Rule 8's floor read exactly 0 at both steps, and its check 0.00278 and 0.00393 against BAR 0.0231.
+- Amendment 7's overhead read: 0.0513 s against a drift noise of 0.0109 s, decision-grade.
+
+That leg's load, like every leg after the first, ran on a warm page cache. Its time outside the load is cache-sensitive too: 123.8 s on
+the cold first leg, against 81.9 s (f7714702) and 79.2 s (9f6e0088) on warm ones. So the fit keeps the first leg's whole box phase and
+adds only the change, measured warm against warm (`q235_fit.py --box-from` this leg, `--box-baseline` the Amendment 4 leg):
+- 222.0 − 79.2 = 142.8 s on the slice, a box basis of 392.8 s;
+- the box's budget at 94 layers is 13,847 s, so its sealed cap goes from 8,820 s to **13,847 s**.
+
+Every other phase still fits its sealed cap: the repeat's 4,702 s budget under 4,710; the fetch's 1,502 s (6,387 Mbps) to 2,499 s
+(3,000 Mbps) budget under 12,000; and the install, under 1,800. The floors are unchanged. `fit-a7-*.json` hold the fit at the
+last box's host listing (6,387 Mbps, $1.5139/h) and at the packet's bandwidth floor (3,000 Mbps, $1.70/h).
+Their `wallclock_h` (9.92 h), `usd_at_wallclock` ($15.02 / $16.87) and `cost_tier` are computed on the sum of every cap, without the
+download. They are NOT the spending bound. The run is bounded by the launcher's declared 6.0 h wallclock, and the Shape B packet is
+judged by Amendment 7's bounds: expected all-in at most $11.50 and worst case (6.0 h × quote + download + upload) at most $15.00,
+both from the packet's own quote.
+
