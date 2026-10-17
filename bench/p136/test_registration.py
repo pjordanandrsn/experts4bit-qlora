@@ -43,6 +43,9 @@ def test_staged_bytes_and_closed_source_map():
     assert "P136_DRIVE_DRYRUN" in drive and "P136_DRY" in run
     assert "70bc03cb7a61b03c4e801e7423c58c103a1b6d7d" in run
     assert "--cuda-graph-trace=$MODE" in run and "SKIP=32; STEPS=64" in run
+    assert "2025.6.1.190-256136895201v0" in run
+    assert "3bf863cc.pub" in run and "7fa2af80.pub" not in run
+    assert run.index("install_nsys\n# ---- the checkpoint") < run.index("snapshot_download")
     assert "for B in $BATCHES" in run and "BATCHES='16'" in run
     assert "--exclude 'census/*.nsys-rep' --exclude 'census/*.sqlite'" in drive
 

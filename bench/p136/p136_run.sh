@@ -131,6 +131,46 @@ if [ "$rc" = 0 ] && echo "$LASTL" | grep -q " passed" && ! echo "$LASTL" | grep 
 else
   echo "premise failed" | tee -a summary.txt; say "PREMISE FAILED on this card"; echo "premise failed rc=$rc" > REFUSAL; finish 25
 fi
+# P123's recorded build, not merely its major/minor label. A missing or
+# different profiler refuses before checkpoint download.
+NSYS_VER=2025.6.1
+NSYS_EXPECT='NVIDIA Nsight Systems version 2025.6.1.190-256136895201v0'
+NSYS=""
+nsys_pick(){
+  local candidate version
+  for candidate in "$(command -v nsys 2>/dev/null || true)" \
+      /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/nsys \
+      $(dpkg -L "nsight-systems-cli-$NSYS_VER" 2>/dev/null | grep -E '/nsys$' || true); do
+    [ -n "$candidate" ] && [ -x "$candidate" ] || continue
+    version=$("$candidate" --version 2>&1 | tail -1)
+    if [ "$version" = "$NSYS_EXPECT" ]; then NSYS=$candidate; return 0; fi
+  done
+  return 1
+}
+install_nsys(){
+  if ! nsys_pick; then
+    say "exact P123 nsys absent; install nsight-systems-cli-$NSYS_VER before fetch"
+    # NVIDIA's rotated CUDA signing key (3bf863cc), fingerprint checked before
+    # writing the devtools source. An apt or version mismatch is a refusal.
+    if ! { apt-get update -qq && apt-get install -y -qq --no-install-recommends gnupg2 wget ca-certificates \
+      && wget -qO "$W/nvidia-devtools.pub" https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/3bf863cc.pub \
+      && FPR=$(gpg --show-keys --with-colons "$W/nvidia-devtools.pub" 2>/dev/null | awk -F: '$1=="fpr" {print $10; exit}') \
+      && case "$FPR" in *A4B469963BF863CC) true;; *) false;; esac \
+      && gpg --batch --yes --dearmor -o /usr/share/keyrings/nvidia-devtools-keyring.gpg "$W/nvidia-devtools.pub" \
+      && . /etc/os-release && [ "$ID" = ubuntu ] && [ "$(dpkg --print-architecture)" = amd64 ] \
+      && DISTRO=ubuntu$(echo "$VERSION_ID" | tr -d .) \
+      && echo "deb [signed-by=/usr/share/keyrings/nvidia-devtools-keyring.gpg] https://developer.download.nvidia.com/devtools/repos/$DISTRO/amd64/ /" > /etc/apt/sources.list.d/nvidia-devtools.list \
+      && apt-get update -qq && apt-get install -y -qq --no-install-recommends "nsight-systems-cli-$NSYS_VER"; } > logs/install_nsys.log 2>&1; then
+      say "NSYS INSTALL REFUSED before fetch: $(tail -1 logs/install_nsys.log | cut -c1-160)"
+      echo 'refused: exact nsys unavailable' > REFUSAL; finish 26
+    fi
+    nsys_pick || { say "NSYS VERSION REFUSED before fetch: need $NSYS_EXPECT"; echo 'refused: nsys version mismatch' > REFUSAL; finish 26; }
+  fi
+  echo "nsys $NSYS_EXPECT at $NSYS" | tee -a versions.txt summary.txt
+  "$NSYS" status -e > logs/nsys_status.log 2>&1 || { say 'NSYS STATUS REFUSED before fetch'; echo 'refused: nsys status' > REFUSAL; finish 26; }
+  { echo 'nsys status -e:'; tail -12 logs/nsys_status.log; } >> forensics.txt
+}
+install_nsys
 # ---- the checkpoint, its NF4 arena (P39's k8_bake.py, as SC1 bakes it) and the prompts
 FREE_GB=$(df -BG --output=avail "$W" | tail -1 | tr -dc 0-9)
 [ "${FREE_GB:-0}" -ge "$MIN_DISK_GB" ] || { say "REFUSED before fetch: disk ${FREE_GB:-?} GB"; finish 13; }
@@ -164,27 +204,15 @@ for TAG in S1a S1b; do
   [ "$rc" = 0 ] || { ARMS_OK=0; tail -6 logs/arm_$TAG.log | cut -c1-300 | tee -a summary.txt; say "ARM $TAG FAILED (rc=$rc) -- the reducer will VOID"; }
 done
 # ---- the census (not when a speed arm failed): Nsight Systems, then B = 1 and 16, graph mode then node mode
-install_nsys(){ say "install nsight-systems-cli-$NSYS_VER (NVIDIA devtools apt repo; the image's own nsys is Nsight Compute's, never used)"
-  { apt-get update -qq && apt-get install -y -qq --no-install-recommends gnupg2 wget ca-certificates \
-    && wget -qO- https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/7fa2af80.pub | gpg --dearmor > /usr/share/keyrings/nvidia-devtools-keyring.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/nvidia-devtools-keyring.gpg] https://developer.download.nvidia.com/devtools/repos/ubuntu$(. /etc/lsb-release; echo "$DISTRIB_RELEASE" | tr -d .)/$(dpkg --print-architecture)/ /" > /etc/apt/sources.list.d/nvidia-devtools.list \
-    && apt-get update -qq && apt-get install -y -qq --no-install-recommends "nsight-systems-cli-$NSYS_VER"; } > logs/install_nsys.log 2>&1
-  NSYS=$(dpkg -L "nsight-systems-cli-$NSYS_VER" 2>/dev/null | grep -E '/nsys$' | head -1)
-  if [ -n "$NSYS" ] && [ -x "$NSYS" ]; then
-    echo "nsys $("$NSYS" --version 2>&1 | tail -1) at $NSYS" | tee -a versions.txt summary.txt
-    "$NSYS" status -e >> logs/install_nsys.log 2>&1; { echo "nsys status -e:"; tail -12 logs/install_nsys.log; } >> forensics.txt
-  else say "NSYS INSTALL FAILED: $(tail -1 logs/install_nsys.log | cut -c1-160)"; finish 26; fi; }
 nsys_export(){ local rep=$1; [ -s "$rep.nsys-rep" ] || { say "no report $rep.nsys-rep"; return 1; }
   "$NSYS" export --type sqlite --force-overwrite true -o "$rep.sqlite" "$rep.nsys-rep" > "logs/export_$(basename "$rep").log" 2>&1; }
 gpu_free(){ local i; for i in $(seq 1 "${1:-120}"); do
     [ -z "$(nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null | tr -d ' ')" ] && return 0; sleep 1; done
   say "GPU still held after ${1:-120}s: $(nvidia-smi --query-compute-apps=pid,process_name --format=csv,noheader | tr '\n' ' ')"; return 1; }
-NSYS_VER=2025.6.1; NSYS=""
 NSYS_TRACE="-t cuda-sw,nvtx --sample=none --cpuctxsw=none"
 SKIP=32; STEPS=64
 mkdir -p $W/census
 if [ "$ARMS_OK" = 1 ]; then
-  install_nsys
   for B in $BATCHES; do
     for MODE in graph node; do
       S=census_e4b_b${B}_$MODE
