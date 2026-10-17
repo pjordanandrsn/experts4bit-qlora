@@ -50,8 +50,10 @@ must(){ phase "$@"; [ "$PHASE_RC" = 0 ] || { tail -30 "logs/$1.log"; say "VOID: 
 # The registered constants live here, in the sealed closure: tc1_drive.sh forwards only its own TC1_* list, so nothing below can
 # be changed from the controller's environment. A rehearsal may override the caps and the interpreter (Q235_CAP_*, Q235_PYTHON).
 # The phase caps (seconds) are gate 2's: each fitted from the rehearsal's measured phases, scaled to the registered model and class.
-# Fitted (q235_fit.py) from the A2000 rehearsal at 4b301ec3, for a host listing at least 500 Mbps: box 5,875 s and repeat 3,055 s
-# scaled (x 94/4), fetch 7,935 s; each cap is the scaled time x 1.5, rounded up to the minute.
+# Box: Amendment 7's refit (q235_fit.py --box-from / --box-baseline, #1676): the cold box at 4b301ec3 (250 s) plus the change measured
+# warm against warm (gate-1 leg f17f0744 against the am4 leg 9f6e0088: 142.8 s) = 392.8 s, x 94/4 = 9,230.8 s, x 1.5 = 13,847 s
+# (q235_fit rounds up to the second). Unchanged: the repeat (4b301ec3 plus Amendment 3's plants, 3,134.5 s scaled, cap 4,710 s) and
+# the fetch (7,935 s at 500 Mbps from the 4b301ec3 fit); the others are rounded up and still cover their budgets (gate2/).
 CAP_GIT=240 CAP_VENV=120 CAP_INSTALL=1800 CAP_HOSTRATE=600 CAP_FETCH=12000 CAP_TOKENS=300 CAP_BOX=13847 CAP_REPEAT=4710
 # The host-rate floors (gate 2's premise), the rehearsal's own: its pinned H2D (PCIe gen 3 x8), its host-copy rate (the load's
 # dominant part is the host-side expert assembly) and its load's effective read rate. The box measures all three (the disk with
