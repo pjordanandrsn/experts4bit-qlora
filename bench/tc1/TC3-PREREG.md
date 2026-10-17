@@ -202,7 +202,8 @@ budget reading. Nothing in the 24 GB token moves. Cost $0 (the owned card).
 Since TC1 amendment 56 (#1292, 2026-10-06), a resident fused arm double-quantizes it by default. So a resident-versus-offload pair can
 read two different numeric paths. Measured on the RTX A2000 on 2026-10-17 (e4b #1683, `bench/async-reuse-20261017/`): with the default, the
 same model's offloaded and resident adapter gradients differed by a constant 0.0768 max relative. With `E4B_ABSMAX_DQ=0` on both sides,
-their losses were bitwise equal and the gradients agreed to within each build's own pass-to-pass spread.
+their losses were bitwise equal and the gradients differed by 0.0103–0.0147, the same size as each build's own pass-to-pass spread
+(0.0128 resident, 0.0137 offloaded).
 
 **The amendment.** `resident_comparison` adds a precondition to the matched-trajectory checks (tokens, init, fp32 adapters, step count).
 The two receipts' `absmax_dq` must agree, or the reading is N-A ("absmax storage differs (offload ..., resident ...): run the resident
