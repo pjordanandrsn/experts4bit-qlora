@@ -41,12 +41,14 @@ overstate the PRO 6000's compute advantage. That would push the read's C lower t
 | PRO 6000, low end (*assumption*: the memory-bandwidth ratio 1.79 / 0.288 TB/s = 6.2 for every phase) | 124.9 ms | 24.5 ms | 5.09 |
 | PRO 6000, high end (the forward ratio for every phase) | 124.9 ms | 11.4 ms | 10.93 |
 
-**Predicted: C = 8.25, interval 5.1 to 11.0 (the computed 5.09 to 10.93, rounded outward), on a host with box 1's H2D (21.76 GB/s).**
+**Predicted: C = 8.25, interval 5.0 to 11.0 (the computed 5.09 to 10.93, each rounded outward to one decimal), on a host with
+box 1's H2D (21.76 GB/s).**
 - The staging term scales as 1 / H2D. The box's own `hostrate.json` rescales the prediction: C ≈ 8.25 × 21.76 / H2D, for example
   3.6 at 50 GB/s.
 - The Shape B box's pinned host is PCIe gen 5 (listed at 52.9 GB/s), and its H2D is unmeasured until its own host-rate phase runs. At
-  an H2D of 40 to 53 GB/s the point is 3.4 to 4.5, and the interval 2.1 to 6.0. That is still staging-bound.
-- **The read REFUTES the prediction** if its C, rescaled to 21.76 GB/s by its own measured H2D, falls outside 5.1 to 11.0.
+  an H2D of 40 to 53 GB/s the point is 3.4 to 4.5, and the interval 2.0 to 6.0 (the computed 5.09 × 21.76 / 53 = 2.09 to
+  10.93 × 21.76 / 40 = 5.95, rounded outward). That is still staging-bound.
+- **The read REFUTES the prediction** if its C, rescaled to 21.76 GB/s by its own measured H2D, falls outside 5.0 to 11.0.
 
 ## What it implies
 
