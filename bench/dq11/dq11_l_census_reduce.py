@@ -27,9 +27,9 @@ MAX_TRACE_BYTES = 512 * 1024 * 1024
 MAX_EVENTS = 2000000
 # Kineto's sequence counter also appears on nested operators and on
 # checkpoint recomputation in the autograd worker thread. Resolve the one
-# forward operator that CREATED each backward node, on its recorded forward
-# thread. The table includes observed real-L A2000 nodes and prospective
-# native SDPA variants for the 5090, all fixed before deciding data. An
+# forward operator that CREATED each backward node, through its explicit
+# forward/backward flow. The table includes observed real-L A2000 nodes and
+# prospective native SDPA variants for the 5090, all fixed before deciding data. An
 # unrecognized node or multiple matching creators refuse certification.
 BACKWARD_CREATOR = {
     "AddBackward0": ("aten::add", "aten::add_"),
@@ -116,7 +116,7 @@ def contains(outer, inner):
 
 
 def normalize_trace(trace, *, expected_steps=STEPS):
-    """External-id kernel binding and autograd sequence mapping; no name classifier."""
+    """Bind kernels by external id and backward creators by explicit Kineto flows."""
     if trace.get("schemaVersion") != 1 or not isinstance(trace.get("traceEvents"), list):
         fail("unsupported Kineto schema")
     events = trace["traceEvents"]
@@ -205,12 +205,13 @@ def normalize_trace(trace, *, expected_steps=STEPS):
                 return candidate
         return None
 
-    # The same sequence is visible on unrelated nested ops and on recompute
-    # in a different thread. A backward node's Fwd thread id plus its exact
-    # creator op distinguishes those views without assigning by kernel name.
+    # Kineto's Fwd thread id is a profiler identity, not the OS tid exported
+    # on CPU events. Only explicit fwdbwd flow endpoints bridge those views.
     forward, backward_nodes, sequence = defaultdict(list), [], {}
+    cpu_starts = defaultdict(list)
     for row in cpu_list:
         event = row["event"]
+        cpu_starts[(event["pid"], event["tid"], row["bounds"][0])].append(row)
         seq = event.get("args", {}).get("Sequence number")
         if type(seq) is not int or seq < 0:
             continue
@@ -218,6 +219,43 @@ def normalize_trace(trace, *, expected_steps=STEPS):
             backward_nodes.append(row)
         elif event.get("args", {}).get("Fwd thread id", 0) == 0:
             forward[(event["pid"], event["tid"], seq)].append(row)
+
+    flows = defaultdict(dict)
+    for event in events:
+        if event.get("cat") != "fwdbwd":
+            continue
+        phase, flow_id = event.get("ph"), event.get("id")
+        if phase not in ("s", "f") or type(flow_id) is not int or flow_id < 0:
+            fail("malformed backward flow")
+        key = (event.get("pid"), flow_id)
+        if phase in flows[key]:
+            fail("duplicate backward flow endpoint")
+        # Use the same timestamp normalization as CPU ranges, without
+        # treating flow arrows as durations or adding them to device time.
+        timestamp = interval({"ts": event.get("ts"), "dur": 0}, allow_zero=True)[0]
+        flows[key][phase] = (event.get("pid"), event.get("tid"), timestamp)
+    node_flows = defaultdict(list)
+    for endpoints in flows.values():
+        if set(endpoints) != {"s", "f"}:
+            fail("incomplete backward flow pair")
+        end_rows = cpu_starts[endpoints["f"]]
+        nodes = {}
+        for row in end_rows:
+            for candidate in ancestors(row):
+                name = candidate["event"]["name"]
+                if name.startswith("autograd::engine::evaluate_function: "):
+                    inner_args = row["event"].get("args", {})
+                    node_args = candidate["event"].get("args", {})
+                    if (
+                        row["event"]["name"] == name.split(": ", 1)[1]
+                        and inner_args.get("Sequence number") == node_args.get("Sequence number")
+                        and inner_args.get("Fwd thread id") == node_args.get("Fwd thread id")
+                    ):
+                        nodes[candidate["index"]] = candidate
+                    break
+        if len(nodes) != 1:
+            fail("unbound or ambiguous backward flow endpoint")
+        node_flows[next(iter(nodes))].append(endpoints["s"])
     if not backward_nodes:
         fail("missing backward sequence nodes")
     for node in backward_nodes:
@@ -237,11 +275,19 @@ def normalize_trace(trace, *, expected_steps=STEPS):
             continue
         if name not in BACKWARD_CREATOR:
             fail("unregistered backward node kind")
-        if not forward[key]:
+        starts = node_flows[node["index"]]
+        if len(starts) != 1:
+            fail("missing or ambiguous backward flow pair")
+        start = starts[0]
+        creators = forward[(start[0], start[1], seq)]
+        if not creators:
             fail("unbound backward sequence")
-        matches = [row for row in forward[key] if row["event"]["name"] in BACKWARD_CREATOR[name]]
+        matches = [row for row in creators if row["event"]["name"] in BACKWARD_CREATOR[name]]
         if len(matches) != 1:
             fail("ambiguous or missing backward creator")
+        creator = matches[0]
+        if creator not in cpu_starts[start] or creator["bounds"][0] >= node["bounds"][0]:
+            fail("unbound backward sequence or creator flow endpoint")
         tag = direct(matches[0]) or ("other", "outside-registered-class")
         if name in BACKWARD_EXPECTED_CLASS and tag[0] != BACKWARD_EXPECTED_CLASS[name]:
             fail("backward creator changed its registered class scope")
