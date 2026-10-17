@@ -86,16 +86,14 @@ the forward and once in the recompute: 187 per pass, as Shape A.
   still run one at a time inside a layer.
 - **Checkpointing.** Unchanged granularity: one non-reentrant checkpoint per (layer, micro-batch). **Assumption A1:** autograd
   runs the backward in decreasing sequence number, so the four micro-batches of layer L are recomputed back to back, and the
-  single resident slot stages each layer once. A1 is expected, because autograd's ready queue takes the highest sequence number
-  first. The A2000's offload copy count decides it: n stagings per direction per pass. If A1 fails, the backward interleaves layers,
-  the slot thrashes and (b) gains nothing; the fix would be an explicit per-layer backward, a larger build.
+  single resident slot stages each layer once. **Tested: A1 holds, and (b) needs one more change** (see "A1, tested" below).
 - **Gradient summation (a registered-result question).** As-is, each LoRA tensor's gradient is four sequential `.backward()` calls
   accumulating into `p.grad`, in micro-batch order 1 → 4. Layer-major is one backward: each tensor's four contributions meet in
   autograd's input buffer in arrival order, likely 4 → 1 under A1, in the gradient's dtype (bf16 for bf16 adapters). The math is the
   same weighted sum; the bits are not. Rule 8's deterministic check compares the registered device accumulation with the host-sum
   reference. Layer-major is a different accumulation, so rule 8 at the registered bar would have to be re-read for it. It also
   redesigns rule 8's `overwrite` plant, which takes a backward per micro-batch: layer-major has a single backward.
-- **Cost to build.** A layer-major driver in e4b: about 200 lines that call the decoder layers directly instead of the model's
+- **Cost to build.** A layer-major driver in e4b that also holds each layer resident across its micro-batches in the forward: about 200 lines that call the decoder layers directly instead of the model's
   forward, plus tests. Gradient parity with (a) within rule 8's bar; the staging count (n per direction) on the A2000's offload
   path, at $0. No kernel change.
 
@@ -119,3 +117,34 @@ experts: 0.734 of the bytes on average, measured above.
 registers it). (b) changes the accumulation procedure that rule 8 reads. (c) changes the staging procedure. Either would need its
 own amendment, with a rehearsal, parity against (a), and rule 8 re-read at its bar, before any box used it. The numbers here are
 for a later training lane's planning.
+
+## A1, tested (CPU, `a1_layer_major.py`)
+
+A toy model with e4b's single-slot staging rule, mirrored from `engines/offload.py`:
+- a forward pre-hook stages the layer, idempotent if it is resident and otherwise evicting the resident one;
+- a forward post-hook evicts it, except inside a backward (`torch._C._current_graph_task_id() != -1`);
+- one non-reentrant checkpoint per (layer, micro-batch).
+
+The toy has 94 layers and 4 unequal micro-batches. It ran on torch 2.11.0 (the box's) and 2.14.1, CPU only, with identical
+results:
+
+| schedule | copies per pass (toy) | on the box | backward layer-major | gradients vs as-is |
+|---|---:|---:|---|---|
+| as-is (Shape B as registered) | 749 | 748 | no (one micro-batch at a time) | — |
+| layer-major, e4b's hooks unchanged | 470 | 469 | **yes** (each layer's 4 recomputes back to back, 93 → 0) | max rel. diff 1.2e-7 |
+| layer-major, forward evict held across a layer's micro-batches | **187** | 186 | **yes** | max rel. diff 1.2e-7 |
+
+The toy starts with nothing staged; the box enters each pass with layer 0 resident, so each box figure is one lower.
+
+- **A1 holds.** Autograd's backward runs layer-major on its own: the recompute stages each layer once.
+- **That alone is not enough.** e4b's forward post-hook evicts after every forward call outside a backward. In a layer-major forward,
+  layer L is evicted after micro-batch 1 and re-staged for micro-batches 2–4. That costs 4 copies per layer in the forward: 470,
+  only −37 % against as-is.
+- **The full −75 % (187) needs the driver to hold the layer** across its micro-batches in the forward: suspend the evict between
+  them, then let the next layer's stage evict it. With the layer held, the backward also starts with layer 93 resident, which saves
+  one more copy.
+- **The gradients are the same math.** The 1.2e-7 differences are fp32 summation order: the four contributions are summed in one
+  backward rather than accumulated across four.
+- **What it decides.** (b) is buildable: autograd needs no explicit per-layer backward. The build is the layer-major driver plus the
+  held forward. It still waits for Q235's read, and it still needs its own amendment before any registered box uses it.
+
