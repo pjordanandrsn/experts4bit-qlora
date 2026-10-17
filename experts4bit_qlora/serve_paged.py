@@ -1399,10 +1399,12 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     tok = AutoTokenizer.from_pretrained(cfg.model, revision=cfg.revision or None)
     from transformers import AutoConfig
 
-    from .engines.paged_runner import kv_layout_refusal
+    from .engines.paged_runner import config_state_refusal
     try:
         model_config = AutoConfig.from_pretrained(cfg.model, revision=cfg.revision or None)
-        why = kv_layout_refusal(model_config)
+        # the runner's own verdict (paged_state_refusal: MLA, state-carrying layers it cannot keep, hybrids declared
+        # without layer_types) on the empty-weight module tree, so a refused model costs no weight load
+        why = config_state_refusal(model_config)
     except (OSError, ValueError, KeyError):           # a config only the loader reads: its own refusals stand
         model_config, why = None, None
     if why:
