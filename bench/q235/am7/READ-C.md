@@ -12,13 +12,17 @@ Means over the 8 sampled layers × 8 calls, without layer 0's resident forward c
 |---|---:|
 | staging, forward | 51.40 ms |
 | staging, recompute | 50.81 ms |
-| experts compute (forward 4.76 + recompute 4.63 + backward 4.69) | 14.07 ms |
+| experts compute (forward 4.76 + recompute 4.62 + backward 4.68) | 14.07 ms |
 | **C, measured** | **7.26** |
 
-**C = 7.26 is the read of record.** It lies inside the registered interval of 5.0 to 11.0, below the 8.25 point, in the
-direction the prediction's caveat named. C is reporting-only.
+**The registered rule, as registered.** `PREDICTION-C.md` refutes the prediction if C, rescaled to 21.76 GB/s by the box's
+own measured H2D, falls outside 5.0 to 11.0. The box's `hostrate.json` reads 20.39 GB/s, so the rescaled C is
+7.26 × 20.39 / 21.76 = 6.80: inside the interval. **The prediction is not refuted.**
 
-## The H2D rescale is retired
+**C = 7.26, measured, is the read of record.** It also lies inside 5.0 to 11.0, below the 8.25 point, in the direction the
+prediction's caveat named. C is reporting-only.
+
+## The H2D rescale is retired (a deviation from the registration)
 
 The prediction rescaled C by the box's own `hostrate.json`: C ≈ 8.25 × 21.76 / H2D. On this host that probe under-measures
 the link, so the rescale divides by the wrong rate.
