@@ -33,12 +33,10 @@ N_LAYERS, TOKENS = 3, (5, 8, 3)  # three unequal micro-batches
 
 @pytest.fixture(autouse=True)
 def _reset_class_state():
-    """The resident slot and the hold are class-level global state; reset them around each test."""
+    """The resident slot is class-level global state; reset it around each test."""
     _ExpertOffload._resident = None
-    _ExpertOffload._hold = False
     yield
     _ExpertOffload._resident = None
-    _ExpertOffload._hold = False
 
 
 @pytest.fixture
@@ -182,7 +180,7 @@ def test_exit_evicts_and_clears_the_flag_also_on_an_exception():
                 layers[0](hs, idx, w)
             assert handles[0].staged  # held: the post-hook kept it
             raise ValueError("boom")
-    assert _ExpertOffload._hold is False
+    assert not any(h._held for h in handles)
     assert not any(h.staged for h in handles)
     assert _ExpertOffload._resident is None
 
@@ -210,7 +208,7 @@ def test_refuses_routed_handles_and_inference_policies(attr, value, match):
     with pytest.raises(RuntimeError, match=match):
         with hold_forward_residency(handles):
             pass
-    assert _ExpertOffload._hold is False  # refused before anything was held
+    assert not any(h._held for h in handles)  # refused before anything was held
 
 
 def test_refuses_a_nested_hold():
@@ -219,7 +217,7 @@ def test_refuses_a_nested_hold():
         with pytest.raises(RuntimeError, match="nested"):
             with hold_forward_residency(handles):
                 pass
-    assert _ExpertOffload._hold is False
+    assert not any(h._held for h in handles)
 
 
 def test_refuses_a_call_inside_a_backward():
@@ -243,4 +241,23 @@ def test_refuses_a_call_inside_a_backward():
     x = torch.ones(2, requires_grad=True)
     Probe.apply(x).sum().backward()
     assert "inside a backward" in seen.get("err", "")
-    assert _ExpertOffload._hold is False
+    assert not any(h._held for h in handles)
+
+
+def test_the_hold_reaches_only_the_handles_it_was_given():
+    """A second model's offloaded layer, not passed to the hold (and so never vetted, e.g. a routed handle), keeps
+    today's evict-after-forward inside the block, and the exit leaves it alone (review of #1708)."""
+    held_layers = _stack()
+    held = _offload(held_layers)
+    other_layers = _stack(seed=10)
+    other = [enable_expert_offload(lo, DEVICE, pin=False) for lo in other_layers]
+    other[0]._routed_only = True  # would be refused if it were passed
+    hs, idx, w = _micro_batches()[0]
+    with hold_forward_residency(held):
+        with torch.no_grad():
+            held_layers[0](hs, idx, w)
+            assert held[0].staged  # held
+            other_layers[1](hs, idx, w)  # stages other[1], which evicts held[0] (the single slot), then evicts itself
+        assert not other[1].staged and not other[1]._held
+        assert not held[0].staged
+    assert not any(h._held for h in held + other)

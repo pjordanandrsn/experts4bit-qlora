@@ -271,10 +271,11 @@ class _ExpertOffload:
     # from a generate() (the circularly-prefetched first layer) never linger into a train step.
     _staged_now: set = set()
 
-    # Forward hold (see hold_forward_residency): while True, the evict post-hook keeps the layer staged after its forward,
-    # so a layer-major driver can run every micro-batch through one staging. Read and written as
-    # ``_ExpertOffload._hold`` only, for the same subclass reason as ``_resident``.
-    _hold = False
+    # Forward hold (see hold_forward_residency): while a handle's ``_held`` is True, the evict post-hook keeps that layer
+    # staged after its forward, so a layer-major driver can run every micro-batch through one staging. Per handle, set and
+    # cleared by the context on exactly the handles it was given (and checked): a class-wide flag would also hold handles
+    # nobody vetted, e.g. a second model's routed handle.
+    _held = False
 
     # Whether routed-only staging may run on a GRAD-ENABLED forward. False here and for every
     # host-RAM home: their bulk path is a cheap whole-layer copy from pinned DRAM, so the
@@ -836,8 +837,8 @@ def enable_expert_offload(experts_lora, device, pin: bool = True,
         # placeholder read); OLMoE, Qwen3-MoE and GraniteMoe happen to stop early and never saw it.
         # Inside a backward the single-resident-slot policy already evicts -- staging the next
         # layer to recompute evicts this one -- so skipping here keeps one-layer residency intact.
-        # Under hold_forward_residency the forward keeps the layer too; the next layer's stage() evicts it.
-        if _in_backward() or _ExpertOffload._hold:
+        # Under hold_forward_residency the forward keeps a held layer too; the next layer's stage() evicts it.
+        if _in_backward() or handle._held:
             return
         handle.evict()
 
@@ -857,7 +858,10 @@ def hold_forward_residency(handles):
 
     What does NOT change: the single resident slot. Staging layer L+1 still evicts L first (``stage()``), so at most one
     layer's experts are on the device at any instant, held or not. On exit (normal or exceptional) the resident layer is
-    evicted, so nothing staged in the block outlives it.
+    evicted if it is one of the held handles, so nothing staged in the block outlives it.
+
+    The hold is per handle: only the handles passed in (and checked below) are held. Any other offloaded module keeps
+    today's evict-after-forward, so a second model in the process is never held without its handles being vetted.
 
     ``handles``: the model's offload handles (:func:`offload_handles`). Refused, by raising, before anything is held:
     - a routed handle (``enable_routed_staging`` / ``enable_speculative_staging``, or an NVMe arena handle that stages
@@ -867,7 +871,7 @@ def hold_forward_residency(handles):
     - a call inside a backward, or a nested hold.
     """
     handles = list(handles)
-    if _ExpertOffload._hold:
+    if any(h._held for h in handles):
         raise RuntimeError("hold_forward_residency: already holding (nested holds are not supported)")
     if _in_backward():
         raise RuntimeError("hold_forward_residency: called inside a backward; the hold is for the forward only")
@@ -882,13 +886,16 @@ def hold_forward_residency(handles):
                 "hold_forward_residency: inference prefetch or a pipelined takeover is active on this handle; "
                 "the hold is a training-forward policy"
             )
-    _ExpertOffload._hold = True
+    for h in handles:
+        h._held = True
     try:
         yield
     finally:
-        _ExpertOffload._hold = False
-        if _ExpertOffload._resident is not None:
-            _ExpertOffload._resident.evict()
+        for h in handles:
+            h._held = False
+        resident = _ExpertOffload._resident
+        if resident is not None and any(resident is h for h in handles):
+            resident.evict()
 
 
 class _ExpertPool:
