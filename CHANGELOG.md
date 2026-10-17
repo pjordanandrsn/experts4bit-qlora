@@ -6,10 +6,10 @@ Changes merged since the last release are one file each in [`changelog.d/`](chan
 
 ## 0.55.0 — 2026-10-17 — the fast extra floors on grouped-nf4-gemm 0.43.0 (the single-request decode GEMV), an earlier hybrid refusal, pinned host blocks released
 
-**0.55.0.** The `fast` extra now requires grouped-nf4-gemm 0.43.0. That release's default sends single-request decode at
-Qwen3-30B-A3B's NF4 expert shapes, on GPUs with at least 160 SMs, through its bandwidth-targeted GEMV: on one RTX 5090 one
-request decodes 1.24× as fast, 16 are unchanged, and quality is within P110's bar (lane P116). `GNF4_GEMV_BW=0` restores
-dot-pad. `serve_paged` now refuses an unservable hybrid model before reading any weight. The streaming loader returns its
+**0.55.0.** The `fast` extra now requires grouped-nf4-gemm 0.43.0, so every install gets that release's default:
+single-request decode at Qwen3-30B-A3B's NF4 expert shapes, on GPUs with at least 160 SMs, runs its bandwidth-targeted
+GEMV. On one RTX 5090 one request decodes 1.24× as fast, 16 are unchanged, and quality is within P110's bar (lane P116).
+`GNF4_GEMV_BW=0` restores dot-pad. `serve_paged` now refuses an unservable hybrid model before reading any weight. The streaming loader returns its
 cached pinned host blocks after a load (2.22 GB on Qwen3-235B). The training estimate prices a held-out evaluation and the
 logits a caller holds on the stock-loss path. Also in this release: bench registrations, records and correctness checks
 (R2 on Mixtral-8x22B, the DQ11 census controls, the DeepSeek-V4.1 gates, Track B1's fast-path portability and fused q/k/v by

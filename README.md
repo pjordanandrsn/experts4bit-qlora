@@ -120,9 +120,10 @@ The offload row uses a different training setup.
 
 ## New in 0.55.0
 
-- **Faster single-request decode on Qwen3-30B-A3B NF4, on GPUs with at least 160 SMs.** `[fast]` now requires
-  grouped-nf4-gemm 0.43.0, whose default routes those decode GEMVs through its bandwidth-targeted kernel. On one RTX 5090,
-  one request decodes 1.24× as fast and 16 are unchanged, within the quality bar. `GNF4_GEMV_BW=0` restores dot-pad.
+- **Every install gets grouped-nf4-gemm 0.43.0's faster single-request decode** on Qwen3-30B-A3B NF4, on GPUs with at
+  least 160 SMs: `[fast]` now requires 0.43.0, whose default routes those decode GEMVs through its bandwidth-targeted
+  kernel. On one RTX 5090, one request decodes 1.24× as fast and 16 are unchanged, within the quality bar.
+  `GNF4_GEMV_BW=0` restores dot-pad.
 - **`serve_paged` refuses an unservable hybrid model before reading any weight,** with the same verdict as before.
 - **The streaming loader returns its cached pinned host blocks after a load:** 2.22 GB of host RAM on Qwen3-235B.
 - **The training estimate prices a held-out evaluation and the logits a caller holds** on the stock-loss path.
