@@ -773,3 +773,38 @@ def test_not_invoked_with_unexpected_receipt_stops(receipt_repo):
     with pytest.raises(ValueError, match="not-invoked attempt has unexpected"):
         with launch.attempt_permit(range_envelope(), RUN_IDS[1], root, root / "state"):
             pass
+
+
+@pytest.mark.parametrize("malformed", [False, True])
+def test_canonical_ledger_header_reaches_used_id_guard_and_bad_entry_refuses(receipt_repo, malformed):
+    root = receipt_repo
+    ledger = root / "receipts/experts4bit-qlora/ledger.jsonl"
+    content = (FIXTURE / "canonical-ledger.jsonl").read_text()
+    assert len(content.splitlines()) == 2
+    assert content.startswith("# Append-only ledger:")
+    assert '"run_id": "dq11-l-census-4"' in content
+    if malformed:
+        lines = content.splitlines()
+        lines[1] = "{malformed non-comment row"
+        content = "\n".join(lines) + "\n"
+    ledger.write_text(content)
+    git_fixture(root, "add", "receipts")
+    git_fixture(root, "commit", "-m", "Canonical ledger with header")
+    env = range_envelope(["dq11-l-census-4", "dq11-l-census-5"])
+    expected = json.JSONDecodeError if malformed else ValueError
+    message = "Expecting property name" if malformed else "already used outside this envelope"
+    with pytest.raises(expected, match=message):
+        with launch.attempt_permit(env, "dq11-l-census-5", root, root / "state"):
+            pytest.fail("used id or malformed row accepted")
+    assert not (root / "state/123.json").exists()  # no attempt burned
+
+
+def test_canonical_ledger_whitespace_and_comments_allow_unused_id(receipt_repo):
+    root = receipt_repo
+    ledger = root / "receipts/experts4bit-qlora/ledger.jsonl"
+    content = (FIXTURE / "canonical-ledger.jsonl").read_text()
+    ledger.write_text("  \n  # leading whitespace comment\n" + content + "\n")
+    git_fixture(root, "add", "receipts")
+    git_fixture(root, "commit", "-m", "Legal ledger whitespace")
+    with launch.attempt_permit(range_envelope(), RUN_IDS[0], root, root / "state"):
+        pass
