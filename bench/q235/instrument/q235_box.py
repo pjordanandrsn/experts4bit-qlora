@@ -20,6 +20,13 @@ gradient checks (finite, nonzero count, the global norm) and optimizer delta (ev
 and reserved peaks); host memory (peak RSS); bytes moved host-to-device by the expert offload (``E4B_OFFLOAD_STATS=1``: its per-copy
 counters, on for the step) and NVMe bytes (``/proc/diskstats``) around the load and around the step; the step's synchronized elapsed
 times; and each decoder layer's output on the step-0 forward, for the fidelity read against the layer-streamed bf16 reference.
+
+Amendment 8 (the ladder's L2, after the R2 gate-1 ruling): each step records ``dx``, every decoder layer's output gradient (dL/dh_i,
+i = 0..n-1) as its fp32 norm, per forward-backward of the step's own pass (``DxProbe``), and ``rules`` gains its STRICT
+``step0_dx_finite_nonzero`` / ``step1_dx_finite_nonzero``. With ``--heldout TOKENS.pt`` (the registered held-out rows,
+``q235_tokens.py --first``), ``heldout`` records the loss on those rows before the update, after step 0 and after step 1, each one
+no-gradient forward at shape A, with ``heldout_finite`` STRICT; the step's own rows are read the same way at the same points
+(``heldout.train``, reported only). Rule 10, the verdict's, is one-sided: no post-update held-out read above ``before x 1.10``.
 """
 from __future__ import annotations
 
@@ -27,6 +34,7 @@ import argparse
 import contextlib
 import hashlib
 import json
+import math
 import os
 import platform
 import resource
@@ -118,15 +126,23 @@ STRICT_RULES = ("step0_all_finite", "step0_every_B_nonzero", "step0_every_A_zero
                 "step1_every_A_nonzero", "step1_every_B_nonzero", "step1_every_A_changed", "step1_every_B_changed")
 
 
+#: Amendment 8's STRICT rules: every decoder layer's output gradient recorded, finite and nonzero at both steps; and, with
+#: ``--heldout``, the held-out loss finite at every read. Required on a record that ran under Amendment 8 (``amendment8``).
+STRICT_RULES_A8 = ("step0_dx_finite_nonzero", "step1_dx_finite_nonzero")
+
+
 def strict_failures(out, repeat=False):
-    """The STRICT checks a box record fails, by name: Amendment 2's rules and the frozen base across both steps. Empty = none.
+    """The STRICT checks a box record fails, by name: Amendment 2's rules and the frozen base across both steps, and on an
+    Amendment 8 record its dX rules (and the held-out read's, when it ran one). Empty = none.
     Fails CLOSED: outside --repeat (step 0's forward only, which records neither), a rule or the frozen-base equality that is
     absent or not exactly True is a failure, so a record that stopped early never reads as clean."""
     if repeat:
         return []
     rules = out.get("rules") or {}
-    bad = [k for k in STRICT_RULES if rules.get(k) is not True]
-    bad += [k for k, v in rules.items() if k not in STRICT_RULES and v is not True]
+    a8 = out.get("amendment8") or {}
+    need = STRICT_RULES + (STRICT_RULES_A8 if a8 else ()) + (("heldout_finite",) if a8.get("heldout") else ())
+    bad = [k for k in need if rules.get(k) is not True]
+    bad += [k for k, v in rules.items() if k not in need and v is not True]
     if out.get("frozen_sha256_after_both_steps_equal") is not True:
         bad.append("frozen_sha256_after_both_steps_equal")
     return bad
@@ -558,6 +574,76 @@ def capture(model):
     return layer_out, topk, hooks
 
 
+class DxProbe:
+    """Amendment 8: each decoder layer's output gradient, dL/dh_i for i = 0..n-1 -- the gradient the layer's own adapters and the
+    layers below it receive -- as its fp32 norm, once per forward-backward of the registered step (one per micro-batch under
+    shape B).
+
+    Where it is taken: layer i's output as the INPUT of the next module, through a forward pre-hook on layer i+1 (and on the final
+    norm for the last layer). There it is an outer graph tensor under either checkpoint mode. Under a reentrant checkpoint (e4b's
+    fast path, ``ckpt_offload``) the checkpointed forward runs without gradients, so the output a layer's own forward hook sees
+    never carries one; the tensor handed to the next module is the checkpoint's own output, which does.
+
+    The pre-hooks register a tensor hook only while ``armed`` (the step's own forward), so the checkpoint recompute inside the
+    backward, which calls the modules again, registers nothing. A layer whose output carries no gradient, or whose hook never
+    fires, stays ``None`` and fails the rule: the record fails closed."""
+
+    def __init__(self, model):
+        layers = list(model.model.layers)
+        self.n = len(layers)
+        self.armed, self.cur, self.passes = False, None, []
+        nxt = layers[1:] + [model.model.norm]                   # the module that receives layer i's output
+        self.handles = [m.register_forward_pre_hook(self._hook(i), with_kwargs=True) for i, m in enumerate(nxt)]
+
+    def _hook(self, i):
+        def h(mod, args, kwargs):
+            if not self.armed or self.cur is None or self.cur[i] is not None:
+                return None
+            t = args[0] if args else kwargs.get("hidden_states")
+            if not (torch.is_tensor(t) and t.requires_grad):
+                return None
+            cur = self.cur
+            cur[i] = "pending"
+
+            def g(grad):
+                cur[i] = float(grad.detach().float().norm())
+            t.register_hook(g)
+            return None
+        return h
+
+    def arm(self):
+        """Before the step's forward (each micro-batch's)."""
+        self.cur = [None] * self.n
+        self.passes.append(self.cur)
+        self.armed = True
+
+    def disarm(self):
+        """After the forward returns, before the backward: the recompute registers nothing."""
+        self.armed = False
+
+    def remove(self):
+        for h in self.handles:
+            h.remove()
+
+    def record(self):
+        bad = [[p, i] for p, norms in enumerate(self.passes) for i, v in enumerate(norms)
+               if not isinstance(v, float) or not math.isfinite(v) or v <= 0]
+        vals = [v for norms in self.passes for v in norms if isinstance(v, float)]
+        return {"layers": self.n, "passes": len(self.passes), "norms": self.passes,
+                "finite_nonzero": bool(self.passes) and not bad, "failing": bad[:20], "failing_count": len(bad),
+                "min": min(vals) if vals else None, "max": max(vals) if vals else None,
+                "what": "dL/dh_i at each decoder layer's output (fp32 norm), taken as the next module's input, per forward-backward "
+                        "of the step (Amendment 8)"}
+
+
+def heldout_loss(model, held, sync):
+    """Amendment 8: the loss on the registered held-out rows at the current parameters, no gradient (one forward, shape A)."""
+    with torch.no_grad():
+        loss = model(input_ids=held["input_ids"], attention_mask=held["attention_mask"], labels=held["labels"]).loss
+    sync()
+    return float(loss)
+
+
 @contextlib.contextmanager
 def deterministic():
     """Amendment 6: ``torch.use_deterministic_algorithms(True, warn_only=True)`` for rule 8's check passes only. The previous setting
@@ -651,6 +737,11 @@ def run(a):
     cuda = dev == "cuda"
     tokens = torch.load(a.tokens, weights_only=True)
     out["tokens_sha256"] = {k: hashlib.sha256(v.contiguous().numpy().tobytes()).hexdigest() for k, v in tokens.items()}
+    held = None
+    if getattr(a, "heldout", None):                             # Amendment 8: the registered held-out rows
+        held = torch.load(a.heldout, weights_only=True)
+        out["heldout"] = {"tokens_sha256": {k: hashlib.sha256(v.contiguous().numpy().tobytes()).hexdigest() for k, v in held.items()},
+                          "rows": int(held["input_ids"].shape[0]), "real_tokens": int(held["attention_mask"].sum())}
     d0, t0 = diskstats(), time.time()
     model, rec = build(a.checkpoint, dev, a.r, a.alpha, a.adapter_dtype, a.enabler, profile=LoadProfile(cuda))
     out["load"] = {**rec, "seconds": round(time.time() - t0, 1), "nvme": disk_delta(d0, diskstats()), "host_memory": host_memory()}
@@ -685,11 +776,15 @@ def run(a):
     out["frozen_hash_seconds"] = round(time.time() - t_h, 1)
     params = adapter_params(model)
 
-    def fwd_bwd():
+    def fwd_bwd(probe=None):
         model.zero_grad(set_to_none=True)
         sync()
         t = time.time()
+        if probe is not None:
+            probe.arm()
         loss = model(input_ids=ids, attention_mask=mask, labels=labels).loss
+        if probe is not None:
+            probe.disarm()
         sync()
         tf = time.time()
         loss.backward()
@@ -702,7 +797,7 @@ def run(a):
     mbs = [{k: (v.to(dev) if torch.is_tensor(v) else v) for k, v in m.items()} for m in micro_batches(tokens, mb)] if mb else None
     n_valid = sum(m["valid"] for m in mbs) if mbs else None
 
-    def fwd_bwd_b(mode="token", routes=None):
+    def fwd_bwd_b(mode="token", routes=None, probe=None):
         """Shape B's accumulation over the micro-batches (Amendment 6). ``token``: each micro-batch's mean loss weighted by its share of
         the window's valid labels, the gradients accumulating in ``p.grad``. Planted bugs: ``mean`` weights each micro-batch 1 / k (a
         mean of micro-batch means); ``overwrite`` clears ``p.grad`` before each backward, so only the last micro-batch survives.
@@ -725,7 +820,11 @@ def run(a):
             if mode in ("overwrite", "separate"):
                 model.zero_grad(set_to_none=True)
             t_m = time.time()
+            if probe is not None:
+                probe.arm()
             loss = model(input_ids=m["input_ids"], attention_mask=m["attention_mask"], labels=m["labels"]).loss
+            if probe is not None:
+                probe.disarm()
             sync()
             tf_sum += time.time() - t_m
             w = (1.0 / len(mbs)) if mode == "mean" else m["valid"] / n_valid
@@ -771,6 +870,12 @@ def run(a):
     l1, g1, *_ = fwd_bwd()
     spread = max(((g1[n] - g0[n]).abs().max() / g0[n].abs().max().clamp_min(1e-30)).item() for n in g0)
     out["in_process"] = {"loss_0": l0, "loss_1": l1, "loss_equal": l0 == l1, "grad_maxrel": spread}
+    out["amendment8"] = {"dx": True, "heldout": held is not None}
+    train_rows = {"input_ids": ids, "attention_mask": mask, "labels": labels}
+    if held is not None:
+        held = {k: v.to(dev) for k, v in held.items()}
+        out["heldout"]["loss_before"] = heldout_loss(model, held, sync)        # at load: B is zero, so the adapters add nothing
+        out["heldout"]["train"] = {"loss_before": heldout_loss(model, train_rows, sync)}   # the step's rows, the same read (reported)
     if mbs:                                                     # Amendment 6: at most four host copies alive at once, as Amendment 5
         del g1
         out["shape_b"] = {"micro_batch": mb, "accumulation": len(mbs), "valid_per_micro_batch": [m["valid"] for m in mbs],
@@ -809,7 +914,11 @@ def run(a):
         d1 = diskstats()
         t_step = time.time()
         mode = algorithms()
-        loss, grads, t_fwd, t_bwd, t_copy = fwd_bwd_b() if mbs else fwd_bwd()
+        probe = DxProbe(model)                                      # Amendment 8: this step's own pass only
+        try:
+            loss, grads, t_fwd, t_bwd, t_copy = fwd_bwd_b(probe=probe) if mbs else fwd_bwd(probe=probe)
+        finally:
+            probe.remove()
         sync()
         t_o = time.time()
         opt.step()
@@ -844,6 +953,7 @@ def run(a):
         rec["optimizer_delta"] = {
             "every_B_changed": all(delta[n] > 0 for n in b_names), "every_A_changed": all(delta[n] > 0 for n in a_names),
             "A_changed": sum(delta[n] > 0 for n in a_names), "unchanged_tensors": sorted(n for n, v in delta.items() if v == 0)}
+        rec["dx"] = probe.record()
         return rec
 
     # Amendment 2. Step 0: B starts at zero, so every A's gradient is exactly zero (it flows through B) -- a nonzero one means B was
@@ -854,6 +964,9 @@ def run(a):
         s0 = one_step(ref=g0, mb_ref=ref0)
         s0["rule8"] = check0
         del g0, ref0
+        if held is not None:
+            out["heldout"]["loss_after_step0"] = heldout_loss(model, held, sync)
+            out["heldout"]["train"]["loss_after_step0"] = heldout_loss(model, train_rows, sync)
         _, ga1, *_ = fwd_bwd()                                  # shape A at step 1's parameters, before its accumulation
         check1, ref1 = rule8_check()
         s1 = one_step(ref=ga1, mb_ref=ref1)
@@ -861,14 +974,28 @@ def run(a):
         del ga1, ref1
     else:
         s0 = one_step()
+        if held is not None:
+            out["heldout"]["loss_after_step0"] = heldout_loss(model, held, sync)
+            out["heldout"]["train"]["loss_after_step0"] = heldout_loss(model, train_rows, sync)
         s1 = one_step()
+    if held is not None:
+        h = out["heldout"]
+        h["loss_after"] = heldout_loss(model, held, sync)                      # after both updates
+        h["train"]["loss_after"] = heldout_loss(model, train_rows, sync)
+        for rec in (h, h["train"]):                                             # each post-update read against the read before
+            rec["rel_change_step0"] = (rec["loss_after_step0"] - rec["loss_before"]) / rec["loss_before"]
+            rec["rel_change"] = (rec["loss_after"] - rec["loss_before"]) / rec["loss_before"]
+        h["all_finite"] = all(math.isfinite(h[k]) for k in ("loss_before", "loss_after_step0", "loss_after"))
     out["step"], out["step1"] = s0, s1
     out["rules"] = {
         "step0_all_finite": s0["gradients"]["all_finite"], "step0_every_B_nonzero": s0["gradients"]["every_B_nonzero"],
         "step0_every_A_zero": s0["gradients"]["every_A_zero"], "step0_every_B_changed": s0["optimizer_delta"]["every_B_changed"],
         "step1_all_finite": s1["gradients"]["all_finite"], "step1_every_A_nonzero": s1["gradients"]["every_A_nonzero"],
         "step1_every_B_nonzero": s1["gradients"]["every_B_nonzero"], "step1_every_A_changed": s1["optimizer_delta"]["every_A_changed"],
-        "step1_every_B_changed": s1["optimizer_delta"]["every_B_changed"]}
+        "step1_every_B_changed": s1["optimizer_delta"]["every_B_changed"],
+        # Amendment 8: every layer's output gradient finite and nonzero at both steps, and the held-out reads finite
+        "step0_dx_finite_nonzero": s0["dx"]["finite_nonzero"], "step1_dx_finite_nonzero": s1["dx"]["finite_nonzero"],
+        **({"heldout_finite": out["heldout"]["all_finite"]} if held is not None else {})}
     after = frozen_hashes(model)
     out["frozen_sha256_after_both_steps_equal"] = after == out["frozen_sha256_after_load"]
     out["frozen_tensors"] = len(after)
@@ -917,6 +1044,9 @@ def main():
                          "spaced layers (REPORTED only, under moe_timing; off by default)")
     ap.add_argument("--time-moe-bound", action="store_true",
                     help="with --time-moe: Amendment 7's overhead read (a warm-up, then untimed, timed, timed, untimed)")
+    ap.add_argument("--heldout", default=None, metavar="TOKENS.pt",
+                    help="Amendment 8: the registered held-out rows (q235_tokens.py --first), read before the update, after step 0 "
+                         "and after step 1")
     a = ap.parse_args()
     if a.device == "cpu" and a.enabler == "fast":
         ap.error("the fused training kernels need CUDA; use --enabler reference on the CPU")
@@ -928,6 +1058,8 @@ def main():
         ap.error("--time-moe N (N >= 1) rides the stepped run, after both registered steps; not --repeat")
     if a.time_moe_bound and not a.time_moe:
         ap.error("--time-moe-bound needs --time-moe")
+    if a.heldout and (a.repeat or a.plant):
+        ap.error("--heldout rides the stepped run; the repeat and the plants run step 0's forward only")
     out, layer_out = run(a)
     os.makedirs(a.out, exist_ok=True)
     out["layer_sha256"] = save_layers(a.out, layer_out, out.pop("_topk"))

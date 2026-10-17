@@ -1,0 +1,151 @@
+{
+ "argv": {
+  "device": "cuda",
+  "enabler": "fast",
+  "adapter_dtype": "bf16",
+  "r": 16,
+  "alpha": 16,
+  "lr": 0.0002,
+  "weight_decay": 0.001,
+  "plant": null,
+  "repeat": false,
+  "plants": false,
+  "micro_batch": 2
+ },
+ "model": "Qwen3-235B-A22B-Instruct-2507 ac9c66cc, a 4-layer cut (memslope/slice4)",
+ "host": {
+  "gpu": "NVIDIA RTX A2000 12GB",
+  "capability": "8.6",
+  "python": "3.11.17"
+ },
+ "versions": {
+  "torch": "2.11.0+cu128",
+  "transformers": "5.19.0",
+  "bitsandbytes": "0.50.2",
+  "grouped-nf4-gemm": "0.45.0",
+  "experts4bit-qlora": "0.54.0"
+ },
+ "tokens_sha256": {
+  "input_ids": "0047ba733be9a034e292fed28019eac34885913c09c4f8087edd370df0b5c847",
+  "attention_mask": "4c279e0e872d4d154aaa9e6de10226bdd7926fc0c6d2c0231963ede0b3968592",
+  "labels": "bf60877d80d50340a77efd7d489c1d27c5a08ddb92ed4819dd5c587f390252bf"
+ },
+ "heldout": {
+  "tokens_sha256": {
+   "input_ids": "273e1b71544ad308d9b917a0cb401609b0bef0fdeea7ff551913bb0cb7963a06",
+   "attention_mask": "58e2d6705ec689764e5205ad2db0cc1a690612ebda469397c6777c5e609b6126",
+   "labels": "1b601dd96c4e263cc880597f62c49b28bd1d60c728c768850a14e46c791b74b4"
+  },
+  "rows": 8,
+  "real_tokens": 1432,
+  "loss_before": 12.951144218444824,
+  "train": {
+   "loss_before": 13.37894344329834,
+   "loss_after_step0": 12.660428047180176,
+   "loss_after": 11.844023704528809,
+   "rel_change_step0": -0.0537049430818901,
+   "rel_change": -0.11472652868851085
+  },
+  "loss_after_step0": 12.485116958618164,
+  "loss_after": 11.95042610168457,
+  "rel_change_step0": -0.035983481611065,
+  "rel_change": -0.0772687030490361,
+  "all_finite": true
+ },
+ "rules": {
+  "step0_all_finite": true,
+  "step0_every_B_nonzero": true,
+  "step0_every_A_zero": true,
+  "step0_every_B_changed": true,
+  "step1_all_finite": true,
+  "step1_every_A_nonzero": true,
+  "step1_every_B_nonzero": true,
+  "step1_every_A_changed": true,
+  "step1_every_B_changed": true,
+  "step0_dx_finite_nonzero": true,
+  "step1_dx_finite_nonzero": true,
+  "heldout_finite": true
+ },
+ "frozen_sha256_after_both_steps_equal": true,
+ "frozen_tensors": 111,
+ "in_process": {
+  "loss_0": 13.37894344329834,
+  "loss_1": 13.37894344329834,
+  "loss_equal": true,
+  "grad_maxrel": 0.005347593687474728
+ },
+ "losses": [
+  13.378870406634292,
+  12.661645253183352
+ ],
+ "dx": {
+  "step": {
+   "layers": 4,
+   "passes": 4,
+   "finite_nonzero": true,
+   "failing_count": 0,
+   "min": 0.5310804843902588,
+   "max": 1.3530298471450806,
+   "norms": [
+    [
+     0.6580126881599426,
+     0.6075908541679382,
+     0.5595843195915222,
+     0.5310804843902588
+    ],
+    [
+     1.0147947072982788,
+     0.9352872967720032,
+     0.8551319241523743,
+     0.8006717562675476
+    ],
+    [
+     1.3530298471450806,
+     1.2498152256011963,
+     1.1452759504318237,
+     1.0735764503479004
+    ],
+    [
+     0.7009634375572205,
+     0.6474559307098389,
+     0.597676694393158,
+     0.5664141178131104
+    ]
+   ]
+  },
+  "step1": {
+   "layers": 4,
+   "passes": 4,
+   "finite_nonzero": true,
+   "failing_count": 0,
+   "min": 0.5271666646003723,
+   "max": 1.336631417274475,
+   "norms": [
+    [
+     0.6467555165290833,
+     0.5988402962684631,
+     0.5538963675498962,
+     0.5271666646003723
+    ],
+    [
+     0.9999902844429016,
+     0.9240421056747437,
+     0.8479530215263367,
+     0.7965313792228699
+    ],
+    [
+     1.336631417274475,
+     1.2365244626998901,
+     1.1370409727096558,
+     1.0674777030944824
+    ],
+    [
+     0.6898461580276489,
+     0.6390644311904907,
+     0.5921807289123535,
+     0.5627990961074829
+    ]
+   ]
+  }
+ }
+}

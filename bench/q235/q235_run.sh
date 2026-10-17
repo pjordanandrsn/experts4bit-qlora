@@ -124,10 +124,11 @@ case "$MODE" in
            must tiny 300 python q235_tiny.py --out "$W/hf-cache/tiny" --tokenizer-from "$W/hf-cache/model"
            MODEL="$W/hf-cache/tiny" DEVICE=cpu ENABLER=reference ;;
 esac
-must tokens "$CAP_TOKENS" python q235_tokens.py ds_alpaca.json "$MODEL" --rows "$ROWS" --seq 2048 --out "$W/receipts/tokens.pt"
+must tokens "$CAP_TOKENS" python q235_tokens.py ds_alpaca.json "$MODEL" --rows "$ROWS" --seq 2048 --out "$W/receipts/tokens.pt" \
+  --heldout-out "$W/receipts/heldout.pt"    # Amendment 8: the registered held-out rows, the next ROWS rows of the split
 
 for run in box repeat; do
-  extra=(--micro-batch 2 --time-moe 8 --time-moe-bound); cap=$CAP_BOX; [ "$run" = repeat ] && { extra=(--repeat --plants); cap=$CAP_REPEAT; }   # box: shape B (Amendment 6), the timed pass (Amendment 7)
+  extra=(--micro-batch 2 --time-moe 8 --time-moe-bound --heldout receipts/heldout.pt); cap=$CAP_BOX; [ "$run" = repeat ] && { extra=(--repeat --plants); cap=$CAP_REPEAT; }   # box: shape B (Amendment 6), the timed pass (Amendment 7), the held-out read (Amendment 8)
   phase "$run" "$cap" python q235_box.py "$MODEL" receipts/tokens.pt --device "$DEVICE" --enabler "$ENABLER" --out "receipts/$run" "${extra[@]}"
   case "$PHASE_RC" in
     0) ;;
