@@ -7,6 +7,7 @@ copy's own; every other difference must be a one-for-one line replacement that a
 
 - **STRICT** against the source at ``CITED``, the Q235 commit R2 cites (``git show``): any undeclared difference fails.
 - **The Python twin.** Every file a wrapped Q235 module (``WRAPPED``) reads through its ``HERE`` is classified; a new one fails.
+- **Cited, not live.** ``cited_tree`` gives the Q235 files R2 runs and seals at ``CITED``; R2's wrappers and its CI read those.
 - **REPORTED** against the source in the working tree: a Q235 change after ``CITED`` (a fix R2 has not taken) is listed, not
   failed, so an open Q235 amendment never turns R2 red. R2 takes it by updating its copy and ``CITED`` together.
 
@@ -14,10 +15,16 @@ copy's own; every other difference must be a one-for-one line replacement that a
 """
 from __future__ import annotations
 
+import atexit
 import difflib
+import functools
+import io
 import re
+import shutil
 import subprocess
 import sys
+import tarfile
+import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -86,6 +93,28 @@ def unclassified(text: str, rule: dict) -> list:
 
 def check_wrapped(commit: str | None = CITED) -> dict:
     return {src: unclassified(source_at(src, commit), rule) for src, rule in WRAPPED.items()}
+
+
+# What R2 takes of Q235's at ``CITED``: the tools it runs through its wrappers and the files its closure seals, plus the shared files
+# its closure carries. ``cited_tree`` extracts them from git, so a later Q235 change reaches R2 only when R2 re-cites.
+CITED_PATHS = ("bench/q235", "bench/p130", "bench/tc1/tc1_arm.py", "bench/dq11/dq11_require_git.sh")
+
+
+@functools.lru_cache(maxsize=None)
+def cited_tree(commit: str = CITED) -> Path:
+    """``CITED_PATHS`` at ``commit``, from ``git archive`` into a private temporary tree (removed at exit). A missing commit (a
+    shallow clone) raises, naming it: R2 never falls back to the working tree."""
+    arc = subprocess.run(["git", "-C", str(REPO), "archive", "--format=tar", commit, "--", *CITED_PATHS], capture_output=True)
+    if arc.returncode != 0:
+        raise RuntimeError(f"cannot read Q235 at {commit} (a shallow clone?): {arc.stderr.decode(errors='replace').strip()[:200]}")
+    root = Path(tempfile.mkdtemp(prefix=f"r2-cited-{commit[:8]}-"))
+    atexit.register(shutil.rmtree, root, True)
+    with tarfile.open(fileobj=io.BytesIO(arc.stdout)) as t:
+        for m in t.getmembers():
+            if m.name.startswith("/") or ".." in Path(m.name).parts or not (m.isfile() or m.isdir()):
+                raise RuntimeError(f"git archive at {commit} holds an unexpected member {m.name!r}")
+        t.extractall(root)
+    return root
 
 
 def _body(lines):
