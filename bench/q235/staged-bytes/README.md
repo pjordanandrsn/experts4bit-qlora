@@ -144,12 +144,14 @@ The toy starts with nothing staged; the box enters each pass with layer 0 reside
   only −37 % against as-is.
 - **The full −75 % (187) needs the layer held** across its micro-batches in the forward: suspend the evict between them, then let
   the next layer's stage evict it. That is an engine change, a hold flag in `engines/offload.py`'s evict post-hook, which inference
-  and every training lane share, so it needs offload's own tests. With the layer held, the backward also starts with layer 93 resident, which saves
+  and every training lane share, so it needs offload's own tests. With the layer held, the backward also starts with layer 93
+  resident, which saves
   one more copy.
 - **The gradients are the same math.** The 1.2e-7 differences are fp32 summation order: the four contributions are summed in one
   backward rather than accumulated across four. The toy is fp32. The registered adapters are bf16, where summation order moves
   bits by about 1e-3 relative, so the toy shows the same math but does not read rule 8's bar. That needs (b) on the A2000 at bf16.
 - **What it decides.** (b) is buildable: autograd needs no explicit per-layer backward. The build is the layer-major driver plus the
   engine's held forward. On CUDA, the A2000's staging count would confirm A1 too. The box figure, 186, is one under the 187 in the
-  table above (0.5 %), because the box enters each pass with layer 0 resident. It still waits for Q235's read, and it still needs its own amendment before any registered box uses it.
+  table above (0.5 %), because the box enters each pass with layer 0 resident. It still waits for Q235's read, and it still needs
+  its own amendment before any registered box uses it.
 
