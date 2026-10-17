@@ -42,6 +42,8 @@ therefore lean high, which leans the prediction toward staging-bound.
 **Predicted: C = 8.6, interval 5.1 to 11.0, on a host with box 1's H2D (21.76 GB/s).**
 - The staging term scales as 1 / H2D. The box's own `hostrate.json` rescales the prediction: C ≈ 8.6 × 21.76 / H2D, for example
   3.7 at 50 GB/s.
+- The Shape B box's pinned host is PCIe gen 5 (listed at 52.9 GB/s), and its H2D is unmeasured until its own host-rate phase runs. At
+  an H2D of 40 to 53 GB/s the point is 3.5 to 4.6, and the interval 2.1 to 6.0. That is still staging-bound.
 - **The read REFUTES the prediction** if its C, rescaled to 21.76 GB/s by its own measured H2D, falls outside 5.1 to 11.0.
 
 ## What it implies
