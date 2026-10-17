@@ -80,4 +80,8 @@ adds only the change, measured warm against warm (`q235_fit.py --box-from` this 
 Every other phase still fits its sealed cap: the repeat's 4,702 s budget under 4,710; the fetch's 1,502 s (6,387 Mbps) to 2,499 s
 (3,000 Mbps) budget under 12,000; and the install, under 1,800. The floors are unchanged. `fit-a7-*.json` hold the fit at the
 last box's host listing (6,387 Mbps, $1.5139/h) and at the packet's bandwidth floor (3,000 Mbps, $1.70/h).
+Their `wallclock_h` (9.92 h), `usd_at_wallclock` ($15.02 / $16.87) and `cost_tier` are computed on the sum of every cap, without the
+download. They are NOT the spending bound. The run is bounded by the launcher's declared 6.0 h wallclock, and the Shape B packet is
+judged by Amendment 7's bounds: expected all-in at most $11.50 and worst case (6.0 h × quote + download + upload) at most $15.00,
+both from the packet's own quote.
 
