@@ -7,8 +7,8 @@ An assessment from records and code only: no runs, no rentals, no default change
   unchanged since v0.46.0).
 - **Families:** the 13 committed fixtures in `tests/fixtures/topology_controls/` (revision and sha256 in its
   `SOURCES.json`).
-- **Inputs from the other Track B tables:** B3's (K16, K19) is folded in. B2's dispatch audit (per family and component, W1
-  and W16) is **pending**, and the cells marked "B2" wait for it.
+- **Inputs from the other Track B tables, both folded in:** B2's dispatch audit (`b1-decode-B2-dispatch-audit-20261017.md`,
+  sha256 `108b4ada`: decode graphs, W1 and W16 expert routes, fusions, attention) and B3's K16 / K19 applicability table.
 
 ## 1. The receipt behind "the Qwen 30B speed"
 
@@ -52,25 +52,32 @@ else is gated on structure, shape class, rows or hardware.
 ## 3. The matrix: served families on the 5090
 
 Classes (the maintainer's): **1** works through shape-general code; **2** blocked by narrow auto-dispatch; **3** needs
-tuning; **4** needs a kernel or code port; **5** cannot safely apply. "Engages" without a receipt on that card means the gain
-is inferred. A train-only or unserved family is N/A.
+tuning; **4** needs a kernel or code port; **5** cannot safely apply. **rec** means a receipt exists on the 5090; **inf** means
+inferred from code. "Engages" without a receipt means the gain is inferred. N/A means not applicable. Cells for the decode
+graphs, W1 and W16 routes, fusions and attention come from B2's dispatch audit (`b1-decode-B2-dispatch-audit-20261017.md`,
+sha256 `108b4ada`), which runs grouped-nf4-gemm's own `_decode_plan` and `_BW_SHAPES` unchanged.
 
-Served (B3: `serve_paged`'s `paged_state_refusal` refuses none of these): Qwen3-30B-A3B, Qwen3-235B-A22B, Qwen3.6-35B-A3B,
-OLMoE, Granite-3.1, gpt-oss-20b, Gemma-4-26B, Mixtral-8x7B, ERNIE-4.5. Not served (conv, mamba or latent MoE layers): LFM2,
-Granite-4.0-h, both Nemotrons.
+**Which families serve** (B2 §1):
+- Served: Qwen3-30B, Qwen3-235B, Qwen3.6 (its Gated DeltaNet layers keep per-slot state), OLMoE, Granite-3.1 and gpt-oss.
+  gpt-oss runs the NF4 arena by default.
+- Admitted with no served record: Gemma-4 and Mixtral.
+- ERNIE: admission unverified. It isn't in `SUPPORTED_ARCHITECTURES`, so it depends on transformers' convention table;
+  its column is inferred throughout.
+- Refused at runner build: LFM2 (`conv` layers) and Granite-4.0-h (`mamba`), at `paged_runner.py:105-119`.
+- Nemotron-H: see finding 5.
 
 | lever (default?) | Qwen3-30B | Qwen3-235B | Qwen3.6 | OLMoE | Granite-3.1 | gpt-oss | Gemma-4 | Mixtral | ERNIE |
 |---|---|---|---|---|---|---|---|---|---|
-| decode graphs (default) | **1, record** (P109) | **M** | 1, engages | 1, engages | 1, engages | 1, engages | 1, engages | 1, engages | 1, engages |
-| fused stack (default for Qwen) | **1, record** (P115) | 1, engages (inferred, solver placement, W1) | **1 for the router epilogue** (only it engages: quality PASS, step 0.973); q/k/v and folds 4 | 2, allow-list (quality unread) | **5**: FAM FAIL | **5**: FAM FAIL | **5**: not licensable with the instrument | **2**: quality PASS, blocked by the allow-list, no speed read | 2, allow-list; round-2 rotary refuses ERNIE (4) |
-| fused q/k/v | **1, record** | 1, engages (inferred, solver placement, W1) | 4 (gated q, a different class) | 2 (class name) | 2 (class name; 0 engaged, P115 C) | 2 (class name); its biased q/k/v would also refuse: 4 | 2 (class name) | 2 (class name; 0 engaged, FAM) | 2 (class name) |
-| prefill glue (default for qwen3_moe) | **1, record** (P130) | 1, engages (inferred, solver placement) | 2 | 2 | 2 | 2 | 2 | 2 | 2 |
-| K33 BW GEMV, NF4, W1 | **1, record** (P116) | 3: no plan for (3072, 4096), (4096, 1536) | 3: no plan for (1024, 2048), (2048, 512) | **2: plans exist, auto excludes** | **2: plans exist, auto excludes** | N/A (native MXFP4) | 3 | 3 | 3 |
-| K25 NF4 grouped small-M, W16 (default) | **1, record** (P121) | **M** | 1, engages | **1, quality licensed** (P96) | **1, quality licensed** (P96) | N/A (MXFP4: K21, `e4b.serve.p90…`) | 1, engages | 1, engages | 1, engages |
-| int4 expert store + K19/K23/tiles (opt-in) | **1, record** (int4 lanes P88/P89/P122/P126) | 3 + **M** | 3: calibration and quality per family | 3 | 3 | N/A (MXFP4 store) | 3 | 3 | 3 |
-| K16 int4 attention, 17–64 rows (opt-in; B3) | **1, record** (P124) | 1, engages (inferred, solver placement) | 1, engages (10 full-attention layers only) | 1, engages | 1, engages | 1, engages (bias carried) | 1, engages (audio tower: B2) | 1, engages | 1, engages |
+| decode graphs (default) | **1 rec** (P109) | **M** | **1 rec** (P115c) | **1 rec** (P99, older e4b) | **1 rec** (P115c) | **1 rec** (P115c) | 1 inf, no served record | 1 inf, no served record | inf |
+| K33 BW GEMV, NF4, W1 (default) | **1 rec** (P116, P123) | 3 inf: no plan for (3072, 4096), (4096, 1536) | 3 inf | **2 inf: plan exists, gate excludes it** | **2 rec**: plan exists; P123 shows the scalar GEMV | 3 inf | 3 inf | 3 inf; its down runs split-K sk = 4 at ≥ 128 SMs | 3 inf |
+| K25 + one-launch table, W16 (default) | **1 rec** (P121, P123) | **M** | 1 inf | 1 inf; quality licensed (P96) | **1 rec** (P123); quality licensed (P96) | 1 inf, the non-lean K25 | 1 inf | 1 inf | inf |
+| fused stack (default only for Qwen) | **1 rec** (P115) | 1 inf (solver placement, W1) | **router epilogue 1 rec** (quality PASS, step 0.973); norm and layer folds **4 rec** (centred norms fail the probe) | 2 inf (allow-list); the layer fold would refuse its full-width q/k norms: 4 | **5** (FAM FAIL) | **5** (FAM FAIL; P115 C argmax 0.924) | 2/5 (no licensing instrument) | **2** (FAM quality PASS; no speed read) | 2 inf; round-2 rotary refuses ERNIE: 4 |
+| fused q/k/v | **1 rec** | 1 inf (solver placement, W1) | 2/4 inf (class gate; gated q) | 2 inf (class gate) | 2 (class gate; 0 engaged, P115 C) | 4/5 (biased projections refused) | 4 inf | 2 inf (class gate) | 2 inf |
+| prefill glue (default for qwen3_moe) | **1 rec** (P130) | 1 inf (solver placement) | 2 | 2 | 2 | 2 | 2 | 2 | 2 |
+| attention: fp8 compute, split-KV (default) | **1 rec** (P123) | 1 inf | 1 inf (head_dim 256) | 1 inf | **f32 by measured design** at head_dim 64 (P30: no gain, +0.0136 nats) | f32 by design at 64; window and sinks supported | 1 inf (256/8 and 512/2) | 1 inf | 1 inf (128) |
+| int4 expert store + K19/K23/tiles (opt-in) | **1 rec** (P88, P89, P122, P126) | 3 + **M** | 3 | 3 | 3 | N/A (the opt-in uses the MXFP4 store) | 3 | 3 | 3 |
+| K16 int4 attention, 17–64 rows (opt-in; B3) | **1 rec** (P124) | 1, engages (inferred: solver placement, eager batched decode; the solver plans at batch 1, `serve_paged.py:1425`) | 1, engages (10 full-attention layers only) | 1, engages | 1, engages | 1, engages (bias carried) | 1, engages (audio tower: see B3 flag) | 1, engages | 1, engages |
 | K19 split tiles, prefill (opt-in; B3) | 1, engages (bitwise on the A2000; gain unread) | 1 under the store; **M** | 1, possibly 3 (16 rows per expert) | 1, engages | 1, engages | **4** (MXFP4 route is K21) | 1, possibly 3 (down K = 704) | 1, engages | 1, engages |
-| attention: fp8 compute, split-KV, fused KV append | B2 | B2 | B2 | B2 | B2 | B2 | B2 | B2 | B2 |
 
 **The two int4 rows are bounded by their stores.** Every K19 cell sits under the int4 expert store's row: outside
 Qwen3-30B that store is class 3, so read "1, engages" as "1 under the store (store: 3)". K16 likewise sits under the RTN int4
@@ -86,7 +93,8 @@ gate needs the all-VRAM placement there:
 The fused stack, q/k/v, prefill glue and K16 don't depend on the placement in the code, so their 235B cells read "engages
 (inferred, solver placement)": no served 235B read exists.
 
-Every "engages" cell outside Qwen3-30B is gain inferred. Quality is per family and unread unless a claim is named.
+**W16 cells are "rec" only where an Nsight trace exists** (P123: Qwen3-30B and Granite). grouped-nf4-gemm's
+`dispatch_counts()` records no W16 route (B2 F5).
 
 ## 4. Other cards
 
@@ -121,6 +129,16 @@ Every "engages" cell outside Qwen3-30B is gain inferred. Quality is per family a
      for the Qwen families.
    - It says `serve_paged` reads `E4B_SERVE_ATTN_INT4_ARTIFACT`, `_FINGERPRINT` and `_DUMP`. Only `enable_from_env` reads
      them, and nothing in the package calls it.
+5. **Nemotron-H is admitted but likely unsafe to serve** (B2 F2, inferred, class 5).
+   - Its fixtures carry no `layer_types`, only `hybrid_override_pattern`, so `layer_plan` treats its Mamba layers as
+     attention (`paged_runner.py:111-113`).
+   - The arena builds gated experts (`has_gate=True`, `loader.py:1612-1615`), while Nemotron's relu² experts are not gated.
+   - An explicit refusal in `serve_paged` would close it. That is a code change and the maintainer's call; nothing is
+     changed here.
+6. **Only a run closes the remaining gaps** (B2 F6), all on sm_89 or newer, so the A2000 can't close them:
+   - served graph traces for Gemma-4 and Mixtral, which have no served record at all;
+   - a W16 trace of gpt-oss's non-lean K25;
+   - any read on the PRO 6000.
 
 ## 6. Proposed paired readings (pre-registration drafts, NOT run)
 
@@ -130,6 +148,7 @@ Every "engages" cell outside Qwen3-30B is gain inferred. Quality is per family a
 | R-b | Mixtral fused stack speed | knobs auto vs off, ABBA, W1, 5090 | quality already PASS; the allow-list waits on this |
 | R-c | K33 on sm_89 / 128 SMs | Qwen3-30B W1, `GNF4_GEMV_BW=1` vs `0`, RTX 4090 | the SM gate's only untested side |
 | R-d | fused q/k/v by structure | a structural gate in place of the class name; A2000 correctness first ($0), then a paid read | OLMoE, Gemma-4, ERNIE |
+| R-e | served traces where none exist | one Nsight W1 + W16 census per family (as P123) for Gemma-4, Mixtral and gpt-oss's W16, on a 5090 | turns "inf" cells into "rec"; finding 6 |
 
 $0 A2000 probes stay limited to cells the records can't settle: correctness and dispatch only, no speed. None is needed
 yet: the engagement cells above come from records (P115 Phase C, FAM) or from the code.
