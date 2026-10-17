@@ -93,9 +93,11 @@ the forward and once in the recompute: 187 per pass, as Shape A.
   same weighted sum; the bits are not. Rule 8's deterministic check compares the registered device accumulation with the host-sum
   reference. Layer-major is a different accumulation, so rule 8 at the registered bar would have to be re-read for it. It also
   redesigns rule 8's `overwrite` plant, which takes a backward per micro-batch: layer-major has a single backward.
-- **Cost to build.** A layer-major driver in e4b that also holds each layer resident across its micro-batches in the forward: about 200 lines that call the decoder layers directly instead of the model's
-  forward, plus tests. Gradient parity with (a) within rule 8's bar; the staging count (n per direction) on the A2000's offload
-  path, at $0. No kernel change.
+- **Cost to build.** Two pieces. First, a layer-major driver in e4b: about 200 lines that call the decoder layers directly instead
+  of the model's forward. Second, an engine change: a hold flag in `engines/offload.py`'s forward evict post-hook, so a layer stays
+  resident across its micro-batches (see "A1, tested"). The post-hook is shared by inference and every training lane, so the
+  flag needs offload's own tests, not just the driver's. Then gradient parity with (a) within rule 8's bar, and the staging count
+  (n per direction) on the A2000's offload path, at $0. No kernel change.
 
 ## (c) Routed experts per micro-batch
 
@@ -140,11 +142,14 @@ The toy starts with nothing staged; the box enters each pass with layer 0 reside
 - **That alone is not enough.** e4b's forward post-hook evicts after every forward call outside a backward. In a layer-major forward,
   layer L is evicted after micro-batch 1 and re-staged for micro-batches 2–4. That costs 4 copies per layer in the forward: 470,
   only −37 % against as-is.
-- **The full −75 % (187) needs the driver to hold the layer** across its micro-batches in the forward: suspend the evict between
-  them, then let the next layer's stage evict it. With the layer held, the backward also starts with layer 93 resident, which saves
+- **The full −75 % (187) needs the layer held** across its micro-batches in the forward: suspend the evict between them, then let
+  the next layer's stage evict it. That is an engine change, a hold flag in `engines/offload.py`'s evict post-hook, which inference
+  and every training lane share, so it needs offload's own tests. With the layer held, the backward also starts with layer 93 resident, which saves
   one more copy.
 - **The gradients are the same math.** The 1.2e-7 differences are fp32 summation order: the four contributions are summed in one
-  backward rather than accumulated across four.
+  backward rather than accumulated across four. The toy is fp32. The registered adapters are bf16, where summation order moves
+  bits by about 1e-3 relative, so the toy shows the same math but does not read rule 8's bar. That needs (b) on the A2000 at bf16.
 - **What it decides.** (b) is buildable: autograd needs no explicit per-layer backward. The build is the layer-major driver plus the
-  held forward. It still waits for Q235's read, and it still needs its own amendment before any registered box uses it.
+  engine's held forward. On CUDA, the A2000's staging count would confirm A1 too. The box figure, 186, is one under the 187 in the
+  table above (0.5 %), because the box enters each pass with layer 0 resident. It still waits for Q235's read, and it still needs its own amendment before any registered box uses it.
 
