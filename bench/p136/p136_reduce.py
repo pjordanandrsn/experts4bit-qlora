@@ -51,9 +51,8 @@ def assess(root, family, e4b_sha):
         grouping = arm.get("grouping") or {}
         if grouping.get("device_grouping") is not True or grouping.get("force_singleton_groups") is not False:
             faults.append(f"arm {tag}: K25 device grouping not established")
-        kinds = arm.get("int4_store_kinds") or []
-        if ("mxfp4" if family == "gptoss" else "nf4") not in kinds:
-            faults.append(f"arm {tag}: expert store kind differs")
+        if arm.get("int4_store_kinds") != [] or arm.get("int4_expert_layers") != 0:
+            faults.append(f"arm {tag}: default expert store differs")
         if family == "mixtral" and arm.get("max_tokens_per_seq") != 768:
             faults.append(f"arm {tag}: Mixtral token pool differs")
         if family != "mixtral" and arm.get("max_tokens_per_seq") != 4096:
