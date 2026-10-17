@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import fcntl
 import json
 import os
 import re
@@ -18,6 +19,7 @@ import sys
 import time
 from collections import defaultdict
 from copy import deepcopy
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from itertools import pairwise
@@ -41,6 +43,8 @@ MAX_SAMPLE_GAP_SECONDS = 30
 FRESH_SECONDS = 60
 POLL_SECONDS = 20
 DISCOVERY_CUTOFF_SECONDS = 3 * 60 * 60
+RUN_ID_PLACEHOLDER = "__DQ11_CENSUS_RUN_ID__"
+MAX_ATTEMPTS = 10
 ENVELOPE_HOURS = 24
 WALL_HOURS = Decimal("0.75")
 HOURLY_CAP = Decimal("0.85")
@@ -497,7 +501,8 @@ def validate_envelope(envelope: dict, envelope_path: Path, template_path: Path,
             or (expires - issued).total_seconds() != ENVELOPE_HOURS * 3600):
         raise ValueError("envelope is not yet valid, expired or not exactly 24 hours")
     if (json.dumps(envelope.get("criteria"), sort_keys=True) != json.dumps(ENVELOPE_CRITERIA, sort_keys=True)
-            or type(envelope.get("maximum_draws")) is not int or envelope["maximum_draws"] != 1):
+            or type(envelope.get("maximum_draws")) is not int or envelope["maximum_draws"] != 1
+            or not valid_run_ids(envelope)):
         raise ValueError("host or budget is outside the exact envelope criteria")
     if (envelope.get("e4b_head") != merged_clean(e4b)
             or envelope.get("controller_head") != merged_clean(controller)
@@ -541,8 +546,164 @@ def verify_envelope_comment(envelope: dict) -> None:
         raise ValueError("envelope ACK was edited, backdated or extended")
 
 
+def valid_run_id(run_id: object) -> bool:
+    return isinstance(run_id, str) and re.fullmatch(r"dq11-l-census-[0-9]+", run_id) is not None
+
+
+def valid_run_ids(envelope: dict) -> bool:
+    ids = envelope.get("run_ids")
+    return (isinstance(ids, list) and 1 <= len(ids) <= MAX_ATTEMPTS
+            and all(valid_run_id(run_id) for run_id in ids) and len(set(ids)) == len(ids)
+            and type(envelope.get("maximum_attempts")) is int
+            and envelope["maximum_attempts"] == len(ids))
+
+
+def assert_attempt_template(attempt: dict, template: dict, run_id: str) -> None:
+    """Compare an actual attempt to the registered template with just run_id substituted."""
+    expected = deepcopy(template)
+    expected["run_id"] = run_id
+    if (template.get("run_id") != RUN_ID_PLACEHOLDER or not valid_run_id(run_id)
+            or attempt != expected):
+        raise ValueError("unregistered attempt or changed field beyond run_id")
+
+
+def attempt_template(template: dict, run_id: str) -> dict:
+    result = deepcopy(template)
+    result["run_id"] = run_id
+    assert_attempt_template(result, template, run_id)
+    return result
+
+
+def receipt_paths(receipts: Path, run_id: str) -> list[Path]:
+    return list((receipts / "receipts/experts4bit-qlora").glob(f"*/{run_id}/receipt.json"))
+
+
+def zero_instance_refusal(receipt: dict, approval_url: str, run_id: str) -> bool:
+    """Only completed canonical provider refusals prove the created-instance draw is unspent."""
+    proof = receipt.get("teardown_proof", {})
+    return (receipt.get("experiment_id") == run_id
+            and receipt.get("work_id") == "experts4bit-qlora#1083"
+            and receipt.get("status") == "REFUSED" and receipt.get("complete") is True
+            and receipt.get("instance_id") == "none"
+            and receipt.get("cost_usd", {}).get("actual") == 0
+            and proof.get("complete") is True and proof.get("method") == "not-launched"
+            and proof.get("instance_id") == "none"
+            and any(a.get("approval_url") == approval_url for a in receipt.get("approvals", [])))
+
+
+def write_attempt_state(path: Path, state: dict) -> None:
+    temporary = path.with_suffix(".tmp")
+    with temporary.open("w") as stream:
+        json.dump(state, stream, indent=2)
+        stream.write("\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+    temporary.replace(path)
+    descriptor = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def committed_bytes(receipts: Path, path: Path) -> bytes:
+    """Accept proof only from tracked, unchanged HEAD bytes, including the index."""
+    relative = path.relative_to(receipts).as_posix()
+    try:
+        subprocess.run(["git", "-C", str(receipts), "ls-files", "--error-unmatch", "--", relative],
+                       check=True, capture_output=True)
+        status = subprocess.check_output(
+            ["git", "-C", str(receipts), "status", "--porcelain", "--", relative], text=True)
+        content = subprocess.check_output(["git", "-C", str(receipts), "show", "HEAD:" + relative])
+        if status or path.is_symlink() or content != path.read_bytes():
+            raise ValueError("receipt/ledger proof must be tracked and clean at HEAD")
+        return content
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ValueError("receipt/ledger proof must be tracked and clean at HEAD") from exc
+
+
+@contextmanager
+def attempt_permit(envelope: dict, run_id: str, receipts: Path, state_dir: Path):
+    """Serialize attempts, persist pre-controller phases, and fail closed on uncertainty."""
+    if not valid_run_ids(envelope) or run_id not in envelope["run_ids"]:
+        raise ValueError("invalid envelope run-id range or attempt cap")
+    state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with (state_dir / "attempts.lock").open("a+") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise ValueError("another census envelope attempt is active") from exc
+        url = envelope["approval_url"]
+        identity = hashlib.sha256(json.dumps(envelope, sort_keys=True).encode()).hexdigest()
+        path = state_dir / (url.rsplit("-", 1)[-1] + ".json")
+        state = json.loads(path.read_text()) if path.exists() else {
+            "envelope_sha256": identity, "attempts": []}
+        if state.get("envelope_sha256") != identity:
+            raise ValueError("envelope changed after first attempt")
+        attempts = state["attempts"]
+        used = {row["run_id"]: row for row in attempts}
+        if not set(used).issubset(envelope["run_ids"]) or len(used) != len(attempts):
+            raise ValueError("invalid attempt journal")
+        ledger = receipts / "receipts/experts4bit-qlora/ledger.jsonl"
+        ledger_rows = [json.loads(line) for line in committed_bytes(receipts, ledger).decode().splitlines()]
+        for candidate in envelope["run_ids"]:
+            paths = receipt_paths(receipts, candidate)
+            dirs = list((receipts / "receipts/experts4bit-qlora").glob(f"*/{candidate}"))
+            rows = [row for row in ledger_rows if row.get("run_id") == candidate]
+            prior = used.get(candidate)
+            if prior is None:
+                if paths or dirs or rows:
+                    raise ValueError("run id already used outside this envelope journal")
+                continue
+            if prior.get("phase") == "not-invoked":
+                if paths or dirs or rows:
+                    raise ValueError("not-invoked attempt has unexpected receipt, run dir or ledger row")
+                continue
+            if prior.get("phase") not in ("admitted", "controller-invoked"):
+                raise ValueError("invalid attempt journal phase")
+            if (len(paths) != 1 or len(dirs) != 1 or len(rows) != 1
+                    or rows[0].get("cost_usd") != 0
+                    or not zero_instance_refusal(
+                        json.loads(committed_bytes(receipts, paths[0])), url, candidate)):
+                raise ValueError("created instance or uncertain prior attempt: stop for maintainer")
+        if run_id in used or len(used) >= envelope["maximum_attempts"]:
+            raise ValueError("run id burned or attempt cap reached")
+        row = {"run_id": run_id, "utc": now(), "phase": "admitted"}
+        attempts.append(row)
+        write_attempt_state(path, state)
+
+        def controller_invoked():
+            if row["phase"] != "admitted":
+                raise ValueError("controller already invoked")
+            row["phase"] = "controller-invoked"
+            write_attempt_state(path, state)
+
+        try:
+            yield controller_invoked
+        except Exception:
+            # A caught failure before the durable controller boundary proves no
+            # controller call occurred. Process death/interrupt leaves admitted.
+            if row["phase"] == "admitted":
+                row["phase"] = "not-invoked"
+                write_attempt_state(path, state)
+            raise
+
+
+def launch(template_path: Path, envelope_path: Path, e4b: Path, controller: Path,
+           assets: Path, packet_dir: Path, *, run_id: str) -> int:
+    """Run one fresh attempt under the range envelope; one created instance ends it."""
+    envelope = json.loads(envelope_path.read_text())
+    validate_envelope(envelope, envelope_path, template_path, e4b, controller)
+    verify_envelope_comment(envelope)
+    receipts = Path(os.environ.get("RECEIPTS_REPO", str(Path.home() / "adertha-receipts")))
+    with attempt_permit(envelope, run_id, receipts,
+                        Path.home() / ".local/state/dq11-census-envelopes") as before_controller:
+        return launch_attempt(template_path, envelope_path, e4b, controller, assets, packet_dir,
+                              run_id=run_id, before_controller=before_controller)
+
+
 def bind_manifest(template_path: Path, envelope_path: Path, summary: dict,
-                  e4b: Path, controller: Path, assets: Path, output: Path) -> dict:
+                  e4b: Path, controller: Path, assets: Path, output: Path, *, run_id: str) -> dict:
     """Pin by inclusion to exactly one qualified machine and its observed union."""
     if output.exists() or output.is_relative_to(e4b) or output.is_relative_to(controller):
         raise ValueError("bound manifest must be write-once and outside source")
@@ -559,8 +720,10 @@ def bind_manifest(template_path: Path, envelope_path: Path, summary: dict,
             or not re.fullmatch(r"[0-9]{3}\.[0-9]{1,3}\.[0-9]{1,3}", driver)
             or int(driver.split(".")[0]) < 580):
         raise ValueError("qualifying host cannot be bound to an exact inclusion pin")
+    if run_id not in envelope["run_ids"]:
+        raise ValueError("run id is outside the envelope")
     template = json.loads(template_path.read_text())
-    manifest = deepcopy(template)
+    manifest = attempt_template(template, run_id)
     manifest["status"] = "ENVELOPE_BOUND_PENDING_FRESH_GATES"
     manifest["heads"] = {"e4b": merged_clean(e4b), "adertha": merged_clean(controller)}
     manifest["command"] = (f"DQ11_ASSET_DIR={assets.resolve()} DQ11_REQUIRED_DRIVER={driver} "
@@ -578,6 +741,7 @@ def bind_manifest(template_path: Path, envelope_path: Path, summary: dict,
         "envelope_ack_url": envelope["approval_url"],
         "envelope_sha256": sha(envelope_path), "issued_at": envelope["issued_at"],
         "expires_at": envelope["expires_at"], "maximum_draws": 1,
+        "run_ids": envelope["run_ids"], "maximum_attempts": envelope["maximum_attempts"],
         "qualifying_window_sha256": summary["stable_history_sha256"],
         "all_host_polls_sha256": summary["polls_sha256"],
     }
@@ -603,7 +767,7 @@ def validate_manifest(manifest: dict, e4b: Path, controller: Path) -> None:
             or manifest.get("work_id") != "experts4bit-qlora#1083"
             or manifest.get("role") != "CTO"
             or manifest.get("agent_env") != "POD_LAUNCH_AGENT"
-            or not str(manifest.get("run_id", "")).startswith("dq11-l-census-")
+            or not valid_run_id(manifest.get("run_id"))
             or manifest.get("preregistration") != "bench/dq11/DQ11-L-CENSUS-PREREG.md"
             or manifest.get("vast_direct_ssh") is not True
             or manifest.get("provider") != "vast:verified-secure"
@@ -646,7 +810,18 @@ def validate_manifest(manifest: dict, e4b: Path, controller: Path) -> None:
     template_path = e4b / TEMPLATE_FILE
     if detail.get("manifest_template_sha256") != sha(template_path):
         raise ValueError("bound manifest template differs from merged source")
-    template = json.loads(template_path.read_text())
+    template = attempt_template(json.loads(template_path.read_text()), manifest["run_id"])
+    binding_fields = {"heads", "command", "vast_pin_machine", "vast_pin_offers",
+                      "vast_required_driver", "authorization_basis", "_asset_path"}
+    actual_template = {key: deepcopy(value) for key, value in manifest.items()
+                       if key not in binding_fields}
+    actual_template["status"] = template["status"]
+    actual_template["l_census"] = deepcopy(template["l_census"])
+    registered = json.loads(template_path.read_text())
+    assert_attempt_template(actual_template, registered, manifest["run_id"])
+    if set(detail) != set(registered["l_census"]) | {
+            "instrument_sha256", "operational_sha256", "transport_sha256", "manifest_template_sha256"}:
+        raise ValueError("bound manifest has unregistered closure fields")
     if manifest.get("status") != "ENVELOPE_BOUND_PENDING_FRESH_GATES":
         raise ValueError("manifest was not bound under an envelope")
     if any(manifest.get(key) != value for key, value in template.items()
@@ -763,8 +938,8 @@ def controller_call(command: list[str], env: dict, packet_dir: Path, name: str) 
     return result.returncode
 
 
-def launch(template_path: Path, envelope_path: Path, e4b: Path, controller: Path,
-           assets: Path, packet_dir: Path) -> int:
+def launch_attempt(template_path: Path, envelope_path: Path, e4b: Path, controller: Path,
+                   assets: Path, packet_dir: Path, *, run_id: str, before_controller=None) -> int:
     """Under one envelope, bind the first qualified host and launch once."""
     if os.environ.get("POD_LAUNCH_AGENT") != "CTO/codex-desktop/dense":
         raise ValueError("POD_LAUNCH_AGENT must identify CTO/codex-desktop/dense before discovery")
@@ -782,7 +957,7 @@ def launch(template_path: Path, envelope_path: Path, e4b: Path, controller: Path
     gate_path = packet_dir / "fresh-cpu-gate.json"
     quote_path = packet_dir / "final-quote.json"
     manifest = bind_manifest(template_path, envelope_path, summary, e4b, controller,
-                             assets, manifest_path)
+                             assets, manifest_path, run_id=run_id)
     env = dict(os.environ, E4B_REPO=str(e4b), ADERTHA_REPO=str(controller))
     command = ["bash", str(controller / "tools/pod-launch.sh"), str(manifest_path), envelope["approval_url"]]
     validation = [*command[:2], "--validate", *command[2:]]
@@ -819,6 +994,8 @@ def launch(template_path: Path, envelope_path: Path, e4b: Path, controller: Path
     if (actual_call - history["samples"][-1]["monotonic"] > FRESH_SECONDS
             or actual_call - gate_end > FRESH_SECONDS):
         raise ValueError("gate/quote/launch exceeded 60-second stable-host window; nothing created")
+    if before_controller is not None:
+        before_controller()  # fsync the irreversible boundary before any paid controller call
     return controller_call(command, env, packet_dir, "controller")
 
 
@@ -848,6 +1025,7 @@ def main() -> None:
     prices.add_argument("--controller", type=Path, required=True)
     prices.add_argument("--out", type=Path, required=True)
     paid = sub.add_parser("launch", help="all-host five-minute search and same-minute guarded launch under envelope ACK")
+    paid.add_argument("--run-id", required=True)
     paid.add_argument("--template", type=Path, required=True)
     paid.add_argument("--envelope", type=Path, required=True)
     paid.add_argument("--e4b", type=Path, required=True)
@@ -881,7 +1059,8 @@ def main() -> None:
             quote(args.manifest, args.history, args.gate, provider, args.out)
         else:
             raise SystemExit(launch(args.template.resolve(), args.envelope.resolve(), args.e4b.resolve(),
-                                    args.controller.resolve(), args.assets.resolve(), args.packet_dir.resolve()))
+                                    args.controller.resolve(), args.assets.resolve(), args.packet_dir.resolve(),
+                                    run_id=args.run_id))
     except (ValueError, OSError, KeyError, TypeError, subprocess.SubprocessError) as exc:
         parser.exit(78, str(exc) + "\n")
 
