@@ -934,7 +934,14 @@ after, one real optimizer update, a held-out check".
     - dX recorded nothing: the probe bug above. The run exited 3, a STRICT FAIL on rule 9.
     - Held-out loss read 1.7656 before the update, 1.2301 after step 0 and 1.0838 after step 1 (`rel_change` −0.386), all finite.
       The step's loss fell 1.871 → 0.910.
-  - It re-runs at this amendment's fixed probe, after a CUDA re-check on the 4-layer slice. That reading is recorded here.
+  - **At the fixed probe** (2026-10-17, e4b `1c12341c`; records in `bench/q235/am8/`):
+    - The CUDA re-check ran first, on the 4-layer slice of `ac9c66cc`. It exited 0. dX was finite and nonzero at every layer in
+      every pass at both steps (4 × 4), and every rule held.
+    - Then the 30B leg ran. It exited 0.
+      - dX was finite and nonzero at all 48 layers in all four passes at both steps (smallest 0.0068).
+      - Amendment 2's nine rules and this amendment's held, and the frozen base was unchanged.
+      - Held-out loss read 1.7656 → 1.2280 → 1.0851 (−30.4 %, −38.5 %), all finite. The step's own rows read 1.8592 → 0.6075.
+      - Under rule 10 as ruled, it reads PASS: every held-out read fell.
 
 **3. Host independence.** Per the ruling, the next Q235 box runs on a Vast machine other than 8652. Its envelope or packet names its
 host by inclusion, and 8652 is not among them. That records the reproduction across hosts, the gate's stated limitation.
