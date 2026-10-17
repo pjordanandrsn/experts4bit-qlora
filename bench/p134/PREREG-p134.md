@@ -70,7 +70,9 @@ records run under another family's name, or a dry record in a reading, read VOID
 
 - **LICENSED (per family):** a grouped-nf4-gemm PR may add that family's two (N, K) shapes to `_BW_SHAPES` (auto, ≥ 160
   SMs), with its own tests and release. It licenses **shapes, not families**: Granite's two shapes also cover the
-  committed Granite-4.0-h fixture (not served today); OLMoE's are OLMoE's alone among the fixtures.
+  committed Granite-4.0-h fixture (not served today); OLMoE's are OLMoE's alone among the fixtures. Under auto's
+  ≥ 160-SM gate a licensed shape also engages on unmeasured parts above 160 SMs, such as the RTX PRO 6000 (188 SMs):
+  P116's precedent for Qwen3's shapes.
 - **SLOWER:** that family's shapes stay out of auto.
 - **QUALITY_FAIL / FUNCTION_FAIL:** they stay out; the defect is examined first.
 - **NOISY or VOID:** one rerun (`p134-5090-2`) for the whole box, except a fit VOID, which ends that family.
