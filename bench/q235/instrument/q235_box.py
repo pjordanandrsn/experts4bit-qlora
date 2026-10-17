@@ -8,6 +8,12 @@ then runs each planted error in the same process after that clean forward (the n
 the null and structurally unplanted; their records go to ``plant_routing/`` and ``plant_epilogue/`` under ``--out``. The fp32 copies
 behind the gradient and delta checks live on the host (Amendment 4), so the device peak is the training step's own.
 
+Shape B (Amendment 6, ``--micro-batch M``): each optimizer step accumulates the rows as ``rows / M`` micro-batches of ``M`` rows, in
+order, each trimmed to its own longest row and weighted by its share of the valid labels (the window's token-weighted mean, as the
+field recipe's trainer normalizes). The same rows as one micro-batch (shape A) give the in-process gradients ``g0``/``g1``; each
+step's accumulated gradient is compared with shape A's at the same parameters (``ga_check``), and two planted accumulation bugs (a
+mean of micro-batch means; each micro-batch's gradient overwriting the last) are compared the same way, before the steps.
+
 Records (one JSON): host facts; versions; the load (timed); frozen-base sha256 after load and after the step (every frozen parameter and
 buffer, host homes included); the in-process spread (two forward-backward passes, no optimizer step); the step's loss, per-adapter
 gradient checks (finite, nonzero count, the global norm) and optimizer delta (every trained tensor changed); device memory (allocated
@@ -18,6 +24,7 @@ times; and each decoder layer's output on the step-0 forward, for the fidelity r
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -142,6 +149,63 @@ def host_copy(t):
     adapters (``g0``, ``g1``, ``before``, ``grads``) here rather than on the device, so the step's device peak measures the training
     step alone. The tensor leaves the device at its own dtype and is widened on the host, so no fp32 temporary lands on the device."""
     return t.detach().to("cpu", copy=True).float()
+
+
+def micro_batches(tokens, m):
+    """Shape B (Amendment 6): the rows as ``len(rows) / m`` micro-batches of ``m`` rows, in order, each trimmed to its longest real row
+    (the rows are right-padded), with each micro-batch's count of valid shifted labels -- its weight in the window's token mean."""
+    ids, mask, labels = tokens["input_ids"], tokens["attention_mask"], tokens["labels"]
+    rows = ids.shape[0]
+    if m < 1 or rows % m:
+        raise ValueError(f"--micro-batch {m} does not divide the {rows} rows")
+    out = []
+    for i in range(0, rows, m):
+        w = int(mask[i:i + m].sum(1).max())
+        lab = labels[i:i + m, :w]
+        out.append({"input_ids": ids[i:i + m, :w], "attention_mask": mask[i:i + m, :w], "labels": lab,
+                    "valid": int((lab[:, 1:] != -100).sum())})
+    return out
+
+
+def compare_grads(ref, got):
+    """Amendment 6's views of a gradient against shape A's at the same parameters: the per-tensor relative difference (the STRICT
+    quantity; over tensors whose reference is nonzero), tensors exactly zero in the reference but not here, the global cosine and the
+    norm ratio of the whole adapter gradient, the largest relative difference per decoder layer, and the per-tensor differences in
+    full with their p50 and p99 (nearest rank). A tensor with no gradient here (``p.grad`` None: no token reached it) counts as a zero
+    gradient."""
+    rel, zero_mismatch, per_layer = {}, [], {}
+    dot = nr = ng = 0.0
+    for n, r in ref.items():
+        r64 = r.double()
+        g = got.get(n)
+        g64 = torch.zeros_like(r64) if g is None else g.double()
+        rn = float(r64.norm())
+        dot += float((r64 * g64).sum())
+        nr += rn ** 2
+        ng += float(g64.norm()) ** 2
+        if rn == 0.0:
+            if bool((g64 != 0).any()):
+                zero_mismatch.append(n)
+            continue
+        rel[n] = float((g64 - r64).norm()) / rn
+        parts = n.split(".")
+        if "layers" in parts:
+            i = int(parts[parts.index("layers") + 1])
+            per_layer[i] = max(per_layer.get(i, 0.0), rel[n])
+    for n, g in got.items():                                    # a gradient where shape A has none
+        if n not in ref and bool((g != 0).any()):
+            zero_mismatch.append(n)
+            ng += float(g.double().norm()) ** 2
+    worst = max(rel, key=rel.get) if rel else None
+    srt = sorted(rel.values())
+
+    def rank(q):
+        return srt[min(len(srt) - 1, max(0, -(-int(q * 100) * len(srt) // 100) - 1))] if srt else None
+
+    return {"tensors": len(ref), "compared": len(rel), "max_rel": rel[worst] if worst else None, "max_rel_tensor": worst,
+            "rel_p50": rank(0.50), "rel_p99": rank(0.99), "rel": rel,
+            "zero_mismatch": sorted(zero_mismatch), "cosine": dot / (nr ** 0.5 * ng ** 0.5) if nr and ng else None,
+            "norm_ratio": (ng / nr) ** 0.5 if nr else None, "per_layer_max_rel": {str(k): per_layer[k] for k in sorted(per_layer)}}
 
 
 def adapter_params(model):
@@ -381,34 +445,39 @@ class MoETimer:
         return out
 
 
-def time_moe(model, fwd_bwd, n, cuda, sync, bound=False):
-    """The extra timed pass (see MoETimer). With ``bound``, an untimed pass runs first in the same process, so the hooks'
-    overhead is stated, not assumed. Both passes run with the checkpoint's early stop off, so a non-reentrant recompute
-    reaches the experts module's return and its compute is observed (the reentrant checkpoint always runs the region whole).
-    Never fails the box: an error is recorded and the hooks are removed."""
+def time_moe(model, fwd_bwd, n, cuda, sync, bound=False, micro_batches=None):
+    """The extra timed pass (see MoETimer): ``fwd_bwd`` is the registered step's own forward-backward, shape B's accumulation under
+    ``--micro-batch`` (Amendment 6), so each sampled layer gets one stage/compute pair per micro-batch, call ``k`` being micro-batch
+    ``k`` (``micro_batches``: their rows, width, positions and valid labels). With ``bound``, an untimed pass runs first in the same
+    process, so the hooks' overhead is stated, not assumed. Both passes run with the checkpoint's early stop off, so a non-reentrant
+    recompute reaches the experts module's return and its compute is observed (the reentrant checkpoint always runs the region
+    whole). Each pass's time includes ``fwd_bwd``'s own device-to-host copy of the adapter gradients, after the hooks' region; it is
+    recorded beside it and left out of ``overhead``. Never fails the box: an error is recorded and the hooks are removed."""
     from torch.utils.checkpoint import set_checkpoint_early_stop
-    rec = {"reported_only": True, "read_by_verdict": False, "pass": "one forward-backward after both registered steps, "
-           "no optimizer step, checkpoint early stop off", "timer": "cuda events" if cuda else "perf_counter (CPU rehearsal, no offload)"}
+    rec = {"reported_only": True, "read_by_verdict": False, "pass": "one forward-backward of the registered shape after both registered "
+           "steps, no optimizer step, checkpoint early stop off", "timer": "cuda events" if cuda else "perf_counter (CPU rehearsal, no offload)",
+           "micro_batches": [{**m, "positions": m["rows"] * m["width"]} for m in micro_batches or []]}
+
+    def one_pass(key):
+        sync()
+        t = time.perf_counter()
+        r = fwd_bwd()
+        sync()
+        rec[f"pass_{key}_s"] = round(time.perf_counter() - t, 3)
+        copy = r[4] if isinstance(r, tuple) and len(r) >= 5 else 0.0
+        rec[f"pass_{key}_grads_copy_s"] = round(copy, 3)
+        return rec[f"pass_{key}_s"] - copy
     timer = None
     try:
         with set_checkpoint_early_stop(False):
-            if bound:
-                sync()
-                t = time.perf_counter()
-                fwd_bwd()
-                sync()
-                rec["pass_off_s"] = round(time.perf_counter() - t, 3)
+            off = one_pass("off") if bound else None
             timer = MoETimer(model, n, cuda)
             rec["sampled_layers"] = timer.layers
-            sync()
-            t = time.perf_counter()
-            fwd_bwd()
-            sync()
-            rec["pass_on_s"] = round(time.perf_counter() - t, 3)
+            on = one_pass("on")
         timer.remove()
         rec["layers"] = timer.record()
-        if bound and rec["pass_off_s"]:
-            rec["overhead"] = round(rec["pass_on_s"] / rec["pass_off_s"] - 1, 4)
+        if bound and off:
+            rec["overhead"] = round(on / off - 1, 4)
     except Exception as e:  # noqa: BLE001 - reported only: a failure here is a reading, never a box failure
         rec["error"] = f"{type(e).__name__}: {e}"[:400]
     finally:
@@ -470,6 +539,51 @@ def capture(model):
     return layer_out, topk, hooks
 
 
+@contextlib.contextmanager
+def deterministic():
+    """Amendment 6: ``torch.use_deterministic_algorithms(True, warn_only=True)`` for rule 8's check passes only. The previous setting
+    (enabled, warn_only) is restored on exit, however the block ends, so the registered steps run on the shipped default path."""
+    prev = (torch.are_deterministic_algorithms_enabled(), torch.is_deterministic_algorithms_warn_only_enabled())
+    torch.use_deterministic_algorithms(True, warn_only=True)
+    try:
+        yield
+    finally:
+        torch.use_deterministic_algorithms(prev[0], warn_only=prev[1])
+
+
+def algorithms():
+    """Which mode a pass runs in: ``deterministic`` or ``default``."""
+    return "deterministic" if torch.are_deterministic_algorithms_enabled() else "default"
+
+
+def route_flips(topk_a, routes_b, mbs, mask):
+    """Amendment 6, reported: per decoder layer, the real tokens whose routed expert SET differs between shape A's forward (``topk_a``,
+    one ``[rows x width, k]`` tensor per layer) and shape B's micro-batch forwards at the same parameters (``routes_b``: per
+    micro-batch, ``{layer: [m x w, k]}``). The rows are right-padded, so micro-batch ``j``'s row ``r`` and position ``t`` are shape A's
+    row ``j * m + r`` at ``t``."""
+    rows, width = mask.shape
+    per_layer = []
+    for i, a in enumerate(topk_a):
+        if a is None:
+            continue
+        k = a.shape[-1]
+        a = a.reshape(rows, width, k).sort(-1).values
+        flipped = real = 0
+        r0 = 0
+        for j, mb in enumerate(mbs):
+            m, w = mb["input_ids"].shape
+            b = routes_b[j][i].reshape(m, w, k).sort(-1).values
+            sel = mask[r0:r0 + m, :w].bool().cpu()
+            diff = (a[r0:r0 + m, :w] != b).any(-1)
+            flipped += int((diff & sel).sum())
+            real += int(sel.sum())
+            r0 += m
+        per_layer.append({"layer": i, "flipped": flipped, "real": real})
+    tot_f, tot_n = sum(x["flipped"] for x in per_layer), sum(x["real"] for x in per_layer)
+    return {"per_layer": per_layer, "flipped": tot_f, "token_layers": tot_n, "flipped_fraction": tot_f / tot_n if tot_n else None,
+            "layers_with_flips": sum(1 for x in per_layer if x["flipped"])}
+
+
 def _sha(t):
     return hashlib.sha256(t.view(torch.uint8).numpy().tobytes()).hexdigest()
 
@@ -513,7 +627,7 @@ def in_process_plants(model, forward, null, mask=None):
 
 def run(a):
     argv = {k: v for k, v in vars(a).items() if v or not k.startswith("time_moe")}   # off: the record carries no trace of it
-    out = {"argv": argv, "host": host_facts(),"versions": versions(), "t_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    out = {"argv": argv, "host": host_facts(), "versions": versions(), "t_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
     dev = a.device
     cuda = dev == "cuda"
     tokens = torch.load(a.tokens, weights_only=True)
@@ -565,12 +679,95 @@ def run(a):
         grads = {n: host_copy(p.grad) for n, p in params.items() if p.grad is not None}
         return float(loss), grads, tf - t, tb - tf, time.time() - tb
 
+    mb = getattr(a, "micro_batch", None)
+    mbs = [{k: (v.to(dev) if torch.is_tensor(v) else v) for k, v in m.items()} for m in micro_batches(tokens, mb)] if mb else None
+    n_valid = sum(m["valid"] for m in mbs) if mbs else None
+
+    def fwd_bwd_b(mode="token", routes=None):
+        """Shape B's accumulation over the micro-batches (Amendment 6). ``token``: each micro-batch's mean loss weighted by its share of
+        the window's valid labels, the gradients accumulating in ``p.grad``. Planted bugs: ``mean`` weights each micro-batch 1 / k (a
+        mean of micro-batch means); ``overwrite`` clears ``p.grad`` before each backward, so only the last micro-batch survives.
+        ``separate``: the same-shapes reference -- each micro-batch's weighted gradient taken on its own (``p.grad`` cleared before
+        each backward) and summed on the host in fp32, so it differs from ``token`` only in how the four backwards accumulate.
+        ``routes`` (a list) collects each micro-batch's router top-k from its forward (not the checkpoint recompute)."""
+        cur, rhooks = {}, []
+        if routes is not None:
+            def route(i):
+                def h(mod, args, o):
+                    if i not in cur:
+                        cur[i] = o[2].detach().to("cpu")
+                return h
+            rhooks = [lay.mlp.gate.register_forward_hook(route(i)) for i, lay in enumerate(model.model.layers)]
+        model.zero_grad(set_to_none=True)
+        sync()
+        t, tf_sum, total, acc = time.time(), 0.0, 0.0, None
+        for m in mbs:
+            cur.clear()
+            if mode in ("overwrite", "separate"):
+                model.zero_grad(set_to_none=True)
+            t_m = time.time()
+            loss = model(input_ids=m["input_ids"], attention_mask=m["attention_mask"], labels=m["labels"]).loss
+            sync()
+            tf_sum += time.time() - t_m
+            w = (1.0 / len(mbs)) if mode == "mean" else m["valid"] / n_valid
+            total += w * float(loss)
+            (loss * w).backward()
+            sync()
+            if routes is not None:
+                routes.append(dict(cur))
+            if mode == "separate":
+                acc = {} if acc is None else acc
+                for n, p in params.items():
+                    if p.grad is not None:
+                        g = host_copy(p.grad)
+                        if n in acc:
+                            acc[n].add_(g)
+                        else:
+                            acc[n] = g
+        for h in rhooks:
+            h.remove()
+        tb = time.time()
+        grads = acc if mode == "separate" else {n: host_copy(p.grad) for n, p in params.items() if p.grad is not None}
+        return total, grads, tf_sum, tb - t - tf_sum, time.time() - tb
+
+    def rule8_check(routes=None):
+        """Rule 8's check at the current parameters, every pass under deterministic algorithms (Amendment 6): the host-sum reference
+        (the micro-batches taken apart), the device accumulation (four backwards into ``p.grad``; a pass of its own, not the
+        registered step) and a second accumulation for the floor. Returns the record and the reference, which the step's own
+        default-mode accumulation is also read against (reported). At most four host copies, with ``g0`` or the step-1 Shape A
+        gradient alive."""
+        with deterministic():
+            mode = algorithms()
+            _, ref, *_ = fwd_bwd_b("separate", routes=routes)
+            _, acc, *_ = fwd_bwd_b("token")
+            _, acc2, *_ = fwd_bwd_b("token")
+            rec = {"algorithms": mode, "check": compare_grads(ref, acc), "floor": compare_grads(acc, acc2)}
+            del acc, acc2
+        rec["restored"] = algorithms()
+        return rec, ref
+
     l0, g0, *_ = fwd_bwd()                                     # step-0 forward: the layer outputs are recorded here
     for h in hooks:
         h.remove()
     l1, g1, *_ = fwd_bwd()
     spread = max(((g1[n] - g0[n]).abs().max() / g0[n].abs().max().clamp_min(1e-30)).item() for n in g0)
     out["in_process"] = {"loss_0": l0, "loss_1": l1, "loss_equal": l0 == l1, "grad_maxrel": spread}
+    if mbs:                                                     # Amendment 6: at most four host copies alive at once, as Amendment 5
+        del g1
+        out["shape_b"] = {"micro_batch": mb, "accumulation": len(mbs), "valid_per_micro_batch": [m["valid"] for m in mbs],
+                          "valid_total": n_valid, "widths": [int(m["input_ids"].shape[1]) for m in mbs]}
+        out["ga_plants"] = {}
+        routes_b = []
+        check0, ref0 = rule8_check(routes=routes_b)            # rule 8's check at step 0's parameters (deterministic)
+        out["route_flips"] = {**route_flips(topk, routes_b, mbs, tokens["attention_mask"]),
+                              "modes": {"shape_a": "default", "shape_b": "deterministic"}}
+        del routes_b
+        with deterministic():                                   # the plants are check passes too
+            for kind in ("mean", "overwrite"):
+                lp, gp, *_ = fwd_bwd_b(kind)
+                out["ga_plants"][kind] = {"loss": lp, "algorithms": algorithms(), **compare_grads(g0, gp),
+                                          "vs_micro_batches": compare_grads(ref0, gp)}
+                del gp
 
     if cuda:
         import bitsandbytes as bnb
@@ -582,8 +779,9 @@ def run(a):
     a_names = [n for n in params if is_a[n]]
     b_names = [n for n in params if not is_a[n]]
 
-    def one_step():
-        """One forward-backward and optimizer step at the registered shape, instrumented: its record, gradients and deltas."""
+    def one_step(ref=None, mb_ref=None):
+        """One forward-backward and optimizer step at the registered shape, instrumented: its record, gradients and deltas. Under shape
+        B the forward-backward is the accumulation, and ``ref`` (shape A's gradient at the same parameters) is compared with it."""
         before = {n: host_copy(p) for n, p in params.items()}
         if cuda:
             torch.cuda.reset_peak_memory_stats()
@@ -591,14 +789,15 @@ def run(a):
         off.reset_offload_stats()
         d1 = diskstats()
         t_step = time.time()
-        loss, grads, t_fwd, t_bwd, t_copy = fwd_bwd()
+        mode = algorithms()
+        loss, grads, t_fwd, t_bwd, t_copy = fwd_bwd_b() if mbs else fwd_bwd()
         sync()
         t_o = time.time()
         opt.step()
         sync()
         t_opt = time.time() - t_o
         rec = {
-            "loss": loss, "forward_s": round(t_fwd, 3), "backward_s": round(t_bwd, 3), "optimizer_s": round(t_opt, 3),
+            "algorithms": mode, "loss": loss, "forward_s": round(t_fwd, 3), "backward_s": round(t_bwd, 3), "optimizer_s": round(t_opt, 3),
             "elapsed_s": round(time.time() - t_step, 3), "grads_host_copy_s": round(t_copy, 3),   # inside elapsed_s (Amendment 4)
             "h2d_bytes_offload": int(sum(c[2] for c in off._stats().copies)), "h2d_copies_offload": len(off._stats().copies),
             "nvme": disk_delta(d1, diskstats()),
@@ -609,6 +808,10 @@ def run(a):
             "lr": a.lr, "weight_decay": a.weight_decay, "optimizer": opt_name, "instrumented": "E4B_OFFLOAD_STATS=1 during the step",
         }
         os.environ["E4B_OFFLOAD_STATS"] = "0"
+        if ref is not None:
+            rec["ga_check"] = compare_grads(ref, grads)
+        if mb_ref is not None:
+            rec["ga_mb_check"] = compare_grads(mb_ref, grads)
         nonzero = {n: int((g != 0).sum()) for n, g in grads.items()}
         delta = {n: float((host_copy(p) - before[n]).abs().max()) for n, p in params.items()}
         rec["gradients"] = {
@@ -628,8 +831,18 @@ def run(a):
     # not zero-initialized (VOID, a harness error); B's gradients are nonzero and every B changes. Step 1, after step 0 has moved B:
     # every A's gradient is nonzero and every A changes (a broken A path cannot pass), and B's rules repeat. The frozen base's hashes
     # hold across both steps.
-    s0 = one_step()
-    s1 = one_step()
+    if mbs:                                                     # Amendment 6: rule 8's check, then the registered step (default mode)
+        s0 = one_step(ref=g0, mb_ref=ref0)
+        s0["rule8"] = check0
+        del g0, ref0
+        _, ga1, *_ = fwd_bwd()                                  # shape A at step 1's parameters, before its accumulation
+        check1, ref1 = rule8_check()
+        s1 = one_step(ref=ga1, mb_ref=ref1)
+        s1["rule8"] = check1
+        del ga1, ref1
+    else:
+        s0 = one_step()
+        s1 = one_step()
     out["step"], out["step1"] = s0, s1
     out["rules"] = {
         "step0_all_finite": s0["gradients"]["all_finite"], "step0_every_B_nonzero": s0["gradients"]["every_B_nonzero"],
@@ -642,7 +855,13 @@ def run(a):
     out["frozen_tensors"] = len(after)
     out["frozen_sha256_after_load"] = hashlib.sha256(json.dumps(out["frozen_sha256_after_load"], sort_keys=True).encode()).hexdigest()
     if a.time_moe:                      # REPORTED only, after every registered record has been taken (MoETimer)
-        out["moe_timing"] = time_moe(model, fwd_bwd, a.time_moe, cuda, sync, bound=a.time_moe_bound)
+        def shape(m_ids, m_labels):
+            return {"rows": int(m_ids.shape[0]), "width": int(m_ids.shape[1]), "valid": int((m_labels[:, 1:] != -100).sum())}
+        if mbs:                         # the registered shape: B's accumulation, one pair per micro-batch (Amendment 6)
+            pass_fn, shapes = (lambda: fwd_bwd_b("token")), [shape(m["input_ids"], m["labels"]) for m in mbs]
+        else:
+            pass_fn, shapes = fwd_bwd, [shape(ids, labels)]
+        out["moe_timing"] = time_moe(model, pass_fn, a.time_moe, cuda, sync, bound=a.time_moe_bound, micro_batches=shapes)
     return out, layer_out
 
 
@@ -673,6 +892,7 @@ def main():
     ap.add_argument("--plant", choices=("routing", "epilogue"), default=None)
     ap.add_argument("--repeat", action="store_true")
     ap.add_argument("--plants", action="store_true", help="with --repeat: Amendment 3's in-process null and planted errors")
+    ap.add_argument("--micro-batch", type=int, default=None, help="shape B (Amendment 6): rows per micro-batch, accumulated per step")
     ap.add_argument("--time-moe", type=int, default=0, metavar="N",
                     help="after both steps, one extra forward-backward timing the MoE experts' staging and compute on N evenly "
                          "spaced layers (REPORTED only, under moe_timing; off by default)")
@@ -683,6 +903,8 @@ def main():
         ap.error("the fused training kernels need CUDA; use --enabler reference on the CPU")
     if a.plants and (not a.repeat or a.plant):
         ap.error("--plants rides the fresh-process repeat (--repeat), and replaces --plant")
+    if a.micro_batch and (a.repeat or a.plant):
+        ap.error("--micro-batch shapes the box's steps; the repeat and the plants run shape A's forward")
     if a.time_moe < 0 or (a.time_moe and a.repeat):
         ap.error("--time-moe N (N >= 1) rides the stepped run, after both registered steps; not --repeat")
     if a.time_moe_bound and not a.time_moe:

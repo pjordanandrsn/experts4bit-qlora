@@ -38,6 +38,7 @@ class FakeProvider:
 def offer(oid="100", machine="200", *, down=.011, up=.05, hourly=.85):
     return {
         "id": oid, "machine_id": machine, "verification": "verified", "rentable": True,
+        "public_ipaddr": "8.8.8.8", "direct_port_count": 1,
         "external": False, "gpu_name": "RTX 5090", "num_gpus": 1,
         "gpu_ram": 32607, "cpu_ram": 131072, "disk_space": 1200,
         "driver_version": "580.159.03", "storage_cost": .2, "reliability2": .99,
@@ -53,9 +54,17 @@ def samples(*offer_ids, gap=20):
 
 def test_registered_budget_and_tariff_refusal():
     launch.check_static_budget()
+    assert launch.WALL_HOURS == launch.Decimal("0.75")
+    assert launch.ALL_IN_CAP == launch.Decimal("1.10")
+    assert launch.HOURLY_CAP == launch.Decimal("0.85")
+    assert launch.ENVELOPE_CRITERIA["maximum_paid_wall_seconds"] == 2700
+    assert launch.ENVELOPE_CRITERIA["maximum_all_in_usd"] == "1.10"
+    assert launch.ENVELOPE_CRITERIA["maximum_draws"] == 1
+    assert launch.reserve(launch.HOURLY_CAP, launch.DOWNLOAD_RATE_CAP,
+                          launch.UPLOAD_RATE_CAP) < launch.ALL_IN_CAP
     p = FakeProvider([])
     row = launch.offer_row(offer(), p)
-    assert row["eligible"] is True and row["all_in_reserved"] == "0.872"
+    assert row["eligible"] is True and row["all_in_reserved"] == "1.0845"
     for changed in (
         {"inet_up_cost": None}, {"inet_down_cost": .012}, {"inet_up_cost": .051},
         {"hourly": .86}, {"storage_cost": None}, {"driver_version": "570.1"},
@@ -479,7 +488,22 @@ def test_launch_refuses_missing_or_wrong_executor_before_discovery(tmp_path, mon
     assert not (tmp_path / "packet").exists()
 
 
-def test_registered_run2_template_identity_and_sha256():
+def test_registered_run3_template_identity_and_sha256():
     template = LANE / "dq11_l_census_manifest_template.json"
-    assert json.loads(template.read_text())["run_id"] == "dq11-l-census-2"
-    assert launch.sha(template) == "537ff2bc4bc89131ef74f03a6e09fb8484127547759b4b6166bd22d51b8b5e2d"
+    assert json.loads(template.read_text())["run_id"] == "dq11-l-census-3"
+    assert launch.sha(template) == "843a3ff3fbd01b508f6d10074a101dc74c455f8d70c3ac6e54f1355a3c236b6b"
+
+
+def test_budget_template_matches_registered_wall_and_full_reservation():
+    template = json.loads((LANE / "dq11_l_census_manifest_template.json").read_text())
+    assert template["wallclock_h"] == .75
+    assert template["est_usd"] == .6375
+    assert template["l_census"]["all_in_cap_usd"] == 1.1
+    assert template["l_census"]["upload_gb"] == 3
+    assert template["l_census"]["max_upload_usd_per_gb"] == .05
+
+
+def test_static_budget_refuses_changed_upload_allowance(monkeypatch):
+    monkeypatch.setattr(launch, "UPLOAD_GB", launch.Decimal(0))
+    with pytest.raises(ValueError, match="budget arithmetic changed"):
+        launch.check_static_budget()

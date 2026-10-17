@@ -1,5 +1,5 @@
 {
- "schema": "r2-model-files/1",
+ "schema": "q235-model-files/1",
  "repo": "mistralai/Mixtral-8x22B-Instruct-v0.1",
  "revision": "cc88a6cc19fbd17d9f1c0ee0b0d70a748dce698d",
  "source": "the hub's model_info(files_metadata=True) at the revision, fetched 2026-10-16 (anonymous: the repository is public); every row content-checked against a local copy (the 59 shards, tokenizer.model and tokenizer.model.v3 by sha256, the rest by git blob id)",

@@ -24,6 +24,7 @@ from itertools import pairwise
 from pathlib import Path
 
 from dq11_bootstrap import preflight_urls
+from dq11_census_transport import direct_available
 from dq11_policy_preflight import preflight_policy
 from dq11_science_stage import stage
 
@@ -41,13 +42,13 @@ FRESH_SECONDS = 60
 POLL_SECONDS = 20
 DISCOVERY_CUTOFF_SECONDS = 3 * 60 * 60
 ENVELOPE_HOURS = 24
-WALL_HOURS = Decimal("0.5")
+WALL_HOURS = Decimal("0.75")
 HOURLY_CAP = Decimal("0.85")
 DOWNLOAD_GB = Decimal(27)
 DOWNLOAD_RATE_CAP = Decimal("0.011")
 UPLOAD_GB = Decimal(3)
 UPLOAD_RATE_CAP = Decimal("0.05")
-ALL_IN_CAP = Decimal("0.90")
+ALL_IN_CAP = Decimal("1.10")
 DISK_GB = 320
 IMAGE = "pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel"
 EXCLUDED_MACHINES = {"45511"}
@@ -56,12 +57,13 @@ INSTRUMENT_FILES = (
 )
 OPERATIONAL_FILES = (
     "dq11_l_census_launch.py", "dq11_l_census_box.sh", "dq11_l_census_drive.sh",
-    "dq11_wheel_retry.py",
+    "dq11_wheel_retry.py", "dq11_census_transport.py",
 )
 TRANSPORT_FILE = "bench/tc1/tc1_drive.sh"
 TEMPLATE_FILE = "bench/dq11/dq11_l_census_manifest_template.json"
 ENVELOPE_CRITERIA = {
     "gpu": "RTX 5090", "num_gpus": 1, "verification": "verified",
+    "direct_ssh_required": True,
     "rentable": True, "external": False, "minimum_reliability": "0.98",
     "minimum_driver_major": 580, "exact_driver_components": 3,
     "minimum_gpu_ram_mb": 30000, "maximum_gpu_ram_mb": 34000,
@@ -70,6 +72,7 @@ ENVELOPE_CRITERIA = {
     "maximum_download_usd_per_gb": str(DOWNLOAD_RATE_CAP),
     "maximum_upload_usd_per_gb": str(UPLOAD_RATE_CAP),
     "maximum_all_in_usd": str(ALL_IN_CAP), "maximum_draws": 1,
+    "maximum_paid_wall_seconds": 2700,
     "minimum_continuous_seconds": MIN_STABLE_SECONDS,
     "maximum_poll_gap_seconds": MAX_SAMPLE_GAP_SECONDS,
 }
@@ -104,7 +107,7 @@ def reserve(hourly: Decimal, download: Decimal, upload: Decimal) -> Decimal:
 
 
 def check_static_budget() -> None:
-    if reserve(HOURLY_CAP, DOWNLOAD_RATE_CAP, UPLOAD_RATE_CAP) != Decimal("0.872"):
+    if reserve(HOURLY_CAP, DOWNLOAD_RATE_CAP, UPLOAD_RATE_CAP) != Decimal("1.0845"):
         raise ValueError("registered all-in budget arithmetic changed")
     if PACKET_MAX > UPLOAD_GB * Decimal(1_000_000_000):
         raise ValueError("upload reservation is smaller than evidence packet cap")
@@ -113,6 +116,8 @@ def check_static_budget() -> None:
 def offer_row(offer: dict, provider) -> dict:
     """Quote one raw controller-search offer; absent price evidence is a refusal."""
     reasons = []
+    if not direct_available(offer):
+        reasons.append("direct SSH unavailable")
     machine = str(offer.get("machine_id", ""))
     oid = str(offer.get("id", ""))
     if not machine.isdigit() or not oid.isdigit() or machine in EXCLUDED_MACHINES:
@@ -157,9 +162,11 @@ def offer_row(offer: dict, provider) -> dict:
         if download > DOWNLOAD_RATE_CAP or upload > UPLOAD_RATE_CAP:
             reasons.append("transport tariff exceeds registered cap")
         if reserve(hourly, download, upload) > ALL_IN_CAP:
-            reasons.append("all-in 30-minute reservation exceeds $0.90")
+            reasons.append("all-in 45-minute reservation exceeds $1.10")
     return {
         "id": oid, "machine_id": machine, "driver_version": driver,
+        "direct_port_count": offer.get("direct_port_count"),
+        "public_ipaddr": offer.get("public_ipaddr"),
         "reliability": str(reliability) if reliability is not None else None,
         "gpu_name": offer.get("gpu_name"), "gpu_ram": offer.get("gpu_ram"),
         "num_gpus": offer.get("num_gpus"), "cpu_ram": offer.get("cpu_ram"),

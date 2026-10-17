@@ -7,16 +7,14 @@ The existing box phase deadline and teardown reserve still bound this command.
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager
-from datetime import datetime, timezone
 import errno
 import hashlib
 import json
-from pathlib import Path
-import signal
 import time
-from urllib.error import HTTPError, URLError
 import urllib.request
+from datetime import datetime, timezone
+from pathlib import Path
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 
 import dq11_bootstrap as bootstrap
@@ -28,28 +26,9 @@ BACKOFF_SECONDS = (5, 10, 20, 40)
 REQUEST_TIMEOUT_SECONDS = 20
 
 
-class WheelDeadlineExceeded(TimeoutError):
-    """A terminal wall-clock limit, including a peer that dribbles bytes."""
-
-
-@contextmanager
-def wheel_deadline():
-    """The Linux box CLI runs on the main thread; interrupt blocked network IO."""
-    def expired(signum, frame):
-        raise WheelDeadlineExceeded("wheel retry budget exhausted")
-
-    previous = signal.signal(signal.SIGALRM, expired)
-    signal.setitimer(signal.ITIMER_REAL, RETRY_SECONDS)
-    try:
-        yield
-    finally:
-        signal.setitimer(signal.ITIMER_REAL, 0)
-        signal.signal(signal.SIGALRM, previous)
-
-
 def transient(error):
     """Classify only reset/timeout transport failures, never HTTP/hash refusals."""
-    if isinstance(error, (HTTPError, WheelDeadlineExceeded)):
+    if isinstance(error, HTTPError):
         return False
     if isinstance(error, URLError):
         return transient(error.reason)
@@ -93,12 +72,14 @@ def download(row, cache, log):
                     while True:
                         if time.monotonic() >= deadline:
                             raise TimeoutError("wheel retry budget exhausted")
-                        block = source.read(1 << 20)
+                        block = getattr(source, "read1", source.read)(1 << 20)
                         if not block:
                             break
                         digest.update(block)
                         size += len(block)
                         target.write(block)
+            if time.monotonic() >= deadline:
+                raise TimeoutError("wheel retry budget exhausted")
             observed = digest.hexdigest()
             if observed != row["sha256"]:
                 raise ValueError("resolved wheel hash mismatch")
@@ -134,8 +115,7 @@ def install(directory, cache):
     cache.mkdir(parents=True, exist_ok=True)
     log = directory / "receipts/wheel-fetch-attempts.jsonl"
     for row in packages:
-        with wheel_deadline():
-            download(row, cache, log)
+        download(row, cache, log)
     bootstrap.install(directory, cache)
 
 

@@ -15,13 +15,14 @@ export TC1_BOX=A TC1_RUNNER=dq11_l_census_box.sh TC1_L_CENSUS=1
 export DQ11_REQUIRED_DRIVER=${DQ11_REQUIRED_DRIVER:?exact manifest driver required}
 export HF_TOKEN_FILE="$HERE/no-token-for-dq11"
 STAGE=$(python3 "$HERE/dq11_science_stage.py" --assets "${DQ11_ASSET_DIR:?canonical asset directory required}")
-for file in dq11_l_census_run.py dq11_l_census_capture.py dq11_l_census_reduce.py dq11_l_census_launch.py dq11_l_census_box.sh dq11_l_census_drive.sh dq11_wheel_retry.py; do
+for file in dq11_l_census_run.py dq11_l_census_capture.py dq11_l_census_reduce.py dq11_l_census_launch.py dq11_l_census_box.sh dq11_l_census_drive.sh dq11_wheel_retry.py dq11_census_transport.py; do
   [ -f "$HERE/$file" ] || { echo "CENSUS_REFUSAL: missing instrument $file"; exit 78; }
   STAGE="$STAGE $HERE/$file"
 done
 HASHES="${E4B_RENT_RUN_DIR:?controller run directory required}/dq11-l-census-stage.sha256"
 ( cd "$HERE" && shasum -a 256 dq11_l_census_run.py dq11_l_census_capture.py dq11_l_census_reduce.py \
-    dq11_l_census_launch.py dq11_l_census_box.sh dq11_l_census_drive.sh dq11_wheel_retry.py ) > "$HASHES"
+    dq11_l_census_launch.py dq11_l_census_box.sh dq11_l_census_drive.sh dq11_wheel_retry.py dq11_census_transport.py ) > "$HASHES"
 STAGE="$STAGE $HASHES"
 export TC1_EXTRA_STAGE="$STAGE"
-exec bash "$REPO/bench/tc1/tc1_drive.sh"
+export TC1_CENSUS_STAGE_HELPER="$HERE/dq11_census_transport.py"
+exec python3 "$HERE/dq11_census_transport.py" drive bash "$REPO/bench/tc1/tc1_drive.sh"

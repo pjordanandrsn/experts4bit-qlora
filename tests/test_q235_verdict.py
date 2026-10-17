@@ -34,7 +34,8 @@ def _save_run(d, layers, topk, loss, rec):
 
 
 def _box_run(root, *, code="0", card=PRO6000, mode="science", rules=None, losses=(2.0, 1.9), repeat_loss=2.0, scale=1.01,
-             peak=24.0 * (1 << 30), null_scale=1.0, plant_kick=3.0, plant_from=2, plant_at=2, repeat=True, pre_scale=1.0):
+             peak=24.0 * (1 << 30), null_scale=1.0, plant_kick=3.0, plant_from=2, plant_at=2, repeat=True, pre_scale=1.0,
+             shape_b=None):
     """A fetched science run (q235_run.sh's layout) and a reference beside it; 4 layers of [2, 6, 8], top-2 of 8 experts. The box
     is the reference's per-layer updates times ``scale`` (u = scale - 1); the repeat's null is the box times ``null_scale``; each plant
     is the null with ``plant_kick`` x a fixed vector added from layer ``plant_from`` on (u at that layer about plant_kick x 10), and its
@@ -58,6 +59,19 @@ def _box_run(root, *, code="0", card=PRO6000, mode="science", rules=None, losses
     step = {"loss": losses[0], "elapsed_s": 60.0, "h2d_bytes_offload": 220 * (1 << 30), "max_memory_allocated": int(peak)}
     box = {"rules": rules if rules is not None else {k: True for k in RULES}, "frozen_sha256_after_both_steps_equal": True,
            "in_process": {"loss_0": 2.0, "loss_1": 2.0}, "step": step, "step1": {**step, "loss": losses[1]}, "plant": {"kind": None}}
+    if shape_b is not None:                                 # Amendment 6: {"ga": (step 0, step 1), "plants": (mean, overwrite), "zero": [...]}
+        def ga(x, zero=()):
+            return {"compared": 48, "max_rel": x, "max_rel_tensor": "model.layers.3.mlp.experts.lora_B", "zero_mismatch": list(zero),
+                    "cosine": 1 - x * x, "norm_ratio": 1.0, "per_layer_max_rel": {"3": x}}
+        box["shape_b"] = {"micro_batch": 2, "accumulation": 4, "valid_per_micro_batch": [125, 252, 480, 149], "valid_total": 1006}
+        for k, x, z in (("step", shape_b["ga"][0], shape_b.get("zero", ())), ("step1", shape_b["ga"][1], ())):
+            box[k]["rule8"] = {"algorithms": shape_b.get("ran", "deterministic"), "restored": "default",
+                               "check": ga(x, z), "floor": ga(shape_b.get("floor", 0.0))}
+            box[k]["algorithms"] = "default"
+            box[k]["ga_mb_check"] = ga(x)                     # the registered step's own accumulation: reported only
+        box["step"]["ga_check"] = box["step1"]["ga_check"] = {**ga(0.3), "rel_p50": 0.2}       # shape A vs B: reported only
+        box["ga_plants"] = {k: {"loss": 2.1, **ga(0.4), "vs_micro_batches": ga(v)} for k, v in zip(("mean", "overwrite"), shape_b["plants"])}
+        box["route_flips"] = {"flipped": 12, "token_layers": 4000, "flipped_fraction": 0.003, "per_layer": [], "layers_with_flips": 3}
     _save_run(w / "receipts" / "box", box_l, topk, 2.0, box)
     if repeat:
         null = [t * null_scale if null_scale != 1.0 else t.clone() for t in box_l]
@@ -166,3 +180,61 @@ def test_a_rehearsal_is_never_a_milestone(tmp_path):
 def test_a_device_peak_far_from_the_estimate_is_reported_not_gated(tmp_path):
     rc, v = _verdict(*_box_run(tmp_path, peak=30.0 * (1 << 30)))
     assert (rc, v["verdict"]) == (0, "PASS") and v["reported"]["estimator_issue"] is True
+
+
+def _verdict_with(w, ref, bar):
+    """The verdict in this process, with GA_BAR set (the registered value is the calibration's; these tests fix one)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("q235_verdict_ga", VERDICT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    mod.GA_BAR = bar
+    return mod.judge(str(w), str(ref))
+
+
+def test_shape_b_passes_rule_8_within_the_bar_and_fails_beyond_it(tmp_path):
+    """Amendment 6: an accumulation within the bar at both steps passes as rules 1-8; beyond it at either step it is a FAIL on rule 8,
+    and a tensor zero in shape A but not in shape B is a FAIL too. The views ride along."""
+    ok = _verdict_with(*_box_run(tmp_path / "a", shape_b={"ga": (0.01, 0.02), "plants": (0.6, 0.9)}), 0.05)
+    assert ok["verdict"] == "PASS" and ok["why"] == "rules 1-8 hold", ok["why"]
+    r8 = ok["rules"]["8_accumulation"]
+    assert r8["ok"] and r8["bar"] == 0.05 and r8["max_rel"] == {"step": 0.01, "step1": 0.02} and set(r8["cosine"]) == {"step", "step1"}
+    assert r8["reported_a_vs_b"]["step"]["max_rel"] == 0.3 and r8["reported_route_flips"]["flipped"] == 12   # reported, not gating
+    bad = _verdict_with(*_box_run(tmp_path / "b", shape_b={"ga": (0.01, 0.2), "plants": (0.6, 0.9)}), 0.05)
+    assert bad["verdict"] == "FAIL" and bad["why"] == "rules failing: 8_accumulation" and bad["rules"]["8_accumulation"]["over"] == {"step1": 0.2}
+    zero = _verdict_with(*_box_run(tmp_path / "c", shape_b={"ga": (0.01, 0.02), "plants": (0.6, 0.9),
+                                                             "zero": ["model.layers.0.self_attn.q_proj.lora_A"]}), 0.05)
+    assert zero["verdict"] == "FAIL" and zero["rules"]["8_accumulation"]["zero_mismatch"]
+
+
+@pytest.mark.parametrize("plants, kind", [((0.04, 0.9), "mean"), ((0.6, 0.05), "overwrite")])
+def test_an_accumulation_plant_inside_the_bar_voids_the_box(tmp_path, plants, kind):
+    """Amendment 6's instrument check: a plant at or under the bar means the bar cannot see that bug at this depth -- VOID."""
+    v = _verdict_with(*_box_run(tmp_path, shape_b={"ga": (0.01, 0.02), "plants": plants}), 0.05)
+    assert v["verdict"] == "VOID" and v["why"].startswith(f"instrument: the {kind} accumulation plant passes the bar"), v["why"]
+
+
+def test_shape_b_without_a_registered_bar_is_void_and_shape_a_never_reads_rule_8(tmp_path):
+    v = _verdict_with(*_box_run(tmp_path / "b", shape_b={"ga": (0.01, 0.02), "plants": (0.6, 0.9)}), None)
+    assert v["verdict"] == "VOID" and v["why"] == "not registered: Amendment 6's accumulation bar", v["why"]
+    a = _verdict_with(*_box_run(tmp_path / "a"), 0.05)
+    assert a["verdict"] == "PASS" and a["why"] == "rules 1-7 hold" and "8_accumulation" not in a["rules"]
+
+
+@pytest.mark.parametrize("extra, cause", [({"floor": 0.02}, "floor at step is 0.02"), ({"ran": "default"}, "ran 'default'")])
+def test_rule_8_cannot_be_read_without_its_deterministic_check(tmp_path, extra, cause):
+    """Amendment 6: the check passes must have run deterministic (default restored for the step), and their floor -- two deterministic
+    accumulations against each other -- must sit at most BAR / 3, or rule 8 is VOID, never a FAIL from noise."""
+    v = _verdict_with(*_box_run(tmp_path, shape_b={"ga": (0.01, 0.02), "plants": (0.6, 0.9), **extra}), 0.05)
+    assert v["verdict"] == "VOID" and cause in v["why"], v["why"]
+
+
+def test_rule_8_s_bar_is_the_third_calibration_s():
+    """Amendment 6: BAR = 3 x max(s94, the 30B's s(48)) from bench/q235/am6/calibration-3-deterministic.json, rounded to 3 figures."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("q235_verdict_pin", VERDICT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    cal = json.loads((ROOT / "bench" / "q235" / "am6" / "calibration-3-deterministic.json").read_text())
+    assert not cal["soft_any"] and all(cal["plants_registered"].values())
+    assert mod.GA_BAR == round(cal["bar"], 4) == 0.0231 and set(mod.GA_PLANTS) == {"mean", "overwrite"}
