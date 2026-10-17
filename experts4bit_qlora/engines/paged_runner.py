@@ -39,6 +39,7 @@ host sync in the prefill forward under device grouping.
 from __future__ import annotations
 
 import inspect
+import warnings
 
 import torch
 
@@ -63,6 +64,11 @@ STATELESS_LAYER_TYPES = frozenset({"mlp", "moe"})
 #: every layer type the runner can serve: attention (K/V in the paged pool), stateless, and linear attention (per-slot
 #: state in :mod:`.linear_state`)
 KEPT_LAYER_TYPES = ATTENTION_LAYER_TYPES | STATELESS_LAYER_TYPES | {linear_state.LINEAR_LAYER_TYPE}
+#: config keys under which a hybrid declares its per-layer mixer list when it carries no ``layer_types``
+#: (Nemotron-H: ``hybrid_override_pattern`` or ``layers_block_type``; Jamba: ``attn_layer_period`` /
+#: ``attn_layer_offset``), and the key prefixes of a state-space mixer's geometry
+MIXER_PATTERN_KEYS = ("layers_block_type", "hybrid_override_pattern", "attn_layer_period", "attn_layer_offset")
+SSM_KEY_PREFIXES = ("mamba_", "ssm_")
 
 
 def kv_layout_refusal(config) -> str | None:
@@ -78,20 +84,42 @@ def kv_layout_refusal(config) -> str | None:
             f"{getattr(c, 'v_head_dim', None)} wide per head, and the FP8 paged pool keeps one head dim for both")
 
 
+def undeclared_mixer_refusal(config) -> str | None:
+    """Why a config WITHOUT ``layer_types`` cannot be planned as all attention, or None. A config that names its
+    per-layer mixers under another key (:data:`MIXER_PATTERN_KEYS`), or carries a state-space mixer's geometry (a key
+    starting ``mamba_`` / ``ssm_``), has layers that are not attention; :func:`layer_plan` would flush K/V for them and
+    run them without their state. transformers derives ``layer_types`` for the hybrids it knows (5.17 does for
+    Nemotron-H and Jamba), so this guards the configs that reach the runner without one."""
+    if config is None or linear_state.layer_types(config):
+        return None
+    c = getattr(config, "text_config", None) or config
+    keys = list(c.to_dict()) if hasattr(c, "to_dict") else list(getattr(c, "__dict__", {}))
+    declared = [k for k in MIXER_PATTERN_KEYS if getattr(c, k, None) not in (None, "", [], ())]
+    declared += sorted(k for k in keys if k.startswith(SSM_KEY_PREFIXES) and getattr(c, k, None) is not None)
+    if not declared:
+        return None
+    named = ", ".join(declared[:4]) + (", ..." if len(declared) > 4 else "")
+    return (f"the config declares non-attention mixers ({named}) but no layer_types, so the paged runner would plan "
+            "every layer as attention")
+
+
 def paged_state_refusal(model) -> str | None:
     """Why the paged server refuses ``model``, or None: :func:`kv_layout_refusal`, then the runner's rules for
-    state-carrying layers, which it applies when it is built:
-    - :func:`layer_plan`: a layer type it keeps no state for;
-    - :func:`.linear_state.install`: linear-attention layers its per-slot pool cannot drive. transformers labels
-      Mamba-style layers ``linear_attention`` too, and the pool drives Gated DeltaNet only.
+    state-carrying layers. The serve estimate, serve_paged's refusal before any weight is read
+    (:func:`config_state_refusal`) and :func:`layer_plan` all ask this one function:
+    - no ``layer_types``: :func:`undeclared_mixer_refusal`;
+    - a layer type the runner keeps no state for;
+    - linear-attention layers its per-slot pool cannot drive (:func:`.linear_state.driven_linear_layers`).
+      transformers labels Mamba-style layers ``linear_attention`` too, and the pool drives Gated DeltaNet only.
 
     It reads the config and module classes only, so a planner can ask on a meta tree."""
-    layout = kv_layout_refusal(getattr(model, "config", None))
+    config = getattr(model, "config", None)
+    layout = kv_layout_refusal(config)
     if layout:
         return layout
-    types = linear_state.layer_types(getattr(model, "config", None))
+    types = linear_state.layer_types(config)
     if not types:
-        return None
+        return undeclared_mixer_refusal(config)
     unknown = sorted(set(types) - KEPT_LAYER_TYPES)
     if unknown:
         return f"layer types {unknown} carry state the paged runner does not keep"
@@ -102,18 +130,43 @@ def paged_state_refusal(model) -> str | None:
     return None
 
 
+def config_state_refusal(config, *, trust_remote_code: bool = False) -> str | None:
+    """:func:`paged_state_refusal` asked of ``config`` before any weight is read: on the module tree transformers
+    builds from it with empty weights (no allocation), the same tree the serve estimate asks. A composite config's
+    text tower is the served model. When this transformers cannot build the tree, the config-only rules still answer
+    (:func:`kv_layout_refusal`, :func:`undeclared_mixer_refusal`), and the loader's and the runner's own refusals
+    stand at load and build."""
+    layout = kv_layout_refusal(config)
+    if layout:
+        return layout
+    lm_config = getattr(config, "text_config", None) or config
+    try:
+        from accelerate import init_empty_weights
+        from transformers import AutoModelForCausalLM
+        with init_empty_weights():
+            tree = AutoModelForCausalLM.from_config(lm_config, dtype=torch.bfloat16,
+                                                    trust_remote_code=trust_remote_code)
+    except Exception as e:                              # noqa: BLE001 -- no tree here: the config-only rules answer
+        warnings.warn(f"[e4b.paged_runner] no empty-weight tree for model_type "
+                      f"{getattr(lm_config, 'model_type', None)!r} ({type(e).__name__}: {str(e)[:200]}); the config-only "
+                      "rules answer before the load, and the runner's own refusal still stands when it is built",
+                      RuntimeWarning, stacklevel=2)
+        return undeclared_mixer_refusal(config)
+    return paged_state_refusal(tree)
+
+
 def layer_plan(model, n_layers: int, n_slots: int):
     """``(attention layer indices, linear-state pool or None)`` for ``model``.
 
-    A model without ``layer_types`` is all attention (every layer flushes K/V). A hybrid model's linear-attention
-    layers keep per-slot state in :mod:`.linear_state` (installed here); any other state-carrying layer type is
-    refused rather than run without its state."""
+    A model without ``layer_types`` is all attention (every layer flushes K/V) unless its config declares other
+    mixers. A hybrid model's linear-attention layers keep per-slot state in :mod:`.linear_state` (installed here).
+    Anything :func:`paged_state_refusal` refuses is refused here, rather than run without its state."""
+    why = paged_state_refusal(model)
+    if why:
+        raise NotImplementedError(f"{why}; refusing")
     types = linear_state.layer_types(getattr(model, "config", None))
     if not types:
         return list(range(n_layers)), None
-    unknown = sorted(set(types) - KEPT_LAYER_TYPES)
-    if unknown:
-        raise NotImplementedError(f"layer types {unknown} carry state the paged runner does not keep; refusing")
     attn = [i for i, t in enumerate(types) if t in ATTENTION_LAYER_TYPES]
     pool = linear_state.install(model, n_slots) if linear_state.LINEAR_LAYER_TYPE in types else None
     return attn, pool
