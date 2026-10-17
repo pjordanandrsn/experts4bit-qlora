@@ -22,21 +22,29 @@ EXPERTS_COMPUTE_S = 15.13e-3 * 4 * LAYERS  # #1680: experts fwd + recompute + bw
 # #1680's per-phase split (A2000 means / measured PRO 6000 ratios), per micro-batch per layer, seconds. Experts only.
 FWD_S = 47.3e-3 / 13.30
 REC_BWD_S = 45.9e-3 / 13.30 + 58.7e-3 / 7.23
+# Measured: Q235 box q235-pro6000-3 (Shape B, Amendment 7) box/box.json moe_timing, 8 sampled layers x 8 calls, means.
+# Experts compute per micro-batch per layer: forward 4.76 ms, recompute 4.62, backward 4.68. Staging per whole-layer call
+# (layer 0's resident forward calls excluded): forward 51.40 ms, recompute 50.81 -> 26.6 GB/s effective; the same box's
+# hostrate.json (1 GiB pinned copies back to back) read 20.39 GB/s.
+A7_FWD_S, A7_REC_BWD_S = 4.76e-3, 4.62e-3 + 4.68e-3
+A7_STAGE_S = (51.40e-3 + 50.81e-3) / 2
+A7_HOSTRATE = 20.39
 
 # Per-copy fixed costs on record (README.md, "DMA size"): seconds.
 COPY_LATENCY = 3.3e-6  # gnf4 cold-engine phase 0: 8 KiB pinned H2D, gen 5
 ENQUEUE = 19.8e-6 / 2  # gnf4 cold-engine p2-g1b: 19.8 us per row = 2 cudaMemcpyAsync + staging write
 
 
-def sweep_schedules(rates):
+def sweep_schedules(rates, fwd_s=FWD_S, rec_bwd_s=REC_BWD_S, label="#1680 predicted"):
     """Layer-major (two sweeps per pass: the forward, then the recompute + backward) under five staging schedules.
 
     A forward cannot prefetch layer L+1's ROUTED experts during layer L: L+1's routes come from L's output. The
     recompute can, because the forward fixed every route. Whole-layer prefetch needs no routes, so it works in both.
     """
-    cf, crb = FWD_S * 4 * LAYERS, REC_BWD_S * 4 * LAYERS
+    cf, crb = fwd_s * 4 * LAYERS, rec_bwd_s * 4 * LAYERS
     print(
-        f"\nlayer-major sweeps (experts compute only, a lower bound): forward {cf:.3f} s, recompute + backward {crb:.3f} s"
+        f"\nlayer-major sweeps, {label} (experts compute only, a lower bound): forward {cf:.3f} s,"
+        f" recompute + backward {crb:.3f} s"
     )
     for L in rates:
         w = LAYER / (L * 1e9)
@@ -87,6 +95,12 @@ def main():
         " staging per layer sweep (the pipeline fill)."
     )
     sweep_schedules(rates)
+    eff = LAYER / A7_STAGE_S / 1e9
+    print(
+        f"\nA7 measured staging: {A7_STAGE_S * 1e3:.2f} ms per whole-layer call = {eff:.2f} GB/s effective"
+        f" ({eff / A7_HOSTRATE:.2f}x the box's own hostrate probe, {A7_HOSTRATE} GB/s)"
+    )
+    sweep_schedules([A7_HOSTRATE, round(eff, 2)], A7_FWD_S, A7_REC_BWD_S, "A7 measured")
     print(
         "\nI-tile sizes (t of I = 1536) and a SERIALIZED per-copy-cost floor on copy efficiency (inference; async"
         " back-to-back copies hide it, see README):"

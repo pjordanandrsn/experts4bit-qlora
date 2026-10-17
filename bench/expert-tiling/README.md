@@ -7,9 +7,8 @@ and layer-major. It answers from records only. `roofline.py` reproduces every de
     python roofline.py --h2d 21.76 --h2d 40 --h2d 53
 
 The worked case is Qwen3-235B-A22B under Q235's Shape B (4 micro-batches, 94 layers, checkpointed), because that is the
-only training lane with staging records. **The GPU-side validation is still open:** the Shape B box's per-layer read
-(Amendment 7, on an RTX PRO 6000) is not committed yet. When it lands, it replaces #1680's predicted compute ratio
-below, and this note's verdict has to be re-read against it.
+only training lane with staging records. Sections 1–2 were first worked from #1680's prediction. The GPU-side check is now
+in: the Shape B box's per-layer read, "A7 measured" below. It confirms the ordering.
 
 ## Two different "tiles"
 
@@ -97,6 +96,39 @@ of max(staging, compute) for that schedule's bytes. "Floor" is the same with rou
 - **The overlap is not free on every host.** DQ5's gen-4 5090 still had 20–59 of 62 forward prefetches in flight when
   their layer began.
 
+### The A7 read (GPU validation)
+
+The Shape B box `q235-pro6000-3` (RTX PRO 6000, PCIe gen 4 x16) passed its verdict. The figures come from its
+`box/box.json` (`8b19c4c2`, measured-private) and `hostrate.json` (`c82685f9`).
+
+**Staging.**
+- A step staged 1,016,497,963,008 B in 748 copies: 1.359 GB per whole-layer call, absmax kept fp32 because offloaded
+  stacks refuse double quantization. The calls are full layers, as modelled.
+- Means over 8 sampled layers × 8 calls, without layer 0's resident forward calls: 51.40 ms forward, 50.81 ms recompute.
+  That is **26.6 GB/s effective**.
+- The same box's `hostrate.json` read 20.39 GB/s: 1 GiB pinned copies, back to back, CUDA-event timed. Staging ran at
+  **1.30x** its own probe.
+- The records do not say why. The bytes per call match the model, so either the probe's buffer reads slower than the
+  offload homes on this host, or the stage timer brackets less than the copy. The p66 record shows two probes on one
+  gen 4 host disagreeing by 1.57x. Until the cause is known, the probe is not the staging rate on this box.
+
+**Experts compute** per micro-batch per layer: forward 4.76 ms, recompute 4.62, backward 4.68, so 14.06 against #1680's
+15.13. The split differs from the prediction: the forward is heavier and the backward lighter.
+
+**Re-run on the measured inputs** (`roofline.py`, "A7 measured"), per pass against the routed floor:
+
+| schedule | @ 20.39 GB/s (probe) | @ 26.6 GB/s (effective) |
+|---|---:|---:|
+| (b) serial | 1.586 | 1.730 |
+| (b) whole-layer double buffer | 1.125 | 1.125 |
+| (b)+(c): forward routed serial | 1.165 | 1.214 |
+| **hybrid** | **1.068** | **1.068** |
+| forward per-expert pipelined | 1.010 | 1.010 |
+
+**The ordering holds on the measured box.** The box is still staging-bound per sweep: 93 or 94 stagings of about 51 ms
+against 1.79 s of forward compute and 3.50 s of recompute + backward. So the levers and the stop-rule reading are
+unchanged.
+
 ## 3. When tiles would matter: VRAM, not time
 
 Tiling earns its place only where **two layer slots do not fit**: a card whose free VRAM after the resident weights,
@@ -170,9 +202,7 @@ result would need a parity bar rather than `torch.equal`.
      whole-layer prefetch.
 - **Revisit tiles** only for a card or model where two layer slots don't fit, or as a tile-fused recompute + backward
   kernel. Before any prototype, run the copy-size sweep from section 5.
-- **What the A7 read can change.** This note uses #1680's predicted, experts-only compute. If the PRO 6000 read puts
-  C near or below 1 at the box's H2D, compute grows relative to staging. Overlap then hides a larger share, and the
-  forward's routing dependency costs less. The ordering holds unless a single layer's staging rivals a whole sweep's
-  compute.
+- **The A7 read confirms it.** Measured compute and staging leave the ordering and the ratios to the floor unchanged.
+  Open: why staging ran 1.30x faster than the box's own host-rate probe.
 
 Nothing here changes Q235, a default or a registered result.
