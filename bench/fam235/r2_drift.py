@@ -37,7 +37,17 @@ PAIRS = {
         "renames": [("q235.sha256", "r2.sha256"), ("q235_tiny.py", "r2_tiny.py"), ("] q235: ", "] r2: "),
                     ('"q235-run/1"', '"r2-run/1"'),
                     ("--only 'tokenizer*' vocab.json merges.txt", "--only 'tokenizer*' special_tokens_map.json")],
-        "lines": [(r"^  science\) CARD_RE=", r"^  science\) say 'refusing: no box is registered "),
+        "lines": [(r"^  science\) CARD_RE=",
+                   r"^  science\) CARD_RE='\^NVIDIA GeForce RTX 5090'; MIN_VRAM_MIB=32000; MIN_RAM_GB=134; MIN_DISK_GB=350 ;; "),
+                  # R2 Amendment 3: R2's own fit (its caps and its pull floor) and Q235's cold host-rate floors, each R2's line.
+                  (r"^# Fitted \(q235_fit\.py\) ", r"^# Fitted \(r2_fit\.py, R2 Amendment 3\) "),
+                  (r"^# scaled \(x \d+/4\)", r"^# host listing at least 500 Mbps, box "),
+                  (r"^CAP_GIT=", r"^CAP_GIT=240 CAP_VENV=120 CAP_INSTALL=360 CAP_HOSTRATE=600 CAP_FETCH=7080 CAP_TOKENS=300 CAP_BOX=3600 "
+                                r"CAP_REPEAT=2040$"),
+                  (r"^# The host-rate floors \(gate 2's premise\), ", r"^# The host-rate floors \(gate 2's premise\): Q235's sealed cold ones"),
+                  (r"^# dominant part is the host-side", r"^# read its fresh slice warm\)"),
+                  (r"^# O_DIRECT\) before the checkpoint", r"^# three \(the disk with O_DIRECT\) before the checkpoint"),
+                  (r"^MIN_FETCH_GBS=", r"^MIN_FETCH_GBS=0\.063$"),
                   # The rehearsal's depth is R2's registration, not plumbing: a Q235 re-cite may move Q235's, never R2's.
                   (r"^  a2000\)   must fetch ", r"^  a2000\)   must fetch .* --slice 4 --slice-dir \"\$W/hf-cache/slice4\" "),
                   (r"^           MODEL=\"\$W/hf-cache/slice\d+\" ", r"^           MODEL=\"\$W/hf-cache/slice4\" DEVICE=cuda ENABLER=fast ;;$"),

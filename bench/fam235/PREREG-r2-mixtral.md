@@ -264,3 +264,68 @@ self-test there.
 - **Later:** a subject-manifest harness is the refactor for a third subject.
 
 **Unchanged:** everything else above.
+
+## Amendment 3 (2026-10-17, before any 8x22B box): the box, registered
+
+**Why.** Phase 1's $0 work is done:
+- the band's mechanical verdict (e4b#1660);
+- the harness (#1666, #1670, #1674);
+- the host-RAM floor (Amendment 2);
+- the A2000 rehearsal of R2's own runner, and its fit (#1673).
+
+This amendment registers the box's class, floors and caps. The numbers are the maintainer's to approve.
+
+**Citations by commit.**
+- R2 cites Q235 at `62d6a6bc`, Amendment 6 (`r2_drift.CITED`). Every Q235 tool R2 runs or seals is read at that commit, and launch
+  staging refuses once Q235's tree moves past it (#1674).
+- Amendment 6 runs Q235's box in shape B. R2's box keeps **shape A** (8 rows in one micro-batch, as registered), as a declared line of
+  R2's runner. Amendment 3's plants, null and tolerances, which this registration adopted in Amendment 1, are unchanged for shape A.
+  `r2_verdict.py`'s self-test passes at `62d6a6bc` (Q235's rule 8 is gated on shape-B records).
+
+**The rehearsal.** RTX A2000, 2026-10-16 23:51–23:57 UTC, $0, e4b `a3e73429`. It was `r2_run.sh` in `a2000` mode on a 4-layer slice;
+its rehearsal directory is sha256 `5470cfae`.
+- Every phase exited 0. Amendment 2's nine STRICT rules held, and the frozen base was unchanged.
+- The repeat equals step 0 bit for bit. Both plants changed layer 2 only.
+- The device peak was 5.10 GB. Host `RssAnon + RssShmem` at the step end was 9.30 GB, against 9.38 GB for Amendment 2's terms at 4 layers.
+
+**The floors.** The maintainer's decision (A), 2026-10-17T00:00Z.
+- H2D 5.8, host copy 5.14 and disk 0.743 GB/s. These are Q235's sealed cold floors, measured on the same RTX A2000 host.
+- The leg read the slice it had just fetched warm, at 2.71 GB/s. That is above the host's own O_DIRECT 1.88, so its own rates would
+  set floors that refuse it.
+- The pull floor is **0.063 GB/s**, the rate at which the checkpoint fits R2's fetch cap / 1.5.
+
+**The caps** (`bench/fam235/r2-fit/`: `r2_fit.py` at #1673's merge commit, re-run at this commit with exit 0):
+- **How they are derived.** The rehearsal's box and repeat are slowed to the floors part by part, then × 1.18 (the slow end of the RTX
+  5090 per-step spread), × 56/4 and × 1.5, each rounded up to the minute. The fixed phases keep Q235's caps (240 / 120 / 600 / 300 s).
+
+| phase | slowed + spread | scaled | budget | cap |
+|---|---|---|---|---|
+| box | 170.6 s | 2,389 s | 3,584 s | **3,600 s** |
+| repeat | 95.0 s | 1,330 s | 1,995 s | **2,040 s** |
+| fetch (500 Mbps) | | 4,715 s | 7,073 s | **7,080 s** |
+| install | | 212 s | 318 s | **360 s** |
+
+- **The repeat's cap.** The maintainer's packet said 1,980 s, from a flat +32 s per process. The per-part rule gives 2,040 s because the
+  repeat's own load read warm, at 29 GB/s.
+- **Wallclock and cost.** The worst-case wallclock is 4.57 h, under the 6 h policy maximum. That is $3.88 at $0.85/h and $9.13 at
+  $2.00/h, inside the no-ask tier.
+
+**The registered box** (`r2_run.sh`'s science line, `r2_verdict.REGISTERED`):
+- the card: an **NVIDIA GeForce RTX 5090** with at least 32,000 MiB, and exactly one GPU;
+- the host: at least **134 GB** of RAM (Amendment 2) and **350 GB** of free disk;
+- the estimates at the box's shape (2,920 positions): 13.98 GiB on the device and 141.75 GiB of link per micro-batch. The device
+  deviation is reported, not gated.
+
+**The market.** At 2026-10-17T00:10:36Z, 7 verified, rentable RTX 5090 offers had at least 134 GB of RAM and 350 GB of disk. 6 of them
+(6 machines) also listed at least 504 Mbps down (the pull floor) and PCIe at 5.8 GB/s or more. They ran $0.670–4.002/h, median
+$0.870. The floors leave the lane runnable.
+
+**The gates, as of this amendment.**
+- **Met:** gates 3–5, and gate 6's fit and rehearsal.
+- **Still before any box:**
+  - **Gate 1:** Q235 reaches L2. Its milestone verdict is pending.
+  - **Gate 2:** the maintainer's escalation gate.
+  - **Gate 6:** the pre-rental fetch gate (`r2_fetch_gate.py`), run within a day of the launch.
+  - **Gate 7:** the pinned-host ACK. The CPU rehearsal mode is exercised by the tests up to its refusals only.
+
+**Unchanged:** everything else above.

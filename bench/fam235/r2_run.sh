@@ -48,16 +48,16 @@ must(){ phase "$@"; [ "$PHASE_RC" = 0 ] || { tail -30 "logs/$1.log"; say "VOID: 
 # The registered constants live here, in the sealed closure: tc1_drive.sh forwards only its own TC1_* list, so nothing below can
 # be changed from the controller's environment. A rehearsal may override the caps and the interpreter (Q235_CAP_*, Q235_PYTHON).
 # The phase caps (seconds) are gate 2's: each fitted from the rehearsal's measured phases, scaled to the registered model and class.
-# Fitted (q235_fit.py) from the A2000 rehearsal at 4b301ec3, for a host listing at least 500 Mbps: box 5,875 s and repeat 3,055 s
-# scaled (x 94/4), fetch 7,935 s; each cap is the scaled time x 1.5, rounded up to the minute.
-CAP_GIT=240 CAP_VENV=120 CAP_INSTALL=1800 CAP_HOSTRATE=600 CAP_FETCH=12000 CAP_TOKENS=300 CAP_BOX=8820 CAP_REPEAT=4710
-# The host-rate floors (gate 2's premise), the rehearsal's own: its pinned H2D (PCIe gen 3 x8), its host-copy rate (the load's
-# dominant part is the host-side expert assembly) and its load's effective read rate. The box measures all three (the disk with
-# O_DIRECT) before the checkpoint fetch and refuses below any. A rehearsal records only.
+# Fitted (r2_fit.py, R2 Amendment 3) from R2's A2000 rehearsal at a3e73429, slowed to the floors and the RTX 5090 spread: for a
+# host listing at least 500 Mbps, box 2,389 s and repeat 1,330 s scaled (x 56/4), fetch 4,715 s; each cap is that x 1.5, to the minute.
+CAP_GIT=240 CAP_VENV=120 CAP_INSTALL=360 CAP_HOSTRATE=600 CAP_FETCH=7080 CAP_TOKENS=300 CAP_BOX=3600 CAP_REPEAT=2040
+# The host-rate floors (gate 2's premise): Q235's sealed cold ones, measured on the same RTX A2000 host (R2 Amendment 3: R2's own leg
+# read its fresh slice warm), its pinned H2D (PCIe gen 3 x8), host-copy rate and load's effective read rate. The box measures all
+# three (the disk with O_DIRECT) before the checkpoint fetch and refuses below any. A rehearsal records only.
 MIN_H2D_GBS=5.8 MIN_DISK_GBS=0.743 MIN_HOST_COPY_GBS=5.14
 # The pull-rate floor (GB/s): the rate at which the checkpoint, hashed at the rehearsal's rate, still fits CAP_FETCH / 1.5. The fetch
 # times its first slice (the small files and 8 shards, ~32 GB) with its own client and refuses (14) below it, before pulling the rest.
-MIN_FETCH_GBS=0.062
+MIN_FETCH_GBS=0.063
 ROWS=8          # TC1's field-text rows in the one micro-batch (the 30B calibration's and gate 1's); the registering amendment fixes it
 PY=python3.11
 if [ "$MODE" != science ]; then
@@ -69,7 +69,7 @@ must require-git "$CAP_GIT" bash dq11_require_git.sh
 
 # Host floors, before any fetch (PREREG "Refusal points" 4-5; the card class is the registering amendment's).
 case "$MODE" in
-  science) say 'refusing: no box is registered (the registering amendment pins the class, floors and caps)'; echo 'not registered' > REFUSAL; finish 78 ;;
+  science) CARD_RE='^NVIDIA GeForce RTX 5090'; MIN_VRAM_MIB=32000; MIN_RAM_GB=134; MIN_DISK_GB=350 ;;   # R2 Amendments 2 and 3
   a2000)   CARD_RE='^NVIDIA RTX A2000 12GB$'; MIN_VRAM_MIB=11000; MIN_RAM_GB=64; MIN_DISK_GB=60 ;;
   cpu)     CARD_RE=''; MIN_VRAM_MIB=0; MIN_RAM_GB=8; MIN_DISK_GB=10 ;;
 esac

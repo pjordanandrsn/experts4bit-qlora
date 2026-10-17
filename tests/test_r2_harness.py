@@ -108,13 +108,51 @@ def _run(w, env):
     return subprocess.run(["bash", str(w / "r2_run.sh")], env=env, capture_output=True, text=True, timeout=120)
 
 
-def test_the_science_mode_refuses_until_a_box_is_registered(box):
+def _science_line():
+    import re
+    m = re.search(r"^  science\) CARD_RE='([^']*)'; MIN_VRAM_MIB=(\d+); MIN_RAM_GB=(\d+); MIN_DISK_GB=(\d+)",
+                  (F / "r2_run.sh").read_text(), re.M)
+    return m.group(1), int(m.group(2)), int(m.group(3)), int(m.group(4))
+
+
+def test_the_science_host_floors_are_the_registration_s():
+    """R2 Amendment 3: the RTX 5090 class (at least 32,000 MiB); Amendment 2's 134 GB of host RAM; 350 GB of free disk."""
+    assert _science_line() == ("^NVIDIA GeForce RTX 5090", 32000, 134, 350)
+
+
+def test_the_runner_refuses_a_card_that_is_not_the_registered_class(box):
     w, env = box
+    (Path(env["PATH"].split(":")[0]) / "nvidia-smi").write_text(
+        "#!/bin/sh\necho 'NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05, 1, 3, 8, 16, 70.00 W'\n")
     r = _run(w, env)
-    assert r.returncode == 78 and "no box is registered" in r.stdout, (r.returncode, r.stdout[-800:], r.stderr[-800:])
-    assert (w / "REFUSAL").read_text().strip() == "not registered" and (w / "TC1_EXIT_CODE.n0nce").read_text().strip() == "78"
-    assert not (w / "receipts" / "card.txt").exists()                      # refused before any host probe, install or fetch
+    assert r.returncode == 18 and (w / "REFUSAL").read_text().strip() == "card class", (r.returncode, r.stdout[-800:])
     assert json.loads((w / "receipts" / "run.json").read_text())["schema"] == "r2-run/1"
+
+
+def test_the_runner_refuses_a_5090_host_below_the_ram_floor(box):
+    w, env = box
+    with open("/proc/meminfo") if os.path.exists("/proc/meminfo") else open(os.devnull) as f:
+        total = next((int(ln.split()[1]) for ln in f if ln.startswith("MemTotal:")), None)
+    if total is None or total * 1024 >= 134e9:
+        pytest.skip("needs a Linux host with less than 134 GB of RAM")
+    r = _run(w, env)                                                         # the fixture's stand-in card is an RTX 5090
+    assert r.returncode == 18 and (w / "REFUSAL").read_text().strip() == "host ram floor", (r.returncode, r.stdout[-800:])
+
+
+def test_the_sealed_caps_and_pull_floor_are_the_committed_fit_s():
+    """R2 Amendment 3: each fitted cap is its budget rounded up to the minute, the fixed phases keep Q235's caps, the pull floor is
+    the fit's at R2's fetch cap, and the fit (r2_fit.py at this commit, on the published rehearsal) fits inside the 6 h maximum."""
+    import math
+    import re
+    text = (F / "r2_run.sh").read_text()
+    caps = {k: int(v) for k, v in re.findall(r"\b(CAP_[A-Z]+)=(\d+)\b", text)}
+    fit = json.loads((F / "r2-fit" / "fit-500-2.00.json").read_text())
+    names = {"install": "CAP_INSTALL", "fetch": "CAP_FETCH", "box": "CAP_BOX", "repeat": "CAP_REPEAT"}
+    for phase, var in names.items():
+        assert caps[var] == 60 * math.ceil(fit["phases"][phase]["budget_s"] / 60), phase
+    assert (caps["CAP_GIT"], caps["CAP_VENV"], caps["CAP_HOSTRATE"], caps["CAP_TOKENS"]) == (240, 120, 600, 300)
+    assert float(re.search(r"^MIN_FETCH_GBS=([0-9.]+)$", text, re.M).group(1)) == fit["floors"]["fetch_gb_s"] == 0.063
+    assert fit["fits"] and fit["within_policy_max"] and fit["wallclock_h"] <= 6.0 and fit["floors"]["sealed_match"]
 
 
 def test_the_runner_voids_a_closure_that_does_not_match_its_manifest(box):
