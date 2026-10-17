@@ -18,12 +18,16 @@ KV_SOURCES = {2: 2, 8: 2, 14: 2, 20: 1}         # kv_source layer -> its compres
 LATENT, INDEX_DIM, WINDOW, LAYERS = 512, 128, 128, 40
 ENGRAM_READS_PER_TOKEN = 2 * 2 * (4 - 1) * 8      # 2 tables x (weight row + scale row) x (max_ngram 4 - 1) x 8 heads
 ENGRAM_BYTES_PER_TOKEN = 2 * (4 - 1) * 8 * (256 + 8)
+ENGRAM_LOOKUPS_PER_TOKEN = ENGRAM_READS_PER_TOKEN // 2      # a lookup = one weight row + one scale row
 TOPK, N_EXPERTS = 6, 384
 
 # Hosts: measured rates and memory (README.md names each record). GB/s and GB.
-#   gpu_free: measured free VRAM in GB (else the card's GiB size); ram: host RAM the model may use; os: reserve kept back.
+#   cards: measured free VRAM in GB (else the card's GiB size); ram: host RAM the model may use; os: reserve kept back.
+#   engram_lookups_s: measured Engram lookups per second on the disk that holds the tables, which the experts share, so the
+#   two are summed (serial). The A2000 host's disk figures are its model pool's, measured at idle I/O priority: floors.
 HOSTS = {
-    "A2000 host": {"h2d": 5.8, "disk": 1.63, "ram": 51.5, "os": 0.0, "cards": {12: 10698 * (1 << 20) / GB}},
+    "A2000 host": {"h2d": 5.8, "disk": 0.786, "ram": 51.5, "os": 0.0, "cards": {12: 10698 * (1 << 20) / GB},
+                   "engram_lookups_s": {"QD4": 76.6, "QD1": 23.3}},
     "rented, 239 GB floor": {"h2d": 21.76, "disk": 6.31, "ram": 239.0, "os": 8.0},
     "rented, 1,081 GB (box 1)": {"h2d": 21.76, "disk": 6.31, "ram": 1081.0, "os": 8.0},
 }
@@ -53,7 +57,7 @@ def kv_bytes(context):
     return compressed + LAYERS * WINDOW * LATENT * 2
 
 
-def placement(host, gpu_gb, b, context, engram_on_disk, h2d=None):
+def placement(host, gpu_gb, b, context, engram_on_disk, h2d=None, qd="QD4"):
     """Routed experts per token from the GPU cache, then host RAM, then disk. The Engram tables sit in RAM or on disk."""
     h2d = h2d or host["h2d"]
     experts, tables = b["routed experts (40 layers)"], b["Engram tables"]
@@ -69,10 +73,13 @@ def placement(host, gpu_gb, b, context, engram_on_disk, h2d=None):
     ram_hit = min(1.0 - gpu_hit, ram * GB / experts)
     disk_bytes, link_bytes = token * (1 - gpu_hit - ram_hit), token * (1 - gpu_hit)
     t_link, t_disk = link_bytes / (h2d * GB), disk_bytes / (host["disk"] * GB)
+    if engram_on_disk and host.get("engram_lookups_s"):
+        t_disk += ENGRAM_LOOKUPS_PER_TOKEN / host["engram_lookups_s"][qd]
     bound = 1 / max(t_link, t_disk)
     return {"feasible": True, "binding": "disk" if t_disk >= t_link else "H2D", "tok_s_bound": bound, "gpu_hit": gpu_hit,
             "ram_hit": ram_hit, "engram": "disk" if engram_on_disk else "host RAM",
-            "engram_binds_below_reads_per_s": ENGRAM_READS_PER_TOKEN * bound if engram_on_disk else None}
+            "engram_binds_below_reads_per_s": (ENGRAM_READS_PER_TOKEN * bound
+                                               if engram_on_disk and not host.get("engram_lookups_s") else None)}
 
 
 def best(host, gpu_gb, b, context, h2d=None):
@@ -123,8 +130,12 @@ def main():
                      if r["engram_binds_below_reads_per_s"] else "")
             print(head + f"{r['tok_s_bound']:5.2f} tok/s{extra}  {r['binding']:4s}  Engram {r['engram']:8s}  hits GPU "
                   f"{r['gpu_hit']:.1%} RAM {r['ram_hit']:.1%}{binds}{alt}")
-    cold = dict(HOSTS["A2000 host"], disk=0.743)
-    print(f"A2000 host at its cold-load disk rate 0.743 GB/s: {best(cold, HOSTS['A2000 host']['cards'][12], b, a.context)[0]['tok_s_bound']:.2f} tok/s")
+    a2k = HOSTS["A2000 host"]
+    for qd in ("QD4", "QD1"):
+        r = placement(a2k, a2k["cards"][12], b, a.context, True, qd=qd)
+        print(f"A2000 host, Engram lookups at {qd} ({a2k['engram_lookups_s'][qd]}/s) on the experts' pool: {r['tok_s_bound']:.3f} tok/s")
+    r = placement(dict(a2k, engram_lookups_s=None), a2k["cards"][12], b, a.context, True)
+    print(f"A2000 host, expert reads alone at {a2k['disk']} GB/s: {r['tok_s_bound']:.3f} tok/s")
     print()
     per_tok = sum((LATENT + INDEX_DIM) * 2 / r for r in KV_SOURCES.values())
     fixed = b["gpu_resident"] + LAYERS * WINDOW * LATENT * 2 / GB + 2 * TOPK * per_expert / GB + RESERVE_GB

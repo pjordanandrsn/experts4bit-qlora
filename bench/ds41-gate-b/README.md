@@ -22,7 +22,7 @@ revision `1bae0e10`), and each rate comes from the record named below.
 
 | host | H2D | disk read (O_DIRECT) | host RAM | record |
 |---|---|---|---|---|
-| our A2000 host, 12 GB card | 5.8 GB/s (gen3 x8) | 1.63 GB/s; 0.743 GB/s on a cold load. Both were measured on the GPU container's work pool, **not** the pool that holds this checkpoint (below) | 131.8 GB total, **51.5 GB available** (read 2026-10-17T13:55Z; the rest serves the host's own services). The card: 12,282 MiB, 1,584 MiB in use with no compute app, so **11.22 GB free** (read 14:02Z) | `bench/q235/gate2/hostrate.json`, `bench/q235/gate2/README.md` |
+| our A2000 host, 12 GB card | 5.8 GB/s (gen3 x8) | **the model pool, which holds the checkpoint:** 0.786 GB/s sequential (4 MiB reads of expert tensors) and 76.6 Engram lookups/s at queue depth 4 (23.3 at depth 1; a lookup is a weight row and a scale row). Measured read-only at idle I/O priority on a loaded pool, so these are floors. (The GPU container's work pool, which does not hold the weights, reads 1.63 GB/s.) | 131.8 GB total, **51.5 GB available** (read 2026-10-17T13:55Z; the rest serves the host's own services). The card: 12,282 MiB, 1,584 MiB in use with no compute app, so **11.22 GB free** (read 14:02Z) | model pool: `engram_read_probe.py` `fcf31c2a`, `results.json` `5127d0db` (measured-private, 2026-10-17 14:11–14:13Z); work pool: `bench/q235/gate2/hostrate.json` |
 | rented, PCIe gen 4 | 21.76 GB/s | 6.31 GB/s | 1,081 GB on that box; Q235 rents to a 239 GB floor | Q235 box 1 `hostrate.json` `2ce01906`, `host.json` `4d5e0251` (measured-private); `bench/q235/PREREG-q235.md` Amendment 5 |
 | rented, PCIe gen 5 | 40–53 GB/s, **unmeasured** (an assumption) | — | — | `bench/q235/am7/PREDICTION-C.md` |
 
@@ -43,7 +43,7 @@ higher bound (both are shown). The remaining RAM caches experts, and the rest of
 
 | host | GPU | Engram tables | expert hits: GPU / RAM | binding link | **decode bound** | the other placement |
 |---|---|---|---|---|---|---|
-| A2000 host | 12 GiB (11.22 GB free) | disk | 0.4 % / 17.4 % | disk | **0.44 tok/s, provisional** (0.20 at the cold-load rate; the rates are another pool's) | (the tables do not fit in RAM) |
+| A2000 host | 12 GiB (11.22 GB free) | disk (the same pool as the experts) | 0.4 % / 17.4 % | disk | **0.19 tok/s** (0.15 at queue depth 1; 0.21 for the expert reads alone) | (the tables do not fit in RAM) |
 | rented, 239 GB floor | 12 GiB | disk | 0.9 % / 79.5 % | H2D | **4.87 tok/s** (gen 5: 7.2, then disk-bound) | in RAM: 1.56 |
 | rented, 239 GB floor | 24 GiB | disk | 5.4 % / 79.5 % | H2D | **5.10 tok/s** (gen 5: 9.3, then disk-bound) | in RAM: 1.64 |
 | rented, 239 GB floor | 48 GiB | disk | 14.3 % / 79.5 % | H2D | **5.63 tok/s** (gen 5: 10.3–13.7) | in RAM: 1.83 |
@@ -61,13 +61,9 @@ higher bound (both are shown). The remaining RAM caches experts, and the rest of
 - **Disk:** the box needs about 492 GB of local disk for the experts and the tables. Box 1 had 697 GB free.
 - **Context:** at batch 1 the A2000's free memory holds 0.46M tokens of KV, and a 12 GiB card 0.98M. The model's maximum is
   1,048,576, which needs a 24 GiB card or larger.
-- **The A2000 host** keeps the tables and 82.3 % of the experts on disk, and the disk binds. Its tables bind only below 42 random
-  reads per second.
-- **But that row's disk rate is the wrong pool's.** The checkpoint (revision `1bae0e10`, all 48 shards) is already on the
-  host, on its model pool: one 12-wide raidz2 vdev of HDDs, 128 KiB records, compression off. There, a random 264 B row read
-  costs a whole 128 KiB record, so the pool's random-read rate is roughly one disk's: an estimated 100–200 reads/s, against the
-  42/s the row needs. That pool's sequential rate is unmeasured too, and could be higher or lower than 1.63 GB/s. The A2000
-  row is **provisional** until gate C item 1 measures that pool.
+- **The A2000 host** keeps the tables and 82.3 % of the experts on its model pool (one 12-wide raidz2 vdev of HDDs, 128 KiB
+  records), where both the expert reads and the tables' lookups go. The expert reads take 4.72 s per token at 0.786 GB/s. The
+  48 lookups add 0.63 s at queue depth 4, or 2.06 s at depth 1. Measured floors, so the row is a floor of the bound too.
 
 ## Training: the per-step bytes (#1681's arithmetic)
 
@@ -89,8 +85,8 @@ With e4b's single-slot whole-layer staging, a pass stages M × (2n − 1) whole 
 1. **The disk's random-read rate: the key measurement.** It covers Engram's 256 B weight rows and 8 B scale rows (separate
    tensors), read at random from our NVMe and pool disks and the rented box class. The tables' placement, and so every headline
    bound above, rests on it. It needs no model: a read probe over a file of the tables' size will do. The sequential read rate
-   for 18.80 MB expert reads comes with it. On the A2000 host it can run against the real tables, which are already on its HDD
-   pool: read-only, at $0.
+   for 18.80 MB expert reads comes with it. **Measured on the A2000 host's HDD pool** (above): 153 random reads/s at queue
+   depth 4, against 467–683/s for the 239 GB rows. That says nothing about rented NVMe, which is still unmeasured.
 2. **A `deepseek_v41` module tree** that loads and runs one layer with real weights (gate A: none exists). Nothing below can
    run without it.
 3. **The routing distribution:** the experts' hit rates on real text. They replace the uniform assumption, which drives every
