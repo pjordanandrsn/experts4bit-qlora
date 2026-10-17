@@ -1,0 +1,448 @@
+{
+ "schema": "e4b-async-reuse/1",
+ "gpu": "NVIDIA RTX A2000 12GB",
+ "torch": "2.11.0+cu128",
+ "gnf4": "5c3d309",
+ "e4b": "3834e696",
+ "raw_outputs_sha256": {
+  "out-ABC-run1.json": "fdc7c4155bf1f83e922e1f1f0a95105d9615c498654e6ef4d06b22c194aec46c",
+  "out-C2.json": "9cbbcde1ebfed9a0bc404e3c3f4d4b643565d6b93c07c5353ec153377aa3dbea",
+  "out-C3-dq0.json": "7ce3ef79decb77e9762baeb9cb306a3b89a6b8eae309639a3f241432b64a4c7c"
+ },
+ "A_int4_fused_reduce": {
+  "cases": 28,
+  "split_cases": 28,
+  "launches": 8400,
+  "mismatches": 0,
+  "two_stream_race": {
+   "N": 4096,
+   "K": 2048,
+   "R": 16,
+   "sk": 8,
+   "rounds": 300,
+   "mismatches": 0
+  },
+  "per_case": [
+   {
+    "N": 1536,
+    "K": 2048,
+    "R": 1,
+    "sk": 16,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 1536,
+    "K": 2048,
+    "R": 8,
+    "sk": 16,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 1536,
+    "K": 2048,
+    "R": 16,
+    "sk": 16,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 1536,
+    "K": 2048,
+    "R": 128,
+    "sk": 16,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 2048,
+    "K": 768,
+    "R": 1,
+    "sk": 6,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 2048,
+    "K": 768,
+    "R": 8,
+    "sk": 6,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 2048,
+    "K": 768,
+    "R": 16,
+    "sk": 6,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 2048,
+    "K": 768,
+    "R": 128,
+    "sk": 6,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 4096,
+    "K": 2048,
+    "R": 1,
+    "sk": 8,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 4096,
+    "K": 2048,
+    "R": 8,
+    "sk": 8,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 4096,
+    "K": 2048,
+    "R": 16,
+    "sk": 8,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 4096,
+    "K": 2048,
+    "R": 128,
+    "sk": 8,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 512,
+    "K": 2048,
+    "R": 1,
+    "sk": 16,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 512,
+    "K": 2048,
+    "R": 8,
+    "sk": 16,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 512,
+    "K": 2048,
+    "R": 16,
+    "sk": 16,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 512,
+    "K": 2048,
+    "R": 128,
+    "sk": 16,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 2048,
+    "K": 4096,
+    "R": 1,
+    "sk": 16,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 2048,
+    "K": 4096,
+    "R": 8,
+    "sk": 16,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 2048,
+    "K": 4096,
+    "R": 16,
+    "sk": 16,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 2048,
+    "K": 4096,
+    "R": 128,
+    "sk": 16,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 5120,
+    "K": 2048,
+    "R": 1,
+    "sk": 8,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 5120,
+    "K": 2048,
+    "R": 8,
+    "sk": 8,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 5120,
+    "K": 2048,
+    "R": 16,
+    "sk": 8,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 5120,
+    "K": 2048,
+    "R": 128,
+    "sk": 8,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 1984,
+    "K": 2048,
+    "R": 1,
+    "sk": 16,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 1984,
+    "K": 2048,
+    "R": 8,
+    "sk": 16,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 1984,
+    "K": 2048,
+    "R": 16,
+    "sk": 16,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "N": 1984,
+    "K": 2048,
+    "R": 128,
+    "sk": 16,
+    "launches": 300,
+    "mismatches": 0
+   }
+  ]
+ },
+ "B_fp8_split_kv_fused_combine": {
+  "cases": 12,
+  "launches": 3600,
+  "mismatches": 0,
+  "two_stream_race": {
+   "rounds": 300,
+   "mismatches": 0
+  },
+  "per_case": [
+   {
+    "trial": 0,
+    "lens": [
+     513
+    ],
+    "n_split": 2,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "trial": 0,
+    "lens": [
+     513
+    ],
+    "n_split": 5,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "trial": 0,
+    "lens": [
+     513
+    ],
+    "n_split": 8,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "trial": 1,
+    "lens": [
+     96,
+     511
+    ],
+    "n_split": 2,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "trial": 1,
+    "lens": [
+     96,
+     511
+    ],
+    "n_split": 5,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "trial": 1,
+    "lens": [
+     96,
+     511
+    ],
+    "n_split": 8,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "trial": 2,
+    "lens": [
+     17,
+     250,
+     384
+    ],
+    "n_split": 2,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "trial": 2,
+    "lens": [
+     17,
+     250,
+     384
+    ],
+    "n_split": 5,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "trial": 2,
+    "lens": [
+     17,
+     250,
+     384
+    ],
+    "n_split": 8,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "trial": 3,
+    "lens": [
+     1024,
+     33,
+     700,
+     2048
+    ],
+    "n_split": 2,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "trial": 3,
+    "lens": [
+     1024,
+     33,
+     700,
+     2048
+    ],
+    "n_split": 5,
+    "launches": 300,
+    "mismatches": 0
+   },
+   {
+    "trial": 3,
+    "lens": [
+     1024,
+     33,
+     700,
+     2048
+    ],
+    "n_split": 8,
+    "launches": 300,
+    "mismatches": 0
+   }
+  ]
+ },
+ "C_offload_default_absmax": {
+  "layers": 4,
+  "tokens": [
+   2,
+   512
+  ],
+  "resident": {
+   "passes": 6,
+   "distinct_losses": [
+    12.358863830566406
+   ],
+   "grad_spread_max_rel_vs_its_first_pass": 0.012842466123402119
+  },
+  "offload": {
+   "passes": 30,
+   "nan_passes": 0,
+   "distinct_losses": [
+    12.358824729919434
+   ],
+   "grad_spread_max_rel_vs_its_first_pass": 0.013109755702316761,
+   "grad_max_rel_vs_resident_first_pass": {
+    "max": 0.07679115980863571,
+    "min": 0.07679115980863571
+   }
+  },
+  "losses_equal_resident_vs_offload": false
+ },
+ "C_offload_E4B_ABSMAX_DQ_0": {
+  "layers": 4,
+  "tokens": [
+   2,
+   512
+  ],
+  "resident": {
+   "passes": 6,
+   "distinct_losses": [
+    12.358824729919434
+   ],
+   "grad_spread_max_rel_vs_its_first_pass": 0.012842466123402119
+  },
+  "offload": {
+   "passes": 30,
+   "nan_passes": 0,
+   "distinct_losses": [
+    12.358824729919434
+   ],
+   "grad_spread_max_rel_vs_its_first_pass": 0.013698630034923553,
+   "grad_max_rel_vs_resident_first_pass": {
+    "max": 0.014705882407724857,
+    "min": 0.010273972526192665
+   }
+  },
+  "losses_equal_resident_vs_offload": true
+ },
+ "pressure_256MB_copies": {
+  "run_AB_C1": 12408,
+  "C_default": 8476,
+  "C_dq0": 8300
+ }
+}
