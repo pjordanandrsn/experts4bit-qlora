@@ -150,13 +150,19 @@ nsys_pick(){
 install_nsys(){
   if ! nsys_pick; then
     say "exact P123 nsys absent; install nsight-systems-cli-$NSYS_VER before fetch"
-    # NVIDIA's rotated CUDA signing key (3bf863cc), fingerprint checked before
-    # writing the devtools source. An apt or version mismatch is a refusal.
+    # The devtools repo is currently signed by the 7fa2af80 key; NVIDIA's
+    # CUDA repo rotated to 3bf863cc. Accept only these two verified key
+    # fingerprints, scoped to this devtools apt source, then pin the CLI build.
     if ! { apt-get update -qq && apt-get install -y -qq --no-install-recommends gnupg2 wget ca-certificates \
-      && wget -qO "$W/nvidia-devtools.pub" https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/3bf863cc.pub \
-      && FPR=$(gpg --show-keys --with-colons "$W/nvidia-devtools.pub" 2>/dev/null | awk -F: '$1=="fpr" {print $10; exit}') \
-      && case "$FPR" in *A4B469963BF863CC) true;; *) false;; esac \
-      && gpg --batch --yes --dearmor -o /usr/share/keyrings/nvidia-devtools-keyring.gpg "$W/nvidia-devtools.pub" \
+      && wget -qO "$W/nvidia-devtools-old.pub" https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/7fa2af80.pub \
+      && wget -qO "$W/nvidia-devtools-new.pub" https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/3bf863cc.pub \
+      && FPR_OLD=$(gpg --show-keys --with-colons "$W/nvidia-devtools-old.pub" 2>/dev/null | awk -F: '$1=="fpr" {print $10; exit}') \
+      && FPR_NEW=$(gpg --show-keys --with-colons "$W/nvidia-devtools-new.pub" 2>/dev/null | awk -F: '$1=="fpr" {print $10; exit}') \
+      && [ "$FPR_OLD" = AE09FE4BBD223A84B2CCFCE3F60F4B3D7FA2AF80 ] \
+      && [ "$FPR_NEW" = EB693B3035CD5710E231E123A4B469963BF863CC ] \
+      && gpg --batch --yes --dearmor -o "$W/nvidia-devtools-old.gpg" "$W/nvidia-devtools-old.pub" \
+      && gpg --batch --yes --dearmor -o "$W/nvidia-devtools-new.gpg" "$W/nvidia-devtools-new.pub" \
+      && cat "$W/nvidia-devtools-old.gpg" "$W/nvidia-devtools-new.gpg" > /usr/share/keyrings/nvidia-devtools-keyring.gpg \
       && . /etc/os-release && [ "$ID" = ubuntu ] && [ "$(dpkg --print-architecture)" = amd64 ] \
       && DISTRO=ubuntu$(echo "$VERSION_ID" | tr -d .) \
       && echo "deb [signed-by=/usr/share/keyrings/nvidia-devtools-keyring.gpg] https://developer.download.nvidia.com/devtools/repos/$DISTRO/amd64/ /" > /etc/apt/sources.list.d/nvidia-devtools.list \
