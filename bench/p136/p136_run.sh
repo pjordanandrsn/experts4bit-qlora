@@ -167,7 +167,10 @@ install_nsys(){
     nsys_pick || { say "NSYS VERSION REFUSED before fetch: need $NSYS_EXPECT"; echo 'refused: nsys version mismatch' > REFUSAL; finish 26; }
   fi
   echo "nsys $NSYS_EXPECT at $NSYS" | tee -a versions.txt summary.txt
-  "$NSYS" status -e > logs/nsys_status.log 2>&1 || { say 'NSYS STATUS REFUSED before fetch'; echo 'refused: nsys status' > REFUSAL; finish 26; }
+  # P123's successful 5090 capture reported CPU profiling failures here;
+  # our --sample=none CUDA trace does not require those optional features.
+  "$NSYS" status -e > logs/nsys_status.log 2>&1
+  echo "nsys status rc=$? (diagnostic only; CUDA trace is checked at capture)" >> forensics.txt
   { echo 'nsys status -e:'; tail -12 logs/nsys_status.log; } >> forensics.txt
 }
 install_nsys
