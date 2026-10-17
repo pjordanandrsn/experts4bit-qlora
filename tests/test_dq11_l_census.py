@@ -26,6 +26,42 @@ def cpu(name, start, duration, external, *, cat="cpu_op", seq=None, fwd=0, dims=
     return {"ph": "X", "cat": cat, "name": name, "ts": start, "dur": duration, "pid": 1, "tid": 1, "args": args}
 
 
+def add_flows(events):
+    """Synthetic Kineto flow endpoints; never import a private trace fixture."""
+    nodes = [e for e in events if e["name"].startswith("autograd::engine::evaluate_function: ")]
+    for flow_id, node in enumerate(nodes, 1):
+        name = node["name"].split(": ", 1)[1]
+        if name == "torch::autograd::AccumulateGrad":
+            continue
+        args = node["args"]
+        creator = next(
+            e
+            for e in events
+            if e.get("args", {}).get("Sequence number") == args["Sequence number"]
+            and e["tid"] == args["Fwd thread id"]
+            and e["name"] in census.BACKWARD_CREATOR[name]
+        )
+        inner = cpu(
+            name, node["ts"] + 0.25, 0.25, 10000 + flow_id, seq=args["Sequence number"], fwd=args["Fwd thread id"]
+        )
+        inner.update(pid=node["pid"], tid=node["tid"])
+        events.append(inner)
+        for phase, anchor in (("s", creator), ("f", inner)):
+            events.append(
+                {
+                    "ph": phase,
+                    "id": flow_id,
+                    "pid": anchor["pid"],
+                    "tid": anchor["tid"],
+                    "ts": anchor["ts"],
+                    "cat": "fwdbwd",
+                    "name": "fwdbwd",
+                    **({"bp": "e"} if phase == "f" else {}),
+                }
+            )
+    return events
+
+
 def fixture():
     events, external, seq, correlation = [], 1, 0, 1
     for step in census.STEPS:
@@ -75,7 +111,7 @@ def fixture():
         )
         external += 1
         correlation += 1
-    return {"schemaVersion": 1, "traceEvents": events}
+    return {"schemaVersion": 1, "traceEvents": add_flows(events)}
 
 
 def test_actual_correlation_backward_mapping_and_clipped_names_not_deduplicated():
@@ -138,7 +174,7 @@ def test_backward_creator_uses_forward_thread_and_exact_op_under_nested_base():
             "args": {"External id": 9},
         }
     ]
-    trace = {"schemaVersion": 1, "traceEvents": events}
+    trace = {"schemaVersion": 1, "traceEvents": add_flows(events)}
     normalized = census.normalize_trace(trace, expected_steps=(step,))
     assert [(e["class"], e["path"]) for e in normalized["events"]] == [
         ("base NF4 GEMM", "q.base"),
@@ -204,6 +240,7 @@ def test_real_l_capture_backward_creators_select_exact_nested_op(backward, outer
             "args": {"External id": 6},
         }
     ]
+    add_flows(events)
     normalized = census.normalize_trace({"schemaVersion": 1, "traceEvents": events}, expected_steps=(6,))
     assert [(e["class"], e["path"]) for e in normalized["events"]] == [expected]
     if backward == "DivBackward0":
@@ -216,6 +253,7 @@ def test_real_l_capture_backward_creators_select_exact_nested_op(backward, outer
             census.normalize_trace({"schemaVersion": 1, "traceEvents": events}, expected_steps=(6,))
         events[3]["name"] = creator
         events[4]["name"] = "autograd::engine::evaluate_function: UnregisteredAttentionBackward0"
+        next(e for e in events if e["name"] == backward)["name"] = "UnregisteredAttentionBackward0"
         with pytest.raises(ValueError, match="unregistered backward node kind"):
             census.normalize_trace({"schemaVersion": 1, "traceEvents": events}, expected_steps=(6,))
 
@@ -229,7 +267,7 @@ def test_real_l_capture_backward_creators_select_exact_nested_op(backward, outer
         ("duplicate_kernel", "duplicate physical"),
         ("cross_step", "crosses a synchronized"),
         ("ambiguous_class", "ambiguous equally"),
-        ("missing_sequence", "unbound backward"),
+        ("missing_sequence", "unbound or ambiguous backward flow endpoint"),
         ("unscoped_rank", "unscoped rank16"),
         ("bad_schema", "unsupported Kineto"),
         ("negative_duration", "invalid duration"),
@@ -581,3 +619,64 @@ def _clock_fixture_loop(model, slots):
         torch.nn.utils.clip_grad_norm_(list(slots.values()), 1.0, error_if_nonfinite=True)
         opt.step()
         _elapsed = time.time() - start
+
+
+@pytest.mark.parametrize("os_tid", [1, 101])
+def test_explicit_flows_bind_both_thread_identity_namespaces(os_tid):
+    trace = fixture()
+    for e in trace["traceEvents"]:
+        if e.get("pid") == 1 and e.get("tid") == 1:
+            e["tid"] = os_tid
+    if os_tid != 1:
+        nodes = [e for e in trace["traceEvents"] if e["name"].startswith("autograd::engine::evaluate_function: ")]
+        for e in trace["traceEvents"]:
+            if e.get("pid") == 1 and any(n["ts"] <= e["ts"] < n["ts"] + n["dur"] for n in nodes):
+                e["tid"] = 202
+    normalized = census.normalize_trace(trace)
+    assert len(normalized["sequence_classes"]) == 3
+    assert [e["class"] for e in normalized["events"] if e["phase"] == "backward"] == ["MLP-adapter"] * 3
+
+
+@pytest.mark.parametrize(
+    "mutation,match",
+    [
+        ("missing", "missing or ambiguous backward flow pair"),
+        ("half", "incomplete backward flow pair"),
+        ("duplicate_endpoint", "duplicate backward flow endpoint"),
+        ("multiple_pairs", "missing or ambiguous backward flow pair"),
+        ("bad_start", "creator flow endpoint"),
+        ("bad_end", "unbound or ambiguous backward flow endpoint"),
+        ("wrong_sequence", "unbound or ambiguous backward flow endpoint"),
+        ("wrong_inner_sequence", "unbound or ambiguous backward flow endpoint"),
+        ("boolean_id", "malformed backward flow"),
+        ("cross_process", "incomplete backward flow pair"),
+    ],
+)
+def test_flow_corruption_refuses_without_thread_alias_fallback(mutation, match):
+    trace = fixture()
+    events = trace["traceEvents"]
+    pair = [e for e in events if e.get("cat") == "fwdbwd" and e["id"] == 1]
+    start = next(e for e in pair if e["ph"] == "s")
+    end = next(e for e in pair if e["ph"] == "f")
+    if mutation == "missing":
+        events[:] = [e for e in events if e not in pair]
+    elif mutation == "half":
+        events.remove(start)
+    elif mutation == "duplicate_endpoint":
+        events.append(copy.deepcopy(start))
+    elif mutation == "multiple_pairs":
+        events.extend([{**e, "id": 999} for e in pair])
+    elif mutation == "bad_start":
+        start["ts"] += 0.1
+    elif mutation == "bad_end":
+        end["ts"] += 0.1
+    elif mutation == "wrong_sequence":
+        next(e for e in events if e["name"].startswith("autograd::"))["args"]["Sequence number"] = 999
+    elif mutation == "wrong_inner_sequence":
+        next(e for e in events if e["name"] == "MmBackward0")["args"]["Sequence number"] = 999
+    elif mutation == "boolean_id":
+        start["id"] = True
+    elif mutation == "cross_process":
+        end["pid"] = 99
+    with pytest.raises(ValueError, match=match):
+        census.normalize_trace(trace)
