@@ -280,7 +280,8 @@ def test_envelope_exact_criteria_source_template_and_expiry(tmp_path, monkeypatc
                 "issued_at": issued.isoformat(), "expires_at": (issued + timedelta(hours=24)).isoformat(),
                 "e4b_head": "e" * 40, "controller_head": "c" * 40,
                 "manifest_template_sha256": launch.sha(template),
-                "criteria": launch.ENVELOPE_CRITERIA, "maximum_draws": 1}
+                "criteria": launch.ENVELOPE_CRITERIA, "maximum_draws": 1,
+                "run_ids": list(launch.RUN_IDS), "maximum_attempts": 10}
     launch.validate_envelope(envelope, record, template, e4b, controller, at=issued + timedelta(hours=1))
     with pytest.raises(ValueError, match="expired"):
         launch.validate_envelope(envelope, record, template, e4b, controller, at=issued + timedelta(hours=24))
@@ -290,6 +291,12 @@ def test_envelope_exact_criteria_source_template_and_expiry(tmp_path, monkeypatc
     broader = dict(envelope, criteria=dict(launch.ENVELOPE_CRITERIA, minimum_reliability="0.97"))
     with pytest.raises(ValueError, match="outside the exact envelope"):
         launch.validate_envelope(broader, record, template, e4b, controller, at=issued + timedelta(hours=1))
+    for change in ({"run_ids": list(launch.RUN_IDS[:-1])},
+                   {"run_ids": [*launch.RUN_IDS, "dq11-l-census-15"]},
+                   {"maximum_attempts": 11}, {"maximum_attempts": True}):
+        with pytest.raises(ValueError, match="outside the exact envelope"):
+            launch.validate_envelope(dict(envelope, **change), record, template, e4b, controller,
+                                     at=issued + timedelta(hours=1))
     template.write_text("{\"changed\":true}")
     with pytest.raises(ValueError, match="source or manifest template change"):
         launch.validate_envelope(envelope, record, template, e4b, controller, at=issued + timedelta(hours=1))
@@ -347,7 +354,8 @@ def test_qualifying_window_makes_one_inclusion_pinned_launch(tmp_path, monkeypat
     envelope = tmp_path / "envelope.json"
     approval_url = "https://github.com/pjordanandrsn/experts4bit-qlora/issues/1083#issuecomment-123"
     envelope.write_text(json.dumps({"approval_url": approval_url, "issued_at": "2026-10-11T08:00:00Z",
-                                    "expires_at": "2026-10-12T08:00:00Z"}))
+                                    "expires_at": "2026-10-12T08:00:00Z",
+                                    "run_ids": list(launch.RUN_IDS)}))
     assets = tmp_path / "assets"
     assets.mkdir()
     packet = tmp_path / "packet"
@@ -384,14 +392,14 @@ def test_qualifying_window_makes_one_inclusion_pinned_launch(tmp_path, monkeypat
     )
     if validation_rc:
         with pytest.raises(ValueError, match="controller --validate refused"):
-            launch.launch(template, envelope, e4b, controller, assets, packet)
+            launch.launch_attempt(template, envelope, e4b, controller, assets, packet, run_id=launch.RUN_IDS[0])
         assert not (packet / "final-quote.json").exists()
         assert not (packet / "launch-admission.json").exists()
         assert not (packet / "controller.json").exists()
         assert (packet / "controller-validate.stderr.txt").read_text() == "validation diagnostic\n"
         assert json.loads((packet / "controller-validate.json").read_text())["returncode"] == 1
         return
-    assert launch.launch(template, envelope, e4b, controller, assets, packet) == controller_rc
+    assert launch.launch_attempt(template, envelope, e4b, controller, assets, packet, run_id=launch.RUN_IDS[0]) == controller_rc
     validation = json.loads((packet / "controller-validate.json").read_text())
     outcome = json.loads((packet / "controller.json").read_text())
     assert "--validate" in validation["command"] and "--validate" not in outcome["command"]
@@ -430,7 +438,7 @@ def test_paid_controller_refuses_expired_search_before_driver(tmp_path, monkeypa
     monkeypatch.setattr(launch, "observe_all_hosts", discover)
     monkeypatch.setattr(launch, "check_qualifying_window", lambda *args: history)
 
-    def bind(*args):
+    def bind(*args, **kwargs):
         args[-1].write_text(json.dumps({"vast_pin_machine": "200", "vast_pin_offers": ["100"]}))
         return {"vast_pin_machine": "200", "vast_pin_offers": ["100"]}
 
@@ -460,7 +468,8 @@ def test_paid_controller_refuses_expired_search_before_driver(tmp_path, monkeypa
     e4b.mkdir()
     controller.mkdir()
     with pytest.raises(ValueError, match="exceeded 60-second"):
-        launch.launch(template, envelope, e4b, controller, tmp_path, tmp_path / "packet")
+        launch.launch_attempt(template, envelope, e4b, controller, tmp_path, tmp_path / "packet",
+                              run_id=launch.RUN_IDS[0])
 
 
 def test_box_refuses_wrong_science_before_gpu_or_network(tmp_path):
@@ -484,14 +493,15 @@ def test_launch_refuses_missing_or_wrong_executor_before_discovery(tmp_path, mon
     if identity is not None:
         monkeypatch.setenv("POD_LAUNCH_AGENT", identity)
     with pytest.raises(ValueError, match="POD_LAUNCH_AGENT must identify"):
-        launch.launch(*(tmp_path / name for name in ("template", "envelope", "e4b", "controller", "assets", "packet")))
+        launch.launch_attempt(*(tmp_path / name for name in ("template", "envelope", "e4b", "controller", "assets", "packet")),
+                              run_id=launch.RUN_IDS[0])
     assert not (tmp_path / "packet").exists()
 
 
-def test_registered_run4_template_identity_and_sha256():
+def test_registered_range_template_identity_and_sha256():
     template = LANE / "dq11_l_census_manifest_template.json"
-    assert json.loads(template.read_text())["run_id"] == "dq11-l-census-4"
-    assert launch.sha(template) == "3fd43211113e2ef632156bcbf1fdd21c88bc94de582e28ce954382098b607174"
+    assert json.loads(template.read_text())["run_id"] == launch.RUN_ID_PLACEHOLDER
+    assert launch.sha(template) == "2c9b0febc3d6933b50fe960b3e16d776bded5d03103822f6548fd5cf2099f31d"
 
 
 def test_budget_template_matches_registered_wall_and_full_reservation():
@@ -509,3 +519,129 @@ def test_static_budget_refuses_changed_upload_allowance(monkeypatch):
     monkeypatch.setattr(launch, "UPLOAD_GB", launch.Decimal(0))
     with pytest.raises(ValueError, match="budget arithmetic changed"):
         launch.check_static_budget()
+
+
+def range_envelope():
+    return {"approval_url": "https://github.com/pjordanandrsn/experts4bit-qlora/issues/1083#issuecomment-123",
+            "run_ids": list(launch.RUN_IDS), "maximum_attempts": 10}
+
+
+def refusal_receipt(root, run_id, **changes):
+    receipt = {"experiment_id": run_id, "work_id": "experts4bit-qlora#1083",
+               "status": "REFUSED", "complete": True, "instance_id": "none",
+               "cost_usd": {"actual": 0}, "approvals": [{"approval_url": range_envelope()["approval_url"]}],
+               "teardown_proof": {"complete": True, "method": "not-launched", "instance_id": "none"}}
+    receipt.update(changes)
+    path = root / "receipts/experts4bit-qlora/2026-10-17" / run_id / "receipt.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(receipt))
+    return path
+
+
+def test_template_substitution_changes_only_run_id():
+    template = json.loads((LANE / "dq11_l_census_manifest_template.json").read_text())
+    for run_id in launch.RUN_IDS:
+        attempt = launch.attempt_template(template, run_id)
+        assert attempt["run_id"] == run_id
+        attempt["run_id"] = launch.RUN_ID_PLACEHOLDER
+        assert attempt == template
+    for invalid in ("dq11-l-census-4", "dq11-l-census-15", "../run", None):
+        with pytest.raises(ValueError, match="unregistered"):
+            launch.attempt_template(template, invalid)
+
+
+def test_zero_instance_refusal_burns_id_but_allows_fresh_attempt(tmp_path):
+    env = range_envelope()
+    state = tmp_path / "state"
+    with launch.attempt_permit(env, launch.RUN_IDS[0], tmp_path, state):
+        pass
+    refusal_receipt(tmp_path, launch.RUN_IDS[0])
+    with pytest.raises(ValueError, match="burned"):
+        with launch.attempt_permit(env, launch.RUN_IDS[0], tmp_path, state):
+            pytest.fail("reused run id")
+    with launch.attempt_permit(env, launch.RUN_IDS[1], tmp_path, state):
+        pass
+    rows = json.loads((state / "123.json").read_text())["attempts"]
+    assert [row["run_id"] for row in rows] == list(launch.RUN_IDS[:2])
+
+
+@pytest.mark.parametrize("changes", [
+    {"instance_id": "123", "status": "ERROR"},
+    {"complete": False}, {"cost_usd": {"actual": .001}},
+    {"experiment_id": "other-run"}, {"work_id": "other-work"},
+    {"approvals": [{"approval_url": "another approval"}]},
+    {"teardown_proof": {"complete": True, "method": "destroy", "instance_id": "none"}},
+])
+def test_created_or_uncertain_receipt_blocks_any_next_draw(tmp_path, changes):
+    refusal_receipt(tmp_path, launch.RUN_IDS[0], **changes)
+    with pytest.raises(ValueError, match="created instance or uncertain"):
+        with launch.attempt_permit(range_envelope(), launch.RUN_IDS[1], tmp_path, tmp_path / "state"):
+            pytest.fail("next draw allowed")
+
+
+def test_process_death_without_receipt_fails_closed(tmp_path):
+    state = tmp_path / "state"
+    with launch.attempt_permit(range_envelope(), launch.RUN_IDS[0], tmp_path, state):
+        pass  # Simulated death after durable admission, before a canonical receipt.
+    with pytest.raises(ValueError, match="uncertain"):
+        with launch.attempt_permit(range_envelope(), launch.RUN_IDS[1], tmp_path, state):
+            pytest.fail("uncertain attempt retried")
+
+
+def test_concurrent_attempts_are_exclusive(tmp_path):
+    state = tmp_path / "state"
+    with launch.attempt_permit(range_envelope(), launch.RUN_IDS[0], tmp_path, state):
+        with pytest.raises(ValueError, match="active"):
+            with launch.attempt_permit(range_envelope(), launch.RUN_IDS[1], tmp_path, state):
+                pytest.fail("concurrent attempt")
+
+
+def test_ten_refusals_exhaust_range_even_with_fresh_journal(tmp_path):
+    for run_id in launch.RUN_IDS:
+        refusal_receipt(tmp_path, run_id)
+    with pytest.raises(ValueError, match="burned or ten-attempt"):
+        with launch.attempt_permit(range_envelope(), launch.RUN_IDS[-1], tmp_path, tmp_path / "new-state"):
+            pytest.fail("eleventh attempt")
+
+
+def test_ledger_without_receipt_blocks_attempt(tmp_path):
+    ledger = tmp_path / "receipts/experts4bit-qlora/ledger.jsonl"
+    ledger.parent.mkdir(parents=True)
+    ledger.write_text(json.dumps({"run_id": launch.RUN_IDS[0], "cost_usd": 0}) + "\n")
+    with pytest.raises(ValueError, match="ledger attempt"):
+        with launch.attempt_permit(range_envelope(), launch.RUN_IDS[1], tmp_path, tmp_path / "state"):
+            pytest.fail("orphan ledger accepted")
+
+
+def test_changed_envelope_cannot_reset_attempt_journal(tmp_path):
+    env = range_envelope()
+    state = tmp_path / "state"
+    with launch.attempt_permit(env, launch.RUN_IDS[0], tmp_path, state):
+        pass
+    refusal_receipt(tmp_path, launch.RUN_IDS[0])
+    with pytest.raises(ValueError, match="envelope changed"):
+        with launch.attempt_permit(dict(env, issued_at="different"), launch.RUN_IDS[1], tmp_path, state):
+            pytest.fail("approval mutation reset journal")
+
+
+def test_each_permitted_attempt_reenters_full_gated_launcher(tmp_path, monkeypatch):
+    env = range_envelope()
+    envelope = tmp_path / "envelope.json"
+    envelope.write_text(json.dumps(env))
+    monkeypatch.setattr(launch, "validate_envelope", lambda *args: None)
+    monkeypatch.setattr(launch, "verify_envelope_comment", lambda *args: None)
+    monkeypatch.setattr(launch.Path, "home", lambda: tmp_path)
+    monkeypatch.setenv("RECEIPTS_REPO", str(tmp_path))
+    calls = []
+
+    def attempt(*args, run_id):
+        calls.append((run_id, args[-1]))
+        refusal_receipt(tmp_path, run_id)
+        return 2
+
+    monkeypatch.setattr(launch, "launch_attempt", attempt)
+    for i in range(2):
+        packet = tmp_path / f"packet{i}"
+        assert launch.launch(tmp_path / "template", envelope, tmp_path / "e4b", tmp_path / "controller",
+                             tmp_path / "assets", packet, run_id=launch.RUN_IDS[i]) == 2
+    assert calls == [(launch.RUN_IDS[i], tmp_path / f"packet{i}") for i in range(2)]
