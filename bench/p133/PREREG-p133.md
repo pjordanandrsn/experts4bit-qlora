@@ -168,3 +168,41 @@ eager. So these run for the first time in this lane on the proof:
 `bench/p133/receipts/<run>/`: `fit.json`, `arm_{B0a,B1a,B1b,B0b}.json`, `quality_{off,on}.json`, `verdict.json`,
 `summary.txt`, `forensics.txt`, `versions.txt`, `prompts.json`, `logs/` (with the premise junit reports),
 `work/bake.json` and `SHA256SUMS`. The checkpoint, the arena, the reference log-probs and the gnf4 clone stay on the box.
+
+## Amendment 1 (2026-10-17, after `p133-4090-prove-1` VOIDed on a defect in the reducer)
+
+**What happened.** `p133-4090-prove-1` ($0.17, Vast contract 56454024 on machine 51612) ran every registered box step:
+- refusals passed (`cc=8.9 sms=128`, torch 2.8.0+cu128); the tripwire and self-tests passed;
+- the premise read 33 + 2 and 18 + 0, by id;
+- the fit check passed (`max_seqs` auto 64, buckets 1–64, graphs on);
+- the four arms ran with every bucket captured and exact engagement;
+- both quality phases ran (rc 0).
+
+The reducer VOIDed it (lane exit 27). The quality pass integrity read the server's buckets from the record (1–64 here)
+instead of the buckets P110's instrument enables, `p110_box.BUCKETS = (1, 2, 4, 8, 16)`.
+
+**The deviation, plainly:** the reducer derived the buckets from the record; this amendment restores P116's rule.
+
+**The correction.**
+- `INSTRUMENT_BUCKETS` is read from `p110_box.py`'s own source (`BUCKETS`), staged beside the reducer, never hard-coded.
+- No rule, bar, prediction, size or budget changes.
+- The self-test grows to 41 cases. They include the proof's shape (server buckets 1–64, passes at 1–16), a pass whose
+  bucket captured, and a pass that misses bucket 8.
+- `tests/test_p133_staged_pin.py` reruns the pre-amendment reducer (#1695's merge) on that shape: it VOIDs on the pass
+  `graph_status` alone, the amended reducer passes it, and the bucket-8 mutant still VOIDs.
+
+**The proof (the maintainer's ruling, 2026-10-17T22:06Z).** The re-reduction stands as the proof, under this page's own
+criterion: a VOID fails the proof, and NOISY at the proof's lengths is not a failure. No `p133-4090-prove-2` is declared.
+The verdict of record comes from the MERGED reducer:
+1. after this amendment merges, `prove-1`'s committed records are re-reduced at the merge commit (`--proof`);
+2. the verdict must be byte-identical to the re-reduction run before the merge (sha256
+   `d07c19db63c122794900c00efb0eba2eccfdc200443ba675edea93b45e61ac6f`, NOISY);
+3. it is posted with the reducer's merge sha on #1695 and the bus;
+4. then the reading `p133-4090-1` may launch under the pin rule.
+
+The B1-against-B0 comparison and the quality deltas stay unread until the reading.
+
+**Disclosed:** that pre-merge re-reduction was run before the maintainer's terms were read. Its reasons, the four self-pair
+ratios at the proof's lengths, were seen. They are noise diagnostics, per the ruling.
+
+**Spend:** $0.17 of the $3.75 ceiling.
