@@ -9,8 +9,9 @@ measured on the same RTX A2000 host (``FLOORS``), and each of the rehearsal's bo
 part by part from its load profile, before Q235's fit scales it:
 - the read: the bytes it read at the disk floor, when that is slower than measured;
 - the expert assembly and the offload (host-copy bound): times the measured host-copy rate over the floor's;
-- the staging (host to device): the bytes staged at the H2D floor, when that is slower than measured. The repeat records no staged
-  bytes, so its three forwards are bounded by the box step's bytes each;
+- the staging (host to device): the bytes staged at the H2D floor, when that is slower than measured. The box stages the experts in
+  four passes, its in-process pair and its two steps, each counted at a step's bytes; the repeat records no staged bytes, so its
+  three forwards are bounded by the box step's bytes each (a forward stages less than a step: conservative);
 - then times ``SPREAD``, the slow end of the observed RTX 5090 per-step spread.
 Every slowed time is at least the measured one: a rehearsal that read faster than a floor is slowed to it, never sped up.
 
@@ -43,6 +44,7 @@ FLOORS = {"h2d_gb_s": 5.8, "host_copy_gb_s": 5.14, "disk_read_gb_s": 0.743}   # 
 SPREAD = 1.18                                            # the slow end of the observed RTX 5090 per-step spread (6-18 %)
 POLICY_MAX_H = 6.0                                       # the launcher's teardown.max_wallclock_h
 REPEAT_FORWARDS = 3                                      # the repeat's null and its two in-process plants
+BOX_PASSES = 4                                           # the box's in-process pair (g0, g1) and its two steps, each staging the experts
 
 
 class _Here:
@@ -79,7 +81,8 @@ def slowed(measured_s: float, profile: dict, hostrate: dict, staged_bytes: float
 def cold_timings(timings: dict, box: dict, repeat: dict, hostrate: dict) -> tuple:
     """The rehearsal's phase times with the box and the repeat slowed to the floors and the spread; the record of each."""
     step_bytes = [box[s]["h2d_bytes_offload"] for s in ("step", "step1")]
-    rec = {"box": slowed(float(timings["box"]), box["load"]["profile"], hostrate, sum(step_bytes)),
+    box_staged = sum(step_bytes) + (BOX_PASSES - len(step_bytes)) * max(step_bytes)   # the pair stages as a step does
+    rec = {"box": slowed(float(timings["box"]), box["load"]["profile"], hostrate, box_staged),
            "repeat": slowed(float(timings["repeat"]), repeat["load"]["profile"], hostrate, REPEAT_FORWARDS * max(step_bytes))}
     out = dict(timings)
     for p in ("box", "repeat"):

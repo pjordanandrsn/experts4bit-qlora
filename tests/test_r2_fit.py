@@ -80,6 +80,9 @@ def test_only_the_box_and_the_repeat_are_slowed_and_spread():
     out, rec = r2.cold_timings(t, box, repeat, host)
     assert out["tokens"] == 7 and out["require-git"] == 0
     assert out["box"] == rec["box"]["with_spread_s"] > 112 * r2.SPREAD and out["repeat"] == rec["repeat"]["with_spread_s"] > 46 * r2.SPREAD
+    per_pass = 9.51e9 / 5.8e9 - 9.51e9 / 6.12e9                             # the H2D floor's extra seconds for one pass's staging
+    assert abs(rec["box"]["staging_s"] - round(r2.BOX_PASSES * per_pass, 2)) < 0.011, rec["box"]   # the pair and both steps
+    assert abs(rec["repeat"]["staging_s"] - round(r2.REPEAT_FORWARDS * per_pass, 2)) < 0.011, rec["repeat"]
 
 
 def test_the_pull_floor_at_r2_s_fetch_cap():
