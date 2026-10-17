@@ -43,7 +43,7 @@ higher bound (both are shown). The remaining RAM caches experts, and the rest of
 
 | host | GPU | Engram tables | expert hits: GPU / RAM | binding link | **decode bound** | the other placement |
 |---|---|---|---|---|---|---|
-| A2000 host | 12 GiB (11.22 GB free) | disk | 0.4 % / 17.4 % | disk | **0.44 tok/s** (0.20 at the cold-load rate) | (the tables do not fit in RAM) |
+| A2000 host | 12 GiB (11.22 GB free) | disk | 0.4 % / 17.4 % | disk | **0.44 tok/s, provisional** (0.20 at the cold-load rate; the rates are another pool's) | (the tables do not fit in RAM) |
 | rented, 239 GB floor | 12 GiB | disk | 0.9 % / 79.5 % | H2D | **4.87 tok/s** (gen 5: 7.2, then disk-bound) | in RAM: 1.56 |
 | rented, 239 GB floor | 24 GiB | disk | 5.4 % / 79.5 % | H2D | **5.10 tok/s** (gen 5: 9.3, then disk-bound) | in RAM: 1.64 |
 | rented, 239 GB floor | 48 GiB | disk | 14.3 % / 79.5 % | H2D | **5.63 tok/s** (gen 5: 10.3–13.7) | in RAM: 1.83 |
@@ -66,8 +66,8 @@ higher bound (both are shown). The remaining RAM caches experts, and the rest of
 - **But that row's disk rate is the wrong pool's.** The checkpoint (revision `1bae0e10`, all 48 shards) is already on the
   host, on its model pool: one 12-wide raidz2 vdev of HDDs, 128 KiB records, compression off. There, a random 264 B row read
   costs a whole 128 KiB record, so the pool's random-read rate is roughly one disk's: an estimated 100–200 reads/s, against the
-  42/s the row needs. That pool's sequential rate is unmeasured too. Read the A2000 row as an upper bound until gate C
-  item 1 measures that pool.
+  42/s the row needs. That pool's sequential rate is unmeasured too, and could be higher or lower than 1.63 GB/s. The A2000
+  row is **provisional** until gate C item 1 measures that pool.
 
 ## Training: the per-step bytes (#1681's arithmetic)
 
