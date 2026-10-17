@@ -9,6 +9,7 @@
 # Install:  ln -sf ../../scripts/hooks/pre-push .git/hooks/pre-push
 # One file exemption, mirrored in the workflow: bench/dq11/DQ11-AMENDMENT-4.md, a sealed
 # registration (pinned in science.sha256) committed before the guard learned the private-store URI scheme.
+# Fixture exemptions and "#all-of:" rules come from .github/private-markers.txt, as in the workflow.
 set -euo pipefail
 fail() { echo "PRE-PUSH GUARD: $*" >&2; exit 1; }
 
@@ -26,14 +27,41 @@ while read -r _lref lsha _rref _rsha; do
     fail "tip tree contains AGENT-* planning docs (private-lane denylist)"
   fi
 
+  # A fixture exemption stands only while the pushed fixture holds its pin.
+  excl=()
+  while read -r _ path cap pin; do
+    git cat-file -e "$lsha:$path" 2>/dev/null || continue
+    git show "$lsha:$path" | scripts/guard_fixture_pin.sh "$path" "$cap" "$pin" \
+      || fail "$path no longer holds its #exempt-fixture pin"
+    excl+=(":!$path")
+  done < <(grep -E '^#exempt-fixture: ' .github/private-markers.txt)
+
   hits=$(git grep -n -I -E -i -f "$PATS" "$lsha" \
            -- . ':!.github/private-markers.txt' \
                 ':!.github/workflows/private-marker-guard.yml' \
                 ':!scripts/hooks/pre-push' \
-                ':!bench/dq11/DQ11-AMENDMENT-4.md' 2>/dev/null \
+                ':!bench/dq11/DQ11-AMENDMENT-4.md' ${excl[@]+"${excl[@]}"} 2>/dev/null \
          | grep -v 'guard-allow' || true)
+  # "#all-of:" rules: every term must match the same line.
+  while IFS= read -r rule; do
+    read -r -a terms <<< "${rule#\#all-of: }"
+    args=()
+    for t in "${terms[@]}"; do
+      [ "${#args[@]}" -eq 0 ] || args+=(--and)
+      args+=(-e "$t")
+    done
+    more=$(git grep -n -I -E -i "${args[@]}" "$lsha" \
+             -- . ':!.github/private-markers.txt' \
+                  ':!.github/workflows/private-marker-guard.yml' \
+                  ':!scripts/hooks/pre-push' \
+                  ':!bench/dq11/DQ11-AMENDMENT-4.md' ${excl[@]+"${excl[@]}"} 2>/dev/null \
+           | grep -v 'guard-allow' || true)
+    [ -z "$more" ] || hits="${hits}${hits:+$'\n'}${more}"
+  done < <(grep -E '^#all-of: ' .github/private-markers.txt)
   if [ -n "$hits" ]; then
-    echo "$hits" | head -20 >&2
+    # || true: under pipefail, head closing the pipe early would end the hook
+    # with SIGPIPE (141) before the refusal below is printed.
+    printf '%s\n' "$hits" | head -20 >&2 || true
     fail "private-lane markers in the tip tree (see above; 'guard-allow' to exempt a line)"
   fi
 done

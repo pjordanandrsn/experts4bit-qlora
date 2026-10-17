@@ -187,6 +187,31 @@ def test_floor_change_needs_its_companions(repo: Path):
     assert r.returncode == 0 and "OK: dependency-floor" in r.stdout, r.stdout
 
 
+def test_floor_change_accepts_a_manifest_record_that_landed_first(repo: Path):
+    # The kernel-first lockstep (#1692 then the 0.55.0 release): the next version's record lands in the manifest on its
+    # own commit, byte-identical in both repositories, before the floor moves.
+    m = _manifest("0.28.0")
+    m["compatibility"][0]["consumer_versions"] = ">=0.35.0,<0.36.0"
+    m["compatibility"].insert(0, {"consumer": "experts4bit-qlora", "consumer_versions": ">=0.36.0",
+                                  "kernel": "grouped-nf4-gemm", "floor": ">=0.30.0", "extra": "fast"})
+    _write(repo, "docs/system-manifest.json", json.dumps(m))
+    _git(repo, "commit", "-q", "-am", "the manifest record first")
+    _write(repo, "pyproject.toml", PYPROJECT.format(floor="0.30.0").replace('version = "0.35.0"', 'version = "0.36.0"'))
+    _append(repo, "docs/capabilities.json", "\n")
+    for companion in (".github/workflows/ci.yml", "docs/SOLUTIONS.md", "docs/solutions/a.md", "CHANGELOG.md"):
+        _append(repo, companion)
+    r = _impact(repo)
+    assert r.returncode == 0 and "landed first: docs/system-manifest.json" in r.stdout, r.stdout
+    # a floor the landed record does not carry is still a missing manifest
+    _write(repo, "pyproject.toml", PYPROJECT.format(floor="0.31.0").replace('version = "0.35.0"', 'version = "0.36.0"'))
+    r = _impact(repo)
+    assert r.returncode == 1 and "MISSING: docs/system-manifest.json" in r.stdout, r.stdout
+    # and so is a version the landed record does not cover
+    _write(repo, "pyproject.toml", PYPROJECT.format(floor="0.30.0"))
+    r = _impact(repo)
+    assert r.returncode == 1 and "MISSING: docs/system-manifest.json" in r.stdout, r.stdout
+
+
 def test_dependency_floor_names_the_drifting_line(repo: Path):
     def run() -> subprocess.CompletedProcess:
         return subprocess.run([sys.executable, str(SCRIPTS / "check_dependency_floor.py"), "--root", str(repo)],

@@ -60,7 +60,7 @@ Serving a native-MXFP4 arena (DeepSeek-V4) is the other side of the seam — [`m
 - Families in the register for this path: Qwen3-MoE, Gemma-4 and OLMoE (host-RAM ceiling receipts, `e4b.offload.arena-vs-host-ram`) and DeepSeek-V4-Flash (native MXFP4, `e4b.serve.deepseek-v4`). gpt-oss has no native-MXFP4 arena route here: `enable_mxfp4_nvme_residency` refuses its bias-carrying modules, and it has no arena-training route ([`mxfp4-moe-training-and-residency.md`](mxfp4-moe-training-and-residency.md)).
 - Training through either tier needs gradient checkpointing (either kind). Attach the engine before `enable_fast_train`: it compresses the expert absmax, which the engines can't read.
 - Arena formats: NF4 quantize-at-bake (four segments per expert row) and native MXFP4 relocation (six segments, fused on read). The manifest's `bake_mode` records which provenance claim the arena supports.
-- Environment: Linux, NVIDIA CUDA sm_80 or newer, grouped-nf4-gemm at the `fast` extra's floor in `pyproject.toml` (grouped-nf4-gemm >= 0.30.0 at this commit; validated by CI), Triton (Linux-only), local NVMe or a fast block device, pinned host RAM for the hot tier; CI tests Python 3.11.
+- Environment: Linux, NVIDIA CUDA sm_80 or newer, grouped-nf4-gemm at the `fast` extra's floor in `pyproject.toml` (grouped-nf4-gemm >= 0.43.0 at this commit; validated by CI), Triton (Linux-only), local NVMe or a fast block device, pinned host RAM for the hot tier; CI tests Python 3.11.
 
 ## Limitations
 

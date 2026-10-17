@@ -39,7 +39,7 @@ always install and cite `experts4bit-qlora`.
 Linux, an NVIDIA CUDA GPU, torch ≥ 2.2, bitsandbytes ≥ 0.43; transformers
 ≥ 5.0 for the streaming loader (`[train]`); for the kernel path (`[fast]`),
 Triton on an sm_80+ GPU and the `fast` extra's floor in `pyproject.toml`
-(grouped-nf4-gemm >= 0.30.0 at this commit; validated by CI). Every floor
+(grouped-nf4-gemm >= 0.43.0 at this commit; validated by CI). Every floor
 above is `pyproject.toml`'s; the machine-readable record of which
 experts4bit-qlora version needs which kernel release, and why, is
 [`system-manifest.json`](system-manifest.json) (`compatibility`). CI tests
