@@ -1,0 +1,162 @@
+# Expert tiling and streaming: where the break-even sits, from existing records
+
+An analytic note: no runs, no GPU, no change to any path. It asks whether streaming routed experts host-to-device in
+sub-expert **tiles** would beat the layouts e4b already has or has sized: the whole layer, the routed whole experts,
+and layer-major. It answers from records only. `roofline.py` reproduces every derived number:
+
+    python roofline.py --h2d 21.76 --h2d 40 --h2d 53
+
+The worked case is Qwen3-235B-A22B under Q235's Shape B (4 micro-batches, 94 layers, checkpointed), because that is the
+only training lane with staging records. **The GPU-side validation is still open:** the Shape B box's per-layer read
+(Amendment 7, on an RTX PRO 6000) is not committed yet. When it lands, it replaces #1680's predicted compute ratio
+below, and this note's verdict has to be re-read against it.
+
+## Two different "tiles"
+
+- **K19's split row tables (gnf4#542)** tile the *activation rows* of a grouped GEMM whose weights are already in VRAM.
+  - A heavy expert (a median 398 of 4,096 routed rows per 512-token chunk on the Qwen3-30B census) gets full 32- or
+    64-row tiles; the rest keep 16-row tiles.
+  - That cuts weight passes per N-block from 307 to 204 (`big_m` 64).
+  - It reduces **VRAM and L2 re-reads**, and moves no host-to-device bytes. Its speed is unread.
+- **Weight-tile streaming**, the subject here, splits each routed expert's *weights* into pieces that cross PCIe
+  separately. Each piece is computed and then evicted.
+  - That changes the H2D schedule and the VRAM working set, not the arithmetic.
+  - The two are independent: weight tiles could feed K19's kernel unchanged.
+
+## Inputs (records)
+
+| record | what it gives |
+|---|---|
+| `bench/q235/PREREG-q235.md` | Qwen3-235B-A22B: hidden 4096, expert intermediate 1536, 128 experts, top-8, 94 layers |
+| box 1 `box/box.json` `27a7863e` (via #1680, #1681) | 254,124,490,752 B in 187 whole-layer stagings: **1,358,954,496 B per layer**, so 10,616,832 B per expert (9,437,184 packed NF4 + 1,179,648 fp32 absmax) |
+| box 1 `hostrate.json` `2ce01906` (via #1680) | pinned H2D 21.76 GB/s, PCIe gen 4 x16 |
+| `bench/q235/am7/PREDICTION-C.md` (#1680) | experts compute (forward, recompute, backward) **15.13 ms per micro-batch per layer** on the PRO 6000, predicted from measured ratios: **5.69 s per Shape B pass**. Staging-bound: C = 8.25 (5.0–11.0) at 21.76 GB/s |
+| `bench/q235/staged-bytes/README.md` (#1681, #1682) | whole-layer stagings per Shape B pass: as-is 748, layer-major 187, routed 548.8, both 167.9. The four micro-batches' routed union is 0.898 of the experts. Layer-major needs a held forward evict (CPU toy: 749 / 470 / 187) |
+| `experts4bit_qlora/engines/offload.py` docstring | Qwen3-235B-A22B inference at 22.5 GB/s, per token: bulk 5.57 s, routed staging **0.93 s**, routed + fused 0.71 s. Routed cannot combine with prefetch; prefill and training fall back to bulk |
+| gnf4 `bench/phase3/flagship/RESULTS-flagship-offload.md` | Qwen3-235B per-expert copies, 4 per expert (0.39 to 6.29 MB each), ran at **101 %** of the 1 GiB pinned microbench (44.28 GB/s, H100) |
+| gnf4 `bench/cold-engine/RESULTS-hybrid-phase0.md` | 8 KiB pinned H2D latency **3.3 µs** per copy (gen 5) |
+| gnf4 `bench/cold-engine/RESULTS-p2-g1b.md` | **19.8 µs per row** of host dispatch: two `cudaMemcpyAsync` enqueues plus a pinned staging write |
+| `bench/p66/RESULTS-p66.md` | on one gen 4 x16 host, a single synchronized 64 MB copy read 14.72 GB/s against 23.07 back-to-back, and a pipelined per-row gather ran at the single-copy rate (14.4 GB/s at h = 0) |
+| `bench/dq5/RESULTS-dq5.md` | layer prefetch on a 5090 (gen 4): step 1.0050x the resident step, but 20–59 of 62 forward copies still in flight when their layer started |
+| `docs/OFFLOAD-TRANSFER-NOTES.md` (A2000) | halving copies per stage (4 to 2) moved 0.08 ms of 36.8: per-copy cost negligible at 216 MiB stages |
+| gnf4 `.../RESULTS-1469-locality-bytes.md` | slicing experts along the intermediate channels "does not move fewer bytes" under exact routing |
+
+Not on record anywhere:
+- an H2D rate-vs-size sweep between 1 and 25 MB;
+- a measured routed staging in training;
+- a GPU roofline for these kernels.
+
+## 1. Bytes: tiling cannot cut them
+
+Exact routing computes every tile of every routed expert, so a tiled schedule moves exactly the bytes of the layout it
+tiles. RESULTS-1469 says the same for slice caching. The byte floor for a checkpointed pass is each layer's routed union
+staged once forward and once in the recompute. That is (b)+(c): **167.9 whole-layer equivalents = 228.2 GB per Shape B
+pass**, 22 % of as-is. Tiling (b)+(c) leaves it at 228.2 GB.
+
+**In training, streamed tiles cost bytes.** e4b keeps a layer resident from its recompute through its backward, so a
+layer crosses PCIe twice per micro-batch. Tiles that are evicted after use must cross a third time for the backward:
+**+50 % bytes**. Keeping every tile resident through the backward avoids that, but then the working set is the whole
+routed layer again and the memory saving is gone.
+
+## 2. Time: overlap is the lever, and whole layers already get it
+
+Per Shape B pass, experts compute 5.69 s (#1680) against staging. "bound" is max(staging, compute). "overlap" is
+layer-granular double buffering: the next layer streams on a side stream during this layer's compute, plus one layer's
+staging per sweep to fill the pipe.
+
+| layout | staging s @ 21.76 | serial / bound | overlap / bound | @ 40: serial / overlap | @ 53: serial / overlap |
+|---|---:|---:|---:|---:|---:|
+| (a) as-is | 46.71 | 1.122 | 1.011 | 1.224 / 1.011 | 1.297 / 1.011 |
+| (b) layer-major | 11.68 | 1.487 | 1.011 | 1.895 / 1.011 | 1.843 / 1.009 |
+| (c) routed | 34.27 | 1.166 | 1.013 | 1.305 / 1.013 | 1.404 / 1.013 |
+| **(b)+(c)** | **10.49** | **1.543** | **1.011** | 1.997 / 1.011 | 1.757 / 1.008 |
+
+- **Run serially (today's synchronous staging), (b)+(c) sits 54 % above its bound.** That fails the 15 % stop line.
+  At 53 GB/s it becomes compute-bound (staging 4.31 s against compute 5.69 s).
+- **With whole-layer double buffering, every layout sits within about 1 % of its bound.** The only residue is the
+  pipeline fill: one layer per sweep, and (b)+(c) has two sweeps per pass.
+- **Tiling's only time gain over that is the fill.** A tile pipeline starts computing after one tile instead of one
+  layer: at most 2 × 0.898 × 62.45 ms = 0.11 s of a 10.6 s pass, about 1 %.
+- **So the stop rule holds, with a qualification.** Layer-major + routed is within 15 % of the transfer bound only
+  once its staging overlaps compute. Whole-layer double buffering supplies that overlap. Tiling does not add enough on
+  top to justify a build.
+- **What double buffering costs.** One more layer slot in VRAM: 1.36 GB (1.22 GB routed). The PRO 6000 box peaked at
+  58.9 GiB of 96. The overlap is not free on every host: DQ5's gen-4 5090 still had 20–59 of 62 forward prefetches in
+  flight when their layer began.
+
+## 3. When tiles would matter: VRAM, not time
+
+Tiling earns its place only where **two layer slots do not fit**: a card whose free VRAM after the resident weights,
+activations, LoRA and optimizer is under about 2.7 GB (2 × 1.36) for this model, or a model with larger layers. There, a
+tile slot of t / 1536 of a layer replaces the second layer slot.
+
+The per-expert working set at tile width t is 10.6 MB × t / 1536. For the 94 experts a micro-batch routes on average,
+that is 1.0 GB at t = 1536 and 0.17 GB at t = 256.
+
+That case is real, but none of today's lanes is in it. It would have to be shown before a prototype was justified.
+
+## 4. Which dimension streams
+
+Expert weights are stored `gate_up` [E, 2I, H] (gate rows, then up rows) and `down` [E, H, I], with one absmax per 64
+consecutive values.
+
+| tile along | intermediate it needs | contiguous on the host? |
+|---|---|---|
+| **I** (the expert intermediate) | [rows, t] per tile; the output accumulates into [rows, H] across tiles | `gate_up`: two contiguous row runs per tile. `down`: **no**. An I-slice of [H, I] is H = 4,096 strided segments of t / 2 bytes (128 B at t = 256), so it needs a one-time host re-layout to I-major tiles first |
+| H as `gate_up`'s K | fp32 partial sums of [rows, 2I] alive until every H tile has arrived, because the activation needs the full dot product | yes (column runs of 64-value absmax blocks), but it holds the whole 2I intermediate |
+| H as `down`'s output | none, but each tile needs the whole [rows, I] intermediate first | needs `gate_up` whole |
+
+**Only I-tiling bounds the intermediate per tile**, and it needs the `down` re-layout. Its cross-tile accumulation also
+reorders the down projection's K-sum, so an I-tiled expert is not bit-identical to the whole-expert kernel. Any registered
+result would need a parity bar rather than `torch.equal`.
+
+## 5. DMA size
+
+- **No record sweeps H2D rate across 1–25 MB.**
+- **Async back-to-back copies of 0.39–6.29 MB already run at link rate.** The flagship's 4-per-expert copies ran at
+  101 % of the 1 GiB microbench.
+- **The per-copy costs on record are microseconds:** 3.3 µs latency at 8 KiB, and 19.8 µs per row of two enqueues.
+- **The serialized floor** (each copy paying latency + one enqueue in series, an inference) gives 0.86 efficiency at
+  t = 256 (1.77 MB) and 0.61 at t = 64 (0.44 MB) at 21.76 GB/s. It is worse at faster links: 0.72 and 0.39 at 53 GB/s.
+- **The host matters more than the size.** One gen-4 host's single copy reached only 64 % of its back-to-back rate
+  (p66), and DQ5's 5090 reached 97 %.
+- **A tile prototype would first need that 0.25–16 MB sweep**, back-to-back and pipelined, on the rented host class.
+
+## 6. Routing extremes
+
+- **Dense:** the four micro-batches' union is already 0.898 of the experts, and the largest micro-batch (662
+  positions) hits 0.82. Routed staging saves little; layer-major is the lever.
+- **Sparse:** decode, at T = 1 with 8 of 128 experts, is the case routed staging was built for: 0.93 s per token
+  against 5.57 bulk, 5.95x. Tiling adds nothing; the bytes are already per expert.
+- **Skewed:** one expert taking about 10 % of the rows (the Qwen3-30B census). Its bytes are no larger; its compute
+  is. That is K19's split-table problem on the compute side, not a streaming problem.
+
+## 7. Recompute, backward and capture
+
+- **Recompute and backward.** Covered in section 1. With tiles evicted, the backward re-streams them (+50 % bytes),
+  and the held-forward and layer-major rules (#1682) would have to hold per tile instead of per layer.
+- **Graph capture.** A fixed slot with a fixed copy count captures; routed copies do not. Their sizes and sources
+  depend on the router's output, which the host must read before it can enqueue copies. That is the sync that keeps
+  routed staging from combining with prefetch today. Tiling routed experts multiplies those host-decided copies.
+  - gnf4's `build_group_tiles_device` is capture-legal, but it builds compute tiles on the device and moves no host
+    bytes.
+  - A capture-legal routed stream would need worst-case fixed copies, which spend the bytes routing saves, or a
+    device-driven copy path, which nothing on record has.
+
+## Verdict
+
+- **Deprioritize weight-tile streaming.** It cannot reduce bytes. In training it adds 50 % unless tiles stay resident.
+  Its time gain over whole-layer double buffering is the pipeline fill, about 1 % of a pass.
+- **The levers, in order:**
+  1. Layer-major, which needs a held forward evict (#1682).
+  2. Routed staging in training, which needs the grad guard lifted, an unrouted-read guard and a parity test (#1681 (c)).
+  3. Whole-layer double buffering on a side stream. The async-reuse stress record (`bench/async-reuse-20261017`)
+     already covers its correctness.
+- **Revisit tiling** only for a card or model where two layer slots don't fit. Before any prototype, run the copy-size
+  sweep from section 5.
+- **What the A7 read can change.** This note uses #1680's predicted compute. If the PRO 6000 read puts C near or
+  below 1 at the box's H2D, overlap's share grows but the conclusion holds: whole layers get the overlap, and the tile
+  fill stays one tile against one layer per sweep. Only a C so low that a single layer's staging rivals the whole pass's
+  compute would favour tiles.
+
+Nothing here changes Q235, a default or a registered result.
