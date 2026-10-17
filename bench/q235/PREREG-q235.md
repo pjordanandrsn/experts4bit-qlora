@@ -809,9 +809,16 @@ answer for the wrong hardware. The box takes the reading at no extra rental.
 
   Each pair sits beside its micro-batch's rows, width and valid labels.
 - **Checkpoint early stop.** It is off for this pass only, so a non-reentrant recompute reaches the module's return.
-- **The overhead.** `--time-moe-bound` first runs the same pass untimed, in the same process. The record carries `pass_off_s`,
-  `pass_on_s` and `overhead`. Each pass's own device-to-host copy of the adapter gradients is recorded beside it and left out of the
-  ratio.
+- **The overhead read** (`--time-moe-bound`, registered here before the gate-1 rehearsal reads it):
+  - One discarded warm-up pass, then four in ABBA order in the same process: untimed, timed, timed, untimed.
+  - `overhead_s` is the mean of the two timed passes minus the mean of the two untimed ones.
+  - `half_s`, the read's order and drift noise, is half the difference between the two timed-minus-untimed pairs,
+    |(on₁ − off₁) − (on₂ − off₂)| / 2.
+  - The read is decision-grade only when `half_s` ≤ `overhead_s` / 2. Otherwise it is reporting-only, and the refit below does not
+    use it.
+  - ABBA cancels a linear drift, and the warm-up removes the cold-first bias.
+  - Each pass's device-to-host copy of the adapter gradients is recorded and left out of every comparison.
+  - Both timed passes carry the hooks, so each sampled layer holds two pairs per micro-batch.
 
 **What it is not.**
 - REPORTED only. It lives under `moe_timing` in the box record. `q235_verdict.py` reads none of it, and no rule, threshold, verdict
@@ -820,9 +827,9 @@ answer for the wrong hardware. The box takes the reading at no extra rental.
 - gate_up and down are not separated. They run as one fused call, and separating them would move the experts4bit-qlora pin.
 
 **Its cost, and when it leaves the box.**
-- The pass adds two Shape B forward-backwards without an optimizer step (one untimed, one timed) to the box phase.
-- The gate-1 A2000 rehearsal at the merge of Amendments 6 and 7 is one rehearsal for both. It measures `overhead` and the pass's time
-  on the slice.
+- The read adds five Shape B forward-backwards without an optimizer step to the box phase: the warm-up, two untimed and two timed.
+- The gate-1 A2000 rehearsal at the merge of Amendments 6 and 7 is one rehearsal for both. It measures `overhead_s`, `half_s` and the
+  passes' time on the slice.
 - Gate 2's time-left fit then re-runs from that rehearsal with the pass in the box phase. The refitted box cap and the run's worst-case
   wallclock and cost are recorded here before any box. Both are UNKNOWN until that rehearsal runs.
 - If, with the pass, the run exceeds 6 h at the slow end of the PRO 6000 spread, the pass leaves the box (the run line drops the flag)

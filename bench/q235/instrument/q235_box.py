@@ -448,36 +448,55 @@ class MoETimer:
 def time_moe(model, fwd_bwd, n, cuda, sync, bound=False, micro_batches=None):
     """The extra timed pass (see MoETimer): ``fwd_bwd`` is the registered step's own forward-backward, shape B's accumulation under
     ``--micro-batch`` (Amendment 6), so each sampled layer gets one stage/compute pair per micro-batch, call ``k`` being micro-batch
-    ``k`` (``micro_batches``: their rows, width, positions and valid labels). With ``bound``, an untimed pass runs first in the same
-    process, so the hooks' overhead is stated, not assumed. Both passes run with the checkpoint's early stop off, so a non-reentrant
-    recompute reaches the experts module's return and its compute is observed (the reentrant checkpoint always runs the region
-    whole). Each pass's time includes ``fwd_bwd``'s own device-to-host copy of the adapter gradients, after the hooks' region; it is
-    recorded beside it and left out of ``overhead``. Never fails the box: an error is recorded and the hooks are removed."""
+    ``k`` (``micro_batches``: their rows, width, positions and valid labels). Every pass runs with the checkpoint's early stop off,
+    so a non-reentrant recompute reaches the experts module's return and its compute is observed (the reentrant checkpoint always
+    runs the region whole). Each pass's time includes ``fwd_bwd``'s own device-to-host copy of the adapter gradients, after the
+    hooks' region; it is recorded and left out of every comparison. Never fails the box: an error is recorded and the hooks are
+    removed.
+
+    ``bound`` (Amendment 7's overhead read, as the maintainer registered it): one discarded warm-up pass, then four in ABBA order,
+    untimed, timed, timed, untimed. ``overhead_s`` is the mean timed pass minus the mean untimed one; ``half_s`` is the order and
+    drift noise of that read, half the difference between the two timed-minus-untimed pairs ``(on1 - off1)`` and ``(on2 - off2)``.
+    The read is decision-grade only when ``half_s <= overhead_s / 2``; otherwise it is reporting-only. Both timed passes carry the
+    hooks, so the layers' record then holds two calls per micro-batch, call ``k`` being micro-batch ``k mod M`` of timed pass
+    ``k // M``. Every key is always written; a quantity with no base is None."""
     from torch.utils.checkpoint import set_checkpoint_early_stop
-    rec = {"reported_only": True, "read_by_verdict": False, "pass": "one forward-backward of the registered shape after both registered "
-           "steps, no optimizer step, checkpoint early stop off", "timer": "cuda events" if cuda else "perf_counter (CPU rehearsal, no offload)",
+    rec = {"reported_only": True, "read_by_verdict": False, "pass": "the registered shape's forward-backward after both registered steps, "
+           "no optimizer step, checkpoint early stop off", "timer": "cuda events" if cuda else "perf_counter (CPU rehearsal, no offload)",
            "micro_batches": [{**m, "positions": m["rows"] * m["width"]} for m in micro_batches or []]}
 
-    def one_pass(key):
+    def one_pass():
+        """The pass's seconds without its grads copy, and the copy's seconds; unrounded."""
         sync()
         t = time.perf_counter()
         r = fwd_bwd()
         sync()
-        rec[f"pass_{key}_s"] = round(time.perf_counter() - t, 3)
-        copy = r[4] if isinstance(r, tuple) and len(r) >= 5 else 0.0
-        rec[f"pass_{key}_grads_copy_s"] = round(copy, 3)
-        return rec[f"pass_{key}_s"] - copy
+        copy = float(r[4]) if isinstance(r, tuple) and len(r) >= 5 else 0.0
+        return time.perf_counter() - t - copy, copy
     timer = None
     try:
         with set_checkpoint_early_stop(False):
-            off = one_pass("off") if bound else None
+            warm = one_pass() if bound else None
+            off1 = one_pass() if bound else None
             timer = MoETimer(model, n, cuda)
             rec["sampled_layers"] = timer.layers
-            on = one_pass("on")
-        timer.remove()
+            ons = [one_pass() for _ in range(2 if bound else 1)]
+            timer.remove()
+            off2 = one_pass() if bound else None
         rec["layers"] = timer.record()
-        if bound and off:
-            rec["overhead"] = round(on / off - 1, 4)
+        rec["timed_passes"] = len(ons)
+        rec["pass_on_s"] = [round(x, 4) for x, _ in ons]
+        rec["grads_copy_s"] = {"on": [round(c, 4) for _, c in ons]}
+        if bound:
+            on1, on2 = ons[0][0], ons[1][0]
+            d1, d2 = on1 - off1[0], on2 - off2[0]
+            over, half = (on1 + on2) / 2 - (off1[0] + off2[0]) / 2, abs(d1 - d2) / 2
+            rec.update({"order": "warm-up, off, on, on, off", "pass_warmup_s": round(warm[0], 4),
+                        "pass_off_s": [round(off1[0], 4), round(off2[0], 4)], "pairs_s": [round(d1, 4), round(d2, 4)],
+                        "overhead_s": round(over, 4), "half_s": round(half, 4),
+                        "overhead_ratio": round(over / ((off1[0] + off2[0]) / 2), 4) if off1[0] + off2[0] > 0 else None,
+                        "decision_grade": half <= over / 2})
+            rec["grads_copy_s"].update(warmup=round(warm[1], 4), off=[round(off1[1], 4), round(off2[1], 4)])
     except Exception as e:  # noqa: BLE001 - reported only: a failure here is a reading, never a box failure
         rec["error"] = f"{type(e).__name__}: {e}"[:400]
     finally:
@@ -897,7 +916,7 @@ def main():
                     help="after both steps, one extra forward-backward timing the MoE experts' staging and compute on N evenly "
                          "spaced layers (REPORTED only, under moe_timing; off by default)")
     ap.add_argument("--time-moe-bound", action="store_true",
-                    help="with --time-moe: an untimed pass first in the same process, so the hooks' overhead is stated")
+                    help="with --time-moe: Amendment 7's overhead read (a warm-up, then untimed, timed, timed, untimed)")
     a = ap.parse_args()
     if a.device == "cpu" and a.enabler == "fast":
         ap.error("the fused training kernels need CUDA; use --enabler reference on the CPU")

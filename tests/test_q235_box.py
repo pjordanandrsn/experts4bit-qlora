@@ -415,19 +415,21 @@ def test_the_moe_timing_is_reported_only_and_leaves_the_registered_record_alone(
     t = rec["moe_timing"]
     assert "error" not in t, t.get("error")
     assert t["reported_only"] and t["read_by_verdict"] is False and t["sampled_layers"] == [0, 3]
-    assert t["pass_off_s"] > 0 and t["pass_on_s"] > 0 and "overhead" in t
-    assert 0 <= t["pass_on_grads_copy_s"] <= t["pass_on_s"] and 0 <= t["pass_off_grads_copy_s"] <= t["pass_off_s"]
+    assert t["order"] == "warm-up, off, on, on, off" and t["timed_passes"] == 2 and t["pass_warmup_s"] >= 0  # Amendment 7's read
+    assert len(t["pass_on_s"]) == len(t["pass_off_s"]) == len(t["pairs_s"]) == 2 and t["half_s"] >= 0
+    assert isinstance(t["overhead_s"], float) and isinstance(t["decision_grade"], bool) and "overhead_ratio" in t
+    assert set(t["grads_copy_s"]) == {"on", "off", "warmup"} and all(c >= 0 for c in t["grads_copy_s"]["on"] + t["grads_copy_s"]["off"])
     (mb,) = t["micro_batches"]                                     # shape A: the one micro-batch, every row
     assert (mb["rows"], mb["width"], mb["positions"]) == (2, 24, 48) and mb["valid"] > 0
     for i in ("0", "3"):
         row = t["layers"][i]
         assert row["staged_by_offload"] is False                     # the CPU rehearsal has no offload
-        assert row["forward"]["calls"] == 1 and row["recompute"]["calls"] == 1 and row["backward"]["calls"] == 1, row
+        assert row["forward"]["calls"] == row["recompute"]["calls"] == row["backward"]["calls"] == 2, row   # both timed passes
         # early stop off: the non-reentrant recompute reaches the module's return, so its compute is observed too
         assert all(v is not None and v >= 0 for ph in ("forward", "recompute") for f in ("stage_ms", "compute_ms") for v in row[ph][f])
         bw = row["backward"]
-        assert bw["recompute_inside"] == [True], bw                 # Hugging Face's checkpoint recomputes inside the window
-        assert 0 <= bw["own_ms"][0] <= bw["ms"][0]
+        assert bw["recompute_inside"] == [True] * 2, bw             # Hugging Face's checkpoint recomputes inside the window
+        assert all(0 <= o <= w for o, w in zip(bw["own_ms"], bw["ms"])), bw
 
 
 def test_the_moe_timing_times_shape_bs_accumulation_one_pair_per_micro_batch(tiny8, shape_b):
@@ -448,10 +450,10 @@ def test_the_moe_timing_times_shape_bs_accumulation_one_pair_per_micro_batch(tin
     assert all(m["rows"] == 2 and m["positions"] == 2 * m["width"] for m in t["micro_batches"])
     for i in ("0", "3"):
         row = t["layers"][i]
-        assert row["forward"]["calls"] == row["recompute"]["calls"] == row["backward"]["calls"] == 4, row
+        assert row["forward"]["calls"] == row["recompute"]["calls"] == row["backward"]["calls"] == 8, row   # 2 timed passes x 4
         assert all(v is not None and v >= 0 for ph in ("forward", "recompute") for v in row[ph]["compute_ms"])
         bw = row["backward"]
-        assert bw["recompute_inside"] == [True] * 4 and all(0 <= o <= w for o, w in zip(bw["own_ms"], bw["ms"])), bw
+        assert bw["recompute_inside"] == [True] * 8 and all(0 <= o <= w for o, w in zip(bw["own_ms"], bw["ms"])), bw
 
 
 def test_the_moe_timing_needs_the_stepped_run(tiny):
@@ -555,17 +557,59 @@ def test_the_timed_pass_observes_the_recompute_under_either_checkpoint_and_a_fai
             return 0.0, {}, 0.0, 0.0, 0.0                              # the box's fwd_bwd: its last is the grads copy's time
         rec = box.time_moe(model, fwd_bwd, 2, cuda=False, sync=lambda: None, bound=True,
                            micro_batches=[{"rows": 1, "width": 8, "valid": 7}])
-        assert "error" not in rec and rec["sampled_layers"] == [0, 1] and rec["pass_off_s"] >= 0 and "overhead" in rec
-        assert rec["pass_on_grads_copy_s"] == rec["pass_off_grads_copy_s"] == 0.0
+        assert "error" not in rec and rec["sampled_layers"] == [0, 1] and rec["timed_passes"] == 2
+        assert isinstance(rec["overhead_s"], float) and isinstance(rec["decision_grade"], bool)
+        assert rec["grads_copy_s"] == {"on": [0.0, 0.0], "off": [0.0, 0.0], "warmup": 0.0}
         assert rec["micro_batches"] == [{"rows": 1, "width": 8, "valid": 7, "positions": 8}]
         for row in rec["layers"].values():
-            assert row["recompute"]["calls"] == 1 and row["recompute"]["compute_ms"][0] >= 0, (reentrant, row)
+            assert row["recompute"]["calls"] == 2 and all(v >= 0 for v in row["recompute"]["compute_ms"]), (reentrant, row)
             bw = row["backward"]
-            assert bw["recompute_inside"] == [not reentrant], (reentrant, bw)
-            assert 0 <= bw["own_ms"][0] <= bw["ms"][0] and (bw["own_ms"] == bw["ms"]) is reentrant
+            assert bw["recompute_inside"] == [not reentrant] * 2, (reentrant, bw)
+            assert all(0 <= o <= w for o, w in zip(bw["own_ms"], bw["ms"])) and (bw["own_ms"] == bw["ms"]) is reentrant
 
     def boom():
         raise RuntimeError("out of memory")
     rec = box.time_moe(model, boom, 2, cuda=False, sync=lambda: None)
     assert rec["error"] == "RuntimeError: out of memory" and "layers" not in rec
     assert all(len(m._forward_pre_hooks) == 1 and len(m._forward_hooks) == 1 and not m._backward_hooks for m in mods)
+
+
+class _Clock:
+    """A clock the fake pass advances: ``time_moe``'s timings, exactly."""
+    def __init__(self):
+        self.now = 0.0
+
+    def perf_counter(self):
+        return self.now
+
+
+def test_the_overhead_read_is_abba_after_a_warm_up_and_says_when_it_is_not_decision_grade(monkeypatch):
+    """Amendment 7's read: one discarded warm-up, then untimed, timed, timed, untimed. ``overhead_s`` = mean(timed) - mean(untimed),
+    ``half_s`` = |(on1 - off1) - (on2 - off2)| / 2, decision-grade only when half_s <= overhead_s / 2. A cold first pass and a
+    linear drift do not move the read; the grads copy is left out of every pass."""
+    box = _box_module()
+    model = _fake_model(2, [])
+    clock = _Clock()
+    monkeypatch.setattr(box, "time", clock)
+
+    def run(durations, copy=0.0):
+        it = iter(durations)
+
+        def fwd_bwd():
+            clock.now += next(it) + copy                              # the pass and its grads copy, which is left out
+            return 0.0, {}, 0.0, 0.0, copy
+        return box.time_moe(model, fwd_bwd, 2, cuda=False, sync=lambda: None, bound=True)
+    # base 1.0, overhead 0.2, linear drift +0.05 a pass, a cold warm-up at 5.0: the drift cancels and the warm-up is discarded
+    rec = run([5.0, 1.0, 1.0 + 0.2 + 0.05, 1.0 + 0.2 + 0.10, 1.0 + 0.15], copy=0.3)
+    assert "error" not in rec and rec["pass_warmup_s"] == 5.0 and rec["pass_off_s"] == [1.0, 1.15]
+    assert rec["overhead_s"] == 0.2 and rec["pairs_s"] == [0.25, 0.15] and rec["half_s"] == 0.05 and rec["decision_grade"] is True
+    assert rec["overhead_ratio"] == round(0.2 / 1.075, 4) and rec["grads_copy_s"]["off"] == [0.3, 0.3]
+    # order noise larger than half the overhead: the read is reporting-only
+    rec = run([5.0, 1.0, 1.4, 1.0, 1.0])
+    assert rec["overhead_s"] == 0.2 and rec["half_s"] == 0.2 and rec["decision_grade"] is False
+    # a negative read is never decision-grade
+    rec = run([5.0, 1.2, 1.0, 1.0, 1.2])
+    assert rec["overhead_s"] == -0.2 and rec["decision_grade"] is False
+    # without the bound: one timed pass, and no overhead keys at all
+    rec = box.time_moe(model, lambda: clock.__setattr__("now", clock.now + 1.0), 2, cuda=False, sync=lambda: None)
+    assert rec["timed_passes"] == 1 and rec["pass_on_s"] == [1.0] and "overhead_s" not in rec
