@@ -4,7 +4,7 @@ Operational follow-up to the second paid census harness refusal. The prospective
 census-3 budget amendment extends the paid wall from 1800 to 2700 seconds
 (45 minutes), with the same 300-second teardown reserve inside it: 2400 seconds
 for work. Science, thresholds, driver, tariffs and the single-draw limit stay fixed. The next template uses unused run id
-`dq11-l-census-3`; a template is not paid authority.
+`dq11-l-census-4`; a template is not paid authority.
 
 The observed initial staging payload was 170,378,038 bytes across 57 files.
 Its proxy SSH endpoint was `ssh2.vast.ai:17364`; the outer staging interval
@@ -101,3 +101,16 @@ but cannot cancel the external watchdog, and an outer ITIMER_REAL armed before
 exec that still fires after a successful wheel fetch. The offer filter is also
 exercised against a GET-only live listing; no create or rental is permitted.
 This is an operational rehearsal, not a GPU census result or paid authority.
+
+## Instance creation and endpoint refusal evidence
+
+Census3 refused before staging because the controller created proxy-only SSH.
+The prospective census4 template explicitly opts in with `vast_direct_ssh: true`,
+forwarded by the reviewed controller as `--vast-direct-ssh`. The provider sends
+`ssh_direc ssh_proxy`; other runs keep the existing `ssh` default.
+
+Endpoint refusal records actual_status, whether public_ipaddr is set, and only
+HostIp/HostPort from the SSH bindings. The public address is omitted; non-wildcard
+HostIp values are redacted. IPv4 and IPv6 wildcard bindings sharing one HostPort
+are one mapping; distinct ports still refuse. There is no workload proxy fallback.
+A fresh census4 envelope at both merged heads is required after controller deployment.

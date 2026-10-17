@@ -1,6 +1,6 @@
 {
   "status": "ENVELOPE_TEMPLATE_NO_PAID_GO",
-  "run_id": "dq11-l-census-3",
+  "run_id": "dq11-l-census-4",
   "work_id": "experts4bit-qlora#1083",
   "role": "CTO",
   "agent_env": "POD_LAUNCH_AGENT",
@@ -10,6 +10,7 @@
   "success_criteria": "Unchanged 13b science and merged instrument closures; exact 5090/driver, sealed inputs/wheels, native SDPA and bitwise observer-removal canary; one fresh unprofiled L40 reference plus separate L40 capture at updates 6-8; K8 quality; every event classified and wall closure; hashes, invoice and authenticated teardown with empty list.",
   "failure_criteria": "Missing source/input/driver/offer identity, timeout, tariff or packet cap, canary or K8 failure, profiler attribution ambiguity, event loss, >1 us closure residual, nonfinite evidence or teardown uncertainty yields CENSUS_REFUSAL; no retry, BUILD choice or new paid draw without review.",
   "provider": "vast:verified-secure",
+  "vast_direct_ssh": true,
   "gpu": "RTX 5090",
   "image": "pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
   "model": "mistralai/Mistral-7B-v0.1",
