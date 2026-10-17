@@ -29,7 +29,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-CITED = "eca70aff0807339cca706ec728964079baccd99d"   # e4b main when the copies were made; Q235's latest change in it is Amendment 5
+CITED = "62d6a6bcd96ccd32191c74329bce3b62cb454e89"   # e4b main at Q235 Amendment 6 (#1661), the commit R2 re-cites
 
 PAIRS = {
     "bench/fam235/r2_run.sh": {
@@ -40,7 +40,10 @@ PAIRS = {
         "lines": [(r"^  science\) CARD_RE=", r"^  science\) say 'refusing: no box is registered "),
                   # The rehearsal's depth is R2's registration, not plumbing: a Q235 re-cite may move Q235's, never R2's.
                   (r"^  a2000\)   must fetch ", r"^  a2000\)   must fetch .* --slice 4 --slice-dir \"\$W/hf-cache/slice4\" "),
-                  (r"^           MODEL=\"\$W/hf-cache/slice\d+\" ", r"^           MODEL=\"\$W/hf-cache/slice4\" DEVICE=cuda ENABLER=fast ;;$")],
+                  (r"^           MODEL=\"\$W/hf-cache/slice\d+\" ", r"^           MODEL=\"\$W/hf-cache/slice4\" DEVICE=cuda ENABLER=fast ;;$"),
+                  # The box's shape is R2's registration: Q235 Amendment 6 runs shape B (--micro-batch 2); R2 keeps shape A.
+                  (r"^  extra=\(.*\); cap=\$CAP_BOX; ",
+                   r"^  extra=\(\); cap=\$CAP_BOX; \[ \"\$run\" = repeat \] && \{ extra=\(--repeat --plants\); cap=\$CAP_REPEAT; \}$")],
     },
     "bench/fam235/r2_drive.sh": {
         "source": "bench/q235/q235_drive.sh",
