@@ -276,11 +276,12 @@ self-test there.
 This amendment registers the box's class, floors and caps. The numbers are the maintainer's to approve.
 
 **Citations by commit.**
-- R2 cites Q235 at `62d6a6bc`, Amendment 6 (`r2_drift.CITED`). Every Q235 tool R2 runs or seals is read at that commit, and launch
+- R2 cites Q235 at `f17f0744`, Amendment 7 (`r2_drift.CITED`). Every Q235 tool R2 runs or seals is read at that commit, and launch
   staging refuses once Q235's tree moves past it (#1674).
-- Amendment 6 runs Q235's box in shape B. R2's box keeps **shape A** (8 rows in one micro-batch, as registered), as a declared line of
-  R2's runner. Amendment 3's plants, null and tolerances, which this registration adopted in Amendment 1, are unchanged for shape A.
-  `r2_verdict.py`'s self-test passes at `62d6a6bc` (Q235's rule 8 is gated on shape-B records).
+- Amendments 6 and 7 run Q235's box in shape B, with the timed MoE pass. R2's box keeps **shape A** (8 rows in one micro-batch, as
+  registered) with no timed pass (`--time-moe` is off, and off leaves no trace in the record), as a declared line of R2's runner.
+  Amendment 3's plants, null and tolerances, which this registration adopted in Amendment 1, are unchanged for shape A.
+  `r2_verdict.py`'s self-test passes at `f17f0744` (Q235's rule 8 is gated on shape-B records).
 
 **The rehearsal.** RTX A2000, 2026-10-16 23:51–23:57 UTC, $0, e4b `a3e73429`. It was `r2_run.sh` in `a2000` mode on a 4-layer slice;
 its rehearsal directory is sha256 `5470cfae`.

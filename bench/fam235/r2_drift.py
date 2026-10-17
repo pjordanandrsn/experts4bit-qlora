@@ -29,7 +29,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-CITED = "62d6a6bcd96ccd32191c74329bce3b62cb454e89"   # e4b main at Q235 Amendment 6 (#1661), the commit R2 re-cites
+CITED = "f17f0744d5910248bbe5e51b813f47fad53a6686"   # e4b main at Q235 Amendment 7 (#1669), the commit R2 re-cites
 
 PAIRS = {
     "bench/fam235/r2_run.sh": {
