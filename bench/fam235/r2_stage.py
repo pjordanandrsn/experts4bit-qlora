@@ -55,7 +55,11 @@ def q235_stage(repo: Path = REPO):
 
 def sealing_tree() -> Path:
     """The closure as R2 seals it: R2's own files from the working tree, the rest at the cited commit."""
-    cited = drift().cited_tree()
+    d = drift()
+    stray = [p for p in CLOSURE if not p.startswith(OWN) and not any(p == c or p.startswith(c + "/") for c in d.CITED_PATHS)]
+    if stray:
+        raise ValueError(f"closure files neither R2's own ({OWN}) nor in r2_drift.CITED_PATHS: {stray}")
+    cited = d.cited_tree()
     root = Path(tempfile.mkdtemp(prefix="r2-seal-"))
     atexit.register(shutil.rmtree, root, True)
     for p in CLOSURE:

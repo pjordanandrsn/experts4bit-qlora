@@ -109,14 +109,15 @@ def cited_tree(commit: str = CITED) -> Path:
     shallow clone) raises, naming it: R2 never falls back to the working tree."""
     arc = subprocess.run(["git", "-C", str(REPO), "archive", "--format=tar", commit, "--", *CITED_PATHS], capture_output=True)
     if arc.returncode != 0:
-        raise RuntimeError(f"cannot read Q235 at {commit} (a shallow clone?): {arc.stderr.decode(errors='replace').strip()[:200]}")
+        raise RuntimeError(f"cannot read Q235 at {commit} (a shallow clone, or not a git checkout?): "
+                           f"{arc.stderr.decode(errors='replace').strip()[:200]}")
     root = Path(tempfile.mkdtemp(prefix=f"r2-cited-{commit[:8]}-"))
     atexit.register(shutil.rmtree, root, True)
     with tarfile.open(fileobj=io.BytesIO(arc.stdout)) as t:
         for m in t.getmembers():
             if m.name.startswith("/") or ".." in Path(m.name).parts or not (m.isfile() or m.isdir()):
                 raise RuntimeError(f"git archive at {commit} holds an unexpected member {m.name!r}")
-        t.extractall(root)
+        t.extractall(root, **({"filter": "data"} if hasattr(tarfile, "data_filter") else {}))    # the stdlib's filter too, if any
     return root
 
 

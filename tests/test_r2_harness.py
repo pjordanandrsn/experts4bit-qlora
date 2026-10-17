@@ -248,3 +248,10 @@ def test_every_wrapper_runs_q235_at_the_cited_commit():
         where = Path(m.__file__).resolve()
         assert ROOT.resolve() not in where.parents and any(p.name.startswith(f"r2-cited-{drift.CITED[:8]}-") for p in where.parents), path
         assert where.read_text() == drift.source_at(path, drift.CITED), path
+
+
+def test_a_closure_file_outside_r2_and_the_cited_paths_is_refused(monkeypatch):
+    stage = _mod("r2_stage", F / "r2_stage.py")
+    monkeypatch.setattr(stage, "CLOSURE", stage.CLOSURE + ("bench/p999/somewhere_else.py",))
+    with pytest.raises(ValueError, match="neither R2's own"):
+        stage.sealing_tree()
