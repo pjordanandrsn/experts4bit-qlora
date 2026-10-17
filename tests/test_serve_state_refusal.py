@@ -116,3 +116,11 @@ def test_one_verdict_three_callers():
     assert "paged_state_refusal(model)" in inspect.getsource(paged_runner.layer_plan)
     topo = (REPO / "experts4bit_qlora" / "arch" / "topology.py").read_text(encoding="utf-8")
     assert "paged_state_refusal(tree)" in topo
+
+
+@pytest.mark.parametrize("name,refused", [("nemotron-3-super-120b-a12b", True), ("qwen3-30b-a3b", False)])
+def test_no_tree_falls_back_to_the_config_rules_and_says_so(name, refused):
+    """A config transformers cannot build a tree from (here a raw namespace) warns, then the config-only rules answer."""
+    with pytest.warns(RuntimeWarning, match="no empty-weight tree"):
+        why = config_state_refusal(_ns(_raw(name)))
+    assert (why is not None) is refused, why

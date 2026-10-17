@@ -20,7 +20,9 @@ came first. Multi-head latent attention is refused inside the same verdict, as b
 - or `mamba_*` / `ssm_*` geometry.
 
 transformers 5.17 derives `layer_types` for Nemotron-H and Jamba, but e4b's floor is transformers>=5.0, and a config
-that reaches the runner without them used to plan every layer as attention.
+that reaches the runner without them used to plan every layer as attention. The guard fails closed: a future
+attention-only family whose config carries a `mamba_*` or `ssm_*` key is refused until it states its `layer_types`.
+None of the served families carries such a key.
 
 `tests/test_serve_state_refusal.py` tests the committed fixture configs: digests are checked, the hybrids are refused
 before load, seven served families are admitted, and both Nemotron-H spellings are refused by the guard. Training paths

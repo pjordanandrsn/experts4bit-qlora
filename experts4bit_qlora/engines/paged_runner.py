@@ -39,6 +39,7 @@ host sync in the prefill forward under device grouping.
 from __future__ import annotations
 
 import inspect
+import warnings
 
 import torch
 
@@ -145,7 +146,11 @@ def config_state_refusal(config, *, trust_remote_code: bool = False) -> str | No
         with init_empty_weights():
             tree = AutoModelForCausalLM.from_config(lm_config, dtype=torch.bfloat16,
                                                     trust_remote_code=trust_remote_code)
-    except Exception:                                   # noqa: BLE001 -- no tree here: the config-only rules answer
+    except Exception as e:                              # noqa: BLE001 -- no tree here: the config-only rules answer
+        warnings.warn(f"[e4b.paged_runner] no empty-weight tree for model_type "
+                      f"{getattr(lm_config, 'model_type', None)!r} ({type(e).__name__}: {str(e)[:200]}); the config-only "
+                      "rules answer before the load, and the runner's own refusal still stands when it is built",
+                      RuntimeWarning, stacklevel=2)
         return undeclared_mixer_refusal(config)
     return paged_state_refusal(tree)
 
