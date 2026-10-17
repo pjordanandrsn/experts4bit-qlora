@@ -53,36 +53,49 @@ tiles. RESULTS-1469 says the same for slice caching. The byte floor for a checkp
 staged once forward and once in the recompute. That is (b)+(c): **167.9 whole-layer equivalents = 228.2 GB per Shape B
 pass**, 22 % of as-is. Tiling (b)+(c) leaves it at 228.2 GB.
 
-**In training, streamed tiles cost bytes.** e4b keeps a layer resident from its recompute through its backward, so a
-layer crosses PCIe twice per micro-batch. Tiles that are evicted after use must cross a third time for the backward:
-**+50 % bytes**. Keeping every tile resident through the backward avoids that, but then the working set is the whole
-routed layer again and the memory saving is gone.
+**In training, the recompute schedule decides whether tiles cost bytes.** e4b keeps a layer resident from its recompute
+through its backward, so a layer crosses PCIe twice per micro-batch. Under that layer-level schedule, tiles evicted
+after the recompute must cross a third time for the backward: **+50 % bytes**, unless every tile stays resident, and
+then the memory saving is gone. A tile-fused op that recomputes one tile and runs its backward while the tile is
+resident would keep two crossings. That is a new kernel-level schedule, not a property of tiling itself.
 
-## 2. Time: overlap is the lever, and whole layers already get it
+## 2. Time: overlap is the lever, and a forward cannot prefetch routed experts
 
-Per Shape B pass, experts compute 5.69 s (#1680) against staging. "bound" is max(staging, compute). "overlap" is
-layer-granular double buffering: the next layer streams on a side stream during this layer's compute, plus one layer's
-staging per sweep to fill the pipe.
+All compute below is #1680's **experts-only** figure: a lower bound, without attention, the dense layers, the router or the
+loss. Per Shape B pass, layer-major is two sweeps:
+- the forward: experts compute 1.337 s;
+- the recompute + backward: 4.350 s.
 
-| layout | staging s @ 21.76 | serial / bound | overlap / bound | @ 40: serial / overlap | @ 53: serial / overlap |
-|---|---:|---:|---:|---:|---:|
-| (a) as-is | 46.71 | 1.122 | 1.011 | 1.224 / 1.011 | 1.297 / 1.011 |
-| (b) layer-major | 11.68 | 1.487 | 1.011 | 1.895 / 1.011 | 1.843 / 1.009 |
-| (c) routed | 34.27 | 1.166 | 1.013 | 1.305 / 1.013 | 1.404 / 1.013 |
-| **(b)+(c)** | **10.49** | **1.543** | **1.011** | 1.997 / 1.011 | 1.757 / 1.008 |
+**A forward cannot prefetch layer L+1's routed experts during layer L.** L+1's routes come from L's output (the
+`offload.py` note that keeps routed staging off prefetch). In training that holds for layer-major too. The recompute can
+prefetch them, because the forward fixed every route. Whole-layer prefetch needs no routes, so it works in both sweeps.
 
-- **Run serially (today's synchronous staging), (b)+(c) sits 54 % above its bound.** That fails the 15 % stop line.
-  At 53 GB/s it becomes compute-bound (staging 4.31 s against compute 5.69 s).
-- **With whole-layer double buffering, every layout sits within about 1 % of its bound.** The only residue is the
-  pipeline fill: one layer per sweep, and (b)+(c) has two sweeps per pass.
-- **Tiling's only time gain over that is the fill.** A tile pipeline starts computing after one tile instead of one
-  layer: at most 2 × 0.898 × 62.45 ms = 0.11 s of a 10.6 s pass, about 1 %.
-- **So the stop rule holds, with a qualification.** Layer-major + routed is within 15 % of the transfer bound only
-  once its staging overlaps compute. Whole-layer double buffering supplies that overlap. Tiling does not add enough on
-  top to justify a build.
-- **What double buffering costs.** One more layer slot in VRAM: 1.36 GB (1.22 GB routed). The PRO 6000 box peaked at
-  58.9 GiB of 96. The overlap is not free on every host: DQ5's gen-4 5090 still had 20–59 of 62 forward prefetches in
-  flight when their layer began.
+Layer-major schedules per pass at 21.76 GB/s (`roofline.py` also prints 40 and 53). "Own bound" is the sum over sweeps
+of max(staging, compute) for that schedule's bytes. "Floor" is the same with routed bytes in both sweeps, 10.49 s.
+
+| schedule | s per pass | / own bound | / floor |
+|---|---:|---:|---:|
+| (b) serial (today's synchronous staging) | 17.37 | 1.487 | 1.656 |
+| (b) whole-layer double buffer, both sweeps | 11.80 | 1.011 | 1.125 |
+| (b)+(c): forward routed serial, recompute routed buffered | 11.88 | 1.133 | 1.133 |
+| **hybrid: forward whole-layer buffered, recompute routed buffered** | **11.20** | 1.011 | **1.068** |
+| (b)+(c): forward per-expert pipelined, recompute routed buffered | 10.59 | 1.010 | 1.010 |
+
+- **Serial staging fails the 15 % stop line**, at 1.487 of its own bound.
+- **Every schedule that overlaps both sweeps sits within about 1 % of its own bound.** The exception is the one that
+  serves the forward's routed experts serially, at 1.133.
+- **Routed staging in the forward helps only if experts stream one at a time inside the layer.** Expert e+1 copies
+  while expert e computes, once that layer's router has run. Served serially, routed forward staging is slower than
+  whole-layer prefetch (11.88 s against 11.80 s at 21.76 GB/s; 8.56 against 7.58 at 40 GB/s). The hybrid is the best
+  schedule that needs no intra-layer pipeline.
+- **Per-expert pipelining is the one place sub-layer granularity earns anything.** It takes the hybrid from 1.068 to
+  1.010 of the floor, about 5 % of a pass. Its unit is the whole routed expert. Sub-expert tiles would shrink only its
+  per-layer fill, from one expert copy (0.49 ms, 46 ms over the pass's 94 layers) to one tile, under 0.5 % of a pass.
+- **Double buffering costs one more slot in VRAM:** a whole layer of 1.36 GB, or a routed one of 1.22 GB. Box 1 (Shape
+  A) recorded a device peak of 58.9 GiB of 96 (`PREREG-q235.md` Amendment 4). That figure is an upper bound: it included
+  four fp32 adapter check copies that Amendment 4 moved to the host.
+- **The overlap is not free on every host.** DQ5's gen-4 5090 still had 20–59 of 62 forward prefetches in flight when
+  their layer began.
 
 ## 3. When tiles would matter: VRAM, not time
 
@@ -145,18 +158,21 @@ result would need a parity bar rather than `torch.equal`.
 
 ## Verdict
 
-- **Deprioritize weight-tile streaming.** It cannot reduce bytes. In training it adds 50 % unless tiles stay resident.
-  Its time gain over whole-layer double buffering is the pipeline fill, about 1 % of a pass.
+- **Deprioritize sub-expert weight-tile streaming.** It cannot reduce bytes. Under today's layer-level recompute it
+  adds 50 %. Its time gain is at most a smaller per-layer fill, under 0.5 % of a pass.
 - **The levers, in order:**
   1. Layer-major, which needs a held forward evict (#1682).
-  2. Routed staging in training, which needs the grad guard lifted, an unrouted-read guard and a parity test (#1681 (c)).
-  3. Whole-layer double buffering on a side stream. The async-reuse stress record (`bench/async-reuse-20261017`)
-     already covers its correctness.
-- **Revisit tiling** only for a card or model where two layer slots don't fit. Before any prototype, run the copy-size
-  sweep from section 5.
-- **What the A7 read can change.** This note uses #1680's predicted compute. If the PRO 6000 read puts C near or
-  below 1 at the box's H2D, overlap's share grows but the conclusion holds: whole layers get the overlap, and the tile
-  fill stays one tile against one layer per sweep. Only a C so low that a single layer's staging rivals the whole pass's
-  compute would favour tiles.
+  2. Whole-layer double buffering on a side stream. The async-reuse stress record (`bench/async-reuse-20261017`)
+     covers its correctness.
+  3. Routed staging in the recompute only: the hybrid, which needs the grad guard lifted, an unrouted-read guard and
+     a parity test (#1681 (c)).
+  4. Routed staging in the forward, but only with per-expert pipelining inside the layer. Served serially it loses to
+     whole-layer prefetch.
+- **Revisit tiles** only for a card or model where two layer slots don't fit, or as a tile-fused recompute + backward
+  kernel. Before any prototype, run the copy-size sweep from section 5.
+- **What the A7 read can change.** This note uses #1680's predicted, experts-only compute. If the PRO 6000 read puts
+  C near or below 1 at the box's H2D, compute grows relative to staging. Overlap then hides a larger share, and the
+  forward's routing dependency costs less. The ordering holds unless a single layer's staging rivals a whole sweep's
+  compute.
 
 Nothing here changes Q235, a default or a registered result.

@@ -19,10 +19,46 @@ STAGINGS = {"(a) as-is": 748.0, "(b) layer-major": 187.0, "(c) routed": 548.8, "
 TRAVERSALS = {"(a) as-is": 8, "(b) layer-major": 2, "(c) routed": 8, "(b)+(c)": 2}  # layer sweeps per pass
 ROUTED_UNION = 0.898  # #1681: mean fraction of experts hit by all four micro-batches
 EXPERTS_COMPUTE_S = 15.13e-3 * 4 * LAYERS  # #1680: experts fwd + recompute + bwd per micro-batch per layer
+# #1680's per-phase split (A2000 means / measured PRO 6000 ratios), per micro-batch per layer, seconds. Experts only.
+FWD_S = 47.3e-3 / 13.30
+REC_BWD_S = 45.9e-3 / 13.30 + 58.7e-3 / 7.23
 
 # Per-copy fixed costs on record (README.md, "DMA size"): seconds.
 COPY_LATENCY = 3.3e-6  # gnf4 cold-engine phase 0: 8 KiB pinned H2D, gen 5
 ENQUEUE = 19.8e-6 / 2  # gnf4 cold-engine p2-g1b: 19.8 us per row = 2 cudaMemcpyAsync + staging write
+
+
+def sweep_schedules(rates):
+    """Layer-major (two sweeps per pass: the forward, then the recompute + backward) under five staging schedules.
+
+    A forward cannot prefetch layer L+1's ROUTED experts during layer L: L+1's routes come from L's output. The
+    recompute can, because the forward fixed every route. Whole-layer prefetch needs no routes, so it works in both.
+    """
+    cf, crb = FWD_S * 4 * LAYERS, REC_BWD_S * 4 * LAYERS
+    print(
+        f"\nlayer-major sweeps (experts compute only, a lower bound): forward {cf:.3f} s, recompute + backward {crb:.3f} s"
+    )
+    for L in rates:
+        w = LAYER / (L * 1e9)
+        r, x = ROUTED_UNION * w, EXPERT / (L * 1e9)
+        fw, fr, rw, rr = (LAYERS - 1) * w, (LAYERS - 1) * r, LAYERS * w, LAYERS * r  # layer 0 stays resident
+        rows = {
+            "(b) serial": (fw + cf + rw + crb, max(fw, cf) + max(rw, crb)),
+            "(b) whole-layer double buffer": (max(fw, cf) + w + max(rw, crb) + w, max(fw, cf) + max(rw, crb)),
+            "(b)+(c) fwd routed serial, rec routed buffered": (fr + cf + max(rr, crb) + r, max(fr, cf) + max(rr, crb)),
+            "hybrid: fwd whole buffered, rec routed buffered": (
+                max(fw, cf) + w + max(rr, crb) + r,
+                max(fw, cf) + max(rr, crb),
+            ),
+            "(b)+(c) fwd per-expert pipelined, rec buffered": (
+                max(fr, cf) + LAYERS * x + max(rr, crb) + r,
+                max(fr, cf) + max(rr, crb),
+            ),
+        }
+        floor = max(fr, cf) + max(rr, crb)
+        print(f"  H2D {L} GB/s (byte floor, routed both sweeps, overlapped: {floor:.2f} s)")
+        for name, (t, bound) in rows.items():
+            print(f"    {name:48s} {t:6.2f} s  / own bound {t / bound:.3f}  / floor {t / floor:.3f}")
 
 
 def main():
@@ -50,6 +86,7 @@ def main():
         "\nbound = max(staging, compute). overlap = layer-granular double buffering: max(staging, compute) plus one layer's"
         " staging per layer sweep (the pipeline fill)."
     )
+    sweep_schedules(rates)
     print(
         "\nI-tile sizes (t of I = 1536) and a SERIALIZED per-copy-cost floor on copy efficiency (inference; async"
         " back-to-back copies hide it, see README):"
