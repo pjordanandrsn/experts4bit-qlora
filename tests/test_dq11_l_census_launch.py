@@ -16,6 +16,7 @@ import pytest
 LANE = Path(__file__).parents[1] / "bench/dq11"
 sys.path.insert(0, str(LANE))
 launch = importlib.import_module("dq11_l_census_launch")
+RUN_IDS = tuple(f"dq11-l-census-{i}" for i in range(5, 15))
 
 
 class FakeProvider:
@@ -281,7 +282,7 @@ def test_envelope_exact_criteria_source_template_and_expiry(tmp_path, monkeypatc
                 "e4b_head": "e" * 40, "controller_head": "c" * 40,
                 "manifest_template_sha256": launch.sha(template),
                 "criteria": launch.ENVELOPE_CRITERIA, "maximum_draws": 1,
-                "run_ids": list(launch.RUN_IDS), "maximum_attempts": 10}
+                "run_ids": list(RUN_IDS), "maximum_attempts": 10}
     launch.validate_envelope(envelope, record, template, e4b, controller, at=issued + timedelta(hours=1))
     with pytest.raises(ValueError, match="expired"):
         launch.validate_envelope(envelope, record, template, e4b, controller, at=issued + timedelta(hours=24))
@@ -291,8 +292,8 @@ def test_envelope_exact_criteria_source_template_and_expiry(tmp_path, monkeypatc
     broader = dict(envelope, criteria=dict(launch.ENVELOPE_CRITERIA, minimum_reliability="0.97"))
     with pytest.raises(ValueError, match="outside the exact envelope"):
         launch.validate_envelope(broader, record, template, e4b, controller, at=issued + timedelta(hours=1))
-    for change in ({"run_ids": list(launch.RUN_IDS[:-1])},
-                   {"run_ids": [*launch.RUN_IDS, "dq11-l-census-15"]},
+    for change in ({"run_ids": list(RUN_IDS[:-1])},
+                   {"run_ids": [*RUN_IDS, "dq11-l-census-15"]},
                    {"maximum_attempts": 11}, {"maximum_attempts": True}):
         with pytest.raises(ValueError, match="outside the exact envelope"):
             launch.validate_envelope(dict(envelope, **change), record, template, e4b, controller,
@@ -355,7 +356,7 @@ def test_qualifying_window_makes_one_inclusion_pinned_launch(tmp_path, monkeypat
     approval_url = "https://github.com/pjordanandrsn/experts4bit-qlora/issues/1083#issuecomment-123"
     envelope.write_text(json.dumps({"approval_url": approval_url, "issued_at": "2026-10-11T08:00:00Z",
                                     "expires_at": "2026-10-12T08:00:00Z",
-                                    "run_ids": list(launch.RUN_IDS)}))
+                                    "run_ids": list(RUN_IDS), "maximum_attempts": 10}))
     assets = tmp_path / "assets"
     assets.mkdir()
     packet = tmp_path / "packet"
@@ -392,14 +393,24 @@ def test_qualifying_window_makes_one_inclusion_pinned_launch(tmp_path, monkeypat
     )
     if validation_rc:
         with pytest.raises(ValueError, match="controller --validate refused"):
-            launch.launch_attempt(template, envelope, e4b, controller, assets, packet, run_id=launch.RUN_IDS[0])
+            launch.launch_attempt(template, envelope, e4b, controller, assets, packet, run_id=RUN_IDS[0])
         assert not (packet / "final-quote.json").exists()
         assert not (packet / "launch-admission.json").exists()
         assert not (packet / "controller.json").exists()
         assert (packet / "controller-validate.stderr.txt").read_text() == "validation diagnostic\n"
         assert json.loads((packet / "controller-validate.json").read_text())["returncode"] == 1
         return
-    assert launch.launch_attempt(template, envelope, e4b, controller, assets, packet, run_id=launch.RUN_IDS[0]) == controller_rc
+    boundaries = []
+
+    def boundary():
+        assert (packet / "controller-validate.json").exists()
+        assert (packet / "launch-admission.json").exists()
+        assert not (packet / "controller.json").exists()
+        boundaries.append("durable boundary before paid call")
+
+    assert launch.launch_attempt(template, envelope, e4b, controller, assets, packet,
+                                 run_id=RUN_IDS[0], before_controller=boundary) == controller_rc
+    assert len(boundaries) == 1
     validation = json.loads((packet / "controller-validate.json").read_text())
     outcome = json.loads((packet / "controller.json").read_text())
     assert "--validate" in validation["command"] and "--validate" not in outcome["command"]
@@ -415,6 +426,14 @@ def test_qualifying_window_makes_one_inclusion_pinned_launch(tmp_path, monkeypat
     assert bound["vast_pin_machine"] == "200" and bound["vast_pin_offers"] == ["100", "101"]
     assert bound["vast_required_driver"] == "580.159.03"
     assert "_asset_path" not in bound
+    stray = json.loads(json.dumps(bound))
+    stray["unexpected_field"] = True
+    with pytest.raises(ValueError, match="changed field beyond run_id"):
+        launch.validate_manifest(stray, e4b, controller)
+    stray = json.loads(json.dumps(bound))
+    stray["l_census"]["unexpected_field"] = True
+    with pytest.raises(ValueError, match="unregistered closure"):
+        launch.validate_manifest(stray, e4b, controller)
     admission = json.loads((packet / "launch-admission.json").read_text())
     assert admission["selected_offer_ids"] == ["100", "101"]
     assert admission["from_last_search_seconds"] < 60
@@ -469,7 +488,7 @@ def test_paid_controller_refuses_expired_search_before_driver(tmp_path, monkeypa
     controller.mkdir()
     with pytest.raises(ValueError, match="exceeded 60-second"):
         launch.launch_attempt(template, envelope, e4b, controller, tmp_path, tmp_path / "packet",
-                              run_id=launch.RUN_IDS[0])
+                              run_id=RUN_IDS[0])
 
 
 def test_box_refuses_wrong_science_before_gpu_or_network(tmp_path):
@@ -494,7 +513,7 @@ def test_launch_refuses_missing_or_wrong_executor_before_discovery(tmp_path, mon
         monkeypatch.setenv("POD_LAUNCH_AGENT", identity)
     with pytest.raises(ValueError, match="POD_LAUNCH_AGENT must identify"):
         launch.launch_attempt(*(tmp_path / name for name in ("template", "envelope", "e4b", "controller", "assets", "packet")),
-                              run_id=launch.RUN_IDS[0])
+                              run_id=RUN_IDS[0])
     assert not (tmp_path / "packet").exists()
 
 
@@ -521,48 +540,77 @@ def test_static_budget_refuses_changed_upload_allowance(monkeypatch):
         launch.check_static_budget()
 
 
-def range_envelope():
+
+FIXTURE = Path(__file__).parent / "fixtures/dq11-census-refused"
+
+
+def range_envelope(ids=RUN_IDS):
     return {"approval_url": "https://github.com/pjordanandrsn/experts4bit-qlora/issues/1083#issuecomment-123",
-            "run_ids": list(launch.RUN_IDS), "maximum_attempts": 10}
+            "run_ids": list(ids), "maximum_attempts": len(ids)}
 
 
-def refusal_receipt(root, run_id, **changes):
-    receipt = {"experiment_id": run_id, "work_id": "experts4bit-qlora#1083",
-               "status": "REFUSED", "complete": True, "instance_id": "none",
-               "cost_usd": {"actual": 0}, "approvals": [{"approval_url": range_envelope()["approval_url"]}],
-               "teardown_proof": {"complete": True, "method": "not-launched", "instance_id": "none"}}
+def git_fixture(root, *args):
+    return subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, text=True)
+
+
+@pytest.fixture
+def receipt_repo(tmp_path):
+    git_fixture(tmp_path, "init")
+    git_fixture(tmp_path, "config", "user.name", "Receipt fixture")
+    git_fixture(tmp_path, "config", "user.email", "fixture@example.invalid")
+    ledger = tmp_path / "receipts/experts4bit-qlora/ledger.jsonl"
+    ledger.parent.mkdir(parents=True)
+    ledger.write_text("")
+    git_fixture(tmp_path, "add", ".")
+    git_fixture(tmp_path, "commit", "-m", "Initial ledger")
+    return tmp_path
+
+
+def refusal_receipt(root, run_id, *, commit=True, **changes):
+    receipt = json.loads((FIXTURE / "receipt.json").read_text())
+    receipt["experiment_id"] = run_id
+    receipt["approvals"][0]["approval_url"] = range_envelope()["approval_url"]
     receipt.update(changes)
     path = root / "receipts/experts4bit-qlora/2026-10-17" / run_id / "receipt.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(receipt))
+    ledger = root / "receipts/experts4bit-qlora/ledger.jsonl"
+    row = json.loads((FIXTURE / "ledger.jsonl").read_text())
+    row["run_id"] = run_id
+    with ledger.open("a") as stream:
+        stream.write(json.dumps(row) + "\n")
+    if commit:
+        git_fixture(root, "add", "receipts")
+        git_fixture(root, "commit", "-m", "Refusal receipt")
     return path
 
 
 def test_template_substitution_changes_only_run_id():
     template = json.loads((LANE / "dq11_l_census_manifest_template.json").read_text())
-    for run_id in launch.RUN_IDS:
+    for run_id in (*RUN_IDS, "dq11-l-census-88"):
         attempt = launch.attempt_template(template, run_id)
-        assert attempt["run_id"] == run_id
-        attempt["run_id"] = launch.RUN_ID_PLACEHOLDER
-        assert attempt == template
-    for invalid in ("dq11-l-census-4", "dq11-l-census-15", "../run", None):
+        launch.assert_attempt_template(attempt, template, run_id)
+        attempt["stray"] = True
+        with pytest.raises(ValueError, match="changed field"):
+            launch.assert_attempt_template(attempt, template, run_id)
+    for invalid in ("../run", "dq11-l-census-five", None):
         with pytest.raises(ValueError, match="unregistered"):
             launch.attempt_template(template, invalid)
 
 
-def test_zero_instance_refusal_burns_id_but_allows_fresh_attempt(tmp_path):
-    env = range_envelope()
-    state = tmp_path / "state"
-    with launch.attempt_permit(env, launch.RUN_IDS[0], tmp_path, state):
-        pass
-    refusal_receipt(tmp_path, launch.RUN_IDS[0])
+def test_zero_instance_refusal_burns_id_but_allows_fresh_attempt(receipt_repo):
+    root = receipt_repo
+    state = root / "state"
+    with launch.attempt_permit(range_envelope(), RUN_IDS[0], root, state) as invoked:
+        invoked()
+    refusal_receipt(root, RUN_IDS[0])
     with pytest.raises(ValueError, match="burned"):
-        with launch.attempt_permit(env, launch.RUN_IDS[0], tmp_path, state):
+        with launch.attempt_permit(range_envelope(), RUN_IDS[0], root, state):
             pytest.fail("reused run id")
-    with launch.attempt_permit(env, launch.RUN_IDS[1], tmp_path, state):
+    with launch.attempt_permit(range_envelope(), RUN_IDS[1], root, state):
         pass
     rows = json.loads((state / "123.json").read_text())["attempts"]
-    assert [row["run_id"] for row in rows] == list(launch.RUN_IDS[:2])
+    assert [row["run_id"] for row in rows] == list(RUN_IDS[:2])
 
 
 @pytest.mark.parametrize("changes", [
@@ -572,76 +620,156 @@ def test_zero_instance_refusal_burns_id_but_allows_fresh_attempt(tmp_path):
     {"approvals": [{"approval_url": "another approval"}]},
     {"teardown_proof": {"complete": True, "method": "destroy", "instance_id": "none"}},
 ])
-def test_created_or_uncertain_receipt_blocks_any_next_draw(tmp_path, changes):
-    refusal_receipt(tmp_path, launch.RUN_IDS[0], **changes)
+def test_created_or_uncertain_receipt_blocks_any_next_draw(receipt_repo, changes):
+    root = receipt_repo
+    with launch.attempt_permit(range_envelope(), RUN_IDS[0], root, root / "state") as invoked:
+        invoked()
+    refusal_receipt(root, RUN_IDS[0], **changes)
     with pytest.raises(ValueError, match="created instance or uncertain"):
-        with launch.attempt_permit(range_envelope(), launch.RUN_IDS[1], tmp_path, tmp_path / "state"):
+        with launch.attempt_permit(range_envelope(), RUN_IDS[1], root, root / "state"):
             pytest.fail("next draw allowed")
 
 
-def test_process_death_without_receipt_fails_closed(tmp_path):
-    state = tmp_path / "state"
-    with launch.attempt_permit(range_envelope(), launch.RUN_IDS[0], tmp_path, state):
-        pass  # Simulated death after durable admission, before a canonical receipt.
+@pytest.mark.parametrize("invoked", [False, True])
+def test_process_death_without_receipt_fails_closed(receipt_repo, invoked):
+    root = receipt_repo
+    with launch.attempt_permit(range_envelope(), RUN_IDS[0], root, root / "state") as boundary:
+        if invoked:
+            boundary()
     with pytest.raises(ValueError, match="uncertain"):
-        with launch.attempt_permit(range_envelope(), launch.RUN_IDS[1], tmp_path, state):
+        with launch.attempt_permit(range_envelope(), RUN_IDS[1], root, root / "state"):
             pytest.fail("uncertain attempt retried")
 
 
-def test_concurrent_attempts_are_exclusive(tmp_path):
-    state = tmp_path / "state"
-    with launch.attempt_permit(range_envelope(), launch.RUN_IDS[0], tmp_path, state):
+@pytest.mark.parametrize("reason", ["no host by cutoff", "validate refusal", "60-second window", "envelope changed"])
+def test_caught_pre_controller_exit_marks_not_invoked_and_allows_next_id(receipt_repo, reason):
+    root = receipt_repo
+    with pytest.raises(ValueError, match=reason):
+        with launch.attempt_permit(range_envelope(), RUN_IDS[0], root, root / "state"):
+            raise ValueError(reason)
+    row = json.loads((root / "state/123.json").read_text())["attempts"][0]
+    assert row["phase"] == "not-invoked"
+    with launch.attempt_permit(range_envelope(), RUN_IDS[1], root, root / "state"):
+        pass
+
+
+def test_controller_exception_stays_uncertain(receipt_repo):
+    root = receipt_repo
+    with pytest.raises(ValueError, match="controller died"):
+        with launch.attempt_permit(range_envelope(), RUN_IDS[0], root, root / "state") as invoked:
+            invoked()
+            raise ValueError("controller died")
+    with pytest.raises(ValueError, match="uncertain"):
+        with launch.attempt_permit(range_envelope(), RUN_IDS[1], root, root / "state"):
+            pass
+
+
+def test_concurrent_attempts_are_exclusive(receipt_repo):
+    root = receipt_repo
+    with launch.attempt_permit(range_envelope(), RUN_IDS[0], root, root / "state"):
         with pytest.raises(ValueError, match="active"):
-            with launch.attempt_permit(range_envelope(), launch.RUN_IDS[1], tmp_path, state):
+            with launch.attempt_permit(range_envelope(), RUN_IDS[1], root, root / "state"):
                 pytest.fail("concurrent attempt")
 
 
-def test_ten_refusals_exhaust_range_even_with_fresh_journal(tmp_path):
-    for run_id in launch.RUN_IDS:
-        refusal_receipt(tmp_path, run_id)
-    with pytest.raises(ValueError, match="burned or ten-attempt"):
-        with launch.attempt_permit(range_envelope(), launch.RUN_IDS[-1], tmp_path, tmp_path / "new-state"):
+def test_ten_refusals_exhaust_range(receipt_repo):
+    root = receipt_repo
+    for run_id in RUN_IDS:
+        with launch.attempt_permit(range_envelope(), run_id, root, root / "state") as invoked:
+            invoked()
+        refusal_receipt(root, run_id)
+    with pytest.raises(ValueError, match="burned or attempt cap"):
+        with launch.attempt_permit(range_envelope(), RUN_IDS[-1], root, root / "state"):
             pytest.fail("eleventh attempt")
 
 
-def test_ledger_without_receipt_blocks_attempt(tmp_path):
-    ledger = tmp_path / "receipts/experts4bit-qlora/ledger.jsonl"
-    ledger.parent.mkdir(parents=True)
-    ledger.write_text(json.dumps({"run_id": launch.RUN_IDS[0], "cost_usd": 0}) + "\n")
-    with pytest.raises(ValueError, match="ledger attempt"):
-        with launch.attempt_permit(range_envelope(), launch.RUN_IDS[1], tmp_path, tmp_path / "state"):
-            pytest.fail("orphan ledger accepted")
+@pytest.mark.parametrize("kind", ["receipt", "ledger", "directory"])
+def test_fresh_envelope_refuses_any_preexisting_run_id(receipt_repo, kind):
+    root = receipt_repo
+    if kind == "receipt":
+        refusal_receipt(root, RUN_IDS[0])
+    elif kind == "ledger":
+        ledger = root / "receipts/experts4bit-qlora/ledger.jsonl"
+        ledger.write_text(json.dumps({"run_id": RUN_IDS[0], "cost_usd": 0}) + "\n")
+        git_fixture(root, "add", "receipts")
+        git_fixture(root, "commit", "-m", "Orphan ledger")
+    else:
+        (root / "receipts/experts4bit-qlora/2026-10-17" / RUN_IDS[0]).mkdir(parents=True)
+    with pytest.raises(ValueError, match="already used"):
+        with launch.attempt_permit(range_envelope(), RUN_IDS[1], root, root / "state"):
+            pass
 
 
-def test_changed_envelope_cannot_reset_attempt_journal(tmp_path):
-    env = range_envelope()
-    state = tmp_path / "state"
-    with launch.attempt_permit(env, launch.RUN_IDS[0], tmp_path, state):
+@pytest.mark.parametrize("dirty", ["untracked-receipt", "modified-receipt", "staged-receipt", "ledger"])
+def test_uncommitted_proofs_refuse(receipt_repo, dirty):
+    root = receipt_repo
+    with launch.attempt_permit(range_envelope(), RUN_IDS[0], root, root / "state") as invoked:
+        invoked()
+    path = refusal_receipt(root, RUN_IDS[0], commit=dirty != "untracked-receipt")
+    if dirty in ("modified-receipt", "staged-receipt"):
+        path.write_text(path.read_text() + "\n")
+        if dirty == "staged-receipt":
+            git_fixture(root, "add", "receipts")
+    if dirty == "ledger":
+        with (root / "receipts/experts4bit-qlora/ledger.jsonl").open("a") as stream:
+            stream.write("\n")
+    with pytest.raises(ValueError, match="tracked and clean"):
+        with launch.attempt_permit(range_envelope(), RUN_IDS[1], root, root / "state"):
+            pass
+
+
+def test_changed_envelope_cannot_reset_attempt_journal(receipt_repo):
+    root = receipt_repo
+    with launch.attempt_permit(range_envelope(), RUN_IDS[0], root, root / "state"):
         pass
-    refusal_receipt(tmp_path, launch.RUN_IDS[0])
     with pytest.raises(ValueError, match="envelope changed"):
-        with launch.attempt_permit(dict(env, issued_at="different"), launch.RUN_IDS[1], tmp_path, state):
-            pytest.fail("approval mutation reset journal")
+        with launch.attempt_permit(dict(range_envelope(), issued_at="different"), RUN_IDS[1], root, root / "state"):
+            pass
 
 
-def test_each_permitted_attempt_reenters_full_gated_launcher(tmp_path, monkeypatch):
-    env = range_envelope()
-    envelope = tmp_path / "envelope.json"
-    envelope.write_text(json.dumps(env))
+def test_later_envelope_can_use_fresh_ids_without_code_change(receipt_repo):
+    env = range_envelope(["dq11-l-census-98", "dq11-l-census-99"])
+    with launch.attempt_permit(env, env["run_ids"][0], receipt_repo, receipt_repo / "state"):
+        pass
+
+
+@pytest.mark.parametrize("ids,cap", [([], 0), (["wrong"], 1), ([RUN_IDS[0]] * 2, 2),
+                                     (list(RUN_IDS) + ["dq11-l-census-15"], 11),
+                                     (list(RUN_IDS), 9), (list(RUN_IDS), True)])
+def test_invalid_envelope_lists_refuse(ids, cap):
+    assert not launch.valid_run_ids({"run_ids": ids, "maximum_attempts": cap})
+
+
+def test_each_permitted_attempt_reenters_full_gated_launcher(receipt_repo, monkeypatch):
+    root = receipt_repo
+    envelope = root / "envelope.json"
+    envelope.write_text(json.dumps(range_envelope()))
     monkeypatch.setattr(launch, "validate_envelope", lambda *args: None)
     monkeypatch.setattr(launch, "verify_envelope_comment", lambda *args: None)
-    monkeypatch.setattr(launch.Path, "home", lambda: tmp_path)
-    monkeypatch.setenv("RECEIPTS_REPO", str(tmp_path))
+    monkeypatch.setattr(launch.Path, "home", lambda: root)
+    monkeypatch.setenv("RECEIPTS_REPO", str(root))
     calls = []
 
-    def attempt(*args, run_id):
+    def attempt(*args, run_id, before_controller):
         calls.append((run_id, args[-1]))
-        refusal_receipt(tmp_path, run_id)
+        before_controller()
+        refusal_receipt(root, run_id)
         return 2
 
     monkeypatch.setattr(launch, "launch_attempt", attempt)
     for i in range(2):
-        packet = tmp_path / f"packet{i}"
-        assert launch.launch(tmp_path / "template", envelope, tmp_path / "e4b", tmp_path / "controller",
-                             tmp_path / "assets", packet, run_id=launch.RUN_IDS[i]) == 2
-    assert calls == [(launch.RUN_IDS[i], tmp_path / f"packet{i}") for i in range(2)]
+        packet = root / f"packet{i}"
+        assert launch.launch(root / "template", envelope, root / "e4b", root / "controller",
+                             root / "assets", packet, run_id=RUN_IDS[i]) == 2
+    assert calls == [(RUN_IDS[i], root / f"packet{i}") for i in range(2)]
+
+
+def test_not_invoked_with_unexpected_receipt_stops(receipt_repo):
+    root = receipt_repo
+    with pytest.raises(ValueError):
+        with launch.attempt_permit(range_envelope(), RUN_IDS[0], root, root / "state"):
+            raise ValueError("pre-controller gate")
+    refusal_receipt(root, RUN_IDS[0])
+    with pytest.raises(ValueError, match="not-invoked attempt has unexpected"):
+        with launch.attempt_permit(range_envelope(), RUN_IDS[1], root, root / "state"):
+            pass

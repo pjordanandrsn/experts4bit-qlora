@@ -119,21 +119,31 @@ seconds of GitHub's `created_at`, `expires_at` must be exactly 24 hours after
 comment refuses. Its local record has schema
 `dq11-l-census-envelope-ack/1`, that comment URL, issue and expiry UTC times,
 the exact clean merged e4b and controller heads, the committed manifest
-template SHA-256, `maximum_draws=1`, `maximum_attempts=10`, the explicit
-`run_ids` list `dq11-l-census-5` through `dq11-l-census-14`, and the exact criteria in
+template SHA-256, `maximum_draws=1`, `maximum_attempts` equal to its explicit
+`run_ids` list length (one through ten unique IDs matching
+`dq11-l-census-[0-9]+`), and the exact criteria in
 `ENVELOPE_CRITERIA` in the launcher. It lapses at the earlier of 24 hours after
 issue or any change to those source/template bytes. An absent, future,
 expired, longer or broader record refuses before a provider search; it is
 checked again immediately before invoking the paid controller. The controller
 records the same GitHub approval URL. The template uses
 `__DQ11_CENSUS_RUN_ID__`; substituting `--run-id` changes only that field.
-Each invocation performs one attempt with a new packet directory and all fresh
+A later envelope may declare fresh IDs without changing the template. Any ID
+with a preexisting receipt, run directory or ledger row outside this envelope
+journal refuses. Each invocation performs one attempt with a new packet directory and all fresh
 gates. Before discovery, a durable journal in
-`~/.adertha/dq11-census-envelopes/` burns the selected ID under an exclusive
-lock held through controller completion. A reused ID refuses. Before another
+`~/.local/state/dq11-census-envelopes/` burns the selected ID under an exclusive
+lock held through controller completion. The journal key is the ACK comment ID.
+The initial `admitted` phase becomes `controller-invoked` durably just before
+the paid controller call. A caught pre-controller exception becomes
+`not-invoked`; another ID may proceed only if that attempt has no receipt,
+run directory or ledger row. Process death in `admitted` or an uncertain
+controller outcome fails closed. A reused ID refuses. Before another
 ID is admitted, every used ID must have a complete canonical `REFUSED` receipt
 with `instance_id=none`, actual cost zero, `not-launched` teardown proof and the
-same approval URL. An absent receipt, orphan ledger row, unfinished attempt,
+same approval URL. Counted receipts and the ledger must be tracked and clean
+at the receipt repository HEAD, including the index. An absent receipt for
+an admitted/controller-invoked attempt, orphan ledger row, unfinished attempt,
 created instance or changed envelope stops for the maintainer. The journal
 survives process death; canonical receipts also prevent resetting it to gain
 another draw. At most ten IDs can be attempted; at most one instance can be
