@@ -142,8 +142,10 @@ eager. So these run for the first time in this lane on the proof:
 - **No P133 data exists.** No served run has set `GNF4_GEMV_BW=1` on a 128-SM part.
 - **On the RTX A2000** (sm_86), a probe before the harness: the default server builds and decodes the tiny fixture
   eager, with host grouping and `max_seqs` auto at 64.
-- **The dry run, `p133-dry-1`** (2026-10-17, 17:10:12Z–17:15:23Z, the RTX A2000 in a container reached through
-  `P133_BOX_EXEC`; driver rc 0, 36 entries fetched). It ran at this page's `staged.sha256`:
+- **The dry run, `p133-dry-2`** (2026-10-17, 17:57:00Z–18:01:10Z, the RTX A2000 in a container reached through
+  `P133_BOX_EXEC`; driver rc 0, 36 entries fetched). It ran at this page's `staged.sha256` and this page's driver: the
+  rerun after the driver's required-variable loop was made literal (the cross-lane known-hosts contract, CI on #1695).
+  `p133-dry-1` (17:10:12Z–17:15:23Z, the earlier driver) read the same on every line below.
   - the box installed and the tripwire confirmed e4b 0.54.0 @ `c8d7e629`, grouped-nf4-gemm 0.46.0 @ `6b7c2e74`, torch
     2.8.0+cu128, triton 3.4.0, transformers 5.17.0 and bitsandbytes 0.50.2; all four self-tests passed;
   - premise: the kernel contract **33 passed, 2 skipped** (the two PDL ids), and the served route **13 passed, 5

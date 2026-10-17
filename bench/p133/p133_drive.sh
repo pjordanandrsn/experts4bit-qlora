@@ -17,11 +17,15 @@ set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [p133_drive] $*"; }
 E4B_PIN=c8d7e629e4c8431fc86970cf7195d8e67f72e22a      # p133_run.sh refuses any other
 DRY=${P133_DRY:-0}; PROVE=${P133_PROVE:-0}
-if [ "$DRY" = 1 ]; then NEED_VARS="E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID P133_BOX_EXEC"
-else NEED_VARS="E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID"; fi
-for v in $NEED_VARS; do
-  [ -n "${!v:-}" ] || { say "refusing: $v is not set -- run as rent.py --command after a live pre-flight (or P133_DRY=1 with P133_BOX_EXEC)"; exit 78; }
+if [ "$DRY" = 1 ]; then
+  for v in E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID P133_BOX_EXEC; do
+    [ -n "${!v:-}" ] || { say "refusing: $v is not set -- P133_DRY=1 needs it"; exit 78; }
+  done
+else
+for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID; do
+  [ -n "${!v:-}" ] || { say "refusing: $v is not set -- run as rent.py --command after a live pre-flight"; exit 78; }
 done
+fi
 # ---- the declared run ids: the proof, the reading, its one rerun; the dry run's own
 RUN_ID=$E4B_RENT_RUN_ID
 case "$RUN_ID" in
