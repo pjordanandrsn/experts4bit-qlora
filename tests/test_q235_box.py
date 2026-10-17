@@ -18,10 +18,14 @@ Qwen3-MoE, on the reference path (the fused kernels need CUDA; the RTX A2000 reh
   inside the step.
 - Amendment 6 (``--micro-batch``): shape B's token-weighted accumulation matches shape A's gradient at both steps, its two planted
   accumulation bugs do not, and the comparison's views read as registered.
+- Amendment 8: every step records each decoder layer's output gradient (dX), finite and nonzero, once per forward-backward of the
+  step's own pass (four under shape B), and the checkpoint recompute adds nothing; ``--heldout`` reads the held-out rows before the
+  update, after step 0 and after step 1, and changes no registered record; the new STRICT rules fail closed.
 """
 from __future__ import annotations
 
 import json
+import math
 import subprocess
 import sys
 from pathlib import Path
@@ -613,3 +617,106 @@ def test_the_overhead_read_is_abba_after_a_warm_up_and_says_when_it_is_not_decis
     # without the bound: one timed pass, and no overhead keys at all
     rec = box.time_moe(model, lambda: clock.__setattr__("now", clock.now + 1.0), 2, cuda=False, sync=lambda: None)
     assert rec["timed_passes"] == 1 and rec["pass_on_s"] == [1.0] and "overhead_s" not in rec
+
+
+# ── Amendment 8: the dX record and the held-out read ─────────────────────────────────────────────────────────────────────
+
+@pytest.fixture(scope="module")
+def step_held(tiny):
+    """The registered step with the held-out read: two other rows, one of them right-padded."""
+    g = torch.Generator().manual_seed(5)
+    ids = torch.randint(3, 256, (2, 20), generator=g)
+    mask = torch.ones(2, 20, dtype=torch.long)
+    mask[0, 14:] = 0
+    ids = ids.masked_fill(mask == 0, 0)
+    torch.save({"input_ids": ids, "attention_mask": mask, "labels": ids.masked_fill(mask == 0, -100)}, tiny / "heldout.pt")
+    return _box(tiny, "step_held", "--heldout", str(tiny / "heldout.pt"))
+
+
+def test_amendment_8_records_every_layers_dx_at_both_steps(step):
+    rec, _ = step
+    for k in ("step", "step1"):
+        dx = rec[k]["dx"]
+        assert dx["layers"] == 4 and dx["passes"] == 1 and dx["finite_nonzero"] and dx["failing"] == [], dx
+        assert all(isinstance(v, float) and math.isfinite(v) and v > 0 for v in dx["norms"][0])  # the recompute left no gap
+    assert rec["rules"]["step0_dx_finite_nonzero"] is True and rec["rules"]["step1_dx_finite_nonzero"] is True
+    assert rec["amendment8"] == {"dx": True, "heldout": False} and "heldout" not in rec
+
+
+def test_the_held_out_read_is_finite_and_changes_no_registered_record(step, step_held):
+    rec, _ = step
+    held, _ = step_held
+    h = held["heldout"]
+    assert h["all_finite"] and all(math.isfinite(h[k]) for k in ("loss_before", "loss_after_step0", "loss_after"))
+    assert h["rel_change"] == (h["loss_after"] - h["loss_before"]) / h["loss_before"] and h["rows"] == 2 and h["real_tokens"] == 34
+    assert held["rules"]["heldout_finite"] is True and held["amendment8"] == {"dx": True, "heldout": True}
+    # the reads own nothing else: the step's losses, gradients' dX, layer outputs and frozen hashes are the run without them
+    for k in ("step", "step1"):
+        assert held[k]["loss"] == rec[k]["loss"] and held[k]["dx"]["norms"] == rec[k]["dx"]["norms"]
+    assert held["layer_sha256"] == rec["layer_sha256"] and held["in_process"] == rec["in_process"]
+    assert held["frozen_sha256_after_load"] == rec["frozen_sha256_after_load"] and held["frozen_sha256_after_both_steps_equal"]
+
+
+def test_shape_b_records_dx_once_per_micro_batch(shape_b):
+    for k in ("step", "step1"):
+        dx = shape_b[k]["dx"]
+        assert dx["passes"] == 4 and dx["finite_nonzero"] and all(len(p) == 4 for p in dx["norms"]), dx
+
+
+def test_the_held_out_read_rides_the_stepped_run_only(tiny):
+    r = subprocess.run([sys.executable, str(BOX), str(tiny / "model"), str(tiny / "tokens.pt"), "--out", str(tiny / "x"), "--device",
+                        "cpu", "--enabler", "reference", "--repeat", "--heldout", str(tiny / "tokens.pt")],
+                       capture_output=True, text=True, cwd=ROOT)
+    assert r.returncode == 2 and "--heldout rides the stepped run" in r.stderr
+
+
+def test_amendment_8_strict_rules_fail_closed():
+    box = _box_module()
+    ok = {"rules": {k: True for k in box.STRICT_RULES}, "frozen_sha256_after_both_steps_equal": True}
+    assert box.strict_failures(ok) == []                        # a record from before Amendment 8 reads as before
+    a8 = {**ok, "amendment8": {"dx": True, "heldout": True}}
+    assert box.strict_failures(a8) == ["step0_dx_finite_nonzero", "step1_dx_finite_nonzero", "heldout_finite"]
+    a8_ok = {**a8, "rules": {**ok["rules"], **{k: True for k in box.STRICT_RULES_A8}, "heldout_finite": True}}
+    assert box.strict_failures(a8_ok) == []
+    assert box.strict_failures({**a8_ok, "rules": {**a8_ok["rules"], "step1_dx_finite_nonzero": False}}) == ["step1_dx_finite_nonzero"]
+
+
+def test_the_dx_probe_records_the_steps_own_pass_and_never_the_recompute():
+    """A forward hook fires again in the checkpoint recompute; only the armed forward's output carries a gradient hook, so a pass
+    records exactly one norm per layer, and an unarmed forward records nothing."""
+    box = _box_module()
+
+    class Layer(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.w = torch.nn.Parameter(torch.ones(3))
+
+        def forward(self, x):
+            return (x * self.w,)
+
+    class Inner(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.layers = torch.nn.ModuleList([Layer(), Layer()])
+
+    class Model(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.model = Inner()
+
+        def forward(self, x):
+            for lay in self.model.layers:
+                x = torch.utils.checkpoint.checkpoint(lay, x, use_reentrant=False)[0]
+            return x.sum()
+
+    m = Model()
+    probe = box.DxProbe(m)
+    m(torch.ones(3)).backward()                                 # unarmed: nothing recorded
+    assert probe.passes == []
+    probe.arm()
+    loss = m(torch.full((3,), 2.0))
+    probe.disarm()
+    loss.backward()                                             # the recompute calls both layers again, unarmed
+    probe.remove()
+    rec = probe.record()
+    assert rec["passes"] == 1 and rec["finite_nonzero"] and rec["norms"] == [[pytest.approx(3 ** 0.5, rel=1e-6)] * 2], rec
