@@ -341,6 +341,170 @@ class LoadProfile:
         return rec
 
 
+class MoETimer:
+    """``--time-moe N``: when the MoE experts module of N evenly spaced layers is staged and when it computes, for ONE extra
+    forward and backward after both registered steps. REPORTED only: ``q235_verdict.py`` does not read it, and the steps run
+    before any of these hooks exist, so their records carry none of its overhead.
+
+    Per sampled layer, from CUDA events in stream order (``perf_counter`` on the CPU rehearsal, which has no offload), each mark
+    also numbered in the order the host enqueued it:
+    - ``stage_ms``: from just before e4b's offload pre-hook (``_stage_pre_hook``, which calls ``_ExpertOffload.stage``) to just
+      after it. That is the layer's synchronous host-to-device copy, enqueued on the compute stream.
+    - ``compute_ms``: from the end of staging to the experts module's return. That is gate_up, the activation and down
+      together; e4b's fused path runs them inside one module call. ``None`` for a call that never returned: a checkpoint
+      recompute that stopped early at the region's last saved tensor.
+    - Each of those in the ``forward`` and, under gradient checkpointing, the ``recompute``: the same hooks firing inside the
+      backward (``engines.offload._in_backward``).
+    - ``backward``: the experts module's own backward window, from its full backward pre-hook to its full backward hook.
+      Under a non-reentrant checkpoint the layer's recompute runs INSIDE that window (it starts at the first saved tensor
+      read, which is in this module); under the reentrant one (the fast path's default) it ran before it.
+      ``recompute_inside`` says which, and ``own_ms`` is the window after the recompute's compute end, the dgrad and the LoRA
+      gradients (an upper bound by the layer's ops after this module), or ``None`` if the recompute ran inside the window
+      but never returned.
+
+    The hooks never change an argument, output or gradient (each returns None), and they are removed before the record is
+    read."""
+
+    PHASES = ("forward", "recompute")
+
+    def __init__(self, model, n, cuda):
+        import itertools
+        from experts4bit_qlora.engines.offload import _in_backward
+        self._in_backward, self.cuda, self._seq = _in_backward, cuda, itertools.count()
+        L = len(model.model.layers)
+        n = max(1, min(int(n), L))
+        self.layers = sorted({round(k * (L - 1) / (n - 1)) for k in range(n)}) if n > 1 else [0]
+        self.marks = {i: {} for i in self.layers}
+        self.staged, self.handles = {}, []
+        for i in self.layers:
+            mod = model.model.layers[i].mlp.experts
+            self.staged[i] = any(getattr(h, "__name__", "") == "_stage_pre_hook" for h in mod._forward_pre_hooks.values())
+            self.handles += [
+                mod.register_forward_pre_hook(self._forward(i, "stage_start"), prepend=True),   # before e4b's staging
+                mod.register_forward_pre_hook(self._forward(i, "stage_end")),                    # after it
+                mod.register_forward_hook(self._forward(i, "compute_end"), prepend=True),       # before e4b's evict
+                mod.register_full_backward_pre_hook(self._mark(i, "backward:start")),
+                mod.register_full_backward_hook(self._mark(i, "backward:end")),
+            ]
+
+    def _stamp(self):
+        if self.cuda:
+            e = torch.cuda.Event(enable_timing=True)
+            e.record()
+            return e
+        return time.perf_counter()
+
+    def _put(self, i, key):
+        self.marks[i].setdefault(key, []).append((next(self._seq), self._stamp()))
+
+    def _mark(self, i, key):
+        def hook(*_):
+            self._put(i, key)
+        return hook
+
+    def _forward(self, i, what):
+        def hook(*_):
+            self._put(i, f"{'recompute' if self._in_backward() else 'forward'}:{what}")
+        return hook
+
+    def remove(self):
+        for h in self.handles:
+            h.remove()
+        self.handles = []
+
+    def _ms(self, a, b):
+        a, b = a[1], b[1]
+        return round(a.elapsed_time(b) if self.cuda else (b - a) * 1e3, 4)
+
+    def record(self):
+        if self.cuda:
+            torch.cuda.synchronize()
+        out = {}
+        for i in self.layers:
+            m, row = self.marks[i], {"staged_by_offload": self.staged[i]}
+            for ph in self.PHASES:
+                s0, s1, c1 = (m.get(f"{ph}:{w}", []) for w in ("stage_start", "stage_end", "compute_end"))
+                n = min(len(s0), len(s1))
+                # a call's compute end is the first one after its stage end and before the next call's stage start
+                ends = [next((e for e in c1 if s1[k][0] < e[0] < (s0[k + 1][0] if k + 1 < n else float("inf"))), None)
+                        for k in range(n)]
+                row[ph] = {"calls": n, "stage_ms": [self._ms(s0[k], s1[k]) for k in range(n)],
+                           "compute_ms": [self._ms(s1[k], e) if e else None for k, e in enumerate(ends)]}
+            b0, b1 = m.get("backward:start", []), m.get("backward:end", [])
+            rs, rc = m.get("recompute:stage_start", []), m.get("recompute:compute_end", [])
+            bw = {"calls": min(len(b0), len(b1)), "ms": [], "recompute_inside": [], "own_ms": []}
+            for k in range(bw["calls"]):
+                lo, hi = b0[k][0], b1[k][0]
+                inside = [e for e in rs if lo < e[0] < hi]
+                end = [e for e in rc if lo < e[0] < hi]
+                bw["ms"].append(self._ms(b0[k], b1[k]))
+                bw["recompute_inside"].append(bool(inside))
+                bw["own_ms"].append(self._ms(end[-1], b1[k]) if end else None if inside else self._ms(b0[k], b1[k]))
+            row["backward"] = bw
+            out[str(i)] = row
+        return out
+
+
+def time_moe(model, fwd_bwd, n, cuda, sync, bound=False, micro_batches=None):
+    """The extra timed pass (see MoETimer): ``fwd_bwd`` is the registered step's own forward-backward, shape B's accumulation under
+    ``--micro-batch`` (Amendment 6), so each sampled layer gets one stage/compute pair per micro-batch, call ``k`` being micro-batch
+    ``k`` (``micro_batches``: their rows, width, positions and valid labels). Every pass runs with the checkpoint's early stop off,
+    so a non-reentrant recompute reaches the experts module's return and its compute is observed (the reentrant checkpoint always
+    runs the region whole). Each pass's time includes ``fwd_bwd``'s own device-to-host copy of the adapter gradients, after the
+    hooks' region; it is recorded and left out of every comparison. Never fails the box: an error is recorded and the hooks are
+    removed.
+
+    ``bound`` (Amendment 7's overhead read, as the maintainer registered it): one discarded warm-up pass, then four in ABBA order,
+    untimed, timed, timed, untimed. ``overhead_s`` is the mean timed pass minus the mean untimed one; ``half_s`` is the order and
+    drift noise of that read, half the difference between the two timed-minus-untimed pairs ``(on1 - off1)`` and ``(on2 - off2)``.
+    The read is decision-grade only when ``half_s <= overhead_s / 2``; otherwise it is reporting-only. Both timed passes carry the
+    hooks, so the layers' record then holds two calls per micro-batch, call ``k`` being micro-batch ``k mod M`` of timed pass
+    ``k // M``. Every key is always written; a quantity with no base is None."""
+    from torch.utils.checkpoint import set_checkpoint_early_stop
+    rec = {"reported_only": True, "read_by_verdict": False, "pass": "the registered shape's forward-backward after both registered steps, "
+           "no optimizer step, checkpoint early stop off", "timer": "cuda events" if cuda else "perf_counter (CPU rehearsal, no offload)",
+           "micro_batches": [{**m, "positions": m["rows"] * m["width"]} for m in micro_batches or []]}
+
+    def one_pass():
+        """The pass's seconds without its grads copy, and the copy's seconds; unrounded."""
+        sync()
+        t = time.perf_counter()
+        r = fwd_bwd()
+        sync()
+        copy = float(r[4]) if isinstance(r, tuple) and len(r) >= 5 else 0.0
+        return time.perf_counter() - t - copy, copy
+    timer = None
+    try:
+        with set_checkpoint_early_stop(False):
+            warm = one_pass() if bound else None
+            off1 = one_pass() if bound else None
+            timer = MoETimer(model, n, cuda)
+            rec["sampled_layers"] = timer.layers
+            ons = [one_pass() for _ in range(2 if bound else 1)]
+            timer.remove()
+            off2 = one_pass() if bound else None
+        rec["layers"] = timer.record()
+        rec["timed_passes"] = len(ons)
+        rec["pass_on_s"] = [round(x, 4) for x, _ in ons]
+        rec["grads_copy_s"] = {"on": [round(c, 4) for _, c in ons]}
+        if bound:
+            on1, on2 = ons[0][0], ons[1][0]
+            d1, d2 = on1 - off1[0], on2 - off2[0]
+            over, half = (on1 + on2) / 2 - (off1[0] + off2[0]) / 2, abs(d1 - d2) / 2
+            rec.update({"order": "warm-up, off, on, on, off", "pass_warmup_s": round(warm[0], 4),
+                        "pass_off_s": [round(off1[0], 4), round(off2[0], 4)], "pairs_s": [round(d1, 4), round(d2, 4)],
+                        "overhead_s": round(over, 4), "half_s": round(half, 4),
+                        "overhead_ratio": round(over / ((off1[0] + off2[0]) / 2), 4) if off1[0] + off2[0] > 0 else None,
+                        "decision_grade": half <= over / 2})
+            rec["grads_copy_s"].update(warmup=round(warm[1], 4), off=[round(off1[1], 4), round(off2[1], 4)])
+    except Exception as e:  # noqa: BLE001 - reported only: a failure here is a reading, never a box failure
+        rec["error"] = f"{type(e).__name__}: {e}"[:400]
+    finally:
+        if timer is not None:
+            timer.remove()
+    return rec
+
+
 def build(path, device, r, alpha, adapter_dtype, enabler, profile=None):
     from experts4bit_qlora import load_moe_4bit_streaming
     from experts4bit_qlora.lora import add_attention_lora, quantize_attention_projections_4bit
@@ -481,7 +645,8 @@ def in_process_plants(model, forward, null, mask=None):
 
 
 def run(a):
-    out = {"argv": vars(a), "host": host_facts(), "versions": versions(), "t_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    argv = {k: v for k, v in vars(a).items() if v or not k.startswith("time_moe")}   # off: the record carries no trace of it
+    out = {"argv": argv, "host": host_facts(), "versions": versions(), "t_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
     dev = a.device
     cuda = dev == "cuda"
     tokens = torch.load(a.tokens, weights_only=True)
@@ -708,6 +873,14 @@ def run(a):
     out["frozen_sha256_after_both_steps_equal"] = after == out["frozen_sha256_after_load"]
     out["frozen_tensors"] = len(after)
     out["frozen_sha256_after_load"] = hashlib.sha256(json.dumps(out["frozen_sha256_after_load"], sort_keys=True).encode()).hexdigest()
+    if a.time_moe:                      # REPORTED only, after every registered record has been taken (MoETimer)
+        def shape(m_ids, m_labels):
+            return {"rows": int(m_ids.shape[0]), "width": int(m_ids.shape[1]), "valid": int((m_labels[:, 1:] != -100).sum())}
+        if mbs:                         # the registered shape: B's accumulation, one pair per micro-batch (Amendment 6)
+            pass_fn, shapes = (lambda: fwd_bwd_b("token")), [shape(m["input_ids"], m["labels"]) for m in mbs]
+        else:
+            pass_fn, shapes = fwd_bwd, [shape(ids, labels)]
+        out["moe_timing"] = time_moe(model, pass_fn, a.time_moe, cuda, sync, bound=a.time_moe_bound, micro_batches=shapes)
     return out, layer_out
 
 
@@ -739,6 +912,11 @@ def main():
     ap.add_argument("--repeat", action="store_true")
     ap.add_argument("--plants", action="store_true", help="with --repeat: Amendment 3's in-process null and planted errors")
     ap.add_argument("--micro-batch", type=int, default=None, help="shape B (Amendment 6): rows per micro-batch, accumulated per step")
+    ap.add_argument("--time-moe", type=int, default=0, metavar="N",
+                    help="after both steps, one extra forward-backward timing the MoE experts' staging and compute on N evenly "
+                         "spaced layers (REPORTED only, under moe_timing; off by default)")
+    ap.add_argument("--time-moe-bound", action="store_true",
+                    help="with --time-moe: Amendment 7's overhead read (a warm-up, then untimed, timed, timed, untimed)")
     a = ap.parse_args()
     if a.device == "cpu" and a.enabler == "fast":
         ap.error("the fused training kernels need CUDA; use --enabler reference on the CPU")
@@ -746,6 +924,10 @@ def main():
         ap.error("--plants rides the fresh-process repeat (--repeat), and replaces --plant")
     if a.micro_batch and (a.repeat or a.plant):
         ap.error("--micro-batch shapes the box's steps; the repeat and the plants run shape A's forward")
+    if a.time_moe < 0 or (a.time_moe and a.repeat):
+        ap.error("--time-moe N (N >= 1) rides the stepped run, after both registered steps; not --repeat")
+    if a.time_moe_bound and not a.time_moe:
+        ap.error("--time-moe-bound needs --time-moe")
     out, layer_out = run(a)
     os.makedirs(a.out, exist_ok=True)
     out["layer_sha256"] = save_layers(a.out, layer_out, out.pop("_topk"))

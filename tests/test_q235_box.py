@@ -398,3 +398,218 @@ def test_the_in_process_plants_reproduce_the_separate_plants_on_mixtral(tiny_mix
         sep_out, sep = mixtral_plants[kind]
         assert p["layer_sha256"] == sep, f"the in-process {kind} plant differs from its own run on Mixtral"
         assert p["loss"] == sep_out["repeat"]["loss"]
+
+
+def test_the_moe_timing_is_reported_only_and_leaves_the_registered_record_alone(tiny, step):
+    """``--time-moe``: one extra timed forward-backward after both steps, under ``moe_timing``. The registered fields are the
+    untimed run's (the CPU reference path is deterministic, so equal bit for bit), and off, the record carries no trace of it."""
+    rec, _ = _box(tiny, "timed", "--time-moe", "2", "--time-moe-bound")
+    base = step[0]
+    assert not any(k.startswith("time_moe") for k in base["argv"]) and "moe_timing" not in base
+    assert set(rec) - set(base) == {"moe_timing"} and rec["argv"]["time_moe"] == 2 and rec["argv"]["time_moe_bound"]
+    assert rec["rules"] == base["rules"] and rec["in_process"] == base["in_process"]
+    assert rec["layer_sha256"] == base["layer_sha256"] and rec["frozen_sha256_after_load"] == base["frozen_sha256_after_load"]
+    for k in ("step", "step1"):
+        assert rec[k]["loss"] == base[k]["loss"] and rec[k]["gradients"] == base[k]["gradients"]
+        assert rec[k]["optimizer_delta"] == base[k]["optimizer_delta"]
+    t = rec["moe_timing"]
+    assert "error" not in t, t.get("error")
+    assert t["reported_only"] and t["read_by_verdict"] is False and t["sampled_layers"] == [0, 3]
+    assert t["order"] == "warm-up, off, on, on, off" and t["timed_passes"] == 2 and t["pass_warmup_s"] >= 0  # Amendment 7's read
+    assert len(t["pass_on_s"]) == len(t["pass_off_s"]) == len(t["pairs_s"]) == 2 and t["half_s"] >= 0
+    assert isinstance(t["overhead_s"], float) and isinstance(t["decision_grade"], bool) and "overhead_ratio" in t
+    assert set(t["grads_copy_s"]) == {"on", "off", "warmup"} and all(c >= 0 for c in t["grads_copy_s"]["on"] + t["grads_copy_s"]["off"])
+    (mb,) = t["micro_batches"]                                     # shape A: the one micro-batch, every row
+    assert (mb["rows"], mb["width"], mb["positions"]) == (2, 24, 48) and mb["valid"] > 0
+    for i in ("0", "3"):
+        row = t["layers"][i]
+        assert row["staged_by_offload"] is False                     # the CPU rehearsal has no offload
+        assert row["forward"]["calls"] == row["recompute"]["calls"] == row["backward"]["calls"] == 2, row   # both timed passes
+        # early stop off: the non-reentrant recompute reaches the module's return, so its compute is observed too
+        assert all(v is not None and v >= 0 for ph in ("forward", "recompute") for f in ("stage_ms", "compute_ms") for v in row[ph][f])
+        bw = row["backward"]
+        assert bw["recompute_inside"] == [True] * 2, bw             # Hugging Face's checkpoint recomputes inside the window
+        assert all(0 <= o <= w for o, w in zip(bw["own_ms"], bw["ms"])), bw
+
+
+def test_the_moe_timing_times_shape_bs_accumulation_one_pair_per_micro_batch(tiny8, shape_b):
+    """Under ``--micro-batch`` the timed pass is the registered step's own forward-backward, shape B's token accumulation, so each
+    sampled layer has one stage/compute pair and one backward per micro-batch, each beside its micro-batch's shape. The registered
+    fields are the untimed shape-B run's."""
+    rec = _box8(tiny8, "shape_b_timed", "--micro-batch", "2", "--time-moe", "2", "--time-moe-bound")
+    base = shape_b
+    assert set(rec) - set(base) == {"moe_timing"}
+    assert rec["rules"] == base["rules"] and rec["shape_b"] == base["shape_b"] and rec["ga_plants"] == base["ga_plants"]
+    for k in ("step", "step1"):
+        assert rec[k]["loss"] == base[k]["loss"] and rec[k]["gradients"] == base[k]["gradients"]
+        assert rec[k]["ga_check"] == base[k]["ga_check"] and rec[k]["ga_mb_check"] == base[k]["ga_mb_check"]
+    t = rec["moe_timing"]
+    assert "error" not in t, t.get("error")
+    assert [m["width"] for m in t["micro_batches"]] == base["shape_b"]["widths"]
+    assert [m["valid"] for m in t["micro_batches"]] == base["shape_b"]["valid_per_micro_batch"]
+    assert all(m["rows"] == 2 and m["positions"] == 2 * m["width"] for m in t["micro_batches"])
+    for i in ("0", "3"):
+        row = t["layers"][i]
+        assert row["forward"]["calls"] == row["recompute"]["calls"] == row["backward"]["calls"] == 8, row   # 2 timed passes x 4
+        assert all(v is not None and v >= 0 for ph in ("forward", "recompute") for v in row[ph]["compute_ms"])
+        bw = row["backward"]
+        assert bw["recompute_inside"] == [True] * 8 and all(0 <= o <= w for o, w in zip(bw["own_ms"], bw["ms"])), bw
+
+
+def test_the_moe_timing_needs_the_stepped_run(tiny):
+    for extra, msg in ((["--time-moe", "2", "--repeat"], "--time-moe N (N >= 1) rides the stepped run"),
+                       (["--time-moe", "-1"], "--time-moe N (N >= 1) rides the stepped run"),
+                       (["--time-moe-bound"], "--time-moe-bound needs --time-moe")):
+        r = subprocess.run([sys.executable, str(BOX), str(tiny / "model"), str(tiny / "tokens.pt"), "--out", str(tiny / "x"),
+                            "--device", "cpu", "--enabler", "reference", *extra], capture_output=True, text=True, cwd=ROOT)
+        assert r.returncode == 2 and msg in r.stderr, (extra, r.stderr[-300:])
+
+
+class _Experts(torch.nn.Module):
+    """A stand-in experts module carrying hooks named and placed as e4b's offload places its own: the staging pre-hook
+    (``_stage_pre_hook``) and the evict post-hook, which skips inside a backward."""
+
+    def __init__(self, log):
+        super().__init__()
+        from experts4bit_qlora.engines.offload import _in_backward
+        self.w, self.log = torch.nn.Parameter(torch.randn(8)), log
+
+        def _stage_pre_hook(module, args):
+            log.append("stage")
+
+        def _evict_post_hook(module, args, output):
+            if not _in_backward():
+                log.append("evict")
+        self.register_forward_pre_hook(_stage_pre_hook)
+        self.register_forward_hook(_evict_post_hook)
+
+    def forward(self, x):
+        self.log.append("compute")
+        return (x * self.w).sin() + 1
+
+
+def _fake_model(n_layers, log):
+    from types import SimpleNamespace
+    layers = [SimpleNamespace(mlp=SimpleNamespace(experts=_Experts(log))) for _ in range(n_layers)]
+    return SimpleNamespace(model=SimpleNamespace(layers=layers))
+
+
+def test_the_moe_timer_brackets_e4bs_staging_and_compute_and_changes_nothing():
+    """The timer's marks sit around e4b's hooks: its stage start before ``_stage_pre_hook``, its stage end after it, its compute
+    end before the evict post-hook. Its hooks change no output or gradient, and they are gone afterwards. With the checkpoint's
+    early stop on (as the registered steps run), a non-reentrant recompute stops inside the module: its compute is not observed,
+    and neither is the module's own backward after it, rather than either being guessed."""
+    from torch.utils.checkpoint import checkpoint
+    box = _box_module()
+    log = []
+    model = _fake_model(5, log)
+    mods = [lay.mlp.experts for lay in model.model.layers]
+    x = torch.randn(8, requires_grad=True)
+
+    def fwd_bwd():
+        for m in mods:
+            m.w.grad = None
+        h = x
+        for m in mods:
+            h = checkpoint(m, h, use_reentrant=False)
+        h.sum().backward()
+        return h.detach(), [m.w.grad.clone() for m in mods]
+    plain = fwd_bwd()
+    hooks_before = [(dict(m._forward_pre_hooks), dict(m._forward_hooks)) for m in mods]
+
+    timer = box.MoETimer(model, 3, cuda=False)
+    assert timer.layers == [0, 2, 4] and all(timer.staged.values())
+    log.clear()
+    real = timer._stamp
+    timer._stamp = lambda: log.append("mark") or real()
+    with torch.no_grad():
+        mods[0](torch.randn(8))
+    assert log == ["mark", "stage", "mark", "compute", "mark", "evict"], log
+    timer._stamp = real
+    timer.marks[0].clear()
+    timed = fwd_bwd()
+    rec = timer.record()
+    timer.remove()
+    assert torch.equal(timed[0], plain[0]) and all(torch.equal(a, b) for a, b in zip(timed[1], plain[1]))
+    assert [(dict(m._forward_pre_hooks), dict(m._forward_hooks)) for m in mods] == hooks_before
+    assert not any(m._backward_hooks or m._backward_pre_hooks for m in mods)
+    assert set(rec) == {"0", "2", "4"}
+    for row in rec.values():
+        assert row["staged_by_offload"] and row["forward"]["calls"] == row["recompute"]["calls"] == row["backward"]["calls"] == 1
+        assert row["forward"]["compute_ms"][0] >= 0
+        assert row["recompute"]["compute_ms"] == [None]             # stopped at the last saved tensor, before the return
+        assert row["backward"]["recompute_inside"] == [True] and row["backward"]["own_ms"] == [None]
+
+
+def test_the_timed_pass_observes_the_recompute_under_either_checkpoint_and_a_failure_never_fails_the_box():
+    """``time_moe`` turns the early stop off, so the non-reentrant recompute returns and the module's own backward is the window
+    after it; the reentrant checkpoint (the fast path's default) recomputes before the window, which is then the module's own."""
+    from torch.utils.checkpoint import checkpoint
+    box = _box_module()
+    model = _fake_model(2, [])
+    mods = [lay.mlp.experts for lay in model.model.layers]
+    for reentrant in (False, True):
+        def fwd_bwd():
+            h = torch.randn(8, requires_grad=True)
+            for m in mods:
+                h = checkpoint(m, h, use_reentrant=reentrant)
+            h.sum().backward()
+            return 0.0, {}, 0.0, 0.0, 0.0                              # the box's fwd_bwd: its last is the grads copy's time
+        rec = box.time_moe(model, fwd_bwd, 2, cuda=False, sync=lambda: None, bound=True,
+                           micro_batches=[{"rows": 1, "width": 8, "valid": 7}])
+        assert "error" not in rec and rec["sampled_layers"] == [0, 1] and rec["timed_passes"] == 2
+        assert isinstance(rec["overhead_s"], float) and isinstance(rec["decision_grade"], bool)
+        assert rec["grads_copy_s"] == {"on": [0.0, 0.0], "off": [0.0, 0.0], "warmup": 0.0}
+        assert rec["micro_batches"] == [{"rows": 1, "width": 8, "valid": 7, "positions": 8}]
+        for row in rec["layers"].values():
+            assert row["recompute"]["calls"] == 2 and all(v >= 0 for v in row["recompute"]["compute_ms"]), (reentrant, row)
+            bw = row["backward"]
+            assert bw["recompute_inside"] == [not reentrant] * 2, (reentrant, bw)
+            assert all(0 <= o <= w for o, w in zip(bw["own_ms"], bw["ms"])) and (bw["own_ms"] == bw["ms"]) is reentrant
+
+    def boom():
+        raise RuntimeError("out of memory")
+    rec = box.time_moe(model, boom, 2, cuda=False, sync=lambda: None)
+    assert rec["error"] == "RuntimeError: out of memory" and "layers" not in rec
+    assert all(len(m._forward_pre_hooks) == 1 and len(m._forward_hooks) == 1 and not m._backward_hooks for m in mods)
+
+
+class _Clock:
+    """A clock the fake pass advances: ``time_moe``'s timings, exactly."""
+    def __init__(self):
+        self.now = 0.0
+
+    def perf_counter(self):
+        return self.now
+
+
+def test_the_overhead_read_is_abba_after_a_warm_up_and_says_when_it_is_not_decision_grade(monkeypatch):
+    """Amendment 7's read: one discarded warm-up, then untimed, timed, timed, untimed. ``overhead_s`` = mean(timed) - mean(untimed),
+    ``half_s`` = |(on1 - off1) - (on2 - off2)| / 2, decision-grade only when half_s <= overhead_s / 2. A cold first pass and a
+    linear drift do not move the read; the grads copy is left out of every pass."""
+    box = _box_module()
+    model = _fake_model(2, [])
+    clock = _Clock()
+    monkeypatch.setattr(box, "time", clock)
+
+    def run(durations, copy=0.0):
+        it = iter(durations)
+
+        def fwd_bwd():
+            clock.now += next(it) + copy                              # the pass and its grads copy, which is left out
+            return 0.0, {}, 0.0, 0.0, copy
+        return box.time_moe(model, fwd_bwd, 2, cuda=False, sync=lambda: None, bound=True)
+    # base 1.0, overhead 0.2, linear drift +0.05 a pass, a cold warm-up at 5.0: the drift cancels and the warm-up is discarded
+    rec = run([5.0, 1.0, 1.0 + 0.2 + 0.05, 1.0 + 0.2 + 0.10, 1.0 + 0.15], copy=0.3)
+    assert "error" not in rec and rec["pass_warmup_s"] == 5.0 and rec["pass_off_s"] == [1.0, 1.15]
+    assert rec["overhead_s"] == 0.2 and rec["pairs_s"] == [0.25, 0.15] and rec["half_s"] == 0.05 and rec["decision_grade"] is True
+    assert rec["overhead_ratio"] == round(0.2 / 1.075, 4) and rec["grads_copy_s"]["off"] == [0.3, 0.3]
+    # order noise larger than half the overhead: the read is reporting-only
+    rec = run([5.0, 1.0, 1.4, 1.0, 1.0])
+    assert rec["overhead_s"] == 0.2 and rec["half_s"] == 0.2 and rec["decision_grade"] is False
+    # a negative read is never decision-grade
+    rec = run([5.0, 1.2, 1.0, 1.0, 1.2])
+    assert rec["overhead_s"] == -0.2 and rec["decision_grade"] is False
+    # without the bound: one timed pass, and no overhead keys at all
+    rec = box.time_moe(model, lambda: clock.__setattr__("now", clock.now + 1.0), 2, cuda=False, sync=lambda: None)
+    assert rec["timed_passes"] == 1 and rec["pass_on_s"] == [1.0] and "overhead_s" not in rec

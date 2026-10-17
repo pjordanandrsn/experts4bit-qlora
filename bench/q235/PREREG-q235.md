@@ -786,3 +786,53 @@ BAR at every depth, the SOFT stops). It uses the third form's quantity, the 235B
 - **The gate-1 rehearsal** on the RTX A2000, after this merges, measures the floor again on the merged code.
 
 **The fp32 arm** stays unrun.
+
+## Amendment 7 (2026-10-16, after Amendment 6, before any Shape B box): the MoE experts' staging and compute, timed in the box (REPORTED only)
+
+**Why.** Training stages each MoE layer's experts synchronously: a whole-layer host-to-device copy before every experts call, twice
+per micro-batch under gradient checkpointing (the forward and the recompute), and nothing overlaps it. Whether projection pipelining
+or whole-layer prefetch is worth registering depends on C: each layer's experts compute time against its staging time. C depends on
+the card's link (the RTX A2000 runs PCIe gen3 x8; the registered class, a PRO 6000, runs gen5), so a rehearsal-only reading would
+answer for the wrong hardware. The box takes the reading at no extra rental.
+
+**The pass** (`q235_box.py --time-moe 8 --time-moe-bound`; `q235_run.sh` runs the box with it).
+- **When.** After both Shape B steps, their frozen-base hashes and every registered record, the box runs one extra forward-backward
+  of the registered shape: Shape B's token accumulation over the four micro-batches, with no optimizer step. The steps run before any
+  of its hooks exist.
+- **Where.** On 8 evenly spaced decoder layers: 0, 13, 27, 40, 53, 66, 80 and 93 of 94. A slice with fewer layers is timed on every
+  layer.
+- **What, per layer and per micro-batch.** CUDA events, in stream order, around each experts module call:
+  - `stage_ms`: across e4b's `_stage_pre_hook`, the synchronous whole-layer copy;
+  - `compute_ms`: from the end of staging to the module's return, gate_up, the activation and down together (one fused call);
+  - both of those in the forward and in the checkpoint recompute;
+  - the module's backward window. `own_ms` is its part after the recompute, the dgrad and the LoRA gradients.
+
+  Each pair sits beside its micro-batch's rows, width and valid labels.
+- **Checkpoint early stop.** It is off for this pass only, so a non-reentrant recompute reaches the module's return.
+- **The overhead read** (`--time-moe-bound`, registered here before the gate-1 rehearsal reads it):
+  - One discarded warm-up pass, then four in ABBA order in the same process: untimed, timed, timed, untimed.
+  - `overhead_s` is the mean of the two timed passes minus the mean of the two untimed ones.
+  - `half_s`, the read's order and drift noise, is half the difference between the two timed-minus-untimed pairs,
+    |(on₁ − off₁) − (on₂ − off₂)| / 2. Under a linear drift d per pass, the pairs read overhead + d and overhead − d, so their mean
+    is the overhead and half their difference is |d|.
+  - `pairs_s`, both pair differences, is in every record, so the read can be recomputed from it.
+  - The read is decision-grade only when `half_s` ≤ `overhead_s` / 2. Otherwise it is reporting-only, and the refit below does not
+    use it.
+  - ABBA cancels a linear drift, and the warm-up removes the cold-first bias.
+  - Each pass's device-to-host copy of the adapter gradients is recorded and left out of every comparison.
+  - Both timed passes carry the hooks, so each sampled layer holds two pairs per micro-batch.
+
+**What it is not.**
+- REPORTED only. It lives under `moe_timing` in the box record. `q235_verdict.py` reads none of it, and no rule, threshold, verdict
+  line or STRICT check reads it. A failure inside the pass is recorded as `error` and never fails the box.
+- With the flag off, the box record is unchanged in every existing field.
+- gate_up and down are not separated. They run as one fused call, and separating them would move the experts4bit-qlora pin.
+
+**Its cost, and when it leaves the box.**
+- The read adds five Shape B forward-backwards without an optimizer step to the box phase: the warm-up, two untimed and two timed.
+- The gate-1 A2000 rehearsal at the merge of Amendments 6 and 7 is one rehearsal for both. It measures `overhead_s`, `half_s` and the
+  passes' time on the slice.
+- Gate 2's time-left fit then re-runs from that rehearsal with the pass in the box phase. The refitted box cap and the run's worst-case
+  wallclock and cost are recorded here before any box. Both are UNKNOWN until that rehearsal runs.
+- If, with the pass, the run exceeds 6 h at the slow end of the PRO 6000 spread, the pass leaves the box (the run line drops the flag)
+  and stays in the rehearsals. The maintainer decides that on the measured numbers, before any box.
