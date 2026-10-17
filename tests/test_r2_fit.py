@@ -48,3 +48,42 @@ def test_the_box_and_the_repeat_scale_by_the_depth_and_the_fixed_phases_do_not()
     assert rep["layers"] == 56 and rep["slice_layers"] == 4
     assert rep["phases"]["box"]["scaled_s"] == 1400.0 and rep["phases"]["repeat"]["scaled_s"] == 700.0
     assert rep["phases"]["tokens"]["scaled_s"] == 10.0 and rep["phases"]["hostrate"]["scaled_s"] == 30.0
+
+
+def _profile(read_s, read_bytes, assemble=24.0, offload=5.3):
+    return {"read": read_s, "read_bytes": read_bytes, "assemble": assemble, "offload": offload}
+
+
+def test_a_warm_read_is_slowed_to_the_disk_floor_and_the_floor_wins():
+    r2 = _mod("r2_fit", F / "r2_fit.py")
+    host = {"h2d_gb_s": 6.12, "host_copy_gb_s": 7.23}
+    warm = r2.slowed(112.0, _profile(0.71, 20.84e9), host, 0)               # 29 GB/s: the page cache, not the disk
+    assert abs(warm["read_s"] - (20.84e9 / 0.743e9 - 0.71)) < 0.01 and warm["slowed_s"] > 112.0
+    slow = r2.slowed(112.0, _profile(60.0, 20.84e9), host, 0)               # slower than the floor already: no read added
+    assert slow["read_s"] == 0.0
+
+
+def test_a_slowed_time_is_never_below_its_measurement():
+    r2 = _mod("r2_fit", F / "r2_fit.py")
+    slow_host = {"h2d_gb_s": 1.0, "host_copy_gb_s": 1.0}                   # a rehearsal host slower than every floor
+    out = r2.slowed(100.0, _profile(100.0, 1e9), slow_host, 9.5e9)
+    assert out["slowed_s"] == 100.0 and out["host_copy_s"] == 0.0 and out["staging_s"] == 0.0
+    assert out["with_spread_s"] == round(100.0 * r2.SPREAD, 2)
+
+
+def test_only_the_box_and_the_repeat_are_slowed_and_spread():
+    r2 = _mod("r2_fit", F / "r2_fit.py")
+    host = {"h2d_gb_s": 6.12, "host_copy_gb_s": 7.23}
+    box = {"load": {"profile": _profile(7.7, 20.84e9)}, "step": {"h2d_bytes_offload": 9.51e9}, "step1": {"h2d_bytes_offload": 9.51e9}}
+    repeat = {"load": {"profile": _profile(0.71, 20.84e9, 12.1, 4.9)}}
+    t = {"require-git": 0, "tokens": 7, "box": 112, "repeat": 46}
+    out, rec = r2.cold_timings(t, box, repeat, host)
+    assert out["tokens"] == 7 and out["require-git"] == 0
+    assert out["box"] == rec["box"]["with_spread_s"] > 112 * r2.SPREAD and out["repeat"] == rec["repeat"]["with_spread_s"] > 46 * r2.SPREAD
+
+
+def test_the_pull_floor_at_r2_s_fetch_cap():
+    """The leg's cold fetch (25.25 GB, hashed in 19.3 s) and a 7,080 s fetch cap: the checkpoint must pull at 0.063 GB/s or more."""
+    g = _mod("r2_fit", F / "r2_fit.py").fit_module()
+    fetch = {"bytes": 25_245_419_050, "hash_seconds": 19.3}
+    assert g.fetch_floor(281_263_818_738, fetch, 7080) == 0.063
