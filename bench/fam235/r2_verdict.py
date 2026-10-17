@@ -14,8 +14,8 @@ by sha256).
 - **Rule 7:** the unplanted box must read u_j <= band_j on every interior layer. Otherwise it is a FAIL.
 - **The map:** a tie (32 j / n exactly k + 1/2) is refused, never resolved by a rounding mode. On 56 layers there is none.
 
-**The registered class and estimates.** ``REGISTERED`` holds the card class and the device and link estimates. The amendment that
-registers the box pins them. Until then any science run is VOID ("no box is registered"), so no placeholder value is ever read.
+**The registered class and estimates.** ``REGISTERED`` holds the card class and the device and link estimates, as R2 Amendment 3
+registers them. A run on any other class FAILs rule 1, as in Q235.
 
 **Reported beside Q235's report:**
 - each interior layer's margin band_j / u_j, the 8x7B layer it maps to, and the smallest margin and where it falls;
@@ -44,7 +44,9 @@ NUMBERS = os.path.join(HERE, "r2-mixtral-a1-numbers.json")
 NUMBERS_SHA256 = "5d2bac26b0c5e5dd4c29962d21a95ac3be8292d34322189012b0ca2866d41279"    # as merged in e4b#1643
 N_CAL = 32                                     # Mixtral-8x7B's decoder layers
 SHALLOW_CAL = (3, 8)                           # the 8x7B layers with the validation's smallest band/u (2.006-2.064)
-REGISTERED = None                              # the box-registering amendment pins {"card_re", "estimate_device_gib", "estimate_link_gib"}
+# R2 Amendment 3: the class r2_run.sh's science line seals, and e4b's estimate at the box's shape (2,920 positions in one micro-batch,
+# r 16 / alpha 16, bf16 adapters, NF4 attention, experts in pinned host RAM, grouped_nf4, AdamW8bit): device and link per micro-batch.
+REGISTERED = {"card_re": r"^NVIDIA GeForce RTX 5090", "estimate_device_gib": 13.98, "estimate_link_gib": 141.75}
 EXIT = {"PASS": 0, "FAIL": 1, "VOID": 2}
 
 

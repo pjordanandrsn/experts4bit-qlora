@@ -1,0 +1,128 @@
+{
+ "schema": "r2-fit/1",
+ "layers": 56,
+ "slice_layers": 4,
+ "margin": 1.5,
+ "bandwidth_mbps": 500.0,
+ "usd_per_hour": 0.85,
+ "hash_rate_gb_s": 1.308,
+ "phases": {
+  "require-git": {
+   "scaled_s": 0.0,
+   "budget_s": 60,
+   "sealed_cap_s": 240,
+   "fits": true
+  },
+  "create-venv": {
+   "scaled_s": 3.0,
+   "budget_s": 60,
+   "sealed_cap_s": 120,
+   "fits": true
+  },
+  "tokens": {
+   "scaled_s": 7.0,
+   "budget_s": 60,
+   "sealed_cap_s": 300,
+   "fits": true
+  },
+  "hostrate": {
+   "scaled_s": 27.0,
+   "budget_s": 60,
+   "sealed_cap_s": 600,
+   "fits": true
+  },
+  "install": {
+   "scaled_s": 211.6,
+   "budget_s": 318,
+   "sealed_cap_s": 360,
+   "fits": true
+  },
+  "fetch": {
+   "scaled_s": 4715.2,
+   "budget_s": 7073,
+   "sealed_cap_s": 7080,
+   "fits": true
+  },
+  "box": {
+   "scaled_s": 2389.0,
+   "budget_s": 3584,
+   "sealed_cap_s": 3600,
+   "fits": true
+  },
+  "repeat": {
+   "scaled_s": 1330.0,
+   "budget_s": 1995,
+   "sealed_cap_s": 2040,
+   "fits": true
+  }
+ },
+ "wallclock_h": 4.57,
+ "usd_at_wallclock": 3.88,
+ "run_cap_usd": 35.0,
+ "no_ask_usd": 15.0,
+ "cost_tier": "within the no-ask tier",
+ "fits": true,
+ "floors": {
+  "h2d_gb_s": 5.8,
+  "host_copy_gb_s": 5.14,
+  "disk_read_gb_s": 0.743,
+  "fetch_gb_s": 0.063,
+  "basis": "Q235's sealed cold floors from the same RTX A2000 host; the pull floor from R2's fetch cap",
+  "sealed": {
+   "h2d_gb_s": 5.8,
+   "disk_read_gb_s": 0.743,
+   "host_copy_gb_s": 5.14,
+   "fetch_gb_s": 0.063
+  },
+  "sealed_match": true
+ },
+ "host_floors": {
+  "card_re": "^NVIDIA GeForce RTX 5090",
+  "min_vram_mib": 32000,
+  "min_ram_gb": 134,
+  "min_disk_gb": 350
+ },
+ "within_policy_max": true,
+ "rehearsal": {
+  "nonce": "r2a2k1792194671",
+  "e4b_sha": "a3e73429ae0ac17c88cb4dc31ea7a3cfe755164d",
+  "timings": {
+   "require-git": 0,
+   "create-venv": 3,
+   "install": 40,
+   "hostrate": 27,
+   "fetch": 121,
+   "tokens": 7,
+   "box": 112,
+   "repeat": 46
+  },
+  "slowed_to_floors": {
+   "box": {
+    "measured_s": 112.0,
+    "read_s": 20.35,
+    "host_copy_s": 11.92,
+    "staging_s": 0.34,
+    "slowed_s": 144.61,
+    "with_spread_s": 170.64
+   },
+   "repeat": {
+    "measured_s": 46.0,
+    "read_s": 27.34,
+    "host_copy_s": 6.92,
+    "staging_s": 0.26,
+    "slowed_s": 80.51,
+    "with_spread_s": 95.0
+   }
+  },
+  "spread": 1.18,
+  "measured_rates": {
+   "h2d_gb_s": 6.12,
+   "host_copy_gb_s": 7.23,
+   "disk_read_gb_s": 1.88
+  },
+  "load_read_gb_s": {
+   "box": 2.707,
+   "repeat": 29.271
+  }
+ }
+}

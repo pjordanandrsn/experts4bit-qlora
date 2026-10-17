@@ -10,6 +10,7 @@ fabricated box records (``tests/test_q235_verdict.py``'s 4-layer run: interior 1
 from __future__ import annotations
 
 import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -19,6 +20,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 ROOT = Path(__file__).resolve().parents[1]
+F = ROOT / "bench" / "fam235"
 TOOL = ROOT / "bench" / "fam235" / "r2_verdict.py"
 sys.path.insert(0, str(ROOT / "tests"))
 from test_q235_verdict import RULES, _box_run, _verdict  # noqa: E402
@@ -40,11 +42,27 @@ def test_the_self_test_reproduces_amendment_1():
     assert r.returncode == 0 and "ok   validation: VALIDATED, as recorded" in r.stdout, r.stdout + r.stderr
 
 
-def test_unregistered_it_voids_every_run(tmp_path):
-    w, ref = _box_run(tmp_path)
-    r = subprocess.run([sys.executable, str(TOOL), str(w), "--ref", str(ref), "--out", str(w / "v.json")],
-                       capture_output=True, text=True, cwd=ROOT)
-    assert r.returncode == 2 and "no box is registered" in r.stdout, r.stdout + r.stderr
+RTX5090 = "NVIDIA GeForce RTX 5090, 32607, 575.64.05, 5, 5, 16, 16, 575.00 W"
+
+
+def test_the_registration_is_the_runner_s_science_class(tmp_path):
+    """R2 Amendment 3: the verdict's class is the one r2_run.sh seals; an RTX 5090 run reads, any other class FAILs rule 1."""
+    import re
+    spec = importlib.util.spec_from_file_location("r2_verdict_registered", TOOL)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    sealed = re.search(r"^  science\) CARD_RE='([^']*)'", (F / "r2_run.sh").read_text(), re.M).group(1)
+    assert mod.REGISTERED["card_re"] == sealed == "^NVIDIA GeForce RTX 5090"
+
+    def verdict(card, sub):
+        w, ref = _box_run(tmp_path / sub, card=card)
+        r = subprocess.run([sys.executable, str(TOOL), str(w), "--ref", str(ref), "--out", str(w / "v.json")],
+                           capture_output=True, text=True, cwd=ROOT)
+        return r.returncode, json.load(open(w / "v.json"))
+    rc, v = verdict(RTX5090, "rtx5090")
+    assert (rc, v["verdict"]) == (0, "PASS") and v["rules"]["1_completed_on_class"]["ok"], v["why"]
+    rc, v = verdict("NVIDIA RTX PRO 6000 Blackwell Server Edition, 97887, 575.64.05, 5, 5, 16, 16, 600.00 W", "pro6000")
+    assert (rc, v["verdict"]) == (1, "FAIL") and "1_completed_on_class" in v["why"], v["why"]
 
 
 def test_a_clean_box_passes_with_its_margins_reported(tmp_path, r2):
