@@ -88,7 +88,8 @@ def _box_run(root, *, code="0", card=PRO6000, mode="science", rules=None, losses
             b, s0, a = held
             fin = all(math.isfinite(v) for v in held)
             box["heldout"] = {"tokens_sha256": {"input_ids": "0" * 64}, "rows": 2, "real_tokens": 12, "loss_before": b,
-                              "loss_after_step0": s0, "loss_after": a, "rel_change": (a - b) / b, "all_finite": fin}
+                              "loss_after_step0": s0, "loss_after": a, "rel_change_step0": (s0 - b) / b, "rel_change": (a - b) / b,
+                              "all_finite": fin, "train": {"loss_before": 1.87, "loss_after_step0": 1.30, "loss_after": 0.91}}
             box["rules"]["heldout_finite"] = fin
     _save_run(w / "receipts" / "box", box_l, topk, 2.0, box)
     if repeat:
@@ -288,8 +289,8 @@ def test_a_layer_with_a_zero_nonfinite_or_missing_dx_fails_rule_9_and_the_strict
     assert v["verdict"] == "FAIL" and not v["rules"]["9_dx"]["ok"] and not v["rules"]["3_5_strict"]["ok"], v["why"]
 
 
-@pytest.mark.parametrize("held", [(2.0, 2.05, 2.3), (2.0, 1.9, 1.7), (2.0, float("inf"), 1.98)])
-def test_a_held_out_change_outside_the_band_or_a_nonfinite_read_fails_rule_10(tmp_path, held):
+@pytest.mark.parametrize("held", [(2.0, 2.05, 2.3), (2.0, 2.22, 2.0), (2.0, float("inf"), 1.98), (2.0, float("nan"), 1.9)])
+def test_a_held_out_increase_beyond_the_cap_at_either_read_or_a_nonfinite_read_fails_rule_10(tmp_path, held):
     v = _verdict_a8(*_box_run(tmp_path, a8={"dx": DX, "heldout": held}), 0.05)
     assert v["verdict"] == "FAIL" and v["rules"]["10_heldout"]["ok"] is False, v["why"]
 
@@ -318,9 +319,13 @@ def test_rule_10_s_band_is_the_ruled_plain_cap():
     assert mod.HELDOUT_BAND == 0.10
 
 
-def test_rule_10_passes_inside_the_cap_either_way_and_fails_beyond_it(tmp_path):
-    for i, held in enumerate(((2.0, 2.1, 2.19), (2.0, 1.9, 1.81))):        # +9.5 % and -9.5 %: a blow-up bound reads both ways
+def test_rule_10_is_one_sided_a_drop_passes_and_only_an_increase_beyond_the_cap_fails(tmp_path):
+    """As re-ruled: a blow-up bound only. -39 % (the 30B rehearsal read -38.6 %: two steps teach the shared template) and +9.5 %
+    pass; +10.5 % fails; NaN fails."""
+    for i, held in enumerate(((2.0, 1.23, 1.22), (2.0, 2.1, 2.19), (2.0, 1.9, 1.81))):
         v = _verdict_a8(*_box_run(tmp_path / f"in{i}", a8={"dx": DX, "heldout": held}), 0.10)
-        assert v["verdict"] == "PASS", v["why"]
-    over = _verdict_a8(*_box_run(tmp_path / "over", a8={"dx": DX, "heldout": (2.0, 2.1, 2.21)}), 0.10)
-    assert over["verdict"] == "FAIL" and over["rules"]["10_heldout"]["ok"] is False
+        assert v["verdict"] == "PASS" and v["rules"]["10_heldout"]["one_sided"], v["why"]
+    assert v["rules"]["10_heldout"]["reported_train_rows"]["loss_after"] == 0.91          # the step's rows ride along, reported
+    for i, held in enumerate(((2.0, 2.1, 2.21), (2.0, float("nan"), 1.9))):
+        v = _verdict_a8(*_box_run(tmp_path / f"out{i}", a8={"dx": DX, "heldout": held}), 0.10)
+        assert v["verdict"] == "FAIL" and v["rules"]["10_heldout"]["ok"] is False, v["why"]

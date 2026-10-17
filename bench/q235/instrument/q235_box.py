@@ -25,7 +25,8 @@ Amendment 8 (the ladder's L2, after the R2 gate-1 ruling): each step records ``d
 i = 0..n-1) as its fp32 norm, per forward-backward of the step's own pass (``DxProbe``), and ``rules`` gains its STRICT
 ``step0_dx_finite_nonzero`` / ``step1_dx_finite_nonzero``. With ``--heldout TOKENS.pt`` (the registered held-out rows,
 ``q235_tokens.py --first``), ``heldout`` records the loss on those rows before the update, after step 0 and after step 1, each one
-no-gradient forward at shape A, with ``heldout_finite`` STRICT. The band on its relative change is the verdict's (rule 10).
+no-gradient forward at shape A, with ``heldout_finite`` STRICT; the step's own rows are read the same way at the same points
+(``heldout.train``, reported only). Rule 10, the verdict's, is one-sided: no post-update held-out read above ``before x 1.10``.
 """
 from __future__ import annotations
 
@@ -576,28 +577,38 @@ def capture(model):
 class DxProbe:
     """Amendment 8: each decoder layer's output gradient, dL/dh_i for i = 0..n-1 -- the gradient the layer's own adapters and the
     layers below it receive -- as its fp32 norm, once per forward-backward of the registered step (one per micro-batch under
-    shape B). The forward hooks register a tensor hook on the layer's output only while ``armed`` (the step's own forward), so the
-    checkpoint recompute inside the backward, which calls the layers again, registers nothing. A layer whose output carries no
-    gradient (``requires_grad`` False) or whose hook never fires stays ``None`` and fails the rule: the record fails closed."""
+    shape B).
+
+    Where it is taken: layer i's output as the INPUT of the next module, through a forward pre-hook on layer i+1 (and on the final
+    norm for the last layer). There it is an outer graph tensor under either checkpoint mode. Under a reentrant checkpoint (e4b's
+    fast path, ``ckpt_offload``) the checkpointed forward runs without gradients, so the output a layer's own forward hook sees
+    never carries one; the tensor handed to the next module is the checkpoint's own output, which does.
+
+    The pre-hooks register a tensor hook only while ``armed`` (the step's own forward), so the checkpoint recompute inside the
+    backward, which calls the modules again, registers nothing. A layer whose output carries no gradient, or whose hook never
+    fires, stays ``None`` and fails the rule: the record fails closed."""
 
     def __init__(self, model):
-        self.n = len(model.model.layers)
+        layers = list(model.model.layers)
+        self.n = len(layers)
         self.armed, self.cur, self.passes = False, None, []
-        self.handles = [lay.register_forward_hook(self._hook(i)) for i, lay in enumerate(model.model.layers)]
+        nxt = layers[1:] + [model.model.norm]                   # the module that receives layer i's output
+        self.handles = [m.register_forward_pre_hook(self._hook(i), with_kwargs=True) for i, m in enumerate(nxt)]
 
     def _hook(self, i):
-        def h(mod, args, o):
+        def h(mod, args, kwargs):
             if not self.armed or self.cur is None or self.cur[i] is not None:
-                return
-            t = o[0] if isinstance(o, tuple) else o
+                return None
+            t = args[0] if args else kwargs.get("hidden_states")
             if not (torch.is_tensor(t) and t.requires_grad):
-                return
+                return None
             cur = self.cur
             cur[i] = "pending"
 
             def g(grad):
                 cur[i] = float(grad.detach().float().norm())
             t.register_hook(g)
+            return None
         return h
 
     def arm(self):
@@ -621,7 +632,8 @@ class DxProbe:
         return {"layers": self.n, "passes": len(self.passes), "norms": self.passes,
                 "finite_nonzero": bool(self.passes) and not bad, "failing": bad[:20], "failing_count": len(bad),
                 "min": min(vals) if vals else None, "max": max(vals) if vals else None,
-                "what": "dL/dh_i at each decoder layer's output (fp32 norm), per forward-backward of the step (Amendment 8)"}
+                "what": "dL/dh_i at each decoder layer's output (fp32 norm), taken as the next module's input, per forward-backward "
+                        "of the step (Amendment 8)"}
 
 
 def heldout_loss(model, held, sync):
@@ -859,9 +871,11 @@ def run(a):
     spread = max(((g1[n] - g0[n]).abs().max() / g0[n].abs().max().clamp_min(1e-30)).item() for n in g0)
     out["in_process"] = {"loss_0": l0, "loss_1": l1, "loss_equal": l0 == l1, "grad_maxrel": spread}
     out["amendment8"] = {"dx": True, "heldout": held is not None}
+    train_rows = {"input_ids": ids, "attention_mask": mask, "labels": labels}
     if held is not None:
         held = {k: v.to(dev) for k, v in held.items()}
         out["heldout"]["loss_before"] = heldout_loss(model, held, sync)        # at load: B is zero, so the adapters add nothing
+        out["heldout"]["train"] = {"loss_before": heldout_loss(model, train_rows, sync)}   # the step's rows, the same read (reported)
     if mbs:                                                     # Amendment 6: at most four host copies alive at once, as Amendment 5
         del g1
         out["shape_b"] = {"micro_batch": mb, "accumulation": len(mbs), "valid_per_micro_batch": [m["valid"] for m in mbs],
@@ -952,6 +966,7 @@ def run(a):
         del g0, ref0
         if held is not None:
             out["heldout"]["loss_after_step0"] = heldout_loss(model, held, sync)
+            out["heldout"]["train"]["loss_after_step0"] = heldout_loss(model, train_rows, sync)
         _, ga1, *_ = fwd_bwd()                                  # shape A at step 1's parameters, before its accumulation
         check1, ref1 = rule8_check()
         s1 = one_step(ref=ga1, mb_ref=ref1)
@@ -961,12 +976,16 @@ def run(a):
         s0 = one_step()
         if held is not None:
             out["heldout"]["loss_after_step0"] = heldout_loss(model, held, sync)
+            out["heldout"]["train"]["loss_after_step0"] = heldout_loss(model, train_rows, sync)
         s1 = one_step()
     if held is not None:
-        out["heldout"]["loss_after"] = heldout_loss(model, held, sync)         # after both updates
-        reads = [out["heldout"][k] for k in ("loss_before", "loss_after_step0", "loss_after")]
-        out["heldout"]["rel_change"] = (out["heldout"]["loss_after"] - out["heldout"]["loss_before"]) / out["heldout"]["loss_before"]
-        out["heldout"]["all_finite"] = all(math.isfinite(v) for v in reads)
+        h = out["heldout"]
+        h["loss_after"] = heldout_loss(model, held, sync)                      # after both updates
+        h["train"]["loss_after"] = heldout_loss(model, train_rows, sync)
+        for rec in (h, h["train"]):                                             # each post-update read against the read before
+            rec["rel_change_step0"] = (rec["loss_after_step0"] - rec["loss_before"]) / rec["loss_before"]
+            rec["rel_change"] = (rec["loss_after"] - rec["loss_before"]) / rec["loss_before"]
+        h["all_finite"] = all(math.isfinite(h[k]) for k in ("loss_before", "loss_after_step0", "loss_after"))
     out["step"], out["step1"] = s0, s1
     out["rules"] = {
         "step0_all_finite": s0["gradients"]["all_finite"], "step0_every_B_nonzero": s0["gradients"]["every_B_nonzero"],

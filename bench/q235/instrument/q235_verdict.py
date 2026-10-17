@@ -40,9 +40,11 @@ router top-k flips between them. Shape A's records carry no ``shape_b``, so rule
 9. every decoder layer's output gradient (``dx``, dL/dh_i, i = 0..n-1) recorded, finite and nonzero at both steps, in every
    forward-backward of the step (one per micro-batch under shape B). It is STRICT as well, so a failure also fails rules 3-5;
 10. the held-out loss on the registered held-out rows (``heldout``: before the update, after step 0, after step 1) finite at
-    every read, and its relative change across the update, (after - before) / before, inside ``HELDOUT_BAND``.
-``HELDOUT_BAND`` is a plain absolute cap, 0.10: a blow-up bound ("did two LoRA updates corrupt the model?"), not an equivalence
-test. Rule 10 is VOID if the band is unset, and an Amendment 8 box without its held-out read is a harness error.
+    every read, and no post-update read above ``before x (1 + HELDOUT_BAND)`` (one-sided).
+Rule 10 is a ONE-SIDED blow-up bound ("did the update make held-out text worse?"): every read finite, and each post-update read
+at most ``before x (1 + HELDOUT_BAND)``, ``HELDOUT_BAND`` = 0.10; no lower bound, since two steps that teach the shared template
+lower held-out loss as they lower the step's own (the 30B rehearsal: -38.6 %). The step's own rows, read the same way, ride along
+as reporting. Rule 10 is VOID if the band is unset, and an Amendment 8 box without its held-out read is a harness error.
 Records without ``amendment8`` (runs 2 and 3) carry neither field: rules 9 and 10 do not apply and their verdicts are unchanged.
 
 **Reported, not gating:** the box's full u profile (the layers outside the interior class without a bar), the full-state profile with
@@ -76,13 +78,14 @@ NULL_FLOOR = 1e-3                              # Amendment 3: the null against t
 GA_BAR = 0.0231                                # Amendment 6: 3 x the 30B's s(48) = 3 x 0.00770, third calibration (am6/)
 GA_PLANTS = ("mean", "overwrite")              # Amendment 6: the plants the calibration registers (a plant short of 3 x BAR is dropped)
 PLANTS = ("routing", "epilogue")
-HELDOUT_BAND = 0.10                            # Amendment 8: |held-out loss after / before - 1|, a plain cap (a blow-up bound)
+HELDOUT_BAND = 0.10                            # Amendment 8: the largest held-out INCREASE allowed after an update (one-sided)
 
 
 def l2_fields(box):
     """Amendment 8 (a box record with ``amendment8``): rule 9, every decoder layer's output gradient recorded, finite and
-    nonzero at both steps (also STRICT, in rules 3-5); rule 10, the held-out loss finite at every read and its relative change
-    across the update inside ``HELDOUT_BAND``. Returns ``(rules, the VOID's reason or None)``."""
+    nonzero at both steps (also STRICT, in rules 3-5); rule 10, a one-sided blow-up bound: every held-out read finite, and no
+    post-update read (after step 0, after step 1) above ``before x (1 + HELDOUT_BAND)``. A drop is learning, never a failure.
+    Returns ``(rules, the VOID's reason or None)``."""
     a8 = box.get("amendment8") or {}
     try:
         dx = {k: box[k]["dx"] for k in ("step", "step1")}
@@ -96,16 +99,18 @@ def l2_fields(box):
             "harness error: an Amendment 8 box without its registered held-out read (--heldout)"
     try:
         h = box["heldout"]
-        r10 = {"ok": None, "band": HELDOUT_BAND, "loss_before": h["loss_before"], "loss_after_step0": h["loss_after_step0"],
-               "loss_after": h["loss_after"], "rel_change": h["rel_change"], "all_finite": h["all_finite"],
-               "tokens_sha256": h["tokens_sha256"]}
+        r10 = {"ok": None, "band": HELDOUT_BAND, "one_sided": True, "loss_before": h["loss_before"],
+               "loss_after_step0": h["loss_after_step0"], "loss_after": h["loss_after"], "rel_change_step0": h["rel_change_step0"],
+               "rel_change": h["rel_change"], "all_finite": h["all_finite"], "tokens_sha256": h["tokens_sha256"],
+               "reported_train_rows": h.get("train")}
     except (KeyError, TypeError) as e:
         return {"9_dx": r9, "10_heldout": {"ok": None, "not_read": "harness error"}}, \
             f"harness error: the held-out record: {type(e).__name__}: {e}"
     if HELDOUT_BAND is None:
         return {"9_dx": r9, "10_heldout": {**r10, "not_read": "Amendment 8's band is not registered"}}, \
             "not registered: Amendment 8's held-out band"
-    r10["ok"] = h["all_finite"] is True and abs(h["rel_change"]) <= HELDOUT_BAND
+    cap = h["loss_before"] * (1 + HELDOUT_BAND)
+    r10["ok"] = h["all_finite"] is True and h["loss_after_step0"] <= cap and h["loss_after"] <= cap
     return {"9_dx": r9, "10_heldout": r10}, None
 
 

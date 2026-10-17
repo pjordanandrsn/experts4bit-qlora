@@ -649,6 +649,10 @@ def test_the_held_out_read_is_finite_and_changes_no_registered_record(step, step
     h = held["heldout"]
     assert h["all_finite"] and all(math.isfinite(h[k]) for k in ("loss_before", "loss_after_step0", "loss_after"))
     assert h["rel_change"] == (h["loss_after"] - h["loss_before"]) / h["loss_before"] and h["rows"] == 2 and h["real_tokens"] == 34
+    assert h["rel_change_step0"] == (h["loss_after_step0"] - h["loss_before"]) / h["loss_before"]
+    t = h["train"]                                              # the step's own rows, read the same way (reported only)
+    assert all(math.isfinite(t[k]) for k in ("loss_before", "loss_after_step0", "loss_after", "rel_change", "rel_change_step0"))
+    assert t["loss_before"] == pytest.approx(held["in_process"]["loss_0"], rel=1e-5)   # the no-gradient read is the step's forward
     assert held["rules"]["heldout_finite"] is True and held["amendment8"] == {"dx": True, "heldout": True}
     # the reads own nothing else: the step's losses, gradients' dX, layer outputs and frozen hashes are the run without them
     for k in ("step", "step1"):
@@ -681,9 +685,12 @@ def test_amendment_8_strict_rules_fail_closed():
     assert box.strict_failures({**a8_ok, "rules": {**a8_ok["rules"], "step1_dx_finite_nonzero": False}}) == ["step1_dx_finite_nonzero"]
 
 
-def test_the_dx_probe_records_the_steps_own_pass_and_never_the_recompute():
-    """A forward hook fires again in the checkpoint recompute; only the armed forward's output carries a gradient hook, so a pass
-    records exactly one norm per layer, and an unarmed forward records nothing."""
+@pytest.mark.parametrize("reentrant", [False, True])
+def test_the_dx_probe_records_the_steps_own_pass_and_never_the_recompute(reentrant):
+    """Each layer's output gradient is taken as the next module's input (the next layer's, or the final norm's), so it is an outer
+    graph tensor under either checkpoint mode: e4b's fast path checkpoints reentrantly (``ckpt_offload``), where the checkpointed
+    forward runs without gradients and a layer's own output never carries one. The recompute calls the modules again, unarmed, so
+    a pass records exactly one norm per layer, and an unarmed forward records nothing."""
     box = _box_module()
 
     class Layer(torch.nn.Module):
@@ -694,10 +701,15 @@ def test_the_dx_probe_records_the_steps_own_pass_and_never_the_recompute():
         def forward(self, x):
             return (x * self.w,)
 
+    class Norm(torch.nn.Module):
+        def forward(self, x):
+            return x * 1.0
+
     class Inner(torch.nn.Module):
         def __init__(self):
             super().__init__()
             self.layers = torch.nn.ModuleList([Layer(), Layer()])
+            self.norm = Norm()
 
     class Model(torch.nn.Module):
         def __init__(self):
@@ -706,17 +718,56 @@ def test_the_dx_probe_records_the_steps_own_pass_and_never_the_recompute():
 
         def forward(self, x):
             for lay in self.model.layers:
-                x = torch.utils.checkpoint.checkpoint(lay, x, use_reentrant=False)[0]
-            return x.sum()
+                x = torch.utils.checkpoint.checkpoint(lay, x, use_reentrant=reentrant)[0]
+            return self.model.norm(x).sum()
+
+    def inputs(v):          # under a reentrant checkpoint the input must carry a gradient (e4b: enable_input_require_grads)
+        return torch.full((3,), v, requires_grad=reentrant)
 
     m = Model()
     probe = box.DxProbe(m)
-    m(torch.ones(3)).backward()                                 # unarmed: nothing recorded
+    m(inputs(1.0)).backward()                                   # unarmed: nothing recorded
     assert probe.passes == []
     probe.arm()
-    loss = m(torch.full((3,), 2.0))
+    loss = m(inputs(2.0))
     probe.disarm()
     loss.backward()                                             # the recompute calls both layers again, unarmed
     probe.remove()
     rec = probe.record()
     assert rec["passes"] == 1 and rec["finite_nonzero"] and rec["norms"] == [[pytest.approx(3 ** 0.5, rel=1e-6)] * 2], rec
+
+
+def test_the_old_output_hook_records_nothing_under_a_reentrant_checkpoint():
+    """The bug the 30B rehearsal found (every dX None on the CUDA fast path, which checkpoints reentrantly): a forward hook on
+    the layer's OWN output sees a tensor without a gradient, because the reentrant checkpoint runs its forward under no_grad. Under
+    a non-reentrant checkpoint the same hook works. The registered probe takes the output as the next module's input instead."""
+    class Layer(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.w = torch.nn.Parameter(torch.ones(3))
+
+        def forward(self, x):
+            return (x * self.w,)
+
+    def old_probe_records(reentrant):
+        """The first DxProbe, as it ran: a forward hook on each layer's own output, armed for the step's forward only."""
+        layers = torch.nn.ModuleList([Layer(), Layer()])
+        seen, armed = [None, None], [True]
+
+        def keep(i):
+            def h(mod, args, o):
+                t = o[0]
+                if armed[0] and seen[i] is None and t.requires_grad:
+                    t.register_hook(lambda g: seen.__setitem__(i, float(g.norm())))
+            return h
+        for i, lay in enumerate(layers):
+            lay.register_forward_hook(keep(i))
+        x = torch.full((3,), 2.0, requires_grad=True)
+        for lay in layers:
+            x = torch.utils.checkpoint.checkpoint(lay, x, use_reentrant=reentrant)[0]
+        armed[0] = False                                        # disarmed before the backward, as the probe was
+        x.sum().backward()
+        return seen
+
+    assert old_probe_records(reentrant=True) == [None, None]               # the bug: nothing recorded
+    assert all(isinstance(v, float) for v in old_probe_records(reentrant=False))
