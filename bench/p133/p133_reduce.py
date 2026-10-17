@@ -53,6 +53,10 @@ LAYERS = {QWEN: 48, GRAN: 32, TINY: 2}
 WINDOWS = {QWEN: 24, GRAN: 12, TINY: 4}    # per text: the reading, the proof, the dry run
 INCUMBENT = {QWEN: "scalar", GRAN: "scalar", TINY: "scalar"}   # the single-row route at 128 SMs (and on sm_86)
 OFF_ARMS = ("R", "rep", "chunk", "mutant_scale")
+#: The buckets P110's instrument enables at capture=False in every quality pass (``p110_box.BUCKETS``; P116's BUCKETS). The
+#: pass integrity reads these, not the server's buckets, which follow its own max_seqs (Amendment 1: p133-4090-prove-1 VOIDed
+#: comparing passes against the server's 1-64).
+INSTRUMENT_BUCKETS = (1, 2, 4, 8, 16)
 FLOORS = ("chunk",)
 GEMV = ("dotpad", "dotpad_splitk", "scalar", "scalar_splitk")
 BW = ("bw_tree", "bw_prmt32", "bw_splitk")
@@ -128,7 +132,7 @@ def _workloads(arms: dict) -> tuple:
     return ("W1",) + ((c,) if c else ())
 
 
-def _t1_pass_faults(e, C, L, buckets, dry=False) -> list:
+def _t1_pass_faults(e, C, L, dry=False) -> list:
     """One window, one pass: bucket 1 eager (capture=False), C - 1 decode steps, no padding, no replay. Device grouping
     is required except in a dry run (sm_86 groups on the host: its first execution is the paid proof)."""
     out = []
@@ -137,7 +141,7 @@ def _t1_pass_faults(e, C, L, buckets, dry=False) -> list:
     if not dry and not (e.get("grouping_flags_in_pass") or {}).get("device_grouping"):
         out.append("device grouping off")
     st = e.get("graph_status") or {}
-    if [st.get(str(b)) for b in buckets] != ["eager: capture=False"] * len(buckets):
+    if [st.get(str(b)) for b in INSTRUMENT_BUCKETS] != ["eager: capture=False"] * len(INSTRUMENT_BUCKETS):
         out.append(f"graph_status {st}")
     gs = e.get("graph_stats") or {}
     got = gs.get("1", {})
@@ -167,7 +171,6 @@ def quality_faults(off: dict, on: dict, e4b_sha: str, proof: bool, dry: bool = F
     if void:
         return void
     L, want_n, C = LAYERS[want_model], WINDOWS[want_model], off["cont"]
-    buckets = off.get("buckets") or []
     for k in ("cont", "prompt", "chunk", "floor_chunk", "layers", "windows_sha256", "fusions", "buckets"):
         if off.get(k) != on.get(k):
             void.append(f"the phases differ in {k}: {off.get(k)} / {on.get(k)}")
@@ -188,7 +191,7 @@ def quality_faults(off: dict, on: dict, e4b_sha: str, proof: bool, dry: bool = F
                     void.append(f"{name} {t} {arm}: {len(passes)} passes, expected {want}")
                     continue
                 for k, e in enumerate(passes):
-                    void += [f"{name} {t} {arm} pass {k}: {m}" for m in _t1_pass_faults(e, C, L, buckets, dry)]
+                    void += [f"{name} {t} {arm} pass {k}: {m}" for m in _t1_pass_faults(e, C, L, dry)]
         r_passes = (off.get("engagement") or {}).get(t, {}).get("R", [])
         on_passes = (on.get("engagement") or {}).get(t, {}).get("ON", [])
         for k, (a, b) in enumerate(zip(r_passes, on_passes)):
@@ -366,13 +369,20 @@ def _fake_quality(phase, *, model=QWEN, bias=None, mutant=0.4, chunk=-0.0004, re
             ws = range(1) if arm == "rep" else range(n)
             per[t][arm] = [{"window": w, "nll": base[w] + off_by + (0.001 if w % 2 else -0.001) * (arm != "R"),
                             "argmax_agree": 1.0, "kl": 0.001} for w in ws]
-            eng[t][arm] = [_fake_pass(C, L, bk, device_grouping) for _ in ws]
+            eng[t][arm] = [_fake_pass(C, L, INSTRUMENT_BUCKETS, device_grouping) for _ in ws]
     return {"mode": "quality", "arm": "B0" if phase == "off" else "B1", "status": "ok", "dry": dry,
             "model": ("/workspace/p133-dry/" + TINY) if model == TINY else model, "revision": REVS[model],
             "e4b_sha": E, "gnf4_sha": GNF4_SHA, "group": group, "prompt": 512, "cont": C, "buckets": bk,
             "chunk": 512, "floor_chunk": 256, "layers": L, "windows_sha256": {t: t for t in TEXTS},
             "fusions": {"fuse_qkv_n": 0}, "rep_identical": {t: rep_identical for t in TEXTS}, "per_window": per,
             "engagement": eng, "dispatch_measure": d}
+
+
+def _bucket_captured(rec: dict) -> dict:
+    """``rec`` with its first R pass's bucket 16 reading ``graph``: the instrument must stay eager in every bucket."""
+    t = TEXTS[0]
+    rec["engagement"][t]["R"][0]["graph_status"]["16"] = "graph"
+    return rec
 
 
 def self_test() -> int:
@@ -427,6 +437,10 @@ def self_test() -> int:
         ("quality short", v(arms(), n=_fake_quality("on", n=23)) == "VOID"),
         ("quality on reached the scalar", v(arms(), n=_fake_quality("on", dispatch={"bw_prmt32": 9, "scalar": 1}))
          == "VOID"),
+        ("server buckets 1-64, instrument passes at 1-16 (Amendment 1)",
+         v(arms(all={"buckets": [1, 2, 4, 8, 16, 32, 64]}), _fake_quality("off", buckets=[1, 2, 4, 8, 16, 32, 64]),
+           _fake_quality("on", buckets=[1, 2, 4, 8, 16, 32, 64])) == "LICENSED"),
+        ("a quality pass whose bucket captured is void", v(arms(), o=_bucket_captured(_fake_quality("off"))) == "VOID"),
         ("quality host grouping is void", v(arms(), o=_fake_quality("off", device_grouping=False),
                                             n=_fake_quality("on", device_grouping=False)) == "VOID"),
         ("rep not identical joins the floor", reduce(arms(), _fake_quality("off", rep_identical=False), on, E, fit=FIT)

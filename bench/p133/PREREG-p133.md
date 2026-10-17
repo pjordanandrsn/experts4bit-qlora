@@ -168,3 +168,34 @@ eager. So these run for the first time in this lane on the proof:
 `bench/p133/receipts/<run>/`: `fit.json`, `arm_{B0a,B1a,B1b,B0b}.json`, `quality_{off,on}.json`, `verdict.json`,
 `summary.txt`, `forensics.txt`, `versions.txt`, `prompts.json`, `logs/` (with the premise junit reports),
 `work/bake.json` and `SHA256SUMS`. The checkpoint, the arena, the reference log-probs and the gnf4 clone stay on the box.
+
+## Amendment 1 (2026-10-17, after `p133-4090-prove-1` VOIDed on a defect in the reducer; its arm and quality numbers not read)
+
+**What happened.** `p133-4090-prove-1` ($0.17, Vast contract 56454024 on machine 51612) ran every registered box step:
+- refusals passed (`cc=8.9 sms=128`, torch 2.8.0+cu128); the tripwire and self-tests passed;
+- the premise: 33 + 2 and 18 + 0, by id;
+- the fit check passed (`max_seqs` auto 64, buckets 1–64, graphs on);
+- the four arms ran with every bucket captured and exact engagement;
+- both quality phases ran (rc 0).
+
+The reducer VOIDed it (lane exit 27). All 98 reasons are one check: the quality pass integrity compared each pass's
+`graph_status` with the SERVER's buckets from the record. P110's instrument enables its OWN buckets,
+`p110_box.BUCKETS = (1, 2, 4, 8, 16)` (`p110_box.py:54, :89`), so buckets 32 and 64 read as missing. P116's reducer
+hard-coded those five; this lane's derivation substituted the record's buckets, which differ once `max_seqs` resolves above
+16. The dry run could not reach this path (quality cannot run on sm_86); the proof did, as registered.
+
+**The correction.** `p133_reduce.INSTRUMENT_BUCKETS = (1, 2, 4, 8, 16)`, the instrument's buckets, which is P116's rule.
+- No rule, bar, prediction, size or budget changes.
+- The self-test grows to 40 cases. The new ones are the proof's shape (server buckets 1–64, passes at 1–16) and a pass
+  whose bucket captured, which is VOID.
+- `tests/test_p133_staged_pin.py` pins the constant to `p110_box.BUCKETS`.
+
+**The proof's records, re-reduced** with the corrected reducer (`--proof`, the committed records; verdict sha256
+`d07c19db63c122794900c00efb0eba2eccfdc200443ba675edea93b45e61ac6f`; the original VOID verdict `92f10ff2fd8bdbe4416ae2f1c02c426fa96e608a91720417da951c0af9cb66f9`): **NOISY**, not VOID. The self-pairs are outside their bands at the proof's
+lengths (8 / 24 tokens, 1 rep): W1 0.9596 and 0.9577, the control 0.9438 and 1.1703. The reading runs 32 / 160 tokens and
+3 reps.
+
+**Pending the maintainer's ruling:** either this re-reduction stands as the proof (the box ran every registered step, and
+only the reduction was wrong), or a new proof id `p133-4090-prove-2` is declared.
+
+**Spend:** $0.17 of the $3.75 ceiling.

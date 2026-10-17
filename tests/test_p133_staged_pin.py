@@ -97,7 +97,7 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 def test_the_self_tests_pass():
     out = subprocess.run([sys.executable, str(LANE / "p133_reduce.py"), "--self-test"], capture_output=True, text=True,
                          env=_env())
-    assert out.returncode == 0 and "p133_reduce self-test OK (38 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "p133_reduce self-test OK (40 cases)" in out.stdout, out.stdout + out.stderr
     out = subprocess.run([sys.executable, str(LANE / "p133_box.py"), "--self-test"], capture_output=True, text=True,
                          env=_env())
     assert out.returncode == 0 and "p133_box self-test OK (27/27 cases)" in out.stdout, out.stdout + out.stderr
@@ -139,6 +139,9 @@ def test_the_rule_is_the_registered_rule():
     assert "SELF_W1_LO, SELF_W1_HI = 0.985, 1.015" in REDUCE
     assert 'FLOORS = ("chunk",)' in REDUCE and 'OFF_ARMS = ("R", "rep", "chunk", "mutant_scale")' in REDUCE
     assert "TOL, SPREAD_X, SPREAD_MIN, K8_BUDGET, K8_GATED = pb.TOL, pb.SPREAD_X, pb.SPREAD_MIN, pb.K8_BUDGET, pb.K8_GATED" in REDUCE
+    p110 = (REPO / "bench" / "p110" / "p110_box.py").read_text()
+    assert "INSTRUMENT_BUCKETS = (1, 2, 4, 8, 16)" in REDUCE and "BUCKETS = (1, 2, 4, 8, 16)" in p110, "Amendment 1"
+    assert "for b in INSTRUMENT_BUCKETS" in REDUCE and "Amendment 1" in PREREG
     assert 'INCUMBENT = {QWEN: "scalar", GRAN: "scalar", TINY: "scalar"}' in REDUCE
     assert "WINDOWS = {QWEN: 24, GRAN: 12, TINY: 4}" in REDUCE
     for mode, w in (("DRY", 4), ("PROVE", 12), ("reading", 24)):

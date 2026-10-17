@@ -148,3 +148,13 @@ run. Evidence is below.
 - shared: `summary.txt`, `forensics.txt`, `versions.txt`, `logs/` (with the premise junit reports) and `SHA256SUMS`.
 
 The checkpoints, arenas, reference log-probs and the gnf4 clone stay on the box.
+
+## Amendment 1 (2026-10-17, before any box)
+
+`p134_reduce.py` inherited P133's quality pass-integrity defect: each pass's `graph_status` was checked over the
+record's server buckets, not over P110's instrument buckets (P133 Amendment 1). It is corrected the same way:
+- `INSTRUMENT_BUCKETS = (1, 2, 4, 8, 16)`, P116's rule;
+- the self-test grows to 33 cases;
+- `tests/test_p134_staged_pin.py` pins the constant to `p110_box.BUCKETS`.
+
+No rule, bar, prediction, size or budget changes.
