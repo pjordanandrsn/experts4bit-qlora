@@ -33,19 +33,43 @@ def direct_available(offer):
         return False
 
 
-def direct_endpoint(instance, expected_id):
-    if str(instance.get('id')) != str(expected_id):
-        raise ValueError('foreign instance record')
-    host = str(instance.get('public_ipaddr', ''))
-    if ipaddress.ip_address(host).version != 4 or not ipaddress.ip_address(host).is_global:
-        raise ValueError('direct SSH needs a public IP')
-    bindings = instance.get('ports', {}).get('22/tcp', [])
-    if not isinstance(bindings, list) or len(bindings) != 1:
-        raise ValueError('direct SSH port mapping absent or ambiguous')
-    port = str(bindings[0].get('HostPort', ''))
-    if not port.isdigit() or not 1 <= int(port) <= 65535:
-        raise ValueError('invalid direct SSH port')
-    return host, int(port)
+def direct_endpoint(instance, expected_id, log=None):
+    """Resolve one port; refusal evidence omits the public address and other metadata."""
+    mapping = instance.get('ports')
+    bindings = mapping.get('22/tcp', []) if isinstance(mapping, dict) else None
+    try:
+        if str(instance.get('id')) != str(expected_id):
+            raise ValueError('foreign instance record')
+        host = str(instance.get('public_ipaddr', ''))
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError as exc:
+            raise ValueError('direct SSH needs a public IP') from exc
+        if address.version != 4 or not address.is_global:
+            raise ValueError('direct SSH needs a public IP')
+        if not isinstance(bindings, list) or not bindings:
+            raise ValueError('direct SSH port mapping absent or ambiguous')
+        ports = set()
+        for binding in bindings:
+            port = str(binding.get('HostPort', '')) if isinstance(binding, dict) else ''
+            if not port.isdigit() or not 1 <= int(port) <= 65535:
+                raise ValueError('invalid direct SSH port')
+            ports.add(int(port))
+        if len(ports) != 1:
+            raise ValueError('direct SSH port mapping absent or ambiguous')
+        return host, ports.pop()
+    except (ValueError, TypeError, AttributeError) as exc:
+        if log is not None:
+            safe_bindings = [
+                {'HostIp': row.get('HostIp') if row.get('HostIp') in ('0.0.0.0', '::', None)
+                 else 'REDACTED', 'HostPort': row.get('HostPort')}
+                for row in bindings if isinstance(row, dict)
+            ] if isinstance(bindings, list) else None
+            record(log, phase='endpoint-refusal', reason=str(exc),
+                   actual_status=instance.get('actual_status'),
+                   public_ipaddr_set=bool(instance.get('public_ipaddr')),
+                   ssh_port_bindings=safe_bindings)
+        raise ValueError(str(exc)) from exc
 
 
 @contextmanager
@@ -194,8 +218,8 @@ def drive(command):
     iid = os.environ['E4B_RENT_INSTANCE_ID']
     provider = VastProvider(ReadOnly(), run_label=os.environ['E4B_RENT_RUN_ID'])
     instance = provider.instance(iid)
-    host, port = direct_endpoint(instance, iid)
     root = Path(os.environ['E4B_RENT_RUN_DIR'])
+    host, port = direct_endpoint(instance, iid, root / 'direct-transport.jsonl')
     known = root / 'direct-known_hosts'
     # Record-on-first-connect, matching the existing controller trust policy.
     options = ['-o', f'UserKnownHostsFile={known}', '-o', 'GlobalKnownHostsFile=/dev/null',

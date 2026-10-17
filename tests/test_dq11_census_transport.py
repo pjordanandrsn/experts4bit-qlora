@@ -268,3 +268,30 @@ def test_cli_edges_are_coded_refusals_without_tracebacks(tmp_path, edge):
     result = subprocess.run([*base, *args], cwd=tmp_path, env=env, capture_output=True, text=True, check=False)
     assert result.returncode == 11
     assert "CENSUS_REFUSAL:" in result.stderr and "Traceback" not in result.stderr
+
+
+def test_dual_stack_same_port_is_one_endpoint():
+    instance = {"id": 12, "public_ipaddr": "8.8.8.8", "ports": {"22/tcp": [
+        {"HostIp": "0.0.0.0", "HostPort": "1234"},
+        {"HostIp": "::", "HostPort": "1234"}]}}
+    assert transport.direct_endpoint(instance, "12") == ("8.8.8.8", 1234)
+    instance["ports"]["22/tcp"][1]["HostPort"] = "1235"
+    with pytest.raises(ValueError, match="ambiguous"):
+        transport.direct_endpoint(instance, "12")
+
+
+def test_endpoint_refusal_records_only_safe_status_and_bindings(tmp_path):
+    log = tmp_path / "direct.jsonl"
+    instance = {"id": 12, "actual_status": "running", "public_ipaddr": "8.8.8.8",
+                "ports": {"22/tcp": [{"HostIp": "8.8.8.8", "HostPort": "0", "secret": "omit"}]}}
+    with pytest.raises(ValueError, match="invalid direct SSH port"):
+        transport.direct_endpoint(instance, "12", log)
+    row = json.loads(log.read_text())
+    assert row["phase"] == "endpoint-refusal" and row["actual_status"] == "running"
+    assert row["public_ipaddr_set"] is True
+    assert row["ssh_port_bindings"] == [{"HostIp": "REDACTED", "HostPort": "0"}]
+    assert "8.8.8.8" not in log.read_text() and "secret" not in log.read_text()
+    instance["ports"] = {}
+    with pytest.raises(ValueError, match="mapping absent"):
+        transport.direct_endpoint(instance, "12", log)
+    assert json.loads(log.read_text().splitlines()[-1])["ssh_port_bindings"] == []

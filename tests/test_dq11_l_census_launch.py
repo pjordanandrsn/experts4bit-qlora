@@ -488,14 +488,16 @@ def test_launch_refuses_missing_or_wrong_executor_before_discovery(tmp_path, mon
     assert not (tmp_path / "packet").exists()
 
 
-def test_registered_run3_template_identity_and_sha256():
+def test_registered_run4_template_identity_and_sha256():
     template = LANE / "dq11_l_census_manifest_template.json"
-    assert json.loads(template.read_text())["run_id"] == "dq11-l-census-3"
-    assert launch.sha(template) == "843a3ff3fbd01b508f6d10074a101dc74c455f8d70c3ac6e54f1355a3c236b6b"
+    assert json.loads(template.read_text())["run_id"] == "dq11-l-census-4"
+    assert launch.sha(template) == "3fd43211113e2ef632156bcbf1fdd21c88bc94de582e28ce954382098b607174"
 
 
 def test_budget_template_matches_registered_wall_and_full_reservation():
     template = json.loads((LANE / "dq11_l_census_manifest_template.json").read_text())
+    assert template["vast_direct_ssh"] is True
+    assert launch.ENVELOPE_CRITERIA["vast_direct_ssh"] is True
     assert template["wallclock_h"] == .75
     assert template["est_usd"] == .6375
     assert template["l_census"]["all_in_cap_usd"] == 1.1

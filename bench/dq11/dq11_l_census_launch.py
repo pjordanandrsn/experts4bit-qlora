@@ -64,6 +64,7 @@ TEMPLATE_FILE = "bench/dq11/dq11_l_census_manifest_template.json"
 ENVELOPE_CRITERIA = {
     "gpu": "RTX 5090", "num_gpus": 1, "verification": "verified",
     "direct_ssh_required": True,
+    "vast_direct_ssh": True,
     "rentable": True, "external": False, "minimum_reliability": "0.98",
     "minimum_driver_major": 580, "exact_driver_components": 3,
     "minimum_gpu_ram_mb": 30000, "maximum_gpu_ram_mb": 34000,
@@ -604,6 +605,7 @@ def validate_manifest(manifest: dict, e4b: Path, controller: Path) -> None:
             or manifest.get("agent_env") != "POD_LAUNCH_AGENT"
             or not str(manifest.get("run_id", "")).startswith("dq11-l-census-")
             or manifest.get("preregistration") != "bench/dq11/DQ11-L-CENSUS-PREREG.md"
+            or manifest.get("vast_direct_ssh") is not True
             or manifest.get("provider") != "vast:verified-secure"
             or manifest.get("gpu") != "RTX 5090"
             or manifest.get("image") != IMAGE
