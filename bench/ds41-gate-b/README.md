@@ -61,7 +61,7 @@ higher bound (both are shown). The remaining RAM caches experts, and the rest of
 - **Disk:** the box needs about 492 GB of local disk for the experts and the tables. Box 1 had 697 GB free.
 - **Context:** at batch 1 the A2000's free memory holds 0.46M tokens of KV, and a 12 GiB card 0.98M. The model's maximum is
   1,048,576, which needs a 24 GiB card or larger.
-- **The A2000 host** keeps the tables and 82.6 % of the experts on disk, and the disk binds. Its tables bind only below 42 random
+- **The A2000 host** keeps the tables and 82.3 % of the experts on disk, and the disk binds. Its tables bind only below 42 random
   reads per second.
 
 ## Training: the per-step bytes (#1681's arithmetic)
