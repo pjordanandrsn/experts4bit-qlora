@@ -61,7 +61,15 @@ Runtime role only:
                      .github/workflows/ci.yml (the ``--requires`` assertion)
                      and every current solution document (docs/SOLUTIONS.md,
                      docs/solutions/*.md) that stated the old floor on a line
-                     that is not historical. FAIL.
+                     that is not historical. FAIL. The manifest also counts
+                     when it is not in the diff because its record landed first
+                     (the kernel-first lockstep: the record is synced into both
+                     repositories before the consumer's floor moves): the BASE's
+                     manifest carries a compatibility record for this package,
+                     the kernel and the ``fast`` extra whose consumer_versions
+                     contain the head's new version and whose floor equals the
+                     head's new floor (``lockstep_record``). Anything else is
+                     still missing.
   public-api-change  a symbol entered or left ``__all__`` in the package's
                      ``__init__.py`` (the package is packages.runtime
                      ``import_names``). docs/capabilities.json or a changed
@@ -91,7 +99,8 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from check_dependency_floor import historical_marker, statements  # noqa: E402
-from check_system_manifest import MANIFEST, fast_requirement, system_role  # noqa: E402
+from check_system_manifest import (  # noqa: E402
+    EXTRA, KERNEL_PACKAGE, MANIFEST, fast_requirement, system_role, version_in_range)
 from discovery_common import ContractError, load_pyproject, read_text  # noqa: E402
 
 CONTRACT = "docs/change-impact.json"
@@ -379,6 +388,33 @@ def fast_floor_change(root: Path, base: str) -> tuple[str | None, str | None] | 
     return None if o == n else (o, n)
 
 
+def lockstep_record(manifest_text: str | None, consumer: str | None, version: str | None, floor: str | None,
+                    kernel: str = KERNEL_PACKAGE, extra: str = EXTRA) -> dict | None:
+    """The kernel-first lockstep: the compatibility record in ``manifest_text`` (the BASE's manifest) for ``consumer``,
+    ``kernel`` and ``extra`` whose ``consumer_versions`` contain ``version`` (the head's new version) and whose ``floor``
+    equals ``floor`` (the head's new ``fast`` specifier, ``">=0.43.0"``), or None. Such a record is the manifest half of a
+    floor move that landed before the consumer's pyproject moved, so the floor move's diff need not touch the manifest.
+    An unreadable manifest, a missing field or an unsupported range never matches."""
+    if not (manifest_text and consumer and version and floor):
+        return None
+    try:
+        records = json.loads(manifest_text).get("compatibility") or []
+    except (ValueError, AttributeError):
+        return None
+    want = re.sub(r"\s+", "", floor)
+    for r in records:
+        if not isinstance(r, dict) or (r.get("consumer"), r.get("kernel"), r.get("extra")) != (consumer, kernel, extra):
+            continue
+        if re.sub(r"\s+", "", str(r.get("floor") or "")) != want:
+            continue
+        try:
+            if version_in_range(version, str(r.get("consumer_versions") or "")):
+                return r
+        except ValueError:
+            continue
+    return None
+
+
 def all_symbols(text: str | None) -> set[str] | None:
     """The string constants of ``__all__`` (assignments and ``+=``), or None
     when the file is absent, does not parse, or binds no ``__all__``."""
@@ -493,18 +529,22 @@ def main(argv: list[str] | None = None) -> int:
     fragments = changelog_fragments(root, changed)
 
     def report(cls: str, trigger: str, need: list[str], hard: bool, note: str = "",
-               fragment_ok: bool = True) -> None:
+               fragment_ok: bool = True, landed: dict[str, str] | None = None) -> None:
         nonlocal failed, warned, triggered
         triggered += 1
+        landed = {c: why for c, why in (landed or {}).items() if c not in changed}
         print(f"CLASS {cls}: trigger: {trigger}")
         if cls not in known:
             failed += 1
             print(f"FAIL: {cls}: class not in {a.contract}")
         via = fragments if fragment_ok and CHANGELOG not in changed else []
         for c in need:
+            if c in landed:
+                print(f"  landed first: {c} ({landed[c]})")
+                continue
             print(f"  {'changed' if c in changed or (c == CHANGELOG and via) else 'MISSING'}: {c}"
                   + (f" (as {via[0]})" if c == CHANGELOG and via else ""))
-        gone = [c for c in need if c not in changed and not (c == CHANGELOG and via)]
+        gone = [c for c in need if c not in changed and c not in landed and not (c == CHANGELOG and via)]
         if note:
             print(f"  note: {note}")
         if gone and hard:
@@ -532,9 +572,14 @@ def main(argv: list[str] | None = None) -> int:
             if fc:
                 old, new = fc
                 need = [MANIFEST, CAPABILITIES, CI] + solution_docs_stating(root, mb, old or "")
+                hp = _project_table(head_py)
+                rec = lockstep_record(base_text(root, mb, MANIFEST), hp.get("name"), hp.get("version"),
+                                      (fast_requirement(hp) or (None, None))[1])
+                landed = {MANIFEST: f"the base's record {rec.get('consumer_versions')!r} -> {rec.get('floor')!r} "
+                                    f"covers {hp.get('version')} at this floor: the kernel-first lockstep"} if rec else {}
                 report("dependency-floor", f"{PYPROJECT} fast extra {old!r} -> {new!r}", need, hard=True,
                        note="scripts/check_dependency_floor.py and scripts/check_system_manifest.py "
-                            "verify the new value")
+                            "verify the new value", landed=landed)
 
         # -- new-kernel-capability (the kernel's sources) --------------------------
         if prof["module_list"] and PYPROJECT in changed:
