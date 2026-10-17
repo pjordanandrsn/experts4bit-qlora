@@ -35,7 +35,7 @@ jobs:
           python -m pip install --upgrade pip "ruff==0.15.22"
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           # grouped-nf4-gemm comes from a pinned git SHA, installed BEFORE
-          # .[test] so the extra's version floor (grouped-nf4-gemm>=0.30.0,
+          # .[test] so the extra's version floor (grouped-nf4-gemm>=0.43.0,
           # pyproject [test]) sees it already satisfied and pip never swaps in
           # a different wheel; the floor itself stays a plain range because
           # the published wheel's metadata cannot carry a direct URL. The SHA
@@ -196,4 +196,4 @@ jobs:
           python -m pip install --quiet --upgrade pip build twine
           python -m build
           python -m twine check dist/*
-          python scripts/check_wheel_metadata.py dist/*.whl --requires 'grouped-nf4-gemm>=0.30.0; extra == "fast"'
+          python scripts/check_wheel_metadata.py dist/*.whl --requires 'grouped-nf4-gemm>=0.43.0; extra == "fast"'
