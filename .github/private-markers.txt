@@ -86,3 +86,21 @@ pjordanandrsn/org-corpus
 \.adertha/
 # adertha:// URIs name artifacts in the private store; one reached a tracked file (2026-10-10).
 adertha://
+
+# --- RECEIPT STORE: the private receipt store's ledger and receipt records ----
+# The store's records are private, and none of the patterns above can see them.
+# They are matched by SHAPE, never by name: this file is public, so naming the
+# store or any private repository here would publish it.
+Append-only ledger: one JSON object per line
+"external_receipt"[[:space:]]*:
+# A ledger row is a line carrying all four keys, in any order. An "#all-of:" line
+# lists ERE terms, separated by single spaces, that must ALL match the same line
+# (git grep --and). Every other reader of this file skips it as a comment.
+#all-of: "run_id"[[:space:]]*: "date_utc"[[:space:]]*: "role"[[:space:]]*: "cost_usd"[[:space:]]*:
+# Fixture exemptions. A path named by an "#exempt-fixture:" line is skipped by
+# every scan only while it holds at most MAX-LINES lines AND its sha256 equals
+# the pin (scripts/guard_fixture_pin.sh); otherwise the guard fails. Format:
+# "#exempt-fixture: PATH MAX-LINES SHA256". The two below are the ledger header
+# and one $0 row, which the DQ11 census tests parse.
+#exempt-fixture: tests/fixtures/dq11-census-refused/canonical-ledger.jsonl 2 4030f01c74fb263e665c900d8d9f04ef89ee224c74429d62c4ffdd36b11569d2
+#exempt-fixture: tests/fixtures/dq11-census-refused/ledger.jsonl 1 c106ef976fbc5fa7a57d09864d97dfd7a502b3fb034860e502f11080f06a2d66
