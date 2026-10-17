@@ -55,7 +55,7 @@ higher bound (both are shown). The remaining RAM caches experts, and the rest of
   (disk-bound) to 4.9–7.1 (H2D-bound).
 - **The price is random reads.** The tables then need 96 random reads per token (a weight row and a scale row per lookup).
   They bind only below about 470–680 reads per second at these bounds, which any NVMe drive should exceed, but nothing here
-  measures it: the placement rests on it (gate C, item 3).
+  measures it: the placement rests on it (gate C, item 1).
 - **Full host residency** needs about 298 GB of host RAM with the tables on disk, or 501 GB with them in RAM. The 239 GB floor
   holds 79.5 % of the experts; box 1 had 1,081 GB.
 - **Disk:** the box needs about 492 GB of local disk for the experts and the tables. Box 1 had 697 GB free.
@@ -81,11 +81,13 @@ With e4b's single-slot whole-layer staging, a pass stages M × (2n − 1) whole 
 
 ## What gate C would need to test
 
-1. **A `deepseek_v41` module tree** that loads and runs one layer with real weights (gate A: none exists). Nothing below can
+1. **The disk's random-read rate: the key measurement.** It covers Engram's 256 B weight rows and 8 B scale rows (separate
+   tensors), read at random from our NVMe and pool disks and the rented box class. The tables' placement, and so every headline
+   bound above, rests on it. It needs no model: a read probe over a file of the tables' size will do. The sequential read rate
+   for 18.80 MB expert reads comes with it.
+2. **A `deepseek_v41` module tree** that loads and runs one layer with real weights (gate A: none exists). Nothing below can
    run without it.
-2. **The routing distribution:** the experts' hit rates on real text. They replace the uniform assumption, which drives every
+3. **The routing distribution:** the experts' hit rates on real text. They replace the uniform assumption, which drives every
    cache figure above.
-3. **The disk's random-read rate** for Engram's 256 B weight rows and 8 B scale rows, on the rented box class: the tables'
-   placement rests on it. Then the sequential read rate for 18.80 MB expert reads.
 4. **The VRAM reserve at batch 1,** measured on one layer, in place of the assumed 1 GB.
 5. **Gen-5 H2D** on the host it would rent, if a large-RAM gen-5 box is the candidate.
