@@ -628,3 +628,161 @@ process at 2, 4, 6 and 8 layers of the same checkpoint. The load-end `host_memor
 - The expectation for the box's `host_memory` becomes `RssAnon + RssShmem` at most 220.0 GB at a step end. It is reported, not gated.
 
 **Tests.** `tests/test_q235_driver.py` pins the science floor to this derivation's 239 GB.
+
+## Amendment 6 (2026-10-16, after Q235's PASS, before any Shape B box): Shape B, and the accumulation it rests on
+
+**Why.** The registration names Shape B "for comparability": the field recipe's micro-batch 2 × accumulation 4. The first box ran
+Shape A only, one micro-batch of 8 rows. The question Shape B answers is whether the milestone's step extends to the shape TC1 trains
+at. Under accumulation, every expert crosses the link four times per optimizer step, and four backwards run before `optimizer.step()`.
+Anything in the offload, eviction or fused paths that assumes one backward per step, or that clears or overwrites `p.grad` between
+micro-batches, changes the gradient here and nowhere in the first box.
+
+**The step at Shape B** (`q235_box.py --micro-batch 2`; `q235_run.sh` runs the box at it).
+- The same 8 TC1 rows as four micro-batches of two rows, in order. Each micro-batch is trimmed to its longest row.
+- Each micro-batch's mean loss is weighted by its share of the window's valid labels (125, 252, 480 and 149 of 1,006 on these rows),
+  so the window's loss is the token mean over all 8 rows, as the field recipe's trainer normalizes. Shape A and Shape B are therefore
+  the same gradient in exact arithmetic.
+- Amendment 2's nine STRICT rules and the frozen-base hashes apply to both Shape B steps.
+- Rule 6 (the fresh-process repeat) and rule 7 (Amendment 3's band, on the repeat's null and plants) stay on Shape A's forward,
+  where the band is calibrated.
+
+**Rule 8 as first registered, and its calibration: STOPPED.** The first form compared each step's accumulated gradient with Shape A's
+at the same parameters (`g0` at step 0; a fresh Shape A gradient at step 1), per-tensor relative difference at most BAR. BAR's rule
+(below, unchanged) was registered before its runs. The calibration ran on 2026-10-16 ($0, RTX A2000; `q235_box.py --micro-batch 2`
+with the leg's environment; every depth exited 0 with all of Amendment 2's rules true):
+
+| depth | largest per-tensor difference s | p50 | global cosine (step 0) | same-shape in-process spread |
+|---|---|---|---|---|
+| 235B, 2 layers | 0.0219 | 0.0055 | 0.999993 | 0.0034 |
+| 235B, 4 layers | 0.0344 | 0.0093 | 0.999977 | 0.0053 |
+| 235B, 8 layers | 0.0558 | 0.0203 | 0.999938 | 0.0078 |
+| 30B, 48 layers | 0.5826 | 0.2342 | 0.981525 | 0.0294 |
+
+- **The fit.** The exponent is 0.676 ± 0.014 (95 % interval 0.50 to 0.86) with residuals within 1.1 %. Extrapolated to 94 layers that
+  gives s₉₄ = 0.29 (0.13 to 0.66). The 30B's s(48) sits 3.13× above the fit's value at 48 layers.
+- **Two SOFT triggers fired:** the exponent is above 0.5, and the 30B is more than 3× off the fit. The p99 view gives no relief: it
+  equals the maximum on the 235B cuts (12 to 96 tensors), and its exponent is the same.
+- **The plants.** BAR by the rule would be 1.75. Both plants then read 0.19 to 0.59 BAR at every depth (mean of means 0.33 to 0.63,
+  overwrite 0.88 to 1.04), so neither could be registered.
+- **The reading.** Shape A against Shape B is not the accumulation. With the same 8 rows at the same parameters, the per-tensor
+  gradients at 48 layers differ by a median of 0.23 and a maximum of 0.58 (cosine 0.98) from the micro-batch shape alone. The
+  difference is spread evenly over the layers, attention as much as experts, and is about 12× the same-shape run-to-run spread at that
+  depth. At full depth it reaches the mean-of-means plant's size, so it cannot gate. It stays reported.
+
+**Rule 8, registered again: the same-shapes reference (STRICT, Shape B only).**
+- **The comparison.** Each step's accumulated gradient (the four backwards into `p.grad`) is compared with the host fp32 sum of the
+  same four micro-batches' weighted gradients, each taken on its own (`p.grad` cleared before each backward). Both sides use the same
+  shapes and the same parameters, so they differ only in how the backwards accumulate. The reference is taken at step 0's parameters
+  before the plants, and at step 1's parameters before that step's accumulation (`ga_mb_check`).
+- **The STRICT quantity** is the per-tensor relative difference against that reference: at most **BAR** on every tensor whose
+  reference is nonzero. A tensor exactly zero in the reference must be exactly zero in the accumulation.
+- **The plants**, the same two (mean of means; overwrite), are read against the same reference at step 0's parameters. Each
+  REGISTERED plant must read above BAR, else **VOID**.
+- **Reported:** the global cosine and the norm ratio; Shape A against Shape B in every view (`ga_check`); and the router-flip count.
+  - **Router flips:** per layer, the real tokens whose top-k expert set differs between Shape A's forward and Shape B's micro-batch
+    forwards at step 0's parameters. If such flips explain the A-against-B gap, that is a finding about batch-variant MoE training in
+    bf16, reported with prior art and claiming nothing here.
+- **Host memory.** At most four fp32 host copies are alive at once, as Amendment 5 prices: `g0` and the reference with the step's
+  `before` and `grads`; at step 1, the fresh Shape A gradient and its reference.
+- **Cost on the box:** four more micro-batch passes per step, about 4 minutes.
+
+**BAR, read by the rule already registered, on the new quantity.**
+1. **Runs** ($0, RTX A2000): the box at `--micro-batch 2` on 2-, 4- and 8-layer cuts of `ac9c66cc` and on Qwen3-30B-A3B at its 48
+   layers, with the same tokens.
+2. **s(n)** is the larger of the two steps' largest per-tensor difference against the same-shapes reference. p50 and p99 are fitted
+   the same way and reported.
+3. **The fit:** log s against log n over the three 235B cuts, extrapolated to n = 94 (s₉₄), with the exponent's interval from the
+   residuals. The 30B's s(48) is reported against the fit at 48.
+4. **BAR = 3 × max(s₉₄, the 30B's s(48)).**
+5. **The plants are fixed in advance, before the data.** A plant registers only if it clears BAR by at least 3× at every calibration
+   depth. If mean of means falls short, it stays unregistered and the overwrite plant alone carries rule 8's instrument check. If
+   neither clears, the amendment stops.
+6. **The SOFT stops are unchanged:** an exponent above 0.5, a point more than 30 % off the fit, or the 30B more than 3× off. Any of
+   them stops the amendment, which then proposes a form for review before any box.
+
+**The diagnostic, as run** (2026-10-16, the 4-layer slice). Under `torch.use_deterministic_algorithms(True, warn_only=True)` with
+`CUBLAS_WORKSPACE_CONFIG=:4096:8`, one warning appeared: memory-efficient attention's backward defaults to a nondeterministic
+algorithm. Shape A's in-process gradient pair became bit for bit equal (spread 0.0, against 0.0053 by default). The same-shapes
+difference fell from 0.0039 to 0.0033. Shape A against Shape B (0.0343) and the router flips (140 of 4,056 token-layers) did not
+change, so those are effects of the batch shape alone.
+
+**The second calibration, as run: one SOFT trigger.** Every depth exited 0, with all of Amendment 2's rules true and no zero mismatch.
+
+| depth | s (same-shapes) | p50 | same-shape in-process spread | plants: mean / overwrite | Shape A vs B | router flips |
+|---|---|---|---|---|---|---|
+| 235B, 2 layers | 0.00309 | 0.00261 | 0.0034 | 0.331 / 0.875 | 0.022 | 2.1 % |
+| 235B, 4 layers | 0.00393 | 0.00291 | 0.0053 | 0.342 / 0.876 | 0.034 | 3.5 % |
+| 235B, 8 layers | 0.00431 | 0.00311 | 0.0069 | 0.341 / 0.894 | 0.056 | 5.2 % |
+| 30B, 48 layers | 0.02663 | 0.00924 | 0.0273 | 0.645 / 1.036 | 1.114 | 16.2 % |
+
+- **The fit.** The exponent is 0.239 ± 0.061 (95 % −0.54 to 1.02) with residuals within 5 %, giving s₉₄ = 0.0079.
+- **The trigger.** The 30B sits 3.93× above the fit at 48 layers: the trigger fired. The other two stops were clean.
+- **What BAR would have been.** The rule gives 0.080, which both plants clear at every depth (mean 4.1× to 8.1×, overwrite 11× to 13×).
+- **The reading.** The 30B's s(48) equals its own same-shape run-to-run spread (0.0273): it measures the backward's nondeterminism
+  compounding over 48 layers, not the accumulation.
+- **Why the bar cannot stand.** At 94 layers that spread extrapolates to about 0.02 to 0.03, so a bar of 0.080 would leave rule 8
+  about a coin flip from a VOID on the box.
+
+**Rule 8, third form: the check passes under deterministic algorithms (STRICT, Shape B only).**
+- **The check passes.** At each step's parameters, before that step, rule 8's check runs under
+  `torch.use_deterministic_algorithms(True, warn_only=True)`:
+  - the host-sum reference;
+  - the device accumulation, a pass of its own, four backwards into `p.grad`;
+  - a second accumulation, for the floor.
+
+  The plants are check passes too. The previous setting is restored when the check ends, however it ends. The registered steps
+  (rules 1 to 7, the fidelity read, the optimizer steps) run on the shipped default path, and every pass records which mode it ran in.
+- **The STRICT quantity** is the per-tensor relative difference between the deterministic accumulation and the deterministic
+  reference: at most **BAR** on every tensor whose reference is nonzero. A tensor exactly zero in the reference must be exactly zero
+  in the accumulation.
+- **Instrument checks (VOID):**
+  - the check ran deterministic, with the default restored for the step;
+  - the floor (the two deterministic accumulations against each other) is at most **BAR / 3**;
+  - each registered plant reads above BAR.
+- **Reported:**
+  - the registered step's own default-mode accumulation against the deterministic reference;
+  - Shape A against Shape B in every view;
+  - the router flips.
+- **Host memory and cost.** At most four fp32 host copies are alive at once. The check adds eight micro-batch passes per step on the
+  box, about 10 minutes in all.
+- **One scoping check before the third calibration.** `CUBLAS_WORKSPACE_CONFIG` is read when cuBLAS creates its handle, so it cannot
+  be limited to the check passes. The calibration session first runs the 4-layer in-process pair under the torch flag alone. If that
+  pair is bit for bit equal, the form stands as written. If not, the amendment stops for review before the calibration.
+
+**BAR, from a third calibration,** read by the rule already registered (the depth fit, 3 × max(s₉₄, the 30B's s(48)), plants at least 3×
+BAR at every depth, the SOFT stops). It uses the third form's quantity, the 235B cuts at 2, 4 and 8 layers, and the 30B at 48.
+
+**The third calibration, as run: BAR = 0.0231, both plants registered** (2026-10-16, RTX A2000, $0; `bench/q235/am6/`).
+- **The scoping check passed.** The 4-layer in-process pair under the torch flag alone, with `CUBLAS_WORKSPACE_CONFIG` unset, was
+  bit for bit equal. The check passes therefore need no process-wide setting, and the registered steps keep the default path.
+- **Modes.** At every depth, the check ran deterministic, the default was restored, and the steps ran on the default. Amendment 2's
+  rules all held, and no tensor was a zero mismatch.
+
+| depth | s (the deterministic check) | p50 | floor (two deterministic accumulations) | plants: mean / overwrite, in BAR |
+|---|---|---|---|---|
+| 235B, 2 layers | 0.00278 | 0.00249 | 0 at both steps | 14.3 / 37.9 |
+| 235B, 4 layers | 0.00332 | 0.00248 | 0 at both steps | 14.8 / 37.9 |
+| 235B, 8 layers | 0.00282 | 0.00247 | 0 at both steps | 14.8 / 38.7 |
+| 30B, 48 layers | 0.00770 | 0.00427 | 0.0079 / 0.0087 | 29.0 / 44.9 |
+
+- **The fit is flat:** exponent 0.010 ± 0.143, residuals within 12.1 %, so s₉₄ = 0.00305. The 30B sits 2.54× the fit at 48, inside 3×.
+  No SOFT stop fired, and the p99 view is clean.
+- **BAR = 3 × max(0.00305, 0.00770) = 0.0231** (`q235_verdict.GA_BAR`). Both plants clear it at least 14× at every depth, so both are
+  registered.
+- **The floor, read plainly.**
+  - It is exactly 0 on the 235B's shapes at every depth measured.
+  - On the 30B's shapes it is not: 0.0079 and 0.0087, just above BAR / 3 = 0.0077, so a 30B box would read rule 8 VOID. Some
+    operation at those shapes stays nondeterministic under the torch flag. It is not identified; `warn_only` leaves
+    memory-efficient attention's backward as it is, and custom kernels sit outside the flag.
+  - The 235B box runs the cuts' layer shapes at 94 layers. Equal inputs stay equal through more layers of the same shapes, so its
+    floor is expected to be 0. If it is not, the instrument check VOIDs rule 8 rather than reading noise as a FAIL.
+- **Reported:**
+  - **Router flips** are 2.1 %, 3.5 %, 5.2 % and 16.2 % of token-layers.
+  - **Shape A against Shape B** reads as in the second calibration.
+  - **The wording.** Shape A and Shape B are the same gradient in exact arithmetic; under bf16, routing differs by a few percent of
+    tokens per layer, growing with depth.
+- **Re-derivation.** `am6/am6_fit.py` re-derives each calibration's figures from its box records. Its per-depth summaries are
+  `am6/calibration-1-a-vs-b.json`, `-2-same-shapes.json` and `-3-deterministic.json`.
+- **The gate-1 rehearsal** on the RTX A2000, after this merges, measures the floor again on the merged code.
+
+**The fp32 arm** stays unrun.

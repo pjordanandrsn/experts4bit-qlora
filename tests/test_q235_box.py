@@ -16,6 +16,8 @@ Qwen3-MoE, on the reference path (the fused kernels need CUDA; the RTX A2000 reh
   process reproduces the separate-process plant bit for bit, and an unplant that leaves anything behind raises.
 - Amendment 4: the fp32 copies behind the gradient and delta checks are host copies, never views, and none is made on the device
   inside the step.
+- Amendment 6 (``--micro-batch``): shape B's token-weighted accumulation matches shape A's gradient at both steps, its two planted
+  accumulation bugs do not, and the comparison's views read as registered.
 """
 from __future__ import annotations
 
@@ -194,6 +196,100 @@ def test_a_strict_failure_names_itself():
     assert set(box.strict_failures({})) == set(box.STRICT_RULES) | {"frozen_sha256_after_both_steps_equal"}
     assert "step1_every_B_changed" in box.strict_failures({"rules": {k: True for k in box.STRICT_RULES[:-1]},
                                                           "frozen_sha256_after_both_steps_equal": True})
+
+
+@pytest.fixture(scope="module")
+def tiny8(tiny):
+    """Amendment 6's shape: 8 right-padded rows of unequal length, so micro-batches of 2 carry unequal counts of valid labels."""
+    g = torch.Generator().manual_seed(2)
+    lengths = [7, 6, 13, 12, 24, 15, 8, 7]
+    ids = torch.randint(3, 256, (8, 24), generator=g)
+    mask = (torch.arange(24)[None, :] < torch.tensor(lengths)[:, None]).long()
+    ids = ids.masked_fill(mask == 0, 0)
+    torch.save({"input_ids": ids, "attention_mask": mask, "labels": ids.masked_fill(mask == 0, -100)}, tiny / "tokens8.pt")
+    return tiny
+
+
+def _box8(root, name, *extra):
+    out = root / name
+    r = subprocess.run([sys.executable, str(BOX), str(root / "model"), str(root / "tokens8.pt"), "--out", str(out), "--device", "cpu",
+                        "--enabler", "reference", *extra], capture_output=True, text=True, cwd=ROOT,
+                       env={**__import__("os").environ, "PYTHONPATH": str(ROOT)})
+    if r.returncode != 0:
+        raise AssertionError(r.stderr[-2000:])
+    return json.load(open(out / "box.json"))
+
+
+@pytest.fixture(scope="module")
+def shape_b(tiny8):
+    return _box8(tiny8, "shape_b", "--micro-batch", "2")
+
+
+def test_shape_b_accumulates_to_shape_a_and_its_plants_do_not(shape_b):
+    """Amendment 6 on the CPU: the token-weighted accumulation over 4 micro-batches of 2 rows matches shape A's gradient at the same
+    parameters at both steps, every registered step rule still holds, and both planted accumulation bugs sit far from it."""
+    rec = shape_b
+    assert all(rec["rules"].values()), rec["rules"]
+    sb = rec["shape_b"]
+    assert sb["micro_batch"] == 2 and sb["accumulation"] == 4 and sb["widths"] == [7, 13, 24, 8]
+    assert sb["valid_per_micro_batch"] == [11, 23, 37, 13] and sb["valid_total"] == 84
+    for k in ("step", "step1"):                              # shape A vs shape B: REPORTED, and bf16 batch-shape numerics vary by
+        ga = rec[k]["ga_check"]                              # host (threads, library versions), so only its views and a loose bound
+        assert ga["compared"] > 0 and not ga["zero_mismatch"], ga
+        assert ga["max_rel"] < 0.1 and ga["cosine"] > 0.999, ga
+        assert ga["rel_p50"] <= ga["rel_p99"] <= ga["max_rel"] and len(ga["rel"]) == ga["compared"]
+    assert rec["step"]["ga_check"]["compared"] < rec["step1"]["ga_check"]["compared"]   # step 0's A gradients are exactly zero
+    for k in ("step", "step1"):                              # rule 8: deterministic check passes; the registered step on the default
+        r8 = rec[k]["rule8"]
+        assert (r8["algorithms"], r8["restored"], rec[k]["algorithms"]) == ("deterministic", "default", "default"), (k, r8)
+        assert r8["check"]["compared"] == rec[k]["ga_check"]["compared"] and not r8["check"]["zero_mismatch"]
+        assert r8["check"]["max_rel"] < 1e-2 and r8["floor"]["max_rel"] == 0.0, r8     # two deterministic accumulations agree
+        assert rec[k]["ga_mb_check"]["max_rel"] < 1e-2                                 # the step's own accumulation: reported
+    floor = max(rec[k]["rule8"]["check"]["max_rel"] for k in ("step", "step1"))
+    for kind in ("mean", "overwrite"):
+        assert rec["ga_plants"][kind]["algorithms"] == "deterministic"
+        assert rec["ga_plants"][kind]["vs_micro_batches"]["max_rel"] > 10 * max(floor, 1e-3), (kind, rec["ga_plants"][kind], floor)
+    assert rec["ga_plants"]["overwrite"]["vs_micro_batches"]["norm_ratio"] < 0.9
+    rf = rec["route_flips"]                                  # reported: shape A vs B router top-k sets, per layer, real tokens only
+    assert len(rf["per_layer"]) == 4 and all(x["real"] == 84 + 8 for x in rf["per_layer"]) and 0 <= rf["flipped"] <= rf["token_layers"]
+
+
+def test_the_deterministic_check_mode_is_always_restored():
+    """Amendment 6: rule 8's check passes run under deterministic algorithms and the previous setting comes back however the block
+    ends, so the registered steps never inherit it."""
+    box = _box_module()
+    before = (torch.are_deterministic_algorithms_enabled(), torch.is_deterministic_algorithms_warn_only_enabled())
+    with box.deterministic():
+        assert box.algorithms() == "deterministic" and torch.is_deterministic_algorithms_warn_only_enabled()
+    assert (torch.are_deterministic_algorithms_enabled(), torch.is_deterministic_algorithms_warn_only_enabled()) == before
+    with pytest.raises(RuntimeError):
+        with box.deterministic():
+            raise RuntimeError("a check pass failed")
+    assert box.algorithms() == "default" and (torch.are_deterministic_algorithms_enabled(),
+                                              torch.is_deterministic_algorithms_warn_only_enabled()) == before
+
+
+def test_shape_b_needs_whole_micro_batches_and_stays_off_the_repeat(tiny8):
+    for extra in (["--micro-batch", "3"], ["--micro-batch", "2", "--repeat"]):
+        r = subprocess.run([sys.executable, str(BOX), str(tiny8 / "model"), str(tiny8 / "tokens8.pt"), "--out", str(tiny8 / "x"),
+                            "--device", "cpu", "--enabler", "reference", *extra], capture_output=True, text=True, cwd=ROOT,
+                           env={**__import__("os").environ, "PYTHONPATH": str(ROOT)})
+        assert r.returncode != 0, extra
+
+
+def test_the_gradient_comparison_reads_each_view():
+    """compare_grads: identical gradients read zero everywhere; a missing gradient counts as zero (relative difference 1); a gradient
+    where the reference is exactly zero is a zero mismatch; cosine and norm ratio cover the whole adapter gradient."""
+    cg = _box_module().compare_grads
+    ref = {"model.layers.0.a": torch.tensor([3.0, 4.0]), "model.layers.1.b": torch.tensor([1.0, 0.0]), "model.layers.1.z": torch.zeros(2)}
+    same = cg(ref, {k: v.clone() for k, v in ref.items()})
+    assert same["max_rel"] == 0.0 and same["cosine"] == pytest.approx(1.0) and same["norm_ratio"] == pytest.approx(1.0)
+    assert same["compared"] == 2 and not same["zero_mismatch"] and same["per_layer_max_rel"] == {"0": 0.0, "1": 0.0}
+    half = cg(ref, {"model.layers.0.a": torch.tensor([3.0, 4.0]), "model.layers.1.z": torch.tensor([0.0, 1.0])})
+    assert half["max_rel"] == 1.0 and half["max_rel_tensor"] == "model.layers.1.b" and half["zero_mismatch"] == ["model.layers.1.z"]
+    assert half["per_layer_max_rel"] == {"0": 0.0, "1": 1.0}
+    q = cg({f"t{i}": torch.tensor([1.0]) for i in range(100)}, {f"t{i}": torch.tensor([1.0 + i / 100]) for i in range(100)})
+    assert q["rel_p50"] == pytest.approx(0.49) and q["rel_p99"] == pytest.approx(0.98) and q["max_rel"] == pytest.approx(0.99)
 
 
 def test_the_adapter_copies_are_fp32_host_copies_never_views():

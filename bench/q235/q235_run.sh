@@ -125,7 +125,7 @@ esac
 must tokens "$CAP_TOKENS" python q235_tokens.py ds_alpaca.json "$MODEL" --rows "$ROWS" --seq 2048 --out "$W/receipts/tokens.pt"
 
 for run in box repeat; do
-  extra=(); cap=$CAP_BOX; [ "$run" = repeat ] && { extra=(--repeat --plants); cap=$CAP_REPEAT; }
+  extra=(--micro-batch 2); cap=$CAP_BOX; [ "$run" = repeat ] && { extra=(--repeat --plants); cap=$CAP_REPEAT; }   # box: shape B (Amendment 6)
   phase "$run" "$cap" python q235_box.py "$MODEL" receipts/tokens.pt --device "$DEVICE" --enabler "$ENABLER" --out "receipts/$run" "${extra[@]}"
   case "$PHASE_RC" in
     0) ;;
