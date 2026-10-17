@@ -24,8 +24,8 @@ FWD_S = 47.3e-3 / 13.30
 REC_BWD_S = 45.9e-3 / 13.30 + 58.7e-3 / 7.23
 # Measured: Q235 box q235-pro6000-3 (Shape B, Amendment 7) box/box.json moe_timing, 8 sampled layers x 8 calls, means.
 # Experts compute per micro-batch per layer: forward 4.76 ms, recompute 4.62, backward 4.68. Staging per whole-layer call
-# (layer 0's resident forward calls excluded): forward 51.40 ms, recompute 50.81 -> 26.6 GB/s effective; the same box's
-# hostrate.json (1 GiB pinned copies back to back) read 20.39 GB/s.
+# (layer 0's resident forward calls excluded): forward 51.40 ms, recompute 50.81 -> 26.6 GB/s, the staging rate of record;
+# the same box's hostrate.json (one 1 GiB pinned buffer, copied back to back) under-reads this host at 20.39 GB/s.
 A7_FWD_S, A7_REC_BWD_S = 4.76e-3, 4.62e-3 + 4.68e-3
 A7_STAGE_S = (51.40e-3 + 50.81e-3) / 2
 A7_HOSTRATE = 20.39
