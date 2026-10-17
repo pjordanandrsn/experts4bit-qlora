@@ -62,18 +62,29 @@ Granite-4.0-h, both Nemotrons.
 | lever (default?) | Qwen3-30B | Qwen3-235B | Qwen3.6 | OLMoE | Granite-3.1 | gpt-oss | Gemma-4 | Mixtral | ERNIE |
 |---|---|---|---|---|---|---|---|---|---|
 | decode graphs (default) | **1, record** (P109) | **M** | 1, engages | 1, engages | 1, engages | 1, engages | 1, engages | 1, engages | 1, engages |
-| fused stack (default for Qwen) | **1, record** (P115) | 1, engages; **M** | **1 for the router epilogue** (only it engages: quality PASS, step 0.973); q/k/v and folds 4 | 2, allow-list (quality unread) | **5**: FAM FAIL | **5**: FAM FAIL | **5**: not licensable with the instrument | **2**: quality PASS, blocked by the allow-list, no speed read | 2, allow-list; round-2 rotary refuses ERNIE (4) |
-| fused q/k/v | **1, record** | 1, engages; **M** | 4 (gated q, a different class) | 2 (class name) | 2 (class name; 0 engaged, P115 C) | 2 (class name); its biased q/k/v would also refuse: 4 | 2 (class name) | 2 (class name; 0 engaged, FAM) | 2 (class name) |
-| prefill glue (default for qwen3_moe) | **1, record** (P130) | 1, engages; **M** | 2 | 2 | 2 | 2 | 2 | 2 | 2 |
-| K33 BW GEMV, NF4, W1 | **1, record** (P116) | 3: no plan for (3072, 4096), (4096, 1536); **M** | 3: no plan for (1024, 2048), (2048, 512) | **2: plans exist, auto excludes** | **2: plans exist, auto excludes** | N/A (native MXFP4) | 3 | 3 | 3 |
-| K25 NF4 grouped small-M, W16 (default) | **1, record** (P121) | 1, engages; **M** | 1, engages | **1, quality licensed** (P96) | **1, quality licensed** (P96) | N/A (MXFP4: K21, `e4b.serve.p90…`) | 1, engages | 1, engages | 1, engages |
+| fused stack (default for Qwen) | **1, record** (P115) | 1, engages (inferred, solver placement, W1) | **1 for the router epilogue** (only it engages: quality PASS, step 0.973); q/k/v and folds 4 | 2, allow-list (quality unread) | **5**: FAM FAIL | **5**: FAM FAIL | **5**: not licensable with the instrument | **2**: quality PASS, blocked by the allow-list, no speed read | 2, allow-list; round-2 rotary refuses ERNIE (4) |
+| fused q/k/v | **1, record** | 1, engages (inferred, solver placement, W1) | 4 (gated q, a different class) | 2 (class name) | 2 (class name; 0 engaged, P115 C) | 2 (class name); its biased q/k/v would also refuse: 4 | 2 (class name) | 2 (class name; 0 engaged, FAM) | 2 (class name) |
+| prefill glue (default for qwen3_moe) | **1, record** (P130) | 1, engages (inferred, solver placement) | 2 | 2 | 2 | 2 | 2 | 2 | 2 |
+| K33 BW GEMV, NF4, W1 | **1, record** (P116) | 3: no plan for (3072, 4096), (4096, 1536) | 3: no plan for (1024, 2048), (2048, 512) | **2: plans exist, auto excludes** | **2: plans exist, auto excludes** | N/A (native MXFP4) | 3 | 3 | 3 |
+| K25 NF4 grouped small-M, W16 (default) | **1, record** (P121) | **M** | 1, engages | **1, quality licensed** (P96) | **1, quality licensed** (P96) | N/A (MXFP4: K21, `e4b.serve.p90…`) | 1, engages | 1, engages | 1, engages |
 | int4 expert store + K19/K23/tiles (opt-in) | **1, record** (int4 lanes P88/P89/P122/P126) | 3 + **M** | 3: calibration and quality per family | 3 | 3 | N/A (MXFP4 store) | 3 | 3 | 3 |
-| K16 int4 attention, 17–64 rows (opt-in; B3) | **1, record** (P124) | 1, engages | 1, engages (10 full-attention layers only) | 1, engages | 1, engages | 1, engages (bias carried) | 1, engages (audio tower: B2) | 1, engages | 1, engages |
-| K19 split tiles, prefill (opt-in; B3) | 1, engages (bitwise on the A2000; gain unread) | 1, engages | 1, possibly 3 (16 rows per expert) | 1, engages | 1, engages | **4** (MXFP4 route is K21) | 1, possibly 3 (down K = 704) | 1, engages | 1, engages |
+| K16 int4 attention, 17–64 rows (opt-in; B3) | **1, record** (P124) | 1, engages (inferred, solver placement) | 1, engages (10 full-attention layers only) | 1, engages | 1, engages | 1, engages (bias carried) | 1, engages (audio tower: B2) | 1, engages | 1, engages |
+| K19 split tiles, prefill (opt-in; B3) | 1, engages (bitwise on the A2000; gain unread) | 1 under the store; **M** | 1, possibly 3 (16 rows per expert) | 1, engages | 1, engages | **4** (MXFP4 route is K21) | 1, possibly 3 (down K = 704) | 1, engages | 1, engages |
 | attention: fp8 compute, split-KV, fused KV append | B2 | B2 | B2 | B2 | B2 | B2 | B2 | B2 | B2 |
 
-**M**: Qwen3-235B-A22B's NF4 experts (about 128 GB) do not fit one 32 GB or 96 GB card, so every lever that needs an
-all-VRAM placement is out of reach on one card, whatever its class.
+**The two int4 rows are bounded by their stores.** Every K19 cell sits under the int4 expert store's row: outside
+Qwen3-30B that store is class 3, so read "1, engages" as "1 under the store (store: 3)". K16 likewise sits under the RTN int4
+attention store (`E4B_SERVE_ATTN_INT4`, opt-in), whose quality is per family and unread.
+
+**M**: Qwen3-235B-A22B's NF4 experts (about 128 GB) do not fit one 32 GB or 96 GB card. `serve_paged` serves it through
+the solver placement (`E4B_PAGED_PLACEMENT=solver`, `serve_paged.py:466`, `:572`, `:1396-1431`). M marks the levers whose
+gate needs the all-VRAM placement there:
+- decode graphs: batched graphs refuse anything else (`serve_paged.py:186-204`, `:1305-1308`);
+- K25: only that path turns on device grouping, which defaults off (`hot_residency.py:48`);
+- the int4 expert store, which needs every layer all-hot (`serve_paged.py:1128-1152`), with K19 under it.
+
+The fused stack, q/k/v, prefill glue and K16 don't depend on the placement in the code, so their 235B cells read "engages
+(inferred, solver placement)": no served 235B read exists.
 
 Every "engages" cell outside Qwen3-30B is gain inferred. Quality is per family and unread unless a claim is named.
 
@@ -83,7 +94,8 @@ Every "engages" cell outside Qwen3-30B is gain inferred. Quality is per family a
   - **RTX 4090** (sm_89, 128 SMs): **2, possibly 3** for every family, Qwen3-30B included. The plans were picked on sm_120.
   - **RTX PRO 6000** (sm_120, 188 SMs): **1, engages**, gain inferred.
   - **A2000** (sm_86, 26 SMs): 2, and correctness only.
-- **PDL** needs cc ≥ 9.0, a hardware feature: **5** on the 4090 and the A2000.
+- **PDL** needs cc ≥ 9.0, a hardware feature: **N/A (hardware)** on the 4090 and the A2000. That is not unsafe, and no code
+  port makes it apply.
 - **Decode graphs** need the fused fp8 KV append (cc ≥ 8.9). The A2000 (sm_86) runs eager: **4**, a port, if it ever mattered.
 - **K16, K19, K25 and the fusions** have no SM or arch gate. On the 4090 and the PRO 6000 they read **1 (engages), possibly 3**:
   one default plan, gain unmeasured.
