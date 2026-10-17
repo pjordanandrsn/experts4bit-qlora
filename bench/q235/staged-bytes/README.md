@@ -150,7 +150,7 @@ The toy starts with nothing staged; the box enters each pass with layer 0 reside
   backward rather than accumulated across four. The toy is fp32. The registered adapters are bf16, where summation order moves
   bits by about 1e-3 relative, so the toy shows the same math but does not read rule 8's bar. That needs (b) on the A2000 at bf16.
 - **What it decides.** (b) is buildable: autograd needs no explicit per-layer backward. The build is the layer-major driver plus the
-  engine's held forward. On CUDA, the A2000's staging count would confirm A1 too. The box figure, 186, is one under the 187 in the
-  table above (0.5 %), because the box enters each pass with layer 0 resident. It still waits for Q235's read, and it still needs
-  its own amendment before any registered box uses it.
+  engine's held forward. On CUDA, the A2000's staging count would confirm A1 too. The box figure, 186, is one under the table's 187
+  (0.5 %), because the held forward leaves layer 93 resident for the backward; the table's 187 already counts layer 0 as resident.
+  It still waits for Q235's read, and it still needs its own amendment before any registered box uses it.
 
