@@ -63,8 +63,9 @@ sha256 `108b4ada`), which runs grouped-nf4-gemm's own `_decode_plan` and `_BW_SH
 - Admitted with no served record: Gemma-4 and Mixtral.
 - ERNIE: admission unverified. It isn't in `SUPPORTED_ARCHITECTURES`, so it depends on transformers' convention table;
   its column is inferred throughout.
-- Refused at runner build: LFM2 (`conv` layers) and Granite-4.0-h (`mamba`), at `paged_runner.py:105-119`.
-- Nemotron-H: see finding 5.
+- Refused at runner build: LFM2 (`conv` layers), Granite-4.0-h (`mamba`) and both Nemotron-H fixtures
+  (`paged_runner.py:80-120`). Under transformers 5.17.0 Nemotron's config derives `layer_types` with its Mamba layers as
+  `linear_attention`, and `paged_state_refusal` refuses any linear mixer but Gated DeltaNet (B2's erratum). See finding 5.
 
 | lever (default?) | Qwen3-30B | Qwen3-235B | Qwen3.6 | OLMoE | Granite-3.1 | gpt-oss | Gemma-4 | Mixtral | ERNIE |
 |---|---|---|---|---|---|---|---|---|---|
@@ -82,6 +83,16 @@ sha256 `108b4ada`), which runs grouped-nf4-gemm's own `_decode_plan` and `_BW_SH
 **The two int4 rows are bounded by their stores.** Every K19 cell sits under the int4 expert store's row: outside
 Qwen3-30B that store is class 3, so read "1, engages" as "1 under the store (store: 3)". K16 likewise sits under the RTN int4
 attention store (`E4B_SERVE_ATTN_INT4`, opt-in), whose quality is per family and unread.
+
+**Correct at shape on the A2000 (B3's record, measured-private: `b3_a2000_out.json` sha256 `f2c8ad2e`, sm_86, correctness
+only, no timing).**
+- K16 wide matches the fp32 dequant reference within one bf16 ulp (grouped-nf4-gemm's own bound) on all 9 served
+  families' q/k/v/o shapes, at 17, 32, 48 and 64 rows.
+- The K19 split is `torch.equal` to the 16-row table on all 8 int4-store families (gate_up and down, `big_m` 32 and 64,
+  heavy and uniform routing).
+
+The gain cells are unchanged. The 5090 bit identity of the split is still P131's to read. On synthetic routing, the share
+of rows that fill tall tiles is high for Mixtral and Granite and near zero for Qwen3.6, so its split rides only real skew.
 
 **M**: Qwen3-235B-A22B's NF4 experts (about 128 GB) do not fit one 32 GB or 96 GB card. `serve_paged` serves it through
 the solver placement (`E4B_PAGED_PLACEMENT=solver`, `serve_paged.py:466`, `:572`, `:1396-1431`). M marks the levers whose
@@ -129,12 +140,9 @@ The fused stack, q/k/v, prefill glue and K16 don't depend on the placement in th
      for the Qwen families.
    - It says `serve_paged` reads `E4B_SERVE_ATTN_INT4_ARTIFACT`, `_FINGERPRINT` and `_DUMP`. Only `enable_from_env` reads
      them, and nothing in the package calls it.
-5. **Nemotron-H is admitted but likely unsafe to serve** (B2 F2, inferred, class 5).
-   - Its fixtures carry no `layer_types`, only `hybrid_override_pattern`, so `layer_plan` treats its Mamba layers as
-     attention (`paged_runner.py:111-113`).
-   - The arena builds gated experts (`has_gate=True`, `loader.py:1612-1615`), while Nemotron's relu² experts are not gated.
-   - An explicit refusal in `serve_paged` would close it. That is a code change and the maintainer's call; nothing is
-     changed here.
+5. **The hybrid refusals come after the weights load.** `serve_paged` refuses LFM2, Granite-4.0-h and Nemotron-H
+   correctly, but only at runner build (`paged_state_refusal`, `paged_runner.py:80-101`), after it has read the weights. B2
+   has proposed moving the check before any weight is read; that is the maintainer's call, and nothing is changed here.
 6. **Only a run closes the remaining gaps** (B2 F6), all on sm_89 or newer, so the A2000 can't close them:
    - served graph traces for Gemma-4 and Mixtral, which have no served record at all;
    - a W16 trace of gpt-oss's non-lean K25;
