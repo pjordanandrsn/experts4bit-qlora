@@ -279,6 +279,15 @@ def test_tc3_readings_on_hand_built_receipts():
     assert F["resident"]["reading"] == "EQUIVALENT-TO-RESIDENT" and abs(F["resident"]["tc1_s"] - 1.01) < 1e-9
     sc = {p: (v, ev) for p, _, v, ev in R.score_frontier_predictions({R.FRONTIER_FAM: F})}
     assert sc["P3"][0] == "HELD" and sc["P4"][0] == "HELD" and "no cross-box ratio formed" in sc["P4"][1]
+    # TC3 amendment 6: a resident arm with double-quantized absmax against the fp32 offload anchor is not the matched trajectory
+    tc1_dq = {"qwen3": R.reduce_family("qwen3", R._good_set(), {}, 20)}
+    tc1_dq["qwen3"]["e"] = dict(tc1_dq["qwen3"]["e"], absmax_dq=True)
+    F_dq = R.reduce_frontier_family(R.FRONTIER_FAM, R._frontier_set(), {}, 20, tc1=tc1_dq)
+    assert F_dq["resident"]["reading"] == "N-A" and "absmax storage differs (offload fp32, resident double-quantized)" in F_dq["resident"]["why"]
+    # ...and matching storage on both sides (fp32 recorded explicitly) reads as before
+    tc1_fp = {"qwen3": R.reduce_family("qwen3", R._good_set(), {}, 20)}
+    tc1_fp["qwen3"]["e"] = dict(tc1_fp["qwen3"]["e"], absmax_dq=False)
+    assert R.reduce_frontier_family(R.FRONTIER_FAM, R._frontier_set(), {}, 20, tc1=tc1_fp)["resident"]["reading"] == "EQUIVALENT-TO-RESIDENT"
     # the 12 GB token: P2 reads frameworks; the receipt file names of both tokens parse and render their own table only
     F12 = R.reduce_frontier_family(R.FRONTIER12_FAM, R._frontier12_set(), {}, 20)
     assert F12["draws"][R.FRONTIER_ANCHOR]["verdict"] == "STABLE" and {p: v for p, _, v, _ in R.score_frontier_predictions({R.FRONTIER12_FAM: F12})} == {"P2": "HELD", "P3": "UNTESTED"}

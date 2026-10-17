@@ -6225,6 +6225,14 @@ def resident_comparison(anchor, v_anchor, tc1):
     for nm, r in (("offload", anchor), ("resident", res)):
         if list((r.get("adapter_dtypes_after") or {}).keys()) != ["torch.float32"]:
             pre.append(f"{nm} adapters are not fp32-only")
+    # TC3 amendment 6 (2026-10-17): the expert absmax storage must match. An offloaded stack keeps its absmax fp32 (the library refuses
+    # to compress it), while a resident fused arm double-quantizes it by default since TC1 amendment 56 (#1292, 2026-10-06), a
+    # constant offset in the gradients. A receipt without the field predates any compression path (#1040, 2026-10-04): fp32.
+    a_dq, r_dq = bool(anchor.get("absmax_dq")), bool(res.get("absmax_dq"))
+    if a_dq != r_dq:
+        def kind(dq):
+            return "double-quantized" if dq else "fp32"
+        pre.append(f"absmax storage differs (offload {kind(a_dq)}, resident {kind(r_dq)}): run the resident arm with E4B_ABSMAX_DQ=0")
     if len(anchor.get("losses") or []) != len(res.get("losses") or []) or not anchor.get("losses"):
         pre.append("step counts differ")
     if pre:

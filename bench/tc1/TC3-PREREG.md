@@ -195,3 +195,22 @@ the Unsloth and axolotl rows already UNSUPPORTED, said as "not an OOM reading");
 a second ALARM -> P2 stays UNTESTED and the host is named as the reason. Unsloth's row (its loader dispatching modules to the CPU on this
 card, no expert-offload lever) and axolotl's (its cu130 wheels need driver >= 580; this host has 575.64) are not re-run: neither is a
 budget reading. Nothing in the 24 GB token moves. Cost $0 (the owned card).
+
+### Amendment 6 (2026-10-17T13:03Z, after the 24 GB box's resident reading; before any further frontier read): the resident comparison requires matching absmax storage
+
+**Why.** An offloaded expert stack keeps its absmax in fp32: the library refuses to compress a stack whose absmax lives in host RAM.
+Since TC1 amendment 56 (#1292, 2026-10-06), a resident fused arm double-quantizes it by default. So a resident-versus-offload pair can
+read two different numeric paths. Measured on the RTX A2000 on 2026-10-17 (e4b #1683, `bench/async-reuse-20261017/`): with the default, the
+same model's offloaded and resident adapter gradients differed by a constant 0.0768 max relative. With `E4B_ABSMAX_DQ=0` on both sides,
+their losses were bitwise equal and the gradients agreed to within each build's own pass-to-pass spread.
+
+**The amendment.** `resident_comparison` adds a precondition to the matched-trajectory checks (tokens, init, fp32 adapters, step count).
+The two receipts' `absmax_dq` must agree, or the reading is N-A ("absmax storage differs (offload ..., resident ...): run the resident
+arm with E4B_ABSMAX_DQ=0"), never a scored EQUIVALENT- or DIVERGENT-FROM-RESIDENT. A receipt without the field predates any absmax
+compression in e4b (#1040, 2026-10-04) and reads as fp32. It applies from this commit on.
+
+**The existing record.** One committed pair has been scored: `tc3-4090-8` (`qwen3frontier_e4b_fused_attn4_m_offload`) against TC1's
+`tc1-5090-16` (`qwen3_e4b_fused_attn4_m`), read EQUIVALENT-TO-RESIDENT (median per-step |Δ| 0.0025). Both receipts were committed on
+2026-10-02, before any compression path existed, and neither carries the field: both fp32, matched. Its verdict stands, not confounded.
+The other frontier reads were not scored: `tc3-a2000-vs-tc1` read N-A (no OK anchor), and `local-20261002T052229Z`, `tc3-4090-1` and
+`tc3-4090-8`'s own RESULTS read UNTESTED (no `--tc1-dir`). Nothing in the arms, the alarms or the other readings moves. Cost $0.
