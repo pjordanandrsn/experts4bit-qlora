@@ -861,8 +861,7 @@ answer for the wrong hardware. The box takes the reading at no extra rental.
 **Why.** R2-Mixtral's gate 1 asks that "Q235 has reached L2 and reproduced it" (`bench/fam235/PREREG-r2-mixtral.md:112`). The family
 ladder's L2 (the fam235 matrix, draft 2.1 §5) is "full-depth nonzero LoRA dX and adapter gradients, frozen-base hashes before and
 after, one real optimizer update, a held-out check".
-- The evidence packet (`adertha://adertha-agents%23190/artifacts/r2-mixtral-gate1-evidence-20261017T1942Z.md`) maps it to runs 2
-  and 3 field by field.
+- The maintainer's evidence packet maps it to runs 2 and 3 field by field.
 - The maintainer ruled gate 1 **not yet met** on two gaps (bus `20261017T194309Z-18922`):
   1. no receipt records dX: it is only inferred from step 1's nonzero A gradients;
   2. no receipt holds a held-out check: this registration scoped one out ("What this registration cannot say").
