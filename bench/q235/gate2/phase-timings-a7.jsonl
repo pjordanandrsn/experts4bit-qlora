@@ -1,0 +1,8 @@
+{"phase": "require-git", "requested_s": 240, "cap_s": 240, "elapsed_s": 0, "left_s": 10800, "rc": 0}
+{"phase": "create-venv", "requested_s": 120, "cap_s": 120, "elapsed_s": 3, "left_s": 10797, "rc": 0}
+{"phase": "install", "requested_s": 1800, "cap_s": 1800, "elapsed_s": 43, "left_s": 10754, "rc": 0}
+{"phase": "hostrate", "requested_s": 600, "cap_s": 600, "elapsed_s": 26, "left_s": 10728, "rc": 0}
+{"phase": "fetch", "requested_s": 12000, "cap_s": 10428, "elapsed_s": 33, "left_s": 10695, "rc": 0}
+{"phase": "tokens", "requested_s": 300, "cap_s": 300, "elapsed_s": 8, "left_s": 10687, "rc": 0}
+{"phase": "box", "requested_s": 8820, "cap_s": 8820, "elapsed_s": 282, "left_s": 10405, "rc": 0}
+{"phase": "repeat", "requested_s": 4710, "cap_s": 4710, "elapsed_s": 88, "left_s": 10317, "rc": 0}

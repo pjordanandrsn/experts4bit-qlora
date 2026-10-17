@@ -188,3 +188,33 @@ def test_the_changed_step_refuses_by_name(tmp_path):
     _leg(later, 146.0, 56.8)
     (base / "receipts" / "box" / "box.json").unlink()
     refused(both, "--box-baseline's box record carries no load.seconds")
+
+
+def _leg_from_gate2(d, tag):
+    """A gate2/ A2000 leg (run-TAG.json, phase-timings-TAG.jsonl, a2000-leg-TAG-summary.json) laid out as receipts."""
+    g = Q / "gate2"
+    (d / "receipts" / "box").mkdir(parents=True)
+    (d / "receipts" / "repeat").mkdir()
+    (d / "receipts" / "run.json").write_text((g / f"run-{tag}.json").read_text())
+    (d / "receipts" / "phase-timings.jsonl").write_text((g / f"phase-timings-{tag}.jsonl").read_text())
+    s = json.loads((g / f"a2000-leg-{tag}-summary.json").read_text())
+    (d / "receipts" / "box" / "box.json").write_text(json.dumps({"load": s["box"]["load"]}))
+    (d / "receipts" / "repeat" / "box.json").write_text(json.dumps({"plants": s["repeat"]["plants"]}))
+    return d
+
+
+def test_the_sealed_box_cap_is_amendment_7s_refit(tmp_path):
+    """Amendments 6 and 7's refit, from the committed gate2/ legs: the first leg's whole box phase plus the change measured warm
+    against warm (f17f0744 against the Amendment 4 leg, 222.0 - 79.2 = 142.8 s), scaled to 94 layers with the margin, is the sealed
+    box cap, 13,847 s; every other sealed cap still covers its budget."""
+    reh = _rehearsal_from_receipts(tmp_path / "reh")
+    cmd = [sys.executable, str(Q / "q235_fit.py"), "--rehearsal", str(reh), "--warm-install-s", "178", "--bandwidth-mbps", "3000",
+           "--usd-per-hour", "1.70", "--plants-from", str(_leg_from_gate2(tmp_path / "a3", "a3")),
+           "--box-baseline", str(_leg_from_gate2(tmp_path / "am4", "am4")), "--box-from", str(_leg_from_gate2(tmp_path / "a7", "a7"))]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    rep = json.loads(r.stdout)
+    step = rep["rehearsal"]["changed_step"]
+    assert step["increment_s"] == 142.8 and step["box_basis_s"] == 392.8, step
+    box = rep["phases"]["box"]
+    assert box["budget_s"] == 13847 == box["sealed_cap_s"] == _fit().sealed_caps(Q / "q235_run.sh")["box"], box
+    assert r.returncode == 0 and rep["fits"] and all(p["fits"] for p in rep["phases"].values()), rep["phases"]

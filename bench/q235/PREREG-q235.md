@@ -836,3 +836,22 @@ answer for the wrong hardware. The box takes the reading at no extra rental.
   wallclock and cost are recorded here before any box. Both are UNKNOWN until that rehearsal runs.
 - If, with the pass, the run exceeds 6 h at the slow end of the PRO 6000 spread, the pass leaves the box (the run line drops the flag)
   and stays in the rehearsals. The maintainer decides that on the measured numbers, before any box.
+
+**Recorded at the gate-1 A2000 rehearsal** (e4b f17f0744, the merge of Amendments 6 and 7; 2026-10-17, $0; records in `gate2/`):
+- **Amendment 6.** Rule 8's floor read exactly 0 at both steps. Its check read 0.00278 and 0.00393 against BAR 0.0231. Amendment 2's
+  rules held (9 of 9), and the frozen base was unchanged across both steps. This is the A2000 correctness gate; the registered verdict
+  is the PRO 6000 box's.
+- **Amendment 7's overhead read.** `overhead_s` 0.0513 s (0.57 % of the pass), `half_s` 0.0109 s: decision-grade. The maintainer kept
+  the pass in the box.
+- **The refit** (`q235_fit.py --box-from` this leg, `--box-baseline` the Amendment 4 leg 9f6e0088):
+  - the change adds 142.8 s outside the load on the slice (222.0 s against 79.2 s), so the box basis is 392.8 s;
+  - the box's budget at 94 layers is 13,847 s;
+  - **the box cap is 13,847 s** (it was 8,820). No other cap moves.
+- **Wallclock and cost.** The launcher's declared wallclock, 6.0 h, bounds the run. The expected run is about 4.4–4.6 h (scaled
+  phases, the 300 s reserve and the controller's 1,800 s). The Shape B packet states both figures from its own quote, under the
+  maintainer's bounds:
+  - expected all-in (scaled hours × quote + the 470.2 GB checkpoint × the listed $/GB + upload) at most $11.50;
+  - worst case (6.0 h × quote + download + upload) at most $15.00;
+  - advertised download at least 3,000 Mbps.
+- **C on the A2000** (reporting only: PCIe gen 3 x8, and the card is correctness-only): staging about 222 ms per experts call,
+  against 44–60 ms of compute. No pipelining or prefetch decision comes from it; the PRO 6000 box's own read decides.
