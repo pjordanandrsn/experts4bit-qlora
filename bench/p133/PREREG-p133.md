@@ -32,7 +32,9 @@ that configuration only.
 ## The arms
 
 Four fresh processes, ABBA: **B0a B1a B1b B0b**, differing only in `GNF4_GEMV_BW`:
-- **B0:** unset, the shipped default (auto). At 128 SMs that is the scalar GEMV.
+- **B0:** unset, the shipped default (auto). At 128 SMs that is the scalar GEMV. Envelope v2 wrote B0 as `=0`; at 128
+  SMs auto engages neither K33 nor dot-pad (the tripwire asserts it), so both are the scalar route, and unset is what
+  ships.
 - **B1:** `GNF4_GEMV_BW=1`, no plan or decode override: the shipped plan table, `prmt32`.
 
 **Workloads:** P109's, at its registered bytes. W1 (row 0 alone) is the subject. The control is **Wn at the box's own
@@ -113,6 +115,7 @@ eager. So these run for the first time in this lane on the proof:
 - **decode-graph capture and replay** of the arms (sm_86 builds no graphs);
 - **device grouping** at T > 1 (sm_86 groups on the host);
 - **the fp8 paged KV and its fused append**, and the five premise cases that cover them;
+- **the card and configuration refusal** (the RTX 4090 class and `cc=8.9 sms=128`, rc 15), which DRY skips;
 - the ssh, scp and rsync transport (unchanged from P116's driver).
 
 ## Budget, host and STOP
