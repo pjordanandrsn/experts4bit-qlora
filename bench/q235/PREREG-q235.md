@@ -909,10 +909,17 @@ after, one real optimizer update, a held-out check".
 - **The band, registered before any box** ($0, on the RTX A2000).
   - Qwen3-30B-A3B, at full depth on the 30B calibration's path, runs this amendment's box step with the held-out read over the same
     registered rows, through its own tokenizer.
-  - `HELDOUT_BAND` = 3 × its |`rel_change`|, rounded up to two significant figures, and at least 0.02. It is recorded here, with
-    the leg's records, before any box.
-  - The 235B box's own `rel_change` is the reading. The 30B leg sizes the band and never stands in for it.
-  - If the 30B leg's |`rel_change`| exceeds 0.10, the band is not set mechanically. The maintainer rules on it before any box.
+  - `HELDOUT_BAND` = max(3 × its |`rel_change`|, 0.02), rounded up to two significant figures and **capped at 0.10**. It is
+    recorded here, with the leg's records, before any box. If the 30B leg's own |`rel_change`| exceeds 0.10, the band is not set
+    mechanically: the maintainer rules on it before any box.
+- **What the band is, and its stated risk** (the maintainer, bus `20261017T201227Z-34762`).
+  - Rule 10 is a **blow-up bound, not an equivalence test.** It reads that the update does not corrupt the model. It does not read
+    that 235B and 30B move alike.
+  - The band is calibrated on 30B and applied to 235B: a band set in one setting and tested in another. So a 235B change above the
+    30B-derived band but inside the 0.10 cap reads **FAIL**, never PASS by default. That false-fail risk is stated here and accepted.
+    A FAIL on rule 10 alone is read with the 235B value beside the 30B one before anything is concluded from it.
+  - The 235B box records its own `rel_change` (`heldout`), with every read. The next amendment recalibrates the band from it, at the
+    scale the rule is applied to.
 
 **3. Host independence.** Per the ruling, the next Q235 box runs on a Vast machine other than 8652. Its envelope or packet names its
 host by inclusion, and 8652 is not among them. That records the reproduction across hosts, the gate's stated limitation.
