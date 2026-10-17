@@ -228,11 +228,17 @@ def _rel_and_cos(ref, got):
 
 @pytest.mark.parametrize("reentrant", [False, True], ids=["nonreentrant", "reentrant"])
 def test_bf16_gradient_band(ckpt, reentrant):
-    """The registered band (maintainer's ruling on the layer-major packet). Both arms against a host fp64 sum of each
-    micro-batch's own gradient, on every adapter tensor, with the same weights. Layer-major passes iff (a) max_rel <=
-    GA_BAR, (b) cosine >= 0.9999, and (c) its max_rel <= max(2 x as-is's, 1e-3), as the MEDIAN over 5 input seeds."""
+    """The registered band (maintainer's rulings on the layer-major packet). Both arms against a host fp64 sum of each
+    micro-batch's own gradient, on every adapter tensor, with the same weights, over 5 input seeds (the same seeds both
+    arms). Layer-major passes iff:
+    (a) max_rel <= GA_BAR on every seed;
+    (b) per seed, cos >= 0.9999; where the as-is arm is ALSO under 0.9999 on a seed, the absolute bar is reading bf16
+        rounding, not the order, and (b) becomes paired: median(1 - cos_LM) <= max(2 x median(1 - cos_asis), 1e-4).
+        Layer-major under 0.9999 while as-is is at or over it on the same seed fails;
+    (c) median(max_rel_LM) <= max(2 x median(max_rel_asis), 1e-3).
+    Set E4B_LAYER_MAJOR_BAND_OUT to a path to write both arms' per-seed values and the (b) branch taken (the receipt)."""
     model = _load(ckpt, torch.bfloat16, reentrant)
-    lm_rel, asis_rel = [], []
+    rows = []
     for seed in range(5):
         batches = _batches(seed=100 + seed, device=DEVICE)
         ref = None
@@ -247,13 +253,26 @@ def test_bf16_gradient_band(ckpt, reentrant):
         model.zero_grad(set_to_none=True)
         layer_major_step(model, batches, WEIGHTS)
         l_rel, l_cos = _rel_and_cos(ref, _adapter_grads(model))
-        assert l_rel <= GA_BAR, (seed, l_rel)
-        assert l_cos >= 0.9999, (seed, l_cos)
-        lm_rel.append(l_rel)
-        asis_rel.append(a_rel)
-    lm_med = sorted(lm_rel)[2]
-    asis_med = sorted(asis_rel)[2]
-    assert lm_med <= max(2 * asis_med, 1e-3), (lm_rel, asis_rel)
+        rows.append({"seed": 100 + seed, "asis_max_rel": a_rel, "asis_cos": a_cos, "lm_max_rel": l_rel, "lm_cos": l_cos})
+
+    def med(xs):
+        return sorted(xs)[len(xs) // 2]
+
+    paired = any(r["asis_cos"] < 0.9999 for r in rows)
+    verdict = {
+        "a": all(r["lm_max_rel"] <= GA_BAR for r in rows),
+        "b_branch": "paired" if paired else "absolute",
+        "b": (not any(r["lm_cos"] < 0.9999 <= r["asis_cos"] for r in rows)
+              and (med([1 - r["lm_cos"] for r in rows]) <= max(2 * med([1 - r["asis_cos"] for r in rows]), 1e-4)
+                   if paired else all(r["lm_cos"] >= 0.9999 for r in rows))),
+        "c": med([r["lm_max_rel"] for r in rows]) <= max(2 * med([r["asis_max_rel"] for r in rows]), 1e-3),
+    }
+    out = os.environ.get("E4B_LAYER_MAJOR_BAND_OUT")
+    if out:
+        with open(f"{out}.{'reentrant' if reentrant else 'nonreentrant'}.json", "w") as f:
+            json.dump({"device": DEVICE, "torch": torch.__version__, "reentrant": reentrant, "ga_bar": GA_BAR,
+                       "rows": rows, "verdict": verdict}, f, indent=1)
+    assert verdict["a"] and verdict["b"] and verdict["c"], (verdict, rows)
 
 
 def test_trainer_refuses_layer_major_without_offload(monkeypatch):
