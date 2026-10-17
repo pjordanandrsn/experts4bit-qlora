@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "image": {
+    "repository": "pytorch/pytorch",
+    "tag": "2.8.0-cuda12.8-cudnn9-devel",
+    "reference": "pytorch/pytorch@sha256:a7103283ea7113e10ae5d014bd2342acebda0bc53164b2f7b1dd6eb7a766bdb6",
+    "manifest_digest": "sha256:a7103283ea7113e10ae5d014bd2342acebda0bc53164b2f7b1dd6eb7a766bdb6",
+    "config_digest": "sha256:6b99022ca960b0bd57f96f2283f2e8584101b2c72f2723bab6af64d6478e04df",
+    "os": "linux",
+    "architecture": "amd64",
+    "base_os": "Ubuntu 22.04.5 LTS",
+    "glibc": "2.35",
+    "base_layer_digest": "sha256:8f84a9f2102e97a4a6bf673b150fc9894df5acc9618ad3484c6c36f768c1caa0",
+    "libc_sha256": "5955dead1a55f545cf9cf34a40b2eb65deb84ea503ac467a266d061073315fa7"
+  },
+  "python": {
+    "path": "/opt/conda/bin/python3.11",
+    "version": "3.11.13",
+    "soabi": "cpython-311-x86_64-linux-gnu",
+    "executable_sha256": "f95bbecba67975d3f8ef22e91549021d444509dabda3fb42bbb8d907970ed47e",
+    "layer_digest": "sha256:8e7374fdf2ff319bdba1bf4d796a5ee80af560130ce4ae4877591636fc3d0d87",
+    "runtime_inventory_sha256": "8a834b3daf850d36d7173a6f1e8972cfbf44806b55b478bcc81cbd569de205f7"
+  },
+  "limits": "CPU validation of extracted OCI interpreter bytes is not full-image installation or GPU engagement. Launch, complete wheel lock, inputs and on-card gates require review before rental."
+}

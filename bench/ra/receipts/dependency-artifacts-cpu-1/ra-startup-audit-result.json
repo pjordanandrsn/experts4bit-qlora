@@ -1,0 +1,537 @@
+{
+  "distributions": {
+    "accelerate": {
+      "payload_files": 90,
+      "startup": {},
+      "version": "1.15.0",
+      "wheel_sha256": "97eacca0b73e45cb867dbf8c5d5d4dc32219544300e0c8992c7334dc2ef33cec"
+    },
+    "aiohappyeyeballs": {
+      "payload_files": 10,
+      "startup": {},
+      "version": "2.7.1",
+      "wheel_sha256": "9243213661e29250eb41368e5daa826fc017156c3b8a11440826b2e3ed376472"
+    },
+    "aiohttp": {
+      "payload_files": 73,
+      "startup": {},
+      "version": "3.14.4",
+      "wheel_sha256": "f887c3b7fb3058fc1ccd917f52078540c18d938d12018cb9edd64b6811d20c57"
+    },
+    "aiosignal": {
+      "payload_files": 7,
+      "startup": {},
+      "version": "1.4.0",
+      "wheel_sha256": "053243f8b92b990551949e63930a839ff0cf0b0ebbe0597b0f3fb19e1a0fe82e"
+    },
+    "annotated-doc": {
+      "payload_files": 8,
+      "startup": {},
+      "version": "0.0.5",
+      "wheel_sha256": "117bac03a25ede5df5440e855b32d556049ca169ead221505badf432fed4b101"
+    },
+    "annotated-types": {
+      "payload_files": 7,
+      "startup": {},
+      "version": "0.8.0",
+      "wheel_sha256": "f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0"
+    },
+    "anyio": {
+      "payload_files": 53,
+      "startup": {},
+      "version": "4.15.1",
+      "wheel_sha256": "6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101"
+    },
+    "attrs": {
+      "payload_files": 35,
+      "startup": {},
+      "version": "26.1.0",
+      "wheel_sha256": "c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309"
+    },
+    "bitsandbytes": {
+      "payload_files": 69,
+      "startup": {},
+      "version": "0.50.2",
+      "wheel_sha256": "55348a9a4a21bfd99cf8c7b32fe67b4030ae5c2a05738e03c1747f65fa6ec283"
+    },
+    "certifi": {
+      "payload_files": 12,
+      "startup": {},
+      "version": "2026.7.22",
+      "wheel_sha256": "62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775"
+    },
+    "click": {
+      "payload_files": 22,
+      "startup": {},
+      "version": "8.5.0",
+      "wheel_sha256": "255bc9599cf7748b4b1a446ccc735421bd08a2ae529a8b88597d3de5664ee360"
+    },
+    "datasets": {
+      "payload_files": 166,
+      "startup": {},
+      "version": "5.1.0",
+      "wheel_sha256": "86fd08b280485aab82894d2c81842c4151d93b575efea0054315104cb7bc3cec"
+    },
+    "dill": {
+      "payload_files": 54,
+      "startup": {},
+      "version": "0.4.1",
+      "wheel_sha256": "1e1ce33e978ae97fcfcff5638477032b801c46c7c65cf717f95fbc2248f79a9d"
+    },
+    "experts4bit-qlora": {
+      "payload_files": 89,
+      "startup": {},
+      "version": "0.50.0",
+      "wheel_sha256": "26fac95411f4d3d172fe4c7b41d171259a8d54e08828eae9bca2a3b7b04fa583"
+    },
+    "fastapi": {
+      "payload_files": 65,
+      "startup": {},
+      "version": "0.143.0",
+      "wheel_sha256": "3e9395fd35276425b61b516a31fdd7c77fe2af83e41b4da22e30696fb1304c5d"
+    },
+    "filelock": {
+      "payload_files": 28,
+      "startup": {},
+      "version": "4.0.12",
+      "wheel_sha256": "5f17ee83ecee8a6f3e389c75822fb70a1c2f0506b99438a6dffa1d56793588c8"
+    },
+    "frozenlist": {
+      "payload_files": 10,
+      "startup": {},
+      "version": "1.8.0",
+      "wheel_sha256": "2552f44204b744fba866e573be4c1f9048d6a324dfe14475103fd51613eb1d1f"
+    },
+    "fsspec": {
+      "payload_files": 61,
+      "startup": {},
+      "version": "2026.7.0",
+      "wheel_sha256": "b57ddbafedfaef7018c1ecab32aa200a9d7ca26b77965f64e48b70061249d279"
+    },
+    "grouped-nf4-gemm": {
+      "payload_files": 48,
+      "startup": {},
+      "version": "0.43.0",
+      "wheel_sha256": "e72c63d2300689e37c72dd3d878f266f04be2d596bf2ff815199f1def138f779"
+    },
+    "h11": {
+      "payload_files": 17,
+      "startup": {},
+      "version": "0.16.0",
+      "wheel_sha256": "63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86"
+    },
+    "hf-xet": {
+      "payload_files": 7,
+      "startup": {},
+      "version": "1.7.0",
+      "wheel_sha256": "2814a6e999d13464c4d679b788cc5d784eb5a4edfc638a31f10e9a11ab531ef8"
+    },
+    "httpcore": {
+      "payload_files": 36,
+      "startup": {},
+      "version": "1.0.9",
+      "wheel_sha256": "2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55"
+    },
+    "httpx": {
+      "payload_files": 29,
+      "startup": {},
+      "version": "0.28.1",
+      "wheel_sha256": "d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad"
+    },
+    "huggingface-hub": {
+      "payload_files": 194,
+      "startup": {},
+      "version": "1.33.0",
+      "wheel_sha256": "04e434b06e100eddbce9a6e817d72693a7884b10a79bd67ab48080d5c07eb899"
+    },
+    "idna": {
+      "payload_files": 16,
+      "startup": {},
+      "version": "3.20",
+      "wheel_sha256": "ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c"
+    },
+    "iniconfig": {
+      "payload_files": 10,
+      "startup": {},
+      "version": "2.3.1",
+      "wheel_sha256": "9121e2c1fdb355232495be3194c8dfe87ccc2d5dee45947b78e68f499790d7a7"
+    },
+    "jinja2": {
+      "payload_files": 31,
+      "startup": {},
+      "version": "3.1.6",
+      "wheel_sha256": "85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67"
+    },
+    "jsonschema": {
+      "payload_files": 43,
+      "startup": {},
+      "version": "4.26.0",
+      "wheel_sha256": "d489f15263b8d200f8387e64b4c3a75f06629559fb73deb8fdfb525f2dab50ce"
+    },
+    "jsonschema-specifications": {
+      "payload_files": 28,
+      "startup": {},
+      "version": "2025.9.1",
+      "wheel_sha256": "98802fee3a11ee76ecaca44429fda8a41bff98b00a0f2838151b113f210cc6fe"
+    },
+    "markdown-it-py": {
+      "payload_files": 74,
+      "startup": {},
+      "version": "4.2.0",
+      "wheel_sha256": "9f7ebbcd14fe59494226453aed97c1070d83f8d24b6fc3a3bcf9a38092641c4a"
+    },
+    "markupsafe": {
+      "payload_files": 11,
+      "startup": {},
+      "version": "3.0.4",
+      "wheel_sha256": "6da83a088f8ef93b2d483a8232a4dbf4d69d3d8496b568a03c56becac43e1808"
+    },
+    "mdurl": {
+      "payload_files": 11,
+      "startup": {},
+      "version": "0.1.2",
+      "wheel_sha256": "84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8"
+    },
+    "mpmath": {
+      "payload_files": 92,
+      "startup": {},
+      "version": "1.3.0",
+      "wheel_sha256": "a0b2b9fe80bbcd81a6647ff13108738cfb482d481d826cc0e02f5b35e5c88d2c"
+    },
+    "multidict": {
+      "payload_files": 11,
+      "startup": {},
+      "version": "6.9.1",
+      "wheel_sha256": "e8f1e362c9352b50ed120f001046fdbb80810c9d56580f4c3fc13bbe30823387"
+    },
+    "multiprocess": {
+      "payload_files": 51,
+      "startup": {},
+      "version": "0.70.19",
+      "wheel_sha256": "928851ae7973aea4ce0eaf330bbdafb2e01398a91518d5c8818802845564f45c"
+    },
+    "networkx": {
+      "payload_files": 601,
+      "startup": {},
+      "version": "3.6.1",
+      "wheel_sha256": "d47fbf302e7d9cbbb9e2555a0d267983d2aa476bac30e90dfbe5669bd57f3762"
+    },
+    "numpy": {
+      "payload_files": 1042,
+      "startup": {},
+      "version": "2.4.6",
+      "wheel_sha256": "89cd468399cfd2504718f0ba50e410dca55a170b61a02ad92bb18c8a65186e93"
+    },
+    "nvidia-cublas-cu12": {
+      "payload_files": 18,
+      "startup": {},
+      "version": "12.8.4.1",
+      "wheel_sha256": "8ac4e771d5a348c551b2a426eda6193c19aa630236b418086020df5ba9667142"
+    },
+    "nvidia-cuda-cupti-cu12": {
+      "payload_files": 51,
+      "startup": {},
+      "version": "12.8.90",
+      "wheel_sha256": "ea0cb07ebda26bb9b29ba82cda34849e73c166c18162d3913575b0c9db9a6182"
+    },
+    "nvidia-cuda-nvrtc-cu12": {
+      "payload_files": 14,
+      "startup": {},
+      "version": "12.8.93",
+      "wheel_sha256": "a7756528852ef889772a84c6cd89d41dfa74667e24cca16bb31f8f061e3e9994"
+    },
+    "nvidia-cuda-runtime-cu12": {
+      "payload_files": 105,
+      "startup": {},
+      "version": "12.8.90",
+      "wheel_sha256": "adade8dcbd0edf427b7204d480d6066d33902cab2a4707dcfc48a2d0fd44ab90"
+    },
+    "nvidia-cudnn-cu12": {
+      "payload_files": 27,
+      "startup": {},
+      "version": "9.10.2.21",
+      "wheel_sha256": "949452be657fa16687d0930933f032835951ef0892b37d2d53824d1a84dc97a8"
+    },
+    "nvidia-cufft-cu12": {
+      "payload_files": 15,
+      "startup": {},
+      "version": "11.3.3.83",
+      "wheel_sha256": "4d2dd21ec0b88cf61b62e6b43564355e5222e4a3fb394cac0db101f2dd0d4f74"
+    },
+    "nvidia-cufile-cu12": {
+      "payload_files": 12,
+      "startup": {},
+      "version": "1.13.1.3",
+      "wheel_sha256": "1d069003be650e131b21c932ec3d8969c1715379251f8d23a1860554b1cb24fc"
+    },
+    "nvidia-curand-cu12": {
+      "payload_files": 27,
+      "startup": {},
+      "version": "10.3.9.90",
+      "wheel_sha256": "b32331d4f4df5d6eefa0554c565b626c7216f87a06a4f56fab27c3b68a830ec9"
+    },
+    "nvidia-cusolver-cu12": {
+      "payload_files": 17,
+      "startup": {},
+      "version": "11.7.3.90",
+      "wheel_sha256": "4376c11ad263152bd50ea295c05370360776f8c3427b30991df774f9fb26c450"
+    },
+    "nvidia-cusparse-cu12": {
+      "payload_files": 12,
+      "startup": {},
+      "version": "12.5.8.93",
+      "wheel_sha256": "1ec05d76bbbd8b61b06a80e1eaf8cf4959c3d4ce8e711b65ebd0443bb0ebb13b"
+    },
+    "nvidia-cusparselt-cu12": {
+      "payload_files": 7,
+      "startup": {},
+      "version": "0.7.1",
+      "wheel_sha256": "f1bb701d6b930d5a7cea44c19ceb973311500847f81b634d802b7b539dc55623"
+    },
+    "nvidia-nccl-cu12": {
+      "payload_files": 7,
+      "startup": {},
+      "version": "2.27.3",
+      "wheel_sha256": "adf27ccf4238253e0b826bce3ff5fa532d65fc42322c8bfdfaf28024c0fbe039"
+    },
+    "nvidia-nvjitlink-cu12": {
+      "payload_files": 11,
+      "startup": {},
+      "version": "12.8.93",
+      "wheel_sha256": "81ff63371a7ebd6e6451970684f916be2eab07321b73c9d244dc2b4da7f73b88"
+    },
+    "nvidia-nvtx-cu12": {
+      "payload_files": 31,
+      "startup": {},
+      "version": "12.8.90",
+      "wheel_sha256": "5b17e2001cc0d751a5bc2c6ec6d26ad95913324a4adb86788c944f8ce9ba441f"
+    },
+    "opentelemetry-api": {
+      "payload_files": 47,
+      "startup": {},
+      "version": "1.45.1",
+      "wheel_sha256": "b31553efa588ae44bc306f863c785c5333a9ecc091248c6ee68b4b6c87fdedfb"
+    },
+    "packaging": {
+      "payload_files": 29,
+      "startup": {},
+      "version": "26.3",
+      "wheel_sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c"
+    },
+    "pandas": {
+      "payload_files": 1521,
+      "startup": {},
+      "version": "3.0.6",
+      "wheel_sha256": "47121f9571503f724c9b93e297ab6254ac99c77adf5e9ed085ea419fd585c258"
+    },
+    "peft": {
+      "payload_files": 257,
+      "startup": {},
+      "version": "0.21.2",
+      "wheel_sha256": "106ab6077ff72c54d21577f9af5970e34bac7582cb14209f7b2b511e322a4eae"
+    },
+    "pip": {
+      "payload_files": 476,
+      "startup": {},
+      "version": "26.2.1",
+      "wheel_sha256": "71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e"
+    },
+    "pluggy": {
+      "payload_files": 14,
+      "startup": {},
+      "version": "1.6.0",
+      "wheel_sha256": "e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746"
+    },
+    "propcache": {
+      "payload_files": 13,
+      "startup": {},
+      "version": "0.5.4",
+      "wheel_sha256": "6e9368e87a3efc285e559131092c5db643eb8e56de4ee42064d5baec22ef2bb5"
+    },
+    "psutil": {
+      "payload_files": 16,
+      "startup": {},
+      "version": "7.2.2",
+      "wheel_sha256": "076a2d2f923fd4821644f5ba89f059523da90dc9014e85f8e45a5774ca5bc6f9"
+    },
+    "pyarrow": {
+      "payload_files": 753,
+      "startup": {},
+      "version": "25.0.1",
+      "wheel_sha256": "25f8720bf6387d5dc2ebd2622112de630760419e4b66134405dd24110d15f37e"
+    },
+    "pydantic": {
+      "payload_files": 111,
+      "startup": {},
+      "version": "2.14.0",
+      "wheel_sha256": "15fab1bea6f1dc5003b54fc2ecab230c1fd1dbade2acd4addc52d81e32416d4b"
+    },
+    "pydantic-core": {
+      "payload_files": 11,
+      "startup": {},
+      "version": "2.50.0",
+      "wheel_sha256": "ac223ea031905319a64d0df116979ae438b42d6265862a3d63c9f9808c2905a7"
+    },
+    "pygments": {
+      "payload_files": 349,
+      "startup": {},
+      "version": "2.21.0",
+      "wheel_sha256": "2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9"
+    },
+    "pytest": {
+      "payload_files": 89,
+      "startup": {},
+      "version": "9.1.1",
+      "wheel_sha256": "37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c"
+    },
+    "python-dateutil": {
+      "payload_files": 25,
+      "startup": {},
+      "version": "2.9.0.post0",
+      "wheel_sha256": "a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427"
+    },
+    "pyyaml": {
+      "payload_files": 24,
+      "startup": {},
+      "version": "6.0.3",
+      "wheel_sha256": "b8bb0864c5a28024fac8a632c443c87c5aa6f215c0b126c449ae1a150412f31d"
+    },
+    "referencing": {
+      "payload_files": 19,
+      "startup": {},
+      "version": "0.37.0",
+      "wheel_sha256": "381329a9f99628c9069361716891d34ad94af76e461dcb0335825aecc7692231"
+    },
+    "regex": {
+      "payload_files": 10,
+      "startup": {},
+      "version": "2026.9.29",
+      "wheel_sha256": "612b709381c0355b70d89cdb51b7f670591ed5cbbc0e3b5337488019dc667b65"
+    },
+    "rich": {
+      "payload_files": 105,
+      "startup": {},
+      "version": "15.0.0",
+      "wheel_sha256": "33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb"
+    },
+    "rpds-py": {
+      "payload_files": 9,
+      "startup": {},
+      "version": "2026.9.1",
+      "wheel_sha256": "136a1c3fe4402b7008bc81cb62ee538481795b61a7e83df88dff3b3f02b726ff"
+    },
+    "safetensors": {
+      "payload_files": 15,
+      "startup": {},
+      "version": "0.8.0",
+      "wheel_sha256": "fd6f3f93c9a0a7cc2788ee63fb763353d4bd2e89b0751bc78fcf7dda00bea774"
+    },
+    "setuptools": {
+      "payload_files": 343,
+      "startup": {
+        "distutils-precedence.pth": "2638ce9e2500e572a5e0de7faed6661eb569d1b696fcba07b0dd223da5f5d224"
+      },
+      "version": "84.0.0",
+      "wheel_sha256": "51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670"
+    },
+    "shellingham": {
+      "payload_files": 13,
+      "startup": {},
+      "version": "1.5.4",
+      "wheel_sha256": "7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686"
+    },
+    "six": {
+      "payload_files": 6,
+      "startup": {},
+      "version": "1.17.0",
+      "wheel_sha256": "4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274"
+    },
+    "starlette": {
+      "payload_files": 41,
+      "startup": {},
+      "version": "1.7.0",
+      "wheel_sha256": "67f8e99895493dd2911a03f11314af6ceebeae4e704bb9f43dfc6a9db151c93e"
+    },
+    "sympy": {
+      "payload_files": 1570,
+      "startup": {},
+      "version": "1.14.0",
+      "wheel_sha256": "e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5"
+    },
+    "tokenizers": {
+      "payload_files": 32,
+      "startup": {},
+      "version": "0.23.2",
+      "wheel_sha256": "41c2f84d172449b4dadb9cdc508e3e364076613c35b16e76ecfe47a60d1e3305"
+    },
+    "torch": {
+      "payload_files": 11499,
+      "startup": {},
+      "version": "2.8.0+cu128",
+      "wheel_sha256": "039b9dcdd6bdbaa10a8a5cd6be22c4cb3e3589a341e5f904cbb571ca28f55bed"
+    },
+    "tqdm": {
+      "payload_files": 39,
+      "startup": {},
+      "version": "4.70.1",
+      "wheel_sha256": "c293e525e6fef9c20e8728fd4612df02a0aa31bb5fe91ecd93e123b1b7bffa73"
+    },
+    "transformers": {
+      "payload_files": 2720,
+      "startup": {},
+      "version": "5.18.0",
+      "wheel_sha256": "d79e5a515a572ee3deb33eb0d578be47d91e70c75d54cf21bf6eede6edef14a9"
+    },
+    "triton": {
+      "payload_files": 369,
+      "startup": {},
+      "version": "3.4.0",
+      "wheel_sha256": "e2b0afe420d202d96f50b847d744a487b780567975455e56f64b061152ee9554"
+    },
+    "typer": {
+      "payload_files": 41,
+      "startup": {},
+      "version": "0.27.3",
+      "wheel_sha256": "e50022f28b82a86313e54501317a1db64bf8f8d036ff8cfe5ca7e47675454aff"
+    },
+    "typing-extensions": {
+      "payload_files": 5,
+      "startup": {},
+      "version": "4.16.0",
+      "wheel_sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8"
+    },
+    "typing-inspection": {
+      "payload_files": 9,
+      "startup": {},
+      "version": "0.4.4",
+      "wheel_sha256": "65b8397ba37ccbce054456aaccddfc91e6e3083c92824df348d96ca832f3f147"
+    },
+    "uvicorn": {
+      "payload_files": 51,
+      "startup": {},
+      "version": "0.54.0",
+      "wheel_sha256": "505bdb0f318731d45f1f712071fc781a8981f6847a31c902c9f5e652d4f67faf"
+    },
+    "xxhash": {
+      "payload_files": 10,
+      "startup": {},
+      "version": "4.0.1",
+      "wheel_sha256": "101aa300de6ceef3d9c77569706330d8921fc45dd82bceed2084f1e9f2557a24"
+    },
+    "yarl": {
+      "payload_files": 17,
+      "startup": {},
+      "version": "1.25.1",
+      "wheel_sha256": "d5add7b4ca7afeea91d52e4d4e4db3b1fe9885b71f07054560d8c4296b7441a2"
+    }
+  },
+  "manifest_sha256": "af40ca5982a018e074bc1141e0aebf137130ef8be578b741073369c1316d9031",
+  "proves_dependency_closure": false,
+  "proves_gpu_engagement": false,
+  "proves_imports": false,
+  "proves_installation": false,
+  "schema": 1,
+  "startup_activated": false,
+  "startup_registry_sha256": "28fecd0b7233057a5c03511a91a36aa6f65c040e7078baa1ed2dcaa656dc8f10",
+  "status": "PROPOSED_ADAPTER_BYTES_VERIFIED_ONLY"
+}

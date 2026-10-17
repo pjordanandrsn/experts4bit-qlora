@@ -1,0 +1,1453 @@
+{
+  "schema": 1,
+  "publications": {
+    "experts4bit-qlora": {
+      "project": "experts4bit-qlora",
+      "version": "0.50.0",
+      "commit": "72e6dfeb36dfefbfdb84d71b77b1399c64709581",
+      "tag_oid": "33664a56f096cdae8f8eca5ac107e7301378f6a8",
+      "github_release_id": 406888966,
+      "published_at": "2026-10-08T13:56:24Z",
+      "github_verified_at": "2026-10-08T13:59:02Z",
+      "github_reports_verified_tag": true,
+      "wheel_filename": "experts4bit_qlora-0.50.0-py3-none-any.whl",
+      "wheel_sha256": "26fac95411f4d3d172fe4c7b41d171259a8d54e08828eae9bca2a3b7b04fa583",
+      "wheel_bytes": 650821,
+      "wheel_uploaded_at": "2026-10-08T13:57:58.536947Z",
+      "wheel_url": "https://files.pythonhosted.org/packages/1c/7e/6d5d1ca4cb3089b887e82b2fd42b5b55b33bcf70af718e7bee392e8cf896/experts4bit_qlora-0.50.0-py3-none-any.whl"
+    },
+    "grouped-nf4-gemm": {
+      "project": "grouped-nf4-gemm",
+      "version": "0.43.0",
+      "commit": "6ee2e10408161a9d3c874975c9191a7f2957e6f4",
+      "tag_oid": "0f38e2936d9020c2b790f24a73082442e0b8483d",
+      "github_release_id": 406394811,
+      "published_at": "2026-10-08T03:52:59Z",
+      "github_verified_at": "2026-10-08T03:56:06Z",
+      "github_reports_verified_tag": true,
+      "wheel_filename": "grouped_nf4_gemm-0.43.0-py3-none-any.whl",
+      "wheel_sha256": "e72c63d2300689e37c72dd3d878f266f04be2d596bf2ff815199f1def138f779",
+      "wheel_bytes": 330775,
+      "wheel_uploaded_at": "2026-10-08T03:54:23.639162Z",
+      "wheel_url": "https://files.pythonhosted.org/packages/2d/b0/5bb8e97502a52085fca50ae7f31f4bac5cd9189b6663bf50c1053dd139bd/grouped_nf4_gemm-0.43.0-py3-none-any.whl"
+    }
+  },
+  "source_binding": {
+    "schema": 1,
+    "releases": {
+      "experts4bit-qlora": {
+        "commit": "72e6dfeb36dfefbfdb84d71b77b1399c64709581",
+        "wheel_sha256": "26fac95411f4d3d172fe4c7b41d171259a8d54e08828eae9bca2a3b7b04fa583",
+        "metadata_sha256": "f1aa94873b7cd591c67bc7099db0e906989b6970302ec3e8a23df0a169410144",
+        "extras": [
+          "fast",
+          "serve",
+          "test",
+          "train"
+        ],
+        "requires_dist": [
+          {
+            "name": "grouped-nf4-gemm",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "0.30.0"
+              ]
+            ],
+            "marker": [
+              "atom",
+              "Variable",
+              "extra",
+              "==",
+              "Value",
+              "fast"
+            ]
+          },
+          {
+            "name": "accelerate",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "0.30"
+              ]
+            ],
+            "marker": [
+              "atom",
+              "Variable",
+              "extra",
+              "==",
+              "Value",
+              "serve"
+            ]
+          },
+          {
+            "name": "fastapi",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "0.110"
+              ]
+            ],
+            "marker": [
+              "atom",
+              "Variable",
+              "extra",
+              "==",
+              "Value",
+              "serve"
+            ]
+          },
+          {
+            "name": "huggingface-hub",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "0.23"
+              ]
+            ],
+            "marker": [
+              "atom",
+              "Variable",
+              "extra",
+              "==",
+              "Value",
+              "serve"
+            ]
+          },
+          {
+            "name": "pydantic",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "2"
+              ]
+            ],
+            "marker": [
+              "atom",
+              "Variable",
+              "extra",
+              "==",
+              "Value",
+              "serve"
+            ]
+          },
+          {
+            "name": "safetensors",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "0.4"
+              ]
+            ],
+            "marker": [
+              "atom",
+              "Variable",
+              "extra",
+              "==",
+              "Value",
+              "serve"
+            ]
+          },
+          {
+            "name": "transformers",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "5.0"
+              ]
+            ],
+            "marker": [
+              "atom",
+              "Variable",
+              "extra",
+              "==",
+              "Value",
+              "serve"
+            ]
+          },
+          {
+            "name": "uvicorn",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "0.29"
+              ]
+            ],
+            "marker": [
+              "atom",
+              "Variable",
+              "extra",
+              "==",
+              "Value",
+              "serve"
+            ]
+          },
+          {
+            "name": "accelerate",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "0.30"
+              ]
+            ],
+            "marker": [
+              "atom",
+              "Variable",
+              "extra",
+              "==",
+              "Value",
+              "test"
+            ]
+          },
+          {
+            "name": "compressed-tensors",
+            "extras": [],
+            "specifiers": [
+              [
+                "==",
+                "0.18.0"
+              ]
+            ],
+            "marker": [
+              "atom",
+              "Variable",
+              "extra",
+              "==",
+              "Value",
+              "test"
+            ]
+          },
+          {
+            "name": "fastapi",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "0.110"
+              ]
+            ],
+            "marker": [
+              "atom",
+              "Variable",
+              "extra",
+              "==",
+              "Value",
+              "test"
+            ]
+          },
+          {
+            "name": "grouped-nf4-gemm",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "0.30.0"
+              ]
+            ],
+            "marker": [
+              "atom",
+              "Variable",
+              "extra",
+              "==",
+              "Value",
+              "test"
+            ]
+          },
+          {
+            "name": "httpx",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "0.27"
+              ]
+            ],
+            "marker": [
+              "atom",
+              "Variable",
+              "extra",
+              "==",
+              "Value",
+              "test"
+            ]
+          },
+          {
+            "name": "jsonschema",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "4.18"
+              ]
+            ],
+            "marker": [
+              "atom",
+              "Variable",
+              "extra",
+              "==",
+              "Value",
+              "test"
+            ]
+          },
+          {
+            "name": "pytest",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "7"
+              ]
+            ],
+            "marker": [
+              "atom",
+              "Variable",
+              "extra",
+              "==",
+              "Value",
+              "test"
+            ]
+          },
+          {
+            "name": "safetensors",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "0.4"
+              ]
+            ],
+            "marker": [
+              "atom",
+              "Variable",
+              "extra",
+              "==",
+              "Value",
+              "test"
+            ]
+          },
+          {
+            "name": "transformers",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "5.0"
+              ]
+            ],
+            "marker": [
+              "atom",
+              "Variable",
+              "extra",
+              "==",
+              "Value",
+              "test"
+            ]
+          },
+          {
+            "name": "accelerate",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "0.30"
+              ]
+            ],
+            "marker": [
+              "atom",
+              "Variable",
+              "extra",
+              "==",
+              "Value",
+              "train"
+            ]
+          },
+          {
+            "name": "datasets",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "2.14"
+              ]
+            ],
+            "marker": [
+              "atom",
+              "Variable",
+              "extra",
+              "==",
+              "Value",
+              "train"
+            ]
+          },
+          {
+            "name": "huggingface-hub",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "0.23"
+              ]
+            ],
+            "marker": [
+              "atom",
+              "Variable",
+              "extra",
+              "==",
+              "Value",
+              "train"
+            ]
+          },
+          {
+            "name": "safetensors",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "0.4"
+              ]
+            ],
+            "marker": [
+              "atom",
+              "Variable",
+              "extra",
+              "==",
+              "Value",
+              "train"
+            ]
+          },
+          {
+            "name": "transformers",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "5.0"
+              ]
+            ],
+            "marker": [
+              "atom",
+              "Variable",
+              "extra",
+              "==",
+              "Value",
+              "train"
+            ]
+          },
+          {
+            "name": "bitsandbytes",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "0.43"
+              ]
+            ],
+            "marker": null
+          },
+          {
+            "name": "torch",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "2.2"
+              ]
+            ],
+            "marker": null
+          }
+        ],
+        "declarations_sha256": "f885a69b3156865ba451661e0cddf0da4a02c9c230b363a8cb95af32381e8086"
+      },
+      "grouped-nf4-gemm": {
+        "commit": "6ee2e10408161a9d3c874975c9191a7f2957e6f4",
+        "wheel_sha256": "e72c63d2300689e37c72dd3d878f266f04be2d596bf2ff815199f1def138f779",
+        "metadata_sha256": "47084065cb3d2a0d836a56ea9bf9bc0a9b0d4ffc2d94ee1d1c9dd3600d2915c9",
+        "extras": [],
+        "requires_dist": [
+          {
+            "name": "triton",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "3.4"
+              ]
+            ],
+            "marker": [
+              "atom",
+              "Variable",
+              "platform_system",
+              "==",
+              "Value",
+              "Linux"
+            ]
+          },
+          {
+            "name": "numpy",
+            "extras": [],
+            "specifiers": [],
+            "marker": null
+          },
+          {
+            "name": "torch",
+            "extras": [],
+            "specifiers": [
+              [
+                ">=",
+                "2.8.0.dev0"
+              ]
+            ],
+            "marker": null
+          }
+        ],
+        "declarations_sha256": "72d4ed769b9b620da8230a910f6c9151f0c9d32ccad6fa12ad96e452eb591595"
+      }
+    },
+    "runtime_source_binding": {
+      "schema": 1,
+      "releases": [
+        {
+          "name": "experts4bit-qlora",
+          "version": "0.50.0",
+          "commit": "72e6dfeb36dfefbfdb84d71b77b1399c64709581",
+          "wheel_sha256": "26fac95411f4d3d172fe4c7b41d171259a8d54e08828eae9bca2a3b7b04fa583",
+          "pyproject_sha256": "935d3417c321744e7d724a629ccb06bd077e5ae703e9ce3ddfba3d08921c10e9",
+          "runtime_files": {
+            "experts4bit_qlora/__init__.py": {
+              "source": "experts4bit_qlora/__init__.py",
+              "git_blob": "c4625ca77b387bf40044b5e5b559f66ee7bfc933",
+              "sha256": "1b9b41f0007922914e92e1e6904ac3a86b9076024433555e9a7b9e59480f2d30",
+              "size": 13989
+            },
+            "experts4bit_qlora/_vendor/__init__.py": {
+              "source": "experts4bit_qlora/_vendor/__init__.py",
+              "git_blob": "fefdc379e5ae421fa380a2fd0ff73325a1467e77",
+              "sha256": "2be780ddc3e1f0530dfd185877e6893398fd9ca6b4b35415d1d677e1ab42d5e2",
+              "size": 93
+            },
+            "experts4bit_qlora/_vendor/experts.py": {
+              "source": "experts4bit_qlora/_vendor/experts.py",
+              "git_blob": "a2dcc7710d8dc21e72f77ea710dc2d7983a2dcc9",
+              "sha256": "87c8e2d3a60813c9c460df8c34793ece36eda8888994c797989a91a565f5820b",
+              "size": 26759
+            },
+            "experts4bit_qlora/absmax_dq.py": {
+              "source": "experts4bit_qlora/absmax_dq.py",
+              "git_blob": "cf6111d24cfd785636f0d41298dce5eabc9cc463",
+              "sha256": "2b7a324a889b0e2e88c7c93de446b1ccfaba8d581384dfc3f89f9798b5cf8d4f",
+              "size": 18171
+            },
+            "experts4bit_qlora/arch/__init__.py": {
+              "source": "experts4bit_qlora/arch/__init__.py",
+              "git_blob": "b0eda4cc027688120ac8d3d55ef80804b54773df",
+              "sha256": "edaadf583537a450eac79159adba515fa87db8c4cb810c5df95d61a925766e9b",
+              "size": 77
+            },
+            "experts4bit_qlora/arch/axk1.py": {
+              "source": "experts4bit_qlora/arch/axk1.py",
+              "git_blob": "f3302e7c1e36ba1618fd39dfaf7b32f379b3c483",
+              "sha256": "501724dbee782499d90d101e981a1974fd8289a0277a427e89d1fba7ce345acc",
+              "size": 2819
+            },
+            "experts4bit_qlora/arch/deepseek_v4.py": {
+              "source": "experts4bit_qlora/arch/deepseek_v4.py",
+              "git_blob": "1b7a44ac136ce5bbbe586376d434683464337839",
+              "sha256": "404e9a0b39732979d7e2b3d6cc398a675f514a22404c1d6b57ce17b4b4a13133",
+              "size": 11664
+            },
+            "experts4bit_qlora/arch/fused_layout_probe.py": {
+              "source": "experts4bit_qlora/arch/fused_layout_probe.py",
+              "git_blob": "e3a5b06843025f9291bbe6345243a82b7f880294",
+              "sha256": "428885402ce8cc0b72e8dc91576d68ab055f97b7c00976a53130031a60dc3802",
+              "size": 17914
+            },
+            "experts4bit_qlora/arch/glimmer.py": {
+              "source": "experts4bit_qlora/arch/glimmer.py",
+              "git_blob": "568937ed31960d0f91609d3da3acf2a7d921d63c",
+              "sha256": "33e3cc76eaf167946655f0de654c8fac486250930affe5c3750aa72751961a64",
+              "size": 7798
+            },
+            "experts4bit_qlora/arch/glimmer_draft.py": {
+              "source": "experts4bit_qlora/arch/glimmer_draft.py",
+              "git_blob": "e93fea68d23b95f65ba6db02c510b2ab6e659d95",
+              "sha256": "3f8ab2a7c391296647c67bcb575e7f30a35b3e4553c3d472efc832d90db67f78",
+              "size": 6271
+            },
+            "experts4bit_qlora/arch/glimmer_load.py": {
+              "source": "experts4bit_qlora/arch/glimmer_load.py",
+              "git_blob": "c3b5ab9f4f6b45871a7537a482d2cb1cf37be22c",
+              "sha256": "c10f7a6a3ec333dfc3b2d62b90bdd0b25d3be06f546df43085cfde14b8fcbbee",
+              "size": 9828
+            },
+            "experts4bit_qlora/arch/glm5.py": {
+              "source": "experts4bit_qlora/arch/glm5.py",
+              "git_blob": "55f7cb30fdcc712de31fa45a9acf2a7c6596f1e7",
+              "sha256": "51c073918d3141bfed79ad4bdf6caf2743da7be3650d6fa9faf2ddc4a8b7896c",
+              "size": 9049
+            },
+            "experts4bit_qlora/arch/gptoss.py": {
+              "source": "experts4bit_qlora/arch/gptoss.py",
+              "git_blob": "3627d4bd7980ee7bb6ca1b3c1fab4a59328ee93c",
+              "sha256": "73bd367c9c70b04bda91b378508603d5061d1649b6d4ccf95161300c8a609e85",
+              "size": 6437
+            },
+            "experts4bit_qlora/arch/mixtral.py": {
+              "source": "experts4bit_qlora/arch/mixtral.py",
+              "git_blob": "8a23ef6da2529ab538996371fd16a006dff4af83",
+              "sha256": "9492608abfa0460e3caf23ebdf3205e53cbb259aca811d477077de5f28c695af",
+              "size": 6254
+            },
+            "experts4bit_qlora/arch/moe_conventions.py": {
+              "source": "experts4bit_qlora/arch/moe_conventions.py",
+              "git_blob": "74489b213d55dcd66e399713f23611f3e7546a47",
+              "sha256": "e839a38a504a53766dd32db621467c54a8f036f01f68d35b29528d28d4d11482",
+              "size": 43110
+            },
+            "experts4bit_qlora/arch/moe_load.py": {
+              "source": "experts4bit_qlora/arch/moe_load.py",
+              "git_blob": "7b13de9f1d6c9c8a48c94059702c87fb97b86aa7",
+              "sha256": "c5991c310490bc29271147a0e80a9d09c40c9193645f7f63748b11356861725b",
+              "size": 18341
+            },
+            "experts4bit_qlora/arch/moe_plan.py": {
+              "source": "experts4bit_qlora/arch/moe_plan.py",
+              "git_blob": "e15042ce6150f53c888baee4944368de9981454b",
+              "sha256": "cc766f1e775316e0702eab6d2607d14220391397ed9f1ec063f98c43920a2a83",
+              "size": 26386
+            },
+            "experts4bit_qlora/arch/topology.py": {
+              "source": "experts4bit_qlora/arch/topology.py",
+              "git_blob": "28d35e0a74e1b8bb387127b84af8ea46afdfe5c6",
+              "sha256": "dba2013826de9b0dc49fc0a78021d1046d4e1997e34a5eeb3a5a2249dcbd2a2c",
+              "size": 14654
+            },
+            "experts4bit_qlora/census.py": {
+              "source": "experts4bit_qlora/census.py",
+              "git_blob": "33bd089fb2e57c9651236bf0b29e6680a7195247",
+              "sha256": "77abc06bbb8156531285eb31f6f6aa589e7484ce7f6e5313d194c42ee10deaf9",
+              "size": 3834
+            },
+            "experts4bit_qlora/engines/__init__.py": {
+              "source": "experts4bit_qlora/engines/__init__.py",
+              "git_blob": "0d3ea385c0a85a0f1446ac91c729f16c75e6420f",
+              "sha256": "01868f6a17678b05b170ae05d6960bba7841651fd95b33b459177f9d00969f4f",
+              "size": 80
+            },
+            "experts4bit_qlora/engines/batched.py": {
+              "source": "experts4bit_qlora/engines/batched.py",
+              "git_blob": "4ec103b918666d6ed6f3648ba9c0eb5c1a478fc0",
+              "sha256": "72923a1a2804f6f18c9004ad16bd63fbfb21dee337d7271e30c654f589c2721a",
+              "size": 23485
+            },
+            "experts4bit_qlora/engines/capture.py": {
+              "source": "experts4bit_qlora/engines/capture.py",
+              "git_blob": "7fe0a3ec5e6cb5f8b7fc6926a08e6227542f5c47",
+              "sha256": "b803922f211baaff5f0e79e717c512736ed399ab8fe53c85d92f6bfe332fc078",
+              "size": 14088
+            },
+            "experts4bit_qlora/engines/chunked_lm_loss.py": {
+              "source": "experts4bit_qlora/engines/chunked_lm_loss.py",
+              "git_blob": "a984e38e4df3dd3efdb5def99df44aa1576b0d93",
+              "sha256": "e9896786af62263dead1f4f9cb97af2d00bb6509cb2a08919e910d55d04f3e98",
+              "size": 32863
+            },
+            "experts4bit_qlora/engines/ckpt_offload.py": {
+              "source": "experts4bit_qlora/engines/ckpt_offload.py",
+              "git_blob": "9271ca5aad8850b21fcfc782562d78f6658ef83a",
+              "sha256": "41d508a344242c5b3267f7a24f44cad54eaaab6e748e0b76648611bc790f97de",
+              "size": 9306
+            },
+            "experts4bit_qlora/engines/cold_engine.py": {
+              "source": "experts4bit_qlora/engines/cold_engine.py",
+              "git_blob": "c6242ec79df1d1450db5b6f1b07d599daa0d1efa",
+              "sha256": "cf3945c0e06771b2d33ea58d8b23710cfd76d3dbbce32f0fa92bc8636420c3dc",
+              "size": 16901
+            },
+            "experts4bit_qlora/engines/cpu_router.py": {
+              "source": "experts4bit_qlora/engines/cpu_router.py",
+              "git_blob": "7640c47cbf9479a43974b5aa308fd1290039f417",
+              "sha256": "f239f3afc7688a30e74c0476cdc280e652cb230ff2a9928ccd54c750a982d5dc",
+              "size": 24253
+            },
+            "experts4bit_qlora/engines/dense_offload.py": {
+              "source": "experts4bit_qlora/engines/dense_offload.py",
+              "git_blob": "7054b03b738aaff366b2b109e7b435d016809bcb",
+              "sha256": "4542fc8ad6ebfda36a64029958b5230bbb2850bed9d2a7cedfa658ee0d012bf9",
+              "size": 56207
+            },
+            "experts4bit_qlora/engines/expert_profile.py": {
+              "source": "experts4bit_qlora/engines/expert_profile.py",
+              "git_blob": "26f72f2344abd783a2f99b33722152ef35880132",
+              "sha256": "3196da4b10532796e45eb98a5ca81ca80616a3375aacdd7975f4860d9ad90c90",
+              "size": 14640
+            },
+            "experts4bit_qlora/engines/fast.py": {
+              "source": "experts4bit_qlora/engines/fast.py",
+              "git_blob": "336c2551e887bb2cc60586e0464220fb9e4dbece",
+              "sha256": "5f862f5c323f8e389b9cff032bb8ffd81459396fff3fefaa404717dff7021af9",
+              "size": 57321
+            },
+            "experts4bit_qlora/engines/fp8_kv_cache.py": {
+              "source": "experts4bit_qlora/engines/fp8_kv_cache.py",
+              "git_blob": "f72efab05970e6caadd937df8bcda9420f45c744",
+              "sha256": "7d84bf5b4b74daa03c619dbab92beae2d2c18bd49851be4725d319226daf0d44",
+              "size": 10213
+            },
+            "experts4bit_qlora/engines/fp8_paged_kv.py": {
+              "source": "experts4bit_qlora/engines/fp8_paged_kv.py",
+              "git_blob": "f46e63a81c7d2a341a48d0c962eba4b72b947a24",
+              "sha256": "205faf68f78148ef5b7ffa0df3b689571da1dfcf792d3241e27c49f34bd3e0cf",
+              "size": 68515
+            },
+            "experts4bit_qlora/engines/glue_fuse.py": {
+              "source": "experts4bit_qlora/engines/glue_fuse.py",
+              "git_blob": "9b50398c5f6d1c7e8ab0e6b42469ed3598e32143",
+              "sha256": "bf6c8deee7c5df8369b3f2f02e44123bbbac41ece3d75899d6bd77d824310519",
+              "size": 8217
+            },
+            "experts4bit_qlora/engines/glue_r2.py": {
+              "source": "experts4bit_qlora/engines/glue_r2.py",
+              "git_blob": "a03fa1a1ee75eaa3c727fd3f31e0e0e9a5b8dae5",
+              "sha256": "68f4f5b51ad381a94a81af9e713cb0b8123a05cd172c48d150fe530e5e820118",
+              "size": 25390
+            },
+            "experts4bit_qlora/engines/host_heap.py": {
+              "source": "experts4bit_qlora/engines/host_heap.py",
+              "git_blob": "35abb6b16f80f20cdc028786384345c8132364e6",
+              "sha256": "d371000835a32dd6ac14104d44bfe7c0601cfaf9c1f42127b807d8f9b914de86",
+              "size": 2241
+            },
+            "experts4bit_qlora/engines/hot_residency.py": {
+              "source": "experts4bit_qlora/engines/hot_residency.py",
+              "git_blob": "a75d32388fab885a900fdfecd015ccdd9d1591cf",
+              "sha256": "a7639068f2705dfeaa5dd9fa9ca49f6220a2499d6b9e85aaf3be70c58ec19500",
+              "size": 92556
+            },
+            "experts4bit_qlora/engines/hybrid.py": {
+              "source": "experts4bit_qlora/engines/hybrid.py",
+              "git_blob": "244012a0e5e9ea6498686524c09d1c7cccba5daa",
+              "sha256": "61efb7e469618611e5ee66e6c60b73f482a21e81934ac3ee4ef936bedbb9c222",
+              "size": 75332
+            },
+            "experts4bit_qlora/engines/hybrid_train.py": {
+              "source": "experts4bit_qlora/engines/hybrid_train.py",
+              "git_blob": "fe7ea69e6367fe2ebde3c8d6e36b06d76245c601",
+              "sha256": "c95c4c9da57de6e8c5c7d30d2d2da53605c8315c9b1c137fc1fd24a52f450a6a",
+              "size": 16566
+            },
+            "experts4bit_qlora/engines/int4_attn.py": {
+              "source": "experts4bit_qlora/engines/int4_attn.py",
+              "git_blob": "6f9b26dab20dfbebc20569c4b20b96c8044aedca",
+              "sha256": "cd42a201033f6b6df176196cba30e4c28aa15084b3598a73b2fafede230c1667",
+              "size": 16220
+            },
+            "experts4bit_qlora/engines/int4_attn_calib.py": {
+              "source": "experts4bit_qlora/engines/int4_attn_calib.py",
+              "git_blob": "06ef9417e44ee9711a056910bf32611df639318a",
+              "sha256": "b01f1b2443650d7b8b537eac5a84669115a236c572b14be5fe7886eb476f2b1d",
+              "size": 22882
+            },
+            "experts4bit_qlora/engines/int4_experts.py": {
+              "source": "experts4bit_qlora/engines/int4_experts.py",
+              "git_blob": "8ef5e47e92d49ad3d20953e2e00543df21b3df44",
+              "sha256": "7498d79b9ff12ee9ec80be0fe15861093b886db9b21be20502c1810509b34cf4",
+              "size": 55873
+            },
+            "experts4bit_qlora/engines/kv_cache.py": {
+              "source": "experts4bit_qlora/engines/kv_cache.py",
+              "git_blob": "b61bcdc7a2d9d6325de35222267eb9d6e240ad80",
+              "sha256": "ffd5e4cbaa05b3ca7b300fab31b0860d2a1efdcebc39987f8c2b4267844e4e41",
+              "size": 49705
+            },
+            "experts4bit_qlora/engines/linear_state.py": {
+              "source": "experts4bit_qlora/engines/linear_state.py",
+              "git_blob": "9187e09f9dd1160e6cb5b3f68c5d609f464454de",
+              "sha256": "360316b37c3812bab5a20b931861e455941817a27c997f834850379ed4eba312",
+              "size": 15071
+            },
+            "experts4bit_qlora/engines/moe_keep.py": {
+              "source": "experts4bit_qlora/engines/moe_keep.py",
+              "git_blob": "c29a5a5fedbdfff61f074de1f98a95f575717fb2",
+              "sha256": "e30663b90c80b257d188c27932ccc792567f47da06d81c07418f0a785aea9a19",
+              "size": 8470
+            },
+            "experts4bit_qlora/engines/nvme_experts.py": {
+              "source": "experts4bit_qlora/engines/nvme_experts.py",
+              "git_blob": "869e98b8cc7c6660ebca1ab6d9d0d853a485cd9c",
+              "sha256": "aa497d2d8b15241524c97ef7012e7bb91a81bebc0af2a1172eac1151e8c443d5",
+              "size": 49832
+            },
+            "experts4bit_qlora/engines/nvme_train.py": {
+              "source": "experts4bit_qlora/engines/nvme_train.py",
+              "git_blob": "7721d3c43409e8335b552cdf80c5b56efda3f520",
+              "sha256": "8bd2070d5f52ca56010ed1432aff0f5b90cbf82efd0432d2f6749c101fd70445",
+              "size": 41469
+            },
+            "experts4bit_qlora/engines/offload.py": {
+              "source": "experts4bit_qlora/engines/offload.py",
+              "git_blob": "a0e9204f4ed3b14be62e5787afc782d3fd7296aa",
+              "sha256": "af910597d814e94e2fe82bcffcba65fe97cf1eadb6fb73fe47af341c2d02272c",
+              "size": 74956
+            },
+            "experts4bit_qlora/engines/pack_manifest.py": {
+              "source": "experts4bit_qlora/engines/pack_manifest.py",
+              "git_blob": "a22e0874e423e68829a99886a1cebd2e38b2b026",
+              "sha256": "ee8573879556120ac2ff9d9cf0b15df8fec8f70ff7cd7b72fd3f146d7564c4c7",
+              "size": 28210
+            },
+            "experts4bit_qlora/engines/paged_attention.py": {
+              "source": "experts4bit_qlora/engines/paged_attention.py",
+              "git_blob": "6876d30e78679d3c49e295328c62edad55ed17ea",
+              "sha256": "eb5da1b15126945e2059f5757988e4f3a1819e047e553f839207ee85e098781d",
+              "size": 18833
+            },
+            "experts4bit_qlora/engines/paged_kv.py": {
+              "source": "experts4bit_qlora/engines/paged_kv.py",
+              "git_blob": "c94907d6169d64b26799b55bb80d4c030d15d610",
+              "sha256": "b19cac07e6de0db0ae35742f2073204c7dca2e03534a66a71a356bff90358874",
+              "size": 12419
+            },
+            "experts4bit_qlora/engines/paged_runner.py": {
+              "source": "experts4bit_qlora/engines/paged_runner.py",
+              "git_blob": "a02791c18f2027e913d579d51f0360e1e63318d4",
+              "sha256": "b4948046627d1beb63aa1b86b12d13960f61c5ed357b8eff849a226e0e6ab8dc",
+              "size": 54565
+            },
+            "experts4bit_qlora/engines/pipelined.py": {
+              "source": "experts4bit_qlora/engines/pipelined.py",
+              "git_blob": "b874be79ebe467714942099729479f4c39658ab0",
+              "sha256": "91240aa30c519183e709704191aec31817655be6d64c6429d9c92e69b381bc2c",
+              "size": 44138
+            },
+            "experts4bit_qlora/engines/placement.py": {
+              "source": "experts4bit_qlora/engines/placement.py",
+              "git_blob": "e4f1a438f906aeea4d253a298ced8ca85c8b6733",
+              "sha256": "4c909dfab48300779a659b68929da2cf72e96bec539c2cbb223ce79e4a01a891",
+              "size": 19119
+            },
+            "experts4bit_qlora/engines/qkv_fuse.py": {
+              "source": "experts4bit_qlora/engines/qkv_fuse.py",
+              "git_blob": "1c6346ab7855b1aa78a36458ac365dc9b0d550ba",
+              "sha256": "36772799c78d89609900f8c6c2fb706361b02424aa0d25546646dcc264867c42",
+              "size": 8050
+            },
+            "experts4bit_qlora/engines/rmsnorm_train.py": {
+              "source": "experts4bit_qlora/engines/rmsnorm_train.py",
+              "git_blob": "950d1ca8cf24ac18a22c56a1ee4e69fa88eb28c1",
+              "sha256": "29ac5dff2a8087671a380031ce04b61dcf5d9bea8124a780b67654be55e12f10",
+              "size": 9995
+            },
+            "experts4bit_qlora/engines/rope_train.py": {
+              "source": "experts4bit_qlora/engines/rope_train.py",
+              "git_blob": "a853c442f52aea9e73fcee1be1fb05588389a9c9",
+              "sha256": "2e39b8c956cfcb4aa9e5b859cb087832d14372e1fe61be9848759ac1c6894fc5",
+              "size": 9741
+            },
+            "experts4bit_qlora/engines/router_epilogue.py": {
+              "source": "experts4bit_qlora/engines/router_epilogue.py",
+              "git_blob": "ab374545434d15abaaf3de9b941068659c8a434c",
+              "sha256": "65ee9ead50ae374b7a97d89f556d885eb3e162b5d714761e6c3cdca5c3ba2595",
+              "size": 17169
+            },
+            "experts4bit_qlora/engines/scheduler.py": {
+              "source": "experts4bit_qlora/engines/scheduler.py",
+              "git_blob": "0ebe6be457c31b648ee36dcfc3fc3db11cc21e28",
+              "sha256": "55755ef82c5d9aed2dd7e208e88b73fad316cc5a066dd78947358c38705b6df0",
+              "size": 21703
+            },
+            "experts4bit_qlora/engines/slot_controller.py": {
+              "source": "experts4bit_qlora/engines/slot_controller.py",
+              "git_blob": "88cb64aa505ad86efd5ed814c5cab60a399b6433",
+              "sha256": "826e9d40f4debcfc5e5ee40b2e9065ad03f2a89e14971deb35c15a29d38c55a0",
+              "size": 4912
+            },
+            "experts4bit_qlora/engines/speculative.py": {
+              "source": "experts4bit_qlora/engines/speculative.py",
+              "git_blob": "d57ab6fe10d9f4ef48efa3d69d6f7439a1c48a43",
+              "sha256": "c8970c2bbedbe3ca7d4411dd37ae8ce8e3c4b07e03d02f7b0338afcf2ebc72ba",
+              "size": 5006
+            },
+            "experts4bit_qlora/engines/step_trace.py": {
+              "source": "experts4bit_qlora/engines/step_trace.py",
+              "git_blob": "d616a4a40ae5b9b0292d39a189a22c6a19f4c750",
+              "sha256": "2b28f9e977e3d01042b73cbf1d7cf41397aff1a1f804ec001569fc210700d4f7",
+              "size": 6479
+            },
+            "experts4bit_qlora/engines/triton_prebind.py": {
+              "source": "experts4bit_qlora/engines/triton_prebind.py",
+              "git_blob": "b0c55598d4ca27ae1bf14740c544f879d8aff9a3",
+              "sha256": "071b0493374754afaf1e74545e91ce9e2d65dc57b8f6e496b8b1f1ab6483a2d1",
+              "size": 9035
+            },
+            "experts4bit_qlora/formats/__init__.py": {
+              "source": "experts4bit_qlora/formats/__init__.py",
+              "git_blob": "7335d642e18de0375d68f33071b2fa4a1cdf76a5",
+              "sha256": "32851d4c873a624362c831516356cff43309dad0accea9773b909c639a84dc0b",
+              "size": 80
+            },
+            "experts4bit_qlora/formats/awq.py": {
+              "source": "experts4bit_qlora/formats/awq.py",
+              "git_blob": "1f6a128dfaad123c27d488b08bc158399406f8df",
+              "sha256": "cb9fe60f7db895cfdb7d58537da4219041e6bac53e4d9c0150b6c8b919752bd7",
+              "size": 3294
+            },
+            "experts4bit_qlora/formats/compressed_int.py": {
+              "source": "experts4bit_qlora/formats/compressed_int.py",
+              "git_blob": "bd4406befb97dd31348dcaa97d40342b40ea0d42",
+              "sha256": "af167eb8bd11cabefee2a175f7927403611e2c9b23deea6936d9f263e420f5ac",
+              "size": 3276
+            },
+            "experts4bit_qlora/formats/dense_disk.py": {
+              "source": "experts4bit_qlora/formats/dense_disk.py",
+              "git_blob": "37cd2c81e0459a85ebfd6306b934ef1d0a82eac6",
+              "sha256": "7613a692b123b7d34459025a47119980e23c6df7ac7200511f27cbba02dca2b2",
+              "size": 13802
+            },
+            "experts4bit_qlora/formats/fp8_blocks.py": {
+              "source": "experts4bit_qlora/formats/fp8_blocks.py",
+              "git_blob": "9c01b7e42c209beff2186598ed557fbf35740043",
+              "sha256": "0b93a4248e7baa31cbcc859f3abca73057b63085eb44565a4dbe80ba0fe66f03",
+              "size": 13627
+            },
+            "experts4bit_qlora/formats/gptq.py": {
+              "source": "experts4bit_qlora/formats/gptq.py",
+              "git_blob": "0332c4e8f06ce7066d73f597f4caeba29feffd7a",
+              "sha256": "e0107076e5fe362be6374aacfab7dc28e9448ce8994d2f97b7f42626df062e11",
+              "size": 3731
+            },
+            "experts4bit_qlora/formats/mxfp4.py": {
+              "source": "experts4bit_qlora/formats/mxfp4.py",
+              "git_blob": "cc22d0cd3432a7f6da90fb5fab3fd4125a32125c",
+              "sha256": "e2a3029d117932c7c3229d9f9753be01697df27e1e66d34cee41fa5332df9fd9",
+              "size": 4962
+            },
+            "experts4bit_qlora/formats/nvfp4.py": {
+              "source": "experts4bit_qlora/formats/nvfp4.py",
+              "git_blob": "622f4254cac85f8a393f54487574adcd8d8ec75b",
+              "sha256": "7895cc081c447d705b702d23cb8c0577fd93f8fa8fc28c155e9816363034f49d",
+              "size": 4588
+            },
+            "experts4bit_qlora/infer.py": {
+              "source": "experts4bit_qlora/infer.py",
+              "git_blob": "1e2ccb26bb6d7ffd20ac9899d740e8cbd3395b85",
+              "sha256": "329bcdac67979c352af31b1a1ebe7803d2df6937c46ab4324b58e93f96944e45",
+              "size": 8158
+            },
+            "experts4bit_qlora/k8_gate.py": {
+              "source": "experts4bit_qlora/k8_gate.py",
+              "git_blob": "0db83c47116b5e69a65ccad006b1ec856c0a3477",
+              "sha256": "73bf60df567b02ea1399390e05c8758558ec1e40c8aed8408bdde24e0eb4d29f",
+              "size": 3765
+            },
+            "experts4bit_qlora/loader.py": {
+              "source": "experts4bit_qlora/loader.py",
+              "git_blob": "da65ac04e2ad1e65c6d79786aebf8342211390f3",
+              "sha256": "07255439a37494a310c706b56aa97e883485b975ad01d46ecc0b6415487bc87f",
+              "size": 111936
+            },
+            "experts4bit_qlora/lora.py": {
+              "source": "experts4bit_qlora/lora.py",
+              "git_blob": "b1d01e3945f3effb7e7f98cbce644bcbedf7ead2",
+              "sha256": "d1d4d93ca75af69c422d359a40c3d2e5880140bc559dbb826916fcd120fa8699",
+              "size": 56405
+            },
+            "experts4bit_qlora/recipe.py": {
+              "source": "experts4bit_qlora/recipe.py",
+              "git_blob": "9547797fd042a8be0d783cdfa9c32fc13e997205",
+              "sha256": "84c2d90e5b7b5ff1c81d160f8b6e600c6d85b21a4e72795b069c464e8f35f07b",
+              "size": 21748
+            },
+            "experts4bit_qlora/serve.py": {
+              "source": "experts4bit_qlora/serve.py",
+              "git_blob": "f4df2f48fc17233cbeda6a31a29578d34787f7ac",
+              "sha256": "5ac9518c31456df4dde1b5077b20c213f5da889771f8101531ef005ec8df20a5",
+              "size": 43093
+            },
+            "experts4bit_qlora/serve_capacity.py": {
+              "source": "experts4bit_qlora/serve_capacity.py",
+              "git_blob": "b70600af8722fb10fd2446dbd287f5c1380aeded",
+              "sha256": "7f7230d5a9936e4cf25d93729c21b98066bfe5b9102842638b54cdf5fea0893a",
+              "size": 11754
+            },
+            "experts4bit_qlora/serve_paged.py": {
+              "source": "experts4bit_qlora/serve_paged.py",
+              "git_blob": "9e058c6d73fe2b2169b9952a40530ddcc967ed0d",
+              "sha256": "96b81a9386aac360f5dc19828238246ab58d102638b7fcb87f54c2d0b891fcc4",
+              "size": 90709
+            },
+            "experts4bit_qlora/serve_recipe.py": {
+              "source": "experts4bit_qlora/serve_recipe.py",
+              "git_blob": "52929cab115f04803482cfe85865d84015b4d85f",
+              "sha256": "d2fe5f62707a30d854b9874647792358281e4eb10d63f85bd7a886ddbdf74500",
+              "size": 42188
+            },
+            "experts4bit_qlora/train.py": {
+              "source": "experts4bit_qlora/train.py",
+              "git_blob": "3fc7d911de27a21a1e85863915a6e062be06c0ce",
+              "sha256": "b5c784d1c74ba63854d7c58b7a54c685a77a53b918047a8c472a3b80536c9b87",
+              "size": 36568
+            },
+            "experts4bit_qlora/util.py": {
+              "source": "experts4bit_qlora/util.py",
+              "git_blob": "8a9d19f9e146a923ae9d42907b4a37474f68957c",
+              "sha256": "724d30caad12ceb0305653881cbb8f125fe21586cf5423dfdfa748658c9afd53",
+              "size": 3137
+            },
+            "experts4bit_qlora/verify.py": {
+              "source": "experts4bit_qlora/verify.py",
+              "git_blob": "2d3456d2b5a81ad84ac0e80563f86983d2758477",
+              "sha256": "acbf6fad5b2ccb73f128d85926c1d06b05e122a5969e8e122be97eaadd91f942",
+              "size": 5631
+            },
+            "experts4bit_qlora/py.typed": {
+              "source": "experts4bit_qlora/py.typed",
+              "git_blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "size": 0
+            },
+            "experts4bit_qlora/README-LAYOUT.md": {
+              "source": "experts4bit_qlora/README-LAYOUT.md",
+              "git_blob": "520d8999a2b7c3feae52acfbf2cb7f941d453104",
+              "sha256": "f8f2d6acc35d42dc323c9e82f26f2947391609dbf4502040fe230357b5ac19f7",
+              "size": 3039
+            }
+          },
+          "runtime_tree_sha256": "b4a21e95452d5e90b41d0e9f9b04b9c07f4b5303b651003518f83ff85a8d0ae7"
+        },
+        {
+          "name": "grouped-nf4-gemm",
+          "version": "0.43.0",
+          "commit": "6ee2e10408161a9d3c874975c9191a7f2957e6f4",
+          "wheel_sha256": "e72c63d2300689e37c72dd3d878f266f04be2d596bf2ff815199f1def138f779",
+          "pyproject_sha256": "099d93633bf2c82d691fe08e7aa8d0c34a6b36ddedf06fa034f3d09861ba1911",
+          "runtime_files": {
+            "_triton_shim.py": {
+              "source": "kernel/_triton_shim.py",
+              "git_blob": "6382645e5a6f977ca465e3af402092acbb4239eb",
+              "sha256": "644ed2aedb68e98f48d3ae2a861dda46ce2f2a6cd756db006b704488692bc47e",
+              "size": 18988
+            },
+            "nf4_grouped.py": {
+              "source": "kernel/nf4_grouped.py",
+              "git_blob": "3164e73f223d2a199505fe4f20edd77a57344d90",
+              "sha256": "187d3a2d5358b3a3faaa4451ce89888f86be75382be3d31edfbb6a4da854cff2",
+              "size": 106423
+            },
+            "nf4_pack_ref.py": {
+              "source": "kernel/nf4_pack_ref.py",
+              "git_blob": "384d9cdb66140187c419970eb910612c69153592",
+              "sha256": "4510f2c94436bd258ec9c4f8cb2b341fd3ca5aed3219e5252154140f03826925",
+              "size": 2741
+            },
+            "nf4_smallm.py": {
+              "source": "kernel/nf4_smallm.py",
+              "git_blob": "5d9b3f1272bf1518d0c5ecb3fccbca7906558259",
+              "sha256": "96176de875af5273d3f13edd9c3dfd1371069dea98a7bf6d618f1dac05e2d412",
+              "size": 14389
+            },
+            "int4_b32.py": {
+              "source": "kernel/int4_b32.py",
+              "git_blob": "71e60024250e4eb358bb00fa5e69e6659b4beb22",
+              "sha256": "2003c2bb4b22d111d086ee5950bf03a2ad38b028d39180bff9601b964eff7167",
+              "size": 62881
+            },
+            "int4_pack_ref.py": {
+              "source": "kernel/int4_pack_ref.py",
+              "git_blob": "f0142be28654711bafe13797de43b47fe6646372",
+              "sha256": "c50c26b3895e0c4ec0bfe8b5763dff4d783f32ec408258e98a8a42c390448406",
+              "size": 1812
+            },
+            "int4_smallm.py": {
+              "source": "kernel/int4_smallm.py",
+              "git_blob": "bb4e8b9a3746adfd8bc565ddbfa87c5883aeba70",
+              "sha256": "16229f12152a69cdda99eecc328ec72f38cc43ef36ad67f45577024ed16bb85f",
+              "size": 16863
+            },
+            "host_gather.py": {
+              "source": "kernel/host_gather.py",
+              "git_blob": "ea493fc0aee40af42f26087449651e365266c4e2",
+              "sha256": "9bafe01348ae83287de6d768d26d3cd5734b6b6071308de415262d0f5867fdb5",
+              "size": 3862
+            },
+            "mxfp4_pack_ref.py": {
+              "source": "kernel/mxfp4_pack_ref.py",
+              "git_blob": "23d7fbf1d44ec9640e24428929f8370312d3ded5",
+              "sha256": "6c55cc7f4243700612e2d51f06799a85e1178c5719faf3a90948eb0434257a13",
+              "size": 5641
+            },
+            "mxfp4_grouped.py": {
+              "source": "kernel/mxfp4_grouped.py",
+              "git_blob": "c404f7ab8209fd1101b0ae48b5abc2cdea005bb4",
+              "sha256": "0462e55cd206f417786dc3aed2409d7aadbf7f7a5326123deb9e48c5d7aa488d",
+              "size": 20747
+            },
+            "mxfp4_loader.py": {
+              "source": "kernel/mxfp4_loader.py",
+              "git_blob": "60db22b3035593a92e8605f93d9a75f49a577edd",
+              "sha256": "fce6a65ae8b60f4d3ed57964b3c1be8e39e8116b70f2a632ad4b3d20251457e6",
+              "size": 6935
+            },
+            "mxfp4_pipelined.py": {
+              "source": "kernel/mxfp4_pipelined.py",
+              "git_blob": "1aba9299564db0680166c2f43b4aed33967b7bcd",
+              "sha256": "05c760e4f3a3b7f467a8606ce931de24e7e82f0da9d93cf7bf6267d9aa259329",
+              "size": 25631
+            },
+            "mxfp4_qlora.py": {
+              "source": "kernel/mxfp4_qlora.py",
+              "git_blob": "b576e79cef82a03ba220dde0f6b6c9c6b7331ce6",
+              "sha256": "251c5ad1ace7c761934affe825d8bcdbc3b077beb05037f40dcb12dc49a6aa4f",
+              "size": 18521
+            },
+            "mxfp4_native_load.py": {
+              "source": "kernel/mxfp4_native_load.py",
+              "git_blob": "ead887f7221e827191327cff590077a45cf4d458",
+              "sha256": "da4cd66a384c3c193b15cecb9dcf4868e3bd5009622036897d15a45059667567",
+              "size": 6025
+            },
+            "moonshot_gather.py": {
+              "source": "kernel/moonshot_gather.py",
+              "git_blob": "d029b50d00d338ca0ddc0ace7804c79b22ef6be9",
+              "sha256": "7be68990eba997f45afc283b232a4fafdf6580c6a6f23d2f498c6407b5319d17",
+              "size": 19185
+            },
+            "arena_experts.py": {
+              "source": "kernel/arena_experts.py",
+              "git_blob": "0372005f10bb8324053ad437c4f9b1d9728ecf5e",
+              "sha256": "a3efa17e39a45d58ae4215f5c9b7521a49357d6340d4622a4a740842ffc8e1f0",
+              "size": 18512
+            },
+            "arena_moe_patch.py": {
+              "source": "kernel/arena_moe_patch.py",
+              "git_blob": "631e1fb8f8647aec254e5c9f553a12578616108b",
+              "sha256": "364dd13af099f5be4373e579f44ce384e2f227acf9ddc14d5510018882193b51",
+              "size": 5830
+            },
+            "verify_provenance.py": {
+              "source": "kernel/verify_provenance.py",
+              "git_blob": "f64aeaa843b166b78a4187898a9479e4dff7e029",
+              "sha256": "2022ad1ee79438343877f9f2b5f0b9af6bdd404d37bee158540fbae1f183c648",
+              "size": 4896
+            },
+            "run_mxfp4_20b_qlora.py": {
+              "source": "kernel/run_mxfp4_20b_qlora.py",
+              "git_blob": "d3208df3b89b233e9fde10096878077153052535",
+              "sha256": "4731fbf7afc80d661de4bef9134442530372d73d74f02f6ac6b96ecb9543e0e0",
+              "size": 19319
+            },
+            "gate_native_load_20b.py": {
+              "source": "kernel/gate_native_load_20b.py",
+              "git_blob": "9e8c0e2dbd57c58ba87a7ab6abee48ba89b7706b",
+              "sha256": "a513d868d2b971bf95ad6147ff4fc211dde4633fba6fc92716ab1f779b7a5631",
+              "size": 4026
+            },
+            "nvme_arena.py": {
+              "source": "kernel/nvme_arena.py",
+              "git_blob": "1279f0a6402a6c99225e24ca7718426bebb0fa2b",
+              "sha256": "7d0db538454f04cb8aaf98c5567535f88e18408ff878112bd3f14a02f18fad86",
+              "size": 23305
+            },
+            "nvme_bake_nf4.py": {
+              "source": "kernel/nvme_bake_nf4.py",
+              "git_blob": "4b38b68e46c95195ba59c9489de602fd620fd703",
+              "sha256": "21ea1787280fa018a6028bbe10536696cd799196f90dd2b4874912f26189f4c9",
+              "size": 35010
+            },
+            "nvme_reader.py": {
+              "source": "kernel/nvme_reader.py",
+              "git_blob": "cd5f2c3f91389356590bb27acf90ebbd8589e788",
+              "sha256": "08b3b677c6a809dc079452f5e11485f58e2d001cd030261841626d962b9649ac",
+              "size": 12810
+            },
+            "mxfp4_residency.py": {
+              "source": "kernel/mxfp4_residency.py",
+              "git_blob": "b2c9725a09b243a898a7b5db0820080a3d3d55d5",
+              "sha256": "5620f773c0cbd5ecd990c9b668bb4a3e2ac325d3d61647242aa1c69f18744aa5",
+              "size": 38257
+            },
+            "nvme_residency.py": {
+              "source": "kernel/nvme_residency.py",
+              "git_blob": "d827d550283910a96a7c5ef481e80b091157febe",
+              "sha256": "b0df36136495a4e78513e2930e7720ace4f480aa71b19272b69bee215710c0c3",
+              "size": 71193
+            },
+            "row_pool.py": {
+              "source": "kernel/row_pool.py",
+              "git_blob": "02517161857566e51292d9ccd3c3d33f6b68b53e",
+              "sha256": "11e8e29869568677e1ebb7e3ba25848aa2e0afcaaa582c4acd404b4875d43a4a",
+              "size": 11793
+            },
+            "fp8_kv.py": {
+              "source": "kernel/fp8_kv.py",
+              "git_blob": "dfd5fd55eb5baeaa6d49ae2fd09425df839c23d0",
+              "sha256": "5476834e2c76c2734379d8008b1fba87d937cfa3f89bed1a341ca9c37d556dc4",
+              "size": 20147
+            },
+            "fp8_paged_attn.py": {
+              "source": "kernel/fp8_paged_attn.py",
+              "git_blob": "df582cf00bf6ac6b37247c7079206b12f5ada8c3",
+              "sha256": "c03b7ed503d2904c429c3592cd679a9a37d5c48a59df0fd013f88ac2b36d1911",
+              "size": 82970
+            },
+            "nf4_qlora.py": {
+              "source": "kernel/nf4_qlora.py",
+              "git_blob": "7dc0a2aa4a0fd465373e346f0a1076f699774ebe",
+              "sha256": "72680106ac3b60c1ef0d9ea7365b1d0ec70246da0b77391ec09692f66bc9da50",
+              "size": 58460
+            },
+            "nf4_route.py": {
+              "source": "kernel/nf4_route.py",
+              "git_blob": "32b5da5e9f4933460e14c92f20d1a1370a418632",
+              "sha256": "bd1391f7fe559c1f428173f7fc9c29b3c58560669fa75aef44c28d9b4d13b0fc",
+              "size": 27766
+            },
+            "gguf_reader.py": {
+              "source": "kernel/gguf_reader.py",
+              "git_blob": "5b98381ec82accf061ce279d263f00dd1f5e9d62",
+              "sha256": "0aa5323f2007328e2fb753df5b314768fbc9526bd09ff8294f5a329b5d6440ea",
+              "size": 8054
+            },
+            "kquant_ref.py": {
+              "source": "kernel/kquant_ref.py",
+              "git_blob": "fc74b4274851dfc907a20b2b52c86ff97d2bd02f",
+              "sha256": "cb4d97abe77b73a8c0629b69f83b9dcef982cb091d0c7c5f11c3ace791dc417c",
+              "size": 10484
+            },
+            "gptq_pack.py": {
+              "source": "kernel/gptq_pack.py",
+              "git_blob": "88308dcb4716d4efaf64b49ace60aeac71d0701f",
+              "sha256": "88dd677916710cd8556a7bb16f5d94b638ecab19d9961b98ac92e71b95d251f7",
+              "size": 6383
+            },
+            "cpu_grouped.py": {
+              "source": "kernel/cpu_grouped.py",
+              "git_blob": "a4fc7cf93dbb5841a3f39d52dfb44523aa2447b5",
+              "sha256": "a1a6ca636167c2965fda89be9ef14a6787077f9599e92b874067dc20d1b7b124",
+              "size": 20505
+            },
+            "cold_cpu_view.py": {
+              "source": "kernel/cold_cpu_view.py",
+              "git_blob": "1b0946da9d064eba484a2325b6a83baebd788d78",
+              "sha256": "8a175b300e78136d790812f1c38c1cc7c5c37189850783a1ea52b2ff58ff434c",
+              "size": 14317
+            },
+            "cold_deadline.py": {
+              "source": "kernel/cold_deadline.py",
+              "git_blob": "848f4a98e72042ca8f0ef67d4613c283afd04407",
+              "sha256": "2a3564a5b431710033969020e2485a44db2ca1d39ab9cfa52e21a5bb6b297aa3",
+              "size": 11196
+            },
+            "reuse_profile.py": {
+              "source": "kernel/reuse_profile.py",
+              "git_blob": "9ca12054de7a14b4c0f8de966fe3b7335d4a7ffa",
+              "sha256": "33f885945f0f167a87bde551c71d0ba8a75a93eb3c6eb32e410ed19f8cee8f37",
+              "size": 8005
+            },
+            "vram_slots.py": {
+              "source": "kernel/vram_slots.py",
+              "git_blob": "f1cb53a8d092da9746369ca8f3ccf91c66581f7a",
+              "sha256": "311a561177bc0a05102bde5722681cdceaf1ecf529f90de30add29fa9bf7f45f",
+              "size": 17846
+            },
+            "segmented_pool.py": {
+              "source": "kernel/segmented_pool.py",
+              "git_blob": "89d59db58aa2846a01da0096c59c463fa85ea08a",
+              "sha256": "753a3af084e046962dc1ea5de725ee0674cd0ba1a48242a7d0a756d8a65acb9e",
+              "size": 9689
+            },
+            "dev_row_cache.py": {
+              "source": "kernel/dev_row_cache.py",
+              "git_blob": "751157631d8dd12407854b0ff99fbb762e8d2485",
+              "sha256": "222af3a4bd28c840105af98637c5772b93d6ce40f71076814f8dbbd7883cab91",
+              "size": 17471
+            },
+            "gnf4_native/__init__.py": {
+              "source": "gnf4_native/__init__.py",
+              "git_blob": "aed06fca496293512c76be2a39f1debb554ddf64",
+              "sha256": "5f902947f03cd28b267fe0b26f4a04346fafd80c9be41d4aaa4e9815ce4370ca",
+              "size": 425
+            },
+            "gnf4_native/build.py": {
+              "source": "gnf4_native/build.py",
+              "git_blob": "54783a3493a337e6d1f9cf78f9382bd51443fe99",
+              "sha256": "10a6c4d57268b81c26266fe0408485d64d450985aa5295cc0198a4edfd803230",
+              "size": 7146
+            },
+            "gnf4_native/cpu_kernels.c": {
+              "source": "gnf4_native/cpu_kernels.c",
+              "git_blob": "3ca908caef62a46447b67ae0b8b22b2672bd4abc",
+              "sha256": "6e7297766b58dc29e6d69b1d324abbecb822f66d623bb03a7782efac6fc9175c",
+              "size": 63501
+            }
+          },
+          "runtime_tree_sha256": "68121fe02f8771abe75deecbc131e28f6a29c08b8c257be8015eb96935ac02fe"
+        }
+      ],
+      "proves_runtime_source_binding": true,
+      "proves_reproducible_build": false,
+      "proves_dependency_metadata_source_binding": false,
+      "proves_installation": false,
+      "proves_imports": false,
+      "proves_gpu_engagement": false,
+      "proves_release_authorization": false
+    },
+    "parser_wheel_sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c",
+    "parser_lock_sha256": "8d30a01ac09a606a35c0ddc256f1d675889e1f117bfe631381fae4fc03c4cc4d",
+    "proves_dependency_metadata_source_binding": true,
+    "proves_reproducible_build": false,
+    "proves_release_authorization": false,
+    "proves_installation": false,
+    "proves_imports": false,
+    "startup_activated": false,
+    "proves_gpu_engagement": false
+  },
+  "proves_published_release_index_binding": true,
+  "proves_local_signature_verification": false,
+  "proves_reproducible_build": false,
+  "proves_release_authorization": false,
+  "proves_installation": false,
+  "startup_activated": false,
+  "proves_release_imports": false,
+  "proves_gpu_engagement": false,
+  "status": "PASS",
+  "manifest_sha256": "11e68f8fe79b9c2987660fcf973891ac480a956706f55a1af5b1e99c367c724c",
+  "observations": [
+    {
+      "url": "https://api.github.com/repos/pjordanandrsn/experts4bit-qlora/releases/tags/v0.50.0",
+      "started_at": "2026-10-09T00:25:21.450526+00:00",
+      "finished_at": "2026-10-09T00:25:22.237035+00:00",
+      "sha256": "6ae8abf59cb6686be4d26343c857ea0e1d67844ba0b7739d9dcd67fbd2609059",
+      "bytes": 19825,
+      "file": "response-00.json"
+    },
+    {
+      "url": "https://api.github.com/repos/pjordanandrsn/experts4bit-qlora/git/ref/tags/v0.50.0",
+      "started_at": "2026-10-09T00:25:22.244751+00:00",
+      "finished_at": "2026-10-09T00:25:22.477675+00:00",
+      "sha256": "99c4a6e9662287f448fea7ffd567b80ba73521355bbfe24e95cbe46724a5c752",
+      "bytes": 361,
+      "file": "response-01.json"
+    },
+    {
+      "url": "https://api.github.com/repos/pjordanandrsn/experts4bit-qlora/git/tags/33664a56f096cdae8f8eca5ac107e7301378f6a8",
+      "started_at": "2026-10-09T00:25:22.489743+00:00",
+      "finished_at": "2026-10-09T00:25:22.840487+00:00",
+      "sha256": "246c305526dd2032ff9b230b2325e55109628a2db39ddcef4b017b8d1460d7d8",
+      "bytes": 1450,
+      "file": "response-02.json"
+    },
+    {
+      "url": "https://pypi.org/pypi/experts4bit-qlora/0.50.0/json",
+      "started_at": "2026-10-09T00:25:24.711148+00:00",
+      "finished_at": "2026-10-09T00:25:24.796393+00:00",
+      "sha256": "9df6d910742e09ea77ce56f86df3da5a7f8c634d0ddbbb38e26e0664e0b8326c",
+      "bytes": 14429,
+      "file": "response-03.json"
+    },
+    {
+      "url": "https://api.github.com/repos/pjordanandrsn/grouped-nf4-gemm/releases/tags/v0.43.0",
+      "started_at": "2026-10-09T00:25:27.095841+00:00",
+      "finished_at": "2026-10-09T00:25:27.435946+00:00",
+      "sha256": "3eed16ba5867556af05b85a5d6821a79806d69039d43a1d6f3a830a416c9bfd6",
+      "bytes": 13217,
+      "file": "response-04.json"
+    },
+    {
+      "url": "https://api.github.com/repos/pjordanandrsn/grouped-nf4-gemm/git/ref/tags/v0.43.0",
+      "started_at": "2026-10-09T00:25:27.452185+00:00",
+      "finished_at": "2026-10-09T00:25:27.694635+00:00",
+      "sha256": "afd6ddbc6cdda705e463e190cafb6fa25d80efde53bdc51f1b0a1fcb31427646",
+      "bytes": 359,
+      "file": "response-05.json"
+    },
+    {
+      "url": "https://api.github.com/repos/pjordanandrsn/grouped-nf4-gemm/git/tags/0f38e2936d9020c2b790f24a73082442e0b8483d",
+      "started_at": "2026-10-09T00:25:27.700992+00:00",
+      "finished_at": "2026-10-09T00:25:28.092644+00:00",
+      "sha256": "f1b2fb918e2df1a6dfa6a79c6063a6a40e5a00a5bf7db4c8087a1f368f8401f6",
+      "bytes": 1446,
+      "file": "response-06.json"
+    },
+    {
+      "url": "https://pypi.org/pypi/grouped-nf4-gemm/0.43.0/json",
+      "started_at": "2026-10-09T00:25:28.129295+00:00",
+      "finished_at": "2026-10-09T00:25:28.181833+00:00",
+      "sha256": "575e036e7bd9e428fc690ced828cf205d5d6c3544fd8758e3aacd3bf63f58b68",
+      "bytes": 13423,
+      "file": "response-07.json"
+    },
+    {
+      "url": "https://api.github.com/repos/pjordanandrsn/experts4bit-qlora/releases/tags/v0.50.0",
+      "started_at": "2026-10-09T00:25:30.008563+00:00",
+      "finished_at": "2026-10-09T00:25:30.209545+00:00",
+      "sha256": "6ae8abf59cb6686be4d26343c857ea0e1d67844ba0b7739d9dcd67fbd2609059",
+      "bytes": 19825,
+      "file": "response-08.json"
+    },
+    {
+      "url": "https://api.github.com/repos/pjordanandrsn/experts4bit-qlora/git/ref/tags/v0.50.0",
+      "started_at": "2026-10-09T00:25:34.382287+00:00",
+      "finished_at": "2026-10-09T00:25:34.713356+00:00",
+      "sha256": "99c4a6e9662287f448fea7ffd567b80ba73521355bbfe24e95cbe46724a5c752",
+      "bytes": 361,
+      "file": "response-09.json"
+    },
+    {
+      "url": "https://api.github.com/repos/pjordanandrsn/experts4bit-qlora/git/tags/33664a56f096cdae8f8eca5ac107e7301378f6a8",
+      "started_at": "2026-10-09T00:25:34.719818+00:00",
+      "finished_at": "2026-10-09T00:25:34.873841+00:00",
+      "sha256": "246c305526dd2032ff9b230b2325e55109628a2db39ddcef4b017b8d1460d7d8",
+      "bytes": 1450,
+      "file": "response-10.json"
+    },
+    {
+      "url": "https://pypi.org/pypi/experts4bit-qlora/0.50.0/json",
+      "started_at": "2026-10-09T00:25:34.929396+00:00",
+      "finished_at": "2026-10-09T00:25:34.985179+00:00",
+      "sha256": "9df6d910742e09ea77ce56f86df3da5a7f8c634d0ddbbb38e26e0664e0b8326c",
+      "bytes": 14429,
+      "file": "response-11.json"
+    },
+    {
+      "url": "https://api.github.com/repos/pjordanandrsn/grouped-nf4-gemm/releases/tags/v0.43.0",
+      "started_at": "2026-10-09T00:25:34.993486+00:00",
+      "finished_at": "2026-10-09T00:25:35.335419+00:00",
+      "sha256": "3eed16ba5867556af05b85a5d6821a79806d69039d43a1d6f3a830a416c9bfd6",
+      "bytes": 13217,
+      "file": "response-12.json"
+    },
+    {
+      "url": "https://api.github.com/repos/pjordanandrsn/grouped-nf4-gemm/git/ref/tags/v0.43.0",
+      "started_at": "2026-10-09T00:25:35.342251+00:00",
+      "finished_at": "2026-10-09T00:25:35.504694+00:00",
+      "sha256": "afd6ddbc6cdda705e463e190cafb6fa25d80efde53bdc51f1b0a1fcb31427646",
+      "bytes": 359,
+      "file": "response-13.json"
+    },
+    {
+      "url": "https://api.github.com/repos/pjordanandrsn/grouped-nf4-gemm/git/tags/0f38e2936d9020c2b790f24a73082442e0b8483d",
+      "started_at": "2026-10-09T00:25:35.514030+00:00",
+      "finished_at": "2026-10-09T00:25:35.813879+00:00",
+      "sha256": "f1b2fb918e2df1a6dfa6a79c6063a6a40e5a00a5bf7db4c8087a1f368f8401f6",
+      "bytes": 1446,
+      "file": "response-14.json"
+    },
+    {
+      "url": "https://pypi.org/pypi/grouped-nf4-gemm/0.43.0/json",
+      "started_at": "2026-10-09T00:25:35.850477+00:00",
+      "finished_at": "2026-10-09T00:25:35.897663+00:00",
+      "sha256": "575e036e7bd9e428fc690ced828cf205d5d6c3544fd8758e3aacd3bf63f58b68",
+      "bytes": 13423,
+      "file": "response-15.json"
+    }
+  ]
+}
