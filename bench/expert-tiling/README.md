@@ -199,19 +199,24 @@ result would need a parity bar rather than `torch.equal`.
 
 `closeout.py` reproduces the table. Peaks and budgets come from the records named in it, and the layer and expert sizes are
 arithmetic from each family's committed shapes (NF4 packed + fp32 absmax, as offloaded stacks keep it). "Spare" is the
-stated budget minus the recorded single-slot peak, so it is the room for a second slot or a smaller unit.
+stated budget after headroom minus the recorded single-slot peak, so it is the room for a second slot or a smaller unit.
+Every recorded peak is the allocator's **allocated** peak (`torch.cuda.max_memory_allocated`); the plan rows are the
+planner's device totals.
 
 | lane | card | spare GiB | layer slot GiB | one expert MiB | 2nd layer slot | 1 whole expert | kind |
 |---|---|---:|---:|---:|---|---|---|
-| Q235 Shape B, `q235-pro6000-3` | RTX PRO 6000 96 GB | 31.90 | 1.266 | 10.1 | fits | fits | run |
+| Q235 Shape B, `q235-pro6000-3` | RTX PRO 6000 96 GB | 68.04 | 1.266 | 10.1 | fits | fits | run |
 | Q235 Shape A bf16 | RTX 5090 32 GB | 1.01 | 1.266 | 10.1 | **no** | fits | plan (stretch class, never run) |
 | R2 Mixtral-8x22B, shape B fp32 | RTX 5090 32 GB | 3.75 | 1.266 | 162.0 | fits | fits | plan |
-| TC3 fused offload, `tc3-4090-8` | RTX 4090 24 GB | 12.92 | 0.316 | 2.5 | fits | fits | run |
+| TC3 fused offload, `tc3-4090-8` | RTX 4090 24 GB | 10.46 | 0.316 | 2.5 | fits | fits | run |
 | TC2 Mixtral-8x7B offload, `tc1-5090-26` | RTX 5090 32 GB | 23.59 | 0.738 | 94.5 | fits | fits | run |
 | METHODOLOGY 11c, Gemma-4-26B-A4B | RTX A2000 12 GB (shared) | 1.70 | 0.399 | 3.2 | fits | fits | run |
 | METHODOLOGY 11c, Qwen3-30B-A3B | RTX A2000 12 GB (shared) | 2.92 | 0.316 | 2.5 | fits | fits | run |
 | METHODOLOGY 11a, OLMoE-1B-7B | RTX A2000 12 GB (shared) | 7.20 | 0.211 | 3.4 | fits | fits | run |
 
+- **Two budgets need a word.** The Q235 run-3 row is that box's own peak (`box/box.json` `8b19c4c2`, 22.77 GiB allocated,
+  24.14 GiB reserved), against the PRO 6000's 90.81 GiB after headroom. The RTX 4090's budget is its recorded 25.26 GB
+  visible (`bench/fused-train-gate`) less 2.0 GiB, more than the 5090 row's headroom deduction.
 - **One row cannot hold a second layer slot:** Q235 Shape A at bf16 on the RTX 5090, a registered stretch class that has
   never run. Its 1.0 GiB margin must also hold the unmeasured staging transient (`PREREG-q235.md`, refusal point 3). Overlap
   there would need a sub-layer second buffer, and whole experts are that unit: 10.1 MiB each, about 100 of them in 1.0 GiB.

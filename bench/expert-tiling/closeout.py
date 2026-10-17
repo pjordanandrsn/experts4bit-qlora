@@ -43,17 +43,21 @@ def expert_bytes(family):
 
 
 # Rows: (lane, family, card, budget bytes, single-slot peak bytes, kind, record).
-# budget = the room the record states for the card; peak = the recorded peak with ONE layer slot (training's policy).
+# budget = the room the record states for the card, after headroom; peak = the recorded peak with ONE layer slot (training's
+# policy). Every peak is the allocator's ALLOCATED peak (torch.cuda.max_memory_allocated: tc1_reduce.py's "peak VRAM",
+# train.py's "peak GPU mem", q235_box's max_memory_allocated); the plan rows are loggetta's device totals.
 # kind "run" = a recorded run; "plan" = a registered capacity row, never run.
 ROWS = [
-    ("Q235 Shape B, q235-pro6000-3", "Qwen3-235B-A22B", "RTX PRO 6000 96 GB", 90.81 * GIB, 58.91 * GIB, "run",
-     "PREREG-q235.md capacity (budget); Amendment 4 (58.9 GiB device peak, an upper bound: it held four fp32 check copies)"),
+    ("Q235 Shape B, q235-pro6000-3", "Qwen3-235B-A22B", "RTX PRO 6000 96 GB", 90.81 * GIB, 24_445_716_480, "run",
+     "PREREG-q235.md capacity (budget); q235-pro6000-3 box/box.json 8b19c4c2 step1.max_memory_allocated 24,445,716,480 B "
+     "(22.77 GiB; max_memory_reserved 25,920,798,720 B = 24.14 GiB)"),
     ("Q235 Shape A bf16 (stretch class)", "Qwen3-235B-A22B", "RTX 5090 32 GB", 30.25 * GIB, 29.24 * GIB, "plan",
      "PREREG-q235.md capacity table: fits, 29.24 of 30.25 GiB (1.0 GiB margin); every other 5090 row refused"),
     ("R2 Mixtral-8x22B, shape B fp32", "Mixtral-8x22B", "RTX 5090 32 GB", 30.25 * GIB, 26.5 * GIB, "plan",
      "PREREG-r2-mixtral.md capacity: 26.5 GiB (its largest row); 5090 budget as PREREG-q235.md"),
-    ("TC3 fused offload, tc3-4090-8", "Qwen3-30B-A3B", "RTX 4090 24 GB", 24_564 * 2 ** 20, 11.881 * GB, "run",
-     "tc3/README.md: peak 11.881 GB"),
+    ("TC3 fused offload, tc3-4090-8", "Qwen3-30B-A3B", "RTX 4090 24 GB", 25.26 * GB - 2.0 * GIB, 11.881 * GB, "run",
+     "tc3/README.md: peak 11.881 GB; budget = 25.26 GB visible (fused-train-gate/RESULTS-fused-train-gate.md, RTX 4090) "
+     "less 2.0 GiB, above the 5090 row's after-headroom deduction (32 GiB nominal - 30.25)"),
     ("TC2 Mixtral-8x7B offload, tc1-5090-26", "Mixtral-8x7B", "RTX 5090 32 GB", 30.25 * GIB, 7.151 * GB, "run",
      "tc2/README.md: peak 7.151 GB"),
     ("METHODOLOGY 11c, Gemma-4 offload", "gemma-4-26B-A4B", "RTX A2000 12 GB (shared)", 10.3 * GB, 8.47 * GB, "run",
