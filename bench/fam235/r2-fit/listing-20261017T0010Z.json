@@ -1,0 +1,5 @@
+{"utc": "2026-10-17T00:10:36Z", "source": "vast verified-secure offer search (read-only GET /v0/bundles/), RTX 5090",
+ "floors": {"host_ram_gb": 134, "disk_gb": 350, "pull_mbps": 504, "pcie_bw_gb_s": 5.8},
+ "counts": {"ram_and_disk": 7, "and_pull": 6, "and_pcie": 6, "machines_all_floors": 6, "all_floors_at_or_below_2_00_usd_h": 5,
+            "all_floors_at_or_below_0_85_usd_h": 3},
+ "usd_per_hour_all_floors": {"min": 0.670, "median": 0.870, "max": 4.002}}
