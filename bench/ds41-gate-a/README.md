@@ -45,13 +45,16 @@ Everything in the two tables above is read from the files cited. The following i
 
 - **The Engram tables are a host or disk residency case, not a VRAM one.** They are 202.76 GB, read sparsely: 24 rows × 264 B
   (256 FP8 values + 8 scales) = 6.3 KB per token per table.
-- **The experts would stream as V4's do.** They are 7.22 GB per layer as stored.
-- **The other ~11 GB** (attention, the shared experts, the embedding and head, vision) fits a large card.
+- **The experts would stream as V4's do.** The main model's are 288.78 GB, 7.22 GB per layer as stored.
+- **The rest of the main model, 10.82 GB** (attention, the shared experts, the embedding and head, vision, the Engram
+  projections, the hyper-connections), fits a large card.
+- **The MTP / DSpark layers are 7.93 GB more** (7.22 GB of experts, 0.71 GB other). Only speculative decoding reads them, and
+  e4b's V4 path drops them, so gate B leaves them out and says so.
 
 ## Recommendation
 
 **Run gate B, scoped to memory and H2D.** It costs nothing and the Engram tables make the residency question new: a single box
-needs about 290 GB of experts plus 203 GB of tables somewhere, and gate B says where they can live. **Do not start a build on
-gate B's answer alone.** e4b cannot load this model until a `deepseek_v41` module tree exists, either in transformers or written
-in e4b. Writing one covers the attention, Engram, the router, the hyper-connections and the vision tower: a large build, and a
-decision of its own.
+needs 288.78 GB of experts plus 202.76 GB of tables somewhere (296.00 GB of experts with DSpark's), and gate B says where they can
+live. **Do not start a build on gate B's answer alone.** e4b cannot load this model until a `deepseek_v41` module tree exists,
+either in transformers or written in e4b. Writing one covers the attention, Engram, the router, the hyper-connections and the
+vision tower: a large build, and a decision of its own.
