@@ -645,7 +645,14 @@ def attempt_permit(envelope: dict, run_id: str, receipts: Path, state_dir: Path)
         if not set(used).issubset(envelope["run_ids"]) or len(used) != len(attempts):
             raise ValueError("invalid attempt journal")
         ledger = receipts / "receipts/experts4bit-qlora/ledger.jsonl"
-        ledger_rows = [json.loads(line) for line in committed_bytes(receipts, ledger).decode().splitlines()]
+        # Match the controller's ledger_check.load_ledger_entries exactly:
+        # comments and blank lines are legal; malformed entries still raise.
+        ledger_rows = []
+        for raw_line in committed_bytes(receipts, ledger).decode().splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            ledger_rows.append(json.loads(line))
         for candidate in envelope["run_ids"]:
             paths = receipt_paths(receipts, candidate)
             dirs = list((receipts / "receipts/experts4bit-qlora").glob(f"*/{candidate}"))
