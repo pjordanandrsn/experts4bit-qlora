@@ -42,13 +42,13 @@ FRESH_SECONDS = 60
 POLL_SECONDS = 20
 DISCOVERY_CUTOFF_SECONDS = 3 * 60 * 60
 ENVELOPE_HOURS = 24
-WALL_HOURS = Decimal("0.5")
+WALL_HOURS = Decimal("0.75")
 HOURLY_CAP = Decimal("0.85")
 DOWNLOAD_GB = Decimal(27)
 DOWNLOAD_RATE_CAP = Decimal("0.011")
 UPLOAD_GB = Decimal(3)
 UPLOAD_RATE_CAP = Decimal("0.05")
-ALL_IN_CAP = Decimal("0.90")
+ALL_IN_CAP = Decimal("1.10")
 DISK_GB = 320
 IMAGE = "pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel"
 EXCLUDED_MACHINES = {"45511"}
@@ -72,6 +72,7 @@ ENVELOPE_CRITERIA = {
     "maximum_download_usd_per_gb": str(DOWNLOAD_RATE_CAP),
     "maximum_upload_usd_per_gb": str(UPLOAD_RATE_CAP),
     "maximum_all_in_usd": str(ALL_IN_CAP), "maximum_draws": 1,
+    "maximum_paid_wall_seconds": 2700,
     "minimum_continuous_seconds": MIN_STABLE_SECONDS,
     "maximum_poll_gap_seconds": MAX_SAMPLE_GAP_SECONDS,
 }
@@ -106,7 +107,7 @@ def reserve(hourly: Decimal, download: Decimal, upload: Decimal) -> Decimal:
 
 
 def check_static_budget() -> None:
-    if reserve(HOURLY_CAP, DOWNLOAD_RATE_CAP, UPLOAD_RATE_CAP) != Decimal("0.872"):
+    if reserve(HOURLY_CAP, DOWNLOAD_RATE_CAP, UPLOAD_RATE_CAP) != Decimal("1.0845"):
         raise ValueError("registered all-in budget arithmetic changed")
     if PACKET_MAX > UPLOAD_GB * Decimal(1_000_000_000):
         raise ValueError("upload reservation is smaller than evidence packet cap")
@@ -161,7 +162,7 @@ def offer_row(offer: dict, provider) -> dict:
         if download > DOWNLOAD_RATE_CAP or upload > UPLOAD_RATE_CAP:
             reasons.append("transport tariff exceeds registered cap")
         if reserve(hourly, download, upload) > ALL_IN_CAP:
-            reasons.append("all-in 30-minute reservation exceeds $0.90")
+            reasons.append("all-in 45-minute reservation exceeds $1.10")
     return {
         "id": oid, "machine_id": machine, "driver_version": driver,
         "direct_port_count": offer.get("direct_port_count"),

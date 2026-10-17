@@ -1,8 +1,9 @@
 # Census direct staging and absolute phase deadlines
 
-Operational follow-up to the second paid census harness refusal. No science,
-threshold, driver, tariff, $0.90 ceiling, 1800-second paid wall or 300-second
-teardown reserve changes. The next template uses unused run id
+Operational follow-up to the second paid census harness refusal. The prospective
+census-3 budget amendment extends the paid wall from 1800 to 2700 seconds
+(45 minutes), with the same 300-second teardown reserve inside it: 2400 seconds
+for work. Science, thresholds, driver, tariffs and the single-draw limit stay fixed. The next template uses unused run id
 `dq11-l-census-3`; a template is not paid authority.
 
 The observed initial staging payload was 170,378,038 bytes across 57 files.
@@ -49,30 +50,48 @@ retained separately.
 
 ## Phase accounting before another envelope
 
-The following are evidence and refusal caps, not a claim that this design has
-already met the paid wall:
+The maintainer's RED budget amendment is prospective. It does not authorize a
+rental or reuse either spent envelope. The following accounting distinguishes
+historical measurements, planning proxies and enforced refusal gates:
 
-| Phase | Evidence | Existing cap / new gate |
-|---|---|---|
-| Provisioning and controller preflight | Census2 create to drive:184s | controller wall remains1800s |
-| Initial staging | Census2 proxy1265s; direct duration unmeasured | direct-only180s total, first-bulk projected gate |
-| Box setup and probes | Census2 lane start to bootstrap:8s | existing individual probe caps |
-| Exact wheel download and bootstrap | Census2 wheels130s, full bootstrap270s | existing900s cap, now externally enforced |
-| Model preparation/fetch | no census2 measurement | existing600s cap |
-| Proof | historical same-5090 L process20.346s | existing240s cap |
-| Fresh unprofiled reference | historical L process50.506s | existing300s cap |
-| Separate capture | historical second L50.501s; profiler overhead unknown | existing300s cap |
-| Reduction/closure | historical conservative full-tail132s | existing120s reducer cap; transfer separately reserved |
-| Packet transfer and destruction | census2 refusal to destroy39s | fixed final300s reserve |
+| Phase | Basis | Conservative allowance (seconds) |
+|---|---|---:|
+| Provisioning and controller preflight | Census2 create to drive: 184s, multiplied by 1.5 | 276 |
+| Authenticated direct endpoint resolution | Unmeasured API allowance | 45 |
+| Initial direct staging | Unmeasured direct rate; fixed total staging gate | 180 |
+| Box setup and probes | Census2 lane start to bootstrap: 8s, multiplied by 1.5 | 12 |
+| Exact wheel download and bootstrap | Census2 full bootstrap: 270s, multiplied by 1.5 | 405 |
+| CUDA/import | Historical 5s attention canary multiplied by 1.5; proxy for the new phase | 7.5 |
+| Model preparation/fetch | Historical same-science prepare interval: 118s, multiplied by 1.5 | 177 |
+| L proof | Historical interval: 22s, multiplied by 1.5 | 33 |
+| Fresh unprofiled reference | Historical interval: 52s, multiplied by 1.5 | 78 |
+| Separate capture | Historical unprofiled L interval multiplied by 1.5; profiler overhead unknown | 78 |
+| Reduction and closure | Historical conservative full tail: 132s, multiplied by 1.5 | 198 |
+| **Work subtotal** | Includes the planning proxies above | **1489.5** |
+| Packet transfer and destruction | Fixed teardown reserve, inside the paid wall | 300 |
+| **Total** | 2700-second paid wall minus 1789.5 seconds | **1789.5, leaving 910.5** |
 
-The prior launch note records a combined496s provisioning/staging/bootstrap/
-prepare measurement and the historical process evidence above. That combined
-number cannot supply a separately measured model-fetch duration. Do not call
-unmeasured phases zero or present the sum of timeout caps as a feasible plan.
-The RED run3 request stays withheld until conservative phase accounting fits
-1500s work plus300s teardown, within unchanged tariff bounds. The new structured
-timing records make that accounting auditable. A direct staging gate passing
-alone is not proof that census capture fits.
+Replacing the 7.5-second CUDA proxy with the full existing 90-second phase cap
+gives 1572 seconds of work and 1872 seconds including teardown, leaving
+828 seconds. Even reserving 1872 seconds for work before adding teardown leaves
+528 seconds. These margins allow for bookkeeping and uncertainty; they do not
+turn the direct rate or capture overhead into measurements. Each existing phase
+cap and the absolute work deadline remain enforced by the external watchdog.
+A direct staging refusal still ends the one draw without retry.
+
+The historical preparation interval comes from the canonical `dq11-5090-4f`
+summary, whose science manifest matches the census science closure. Census2
+supplies provisioning, setup and bootstrap evidence. The private accounting
+archive records source hashes and the distinction between measurements and
+proxies. The prior combined 496-second launch note is not used to invent a
+separate preparation measurement.
+
+The hourly cap remains $0.85, with 27 GB download at no more than $0.011/GB and
+3 GB upload at no more than $0.05/GB. At 45 minutes the full reservation is
+`0.85 * 0.75 + 27 * 0.011 + 3 * 0.05 = 1.0845` dollars. The approved all-in ceiling is $1.10, leaving $0.0155 above this full
+reservation. The upload allowance remains included. A fresh RED envelope
+request follows review and merge of the budget amendment; the template alone
+is never paid authority.
 
 ## Zero-cost verification
 

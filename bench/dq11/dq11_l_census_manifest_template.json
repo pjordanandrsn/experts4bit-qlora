@@ -16,8 +16,8 @@
   "model_revision": "27d67f1b5f57dc0953326b2601d68371d40ea8da",
   "seed": 3407,
   "usd_per_hour": 0.85,
-  "wallclock_h": 0.5,
-  "est_usd": 0.425,
+  "wallclock_h": 0.75,
+  "est_usd": 0.6375,
   "role_daily_ceiling": 100,
   "storage": 320,
   "download_gb": 27,
@@ -63,6 +63,6 @@
     "packet_max_bytes": 2147483648,
     "upload_gb": 3,
     "max_upload_usd_per_gb": 0.05,
-    "all_in_cap_usd": 0.9
+    "all_in_cap_usd": 1.1
   }
 }
