@@ -1,0 +1,690 @@
+{
+ "torch": "2.11.0+cu128",
+ "gpu": "NVIDIA RTX A2000 12GB",
+ "bar": 0.0078125,
+ "rows": [
+  {
+   "family": "qwen3-30b-a3b",
+   "layer": 0,
+   "kind": "full_attention",
+   "T": 1,
+   "ref_repeat_bitwise": true,
+   "A": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.0,
+    "proj_within_bar": true,
+    "proj_bitwise": true,
+    "out_rel": 0.0,
+    "out_bitwise": true
+   },
+   "A2": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.0,
+    "proj_within_bar": true,
+    "proj_bitwise": true,
+    "out_rel": 0.0,
+    "out_bitwise": true
+   },
+   "B": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.0,
+    "proj_within_bar": true,
+    "proj_bitwise": true,
+    "out_rel": 0.0,
+    "out_bitwise": true,
+    "fused_computes": 1,
+    "fused_hits": 2,
+    "fallbacks": 0,
+    "cache_dropped": true
+   }
+  },
+  {
+   "family": "qwen3-30b-a3b",
+   "layer": 0,
+   "kind": "full_attention",
+   "T": 17,
+   "ref_repeat_bitwise": true,
+   "A": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.007936508394777775,
+    "proj_within_bar": false,
+    "proj_bitwise": false,
+    "out_rel": 0.008888889104127884,
+    "out_bitwise": false
+   },
+   "A2": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.007936508394777775,
+    "proj_within_bar": false,
+    "proj_bitwise": false,
+    "out_rel": 0.008888889104127884,
+    "out_bitwise": false
+   },
+   "B": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.007936508394777775,
+    "proj_within_bar": false,
+    "proj_bitwise": false,
+    "out_rel": 0.008888889104127884,
+    "out_bitwise": false,
+    "fused_computes": 1,
+    "fused_hits": 2,
+    "fallbacks": 0,
+    "cache_dropped": true
+   }
+  },
+  {
+   "family": "qwen3-235b-a22b-instruct-2507",
+   "layer": 0,
+   "kind": "full_attention",
+   "T": 1,
+   "ref_repeat_bitwise": true,
+   "A": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.0,
+    "proj_within_bar": true,
+    "proj_bitwise": true,
+    "out_rel": 0.0,
+    "out_bitwise": true
+   },
+   "A2": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.0,
+    "proj_within_bar": true,
+    "proj_bitwise": true,
+    "out_rel": 0.0,
+    "out_bitwise": true
+   },
+   "B": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.0,
+    "proj_within_bar": true,
+    "proj_bitwise": true,
+    "out_rel": 0.0,
+    "out_bitwise": true,
+    "fused_computes": 1,
+    "fused_hits": 2,
+    "fallbacks": 0,
+    "cache_dropped": true
+   }
+  },
+  {
+   "family": "qwen3-235b-a22b-instruct-2507",
+   "layer": 0,
+   "kind": "full_attention",
+   "T": 17,
+   "ref_repeat_bitwise": true,
+   "A": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.005464480724185705,
+    "proj_within_bar": true,
+    "proj_bitwise": false,
+    "out_rel": 0.006637168116867542,
+    "out_bitwise": false
+   },
+   "A2": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.005464480724185705,
+    "proj_within_bar": true,
+    "proj_bitwise": false,
+    "out_rel": 0.006637168116867542,
+    "out_bitwise": false
+   },
+   "B": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.005464480724185705,
+    "proj_within_bar": true,
+    "proj_bitwise": false,
+    "out_rel": 0.006637168116867542,
+    "out_bitwise": false,
+    "fused_computes": 1,
+    "fused_hits": 2,
+    "fallbacks": 0,
+    "cache_dropped": true
+   }
+  },
+  {
+   "family": "qwen3.6-35b-a3b",
+   "layer": 3,
+   "kind": "full_attention",
+   "T": 1,
+   "ref_repeat_bitwise": true,
+   "A": {
+    "selected": true,
+    "why": "matches",
+    "error": "RuntimeError: The size of tensor a (256) must match the size of tensor b (64) at non-singleton dimension 3"
+   },
+   "A2": {
+    "selected": false,
+    "why": "q/k/v out (8192, 512, 512) != heads x head_dim (4096, 512, 512)"
+   },
+   "B": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.0,
+    "proj_within_bar": true,
+    "proj_bitwise": true,
+    "out_rel": 0.0,
+    "out_bitwise": true,
+    "fused_computes": 1,
+    "fused_hits": 2,
+    "fallbacks": 0,
+    "cache_dropped": true
+   }
+  },
+  {
+   "family": "qwen3.6-35b-a3b",
+   "layer": 3,
+   "kind": "full_attention",
+   "T": 17,
+   "ref_repeat_bitwise": true,
+   "A": {
+    "selected": true,
+    "why": "matches",
+    "error": "RuntimeError: The size of tensor a (256) must match the size of tensor b (64) at non-singleton dimension 3"
+   },
+   "A2": {
+    "selected": false,
+    "why": "q/k/v out (8192, 512, 512) != heads x head_dim (4096, 512, 512)"
+   },
+   "B": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.00657894741743803,
+    "proj_within_bar": true,
+    "proj_bitwise": false,
+    "out_rel": 0.006976744160056114,
+    "out_bitwise": false,
+    "fused_computes": 1,
+    "fused_hits": 2,
+    "fallbacks": 0,
+    "cache_dropped": true
+   }
+  },
+  {
+   "family": "olmoe-1b-7b-0924-instruct",
+   "layer": 0,
+   "kind": "full_attention",
+   "T": 1,
+   "ref_repeat_bitwise": true,
+   "A": {
+    "selected": false,
+    "why": "q/k norms are not head_dim wide"
+   },
+   "A2": {
+    "selected": false,
+    "why": "q/k norms are not head_dim wide"
+   },
+   "B": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.0,
+    "proj_within_bar": true,
+    "proj_bitwise": true,
+    "out_rel": 0.0,
+    "out_bitwise": true,
+    "fused_computes": 1,
+    "fused_hits": 2,
+    "fallbacks": 0,
+    "cache_dropped": true
+   }
+  },
+  {
+   "family": "olmoe-1b-7b-0924-instruct",
+   "layer": 0,
+   "kind": "full_attention",
+   "T": 17,
+   "ref_repeat_bitwise": true,
+   "A": {
+    "selected": false,
+    "why": "q/k norms are not head_dim wide"
+   },
+   "A2": {
+    "selected": false,
+    "why": "q/k norms are not head_dim wide"
+   },
+   "B": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.008064515888690948,
+    "proj_within_bar": false,
+    "proj_bitwise": false,
+    "out_rel": 0.009036144241690636,
+    "out_bitwise": false,
+    "fused_computes": 1,
+    "fused_hits": 2,
+    "fallbacks": 0,
+    "cache_dropped": true
+   }
+  },
+  {
+   "family": "granite-3.1-3b-a800m-instruct",
+   "layer": 0,
+   "kind": "full_attention",
+   "T": 1,
+   "ref_repeat_bitwise": true,
+   "A": {
+    "selected": false,
+    "why": "children ['k_proj', 'o_proj', 'q_proj', 'v_proj']"
+   },
+   "A2": {
+    "selected": false,
+    "why": "children ['k_proj', 'o_proj', 'q_proj', 'v_proj']"
+   },
+   "B": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.0,
+    "proj_within_bar": true,
+    "proj_bitwise": true,
+    "out_rel": 0.0,
+    "out_bitwise": true,
+    "fused_computes": 1,
+    "fused_hits": 2,
+    "fallbacks": 0,
+    "cache_dropped": true
+   }
+  },
+  {
+   "family": "granite-3.1-3b-a800m-instruct",
+   "layer": 0,
+   "kind": "full_attention",
+   "T": 17,
+   "ref_repeat_bitwise": true,
+   "A": {
+    "selected": false,
+    "why": "children ['k_proj', 'o_proj', 'q_proj', 'v_proj']"
+   },
+   "A2": {
+    "selected": false,
+    "why": "children ['k_proj', 'o_proj', 'q_proj', 'v_proj']"
+   },
+   "B": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.002659574383869767,
+    "proj_within_bar": true,
+    "proj_bitwise": false,
+    "out_rel": 0.003448275849223137,
+    "out_bitwise": false,
+    "fused_computes": 1,
+    "fused_hits": 2,
+    "fallbacks": 0,
+    "cache_dropped": true
+   }
+  },
+  {
+   "family": "gpt-oss-20b",
+   "layer": 1,
+   "kind": "full_attention",
+   "T": 1,
+   "ref_repeat_bitwise": true,
+   "A": {
+    "selected": false,
+    "why": "children ['k_proj', 'o_proj', 'q_proj', 'v_proj']"
+   },
+   "A2": {
+    "selected": false,
+    "why": "children ['k_proj', 'o_proj', 'q_proj', 'v_proj']"
+   },
+   "B": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.005319148767739534,
+    "proj_within_bar": true,
+    "proj_bitwise": false,
+    "out_rel": 0.00401606410741806,
+    "out_bitwise": false,
+    "fused_computes": 1,
+    "fused_hits": 2,
+    "fallbacks": 0,
+    "cache_dropped": true
+   }
+  },
+  {
+   "family": "gpt-oss-20b",
+   "layer": 1,
+   "kind": "full_attention",
+   "T": 17,
+   "ref_repeat_bitwise": true,
+   "A": {
+    "selected": false,
+    "why": "children ['k_proj', 'o_proj', 'q_proj', 'v_proj']"
+   },
+   "A2": {
+    "selected": false,
+    "why": "children ['k_proj', 'o_proj', 'q_proj', 'v_proj']"
+   },
+   "B": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.0069444444961845875,
+    "proj_within_bar": true,
+    "proj_bitwise": false,
+    "out_rel": 0.009615384973585606,
+    "out_bitwise": false,
+    "fused_computes": 1,
+    "fused_hits": 2,
+    "fallbacks": 0,
+    "cache_dropped": true
+   }
+  },
+  {
+   "family": "gpt-oss-20b",
+   "layer": 0,
+   "kind": "sliding_attention",
+   "T": 1,
+   "ref_repeat_bitwise": true,
+   "A": {
+    "selected": false,
+    "why": "children ['k_proj', 'o_proj', 'q_proj', 'v_proj']"
+   },
+   "A2": {
+    "selected": false,
+    "why": "children ['k_proj', 'o_proj', 'q_proj', 'v_proj']"
+   },
+   "B": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.005235602147877216,
+    "proj_within_bar": true,
+    "proj_bitwise": false,
+    "out_rel": 0.0055555556900799274,
+    "out_bitwise": false,
+    "fused_computes": 1,
+    "fused_hits": 2,
+    "fallbacks": 0,
+    "cache_dropped": true
+   }
+  },
+  {
+   "family": "gpt-oss-20b",
+   "layer": 0,
+   "kind": "sliding_attention",
+   "T": 17,
+   "ref_repeat_bitwise": true,
+   "A": {
+    "selected": false,
+    "why": "children ['k_proj', 'o_proj', 'q_proj', 'v_proj']"
+   },
+   "A2": {
+    "selected": false,
+    "why": "children ['k_proj', 'o_proj', 'q_proj', 'v_proj']"
+   },
+   "B": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.0036231884732842445,
+    "proj_within_bar": true,
+    "proj_bitwise": false,
+    "out_rel": 0.011202829889953136,
+    "out_bitwise": false,
+    "fused_computes": 1,
+    "fused_hits": 2,
+    "fallbacks": 0,
+    "cache_dropped": true
+   }
+  },
+  {
+   "family": "gemma-4-26b-a4b-it",
+   "layer": 5,
+   "kind": "full_attention",
+   "T": 1,
+   "ref_repeat_bitwise": true,
+   "A": {
+    "selected": false,
+    "why": "children ['k_norm', 'k_proj', 'o_proj', 'q_norm', 'q_proj', 'v_norm']"
+   },
+   "A2": {
+    "selected": false,
+    "why": "children ['k_norm', 'k_proj', 'o_proj', 'q_norm', 'q_proj', 'v_norm']"
+   },
+   "B": {
+    "selected": false,
+    "why": "q/k/v are not all nn.Linear"
+   }
+  },
+  {
+   "family": "gemma-4-26b-a4b-it",
+   "layer": 5,
+   "kind": "full_attention",
+   "T": 17,
+   "ref_repeat_bitwise": true,
+   "A": {
+    "selected": false,
+    "why": "children ['k_norm', 'k_proj', 'o_proj', 'q_norm', 'q_proj', 'v_norm']"
+   },
+   "A2": {
+    "selected": false,
+    "why": "children ['k_norm', 'k_proj', 'o_proj', 'q_norm', 'q_proj', 'v_norm']"
+   },
+   "B": {
+    "selected": false,
+    "why": "q/k/v are not all nn.Linear"
+   }
+  },
+  {
+   "family": "gemma-4-26b-a4b-it",
+   "layer": 0,
+   "kind": "sliding_attention",
+   "T": 1,
+   "ref_repeat_bitwise": true,
+   "A": {
+    "selected": false,
+    "why": "children ['k_norm', 'k_proj', 'o_proj', 'q_norm', 'q_proj', 'v_norm', 'v_proj']"
+   },
+   "A2": {
+    "selected": false,
+    "why": "children ['k_norm', 'k_proj', 'o_proj', 'q_norm', 'q_proj', 'v_norm', 'v_proj']"
+   },
+   "B": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.0045045046135783195,
+    "proj_within_bar": true,
+    "proj_bitwise": false,
+    "out_rel": 0.00671140942722559,
+    "out_bitwise": false,
+    "fused_computes": 1,
+    "fused_hits": 2,
+    "fallbacks": 0,
+    "cache_dropped": true
+   }
+  },
+  {
+   "family": "gemma-4-26b-a4b-it",
+   "layer": 0,
+   "kind": "sliding_attention",
+   "T": 17,
+   "ref_repeat_bitwise": true,
+   "A": {
+    "selected": false,
+    "why": "children ['k_norm', 'k_proj', 'o_proj', 'q_norm', 'q_proj', 'v_norm', 'v_proj']"
+   },
+   "A2": {
+    "selected": false,
+    "why": "children ['k_norm', 'k_proj', 'o_proj', 'q_norm', 'q_proj', 'v_norm', 'v_proj']"
+   },
+   "B": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.007246376946568489,
+    "proj_within_bar": true,
+    "proj_bitwise": false,
+    "out_rel": 0.0275297611951828,
+    "out_bitwise": false,
+    "fused_computes": 1,
+    "fused_hits": 2,
+    "fallbacks": 0,
+    "cache_dropped": true
+   }
+  },
+  {
+   "family": "mixtral-8x7b-instruct-v0.1",
+   "layer": 0,
+   "kind": "full_attention",
+   "T": 1,
+   "ref_repeat_bitwise": true,
+   "A": {
+    "selected": false,
+    "why": "children ['k_proj', 'o_proj', 'q_proj', 'v_proj']"
+   },
+   "A2": {
+    "selected": false,
+    "why": "children ['k_proj', 'o_proj', 'q_proj', 'v_proj']"
+   },
+   "B": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.007042253389954567,
+    "proj_within_bar": true,
+    "proj_bitwise": false,
+    "out_rel": 0.005319148767739534,
+    "out_bitwise": false,
+    "fused_computes": 1,
+    "fused_hits": 2,
+    "fallbacks": 0,
+    "cache_dropped": true
+   }
+  },
+  {
+   "family": "mixtral-8x7b-instruct-v0.1",
+   "layer": 0,
+   "kind": "full_attention",
+   "T": 17,
+   "ref_repeat_bitwise": true,
+   "A": {
+    "selected": false,
+    "why": "children ['k_proj', 'o_proj', 'q_proj', 'v_proj']"
+   },
+   "A2": {
+    "selected": false,
+    "why": "children ['k_proj', 'o_proj', 'q_proj', 'v_proj']"
+   },
+   "B": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.005847953259944916,
+    "proj_within_bar": true,
+    "proj_bitwise": false,
+    "out_rel": 0.008547008968889713,
+    "out_bitwise": false,
+    "fused_computes": 1,
+    "fused_hits": 2,
+    "fallbacks": 0,
+    "cache_dropped": true
+   }
+  },
+  {
+   "family": "ernie-4.5-21b-a3b-pt",
+   "layer": 0,
+   "kind": "full_attention",
+   "T": 1,
+   "ref_repeat_bitwise": true,
+   "A": {
+    "selected": false,
+    "why": "children ['k_proj', 'o_proj', 'q_proj', 'v_proj']"
+   },
+   "A2": {
+    "selected": false,
+    "why": "children ['k_proj', 'o_proj', 'q_proj', 'v_proj']"
+   },
+   "B": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.0,
+    "proj_within_bar": true,
+    "proj_bitwise": true,
+    "out_rel": 0.0,
+    "out_bitwise": true,
+    "fused_computes": 1,
+    "fused_hits": 2,
+    "fallbacks": 0,
+    "cache_dropped": true
+   }
+  },
+  {
+   "family": "ernie-4.5-21b-a3b-pt",
+   "layer": 0,
+   "kind": "full_attention",
+   "T": 17,
+   "ref_repeat_bitwise": true,
+   "A": {
+    "selected": false,
+    "why": "children ['k_proj', 'o_proj', 'q_proj', 'v_proj']"
+   },
+   "A2": {
+    "selected": false,
+    "why": "children ['k_proj', 'o_proj', 'q_proj', 'v_proj']"
+   },
+   "B": {
+    "selected": true,
+    "why": "matches",
+    "proj_max_rel": 0.007092198356986046,
+    "proj_within_bar": true,
+    "proj_bitwise": false,
+    "out_rel": 0.0077720205299556255,
+    "out_bitwise": false,
+    "fused_computes": 1,
+    "fused_hits": 2,
+    "fallbacks": 0,
+    "cache_dropped": true
+   }
+  }
+ ],
+ "transformers": "5.19.0",
+ "negative": {
+  "cross": {
+   "hits": 0,
+   "fallbacks": 2,
+   "k_v_bitwise_unfused": true
+  },
+  "inplace": {
+   "hits": 0,
+   "fallbacks": 1,
+   "k_bitwise_unfused": true
+  },
+  "after_consume": {
+   "hits": 2,
+   "fallbacks": 1,
+   "cache_dropped": true,
+   "k_again_bitwise_unfused": true
+  }
+ },
+ "capture": [
+  {
+   "family": "qwen3-30b-a3b",
+   "layer": 0,
+   "replay_rel_vs_unfused_eager": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "computes": 3,
+   "hits": 6
+  },
+  {
+   "family": "granite-3.1-3b-a800m-instruct",
+   "layer": 0,
+   "replay_rel_vs_unfused_eager": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "computes": 3,
+   "hits": 6
+  }
+ ]
+}
