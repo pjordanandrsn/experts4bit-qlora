@@ -123,7 +123,7 @@ python $W/sc1b_e4b_census.py --selftest | tee -a summary.txt; [ "${PIPESTATUS[0]
 (cd $W && PYTHONPATH='' perl -e 'alarm 900; exec @ARGV' python -m pytest test_decode_graph_buckets.py test_kv_step_select.py test_fused_glue_decode_graphs_gpu.py test_gemv_bw_served_gpu.py -q -rs -p no:cacheprovider) > logs/premise.log 2>&1
 rc=$?; LASTL=$(tail -1 logs/premise.log)
 { echo -n "premise rc=$rc: "; echo "$LASTL"; } | tee -a summary.txt
-if [ "$rc" = 0 ] && echo "$LASTL" | grep -qE '^19 passed(, [0-9]+ warnings?)? in [0-9.]+s$'; then
+if [ "$rc" = 0 ] && echo "$LASTL" | grep -qE '^19 passed(, [0-9]+ warnings?)? in [0-9.]+s( \([0-9:]+\))?$'; then
   echo "premise ok" | tee -a summary.txt
 else
   echo "premise failed" | tee -a summary.txt; say "PREMISE FAILED on this card"; echo "premise failed rc=$rc" > REFUSAL; finish 25
