@@ -29,9 +29,8 @@ as well, so the backward-only figure subtracts the forward:
 | **ratio** | **13.30** | | **7.23** |
 
 The A2000 figures carry per-step fixed costs (the embedding, the head and the loss) spread over 4 layers rather than 94, so the ratios
-lean high. They also come from shape A (2,648 positions per call) and are applied to shape B's micro-batches of 134 to 662 positions,
-where per-call fixed costs weigh more. That may overstate the PRO 6000's advantage. Both effects lean the point toward the
-interval's low end.
+lean high. The ratios also come from shape A (2,648 positions) and are applied to shape-B micro-batches (134 to 662 positions), so they may
+overstate the PRO 6000's compute advantage. That would push the read's C lower than predicted.
 
 ## Prediction (per micro-batch per layer, at Amendment 7's shape-B micro-batches)
 
@@ -39,15 +38,15 @@ interval's low end.
 |---|---|---|---|
 | A2000, measured (`f17f0744`, means over every sampled call) | 2 × 222 = 444 ms | (fwd 47.3 + recompute 45.9 + bwd 58.7) = 152.0 ms | **2.92** |
 | PRO 6000, point (per-phase measured ratios) | 2 × 62.45 = 124.9 ms | 47.3 / 13.30 + 45.9 / 13.30 + 58.7 / 7.23 = 15.1 ms | **8.25** |
-| PRO 6000, low end (*assumption*: the memory-bandwidth ratio 1.79 / 0.288 TB/s = 6.2 for every phase) | 124.9 ms | 24.5 ms | 5.1 |
-| PRO 6000, high end (the forward ratio for every phase) | 124.9 ms | 11.4 ms | 10.9 |
+| PRO 6000, low end (*assumption*: the memory-bandwidth ratio 1.79 / 0.288 TB/s = 6.2 for every phase) | 124.9 ms | 24.5 ms | 5.09 |
+| PRO 6000, high end (the forward ratio for every phase) | 124.9 ms | 11.4 ms | 10.93 |
 
-**Predicted: C = 8.25, interval 5.1 to 10.9, on a host with box 1's H2D (21.76 GB/s).**
+**Predicted: C = 8.25, interval 5.1 to 11.0 (the computed 5.09 to 10.93, rounded outward), on a host with box 1's H2D (21.76 GB/s).**
 - The staging term scales as 1 / H2D. The box's own `hostrate.json` rescales the prediction: C ≈ 8.25 × 21.76 / H2D, for example
   3.6 at 50 GB/s.
 - The Shape B box's pinned host is PCIe gen 5 (listed at 52.9 GB/s), and its H2D is unmeasured until its own host-rate phase runs. At
   an H2D of 40 to 53 GB/s the point is 3.4 to 4.5, and the interval 2.1 to 6.0. That is still staging-bound.
-- **The read REFUTES the prediction** if its C, rescaled to 21.76 GB/s by its own measured H2D, falls outside 5.1 to 10.9.
+- **The read REFUTES the prediction** if its C, rescaled to 21.76 GB/s by its own measured H2D, falls outside 5.1 to 11.0.
 
 ## What it implies
 
