@@ -4,6 +4,389 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
+## 0.55.0 — 2026-10-17 — the fast extra floors on grouped-nf4-gemm 0.43.0 (the single-request decode GEMV), an earlier hybrid refusal, pinned host blocks released
+
+**0.55.0.** The `fast` extra now requires grouped-nf4-gemm 0.43.0, so every install gets that release's default:
+single-request decode at Qwen3-30B-A3B's NF4 expert shapes, on GPUs with at least 160 SMs, runs its bandwidth-targeted
+GEMV. On one RTX 5090 one request decodes 1.24× as fast, 16 are unchanged, and quality is within P110's bar (lane P116).
+`GNF4_GEMV_BW=0` restores dot-pad. `serve_paged` now refuses an unservable hybrid model before reading any weight. The
+streaming loader returns its cached pinned host blocks after a load (2.22 GB on Qwen3-235B). The training estimate
+prices a held-out evaluation and the logits a caller holds on the stock-loss path. Also in this release: bench
+registrations, records and correctness checks (R2 on Mixtral-8x22B, the DQ11 census controls, the DeepSeek-V4.1 gates,
+Track B1's fast-path portability, fused q/k/v by structure and the R-c and R-a registrations (P133, P134), asynchronous
+workspace reuse), with no default changed by them.
+
+### P134 registered (Track B1, R-a): does `GNF4_GEMV_BW=1` decode the default `serve_paged` server faster at one request on Granite-3.1-3b-a800m and OLMoE-1B-7B on an RTX 5090?
+
+- `bench/p134/` adds the lane's runner, driver, box and reducer, derived from P133's, with P133's dry fixture.
+  `PREREG-p134.md` registers it before any box.
+  - Two families run one after the other on one box, each with its own fit check, ABBA arms, quality phases and
+    verdict. The arms are `GNF4_GEMV_BW` unset (the scalar GEMV at both families' shapes) against `=1` at the shipped
+    plans.
+  - The premise is the 5090's: 35 + 18 passed, none skipped.
+  - The proof reports each family's g1 band from its own B0 step. OLMoE's band is posted before the reading.
+  - The driver refuses any run id but `p134-5090-prove-1`, `p134-5090-1` and `p134-5090-2`.
+- `tests/test_p134_staged_pin.py` pins the staged files, the self-tests, the pins, the families, the run ids, the order,
+  the guards and the exit codes.
+- Nothing in the package changes.
+
+### `[fast]` requires grouped-nf4-gemm 0.43.0
+
+- The `fast` and `test` extras now require grouped-nf4-gemm >= 0.43.0 (was 0.30.0): the release that makes
+  `GNF4_GEMV_BW=auto` its default. On GPUs with at least 160 SMs, single-request decode at Qwen3-30B-A3B's NF4 expert shapes
+  takes the bandwidth-targeted GEMV, 1.24× as fast and unchanged at 16 requests (lane P116,
+  `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`). This is P116's registered consequence (`bench/p116/RESULTS-p116.md:93-96`).
+- `pyproject.toml`'s comment ladder, CI's `--requires` assertion, `docs/capabilities.json`, the solution pages and
+  `docs/SERVING.md` state the new floor. `GNF4_GEMV_BW=0` restores dot-pad.
+
+### Changed
+
+- `docs/system-manifest.json` is synced byte for byte with grouped-nf4-gemm's: a compatibility record for this package
+  0.55.0 and later floors the `fast` extra at grouped-nf4-gemm 0.43.0 (P116's registered consequence, the release that
+  makes `GNF4_GEMV_BW=auto` the default), and the previous record now covers 0.35.0 to 0.54.x. Nothing installs
+  differently yet: 0.54.x keeps its 0.30.0 floor, and 0.55.0 raises it.
+
+### P133 registered (Track B1, R-c): does `GNF4_GEMV_BW=1` decode the default `serve_paged` server faster at one request on an RTX 4090 (sm_89, 128 SMs), where auto keeps it off?
+
+- `bench/p133/` adds the lane's runner, driver, box, reducer, dry fixture and pins, derived from P116's.
+  `PREREG-p133.md` registers it before any box.
+  - Arms B0a B1a B1b B0b on the default server (Qwen3-30B-A3B NF4): `GNF4_GEMV_BW` unset (the scalar GEMV at 128 SMs)
+    against `=1` at the shipped plan table. W1 is the subject; the control is W16 at the box's own width.
+  - Exact pins: e4b `c8d7e629`, grouped-nf4-gemm 0.46.0, torch 2.8.0+cu128, transformers 5.17.0, bitsandbytes 0.50.2.
+  - A fit check runs before any arm: if W1 does not fit the 4090, the read is VOID with no rerun.
+  - The premise requires exact pass counts and skipped test ids, so a new skip fails.
+  - The driver refuses any run id but `p133-4090-prove-1`, `p133-4090-1` and `p133-4090-2`; `P133_DRY=1` is the $0
+    dry run on a tiny fixture.
+- `tests/test_p133_staged_pin.py` pins the staged files, the self-tests, the pins, the run ids, the order, the subject,
+  the guards and the exit codes.
+- Nothing in the package changes.
+
+### Accept canonical census ledger comments
+
+The census attempt guard now follows the controller ledger parser: it strips lines, skips blank lines and comments, and rejects malformed non-comment JSON. Regression tests use a minimal ledger excerpt with the real header and census-4 refusal row.
+
+### Added
+
+- `bench/qkv-by-structure/`: a correctness check, on the A2000, of fusing q/k/v with the module selected by structure
+  instead of the `Qwen3MoeAttention` class name, over every served family's committed fixture (no timing, random
+  weights). Replacing the forward on a Qwen-like structure is unsafe: it crashes on Qwen3.6's gated q. A shared
+  projection that keeps each family's own forward engages on 8 families plus Gemma-4's sliding layers. It is bitwise at
+  one row on six, falls back cleanly in the negative cases, and replays bitwise under CUDA-graph capture. No speed or
+  quality is read, and nothing in the package changes.
+
+### serve_paged refuses an unservable hybrid before reading any weight
+
+serve_paged gave the same verdict on hybrid models before; it now gives it earlier. Before any weight is read, it asks
+the paged runner's own verdict, `paged_runner.paged_state_refusal`, on the empty-weight module tree that transformers
+builds from the config (`config_state_refusal`). The serve estimate and the runner's `layer_plan` ask the same
+function, so the three cannot disagree.
+
+**Which models it refuses.** Hybrids whose non-attention layers the runner keeps no state for:
+- Nemotron-H and Jamba (Mamba layers, which transformers labels `linear_attention`, while the per-slot pool drives
+  Gated DeltaNet only);
+- granite-4.0-h (Mamba);
+- LFM2 (short convolutions).
+
+These now fail in seconds with the reason. Before, a full weight load (about 120B parameters for Nemotron-3-Super)
+came first. Multi-head latent attention is refused inside the same verdict, as before.
+
+**A config without `layer_types` is no longer assumed to be all attention** when it declares other mixers:
+- a per-layer list under `layers_block_type`, `hybrid_override_pattern` or `attn_layer_period` /
+  `attn_layer_offset`;
+- or `mamba_*` / `ssm_*` geometry.
+
+transformers 5.17 derives `layer_types` for Nemotron-H and Jamba, but e4b's floor is transformers>=5.0, and a config
+that reaches the runner without them used to plan every layer as attention. The guard fails closed: a future
+attention-only family whose config carries a `mamba_*` or `ssm_*` key is refused until it states its `layer_types`.
+None of the served families carries such a key.
+
+`tests/test_serve_state_refusal.py` tests the committed fixture configs: digests are checked, the hybrids are refused
+before load, seven served families are admitted, and both Nemotron-H spellings are refused by the guard. Training paths
+are unchanged.
+
+### Added
+
+- `bench/fastpath-portability/`: a records-and-code assessment of which Qwen3-30B-A3B serving fast paths carry to the
+  other served families, classed per family (works / narrow gate / tune / port / unsafe). Three gates tie the speed to Qwen:
+  K33's exact-shape auto gate in grouped-nf4-gemm, `serve_paged`'s fusion and prefill-glue family allow-lists, and the
+  `Qwen3MoeAttention` class name for fused q/k/v. It proposes four paired readings and runs none. Documentation only.
+
+### Added
+
+- `bench/expert-tiling/`: an analytic note, from existing records, on streaming routed experts host-to-device in sub-expert weight tiles against whole layers, routed whole experts and layer-major. Tiles move no fewer bytes, and under today's layer-level recompute they add 50 %. A forward cannot prefetch the next layer's routed experts, because its routes come from this layer's output. The best schedule without an intra-layer pipeline is therefore layer-major with whole-layer prefetch in the forward and routed prefetch in the recompute (1.068 of the byte floor for a Q235 Shape B pass at 21.76 GB/s). Per-expert pipelining inside a layer reaches 1.010; sub-expert tiles would add under 0.5 %. The Shape B box's measured per-layer read (Amendment 7) confirms the ordering: the measured compute and staging leave every ratio to the floor unchanged. Its staging ran at 1.30x the box's own host-rate probe (26.6 against 20.39 GB/s), for reasons the records don't settle. Documentation and one CPU script; no runs.
+
+### Bound DQ11 census attempts to an approved run-id list
+
+The census envelope now names up to ten unique run IDs while retaining one created-instance draw and the same science, host gates and budget caps. A durable exclusive journal distinguishes admitted, controller-invoked and caught not-invoked outcomes. Continuation requires a committed clean zero-instance refusal receipt or proof that the controller was never invoked. Every explicit invocation repeats all fresh gates; created-instance and ambiguous outcomes stop.
+
+### Added
+
+- `bench/ds41-gate-b/`: gate B for DeepSeek-V4.1-Flash-1017, an analytic memory, residency and transfer model ($0; no weights,
+  no build). The Engram tables (203 GB, 12.7 KB per token) belong on disk unless RAM is plentiful, leaving the RAM to the
+  289 GB of experts: full host residency then needs about 298 GB. Decode transfer bounds at batch 1 and 128K: 0.19 tok/s on the
+  A2000 host (its HDD model pool, measured read-only), and 4.87–7.11 tok/s on Q235's 239 GB-floor boxes and up (H2D-bound at
+  gen 4). The tables' random-read rate on rented NVMe is still unmeasured. Bounds, not measurements.
+
+### Added
+
+- `bench/ds41-gate-a/`: a metadata-only architecture audit of DeepSeek-V4.1-Flash-1017 (revision `1bae0e10`; no weights
+  downloaded) and a support matrix for e4b and gnf4. The text backbone is 551.88B parameters (763.21B with the Engram tables,
+  vision and MTP). Its MXFP4 experts match e4b's and gnf4's byte layout. The model type `deepseek_v41` has no module tree in
+  transformers, so e4b cannot load it today. Documentation and one metadata script.
+
+### Changed
+
+- TC3 amendment 6: `bench/tc1/tc1_reduce.py`'s `resident_comparison` now requires the offload anchor and TC1's resident arm to have
+  the same expert absmax storage (the receipts' `absmax_dq`; absent = fp32, as before any compression path existed). A mismatched
+  pair reads N-A instead of being scored: offloaded stacks keep the fp32 absmax while a resident fused arm double-quantizes it by
+  default. The one committed scored pair (`tc3-4090-8` against `tc1-5090-16`) was fp32 on both sides; its verdict stands.
+
+### Added
+
+- `bench/async-reuse-20261017/`: an RTX A2000 correctness check of three paths that reuse device workspaces across asynchronous
+  launches (grouped-nf4-gemm's int4 fused split-K reduce, its fp8 split-KV in-kernel combine, and e4b's expert offload), under
+  NaN-poisoned workspaces and concurrent copy traffic. No reuse failure found: 0 of 8,400 and 0 of 3,600 launches mismatched,
+  and 30 offloaded passes showed a gradient spread the same size as the resident model's own, with no NaN. It also records that
+  offloaded layers keep the fp32 absmax while a resident build double-quantizes it, so an offloaded-versus-resident parity check
+  must set `E4B_ABSMAX_DQ=0` on both sides. Documentation only.
+
+### Added
+
+- An analytic note on Q235 Shape B's staged bytes (`bench/q235/staged-bytes/`), from records only. A Shape B pass stages
+  M × (2n − 1) whole layers: 748, or 1,016.5 GB at 94 layers. Layer-major accumulation would stage 187 (−75 %), and staging only
+  each micro-batch's routed experts 0.734 of them (measured routing, −27 %); together −78 %. Neither may run in the registered box
+  without its own amendment. Documentation only.
+
+### Added
+
+- A pre-registered prediction of Q235 Amendment 7's C on the PRO 6000 Shape B box (`bench/q235/am7/PREDICTION-C.md`, #835),
+  written before that box reads it. It predicts C = 8.25 (interval 5.0–11.0, the computed 5.09–10.93 rounded outward) at box 1's
+  measured 21.76 GB/s H2D, staging-bound, and states the bound that would refute it. Every input is a measured record cited by
+  sha256, except one marked assumption.
+  Documentation only.
+
+### Added
+
+- R2-Mixtral Amendment 3 (`bench/fam235/PREREG-r2-mixtral.md`, #1630), which registers the 8x22B box. It sets:
+  - the RTX 5090 class (at least 32,000 MiB), 134 GB of host RAM and 350 GB of free disk;
+  - R2's own fitted caps (box 3,600 s, repeat 2,040 s, fetch 7,080 s, install 360 s) and a 0.063 GB/s pull floor in `r2_run.sh`;
+  - the verdict's class and estimates.
+  The fit records are in `bench/fam235/r2-fit/`, and the worst case is 4.57 h. Gates 1, 2, 6's fetch-gate run and 7 remain before
+  any box. No rental, budget or default change.
+
+### Changed
+
+- R2-Mixtral reads Q235 at the commit it cites, not Q235's working tree (#1630). `r2_drift.cited_tree` extracts Q235's files at
+  `CITED` from git, and R2's wrappers (stage, fetch gate, verdict, fit) run Q235's tools from it. `r2.sha256` seals R2's own files from
+  the tree and Q235's at `CITED`. A Q235 change therefore no longer breaks R2's tests or needs a re-seal in Q235's PR. Launch-time
+  staging still hashes the working tree, so once Q235 moves, R2 refuses to stage until it re-cites: it never ships uncited Q235 bytes.
+
+### Added
+
+- R2-Mixtral's time-left fit (`bench/fam235/r2_fit.py`, #1630). It runs Q235's fit unchanged with R2's depth (56 layers against
+  the rehearsal's 4) and the checkpoint's tensor bytes, after one R2 pre-step. The pre-step slows the A2000 rehearsal's box and repeat,
+  part by part from their load profiles, to the registered cold floors (Q235's, measured on the same host), then applies the slow end
+  of the observed RTX 5090 spread. A rehearsal that read from a warm cache is slowed to the disk floor, never sped up. The fit also
+  reports the 6 h policy maximum and the runner's science-line host floors. No box, rental or claim.
+
+### Request a direct SSH census instance explicitly
+
+Opt the prospective census4 template into direct SSH creation. Record safe
+endpoint-refusal diagnostics and accept dual-stack bindings only when they
+agree on one port. Keep the default controller route and other runs unchanged.
+
+### Re-budget the third DQ11 census draw
+
+Extend the prospective census-3 paid wall to 45 minutes with the existing
+five-minute teardown reserve inside it, and set the all-in ceiling to $1.10.
+Keep the $0.85 hourly cap and all download/upload allowances, reserving $1.0845
+at their maxima. Pin the new template and envelope criteria and document the
+historical phase accounting, remaining uncertainties and available margin.
+A fresh maintainer envelope remains required before any paid draw.
+
+### Fixed
+
+- R2-Mixtral's checkpoint lock (`bench/fam235/model_files.json`, #1630) now names its format, `q235-model-files/1`. Q235's fetch,
+  which R2 runs unchanged, refused the R2-named schema, and the first A2000 leg VOIDed at its fetch (0 USD). A test now runs
+  Q235's own fetch check on R2's lock.
+
+### Bound DQ11 census staging and preserve teardown deadlines
+
+Qualify direct-SSH offers, resolve the created instance's direct mapped endpoint,
+and refuse a slow bulk transfer within a shared three-minute staging budget.
+Remove the wheel downloader's process alarm and supervise box phases independently
+so nested downloads cannot cancel the enclosing deadline. Keep frozen science and
+paid limits unchanged; the next census template uses a fresh run identifier.
+
+### The streaming loader releases its cached pinned host blocks (about 2.2 GB on Qwen3-235B)
+
+- safetensors reads each dense tensor opened with `device="cuda"` through a pinned host block. torch's caching host
+  allocator rounds that block up to a power of two and keeps it after the copy. A load therefore left one cached block per
+  size class behind, in host RAM, for the life of the process: 2.22 GB on Qwen3-235B and 0.69 GB on Mixtral-8x22B.
+- `load_moe_4bit_streaming` now returns those free blocks to CUDA at the end of a CUDA load and logs the amount. The
+  offloaded expert homes, which live tensors hold, are untouched.
+- Measured on an RTX A2000 at 2 layers: 2,219,843,841 B and 688,013,313 B released, within 1 B of the prediction from
+  the dense tensors' sizes. The step-0 loss was bitwise unchanged on both models. Receipts: `bench/pinned-host-cache/`.
+
+### Added
+
+- R2-Mixtral's box harness (`bench/fam235/`, #1630), built as Amendment 2 decided: R2's own lock (`model_files.json`,
+  Mixtral-8x22B at `cc88a6cc`, 69 files), closure (`r2.sha256`) and tiny Mixtral (`r2_tiny.py`). Thin wrappers run Q235's
+  stage and fetch-gate tools unchanged. R2's copies of Q235's runner and drive (`r2_run.sh`, `r2_drive.sh`) are held to Q235's
+  line for line by `r2_drift.py`: strict against the cited Q235 commit, with drift against the working tree reported.
+  Its Python twin classifies every file a wrapped Q235 module reads, so a new one fails until it is declared.
+- The science mode refuses until the amendment that registers the box pins its class, floors and caps. No box, rental or
+  claim.
+
+### Reserve a fresh receipt identity for the second DQ11 census request
+
+Change only the census template's run ID to `dq11-l-census-2`, since the first
+draw is already recorded. Pin the resulting template hash in the CPU tests.
+This grants no rental authority; a new envelope must bind the reviewed merge
+and template bytes.
+
+### Retry transient DQ11 census wheel transfers without changing locked bytes
+
+The census bootstrap prefetches exact locked wheels with at most five attempts
+over a three-minute budget per wheel. Only connection resets and timeouts retry,
+using the same URL; SHA256 mismatches and HTTP refusals stop immediately. A
+separately hashed operational helper records each attempt under receipts before
+the unchanged science installer rechecks the cache. The existing bootstrap phase,
+paid wall clock and teardown reserve remain unchanged.
+
+### Added
+
+- R2-Mixtral Amendment 2 (`bench/fam235/PREREG-r2-mixtral.md`, #1630), which raises the host-RAM floor from 128 GB to 134 GB.
+  The floor is measured by Q235 Amendment 5's depth-scaling read on 2–8-layer cuts of Mixtral-8x22B. The pinned homes match the
+  estimate exactly from 2 to 6 layers. The 8-layer point is undercounted under swap pressure and is not used. The floor adds
+  Amendment 4's four fp32 host check copies (7.6 GB) and the held layer outputs. Numbers: `bench/fam235/r2-memslope.json`.
+  Docs only: no rental, budget, default change or claim.
+
+### P132 Amendment 2 (#1313): the box refuses any card but the reference card
+
+P132's rule reads absolute milliseconds against `sd2-5090-3`, which ran on one card (GPU-38c66e15). A matched pair in
+the records (`p116-5090-1` vs `p116-5090-2`: same package bytes, kernels, model, prompts and box) shows another RTX 5090
+taking 0.85–0.87× the time per B = 1 step, which would VOID P132 on the host, not the build.
+
+Normalizing by a B = 1 anchor fails on the same pair: the one-row and multi-row phases scale differently, by up to
++10.8 % against the rule's 5 % band. So `bench/p132/p132_run.sh` now refuses with rc 18, before anything is installed or
+fetched, unless the card's uuid is the reference card's. It records `card.json` either way.
+
+`tests/test_p132_card.py` runs the check on real records: `sd2-5090-3`'s committed forensics passes, and
+`p132-5090-1`'s refuses. `staged-p132.sha256` re-pins `p132_run.sh` only.
+
+### Added
+
+- R2-Mixtral's mechanical milestone verdict (`bench/fam235/r2_verdict.py`, #1630). It runs Q235's verdict unchanged, by
+  citation, with Amendment 1's depth-local band in place of Q235's single 0.775: `band_j = 2 × u_cal(round(32j / n))`, the same
+  threshold for the plants (VOID below it) and the unplanted box (FAIL above it). It reports each layer's margin and names the
+  shallow band (j = 5..14 on 56 layers) as where a noise FAIL is expected.
+- Its self-test replays Amendment 1's numbers and reproduces the recorded VALIDATED. Until an amendment registers the box's class
+  and estimates, the tool VOIDs every run. No box, rental or claim.
+
+### Validate census controller admission before the fresh CPU gate
+
+The DQ11 L-census launcher checks its executor identity before discovery, runs
+the controller's write-free `--validate` on the exact bound manifest, and keeps
+validation and controller stdout, stderr and exit status in its private packet.
+A validation refusal stops before the CPU gate, quote or paid controller call.
+
+### Training estimate: price the logits a caller holds on the stock-loss path (#1526)
+
+- `estimate_qlora_footprint` adds a device item, "logits held by the caller", of `T x V x 2` bytes whenever the run takes
+  the stock LM loss (below the chunked-loss gate, e.g. `T < 1,767` at Qwen3's vocabulary). The stock loss returns its bf16
+  logits on the model output. A loop that keeps the output across the backward (`out = model(...); out.loss.backward()`)
+  holds them through the whole backward. `LOGITS_LOSS_BYTES` was measured on the chunked loss, which returns no logits.
+- The term was derived from the record, not fitted to it. On the reduced Qwen3-30B-A3B probe at T = 1,024 with bf16 expert
+  adapters (`bench/issue1526/receipts-29370aaa`), the measured loss branch is 2,085.0 MiB. The stock workspace
+  (1,780.5 MiB) plus the held logits (296.75 MiB) is 2,077.25 MiB, a residual of 7.75 MiB (0.16 % of the peak).
+- A loop that keeps only the loss (HF Trainer's `compute_loss`) does not pay this. There the estimate over-counts by exactly
+  this item. The chunked-loss path and the held-out evaluation item are unchanged.
+
+### P132 Amendment 1 (#1313): the canary's census floor fits what SC1b keeps
+
+`p132-5090-1` stopped at its in-box canary (rc 26, $0.731) before timing anything.
+
+**Cause.** SC1b's census keeps at most N − 3 of N bracketed replays:
+- it makes one row for each period between consecutive replays;
+- it then trims both edges.
+
+The registration's canary floor was `CANARY_STEPS - 2`, so 8 replays kept 5 against a floor of 6. The canary could
+not pass on any host. The main census (64 replays, 61 kept against 56) is unaffected.
+
+**Change.** `bench/p132/p132_run.sh` now captures 12 canary replays with a floor of `CANARY_STEPS - 4`, which tolerates
+one long period. `staged-p132.sha256` re-pins `p132_run.sh` only.
+
+**Tests.** `tests/test_p132.py` first reproduces the run's two void `why` strings byte for byte from its real canary
+records (`tests/fixtures/p132_canary/`, digests checked), then checks the amended floor and the main census against the
+reader's own count. The reducer, box, class map, rule and predictions are unchanged.
+
+### Check DQ11 census envelope comment timestamps
+
+The paid launcher now binds the envelope's issue time to GitHub's comment
+creation time, requires exactly 24 hours of validity, and refuses an edited
+comment before discovery or paid invocation.
+
+### Bind the DQ11 L-only census launch to a time-limited maintainer envelope
+
+The prospective launch now watches every eligible 5090 host, binds the first
+five-minute qualifying machine and observed offer union by inclusion, then
+requires the fresh CPU gate and quote within the existing 60-second clocks.
+The maintainer's exact issue-comment envelope fixes the resource and price
+criteria for one draw and expires after 24 hours or a source/template change.
+The census science and BUILD decision rule are unchanged.
+
+### Training estimate: the held-out evaluation is priced, and attention adapters can take their own dtype
+
+`estimate_qlora_footprint` now prices the larger of two peaks: the training step's, and a held-out evaluation's (a no-grad
+forward of one micro-batch with labels after an optimizer step, with no gradients live). The new item
+`held-out evaluation, above the training step` is what the evaluation exceeds the step by, and zero when the step is
+larger. A stock evaluation holds the bf16 logits, their fp32 upcast and its log-softmax (`T x V x 10` bytes) plus
+`T x H x 10` of hidden states; the chunked held-out loss (`E4B_CHUNKED_EVAL_LOSS`, on by default) holds the bf16 logits
+and one chunk's fp32 rows. `estimate_env()` reports `E4B_CHUNKED_EVAL_LOSS`.
+
+**Estimates rise where evaluation is stock**, by about what the evaluation peak exceeds the training step: under
+`E4B_CHUNKED_EVAL_LOSS=0` or `E4B_CHUNKED_LM_LOSS=0`, with the reference kernel, or for an architecture the chunked loss
+does not support, on long rows at a large vocabulary. Qwen3-30B-A3B at 4,096 tokens per micro-batch (fp32 absmax, no
+fused q/k/v projection): +0.89 GiB with fp32 adapters, +2.60 GiB with bf16 expert and fp32 attention adapters. Under the
+defaults the item is zero there. Every estimate also gains a 4 MiB `small allocations` line (kernel scratch, lookup
+tables, index buffers; 0.4-2.0 MB measured at two census peaks).
+
+`QLoRASetup.attention_adapter_dtype` (default None: the same as `adapter_dtype`) prices and builds the attention adapters
+in their own dtype; TC1's `native` arm is `adapter_dtype="bf16", attention_adapter_dtype="fp32"`.
+
+On HO1's 22 held-out 4096 x 1 packed Qwen3-30B-A3B rows, in the configuration they ran (experts4bit-qlora 0.48.0), every
+peak is now within the registered bar: peak <= estimate <= 1.05 x peak (estimate / peak 1.0001-1.0033). They pass
+because the evaluation term dominates them. **This does not certify the training-step term at 4,096 tokens on main**,
+which no receipt here measures, and under the default chunked evaluation that term decides the estimate. #1526 stays
+open for it.
+
+### Fix the DQ11 census host observation window
+
+Measure the five-minute read-only offer history from its first completed
+controller search. Search latency can no longer make a full observation run
+fail the same first-to-last duration check it uses for launch admission.
+
+### Register DQ11 L-only census launch limits
+
+Fix the one-draw budget, transport and evidence-size ceilings and the exact
+machine/offer-set stability and fresh-ACK sequence for the L-only device census.
+The amendment authorizes no rental before its reviewed launch packet.
+
+### DQ11 L-only census instrument
+
+Add a sealed Kineto/CUDA L-only reporting instrument and CPU reducer for the
+preregistered device-class census. It checks event attribution, interval
+closure, unchanged training and quality before producing a BUILD decision;
+no paid run or public performance claim is included.
+
+### Added
+
+- R2-Mixtral Amendment 1 (`bench/fam235/PREREG-r2-mixtral.md`, #1630). The Mixtral-8x7B calibration's separation check failed for
+  the routing plant (0.670 < 2U = 0.7052), so the global band's form is void on this family, as registered. It is replaced by one
+  depth-local band, band_j = 2 × u_cal(round(4j/7)), used both ways on the 8x22B box. An out-of-sample 8x7B read on new tokens
+  validated it. Numbers: `bench/fam235/r2-mixtral-a1-numbers.json`. Docs only: no rental, budget, default change or claim.
+
 ## 0.54.0 — 2026-10-11 — two Qwen3-MoE prefill defaults, EAGLE-3 speculative decode measured and closed, the SC5 same-box read
 
 **0.54.0.** Two prefill defaults change for Qwen3-MoE in `serve_paged`. A prefill's norms and rotary now run decode's
