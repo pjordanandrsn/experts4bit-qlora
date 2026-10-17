@@ -862,7 +862,7 @@ answer for the wrong hardware. The box takes the reading at no extra rental.
 ladder's L2 (the fam235 matrix, draft 2.1 §5) is "full-depth nonzero LoRA dX and adapter gradients, frozen-base hashes before and
 after, one real optimizer update, a held-out check".
 - The maintainer's evidence packet maps it to runs 2 and 3 field by field.
-- The maintainer ruled gate 1 **not yet met** on two gaps (bus `20261017T194309Z-18922`):
+- The maintainer ruled gate 1 **not yet met** on two gaps:
   1. no receipt records dX: it is only inferred from step 1's nonzero A gradients;
   2. no receipt holds a held-out check: this registration scoped one out ("What this registration cannot say").
 - Everything else is met on both runs. Reproduction stands as rule 6 (both runs, gap 0.0) plus the bitwise cross-run forward (all 94
@@ -902,7 +902,7 @@ after, one real optimizer update, a held-out check".
   They are recorded under `heldout`, with `rel_change` = (after − before) / before. `heldout_finite` (STRICT) requires all three
   reads finite.
 - **Rule 10 (the verdict's):** |`rel_change`| ≤ `HELDOUT_BAND` = **0.10**, a plain absolute cap.
-  - The maintainer ruled it on loggetta's pick (bus `20261017T202534Z-62850`).
+  - The maintainer ruled it.
   - It is a **blow-up bound only**: it asks whether two LoRA updates corrupted the model. It is not an equivalence test.
   - No cross-scale sensitivity is assumed. A band derived from the 30B would risk a false FAIL on a paid box, for a sensitivity
     this rule does not need.
