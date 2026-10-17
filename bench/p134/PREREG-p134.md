@@ -151,10 +151,11 @@ The checkpoints, arenas, reference log-probs and the gnf4 clone stay on the box.
 
 ## Amendment 1 (2026-10-17, before any box)
 
-`p134_reduce.py` inherited P133's quality pass-integrity defect: each pass's `graph_status` was checked over the
-record's server buckets, not over P110's instrument buckets (P133 Amendment 1). It is corrected the same way:
-- `INSTRUMENT_BUCKETS = (1, 2, 4, 8, 16)`, P116's rule;
-- the self-test grows to 33 cases;
-- `tests/test_p134_staged_pin.py` pins the constant to `p110_box.BUCKETS`.
+`p134_reduce.py` inherited P133's quality pass-integrity defect: it read the server's buckets from the record. This
+amendment restores P116's rule, as P133 Amendment 1 does:
+- `INSTRUMENT_BUCKETS` is read from `p110_box.py`'s own `BUCKETS`;
+- the self-test grows to 34 cases;
+- `tests/test_p134_staged_pin.py` reruns the pre-amendment reducer (#1697's merge) on the proof's shape and the bucket-8
+  mutant.
 
 No rule, bar, prediction, size or budget changes.

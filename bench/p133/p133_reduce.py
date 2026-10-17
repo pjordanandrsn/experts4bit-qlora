@@ -32,6 +32,7 @@ The rule, first rung that applies:
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import math
 import os
@@ -53,10 +54,21 @@ LAYERS = {QWEN: 48, GRAN: 32, TINY: 2}
 WINDOWS = {QWEN: 24, GRAN: 12, TINY: 4}    # per text: the reading, the proof, the dry run
 INCUMBENT = {QWEN: "scalar", GRAN: "scalar", TINY: "scalar"}   # the single-row route at 128 SMs (and on sm_86)
 OFF_ARMS = ("R", "rep", "chunk", "mutant_scale")
-#: The buckets P110's instrument enables at capture=False in every quality pass (``p110_box.BUCKETS``; P116's BUCKETS). The
-#: pass integrity reads these, not the server's buckets, which follow its own max_seqs (Amendment 1: p133-4090-prove-1 VOIDed
-#: comparing passes against the server's 1-64).
-INSTRUMENT_BUCKETS = (1, 2, 4, 8, 16)
+def _instrument_buckets() -> tuple:
+    """The buckets P110's instrument enables at capture=False in every quality pass: ``p110_box.BUCKETS``, read from that
+    file's own source (staged beside this reducer on the box; ``bench/p110`` in the repository) without importing it (it
+    imports torch), so the rule cannot drift from the instrument. Amendment 1: the pass integrity reads these, as P116's
+    reducer did, not the server's buckets from the record, which follow its own max_seqs."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    for path in (os.path.join(here, "p110_box.py"), os.path.join(here, "..", "p110", "p110_box.py")):
+        if os.path.exists(path):
+            for node in ast.parse(open(path, encoding="utf-8").read()).body:
+                if isinstance(node, ast.Assign) and any(getattr(x, "id", None) == "BUCKETS" for x in node.targets):
+                    return tuple(ast.literal_eval(node.value))
+    raise SystemExit("REFUSED: p110_box.py (P110's instrument, where its BUCKETS live) is not beside the reducer")
+
+
+INSTRUMENT_BUCKETS = _instrument_buckets()
 FLOORS = ("chunk",)
 GEMV = ("dotpad", "dotpad_splitk", "scalar", "scalar_splitk")
 BW = ("bw_tree", "bw_prmt32", "bw_splitk")
@@ -378,6 +390,13 @@ def _fake_quality(phase, *, model=QWEN, bias=None, mutant=0.4, chunk=-0.0004, re
             "engagement": eng, "dispatch_measure": d}
 
 
+def _bucket_missing(rec: dict) -> dict:
+    """``rec`` with its first R pass reporting no bucket 8: the instrument genuinely missed one of its buckets."""
+    t = TEXTS[0]
+    del rec["engagement"][t]["R"][0]["graph_status"]["8"]
+    return rec
+
+
 def _bucket_captured(rec: dict) -> dict:
     """``rec`` with its first R pass's bucket 16 reading ``graph``: the instrument must stay eager in every bucket."""
     t = TEXTS[0]
@@ -441,6 +460,10 @@ def self_test() -> int:
          v(arms(all={"buckets": [1, 2, 4, 8, 16, 32, 64]}), _fake_quality("off", buckets=[1, 2, 4, 8, 16, 32, 64]),
            _fake_quality("on", buckets=[1, 2, 4, 8, 16, 32, 64])) == "LICENSED"),
         ("a quality pass whose bucket captured is void", v(arms(), o=_bucket_captured(_fake_quality("off"))) == "VOID"),
+        ("a quality pass missing instrument bucket 8 is void",
+         v(arms(all={"buckets": [1, 2, 4, 8, 16, 32, 64]}),
+           _bucket_missing(_fake_quality("off", buckets=[1, 2, 4, 8, 16, 32, 64])),
+           _fake_quality("on", buckets=[1, 2, 4, 8, 16, 32, 64])) == "VOID"),
         ("quality host grouping is void", v(arms(), o=_fake_quality("off", device_grouping=False),
                                             n=_fake_quality("on", device_grouping=False)) == "VOID"),
         ("rep not identical joins the floor", reduce(arms(), _fake_quality("off", rep_identical=False), on, E, fit=FIT)

@@ -29,6 +29,7 @@ The rule, per family, first rung that applies:
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import math
 import os
@@ -55,10 +56,21 @@ INCUMBENT = {GRAN: "scalar", OLMOE: "scalar", TINY: "scalar"}   # neither family
 K33_SAVED_MS = {GRAN: 1.644 - 0.385, OLMOE: 1.618 - 0.391}
 TRANSFER = (0.55, 1.0)       # the share of a kernel saving that reaches the served step: K6b's, and all of it (P116)
 OFF_ARMS = ("R", "rep", "chunk", "mutant_scale")
-#: The buckets P110's instrument enables at capture=False in every quality pass (``p110_box.BUCKETS``; P116's BUCKETS). The
-#: pass integrity reads these, not the server's buckets, which follow its own max_seqs (Amendment 1: p133-4090-prove-1 VOIDed
-#: comparing passes against the server's 1-64).
-INSTRUMENT_BUCKETS = (1, 2, 4, 8, 16)
+def _instrument_buckets() -> tuple:
+    """The buckets P110's instrument enables at capture=False in every quality pass: ``p110_box.BUCKETS``, read from that
+    file's own source (staged beside this reducer on the box; ``bench/p110`` in the repository) without importing it (it
+    imports torch), so the rule cannot drift from the instrument. Amendment 1: the pass integrity reads these, as P116's
+    reducer did, not the server's buckets from the record, which follow its own max_seqs."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    for path in (os.path.join(here, "p110_box.py"), os.path.join(here, "..", "p110", "p110_box.py")):
+        if os.path.exists(path):
+            for node in ast.parse(open(path, encoding="utf-8").read()).body:
+                if isinstance(node, ast.Assign) and any(getattr(x, "id", None) == "BUCKETS" for x in node.targets):
+                    return tuple(ast.literal_eval(node.value))
+    raise SystemExit("REFUSED: p110_box.py (P110's instrument, where its BUCKETS live) is not beside the reducer")
+
+
+INSTRUMENT_BUCKETS = _instrument_buckets()
 FLOORS = ("chunk",)
 GEMV = ("dotpad", "dotpad_splitk", "scalar", "scalar_splitk")
 BW = ("bw_tree", "bw_prmt32", "bw_splitk")
@@ -407,6 +419,13 @@ def _fake_quality(phase, *, model=GRAN, mode="reading", bias=None, mutant=0.4, c
             "engagement": eng, "dispatch_measure": d}
 
 
+def _bucket_missing(rec: dict) -> dict:
+    """``rec`` with its first R pass reporting no bucket 8: the instrument genuinely missed one of its buckets."""
+    t = TEXTS[0]
+    del rec["engagement"][t]["R"][0]["graph_status"]["8"]
+    return rec
+
+
 def _bucket_captured(rec: dict) -> dict:
     """``rec`` with its first R pass's bucket 16 reading ``graph``: the instrument must stay eager in every bucket."""
     t = TEXTS[0]
@@ -465,6 +484,10 @@ def self_test() -> int:
          v(arms(all={"buckets": [1, 2, 4, 8, 16, 32, 64]}), _fake_quality("off", buckets=[1, 2, 4, 8, 16, 32, 64]),
            _fake_quality("on", buckets=[1, 2, 4, 8, 16, 32, 64])) == "LICENSED"),
         ("a quality pass whose bucket captured is void", v(arms(), o=_bucket_captured(_fake_quality("off"))) == "VOID"),
+        ("a quality pass missing instrument bucket 8 is void",
+         v(arms(all={"buckets": [1, 2, 4, 8, 16, 32, 64]}),
+           _bucket_missing(_fake_quality("off", buckets=[1, 2, 4, 8, 16, 32, 64])),
+           _fake_quality("on", buckets=[1, 2, 4, 8, 16, 32, 64])) == "VOID"),
         ("reading windows are 24", v(arms(), n=_fake_quality("on", n=12)) == "VOID"),
         ("proof windows are 12", v(arms(), _fake_quality("off", **pr_q), _fake_quality("on", **pr_q), proof=True)
          == "LICENSED"),
