@@ -45,17 +45,23 @@ rule 8's check at steps 0 and 1 (`separate`, `token`, `token` each), the two `ga
 Box staging includes the Shape A passes (3 × 187 stagings) in every row. H2D: box 1's measured 21.76 GB/s (gen 4), and 40 / 53 GB/s
 for the gen-5 host, whose H2D is unmeasured until its own host-rate phase runs.
 
-| layout | stagings per pass | GB per pass | pass s @ 21.76 (staging + 5.69 compute) | box staging s @ 21.76 / 40 / 53 |
+| layout | stagings per pass | GB per pass | pass s @ 21.76: staging + experts compute (a lower bound) | box staging s @ 21.76 / 40 / 53 |
 |---|---:|---:|---:|---:|
 | **(a) as-is** | 748 | 1,016.5 | 46.7 + 5.7 = **52.4** | **735.7** / 400.2 / 302.1 |
 | **(b) layer-major** | 187 | 254.1 | 11.7 + 5.7 = **17.4** | **210.2** / 114.4 / 86.3 |
 | **(c) routed experts per micro-batch** | 548.8 | 745.8 | 34.3 + 5.7 = **40.0** | **549.1** / 298.7 / 225.4 |
 | **(b) + (c)** | 167.9 | 228.2 | 10.5 + 5.7 = **16.2** | **192.3** / 104.6 / 79.0 |
 
-- **(b) cuts the staged bytes 4×**: 75 % fewer, and a Shape B step 3.0× faster at 21.76 GB/s (2.4× at 53). **(c) cuts them 27 %.**
-  Together they cut 78 %. For comparison, #1680's overlap cap is about 11 % of the experts time.
-- **On this one box the saving is small in money.** (b) saves 526 s of staging at 21.76 GB/s, about $0.29 at $2.00/h. The lever
-  matters for training throughput on a staging-bound card, not for Q235's single registered box.
+- **The pass seconds are lower bounds.** They add only the experts compute (#1680's 15.13 ms covers the experts' forward, recompute
+  and backward), not attention, the dense layers, the router, the head or the loss. Box 1's Shape A step spent 17.6 s outside
+  staging (7.203 + 22.116 − 11.68).
+- **(b) cuts the staged bytes 4×: 75 % fewer. (c) cuts them 27 %; together, 78 %.** Those are exact counts.
+- **The step-time effect of (b) is bounded, not known.** With experts compute alone, a Shape B pass would run 3.0× faster at 21.76 GB/s
+  (2.4× at 53); that is an upper bound. With Shape A's measured 17.6 s of non-staging time in place of 5.69 s, it would be 2.2× (1.6×
+  at 53). The true figure lies between, and Shape B's own non-staging time would settle it. For comparison, #1680's overlap cap is
+  about 11 % of the experts time.
+- **On this one box the saving is small in money.** (b) saves 526 s of staging at 21.76 GB/s: about $0.29 at an illustrative
+  $2.00/h, not a quote. The lever matters for training throughput on a staging-bound card, not for Q235's single registered box.
 - **These are staging seconds.** The box's other phases (the load, the frozen hashes, the fetch) don't change.
 
 ## (a) As-is
@@ -77,14 +83,15 @@ the forward and once in the recompute: 187 per pass, as Shape A.
   still run one at a time inside a layer.
 - **Checkpointing.** Unchanged granularity: one non-reentrant checkpoint per (layer, micro-batch). **Assumption A1:** autograd
   runs the backward in decreasing sequence number, so the four micro-batches of layer L are recomputed back to back, and the
-  single resident slot stages each layer once. If A1 fails, the backward interleaves layers, the slot thrashes and (b) gains
-  nothing. The fix would be an explicit per-layer backward, a larger build. A1 is the first thing to test, on CPU, before any
-  build.
+  single resident slot stages each layer once. A1 is expected, because autograd's ready queue takes the highest sequence number
+  first. The A2000's offload copy count decides it: n stagings per direction per pass. If A1 fails, the backward interleaves layers,
+  the slot thrashes and (b) gains nothing; the fix would be an explicit per-layer backward, a larger build.
 - **Gradient summation (a registered-result question).** As-is, each LoRA tensor's gradient is four sequential `.backward()` calls
   accumulating into `p.grad`, in micro-batch order 1 → 4. Layer-major is one backward: each tensor's four contributions meet in
   autograd's input buffer in arrival order, likely 4 → 1 under A1, in the gradient's dtype (bf16 for bf16 adapters). The math is the
   same weighted sum; the bits are not. Rule 8's deterministic check compares the registered device accumulation with the host-sum
-  reference. Layer-major is a different accumulation, so rule 8 at the registered bar would have to be re-read for it.
+  reference. Layer-major is a different accumulation, so rule 8 at the registered bar would have to be re-read for it. It also
+  redesigns rule 8's `overwrite` plant, which takes a backward per micro-batch: layer-major has a single backward.
 - **Cost to build.** A layer-major driver in e4b: about 200 lines that call the decoder layers directly instead of the model's
   forward, plus tests. Gradient parity with (a) within rule 8's bar; the staging count (n per direction) on the A2000's offload
   path, at $0. No kernel change.
