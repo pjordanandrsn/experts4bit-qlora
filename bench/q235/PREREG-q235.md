@@ -901,25 +901,22 @@ after, one real optimizer update, a held-out check".
 
   They are recorded under `heldout`, with `rel_change` = (after − before) / before. `heldout_finite` (STRICT) requires all three
   reads finite.
-- **Rule 10 (the verdict's):** |`rel_change`| ≤ `HELDOUT_BAND`.
-  - It reads that the two registered updates leave the loss on text the step did not train on inside a band: the update is real and
-    does not corrupt the model.
+- **Rule 10 (the verdict's):** |`rel_change`| ≤ `HELDOUT_BAND` = **0.10**, a plain absolute cap.
+  - The maintainer ruled it on loggetta's pick (bus `20261017T202534Z-62850`).
+  - It is a **blow-up bound only**: it asks whether two LoRA updates corrupted the model. It is not an equivalence test.
+  - No cross-scale sensitivity is assumed. A band derived from the 30B would risk a false FAIL on a paid box, for a sensitivity
+    this rule does not need.
   - It is not a claim about quality after training, which stays out of scope.
-  - It is VOID while the band is unregistered. An Amendment 8 box without its held-out read is a harness error.
-- **The band, registered before any box** ($0, on the RTX A2000).
-  - Qwen3-30B-A3B, at full depth on the 30B calibration's path, runs this amendment's box step with the held-out read over the same
-    registered rows, through its own tokenizer.
-  - `HELDOUT_BAND` = max(3 × its |`rel_change`|, 0.02), rounded up to two significant figures and **capped at 0.10**. It is
-    recorded here, with the leg's records, before any box. If the 30B leg's own |`rel_change`| exceeds 0.10, the band is not set
-    mechanically: the maintainer rules on it before any box.
-- **What the band is, and its stated risk** (the maintainer, bus `20261017T201227Z-34762`).
-  - Rule 10 is a **blow-up bound, not an equivalence test.** It reads that the update does not corrupt the model. It does not read
-    that 235B and 30B move alike.
-  - The band is calibrated on 30B and applied to 235B: a band set in one setting and tested in another. So a 235B change above the
-    30B-derived band but inside the 0.10 cap reads **FAIL**, never PASS by default. That false-fail risk is stated here and accepted.
-    A FAIL on rule 10 alone is read with the 235B value beside the 30B one before anything is concluded from it.
-  - The 235B box records its own `rel_change` (`heldout`), with every read. The next amendment recalibrates the band from it, at the
-    scale the rule is applied to.
+  - An Amendment 8 box without its held-out read is a harness error. The verdict code also keeps rule 10 VOID for an unset band;
+    a test exercises that path.
+- **The 235B box records its own** |`rel_change`| (`heldout`), with every read. A later amendment tightens the cap from it, at the
+  scale the rule applies to.
+- **The 30B A2000 leg** is the mechanics rehearsal: recorded, not band-setting ($0).
+  - Qwen3-30B-A3B runs this amendment's box step at full depth on the 30B calibration's path, with the held-out read over the same
+    registered rows.
+  - The rows are tokenized as the step's: the 30B's `tokenizer.json` is the same file as the 235B's (sha256 `aeb13307`), as in
+    Amendment 6's calibrations.
+  - Its reading is recorded here when it completes.
 
 **3. Host independence.** Per the ruling, the next Q235 box runs on a Vast machine other than 8652. Its envelope or packet names its
 host by inclusion, and 8652 is not among them. That records the reproduction across hosts, the gate's stated limitation.

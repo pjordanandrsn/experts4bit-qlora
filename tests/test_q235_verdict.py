@@ -307,3 +307,20 @@ def test_records_from_before_amendment_8_read_as_before(tmp_path):
     assert a["verdict"] == "PASS" and a["why"] == "rules 1-7 hold" and "9_dx" not in a["rules"] and "10_heldout" not in a["rules"]
     b = _verdict_a8(*_box_run(tmp_path / "b", shape_b={"ga": (0.01, 0.02), "plants": (0.6, 0.9)}), None, bar=0.05)
     assert b["verdict"] == "PASS" and b["why"] == "rules 1-8 hold"
+
+
+def test_rule_10_s_band_is_the_ruled_plain_cap():
+    """Amendment 8, as ruled: a plain absolute cap of 0.10 on |rel_change| (a blow-up bound), not derived from the 30B leg."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("q235_verdict_band", VERDICT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.HELDOUT_BAND == 0.10
+
+
+def test_rule_10_passes_inside_the_cap_either_way_and_fails_beyond_it(tmp_path):
+    for i, held in enumerate(((2.0, 2.1, 2.19), (2.0, 1.9, 1.81))):        # +9.5 % and -9.5 %: a blow-up bound reads both ways
+        v = _verdict_a8(*_box_run(tmp_path / f"in{i}", a8={"dx": DX, "heldout": held}), 0.10)
+        assert v["verdict"] == "PASS", v["why"]
+    over = _verdict_a8(*_box_run(tmp_path / "over", a8={"dx": DX, "heldout": (2.0, 2.1, 2.21)}), 0.10)
+    assert over["verdict"] == "FAIL" and over["rules"]["10_heldout"]["ok"] is False

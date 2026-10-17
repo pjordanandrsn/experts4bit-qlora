@@ -41,7 +41,8 @@ router top-k flips between them. Shape A's records carry no ``shape_b``, so rule
    forward-backward of the step (one per micro-batch under shape B). It is STRICT as well, so a failure also fails rules 3-5;
 10. the held-out loss on the registered held-out rows (``heldout``: before the update, after step 0, after step 1) finite at
     every read, and its relative change across the update, (after - before) / before, inside ``HELDOUT_BAND``.
-Rule 10 is VOID while ``HELDOUT_BAND`` is unregistered, and an Amendment 8 box without its held-out read is a harness error.
+``HELDOUT_BAND`` is a plain absolute cap, 0.10: a blow-up bound ("did two LoRA updates corrupt the model?"), not an equivalence
+test. Rule 10 is VOID if the band is unset, and an Amendment 8 box without its held-out read is a harness error.
 Records without ``amendment8`` (runs 2 and 3) carry neither field: rules 9 and 10 do not apply and their verdicts are unchanged.
 
 **Reported, not gating:** the box's full u profile (the layers outside the interior class without a bar), the full-state profile with
@@ -75,7 +76,7 @@ NULL_FLOOR = 1e-3                              # Amendment 3: the null against t
 GA_BAR = 0.0231                                # Amendment 6: 3 x the 30B's s(48) = 3 x 0.00770, third calibration (am6/)
 GA_PLANTS = ("mean", "overwrite")              # Amendment 6: the plants the calibration registers (a plant short of 3 x BAR is dropped)
 PLANTS = ("routing", "epilogue")
-HELDOUT_BAND = None                            # Amendment 8: |held-out loss after / before - 1|, set by its A2000 calibration
+HELDOUT_BAND = 0.10                            # Amendment 8: |held-out loss after / before - 1|, a plain cap (a blow-up bound)
 
 
 def l2_fields(box):
