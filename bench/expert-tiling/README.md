@@ -145,7 +145,7 @@ tile slot of t / 1536 of a layer replaces the second layer slot.
 The per-expert working set at tile width t is 10.6 MB × t / 1536. For the 94 experts a micro-batch routes on average,
 that is 1.0 GB at t = 1536 and 0.17 GB at t = 256.
 
-That case is real, but none of today's lanes is in it. It would have to be shown before a prototype was justified.
+Section 8 checks every recorded offload lane against this regime: none needs a unit smaller than one whole expert.
 
 ## 4. Which dimension streams
 
@@ -195,10 +195,47 @@ result would need a parity bar rather than `torch.equal`.
   - A capture-legal routed stream would need worst-case fixed copies, which spend the bytes routing saves, or a
     device-driven copy path, which nothing on record has.
 
+## 8. Close-out: no recorded lane is in section 3's regime
+
+`closeout.py` reproduces the table. Peaks and budgets come from the records named in it, and the layer and expert sizes are
+arithmetic from each family's committed shapes (NF4 packed + fp32 absmax, as offloaded stacks keep it). "Spare" is the
+stated budget minus the recorded single-slot peak, so it is the room for a second slot or a smaller unit.
+
+| lane | card | spare GiB | layer slot GiB | one expert MiB | 2nd layer slot | 1 whole expert | kind |
+|---|---|---:|---:|---:|---|---|---|
+| Q235 Shape B, `q235-pro6000-3` | RTX PRO 6000 96 GB | 31.90 | 1.266 | 10.1 | fits | fits | run |
+| Q235 Shape A bf16 | RTX 5090 32 GB | 1.01 | 1.266 | 10.1 | **no** | fits | plan (stretch class, never run) |
+| R2 Mixtral-8x22B, shape B fp32 | RTX 5090 32 GB | 3.75 | 1.266 | 162.0 | fits | fits | plan |
+| TC3 fused offload, `tc3-4090-8` | RTX 4090 24 GB | 12.92 | 0.316 | 2.5 | fits | fits | run |
+| TC2 Mixtral-8x7B offload, `tc1-5090-26` | RTX 5090 32 GB | 23.59 | 0.738 | 94.5 | fits | fits | run |
+| METHODOLOGY 11c, Gemma-4-26B-A4B | RTX A2000 12 GB (shared) | 1.70 | 0.399 | 3.2 | fits | fits | run |
+| METHODOLOGY 11c, Qwen3-30B-A3B | RTX A2000 12 GB (shared) | 2.92 | 0.316 | 2.5 | fits | fits | run |
+| METHODOLOGY 11a, OLMoE-1B-7B | RTX A2000 12 GB (shared) | 7.20 | 0.211 | 3.4 | fits | fits | run |
+
+- **One row cannot hold a second layer slot:** Q235 Shape A at bf16 on the RTX 5090, a registered stretch class that has
+  never run. Its 1.0 GiB margin must also hold the unmeasured staging transient (`PREREG-q235.md`, refusal point 3). Overlap
+  there would need a sub-layer second buffer, and whole experts are that unit: 10.1 MiB each, about 100 of them in 1.0 GiB.
+- **Every row holds at least 24 whole experts in its spare room** (the tightest is R2's 3.75 GiB against Mixtral-8x22B's
+  162 MiB experts). Routed staging and per-expert pipelining already work in whole experts, so a sub-expert tile is not
+  needed for overlap anywhere on record.
+- **Two recorded fits fail on the single slot itself, and tiles fix neither:**
+  - TC3 on the shared A2000 at micro-batch 2 (`tc3/README.md`): the recipe peaks at 11.88 GB on the 4090, against 10.3 GB
+    free, so it is 1.58 GB over. The whole Qwen3-30B layer slot is 0.34 GB, so no tile size closes it. Micro-batch 1 fits
+    (10.46 GB).
+  - `mxfp4-arena-train`'s 284B on a 23.5 GiB A5000 (`RESULTS-284b-ladder-fp8.md`): the binding allocation is the staged
+    stack's full-`[E]` destination (2.12 GiB per layer). The record's own next step is a compacted stack of the routed
+    experts, whole experts of about 8.3 MiB each, which needs its own prereg. That is a routed-staging change, not tiling.
+- **The tile-fused recompute + backward kernel** (section 1) would only keep tiles at two crossings. It moves no fewer bytes
+  than the whole-layer layout and saves under 0.5 % of a pass (section 2), so without a VRAM case it has nothing to win.
+
+**Tiling is closed, not deferred.** Reopen only for a lane where the spare room beside one layer slot cannot hold one whole
+routed expert, shown from that lane's records.
+
 ## Verdict
 
-- **Deprioritize sub-expert weight-tile streaming.** It cannot reduce bytes. Under today's layer-level recompute it
-  adds 50 %. Its time gain is at most a smaller per-layer fill, under 0.5 % of a pass.
+- **Sub-expert weight-tile streaming is closed** (section 8). It cannot reduce bytes. Under today's layer-level recompute it
+  adds 50 %. Its time gain is at most a smaller per-layer fill, under 0.5 % of a pass. No recorded lane needs a unit smaller
+  than one whole expert.
 - **The levers, in order:**
   1. Layer-major, which needs a held forward evict (#1682).
   2. Whole-layer double buffering on a side stream. The async-reuse stress record (`bench/async-reuse-20261017`)
@@ -207,8 +244,8 @@ result would need a parity bar rather than `torch.equal`.
      a parity test (#1681 (c)).
   4. Routed staging in the forward, but only with per-expert pipelining inside the layer. Served serially it loses to
      whole-layer prefetch.
-- **Revisit tiles** only for a card or model where two layer slots don't fit, or as a tile-fused recompute + backward
-  kernel. Before any prototype, run the copy-size sweep from section 5.
+- **Reopen tiles** only on section 8's trigger: a lane whose spare room beside one layer slot cannot hold one whole routed
+  expert. Before any prototype there, run the copy-size sweep from section 5.
 - **The A7 read confirms it.** Measured compute and staging leave the ordering and the ratios to the floor unchanged.
   Staging ran 1.30x the box's host-rate probe because the probe under-measures this host's H2D (section 2, "The A7
   read").
