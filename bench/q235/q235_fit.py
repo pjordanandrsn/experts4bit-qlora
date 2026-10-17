@@ -32,12 +32,18 @@ leg (its repeat's ``plants``: each plant's synchronized forward) and adds it to 
 forwards are taken from it: its load ran on a warm page cache, so its phases would understate a cold host.
 
 Amendments 6 and 7 change the box's step: Shape B's accumulation, rule 8's deterministic check passes and the timed MoE pass.
-``--box-from DIR`` takes the box phase's time outside its load (the phase's elapsed seconds less the box's own ``load.seconds``)
-from a later A2000 leg that ran the changed step, and keeps the rehearsal's own load. That later leg's load ran on a warm cache, so
-only the part that the cache does not touch is taken from it: the box basis is the rehearsal's cold load plus the later leg's step.
+The rehearsal keeps its whole cold box phase (load and the rest), and only the change is added, measured warm against warm (the
+maintainer's rule): ``--box-from DIR`` is a later A2000 leg that ran the changed step and ``--box-baseline DIR`` a warm A2000 leg
+at the code before the change. Each leg's box time outside its load is its box phase's elapsed seconds less its box record's
+``load.seconds``, and
 
-    python q235_fit.py --rehearsal DIR --warm-install-s S --bandwidth-mbps M --usd-per-hour R [--plants-from DIR2] [--box-from DIR3]
-                       [--out FIT.json]
+    box basis = the rehearsal's box phase + max(0, (later phase - later load) - (baseline phase - baseline load)).
+
+The time outside the load is itself cache-sensitive (imports, compile caches, the frozen-base hash reads) and shrinks on a warm
+host, so a warm leg's step alone would understate the cold box; the increment does not, and it is never negative.
+
+    python q235_fit.py --rehearsal DIR --warm-install-s S --bandwidth-mbps M --usd-per-hour R [--plants-from DIR2]
+                       [--box-from DIR3 --box-baseline DIR4] [--out FIT.json]
 """
 from __future__ import annotations
 
@@ -130,6 +136,24 @@ def fit(timings: dict, warm_install_s: float, fetch: dict, wheel_bytes: int, mod
             "fits": all(v["fits"] for v in phases.values()) and usd <= RUN_CAP_USD}
 
 
+def leg_box(d, flag):
+    """A clean A2000 leg's run record, box phase seconds and box load seconds, or a named refusal."""
+    rows = [json.loads(ln) for ln in (d / "receipts" / "phase-timings.jsonl").read_text().splitlines()]
+    run = json.loads((d / "receipts" / "run.json").read_text())
+    if run.get("mode") != "a2000" or any(r["rc"] != 0 for r in rows):
+        sys.exit(f"refusing: {flag} is not a clean A2000 leg (mode a2000, every phase rc 0)")
+    phase = {r["phase"]: r["elapsed_s"] for r in rows}.get("box")
+    if phase is None:
+        sys.exit(f"refusing: {flag} has no box phase in its phase timings")
+    try:
+        load = float(json.loads((d / "receipts" / "box" / "box.json").read_text())["load"]["seconds"])
+    except (OSError, KeyError, TypeError, ValueError):
+        sys.exit(f"refusing: {flag}'s box record carries no load.seconds")
+    if float(phase) - load <= 0:
+        sys.exit(f"refusing: {flag}'s box phase is not longer than its own load")
+    return run, float(phase), load
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--rehearsal", type=Path, required=True, help="the A2000 rehearsal's workspace (receipts/)")
@@ -138,6 +162,8 @@ def main():
     ap.add_argument("--usd-per-hour", type=float, required=True, help="the pinned host's rate")
     ap.add_argument("--plants-from", type=Path, default=None, help="an A2000 leg whose repeat ran the in-process plants")
     ap.add_argument("--box-from", type=Path, default=None, help="an A2000 leg whose box ran the changed step (Amendments 6 and 7)")
+    ap.add_argument("--box-baseline", type=Path, default=None,
+                    help="with --box-from: a warm A2000 leg at the code before the change, the increment's baseline")
     ap.add_argument("--out", type=Path, default=None)
     a = ap.parse_args()
     rows = [json.loads(ln) for ln in (a.rehearsal / "receipts" / "phase-timings.jsonl").read_text().splitlines()]
@@ -154,21 +180,20 @@ def main():
         plants = {k: v["forward_s"] for k, v in later["plants"].items()}
         timings["repeat"] = timings["repeat"] + sum(plants.values())
     box_step = None
+    if (a.box_from is None) != (a.box_baseline is None):
+        sys.exit("refusing: --box-from and --box-baseline go together (the change is measured warm against warm)")
     if a.box_from:
-        brows = [json.loads(ln) for ln in (a.box_from / "receipts" / "phase-timings.jsonl").read_text().splitlines()]
-        brun = json.loads((a.box_from / "receipts" / "run.json").read_text())
-        if brun.get("mode") != "a2000" or any(r["rc"] != 0 for r in brows):
-            sys.exit("refusing: --box-from is not a clean A2000 leg (mode a2000, every phase rc 0)")
-        own_load = float(json.loads((a.rehearsal / "receipts" / "box" / "box.json").read_text())["load"]["seconds"])
-        later_box = json.loads((a.box_from / "receipts" / "box" / "box.json").read_text())
-        later_phase = {r["phase"]: r["elapsed_s"] for r in brows}["box"]
-        step = later_phase - float(later_box["load"]["seconds"])
-        if step <= 0:
-            sys.exit("refusing: --box-from's box phase is not longer than its own load")
-        box_step = {"from_e4b_sha": brun.get("e4b_sha"), "from_nonce": brun.get("nonce"), "later_phase_s": later_phase,
-                    "later_load_s": float(later_box["load"]["seconds"]), "step_s": round(step, 3), "own_load_s": own_load,
-                    "replaced_box_s": timings["box"]}
-        timings["box"] = own_load + step
+        lrun_b, later_phase, later_load = leg_box(a.box_from, "--box-from")
+        base_run, base_phase, base_load = leg_box(a.box_baseline, "--box-baseline")
+        own_phase = timings["box"]
+        later_step, base_step = later_phase - later_load, base_phase - base_load
+        increment = max(0.0, later_step - base_step)
+        box_step = {"from_e4b_sha": lrun_b.get("e4b_sha"), "from_nonce": lrun_b.get("nonce"),
+                    "baseline_e4b_sha": base_run.get("e4b_sha"), "baseline_nonce": base_run.get("nonce"),
+                    "later_phase_s": later_phase, "later_load_s": later_load, "later_outside_load_s": round(later_step, 3),
+                    "baseline_phase_s": base_phase, "baseline_load_s": base_load, "baseline_outside_load_s": round(base_step, 3),
+                    "increment_s": round(increment, 3), "own_box_phase_s": own_phase}
+        timings["box"] = own_phase + increment
         box_step["box_basis_s"] = round(timings["box"], 3)
     fetch = json.loads((a.rehearsal / "warm-fetch.json").read_text())       # the cold fetch (the rehearsal's own re-verified warm files)
     wheels = json.loads((HERE / "wheels.json").read_text())["packages"]

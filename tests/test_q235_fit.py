@@ -128,25 +128,63 @@ def test_the_in_process_plants_add_only_their_measured_forwards_to_the_repeat(tm
     assert r.returncode != 0 and "ran both in-process plants" in r.stderr
 
 
-def test_the_changed_step_takes_only_the_later_leg_s_non_load_box_time(tmp_path):
-    """Amendments 6 and 7: the box basis is the rehearsal's own (cold) load plus a later leg's box time outside its (warm) load."""
+def _leg(d, box_s, load_s, mode="a2000", sha="e"):
+    """An A2000 leg's receipts: its run record, its phases (rc 0) and its box record's load."""
+    (d / "receipts" / "box").mkdir(parents=True, exist_ok=True)
+    (d / "receipts" / "run.json").write_text(json.dumps({"mode": mode, "e4b_sha": sha * 40, "nonce": f"n-{sha}"}))
+    (d / "receipts" / "phase-timings.jsonl").write_text(
+        "\n".join(json.dumps({"phase": p, "elapsed_s": t, "rc": 0}) for p, t in (("box", box_s), ("repeat", 50.0))) + "\n")
+    (d / "receipts" / "box" / "box.json").write_text(json.dumps({"load": {"seconds": load_s}}))
+    return d
+
+
+def test_the_changed_step_adds_only_its_warm_against_warm_increment_to_the_cold_box(tmp_path):
+    """Amendments 6 and 7 (the maintainer's rule): the rehearsal keeps its whole cold box phase, and only the change is added,
+    measured warm against warm: max(0, (later phase - later load) - (baseline phase - baseline load))."""
     reh = _rehearsal_from_receipts(tmp_path / "reh")
-    own_load = json.loads((Q / "gate2" / "a2000-leg-summary.json").read_text())["load"]["seconds"]
-    later = tmp_path / "later"
-    (later / "receipts" / "box").mkdir(parents=True)
-    (later / "receipts" / "run.json").write_text(json.dumps({"mode": "a2000", "e4b_sha": "e" * 40, "nonce": "n2"}))
-    (later / "receipts" / "phase-timings.jsonl").write_text(
-        "\n".join(json.dumps({"phase": p, "elapsed_s": t, "rc": 0}) for p, t in (("box", 300.0), ("repeat", 50.0))) + "\n")
-    (later / "receipts" / "box" / "box.json").write_text(json.dumps({"load": {"seconds": 40.0}}))
+    own = {x["phase"]: x["elapsed_s"] for x in map(json.loads, (Q / "gate2" / "phase-timings.jsonl").read_text().splitlines())}["box"]
+    base = _leg(tmp_path / "base", 136.0, 56.8, sha="9")                 # outside the load: 79.2 s (the am4 leg's own numbers)
     cmd = [sys.executable, str(Q / "q235_fit.py"), "--rehearsal", str(reh), "--warm-install-s", "178", "--bandwidth-mbps", "500",
-           "--usd-per-hour", "1.6", "--box-from", str(later)]
-    rep = json.loads(subprocess.run(cmd, capture_output=True, text=True, timeout=60).stdout)
+           "--usd-per-hour", "1.6", "--box-baseline", str(base)]
+
+    def run(later):
+        return subprocess.run(cmd + ["--box-from", str(later)], capture_output=True, text=True, timeout=60)
+    later = _leg(tmp_path / "later", 136.0 + 10.0, 56.8, sha="e")         # 10 s over the baseline outside the load
+    rep = json.loads(run(later).stdout)
     step = rep["rehearsal"]["changed_step"]
-    assert step["step_s"] == 260.0 and step["own_load_s"] == own_load and step["box_basis_s"] == round(own_load + 260.0, 3)
-    assert abs(rep["phases"]["box"]["scaled_s"] - round((own_load + 260.0) * 94 / 4, 1)) < 0.1, rep["phases"]["box"]
-    (later / "receipts" / "box" / "box.json").write_text(json.dumps({"load": {"seconds": 300.0}}))
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-    assert r.returncode != 0 and "not longer than its own load" in r.stderr
-    (later / "receipts" / "run.json").write_text(json.dumps({"mode": "cpu"}))
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-    assert r.returncode != 0 and "--box-from is not a clean A2000 leg" in r.stderr
+    assert step["increment_s"] == 10.0 and step["own_box_phase_s"] == own and step["box_basis_s"] == round(own + 10.0, 3)
+    assert step["baseline_e4b_sha"] == "9" * 40 and step["from_e4b_sha"] == "e" * 40
+    assert abs(rep["phases"]["box"]["scaled_s"] - round((own + 10.0) * 94 / 4, 1)) < 0.1, rep["phases"]["box"]
+    later = _leg(tmp_path / "later", 140.0, 70.0)                          # 70 s outside the load, under the baseline's 79.2
+    assert json.loads(run(later).stdout)["rehearsal"]["changed_step"]["increment_s"] == 0.0
+    later = _leg(tmp_path / "later", 136.0, 56.8)                          # exactly the baseline
+    assert json.loads(run(later).stdout)["rehearsal"]["changed_step"]["box_basis_s"] == round(own, 3)
+
+
+def test_the_changed_step_refuses_by_name(tmp_path):
+    """Each refusal names itself (no traceback): a leg that is not a clean A2000 run, no box phase, no load.seconds, a box phase
+    not longer than its load, and --box-from without its baseline or the other way round."""
+    reh = _rehearsal_from_receipts(tmp_path / "reh")
+    base = _leg(tmp_path / "base", 136.0, 56.8, sha="9")
+    cmd = [sys.executable, str(Q / "q235_fit.py"), "--rehearsal", str(reh), "--warm-install-s", "178", "--bandwidth-mbps", "500",
+           "--usd-per-hour", "1.6"]
+
+    def refused(extra, msg):
+        r = subprocess.run(cmd + extra, capture_output=True, text=True, timeout=60)
+        assert r.returncode != 0 and msg in r.stderr and "Traceback" not in r.stderr, (extra, r.stderr[-400:])
+    later = _leg(tmp_path / "later", 146.0, 56.8)
+    refused(["--box-from", str(later)], "--box-from and --box-baseline go together")
+    refused(["--box-baseline", str(base)], "--box-from and --box-baseline go together")
+    both = ["--box-from", str(later), "--box-baseline", str(base)]
+    (later / "receipts" / "phase-timings.jsonl").write_text(json.dumps({"phase": "repeat", "elapsed_s": 50.0, "rc": 0}) + "\n")
+    refused(both, "--box-from has no box phase in its phase timings")
+    _leg(later, 146.0, 56.8)
+    (later / "receipts" / "box" / "box.json").write_text(json.dumps({"steps": {}}))
+    refused(both, "--box-from's box record carries no load.seconds")
+    _leg(later, 50.0, 56.8)
+    refused(both, "--box-from's box phase is not longer than its own load")
+    _leg(later, 146.0, 56.8, mode="cpu")
+    refused(both, "--box-from is not a clean A2000 leg")
+    _leg(later, 146.0, 56.8)
+    (base / "receipts" / "box" / "box.json").unlink()
+    refused(both, "--box-baseline's box record carries no load.seconds")
