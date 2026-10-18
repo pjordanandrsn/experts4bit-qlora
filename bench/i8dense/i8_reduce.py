@@ -8,7 +8,8 @@ P125's ruled gates (``t1`` 196 windows, ``k16`` 123):
           P125's bound, ln(1 + 0.05 / ppl_A) over that gate's own windows (``p125_reduce.bound_of``);
     PARK  otherwise: the W8A16 lever parks with the numbers (no third premise).
     VOID  A or I8ATTN missing or not ok, an arm off its name, I8ATTN's round trip not exactly the 96 attention modules
-          (head untouched), or a ruled gate's windows off 196 / 123 or not the same windows in both arms.
+          (head untouched), an arm's recorded windows (counts and wikitext stride) off ``WINDOWS``, or a ruled gate's
+          windows off 196 / 123 or not the same windows in both arms.
 
 REPORTED, never a rung: I8HEAD (the head int8, the attention bf16) at every gate, which explains where the argmax flips
 come from; c4 for both arms; P125's own gate outcome for each; each module's round-trip error.
@@ -30,6 +31,7 @@ import p125_reduce as pr  # noqa: E402  (staged at P125's pinned bytes: bound_of
 RULED, CANDIDATE, REPORTED = ("t1", "k16"), "I8ATTN", "I8HEAD"
 COUNTS = {"t1": 196, "k16": 123, "c4": 16}
 UPPER_Z = 1.645                                       # one-sided 95 %
+WINDOWS = {"counts": COUNTS, "wikitext_stride": 1024}  # i8_box's rec["windows"]: every arm reads the same windows
 SCOPE = {"I8ATTN": {"modules": 96, "attention_modules": 96, "lm_head": False},
          "I8HEAD": {"modules": 1, "attention_modules": 0, "lm_head": True}}
 
@@ -83,6 +85,8 @@ def judge(d) -> dict:
             void.append(f"quality_{arm} missing or not ok")
         elif rec.get("arm") != arm:
             void.append(f"quality_{arm} names arm {rec.get('arm')!r}")
+        elif rec.get("windows") != WINDOWS:
+            void.append(f"quality_{arm} read windows {rec.get('windows')}, not {WINDOWS}")
     if qc and qc.get("status") == "ok":
         fq = qc.get("fakequant") or {}
         if {k: fq.get(k) for k in SCOPE[CANDIDATE]} != SCOPE[CANDIDATE]:
@@ -114,6 +118,7 @@ def judge(d) -> dict:
     if qh and qh.get("status") == "ok" and qh.get("arm") == REPORTED:
         fq = qh.get("fakequant") or {}
         rep[f"{REPORTED}_scope_ok"] = {k: fq.get(k) for k in SCOPE[REPORTED]} == SCOPE[REPORTED]
+        rep[f"{REPORTED}_windows_ok"] = qh.get("windows") == WINDOWS
         for g in ("t1", "k16", "c4"):
             try:
                 rep[f"{REPORTED}_{g}"], _ = _arm_gate(qa, qh, g, None)
@@ -127,7 +132,7 @@ def judge(d) -> dict:
 
 
 def _fake(d, *, d_attn=0.0005, sd=0.02, argmax_attn=0.99, d_head=0.004, argmax_head=0.96, scope_attn=None,
-          windows=None, head=True, a_status="ok"):
+          windows=None, head=True, a_status="ok", stride=None):
     arms = ["A", CANDIDATE] + ([REPORTED] if head else [])
     base = {}
     for arm in arms:
@@ -146,7 +151,9 @@ def _fake(d, *, d_attn=0.0005, sd=0.02, argmax_attn=0.99, d_head=0.004, argmax_h
                                            max_err_over_half_step=1.0, rel_fro_err_max=0.01)
         if arm == CANDIDATE and scope_attn is not None:
             fq = dict(fq, **scope_attn)
-        rec = {"status": a_status if arm == "A" else "ok", "arm": arm, "gates": gates, "fakequant": fq}
+        rec = {"status": a_status if arm == "A" else "ok", "arm": arm, "gates": gates, "fakequant": fq,
+               # the ruled counts as recorded, whatever the gates hold: the per-window count check is tested on its own
+               "windows": {"counts": dict(COUNTS), "wikitext_stride": (stride or {}).get(arm, 1024)}}
         json.dump(rec, open(os.path.join(d, f"quality_{arm}.json"), "w"))
 
 
@@ -172,6 +179,9 @@ def self_test() -> int:
     run("a short t1 is VOID", "VOID", windows={"t1": 108})
     run("a short k16 is VOID", "VOID", windows={"k16": 112})
     run("A not ok is VOID", "VOID", a_status="failed")
+    run("an arm read at another wikitext stride is VOID", "VOID", stride={CANDIDATE: 2048})
+    r = run("the head at another stride rules nothing", "GO", stride={REPORTED: 2048})
+    cases.append(("the head's stride is reported", r["reporting"].get(f"{REPORTED}_windows_ok") is False, None))
     bad = [(n, d) for n, ok, d in cases if not ok]
     print(f"i8_reduce self-test {'OK' if not bad else 'FAILED ' + str(bad)} ({len(cases)} cases)")
     return 0 if not bad else 1

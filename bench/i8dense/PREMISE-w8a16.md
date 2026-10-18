@@ -100,7 +100,8 @@ holds 292 windows and still never overlaps two windows.
   ln(1 + 0.05 / ppl_A) over that gate's windows.
 - **PARK** otherwise. The W8A16 lever parks with the numbers, and there is no third premise.
 - **VOID:** a record is missing or off its arm; I8ATTN's round trip is not exactly the 96 attention modules with the
-  head untouched; a ruled gate's windows are off 196 / 123.
+  head untouched; A's or I8ATTN's recorded windows (counts and the 1024 stride) differ from the ruled ones; a ruled
+  gate's windows are off 196 / 123. I8HEAD's recorded windows are reported, never ruled.
 - A unit test confirms that a rule judging on point d instead of the upper bound fails the reducer's own self-test.
 
 **The box.**
