@@ -83,10 +83,25 @@ def required_status(paths: list, ids: list) -> dict:
     for path in paths:
         for tc in ET.parse(path).getroot().iter("testcase"):
             kinds = {child.tag for child in tc}
-            seen[f"{tc.get('classname', '')}::{tc.get('name', '')}"] = (
-                "FAILED" if "failure" in kinds else "ERROR" if "error" in kinds else "SKIPPED" if "skipped" in kinds else "PASSED")
+            tid = f"{tc.get('classname', '')}::{tc.get('name', '')}"
+            got = "FAILED" if "failure" in kinds else "ERROR" if "error" in kinds else "SKIPPED" if "skipped" in kinds else "PASSED"
+            # worst of: pytest can write one id twice (a pass, then a teardown error), and any non-PASSED outcome must win
+            if seen.get(tid, "PASSED") == "PASSED":
+                seen[tid] = got
     status = {i: seen.get(i, "ABSENT") for i in ids}
     return {"required": status, "ok": bool(ids) and all(v == "PASSED" for v in status.values())}
+
+
+def required_status_text(xml: str, ids: list) -> dict:
+    """:func:`required_status` over a report given as text (the self-test's)."""
+    import tempfile
+    fd, p = tempfile.mkstemp(suffix=".xml")
+    with os.fdopen(fd, "w") as f:
+        f.write(xml)
+    try:
+        return required_status([p], ids)
+    finally:
+        os.unlink(p)
 
 
 def self_test() -> int:
@@ -123,6 +138,11 @@ def self_test() -> int:
     os.unlink(p)
     assert r["required"] == {"test_a::t1": "PASSED", "test_a::t2": "SKIPPED", "test_b::t3": "FAILED", "test_c::t9": "ABSENT"}, r
     assert not r["ok"] and required_status([], [])["ok"] is False
+    only_skipped = required_status_text(xml, ["test_a::t2"])
+    assert only_skipped == {"required": {"test_a::t2": "SKIPPED"}, "ok": False}, only_skipped   # a skip is never a pass
+    twice = ('<testsuites><testsuite><testcase classname="m" name="t"><error message="setup"/></testcase>'
+             '<testcase classname="m" name="t"/></testsuite></testsuites>')            # an error, then a pass: last-wins would read PASSED
+    assert required_status_text(twice, ["m::t"])["required"] == {"m::t": "ERROR"}, "worst of, not last"
     assert parse_required("a.b::c d::e[x-1]") == ["a.b::c", "d::e[x-1]"]
     for bad in ("nocolons", "a::b;rm", "a::b c"):            # "c" has no classname
         try:
