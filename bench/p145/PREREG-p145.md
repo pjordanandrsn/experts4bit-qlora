@@ -38,9 +38,16 @@ The per-name census (`bench/pername/PREREG-pername.md`) by counted substitutions
   selected plans: gate_up **3.0862 ms**, down **1.9502 ms**) is its in-situ excess, reported.
 - **Ranking:** every W1 line by addressable time = removable − its floor (P141's isolated time for the two GEMVs, 0
   otherwise). Nothing is closed for Mixtral; dense_gemm is ranked.
-- **Next:** the top W1 line is **proposed** with the table; a lever is a new registration, never automatic. If dense_gemm
-  is on top, the proposal is a **quality premise** for compressing those projections, not a kernel (the maintainer's
-  rule of 2026-10-18; Qwen3's W8A16 attention was parked on its quality bound). W16's ranking is reported, not proposed.
+- **Next:** the top W1 line is **proposed** with the table; a lever is a new registration, never automatic. The proposal
+  names the **lever type** its line implies. dense_gemm's floor of 0 bounds a **format** lever (fewer bytes), so with
+  dense_gemm on top the proposal is a **quality premise** for compressing those projections, not a kernel (the
+  maintainer's rule of 2026-10-18; Qwen3's W8A16 attention was parked on its quality bound). Any other top line is a
+  **kernel** lever. W16's ranking is reported, not proposed.
+- **Bandwidth floors (REPORTING only, added in review; never ranked):** each line's copy-bandwidth floor where its bytes
+  are known, so a format lever is not read as kernel headroom:
+  - the two expert GEMVs at P141's own `floor_ms`: 2.8206 and 1.4103 ms for 32 launches;
+  - the dense_gemm class at its bf16 bytes (attention q/k/v/o and the head, 2,946,498,560 B a step) / 1,498.9 GB/s
+    (P141's measured copy bandwidth) = 1.9658 ms.
 
 Profiled node times are never quoted as speed. Shares are over each batch's node replay period P.
 

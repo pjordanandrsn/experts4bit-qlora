@@ -12,8 +12,12 @@ READ   otherwise, with these lines, every share over that batch's node replay pe
   ranked   every line by addressable time = removable - its floor (P141's isolated time for the two expert GEMVs, 0
            otherwise). Nothing is closed for Mixtral: dense_gemm (its bf16 attention projections and head) is ranked.
   next     the top-ranked W1 line, PROPOSED to the maintainer with this table (a lever is a new registration, never
-           automatic). A dense_gemm line on top names a quality premise first, never a kernel (the maintainer's rule,
-           2026-10-18). W16's ranking is reported, never proposed.
+           automatic), naming the lever type its line implies: a FORMAT lever for dense_gemm (its floor of 0 bounds what
+           fewer bytes could save; it names a quality premise first, never a kernel: the maintainer's rule, 2026-10-18),
+           a KERNEL lever otherwise. W16's ranking is reported, never proposed.
+  bw_floor (REPORTING only, added in review) each line's copy-bandwidth floor where its bytes are known: the two expert
+           GEMVs at P141's own floor_ms (2.8206 / 1.4103 ms for 32 launches), and the dense_gemm class at its bf16 bytes
+           (attention q/k/v/o and the head, 2,946,498,560 B a step) / 1,498.9 GB/s. It never ranks.
 
     python p145_reduce.py --dir /root/p145 --out verdict_p145.json --e4b-sha <sha>
     python p145_reduce.py --self-test
@@ -36,6 +40,11 @@ SWIGLU, GEMV = "_swiglu_rows", "_gemv_nf4_bw"
 P141_MS = {"gate_up": 3.0862, "down": 1.9502}     # isolated, 32 launches each, bw_prmt32 at the selected plans, an RTX
                                                   # 5090 (P141 phase 1, select.json; synthetic stores, the served forms)
 MIN_STEPS = 56
+COPY_GBPS = 1498.9                                # P141 phase 1's measured copy bandwidth on the RTX 5090 (select.json)
+GEMV_BW_FLOOR_MS = {"gate_up": 2.8206, "down": 1.4103}     # P141's floor_ms: 32 launches' bytes / COPY_GBPS
+#: Mixtral's bf16 dense bytes a step: 32 layers x (q 4096 + k 1024 + v 1024 + o 4096) x 4096 x 2 B, plus the 32000 x 4096
+#: bf16 head (the routers' 8 x 4096 per layer are under 0.1 % and left out)
+DENSE_BYTES = 32 * (4096 + 1024 + 1024 + 4096) * 4096 * 2 + 32000 * 4096 * 2
 
 
 def _load(root, name):
@@ -76,15 +85,20 @@ def rank(tab, floors) -> dict:
     for r in tab["rows"]:
         floor = floors.get(r.get("role"), 0.0) if r["name"] == GEMV else 0.0
         addr = max(0.0, r["removable_ms"] - floor)
+        bw = GEMV_BW_FLOOR_MS.get(r.get("role")) if r["name"] == GEMV and floors else None     # REPORTING only
         lines.append({"key": r["key"], "class": r["class"], "n_per_step": r["n_per_step"], "dur_ms": r["dur_ms"],
                       "billed_ms": r["billed_ms"], "removable_ms": r["removable_ms"], "floor_ms": floor,
                       "addressable_ms": round(addr, 6), "share": round(r["removable_ms"] / p, 5),
-                      "addressable_share": round(addr / p, 5)})
+                      "addressable_share": round(addr / p, 5), "bw_floor_ms": bw})
     ranked = sorted(lines, key=lambda x: -x["addressable_ms"])
     by_class = {}
     for x in lines:
         by_class[x["class"]] = round(by_class.get(x["class"], 0.0) + x["removable_ms"], 6)
-    return {"P_ms": p, "ranked": ranked[:20], "class_removable_ms": by_class, "lines": lines}
+    dense_floor = round(DENSE_BYTES / (COPY_GBPS * 1e6), 6)
+    bw = {"copy_gbps": COPY_GBPS, "dense_gemm_class_bytes": DENSE_BYTES, "dense_gemm_class_floor_ms": dense_floor,
+          "dense_gemm_class_removable_ms": by_class.get("dense_gemm"),
+          "gemv_floor_ms": dict(GEMV_BW_FLOOR_MS) if floors else None, "reporting_only": True}
+    return {"P_ms": p, "ranked": ranked[:20], "class_removable_ms": by_class, "bw_floor": bw, "lines": lines}
 
 
 def decide(tab1, tab16) -> dict:
@@ -98,12 +112,14 @@ def decide(tab1, tab16) -> dict:
     if top is None:
         nxt = {"target": None, "why": "no line"}
     elif top["class"] == "dense_gemm":
-        nxt = {"target": f"PROPOSE a quality premise for {top['key']}",
+        nxt = {"target": f"PROPOSE a quality premise for {top['key']}", "lever": "format",
                "why": f"top addressable W1 line is dense_gemm ({top['addressable_ms']:.4f} ms, "
-                      f"{top['addressable_share']:.2%} of P): a quality premise comes before any kernel"}
+                      f"{top['addressable_share']:.2%} of P): a FORMAT lever (fewer bytes; its floor of 0 is not kernel "
+                      "headroom), so a quality premise comes before any kernel"}
     else:
-        nxt = {"target": f"PROPOSE {top['key']}",
-               "why": f"top addressable W1 line ({top['addressable_ms']:.4f} ms, {top['addressable_share']:.2%} of P)"}
+        nxt = {"target": f"PROPOSE {top['key']}", "lever": "kernel",
+               "why": f"top addressable W1 line ({top['addressable_ms']:.4f} ms, {top['addressable_share']:.2%} of P): "
+                      "a KERNEL lever"}
     w16 = rank(tab16, {})
     for w in (w1, w16):
         w.pop("lines")
@@ -165,6 +181,14 @@ def self_test() -> int:
     few = _tab()
     few["steps_kept"] = 40
     cases.append(("too few kept steps is a fault", any("< 56" in f for f in table_faults(few, 1))))
+    cases.append(("the lever type is named", dd["next"]["lever"] == "format" and da["next"]["lever"] == "kernel"))
+    gemv_bw = {x["key"].rsplit("|", 1)[1]: x["bw_floor_ms"] for x in dd["W1"]["ranked"] if x["key"].startswith(GEMV)}
+    cases.append(("the bandwidth floors are reported, never ranked",
+                  abs(dd["W1"]["bw_floor"]["dense_gemm_class_floor_ms"] - 1.965774) < 1e-6
+                  and dd["W1"]["bw_floor"]["gemv_floor_ms"] == {"gate_up": 2.8206, "down": 1.4103}
+                  and gemv_bw == {"gate_up": 2.8206, "down": 1.4103}
+                  and all(x["bw_floor_ms"] is None for x in dd["W1"]["ranked"] if not x["key"].startswith(GEMV))))
+    cases.append(("W16 reports no GEMV floor", dd["W16"]["bw_floor"]["gemv_floor_ms"] is None))
     cases.append(("Mixtral at (1, 16) in P136's reducer, 32 layers", pr.FAMILIES[FAMILY][2] == (1, 16)
                   and pr.MOE_LAYERS[FAMILY] == LAYERS == 32 and BATCHES == (1, 16)))
     cases.append(("the grouped-nf4-gemm pin is this lane's", pr.GNF4_SHA == GNF4_PIN))
