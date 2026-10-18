@@ -115,9 +115,9 @@ else
     perl -e "alarm $secs; exec @ARGV" python -m pip install -q --no-input -c $W/constraints.txt "$@" > $log 2>&1 && return 0
     say "pip failed ($(tail -1 $log | cut -c1-120)) -- one retry in 20 s"; sleep 20
     perl -e "alarm $secs; exec @ARGV" python -m pip install -q --no-input -c $W/constraints.txt "$@" >> $log 2>&1; }
-  say "install e4b @$E4B_SHA + gnf4 @$GNF4_SHA (image python; transformers 5.18.0; bitsandbytes 0.50.2; torch held at $TORCH_WANT)"
+  say "install e4b @$E4B_SHA + gnf4 @$GNF4_SHA (image python; transformers 5.18.0; huggingface_hub < 2; bitsandbytes 0.50.2; torch held at $TORCH_WANT)"
   pipx logs/pip_e4b.log 1800 --prefer-binary "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" \
-    "transformers==5.18.0" "bitsandbytes==0.50.2" datasets accelerate sentencepiece safetensors "huggingface_hub>=0.23" pytest numpy || { tail -4 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
+    "transformers==5.18.0" "bitsandbytes==0.50.2" datasets accelerate sentencepiece safetensors "huggingface_hub>=0.23,<2" pytest numpy || { tail -4 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
   pipx logs/pip_gnf4.log 900 --force-reinstall --no-deps "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA" || { tail -3 logs/pip_gnf4.log; say "PIP FAIL (gnf4)"; finish 9; }
   # the e4b tests at the pin, for the premise (they run against the installed package)
   perl -e 'alarm 600; exec @ARGV' git clone -q https://github.com/pjordanandrsn/experts4bit-qlora.git $W/e4bsrc > logs/clone.log 2>&1 && git -C $W/e4bsrc checkout -q $E4B_SHA \
@@ -136,6 +136,8 @@ if not dry:
     assert md.version("grouped-nf4-gemm") == "0.46.0", md.version("grouped-nf4-gemm")
     assert md.version("bitsandbytes") == "0.50.2", md.version("bitsandbytes")
     assert transformers.__version__ == "5.18.0", transformers.__version__
+    hub = md.version("huggingface_hub")
+    assert int(hub.split(".")[0]) < 2, f"huggingface_hub {hub}: Amendment 1 pins < 2 (hub 2.x's httpx2 breaks on this image)"
     assert torch.__version__ == os.environ["WANT_TORCH"], torch.__version__
     assert torch.cuda.get_device_capability() == (8, 9), torch.cuda.get_device_capability()
 from experts4bit_qlora.engines import layer_major as lm, offload as off
@@ -145,11 +147,23 @@ assert hasattr(lm, "LayerMajorDriftError") and hasattr(lm, "LayerMajorNotReprodu
 assert hasattr(off, "hold_forward_residency") and hasattr(off._ExpertOffload, "_held"), "the per-handle hold (#1708)"
 assert not any(os.environ.get(k) for k in ("LAYER_MAJOR", "E4B_OFFLOAD_STATS", "E4B_CKPT_OFFLOAD", "E4B_CHUNKED_LM_LOSS"))
 import nf4_grouped  # noqa: F401  (the grouped kernels enable_fast_train routes through)
+
+
+def _has(name):
+    try:
+        md.version(name)
+        return True
+    except md.PackageNotFoundError:
+        return False
+
+
 import experts4bit_qlora as e
 open(os.path.join(os.environ.get("P137_HOME", "/root/p137"), "versions.txt"), "a").write(
     f"e4b {e.__version__} @{os.environ['WANT_E4B']}{' (dry: the tree)' if dry else ''}\ngnf4 {md.version('grouped-nf4-gemm')}\n"
     f"torch {torch.__version__}\ntransformers {transformers.__version__}\nbitsandbytes {md.version('bitsandbytes')}\n"
-    f"cc {torch.cuda.get_device_capability()}\n")
+    f"huggingface_hub {md.version('huggingface_hub')}\n"
+    + "".join(f"{n} {md.version(n)}\n" for n in ("httpx", "httpx2") if _has(n))
+    + f"cc {torch.cuda.get_device_capability()}\n")
 print("tripwire OK:", e.__version__, "torch", torch.__version__, "transformers", transformers.__version__)
 PYT
 cat versions.txt | tee -a summary.txt

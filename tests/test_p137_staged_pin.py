@@ -84,7 +84,8 @@ def test_the_pins_are_exact_and_agree():
                 "torch.cuda.get_device_capability() == (8, 9)", 'lm.SUPPORTED == ("Qwen3MoeForCausalLM",)',
                 'hasattr(off._ExpertOffload, "_held")', "LayerMajorNotReproducibleError"):
         assert pin in trip, pin
-    assert '"transformers==5.18.0" "bitsandbytes==0.50.2"' in RUN
+    assert '"transformers==5.18.0" "bitsandbytes==0.50.2"' in RUN and '"huggingface_hub>=0.23,<2"' in RUN   # Amendment 1
+    assert 'int(hub.split(".")[0]) < 2' in trip
     assert "MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39" in RUN
 
 

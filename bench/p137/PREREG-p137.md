@@ -188,6 +188,12 @@ the data step passed on sm_89 for the first time:
 The data step (rc 19) failed inside the dataset download on the box: `load_dataset('tatsu-lab/alpaca')` raised in the hub
 client's content decoder (`TypeError: process() takes no keyword arguments`). Nothing was fetched or measured.
 
+**The cause.** transformers 5.18.0 admits huggingface-hub 2.x, so pip took 2.2.0, which runs on `httpx2`. On the rented
+image, `httpx2`'s decoder breaks against the image's older compression binding, so every content-encoded Hub response
+fails. Binary safetensors pass, but dataset files, the model's JSON and its tokenizer files are content-encoded too. The
+model fetch would have met the same failure. transformers 5.17.0 (P133's stack) resolves hub below 2 on plain `httpx`,
+which is why P133's fetches pass on the same image.
+
 **The change.** The training rows no longer come from a download on the box:
 - The slice (alpaca `train[:400]`, as `data.json`, the bytes every dry run produced) is staged by the driver from the
   controller (`P137_DATA`, default `~/p137-data/data.json`). It is kept outside the repository: the dataset's licence is
@@ -196,6 +202,17 @@ client's content decoder (`TypeError: process() takes no keyword arguments`). No
   **`68e3d31c194ebd8fee4330808a46642f443aecf4e16b78e5eb39fd21b16079c5`**. The runner checks it again on the box (rc 19 on a
   missing or different file).
 - Nothing on the box imports `datasets`.
+- **huggingface-hub is pinned below 2** in the box's pip line (`"huggingface_hub>=0.23,<2"`), and the tripwire refuses a
+  hub of 2 or above and records the hub and `httpx` / `httpx2` versions. transformers stays 5.18.0 as registered, since it
+  admits hub ≥ 1.31.
+  - A resolve of the box's exact pip line for Python 3.11 on Linux (`pip install --dry-run`, binary wheels, bitsandbytes
+    and torch left out) gives huggingface-hub **1.33.0**, `httpx` **0.28.1**, no `httpx2`, transformers 5.18.0 and
+    datasets 5.1.0.
+
+**What this amendment cannot show before a paid start.** The fix targets the rented image's environment. It was diagnosed
+from `p137-4090-1`'s log. The $0 dry run runs on the A2000's own environment, not the image's, so it cannot exercise the
+failure or the fix; it checks only the new data staging. The next paid start is therefore also the fix's first test, and
+a second failure there stops the lane, as registered.
 
 Nothing else changes: the arms, the recipe, the rule, the bars, the pins and the run ids. The reading runs as the declared
 rerun `p137-4090-2`, after a $0 dry run at this amendment's merge and a fresh launch approval. Under the two-strikes rule,
