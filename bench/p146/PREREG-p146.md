@@ -203,7 +203,9 @@ first pair the host-link fit gives T 1.42 s, inside the predicted 1.29–1.90, a
 strike). The self-pair band is unchanged and still decides on a quiet host.
 - **CPU, per arm, over its timed window** (from the end of warm step 2 to the end of the last step):
   - **throttling:** the share of the box cgroup's CFS enforcement periods in which it was throttled, Δ`nr_throttled` /
-    Δ`nr_periods` (`cpu.stat`, v2 or v1; 0 when no period elapsed, i.e. no quota is enforced). The review pass
+    Δ`nr_periods` (`cpu.stat`, v2 or v1; 0 when no period elapsed, i.e. no quota is enforced). A `cpu.stat` that
+    reads but has no period counters (cgroup v2 with the cpu controller not delegated, so no CFS quota exists) is
+    recorded as `not_enforced`, counted as 0, and never refused; only a wholly unreadable `cpu.stat` refuses. The review pass
     corrected a first form: the throttled time (`throttled_usec`) is summed by the kernel over every runqueue the group
     ran on, so per wall second it reads "CPUs throttled on average" and grows with the CPU count. That figure is kept
     as REPORTING (`throttled_cpu_s_per_wall_s`);

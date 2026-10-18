@@ -90,19 +90,24 @@ def rows_from_census(census):
 def read_cpu_stat(root="/sys/fs/cgroup"):
     """The cgroup's CFS counters: nr_periods and nr_throttled (the guard), and the throttled time in microseconds
     (REPORTING: the kernel sums it over every runqueue the group ran on, so it is CPU-time, not wall). v2 cpu.stat
-    (throttled_usec), else v1 cpu/cpu.stat (throttled_time, ns). None unless both period counters are readable."""
+    (throttled_usec), else v1 cpu/cpu.stat (throttled_time, ns).
+    A cpu.stat that reads but carries no period counters (cgroup v2 with the cpu controller not delegated: no CFS quota,
+    so no throttling is possible) is {"not_enforced": True} (the maintainer's ruling): counted as 0, never a refusal.
+    None only when no cpu.stat is readable at all."""
+    readable = False
     for path, key, scale in ((os.path.join(root, "cpu.stat"), "throttled_usec", 1.0),
                              (os.path.join(root, "cpu", "cpu.stat"), "throttled_time", 1e-3)):
         try:
             kv = dict(line.split(None, 1) for line in open(path) if line.strip())
         except (OSError, ValueError):
             continue
+        readable = True
         try:
             return {"nr_periods": int(kv["nr_periods"]), "nr_throttled": int(kv["nr_throttled"]),
                     "throttled_usec": float(kv[key]) * scale if key in kv else None}
         except (KeyError, ValueError):
             continue
-    return None
+    return {"not_enforced": True} if readable else None
 
 
 def read_proc_stat(path="/proc/stat"):
@@ -152,7 +157,10 @@ def host_window(a, b):
     wall = b["t"] - a["t"]
     thr = thr_cpu = None
     ca, cb = a.get("cpu_stat"), b.get("cpu_stat")
-    if ca and cb:
+    throttle = None
+    if ca and cb and (ca.get("not_enforced") or cb.get("not_enforced")):
+        thr, throttle = 0.0, "not_enforced"                # no CFS quota on this cgroup: nothing can throttle it
+    elif ca and cb:
         dp = cb["nr_periods"] - ca["nr_periods"]
         thr = (cb["nr_throttled"] - ca["nr_throttled"]) / dp if dp > 0 else 0.0
         if ca["throttled_usec"] is not None and cb["throttled_usec"] is not None and wall > 0:
@@ -163,8 +171,11 @@ def host_window(a, b):
     psi = None
     if a.get("psi_some_usec") is not None and b.get("psi_some_usec") is not None and wall > 0:
         psi = (b["psi_some_usec"] - a["psi_some_usec"]) / (wall * 1e6)
-    return {"wall_s": wall, "throttled_frac": thr, "steal_frac": steal, "psi_some_frac": psi,
-            "throttled_cpu_s_per_wall_s": thr_cpu}
+    out = {"wall_s": wall, "throttled_frac": thr, "steal_frac": steal, "psi_some_frac": psi,
+           "throttled_cpu_s_per_wall_s": thr_cpu}
+    if throttle:
+        out["throttle"] = throttle
+    return out
 
 
 def h2d_pinned_gbps(mb=256, iters=20):
@@ -429,9 +440,19 @@ def self_test():
     open(os.path.join(d, "cpu", "cpu.stat"), "w").write("nr_periods 9\nnr_throttled 1\nthrottled_time 4000000000\n")
     assert read_cpu_stat(d) == {"nr_periods": 9, "nr_throttled": 1, "throttled_usec": 4000000.0}   # v1: ns -> us
     open(os.path.join(d, "cpu", "cpu.stat"), "w").write("throttled_time 4000000000\n")
-    assert read_cpu_stat(d) is None                                       # no period counters: unreadable
+    assert read_cpu_stat(d) == {"not_enforced": True}                   # readable, no period counters
     os.remove(os.path.join(d, "cpu", "cpu.stat"))
-    assert read_cpu_stat(d) is None
+    assert read_cpu_stat(d) is None                                       # wholly unreadable
+    # the ruling's case: cgroup v2, usage only (the cpu controller not delegated) -> not_enforced, counted as 0, runs on
+    open(os.path.join(d, "cpu.stat"), "w").write("usage_usec 10\nuser_usec 6\nsystem_usec 4\n")
+    ne = read_cpu_stat(d)
+    assert ne == {"not_enforced": True}
+    ok_ne = {"t": 0.0, "cpu_stat": ne, "proc_stat": (0, 10), "psi_some_usec": None}
+    assert preflight_ok(ok_ne, 20.0) == []                               # never a refusal
+    w = host_window(ok_ne, {**ok_ne, "t": 10.0, "proc_stat": (0, 20)})
+    assert w["throttled_frac"] == 0.0 and w["throttle"] == "not_enforced" and w["throttled_cpu_s_per_wall_s"] is None
+    os.remove(os.path.join(d, "cpu.stat"))
+    assert len(preflight_ok({**ok_ne, "cpu_stat": read_cpu_stat(d)}, 20.0)) == 1   # wholly unreadable still refuses
     n += 1
     ps = os.path.join(d, "stat")
     open(ps, "w").write("cpu  100 0 50 800 10 0 0 40 0 0\ncpu0 1 2 3\n")
