@@ -17,7 +17,10 @@ experts, gate and up [768, 2048], down [2048, 768], bf16, about 1.2 GB. Medians 
 | no quota | 7.68 s | 0.43 s |
 
 A pool larger than the CPUs the process can actually run on makes this copy many times slower. Inside the quota the pool
-spins through the quota and is throttled every period; without one, 12 threads still oversubscribe the 6 cores. Inside
+spins through the quota and is throttled every period. The no-quota row is diagnostic only: the QNAP runs a full
+service stack on its 6 cores, so that slowdown is most likely contention, and it sets no rule. **The cap targets the quota
+case.** With no quota it is min(pool, affinity), unchanged here. The new load log shows whether a real box ever hits a
+no-quota slowdown; that would be a separate, measured fix. Inside
 `--cpus=2`, `container_cpu_quota()` reads the cgroup v1 quota as 2.0 CPUs, so `host_thread_cap()` gives 2.
 
 **The fix (this directory's PR).**
