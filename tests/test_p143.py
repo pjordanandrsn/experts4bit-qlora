@@ -51,7 +51,7 @@ def test_the_premise_tests_are_staged_at_p136s_pins():
 def test_the_runner_runs_the_bench_after_the_premise_and_reads_only_a_rule_verdict():
     run = (LANE / "p143_run.sh").read_text(encoding="utf-8")
     assert "GNF4_SHA=70bc03cb7a61b03c4e801e7423c58c103a1b6d7d" in run
-    assert "p143-5090-1|p143-5090-2) FAMILY=qwen3-attn;" in run
+    assert "p143-5090-1|p143-5090-2|p143-5090-3) FAMILY=qwen3-attn;" in run
     assert run.index("grep -qE '^19 passed") < run.index("python $W/p143_bench.py --out") < run.index("python $W/p143_reduce.py --bench")
     assert 'case "$V" in GO_FIXED|GO_ADAPTIVE|PARK) ;;' in run
     for gone in ("snapshot_download", "k8_bake.py", "nsys", "p136_box.py"):
@@ -83,8 +83,34 @@ def test_every_contexts_kernel_args_outlive_its_graphs():
     assert len(step) == 1
     defaults = [ast.unparse(d) for d in step[0].args.defaults]
     assert step[0].args.args[0].arg == "args" and defaults[0] == "held[ctx]", defaults
-    assert "held[ctx] = [kv.kernel_args(layer, [0]) for layer in range(LAYERS)]" in src
-    assert src.index("REFUSED: context {ctx}'s held lengths read") < src.index("order = arms()"), "checked before timing"
+    assert "held = hold_args(kv, LAYERS)" in src
+    assert src.index("    check_held(held)") < src.index("order = arms()"), "checked before timing"
+
+
+def _bench():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("p143_bench_t", LANE / "p143_bench.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_the_bench_setup_runs_on_the_served_kv_class():
+    """Amendment 1 (p143-5090-1 failed here on the box): the bench's own fill / hold_args / check_held, on e4b's
+    Fp8PagedKV on CPU, at the registered contexts and capacity (two layers). Every context's held lengths read it."""
+    pytest.importorskip("fp8_kv", reason="the KV class needs grouped-nf4-gemm (CI installs it)")
+    torch = pytest.importorskip("torch")
+    from experts4bit_qlora.engines.fp8_paged_kv import Fp8PagedKV
+    b = _bench()
+    kv = Fp8PagedKV(2, b.HKV, b.D, batch=2, max_tokens_per_seq=b.CAP, device="cpu")
+    b.fill(kv, torch, 2, b.CAP, "cpu")
+    held = b.hold_args(kv, 2)
+    assert set(held) == set(b.CTX)
+    b.check_held(held)
+    assert all(int(a[3][0]) == ctx for ctx, args in held.items() for a in args)
+    with pytest.raises(ValueError, match="rewind forward"):          # the order p143-5090-1 used
+        kv.rewind(0, b.CTX[0])
+        kv.rewind(0, b.CTX[1])
 
 
 @pytest.mark.parametrize("script", ["p143_bench.py", "p143_reduce.py"])

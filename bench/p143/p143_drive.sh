@@ -47,9 +47,9 @@ SCP="scp -q -o BatchMode=yes $E4B_RENT_SSH_OPTS -P $PORT"
 POLL=${P143_POLL_S:-60}; W=/root/p143
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
 PASS="P143_RUN_ID=$RUN_ID P143_RUN_NONCE=$NONCE P143_DEADLINE_EPOCH=$DEADLINE P143_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA"
-# Explicit IDs only: the reading and its one pre-create spare.
+# Explicit IDs only: the reading, its rerun under Amendment 1 (-2) and one pre-create spare (-3).
 case "$RUN_ID" in
-  p143-5090-1|p143-5090-2) :;;
+  p143-5090-1|p143-5090-2|p143-5090-3) :;;
   *) say "refusing unregistered run ID: $RUN_ID (is not p143-5090-N)"; exit 78;;
 esac
 if [ "${P143_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash p143_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p143"; exit 0; fi

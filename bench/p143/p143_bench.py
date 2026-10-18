@@ -31,6 +31,33 @@ def arms():
     return [(c, s) for c in CTX for s in SPLITS]
 
 
+def fill(kv, torch, layers, cap, dev):
+    """Slot 0 of every layer filled to ``cap`` tokens by one bulk ``append`` each (random bf16 K and V)."""
+    for layer in range(layers):
+        k = torch.randn(cap, HKV, D, device=dev, dtype=torch.bfloat16)
+        v = torch.randn(cap, HKV, D, device=dev, dtype=torch.bfloat16)
+        kv.append(layer, 0, k, v)
+
+
+def hold_args(kv, layers, ctxs=CTX):
+    """Each context's ``kernel_args``, taken LONGEST FIRST: ``Fp8PagedKV.rewind`` only moves a sequence back and refuses
+    a forward move (p143-5090-1's harness error, Amendment 1), and each copy keeps its lengths through the later
+    rewinds. The copies are held for the whole run: a CUDA graph keeps only their pointers (the review of #1759)."""
+    held = {}
+    for ctx in sorted(ctxs, reverse=True):
+        kv.rewind(0, ctx)
+        held[ctx] = [kv.kernel_args(layer, [0]) for layer in range(layers)]
+    return held
+
+
+def check_held(held):
+    """Every held length still reads its context, on every layer; refused otherwise."""
+    for ctx, args in held.items():
+        got = sorted({int(lens[0].item()) for _kf, _vf, _tbl, lens in args})
+        if got != [ctx]:
+            raise SystemExit(f"REFUSED: context {ctx}'s held lengths read {got} before timing")
+
+
 def run(out_path) -> int:
     import torch
     from experts4bit_qlora.engines.fp8_paged_kv import Fp8PagedKV
@@ -39,10 +66,7 @@ def run(out_path) -> int:
     dev = "cuda"
     torch.manual_seed(143)
     kv = Fp8PagedKV(LAYERS, HKV, D, batch=SLOTS, max_tokens_per_seq=CAP, device=dev)
-    for layer in range(LAYERS):
-        k = torch.randn(CAP, HKV, D, device=dev, dtype=torch.bfloat16)
-        v = torch.randn(CAP, HKV, D, device=dev, dtype=torch.bfloat16)
-        kv.append(layer, 0, k, v)
+    fill(kv, torch, LAYERS, CAP, dev)
     torch.cuda.synchronize()
     q = torch.randn(1, HQ, D, device=dev, dtype=torch.bfloat16)
     scale = D ** -0.5
@@ -50,14 +74,9 @@ def run(out_path) -> int:
                         "block_tokens": kv.bt, "k_groups": kv.kgs[0], "block_table_cols": None},
            "reps": REPS, "passes": {}, "status": "ok"}
     graphs = {}
-    # kernel_args returns FRESH index_select copies of the block table and lengths. A CUDA graph keeps only their
-    # pointers and does not keep them alive, so every context's copies are held for the whole run (review of #1759):
-    # otherwise the allocator hands a freed context's blocks to the next context's copies and its graphs read those.
-    held = {}
+    held = hold_args(kv, LAYERS)                         # longest first; held for the run (see hold_args)
+    rec["geometry"]["block_table_cols"] = int(held[CTX[0]][0][2].shape[1])
     for ctx in CTX:
-        kv.rewind(0, ctx)
-        held[ctx] = [kv.kernel_args(layer, [0]) for layer in range(LAYERS)]
-        rec["geometry"]["block_table_cols"] = int(held[ctx][0][2].shape[1])
         for s in SPLITS:
             kw = {} if s is None else {"n_split": s}
 
@@ -77,10 +96,7 @@ def run(out_path) -> int:
                 step()
             graphs[(ctx, s)] = g
     torch.cuda.synchronize()
-    for ctx, args in held.items():                       # the held lengths still read their context, every layer
-        got = sorted({int(lens[0].item()) for _kf, _vf, _tbl, lens in args})
-        if got != [ctx]:
-            raise SystemExit(f"REFUSED: context {ctx}'s held lengths read {got} before timing")
+    check_held(held)                                     # before any timing
     rec["held_lengths_checked"] = True
     order = arms()
     for p, seq in (("1", order), ("2", list(reversed(order)))):
