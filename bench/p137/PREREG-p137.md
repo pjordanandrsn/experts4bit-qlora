@@ -143,4 +143,26 @@ harness; its high end allows a slower link.
 
 ## What was seen
 
-Nothing yet. The dry run's record, its listed skips, and any amendment are added here before the envelope request.
+**Dry run `p137-dry-4`** ($0; RTX A2000, sm_86, torch 2.11.0+cu128, transformers 5.19.0, grouped-nf4-gemm 0.45.0, the box's
+own stack; e4b the pin's tree; the harness at `57d401ee`). The whole path ran end to end, driver rc 0: staging, the nonce
+handshake, the heartbeat, the self-tests, the premise, the data, the fixture, four arms, the reducer and the fetch.
+- **Premise: 47 passed, none skipped** (`-rs` listed no skip). So the A2000 skipped nothing that sm_89 would run.
+  - What sm_89 adds is not in the premise: the grouped kernels' sm_89 build and tuning on the fused path, and the
+    timed walls. Both run first on the paid box.
+- **Every arm:** `enable_fast_train` patched 2/2 layers, with the reentrant checkpoint on 2 layers.
+- **Step 0's per-micro-batch losses were bit-identical across A0a L1a L1b A0b** (float hex, e.g. `0x1.59d7d4p+4`).
+- **Stagings** after step 0 were exactly 12 (A0) and 3 (L1) at n = 2. Step 0 was 13 (A0, cold) and 14 (L1: cold plus
+  the drift guard's stock forward).
+- **Peak allocated memory** over the timed steps: A0 1.602 GiB, L1 2.179 GiB, so +0.58 GiB, inside the term at the
+  fixture's size. The all-steps peak was the same.
+- **Held-out:** A0 21.781191 vs L1 21.781043 (|Δ| 1.5e-4).
+- **The reducer's dry verdict was NOISY** (A0b/A0a 0.956). The fixture's steps take about 0.17 s on the A2000, so its
+  self-pairs are timer noise. The A2000 is correctness-only, and no timing from it enters any prediction or bar.
+
+The harness changed twice on the way, each change followed by a dry run:
+- The fixture's own disk and RAM floors (`p137-dry-1` refused at the reading's 120 GB floor on a 79 GB dry box: the
+  refusal worked).
+- The premise line may carry a warnings count (`p137-dry-2` had 47 passed with 15 warnings, and the strict match
+  refused it).
+
+The memory term was then set to read the timed steps only. `p137-dry-4` is that final tree.
