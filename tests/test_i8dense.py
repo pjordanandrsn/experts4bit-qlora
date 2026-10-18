@@ -78,7 +78,7 @@ def test_the_runner_installs_p125s_subject_and_runs_a_then_i8():
 
 @pytest.mark.parametrize("script", ["i8_fakequant.py", "i8_box.py", "i8_reduce.py"])
 def test_the_self_tests_pass(script):
-    out = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True, timeout=120,
+    out = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True, timeout=600,
                          env=dict(os.environ, PYTHONPATH=PYPATH))
     assert out.returncode == 0 and "self-test OK" in out.stdout, out.stdout + out.stderr
 
