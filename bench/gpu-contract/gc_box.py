@@ -3,6 +3,7 @@
 
     python gc_box.py --card "ok torch=2.8.0+cu128 cc=8.9 sms=128" --declared 8.9/128   (exit 15 outside the class)
     python gc_box.py --junit report.xml --suite gnf4                                    (one JSON line; exit 30 on a failure)
+    python gc_box.py --require "mod::test ..." --junits a.xml b.xml                     (exit 30 unless every one PASSED)
     python gc_box.py --self-test
 
 A declared card class is ``MAJOR.MINOR/SMS``, where SMS is an exact count (``128``) or a floor (``>=160``). The class is the
@@ -11,11 +12,13 @@ device's compute capability and SM count as torch reports them, never its market
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 import xml.etree.ElementTree as ET
 
 CLASS = re.compile(r"^(\d+)\.(\d+)/(>=)?(\d+)$")
+TEST_ID = re.compile(r"^[A-Za-z0-9_.]+::[A-Za-z0-9_.\[\]-]+$")
 PROBE = re.compile(r"\bcc=(\d+)\.(\d+) sms=(\d+)\b")
 
 
@@ -63,6 +66,29 @@ def junit_summary(path: str, suite: str) -> dict:
     return out
 
 
+def parse_required(ids: str) -> list:
+    """GC_REQUIRE: test ids in junit form (``<classname>::<name>``, e.g.
+    ``kernel.test_dispatch_counts::test_on_a_real_rtx_4090_auto_engages_unmocked``), space-separated."""
+    out = (ids or "").split()
+    bad = [x for x in out if not TEST_ID.match(x)]
+    if bad:
+        raise ValueError(f"GC_REQUIRE ids {bad}: expected <classname>::<name>")
+    return out
+
+
+def required_status(paths: list, ids: list) -> dict:
+    """Each required id's outcome across the junit reports: PASSED only if it ran and passed; skipped, failed, errored or
+    absent is not a pass. ``ok`` iff every required id PASSED."""
+    seen = {}
+    for path in paths:
+        for tc in ET.parse(path).getroot().iter("testcase"):
+            kinds = {child.tag for child in tc}
+            seen[f"{tc.get('classname', '')}::{tc.get('name', '')}"] = (
+                "FAILED" if "failure" in kinds else "ERROR" if "error" in kinds else "SKIPPED" if "skipped" in kinds else "PASSED")
+    status = {i: seen.get(i, "ABSENT") for i in ids}
+    return {"required": status, "ok": bool(ids) and all(v == "PASSED" for v in status.values())}
+
+
 def self_test() -> int:
     good = "ok torch=2.8.0+cu128 cc=8.9 sms=128"
     assert card_ok(good, "8.9/128")[0]
@@ -89,6 +115,21 @@ def self_test() -> int:
     os.unlink(p)
     assert (s["passed"], s["failed"], s["errors"], s["skipped"], s["ok"]) == (1, 1, 1, 1, False), s
     assert s["skips"] == [{"id": "test_a::t2", "reason": "needs sm_90+"}] and s["failures"] == ["test_b::t3", "test_b::t4"]
+    fd, p = tempfile.mkstemp(suffix=".xml")
+    with os.fdopen(fd, "w") as f:
+        f.write(xml)
+    want = ["test_a::t1", "test_a::t2", "test_b::t3", "test_c::t9"]
+    r = required_status([p], want)
+    os.unlink(p)
+    assert r["required"] == {"test_a::t1": "PASSED", "test_a::t2": "SKIPPED", "test_b::t3": "FAILED", "test_c::t9": "ABSENT"}, r
+    assert not r["ok"] and required_status([], [])["ok"] is False
+    assert parse_required("a.b::c d::e[x-1]") == ["a.b::c", "d::e[x-1]"]
+    for bad in ("nocolons", "a::b;rm", "a::b c"):            # "c" has no classname
+        try:
+            parse_required(bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"accepted {bad!r}")
     print("gc_box self-test OK")
     return 0
 
@@ -100,11 +141,22 @@ def main(argv=None) -> int:
     g.add_argument("--card")
     g.add_argument("--junit")
     g.add_argument("--self-test", action="store_true")
+    g.add_argument("--require")
+    ap.add_argument("--junits", nargs="*", default=[])
     ap.add_argument("--declared")
     ap.add_argument("--suite", default="suite")
     a = ap.parse_args(argv)
     if a.self_test:
         return self_test()
+    if a.require is not None:
+        try:
+            ids = parse_required(a.require)
+        except ValueError as e:
+            print(f"GC_REQUIRE refused: {e}")
+            return 78
+        r = required_status([p for p in a.junits if os.path.exists(p)], ids)
+        print("GC_REQUIRE " + json.dumps(r))
+        return 0 if r["ok"] else 30
     if a.card is not None:
         try:
             ok, why = card_ok(a.card, a.declared)

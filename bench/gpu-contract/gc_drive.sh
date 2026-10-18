@@ -29,6 +29,12 @@ esac
 for v in GC_GNF4_SHA GC_E4B_SHA; do
   val=${!v:-}; [[ "$val" =~ ^[0-9a-f]{40}$ ]] || { say "refusing: $v='$val' is not a full 40-character commit sha (an unpinned ref is refused)"; exit 78; }
 done
+# GC_REQUIRE (optional): the test ids that must PASS, in junit form <classname>::<name>, space-separated
+# (read into an array, never word-split unquoted: an id like t[graph] must not glob against the working directory)
+REQ_RE='^[A-Za-z0-9_.]+::[]A-Za-z0-9_.[-]+$'; read -r -a REQ <<< "${GC_REQUIRE:-}"
+for id in ${REQ[@]+"${REQ[@]}"}; do
+  [[ "$id" =~ $REQ_RE ]] || { say "refusing: GC_REQUIRE id '$id' is not <classname>::<name>"; exit 78; }
+done
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 # the class must parse: gc_box answers 0 (inside) or 15 (outside) for a well-formed class against this dummy probe; 78 (malformed)
 # or anything else (the check itself failed) refuses
@@ -59,7 +65,7 @@ else
       --exclude '__pycache__' --exclude '.cache' --exclude 'gnf4src' --exclude 'e4bsrc' "root@$HOST:$W/" "$1/"; }
 fi
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
-PASS="GC_RUN_ID=$RUN_ID GC_RUN_NONCE=$NONCE GC_DEADLINE_EPOCH=$DEADLINE GC_GNF4_SHA=$GC_GNF4_SHA GC_E4B_SHA=$GC_E4B_SHA GC_CARD=$(printf %q "$GC_CARD")"
+PASS="GC_RUN_ID=$RUN_ID GC_RUN_NONCE=$NONCE GC_DEADLINE_EPOCH=$DEADLINE GC_GNF4_SHA=$GC_GNF4_SHA GC_E4B_SHA=$GC_E4B_SHA GC_CARD=$(printf %q "$GC_CARD") GC_REQUIRE=$(printf %q "${GC_REQUIRE:-}")"
 if [ "${GC_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN tool $TOOL_SHA; stage -> $WHERE:$W ; start: env $PASS bash gc_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/gc"; exit 0; fi
 say "run $RUN_ID nonce=$NONCE -> $WHERE; tool $TOOL_SHA; gnf4 $GC_GNF4_SHA; e4b $GC_E4B_SHA; card $GC_CARD; receipts -> $RUN_DIR/gc; deadline $DEADLINE"
 box "rm -rf -- $W && mkdir -p $W/logs" || { say "stage failed: remote cleanup"; exit 20; }
