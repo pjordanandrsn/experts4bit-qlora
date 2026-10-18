@@ -36,12 +36,12 @@ PREMISE_PASSED=47                                       # test_layer_major 15 + 
 DRY=${P137_DRY:-0}
 if [ "$DRY" = 1 ]; then
   MODEL=$W/p137-tiny; REV=""                                                                      # p137_tiny.py's fixture
-  NEED_FETCH=300; NEED_ARM=300
+  NEED_FETCH=300; NEED_ARM=300; DISK_DEF=10; RAM_DEF=16                                           # the fixture's own floors
 else
   MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39                            # TC3's pin
-  NEED_FETCH=2700; NEED_ARM=900
+  NEED_FETCH=2700; NEED_ARM=900; DISK_DEF=120; RAM_DEF=64
 fi
-GPU_CLASS=${P137_GPU_CLASS:-4090}; MIN_DISK_GB=${P137_MIN_DISK_GB:-120}; MIN_RAM_GB=${P137_MIN_RAM_GB:-64}
+GPU_CLASS=${P137_GPU_CLASS:-4090}; MIN_DISK_GB=${P137_MIN_DISK_GB:-$DISK_DEF}; MIN_RAM_GB=${P137_MIN_RAM_GB:-$RAM_DEF}
 REHEARSAL=${P137_REHEARSAL:-0}
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false P137_DRY=$DRY
 # every training lever starts unset: TC3's fused offload configuration at its defaults is the subject
@@ -49,7 +49,7 @@ unset LAYER_MAJOR E4B_OFFLOAD_STATS E4B_OFFLOAD_ARENA E4B_OFFLOAD_PIN_SLAB E4B_C
       E4B_CHUNKED_EVAL_LOSS E4B_ABSMAX_DQ E4B_MOE_KEEP_LAYERS TRAIN_ARENA OFFLOAD_EXPERTS OFFLOAD_PIN TRITON_INTERPRET
 : > summary.txt; echo "$P137_INSTANCE_ID" > INSTANCE_ID
 echo "KNOBS run=$P137_RUN_ID e4b=$E4B_SHA gnf4=$GNF4_SHA model=$MODEL@$REV gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_ram_gb=$MIN_RAM_GB dry=$DRY" | tee -a summary.txt
-if [ "$REHEARSAL" != 0 ] || [ "$GPU_CLASS" != 4090 ] || [ "$MIN_DISK_GB" != 120 ] || [ "$MIN_RAM_GB" != 64 ]; then
+if [ "$REHEARSAL" != 0 ] || [ "$GPU_CLASS" != 4090 ] || [ "$MIN_DISK_GB" != "$DISK_DEF" ] || [ "$MIN_RAM_GB" != "$RAM_DEF" ]; then
   echo "REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)" | tee -a summary.txt; : > REHEARSAL
 fi
 [ "$DRY" = 1 ] && { echo "DRY -- the \$0 dry run on the tiny fixture: NEVER a reading" | tee -a summary.txt; : > DRY; }

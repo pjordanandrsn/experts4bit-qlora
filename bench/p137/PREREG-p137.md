@@ -135,6 +135,7 @@ harness; its high end allows a slower link.
   - The dry box is shared, so nothing is installed: it runs the pin's e4b tree (staged by the driver) on the box's own
     stack, recorded and not pinned. The torch, card and version pins are the paid run's alone.
   - The reducer reads the fixture's records in its dry mode (n = 2: stagings 12 / 3).
+  - The fixture's own floors apply: 10 GB of disk and 16 GiB of host RAM (the reading's: 120 GB and 64 GiB).
   - The A2000 is correctness-only: no timing from it enters any prediction.
 - **First executed on the paid run:** the install and the tripwire's pins, the 61 GB fetch, the rsync transport, sm_89,
   and the timed walls at Qwen3-30B scale.
