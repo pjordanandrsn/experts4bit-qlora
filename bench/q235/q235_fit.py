@@ -119,8 +119,9 @@ def _rate(x) -> float:
     return math.ceil(x * 1000 - 1e-9) / 1000
 
 
-def leg_floors(hostrate: dict, hostrate2: dict, leg_disk_gb_s: float, sealed: dict) -> dict:
-    """Amendment 11: the floors a PRO 6000 timing leg implies; refuses (SystemExit) when its two hostrate samples disagree."""
+def leg_floors(hostrate: dict, hostrate2: dict, leg_disk_gb_s: float | None, sealed: dict) -> dict:
+    """Amendment 11: the floors a PRO 6000 timing leg implies; refuses (SystemExit) when its two hostrate samples disagree.
+    ``leg_disk_gb_s`` None: the leg did not observe a cold read, so the disk floor takes no leg sample (Amendment 12)."""
     out, basis = {}, {}
     for k in ("h2d_gb_s", "host_copy_gb_s"):
         a, b = float(hostrate[k]), float(hostrate2[k])
@@ -132,10 +133,10 @@ def leg_floors(hostrate: dict, hostrate2: dict, leg_disk_gb_s: float, sealed: di
         out[k] = _rate(max(sealed[k], A2000_MEASURED[k], leg))
         basis[k] = {"samples": [a, b], "spread": round(spread, 4), "leg_over_slack": round(leg, 4), "sealed": sealed[k],
                     "a2000_measured": A2000_MEASURED[k]}
-    leg = leg_disk_gb_s / LEG_SLACK
-    out["disk_read_gb_s"] = _rate(max(sealed["disk_read_gb_s"], A2000_MEASURED["disk_read_gb_s"], leg))
-    basis["disk_read_gb_s"] = {"sample": leg_disk_gb_s, "leg_over_slack": round(leg, 4), "sealed": sealed["disk_read_gb_s"],
-                               "a2000_measured": A2000_MEASURED["disk_read_gb_s"]}
+    leg = None if leg_disk_gb_s is None else leg_disk_gb_s / LEG_SLACK
+    out["disk_read_gb_s"] = _rate(max(sealed["disk_read_gb_s"], A2000_MEASURED["disk_read_gb_s"], leg or 0.0))
+    basis["disk_read_gb_s"] = {"sample": leg_disk_gb_s, "leg_over_slack": None if leg is None else round(leg, 4),
+                               "sealed": sealed["disk_read_gb_s"], "a2000_measured": A2000_MEASURED["disk_read_gb_s"]}
     out["basis"] = {"rule": f"max(sealed, A2000 measured, leg / {LEG_SLACK}); floors only move up", "per_floor": basis,
                     "pcie": f"gen {hostrate.get('pcie_gen')} x{hostrate.get('pcie_width')}", "host_threads": hostrate.get("host_threads")}
     return out
@@ -258,7 +259,11 @@ def main():
     sealed = sealed_floors(HERE / "q235_run.sh")
     if leg:                                            # Amendment 11: the rented leg's floors replace the A2000 rehearsal's
         hostrate2 = json.loads((a.rehearsal / "receipts" / "hostrate2.json").read_text())
-        rep["floors"] = leg_floors(hostrate, hostrate2, rep["floors"]["disk_read_gb_s"], sealed)
+        warm_read = rep["floors"]["disk_read_gb_s"]
+        # Amendment 12: an Amendment 11 leg cannot observe a cold read (its fetch has just read and hashed the slice, so the box
+        # load reads from the page cache); the registered cold-read sample is absent and contributes nothing. Reported, not used.
+        rep["floors"] = leg_floors(hostrate, hostrate2, None, sealed)
+        rep["floors"]["basis"]["per_floor"]["disk_read_gb_s"]["warm_load_read_gb_s_not_used"] = warm_read
         rep["fits"] = rep["fits"] and rep["expected_within_guard"]
     rep["floors"]["sealed"] = sealed
     caps = sealed_caps(HERE / "q235_run.sh")

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -124,7 +125,8 @@ def test_the_in_process_plants_add_only_their_measured_forwards_to_the_repeat(tm
     base = {x["phase"]: x["elapsed_s"] for x in map(json.loads, (Q / "gate2" / "phase-timings.jsonl").read_text().splitlines())}
     assert abs(rep["phases"]["repeat"]["scaled_s"] - round((base["repeat"] + 3.382) * 94 / 4, 1)) < 0.1, rep["phases"]["repeat"]
     assert rep["rehearsal"]["in_process_plants"]["added_to_repeat_s"] == 3.382
-    assert r.returncode == 0 and rep["phases"]["repeat"]["fits"], rep["phases"]["repeat"]   # the sealed cap covers the plants
+    assert rep["phases"]["repeat"]["budget_s"] == 4702        # the A2000 record; Amendment 12 seals the repeat from the PRO 6000 leg
+    assert rep["phases"]["repeat"]["sealed_cap_s"] == 705 and not rep["phases"]["repeat"]["fits"]
     (later / "receipts" / "repeat" / "box.json").write_text(json.dumps({"repeat": {"loss": 1.0}}))
     r = subprocess.run(cmd + ["--plants-from", str(later)], capture_output=True, text=True, timeout=60)
     assert r.returncode != 0 and "ran both in-process plants" in r.stderr
@@ -205,10 +207,10 @@ def _leg_from_gate2(d, tag):
     return d
 
 
-def test_the_sealed_box_cap_is_amendment_7s_refit(tmp_path):
+def test_amendment_7s_refit_is_kept_as_its_record(tmp_path):
     """Amendments 6 and 7's refit, from the committed gate2/ legs: the first leg's whole box phase plus the change measured warm
-    against warm (f17f0744 against the Amendment 4 leg, 222.0 - 79.2 = 142.8 s), scaled to 94 layers with the margin, is the sealed
-    box cap, 13,847 s; every other sealed cap still covers its budget."""
+    against warm (f17f0744 against the Amendment 4 leg, 222.0 - 79.2 = 142.8 s), scaled to 94 layers with the margin, is 13,847 s.
+    Amendment 12 seals the box cap from the RTX PRO 6000 leg instead (2,997 s), so the A2000 refit no longer fits the sealed caps."""
     reh = _rehearsal_from_receipts(tmp_path / "reh")
     cmd = [sys.executable, str(Q / "q235_fit.py"), "--rehearsal", str(reh), "--warm-install-s", "178", "--bandwidth-mbps", "3000",
            "--usd-per-hour", "1.70", "--plants-from", str(_leg_from_gate2(tmp_path / "a3", "a3")),
@@ -218,8 +220,8 @@ def test_the_sealed_box_cap_is_amendment_7s_refit(tmp_path):
     step = rep["rehearsal"]["changed_step"]
     assert step["increment_s"] == 142.8 and step["box_basis_s"] == 392.8, step
     box = rep["phases"]["box"]
-    assert box["budget_s"] == 13847 == box["sealed_cap_s"] == _fit().sealed_caps(Q / "q235_run.sh")["box"], box
-    assert r.returncode == 0 and rep["fits"] and all(p["fits"] for p in rep["phases"].values()), rep["phases"]
+    assert box["budget_s"] == 13847 and box["sealed_cap_s"] == 2997 == _fit().sealed_caps(Q / "q235_run.sh")["box"], box
+    assert not box["fits"] and r.returncode == 1
 
 
 def test_a_leg_s_floors_are_max_of_sealed_a2000_and_the_slower_sample_over_the_slack():
@@ -236,6 +238,7 @@ def test_a_leg_s_floors_are_max_of_sealed_a2000_and_the_slower_sample_over_the_s
     slow = f.leg_floors({**h1, "h2d_gb_s": 6.0}, {**h2, "h2d_gb_s": 5.9}, 1.0, sealed)
     assert slow["h2d_gb_s"] == 5.83 and slow["disk_read_gb_s"] == 1.145          # the A2000's measured rates bind a slow leg
     assert f.LEG_SLACK == 1.2 and f.MARGIN / f.LEG_SLACK == 1.25
+    assert f.leg_floors(h1, h2, None, sealed)["disk_read_gb_s"] == 1.145      # Amendment 12: no cold-read sample, no leg term
 
 
 def test_a_leg_whose_two_samples_disagree_is_unusable():
@@ -279,10 +282,12 @@ def test_the_fit_reads_a_pro6000_leg_end_to_end(tmp_path):
                         "--bandwidth-mbps", "800", "--usd-per-hour", "1.6", "--out", str(tmp_path / "fit.json")],
                        capture_output=True, text=True)
     rep = json.loads((tmp_path / "fit.json").read_text())
-    assert rep["floors"]["h2d_gb_s"] == 19.167 and rep["floors"]["host_copy_gb_s"] == 29.167
-    assert rep["floors"]["disk_read_gb_s"] == 2.074                       # the cold load's reads, 2.488 GB/s, over 1.2, rounded up
+    sealed = _fit().sealed_floors(Q / "q235_run.sh")
+    assert rep["floors"]["h2d_gb_s"] == max(19.167, sealed["h2d_gb_s"])          # max(sealed, A2000, 23.0 / 1.2): floors only up
+    assert rep["floors"]["host_copy_gb_s"] == max(29.167, sealed["host_copy_gb_s"])
+    assert rep["floors"]["disk_read_gb_s"] == max(1.145, sealed["disk_read_gb_s"])   # Amendment 12: no cold-read sample from a leg
     assert rep["phases"]["box"]["scaled_s"] == 110 * 94 / 4 and "expected_within_guard" in rep
-    assert rep["floors"]["sealed_match"] is False and r.returncode == 1      # A12 re-seals the floors the leg implies
+    assert not rep["phases"]["box"]["fits"] and r.returncode == 1            # 110 s x 94/4 x 1.5 = 3,878 s > CAP_BOX 2,997
     bad = _leg_dir(tmp_path / "b", h2={"h2d_gb_s": 18.0, "host_copy_gb_s": 35.0})
     r = subprocess.run([sys.executable, str(Q / "q235_fit.py"), "--rehearsal", str(bad), "--warm-install-s", "160",
                         "--bandwidth-mbps", "800", "--usd-per-hour", "1.6"], capture_output=True, text=True)
@@ -298,8 +303,13 @@ def test_a_leg_s_fit_binds_the_expected_run_to_the_guard(tmp_path, monkeypatch):
     the expected run (about 6.0 h) is above 0.8 x 6 h, so a leg's fit refuses. With the floors sealed as the leg implies them (what
     Amendment 12 does), the same leg at box 110 s / repeat 70 s fits."""
     f = _fit()
-    sealed = {"h2d_gb_s": 19.167, "host_copy_gb_s": 29.167, "disk_read_gb_s": 2.074, "fetch_gb_s": 10.0}
+    sealed = {"h2d_gb_s": 19.167, "host_copy_gb_s": 29.167, "disk_read_gb_s": 1.145, "fetch_gb_s": 10.0}
     monkeypatch.setattr(f, "sealed_floors", lambda run_sh: dict(sealed))
+    # Amendment 11's caps (box 13,847, repeat 4,710): under Amendment 12's tighter caps every cap fitting already implies an
+    # expected run below 4.8 h, so the binding is exercised against the caps it was registered beside.
+    a11_caps = {"require-git": 240, "create-venv": 120, "install": 1800, "hostrate": 600, "fetch": 12000, "tokens": 300, "box": 13847,
+                "repeat": 4710}
+    monkeypatch.setattr(f, "sealed_caps", lambda run_sh: dict(a11_caps))
 
     def run(d):
         out = d / "fit.json"
@@ -314,3 +324,29 @@ def test_a_leg_s_fit_binds_the_expected_run_to_the_guard(tmp_path, monkeypatch):
     assert rep["expected_within_guard"] is False and rep["fits"] is False and code == 1
     code, rep = run(_leg_dir(tmp_path / "short"))
     assert rep["expected_within_guard"] is True and rep["fits"] is True and code == 0
+
+
+def test_the_sealed_floors_and_caps_are_amendment_12s_refit_of_the_pro6000_leg(tmp_path):
+    """Amendment 12, mechanical: Amendment 11's formulas on the committed leg receipt (bench/q235/am12/leg, q235-leg-pro6000-2)
+    give exactly the sealed floors (H2D 28.33 / 1.2 -> 23.609; host copy 70.20 / 1.2 -> 58.5; the disk 1.145, because the leg's
+    load was warm and its cold-read sample is absent) and the sealed box and repeat caps (85 s and 20 s x 94/4 x 1.5 -> 2,997 and
+    705), with the expected run inside 0.8 x 6 h at the pin's 806 Mbps."""
+    import hashlib
+    am12 = Q / "am12"
+    for line in (am12 / "SHA256SUMS").read_text().splitlines():
+        digest, name = line.split()
+        assert hashlib.sha256((am12 / name).read_bytes()).hexdigest() == digest, name
+    leg = tmp_path / "leg"
+    shutil.copytree(am12 / "leg", leg)
+    out = tmp_path / "fit.json"
+    r = subprocess.run([sys.executable, str(Q / "q235_fit.py"), "--rehearsal", str(leg), "--warm-install-s", "155",
+                        "--bandwidth-mbps", "806", "--usd-per-hour", "1.627", "--out", str(out)], capture_output=True, text=True)
+    rep = json.loads(out.read_text())
+    fl, sealed = rep["floors"], _fit().sealed_floors(Q / "q235_run.sh")
+    assert (fl["h2d_gb_s"], fl["host_copy_gb_s"], fl["disk_read_gb_s"]) == (23.609, 58.5, 1.145) == (
+        sealed["h2d_gb_s"], sealed["host_copy_gb_s"], sealed["disk_read_gb_s"]), (fl, sealed)
+    assert fl["basis"]["per_floor"]["disk_read_gb_s"]["sample"] is None
+    assert fl["basis"]["per_floor"]["disk_read_gb_s"]["warm_load_read_gb_s_not_used"] > 10      # the page cache, not the disk
+    caps = _fit().sealed_caps(Q / "q235_run.sh")
+    assert rep["phases"]["box"]["budget_s"] == caps["box"] == 2997 and rep["phases"]["repeat"]["budget_s"] == caps["repeat"] == 705
+    assert rep["expected_within_guard"] and fl["sealed_match"] and rep["fits"] and r.returncode == 0, rep

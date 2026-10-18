@@ -1146,3 +1146,52 @@ receipt. The science box's pin screen re-derives its download bound from that fi
 
 **Unchanged.** The science box's rules, bands, plants, records and verdict; gate 1's A2000 rehearsal; the sealed floors and caps
 until Amendment 12.
+
+## Amendment 12 (2026-10-18, after the leg `q235-leg-pro6000-2`, before any further 235B box): the leg's floors and caps, sealed
+
+**Mechanical.** This amendment applies Amendment 11's registered formulas to the leg's receipt and seals the results into
+`q235_run.sh`. The receipt's inputs are committed under `bench/q235/am12/` with their sha256. A test re-derives every sealed
+value from them.
+
+**The leg.** `q235-leg-pro6000-1` was refused before the create, at $0: the declared hourly rate was rounded below the
+offer's bill. `q235-leg-pro6000-2` ran on a rented RTX PRO 6000, PCIe gen 4 x16, at a cost of $0.52. Every phase exited 0. The
+quiet gate saw no compute app and 0 % utilization.
+
+**The floors** (`max(sealed, the A2000's measured, min(two samples) / 1.2)`, rounded up to 0.001 GB/s):
+- **Pinned H2D:** samples 28.36 and 28.33 GB/s (0.1 % apart). 28.33 / 1.2 = 23.6083, so **23.609**.
+- **Host copy:** samples 76.64 and 70.20 GB/s (8.4 % apart, inside 15 %). 70.20 / 1.2 = **58.5**.
+- **Disk: 1.145.** Amendment 11 registers the leg's cold box load's read rate as the sample. This leg's load was warm: the
+  fetch had just read and hashed the slice, and the load read it at 17.36 GB/s from the page cache. The registered term was
+  not observed, so it contributes nothing, and the floor is max(sealed 0.743, the A2000's measured 1.145) = **1.145**. The leg's
+  O_DIRECT samples (1.73 and 3.33) are not substituted: that would be a new rule chosen after seeing the data.
+- **Sanity check of the fit at that disk floor:** the full checkpoint's reads are about 22.39 GB × 94 / 4 ≈ 526 GB. Read cold
+  at 1.145 GB/s, they take about 460 s, against the leg-scaled warm read of about 30 s. So the box's scaled 1,997.5 s becomes
+  about 2,427 s, inside its 2,997 s budget.
+- **For a later leg:** this leg design cannot observe a cold read, because the fetch warms the cache. A leg that needs one must
+  drop the page cache, or read with O_DIRECT, before its box load.
+
+**The caps** (`q235_fit.py --rehearsal <the leg> --warm-install-s 155 --bandwidth-mbps 806 --usd-per-hour 1.627`):
+- **Box:** 85 s × 94 / 4 = 1,997.5 s, × 1.5 = **2,997 s** (was 13,847, the A2000 refit of Amendment 7).
+- **Repeat:** 20 s × 94 / 4 = 470 s, × 1.5 = **705 s** (was 4,710).
+- **Unchanged,** because each still covers the leg fit's budget: install 1,800 (budget 293 at 806 Mbps), fetch 12,000 (budget
+  7,111 at 806 Mbps), the fixed phases, and `MIN_FETCH_GBS` 0.062.
+- **The expected run** (the scaled phases without `MARGIN`, plus the reserve and the controller) is **2.65 h**, within
+  0.8 × 6 h.
+
+**The pin screen.** The science box's download bound is the fit's expected run at the pinned host's listed bandwidth, at most
+4.8 h, as Amendment 11 registered. The fixed 3,000 Mbps bound is retired.
+
+**The fit's one code change.** For an Amendment 11 leg, `q235_fit.py` passes no disk sample to `leg_floors`, and reports the
+warm read beside it as not used.
+
+**The closure.** `q235.sha256` is re-sealed with `q235_stage.py --write`. Only the `q235_run.sh` row moves, from
+`900e7357558d254089bc9e0f1192f5a04c98d6d1ab4ccbe3036bd2deffd94434` to `1bc7a664ff791a3bfbc38f17ecb4829d4236e20424ace89599c7872157e51875`.
+
+**Tests** (`tests/test_q235_fit.py`):
+- The committed leg refits to exactly the sealed floors and caps, with `sealed_match` true and the expected run inside the guard.
+  Each sealed constant moved by one unit fails it.
+- Amendment 7's A2000 refit (13,847 s) and Amendment 3's plants refit (4,702 s) stay as records against the new caps.
+- The binding of the expected run is exercised against the caps Amendment 11 registered it beside: under these tighter caps,
+  every cap fitting already implies an expected run under 4.8 h.
+
+**Unchanged.** The science box's rules, bands, plants, records and verdict, and gate 1's A2000 rehearsal.
