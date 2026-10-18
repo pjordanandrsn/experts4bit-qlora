@@ -26,7 +26,9 @@ What is the same as the stock loop, and what is not:
 - Drift guard: the forward above reproduces the model's own preamble, so a transformers release that changes that
   forward would make it diverge silently. On its first call for a model, the step therefore also runs each micro-batch
   through the stock forward (gradients on, the same path the stock loop takes, its graph discarded) and refuses, before
-  any backward, unless every loss is ``torch.equal``. One extra forward per micro-batch, once per model.
+  any backward, unless every loss is ``torch.equal``. It first checks that the stock forward is itself reproducible here
+  (micro-batch 0 twice), so a nondeterministic device path refuses as that, not as drift. M + 1 extra forwards, once per
+  model. Dropout is refused outright: it would make neither the guard nor the stock-loop equality hold.
 
 Supported: the classes in :data:`SUPPORTED` (v1: Qwen3-MoE). Anything else is refused by name, as is a model that
 returns router logits (the auxiliary loss would need the layers' router outputs, which the head-only call cannot see).
@@ -52,6 +54,20 @@ class LayerMajorDriftError(RuntimeError):
     """The layer-major forward's losses differ from the model's stock forward: the reproduced preamble has drifted."""
 
 
+class LayerMajorNotReproducibleError(RuntimeError):
+    """The model's stock forward is not bit-reproducible here (two runs of one micro-batch differ), so the drift guard's
+    ``torch.equal`` cannot decide anything on this device or kernel path."""
+
+
+def _dropout_rates(model):
+    """Every nonzero dropout probability the model can draw: ``nn.Dropout`` modules and the config's ``*dropout*``
+    floats (Qwen3-MoE's attention dropout is a config float applied functionally, not a module)."""
+    rates = {f"config.{k}": v for k, v in model.config.to_dict().items()
+             if "dropout" in k and isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0}
+    rates.update({n: m.p for n, m in model.named_modules() if isinstance(m, torch.nn.Dropout) and m.p > 0})
+    return rates
+
+
 def _refuse(model) -> None:
     name = type(model).__name__
     if name not in SUPPORTED:
@@ -61,6 +77,13 @@ def _refuse(model) -> None:
     if getattr(model.config, "output_router_logits", False):
         raise NotImplementedError(
             "layer_major_step: output_router_logits is on; the router auxiliary loss is not carried by the layer-major step"
+        )
+    rates = _dropout_rates(model) if model.training else {}
+    if rates:
+        raise NotImplementedError(
+            f"layer_major_step: dropout is on ({rates}); layer-major draws the random stream in another order than the "
+            "stock loop, so its losses would not be the stock loop's, and the drift guard's extra forward would shift "
+            "training's random stream"
         )
 
 
@@ -116,6 +139,13 @@ def layer_major_step(model, batches, weights, handles=None):
     if model not in _VERIFIED:
         with torch.enable_grad():
             stock = [model(**b, use_cache=False).loss.detach() for b in batches]
+            again = model(**batches[0], use_cache=False).loss.detach()
+        if not torch.equal(again, stock[0]):
+            raise LayerMajorNotReproducibleError(
+                f"layer_major_step: the stock forward is not bit-reproducible here ({float(stock[0])!r} then "
+                f"{float(again)!r} for one micro-batch), so the drift check cannot run. No backward ran. Use the stock "
+                "accumulation loop, or make the forward deterministic"
+            )
         bad = [k for k, (got, want) in enumerate(zip(losses, stock)) if not torch.equal(got.detach(), want)]
         if bad:
             raise LayerMajorDriftError(

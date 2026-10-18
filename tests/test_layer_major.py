@@ -322,5 +322,44 @@ def test_drift_guard_runs_once_per_model(reentrant):
     layer_major_step(model, _batches(), WEIGHTS, handles=[])
     first = calls["n"]
     layer_major_step(model, _batches(), WEIGHTS, handles=[])
-    assert first == 2 * M and calls["n"] - first == M  # first: M head calls + M stock checks; then M head calls only
+    assert first == 2 * M + 1 and calls["n"] - first == M  # first: M head calls + M stock checks + 1 repeat; then M
     assert model in lm._VERIFIED
+
+
+@pytest.mark.parametrize("reentrant", [False, True], ids=["nonreentrant", "reentrant"])
+def test_drift_guard_refuses_a_non_reproducible_forward_as_such(monkeypatch, reentrant):
+    """If the stock forward itself is not bit-reproducible here (simulated: each call's loss nudged by a counter), the
+    guard says so, rather than blaming drift, and writes no gradient."""
+    from experts4bit_qlora.engines import layer_major as lm
+
+    model = _tiny(reentrant=reentrant)
+    real = type(model).forward
+    n = {"k": 0}
+
+    def wobbly(self, *a, **kw):
+        out = real(self, *a, **kw)
+        if kw.get("input_ids") is not None:  # only the stock calls (the head-only call passes inputs_embeds)
+            n["k"] += 1
+            out.loss = out.loss + n["k"] * 1e-6
+        return out
+
+    monkeypatch.setattr(type(model), "forward", wobbly)
+    with pytest.raises(lm.LayerMajorNotReproducibleError, match="not bit-reproducible"):
+        layer_major_step(model, _batches(), WEIGHTS, handles=[])
+    assert all(p.grad is None for p in model.parameters())
+
+
+def test_refuses_dropout_in_training():
+    """Layer-major draws the random stream in another order than the stock loop, so any active dropout is refused: a
+    config float (Qwen3-MoE's attention dropout) and an ``nn.Dropout`` module (as a PEFT ``lora_dropout`` is)."""
+    from experts4bit_qlora.engines import layer_major as lm
+
+    model = _tiny()
+    model.config.attention_dropout = 0.05
+    with pytest.raises(NotImplementedError, match="dropout is on"):
+        layer_major_step(model, _batches(), WEIGHTS, handles=[])
+    model.config.attention_dropout = 0.0
+    model.model.layers[1].self_attn.q_proj_dropout = torch.nn.Dropout(0.05)
+    with pytest.raises(NotImplementedError, match="q_proj_dropout"):
+        layer_major_step(model, _batches(), WEIGHTS, handles=[])
+    assert model not in lm._VERIFIED
