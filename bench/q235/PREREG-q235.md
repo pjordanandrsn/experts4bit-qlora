@@ -976,3 +976,84 @@ margin. The dX hooks add n fp32 norms per pass.
 
 **The closure.** `q235.sha256` is re-sealed for `q235_box.py`, `q235_tokens.py` and `q235_run.sh`. `q235_verdict.py` runs off the box,
 outside the closure. R2's `r2.sha256` cites Q235 at its own commit and is untouched.
+
+## Amendment 9 (2026-10-17, after box `q235-pro6000-3` and Amendment 8, before any further 235B box): the staging rate per copy, and the host-rate probe by buffer (REPORTED only)
+
+**Why.** On `q235-pro6000-3` (`box/box.json` `8b19c4c2`, `hostrate.json` `c82685f9`, `instance.json` `295f1dc7`), staging ran at
+26.6 GB/s while the box's own host-rate probe read 20.39. `am7/READ-C.md` settles that the probe under-measures that host's H2D:
+the staged bytes are exact, the timed pass bounds the rate from below at 23.0 GB/s without the stage timer, and the provider's
+listing gave 26.6. The records could not say why:
+- the box keeps only each step's staged bytes and copy count, though the offload records every copy's CUDA events during the step
+  (`E4B_OFFLOAD_STATS=1`);
+- the probe times one 1 GiB pinned buffer and records nothing about where it sits. On that host its D2H read 28.29 GB/s on both
+  boxes while its H2D read 21.76, then 20.39. Staging varied by layer (25.8–27.9 GB/s) and held steady within a layer. H2D there
+  depends on which buffer is read, and one buffer is one sample.
+
+**(i) The box records `h2d_staging` at each step**, beside `h2d_bytes_offload` (`q235_box.py`, `staging_record`):
+- `ms`: every staging call's event time, in issue order. These are the offload's own events, recorded on the stream that carries
+  each copy and read after the step's synchronize, so nothing is added inside the step;
+- `gb_s`: the bytes-weighted rate over all calls; `gb_s_min`, `gb_s_median` and `gb_s_max`: the per-call spread; `nbytes`,
+  `policies` and `total_ms`;
+- `by_layer`: calls attributed to decoder layers by the registered schedule. Per forward-backward pass, layers 1 to L−1 stage for
+  the forward (layer 0 is still resident from the previous pass's backward), then L−1 down to 0 for the recompute: 2L − 1 calls,
+  187 at 94 layers, 748 per Shape B step. This is DERIVED from the issue order, not observed. It is left out, with `by_layer_why`,
+  when the count is not that schedule's.
+
+**(ii) The probe records `h2d_by_buffer`, `single_buffer_pages` and `card`** (`q235_hostrate.py`):
+- **Unchanged:** `h2d_gb_s` and `d2h_gb_s` are still one 1 GiB pinned buffer, timed as before. Every floor and gate 2's fit read
+  what they read before.
+- `single_buffer_pages`: where that buffer's pages sit.
+- `h2d_by_buffer`:
+  - K = 8 separately pinned 1 GiB buffers (`--multi-buffers 8 --multi-copies 5`), allocated after the pinned-block cache is emptied,
+    so none of them is the single buffer's block reused;
+  - buffer i is allocated with the process bound to the CPUs of NUMA node i mod N, round robin over the N nodes that have CPUs
+    (unbound where the host exposes no nodes);
+  - each buffer is timed alone with CUDA events: one warm-up copy, then 5;
+  - buffer 0 is timed again after the rest (`first_last_gb_s`), so a link still warming up does not read as placement;
+  - per buffer: the bound node, the node its pages report, and GB/s. Overall: min, median, max, the median per bound node, and the
+    median per observed node (null unless every buffer's placement was observed);
+  - the single-buffer read runs FIRST, so none of its pinned blocks can be one of these, and the by-buffer read hands its 8 GiB
+    back before the host-copy and disk reads.
+- Page placement comes from `move_pages(2)`, queried without moving at 16 pages per buffer. Where the kernel refuses that (a
+  driver-pinned mapping), it comes from `/proc/self/numa_maps`'s counts for the mapping; otherwise the record says why.
+- `card`: the card's NUMA node (sysfs `numa_node`), its IOMMU group's default-domain type (`identity` = passthrough; `DMA` or
+  `DMA-FQ` = translated; no group = no IOMMU in use, or none exposed), and the kernel command line's IOMMU arguments.
+- **Cost:** about 8 GiB of pinned host memory for the probe's few seconds, before the fetch. The hostrate phase's 600 s cap is
+  unchanged.
+
+**How the next box's records are read** (registered now; reporting-only):
+- **R9.1, the staging rate of record**, is step 0's `h2d_staging.gb_s` (step 1's is the check). The probe's `h2d_gb_s` is a lower
+  bound and is not quoted as the link rate.
+- **R9.2, does the by-buffer probe find the link?** Expected: `h2d_by_buffer.gb_s_median` within ±10 % of R9.1's rate. Outside
+  that band, the probe still misses what staging sees, and the read says so.
+- **R9.3, placement.**
+  - The per-node medians are `by_observed_node_median_gb_s` when every buffer's placement was observed, else
+    `by_bound_node_median_gb_s` (and the read says which).
+  - If those medians span more than 10 % between nodes, NUMA placement accounts for buffer-to-buffer H2D on that host.
+  - If every node agrees within 5 % while the single buffer's `h2d_gb_s` sits more than 10 % below them, its low read is not
+    placement. `card.iommu_type` and `first_last_gb_s` are read next.
+  - Between those, or on a host with one node, no conclusion.
+- The next box is not `q235-pro6000-3`'s machine and may show no gap at all. That is a result, not a failure.
+
+**What it is not.**
+- REPORTED only. `q235_verdict.py` reads none of it, and no rule, threshold, floor, verdict line or STRICT check reads it.
+- A failure in either record is recorded (`error` in the box, `why` in the probe) and never fails the box or the phase.
+- Every existing field is unchanged.
+
+**Rehearsal** (the A2000, $0, correctness only; it sets no rate): the probe on the A2000 host, checking that the by-buffer read,
+the placement fields and the card fields fill, that buffer 0 reads the same first and last, and that the single-buffer figure is
+the one it was; and `h2d_staging` from a box step with the experts offloaded, its call count and per-layer attribution matching the
+schedule.
+
+**Recorded at the rehearsal** (2026-10-17, RTX A2000, $0; records in `am9/`):
+- **The probe** (at `72c0663a`): single buffer 6.10 GB/s; by buffer 6.12 / 6.16 / 6.18 (min / median / max); buffer 0 first and
+  last 6.15 and 6.11. Placement was not observable on that host, and the record says why: its kernel has no NUMA, and the
+  container's seccomp filter refuses `move_pages`. The IOMMU group type is `identity`. The rehearsal first ran at `3757430f`,
+  where those absent fields were left out silently; `72c0663a` records the reason instead.
+- **The box** (Shape B, the 4-layer slice; `q235_box.py` byte-identical at both heads): `h2d_staging` holds 28 calls per step =
+  4 × (2 × 4 − 1), the bytes exact, at 6.168 and 6.117 GB/s, with `by_layer` matching the schedule (layer 0: 4 calls; layers 1
+  to 3: 8 each). Amendment 2's rules all hold.
+- On that host staging sits +0.13 % (step 0) and −0.70 % (step 1) from the by-buffer median (6.16 GB/s), and the single buffer shows no gap.
+- The rehearsed `q235_box.py` is Amendment 9 on the tree before Amendment 8 merged. At this amendment's merge the file carries both;
+  Amendment 9's hunks are unchanged, and the merged file is rehearsed with the next gate-1 leg before any box. R9.2 and R9.3 are the
+  next box's reads.
