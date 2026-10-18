@@ -72,8 +72,9 @@ the rule uses (tested). The census-sum vs unprofiled ratio is REPORTED.
 - a census arm is void, or labelled CLASS_MAP_INCOMPLETE, CLASS_MAP_SEGMENT_BROKEN, NSYS_DIAGNOSTIC_ERRORS or
   CLOCK_MISMATCH;
 - a census window did not bracket exactly 64 replays;
-- in either timing pass, anchor < verify_ms(2) < verify_ms(3) < verify_ms(4) does not hold;
-- I_b(n) ≤ bytes(n): there is no increment beyond the bytes to split.
+- in either timing pass, anchor < verify_ms(2) < verify_ms(3) < verify_ms(4) does not hold.
+
+VOID is for record and instrument failures only. An increment that is all bytes is an answer, below.
 
 **NOISY:**
 - in either pass, the A/A anchors differ by more than 3 % (SD2's ANCHOR_TOL); or
@@ -81,10 +82,16 @@ the rule uses (tested). The census-sum vs unprofiled ratio is REPORTED.
 
 **READ** otherwise, with two readings:
 - **H:** share(n) = S(n) / [I_b(n) − bytes(n)], the part of the increment beyond its bytes that lies in the expert path.
-  - SUPPORT if share ≥ 0.70 at every n = 2, 3, 4;
-  - REFUTE if share < 0.50 at every n;
-  - INCONCLUSIVE otherwise.
-- **BUILD** iff S(n) ≥ need(n) for some n; otherwise NO_BUILD.
+  - At an n where I_b(n) ≤ bytes(n) there is nothing beyond the bytes: H(n) = NO_EXCESS, and that n is left out of the
+    label.
+  - Over the remaining n: SUPPORT if share ≥ 0.70 at every one; REFUTE if share < 0.50 at every one; INCONCLUSIVE
+    otherwise.
+  - NO_EXCESS at every n gives **H = NO_EXCESS**: a reading that closes the lane (a 2–4-row kernel has nothing beyond
+    the bytes to save), not a failure and not a strike.
+- **BUILD** iff S(n) ≥ need(n) for some n; otherwise NO_BUILD. It is always NO_BUILD when H is NO_EXCESS.
+
+Real records do not trip NO_EXCESS: sd2-5090-3's increment against the bytes term built from P123's real B = 1
+census share carries an excess at every n (`tests/test_vsplit.py`).
 
 **REPORTING, never a rung:**
 - census-sum vs unprofiled;

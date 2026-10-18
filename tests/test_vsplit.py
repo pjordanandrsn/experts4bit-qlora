@@ -186,3 +186,18 @@ def test_the_driver_refuses_another_run_id(tmp_path):
     out = subprocess.run(["bash", str(LANE / "vsplit_drive.sh")], capture_output=True, text=True,
                          env=_dry_env(tmp_path, "p132-5090-9"), timeout=120)
     assert out.returncode == 78 and "is not vsplit-5090-N" in out.stdout + out.stderr
+
+
+def test_the_reference_records_carry_an_excess_beyond_the_bytes():
+    """Real records first, for the NO_EXCESS rung: sd2-5090-3's V1 increment against the bytes term built from P123's
+    real B = 1 census share (p123-5090-1, the same model and route) has an excess at every n, so the reference case reads
+    H over all three n rather than NO_EXCESS."""
+    red = _red()
+    v1 = json.loads(SD2_V.read_text())["v1"]
+    anchor, verify, full, per = red.timing_terms([v1, v1])
+    p123 = B / "p123" / "receipts" / "p123-5090-1"
+    raw = (p123 / "census_b1.json").read_bytes()
+    assert hashlib.sha256(raw).hexdigest() in (p123 / "SHA256SUMS").read_text()
+    sh1 = red.shares(json.loads(raw))
+    by = {n: (red.RHO[n] - 1.0) * sh1["moe_expert"] * anchor for n in red.NS}
+    assert all(verify[n] - anchor - by[n] > 0 for n in red.NS), (verify, anchor, by)

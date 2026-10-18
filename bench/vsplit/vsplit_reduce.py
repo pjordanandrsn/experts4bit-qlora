@@ -28,13 +28,17 @@ First rung that applies:
   VOID   a record missing or not ok; the target, kernel package or model revision off the registration; a bucket of
          1..4 not captured; the canary failed; a census arm void or labelled CLASS_MAP_INCOMPLETE,
          CLASS_MAP_SEGMENT_BROKEN, NSYS_DIAGNOSTIC_ERRORS or CLOCK_MISMATCH; a census window not exactly the registered
-         replays; in either pass, anchor < verify_ms(2) < verify_ms(3) < verify_ms(4) does not hold; I_b(n) <= bytes(n).
+         replays; in either pass, anchor < verify_ms(2) < verify_ms(3) < verify_ms(4) does not hold. VOID is for record
+         and instrument failures only.
   NOISY  in either pass, the A/A anchors differ by more than 3 %; or the two passes (the self-pair) differ by more
          than 3 % on the anchor or on any verify_ms(n).
   READ   otherwise, with two readings:
     H      share(n) = S(n) / [I_b(n) - bytes(n)], the part of the increment beyond its bytes that lies in the expert
-           path. SUPPORT if share >= 0.70 at every n = 2, 3, 4; REFUTE if share < 0.50 at every n; INCONCLUSIVE otherwise.
-    BUILD  BUILD a 2-4-row expert kernel iff S(n) >= need(n) for some n; NO_BUILD otherwise.
+           path. At an n where I_b(n) <= bytes(n) there is nothing beyond the bytes: H(n) = NO_EXCESS, and that n is left
+           out of the label. Over the remaining n: SUPPORT if share >= 0.70 at every one; REFUTE if share < 0.50 at
+           every one; INCONCLUSIVE otherwise. NO_EXCESS at every n gives H = NO_EXCESS (a reading, not a failure).
+    BUILD  BUILD a 2-4-row expert kernel iff S(n) >= need(n) for some n; NO_BUILD otherwise (and always when H is
+           NO_EXCESS: a kernel has nothing beyond the bytes to save).
 REPORTING (never a rung): census-sum vs unprofiled (P_ms / the unprofiled step, the profiler's inflation); each class's
 increment as a fraction of I_b(n) beside the registered prediction; the unattributed remainder.
 
@@ -124,7 +128,10 @@ def split(anchor, verify, sh):
 
 
 def h_label(share):
-    vals = [share[n] for n in NS]
+    """The label over the n that carry an excess (``share`` holds only those); NO_EXCESS when none does."""
+    vals = list(share.values())
+    if not vals:
+        return "NO_EXCESS"
     if all(s >= SUPPORT_AT for s in vals):
         return "SUPPORT"
     if all(s < REFUTE_BELOW for s in vals):
@@ -182,19 +189,18 @@ def judge(d):
         ms, delta, by, dexp = split(anchor, verify, sh)
         out["inputs"]["share_n1"] = sh[1]
         out["inputs"]["bytes"] = by
-        inc = out["inputs"]["I_b"]
-        for n in NS:
-            if inc[n] - by[n] <= 0:
-                void.append(f"I_b(n={n}) {inc[n]:.4f} <= bytes(n) {by[n]:.4f}: no increment beyond the bytes to split")
     if void:
         out["verdict"] = "VOID"
         return out
     inc, need = out["inputs"]["I_b"], out["inputs"]["need"]
     sav = {n: dexp[n] - by[n] for n in NS}
-    share = {n: sav[n] / (inc[n] - by[n]) for n in NS}
-    build = [n for n in NS if sav[n] >= need[n]]
+    excess = [n for n in NS if inc[n] - by[n] > 0]
+    share = {n: sav[n] / (inc[n] - by[n]) for n in excess}
+    h = h_label(share)
+    build = [] if h == "NO_EXCESS" else [n for n in NS if sav[n] >= need[n]]
     out["outcome"] = {"shares": {n: sh[n] for n in NS}, "delta_class": delta, "dExp": dexp, "S": sav, "share": share,
-                      "H": h_label(share), "build_at": build, "BUILD": "BUILD" if build else "NO_BUILD"}
+                      "H_by_n": {n: (share[n] if n in share else "NO_EXCESS") for n in NS}, "H": h,
+                      "build_at": build, "BUILD": "BUILD" if build else "NO_BUILD"}
     out["reporting"] = {
         "census_over_unprofiled": {n: census[n]["P_ms"] / ({1: anchor, **verify}[n]) for n in (1,) + NS},
         "class_fraction_of_I_b": {n: {c: delta[n][c] / inc[n] for c in CLASSES} for n in NS},
@@ -308,6 +314,18 @@ def self_test() -> int:
     run("a failed canary is VOID", {"verdict": "VOID"}, canary="failed")
     run("another target is VOID", {"verdict": "VOID"}, sha="0" * 40)
     run("failed GPU tests are VOID", {"verdict": "VOID"}, gpu_rc=1)
+    # an increment that is all bytes is the lane's answer (NO_EXCESS, NO_BUILD), never a VOID
+    t1 = _world(0.9)[1]
+    e1 = t1["moe_expert"]
+    a_mid = sum(_V1["anchor"]) / 2
+    small = {n: a_mid + 0.5 * (RHO[n] - 1.0) * e1 for n in NS}
+    run("an all-bytes increment reads NO_EXCESS and NO_BUILD", {"verdict": "READ", "H": "NO_EXCESS", "BUILD": "NO_BUILD"},
+        verify=small, terms=_world(0.9, verify=small))
+    part = {2: small[2], 3: _V1["verify"][3], 4: _V1["verify"][4]}
+    r = run("NO_EXCESS at n = 2 leaves H to n = 3, 4", {"verdict": "READ", "H": "SUPPORT"}, verify=part,
+            terms=_world(0.9, verify=part))
+    cases.append(("H_by_n marks the no-excess n", r["outcome"]["H_by_n"][2] == "NO_EXCESS"
+                  and set(r["outcome"]["share"]) == {3, 4}, r["outcome"]["H_by_n"]))
     # a card 15 % faster everywhere reads the same verdict: nothing compares it with another card
     fast_a = tuple(x * 0.85 for x in _V1["anchor"])
     fast_v = {n: v * 0.85 for n, v in _V1["verify"].items()}
