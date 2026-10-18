@@ -108,16 +108,23 @@ The Shape B box `q235-pro6000-3` (RTX PRO 6000, PCIe gen 4 x16) passed its verdi
   That is **26.6 GB/s effective**.
 - The same box's `hostrate.json` read 20.39 GB/s: 1 GiB pinned copies, back to back, CUDA-event timed. Staging ran at
   **1.30x** its own probe.
-- The records do not say why. The bytes per call match the model, so either the probe's buffer reads slower than the
-  offload homes on this host, or the stage timer brackets less than the copy. The p66 record shows two probes on one
-  gen 4 host disagreeing by 1.57x. Until the cause is known, the probe is not the staging rate on this box.
+- **The probe under-measures this host's H2D**, so the staging rate of record on this machine is **26.6 GB/s** (25.8–27.9
+  per layer). The receipts settle it:
+  - The bytes are exact: 1,016,497,963,008 B / 748 copies = 1,358,954,496 B, 128 experts × 10,616,832 B.
+  - The timer does not under-bracket. The box loads with prefetch off, and the copies run on the stream the stage
+    events are recorded on. Independently of the timer, the timed pass moved 1,016.5 GB in 44.1 s: at least 23.0 GB/s
+    even if staging overlapped everything, and at least 26.2 GB/s with the 5.29 s of experts compute taken out.
+  - The provider's listing for the machine at launch gave pcie_bw 26.6 GB/s (the run's `instance.json`, `295f1dc7`).
+  - The probe copies one 1 GiB buffer. Its D2H (28.29 GB/s) is unaffected while its H2D is low, which points at that
+    one source buffer's placement. Which mechanism (NUMA or IOMMU) is not in the receipts.
+  - Receipts: `q235-pro6000-3` `box/box.json` (`8b19c4c2`), `hostrate.json` (`c82685f9`), `instance.json` (`295f1dc7`).
 
-**Experts compute** per micro-batch per layer: forward 4.76 ms, recompute 4.62, backward 4.68, so 14.06 against #1680's
+**Experts compute** per micro-batch per layer: forward 4.76 ms, recompute 4.62, backward 4.68, so 14.07 against #1680's
 15.13. The split differs from the prediction: the forward is heavier and the backward lighter.
 
 **Re-run on the measured inputs** (`roofline.py`, "A7 measured"), per pass against the routed floor:
 
-| schedule | @ 20.39 GB/s (probe) | @ 26.6 GB/s (effective) |
+| schedule | @ 20.39 GB/s (the probe, an under-read) | @ 26.6 GB/s (staging, of record) |
 |---|---:|---:|
 | (b) serial | 1.586 | 1.730 |
 | (b) whole-layer double buffer | 1.125 | 1.125 |
@@ -203,6 +210,7 @@ result would need a parity bar rather than `torch.equal`.
 - **Revisit tiles** only for a card or model where two layer slots don't fit, or as a tile-fused recompute + backward
   kernel. Before any prototype, run the copy-size sweep from section 5.
 - **The A7 read confirms it.** Measured compute and staging leave the ordering and the ratios to the floor unchanged.
-  Open: why staging ran 1.30x faster than the box's own host-rate probe.
+  Staging ran 1.30x the box's host-rate probe because the probe under-measures this host's H2D (section 2, "The A7
+  read").
 
 Nothing here changes Q235, a default or a registered result.
