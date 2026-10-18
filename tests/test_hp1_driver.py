@@ -19,13 +19,13 @@ echo "PY: $*" >> "$W/py.log"
 case "$*" in *hp1_eval.py*) echo "EVAL_OFFLINE=${HF_HUB_OFFLINE:-unset}" >> "$W/py.log";; esac
 case "$*" in
   *hp1_trunc.py*) echo '{"model": "local/cut", "revision": "abc"}';;
-  *"hp1_reduce.py select"*) [ -n "${SEL:-}" ] && echo "HP1_SELECTED=$SEL";;
-  *"hp1_reduce.py voids"*eval_early*) [ "${EARLY:-ok}" = runvoid ] && [ ! -e "$W/early_redrawn" ] && { echo hp1_k00_s3407; touch "$W/early_redrawn"; };;
+  *"hp1_reduce.py select"*) [ -n "${STUB_SEL:-}" ] && echo "HP1_SELECTED=$STUB_SEL";;
+  *"hp1_reduce.py voids"*eval_early*) [ "${STUB_EARLY:-ok}" = runvoid ] && [ ! -e "$W/early_redrawn" ] && { echo hp1_k00_s3407; touch "$W/early_redrawn"; };;
   *"hp1_reduce.py voids"*eval_K*) [ -n "${VOID_K:-}" ] && [ ! -e "$W/k_redrawn" ] && { echo "$VOID_K"; touch "$W/k_redrawn"; };;
   *"hp1_reduce.py voids"*) ;;
   *hp1_eval.py*)
     out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p'); st=OK
-    case "$out" in *eval_early*) case "${EARLY:-ok}" in basevoid) st=VOID;; runvoid) [ -e "$W/early_redrawn" ] && st=OK || st=UNUSED;; esac;; esac
+    case "$out" in *eval_early*) case "${STUB_EARLY:-ok}" in basevoid) st=VOID;; runvoid) [ -e "$W/early_redrawn" ] && st=OK || st=UNUSED;; esac;; esac
     echo "{\"bases\":[{\"seconds\":120,\"status\":\"$st\"}],\"arms\":[{\"tag\":\"x\"}]}" > "$out";;
   *"import json,sys"*) python3 -c "${@:2}";;
 esac
@@ -44,7 +44,7 @@ status_of(){ [ "${SHAKE_FAIL:-}" = "$2" ] && echo install_failed || echo ok; }
 hp1_bulk_manifest(){ echo "manifest $1" >> "$W/manifest.log"; }
 mkdir -p logs hp1 data; : > summary.txt; : > arms.log
 source ./hp1_funcs.sh
-tc1_hp1_family qwen3hp1 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600 3600
+${FAMILY_FN:-tc1_hp1_family} qwen3hp1 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600 3600
 """
 
 
@@ -55,7 +55,7 @@ def drive(tmp_path, **env):
     (tmp_path / "fakepy").chmod(0o755)
     (tmp_path / "harness.sh").write_text(HARNESS)
     e = dict(os.environ, W=str(tmp_path))
-    e.update({"SEL": "k10", **env})
+    e.update({"STUB_SEL": "k10", **env})
     p = subprocess.run(["bash", "harness.sh"], cwd=tmp_path, env=e, capture_output=True, text=True, timeout=120)
     assert p.returncode == 0, p.stderr[-2000:]
     arms = [ln.split() for ln in (tmp_path / "arms.log").read_text().splitlines()]
@@ -87,13 +87,13 @@ def test_a_failed_box_side_shakedown_ends_the_draw_unscored(tmp_path):
 
 
 def test_a_base_level_early_failure_ends_the_draw_after_one_run(tmp_path):
-    arms, summary = drive(tmp_path, EARLY="basevoid")
+    arms, summary = drive(tmp_path, STUB_EARLY="basevoid")
     assert "HP1 EARLY_BASE_CHECK_FAILED VOID" in summary and tags(arms) == ["hp1_k00_s3407"]
     assert "HP1_REDRAW" not in summary                    # a base-level VOID is never redrawn
 
 
 def test_a_run_level_early_void_is_redrawn_once_then_the_k_block_runs(tmp_path):
-    arms, summary = drive(tmp_path, EARLY="runvoid")
+    arms, summary = drive(tmp_path, STUB_EARLY="runvoid")
     t = tags(arms)
     assert t.count("hp1_k00_s3407") == 2 and "HP1_REDRAW hp1_k00_s3407" in summary and "HP1 EARLY_BASE_CHECK_OK" in summary
     redraw = [a for a in arms if a[0] == "qwen3hp1" and a[2] == "hp1_k00_s3407"][1]
@@ -107,7 +107,7 @@ def test_a_run_level_void_in_the_k_block_is_redrawn_once(tmp_path):
 
 
 def test_an_empty_selection_skips_the_p_block(tmp_path):
-    arms, summary = drive(tmp_path, SEL="")
+    arms, summary = drive(tmp_path, STUB_SEL="")
     assert "HP1 K_INCOMPLETE" in summary
     assert not [x for x in tags(arms) if x.endswith(("3410", "3411", "3412"))]
 
@@ -196,3 +196,102 @@ def test_a_finish_with_unhashed_bytes_skips_even_when_the_last_pass_was_fast(tmp
     assert p.returncode == 0, p.stderr
     assert (tmp_path / "hp1" / "bulk_manifest.SKIPPED").exists()
     assert json.loads((tmp_path / "hp1" / "bulk_manifest.json").read_text())["files"] == []   # it never started hashing
+
+
+# ----------------------------------------------------------------------------- the split path (Amendment 2: box 1 / box 2)
+def _stage_box1_outputs(tmp_path, selected="k10"):
+    """What box 1 carries out, staged flat beside box 2's runner, and the sha256s its receipt pins."""
+    import hashlib
+    import json
+    (tmp_path / "eval_K.json").write_text(json.dumps({"tokens": {"eval_n": 48}, "arms": []}))
+    (tmp_path / "select.json").write_text(json.dumps({"verdict": "OK", "k": {"selected": selected}}))
+    (tmp_path / "bulk_manifest.json").write_text(json.dumps({"hp1_bulk_manifest": 1, "files": []}))
+    return {f"TC1_HP1_K_{k}_SHA256": hashlib.sha256((tmp_path / f).read_bytes()).hexdigest()
+            for k, f in (("EVAL", "eval_K.json"), ("SELECT", "select.json"), ("MANIFEST", "bulk_manifest.json"))}
+
+
+def test_split_box1_ends_at_the_selection_and_prints_what_it_carries(tmp_path):
+    arms, summary = drive(tmp_path, FAMILY_FN="tc1_hp1k_family")
+    t = tags(arms)
+    assert len([x for x in t if x.startswith("hp1_k")]) == 12 and not [x for x in t if x.endswith(("3410", "3411", "3412"))]
+    assert "HP1_SELECTED=k10" in summary and all(f"HP1_CARRY {f} sha256" in summary for f in ("eval_K.json", "select.json", "bulk_manifest.json"))
+
+
+def test_split_box2_refuses_without_box1s_files(tmp_path):
+    arms, summary = drive(tmp_path, FAMILY_FN="tc1_hp1p_family")
+    assert "HP1 P_REFUSED carry eval_K.json" in summary and tags(arms) == []
+
+
+def test_split_box2_refuses_a_carried_file_that_does_not_match_box1s_hash(tmp_path):
+    pins = _stage_box1_outputs(tmp_path)
+    pins["TC1_HP1_K_SELECT_SHA256"] = "0" * 64
+    arms, summary = drive(tmp_path, FAMILY_FN="tc1_hp1p_family", **pins)
+    assert "HP1 P_REFUSED carry select.json" in summary and tags(arms) == []
+
+
+def test_split_box2_refuses_a_selection_that_does_not_re_derive(tmp_path):
+    pins = _stage_box1_outputs(tmp_path, selected="k01")     # select.json says k01; the staged eval_K.json re-derives k10
+    arms, summary = drive(tmp_path, FAMILY_FN="tc1_hp1p_family", **pins)
+    assert "HP1 P_REFUSED selection" in summary and tags(arms) == []
+
+
+def test_split_box2_runs_its_own_shakedown_and_early_check_before_p(tmp_path):
+    pins = _stage_box1_outputs(tmp_path)
+    arms, summary = drive(tmp_path, FAMILY_FN="tc1_hp1p_family", **pins)
+    assert "HP1 SHAKEDOWN_OK" in summary and "HP1 EARLY_BASE_CHECK_OK" in summary
+    t = tags(arms)
+    assert t[0] == "hp1_e_k10_s3410" and not [x for x in t if x.endswith(("3407", "3408", "3409"))]
+    assert len(t) == 12
+    first = [a for a in arms if a[0] == "qwen3hp1"][0]
+    assert "--hp1-export-base" in first                    # box 2's first E run exports the e4b base for its early check
+    py = (tmp_path / "py.log").read_text()
+    line = [ln for ln in py.splitlines() if "hp1_reduce.py verdict" in ln][0]
+    assert "eval_K_box1.json" in line and "bulk_manifest_box1.json" in line and line.count("--manifest") == 2
+
+
+def test_split_box2_ends_on_a_base_level_early_failure(tmp_path):
+    pins = _stage_box1_outputs(tmp_path)
+    arms, summary = drive(tmp_path, FAMILY_FN="tc1_hp1p_family", STUB_EARLY="basevoid", **pins)
+    assert "HP1 EARLY_BASE_CHECK_FAILED" in summary and tags(arms) == ["hp1_e_k10_s3410"]
+
+
+
+def test_split_box2_refuses_a_box1_manifest_that_does_not_match(tmp_path):
+    pins = _stage_box1_outputs(tmp_path)
+    pins["TC1_HP1_K_MANIFEST_SHA256"] = "f" * 64
+    arms, summary = drive(tmp_path, FAMILY_FN="tc1_hp1p_family", **pins)
+    assert "HP1 P_REFUSED carry bulk_manifest.json" in summary and tags(arms) == []
+
+
+def _controller_pin_check(tmp_path, pins, stage):
+    src = (REPO / "bench" / "tc1" / "tc1_drive.sh").read_text()
+    i = src.index("# HP1 split box 2 (qwen3hp1p")
+    block = src[i:src.index("# end HP1 split box 2 pins", i)]
+    sh = tmp_path / "pins.sh"
+    sh.write_text('say(){ echo "SAY: $*"; }\n' + block + "echo PINS_OK\n")
+    env = dict(os.environ, TC1_FAMILIES="qwen3hp1p", TC1_EXTRA_STAGE=" ".join(str(p) for p in stage), **pins)
+    return subprocess.run(["bash", str(sh)], env=env, capture_output=True, text=True, timeout=60)
+
+
+@pytest.mark.parametrize("case", ["ok", "short_pin", "non_hex_pin", "unset_pin", "file_missing", "hash_mismatch"])
+def test_the_controller_checks_box1s_carry_pins_before_renting(tmp_path, case):
+    """Amendment 2: a mis-pinned box 2 is a $0 refusal on the controller (rc 78), never a paid box that spends the run id."""
+    stage_dir = tmp_path / "carry"
+    stage_dir.mkdir()
+    pins = _stage_box1_outputs(stage_dir)
+    stage = [stage_dir / f for f in ("eval_K.json", "select.json", "bulk_manifest.json")]
+    if case == "short_pin":
+        pins["TC1_HP1_K_EVAL_SHA256"] = pins["TC1_HP1_K_EVAL_SHA256"][:40]
+    elif case == "non_hex_pin":
+        pins["TC1_HP1_K_SELECT_SHA256"] = "Z" * 64
+    elif case == "unset_pin":
+        pins.pop("TC1_HP1_K_MANIFEST_SHA256")
+    elif case == "file_missing":
+        stage = stage[:2]
+    elif case == "hash_mismatch":
+        (stage_dir / "select.json").write_text("{}")
+    p = _controller_pin_check(tmp_path, pins, stage)
+    if case == "ok":
+        assert p.returncode == 0 and "PINS_OK" in p.stdout, p.stdout + p.stderr
+    else:
+        assert p.returncode == 78 and "refusing" in p.stdout and "PINS_OK" not in p.stdout, p.stdout + p.stderr

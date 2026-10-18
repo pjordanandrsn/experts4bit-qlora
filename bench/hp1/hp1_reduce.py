@@ -433,9 +433,16 @@ def p_readout(index, k):
     groups += [(f"P:{g}", list(series(index, "P", g, CONFIRMATION_SEEDS)[0].values())) for g in p_groups]
     sigma, sigma_df, sigma_detail = pooled_sd(groups)
     margin = min(max(sigma, MARGIN_FLOOR), MARGIN_CAP) if sigma is not None else None
+    # REPORTED beside the pooled sigma the verdict uses (Amendment 2): per block, which is per box on the split path (K on box 1,
+    # P on box 2). A box-to-box shift can move the pooled value through the K groups; it never enters a paired delta (all on box 2).
+    by_block = {}
+    for blk in ("K", "P"):
+        sd, df, _ = pooled_sd([g for g in groups if g[0].startswith(blk + ":")])
+        by_block[blk] = {"sigma": sd, "df": df}
 
     out = {"selected": cell, "e_arm": e_group, "seeds": list(CONFIRMATION_SEEDS),
            "sigma_seed": sigma, "sigma_seed_df": sigma_df, "sigma_seed_groups": sigma_detail, "m": margin,
+           "sigma_seed_by_block": by_block,
            "competitors": {c: {"included": v["included"], "mean": v["mean"], "missing": v["missing"],
                                "per_seed": {str(s): y for s, y in v["ys"].items()},
                                "own_base_only": sorted(r["tag"] for r in v["recs"] if r["own_base_only"])}
@@ -515,6 +522,9 @@ def render_md(k, p):
         return "\n".join(lines) + "\n"
     lines += [f"- sigma_seed = {_f(p['sigma_seed'])} (pooled, df {p['sigma_seed_df']}); m = {_f(p['m'])}; "
               f"C* = {p.get('c_star')}; excluded competitors: {p['excluded_competitors'] or 'none'}"]
+    bb = p.get("sigma_seed_by_block") or {}
+    lines += [f"- sigma_seed by block (REPORTED; per box on the split path): K {_f((bb.get('K') or {}).get('sigma'))} "
+              f"(df {(bb.get('K') or {}).get('df')}), P {_f((bb.get('P') or {}).get('sigma'))} (df {(bb.get('P') or {}).get('df')})"]
     if p["verdict"] == "P_INCOMPLETE":
         lines += ["", "**P_INCOMPLETE**: " + "; ".join(p["problems"])]
         return "\n".join(lines) + "\n"
@@ -545,15 +555,41 @@ def _rel_hp1(path):
     return path[i:] if i >= 0 else path
 
 
-def manifest_problems(manifest_path, eval_paths):
+def manifest_problems(manifest_paths, eval_paths):
     """Amendment 1, fail-closed: the bulk manifest must pin every canonical adapter and base export the evaluator SCORED -- each
     scored arm's adapter listed with its exact sha256, its base export's index.json listed. Returns a list of problems (empty = pinned)."""
-    try:
-        with open(manifest_path) as fh:
-            man = json.load(fh)
-        listed = {row["path"]: row.get("sha256") for row in man["files"]}
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        return [f"bulk manifest {manifest_path} missing or unparsable: {type(exc).__name__}: {exc}"]
+    if isinstance(manifest_paths, str):
+        manifest_paths = [manifest_paths]
+    per = []                                        # every box's manifest (Amendment 2: box 1's + box 2's)
+    for manifest_path in manifest_paths:
+        try:
+            with open(manifest_path) as fh:
+                man = json.load(fh)
+            per.append((manifest_path, {row["path"]: row.get("sha256") for row in man["files"]}))
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            return [f"bulk manifest {manifest_path} missing or unparsable: {type(exc).__name__}: {exc}"]
+    # The paths a reading USES: every scored arm's adapter and its base export's index.json -- plus the layer files of every base
+    # export outside the shakedown (a deterministic quantization: the same base on two boxes must be the same bytes). A box's own
+    # shakedown files (hp1/shake/**, shake-cache) are trained per box and never compared across manifests.
+    used = set()
+    for path in eval_paths:
+        with open(path) as fh:
+            for arm in json.load(fh).get("arms", []):
+                if arm.get("status") == "SCORED":
+                    used.add(_rel_hp1(arm.get("adapter")))
+                    used.add(_rel_hp1(arm.get("base")).rstrip("/") + "/index.json")
+
+    def compared(k):
+        if k.startswith("hp1/shake/") or "/shake-cache/" in k:
+            return False
+        return k in used or any(part.startswith("base_") for part in k.split("/")[1:-1])
+    listed = {}
+    for manifest_path, rows in per:
+        clash = sorted(k for k in rows if compared(k) and k in listed and listed[k] != rows[k])
+        if clash:                                   # fail closed on what the reading uses: refused by name, never last-wins
+            return [f"bulk manifests disagree on {k}: {str(listed[k])[:12]} vs {str(rows[k])[:12]} ({manifest_path})" for k in clash]
+        for k, v in rows.items():
+            listed.setdefault(k, v)
     problems = []
     for path in eval_paths:
         with open(path) as fh:
@@ -581,8 +617,9 @@ def main(argv=None):
         sp = sub.add_parser(name)
         sp.add_argument("evals", nargs="+", help="hp1_eval.py output JSON(s); arms are merged, duplicate tags refused")
         sp.add_argument("--out", required=True, help="readout JSON")
-        sp.add_argument("--manifest", required=True, help="the box's hp1/bulk_manifest.json (Amendment 1): a reading whose manifest does not pin "
-                        "every scored adapter and base export is VOID")
+        sp.add_argument("--manifest", required=True, action="append",
+                        help="a box's hp1/bulk_manifest.json (Amendment 1; repeat it for each box, Amendment 2): a reading whose manifests do "
+                        "not pin every scored adapter and base export is VOID")
         if name == "verdict":
             sp.add_argument("--md", required=True, help="human-readable markdown table")
     a = ap.parse_args(argv)

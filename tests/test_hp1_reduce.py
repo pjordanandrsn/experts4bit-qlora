@@ -476,3 +476,85 @@ def test_a_reading_whose_manifest_does_not_pin_what_was_scored_is_void(tmp_path,
     assert hr.main(["select", kf, "--out", str(out), *mf]) == hr.EXIT_INCOMPLETE
     res = json.loads(out.read_text())
     assert res["verdict"] == "VOID" and res["manifest_problems"] and "HP1_SELECTED" not in capsys.readouterr().out
+
+
+def test_sigma_is_reported_per_block_beside_the_pooled_value(tmp_path, capsys):
+    """Amendment 2: sigma_seed per block (per box on the split path) is REPORTED beside the pooled value the verdict uses. K and P
+    get DIFFERENT spreads here, and each block's sigma is checked against a pooled SD computed from its own groups alone."""
+    import statistics
+    k_noise, p_noise = (-0.0001, 0.0, 0.0001), (-0.004, 0.0, 0.004)
+    k_arms = _k_arms(K10_BEST, noise=k_noise)
+    p_arms = []
+    for i, s in enumerate(CONF):
+        p_arms.append(_arm(f"hp1_e_k10_s{s}", s, BASE + p_noise[i]))
+        p_arms.append(_arm(f"hp1_k00_s{s}", s, BASE + 0.02 + p_noise[i]))
+        p_arms += [_arm(f"hp1_{c}_s{s}", s, BASE + 0.001 + p_noise[i], framework=c) for c in hr.COMPETITORS]
+    code, res, md, _ = _verdict(tmp_path, k_arms, p_arms, capsys)
+
+    def pooled(groups):
+        ss = sum(sum((y - statistics.fmean(g)) ** 2 for y in g) for g in groups)
+        return math.sqrt(ss / sum(len(g) - 1 for g in groups))
+    k_groups = [[K10_BEST[c] + e for e in k_noise] for c in K10_BEST]
+    p_groups = [[BASE + off + e for e in p_noise] for off in (0.0, 0.02, 0.001, 0.001)]
+    bb = res["p"]["sigma_seed_by_block"]
+    assert bb["K"]["df"] == 8 and bb["P"]["df"] == 8
+    assert bb["K"]["sigma"] == pytest.approx(pooled(k_groups)) and bb["P"]["sigma"] == pytest.approx(pooled(p_groups))
+    assert bb["K"]["sigma"] < res["p"]["sigma_seed"] < bb["P"]["sigma"] and "sigma_seed by block" in md
+
+def test_manifests_from_two_boxes_are_checked_as_their_union(tmp_path, capsys):
+    """Amendment 2: box 2's verdict reads box 1's eval_K.json, whose adapters only box 1's manifest lists -- the reducer takes both
+    manifests and checks the union; either one alone does not pin everything."""
+    kf, pf = _write(tmp_path, "k.json", _k_arms(K10_BEST)), _write(tmp_path, "p.json", _p_arms("k10", (0.0001, -0.0001, 0.0)))
+    (tmp_path / "b1").mkdir()
+    (tmp_path / "b2").mkdir()
+    m1, m2 = _mf(tmp_path / "b1", kf), _mf(tmp_path / "b2", pf)
+    out, md = str(tmp_path / "v.json"), str(tmp_path / "v.md")
+    assert hr.main(["verdict", kf, pf, "--out", out, "--md", md, *m2]) == hr.EXIT_INCOMPLETE      # box 2's alone: K unpinned
+    assert hr.main(["verdict", kf, pf, "--out", out, "--md", md, *m1, *m2]) == hr.EXIT_OK
+
+
+
+def test_manifests_that_disagree_on_a_path_refuse_by_name(tmp_path, capsys):
+    """Fail closed: two manifests giving one path different sha256s refuse (VOID, naming the path), never last-wins."""
+    kf = _write(tmp_path, "k.json", _k_arms(K10_BEST))
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    m1, m2 = _mf(tmp_path / "a", kf), _mf(tmp_path / "b", kf)
+    doc = json.loads(Path(m2[1]).read_text())
+    doc["files"][0]["sha256"] = "different"
+    Path(m2[1]).write_text(json.dumps(doc))
+    out = tmp_path / "s.json"
+    assert hr.main(["select", kf, "--out", str(out), *m1, *m2]) == hr.EXIT_INCOMPLETE
+    probs = json.loads(out.read_text())["manifest_problems"]
+    assert probs and "disagree" in probs[0] and doc["files"][0]["path"] in probs[0]
+
+
+def test_a_shakedown_only_disagreement_across_boxes_is_not_a_problem(tmp_path, capsys):
+    """Each box trains its own shakedown adapter at the same relative path; those bytes are not reproducible across boxes and are
+    never compared. Only what the reading uses (scored adapters, base index, base layer files) is."""
+    kf = _write(tmp_path, "k.json", _k_arms(K10_BEST))
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    m1, m2 = _mf(tmp_path / "a", kf), _mf(tmp_path / "b", kf)
+    for m, sha in ((m1, "box1-shake"), (m2, "box2-shake")):
+        doc = json.loads(Path(m[1]).read_text())
+        doc["files"] += [{"path": "hp1/shake/canonical_qwen3hp1shake_hp1shake_e4b.safetensors", "bytes": 1, "sha256": sha},
+                         {"path": "hp1/shake/base_e4b_qwen3hp1shake/index.json", "bytes": 1, "sha256": sha}]
+        Path(m[1]).write_text(json.dumps(doc))
+    out = tmp_path / "s.json"
+    assert hr.main(["select", kf, "--out", str(out), *m1, *m2]) == hr.EXIT_OK
+
+
+def test_a_base_layer_disagreement_across_boxes_voids(tmp_path, capsys):
+    """The shared base export is a deterministic quantization: its layer files must agree across boxes, or the reading is VOID."""
+    kf = _write(tmp_path, "k.json", _k_arms(K10_BEST))
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    m1, m2 = _mf(tmp_path / "a", kf), _mf(tmp_path / "b", kf)
+    for m, sha in ((m1, "L0-box1"), (m2, "L0-box2")):
+        doc = json.loads(Path(m[1]).read_text())
+        doc["files"].append({"path": "hp1/base_e4b_qwen3hp1/layer000.safetensors", "bytes": 1, "sha256": sha})
+        Path(m[1]).write_text(json.dumps(doc))
+    out = tmp_path / "s.json"
+    assert hr.main(["select", kf, "--out", str(out), *m1, *m2]) == hr.EXIT_INCOMPLETE
+    assert "layer000" in json.loads(out.read_text())["manifest_problems"][0]

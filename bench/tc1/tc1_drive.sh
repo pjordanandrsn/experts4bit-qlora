@@ -31,10 +31,25 @@ STAGE="$HERE/tc1_run.sh $HERE/tc1_arm.py $HERE/tc1_reduce.py $REPO/bench/tp4/tp4
 # guard beside these and has the box start THAT, which checks its pins and registered knobs and then execs
 # tc1_run.sh. Both default to tp4's own behaviour; the runner must be one of the staged files.
 # HP1 (the qwen3hp1 token; bench/hp1/HP1-PREREG.md): the evaluator, its library, the reducer and the shakedown cut, beside tc1_arm.py
-case " ${TC1_FAMILIES:-} " in *" qwen3hp1 "*) STAGE="$STAGE $REPO/bench/hp1/hp1_lib.py $REPO/bench/hp1/hp1_eval.py $REPO/bench/hp1/hp1_reduce.py $REPO/bench/hp1/hp1_trunc.py";; esac
+case " ${TC1_FAMILIES:-} " in *" qwen3hp1 "*|*" qwen3hp1k "*|*" qwen3hp1p "*) STAGE="$STAGE $REPO/bench/hp1/hp1_lib.py $REPO/bench/hp1/hp1_eval.py $REPO/bench/hp1/hp1_reduce.py $REPO/bench/hp1/hp1_trunc.py";; esac
 STAGE="$STAGE ${TC1_EXTRA_STAGE:-}"; RUNNER=${TC1_RUNNER:-tc1_run.sh}
 case " $STAGE " in *"/$RUNNER "*) ;; *) say "refusing: TC1_RUNNER=$RUNNER is not a staged file"; exit 78;; esac
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
+# HP1 split box 2 (qwen3hp1p, HP1-PREREG Amendment 2): box 1's carries are checked HERE, before anything is rented, so a mis-pin is a
+# $0 refusal and never a paid box that spends the run id. Three 64-hex pins, and TC1_EXTRA_STAGE files named eval_K.json, select.json and
+# bulk_manifest.json whose sha256 equal them.
+case " ${TC1_FAMILIES:-} " in *" qwen3hp1p "*)
+  for pv in "eval_K.json:${TC1_HP1_K_EVAL_SHA256:-}" "select.json:${TC1_HP1_K_SELECT_SHA256:-}" "bulk_manifest.json:${TC1_HP1_K_MANIFEST_SHA256:-}"; do
+    pf=${pv%%:*}; pw=${pv#*:}
+    case "$pw" in *[!0-9a-f]*|"") say "refusing: the $pf pin is not a 64-hex sha256 ('$pw')"; exit 78;; esac
+    [ ${#pw} -eq 64 ] || { say "refusing: the $pf pin is not a 64-hex sha256 ('$pw')"; exit 78; }
+    pp=""; for f in ${TC1_EXTRA_STAGE:-}; do [ "$(basename "$f")" = "$pf" ] && pp=$f; done
+    [ -n "$pp" ] || { say "refusing: box 1's $pf is not in TC1_EXTRA_STAGE"; exit 78; }
+    pg=$(python3 -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" "$pp") || { say "refusing: cannot hash $pp"; exit 78; }
+    [ "$pg" = "$pw" ] || { say "refusing: $pp hashes to $pg, not box 1's pinned $pw"; exit 78; }
+  done;;
+esac
+# end HP1 split box 2 pins
 # The e4b the BOX installs is the e4b this driver ships from: the launcher has proven this checkout is the manifest's heads.e4b
 # (pod-launch.sh check_tree). Derived, never a literal; refused if the tree is dirty (p39-box1b-3's lesson).
 if [ -z "${E4B_SHA:-}" ]; then
@@ -66,6 +81,7 @@ for v in TC1_FAMILIES TC1_SKIP TC1_UNSLOTH_VERSION TC1_UNSLOTH_ZOO_VERSION TC1_P
          TC1_CURVE_STEPS TC1_CURVE_EVAL_EVERY TC1_CURVE_EVAL_N TC1_T1_MB TC1_T1_ACCUM TC1_R64_R TC1_R64_ALPHA \
          TC1_SMALL_STEPS TC1_SMALL_EVAL_N TC1_SMALL_EVAL_EVERY TC1_E4B_ENV TC1_PACK TC1_FREE_OUTPUTS TC1_PAD_CENSUS \
          TC1_HP1_EVAL_N TC1_HP1_EVAL_EVERY TC1_HP1_SEL_SEEDS TC1_HP1_CONF_SEEDS TC1_HP1_SHAKE_LAYERS TC1_HP1_SHAKE_STEPS \
+         TC1_HP1_K_EVAL_SHA256 TC1_HP1_K_SELECT_SHA256 TC1_HP1_K_MANIFEST_SHA256 \
          MG1_FAMILIES MG1_STEPS MG1_PROVE MG1_LADDER_ONLY MG1_LADDER_ARGS MG1_P2_ARM RD1_PROVE DQ11_REQUIRED_DRIVER; do   # TC1b (tc1_run.sh's curve / t1 / r64 knobs); TC2 (the small families' instrument); TC1 amendment 39 (TC1_PACK: the packed regime; TC1_FREE_OUTPUTS: each micro-batch's output released); MG1 (bench/moegen/mg1_run.sh; never MG1_REHEARSAL)
   # Quoted: run tp4-b-p46cut-3 passed TC1_FAMILIES='qwen3 qwen3_5' and the remote `env ... bash tc1_run.sh` saw the second
   # word as the COMMAND -- rc=127 before the nonce was bound, a HARNESS_ERROR row. %q survives the remote shell's re-parse.
