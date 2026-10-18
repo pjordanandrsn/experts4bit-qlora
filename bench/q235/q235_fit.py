@@ -42,6 +42,19 @@ at the code before the change. Each leg's box time outside its load is its box p
 The time outside the load is itself cache-sensitive (imports, compile caches, the frozen-base hash reads) and shrinks on a warm
 host, so a warm leg's step alone would understate the cold box; the increment does not, and it is never negative.
 
+Amendment 11 moves the TIMING leg to a rented RTX PRO 6000 (``q235_run.sh`` mode ``pro6000``, run ids ``q235-leg-pro6000-N``); the
+A2000 keeps gate 1's correctness. ``--rehearsal`` may then be that leg, whose box and repeat are the registered class's own, scaled by
+LAYERS / SLICE_LAYERS and ``MARGIN`` as before. Its fetch record is the box's own ``receipts/fetch.json`` (the slice's download and
+hashing). Because its budgets come from a fast host, its floors are re-derived (``leg_floors``): for the link and the host copy,
+
+    floor = max(sealed, the A2000's measured, min(the leg's two hostrate samples) / LEG_SLACK),
+
+the two samples (before the fetch and after the repeat) agreeing within LEG_AGREE or the leg is unusable; for the disk, the same with
+the leg's cold box load's effective read rate as its sample. Floors only move up. A box host at a floor runs a host-bound part at
+most LEG_SLACK slower than the leg did, inside the budget's ``MARGIN`` (1.5 / 1.2 = 1.25 is left for everything else). A leg also
+binds the maintainer's six-hour rule: the expected run (the scaled phases, no ``MARGIN``, plus the reserve and the controller) is at
+most EXPECTED_SHARE of GUARD_H.
+
     python q235_fit.py --rehearsal DIR --warm-install-s S --bandwidth-mbps M --usd-per-hour R [--plants-from DIR2]
                        [--box-from DIR3 --box-baseline DIR4] [--out FIT.json]
 """
@@ -63,6 +76,12 @@ CONTROLLER_S = 1800                 # tc1_drive.sh: staging, the nonce handshake
 RUN_CAP_USD = 35.0                  # the launcher's per-run hard cap
 NO_ASK_USD = 15.0                   # above this, a run's ACK needs approval
 FIXED = ("require-git", "create-venv", "tokens", "hostrate")
+# Amendment 11 (the PRO 6000 timing leg's floors). The A2000's measured rates: gate 1's leg at d2d6b292 (2026-10-18, contended): the
+# hostrate probe's pinned H2D and host copy, and its box load's reads (22,391,367,680 bytes in 19.55 s).
+A2000_MEASURED = {"h2d_gb_s": 5.83, "host_copy_gb_s": 4.34, "disk_read_gb_s": 1.145}
+LEG_SLACK = 1.2                     # a box host may be at most this much slower than the leg host on a host-bound part
+LEG_AGREE = 0.15                    # the leg's two hostrate samples agree within this share, or the leg is unusable
+GUARD_H, EXPECTED_SHARE = 6.0, 0.8  # the science box's guard and the share of it the expected run may use (2026-10-18 07:51Z)
 # The checkpoint's tensor bytes from its config at ac9c66cc (bf16): per decoder layer q (64 x 128 x 4096), k and v (4 x 128 x 4096 each),
 # o (4096 x 8192), the router (128 x 4096), the 128 experts' gate, up and down (3 x 1536 x 4096 each) and four norms (2 x 4096 +
 # 2 x 128); outside the layers the embedding and the head (151936 x 4096 each) and the final norm (4096).
@@ -93,6 +112,33 @@ def floors(hostrate: dict, load_s: float, profile: dict | None = None) -> dict:
                       "rehearsal_direct_read_gb_s": hostrate.get("disk_read_gb_s"), "rehearsal_disk_method": hostrate.get("disk_method"),
                       "rehearsal_host_threads": hostrate.get("host_threads"),
                       "rehearsal_pcie": f"gen {hostrate.get('pcie_gen')} x{hostrate.get('pcie_width')}"}}
+
+
+def _rate(x) -> float:
+    """A floor rounded UP to 1e-3 GB/s, so a rounded floor never admits a host below the derived one."""
+    return math.ceil(x * 1000 - 1e-9) / 1000
+
+
+def leg_floors(hostrate: dict, hostrate2: dict, leg_disk_gb_s: float, sealed: dict) -> dict:
+    """Amendment 11: the floors a PRO 6000 timing leg implies; refuses (SystemExit) when its two hostrate samples disagree."""
+    out, basis = {}, {}
+    for k in ("h2d_gb_s", "host_copy_gb_s"):
+        a, b = float(hostrate[k]), float(hostrate2[k])
+        spread = abs(a - b) / max(a, b)
+        if spread > LEG_AGREE:
+            sys.exit(f"refusing: the leg's two {k} samples ({a}, {b}) differ by {spread:.1%} > {LEG_AGREE:.0%}: the leg is unusable "
+                     "for floors (one re-run on another host, then RED)")
+        leg = min(a, b) / LEG_SLACK
+        out[k] = _rate(max(sealed[k], A2000_MEASURED[k], leg))
+        basis[k] = {"samples": [a, b], "spread": round(spread, 4), "leg_over_slack": round(leg, 4), "sealed": sealed[k],
+                    "a2000_measured": A2000_MEASURED[k]}
+    leg = leg_disk_gb_s / LEG_SLACK
+    out["disk_read_gb_s"] = _rate(max(sealed["disk_read_gb_s"], A2000_MEASURED["disk_read_gb_s"], leg))
+    basis["disk_read_gb_s"] = {"sample": leg_disk_gb_s, "leg_over_slack": round(leg, 4), "sealed": sealed["disk_read_gb_s"],
+                               "a2000_measured": A2000_MEASURED["disk_read_gb_s"]}
+    out["basis"] = {"rule": f"max(sealed, A2000 measured, leg / {LEG_SLACK}); floors only move up", "per_floor": basis,
+                    "pcie": f"gen {hostrate.get('pcie_gen')} x{hostrate.get('pcie_width')}", "host_threads": hostrate.get("host_threads")}
+    return out
 
 
 def sealed_floors(run_sh: Path) -> dict:
@@ -126,12 +172,14 @@ def fit(timings: dict, warm_install_s: float, fetch: dict, wheel_bytes: int, mod
         budget = math.ceil(max(s * MARGIN, 60))
         phases[p] = {"scaled_s": round(s, 1), "budget_s": budget, "sealed_cap_s": caps.get(p), "fits": caps.get(p, 0) >= budget}
     wallclock_s = sum(caps.get(p, 0) for p in phases) + RESERVE_S + CONTROLLER_S
+    expected_s = sum(scaled.values()) + RESERVE_S + CONTROLLER_S          # no MARGIN: the run as expected, not its alarms
     usd = wallclock_s / 3600 * usd_per_hour
     tier = "within the no-ask tier" if usd <= NO_ASK_USD else ("above the no-ask tier: the ACK needs approval"
                                                                  if usd <= RUN_CAP_USD else "above the per-run cap")
     return {"schema": "q235-fit/1", "layers": LAYERS, "slice_layers": SLICE_LAYERS, "margin": MARGIN,
             "bandwidth_mbps": bandwidth_mbps, "usd_per_hour": usd_per_hour, "hash_rate_gb_s": round(hash_rate / 1e9, 3),
             "phases": phases, "wallclock_h": round(wallclock_s / 3600, 2), "usd_at_wallclock": round(usd, 2),
+            "expected_h": round(expected_s / 3600, 2), "expected_within_guard": expected_s <= EXPECTED_SHARE * GUARD_H * 3600,
             "run_cap_usd": RUN_CAP_USD, "no_ask_usd": NO_ASK_USD, "cost_tier": tier,
             "fits": all(v["fits"] for v in phases.values()) and usd <= RUN_CAP_USD}
 
@@ -168,8 +216,11 @@ def main():
     a = ap.parse_args()
     rows = [json.loads(ln) for ln in (a.rehearsal / "receipts" / "phase-timings.jsonl").read_text().splitlines()]
     run = json.loads((a.rehearsal / "receipts" / "run.json").read_text())
-    if run.get("mode") != "a2000" or any(r["rc"] != 0 for r in rows):
-        sys.exit("refusing: not a clean A2000 rehearsal (mode a2000, every phase rc 0)")
+    if run.get("mode") not in ("a2000", "pro6000") or any(r["rc"] != 0 for r in rows):
+        sys.exit("refusing: not a clean A2000 rehearsal or Amendment 11 pro6000 leg (every phase rc 0)")
+    leg = run["mode"] == "pro6000"
+    if leg and (a.plants_from or a.box_from):
+        sys.exit("refusing: a pro6000 leg ran the current step and its plants itself; --plants-from / --box-from are A2000 tools")
     timings = {r["phase"]: r["elapsed_s"] for r in rows}
     plants = None
     if a.plants_from:
@@ -195,7 +246,8 @@ def main():
                     "increment_s": round(increment, 3), "own_box_phase_s": own_phase}
         timings["box"] = own_phase + increment
         box_step["box_basis_s"] = round(timings["box"], 3)
-    fetch = json.loads((a.rehearsal / "warm-fetch.json").read_text())       # the cold fetch (the rehearsal's own re-verified warm files)
+    fetch_file = (a.rehearsal / "receipts" / "fetch.json") if leg else (a.rehearsal / "warm-fetch.json")
+    fetch = json.loads(fetch_file.read_text())         # A2000: its own re-verified warm files; a leg: the box's slice fetch (Amendment 11)
     wheels = json.loads((HERE / "wheels.json").read_text())["packages"]
     model = json.loads((HERE / "model_files.json").read_text())
     rep = fit(timings, a.warm_install_s, fetch, sum(w["size"] for w in wheels), model["total_bytes"], a.bandwidth_mbps,
@@ -204,6 +256,10 @@ def main():
     hostrate = json.loads((a.rehearsal / "receipts" / "hostrate.json").read_text())
     rep["floors"] = floors(hostrate, float(box["load"]["seconds"]), box["load"].get("profile"))
     sealed = sealed_floors(HERE / "q235_run.sh")
+    if leg:                                            # Amendment 11: the rented leg's floors replace the A2000 rehearsal's
+        hostrate2 = json.loads((a.rehearsal / "receipts" / "hostrate2.json").read_text())
+        rep["floors"] = leg_floors(hostrate, hostrate2, rep["floors"]["disk_read_gb_s"], sealed)
+        rep["fits"] = rep["fits"] and rep["expected_within_guard"]
     rep["floors"]["sealed"] = sealed
     caps = sealed_caps(HERE / "q235_run.sh")
     rep["floors"]["fetch_gb_s"] = fetch_floor(model["total_bytes"], fetch, caps["fetch"])

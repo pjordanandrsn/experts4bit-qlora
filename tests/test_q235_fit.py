@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 Q = ROOT / "bench" / "q235"
 
@@ -218,3 +220,97 @@ def test_the_sealed_box_cap_is_amendment_7s_refit(tmp_path):
     box = rep["phases"]["box"]
     assert box["budget_s"] == 13847 == box["sealed_cap_s"] == _fit().sealed_caps(Q / "q235_run.sh")["box"], box
     assert r.returncode == 0 and rep["fits"] and all(p["fits"] for p in rep["phases"].values()), rep["phases"]
+
+
+def test_a_leg_s_floors_are_max_of_sealed_a2000_and_the_slower_sample_over_the_slack():
+    """Amendment 11's worked example: samples 24.0 and 23.0 GB/s H2D give 23.0 / 1.2 = 19.167; host copy 36 and 35 give 29.167; the
+    cold box load's 3.0 GB/s reads give 2.5. A sealed floor above a leg's stays (floors only move up)."""
+    f = _fit()
+    sealed = {"h2d_gb_s": 5.8, "host_copy_gb_s": 5.14, "disk_read_gb_s": 0.743, "fetch_gb_s": 0.062}
+    h1 = {"h2d_gb_s": 24.0, "host_copy_gb_s": 36.0, "pcie_gen": "5", "pcie_width": "16", "host_threads": 32}
+    h2 = {"h2d_gb_s": 23.0, "host_copy_gb_s": 35.0}
+    fl = f.leg_floors(h1, h2, 3.0, sealed)
+    assert (fl["h2d_gb_s"], fl["host_copy_gb_s"], fl["disk_read_gb_s"]) == (19.167, 29.167, 2.5), fl
+    up = f.leg_floors(h1, h2, 3.0, {**sealed, "h2d_gb_s": 30.0})
+    assert up["h2d_gb_s"] == 30.0                                               # never below a sealed floor
+    slow = f.leg_floors({**h1, "h2d_gb_s": 6.0}, {**h2, "h2d_gb_s": 5.9}, 1.0, sealed)
+    assert slow["h2d_gb_s"] == 5.83 and slow["disk_read_gb_s"] == 1.145          # the A2000's measured rates bind a slow leg
+    assert f.LEG_SLACK == 1.2 and f.MARGIN / f.LEG_SLACK == 1.25
+
+
+def test_a_leg_whose_two_samples_disagree_is_unusable():
+    f = _fit()
+    sealed = {"h2d_gb_s": 5.8, "host_copy_gb_s": 5.14, "disk_read_gb_s": 0.743}
+    with pytest.raises(SystemExit, match="unusable"):
+        f.leg_floors({"h2d_gb_s": 24.0, "host_copy_gb_s": 36.0}, {"h2d_gb_s": 20.0, "host_copy_gb_s": 36.0}, 3.0, sealed)
+    f.leg_floors({"h2d_gb_s": 24.0, "host_copy_gb_s": 36.0}, {"h2d_gb_s": 20.5, "host_copy_gb_s": 36.0}, 3.0, sealed)   # 14.6 %
+
+
+def test_the_fit_reports_the_expected_run_against_the_six_hour_guard():
+    f = _fit()
+    timings = {"require-git": 2, "create-venv": 4, "install": 150, "hostrate": 20, "fetch": 30, "tokens": 7, "box": 100, "repeat": 60}
+    fetch = {"bytes": 27_047_001_621, "hash_seconds": 23.7}
+    caps = f.sealed_caps(Q / "q235_run.sh")
+    rep = f.fit(timings, 178.0, fetch, 4_000_000_000, 470_211_497_053, 800.0, 1.6, caps)
+    want = (2 + 4 + 20 + 7 + 4_000_000_000 / 1e8 + 178.0 + 470_211_497_053 / 1e8 + 470_211_497_053 / (27_047_001_621 / 23.7)
+            + (100 + 60) * 94 / 4 + f.RESERVE_S + f.CONTROLLER_S)
+    assert rep["expected_h"] == round(want / 3600, 2) and rep["expected_within_guard"] == (want <= 0.8 * 6 * 3600)
+
+
+def _leg_dir(tmp_path, h2=None, box=110, repeat=70):
+    d = tmp_path / "leg"
+    (d / "receipts" / "box").mkdir(parents=True)
+    (d / "receipts" / "run.json").write_text(json.dumps({"mode": "pro6000", "nonce": "n", "e4b_sha": "a" * 40}))
+    phases = {"require-git": 3, "create-venv": 4, "install": 160, "hostrate": 25, "fetch": 300, "tokens": 6, "box": box,
+              "repeat": repeat, "hostrate2": 25}
+    (d / "receipts" / "phase-timings.jsonl").write_text("".join(json.dumps({"phase": k, "elapsed_s": v, "rc": 0}) + "\n"
+                                                                 for k, v in phases.items()))
+    (d / "receipts" / "fetch.json").write_text(json.dumps({"bytes": 27_047_001_621, "hash_seconds": 30.0}))
+    prof = {"read": 9.0, "read_bytes": 22_391_367_680, "assemble": 10.0, "quantize": 0.5, "offload": 1.0, "other_s": 2.0}
+    (d / "receipts" / "box" / "box.json").write_text(json.dumps({"load": {"seconds": 25.0, "profile": prof}}))
+    (d / "receipts" / "hostrate.json").write_text(json.dumps({"h2d_gb_s": 24.0, "host_copy_gb_s": 36.0}))
+    (d / "receipts" / "hostrate2.json").write_text(json.dumps(h2 or {"h2d_gb_s": 23.0, "host_copy_gb_s": 35.0}))
+    return d
+
+
+def test_the_fit_reads_a_pro6000_leg_end_to_end(tmp_path):
+    d = _leg_dir(tmp_path)
+    r = subprocess.run([sys.executable, str(Q / "q235_fit.py"), "--rehearsal", str(d), "--warm-install-s", "160",
+                        "--bandwidth-mbps", "800", "--usd-per-hour", "1.6", "--out", str(tmp_path / "fit.json")],
+                       capture_output=True, text=True)
+    rep = json.loads((tmp_path / "fit.json").read_text())
+    assert rep["floors"]["h2d_gb_s"] == 19.167 and rep["floors"]["host_copy_gb_s"] == 29.167
+    assert rep["floors"]["disk_read_gb_s"] == 2.074                       # the cold load's reads, 2.488 GB/s, over 1.2, rounded up
+    assert rep["phases"]["box"]["scaled_s"] == 110 * 94 / 4 and "expected_within_guard" in rep
+    assert rep["floors"]["sealed_match"] is False and r.returncode == 1      # A12 re-seals the floors the leg implies
+    bad = _leg_dir(tmp_path / "b", h2={"h2d_gb_s": 18.0, "host_copy_gb_s": 35.0})
+    r = subprocess.run([sys.executable, str(Q / "q235_fit.py"), "--rehearsal", str(bad), "--warm-install-s", "160",
+                        "--bandwidth-mbps", "800", "--usd-per-hour", "1.6"], capture_output=True, text=True)
+    assert r.returncode != 0 and "unusable" in r.stderr
+    r = subprocess.run([sys.executable, str(Q / "q235_fit.py"), "--rehearsal", str(d), "--warm-install-s", "160",
+                        "--bandwidth-mbps", "800", "--usd-per-hour", "1.6", "--box-from", str(d), "--box-baseline", str(d)],
+                       capture_output=True, text=True)
+    assert r.returncode != 0 and "A2000 tools" in r.stderr
+
+
+def test_a_leg_s_fit_binds_the_expected_run_to_the_guard(tmp_path, monkeypatch):
+    """Every cap holds (box 390 s and repeat 130 s scale inside CAP_BOX / CAP_REPEAT; the fetch at 580 Mbps inside CAP_FETCH), yet
+    the expected run (about 6.0 h) is above 0.8 x 6 h, so a leg's fit refuses. With the floors sealed as the leg implies them (what
+    Amendment 12 does), the same leg at box 110 s / repeat 70 s fits."""
+    f = _fit()
+    sealed = {"h2d_gb_s": 19.167, "host_copy_gb_s": 29.167, "disk_read_gb_s": 2.074, "fetch_gb_s": 10.0}
+    monkeypatch.setattr(f, "sealed_floors", lambda run_sh: dict(sealed))
+
+    def run(d):
+        out = d / "fit.json"
+        monkeypatch.setattr(sys, "argv", ["q235_fit.py", "--rehearsal", str(d), "--warm-install-s", "160", "--bandwidth-mbps", "580",
+                                          "--usd-per-hour", "1.6", "--out", str(out)])
+        with pytest.raises(SystemExit) as e:
+            f.main()
+        return e.value.code, json.loads(out.read_text())
+
+    code, rep = run(_leg_dir(tmp_path / "long", box=390, repeat=130))
+    assert all(p["fits"] for p in rep["phases"].values()) and rep["floors"]["sealed_match"], rep["phases"]
+    assert rep["expected_within_guard"] is False and rep["fits"] is False and code == 1
+    code, rep = run(_leg_dir(tmp_path / "short"))
+    assert rep["expected_within_guard"] is True and rep["fits"] is True and code == 0

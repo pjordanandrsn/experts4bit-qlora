@@ -9,6 +9,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -369,3 +370,64 @@ def test_the_gate_probes_wheels_with_the_box_s_own_opener(monkeypatch):
     monkeypatch.setattr(boot, "USER_AGENT", "someone-else/1")
     out = g.check_probes(rows, g.probe_wheels(rows, boot))
     assert len(out) == 1 and "403" in out[0], out
+
+
+def _smi_leg(bin_, card, apps="", util="0"):
+    """A stand-in nvidia-smi for Amendment 11's leg: the card line, the compute apps, and a utilization stream under -l."""
+    (bin_ / "nvidia-smi").write_text(
+        "#!/bin/sh\n"
+        'case "$*" in\n'
+        f'  *query-compute-apps*) [ -n "{apps}" ] && echo "{apps}"; exit 0 ;;\n'
+        f'  *utilization.gpu*) while :; do echo "{util}"; sleep 1; done ;;\n'
+        f"  *) echo '{card}' ;;\n"
+        "esac\n")
+    (bin_ / "nvidia-smi").chmod(0o755)
+
+
+PRO6000 = "NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 97887, 575.64.05, 5, 5, 16, 16, 600.00 W"
+
+
+def test_a_leg_run_id_runs_the_pro6000_mode_never_science(box):
+    """Amendment 11: the launcher's run id q235-leg-pro6000-N selects the leg; its card class is the PRO 6000 and it is never a draw."""
+    w, bin_, env = box
+    _smi_leg(bin_, "NVIDIA GeForce RTX 5090, 32607, 575.64.05, 5, 5, 16, 16, 575.00 W")
+    r = _run(w, {**env, "TC1_RUN_ID": "q235-leg-pro6000-1"})
+    assert r.returncode == 18 and (w / "REFUSAL").read_text().strip() == "card class", (r.returncode, r.stdout[-800:])
+    run = json.loads((w / "receipts" / "run.json").read_text())
+    assert run["mode"] == "pro6000" and run["science_eligible"] is False
+
+
+def test_the_leg_mode_comes_from_the_run_id_only(box):
+    w, bin_, env = box
+    r = _run(w, {**env, "TC1_RUN_ID": "q235-leg-pro6000-1", "Q235_REHEARSAL": "a2000"})
+    assert r.returncode == 78 and "with leg run id" in r.stdout
+    r = _run(w, {**env, "Q235_REHEARSAL": "pro6000"})
+    assert r.returncode == 78 and "leg run id only" in r.stdout
+    _smi_leg(bin_, "NVIDIA GeForce RTX 5090, 32607, 575.64.05, 5, 5, 16, 16, 575.00 W")
+    r = _run(w, {**env, "TC1_RUN_ID": "q235-pro6000-4"})            # a science id stays science
+    assert json.loads((w / "receipts" / "run.json").read_text())["mode"] == "science"
+
+
+@pytest.mark.parametrize("apps,util,why", [("4242", "0", "1 compute apps"), ("", "37", "max 37 %")])
+def test_the_leg_refuses_a_card_that_is_not_quiet(box, apps, util, why):
+    w, bin_, env = box
+    _smi_leg(bin_, PRO6000, apps=apps, util=util)
+    r = _run(w, {**env, "TC1_RUN_ID": "q235-leg-pro6000-1"})
+    assert r.returncode == 18 and (w / "REFUSAL").read_text().strip() == "not quiet" and why in r.stdout, (r.returncode, r.stdout[-600:])
+    q = json.loads((w / "receipts" / "quiet.json").read_text())
+    assert q["util_samples"] >= 5 and q["nproc"] >= 1 and "loadavg" in q
+
+
+def test_a_quiet_leg_passes_its_gate_and_records_it(box):
+    w, bin_, env = box
+    _smi_leg(bin_, PRO6000, util="3")
+    r = _run(w, {**env, "TC1_RUN_ID": "q235-leg-pro6000-1"})
+    q = json.loads((w / "receipts" / "quiet.json").read_text())
+    assert q["compute_apps"] == 0 and q["utilization_gpu_max_pct"] == 3, q
+    assert "not quiet" not in r.stdout                               # the next check is the host-RAM floor (239 GB) or beyond
+
+
+def test_the_leg_takes_a_second_host_rate_sample_after_the_repeat():
+    text = (Q / "q235_run.sh").read_text()
+    assert text.index("must hostrate2") > text.index("for run in box repeat")
+    assert re.search(r"^  pro6000\) CARD_RE='\^NVIDIA RTX PRO 6000'; MIN_VRAM_MIB=94000; MIN_RAM_GB=239;", text, re.M)

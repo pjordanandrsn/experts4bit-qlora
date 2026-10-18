@@ -1080,3 +1080,69 @@ own PR, after this merges.
 
 **What it is not.** No rule, threshold, band or registered record changes. The scope and the re-pin are ruled by the maintainer;
 the closure re-seal is reviewed.
+
+## Amendment 11 (2026-10-18, before any further 235B box): gate 2's timing leg moves to a rented RTX PRO 6000, and the floors it implies
+
+**Why.** Gate 2's time-left caps and the box's host floors are scaled from RTX A2000 legs (Amendment 3's table; `CAP_BOX` from the
+Amendment 7 refit). An A2000 timing should not set a budget or a floor for another card class, and the quiet A2000 window that the
+floors rule (`max(sealed, measured, quiet sample)`) waits on has not come: the host's load average stayed far above the quiet
+gate all day. Gate 2's TIMING leg therefore moves to the registered class, a rented RTX PRO 6000. The A2000 keeps gate 1's
+correctness rehearsal (the lifecycle and the plants) and sets no time.
+
+**The leg.**
+- **Mode `pro6000`** (`q235_run.sh`): the a2000 rehearsal's slice leg exactly (4 decoder layers, 18 files, 27.05 GB fetched and
+  hash-checked like the full checkpoint; box, then repeat with the plants). The card must match `^NVIDIA RTX PRO 6000` with at
+  least 94,000 MiB, and the host must have 239 GB of RAM (Amendment 5's science floor, so the leg host is a box-class host) and
+  120 GB of free disk. It records only: `science_eligible` is false, and no rate floor refuses it.
+- **Selected by the run id only.** A launcher run id `q235-leg-pro6000-N` sets the mode inside the sealed runner (`TC1_RUN_ID`,
+  which the launcher forwards). `Q235_REHEARSAL` beside a leg id refuses (78), and `pro6000` without a leg id refuses. A science
+  id stays science.
+- **Run ids:** `q235-leg-pro6000-1`, with `-2` and `-3` as spares. A refusal before the create consumes an id and is not an
+  attempt. At most two legs start a box, and the second runs only as the one re-run the quiet rule below allows.
+- **Host terms:** a RTX PRO 6000 offer with at least 239 GB of host RAM and reliability at least 0.98, preferably a machine the
+  science box would pin. Rate at most $1.70 an hour including its disk, download at most $0.011 per GB.
+- **Guard 1.0 h:** the A2000 leg's 716 s × 1.3, plus the slice pull at the host's listed rate × 1.3, plus 15 minutes of boot and
+  pre-flight. **Worst $2.04:** $1.70 × 1.0 h, plus 31.1 GB (the slice and 4.04 GB of wheels) × $0.011.
+
+**Quiet on a rented box** (before the leg's first venv):
+- no compute app on the card, and `utilization.gpu` at most 5 % over 10 s, or a refusal (18, `not quiet`);
+- the load average and `nproc` are recorded in `receipts/quiet.json` and gate nothing, because a container can see its
+  co-tenants' load;
+- `q235_hostrate.py` runs twice, before the fetch (`hostrate`) and after the repeat (`hostrate2`), both with an O_DIRECT disk
+  read. The two samples must agree within **15 %** on pinned H2D and on host copy. Otherwise the leg is unusable for floors: one
+  re-run on another host, and after that the decision goes to the maintainer.
+
+**The floors** (`q235_fit.leg_floors`). The box's budgets will come from a fast host, so the A2000's floors no longer protect
+the fit. For pinned H2D and host copy,
+
+    floor = max(sealed, the A2000's measured, min(the leg's two samples) / 1.2);
+
+for the disk, the same with the leg's cold box load's effective read rate (bytes returned over read seconds) as the sample. Each
+floor is rounded up to 0.001 GB/s, and floors only move up. The A2000's measured rates are registered here: gate 1's leg at
+`d2d6b292`, H2D 5.83 GB/s, host copy 4.34 GB/s, and its box load's reads 22,391,367,680 bytes in 19.55 s (1.145 GB/s).
+- **Why 1.2:** a box host at a floor runs a host-bound part at most 1.2 × slower than the leg did. The budget's `MARGIN` of 1.5
+  then leaves 1.5 / 1.2 = 1.25 for everything else.
+- **Worked example:** samples 24.0 and 23.0 GB/s H2D give 23.0 / 1.2 = **19.167**. Host copy 36.0 and 35.0 give **29.167**. A cold
+  load reading 2.488 GB/s gives 2.0733, rounded up to **2.074**. Each is above the sealed floor and the A2000's measured rate, so
+  each binds. Samples of 24.0 and 20.0 (16.7 % apart) make the leg unusable. A tested case pins this example.
+
+**The caps.** `q235_fit.py --rehearsal <the leg>` scales the leg's box and repeat by 94 / 4 and `MARGIN` 1.5, as before; its
+fetch record is the box's own slice fetch. A leg also binds the six-hour rule: the expected run (the scaled phases without
+`MARGIN`, plus the 300 s reserve and the controller's 1,800 s) must be at most 0.8 × 6 h. If it is not, the science box waits.
+
+**Amendment 12 is mechanical.** After the leg, the floors and caps this amendment's formulas give are sealed into
+`q235_run.sh` (`MIN_*`, `CAP_*`) in their own change, which is reviewed as arithmetic only: re-derive both from the leg's
+receipt. The science box's pin screen re-derives its download bound from that fit instead of holding a fixed one.
+
+**The closure.** `q235.sha256` is re-sealed with `q235_stage.py --write`. Only the `q235_run.sh` row moves, from
+`d88469ad66b7113d02489636a9302e92dcc061734670a1d1efea3616ff7dcc84` to `900e7357558d254089bc9e0f1192f5a04c98d6d1ab4ccbe3036bd2deffd94434`. `q235_fit.py` runs off the box and is not in the closure.
+
+**Tests.**
+- `tests/test_q235_driver.py`: a leg id runs mode `pro6000` and refuses a card outside the class; the mode comes from the run id
+  only; a busy card (a compute app, or utilization above 5 %) refuses as `not quiet`; a quiet card passes and records its gate; the
+  second host-rate sample follows the repeat.
+- `tests/test_q235_fit.py`: the worked example; disagreeing samples make the leg unusable; the expected run against the guard; a
+  synthetic leg read end to end, with `--box-from` refused for a leg.
+
+**Unchanged.** The science box's rules, bands, plants, records and verdict; gate 1's A2000 rehearsal; the sealed floors and caps
+until Amendment 12.
