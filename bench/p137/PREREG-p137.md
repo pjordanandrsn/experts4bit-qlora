@@ -60,22 +60,25 @@ copy, the same in both arms).
 per-micro-batch losses (and their float hex), a held-out loss on 16 later rows after the last step, the versions and the
 fast-path census.
 
-## The rule (`p137_reduce.py`, self-tested on 25 cases)
+## The rule (`p137_reduce.py`, self-tested on 29 cases)
 
 First rung that applies:
 1. **VOID** on any of these:
    - an arm record missing, or an arm OOM. An L1 OOM is VOID, never NO_GAIN;
    - another e4b commit than the pin, or the arms on different stacks, models or recipes;
    - `enable_fast_train` patched nothing, or no expert layer was offloaded;
-   - a dry record in a reading, or the reverse;
+   - a dry record in a reading, or the reverse; a reading whose model path lacks the pinned revision `ad44e777`;
+   - the patched and the offloaded layer counts not both the registered **n = 48** (the dry fixture's 2): a partly
+     offloaded run must not pass against a target derived from itself;
    - step 0's per-micro-batch losses not bit-identical across all four arms;
    - stagings per step after step 0 not exactly **4 × (2n − 1) = 380** (A0) and **2n − 1 = 95** (L1), with n = 48;
-   - L1's peak allocated memory over the **timed** steps above A0's by more than **4.0 GiB** (below). Step 0 is left out:
+   - L1's peak allocated memory over the **timed** steps above A0's by more than **4.25 GiB** (below). Step 0 is left out:
      on L1 it also carries the drift guard's one-time stock forward. The all-steps peak is recorded.
 2. **NOISY:** a self-pair (A0b/A0a, L1b/L1a, the medians of the timed walls) outside **[0.97, 1.03]**.
 3. **LICENSED** iff **S = min(A0a/L1a, A0b/L1b) ≥ 1.10**; otherwise **NO_GAIN**.
 
-**REPORTING** (never changes the verdict): held-out |L1 − A0| ≤ **0.01**; S inside the registered band.
+**REPORTING** (never changes the verdict): held-out |L1 − A0| ≤ **0.01** (a missing held-out is recorded as missing);
+S inside the registered band.
 
 **The memory term, derived.** Layer-major keeps every micro-batch's saved state alive until its one backward; the stock
 loop keeps one at a time. The extra is the other M − 1 = 3 micro-batches':
@@ -84,17 +87,19 @@ loop keeps one at a time. The extra is the other M − 1 = 3 micro-batches':
   the stock loss on. It engages at 1 GiB of fp32 logits, so at 1,767 tokens per micro-batch.
 
 The worst case over micro-batches of at most 2 × 2,048 tokens sits just under that gate: 3 × (1.0 GiB + 0.32 GiB)
-≈ **4.0 GiB**. Above the gate the log-probabilities go and 3 × 0.75 GiB = 2.25 GiB remain.
+≈ 3.97 GiB. Above the gate the log-probabilities go and 3 × 0.75 GiB = 2.25 GiB remain. **The registered term is
+4.25 GiB:** the extra 0.25 GiB covers state the derivation does not model (about 10–20 MB per micro-batch), so that the
+bound is not itself the likeliest false VOID at the gate boundary.
 
 **Checked against the card before any data:** the anchor's peak (`tc3-4090-8`, `fused_attn4_m_offload`, 11.881 GB
-`torch.cuda.max_memory_allocated`, 11.07 GiB) plus the 4.0 GiB term is 15.07 GiB (16.2 GB), against the RTX 4090's
+`torch.cuda.max_memory_allocated`, 11.07 GiB) plus the 4.25 GiB term is 15.32 GiB (16.4 GB), against the RTX 4090's
 23.52 GiB. An L1 OOM is not expected.
 
 ## Predictions (written before any data)
 
 | # | prediction |
 |---|---|
-| Q1 | every arm fits; A0's peak near the anchor's 11.881 GB, L1's within the 4.0 GiB term |
+| Q1 | every arm fits; A0's peak near the anchor's 11.881 GB, L1's within the 4.25 GiB term |
 | Q2 | step 0 bit-identical across arms (the drift guard already checks it per micro-batch on L1); stagings exactly 380 / 95 |
 | Q3 | **S ∈ [1.25, 2.0], point 1.55–1.85** |
 | Q4 | self-pairs inside [0.97, 1.03] |

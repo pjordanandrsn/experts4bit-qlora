@@ -62,7 +62,7 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 
 
 def test_the_self_tests_pass():
-    for script, line in (("p137_reduce.py", "p137_reduce self-test OK (25 cases)"), ("p137_box.py", "p137_box self-test OK (10/10 cases)")):
+    for script, line in (("p137_reduce.py", "p137_reduce self-test OK (29 cases)"), ("p137_box.py", "p137_box self-test OK (10/10 cases)")):
         out = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True,
                              env={**os.environ, "PYTHONPATH": ""})
         assert out.returncode == 0 and line in out.stdout, out.stdout + out.stderr
@@ -99,8 +99,8 @@ def test_the_declared_run_ids_and_nothing_else(tmp_path):
 def test_the_rule_is_the_registered_rule():
     assert 'TAGS = ("A0a", "L1a", "L1b", "A0b")' in REDUCE
     assert "SELF_LO, SELF_HI = 0.97, 1.03" in REDUCE and "S_MIN = 1.10" in REDUCE
-    assert "BAND_LO, BAND_HI = 1.25, 2.0" in REDUCE and "MEM_TERM_GIB = 4.0" in REDUCE and "HELD_TOL = 0.01" in REDUCE
-    for s in ("1.10", "[0.97, 1.03]", "[1.25, 2.0]", "4.0 GiB", "0.01"):
+    assert "BAND_LO, BAND_HI = 1.25, 2.0" in REDUCE and "MEM_TERM_GIB = 4.25" in REDUCE and "HELD_TOL = 0.01" in REDUCE
+    for s in ("1.10", "[0.97, 1.03]", "[1.25, 2.0]", "4.25 GiB", "0.01"):
         assert s in PREREG, s
     assert 'LOOPS = {"A0": "stock", "L1": "layer_major"}' in BOX
     assert "SEQ, MB_ROWS, ACCUM = 2048, 2, 4" in BOX and "WARM, TIMED = 2, 8" in BOX
