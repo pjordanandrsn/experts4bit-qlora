@@ -67,6 +67,11 @@ TRAIN_ROUTER = os.environ.get("TRAIN_ROUTER", "0") == "1"
 DO_GEN = os.environ.get("DO_GEN", "1") == "1"
 OFFLOAD_EXPERTS = os.environ.get("OFFLOAD_EXPERTS", "0") == "1"
 OFFLOAD_PIN = os.environ.get("OFFLOAD_PIN", "1") == "1"
+# Layer-major accumulation (engines/layer_major.py): every micro-batch of a step through layer L before L+1, the layer held
+# resident across them, then one backward of the weighted sum. Under OFFLOAD_EXPERTS=1 a step stages each layer once per
+# direction instead of once per micro-batch (GRAD_ACCUM times fewer bytes). Same losses as the stock loop; gradients the same
+# sum in another order. Opt-in; requires OFFLOAD_EXPERTS=1 (resident training stages nothing, so it has nothing to gain).
+LAYER_MAJOR = os.environ.get("LAYER_MAJOR", "0") == "1"
 # Store the frozen expert absmax double-quantized, as bitsandbytes' compress_statistics=True does (one fp32
 # per 64 weights -> ~1.02 bytes per 64): ~2.8 GB less on Mixtral-8x7B, ~1.8 GB on Qwen3-30B-A3B. Lossy
 # against fp32; see experts4bit_qlora.absmax_dq. ON by default for resident training since TC1 amendments
@@ -242,6 +247,7 @@ def _print_env_help(which: str) -> None:
         ("TRAIN_VRAM_FRAC", "1", "fraction of experts held in VRAM (rest -> DRAM)"),
         ("OFFLOAD_EXPERTS", "0", "keep experts in pinned CPU RAM"),
         ("OFFLOAD_PIN", "1", "pin the offloaded expert memory"),
+        ("LAYER_MAJOR", "0", "layer-major accumulation: stage each offloaded layer once per step (needs OFFLOAD_EXPERTS=1)"),
         ("E4B_ABSMAX_DQ", "auto", "double-quantize the frozen expert absmax: on for resident training (0 off, 1 required)"),
         ("E4B_CHUNKED_LM_LOSS", "auto", "auto: the loss over token chunks only where a forward's fp32 logits would reach 1 GiB; 1 or a chunk size: every training forward; 0: the stock loss"),
         ("DO_GEN", "1", "sample generations during training"),
@@ -354,6 +360,8 @@ def main():
         raise SystemExit("E4B_ABSMAX_DQ=1 is a RESIDENT-training switch: it cannot be combined with "
                          + ("OFFLOAD_EXPERTS=1" if OFFLOAD_EXPERTS else "TRAIN_ARENA")
                          + " (that path reads the fp32 expert absmax by name). Unset one of them.")
+    if LAYER_MAJOR and not OFFLOAD_EXPERTS:
+        raise SystemExit("LAYER_MAJOR=1 needs OFFLOAD_EXPERTS=1: it saves expert stagings, and resident training stages none.")
     log(f"loading {MODEL} via streaming 4-bit loader (CPU-RAM-light)...")
     from transformers import AutoTokenizer, get_cosine_schedule_with_warmup
 
@@ -592,7 +600,31 @@ def main():
             _clock.stop()
         loss_acc = 0.0
         try:
-            for _ in range(GRAD_ACCUM):
+            if LAYER_MAJOR:
+                from .engines.layer_major import layer_major_step
+
+                if _clock:
+                    _clock.start("data")
+                mbs = []
+                for _ in range(GRAD_ACCUM):
+                    try:
+                        ids, lbl, att = next(it)
+                    except StopIteration:
+                        it = _batch_stream(budget)
+                        ids, lbl, att = next(it)
+                    mbs.append({"input_ids": ids, "labels": lbl, "attention_mask": att})
+                if _clock:
+                    _clock.stop()
+                    _clock.start("forward")  # the layer-major forward and its one backward, timed as one phase
+                losses = layer_major_step(model, mbs, [1.0 / GRAD_ACCUM] * GRAD_ACCUM)
+                if _clock:
+                    _clock.stop()
+                    _clock.start("loss_sync")
+                loss_acc = sum(float(x) for x in losses) / GRAD_ACCUM
+                tok_seen += sum(int(b["attention_mask"].sum()) for b in mbs)
+                if _clock:
+                    _clock.stop()
+            for _ in range(0 if LAYER_MAJOR else GRAD_ACCUM):
                 if _clock:
                     _clock.start("data")
                 try:
