@@ -1,0 +1,248 @@
+{
+ "engine": "e4b",
+ "batch": 16,
+ "graph": {
+  "status": "ok",
+  "delim": "graph",
+  "steps_kept": 61,
+  "dropped": {},
+  "steady_graph_exec": 14,
+  "other_graph_replays": 0,
+  "P": {
+   "median_ms": 52.950077,
+   "iqr_ms": 0.716387
+  },
+  "S": {
+   "median_ms": 52.815458,
+   "iqr_ms": 0.731939
+  },
+  "D_out": {
+   "median_ms": 0.025857,
+   "iqr_ms": 0.00016
+  },
+  "idle_out": {
+   "median_ms": 0.108609,
+   "iqr_ms": 0.007744
+  }
+ },
+ "node": {
+  "status": "ok",
+  "steps_kept": 61,
+  "dropped": {},
+  "kernels_per_graph_modal": 655,
+  "other_launches": 0,
+  "U_in": {
+   "median_ms": 52.713765,
+   "iqr_ms": 0.795364
+  },
+  "span": {
+   "median_ms": 52.763494,
+   "iqr_ms": 0.795173
+  },
+  "I_in_node": {
+   "median_ms": 0.050241,
+   "iqr_ms": 0.000544
+  },
+  "segments": {
+   "replays_broken": 0,
+   "starts_modal": 32,
+   "ends_modal": 32,
+   "moe_layers": 32
+  },
+  "kernels_in_graph": 654,
+  "overlap_in": {
+   "median_ms": 0.01152,
+   "iqr_ms": 0.000576
+  },
+  "overlap_pairs_same_stream_fraction": 0.196,
+  "kernels_out_graph": 6,
+  "class": {
+   "moe_expert": {
+    "median_ms": 48.585621,
+    "iqr_ms": 0.808006
+   },
+   "moe_route": {
+    "median_ms": 0.105282,
+    "iqr_ms": 0.000706
+   },
+   "attn": {
+    "median_ms": 0.761576,
+    "iqr_ms": 0.008667
+   },
+   "dense_gemm": {
+    "median_ms": 3.073698,
+    "iqr_ms": 0.007073
+   },
+   "norm_elem": {
+    "median_ms": 0.188739,
+    "iqr_ms": 0.001245
+   },
+   "sample": {
+    "median_ms": 0.00864,
+    "iqr_ms": 0.000129
+   },
+   "input_prep": {
+    "median_ms": 0.024544,
+    "iqr_ms": 0.000192
+   },
+   "memcpy": {
+    "median_ms": 0.002016,
+    "iqr_ms": 3.2e-05
+   },
+   "residual": {
+    "median_ms": 0.0,
+    "iqr_ms": 0.0
+   }
+  },
+  "class_in_graph_median_ms": {
+   "moe_expert": 48.585621,
+   "moe_route": 0.105282,
+   "attn": 0.761576,
+   "dense_gemm": 3.073698,
+   "norm_elem": 0.188739,
+   "sample": 0.00864,
+   "input_prep": 0.0,
+   "memcpy": 0.000832,
+   "residual": 0.0
+  },
+  "residual_fraction": 0.0,
+  "name_map": {
+   "CatArrayBatchedCopy_alignedK_contig": {
+    "norm_elem": 63
+   },
+   "Kernel2": {
+    "dense_gemm": 10143
+   },
+   "_combine_rows": {
+    "moe_route": 2016
+   },
+   "_fp8_append_bt1_side": {
+    "attn": 4032
+   },
+   "_fp8_paged_decode_split_f8dot": {
+    "attn": 2016
+   },
+   "_gemm_nf4_grouped_smallm": {
+    "moe_expert": 4032
+   },
+   "_rmsnorm_resid_rows": {
+    "norm_elem": 2016
+   },
+   "_rmsnorm_rows": {
+    "norm_elem": 2079
+   },
+   "_rope_heads": {
+    "norm_elem": 4032
+   },
+   "_router_epilogue": {
+    "moe_route": 2016
+   },
+   "_swiglu_rows": {
+    "moe_expert": 2016
+   },
+   "_tile_table_r1": {
+    "moe_route": 2016
+   },
+   "gemmk1_kernel": {
+    "dense_gemm": 63
+   },
+   "indexFuncSmallIndex": {
+    "input_prep": 63
+   },
+   "indexSelectSmallIndex": {
+    "norm_elem": 63,
+    "input_prep": 126
+   },
+   "index_elementwise_kernel": {
+    "input_prep": 63
+   },
+   "memcpy": {
+    "memcpy": 315
+   },
+   "reduce_kernel": {
+    "sample": 63
+   },
+   "splitKreduce_kernel": {
+    "dense_gemm": 4032
+   },
+   "unrolled_elementwise_kernel": {
+    "norm_elem": 63,
+    "input_prep": 63
+   },
+   "vectorized_elementwise_kernel": {
+    "norm_elem": 441,
+    "input_prep": 63
+   }
+  },
+  "top_residual_kernels": []
+ },
+ "unprofiled_ms": 53.5164,
+ "positions": null,
+ "clocks_mhz": null,
+ "gates": {
+  "inflate": -0.0106,
+  "node_union_over_span": 0.9981,
+  "node_span_over_span": 0.999,
+  "map_residual_fraction": 0.0
+ },
+ "labels": [],
+ "nsys_diagnostics": [
+  "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_108761/streams/pid_8772_stdout.log and stderr.log for program output",
+  "Common injection library initialized successfully.",
+  "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+  "Loaded CUPTI library: /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/libcupti.so.13.1",
+  "Installed CUDA driver version (13.2) is not supported by this build of Nsight Systems. CUDA trace will be collected using libraries for driver version 13.1",
+  "Enabling trace for device graph launch",
+  "CUDA injection initialized successfully.",
+  "Common injection library initialized successfully.",
+  "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+  "Loaded CUPTI library: /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/libcupti.so.13.1",
+  "Installed CUDA driver version (13.2) is not supported by this build of Nsight Systems. CUDA trace will be collected using libraries for driver version 13.1",
+  "Enabling trace for device graph launch",
+  "CUDA injection initialized successfully.",
+  "Profiling has started.",
+  "Not all NVTX events might have been collected.",
+  "No NVTX events collected. Does the process use NVTX?",
+  "Not all NVTX events might have been collected.",
+  "No NVTX events collected. Does the process use NVTX?",
+  "Not all CUDA events might have been collected.",
+  "Number of CUDA events collected: \t1474."
+ ],
+ "node_band": {
+  "omega_ms": 0.0,
+  "dk_lo_ms": 0.0
+ },
+ "P_ms": 52.950077,
+ "terms": {
+  "moe_expert": 48.585621,
+  "moe_route": 0.105282,
+  "attn": 0.761576,
+  "dense_gemm": 3.073698,
+  "norm_elem": 0.188739,
+  "sample": 0.00864,
+  "input_prep": 0.024544,
+  "memcpy": 0.002016,
+  "residual": 0.0,
+  "I_in": 0.101693,
+  "idle_out": 0.108609,
+  "overlap_in": -0.01152,
+  "O": -0.001179
+ },
+ "noise_iqr": {
+  "moe_expert": 0.808006,
+  "moe_route": 0.000706,
+  "attn": 0.008667,
+  "dense_gemm": 0.007073,
+  "norm_elem": 0.001245,
+  "sample": 0.000129,
+  "input_prep": 0.000192,
+  "memcpy": 3.2e-05,
+  "residual": 0.0,
+  "I_in": 1.527303,
+  "idle_out": 0.007744,
+  "overlap_in": 0.000576,
+  "O": null
+ },
+ "I_in_node_ms": 0.050241,
+ "status": "ok"
+}

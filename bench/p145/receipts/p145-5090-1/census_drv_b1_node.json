@@ -1,0 +1,79 @@
+{
+ "engine": "e4b",
+ "batch": 1,
+ "mode": "census",
+ "e4b_sha": "67ba40b765368cd357f5003f4650d49886c1595c",
+ "gnf4_sha": "eea5df6baefbe38b795621286fe70eac2980aa44",
+ "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+ "revision": "eba92302a2861cdc0098cc54bc9f17cb2c47eb61",
+ "load_s": 23.2,
+ "torch": "2.8.0+cu128",
+ "fusions": {
+  "fuse_qkv_n": 0,
+  "fuse_t1_glue_n": 65,
+  "fuse_t1_glue_r2_n": [
+   32,
+   32
+  ],
+  "fuse_router_epilogue_n": 32
+ },
+ "fusion_sources": {
+  "E4B_PAGED_FUSE_QKV": "default-allowlisted",
+  "E4B_FUSE_T1_GLUE": "default-allowlisted",
+  "E4B_FUSE_T1_GLUE_R2": "default-allowlisted",
+  "E4B_FUSE_ROUTER_EPI": "default-allowlisted"
+ },
+ "prompts_sha256": "9689e662d473cbd1e114ddf251817490aeaef5bdd788ec2e034d0937bd10dbbb",
+ "moe_layers": 32,
+ "int4_store_kinds": [],
+ "grouping": {
+  "device_grouping": true,
+  "force_singleton_groups": false
+ },
+ "max_tokens_per_seq": 768,
+ "ramp_steps": 2,
+ "skip": 32,
+ "steps_bracketed": 64,
+ "row_tokens": 160,
+ "window_decode_positions": [
+  35,
+  98
+ ],
+ "profiled_wall_s": 0.526776,
+ "profiled_ms_per_step": 8.2309,
+ "note": "profiled wall: never a speed reading (SC1's unprofiled arm is the speed)",
+ "graph_stats": {
+  "1": {
+   "replays": 190,
+   "eager_steps": 0,
+   "rows": 190,
+   "pad_rows": 0
+  },
+  "2": {
+   "replays": 0,
+   "eager_steps": 0,
+   "rows": 0,
+   "pad_rows": 0
+  },
+  "4": {
+   "replays": 0,
+   "eager_steps": 0,
+   "rows": 0,
+   "pad_rows": 0
+  },
+  "8": {
+   "replays": 0,
+   "eager_steps": 0,
+   "rows": 0,
+   "pad_rows": 0
+  },
+  "16": {
+   "replays": 0,
+   "eager_steps": 0,
+   "rows": 0,
+   "pad_rows": 0
+  }
+ },
+ "max_memory_allocated": 29972738560,
+ "max_memory_reserved": 30379343872
+}

@@ -1,0 +1,22 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.71.05, GPU-0ca1ed62-a4bf-1965-5cf8-1333ee34175a, 12.0
+power.limit,clocks.max.sm 450.00 W, 3105 MHz
+CPU(s):                                  24
+Vendor ID:                               GenuineIntel
+Model name:                              Intel(R) Core(TM) Ultra 9 285K
+               total        used        free      shared  buff/cache   available
+Mem:             188           1         171           0          14         184
+overlay         250G  1.4M  250G   1% /
+nsys status rc=0 (diagnostic only; CUDA trace is checked at capture)
+nsys status -e:
+- Root privilege: enabled
+- Linux Kernel Paranoid Level: 4 (some features maybe not available)
+- Linux Distribution: Ubuntu
+- Linux Kernel Version (6.8.0-139-generic): OK
+- Linux perf_event_open syscall available: Fail
+- Sampling trigger event available: Fail
+- Intel(c) Last Branch Record support: Not Available
+- CPU Profiling Environment (process-tree): Fail
+- CPU Profiling Environment (system-wide): Fail
+
+See the product documentation at https://docs.nvidia.com/nsight-systems for more information,
+including information on how to set the Linux Kernel Paranoid Level.

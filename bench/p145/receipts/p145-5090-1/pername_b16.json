@@ -1,0 +1,473 @@
+{
+ "status": "ok",
+ "steps_kept": 61,
+ "dropped": {},
+ "kernels_per_graph_modal": 655,
+ "P_ms": 53.22414,
+ "span_ms": 52.763494,
+ "tail_ms": 0.451845,
+ "closure_ns_max": 0,
+ "class_removable_ms": {
+  "moe_expert": 48.583382,
+  "moe_route": 0.108322,
+  "attn": 0.770792,
+  "dense_gemm": 3.095202,
+  "norm_elem": 0.196097,
+  "sample": 0.008544,
+  "input_prep": 0.0,
+  "memcpy": 0.000768,
+  "residual": 0.0
+ },
+ "rows": [
+  {
+   "key": "_gemm_nf4_grouped_smallm|10x896x1",
+   "name": "_gemm_nf4_grouped_smallm",
+   "grid": "10x896x1",
+   "role": null,
+   "class": "moe_expert",
+   "classes": {
+    "moe_expert": 1952
+   },
+   "n_per_step": 32,
+   "dur_ms": 29.559194,
+   "excl_ms": 29.559194,
+   "billed_ms": 0.0,
+   "gap_before_ms": 0.003136,
+   "removable_ms": 29.56217,
+   "removable_iqr_ms": 0.444349,
+   "steps_ge_3pct": 1.0
+  },
+  {
+   "key": "_gemm_nf4_grouped_smallm|10x128x1",
+   "name": "_gemm_nf4_grouped_smallm",
+   "grid": "10x128x1",
+   "role": null,
+   "class": "moe_expert",
+   "classes": {
+    "moe_expert": 1952
+   },
+   "n_per_step": 32,
+   "dur_ms": 18.942012,
+   "excl_ms": 18.939676,
+   "billed_ms": 0.002528,
+   "gap_before_ms": 1e-06,
+   "removable_ms": 18.939677,
+   "removable_iqr_ms": 0.358912,
+   "steps_ge_3pct": 1.0
+  },
+  {
+   "key": "Kernel2|8x32x1",
+   "name": "Kernel2",
+   "grid": "8x32x1",
+   "role": null,
+   "class": "dense_gemm",
+   "classes": {
+    "dense_gemm": 3904
+   },
+   "n_per_step": 64,
+   "dur_ms": 1.621011,
+   "excl_ms": 1.621011,
+   "billed_ms": 0.0,
+   "gap_before_ms": 0.006016,
+   "removable_ms": 1.626835,
+   "removable_iqr_ms": 0.004831,
+   "steps_ge_3pct": 1.0
+  },
+  {
+   "key": "Kernel2|1x1x1",
+   "name": "Kernel2",
+   "grid": "1x1x1",
+   "role": null,
+   "class": "dense_gemm",
+   "classes": {
+    "dense_gemm": 1952
+   },
+   "n_per_step": 32,
+   "dur_ms": 0.75175,
+   "excl_ms": 0.75175,
+   "billed_ms": 0.0,
+   "gap_before_ms": 0.003168,
+   "removable_ms": 0.754887,
+   "removable_iqr_ms": 0.001822,
+   "steps_ge_3pct": 0.0
+  },
+  {
+   "key": "_fp8_paged_decode_split_f8dot|256x1x1",
+   "name": "_fp8_paged_decode_split_f8dot",
+   "grid": "256x1x1",
+   "role": null,
+   "class": "attn",
+   "classes": {
+    "attn": 1952
+   },
+   "n_per_step": 32,
+   "dur_ms": 0.645735,
+   "excl_ms": 0.645735,
+   "billed_ms": 0.0,
+   "gap_before_ms": 0.003072,
+   "removable_ms": 0.648775,
+   "removable_iqr_ms": 0.00854,
+   "steps_ge_3pct": 0.0
+  },
+  {
+   "key": "Kernel2|8x8x16",
+   "name": "Kernel2",
+   "grid": "8x8x16",
+   "role": null,
+   "class": "dense_gemm",
+   "classes": {
+    "dense_gemm": 3904
+   },
+   "n_per_step": 64,
+   "dur_ms": 0.459397,
+   "excl_ms": 0.459397,
+   "billed_ms": 0.0,
+   "gap_before_ms": 0.006048,
+   "removable_ms": 0.465252,
+   "removable_iqr_ms": 0.002525,
+   "steps_ge_3pct": 0.0
+  },
+  {
+   "key": "Kernel2|8x250x1",
+   "name": "Kernel2",
+   "grid": "8x250x1",
+   "role": null,
+   "class": "dense_gemm",
+   "classes": {
+    "dense_gemm": 61
+   },
+   "n_per_step": 1,
+   "dur_ms": 0.163842,
+   "excl_ms": 0.163842,
+   "billed_ms": 0.0,
+   "gap_before_ms": 9.6e-05,
+   "removable_ms": 0.163938,
+   "removable_iqr_ms": 0.001216,
+   "steps_ge_3pct": 0.0
+  },
+  {
+   "key": "_fp8_append_bt1_side|16x8x1",
+   "name": "_fp8_append_bt1_side",
+   "grid": "16x8x1",
+   "role": null,
+   "class": "attn",
+   "classes": {
+    "attn": 3904
+   },
+   "n_per_step": 64,
+   "dur_ms": 0.116132,
+   "excl_ms": 0.116132,
+   "billed_ms": 0.0,
+   "gap_before_ms": 0.006048,
+   "removable_ms": 0.122146,
+   "removable_iqr_ms": 0.000641,
+   "steps_ge_3pct": 0.0
+  },
+  {
+   "key": "splitKreduce_kernel|32x1x1",
+   "name": "splitKreduce_kernel",
+   "grid": "32x1x1",
+   "role": null,
+   "class": "dense_gemm",
+   "classes": {
+    "dense_gemm": 3904
+   },
+   "n_per_step": 64,
+   "dur_ms": 0.077057,
+   "excl_ms": 0.077057,
+   "billed_ms": 0.0,
+   "gap_before_ms": 0.005985,
+   "removable_ms": 0.083043,
+   "removable_iqr_ms": 0.000384,
+   "steps_ge_3pct": 0.0
+  },
+  {
+   "key": "_swiglu_rows|32x14x1",
+   "name": "_swiglu_rows",
+   "grid": "32x14x1",
+   "role": null,
+   "class": "moe_expert",
+   "classes": {
+    "moe_expert": 1952
+   },
+   "n_per_step": 32,
+   "dur_ms": 0.077695,
+   "excl_ms": 0.075136,
+   "billed_ms": 0.00256,
+   "gap_before_ms": 0.0,
+   "removable_ms": 0.075136,
+   "removable_iqr_ms": 0.001024,
+   "steps_ge_3pct": 0.0
+  },
+  {
+   "key": "_rmsnorm_resid_rows|16x1x1",
+   "name": "_rmsnorm_resid_rows",
+   "grid": "16x1x1",
+   "role": null,
+   "class": "norm_elem",
+   "classes": {
+    "norm_elem": 1952
+   },
+   "n_per_step": 32,
+   "dur_ms": 0.058049,
+   "excl_ms": 0.058049,
+   "billed_ms": 0.0,
+   "gap_before_ms": 0.003104,
+   "removable_ms": 0.061121,
+   "removable_iqr_ms": 0.000705,
+   "steps_ge_3pct": 0.0
+  },
+  {
+   "key": "_rmsnorm_rows|16x1x1",
+   "name": "_rmsnorm_rows",
+   "grid": "16x1x1",
+   "role": null,
+   "class": "norm_elem",
+   "classes": {
+    "norm_elem": 2013
+   },
+   "n_per_step": 33,
+   "dur_ms": 0.05072,
+   "excl_ms": 0.047648,
+   "billed_ms": 0.002976,
+   "gap_before_ms": 9.6e-05,
+   "removable_ms": 0.047777,
+   "removable_iqr_ms": 0.000671,
+   "steps_ge_3pct": 0.0
+  },
+  {
+   "key": "_combine_rows|16x4x1",
+   "name": "_combine_rows",
+   "grid": "16x4x1",
+   "role": null,
+   "class": "moe_route",
+   "classes": {
+    "moe_route": 1952
+   },
+   "n_per_step": 32,
+   "dur_ms": 0.043104,
+   "excl_ms": 0.039936,
+   "billed_ms": 0.003137,
+   "gap_before_ms": 0.0,
+   "removable_ms": 0.039936,
+   "removable_iqr_ms": 0.000704,
+   "steps_ge_3pct": 0.0
+  },
+  {
+   "key": "_rope_heads|16x32x1",
+   "name": "_rope_heads",
+   "grid": "16x32x1",
+   "role": null,
+   "class": "norm_elem",
+   "classes": {
+    "norm_elem": 1952
+   },
+   "n_per_step": 32,
+   "dur_ms": 0.03584,
+   "excl_ms": 0.03584,
+   "billed_ms": 0.0,
+   "gap_before_ms": 0.0032,
+   "removable_ms": 0.039009,
+   "removable_iqr_ms": 0.000576,
+   "steps_ge_3pct": 0.0
+  },
+  {
+   "key": "_tile_table_r1|1x1x1",
+   "name": "_tile_table_r1",
+   "grid": "1x1x1",
+   "role": null,
+   "class": "moe_route",
+   "classes": {
+    "moe_route": 1952
+   },
+   "n_per_step": 32,
+   "dur_ms": 0.031744,
+   "excl_ms": 0.031744,
+   "billed_ms": 0.0,
+   "gap_before_ms": 0.00304,
+   "removable_ms": 0.034786,
+   "removable_iqr_ms": 0.000128,
+   "steps_ge_3pct": 0.0
+  },
+  {
+   "key": "_router_epilogue|16x1x1",
+   "name": "_router_epilogue",
+   "grid": "16x1x1",
+   "role": null,
+   "class": "moe_route",
+   "classes": {
+    "moe_route": 1952
+   },
+   "n_per_step": 32,
+   "dur_ms": 0.0304,
+   "excl_ms": 0.0304,
+   "billed_ms": 0.0,
+   "gap_before_ms": 0.003168,
+   "removable_ms": 0.033568,
+   "removable_iqr_ms": 0.000161,
+   "steps_ge_3pct": 0.0
+  },
+  {
+   "key": "_rope_heads|16x8x1",
+   "name": "_rope_heads",
+   "grid": "16x8x1",
+   "role": null,
+   "class": "norm_elem",
+   "classes": {
+    "norm_elem": 1952
+   },
+   "n_per_step": 32,
+   "dur_ms": 0.023808,
+   "excl_ms": 0.023808,
+   "billed_ms": 0.0,
+   "gap_before_ms": 0.003008,
+   "removable_ms": 0.026752,
+   "removable_iqr_ms": 0.000255,
+   "steps_ge_3pct": 0.0
+  },
+  {
+   "key": "indexSelectSmallIndex|32x1x1",
+   "name": "indexSelectSmallIndex",
+   "grid": "32x1x1",
+   "role": null,
+   "class": "norm_elem",
+   "classes": {
+    "norm_elem": 61
+   },
+   "n_per_step": 1,
+   "dur_ms": 0.011488,
+   "excl_ms": 0.011488,
+   "billed_ms": 0.0,
+   "gap_before_ms": 0.0,
+   "removable_ms": 0.011488,
+   "removable_iqr_ms": 0.000288,
+   "steps_ge_3pct": 0.0
+  },
+  {
+   "key": "reduce_kernel|16x1x1",
+   "name": "reduce_kernel",
+   "grid": "16x1x1",
+   "role": null,
+   "class": "sample",
+   "classes": {
+    "sample": 61
+   },
+   "n_per_step": 1,
+   "dur_ms": 0.00864,
+   "excl_ms": 0.008544,
+   "billed_ms": 9.6e-05,
+   "gap_before_ms": 0.0,
+   "removable_ms": 0.008544,
+   "removable_iqr_ms": 9.6e-05,
+   "steps_ge_3pct": 0.0
+  },
+  {
+   "key": "vectorized_elementwise_kernel|2x1x1",
+   "name": "vectorized_elementwise_kernel",
+   "grid": "2x1x1",
+   "role": null,
+   "class": "norm_elem",
+   "classes": {
+    "norm_elem": 366
+   },
+   "n_per_step": 6,
+   "dur_ms": 0.0064,
+   "excl_ms": 0.0064,
+   "billed_ms": 0.0,
+   "gap_before_ms": 0.000544,
+   "removable_ms": 0.006945,
+   "removable_iqr_ms": 0.000192,
+   "steps_ge_3pct": 0.0
+  },
+  {
+   "key": "gemmk1_kernel|2x1x16",
+   "name": "gemmk1_kernel",
+   "grid": "2x1x16",
+   "role": null,
+   "class": "dense_gemm",
+   "classes": {
+    "dense_gemm": 61
+   },
+   "n_per_step": 1,
+   "dur_ms": 0.001184,
+   "excl_ms": 0.001184,
+   "billed_ms": 0.0,
+   "gap_before_ms": 9.6e-05,
+   "removable_ms": 0.00128,
+   "removable_iqr_ms": 0.000128,
+   "steps_ge_3pct": 0.0
+  },
+  {
+   "key": "unrolled_elementwise_kernel|1x1x1",
+   "name": "unrolled_elementwise_kernel",
+   "grid": "1x1x1",
+   "role": null,
+   "class": "norm_elem",
+   "classes": {
+    "norm_elem": 61
+   },
+   "n_per_step": 1,
+   "dur_ms": 0.001088,
+   "excl_ms": 0.001088,
+   "billed_ms": 0.0,
+   "gap_before_ms": 9.6e-05,
+   "removable_ms": 0.001152,
+   "removable_iqr_ms": 0.000128,
+   "steps_ge_3pct": 0.0
+  },
+  {
+   "key": "CatArrayBatchedCopy_alignedK_contig|2x2x1",
+   "name": "CatArrayBatchedCopy_alignedK_contig",
+   "grid": "2x2x1",
+   "role": null,
+   "class": "norm_elem",
+   "classes": {
+    "norm_elem": 61
+   },
+   "n_per_step": 1,
+   "dur_ms": 0.000832,
+   "excl_ms": 0.000832,
+   "billed_ms": 0.0,
+   "gap_before_ms": 9.6e-05,
+   "removable_ms": 0.000928,
+   "removable_iqr_ms": 3.2e-05,
+   "steps_ge_3pct": 0.0
+  },
+  {
+   "key": "memcpy|0x0x0",
+   "name": "memcpy",
+   "grid": "0x0x0",
+   "role": null,
+   "class": "memcpy",
+   "classes": {
+    "memcpy": 61
+   },
+   "n_per_step": 1,
+   "dur_ms": 0.000832,
+   "excl_ms": 0.000768,
+   "billed_ms": 9.6e-05,
+   "gap_before_ms": 0.0,
+   "removable_ms": 0.000768,
+   "removable_iqr_ms": 0.0,
+   "steps_ge_3pct": 0.0
+  },
+  {
+   "key": "vectorized_elementwise_kernel|1x1x1",
+   "name": "vectorized_elementwise_kernel",
+   "grid": "1x1x1",
+   "role": null,
+   "class": "norm_elem",
+   "classes": {
+    "norm_elem": 61
+   },
+   "n_per_step": 1,
+   "dur_ms": 0.000672,
+   "excl_ms": 0.000672,
+   "billed_ms": 0.0,
+   "gap_before_ms": 9.6e-05,
+   "removable_ms": 0.000768,
+   "removable_iqr_ms": 3.2e-05,
+   "steps_ge_3pct": 0.0
+  }
+ ]
+}

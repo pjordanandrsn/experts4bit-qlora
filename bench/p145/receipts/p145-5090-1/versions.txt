@@ -1,0 +1,9 @@
+e4b 0.55.0 @67ba40b765368cd357f5003f4650d49886c1595c
+gnf4 0.47.0 @eea5df6baefbe38b795621286fe70eac2980aa44
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+nsys NVIDIA Nsight Systems version 2025.6.1.190-256136895201v0 at /usr/local/bin/nsys
