@@ -5,6 +5,9 @@
 `enable_fast_train(dgrad=True)` on Qwen3-30B-A3B. Does the gain hold on an RTX 5090? The 5090 has a different compute
 rate and, on many hosts, a faster host link.
 
+The lane number is free: TC1 amendment 54 (#1286) used "P137–P140" as its own prediction ids, the same
+namespace overlap P137 and P138 already live with. This lane is unrelated to those predictions.
+
 This is a replication. The kit is P137's at Amendment 3, by named substitutions (`bench/p140/`), and only the card
 changes. The licence, if earned, covers the RTX 5090 class (sm_120) at this recipe and nothing else.
 
@@ -116,9 +119,10 @@ never used to re-band.
   `p140-dry-<n>` are the $0 dry runs.
 - **Guards:** guard 2.5 h; the runner's arm check is 4,500 s (P137 Amendment 3's arithmetic, on a faster card).
 - **Cost:**
-  - Rate cap $0.53/h for the GPU and 200 GB, download at most $0.011/GB.
-  - **Worst $2.00**: $0.53 × 2.5 h, plus 61.1 GB × $0.011.
-  - Expected about $0.6–1.0.
+  - Rate cap $0.85/h for the GPU and 200 GB (the other 5090 lanes' cap; 5090 pins on 2026-10-18 ran $0.71–0.83/h),
+    download at most $0.011/GB.
+  - **Worst $2.80**: $0.85 × 2.5 h, plus 61.1 GB × $0.011.
+  - Expected about $0.8–1.3.
   - Under the lane's standing authority, at most $15 per run, after this registration merges.
 - **Before any box:** a $0 dry run (`p140-dry-1`) of this kit on the A2000, for correctness only.
 - **Launches** use the launcher current at launch, `--validate` passing, the market rule (3 GETs over 40 s, first-posted
