@@ -1,0 +1,53 @@
+KNOBS e4b_target=88ae1cfd8fbe3477189f5a42d8448f395e974345 gnf4_target=724ccc454f006c1a46836e434e997f31f293747f e4b_harness=bd51c7d9ce8dd7ca2fa3e4b09308361ff6be74bd model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 head=RedHatAI/Qwen3-30B-A3B-speculator.eagle3@6afc5aa2477b923467fb9a8d906782b984a9a6ba gpu_class=5090 min_disk_gb=150 min_ram_gb=60
+VSPLIT_CARD uuid=GPU-98583136-4b17-4f20-f581-5a8df4ef762c
+SD2_AUDIT ok {"changed": 7, "unlisted": [], "stale": []}
+e4b target 0.53.0 sha 88ae1cfd8fbe3477189f5a42d8448f395e974345
+harness sha bd51c7d9ce8dd7ca2fa3e4b09308361ff6be74bd
+gnf4 target 0.45.0
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+huggingface_hub 1.33.0
+cc (12, 0)
+vsplit_reduce self-test OK (28 cases)
+p132_box self-test OK (6 cases)
+sd2_box self-test OK (agreement, dlogp, digest, logits tap, verify plan and assembly, median, pair-0 rotation, fail-soft reports, the offline depth report, and both from the GPU)
+sd2_audit self-test OK (equal, unlisted, stale, the list's format)
+self-test OK (43 checks)
+hf_fetch_watchdog self-test OK (7/7 cases)
+VSPLIT_GPU_TESTS {"rc": 0, "passed": 123, "failed": 0, "skipped": 0, "summary": "123 passed in 17.08s"}
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+HEAD RedHatAI/Qwen3-30B-A3B-speculator.eagle3@6afc5aa2477b923467fb9a8d906782b984a9a6ba sha256 d2d6e2e63e09dc755053ae5c98cdececae3611ae5e202d4fa5411126dd3b1dfa dir /root/.cache/huggingface/hub/models--RedHatAI--Qwen3-30B-A3B-speculator.eagle3/snapshots/6afc5aa2477b923467fb9a8d906782b984a9a6ba
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709
+nsys NVIDIA Nsight Systems version 2025.6.1.190-256136895201v0 at /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/nsys
+P132_CANARY {"status": "ok", "missing_buckets": [], "replays": {"1": "ok", "2": "ok", "3": "ok", "4": "ok"}}
+capture canary_n2_graph rc=0 P132_CENSUS {"n": 2, "capture": "graph", "steps_bracketed": 12, "profiled_ms_per_replay": 9.0445}
+
+capture canary_n2_node rc=0 P132_CENSUS {"n": 2, "capture": "node", "steps_bracketed": 12, "profiled_ms_per_replay": 9.5256}
+
+SC1B {"engine": "e4b", "comparator": null, "batch": 2, "status": "labelled", "reading": null, "named_cause": null, "labels": ["NO_UNPROFILED_TIMING"]}
+P132_TIMING {"anchors": [3.9147, 3.921], "k1": 7.894, "k2": 8.3759, "k3": 8.7309}
+capture census_n1_graph rc=0 P132_CENSUS {"n": 1, "capture": "graph", "steps_bracketed": 64, "profiled_ms_per_replay": 4.0436}
+
+capture census_n1_node rc=0 P132_CENSUS {"n": 1, "capture": "node", "steps_bracketed": 64, "profiled_ms_per_replay": 4.3466}
+
+SC1B {"engine": "e4b", "comparator": null, "batch": 1, "status": "ok", "reading": null, "named_cause": null, "labels": []}
+capture census_n2_graph rc=0 P132_CENSUS {"n": 2, "capture": "graph", "steps_bracketed": 64, "profiled_ms_per_replay": 8.9437}
+
+capture census_n2_node rc=0 P132_CENSUS {"n": 2, "capture": "node", "steps_bracketed": 64, "profiled_ms_per_replay": 9.3765}
+
+SC1B {"engine": "e4b", "comparator": null, "batch": 2, "status": "labelled", "reading": null, "named_cause": null, "labels": ["PROFILER_INFLATED"]}
+capture census_n3_graph rc=0 P132_CENSUS {"n": 3, "capture": "graph", "steps_bracketed": 64, "profiled_ms_per_replay": 9.503}
+
+capture census_n3_node rc=0 P132_CENSUS {"n": 3, "capture": "node", "steps_bracketed": 64, "profiled_ms_per_replay": 10.0731}
+
+SC1B {"engine": "e4b", "comparator": null, "batch": 3, "status": "labelled", "reading": null, "named_cause": null, "labels": ["PROFILER_INFLATED", "NODE_TRACE_INFLATED"]}
+capture census_n4_graph rc=0 P132_CENSUS {"n": 4, "capture": "graph", "steps_bracketed": 64, "profiled_ms_per_replay": 10.1617}
+
+capture census_n4_node rc=0 P132_CENSUS {"n": 4, "capture": "node", "steps_bracketed": 64, "profiled_ms_per_replay": 10.652}
+
+SC1B {"engine": "e4b", "comparator": null, "batch": 4, "status": "labelled", "reading": null, "named_cause": null, "labels": ["PROFILER_INFLATED"]}
+pass B P132_TIMING {"anchors": [3.9133, 3.9604], "k1": 7.887, "k2": 8.367, "k3": 8.812}
+VSPLIT_VERDICT {"verdict": "READ", "H": "REFUTE", "BUILD": "NO_BUILD", "build_at": [], "void": [], "noisy": []}

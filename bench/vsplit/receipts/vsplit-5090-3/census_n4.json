@@ -1,0 +1,254 @@
+{
+ "engine": "e4b",
+ "batch": 4,
+ "graph": {
+  "status": "ok",
+  "delim": "graph",
+  "steps_kept": 61,
+  "dropped": {},
+  "steady_graph_exec": 11,
+  "other_graph_replays": 0,
+  "P": {
+   "median_ms": 10.15134,
+   "iqr_ms": 0.061568
+  },
+  "S": {
+   "median_ms": 9.017255,
+   "iqr_ms": 0.015584
+  },
+  "D_out": {
+   "median_ms": 0.070912,
+   "iqr_ms": 0.00048
+  },
+  "idle_out": {
+   "median_ms": 1.065796,
+   "iqr_ms": 0.055072
+  }
+ },
+ "node": {
+  "status": "ok",
+  "steps_kept": 61,
+  "dropped": {},
+  "kernels_per_graph_modal": 883,
+  "other_launches": 0,
+  "U_in": {
+   "median_ms": 9.060073,
+   "iqr_ms": 0.012641
+  },
+  "span": {
+   "median_ms": 9.156776,
+   "iqr_ms": 0.013248
+  },
+  "I_in_node": {
+   "median_ms": 0.096417,
+   "iqr_ms": 0.001057
+  },
+  "segments": {
+   "replays_broken": 0,
+   "starts_modal": 48,
+   "ends_modal": 48,
+   "moe_layers": 48
+  },
+  "kernels_in_graph": 881,
+  "overlap_in": {
+   "median_ms": 0.019904,
+   "iqr_ms": 0.000224
+  },
+  "overlap_pairs_same_stream_fraction": 0.1023,
+  "kernels_out_graph": 58,
+  "class": {
+   "moe_expert": {
+    "median_ms": 4.775832,
+    "iqr_ms": 0.013857
+   },
+   "moe_route": {
+    "median_ms": 0.275328,
+    "iqr_ms": 0.00048
+   },
+   "attn": {
+    "median_ms": 0.75309,
+    "iqr_ms": 0.002302
+   },
+   "dense_gemm": {
+    "median_ms": 2.8323,
+    "iqr_ms": 0.002914
+   },
+   "norm_elem": {
+    "median_ms": 0.436256,
+    "iqr_ms": 0.001631
+   },
+   "sample": {
+    "median_ms": 0.005824,
+    "iqr_ms": 0.000128
+   },
+   "input_prep": {
+    "median_ms": 0.052192,
+    "iqr_ms": 0.000351
+   },
+   "memcpy": {
+    "median_ms": 0.019937,
+    "iqr_ms": 0.001663
+   },
+   "residual": {
+    "median_ms": 0.0,
+    "iqr_ms": 0.0
+   }
+  },
+  "class_in_graph_median_ms": {
+   "moe_expert": 4.775832,
+   "moe_route": 0.275328,
+   "attn": 0.75309,
+   "dense_gemm": 2.8323,
+   "norm_elem": 0.436256,
+   "sample": 0.005824,
+   "input_prep": 0.0,
+   "memcpy": 0.00096,
+   "residual": 0.0
+  },
+  "residual_fraction": 0.0,
+  "name_map": {
+   "CatArrayBatchedCopy_alignedK_contig": {
+    "norm_elem": 63
+   },
+   "Kernel2": {
+    "dense_gemm": 9135
+   },
+   "_combine_rows": {
+    "moe_route": 3024
+   },
+   "_fp8_append_bt1_side": {
+    "attn": 6048
+   },
+   "_fp8_paged_decode_split_f8dot": {
+    "attn": 3024
+   },
+   "_gemm_nf4_grouped_smallm": {
+    "moe_expert": 6048
+   },
+   "_rmsnorm_resid_rows": {
+    "norm_elem": 3024
+   },
+   "_rmsnorm_rows": {
+    "norm_elem": 3087
+   },
+   "_rope_norm_qk": {
+    "norm_elem": 3024
+   },
+   "_router_epilogue": {
+    "moe_route": 3024
+   },
+   "_swiglu_rows": {
+    "moe_expert": 3024
+   },
+   "_tile_table_r1": {
+    "moe_route": 3024
+   },
+   "elementwise_kernel": {
+    "norm_elem": 9261,
+    "input_prep": 126
+   },
+   "gemmk1_kernel": {
+    "dense_gemm": 63
+   },
+   "indexFuncSmallIndex": {
+    "input_prep": 63
+   },
+   "indexSelectSmallIndex": {
+    "norm_elem": 63,
+    "input_prep": 126
+   },
+   "index_elementwise_kernel": {
+    "input_prep": 189
+   },
+   "memcpy": {
+    "memcpy": 3276
+   },
+   "memset": {
+    "memcpy": 63
+   },
+   "reduce_kernel": {
+    "sample": 63
+   },
+   "unrolled_elementwise_kernel": {
+    "norm_elem": 63,
+    "input_prep": 1575
+   },
+   "vectorized_elementwise_kernel": {
+    "norm_elem": 441,
+    "input_prep": 1575
+   }
+  },
+  "top_residual_kernels": []
+ },
+ "unprofiled_ms": 8.7309,
+ "positions": null,
+ "clocks_mhz": null,
+ "gates": {
+  "inflate": 0.1627,
+  "node_union_over_span": 1.0047,
+  "node_span_over_span": 1.0155,
+  "map_residual_fraction": 0.0
+ },
+ "labels": [
+  "PROFILER_INFLATED"
+ ],
+ "nsys_diagnostics": [
+  "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_1012560/streams/pid_12571_stdout.log and stderr.log for program output",
+  "Common injection library initialized successfully.",
+  "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+  "Loaded CUPTI library: /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/libcupti.so.13.1",
+  "Installed CUDA driver version (13.3) is not supported by this build of Nsight Systems. CUDA trace will be collected using libraries for driver version 13.1",
+  "Enabling trace for device graph launch",
+  "CUDA injection initialized successfully.",
+  "Common injection library initialized successfully.",
+  "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+  "Loaded CUPTI library: /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/libcupti.so.13.1",
+  "Installed CUDA driver version (13.3) is not supported by this build of Nsight Systems. CUDA trace will be collected using libraries for driver version 13.1",
+  "Enabling trace for device graph launch",
+  "CUDA injection initialized successfully.",
+  "NVTX injection initialized successfully.",
+  "Profiling has started.",
+  "Not all NVTX events might have been collected.",
+  "No NVTX events collected. Does the process use NVTX?",
+  "Not all NVTX events might have been collected.",
+  "Number of NVTX events collected: \t1.",
+  "Not all CUDA events might have been collected."
+ ],
+ "node_band": {
+  "omega_ms": 0.139521,
+  "dk_lo_ms": 0.042818
+ },
+ "P_ms": 10.15134,
+ "terms": {
+  "moe_expert": 4.775832,
+  "moe_route": 0.275328,
+  "attn": 0.75309,
+  "dense_gemm": 2.8323,
+  "norm_elem": 0.436256,
+  "sample": 0.005824,
+  "input_prep": 0.052192,
+  "memcpy": 0.019937,
+  "residual": 0.0,
+  "I_in": -0.042818,
+  "idle_out": 1.065796,
+  "overlap_in": -0.019904,
+  "O": 0.002493
+ },
+ "noise_iqr": {
+  "moe_expert": 0.013857,
+  "moe_route": 0.00048,
+  "attn": 0.002302,
+  "dense_gemm": 0.002914,
+  "norm_elem": 0.001631,
+  "sample": 0.000128,
+  "input_prep": 0.000351,
+  "memcpy": 0.001663,
+  "residual": 0.0,
+  "I_in": 0.028225,
+  "idle_out": 0.055072,
+  "overlap_in": 0.000224,
+  "O": null
+ },
+ "I_in_node_ms": 0.096417,
+ "status": "labelled"
+}

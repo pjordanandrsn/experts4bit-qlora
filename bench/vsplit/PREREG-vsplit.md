@@ -248,3 +248,15 @@ term, gate or cost changes.
 **Tests, real records first:** the box's own canary records (`tests/fixtures/p138_canary/`, sha256-pinned). The
 runner's canary block passes them, and the old rule fails them as it did on the box. The reducer reads the real
 labelled arm through and VOIDs it when void.
+
+## Closed (2026-10-18): READ, H = REFUTE, BUILD = NO_BUILD
+
+`vsplit-5090-3`, the last box-started attempt, read cleanly. The maintainer independently re-derived the verdict,
+identical on the committed records (`receipts/vsplit-5090-3/`, `RESULTS-vsplit.md`).
+- The share of the excess beyond the bytes that lies in the expert path is 0.241 / 0.195 / 0.184 at n = 2 / 3 / 4,
+  so H reads REFUTE.
+- S(n) = 0.762 / 0.582 / 0.517 ms against need(n) = 2.259 / 1.690 / 1.674 ms, so BUILD reads NO_BUILD.
+
+As registered, the B = 1 multi-token lane closes for Qwen3-30B-A3B on this stack. The attempts: `vsplit-5090-1` was
+refused before create ($0); `vsplit-5090-2` was strike 1 (the canary check, fixed by Fix 1, $0.417);
+`vsplit-5090-3` was the READ ($0.367). The lane spent $0.784 of its $5.60 ceiling.
