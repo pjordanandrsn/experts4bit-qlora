@@ -223,6 +223,16 @@ def test_the_reducer_reads_the_real_labelled_census_arm_through(tmp_path):
         assert red.judge(d)["verdict"] == "VOID"
 
 
+def test_fix_1_names_the_current_pins():
+    """The PREREG's Fix 1 note records the re-pins it made; if the staged bytes move again, the note must move too."""
+    pre = (LANE / "PREREG-vsplit.md").read_text(encoding="utf-8")
+    fix = pre[pre.index("## Fix 1"):]
+    pins = _pins(LANE / "staged-vsplit.sha256")
+    assert f"`vsplit_run.sh`: `a05dff24` → `{pins['vsplit_run.sh'][:8]}`" in fix
+    assert f"`vsplit_reduce.py`: `88ece714` → `{pins['vsplit_reduce.py'][:8]}`" in fix
+    assert "No rule, measured term, gate or cost changes." in " ".join(fix.split())
+
+
 def test_the_outcome_alone_flips_the_verdict():
     """The maintainer's condition 1: with every input held fixed (the timing passes, the n = 1 census, tau, G_BAR, rho),
     the n >= 2 shares alone take the reading from SUPPORT/BUILD to REFUTE/NO_BUILD."""
