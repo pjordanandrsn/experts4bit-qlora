@@ -68,7 +68,7 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 
 
 def test_the_self_tests_pass():
-    for script, line in (("p137_reduce.py", "p137_reduce self-test OK (36 cases)"), ("p137_box.py", "p137_box self-test OK (10/10 cases)")):
+    for script, line in (("p137_reduce.py", "p137_reduce self-test OK (41 cases)"), ("p137_box.py", "p137_box self-test OK (11/11 cases)")):
         out = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True,
                              env={**os.environ, "PYTHONPATH": ""})
         assert out.returncode == 0 and line in out.stdout, out.stdout + out.stderr
@@ -90,12 +90,12 @@ def test_the_pins_are_exact_and_agree():
 
 
 def test_the_declared_run_ids_and_nothing_else(tmp_path):
-    ok = [("p137-4090-1", {}), ("p137-4090-2", {}), ("p137-4090-3", {}), ("p137-4090-4", {}), ("p137-dry-1", {"P137_DRY": "1", "P137_BOX_EXEC": "/bin/false"})]
+    ok = [("p137-4090-1", {}), ("p137-4090-2", {}), ("p137-4090-3", {}), ("p137-4090-4", {}), ("p137-4090-5", {}), ("p137-4090-8", {}), ("p137-dry-1", {"P137_DRY": "1", "P137_BOX_EXEC": "/bin/false"})]
     for run_id, extra in ok:
         out = _drive(tmp_path, run_id, **extra)
         assert out.returncode == 0 and out.stdout.startswith("DRYRUN stage -> "), (run_id, out.stdout + out.stderr)
         assert f"E4B_SHA={E4B_PIN}" in out.stdout, out.stdout
-    refused = [("p137-4090-5", {}), ("p137-4090-prove-1", {}), ("p137-4090-1", {"P137_DRY": "1", "P137_BOX_EXEC": "/bin/false"}),
+    refused = [("p137-4090-9", {}), ("p137-4090-10", {}), ("p137-4090-prove-1", {}), ("p137-4090-1", {"P137_DRY": "1", "P137_BOX_EXEC": "/bin/false"}),
                ("p137-dry-1", {}), ("p133-4090-1", {}), ("p137-4090-1", {"E4B_SHA": "0" * 40})]
     for run_id, extra in refused:
         out = _drive(tmp_path, run_id, **extra)
@@ -110,7 +110,7 @@ def test_the_rule_is_the_registered_rule():
     for s in ("1.10", "[0.97, 1.03]", "[1.25, 2.0]", "4.25 GiB", "0.01"):
         assert s in PREREG, s
     assert 'LOOPS = {"A0": "stock", "L1": "layer_major"}' in BOX
-    assert "SEQ, MB_ROWS, ACCUM = 2048, 2, 4" in BOX and "WARM, TIMED = 2, 8" in BOX
+    assert "SEQ, MB_ROWS, ACCUM = 2048, 2, 4" in BOX and "WARM, TIMED = 2, 32" in BOX and "TIMED_REG = 32" in REDUCE
     assert "SEED, LR, R, ALPHA = 3407, 2e-4, 16, 16" in BOX
     assert "enable_fast_train(model, dgrad=True)" in BOX and "offload=True, pin=True" in BOX
 

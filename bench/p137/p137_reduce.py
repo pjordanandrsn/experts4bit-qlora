@@ -10,6 +10,9 @@ verdict. The rule, first rung that applies:
      that did not start from the post-load adapter snapshot, or arms whose snapshots differ; an arm whose allocated memory
      at its start is more than MEM_START_TOL_MIB from the post-load baseline; step 0 not cold (A0a and A0b exactly
      M x (2n - 1) + 1, L1b exactly 2n, L1a above L1b: the drift guard's stock forwards run once, on L1a).
+     Amendment 3 replaces the L1a rung: the untimed warm-up runs one layer-major step before the snapshot, so the guard
+     runs there (its layer-major stagings above 2n, the same warm-up record in every arm) and L1a and L1b are both
+     exactly 2n at step 0; every arm records exactly TIMED_REG timed steps.
   2. VOID (Amendment 2): a self-pair outside [SELF_LO, SELF_HI] -- in one process it is the carry-over check.
   3. LICENSED iff S = min(A0a/L1a, A0b/L1b) >= S_MIN; otherwise NO_GAIN.
 REPORTING (never changes the verdict): held-out |L1 - A0| <= HELD_TOL; S inside the registered band [BAND_LO, BAND_HI].
@@ -29,6 +32,7 @@ BAND_LO, BAND_HI = 1.25, 2.0
 MEM_TERM_GIB = 4.25
 HELD_TOL = 0.01
 MEM_START_TOL_MIB = 16                   # Amendment 2: arm-start allocated memory vs the post-load baseline
+TIMED_REG = 32                           # Amendment 3: timed steps per arm (was 8), fixed before any data
 ACCUM = 4
 QWEN = "Qwen/Qwen3-30B-A3B"
 QWEN_REV = "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39"
@@ -81,8 +85,16 @@ def reduce(recs, e4b_sha, dry=False):
             reasons.append(f"{t}: allocated memory at the arm's start {m0} vs the post-load baseline {mb}")
     s0 = {t: r[t].get("summary", {}).get("stagings_step0") for t in TAGS}
     cold_a0, cold_l1 = ACCUM * (2 * n_reg - 1) + 1, 2 * n_reg
-    if not (s0["A0a"] == s0["A0b"] == cold_a0 and s0["L1b"] == cold_l1 and (s0["L1a"] or 0) > cold_l1):
-        reasons.append(f"step 0 not cold: stagings {s0}, registered A0 {cold_a0}, L1b {cold_l1}, L1a above L1b")
+    if not (s0["A0a"] == s0["A0b"] == cold_a0 and s0["L1a"] == s0["L1b"] == cold_l1):
+        reasons.append(f"step 0 not cold: stagings {s0}, registered A0 {cold_a0}, L1 {cold_l1}")
+    wu = {t: json.dumps(r[t].get("warmup"), sort_keys=True) for t in TAGS}   # Amendment 3: the guard ran in the warm-up
+    lm = (r["A0a"].get("warmup") or {}).get("layer_major_stagings") or 0
+    if len(set(wu.values())) != 1 or lm <= cold_l1:
+        reasons.append(f"the warm-up did not run the layer-major step and its guard: {wu['A0a']} (needs above {cold_l1})")
+    for t in TAGS:
+        nt = len(r[t].get("summary", {}).get("timed_walls") or [])
+        if nt != TIMED_REG or (r[t].get("recipe") or {}).get("timed") != TIMED_REG:
+            reasons.append(f"{t}: {nt} timed steps (recipe {(r[t].get('recipe') or {}).get('timed')}), registered {TIMED_REG}")
     stacks = {json.dumps({k: v for k, v in r[t].get("versions", {}).items() if k != "gpu"}, sort_keys=True) for t in TAGS}
     if len(stacks) != 1:
         reasons.append(f"the arms ran on {len(stacks)} different stacks")
@@ -131,10 +143,11 @@ def _fake(tag, med, n=48, model=f"/root/.cache/huggingface/hub/models--Qwen--Qwe
     rec = {"tag": tag, "loop": loop or ("stock" if a0 else "layer_major"), "model": model, "n_fast": n, "n_offloaded": n,
            "adapter_sha_at_start": "a" * 64, "adapter_sha_snapshot": "a" * 64, "mem_at_start": 7 * GIB,
            "mem_baseline": 7 * GIB,
-           "step0_hex": list(step0), "heldout": 1.0, "recipe": {"seq": 2048},
+           "step0_hex": list(step0), "heldout": 1.0, "recipe": {"seq": 2048, "timed": TIMED_REG},
+           "warmup": {"stock_stagings": 2 * n - 1, "layer_major_stagings": 2 * n + n * ACCUM},
            "versions": {"e4b_sha": e4b, "torch": "2.8.0+cu128", "gpu": "RTX 4090"},
-           "summary": {"median_s": med, "stagings_steady": [steady], "peak_alloc": peak,
-                       "stagings_step0": (ACCUM * (2 * n - 1) + 1) if a0 else (2 * n + (n * ACCUM if tag == "L1a" else 0))}}
+           "summary": {"median_s": med, "stagings_steady": [steady], "peak_alloc": peak, "timed_walls": [med] * TIMED_REG,
+                       "stagings_step0": (ACCUM * (2 * n - 1) + 1) if a0 else 2 * n}}
     rec.update(kw)
     return rec
 
@@ -162,8 +175,16 @@ def self_test():
          "LICENSED")
     case("A2: a warm step 0 (L1b inherits residency)",
          {**ok, "L1b": {**ok["L1b"], "summary": {**ok["L1b"]["summary"], "stagings_step0": 95}}}, "VOID")
-    case("A2: L1a without the guard's forwards",
-         {**ok, "L1a": {**ok["L1a"], "summary": {**ok["L1a"]["summary"], "stagings_step0": 96}}}, "VOID")
+    case("A3: L1a carrying the guard's forwards (the warm-up skipped it)",
+         {**ok, "L1a": {**ok["L1a"], "summary": {**ok["L1a"]["summary"], "stagings_step0": 336}}}, "VOID")
+    case("A3: no layer-major warm-up", {t: {**v, "warmup": {"stock_stagings": 95}} for t, v in ok.items()}, "VOID")
+    case("A3: warm-up without the guard", {t: {**v, "warmup": {**v["warmup"], "layer_major_stagings": 96}}
+                                            for t, v in ok.items()}, "VOID")
+    case("A3: arms carry different warm-ups", {**ok, "L1b": {**ok["L1b"], "warmup": {"stock_stagings": 1,
+                                                 "layer_major_stagings": 336}}}, "VOID")
+    case("A3: 8 timed steps (the old n)", {**ok, "A0b": {**ok["A0b"], "summary": {**ok["A0b"]["summary"],
+                                         "timed_walls": [10.4] * 8}}}, "VOID")
+    case("A3: the recipe's timed off", {t: {**v, "recipe": {"seq": 2048, "timed": 8}} for t, v in ok.items()}, "VOID")
     case("missing", {k: v for k, v in ok.items() if k != "L1b"}, "VOID")
     v = case("L1 OOM is VOID", {**ok, "L1a": {**ok["L1a"], "oom": "step 3"}}, "VOID")
     assert "OOM" in v["reasons"][0]
