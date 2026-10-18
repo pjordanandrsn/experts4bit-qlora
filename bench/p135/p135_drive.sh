@@ -46,6 +46,11 @@ case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not a 40-char hex s
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char hex sha ($E4B_SHA)"; exit 78; }
 # grouped-nf4-gemm's pin is a constant in the runner; the box installs e4b at THIS commit.
 HOST=$E4B_RENT_SSH_HOST; PORT=$E4B_RENT_SSH_PORT; RUN_DIR=$E4B_RENT_RUN_DIR; RUN_ID=$E4B_RENT_RUN_ID; DEADLINE=$E4B_RENT_DEADLINE_EPOCH
+# the registered run ids only (PREREG-p135.md "Runs and budget"): the reading and its two spares
+case "$RUN_ID" in
+  p135-5090-1|p135-5090-2|p135-5090-3) :;;
+  *) say "refusing: run id $RUN_ID is not a registered P135 id (p135-5090-1, -2, -3)"; exit 78;;
+esac
 SSH="ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -o ServerAliveInterval=30 -p $PORT root@$HOST"
 SCP="scp -q -o BatchMode=yes $E4B_RENT_SSH_OPTS -P $PORT"
 POLL=${P135_POLL_S:-60}; W=/root/p135

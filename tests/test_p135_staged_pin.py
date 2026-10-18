@@ -119,3 +119,18 @@ def test_every_time_left_check_fits_the_guard():
 def test_the_runner_and_driver_parse():
     for f in ("p135_run.sh", "p135_drive.sh"):
         subprocess.run(["bash", "-n", str(LANE / f)], check=True)
+
+
+def test_the_driver_refuses_an_unregistered_run_id(tmp_path):
+    case = re.search(r'case "\$RUN_ID" in\n\s*([^)]+)\) :;;', DRIVE).group(1)
+    assert case.split("|") == ["p135-5090-1", "p135-5090-2", "p135-5090-3"]
+    env = {"PATH": "/usr/bin:/bin", "HOME": str(tmp_path), "E4B_RENT_SSH_HOST": "h", "E4B_RENT_SSH_PORT": "22",
+           "E4B_RENT_SSH_OPTS": "-o x=y", "E4B_RENT_RUN_DIR": str(tmp_path), "E4B_RENT_DEADLINE_EPOCH": "9999999999",
+           "E4B_RENT_INSTANCE_ID": "1", "E4B_SHA": "a" * 40, "P135_DRIVE_DRYRUN": "1"}
+    bad = subprocess.run(["bash", str(LANE / "p135_drive.sh")], env={**env, "E4B_RENT_RUN_ID": "p135-5090-4"},
+                         capture_output=True, text=True)
+    assert bad.returncode == 78 and "not a registered P135 id" in bad.stdout, (bad.returncode, bad.stdout, bad.stderr)
+    ok = subprocess.run(["bash", str(LANE / "p135_drive.sh")], env={**env, "E4B_RENT_RUN_ID": "p135-5090-1"},
+                        capture_output=True, text=True)
+    assert ok.returncode == 0 and ok.stdout.startswith("DRYRUN stage"), (ok.returncode, ok.stdout, ok.stderr)
+

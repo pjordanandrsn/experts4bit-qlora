@@ -34,6 +34,8 @@ FAM Amendment 4's box (`bench/fam/fam_speed.py`), which timed Qwen3.6's one enga
 - grouped-nf4-gemm: `724ccc454f006c1a46836e434e997f31f293747f` (v0.45.0), e4b CI's pin at registration.
 - transformers 5.17.0, bitsandbytes 0.50.2, and torch held at the image's 2.8.0+cu128.
 
+**The kernels are the ones FAM read.** FAM's Mixtral quality read ran grouped-nf4-gemm v0.43.0 (`6ee2e104`); P135 pins v0.45.0 (`724ccc45`). Between the two, the kernels Mixtral's folds call are bitwise unchanged on Mixtral: `rmsnorm_rows`, `rmsnorm_resid_rows` and `rope_heads` (the attention fold) are byte-identical. `router_epilogue` gained a `weights_dtype` argument, which is fp32 on Mixtral's fp32-upstream routers, so it is a no-op there. `combine_rows` gained `residual=`, licensed only where bitwise. `rope_norm_qk` needs a `q_norm`, which Mixtral lacks. ON is therefore bitwise FAM's ON_auto by construction (the independent review's check of the two releases).
+
 **The folds are the ones FAM licensed.** Since `fam-mixtral-4` (e4b `68845bfc`), the fold modules have changed only by
 #1583's two opt-in prefill knobs, `E4B_FUSE_PREFILL_GLUE` and `E4B_PREFILL_LEAN_DISPATCH`, both off by default. Decode
 arithmetic is unchanged. The box refuses either knob set, and the tripwire asserts the 64-row decode gate.
