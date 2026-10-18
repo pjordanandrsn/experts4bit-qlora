@@ -161,8 +161,10 @@ tc1_lane_dead() { lane_two_missing "$@"; }
 # gnf4-src: TC1 amendment 46's gate checkout (tc1_run.sh deletes it after the gate). Never fetch it: a source tree is not evidence, and its
 # docs/receipts-ab/receipt.json, pulled into a live run's tc1.partial/, failed adertha's reconciler and refused every launch on the account
 # (tc1dec-5090-4, 2026-10-06).
-# HP1: the base exports (~17 GB each), the canonical adapters (~2.6 GB each) and the shakedown cut stay on the box; the receipts carry their sha256s
-TC1_RSYNC_EXCLUDES=(--exclude 'venv*' --exclude '.cache' --exclude 'adapters' --exclude 'data/alpaca_data_cleaned.json' --exclude 'unsloth_compiled_cache' --exclude 'hf-cache' --exclude 'gnf4-src' --exclude 'hp1/**/base_*/' --exclude 'hp1/base_*/' --exclude 'canonical_*.safetensors' --exclude 'shake-cache')
+# HP1: the base exports (~17 GB each), the canonical adapters (~2.6 GB each) and the shakedown cut stay on the box; the receipts carry their sha256s.
+# The shakedown's own canonical adapters (hp1/shake/canonical_*, ~107 MB each) come back (the include before the canonical exclude;
+# rsync's first matching rule wins), so an evaluator VOID on the shakedown can be re-scored off the box (#1767).
+TC1_RSYNC_EXCLUDES=(--exclude 'venv*' --exclude '.cache' --exclude 'adapters' --exclude 'data/alpaca_data_cleaned.json' --exclude 'unsloth_compiled_cache' --exclude 'hf-cache' --exclude 'gnf4-src' --exclude 'hp1/**/base_*/' --exclude 'hp1/base_*/' --include 'hp1/shake/canonical_*.safetensors' --exclude 'canonical_*.safetensors' --exclude 'shake-cache')
 if [ "${TC1_L_CENSUS:-}" = 1 ]; then
   # The census's two raw profiler traces and normalized events may approach
   # 2 GiB. Partial polls retain small failure evidence but never transfer the

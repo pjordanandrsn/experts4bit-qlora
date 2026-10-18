@@ -2129,7 +2129,8 @@ tc1_axolotl_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 HAL=$6 AAL=$7
 #   5 e4b/fused_attn4_m_t1 + unsloth/ckpt_unsloth_m_t1 (micro-batch 1 x accum 1)   6 e4b/fused_attn4_m_r64 + unsloth/ckpt_unsloth_m_r64 (r 64 / alpha 64)
 # The matched pair runs first so a deadline cannot eat it; the family's tokens file carries CURVE_EVAL_N held-out rows (arms 5-6 take the first 8).
 # hp1_bulk_manifest W: hp1/bulk_manifest.json = {path, bytes, mtime_ns, sha256} for every file the fetch excludes under hp1/ -- any file inside
-# a directory named base_* or shake-cache, and any canonical_*.safetensors (tc1_drive.sh's TC1_RSYNC_EXCLUDES, the same patterns). A file
+# a directory named base_* or shake-cache, and any canonical_*.safetensors outside hp1/shake/ (tc1_drive.sh's TC1_RSYNC_EXCLUDES, the same
+# patterns: the shakedown's canonical adapters come back, and their receipts pin their sha256s). A file
 # whose size and mtime match the previous manifest keeps its sha256 (it is written before each reducer pass and at finish; only new files
 # are hashed). The manifest records how long it took (`seconds`), which sizes the finish path's time-left check.
 hp1_bulk_manifest(){ local W=$1
@@ -2148,7 +2149,7 @@ for d, dirs, files in os.walk(root):
     parts = os.path.relpath(d, w).split(os.sep)
     in_bulk_dir = any(p.startswith("base_") or p == "shake-cache" for p in parts[1:])
     for f in sorted(files):
-        if not (in_bulk_dir or (f.startswith("canonical_") and f.endswith(".safetensors"))):
+        if not (in_bulk_dir or (f.startswith("canonical_") and f.endswith(".safetensors") and parts[1:] != ["shake"])):
             continue
         path = os.path.join(d, f)
         rel, st = os.path.relpath(path, w), os.stat(path)
@@ -2195,7 +2196,7 @@ for d, dirs, files in os.walk(root):
     parts = os.path.relpath(d, w).split(os.sep)
     in_bulk_dir = any(p.startswith("base_") or p == "shake-cache" for p in parts[1:])
     for f in files:
-        if not (in_bulk_dir or (f.startswith("canonical_") and f.endswith(".safetensors"))):
+        if not (in_bulk_dir or (f.startswith("canonical_") and f.endswith(".safetensors") and parts[1:] != ["shake"])):
             continue
         path = os.path.join(d, f)
         st, old = os.stat(path), prev.get(os.path.relpath(path, w))
