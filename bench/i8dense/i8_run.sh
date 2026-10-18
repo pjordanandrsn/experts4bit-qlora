@@ -5,13 +5,14 @@
 # Started detached by i8_drive.sh with the run's nonce; I8_RUN_NONCE first, then I8_EXIT_CODE.<nonce> + TP_DONE.<nonce>
 # on every exit and I8_SUCCESS.<nonce> only when the reducer ran.
 #
-# Does int8 weight-only rounding of the B = 1 dense path (every attention projection and the lm_head) keep P125's quality
-# gate? On ONE RTX 5090, P125's subject exactly (e4b 4934aba9 + grouped-nf4-gemm 0.43.0, Qwen3-30B-A3B at ad44e777, the
-# default server built eager at all-VRAM), each arm its own process:
-#   A   the default: writes R's log-probs per gate (t1 108 windows, k16 112, c4 16);
-#   I8  A's build, then every attention projection and the lm_head rounded in place to its per-output-row int8 round
-#       trip (i8_fakequant.py): scored ON against A;
-#   rule  i8_reduce.py: P125's gate function at t1 and k16; GO / PARK / UNDERPOWERED / VOID. A PREMISE, never a reading.
+# The SPLIT premise: does int8 weight-only rounding of the attention projections alone (the head bf16) keep P125's
+# quality gate with margin? On ONE RTX 5090, P125's subject exactly (e4b 4934aba9 + grouped-nf4-gemm 0.43.0,
+# Qwen3-30B-A3B at ad44e777, the default server built eager at all-VRAM), each arm its own process, in this order:
+#   A       the default: writes R's log-probs per gate (t1 196 windows, k16 123, c4 16; wikitext every 1024 tokens);
+#   I8ATTN  the candidate: the attention projections rounded to their per-output-row int8 round trip, the head bf16;
+#   I8HEAD  reported only: the lm_head rounded, the attention bf16 (a deadline skips it gracefully; it rules nothing);
+#   rule    i8_reduce.py: I8ATTN alone, GO iff argmax >= 0.95 and d + 1.645 SE <= P125's bound at t1 AND k16, else
+#           PARK; VOID on a record or window fault. A PREMISE, never a reading.
 #
 # Refusals: CUDA unusable 18, card class 15, disk 13, host RAM 16; premise tests 25; deadline skip 40.
 set -uo pipefail
@@ -27,7 +28,7 @@ E4B_H=$E4B_SHA                                    # the harness commit this kit 
 E4B_T=4934aba9c88da7ff49e12e4911354538ae0fdf48   # P125's subject: e4b 0.50.0, the commit P125's box installed (p125-5090-2)
 GNF4_SHA=6ee2e10408161a9d3c874975c9191a7f2957e6f4   # grouped-nf4-gemm 0.43.0: P125's pin
 MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
-NEED_FETCH=1800; NEED_BAKE=1200; NEED_QUALITY=900
+NEED_FETCH=1800; NEED_BAKE=1200; NEED_QUALITY=1100
 GPU_CLASS=${I8_GPU_CLASS:-5090}; MIN_DISK_GB=${I8_MIN_DISK_GB:-150}; MIN_RAM_GB=${I8_MIN_RAM_GB:-60}
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 # every serving lever and engine knob starts unset: the default server is the subject; each arm sets only its own lever
@@ -164,13 +165,16 @@ K8_MODEL="$SNAP" K8_WORK="$W/work" perl -e "alarm $(step_alarm 5400); exec @ARGV
 [ -e $W/work/nf4.arena ] || { say "BAKE FAIL: no arena"; finish 12; }
 # ---- Amendment 3: every gate's windows load, full, from the real corpora and tokenizer -- before any arm (rc 19)
 CAPF=""
-perl -e "alarm 1200; exec @ARGV" python $W/p125_box.py --windows-check --model "$MODEL" --revision "$REV" $CAPF > logs/windows.log 2>&1 \
+perl -e "alarm 1200; exec @ARGV" python $W/i8_box.py --windows-check --model "$MODEL" --revision "$REV" > logs/windows.log 2>&1 \
   || { tail -4 logs/windows.log | cut -c1-300 | tee -a summary.txt; say "WINDOWS FAIL: a gate's windows do not fit its corpus"; finish 19; }
-grep -a "^P125_WINDOWS" logs/windows.log | cut -c1-400 | tee -a summary.txt
+grep -a "^I8_WINDOWS" logs/windows.log | cut -c1-400 | tee -a summary.txt
 ENGINE_ENV="E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$REV E4B_PAGED_ARENA=$W/work/nf4.arena E4B_PAGED_CALIB=$W/calib.json E4B_PAGED_MAX_SEQS=16"
 # ---- the two quality arms: the server built eager; A first (it writes R's log-probs, which stay on the box)
-for ARM in A I8; do
-  can_run $NEED_QUALITY "quality $ARM" || finish 40
+for ARM in A I8ATTN I8HEAD; do
+  if ! can_run $NEED_QUALITY "quality $ARM"; then
+    [ "$ARM" = I8HEAD ] && { say "I8HEAD skipped on the deadline (reported only; the reducer still runs)"; break; }
+    finish 40
+  fi
   AL=$(step_alarm 3600); say "quality arm $ARM (alarm=$AL)"
   # shellcheck disable=SC2086
   env PYTHONPATH= $ENGINE_ENV E4B_PAGED_GRAPHS=0 I8_ARM=$ARM E4B_SHA=$E4B_T GNF4_SHA=$GNF4_SHA \
@@ -180,7 +184,7 @@ for ARM in A I8; do
   { echo -n "quality $ARM rc=$rc "; grep -a "^I8_GATE\|^I8_QUALITY" logs/quality_$ARM.log | cut -c1-400; echo; } | tee -a summary.txt
   if [ "$rc" != 0 ]; then
     tail -6 logs/quality_$ARM.log | cut -c1-300 | tee -a summary.txt; say "QUALITY $ARM FAILED (rc=$rc) -- the reducer will VOID"
-    [ "$ARM" = A ] && { say "no reference: I8 cannot score"; break; }
+    [ "$ARM" = A ] && { say "no reference: the lever arms cannot score"; break; }
   fi
 done
 say "reduce"; python $W/i8_reduce.py --dir $W --out $W/verdict_i8.json 2>&1 | tee -a summary.txt
