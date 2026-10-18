@@ -23,6 +23,10 @@ case "$*" in
   *"hp1_reduce.py voids"*eval_early*) [ "${STUB_EARLY:-ok}" = runvoid ] && [ ! -e "$W/early_redrawn" ] && { echo hp1_k00_s3407; touch "$W/early_redrawn"; };;
   *"hp1_reduce.py voids"*eval_K*) [ -n "${VOID_K:-}" ] && [ ! -e "$W/k_redrawn" ] && { echo "$VOID_K"; touch "$W/k_redrawn"; };;
   *"hp1_reduce.py voids"*) ;;
+  *hp1_caltokens.py*) out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p')
+    [ "${STUB_CALTOK:-ok}" = refuse ] && { echo "HP1 CALTOKENS REFUSED: the pool's first 48 rows do not reproduce HP1's held-out rows"; exit 13; }
+    python3 -c "import json,sys; json.dump({'fam': 'qwen3hp1cal', 'sha256': 'c' * 64, 'train': [[1, 2]], 'eval': [[i] for i in range(48, 96)]}, open(sys.argv[1], 'w'))" "$out"
+    echo "HP1 CALTOKENS rows 49-96 of the held-out pool; prefix reproduces HP1's 48; sha=$(printf 'c%.0s' $(seq 64))";;
   *hp1_calib.py*) out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p'); echo '{"verdict": "PASS", "tol": 0.0123}' > "$out"; echo "HP1_CALIB=PASS tol=0.0123";;
   *hp1_eval.py*)
     out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p'); st=OK
@@ -406,25 +410,28 @@ def test_a_non_axolotl_evaluator_failure_still_ends_the_draw(tmp_path, case):
     assert "HP1 SHAKEDOWN_FAILED" in summary and "AXOLOTL_DROPPED" not in summary and tags(arms) == []
 
 
-def test_the_calibration_box_runs_one_e4b_k00_step_on_held_out_rows_49_to_96(tmp_path):
-    """HP1-PREREG Amendment 4: one e4b K00 run (1 step, its base exported) on the 48 CALIBRATION rows -- rows 49-96 of a 96-row prepare,
-    disjoint from HP1's 48 -- then the evaluator and hp1_calib.py; calib.json is carried out with its sha256."""
-    import hashlib
-    import json
+def test_the_calibration_box_runs_one_e4b_k00_step_on_held_out_pool_rows_49_to_96(tmp_path):
+    """HP1-PREREG Amendment 4: the registered dataset carries only HP1's 48 held-out rows, so hp1_caltokens.py builds rows 49-96 from
+    tc1_arm's held-out pool (tests/test_hp1_caltokens.py runs it on the real prepare / pack_pools); one e4b K00 run (1 step, its base
+    exported) on them, then the evaluator and hp1_calib.py; calib.json is carried out with its sha256."""
     arms, summary = drive(tmp_path, FAMILY_FN="tc1_hp1cal_family", FAMILY_FAM="qwen3hp1cal")
     assert [a[:3] for a in arms] == [["qwen3hp1cal", "e4b", "hp1cal_k00_s3407"]]
     a = arms[0]
     assert "--hp1-export-base" in a and "native" in a and "--order-seed" in a
-    tk = json.loads((tmp_path / "hp1" / "tokens_qwen3hp1cal_calib.json").read_text())
-    assert tk["eval"] == [[i] for i in range(48, 96)] and tk["hp1_calibration"]["held_out_rows"] == [49, 96]
-    body = json.dumps({"train": tk["train"], "eval": tk["eval"]}, separators=(",", ":")).encode()
-    assert tk["sha256"] == hashlib.sha256(body).hexdigest()
     py = (tmp_path / "py.log").read_text()
+    ct = next(ln for ln in py.splitlines() if "hp1_caltokens.py" in ln)
+    assert "--pack-src" in ct and "alpaca_data_cleaned.json" in ct and "--n 48" in ct and "--tokens" in ct
+    assert "c" * 64 in summary and "held-out pool rows 49-96" in summary
     ev = next(ln for ln in py.splitlines() if "hp1_eval.py" in ln and "eval_cal" in ln)
     assert "tokens_qwen3hp1cal_calib.json" in ev and "--zero-tol" not in ev
     cal = next(ln for ln in py.splitlines() if "hp1_calib.py" in ln)
     assert "--ceiling 0.01" in cal and "--tag hp1cal_k00_s3407" in cal
     assert "HP1_CALIB=PASS tol=0.0123" in summary and "HP1_CARRY calib.json sha256" in summary
+
+
+def test_a_calibration_tokens_refusal_ends_the_draw_unscored(tmp_path):
+    arms, summary = drive(tmp_path, FAMILY_FN="tc1_hp1cal_family", FAMILY_FAM="qwen3hp1cal", STUB_CALTOK="refuse")
+    assert arms == [] and "HP1 CALIB_REFUSED tokens: HP1 CALTOKENS REFUSED" in summary and "HP1_CALIB=" not in summary
 
 
 def test_the_calibrated_tolerance_reaches_every_full_depth_evaluator_pass_and_not_the_shakedown(tmp_path):

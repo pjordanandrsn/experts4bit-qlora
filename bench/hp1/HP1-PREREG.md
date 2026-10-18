@@ -387,14 +387,19 @@ steps). Then the early base check VOIDed the e4b base:
 - One RTX 5090 under the registered host rule, worst $0.90 (0.75 h × $0.85 + 65 GB × $0.004/GB, the per-GB rate capped in its
   manifest). Same source as box 1.
 - One e4b K00 run (seed 3407, 1 optimizer step), its base exported as the boxes build it.
-- It runs on 48 CALIBRATION rows: held-out rows 49–96 of the same unpacked prepare and template. The eval set is a prefix, so rows
-  1–48 are HP1's own held-out rows and 49–96 are disjoint from them.
+- It runs on 48 CALIBRATION rows. The registered dataset carries exactly HP1's 48 held-out rows (`tp4_alpaca.py`, N_EVAL = 48),
+  so `bench/hp1/hp1_caltokens.py` takes rows 49–96 of `tc1_arm.py`'s own held-out POOL. That pool (`pack_pools`, TC1 amendment 39)
+  is the registered 48, then the sha-pinned source's shuffled extension beyond every train row. The rows are encoded unpacked with
+  HP1's template, EOS and seq. It REFUSES unless the pool's first 48 rows reproduce HP1's held-out rows byte-for-byte, so rows 49–96
+  are disjoint from HP1's train and held-out sets. `tc1_arm.py` is used unchanged (it is pinned by a closure).
 - The one evaluator then reads the per-row zero-adapter losses, and the per-row gaps against the run's in-loop step-0 rows
   (`zero_adapter_row_gaps`). Nothing on this box is a scored number.
 
 **The rules (`bench/hp1/hp1_calib.py`).**
-1. **Shape (fail-closed).** The per-row gaps must look like numeric drift. If any row's |gap| > 5 × the median |gap|, the two paths
-   differ (template, truncation or masking), and HP1 CLOSES (`CLOSE_SHAPE`).
+1. **Shape (fail-closed).** The per-row gaps must look like numeric drift. If the largest |gap| > 5 × the median |gap| **and** > 0.005,
+   the two paths differ (template, truncation or masking), and HP1 CLOSES (`CLOSE_SHAPE`). The 0.005 floor means a row under the
+   2-layer tolerance cannot be a path difference worth closing on. Without it, tiny zero-mean gaps (an instrument better than
+   expected, whose median tends to 0) would close HP1. A median of 0 takes the absolute test alone.
 2. **Tolerance.** `zero_adapter_tol` at 48 layers = 2 × the mean |gap| over the 48 calibration rows, rounded up to 1e-6.
 3. **Pre-box ceiling.** HP1's registered parity margin is m = min(max(σ_seed, 0.005), 0.02), which depends on σ_seed and is unknown
    before data. Before any box: if tol > 0.01 (half the 0.02 cap, which no σ_seed could rescue), HP1 CLOSES (`CLOSE_CEILING`). The 0.005

@@ -82,3 +82,28 @@ def test_cli_writes_the_verdict_and_exits_by_it(tmp_path, capsys):
     assert json.loads(out.read_text())["verdict"] == "PASS" and capsys.readouterr().out.startswith("HP1_CALIB=PASS tol=")
     src.write_text(json.dumps(_ev(_drift(0.008, 0.002))))
     assert hp1_calib.main([str(src), "--tag", TAG, "--ceiling", "0.01", "--out", str(out)]) == 3
+
+
+def test_tiny_zero_mean_gaps_pass_the_shape_rule():
+    """The maintainer's pre-pass: an instrument BETTER than expected has a median |gap| near 0, so max/median can pass 5 with no path
+    difference. Rows under the 0.005 floor never close on shape."""
+    gaps = [((-1) ** i) * (1e-6 if i % 5 else 4e-4) for i in range(48)]     # median ~1e-6, max 4e-4: ratio 400, all < 0.005
+    res = hp1_calib.calibrate(_ev(gaps), TAG, ceiling=0.01)
+    assert res["verdict"] == "PASS" and res["max_over_median"] > hp1_calib.SHAPE_FACTOR and res["max_abs_gap"] < hp1_calib.SHAPE_FLOOR
+
+
+def test_a_zero_median_takes_the_absolute_test_alone():
+    gaps = [0.0] * 48
+    assert hp1_calib.calibrate(_ev(gaps), TAG, ceiling=0.01)["verdict"] == "PASS"         # an exact instrument
+    gaps[5] = 0.004
+    assert hp1_calib.calibrate(_ev(gaps), TAG, ceiling=0.01)["verdict"] == "PASS"         # under the floor
+    gaps[5] = 0.006
+    res = hp1_calib.calibrate(_ev(gaps), TAG, ceiling=0.01)
+    assert res["verdict"] == "CLOSE_SHAPE" and res["max_over_median"] is None
+
+
+def test_one_0_02_row_among_0_003_rows_closes():
+    gaps = [0.003] * 48
+    gaps[30] = 0.02
+    res = hp1_calib.calibrate(_ev(gaps), TAG, ceiling=0.01)
+    assert res["verdict"] == "CLOSE_SHAPE" and "row 30" in res["reason"]
