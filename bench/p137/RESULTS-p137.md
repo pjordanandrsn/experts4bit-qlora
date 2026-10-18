@@ -13,8 +13,9 @@ Registration: [PREREG-p137.md](PREREG-p137.md) (#1718), with Amendments 1 (#1722
   2.8.0+cu128; transformers 5.18.0; bitsandbytes 0.50.2.
 - **Lane source:** e4b `b3567954` (#1734's merge). The staged runner, box, reducer and fixture were byte-identical to it.
 - **Model and setup:** Qwen3-30B-A3B @ `ad44e777`. `load_moe_4bit_streaming(..., offload=True, pin=True)` with all 48
-  MoE layers offloaded, then `enable_fast_train(model, dgrad=True)`, 48 layers patched. Gradient checkpointing is on,
-  non-reentrant.
+  MoE layers offloaded. Gradient checkpointing is enabled first (`use_reentrant=False`), then
+  `enable_fast_train(model, dgrad=True)` patches 48 layers and, by its default since TC1 amendment 64, routes all 48
+  decoder layers through e4b's reentrant checkpoint; each arm records `ckpt {layers: 48, mode: reentrant}`.
 - **Recipe:** alpaca `train[:400]` (sha256 `68e3d31c…`, staged from the controller), seq 2048, micro-batch 2 × accum 4,
   r 16 / α 16, AdamW 8-bit, lr 2e-4, seed 3407.
 - **Steps per arm:** 2 warm and 32 timed.
