@@ -36,3 +36,17 @@ STOP-1: bad stage hash, dirty/overridden source SHA, undeclared ID, bad CUDA/car
 ## Receipt and authority boundary
 
 After an ACKed run, hand off run ID, exact source pins, `verdict_p136.json`, `summary.txt`, driver and census records, staged manifest, and SHA-256 per retained file. The handoff may use an immutable evidence URI and its digest; the public PR names only run ID, repository file and digest, never private machine paths or coordination IDs. The independent reviewer is the planner-incubation reviewer; the maintainer alone merges and grants a later run envelope. Until that envelope, **no A2000 claim/probe, GPU rental, or model fetch is authorized by this PR**.
+
+## Amendment 1 (2026-10-18): the premise counts either norm + rotary kernel
+
+`p136-gemma4-5090-1`, attempt 1, stopped at STOP-1 before the model fetch. The card passed the host refusals, the tripwires and every self-test (RTX 5090, 32607 MiB, torch 2.8.0+cu128). The premise ran 18 passed and 1 failed, and the box exited 25. The failing case, `test_the_folds_replay_exactly_as_their_padded_eager_step`, asserted that `rope_norm_heads` ran during capture and saw `{'rmsnorm_rows': 48, 'rmsnorm_resid_rows': 28, 'rope_norm_heads': 0}`. Since `1ddcb0ae` (#1472), round 2's attention fold calls grouped-nf4-gemm's `rope_norm_qk` (grouped-nf4-gemm#528: q's and k's norm + rotary in one launch) wherever the kernel exports it, and never calls `rope_norm_heads`. The pinned `70bc03cb` exports it. The fold ran, and the census assertion `(9, (2, 2))` passed. The test predates the switch (it was last changed in `98f919de`) and is gated to sm_89+, so the sm_86 dry run could not reach it. Receipt files, SHA-256:
+
+- `summary.txt` `3443f22f29c66c145a8196c51a77baff14e88f6e415cea0f1892f9c27d02b073`
+- `logs/premise.log` `709827ae15914c96161a60a250ceed5f0f8f42884662e7f24a3765cd0ad05250`
+- `REFUSAL` `033cadc0ce6948e9788cd50fcbb27b13d027c1b7c915df7b71b44172a78a550c`
+- `receipt.json` `ce2c17fbc81b6248eddb3411fae055b60d30fe75b2cf8464873cec980c77e1a2`
+- `teardown-proof.json` `3d0db8dcd6c68249cd8a110668afb031e7eab59d8548bfc81fccce3b8ba09401`
+
+The amendment is test-only. P136 stages its own copy of the test, `bench/p136/premise/test_fused_glue_decode_graphs_gpu.py`, under the same box name. `tests/test_fused_glue_decode_graphs_gpu.py` keeps its bytes, because P115, P115c, P115d, P123 and P125 pin them; those lanes' kernel pins predate `rope_norm_qk`. `p136_drive.sh` and `test_registration.py` map that one staged name to the copy. The copy also counts `rope_norm_qk` where the kernel has it. It requires `rmsnorm_rows > 0`, `rmsnorm_resid_rows > 0` and `rope_norm_heads + rope_norm_qk > 0`. Its graph == padded-eager assertions are unchanged; they have not yet run on an sm_89+ card, and they must pass. The premise is still exactly 19 passing tests, with none skipped, failed or errored. `staged-p136.sha256` moves by one row: `test_fused_glue_decode_graphs_gpu.py` goes from `5a8eb6b4b0e4d515d8789f1fb729bb847fd74d53288f2faa3efac07e04e1a740` to `5d1ec7cca58ca4a35632219f2d00715b1400858041441ea225fa779a48106cd7`. No other staged file, threshold, read rule, host term or budget changes.
+
+`p136-gemma4-5090-1` has used one of its two attempts, so its next attempt is its last. The Mixtral and gpt-oss run IDs keep both of theirs. Every further run still needs its own post-merge execution approval, naming this amendment's merge commit as the source.
