@@ -21,7 +21,7 @@ STAGED = {
     "calib.json": ROOT / "bench/p39/calib.json",
     "test_decode_graph_buckets.py": ROOT / "tests/test_decode_graph_buckets.py",
     "test_kv_step_select.py": ROOT / "tests/test_kv_step_select.py",
-    "test_fused_glue_decode_graphs_gpu.py": ROOT / "tests/test_fused_glue_decode_graphs_gpu.py",
+    "test_fused_glue_decode_graphs_gpu.py": HERE / "premise/test_fused_glue_decode_graphs_gpu.py",  # Amendment 1
     "test_gemv_bw_served_gpu.py": ROOT / "tests/test_gemv_bw_served_gpu.py",
 }
 

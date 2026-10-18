@@ -11,10 +11,10 @@ for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR 
 done
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 # P136's staging: its runner, reducer, speed box, census driver and class map, SC1b's census reducer and window, P109's
-# box, P39's k8_bake.py and calib.json, and the premise tests from tests/. staged-p136.sha256 pins every one by the name
-# the box sees.
+# box, P39's k8_bake.py and calib.json, and the premise tests: three from tests/ and P136's own copy of the fused-glue
+# graph test (premise/, Amendment 1). staged-p136.sha256 pins every one by the name the box sees.
 TESTS="$REPO/tests"; P39="$REPO/bench/p39"; P109="$REPO/bench/p109"; SC1B="$REPO/bench/sc1b"
-STAGE="$HERE/p136_run.sh $HERE/p136_reduce.py $HERE/p136_box.py $HERE/p136_census.py $HERE/kernel_classes_nf4.json $SC1B/sc1b_census.py $SC1B/sc1b_e4b_census.py $P109/p109_box.py $P39/k8_bake.py $P39/calib.json $TESTS/test_decode_graph_buckets.py $TESTS/test_kv_step_select.py $TESTS/test_fused_glue_decode_graphs_gpu.py $TESTS/test_gemv_bw_served_gpu.py $HERE/staged-p136.sha256"
+STAGE="$HERE/p136_run.sh $HERE/p136_reduce.py $HERE/p136_box.py $HERE/p136_census.py $HERE/kernel_classes_nf4.json $SC1B/sc1b_census.py $SC1B/sc1b_e4b_census.py $P109/p109_box.py $P39/k8_bake.py $P39/calib.json $TESTS/test_decode_graph_buckets.py $TESTS/test_kv_step_select.py $HERE/premise/test_fused_glue_decode_graphs_gpu.py $TESTS/test_gemv_bw_served_gpu.py $HERE/staged-p136.sha256"
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
 # staged-p136.sha256 names the files as the BOX will see them; resolve each name to its source and compare hashes
 # (the same map as bench/p136/test_registration.py, checked in CI).
@@ -26,7 +26,8 @@ while read -r want name; do
     sc1b_census.py|sc1b_e4b_census.py) src="$SC1B/$name";;
     p109_box.py) src="$P109/$name";;
     k8_bake.py|calib.json) src="$P39/$name";;
-    test_decode_graph_buckets.py|test_kv_step_select.py|test_fused_glue_decode_graphs_gpu.py|test_gemv_bw_served_gpu.py) src="$TESTS/$name";;
+    test_decode_graph_buckets.py|test_kv_step_select.py|test_gemv_bw_served_gpu.py) src="$TESTS/$name";;
+    test_fused_glue_decode_graphs_gpu.py) src="$HERE/premise/$name";;
     *) say "refusing: staged-p136.sha256 names $name, which this driver does not stage"; exit 78;;
   esac
   got=$(sha_of "$src")
