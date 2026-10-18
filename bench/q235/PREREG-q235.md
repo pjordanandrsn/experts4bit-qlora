@@ -1202,3 +1202,44 @@ warm read beside it as not used.
   every cap fitting already implies an expected run under 4.8 h.
 
 **Unchanged.** The science box's rules, bands, plants, records and verdict, and gate 1's A2000 rehearsal.
+
+## Amendment 13 (2026-10-18, after `q235-pro6000-5`, before any further 235B box): the host-copy floor, from the fit
+
+**Why, stated plainly.** This amendment is motivated by `q235-pro6000-5`'s refusal. That box (24 CPUs, PCIe gen 5) read pinned
+H2D at 49.02 GB/s and the disk at 11.91, but host copy at 17.69 GB/s against Amendment 12's floor of 58.5. Host floors are
+feasibility gates: they protect the guard and the fit, they never touch the science reading, and the worst case stays bounded
+by the guard × the rate. Amendment 11's rule (min(samples) / 1.2, applied as if the whole box were bound by each rate) turns
+out to demand a host like the leg's own (56 CPUs, host copy 76.64 / 70.20). Yet its own fit shows a 17.69 GB/s host fitting
+with about 900 s to spare: the host-copy-bound part of the box is the load's assemble, 1.45 s on the slice, 34.075 s scaled, and
+at 17.69 GB/s it becomes about 135 s, so the box takes about 2,099 s against its 2,997 s budget.
+
+**The rule.** The host-copy floor is derived per host-bound part. The load's assemble may grow by at most 20 % of the box's
+scaled time on a slower host:
+
+    MIN_HOST_COPY = max(5.14, the A2000's measured 4.34, min(two samples) × A / (A + 0.2 × B)),
+
+with A the leg's scaled assemble and B the leg's scaled box, rounded up to 0.001 GB/s. The base 5.14 is the floor sealed before
+Amendment 12. This keeps the 1.2 slack's intent, a slower host costs a bounded share, while dropping the strictness of charging
+that share to the whole box.
+
+**Worked example (the leg).** A = 1.45 × 94 / 4 = 34.075 s and B = 85 × 94 / 4 = 1,997.5 s, so 0.2 × B = 399.5 s and the
+assemble may reach 433.575 s. 70.20 × 34.075 / 433.575 = 5.5171, rounded up to **5.518** GB/s (`MIN_HOST_COPY_GBS`, was 58.5).
+A host at 17.69 passes; one at 5.0 is refused.
+
+**Unchanged.** Pinned H2D stays at 23.609 and the disk at 1.145. Their parts already sit far inside the fit: H2D-bound
+staging and offload rides the leg's measured box, and the disk's cold-read check gives about 2,427 s against 2,997. Nothing
+else changes either: the caps, the expected run (2.65 h), the leg and its receipt.
+
+**Run ids.** `q235-pro6000-7`, `-8` and `-9` are registered as spares for host-floor refusals. A registered host-floor
+refusal after the create is not an attempt: the gate refused a host for a host property, before any fetch.
+
+**The fit.** `q235_fit.leg_floors` takes the leg's scaled assemble and box and derives the host-copy floor by this rule (main
+passes them for a pro6000 leg). Without them it keeps Amendment 11's rule, which the A11 worked-example test still pins.
+
+**The closure.** `q235.sha256` is re-sealed with `q235_stage.py --write`. Only the `q235_run.sh` row moves, from
+`1bc7a664ff791a3bfbc38f17ecb4829d4236e20424ace89599c7872157e51875` to `d09981f5f73198875cc5b93733c1c0864a6feec567f537c991227fbd2b96b1eb`.
+
+**Tests** (`tests/test_q235_fit.py`):
+- The worked example. A host at 17.69 passes and one at 5.0 is refused. The base 5.14 binds when the fit-derived value is lower.
+- The committed leg refits to exactly the sealed floors (23.609, 5.518, 1.145).
+- `HC_BOX_SHARE` 0.1 fails three tests, and `MIN_HOST_COPY_GBS` 5.517 fails the refit test.
