@@ -31,7 +31,7 @@ def _fit():
 def test_the_fit_reads_every_sealed_cap_from_the_runner():
     f = _fit()
     caps = f.sealed_caps(Q / "q235_run.sh")
-    assert set(caps) == {"require-git", "create-venv", "install", "hostrate", "fetch", "tokens", "box", "repeat"}, caps
+    assert set(caps) == {"require-git", "create-venv", "install", "hostrate", "fetch", "tokens", "box"}, caps   # repeat: Amendment 15
     assert all(v > 0 for v in caps.values())
 
 
@@ -126,8 +126,8 @@ def test_the_in_process_plants_add_only_their_measured_forwards_to_the_repeat(tm
     base = {x["phase"]: x["elapsed_s"] for x in map(json.loads, (Q / "gate2" / "phase-timings.jsonl").read_text().splitlines())}
     assert abs(rep["phases"]["repeat"]["scaled_s"] - round((base["repeat"] + 3.382) * 94 / 4, 1)) < 0.1, rep["phases"]["repeat"]
     assert rep["rehearsal"]["in_process_plants"]["added_to_repeat_s"] == 3.382
-    assert rep["phases"]["repeat"]["budget_s"] == 4702        # the A2000 record; Amendment 12 seals the repeat from the PRO 6000 leg
-    assert rep["phases"]["repeat"]["sealed_cap_s"] == 705 and not rep["phases"]["repeat"]["fits"]
+    assert rep["phases"]["repeat"]["budget_s"] == 4702        # the A2000 record, reported: Amendment 15 sizes the repeat on the box
+    assert rep["phases"]["repeat"]["sealed_cap_s"] is None and rep["phases"]["repeat"]["fits"]
     (later / "receipts" / "repeat" / "box.json").write_text(json.dumps({"repeat": {"loss": 1.0}}))
     r = subprocess.run(cmd + ["--plants-from", str(later)], capture_output=True, text=True, timeout=60)
     assert r.returncode != 0 and "ran both in-process plants" in r.stderr
@@ -338,7 +338,8 @@ def test_the_sealed_floors_and_caps_are_the_refit_of_the_pro6000_leg(tmp_path):
     """Amendment 12, mechanical: Amendment 11's formulas on the committed leg receipt (bench/q235/am12/leg, q235-leg-pro6000-2)
     give exactly the sealed floors (H2D 28.33 / 1.2 -> 23.609; the disk 1.145, because the leg's load was warm and its cold-read
     sample is absent; host copy by Amendment 13's fit, 70.20 x 34.075 / (34.075 + 0.2 x 1997.5) -> 5.518) and the sealed box and
-    repeat caps (85 s and 20 s x 94/4 x 1.5 -> 2,997 and 705), with the expected run inside 0.8 x 6 h at the pin's 806 Mbps."""
+    repeat budgets (85 s and 20 s x 94/4 x 1.5 -> 2,997 and 705; only the box's is sealed since Amendment 15 sizes the repeat on the
+    box), with the expected run inside 0.8 x 6 h at the pin's 806 Mbps."""
     import hashlib
     am12 = Q / "am12"
     for line in (am12 / "SHA256SUMS").read_text().splitlines():
@@ -356,7 +357,8 @@ def test_the_sealed_floors_and_caps_are_the_refit_of_the_pro6000_leg(tmp_path):
     assert fl["basis"]["per_floor"]["disk_read_gb_s"]["sample"] is None
     assert fl["basis"]["per_floor"]["disk_read_gb_s"]["warm_load_read_gb_s_not_used"] > 10      # the page cache, not the disk
     caps = _fit().sealed_caps(Q / "q235_run.sh")
-    assert rep["phases"]["box"]["budget_s"] == caps["box"] == 2997 and rep["phases"]["repeat"]["budget_s"] == caps["repeat"] == 705
+    assert rep["phases"]["box"]["budget_s"] == caps["box"] == 2997 and rep["phases"]["repeat"]["budget_s"] == 705
+    assert "repeat" not in caps and rep["phases"]["repeat"]["sealed_cap_s"] is None and rep["phases"]["repeat"]["fits"]
     assert rep["expected_within_guard"] and fl["sealed_match"] and rep["fits"] and r.returncode == 0, rep
 
 

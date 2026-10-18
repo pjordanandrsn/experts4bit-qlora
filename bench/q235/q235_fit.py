@@ -73,6 +73,9 @@ MARGIN = 1.5
 RESERVE_S = 300                     # q235_run.sh's deadline reserve
 CONTROLLER_S = 1800                 # tc1_drive.sh: staging, the nonce handshake, the receipt fetch (per-layer outputs of the box, the
                                     # null and two plants: 4 x 94 x 2,648 x 4,096 x 2 B, about 8.2 GB, at >= 4.6 MB/s)
+# Amendment 15: phases whose cap the box sizes from its own box phase (q235_run.sh's repeat_cap), so nothing is sealed for them. The
+# fit reports their scaled budget, counts it in the wallclock and never refuses on it.
+ON_BOX_CAPS = ("repeat",)
 RUN_CAP_USD = 35.0                  # the launcher's per-run hard cap
 NO_ASK_USD = 15.0                   # above this, a run's ACK needs approval
 FIXED = ("require-git", "create-venv", "tokens", "hostrate")
@@ -185,8 +188,12 @@ def fit(timings: dict, warm_install_s: float, fetch: dict, wheel_bytes: int, mod
     phases = {}
     for p, s in scaled.items():
         budget = math.ceil(max(s * MARGIN, 60))
-        phases[p] = {"scaled_s": round(s, 1), "budget_s": budget, "sealed_cap_s": caps.get(p), "fits": caps.get(p, 0) >= budget}
-    wallclock_s = sum(caps.get(p, 0) for p in phases) + RESERVE_S + CONTROLLER_S
+        if p in ON_BOX_CAPS and p not in caps:
+            phases[p] = {"scaled_s": round(s, 1), "budget_s": budget, "sealed_cap_s": None, "cap": "sized on the box (Amendment 15)",
+                         "fits": True}
+        else:
+            phases[p] = {"scaled_s": round(s, 1), "budget_s": budget, "sealed_cap_s": caps.get(p), "fits": caps.get(p, 0) >= budget}
+    wallclock_s = sum(caps.get(p, phases[p]["budget_s"] if p in ON_BOX_CAPS else 0) for p in phases) + RESERVE_S + CONTROLLER_S
     expected_s = sum(scaled.values()) + RESERVE_S + CONTROLLER_S          # no MARGIN: the run as expected, not its alarms
     usd = wallclock_s / 3600 * usd_per_hour
     tier = "within the no-ask tier" if usd <= NO_ASK_USD else ("above the no-ask tier: the ACK needs approval"
