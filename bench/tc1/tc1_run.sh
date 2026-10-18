@@ -2245,7 +2245,8 @@ hp1_shakedown(){ local FAM=$1 MID=$2 REV=$3 TOK=$4 TS=$5 SF=${1}shake
   tail -5 logs/hp1_eval_shake.log
   # Amendment 3 covers an axolotl failure AT THE EVALUATOR too (hp1k-5090-8: the axolotl shake arm trained, then VOIDed on STRICT
   # round-trip 6(b), and --require-all-scored ended the draw). If every non-axolotl arm SCORED and every non-axolotl base is OK, drop
-  # axolotl and go on; any other evaluator failure still ends the draw.
+  # axolotl and go on; any other evaluator failure still ends the draw. (Stricter than hp1_eval's base_fine, which also accepts an
+  # UNUSED verified duplicate base: such a case fails closed here -- a missed drop, never a wrong one.)
   local axv; axv=$($PY_E4B -c "import json,sys,os
 d = json.load(open(sys.argv[1]))
 ax = lambda t: 'axolotl' in str(t)
