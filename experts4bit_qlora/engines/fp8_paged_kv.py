@@ -1282,7 +1282,8 @@ class Fp8PagedKV:
     def _record_split(self, layer: int, q: torch.Tensor, tbl: torch.Tensor, kw: dict):
         """The engagement record (lane P143): for each row count B the cap met, the library's plan and the split count it
         runs, from grouped-nf4-gemm's own ``decode_split_plan`` (a captured graph replays without calling back here, so
-        this is what each bucket captured with)."""
+        this is what each bucket captured with). Keyed by B alone: a family whose layers differ in KV geometry would
+        keep its first layer's plan (moot for qwen3_moe, the one family P143 reads)."""
         import fp8_paged_attn
         plan_fn = getattr(fp8_paged_attn, "decode_split_plan", None)
         B = int(q.shape[0])

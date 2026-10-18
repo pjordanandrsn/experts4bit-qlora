@@ -20,12 +20,17 @@ from experts4bit_qlora import serve_paged as sp  # noqa: E402
 from experts4bit_qlora.engines import fp8_paged_kv as kvmod  # noqa: E402
 
 
+def _require(module: str, reason: str):
+    """Import ``module``; in CI a plain import (it must be there, never a skip), off CI a skip when it is absent."""
+    if os.environ.get("CI"):
+        import importlib
+        return importlib.import_module(module)
+    return pytest.importorskip(module, reason=reason)
+
+
 def _planner():
     """grouped-nf4-gemm's real ``decode_split_plan``: required in CI, skipped only off it."""
-    if os.environ.get("CI"):
-        import fp8_paged_attn                                    # CI installs grouped-nf4-gemm >= 0.47.1: no skip
-    else:
-        fp8_paged_attn = pytest.importorskip("fp8_paged_attn", reason="grouped-nf4-gemm is not installed (CI installs it)")
+    fp8_paged_attn = _require("fp8_paged_attn", "grouped-nf4-gemm is not installed (CI installs it)")
     fn = getattr(fp8_paged_attn, "decode_split_plan", None)
     if fn is None:
         if os.environ.get("CI"):
@@ -70,7 +75,7 @@ def test_the_cap_runs_min_16_and_the_library_plan_across_B_1_to_64(monkeypatch):
 
 
 def _kv_with_stub_kernel(monkeypatch, *, takes_split_cap=True, compute="fp8"):
-    pytest.importorskip("fp8_kv", reason="the KV class needs grouped-nf4-gemm (CI installs it)")
+    _require("fp8_kv", "the KV class needs grouped-nf4-gemm (CI installs it)")          # never a skip in CI
     seen = []
     stub = types.ModuleType("fp8_paged_attn")
     if takes_split_cap:
