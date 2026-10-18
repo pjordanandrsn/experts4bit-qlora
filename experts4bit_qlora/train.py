@@ -372,7 +372,8 @@ def main():
         raise SystemExit(f"FAST_TRAIN={_FAST_TRAIN_ENV!r}: use 1 (the fused expert path) or 0 (the reference loop).")
     if FAST_TRAIN and os.environ.get("TRAIN_ARENA"):
         # Refused before the load: enable_hybrid_train patches the same ExpertsLoRA wrappers, and the composition is untested.
-        raise SystemExit("FAST_TRAIN=1 cannot be combined with TRAIN_ARENA (both route the ExpertsLoRA wrappers). Unset one of them.")
+        raise SystemExit("FAST_TRAIN=1" + (" (implied by LAYER_MAJOR=1)" if _FAST_TRAIN_ENV == "" else "")
+                         + " cannot be combined with TRAIN_ARENA (both route the ExpertsLoRA wrappers). Unset one of them.")
     if LAYER_MAJOR and not OFFLOAD_EXPERTS:
         raise SystemExit("LAYER_MAJOR=1 needs OFFLOAD_EXPERTS=1: it saves expert stagings, and resident training stages none.")
     log(f"loading {MODEL} via streaming 4-bit loader (CPU-RAM-light)...")
@@ -451,6 +452,11 @@ def main():
         # on a model the compressor refuses); the patched forward reads a compressed absmax through expert_absmax_fp32.
         from .engines.chunked_lm_loss import _target as _chunk_target
         from .engines.fast import enable_fast_train
+        # Checkpointing FIRST, as P137's box and recipe.prepare_qlora_training do: enable_fast_train routes only the decoder
+        # layers whose checkpointing is already on through e4b's reentrant checkpoint (TC1 amendment 64; E4B_CKPT_OFFLOAD), and
+        # a later gradient_checkpointing_enable would put Hugging Face's back. Training mode alone checkpoints, so the BEFORE
+        # evaluation and the generations below are unaffected; the call before the loop is skipped under FAST_TRAIN.
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
         n_fast = enable_fast_train(model, dgrad=True, absmax_dq=False)
         if n_fast <= 0:
             raise SystemExit("FAST_TRAIN=1 patched no ExpertsLoRA wrapper -- refusing to report a fused-path run that trains "
@@ -572,7 +578,8 @@ def main():
     # Gradient checkpointing: recompute each decoder layer in backward instead of saving the
     # dequantized expert weights as activations — the key to fitting MoE QLoRA on a small card.
     model.config.use_cache = False
-    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+    if not FAST_TRAIN:   # under FAST_TRAIN it was enabled before enable_fast_train, which routed it; enabling again would undo that
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     model.enable_input_require_grads()
     model.train()
     log(

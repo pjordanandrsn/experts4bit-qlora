@@ -55,3 +55,25 @@ def test_help_lists_the_knob(monkeypatch, capsys):
     train._print_env_help("train")
     out = capsys.readouterr().out
     assert "FAST_TRAIN" in out and "enable_fast_train(dgrad=True)" in out and "implies FAST_TRAIN=1" in out
+
+
+def test_checkpointing_is_enabled_before_the_fused_path_and_not_again():
+    """enable_fast_train routes only already-checkpointed layers through e4b's reentrant checkpoint, and a second
+    gradient_checkpointing_enable puts Hugging Face's back: under FAST_TRAIN the trainer enables it first and skips the later
+    call (the A2000 leg reads the routing itself)."""
+    import inspect
+
+    import experts4bit_qlora.train as train
+    src = inspect.getsource(train.main)
+    block = src[src.index("    if FAST_TRAIN:\n"):src.index("    elif LAYER_MAJOR:")]
+    assert block.index("model.gradient_checkpointing_enable(") < block.index("enable_fast_train(model")
+    later = src[src.index("model.enable_input_require_grads()") - 400:src.index("model.enable_input_require_grads()")]
+    assert "if not FAST_TRAIN:" in later and later.count("model.gradient_checkpointing_enable(") == 1
+
+
+def test_the_arena_refusal_says_when_layer_major_implied_it(monkeypatch):
+    train = _reload(monkeypatch, LAYER_MAJOR="1", OFFLOAD_EXPERTS="1", TRAIN_ARENA="/nonexistent/arena")
+    monkeypatch.setattr(train, "load_moe_4bit_streaming", lambda *a, **k: pytest.fail("loaded a model"))
+    monkeypatch.setattr(train.sys, "argv", ["train"])
+    with pytest.raises(SystemExit, match=r"implied by LAYER_MAJOR=1"):
+        train.main()

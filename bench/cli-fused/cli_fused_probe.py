@@ -14,8 +14,8 @@ from --data.
 STRICT checks (every one must hold; the probe exits 1 otherwise):
   0. the library self-pair: layer_major_step called twice in one process on the same micro-batches is bit-identical (so a
      nondeterministic kernel fails here as "not reproducible", never as "trainer != library");
-  1. the trainer IS the library call. A model built directly (torch.manual_seed as the trainer's SEED,
-     load_moe_4bit_streaming with offload, enable_fast_train(dgrad=True), non-reentrant gradient checkpointing),
+  1. the trainer IS the library call. A model built directly in P137's order (torch.manual_seed as the trainer's SEED,
+     load_moe_4bit_streaming with offload, gradient checkpointing enabled, then enable_fast_train(dgrad=True)),
      with layer_major_step run on the exact micro-batches of L's first step: the adapters are equal byte for byte to
      L's at that step's entry, and the per-micro-batch losses are torch.equal to L's;
   2. the patch count is the number of MoE layers in L and A, and 0 in R; R's step-0 losses differ from L's (nonzero);
@@ -23,6 +23,10 @@ STRICT checks (every one must hold; the probe exits 1 otherwise):
      L's step 0 above 2n (the drift guard's forwards run there);
   4. the refusals: FAST_TRAIN=1 with TRAIN_ARENA, and a FAST_TRAIN=1 run whose enable_fast_train patches nothing, each
      SystemExit before training;
+  6. the checkpoint: at the first optimizer step of every fused arm (L, A, resident) every decoder layer runs e4b's
+     reentrant_checkpoint (enable_fast_train's routing, as in P137's arm records), and CKPT_OFFLOAD_STATS["layers"] is L;
+  7. generation: FAST_TRAIN=1 with DO_GEN=1 (the trainer's default) generates before and after training without a raise,
+     every generation non-empty (the text is REPORTING);
   5. resident (no offload) FAST_TRAIN=1: the patch count is the number of MoE layers, no raise, and the absmax compressed
      as apply_absmax_dq's soft resident default leaves it (E4B_ABSMAX_DQ unset).
 REPORTING: the size of R's step-0 difference from L's (the forward fusion's error; no receipt bounds it on the fixture).
@@ -79,7 +83,22 @@ def _run_trainer(env, model_dir, record):
     train = importlib.reload(train)
     fast.FAST_TRAIN_STATS["patched"] = 0
     real_lm = lm.layer_major_step
+    real_eft = fast.enable_fast_train
     steps = []
+    seen = {}
+
+    def eft_hook(model, *a, **k):
+        seen["model"] = model
+        return real_eft(model, *a, **k)
+    fast.enable_fast_train = eft_hook
+    gens = []
+    real_gen = train.generate
+
+    def gen_hook(model, tokenizer, q, *a, **k):
+        out = real_gen(model, tokenizer, q, *a, **k)
+        gens.append(out)
+        return out
+    train.generate = gen_hook
 
     def lm_hook(model, batches, weights, handles=None):
         if "lm_first" not in record:
@@ -94,6 +113,8 @@ def _run_trainer(env, model_dir, record):
     real_step = torch.optim.AdamW.step
 
     def step_hook(self, *a, **k):
+        if not steps and "model" in seen:
+            record["ckpt"] = _ckpt_routing(seen["model"])
         steps.append(len(off._stats().copies))
         off.reset_offload_stats()
         return real_step(self, *a, **k)
@@ -104,10 +125,28 @@ def _run_trainer(env, model_dir, record):
     finally:
         lm.layer_major_step = real_lm
         torch.optim.AdamW.step = real_step
+        fast.enable_fast_train = real_eft
+    record["gens"] = gens
     record["patched"] = fast.FAST_TRAIN_STATS["patched"]
     record["stagings"] = steps
     record["absmax_compressed"] = _absmax_compressed()
     return record
+
+
+def _ckpt_routing(model):
+    """Every decoder layer's checkpoint function at the first optimizer step: e4b's reentrant one, and the stats' count."""
+    from transformers.modeling_layers import GradientCheckpointingLayer
+
+    from experts4bit_qlora.engines.ckpt_offload import CKPT_OFFLOAD_STATS, reentrant_checkpoint
+    layers = [m for m in model.modules() if isinstance(m, GradientCheckpointingLayer) and m is not model]
+    return {"layers": len(layers), "reentrant": [getattr(m, "_gradient_checkpointing_func", None) is reentrant_checkpoint
+                                                 for m in layers],
+            "stats_layers": CKPT_OFFLOAD_STATS.get("layers")}
+
+
+def _ckpt_ok(rec):
+    c = rec.get("ckpt")
+    return bool(c) and c["layers"] > 0 and all(c["reentrant"]) and c["stats_layers"] == c["layers"]
 
 
 def _absmax_compressed():
@@ -135,9 +174,9 @@ def _library_losses(model_dir, first):
     expert_ids, _attn = trainable_lora_param_ids(model)
     for p in model.parameters():
         p.requires_grad_(id(p) in expert_ids)
+    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})   # P137's order
     n = enable_fast_train(model, dgrad=True, absmax_dq=False)
     model.config.use_cache = False
-    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     model.enable_input_require_grads()
     model.train()
     sha = _adapter_sha(model)
@@ -196,6 +235,13 @@ def main(argv=None):
         Res, res_err = {"patched": None, "absmax_compressed": None}, f"{type(e).__name__}: {str(e)[:200]}"
     checks["5_resident_no_raise_patched"] = res_err is None and Res["patched"] == n
     checks["5_resident_absmax_as_apply_left_it"] = res_err is None and Res["absmax_compressed"] is True
+    checks["6_ckpt_reentrant_routed"] = _ckpt_ok(L) and _ckpt_ok(A) and res_err is None and _ckpt_ok(Res)
+    try:
+        G = _run_trainer({"FAST_TRAIN": "1", "LAYER_MAJOR": "0", "DO_GEN": "1", "STEPS": "1"}, a.model, {})
+        gen_err = None
+    except Exception as e:
+        G, gen_err = {"gens": []}, f"{type(e).__name__}: {str(e)[:200]}"
+    checks["7_generation_fused_no_raise"] = gen_err is None and len(G["gens"]) >= 2 and all(g.strip() for g in G["gens"])
     rep = {"R_vs_L_step0_max_abs": max(abs(float.fromhex(x) - float.fromhex(y))
                                        for x, y in zip(R["lm_first_losses"], L["lm_first_losses"]))}
     out = {"checks": checks, "pass": all(checks.values()), "reporting": rep,
@@ -203,7 +249,10 @@ def main(argv=None):
            "A": {k: A[k] for k in ("patched", "stagings")},
            "R": {k: R[k] for k in ("patched", "stagings", "lm_first_losses")},
            "library": {k: lib[k] for k in ("patched", "losses", "self_pair")},
-           "resident": {"patched": Res["patched"], "absmax_compressed": Res["absmax_compressed"], "error": res_err},
+           "resident": {"patched": Res["patched"], "absmax_compressed": Res["absmax_compressed"], "error": res_err,
+                        "ckpt": Res.get("ckpt")},
+           "ckpt": {"L": L.get("ckpt"), "A": A.get("ckpt"), "R": R.get("ckpt")},
+           "generation": {"gens": [g[:200] for g in G["gens"]], "error": gen_err},
            "refusals": {"arena": arena, "zero_patch": zero}}
     json.dump(out, open(a.out, "w"), indent=1)
     print("CLI_FUSED_PROBE " + json.dumps({"pass": out["pass"], "checks": checks, "reporting": rep}), flush=True)
