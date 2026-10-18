@@ -132,6 +132,16 @@ Before anything is fetched (rc 25), read from junit against `p139_box.PREMISE` (
 `P139_DRY=1` (run ids `p139-dry-<n>`, $0): the driver and the whole box on one tiny family (`tiny`, built by
 `p133_tiny.py`), phase 1 at its shapes, on any CUDA card. The premise there reads P134's sm_86 lists. Never a reading.
 
+**Evidence (2026-10-18, an RTX A2000, sm_86, launch commit `007e955f`):**
+- `p139-dry-1` stopped at the tripwire (rc 9): the dry box's scratch venv kept another e4b commit, which pip did not
+  replace. That is a property of the reused dry box; a rented box starts without e4b. The venv's e4b was removed.
+- `p139-dry-2` ran the driver, staging, every self-test and both premise suites (sm_86's lists: 33 passed with the two
+  PDL skips; 13 passed with the five fp8-KV skips). Phase 1 found 12 of 12 plans selectable at the fixture's shapes and
+  handed B1 its plan string (`512,512=16,512,4,1;512,256=16,256,4,1`). The fixture, bake, prompts, fit check and four
+  arms followed, with engagement exact: B0 only the scalar GEMV, B1 only `bw_prmt32`. The quality phase then stopped
+  at the fused fp8 KV append, which needs sm_89+, as P133's and P134's dry runs did. The reducer read VOID (records
+  missing), as a dry run does there.
+
 **First executed on the paid reading:** Mixtral's checkpoint on this harness, phase 1 at Mixtral's shapes on sm_120, the
 default graph server at 16 x 768 with K33's plans, decode-graph capture, device grouping, the fp8 KV append, the
 quality phase on Mixtral, and the card and configuration refusal.
