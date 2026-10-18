@@ -167,6 +167,62 @@ def test_amendment_1s_card_terms_are_the_runners_floors():
     assert "No data has been seen." in a1
 
 
+CANARY = REPO / "tests" / "fixtures" / "p138_canary"
+CANARY_SHA = {"canary_census.json": "4065b49988ec9b8ceaeed0060936a31ab555ff087e6ec4445c74f09ea54876d9",
+              "canary.json": "340eb4f59ee65ff87854b80924a5e6ac8fcdae9bf3cd3b31e39415c64c785dd4"}
+
+
+def _canary_block():
+    """The runner's own canary check: the python between `python - <<'PYC'` and `PYC` after the canary census."""
+    run = (LANE / "vsplit_run.sh").read_text(encoding="utf-8")
+    start = run.index("python - <<'PYC' || { say \"CANARY FAILED: the classifier")
+    body = run[run.index("\n", start) + 1:]
+    return body[:body.index("\nPYC\n") + 1]
+
+
+def _canary_dir(tmp_path):
+    """The box's records, sha256-checked; canary.json restored to the box's pre-check record (status ok, no census)."""
+    for name, want in CANARY_SHA.items():
+        assert hashlib.sha256((CANARY / name).read_bytes()).hexdigest() == want, name
+    shutil.copy(CANARY / "canary_census.json", tmp_path / "canary_census.json")
+    rec = json.loads((CANARY / "canary.json").read_text())
+    assert rec["replays"] == {"1": "ok", "2": "ok", "3": "ok", "4": "ok"} and rec["missing_buckets"] == []
+    rec.pop("census")
+    rec["status"] = "ok"
+    (tmp_path / "canary.json").write_text(json.dumps(rec))
+    return tmp_path
+
+
+def test_the_runners_canary_check_passes_the_real_canary(tmp_path):
+    """Real records first: vsplit-5090-2's canary census is clean but `labelled` (NO_UNPROFILED_TIMING, unavoidable
+    before timing pass A). The runner's canary block passes it; the old rule (status == "ok") fails it, as on the box."""
+    d = _canary_dir(tmp_path)
+    block = _canary_block().replace("/root/vsplit/", d.as_posix() + "/")
+    out = subprocess.run([sys.executable, "-c", block], capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0 and "VSPLIT_CANARY_CENSUS" in out.stdout, out.stdout + out.stderr
+    assert json.loads((d / "canary.json").read_text())["status"] == "ok"
+    old = block.replace('ok = c.get("status") in ("ok", "labelled") and not blocking',
+                        'ok = c.get("status") == "ok" and not blocking')
+    assert old != block
+    _canary_dir(tmp_path)
+    out = subprocess.run([sys.executable, "-c", old], capture_output=True, text=True, timeout=60)
+    assert out.returncode == 1                                 # the box's exit 26: the old rule fails the real record
+
+
+def test_the_reducer_reads_the_real_labelled_census_arm_through(tmp_path):
+    """The same real reading (status labelled, a reporting label only) as census n = 2 is not a VOID; a void arm is."""
+    red = _red()
+    real = json.loads((CANARY / "canary_census.json").read_text())
+    assert real["status"] == "labelled" and real["labels"] == ["NO_UNPROFILED_TIMING"]
+    with tempfile.TemporaryDirectory() as d:
+        red._fake(d, terms=red._world(0.9))
+        (pathlib.Path(d) / "census_n2.json").write_text(json.dumps(real))
+        r = red.judge(d)
+        assert r["verdict"] != "VOID" and not any("census n=2" in v for v in r["void"]), r["void"]
+        (pathlib.Path(d) / "census_n2.json").write_text(json.dumps(dict(real, status="void")))
+        assert red.judge(d)["verdict"] == "VOID"
+
+
 def test_the_outcome_alone_flips_the_verdict():
     """The maintainer's condition 1: with every input held fixed (the timing passes, the n = 1 census, tau, G_BAR, rho),
     the n >= 2 shares alone take the reading from SUPPORT/BUILD to REFUTE/NO_BUILD."""

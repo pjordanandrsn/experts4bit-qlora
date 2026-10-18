@@ -183,7 +183,9 @@ def judge(d):
     if not canary or canary.get("status") != "ok":
         void.append("canary missing or failed")
     for n, c in census.items():
-        if not c or c.get("status") != "ok" or not c.get("P_ms"):
+        # sc1b's status is "labelled" whenever any label is attached; the rule VOIDs only a void arm or a BLOCKING label,
+        # so the reporting labels (PROFILER_INFLATED, NODE_TRACE_INFLATED, NO_UNPROFILED_TIMING) read through
+        if not c or c.get("status") not in ("ok", "labelled") or not c.get("P_ms"):
             void.append(f"census n={n} missing or void")
             continue
         bad = [lab for lab in (c.get("labels") or []) if lab in BLOCKING]
@@ -255,9 +257,10 @@ def _timing(anchor, verify, full, sha=E4B_T, buckets=BUCKETS):
 
 
 def _fake(d, *, terms=None, anchor=None, anchor_b=None, verify=None, verify_b=None, steps=STEPS, labels=(),
-          canary="ok", sha=E4B_T, buckets=BUCKETS, gpu_rc=0):
+          canary="ok", sha=E4B_T, buckets=BUCKETS, gpu_rc=0, census_status=None):
     """A run directory. ``terms`` maps n -> per-class UNPROFILED ms summing to the step; the census records them, and
-    its period, inflated x 1.2 (a profiler's uniform inflation), so only the shares carry over."""
+    its period, inflated x 1.2 (a profiler's uniform inflation), so only the shares carry over. As sc1b writes it, a
+    census arm's status is "labelled" whenever it carries a label; ``census_status`` overrides n = 2's."""
     anchor, verify = anchor or _V1["anchor"], verify or _V1["verify"]
     json.dump(_timing(anchor, verify, _V1["full"], sha, buckets), open(os.path.join(d, "timing.json"), "w"))
     json.dump(_timing(anchor_b or anchor, verify_b or verify, _V1["full"], sha, buckets),
@@ -267,7 +270,9 @@ def _fake(d, *, terms=None, anchor=None, anchor_b=None, verify=None, verify_b=No
     terms = terms or _world(0.9)
     for n in (1,) + NS:
         t = terms[n]
-        json.dump({"status": "ok", "labels": list(labels) if n == 2 else [], "terms": {c: 1.2 * v for c, v in t.items()},
+        labs = list(labels) if n == 2 else []
+        status = census_status if (n == 2 and census_status) else ("labelled" if labs else "ok")
+        json.dump({"status": status, "labels": labs, "terms": {c: 1.2 * v for c, v in t.items()},
                    "P_ms": 1.2 * math.fsum(t.values())}, open(os.path.join(d, f"census_n{n}.json"), "w"))
         for m in ("graph", "node"):
             json.dump({"steps_bracketed": steps}, open(os.path.join(d, f"census_drv_n{n}_{m}.json"), "w"))
@@ -329,6 +334,12 @@ def self_test() -> int:
         verify_b={2: 8.3016 * 1.04, 3: 8.7415, 4: 9.0799})
     run("a non-monotone verify is VOID", {"verdict": "VOID"}, verify={2: 8.80, 3: 8.7415, 4: 9.0799})
     run("a blocking census label is VOID", {"verdict": "VOID"}, labels=("CLASS_MAP_INCOMPLETE",))
+    # vsplit-5090-2: a reporting label makes sc1b's status "labelled"; only void or a blocking label VOIDs
+    run("a PROFILER_INFLATED census arm reads through", {"verdict": "READ", "H": "SUPPORT", "BUILD": "BUILD"},
+        labels=("PROFILER_INFLATED", "NODE_TRACE_INFLATED"), terms=_world(0.9))
+    run("a NO_UNPROFILED_TIMING census arm reads through", {"verdict": "READ"}, labels=("NO_UNPROFILED_TIMING",),
+        terms=_world(0.9))
+    run("a void census arm is VOID", {"verdict": "VOID"}, census_status="void")
     run("a short census window is VOID", {"verdict": "VOID"}, steps=STEPS - 1)
     run("an uncaptured bucket is VOID", {"verdict": "VOID"}, buckets=(1, 2, 4))
     run("a failed canary is VOID", {"verdict": "VOID"}, canary="failed")
