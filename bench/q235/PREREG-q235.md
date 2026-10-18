@@ -1062,7 +1062,7 @@ schedule.
 
 **What changes.** `bench/tc1/tc1_arm.py`, which this closure seals, moves from
 `fbe790d7d6e868c31598c76c7e77afb8c5632f16e61cab85c457854af30bdadc` to
-`fa574f43eb3ec44f711678a0c15b2af2c7c272ea12aea3afeae139b13d17be46` (e4b #1709). It gains two default-off additions for the HP1
+`9f43b45b267d3b4fbc0855fd26e8b1c15de7e92832344fe42c74ecba5e2a4939` (e4b #1709). It gains two default-off additions for the HP1
 held-out parity lane:
 1. `--order-seed S` permutes the TC1 train rows per seed.
 2. `--hp1-export DIR` / `--hp1-export-base 1` write a canonical adapter, a training-base digest and the base as stored, after the
@@ -1072,11 +1072,11 @@ Registered Q235 runs pass neither.
 - With them unset, the train rows are untouched, the receipt carries neither `order` nor `hp1` (its key set and content are
   unchanged; the harness selftest asserts both), and `hp1_lib` is never imported.
 - A box that stages `tc1_arm.py` alone needs no new file.
-- With the HP1 flags set and no `hp1_lib`, the arm is a `refused` stub before anything loads.
+- With the HP1 flags set and no `hp1_lib`, or with `--offload 1`, the arm is a `refused` stub before anything loads.
 
 **The closure.** `q235.sha256` is re-sealed with `q235_stage.py --write`. Against main after Amendment 9 (053c5780), only the
 `tc1_arm.py` row moves. A box already staged from an earlier main keeps its old bytes and is unaffected. R2 re-cites once, in its
 own PR, after this merges.
 
-**What it is not.** No rule, threshold, band or registered record changes. The scope and the re-pin are ruled by the maintainer
-(bus 20261017T230921Z-96056 and 20261018T002304Z-35903), and tc-campaign, the closure owner, acks it on review.
+**What it is not.** No rule, threshold, band or registered record changes. The scope and the re-pin are ruled by the maintainer;
+the closure re-seal is reviewed.

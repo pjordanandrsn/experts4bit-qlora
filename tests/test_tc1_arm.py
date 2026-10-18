@@ -2393,7 +2393,7 @@ def test_base_slots_bind_each_layer_to_its_own_experts(monkeypatch):
 
 
 def test_hp1_export_refuses_cleanly_without_hp1_lib(tmp_path):
-    """#1709 condition 6: on a tree without bench/hp1 (main before the HP1 registration, or a box that staged tc1_arm.py alone),
+    """On a tree without bench/hp1 (main before the HP1 registration, or a box that staged tc1_arm.py alone),
     --hp1-export is a `refused` stub (exit 3) with a one-line reason naming hp1_lib -- before anything loads, never a traceback.
     --hp1-export-base without --hp1-export is refused the same way."""
     import shutil
@@ -2412,3 +2412,13 @@ def test_hp1_export_refuses_cleanly_without_hp1_lib(tmp_path):
     assert p.returncode == 3 and "Traceback" not in p.stderr, (p.stdout + p.stderr)[-2000:]
     rec = json.loads((out / "qwen3_e4b_y.json").read_text())
     assert rec["status"] == "refused" and "--hp1-export DIR" in rec["reason"], rec
+
+
+def test_hp1_export_refuses_an_offloaded_model_before_load(tmp_path):
+    """--hp1-export with --offload 1 is a `refused` stub (exit 3) before anything loads: the export reads every frozen expert stack
+    on the device, and an offloaded model keeps them in host RAM. HP1's arms run resident."""
+    common = ["--prereg", "hp1/HP1-PREREG.md", "--out", str(tmp_path), "--adapter-dir", str(tmp_path / "ad"), "--framework", "e4b", "--arm", "fused"]
+    p = _run("--tag", "off", "--offload", "1", "--hp1-export", str(tmp_path / "hp1"), *common)
+    assert p.returncode == 3 and "Traceback" not in p.stderr, (p.stdout + p.stderr)[-2000:]
+    rec = json.loads((tmp_path / "qwen3_e4b_off.json").read_text())
+    assert rec["status"] == "refused" and "--offload 1" in rec["reason"] and "resident" in rec["reason"], rec

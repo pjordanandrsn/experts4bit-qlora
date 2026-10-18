@@ -3015,8 +3015,8 @@ def hp1_expert_source(mod, hidden):
     weight as STORED, framework-neutral (hp1_lib.dequant_raw reads it): {"fmt": "nf4"|"fp4", packed uint8 [n/2], absmax fp32
     [n/blocksize] (the values the framework's dequant multiplies by), shape [d1, d2] of the stored matrix, blocksize, code,
     transposed} or {"fmt": "bf16", "w": [out, in]}. deq(e) is the framework's OWN dequant to bf16 [out, in] (the per-expert
-    generalisation of T21's expert-0 probe): e4b's Experts4bit._dequantize_expert (offload home copies when offloaded; the
-    double-quantized absmax rows when ABSMAX-DQ); bnb dequantize_4bit with the stack's own quant_state otherwise. The digest is
+    generalisation of T21's expert-0 probe): e4b's Experts4bit._dequantize_expert (the double-quantized absmax rows when
+    ABSMAX-DQ; an offloaded stack is refused -- the export runs resident only); bnb dequantize_4bit with the stack's own quant_state otherwise. The digest is
     taken over deq; the export writes raw; hp1_lib's STRICT check proves dequant_raw(raw) == deq bitwise."""
     import bitsandbytes.functional as BF
     from bitsandbytes.functional import QuantState
@@ -3024,19 +3024,17 @@ def hp1_expert_source(mod, hidden):
     if hasattr(inner, "_dequantize_expert") and hasattr(inner, "gate_up_absmax"):
         if int(getattr(inner, "bits", 4)) != 4:
             raise RuntimeError(f"e4b experts at {getattr(inner, 'bits', None)} bits: HP1 exports 4-bit stacks only")
-        h = expert_offload_handle(mod, inner)
+        if expert_offload_handle(mod, inner) is not None:   # refused at the preamble; fail closed rather than stage whole homes
+            raise RuntimeError("an offloaded expert stack: HP1's export runs resident only (--hp1-export with --offload 1 is refused)")
         dq = "_e4b_absmax_dq" in getattr(inner, "__dict__", {})
         src, raw, deq = {}, {}, {}
         for kind, pk, am, shp in (("gate_up", "gate_up_proj", "gate_up_absmax", "_gate_up_shape"), ("down", "down_proj", "down_absmax", "_down_shape")):
-            if h is not None:
-                packed, absmax = h.home[pk].to(h.device), h.home[am].to(h.device)
+            packed = getattr(inner, pk)
+            if dq:
+                from experts4bit_qlora.absmax_dq import expert_absmax_rows
+                absmax = expert_absmax_rows(inner, kind)
             else:
-                packed = getattr(inner, pk)
-                if dq:
-                    from experts4bit_qlora.absmax_dq import expert_absmax_rows
-                    absmax = expert_absmax_rows(inner, kind)
-                else:
-                    absmax = getattr(inner, am)
+                absmax = getattr(inner, am)
             src[kind] = (packed, absmax, tuple(int(v) for v in getattr(inner, shp)))
 
             def raw_e4b(e, kind=kind):
@@ -5949,7 +5947,7 @@ def selftest(a):
     tc2 = _selftest_tc2(a, d, rec, e_ref)       # TC2: T23-T27 on the tiny models
     tc3 = _selftest_tc3(a, d, rec)                 # TC3: the levers' helpers, the step context, the host-RAM report, the lever refusal
     assert all("mem_census" not in r for r in R.values()), "an arm without --mem-census must carry no mem_census"
-    # HP1 (#1709): a default arm passes neither --order-seed nor --hp1-export, so its receipt keeps today's exact key set (neither
+    # HP1: a default arm passes neither --order-seed nor --hp1-export, so its receipt keeps today's exact key set (neither
     # key appears), and hp1_lib is never imported -- a Q235 / R2 box that stages tc1_arm.py alone needs no new file
     assert all("order" not in r and "hp1" not in r for r in R.values()), "a default arm must carry neither `order` nor `hp1`"
     assert "hp1_lib" not in sys.modules, "hp1_lib is imported only by an --hp1-export run"
@@ -6126,9 +6124,14 @@ def main():
         stub(a, "refused", "--absmax-dq 1 with --offload 1: the double-quantized expert absmax is resident-only -- expert offload stages "
              "the fp32 absmax by name, and the library refuses it (compress_expert_absmax_ / enable_expert_offload)", {"phase": "preamble"}, code=3)
     # HP1: the export flags need bench/hp1/hp1_lib.py (beside this file on a box, ../hp1 in the repo). Refused before anything loads
-    # -- and before the CUDA check, so CI drives it -- with a stub and one line, never a traceback (#1709, the maintainer's condition 6)
+    # -- and before the CUDA check, so CI drives it -- with a stub and one line, never a traceback. They also refuse an offloaded
+    # model: the export reads every frozen expert stack on the device, and an offloaded model's stacks live in host RAM because they
+    # do not fit there. HP1's arms run resident; export under offload would need per-expert staging, which is not built.
     if getattr(a, "hp1_export_base", 0) and not getattr(a, "hp1_export", None):
         stub(a, "refused", "--hp1-export-base 1 needs --hp1-export DIR (the base is written beside the canonical adapter)", {"phase": "preamble"}, code=3)
+    if getattr(a, "hp1_export", None) and a.offload:
+        stub(a, "refused", "--hp1-export with --offload 1: the export reads every frozen expert stack on the device, and an offloaded "
+             "model's stacks live in host RAM (per-expert staging is not built; HP1's arms run resident)", {"phase": "preamble"}, code=3)
     if getattr(a, "hp1_export", None):
         _hp1_path()
         try:
