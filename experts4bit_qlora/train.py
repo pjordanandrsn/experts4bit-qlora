@@ -72,6 +72,13 @@ OFFLOAD_PIN = os.environ.get("OFFLOAD_PIN", "1") == "1"
 # direction instead of once per micro-batch (GRAD_ACCUM times fewer bytes). Same losses as the stock loop; gradients the same
 # sum in another order. Opt-in; requires OFFLOAD_EXPERTS=1 (resident training stages nothing, so it has nothing to gain).
 LAYER_MAJOR = os.environ.get("LAYER_MAJOR", "0") == "1"
+# The fused expert path (engines/fast.py): enable_fast_train(model, dgrad=True) routes every ExpertsLoRA forward and backward
+# through grouped-nf4-gemm's grouped kernels instead of the per-expert reference loop. Opt-in: a default flip needs its own
+# read. LAYER_MAJOR=1 implies it, because layer-major's measured speed is on this path (P137,
+# e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18); an explicit FAST_TRAIN=0 keeps the reference loop under
+# LAYER_MAJOR=1, with a log line.
+_FAST_TRAIN_ENV = os.environ.get("FAST_TRAIN", "").strip()
+FAST_TRAIN = _FAST_TRAIN_ENV == "1" or (_FAST_TRAIN_ENV == "" and LAYER_MAJOR)
 # Store the frozen expert absmax double-quantized, as bitsandbytes' compress_statistics=True does (one fp32
 # per 64 weights -> ~1.02 bytes per 64): ~2.8 GB less on Mixtral-8x7B, ~1.8 GB on Qwen3-30B-A3B. Lossy
 # against fp32; see experts4bit_qlora.absmax_dq. ON by default for resident training since TC1 amendments
@@ -247,7 +254,8 @@ def _print_env_help(which: str) -> None:
         ("TRAIN_VRAM_FRAC", "1", "fraction of experts held in VRAM (rest -> DRAM)"),
         ("OFFLOAD_EXPERTS", "0", "keep experts in pinned CPU RAM"),
         ("OFFLOAD_PIN", "1", "pin the offloaded expert memory"),
-        ("LAYER_MAJOR", "0", "layer-major accumulation: stage each offloaded layer once per step (needs OFFLOAD_EXPERTS=1)"),
+        ("FAST_TRAIN", "0", "the fused expert path: enable_fast_train(dgrad=True) (1 under LAYER_MAJOR=1 unless set to 0)"),
+        ("LAYER_MAJOR", "0", "layer-major accumulation: stage each offloaded layer once per step (needs OFFLOAD_EXPERTS=1; implies FAST_TRAIN=1)"),
         ("E4B_ABSMAX_DQ", "auto", "double-quantize the frozen expert absmax: on for resident training (0 off, 1 required)"),
         ("E4B_CHUNKED_LM_LOSS", "auto", "auto: the loss over token chunks only where a forward's fp32 logits would reach 1 GiB; 1 or a chunk size: every training forward; 0: the stock loss"),
         ("DO_GEN", "1", "sample generations during training"),
@@ -360,6 +368,12 @@ def main():
         raise SystemExit("E4B_ABSMAX_DQ=1 is a RESIDENT-training switch: it cannot be combined with "
                          + ("OFFLOAD_EXPERTS=1" if OFFLOAD_EXPERTS else "TRAIN_ARENA")
                          + " (that path reads the fp32 expert absmax by name). Unset one of them.")
+    if _FAST_TRAIN_ENV not in ("", "0", "1"):
+        raise SystemExit(f"FAST_TRAIN={_FAST_TRAIN_ENV!r}: use 1 (the fused expert path) or 0 (the reference loop).")
+    if FAST_TRAIN and os.environ.get("TRAIN_ARENA"):
+        # Refused before the load: enable_hybrid_train patches the same ExpertsLoRA wrappers, and the composition is untested.
+        raise SystemExit("FAST_TRAIN=1" + (" (implied by LAYER_MAJOR=1)" if _FAST_TRAIN_ENV == "" else "")
+                         + " cannot be combined with TRAIN_ARENA (both route the ExpertsLoRA wrappers). Unset one of them.")
     if LAYER_MAJOR and not OFFLOAD_EXPERTS:
         raise SystemExit("LAYER_MAJOR=1 needs OFFLOAD_EXPERTS=1: it saves expert stagings, and resident training stages none.")
     log(f"loading {MODEL} via streaming 4-bit loader (CPU-RAM-light)...")
@@ -432,6 +446,28 @@ def main():
             "under a flag that says otherwise. Set TRAIN_EXPERTS=0 to train what is "
             "wrapped, or train the experts with grouped-nf4-gemm's "
             "mxfp4_qlora.ExpertsMxfp4LoRA (docs/solutions/mxfp4-moe-training-and-residency.md).")
+    if FAST_TRAIN:
+        # Before the BEFORE evaluation, so both evaluations and every step run one expert path. absmax_dq=False: apply_absmax_dq
+        # above already settled the absmax (an explicit True would turn its soft resident default into a requirement and raise
+        # on a model the compressor refuses); the patched forward reads a compressed absmax through expert_absmax_fp32.
+        from .engines.chunked_lm_loss import _target as _chunk_target
+        from .engines.fast import enable_fast_train
+        # Checkpointing FIRST, as P137's box and recipe.prepare_qlora_training do: enable_fast_train routes only the decoder
+        # layers whose checkpointing is already on through e4b's reentrant checkpoint (TC1 amendment 64; E4B_CKPT_OFFLOAD), and
+        # a later gradient_checkpointing_enable would put Hugging Face's back. Training mode alone checkpoints, so the BEFORE
+        # evaluation and the generations below are unaffected; the call before the loop is skipped under FAST_TRAIN.
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        n_fast = enable_fast_train(model, dgrad=True, absmax_dq=False)
+        if n_fast <= 0:
+            raise SystemExit("FAST_TRAIN=1 patched no ExpertsLoRA wrapper -- refusing to report a fused-path run that trains "
+                             "through the reference loop")
+        # enable_fast_train installs the chunked LM loss itself (E4B_CHUNKED_LM_LOSS); the hook below then only updates it.
+        chunked = _chunk_target(model).__dict__.get("_e4b_chunked_lm_loss") is not None
+        log(f"[fast-train] {n_fast} ExpertsLoRA wrapper(s) on the fused path (dgrad=True); chunked LM loss "
+            f"{'installed by enable_fast_train' if chunked else 'not installed'}")
+    elif LAYER_MAJOR:
+        log("LAYER_MAJOR=1 with FAST_TRAIN=0: layer-major over the ExpertsLoRA reference loop, not the fused configuration "
+            "P137 measured")
     # E4B_CHUNKED_LM_LOSS, `auto` by default (TC1 amendment 44): a training forward whose fp32 logits would reach 1 GiB takes the loss
     # over token chunks (engines/chunked_lm_loss.py), smaller ones run stock; `1` chunks every training forward, `0` keeps the stock
     # loss. Evaluation (no_grad) and generation keep the stock forward; a model the module does not reproduce keeps the stock loss
@@ -542,7 +578,8 @@ def main():
     # Gradient checkpointing: recompute each decoder layer in backward instead of saving the
     # dequantized expert weights as activations — the key to fitting MoE QLoRA on a small card.
     model.config.use_cache = False
-    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+    if not FAST_TRAIN:   # under FAST_TRAIN it was enabled before enable_fast_train, which routed it; enabling again would undo that
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     model.enable_input_require_grads()
     model.train()
     log(

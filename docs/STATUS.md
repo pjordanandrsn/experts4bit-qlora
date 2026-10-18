@@ -41,8 +41,9 @@ table, one draw per row, not a speed position. `e4b.train.frontier.qwen3.4090-24
 once per step instead of once per micro-batch: 95 stagings against 380. With `enable_fast_train(dgrad=True)` on
 Qwen3-30B-A3B on one RTX 4090, the stock loop steps 7.641 / 7.514 s and layer-major 3.231 / 3.173 s, at 7.98 GB peak
 against 8.41. The predicted band [1.25, 2.0] was missed high, and the held-out term (0.015 against 0.01) sits inside
-the 0.031 same-loop spread at 34 steps. This is that call, not the CLI trainer's `LAYER_MAJOR=1`, whose loop does not
-take the fused path.
+the 0.031 same-loop spread at 34 steps. From the CLI trainer, `OFFLOAD_EXPERTS=1 LAYER_MAJOR=1` (which implies
+`FAST_TRAIN=1`) makes the same calls, checked bit for bit against the library on a fixture; its own recipe (AdamW,
+token-budget batches) is unread.
 `e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18` ([P137](../bench/p137/RESULTS-p137.md)).
 
 **On the 12 GB RTX A2000 the same set trains under offload at micro-batch 1**, at 10.46 GB peak, held-out 0.8483 beside

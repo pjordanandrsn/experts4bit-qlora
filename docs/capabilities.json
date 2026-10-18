@@ -126,7 +126,7 @@
     "LoRA on gate_up_proj of a fused MoE",
     "train a 30B MoE on a 24 GB GPU"
    ],
-   "solution": "ExpertsLoRA wraps each frozen 4-bit expert stack with per-expert LoRA; load_moe_4bit_streaming installs it; enable_fast_train(model, dgrad=True) routes the step through grouped-nf4-gemm's grouped kernels, enable_batched_train(model) is the no-extras fallback; python -m experts4bit_qlora.train is the env-configured trainer. model_families lists exactly the families whose fast_train path is `supported` in training_support (the headline path, enable_fast_train, with a PASS receipt on real weights); every other path is stated per family there, never as a flat flag.",
+   "solution": "ExpertsLoRA wraps each frozen 4-bit expert stack with per-expert LoRA; load_moe_4bit_streaming installs it; enable_fast_train(model, dgrad=True) routes the step through grouped-nf4-gemm's grouped kernels, enable_batched_train(model) is the no-extras fallback; python -m experts4bit_qlora.train is the env-configured trainer, on the fused path with FAST_TRAIN=1 (implied by LAYER_MAJOR=1) and on the reference loop otherwise. model_families lists exactly the families whose fast_train path is `supported` in training_support (the headline path, enable_fast_train, with a PASS receipt on real weights); every other path is stated per family there, never as a flat flag.",
    "modes": [
     "training"
    ],

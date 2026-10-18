@@ -482,7 +482,7 @@ Register: [`../claims.json`](../claims.json).
 # How do I QLoRA-train the fused experts of a MoE (per-expert LoRA on 4-bit experts)?
 <!-- summary: ExpertsLoRA adds a trainable per-expert low-rank delta before each routed expert's activation over a frozen NF4 stack PEFT cannot target; enable_fast_train runs it on grouped kernels. -->
 
-Load with `load_moe_4bit_streaming`, which installs a frozen NF4 `Experts4bit` stack wrapped in trainable per-expert `ExpertsLoRA` adapters for every MoE layer, then train with `python -m experts4bit_qlora.train` or your own loop. Add `enable_fast_train(model, dgrad=True)` from the `[fast]` extra to run the step through `grouped-nf4-gemm`'s grouped kernels, and assert its return value.
+Load with `load_moe_4bit_streaming`, which installs a frozen NF4 `Experts4bit` stack wrapped in trainable per-expert `ExpertsLoRA` adapters for every MoE layer, then train with `python -m experts4bit_qlora.train` or your own loop. In your own loop, add `enable_fast_train(model, dgrad=True)` from the `[fast]` extra to run the step through `grouped-nf4-gemm`'s grouped kernels, and assert its return value; the trainer does the same with `FAST_TRAIN=1` and otherwise trains through the per-expert reference loop.
 
 ## The abstraction that fails, and what replaces it
 
@@ -584,7 +584,7 @@ print(f"one expert-adapter step completed; loss={loss.item():.4f}")
 
 The assertion is there because acceleration must be observed, not assumed: `enable_fast_train` returns `0` rather than raising when the kernel package is absent, and from the caller's side `0` looks exactly like the per-expert loop it was meant to replace. Keep the assert in your own loop.
 
-The shipped trainer provides dataset training (tatsu-lab/alpaca, response-only loss) and adapter checkpoints from environment variables (there are no CLI flags; `--help` prints them). Without `MODEL`, it and `infer` default to `allenai/OLMoE-1B-7B-0924`, not the model above; set `MODEL=` on both to change it:
+The shipped trainer provides dataset training (tatsu-lab/alpaca, response-only loss) and adapter checkpoints from environment variables (there are no CLI flags; `--help` prints them). It runs the per-expert reference loop unless `FAST_TRAIN=1` (the fused path, `enable_fast_train(model, dgrad=True)`, refused when it patches nothing); `LAYER_MAJOR=1` implies it. Without `MODEL`, it and `infer` default to `allenai/OLMoE-1B-7B-0924`, not the model above; set `MODEL=` on both to change it:
 
 ```bash
 STEPS=150 R=8 TRAIN_EXPERTS=1 OFFLOAD_EXPERTS=1 OUT=./out python -m experts4bit_qlora.train
@@ -1028,7 +1028,7 @@ Register: [`../claims.json`](../claims.json). The position, **measured** (receip
     "LoRA on gate_up_proj of a fused MoE",
     "train a 30B MoE on a 24 GB GPU"
    ],
-   "solution": "ExpertsLoRA wraps each frozen 4-bit expert stack with per-expert LoRA; load_moe_4bit_streaming installs it; enable_fast_train(model, dgrad=True) routes the step through grouped-nf4-gemm's grouped kernels, enable_batched_train(model) is the no-extras fallback; python -m experts4bit_qlora.train is the env-configured trainer. model_families lists exactly the families whose fast_train path is `supported` in training_support (the headline path, enable_fast_train, with a PASS receipt on real weights); every other path is stated per family there, never as a flat flag.",
+   "solution": "ExpertsLoRA wraps each frozen 4-bit expert stack with per-expert LoRA; load_moe_4bit_streaming installs it; enable_fast_train(model, dgrad=True) routes the step through grouped-nf4-gemm's grouped kernels, enable_batched_train(model) is the no-extras fallback; python -m experts4bit_qlora.train is the env-configured trainer, on the fused path with FAST_TRAIN=1 (implied by LAYER_MAJOR=1) and on the reference loop otherwise. model_families lists exactly the families whose fast_train path is `supported` in training_support (the headline path, enable_fast_train, with a PASS receipt on real weights); every other path is stated per family there, never as a flat flag.",
    "modes": [
     "training"
    ],
@@ -2142,8 +2142,9 @@ table, one draw per row, not a speed position. `e4b.train.frontier.qwen3.4090-24
 once per step instead of once per micro-batch: 95 stagings against 380. With `enable_fast_train(dgrad=True)` on
 Qwen3-30B-A3B on one RTX 4090, the stock loop steps 7.641 / 7.514 s and layer-major 3.231 / 3.173 s, at 7.98 GB peak
 against 8.41. The predicted band [1.25, 2.0] was missed high, and the held-out term (0.015 against 0.01) sits inside
-the 0.031 same-loop spread at 34 steps. This is that call, not the CLI trainer's `LAYER_MAJOR=1`, whose loop does not
-take the fused path.
+the 0.031 same-loop spread at 34 steps. From the CLI trainer, `OFFLOAD_EXPERTS=1 LAYER_MAJOR=1` (which implies
+`FAST_TRAIN=1`) makes the same calls, checked bit for bit against the library on a fixture; its own recipe (AdamW,
+token-budget batches) is unread.
 `e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18` ([P137](../bench/p137/RESULTS-p137.md)).
 
 **On the 12 GB RTX A2000 the same set trains under offload at micro-batch 1**, at 10.46 GB peak, held-out 0.8483 beside

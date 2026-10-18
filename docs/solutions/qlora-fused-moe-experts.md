@@ -1,7 +1,7 @@
 # How do I QLoRA-train the fused experts of a MoE (per-expert LoRA on 4-bit experts)?
 <!-- summary: ExpertsLoRA adds a trainable per-expert low-rank delta before each routed expert's activation over a frozen NF4 stack PEFT cannot target; enable_fast_train runs it on grouped kernels. -->
 
-Load with `load_moe_4bit_streaming`, which installs a frozen NF4 `Experts4bit` stack wrapped in trainable per-expert `ExpertsLoRA` adapters for every MoE layer, then train with `python -m experts4bit_qlora.train` or your own loop. Add `enable_fast_train(model, dgrad=True)` from the `[fast]` extra to run the step through `grouped-nf4-gemm`'s grouped kernels, and assert its return value.
+Load with `load_moe_4bit_streaming`, which installs a frozen NF4 `Experts4bit` stack wrapped in trainable per-expert `ExpertsLoRA` adapters for every MoE layer, then train with `python -m experts4bit_qlora.train` or your own loop. In your own loop, add `enable_fast_train(model, dgrad=True)` from the `[fast]` extra to run the step through `grouped-nf4-gemm`'s grouped kernels, and assert its return value; the trainer does the same with `FAST_TRAIN=1` and otherwise trains through the per-expert reference loop.
 
 ## The abstraction that fails, and what replaces it
 
@@ -103,7 +103,7 @@ print(f"one expert-adapter step completed; loss={loss.item():.4f}")
 
 The assertion is there because acceleration must be observed, not assumed: `enable_fast_train` returns `0` rather than raising when the kernel package is absent, and from the caller's side `0` looks exactly like the per-expert loop it was meant to replace. Keep the assert in your own loop.
 
-The shipped trainer provides dataset training (tatsu-lab/alpaca, response-only loss) and adapter checkpoints from environment variables (there are no CLI flags; `--help` prints them). Without `MODEL`, it and `infer` default to `allenai/OLMoE-1B-7B-0924`, not the model above; set `MODEL=` on both to change it:
+The shipped trainer provides dataset training (tatsu-lab/alpaca, response-only loss) and adapter checkpoints from environment variables (there are no CLI flags; `--help` prints them). It runs the per-expert reference loop unless `FAST_TRAIN=1` (the fused path, `enable_fast_train(model, dgrad=True)`, refused when it patches nothing); `LAYER_MAJOR=1` implies it. Without `MODEL`, it and `infer` default to `allenai/OLMoE-1B-7B-0924`, not the model above; set `MODEL=` on both to change it:
 
 ```bash
 STEPS=150 R=8 TRAIN_EXPERTS=1 OFFLOAD_EXPERTS=1 OUT=./out python -m experts4bit_qlora.train
