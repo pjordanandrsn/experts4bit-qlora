@@ -2,6 +2,8 @@
 import hashlib
 import importlib.util
 import json
+import re
+import subprocess
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -59,6 +61,20 @@ def test_missing_receipts_void(tmp_path):
         result = r.assess(tmp_path, family, "a" * 40)
         assert result["verdict"] == "VOID"
         assert result["rows"] == {}
+
+
+def test_premise_summary_accepts_pytest_elapsed_suffix():
+    run = (HERE / "p136_run.sh").read_text()
+    pattern = re.search(r"grep -qE '([^']+)'", run).group(1)
+    for summary in ("19 passed in 17.18s",
+                    "19 passed, 5 warnings in 17.18s",
+                    "19 passed, 5 warnings in 61.40s (0:01:01)"):
+        assert subprocess.run(["grep", "-qE", pattern], input=summary, text=True,
+                              check=False).returncode == 0
+    for summary in ("18 passed in 17.18s", "19 passed, 1 skipped in 17.18s",
+                    "19 passed, 1 failed in 17.18s"):
+        assert subprocess.run(["grep", "-qE", pattern], input=summary, text=True,
+                              check=False).returncode != 0
 
 
 def test_default_store_read_and_lever_store_void(tmp_path):
