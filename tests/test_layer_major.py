@@ -187,6 +187,7 @@ def test_offloaded_step_stages_2n_cold_and_2n_minus_1_steady(ckpt, copies, reent
     n = N_LAYERS
     ref_losses = _stock(model, _batches(device=DEVICE), WEIGHTS)
     assert len(copies) == M * (2 * n - 1) + 1  # cold: the first forward also stages layer 0
+    layer_major_step(model, _batches(device=DEVICE), WEIGHTS)  # the first call runs the drift guard's stock forward too
     for h in _handles(model):
         h.evict()
     copies.clear()
@@ -285,3 +286,39 @@ def test_trainer_refuses_layer_major_without_offload(monkeypatch):
     monkeypatch.setattr(train.sys, "argv", ["train"])
     with pytest.raises(SystemExit, match="LAYER_MAJOR=1 needs OFFLOAD_EXPERTS=1"):
         train.main()
+
+
+def test_drift_guard_refuses_a_diverged_preamble_before_any_backward(monkeypatch):
+    """If the reproduced preamble stops matching the model's forward (here: the step's causal mask also hides each row's
+    first token, which the stock forward's mask does not), the first call refuses before its backward: no gradient is
+    written."""
+    import transformers.masking_utils as mu
+
+    from experts4bit_qlora.engines import layer_major as lm
+
+    model = _tiny()
+    real = mu.create_causal_mask
+
+    def diverged(**kw):
+        att = kw["attention_mask"].clone()
+        att[:, 0] = 0
+        return real(**{**kw, "attention_mask": att})
+
+    monkeypatch.setattr(mu, "create_causal_mask", diverged)
+    with pytest.raises(lm.LayerMajorDriftError, match="drifted"):
+        layer_major_step(model, _batches(), WEIGHTS, handles=[])
+    assert all(p.grad is None for p in model.parameters())
+    assert model not in lm._VERIFIED
+
+
+def test_drift_guard_runs_once_per_model():
+    from experts4bit_qlora.engines import layer_major as lm
+
+    model = _tiny()
+    calls = {"n": 0}
+    model.register_forward_pre_hook(lambda m, a: calls.__setitem__("n", calls["n"] + 1))
+    layer_major_step(model, _batches(), WEIGHTS, handles=[])
+    first = calls["n"]
+    layer_major_step(model, _batches(), WEIGHTS, handles=[])
+    assert first == 2 * M and calls["n"] - first == M  # first: M head calls + M stock checks; then M head calls only
+    assert model in lm._VERIFIED

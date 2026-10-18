@@ -615,7 +615,7 @@ def main():
                     mbs.append({"input_ids": ids, "labels": lbl, "attention_mask": att})
                 if _clock:
                     _clock.stop()
-                    _clock.start("forward")  # the layer-major forward and its one backward, timed as one phase
+                    _clock.start("layer_major")  # forward + the one backward: its own phase, never read against "forward"
                 losses = layer_major_step(model, mbs, [1.0 / GRAD_ACCUM] * GRAD_ACCUM)
                 if _clock:
                     _clock.stop()

@@ -1,0 +1,3 @@
+### Changed
+
+- `engines/layer_major.py`: a drift guard. On its first call for a model, `layer_major_step` also runs each micro-batch through the stock forward (gradients on, graph discarded). It raises `LayerMajorDriftError` before any backward unless every loss is `torch.equal`, so a transformers release that changes the model's forward is refused instead of silently diverging. It costs one extra forward per micro-batch, once per model. The module docstring now says the +0.8 GB memory figure holds with the chunked loss engaged; without it, M micro-batches keep their fp32 log-probabilities alive until the backward. `train.py` times `LAYER_MAJOR=1`'s forward and backward as their own census phase, `layer_major`, so they are never read against the stock `forward` phase.

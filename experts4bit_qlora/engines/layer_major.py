@@ -18,8 +18,15 @@ What is the same as the stock loop, and what is not:
   stock forward's (``tests/test_layer_major.py``).
 - The gradients are the same weighted sum in a different summation order: one backward of the sum, where the stock loop
   accumulates M backwards into ``.grad``. In bf16 that moves bits; the registered band is the parity test's, not equality.
-- Memory: every micro-batch's checkpointed layer inputs and its loss's saved state are alive until the one backward
-  (about +0.8 GB at Q235's Shape B, ``bench/q235/staged-bytes``). The per-layer working set is unchanged.
+- Memory: every micro-batch's checkpointed layer inputs and its loss's saved state are alive until the one backward. With
+  e4b's chunked loss engaged (``E4B_CHUNKED_LM_LOSS``) the loss keeps no logits, and Q235's Shape B costs about +0.8 GB
+  (``bench/q235/staged-bytes``). Without it (``0``, or ``auto`` under its gate), each micro-batch's stock loss keeps its
+  full fp32 log-probabilities, tokens x vocab x 4 bytes, so M micro-batches hold M of them at once. The per-layer working
+  set is unchanged.
+- Drift guard: the forward above reproduces the model's own preamble, so a transformers release that changes that
+  forward would make it diverge silently. On its first call for a model, the step therefore also runs each micro-batch
+  through the stock forward (gradients on, the same path the stock loop takes, its graph discarded) and refuses, before
+  any backward, unless every loss is ``torch.equal``. One extra forward per micro-batch, once per model.
 
 Supported: the classes in :data:`SUPPORTED` (v1: Qwen3-MoE). Anything else is refused by name, as is a model that
 returns router logits (the auxiliary loss would need the layers' router outputs, which the head-only call cannot see).
@@ -30,10 +37,19 @@ import contextlib
 
 import torch
 
+import weakref
+
 from .offload import hold_forward_residency, offload_handles
 
 #: Causal-LM classes whose decoder forward this module reproduces (read in transformers' source, test-pinned).
 SUPPORTED = ("Qwen3MoeForCausalLM",)
+
+#: Models whose first layer-major step matched the stock forward (the drift guard); weak, so a freed model drops out.
+_VERIFIED: "weakref.WeakSet" = weakref.WeakSet()
+
+
+class LayerMajorDriftError(RuntimeError):
+    """The layer-major forward's losses differ from the model's stock forward: the reproduced preamble has drifted."""
 
 
 def _refuse(model) -> None:
@@ -97,5 +113,16 @@ def layer_major_step(model, batches, weights, handles=None):
         for s, b in zip(states, batches):
             out = model(inputs_embeds=s[0], attention_mask=b.get("attention_mask"), labels=b["labels"], use_cache=False)
             losses.append(out.loss)
+    if model not in _VERIFIED:
+        with torch.enable_grad():
+            stock = [model(**b, use_cache=False).loss.detach() for b in batches]
+        bad = [k for k, (got, want) in enumerate(zip(losses, stock)) if not torch.equal(got.detach(), want)]
+        if bad:
+            raise LayerMajorDriftError(
+                f"layer_major_step: micro-batch(es) {bad} lose torch.equal against the stock forward "
+                f"(e.g. {float(losses[bad[0]])!r} vs {float(stock[bad[0]])!r}); the reproduced decoder preamble has drifted "
+                "from this transformers version. No backward ran. Use the stock accumulation loop"
+            )
+        _VERIFIED.add(model)
     sum(w * loss for w, loss in zip(weights, losses)).backward()
     return [loss.detach() for loss in losses]
