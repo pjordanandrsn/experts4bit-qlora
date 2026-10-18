@@ -1,0 +1,3 @@
+### Added
+
+- `layer_major_step` (and the trainer's `LAYER_MAJOR=1`) runs on Mixtral, OLMoE and Gemma-4's text model besides Qwen3-MoE. The decoder preamble is a per-family adapter: Gemma-4 builds a full and a sliding mask per micro-batch, chosen per layer by `layer_types`, the rotary per layer type, and one `shared_kv_states` dict per micro-batch. New refusals: Mixtral's training-time `router_jitter_noise` and Gemma-4's per-layer embeddings. Correctness only: on every family the drift guard's `torch.equal` against the stock loop holds (CPU fp32 and an A2000 under NF4 offload with enable_fast_train), and the stagings are 2n - 1 against GRAD_ACCUM x (2n - 1). No speed is claimed beyond Qwen3 (P137, P140).
