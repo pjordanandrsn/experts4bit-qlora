@@ -84,8 +84,11 @@ loop keeps one at a time. The extra is the other M − 1 = 3 micro-batches':
   the stock loss on. It engages at 1 GiB of fp32 logits, so at 1,767 tokens per micro-batch.
 
 The worst case over micro-batches of at most 2 × 2,048 tokens sits just under that gate: 3 × (1.0 GiB + 0.32 GiB)
-≈ **4.0 GiB**. Above the gate the log-probabilities go and 3 × 0.75 GiB = 2.25 GiB remain. At the anchor's 11.881 GB
-peak, A0 + 4.0 GiB fits the card.
+≈ **4.0 GiB**. Above the gate the log-probabilities go and 3 × 0.75 GiB = 2.25 GiB remain.
+
+**Checked against the card before any data:** the anchor's peak (`tc3-4090-8`, `fused_attn4_m_offload`, 11.881 GB
+`torch.cuda.max_memory_allocated`, 11.07 GiB) plus the 4.0 GiB term is 15.07 GiB (16.2 GB), against the RTX 4090's
+23.52 GiB. An L1 OOM is not expected.
 
 ## Predictions (written before any data)
 
