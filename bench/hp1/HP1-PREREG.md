@@ -1,15 +1,20 @@
-# HP1 — held-out parity: e4b as shipped vs Unsloth vs axolotl on Qwen3-30B-A3B, one evaluator, three seeds per arm (DRAFT, not registered)
+# HP1 — held-out parity: e4b as shipped vs Unsloth vs axolotl on Qwen3-30B-A3B, one evaluator, three seeds per arm
 
-Status: DRAFT. The bar was RULED by the maintainer on 2026-10-17T22:47Z (bus 20261017T224744Z-81856, on packet sha256
-b49f6328): approved with five changes, all folded in below. Scoring may proceed once this file is registered and the shakedowns pass.
-The later binding rulings are folded in too:
-- equal order_sha VOIDs a mismatched pair (bus 20261017T233104Z-7528);
-- the shared base is a checked premise; the box-side shakedown VOIDs cleanly; the run ids, host rule and spend go to the maintainer
-  as an envelope for ACK (all bus 20261018T002045Z-34273).
+Status: registered when this file merges, before any box. The maintainer ruled the bar on 2026-10-17 (22:47Z) and approved it with
+five changes, all folded in below. The later binding rulings are folded in too:
+- an unequal order_sha VOIDs a pair (2026-10-17);
+- the shared base is a checked premise;
+- the box-side shakedown ends the draw cleanly;
+- the run id, host rule and spend go to the maintainer as an envelope for ACK;
+- every STRICT failure VOIDs, fail-closed, and a TC1-invalid run is never scored;
+- the headline needs both competitors;
+- the redraw rule is as implemented (2026-10-18).
 
-Lane: heldout-parity (owner direction 2026-10-17). Issue: experts4bit-qlora#835 (TC campaign). The harness pieces are:
-- the TC1 harness `bench/tc1/tc1_arm.py`. Its `--order-seed` and `--hp1-export` / `--hp1-export-base` hooks land in e4b #1709
-  (Q235 Amendment 10 re-seals it, and R2 re-cites once).
+Scoring starts only after this file merges and the box-side shakedown passes.
+
+Lane HP1 (the owner's direction, 2026-10-17); issue experts4bit-qlora#835. The pieces:
+- the TC1 harness `bench/tc1/tc1_arm.py`. Its `--order-seed` and `--hp1-export` / `--hp1-export-base` hooks landed in e4b #1709,
+  and Q235 Amendment 10 re-seals it.
 - the `qwen3hp1` token in `bench/tc1/tc1_run.sh`;
 - this directory: `hp1_lib.py`, the evaluator `hp1_eval.py`, the reducer `hp1_reduce.py`, and the shakedown cut `hp1_trunc.py`.
 
@@ -53,7 +58,7 @@ carry a parity or a "beats" claim.
   fixed order, byte-identical.
 - Seeds: SELECTION seeds 1–3 = {3407, 3408, 3409} (the K block only); CONFIRMATION seeds 4–6 = {3410, 3411, 3412} (the P
   block only, never seen by the selection). For each arm and seed, `--seed s --order-seed s`, plus `matched:s` where the arm's
-  init is kaiming (below). `--order-seed` lands as its own e4b PR (ruling item 4) before this registration.
+  init is kaiming (below). `--order-seed` landed in e4b #1709.
 
 ## Arms (24 scored runs at most), in this order
 
@@ -81,34 +86,50 @@ Every run shares TC1's loop (`run_arm`): the same optimizer call, tokens, order 
 
 ## The one evaluator (`bench/hp1/hp1_eval.py`, NEW)
 
-Every arm's FINAL adapter (step 200: e4b `adapter_<tag>.pt`, PEFT `adapter_model.safetensors`) is scored by the same code.
-No framework's eval loop is used.
-1. **Canonical adapter export.** Each adapter's A/B tensors are mapped to canonical slots (layer, kind ∈ {q,k,v,o,gate,up,down},
-   expert), fp32, [r, in] / [out, r], using the harness's T20 structural slot mapping (the code that already applies
-   `matched:s` across e4b's fused layout and PEFT's per-expert layout). An unmapped or duplicate slot refuses the arm.
-   Scaling α/r is applied once, from the arm's receipt.
-2. **One frozen base.** Qwen3-30B-A3B at the pin, quantized once to NF4 (bitsandbytes 0.50.2 `quantize_4bit`, blocksize 64,
-   no double quant). The bytes are hashed and the hash goes in the receipt. The same base object serves every arm.
-3. **One forward.** HF transformers 5.18.0 `Qwen3MoeForCausalLM`, eager attention. Each NF4 weight is dequantized by
-   bitsandbytes' own dequantize to bf16, and the LoRA delta (x·Aᵀ·Bᵀ·α/r) is added in fp32 to the projection output
-   before the SwiGLU. bf16 autocast, as in training. No fused kernel of any framework is on this path.
-4. **Rows and masking.** The 48 registered held-out rows (TC1b read 16), the alpaca template, labels = input ids (TC1's
-   eval_loss convention; the identical token count per row is asserted per arm). The score per arm is the mean over rows
-   of the per-row token-mean CE, plus the token-weighted mean, REPORTED beside it.
-5. **Base identity (STRICT; ruling item 3).** Each training run hashes the base it TRAINED on: every frozen slot (layer, kind,
-   expert) dequantized the framework's own way to bf16, sha256 per slot in canonical order, folded into one `train_base_digest`
-   (extending T21's layer-0 probe to every layer). The evaluator computes the same digest over its own base. An arm whose
-   digest differs (quant scheme, block size, double quant) is ALSO scored on its own training base by the same scoring
-   function (`hp1_eval.score_rows`), run inside that arm's process at step 200 on its own model. Both numbers are reported,
-   and the verdict uses the own-base number for that arm. A framework is never scored on a base it did not train against.
-   One export serves several frameworks ONLY when their re-derived digests match. The shared base is a checked premise, re-derived
-   per arm on the box, never assumed (maintainer, bus 20261018T002045Z-34273). On the A2000 cut, e4b and Unsloth-t28 trained on
-   the bitwise same dequantized base (digest 5e7564ea, NF4/64 with nested statistics), so there one export served both.
-6. **Self-checks (STRICT).** (a) A zero-adapter row reproduces the base held-out within 1e-4 of each arm's in-loop step-0
-   loss class. (b) The e4b and PEFT adapters of K11-seed-3407 and the Unsloth arm at step 0 (all B = 0) score identically.
-   (c) A byte-flipped adapter changes the score (control).
-7. **Cross-check (REPORTING, never a verdict).** Each arm's own in-loop step-200 held-out on the same 48 rows, and its
-   difference from the evaluator's number.
+Every arm's FINAL (step-200) adapter is scored by the same code. No framework's eval loop is used.
+1. **Canonical adapter export (in the training process, `--hp1-export`).** The harness's own `lora_slots` maps every LoRA slot
+   to (layer, kind ∈ {q, k, v, o, gate_up, down}, expert): e4b's fused ExpertsLoRA / LoRALinear, PEFT's ParamWrapper / Linear.
+   Each slot is written in fp32 as A [r, in] / B [out, r], with the scaling its module applies. An unmapped or duplicate slot,
+   shapes that do not chain, or mixed scalings within one stack, refuse the export.
+2. **The bases: what each run trained on, as stored.** Each framework's first run (`--hp1-export-base 1`) writes its frozen base AS
+   STORED: packed NF4 per slot, the absmax as the framework's dequant multiplies by it (nested statistics un-nested), the code,
+   the blocksize, the dtype, and the bf16 non-quantized slots.
+   - Every run records its training-base digest: each frozen slot dequantized the framework's own way, fingerprinted, and folded
+     with sha256. On the first layer it also proves that the evaluator's stored-slot dequant is bitwise the framework's.
+   - The evaluator re-derives each export's digest and scores an arm only on the export whose digest equals that arm's training
+     digest. One export serves several frameworks only when their digests match. The shared base is a checked premise, per arm,
+     never assumed.
+   - On the A2000 cut, e4b and Unsloth-t28 trained on the bitwise same dequantized base (NF4/64 with nested statistics).
+   - An arm that no export claims is OWN_BASE_ONLY: its y is its own in-loop held-out loss at step 200, on the same 48 rows, by the
+     harness's `eval_loss` (the same scoring code), and the readout labels it.
+3. **One forward.** It uses HF transformers 5.18.0's `Qwen3MoeForCausalLM` skeleton with eager attention. Each layer's experts
+   and q/k/v/o are replaced by `hp1_lib`'s eager modules:
+   - every weight is dequantized from the stored slot by bitsandbytes' `dequantize_4bit` to bf16, and the projection runs in bf16;
+   - the LoRA delta (x·Aᵀ·Bᵀ·scaling) is added in fp32 before the SwiGLU, and the routing weights accumulate in fp32;
+   - bf16 autocast, as in training. No fused kernel of any framework is on this path.
+4. **Rows.** The 48 registered held-out rows (TC1b read 16), with TC1's `eval_loss` convention (labels = input ids). y is the mean
+   over rows of each row's token-mean CE; the token-weighted mean is REPORTED beside it.
+5. **STRICT checks.** Each check VOIDs and fails closed:
+   - (a) **Base digest.** An export's re-derived digest must equal its training run's. Otherwise the base is VOID, and so is every
+     arm that trained on it.
+   - (b) **Zero adapter.** With no adapter, the evaluator's score is within **0.005** (TC1's SAME-BYTES-CLASS bound) of every
+     matched arm's in-loop step-0 held-out loss. Otherwise the base and its arms are VOID. An arm with no step-0 read is VOID.
+   - (c) **Round trip ("6(b)").** For each arm, the evaluator's step-200 score is within **0.02** (TC1b's fixed band) of the arm's
+     own in-loop step-200 score. This proves its layout exported correctly. Otherwise the arm is VOID.
+   - (d) **Control.** A perturbed adapter moves the score. Otherwise the base and its arms are VOID.
+   - (e) **Adapter file.** The file's sha256 equals the receipt's.
+6. **TC1 validity, read by the evaluator before any scoring.** A TC1-invalid run is VOID, never scored. The run must have:
+   - receipt status `ok`, and C1 bit-exact;
+   - the tokens sha;
+   - trainable = 642,514,944 (asserted on every arm, e4b included);
+   - matched-init completeness on kaiming cells;
+   - the dtype census: bf16 expert adapters on the native e4b cells (K00, K10), fp32 only on fp32 cells;
+   - an `order` carrying its own seed;
+   - an HP1 export with the stored-slot proof;
+   - in-loop reads at step 0 and step 200.
+7. **Cross-check (REPORTING).** For every scored arm, the evaluator's score minus its in-loop step-200 score.
+
+The evaluator writes its JSON after every base, so a deadline mid-pass keeps what was scored.
 
 ## Readings and decision rules (RULED 2026-10-17T22:47Z; fixed before any scored number)
 
@@ -132,6 +153,8 @@ term. Reported: the init main effect, the dtype main effect and the init × dtyp
 **P readout (confirmation, FRESH seeds 4–6; never the selection seeds, so no winner's curse).** C* = the competitor with the
 lower mean on seeds 4–6. Paired by seed: Δ_s = y(E, s) − y(C*, s). Δ̄ = their mean, SE = sd(Δ_s)/√3. CI = the 90% two-sided
 t-interval Δ̄ ± 2.920 · SE (df 2). Margin m = min(max(σ_seed, 0.005), 0.02).
+Checked in this order; the first that holds is the verdict (with σ_seed below 0.005, BEATS can also satisfy PARITY, and
+BEATS is read):
 - **BEATS** iff CI upper < 0 AND |Δ̄| > σ_seed.
 - **BEHIND** iff CI lower > 0 AND |Δ̄| > σ_seed.
 - **PARITY** iff the whole CI lies within [−m, +m] (equivalence by TOST, not a point estimate).
@@ -141,14 +164,25 @@ Stated up front: with three seeds the CI half-width is 2.92 · SE. INCONCLUSIVE 
 reported as such, never rounded to PARITY. The same reading is reported for K00 (as shipped today) vs C* on seeds 4–6, and
 for E vs each competitor separately.
 
+**The headline needs both competitors.** C* is defined over both competitors' complete confirmation cells. If either competitor's
+cell is incomplete after its redraw, the headline reads **P_INCOMPLETE**. The complete competitor's reading is reported beside
+it, labelled per-competitor, never as the headline. C* is chosen on the same seeds it is compared on. That leans E vs C* slightly
+toward BEHIND, and the per-competitor readings show both.
+
 **Validity (STRICT, per run).** TC1's predicates: the tokens/train sha, the trainable count, C1, the frozen-base probe
 class, matched-init completeness on kaiming e4b cells, the K-cell dtype census (bf16 expert adapters on K00/K10, fp32 on
 K01/K11), and the order-seed permutation identical across arms at each s: every run carries a non-null `order` whose
 `order_seed` equals its seed, and every arm compared at seed s has the same `order_sha`. A mismatch VOIDs that pair; the reducer
-reads K_INCOMPLETE / P_INCOMPLETE and names the arm (maintainer, bus 20261017T233104Z-7528: required, not optional). A VOID run is redrawn once on the same box.
-A second VOID voids the cell, and the readout states it.
+reads K_INCOMPLETE / P_INCOMPLETE and names the arm.
 
-## Shakedown ($0, before any paid minute; correctness only, never a number; exception RULED approved, item 5)
+**Redraw (as implemented in the `qwen3hp1` token).**
+- After each block's evaluator pass, every run the evaluator VOIDs (TC1-invalid, a STRICT failure, or a VOID base) is redrawn
+  ONCE on the same box, with the same invocation. Its first receipt is kept as `hp1/void/<name>.a1`. Then the block is evaluated
+  again.
+- A second VOID voids that cell, and the readout states it.
+- An incomplete K block (any K cell without three usable runs) skips the P block (K_INCOMPLETE).
+
+## Shakedown ($0, before any paid minute; correctness only, never a number; the exception is approved by the maintainer)
 
 On the seat A2000 (driver 575, CUDA 12.9), `TC1_LOCAL_BOX=1`:
 1. `--order-seed` selftest. Off is byte-identical to today's tokens and layout. On permutes the train rows, and two
@@ -166,20 +200,24 @@ have VALID paid-box precedents in this harness at these pins (tc1-5090-15, stead
 shakedown first: the 2-layer truncation through the cu130 Unsloth arm and the axolotl arm, 3 steps each, plus the
 evaluator. It runs before any scored arm (~10 min, inside the cap), and a failure ends the draw before scoring.
 
-**Result, 2026-10-18 (A2000, branch heldout-parity/hp1-prereg on order-seed 6c7a3166): PASS on run 2.**
+**Result (A2000, 2026-10-18): PASS on run 3, at this registration's code.**
 - **Run 1 was VOIDED by the evaluator's STRICT zero-adapter check (+0.437 nats on every arm).** `hp1_base_slots` bound every
   expert slot to the last layer's dequantizer (a late-binding closure), so layer 0 exported layer 1's experts. The digest could
-  not see it, because every framework went through the same walker. Fixed; a regression test fails without the fix.
-- **Run 2: e4b K00/K10/K01/K11 and Unsloth 2026.9.14 (venv-unsloth-t28), 3 steps each.**
-  - Every arm was CELL OK, with C1 bit-exact and the dtype census each cell requires.
-  - Matched init was complete on K10/K11, and every arm had one order_sha (25d50439).
-  - Evaluator `--require-all-scored`: rc 0, with all five arms SCORED.
-  - Zero adapter vs in-loop step 0: −0.0018 (e4b) and −0.0023 (Unsloth).
-  - Evaluator vs in-loop step 3: within 0.0047 on every arm, so the canonical export round-trips both layouts.
-  - The perturbed-adapter control moved the score.
-  - The digest equalled each training digest.
-- The driver's `qwen3hp1` flow was dry-run with stubbed harness calls: the full path, a failed box-side shakedown (the draw ends
-  unscored) and an empty K selection (the P block is skipped).
+  not see it, because every framework went through the same walker. It was fixed in #1709, with a regression test.
+- **Run 2 passed, before the review changes.**
+- **Run 3: e4b K00/K10/K01/K11 and Unsloth 2026.9.14 (venv-unsloth-t28), 3 steps each, trained at af7070bb** (the harness as
+  merged in #1709).
+  - The evaluator pass first ran out of device memory on the duplicate base, because the first base's model was still held.
+    The fix: `evaluate()` drops each base's scorer and releases the device before the next base, with a regression test. The
+    re-run of the evaluator over run 3's arms then passed:
+    - `--require-all-scored` rc 0, with all five arms SCORED;
+    - zero adapter −0.0018 (e4b) and −0.0023 (Unsloth);
+    - round trip −0.0011 to −0.0039, against the 0.02 bound;
+    - the perturbed-adapter control moved the score;
+    - one base digest, 5e7564ea, whose duplicate (Unsloth's export) was verified and UNUSED.
+- The driver's `qwen3hp1` flow was dry-run with stubbed harness calls. Five paths were covered: the full path, a failed box-side
+  shakedown (the draw ends unscored), an empty K selection (the P block is skipped), a VOID K run (redrawn once, then
+  re-evaluated) and the P pass's time gate.
 
 ## Budget and stop rules
 
@@ -205,12 +243,12 @@ One RTX 5090, RunPod secure (the 5090 row, $1.10/h) or Vast verified-secure. Est
 - Unsloth: 3 × ~17 min, ≈ 0.85 h
 - axolotl: 3 × ~19 min, ≈ 0.95 h
 - venvs, model fetch and the box-side shakedown: ≈ 0.75 h
-- evaluator: up to 24 arms × ~4 min plus two base loads, ≈ 1.7 h (not yet measured at 30B)
+- evaluator: up to 24 arms × ~4 min plus two base loads, ≈ 1.7 h (not yet measured at 30B). The P pass is gated on the K pass's
+  measured seconds (× 1.3 + 10 min), and redraws on their own time-left check.
 
 That totals ≈ 8.2 h ≈ $9.00. Cap $15 (owner, 2026-10-17). Guard 10 h ($11 worst case), so a full redraw does not fit inside
 the cap; the two-strikes rule applies instead. Teardown by
-explicit pod id, with a heartbeat watch. The live list is posted after. Receipts go into the store under #225's tensor
-rule. Two strikes (two consecutive HARNESS_ERROR / VOID / NOT_RUN draws) stops the lane and sends a simplification
+explicit pod id, with a heartbeat watch. The live list is posted after. Receipts go into the receipt store. Two strikes (two consecutive HARNESS_ERROR / VOID / NOT_RUN draws) stops the lane and sends a simplification
 proposal to the maintainer. The K block runs first, so a deadline cannot eat the knob readout. The reducer then applies the K rule, and the P block runs second.
 
 ## Predictions (scored HELD / FALSIFIED / UNTESTED)

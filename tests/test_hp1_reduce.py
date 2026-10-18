@@ -306,11 +306,15 @@ def test_own_base_only_is_used_and_flagged(tmp_path, capsys):
     assert run["y_source"].startswith("inloop_final")
 
 
-def test_incomplete_competitor_is_excluded(tmp_path, capsys):
+def test_an_incomplete_competitor_gives_no_headline(tmp_path, capsys):
+    """Registered: the headline needs BOTH competitors' confirmation cells. With one incomplete it reads P_INCOMPLETE (exit 3), never
+    a headline against the other; the complete competitor's reading is reported, labelled, beside it."""
     p_arms = _p_arms("k10", (0.0, 0.0, 0.0), unsloth_off=-0.05, skip={("unsloth", 3411)})
     code, res, _, _ = _verdict(tmp_path, _k_arms(K10_BEST), p_arms, capsys)
-    assert code == 0 and res["p"]["excluded_competitors"] == ["unsloth"] and res["p"]["c_star"] == "axolotl"
-    assert _reading(res, "per-competitor")["verdict"] == "EXCLUDED"
+    assert code == 3 and res["verdict"] == "P_INCOMPLETE" and res["p"]["c_star"] is None
+    assert res["p"]["excluded_competitors"] == ["unsloth"] and any("unsloth" in x for x in res["p"]["problems"])
+    side = [r for r in res["p"]["readings"] if r["role"].startswith("per-competitor")]
+    assert len(side) == 1 and "axolotl" in side[0]["reading"] and side[0]["role"] == "per-competitor (no headline)"
 
 
 def test_p_incomplete_when_e_or_both_competitors_missing(tmp_path, capsys):
@@ -402,3 +406,12 @@ def test_order_problems_unit():
     assert hr.order_problems(recs) == []
     recs.append({"tag": "d", "seed": 2, "order": {"order_seed": 2, "order_sha": "z"}})
     assert {x["tag"] for x in hr.order_problems(recs)} == {"c", "d"}
+
+
+def test_voids_lists_exactly_the_void_arms(tmp_path, capsys):
+    """The driver's redraw rule reads `voids`: every VOID arm's tag, nothing else."""
+    path = _write(tmp_path, "e.json", [_arm("hp1_k00_s3407", 3407, 1.0), dict(_arm("hp1_k10_s3407", 3407, 1.0), status="VOID"),
+                                       dict(_arm("hp1_k01_s3407", 3407, 1.0), status="OWN_BASE_ONLY")])
+    capsys.readouterr()
+    assert hr.main(["voids", path]) == 0
+    assert capsys.readouterr().out.split() == ["hp1_k10_s3407"]

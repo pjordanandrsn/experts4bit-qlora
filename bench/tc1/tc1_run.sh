@@ -2147,8 +2147,37 @@ hp1_shakedown(){ local FAM=$1 MID=$2 REV=$3 TOK=$4 TS=$5 SF=${1}shake
     --lora-init native --adapter-dtype native --seed 3407 --order-seed 3407 $X
   local fw; for fw in e4b unsloth axolotl; do [ "$(status_of $SF $fw hp1shake_$fw)" = ok ] || { say "HP1 shakedown: $fw arm status $(status_of $SF $fw hp1shake_$fw)"; return 1; }; done
   HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts "$W/${SF}_*_hp1shake_*.json" --bases $W/hp1/shake/base_* --tokens $TOK --eval-n 8 \
-    --model "$TM" --revision $TR --out $W/hp1/eval_shake.json --require-all-scored 1 > logs/hp1_eval_shake.log 2>&1 || { tail -5 logs/hp1_eval_shake.log; return 1; }
+    --model "$TM" --revision $TR --expect-trainable 0 --out $W/hp1/eval_shake.json --require-all-scored 1 > logs/hp1_eval_shake.log 2>&1 || { tail -5 logs/hp1_eval_shake.log; return 1; }
   tail -1 logs/hp1_eval_shake.log; rm -rf $SC; return 0; }
+# HP1's registered redraw rule: a run the evaluator VOIDs is redrawn ONCE on the same box (its receipt moved to hp1/void/<name>.a1), then
+# the block is evaluated again; a second VOID voids the cell and the readout says so. hp1_run records each run's invocation for that.
+declare -A HP1_FW HP1_ARGS
+hp1_run(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 TOK=$8 TS=$9; shift 9
+  HP1_FW[$TAG]="$FW $ARM $AL"; HP1_ARGS[$TAG]="$*"
+  can_run 1500 $FAM/$FW/$TAG && arm $FAM $FW $TAG $ARM $AL "$MID" $REV 0 hp1 $TOK $TS "$@"; }
+hp1_redraw(){ local FAM=$1 MID=$2 REV=$3 TOK=$4 TS=$5 EVJ=$6 t fw armk al n=0
+  mkdir -p $W/hp1/void
+  for t in $($PY_E4B $W/hp1_reduce.py voids $EVJ); do
+    [ -n "${HP1_FW[$t]:-}" ] || { say "HP1: VOID $t has no recorded invocation (not redrawn)"; continue; }
+    [ -e "$W/hp1/void/${t}.redrawn" ] && continue                 # once only
+    read -r fw armk al <<< "${HP1_FW[$t]}"
+    mv "$W/${FAM}_${fw}_$t.json" "$W/hp1/void/${FAM}_${fw}_$t.json.a1" 2>/dev/null
+    : > "$W/hp1/void/${t}.redrawn"; n=$((n + 1))
+    say "HP1 redraw (once): $t"; echo "HP1_REDRAW $t" >> summary.txt
+    # shellcheck disable=SC2086
+    can_run 1500 $FAM/$fw/$t/redraw && arm $FAM $fw $t $armk $al "$MID" $REV 0 hp1 $TOK $TS ${HP1_ARGS[$t]}
+  done
+  return $(( n > 0 ? 0 : 1 )); }
+# hp1_eval_block NAME RECEIPTS... -- BASES...: the one evaluator over a block, gated on the time it needs (the K pass's measured seconds, or
+# HP1_EVAL_BUDGET_S before any pass), writing its JSON after every base
+hp1_eval_block(){ local NAME=$1 TOK=$2 MID=$3 REV=$4; shift 4; local R=() B=() x side=r
+  for x in "$@"; do [ "$x" = -- ] && { side=b; continue; }; [ $side = r ] && R+=("$x") || B+=("$x"); done
+  local need=${HP1_EVAL_NEED_S:-${HP1_EVAL_BUDGET_S:-3600}}
+  can_run "$need" "hp1/eval_$NAME" || { echo "HP1 EVAL_$NAME SKIPPED host-limited" | tee -a summary.txt; return 1; }
+  $PY_E4B $W/hp1_eval.py --receipts "${R[@]}" --bases "${B[@]}" --tokens $TOK --eval-n $HP1_EVAL_N --model "$MID" --revision $REV \
+    --out $W/hp1/eval_$NAME.json > logs/hp1_eval_$NAME.log 2>&1; tail -1 logs/hp1_eval_$NAME.log
+  HP1_EVAL_NEED_S=$($PY_E4B -c "import json,sys; b=json.load(open(sys.argv[1]))['bases']; print(int(1.3*sum(x.get('seconds',0) for x in b))+600)" \
+    $W/hp1/eval_$NAME.json 2>/dev/null || echo 3600); return 0; }
 tc1_hp1_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AXAL=$7
   local ALL="" s c
   for s in $HP1_SEL_SEEDS; do for c in k00 k10 k01 k11; do ALL="$ALL e4b:hp1_${c}_s$s:fused"; done; done
@@ -2156,36 +2185,40 @@ tc1_hp1_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AXAL=$7
   local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" $HP1_EVAL_N || return 0
   mkdir -p $W/hp1
   if ! hp1_shakedown $FAM "$MID" $REV $TOK $TS; then
-    say "HP1 box-side shakedown FAILED: the draw ends unscored (ruling item 5)"; echo "HP1 SHAKEDOWN_FAILED" | tee -a summary.txt; return 0
+    say "HP1 box-side shakedown FAILED: the draw ends unscored"; echo "HP1 SHAKEDOWN_FAILED" | tee -a summary.txt; return 0
   fi
   echo "HP1 SHAKEDOWN_OK" | tee -a summary.txt
   local X="--hp1-export $W/hp1" B first=1
   # the K block (selection seeds): e4b's 2x2, its first run exporting the e4b base
   for s in $HP1_SEL_SEEDS; do for c in k00 k10 k01 k11; do
     B=""; [ $first = 1 ] && { B="--hp1-export-base 1"; first=0; }
-    can_run 1500 $FAM/e4b/hp1_${c}_s$s && arm $FAM e4b hp1_${c}_s$s fused $EAL "$MID" $REV 0 hp1 $TOK $TS --attn-4bit 1 $(hp1_cell $c $s) --seed $s --order-seed $s $X $B
+    hp1_run $FAM e4b hp1_${c}_s$s fused $EAL "$MID" $REV $TOK $TS --attn-4bit 1 $(hp1_cell $c $s) --seed $s --order-seed $s $X $B
   done; done
-  $PY_E4B $W/hp1_eval.py --receipts "$W/${FAM}_e4b_hp1_k*_s*.json" --bases $W/hp1/base_e4b_$FAM --tokens $TOK --eval-n $HP1_EVAL_N \
-    --model "$MID" --revision $REV --out $W/hp1/eval_K.json > logs/hp1_eval_K.log 2>&1; tail -1 logs/hp1_eval_K.log
+  local KR=(); for s in $HP1_SEL_SEEDS; do KR+=("$W/${FAM}_e4b_hp1_k*_s$s.json"); done   # globs, expanded by hp1_eval
+  hp1_eval_block K $TOK "$MID" $REV "${KR[@]}" -- $W/hp1/base_e4b_$FAM || return 0
+  if hp1_redraw $FAM "$MID" $REV $TOK $TS $W/hp1/eval_K.json; then
+    hp1_eval_block K $TOK "$MID" $REV "${KR[@]}" -- $W/hp1/base_e4b_$FAM || return 0
+  fi
   local SEL; SEL=$($PY_E4B $W/hp1_reduce.py select $W/hp1/eval_K.json --out $W/hp1/select.json 2> logs/hp1_select.err | sed -n 's/^HP1_SELECTED=//p')
   if ! hp1_cell "$SEL" 0 > /dev/null; then say "HP1: the K rule selected nothing (logs/hp1_select.err): the P block is not run"; echo "HP1 K_INCOMPLETE" | tee -a summary.txt; return 0; fi
   say "HP1: the registered K rule selects $SEL"; echo "HP1_SELECTED=$SEL" | tee -a summary.txt
   # the P block (fresh confirmation seeds): E, shipped K00 beside it, both competitors at their native settings, each framework's first run exporting its base
-  local bu=1 ba=1
+  local bu=1 ba=1 PR=()
   for s in $HP1_CONF_SEEDS; do
-    can_run 1500 $FAM/e4b/hp1_e_${SEL}_s$s && arm $FAM e4b hp1_e_${SEL}_s$s fused $EAL "$MID" $REV 0 hp1 $TOK $TS --attn-4bit 1 $(hp1_cell $SEL $s) --seed $s --order-seed $s $X
-    [ "$SEL" != k00 ] && can_run 1500 $FAM/e4b/hp1_k00_s$s && arm $FAM e4b hp1_k00_s$s fused $EAL "$MID" $REV 0 hp1 $TOK $TS --attn-4bit 1 $(hp1_cell k00 $s) --seed $s --order-seed $s $X
+    hp1_run $FAM e4b hp1_e_${SEL}_s$s fused $EAL "$MID" $REV $TOK $TS --attn-4bit 1 $(hp1_cell $SEL $s) --seed $s --order-seed $s $X
+    [ "$SEL" != k00 ] && hp1_run $FAM e4b hp1_k00_s$s fused $EAL "$MID" $REV $TOK $TS --attn-4bit 1 $(hp1_cell k00 $s) --seed $s --order-seed $s $X
     B=""; [ $bu = 1 ] && { B="--hp1-export-base 1"; bu=0; }
-    can_run 1800 $FAM/unsloth/hp1_unsloth_s$s && arm $FAM unsloth hp1_unsloth_s$s unsloth $UAL "$MID" $REV 0 hp1 $TOK $TS --grad-ckpt unsloth --unsloth-targets $UT7 \
+    hp1_run $FAM unsloth hp1_unsloth_s$s unsloth $UAL "$MID" $REV $TOK $TS --grad-ckpt unsloth --unsloth-targets $UT7 \
       --unsloth-moe-backend grouped_mm --lora-init native --adapter-dtype native --seed $s --order-seed $s $X $B
     B=""; [ $ba = 1 ] && { B="--hp1-export-base 1"; ba=0; }
-    can_run 1800 $FAM/axolotl/hp1_axolotl_s$s && arm $FAM axolotl hp1_axolotl_s$s axolotl $AXAL "$MID" $REV 0 hp1 $TOK $TS --axolotl-dataset $W/data/ds_alpaca.json \
+    hp1_run $FAM axolotl hp1_axolotl_s$s axolotl $AXAL "$MID" $REV $TOK $TS --axolotl-dataset $W/data/ds_alpaca.json \
       --axolotl-best 1 --lora-init native --adapter-dtype native --seed $s --order-seed $s $X $B
+    PR+=("$W/${FAM}_*_hp1_*_s$s.json")
   done
-  local PR=""; for s in $HP1_CONF_SEEDS; do PR="$PR $W/${FAM}_*_hp1_*_s$s.json"; done     # the confirmation seeds' receipts only (globs, expanded by hp1_eval)
-  # shellcheck disable=SC2086
-  $PY_E4B $W/hp1_eval.py --receipts $PR --bases $W/hp1/base_*_$FAM --tokens $TOK --eval-n $HP1_EVAL_N \
-    --model "$MID" --revision $REV --out $W/hp1/eval_P.json > logs/hp1_eval_P.log 2>&1; tail -1 logs/hp1_eval_P.log
+  hp1_eval_block P $TOK "$MID" $REV "${PR[@]}" -- $W/hp1/base_*_$FAM || { echo "HP1 P readout lost to the deadline" | tee -a summary.txt; return 0; }
+  if hp1_redraw $FAM "$MID" $REV $TOK $TS $W/hp1/eval_P.json; then
+    hp1_eval_block P $TOK "$MID" $REV "${PR[@]}" -- $W/hp1/base_*_$FAM || true
+  fi
   $PY_E4B $W/hp1_reduce.py verdict $W/hp1/eval_K.json $W/hp1/eval_P.json --out $W/hp1/verdict.json --md $W/RESULTS-hp1.md > logs/hp1_verdict.log 2>&1
   tail -20 logs/hp1_verdict.log; echo "HP1 verdict: $W/RESULTS-hp1.md" | tee -a summary.txt; }
 tc1_curve_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SAL=$8

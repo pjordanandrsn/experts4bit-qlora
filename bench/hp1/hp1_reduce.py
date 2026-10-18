@@ -441,15 +441,21 @@ def p_readout(index, k):
     problems = []
     if e_miss:
         problems.append(f"E ({e_group}) lacks confirmation seeds: {e_miss}")
-    if not included:
-        problems.append("both competitors are excluded (each lacks a usable confirmation seed)")
+    for c in COMPETITORS:                          # registered: the headline needs BOTH competitors' confirmation cells
+        if not comp[c]["included"]:
+            problems.append(f"competitor {c} lacks confirmation seeds {comp[c]['missing']}: no headline (HP1-PREREG, P readout)")
     if sigma is None:
         problems.append("sigma_seed undefined (no arm has two runs with a y)")
     p_recs = [rec for (role, _g), runs in index.items() if role == "P" for rec in runs.values() if rec["y"] is not None]
     out["order_problems"] = order_problems(p_recs)
     problems += [f"data order: {x['tag']} at seed {x['seed']}: {x['why']}" for x in out["order_problems"]]
     if problems:
-        out.update(verdict="P_INCOMPLETE", problems=problems, c_star=None, readings=[])
+        side = []                                  # the complete competitor's reading, reported and labelled, never the headline
+        if not e_miss and sigma is not None and not out["order_problems"]:
+            for c in included:
+                side.append(dict(paired_reading(f"E ({cell}) vs {c}", e_ys, e_recs, comp[c]["ys"], comp[c]["recs"], sigma, margin),
+                                 role="per-competitor (no headline)"))
+        out.update(verdict="P_INCOMPLETE", problems=problems, c_star=None, readings=side)
         return out, EXIT_INCOMPLETE
 
     c_star = min(included, key=lambda c: (comp[c]["mean"], COMPETITORS.index(c)))
@@ -530,6 +536,8 @@ def _write_json(path, obj):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
+    vp = sub.add_parser("voids", help="the tags of the VOID arms in evaluator JSON(s), one per line (the driver redraws each once)")
+    vp.add_argument("evals", nargs="+")
     for name in ("select", "verdict"):
         sp = sub.add_parser(name)
         sp.add_argument("evals", nargs="+", help="hp1_eval.py output JSON(s); arms are merged, duplicate tags refused")
@@ -537,6 +545,12 @@ def main(argv=None):
         if name == "verdict":
             sp.add_argument("--md", required=True, help="human-readable markdown table")
     a = ap.parse_args(argv)
+    if a.cmd == "voids":                            # registered redraw rule: a VOID run is redrawn once on the same box
+        for path in a.evals:
+            for arm in json.load(open(path)).get("arms", []):
+                if arm.get("status") == "VOID":
+                    print(arm["tag"])
+        return EXIT_OK
     try:
         index, records, ignored = load_arms(a.evals)
         k = k_readout(index)

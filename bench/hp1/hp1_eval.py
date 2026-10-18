@@ -33,6 +33,8 @@ sys.path.insert(0, HERE)
 import hp1_lib  # noqa: E402
 
 ZERO_ADAPTER_TOL = 0.005     # TC1's SAME-BYTES-CLASS bound on step-0 held-out across forwards
+ROUNDTRIP_TOL = 0.02         # self-check 6(b): the evaluator's step-N score vs the arm's own in-loop step-N score (TC1b's fixed band)
+EXPECT_TRAINABLE = 642514944  # the registered trainable count on every Qwen3-30B-A3B arm (HP1-PREREG "Fixture")
 DEV = "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -134,6 +136,133 @@ def sha_file(path):
     return h.hexdigest()
 
 
+def receipt_arm(path):
+    """One arm as the evaluator reads it from its TC1 receipt."""
+    r = json.load(open(path))
+    hp1 = r.get("hp1") or {}
+    curve = r.get("eval_curve") or []
+    step0 = [c["heldout_loss"] for c in curve if c.get("step") == 0]
+    return {"receipt": path, "framework": r.get("framework"), "tag": r.get("tag"), "seed": r.get("seed"), "order": r.get("order"),
+            "tokens_sha": (r.get("tokens") or {}).get("sha256"), "adapter": (hp1.get("adapter") or {}).get("path"),
+            "adapter_sha256": (hp1.get("adapter") or {}).get("sha256"), "train_digest": (hp1.get("train_base") or {}).get("digest"),
+            "inloop_step0": step0[0] if step0 else None, "inloop_final": curve[-1]["heldout_loss"] if curve else None,
+            "inloop_final_step": curve[-1]["step"] if curve else None, "steps": r.get("steps"),
+            "hp1_errors": {k: v for k, v in hp1.items() if k.endswith("_error")}, "raw_ok": (hp1.get("train_base") or {}).get("raw_ok"),
+            "status_receipt": r.get("status"), "c1_bit_exact": r.get("C1_bit_exact"), "trainable_params": r.get("trainable_params"),
+            "lora_init": r.get("lora_init"), "adapter_dtype": r.get("adapter_dtype"), "matched_init": r.get("matched_init"),
+            "adapter_dtypes_after": r.get("adapter_dtypes_after") or {}}
+
+
+def tc1_invalid(arm, tokens_sha, expect_trainable):
+    """TC1's validity predicates (HP1-PREREG "Validity"), read from the receipt; the first that fails, or None. A run that is not
+    TC1-valid is never scored."""
+    if arm["status_receipt"] != "ok":
+        return f"receipt status {arm['status_receipt']!r} (not ok)"
+    if arm["c1_bit_exact"] is not True:
+        return "C1: the frozen base changed during training (C1_bit_exact is not true)"
+    if arm["tokens_sha"] != tokens_sha:
+        return f"tokens sha {str(arm['tokens_sha'])[:12]} != the evaluator's {str(tokens_sha)[:12]}"
+    if expect_trainable is not None and arm["trainable_params"] != expect_trainable:
+        return f"trainable {arm['trainable_params']} != the registered {expect_trainable}"
+    if str(arm["lora_init"] or "").startswith("matched:") and not (arm["matched_init"] or {}).get("complete"):
+        return "matched init incomplete"
+    dts = set(arm["adapter_dtypes_after"])
+    if arm["framework"] == "e4b" and arm["adapter_dtype"] == "native" and "torch.bfloat16" not in dts:
+        return f"dtype census: a native e4b cell must carry bf16 expert adapters, found {sorted(dts)}"
+    if arm["adapter_dtype"] == "fp32" and dts != {"torch.float32"}:
+        return f"dtype census: an fp32 cell must carry fp32 adapters only, found {sorted(dts)}"
+    if not arm["order"] or arm["order"].get("order_seed") != arm["seed"]:
+        return f"order: {arm['order']!r} does not carry this run's seed {arm['seed']}"
+    if arm["hp1_errors"] or not arm["adapter"] or not arm["train_digest"]:
+        return f"no HP1 export in the receipt ({arm['hp1_errors'] or 'adapter/digest missing'})"
+    if arm["raw_ok"] is not True:
+        return "the training-base digest's stored-slot dequant check did not pass (raw_ok)"
+    if arm["inloop_step0"] is None:
+        return "no in-loop step-0 held-out read: the zero-adapter check cannot run (fails closed)"
+    if arm["inloop_final"] is None or arm["inloop_final_step"] != arm["steps"]:
+        return f"no in-loop step-{arm['steps']} held-out read: the round-trip check cannot run (fails closed)"
+    return None
+
+
+def evaluate(arms, base_dirs, rows, open_base, make_scorer, load_adapter, file_sha, tokens_sha, expect_trainable, write=None,
+             release=None):
+    """The evaluator's rules, with the model and the scoring injected (``open_base(dir) -> store`` with .digest() and .meta;
+    ``make_scorer(store) -> (set_adapter(canon | None), score() -> {"row_mean", ...})``; ``load_adapter(path) -> (tensors, scalings)``).
+    Every STRICT failure VOIDs: a TC1-invalid run is never scored; a base whose digest or zero-adapter check fails VOIDs every arm
+    that trained on it; the round-trip check 6(b) and the perturbation control VOID their arm / base. An arm is OWN_BASE_ONLY only
+    when NO export claims its training digest (and it is TC1-valid). ``write(bases, arms)`` is called after every base;
+    ``release()`` after every base, once its store and scorer are dropped (one model on the device at a time)."""
+    bases = []
+    for arm in arms:
+        why = tc1_invalid(arm, tokens_sha, expect_trainable)
+        if why:
+            arm["status"], arm["reason"] = "VOID", f"TC1-invalid: {why}"
+    for bdir in base_dirs:
+        t0 = time.perf_counter()
+        set_adapter = score_fn = None
+        store = open_base(bdir)
+        digest, n_slots = store.digest()
+        want = store.meta.get("train_base_digest")
+        brec = {"dir": bdir, "meta": store.meta, "digest": digest, "n_slots": n_slots, "digest_matches_training_run": digest == want}
+        bases.append(brec)
+        claim = [x for x in arms if x.get("status") is None and x["train_digest"] in (digest, want)]
+        if digest != want:
+            brec["status"], brec["reason"] = "VOID", f"STRICT: the export's re-derived digest {digest[:12]} != its training run's {str(want)[:12]}"
+        mine = [x for x in claim if x["train_digest"] == digest]
+        if brec.get("status") is None and not mine:
+            brec["status"] = "UNUSED"
+        if brec.get("status") is None:
+            set_adapter, score_fn = make_scorer(store)
+            set_adapter(None)
+            zero = score_fn()
+            brec["zero_adapter"] = {k: zero[k] for k in ("row_mean", "token_weighted")}
+            brec["zero_adapter_vs_inloop_step0"] = {x["tag"]: round(zero["row_mean"] - x["inloop_step0"], 6) for x in mine}
+            bad = [x["tag"] for x in mine if abs(zero["row_mean"] - x["inloop_step0"]) > ZERO_ADAPTER_TOL]
+            if bad:
+                brec["status"], brec["reason"] = "VOID", f"STRICT zero-adapter check: |evaluator - in-loop step 0| > {ZERO_ADAPTER_TOL} for {bad}"
+        if brec.get("status") is None:
+            flip_done = False
+            for arm in mine:
+                if file_sha(arm["adapter"]) != arm["adapter_sha256"]:
+                    arm["status"], arm["reason"] = "VOID", "adapter file sha differs from the receipt's"
+                    continue
+                canon = load_adapter(arm["adapter"])
+                set_adapter(canon)
+                res = score_fn()
+                arm.update(base=bdir, evaluator=res, evaluator_minus_inloop_final=round(res["row_mean"] - arm["inloop_final"], 6))
+                if abs(arm["evaluator_minus_inloop_final"]) > ROUNDTRIP_TOL:     # self-check 6(b): the export round-trips its layout
+                    arm["status"], arm["reason"] = "VOID", f"STRICT round-trip 6(b): |evaluator - in-loop step N| > {ROUNDTRIP_TOL}"
+                else:
+                    arm["status"] = "SCORED"
+                if not flip_done:                   # STRICT control: a perturbed adapter must move the score
+                    t, sc = canon
+                    k = sorted(x for x in t if x.endswith(".B"))[0]
+                    t = dict(t)
+                    t[k] = t[k].clone()
+                    t[k].view(-1)[0] += 1.0
+                    set_adapter((t, sc))
+                    flipped = score_fn()["row_mean"]
+                    brec["perturbed_adapter_control"] = {"tensor": k, "row_mean": flipped, "changed": flipped != res["row_mean"]}
+                    flip_done = True
+                    if flipped == res["row_mean"]:
+                        brec["status"], brec["reason"] = "VOID", "STRICT control: a perturbed adapter did not change the score"
+            brec.setdefault("status", "OK")
+        if brec["status"] == "VOID":                # every arm that trained on this base (by either digest) is VOID with it
+            for arm in claim:
+                arm["status"], arm["reason"] = "VOID", f"base {bdir}: {brec['reason']}"
+        brec["seconds"] = round(time.perf_counter() - t0, 1)
+        del store, set_adapter, score_fn            # the scorer closes over the model: drop it before the next base loads
+        if release:
+            release()
+        if write:
+            write(bases, arms)
+    for arm in arms:
+        if arm.get("status") is None:
+            arm["status"] = "OWN_BASE_ONLY"
+            arm["reason"] = "no base export claims this arm's training-base digest: the readout uses its own-base score (in-loop eval_loss at step N, same rows)"
+    return bases, arms
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--receipts", nargs="+", required=True)
@@ -142,6 +271,8 @@ def main():
     ap.add_argument("--eval-n", type=int, default=48)
     ap.add_argument("--model", default="Qwen/Qwen3-30B-A3B")
     ap.add_argument("--revision", default="ad44e777bcd18fa416d9da3bd8f70d33ebb85d39")
+    ap.add_argument("--expect-trainable", type=int, default=EXPECT_TRAINABLE,
+                    help="the registered trainable count every arm must carry (0 = not checked: the shakedown's truncated model)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--require-all-scored", type=int, default=0,
                     help="the box-side shakedown: exit 3 unless every arm is SCORED by this evaluator and every base is OK")
@@ -152,99 +283,39 @@ def main():
     rows = tk["eval"][: a.eval_n]
     if len(rows) != a.eval_n:
         sys.exit(f"tokens file has {len(rows)} eval rows, need {a.eval_n}")
-    arms = []
-    for p in sorted({q for pat in a.receipts for q in glob.glob(pat)}):
-        r = json.load(open(p))
-        hp1 = r.get("hp1") or {}
-        curve = r.get("eval_curve") or []
-        arms.append({"receipt": p, "framework": r.get("framework"), "tag": r.get("tag"), "seed": r.get("seed"), "order": r.get("order"),
-                     "tokens_sha": (r.get("tokens") or {}).get("sha256"), "adapter": (hp1.get("adapter") or {}).get("path"),
-                     "adapter_sha256": (hp1.get("adapter") or {}).get("sha256"), "train_digest": (hp1.get("train_base") or {}).get("digest"),
-                     "inloop_step0": curve[0]["heldout_loss"] if curve else None, "inloop_final": curve[-1]["heldout_loss"] if curve else None,
-                     "inloop_final_step": curve[-1]["step"] if curve else None, "hp1_errors": {k: v for k, v in hp1.items() if k.endswith("_error")}})
+    arms = [receipt_arm(p) for p in sorted({q for pat in a.receipts for q in glob.glob(pat)})]
     out = {"evaluator": "bench/hp1/hp1_eval.py", "tokens": {"path": a.tokens, "sha256": tk.get("sha256"), "eval_n": a.eval_n},
            "model": a.model, "revision": a.revision, "device": torch.cuda.get_device_name(0) if DEV == "cuda" else "cpu",
-           "torch": torch.__version__, "bases": [], "arms": []}
-    for arm in arms:
-        if arm["tokens_sha"] != tk.get("sha256"):
-            arm["status"] = "VOID"
-            arm["reason"] = f"tokens sha {str(arm['tokens_sha'])[:12]} != evaluator tokens {str(tk.get('sha256'))[:12]}"
-        elif arm["hp1_errors"] or not arm["adapter"] or not arm["train_digest"]:
-            arm["status"] = "VOID"
-            arm["reason"] = f"no HP1 export in the receipt ({arm['hp1_errors'] or 'adapter/digest missing'})"
-    for bdir in a.bases:
-        t0 = time.perf_counter()
-        store = hp1_lib.BaseStore(bdir, DEV)
-        digest, n_slots = store.digest()
-        want = store.meta.get("train_base_digest")
-        brec = {"dir": bdir, "meta": store.meta, "digest": digest, "n_slots": n_slots, "digest_matches_training_run": digest == want}
-        out["bases"].append(brec)
-        if digest != want:
-            brec["status"] = "VOID"
-            brec["reason"] = f"STRICT: the export's re-derived digest {digest[:12]} != its training run's {str(want)[:12]}"
-            del store
-            continue
-        mine = [x for x in arms if x.get("status") is None and x["train_digest"] == digest]
-        if not mine:
-            brec["status"] = "UNUSED"
-            del store
-            continue
-        model, hooks = build_model(store, a.model, a.revision)
-        set_adapter(hooks, None)
-        zero = score(model, rows, tc1)
-        brec["zero_adapter"] = {k: zero[k] for k in ("row_mean", "token_weighted")}
-        bad = [x["tag"] for x in mine if x["inloop_step0"] is not None and abs(zero["row_mean"] - x["inloop_step0"]) > ZERO_ADAPTER_TOL]
-        brec["zero_adapter_vs_inloop_step0"] = {x["tag"]: None if x["inloop_step0"] is None else round(zero["row_mean"] - x["inloop_step0"], 6) for x in mine}
-        if bad:
-            brec["status"] = "VOID"
-            brec["reason"] = f"STRICT zero-adapter check: |evaluator - in-loop step 0| > {ZERO_ADAPTER_TOL} for {bad}"
-            del model, hooks, store
-            continue
-        flip_done = False
-        for arm in mine:
-            if sha_file(arm["adapter"]) != arm["adapter_sha256"]:
-                arm["status"], arm["reason"] = "VOID", "adapter file sha differs from the receipt's"
-                continue
-            canon = hp1_lib.load_canonical(arm["adapter"], DEV)
-            set_adapter(hooks, canon[:2])
-            res = score(model, rows, tc1)
-            arm.update(status="SCORED", base=bdir, evaluator=res)
-            if arm["inloop_final"] is not None:
-                arm["evaluator_minus_inloop_final"] = round(res["row_mean"] - arm["inloop_final"], 6)     # REPORTING
-            if not flip_done:                       # STRICT control: a perturbed adapter must move the score
-                t, sc = canon[0], canon[1]
-                k = next(iter(sorted(x for x in t if x.endswith(".B"))))
-                t[k] = t[k].clone()
-                t[k].view(-1)[0] += 1.0
-                set_adapter(hooks, (t, sc))
-                flipped = score(model, rows, tc1)["row_mean"]
-                brec["perturbed_adapter_control"] = {"tensor": k, "row_mean": flipped, "changed": flipped != res["row_mean"]}
-                flip_done = True
-                if flipped == res["row_mean"]:
-                    brec["status"] = "VOID"
-                    brec["reason"] = "STRICT control: a perturbed adapter did not change the score"
-            del canon
-        brec.setdefault("status", "OK")
-        if brec["status"] == "VOID":
-            for arm in mine:
-                arm["status"], arm["reason"] = "VOID", f"base {bdir}: {brec['reason']}"
-        brec["seconds"] = round(time.perf_counter() - t0, 1)
-        del model, hooks, store
-        torch.cuda.empty_cache() if DEV == "cuda" else None
-    for arm in arms:
-        if arm.get("status") is None:
-            arm["status"] = "OWN_BASE_ONLY"
-            arm["reason"] = "no base export matches this arm's training-base digest: the readout uses its own-base score (in-loop eval_loss at step N, same rows)"
-        out["arms"].append(arm)
+           "torch": torch.__version__, "zero_adapter_tol": ZERO_ADAPTER_TOL, "roundtrip_tol": ROUNDTRIP_TOL,
+           "expect_trainable": a.expect_trainable or None, "bases": [], "arms": []}
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
-    json.dump(out, open(a.out, "w"), indent=1)
-    print(json.dumps({"bases": [(b["dir"], b.get("status")) for b in out["bases"]],
-                      "arms": [(x["tag"], x["status"], (x.get("evaluator") or {}).get("row_mean")) for x in out["arms"]]}))
-    ok_digests = {b["digest"] for b in out["bases"] if b.get("status") == "OK"}
+
+    def write(bases, arms_now):                     # after every base, so a deadline mid-pass keeps what was scored
+        out["bases"], out["arms"] = bases, arms_now
+        json.dump(out, open(a.out + ".tmp", "w"), indent=1)
+        os.replace(a.out + ".tmp", a.out)
+
+    def release():
+        import gc
+        gc.collect()
+        if DEV == "cuda":
+            torch.cuda.empty_cache()
+
+    def make_scorer(store):
+        model, hooks = build_model(store, a.model, a.revision)
+        return (lambda canon: set_adapter(hooks, None if canon is None else canon[:2])), (lambda: score(model, rows, tc1))
+
+    bases, arms = evaluate(arms, a.bases, rows, lambda d: hp1_lib.BaseStore(d, DEV), make_scorer,
+                           lambda p: hp1_lib.load_canonical(p, DEV)[:2], sha_file, tk.get("sha256"), a.expect_trainable or None, write,
+                           release)
+    write(bases, arms)
+    print(json.dumps({"bases": [(b["dir"], b.get("status")) for b in bases],
+                      "arms": [(x["tag"], x["status"], (x.get("evaluator") or {}).get("row_mean")) for x in arms]}))
+    ok_digests = {b["digest"] for b in bases if b.get("status") == "OK"}
 
     def base_fine(b):                               # an UNUSED base is fine when it is a verified duplicate of a base that scored
         return b.get("status") == "OK" or (b.get("status") == "UNUSED" and b.get("digest_matches_training_run") and b["digest"] in ok_digests)
-    if a.require_all_scored and (not out["arms"] or any(x["status"] != "SCORED" for x in out["arms"]) or not all(map(base_fine, out["bases"]))):
+    if a.require_all_scored and (not arms or any(x["status"] != "SCORED" for x in arms) or not all(map(base_fine, bases))):
         sys.exit(3)
 
 
