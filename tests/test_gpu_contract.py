@@ -107,3 +107,21 @@ def test_the_box_refuses_an_unpinned_or_dirty_checkout():
     assert '[ ${#val} -eq 40 ] || { say "refusing: $v is not 40 characters (an unpinned ref)"; finish 78; }' in text
     assert '[ "$(git -C "$dir" rev-parse HEAD)" = "$sha" ] && [ -z "$(git -C "$dir" status --porcelain)" ]; }' in text
     assert "assert inst == src" in text, "the installed nf4_grouped.py must be the checkout's"
+
+
+def test_a_run_dir_that_already_holds_receipts_is_refused_not_deleted(tool, tmp_path):
+    old = tmp_path / "run" / "gc"
+    old.mkdir(parents=True)
+    (old / "summary.txt").write_text("an earlier run's receipt\n")
+    r = _drive(tool, tmp_path)
+    assert r.returncode == 78 and "already holds receipts" in r.stdout, r.stdout + r.stderr
+    assert (old / "summary.txt").read_text() == "an earlier run's receipt\n"
+
+
+def test_a_class_check_that_fails_to_run_is_refused(tool, tmp_path):
+    """Only 0 (inside) or 15 (outside) from the class check lets the plan through: a crash is a refusal."""
+    (tool / "bench" / "gpu-contract" / "gc_box.py").write_text("import sys; sys.exit(1)\n")
+    env = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+    subprocess.run(["git", "-C", str(tool), "commit", "-qam", "a broken class check"], check=True, env={**os.environ, **env})
+    r = _drive(tool, tmp_path)
+    assert r.returncode == 78 and "class check rc 1" in r.stdout, r.stdout + r.stderr

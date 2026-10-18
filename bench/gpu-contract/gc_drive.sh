@@ -30,13 +30,18 @@ for v in GC_GNF4_SHA GC_E4B_SHA; do
   val=${!v:-}; [[ "$val" =~ ^[0-9a-f]{40}$ ]] || { say "refusing: $v='$val' is not a full 40-character commit sha (an unpinned ref is refused)"; exit 78; }
 done
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
-python3 "$HERE/gc_box.py" --card "cc=0.0 sms=0" --declared "${GC_CARD:-}" > /dev/null; [ $? = 78 ] && { say "refusing: GC_CARD='${GC_CARD:-}' is not MAJOR.MINOR/SMS or MAJOR.MINOR/>=SMS"; exit 78; }
+# the class must parse: gc_box answers 0 (inside) or 15 (outside) for a well-formed class against this dummy probe; 78 (malformed)
+# or anything else (the check itself failed) refuses
+python3 "$HERE/gc_box.py" --card "cc=0.0 sms=0" --declared "${GC_CARD:-}" > /dev/null; crc=$?
+case "$crc" in 0|15) ;; *) say "refusing: GC_CARD='${GC_CARD:-}' did not parse as MAJOR.MINOR/SMS or MAJOR.MINOR/>=SMS (class check rc $crc)"; exit 78;; esac
 # the staged tool is the committed one: a dirty launch tree is refused, and its commit travels into the receipt
 [ -z "$(git -C "$REPO" status --porcelain 2>/dev/null)" ] || { say "refusing: the launch tree $REPO is dirty"; exit 78; }
 TOOL_SHA=$(git -C "$REPO" rev-parse HEAD 2>/dev/null) || { say "refusing: $REPO is not a git checkout"; exit 78; }
 STAGE="$HERE/gc_run.sh $HERE/gc_box.py"
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
 RUN_DIR=$E4B_RENT_RUN_DIR; DEADLINE=$E4B_RENT_DEADLINE_EPOCH
+# receipts are evidence: an earlier run's receipts in this run dir are refused, never deleted
+[ ! -e "$RUN_DIR/gc" ] || [ -z "$(ls -A "$RUN_DIR/gc" 2>/dev/null)" ] || { say "refusing: $RUN_DIR/gc already holds receipts"; exit 78; }
 POLL=${GC_POLL_S:-60}; W=/root/gc
 if [ "$DRY" = 1 ]; then
   WHERE="dry box via $GC_BOX_EXEC"
@@ -74,7 +79,7 @@ while :; do
   say "hb: ${hb:-<no answer>} | left $((DEADLINE - now))s"
   sleep "$POLL"
 done
-rm -rf "$RUN_DIR/gc" && mkdir -p "$RUN_DIR/gc" || { say "fetch failed: local dir"; exit 22; }
+mkdir -p "$RUN_DIR/gc" || { say "fetch failed: local dir"; exit 22; }
 box_fetch "$RUN_DIR/gc" < /dev/null || { say "fetch failed"; exit 22; }
 say "fetched $(ls "$RUN_DIR/gc" | wc -l | tr -d ' ') entries"
 [ "$(cat "$RUN_DIR/gc/GC_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }

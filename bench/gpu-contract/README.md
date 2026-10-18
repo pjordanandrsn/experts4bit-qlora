@@ -48,3 +48,9 @@ The launcher's `--command`, from a clean checkout of the tool's commit:
 The receipts land in `<run dir>/gc/`: `summary.txt`, `versions.txt`, `forensics.txt`, `logs/` (both junit reports and both
 pytest logs), `GC_TOOL_SHA`. The pin, the spend and the teardown proof are posted on the PR under review and on the bus, as
 for any rental.
+
+## Before the next reuse (a follow-up PR)
+
+- `GC_REQUIRE`: a list of test ids that must PASS (a skip or an absence exits 30). Today a pass allows any skip, so the
+  first run's review reads the required test from `logs/gnf4.xml` by hand.
+- A time-left check before each suite that reads `GC_DEADLINE_EPOCH` with a receipt margin, as P133's `can_run` does.
