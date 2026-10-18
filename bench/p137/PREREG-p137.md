@@ -70,7 +70,8 @@ First rung that applies:
    - a dry record in a reading, or the reverse;
    - step 0's per-micro-batch losses not bit-identical across all four arms;
    - stagings per step after step 0 not exactly **4 × (2n − 1) = 380** (A0) and **2n − 1 = 95** (L1), with n = 48;
-   - L1's peak allocated memory above A0's by more than **4.0 GiB** (below).
+   - L1's peak allocated memory over the **timed** steps above A0's by more than **4.0 GiB** (below). Step 0 is left out:
+     on L1 it also carries the drift guard's one-time stock forward. The all-steps peak is recorded.
 2. **NOISY:** a self-pair (A0b/A0a, L1b/L1a, the medians of the timed walls) outside **[0.97, 1.03]**.
 3. **LICENSED** iff **S = min(A0a/L1a, A0b/L1b) ≥ 1.10**; otherwise **NO_GAIN**.
 
