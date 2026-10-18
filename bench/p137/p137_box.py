@@ -166,6 +166,11 @@ def _reset(model, params, snapshot, handles):
 
     from experts4bit_qlora.engines import offload as off
 
+    import gc
+    import random
+
+    import numpy as np
+
     with torch.no_grad():
         for p, s in zip(params, snapshot):
             p.copy_(s)
@@ -174,13 +179,16 @@ def _reset(model, params, snapshot, handles):
         h.evict()
     off._ExpertOffload._resident = None
     off.reset_offload_stats()
+    gc.collect()                        # the previous arm's optimizer state goes here, before the memory check
     torch.cuda.synchronize()
     torch.cuda.empty_cache()
     torch.cuda.reset_peak_memory_stats()
-    torch.manual_seed(SEED)
+    torch.manual_seed(SEED)             # CPU and CUDA generators
+    random.seed(SEED)
+    np.random.seed(SEED)
 
 
-def _arm(tag, model, params, snapshot, snap_hash, handles, plan, held, pad_id, n_fast, model_dir, out_path):
+def _arm(tag, model, params, snapshot, snap_hash, handles, plan, held, pad_id, n_fast, model_dir, out_path, mem_baseline):
     import torch
 
     import bitsandbytes as bnb
@@ -189,6 +197,7 @@ def _arm(tag, model, params, snapshot, snap_hash, handles, plan, held, pad_id, n
     loop = LOOPS[tag[:2]]
     _reset(model, params, snapshot, handles)
     start_hash = adapter_hash(params)
+    mem_at_start = torch.cuda.memory_allocated()
     model.train()
     opt = bnb.optim.AdamW8bit(params, lr=LR)
     steps = []
@@ -196,7 +205,8 @@ def _arm(tag, model, params, snapshot, snap_hash, handles, plan, held, pad_id, n
         _train(model, plan, pad_id, "cuda", loop, handles, opt, steps)
     except torch.cuda.OutOfMemoryError as e:
         rec = {"tag": tag, "loop": loop, "model": model_dir, "oom": f"step {len(steps)}: {str(e)[:200]}", "steps": steps,
-               "adapter_sha_at_start": start_hash, "adapter_sha_snapshot": snap_hash}
+               "adapter_sha_at_start": start_hash, "adapter_sha_snapshot": snap_hash, "mem_at_start": mem_at_start,
+               "mem_baseline": mem_baseline}
         json.dump(rec, open(out_path, "w"), indent=1)
         print("P137_ARM " + json.dumps({"tag": tag, "oom": rec["oom"]}), flush=True)
         return
@@ -214,6 +224,7 @@ def _arm(tag, model, params, snapshot, snap_hash, handles, plan, held, pad_id, n
            "step0_hex": [x.hex() for x in step0], "summary": summarize(steps), "heldout": sum(hl) / len(hl),
            "n_fast": n_fast, "n_offloaded": len(handles), "ckpt": dict(ckpt_offload.CKPT_OFFLOAD_STATS),
            "adapter_sha_at_start": start_hash, "adapter_sha_snapshot": snap_hash, "process": "one-process ABBA (A2)",
+           "mem_at_start": mem_at_start, "mem_baseline": mem_baseline,
            "versions": {"torch": torch.__version__, "transformers": transformers.__version__,
                         "bitsandbytes": md.version("bitsandbytes"), "gnf4": md.version("grouped-nf4-gemm"),
                         "e4b_sha": os.environ.get("E4B_SHA"), "gpu": torch.cuda.get_device_name(0)},
@@ -232,13 +243,17 @@ def run_abba(a):
     params = [p for p in model.parameters() if p.requires_grad]
     snapshot = [p.detach().clone() for p in params]
     snap_hash = adapter_hash(params)
+    import torch
+
+    _reset(model, params, snapshot, handles)
+    mem_baseline = torch.cuda.memory_allocated()       # post-load, post-snapshot, everything evicted
     rows = [encode(tok, ex) for ex in json.load(open(a.data))]
     n_steps = WARM + TIMED
     plan = micro_batches(rows[: n_steps * ACCUM * MB_ROWS + 4 * HELD_ROWS], n_steps)
     held = [r for r in rows[n_steps * ACCUM * MB_ROWS:] if any(t != -100 for t in r[1])][:HELD_ROWS]
     for tag in TAGS:
         _arm(tag, model, params, snapshot, snap_hash, handles, plan, held, pad_id, n_fast, a.model,
-             os.path.join(a.outdir, f"arm_{tag}.json"))
+             os.path.join(a.outdir, f"arm_{tag}.json"), mem_baseline)
     return 0
 
 

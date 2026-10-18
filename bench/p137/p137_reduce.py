@@ -7,8 +7,10 @@ verdict. The rule, first rung that applies:
      layer counts not both the registered n (48; the dry fixture's 2); step 0's per-micro-batch losses not
      bit-identical between every arm; the stagings per timed step not exactly ACCUM x (2n - 1) (A0) and 2n - 1 (L1)
      at that n; L1's peak device memory above A0's by more than MEM_TERM_GIB; (Amendment 2, one process) an arm
-     that did not start from the post-load adapter snapshot, or arms whose snapshots differ.
-  2. NOISY: a self-pair (A0b/A0a, L1b/L1a, the median timed walls) outside [SELF_LO, SELF_HI].
+     that did not start from the post-load adapter snapshot, or arms whose snapshots differ; an arm whose allocated memory
+     at its start is more than MEM_START_TOL_MIB from the post-load baseline; step 0 not cold (A0a and A0b exactly
+     M x (2n - 1) + 1, L1b exactly 2n, L1a above L1b: the drift guard's stock forwards run once, on L1a).
+  2. VOID (Amendment 2): a self-pair outside [SELF_LO, SELF_HI] -- in one process it is the carry-over check.
   3. LICENSED iff S = min(A0a/L1a, A0b/L1b) >= S_MIN; otherwise NO_GAIN.
 REPORTING (never changes the verdict): held-out |L1 - A0| <= HELD_TOL; S inside the registered band [BAND_LO, BAND_HI].
 
@@ -26,6 +28,7 @@ S_MIN = 1.10
 BAND_LO, BAND_HI = 1.25, 2.0
 MEM_TERM_GIB = 4.25
 HELD_TOL = 0.01
+MEM_START_TOL_MIB = 16                   # Amendment 2: arm-start allocated memory vs the post-load baseline
 ACCUM = 4
 QWEN = "Qwen/Qwen3-30B-A3B"
 QWEN_REV = "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39"
@@ -72,6 +75,14 @@ def reduce(recs, e4b_sha, dry=False):
             reasons.append(f"{t}: adapters at the arm's start do not match the post-load snapshot")
     if len({r[t].get("adapter_sha_snapshot") for t in TAGS}) != 1:
         reasons.append("the arms carry different adapter snapshots")
+    for t in TAGS:
+        m0, mb = r[t].get("mem_at_start"), r[t].get("mem_baseline")
+        if m0 is None or mb is None or abs(m0 - mb) > MEM_START_TOL_MIB * 2 ** 20:
+            reasons.append(f"{t}: allocated memory at the arm's start {m0} vs the post-load baseline {mb}")
+    s0 = {t: r[t].get("summary", {}).get("stagings_step0") for t in TAGS}
+    cold_a0, cold_l1 = ACCUM * (2 * n_reg - 1) + 1, 2 * n_reg
+    if not (s0["A0a"] == s0["A0b"] == cold_a0 and s0["L1b"] == cold_l1 and (s0["L1a"] or 0) > cold_l1):
+        reasons.append(f"step 0 not cold: stagings {s0}, registered A0 {cold_a0}, L1b {cold_l1}, L1a above L1b")
     stacks = {json.dumps({k: v for k, v in r[t].get("versions", {}).items() if k != "gpu"}, sort_keys=True) for t in TAGS}
     if len(stacks) != 1:
         reasons.append(f"the arms ran on {len(stacks)} different stacks")
@@ -109,8 +120,8 @@ def reduce(recs, e4b_sha, dry=False):
                  "peak_gib": {t: peak[t] / GIB for t in TAGS}}
     base = {"medians_s": med, "self_pairs": selfp, "pairs": pairs, "S": s, "reporting": reporting}
     noisy = [k for k, v in selfp.items() if not SELF_LO <= v <= SELF_HI]
-    if noisy:
-        return {"verdict": "NOISY", "reasons": [f"{k} = {selfp[k]:.4f} outside [{SELF_LO}, {SELF_HI}]" for k in noisy], **base}
+    if noisy:                                        # Amendment 2: in one process this is the carry-over check
+        return {"verdict": "VOID", "reasons": [f"{k} = {selfp[k]:.4f} outside [{SELF_LO}, {SELF_HI}]" for k in noisy], **base}
     return {"verdict": "LICENSED" if s >= S_MIN else "NO_GAIN", "reasons": [], **base}
 
 
@@ -118,10 +129,12 @@ def _fake(tag, med, n=48, model=f"/root/.cache/huggingface/hub/models--Qwen--Qwe
     a0 = tag[:2] == "A0"
     steady = ACCUM * (2 * n - 1) if a0 else 2 * n - 1
     rec = {"tag": tag, "loop": loop or ("stock" if a0 else "layer_major"), "model": model, "n_fast": n, "n_offloaded": n,
-           "adapter_sha_at_start": "a" * 64, "adapter_sha_snapshot": "a" * 64,
+           "adapter_sha_at_start": "a" * 64, "adapter_sha_snapshot": "a" * 64, "mem_at_start": 7 * GIB,
+           "mem_baseline": 7 * GIB,
            "step0_hex": list(step0), "heldout": 1.0, "recipe": {"seq": 2048},
            "versions": {"e4b_sha": e4b, "torch": "2.8.0+cu128", "gpu": "RTX 4090"},
-           "summary": {"median_s": med, "stagings_steady": [steady], "peak_alloc": peak}}
+           "summary": {"median_s": med, "stagings_steady": [steady], "peak_alloc": peak,
+                       "stagings_step0": (ACCUM * (2 * n - 1) + 1) if a0 else (2 * n + (n * ACCUM if tag == "L1a" else 0))}}
     rec.update(kw)
     return rec
 
@@ -142,8 +155,15 @@ def self_test():
     case("no gain", {**ok, "L1a": _fake("L1a", 9.8), "L1b": _fake("L1b", 9.75)}, "NO_GAIN")
     case("just licensed", {**ok, "L1a": _fake("L1a", 10.5 / 1.10), "L1b": _fake("L1b", 10.4 / 1.10)}, "LICENSED")
     case("just under", {**ok, "L1a": _fake("L1a", 10.5 / 1.0999), "L1b": _fake("L1b", 10.4 / 1.0999)}, "NO_GAIN")
-    case("noisy A0", {**ok, "A0b": _fake("A0b", 11.0)}, "NOISY")
-    case("noisy L1", {**ok, "L1b": _fake("L1b", 5.7)}, "NOISY")
+    case("A2: a self-pair off (A0) is VOID", {**ok, "A0b": _fake("A0b", 11.0)}, "VOID")
+    case("A2: a self-pair off (L1) is VOID", {**ok, "L1b": _fake("L1b", 5.7)}, "VOID")
+    case("A2: arm-start memory off the baseline", {**ok, "L1b": {**ok["L1b"], "mem_at_start": 7 * GIB + 17 * 2 ** 20}}, "VOID")
+    case("A2: arm-start memory inside the tolerance", {**ok, "L1b": {**ok["L1b"], "mem_at_start": 7 * GIB + 15 * 2 ** 20}},
+         "LICENSED")
+    case("A2: a warm step 0 (L1b inherits residency)",
+         {**ok, "L1b": {**ok["L1b"], "summary": {**ok["L1b"]["summary"], "stagings_step0": 95}}}, "VOID")
+    case("A2: L1a without the guard's forwards",
+         {**ok, "L1a": {**ok["L1a"], "summary": {**ok["L1a"]["summary"], "stagings_step0": 96}}}, "VOID")
     case("missing", {k: v for k, v in ok.items() if k != "L1b"}, "VOID")
     v = case("L1 OOM is VOID", {**ok, "L1a": {**ok["L1a"], "oom": "step 3"}}, "VOID")
     assert "OOM" in v["reasons"][0]

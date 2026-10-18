@@ -68,7 +68,7 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 
 
 def test_the_self_tests_pass():
-    for script, line in (("p137_reduce.py", "p137_reduce self-test OK (32 cases)"), ("p137_box.py", "p137_box self-test OK (10/10 cases)")):
+    for script, line in (("p137_reduce.py", "p137_reduce self-test OK (36 cases)"), ("p137_box.py", "p137_box self-test OK (10/10 cases)")):
         out = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True,
                              env={**os.environ, "PYTHONPATH": ""})
         assert out.returncode == 0 and line in out.stdout, out.stdout + out.stderr

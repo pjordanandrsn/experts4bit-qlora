@@ -252,8 +252,20 @@ abba`). Before each arm it:
 - evicts every offloaded layer;
 - empties the allocator cache and resets the peak counter.
 
-Each record carries the adapter sha256 at the arm's start and the snapshot's. A **new STRICT VOID** fires unless every arm
-started from the snapshot and the four snapshots agree.
+Each arm's record carries the adapter sha256 at its start and the snapshot's. The arm start also reseeds Python's
+`random` and NumPy beside torch. **New STRICT VOIDs** (the maintainer's ruling and the review pass):
+- an arm that did not start from the snapshot, or snapshots that differ across arms;
+- **allocated memory at an arm's start** more than 16 MiB from the post-load baseline (taken after the snapshot with every
+  layer evicted), so that one arm's leftovers (an optimizer, a resident layer) cannot inflate the next arm's peak;
+- **step 0 not cold:**
+  - A0a and A0b exactly M × (2n − 1) + 1 = 381;
+  - L1b exactly 2n = 96;
+  - L1a above L1b. The drift guard's stock forwards run once per model, on L1a; on `p137-4090-2` that step was 336.
+- **a self-pair outside [0.97, 1.03] is now VOID** (it was NOISY). In one process the self-pair is the carry-over check, so
+  a cache order effect voids the read and is never re-banded.
+
+Peak memory per arm is `max_memory_allocated` after that arm's `reset_peak_memory_stats`, never `reserved`, so allocator
+caching from an earlier arm cannot move the 4.25 GiB term.
 
 **What this gives up.** The arms are no longer fresh processes, so warm state (kernel autotune caches, the allocator)
 carries from arm to arm. The ABBA order and the 2 warm steps per arm balance that, and the self-pair band still reads it.
