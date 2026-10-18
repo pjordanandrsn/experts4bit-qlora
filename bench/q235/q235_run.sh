@@ -9,6 +9,8 @@
 # Q235_REHEARSAL=a2000 runs this same script on the lane's RTX A2000 with a depth-truncated slice of the checkpoint (fetched and
 # verified like the full one); Q235_REHEARSAL=cpu runs it on a CPU host with a tiny Qwen3-MoE built locally. Neither is ever a
 # scientific draw: receipts/run.json says science_eligible false, and the slice and the tiny model are not the registered model.
+# Amendment 11: a launcher run id q235-leg-pro6000-N runs the a2000 slice leg on a rented RTX PRO 6000 (mode pro6000), gate 2's
+# timing leg; the id is the launcher's registered one, and nothing in the controller's environment reaches this script.
 set -uo pipefail
 W=${Q235_W:-/root/tc1}; cd "$W" || exit 9
 NONCE=${TC1_RUN_NONCE:?}
@@ -20,7 +22,12 @@ say(){ echo "[$(date -u +%FT%TZ)] q235: $*" | tee -a summary.txt; }
 mkdir -p logs receipts
 : > summary.txt
 MODE=${Q235_REHEARSAL:-science}
-case "$MODE" in science|a2000|cpu) ;; *) say "refusing: Q235_REHEARSAL=$MODE"; finish 78;; esac
+case "${TC1_RUN_ID:-}" in
+  q235-leg-pro6000-[0-9]*) [ -z "${Q235_REHEARSAL:-}" ] || { say "refusing: Q235_REHEARSAL=$Q235_REHEARSAL with leg run id $TC1_RUN_ID"; finish 78; }
+                           MODE=pro6000 ;;
+esac
+case "$MODE" in science|a2000|cpu) ;; pro6000) [ -n "${TC1_RUN_ID:-}" ] || { say 'refusing: pro6000 comes from a leg run id only'; finish 78; } ;;
+  *) say "refusing: Q235_REHEARSAL=$MODE"; finish 78;; esac
 sha256sum -c q235.sha256 > logs/closure-tripwire.log 2>&1 || { say 'VOID: the staged closure does not match q235.sha256'; finish 9; }
 for v in E4B_SHA GNF4_SHA TC1_DEADLINE_EPOCH; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
 case "$TC1_DEADLINE_EPOCH" in *[!0-9]*) finish 78;; esac
@@ -75,6 +82,7 @@ must require-git "$CAP_GIT" bash dq11_require_git.sh
 case "$MODE" in
   science) CARD_RE='^NVIDIA RTX PRO 6000'; MIN_VRAM_MIB=94000; MIN_RAM_GB=239; MIN_DISK_GB=550 ;;   # host RAM: Amendment 5
   a2000)   CARD_RE='^NVIDIA RTX A2000 12GB$'; MIN_VRAM_MIB=11000; MIN_RAM_GB=64; MIN_DISK_GB=60 ;;
+  pro6000) CARD_RE='^NVIDIA RTX PRO 6000'; MIN_VRAM_MIB=94000; MIN_RAM_GB=239; MIN_DISK_GB=120 ;;   # Amendment 11: a box-class host
   cpu)     CARD_RE=''; MIN_VRAM_MIB=0; MIN_RAM_GB=8; MIN_DISK_GB=10 ;;
 esac
 if [ -n "$CARD_RE" ]; then
@@ -84,6 +92,18 @@ if [ -n "$CARD_RE" ]; then
   name=$(cut -d, -f1 receipts/card.txt); vram=$(cut -d, -f2 receipts/card.txt | tr -dc 0-9)
   echo "$name" | grep -Eq "$CARD_RE" || { say "refusing: card $name is not the registered class"; echo 'card class' > REFUSAL; finish 18; }
   [ "${vram:-0}" -ge "$MIN_VRAM_MIB" ] || { say "refusing: ${vram} MiB VRAM"; echo 'vram floor' > REFUSAL; finish 18; }
+fi
+if [ "$MODE" = pro6000 ]; then
+  # Amendment 11, quiet on a rented box: no compute app on the card and utilization.gpu <= 5 % over 10 s, or a refusal. The load
+  # average and nproc are recorded, not gated (a container can see its co-tenants' load).
+  apps=$(nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null | grep -c '[0-9]')
+  nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits -l 1 > logs/quiet-util.log 2>&1 & smi=$!
+  sleep 10; kill "$smi" 2>/dev/null; wait "$smi" 2>/dev/null
+  umax=$(awk 'BEGIN { m = -1 } /^[ ]*[0-9]+[ ]*$/ { u = $1 + 0; if (u > m) m = u } END { print m }' logs/quiet-util.log)
+  printf '{"compute_apps": %d, "utilization_gpu_max_pct": %d, "util_samples": %d, "loadavg": "%s", "nproc": %d}\n' "$apps" "$umax" \
+    "$(grep -c '^[ ]*[0-9]' logs/quiet-util.log)" "$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null)" "$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN)" > receipts/quiet.json
+  [ "$apps" -eq 0 ] && [ "$umax" -ge 0 ] && [ "$umax" -le 5 ] \
+    || { say "refusing: not quiet ($apps compute apps, utilization.gpu max ${umax} %)"; echo 'not quiet' > REFUSAL; finish 18; }
 fi
 ram_gb=$(awk '/^MemTotal:/ {printf "%d", $2 * 1024 / 1e9}' /proc/meminfo)
 [ "${ram_gb:-0}" -ge "$MIN_RAM_GB" ] || { say "refusing: ${ram_gb} GB host RAM < ${MIN_RAM_GB}"; echo 'host ram floor' > REFUSAL; finish 18; }
@@ -101,6 +121,7 @@ must install "$CAP_INSTALL" python q235_bootstrap.py --cache "$W/.cache/wheels"
 DIRECT=(); FLOORS=(--min-h2d-gbs 0 --min-disk-gbs 0 --min-host-copy-gbs 0)
 [ "$MODE" = science ] && { DIRECT=(--require-direct)
                            FLOORS=(--min-h2d-gbs "$MIN_H2D_GBS" --min-disk-gbs "$MIN_DISK_GBS" --min-host-copy-gbs "$MIN_HOST_COPY_GBS"); }
+[ "$MODE" = pro6000 ] && DIRECT=(--require-direct)        # Amendment 11: the leg records its O_DIRECT read; it refuses nothing by rate
 phase hostrate "$CAP_HOSTRATE" python q235_hostrate.py --out receipts/hostrate.json --dir "$W" "${FLOORS[@]}" "${DIRECT[@]}"
 case "$PHASE_RC" in
   0) ;;
@@ -118,7 +139,8 @@ case "$MODE" in
              *) tail -30 logs/fetch.log; say "VOID: fetch (rc $PHASE_RC)"; finish 11 ;;
            esac
            MODEL="$W/hf-cache/model" DEVICE=cuda ENABLER=fast ;;
-  a2000)   must fetch "$CAP_FETCH" python q235_fetch.py --lock model_files.json --dest "$W/hf-cache/model" --slice 4 --slice-dir "$W/hf-cache/slice4" --out receipts/fetch.json
+  a2000|pro6000)
+           must fetch "$CAP_FETCH" python q235_fetch.py --lock model_files.json --dest "$W/hf-cache/model" --slice 4 --slice-dir "$W/hf-cache/slice4" --out receipts/fetch.json
            MODEL="$W/hf-cache/slice4" DEVICE=cuda ENABLER=fast ;;
   cpu)     must fetch "$CAP_FETCH" python q235_fetch.py --lock model_files.json --dest "$W/hf-cache/model" --only 'tokenizer*' vocab.json merges.txt --out receipts/fetch.json
            must tiny 300 python q235_tiny.py --out "$W/hf-cache/tiny" --tokenizer-from "$W/hf-cache/model"
@@ -136,5 +158,8 @@ for run in box repeat; do
     *) tail -30 "logs/$run.log"; say "VOID: $run (rc $PHASE_RC)"; finish 11 ;;
   esac
 done
+if [ "$MODE" = pro6000 ]; then   # Amendment 11: the second host-rate sample, after the repeat (the fit needs both within 15 %)
+  must hostrate2 "$CAP_HOSTRATE" python q235_hostrate.py --out receipts/hostrate2.json --dir "$W" "${FLOORS[@]}" "${DIRECT[@]}"
+fi
 say 'DONE: the step, its repeat and the records; the fidelity read and the verdict are made off the box'
 finish 0
