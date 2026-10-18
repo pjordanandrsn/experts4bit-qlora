@@ -1,0 +1,223 @@
+#!/bin/bash
+# bench/p146/p146_run.sh -- lane P146, BOX side (bench/p146/PREREG-p146.md). Started detached by p146_drive.sh with the
+# run's nonce; P146_RUN_NONCE first, then P146_EXIT_CODE.<nonce> + TP_DONE.<nonce> on every exit and P146_SUCCESS.<nonce>
+# only when the reducer ran.
+#
+# Does layer-major accumulation cut the step time of the CLI trainer, `python -m experts4bit_qlora.train`, at its own
+# recipe (SEQ 192, TOKEN_BUDGET 2048, GRAD_ACCUM 4, r 8 / alpha 16, attention LoRA, torch AdamW, cosine warm-up) on
+# Qwen3-30B-A3B with its experts offloaded, on an RTX 4090? The library-call licences (P137, P140, P144) do not cover it.
+# Derived from bench/p144/p144_run.sh (P137's kit at Amendments 1-3) by named substitutions:
+#   pins     e4b E4B_PIN (main with #1744's FAST_TRAIN in train.py and #1752's thread cap), grouped-nf4-gemm 0.46.0
+#            exact, torch 2.8.0+cu128 (the image's), transformers 5.18.0, bitsandbytes 0.50.2; any other is refused;
+#   card     the RTX 4090 class, compute capability 8.9 (the licence would cover that configuration only);
+#   arms     A0 = OFFLOAD_EXPERTS=1 FAST_TRAIN=1; L1 = OFFLOAD_EXPERTS=1 LAYER_MAJOR=1; each arm is ONE FRESH PROCESS
+#            running train.py's own main() (p146_box.py --mode cli-abba), ABBA A0a L1a L1b A0b;
+#   data     tatsu-lab/alpaca's train parquet at its pinned revision, staged by the driver and sha256-checked (P137
+#            Amendment 1); train.py's load_dataset call is served from it with its own split strings;
+#   premise  rc 0 with exactly the registered pass count and no skip (tests/test_layer_major.py, test_offload_hold.py,
+#            test_offload.py, test_train_fast_train.py at the pin), listed with -rs;
+#   dry      P146_DRY=1: the $0 dry run on a tiny Qwen3-MoE fixture (p146_tiny.py) on any CUDA card, on the BOX'S OWN
+#            stack (recorded, never installed: the dry box is shared), the e4b tree on PYTHONPATH. Never a reading.
+#   order    refusals; install + tripwire (or the dry stack's record); reducer and box self-tests; premise; the staged
+#            parquet's sha256; fetch (or the fixture); four arm processes A0a L1a L1b A0b; reduce
+# Refusals: CUDA unusable 18 (the host floor; a torch that will not import stays 10), torch not the pin 28, card class 15,
+# disk 13, host RAM 16. Only 13 and 18 name the machine for the launcher's next draw.
+# Knobs (recorded; any value off its registered default marks the run a REHEARSAL, NOT a reading):
+# P146_GPU_CLASS P146_MIN_DISK_GB P146_MIN_RAM_GB P146_REHEARSAL.
+set -uo pipefail
+W=${P146_HOME:-/root/p146}; export P146_HOME=$W; mkdir -p $W/logs; cd $W || exit 78
+say(){ echo "[$(date -u +%FT%TZ)] p146: $*"; }
+NONCE=${P146_RUN_NONCE:?}; printf '%s\n' "$NONCE" > $W/P146_RUN_NONCE.tmp && mv $W/P146_RUN_NONCE.tmp $W/P146_RUN_NONCE
+finish(){ local rc=$1; printf '%s\n' "$rc" > P146_EXIT_CODE.$NONCE; [ "$rc" = 0 ] && : > P146_SUCCESS.$NONCE; say "TP_DONE rc=$rc"; : > TP_DONE.$NONCE; exit "$rc"; }
+trap 'finish 130' INT TERM
+for v in P146_RUN_ID P146_DEADLINE_EPOCH P146_INSTANCE_ID E4B_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
+E4B_PIN=4917506a22d960a6586bd5cefe9a0deca662fc46      # main with #1744 (train.py FAST_TRAIN) and #1752 (the thread cap); a registered constant
+GNF4_SHA=6b7c2e7474d20c8843814dd46dad6cfc3d94b440      # grouped-nf4-gemm 0.46.0, exact; a registered constant
+TORCH_WANT=2.8.0+cu128
+PREMISE_PASSED=57                                       # test_layer_major + test_offload_hold + test_offload + test_train_fast_train, none skipped
+[ "$E4B_SHA" = "$E4B_PIN" ] || { say "refusing: E4B_SHA $E4B_SHA is not the registered e4b pin $E4B_PIN"; finish 78; }
+DRY=${P146_DRY:-0}
+if [ "$DRY" = 1 ]; then
+  MODEL=$W/p146-tiny; REV=""                                                                      # p146_tiny.py's fixture
+  NEED_FETCH=300; NEED_ABBA=600; DISK_DEF=10; RAM_DEF=16                                           # the fixture's own floors
+else
+  MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39                            # TC3's pin (P137's)
+  NEED_FETCH=3300; NEED_ABBA=6000; DISK_DEF=120; RAM_DEF=64   # 61 GB at the launcher's 20 MB/s floor; 4 loads + 4 arms
+fi
+GPU_CLASS=${P146_GPU_CLASS:-4090}; MIN_DISK_GB=${P146_MIN_DISK_GB:-$DISK_DEF}; MIN_RAM_GB=${P146_MIN_RAM_GB:-$RAM_DEF}
+REHEARSAL=${P146_REHEARSAL:-0}
+export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false P146_DRY=$DRY
+# every training lever starts unset: p146_box.py sets each arm's CLI switches itself
+unset LAYER_MAJOR FAST_TRAIN E4B_OFFLOAD_STATS E4B_OFFLOAD_ARENA E4B_OFFLOAD_PIN_SLAB E4B_CKPT_OFFLOAD E4B_CHUNKED_LM_LOSS \
+      E4B_CHUNKED_EVAL_LOSS E4B_ABSMAX_DQ E4B_MOE_KEEP_LAYERS TRAIN_ARENA OFFLOAD_EXPERTS OFFLOAD_PIN TRITON_INTERPRET \
+      SEQ STEPS GRAD_ACCUM TOKEN_BUDGET LR R ALPHA N_TRAIN EVAL_EVERY SEED DO_GEN TR1_CENSUS TR1_CENSUS_OUT   # MODEL/OUT: set per arm by p146_box.py
+: > summary.txt; echo "$P146_INSTANCE_ID" > INSTANCE_ID
+echo "KNOBS run=$P146_RUN_ID e4b=$E4B_SHA gnf4=$GNF4_SHA model=$MODEL@$REV gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_ram_gb=$MIN_RAM_GB dry=$DRY" | tee -a summary.txt
+if [ "$REHEARSAL" != 0 ] || [ "$GPU_CLASS" != 4090 ] || [ "$MIN_DISK_GB" != "$DISK_DEF" ] || [ "$MIN_RAM_GB" != "$RAM_DEF" ]; then
+  echo "REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)" | tee -a summary.txt; : > REHEARSAL
+fi
+[ "$DRY" = 1 ] && { echo "DRY -- the \$0 dry run on the tiny fixture: NEVER a reading" | tee -a summary.txt; : > DRY; }
+# ---- staged pieces, byte-for-byte
+for f in p146_box.py p146_reduce.py p146_tiny.py staged.sha256; do
+  [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
+(cd $W && sha256sum -c staged.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/p146/staged.sha256"; finish 9; }
+# ---- refusals before anything is installed or fetched: CUDA, the torch pin, the card, the disk, the host RAM
+CUDA_PROBE=$(python - <<'PYC' 2>/dev/null | tail -1
+import sys
+try:
+    import torch
+except Exception as e:
+    print(f"no-torch {type(e).__name__}"); sys.exit(0)
+try:
+    ok = torch.cuda.is_available() and torch.cuda.device_count() > 0
+except Exception:
+    ok = False
+if not ok:
+    print(f"no-cuda torch {torch.__version__}"); sys.exit(0)
+cc, p = torch.cuda.get_device_capability(0), torch.cuda.get_device_properties(0)
+print(f"ok torch={torch.__version__} cc={cc[0]}.{cc[1]} sms={p.multi_processor_count}")
+PYC
+)
+echo "CUDA_PROBE ${CUDA_PROBE:-none}" | tee -a summary.txt
+case "$CUDA_PROBE" in
+  ok*) ;;
+  no-cuda*) say "REFUSED: torch cannot use the GPU on this host (${CUDA_PROBE}) -- registered host floor"
+            echo "refused: cuda unusable (${CUDA_PROBE})" > REFUSAL; echo "BOX_REFUSED cuda=unusable" >> summary.txt; finish 18;;
+  *) say "DUD BOX (${CUDA_PROBE:-no probe output})"; finish 10;;
+esac
+if [ "$DRY" = 1 ]; then
+  echo "DRY: the box's own torch ($CUDA_PROBE), recorded, not the pin" | tee -a summary.txt
+else
+  case "$CUDA_PROBE" in *" torch=$TORCH_WANT "*) ;; *) say "REFUSED: the image's torch is not the registered $TORCH_WANT ($CUDA_PROBE)"; echo "refused: torch ($CUDA_PROBE)" > REFUSAL; finish 28;; esac
+fi
+nvidia-smi --query-gpu=name,memory.total,driver_version,uuid,compute_cap,pcie.link.gen.max,pcie.link.width.max --format=csv,noheader | tee forensics.txt
+lscpu | grep -E "Model name|^Vendor ID|^CPU\(s\)" | tee -a forensics.txt; free -g | head -2 | tee -a forensics.txt; df -h $W | tail -1 | tee -a forensics.txt
+GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
+if [ "$DRY" = 1 ]; then
+  echo "DRY: card '$GPU_NAME' ($CUDA_PROBE) -- the class is not checked" | tee -a summary.txt
+else
+  case "$GPU_NAME" in *"$GPU_CLASS"*) ;; *) say "REFUSED: card is '$GPU_NAME', the lane registers the RTX $GPU_CLASS class"; echo "refused: class $GPU_NAME" > REFUSAL; finish 15;; esac
+  case "$CUDA_PROBE" in *" cc=8.9 "*) ;; *) say "REFUSED: $CUDA_PROBE -- the licence covers sm_89 only"; echo "refused: config $CUDA_PROBE" > REFUSAL; finish 15;; esac
+fi
+FREE_GB=$(df -BG --output=avail $W 2>/dev/null | tail -1 | tr -dc 0-9)
+[ "${FREE_GB:-0}" -ge "$MIN_DISK_GB" ] || { say "REFUSED: ${FREE_GB:-?} GB free < ${MIN_DISK_GB} GB (a 61 GB checkpoint and the install)"; echo "refused: disk ${FREE_GB:-?} GB" > REFUSAL; finish 13; }
+RAM_GB=$(awk '/^MemTotal:/{print int($2/1048576)}' /proc/meminfo)
+[ "${RAM_GB:-0}" -ge "$MIN_RAM_GB" ] || { say "REFUSED: ${RAM_GB:-?} GiB host RAM < ${MIN_RAM_GB} GiB"; echo "refused: ram ${RAM_GB:-?} GiB" > REFUSAL; finish 16; }
+can_run(){ local need=$1 now; now=$(date +%s); [ $((now + need + 600)) -le "$P146_DEADLINE_EPOCH" ] || { say "STOP-2: $2 needs ${need}s, only $((P146_DEADLINE_EPOCH - now))s left -- skipped (host-limited)"; echo "SKIPPED $2 host-limited deadline" >> summary.txt; return 1; }; }
+step_alarm(){ local cap=$1 left=$(( P146_DEADLINE_EPOCH - $(date +%s) - 600 )); [ "$left" -gt "$cap" ] && left=$cap; [ "$left" -lt 600 ] && left=600; echo "$left"; }
+export DEBIAN_FRONTEND=noninteractive
+if [ "$DRY" = 1 ]; then
+  # the dry box is shared: nothing is installed; the e4b tree (staged as e4bsrc/ by the driver) runs from PYTHONPATH
+  [ -d $W/e4bsrc/experts4bit_qlora ] || { say "DRY: no e4b tree at $W/e4bsrc"; finish 9; }
+  export PYTHONPATH=$W/e4bsrc
+  python -c "import experts4bit_qlora.engines.layer_major" || { say "DRY: the e4b tree does not import"; finish 9; }
+  E4BSRC=$W/e4bsrc
+else
+  echo "torch==${TORCH_WANT%%+*}" > $W/constraints.txt
+  pipx(){ local log=$1 secs=$2; shift 2
+    perl -e "alarm $secs; exec @ARGV" python -m pip install -q --no-input -c $W/constraints.txt "$@" > $log 2>&1 && return 0
+    say "pip failed ($(tail -1 $log | cut -c1-120)) -- one retry in 20 s"; sleep 20
+    perl -e "alarm $secs; exec @ARGV" python -m pip install -q --no-input -c $W/constraints.txt "$@" >> $log 2>&1; }
+  say "install e4b @$E4B_SHA + gnf4 @$GNF4_SHA (image python; transformers 5.18.0; huggingface_hub < 2; bitsandbytes 0.50.2; torch held at $TORCH_WANT)"
+  pipx logs/pip_e4b.log 1800 --prefer-binary "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" \
+    "transformers==5.18.0" "bitsandbytes==0.50.2" datasets accelerate sentencepiece safetensors "huggingface_hub>=0.23,<2" pytest numpy || { tail -4 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
+  pipx logs/pip_gnf4.log 900 --force-reinstall --no-deps "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA" || { tail -3 logs/pip_gnf4.log; say "PIP FAIL (gnf4)"; finish 9; }
+  # the e4b tests at the pin, for the premise (they run against the installed package)
+  perl -e 'alarm 600; exec @ARGV' git clone -q https://github.com/pjordanandrsn/experts4bit-qlora.git $W/e4bsrc > logs/clone.log 2>&1 && git -C $W/e4bsrc checkout -q $E4B_SHA \
+    || { say "CLONE FAIL (e4b, for the premise tests)"; finish 9; }
+  E4BSRC=$W/e4bsrc
+fi
+WANT_E4B=$E4B_SHA WANT_GNF4=$GNF4_SHA WANT_TORCH=$TORCH_WANT python - <<'PYT' || { say "TRIPWIRE FAIL"; finish 9; }
+import os, json, importlib.metadata as md
+dry = os.environ.get("P146_DRY") == "1"
+import torch, transformers
+if not dry:
+    d = json.loads(md.distribution("experts4bit-qlora").read_text("direct_url.json") or "{}")
+    assert d.get("vcs_info", {}).get("commit_id") == os.environ["WANT_E4B"], f"installed e4b is not the pin: {d}"
+    dg = json.loads(md.distribution("grouped-nf4-gemm").read_text("direct_url.json") or "{}")
+    assert dg.get("vcs_info", {}).get("commit_id") == os.environ["WANT_GNF4"], f"installed gnf4 is not the pin: {dg}"
+    assert md.version("grouped-nf4-gemm") == "0.46.0", md.version("grouped-nf4-gemm")
+    assert md.version("bitsandbytes") == "0.50.2", md.version("bitsandbytes")
+    assert transformers.__version__ == "5.18.0", transformers.__version__
+    hub = md.version("huggingface_hub")
+    assert int(hub.split(".")[0]) < 2, f"huggingface_hub {hub}: P137 Amendment 1 pins < 2 (hub 2.x's httpx2 breaks on this image)"
+    assert torch.__version__ == os.environ["WANT_TORCH"], torch.__version__
+    assert torch.cuda.get_device_capability() == (8, 9), torch.cuda.get_device_capability()
+from experts4bit_qlora.engines import layer_major as lm, offload as off
+from experts4bit_qlora.engines.fast import enable_fast_train  # noqa: F401
+assert "Qwen3MoeForCausalLM" in lm.SUPPORTED
+assert hasattr(lm, "LayerMajorDriftError") and hasattr(lm, "LayerMajorNotReproducibleError"), "the guards (#1715)"
+assert hasattr(off, "hold_forward_residency") and hasattr(off._ExpertOffload, "_held"), "the per-handle hold (#1708)"
+assert not any(os.environ.get(k) for k in ("LAYER_MAJOR", "FAST_TRAIN", "E4B_OFFLOAD_STATS", "E4B_CKPT_OFFLOAD", "E4B_CHUNKED_LM_LOSS"))
+from experts4bit_qlora import census, train
+assert hasattr(train, "_FAST_TRAIN_ENV") and train.LAYER_MAJOR is False and train.FAST_TRAIN is False, "train.py's FAST_TRAIN (#1744)"
+assert census.enabled() is False and hasattr(census.PhaseClock, "step_end"), "train.py's step clock (TR1_CENSUS)"
+import nf4_grouped  # noqa: F401  (the grouped kernels enable_fast_train routes through)
+
+
+def _has(name):
+    try:
+        md.version(name)
+        return True
+    except md.PackageNotFoundError:
+        return False
+
+
+import experts4bit_qlora as e
+open(os.path.join(os.environ.get("P146_HOME", "/root/p146"), "versions.txt"), "a").write(
+    f"e4b {e.__version__} @{os.environ['WANT_E4B']}{' (dry: the tree)' if dry else ''}\ngnf4 {md.version('grouped-nf4-gemm')}\n"
+    f"torch {torch.__version__}\ntransformers {transformers.__version__}\nbitsandbytes {md.version('bitsandbytes')}\n"
+    f"huggingface_hub {md.version('huggingface_hub')}\n"
+    + "".join(f"{n} {md.version(n)}\n" for n in ("httpx", "httpx2") if _has(n))
+    + f"cc {torch.cuda.get_device_capability()}\n")
+print("tripwire OK:", e.__version__, "torch", torch.__version__, "transformers", transformers.__version__)
+PYT
+cat versions.txt | tee -a summary.txt
+python $W/p146_reduce.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "REDUCER SELF-TEST FAILED"; finish 21; }
+python $W/p146_box.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "BOX SELF-TEST FAILED"; finish 21; }
+# ---- the premise, on THIS card, before anything is fetched: layer-major, the hold and offload, exact pass count, no skip
+(cd $E4BSRC && perl -e 'alarm 1200; exec @ARGV' python -m pytest tests/test_layer_major.py tests/test_offload_hold.py tests/test_offload.py tests/test_train_fast_train.py -q -rs -p no:cacheprovider) > logs/premise.log 2>&1
+rc=$?; { echo -n "premise rc=$rc: "; tail -1 logs/premise.log; } | tee -a summary.txt
+grep -a "^SKIPPED" logs/premise.log | tee -a summary.txt
+if [ "$rc" = 0 ] && tail -1 logs/premise.log | grep -Eq "^=* ?$PREMISE_PASSED passed(, [0-9]+ warnings?)? in "; then
+  echo "premise ok ($PREMISE_PASSED passed, none skipped)" | tee -a summary.txt
+else
+  echo "premise failed" | tee -a summary.txt; say "PREMISE FAILED on this card"; echo "premise failed rc=$rc" > REFUSAL; finish 25
+fi
+# ---- the training rows: tatsu-lab/alpaca's train parquet at its pinned revision, staged by the driver from the controller
+# ---- (P137 Amendment 1: no dataset download on the box), checked against its registered sha256; train.py's own
+# ---- load_dataset call is served from it (p146_box.py), with train.py's split strings
+DATA_SHA=06391b656a06fd3fb9d213160ef2398796c3b7f3dc75ef1e3ced30d461517073   # data/train-00000-of-00001-a09b74b3ef9c3b56.parquet @dce01c9b
+[ -s $W/alpaca.parquet ] || { say "DATA FAIL: alpaca.parquet was not staged"; finish 19; }
+GOT_SHA=$(sha256sum $W/alpaca.parquet | cut -d" " -f1)
+[ "$GOT_SHA" = "$DATA_SHA" ] || { say "DATA FAIL: alpaca.parquet is $GOT_SHA, registered $DATA_SHA"; finish 19; }
+echo "P146_DATA staged, sha256 $GOT_SHA (registered)" | tee -a summary.txt
+# ---- the checkpoint (or the dry fixture)
+can_run $NEED_FETCH fetch || finish 40
+if [ "$DRY" = 1 ]; then
+  say "build the dry fixture"
+  perl -e "alarm $(step_alarm 1200); exec @ARGV" python $W/p146_tiny.py --out "$MODEL" > logs/fetch.log 2>&1 || { tail -3 logs/fetch.log; say "FIXTURE FAIL"; finish 11; }
+  grep -a "^P146_TINY" logs/fetch.log | tee -a summary.txt; SNAP=$MODEL
+else
+  say "fetch $MODEL @ $REV"
+  perl -e "alarm $(step_alarm 2700); exec @ARGV" python -c "from huggingface_hub import snapshot_download as s; print(s('$MODEL', revision='$REV', allow_patterns=['*.safetensors','*.json','tokenizer*','*.model','*.txt','merges.txt','vocab.json'], max_workers=8))" > logs/fetch.log 2>&1 || { tail -2 logs/fetch.log; say "DL FAIL"; finish 11; }
+  SNAP=$(tail -1 logs/fetch.log); echo "FETCH $MODEL@$REV $SNAP" | tee -a summary.txt
+fi
+[ -d "$SNAP" ] || { say "DL FAIL: no snapshot dir"; finish 11; }
+# ---- the four arms A0a L1a L1b A0b (ABBA), each ONE FRESH PROCESS of train.py's own main(): as a user runs the CLI.
+# ---- Each loads the model, runs its BEFORE eval, 34 steps and its AFTER eval; only LAYER_MAJOR differs.
+can_run $NEED_ABBA "the four arm processes" || finish 40
+AL=$(step_alarm 7200); say "the four arm processes (alarm=$AL)"
+env E4B_SHA=$E4B_SHA perl -e "alarm $AL; exec @ARGV" python $W/p146_box.py --mode cli-abba --model "$SNAP" \
+  --parquet $W/alpaca.parquet --outdir $W > logs/abba.log 2>&1
+rc=$?
+{ echo "arms rc=$rc"; grep -a "^P146_PROC" logs/abba.log; grep -a "host CPUs:\|host-side fuse" logs/abba.log | head -2; } | tee -a summary.txt
+for TAG in A0a L1a L1b A0b; do
+  { echo -n "arm $TAG "; grep -a "^P146_ARM {\"tag\": \"$TAG\"" logs/abba.log | tail -1 | cut -c1-600; echo; } | tee -a summary.txt
+done
+[ "$rc" = 0 ] || { tail -6 logs/abba.log | cut -c1-300 | tee -a summary.txt; say "AN ARM PROCESS FAILED (rc=$rc) -- the reducer will VOID"; }
+DF=""; [ "$DRY" = 1 ] && DF="--dry"
+say "reduce"; python $W/p146_reduce.py --dir $W --out $W/verdict.json --e4b-sha $E4B_SHA $DF 2>&1 | tee -a summary.txt
+[ "${PIPESTATUS[0]}" = 0 ] && [ -s $W/verdict.json ] || { say "REDUCER FAILED"; finish 22; }
+[ "$DRY" = 1 ] && echo "DRY -- reducer verdict $(python -c "import json; print(json.load(open('$W/verdict.json'))['verdict'])") on the tiny fixture (never a reading)" | tee -a summary.txt
+finish 0

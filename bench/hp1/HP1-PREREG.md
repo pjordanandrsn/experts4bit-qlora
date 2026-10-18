@@ -310,6 +310,11 @@ fetch excludes them (e4b #1720), and they are gone when the box is torn down. Th
 
 The evaluator's checks therefore rest on the receipt digests plus this manifest. No rule, threshold or registered reading changes.
 
+**Note to Amendment 1 (2026-10-18, after `hp1k-5090-8`; no rule, threshold or registered reading changes).** The shakedown's own
+canonical adapters (`hp1/shake/canonical_*.safetensors`, about 107 MB each at the 2-layer cut) now come back with the receipts, so a
+shakedown evaluator VOID can be re-scored off the box (#1767). Their receipts already pin their sha256s, and the bulk manifest stops
+listing them. The K and P blocks' canonical adapters, every base export and the shakedown cut stay on the box as above.
+
 ### Amendment 2 (2026-10-18, before any box; takes effect only if the maintainer picks the split path): HP1 on two boxes of at most 6 h each
 
 **Why.** The compute policy caps a rental at 6 h of wallclock. The one-box draw estimates about 7.5 h of work, so it needs either a

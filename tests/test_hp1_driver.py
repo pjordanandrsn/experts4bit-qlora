@@ -25,6 +25,12 @@ case "$*" in
   *"hp1_reduce.py voids"*) ;;
   *hp1_eval.py*)
     out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p'); st=OK
+    case "$out:${STUB_SHAKE_EVAL:-ok}" in
+      *eval_shake*:axvoid) echo '{"bases":[{"dir":"/x/base_e4b_s","status":"OK"},{"dir":"/x/base_unsloth_s","status":"OK"},{"dir":"/x/base_axolotl_s","status":"OK"}],"arms":[{"tag":"hp1shake_e4b","status":"SCORED"},{"tag":"hp1shake_unsloth","status":"SCORED"},{"tag":"hp1shake_axolotl","status":"VOID","reason":"STRICT round-trip 6(b)"}]}' > "$out"; exit 1;;
+      *eval_shake*:e4bvoid) echo '{"bases":[{"dir":"/x/base_e4b_s","status":"OK"}],"arms":[{"tag":"hp1shake_e4b","status":"VOID","reason":"x"},{"tag":"hp1shake_unsloth","status":"SCORED"},{"tag":"hp1shake_axolotl","status":"SCORED"}]}' > "$out"; exit 1;;
+      *eval_shake*:bothvoid) echo '{"bases":[{"dir":"/x/base_e4b_s","status":"OK"},{"dir":"/x/base_unsloth_s","status":"OK"},{"dir":"/x/base_axolotl_s","status":"OK"}],"arms":[{"tag":"hp1shake_e4b","status":"VOID","reason":"x"},{"tag":"hp1shake_unsloth","status":"SCORED"},{"tag":"hp1shake_axolotl","status":"VOID","reason":"y"}]}' > "$out"; exit 1;;
+      *eval_shake*:basevoid) echo '{"bases":[{"dir":"/x/base_unsloth_s","status":"VOID"}],"arms":[{"tag":"hp1shake_e4b","status":"SCORED"},{"tag":"hp1shake_unsloth","status":"SCORED"},{"tag":"hp1shake_axolotl","status":"VOID"}]}' > "$out"; exit 1;;
+    esac
     case "$out" in *eval_early*) case "${STUB_EARLY:-ok}" in basevoid) st=VOID;; runvoid) [ -e "$W/early_redrawn" ] && st=OK || st=UNUSED;; esac;; esac
     echo "{\"bases\":[{\"seconds\":120,\"status\":\"$st\"}],\"arms\":[{\"tag\":\"x\"}]}" > "$out";;
   *"import json,sys"*) python3 -c "${@:2}";;
@@ -378,3 +384,18 @@ def test_the_hp1_axolotl_calls_carry_the_flag_the_rule_reads():
     assert calls, "no HP1 axolotl call found"
     for ln in calls:
         assert "--axolotl-best 1" in ln, ln
+
+
+def test_an_axolotl_void_at_the_shakedown_evaluator_drops_axolotl_and_the_k_block_runs(tmp_path):
+    """hp1k-5090-8: the axolotl shake arm trained, then the evaluator VOIDed it (STRICT round-trip 6(b)) and --require-all-scored ended
+    the draw. Amendment 3 drops axolotl for that too, when e4b and Unsloth scored and their bases are OK."""
+    arms, summary = drive(tmp_path, STUB_SHAKE_EVAL="axvoid")
+    assert "HP1 AXOLOTL_DROPPED shakedown evaluator VOID: STRICT round-trip 6(b)" in summary and "HP1 SHAKEDOWN_OK" in summary
+    t = tags(arms)
+    assert len([x for x in t if x.startswith("hp1_k")]) >= 12 and not [x for x in t if "axolotl" in x]
+
+
+@pytest.mark.parametrize("case", ["e4bvoid", "basevoid", "bothvoid"])   # bothvoid: an axolotl VOID never masks an e4b VOID
+def test_a_non_axolotl_evaluator_failure_still_ends_the_draw(tmp_path, case):
+    arms, summary = drive(tmp_path, STUB_SHAKE_EVAL=case)
+    assert "HP1 SHAKEDOWN_FAILED" in summary and "AXOLOTL_DROPPED" not in summary and tags(arms) == []

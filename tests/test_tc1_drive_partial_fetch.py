@@ -131,17 +131,20 @@ def test_the_poll_loop_calls_the_partial_fetch_on_a_summary_change():
 
 def test_hp1_bulk_files_stay_on_the_box_and_its_small_outputs_come_back(tmp_path: Path):
     """HP1's base exports (~17 GB each) and canonical adapters (~2.6 GB each), and the shakedown cut, are excluded from every fetch
-    by the driver's own TC1_RSYNC_EXCLUDES, run through the REAL rsync; the evaluator JSONs, select.json and the receipts come back."""
+    by the driver's own TC1_RSYNC_EXCLUDES, run through the REAL rsync; the evaluator JSONs, select.json and the receipts come back,
+    and so do the shakedown's own canonical adapters (~107 MB each, #1767), which the bulk manifest then does not list."""
     import shutil
     rsync = shutil.which("rsync")
     if rsync is None:
         pytest.skip("no rsync on PATH")
     box = tmp_path / "box"
     keep = ["qwen3hp1_e4b_hp1_k00_s3407.json", "summary.txt", "hp1/eval_K.json", "hp1/select.json", "hp1/eval_early.json",
-            "hp1/eval_shake.json"]
+            "hp1/eval_shake.json", "hp1/shake/canonical_qwen3hp1shake_hp1shake_e4b.safetensors",
+            "hp1/shake/canonical_qwen3hp1shake_hp1shake_axolotl.safetensors"]
     drop = ["hp1/base_e4b_qwen3hp1/layer000.safetensors", "hp1/base_e4b_qwen3hp1/index.json",
             "hp1/shake/base_e4b_qwen3hp1shake/global.safetensors", "hp1/canonical_qwen3hp1_hp1_k00_s3407.safetensors",
-            "hp1/shake/canonical_qwen3hp1shake_hp1shake_e4b.safetensors", "hp1/shake-cache/models--local--x/config.json"]
+            "hp1/shake-cache/models--local--x/config.json", "hp1/shake-cache/canonical_stray.safetensors",
+            "hp1/shake/sub/canonical_nested.safetensors"]   # near misses: only hp1/shake/canonical_* itself comes back
     for rel in keep + drop:
         (box / rel).parent.mkdir(parents=True, exist_ok=True)
         (box / rel).write_text("x")
