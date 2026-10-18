@@ -4,7 +4,7 @@
 #   * it stages P146's runner, reducer, box and dry fixture at staged.sha256 (no borrowed pieces);
 #   * the e4b the box installs is the registered pin (E4B_PIN), not the launch tree's HEAD; the DRY box gets that pin's
 #     tree (git archive) as e4bsrc/, since the dry box installs nothing;
-#   * the run id must be one the registration declares: p146-4090-1..4 (bench/p146/PREREG-p146.md). No paid proof: the
+#   * the run id must be one the registration declares: p146-4090-1..8 (bench/p146/PREREG-p146.md; -5..-8 are spares). No paid proof: the
 #     $0 dry run is the shakedown. Any other id is refused;
 #   * P146_DRY=1 is the $0 dry run: run ids p146-dry-<n>, the box reached through P146_BOX_EXEC (a local command that runs
 #     one shell command on the dry box, stdin passed through) with tar for staging and fetching, and P146_HOME naming the
@@ -28,9 +28,9 @@ fi
 # ---- the declared run ids: the reading, its one rerun; the dry run's own
 RUN_ID=$E4B_RENT_RUN_ID
 case "$RUN_ID" in
-  p146-4090-[1-4]) [ "$DRY" != 1 ] || { say "refusing: $RUN_ID is a reading's id"; exit 78; };;
+  p146-4090-[1-8]) [ "$DRY" != 1 ] || { say "refusing: $RUN_ID is a reading's id"; exit 78; };;
   p146-dry-[0-9]|p146-dry-[0-9][0-9]) [ "$DRY" = 1 ] || { say "refusing: $RUN_ID is a dry run's id (P146_DRY=1 only)"; exit 78; };;
-  *) say "refusing: run id $RUN_ID is not declared (p146-4090-1..4; p146-dry-<n> dry)"; exit 78;;
+  *) say "refusing: run id $RUN_ID is not declared (p146-4090-1..8; p146-dry-<n> dry)"; exit 78;;
 esac
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 # P137 Amendment 1: the training rows travel from the controller (tatsu-lab/alpaca's train parquet @dce01c9b as
