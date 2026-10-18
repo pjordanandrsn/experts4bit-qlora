@@ -38,7 +38,7 @@ First rung that applies:
            out of the label. Over the remaining n: SUPPORT if share >= 0.70 at every one; REFUTE if share < 0.50 at
            every one; INCONCLUSIVE otherwise. NO_EXCESS at every n gives H = NO_EXCESS (a reading, not a failure).
     BUILD  BUILD a 2-4-row expert kernel iff S(n) >= need(n) for some n; NO_BUILD otherwise (and always when H is
-           NO_EXCESS: a kernel has nothing beyond the bytes to save).
+           NO_EXCESS: a kernel has nothing beyond the bytes to save). Only an n that carries an excess counts.
 REPORTING (never a rung): census-sum vs unprofiled (P_ms / the unprofiled step, the profiler's inflation); each class's
 increment as a fraction of I_b(n) beside the registered prediction; the unattributed remainder.
 
@@ -139,6 +139,16 @@ def h_label(share):
     return "INCONCLUSIVE"
 
 
+def reading(inc, by, dexp, need):
+    """H and BUILD from the increments: S(n), the n that carry an excess beyond the bytes, share(n) over those, the
+    label, and the n where S(n) >= need(n). A NO_EXCESS n never counts toward BUILD: the rule's own reason is that
+    there is nothing beyond the bytes to save there."""
+    sav = {n: dexp[n] - by[n] for n in NS}
+    excess = [n for n in NS if inc[n] - by[n] > 0]
+    share = {n: sav[n] / (inc[n] - by[n]) for n in excess}
+    return sav, excess, share, h_label(share), [n for n in excess if sav[n] >= need[n]]
+
+
 def judge(d):
     """The verdict for the run directory ``d`` (first rung that applies)."""
     void = []
@@ -193,11 +203,7 @@ def judge(d):
         out["verdict"] = "VOID"
         return out
     inc, need = out["inputs"]["I_b"], out["inputs"]["need"]
-    sav = {n: dexp[n] - by[n] for n in NS}
-    excess = [n for n in NS if inc[n] - by[n] > 0]
-    share = {n: sav[n] / (inc[n] - by[n]) for n in excess}
-    h = h_label(share)
-    build = [] if h == "NO_EXCESS" else [n for n in NS if sav[n] >= need[n]]
+    sav, excess, share, h, build = reading(inc, by, dexp, need)
     out["outcome"] = {"shares": {n: sh[n] for n in NS}, "delta_class": delta, "dExp": dexp, "S": sav, "share": share,
                       "H_by_n": {n: (share[n] if n in share else "NO_EXCESS") for n in NS}, "H": h,
                       "build_at": build, "BUILD": "BUILD" if build else "NO_BUILD"}
@@ -326,6 +332,12 @@ def self_test() -> int:
             terms=_world(0.9, verify=part))
     cases.append(("H_by_n marks the no-excess n", r["outcome"]["H_by_n"][2] == "NO_EXCESS"
                   and set(r["outcome"]["share"]) == {3, 4}, r["outcome"]["H_by_n"]))
+    # a NO_EXCESS n never counts toward BUILD, even when its S(n) clears need(n) (the census put dExp above I_b there)
+    need3 = {2: 2.358, 3: 1.683, 4: 1.558}
+    sav, excess, share, h, build = reading({2: 1.0, 3: 4.5, 4: 4.9}, {2: 1.2, 3: 1.3, 4: 1.8},
+                                           {2: 5.0, 3: 1.8, 4: 2.3}, need3)
+    cases.append(("a NO_EXCESS n never counts toward BUILD", sav[2] >= need3[2] and excess == [3, 4] and build == []
+                  and h == "REFUTE", (sav, excess, build, h)))
     # a card 15 % faster everywhere reads the same verdict: nothing compares it with another card
     fast_a = tuple(x * 0.85 for x in _V1["anchor"])
     fast_v = {n: v * 0.85 for n, v in _V1["verify"].items()}

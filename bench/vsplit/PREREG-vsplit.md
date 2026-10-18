@@ -88,7 +88,8 @@ VOID is for record and instrument failures only. An increment that is all bytes 
     otherwise.
   - NO_EXCESS at every n gives **H = NO_EXCESS**: a reading that closes the lane (a 2–4-row kernel has nothing beyond
     the bytes to save), not a failure and not a strike.
-- **BUILD** iff S(n) ≥ need(n) for some n; otherwise NO_BUILD. It is always NO_BUILD when H is NO_EXCESS.
+- **BUILD** iff S(n) ≥ need(n) for some n that carries an excess; otherwise NO_BUILD. A NO_EXCESS n never counts,
+  even if the census puts its dExp above I_b, so BUILD is always NO_BUILD when H is NO_EXCESS.
 
 Real records do not trip NO_EXCESS: sd2-5090-3's increment against the bytes term built from P123's real B = 1
 census share carries an excess at every n (`tests/test_vsplit.py`).
