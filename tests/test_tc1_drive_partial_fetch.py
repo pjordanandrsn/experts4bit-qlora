@@ -13,6 +13,8 @@ import re
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).resolve().parents[1]
 DRIVE = (REPO / "bench" / "tc1" / "tc1_drive.sh").read_text()
 
@@ -125,3 +127,29 @@ def test_the_poll_loop_calls_the_partial_fetch_on_a_summary_change():
     loop = _cut(r'^  if \[ "\$line" != "\$LAST" \]; then\n.*?^  fi\n')
     assert 'tc1_partial_fetch "$RUN_DIR/tc1.partial"' in loop and "PARTIAL_AT=$(date -u" in loop
     assert "exit" not in loop, "a failed partial fetch must never end the poll"
+
+
+def test_hp1_bulk_files_stay_on_the_box_and_its_small_outputs_come_back(tmp_path: Path):
+    """HP1's base exports (~17 GB each) and canonical adapters (~2.6 GB each), and the shakedown cut, are excluded from every fetch
+    by the driver's own TC1_RSYNC_EXCLUDES, run through the REAL rsync; the evaluator JSONs, select.json and the receipts come back."""
+    import shutil
+    rsync = shutil.which("rsync")
+    if rsync is None:
+        pytest.skip("no rsync on PATH")
+    box = tmp_path / "box"
+    keep = ["qwen3hp1_e4b_hp1_k00_s3407.json", "summary.txt", "hp1/eval_K.json", "hp1/select.json", "hp1/eval_early.json",
+            "hp1/eval_shake.json"]
+    drop = ["hp1/base_e4b_qwen3hp1/layer000.safetensors", "hp1/base_e4b_qwen3hp1/index.json",
+            "hp1/shake/base_e4b_qwen3hp1shake/global.safetensors", "hp1/canonical_qwen3hp1_hp1_k00_s3407.safetensors",
+            "hp1/shake/canonical_qwen3hp1shake_hp1shake_e4b.safetensors", "hp1/shake-cache/models--local--x/config.json"]
+    for rel in keep + drop:
+        (box / rel).parent.mkdir(parents=True, exist_ok=True)
+        (box / rel).write_text("x")
+    out = tmp_path / "out"
+    script = "set -uo pipefail\n" + EXCLUDES + f'rsync -a "${{TC1_RSYNC_EXCLUDES[@]}}" "{box}/" "{out}/"\n'
+    r = subprocess.run([shutil.which("bash") or "bash", "-c", script], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr
+    for rel in keep:
+        assert (out / rel).exists(), f"{rel} must come back"
+    for rel in drop:
+        assert not (out / rel).exists(), f"{rel} must stay on the box"
