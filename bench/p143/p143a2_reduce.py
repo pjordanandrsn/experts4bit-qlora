@@ -18,14 +18,18 @@ The rule, first rung that applies:
   KERNEL_FAIL    (a) at any B in {1, 2, 4} and context in {256, 640, 1024, 2048, 4096}: the cap-16 output's RMS error
                  against the fp64 reference > 1.05 x the library plan's; or (b) at any B in {2, 4} and context in {640, 1024,
                  2048}: the cap-16 time minus the plan's > the larger of the two arms' |pass 1 - pass 2|.
-  FUNCTION_FAIL  a self-pair (S0b/S0a, S1b/S1a) decodes different tokens on any row, workload or length; one arm's timed reps
-                 digest differently; or W16 decodes different tokens in S1 than in S0 (the cap cannot bind at B = 16, which
-                 plans 5 splits: W16 is the no-change check).
+  FUNCTION_FAIL  a self-pair (S0b/S0a, S1b/S1a) decodes different tokens on any row, workload or length; one arm's timed
+                 reps digest differently.
   QUALITY_FAIL   the SANE gate fails: |mean NLL difference ON - R| > 0.02 nats or argmax agreement < 0.95 over 12 windows.
-  FLIP           g1 = min(S1a/S0a, S1b/S0b) at W1 >= 1.03: qwen3_moe enters ATTN_SPLIT_CAP_DEFAULT_FAMILIES at 16.
-  NO_FLIP        otherwise: the cap stays opt-in, with the numbers.
+  FLIP           g1 = min(S1a/S0a, S1b/S0b) at W1 >= 1.03 AND g16 (the same at W16) >= 0.99, W16's no-regression line
+                 (P141's form): qwen3_moe enters ATTN_SPLIT_CAP_DEFAULT_FAMILIES at 16.
+  NO_FLIP        otherwise (each failed bar named): the cap stays opt-in, with the numbers.
 
-Reported, not ruled: g16, the self-pairs, the SANE KL, every kernel cell, the W1 token identity of S1 against S0.
+Reported, not ruled: the self-pairs, the SANE KL, every kernel cell, the W1 token identity of S1 against S0, and W16's
+(rows identical out of 16 and each row's first divergent step, per pair and length). W16 identity is NOT ruled (adopted
+before data, serve-throughput's finding): the prefill ramp decodes W16's first steps at 1..4 rows, buckets 1, 2 and 4,
+where the cap binds, so a last-bit regrouping there can move a row's tokens on correct behaviour. Small-B quality is
+SANE's job at T == 1.
 
     python p143a2_reduce.py --dir RUN_DIR --out verdict_p143a2.json --e4b-sha SHA
     python p143a2_reduce.py --self-test
@@ -51,7 +55,7 @@ CAPTURED_PLANS = {1: (32, 16), 2: (32, 16), 4: (23, 16), 8: (11, 11), 16: (5, 5)
 SANE_WINDOWS, SANE_BIAS, SANE_ARGMAX = 12, 0.02, 0.95       # Phase C/D's gate, unchanged
 CONTRACT_B, CONTRACT_CTX, CONTRACT_RATIO = (1, 2, 4), (256, 640, 1024, 2048, 4096), 1.05
 TIMING_B, TIMING_CTX = (2, 4), (640, 1024, 2048)
-FLIP_G1 = 1.03
+FLIP_G1, NOREG_G16 = 1.03, 0.99
 BW = ("bw_tree", "bw_prmt32", "bw_splitk")
 SMS = 170                                                   # the RTX 5090: the plans above are its
 SERVED_TOKENS, SERVED_BLOCKS = 4096, 256                    # the server's KV per sequence (16-token blocks)
@@ -65,6 +69,15 @@ def _rate(r, w):
 
 def _tok(r, w, n):
     return r["workloads"][w]["tokens"][str(n)]
+
+
+def divergence(a: list, b: list) -> dict:
+    """Rows identical out of the rows, and each row's first divergent step (None when identical): reported, never ruled."""
+    first = []
+    for x, y in zip(a, b):
+        i = next((k for k, (p, q) in enumerate(zip(x, y)) if p != q), None)
+        first.append(i if i is not None or len(x) == len(y) else min(len(x), len(y)))
+    return {"rows_identical": sum(f is None for f in first), "rows": len(first), "first_divergent_step": first}
 
 
 def gemv_faults(name, d) -> list:
@@ -179,7 +192,7 @@ def kernel_faults(k) -> tuple:
 def reduce(kernel: dict | None, arms: dict, off: dict | None, on: dict | None, e4b_sha: str) -> dict:
     out = {"lane": "P143 Amendment 2", "verdict": None, "reasons": [],
            "bars": {"contract_ratio": CONTRACT_RATIO, "sane_bias": SANE_BIAS, "sane_argmax": SANE_ARGMAX,
-                    "sane_windows": SANE_WINDOWS, "flip_g1": FLIP_G1}}
+                    "sane_windows": SANE_WINDOWS, "flip_g1": FLIP_G1, "noreg_g16": NOREG_G16}}
     missing = [t for t in TAGS if t not in arms or arms[t].get("status") != "ok"]
     missing += [n for n, r in (("sane_off", off), ("sane_on", on), ("kernel", kernel)) if not r or r.get("status") != "ok"]
     if missing:
@@ -228,16 +241,15 @@ def reduce(kernel: dict | None, arms: dict, off: dict | None, on: dict | None, e
                     "self_pairs": {f"{a}/{b} {w}": round(rates[a][w] / rates[b][w], 4)
                                    for a, b in (("S0b", "S0a"), ("S1b", "S1a")) for w in WORKLOADS},
                     "w1_s1_vs_s0_identical": {str(n): _tok(S1a, "W1", n) == _tok(S0a, "W1", n)
-                                              for n in (S0a["short"], S0a["long"])}}
+                                              for n in (S0a["short"], S0a["long"])},
+                    "w16_s1_vs_s0": {f"{a}/{b} {n}": divergence(_tok(arms[a], "W16", n), _tok(arms[b], "W16", n))
+                                     for a, b in (("S1a", "S0a"), ("S1b", "S0b")) for n in (S0a["short"], S0a["long"])}}
     fn = []
     for a, b in (("S0b", "S0a"), ("S1b", "S1a")):
         for w in WORKLOADS:
             for n in (S0a["short"], S0a["long"]):
                 if _tok(arms[a], w, n) != _tok(arms[b], w, n):
                     fn.append(f"{a} != {b} on {w} at {n} tokens")
-    for n in (S0a["short"], S0a["long"]):
-        if _tok(S1a, "W16", n) != _tok(S0a, "W16", n):
-            fn.append(f"W16 decodes differently with the cap at {n} tokens (it plans 5 splits: nothing should change)")
     for t in TAGS:
         for w in WORKLOADS:
             for n, ds in arms[t]["workloads"][w]["rep_digests"].items():
@@ -249,18 +261,20 @@ def reduce(kernel: dict | None, arms: dict, off: dict | None, on: dict | None, e
     sane = {"bias": sum(d) / len(d), "argmax_agree": sum(x["argmax_agree"] for x in onw) / len(onw),
             "mean_kl": sum(x.get("kl", 0.0) for x in onw) / len(onw), "n": len(onw)}
     out["sane"] = {k: (round(v, 6) if isinstance(v, float) else v) for k, v in sane.items()}
-    g1 = out["speed"]["g1"]
+    g1, g16 = out["speed"]["g1"], out["speed"]["g16"]
     if kfail:
         out.update(verdict="KERNEL_FAIL", reasons=kfail)
     elif fn:
         out.update(verdict="FUNCTION_FAIL", reasons=fn)
     elif abs(sane["bias"]) > SANE_BIAS or sane["argmax_agree"] < SANE_ARGMAX:
         out.update(verdict="QUALITY_FAIL", reasons=[f"SANE {out['sane']} (gate |bias| <= {SANE_BIAS}, argmax >= {SANE_ARGMAX})"])
-    elif g1 >= FLIP_G1:
-        out.update(verdict="FLIP", reasons=[f"g1 {g1} >= {FLIP_G1}; SANE bias {sane['bias']:+.5f}, argmax "
-                                            f"{sane['argmax_agree']:.4f}; g16 {out['speed']['g16']} (reported)"])
+    elif g1 >= FLIP_G1 and g16 >= NOREG_G16:
+        out.update(verdict="FLIP", reasons=[f"g1 {g1} >= {FLIP_G1} and g16 {g16} >= {NOREG_G16}; SANE bias "
+                                            f"{sane['bias']:+.5f}, argmax {sane['argmax_agree']:.4f}"])
     else:
-        out.update(verdict="NO_FLIP", reasons=[f"g1 {g1} < {FLIP_G1}; the cap stays opt-in"])
+        why = [f"g1 {g1} < {FLIP_G1}"] if g1 < FLIP_G1 else []
+        why += [f"g16 {g16} < {NOREG_G16} (W16's no-regression line)"] if g16 < NOREG_G16 else []
+        out.update(verdict="NO_FLIP", reasons=why + ["the cap stays opt-in"])
     return out
 
 
@@ -332,6 +346,7 @@ def _fake_kernel(*, err_cap=1.0e-3, err_plan=1.0e-3, plan_ms=0.40, cap_ms=0.36, 
 def self_test() -> int:
     toks = [[i, i + 1] for i in range(16)]
     other = [[i, i + 2] for i in range(16)]
+    ramp = [[i, i + 7] if i < 4 else [i, i + 1] for i in range(16)]       # rows 0-3 move at step 1 (the 1..4-row ramp)
 
     def arms(r1=(120.0, 130.0, 129.5, 121.0), **over):
         base = {"S0a": (800.0, r1[0]), "S1a": (800.5, r1[1]), "S1b": (800.2, r1[2]), "S0b": (799.0, r1[3])}
@@ -355,7 +370,18 @@ def self_test() -> int:
         ("a B 2/4 timing loss beyond noise", v(arms(), k=_fake_kernel(cap_ms=0.42)) == "KERNEL_FAIL"),
         ("a loss inside noise is not a loss", v(arms(), k=_fake_kernel(cap_ms=0.4005, noise=0.001)) == "FLIP"),
         ("a contract cell missing is VOID", v(arms(), k=_fake_kernel(drop="4/4096")) == "VOID"),
-        ("W16 decodes differently with the cap", v(arms(S1a={"toks16": other}, S1b={"toks16": other})) == "FUNCTION_FAIL"),
+        ("a ramp-step divergence at W16 stays REPORTING",
+         (lambda r: r["verdict"] == "FLIP" and r["speed"]["w16_s1_vs_s0"]["S1a/S0a 32"] ==
+          {"rows_identical": 12, "rows": 16, "first_divergent_step": [1] * 4 + [None] * 12})(
+             reduce(ker, arms(S1a={"toks16": ramp}, S1b={"toks16": ramp}), off, on, E))),
+        ("every W16 row moved is still REPORTING", v(arms(S1a={"toks16": other}, S1b={"toks16": other})) == "FLIP"),
+        ("g16 0.98 does not flip (W16's no-regression line)",
+         (lambda r: r["verdict"] == "NO_FLIP" and any("g16" in x for x in r["reasons"]))(
+             reduce(ker, arms(S1a={"r16": 784.0}), off, on, E))),
+        ("g16 exactly 0.99 flips", v(arms(S1a={"r16": 792.0}, S1b={"r16": 0.99 * 799.0})) == "FLIP"),
+        ("g1 and g16 both short: both named",
+         (lambda r: r["verdict"] == "NO_FLIP" and len(r["reasons"]) == 3)(
+             reduce(ker, arms(r1=(120.0, 122.4, 122.5, 120.0), S1a={"r16": 784.0}), off, on, E))),
         ("W1 may differ (reported)", v(arms(S1a={"toks": other, "toks16": toks}, S1b={"toks": other, "toks16": toks})) == "FLIP"),
         ("a self-pair differs", v(arms(S1b={"toks": other})) == "FUNCTION_FAIL"),
         ("timed reps differ", v(arms(S0a={"rep_ok": False})) == "FUNCTION_FAIL"),

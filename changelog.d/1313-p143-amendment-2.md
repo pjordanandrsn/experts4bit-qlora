@@ -5,8 +5,8 @@ an opt-in knob, `E4B_ATTN_SPLIT_CAP`, over grouped-nf4-gemm 0.47.1's `split_cap`
 decides whether Qwen3-MoE takes it by default:
 - a kernel tolerance contract against an fp64 reference (the cap's error at most 1.05x the plan's);
 - a kernel timing check at buckets 2 and 4;
-- a served ABBA speed read with P115 Phase D's SANE gate at T == 1. The flip bar is g1 >= 1.03, and W16 is a
-  no-change check.
+- a served ABBA speed read with P115 Phase D's SANE gate at T == 1. The flip needs g1 >= 1.03 and, at W16, no
+  regression (g16 >= 0.99); W16's token identity is reported, not ruled (its prefill ramp runs the capped buckets).
 
 Phase D's quality pass builds its KV at 656 tokens, where the library plans 11 splits and a cap of 16 cannot bind. Here
 that KV is built at the server's 4096 tokens. The kit is `bench/p143/p143a2_*` and `tests/test_p143a2.py`. Nothing

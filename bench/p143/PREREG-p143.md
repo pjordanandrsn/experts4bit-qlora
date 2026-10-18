@@ -214,16 +214,23 @@ The first rung that applies decides.
 2. **KERNEL_FAIL:** (a) or (b) fails.
 3. **FUNCTION_FAIL:**
    - a self-pair (S0b/S0a, S1b/S1a) decodes different tokens on any row, workload or length;
-   - one arm's timed reps digest differently;
-   - **W16 decodes different tokens in S1 than in S0.** At B = 16 the plan is 5 splits and the cap cannot bind, so W16 is
-     the no-change check.
+   - one arm's timed reps digest differently.
 4. **QUALITY_FAIL:** SANE fails, i.e. |mean NLL(ON) − NLL(R)| > 0.02 nats or argmax agreement < 0.95.
-5. **FLIP:** g1 = min(S1a/S0a, S1b/S0b) at W1 ≥ **1.03**. A separate PR then adds `qwen3_moe: 16` to
-   `ATTN_SPLIT_CAP_DEFAULT_FAMILIES`, citing this read.
-6. **NO_FLIP:** otherwise. The cap stays opt-in, with the numbers.
+5. **FLIP:** g1 = min(S1a/S0a, S1b/S0b) at W1 ≥ **1.03**, **and** g16 (the same at W16) ≥ **0.99**, W16's
+   no-regression line in P141's form. A separate PR then adds `qwen3_moe: 16` to `ATTN_SPLIT_CAP_DEFAULT_FAMILIES`,
+   citing this read.
+6. **NO_FLIP:** otherwise, with each failed bar named. The cap stays opt-in, with the numbers.
 
-**Reported, never ruling:** g16, the self-pairs, the SANE mean KL, every kernel cell (errors, ratios, bitwise
-agreement, timings), B = 1's timing, and whether W1 decodes the same tokens in S1 as in S0.
+**Reported, never ruling:** the self-pairs, the SANE mean KL, every kernel cell (errors, ratios, bitwise agreement,
+timings), B = 1's timing, whether W1 decodes the same tokens in S1 as in S0, and W16's token identity: rows identical
+out of 16 and each row's first divergent step, per pair and length.
+
+**W16 is a speed check, not an identity check (adopted before data, 2026-10-18 22:32Z, on serve-throughput's
+finding).** `p109_box.run_pass` adds all 16 rows at once, and the scheduler takes one 512-token prompt of prefill per
+step while every row already past prefill decodes. So W16's first decode steps run 1, 2, 3 and 4 rows, on buckets 1, 2
+and 4, where the cap binds (32/32/23 → 16). A last-bit regrouping of the log-sum-exp there can move one argmax, and that
+row then diverges for the rest of its tokens: an identity rule would FAIL on correct behaviour. Small-B quality is
+SANE's question at T == 1, and SANE reads the capped B = 1 path.
 
 **Predictions (graded, never ruling):**
 - every contract ratio in [0.98, 1.02];

@@ -175,8 +175,11 @@ MUTANTS = [
     # g1 from the better pair, not the worse
     ('out["speed"] = {"decode_tok_s": rates, "g1": round(min(pairs["W1"]), 4)',
      'out["speed"] = {"decode_tok_s": rates, "g1": round(max(pairs["W1"]), 4)'),
-    # W16 (the no-change check) never compared across arms
-    ('        if _tok(S1a, "W16", n) != _tok(S0a, "W16", n):', '        if False:'),
+    # W16's no-regression line dropped from the flip
+    ("    elif g1 >= FLIP_G1 and g16 >= NOREG_G16:", "    elif g1 >= FLIP_G1:"),
+    # the old rule: S1 against S0 token identity STRICT (the W16 prefill ramp runs buckets 1-4, where the cap binds)
+    ('    for a, b in (("S0b", "S0a"), ("S1b", "S1a")):\n        for w in WORKLOADS:',
+     '    for a, b in (("S0b", "S0a"), ("S1b", "S1a"), ("S1a", "S0a")):\n        for w in WORKLOADS:'),
     # the SANE pass's KV capacity never checked (P115's 656 tokens, where the cap cannot bind, would read)
     ('        if not served or (sk.get("passes") or 0) < SANE_WINDOWS',
      '        if (sk.get("passes") or 0) < SANE_WINDOWS'),
