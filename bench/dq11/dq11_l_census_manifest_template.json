@@ -1,5 +1,4 @@
 {
-  "status": "ENVELOPE_TEMPLATE_NO_PAID_GO",
   "run_id": "__DQ11_CENSUS_RUN_ID__",
   "work_id": "experts4bit-qlora#1083",
   "role": "CTO",
@@ -57,13 +56,16 @@
     }
   ],
   "command_cwd": "e4b",
-  "l_census": {
-    "science_head": "13b55990433f357d63232f75926ce19f5bda5b42",
-    "science_manifest_sha256": "4691e7329f12ad2f4b7518b75c4d3e351207fc4e5220aee514fdd42c429fef01",
-    "raw_trace_max_bytes": 536870912,
-    "packet_max_bytes": 2147483648,
-    "upload_gb": 3,
-    "max_upload_usd_per_gb": 0.05,
-    "all_in_cap_usd": 1.1
+  "lane_record": {
+    "status": "ENVELOPE_TEMPLATE_NO_PAID_GO",
+    "l_census": {
+      "science_head": "13b55990433f357d63232f75926ce19f5bda5b42",
+      "science_manifest_sha256": "4691e7329f12ad2f4b7518b75c4d3e351207fc4e5220aee514fdd42c429fef01",
+      "raw_trace_max_bytes": 536870912,
+      "packet_max_bytes": 2147483648,
+      "upload_gb": 3,
+      "max_upload_usd_per_gb": 0.05,
+      "all_in_cap_usd": 1.1
+    }
   }
 }

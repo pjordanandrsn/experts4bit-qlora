@@ -92,7 +92,7 @@ The committed [manifest template](dq11_l_census_manifest_template.json) sets
 `download_gb=27`, `max_download_usd_per_gb=0.011`, `storage=320`, the
 previously used devel image `pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel`,
 and a command that binds the validated canonical asset path and exact driver to
-`bench/dq11/dq11_l_census_drive.sh`. Its `l_census` object
+`bench/dq11/dq11_l_census_drive.sh`. Its `lane_record.l_census` object
 binds the 13b science head and manifest hash, per-file SHA-256 for the three
 merged instrument files, three operational files and the shared transport
 controller, `raw_trace_max_bytes`
@@ -198,3 +198,15 @@ teardown and empty-list proof. A refusal at any stage licenses no BUILD choice.
 The only decision is the preregistered `C_j` rule; a passing MLP ceiling is
 still only a BUILD proposal for separate review. No public speed, default,
 capacity or shipping claim follows this census.
+
+## Manifest layout under the strict launcher (2026-10-18)
+
+The launcher refuses any top-level manifest key it does not read (adertha-agents#243). So the census's own record sits
+in `lane_record`, which the launcher copies verbatim into `receipt.configuration.lane_record`:
+- the template's `status`;
+- the `l_census` closure;
+- once bound, the `authorization_basis`.
+
+Top level carries only launcher terms: the template's fields plus the bound `heads`, `command`, `vast_pin_machine`,
+`vast_pin_offers` and `vast_required_driver`. This moves fields and changes no value, cap, gate or rule.
+
