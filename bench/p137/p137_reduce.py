@@ -10,9 +10,9 @@ verdict. The rule, first rung that applies:
      that did not start from the post-load adapter snapshot, or arms whose snapshots differ; an arm whose allocated memory
      at its start is more than MEM_START_TOL_MIB from the post-load baseline; step 0 not cold (A0a and A0b exactly
      M x (2n - 1) + 1, L1b exactly 2n, L1a above L1b: the drift guard's stock forwards run once, on L1a).
-     Amendment 3 replaces the L1a rung: the untimed warm-up runs one layer-major step before the snapshot, so the guard
-     runs there (its layer-major stagings above 2n, the same warm-up record in every arm) and L1a and L1b are both
-     exactly 2n at step 0; every arm records exactly TIMED_REG timed steps.
+     Amendment 3 replaces the L1a rung: the untimed warm-up runs one layer-major step after the snapshot (the adapters
+     restored from it afterwards), so the guard runs there (its layer-major stagings above 2n, the same warm-up record
+     in every arm) and L1a and L1b are both exactly 2n at step 0; every arm records exactly TIMED_REG timed steps.
   2. VOID (Amendment 2): a self-pair outside [SELF_LO, SELF_HI] -- in one process it is the carry-over check.
   3. LICENSED iff S = min(A0a/L1a, A0b/L1b) >= S_MIN; otherwise NO_GAIN.
 REPORTING (never changes the verdict): held-out |L1 - A0| <= HELD_TOL; S inside the registered band [BAND_LO, BAND_HI].

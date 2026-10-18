@@ -1,0 +1,3 @@
+### Added
+
+- P137 LICENSED: under expert offload with `enable_fast_train(dgrad=True)`, `experts4bit_qlora.engines.layer_major:layer_major_step` is 2.365x faster per step than the stock accumulation loop on Qwen3-30B-A3B on one RTX 4090 (`e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18`; [results](bench/p137/RESULTS-p137.md), receipt under `bench/p137/receipts/p137-4090-7/`). The predicted band [1.25, 2.0] was missed high; the held-out term (0.015 against 0.01) sits inside the 0.031 same-loop spread at 34 steps. `docs/capabilities.json` lists `layer_major_step` as an entry point of `run-moe-larger-than-vram`. The licence is that call, not the CLI trainer's `LAYER_MAJOR=1`; no default changes.
