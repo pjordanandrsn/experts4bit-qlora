@@ -147,6 +147,24 @@ def test_the_guard_and_the_launch_terms_are_the_registered_ones():
     assert f"**${7200 / 3600 * 0.85 + 100 * 0.011:.2f}**" in pre
 
 
+def test_amendment_1s_card_terms_are_the_runners_floors():
+    """Amendment 1: the card terms name the runner's own RAM and disk floors (disk ordered at the floor + 20), the ACK's
+    market terms and the 6-of-6 stability screen, and the receipts clean-runs bar is no longer a term."""
+    run = (LANE / "vsplit_run.sh").read_text(encoding="utf-8")
+    knobs = re.search(r"^GPU_CLASS=\$\{VSPLIT_GPU_CLASS:-(\d+)\}; MIN_DISK_GB=\$\{VSPLIT_MIN_DISK_GB:-(\d+)\}; "
+                      r"MIN_RAM_GB=\$\{VSPLIT_MIN_RAM_GB:-(\d+)\}$", run, re.M)
+    gpu, disk, ram = (int(x) for x in knobs.groups())
+    pre = (LANE / "PREREG-vsplit.md").read_text(encoding="utf-8")
+    a1 = pre[pre.index("## Amendment 1"):]
+    terms = a1[a1.index("**The card terms**"):a1.index("The pin is still")]
+    for want in (f"RTX {gpu}", "verified-secure, with direct SSH", "reliability2 ≥ 0.98", "inet_down ≥ 1000 Mbps",
+                 f"≥ {disk + 20} GB (the runner's {disk} GB floor + 20)", f"≥ {ram} GiB (the runner's floor)",
+                 "≤ $0.85/h", "≤ $0.011/GB", "not ranking-ineligible", "**6 of 6**"):
+        assert want in terms, want
+    assert "clean run" not in terms and "Amendment 1 replaces this bar" in pre
+    assert "No data has been seen." in a1
+
+
 def test_the_outcome_alone_flips_the_verdict():
     """The maintainer's condition 1: with every input held fixed (the timing passes, the n = 1 census, tau, G_BAR, rho),
     the n >= 2 shares alone take the reading from SUPPORT/BUILD to REFUTE/NO_BUILD."""

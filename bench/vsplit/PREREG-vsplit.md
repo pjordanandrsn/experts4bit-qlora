@@ -150,7 +150,8 @@ kills the lane.** It ships no default. Any default needs a second card's read.
 
 The maintainer's condition 5:
 - **Card:** any RTX 5090 that meets the bar (receipts ranking, clean runs ≥ 5, reliability ≥ 0.5), at or below the
-  class rate, pinned by machine and offer set under the market rules.
+  class rate, pinned by machine and offer set under the market rules. **Amendment 1 replaces this bar** with the card
+  terms below.
 - **Launcher:** the launch tooling at or after its provider-side machine-pin filter, with `--validate` at its HEAD
   on the exact manifest.
 - **Host bar:** inet_down ≥ 1000 Mbps (the fetch is about 62 GB: Qwen3-30B-A3B plus the head).
@@ -184,3 +185,39 @@ The maintainer's condition 5:
   registration has a bitwise gate against the current K25 path and a re-read of SD2's verify cost.
 - **NO_BUILD:** the B = 1 multi-token lane closes for Qwen3-30B-A3B on this stack, with the measured split as its
   record.
+
+## Amendment 1 (2026-10-18, before any data; the card terms)
+
+**No data has been seen.** No `vsplit-5090-N` id has been used, and nothing has been rented or measured under this
+registration. Nothing is measured until a run.
+
+**Why.** The bar on the Card line (≥ 5 clean runs in the receipts ranking, reliability lower bound ≥ 0.5) came over
+from P132, whose rule compared absolute milliseconds with one card. This lane compares nothing across cards. Both
+timing passes, the census and need(n) come from the box that runs it, and the reducer's self-test shows that a card
+15 % faster everywhere reads the same verdict. The receipts bar named 13 machines, and the market did not offer them:
+- in machine-by-machine reads on 2026-10-18 (06:23–06:28Z), 12 listed no RTX 5090 offer at all;
+- the 13th failed the price, reliability2 and bandwidth terms;
+- P132's all-host polls on 2026-10-16 found no bar machine at ≤ $0.85/h in 22 reads.
+
+These are reads of the offer market, not of the subject. The risk the bar guarded against remains: an instance lost
+mid-run leaves records missing, which VOIDs, and VOID is a strike. The terms below screen it.
+
+**The card terms** (they replace the Card line's bar). One RTX 5090 (sm_120) on Vast that is:
+- verified-secure, with direct SSH;
+- reliability2 ≥ 0.98;
+- inet_down ≥ 1000 Mbps;
+- ordered with a container disk ≥ 170 GB (the runner's 150 GB floor + 20);
+- host RAM ≥ 60 GiB (the runner's floor);
+- ≤ $0.85/h for the GPU plus the ordered storage, and ≤ $0.011/GB download;
+- **not ranking-ineligible:** the machine's most recent host outcome in the receipts store is not a failure
+  (pre-flight failure, host refusal or instance lost). A machine with no host outcome in the receipts qualifies;
+- **stable:** within the 2 minutes before its pin is posted, the offer reads present in **6 of 6** machine-filtered
+  reads (the launcher's search filter with `machine_id` set). One absent read (a ghost or a flap) disqualifies the
+  offer for that pin attempt. On 2026-10-18 a 5090 offer stood in the broad search while reading absent 6 of 6 by
+  machine, and was refused at create.
+
+The pin is still by machine and offer set under the market rules, with no substitute.
+
+**Unchanged:** the subject, the instrument, the rule, the predictions, the guard, the costs ($2.80 worst per run,
+$5.60 for the lane) and the stop rule. **Re-pinned:** nothing; no staged byte moves. A new scope ACK follows the
+merge. Until then, a host that meets the original bar may still run under the current ACK.
