@@ -141,4 +141,4 @@ def test_the_runner_and_the_driver_accept_the_same_registered_ids():
     named = set(RUN_ID.findall((HERE / "PREREG-p136.md").read_text()))
     want = {f"p136-{f}-5090-{n}" for f in ("gemma4", "mixtral", "gptoss") for n in (1, 2)} | {"p136-a2000-dry-1"}
     assert run == drive == want, (sorted(run ^ want), sorted(drive ^ want))
-    assert want <= named, sorted(want - named)
+    assert named == want, (sorted(named - want), sorted(want - named))
