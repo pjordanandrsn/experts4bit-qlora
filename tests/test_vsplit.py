@@ -1,6 +1,7 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
-"""The verify split (#1313; bench/vsplit/PREREG-vsplit.md): the staged pins, the runner's shape, the reducer's rule on
-real records first, the anti-circularity condition, the registered predictions, and the driver's dry run."""
+"""Lane P138, the verify split (#1313; bench/vsplit/PREREG-vsplit.md): the staged pins, the runner's shape, the
+reducer's rule on real records first, the anti-circularity condition, the registered predictions, and the driver's dry
+run."""
 import hashlib
 import importlib.util
 import json
