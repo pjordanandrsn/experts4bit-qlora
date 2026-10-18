@@ -208,7 +208,7 @@ def test_the_subject_is_the_default_server_and_only_the_switch_differs():
 
 
 def test_every_time_left_check_fits_its_own_guard():
-    assert "guard 0.75 h" in PREREG and "guard 1.25 h" in PREREG
+    assert "guard 0.75 h" in PREREG and "guard goes from 1.25 h to **2.0 h**" in PREREG   # Amendment 2: the reading
     keys = {"FETCH", "BAKE", "FIT", "ARM", "QOFF", "QON"}
     prove = dict(re.findall(r"NEED_(FETCH|BAKE|FIT|ARM|QOFF|QON)=(\d+)",
                             RUN[RUN.index('elif [ "$PROVE" = 1 ]; then'):RUN.index("else\n")]))
@@ -217,7 +217,7 @@ def test_every_time_left_check_fits_its_own_guard():
     for need in prove.values():
         assert int(need) + 600 <= 0.75 * 3600 - 900, prove
     for need in reading.values():
-        assert int(need) + 600 <= 1.25 * 3600 - 900, reading
+        assert int(need) + 600 <= 2.0 * 3600 - 900, reading
     assert re.findall(r"can_run (\S+)", RUN) == ["$NEED_FETCH", "$NEED_BAKE", "$NEED_FIT", "$NEED_ARM", "$NEED"]
 
 

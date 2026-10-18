@@ -27,6 +27,10 @@ i = 0..n-1) as its fp32 norm, per forward-backward of the step's own pass (``DxP
 ``q235_tokens.py --first``), ``heldout`` records the loss on those rows before the update, after step 0 and after step 1, each one
 no-gradient forward at shape A, with ``heldout_finite`` STRICT; the step's own rows are read the same way at the same points
 (``heldout.train``, reported only). Rule 10, the verdict's, is one-sided: no post-update held-out read above ``before x 1.10``.
+
+Amendment 9 (reported only): each step also records ``h2d_staging``, every expert-staging copy's CUDA-event time from the offload's own
+per-copy events (``E4B_OFFLOAD_STATS=1``), its bytes-weighted rate and spread, and a per-layer view derived from the registered
+schedule (``staging_record``).
 """
 from __future__ import annotations
 
@@ -165,6 +169,49 @@ def host_copy(t):
     adapters (``g0``, ``g1``, ``before``, ``grads``) here rather than on the device, so the step's device peak measures the training
     step alone. The tensor leaves the device at its own dtype and is widened on the host, so no fp32 temporary lands on the device."""
     return t.detach().to("cpu", copy=True).float()
+
+
+def staging_record(copies, n_layers, passes):
+    """The step's expert-staging copies, as the offload recorded them under ``E4B_OFFLOAD_STATS=1`` (Amendment 9; REPORTED only, no
+    rule reads it). ``copies`` is the offload's own list of ``(start, end, nbytes, ncopies, policy)``, one entry per staging call,
+    its CUDA events recorded on the stream that carries the copy; the caller has synchronized, so every event has completed.
+
+    ``ms`` is each call's event time in issue order; ``gb_s`` the bytes-weighted rate over all of them, beside the per-call spread.
+    ``by_layer`` attributes calls to decoder layers by the registered schedule: per forward-backward pass, layers 1..L-1 stage
+    forward (layer 0 is still resident from the previous pass's backward) and L-1..0 stage for the recompute, 2L - 1 calls. It is
+    DERIVED from the issue order, not observed, and is left out (``by_layer_why``) when the count does not equal ``passes`` x
+    (2L - 1)."""
+    import statistics
+    if not copies:
+        return {"n": 0}
+    ms = [float(s.elapsed_time(e)) for s, e, *_ in copies]
+    nb = [int(c[2]) for c in copies]
+    rates = sorted(b / (m / 1e3) / 1e9 for b, m in zip(nb, ms) if m > 0)
+    rec = {"n": len(ms), "ms": [round(m, 4) for m in ms], "nbytes": sorted(set(nb)), "policies": sorted({str(c[4]) for c in copies}),
+           "total_ms": round(sum(ms), 3), "gb_s": round(sum(nb) / (sum(ms) / 1e3) / 1e9, 3) if sum(ms) > 0 else None,
+           "gb_s_min": round(rates[0], 3) if rates else None, "gb_s_median": round(statistics.median(rates), 3) if rates else None,
+           "gb_s_max": round(rates[-1], 3) if rates else None}
+    per_pass = 2 * n_layers - 1
+    if n_layers < 1 or len(ms) != passes * per_pass:
+        rec["by_layer_why"] = f"{len(ms)} calls, not {passes} pass(es) x {per_pass}: the schedule is not the registered one"
+        return rec
+    order = list(range(1, n_layers)) + list(range(n_layers - 1, -1, -1))
+    acc = {}
+    for k, (b, m) in enumerate(zip(nb, ms)):
+        acc.setdefault(order[k % per_pass], []).append((b, m))
+    rec["by_layer"] = {str(i): {"calls": len(v), "ms_mean": round(sum(m for _, m in v) / len(v), 4),
+                                "gb_s": round(sum(b for b, _ in v) / (sum(m for _, m in v) / 1e3) / 1e9, 3) if sum(m for _, m in v) > 0
+                                else None}
+                       for i, v in sorted(acc.items())}
+    return rec
+
+
+def staging_or_error(copies, n_layers, passes):
+    """``staging_record``, or its failure as ``{"error": ...}``: Amendment 9 is reported only and never fails the box."""
+    try:
+        return staging_record(copies, n_layers, passes)
+    except Exception as e:                 # noqa: BLE001
+        return {"error": f"{type(e).__name__}: {e}"[:300]}
 
 
 def micro_batches(tokens, m):
@@ -928,6 +975,7 @@ def run(a):
             "algorithms": mode, "loss": loss, "forward_s": round(t_fwd, 3), "backward_s": round(t_bwd, 3), "optimizer_s": round(t_opt, 3),
             "elapsed_s": round(time.time() - t_step, 3), "grads_host_copy_s": round(t_copy, 3),   # inside elapsed_s (Amendment 4)
             "h2d_bytes_offload": int(sum(c[2] for c in off._stats().copies)), "h2d_copies_offload": len(off._stats().copies),
+            "h2d_staging": staging_or_error(off._stats().copies, len(model.model.layers), len(mbs) if mbs else 1),   # Amendment 9
             "nvme": disk_delta(d1, diskstats()),
             "max_memory_allocated": torch.cuda.max_memory_allocated() if cuda else None,
             "max_memory_reserved": torch.cuda.max_memory_reserved() if cuda else None,
