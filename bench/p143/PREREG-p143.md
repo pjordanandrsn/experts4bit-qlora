@@ -251,6 +251,9 @@ SANE's question at T == 1, and SANE reads the capped B = 1 path.
   - Disk: 170 GB; the runner refuses below 150 GB.
   - Download: 70 GB at ≤ $0.005/GB.
   - Guard: 1.25 h. Worst case $1.35 at the caps.
+  - **Fallback tier** (approved 2026-10-18 22:54Z, before merge): if one full launch loop finds no stable offer under
+    these terms, the 5090 class rate may be **≤ $0.85/h** including 170 GB. Everything else is unchanged ($/GB
+    ≤ $0.005, 70 GB, 1.25 h). Worst case = 1.25 × 0.85 + 70 × 0.005 = **$1.41**. The pin post names the tier it used.
 - **Runner** (`p143a2_run.sh`): P143's runner, by counted edits, plus P115 Phase D's served half. Order: install and
   tripwire, self-tests, P136's 19 premise tests, the kernel step (before anything is fetched), fetch, NF4 bake, prompts,
   four arms, two SANE phases, reduce.
