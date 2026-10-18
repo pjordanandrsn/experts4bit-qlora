@@ -2170,16 +2170,19 @@ hp1_redraw(){ local FAM=$1 MID=$2 REV=$3 TOK=$4 TS=$5 EVJ=$6 t fw armk al n=0
     can_run 1500 $FAM/$fw/$t/redraw && arm $FAM $fw $t $armk $al "$MID" $REV 0 hp1 $TOK $TS ${HP1_ARGS[$t]} --hp1-export-base 1
   done
   return $(( n > 0 ? 0 : 1 )); }
-# hp1_eval_block NAME RECEIPTS... -- BASES...: the one evaluator over a block, gated on the time it needs (the K pass's measured seconds, or
-# HP1_EVAL_BUDGET_S before any pass), writing its JSON after every base
-hp1_eval_block(){ local NAME=$1 TOK=$2 MID=$3 REV=$4; shift 4; local R=() B=() x side=r
+# hp1_eval_block NAME TOK MID REV RECEIPTS... -- BASES...: the one evaluator over a block, gated on the time it needs: the last pass's
+# measured seconds PER ARM x this pass's arm count x 1.3 + 600 s (before any pass, HP1_EVAL_BUDGET_S), so the K pass is sized from the
+# early pass's per-arm time x 12, not from a 1-arm figure. The evaluator writes its JSON after every base.
+hp1_eval_block(){ local NAME=$1 TOK=$2 MID=$3 REV=$4; shift 4; local R=() B=() x side=r n need
   for x in "$@"; do [ "$x" = -- ] && { side=b; continue; }; [ $side = r ] && R+=("$x") || B+=("$x"); done
-  local need=${HP1_EVAL_NEED_S:-${HP1_EVAL_BUDGET_S:-3600}}
-  can_run "$need" "hp1/eval_$NAME" || { echo "HP1 EVAL_$NAME SKIPPED host-limited" | tee -a summary.txt; return 1; }
+  # shellcheck disable=SC2086
+  n=$(ls ${R[*]} 2>/dev/null | wc -l); [ "$n" -ge 1 ] || n=1
+  if [ -n "${HP1_EVAL_PER_ARM_S:-}" ]; then need=$(( (HP1_EVAL_PER_ARM_S * n * 13) / 10 + 600 )); else need=${HP1_EVAL_BUDGET_S:-3600}; fi
+  can_run "$need" "hp1/eval_$NAME ($n arms)" || { echo "HP1 EVAL_$NAME SKIPPED host-limited (needs ${need}s for $n arms)" | tee -a summary.txt; return 1; }
   $PY_E4B $W/hp1_eval.py --receipts "${R[@]}" --bases "${B[@]}" --tokens $TOK --eval-n $HP1_EVAL_N --model "$MID" --revision $REV \
     --out $W/hp1/eval_$NAME.json > logs/hp1_eval_$NAME.log 2>&1; tail -1 logs/hp1_eval_$NAME.log
-  HP1_EVAL_NEED_S=$($PY_E4B -c "import json,sys; b=json.load(open(sys.argv[1]))['bases']; print(int(1.3*sum(x.get('seconds',0) for x in b))+600)" \
-    $W/hp1/eval_$NAME.json 2>/dev/null || echo 3600); return 0; }
+  HP1_EVAL_PER_ARM_S=$($PY_E4B -c "import json,sys; d=json.load(open(sys.argv[1])); t=sum(x.get('seconds',0) for x in d['bases']); print(max(60, int(t / max(1, len(d['arms'])))))" \
+    $W/hp1/eval_$NAME.json 2>/dev/null || echo 600); return 0; }
 tc1_hp1_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AXAL=$7
   local ALL="" s c
   for s in $HP1_SEL_SEEDS; do for c in k00 k10 k01 k11; do ALL="$ALL e4b:hp1_${c}_s$s:fused"; done; done

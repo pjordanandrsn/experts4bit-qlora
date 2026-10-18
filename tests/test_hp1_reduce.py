@@ -24,7 +24,7 @@ def _order(seed):
 
 
 def _arm(tag, seed, y, status="SCORED", framework="e4b"):
-    arm = {"tag": tag, "framework": framework, "seed": seed, "status": status, "inloop_final": None, "order": _order(seed)}
+    arm = {"tag": tag, "framework": framework, "seed": seed, "status": status, "inloop_final": None, "order": _order(seed), "steps": 200}
     if status == "SCORED":
         arm["evaluator"] = {"row_mean": y, "token_weighted": y}
         arm["inloop_final"] = y + 0.0003
@@ -44,9 +44,9 @@ def _k_arms(means, noise=NOISE, skip=()):
     return out
 
 
-def _write(tmp_path, name, arms):
+def _write(tmp_path, name, arms, eval_n=48):
     path = tmp_path / name
-    path.write_text(json.dumps({"evaluator": "bench/hp1/hp1_eval.py", "arms": arms}))
+    path.write_text(json.dumps({"evaluator": "bench/hp1/hp1_eval.py", "tokens": {"eval_n": eval_n}, "arms": arms}))
     return str(path)
 
 
@@ -419,3 +419,20 @@ def test_a_scored_arm_on_its_own_base_is_usable(tmp_path, capsys):
             a["base"] = "base_axolotl_qwen3hp1"
     code, res, _, _ = _verdict(tmp_path, _k_arms(K10_BEST), p_arms, capsys)
     assert code == 0 and res["p"]["c_star"] == "axolotl" and res["p"]["competitors"]["axolotl"]["included"]
+
+
+def test_a_non_registered_eval_n_is_refused(tmp_path, capsys):
+    """A forwarded TC1_HP1_EVAL_N cannot silently change the instrument: an evaluator JSON that read other than 48 held-out rows is
+    refused (exit 2), fail-closed."""
+    path = _write(tmp_path, "k.json", _k_arms(K10_BEST), eval_n=16)
+    assert hr.main(["select", path, "--out", str(tmp_path / "s.json")]) == hr.EXIT_REFUSED
+    assert "48" in capsys.readouterr().err
+
+
+def test_a_run_at_another_n_gives_no_y(tmp_path, capsys):
+    """A run whose receipt says steps != 200 (a forwarded TC1_CURVE_STEPS) is not this registration's run: it gives no y, so its
+    cell is incomplete."""
+    arms = _k_arms(K10_BEST)
+    arms[0]["steps"] = 100
+    code, res, _ = _select(tmp_path, arms, capsys)
+    assert code == hr.EXIT_INCOMPLETE and res["verdict"] != "OK"

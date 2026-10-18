@@ -53,6 +53,8 @@ import re
 import sys
 
 SELECTION_SEEDS = (3407, 3408, 3409)
+REGISTERED_EVAL_N = 48        # the held-out rows every scored number reads (HP1-PREREG "The one evaluator", item 4)
+REGISTERED_STEPS = 200        # N, the field recipe's optimizer steps (HP1-PREREG "Fixture")
 CONFIRMATION_SEEDS = (3410, 3411, 3412)
 
 # The 2x2 K cells: k<init><dtype>. init 0 = native N(0, 1/r), 1 = kaiming (PEFT's); dtype 0 = bf16 expert adapters, 1 = fp32.
@@ -227,6 +229,9 @@ def load_arms(paths):
             raise RefusedInput(f"cannot read evaluator JSON {path}: {exc}") from exc
         if not isinstance(doc.get("arms"), list):
             raise RefusedInput(f"{path}: no top-level `arms` list (not an hp1_eval.py output)")
+        eval_n = (doc.get("tokens") or {}).get("eval_n")
+        if eval_n != REGISTERED_EVAL_N:              # a forwarded knob cannot silently change the instrument (fail closed)
+            raise RefusedInput(f"{path}: the evaluator read {eval_n} held-out rows; the registration scores {REGISTERED_EVAL_N}")
         for arm in doc["arms"]:
             tag = arm.get("tag")
             if tag in seen:
@@ -239,6 +244,8 @@ def load_arms(paths):
             if arm.get("seed") is not None and int(arm["seed"]) != seed:
                 raise RefusedInput(f"tag {tag!r} names seed {seed} but the arm's receipt says seed {arm['seed']}")
             y, source, unusable = usable_y(arm)
+            if y is not None and arm.get("steps") != REGISTERED_STEPS:   # a run at another N is not this registration's run
+                y, source, unusable = None, None, f"steps {arm.get('steps')} != the registered {REGISTERED_STEPS}"
             rec = {"tag": tag, "file": path, "framework": arm.get("framework"), "role": role, "group": group, "seed": seed,
                    "status": arm.get("status"), "y": y, "y_source": source, "unusable": unusable,
                    "own_base_only": arm.get("status") == "OWN_BASE_ONLY" and y is not None, "order": arm.get("order")}

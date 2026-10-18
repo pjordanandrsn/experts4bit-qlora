@@ -142,6 +142,11 @@ Every arm's FINAL (step-200) adapter is scored by the same code. No framework's 
 **Every verdict uses evaluator numbers only.** An in-loop number never becomes a y; it appears only in the STRICT checks above and
 in REPORTING. A shared evaluator offset therefore cancels in every paired difference.
 
+**Registered constants are enforced, fail-closed.**
+- The reducer refuses an evaluator output that read other than 48 held-out rows.
+- A run whose receipt says other than N = 200 steps gives no y, so its cell is incomplete.
+- A forwarded controller knob can never score silently. The seeds are fixed by the tag rules.
+
 **Each VOID carries a level.** A run-level VOID (TC1-invalid, the adapter file, the round trip, or no export claiming the arm) can
 be redrawn. A base-level VOID (the base's digest, its zero-adapter check, or its control failed) is a systematic miss, and a redraw
 cannot fix it.
@@ -249,6 +254,9 @@ evaluator. It runs before any scored arm (~10 min, inside the cap), and a failur
   - a run-level VOID K run (redrawn once, then re-evaluated);
   - the P pass's time gate.
 
+  These are committed as `tests/test_hp1_driver.py`. It extracts the HP1 functions from `tc1_run.sh` and runs them with stubbed
+  harness calls; a mutation of the early check is caught.
+
 ## Budget and stop rules
 
 **Envelope (for the maintainer's ACK; nothing rents before it):**
@@ -273,8 +281,9 @@ One RTX 5090, RunPod secure (the 5090 row, $1.10/h) or Vast verified-secure. Est
 - Unsloth: 3 × ~17 min, ≈ 0.85 h
 - axolotl: 3 × ~19 min, ≈ 0.95 h
 - venvs, model fetch and the box-side shakedown: ≈ 0.75 h
-- evaluator: up to 24 arms × ~4 min plus two base loads, ≈ 1.7 h (not yet measured at 30B). The P pass is gated on the K pass's
-  measured seconds (× 1.3 + 10 min), and redraws on their own time-left check.
+- evaluator: up to 24 arms × ~4 min plus two base loads, ≈ 1.7 h (not yet measured at 30B). Each pass is gated on the last pass's
+  measured seconds per arm × its own arm count × 1.3 + 10 min (the K pass is sized from the early pass × 12), and redraws are gated
+  on their own time-left check.
 
 That totals ≈ 8.2 h ≈ $9.00. Cap $15 (owner, 2026-10-17). Guard 10 h ($11 worst case), so a full redraw does not fit inside
 the cap; the two-strikes rule applies instead. Teardown by
