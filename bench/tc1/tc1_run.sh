@@ -2137,7 +2137,7 @@ try:
     prev = {r["path"]: r for r in json.load(open(mpath))["files"]}
 except Exception:
     prev = {}
-rows = []
+rows, hashed_bytes, hash_s = [], 0, 0.0
 for d, dirs, files in os.walk(root):
     parts = os.path.relpath(d, w).split(os.sep)
     in_bulk_dir = any(p.startswith("base_") or p == "shake-cache" for p in parts[1:])
@@ -2150,23 +2150,54 @@ for d, dirs, files in os.walk(root):
         if old and old.get("bytes") == st.st_size and old.get("mtime_ns") == st.st_mtime_ns and old.get("sha256"):
             rows.append(old)
             continue
-        h = hashlib.sha256()
+        h, th = hashlib.sha256(), time.time()
         with open(path, "rb") as fh:
             for chunk in iter(lambda: fh.read(1 << 24), b""):
                 h.update(chunk)
+        hashed_bytes, hash_s = hashed_bytes + st.st_size, hash_s + (time.time() - th)
         rows.append({"path": rel, "bytes": st.st_size, "mtime_ns": st.st_mtime_ns, "sha256": h.hexdigest()})
 rows.sort(key=lambda r: r["path"])
+try:
+    prev_rate = json.load(open(mpath)).get("hash_rate_bps")
+except Exception:
+    prev_rate = None
+rate = hashed_bytes / hash_s if hashed_bytes >= (1 << 26) and hash_s > 0 else prev_rate   # measured on >= 64 MiB, else the last measurement
 doc = {"hp1_bulk_manifest": 1, "files": rows, "n_files": len(rows), "bytes": sum(r["bytes"] for r in rows),
-       "seconds": round(time.time() - t0, 1)}
+       "seconds": round(time.time() - t0, 1), "hashed_bytes": hashed_bytes, "hash_rate_bps": rate}
 json.dump(doc, open(mpath + ".tmp", "w"), indent=1)
 os.replace(mpath + ".tmp", mpath)
 print(f"HP1 bulk manifest: {len(rows)} files, {doc['bytes']} bytes, {doc['seconds']} s")
 PYM
   tail -1 "$W/logs/hp1_bulk_manifest.log"; }
 # hp1_finish_manifest: the finish path (a normal end, a refusal or a deadline stop) writes the manifest too, when the time left covers the
-# last measured hashing time x 1.5 + 60 s (600 s before any measurement); otherwise it says so and leaves hp1/bulk_manifest.SKIPPED.
-hp1_finish_manifest(){ local need=600 last
-  last=$(python3 -c "import json,sys; print(int(json.load(open(sys.argv[1])).get('seconds', 0)))" "$W/hp1/bulk_manifest.json" 2>/dev/null) && need=$(( last * 3 / 2 + 60 ))
+# hashing it still needs: the bytes the size+mtime cache cannot reuse / the recorded hash rate x 1.5 + 60 s (HP1_HASH_DEFAULT_BPS,
+# 100 MB/s, before any measurement). Otherwise it says so and leaves hp1/bulk_manifest.SKIPPED -- hashing past the guard would lose
+# the receipt fetch, which is worth more than the manifest.
+hp1_finish_manifest(){ local need
+  need=$(python3 - "$W" "${HP1_HASH_DEFAULT_BPS:-100000000}" <<'PYN' 2>/dev/null || echo 600
+import json, os, sys
+w, default = sys.argv[1], float(sys.argv[2])
+root = os.path.join(w, "hp1")
+try:
+    man = json.load(open(os.path.join(root, "bulk_manifest.json")))
+except Exception:
+    man = {}
+prev = {r["path"]: r for r in man.get("files", [])}
+rate = man.get("hash_rate_bps") or default
+unhashed = 0
+for d, dirs, files in os.walk(root):
+    parts = os.path.relpath(d, w).split(os.sep)
+    in_bulk_dir = any(p.startswith("base_") or p == "shake-cache" for p in parts[1:])
+    for f in files:
+        if not (in_bulk_dir or (f.startswith("canonical_") and f.endswith(".safetensors"))):
+            continue
+        path = os.path.join(d, f)
+        st, old = os.stat(path), prev.get(os.path.relpath(path, w))
+        if not (old and old.get("bytes") == st.st_size and old.get("mtime_ns") == st.st_mtime_ns):
+            unhashed += st.st_size
+print(int(unhashed / rate * 1.5) + 60)
+PYN
+)
   if [ "$(left)" -ge "$need" ]; then hp1_bulk_manifest "$W"
   else say "HP1 bulk manifest SKIPPED at finish: needs ${need}s, $(left)s left"; echo "needs ${need}s, $(left)s left" > "$W/hp1/bulk_manifest.SKIPPED"; fi; }
 # ---------------------------------------------------------------- HP1 (bench/hp1/HP1-PREREG.md): held-out parity, one evaluator, seeds per arm

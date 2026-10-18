@@ -158,10 +158,10 @@ def _finish_harness(tmp_path, left_s):
     fns = (cut("hp1_bulk_manifest(){", 'tail -1 "$W/logs/hp1_bulk_manifest.log"; }')
            + cut("hp1_finish_manifest(){", 'bulk_manifest.SKIPPED"; fi; }')
            + cut("finish(){", 'exit "$rc"; }'))
-    (tmp_path / "hp1" / "base_e4b_qwen3hp1").mkdir(parents=True)
+    (tmp_path / "hp1" / "base_e4b_qwen3hp1").mkdir(parents=True, exist_ok=True)
     (tmp_path / "hp1" / "base_e4b_qwen3hp1" / "index.json").write_text("{}")
     (tmp_path / "hp1" / "canonical_qwen3hp1_hp1_k00_s3407.safetensors").write_bytes(b"\x01" * 64)
-    (tmp_path / "logs").mkdir()
+    (tmp_path / "logs").mkdir(exist_ok=True)
     sh = tmp_path / "finish.sh"
     sh.write_text(f'W={tmp_path}; NONCE=n; cd "$W"; say(){{ echo "SAY: $*"; }}; left(){{ echo {left_s}; }}\n' + fns + "finish 0\n")
     return subprocess.run(["bash", str(sh)], capture_output=True, text=True, timeout=60)
@@ -182,3 +182,17 @@ def test_the_finish_path_skips_the_manifest_without_the_time_and_says_so(tmp_pat
     assert p.returncode == 0, p.stderr
     assert not (tmp_path / "hp1" / "bulk_manifest.json").exists() and (tmp_path / "hp1" / "bulk_manifest.SKIPPED").exists()
     assert (tmp_path / "TP_DONE.n").exists()
+
+
+def test_a_finish_with_unhashed_bytes_skips_even_when_the_last_pass_was_fast(tmp_path):
+    """The size+mtime cache makes the last pass's `seconds` tiny; a deadline stop after new adapters must size its check from the
+    UNHASHED bytes x the recorded rate x 1.5 + 60 s, and SKIP (never start hashing past the guard) when that does not fit."""
+    import json
+    (tmp_path / "hp1").mkdir()
+    (tmp_path / "hp1" / "bulk_manifest.json").write_text(json.dumps({"hp1_bulk_manifest": 1, "files": [], "seconds": 0.1,
+                                                                    "hash_rate_bps": 1000}))
+    (tmp_path / "hp1" / "canonical_qwen3hp1_hp1_e_k10_s3410.safetensors").write_bytes(b"\x02" * 1_000_000)   # 1 MB unhashed
+    p = _finish_harness(tmp_path, 1000)            # needs 1e6 / 1000 x 1.5 + 60 = 1560 s > 1000 s left
+    assert p.returncode == 0, p.stderr
+    assert (tmp_path / "hp1" / "bulk_manifest.SKIPPED").exists()
+    assert json.loads((tmp_path / "hp1" / "bulk_manifest.json").read_text())["files"] == []   # it never started hashing
