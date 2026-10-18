@@ -28,6 +28,9 @@ def _arm(tag, seed, y, status="SCORED", framework="e4b"):
     if status == "SCORED":
         arm["evaluator"] = {"row_mean": y, "token_weighted": y}
         arm["inloop_final"] = y + 0.0003
+        arm["adapter"] = f"/root/tc1/hp1/canonical_qwen3hp1_{tag}.safetensors"
+        arm["adapter_sha256"] = f"sha-{tag}"
+        arm["base"] = f"/root/tc1/hp1/base_{framework}_qwen3hp1"
     elif status == "OWN_BASE_ONLY":
         arm["inloop_final"] = y
     else:
@@ -44,6 +47,20 @@ def _k_arms(means, noise=NOISE, skip=()):
     return out
 
 
+def _mf(tmp_path, *eval_paths, drop=()):
+    """['--manifest', path]: a bulk manifest pinning every SCORED arm's adapter (by its receipt sha256) and base export in eval_paths,
+    minus the rel paths in `drop` (the injected failures)."""
+    rows = {}
+    for p in eval_paths:
+        for a in json.loads(Path(p).read_text())["arms"]:
+            if a.get("status") == "SCORED":
+                rows[hr._rel_hp1(a["adapter"])] = a["adapter_sha256"]
+                rows[hr._rel_hp1(a["base"]) + "/index.json"] = "idx"
+    path = tmp_path / "bulk_manifest.json"
+    path.write_text(json.dumps({"hp1_bulk_manifest": 1, "files": [{"path": k, "bytes": 1, "sha256": v} for k, v in rows.items() if k not in drop]}))
+    return ["--manifest", str(path)]
+
+
 def _write(tmp_path, name, arms, eval_n=48):
     path = tmp_path / name
     path.write_text(json.dumps({"evaluator": "bench/hp1/hp1_eval.py", "tokens": {"eval_n": eval_n}, "arms": arms}))
@@ -53,7 +70,7 @@ def _write(tmp_path, name, arms, eval_n=48):
 def _select(tmp_path, arms, capsys):
     ev = _write(tmp_path, "k.json", arms)
     out = tmp_path / "sel.json"
-    code = hr.main(["select", ev, "--out", str(out)])
+    code = hr.main(["select", ev, "--out", str(out), *_mf(tmp_path, ev)])
     return code, json.loads(out.read_text()), capsys.readouterr().out
 
 
@@ -79,7 +96,7 @@ def _verdict(tmp_path, k_arms, p_arms, capsys):
     kf = _write(tmp_path, "k.json", k_arms)
     pf = _write(tmp_path, "p.json", p_arms)
     out, md = tmp_path / "v.json", tmp_path / "v.md"
-    code = hr.main(["verdict", kf, pf, "--out", str(out), "--md", str(md)])
+    code = hr.main(["verdict", kf, pf, "--out", str(out), "--md", str(md), *_mf(tmp_path, kf, pf)])
     res = json.loads(out.read_text())
     return code, res, md.read_text(), capsys.readouterr().out
 
@@ -330,9 +347,8 @@ def test_e_k00_uses_shipped_runs_and_k00_reading_is_the_headline(tmp_path, capsy
 
 
 def test_e_tag_naming_another_cell_is_refused(tmp_path, capsys):
-    code = hr.main(["verdict", _write(tmp_path, "k.json", _k_arms(K10_BEST)),
-                    _write(tmp_path, "p.json", _p_arms("k11", (0, 0, 0))),
-                    "--out", str(tmp_path / "v.json"), "--md", str(tmp_path / "v.md")])
+    kf, pf = _write(tmp_path, "k.json", _k_arms(K10_BEST)), _write(tmp_path, "p.json", _p_arms("k11", (0, 0, 0)))
+    code = hr.main(["verdict", kf, pf, "--out", str(tmp_path / "v.json"), "--md", str(tmp_path / "v.md"), *_mf(tmp_path, kf, pf)])
     assert code == 2 and "selects k10" in capsys.readouterr().err
 
 
@@ -340,7 +356,7 @@ def test_duplicate_tags_across_files_refused(tmp_path, capsys):
     k_arms = _k_arms(K10_BEST)
     f1 = _write(tmp_path, "a.json", k_arms)
     f2 = _write(tmp_path, "b.json", [k_arms[0]])
-    code = hr.main(["select", f1, f2, "--out", str(tmp_path / "s.json")])
+    code = hr.main(["select", f1, f2, "--out", str(tmp_path / "s.json"), "--manifest", str(tmp_path / "none.json")])
     captured = capsys.readouterr()
     assert code == 2 and "duplicate tag" in captured.err and "HP1_SELECTED" not in captured.out
     with pytest.raises(hr.RefusedInput):
@@ -425,7 +441,7 @@ def test_a_non_registered_eval_n_is_refused(tmp_path, capsys):
     """A forwarded TC1_HP1_EVAL_N cannot silently change the instrument: an evaluator JSON that read other than 48 held-out rows is
     refused (exit 2), fail-closed."""
     path = _write(tmp_path, "k.json", _k_arms(K10_BEST), eval_n=16)
-    assert hr.main(["select", path, "--out", str(tmp_path / "s.json")]) == hr.EXIT_REFUSED
+    assert hr.main(["select", path, "--out", str(tmp_path / "s.json"), *_mf(tmp_path, path)]) == hr.EXIT_REFUSED
     assert "48" in capsys.readouterr().err
 
 
@@ -436,3 +452,27 @@ def test_a_run_at_another_n_gives_no_y(tmp_path, capsys):
     arms[0]["steps"] = 100
     code, res, _ = _select(tmp_path, arms, capsys)
     assert code == hr.EXIT_INCOMPLETE and res["verdict"] != "OK"
+
+
+# ----------------------------------------------------------------------------- Amendment 1: the bulk manifest pins what was scored
+@pytest.mark.parametrize("case", ["missing", "unparsable", "adapter_absent", "adapter_sha", "base_absent"])
+def test_a_reading_whose_manifest_does_not_pin_what_was_scored_is_void(tmp_path, capsys, case):
+    kf = _write(tmp_path, "k.json", _k_arms(K10_BEST))
+    mf = _mf(tmp_path, kf)
+    man = Path(mf[1])
+    if case == "missing":
+        man.unlink()
+    elif case == "unparsable":
+        man.write_text("{not json")
+    elif case == "adapter_absent":
+        mf = _mf(tmp_path, kf, drop={"hp1/canonical_qwen3hp1_hp1_k10_s3408.safetensors"})
+    elif case == "adapter_sha":
+        doc = json.loads(man.read_text())
+        doc["files"][0]["sha256"] = "tampered"
+        man.write_text(json.dumps(doc))
+    elif case == "base_absent":
+        mf = _mf(tmp_path, kf, drop={"hp1/base_e4b_qwen3hp1/index.json"})
+    out = tmp_path / "s.json"
+    assert hr.main(["select", kf, "--out", str(out), *mf]) == hr.EXIT_INCOMPLETE
+    res = json.loads(out.read_text())
+    assert res["verdict"] == "VOID" and res["manifest_problems"] and "HP1_SELECTED" not in capsys.readouterr().out

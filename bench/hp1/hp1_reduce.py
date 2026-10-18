@@ -538,6 +538,40 @@ def _write_json(path, obj):
         json.dump(obj, fh, indent=1, allow_nan=False)
 
 
+def _rel_hp1(path):
+    """A box path (/root/tc1/hp1/...) as the manifest writes it: relative to the work directory, from the `hp1/` component on."""
+    path = str(path or "")
+    i = path.find("hp1/")
+    return path[i:] if i >= 0 else path
+
+
+def manifest_problems(manifest_path, eval_paths):
+    """Amendment 1, fail-closed: the bulk manifest must pin every canonical adapter and base export the evaluator SCORED -- each
+    scored arm's adapter listed with its exact sha256, its base export's index.json listed. Returns a list of problems (empty = pinned)."""
+    try:
+        with open(manifest_path) as fh:
+            man = json.load(fh)
+        listed = {row["path"]: row.get("sha256") for row in man["files"]}
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return [f"bulk manifest {manifest_path} missing or unparsable: {type(exc).__name__}: {exc}"]
+    problems = []
+    for path in eval_paths:
+        with open(path) as fh:
+            doc = json.load(fh)
+        for arm in doc.get("arms", []):
+            if arm.get("status") != "SCORED":
+                continue
+            rel = _rel_hp1(arm.get("adapter"))
+            if listed.get(rel) is None:
+                problems.append(f"{arm.get('tag')}: adapter {rel} not in the bulk manifest")
+            elif listed[rel] != arm.get("adapter_sha256"):
+                problems.append(f"{arm.get('tag')}: adapter {rel} sha256 {str(listed[rel])[:12]} != the receipt's {str(arm.get('adapter_sha256'))[:12]}")
+            base = _rel_hp1(arm.get("base")).rstrip("/")
+            if base + "/index.json" not in listed:
+                problems.append(f"{arm.get('tag')}: base export {base} not in the bulk manifest")
+    return problems
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -547,6 +581,8 @@ def main(argv=None):
         sp = sub.add_parser(name)
         sp.add_argument("evals", nargs="+", help="hp1_eval.py output JSON(s); arms are merged, duplicate tags refused")
         sp.add_argument("--out", required=True, help="readout JSON")
+        sp.add_argument("--manifest", required=True, help="the box's hp1/bulk_manifest.json (Amendment 1): a reading whose manifest does not pin "
+                        "every scored adapter and base export is VOID")
         if name == "verdict":
             sp.add_argument("--md", required=True, help="human-readable markdown table")
     a = ap.parse_args(argv)
@@ -558,6 +594,15 @@ def main(argv=None):
         return EXIT_OK
     try:
         index, records, ignored = load_arms(a.evals)
+        mprob = manifest_problems(a.manifest, a.evals)
+        if mprob:                                   # a harness defect, not a log line: the reading is VOID
+            _write_json(a.out, {"reducer": "bench/hp1/hp1_reduce.py", "subcommand": a.cmd, "inputs": a.evals, "manifest": a.manifest,
+                                "verdict": "VOID", "manifest_problems": mprob})
+            if a.cmd == "verdict":
+                with open(a.md, "w") as fh:
+                    fh.write("# HP1 readout\n\n**VOID**: the bulk manifest does not pin what was scored:\n\n" + "\n".join(f"- {x}" for x in mprob) + "\n")
+            print(f"VOID: bulk manifest: {mprob[:3]}", file=sys.stderr)
+            return EXIT_INCOMPLETE
         k = k_readout(index)
         base = {"reducer": "bench/hp1/hp1_reduce.py", "subcommand": a.cmd, "inputs": a.evals, "ignored": ignored,
                 "runs": [{x: r[x] for x in ("tag", "role", "group", "seed", "status", "y", "y_source", "unusable", "file")}
