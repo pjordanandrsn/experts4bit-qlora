@@ -20,6 +20,7 @@ from experts4bit_qlora.engines.layer_major import layer_major_step  # noqa: E402
 from experts4bit_qlora.engines.offload import _ExpertOffload  # noqa: E402
 
 VOCAB, M = 97, 3
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"  # the tiny model too: the drift guard must hold on CUDA
 WIDTHS = (9, 14, 6)  # unequal micro-batches, right-padded rows inside each
 
 
@@ -36,7 +37,7 @@ def _tiny(seed=0, layers=3, reentrant=False, dtype=torch.float32):
                             head_dim=16, vocab_size=VOCAB, max_position_embeddings=64, decoder_sparse_step=1,
                             norm_topk_prob=True)
     torch.manual_seed(seed)
-    m = tr.Qwen3MoeForCausalLM(cfg).to(dtype)
+    m = tr.Qwen3MoeForCausalLM(cfg).to(dtype).to(DEVICE)
     _train_mode(m, reentrant)
     return m
 
@@ -49,7 +50,7 @@ def _train_mode(m, reentrant):
     m.train()
 
 
-def _batches(seed=3, device="cpu"):
+def _batches(seed=3, device=DEVICE):
     g = torch.Generator().manual_seed(seed)
     out = []
     for w in WIDTHS:
@@ -144,7 +145,6 @@ def _qwen3_moe_checkpoint(d):
     model.config.save_pretrained(d)
 
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 @pytest.fixture(scope="module")
@@ -288,7 +288,8 @@ def test_trainer_refuses_layer_major_without_offload(monkeypatch):
         train.main()
 
 
-def test_drift_guard_refuses_a_diverged_preamble_before_any_backward(monkeypatch):
+@pytest.mark.parametrize("reentrant", [False, True], ids=["nonreentrant", "reentrant"])
+def test_drift_guard_refuses_a_diverged_preamble_before_any_backward(monkeypatch, reentrant):
     """If the reproduced preamble stops matching the model's forward (here: the step's causal mask also hides each row's
     first token, which the stock forward's mask does not), the first call refuses before its backward: no gradient is
     written."""
@@ -296,7 +297,7 @@ def test_drift_guard_refuses_a_diverged_preamble_before_any_backward(monkeypatch
 
     from experts4bit_qlora.engines import layer_major as lm
 
-    model = _tiny()
+    model = _tiny(reentrant=reentrant)
     real = mu.create_causal_mask
 
     def diverged(**kw):
@@ -311,10 +312,11 @@ def test_drift_guard_refuses_a_diverged_preamble_before_any_backward(monkeypatch
     assert model not in lm._VERIFIED
 
 
-def test_drift_guard_runs_once_per_model():
+@pytest.mark.parametrize("reentrant", [False, True], ids=["nonreentrant", "reentrant"])
+def test_drift_guard_runs_once_per_model(reentrant):
     from experts4bit_qlora.engines import layer_major as lm
 
-    model = _tiny()
+    model = _tiny(reentrant=reentrant)
     calls = {"n": 0}
     model.register_forward_pre_hook(lambda m, a: calls.__setitem__("n", calls["n"] + 1))
     layer_major_step(model, _batches(), WEIGHTS, handles=[])
