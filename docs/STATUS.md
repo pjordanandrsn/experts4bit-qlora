@@ -42,15 +42,18 @@ once per step instead of once per micro-batch: 95 stagings against 380. With `en
 Qwen3-30B-A3B on one RTX 4090, the stock loop steps 7.641 / 7.514 s and layer-major 3.231 / 3.173 s, at 7.98 GB peak
 against 8.41. The predicted band [1.25, 2.0] was missed high, and the held-out term (0.015 against 0.01) sits inside
 the 0.031 same-loop spread at 34 steps. From the CLI trainer, `OFFLOAD_EXPERTS=1 LAYER_MAJOR=1` (which implies
-`FAST_TRAIN=1`) makes the same calls, checked bit for bit against the library on a fixture; its own recipe (AdamW,
-token-budget batches) is unread.
+`FAST_TRAIN=1`) makes the same calls, checked bit for bit against the library on a fixture. At the CLI's own default
+recipe (SEQ 192, token-budget batches of 2048, r 8 with attention LoRA, torch AdamW) on one RTX 4090 it steps 1.455×
+faster than `OFFLOAD_EXPERTS=1 FAST_TRAIN=1` (11.596 / 11.595 s against 7.956 / 7.968 s): its larger micro-batches
+carry more compute, so the copy is a smaller share of the step, and the a-priori band [1.5, 2.6] was missed low.
 It replicates on one RTX 5090: 2.311× (6.017 / 6.014 s against 2.597 / 2.602 s), inside the band [1.8, 3.0]
 predicted a priori from the host link.
 It holds on Mixtral-8x7B on one RTX 4090: 2.118× (11.386 / 11.386 s against 5.372 / 5.375 s), inside the band
 [1.5, 2.6] predicted a priori, at 5.64 GiB peak against 5.72.
 `e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18` ([P137](../bench/p137/RESULTS-p137.md)),
 `e4b.train.p140.layer-major-offload.qwen3.5090.2026-10-18` ([P140](../bench/p140/RESULTS-p140.md)),
-`e4b.train.p144.layer-major-offload.mixtral.4090.2026-10-18` ([P144](../bench/p144/RESULTS-p144.md)).
+`e4b.train.p144.layer-major-offload.mixtral.4090.2026-10-18` ([P144](../bench/p144/RESULTS-p144.md)),
+`e4b.train.p146.layer-major-cli.qwen3.4090.2026-10-18` ([P146](../bench/p146/RESULTS-p146.md)).
 
 **On the 12 GB RTX A2000 the same set trains under offload at micro-batch 1**, at 10.46 GB peak, held-out 0.8483 beside
 the 5090's 0.8516 / 0.8487. Unsloth refuses on that card, axolotl's wheels need a newer driver, and HF runs out of

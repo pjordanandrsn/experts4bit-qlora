@@ -1,0 +1,31 @@
+[20:59:13] loading /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 via streaming 4-bit loader (CPU-RAM-light)...
+[20:59:13]   host CPUs: 192 visible, quota 23.04, torch threads 96, OMP_NUM_THREADS=None
+[20:59:14]   checkpoint: local directory /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+[20:59:14]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[20:59:14]   host-side fuse: intra-op threads 96 -> 24 (the container's CPU quota / affinity)
+[21:00:30]   quantized experts on 48/48 MoE layers (128 experts each)
+[21:00:30]   offloaded 48 layers' 4-bit experts to pinned CPU RAM (streamed to GPU one layer at a time during train/eval)
+[21:00:30] offload env: PCIe NVIDIA GeForce RTX 4090, 4, 4, 16, 16
+[21:00:30] offload env: pinned H2D ceiling 20.28 GB/s (256 MB x 20)
+[21:00:31] offload env: pageable H2D ceiling 15.82 GB/s (256 MB x 20)
+[21:00:31]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[21:00:38] attn LoRA 192 projs | train experts=True attn=True router=False
+[21:00:38] [fast-train] 48 ExpertsLoRA wrapper(s) on the fused path (dgrad=True); chunked LM loss installed by enable_fast_train
+[21:00:38] loaded. trainable: 321,257,472 (lora 321,257,472 + router 0) | offload=on | GPU mem: 3.72 GB
+[21:00:38] preparing dataset (alpaca, response-only loss)...
+Generating train split: 0 examples [00:00, ? examples/s]Generating train split: 1000 examples [00:00, 7347.97 examples/s]Generating train split: 10000 examples [00:00, 47563.43 examples/s]Generating train split: 22000 examples [00:00, 72306.62 examples/s]Generating train split: 49000 examples [00:00, 141264.00 examples/s]Generating train split: 52002 examples [00:00, 109836.21 examples/s]
+Map:   0%|          | 0/2000 [00:00<?, ? examples/s]Map:  10%|▉         | 195/2000 [00:00<00:00, 1907.99 examples/s]Map:  24%|██▍       | 477/2000 [00:00<00:00, 1885.85 examples/s]Map:  37%|███▋      | 741/2000 [00:00<00:00, 1817.96 examples/s]Map:  48%|████▊     | 970/2000 [00:00<00:00, 1963.62 examples/s]Map:  62%|██████▏   | 1243/2000 [00:00<00:00, 1882.81 examples/s]Map:  74%|███████▍  | 1487/2000 [00:00<00:00, 2035.19 examples/s]Map:  86%|████████▌ | 1712/2000 [00:00<00:00, 2089.52 examples/s]Map:  98%|█████████▊| 1970/2000 [00:00<00:00, 2227.03 examples/s]Map: 100%|██████████| 2000/2000 [00:00<00:00, 2022.14 examples/s]
+Filter:   0%|          | 0/2000 [00:00<?, ? examples/s]Filter: 100%|██████████| 2000/2000 [00:00<00:00, 89688.00 examples/s]
+Map:   0%|          | 0/64 [00:00<?, ? examples/s]Map: 100%|██████████| 64/64 [00:00<00:00, 1554.86 examples/s]
+Filter:   0%|          | 0/64 [00:00<?, ? examples/s]Filter: 100%|██████████| 64/64 [00:00<00:00, 25264.51 examples/s]
+[21:01:55] held-out eval loss BEFORE: 2.4928
+[21:01:55] training: 34 steps x grad_accum 4 (seq<= 192), lr=0.0002, cosine+warmup, eval every 50
+[21:02:21]   step 1/34  loss 2.126  ema 2.126  (25.7s/step, 215 tok/s)
+[21:04:14]   step 10/34  loss 1.163  ema 1.739  (13.9s/step, 388 tok/s)
+[21:06:20]   step 20/34  loss 0.989  ema 1.374  (13.2s/step, 402 tok/s)
+[21:08:25]   step 30/34  loss 1.037  ema 1.225  (13.0s/step, 413 tok/s)
+[21:09:15] training done in 440s | peak GPU mem: 6.03 GB (offload=on)
+[21:09:15] [tr1-census] wrote /root/p146/census_A0a.json (34 steps)
+[21:10:16] held-out eval loss: BEFORE 2.4928 -> AFTER 0.9938 (delta -1.4990) | best inf
+[21:10:17] saved final adapter (576 tensors) -> /root/p146/out_A0a/adapter_last.pt ; best kept at adapter_best.pt
+P146_ARM {"tag": "A0a", "loop": "stock", "summary": {"median_s": 12.533195196650922, "timed_walls": [12.665252571925521, 11.927083980059251, 12.794173615984619, 12.89903496298939, 12.613808596972376, 12.679126869887114, 12.493475518887863, 12.509209539042786, 12.530802219174802, 12.467887730104849, 12.753237219993025, 12.644005704903975, 12.665380169870332, 12.414182133041322, 12.744684820994735, 12.535588174127042, 12.510867130942643, 12.415888488059863, 12.48484734701924, 12.790547739015892, 12.511032655835152, 12.314856933895499, 12.556094787083566, 12.361356690060347, 12.443515911931172, 12.647895087022334, 12.292742036981508, 12.450861985096708, 12.718399102101102, 12.089775589993224, 12.575811403105035, 12.751297779148445], "stagings_steady": [380], "stagings_step0": 381, "peak_alloc": 9775991808, "peak_alloc_all": 9775991808}, "heldout": 0.9937872033042368, "step0_loss_hex": "0x1.10266ac000000p+1", "load_s": 91.9, "token_budget_effective": 2048}
