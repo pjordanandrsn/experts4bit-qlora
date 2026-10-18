@@ -78,5 +78,7 @@ prefill, or Mixtral-8x22B. A format lever's quality is untested here.
   - the arms `arm_S1a.json` and `arm_S1b.json`;
   - `summary.txt`, the logs and `teardown-proof.json`;
   - `SHA256SUMS`, which covers the directory.
+- Thirteen logs carry CRLF line endings from the box's progress output. They stay byte-exact in the receipt store, and
+  `STORE-ONLY.sha256` lists each one's sha256 with its store path and commit.
 - The maintainer re-derived `verdict_p145.json` byte-identical from the receipt store (`f3ce417a`), with the reducer and
   `p136_reduce.py` from `67ba40b7` (the staged copies) and the self-test at 17/17.

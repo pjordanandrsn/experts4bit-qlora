@@ -15,4 +15,5 @@ The W1 node replay period is 8.125 ms. `RESULTS-p145.md` has the ranking, the ba
 
 The maintainer re-derived `verdict_p145.json` byte-identical from the receipt store (`f3ce417a`). The launcher's receipt
 and ledger row are in that store. The raw Nsight exports and the checkpoint stayed on the box. `SHA256SUMS` covers every
-file here.
+file here. Thirteen logs with CRLF line endings stay only in that store,
+byte-exact; `STORE-ONLY.sha256` lists them.
