@@ -31,7 +31,9 @@ FAMILY, MODEL, REV, LAYERS = "qwen3", "Qwen/Qwen3-30B-A3B", "ad44e777bcd18fa416d
 pr.FAMILIES[FAMILY] = (MODEL, REV, (1,))
 pr.MOE_LAYERS[FAMILY] = LAYERS
 SWIGLU, GEMV = "_swiglu_rows", "_gemv_nf4_bw"
-K33_MS = {"gate_up": 0.6068, "down": 0.3540}          # isolated, 48 launches each, bw_prmt32 on an RTX 5090 (K33)
+K33_MS = {"gate_up": 0.6068, "down": 0.3540}          # isolated, 48 launches each, bw_prmt32 on an RTX 5090 (K33:
+                                                      # gnf4 5a60c37 = 0.42.0 + #500 + #501, 16 synthetic experts, 8 rows;
+                                                      # this box runs 0.46.1, so the excess compares across builds)
 P2_BAR = 0.03
 CLOSED = {"dense_gemm"}
 
@@ -77,6 +79,9 @@ def decide(tab) -> dict:
                       "addressable_ms": round(addr, 6), "share": round(r["removable_ms"] / p, 5),
                       "addressable_share": round(addr / p, 5), "closed": r["class"] in CLOSED})
     sw = round(sum(x["removable_ms"] for x in lines if x["key"].startswith(SWIGLU + "|")), 6)
+    sw_rows = [r for r in tab["rows"] if r["name"] == SWIGLU]
+    spread = {"removable_iqr_ms": [r.get("removable_iqr_ms") for r in sw_rows],
+              "steps_ge_3pct": [r.get("steps_ge_3pct") for r in sw_rows]}          # REPORTING beside the decision
     gemv = {x["key"].rsplit("|", 1)[1]: {"removable_ms": x["removable_ms"], "k33_ms": x["floor_ms"],
                                          "in_situ_excess_ms": round(x["removable_ms"] - x["floor_ms"], 6),
                                          "in_situ_excess_share": round((x["removable_ms"] - x["floor_ms"]) / p, 5)}
@@ -89,7 +94,8 @@ def decide(tab) -> dict:
         p2 = {"target": f"PROPOSE {top['key']}" if top else None,
               "why": f"swiglu removable {sw:.4f} ms = {sw / p:.2%} of P < 3 %; top addressable line "
                      f"{top['key'] if top else None} ({top['addressable_ms'] if top else 0:.4f} ms)"}
-    return {"P_ms": p, "swiglu": {"removable_ms": sw, "share": round(sw / p, 5), "clears_3pct": sw / p >= P2_BAR},
+    return {"P_ms": p, "swiglu": {"removable_ms": sw, "share": round(sw / p, 5), "clears_3pct": sw / p >= P2_BAR,
+                                  **spread},
             "gemv": gemv, "p2": p2, "ranked": ranked[:16],
             "closed": [x for x in lines if x["closed"]][:4], "class_removable_ms": tab.get("class_removable_ms")}
 

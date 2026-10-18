@@ -116,7 +116,12 @@ def table(ex, spec, keep=sc.KEEP, min_steps=sc.MIN_STEPS) -> dict:
         row = {"key": k, "name": name, "grid": grid, "role": role[0] if role else None,
                "class": cls.most_common(1)[0][0], "classes": dict(cls), "n_per_step": statistics.median(vals["n"])}
         row.update({f"{p}_ms": ms(vals[p]) for p in PARTS if p != "n"})
-        row["removable_ms"] = ms([g + e for g, e in zip(vals["gap_before"], vals["excl"])])
+        rem = [g + e for g, e in zip(vals["gap_before"], vals["excl"])]
+        row["removable_ms"] = ms(rem)
+        # REPORTING (the review of #1756): the per-step spread, and the share of kept steps where this line alone is
+        # >= 3 % of that step's own period -- so a median near a bar shows as marginal
+        row["removable_iqr_ms"] = sc._stat(rem)["iqr_ms"]
+        row["steps_ge_3pct"] = round(sum(x >= 0.03 * r["P"] for x, r in zip(rem, kept)) / len(kept), 4)
         out_rows.append(row)
     out_rows.sort(key=lambda r: -r["removable_ms"])
     class_rem = defaultdict(list)
@@ -172,6 +177,8 @@ def self_test() -> int:
         cases.append(("swiglu's excl is its own advance, not its duration", sw and (sw["dur_ms"], sw["excl_ms"], sw["billed_ms"])
                       == (0.005, 0.003, 0.002)))
         cases.append(("swiglu's removable time is excl + gap", sw and sw["removable_ms"] == 0.003 and sw["gap_before_ms"] == 0.0))
+        # every replay is identical: no spread; 3 us of a 63 us period is 4.8 %, every step over 3 %
+        cases.append(("the spread is reported beside the median", sw and sw["removable_iqr_ms"] == 0.0 and sw["steps_ge_3pct"] == 1.0))
         cases.append(("the GEMVs carry their roles", {f"{GEMV}|96x8x1|gate_up", f"{GEMV}|128x8x1|down"} <= set(by)))
         dn = by.get(f"{GEMV}|128x8x1|down")
         cases.append(("down's 1 us launch gap is on the critical path", dn and dn["gap_before_ms"] == 0.001 and dn["excl_ms"] == 0.007))

@@ -41,9 +41,11 @@ what removing it saves.
   missing, a replay not closing exactly, fewer than 56 kept steps, or the expert path's three lines (gate_up, swiglu,
   down) not at 48 launches per step.
 - **swiglu:** P2 = the swiglu-into-down fusion read (P0's gnf4 option) **iff** `_swiglu_rows`' removable time is
-  ≥ **3 %** of the node replay's period P.
+  ≥ **3 %** of the node replay's period P. Reported beside it: the line's per-step IQR and the share of kept steps
+  at ≥ 3 % of their own period, so a call near the bar shows as marginal.
 - **Expert GEMVs:** each GEMV's removable time minus K33's isolated time is its in-situ excess. It is reported, and it
-  is the GEMVs' addressable time in the ranking.
+  is the GEMVs' addressable time in the ranking. K33's floors come from gnf4 `5a60c37` (0.42.0 + #500 + #501; 16
+  synthetic experts, 8 rows, isolated); this box runs 0.46.1, so the excess compares across builds.
 - **Ranking:** every line by addressable time (removable time minus its floor: K33 for the two GEMVs, 0 otherwise). It
   covers attn (`_fp8_append_bt1_side`, `_fp8_paged_decode_split_f8dot`), moe_route (`_router_epilogue`,
   `_combine_rows`), norm. dense_gemm is listed, never ranked.
