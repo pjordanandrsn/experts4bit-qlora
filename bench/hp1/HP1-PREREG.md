@@ -189,7 +189,11 @@ evaluator. It runs before any scored arm (~10 min, inside the cap), and a failur
 - **Host rule:** one RTX 5090 32 GB on RunPod secure or Vast verified-secure. Driver ≥ 580 (the cu130 venvs), host RAM ≥ 98 GB,
   free disk ≥ 300 GB. The disk holds the 57 GB checkpoint, about 20 GB of venvs, the base exports (about 17 GB each; one when
   the digests match), about 2.6 GB per canonical adapter × 27, and receipts.
-- **Spend:** cap $15 (the owner's), guard 10 h, teardown by explicit pod id with a heartbeat watch. The live list is posted
+- **Spend:** cap $15 (the owner's), guard 10 h, teardown by explicit pod id with a heartbeat watch. The worst case per provider
+  at the guard:
+  - RunPod secure: 10 h × $1.10/h = **$11.00** (no download billing);
+  - Vast verified-secure: 10 h × $0.85/h + about 72 GB of downloads (the 57 GB checkpoint plus wheels) × $0.011/GB ≈ $9.29.
+  The run's worst case is the larger, **$11.00**, inside the $15 cap. The live list is posted
   after, and the spend is disclosed on the bus.
 - **Two strikes:** two consecutive HARNESS_ERROR / VOID / NOT_RUN draws stop the lane.
 
