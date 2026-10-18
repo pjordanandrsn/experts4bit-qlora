@@ -1323,6 +1323,10 @@ def load_moe_4bit_streaming(
     # below must only ever see canonical names (an unnormalized alias would silently pick the
     # wrong class).
     quant_type = normalize_quant_type(quant_type)
+    from .util import host_cpu_report
+    _cpu = host_cpu_report()
+    log(f"  host CPUs: {_cpu['visible_cpus']} visible, quota {_cpu['cpu_quota'] if _cpu['cpu_quota'] is not None else 'none'}, "
+        f"torch threads {_cpu['torch_threads']}, OMP_NUM_THREADS={_cpu['omp_num_threads']}")
     # #344: staged synchronisation, armed HERE because this is the last point in the load
     # at which CUDA_LAUNCH_BLOCKING can still reach the driver — nothing above has touched
     # the GPU (the model is built on `meta`, the snapshot comes off disk), so a caller that
@@ -1553,301 +1557,311 @@ def load_moe_4bit_streaming(
     # Stacking and concatenation are copies and the quantization still runs on the device, so the stored bytes are the
     # same; the resident (no-offload) path reads to the device exactly as before.
     stage_on_host = _stage_expert_rows_on_host(device, offload)
-    for i in range(n_layers):
-        # MODULE side: where this layer's fused experts are PLACED in the built tree.
-        # Not a checkpoint prefix — for the mixtral family the checkpoint keys live
-        # under `block_sparse_moe.experts` instead, and `ckpt_experts` holds those.
-        epfx = f"model.layers.{i}.{expert_rel}."  # "...mlp.experts." / "...experts." / "...block_sparse_moe.experts."
-        trace.phase(f"quantise experts: layer {i}")
-        # CHECKPOINT side: this layer's per-expert keys as the convention parses them.
-        # Empty for the pre-fused and dedicated-quant families, whose branches below
-        # address the checkpoint by `epfx` because there the two sides do coincide.
-        layer_experts = ckpt_experts.get(i, {})
-        spec = layer_store_spec(quantize_layers, i, quant_type, blocksize)
-        layer_quant_type, layer_blocksize = spec if spec is not None else (None, None)
-        if spec is None:
-            # Deliberately left in the base dtype: the original module stays in place,
-            # unquantized. It still has to be FILLED, and a per-expert checkpoint cannot
-            # fill a fused module key-by-key — see `_place_unquantized_experts`.
-            consumed, cut = _place_unquantized_experts(
-                model, epfx, i, weight_map, get, n_exp, model_type,
-                layer_experts, has_gate)
-            expert_keys |= consumed
-            narrowed += cut
-            continue
-        if isinstance(quantize_layers, Mapping) and (arena_index is not None or model_type in K3_PER_EXPERT_MXFP4
-                                                     or f"{epfx}gate_up_proj_blocks" in weight_map):
-            raise NotImplementedError(
-                f"layer {i}: a per-layer store map is not supported on this load path "
-                f"({'arena' if arena_index is not None else model_type!r} packs its experts by a family "
-                "convention with one store for the whole model). Use a single quant_type here, or a set "
-                "of layers to quantize, and raise an issue if a map is what this family needs."
-            )
-        if arena_index is not None:
-            # Every checkpoint key under the experts submodule is an expert tensor,
-            # so they can be marked read-and-skipped WITHOUT reading them — which is
-            # the whole point: at K3 scale the read is what does not fit. Union the
-            # convention's own keys so a family stored under a container `epfx` does
-            # not name is marked consumed rather than falling through as dense; for
-            # every family whose two sides coincide this adds nothing.
-            keys = {k for k in weight_map if k.startswith(epfx)}
-            keys |= {k for byidx in layer_experts.values() for k in byidx.values()}
-            if not keys:
-                continue                                  # dense layer
-            bias = sorted(k for k in keys if k.endswith("_bias"))
-            gptoss_arena = bool(bias) and f"{epfx}gate_up_proj_bias" in weight_map
-            if bias and not gptoss_arena:
+    # The host-side stack/cat of every layer's expert rows runs on torch's intra-op pool, which torch sizes to the CPUs it can
+    # SEE. A rented container can see a 256-thread host and hold a CFS quota of about 31 CPUs; the pool then spins through the
+    # quota and is throttled every period (the only slow offloaded loads in the receipt store, machine 51612, ~35x). For the
+    # staged loop, cap the pool at the quota (and the affinity); restored after. Bytes are unchanged, only speed.
+    from .util import capped_intra_op_threads, host_thread_cap
+    _cap = host_thread_cap(_cpu) if stage_on_host else None
+    if _cap is not None and _cap < torch.get_num_threads():
+        log(f"  host-side fuse: intra-op threads {torch.get_num_threads()} -> {_cap} (the container's CPU quota / affinity)")
+    _thread_cap = capped_intra_op_threads(_cap)
+    with _thread_cap:
+        for i in range(n_layers):
+            # MODULE side: where this layer's fused experts are PLACED in the built tree.
+            # Not a checkpoint prefix — for the mixtral family the checkpoint keys live
+            # under `block_sparse_moe.experts` instead, and `ckpt_experts` holds those.
+            epfx = f"model.layers.{i}.{expert_rel}."  # "...mlp.experts." / "...experts." / "...block_sparse_moe.experts."
+            trace.phase(f"quantise experts: layer {i}")
+            # CHECKPOINT side: this layer's per-expert keys as the convention parses them.
+            # Empty for the pre-fused and dedicated-quant families, whose branches below
+            # address the checkpoint by `epfx` because there the two sides do coincide.
+            layer_experts = ckpt_experts.get(i, {})
+            spec = layer_store_spec(quantize_layers, i, quant_type, blocksize)
+            layer_quant_type, layer_blocksize = spec if spec is not None else (None, None)
+            if spec is None:
+                # Deliberately left in the base dtype: the original module stays in place,
+                # unquantized. It still has to be FILLED, and a per-expert checkpoint cannot
+                # fill a fused module key-by-key — see `_place_unquantized_experts`.
+                consumed, cut = _place_unquantized_experts(
+                    model, epfx, i, weight_map, get, n_exp, model_type,
+                    layer_experts, has_gate)
+                expert_keys |= consumed
+                narrowed += cut
+                continue
+            if isinstance(quantize_layers, Mapping) and (arena_index is not None or model_type in K3_PER_EXPERT_MXFP4
+                                                         or f"{epfx}gate_up_proj_blocks" in weight_map):
                 raise NotImplementedError(
-                    f"layer {i}: arena serving does not carry per-expert biases "
-                    f"in this layout ({bias[0]!r} and {len(bias) - 1} more). "
-                    "Only the gpt-oss spelling (gate_up_proj_bias/"
-                    "down_proj_bias) is handled. Refusing rather than dropping "
-                    "them, which would silently change the epilogue.")
-            expert_keys.update(keys)
-            n_moe += 1
-            from .engines.nvme_experts import build_meta_experts
-            v4 = model_type == "deepseek_v4"
-            arena_cls = (GptOssExperts4bit if gptoss_arena
-                         else DeepseekV4Experts4bit if v4 else None)
-            experts = build_meta_experts(
-                arena_index, n_exp, has_gate=True, activation=activation,
-                compute_dtype=dtype, quant_type=quant_type,
-                cls=arena_cls)
-            if gptoss_arena:
-                # The WEIGHTS stream from the arena; the biases are two small
-                # [E, 2I] / [E, H] stacks that must stay resident, exactly as on
-                # the direct path. Skipping them would leave the gpt-oss epilogue
-                # reading absent buffers -- the failure this branch used to refuse
-                # outright. De-interleave the gate_up bias the SAME way
-                # `from_gptoss` de-interleaves the gate_up ROWS: the arena's baked
-                # stack is already gate-block-then-up-block, so a bias left
-                # interleaved would pair every gate row with an up row's bias and
-                # score a plausible, wrong model.
-                _gub = get(f"{epfx}gate_up_proj_bias").to(dtype)
-                experts.register_buffer(
-                    "gate_up_bias",
-                    torch.cat([_gub[:, 0::2], _gub[:, 1::2]], dim=1).to(device),
-                    persistent=True)
-                experts.register_buffer(
-                    "down_bias",
-                    get(f"{epfx}down_proj_bias").to(dtype).to(device),
-                    persistent=True)
-                # The DIRECT path is the epilogue oracle; take its scalars,
-                # not a config lookup (the released config ships no `alpha`,
-                # and this function's own `alpha` argument is the LoRA one).
-                experts.alpha = GPTOSS_ALPHA
-                experts.limit = float(getattr(lm_config, "swiglu_limit",
-                                              GPTOSS_LIMIT))
-            if v4:
-                # The epilogue has to survive the arena path too — see the bare-build
-                # note on the resident branch below.
-                experts.limit = float(
-                    getattr(lm_config, "swiglu_limit", DEFAULT_SWIGLU_LIMIT))
-            # Wrap in the adapter ONLY when the caller says they are training.
-            # Without this the arena path is serving-only and silently ignores
-            # r/alpha: it produced bare meta experts, so
-            # `enable_nvme_train_residency` — whose whole purpose is training over
-            # arena-resident experts — refused every module with "not
-            # ExpertsLoRA-wrapped", and its documented usage could not run at all.
-            # Found on an A5000 (2026-08-12); no CPU test caught it because every
-            # fixture constructs `ExpertsLoRA` by hand, so they exercised the
-            # mechanism and never the path a caller actually takes.
-            #
-            # Gated on an EXPLICIT flag, not on `r`, and that distinction is
-            # load-bearing: `r` is a required positional and the documented
-            # SERVING example passes `r=8` before calling
-            # `enable_mxfp4_nvme_residency`, which refuses wrapped modules. Keying
-            # off `r` would have fixed training by breaking serving.
-            #
-            # `.to(device)` is deliberately NOT used here, unlike the resident
-            # branches: the base is on `meta` by design — that is what makes
-            # expert storage independent of model size — and moving a meta tensor
-            # to CUDA raises. Only the adapter, which is real, is moved.
-            if arena_train:
-                # The wrapper re-implements the expert forward, so it is only
-                # faithful for the stock epilogue (or one the base hands over via
-                # `_apply_gate`, as V4 does). gpt-oss's meta stack -- biases +
-                # clamped GLU, no hook -- used to be wrapped here regardless, and
-                # trained against a plain SwiGLU with nothing raised (#397).
-                # `ExpertsLoRA.__init__` refuses that by STRUCTURE; this adds the
-                # layer and family to the message so the refusal reads as a
-                # loader decision, not a stray TypeError from inside a constructor.
-                try:
-                    assert_stock_epilogue(experts)
-                except EpilogueContractError as exc:
-                    raise EpilogueContractError(
-                        f"layer {i} ({model_type!r}): arena_train=True asked for an "
-                        f"ExpertsLoRA over this layer's arena-backed experts, but {exc}"
-                    ) from exc
-                experts = ExpertsLoRA(experts, r=r, alpha=alpha, dtype=dtype)
-                for _n in ("gate_up_lora_A", "gate_up_lora_B",
-                           "down_lora_A", "down_lora_B"):
-                    _p = getattr(experts, _n)
-                    setattr(experts, _n, torch.nn.Parameter(
-                        _p.data.to(device), requires_grad=_p.requires_grad))
-            parent, leaf = epfx.rstrip(".").rsplit(".", 1)
-            setattr(model.get_submodule(parent), leaf, experts)
-            meta_expert_prefixes.append(epfx)
-            continue
-        if f"{epfx}gate_up_proj_blocks" in weight_map:
-            # GPT-OSS: experts on disk as MXFP4 (blocks/scales) + per-projection biases.
-            # Dequantize the exact released bytes, then build a faithful NF4 expert
-            # (biases + clamped GLU) — see gptoss.py. Built bare (no ExpertsLoRA):
-            # GPT-OSS-aware training LoRA is a separate change.
-            gate_up = dequantize_mxfp4(get(f"{epfx}gate_up_proj_blocks"), get(f"{epfx}gate_up_proj_scales"), dtype=dtype)
-            down = dequantize_mxfp4(get(f"{epfx}down_proj_blocks"), get(f"{epfx}down_proj_scales"), dtype=dtype)
-            gu_bias = get(f"{epfx}gate_up_proj_bias").to(dtype)
-            dn_bias = get(f"{epfx}down_proj_bias").to(dtype)
-            expert_keys.update({
-                f"{epfx}{k}" for k in (
-                    "gate_up_proj_blocks", "gate_up_proj_scales", "gate_up_proj_bias",
-                    "down_proj_blocks", "down_proj_scales", "down_proj_bias",
+                    f"layer {i}: a per-layer store map is not supported on this load path "
+                    f"({'arena' if arena_index is not None else model_type!r} packs its experts by a family "
+                    "convention with one store for the whole model). Use a single quant_type here, or a set "
+                    "of layers to quantize, and raise an issue if a map is what this family needs."
                 )
-            })
+            if arena_index is not None:
+                # Every checkpoint key under the experts submodule is an expert tensor,
+                # so they can be marked read-and-skipped WITHOUT reading them — which is
+                # the whole point: at K3 scale the read is what does not fit. Union the
+                # convention's own keys so a family stored under a container `epfx` does
+                # not name is marked consumed rather than falling through as dense; for
+                # every family whose two sides coincide this adds nothing.
+                keys = {k for k in weight_map if k.startswith(epfx)}
+                keys |= {k for byidx in layer_experts.values() for k in byidx.values()}
+                if not keys:
+                    continue                                  # dense layer
+                bias = sorted(k for k in keys if k.endswith("_bias"))
+                gptoss_arena = bool(bias) and f"{epfx}gate_up_proj_bias" in weight_map
+                if bias and not gptoss_arena:
+                    raise NotImplementedError(
+                        f"layer {i}: arena serving does not carry per-expert biases "
+                        f"in this layout ({bias[0]!r} and {len(bias) - 1} more). "
+                        "Only the gpt-oss spelling (gate_up_proj_bias/"
+                        "down_proj_bias) is handled. Refusing rather than dropping "
+                        "them, which would silently change the epilogue.")
+                expert_keys.update(keys)
+                n_moe += 1
+                from .engines.nvme_experts import build_meta_experts
+                v4 = model_type == "deepseek_v4"
+                arena_cls = (GptOssExperts4bit if gptoss_arena
+                             else DeepseekV4Experts4bit if v4 else None)
+                experts = build_meta_experts(
+                    arena_index, n_exp, has_gate=True, activation=activation,
+                    compute_dtype=dtype, quant_type=quant_type,
+                    cls=arena_cls)
+                if gptoss_arena:
+                    # The WEIGHTS stream from the arena; the biases are two small
+                    # [E, 2I] / [E, H] stacks that must stay resident, exactly as on
+                    # the direct path. Skipping them would leave the gpt-oss epilogue
+                    # reading absent buffers -- the failure this branch used to refuse
+                    # outright. De-interleave the gate_up bias the SAME way
+                    # `from_gptoss` de-interleaves the gate_up ROWS: the arena's baked
+                    # stack is already gate-block-then-up-block, so a bias left
+                    # interleaved would pair every gate row with an up row's bias and
+                    # score a plausible, wrong model.
+                    _gub = get(f"{epfx}gate_up_proj_bias").to(dtype)
+                    experts.register_buffer(
+                        "gate_up_bias",
+                        torch.cat([_gub[:, 0::2], _gub[:, 1::2]], dim=1).to(device),
+                        persistent=True)
+                    experts.register_buffer(
+                        "down_bias",
+                        get(f"{epfx}down_proj_bias").to(dtype).to(device),
+                        persistent=True)
+                    # The DIRECT path is the epilogue oracle; take its scalars,
+                    # not a config lookup (the released config ships no `alpha`,
+                    # and this function's own `alpha` argument is the LoRA one).
+                    experts.alpha = GPTOSS_ALPHA
+                    experts.limit = float(getattr(lm_config, "swiglu_limit",
+                                                  GPTOSS_LIMIT))
+                if v4:
+                    # The epilogue has to survive the arena path too — see the bare-build
+                    # note on the resident branch below.
+                    experts.limit = float(
+                        getattr(lm_config, "swiglu_limit", DEFAULT_SWIGLU_LIMIT))
+                # Wrap in the adapter ONLY when the caller says they are training.
+                # Without this the arena path is serving-only and silently ignores
+                # r/alpha: it produced bare meta experts, so
+                # `enable_nvme_train_residency` — whose whole purpose is training over
+                # arena-resident experts — refused every module with "not
+                # ExpertsLoRA-wrapped", and its documented usage could not run at all.
+                # Found on an A5000 (2026-08-12); no CPU test caught it because every
+                # fixture constructs `ExpertsLoRA` by hand, so they exercised the
+                # mechanism and never the path a caller actually takes.
+                #
+                # Gated on an EXPLICIT flag, not on `r`, and that distinction is
+                # load-bearing: `r` is a required positional and the documented
+                # SERVING example passes `r=8` before calling
+                # `enable_mxfp4_nvme_residency`, which refuses wrapped modules. Keying
+                # off `r` would have fixed training by breaking serving.
+                #
+                # `.to(device)` is deliberately NOT used here, unlike the resident
+                # branches: the base is on `meta` by design — that is what makes
+                # expert storage independent of model size — and moving a meta tensor
+                # to CUDA raises. Only the adapter, which is real, is moved.
+                if arena_train:
+                    # The wrapper re-implements the expert forward, so it is only
+                    # faithful for the stock epilogue (or one the base hands over via
+                    # `_apply_gate`, as V4 does). gpt-oss's meta stack -- biases +
+                    # clamped GLU, no hook -- used to be wrapped here regardless, and
+                    # trained against a plain SwiGLU with nothing raised (#397).
+                    # `ExpertsLoRA.__init__` refuses that by STRUCTURE; this adds the
+                    # layer and family to the message so the refusal reads as a
+                    # loader decision, not a stray TypeError from inside a constructor.
+                    try:
+                        assert_stock_epilogue(experts)
+                    except EpilogueContractError as exc:
+                        raise EpilogueContractError(
+                            f"layer {i} ({model_type!r}): arena_train=True asked for an "
+                            f"ExpertsLoRA over this layer's arena-backed experts, but {exc}"
+                        ) from exc
+                    experts = ExpertsLoRA(experts, r=r, alpha=alpha, dtype=dtype)
+                    for _n in ("gate_up_lora_A", "gate_up_lora_B",
+                               "down_lora_A", "down_lora_B"):
+                        _p = getattr(experts, _n)
+                        setattr(experts, _n, torch.nn.Parameter(
+                            _p.data.to(device), requires_grad=_p.requires_grad))
+                parent, leaf = epfx.rstrip(".").rsplit(".", 1)
+                setattr(model.get_submodule(parent), leaf, experts)
+                meta_expert_prefixes.append(epfx)
+                continue
+            if f"{epfx}gate_up_proj_blocks" in weight_map:
+                # GPT-OSS: experts on disk as MXFP4 (blocks/scales) + per-projection biases.
+                # Dequantize the exact released bytes, then build a faithful NF4 expert
+                # (biases + clamped GLU) — see gptoss.py. Built bare (no ExpertsLoRA):
+                # GPT-OSS-aware training LoRA is a separate change.
+                gate_up = dequantize_mxfp4(get(f"{epfx}gate_up_proj_blocks"), get(f"{epfx}gate_up_proj_scales"), dtype=dtype)
+                down = dequantize_mxfp4(get(f"{epfx}down_proj_blocks"), get(f"{epfx}down_proj_scales"), dtype=dtype)
+                gu_bias = get(f"{epfx}gate_up_proj_bias").to(dtype)
+                dn_bias = get(f"{epfx}down_proj_bias").to(dtype)
+                expert_keys.update({
+                    f"{epfx}{k}" for k in (
+                        "gate_up_proj_blocks", "gate_up_proj_scales", "gate_up_proj_bias",
+                        "down_proj_blocks", "down_proj_scales", "down_proj_bias",
+                    )
+                })
+                n_moe += 1
+                experts = GptOssExperts4bit.from_gptoss(
+                    gate_up, gu_bias, down, dn_bias, quant_type=quant_type, compute_dtype=dtype
+                ).to(device)
+                if not bare_logged:
+                    # Said once, at load: `r`/`alpha` are required positionals and every
+                    # other family gets an expert adapter, so a caller training this model
+                    # would otherwise learn from the trainable-parameter count (attention
+                    # LoRA only) that the experts were never wrapped.
+                    bare_logged = True
+                    log(f"  NOTE: {model_type!r} experts are built BARE (GptOssExperts4bit, no "
+                        "ExpertsLoRA): r/alpha do not apply to the expert stacks. The generic "
+                        "adapter cannot represent this epilogue (biases + clamped GLU; "
+                        "ExpertsLoRA refuses it structurally); expert LoRA for this family is "
+                        "grouped-nf4-gemm's mxfp4_qlora.ExpertsMxfp4LoRA "
+                        "(docs/solutions/mxfp4-moe-training-and-residency.md).")
+                if offload:
+                    # Bare-module offload: packed experts stream from (pinned) CPU one layer at a
+                    # time; the small biases stay resident. Lets gpt-oss-20b (~11 GB NF4) load and
+                    # run on a 12 GB card.
+                    offload_handles.append(enable_expert_offload(experts, device, pin=pin))
+                parent, leaf = epfx.rstrip(".").rsplit(".", 1)
+                setattr(model.get_submodule(parent), leaf, experts)
+                del gate_up, down
+                continue
+            if f"{epfx}gate_up_proj" in weight_map:
+                # Already fused on disk (Gemma-4; GraniteMoe after the legacy rename above):
+                # [num_experts, 2*inter, hidden] / [num_experts, hidden, inter].
+                gate_up = get(f"{epfx}gate_up_proj").to(dtype)
+                down = get(f"{epfx}down_proj").to(dtype)
+                expert_keys.update({f"{epfx}gate_up_proj", f"{epfx}down_proj"})
+            elif model_type in K3_PER_EXPERT_MXFP4 and \
+                    f"{epfx}0.{K3_PER_EXPERT_MXFP4[model_type][0][0]}.{K3_PER_EXPERT_MXFP4[model_type][1]}" in weight_map:
+                # Per-expert MXFP4 on disk (Kimi K3): each projection is a packed uint8
+                # `[rows, K//2]` plus an e8m0 `[rows, K//32]` scale, two fp4 nibbles per
+                # byte. Same numeric format gpt-oss uses, different NAMING and shape rank
+                # -- so it reuses `dequantize_mxfp4` unchanged.
+                #
+                # `dequantize_mxfp4` returns the TRANSPOSE of the stored matrix
+                # (`[K, rows]`, the layout GptOssExperts wants), but `from_float` below
+                # expects gate_up `[2*inter, hidden]` / down `[hidden, inter]` in STORED
+                # orientation -- hence the `.T`. Getting this wrong yields a model that
+                # loads with plausible shapes and computes garbage.
+                (p_gate, p_up, p_down), packed_kind, scale_kind = K3_PER_EXPERT_MXFP4[model_type]
+
+                def _mxfp4_expert(e, proj):
+                    blocks = get(f"{epfx}{e}.{proj}.{packed_kind}")
+                    scales = get(f"{epfx}{e}.{proj}.{scale_kind}")
+                    rows, kh = blocks.shape
+                    groups = scales.shape[1]
+                    w = dequantize_mxfp4(
+                        blocks.reshape(rows, groups, kh // groups), scales, dtype=dtype)
+                    return w.T.contiguous()          # [K, rows] -> stored [rows, K]
+
+                gate_up_rows, down_rows = [], []
+                for e in range(n_exp):
+                    gate_up_rows.append(torch.cat(
+                        [_mxfp4_expert(e, p_gate), _mxfp4_expert(e, p_up)], dim=0))
+                    down_rows.append(_mxfp4_expert(e, p_down))
+                    expert_keys.update({
+                        f"{epfx}{e}.{proj}.{kind}"
+                        for proj in (p_gate, p_up, p_down)
+                        for kind in (packed_kind, scale_kind)
+                    })
+                gate_up = torch.stack(gate_up_rows).to(dtype)
+                down = torch.stack(down_rows).to(dtype)
+            elif layer_experts:
+                # Per-expert Linears on disk (OLMoE and Qwen3 as `mlp.experts.{e}.gate_proj`;
+                # the mixtral family as `block_sparse_moe.experts.{e}.w1`). Both reach here
+                # through the SAME code: `layer_experts` already holds the exact checkpoint
+                # key for each (expert, role), so neither the container nor the projection
+                # spelling is written out here. The role -> on-disk-token mapping stays in
+                # the convention, where w1=gate/w3=up/w2=down was adjudicated against
+                # upstream's converter and the expert forward — the one thing shapes cannot
+                # tell you, because gate and up are shape-identical.
+                from .arch.moe_conventions import fuse_experts, stack_experts
+
+                # A hole is carried through as None rather than skipped: a short stack
+                # would leave the router addressing experts that were never loaded, so it
+                # goes to the fuser, which refuses and names the missing indices.
+                rows = {}
+                for role in (("gate", "up", "down") if has_gate else ("up", "down")):
+                    byidx = layer_experts.get(role, {})
+                    expert_keys.update(byidx[e] for e in range(n_exp) if e in byidx)
+                    rows[role] = [get(byidx[e], host=stage_on_host) if e in byidx else None for e in range(n_exp)]
+                gate_up, down = (fuse_experts(rows["gate"], rows["up"], rows["down"]) if has_gate
+                                 else stack_experts(rows["up"], rows["down"]))
+                del rows
+                gate_up = gate_up.to(device=device, dtype=dtype)
+                down = down.to(device=device, dtype=dtype)
+            elif f"{epfx}0.gate_proj.weight" in weight_map:
+                # Same per-expert shape, reached WITHOUT a convention: the dedicated-quant
+                # families (gemma4, kimi_k3, deepseek_v4) predate the convention system and
+                # `_convention_or_none` returns None for them, so `layer_experts` is empty
+                # even when their checkpoint is spelled this way. Kept verbatim so nothing
+                # that loads today starts depending on a convention entry it never had.
+                gate_up_rows, down_rows = [], []
+                for e in range(n_exp):
+                    g, u, d = (
+                        get(f"{epfx}{e}.gate_proj.weight"),
+                        get(f"{epfx}{e}.up_proj.weight"),
+                        get(f"{epfx}{e}.down_proj.weight"),
+                    )
+                    gate_up_rows.append(torch.cat([g, u], dim=0))  # [2*inter, hidden]
+                    down_rows.append(d)  # [hidden, inter]
+                    expert_keys.update({f"{epfx}{e}.{p}.weight" for p in ("gate_proj", "up_proj", "down_proj")})
+                gate_up = torch.stack(gate_up_rows).to(dtype)
+                down = torch.stack(down_rows).to(dtype)
+            else:
+                continue  # dense layer (no experts here — e.g. Qwen3 mlp_only_layers, or a dense Gemma-4 layer)
             n_moe += 1
-            experts = GptOssExperts4bit.from_gptoss(
-                gate_up, gu_bias, down, dn_bias, quant_type=quant_type, compute_dtype=dtype
-            ).to(device)
-            if not bare_logged:
-                # Said once, at load: `r`/`alpha` are required positionals and every
-                # other family gets an expert adapter, so a caller training this model
-                # would otherwise learn from the trainable-parameter count (attention
-                # LoRA only) that the experts were never wrapped.
-                bare_logged = True
-                log(f"  NOTE: {model_type!r} experts are built BARE (GptOssExperts4bit, no "
-                    "ExpertsLoRA): r/alpha do not apply to the expert stacks. The generic "
-                    "adapter cannot represent this epilogue (biases + clamped GLU; "
-                    "ExpertsLoRA refuses it structurally); expert LoRA for this family is "
-                    "grouped-nf4-gemm's mxfp4_qlora.ExpertsMxfp4LoRA "
-                    "(docs/solutions/mxfp4-moe-training-and-residency.md).")
+            if model_type == "deepseek_v4":
+                # V4's epilogue is a CLAMPED SwiGLU, and `ExpertsLoRA` re-implements the expert
+                # math inline (to inject the delta before the nonlinearity) rather than calling
+                # `base.forward`. It used to hardcode a plain SwiGLU there, so wrapping V4 would
+                # have dropped the clamps on every training forward with nothing raised — which
+                # is why this was built bare. The adapter now takes the epilogue from the base's
+                # `_apply_gate` (see `lora._epilogue`), so wrapping is faithful and V4 is
+                # trainable like any other supported architecture.
+                base = DeepseekV4Experts4bit.from_deepseek_v4(
+                    gate_up, down,
+                    limit=float(getattr(lm_config, "swiglu_limit", DEFAULT_SWIGLU_LIMIT)),
+                    quant_type=quant_type, compute_dtype=dtype,
+                )
+                experts = ExpertsLoRA(base, r=r, alpha=alpha, dtype=dtype).to(device)
+            else:
+                # Instantiate the most-specific class for the scheme: 4-bit loads stay `Experts4bit`
+                # instances, so downstream `isinstance(x, Experts4bit)` checks keep working exactly as
+                # they did before the ExpertsNbit fold.
+                base_cls = Experts4bit if layer_quant_type in ("nf4", "fp4") else ExpertsNbit
+                base = base_cls.from_float(
+                    gate_up, down, has_gate=has_gate, activation=activation, quant_type=layer_quant_type,
+                    compute_dtype=dtype, blocksize=layer_blocksize,
+                )
+                experts = ExpertsLoRA(base, r=r, alpha=alpha, dtype=dtype).to(device)
             if offload:
-                # Bare-module offload: packed experts stream from (pinned) CPU one layer at a
-                # time; the small biases stay resident. Lets gpt-oss-20b (~11 GB NF4) load and
-                # run on a 12 GB card.
+                # Move this layer's packed experts to (pinned) CPU now, before the next layer is built,
+                # so the GPU never holds more than one layer's experts at a time during load.
                 offload_handles.append(enable_expert_offload(experts, device, pin=pin))
-            parent, leaf = epfx.rstrip(".").rsplit(".", 1)
+            parent, leaf = epfx.rstrip(".").rsplit(
+                ".", 1
+            )  # ("model.layers.i.mlp","experts") or ("model.layers.i","experts")
             setattr(model.get_submodule(parent), leaf, experts)
             del gate_up, down
-            continue
-        if f"{epfx}gate_up_proj" in weight_map:
-            # Already fused on disk (Gemma-4; GraniteMoe after the legacy rename above):
-            # [num_experts, 2*inter, hidden] / [num_experts, hidden, inter].
-            gate_up = get(f"{epfx}gate_up_proj").to(dtype)
-            down = get(f"{epfx}down_proj").to(dtype)
-            expert_keys.update({f"{epfx}gate_up_proj", f"{epfx}down_proj"})
-        elif model_type in K3_PER_EXPERT_MXFP4 and \
-                f"{epfx}0.{K3_PER_EXPERT_MXFP4[model_type][0][0]}.{K3_PER_EXPERT_MXFP4[model_type][1]}" in weight_map:
-            # Per-expert MXFP4 on disk (Kimi K3): each projection is a packed uint8
-            # `[rows, K//2]` plus an e8m0 `[rows, K//32]` scale, two fp4 nibbles per
-            # byte. Same numeric format gpt-oss uses, different NAMING and shape rank
-            # -- so it reuses `dequantize_mxfp4` unchanged.
-            #
-            # `dequantize_mxfp4` returns the TRANSPOSE of the stored matrix
-            # (`[K, rows]`, the layout GptOssExperts wants), but `from_float` below
-            # expects gate_up `[2*inter, hidden]` / down `[hidden, inter]` in STORED
-            # orientation -- hence the `.T`. Getting this wrong yields a model that
-            # loads with plausible shapes and computes garbage.
-            (p_gate, p_up, p_down), packed_kind, scale_kind = K3_PER_EXPERT_MXFP4[model_type]
-
-            def _mxfp4_expert(e, proj):
-                blocks = get(f"{epfx}{e}.{proj}.{packed_kind}")
-                scales = get(f"{epfx}{e}.{proj}.{scale_kind}")
-                rows, kh = blocks.shape
-                groups = scales.shape[1]
-                w = dequantize_mxfp4(
-                    blocks.reshape(rows, groups, kh // groups), scales, dtype=dtype)
-                return w.T.contiguous()          # [K, rows] -> stored [rows, K]
-
-            gate_up_rows, down_rows = [], []
-            for e in range(n_exp):
-                gate_up_rows.append(torch.cat(
-                    [_mxfp4_expert(e, p_gate), _mxfp4_expert(e, p_up)], dim=0))
-                down_rows.append(_mxfp4_expert(e, p_down))
-                expert_keys.update({
-                    f"{epfx}{e}.{proj}.{kind}"
-                    for proj in (p_gate, p_up, p_down)
-                    for kind in (packed_kind, scale_kind)
-                })
-            gate_up = torch.stack(gate_up_rows).to(dtype)
-            down = torch.stack(down_rows).to(dtype)
-        elif layer_experts:
-            # Per-expert Linears on disk (OLMoE and Qwen3 as `mlp.experts.{e}.gate_proj`;
-            # the mixtral family as `block_sparse_moe.experts.{e}.w1`). Both reach here
-            # through the SAME code: `layer_experts` already holds the exact checkpoint
-            # key for each (expert, role), so neither the container nor the projection
-            # spelling is written out here. The role -> on-disk-token mapping stays in
-            # the convention, where w1=gate/w3=up/w2=down was adjudicated against
-            # upstream's converter and the expert forward — the one thing shapes cannot
-            # tell you, because gate and up are shape-identical.
-            from .arch.moe_conventions import fuse_experts, stack_experts
-
-            # A hole is carried through as None rather than skipped: a short stack
-            # would leave the router addressing experts that were never loaded, so it
-            # goes to the fuser, which refuses and names the missing indices.
-            rows = {}
-            for role in (("gate", "up", "down") if has_gate else ("up", "down")):
-                byidx = layer_experts.get(role, {})
-                expert_keys.update(byidx[e] for e in range(n_exp) if e in byidx)
-                rows[role] = [get(byidx[e], host=stage_on_host) if e in byidx else None for e in range(n_exp)]
-            gate_up, down = (fuse_experts(rows["gate"], rows["up"], rows["down"]) if has_gate
-                             else stack_experts(rows["up"], rows["down"]))
-            del rows
-            gate_up = gate_up.to(device=device, dtype=dtype)
-            down = down.to(device=device, dtype=dtype)
-        elif f"{epfx}0.gate_proj.weight" in weight_map:
-            # Same per-expert shape, reached WITHOUT a convention: the dedicated-quant
-            # families (gemma4, kimi_k3, deepseek_v4) predate the convention system and
-            # `_convention_or_none` returns None for them, so `layer_experts` is empty
-            # even when their checkpoint is spelled this way. Kept verbatim so nothing
-            # that loads today starts depending on a convention entry it never had.
-            gate_up_rows, down_rows = [], []
-            for e in range(n_exp):
-                g, u, d = (
-                    get(f"{epfx}{e}.gate_proj.weight"),
-                    get(f"{epfx}{e}.up_proj.weight"),
-                    get(f"{epfx}{e}.down_proj.weight"),
-                )
-                gate_up_rows.append(torch.cat([g, u], dim=0))  # [2*inter, hidden]
-                down_rows.append(d)  # [hidden, inter]
-                expert_keys.update({f"{epfx}{e}.{p}.weight" for p in ("gate_proj", "up_proj", "down_proj")})
-            gate_up = torch.stack(gate_up_rows).to(dtype)
-            down = torch.stack(down_rows).to(dtype)
-        else:
-            continue  # dense layer (no experts here — e.g. Qwen3 mlp_only_layers, or a dense Gemma-4 layer)
-        n_moe += 1
-        if model_type == "deepseek_v4":
-            # V4's epilogue is a CLAMPED SwiGLU, and `ExpertsLoRA` re-implements the expert
-            # math inline (to inject the delta before the nonlinearity) rather than calling
-            # `base.forward`. It used to hardcode a plain SwiGLU there, so wrapping V4 would
-            # have dropped the clamps on every training forward with nothing raised — which
-            # is why this was built bare. The adapter now takes the epilogue from the base's
-            # `_apply_gate` (see `lora._epilogue`), so wrapping is faithful and V4 is
-            # trainable like any other supported architecture.
-            base = DeepseekV4Experts4bit.from_deepseek_v4(
-                gate_up, down,
-                limit=float(getattr(lm_config, "swiglu_limit", DEFAULT_SWIGLU_LIMIT)),
-                quant_type=quant_type, compute_dtype=dtype,
-            )
-            experts = ExpertsLoRA(base, r=r, alpha=alpha, dtype=dtype).to(device)
-        else:
-            # Instantiate the most-specific class for the scheme: 4-bit loads stay `Experts4bit`
-            # instances, so downstream `isinstance(x, Experts4bit)` checks keep working exactly as
-            # they did before the ExpertsNbit fold.
-            base_cls = Experts4bit if layer_quant_type in ("nf4", "fp4") else ExpertsNbit
-            base = base_cls.from_float(
-                gate_up, down, has_gate=has_gate, activation=activation, quant_type=layer_quant_type,
-                compute_dtype=dtype, blocksize=layer_blocksize,
-            )
-            experts = ExpertsLoRA(base, r=r, alpha=alpha, dtype=dtype).to(device)
-        if offload:
-            # Move this layer's packed experts to (pinned) CPU now, before the next layer is built,
-            # so the GPU never holds more than one layer's experts at a time during load.
-            offload_handles.append(enable_expert_offload(experts, device, pin=pin))
-        parent, leaf = epfx.rstrip(".").rsplit(
-            ".", 1
-        )  # ("model.layers.i.mlp","experts") or ("model.layers.i","experts")
-        setattr(model.get_submodule(parent), leaf, experts)
-        del gate_up, down
     trace.sync("quantise experts (all layers)")
     if n_moe == 0:
         # Name the CHECKPOINT spelling the convention actually looks for, not the

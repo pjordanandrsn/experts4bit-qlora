@@ -1,3 +1,4 @@
+import contextlib
 import os
 import time
 
@@ -67,3 +68,70 @@ def container_free_bytes(root: str = "/sys/fs/cgroup") -> tuple[int | None, dict
         except Exception as exc:                       # unreadable / malformed
             return None, {"cgroup": ver, "error": f"{type(exc).__name__}: {exc}"}
     return None, {"error": f"no cgroup v2 or v1 memory controller under {root}"}
+
+
+def container_cpu_quota(root: str = "/sys/fs/cgroup") -> tuple[float | None, dict]:
+    """The CPUs THIS container may use per scheduling period, from its cgroup CPU quota.
+
+    Returns ``(cpus_or_None, detail)``; ``None`` means no quota (``max`` / ``-1``) or nothing readable. Like
+    :func:`container_free_bytes`, the point is that the host's figure misleads: a rented container can see all of a
+    256-thread host's CPUs in its affinity while its CFS quota allows about 31 of them, and a thread pool sized to the
+    visible CPUs then spends the quota spinning and is throttled every period. v2 (``cpu.max``) and v1
+    (``cpu/cpu.cfs_quota_us`` over ``cpu/cpu.cfs_period_us``) are both read. ``root`` is a parameter so this is
+    testable without a container.
+    """
+    try:
+        v2 = os.path.join(root, "cpu.max")
+        if os.path.exists(v2):
+            quota, period = open(v2).read().split()[:2]
+            if quota == "max":
+                return None, {"cgroup": "v2", "cpu.max": "max (unlimited)"}
+            return int(quota) / int(period), {"cgroup": "v2", "cpu.max": f"{quota} {period}"}
+        q1, p1 = os.path.join(root, "cpu", "cpu.cfs_quota_us"), os.path.join(root, "cpu", "cpu.cfs_period_us")
+        if os.path.exists(q1):
+            quota, period = int(open(q1).read().strip()), int(open(p1).read().strip())
+            if quota < 0:
+                return None, {"cgroup": "v1", "cfs_quota_us": quota}
+            return quota / period, {"cgroup": "v1", "cfs_quota_us": quota, "cfs_period_us": period}
+    except Exception as exc:                           # unreadable / malformed
+        return None, {"error": f"{type(exc).__name__}: {exc}"}
+    return None, {"error": f"no cgroup CPU controller under {root}"}
+
+
+def host_cpu_report(root: str = "/sys/fs/cgroup") -> dict:
+    """What the process can actually run on, for a load log: the visible CPUs (affinity), the cgroup quota, torch's
+    intra-op threads and ``OMP_NUM_THREADS``. A thread count far above the quota is the first suspect for a slow
+    host-side load (P137's machine 51612)."""
+    import torch
+    quota, detail = container_cpu_quota(root)
+    visible = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count()
+    return {"visible_cpus": visible, "cpu_quota": None if quota is None else round(quota, 2), "quota_detail": detail,
+            "torch_threads": torch.get_num_threads(), "omp_num_threads": os.environ.get("OMP_NUM_THREADS")}
+
+
+def host_thread_cap(report: dict) -> int:
+    """The intra-op thread count for host-side work: torch's current pool, never above the visible CPUs or the cgroup
+    quota (rounded up). Thread count changes the speed of a CPU copy, never its bytes."""
+    import math
+    cap = report["torch_threads"]
+    if report.get("visible_cpus"):
+        cap = min(cap, report["visible_cpus"])
+    if report.get("cpu_quota") is not None:
+        cap = min(cap, max(1, math.ceil(report["cpu_quota"])))
+    return max(1, cap)
+
+
+@contextlib.contextmanager
+def capped_intra_op_threads(n):
+    """Run the body with torch's intra-op pool at most ``n`` threads (``None``: unchanged), and restore the pool on the way
+    out, raise or not: the pool is process-wide, so a load that fails inside must not leave its caller capped."""
+    import torch
+    before = torch.get_num_threads()
+    changed = n is not None and n < before
+    if changed:
+        torch.set_num_threads(n)
+    try:
+        yield changed
+    finally:
+        if changed:
+            torch.set_num_threads(before)
