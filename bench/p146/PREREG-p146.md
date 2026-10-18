@@ -159,7 +159,7 @@ them re-bands.
 - **Run ids:** `p146-4090-1` is the reading. `p146-4090-2` to `p146-4090-4` are spares under the flicker rule: an id
   refused before the create, or NOT_RUN at the pre-flight, is consumed and is not an attempt. `p146-dry-<n>` are the $0
   dry runs.
-- **Guard 3.0 h.**
+- **Guards:** guard 3.0 h.
   - The fetch check is 3,300 s: 61.1 GB at the launcher's 20 MB/s floor is about 3,050 s.
   - The arm check is 6,000 s: four processes of at most 1,500 s each. Each is a load (about 65 s on a capped host),
     two 64-row evaluations under offload, 34 steps and an adapter save.
