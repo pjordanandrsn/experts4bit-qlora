@@ -1,0 +1,6 @@
+# Names as the BOX sees them after staging ($P140_HOME, /root/p144 on a rental). The box runs `sha256sum -c` on this
+# file; p144_drive.sh and tests/test_p144_staged_pin.py resolve each name to bench/p144 and compare.
+dfbfdd927071499444d8559c59e149294501d19a3cad40130c53e01714baa191  p144_run.sh
+e6239482d72a4ab1efe009c82d77f8a29e5b2e6ccbb9d3fb225b157105ea39f7  p144_box.py
+bdd2d5d7a569006755ad9c6544119d57af110307c870b81008b621e5ff5ccb13  p144_reduce.py
+bbd1cf2490f890242470b76047814e4a2b7e03b10f0b54f9bdeefe6faaa2a51d  p144_tiny.py
