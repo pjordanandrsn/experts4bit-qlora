@@ -121,7 +121,8 @@ comment refuses. Its local record has schema
 the exact clean merged e4b and controller heads, the committed manifest
 template SHA-256, `maximum_draws=1`, `maximum_attempts` equal to its explicit
 `run_ids` list length (one through ten unique IDs matching
-`dq11-l-census-[0-9]+`), and the exact criteria in
+`dq11-l-census-[0-9]+`), `executor_sha256` (the SHA-256 of the one executing
+seat's `CTO/...` identity), and the exact criteria in
 `ENVELOPE_CRITERIA` in the launcher. It lapses at the earlier of 24 hours after
 issue or any change to those source/template bytes. An absent, future,
 expired, longer or broader record refuses before a provider search; it is
@@ -166,8 +167,11 @@ complete observed **union** for the first qualified machine becomes its exact
 inclusion set. Each poll and the selected five-minute window are saved and
 SHA-256 bound. The observer uses only an auth probe and offer-search GETs.
 
-Before discovery, the launcher requires `POD_LAUNCH_AGENT` to identify
-`CTO/codex-desktop/dense`. After binding the manifest, it runs the merged
+Before discovery, the launcher requires `POD_LAUNCH_AGENT` to be a well-formed
+`CTO/...` identity whose SHA-256 equals the envelope's `executor_sha256`; any
+other seat refuses before a search. The envelope thus authorizes one executor
+without naming it in public text, and the controller records the real identity
+in the receipt. After binding the manifest, it runs the merged
 controller's write-free `tools/pod-launch.sh --validate` on that exact file and
 approval URL before the CPU gate and quote. Any validation refusal stops there.
 The packet retains validation and controller stdout, stderr, exit codes and
