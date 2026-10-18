@@ -1267,6 +1267,51 @@ def _release_cached_pinned_blocks(device) -> int | None:
     return freed
 
 
+def _open_quant_cache(model_id, snap, config, lm_config, model_type, has_gate, n_layers, n_exp, quantize_layers,
+                       quant_type, blocksize, dtype, offload, arena_index, ckpt_experts):
+    """The load's :class:`~experts4bit_qlora.quant_cache.QuantCache` when ``E4B_QUANT_CACHE`` is set and applies, else
+    ``None``. It applies to offloaded loads of the per-expert convention families with 4-bit (nf4/fp4) storage; an arena
+    load or another storage with the variable set refuses, and any other path ignores it with a log line."""
+    from . import quant_cache as ec
+    root = ec.cache_dir_requested()
+    if root is None:
+        return None
+    if arena_index is not None:
+        raise ValueError(f"{ec.ENV} is set, but this is an arena load: the arena already holds the quantized experts")
+    specs = {i: layer_store_spec(quantize_layers, i, quant_type, blocksize) for i in range(n_layers)}
+    odd = sorted({s[0] for s in specs.values() if s is not None and s[0] not in ("nf4", "fp4")})
+    if odd:
+        raise ValueError(f"{ec.ENV} caches 4-bit (nf4/fp4) expert storage only; this load stores {odd}")
+    if not offload:
+        log(f"  [quant-cache] {ec.ENV} is set, but offload is off: the cache serves offloaded loads only (ignored)")
+        return None
+    if not ckpt_experts or model_type == "deepseek_v4":
+        log(f"  [quant-cache] {ec.ENV} is set, but {model_type!r} does not take the per-expert path the cache serves "
+            "(ignored)")
+        return None
+    ident = ec.checkpoint_identity(model_id, snap, getattr(config, "_commit_hash", None))
+    shape = {"num_experts": n_exp, "hidden_size": getattr(lm_config, "hidden_size", None),
+             "moe_intermediate_size": getattr(lm_config, "moe_intermediate_size", None),
+             "intermediate_size": getattr(lm_config, "intermediate_size", None)}
+    fields = ec.key_fields(checkpoint=ident, model_type=model_type, layer_specs=specs, dtype=dtype, has_gate=has_gate,
+                           shape=shape)
+    cache = ec.QuantCache(root, fields, log=log)
+    log(f"  [quant-cache] {cache.mode}: key {cache.key[:12]} under {root}"
+        + (" (another GPU recorded: the first layer is re-quantized and compared)" if cache.needs_device_check else ""))
+    return cache
+
+
+def _quant_cache_device_check(cache, i, base):
+    """A hit recorded on another GPU: layer ``i`` was just quantized fresh; compare it byte for byte with the cache's."""
+    from .quant_cache import NAMES
+    packed, _ = cache.load_layer(i)
+    if all(torch.equal(getattr(base, n).detach().to("cpu"), packed[n]) for n in NAMES):
+        cache.needs_device_check = False
+        log(f"  [quant-cache] layer {i} re-quantized here equals the cache's byte for byte: the hit stands")
+    else:
+        cache.device_mismatch_to_miss()
+
+
 def load_moe_4bit_streaming(
     model_id, device, dtype, r, alpha, offload=False, pin=True, prefetch=False, quant_type="nf4",
     trust_remote_code=None, arena=None, quantize_layers=None, arena_train=False,
@@ -1553,6 +1598,8 @@ def load_moe_4bit_streaming(
     # Stacking and concatenation are copies and the quantization still runs on the device, so the stored bytes are the
     # same; the resident (no-offload) path reads to the device exactly as before.
     stage_on_host = _stage_expert_rows_on_host(device, offload)
+    xcache = _open_quant_cache(model_id, snap, config, lm_config, model_type, has_gate, n_layers, n_exp, quantize_layers,
+                                quant_type, blocksize, dtype, offload, arena_index, ckpt_experts)
     for i in range(n_layers):
         # MODULE side: where this layer's fused experts are PLACED in the built tree.
         # Not a checkpoint prefix — for the mixtral family the checkpoint keys live
@@ -1784,16 +1831,23 @@ def load_moe_4bit_streaming(
             # A hole is carried through as None rather than skipped: a short stack
             # would leave the router addressing experts that were never loaded, so it
             # goes to the fuser, which refuses and names the missing indices.
+            # E4B_QUANT_CACHE hit (quant_cache.py): this layer's packed experts come from disk below, so its rows are
+            # marked consumed without being read. The first layer of a hit on another GPU is built fresh and compared.
+            cached = xcache is not None and xcache.has_layer(i) and not xcache.needs_device_check
             rows = {}
             for role in (("gate", "up", "down") if has_gate else ("up", "down")):
                 byidx = layer_experts.get(role, {})
                 expert_keys.update(byidx[e] for e in range(n_exp) if e in byidx)
-                rows[role] = [get(byidx[e], host=stage_on_host) if e in byidx else None for e in range(n_exp)]
-            gate_up, down = (fuse_experts(rows["gate"], rows["up"], rows["down"]) if has_gate
-                             else stack_experts(rows["up"], rows["down"]))
-            del rows
-            gate_up = gate_up.to(device=device, dtype=dtype)
-            down = down.to(device=device, dtype=dtype)
+                if not cached:
+                    rows[role] = [get(byidx[e], host=stage_on_host) if e in byidx else None for e in range(n_exp)]
+            if cached:
+                gate_up = down = None
+            else:
+                gate_up, down = (fuse_experts(rows["gate"], rows["up"], rows["down"]) if has_gate
+                                 else stack_experts(rows["up"], rows["down"]))
+                del rows
+                gate_up = gate_up.to(device=device, dtype=dtype)
+                down = down.to(device=device, dtype=dtype)
         elif f"{epfx}0.gate_proj.weight" in weight_map:
             # Same per-expert shape, reached WITHOUT a convention: the dedicated-quant
             # families (gemma4, kimi_k3, deepseek_v4) predate the convention system and
@@ -1834,15 +1888,29 @@ def load_moe_4bit_streaming(
             # instances, so downstream `isinstance(x, Experts4bit)` checks keep working exactly as
             # they did before the ExpertsNbit fold.
             base_cls = Experts4bit if layer_quant_type in ("nf4", "fp4") else ExpertsNbit
-            base = base_cls.from_float(
-                gate_up, down, has_gate=has_gate, activation=activation, quant_type=layer_quant_type,
-                compute_dtype=dtype, blocksize=layer_blocksize,
-            )
+            if gate_up is None:                                     # a quant-cache hit (above)
+                packed, est = xcache.load_layer(i)
+                if (est["quant_type"], est["blocksize"], est["has_gate"]) != (layer_quant_type, layer_blocksize, has_gate):
+                    raise RuntimeError(f"quant cache {xcache.dir}: layer {i} was stored as {est}, the load expects "
+                                       f"({layer_quant_type!r}, {layer_blocksize}, has_gate={has_gate})")
+                base = base_cls.from_packed(packed["gate_up_proj"], packed["down_proj"], packed["gate_up_absmax"],
+                                            packed["down_absmax"], est, activation=activation, compute_dtype=dtype)
+            else:
+                base = base_cls.from_float(
+                    gate_up, down, has_gate=has_gate, activation=activation, quant_type=layer_quant_type,
+                    compute_dtype=dtype, blocksize=layer_blocksize,
+                )
+                if xcache is not None and xcache.needs_device_check and xcache.has_layer(i):
+                    _quant_cache_device_check(xcache, i, base)
             experts = ExpertsLoRA(base, r=r, alpha=alpha, dtype=dtype).to(device)
         if offload:
             # Move this layer's packed experts to (pinned) CPU now, before the next layer is built,
             # so the GPU never holds more than one layer's experts at a time during load.
             offload_handles.append(enable_expert_offload(experts, device, pin=pin))
+            if xcache is not None and xcache.mode == "miss":
+                from .quant_cache import NAMES as _XNAMES
+                xcache.write_layer(i, {n: offload_handles[-1].home[n] for n in _XNAMES}, base.get_extra_state(),
+                                   n_layers_expected=len(ckpt_experts))
         parent, leaf = epfx.rstrip(".").rsplit(
             ".", 1
         )  # ("model.layers.i.mlp","experts") or ("model.layers.i","experts")
@@ -1865,6 +1933,8 @@ def load_moe_4bit_streaming(
             "prevent."
         )
     log(f"  quantized experts on {n_moe}/{n_layers} MoE layers ({n_exp} experts each)")
+    if xcache is not None:
+        log(f"  [quant-cache] {xcache.finish()}: key {xcache.key[:12]} under {xcache.root}")
 
     if offload_handles:
         pinned = all(h.pinned for h in offload_handles)

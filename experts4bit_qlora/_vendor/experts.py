@@ -396,6 +396,42 @@ class ExpertsNbit(nn.Module):
         module.down_absmax = down_absmax
         return module
 
+    @classmethod
+    def from_packed(
+        cls,
+        gate_up_proj: torch.Tensor,
+        down_proj: torch.Tensor,
+        gate_up_absmax: Optional[torch.Tensor],
+        down_absmax: Optional[torch.Tensor],
+        extra_state: dict,
+        activation: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
+        compute_dtype: Optional[torch.dtype] = None,
+    ) -> "ExpertsNbit":
+        """Build an :class:`ExpertsNbit` from tensors :meth:`from_float` produced earlier (the quantized-expert cache,
+        :mod:`experts4bit_qlora.quant_cache`), without quantizing. ``extra_state`` is :meth:`get_extra_state`'s dict; the
+        module is constructed from it and the tensors must have exactly the shapes and dtypes that construction allocates,
+        or this raises. The codebook is rebuilt on the tensors' device, as :meth:`from_float` builds it on the inputs'."""
+        st = dict(extra_state)
+        if st.get("schema") != _EXTRA_STATE_SCHEMA:
+            raise ValueError(f"from_packed: extra-state schema {st.get('schema')!r}, this build writes {_EXTRA_STATE_SCHEMA}")
+        module = cls(st["num_experts"], st["hidden_dim"], st["intermediate_dim"], has_gate=st["has_gate"],
+                     activation=activation, compute_dtype=compute_dtype, quant_type=st["quant_type"],
+                     blocksize=st["blocksize"], device="meta")
+        module.set_extra_state(st)
+        given = {"gate_up_proj": gate_up_proj, "down_proj": down_proj, "gate_up_absmax": gate_up_absmax,
+                 "down_absmax": down_absmax}
+        for name, t in given.items():
+            want = getattr(module, name)
+            if (want is None) != (t is None) or (t is not None and (t.shape != want.shape or t.dtype != want.dtype)):
+                raise ValueError(f"from_packed: {name} {None if t is None else (tuple(t.shape), t.dtype)} does not match "
+                                 f"the construction's {None if want is None else (tuple(want.shape), want.dtype)}")
+        module.gate_up_proj = nn.Parameter(gate_up_proj, requires_grad=False)
+        module.down_proj = nn.Parameter(down_proj, requires_grad=False)
+        module.gate_up_absmax = gate_up_absmax
+        module.down_absmax = down_absmax
+        module.code = _build_code(module.quant_type, gate_up_proj.device)
+        return module
+
     def _quantize_stack(self, weights: torch.Tensor) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Quantize a ``[num_experts, out, in]`` stack to packed storage + per-expert absmax.
 
