@@ -21,6 +21,7 @@ Nothing in train.py is changed. This script calls ``experts4bit_qlora.train.main
     python p146_box.py --mode cli-abba --model DIR --parquet alpaca.parquet --outdir DIR
     python p146_box.py --arm TAG --model DIR --parquet alpaca.parquet --outdir DIR      (one arm; the parent runs these)
     python p146_box.py --probe --outdir DIR --tag TAG                                     (one pinned H2D probe; A1)
+    python p146_box.py --preflight                         (A1: every guard signal readable, before anything is paid for)
     python p146_box.py --self-test
 
 Amendment A1 (after p146-4090-5, VOID on the self-pairs alone while the host got noisy mid-box): a host-quiet guard,
@@ -124,6 +125,51 @@ def host_window(a, b):
     if a["proc_stat"] and b["proc_stat"] and b["proc_stat"][1] > a["proc_stat"][1]:
         steal = (b["proc_stat"][0] - a["proc_stat"][0]) / (b["proc_stat"][1] - a["proc_stat"][1])
     return {"wall_s": wall, "throttled_frac": thr, "steal_frac": steal}
+
+
+def h2d_pinned_gbps(mb=256, iters=20):
+    """A pinned host-to-device copy rate in plain torch (report_offload_environment's micro-bench, without e4b)."""
+    import torch
+
+    n = mb * 1024 * 1024
+    dst = torch.empty(n, dtype=torch.uint8, device="cuda")
+    src = torch.empty(n, dtype=torch.uint8).pin_memory()
+    for _ in range(3):
+        dst.copy_(src, non_blocking=True)
+    torch.cuda.synchronize()
+    s, e = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+    s.record()
+    for _ in range(iters):
+        dst.copy_(src, non_blocking=True)
+    e.record()
+    torch.cuda.synchronize()
+    return iters * n / 1e9 / (s.elapsed_time(e) / 1e3)
+
+
+def preflight_ok(snap, gbps):
+    """A1 pre-flight: every signal the guard reads must be readable on this host."""
+    bad = []
+    if snap["throttled_usec"] is None:
+        bad.append("cgroup cpu.stat throttled time unreadable")
+    if snap["proc_stat"] is None:
+        bad.append("/proc/stat steal unreadable")
+    if not gbps or gbps <= 0:
+        bad.append("pinned H2D probe failed")
+    return bad
+
+
+def run_preflight():
+    """Read cpu.stat and /proc/stat once and run one pinned H2D probe; rc 2 if any of them is unreadable."""
+    snap = host_snapshot()
+    try:
+        gbps = h2d_pinned_gbps()
+    except Exception as e:                       # noqa: BLE001 -- any failure is "unreadable"
+        print(f"P146_PREFLIGHT_PROBE_ERROR {type(e).__name__}: {e}", flush=True)
+        gbps = None
+    bad = preflight_ok(snap, gbps)
+    print("P146_PREFLIGHT " + json.dumps({"throttled_usec": snap["throttled_usec"], "proc_stat": snap["proc_stat"],
+                                          "pinned_gbps": gbps, "bad": bad}), flush=True)
+    return 2 if bad else 0
 
 
 def run_probe(a):
@@ -353,7 +399,14 @@ def self_test():
     w = host_window({"t": 0.0, "throttled_usec": None, "proc_stat": None}, {"t": 1.0, "throttled_usec": 5.0, "proc_stat": (1, 2)})
     assert w["throttled_frac"] is None and w["steal_frac"] is None
     n += 1
-    print(f"p146_box self-test OK ({n}/14 cases)")
+    ok = {"t": 0.0, "throttled_usec": 0.0, "proc_stat": (0, 10)}
+    assert preflight_ok(ok, 20.0) == []
+    assert len(preflight_ok({**ok, "throttled_usec": None}, 20.0)) == 1
+    assert len(preflight_ok({**ok, "proc_stat": None}, 20.0)) == 1
+    assert len(preflight_ok(ok, None)) == 1 and len(preflight_ok(ok, 0.0)) == 1
+    assert len(preflight_ok({"t": 0.0, "throttled_usec": None, "proc_stat": None}, None)) == 3
+    n += 1
+    print(f"p146_box self-test OK ({n}/15 cases)")
     return 0
 
 
@@ -367,9 +420,12 @@ def main(argv=None):
     p.add_argument("--outdir")
     p.add_argument("--probe", action="store_true")
     p.add_argument("--tag")
+    p.add_argument("--preflight", action="store_true")
     a = p.parse_args(argv)
     if a.self_test:
         return self_test()
+    if a.preflight:
+        return run_preflight()
     if a.probe:
         return run_probe(a)
     if a.arm:

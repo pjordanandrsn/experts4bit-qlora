@@ -215,6 +215,10 @@ strike). The self-pair band is unchanged and still decides on a quiet host.
     that probe. T is bound by the host link, so the link is the quantity that moves S.
 - **A guard signal that was not recorded** (an unreadable `cpu.stat` or `/proc/stat`, a missing or failed probe) is
   also VOID_BY_HOST: the host cannot show it was quiet.
+- **Pre-flight (the maintainer's pre-pass):** right after the box starts, before the install and the fetch, the box reads
+  `cpu.stat` and `/proc/stat` once and runs one pinned H2D probe in plain torch. If any of them is unreadable it refuses
+  (rc 29, `BOX_REFUSED host_guard=unreadable`): NOT_RUN at the pre-flight, at minimal cost and not a strike, so no
+  box is spent on a certain VOID_BY_HOST.
 - **Order of the rule:** the structural STRICT rungs first (a broken arm is a strike on any host), then the guard,
   then the self-pair band, then S.
 - **Pin preference** (not a floor): prefer offers whose CPU allotment is the whole host or close to it (`-5` had a

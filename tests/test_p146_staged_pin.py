@@ -68,7 +68,7 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 
 def test_the_self_tests_pass():
     for script, line in (("p146_reduce.py", "p146_reduce self-test OK (56 cases)"),
-                         ("p146_box.py", "p146_box self-test OK (14/14 cases)")):
+                         ("p146_box.py", "p146_box self-test OK (15/15 cases)")):
         out = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True,
                              env={**os.environ, "PYTHONPATH": ""})
         assert out.returncode == 0 and line in out.stdout, out.stdout + out.stderr
@@ -130,7 +130,7 @@ def test_the_rule_is_the_registered_rule():
 
 def test_the_order_puts_every_refusal_before_the_fetch():
     order = ["CUDA_PROBE=$(python -", "REFUSED: the image's torch", "REFUSED: card is", "the licence covers sm_89",
-             "REFUSED: ${FREE_GB", "REFUSED: ${RAM_GB", 'say "install e4b @', "python - <<'PYT'",
+             "REFUSED: ${FREE_GB", "REFUSED: ${RAM_GB", "python $W/p146_box.py --preflight", "finish 29", 'say "install e4b @', "python - <<'PYT'",
              "p146_reduce.py --self-test", "p146_box.py --self-test", "python -m pytest tests/test_layer_major.py",
              'echo "premise ok', f"DATA_SHA={DATA_SHA}", "python $W/p146_tiny.py", 'say "fetch $MODEL @ $REV"',
              "--mode cli-abba --model", 'say "reduce"; python $W/p146_reduce.py --dir $W --out $W/verdict.json']
@@ -164,7 +164,9 @@ def test_lane_failures_avoid_the_machine_exclusion_codes():
     assert codes & {13, 14, 17, 18} == {13, 18}, codes
     eighteen = [line for line in RUN.splitlines() if "finish 18" in line]
     assert len(eighteen) == 1 and "cuda unusable" in eighteen[0], eighteen
-    assert {9, 10, 11, 15, 16, 19, 21, 22, 25, 28, 40} <= codes
+    assert {9, 10, 11, 15, 16, 19, 21, 22, 25, 28, 29, 40} <= codes
+    pre = [line for line in RUN.splitlines() if "finish 29" in line]
+    assert len(pre) == 1 and "host_guard=unreadable" in pre[0], pre        # A1: the guard's pre-flight refusal
 
 
 def test_amendment_1_the_alpaca_parquet_is_staged_and_checked_never_downloaded(tmp_path):

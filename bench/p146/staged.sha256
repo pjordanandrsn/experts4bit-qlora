@@ -1,6 +1,6 @@
 # Names as the BOX sees them after staging ($P146_HOME, /root/p146 on a rental). The box runs `sha256sum -c` on this
 # file; p146_drive.sh and tests/test_p146_staged_pin.py resolve each name to bench/p146 and compare.
-5d0d9f07944d9a59a2183cceda484a523172f947df2008221db97ef9016a7b3c  p146_run.sh
-d564ae6f90a4919fc78d4d1fd2e7ed084213414591b353515a0a5a6417ffc17a  p146_box.py
+5ac2f3fc5e0dcf44a65ec3e277b245da5f9289a25a5899078ab99cc491bca21c  p146_run.sh
+c7c64d9bde315420ae06736c4d5615a839d9aa81948905bc7801a72442e6c7ce  p146_box.py
 9df06a776f9b3d4db5a99a5a68d4de08950f21beaef62faebe6b1bcec6609b3b  p146_reduce.py
 abe049a534604dd80bd28123b036a758f6363e1cd2e9947b480f06c6c5348d2e  p146_tiny.py
