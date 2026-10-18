@@ -1,7 +1,8 @@
-# The verify split (#1313): where SD2's 1 → n row verify increment goes, on one card's own numbers
+# P138, the verify split (#1313): where SD2's 1 → n row verify increment goes, on one card's own numbers
 
-**The lane number is assigned at merge.** Until then the lane is "the verify split", and its run ids are
-`vsplit-5090-N`.
+**The lane is P138**, numbered at the registration's merge (`1026c439`, #1727). Its files keep the `vsplit` names,
+and its run ids are `vsplit-5090-N`. TC1's PREREG uses "P138" only as one of its own prediction labels, a separate
+namespace.
 
 ## Why this lane exists
 

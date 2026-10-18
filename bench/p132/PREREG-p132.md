@@ -253,6 +253,6 @@ The reference card (machine 55913, offer 40421555, GPU-38c66e15) was listed in *
 on any other card (Amendment 2), and P116's matched pair shows that normalizing by the B = 1 anchor cannot carry its
 rule to another card. **P132 closes "not run"; that is not a strike.**
 
-The question moves to a new registration, the verify split (`bench/vsplit/PREREG-vsplit.md`). There every number the
+The question moves to a new registration, P138, the verify split (`bench/vsplit/PREREG-vsplit.md`). There every number the
 rule compares comes from the box that runs it, P132's box is reused byte-identical, and the desk prediction is
 restated as fractions of the increment.

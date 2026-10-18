@@ -1,9 +1,9 @@
-### The verify split registered (#1313): where SD2's verify increment goes, on one card's own numbers
+### P138, the verify split, registered (#1313): where SD2's verify increment goes, on one card's own numbers
 
 P132 closes "not run": its reference card was listed in 0 of about 4,050 reads over 34.5 h, and its rule compared
-absolute milliseconds with that card. The question moves to `bench/vsplit/` (the lane number is assigned at merge).
+absolute milliseconds with that card. The question moves to P138 in `bench/vsplit/`.
 
-Every number the verify split's rule compares comes from the box that runs it:
+Every number P138's rule compares comes from the box that runs it:
 - two unprofiled timing passes of SD2's V1 terms (the A/A anchors and a self-pair);
 - the census's class shares at n = 1..4, converted with the unprofiled steps;
 - need(n) from SD2's own formula with this box's terms.
