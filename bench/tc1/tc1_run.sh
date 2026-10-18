@@ -2219,10 +2219,14 @@ hp1_shakedown(){ local FAM=$1 MID=$2 REV=$3 TOK=$4 TS=$5 SF=${1}shake
   local TM TR; TM=$($PY_E4B -c "import json,sys; print(json.loads(open(sys.argv[1]).read().splitlines()[-1])['model'])" logs/hp1_trunc.log)
   TR=$($PY_E4B -c "import json,sys; print(json.loads(open(sys.argv[1]).read().splitlines()[-1])['revision'])" logs/hp1_trunc.log)
   local X="--hp1-export $W/hp1/shake --hp1-export-base 1" E="HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1"
-  TC1_ARM_EXTRA_ENV="$E" arm $SF e4b hp1shake_e4b fused 1800 "$TM" $TR 0 hp1shake $TOK $TS --attn-4bit 1 $(hp1_cell k10 3407) --seed 3407 --order-seed 3407 $X
-  TC1_ARM_EXTRA_ENV="$E" arm $SF unsloth hp1shake_unsloth unsloth 1800 "$TM" $TR 0 hp1shake $TOK $TS --grad-ckpt unsloth --unsloth-targets $UT7 \
+  # The arms run as fam $SF, and tc1_arm refuses a tokens file labelled for another fam (hp1k-5090-1: rc=13 TOKENS_MISMATCH on all three).
+  # Same rows relabelled: the registered sha256 covers train+eval only, so $TS still binds the copy.
+  local STOK=$W/hp1/tokens_$SF.json
+  $PY_E4B -c "import json,sys; t=json.load(open(sys.argv[1])); t['fam']=sys.argv[3]; json.dump(t,open(sys.argv[2],'w'))" $TOK $STOK $SF || { say "HP1 shakedown: cannot relabel $TOK"; return 1; }
+  TC1_ARM_EXTRA_ENV="$E" arm $SF e4b hp1shake_e4b fused 1800 "$TM" $TR 0 hp1shake $STOK $TS --attn-4bit 1 $(hp1_cell k10 3407) --seed 3407 --order-seed 3407 $X
+  TC1_ARM_EXTRA_ENV="$E" arm $SF unsloth hp1shake_unsloth unsloth 1800 "$TM" $TR 0 hp1shake $STOK $TS --grad-ckpt unsloth --unsloth-targets $UT7 \
     --unsloth-moe-backend grouped_mm --lora-init native --adapter-dtype native --seed 3407 --order-seed 3407 $X
-  TC1_ARM_EXTRA_ENV="$E" arm $SF axolotl hp1shake_axolotl axolotl 1800 "$TM" $TR 0 hp1shake $TOK $TS --axolotl-dataset $W/data/ds_alpaca.json --axolotl-best 1 \
+  TC1_ARM_EXTRA_ENV="$E" arm $SF axolotl hp1shake_axolotl axolotl 1800 "$TM" $TR 0 hp1shake $STOK $TS --axolotl-dataset $W/data/ds_alpaca.json --axolotl-best 1 \
     --lora-init native --adapter-dtype native --seed 3407 --order-seed 3407 $X
   local fw; for fw in e4b unsloth axolotl; do [ "$(status_of $SF $fw hp1shake_$fw)" = ok ] || { say "HP1 shakedown: $fw arm status $(status_of $SF $fw hp1shake_$fw)"; return 1; }; done
   HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts "$W/${SF}_*_hp1shake_*.json" --bases $W/hp1/shake/base_* --tokens $TOK --eval-n 8 \

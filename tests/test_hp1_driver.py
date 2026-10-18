@@ -39,17 +39,24 @@ PY_E4B=$W/fakepy
 say(){ echo "SAY: $*" >> "$W/say.log"; }
 can_run(){ case "$2" in ${NO_TIME_FOR:-__none__}) echo "SKIPPED $2" >> summary.txt; return 1;; esac; return 0; }
 tc1_prepare(){ TOK=$W/tokens.json; TS=deadbeef; return 0; }
-arm(){ echo "$1 $2 $3 ${*:12}" >> "$W/arms.log"; touch "$W/${1}_${2}_${3}.json"; }
-status_of(){ [ "${SHAKE_FAIL:-}" = "$2" ] && echo install_failed || echo ok; }
+# tc1_arm's own rule (tc1_arm.py, the tokens check): a tokens file labelled for another fam is refused, rc=13 TOKENS_MISMATCH.
+arm(){ local tf; tf=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('fam') or '')" "${10}")
+  if [ -n "$tf" ] && [ "$tf" != "$1" ]; then echo "$1 $2 $3" >> "$W/mismatch.log"; return 0; fi
+  echo "$1 $2 $3 ${*:12}" >> "$W/arms.log"; touch "$W/${1}_${2}_${3}.json"; }
+status_of(){ grep -qx "$1 $2 $3" "$W/mismatch.log" 2>/dev/null && { echo tokens_mismatch; return; }
+  [ "${SHAKE_FAIL:-}" = "$2" ] && echo install_failed || echo ok; }
 hp1_bulk_manifest(){ echo "manifest $1" >> "$W/manifest.log"; }
 mkdir -p logs hp1 data; : > summary.txt; : > arms.log
+echo '{"fam": "qwen3hp1", "sha256": "deadbeef", "train": [], "eval": []}' > tokens.json
 source ./hp1_funcs.sh
 ${FAMILY_FN:-tc1_hp1_family} qwen3hp1 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600 3600
 """
 
 
-def drive(tmp_path, **env):
+def drive(tmp_path, mutate=None, **env):
     src = RUN_SH.read_text()
+    if mutate:
+        src = mutate(src)
     (tmp_path / "hp1_funcs.sh").write_text(src[src.index(START):src.index(END)])
     (tmp_path / "fakepy").write_text(FAKEPY)
     (tmp_path / "fakepy").chmod(0o755)
@@ -295,3 +302,24 @@ def test_the_controller_checks_box1s_carry_pins_before_renting(tmp_path, case):
         assert p.returncode == 0 and "PINS_OK" in p.stdout, p.stdout + p.stderr
     else:
         assert p.returncode == 78 and "refusing" in p.stdout and "PINS_OK" not in p.stdout, p.stdout + p.stderr
+
+
+def test_the_shakedown_hands_each_arm_a_tokens_file_labelled_for_its_own_fam(tmp_path):
+    """hp1k-5090-1: the shakedown arms run as fam qwen3hp1shake and were handed the qwen3hp1 tokens file, so tc1_arm refused all
+    three (rc=13 TOKENS_MISMATCH) and the draw ended SHAKEDOWN_FAILED. The stub arm applies tc1_arm's fam rule."""
+    arms, summary = drive(tmp_path)
+    assert not (tmp_path / "mismatch.log").exists()
+    assert "HP1 SHAKEDOWN_OK" in summary
+    assert sorted(tags(arms, "qwen3hp1shake")) == ["hp1shake_axolotl", "hp1shake_e4b", "hp1shake_unsloth"]
+    import json
+    relabelled = json.loads((tmp_path / "hp1" / "tokens_qwen3hp1shake.json").read_text())
+    original = json.loads((tmp_path / "tokens.json").read_text())
+    assert relabelled["fam"] == "qwen3hp1shake" and {k: v for k, v in relabelled.items() if k != "fam"} == \
+        {k: v for k, v in original.items() if k != "fam"}
+
+
+def test_without_the_relabel_the_shakedown_fails_as_hp1k_5090_1_did(tmp_path):
+    arms, summary = drive(tmp_path, mutate=lambda s: s.replace("hp1shake $STOK $TS", "hp1shake $TOK $TS"))
+    assert sorted((tmp_path / "mismatch.log").read_text().split("\n")[:-1]) == [
+        "qwen3hp1shake axolotl hp1shake_axolotl", "qwen3hp1shake e4b hp1shake_e4b", "qwen3hp1shake unsloth hp1shake_unsloth"]
+    assert "HP1 SHAKEDOWN_FAILED" in summary and not [t for t in tags(arms) if t.startswith("hp1_k")]
