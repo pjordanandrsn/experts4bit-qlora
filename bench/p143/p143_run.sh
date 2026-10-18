@@ -17,7 +17,7 @@ GNF4_SHA=70bc03cb7a61b03c4e801e7423c58c103a1b6d7d # v0.46.1 tag commit
 SHORT=32; LONG=160; REPS=3; NEED_BENCH=900   # 25 graphs x 400 timed replays of 48 launches: a few minutes
 DRY=${P143_DRY:-0}; GPU_CLASS=5090; MIN_RAM_GB=60
 case "$P143_RUN_ID" in
-  p143-5090-1|p143-5090-2) FAMILY=qwen3-attn; MODEL=none; REV=none; MOE_LAYERS=48; MIN_DISK_GB=40; BATCHES='';;
+  p143-5090-1|p143-5090-2|p143-5090-3) FAMILY=qwen3-attn; MODEL=none; REV=none; MOE_LAYERS=48; MIN_DISK_GB=40; BATCHES='';;
   *) say "unregistered run ID: $P143_RUN_ID"; finish 78;;
 esac
 [ "$DRY" = 0 ] || [ "$FAMILY" = dry ] || { say 'dry mode requires registered A2000 ID'; finish 78; }

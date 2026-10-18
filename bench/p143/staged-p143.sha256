@@ -1,7 +1,7 @@
 # bench/p143/staged-p143.sha256 -- every piece the P143 box runs, by the name the box sees
 # (bench/p143/PREREG-p143.md). The premise tests at P136's pins (bench/p136/staged-p136.sha256).
-19bbe39e21efd4ed7f188d4c0b594bd1c433f5cc8e6220b2facf48b540ee7236  p143_run.sh
-f54eab4deb9fabbb8a4dc168c14de6d53f61195419c0bc7a57650187c59fe7b0  p143_bench.py
+0c787d17e58b17153811a4ac0ead5835674bdd8b8a92522d052ad4589ec46c64  p143_run.sh
+bac12a2ebd70a0ed29e79df786549b76abe398a17471ffc5725315503fb8c795  p143_bench.py
 20c7e8671c3a146e968086961659ed08947021389ef3749f6c6bc72c8de9e439  p143_reduce.py
 f53952c1a26b06e8a8f61dcfdbd511acad0b0507cae58cb1bbfca7f3c8f4313a  test_decode_graph_buckets.py
 0af027ec93837f2b0cd150a77c7692386ac33eb59d553727c40fe784c6c273de  test_kv_step_select.py
