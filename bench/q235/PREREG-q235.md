@@ -1243,3 +1243,10 @@ passes them for a pro6000 leg). Without them it keeps Amendment 11's rule, which
 - The worked example. A host at 17.69 passes and one at 5.0 is refused. The base 5.14 binds when the fit-derived value is lower.
 - The committed leg refits to exactly the sealed floors (23.609, 5.518, 1.145).
 - `HC_BOX_SHARE` 0.1 fails three tests, and `MIN_HOST_COPY_GBS` 5.517 fails the refit test.
+
+## Amendment 14 (2026-10-18, before any further 235B box): the science box's host rate
+
+For the science box's ids `q235-pro6000-6` to `-9`, the host rate is at most **$1.85 an hour including 650 GB of disk** (was
+$1.70). This is a feasibility term. No PRO 6000 offer with at least 239 GB of host RAM billed under $1.70 for about 1.5 hours,
+and the cheapest reliable one billed $1.83. The worst case must still be at most $15 at the pinned quote (6.0 h × the quoted
+rate + 474.252 GB × the quoted per-GB). Amendment 13's floors and everything else are unchanged.
