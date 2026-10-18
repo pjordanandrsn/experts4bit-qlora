@@ -17,11 +17,11 @@ def quota():
     return container_cpu_quota()[0]
 
 
-E, I, H = 128, 768, 2048
+E, INTER, H = 128, 768, 2048
 g = torch.Generator().manual_seed(0)
-gate = [torch.randn(I, H, generator=g).to(torch.bfloat16) for _ in range(E)]
-up = [torch.randn(I, H, generator=g).to(torch.bfloat16) for _ in range(E)]
-down = [torch.randn(H, I, generator=g).to(torch.bfloat16) for _ in range(E)]
+gate = [torch.randn(INTER, H, generator=g).to(torch.bfloat16) for _ in range(E)]
+up = [torch.randn(INTER, H, generator=g).to(torch.bfloat16) for _ in range(E)]
+down = [torch.randn(H, INTER, generator=g).to(torch.bfloat16) for _ in range(E)]
 out = {"visible": len(os.sched_getaffinity(0)), "quota": quota(), "runs": {}}
 for t in [int(x) for x in sys.argv[1:]]:
     torch.set_num_threads(t)
