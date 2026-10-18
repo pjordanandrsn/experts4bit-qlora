@@ -97,7 +97,8 @@ the paged attention, and the fusions at one assembly point as the harness: `fuse
 `E4B_FUSE_ROUTER_EPI`) itself -- the registered B=1 fused stack is `--fuse-qkv` with those flags set -- or,
 without it, the three folds called directly. Unset, the four knobs resolve per family at startup: `auto` on
 `qwen3_moe` (lane P115 Phase D's SANE read at T == 1, #1379) and on Qwen3.5/3.6-MoE (`qwen3_5_moe_text`, lane FAM's
-quality and speed reads, #1362; only the router epilogue engages there), and `0` elsewhere, gpt-oss and Granite-MoE
+quality and speed reads, #1362; only the router epilogue engages there) and on Mixtral (`mixtral`, FAM's quality read
+and P135's speed read, #1732; the three glue folds engage, no fused q/k/v), and `0` elsewhere, gpt-oss and Granite-MoE
 included (FAM read both FAIL); `/health` reports each knob's resolution and its source. Explicit `auto` is structural and quality-licensed only on that list: elsewhere it logs one
 warning naming the read the family lacks or failed. `0` on a knob is the way back. A set lever that patches nothing
 refuses at startup, and

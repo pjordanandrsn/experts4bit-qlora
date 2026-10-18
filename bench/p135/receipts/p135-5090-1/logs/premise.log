@@ -1,0 +1,21 @@
+..................................F                                      [100%]
+=================================== FAILURES ===================================
+___________ test_the_folds_replay_exactly_as_their_padded_eager_step ___________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7553b3b9bcd0>
+
+    @needs_fp8
+    def test_the_folds_replay_exactly_as_their_padded_eager_step(monkeypatch):
+        graph, status, stats, census, calls = _run("graph", monkeypatch)
+        assert census == (9, (2, 2)), census                  # 4 norms per layer + the final norm; 2 layers, 2 attentions
+        assert status == {1: "graph", 2: "graph", 4: "graph"}, status
+        assert all(stats[b]["replays"] > 0 for b in (1, 2, 4)), stats
+        assert sum(s["eager_steps"] for s in stats.values()) == 0
+>       assert all(calls[k] > 0 for k in KERNELS), calls       # the capture ran the fused kernels
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'rmsnorm_rows': 48, 'rmsnorm_resid_rows': 28, 'rope_norm_heads': 0}
+E       assert False
+E        +  where False = all(<generator object test_the_folds_replay_exactly_as_their_padded_eager_step.<locals>.<genexpr> at 0x7555edc1b760>)
+
+test_fused_glue_decode_graphs_gpu.py:76: AssertionError
+1 failed, 34 passed in 13.79s
