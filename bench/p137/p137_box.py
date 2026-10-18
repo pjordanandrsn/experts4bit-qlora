@@ -240,17 +240,23 @@ def run_abba(a):
     tok, pad_id, model, n_fast, handles = _load(a.model)
     print("P137_LOAD " + json.dumps({"seconds": round(time.perf_counter() - t0, 1), "n_fast": n_fast,
                                      "n_offloaded": len(handles)}), flush=True)
-    params = [p for p in model.parameters() if p.requires_grad]
-    snapshot = [p.detach().clone() for p in params]
-    snap_hash = adapter_hash(params)
-    import torch
-
-    _reset(model, params, snapshot, handles)
-    mem_baseline = torch.cuda.memory_allocated()       # post-load, post-snapshot, everything evicted
     rows = [encode(tok, ex) for ex in json.load(open(a.data))]
     n_steps = WARM + TIMED
     plan = micro_batches(rows[: n_steps * ACCUM * MB_ROWS + 4 * HELD_ROWS], n_steps)
     held = [r for r in rows[n_steps * ACCUM * MB_ROWS:] if any(t != -100 for t in r[1])][:HELD_ROWS]
+    params = [p for p in model.parameters() if p.requires_grad]
+    snapshot = [p.detach().to("cpu").clone() for p in params]   # on the host: no arm's device peak carries it (review)
+    snap_hash = adapter_hash(params)
+    import torch
+
+    # One untimed warm-up forward + backward (no optimizer step; the reset restores the adapters) BEFORE the baseline, so
+    # the one-time lazy device workspaces of the first training step (p137-dry-9: +16.26 MiB from the second arm on, e.g.
+    # the cuBLAS workspace) are inside the baseline rather than read as an arm-to-arm leak.
+    model.train()
+    warm = pad(plan[0][0], pad_id, "cuda")
+    model(**warm).loss.backward()
+    _reset(model, params, snapshot, handles)
+    mem_baseline = torch.cuda.memory_allocated()       # post-load, post-warm-up, post-snapshot, everything evicted
     for tag in TAGS:
         _arm(tag, model, params, snapshot, snap_hash, handles, plan, held, pad_id, n_fast, a.model,
              os.path.join(a.outdir, f"arm_{tag}.json"), mem_baseline)

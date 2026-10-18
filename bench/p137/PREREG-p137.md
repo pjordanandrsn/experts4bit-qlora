@@ -264,6 +264,8 @@ Each arm's record carries the adapter sha256 at its start and the snapshot's. Th
 - **a self-pair outside [0.97, 1.03] is now VOID** (it was NOISY). In one process the self-pair is the carry-over check, so
   a cache order effect voids the read and is never re-banded.
 
+Before the baseline, one untimed warm-up forward and backward runs, with no optimizer step and the adapters restored after it. That puts the first training step's one-time lazy device workspaces inside the baseline: `p137-dry-9` showed +16.26 MiB, constant, from the second arm on, which the check read as a leak. The adapter snapshot is held on the host.
+
 Peak memory per arm is `max_memory_allocated` after that arm's `reset_peak_memory_stats`, never `reserved`, so allocator
 caching from an earlier arm cannot move the 4.25 GiB term.
 
