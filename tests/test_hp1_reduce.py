@@ -527,3 +527,34 @@ def test_manifests_that_disagree_on_a_path_refuse_by_name(tmp_path, capsys):
     assert hr.main(["select", kf, "--out", str(out), *m1, *m2]) == hr.EXIT_INCOMPLETE
     probs = json.loads(out.read_text())["manifest_problems"]
     assert probs and "disagree" in probs[0] and doc["files"][0]["path"] in probs[0]
+
+
+def test_a_shakedown_only_disagreement_across_boxes_is_not_a_problem(tmp_path, capsys):
+    """Each box trains its own shakedown adapter at the same relative path; those bytes are not reproducible across boxes and are
+    never compared. Only what the reading uses (scored adapters, base index, base layer files) is."""
+    kf = _write(tmp_path, "k.json", _k_arms(K10_BEST))
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    m1, m2 = _mf(tmp_path / "a", kf), _mf(tmp_path / "b", kf)
+    for m, sha in ((m1, "box1-shake"), (m2, "box2-shake")):
+        doc = json.loads(Path(m[1]).read_text())
+        doc["files"] += [{"path": "hp1/shake/canonical_qwen3hp1shake_hp1shake_e4b.safetensors", "bytes": 1, "sha256": sha},
+                         {"path": "hp1/shake/base_e4b_qwen3hp1shake/index.json", "bytes": 1, "sha256": sha}]
+        Path(m[1]).write_text(json.dumps(doc))
+    out = tmp_path / "s.json"
+    assert hr.main(["select", kf, "--out", str(out), *m1, *m2]) == hr.EXIT_OK
+
+
+def test_a_base_layer_disagreement_across_boxes_voids(tmp_path, capsys):
+    """The shared base export is a deterministic quantization: its layer files must agree across boxes, or the reading is VOID."""
+    kf = _write(tmp_path, "k.json", _k_arms(K10_BEST))
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    m1, m2 = _mf(tmp_path / "a", kf), _mf(tmp_path / "b", kf)
+    for m, sha in ((m1, "L0-box1"), (m2, "L0-box2")):
+        doc = json.loads(Path(m[1]).read_text())
+        doc["files"].append({"path": "hp1/base_e4b_qwen3hp1/layer000.safetensors", "bytes": 1, "sha256": sha})
+        Path(m[1]).write_text(json.dumps(doc))
+    out = tmp_path / "s.json"
+    assert hr.main(["select", kf, "--out", str(out), *m1, *m2]) == hr.EXIT_INCOMPLETE
+    assert "layer000" in json.loads(out.read_text())["manifest_problems"][0]

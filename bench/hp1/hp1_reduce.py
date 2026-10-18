@@ -560,18 +560,36 @@ def manifest_problems(manifest_paths, eval_paths):
     scored arm's adapter listed with its exact sha256, its base export's index.json listed. Returns a list of problems (empty = pinned)."""
     if isinstance(manifest_paths, str):
         manifest_paths = [manifest_paths]
-    listed = {}                                     # the union over every box's manifest (Amendment 2: box 1's + box 2's)
+    per = []                                        # every box's manifest (Amendment 2: box 1's + box 2's)
     for manifest_path in manifest_paths:
         try:
             with open(manifest_path) as fh:
                 man = json.load(fh)
-            rows = {row["path"]: row.get("sha256") for row in man["files"]}
+            per.append((manifest_path, {row["path"]: row.get("sha256") for row in man["files"]}))
         except (OSError, ValueError, KeyError, TypeError) as exc:
             return [f"bulk manifest {manifest_path} missing or unparsable: {type(exc).__name__}: {exc}"]
-        clash = sorted(k for k in rows if k in listed and listed[k] != rows[k])
-        if clash:                                   # fail closed: two manifests disagreeing on one path is refused by name, never last-wins
+    # The paths a reading USES: every scored arm's adapter and its base export's index.json -- plus the layer files of every base
+    # export outside the shakedown (a deterministic quantization: the same base on two boxes must be the same bytes). A box's own
+    # shakedown files (hp1/shake/**, shake-cache) are trained per box and never compared across manifests.
+    used = set()
+    for path in eval_paths:
+        with open(path) as fh:
+            for arm in json.load(fh).get("arms", []):
+                if arm.get("status") == "SCORED":
+                    used.add(_rel_hp1(arm.get("adapter")))
+                    used.add(_rel_hp1(arm.get("base")).rstrip("/") + "/index.json")
+
+    def compared(k):
+        if k.startswith("hp1/shake/") or "/shake-cache/" in k:
+            return False
+        return k in used or any(part.startswith("base_") for part in k.split("/")[1:-1])
+    listed = {}
+    for manifest_path, rows in per:
+        clash = sorted(k for k in rows if compared(k) and k in listed and listed[k] != rows[k])
+        if clash:                                   # fail closed on what the reading uses: refused by name, never last-wins
             return [f"bulk manifests disagree on {k}: {str(listed[k])[:12]} vs {str(rows[k])[:12]} ({manifest_path})" for k in clash]
-        listed.update(rows)
+        for k, v in rows.items():
+            listed.setdefault(k, v)
     problems = []
     for path in eval_paths:
         with open(path) as fh:
