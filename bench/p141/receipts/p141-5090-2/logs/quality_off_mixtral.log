@@ -1,0 +1,62 @@
+[16:48:55]   host CPUs: 36 visible, quota 34.56, torch threads 18, OMP_NUM_THREADS=None
+Fetching 26 files:   0%|          | 0/26 [00:00<?, ?it/s]Fetching 26 files: 100%|██████████| 26/26 [00:00<00:00, 881.66it/s]
+[16:48:55]   checkpoint: mistralai/Mixtral-8x7B-Instruct-v0.1 @ eba92302a2861cdc0098cc54bc9f17cb2c47eb61 (requested eba92302a2861cdc0098cc54bc9f17cb2c47eb61)
+[16:48:55]   fusing + quantizing experts (up to 32x8) to nf4 (streaming)...
+[16:48:55]   quantized experts on 32/32 MoE layers (8 experts each)
+[16:48:55]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[16:48:56]   applied 32 transformers checkpoint-key renaming(s) (this checkpoint's layout differs from the module tree)
+[16:48:56]   experts deferred to the arena: 32 module(s), 160 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[16:49:25]   hybrid tier active on 32 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] fusions (q/k/v auto; folds set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 0, 'fuse_t1_glue_n': 65, 'fuse_t1_glue_r2_n': [32, 32], 'fuse_router_epilogue_n': 32}
+[serve_paged] PREFILL_GRAPH auto: refused, prefill stays eager (device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement))
+[serve_paged] ready: {"moe_layers": 32, "experts": 8, "top_k": 2, "model_type": "mixtral", "int4_expert_layers": 0, "int4_store_kinds": [], "int4_attn_projections": 0, "kv": {"n_kv_heads": 8, "head_dim": 128, "k_groups": "auto", "scratch_slots": 0, "blocks_per_seq": 48, "pool_mib": 828.1}, "graph_status": null, "spec": {"mode": "off"}, "grouping": {"device_grouping": false, "force_singleton_groups": false}, "moe_residual": {"rows": [1, 2, 4, 8, 16], "licensed": 32, "partial": 0, "refused": 0, "probe_errors": []}, "prefill_graph": "auto", "levers_env": {}, "exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glue_n": 65, "fuse_t1_glue_r2_n": [32, 32], "fuse_router_epilogue_n": 32, "fusion_modes": {"E4B_PAGED_FUSE_QKV": "auto", "E4B_FUSE_T1_GLUE": "auto", "E4B_FUSE_T1_GLUE_R2": "auto", "E4B_FUSE_ROUTER_EPI": "auto"}, "fusion_sources": {"E4B_PAGED_FUSE_QKV": "default-allowlisted", "E4B_FUSE_T1_GLUE": "default-allowlisted", "E4B_FUSE_T1_GLUE_R2": "default-allowlisted", "E4B_FUSE_ROUTER_EPI": "default-allowlisted"}, "fusion_report": {"E4B_FUSE_T1_GLUE": {"mode": "auto", "prefill": "off", "patched": 65, "failed_probe": 0}, "E4B_FUSE_T1_GLUE_R2": {"mode": "auto", "prefill": "off", "patched": [32, 32], "kernel_gaps": 0}, "E4B_FUSE_ROUTER_EPI": {"mode": "auto", "patched": 32, "failed_probe": 0, "no_kernel_mode": 0, "fp32_upstream": 32}}, "prefill_glue": {"mode": "0", "source": "default-off"}, "pinned_cache_released": true, "host_heap_trimmed": true}
+Generating v split: 0 examples [00:00, ? examples/s]Generating v split: 4707 examples [00:00, 43029.14 examples/s]Generating v split: 9287 examples [00:00, 39482.02 examples/s]Generating v split: 13720 examples [00:00, 40232.89 examples/s]Generating v split: 18275 examples [00:00, 40767.32 examples/s]Generating v split: 22851 examples [00:00, 40751.15 examples/s]Generating v split: 27432 examples [00:00, 39650.21 examples/s]Generating v split: 31844 examples [00:00, 39766.19 examples/s]Generating v split: 36604 examples [00:00, 41600.19 examples/s]Generating v split: 41229 examples [00:01, 41752.44 examples/s]Generating v split: 45576 examples [00:01, 41242.63 examples/s]
+P115_QGROUP off wikitext group 1 of 24 done at 31 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 2 of 24 done at 51 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 3 of 24 done at 72 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 4 of 24 done at 92 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 5 of 24 done at 113 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 6 of 24 done at 133 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 7 of 24 done at 153 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 8 of 24 done at 173 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 9 of 24 done at 194 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 10 of 24 done at 214 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 11 of 24 done at 234 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 12 of 24 done at 255 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 13 of 24 done at 275 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 14 of 24 done at 295 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 15 of 24 done at 316 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 16 of 24 done at 336 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 17 of 24 done at 356 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 18 of 24 done at 376 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 19 of 24 done at 397 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 20 of 24 done at 417 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 21 of 24 done at 437 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 22 of 24 done at 458 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 23 of 24 done at 478 s, 27.43 GiB allocated
+P115_QGROUP off wikitext group 24 of 24 done at 498 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 1 of 24 done at 525 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 2 of 24 done at 546 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 3 of 24 done at 566 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 4 of 24 done at 586 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 5 of 24 done at 606 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 6 of 24 done at 627 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 7 of 24 done at 647 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 8 of 24 done at 667 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 9 of 24 done at 688 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 10 of 24 done at 708 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 11 of 24 done at 728 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 12 of 24 done at 748 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 13 of 24 done at 769 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 14 of 24 done at 789 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 15 of 24 done at 809 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 16 of 24 done at 830 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 17 of 24 done at 850 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 18 of 24 done at 870 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 19 of 24 done at 890 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 20 of 24 done at 911 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 21 of 24 done at 931 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 22 of 24 done at 951 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 23 of 24 done at 972 s, 27.43 GiB allocated
+P115_QGROUP off c4val1 group 24 of 24 done at 992 s, 27.43 GiB allocated
+P141_QUALITY B0 windows={'wikitext': 24, 'c4val1': 24} dispatch={'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 593344, 'scalar_splitk': 593344, 'bw_tree': 0, 'bw_prmt32': 0, 'bw_splitk': 0} load 36s mem 27.69 GB 991.8 s

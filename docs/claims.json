@@ -12425,6 +12425,35 @@
         "docs/STATUS.md#fit-and-memory"
       ],
       "notes": "Pre-registered in #1746 (P137's kit at its Amendment 3 by named substitutions); read on p140-5090-1 and re-derived byte-identical (verdict.json sha256 20bd7656). Covers layer_major_step + enable_fast_train + expert offload, Qwen3-30B-A3B, the RTX 5090 class, P137's recipe; from the CLI trainer OFFLOAD_EXPERTS=1 LAYER_MAJOR=1. No default changes. Host-link fit: T 1.139 s, C 1.461 s (P137's 4090: 1.459 / 1.743)."
+    },
+    {
+      "id": "e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+      "claim": "Lane P141 (one RTX 5090): grouped-nf4-gemm K33's bandwidth-targeted NF4 decode GEMV (GNF4_GEMV_BW=1), at the plans P141's phase 1 selected on the card (gate_up 28672x4096 at 16,1024,4,1; down 4096x14336 at 16,512,4,2), decodes Mixtral-8x7B-Instruct NF4 one request 2.4075x as fast as the shipped scalar GEMV on the default serve_paged server (16 x 768, graphs on): 19.535 -> 8.114 ms (block a) and 19.624 -> 8.126 ms (block b) a step, ABBA over four fresh processes. Sixteen requests are unchanged (g16 0.9964, the registered no-regression line 0.99), and quality is within P110's bar (wikitext bias +0.00228, bar 0.01165; K8 delta ppl +0.0103). Under P141's rule it licenses adding both shapes and their plans to grouped-nf4-gemm's auto (#556).",
+      "value": 2.4075,
+      "unit": "ratio, B1 / B0 one-request decode rate (tokens/s), the smaller of the two ABBA pairs (B1a/B0a 2.4075; B1b/B0b 2.4148)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, driver 595.71.05), one rented Vast.ai host (instance 56580839, verified-secure, Intel Xeon Gold 6240, 36 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @d2bf9f64 (0.55.0, P141's registration merge, #1754) + grouped-nf4-gemm @70bc03cb (0.46.1); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0, bitsandbytes 0.50.2; premise on the card: K33's kernel contract 35 passed and the served route 18 passed, none skipped; mistralai/Mixtral-8x7B-Instruct-v0.1 @eba9230, NF4 arena baked on the box; the default serve_paged server at 16 slots x 768 tokens (P136's Mixtral size), graphs on, buckets 1-16, Mixtral's folds on; B0 = GNF4_GEMV_BW unset (the scalar GEMV at these shapes), B1 = GNF4_GEMV_BW=1 with phase 1's GNF4_GEMV_BW_PLAN; P109's 16 prompts, W1 and W16 at 32 and 160 tokens, 3 reps; quality P110's teacher-forced instrument, 24 windows x 128 positions per text, eager",
+      "measured_on": "2026-10-18",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p141/RESULTS-p141.md",
+        "bench/p141/PREREG-p141.md",
+        "bench/p141/p141_reduce.py",
+        "bench/p141/p141_select.py",
+        "bench/p141/receipts/p141-5090-2/verdict_mixtral.json",
+        "bench/p141/receipts/p141-5090-2/select.json",
+        "bench/p141/receipts/p141-5090-2/SHA256SUMS",
+        "bench/p141/receipts/p141-5090-1/README.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-18/p141-5090-2/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-18/p141-5090-1/ (receipt.json, teardown-proof.json; NOT_RUN, a host fault)"
+      ],
+      "notes": "Pre-registered in #1754 (opened as P139, renumbered before review). Q1, Q2 (except B1 != B0 on W1 rows: identical), Q4, Q5 and Q6 HIT; Q3 (g1 in [1.25, 2.00]) FALSIFIED high. Phase 1's per-call timings (reported, never ruled): gate_up 3.086 vs 10.309 ms, down 1.950 vs 6.105 ms over 32 layers. p141-5090-1 ($0.007) never ran: its instance stuck loading. The reviewers and the maintainer re-derived the verdict from the store; the default takes effect with a grouped-nf4-gemm release carrying #556."
     }
   ]
 }

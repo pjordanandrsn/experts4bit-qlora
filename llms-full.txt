@@ -2317,7 +2317,10 @@ eager chain until a read of their own. `e4b.serve.p130.prefill-glue-speed.qwen3.
 
 **Single-request decode.** grouped-nf4-gemm's bandwidth-targeted NF4 decode GEMV decodes one request 1.2417× as fast,
 16 unchanged, within P110's quality bar; it is grouped-nf4-gemm's default from 0.43.0 at Qwen3's NF4 expert shapes on
-GPUs with 160 or more SMs. `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`.
+GPUs with 160 or more SMs. `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`. On Mixtral-8x7B, at plans chosen on an RTX
+5090, the same GEMV decodes one request **2.41×** as fast (19.5 → 8.1 ms a step), 16 unchanged, within the same bar; it
+becomes auto's at Mixtral's shapes with a grouped-nf4-gemm release carrying #556.
+`e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18` ([results](../bench/p141/RESULTS-p141.md)).
 
 **The B=1 fused stack is the default on Qwen3-MoE, Qwen3.5/3.6-MoE and Mixtral.** On top of grouped-nf4-gemm 0.43.0's
 bandwidth GEMV, fused q/k/v
@@ -3355,6 +3358,7 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18 [measured]: Lane P137, one rented RTX 4090: under expert offload with enable_fast_train(dgrad=True), layer-major accumulation (experts4bit_qlora.engines.layer_major.layer_major_step, one step's micro-batches run layer by layer) trains Qwen3-30B-A3B at 2.365x the stock accumulation loop's speed: medians A0a 7.641 / L1a 3.231 / L1b …
 - e4b.serve.p135.fold-speed.mixtral.5090.2026-10-18 [measured]: Lane P135 (one RTX 5090): on the default serve_paged graph server (Mixtral-8x7B-Instruct NF4, bucket-1 decode graph), FAM's ON_auto folds (census 0 / 65 / [32, 32] / 32: the glue fold's 65 RMSNorms, round 2's 32 decoder layers and 32 attentions, the router epilogue's 32 routers on their fp32 path …
 - e4b.train.p140.layer-major-offload.qwen3.5090.2026-10-18 [measured]: Lane P140, one rented RTX 5090, a replication of P137 (its kit at Amendment 3, every STRICT term unchanged): under expert offload with enable_fast_train(dgrad=True), layer-major accumulation (experts4bit_qlora.engines.layer_major.layer_major_step) trains Qwen3-30B-A3B at 2.311x the stock accumulation loop's speed …
+- e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18 [measured]: Lane P141 (one RTX 5090): grouped-nf4-gemm K33's bandwidth-targeted NF4 decode GEMV (GNF4_GEMV_BW=1), at the plans P141's phase 1 selected on the card (gate_up 28672x4096 at 16,1024,4,1 …
 
 Open items (no evidence either way):
 
@@ -3362,4 +3366,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 …
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(446 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(447 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

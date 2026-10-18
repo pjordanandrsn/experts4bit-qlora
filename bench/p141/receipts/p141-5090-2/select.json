@@ -1,0 +1,618 @@
+{
+ "family": "mixtral",
+ "spec": {
+  "layers": 32,
+  "top_k": 2,
+  "gate_up": [
+   28672,
+   4096
+  ],
+  "down": [
+   4096,
+   14336
+  ]
+ },
+ "device": "NVIDIA GeForce RTX 5090",
+ "cc": [
+  12,
+  0
+ ],
+ "sm_count": 170,
+ "torch": "2.8.0+cu128",
+ "plans": [
+  [
+   16,
+   256,
+   4,
+   1
+  ],
+  [
+   16,
+   512,
+   4,
+   1
+  ],
+  [
+   16,
+   1024,
+   4,
+   1
+  ],
+  [
+   16,
+   256,
+   8,
+   1
+  ],
+  [
+   16,
+   512,
+   8,
+   1
+  ],
+  [
+   32,
+   256,
+   4,
+   1
+  ],
+  [
+   32,
+   512,
+   4,
+   1
+  ],
+  [
+   32,
+   512,
+   8,
+   1
+  ],
+  [
+   32,
+   1024,
+   8,
+   1
+  ],
+  [
+   16,
+   256,
+   4,
+   2
+  ],
+  [
+   16,
+   512,
+   4,
+   2
+  ],
+  [
+   32,
+   256,
+   4,
+   2
+  ]
+ ],
+ "warm": 20,
+ "select_rounds": 40,
+ "numerics": {
+  "gate_up": {
+   "16,256,4,1": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0031241218093782663,
+     "bw_tree": 0.0031241218093782663,
+     "bw_prmt32": 0.0031241218093782663
+    },
+    "contract": true
+   },
+   "16,512,4,1": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0031241218093782663,
+     "bw_tree": 0.0031241218093782663,
+     "bw_prmt32": 0.0031241218093782663
+    },
+    "contract": true
+   },
+   "16,1024,4,1": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0031241218093782663,
+     "bw_tree": 0.0031241218093782663,
+     "bw_prmt32": 0.0031241218093782663
+    },
+    "contract": true
+   },
+   "16,256,8,1": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0031241218093782663,
+     "bw_tree": 0.0031241218093782663,
+     "bw_prmt32": 0.0031241218093782663
+    },
+    "contract": true
+   },
+   "16,512,8,1": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0031241218093782663,
+     "bw_tree": 0.0031241218093782663,
+     "bw_prmt32": 0.0031241218093782663
+    },
+    "contract": true
+   },
+   "32,256,4,1": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0031241218093782663,
+     "bw_tree": 0.0031241218093782663,
+     "bw_prmt32": 0.0031241218093782663
+    },
+    "contract": true
+   },
+   "32,512,4,1": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0031241218093782663,
+     "bw_tree": 0.0031241218093782663,
+     "bw_prmt32": 0.0031241218093782663
+    },
+    "contract": true
+   },
+   "32,512,8,1": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0031241218093782663,
+     "bw_tree": 0.0031241218093782663,
+     "bw_prmt32": 0.0031241218093782663
+    },
+    "contract": true
+   },
+   "32,1024,8,1": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0031241218093782663,
+     "bw_tree": 0.0031241218093782663,
+     "bw_prmt32": 0.0031241218093782663
+    },
+    "contract": true
+   },
+   "16,256,4,2": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0031241218093782663,
+     "bw_tree": 0.0031241218093782663,
+     "bw_prmt32": 0.0031241218093782663
+    },
+    "contract": true
+   },
+   "16,512,4,2": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0031241218093782663,
+     "bw_tree": 0.0031241218093782663,
+     "bw_prmt32": 0.0031241218093782663
+    },
+    "contract": true
+   },
+   "32,256,4,2": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0031241218093782663,
+     "bw_tree": 0.0031241218093782663,
+     "bw_prmt32": 0.0031241218093782663
+    },
+    "contract": true
+   }
+  },
+  "down": {
+   "16,256,4,1": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0018883079756051302,
+     "bw_tree": 0.0018883079756051302,
+     "bw_prmt32": 0.0018883079756051302
+    },
+    "contract": true
+   },
+   "16,512,4,1": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0018883079756051302,
+     "bw_tree": 0.0018883079756051302,
+     "bw_prmt32": 0.0018883079756051302
+    },
+    "contract": true
+   },
+   "16,1024,4,1": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0018883079756051302,
+     "bw_tree": 0.0018883079756051302,
+     "bw_prmt32": 0.0018883079756051302
+    },
+    "contract": true
+   },
+   "16,256,8,1": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0018883079756051302,
+     "bw_tree": 0.0018883079756051302,
+     "bw_prmt32": 0.0018883079756051302
+    },
+    "contract": true
+   },
+   "16,512,8,1": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0018883079756051302,
+     "bw_tree": 0.0018883079756051302,
+     "bw_prmt32": 0.0018883079756051302
+    },
+    "contract": true
+   },
+   "32,256,4,1": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0018883079756051302,
+     "bw_tree": 0.0018883079756051302,
+     "bw_prmt32": 0.0018883079756051302
+    },
+    "contract": true
+   },
+   "32,512,4,1": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0018883079756051302,
+     "bw_tree": 0.0018883079756051302,
+     "bw_prmt32": 0.0018883079756051302
+    },
+    "contract": true
+   },
+   "32,512,8,1": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0018883079756051302,
+     "bw_tree": 0.0018883079756051302,
+     "bw_prmt32": 0.0018883079756051302
+    },
+    "contract": true
+   },
+   "32,1024,8,1": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0018883079756051302,
+     "bw_tree": 0.0018883079756051302,
+     "bw_prmt32": 0.0018883079756051302
+    },
+    "contract": true
+   },
+   "16,256,4,2": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0018883079756051302,
+     "bw_tree": 0.0018883079756051302,
+     "bw_prmt32": 0.0018883079756051302
+    },
+    "contract": true
+   },
+   "16,512,4,2": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0018883079756051302,
+     "bw_tree": 0.0018883079756051302,
+     "bw_prmt32": 0.0018883079756051302
+    },
+    "contract": true
+   },
+   "32,256,4,2": {
+    "bitwise_tree_prmt32": true,
+    "err": {
+     "scalar": 0.0018883079756051302,
+     "bw_tree": 0.0018883079756051302,
+     "bw_prmt32": 0.0018883079756051302
+    },
+    "contract": true
+   }
+  }
+ },
+ "plan_refused": {},
+ "plan_ms": {
+  "gate_up": {
+   "16,256,4,1": 3.66811203956604,
+   "16,512,4,1": 3.637168049812317,
+   "16,1024,4,1": 3.0861599445343018,
+   "16,256,8,1": 3.772271990776062,
+   "16,512,8,1": 3.4438880681991577,
+   "32,256,4,1": 3.903007984161377,
+   "32,512,4,1": 3.8471999168395996,
+   "32,512,8,1": 3.5417920351028442,
+   "32,1024,8,1": 3.942255973815918,
+   "16,256,4,2": 3.65830397605896,
+   "16,512,4,2": 3.682080030441284,
+   "32,256,4,2": 3.6802079677581787
+  },
+  "down": {
+   "16,256,4,1": 2.619055986404419,
+   "16,512,4,1": 2.8521759510040283,
+   "16,1024,4,1": 2.023375988006592,
+   "16,256,8,1": 2.6053760051727295,
+   "16,512,8,1": 1.9931039810180664,
+   "32,256,4,1": 3.5451040267944336,
+   "32,512,4,1": 3.1620320081710815,
+   "32,512,8,1": 2.133471965789795,
+   "32,1024,8,1": 2.500447988510132,
+   "16,256,4,2": 2.166800022125244,
+   "16,512,4,2": 1.9502400159835815,
+   "32,256,4,2": 2.095136046409607
+  }
+ },
+ "incumbent_ms": {
+  "gate_up": 10.30944013595581,
+  "down": 6.104687929153442
+ },
+ "floor_ms": {
+  "gate_up": 2.8205730468034744,
+  "down": 1.4102865234017372
+ },
+ "selected": {
+  "gate_up": [
+   16,
+   1024,
+   4,
+   1
+  ],
+  "down": [
+   16,
+   512,
+   4,
+   2
+  ]
+ },
+ "tally": {
+  "gate_up/16,256,4,1": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 0
+  },
+  "gate_up/16,512,4,1": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 0
+  },
+  "gate_up/16,1024,4,1": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 0
+  },
+  "gate_up/16,256,8,1": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 0
+  },
+  "gate_up/16,512,8,1": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 0
+  },
+  "gate_up/32,256,4,1": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 0
+  },
+  "gate_up/32,512,4,1": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 0
+  },
+  "gate_up/32,512,8,1": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 0
+  },
+  "gate_up/32,1024,8,1": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 0
+  },
+  "gate_up/16,256,4,2": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 32
+  },
+  "gate_up/16,512,4,2": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 32
+  },
+  "gate_up/32,256,4,2": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 32
+  },
+  "gate_up/incumbent": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 32,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 0,
+   "bw_splitk": 0
+  },
+  "down/16,256,4,1": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 0
+  },
+  "down/16,512,4,1": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 0
+  },
+  "down/16,1024,4,1": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 0
+  },
+  "down/16,256,8,1": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 0
+  },
+  "down/16,512,8,1": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 0
+  },
+  "down/32,256,4,1": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 0
+  },
+  "down/32,512,4,1": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 0
+  },
+  "down/32,512,8,1": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 0
+  },
+  "down/32,1024,8,1": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 0
+  },
+  "down/16,256,4,2": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 32
+  },
+  "down/16,512,4,2": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 32
+  },
+  "down/32,256,4,2": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 32,
+   "bw_splitk": 32
+  },
+  "down/incumbent": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 32,
+   "bw_tree": 0,
+   "bw_prmt32": 0,
+   "bw_splitk": 0
+  }
+ },
+ "reported_never_ruled": [
+  "plan_ms",
+  "incumbent_ms",
+  "floor_ms"
+ ],
+ "copy_gbps": 1498.9359828107933,
+ "status": "ok",
+ "env": "28672,4096=16,1024,4,1;4096,14336=16,512,4,2",
+ "wall_s": 30.1
+}

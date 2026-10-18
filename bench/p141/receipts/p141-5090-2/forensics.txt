@@ -1,0 +1,8 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.71.05, GPU-fa03ed04-3128-3a13-d4a9-158e02a0ed87, 12.0
+power.limit,clocks.max.sm 500.00 W, 3090 MHz
+CPU(s):                                  36
+Vendor ID:                               GenuineIntel
+Model name:                              Intel(R) Xeon(R) Gold 6240 CPU @ 2.60GHz
+               total        used        free      shared  buff/cache   available
+Mem:             187           4          83           0          99         181
+overlay         250G   62M  250G   1% /
