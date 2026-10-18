@@ -10,12 +10,14 @@ Today the trainer cannot reach that configuration, so the measured gain is not a
 
 ## What the trainer does today (e4b main)
 
-- **No fused path at all.** Nothing in `experts4bit_qlora/` calls `enable_fast_train` except `engines/fast.py` itself.
+- **No fused path in the trainer.** `train.py` never calls `enable_fast_train` (`recipe.py` already says so).
   - Every `python -m experts4bit_qlora.train` run trains through the `ExpertsLoRA` reference loop: per-expert
     bitsandbytes.
   - That holds resident or offloaded, on every family.
-  - The fused path, the headline of `qlora-fused-moe-experts` in `docs/capabilities.json`, is reachable only from
-    Python and from the bench harnesses (TC1, TC3, P137).
+  - The library does reach the fused path. `recipe.prepare_qlora_training`, exported from the package, calls
+    `enable_fast_train(model, dgrad=setup.dgrad)` for `expert_kernel="grouped_nf4"`, host offload included, and
+    raises on 0 patched. The bench harnesses (TC1, TC3, P137) call it directly. Only the env-configured trainer is
+    missing it.
 - **`LAYER_MAJOR=1`** (needs `OFFLOAD_EXPERTS=1`) calls `layer_major_step` over that reference loop. TC3 read the
   reference loop under offload at 77.4 s/step on an RTX 4090, against 10.5 s/step for the fused path. P137's licence
   explicitly excludes it.
@@ -29,9 +31,17 @@ Today the trainer cannot reach that configuration, so the measured gain is not a
 ## The change
 
 1. **`FAST_TRAIN=1`** (default `0`, so no default flips) calls `enable_fast_train(model, dgrad=True,
-   absmax_dq=ABSMAX_DQ)`. That is `dgrad=True` always, the only configuration with receipts.
-   - **When it runs:** once the adapters and trainables are set, before the chunked-loss hook and before the BEFORE
-     evaluation. So both evaluations and every training step run the same expert path.
+   absmax_dq=False)`. That is `dgrad=True` always, the only configuration with receipts.
+   - **Why `absmax_dq=False`.** The trainer's own `apply_absmax_dq` has already settled the absmax by then: a soft
+     default resident, required under `E4B_ABSMAX_DQ=1`, off under offload. An explicit `True` here would turn the
+     soft resident default into a requirement, and raise on a model the compressor refuses. `False` leaves the absmax
+     exactly as `apply_absmax_dq` left it, and the patched forward reads a compressed absmax through
+     `expert_absmax_fp32`.
+   - **When it runs:** once the adapters and trainables are set, before the BEFORE evaluation. So both evaluations and
+     every training step run the same expert path.
+   - **The chunked LM loss** is installed by `enable_fast_train` itself, under `E4B_CHUNKED_LM_LOSS` (auto). The
+     trainer's later hook then finds it patched and only updates the chunk size and gate, returning 0. The trainer's
+     log says which call installed it, so the line does not read as if the chunked loss were off.
    - **It refuses:**
      - a patch count of 0 (`SystemExit`, as `TRAIN_ATTN_4BIT` does for a vacuous arm);
      - `TRAIN_ARENA`, because `enable_hybrid_train` patches the same wrappers and the composition is untested;
@@ -51,11 +61,17 @@ Today the trainer cannot reach that configuration, so the measured gain is not a
 
 This uses the tiny Qwen3-MoE fixture (`bench/p137/p137_tiny.py`, 2 MoE layers), `OFFLOAD_EXPERTS=1` and `STEPS=2`.
 Each check is STRICT:
+- **The library self-pair, first.** `layer_major_step`, called directly twice in one process on the same micro-batches,
+  is bit-identical. If it is not, a nondeterministic kernel fails as "not reproducible" rather than as "trainer ≠
+  library".
 - **The trainer is the library call.** With `FAST_TRAIN=1 LAYER_MAJOR=1`, step 0's per-micro-batch losses are
-  bit-identical to `layer_major_step` called directly on the same micro-batches after `enable_fast_train(dgrad=True)`
-  (a probe script that imports the trainer's batcher).
+  bit-identical to `layer_major_step` called directly on the same micro-batches. The probe's model is built with
+  `train.py`'s load arguments and its order of calls: `enable_fast_train`, then non-reentrant gradient checkpointing.
 - **The fused path is engaged.** The patch count equals the number of MoE layers, and the step-0 losses differ from
-  `FAST_TRAIN=0`'s by the expected forward-fusion error, nonzero and under 1e-2.
+  `FAST_TRAIN=0`'s (nonzero, STRICT). The size of the difference is REPORTING: no receipt sets a bound for it on the
+  fixture.
+- **Resident.** One `FAST_TRAIN=1` run without offload: the patch count is right, there is no raise, and the absmax
+  state is as `apply_absmax_dq` left it.
 - **Stagings.** `offload_stats_report` reads 2n − 1 per steady step with `LAYER_MAJOR=1` and GRAD_ACCUM × (2n − 1)
   without, as in P137.
 - **Same adapters, same start.** The adapter sha256 after loading is equal across the arms.
