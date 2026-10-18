@@ -95,3 +95,41 @@ The attempt rule, replacing Amendment 2's:
 The launch rule under the $15.20 ceiling is unchanged, with billed-to-date read from the ledger at the launch. Both case lists
 gain the nine IDs: `p136_run.sh` (staged) and `p136_drive.sh`. `staged-p136.sha256` moves by one row: `p136_run.sh` goes from
 `79ad608032f0044d1fd4ef699d3979e4a5e7a84fadf667558dc155454f1eb79a` to `119a26c583ae1b426dcf2bd3ee4f14b4c1f02239c91df2936f803e561d5ee9f7`. No threshold, read rule, host term, workload or other staged file changes.
+
+## Amendment 4 (2026-10-18): gemma4 lapsed under Amendment 3, and is reinstated once, for `p136-gemma4-5090-4` only
+
+**What happened.** `p136-gemma4-5090-3` ended HARNESS_ERROR at $0.03 (box rc 13).
+- The premise passed, 19 of 19, on the RTX 5090 (compute capability 12.0), including the route-exact fused-glue test.
+- The box then refused before the model fetch, with 199 GB free against the 200 GB pre-fetch floor.
+- The cause was the launch: it ordered a 200 GB container disk, equal to the floor. The image and the installs share that disk, so at that order size the free space before the fetch is always below the floor.
+
+Receipt files, SHA-256:
+- `p136/summary.txt` `04c8b6a85d31b4f86b75fae99427ab6e5a7e517faa9bdf27d274d812b58907c2`
+- `p136/outer.log` `f49e1a2d5dc374d4dae6a9037249a9c0bd7afab8e1365277aebed6af58a7f001` (the refusal line)
+- `p136/logs/premise.log` `8125ace5f2bc85439c467ea449cfafab874cebe06a3d9d4656c0c1fcb04b4076`
+- `receipt.json` `232e19f19465425d442da97ab3f3f6e32a9e26567c34cf8f386f982cdd083d99`
+- `teardown-proof.json` `13c40d81048daa2478d59f1dc87768993013c955f356115a3b1bf4e0bc491cbe`
+
+**Gemma4 lapsed.** Under Amendment 3 a family lapses after two box-started failures. `p136-gemma4-5090-1` (Amendment 1) and
+`p136-gemma4-5090-3` both started their boxes and failed, so gemma4 lapsed under the rule as registered.
+
+**One reinstatement.** This amendment reinstates gemma4 for one final attempt, `p136-gemma4-5090-4`, on these grounds:
+- Both failures ended before any measurement: one at the premise, one at the pre-fetch disk check. No gemma4 reading was seen,
+  so the reinstatement cannot be steered by a result.
+- Both causes are identified and fixed with tests: the route-exact premise copy (Amendment 1), which passed 19 of 19 on the
+  5090, and the container disk order below.
+- The lane has spent $0.064 of its $15.20.
+
+This is the only reinstatement. A box-started failure of `p136-gemma4-5090-4` ends gemma4, and no further amendment reinstates
+it. If `p136-gemma4-5090-4` is refused before create, which is not an attempt under Amendment 3, `p136-gemma4-5090-5` takes its
+place on the same terms.
+
+**The container disk order.** Every launch orders a container disk of at least its family's pre-fetch floor plus 20 GB:
+230 GB for gemma4 and gpt-oss (floor 200 GB) and 250 GB for Mixtral (floor 220 GB). The quote is taken at the order size, and
+the host rule (at most $0.85/h including the disk) still binds, so the registered worsts are unchanged.
+
+**An attempt, mechanically.** A box has started when it has bound the run's nonce: the driver's handshake writes
+`P136_RUN_NONCE` on the box before anything else runs, and the fetched receipt carries it. A created instance whose box never
+bound the nonce is not an attempt. The receipt shows which applies.
+
+No staged file changes, and `staged-p136.sha256` is unchanged.
