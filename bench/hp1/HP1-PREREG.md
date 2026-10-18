@@ -335,7 +335,7 @@ higher cap or this split. The cut falls on the line the registration already dra
 - The same card class (one RTX 5090).
 - The receipts record the driver and machine id.
 - One registered redraw id each (`-2`), and the two-strikes rule per box.
-- Pre-create spares (maintainer, 2026-10-18): box 1 `hp1k-5090-6`, `-7`, `-8`. A refusal before any instance exists consumes an id and is not a strike; a box-started failure counts as the rulings say.
+- Pre-create spares (maintainer, 2026-10-18): box 1 `hp1k-5090-6`, `-7`, `-8`, `-9`, `-10`, `-11`. A refusal before any instance exists consumes an id and is not a strike; a box-started failure counts as the rulings say.
 
 **The limitation, stated.** K and P run on different boxes of the same class.
 - Every verdict pairs only within box 2: E vs C* on the same box, at the same seeds.
