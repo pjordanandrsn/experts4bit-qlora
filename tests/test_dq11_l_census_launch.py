@@ -431,8 +431,23 @@ def test_qualifying_window_makes_one_inclusion_pinned_launch(tmp_path, monkeypat
     with pytest.raises(ValueError, match="changed field beyond run_id"):
         launch.validate_manifest(stray, e4b, controller)
     stray = json.loads(json.dumps(bound))
-    stray["l_census"]["unexpected_field"] = True
+    stray["lane_record"]["l_census"]["unexpected_field"] = True
     with pytest.raises(ValueError, match="unregistered closure"):
+        launch.validate_manifest(stray, e4b, controller)
+    # adertha-agents#243: the launcher refuses unknown top-level keys, so the census's record is in lane_record
+    registered = json.loads(template.read_text())
+    assert set(bound) == set(registered) | launch.BINDING_FIELDS
+    assert not {"status", "l_census", "authorization_basis"} & set(bound)
+    assert set(bound["lane_record"]) == launch.LANE_RECORD_FIELDS
+    assert bound["lane_record"]["status"] == "ENVELOPE_BOUND_PENDING_FRESH_GATES"
+    assert bound["lane_record"]["authorization_basis"]["envelope_ack_url"] == approval_url
+    stray = json.loads(json.dumps(bound))
+    stray["lane_record"]["note"] = "x"
+    with pytest.raises(ValueError, match="lane_record has unregistered fields"):
+        launch.validate_manifest(stray, e4b, controller)
+    stray = json.loads(json.dumps(bound))
+    stray["l_census"] = stray["lane_record"].pop("l_census")              # the pre-#243 layout refuses
+    with pytest.raises(TypeError, match="lacks L-census closure"):
         launch.validate_manifest(stray, e4b, controller)
     admission = json.loads((packet / "launch-admission.json").read_text())
     assert admission["selected_offer_ids"] == ["100", "101"]
@@ -520,7 +535,17 @@ def test_launch_refuses_missing_or_wrong_executor_before_discovery(tmp_path, mon
 def test_registered_range_template_identity_and_sha256():
     template = LANE / "dq11_l_census_manifest_template.json"
     assert json.loads(template.read_text())["run_id"] == launch.RUN_ID_PLACEHOLDER
-    assert launch.sha(template) == "2c9b0febc3d6933b50fe960b3e16d776bded5d03103822f6548fd5cf2099f31d"
+    assert launch.sha(template) == "9dd6fdee2b5797fc596fe6693c8abb107b8b18f35ec057e21b7e0d9b7fa211c9"
+
+
+
+def test_the_template_keeps_only_launcher_terms_at_top_level():
+    """adertha-agents#243: the launcher refuses a top-level key it does not read. The census's own record (its status,
+    closure and, once bound, the authorization basis) sits in lane_record, which the launcher copies into the receipt."""
+    template = json.loads((LANE / "dq11_l_census_manifest_template.json").read_text())
+    assert not {"status", "l_census", "authorization_basis"} & set(template)
+    assert set(template["lane_record"]) == {"status", "l_census"}
+    assert template["lane_record"]["status"] == "ENVELOPE_TEMPLATE_NO_PAID_GO"
 
 
 def test_budget_template_matches_registered_wall_and_full_reservation():
@@ -529,9 +554,9 @@ def test_budget_template_matches_registered_wall_and_full_reservation():
     assert launch.ENVELOPE_CRITERIA["vast_direct_ssh"] is True
     assert template["wallclock_h"] == .75
     assert template["est_usd"] == .6375
-    assert template["l_census"]["all_in_cap_usd"] == 1.1
-    assert template["l_census"]["upload_gb"] == 3
-    assert template["l_census"]["max_upload_usd_per_gb"] == .05
+    assert template["lane_record"]["l_census"]["all_in_cap_usd"] == 1.1
+    assert template["lane_record"]["l_census"]["upload_gb"] == 3
+    assert template["lane_record"]["l_census"]["max_upload_usd_per_gb"] == .05
 
 
 def test_static_budget_refuses_changed_upload_allowance(monkeypatch):

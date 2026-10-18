@@ -65,6 +65,11 @@ OPERATIONAL_FILES = (
 )
 TRANSPORT_FILE = "bench/tc1/tc1_drive.sh"
 TEMPLATE_FILE = "bench/dq11/dq11_l_census_manifest_template.json"
+#: The launcher refuses any top-level manifest key it does not read (adertha-agents#243), so the census's own record
+#: (its status, closure and authorization basis) travels in ``lane_record``, which the launcher copies into the receipt.
+LANE_RECORD_FIELDS = frozenset({"status", "l_census", "authorization_basis"})
+#: The top-level fields a bound manifest adds to the registered template, all of them launcher terms.
+BINDING_FIELDS = frozenset({"heads", "command", "vast_pin_machine", "vast_pin_offers", "vast_required_driver"})
 ENVELOPE_CRITERIA = {
     "gpu": "RTX 5090", "num_gpus": 1, "verification": "verified",
     "direct_ssh_required": True,
@@ -731,7 +736,8 @@ def bind_manifest(template_path: Path, envelope_path: Path, summary: dict,
         raise ValueError("run id is outside the envelope")
     template = json.loads(template_path.read_text())
     manifest = attempt_template(template, run_id)
-    manifest["status"] = "ENVELOPE_BOUND_PENDING_FRESH_GATES"
+    lane = manifest["lane_record"]       # the launcher refuses unknown top-level keys (adertha-agents#243): ours live here
+    lane["status"] = "ENVELOPE_BOUND_PENDING_FRESH_GATES"
     manifest["heads"] = {"e4b": merged_clean(e4b), "adertha": merged_clean(controller)}
     manifest["command"] = (f"DQ11_ASSET_DIR={assets.resolve()} DQ11_REQUIRED_DRIVER={driver} "
                            "bash bench/dq11/dq11_l_census_drive.sh")
@@ -739,12 +745,12 @@ def bind_manifest(template_path: Path, envelope_path: Path, summary: dict,
     manifest["vast_pin_offers"] = offers
     manifest["vast_required_driver"] = driver
     directory = e4b / "bench/dq11"
-    detail = manifest["l_census"]
+    detail = lane["l_census"]
     detail["instrument_sha256"] = {name: sha(directory / name) for name in INSTRUMENT_FILES}
     detail["operational_sha256"] = {name: sha(directory / name) for name in OPERATIONAL_FILES}
     detail["transport_sha256"] = sha(e4b / TRANSPORT_FILE)
     detail["manifest_template_sha256"] = sha(template_path)
-    manifest["authorization_basis"] = {
+    lane["authorization_basis"] = {
         "envelope_ack_url": envelope["approval_url"],
         "envelope_sha256": sha(envelope_path), "issued_at": envelope["issued_at"],
         "expires_at": envelope["expires_at"], "maximum_draws": 1,
@@ -797,9 +803,12 @@ def validate_manifest(manifest: dict, e4b: Path, controller: Path) -> None:
     if not match:
         raise ValueError("manifest command must bind the canonical asset path and L-census driver")
     manifest["_asset_path"] = match.group(1)
-    detail = manifest.get("l_census")
-    if not isinstance(detail, dict):
+    lane = manifest.get("lane_record")
+    if not isinstance(lane, dict) or not isinstance(lane.get("l_census"), dict):
         raise TypeError("manifest lacks L-census closure")
+    if set(lane) != LANE_RECORD_FIELDS:
+        raise ValueError("bound manifest lane_record has unregistered fields")
+    detail = lane["l_census"]
     try:
         upload_gb = number(detail.get("upload_gb"), "manifest upload GB")
         upload_rate = number(detail.get("max_upload_usd_per_gb"), "manifest upload tariff")
@@ -818,23 +827,19 @@ def validate_manifest(manifest: dict, e4b: Path, controller: Path) -> None:
     if detail.get("manifest_template_sha256") != sha(template_path):
         raise ValueError("bound manifest template differs from merged source")
     template = attempt_template(json.loads(template_path.read_text()), manifest["run_id"])
-    binding_fields = {"heads", "command", "vast_pin_machine", "vast_pin_offers",
-                      "vast_required_driver", "authorization_basis", "_asset_path"}
     actual_template = {key: deepcopy(value) for key, value in manifest.items()
-                       if key not in binding_fields}
-    actual_template["status"] = template["status"]
-    actual_template["l_census"] = deepcopy(template["l_census"])
+                       if key not in BINDING_FIELDS | {"_asset_path"}}
+    actual_template["lane_record"] = deepcopy(template["lane_record"])     # its bound fields are checked below
     registered = json.loads(template_path.read_text())
     assert_attempt_template(actual_template, registered, manifest["run_id"])
-    if set(detail) != set(registered["l_census"]) | {
+    if set(detail) != set(registered["lane_record"]["l_census"]) | {
             "instrument_sha256", "operational_sha256", "transport_sha256", "manifest_template_sha256"}:
         raise ValueError("bound manifest has unregistered closure fields")
-    if manifest.get("status") != "ENVELOPE_BOUND_PENDING_FRESH_GATES":
+    if lane.get("status") != "ENVELOPE_BOUND_PENDING_FRESH_GATES":
         raise ValueError("manifest was not bound under an envelope")
-    if any(manifest.get(key) != value for key, value in template.items()
-           if key not in ("status", "l_census")):
+    if any(manifest.get(key) != value for key, value in template.items() if key != "lane_record"):
         raise ValueError("bound manifest changed a registered template field")
-    if any(detail.get(key) != value for key, value in template["l_census"].items()):
+    if any(detail.get(key) != value for key, value in template["lane_record"]["l_census"].items()):
         raise ValueError("bound manifest changed a registered L-census template field")
     machine = str(manifest["vast_pin_machine"])
     offers = [str(x) for x in manifest["vast_pin_offers"]]
@@ -992,7 +997,7 @@ def launch_attempt(template_path: Path, envelope_path: Path, e4b: Path, controll
                    "from_gate_seconds": invocation - gate_end,
                    "guarded_controller_invoked": True}, stream, indent=2)
         stream.write("\n")
-    if sha(envelope_path) != manifest["authorization_basis"]["envelope_sha256"]:
+    if sha(envelope_path) != manifest["lane_record"]["authorization_basis"]["envelope_sha256"]:
         raise ValueError("envelope record changed after manifest binding; nothing created")
     check_qualifying_window(packet_dir, summary)
     validate_envelope(envelope, envelope_path, template_path, e4b, controller)
