@@ -433,7 +433,7 @@ def p_readout(index, k):
     groups += [(f"P:{g}", list(series(index, "P", g, CONFIRMATION_SEEDS)[0].values())) for g in p_groups]
     sigma, sigma_df, sigma_detail = pooled_sd(groups)
     margin = min(max(sigma, MARGIN_FLOOR), MARGIN_CAP) if sigma is not None else None
-    # REPORTED beside the pooled sigma the verdict uses (Amendment 1): per block, which is per box on the split path (K on box 1,
+    # REPORTED beside the pooled sigma the verdict uses (Amendment 2): per block, which is per box on the split path (K on box 1,
     # P on box 2). A box-to-box shift can move the pooled value through the K groups; it never enters a paired delta (all on box 2).
     by_block = {}
     for blk in ("K", "P"):
@@ -565,9 +565,13 @@ def manifest_problems(manifest_paths, eval_paths):
         try:
             with open(manifest_path) as fh:
                 man = json.load(fh)
-            listed.update({row["path"]: row.get("sha256") for row in man["files"]})
+            rows = {row["path"]: row.get("sha256") for row in man["files"]}
         except (OSError, ValueError, KeyError, TypeError) as exc:
             return [f"bulk manifest {manifest_path} missing or unparsable: {type(exc).__name__}: {exc}"]
+        clash = sorted(k for k in rows if k in listed and listed[k] != rows[k])
+        if clash:                                   # fail closed: two manifests disagreeing on one path is refused by name, never last-wins
+            return [f"bulk manifests disagree on {k}: {str(listed[k])[:12]} vs {str(rows[k])[:12]} ({manifest_path})" for k in clash]
+        listed.update(rows)
     problems = []
     for path in eval_paths:
         with open(path) as fh:

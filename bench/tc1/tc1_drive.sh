@@ -35,6 +35,21 @@ case " ${TC1_FAMILIES:-} " in *" qwen3hp1 "*|*" qwen3hp1k "*|*" qwen3hp1p "*) ST
 STAGE="$STAGE ${TC1_EXTRA_STAGE:-}"; RUNNER=${TC1_RUNNER:-tc1_run.sh}
 case " $STAGE " in *"/$RUNNER "*) ;; *) say "refusing: TC1_RUNNER=$RUNNER is not a staged file"; exit 78;; esac
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
+# HP1 split box 2 (qwen3hp1p, HP1-PREREG Amendment 2): box 1's carries are checked HERE, before anything is rented, so a mis-pin is a
+# $0 refusal and never a paid box that spends the run id. Three 64-hex pins, and TC1_EXTRA_STAGE files named eval_K.json, select.json and
+# bulk_manifest.json whose sha256 equal them.
+case " ${TC1_FAMILIES:-} " in *" qwen3hp1p "*)
+  for pv in "eval_K.json:${TC1_HP1_K_EVAL_SHA256:-}" "select.json:${TC1_HP1_K_SELECT_SHA256:-}" "bulk_manifest.json:${TC1_HP1_K_MANIFEST_SHA256:-}"; do
+    pf=${pv%%:*}; pw=${pv#*:}
+    case "$pw" in *[!0-9a-f]*|"") say "refusing: the $pf pin is not a 64-hex sha256 ('$pw')"; exit 78;; esac
+    [ ${#pw} -eq 64 ] || { say "refusing: the $pf pin is not a 64-hex sha256 ('$pw')"; exit 78; }
+    pp=""; for f in ${TC1_EXTRA_STAGE:-}; do [ "$(basename "$f")" = "$pf" ] && pp=$f; done
+    [ -n "$pp" ] || { say "refusing: box 1's $pf is not in TC1_EXTRA_STAGE"; exit 78; }
+    pg=$(python3 -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" "$pp") || { say "refusing: cannot hash $pp"; exit 78; }
+    [ "$pg" = "$pw" ] || { say "refusing: $pp hashes to $pg, not box 1's pinned $pw"; exit 78; }
+  done;;
+esac
+# end HP1 split box 2 pins
 # The e4b the BOX installs is the e4b this driver ships from: the launcher has proven this checkout is the manifest's heads.e4b
 # (pod-launch.sh check_tree). Derived, never a literal; refused if the tree is dirty (p39-box1b-3's lesson).
 if [ -z "${E4B_SHA:-}" ]; then

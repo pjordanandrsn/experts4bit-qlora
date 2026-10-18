@@ -479,13 +479,27 @@ def test_a_reading_whose_manifest_does_not_pin_what_was_scored_is_void(tmp_path,
 
 
 def test_sigma_is_reported_per_block_beside_the_pooled_value(tmp_path, capsys):
-    """Amendment 1: sigma_seed per block (per box on the split path) is REPORTED beside the pooled value the verdict uses."""
-    code, res, md, _ = _verdict(tmp_path, _k_arms(K10_BEST), _p_arms("k10", (0.0001, -0.0001, 0.0), unsloth_off=0.005), capsys)
+    """Amendment 2: sigma_seed per block (per box on the split path) is REPORTED beside the pooled value the verdict uses. K and P
+    get DIFFERENT spreads here, and each block's sigma is checked against a pooled SD computed from its own groups alone."""
+    import statistics
+    k_noise, p_noise = (-0.0001, 0.0, 0.0001), (-0.004, 0.0, 0.004)
+    k_arms = _k_arms(K10_BEST, noise=k_noise)
+    p_arms = []
+    for i, s in enumerate(CONF):
+        p_arms.append(_arm(f"hp1_e_k10_s{s}", s, BASE + p_noise[i]))
+        p_arms.append(_arm(f"hp1_k00_s{s}", s, BASE + 0.02 + p_noise[i]))
+        p_arms += [_arm(f"hp1_{c}_s{s}", s, BASE + 0.001 + p_noise[i], framework=c) for c in hr.COMPETITORS]
+    code, res, md, _ = _verdict(tmp_path, k_arms, p_arms, capsys)
+
+    def pooled(groups):
+        ss = sum(sum((y - statistics.fmean(g)) ** 2 for y in g) for g in groups)
+        return math.sqrt(ss / sum(len(g) - 1 for g in groups))
+    k_groups = [[K10_BEST[c] + e for e in k_noise] for c in K10_BEST]
+    p_groups = [[BASE + off + e for e in p_noise] for off in (0.0, 0.02, 0.001, 0.001)]
     bb = res["p"]["sigma_seed_by_block"]
-    assert set(bb) == {"K", "P"} and bb["K"]["df"] == 8 and bb["P"]["df"] > 0
-    assert bb["K"]["sigma"] is not None and bb["P"]["sigma"] is not None and "sigma_seed by block" in md
-
-
+    assert bb["K"]["df"] == 8 and bb["P"]["df"] == 8
+    assert bb["K"]["sigma"] == pytest.approx(pooled(k_groups)) and bb["P"]["sigma"] == pytest.approx(pooled(p_groups))
+    assert bb["K"]["sigma"] < res["p"]["sigma_seed"] < bb["P"]["sigma"] and "sigma_seed by block" in md
 
 def test_manifests_from_two_boxes_are_checked_as_their_union(tmp_path, capsys):
     """Amendment 2: box 2's verdict reads box 1's eval_K.json, whose adapters only box 1's manifest lists -- the reducer takes both
@@ -497,3 +511,19 @@ def test_manifests_from_two_boxes_are_checked_as_their_union(tmp_path, capsys):
     out, md = str(tmp_path / "v.json"), str(tmp_path / "v.md")
     assert hr.main(["verdict", kf, pf, "--out", out, "--md", md, *m2]) == hr.EXIT_INCOMPLETE      # box 2's alone: K unpinned
     assert hr.main(["verdict", kf, pf, "--out", out, "--md", md, *m1, *m2]) == hr.EXIT_OK
+
+
+
+def test_manifests_that_disagree_on_a_path_refuse_by_name(tmp_path, capsys):
+    """Fail closed: two manifests giving one path different sha256s refuse (VOID, naming the path), never last-wins."""
+    kf = _write(tmp_path, "k.json", _k_arms(K10_BEST))
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    m1, m2 = _mf(tmp_path / "a", kf), _mf(tmp_path / "b", kf)
+    doc = json.loads(Path(m2[1]).read_text())
+    doc["files"][0]["sha256"] = "different"
+    Path(m2[1]).write_text(json.dumps(doc))
+    out = tmp_path / "s.json"
+    assert hr.main(["select", kf, "--out", str(out), *m1, *m2]) == hr.EXIT_INCOMPLETE
+    probs = json.loads(out.read_text())["manifest_problems"]
+    assert probs and "disagree" in probs[0] and doc["files"][0]["path"] in probs[0]

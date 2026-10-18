@@ -261,3 +261,37 @@ def test_split_box2_refuses_a_box1_manifest_that_does_not_match(tmp_path):
     pins["TC1_HP1_K_MANIFEST_SHA256"] = "f" * 64
     arms, summary = drive(tmp_path, FAMILY_FN="tc1_hp1p_family", **pins)
     assert "HP1 P_REFUSED carry bulk_manifest.json" in summary and tags(arms) == []
+
+
+def _controller_pin_check(tmp_path, pins, stage):
+    src = (REPO / "bench" / "tc1" / "tc1_drive.sh").read_text()
+    i = src.index("# HP1 split box 2 (qwen3hp1p")
+    block = src[i:src.index("# end HP1 split box 2 pins", i)]
+    sh = tmp_path / "pins.sh"
+    sh.write_text('say(){ echo "SAY: $*"; }\n' + block + "echo PINS_OK\n")
+    env = dict(os.environ, TC1_FAMILIES="qwen3hp1p", TC1_EXTRA_STAGE=" ".join(str(p) for p in stage), **pins)
+    return subprocess.run(["bash", str(sh)], env=env, capture_output=True, text=True, timeout=60)
+
+
+@pytest.mark.parametrize("case", ["ok", "short_pin", "non_hex_pin", "unset_pin", "file_missing", "hash_mismatch"])
+def test_the_controller_checks_box1s_carry_pins_before_renting(tmp_path, case):
+    """Amendment 2: a mis-pinned box 2 is a $0 refusal on the controller (rc 78), never a paid box that spends the run id."""
+    stage_dir = tmp_path / "carry"
+    stage_dir.mkdir()
+    pins = _stage_box1_outputs(stage_dir)
+    stage = [stage_dir / f for f in ("eval_K.json", "select.json", "bulk_manifest.json")]
+    if case == "short_pin":
+        pins["TC1_HP1_K_EVAL_SHA256"] = pins["TC1_HP1_K_EVAL_SHA256"][:40]
+    elif case == "non_hex_pin":
+        pins["TC1_HP1_K_SELECT_SHA256"] = "Z" * 64
+    elif case == "unset_pin":
+        pins.pop("TC1_HP1_K_MANIFEST_SHA256")
+    elif case == "file_missing":
+        stage = stage[:2]
+    elif case == "hash_mismatch":
+        (stage_dir / "select.json").write_text("{}")
+    p = _controller_pin_check(tmp_path, pins, stage)
+    if case == "ok":
+        assert p.returncode == 0 and "PINS_OK" in p.stdout, p.stdout + p.stderr
+    else:
+        assert p.returncode == 78 and "refusing" in p.stdout and "PINS_OK" not in p.stdout, p.stdout + p.stderr

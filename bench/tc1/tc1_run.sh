@@ -2323,8 +2323,12 @@ hp1_p_block(){ local FAM=$1 MID=$2 REV=$3 TOK=$4 TS=$5 EAL=$6 UAL=$7 AXAL=$8 SEL
   $PY_E4B $W/hp1_reduce.py verdict $KEVAL $W/hp1/eval_P.json --manifest $W/hp1/bulk_manifest.json ${KMAN:+--manifest $KMAN} --out $W/hp1/verdict.json \
     --md $W/RESULTS-hp1.md > logs/hp1_verdict.log 2>&1
   tail -20 logs/hp1_verdict.log; echo "HP1 verdict: $W/RESULTS-hp1.md" | tee -a summary.txt; return 0; }
-hp1_open(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 ALL=$5
-  local s c; for s in $HP1_SEL_SEEDS; do for c in k00 k10 k01 k11; do ALL="$ALL e4b:hp1_${c}_s$s:fused"; done; done
+# hp1_open FAM MID REV FAL [SEL]: prepare + the box-side shakedown; a failure stubs the block's own arms (the K arms, or -- box 2, SEL
+# given -- the P arms it would have run)
+hp1_open(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 SEL=${5:-} ALL="" s c
+  if [ -z "$SEL" ]; then for s in $HP1_SEL_SEEDS; do for c in k00 k10 k01 k11; do ALL="$ALL e4b:hp1_${c}_s$s:fused"; done; done
+  else for s in $HP1_CONF_SEEDS; do ALL="$ALL e4b:hp1_e_${SEL}_s$s:fused unsloth:hp1_unsloth_s$s:unsloth axolotl:hp1_axolotl_s$s:axolotl"
+    [ "$SEL" != k00 ] && ALL="$ALL e4b:hp1_k00_s$s:fused"; done; fi
   tc1_prepare $FAM "$MID" $REV $FAL "$ALL" $HP1_EVAL_N || return 1
   mkdir -p $W/hp1
   if ! hp1_shakedown $FAM "$MID" $REV $TOK $TS; then
@@ -2365,7 +2369,7 @@ tc1_hp1p_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AXAL=$7 TOK T
     say "HP1 box 2 REFUSES: select.json says '$SEL', the staged eval_K.json re-derives '$SEL2'"; echo "HP1 P_REFUSED selection" | tee -a summary.txt; return 0
   fi
   echo "HP1_SELECTED=$SEL (carried from box 1, re-derived)" | tee -a summary.txt
-  hp1_open $FAM "$MID" $REV $FAL "" || return 0
+  hp1_open $FAM "$MID" $REV $FAL "$SEL" || return 0
   hp1_p_block $FAM "$MID" $REV $TOK $TS $EAL $UAL $AXAL $SEL $W/hp1/eval_K_box1.json 1 $W/hp1/bulk_manifest_box1.json || true; }
 tc1_curve_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SAL=$8
   local ALL="e4b:fused_attn4_m_200:fused unsloth:ckpt_unsloth_m_200:unsloth e4b:fused_attn4_shipped_200:fused e4b:fused_attn4_p38:fused unsloth:ckpt_unsloth_p38:unsloth unsloth:ckpt_unsloth_p38_t28:unsloth e4b:fused_attn4_m_t1:fused unsloth:ckpt_unsloth_m_t1:unsloth e4b:fused_attn4_m_r64:fused unsloth:ckpt_unsloth_m_r64:unsloth"
