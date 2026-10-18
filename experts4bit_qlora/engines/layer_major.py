@@ -30,8 +30,14 @@ What is the same as the stock loop, and what is not:
   (micro-batch 0 twice), so a nondeterministic device path refuses as that, not as drift. M + 1 extra forwards, once per
   model. Dropout is refused outright: it would make neither the guard nor the stock-loop equality hold.
 
-Supported: the classes in :data:`SUPPORTED` (v1: Qwen3-MoE). Anything else is refused by name, as is a model that
-returns router logits (the auxiliary loss would need the layers' router outputs, which the head-only call cannot see).
+Supported: the classes in :data:`SUPPORTED`: Qwen3-MoE, Mixtral and OLMoE (one preamble: an embedding, one causal or
+sliding-window mask, one rotary), and Gemma-4's text model (its own preamble: a full and a sliding mask chosen per layer by
+``config.layer_types``, the rotary per layer type, and one ``shared_kv_states`` dict per micro-batch, since layer-major runs
+every micro-batch through a layer before the next and a shared dict would hand a layer another micro-batch's keys;
+bench/layer-major-families/DESIGN.md). Anything else is refused by name, as is a model that returns router logits (the
+auxiliary loss would need the layers' router outputs, which the head-only call cannot see), Mixtral's training-time
+``router_jitter_noise`` (a random draw the stock loop takes in another order) and Gemma-4's per-layer embeddings (built
+from the input ids, which the head-only call does not have).
 """
 from __future__ import annotations
 
@@ -44,7 +50,7 @@ import weakref
 from .offload import hold_forward_residency, offload_handles
 
 #: Causal-LM classes whose decoder forward this module reproduces (read in transformers' source, test-pinned).
-SUPPORTED = ("Qwen3MoeForCausalLM",)
+SUPPORTED = ("Qwen3MoeForCausalLM", "MixtralForCausalLM", "OlmoeForCausalLM", "Gemma4ForCausalLM")
 
 #: Models whose first layer-major step matched the stock forward (the drift guard); weak, so a freed model drops out.
 _VERIFIED: "weakref.WeakSet" = weakref.WeakSet()
@@ -78,6 +84,16 @@ def _refuse(model) -> None:
         raise NotImplementedError(
             "layer_major_step: output_router_logits is on; the router auxiliary loss is not carried by the layer-major step"
         )
+    if model.training and float(getattr(model.config, "router_jitter_noise", 0) or 0) > 0:
+        raise NotImplementedError(
+            f"layer_major_step: router_jitter_noise is {model.config.router_jitter_noise}; the router's training-time noise is a "
+            "random draw layer-major takes in another order than the stock loop, so its losses would not be the stock loop's"
+        )
+    if name == "Gemma4ForCausalLM" and getattr(model.model.config, "hidden_size_per_layer_input", 0):
+        raise NotImplementedError(
+            "layer_major_step: Gemma-4's per-layer embeddings (hidden_size_per_layer_input) are on; they are built from the "
+            "input ids, which the head-only call does not have, so this model is not supported yet"
+        )
     rates = _dropout_rates(model) if model.training else {}
     if rates:
         raise NotImplementedError(
@@ -98,6 +114,38 @@ def _without_layers(inner):
         inner.layers = saved
 
 
+def _shared_kv_states():
+    """A fresh per-forward store for Gemma-4's KV sharing, as its text model's forward starts each forward with one."""
+    from collections import UserDict
+    return UserDict()
+
+
+def _preamble(model, inner, cfg, b):
+    """What the model's own decoder forward builds before its layer loop, for one micro-batch (no cache in training).
+    Returns ``(hidden, call)``: the embedding output and ``call(layer, i, h)``, which calls layer ``i`` with exactly the
+    arguments that forward passes it."""
+    from transformers.masking_utils import create_causal_mask, create_sliding_window_causal_mask
+    emb = inner.embed_tokens(b["input_ids"])
+    pos = torch.arange(emb.shape[1], device=emb.device).unsqueeze(0)
+    mk = dict(config=cfg, inputs_embeds=emb, attention_mask=b.get("attention_mask"), past_key_values=None, position_ids=pos)
+    if type(model).__name__ == "Gemma4ForCausalLM":
+        masks = {"full_attention": create_causal_mask(**mk), "sliding_attention": create_sliding_window_causal_mask(**mk)}
+        pe = {t: inner.rotary_emb(emb, pos, t) for t in inner.unique_layer_types}
+        shared = _shared_kv_states()
+
+        def call(layer, i, h):
+            t = cfg.layer_types[i]
+            return layer(h, None, shared_kv_states=shared, position_embeddings=pe[t], attention_mask=masks[t],
+                         position_ids=pos, past_key_values=None)
+        return emb, call
+    mask_function = create_causal_mask if getattr(cfg, "sliding_window", None) is None else create_sliding_window_causal_mask
+    mask, pe = mask_function(**mk), inner.rotary_emb(emb, position_ids=pos)
+
+    def call(layer, i, h):
+        return layer(h, attention_mask=mask, position_ids=pos, past_key_values=None, use_cache=False, position_embeddings=pe)
+    return emb, call
+
+
 def layer_major_step(model, batches, weights, handles=None):
     """One accumulation step, layer-major. Returns the micro-batch losses (detached), after the backward.
 
@@ -106,30 +154,19 @@ def layer_major_step(model, batches, weights, handles=None):
     ``1 / GRAD_ACCUM``, or a token share). The backward is ``sum(w_k * loss_k)``. ``handles``: the offload handles to hold
     (default: :func:`offload_handles`); an empty list runs the same schedule with nothing held.
     """
-    from transformers.masking_utils import create_causal_mask, create_sliding_window_causal_mask
-
     _refuse(model)
     if len(batches) != len(weights):
         raise ValueError(f"layer_major_step: {len(batches)} micro-batches but {len(weights)} weights")
     inner = model.model
     cfg = inner.config
-    mask_function = create_causal_mask if cfg.sliding_window is None else create_sliding_window_causal_mask
     handles = offload_handles(model) if handles is None else list(handles)
 
-    # Per micro-batch, what Qwen3MoeModel.forward builds before its layer loop (no cache in training).
-    states = []
-    for b in batches:
-        emb = inner.embed_tokens(b["input_ids"])
-        pos = torch.arange(emb.shape[1], device=emb.device).unsqueeze(0)
-        mask = mask_function(config=cfg, inputs_embeds=emb, attention_mask=b.get("attention_mask"),
-                             past_key_values=None, position_ids=pos)
-        states.append([emb, mask, pos, inner.rotary_emb(emb, position_ids=pos)])
+    states = [list(_preamble(model, inner, cfg, b)) for b in batches]      # [hidden, call] per micro-batch
 
     with hold_forward_residency(handles):
-        for layer in inner.layers[: cfg.num_hidden_layers]:
+        for i, layer in enumerate(inner.layers[: cfg.num_hidden_layers]):
             for s in states:
-                s[0] = layer(s[0], attention_mask=s[1], position_ids=s[2], past_key_values=None, use_cache=False,
-                             position_embeddings=s[3])
+                s[0] = s[1](layer, i, s[0])
 
     losses = []
     with _without_layers(inner):

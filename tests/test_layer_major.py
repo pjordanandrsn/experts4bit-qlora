@@ -96,10 +96,10 @@ def test_losses_equal_the_stock_forward_and_grads_are_the_same_sum(reentrant):
 
 
 def test_refuses_other_families_router_logits_and_a_mismatch():
-    cfg = tr.MixtralConfig(hidden_size=32, intermediate_size=64, num_hidden_layers=1, num_attention_heads=4,
-                           num_key_value_heads=2, num_local_experts=4, num_experts_per_tok=2, vocab_size=VOCAB)
-    with pytest.raises(NotImplementedError, match="MixtralForCausalLM is not supported"):
-        layer_major_step(tr.MixtralForCausalLM(cfg), _batches(), WEIGHTS, handles=[])
+    cfg = tr.GraniteMoeConfig(hidden_size=32, intermediate_size=64, num_hidden_layers=1, num_attention_heads=4,
+                              num_key_value_heads=2, num_local_experts=4, num_experts_per_tok=2, vocab_size=VOCAB)
+    with pytest.raises(NotImplementedError, match="GraniteMoeForCausalLM is not supported"):
+        layer_major_step(tr.GraniteMoeForCausalLM(cfg), _batches(), WEIGHTS, handles=[])
     model = _tiny()
     model.config.output_router_logits = True
     with pytest.raises(NotImplementedError, match="output_router_logits"):

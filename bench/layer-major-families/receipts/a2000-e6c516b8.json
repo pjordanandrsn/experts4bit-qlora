@@ -1,0 +1,147 @@
+{
+ "transformers": "5.19.0",
+ "torch": "2.11.0+cu128",
+ "gpu": "NVIDIA RTX A2000 12GB",
+ "families": {
+  "qwen3": {
+   "n_fast": 3,
+   "n_offloaded": 3,
+   "ckpt_reentrant": [
+    true,
+    true,
+    true
+   ],
+   "stock_stagings": [
+    16,
+    15
+   ],
+   "layer_major_stagings": [
+    17,
+    5
+   ],
+   "verified": true,
+   "grad_keys_equal": true,
+   "max_rel_grad_gap": 0.002758334157988429,
+   "checks": {
+    "1_drift_guard_passed": true,
+    "2_stagings": true,
+    "3_reentrant_routed": true,
+    "grads_present": true
+   }
+  },
+  "mixtral": {
+   "n_fast": 3,
+   "n_offloaded": 3,
+   "ckpt_reentrant": [
+    true,
+    true,
+    true
+   ],
+   "stock_stagings": [
+    16,
+    15
+   ],
+   "layer_major_stagings": [
+    17,
+    5
+   ],
+   "verified": true,
+   "grad_keys_equal": true,
+   "max_rel_grad_gap": 0.0028546303510665894,
+   "checks": {
+    "1_drift_guard_passed": true,
+    "2_stagings": true,
+    "3_reentrant_routed": true,
+    "grads_present": true
+   }
+  },
+  "olmoe": {
+   "n_fast": 3,
+   "n_offloaded": 3,
+   "ckpt_reentrant": [
+    true,
+    true,
+    true
+   ],
+   "stock_stagings": [
+    16,
+    15
+   ],
+   "layer_major_stagings": [
+    17,
+    5
+   ],
+   "verified": true,
+   "grad_keys_equal": true,
+   "max_rel_grad_gap": 0.0026883340906351805,
+   "checks": {
+    "1_drift_guard_passed": true,
+    "2_stagings": true,
+    "3_reentrant_routed": true,
+    "grads_present": true
+   }
+  },
+  "gemma4": {
+   "n_fast": 6,
+   "n_offloaded": 6,
+   "ckpt_reentrant": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ],
+   "stock_stagings": [
+    34,
+    33
+   ],
+   "layer_major_stagings": [
+    35,
+    11
+   ],
+   "verified": true,
+   "grad_keys_equal": true,
+   "max_rel_grad_gap": 0.003123238682746887,
+   "checks": {
+    "1_drift_guard_passed": true,
+    "2_stagings": true,
+    "3_reentrant_routed": true,
+    "grads_present": true
+   }
+  }
+ },
+ "gemma4_mutant": {
+  "n_fast": 6,
+  "n_offloaded": 6,
+  "ckpt_reentrant": [
+   true,
+   true,
+   true,
+   true,
+   true,
+   true
+  ],
+  "mutant_raised": true
+ },
+ "checks": {
+  "qwen3.1_drift_guard_passed": true,
+  "qwen3.2_stagings": true,
+  "qwen3.3_reentrant_routed": true,
+  "qwen3.grads_present": true,
+  "mixtral.1_drift_guard_passed": true,
+  "mixtral.2_stagings": true,
+  "mixtral.3_reentrant_routed": true,
+  "mixtral.grads_present": true,
+  "olmoe.1_drift_guard_passed": true,
+  "olmoe.2_stagings": true,
+  "olmoe.3_reentrant_routed": true,
+  "olmoe.grads_present": true,
+  "gemma4.1_drift_guard_passed": true,
+  "gemma4.2_stagings": true,
+  "gemma4.3_reentrant_routed": true,
+  "gemma4.grads_present": true,
+  "gemma4.4_mutant_fails_the_equality_check": true
+ },
+ "pass": true
+}
