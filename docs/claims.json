@@ -12394,6 +12394,37 @@
         "receipts/experts4bit-qlora/2026-10-18/p135-5090-1/ (receipt.json, teardown-proof.json; HARNESS_ERROR at the premise)"
       ],
       "notes": "Pre-registered in #1732 with Amendment 1 (#1737). Y1-Y6 all HIT (FASTER about 70 %; the ratios inside the predicted [0.91, 0.975]). p135-5090-1 ($0.038) stopped at the premise on the card before any fetch: a staged GPU test predated grouped-nf4-gemm's rope_norm_qk route. ON and OFF tokens agree on 283 of 293 per block, first parting at step 38 (reported, never gated). The reviewers and the maintainer re-derived the verdict from the store byte for byte, and the maintainer decided the allowlist flip on the quality and speed reads together."
+    },
+    {
+      "id": "e4b.train.p140.layer-major-offload.qwen3.5090.2026-10-18",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane P140, one rented RTX 5090, a replication of P137 (its kit at Amendment 3, every STRICT term unchanged): under expert offload with enable_fast_train(dgrad=True), layer-major accumulation (experts4bit_qlora.engines.layer_major.layer_major_step) trains Qwen3-30B-A3B at 2.311x the stock accumulation loop's speed: medians A0a 6.017 / L1a 2.597 / L1b 2.602 / A0b 6.014 s/step over 32 timed steps each, self-pairs 0.999 / 1.002, against a registered bar of S >= 1.10; stagings 380 -> 95 per step, peak allocated 7.98 GB against 8.41 GB. Inside the band [1.8, 3.0] predicted a priori from the host link. P137 read 2.365 on an RTX 4090.",
+      "value": 2.3112212607720592,
+      "unit": "S = min(A0a/L1a, A0b/L1b), stock over layer-major median s/step, one process ABBA, 32 timed steps per arm",
+      "hardware": "RTX 5090 (sm_120, 32 GB, driver 615.71.09), one rented Vast.ai verified/secure host (p140-5090-1: machine 34018, AMD Ryzen 7 5700X3D, 16 threads, pinned H2D ceiling 22.80 GB/s), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @b4366b9a (0.55.0, the registered library pin) + grouped-nf4-gemm 0.46.0 @6b7c2e74; torch 2.8.0+cu128, transformers 5.18.0, bitsandbytes 0.50.2; lane source @5bcae060 (P140 registration); load_moe_4bit_streaming(offload=True, pin=True), 48/48 MoE layers offloaded and patched, gradient checkpointing enabled then routed by enable_fast_train through e4b's reentrant checkpoint on all 48 decoder layers; alpaca train[:400] (sha256 68e3d31c), seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, AdamW 8-bit, lr 2e-4, seed 3407; one load (65.1 s), A0a L1a L1b A0b from one hash-checked adapter snapshot after an untimed warm-up of both loops; 2 warm + 32 timed steps per arm; verdict by bench/p140/p140_reduce.py",
+      "measured_on": "2026-10-18",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p140/RESULTS-p140.md",
+        "bench/p140/PREREG-p140.md",
+        "bench/p140/p140_reduce.py",
+        "bench/p140/p140_box.py",
+        "bench/p140/receipts/p140-5090-1/verdict.json",
+        "bench/p140/receipts/p140-5090-1/summary.txt",
+        "bench/p140/receipts/p140-5090-1/SHA256SUMS",
+        "bench/p140/receipts/p140-5090-1/arm_A0a.json",
+        "bench/p140/receipts/p140-5090-1/arm_L1a.json",
+        "bench/p140/receipts/p140-5090-1/arm_L1b.json",
+        "bench/p140/receipts/p140-5090-1/arm_A0b.json"
+      ],
+      "quoted_in": [
+        "docs/STATUS.md#fit-and-memory"
+      ],
+      "notes": "Pre-registered in #1746 (P137's kit at its Amendment 3 by named substitutions); read on p140-5090-1 and re-derived byte-identical (verdict.json sha256 20bd7656). Covers layer_major_step + enable_fast_train + expert offload, Qwen3-30B-A3B, the RTX 5090 class, P137's recipe; from the CLI trainer OFFLOAD_EXPERTS=1 LAYER_MAJOR=1. No default changes. Host-link fit: T 1.139 s, C 1.461 s (P137's 4090: 1.459 / 1.743)."
     }
   ]
 }

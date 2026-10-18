@@ -1,0 +1,9 @@
+...............................................                          [100%]
+=============================== warnings summary ===============================
+tests/test_layer_major.py::test_drift_guard_refuses_a_diverged_preamble_before_any_backward[nonreentrant]
+  /root/p140/e4bsrc/experts4bit_qlora/engines/layer_major.py:153: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+  Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:835.)
+    f"(e.g. {float(losses[bad[0]])!r} vs {float(stock[bad[0]])!r}); the reproduced decoder preamble has drifted "
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+47 passed, 1 warning in 30.96s

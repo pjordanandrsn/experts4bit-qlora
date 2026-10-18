@@ -44,7 +44,10 @@ against 8.41. The predicted band [1.25, 2.0] was missed high, and the held-out t
 the 0.031 same-loop spread at 34 steps. From the CLI trainer, `OFFLOAD_EXPERTS=1 LAYER_MAJOR=1` (which implies
 `FAST_TRAIN=1`) makes the same calls, checked bit for bit against the library on a fixture; its own recipe (AdamW,
 token-budget batches) is unread.
-`e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18` ([P137](../bench/p137/RESULTS-p137.md)).
+It replicates on one RTX 5090: 2.311× (6.017 / 6.014 s against 2.597 / 2.602 s), inside the band [1.8, 3.0]
+predicted a priori from the host link.
+`e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18` ([P137](../bench/p137/RESULTS-p137.md)),
+`e4b.train.p140.layer-major-offload.qwen3.5090.2026-10-18` ([P140](../bench/p140/RESULTS-p140.md)).
 
 **On the 12 GB RTX A2000 the same set trains under offload at micro-batch 1**, at 10.46 GB peak, held-out 0.8483 beside
 the 5090's 0.8516 / 0.8487. Unsloth refuses on that card, axolotl's wheels need a newer driver, and HF runs out of

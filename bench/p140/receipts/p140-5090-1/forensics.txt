@@ -1,0 +1,7 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 615.71.09, GPU-25e4da5b-1340-0fa7-5dd3-df9f9f1df47f, 12.0, 4, 16
+CPU(s):                                  16
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD Ryzen 7 5700X3D 8-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             125           3          71           0          51         121
+overlay         200G   12M  200G   1% /
