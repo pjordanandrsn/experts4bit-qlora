@@ -1,0 +1,161 @@
+{
+ "_comment": "per-name census map (bench/pername/PREREG-pername.md) = P136's map (bench/p136/kernel_classes_nf4.json) plus ONE name: _rope_norm_qk joins norm_elem (Qwen3's q/k norm + rope launch, mapped the same way by P132's v1.2, bench/p132/kernel_classes_nf4_v1_2.json). Unknown names and broken segments stay fail-closed.",
+ "e4b": {
+  "rules": [
+   {
+    "class": "attn",
+    "match": [
+     "_fp8_paged_decode",
+     "_fp8_combine",
+     "_fp8_append"
+    ]
+   },
+   {
+    "class": "norm_elem",
+    "match": [
+     "_rmsnorm_rows",
+     "_rmsnorm_resid_rows",
+     "_scaled_resid_add_rows",
+     "_rope_heads",
+     "_rope_norm_heads",
+     "_rope_norm_qk"
+    ]
+   },
+   {
+    "class": "moe_route",
+    "match": [
+     "_router_epilogue",
+     "_tile_table_r1",
+     "_combine_rows",
+     "_gather_rows"
+    ]
+   },
+   {
+    "class": "dense_gemm",
+    "match": [
+     "_gemv_int4_b32"
+    ],
+    "where": {
+     "gridY_eq": 1
+    }
+   },
+   {
+    "class": "dense_gemm",
+    "match": [
+     "_gemm_int4_b32_smallm"
+    ]
+   },
+   {
+    "class": "dense_gemm",
+    "match": [
+     "nvjet",
+     "gemm",
+     "gemv",
+     "cutlass",
+     "xmma",
+     "cublas"
+    ]
+   },
+   {
+    "class": "sample",
+    "match": [
+     "ArgMax",
+     "argmax"
+    ]
+   },
+   {
+    "class": "moe_route",
+    "match": [
+     "topk",
+     "TopK",
+     "sort",
+     "Sort"
+    ]
+   },
+   {
+    "class": "input_prep",
+    "match": [
+     "elementwise",
+     "vectorized",
+     "index",
+     "copy",
+     "fill",
+     "cat",
+     "CatArrayBatchedCopy",
+     "unrolled",
+     "reduce_kernel",
+     "DeviceScan",
+     "cumsum",
+     "Cumsum"
+    ],
+    "where": {
+     "in_graph": false
+    }
+   },
+   {
+    "class": "norm_elem",
+    "match": [
+     "elementwise",
+     "vectorized",
+     "index",
+     "copy",
+     "fill",
+     "cat",
+     "CatArrayBatchedCopy",
+     "unrolled",
+     "reduce_kernel"
+    ]
+   }
+  ],
+  "segment": {
+   "start": [
+    "_router_epilogue",
+    "topk",
+    "TopK"
+   ],
+   "end": [
+    "_combine_rows"
+   ]
+  },
+  "expert_names": [
+   "_gemv_nf4_bw",
+   "_gemv_nf4_dotpad",
+   "_gemv_nf4_dotpad_splitk",
+   "_gemv_nf4_grouped",
+   "_gemv_nf4_grouped_splitk",
+   "_gemm_nf4_grouped",
+   "_gemm_nf4_grouped_smallm",
+   "_gemv_int4_b32",
+   "_gemm_int4_b32_grouped",
+   "_swiglu_rows",
+   "_gemm_mxfp4_grouped",
+   "_gemv_mxfp4_grouped",
+   "_gemm_mxfp4_grouped_smallm"
+  ],
+  "matmul_names": [
+   "_gemv_nf4_bw",
+   "_gemv_nf4_dotpad",
+   "_gemv_nf4_dotpad_splitk",
+   "_gemv_nf4_grouped",
+   "_gemv_nf4_grouped_splitk",
+   "_gemm_nf4_grouped",
+   "_gemm_nf4_grouped_smallm",
+   "_gemv_int4_b32",
+   "_gemm_int4_b32",
+   "nvjet",
+   "gemm",
+   "gemv",
+   "cutlass",
+   "xmma",
+   "_gemm_mxfp4_grouped",
+   "_gemv_mxfp4_grouped",
+   "_gemm_mxfp4_grouped_smallm"
+  ],
+  "inherit_next": [
+   "_quant_x_rows"
+  ],
+  "inherit_prev": [
+   "_reduce_partials"
+  ]
+ }
+}
