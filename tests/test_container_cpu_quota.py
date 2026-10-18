@@ -42,3 +42,12 @@ def test_the_report_names_what_the_load_log_prints(tmp_path, monkeypatch):
     r = host_cpu_report(_tree(tmp_path, {"cpu.max": "200000 100000\n"}))
     assert r["cpu_quota"] == 2.0 and r["omp_num_threads"] == "7" and r["torch_threads"] >= 1
     assert r["visible_cpus"] == (len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count())
+
+
+def test_the_thread_cap_is_the_quota_rounded_up_never_above_the_pool():
+    from experts4bit_qlora.util import host_thread_cap
+    assert host_thread_cap({"torch_threads": 256, "visible_cpus": 256, "cpu_quota": 30.72}) == 31   # machine 51612's shape
+    assert host_thread_cap({"torch_threads": 16, "visible_cpus": 16, "cpu_quota": None}) == 16      # no quota: unchanged
+    assert host_thread_cap({"torch_threads": 4, "visible_cpus": 256, "cpu_quota": 30.72}) == 4      # never raises the pool
+    assert host_thread_cap({"torch_threads": 12, "visible_cpus": 12, "cpu_quota": 0.5}) == 1
+    assert host_thread_cap({"torch_threads": 64, "visible_cpus": 8, "cpu_quota": None}) == 8        # affinity caps too

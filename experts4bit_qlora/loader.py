@@ -1557,6 +1557,17 @@ def load_moe_4bit_streaming(
     # Stacking and concatenation are copies and the quantization still runs on the device, so the stored bytes are the
     # same; the resident (no-offload) path reads to the device exactly as before.
     stage_on_host = _stage_expert_rows_on_host(device, offload)
+    # The host-side stack/cat of every layer's expert rows runs on torch's intra-op pool, which torch sizes to the CPUs it can
+    # SEE. A rented container can see a 256-thread host and hold a CFS quota of about 31 CPUs; the pool then spins through the
+    # quota and is throttled every period (the only slow offloaded loads in the receipt store, machine 51612, ~35x). For the
+    # staged loop, cap the pool at the quota (and the affinity); restored after. Bytes are unchanged, only speed.
+    _threads_before = torch.get_num_threads()
+    if stage_on_host:
+        from .util import host_thread_cap
+        _cap = host_thread_cap(_cpu)
+        if _cap < _threads_before:
+            torch.set_num_threads(_cap)
+            log(f"  host-side fuse: intra-op threads {_threads_before} -> {_cap} (the container's CPU quota / affinity)")
     for i in range(n_layers):
         # MODULE side: where this layer's fused experts are PLACED in the built tree.
         # Not a checkpoint prefix — for the mixtral family the checkpoint keys live
@@ -1853,6 +1864,8 @@ def load_moe_4bit_streaming(
         setattr(model.get_submodule(parent), leaf, experts)
         del gate_up, down
     trace.sync("quantise experts (all layers)")
+    if torch.get_num_threads() != _threads_before:
+        torch.set_num_threads(_threads_before)
     if n_moe == 0:
         # Name the CHECKPOINT spelling the convention actually looks for, not the
         # module path. Reporting `expert_rel` here is what made the mixtral failure

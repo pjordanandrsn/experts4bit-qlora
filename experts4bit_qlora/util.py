@@ -106,3 +106,15 @@ def host_cpu_report(root: str = "/sys/fs/cgroup") -> dict:
     visible = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count()
     return {"visible_cpus": visible, "cpu_quota": None if quota is None else round(quota, 2), "quota_detail": detail,
             "torch_threads": torch.get_num_threads(), "omp_num_threads": os.environ.get("OMP_NUM_THREADS")}
+
+
+def host_thread_cap(report: dict) -> int:
+    """The intra-op thread count for host-side work: torch's current pool, never above the visible CPUs or the cgroup
+    quota (rounded up). Thread count changes the speed of a CPU copy, never its bytes."""
+    import math
+    cap = report["torch_threads"]
+    if report.get("visible_cpus"):
+        cap = min(cap, report["visible_cpus"])
+    if report.get("cpu_quota") is not None:
+        cap = min(cap, max(1, math.ceil(report["cpu_quota"])))
+    return max(1, cap)
