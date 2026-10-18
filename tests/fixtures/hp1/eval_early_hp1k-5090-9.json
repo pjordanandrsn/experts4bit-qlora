@@ -1,0 +1,84 @@
+{
+ "evaluator": "bench/hp1/hp1_eval.py",
+ "tokens": {
+  "path": "/root/tc1/tokens_qwen3hp1.json",
+  "sha256": "6d5783ce31b2ff57a05cca2db0446ab8bbf7697bd322d22e7b0545a25585b3b2",
+  "eval_n": 48
+ },
+ "model": "Qwen/Qwen3-30B-A3B",
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "device": "NVIDIA GeForce RTX 5090",
+ "torch": "2.8.0+cu128",
+ "zero_adapter_tol": 0.005,
+ "roundtrip_tol": 0.02,
+ "expect_trainable": 642514944,
+ "bases": [
+  {
+   "dir": "/root/tc1/hp1/base_e4b_qwen3hp1",
+   "meta": {
+    "fam": "qwen3hp1",
+    "framework": "e4b",
+    "model": "Qwen/Qwen3-30B-A3B",
+    "regimes": {
+     "attention k_proj": "nf4/64",
+     "attention o_proj": "nf4/64+dq",
+     "attention q_proj": "nf4/64",
+     "attention v_proj": "nf4/64",
+     "expert down": "nf4/64+dq",
+     "expert gate_up": "nf4/64+dq"
+    },
+    "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+    "train_base_digest": "65b6083d6158cfca3834a0f3b5e56f4828b033fbe6abf01fa9aa6d8eb58e9dca"
+   },
+   "digest": "65b6083d6158cfca3834a0f3b5e56f4828b033fbe6abf01fa9aa6d8eb58e9dca",
+   "n_slots": 12723,
+   "digest_matches_training_run": true,
+   "zero_adapter": {
+    "row_mean": 1.921029,
+    "token_weighted": 1.73508
+   },
+   "zero_adapter_vs_inloop_step0": {
+    "hp1_k00_s3407": 0.006999
+   },
+   "status": "VOID",
+   "reason": "STRICT zero-adapter check: |evaluator - in-loop step 0| > 0.005 for ['hp1_k00_s3407']",
+   "seconds": 50.3
+  }
+ ],
+ "arms": [
+  {
+   "receipt": "/root/tc1/qwen3hp1_e4b_hp1_k00_s3407.json",
+   "framework": "e4b",
+   "tag": "hp1_k00_s3407",
+   "seed": 3407,
+   "order": {
+    "order_seed": 3407,
+    "n_rows": 1200,
+    "order_sha": "25d50439321bfa3e4dcf47761f08af71fa9e91a041c7167996de30f8c6e9e65a"
+   },
+   "tokens_sha": "6d5783ce31b2ff57a05cca2db0446ab8bbf7697bd322d22e7b0545a25585b3b2",
+   "adapter": "/root/tc1/hp1/canonical_qwen3hp1_hp1_k00_s3407.safetensors",
+   "adapter_sha256": "7998be570edca49b557021d505a9fed62f79ee0b1270651397e32e2080fbf029",
+   "train_digest": "65b6083d6158cfca3834a0f3b5e56f4828b033fbe6abf01fa9aa6d8eb58e9dca",
+   "inloop_step0": 1.91403,
+   "inloop_final": 0.86954,
+   "inloop_final_step": 200,
+   "steps": 200,
+   "hp1_errors": {},
+   "raw_ok": true,
+   "status_receipt": "ok",
+   "c1_bit_exact": true,
+   "trainable_params": 642514944,
+   "lora_init": "native",
+   "adapter_dtype": "native",
+   "matched_init": null,
+   "adapter_dtypes_after": {
+    "torch.float32": 384,
+    "torch.bfloat16": 192
+   },
+   "status": "VOID",
+   "reason": "base /root/tc1/hp1/base_e4b_qwen3hp1: STRICT zero-adapter check: |evaluator - in-loop step 0| > 0.005 for ['hp1_k00_s3407']",
+   "void_level": "base"
+  }
+ ]
+}

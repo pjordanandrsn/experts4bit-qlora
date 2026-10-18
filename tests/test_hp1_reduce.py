@@ -586,3 +586,30 @@ def test_a_base_layer_disagreement_across_boxes_voids(tmp_path, capsys):
     out = tmp_path / "s.json"
     assert hr.main(["select", kf, "--out", str(out), *m1, *m2]) == hr.EXIT_INCOMPLETE
     assert "layer000" in json.loads(out.read_text())["manifest_problems"][0]
+
+
+def _verdict_tol(tmp_path, k_arms, p_arms, capsys, k_tol=None, p_tol=None):
+    kf = _write(tmp_path, "k.json", k_arms)
+    pf = _write(tmp_path, "p.json", p_arms)
+    for f, t in ((kf, k_tol), (pf, p_tol)):
+        if t is not None:
+            d = json.loads(Path(f).read_text())
+            d["zero_adapter_tol"] = t
+            Path(f).write_text(json.dumps(d))
+    out, md = tmp_path / "v.json", tmp_path / "v.md"
+    code = hr.main(["verdict", kf, pf, "--out", str(out), "--md", str(md), *_mf(tmp_path, kf, pf)])
+    return code, json.loads(out.read_text()), md.read_text()
+
+
+def test_a_zero_adapter_tolerance_above_half_the_realized_margin_closes_the_headline(tmp_path, capsys):
+    """HP1-PREREG Amendment 4, stage 2: the largest zero-adapter tolerance any input used must be <= m/2 for the realized m; above it
+    the evaluator sits too far from training at depth to read the margin, so no headline is read."""
+    p_arms = _p_arms("k10", (-0.02, -0.021, -0.019), unsloth_off=0.01)
+    code, res, _ = _verdict_tol(tmp_path, _k_arms(K10_BEST), p_arms, capsys)
+    m = res["p"]["m"]
+    assert code == 0 and res["p"]["zero_adapter_tol"] is None and "headline_closed" not in res["p"]
+    code, res, md = _verdict_tol(tmp_path, _k_arms(K10_BEST), p_arms, capsys, k_tol=round(m / 2 + 1e-4, 6), p_tol=0.001)   # the largest input tol counts
+    assert code == 3 and res["verdict"] == "CLOSED_TOL" and res["p"]["zero_adapter_tol"] == round(m / 2 + 1e-4, 6)
+    assert _reading(res, "headline (CLOSED: Amendment 4)") and "HEADLINE CLOSED" in md
+    code, res, _ = _verdict_tol(tmp_path, _k_arms(K10_BEST), p_arms, capsys, k_tol=round(m / 2, 6), p_tol=round(m / 2, 6))
+    assert code == 0 and res["verdict"] != "CLOSED_TOL"                       # at m/2 exactly: within
