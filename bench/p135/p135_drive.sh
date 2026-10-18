@@ -14,9 +14,10 @@ HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 LANE_HELPER="$REPO/bench/common/lane_liveness.sh"
 source "$LANE_HELPER" || { say "refusing: missing lane liveness helper"; exit 78; }
 # P135's staging: its runner, speed box and reducer, P115's quality box, P110's, P108's and P97's boxes, P39's k8_bake.py
-# and calib.json, and the premise tests from tests/. staged.sha256 pins every one by the name the box sees.
-TESTS="$REPO/tests"; P39="$REPO/bench/p39"; P115="$REPO/bench/p115"; P110="$REPO/bench/p110"; P108="$REPO/bench/p108"; P97="$REPO/bench/p97"
-STAGE="$HERE/p135_run.sh $HERE/p135_speed.py $HERE/p135_reduce.py $P115/p115_quality.py $P110/p110_box.py $P108/p108_box.py $P97/p97_box.py $P39/k8_bake.py $P39/calib.json $TESTS/test_fusion_modes.py $TESTS/test_fused_glue_decode_graphs_gpu.py $HERE/staged.sha256"
+# and calib.json, and the premise tests (test_fusion_modes.py from tests/; the decode-graph fold test as P136's route-exact
+# copy, Amendment 1). staged.sha256 pins every one by the name the box sees.
+TESTS="$REPO/tests"; P136="$REPO/bench/p136"; P39="$REPO/bench/p39"; P115="$REPO/bench/p115"; P110="$REPO/bench/p110"; P108="$REPO/bench/p108"; P97="$REPO/bench/p97"
+STAGE="$HERE/p135_run.sh $HERE/p135_speed.py $HERE/p135_reduce.py $P115/p115_quality.py $P110/p110_box.py $P108/p108_box.py $P97/p97_box.py $P39/k8_bake.py $P39/calib.json $TESTS/test_fusion_modes.py $P136/premise/test_fused_glue_decode_graphs_gpu.py $HERE/staged.sha256"
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
 # staged.sha256 names the files as the BOX will see them; resolve each name to its source and compare hashes
 # (the same check as tests/test_p135_staged_pin.py, which runs it in CI where it costs nothing).
@@ -30,7 +31,8 @@ while read -r want name; do
     p108_box.py) src="$P108/$name";;
     p97_box.py) src="$P97/$name";;
     k8_bake.py|calib.json) src="$P39/$name";;
-    test_fusion_modes.py|test_fused_glue_decode_graphs_gpu.py) src="$TESTS/$name";;
+    test_fusion_modes.py) src="$TESTS/$name";;
+    test_fused_glue_decode_graphs_gpu.py) src="$P136/premise/$name";;   # Amendment 1: P136's route-exact copy
     *) say "refusing: staged.sha256 names $name, which this driver does not stage"; exit 78;;
   esac
   got=$(sha_of "$src")
