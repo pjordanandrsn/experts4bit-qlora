@@ -72,7 +72,18 @@ per-layer safetensors, packed bytes, absmax, an index sha256).
 5. **Unchanged:** the non-expert weights, `verify_moe_4bit(strict=True)`, the loader's `n_moe` guard, the offload
    engine's structural check, the absmax-DQ refusal under offload (the cache always stores fp32 absmax), and every
    training path downstream.
-6. **The trainer** inherits it through the environment. One log line says hit, miss-and-wrote, or rebuilt, with the
+6. **No code runs from the cache.** Reads are safetensors and the JSON manifest only, never a pickle (`torch.load`)
+   path. A cache directory copied from elsewhere can supply bytes, which the sha256 and the key check, but it cannot
+   execute code.
+7. **The disk budget** at the recorded NF4 scheme (fp32 absmax, blocksize 64):
+   - Qwen3-30B-A3B: 0.3397 GB a layer × 48 = **16.3 GB**;
+   - Qwen3-235B-A22B: 1.359 GB a layer × 94 = **127.7 GB**.
+
+   Before writing, a miss checks free space against the manifest's total plus 5 %, and skips the write with a
+   warning if it would not fit. A partial write (a full disk or a crash) leaves only the temporary directory, which is
+   never read as a cache and is removed on the next miss. A hit whose files do not match the manifest refuses (point
+   4). The cache is never trimmed automatically; removing `DIR/<key>` is the user's call.
+8. **The trainer** inherits it through the environment. One log line says hit, miss-and-wrote, or rebuilt, with the
    key and the seconds spent.
 
 ## The $0 correctness legs (no timing is read)
