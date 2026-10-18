@@ -62,12 +62,13 @@ must(){ phase "$@"; [ "$PHASE_RC" = 0 ] || { tail -30 "logs/$1.log"; say "VOID: 
 # above the leg fit's budgets: install (293 s at 806 Mbps), fetch (7,111 s at 806 Mbps; it covers any pull >= MIN_FETCH_GBS) and the
 # fixed phases.
 CAP_GIT=240 CAP_VENV=120 CAP_INSTALL=1800 CAP_HOSTRATE=600 CAP_FETCH=12000 CAP_TOKENS=300 CAP_BOX=2997 CAP_REPEAT=705
-# The host-rate floors (gate 2's premise), Amendment 11's rule applied to the leg (Amendment 12): max(sealed, the A2000's measured,
-# min(the leg's two samples) / 1.2), rounded up. Pinned H2D 28.36 / 28.33 -> 23.609; host copy 76.64 / 70.20 -> 58.5; the disk: the
-# leg's box load was warm (the fetch had just read the slice), so its registered cold-read sample was not observed and the floor is
-# max(0.743, 1.145) = 1.145. The box measures all three (the disk with O_DIRECT) before the checkpoint fetch and refuses below any.
-# A rehearsal records only.
-MIN_H2D_GBS=23.609 MIN_DISK_GBS=1.145 MIN_HOST_COPY_GBS=58.5
+# The host-rate floors (gate 2's premise), from the RTX PRO 6000 leg. Pinned H2D (Amendment 12): max(sealed, the A2000's measured,
+# min(28.36, 28.33) / 1.2) = 23.609. The disk (Amendment 12): the leg's box load was warm, so its registered cold-read sample was not
+# observed and the floor is max(0.743, 1.145) = 1.145. Host copy (Amendment 13, from the fit): the load's assemble (34.075 s scaled)
+# may grow by at most 0.2 x the scaled box (399.5 s), so min(76.64, 70.20) x 34.075 / 433.575 = 5.518 (was 58.5, which refused a
+# host whose box fit with ~900 s to spare). The box measures all three (the disk with O_DIRECT) before the checkpoint fetch and
+# refuses below any. A rehearsal records only.
+MIN_H2D_GBS=23.609 MIN_DISK_GBS=1.145 MIN_HOST_COPY_GBS=5.518
 # The pull-rate floor (GB/s): the rate at which the checkpoint, hashed at the rehearsal's rate, still fits CAP_FETCH / 1.5. The fetch
 # times its first slice (the small files and 8 shards, ~32 GB) with its own client and refuses (14) below it, before pulling the rest.
 MIN_FETCH_GBS=0.062

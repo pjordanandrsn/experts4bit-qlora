@@ -82,6 +82,9 @@ A2000_MEASURED = {"h2d_gb_s": 5.83, "host_copy_gb_s": 4.34, "disk_read_gb_s": 1.
 LEG_SLACK = 1.2                     # a box host may be at most this much slower than the leg host on a host-bound part
 LEG_AGREE = 0.15                    # the leg's two hostrate samples agree within this share, or the leg is unusable
 GUARD_H, EXPECTED_SHARE = 6.0, 0.8  # the science box's guard and the share of it the expected run may use (2026-10-18 07:51Z)
+# Amendment 13: the host-copy floor from the fit, per host-bound part. The load's assemble (host copies) may add at most this share
+# of the box's scaled time on a slower host; the floor never goes below the one sealed before Amendment 12.
+HC_BOX_SHARE, HOST_COPY_BASE = 0.2, 5.14
 # The checkpoint's tensor bytes from its config at ac9c66cc (bf16): per decoder layer q (64 x 128 x 4096), k and v (4 x 128 x 4096 each),
 # o (4096 x 8192), the router (128 x 4096), the 128 experts' gate, up and down (3 x 1536 x 4096 each) and four norms (2 x 4096 +
 # 2 x 128); outside the layers the embedding and the head (151936 x 4096 each) and the final norm (4096).
@@ -119,9 +122,13 @@ def _rate(x) -> float:
     return math.ceil(x * 1000 - 1e-9) / 1000
 
 
-def leg_floors(hostrate: dict, hostrate2: dict, leg_disk_gb_s: float | None, sealed: dict) -> dict:
+def leg_floors(hostrate: dict, hostrate2: dict, leg_disk_gb_s: float | None, sealed: dict, assemble_scaled_s: float | None = None,
+               box_scaled_s: float | None = None) -> dict:
     """Amendment 11: the floors a PRO 6000 timing leg implies; refuses (SystemExit) when its two hostrate samples disagree.
-    ``leg_disk_gb_s`` None: the leg did not observe a cold read, so the disk floor takes no leg sample (Amendment 12)."""
+    ``leg_disk_gb_s`` None: the leg did not observe a cold read, so the disk floor takes no leg sample (Amendment 12).
+    ``assemble_scaled_s`` and ``box_scaled_s`` (Amendment 13): the host-copy floor comes from the fit instead of leg / 1.2 --
+    the slowest host copy at which the scaled assemble part grows by at most HC_BOX_SHARE of the scaled box,
+    ``min(samples) x A / (A + HC_BOX_SHARE x box)``, never below HOST_COPY_BASE or the A2000's measured rate."""
     out, basis = {}, {}
     for k in ("h2d_gb_s", "host_copy_gb_s"):
         a, b = float(hostrate[k]), float(hostrate2[k])
@@ -130,6 +137,13 @@ def leg_floors(hostrate: dict, hostrate2: dict, leg_disk_gb_s: float | None, sea
             sys.exit(f"refusing: the leg's two {k} samples ({a}, {b}) differ by {spread:.1%} > {LEG_AGREE:.0%}: the leg is unusable "
                      "for floors (one re-run on another host, then RED)")
         leg = min(a, b) / LEG_SLACK
+        if k == "host_copy_gb_s" and assemble_scaled_s is not None and box_scaled_s is not None:
+            fit = min(a, b) * assemble_scaled_s / (assemble_scaled_s + HC_BOX_SHARE * box_scaled_s)
+            out[k] = _rate(max(HOST_COPY_BASE, A2000_MEASURED[k], fit))
+            basis[k] = {"samples": [a, b], "spread": round(spread, 4), "rule": "Amendment 13: min(samples) x A / (A + "
+                        f"{HC_BOX_SHARE} x box)", "assemble_scaled_s": assemble_scaled_s, "box_scaled_s": box_scaled_s,
+                        "fit_derived": round(fit, 4), "base": HOST_COPY_BASE, "a2000_measured": A2000_MEASURED[k]}
+            continue
         out[k] = _rate(max(sealed[k], A2000_MEASURED[k], leg))
         basis[k] = {"samples": [a, b], "spread": round(spread, 4), "leg_over_slack": round(leg, 4), "sealed": sealed[k],
                     "a2000_measured": A2000_MEASURED[k]}
@@ -262,7 +276,10 @@ def main():
         warm_read = rep["floors"]["disk_read_gb_s"]
         # Amendment 12: an Amendment 11 leg cannot observe a cold read (its fetch has just read and hashed the slice, so the box
         # load reads from the page cache); the registered cold-read sample is absent and contributes nothing. Reported, not used.
-        rep["floors"] = leg_floors(hostrate, hostrate2, None, sealed)
+        prof = box["load"].get("profile") or {}
+        rep["floors"] = leg_floors(hostrate, hostrate2, None, sealed,      # Amendment 13: host copy from the fit's own parts
+                                   assemble_scaled_s=float(prof.get("assemble", 0.0)) * LAYERS / SLICE_LAYERS,
+                                   box_scaled_s=float(timings["box"]) * LAYERS / SLICE_LAYERS)
         rep["floors"]["basis"]["per_floor"]["disk_read_gb_s"]["warm_load_read_gb_s_not_used"] = warm_read
         rep["fits"] = rep["fits"] and rep["expected_within_guard"]
     rep["floors"]["sealed"] = sealed

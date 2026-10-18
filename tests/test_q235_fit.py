@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import math
 import shutil
 import subprocess
 import sys
@@ -284,7 +285,8 @@ def test_the_fit_reads_a_pro6000_leg_end_to_end(tmp_path):
     rep = json.loads((tmp_path / "fit.json").read_text())
     sealed = _fit().sealed_floors(Q / "q235_run.sh")
     assert rep["floors"]["h2d_gb_s"] == max(19.167, sealed["h2d_gb_s"])          # max(sealed, A2000, 23.0 / 1.2): floors only up
-    assert rep["floors"]["host_copy_gb_s"] == max(29.167, sealed["host_copy_gb_s"])
+    fit_hc = 35.0 * (10.0 * 94 / 4) / (10.0 * 94 / 4 + 0.2 * 110 * 94 / 4)            # Amendment 13: min(samples) x A / (A + 0.2 x box)
+    assert rep["floors"]["host_copy_gb_s"] == math.ceil(max(5.14, 4.34, fit_hc) * 1000 - 1e-9) / 1000
     assert rep["floors"]["disk_read_gb_s"] == max(1.145, sealed["disk_read_gb_s"])   # Amendment 12: no cold-read sample from a leg
     assert rep["phases"]["box"]["scaled_s"] == 110 * 94 / 4 and "expected_within_guard" in rep
     assert not rep["phases"]["box"]["fits"] and r.returncode == 1            # 110 s x 94/4 x 1.5 = 3,878 s > CAP_BOX 2,997
@@ -313,6 +315,12 @@ def test_a_leg_s_fit_binds_the_expected_run_to_the_guard(tmp_path, monkeypatch):
 
     def run(d):
         out = d / "fit.json"
+        b = json.loads((d / "receipts" / "box" / "box.json").read_text())
+        t = {r["phase"]: r["elapsed_s"] for r in map(json.loads, (d / "receipts" / "phase-timings.jsonl").read_text().splitlines())}
+        hr = [json.loads((d / "receipts" / n).read_text()) for n in ("hostrate.json", "hostrate2.json")]
+        derived = f.leg_floors(hr[0], hr[1], None, dict(sealed), b["load"]["profile"]["assemble"] * 94 / 4, t["box"] * 94 / 4)
+        monkeypatch.setattr(f, "sealed_floors", lambda run_sh: {**sealed, **{k: derived[k] for k in
+                                                                              ("h2d_gb_s", "host_copy_gb_s", "disk_read_gb_s")}})
         monkeypatch.setattr(sys, "argv", ["q235_fit.py", "--rehearsal", str(d), "--warm-install-s", "160", "--bandwidth-mbps", "580",
                                           "--usd-per-hour", "1.6", "--out", str(out)])
         with pytest.raises(SystemExit) as e:
@@ -326,11 +334,11 @@ def test_a_leg_s_fit_binds_the_expected_run_to_the_guard(tmp_path, monkeypatch):
     assert rep["expected_within_guard"] is True and rep["fits"] is True and code == 0
 
 
-def test_the_sealed_floors_and_caps_are_amendment_12s_refit_of_the_pro6000_leg(tmp_path):
+def test_the_sealed_floors_and_caps_are_the_refit_of_the_pro6000_leg(tmp_path):
     """Amendment 12, mechanical: Amendment 11's formulas on the committed leg receipt (bench/q235/am12/leg, q235-leg-pro6000-2)
-    give exactly the sealed floors (H2D 28.33 / 1.2 -> 23.609; host copy 70.20 / 1.2 -> 58.5; the disk 1.145, because the leg's
-    load was warm and its cold-read sample is absent) and the sealed box and repeat caps (85 s and 20 s x 94/4 x 1.5 -> 2,997 and
-    705), with the expected run inside 0.8 x 6 h at the pin's 806 Mbps."""
+    give exactly the sealed floors (H2D 28.33 / 1.2 -> 23.609; the disk 1.145, because the leg's load was warm and its cold-read
+    sample is absent; host copy by Amendment 13's fit, 70.20 x 34.075 / (34.075 + 0.2 x 1997.5) -> 5.518) and the sealed box and
+    repeat caps (85 s and 20 s x 94/4 x 1.5 -> 2,997 and 705), with the expected run inside 0.8 x 6 h at the pin's 806 Mbps."""
     import hashlib
     am12 = Q / "am12"
     for line in (am12 / "SHA256SUMS").read_text().splitlines():
@@ -343,10 +351,27 @@ def test_the_sealed_floors_and_caps_are_amendment_12s_refit_of_the_pro6000_leg(t
                         "--bandwidth-mbps", "806", "--usd-per-hour", "1.627", "--out", str(out)], capture_output=True, text=True)
     rep = json.loads(out.read_text())
     fl, sealed = rep["floors"], _fit().sealed_floors(Q / "q235_run.sh")
-    assert (fl["h2d_gb_s"], fl["host_copy_gb_s"], fl["disk_read_gb_s"]) == (23.609, 58.5, 1.145) == (
+    assert (fl["h2d_gb_s"], fl["host_copy_gb_s"], fl["disk_read_gb_s"]) == (23.609, 5.518, 1.145) == (
         sealed["h2d_gb_s"], sealed["host_copy_gb_s"], sealed["disk_read_gb_s"]), (fl, sealed)
     assert fl["basis"]["per_floor"]["disk_read_gb_s"]["sample"] is None
     assert fl["basis"]["per_floor"]["disk_read_gb_s"]["warm_load_read_gb_s_not_used"] > 10      # the page cache, not the disk
     caps = _fit().sealed_caps(Q / "q235_run.sh")
     assert rep["phases"]["box"]["budget_s"] == caps["box"] == 2997 and rep["phases"]["repeat"]["budget_s"] == caps["repeat"] == 705
     assert rep["expected_within_guard"] and fl["sealed_match"] and rep["fits"] and r.returncode == 0, rep
+
+
+def test_amendment_13s_host_copy_floor_is_from_the_fit_not_the_leg_rate():
+    """Amendment 13, motivated by q235-pro6000-5's refusal (host copy 17.69 GB/s against Amendment 12's 58.5): the host-copy floor is
+    the slowest host copy at which the scaled assemble part grows by at most 0.2 x the scaled box. On the leg: 70.20 x 34.075 /
+    (34.075 + 399.5) = 5.5171 -> 5.518. A host at 17.69 passes it; a host at 5.0 is refused. The base 5.14 still binds a leg whose
+    fit-derived value is lower."""
+    f = _fit()
+    sealed = {"h2d_gb_s": 23.609, "host_copy_gb_s": 58.5, "disk_read_gb_s": 1.145}
+    h1, h2 = {"h2d_gb_s": 28.36, "host_copy_gb_s": 76.64}, {"h2d_gb_s": 28.33, "host_copy_gb_s": 70.20}
+    fl = f.leg_floors(h1, h2, None, sealed, assemble_scaled_s=1.45 * 94 / 4, box_scaled_s=85 * 94 / 4)
+    assert fl["host_copy_gb_s"] == 5.518 and fl["h2d_gb_s"] == 23.609 and fl["disk_read_gb_s"] == 1.145, fl
+    assert 17.69 >= fl["host_copy_gb_s"] > 5.0
+    low = f.leg_floors(h1, h2, None, sealed, assemble_scaled_s=0.1, box_scaled_s=85 * 94 / 4)
+    assert low["host_copy_gb_s"] == 5.14                                       # never below the floor sealed before Amendment 12
+    assert f.leg_floors(h1, h2, None, sealed)["host_copy_gb_s"] == 58.5        # without the fit's parts: Amendment 11's leg / 1.2
+    assert (f.HC_BOX_SHARE, f.HOST_COPY_BASE) == (0.2, 5.14)
