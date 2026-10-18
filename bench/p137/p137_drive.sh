@@ -28,9 +28,9 @@ fi
 # ---- the declared run ids: the reading, its one rerun; the dry run's own
 RUN_ID=$E4B_RENT_RUN_ID
 case "$RUN_ID" in
-  p137-4090-1|p137-4090-2) [ "$DRY" != 1 ] || { say "refusing: $RUN_ID is a reading's id"; exit 78; };;
+  p137-4090-1|p137-4090-2|p137-4090-3|p137-4090-4) [ "$DRY" != 1 ] || { say "refusing: $RUN_ID is a reading's id"; exit 78; };;
   p137-dry-[0-9]|p137-dry-[0-9][0-9]) [ "$DRY" = 1 ] || { say "refusing: $RUN_ID is a dry run's id (P137_DRY=1 only)"; exit 78; };;
-  *) say "refusing: run id $RUN_ID is not declared (p137-4090-1, p137-4090-2; p137-dry-<n> dry)"; exit 78;;
+  *) say "refusing: run id $RUN_ID is not declared (p137-4090-1..4; p137-dry-<n> dry)"; exit 78;;
 esac
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 # Amendment 1: the training rows travel from the controller (alpaca train[:400] as data.json, outside the repo), checked

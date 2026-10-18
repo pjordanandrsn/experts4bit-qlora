@@ -217,3 +217,68 @@ a second failure there stops the lane, as registered.
 Nothing else changes: the arms, the recipe, the rule, the bars, the pins and the run ids. The reading runs as the declared
 rerun `p137-4090-2`, after a $0 dry run at this amendment's merge and a fresh launch approval. Under the two-strikes rule,
 one more HARNESS_ERROR or VOID stops the lane for a root-cause and simplification note.
+
+## Amendment 2 (after `p137-4090-2`, strike 2): one load per box
+
+**What happened.** `p137-4090-2` (RTX 4090, machine 51612) proved Amendment 1 on the rented image:
+- hub 1.33.0 on `httpx` 0.28.1, no `httpx2`;
+- the 61.1 GB fetch in about 7 m 46 s;
+- premise 47 passed, none skipped.
+
+It then VOIDed by construction. Each arm was a fresh process that re-quantized the experts, and with offload on CUDA the
+loader fuses every offloaded expert row on the host CPU (`_stage_expert_rows_on_host`). On a contended host (load average
+about 112 on a 256-thread EPYC) that took about 38 min per arm, so four arms could not fit the 2.5 h guard. The run was torn
+down on the maintainer's ruling at $0.974 after A0a and L1a.
+
+**The seen pair, disclosed verbatim and never cited as a result** (one unpaired observation, REPORTING only):
+
+| | A0a (stock) | L1a (layer-major) |
+|---|---|---|
+| timed median s/step | 8.177 | 3.807 |
+| stagings per step after step 0 | 380 | 95 |
+| peak allocated | 8.41 GB | 7.98 GB |
+| held-out | 1.436256 | 1.436477 |
+
+The step-0 per-micro-batch losses were identical. Seeing this pair changes no bar: the band [1.25, 2.0], S_MIN 1.10, the
+self-pair band [0.97, 1.03], the 4.25 GiB memory term, the 0.01 held-out term, the stagings, step-0 bit-identity and
+n = 48 all stay exactly as registered.
+
+**The change (method only).** One process loads the model once and runs A0a L1a L1b A0b in turn (`p137_box.py --mode
+abba`). Before each arm it:
+- restores the adapters from the snapshot taken right after the load;
+- clears their grads;
+- builds a new AdamW 8-bit;
+- reseeds (3407);
+- evicts every offloaded layer;
+- empties the allocator cache and resets the peak counter.
+
+Each arm's record carries the adapter sha256 at its start and the snapshot's. The arm start also reseeds Python's
+`random` and NumPy beside torch. **New STRICT VOIDs** (the maintainer's ruling and the review pass):
+- an arm that did not start from the snapshot, or snapshots that differ across arms;
+- **allocated memory at an arm's start** more than 16 MiB from the post-load baseline (taken after the snapshot with every
+  layer evicted), so that one arm's leftovers (an optimizer, a resident layer) cannot inflate the next arm's peak;
+- **step 0 not cold:**
+  - A0a and A0b exactly M × (2n − 1) + 1 = 381;
+  - L1b exactly 2n = 96;
+  - L1a above L1b. The drift guard's stock forwards run once per model, on L1a; on `p137-4090-2` that step was 336.
+- **a self-pair outside [0.97, 1.03] is now VOID** (it was NOISY). In one process the self-pair is the carry-over check, so
+  a cache order effect voids the read and is never re-banded.
+
+Before the baseline, one untimed warm-up forward and backward runs, with no optimizer step and the adapters restored after it. That puts the first training step's one-time lazy device workspaces inside the baseline: `p137-dry-9` showed +16.26 MiB, constant, from the second arm on, which the check read as a leak. The adapter snapshot is held on the host.
+
+Peak memory per arm is `max_memory_allocated` after that arm's `reset_peak_memory_stats`, never `reserved`, so allocator
+caching from an earlier arm cannot move the 4.25 GiB term.
+
+**What this gives up.** The arms are no longer fresh processes, so warm state (kernel autotune caches, the allocator)
+carries from arm to arm. The ABBA order and the 2 warm steps per arm balance that, and the self-pair band still reads it.
+The drift guard runs once, on L1a: per model, as it would in a fresh process.
+
+**Cost.** One load (about 38 min on a contended host, a few minutes on a quiet one) plus four arms of about 1.5 min each:
+about 45 min worst, against about 160 min before. The guard stays 2.5 h, and the runner's time check for the four arms is
+4,500 s. Worst cost is unchanged at $1.90 per run.
+
+**Run ids.** `p137-4090-3` and `p137-4090-4` are added, under the market's flicker rule: an id refused before the create is
+consumed. `p137-4090-1` and `-2` are spent.
+
+**Teardown.** Launches use the launcher with the abort-fetch fix, which fetches the lane's records before an abort
+destroys the box.
