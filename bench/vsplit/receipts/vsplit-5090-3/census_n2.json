@@ -1,0 +1,254 @@
+{
+ "engine": "e4b",
+ "batch": 2,
+ "graph": {
+  "status": "ok",
+  "delim": "graph",
+  "steps_kept": 61,
+  "dropped": {},
+  "steady_graph_exec": 5,
+  "other_graph_replays": 0,
+  "P": {
+   "median_ms": 8.904902,
+   "iqr_ms": 0.04016
+  },
+  "S": {
+   "median_ms": 7.772834,
+   "iqr_ms": 0.016
+  },
+  "D_out": {
+   "median_ms": 0.068737,
+   "iqr_ms": 0.000352
+  },
+  "idle_out": {
+   "median_ms": 1.068133,
+   "iqr_ms": 0.047392
+  }
+ },
+ "node": {
+  "status": "ok",
+  "steps_kept": 61,
+  "dropped": {},
+  "kernels_per_graph_modal": 883,
+  "other_launches": 0,
+  "U_in": {
+   "median_ms": 7.756481,
+   "iqr_ms": 0.019617
+  },
+  "span": {
+   "median_ms": 7.851521,
+   "iqr_ms": 0.018593
+  },
+  "I_in_node": {
+   "median_ms": 0.09488,
+   "iqr_ms": 0.000992
+  },
+  "segments": {
+   "replays_broken": 0,
+   "starts_modal": 48,
+   "ends_modal": 48,
+   "moe_layers": 48
+  },
+  "kernels_in_graph": 881,
+  "overlap_in": {
+   "median_ms": 0.019296,
+   "iqr_ms": 0.000416
+  },
+  "overlap_pairs_same_stream_fraction": 0.1023,
+  "kernels_out_graph": 58,
+  "class": {
+   "moe_expert": {
+    "median_ms": 3.558256,
+    "iqr_ms": 0.019328
+   },
+   "moe_route": {
+    "median_ms": 0.26528,
+    "iqr_ms": 0.000484
+   },
+   "attn": {
+    "median_ms": 0.74048,
+    "iqr_ms": 0.001307
+   },
+   "dense_gemm": {
+    "median_ms": 2.780785,
+    "iqr_ms": 0.002461
+   },
+   "norm_elem": {
+    "median_ms": 0.422977,
+    "iqr_ms": 0.001472
+   },
+   "sample": {
+    "median_ms": 0.005856,
+    "iqr_ms": 0.000128
+   },
+   "input_prep": {
+    "median_ms": 0.050049,
+    "iqr_ms": 0.00032
+   },
+   "memcpy": {
+    "median_ms": 0.02016,
+    "iqr_ms": 0.001792
+   },
+   "residual": {
+    "median_ms": 0.0,
+    "iqr_ms": 0.0
+   }
+  },
+  "class_in_graph_median_ms": {
+   "moe_expert": 3.558256,
+   "moe_route": 0.26528,
+   "attn": 0.74048,
+   "dense_gemm": 2.780785,
+   "norm_elem": 0.422977,
+   "sample": 0.005856,
+   "input_prep": 0.0,
+   "memcpy": 0.001152,
+   "residual": 0.0
+  },
+  "residual_fraction": 0.0,
+  "name_map": {
+   "CatArrayBatchedCopy_alignedK_contig": {
+    "norm_elem": 63
+   },
+   "Kernel2": {
+    "dense_gemm": 9135
+   },
+   "_combine_rows": {
+    "moe_route": 3024
+   },
+   "_fp8_append_bt1_side": {
+    "attn": 6048
+   },
+   "_fp8_paged_decode_split_f8dot": {
+    "attn": 3024
+   },
+   "_gemm_nf4_grouped_smallm": {
+    "moe_expert": 6048
+   },
+   "_rmsnorm_resid_rows": {
+    "norm_elem": 3024
+   },
+   "_rmsnorm_rows": {
+    "norm_elem": 3087
+   },
+   "_rope_norm_qk": {
+    "norm_elem": 3024
+   },
+   "_router_epilogue": {
+    "moe_route": 3024
+   },
+   "_swiglu_rows": {
+    "moe_expert": 3024
+   },
+   "_tile_table_r1": {
+    "moe_route": 3024
+   },
+   "elementwise_kernel": {
+    "norm_elem": 9261,
+    "input_prep": 126
+   },
+   "gemmk1_kernel": {
+    "dense_gemm": 63
+   },
+   "indexFuncSmallIndex": {
+    "input_prep": 63
+   },
+   "indexSelectSmallIndex": {
+    "norm_elem": 63,
+    "input_prep": 126
+   },
+   "index_elementwise_kernel": {
+    "input_prep": 189
+   },
+   "memcpy": {
+    "memcpy": 3276
+   },
+   "memset": {
+    "memcpy": 63
+   },
+   "reduce_kernel": {
+    "sample": 63
+   },
+   "unrolled_elementwise_kernel": {
+    "norm_elem": 63,
+    "input_prep": 1575
+   },
+   "vectorized_elementwise_kernel": {
+    "norm_elem": 441,
+    "input_prep": 1575
+   }
+  },
+  "top_residual_kernels": []
+ },
+ "unprofiled_ms": 7.894,
+ "positions": null,
+ "clocks_mhz": null,
+ "gates": {
+  "inflate": 0.1281,
+  "node_union_over_span": 0.9979,
+  "node_span_over_span": 1.0101,
+  "map_residual_fraction": 0.0
+ },
+ "labels": [
+  "PROFILER_INFLATED"
+ ],
+ "nsys_diagnostics": [
+  "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_1011393/streams/pid_11404_stdout.log and stderr.log for program output",
+  "Common injection library initialized successfully.",
+  "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+  "Loaded CUPTI library: /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/libcupti.so.13.1",
+  "Installed CUDA driver version (13.3) is not supported by this build of Nsight Systems. CUDA trace will be collected using libraries for driver version 13.1",
+  "Enabling trace for device graph launch",
+  "CUDA injection initialized successfully.",
+  "Common injection library initialized successfully.",
+  "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+  "Loaded CUPTI library: /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/libcupti.so.13.1",
+  "Installed CUDA driver version (13.3) is not supported by this build of Nsight Systems. CUDA trace will be collected using libraries for driver version 13.1",
+  "Enabling trace for device graph launch",
+  "CUDA injection initialized successfully.",
+  "NVTX injection initialized successfully.",
+  "Profiling has started.",
+  "Not all NVTX events might have been collected.",
+  "No NVTX events collected. Does the process use NVTX?",
+  "Not all NVTX events might have been collected.",
+  "Number of NVTX events collected: \t1.",
+  "Not all CUDA events might have been collected."
+ ],
+ "node_band": {
+  "omega_ms": 0.078687,
+  "dk_lo_ms": 0.0
+ },
+ "P_ms": 8.904902,
+ "terms": {
+  "moe_expert": 3.558256,
+  "moe_route": 0.26528,
+  "attn": 0.74048,
+  "dense_gemm": 2.780785,
+  "norm_elem": 0.422977,
+  "sample": 0.005856,
+  "input_prep": 0.050049,
+  "memcpy": 0.02016,
+  "residual": 0.0,
+  "I_in": 0.016353,
+  "idle_out": 1.068133,
+  "overlap_in": -0.019296,
+  "O": 0.004131
+ },
+ "noise_iqr": {
+  "moe_expert": 0.019328,
+  "moe_route": 0.000484,
+  "attn": 0.001307,
+  "dense_gemm": 0.002461,
+  "norm_elem": 0.001472,
+  "sample": 0.000128,
+  "input_prep": 0.00032,
+  "memcpy": 0.001792,
+  "residual": 0.0,
+  "I_in": 0.035617,
+  "idle_out": 0.047392,
+  "overlap_in": 0.000416,
+  "O": null
+ },
+ "I_in_node_ms": 0.09488,
+ "status": "labelled"
+}

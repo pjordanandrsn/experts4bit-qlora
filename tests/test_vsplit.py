@@ -233,6 +233,23 @@ def test_fix_1_names_the_current_pins():
     assert "No rule, measured term, gate or cost changes." in " ".join(fix.split())
 
 
+def test_the_read_reproduces_from_its_receipts():
+    """vsplit-5090-3: the committed records, sha256-checked against their SHA256SUMS, reduce to the committed verdict
+    exactly (READ, H REFUTE, BUILD NO_BUILD), as the maintainer's independent re-derivation found."""
+    rec = LANE / "receipts" / "vsplit-5090-3"
+    sums = {}
+    for line in (rec / "SHA256SUMS").read_text(encoding="ascii").splitlines():
+        want, name = line.split()
+        sums[name] = want
+        assert hashlib.sha256((rec / name).read_bytes()).hexdigest() == want, name
+    assert "verdict_vsplit.json" in sums and len(sums) == 27
+    red = _red()
+    got = json.loads(json.dumps(red.judge(str(rec)), default=str))
+    want = json.loads((rec / "verdict_vsplit.json").read_text())
+    assert got == want
+    assert (want["verdict"], want["H"], want["BUILD"], want["void"]) == ("READ", "REFUTE", "NO_BUILD", [])
+
+
 def test_the_outcome_alone_flips_the_verdict():
     """The maintainer's condition 1: with every input held fixed (the timing passes, the n = 1 census, tau, G_BAR, rho),
     the n >= 2 shares alone take the reading from SUPPORT/BUILD to REFUTE/NO_BUILD."""

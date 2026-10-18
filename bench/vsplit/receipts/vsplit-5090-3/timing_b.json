@@ -1,0 +1,119 @@
+{
+ "mode": "timing",
+ "e4b_sha": "88ae1cfd8fbe3477189f5a42d8448f395e974345",
+ "gnf4_sha": "724ccc454f006c1a46836e434e997f31f293747f",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "load_s": 39.32,
+ "graph_status": {
+  "1": "graph",
+  "2": "graph",
+  "3": "graph",
+  "4": "graph"
+ },
+ "spec_build": {
+  "mode": "eagle3",
+  "k": 3,
+  "head": "/root/.cache/huggingface/hub/models--RedHatAI--Qwen3-30B-A3B-speculator.eagle3/snapshots/6afc5aa2477b923467fb9a8d906782b984a9a6ba",
+  "head_sha256": "d2d6e2e63e09dc755053ae5c98cdececae3611ae5e202d4fa5411126dd3b1dfa",
+  "aux_layers": [
+   2,
+   24,
+   45
+  ],
+  "hooks": 3,
+  "draft_max_positions": 4103,
+  "verify_buckets": [
+   2,
+   3,
+   4
+  ]
+ },
+ "timed": 64,
+ "warm": 8,
+ "anchor_a_ms": 3.9133,
+ "k1": {
+  "full_ms": 8.4132,
+  "verify_ms": 7.887,
+  "post_ms": 0.4792,
+  "loop_ms": 0.047,
+  "verify_events": 64,
+  "post_events": 64,
+  "post_status": "graph",
+  "census": {
+   "prefills": 1,
+   "steps": 72,
+   "drafted": 72,
+   "accepted": 65,
+   "emitted": 137,
+   "short_steps": 0,
+   "dropped_batched": 0,
+   "dropped_end": 0,
+   "post_replays": 72,
+   "post_eager": 0,
+   "k": 1,
+   "tau_live": 1.9027777777777777,
+   "acceptance": 0.9027777777777778,
+   "post_graphs": [
+    2
+   ]
+  }
+ },
+ "k2": {
+  "full_ms": 9.2932,
+  "verify_ms": 8.367,
+  "post_ms": 0.8806,
+  "loop_ms": 0.0456,
+  "verify_events": 64,
+  "post_events": 64,
+  "post_status": "graph",
+  "census": {
+   "prefills": 1,
+   "steps": 72,
+   "drafted": 144,
+   "accepted": 111,
+   "emitted": 183,
+   "short_steps": 0,
+   "dropped_batched": 0,
+   "dropped_end": 0,
+   "post_replays": 72,
+   "post_eager": 0,
+   "k": 2,
+   "tau_live": 2.5416666666666665,
+   "acceptance": 0.7708333333333334,
+   "post_graphs": [
+    3
+   ]
+  }
+ },
+ "k3": {
+  "full_ms": 10.1836,
+  "verify_ms": 8.812,
+  "post_ms": 1.2902,
+  "loop_ms": 0.0814,
+  "verify_events": 64,
+  "post_events": 64,
+  "post_status": "graph",
+  "census": {
+   "prefills": 1,
+   "steps": 72,
+   "drafted": 216,
+   "accepted": 148,
+   "emitted": 220,
+   "short_steps": 0,
+   "dropped_batched": 0,
+   "dropped_end": 0,
+   "post_replays": 72,
+   "post_eager": 0,
+   "k": 3,
+   "tau_live": 3.0555555555555554,
+   "acceptance": 0.6851851851851852,
+   "post_graphs": [
+    4
+   ]
+  }
+ },
+ "anchor_b_ms": 3.9604,
+ "max_memory_allocated": 25365656064,
+ "status": "ok"
+}

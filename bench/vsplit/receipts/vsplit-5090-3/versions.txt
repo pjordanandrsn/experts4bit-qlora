@@ -1,0 +1,10 @@
+e4b target 0.53.0 sha 88ae1cfd8fbe3477189f5a42d8448f395e974345
+harness sha bd51c7d9ce8dd7ca2fa3e4b09308361ff6be74bd
+gnf4 target 0.45.0
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+huggingface_hub 1.33.0
+cc (12, 0)
+nsys NVIDIA Nsight Systems version 2025.6.1.190-256136895201v0 at /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/nsys
