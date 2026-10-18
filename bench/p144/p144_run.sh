@@ -42,7 +42,7 @@ if [ "$DRY" = 1 ]; then
   MODEL=$W/p144-tiny; REV=""                                                                      # p144_tiny.py's fixture
   NEED_FETCH=300; NEED_ABBA=600; DISK_DEF=10; RAM_DEF=16                                           # the fixture's own floors
 else
-  MODEL=mistralai/Mixtral-8x7B-Instruct-v0.1; REV=fc7ac94680e38d7348cfa806e51218e6273104b0                # tp1's Mixtral
+  MODEL=mistralai/Mixtral-8x7B-Instruct-v0.1; REV=eba92302a2861cdc0098cc54bc9f17cb2c47eb61                # tp1's Mixtral
   NEED_FETCH=2700; NEED_ABBA=4500; DISK_DEF=150; RAM_DEF=98   # one load + 4 arms; Mixtral's 93 GB and 98 GB host RAM
 fi
 GPU_CLASS=${P144_GPU_CLASS:-4090}; MIN_DISK_GB=${P144_MIN_DISK_GB:-$DISK_DEF}; MIN_RAM_GB=${P144_MIN_RAM_GB:-$RAM_DEF}

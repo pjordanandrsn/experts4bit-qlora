@@ -11,7 +11,7 @@ import json
 import os
 import sys
 
-QWEN, QWEN_REV = "mistralai/Mixtral-8x7B-Instruct-v0.1", "fc7ac94680e38d7348cfa806e51218e6273104b0"
+QWEN, QWEN_REV = "mistralai/Mixtral-8x7B-Instruct-v0.1", "eba92302a2861cdc0098cc54bc9f17cb2c47eb61"
 DIMS = dict(hidden_size=512, intermediate_size=256, num_hidden_layers=2, num_attention_heads=8,
             num_key_value_heads=4, head_dim=64, num_local_experts=8, num_experts_per_tok=2,
             max_position_embeddings=4096, tie_word_embeddings=False, initializer_range=0.2)

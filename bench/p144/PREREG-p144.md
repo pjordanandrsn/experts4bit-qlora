@@ -32,7 +32,7 @@ These inform the scale of the prediction below and nothing else. Every bar is P1
   thread cap).
 - grouped-nf4-gemm 0.46.0 `GNF4_SHA=6b7c2e7474d20c8843814dd46dad6cfc3d94b440`.
 - torch 2.8.0+cu128 (the image's), transformers 5.18.0, bitsandbytes 0.50.2, `huggingface_hub>=0.23,<2` (P137 Amendment 1).
-- `mistralai/Mixtral-8x7B-Instruct-v0.1` @ `fc7ac94680e38d7348cfa806e51218e6273104b0`, the Mixtral of tp1's receipts.
+- `mistralai/Mixtral-8x7B-Instruct-v0.1` @ `eba92302a2861cdc0098cc54bc9f17cb2c47eb61`, the Mixtral of tp1's receipts.
 - The data slice: alpaca `train[:400]`, staged from the controller, with
   `DATA_SHA=68e3d31c194ebd8fee4330808a46642f443aecf4e16b78e5eb39fd21b16079c5`.
 

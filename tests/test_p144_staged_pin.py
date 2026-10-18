@@ -86,7 +86,7 @@ def test_the_pins_are_exact_and_agree():
         assert pin in trip, pin
     assert '"transformers==5.18.0" "bitsandbytes==0.50.2"' in RUN and '"huggingface_hub>=0.23,<2"' in RUN   # P137 Amendment 1
     assert 'int(hub.split(".")[0]) < 2' in trip
-    assert "MODEL=mistralai/Mixtral-8x7B-Instruct-v0.1; REV=fc7ac94680e38d7348cfa806e51218e6273104b0" in RUN
+    assert "MODEL=mistralai/Mixtral-8x7B-Instruct-v0.1; REV=eba92302a2861cdc0098cc54bc9f17cb2c47eb61" in RUN
 
 
 def test_the_declared_run_ids_and_nothing_else(tmp_path):
