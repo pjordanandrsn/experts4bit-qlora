@@ -29,7 +29,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-CITED = "f17f0744d5910248bbe5e51b813f47fad53a6686"   # e4b main at Q235 Amendment 7 (#1669), the commit R2 re-cites
+CITED = "9480ed0386bd13c7666ae2b4d297633e522e78e7"   # e4b main at #1709's merge (Q235 Amendment 10), the commit R2 re-cites
 
 PAIRS = {
     "bench/fam235/r2_run.sh": {
@@ -40,8 +40,11 @@ PAIRS = {
         "lines": [(r"^  science\) CARD_RE=",
                    r"^  science\) CARD_RE='\^NVIDIA GeForce RTX 5090'; MIN_VRAM_MIB=32000; MIN_RAM_GB=134; MIN_DISK_GB=350 ;; "),
                   # R2 Amendment 3: R2's own fit (its caps and its pull floor) and Q235's cold host-rate floors, each R2's line.
-                  (r"^# Fitted \(q235_fit\.py\) ", r"^# Fitted \(r2_fit\.py, R2 Amendment 3\) "),
-                  (r"^# scaled \(x \d+/4\)", r"^# host listing at least 500 Mbps, box "),
+                  # R2 Amendment 4: Q235 Amendment 7's box refit comment (four lines) against R2's own four.
+                  (r"^# Box: Amendment 7's refit ", r"^# Fitted \(r2_fit\.py, R2 Amendment 3\) "),
+                  (r"^# warm against warm ", r"^# host listing at least 500 Mbps, box "),
+                  (r"^# \(q235_fit rounds up to the second\)", r"^# R2 Amendment 4 re-cites Q235 and keeps these caps: "),
+                  (r"^# the fetch \(7,935 s at 500 Mbps ", r"^# timed MoE pass, which R2's box does not run "),
                   (r"^CAP_GIT=", r"^CAP_GIT=240 CAP_VENV=120 CAP_INSTALL=360 CAP_HOSTRATE=600 CAP_FETCH=7080 CAP_TOKENS=300 CAP_BOX=3600 "
                                 r"CAP_REPEAT=2040$"),
                   (r"^# The host-rate floors \(gate 2's premise\), ", r"^# The host-rate floors \(gate 2's premise\): Q235's sealed cold ones"),
