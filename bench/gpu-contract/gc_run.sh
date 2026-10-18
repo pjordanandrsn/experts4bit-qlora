@@ -25,7 +25,7 @@ GNF4_TESTS="test_nf4_gemv_bw.py test_dispatch_counts.py"
 E4B_TESTS="tests/test_decode_graph_buckets.py tests/test_kv_step_select.py tests/test_gemv_bw_served_gpu.py"
 MIN_DISK_GB=${GC_MIN_DISK_GB:-30}
 export HF_HUB_DISABLE_XET=1 TOKENIZERS_PARALLELISM=false TRITON_INTERPRET=0
-{ echo "GC run $GC_RUN_ID nonce ${NONCE:0:12}"; echo "gnf4 $GC_GNF4_SHA"; echo "e4b $GC_E4B_SHA"; echo "card class $GC_CARD"; } | tee summary.txt
+{ echo "GC run $GC_RUN_ID nonce ${NONCE:0:12}"; echo "gnf4 $GC_GNF4_SHA"; echo "e4b $GC_E4B_SHA"; echo "card class $GC_CARD"; echo "required ${GC_REQUIRE:-<none>}"; } | tee summary.txt
 CUDA_PROBE=$(python - <<'PYC' 2>/dev/null
 import sys
 try:
@@ -91,17 +91,31 @@ open("/root/gc/versions.txt", "w").write(
 print("tripwire OK")
 PYT
 cat versions.txt | tee -a summary.txt
+# ---- the time left (P133's can_run): a suite starts only with its need plus a receipt margin before the deadline, and its alarm
+# never runs past that margin, so a tight guard still leaves time to fetch the receipts. A skipped suite fails the contract.
+MARGIN_S=300
+can_run(){ local need=$1 now; now=$(date +%s); [ $((now + need + MARGIN_S)) -le "$GC_DEADLINE_EPOCH" ] && return 0
+  say "STOP: $2 needs ${need}s, only $((GC_DEADLINE_EPOCH - now))s left -- skipped (host-limited)"; echo "SKIPPED $2 host-limited deadline" | tee -a summary.txt; return 1; }
+alarm(){ local left=$(( GC_DEADLINE_EPOCH - $(date +%s) - MARGIN_S )); [ "$left" -gt 1800 ] && left=1800; [ "$left" -lt 60 ] && left=60; echo "$left"; }
 # ---- the two suites, each with -rs (every skip listed) and a junit report; neither stops the other
-(cd $W/gnf4src/kernel && PYTHONPATH= perl -e 'alarm 1800; exec @ARGV' python -m pytest $GNF4_TESTS -q -rs -p no:cacheprovider --junitxml=$W/logs/gnf4.xml) > logs/gnf4_tests.log 2>&1
-echo "gnf4 kernel tests rc=$?: $(tail -1 logs/gnf4_tests.log)" | tee -a summary.txt
-grep -E '^SKIPPED' logs/gnf4_tests.log | tee -a summary.txt
-(cd $W/e4bsrc && PYTHONPATH= perl -e 'alarm 1800; exec @ARGV' python -m pytest $E4B_TESTS -q -rs -p no:cacheprovider --junitxml=$W/logs/e4b.xml) > logs/e4b_tests.log 2>&1
-echo "e4b served tests rc=$?: $(tail -1 logs/e4b_tests.log)" | tee -a summary.txt
-grep -E '^SKIPPED' logs/e4b_tests.log | tee -a summary.txt
+if can_run "${GC_NEED_GNF4_S:-900}" "gnf4 kernel tests"; then
+  (cd $W/gnf4src/kernel && PYTHONPATH= perl -e "alarm $(alarm); exec @ARGV" python -m pytest $GNF4_TESTS -q -rs -p no:cacheprovider --junitxml=$W/logs/gnf4.xml) > logs/gnf4_tests.log 2>&1
+  echo "gnf4 kernel tests rc=$?: $(tail -1 logs/gnf4_tests.log)" | tee -a summary.txt
+  grep -E '^SKIPPED' logs/gnf4_tests.log | tee -a summary.txt
+fi
+if can_run "${GC_NEED_E4B_S:-600}" "e4b served tests"; then
+  (cd $W/e4bsrc && PYTHONPATH= perl -e "alarm $(alarm); exec @ARGV" python -m pytest $E4B_TESTS -q -rs -p no:cacheprovider --junitxml=$W/logs/e4b.xml) > logs/e4b_tests.log 2>&1
+  echo "e4b served tests rc=$?: $(tail -1 logs/e4b_tests.log)" | tee -a summary.txt
+  grep -E '^SKIPPED' logs/e4b_tests.log | tee -a summary.txt
+fi
 rc=0
 for s in gnf4 e4b; do
   [ -s logs/$s.xml ] || { echo "GC_SUITE {\"suite\": \"$s\", \"ok\": false, \"why\": \"no junit report\"}" | tee -a summary.txt; rc=30; continue; }
   python $W/gc_box.py --junit logs/$s.xml --suite $s | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || rc=30
 done
+# GC_REQUIRE: the tests the review names as the PR's own evidence must PASS, not merely not fail (a skip or an absence fails)
+if [ -n "${GC_REQUIRE:-}" ]; then
+  python $W/gc_box.py --require "$GC_REQUIRE" --junits logs/gnf4.xml logs/e4b.xml | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || rc=30
+fi
 [ $rc = 0 ] && echo "GC CONTRACT PASSED" | tee -a summary.txt || echo "GC CONTRACT FAILED" | tee -a summary.txt
 finish $rc
