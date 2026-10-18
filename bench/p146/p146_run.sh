@@ -103,6 +103,13 @@ FREE_GB=$(df -BG --output=avail $W 2>/dev/null | tail -1 | tr -dc 0-9)
 [ "${FREE_GB:-0}" -ge "$MIN_DISK_GB" ] || { say "REFUSED: ${FREE_GB:-?} GB free < ${MIN_DISK_GB} GB (a 61 GB checkpoint and the install)"; echo "refused: disk ${FREE_GB:-?} GB" > REFUSAL; finish 13; }
 RAM_GB=$(awk '/^MemTotal:/{print int($2/1048576)}' /proc/meminfo)
 [ "${RAM_GB:-0}" -ge "$MIN_RAM_GB" ] || { say "REFUSED: ${RAM_GB:-?} GiB host RAM < ${MIN_RAM_GB} GiB"; echo "refused: ram ${RAM_GB:-?} GiB" > REFUSAL; finish 16; }
+# ---- A1 pre-flight, before the install and the fetch: every host-quiet guard signal must be readable here, or the box
+# ---- refuses (rc 29, NOT_RUN at the pre-flight: no reading, not a strike) instead of spending a box on a certain VOID_BY_HOST
+python $W/p146_box.py --preflight | tee -a summary.txt
+if [ "${PIPESTATUS[0]}" != 0 ]; then
+  say "REFUSED: a host-quiet guard signal is unreadable on this host (A1 pre-flight)"; echo "refused: host guard unreadable" > REFUSAL
+  echo "BOX_REFUSED host_guard=unreadable" >> summary.txt; finish 29
+fi
 can_run(){ local need=$1 now; now=$(date +%s); [ $((now + need + 600)) -le "$P146_DEADLINE_EPOCH" ] || { say "STOP-2: $2 needs ${need}s, only $((P146_DEADLINE_EPOCH - now))s left -- skipped (host-limited)"; echo "SKIPPED $2 host-limited deadline" >> summary.txt; return 1; }; }
 step_alarm(){ local cap=$1 left=$(( P146_DEADLINE_EPOCH - $(date +%s) - 600 )); [ "$left" -gt "$cap" ] && left=$cap; [ "$left" -lt 600 ] && left=600; echo "$left"; }
 export DEBIAN_FRONTEND=noninteractive
@@ -211,7 +218,7 @@ AL=$(step_alarm 7200); say "the four arm processes (alarm=$AL)"
 env E4B_SHA=$E4B_SHA perl -e "alarm $AL; exec @ARGV" python $W/p146_box.py --mode cli-abba --model "$SNAP" \
   --parquet $W/alpaca.parquet --outdir $W > logs/abba.log 2>&1
 rc=$?
-{ echo "arms rc=$rc"; grep -a "^P146_PROC" logs/abba.log; grep -a "host CPUs:\|host-side fuse" logs/abba.log | head -2; } | tee -a summary.txt
+{ echo "arms rc=$rc"; grep -a "^P146_PROC\|^P146_PROBE" logs/abba.log; grep -a "host CPUs:\|host-side fuse" logs/abba.log | head -2; } | tee -a summary.txt
 for TAG in A0a L1a L1b A0b; do
   { echo -n "arm $TAG "; grep -a "^P146_ARM {\"tag\": \"$TAG\"" logs/abba.log | tail -1 | cut -c1-600; echo; } | tee -a summary.txt
 done

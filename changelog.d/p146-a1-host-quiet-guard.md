@@ -1,0 +1,3 @@
+### Changed
+
+- P146 Amendment A1: a host-quiet guard after `p146-4090-5` VOIDed on its cross-process self-pairs while the host got noisy mid-box. Per arm timed window: the share of CFS periods throttled and `/proc/stat` steal (VOID_BY_HOST above 5 %), CPU pressure where readable (VOID_BY_HOST if a self-pair's two arms differ by more than 5 points), and a pinned H2D probe before the first arm and after every arm (VOID_BY_HOST if one is more than 15 % below the first). An unrecorded signal is VOID_BY_HOST; a box whose signals are unreadable refuses at a pre-flight before the install (NOT_RUN). VOID_BY_HOST is not a strike. Every other term is unchanged.

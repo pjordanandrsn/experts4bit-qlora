@@ -67,8 +67,8 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 
 
 def test_the_self_tests_pass():
-    for script, line in (("p146_reduce.py", "p146_reduce self-test OK (43 cases)"),
-                         ("p146_box.py", "p146_box self-test OK (11/11 cases)")):
+    for script, line in (("p146_reduce.py", "p146_reduce self-test OK (63 cases)"),
+                         ("p146_box.py", "p146_box self-test OK (15/15 cases)")):
         out = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True,
                              env={**os.environ, "PYTHONPATH": ""})
         assert out.returncode == 0 and line in out.stdout, out.stdout + out.stderr
@@ -120,11 +120,21 @@ def test_the_rule_is_the_registered_rule():
               '"n_train": 2000', '"seed": 0', '"train_attention": True'):
         assert k in REDUCE, k
     assert 'DATASET_CALLS = ["train[:2000]", "train[2000:2064]"]' in REDUCE
+    # Amendment A1: the host-quiet guard's terms, fixed before any data under them
+    assert "HOST_CPU_MAX = 0.05" in REDUCE and "HOST_LINK_DROP = 0.15" in REDUCE and '"VOID_BY_HOST"' in REDUCE
+    assert "HOST_PSI_PAIR = 0.05" in REDUCE and 'for a, b in (("A0a", "A0b"), ("L1a", "L1b")):' in REDUCE
+    assert 'thr = (cb["nr_throttled"] - ca["nr_throttled"]) / dp if dp > 0 else 0.0' in BOX     # periods, not CPU-time
+    assert "psi = psi_source()" in BOX and 'env["P146_PSI_SOURCE"] = psi' in BOX            # one PSI file for all arms
+    assert 'PROBES_REG = ("before_A0a", "after_A0a", "after_L1a", "after_L1b", "after_A0b")' in REDUCE
+    assert 'probe(a, "before_A0a")' in BOX and 'probe(a, f"after_{tag}")' in BOX and "report_offload_environment" in BOX
+    for s in ("Amendment A1", "5 %", "15 %", "VOID_BY_HOST", "not a strike", "nr_throttled", "|L1b − L1a| > 5 points",
+              "psi: absent"):
+        assert s in PREREG, s
 
 
 def test_the_order_puts_every_refusal_before_the_fetch():
     order = ["CUDA_PROBE=$(python -", "REFUSED: the image's torch", "REFUSED: card is", "the licence covers sm_89",
-             "REFUSED: ${FREE_GB", "REFUSED: ${RAM_GB", 'say "install e4b @', "python - <<'PYT'",
+             "REFUSED: ${FREE_GB", "REFUSED: ${RAM_GB", "python $W/p146_box.py --preflight", "finish 29", 'say "install e4b @', "python - <<'PYT'",
              "p146_reduce.py --self-test", "p146_box.py --self-test", "python -m pytest tests/test_layer_major.py",
              'echo "premise ok', f"DATA_SHA={DATA_SHA}", "python $W/p146_tiny.py", 'say "fetch $MODEL @ $REV"',
              "--mode cli-abba --model", 'say "reduce"; python $W/p146_reduce.py --dir $W --out $W/verdict.json']
@@ -158,7 +168,9 @@ def test_lane_failures_avoid_the_machine_exclusion_codes():
     assert codes & {13, 14, 17, 18} == {13, 18}, codes
     eighteen = [line for line in RUN.splitlines() if "finish 18" in line]
     assert len(eighteen) == 1 and "cuda unusable" in eighteen[0], eighteen
-    assert {9, 10, 11, 15, 16, 19, 21, 22, 25, 28, 40} <= codes
+    assert {9, 10, 11, 15, 16, 19, 21, 22, 25, 28, 29, 40} <= codes
+    pre = [line for line in RUN.splitlines() if "finish 29" in line]
+    assert len(pre) == 1 and "host_guard=unreadable" in pre[0], pre        # A1: the guard's pre-flight refusal
 
 
 def test_amendment_1_the_alpaca_parquet_is_staged_and_checked_never_downloaded(tmp_path):
