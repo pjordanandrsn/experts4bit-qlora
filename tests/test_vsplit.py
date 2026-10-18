@@ -126,6 +126,27 @@ def test_need_on_the_reference_record_is_p132s_registered_threshold():
     assert all(abs(need[n] - p132.NEED[n]) < 1e-12 for n in red.NS), (need, p132.NEED)
 
 
+def test_a_noisy_verdict_carries_no_quotable_label():
+    """Planner's R3: H, BUILD and build_at sit at the top level only on READ; a NOISY run keeps them under "outcome"."""
+    red = _red()
+    with tempfile.TemporaryDirectory() as d:
+        red._fake(d, anchor=(4.10, 4.27), terms=red._world(0.9))
+        r = red.judge(d)
+    assert r["verdict"] == "NOISY" and not {"H", "BUILD", "build_at"} & set(r)
+    assert r["outcome"]["H"] == "SUPPORT" and r["outcome"]["BUILD"] == "BUILD"
+
+
+def test_the_guard_and_the_launch_terms_are_the_registered_ones():
+    """R4 and R5: the runner's guard is 2.0 h, and the PREREG's disk order and worst follow from the runner's floor and
+    the stated caps."""
+    run = (LANE / "vsplit_run.sh").read_text(encoding="utf-8")
+    assert re.search(r"^GUARD_S=7200;.*# --wallclock-h 2\.0$", run, re.M)
+    floor = int(re.search(r"MIN_DISK_GB=\$\{VSPLIT_MIN_DISK_GB:-(\d+)\}", run).group(1))
+    pre = (LANE / "PREREG-vsplit.md").read_text(encoding="utf-8")
+    assert f"≥ {floor + 20} GB" in pre and "inet_down ≥ 1000" in pre
+    assert f"**${7200 / 3600 * 0.85 + 100 * 0.011:.2f}**" in pre
+
+
 def test_the_outcome_alone_flips_the_verdict():
     """The maintainer's condition 1: with every input held fixed (the timing passes, the n = 1 census, tau, G_BAR, rho),
     the n >= 2 shares alone take the reading from SUPPORT/BUILD to REFUTE/NO_BUILD."""
@@ -190,8 +211,9 @@ def test_the_driver_refuses_another_run_id(tmp_path):
 
 def test_the_reference_records_carry_an_excess_beyond_the_bytes():
     """Real records first, for the NO_EXCESS rung: sd2-5090-3's V1 increment against the bytes term built from P123's
-    real B = 1 census share (p123-5090-1, the same model and route) has an excess at every n, so the reference case reads
-    H over all three n rather than NO_EXCESS."""
+    real B = 1 census share (p123-5090-1, the same model and route) has an excess above the registered floor at every n,
+    so the reference case reads H over all three n rather than NO_EXCESS. One pass stands for both, so the spread term
+    is zero and the floor is its 5 % branch."""
     red = _red()
     v1 = json.loads(SD2_V.read_text())["v1"]
     anchor, verify, full, per = red.timing_terms([v1, v1])
@@ -200,4 +222,7 @@ def test_the_reference_records_carry_an_excess_beyond_the_bytes():
     assert hashlib.sha256(raw).hexdigest() in (p123 / "SHA256SUMS").read_text()
     sh1 = red.shares(json.loads(raw))
     by = {n: (red.RHO[n] - 1.0) * sh1["moe_expert"] * anchor for n in red.NS}
-    assert all(verify[n] - anchor - by[n] > 0 for n in red.NS), (verify, anchor, by)
+    inc = {n: verify[n] - anchor for n in red.NS}
+    floor = red.excess_floor(inc, inc, inc)
+    assert floor == {n: red.EXCESS_FRAC * inc[n] for n in red.NS}
+    assert all(inc[n] - by[n] > floor[n] for n in red.NS), (inc, by, floor)

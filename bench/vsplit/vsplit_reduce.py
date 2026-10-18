@@ -32,10 +32,11 @@ First rung that applies:
          and instrument failures only.
   NOISY  in either pass, the A/A anchors differ by more than 3 %; or the two passes (the self-pair) differ by more
          than 3 % on the anchor or on any verify_ms(n).
-  READ   otherwise, with two readings:
+  READ   otherwise, with two readings (only a READ carries the top-level H and BUILD; NOISY keeps them under
+         "outcome", for reporting only):
     H      share(n) = S(n) / [I_b(n) - bytes(n)], the part of the increment beyond its bytes that lies in the expert
-           path. At an n where I_b(n) <= bytes(n) there is nothing beyond the bytes: H(n) = NO_EXCESS, and that n is left
-           out of the label. Over the remaining n: SUPPORT if share >= 0.70 at every one; REFUTE if share < 0.50 at
+           path. At an n where the excess I_b(n) - bytes(n) is within the noise floor, max(|I_b,A(n) - I_b,B(n)|, 0.05 x
+           I_b(n)), there is nothing measurable beyond the bytes: H(n) = NO_EXCESS, and that n is left out of the label. Over the remaining n: SUPPORT if share >= 0.70 at every one; REFUTE if share < 0.50 at
            every one; INCONCLUSIVE otherwise. NO_EXCESS at every n gives H = NO_EXCESS (a reading, not a failure).
     BUILD  BUILD a 2-4-row expert kernel iff S(n) >= need(n) for some n; NO_BUILD otherwise (and always when H is
            NO_EXCESS: a kernel has nothing beyond the bytes to save). Only an n that carries an excess counts.
@@ -61,6 +62,9 @@ STEPS = 64
 # (bench/p132/desk_prediction.py; bench/p132/desk_out.json "rho"); tests/test_vsplit.py holds them equal
 RHO = {2: 1.6123626569634704, 3: 2.1082912071078432, 4: 2.538318086935167}
 ANCHOR_TOL, SELF_PAIR_TOL = 0.03, 0.03
+# the excess floor (pre-data): an n counts only when I_b(n) - bytes(n) exceeds max(the two passes' I_b(n) spread,
+# EXCESS_FRAC x I_b(n)); the max keeps a lucky-tight self-pair from shrinking the floor to zero
+EXCESS_FRAC = 0.05
 SUPPORT_AT, REFUTE_BELOW = 0.70, 0.50
 CLASSES = ("moe_expert", "moe_route", "attn", "dense_gemm", "norm_elem", "sample", "input_prep", "memcpy", "residual")
 EXPERT_PATH = ("moe_expert", "moe_route")
@@ -139,12 +143,17 @@ def h_label(share):
     return "INCONCLUSIVE"
 
 
-def reading(inc, by, dexp, need):
-    """H and BUILD from the increments: S(n), the n that carry an excess beyond the bytes, share(n) over those, the
-    label, and the n where S(n) >= need(n). A NO_EXCESS n never counts toward BUILD: the rule's own reason is that
-    there is nothing beyond the bytes to save there."""
+def excess_floor(inc, ib_a, ib_b):
+    """The noise floor per n: max(the two timing passes' I_b(n) spread, EXCESS_FRAC x I_b(n))."""
+    return {n: max(abs(ib_a[n] - ib_b[n]), EXCESS_FRAC * inc[n]) for n in NS}
+
+
+def reading(inc, by, dexp, need, floor):
+    """H and BUILD from the increments: S(n), the n that carry an excess beyond the bytes above the noise floor,
+    share(n) over those, the label, and the n where S(n) >= need(n). A NO_EXCESS n never counts toward BUILD: the
+    rule's own reason is that there is nothing measurable beyond the bytes to save there."""
     sav = {n: dexp[n] - by[n] for n in NS}
-    excess = [n for n in NS if inc[n] - by[n] > 0]
+    excess = [n for n in NS if inc[n] - by[n] > floor[n]]
     share = {n: sav[n] / (inc[n] - by[n]) for n in excess}
     return sav, excess, share, h_label(share), [n for n in excess if sav[n] >= need[n]]
 
@@ -203,7 +212,11 @@ def judge(d):
         out["verdict"] = "VOID"
         return out
     inc, need = out["inputs"]["I_b"], out["inputs"]["need"]
-    sav, excess, share, h, build = reading(inc, by, dexp, need)
+    pa, pb = out["inputs"]["passes"]
+    floor = excess_floor(inc, {n: pa["verify"][n] - pa["anchor"] for n in NS},
+                         {n: pb["verify"][n] - pb["anchor"] for n in NS})
+    out["inputs"]["excess_floor"] = floor
+    sav, excess, share, h, build = reading(inc, by, dexp, need, floor)
     out["outcome"] = {"shares": {n: sh[n] for n in NS}, "delta_class": delta, "dExp": dexp, "S": sav, "share": share,
                       "H_by_n": {n: (share[n] if n in share else "NO_EXCESS") for n in NS}, "H": h,
                       "build_at": build, "BUILD": "BUILD" if build else "NO_BUILD"}
@@ -221,7 +234,8 @@ def judge(d):
               if abs(a1["verify"][n] / a0["verify"][n] - 1) > SELF_PAIR_TOL]
     out["noisy"] = noisy
     out["verdict"] = "NOISY" if noisy else "READ"
-    out["H"], out["BUILD"], out["build_at"] = out["outcome"]["H"], out["outcome"]["BUILD"], build
+    if out["verdict"] == "READ":                          # a NOISY run's labels stay under "outcome", for reporting only
+        out["H"], out["BUILD"], out["build_at"] = out["outcome"]["H"], out["outcome"]["BUILD"], build
     return out
 
 
@@ -335,9 +349,25 @@ def self_test() -> int:
     # a NO_EXCESS n never counts toward BUILD, even when its S(n) clears need(n) (the census put dExp above I_b there)
     need3 = {2: 2.358, 3: 1.683, 4: 1.558}
     sav, excess, share, h, build = reading({2: 1.0, 3: 4.5, 4: 4.9}, {2: 1.2, 3: 1.3, 4: 1.8},
-                                           {2: 5.0, 3: 1.8, 4: 2.3}, need3)
+                                           {2: 5.0, 3: 1.8, 4: 2.3}, need3, {2: 0.0, 3: 0.0, 4: 0.0})
     cases.append(("a NO_EXCESS n never counts toward BUILD", sav[2] >= need3[2] and excess == [3, 4] and build == []
                   and h == "REFUTE", (sav, excess, build, h)))
+    # R2: the noise floor, both branches of the max
+    fl = excess_floor({2: 4.0, 3: 4.5, 4: 4.9}, {2: 4.30, 3: 4.5, 4: 4.9}, {2: 4.0, 3: 4.5, 4: 4.9})
+    cases.append(("the floor takes the self-pair spread when it is larger", abs(fl[2] - 0.30) < 1e-12
+                  and abs(fl[3] - 0.05 * 4.5) < 1e-12, fl))
+    sav, excess, share, h, build = reading({2: 4.0, 3: 4.5, 4: 4.9}, {2: 3.75, 3: 1.3, 4: 1.8},
+                                           {2: 3.9, 3: 4.2, 4: 4.6}, need3, fl)
+    cases.append(("an excess inside the spread is NO_EXCESS", excess == [3, 4], excess))
+    fl0 = excess_floor({2: 4.0, 3: 4.5, 4: 4.9}, {2: 4.0, 3: 4.5, 4: 4.9}, {2: 4.0, 3: 4.5, 4: 4.9})
+    sav, excess, share, h, build = reading({2: 4.0, 3: 4.5, 4: 4.9}, {2: 3.85, 3: 1.3, 4: 1.8},
+                                           {2: 3.9, 3: 4.2, 4: 4.6}, need3, fl0)
+    cases.append(("a tight self-pair still leaves the 5 % floor", abs(fl0[2] - 0.2) < 1e-12 and excess == [3, 4],
+                  (fl0, excess)))
+    # R3: a NOISY verdict carries no top-level labels; its outcome stays for reporting
+    r = run("a NOISY run carries no top-level H or BUILD", {"verdict": "NOISY", "H": None, "BUILD": None},
+            anchor=(4.10, 4.27), terms=_world(0.9))
+    cases.append(("the NOISY outcome is kept for reporting", r["outcome"].get("H") == "SUPPORT", r["outcome"].get("H")))
     # a card 15 % faster everywhere reads the same verdict: nothing compares it with another card
     fast_a = tuple(x * 0.85 for x in _V1["anchor"])
     fast_v = {n: v * 0.85 for n, v in _V1["verify"].items()}

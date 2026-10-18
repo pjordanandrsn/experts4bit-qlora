@@ -80,10 +80,14 @@ VOID is for record and instrument failures only. An increment that is all bytes 
 - in either pass, the A/A anchors differ by more than 3 % (SD2's ANCHOR_TOL); or
 - the two passes (the self-pair) differ by more than 3 % on the anchor or on any verify_ms(n).
 
-**READ** otherwise, with two readings:
+**READ** otherwise, with two readings. Only a READ carries the top-level H and BUILD; a NOISY verdict keeps them under
+`outcome`, for reporting only, so no label can be quoted from it.
 - **H:** share(n) = S(n) / [I_b(n) − bytes(n)], the part of the increment beyond its bytes that lies in the expert path.
-  - At an n where I_b(n) ≤ bytes(n) there is nothing beyond the bytes: H(n) = NO_EXCESS, and that n is left out of the
-    label.
+  - **The excess floor:** at an n where I_b(n) − bytes(n) ≤ max(|I_b,A(n) − I_b,B(n)|, 0.05 × I_b(n)) there is nothing
+    measurable beyond the bytes: H(n) = NO_EXCESS, and that n is left out of the label. The first term is the two
+    timing passes' own spread at n; the second (EXCESS_FRAC = 0.05, named here before any data) keeps a lucky-tight
+    self-pair from shrinking the floor to zero. Without it, share = S / (I_b − bytes) can read SUPPORT on noise when
+    the excess is small but positive.
   - Over the remaining n: SUPPORT if share ≥ 0.70 at every one; REFUTE if share < 0.50 at every one; INCONCLUSIVE
     otherwise.
   - NO_EXCESS at every n gives **H = NO_EXCESS**: a reading that closes the lane (a 2–4-row kernel has nothing beyond
@@ -92,7 +96,7 @@ VOID is for record and instrument failures only. An increment that is all bytes 
   even if the census puts its dExp above I_b, so BUILD is always NO_BUILD when H is NO_EXCESS.
 
 Real records do not trip NO_EXCESS: sd2-5090-3's increment against the bytes term built from P123's real B = 1
-census share carries an excess at every n (`tests/test_vsplit.py`).
+census share carries an excess above the 5 % floor at every n (`tests/test_vsplit.py`).
 
 **REPORTING, never a rung:**
 - census-sum vs unprofiled;
@@ -149,8 +153,12 @@ The maintainer's condition 5:
   class rate, pinned by machine and offer set under the market rules.
 - **Launcher:** the launch tooling at or after its provider-side machine-pin filter, with `--validate` at its HEAD
   on the exact manifest.
-- **Guard:** 1.25 h.
-- **Cost:** worst ≤ $15; expected about $1.5 at the class rate.
+- **Host bar:** inet_down ≥ 1000 Mbps (the fetch is about 62 GB: Qwen3-30B-A3B plus the head).
+- **Disk:** the container disk ordered (`vast_disk_gb`) ≥ 170 GB, the runner's 150 GB floor + 20. Free space after the
+  image and installs is always below the order, so ordering exactly the floor fails the runner's own disk check.
+- **Guard:** 2.0 h (`--wallclock-h 2.0`; the runner's GUARD_S = 7200).
+- **Cost:** worst = guard × the class-rate cap + the download budget × the $/GB cap = 2.0 h × $0.85/h + 100 GB ×
+  $0.011/GB = **$2.80** (the launcher's default download budget, above the about 62 GB fetch); expected about $1.5.
 - **Nothing launches before the maintainer's ACK of the merged registration**, after an independent review by a seat
   that did not write it (the maintainer's condition 6).
 
@@ -158,6 +166,9 @@ The maintainer's condition 5:
 
 - **READ:** the maintainer re-derives the verdict with main's reducer before anything is quoted.
 - **NOISY:** one rerun on another host, under a new ACK.
+- **A deadline skip** (the runner's STOP-2: exit 40 before the reduce step, with `SKIPPED … host-limited deadline` in
+  `summary.txt`): an incomplete attempt, not a strike, although reducing what exists would VOID on the missing records.
+  A slow host is not a measurement. It reruns on another host, under a new ACK.
 - **VOID, or a second NOISY:** a strike for this lane. The second strike closes it with a simplification note.
 
 ## What this lane cannot say
