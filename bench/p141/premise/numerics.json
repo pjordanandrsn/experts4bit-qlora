@@ -1,0 +1,330 @@
+{
+ "device": "NVIDIA RTX A2000 12GB",
+ "gnf4": "0.46.1",
+ "shapes": {
+  "gate_up": [
+   28672,
+   4096
+  ],
+  "down": [
+   4096,
+   14336
+  ]
+ },
+ "experts": 8,
+ "rows": 2,
+ "plans": [
+  [
+   16,
+   256,
+   4,
+   1
+  ],
+  [
+   16,
+   512,
+   4,
+   1
+  ],
+  [
+   16,
+   1024,
+   4,
+   1
+  ],
+  [
+   16,
+   256,
+   8,
+   1
+  ],
+  [
+   16,
+   512,
+   8,
+   1
+  ],
+  [
+   32,
+   256,
+   4,
+   1
+  ],
+  [
+   32,
+   512,
+   4,
+   1
+  ],
+  [
+   32,
+   512,
+   8,
+   1
+  ],
+  [
+   32,
+   1024,
+   8,
+   1
+  ],
+  [
+   16,
+   256,
+   4,
+   2
+  ],
+  [
+   16,
+   512,
+   4,
+   2
+  ],
+  [
+   32,
+   256,
+   4,
+   2
+  ]
+ ],
+ "by_shape": {
+  "gate_up": {
+   "N": 28672,
+   "K": 4096,
+   "err_scalar": 0.0028050472028553486,
+   "plans": {
+    "16,256,4,1": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0028050472028553486,
+      "prmt32": 0.0028050472028553486
+     },
+     "tolerance": true
+    },
+    "16,512,4,1": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0028050472028553486,
+      "prmt32": 0.0028050472028553486
+     },
+     "tolerance": true
+    },
+    "16,1024,4,1": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0028050472028553486,
+      "prmt32": 0.0028050472028553486
+     },
+     "tolerance": true
+    },
+    "16,256,8,1": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0028050472028553486,
+      "prmt32": 0.0028050472028553486
+     },
+     "tolerance": true
+    },
+    "16,512,8,1": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0028050472028553486,
+      "prmt32": 0.0028050472028553486
+     },
+     "tolerance": true
+    },
+    "32,256,4,1": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0028050472028553486,
+      "prmt32": 0.0028050472028553486
+     },
+     "tolerance": true
+    },
+    "32,512,4,1": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0028050472028553486,
+      "prmt32": 0.0028050472028553486
+     },
+     "tolerance": true
+    },
+    "32,512,8,1": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0028050472028553486,
+      "prmt32": 0.0028050472028553486
+     },
+     "tolerance": true
+    },
+    "32,1024,8,1": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0028050472028553486,
+      "prmt32": 0.0028050472028553486
+     },
+     "tolerance": true
+    },
+    "16,256,4,2": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0028050472028553486,
+      "prmt32": 0.0028050472028553486
+     },
+     "tolerance": true
+    },
+    "16,512,4,2": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0028050472028553486,
+      "prmt32": 0.0028050472028553486
+     },
+     "tolerance": true
+    },
+    "32,256,4,2": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0028050472028553486,
+      "prmt32": 0.0028050472028553486
+     },
+     "tolerance": true
+    }
+   },
+   "gather_div": {
+    "bitwise_expanded": true
+   }
+  },
+  "down": {
+   "N": 4096,
+   "K": 14336,
+   "err_scalar": 0.0029361851047724485,
+   "plans": {
+    "16,256,4,1": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0029361851047724485,
+      "prmt32": 0.0029361851047724485
+     },
+     "tolerance": true
+    },
+    "16,512,4,1": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0029361851047724485,
+      "prmt32": 0.0029361851047724485
+     },
+     "tolerance": true
+    },
+    "16,1024,4,1": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0029361851047724485,
+      "prmt32": 0.0029361851047724485
+     },
+     "tolerance": true
+    },
+    "16,256,8,1": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0029361851047724485,
+      "prmt32": 0.0029361851047724485
+     },
+     "tolerance": true
+    },
+    "16,512,8,1": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0029361851047724485,
+      "prmt32": 0.0029361851047724485
+     },
+     "tolerance": true
+    },
+    "32,256,4,1": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0029361851047724485,
+      "prmt32": 0.0029361851047724485
+     },
+     "tolerance": true
+    },
+    "32,512,4,1": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0029361851047724485,
+      "prmt32": 0.0029361851047724485
+     },
+     "tolerance": true
+    },
+    "32,512,8,1": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0029361851047724485,
+      "prmt32": 0.0029361851047724485
+     },
+     "tolerance": true
+    },
+    "32,1024,8,1": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0029361851047724485,
+      "prmt32": 0.0029361851047724485
+     },
+     "tolerance": true
+    },
+    "16,256,4,2": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0029361851047724485,
+      "prmt32": 0.0029361851047724485
+     },
+     "tolerance": true
+    },
+    "16,512,4,2": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0029361851047724485,
+      "prmt32": 0.0029361851047724485
+     },
+     "tolerance": true
+    },
+    "32,256,4,2": {
+     "bitwise_tree_prmt32": true,
+     "bitwise_scalar": false,
+     "err": {
+      "tree": 0.0029361851047724485,
+      "prmt32": 0.0029361851047724485
+     },
+     "tolerance": true
+    }
+   },
+   "gather_div": {
+    "bitwise_expanded": true
+   }
+  }
+ },
+ "all_runnable_plans_pass": true,
+ "wall_s": 10.6
+}

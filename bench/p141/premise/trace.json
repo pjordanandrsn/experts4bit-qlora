@@ -1,0 +1,65 @@
+{
+ "device": "NVIDIA RTX A2000 12GB",
+ "capability": [
+  8,
+  6
+ ],
+ "gnf4_bw_mode": "auto",
+ "bw_gate_calls": {
+  "4096x14336": 16,
+  "28672x4096": 16
+ },
+ "singleton_calls_N_K_T": {
+  "4096x14336@T2": 16,
+  "28672x4096@T2": 16
+ },
+ "model": {
+  "hidden": 4096,
+  "intermediate": 14336,
+  "experts": 8,
+  "top_k": 2,
+  "layers": 2
+ },
+ "smoke_row": {
+  "residency_states": [
+   "_HybridTier",
+   "_HybridTier"
+  ],
+  "expert_target_names": [
+   "model.layers.0.mlp.experts",
+   "model.layers.1.mlp.experts"
+  ],
+  "graph_status": null,
+  "fusion_report": {
+   "E4B_FUSE_T1_GLUE": {
+    "mode": "auto",
+    "prefill": "off",
+    "patched": 5,
+    "failed_probe": 0
+   },
+   "E4B_FUSE_T1_GLUE_R2": {
+    "mode": "auto",
+    "prefill": "off",
+    "patched": [
+     2,
+     2
+    ],
+    "kernel_gaps": 0
+   },
+   "E4B_FUSE_ROUTER_EPI": {
+    "mode": "auto",
+    "patched": 2,
+    "failed_probe": 0,
+    "no_kernel_mode": 0,
+    "fp32_upstream": 2
+   }
+  },
+  "requests_completed": 2,
+  "placement": "all-vram"
+ },
+ "source": {
+  "e4b": "9890a5023af84eed0a80e3d3baee3bc7bf110443",
+  "grouped_nf4_gemm": "0.46.1",
+  "harness": "bench/smoke/gpu_serve_smoke.py run_cell(mixtral, default) with a real-width Mixtral, nf4_grouped._bw_engages wrapped"
+ }
+}
