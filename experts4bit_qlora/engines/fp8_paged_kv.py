@@ -227,6 +227,16 @@ def _auto_k_groups(head_dim: int, width: int = 32) -> int:
     return want
 
 
+_SM_COUNT: dict = {}
+
+
+def _sm_count(device) -> int:
+    key = str(device)
+    if key not in _SM_COUNT:
+        _SM_COUNT[key] = torch.cuda.get_device_properties(device).multi_processor_count
+    return _SM_COUNT[key]
+
+
 class Fp8PagedKV:
     """FP8 paged KV for ``L`` layers, ``B`` sequences, one model.
 
@@ -308,6 +318,8 @@ class Fp8PagedKV:
         slots_total = batch + self.n_scratch + self.n_alias
         self._alias_set = frozenset(self.alias)
         self.bt = BLOCK_TOKENS
+        self.split_cap = None      # E4B_ATTN_SPLIT_CAP, set by the server's build (lane P143): None = the library's plan
+        self.split_plans = {}      # B -> {calls, plan, n_split}: what the cap met (lane P143's engagement record)
         self.kgs = kgs
         # the uniform value when there is one (what callers used to read);
         # None under mixed geometry -- read ``kgs[layer]``
@@ -1245,11 +1257,44 @@ class Fp8PagedKV:
             raise ValueError(
                 f"q has {q.shape[0]} rows but the block table has "
                 f"{tbl.shape[0]} — pass slots= so rows map to sequences")
+        # never on speculative verify (lens_override): lane P143 read the decode step only
+        if (self.split_cap and lens_override is None and "n_split" not in kw and not kw.get("pack_heads")
+                and _kernel_takes(fp8_paged_decode_attention, "split_cap") and self._split_cap_applies(layer, q, kw)):
+            kw = dict(kw, split_cap=int(self.split_cap))
+            self._record_split(layer, q, tbl, kw)
         return fp8_paged_decode_attention(
             q, kf, vf, tbl, lens, n_kv_heads=self.Hs[layer],
             head_dim=self.Ds[layer], block_tokens=self.bt,
             k_groups=self.kgs[layer], k_row_bytes=self.k_row,
             v_row_bytes=self.v_row, **kw)
+
+    def _split_cap_applies(self, layer: int, q: torch.Tensor, kw: dict) -> bool:
+        """The cap applies on the fp8 split path only, the one lane P143 measured: the compute mode is the kernel's own
+        choice (``fp8_paged_attn._compute_default``, as it resolves an unset ``compute``) unless the caller names it."""
+        import fp8_paged_attn
+        # the kernel's own verdict: the same inputs its wrapper hands _compute_default (fp8 applicability depends on
+        # v_groups == 1 and on ktile), so a caller's ktile can never send the cap into the f32 path
+        compute = kw.get("compute") or fp8_paged_attn._compute_default(
+            q, self.Ds[layer], self.kgs[layer], kw.get("v_groups", 1), pack_heads=False, block_tokens=self.bt,
+            n_kv_heads=self.Hs[layer], ktile=kw.get("ktile"))
+        return compute == "fp8"
+
+    def _record_split(self, layer: int, q: torch.Tensor, tbl: torch.Tensor, kw: dict):
+        """The engagement record (lane P143): for each row count B the cap met, the library's plan and the split count it
+        runs, from grouped-nf4-gemm's own ``decode_split_plan`` (a captured graph replays without calling back here, so
+        this is what each bucket captured with). Keyed by B alone: a family whose layers differ in KV geometry would
+        keep its first layer's plan (moot for qwen3_moe, the one family P143 reads)."""
+        import fp8_paged_attn
+        plan_fn = getattr(fp8_paged_attn, "decode_split_plan", None)
+        B = int(q.shape[0])
+        rec = self.split_plans.setdefault(B, {"calls": 0})
+        rec["calls"] += 1
+        if plan_fn is not None and "plan" not in rec:
+            args = (B, self.Hs[layer], int(tbl.shape[1]))
+            kwargs = dict(block_tokens=self.bt, ktile=kw.get("ktile") or 64, compute="fp8", pack_heads=False,
+                          sms=_sm_count(q.device))
+            rec["plan"] = plan_fn(*args, **kwargs)
+            rec["n_split"] = plan_fn(*args, split_cap=int(self.split_cap), **kwargs)
 
     def seen_device(self, layer: int, seq: int) -> int:
         """Authoritative token count for (layer, seq), read from DEVICE

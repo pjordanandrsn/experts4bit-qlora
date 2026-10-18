@@ -177,6 +177,11 @@ PREFILL_GLUE_DEFAULT_FAMILIES = {
     "qwen3_moe": "P130 (#1588, read #1605): x1.118 [1.116, 1.119] per 512-token first-chunk prefill replay on one RTX "
                  "5090, AT_PARITY on P117's teacher-forced instrument (bias -0.0035 nats)",
 }
+# Lane P143's split cap for the paged FP8 attention decode (bench/p143/PREREG-p143.md, Amendment 2): an UNSET
+# ``E4B_ATTN_SPLIT_CAP`` resolves per family from here -- empty until P143's served read licenses a family -- and to the
+# library's own plan everywhere else. ``0`` keeps the library's plan; ``n`` caps it at n splits.
+ATTN_SPLIT_CAP_ENV = "E4B_ATTN_SPLIT_CAP"
+ATTN_SPLIT_CAP_DEFAULT_FAMILIES: dict = {}
 _FUSION_WARNED: set = set()
 
 
@@ -410,6 +415,30 @@ def _prefill_glue_env(value: str) -> str:
     raise ValueError(f"{PREFILL_GLUE_ENV}={value!r}: expected '0' or '1' (unset: per family, lane P130)")
 
 
+def _attn_split_cap_env(value: str) -> str:
+    """``E4B_ATTN_SPLIT_CAP`` as the server reads it: ``0`` (the library's plan) or a split cap 1..32 pass through; unset
+    or empty is ``default``, resolved per family at the build (:data:`ATTN_SPLIT_CAP_DEFAULT_FAMILIES`, lane P143).
+    Anything else is refused."""
+    v = (value or "").strip()
+    if not v:
+        return FUSION_UNSET
+    if v.isdigit() and int(v) <= 32:
+        return str(int(v))
+    raise ValueError(f"{ATTN_SPLIT_CAP_ENV}={value!r}: expected 0 (the library's plan) or a split cap 1..32 "
+                     "(unset: per family, lane P143)")
+
+
+def resolve_attn_split_cap(value: str, model_type) -> tuple:
+    """``(cap, source)``: an explicit ``0`` is ``(None, "explicit")``, an explicit cap ``n`` is ``(n, "explicit")``;
+    ``default`` takes the cap of a ``model_type`` in :data:`ATTN_SPLIT_CAP_DEFAULT_FAMILIES` (``default-allowlisted``)
+    and None elsewhere (``default-off``). None leaves the split plan to the library."""
+    if value != FUSION_UNSET:
+        return (int(value) or None), "explicit"
+    if model_type in ATTN_SPLIT_CAP_DEFAULT_FAMILIES:
+        return int(ATTN_SPLIT_CAP_DEFAULT_FAMILIES[model_type]), "default-allowlisted"
+    return None, "default-off"
+
+
 def resolve_prefill_glue(value: str, model_type) -> tuple:
     """``(mode, source)``: an explicit ``0`` / ``1`` passes through (``explicit``); ``default`` resolves to ``1`` on a
     ``model_type`` in :data:`PREFILL_GLUE_DEFAULT_FAMILIES` (``default-allowlisted``) and to ``0`` elsewhere
@@ -473,6 +502,7 @@ class PagedServeConfig:
     kv_groups: str = "auto"              # E4B_PAGED_KV_GROUPS: auto | <int>
     fuse_qkv: bool = False               # E4B_PAGED_FUSE_QKV not 0 (fuse_qkv applies the env-gated folds itself)
     prefill_glue: str = FUSION_UNSET     # E4B_FUSE_PREFILL_GLUE: 0 | 1, or "default" when unset (per family, P130)
+    attn_split_cap: str = FUSION_UNSET   # E4B_ATTN_SPLIT_CAP: 0 | 1..32, or "default" when unset (per family, P143)
     fusion_modes: dict = field(default_factory=dict)   # FUSION_KNOBS -> auto | 0 | 1 (_fusion_env), or "default" when
                                                        # unset (resolved per family at the build); a knob not named keeps
                                                        # its old reading: fuse_qkv, or the fold's own env var
@@ -525,6 +555,7 @@ class PagedServeConfig:
             fuse_qkv=modes[FUSE_QKV_ENV] != "0",
             fusion_modes=modes,
             prefill_glue=_prefill_glue_env(env(PREFILL_GLUE_ENV, "")),
+            attn_split_cap=_attn_split_cap_env(env(ATTN_SPLIT_CAP_ENV, "")),
             torch_threads=int(env("E4B_PAGED_TORCH_THREADS", "8")),
             max_tokens_cap=int(env("E4B_PAGED_MAX_TOKENS", "0")),
             max_queue=int(env("E4B_PAGED_MAX_QUEUE", "0")),
@@ -1473,6 +1504,10 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     kv = Fp8PagedKV(kv_layers(model, decoder_layers(model.config)), hkv, hd, batch=cfg.max_seqs, max_tokens_per_seq=cfg.max_tokens_per_seq,
                     k_groups=(None if cfg.kv_groups == "auto" else int(cfg.kv_groups)),
                     batched_append=True, device=cfg.device, scratch_slots=scratch, alias_slots=spec_k)
+    # P143: the attention split cap, on the KV before any decode graph is captured (a captured graph keeps its n_split)
+    split_cap, split_cap_source = resolve_attn_split_cap(getattr(cfg, "attn_split_cap", FUSION_UNSET),
+                                                         getattr(model.config, "model_type", None))
+    kv.split_cap = split_cap
     runner = PagedModelRunner(model, kv, device=cfg.device, bulk_kv=cfg.bulk_kv, last_logits=cfg.last_logits)
     grouping = _batched_graph_grouping(cfg)          # before capture: the batched lane's sync-free grouping
     # SD2: the draft, its hooks and the verify buckets, before any graph is captured
@@ -1499,6 +1534,10 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     info["fusion_sources"] = fusion_report.get("sources")
     info["fusion_report"] = fusion_report.get("folds")
     info["prefill_glue"] = fusion_report.get("prefill_glue")
+    # P143: the cap, its source, and what each captured bucket planned with it (Fp8PagedKV.split_plans, from
+    # grouped-nf4-gemm's own decode_split_plan): the engagement record a served read checks
+    info["attn_split_cap"] = {"cap": split_cap, "source": split_cap_source,
+                              "plans": {str(b_): dict(r_) for b_, r_ in sorted(kv.split_plans.items())}}
     # The build churns through host buffers it frees (the hybrid tier's setup tier, the stacks' one-shot reads), and
     # glibc keeps freed blocks under its mmap threshold resident for the life of the server: 0.34 GB on OLMoE-1B-7B
     # (RTX A2000 host, the one place it was measured). The loader alone leaves ~4 MB.
