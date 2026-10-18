@@ -257,12 +257,12 @@ def test_the_fit_reports_the_expected_run_against_the_six_hour_guard():
     assert rep["expected_h"] == round(want / 3600, 2) and rep["expected_within_guard"] == (want <= 0.8 * 6 * 3600)
 
 
-def _leg_dir(tmp_path, h2=None):
+def _leg_dir(tmp_path, h2=None, box=110, repeat=70):
     d = tmp_path / "leg"
     (d / "receipts" / "box").mkdir(parents=True)
     (d / "receipts" / "run.json").write_text(json.dumps({"mode": "pro6000", "nonce": "n", "e4b_sha": "a" * 40}))
-    phases = {"require-git": 3, "create-venv": 4, "install": 160, "hostrate": 25, "fetch": 300, "tokens": 6, "box": 110, "repeat": 70,
-              "hostrate2": 25}
+    phases = {"require-git": 3, "create-venv": 4, "install": 160, "hostrate": 25, "fetch": 300, "tokens": 6, "box": box,
+              "repeat": repeat, "hostrate2": 25}
     (d / "receipts" / "phase-timings.jsonl").write_text("".join(json.dumps({"phase": k, "elapsed_s": v, "rc": 0}) + "\n"
                                                                  for k, v in phases.items()))
     (d / "receipts" / "fetch.json").write_text(json.dumps({"bytes": 27_047_001_621, "hash_seconds": 30.0}))
@@ -291,3 +291,26 @@ def test_the_fit_reads_a_pro6000_leg_end_to_end(tmp_path):
                         "--bandwidth-mbps", "800", "--usd-per-hour", "1.6", "--box-from", str(d), "--box-baseline", str(d)],
                        capture_output=True, text=True)
     assert r.returncode != 0 and "A2000 tools" in r.stderr
+
+
+def test_a_leg_s_fit_binds_the_expected_run_to_the_guard(tmp_path, monkeypatch):
+    """Every cap holds (box 390 s and repeat 130 s scale inside CAP_BOX / CAP_REPEAT; the fetch at 580 Mbps inside CAP_FETCH), yet
+    the expected run (about 6.0 h) is above 0.8 x 6 h, so a leg's fit refuses. With the floors sealed as the leg implies them (what
+    Amendment 12 does), the same leg at box 110 s / repeat 70 s fits."""
+    f = _fit()
+    sealed = {"h2d_gb_s": 19.167, "host_copy_gb_s": 29.167, "disk_read_gb_s": 2.074, "fetch_gb_s": 10.0}
+    monkeypatch.setattr(f, "sealed_floors", lambda run_sh: dict(sealed))
+
+    def run(d):
+        out = d / "fit.json"
+        monkeypatch.setattr(sys, "argv", ["q235_fit.py", "--rehearsal", str(d), "--warm-install-s", "160", "--bandwidth-mbps", "580",
+                                          "--usd-per-hour", "1.6", "--out", str(out)])
+        with pytest.raises(SystemExit) as e:
+            f.main()
+        return e.value.code, json.loads(out.read_text())
+
+    code, rep = run(_leg_dir(tmp_path / "long", box=390, repeat=130))
+    assert all(p["fits"] for p in rep["phases"].values()) and rep["floors"]["sealed_match"], rep["phases"]
+    assert rep["expected_within_guard"] is False and rep["fits"] is False and code == 1
+    code, rep = run(_leg_dir(tmp_path / "short"))
+    assert rep["expected_within_guard"] is True and rep["fits"] is True and code == 0
