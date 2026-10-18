@@ -58,7 +58,8 @@ PY_BASE=${TC1_LOCAL_PYTHON:-python}        # the interpreter the venvs are made 
 mkdir -p $W/logs $W/adapters $W/data; cd $W || exit 9
 say(){ echo "[$(date -u +%FT%TZ)] tc1/box${TC1_BOX:-?}: $*"; }
 NONCE=${TC1_RUN_NONCE:?}; printf '%s\n' "$NONCE" > $W/TC1_RUN_NONCE.tmp && mv $W/TC1_RUN_NONCE.tmp $W/TC1_RUN_NONCE
-finish(){ local rc=$1; printf '%s\n' "$rc" > TC1_EXIT_CODE.$NONCE; [ "$rc" = 0 ] && : > TC1_SUCCESS.$NONCE; say "TP_DONE rc=$rc"; : > TP_DONE.$NONCE; exit "$rc"; }
+# finish: HP1's bulk manifest first (a normal end, a refusal or a deadline stop still pins the bulk bytes; hp1_finish_manifest), then the exit files
+finish(){ local rc=$1; [ -d "$W/hp1" ] && declare -F hp1_finish_manifest >/dev/null && hp1_finish_manifest; printf '%s\n' "$rc" > TC1_EXIT_CODE.$NONCE; [ "$rc" = 0 ] && : > TC1_SUCCESS.$NONCE; say "TP_DONE rc=$rc"; : > TP_DONE.$NONCE; exit "$rc"; }
 trap 'finish 130' INT TERM
 for v in TC1_BOX TC1_RUN_ID TC1_DEADLINE_EPOCH TC1_INSTANCE_ID E4B_SHA GNF4_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
 case "$TC1_BOX" in A|B) ;; *) say "refusing: TC1_BOX must be A (TC1's one RTX 5090; TC1-PREREG 'Budget and stop rules') or B (lane TC2's box B, tc2big)"; finish 78;; esac
@@ -2121,33 +2122,53 @@ tc1_axolotl_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 HAL=$6 AAL=$7
 #   4 e4b/fused_attn4_p38 + unsloth/ckpt_unsloth_p38 (tp4's anchor pair at tp2/P38's fixture, clinical tokens) + unsloth/ckpt_unsloth_p38_t28
 #   5 e4b/fused_attn4_m_t1 + unsloth/ckpt_unsloth_m_t1 (micro-batch 1 x accum 1)   6 e4b/fused_attn4_m_r64 + unsloth/ckpt_unsloth_m_r64 (r 64 / alpha 64)
 # The matched pair runs first so a deadline cannot eat it; the family's tokens file carries CURVE_EVAL_N held-out rows (arms 5-6 take the first 8).
-# hp1_bulk_manifest W: hp1/bulk_manifest.json = {path, bytes, sha256} for every file the fetch excludes under hp1/ -- any file inside a
-# directory named base_* or shake-cache, and any canonical_*.safetensors (tc1_drive.sh's TC1_RSYNC_EXCLUDES, the same patterns)
+# hp1_bulk_manifest W: hp1/bulk_manifest.json = {path, bytes, mtime_ns, sha256} for every file the fetch excludes under hp1/ -- any file inside
+# a directory named base_* or shake-cache, and any canonical_*.safetensors (tc1_drive.sh's TC1_RSYNC_EXCLUDES, the same patterns). A file
+# whose size and mtime match the previous manifest keeps its sha256 (it is written before each reducer pass and at finish; only new files
+# are hashed). The manifest records how long it took (`seconds`), which sizes the finish path's time-left check.
 hp1_bulk_manifest(){ local W=$1
   python3 - "$W" <<'PYM' > "$W/logs/hp1_bulk_manifest.log" 2>&1 || say "HP1 bulk manifest FAILED (logs/hp1_bulk_manifest.log)"
-import hashlib, json, os, sys
+import hashlib, json, os, sys, time
+t0 = time.time()
 w = sys.argv[1]
 root = os.path.join(w, "hp1")
+mpath = os.path.join(root, "bulk_manifest.json")
+try:
+    prev = {r["path"]: r for r in json.load(open(mpath))["files"]}
+except Exception:
+    prev = {}
 rows = []
 for d, dirs, files in os.walk(root):
-    rel_d = os.path.relpath(d, w)
-    parts = rel_d.split(os.sep)
+    parts = os.path.relpath(d, w).split(os.sep)
     in_bulk_dir = any(p.startswith("base_") or p == "shake-cache" for p in parts[1:])
     for f in sorted(files):
         if not (in_bulk_dir or (f.startswith("canonical_") and f.endswith(".safetensors"))):
             continue
         path = os.path.join(d, f)
+        rel, st = os.path.relpath(path, w), os.stat(path)
+        old = prev.get(rel)
+        if old and old.get("bytes") == st.st_size and old.get("mtime_ns") == st.st_mtime_ns and old.get("sha256"):
+            rows.append(old)
+            continue
         h = hashlib.sha256()
         with open(path, "rb") as fh:
             for chunk in iter(lambda: fh.read(1 << 24), b""):
                 h.update(chunk)
-        rows.append({"path": os.path.relpath(path, w), "bytes": os.path.getsize(path), "sha256": h.hexdigest()})
+        rows.append({"path": rel, "bytes": st.st_size, "mtime_ns": st.st_mtime_ns, "sha256": h.hexdigest()})
 rows.sort(key=lambda r: r["path"])
-json.dump({"hp1_bulk_manifest": 1, "files": rows, "n_files": len(rows), "bytes": sum(r["bytes"] for r in rows)},
-          open(os.path.join(root, "bulk_manifest.json"), "w"), indent=1)
-print(f"HP1 bulk manifest: {len(rows)} files, {sum(r['bytes'] for r in rows)} bytes")
+doc = {"hp1_bulk_manifest": 1, "files": rows, "n_files": len(rows), "bytes": sum(r["bytes"] for r in rows),
+       "seconds": round(time.time() - t0, 1)}
+json.dump(doc, open(mpath + ".tmp", "w"), indent=1)
+os.replace(mpath + ".tmp", mpath)
+print(f"HP1 bulk manifest: {len(rows)} files, {doc['bytes']} bytes, {doc['seconds']} s")
 PYM
   tail -1 "$W/logs/hp1_bulk_manifest.log"; }
+# hp1_finish_manifest: the finish path (a normal end, a refusal or a deadline stop) writes the manifest too, when the time left covers the
+# last measured hashing time x 1.5 + 60 s (600 s before any measurement); otherwise it says so and leaves hp1/bulk_manifest.SKIPPED.
+hp1_finish_manifest(){ local need=600 last
+  last=$(python3 -c "import json,sys; print(int(json.load(open(sys.argv[1])).get('seconds', 0)))" "$W/hp1/bulk_manifest.json" 2>/dev/null) && need=$(( last * 3 / 2 + 60 ))
+  if [ "$(left)" -ge "$need" ]; then hp1_bulk_manifest "$W"
+  else say "HP1 bulk manifest SKIPPED at finish: needs ${need}s, $(left)s left"; echo "needs ${need}s, $(left)s left" > "$W/hp1/bulk_manifest.SKIPPED"; fi; }
 # ---------------------------------------------------------------- HP1 (bench/hp1/HP1-PREREG.md): held-out parity, one evaluator, seeds per arm
 # hp1_cell CELL SEED: the K cell's flags (k<init><dtype>; init 0 = e4b's N(0, 1/r), 1 = PEFT's kaiming via matched:<seed>; dtype 0 = the
 # loader's bf16 expert adapters, 1 = fp32 everywhere)
@@ -2206,7 +2227,8 @@ hp1_eval_block(){ local NAME=$1 TOK=$2 MID=$3 REV=$4; shift 4; local R=() B=() x
   n=$(ls ${R[*]} 2>/dev/null | wc -l); [ "$n" -ge 1 ] || n=1
   if [ -n "${HP1_EVAL_PER_ARM_S:-}" ]; then need=$(( (HP1_EVAL_PER_ARM_S * n * 13) / 10 + 600 )); else need=${HP1_EVAL_BUDGET_S:-3600}; fi
   can_run "$need" "hp1/eval_$NAME ($n arms)" || { echo "HP1 EVAL_$NAME SKIPPED host-limited (needs ${need}s for $n arms)" | tee -a summary.txt; return 1; }
-  $PY_E4B $W/hp1_eval.py --receipts "${R[@]}" --bases "${B[@]}" --tokens $TOK --eval-n $HP1_EVAL_N --model "$MID" --revision $REV \
+  # offline: the checkpoint is already on the box, and the image's huggingface_hub 2.x / httpx2 can break content-encoded Hub responses
+  HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts "${R[@]}" --bases "${B[@]}" --tokens $TOK --eval-n $HP1_EVAL_N --model "$MID" --revision $REV \
     --out $W/hp1/eval_$NAME.json > logs/hp1_eval_$NAME.log 2>&1; tail -1 logs/hp1_eval_$NAME.log
   HP1_EVAL_PER_ARM_S=$($PY_E4B -c "import json,sys; d=json.load(open(sys.argv[1])); t=sum(x.get('seconds',0) for x in d['bases']); print(max(60, int(t / max(1, len(d['arms'])))))" \
     $W/hp1/eval_$NAME.json 2>/dev/null || echo 600); return 0; }
@@ -2245,7 +2267,8 @@ tc1_hp1_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AXAL=$7
   if hp1_redraw $FAM "$MID" $REV $TOK $TS $W/hp1/eval_K.json; then
     hp1_eval_block K $TOK "$MID" $REV "${KR[@]}" -- $W/hp1/base_e4b_$FAM || return 0
   fi
-  local SEL; SEL=$($PY_E4B $W/hp1_reduce.py select $W/hp1/eval_K.json --out $W/hp1/select.json 2> logs/hp1_select.err | sed -n 's/^HP1_SELECTED=//p')
+  hp1_bulk_manifest "$W"                  # the reducer VOIDs a reading whose manifest does not pin every adapter and base it scored
+  local SEL; SEL=$($PY_E4B $W/hp1_reduce.py select $W/hp1/eval_K.json --manifest $W/hp1/bulk_manifest.json --out $W/hp1/select.json 2> logs/hp1_select.err | sed -n 's/^HP1_SELECTED=//p')
   if ! hp1_cell "$SEL" 0 > /dev/null; then say "HP1: the K rule selected nothing (logs/hp1_select.err): the P block is not run"; echo "HP1 K_INCOMPLETE" | tee -a summary.txt; return 0; fi
   say "HP1: the registered K rule selects $SEL"; echo "HP1_SELECTED=$SEL" | tee -a summary.txt
   # the P block (fresh confirmation seeds): E, shipped K00 beside it, both competitors at their native settings, each framework's first run exporting its base
@@ -2265,7 +2288,9 @@ tc1_hp1_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AXAL=$7
   if hp1_redraw $FAM "$MID" $REV $TOK $TS $W/hp1/eval_P.json; then
     hp1_eval_block P $TOK "$MID" $REV "${PR[@]}" -- $W/hp1/base_*_$FAM || true
   fi
-  $PY_E4B $W/hp1_reduce.py verdict $W/hp1/eval_K.json $W/hp1/eval_P.json --out $W/hp1/verdict.json --md $W/RESULTS-hp1.md > logs/hp1_verdict.log 2>&1
+  hp1_bulk_manifest "$W"
+  $PY_E4B $W/hp1_reduce.py verdict $W/hp1/eval_K.json $W/hp1/eval_P.json --manifest $W/hp1/bulk_manifest.json --out $W/hp1/verdict.json \
+    --md $W/RESULTS-hp1.md > logs/hp1_verdict.log 2>&1
   tail -20 logs/hp1_verdict.log; echo "HP1 verdict: $W/RESULTS-hp1.md" | tee -a summary.txt; }
 tc1_curve_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SAL=$8
   local ALL="e4b:fused_attn4_m_200:fused unsloth:ckpt_unsloth_m_200:unsloth e4b:fused_attn4_shipped_200:fused e4b:fused_attn4_p38:fused unsloth:ckpt_unsloth_p38:unsloth unsloth:ckpt_unsloth_p38_t28:unsloth e4b:fused_attn4_m_t1:fused unsloth:ckpt_unsloth_m_t1:unsloth e4b:fused_attn4_m_r64:fused unsloth:ckpt_unsloth_m_r64:unsloth"

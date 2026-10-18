@@ -16,6 +16,7 @@ END = "tc1_curve_family(){"
 # The stub interpreter: answers the driver's python calls from the environment of the scenario.
 FAKEPY = r"""#!/bin/bash
 echo "PY: $*" >> "$W/py.log"
+case "$*" in *hp1_eval.py*) echo "EVAL_OFFLINE=${HF_HUB_OFFLINE:-unset}" >> "$W/py.log";; esac
 case "$*" in
   *hp1_trunc.py*) echo '{"model": "local/cut", "revision": "abc"}';;
   *"hp1_reduce.py select"*) [ -n "${SEL:-}" ] && echo "HP1_SELECTED=$SEL";;
@@ -40,6 +41,7 @@ can_run(){ case "$2" in ${NO_TIME_FOR:-__none__}) echo "SKIPPED $2" >> summary.t
 tc1_prepare(){ TOK=$W/tokens.json; TS=deadbeef; return 0; }
 arm(){ echo "$1 $2 $3 ${*:12}" >> "$W/arms.log"; touch "$W/${1}_${2}_${3}.json"; }
 status_of(){ [ "${SHAKE_FAIL:-}" = "$2" ] && echo install_failed || echo ok; }
+hp1_bulk_manifest(){ echo "manifest $1" >> "$W/manifest.log"; }
 mkdir -p logs hp1 data; : > summary.txt; : > arms.log
 source ./hp1_funcs.sh
 tc1_hp1_family qwen3hp1 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600 3600
@@ -127,3 +129,56 @@ def test_the_k_pass_gate_is_sized_per_arm():
     """The gate after the 1-arm early pass is that pass's per-arm seconds x the next pass's arm count x 1.3 + 600 s."""
     src = RUN_SH.read_text()
     assert "HP1_EVAL_PER_ARM_S * n * 13) / 10 + 600" in src and "len(d['arms'])" in src
+
+
+def test_every_evaluator_pass_runs_offline(tmp_path):
+    """The checkpoint is already on the box; the evaluator must never reach the Hub (the rented image's huggingface_hub 2.x / httpx2
+    can break content-encoded responses), so every hp1_eval.py call runs with HF_HUB_OFFLINE=1."""
+    drive(tmp_path)
+    lines = [ln for ln in (tmp_path / "py.log").read_text().splitlines() if ln.startswith("EVAL_OFFLINE=")]
+    assert lines and all(ln == "EVAL_OFFLINE=1" for ln in lines), lines
+
+
+def test_the_manifest_is_written_before_each_reducer_pass_and_handed_to_it(tmp_path):
+    drive(tmp_path)
+    py = (tmp_path / "py.log").read_text()
+    assert (tmp_path / "manifest.log").read_text().count("manifest") >= 2
+    for sub in ("select", "verdict"):
+        line = [ln for ln in py.splitlines() if f"hp1_reduce.py {sub}" in ln][0]
+        assert "--manifest" in line and "bulk_manifest.json" in line
+
+
+def _finish_harness(tmp_path, left_s):
+    """finish() + hp1_finish_manifest() + hp1_bulk_manifest(), cut from tc1_run.sh, on a fake box with one base export and one adapter."""
+    src = RUN_SH.read_text()
+
+    def cut(start, end):
+        i = src.index(start)
+        return src[i:src.index(end, i) + len(end)] + "\n"
+    fns = (cut("hp1_bulk_manifest(){", 'tail -1 "$W/logs/hp1_bulk_manifest.log"; }')
+           + cut("hp1_finish_manifest(){", 'bulk_manifest.SKIPPED"; fi; }')
+           + cut("finish(){", 'exit "$rc"; }'))
+    (tmp_path / "hp1" / "base_e4b_qwen3hp1").mkdir(parents=True)
+    (tmp_path / "hp1" / "base_e4b_qwen3hp1" / "index.json").write_text("{}")
+    (tmp_path / "hp1" / "canonical_qwen3hp1_hp1_k00_s3407.safetensors").write_bytes(b"\x01" * 64)
+    (tmp_path / "logs").mkdir()
+    sh = tmp_path / "finish.sh"
+    sh.write_text(f'W={tmp_path}; NONCE=n; cd "$W"; say(){{ echo "SAY: $*"; }}; left(){{ echo {left_s}; }}\n' + fns + "finish 0\n")
+    return subprocess.run(["bash", str(sh)], capture_output=True, text=True, timeout=60)
+
+
+def test_the_finish_path_writes_the_manifest_when_time_allows(tmp_path):
+    """A normal end, a refusal or a deadline stop all go through finish(): a stopped run still pins its bulk bytes."""
+    import json
+    p = _finish_harness(tmp_path, 100000)
+    assert p.returncode == 0, p.stderr
+    man = json.loads((tmp_path / "hp1" / "bulk_manifest.json").read_text())
+    assert {r["path"] for r in man["files"]} == {"hp1/base_e4b_qwen3hp1/index.json", "hp1/canonical_qwen3hp1_hp1_k00_s3407.safetensors"}
+    assert (tmp_path / "TP_DONE.n").exists()
+
+
+def test_the_finish_path_skips_the_manifest_without_the_time_and_says_so(tmp_path):
+    p = _finish_harness(tmp_path, 5)
+    assert p.returncode == 0, p.stderr
+    assert not (tmp_path / "hp1" / "bulk_manifest.json").exists() and (tmp_path / "hp1" / "bulk_manifest.SKIPPED").exists()
+    assert (tmp_path / "TP_DONE.n").exists()
