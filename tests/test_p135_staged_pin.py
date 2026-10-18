@@ -32,7 +32,7 @@ SOURCES = {
     "k8_bake.py": REPO / "bench" / "p39" / "k8_bake.py",
     "calib.json": REPO / "bench" / "p39" / "calib.json",
     "test_fusion_modes.py": REPO / "tests" / "test_fusion_modes.py",
-    "test_fused_glue_decode_graphs_gpu.py": REPO / "tests" / "test_fused_glue_decode_graphs_gpu.py",
+    "test_fused_glue_decode_graphs_gpu.py": REPO / "bench" / "p136" / "premise" / "test_fused_glue_decode_graphs_gpu.py",
 }
 SHARED_WITH_FAM = ("p115_quality.py", "p110_box.py", "p108_box.py", "p97_box.py", "k8_bake.py", "calib.json",
                    "test_fusion_modes.py")

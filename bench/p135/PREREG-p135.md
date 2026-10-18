@@ -105,3 +105,23 @@ Batches above one row (W16), other cards, prefill, the int4 route, and Mixtral's
 - `tests/test_p135_speed.py`: the self-tests; the census, folds and fp32 path at Mixtral's real depth; the swap's
   exactness; two alternating runners against each alone.
 - `tests/test_p135_staged_pin.py`: the pin, the stage lists, the shared bytes, the constants and the guard.
+
+## Amendment 1 (2026-10-18, after `p135-5090-1`, before any data)
+
+**What happened.** `p135-5090-1` (HARNESS_ERROR, $0.038) stopped at the premise on the card, before any fetch. Nothing was
+measured and no P135 datum has been seen. One premise test failed:
+`test_fused_glue_decode_graphs_gpu.py::test_the_folds_replay_exactly_as_their_padded_eager_step` required
+`rope_norm_heads` calls and saw 0. Since grouped-nf4-gemm#528, round 2's attention fold runs q's and k's per-head norm
+and rotary as `rope_norm_qk`, one launch, wherever the kernel exports it. The pinned v0.45.0 does. The test in `tests/`
+predates that, and CI never runs it (it needs sm_89+). P136 met the same failure and stages a route-exact copy
+(`bench/p136/premise/test_fused_glue_decode_graphs_gpu.py`, P136 Amendment 1), which requires the route the kernel
+offers.
+
+**The change.** P135's premise stages P136's copy (sha256 `8e5b2f77…`) in place of the `tests/` file. `tests/` keeps the
+bytes P115, P123 and P125 pin. Nothing else moves: the box, the rule, the pins, the predictions and the budget are as
+registered. The failing case exercises a q/k-norm model. Mixtral has no `q_norm`, so its attention fold runs `rope_heads`
+(FAM Amendment 5's table), and the box's census and fold checks are unchanged.
+
+**The run ids** (the maintainer's ruling, as for P136, P138 and HP1). `p135-5090-1` is strike 1: a box-started failure,
+before any data. The reading runs as `p135-5090-2`, P135's **last** box-started attempt. `-3` stays a spare for a refusal
+before create only.
