@@ -15,9 +15,9 @@ GNF4_SHA=70bc03cb7a61b03c4e801e7423c58c103a1b6d7d # v0.46.1 tag commit
 SHORT=32; LONG=160; REPS=3; NEED_FETCH=3600; NEED_BAKE=1800; NEED_ARM=1800; NEED_CAPTURE=1800
 DRY=${P136_DRY:-0}; GPU_CLASS=5090; MIN_RAM_GB=60
 case "$P136_RUN_ID" in
-  p136-gemma4-5090-1|p136-gemma4-5090-2) FAMILY=gemma4; MODEL=google/gemma-4-26B-A4B-it; REV=4d7ae4984b7db7de8f8457170b3f1a419ee76d52; MOE_LAYERS=30; MIN_DISK_GB=200; BATCHES='1 16';;
-  p136-mixtral-5090-1|p136-mixtral-5090-2) FAMILY=mixtral; MODEL=mistralai/Mixtral-8x7B-Instruct-v0.1; REV=eba92302a2861cdc0098cc54bc9f17cb2c47eb61; MOE_LAYERS=32; MIN_DISK_GB=220; BATCHES='1 16';;
-  p136-gptoss-5090-1|p136-gptoss-5090-2) FAMILY=gptoss; MODEL=openai/gpt-oss-20b; REV=6cee5e81ee83917806bbde320786a8fb61efebee; MOE_LAYERS=24; MIN_DISK_GB=200; BATCHES='16';;
+  p136-gemma4-5090-1|p136-gemma4-5090-2|p136-gemma4-5090-3|p136-gemma4-5090-4|p136-gemma4-5090-5) FAMILY=gemma4; MODEL=google/gemma-4-26B-A4B-it; REV=4d7ae4984b7db7de8f8457170b3f1a419ee76d52; MOE_LAYERS=30; MIN_DISK_GB=200; BATCHES='1 16';;
+  p136-mixtral-5090-1|p136-mixtral-5090-2|p136-mixtral-5090-3|p136-mixtral-5090-4|p136-mixtral-5090-5) FAMILY=mixtral; MODEL=mistralai/Mixtral-8x7B-Instruct-v0.1; REV=eba92302a2861cdc0098cc54bc9f17cb2c47eb61; MOE_LAYERS=32; MIN_DISK_GB=220; BATCHES='1 16';;
+  p136-gptoss-5090-1|p136-gptoss-5090-2|p136-gptoss-5090-3|p136-gptoss-5090-4|p136-gptoss-5090-5) FAMILY=gptoss; MODEL=openai/gpt-oss-20b; REV=6cee5e81ee83917806bbde320786a8fb61efebee; MOE_LAYERS=24; MIN_DISK_GB=200; BATCHES='16';;
   p136-a2000-dry-1) [ "$DRY" = 1 ] || { say 'dry id requires P136_DRY=1'; finish 78; }; FAMILY=dry; MODEL=none; REV=none; MOE_LAYERS=0; MIN_DISK_GB=0; BATCHES='';;
   *) say "unregistered run ID: $P136_RUN_ID"; finish 78;;
 esac

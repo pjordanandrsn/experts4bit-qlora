@@ -55,6 +55,9 @@ PASS="P136_RUN_ID=$RUN_ID P136_RUN_NONCE=$NONCE P136_DEADLINE_EPOCH=$DEADLINE P1
 case "$RUN_ID" in
   p136-gemma4-5090-1|p136-mixtral-5090-1|p136-gptoss-5090-1) :;;
   p136-gemma4-5090-2|p136-mixtral-5090-2|p136-gptoss-5090-2) :;;   # Amendment 2: each family's second and last attempt
+  p136-gemma4-5090-3|p136-gemma4-5090-4|p136-gemma4-5090-5) :;;   # Amendment 3: IDs a pre-create refusal may consume
+  p136-mixtral-5090-3|p136-mixtral-5090-4|p136-mixtral-5090-5) :;;
+  p136-gptoss-5090-3|p136-gptoss-5090-4|p136-gptoss-5090-5) :;;
   p136-a2000-dry-1) PASS="$PASS P136_DRY=1";;
   *) say "refusing unregistered run ID: $RUN_ID"; exit 78;;
 esac
