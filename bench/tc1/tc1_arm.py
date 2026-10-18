@@ -1482,6 +1482,20 @@ def prepare(a, tok=None):
     return rec
 
 
+def order_rows(train, order_seed):
+    """HP1 (--order-seed): the train rows permuted by random.Random(order_seed), before the fixed (i*accum+j) layout reads them, so a
+    seed moves the data order as well as the init and every arm at the same order seed sees the same order (paired). None -> the rows
+    untouched (today's fixed order, byte-identical) and no record. The record's order_sha is a sha256 over the permutation itself, so
+    two arms' receipts prove the same order without carrying the rows."""
+    if order_seed is None:
+        return train, None
+    import random
+    perm = list(range(len(train)))
+    random.Random(int(order_seed)).shuffle(perm)
+    return [train[i] for i in perm], {"order_seed": int(order_seed), "n_rows": len(perm),
+                                      "order_sha": sha_bytes(json.dumps(perm, separators=(",", ":")).encode())}
+
+
 def collate(rows, pad_id):
     """T13: right-pad M token rows to the longest; labels -100 on the pads; a 0/1 attention mask. M == 1 -> no padding."""
     L = max(len(r) for r in rows)
@@ -2978,6 +2992,257 @@ def frozen_base_probe(model, framework):
     return out
 
 
+# ----------------------------------------------------------------------------- HP1 (bench/hp1/HP1-PREREG.md): the whole base, the canonical adapter
+def _hp1_path():
+    """hp1_lib beside this file (a box stages the pieces flat) or in the repo's bench/hp1."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    for d in (here, os.path.join(here, "..", "hp1")):
+        if os.path.exists(os.path.join(d, "hp1_lib.py")) and d not in sys.path:
+            sys.path.insert(0, d)
+
+
+def _hp1_absmax_fp32(qs):
+    """The fp32 absmax a bnb QuantState's dequantize actually multiplies by: its own absmax, or -- nested statistics
+    (double quant) -- dequantize_blockwise(absmax, state2) + offset, as bitsandbytes.functional.dequantize_4bit does."""
+    import bitsandbytes.functional as BF
+    if not bool(getattr(qs, "nested", False)):
+        return qs.absmax.float()
+    return (BF.dequantize_blockwise(qs.absmax, qs.state2) + qs.offset).float()
+
+
+def hp1_expert_source(mod, hidden):
+    """For one experts module of ANY framework: ({kind: raw(e)}, num_experts, {kind: regime}, {kind: deq(e)}). raw(e) is expert e's
+    weight as STORED, framework-neutral (hp1_lib.dequant_raw reads it): {"fmt": "nf4"|"fp4", packed uint8 [n/2], absmax fp32
+    [n/blocksize] (the values the framework's dequant multiplies by), shape [d1, d2] of the stored matrix, blocksize, code,
+    transposed} or {"fmt": "bf16", "w": [out, in]}. deq(e) is the framework's OWN dequant to bf16 [out, in] (the per-expert
+    generalisation of T21's expert-0 probe): e4b's Experts4bit._dequantize_expert (offload home copies when offloaded; the
+    double-quantized absmax rows when ABSMAX-DQ); bnb dequantize_4bit with the stack's own quant_state otherwise. The digest is
+    taken over deq; the export writes raw; hp1_lib's STRICT check proves dequant_raw(raw) == deq bitwise."""
+    import bitsandbytes.functional as BF
+    from bitsandbytes.functional import QuantState
+    inner = innermost_experts(mod)
+    if hasattr(inner, "_dequantize_expert") and hasattr(inner, "gate_up_absmax"):
+        if int(getattr(inner, "bits", 4)) != 4:
+            raise RuntimeError(f"e4b experts at {getattr(inner, 'bits', None)} bits: HP1 exports 4-bit stacks only")
+        h = expert_offload_handle(mod, inner)
+        dq = "_e4b_absmax_dq" in getattr(inner, "__dict__", {})
+        src, raw, deq = {}, {}, {}
+        for kind, pk, am, shp in (("gate_up", "gate_up_proj", "gate_up_absmax", "_gate_up_shape"), ("down", "down_proj", "down_absmax", "_down_shape")):
+            if h is not None:
+                packed, absmax = h.home[pk].to(h.device), h.home[am].to(h.device)
+            else:
+                packed = getattr(inner, pk)
+                if dq:
+                    from experts4bit_qlora.absmax_dq import expert_absmax_rows
+                    absmax = expert_absmax_rows(inner, kind)
+                else:
+                    absmax = getattr(inner, am)
+            src[kind] = (packed, absmax, tuple(int(v) for v in getattr(inner, shp)))
+
+            def raw_e4b(e, kind=kind):
+                packed, absmax, shape = src[kind]
+                return {"fmt": inner.quant_type, "packed": packed[int(e)].reshape(-1), "absmax": absmax[int(e)].float().reshape(-1),
+                        "shape": list(shape), "blocksize": int(inner.blocksize), "code": inner.code.float(), "transposed": False,
+                        "dtype": "bfloat16"}
+
+            def deq_e4b(e, kind=kind):
+                packed, absmax, shape = src[kind]
+                return inner._dequantize_expert(packed, absmax, shape, int(e), torch.bfloat16)
+            raw[kind], deq[kind] = raw_e4b, deq_e4b
+        regime = f"{inner.quant_type}/{inner.blocksize}" + ("+dq" if dq else "")
+        return raw, int(inner.num_experts), {"gate_up": regime, "down": regime}, deq
+    transposed = bool(getattr(inner, "is_transposed", False))
+    cands = [n for n, _ in inner.named_parameters(recurse=False)]
+    pz = getattr(inner, "parametrizations", None)
+    if pz is not None:
+        cands += [k for k in pz.keys() if k not in cands]
+    raw, deq, regimes, E_seen = {}, {}, {}, set()
+    for attr in cands:
+        p = _raw_param(inner, attr)
+        shp = expert_stack_shape(inner, attr)
+        if p is None or shp is None:
+            continue
+        kind, rule = expert_kind(shp, hidden, attr)
+        if kind is None:
+            continue
+        if kind in raw:
+            raise RuntimeError(f"{attr}: a second {kind} stack on one experts module")
+        qs = quant_state_of(inner, attr, p)
+        if qs is not None:
+            E, d1, d2 = (int(v) for v in qs.shape)
+            numel_e, bs = d1 * d2, int(qs.blocksize)
+            if numel_e % bs:
+                raise RuntimeError(f"{attr}: {d1}x{d2} is not a multiple of blocksize {bs}; experts do not tile into blocks")
+            nb = numel_e // bs
+            regimes[kind] = f"{qs.quant_type}/{bs}" + ("+dq" if bool(getattr(qs, "nested", False)) else "")
+            absmax_all = _hp1_absmax_fp32(qs)
+
+            def raw_bnb(e, p=p, qs=qs, d1=d1, d2=d2, numel_e=numel_e, nb=nb, bs=bs, absmax_all=absmax_all):
+                flat = p.data.reshape(-1)
+                return {"fmt": qs.quant_type, "packed": flat[e * numel_e // 2:(e + 1) * numel_e // 2], "absmax": absmax_all[e * nb:(e + 1) * nb],
+                        "shape": [d1, d2], "blocksize": bs, "code": qs.code.float(), "transposed": transposed, "dtype": str(qs.dtype).replace("torch.", "")}
+
+            def deq_bnb(e, p=p, qs=qs, d1=d1, d2=d2, numel_e=numel_e, nb=nb, absmax_all=absmax_all):
+                flat = p.data.reshape(-1)
+                st = QuantState(absmax=absmax_all[e * nb:(e + 1) * nb], shape=torch.Size((d1, d2)), code=qs.code, blocksize=qs.blocksize,
+                                quant_type=qs.quant_type, dtype=qs.dtype)
+                w = BF.dequantize_4bit(flat[e * numel_e // 2:(e + 1) * numel_e // 2].reshape(-1, 1), quant_state=st).to(torch.bfloat16)
+                return w.t().contiguous() if transposed else w
+            raw[kind], deq[kind] = raw_bnb, deq_bnb
+        elif p.ndim == 3 and p.is_floating_point():
+            regimes[kind] = f"{_dtype_label(p.dtype)} passthrough"
+
+            def deq_float(e, p=p):
+                w = p.data[e].to(torch.bfloat16)
+                return w.t().contiguous() if transposed else w
+            raw[kind] = (lambda e, f=deq_float: {"fmt": "bf16", "w": f(e)})
+            deq[kind] = deq_float
+        else:
+            raise RuntimeError(f"{attr}: an expert stack this evaluator cannot read ({type(p).__name__}, ndim {p.ndim})")
+        E_seen.add(int(shp[0]))
+    if set(raw) != {"gate_up", "down"} or len(E_seen) != 1:
+        raise RuntimeError(f"experts module: stacks {sorted(raw)} with expert counts {sorted(E_seen)}; need gate_up + down, one count")
+    return raw, E_seen.pop(), regimes, deq
+
+
+def hp1_linear_source(proj):
+    """(raw() -> the projection's frozen weight as stored, framework-neutral (see hp1_expert_source), deq() -> the bf16 [out, in]
+    weight its forward multiplies, bias or None, regime): a bnb Linear4bit weight through its own quant_state, a plain Linear's
+    bytes cast to bf16. The owner is the module, its e4b `base` or its PEFT `base_layer`, whichever carries a weight first (as
+    T21's attention probe reads it)."""
+    import bitsandbytes.functional as BF
+    w, owner = None, None
+    for owner in (proj, getattr(proj, "base", None), getattr(proj, "base_layer", None)):
+        w = getattr(owner, "weight", None) if owner is not None else None
+        if w is not None:
+            break
+    if w is None:
+        raise RuntimeError(f"{type(proj).__name__}: no weight found")
+    while hasattr(owner, "base_layer") and getattr(owner.base_layer, "weight", None) is w:
+        owner = owner.base_layer
+    bias = getattr(owner, "bias", None)
+    qs = getattr(w, "quant_state", None)
+    if qs is not None:
+        regime = f"{qs.quant_type}/{qs.blocksize}" + ("+dq" if bool(getattr(qs, "nested", False)) else "")
+        d1, d2 = (int(v) for v in qs.shape)
+        return ((lambda: {"fmt": qs.quant_type, "packed": w.data.reshape(-1), "absmax": _hp1_absmax_fp32(qs), "shape": [d1, d2],
+                          "blocksize": int(qs.blocksize), "code": qs.code.float(), "transposed": False, "dtype": str(qs.dtype).replace("torch.", "")}),
+                (lambda: BF.dequantize_4bit(w.data, quant_state=qs).to(torch.bfloat16)), bias, regime)
+    return (lambda: {"fmt": "bf16", "w": w.data.to(torch.bfloat16)}), (lambda: w.data.to(torch.bfloat16)), bias, _dtype_label(w.dtype)
+
+
+def hp1_base_slots(model):
+    """Every frozen slot of the HP1 base, by canonical key -> (raw(), deq(), bias or None):
+      (layer, gate_up|down, expert)  each expert of each layer's OUTERMOST module named `experts`;
+      (layer, q|k|v|o, -1)           each attention projection;
+      (layer, router, -1)            the router `gate` beside the experts;
+      (layer, norm:<name>, -1)       every RMSNorm-like weight in the layer (input/post-attention/q/k norms);
+      (-1, embed|lm_head|final_norm, -1).
+    The non-quantized slots are bf16 in every framework here; they are covered so a framework that touched them is caught.
+    -> (slots, regimes, n_expert_layers)."""
+    hidden, _ = hidden_size_of(model)
+    out, regimes, layers, claimed = {}, {}, set(), set()
+
+    def bf16_slot(t):
+        return ((lambda: {"fmt": "bf16", "w": t.data.to(torch.bfloat16)}), (lambda: t.data.to(torch.bfloat16)), None)
+    for name, m in model.named_modules():
+        L = layer_index_of(name)
+        if L < 0 or any(name.startswith(c + ".") for c in claimed):
+            continue
+        if is_experts_module(name):
+            raw, E, reg, deq = hp1_expert_source(m, hidden)
+            regimes.update({f"expert {k}": v for k, v in reg.items()})
+            for kind in ("gate_up", "down"):
+                for e in range(E):
+                    # raw/deq bound as defaults: they are rebound for every experts module, so a closure would read the LAST layer's
+                    out[(L, kind, e)] = ((lambda kind=kind, e=e, raw=raw: raw[kind](e)), (lambda kind=kind, e=e, deq=deq: deq[kind](e)), None)
+            layers.add(L)
+            claimed.add(name)
+        elif all(getattr(m, pn, None) is not None for pn in ("q_proj", "k_proj", "o_proj")):
+            for pn in ("q_proj", "k_proj", "v_proj", "o_proj"):
+                proj = getattr(m, pn, None)
+                if proj is None:
+                    continue
+                raw, deq, bias, reg = hp1_linear_source(proj)
+                regimes[f"attention {pn}"] = reg
+                out[(L, ATTN_KINDS[pn], -1)] = (raw, deq, bias)
+                claimed.add(f"{name}.{pn}")
+        elif name.split(".")[-1] == "gate" and isinstance(getattr(m, "weight", None), torch.Tensor):
+            out[(L, "router", -1)] = bf16_slot(m.weight)
+        elif "norm" in name.split(".")[-1].lower() and isinstance(getattr(m, "weight", None), torch.Tensor) and m.weight.ndim == 1:
+            out[(L, "norm:" + name.split(".")[-1], -1)] = bf16_slot(m.weight)
+    emb, head = model.get_input_embeddings(), model.get_output_embeddings()
+    if emb is not None:
+        out[(-1, "embed", -1)] = bf16_slot(emb.weight)
+    if head is not None:
+        out[(-1, "lm_head", -1)] = bf16_slot(head.weight)
+    final = [m for n, m in model.named_modules() if layer_index_of(n) < 0 and n.split(".")[-1] == "norm" and isinstance(getattr(m, "weight", None), torch.Tensor)]
+    if len(final) == 1:
+        out[(-1, "final_norm", -1)] = bf16_slot(final[0].weight)
+    return out, regimes, len(layers)
+
+
+def hp1_base_digest(model, slots=None):
+    """The HP1 training-base digest (STRICT, ruling item 3): every slot of ``hp1_base_slots`` dequantized THE FRAMEWORK'S OWN WAY,
+    fingerprinted on the device (hp1_lib.slot_fingerprint) and folded (sha256) in canonical key order. Also proves, on every
+    expert of layer 0 and every attention projection, that hp1_lib.dequant_raw(raw) is bitwise the framework's own dequant (the
+    evaluator reads raw). The receipt's `hp1.train_base` block."""
+    _hp1_path()
+    import hp1_lib
+    t0 = time.perf_counter()
+    if slots is None:
+        slots, regimes, n_layers = hp1_base_slots(model)
+    else:
+        regimes, n_layers = None, None
+    fps, raw_checked, raw_mismatch = {}, 0, []
+    with torch.no_grad():
+        first_L = min((k[0] for k in slots if k[0] >= 0), default=0)
+        for key, (raw, deq, _b) in slots.items():
+            w = deq()
+            fps[key] = (int(w.numel()), *hp1_lib.slot_fingerprint(w))
+            if key[0] == first_L and key[1] in ("gate_up", "down", "q", "k", "v", "o"):
+                w2 = hp1_lib.dequant_raw(raw(), device=w.device)
+                raw_checked += 1
+                if w2.shape != w.shape or not torch.equal(w2, w):
+                    raw_mismatch.append(str(key))
+            del w
+    digest, n = hp1_lib.fold_fingerprints(fps)
+    return {"digest": digest, "n_slots": n, "n_layers": n_layers, "regimes": regimes, "seconds": round(time.perf_counter() - t0, 1),
+            "raw_checked": raw_checked, "raw_mismatch": raw_mismatch[:8], "raw_ok": raw_checked > 0 and not raw_mismatch,
+            "method": "per-slot (int16 sum, position-weighted int16 sum) of the framework's own bf16 dequant; sha256 over sorted keys"}
+
+
+def hp1_export(model, a):
+    """--hp1-export DIR: after the step-N eval, write the canonical adapter (hp1_lib.export_canonical over lora_slots) and the
+    training-base digest; returns the receipt's `hp1` block. A failure is recorded in the block (the reducer VOIDs the arm for HP1),
+    never raised: the TC1 receipt itself stays whole."""
+    rec = {"export_dir": a.hp1_export}
+    try:
+        _hp1_path()
+        import hp1_lib
+        hidden, _ = hidden_size_of(model)
+        slots, unmapped, _rules = lora_slots(model, hidden)
+        if unmapped:
+            raise RuntimeError(f"{len(unmapped)} unmapped LoRA slots: {unmapped[:3]}")
+        meta = {"framework": a.framework, "arm": a.arm, "tag": a.tag, "fam": a.fam, "seed": a.seed, "order_seed": getattr(a, "order_seed", None),
+                "lora_init": a.lora_init, "adapter_dtype": a.adapter_dtype, "steps": a.steps, "model": a.model, "revision": a.revision}
+        rec["adapter"] = hp1_lib.export_canonical(model, slots, os.path.join(a.hp1_export, f"canonical_{a.fam}_{a.tag}.safetensors"), meta)
+    except Exception as e:
+        rec["adapter_error"] = f"{type(e).__name__}: {str(e)[:300]}"
+    try:
+        slots, regimes, n_layers = hp1_base_slots(model)
+        rec["train_base"] = hp1_base_digest(model, slots)
+        rec["train_base"].update(regimes=regimes, n_layers=n_layers)
+        if getattr(a, "hp1_export_base", 0):        # once per framework: the base as stored, for the one evaluator
+            rec["base_export"] = hp1_lib.export_base(slots, os.path.join(a.hp1_export, f"base_{a.framework}_{a.fam}"),
+                                                     {"framework": a.framework, "fam": a.fam, "model": a.model, "revision": a.revision,
+                                                      "train_base_digest": rec["train_base"]["digest"], "regimes": regimes})
+    except Exception as e:
+        rec["train_base_error"] = f"{type(e).__name__}: {str(e)[:300]}"
+    return rec
+
+
+
 # ----------------------------------------------------------------------------- the arm (both frameworks, one code path)
 # ------------------------------------------------------------------ P45: where a training step's time goes (host vs device)
 PROFILE_FAMILIES = [                     # first match wins; the order is the registration (P45-PREREG.md)
@@ -3535,6 +3800,7 @@ def run_arm(a, load_fn, sampler=True):
     if tk.get("pack") and tk.get("seq") != a.seq:   # TC1 amendment 39: a packed file's rows ARE its seq; an arm labelled otherwise would mis-record its fixture
         stub(a, "tokens_mismatch", f"{a.tokens} is packed at seq {tk.get('seq')}, the arm runs --seq {a.seq}", code=13)
     train, ev = tk["train"], tk["eval"][:a.eval_n]
+    train, order_rec = order_rows(train, getattr(a, "order_seed", None))   # HP1: None keeps today's fixed order
     template, eos, pad_id = tk.get("template", "clinical"), tk.get("eos", "") or "", tk.get("pad_id")
     M = int(getattr(a, "micro_batch", 1) or 1)
 
@@ -3890,6 +4156,12 @@ def run_arm(a, load_fn, sampler=True):
     except Exception as e:
         adapter = {"error": f"{type(e).__name__}: {str(e)[:300]}"}
     _adapter_phase.__exit__(None, None, None)
+    hp1 = None
+    if getattr(a, "hp1_export", None):              # HP1: the canonical adapter + the training-base digest (bench/hp1/HP1-PREREG.md)
+        with PH("hp1_export"):
+            hp1 = hp1_export(model, a)
+        print("HP1 " + json.dumps({k: (v.get("sha256") if k == "adapter" else v.get("digest") if k == "train_base" else v)
+                                   for k, v in hp1.items()}), flush=True)
 
     mean_w = statistics.mean(ps.samples) if ps.samples else None
     net_w = (mean_w - idle_w) if mean_w else None
@@ -4215,6 +4487,10 @@ def run_arm(a, load_fn, sampler=True):
         "peak_vram_gb_phases": ({k: round(v / 1e9, 3) for k, v in _PHASE_PEAKS.items()} if _PHASE_PEAKS is not None else None),   # TC1 amendment 56
         "note": getattr(a, "note", None),                                                                                  # TC1b: --note, verbatim
     }
+    if order_rec is not None:                     # HP1: only a --order-seed run carries the key; a default receipt keeps its exact key set
+        cell["order"] = order_rec
+    if hp1 is not None:                           # HP1: only an --hp1-export run carries the key, as `order` above
+        cell["hp1"] = hp1
     write_json(receipt_path(a), cell)
     if mcen is not None:                          # TC1 amendment 23: the census's headline on its own line (the CELL line leaves it out)
         mc = mem_census or {}
@@ -5673,6 +5949,10 @@ def selftest(a):
     tc2 = _selftest_tc2(a, d, rec, e_ref)       # TC2: T23-T27 on the tiny models
     tc3 = _selftest_tc3(a, d, rec)                 # TC3: the levers' helpers, the step context, the host-RAM report, the lever refusal
     assert all("mem_census" not in r for r in R.values()), "an arm without --mem-census must carry no mem_census"
+    # HP1 (#1709): a default arm passes neither --order-seed nor --hp1-export, so its receipt keeps today's exact key set (neither
+    # key appears), and hp1_lib is never imported -- a Q235 / R2 box that stages tc1_arm.py alone needs no new file
+    assert all("order" not in r and "hp1" not in r for r in R.values()), "a default arm must carry neither `order` nor `hp1`"
+    assert "hp1_lib" not in sys.modules, "hp1_lib is imported only by an --hp1-export run"
     mcen = _selftest_memcensus(a, d, rec)          # TC1 amendment 23: the memory census's CPU-reachable paths
     a.framework, a.arm, a.tag, a.lora_init, a.adapter_dtype = "e4b", "fused", "fused_attn4", "native", "fp32"
 
@@ -5749,6 +6029,12 @@ def main():
                          "deterministic tensor (U(-1/sqrt(fan_in), 1/sqrt(fan_in)) from sha256(seed|layer|kind|expert)) and assert every B zero; "
                          "the receipt's matched_init.complete says whether every slot was mapped")
     ap.add_argument("--tag", default=None)
+    ap.add_argument("--hp1-export", default=None,
+                    help="HP1: after the step-N eval write the canonical fp32 adapter (canonical_<fam>_<tag>.safetensors) to this directory and "
+                         "record the training-base digest (receipt `hp1`); unset = nothing written, the receipt's `hp1` is null")
+    ap.add_argument("--hp1-export-base", type=int, default=0,
+                    help="HP1: with --hp1-export, also write the frozen base AS STORED (framework-neutral packed NF4 per slot, base_<framework>_<fam>/) "
+                         "for the one evaluator; one run per framework is enough (the digest proves every other run trained on the same bytes)")
     ap.add_argument("--fam", default="qwen3")
     ap.add_argument("--model", default="Qwen/Qwen3-30B-A3B")
     ap.add_argument("--revision", default="ad44e777bcd18fa416d9da3bd8f70d33ebb85d39")
@@ -5775,6 +6061,10 @@ def main():
     ap.add_argument("--alpha", type=int, default=16)
     ap.add_argument("--lr", type=float, default=2e-4)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--order-seed", type=int, default=None,
+                    help="HP1: permute the train rows with random.Random(S) before the fixed (i*accum+j) layout (receipt `order`: seed, "
+                         "n_rows, order_sha); unset = today's fixed order, byte-identical, and no `order` key. --seed alone moves only "
+                         "the init")
     ap.add_argument("--dgrad", type=int, default=1,
                     help="P56: enable_fast_train(dgrad=...) on the `fused` arm. 1 (default, every tp1-tp4 row to date) "
                          "routes the BACKWARD through grouped-nf4-gemm's single-launch dgrad kernel; 0 keeps its "
@@ -5835,6 +6125,17 @@ def main():
     if a.absmax_dq and a.offload:
         stub(a, "refused", "--absmax-dq 1 with --offload 1: the double-quantized expert absmax is resident-only -- expert offload stages "
              "the fp32 absmax by name, and the library refuses it (compress_expert_absmax_ / enable_expert_offload)", {"phase": "preamble"}, code=3)
+    # HP1: the export flags need bench/hp1/hp1_lib.py (beside this file on a box, ../hp1 in the repo). Refused before anything loads
+    # -- and before the CUDA check, so CI drives it -- with a stub and one line, never a traceback (#1709, the maintainer's condition 6)
+    if getattr(a, "hp1_export_base", 0) and not getattr(a, "hp1_export", None):
+        stub(a, "refused", "--hp1-export-base 1 needs --hp1-export DIR (the base is written beside the canonical adapter)", {"phase": "preamble"}, code=3)
+    if getattr(a, "hp1_export", None):
+        _hp1_path()
+        try:
+            import hp1_lib  # noqa: F401
+        except ImportError as e:
+            stub(a, "refused", f"--hp1-export needs hp1_lib.py beside tc1_arm.py or in ../hp1 (stage bench/hp1/hp1_lib.py with "
+                 f"TC1_EXTRA_STAGE): {type(e).__name__}: {str(e)[:160]}", {"phase": "preamble"}, code=3)
     if not torch.cuda.is_available():
         stub(a, "harness_error", "torch.cuda.is_available() is False on a GPU lane", code=10)
     loader = {"e4b": load_e4b, "unsloth": load_unsloth, "hf": load_hf, "axolotl": load_axolotl}[a.framework]

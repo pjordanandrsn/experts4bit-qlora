@@ -2334,3 +2334,81 @@ def test_phase_peaks_keep_peak_vram_gb_to_the_phases_after_reset_peak(monkeypatc
         m.phase_mark(name)
     assert m._PHASE_PEAKS == {"setup": 31_000_000_000, "eval": 28_200_000_000, "train": 24_900_000_000}
     assert m.peak_gb() == 28.2                                                # not 31.0: setup stays out, as without the flag
+
+
+def test_hp1_order_seed_permutes_identically_and_off_is_untouched():
+    """HP1 --order-seed: unset leaves the train rows as they are (the same list object, no record); a seed permutes them
+    deterministically, so two arms at the same order seed get the same rows in the same order and the same order_sha, a
+    different seed gives a different order, and the permutation keeps every row exactly once."""
+    m = _load_arm_module()
+    rows = [[i, i + 1, i + 2] for i in range(50)]
+    same, rec = m.order_rows(rows, None)
+    assert same is rows and rec is None
+    a1, r1 = m.order_rows(rows, 3407)
+    a2, r2 = m.order_rows([list(r) for r in rows], 3407)
+    b, rb = m.order_rows(rows, 3408)
+    assert a1 == a2 and r1 == r2 and r1["order_seed"] == 3407 and r1["n_rows"] == 50
+    assert a1 != rows and b != a1 and rb["order_sha"] != r1["order_sha"]
+    assert sorted(map(tuple, a1)) == sorted(map(tuple, rows))
+    assert rows[0] == [0, 1, 2]            # the source list is not shuffled in place
+
+
+def test_base_slots_bind_each_layer_to_its_own_experts(monkeypatch):
+    """Regression: hp1_base_slots once bound every expert slot to the LAST layer's dequantizer (a late-binding closure), so a
+    2-layer base exported layer 1's experts under layer 0's keys. The A2000 shakedown's zero-adapter check caught it (0.437 nats)."""
+    import torch
+    import torch.nn as nn
+    tc1 = _load_arm_module()
+    H = 16
+
+    class Experts(nn.Module):
+        def __init__(self, tag):
+            super().__init__()
+            self.tag = tag
+
+    root = nn.Module()
+    root.config = type("C", (), {"hidden_size": H})()
+    layers = nn.ModuleList()
+    for i in range(3):
+        blk, mlp = nn.Module(), nn.Module()
+        mlp.add_module("experts", Experts(i))
+        blk.add_module("mlp", mlp)
+        layers.append(blk)
+    root.add_module("layers", layers)
+    root.get_input_embeddings = lambda: None
+    root.get_output_embeddings = lambda: None
+
+    def fake_source(mod, hidden):
+        t = mod.tag
+        raw = {k: (lambda e, k=k: {"fmt": "bf16", "w": torch.full((2, 2), float(100 * t + e), dtype=torch.bfloat16)}) for k in ("gate_up", "down")}
+        deq = {k: (lambda e, k=k: torch.full((2, 2), float(100 * t + e), dtype=torch.bfloat16)) for k in ("gate_up", "down")}
+        return raw, 2, {"gate_up": "x", "down": "x"}, deq
+    monkeypatch.setattr(tc1, "hp1_expert_source", fake_source)
+    slots, _regimes, n_layers = tc1.hp1_base_slots(root)
+    assert n_layers == 3
+    for L in range(3):
+        for e in range(2):
+            assert float(slots[(L, "gate_up", e)][1]()[0, 0]) == 100 * L + e
+            assert float(slots[(L, "down", e)][0]()["w"][0, 0]) == 100 * L + e
+
+
+def test_hp1_export_refuses_cleanly_without_hp1_lib(tmp_path):
+    """#1709 condition 6: on a tree without bench/hp1 (main before the HP1 registration, or a box that staged tc1_arm.py alone),
+    --hp1-export is a `refused` stub (exit 3) with a one-line reason naming hp1_lib -- before anything loads, never a traceback.
+    --hp1-export-base without --hp1-export is refused the same way."""
+    import shutil
+    lone = tmp_path / "lone"
+    lone.mkdir()
+    shutil.copy(ARM, lone / "tc1_arm.py")              # no hp1_lib.py beside it and no ../hp1
+    out = tmp_path / "out"
+    out.mkdir()
+    common = ["--prereg", "hp1/HP1-PREREG.md", "--out", str(out), "--adapter-dir", str(out / "ad"), "--framework", "e4b", "--arm", "fused"]
+    p = subprocess.run([sys.executable, str(lone / "tc1_arm.py"), "--tag", "x", "--hp1-export", str(tmp_path / "hp1"), *common],
+                       capture_output=True, text=True, timeout=300, cwd=tmp_path)
+    assert p.returncode == 3 and "Traceback" not in p.stderr, (p.stdout + p.stderr)[-2000:]
+    rec = json.loads((out / "qwen3_e4b_x.json").read_text())
+    assert rec["status"] == "refused" and "hp1_lib" in rec["reason"] and "\n" not in rec["reason"], rec
+    p = _run("--tag", "y", "--hp1-export-base", "1", *common)
+    assert p.returncode == 3 and "Traceback" not in p.stderr, (p.stdout + p.stderr)[-2000:]
+    rec = json.loads((out / "qwen3_e4b_y.json").read_text())
+    assert rec["status"] == "refused" and "--hp1-export DIR" in rec["reason"], rec
