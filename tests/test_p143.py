@@ -73,6 +73,20 @@ def test_the_bench_hands_the_kernel_the_served_calls_arguments():
         assert arg in kv_src, arg
 
 
+def test_every_contexts_kernel_args_outlive_its_graphs():
+    """The review of #1759: ``kernel_args`` returns fresh copies of the table and lengths, and a CUDA graph keeps only
+    their pointers. Each context's copies are held for the run and bound into the captured step as defaults (a late
+    lookup of a rebound name would read the next context's), and the held lengths are read back before any timing."""
+    src = (LANE / "p143_bench.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    step = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "step"]
+    assert len(step) == 1
+    defaults = [ast.unparse(d) for d in step[0].args.defaults]
+    assert step[0].args.args[0].arg == "args" and defaults[0] == "held[ctx]", defaults
+    assert "held[ctx] = [kv.kernel_args(layer, [0]) for layer in range(LAYERS)]" in src
+    assert src.index("REFUSED: context {ctx}'s held lengths read") < src.index("order = arms()"), "checked before timing"
+
+
 @pytest.mark.parametrize("script", ["p143_bench.py", "p143_reduce.py"])
 def test_the_self_tests_pass(script):
     out = _run(LANE / script, "--self-test")

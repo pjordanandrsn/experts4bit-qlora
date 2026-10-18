@@ -50,14 +50,18 @@ def run(out_path) -> int:
                         "block_tokens": kv.bt, "k_groups": kv.kgs[0], "block_table_cols": None},
            "reps": REPS, "passes": {}, "status": "ok"}
     graphs = {}
+    # kernel_args returns FRESH index_select copies of the block table and lengths. A CUDA graph keeps only their
+    # pointers and does not keep them alive, so every context's copies are held for the whole run (review of #1759):
+    # otherwise the allocator hands a freed context's blocks to the next context's copies and its graphs read those.
+    held = {}
     for ctx in CTX:
         kv.rewind(0, ctx)
-        args = [kv.kernel_args(layer, [0]) for layer in range(LAYERS)]
-        rec["geometry"]["block_table_cols"] = int(args[0][2].shape[1])
+        held[ctx] = [kv.kernel_args(layer, [0]) for layer in range(LAYERS)]
+        rec["geometry"]["block_table_cols"] = int(held[ctx][0][2].shape[1])
         for s in SPLITS:
             kw = {} if s is None else {"n_split": s}
 
-            def step():
+            def step(args=held[ctx], kw=kw):
                 for layer, (kf, vf, tbl, lens) in enumerate(args):
                     fp8_paged_decode_attention(q, kf, vf, tbl, lens, n_kv_heads=kv.Hs[layer], head_dim=kv.Ds[layer],
                                                block_tokens=kv.bt, k_groups=kv.kgs[layer], k_row_bytes=kv.k_row,
@@ -72,6 +76,12 @@ def run(out_path) -> int:
             with torch.cuda.graph(g):
                 step()
             graphs[(ctx, s)] = g
+    torch.cuda.synchronize()
+    for ctx, args in held.items():                       # the held lengths still read their context, every layer
+        got = sorted({int(lens[0].item()) for _kf, _vf, _tbl, lens in args})
+        if got != [ctx]:
+            raise SystemExit(f"REFUSED: context {ctx}'s held lengths read {got} before timing")
+    rec["held_lengths_checked"] = True
     order = arms()
     for p, seq in (("1", order), ("2", list(reversed(order)))):
         res = {}
@@ -91,8 +101,7 @@ def run(out_path) -> int:
                                  "p10_ms": round(ms[len(ms) // 10], 6), "p90_ms": round(ms[(9 * len(ms)) // 10], 6)}
             print(f"P143 pass {p} ctx {ctx} n_split {s}: {res[f'{ctx}/{s}']['median_ms']:.4f} ms per 48 launches", flush=True)
         rec["passes"][p] = res
-    import torch as _t
-    rec["device"] = {"name": _t.cuda.get_device_name(0), "sm_count": _t.cuda.get_device_properties(0).multi_processor_count,
+    rec["device"] = {"name": torch.cuda.get_device_name(0), "sm_count": torch.cuda.get_device_properties(0).multi_processor_count,
                      "utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
     with open(out_path, "w") as f:
         json.dump(rec, f, indent=1)
