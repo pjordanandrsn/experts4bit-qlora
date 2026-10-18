@@ -121,3 +121,24 @@ def test_default_store_read_and_lever_store_void(tmp_path):
         census["labels"] = ["CLASS_MAP_INCOMPLETE"]
         census_path.write_text(json.dumps(census))
         assert r.assess(root, family, "a" * 40)["verdict"] == "VOID"
+
+
+RUN_ID = re.compile(r"p136-(?:gemma4|mixtral|gptoss)-5090-\d|p136-a2000-dry-\d")
+
+
+def _case_ids(script, var):
+    """The run IDs one ``case "$VAR" in ... esac`` block accepts (its pattern lines only)."""
+    block = re.search(r'^case "\$' + var + r'" in\n(.*?)^esac', script, re.DOTALL | re.MULTILINE).group(1)
+    return {i for line in block.splitlines() if ")" in line for i in RUN_ID.findall(line.split(")", 1)[0])}
+
+
+def test_the_runner_and_the_driver_accept_the_same_registered_ids():
+    """Amendment 2: the box and the controller must agree on every run ID. A drift in either direction is paid for after
+    the create (an ID the drive accepts and the box refuses starts a box; the reverse creates an instance for nothing), and
+    every accepted ID is one the preregistration names."""
+    run = _case_ids((HERE / "p136_run.sh").read_text(), "P136_RUN_ID")
+    drive = _case_ids((HERE / "p136_drive.sh").read_text(), "RUN_ID")
+    named = set(RUN_ID.findall((HERE / "PREREG-p136.md").read_text()))
+    want = {f"p136-{f}-5090-{n}" for f in ("gemma4", "mixtral", "gptoss") for n in (1, 2)} | {"p136-a2000-dry-1"}
+    assert run == drive == want, (sorted(run ^ want), sorted(drive ^ want))
+    assert named == want, (sorted(named - want), sorted(want - named))

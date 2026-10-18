@@ -54,6 +54,7 @@ PASS="P136_RUN_ID=$RUN_ID P136_RUN_NONCE=$NONCE P136_DEADLINE_EPOCH=$DEADLINE P1
 # Explicit IDs only; the dry ID sets an inventory-only A2000 mode.
 case "$RUN_ID" in
   p136-gemma4-5090-1|p136-mixtral-5090-1|p136-gptoss-5090-1) :;;
+  p136-gemma4-5090-2|p136-mixtral-5090-2|p136-gptoss-5090-2) :;;   # Amendment 2: each family's second and last attempt
   p136-a2000-dry-1) PASS="$PASS P136_DRY=1";;
   *) say "refusing unregistered run ID: $RUN_ID"; exit 78;;
 esac
