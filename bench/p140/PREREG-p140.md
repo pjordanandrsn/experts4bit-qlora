@@ -78,19 +78,27 @@ S = (C + 4T) / (C + T), with T = 32.3 GB / r. S tends to 4 when copy-bound and t
 **Ranges:**
 - **r = 20–50 GB/s.** A PCIe 4.0 x16 host at the low end; PCIe 5.0 x16 pinned at the high end, which a 5090 can use when
   the host provides it. So T runs from 0.65 to 1.6 s.
-- **C = 0.8–1.6 s.** The 4090 reading fits r ≈ 17–20 GB/s with C ≈ 1.3–1.6 s (seen data, used here only for the scale).
+- **C = 0.8–1.74 s.** Under this model the 4090 reading solves exactly: A0 = C + 4T = 7.578 and L1 = C + T = 3.202
+  (the medians' means) give T = 1.459 s, C = 1.743 s, r = 22.1 GB/s. That is seen data, used here only for the scale.
   The 5090 runs the same kernels on more, faster SMs, so its C is no larger.
 
 **Corners:**
 
 | C (s) | r (GB/s) | T (s) | S |
 |---|---|---|---|
-| 1.6 | 20 | 1.6 | 2.5 |
-| 0.8 | 20 | 1.6 | 3.0 |
-| 1.6 | 50 | 0.65 | 1.9 |
-| 0.8 | 50 | 0.65 | 2.3 |
+| 1.74 | 20 | 1.61 | 2.44 |
+| 0.8 | 20 | 1.61 | 3.01 |
+| 1.74 | 50 | 0.65 | 1.81 |
+| 0.8 | 50 | 0.65 | 2.34 |
 
-**Predicted band: S in [1.8, 3.0], point about 2.4** (REPORTING). A host-link probe (the box's
+**Predicted band: S in [1.8, 3.0], point about 2.4** (REPORTING).
+
+**The band's assumptions**, both read from what the box records (`lscpu`, the pinned ceiling):
+- C is the non-overlapped step, host-side work included, so it is no larger than the 4090's only on a host CPU at
+  least as fast as the EPYC 7742. At C 2.0 and r 50, S is 1.73.
+- r is at least 20 GB/s. PCIe 4.0 x8 or a riser can sit below it: at C 0.8 and r 12, S is 3.31.
+
+A miss on either side is read against these two records. A host-link probe (the box's
 `report_offload_environment` pinned ceiling) is recorded beside the reading, so a miss can be read against r. It is
 never used to re-band.
 
