@@ -1,0 +1,35 @@
+{
+ "schema": "q235-fetch/1",
+ "repo": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+ "revision": "ac9c66cc9b46af7306746a9250f23d47083d689e",
+ "mode": "slice 4",
+ "probe": {
+  "files": 18,
+  "slice_bytes": 27047001621,
+  "completed_bytes": 27047001621,
+  "seconds": 211.4,
+  "gb_s": 0.128,
+  "finished": true,
+  "deadline_s": null,
+  "floor_gb_s": 0.0
+ },
+ "download_seconds": 211.8,
+ "files": 18,
+ "bytes": 27047001621,
+ "hash_seconds": 4.2,
+ "refusals": [],
+ "ok": true,
+ "slice": {
+  "layers": 4,
+  "tensors": 1575,
+  "shards": [
+   "model-00001-of-00118.safetensors",
+   "model-00002-of-00118.safetensors",
+   "model-00003-of-00118.safetensors",
+   "model-00004-of-00118.safetensors",
+   "model-00005-of-00118.safetensors",
+   "model-00006-of-00118.safetensors",
+   "model-00118-of-00118.safetensors"
+  ]
+ }
+}
