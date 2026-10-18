@@ -2241,8 +2241,23 @@ hp1_shakedown(){ local FAM=$1 MID=$2 REV=$3 TOK=$4 TS=$5 SF=${1}shake
   fi
   local RR=() BB=(); for fw in $FWS; do RR+=("$W/${SF}_${fw}_hp1shake_${fw}.json"); BB+=($W/hp1/shake/base_${fw}_${SF}); done
   HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts "${RR[@]}" --bases "${BB[@]}" --tokens $TOK --eval-n 8 \
-    --model "$TM" --revision $TR --expect-trainable 0 --out $W/hp1/eval_shake.json --require-all-scored 1 > logs/hp1_eval_shake.log 2>&1 || { tail -5 logs/hp1_eval_shake.log; return 1; }
-  tail -1 logs/hp1_eval_shake.log; rm -rf $SC; return 0; }
+    --model "$TM" --revision $TR --expect-trainable 0 --out $W/hp1/eval_shake.json --require-all-scored 1 > logs/hp1_eval_shake.log 2>&1 && { tail -1 logs/hp1_eval_shake.log; rm -rf $SC; return 0; }
+  tail -5 logs/hp1_eval_shake.log
+  # Amendment 3 covers an axolotl failure AT THE EVALUATOR too (hp1k-5090-8: the axolotl shake arm trained, then VOIDed on STRICT
+  # round-trip 6(b), and --require-all-scored ended the draw). If every non-axolotl arm SCORED and every non-axolotl base is OK, drop
+  # axolotl and go on; any other evaluator failure still ends the draw. (Stricter than hp1_eval's base_fine, which also accepts an
+  # UNUSED verified duplicate base: such a case fails closed here -- a missed drop, never a wrong one.)
+  local axv; axv=$($PY_E4B -c "import json,sys,os
+d = json.load(open(sys.argv[1]))
+ax = lambda t: 'axolotl' in str(t)
+rest_ok = all(a.get('status') == 'SCORED' for a in d.get('arms', []) if not ax(a.get('tag')))
+rest_ok = rest_ok and any(not ax(a.get('tag')) for a in d.get('arms', []))
+bases_ok = all(b.get('status') == 'OK' for b in d.get('bases', []) if not os.path.basename(str(b.get('dir', ''))).startswith('base_axolotl_'))
+bad = [a.get('status', '?') + ': ' + str(a.get('reason', ''))[:120] for a in d.get('arms', []) if ax(a.get('tag')) and a.get('status') != 'SCORED']
+print(bad[0] if rest_ok and bases_ok and bad else '')" $W/hp1/eval_shake.json 2>/dev/null)
+  [ -n "$axv" ] && [ "$HP1_AX_DROP" = 0 ] || return 1
+  HP1_AX_DROP=1; echo "HP1 AXOLOTL_DROPPED shakedown evaluator $axv (HP1-PREREG Amendment 3: the e4b K block runs; box 2 reads E vs Unsloth)" | tee -a summary.txt
+  rm -rf $SC; return 0; }
 # HP1's registered redraw rule: a run the evaluator VOIDs at RUN level is redrawn ONCE on the same box (its receipt moved to
 # hp1/void/<name>.a1; the redraw re-exports its framework's base), then the block is evaluated again; a second VOID voids the cell and
 # the readout says so. A BASE-level VOID is a systematic miss and is never redrawn (hp1_reduce.py voids lists run-level VOIDs only).
