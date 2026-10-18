@@ -84,6 +84,11 @@ TF_VER=${TC1_TRANSFORMERS_VER:-5.18.0}; BNB_VER=${TC1_BNB_VER:-0.50.2}; PEFT_VER
 # tc1_arm.py's _lam(step, N=a.steps) is transformers' formula), the `_t1` sub-fixture (micro-batch 1 x accum 1, N 20, 8 rows at 0 and N)
 # and the `_r64` sub-fixture (r 64 / alpha 64, everything else the field recipe). Every knob here is forwarded by tc1_drive.sh.
 CURVE_STEPS=${TC1_CURVE_STEPS:-200}; CURVE_EVAL_EVERY=${TC1_CURVE_EVAL_EVERY:-40}; CURVE_EVAL_N=${TC1_CURVE_EVAL_N:-16}
+# HP1 (the qwen3hp1 token; bench/hp1/HP1-PREREG.md): TC1b's field recipe at N = CURVE_STEPS, the 48 registered held-out rows read at step 0 and step N
+# only (the one evaluator re-reads the step-N adapters), selection seeds for the K block, fresh confirmation seeds for the P block
+HP1_EVAL_N=${TC1_HP1_EVAL_N:-48}; HP1_EVAL_EVERY=${TC1_HP1_EVAL_EVERY:-$CURVE_STEPS}
+HP1_SEL_SEEDS=${TC1_HP1_SEL_SEEDS:-"3407 3408 3409"}; HP1_CONF_SEEDS=${TC1_HP1_CONF_SEEDS:-"3410 3411 3412"}
+HP1_SHAKE_LAYERS=${TC1_HP1_SHAKE_LAYERS:-2}; HP1_SHAKE_STEPS=${TC1_HP1_SHAKE_STEPS:-3}
 T1_MB=${TC1_T1_MB:-1}; T1_ACCUM=${TC1_T1_ACCUM:-1}; R64_R=${TC1_R64_R:-64}; R64_ALPHA=${TC1_R64_ALPHA:-64}
 # ---------------------------------------------------------------- TC2 (the tc2small token; TC2-PREREG-draft "Fixture"): the small families' instrument -- N 60, eval 48 rows every
 # 20 steps, as tp4 registered for them (TP4-PREREG; amendment 2 cut only the LARGE families to N 20 / 8 rows). The tc2big token runs the field recipe above
@@ -116,6 +121,11 @@ case " $FAMILIES " in *" qwen3curve "*)
   echo "FIXTURE curve (TC1b): steps=$CURVE_STEPS eval_every=$CURVE_EVAL_EVERY eval_n=$CURVE_EVAL_N; t1: micro_batch=$T1_MB accum=$T1_ACCUM; r64: r=$R64_R alpha=$R64_ALPHA" | tee -a summary.txt
   echo "FIXTURE anchor (tp4's A_*): template=$A_TEMPLATE steps=$A_STEPS seq=$A_SEQ micro_batch=$A_MB accum=$A_ACCUM r=$A_R alpha=$A_ALPHA lr=$A_LR wd=$A_WD warmup=$A_WARMUP sched=$A_SCHED optim=$A_OPTIM seed=$A_SEED eval_every=$A_EVAL_EVERY eval_n=$A_EVAL_N" | tee -a summary.txt
   [ -n "${TC1_PREREG:-}" ] || PREREG=tc1/TC1B-PREREG.md     # TC1b: the curve token is governed by its own registration (the PI's); TC1_PREREG still overrides
+  ;;
+esac
+case " $FAMILIES " in *" qwen3hp1 "*)
+  echo "FIXTURE hp1 (HP1-PREREG): steps=$CURVE_STEPS eval_n=$HP1_EVAL_N eval_every=$HP1_EVAL_EVERY K seeds=[$HP1_SEL_SEEDS] P seeds=[$HP1_CONF_SEEDS] (--seed s --order-seed s); box-side shakedown: $HP1_SHAKE_LAYERS-layer truncation, $HP1_SHAKE_STEPS steps" | tee -a summary.txt
+  [ -n "${TC1_PREREG:-}" ] || PREREG=hp1/HP1-PREREG.md     # HP1: governed by its own registration; TC1_PREREG still overrides
   ;;
 esac
 case " $FAMILIES " in *" tc2small "*|*" tc2big "*|*" tc2mixtral "*|*" tc2qwen35off "*|*" tc2resident "*|*" tc2mixtralres "*|*" tc2qwen35mb1 "*)
@@ -625,6 +635,9 @@ arm_once(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$
     r64)    r=$R64_R; al=$R64_ALPHA; ex_tag=fused_attn4_m_r64;;
     # TC2: the small families' instrument (N 60, 48 held-out rows every 20 steps); everything else the field recipe; the trainable reference is the family's fused_attn4_m
     small)  s=$SMALL_STEPS; en=$SMALL_EVAL_N; ee=$SMALL_EVAL_EVERY; ex_tag=fused_attn4_m;;
+    # HP1: every e4b cell has the same trainable count, so the competitors' expectation reads the first K11 arm (the box-side shakedown, its own)
+    hp1)    s=$CURVE_STEPS; en=$HP1_EVAL_N; ee=$HP1_EVAL_EVERY; ex_tag=hp1_k11_s${HP1_SEL_SEEDS%% *};;
+    hp1shake) s=$HP1_SHAKE_STEPS; en=8; ee=$HP1_SHAKE_STEPS; ex_tag=hp1shake_e4b;;
   esac
   local EXP EXPARG=""; [ "$FW" != e4b ] && { EXP=$(expect_of $FAM $ex_tag); [ -n "$EXP" ] && EXPARG="--expect-trainable $EXP"; }
   local A; A=$(alarm_for $AL)
@@ -2108,6 +2121,73 @@ tc1_axolotl_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 HAL=$6 AAL=$7
 #   4 e4b/fused_attn4_p38 + unsloth/ckpt_unsloth_p38 (tp4's anchor pair at tp2/P38's fixture, clinical tokens) + unsloth/ckpt_unsloth_p38_t28
 #   5 e4b/fused_attn4_m_t1 + unsloth/ckpt_unsloth_m_t1 (micro-batch 1 x accum 1)   6 e4b/fused_attn4_m_r64 + unsloth/ckpt_unsloth_m_r64 (r 64 / alpha 64)
 # The matched pair runs first so a deadline cannot eat it; the family's tokens file carries CURVE_EVAL_N held-out rows (arms 5-6 take the first 8).
+# ---------------------------------------------------------------- HP1 (bench/hp1/HP1-PREREG.md): held-out parity, one evaluator, seeds per arm
+# hp1_cell CELL SEED: the K cell's flags (k<init><dtype>; init 0 = e4b's N(0, 1/r), 1 = PEFT's kaiming via matched:<seed>; dtype 0 = the
+# loader's bf16 expert adapters, 1 = fp32 everywhere)
+hp1_cell(){ case $1 in
+  k00) echo "--lora-init native --adapter-dtype native";;
+  k10) echo "--lora-init matched:$2 --adapter-dtype native";;
+  k01) echo "--lora-init native --adapter-dtype fp32";;
+  k11) echo "--lora-init matched:$2 --adapter-dtype fp32";;
+  *) return 1;; esac; }
+# hp1_shakedown FAM MID REV TOK TS: the box-side shakedown (ruling item 5). The pinned checkpoint cut to HP1_SHAKE_LAYERS layers (real weights,
+# hp1_trunc.py), one e4b cell, the cu130 Unsloth arm and the axolotl arm, HP1_SHAKE_STEPS steps each, every one exporting its adapter and base,
+# then the one evaluator with --require-all-scored. Correctness only: nothing it writes is a scored number. rc != 0 ends the draw unscored.
+hp1_shakedown(){ local FAM=$1 MID=$2 REV=$3 TOK=$4 TS=$5 SF=${1}shake
+  local SRC=${HF_HUB_CACHE:-/root/.cache/huggingface/hub}/models--${MID//\//--}/snapshots/$REV SC=$W/hp1/shake-cache
+  say "HP1 box-side shakedown: $HP1_SHAKE_LAYERS-layer cut of $MID @ ${REV:0:8} -> $SC"
+  $PY_E4B $W/hp1_trunc.py --src "$SRC" --cache $SC --layers $HP1_SHAKE_LAYERS > logs/hp1_trunc.log 2>&1 || { tail -3 logs/hp1_trunc.log; return 1; }
+  local TM TR; TM=$($PY_E4B -c "import json,sys; print(json.loads(open(sys.argv[1]).read().splitlines()[-1])['model'])" logs/hp1_trunc.log)
+  TR=$($PY_E4B -c "import json,sys; print(json.loads(open(sys.argv[1]).read().splitlines()[-1])['revision'])" logs/hp1_trunc.log)
+  local X="--hp1-export $W/hp1/shake --hp1-export-base 1" E="HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1"
+  TC1_ARM_EXTRA_ENV="$E" arm $SF e4b hp1shake_e4b fused 1800 "$TM" $TR 0 hp1shake $TOK $TS --attn-4bit 1 $(hp1_cell k10 3407) --seed 3407 --order-seed 3407 $X
+  TC1_ARM_EXTRA_ENV="$E" arm $SF unsloth hp1shake_unsloth unsloth 1800 "$TM" $TR 0 hp1shake $TOK $TS --grad-ckpt unsloth --unsloth-targets $UT7 \
+    --unsloth-moe-backend grouped_mm --lora-init native --adapter-dtype native --seed 3407 --order-seed 3407 $X
+  TC1_ARM_EXTRA_ENV="$E" arm $SF axolotl hp1shake_axolotl axolotl 1800 "$TM" $TR 0 hp1shake $TOK $TS --axolotl-dataset $W/data/ds_alpaca.json --axolotl-best 1 \
+    --lora-init native --adapter-dtype native --seed 3407 --order-seed 3407 $X
+  local fw; for fw in e4b unsloth axolotl; do [ "$(status_of $SF $fw hp1shake_$fw)" = ok ] || { say "HP1 shakedown: $fw arm status $(status_of $SF $fw hp1shake_$fw)"; return 1; }; done
+  HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts "$W/${SF}_*_hp1shake_*.json" --bases $W/hp1/shake/base_* --tokens $TOK --eval-n 8 \
+    --model "$TM" --revision $TR --out $W/hp1/eval_shake.json --require-all-scored 1 > logs/hp1_eval_shake.log 2>&1 || { tail -5 logs/hp1_eval_shake.log; return 1; }
+  tail -1 logs/hp1_eval_shake.log; rm -rf $SC; return 0; }
+tc1_hp1_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AXAL=$7
+  local ALL="" s c
+  for s in $HP1_SEL_SEEDS; do for c in k00 k10 k01 k11; do ALL="$ALL e4b:hp1_${c}_s$s:fused"; done; done
+  say "===== HP1 family $FAM ($MID @ $REV; K seeds [$HP1_SEL_SEEDS], P seeds [$HP1_CONF_SEEDS]; N $CURVE_STEPS; $HP1_EVAL_N held-out rows; alarms e4b $EAL unsloth $UAL axolotl $AXAL)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" $HP1_EVAL_N || return 0
+  mkdir -p $W/hp1
+  if ! hp1_shakedown $FAM "$MID" $REV $TOK $TS; then
+    say "HP1 box-side shakedown FAILED: the draw ends unscored (ruling item 5)"; echo "HP1 SHAKEDOWN_FAILED" | tee -a summary.txt; return 0
+  fi
+  echo "HP1 SHAKEDOWN_OK" | tee -a summary.txt
+  local X="--hp1-export $W/hp1" B first=1
+  # the K block (selection seeds): e4b's 2x2, its first run exporting the e4b base
+  for s in $HP1_SEL_SEEDS; do for c in k00 k10 k01 k11; do
+    B=""; [ $first = 1 ] && { B="--hp1-export-base 1"; first=0; }
+    can_run 1500 $FAM/e4b/hp1_${c}_s$s && arm $FAM e4b hp1_${c}_s$s fused $EAL "$MID" $REV 0 hp1 $TOK $TS --attn-4bit 1 $(hp1_cell $c $s) --seed $s --order-seed $s $X $B
+  done; done
+  $PY_E4B $W/hp1_eval.py --receipts "$W/${FAM}_e4b_hp1_k*_s*.json" --bases $W/hp1/base_e4b_$FAM --tokens $TOK --eval-n $HP1_EVAL_N \
+    --model "$MID" --revision $REV --out $W/hp1/eval_K.json > logs/hp1_eval_K.log 2>&1; tail -1 logs/hp1_eval_K.log
+  local SEL; SEL=$($PY_E4B $W/hp1_reduce.py select $W/hp1/eval_K.json --out $W/hp1/select.json 2> logs/hp1_select.err | sed -n 's/^HP1_SELECTED=//p')
+  if ! hp1_cell "$SEL" 0 > /dev/null; then say "HP1: the K rule selected nothing (logs/hp1_select.err): the P block is not run"; echo "HP1 K_INCOMPLETE" | tee -a summary.txt; return 0; fi
+  say "HP1: the registered K rule selects $SEL"; echo "HP1_SELECTED=$SEL" | tee -a summary.txt
+  # the P block (fresh confirmation seeds): E, shipped K00 beside it, both competitors at their native settings, each framework's first run exporting its base
+  local bu=1 ba=1
+  for s in $HP1_CONF_SEEDS; do
+    can_run 1500 $FAM/e4b/hp1_e_${SEL}_s$s && arm $FAM e4b hp1_e_${SEL}_s$s fused $EAL "$MID" $REV 0 hp1 $TOK $TS --attn-4bit 1 $(hp1_cell $SEL $s) --seed $s --order-seed $s $X
+    [ "$SEL" != k00 ] && can_run 1500 $FAM/e4b/hp1_k00_s$s && arm $FAM e4b hp1_k00_s$s fused $EAL "$MID" $REV 0 hp1 $TOK $TS --attn-4bit 1 $(hp1_cell k00 $s) --seed $s --order-seed $s $X
+    B=""; [ $bu = 1 ] && { B="--hp1-export-base 1"; bu=0; }
+    can_run 1800 $FAM/unsloth/hp1_unsloth_s$s && arm $FAM unsloth hp1_unsloth_s$s unsloth $UAL "$MID" $REV 0 hp1 $TOK $TS --grad-ckpt unsloth --unsloth-targets $UT7 \
+      --unsloth-moe-backend grouped_mm --lora-init native --adapter-dtype native --seed $s --order-seed $s $X $B
+    B=""; [ $ba = 1 ] && { B="--hp1-export-base 1"; ba=0; }
+    can_run 1800 $FAM/axolotl/hp1_axolotl_s$s && arm $FAM axolotl hp1_axolotl_s$s axolotl $AXAL "$MID" $REV 0 hp1 $TOK $TS --axolotl-dataset $W/data/ds_alpaca.json \
+      --axolotl-best 1 --lora-init native --adapter-dtype native --seed $s --order-seed $s $X $B
+  done
+  local PR=""; for s in $HP1_CONF_SEEDS; do PR="$PR $W/${FAM}_*_hp1_*_s$s.json"; done     # the confirmation seeds' receipts only (globs, expanded by hp1_eval)
+  # shellcheck disable=SC2086
+  $PY_E4B $W/hp1_eval.py --receipts $PR --bases $W/hp1/base_*_$FAM --tokens $TOK --eval-n $HP1_EVAL_N \
+    --model "$MID" --revision $REV --out $W/hp1/eval_P.json > logs/hp1_eval_P.log 2>&1; tail -1 logs/hp1_eval_P.log
+  $PY_E4B $W/hp1_reduce.py verdict $W/hp1/eval_K.json $W/hp1/eval_P.json --out $W/hp1/verdict.json --md $W/RESULTS-hp1.md > logs/hp1_verdict.log 2>&1
+  tail -20 logs/hp1_verdict.log; echo "HP1 verdict: $W/RESULTS-hp1.md" | tee -a summary.txt; }
 tc1_curve_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SAL=$8
   local ALL="e4b:fused_attn4_m_200:fused unsloth:ckpt_unsloth_m_200:unsloth e4b:fused_attn4_shipped_200:fused e4b:fused_attn4_p38:fused unsloth:ckpt_unsloth_p38:unsloth unsloth:ckpt_unsloth_p38_t28:unsloth e4b:fused_attn4_m_t1:fused unsloth:ckpt_unsloth_m_t1:unsloth e4b:fused_attn4_m_r64:fused unsloth:ckpt_unsloth_m_r64:unsloth"
   say "===== CURVE family $FAM (TC1b; $MID @ $REV; matched seed $MATCHED_SEED; N $CURVE_STEPS eval every $CURVE_EVAL_EVERY on $CURVE_EVAL_N rows; alarms e4b $EAL unsloth $UAL anchor $AAL t1/r64 $SAL)"
@@ -2288,6 +2368,8 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3axolotl) tc1_axolotl_family qwen3axolotl Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 1800 2700;;
   #                                                                                                        FETCH E4B  UNS  ANCH SCALE   (TC1b alarms: e4b 200-step 4800, Unsloth 200-step 9000, anchor 1800 each, t1/r64 3600)
   qwen3curve)  tc1_curve_family  qwen3curve  Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 4800 9000 1800 3600;;
+  #                                                                                                        FETCH E4B  UNS  AX   (HP1: per-run alarms over N 200)
+  qwen3hp1)    tc1_hp1_family    qwen3hp1    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600 3600;;
   tc2small)    tc2_small_box;;                 # lane TC2, box A: granite, olmoe, gptoss (tc2_small_box's table)
   tc2big)      tc2_big_box;;                   # lane TC2, box B: qwen3_5, mixtral (tc2_big_box's table)
   tc2mixtral)  tc2_mixtral_redraw;;            # lane TC2 amendment 2: Mixtral's P5 pair and reference redrawn with the Unsloth alarm at 7,200 s
