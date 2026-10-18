@@ -65,5 +65,10 @@ gain the three IDs: `p136_run.sh` (staged) and `p136_drive.sh`. An attempt count
 started; a create refused because the offer was taken or vanished is not an attempt. Two failed attempts lapse a family. Every
 attempt counts against the lane's combined ceiling, which stays at **$15.20**.
 
+**Launch rule under the ceiling.** A run launches only if the lane's billed-to-date plus that run's worst at its quoted
+offer is at or under **$15.20**. The run's worst is its guard hours × the quoted hourly rate plus the 100 GB download cap
+× the quoted per-GB rate. Billed-to-date is the sum of the billed cost of every `p136-*` row in the launcher's ledger, read
+at the launch, not carried forward from memory. A run that does not fit waits for an amendment.
+
 `staged-p136.sha256` moves by one row: `p136_run.sh` goes from `09feafcafafb42e66ecc7a018ddeef3b31541c6c6ff52e92bdd4c9d1dbc86290` to `79ad608032f0044d1fd4ef699d3979e4a5e7a84fadf667558dc155454f1eb79a`. No threshold, read rule, host term,
 workload or other staged file changes.
