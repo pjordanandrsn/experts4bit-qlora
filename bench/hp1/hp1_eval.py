@@ -142,10 +142,11 @@ def receipt_arm(path):
     hp1 = r.get("hp1") or {}
     curve = r.get("eval_curve") or []
     step0 = [c["heldout_loss"] for c in curve if c.get("step") == 0]
+    step0_rows = [c.get("row_losses") for c in curve if c.get("step") == 0]
     return {"receipt": path, "framework": r.get("framework"), "tag": r.get("tag"), "seed": r.get("seed"), "order": r.get("order"),
             "tokens_sha": (r.get("tokens") or {}).get("sha256"), "adapter": (hp1.get("adapter") or {}).get("path"),
             "adapter_sha256": (hp1.get("adapter") or {}).get("sha256"), "train_digest": (hp1.get("train_base") or {}).get("digest"),
-            "inloop_step0": step0[0] if step0 else None, "inloop_final": curve[-1]["heldout_loss"] if curve else None,
+            "inloop_step0": step0[0] if step0 else None, "inloop_step0_rows": step0_rows[0] if step0_rows else None, "inloop_final": curve[-1]["heldout_loss"] if curve else None,
             "inloop_final_step": curve[-1]["step"] if curve else None, "steps": r.get("steps"),
             "hp1_errors": {k: v for k, v in hp1.items() if k.endswith("_error")}, "raw_ok": (hp1.get("train_base") or {}).get("raw_ok"),
             "status_receipt": r.get("status"), "c1_bit_exact": r.get("C1_bit_exact"), "trainable_params": r.get("trainable_params"),
@@ -185,7 +186,7 @@ def tc1_invalid(arm, tokens_sha, expect_trainable):
 
 
 def evaluate(arms, base_dirs, rows, open_base, make_scorer, load_adapter, file_sha, tokens_sha, expect_trainable, write=None,
-             release=None):
+             release=None, zero_tol=ZERO_ADAPTER_TOL):
     """The evaluator's rules, with the model and the scoring injected (``open_base(dir) -> store`` with .digest() and .meta;
     ``make_scorer(store) -> (set_adapter(canon | None), score() -> {"row_mean", ...})``; ``load_adapter(path) -> (tensors, scalings)``).
     Every STRICT failure VOIDs: a TC1-invalid run is never scored; a base whose digest or zero-adapter check fails VOIDs every arm
@@ -216,11 +217,18 @@ def evaluate(arms, base_dirs, rows, open_base, make_scorer, load_adapter, file_s
             set_adapter, score_fn = make_scorer(store)
             set_adapter(None)
             zero = score_fn()
+            # HP1-PREREG Amendment 4: the per-row zero-adapter losses and, where the receipt carries them, the per-row gaps against the
+            # in-loop step-0 rows, so a VOID can be diagnosed from the receipt (hp1k-5090-9 could not be); the tolerance used is recorded.
             brec["zero_adapter"] = {k: zero[k] for k in ("row_mean", "token_weighted")}
+            brec["zero_adapter"]["row_losses"] = zero.get("row_losses")
+            brec["zero_adapter_tol"] = zero_tol
             brec["zero_adapter_vs_inloop_step0"] = {x["tag"]: round(zero["row_mean"] - x["inloop_step0"], 6) for x in mine}
-            bad = [x["tag"] for x in mine if abs(zero["row_mean"] - x["inloop_step0"]) > ZERO_ADAPTER_TOL]
+            brec["zero_adapter_row_gaps"] = {x["tag"]: [round(e - i, 6) for e, i in zip(zero["row_losses"], x["inloop_step0_rows"])]
+                                             for x in mine if zero.get("row_losses") and x.get("inloop_step0_rows")
+                                             and len(x["inloop_step0_rows"]) == len(zero["row_losses"])}
+            bad = [x["tag"] for x in mine if abs(zero["row_mean"] - x["inloop_step0"]) > zero_tol]
             if bad:
-                brec["status"], brec["reason"] = "VOID", f"STRICT zero-adapter check: |evaluator - in-loop step 0| > {ZERO_ADAPTER_TOL} for {bad}"
+                brec["status"], brec["reason"] = "VOID", f"STRICT zero-adapter check: |evaluator - in-loop step 0| > {zero_tol} for {bad}"
         if brec.get("status") is None:
             flip_done = False
             for arm in mine:
@@ -275,6 +283,8 @@ def main():
     ap.add_argument("--expect-trainable", type=int, default=EXPECT_TRAINABLE,
                     help="the registered trainable count every arm must carry (0 = not checked: the shakedown's truncated model)")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--zero-tol", type=float, default=ZERO_ADAPTER_TOL,
+                    help="the zero-adapter tolerance (HP1-PREREG Amendment 4: set by the 48-layer calibration; default the 2-layer 0.005)")
     ap.add_argument("--require-all-scored", type=int, default=0,
                     help="the box-side shakedown: exit 3 unless every arm is SCORED by this evaluator and every base is OK")
     a = ap.parse_args()
@@ -287,7 +297,7 @@ def main():
     arms = [receipt_arm(p) for p in sorted({q for pat in a.receipts for q in glob.glob(pat)})]
     out = {"evaluator": "bench/hp1/hp1_eval.py", "tokens": {"path": a.tokens, "sha256": tk.get("sha256"), "eval_n": a.eval_n},
            "model": a.model, "revision": a.revision, "device": torch.cuda.get_device_name(0) if DEV == "cuda" else "cpu",
-           "torch": torch.__version__, "zero_adapter_tol": ZERO_ADAPTER_TOL, "roundtrip_tol": ROUNDTRIP_TOL,
+           "torch": torch.__version__, "zero_adapter_tol": a.zero_tol, "roundtrip_tol": ROUNDTRIP_TOL,
            "expect_trainable": a.expect_trainable or None, "bases": [], "arms": []}
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
 
@@ -308,7 +318,7 @@ def main():
 
     bases, arms = evaluate(arms, a.bases, rows, lambda d: hp1_lib.BaseStore(d, DEV), make_scorer,
                            lambda p: hp1_lib.load_canonical(p, DEV)[:2], sha_file, tk.get("sha256"), a.expect_trainable or None, write,
-                           release)
+                           release, zero_tol=a.zero_tol)
     write(bases, arms)
     print(json.dumps({"bases": [(b["dir"], b.get("status")) for b in bases],
                       "arms": [(x["tag"], x["status"], (x.get("evaluator") or {}).get("row_mean")) for x in arms]}))

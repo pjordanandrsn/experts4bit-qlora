@@ -23,6 +23,11 @@ case "$*" in
   *"hp1_reduce.py voids"*eval_early*) [ "${STUB_EARLY:-ok}" = runvoid ] && [ ! -e "$W/early_redrawn" ] && { echo hp1_k00_s3407; touch "$W/early_redrawn"; };;
   *"hp1_reduce.py voids"*eval_K*) [ -n "${VOID_K:-}" ] && [ ! -e "$W/k_redrawn" ] && { echo "$VOID_K"; touch "$W/k_redrawn"; };;
   *"hp1_reduce.py voids"*) ;;
+  *hp1_caltokens.py*) out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p')
+    [ "${STUB_CALTOK:-ok}" = refuse ] && { echo "HP1 CALTOKENS REFUSED: the pool's first 48 rows do not reproduce HP1's held-out rows"; exit 13; }
+    python3 -c "import json,sys; json.dump({'fam': 'qwen3hp1cal', 'sha256': 'c' * 64, 'train': [[1, 2]], 'eval': [[i] for i in range(48, 96)]}, open(sys.argv[1], 'w'))" "$out"
+    echo "HP1 CALTOKENS rows 49-96 of the held-out pool; prefix reproduces HP1's 48; sha=$(printf 'c%.0s' $(seq 64))";;
+  *hp1_calib.py*) out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p'); echo '{"verdict": "PASS", "tol": 0.0123}' > "$out"; echo "HP1_CALIB=PASS tol=0.0123";;
   *hp1_eval.py*)
     out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p'); st=OK
     case "$out:${STUB_SHAKE_EVAL:-ok}" in
@@ -42,10 +47,14 @@ HARNESS = r"""#!/bin/bash
 W=$PWD; HP1_EVAL_N=48; HP1_EVAL_EVERY=200; HP1_SEL_SEEDS="3407 3408 3409"; HP1_CONF_SEEDS="3410 3411 3412"
 HP1_SHAKE_LAYERS=2; HP1_SHAKE_STEPS=3; CURVE_STEPS=200; UT7="q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj"
 HP1_AX_DROP=${TC1_HP1_DROP_AXOLOTL:-0}
+HP1_ZERO_TOL=${TC1_HP1_ZERO_TOL:-}; HP1_CAL_CEILING=0.01
 PY_E4B=$W/fakepy
 say(){ echo "SAY: $*" >> "$W/say.log"; }
 can_run(){ case "$2" in ${NO_TIME_FOR:-__none__}) echo "SKIPPED $2" >> summary.txt; return 1;; esac; return 0; }
-tc1_prepare(){ TOK=$W/tokens.json; TS=deadbeef; return 0; }
+tc1_prepare(){ TOK=$W/tokens.json; TS=deadbeef
+  # the calibration box asks for 2 x 48 held-out rows, tokenised for its own fam (as tc1_arm --prepare does)
+  [ "${6:-}" = 96 ] && python3 -c "import json,sys; json.dump({'fam': sys.argv[1], 'sha256': 'x', 'train': [[1, 2]], 'eval': [[i] for i in range(96)]}, open(sys.argv[2], 'w'))" "$1" "$TOK"
+  return 0; }
 # tc1_arm's own rule (tc1_arm.py, the tokens check): a tokens file labelled for another fam is refused, rc=13 TOKENS_MISMATCH.
 arm(){ local tf; tf=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('fam') or '')" "${10}")
   if [ -n "$tf" ] && [ "$tf" != "$1" ]; then echo "$1 $2 $3" >> "$W/mismatch.log"; return 0; fi
@@ -56,7 +65,7 @@ hp1_bulk_manifest(){ echo "manifest $1" >> "$W/manifest.log"; }
 mkdir -p logs hp1 data; : > summary.txt; : > arms.log
 echo '{"fam": "qwen3hp1", "sha256": "deadbeef", "train": [], "eval": []}' > tokens.json
 source ./hp1_funcs.sh
-${FAMILY_FN:-tc1_hp1_family} qwen3hp1 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600 3600
+${FAMILY_FN:-tc1_hp1_family} ${FAMILY_FAM:-qwen3hp1} Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600 3600
 """
 
 
@@ -399,3 +408,41 @@ def test_an_axolotl_void_at_the_shakedown_evaluator_drops_axolotl_and_the_k_bloc
 def test_a_non_axolotl_evaluator_failure_still_ends_the_draw(tmp_path, case):
     arms, summary = drive(tmp_path, STUB_SHAKE_EVAL=case)
     assert "HP1 SHAKEDOWN_FAILED" in summary and "AXOLOTL_DROPPED" not in summary and tags(arms) == []
+
+
+def test_the_calibration_box_runs_one_e4b_k00_step_on_held_out_pool_rows_49_to_96(tmp_path):
+    """HP1-PREREG Amendment 4: the registered dataset carries only HP1's 48 held-out rows, so hp1_caltokens.py builds rows 49-96 from
+    tc1_arm's held-out pool (tests/test_hp1_caltokens.py runs it on the real prepare / pack_pools); one e4b K00 run (1 step, its base
+    exported) on them, then the evaluator and hp1_calib.py; calib.json is carried out with its sha256."""
+    arms, summary = drive(tmp_path, FAMILY_FN="tc1_hp1cal_family", FAMILY_FAM="qwen3hp1cal")
+    assert [a[:3] for a in arms] == [["qwen3hp1cal", "e4b", "hp1cal_k00_s3407"]]
+    a = arms[0]
+    assert "--hp1-export-base" in a and "native" in a and "--order-seed" in a
+    py = (tmp_path / "py.log").read_text()
+    ct = next(ln for ln in py.splitlines() if "hp1_caltokens.py" in ln)
+    assert "--pack-src" in ct and "alpaca_data_cleaned.json" in ct and "--n 48" in ct and "--tokens" in ct
+    assert "c" * 64 in summary and "held-out pool rows 49-96" in summary
+    ev = next(ln for ln in py.splitlines() if "hp1_eval.py" in ln and "eval_cal" in ln)
+    assert "tokens_qwen3hp1cal_calib.json" in ev and "--zero-tol" not in ev
+    cal = next(ln for ln in py.splitlines() if "hp1_calib.py" in ln)
+    assert "--ceiling 0.01" in cal and "--tag hp1cal_k00_s3407" in cal
+    assert "HP1_CALIB=PASS tol=0.0123" in summary and "HP1_CARRY calib.json sha256" in summary
+
+
+def test_a_calibration_tokens_refusal_ends_the_draw_unscored(tmp_path):
+    arms, summary = drive(tmp_path, FAMILY_FN="tc1_hp1cal_family", FAMILY_FAM="qwen3hp1cal", STUB_CALTOK="refuse")
+    assert arms == [] and "HP1 CALIB_REFUSED tokens: HP1 CALTOKENS REFUSED" in summary and "HP1_CALIB=" not in summary
+
+
+def test_the_calibrated_tolerance_reaches_every_full_depth_evaluator_pass_and_not_the_shakedown(tmp_path):
+    drive(tmp_path, TC1_HP1_ZERO_TOL="0.0123")
+    evs = [ln for ln in (tmp_path / "py.log").read_text().splitlines() if "hp1_eval.py" in ln and "--out" in ln]
+    shake = [ln for ln in evs if "eval_shake" in ln]
+    deep = [ln for ln in evs if "eval_shake" not in ln]
+    assert shake and deep and all("--zero-tol" not in ln for ln in shake)
+    assert all("--zero-tol 0.0123" in ln for ln in deep)                  # early, K and P passes
+
+
+def test_without_a_calibrated_tolerance_no_pass_overrides_the_default(tmp_path):
+    drive(tmp_path)
+    assert "--zero-tol" not in (tmp_path / "py.log").read_text()

@@ -93,6 +93,11 @@ HP1_SHAKE_LAYERS=${TC1_HP1_SHAKE_LAYERS:-2}; HP1_SHAKE_STEPS=${TC1_HP1_SHAKE_STE
 # HP1-PREREG Amendment 3: any axolotl failure in HP1 drops axolotl (the headline then reads E vs Unsloth). 1 = already dropped (box 2
 # after box 1's shakedown dropped it: the controller sets it from box 1's summary); a shakedown axolotl failure on this box sets it.
 HP1_AX_DROP=${TC1_HP1_DROP_AXOLOTL:-0}; case "$HP1_AX_DROP" in 0|1) ;; *) echo "refusing: TC1_HP1_DROP_AXOLOTL must be 0 or 1"; exit 78;; esac
+# HP1-PREREG Amendment 4: the 48-layer zero-adapter tolerance, set by the calibration box (qwen3hp1cal) and pinned in the box's command;
+# unset = the evaluator's 2-layer 0.005. The 2-layer shakedown always reads 0.005 (it was calibrated there). HP1_CAL_CEILING is the
+# registered pre-box ceiling (half the 0.02 margin cap): a calibration above it CLOSES HP1.
+HP1_ZERO_TOL=${TC1_HP1_ZERO_TOL:-}; HP1_CAL_CEILING=0.01
+case "$HP1_ZERO_TOL" in ""|0.[0-9]*) ;; *) echo "refusing: TC1_HP1_ZERO_TOL must be a decimal below 1 (got $HP1_ZERO_TOL)"; exit 78;; esac
 T1_MB=${TC1_T1_MB:-1}; T1_ACCUM=${TC1_T1_ACCUM:-1}; R64_R=${TC1_R64_R:-64}; R64_ALPHA=${TC1_R64_ALPHA:-64}
 # ---------------------------------------------------------------- TC2 (the tc2small token; TC2-PREREG-draft "Fixture"): the small families' instrument -- N 60, eval 48 rows every
 # 20 steps, as tp4 registered for them (TP4-PREREG; amendment 2 cut only the LARGE families to N 20 / 8 rows). The tc2big token runs the field recipe above
@@ -118,6 +123,9 @@ case " $FAMILIES " in " qwen3prebindab ") NEED_UNSLOTH=0;; esac   # TC1 amendmen
 case " $FAMILIES " in " qwen3dqab "|" mixtraldqab ") NEED_UNSLOTH=0;; esac   # TC1 amendment 28: e4b-only A/Bs
 case " $FAMILIES " in " qwen3tritonab ") NEED_UNSLOTH=0;; esac   # TC1 amendment 32: an e4b-only A/B
 case " $FAMILIES " in " olmoedecab "|" qwen3decab "|" olmoedecab qwen3decab "|" qwen3decab olmoedecab ") NEED_UNSLOTH=0;; esac   # TC1 amendment 46: e4b-only A/Bs in venv-e4b
+# HP1-PREREG Amendment 4: the calibration box runs one e4b arm in venv-e4b (as every HP1 e4b arm does): no Unsloth and no axolotl venv,
+# so its guard is spent on the measurement, not on installs it never uses
+NEED_AXOLOTL=1; case " $FAMILIES " in " qwen3hp1cal ") NEED_UNSLOTH=0; NEED_AXOLOTL=0;; esac
 : > summary.txt; echo "$TC1_INSTANCE_ID" > INSTANCE_ID
 FETCH_OK_N=0; FETCH_FAILED_N=0   # families whose model staged / did not (tc1_prepare); none staged and one failed = rc 15 at the end
 echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST matched_seed=$MATCHED_SEED pack=$PACK" | tee -a summary.txt
@@ -127,7 +135,7 @@ case " $FAMILIES " in *" qwen3curve "*)
   [ -n "${TC1_PREREG:-}" ] || PREREG=tc1/TC1B-PREREG.md     # TC1b: the curve token is governed by its own registration (the PI's); TC1_PREREG still overrides
   ;;
 esac
-case " $FAMILIES " in *" qwen3hp1 "*|*" qwen3hp1k "*|*" qwen3hp1p "*)
+case " $FAMILIES " in *" qwen3hp1 "*|*" qwen3hp1k "*|*" qwen3hp1p "*|*" qwen3hp1cal "*)
   echo "FIXTURE hp1 (HP1-PREREG): steps=$CURVE_STEPS eval_n=$HP1_EVAL_N eval_every=$HP1_EVAL_EVERY K seeds=[$HP1_SEL_SEEDS] P seeds=[$HP1_CONF_SEEDS] (--seed s --order-seed s); box-side shakedown: $HP1_SHAKE_LAYERS-layer truncation, $HP1_SHAKE_STEPS steps; axolotl dropped=$HP1_AX_DROP" | tee -a summary.txt
   [ -n "${TC1_PREREG:-}" ] || PREREG=hp1/HP1-PREREG.md     # HP1: governed by its own registration; TC1_PREREG still overrides
   ;;
@@ -429,7 +437,9 @@ fi
 # Pins (wheel METADATA): python >= 3.12, torch >= 2.13.0 <= 2.14.0, transformers == 5.17.0, peft == 0.21.0, bitsandbytes == 0.50.2.
 # torch >= 2.13 Linux cp312 wheels exist only under /whl/cu130 (verified 2026-10-01 by the coordinator), so the driver gate above applies.
 AX_VER=${TC1_AXOLOTL_VERSION:-0.20.0}; AX_OK=0; AX_REASON=""
-if [ "$CU130_OK" != 1 ]; then
+if [ "$NEED_AXOLOTL" != 1 ]; then
+  AX_REASON="the $FAMILIES token runs no axolotl arm"; say "venv-axolotl SKIPPED: $AX_REASON"
+elif [ "$CU130_OK" != 1 ]; then
   AX_REASON="$CU130_REASON"; say "venv-axolotl SKIPPED: $AX_REASON -- its arms are refused rows"
 else
   AX_PKG="axolotl==$AX_VER"; AX_INDEX="https://download.pytorch.org/whl/cu130"      # TC3 reuses both for its deepspeed extra (a separate, non-fatal step)
@@ -642,6 +652,7 @@ arm_once(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$
     # HP1: every e4b cell has the same trainable count, so the competitors' expectation reads the first K11 arm (the box-side shakedown, its own)
     hp1)    s=$CURVE_STEPS; en=$HP1_EVAL_N; ee=$HP1_EVAL_EVERY; ex_tag=hp1_k11_s${HP1_SEL_SEEDS%% *};;
     hp1shake) s=$HP1_SHAKE_STEPS; en=8; ee=$HP1_SHAKE_STEPS; ex_tag=hp1shake_e4b;;
+    hp1cal) s=1; en=$HP1_EVAL_N; ee=1; ex_tag=hp1cal_k00_s3407;;          # Amendment 4: one step; the step-0 read is what is calibrated
   esac
   local EXP EXPARG=""; [ "$FW" != e4b ] && { EXP=$(expect_of $FAM $ex_tag); [ -n "$EXP" ] && EXPARG="--expect-trainable $EXP"; }
   local A; A=$(alarm_for $AL)
@@ -2291,7 +2302,7 @@ hp1_eval_block(){ local NAME=$1 TOK=$2 MID=$3 REV=$4; shift 4; local R=() B=() x
   can_run "$need" "hp1/eval_$NAME ($n arms)" || { echo "HP1 EVAL_$NAME SKIPPED host-limited (needs ${need}s for $n arms)" | tee -a summary.txt; return 1; }
   # offline: the checkpoint is already on the box, and the image's huggingface_hub 2.x / httpx2 can break content-encoded Hub responses
   HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts "${R[@]}" --bases "${B[@]}" --tokens $TOK --eval-n $HP1_EVAL_N --model "$MID" --revision $REV \
-    --out $W/hp1/eval_$NAME.json > logs/hp1_eval_$NAME.log 2>&1; tail -1 logs/hp1_eval_$NAME.log
+    ${HP1_ZERO_TOL:+--zero-tol $HP1_ZERO_TOL} --out $W/hp1/eval_$NAME.json > logs/hp1_eval_$NAME.log 2>&1; tail -1 logs/hp1_eval_$NAME.log
   HP1_EVAL_PER_ARM_S=$($PY_E4B -c "import json,sys; d=json.load(open(sys.argv[1])); t=sum(x.get('seconds',0) for x in d['bases']); print(max(60, int(t / max(1, len(d['arms'])))))" \
     $W/hp1/eval_$NAME.json 2>/dev/null || echo 600); return 0; }
 # hp1_early_check FAM MID REV TOK TS TAG FW: the EARLY BASE CHECK on the run that just exported FW's base -- the base's digest and
@@ -2383,6 +2394,29 @@ tc1_hp1k_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 TOK TS x
   hp1_k_block $FAM "$MID" $REV $TOK $TS $EAL || return 0
   hp1_bulk_manifest "$W"
   for x in eval_K.json select.json bulk_manifest.json; do echo "HP1_CARRY $x sha256 $(sha256sum $W/hp1/$x | cut -d' ' -f1)" | tee -a summary.txt; done; }
+# HP1-PREREG Amendment 4, the calibration box (qwen3hp1cal): one e4b K00 run, 1 step, on 48 CALIBRATION rows, its base exported as the
+# box builds it; the one evaluator's per-row zero-adapter gaps; hp1_calib.py's shape check, tol and pre-box ceiling. The registered
+# dataset carries only HP1's 48 held-out rows, so hp1_caltokens.py takes rows 49-96 of tc1_arm's own held-out POOL (pack_pools: the
+# registered 48, then the sha-pinned source's shuffled extension beyond every train row), encoded unpacked as HP1's are, and refuses
+# unless the pool's first 48 reproduce HP1's held-out rows byte-for-byte. Nothing here is a scored number. It carries out calib.json and
+# prints its sha256 (HP1_CARRY) for box 1's pin.
+tc1_hp1cal_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 TOK TS TOKC TSC TAG=hp1cal_k00_s3407
+  say "===== HP1 calibration box (Amendment 4) $FAM ($MID @ $REV; held-out pool rows $((HP1_EVAL_N + 1))-$((2 * HP1_EVAL_N)); 1 step)"
+  tc1_prepare $FAM "$MID" $REV $FAL "e4b:$TAG:fused" $HP1_EVAL_N || return 0
+  mkdir -p $W/hp1; TOKC=$W/hp1/tokens_${FAM}_calib.json
+  HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_caltokens.py --tc1-arm $W/tc1_arm.py --data $W/data/ds_alpaca.json --data-sha $DS_ALPACA_SHA \
+    --pack-src $W/data/alpaca_data_cleaned.json --model "$MID" --revision $REV --tokens $TOK --n $HP1_EVAL_N --out $TOKC > logs/hp1_caltokens.log 2>&1
+  TSC=$(sed -n 's/^HP1 CALTOKENS .*sha=\([0-9a-f]\{64\}\)$/\1/p' logs/hp1_caltokens.log)
+  [ -n "$TSC" ] && [ -s "$TOKC" ] || { tail -2 logs/hp1_caltokens.log; echo "HP1 CALIB_REFUSED tokens: $(grep -m1 REFUSED logs/hp1_caltokens.log | cut -c1-200)" | tee -a summary.txt; return 0; }
+  echo "HP1 calibration tokens: held-out pool rows $((HP1_EVAL_N + 1))-$((2 * HP1_EVAL_N)) (rows 1-$HP1_EVAL_N reproduce HP1's), sha=$TSC" | tee -a summary.txt
+  arm $FAM e4b $TAG fused $EAL "$MID" $REV 0 hp1cal $TOKC $TSC --attn-4bit 1 $(hp1_cell k00 3407) --seed 3407 --order-seed 3407 --hp1-export $W/hp1 --hp1-export-base 1
+  [ "$(status_of $FAM e4b $TAG)" = ok ] || { echo "HP1 CALIB_ARM_FAILED $(status_of $FAM e4b $TAG)" | tee -a summary.txt; return 0; }
+  # the evaluator at its 2-layer default: a VOID there is expected and irrelevant; the per-row gaps are what is read
+  HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts $W/${FAM}_e4b_$TAG.json --bases $W/hp1/base_e4b_$FAM --tokens $TOKC --eval-n $HP1_EVAL_N \
+    --model "$MID" --revision $REV --out $W/hp1/eval_cal.json > logs/hp1_eval_cal.log 2>&1; tail -1 logs/hp1_eval_cal.log
+  $PY_E4B $W/hp1_calib.py $W/hp1/eval_cal.json --tag $TAG --ceiling $HP1_CAL_CEILING --out $W/hp1/calib.json 2>&1 | tee -a summary.txt
+  hp1_bulk_manifest "$W"
+  [ -s $W/hp1/calib.json ] && echo "HP1_CARRY calib.json sha256 $(sha256sum $W/hp1/calib.json | cut -d' ' -f1)" | tee -a summary.txt; return 0; }
 # the split path, box 2 (qwen3hp1p): REFUSES unless box 1's eval_K.json + select.json are staged beside the runner AND match the pinned
 # TC1_HP1_K_EVAL_SHA256 / TC1_HP1_K_SELECT_SHA256 / TC1_HP1_K_MANIFEST_SHA256 (box 1's receipt), and the selection re-derives from the staged eval_K.json; then its
 # OWN shakedown, the P block with an early base check on the first E run, and the verdict over the staged eval_K.json + eval_P.json
@@ -2589,6 +2623,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3hp1)    tc1_hp1_family    qwen3hp1    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600 3600;;
   qwen3hp1k)   tc1_hp1k_family   qwen3hp1    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400;;            # HP1 Amendment 2, split box 1
   qwen3hp1p)   tc1_hp1p_family   qwen3hp1    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600 3600;;  # HP1 Amendment 2, split box 2
+  qwen3hp1cal) tc1_hp1cal_family qwen3hp1cal Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400;;            # HP1 Amendment 4, the calibration box
   tc2small)    tc2_small_box;;                 # lane TC2, box A: granite, olmoe, gptoss (tc2_small_box's table)
   tc2big)      tc2_big_box;;                   # lane TC2, box B: qwen3_5, mixtral (tc2_big_box's table)
   tc2mixtral)  tc2_mixtral_redraw;;            # lane TC2 amendment 2: Mixtral's P5 pair and reference redrawn with the Unsloth alarm at 7,200 s

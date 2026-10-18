@@ -538,6 +538,8 @@ def render_md(k, p):
         return "\n".join(lines) + "\n"
     lines += [f"- sigma_seed = {_f(p['sigma_seed'])} (pooled, df {p['sigma_seed_df']}); m = {_f(p['m'])}; "
               f"C* = {p.get('c_star')}; excluded competitors: {p['excluded_competitors'] or 'none'}"]
+    if p.get("headline_closed"):
+        lines += [f"- **HEADLINE CLOSED**: {p['headline_closed']}"]
     if p.get("axolotl_dropped"):
         lines += [f"- axolotl DROPPED (HP1-PREREG Amendment 3): {p['axolotl_dropped']}; the headline reads E vs Unsloth"]
     bb = p.get("sigma_seed_by_block") or {}
@@ -677,6 +679,17 @@ def main(argv=None):
             print("K_INCOMPLETE: E cannot be derived", file=sys.stderr)
             return EXIT_INCOMPLETE
         p, code = p_readout(index, k)
+        # Amendment 4, stage 2: the evaluator's zero-adapter tolerance (the largest any input used) must sit within half the realized
+        # margin, or the evaluator is too far from training at depth to read it: the headline CLOSES (no verdict is read).
+        tols = [t for t in (json.load(open(pth)).get("zero_adapter_tol") for pth in a.evals) if isinstance(t, (int, float))]
+        p["zero_adapter_tol"] = max(tols) if tols else None
+        if p["zero_adapter_tol"] is not None and p.get("m") is not None and p["zero_adapter_tol"] > p["m"] / 2:
+            p["headline_closed"] = (f"HP1-PREREG Amendment 4: zero-adapter tolerance {p['zero_adapter_tol']} > m/2 = {p['m'] / 2:.6f} "
+                                    f"(m = {p['m']}): the evaluator sits too far from training at depth to read the margin")
+            for r in p.get("readings") or []:
+                if r.get("role") == "headline":
+                    r["role"] = "headline (CLOSED: Amendment 4)"
+            p["verdict"], code = "CLOSED_TOL", EXIT_INCOMPLETE
         _write_json(a.out, dict(base, verdict=p["verdict"], k=k, p=p))
         with open(a.md, "w") as fh:
             fh.write(render_md(k, p))

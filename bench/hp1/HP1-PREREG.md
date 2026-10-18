@@ -370,3 +370,56 @@ The maintainer's ruling (strike 2) continues the lane in a simplified form. One 
 - Box 2: `TC1_HP1_DROP_AXOLOTL=1` (set by the controller when box 1's summary records the drop) runs no axolotl arm anywhere. Without it, box 2's own shakedown applies the same rule as box 1.
 
 **Unchanged.** Every threshold, the K rule, σ, m, the verdict bands, the evaluator, both boxes' seeds and the spend cap. A box 2 redraw does not fit inside the cap and goes back to the maintainer.
+
+### Amendment 4 (2026-10-18, before any scored y and before the next box): the 48-layer zero-adapter tolerance, from a calibration that can fail
+
+**Why.** `hp1k-5090-9` cleared the shakedown and trained `hp1_k00_s3407` on the full 48 layers (in-loop held-out 1.914 -> 0.870 over 200
+steps). Then the early base check VOIDed the e4b base:
+- The base's digest matched its training run (12,723 slots).
+- The STRICT zero-adapter check read evaluator 1.921029 against in-loop step 0 1.914030: +0.006999 against the 0.005 bound.
+- That bound was set on the 2-layer cut, where the same check reads -0.0023 (e4b) and +0.0010 (Unsloth), and this registration says
+  the evaluator was "measured on no 30B yet".
+- It is an instrument constant failing at depth, not a training fault.
+- A constant picked after seeing 0.37% would be tuned to pass. So the tolerance comes from a calibration whose rules are fixed here,
+  and which can close HP1.
+
+**The calibration box (`qwen3hp1cal`, run id `hp1cal-5090-1`, pre-create spare `-2`).**
+- One RTX 5090 under the registered host rule, worst $0.90 (0.75 h × $0.85 + 65 GB × $0.004/GB, the per-GB rate capped in its
+  manifest). Same source as box 1.
+- One e4b K00 run (seed 3407, 1 optimizer step), its base exported as the boxes build it.
+- It runs on 48 CALIBRATION rows. The registered dataset carries exactly HP1's 48 held-out rows (`tp4_alpaca.py`, N_EVAL = 48),
+  so `bench/hp1/hp1_caltokens.py` takes rows 49–96 of `tc1_arm.py`'s own held-out POOL. That pool (`pack_pools`, TC1 amendment 39)
+  is the registered 48, then the sha-pinned source's shuffled extension beyond every train row. The rows are encoded unpacked with
+  HP1's template, EOS and seq. It REFUSES unless the pool's first 48 rows reproduce HP1's held-out rows byte-for-byte, so rows 49–96
+  are disjoint from HP1's train and held-out sets. `tc1_arm.py` is used unchanged (it is pinned by a closure).
+- The one evaluator then reads the per-row zero-adapter losses, and the per-row gaps against the run's in-loop step-0 rows
+  (`zero_adapter_row_gaps`). Nothing on this box is a scored number.
+
+**The rules (`bench/hp1/hp1_calib.py`).**
+1. **Shape (fail-closed).** The per-row gaps must look like numeric drift. If the largest |gap| > 5 × the median |gap| **and** > 0.005,
+   the two paths differ (template, truncation or masking), and HP1 CLOSES (`CLOSE_SHAPE`). The 0.005 floor means a row under the
+   2-layer tolerance cannot be a path difference worth closing on. Without it, tiny zero-mean gaps (an instrument better than
+   expected, whose median tends to 0) would close HP1. A median of 0 takes the absolute test alone.
+2. **Tolerance.** `zero_adapter_tol` at 48 layers = 2 × the mean |gap| over the 48 calibration rows, rounded up to 1e-6.
+3. **Pre-box ceiling.** HP1's registered parity margin is m = min(max(σ_seed, 0.005), 0.02), which depends on σ_seed and is unknown
+   before data. Before any box: if tol > 0.01 (half the 0.02 cap, which no σ_seed could rescue), HP1 CLOSES (`CLOSE_CEILING`). The 0.005
+   floor is not a pre-box ceiling: that would decide the result before the measurement.
+4. **Verdict-stage ceiling.** At the verdict, the reducer CLOSES the headline (`CLOSED_TOL`) if the largest tolerance any input used is
+   > m/2 for the realized m.
+5. **Per-row output.** `hp1_eval.py` writes the per-row zero-adapter losses and gaps from now on, so a future VOID can be diagnosed
+   from the receipt. `hp1k-5090-9`'s cannot be.
+
+**Then.** The calibration verdict and `calib.json` (sha256 printed as `HP1_CARRY`) are posted, and the maintainer re-derives them.
+- Box 1 runs as `hp1k-5090-10` (the last box 1 under any rule; `-11` is a pre-create spare only), from the same source.
+- Its command pins `TC1_HP1_ZERO_TOL` to the derived tol, used by every full-depth evaluator pass (early, K, P).
+- The 2-layer shakedown keeps 0.005: it was calibrated there.
+- Box 2 carries the same pin.
+- If rule 1 or 3 fires, HP1 closes. Its only datum is then K00's single in-loop curve (1.914 -> 0.870, 200 steps, 48 layers), reported
+  as such.
+
+**Dropped from the ruling's draft.** An A2000 2-layer parity step. It existed to validate an A2000 calibration, and the calibration
+runs on the box class itself. The A2000 cannot run the boxes' resident step-0 path at 48 layers, and `tc1_arm` refuses an HP1 export
+under offload.
+
+**Spend.** The maintainer raised HP1's envelope to $16.50: billed $3.256 + calibration ≤ $1 + box 1 $6.09 + box 2 $6.09 = $16.44.
+Every other threshold, rule and registered reading is unchanged.

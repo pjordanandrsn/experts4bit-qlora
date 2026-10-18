@@ -31,7 +31,7 @@ STAGE="$HERE/tc1_run.sh $HERE/tc1_arm.py $HERE/tc1_reduce.py $REPO/bench/tp4/tp4
 # guard beside these and has the box start THAT, which checks its pins and registered knobs and then execs
 # tc1_run.sh. Both default to tp4's own behaviour; the runner must be one of the staged files.
 # HP1 (the qwen3hp1 token; bench/hp1/HP1-PREREG.md): the evaluator, its library, the reducer and the shakedown cut, beside tc1_arm.py
-case " ${TC1_FAMILIES:-} " in *" qwen3hp1 "*|*" qwen3hp1k "*|*" qwen3hp1p "*) STAGE="$STAGE $REPO/bench/hp1/hp1_lib.py $REPO/bench/hp1/hp1_eval.py $REPO/bench/hp1/hp1_reduce.py $REPO/bench/hp1/hp1_trunc.py";; esac
+case " ${TC1_FAMILIES:-} " in *" qwen3hp1 "*|*" qwen3hp1k "*|*" qwen3hp1p "*|*" qwen3hp1cal "*) STAGE="$STAGE $REPO/bench/hp1/hp1_lib.py $REPO/bench/hp1/hp1_eval.py $REPO/bench/hp1/hp1_calib.py $REPO/bench/hp1/hp1_caltokens.py $REPO/bench/hp1/hp1_reduce.py $REPO/bench/hp1/hp1_trunc.py";; esac
 STAGE="$STAGE ${TC1_EXTRA_STAGE:-}"; RUNNER=${TC1_RUNNER:-tc1_run.sh}
 case " $STAGE " in *"/$RUNNER "*) ;; *) say "refusing: TC1_RUNNER=$RUNNER is not a staged file"; exit 78;; esac
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
@@ -80,7 +80,7 @@ for v in TC1_FAMILIES TC1_SKIP TC1_UNSLOTH_VERSION TC1_UNSLOTH_ZOO_VERSION TC1_P
          TC1_PREREG TC1_BATCHED_PAD_WASTE_LIMIT TC1_PHASE_BUDGET_S TC1_ANCHOR_JSON TC1_AXOLOTL_VERSION \
          TC1_CURVE_STEPS TC1_CURVE_EVAL_EVERY TC1_CURVE_EVAL_N TC1_T1_MB TC1_T1_ACCUM TC1_R64_R TC1_R64_ALPHA \
          TC1_SMALL_STEPS TC1_SMALL_EVAL_N TC1_SMALL_EVAL_EVERY TC1_E4B_ENV TC1_PACK TC1_FREE_OUTPUTS TC1_PAD_CENSUS \
-         TC1_HP1_EVAL_N TC1_HP1_EVAL_EVERY TC1_HP1_SEL_SEEDS TC1_HP1_CONF_SEEDS TC1_HP1_SHAKE_LAYERS TC1_HP1_SHAKE_STEPS TC1_HP1_DROP_AXOLOTL \
+         TC1_HP1_EVAL_N TC1_HP1_EVAL_EVERY TC1_HP1_SEL_SEEDS TC1_HP1_CONF_SEEDS TC1_HP1_SHAKE_LAYERS TC1_HP1_SHAKE_STEPS TC1_HP1_DROP_AXOLOTL TC1_HP1_ZERO_TOL \
          TC1_HP1_K_EVAL_SHA256 TC1_HP1_K_SELECT_SHA256 TC1_HP1_K_MANIFEST_SHA256 \
          MG1_FAMILIES MG1_STEPS MG1_PROVE MG1_LADDER_ONLY MG1_LADDER_ARGS MG1_P2_ARM RD1_PROVE DQ11_REQUIRED_DRIVER; do   # TC1b (tc1_run.sh's curve / t1 / r64 knobs); TC2 (the small families' instrument); TC1 amendment 39 (TC1_PACK: the packed regime; TC1_FREE_OUTPUTS: each micro-batch's output released); MG1 (bench/moegen/mg1_run.sh; never MG1_REHEARSAL)
   # Quoted: run tp4-b-p46cut-3 passed TC1_FAMILIES='qwen3 qwen3_5' and the remote `env ... bash tc1_run.sh` saw the second

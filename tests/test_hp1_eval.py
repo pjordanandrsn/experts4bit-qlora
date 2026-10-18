@@ -36,8 +36,8 @@ class Store:
 class Harness:
     """The injected scorer: zero adapter -> `zero`; an adapter -> its `target` row mean (by tag); a perturbed adapter -> `flip`."""
 
-    def __init__(self, zero=2.0010, targets=None, flip_moves=True, stores=None):
-        self.zero, self.targets, self.flip_moves = zero, targets or {}, flip_moves
+    def __init__(self, zero=2.0010, targets=None, flip_moves=True, stores=None, zero_rows=None):
+        self.zero, self.targets, self.flip_moves, self.zero_rows = zero, targets or {}, flip_moves, zero_rows
         self.stores = stores or {"base_e4b": Store()}
         self.scored, self.cur = [], None
 
@@ -50,7 +50,7 @@ class Harness:
 
         def score():
             if self.cur is None:
-                return {"row_mean": self.zero, "token_weighted": self.zero}
+                return {"row_mean": self.zero, "token_weighted": self.zero, "row_losses": self.zero_rows}
             t, _ = self.cur
             tag = t["tag"]
             v = self.targets.get(tag, 1.5010)
@@ -63,10 +63,10 @@ class Harness:
     def load_adapter(self, path):
         return {"tag": path.split(".")[0], "0.q.B": torch.zeros(2, 2)}, {"0.q": 1.0}
 
-    def run(self, arms, bases=("base_e4b",), expect=642514944):
+    def run(self, arms, bases=("base_e4b",), expect=642514944, **kw):
         return hp1_eval.evaluate(copy.deepcopy(arms), list(bases), rows=None, open_base=self.open_base, make_scorer=self.make_scorer,
                                  load_adapter=self.load_adapter, file_sha=lambda p: "sha-" + p.split(".")[0], tokens_sha=TOK,
-                                 expect_trainable=expect)
+                                 expect_trainable=expect, **kw)
 
 
 def by_tag(arms):
@@ -194,3 +194,23 @@ def test_an_arm_on_its_own_base_is_scored_by_the_evaluator_on_that_base():
     assert [b["status"] for b in bases] == ["OK", "OK"]
     x = by_tag(arms)["x"]
     assert x["status"] == "SCORED" and x["base"] == "base_axolotl" and x["evaluator"]["row_mean"] == 1.5010
+
+
+def test_the_zero_adapter_tolerance_is_a_parameter_and_is_recorded():
+    """HP1-PREREG Amendment 4: the 48-layer tolerance comes from the calibration; the default stays the 2-layer 0.005."""
+    bases, _ = Harness(zero=2.0060).run([arm("a")])
+    assert bases[0]["status"] == "VOID" and bases[0]["zero_adapter_tol"] == hp1_eval.ZERO_ADAPTER_TOL == 0.005
+    bases, arms = Harness(zero=2.0060).run([arm("a")], zero_tol=0.01)
+    assert bases[0]["status"] == "OK" and bases[0]["zero_adapter_tol"] == 0.01 and arms[0]["status"] == "SCORED"
+    bases, _ = Harness(zero=2.0060).run([arm("a")], zero_tol=0.0059)
+    assert bases[0]["status"] == "VOID" and "> 0.0059" in bases[0]["reason"]
+
+
+def test_per_row_zero_adapter_losses_and_gaps_are_recorded():
+    """Amendment 4 item 5: per-row zero-adapter losses, and per-row gaps against the arm's in-loop step-0 rows, so a VOID can be
+    diagnosed from the receipt. Gaps only where the receipt carries step-0 rows of the same length."""
+    h = Harness(zero=2.0060, zero_rows=[2.0, 2.012])
+    bases, _ = h.run([arm("a", inloop_step0_rows=[1.999, 2.001]), arm("b", inloop_step0_rows=[2.0]), arm("c")])
+    b = bases[0]
+    assert b["zero_adapter"]["row_losses"] == [2.0, 2.012] and b["status"] == "VOID"      # recorded on a VOID too
+    assert b["zero_adapter_row_gaps"] == {"a": [0.001, 0.011]}                            # b: length mismatch; c: no rows
