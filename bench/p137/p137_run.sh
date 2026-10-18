@@ -15,7 +15,8 @@
 #            test_offload.py at the pin), listed with -rs;
 #   dry      P137_DRY=1: the $0 dry run on a tiny Qwen3-MoE fixture (p137_tiny.py) on any CUDA card, on the BOX'S OWN
 #            stack (recorded, never installed: the dry box is shared), the e4b tree on PYTHONPATH. Never a reading.
-#   order    refusals; install + tripwire (or the dry stack's record); reducer and box self-tests; premise; data slice;
+#   order    refusals; install + tripwire (or the dry stack's record); reducer and box self-tests; premise; the staged
+#            data slice's sha256 (Amendment 1);
 #            fetch (or the fixture); four arms A0a L1a L1b A0b; reduce
 # Refusals: CUDA unusable 18 (the host floor; a torch that will not import stays 10), torch not the pin 28, card class 15,
 # disk 13, host RAM 16. Only 13 and 18 name the machine for the launcher's next draw.
@@ -163,13 +164,13 @@ if [ "$rc" = 0 ] && tail -1 logs/premise.log | grep -Eq "^=* ?$PREMISE_PASSED pa
 else
   echo "premise failed" | tee -a summary.txt; say "PREMISE FAILED on this card"; echo "premise failed rc=$rc" > REFUSAL; finish 25
 fi
-# ---- the training rows (alpaca, the dataset TC3's recipe trains on): a fixed slice, kept with the receipts
-perl -e "alarm 1200; exec @ARGV" python -c "
-import json; from datasets import load_dataset
-ds = load_dataset('tatsu-lab/alpaca', split='train[:400]')
-json.dump([dict(r) for r in ds], open('$W/data.json', 'w'))
-print('P137_DATA', len(ds))" > logs/data.log 2>&1 || { tail -3 logs/data.log; say "DATA FAIL"; finish 19; }
-grep -a "^P137_DATA" logs/data.log | tee -a summary.txt; sha256sum $W/data.json | tee -a summary.txt
+# ---- the training rows (alpaca train[:400], the dataset TC3's recipe trains on): staged by the driver from the controller
+# ---- (Amendment 1: no dataset download on the box; p137-4090-1 died in one), checked against its registered sha256
+DATA_SHA=68e3d31c194ebd8fee4330808a46642f443aecf4e16b78e5eb39fd21b16079c5
+[ -s $W/data.json ] || { say "DATA FAIL: data.json was not staged"; finish 19; }
+GOT_SHA=$(sha256sum $W/data.json | cut -d" " -f1)
+[ "$GOT_SHA" = "$DATA_SHA" ] || { say "DATA FAIL: data.json is $GOT_SHA, registered $DATA_SHA"; finish 19; }
+echo "P137_DATA staged, sha256 $GOT_SHA (registered)" | tee -a summary.txt
 # ---- the checkpoint (or the dry fixture)
 can_run $NEED_FETCH fetch || finish 40
 if [ "$DRY" = 1 ]; then

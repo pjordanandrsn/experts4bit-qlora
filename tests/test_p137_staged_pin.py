@@ -36,8 +36,14 @@ def _entries(pin=PIN):
         yield want, name.strip()
 
 
+DATA_SHA = "68e3d31c194ebd8fee4330808a46642f443aecf4e16b78e5eb39fd21b16079c5"
+
+
 def _drive(tmp_path, run_id, **extra):
-    env = {"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", "HOME": str(tmp_path), "E4B_RENT_SSH_HOST": "h",
+    data = tmp_path / "data.json"
+    if not data.exists():
+        data.write_text("stand-in")
+    env = {"P137_DATA": str(data), "PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", "HOME": str(tmp_path), "E4B_RENT_SSH_HOST": "h",
            "E4B_RENT_SSH_PORT": "1", "E4B_RENT_SSH_OPTS": "-o UserKnownHostsFile=/run/known_hosts",
            "E4B_RENT_RUN_DIR": str(tmp_path), "E4B_RENT_RUN_ID": run_id, "E4B_RENT_DEADLINE_EPOCH": "1",
            "E4B_RENT_INSTANCE_ID": "0", "P137_DRIVE_DRYRUN": "1", **extra}
@@ -112,7 +118,7 @@ def test_the_order_puts_every_refusal_before_the_fetch():
     order = ["CUDA_PROBE=$(python -", "REFUSED: the image's torch", "REFUSED: card is", "the licence covers sm_89",
              "REFUSED: ${FREE_GB", "REFUSED: ${RAM_GB", 'say "install e4b @', "python - <<'PYT'",
              "p137_reduce.py --self-test", "p137_box.py --self-test", "python -m pytest tests/test_layer_major.py",
-             'echo "premise ok', "load_dataset('tatsu-lab/alpaca'", "python $W/p137_tiny.py", 'say "fetch $MODEL @ $REV"',
+             'echo "premise ok', "DATA_SHA=68e3d31c194ebd8fee4330808a46642f443aecf4e16b78e5eb39fd21b16079c5", "python $W/p137_tiny.py", 'say "fetch $MODEL @ $REV"',
              "for TAG in A0a L1a L1b A0b; do", 'say "reduce"; python $W/p137_reduce.py --dir $W --out $W/verdict.json']
     at = [RUN.index(s) for s in order]
     assert at == sorted(at), list(zip(order, at))
@@ -143,3 +149,14 @@ def test_lane_failures_avoid_the_machine_exclusion_codes():
     eighteen = [line for line in RUN.splitlines() if "finish 18" in line]
     assert len(eighteen) == 1 and "cuda unusable" in eighteen[0], eighteen
     assert {9, 10, 11, 15, 16, 19, 21, 22, 25, 28, 40} <= codes
+
+
+def test_amendment_1_the_data_slice_is_staged_and_checked_never_downloaded(tmp_path):
+    """p137-4090-1 died downloading alpaca on the box (an httpx2 decode TypeError). Amendment 1: the driver stages data.json
+    from the controller and checks it, the runner checks it again, and nothing on the box imports datasets."""
+    assert f"DATA_SHA={DATA_SHA}" in RUN and f"DATA_SHA={DATA_SHA}" in DRIVE and DATA_SHA in PREREG
+    assert "load_dataset" not in RUN and "datasets import" not in BOX and "load_dataset" not in BOX
+    assert '[ "$GOT_SHA" = "$DATA_SHA" ] || { say "DATA FAIL: data.json is $GOT_SHA' in RUN
+    out = _drive(tmp_path, "p137-4090-2", P137_DRIVE_DRYRUN="0")   # past the composition print: the stand-in's sha256 refuses
+    assert out.returncode == 78 and "the registered data slice is" in out.stdout, out.stdout + out.stderr
+    assert "Amendment 1" in PREREG

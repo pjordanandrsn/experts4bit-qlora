@@ -174,3 +174,29 @@ The harness changed twice on the way, each change followed by a dry run:
   refused it).
 
 The memory term was then set to read the timed steps only. `p137-dry-4` is that final tree.
+
+## Amendment 1 (after `p137-4090-1`, before any measurement)
+
+**What happened.** `p137-4090-1` (RTX 4090, machine 51617) ended HARNESS_ERROR at $0.028, before any arm. Everything up to
+the data step passed on sm_89 for the first time:
+- the refusals (cc 8.9, 128 SMs);
+- the pinned install and its tripwire (torch 2.8.0+cu128, transformers 5.18.0, grouped-nf4-gemm 0.46.0, bitsandbytes
+  0.50.2);
+- both self-tests;
+- the premise, **47 passed, none skipped**.
+
+The data step (rc 19) failed inside the dataset download on the box: `load_dataset('tatsu-lab/alpaca')` raised in the hub
+client's content decoder (`TypeError: process() takes no keyword arguments`). Nothing was fetched or measured.
+
+**The change.** The training rows no longer come from a download on the box:
+- The slice (alpaca `train[:400]`, as `data.json`, the bytes every dry run produced) is staged by the driver from the
+  controller (`P137_DATA`, default `~/p137-data/data.json`). It is kept outside the repository: the dataset's licence is
+  not the repository's.
+- The driver refuses (78) unless its sha256 is
+  **`68e3d31c194ebd8fee4330808a46642f443aecf4e16b78e5eb39fd21b16079c5`**. The runner checks it again on the box (rc 19 on a
+  missing or different file).
+- Nothing on the box imports `datasets`.
+
+Nothing else changes: the arms, the recipe, the rule, the bars, the pins and the run ids. The reading runs as the declared
+rerun `p137-4090-2`, after a $0 dry run at this amendment's merge and a fresh launch approval. Under the two-strikes rule,
+one more HARNESS_ERROR or VOID stops the lane for a root-cause and simplification note.
