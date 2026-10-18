@@ -2149,8 +2149,10 @@ hp1_shakedown(){ local FAM=$1 MID=$2 REV=$3 TOK=$4 TS=$5 SF=${1}shake
   HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts "$W/${SF}_*_hp1shake_*.json" --bases $W/hp1/shake/base_* --tokens $TOK --eval-n 8 \
     --model "$TM" --revision $TR --expect-trainable 0 --out $W/hp1/eval_shake.json --require-all-scored 1 > logs/hp1_eval_shake.log 2>&1 || { tail -5 logs/hp1_eval_shake.log; return 1; }
   tail -1 logs/hp1_eval_shake.log; rm -rf $SC; return 0; }
-# HP1's registered redraw rule: a run the evaluator VOIDs is redrawn ONCE on the same box (its receipt moved to hp1/void/<name>.a1), then
-# the block is evaluated again; a second VOID voids the cell and the readout says so. hp1_run records each run's invocation for that.
+# HP1's registered redraw rule: a run the evaluator VOIDs at RUN level is redrawn ONCE on the same box (its receipt moved to
+# hp1/void/<name>.a1; the redraw re-exports its framework's base), then the block is evaluated again; a second VOID voids the cell and
+# the readout says so. A BASE-level VOID is a systematic miss and is never redrawn (hp1_reduce.py voids lists run-level VOIDs only).
+# hp1_run records each run's invocation for that.
 declare -A HP1_FW HP1_ARGS
 hp1_run(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 TOK=$8 TS=$9; shift 9
   HP1_FW[$TAG]="$FW $ARM $AL"; HP1_ARGS[$TAG]="$*"
@@ -2165,7 +2167,7 @@ hp1_redraw(){ local FAM=$1 MID=$2 REV=$3 TOK=$4 TS=$5 EVJ=$6 t fw armk al n=0
     : > "$W/hp1/void/${t}.redrawn"; n=$((n + 1))
     say "HP1 redraw (once): $t"; echo "HP1_REDRAW $t" >> summary.txt
     # shellcheck disable=SC2086
-    can_run 1500 $FAM/$fw/$t/redraw && arm $FAM $fw $t $armk $al "$MID" $REV 0 hp1 $TOK $TS ${HP1_ARGS[$t]}
+    can_run 1500 $FAM/$fw/$t/redraw && arm $FAM $fw $t $armk $al "$MID" $REV 0 hp1 $TOK $TS ${HP1_ARGS[$t]} --hp1-export-base 1
   done
   return $(( n > 0 ? 0 : 1 )); }
 # hp1_eval_block NAME RECEIPTS... -- BASES...: the one evaluator over a block, gated on the time it needs (the K pass's measured seconds, or
@@ -2188,11 +2190,25 @@ tc1_hp1_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AXAL=$7
     say "HP1 box-side shakedown FAILED: the draw ends unscored"; echo "HP1 SHAKEDOWN_FAILED" | tee -a summary.txt; return 0
   fi
   echo "HP1 SHAKEDOWN_OK" | tee -a summary.txt
-  local X="--hp1-export $W/hp1" B first=1
-  # the K block (selection seeds): e4b's 2x2, its first run exporting the e4b base
+  local X="--hp1-export $W/hp1" B s0=${HP1_SEL_SEEDS%% *}
+  # the K block (selection seeds): e4b's 2x2. Its first run exports the e4b base, and the EARLY BASE CHECK runs on it at once: the
+  # base's digest and zero-adapter check (and that run's validity) before 11 more runs are paid for. A run-level VOID there gets its
+  # one redraw; a base that is not OK after that ends the draw (a systematic miss caps at about one run's cost).
+  hp1_run $FAM e4b hp1_k00_s$s0 fused $EAL "$MID" $REV $TOK $TS --attn-4bit 1 $(hp1_cell k00 $s0) --seed $s0 --order-seed $s0 $X --hp1-export-base 1
+  local ER=("$W/${FAM}_e4b_hp1_k00_s$s0.json") est
+  hp1_eval_block early $TOK "$MID" $REV "${ER[@]}" -- $W/hp1/base_e4b_$FAM || return 0
+  est=$($PY_E4B -c "import json,sys; b=json.load(open(sys.argv[1]))['bases']; print(b[0].get('status') if b else 'none')" $W/hp1/eval_early.json 2>/dev/null || echo none)
+  if [ "$est" != OK ] && hp1_redraw $FAM "$MID" $REV $TOK $TS $W/hp1/eval_early.json; then
+    hp1_eval_block early $TOK "$MID" $REV "${ER[@]}" -- $W/hp1/base_e4b_$FAM || return 0
+    est=$($PY_E4B -c "import json,sys; b=json.load(open(sys.argv[1]))['bases']; print(b[0].get('status') if b else 'none')" $W/hp1/eval_early.json 2>/dev/null || echo none)
+  fi
+  if [ "$est" != OK ]; then
+    say "HP1 early base check FAILED (e4b base $est): the draw ends before the rest of the K block"; echo "HP1 EARLY_BASE_CHECK_FAILED $est" | tee -a summary.txt; return 0
+  fi
+  echo "HP1 EARLY_BASE_CHECK_OK" | tee -a summary.txt
   for s in $HP1_SEL_SEEDS; do for c in k00 k10 k01 k11; do
-    B=""; [ $first = 1 ] && { B="--hp1-export-base 1"; first=0; }
-    hp1_run $FAM e4b hp1_${c}_s$s fused $EAL "$MID" $REV $TOK $TS --attn-4bit 1 $(hp1_cell $c $s) --seed $s --order-seed $s $X $B
+    [ "$s" = "$s0" ] && [ "$c" = k00 ] && continue
+    hp1_run $FAM e4b hp1_${c}_s$s fused $EAL "$MID" $REV $TOK $TS --attn-4bit 1 $(hp1_cell $c $s) --seed $s --order-seed $s $X
   done; done
   local KR=(); for s in $HP1_SEL_SEEDS; do KR+=("$W/${FAM}_e4b_hp1_k*_s$s.json"); done   # globs, expanded by hp1_eval
   hp1_eval_block K $TOK "$MID" $REV "${KR[@]}" -- $W/hp1/base_e4b_$FAM || return 0

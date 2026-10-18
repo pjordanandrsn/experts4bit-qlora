@@ -134,12 +134,20 @@ def test_a_dead_perturbation_control_voids_the_base_and_its_arms():
     assert bases[0]["status"] == "VOID" and {a["status"] for a in arms} == {"VOID"}
 
 
-def test_own_base_only_needs_no_export_claiming_the_digest_and_a_valid_run():
+def test_an_arm_no_export_claims_is_a_run_level_void():
+    """Every verdict uses evaluator numbers only: an arm whose training digest no export claims has none, so it is VOID (run-level,
+    redrawn once with its base re-exported), never scored on its in-loop number."""
     h = Harness()
     _, arms = h.run([arm("a", train_digest="e" * 64), arm("b")])
-    assert by_tag(arms)["a"]["status"] == "OWN_BASE_ONLY" and by_tag(arms)["b"]["status"] == "SCORED"
-    _, arms = h.run([arm("a", train_digest="e" * 64, c1_bit_exact=False)])
-    assert arms[0]["status"] == "VOID"
+    a = by_tag(arms)["a"]
+    assert a["status"] == "VOID" and a["void_level"] == "run" and "no base export" in a["reason"]
+    assert by_tag(arms)["b"]["status"] == "SCORED"
+
+
+def test_void_levels_split_run_from_base():
+    h = Harness(zero=2.0060)
+    _, arms = h.run([arm("a"), arm("b", status_receipt="c1_failed")])
+    assert by_tag(arms)["a"]["void_level"] == "base" and by_tag(arms)["b"]["void_level"] == "run"
 
 
 def test_a_duplicate_base_is_unused_and_does_not_void():
@@ -174,3 +182,15 @@ def test_each_base_is_released_before_the_next_loads():
     hp1_eval.evaluate([arm("a")], ["base_e4b", "base_unsloth"], None, h.open_base, make_scorer, h.load_adapter,
                       lambda p: "sha-" + p.split(".")[0], TOK, 642514944, release=release)
     assert calls == [0, 0], calls
+
+
+def test_an_arm_on_its_own_base_is_scored_by_the_evaluator_on_that_base():
+    """(a) An arm whose training base differs from the shared one is scored by the EVALUATOR on its OWN exported base (matched by
+    digest, the same STRICT checks on that base) -- usable, with an evaluator number, never an in-loop one."""
+    other = "f" * 64
+    h = Harness(stores={"base_e4b": Store(), "base_axolotl": Store(digest=other, want=other)})
+    bases, arms = h.run([arm("a"), arm("x", framework="axolotl", lora_init="native", adapter_dtypes_after={"torch.float32": 24},
+                                        train_digest=other)], bases=("base_e4b", "base_axolotl"))
+    assert [b["status"] for b in bases] == ["OK", "OK"]
+    x = by_tag(arms)["x"]
+    assert x["status"] == "SCORED" and x["base"] == "base_axolotl" and x["evaluator"]["row_mean"] == 1.5010

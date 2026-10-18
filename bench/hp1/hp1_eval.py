@@ -189,14 +189,15 @@ def evaluate(arms, base_dirs, rows, open_base, make_scorer, load_adapter, file_s
     """The evaluator's rules, with the model and the scoring injected (``open_base(dir) -> store`` with .digest() and .meta;
     ``make_scorer(store) -> (set_adapter(canon | None), score() -> {"row_mean", ...})``; ``load_adapter(path) -> (tensors, scalings)``).
     Every STRICT failure VOIDs: a TC1-invalid run is never scored; a base whose digest or zero-adapter check fails VOIDs every arm
-    that trained on it; the round-trip check 6(b) and the perturbation control VOID their arm / base. An arm is OWN_BASE_ONLY only
-    when NO export claims its training digest (and it is TC1-valid). ``write(bases, arms)`` is called after every base;
+    that trained on it; the round-trip check 6(b) and the perturbation control VOID their arm / base. Every verdict uses evaluator
+    numbers only, so an arm that no export claims is VOID too (it has no evaluator number). Each VOID carries `void_level`: "run"
+    (the driver redraws it once) or "base" (a systematic miss: never redrawn). ``write(bases, arms)`` is called after every base;
     ``release()`` after every base, once its store and scorer are dropped (one model on the device at a time)."""
     bases = []
     for arm in arms:
         why = tc1_invalid(arm, tokens_sha, expect_trainable)
         if why:
-            arm["status"], arm["reason"] = "VOID", f"TC1-invalid: {why}"
+            arm["status"], arm["reason"], arm["void_level"] = "VOID", f"TC1-invalid: {why}", "run"
     for bdir in base_dirs:
         t0 = time.perf_counter()
         set_adapter = score_fn = None
@@ -224,14 +225,14 @@ def evaluate(arms, base_dirs, rows, open_base, make_scorer, load_adapter, file_s
             flip_done = False
             for arm in mine:
                 if file_sha(arm["adapter"]) != arm["adapter_sha256"]:
-                    arm["status"], arm["reason"] = "VOID", "adapter file sha differs from the receipt's"
+                    arm["status"], arm["reason"], arm["void_level"] = "VOID", "adapter file sha differs from the receipt's", "run"
                     continue
                 canon = load_adapter(arm["adapter"])
                 set_adapter(canon)
                 res = score_fn()
                 arm.update(base=bdir, evaluator=res, evaluator_minus_inloop_final=round(res["row_mean"] - arm["inloop_final"], 6))
                 if abs(arm["evaluator_minus_inloop_final"]) > ROUNDTRIP_TOL:     # self-check 6(b): the export round-trips its layout
-                    arm["status"], arm["reason"] = "VOID", f"STRICT round-trip 6(b): |evaluator - in-loop step N| > {ROUNDTRIP_TOL}"
+                    arm["status"], arm["reason"], arm["void_level"] = "VOID", f"STRICT round-trip 6(b): |evaluator - in-loop step N| > {ROUNDTRIP_TOL}", "run"
                 else:
                     arm["status"] = "SCORED"
                 if not flip_done:                   # STRICT control: a perturbed adapter must move the score
@@ -249,7 +250,7 @@ def evaluate(arms, base_dirs, rows, open_base, make_scorer, load_adapter, file_s
             brec.setdefault("status", "OK")
         if brec["status"] == "VOID":                # every arm that trained on this base (by either digest) is VOID with it
             for arm in claim:
-                arm["status"], arm["reason"] = "VOID", f"base {bdir}: {brec['reason']}"
+                arm["status"], arm["reason"], arm["void_level"] = "VOID", f"base {bdir}: {brec['reason']}", "base"
         brec["seconds"] = round(time.perf_counter() - t0, 1)
         del store, set_adapter, score_fn            # the scorer closes over the model: drop it before the next base loads
         if release:
@@ -257,9 +258,9 @@ def evaluate(arms, base_dirs, rows, open_base, make_scorer, load_adapter, file_s
         if write:
             write(bases, arms)
     for arm in arms:
-        if arm.get("status") is None:
-            arm["status"] = "OWN_BASE_ONLY"
-            arm["reason"] = "no base export claims this arm's training-base digest: the readout uses its own-base score (in-loop eval_loss at step N, same rows)"
+        if arm.get("status") is None:               # no evaluator number: every verdict uses evaluator numbers only
+            arm["status"], arm["void_level"] = "VOID", "run"
+            arm["reason"] = "no base export claims this arm's training-base digest, so it has no evaluator number (its redraw re-exports the base)"
     return bases, arms
 
 

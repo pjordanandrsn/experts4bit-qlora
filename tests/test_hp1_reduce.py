@@ -291,20 +291,12 @@ def test_c_star_is_lower_mean_competitor_and_per_competitor_readings(tmp_path, c
     assert res["p"]["c_star"] == "unsloth"
 
 
-def test_own_base_only_is_used_and_flagged(tmp_path, capsys):
+def test_an_own_base_only_arm_gives_no_y(tmp_path, capsys):
+    """Every verdict uses evaluator numbers only: an OWN_BASE_ONLY competitor contributes no y, so its cell is incomplete and the
+    headline reads P_INCOMPLETE -- an in-loop number never enters a verdict."""
     p_arms = _p_arms("k10", (0.0001, -0.0001, 0.0), unsloth_off=0.005, comp_status="OWN_BASE_ONLY")
-    code, res, md, _ = _verdict(tmp_path, _k_arms(K10_BEST), p_arms, capsys)
-    head = _reading(res, "headline")
-    assert code == 0 and res["verdict"] == "PARITY"
-    assert res["p"]["c_star"] == "axolotl"
-    assert head["any_own_base_only"] and head["own_base_only"] == [f"hp1_axolotl_s{s}" for s in CONF]
-    assert _reading(res, "headline") is res["p"]["readings"][0]
-    assert all(r["any_own_base_only"] for r in res["p"]["readings"] if "deltas" in r)
-    assert res["p"]["competitors"]["axolotl"]["per_seed"]["3410"] == pytest.approx(BASE + NOISE[0])
-    assert "hp1_axolotl_s3410" in md
-    run = next(r for r in res["runs"] if r["tag"] == "hp1_axolotl_s3410")
-    assert run["y_source"].startswith("inloop_final")
-
+    code, res, _, _ = _verdict(tmp_path, _k_arms(K10_BEST), p_arms, capsys)
+    assert code == 3 and res["verdict"] == "P_INCOMPLETE" and "axolotl" in res["p"]["excluded_competitors"]
 
 def test_an_incomplete_competitor_gives_no_headline(tmp_path, capsys):
     """Registered: the headline needs BOTH competitors' confirmation cells. With one incomplete it reads P_INCOMPLETE (exit 3), never
@@ -409,9 +401,21 @@ def test_order_problems_unit():
 
 
 def test_voids_lists_exactly_the_void_arms(tmp_path, capsys):
-    """The driver's redraw rule reads `voids`: every VOID arm's tag, nothing else."""
+    """The driver's redraw rule reads `voids`: every RUN-level VOID arm's tag; a base-level VOID (a systematic miss) is not redrawn."""
     path = _write(tmp_path, "e.json", [_arm("hp1_k00_s3407", 3407, 1.0), dict(_arm("hp1_k10_s3407", 3407, 1.0), status="VOID"),
-                                       dict(_arm("hp1_k01_s3407", 3407, 1.0), status="OWN_BASE_ONLY")])
+                                       dict(_arm("hp1_k01_s3407", 3407, 1.0), status="OWN_BASE_ONLY"),
+                                       dict(_arm("hp1_k11_s3407", 3407, 1.0), status="VOID", void_level="base")])
     capsys.readouterr()
     assert hr.main(["voids", path]) == 0
     assert capsys.readouterr().out.split() == ["hp1_k10_s3407"]
+
+
+def test_a_scored_arm_on_its_own_base_is_usable(tmp_path, capsys):
+    """(a) A competitor scored by the evaluator on its own exported base (status SCORED, a different `base`) is an ordinary,
+    usable y; (b), an in-loop-only arm giving no y, is test_an_own_base_only_arm_gives_no_y."""
+    p_arms = _p_arms("k10", (0.0001, -0.0001, 0.0), unsloth_off=0.005)
+    for a in p_arms:
+        if a["tag"].startswith("hp1_axolotl"):
+            a["base"] = "base_axolotl_qwen3hp1"
+    code, res, _, _ = _verdict(tmp_path, _k_arms(K10_BEST), p_arms, capsys)
+    assert code == 0 and res["p"]["c_star"] == "axolotl" and res["p"]["competitors"]["axolotl"]["included"]

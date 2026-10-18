@@ -5,9 +5,8 @@ P readout that reads E against the stronger competitor after them. Mechanical: n
 Inputs: one or more evaluator JSONs written by `bench/hp1/hp1_eval.py` (the K and P blocks may be evaluated separately). Their
 `arms` lists are merged; a tag seen twice (in one file or across files) refuses the whole input. Per arm, y is:
   - status SCORED        -> `evaluator.row_mean` (the one evaluator on the arm's training base);
-  - status OWN_BASE_ONLY -> `inloop_final` (the arm's own-base score, same rows; ruling item 3), and every reading that uses it
-                            says so;
-  - status VOID          -> no y (the run does not exist for the readout).
+  - any other status     -> no y (the run does not exist for the readout). Every verdict uses EVALUATOR numbers only: an in-loop
+                            number never becomes a y (an older evaluator's OWN_BASE_ONLY arm is unusable here).
 Lower held-out loss is better; every one-sided test points that way.
 
 Arm tags (the driver's naming; see ARM_ROLES below): K cells `hp1_k<init><dtype>_s<seed>` on the SELECTION seeds; on the
@@ -198,8 +197,7 @@ def usable_y(arm):
         y = (arm.get("evaluator") or {}).get("row_mean")
         return (y, "evaluator.row_mean", None) if y is not None else (None, None, "SCORED without evaluator.row_mean")
     if status == "OWN_BASE_ONLY":
-        y = arm.get("inloop_final")
-        return (y, "inloop_final (OWN_BASE_ONLY)", None) if y is not None else (None, None, "OWN_BASE_ONLY without inloop_final")
+        return None, None, "OWN_BASE_ONLY: every verdict uses evaluator numbers only"
     return None, None, f"status {status}" + (f": {arm['reason']}" if arm.get("reason") else "")
 
 
@@ -545,10 +543,10 @@ def main(argv=None):
         if name == "verdict":
             sp.add_argument("--md", required=True, help="human-readable markdown table")
     a = ap.parse_args(argv)
-    if a.cmd == "voids":                            # registered redraw rule: a VOID run is redrawn once on the same box
-        for path in a.evals:
+    if a.cmd == "voids":                            # registered redraw rule: a RUN-level VOID is redrawn once on the same box;
+        for path in a.evals:                        # a base-level VOID is a systematic miss and is never redrawn
             for arm in json.load(open(path)).get("arms", []):
-                if arm.get("status") == "VOID":
+                if arm.get("status") == "VOID" and arm.get("void_level") != "base":
                     print(arm["tag"])
         return EXIT_OK
     try:

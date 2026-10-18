@@ -7,6 +7,9 @@ five changes, all folded in below. The later binding rulings are folded in too:
 - the box-side shakedown ends the draw cleanly;
 - the run id, host rule and spend go to the maintainer as an envelope for ACK;
 - every STRICT failure VOIDs, fail-closed, and a TC1-invalid run is never scored;
+- every verdict uses evaluator numbers only;
+- 6(b) is the round trip;
+- an early base check ends the draw on a systematic miss, and base-level VOIDs are never redrawn;
 - the headline needs both competitors;
 - the redraw rule is as implemented (2026-10-18).
 
@@ -100,8 +103,12 @@ Every arm's FINAL (step-200) adapter is scored by the same code. No framework's 
      digest. One export serves several frameworks only when their digests match. The shared base is a checked premise, per arm,
      never assumed.
    - On the A2000 cut, e4b and Unsloth-t28 trained on the bitwise same dequantized base (NF4/64 with nested statistics).
-   - An arm that no export claims is OWN_BASE_ONLY: its y is its own in-loop held-out loss at step 200, on the same 48 rows, by the
-     harness's `eval_loss` (the same scoring code), and the readout labels it.
+   - An arm whose training base differs from another framework's is scored by the evaluator on its OWN exported base, with the
+     same STRICT checks on that base.
+   - An arm that no export claims has no evaluator number. It is a run-level VOID, and its redraw re-exports its framework's base.
+     If its own base is still not exported, or fails a STRICT check, the arm is unusable and its cell incomplete
+     (K_INCOMPLETE / P_INCOMPLETE). An in-loop number never stands in for it: a mixed pair would leave the in-loop-vs-evaluator
+     offset (up to the 0.02 round-trip bound, the margin's cap) uncancelled.
 3. **One forward.** It uses HF transformers 5.18.0's `Qwen3MoeForCausalLM` skeleton with eager attention. Each layer's experts
    and q/k/v/o are replaced by `hp1_lib`'s eager modules:
    - every weight is dequantized from the stored slot by bitsandbytes' `dequantize_4bit` to bf16, and the projection runs in bf16;
@@ -115,7 +122,10 @@ Every arm's FINAL (step-200) adapter is scored by the same code. No framework's 
    - (b) **Zero adapter.** With no adapter, the evaluator's score is within **0.005** (TC1's SAME-BYTES-CLASS bound) of every
      matched arm's in-loop step-0 held-out loss. Otherwise the base and its arms are VOID. An arm with no step-0 read is VOID.
    - (c) **Round trip ("6(b)").** For each arm, the evaluator's step-200 score is within **0.02** (TC1b's fixed band) of the arm's
-     own in-loop step-200 score. This proves its layout exported correctly. Otherwise the arm is VOID.
+     own in-loop step-200 score. This proves its layout exported correctly. Otherwise the arm is VOID. *Changed from the earlier
+     draft:* 6(b) was a step-0 identity between e4b's and PEFT's adapters. With every B = 0 at step 0 it is vacuous, so the
+     maintainer ruled the round trip in its place (2026-10-18). It is a gross-error detector: an export or layout bug lands near
+     +0.4 nats, not 0.02.
    - (d) **Control.** A perturbed adapter moves the score. Otherwise the base and its arms are VOID.
    - (e) **Adapter file.** The file's sha256 equals the receipt's.
 6. **TC1 validity, read by the evaluator before any scoring.** A TC1-invalid run is VOID, never scored. The run must have:
@@ -128,6 +138,13 @@ Every arm's FINAL (step-200) adapter is scored by the same code. No framework's 
    - an HP1 export with the stored-slot proof;
    - in-loop reads at step 0 and step 200.
 7. **Cross-check (REPORTING).** For every scored arm, the evaluator's score minus its in-loop step-200 score.
+
+**Every verdict uses evaluator numbers only.** An in-loop number never becomes a y; it appears only in the STRICT checks above and
+in REPORTING. A shared evaluator offset therefore cancels in every paired difference.
+
+**Each VOID carries a level.** A run-level VOID (TC1-invalid, the adapter file, the round trip, or no export claiming the arm) can
+be redrawn. A base-level VOID (the base's digest, its zero-adapter check, or its control failed) is a systematic miss, and a redraw
+cannot fix it.
 
 The evaluator writes its JSON after every base, so a deadline mid-pass keeps what was scored.
 
@@ -175,10 +192,17 @@ K01/K11), and the order-seed permutation identical across arms at each s: every 
 `order_seed` equals its seed, and every arm compared at seed s has the same `order_sha`. A mismatch VOIDs that pair; the reducer
 reads K_INCOMPLETE / P_INCOMPLETE and names the arm.
 
-**Redraw (as implemented in the `qwen3hp1` token).**
-- After each block's evaluator pass, every run the evaluator VOIDs (TC1-invalid, a STRICT failure, or a VOID base) is redrawn
-  ONCE on the same box, with the same invocation. Its first receipt is kept as `hp1/void/<name>.a1`. Then the block is evaluated
-  again.
+**Early base check (as implemented in the `qwen3hp1` token).** The first K run exports the e4b base. The evaluator checks that
+base and run at once: the digest, the zero-adapter check against that run's step 0, and its validity. This happens before the
+other eleven K runs are paid for.
+- A run-level VOID there gets its one redraw.
+- A base that is not OK after that ENDS THE DRAW (EARLY_BASE_CHECK_FAILED). A systematic miss then costs about one run, not the K
+  block.
+
+**Redraw (as implemented).**
+- After each block's evaluator pass, every RUN-level VOID is redrawn ONCE on the same box, with the same invocation plus its
+  framework's base export. Its first receipt is kept as `hp1/void/<name>.a1`. Then the block is evaluated again.
+- A base-level VOID is never redrawn.
 - A second VOID voids that cell, and the readout states it.
 - An incomplete K block (any K cell without three usable runs) skips the P block (K_INCOMPLETE).
 
@@ -205,19 +229,25 @@ evaluator. It runs before any scored arm (~10 min, inside the cap), and a failur
   expert slot to the last layer's dequantizer (a late-binding closure), so layer 0 exported layer 1's experts. The digest could
   not see it, because every framework went through the same walker. It was fixed in #1709, with a regression test.
 - **Run 2 passed, before the review changes.**
-- **Run 3: e4b K00/K10/K01/K11 and Unsloth 2026.9.14 (venv-unsloth-t28), 3 steps each, trained at af7070bb** (the harness as
-  merged in #1709).
+- **Run 3: e4b K00/K10/K01/K11 and Unsloth 2026.9.14 (venv-unsloth-t28), 3 steps each.** It was trained with `bench/tc1/tc1_arm.py`
+  sha256 `9f43b45b267d3b4fbc0855fd26e8b1c15de7e92832344fe42c74ecba5e2a4939` (as merged in #1709) and `bench/hp1/hp1_lib.py`
+  `d951d1b21e555da99009dfbee3881821557a78aa97256a4bb2ecdee3d323e1c8`. Both are byte-identical to this registration.
   - The evaluator pass first ran out of device memory on the duplicate base, because the first base's model was still held.
     The fix: `evaluate()` drops each base's scorer and releases the device before the next base, with a regression test. The
-    re-run of the evaluator over run 3's arms then passed:
+    final evaluator, `bench/hp1/hp1_eval.py` `ffbda48a6c671547de3e5d67b12948bace6f7372112c48c507c907d346caf3da` (this
+    registration's), re-ran over run 3's arms and passed:
     - `--require-all-scored` rc 0, with all five arms SCORED;
     - zero adapter −0.0018 (e4b) and −0.0023 (Unsloth);
     - round trip −0.0011 to −0.0039, against the 0.02 bound;
     - the perturbed-adapter control moved the score;
     - one base digest, 5e7564ea, whose duplicate (Unsloth's export) was verified and UNUSED.
-- The driver's `qwen3hp1` flow was dry-run with stubbed harness calls. Five paths were covered: the full path, a failed box-side
-  shakedown (the draw ends unscored), an empty K selection (the P block is skipped), a VOID K run (redrawn once, then
-  re-evaluated) and the P pass's time gate.
+- The driver's `qwen3hp1` flow was dry-run with stubbed harness calls. The paths covered:
+  - the full path;
+  - a failed box-side shakedown (the draw ends unscored);
+  - the early base check: OK, base-level VOID (the draw ends after one run), and run-level VOID (redrawn, then OK);
+  - an empty K selection (the P block is skipped);
+  - a run-level VOID K run (redrawn once, then re-evaluated);
+  - the P pass's time gate.
 
 ## Budget and stop rules
 
