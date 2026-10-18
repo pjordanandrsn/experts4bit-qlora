@@ -88,6 +88,7 @@ Or from the CLI: `MODEL=Qwen/Qwen3-30B-A3B OFFLOAD_EXPERTS=1 BENCH_TOKENS=128 py
 
 - Families: those of the loader ([`bitsandbytes-moe-load-in-4bit-still-ooms.md`](bitsandbytes-moe-load-in-4bit-still-ooms.md)). Offload identity is tested on nf4 / int8 / bf16; fp4 / fp8 / fp16 ride the same code path ([`../STORAGE-MODES.md`](../STORAGE-MODES.md)).
 - Offload training requires gradient checkpointing (either kind); the shipped trainer always enables it. Attach offload or NVMe engines before `enable_fast_train`.
+- `E4B_QUANT_CACHE=DIR` (opt-in) keeps the quantized experts of an offloaded load on disk and reads them back on the next start with the same checkpoint, scheme and stack: 4-bit (nf4/fp4) per-expert families; every file is checked by sha256 before use and a mismatch refuses ([`../../bench/quant-cache/DESIGN.md`](../../bench/quant-cache/DESIGN.md)). How much load time it saves depends on the host and is unread.
 - Environment: Linux, NVIDIA CUDA, torch>=2.2, bitsandbytes>=0.43, transformers>=5.0; CI tests Python 3.11. Residency engines need grouped-nf4-gemm at the `fast` extra's floor in `pyproject.toml` (grouped-nf4-gemm >= 0.43.0 at this commit; validated by CI), with Triton (Linux-only) on an sm_80-or-newer GPU.
 
 ## Limitations
