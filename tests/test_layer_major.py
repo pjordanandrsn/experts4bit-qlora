@@ -20,6 +20,7 @@ from experts4bit_qlora.engines.layer_major import layer_major_step  # noqa: E402
 from experts4bit_qlora.engines.offload import _ExpertOffload  # noqa: E402
 
 VOCAB, M = 97, 3
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"  # the tiny model too: the drift guard must hold on CUDA
 WIDTHS = (9, 14, 6)  # unequal micro-batches, right-padded rows inside each
 
 
@@ -36,7 +37,7 @@ def _tiny(seed=0, layers=3, reentrant=False, dtype=torch.float32):
                             head_dim=16, vocab_size=VOCAB, max_position_embeddings=64, decoder_sparse_step=1,
                             norm_topk_prob=True)
     torch.manual_seed(seed)
-    m = tr.Qwen3MoeForCausalLM(cfg).to(dtype)
+    m = tr.Qwen3MoeForCausalLM(cfg).to(dtype).to(DEVICE)
     _train_mode(m, reentrant)
     return m
 
@@ -49,7 +50,7 @@ def _train_mode(m, reentrant):
     m.train()
 
 
-def _batches(seed=3, device="cpu"):
+def _batches(seed=3, device=DEVICE):
     g = torch.Generator().manual_seed(seed)
     out = []
     for w in WIDTHS:
@@ -144,7 +145,6 @@ def _qwen3_moe_checkpoint(d):
     model.config.save_pretrained(d)
 
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 @pytest.fixture(scope="module")
@@ -187,6 +187,7 @@ def test_offloaded_step_stages_2n_cold_and_2n_minus_1_steady(ckpt, copies, reent
     n = N_LAYERS
     ref_losses = _stock(model, _batches(device=DEVICE), WEIGHTS)
     assert len(copies) == M * (2 * n - 1) + 1  # cold: the first forward also stages layer 0
+    layer_major_step(model, _batches(device=DEVICE), WEIGHTS)  # the first call runs the drift guard's stock forward too
     for h in _handles(model):
         h.evict()
     copies.clear()
@@ -285,3 +286,80 @@ def test_trainer_refuses_layer_major_without_offload(monkeypatch):
     monkeypatch.setattr(train.sys, "argv", ["train"])
     with pytest.raises(SystemExit, match="LAYER_MAJOR=1 needs OFFLOAD_EXPERTS=1"):
         train.main()
+
+
+@pytest.mark.parametrize("reentrant", [False, True], ids=["nonreentrant", "reentrant"])
+def test_drift_guard_refuses_a_diverged_preamble_before_any_backward(monkeypatch, reentrant):
+    """If the reproduced preamble stops matching the model's forward (here: the step's causal mask also hides each row's
+    first token, which the stock forward's mask does not), the first call refuses before its backward: no gradient is
+    written."""
+    import transformers.masking_utils as mu
+
+    from experts4bit_qlora.engines import layer_major as lm
+
+    model = _tiny(reentrant=reentrant)
+    real = mu.create_causal_mask
+
+    def diverged(**kw):
+        att = kw["attention_mask"].clone()
+        att[:, 0] = 0
+        return real(**{**kw, "attention_mask": att})
+
+    monkeypatch.setattr(mu, "create_causal_mask", diverged)
+    with pytest.raises(lm.LayerMajorDriftError, match="drifted"):
+        layer_major_step(model, _batches(), WEIGHTS, handles=[])
+    assert all(p.grad is None for p in model.parameters())
+    assert model not in lm._VERIFIED
+
+
+@pytest.mark.parametrize("reentrant", [False, True], ids=["nonreentrant", "reentrant"])
+def test_drift_guard_runs_once_per_model(reentrant):
+    from experts4bit_qlora.engines import layer_major as lm
+
+    model = _tiny(reentrant=reentrant)
+    calls = {"n": 0}
+    model.register_forward_pre_hook(lambda m, a: calls.__setitem__("n", calls["n"] + 1))
+    layer_major_step(model, _batches(), WEIGHTS, handles=[])
+    first = calls["n"]
+    layer_major_step(model, _batches(), WEIGHTS, handles=[])
+    assert first == 2 * M + 1 and calls["n"] - first == M  # first: M head calls + M stock checks + 1 repeat; then M
+    assert model in lm._VERIFIED
+
+
+@pytest.mark.parametrize("reentrant", [False, True], ids=["nonreentrant", "reentrant"])
+def test_drift_guard_refuses_a_non_reproducible_forward_as_such(monkeypatch, reentrant):
+    """If the stock forward itself is not bit-reproducible here (simulated: each call's loss nudged by a counter), the
+    guard says so, rather than blaming drift, and writes no gradient."""
+    from experts4bit_qlora.engines import layer_major as lm
+
+    model = _tiny(reentrant=reentrant)
+    real = type(model).forward
+    n = {"k": 0}
+
+    def wobbly(self, *a, **kw):
+        out = real(self, *a, **kw)
+        if kw.get("input_ids") is not None:  # only the stock calls (the head-only call passes inputs_embeds)
+            n["k"] += 1
+            out.loss = out.loss + n["k"] * 1e-6
+        return out
+
+    monkeypatch.setattr(type(model), "forward", wobbly)
+    with pytest.raises(lm.LayerMajorNotReproducibleError, match="not bit-reproducible"):
+        layer_major_step(model, _batches(), WEIGHTS, handles=[])
+    assert all(p.grad is None for p in model.parameters())
+
+
+def test_refuses_dropout_in_training():
+    """Layer-major draws the random stream in another order than the stock loop, so any active dropout is refused: a
+    config float (Qwen3-MoE's attention dropout) and an ``nn.Dropout`` module (as a PEFT ``lora_dropout`` is)."""
+    from experts4bit_qlora.engines import layer_major as lm
+
+    model = _tiny()
+    model.config.attention_dropout = 0.05
+    with pytest.raises(NotImplementedError, match="dropout is on"):
+        layer_major_step(model, _batches(), WEIGHTS, handles=[])
+    model.config.attention_dropout = 0.0
+    model.model.layers[1].self_attn.q_proj_dropout = torch.nn.Dropout(0.05)
+    with pytest.raises(NotImplementedError, match="q_proj_dropout"):
+        layer_major_step(model, _batches(), WEIGHTS, handles=[])
+    assert model not in lm._VERIFIED
