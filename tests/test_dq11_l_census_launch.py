@@ -282,8 +282,16 @@ def test_envelope_exact_criteria_source_template_and_expiry(tmp_path, monkeypatc
                 "e4b_head": "e" * 40, "controller_head": "c" * 40,
                 "manifest_template_sha256": launch.sha(template),
                 "criteria": launch.ENVELOPE_CRITERIA, "maximum_draws": 1,
-                "run_ids": list(RUN_IDS), "maximum_attempts": 10}
+                "run_ids": list(RUN_IDS), "maximum_attempts": 10,
+                "executor_sha256": launch.executor_sha256("CTO/a/seat")}
     launch.validate_envelope(envelope, record, template, e4b, controller, at=issued + timedelta(hours=1))
+    for bad in ({"executor_sha256": None}, {"executor_sha256": "CTO/a/seat"}, {"executor_sha256": "0" * 63}):
+        with pytest.raises(ValueError, match="bind its one executor"):
+            launch.validate_envelope(dict(envelope, **bad), record, template, e4b, controller,
+                                     at=issued + timedelta(hours=1))
+    unbound = {k: v for k, v in envelope.items() if k != "executor_sha256"}
+    with pytest.raises(ValueError, match="bind its one executor"):
+        launch.validate_envelope(unbound, record, template, e4b, controller, at=issued + timedelta(hours=1))
     with pytest.raises(ValueError, match="expired"):
         launch.validate_envelope(envelope, record, template, e4b, controller, at=issued + timedelta(hours=24))
     shorter = dict(envelope, expires_at=(issued + timedelta(hours=23)).isoformat())
@@ -347,7 +355,7 @@ def test_envelope_comment_must_be_maintainer_exact_json(monkeypatch):
 
 @pytest.mark.parametrize("validation_rc,controller_rc", [(0, 0), (1, 0), (0, 97)])
 def test_qualifying_window_makes_one_inclusion_pinned_launch(tmp_path, monkeypatch, validation_rc, controller_rc):
-    monkeypatch.setenv("POD_LAUNCH_AGENT", "CTO/codex-desktop/dense")
+    monkeypatch.setenv("POD_LAUNCH_AGENT", "CTO/example/executor")
     e4b = LANE.parents[1]
     controller = tmp_path / "controller"
     controller.mkdir()
@@ -356,7 +364,8 @@ def test_qualifying_window_makes_one_inclusion_pinned_launch(tmp_path, monkeypat
     approval_url = "https://github.com/pjordanandrsn/experts4bit-qlora/issues/1083#issuecomment-123"
     envelope.write_text(json.dumps({"approval_url": approval_url, "issued_at": "2026-10-11T08:00:00Z",
                                     "expires_at": "2026-10-12T08:00:00Z",
-                                    "run_ids": list(RUN_IDS), "maximum_attempts": 10}))
+                                    "run_ids": list(RUN_IDS), "maximum_attempts": 10,
+                                    "executor_sha256": launch.executor_sha256("CTO/example/executor")}))
     assets = tmp_path / "assets"
     assets.mkdir()
     packet = tmp_path / "packet"
@@ -441,6 +450,7 @@ def test_qualifying_window_makes_one_inclusion_pinned_launch(tmp_path, monkeypat
     assert set(bound["lane_record"]) == launch.LANE_RECORD_FIELDS
     assert bound["lane_record"]["status"] == "ENVELOPE_BOUND_PENDING_FRESH_GATES"
     assert bound["lane_record"]["authorization_basis"]["envelope_ack_url"] == approval_url
+    assert bound["lane_record"]["authorization_basis"]["executor_sha256"] == launch.executor_sha256("CTO/example/executor")
     stray = json.loads(json.dumps(bound))
     stray["lane_record"]["note"] = "x"
     with pytest.raises(ValueError, match="lane_record has unregistered fields"):
@@ -455,11 +465,12 @@ def test_qualifying_window_makes_one_inclusion_pinned_launch(tmp_path, monkeypat
 
 
 def test_paid_controller_refuses_expired_search_before_driver(tmp_path, monkeypatch):
-    monkeypatch.setenv("POD_LAUNCH_AGENT", "CTO/codex-desktop/dense")
+    monkeypatch.setenv("POD_LAUNCH_AGENT", "CTO/example/executor")
     template = tmp_path / "template.json"
     template.write_text("{}")
     envelope = tmp_path / "envelope.json"
-    envelope.write_text(json.dumps({"approval_url": "https://github.com/pjordanandrsn/experts4bit-qlora/issues/1083#issuecomment-1"}))
+    envelope.write_text(json.dumps({"approval_url": "https://github.com/pjordanandrsn/experts4bit-qlora/issues/1083#issuecomment-1",
+                                    "executor_sha256": launch.executor_sha256("CTO/example/executor")}))
     monkeypatch.setattr(launch, "validate_envelope", lambda *args: None)
     monkeypatch.setattr(launch, "verify_envelope_comment", lambda *args: None)
     monkeypatch.setattr(launch, "live_provider", lambda *args: FakeProvider([offer()]))
@@ -521,7 +532,8 @@ def test_box_refuses_wrong_science_before_gpu_or_network(tmp_path):
     assert not (tmp_path / "logs/hardware-precheck.log").exists()
 
 
-@pytest.mark.parametrize("identity", [None, "", "someone-else"])
+@pytest.mark.parametrize("identity", [None, "", "someone-else", "CTO", "CTO/", "CTO/a b", "cto/example/executor",
+                                      "CTO/seat;rm"])
 def test_launch_refuses_missing_or_wrong_executor_before_discovery(tmp_path, monkeypatch, identity):
     monkeypatch.delenv("POD_LAUNCH_AGENT", raising=False)
     if identity is not None:
@@ -531,6 +543,27 @@ def test_launch_refuses_missing_or_wrong_executor_before_discovery(tmp_path, mon
                               run_id=RUN_IDS[0])
     assert not (tmp_path / "packet").exists()
 
+
+
+@pytest.mark.parametrize("identity,refused", [("CTO/a/seat", False), ("CTO/another/seat", True)])
+def test_launch_runs_only_as_the_executor_the_envelope_binds(tmp_path, monkeypatch, identity, refused):
+    """The envelope binds ONE executor (the SHA-256 of its CTO identity); POD_LAUNCH_AGENT must be exactly that seat,
+    checked before any search. A matching seat goes on (to the comment check, stubbed here to stop)."""
+    monkeypatch.setenv("POD_LAUNCH_AGENT", identity)
+    envelope = tmp_path / "envelope.json"
+    envelope.write_text(json.dumps({"executor_sha256": launch.executor_sha256("CTO/a/seat")}))
+    monkeypatch.setattr(launch, "validate_envelope", lambda *args: None)
+
+    def comment(_):
+        raise ValueError("comment check reached")
+    monkeypatch.setattr(launch, "verify_envelope_comment", comment)
+    monkeypatch.setattr(launch, "live_provider", lambda *a: pytest.fail("no search before the executor check"))
+    with pytest.raises(ValueError) as err:
+        launch.launch_attempt(tmp_path / "template", envelope, *(tmp_path / n for n in ("e4b", "controller", "assets", "packet")),
+                              run_id=RUN_IDS[0])
+    assert ("not the executor this envelope binds" in str(err.value)) is refused
+    assert ("comment check reached" in str(err.value)) is (not refused)
+    assert not (tmp_path / "packet").exists()
 
 def test_registered_range_template_identity_and_sha256():
     template = LANE / "dq11_l_census_manifest_template.json"

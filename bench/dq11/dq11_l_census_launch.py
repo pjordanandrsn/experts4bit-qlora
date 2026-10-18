@@ -65,6 +65,14 @@ OPERATIONAL_FILES = (
 )
 TRANSPORT_FILE = "bench/tc1/tc1_drive.sh"
 TEMPLATE_FILE = "bench/dq11/dq11_l_census_manifest_template.json"
+#: The seat that runs the launch: POD_LAUNCH_AGENT, a well-formed CTO identity, which the controller records in the
+#: receipt. The envelope binds ONE executor by the SHA-256 of that identity (``executor_sha256``: the ACK is a public
+#: comment, so it carries no seat name), and the launch refuses any other seat.
+EXECUTOR_RE = re.compile(r"CTO(/[A-Za-z0-9._-]+)+")
+
+
+def executor_sha256(identity: str) -> str:
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()
 #: The launcher refuses any top-level manifest key it does not read (adertha-agents#243), so the census's own record
 #: (its status, closure and authorization basis) travels in ``lane_record``, which the launcher copies into the receipt.
 LANE_RECORD_FIELDS = frozenset({"status", "l_census", "authorization_basis"})
@@ -505,6 +513,8 @@ def validate_envelope(envelope: dict, envelope_path: Path, template_path: Path,
             or not issued <= current < expires
             or (expires - issued).total_seconds() != ENVELOPE_HOURS * 3600):
         raise ValueError("envelope is not yet valid, expired or not exactly 24 hours")
+    if not (isinstance(envelope.get("executor_sha256"), str) and re.fullmatch(r"[0-9a-f]{64}", envelope["executor_sha256"])):
+        raise ValueError("envelope must bind its one executor (executor_sha256)")
     if (json.dumps(envelope.get("criteria"), sort_keys=True) != json.dumps(ENVELOPE_CRITERIA, sort_keys=True)
             or type(envelope.get("maximum_draws")) is not int or envelope["maximum_draws"] != 1
             or not valid_run_ids(envelope)):
@@ -753,6 +763,7 @@ def bind_manifest(template_path: Path, envelope_path: Path, summary: dict,
     lane["authorization_basis"] = {
         "envelope_ack_url": envelope["approval_url"],
         "envelope_sha256": sha(envelope_path), "issued_at": envelope["issued_at"],
+        "executor_sha256": envelope["executor_sha256"],
         "expires_at": envelope["expires_at"], "maximum_draws": 1,
         "run_ids": envelope["run_ids"], "maximum_attempts": envelope["maximum_attempts"],
         "qualifying_window_sha256": summary["stable_history_sha256"],
@@ -953,10 +964,13 @@ def controller_call(command: list[str], env: dict, packet_dir: Path, name: str) 
 def launch_attempt(template_path: Path, envelope_path: Path, e4b: Path, controller: Path,
                    assets: Path, packet_dir: Path, *, run_id: str, before_controller=None) -> int:
     """Under one envelope, bind the first qualified host and launch once."""
-    if os.environ.get("POD_LAUNCH_AGENT") != "CTO/codex-desktop/dense":
-        raise ValueError("POD_LAUNCH_AGENT must identify CTO/codex-desktop/dense before discovery")
+    agent = os.environ.get("POD_LAUNCH_AGENT") or ""
+    if not EXECUTOR_RE.fullmatch(agent):
+        raise ValueError("POD_LAUNCH_AGENT must identify the executing CTO/... seat before discovery")
     envelope = json.loads(envelope_path.read_text())
     validate_envelope(envelope, envelope_path, template_path, e4b, controller)
+    if executor_sha256(agent) != envelope.get("executor_sha256"):
+        raise ValueError("POD_LAUNCH_AGENT is not the executor this envelope binds; nothing searched or created")
     verify_envelope_comment(envelope)
     if packet_dir.exists() or packet_dir.is_relative_to(e4b) or packet_dir.is_relative_to(controller):
         raise ValueError("write-once launch packet must be outside source checkouts")
