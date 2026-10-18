@@ -218,7 +218,9 @@ c = json.load(open("/root/vsplit/canary_census.json"))
 blocking = [x for x in (c.get("labels") or []) if x in ("CLASS_MAP_INCOMPLETE", "CLASS_MAP_SEGMENT_BROKEN", "NSYS_DIAGNOSTIC_ERRORS", "CLOCK_MISMATCH")]
 rec = json.load(open("/root/vsplit/canary.json"))
 rec["census"] = {"status": c.get("status"), "labels": c.get("labels"), "blocking": blocking}
-ok = c.get("status") == "ok" and not blocking
+# sc1b's status is "labelled" whenever ANY label is attached, and the canary always carries NO_UNPROFILED_TIMING (no
+# unprofiled time exists before timing pass A): only a void arm or a blocking label fails it (vsplit-5090-2, rc 26)
+ok = c.get("status") in ("ok", "labelled") and not blocking
 rec["status"] = "ok" if (rec.get("status") == "ok" and ok) else "failed"
 json.dump(rec, open("/root/vsplit/canary.json", "w"), indent=1)
 print("VSPLIT_CANARY_CENSUS " + json.dumps(rec["census"]))

@@ -1,0 +1,47 @@
+{
+ "mode": "canary",
+ "e4b_sha": "88ae1cfd8fbe3477189f5a42d8448f395e974345",
+ "gnf4_sha": "724ccc454f006c1a46836e434e997f31f293747f",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "load_s": 82.26,
+ "graph_status": {
+  "1": "graph",
+  "2": "graph",
+  "3": "graph",
+  "4": "graph"
+ },
+ "spec_build": {
+  "mode": "eagle3",
+  "k": 3,
+  "head": "/root/.cache/huggingface/hub/models--RedHatAI--Qwen3-30B-A3B-speculator.eagle3/snapshots/6afc5aa2477b923467fb9a8d906782b984a9a6ba",
+  "head_sha256": "d2d6e2e63e09dc755053ae5c98cdececae3611ae5e202d4fa5411126dd3b1dfa",
+  "aux_layers": [
+   2,
+   24,
+   45
+  ],
+  "hooks": 3,
+  "draft_max_positions": 4103,
+  "verify_buckets": [
+   2,
+   3,
+   4
+  ]
+ },
+ "missing_buckets": [],
+ "replays": {
+  "1": "ok",
+  "2": "ok",
+  "3": "ok",
+  "4": "ok"
+ },
+ "status": "failed",
+ "census": {
+  "status": "labelled",
+  "labels": [
+   "NO_UNPROFILED_TIMING"
+  ],
+  "blocking": []
+ }
+}

@@ -225,3 +225,26 @@ The pin is still by machine and offer set under the market rules, with no substi
 **Unchanged:** the subject, the instrument, the rule, the predictions, the guard, the costs ($2.80 worst per run,
 $5.60 for the lane) and the stop rule. **Re-pinned:** nothing; no staged byte moves. A new scope ACK follows the
 merge. Until then, a host that meets the original bar may still run under the current ACK.
+
+## Fix 1 (2026-10-18, after `vsplit-5090-2`; no rule change)
+
+**What happened.** `vsplit-5090-2`, P138's first box-started attempt, stopped at its canary (box exit 26), although
+the canary was clean. That is strike 1, and `vsplit-5090-3` is the last box-started attempt.
+- SC1b's census reader marks a reading `labelled` whenever it attaches any label.
+- The canary always carries `NO_UNPROFILED_TIMING`, because no unprofiled time exists before timing pass A.
+- The runner's canary check required status `ok`. So did the reducer's census check, which would also have VOIDed
+  every census arm carrying `PROFILER_INFLATED`: on that card the canary's profiled period was 10.54 ms at n = 2,
+  far past the reader's 5 % gate.
+
+**The fix.** The registered VOID list (The rule, above) fails a census reading only when it is void or carries one of
+the four blocking labels. Both checks now follow it, so the reporting labels (`NO_UNPROFILED_TIMING`,
+`PROFILER_INFLATED`, `NODE_TRACE_INFLATED`) read through. The code now matches the registration. No rule, measured
+term, gate or cost changes.
+
+**Re-pinned** (`staged-vsplit.sha256`; every other staged byte is unchanged):
+- `vsplit_run.sh`: `a05dff24` → `71705391`;
+- `vsplit_reduce.py`: `88ece714` → `b2ee7028`.
+
+**Tests, real records first:** the box's own canary records (`tests/fixtures/p138_canary/`, sha256-pinned). The
+runner's canary block passes them, and the old rule fails them as it did on the box. The reducer reads the real
+labelled arm through and VOIDs it when void.
