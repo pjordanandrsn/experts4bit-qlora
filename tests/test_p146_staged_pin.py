@@ -67,7 +67,7 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 
 
 def test_the_self_tests_pass():
-    for script, line in (("p146_reduce.py", "p146_reduce self-test OK (56 cases)"),
+    for script, line in (("p146_reduce.py", "p146_reduce self-test OK (63 cases)"),
                          ("p146_box.py", "p146_box self-test OK (15/15 cases)")):
         out = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True,
                              env={**os.environ, "PYTHONPATH": ""})
@@ -122,9 +122,13 @@ def test_the_rule_is_the_registered_rule():
     assert 'DATASET_CALLS = ["train[:2000]", "train[2000:2064]"]' in REDUCE
     # Amendment A1: the host-quiet guard's terms, fixed before any data under them
     assert "HOST_CPU_MAX = 0.05" in REDUCE and "HOST_LINK_DROP = 0.15" in REDUCE and '"VOID_BY_HOST"' in REDUCE
+    assert "HOST_PSI_PAIR = 0.05" in REDUCE and 'for a, b in (("A0a", "A0b"), ("L1a", "L1b")):' in REDUCE
+    assert 'thr = (cb["nr_throttled"] - ca["nr_throttled"]) / dp if dp > 0 else 0.0' in BOX     # periods, not CPU-time
+    assert "psi = psi_source()" in BOX and 'env["P146_PSI_SOURCE"] = psi' in BOX            # one PSI file for all arms
     assert 'PROBES_REG = ("before_A0a", "after_A0a", "after_L1a", "after_L1b", "after_A0b")' in REDUCE
     assert 'probe(a, "before_A0a")' in BOX and 'probe(a, f"after_{tag}")' in BOX and "report_offload_environment" in BOX
-    for s in ("Amendment A1", "5 %", "15 %", "VOID_BY_HOST", "not a strike"):
+    for s in ("Amendment A1", "5 %", "15 %", "VOID_BY_HOST", "not a strike", "nr_throttled", "|L1b − L1a| > 5 points",
+              "psi: absent"):
         assert s in PREREG, s
 
 

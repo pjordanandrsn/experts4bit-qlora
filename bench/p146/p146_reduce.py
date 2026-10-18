@@ -13,7 +13,11 @@
      forwards in its first step); the stagings per step after step 0 not exactly M x (2n - 1) (A0) and 2n - 1 (L1);
      an arm with other than TIMED_REG timed steps; L1's peak above A0's by more than MEM_TERM_GIB.
   2. VOID_BY_HOST (Amendment A1; NOT a strike, the run id becomes a spare): the host-quiet guard did not hold. Any arm
-     whose timed window shows the box cgroup throttled, or /proc/stat steal, above HOST_CPU_MAX of the window; any of
+     whose timed window shows the box cgroup throttled in more than HOST_CPU_MAX of its CFS enforcement periods, or
+     /proc/stat steal above HOST_CPU_MAX of all CPU time; CPU pressure ("some", one source fixed for all four arms)
+     that moved by more than HOST_PSI_PAIR between a self-pair's arms (|A0b - A0a| or |L1b - L1a|; A0 and L1 do
+     different host work by design, so their own baselines may differ), where PSI is readable (absent in every arm:
+     that signal is skipped); any of
      the PROBES_REG pinned host-to-device probes (before the first arm, after each arm) more than HOST_LINK_DROP below
      the first; or a guard signal that was not recorded (the host cannot show it was quiet).
   3. VOID: a self-pair outside [SELF_LO, SELF_HI]. Across fresh processes it reads process-to-process variance.
@@ -36,6 +40,7 @@ MEM_TERM_GIB = 4.25
 HELD_TOL = 0.01
 HOST_CPU_MAX = 0.05                      # A1: throttled or steal time, as a fraction of an arm's timed window
 HOST_LINK_DROP = 0.15                    # A1: a probe this far below the first probe; A11's two-sample tolerance
+HOST_PSI_PAIR = 0.05                     # A1: |A0b - A0a| or |L1b - L1a| of the CPU pressure ("some") shares
 PROBES_REG = ("before_A0a", "after_A0a", "after_L1a", "after_L1b", "after_A0b")
 TIMED_REG = 32
 ACCUM = 4
@@ -66,6 +71,16 @@ def host_guard(recs, probes):
         for k in ("throttled_frac", "steal_frac"):
             if g[k] > HOST_CPU_MAX:
                 out.append(f"{t}: {k} {g[k]:.4f} of the timed window > {HOST_CPU_MAX}")
+    psi = {t: (recs[t].get("host_guard") or {}).get("psi_some_frac") for t in TAGS}
+    src = {recs[t].get("psi_source") for t in TAGS}
+    if all(v is not None for v in psi.values()):
+        if len(src) != 1 or "absent" in src or None in src:
+            out.append(f"CPU pressure read from different or unnamed sources: {sorted(map(str, src))}")
+        for a, b in (("A0a", "A0b"), ("L1a", "L1b")):
+            if abs(psi[b] - psi[a]) > HOST_PSI_PAIR:
+                out.append(f"CPU pressure moved {abs(psi[b] - psi[a]):.4f} between {a} and {b} > {HOST_PSI_PAIR}: {psi}")
+    elif any(v is not None for v in psi.values()):
+        out.append(f"CPU pressure recorded in some arms but not all: {psi}")
     got = [x.get("tag") for x in (probes or [])]
     if tuple(got) != PROBES_REG or any(x.get("pinned_gbps") is None for x in probes):
         out.append(f"the link probes are not the registered five: {got}")
@@ -269,6 +284,18 @@ def self_test():
     case("A1: steal above 5% is VOID_BY_HOST", {**ok, "A0b": hgd("A0b", steal_frac=0.06)}, "VOID_BY_HOST")
     case("A1: exactly 5% holds", {**ok, "A0b": hgd("A0b", steal_frac=0.05, throttled_frac=0.05)}, "LICENSED")
     case("A1: a CPU signal not recorded", {**ok, "L1a": hgd("L1a", steal_frac=None)}, "VOID_BY_HOST")
+    def psi(**kw):
+        return {t: {**hgd(t, psi_some_frac=kw.get(t, 0.10)), "psi_source": kw.get("src_" + t, "/proc/pressure/cpu")}
+                for t in TAGS}
+    case("A1: PSI baselines 10 points apart, both self-pairs within 2: HOLDS (the maintainer's test)",
+         psi(A0a=0.10, A0b=0.12, L1a=0.20, L1b=0.19), "LICENSED")
+    case("A1: a PSI self-pair 5 points apart holds", psi(L1b=0.15), "LICENSED")
+    v = case("A1: a PSI self-pair above 5 points is VOID_BY_HOST", psi(L1b=0.1501), "VOID_BY_HOST")
+    assert "between L1a and L1b" in v["reasons"][0]
+    case("A1: the A0 PSI pair above 5 points is VOID_BY_HOST", psi(A0b=0.16), "VOID_BY_HOST")
+    case("A1: PSI from two different sources", psi(src_L1b="/sys/fs/cgroup/cpu.pressure"), "VOID_BY_HOST")
+    case("A1: PSI absent in every arm is skipped", ok, "LICENSED")
+    case("A1: PSI in some arms only is VOID_BY_HOST", {**ok, "A0a": hgd("A0a", psi_some_frac=0.0)}, "VOID_BY_HOST")
     case("A1: no guard at all", {**ok, "L1a": {k: v for k, v in ok["L1a"].items() if k != "host_guard"}}, "VOID_BY_HOST")
     slow = [dict(x) for x in QUIET]
     slow[3]["pinned_gbps"] = 22.0 * 0.84

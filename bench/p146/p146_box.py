@@ -56,9 +56,12 @@ LEVERS = ("LAYER_MAJOR", "FAST_TRAIN", "OFFLOAD_EXPERTS", "OFFLOAD_PIN", "E4B_OF
           "E4B_EXPERT_PROFILE", "TRITON_INTERPRET")
 
 
-def arm_env(tag, model, outdir, base=None):
-    """The environment one arm's process runs under: the levers cleared, then the CLI's switches for this arm."""
-    env = {k: v for k, v in (os.environ if base is None else base).items() if k not in LEVERS}
+def arm_env(tag, model, outdir, base=None, psi=None):
+    """The environment one arm's process runs under: the levers cleared, then the CLI's switches for this arm, and
+    the PSI file fixed for every arm (A1; unset when psi is absent)."""
+    env = {k: v for k, v in (os.environ if base is None else base).items() if k not in LEVERS and k != "P146_PSI_SOURCE"}
+    if psi:
+        env["P146_PSI_SOURCE"] = psi
     env.update(ARM_ENV[tag[:2]])
     env.update({"MODEL": model, "STEPS": str(STEPS), "DO_GEN": "0", "TR1_CENSUS": "1",
                 "TR1_CENSUS_OUT": os.path.join(outdir, f"census_{tag}.json"), "E4B_OFFLOAD_STATS": "1",
@@ -84,17 +87,20 @@ def rows_from_census(census):
              "peak_alloc": r["peak_alloc"]} for i, r in enumerate(census["steps"])]
 
 
-def read_throttled_usec(root="/sys/fs/cgroup"):
-    """The cgroup's cumulative throttled time in microseconds: v2 cpu.stat throttled_usec, v1 cpu/cpu.stat
-    throttled_time (ns). None when neither is readable."""
+def read_cpu_stat(root="/sys/fs/cgroup"):
+    """The cgroup's CFS counters: nr_periods and nr_throttled (the guard), and the throttled time in microseconds
+    (REPORTING: the kernel sums it over every runqueue the group ran on, so it is CPU-time, not wall). v2 cpu.stat
+    (throttled_usec), else v1 cpu/cpu.stat (throttled_time, ns). None unless both period counters are readable."""
     for path, key, scale in ((os.path.join(root, "cpu.stat"), "throttled_usec", 1.0),
                              (os.path.join(root, "cpu", "cpu.stat"), "throttled_time", 1e-3)):
         try:
-            for line in open(path):
-                k, _, v = line.partition(" ")
-                if k == key:
-                    return float(v) * scale
-        except OSError:
+            kv = dict(line.split(None, 1) for line in open(path) if line.strip())
+        except (OSError, ValueError):
+            continue
+        try:
+            return {"nr_periods": int(kv["nr_periods"]), "nr_throttled": int(kv["nr_throttled"]),
+                    "throttled_usec": float(kv[key]) * scale if key in kv else None}
+        except (KeyError, ValueError):
             continue
     return None
 
@@ -111,20 +117,54 @@ def read_proc_stat(path="/proc/stat"):
         return None
 
 
-def host_snapshot(root="/sys/fs/cgroup", stat="/proc/stat"):
-    return {"t": time.monotonic(), "throttled_usec": read_throttled_usec(root), "proc_stat": read_proc_stat(stat)}
+def read_psi_some_usec(path):
+    """CPU pressure from one file, "some" total in microseconds (run-queue wait: how a noisy neighbour shows).
+    None when it is not readable."""
+    try:
+        for line in open(path):
+            if line.startswith("some "):
+                return float(dict(x.split("=") for x in line.split()[1:])["total"])
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return None
+
+
+def psi_source(root="/sys/fs/cgroup", proc="/proc/pressure/cpu"):
+    """The ONE PSI file every arm reads, fixed once (the cgroup v2 cpu.pressure, else the host's /proc/pressure/cpu),
+    so a spread never compares two files. None when neither is readable: psi absent."""
+    for path in (os.path.join(root, "cpu.pressure"), proc):
+        if read_psi_some_usec(path) is not None:
+            return path
+    return None
+
+
+def host_snapshot(root="/sys/fs/cgroup", stat="/proc/stat", psi_path=None):
+    psi_path = psi_path if psi_path is not None else os.environ.get("P146_PSI_SOURCE") or None
+    return {"t": time.monotonic(), "cpu_stat": read_cpu_stat(root), "proc_stat": read_proc_stat(stat),
+            "psi_some_usec": read_psi_some_usec(psi_path) if psi_path else None}
 
 
 def host_window(a, b):
-    """The timed window's guard signals from two snapshots; a signal that could not be read is None."""
+    """The timed window's signals from two snapshots; a signal that could not be read is None.
+    Guard: throttled_frac = the share of CFS enforcement periods in which the group was throttled (0.0 when no period
+    elapsed: no quota is being enforced); steal_frac; psi_some_frac (a guard across the arms where it is readable).
+    REPORTING: throttled_cpu_s_per_wall_s."""
     wall = b["t"] - a["t"]
-    thr = None
-    if a["throttled_usec"] is not None and b["throttled_usec"] is not None and wall > 0:
-        thr = (b["throttled_usec"] - a["throttled_usec"]) / (wall * 1e6)
+    thr = thr_cpu = None
+    ca, cb = a.get("cpu_stat"), b.get("cpu_stat")
+    if ca and cb:
+        dp = cb["nr_periods"] - ca["nr_periods"]
+        thr = (cb["nr_throttled"] - ca["nr_throttled"]) / dp if dp > 0 else 0.0
+        if ca["throttled_usec"] is not None and cb["throttled_usec"] is not None and wall > 0:
+            thr_cpu = (cb["throttled_usec"] - ca["throttled_usec"]) / (wall * 1e6)
     steal = None
     if a["proc_stat"] and b["proc_stat"] and b["proc_stat"][1] > a["proc_stat"][1]:
         steal = (b["proc_stat"][0] - a["proc_stat"][0]) / (b["proc_stat"][1] - a["proc_stat"][1])
-    return {"wall_s": wall, "throttled_frac": thr, "steal_frac": steal}
+    psi = None
+    if a.get("psi_some_usec") is not None and b.get("psi_some_usec") is not None and wall > 0:
+        psi = (b["psi_some_usec"] - a["psi_some_usec"]) / (wall * 1e6)
+    return {"wall_s": wall, "throttled_frac": thr, "steal_frac": steal, "psi_some_frac": psi,
+            "throttled_cpu_s_per_wall_s": thr_cpu}
 
 
 def h2d_pinned_gbps(mb=256, iters=20):
@@ -149,8 +189,8 @@ def h2d_pinned_gbps(mb=256, iters=20):
 def preflight_ok(snap, gbps):
     """A1 pre-flight: every signal the guard reads must be readable on this host."""
     bad = []
-    if snap["throttled_usec"] is None:
-        bad.append("cgroup cpu.stat throttled time unreadable")
+    if snap["cpu_stat"] is None:
+        bad.append("cgroup cpu.stat period counters unreadable")
     if snap["proc_stat"] is None:
         bad.append("/proc/stat steal unreadable")
     if not gbps or gbps <= 0:
@@ -167,7 +207,8 @@ def run_preflight():
         print(f"P146_PREFLIGHT_PROBE_ERROR {type(e).__name__}: {e}", flush=True)
         gbps = None
     bad = preflight_ok(snap, gbps)
-    print("P146_PREFLIGHT " + json.dumps({"throttled_usec": snap["throttled_usec"], "proc_stat": snap["proc_stat"],
+    print("P146_PREFLIGHT " + json.dumps({"cpu_stat": snap["cpu_stat"], "proc_stat": snap["proc_stat"],
+                                          "psi_source": psi_source() or "absent",
                                           "pinned_gbps": gbps, "bad": bad}), flush=True)
     return 2 if bad else 0
 
@@ -284,6 +325,7 @@ def run_arm(a):
            "token_budget_effective": cen["meta"].get("token_budget_effective"),
            "host_guard": (host_window(got["host"]["start"], got["host"]["end"])
                           if "start" in got["host"] and "end" in got["host"] else None),
+           "psi_source": os.environ.get("P146_PSI_SOURCE") or "absent",
            "process": "fresh process per arm (python -m experts4bit_qlora.train's main)",
            "switches": {k: os.environ.get(k) for k in ("OFFLOAD_EXPERTS", "FAST_TRAIN", "LAYER_MAJOR")},
            "versions": {"torch": torch.__version__, "transformers": transformers.__version__,
@@ -304,6 +346,8 @@ def run_cli_abba(a):
     """A0a L1a L1b A0b, each `python p146_box.py --arm TAG` in a fresh process; one log per arm."""
     os.makedirs(os.path.join(a.outdir, "logs"), exist_ok=True)
     rc_all = 0
+    psi = psi_source()
+    print("P146_PSI_SOURCE " + json.dumps({"source": psi or "absent"}), flush=True)
     probe(a, "before_A0a")
     for tag in TAGS:
         log = os.path.join(a.outdir, "logs", f"arm_{tag}.log")
@@ -312,7 +356,7 @@ def run_cli_abba(a):
         t0 = time.perf_counter()
         with open(log, "w") as f:
             try:
-                rc = subprocess.run(cmd, env=arm_env(tag, a.model, a.outdir), stdout=f, stderr=subprocess.STDOUT,
+                rc = subprocess.run(cmd, env=arm_env(tag, a.model, a.outdir, psi=psi), stdout=f, stderr=subprocess.STDOUT,
                                     timeout=ARM_TIMEOUT_S).returncode
             except subprocess.TimeoutExpired:
                 rc = 124
@@ -379,32 +423,53 @@ def self_test():
     import tempfile
     d = tempfile.mkdtemp()
     os.makedirs(os.path.join(d, "cpu"))
-    open(os.path.join(d, "cpu.stat"), "w").write("usage_usec 10\nnr_throttled 3\nthrottled_usec 2500000\n")
-    assert read_throttled_usec(d) == 2500000.0
+    open(os.path.join(d, "cpu.stat"), "w").write("usage_usec 10\nnr_periods 100\nnr_throttled 3\nthrottled_usec 2500000\n")
+    assert read_cpu_stat(d) == {"nr_periods": 100, "nr_throttled": 3, "throttled_usec": 2500000.0}
     os.remove(os.path.join(d, "cpu.stat"))
-    open(os.path.join(d, "cpu", "cpu.stat"), "w").write("nr_periods 9\nthrottled_time 4000000000\n")
-    assert read_throttled_usec(d) == 4000000.0                          # v1: ns -> us
+    open(os.path.join(d, "cpu", "cpu.stat"), "w").write("nr_periods 9\nnr_throttled 1\nthrottled_time 4000000000\n")
+    assert read_cpu_stat(d) == {"nr_periods": 9, "nr_throttled": 1, "throttled_usec": 4000000.0}   # v1: ns -> us
+    open(os.path.join(d, "cpu", "cpu.stat"), "w").write("throttled_time 4000000000\n")
+    assert read_cpu_stat(d) is None                                       # no period counters: unreadable
     os.remove(os.path.join(d, "cpu", "cpu.stat"))
-    assert read_throttled_usec(d) is None
+    assert read_cpu_stat(d) is None
     n += 1
     ps = os.path.join(d, "stat")
     open(ps, "w").write("cpu  100 0 50 800 10 0 0 40 0 0\ncpu0 1 2 3\n")
     assert read_proc_stat(ps) == (40, 1000)
     open(ps, "w").write("intr 1 2\n")
     assert read_proc_stat(ps) is None
+    pp = os.path.join(d, "pressure")
+    open(pp, "w").write("some avg10=0.00 avg60=0.00 avg300=0.00 total=1234\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=9\n")
+    assert read_psi_some_usec(pp) == 1234.0 and read_psi_some_usec(os.path.join(d, "none")) is None
+    assert psi_source(d, pp) == pp                                          # no cgroup file: the host's
+    open(os.path.join(d, "cpu.pressure"), "w").write("some avg10=1.00 avg60=0.00 avg300=0.00 total=77\n")
+    assert psi_source(d, pp) == os.path.join(d, "cpu.pressure")             # the cgroup's own pressure first
+    assert psi_source(os.path.join(d, "none"), os.path.join(d, "none")) is None
+    assert host_snapshot(d, ps, psi_path=pp)["psi_some_usec"] == 1234.0      # one fixed file for every arm
+    e = arm_env("A0a", "/m", "/o", base={"P146_PSI_SOURCE": "/stale"}, psi=None)
+    assert "P146_PSI_SOURCE" not in e and arm_env("L1a", "/m", "/o", base={}, psi=pp)["P146_PSI_SOURCE"] == pp
     n += 1
-    w = host_window({"t": 0.0, "throttled_usec": 1e6, "proc_stat": (40, 1000)},
-                    {"t": 100.0, "throttled_usec": 6e6, "proc_stat": (90, 2000)})
-    assert abs(w["throttled_frac"] - 0.05) < 1e-12 and abs(w["steal_frac"] - 0.05) < 1e-12 and w["wall_s"] == 100.0
-    w = host_window({"t": 0.0, "throttled_usec": None, "proc_stat": None}, {"t": 1.0, "throttled_usec": 5.0, "proc_stat": (1, 2)})
+
+    def snap(t, per, thr, us, st, psi):
+        return {"t": t, "cpu_stat": {"nr_periods": per, "nr_throttled": thr, "throttled_usec": us}, "proc_stat": st,
+                "psi_some_usec": psi}
+    # serve-throughput's case: 4 % of periods throttled while throttled CPU-time is 0.4 x wall (summed over runqueues)
+    w = host_window(snap(0.0, 0, 0, 0.0, (40, 1000), 0.0), snap(100.0, 1000, 40, 40e6, (90, 2000), 5e6))
+    assert abs(w["throttled_frac"] - 0.04) < 1e-12 and abs(w["throttled_cpu_s_per_wall_s"] - 0.4) < 1e-12
+    assert abs(w["steal_frac"] - 0.05) < 1e-12 and abs(w["psi_some_frac"] - 0.05) < 1e-12 and w["wall_s"] == 100.0
+    w = host_window(snap(0.0, 7, 0, 0.0, (1, 2), None), snap(10.0, 7, 0, 0.0, (1, 3), None))
+    assert w["throttled_frac"] == 0.0 and w["psi_some_frac"] is None          # no period elapsed: no quota enforced
+    w = host_window({"t": 0.0, "cpu_stat": None, "proc_stat": None, "psi_some_usec": None},
+                    {"t": 1.0, "cpu_stat": None, "proc_stat": (1, 2), "psi_some_usec": None})
     assert w["throttled_frac"] is None and w["steal_frac"] is None
     n += 1
-    ok = {"t": 0.0, "throttled_usec": 0.0, "proc_stat": (0, 10)}
-    assert preflight_ok(ok, 20.0) == []
-    assert len(preflight_ok({**ok, "throttled_usec": None}, 20.0)) == 1
+    ok = {"t": 0.0, "cpu_stat": {"nr_periods": 0, "nr_throttled": 0, "throttled_usec": 0.0}, "proc_stat": (0, 10),
+          "psi_some_usec": None}
+    assert preflight_ok(ok, 20.0) == []                                   # psi absent: never a refusal (the ruling)
+    assert len(preflight_ok({**ok, "cpu_stat": None}, 20.0)) == 1
     assert len(preflight_ok({**ok, "proc_stat": None}, 20.0)) == 1
     assert len(preflight_ok(ok, None)) == 1 and len(preflight_ok(ok, 0.0)) == 1
-    assert len(preflight_ok({"t": 0.0, "throttled_usec": None, "proc_stat": None}, None)) == 3
+    assert len(preflight_ok({**ok, "cpu_stat": None, "proc_stat": None}, None)) == 3
     n += 1
     print(f"p146_box self-test OK ({n}/15 cases)")
     return 0

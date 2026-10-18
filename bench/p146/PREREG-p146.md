@@ -202,12 +202,24 @@ first pair the host-link fit gives T 1.42 s, inside the predicted 1.29–1.90, a
 (**VOID_BY_HOST: no reading, not a strike**, and the run id becomes a spare) from "the arms are unstable" (VOID, a
 strike). The self-pair band is unchanged and still decides on a quiet host.
 - **CPU, per arm, over its timed window** (from the end of warm step 2 to the end of the last step):
-  - the box cgroup's throttled time (`cpu.stat`: v2 `throttled_usec`, v1 `throttled_time`), as a fraction of the
-    window's wall;
-  - `/proc/stat` steal, as a fraction of all CPU time on the aggregate `cpu` line.
-  - **VOID_BY_HOST if either exceeds 5 % of the window.** The argument rests on the band, not on any box: the
-    self-pair band allows 3 %, so a host that takes more than 5 % of a window can by itself move a median past the
-    band. A quiet box shows neither signal. `p146-4090-5` recorded neither, so no seen value sets the threshold.
+  - **throttling:** the share of the box cgroup's CFS enforcement periods in which it was throttled, Δ`nr_throttled` /
+    Δ`nr_periods` (`cpu.stat`, v2 or v1; 0 when no period elapsed, i.e. no quota is enforced). The review pass
+    corrected a first form: the throttled time (`throttled_usec`) is summed by the kernel over every runqueue the group
+    ran on, so per wall second it reads "CPUs throttled on average" and grows with the CPU count. That figure is kept
+    as REPORTING (`throttled_cpu_s_per_wall_s`);
+  - **steal:** `/proc/stat` steal as a fraction of all CPU time on the aggregate `cpu` line.
+  - **VOID_BY_HOST if either exceeds 5 %.** The argument rests on the band, not on any box: the self-pair band allows
+    3 %, so a host that takes more than 5 % of a window can by itself move a median past the band. A quiet box shows
+    neither signal. `p146-4090-5` recorded neither, so no seen value sets the threshold.
+- **CPU pressure (PSI), a guard where it is readable** (the maintainer's ruling: neighbour run-queue contention, which
+  is what `-5` looked like, shows as neither throttling nor steal on bare metal):
+  - the "some" total of one file fixed once for all four arms (the cgroup v2 `cpu.pressure`, else
+    `/proc/pressure/cpu`), as a share of each arm's timed window;
+  - **VOID_BY_HOST if |A0b − A0a| > 5 points or |L1b − L1a| > 5 points.** The self-pair form asks "did the host change
+    between the replicate arms". A four-arm spread could VOID on the lever itself, since A0 and L1 do different host
+    work by design, so their own baselines may differ;
+  - unreadable at the pre-flight: recorded as `psi: absent`, and the box runs on with the other signals (a host booted
+    with `psi=0` is not excluded). Recorded in some arms but not all, or from different files, is VOID_BY_HOST.
 - **Link:** one pinned host-to-device probe (`engines.offload.report_offload_environment`, 256 MB × 20) in its own
   process before the first arm and after every arm. That is five probes: `before_A0a`, then `after_A0a`, `after_L1a`,
   `after_L1b`, `after_A0b`.
@@ -216,7 +228,8 @@ strike). The self-pair band is unchanged and still decides on a quiet host.
 - **A guard signal that was not recorded** (an unreadable `cpu.stat` or `/proc/stat`, a missing or failed probe) is
   also VOID_BY_HOST: the host cannot show it was quiet.
 - **Pre-flight (the maintainer's pre-pass):** right after the box starts, before the install and the fetch, the box reads
-  `cpu.stat` and `/proc/stat` once and runs one pinned H2D probe in plain torch. If any of them is unreadable it refuses
+  `cpu.stat` (with its period counters) and `/proc/stat` once, names the PSI source (or `absent`), and runs one
+  pinned H2D probe in plain torch. If `cpu.stat`, `/proc/stat` or the probe is unreadable it refuses
   (rc 29, `BOX_REFUSED host_guard=unreadable`): NOT_RUN at the pre-flight, at minimal cost and not a strike, so no
   box is spent on a certain VOID_BY_HOST.
 - **Order of the rule:** the structural STRICT rungs first (a broken arm is a strike on any host), then the guard,
