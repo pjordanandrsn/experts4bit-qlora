@@ -159,7 +159,8 @@ def test_amendment_1s_card_terms_are_the_runners_floors():
     terms = a1[a1.index("**The card terms**"):a1.index("The pin is still")]
     for want in (f"RTX {gpu}", "verified-secure, with direct SSH", "reliability2 ≥ 0.98", "inet_down ≥ 1000 Mbps",
                  f"≥ {disk + 20} GB (the runner's {disk} GB floor + 20)", f"≥ {ram} GiB (the runner's floor)",
-                 "≤ $0.85/h", "≤ $0.011/GB", "not ranking-ineligible", "**6 of 6**"):
+                 "≤ $0.85/h", "≤ $0.011/GB", "not ranking-ineligible", "not the ranking tool's own eligibility flag",
+                 "**6 of 6**", "The pin post lists the six reads"):
         assert want in terms, want
     assert "clean run" not in terms and "Amendment 1 replaces this bar" in pre
     assert "No data has been seen." in a1

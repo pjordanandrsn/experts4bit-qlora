@@ -210,11 +210,14 @@ mid-run leaves records missing, which VOIDs, and VOID is a strike. The terms bel
 - host RAM ≥ 60 GiB (the runner's floor);
 - ≤ $0.85/h for the GPU plus the ordered storage, and ≤ $0.011/GB download;
 - **not ranking-ineligible:** the machine's most recent host outcome in the receipts store is not a failure
-  (pre-flight failure, host refusal or instance lost). A machine with no host outcome in the receipts qualifies;
+  (pre-flight failure, host refusal or instance lost). A machine with no host outcome in the receipts qualifies. This
+  is not the ranking tool's own eligibility flag, which also excludes every machine with no successful run in the
+  receipts; a pin applies only the most-recent-outcome test;
 - **stable:** within the 2 minutes before its pin is posted, the offer reads present in **6 of 6** machine-filtered
   reads (the launcher's search filter with `machine_id` set). One absent read (a ghost or a flap) disqualifies the
   offer for that pin attempt. On 2026-10-18 a 5090 offer stood in the broad search while reading absent 6 of 6 by
-  machine, and was refused at create.
+  machine, and was refused at create. The pin post lists the six reads (each read's UTC time and the query sent), so
+  the screen can be audited.
 
 The pin is still by machine and offer set under the market rules, with no substitute.
 
