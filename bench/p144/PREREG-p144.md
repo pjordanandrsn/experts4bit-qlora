@@ -62,12 +62,7 @@ These inform the scale of the prediction below and nothing else. Every bar is P1
 - step 0's per-micro-batch losses are not bit-identical across arms;
 - step 0 is not cold (A0 M(2n − 1) + 1 = 253; L1a = L1b = 2n = 64);
 - steady stagings are not exactly 252 (A0) and 63 (L1);
-- L1's peak is above A0's by more than **4.25 GiB**. P137 derived that term from Qwen3's dimensions: (M − 1) × the
-  checkpointed layer inputs plus the saved fp32 log-probabilities while the chunked-loss gate is off. Re-derived for
-  Mixtral at P137's worst case of 2 × 2048 tokens, it would be 3 × (1.0 + 0.49) = 4.47 GiB, above the term. But the
-  registered slice keeps it far away. With Mixtral's tokenizer at `eba92302`, the widest micro-batch over the 34 steps
-  is 2 × 463 = 926 tokens, so the extra is 3 × (0.226 + 0.110) = 1.01 GiB. The term holds on this data by about
-  3.2 GiB, not by its Qwen3 derivation;
+- L1's peak is above A0's by more than **4.25 GiB**;
 - an arm did not start from the snapshot, or the arm-start memory is more than 16 MiB off;
 - the warm-up record is missing or differs across arms, or its layer-major stagings are not above 64;
 - an arm has other than 32 timed steps;
@@ -105,12 +100,7 @@ step); layer-major makes it once per step (49.9 GB).
 
 ## Predictions (written before any data)
 
-- **Q1.** Every arm fits in 24 GB under offload; an OOM is VOID. Estimated A0 peak, about 8–10 GiB:
-  - the non-expert bf16 weights, about 3.2 GB (attention 1.34 B parameters, embeddings and head 0.26 B);
-  - two staged expert layers, about 1.6 GB;
-  - the expert LoRA (r 16, 210 M fp32 parameters) with its gradients and AdamW 8-bit state, about 2.1 GB;
-  - activations, logits and the CUDA context, about 1–2 GB.
-  P137 had a measured anchor (tc3-4090-8's 11.07 GiB); this one is arithmetic.
+- **Q1.** Every arm fits in 24 GB under offload; an OOM is VOID.
 - **Q2.** Step 0 is bit-identical across the four arms; stagings are exactly 253 / 252 and 64 / 63.
 - **Q3.** S is in [1.5, 2.6].
 - **Q4.** L1's peak is within the 4.25 GiB term of A0's.
