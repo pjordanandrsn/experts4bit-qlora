@@ -1181,6 +1181,13 @@ quiet gate saw no compute app and 0 % utilization.
 **The pin screen.** The science box's download bound is the fit's expected run at the pinned host's listed bandwidth, at most
 4.8 h, as Amendment 11 registered. The fixed 3,000 Mbps bound is retired.
 
+**The science box.**
+- **Run ids:** `q235-pro6000-4`, with `-5` and `-6` as spares. A refusal before the create consumes an id and is not an attempt.
+- **Host terms:** a RTX PRO 6000 with at least 239 GB of host RAM, reliability at least 0.98, and 650 GB of disk. Rate at most
+  $1.70 an hour including the disk, download at most $0.011 per GB. Prefer the leg's machine, whose rates set these floors.
+- **Guard:** 6.0 h. **Worst** = 6.0 h × the quoted rate + 474.252 GB × the quoted per-GB download, at most $15 (at the leg
+  machine's quote: $1.627 and $0.0026, so $11.00).
+
 **The fit's one code change.** For an Amendment 11 leg, `q235_fit.py` passes no disk sample to `leg_floors`, and reports the
 warm read beside it as not used.
 
