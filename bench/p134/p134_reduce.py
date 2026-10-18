@@ -29,6 +29,7 @@ The rule, per family, first rung that applies:
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import math
 import os
@@ -55,6 +56,21 @@ INCUMBENT = {GRAN: "scalar", OLMOE: "scalar", TINY: "scalar"}   # neither family
 K33_SAVED_MS = {GRAN: 1.644 - 0.385, OLMOE: 1.618 - 0.391}
 TRANSFER = (0.55, 1.0)       # the share of a kernel saving that reaches the served step: K6b's, and all of it (P116)
 OFF_ARMS = ("R", "rep", "chunk", "mutant_scale")
+def _instrument_buckets() -> tuple:
+    """The buckets P110's instrument enables at capture=False in every quality pass: ``p110_box.BUCKETS``, read from that
+    file's own source (staged beside this reducer on the box; ``bench/p110`` in the repository) without importing it (it
+    imports torch), so the rule cannot drift from the instrument. Amendment 1: the pass integrity reads these, as P116's
+    reducer did, not the server's buckets from the record, which follow its own max_seqs."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    for path in (os.path.join(here, "p110_box.py"), os.path.join(here, "..", "p110", "p110_box.py")):
+        if os.path.exists(path):
+            for node in ast.parse(open(path, encoding="utf-8").read()).body:
+                if isinstance(node, ast.Assign) and any(getattr(x, "id", None) == "BUCKETS" for x in node.targets):
+                    return tuple(ast.literal_eval(node.value))
+    raise SystemExit("REFUSED: p110_box.py (P110's instrument, where its BUCKETS live) is not beside the reducer")
+
+
+INSTRUMENT_BUCKETS = _instrument_buckets()
 FLOORS = ("chunk",)
 GEMV = ("dotpad", "dotpad_splitk", "scalar", "scalar_splitk")
 BW = ("bw_tree", "bw_prmt32", "bw_splitk")
@@ -136,7 +152,7 @@ def _workloads(arms: dict) -> tuple:
     return ("W1",) + ((c,) if c else ())
 
 
-def _t1_pass_faults(e, C, L, buckets, dry=False) -> list:
+def _t1_pass_faults(e, C, L, dry=False) -> list:
     """One window, one pass: bucket 1 eager (capture=False), C - 1 decode steps, no padding, no replay. Device grouping
     is required except in a dry run (sm_86 groups on the host: its first execution is the paid proof)."""
     out = []
@@ -145,7 +161,7 @@ def _t1_pass_faults(e, C, L, buckets, dry=False) -> list:
     if not dry and not (e.get("grouping_flags_in_pass") or {}).get("device_grouping"):
         out.append("device grouping off")
     st = e.get("graph_status") or {}
-    if [st.get(str(b)) for b in buckets] != ["eager: capture=False"] * len(buckets):
+    if [st.get(str(b)) for b in INSTRUMENT_BUCKETS] != ["eager: capture=False"] * len(INSTRUMENT_BUCKETS):
         out.append(f"graph_status {st}")
     gs = e.get("graph_stats") or {}
     got = gs.get("1", {})
@@ -175,7 +191,6 @@ def quality_faults(off: dict, on: dict, e4b_sha: str, family: str, proof: bool, 
     if void:
         return void
     L, want_n, C = LAYERS[want_model], WINDOWS[_mode(proof, dry)], off["cont"]
-    buckets = off.get("buckets") or []
     for k in ("cont", "prompt", "chunk", "floor_chunk", "layers", "windows_sha256", "fusions", "buckets"):
         if off.get(k) != on.get(k):
             void.append(f"the phases differ in {k}: {off.get(k)} / {on.get(k)}")
@@ -196,7 +211,7 @@ def quality_faults(off: dict, on: dict, e4b_sha: str, family: str, proof: bool, 
                     void.append(f"{name} {t} {arm}: {len(passes)} passes, expected {want}")
                     continue
                 for k, e in enumerate(passes):
-                    void += [f"{name} {t} {arm} pass {k}: {m}" for m in _t1_pass_faults(e, C, L, buckets, dry)]
+                    void += [f"{name} {t} {arm} pass {k}: {m}" for m in _t1_pass_faults(e, C, L, dry)]
         r_passes = (off.get("engagement") or {}).get(t, {}).get("R", [])
         on_passes = (on.get("engagement") or {}).get(t, {}).get("ON", [])
         for k, (a, b) in enumerate(zip(r_passes, on_passes)):
@@ -395,13 +410,27 @@ def _fake_quality(phase, *, model=GRAN, mode="reading", bias=None, mutant=0.4, c
             ws = range(1) if arm == "rep" else range(n)
             per[t][arm] = [{"window": w, "nll": base[w] + off_by + (0.001 if w % 2 else -0.001) * (arm != "R"),
                             "argmax_agree": 1.0, "kl": 0.001} for w in ws]
-            eng[t][arm] = [_fake_pass(C, L, bk, device_grouping) for _ in ws]
+            eng[t][arm] = [_fake_pass(C, L, INSTRUMENT_BUCKETS, device_grouping) for _ in ws]
     return {"mode": "quality", "arm": "B0" if phase == "off" else "B1", "status": "ok", "dry": dry,
             "model": ("/root/p134/fam/tinya/" + TINY) if model == TINY else model, "revision": REVS[model],
             "e4b_sha": E, "gnf4_sha": GNF4_SHA, "group": group, "prompt": 512, "cont": C, "buckets": bk,
             "chunk": 512, "floor_chunk": 256, "layers": L, "windows_sha256": {t: t for t in TEXTS},
             "fusions": {"fuse_qkv_n": 0}, "rep_identical": {t: rep_identical for t in TEXTS}, "per_window": per,
             "engagement": eng, "dispatch_measure": d}
+
+
+def _bucket_missing(rec: dict) -> dict:
+    """``rec`` with its first R pass reporting no bucket 8: the instrument genuinely missed one of its buckets."""
+    t = TEXTS[0]
+    del rec["engagement"][t]["R"][0]["graph_status"]["8"]
+    return rec
+
+
+def _bucket_captured(rec: dict) -> dict:
+    """``rec`` with its first R pass's bucket 16 reading ``graph``: the instrument must stay eager in every bucket."""
+    t = TEXTS[0]
+    rec["engagement"][t]["R"][0]["graph_status"]["16"] = "graph"
+    return rec
 
 
 def self_test() -> int:
@@ -451,6 +480,14 @@ def self_test() -> int:
         ("quality bias", v(arms(), n=_fake_quality("on", bias={"c4val1": 0.02})) == "QUALITY_FAIL"),
         ("quality K8 wikitext", v(arms(), n=_fake_quality("on", bias={"wikitext": 0.009})) == "QUALITY_FAIL"),
         ("mutant passes", v(arms(), o=_fake_quality("off", mutant=0.0001)) == "VOID"),
+        ("server buckets 1-64, instrument passes at 1-16 (Amendment 1)",
+         v(arms(all={"buckets": [1, 2, 4, 8, 16, 32, 64]}), _fake_quality("off", buckets=[1, 2, 4, 8, 16, 32, 64]),
+           _fake_quality("on", buckets=[1, 2, 4, 8, 16, 32, 64])) == "LICENSED"),
+        ("a quality pass whose bucket captured is void", v(arms(), o=_bucket_captured(_fake_quality("off"))) == "VOID"),
+        ("a quality pass missing instrument bucket 8 is void",
+         v(arms(all={"buckets": [1, 2, 4, 8, 16, 32, 64]}),
+           _bucket_missing(_fake_quality("off", buckets=[1, 2, 4, 8, 16, 32, 64])),
+           _fake_quality("on", buckets=[1, 2, 4, 8, 16, 32, 64])) == "VOID"),
         ("reading windows are 24", v(arms(), n=_fake_quality("on", n=12)) == "VOID"),
         ("proof windows are 12", v(arms(), _fake_quality("off", **pr_q), _fake_quality("on", **pr_q), proof=True)
          == "LICENSED"),

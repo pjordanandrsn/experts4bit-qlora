@@ -1,7 +1,10 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
 """The step's token ids, from TC1's field-recipe rows (``tp4_alpaca.py``'s file) rendered as TC1 renders them (``tc1_arm.render_row``,
 the Alpaca template with EOS), tokenized by the checkpoint's own tokenizer, truncated to ``--seq`` and right-padded to the longest row.
-Writes ``input_ids``, ``attention_mask`` and ``labels`` (-100 on pads) as one torch file, and their sha256 beside it."""
+Writes ``input_ids``, ``attention_mask`` and ``labels`` (-100 on pads) as one torch file, and their sha256 beside it.
+
+``--heldout-out`` (Amendment 8) also writes the registered held-out rows: the next ``--rows`` rows of the same split, from
+``--first + --rows``, rendered, tokenized and padded the same way and disjoint from the step's by construction."""
 from __future__ import annotations
 
 import argparse
@@ -54,10 +57,15 @@ def main():
     ap.add_argument("--seq", type=int, default=2048)
     ap.add_argument("--first", type=int, default=0)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--heldout-out", default=None, help="Amendment 8: also write the next --rows rows, the held-out read's")
     a = ap.parse_args()
     t, rec = build(a.ds, a.tokenizer, a.rows, a.seq, a.first)
     torch.save(t, a.out)
     json.dump(rec, open(a.out + ".json", "w"), indent=1)
+    if a.heldout_out:
+        h, hrec = build(a.ds, a.tokenizer, a.rows, a.seq, a.first + a.rows)
+        torch.save(h, a.heldout_out)
+        json.dump(hrec, open(a.heldout_out + ".json", "w"), indent=1)
     print(json.dumps(rec))
 
 

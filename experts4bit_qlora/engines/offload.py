@@ -109,9 +109,12 @@ stream the copy runs on.
 
 from __future__ import annotations
 
+import contextlib
+import mmap
 import os
 
 import time
+import weakref
 
 import torch
 
@@ -180,6 +183,103 @@ def reset_offload_stats() -> None:
 _PLACEHOLDERS: dict[tuple[torch.device, torch.dtype], torch.Tensor] = {}
 
 
+def _slab_enabled() -> bool:
+    """Exact-size pinning (``E4B_OFFLOAD_PIN_SLAB=1``, default off): a layer's homes share one exact-size, page-aligned pageable
+    buffer, pinned in place with ``cudaHostRegister`` (:class:`_PinnedSlab`). torch's pinned allocator rounds every request up to a
+    power of two, so pinning the four homes separately costs up to 1.33x their bytes (Qwen3, Mixtral 8x22B) and more on some
+    families; the slab costs their bytes plus at most a page and the alignment. Staging is unchanged: the homes are views, copied
+    as before. Not combinable with ``E4B_OFFLOAD_ARENA`` (whose per-dtype arenas round up to 1.78x on those families)."""
+    return os.environ.get("E4B_OFFLOAD_PIN_SLAB", "0") == "1"
+
+
+#: Offset alignment of each home inside a slab, in bytes: a multiple of every element size and of what the copy engines prefer.
+_SLAB_ALIGN = 512
+
+#: The slabs registered with ``cudaHostRegister`` and not yet unregistered: base address -> (bytes, whether the device reads them
+#: at their host address). Read by :func:`_is_pinned`, :func:`_slab_of` and the leak tests. torch's ``Tensor.is_pinned`` answers
+#: False for registered memory: it knows only its own allocator's blocks.
+_REGISTERED: dict = {}
+
+
+def _cudart():
+    """The CUDA runtime bindings (``torch.cuda.cudart()``). One seam, so CPU tests can stand in for registration."""
+    return torch.cuda.cudart()
+
+
+def _rc(rc) -> int:
+    return int(getattr(rc, "value", rc))
+
+
+#: ``cudaHostRegisterPortable | cudaHostRegisterMapped``: the pages count as pinned in every CUDA context, and are mapped into the
+#: device's address space, so a kernel may read them in place (the pipelined engine's gather does, at the host address).
+_HOST_REGISTER_FLAGS = 3
+
+
+def _host_device_pointer(ptr: int) -> "tuple[int | None, str | None]":
+    """``(device address, which library answered)`` for registered host memory, or ``(None, None)``. The driver API first
+    (``libcuda.so.1``'s ``cuMemHostGetDevicePointer_v2``: one soname across CUDA versions), then the runtime's
+    ``cudaHostGetDevicePointer`` under any soname a torch build may load. One seam, so CPU tests can stand in for it."""
+    import ctypes
+    try:
+        fn = ctypes.CDLL("libcuda.so.1").cuMemHostGetDevicePointer_v2
+        d = ctypes.c_uint64()
+        if fn(ctypes.byref(d), ctypes.c_void_p(ptr), ctypes.c_uint(0)) == 0 and d.value:
+            return int(d.value), "libcuda.so.1:cuMemHostGetDevicePointer_v2"
+    except (OSError, AttributeError):
+        pass
+    for name in (None, "libcudart.so.13", "libcudart.so.12", "libcudart.so"):
+        try:
+            fn = ctypes.CDLL(name).cudaHostGetDevicePointer
+        except (OSError, AttributeError):
+            continue
+        dptr = ctypes.c_void_p()
+        if fn(ctypes.byref(dptr), ctypes.c_void_p(ptr), ctypes.c_uint(0)) == 0 and dptr.value:
+            return int(dptr.value), f"{name or 'process'}:cudaHostGetDevicePointer"
+    return None, None
+
+
+def _unregister_slab(ptr: int, backing: torch.Tensor) -> None:
+    """Unregister a slab's pages, THEN drop its memory. ``backing`` is held by this call's own arguments until it returns, so the
+    pages are never freed while still registered; every initialized device is synchronized first, so no non_blocking copy from
+    the slab is still in flight. Idempotent: :class:`weakref.finalize` runs it at most once (and not at interpreter exit)."""
+    if ptr in _REGISTERED:
+        del _REGISTERED[ptr]
+        if torch.cuda.is_available() and torch.cuda.is_initialized():
+            for d in range(torch.cuda.device_count()):
+                torch.cuda.synchronize(d)
+        _cudart().cudaHostUnregister(ptr)
+    del backing
+
+
+class _PinnedSlab:
+    """One layer's homes in a single exact-size, page-aligned pageable buffer, pinned in place with one ``cudaHostRegister`` (so
+    torch's power-of-two rounding of pinned requests never applies). The pages are unregistered before the buffer can be freed:
+    on :meth:`release`, or when the slab is collected. Raises if registration fails; nothing stays registered then."""
+
+    def __init__(self, nbytes: int):
+        page = mmap.PAGESIZE
+        size = max(page, -(-nbytes // page) * page)
+        raw = torch.empty(size + page, dtype=torch.uint8)
+        shift = (-raw.data_ptr()) % page
+        self.tensor = raw[shift: shift + size]
+        self.nbytes = size
+        self.ptr = self.tensor.data_ptr()
+        rc = _rc(_cudart().cudaHostRegister(self.ptr, size, _HOST_REGISTER_FLAGS))
+        if rc != 0:
+            raise RuntimeError(f"cudaHostRegister of a {size}-byte slab failed (cudaError {rc})")
+        # Whether a kernel may dereference the host address itself (UVA with a mapped registration gives the same address). If the
+        # runtime answers otherwise, or not at all, consumers that read in place must refuse rather than copy (see pipelined.py).
+        dptr, self.device_pointer_via = _host_device_pointer(self.ptr)
+        self.device_readable = dptr == self.ptr
+        _REGISTERED[self.ptr] = (size, self.device_readable)
+        self._finalizer = weakref.finalize(self, _unregister_slab, self.ptr, raw)
+        self._finalizer.atexit = False     # at exit the runtime may already be gone; the OS takes the pages back
+
+    def release(self) -> None:
+        """Unregister now (idempotent); the memory goes when the last view of it does."""
+        self._finalizer()
+
+
 def _placeholder(device: torch.device, dtype: torch.dtype) -> torch.Tensor:
     ph = _PLACEHOLDERS.get((device, dtype))
     if ph is None:
@@ -190,7 +290,34 @@ def _placeholder(device: torch.device, dtype: torch.dtype) -> torch.Tensor:
 
 def _is_pinned(t: torch.Tensor) -> bool:
     """Whether ``t`` is in pinned memory (so ``non_blocking`` H2D is truly async). Robust on hosts
-    where ``is_pinned`` is unavailable/raises without CUDA."""
+    where ``is_pinned`` is unavailable/raises without CUDA. A view into a live registered slab
+    (``E4B_OFFLOAD_PIN_SLAB``) counts: its pages are page-locked, though torch's ``is_pinned``
+    reports only its own allocator's blocks."""
+    try:
+        if t.is_pinned():
+            return True
+    except Exception:
+        pass
+    return _slab_of(t) is not None
+
+
+def _slab_of(t: torch.Tensor) -> "tuple[int, int, bool] | None":
+    """``(base, bytes, device_readable)`` of the live registered slab holding ``t``, or None."""
+    if not _REGISTERED or t.device.type != "cpu" or not t.numel():
+        return None
+    ptr = t.data_ptr()
+    for base, (n, readable) in _REGISTERED.items():
+        if base <= ptr < base + n:
+            return base, n, readable
+    return None
+
+
+def _device_readable_in_place(t: torch.Tensor) -> bool:
+    """Whether a kernel may read ``t`` at its host address: torch-pinned memory (``cudaHostAlloc`` under unified addressing is
+    mapped), or a live slab whose registration the device reads at the same address."""
+    s = _slab_of(t)
+    if s is not None:
+        return s[2]
     try:
         return bool(t.is_pinned())
     except Exception:
@@ -270,6 +397,12 @@ class _ExpertOffload:
     # from a generate() (the circularly-prefetched first layer) never linger into a train step.
     _staged_now: set = set()
 
+    # Forward hold (see hold_forward_residency): while a handle's ``_held`` is True, the evict post-hook keeps that layer
+    # staged after its forward, so a layer-major driver can run every micro-batch through one staging. Per handle, set and
+    # cleared by the context on exactly the handles it was given (and checked): a class-wide flag would also hold handles
+    # nobody vetted, e.g. a second model's routed handle.
+    _held = False
+
     # Whether routed-only staging may run on a GRAD-ENABLED forward. False here and for every
     # host-RAM home: their bulk path is a cheap whole-layer copy from pinned DRAM, so the
     # conservative choice costs little and needs no guard. Overridden by the NVMe-backed handle,
@@ -315,9 +448,23 @@ class _ExpertOffload:
         # dtype; ``self.home[n]`` is then a correctly-shaped CPU *view* into its arena (so the
         # state_dict hook and any per-tensor reader see the same thing as the non-arena path), and
         # staging copies whole arenas (1-2 copies) instead of four separate tensors.
-        self.home, self._arena_cpu, self._arena_layout = self._build_homes(
-            base, self._param_names + self._buffer_names, pin, _arena_enabled()
-        )
+        # Slab mode (E4B_OFFLOAD_PIN_SLAB=1): the homes are views into one exact-size registered slab per layer instead of four
+        # separately pinned tensors (see _slab_enabled). If registration fails, the homes are pinned per tensor as before and
+        # ``slab_why`` says why. ``pin_mode`` names the path taken.
+        names = self._param_names + self._buffer_names
+        # Only where home building is this class's own: a subclass with other homes (the NVMe arena's meta homes) keeps its path.
+        own_homes = type(self)._build_homes.__func__ is _ExpertOffload._build_homes.__func__
+        self._slab, self.slab_why = None, None
+        self.pin_mode = ("per-tensor" if pin else "pageable") if own_homes else None
+        if pin and _slab_enabled() and own_homes:
+            if _arena_enabled():
+                raise ValueError("E4B_OFFLOAD_PIN_SLAB and E4B_OFFLOAD_ARENA are exclusive: set one")
+            self.home, self._slab, self.slab_why = self._build_slab_homes(base, names)
+            self._arena_cpu = self._arena_layout = None
+            if self._slab is not None:
+                self.pin_mode = "slab"
+        if self._slab is None:
+            self.home, self._arena_cpu, self._arena_layout = self._build_homes(base, names, pin, _arena_enabled())
         self._staged_dev = None  # arena mode: the device-side arena tensors kept alive while staged
         # True iff every home landed in pinned memory (so staging's non_blocking H2D is real); False
         # when pin=False or pin_memory fell back to pageable. Surfaced by the loader's summary log.
@@ -394,6 +541,34 @@ class _ExpertOffload:
                 off += k
             arena_cpu[dt] = buf
         return home, arena_cpu, layout
+
+    @staticmethod
+    def _build_slab_homes(base, names):
+        """Return ``(home, slab, why)``: ``home[n]`` a correctly-shaped view at a ``_SLAB_ALIGN``-aligned offset of one registered
+        :class:`_PinnedSlab`, holding the bytes of ``base``'s tensor ``n``. ``({}, None, why)`` when the slab could not be
+        registered, so the caller pins per tensor instead; a failure after registration unregisters before it propagates."""
+        srcs = {n: getattr(base, n).detach() for n in names}          # where they live (often the device): copied one at a time
+        offsets, off = {}, 0
+        for n in names:
+            off = -(-off // _SLAB_ALIGN) * _SLAB_ALIGN
+            offsets[n] = off
+            off += srcs[n].numel() * srcs[n].element_size()
+        try:
+            slab = _PinnedSlab(off)
+        except Exception as e:  # no CUDA, or the driver refused the registration
+            return {}, None, f"{type(e).__name__}: {e}"
+        try:
+            home = {}
+            for n in names:
+                src = srcs[n]
+                nb = src.numel() * src.element_size()
+                view = slab.tensor[offsets[n]: offsets[n] + nb].view(src.dtype).view(src.shape)
+                view.copy_(src)
+                home[n] = view
+        except BaseException:
+            slab.release()
+            raise
+        return home, slab, None
 
     def _copy_home_to_device(self, policy: str = "sync") -> None:
         """Enqueue this layer's H2D copies on the *current* stream and mark the handle staged. The
@@ -830,13 +1005,65 @@ def enable_expert_offload(experts_lora, device, pin: bool = True,
         # placeholder read); OLMoE, Qwen3-MoE and GraniteMoe happen to stop early and never saw it.
         # Inside a backward the single-resident-slot policy already evicts -- staging the next
         # layer to recompute evicts this one -- so skipping here keeps one-layer residency intact.
-        if _in_backward():
+        # Under hold_forward_residency the forward keeps a held layer too; the next layer's stage() evicts it.
+        if _in_backward() or handle._held:
             return
         handle.evict()
 
     experts_lora.register_forward_pre_hook(_stage_pre_hook)
     experts_lora.register_forward_hook(_evict_post_hook)
     return handle
+
+
+@contextlib.contextmanager
+def hold_forward_residency(handles):
+    """Keep each layer's experts staged across repeated forwards of that layer (default off; opt-in per block).
+
+    A layer-major driver runs every micro-batch through layer L before layer L+1. Without the hold, the evict post-hook
+    drops L after each micro-batch's call and the next call stages it again: M copies per layer per forward instead of
+    one (``bench/q235/staged-bytes``, assumption A1: 470 copies against 187 on the 94-layer toy). Inside the block the
+    post-hook skips its evict, so a repeated forward of the resident layer finds it staged (``stage()`` is idempotent).
+
+    What does NOT change: the single resident slot. Staging layer L+1 still evicts L first (``stage()``), so at most one
+    layer's experts are on the device at any instant, held or not. On exit (normal or exceptional) the resident layer is
+    evicted if it is one of the held handles, so nothing staged in the block outlives it.
+
+    The hold is per handle: only the handles passed in (and checked below) are held. Any other offloaded module keeps
+    today's evict-after-forward, so a second model in the process is never held without its handles being vetted.
+
+    ``handles``: the model's offload handles (:func:`offload_handles`). Refused, by raising, before anything is held:
+    - a routed handle (``enable_routed_staging`` / ``enable_speculative_staging``, or an NVMe arena handle that stages
+      routed rows in training): a held routed stage carries micro-batch k's experts into micro-batch k+1, which routes
+      differently;
+    - an inference policy: prefetch links (``enable_inference_prefetch``) or a pipelined-engine takeover;
+    - a call inside a backward, or a nested hold.
+    """
+    handles = list(handles)
+    if any(h._held for h in handles):
+        raise RuntimeError("hold_forward_residency: already holding (nested holds are not supported)")
+    if _in_backward():
+        raise RuntimeError("hold_forward_residency: called inside a backward; the hold is for the forward only")
+    for h in handles:
+        if h._routed_only or h._routed_in_train:
+            raise RuntimeError(
+                "hold_forward_residency: a routed offload handle stages only one forward's experts, so holding it "
+                "would serve the next micro-batch's routes from the previous one's rows; use bulk staging"
+            )
+        if h._prefetch_next is not None or getattr(h, "_superseded", False):
+            raise RuntimeError(
+                "hold_forward_residency: inference prefetch or a pipelined takeover is active on this handle; "
+                "the hold is a training-forward policy"
+            )
+    for h in handles:
+        h._held = True
+    try:
+        yield
+    finally:
+        for h in handles:
+            h._held = False
+        resident = _ExpertOffload._resident
+        if resident is not None and any(resident is h for h in handles):
+            resident.evict()
 
 
 class _ExpertPool:

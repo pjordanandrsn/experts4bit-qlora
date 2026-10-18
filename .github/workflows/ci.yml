@@ -69,6 +69,11 @@ jobs:
         run: |
           ruff check bench/dq11 tests/test_dq11_science.py tests/test_dq11_a2000_initial_quality.py
           pytest tests/test_dq11_science.py tests/test_dq11_a2000_initial_quality.py -q
+      - name: P136 registration contract (CPU only; no GPU or rental)
+        run: |
+          ruff check bench/p136
+          pytest bench/p136/test_registration.py -q
+          PYTHONPATH=bench/p109 python bench/p136/p136_box.py --self-test
       - name: Test
         run: pytest tests/ -q
       - name: census cross-check (grouped-nf4-gemm#353 -- every claimed family the kernel's shape census covered is still covered, against the census of the exact kernel commit installed above)

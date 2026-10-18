@@ -855,3 +855,205 @@ answer for the wrong hardware. The box takes the reading at no extra rental.
   - advertised download at least 3,000 Mbps.
 - **C on the A2000** (reporting only: PCIe gen 3 x8, and the card is correctness-only): staging about 222 ms per experts call,
   against 44–60 ms of compute. No pipelining or prefetch decision comes from it; the PRO 6000 box's own read decides.
+
+## Amendment 8 (2026-10-17, after the R2 gate-1 ruling, before any further 235B box): the dX record and the held-out read
+
+**Why.** R2-Mixtral's gate 1 asks that "Q235 has reached L2 and reproduced it" (`bench/fam235/PREREG-r2-mixtral.md:112`). The family
+ladder's L2 (the fam235 matrix, draft 2.1 §5) is "full-depth nonzero LoRA dX and adapter gradients, frozen-base hashes before and
+after, one real optimizer update, a held-out check".
+- The maintainer's evidence packet maps it to runs 2 and 3 field by field.
+- The maintainer ruled gate 1 **not yet met** on two gaps:
+  1. no receipt records dX: it is only inferred from step 1's nonzero A gradients;
+  2. no receipt holds a held-out check: this registration scoped one out ("What this registration cannot say").
+- Everything else is met on both runs. Reproduction stands as rule 6 (both runs, gap 0.0) plus the bitwise cross-run forward (all 94
+  layer outputs and the step-0 loss equal).
+- Both boxes ran on Vast machine 8652. That is a stated limitation, not a blocker.
+
+**1. The dX record** (`q235_box.py`, every stepped run).
+- **What.** Each step records `dx`: every decoder layer's output gradient dL/dh_i, i = 0 … n−1, as its fp32 norm. It is taken once per
+  forward-backward of the step's own pass: one under shape A, one per micro-batch under shape B.
+  - It is the gradient that the layer's own adapters, and every layer below it, receive. Layer 0's is the deepest the backward must
+    reach.
+  - It is not the LoRA branch's own input gradient. At step 0, B is zero, so that term is exactly zero by construction (Amendment 2).
+    The registered quantity is the full gradient arriving at each layer, from which every adapter gradient is computed.
+- **How** (`DxProbe`).
+  - Layer i's output is taken where it is an outer graph tensor: as the input of the next module, through a forward pre-hook on
+    layer i+1, and on the final norm for the last layer. A tensor hook registered there receives dL/dh_i in the backward. That
+    holds under either checkpoint mode.
+  - The probe is armed around the step's own forward and disarmed before the backward. So the checkpoint recompute, which calls the
+    modules again inside the backward, registers nothing.
+  - A layer whose output carries no gradient, or whose hook never fires, stays unrecorded and fails the rule. The record fails closed.
+  - The in-process pair, rule 8's check passes and the timed pass carry no probe.
+  - **Found at the 30B rehearsal, before any box.** The first form hooked each layer's own output. On the CUDA fast path it recorded
+    nothing: 192 of 192 entries were `None`, and the STRICT rule failed closed (exit 3), as designed. e4b's fast path checkpoints
+    reentrantly (`ckpt_offload`), which runs the checkpointed forward without gradients, so the output a layer's own hook sees never
+    carries one. The CPU tests ran HF's non-reentrant checkpoint and passed. A CPU test now shows the old hook recording nothing
+    under a reentrant checkpoint, and the new probe recording every layer under both modes.
+- **Rule 9 (STRICT).** At both steps, every layer's dX in every pass is recorded, finite and nonzero.
+  - In the record: `step0_dx_finite_nonzero` and `step1_dx_finite_nonzero` in `rules`.
+  - `strict_failures` requires them on any record that carries `amendment8`, fail-closed. A failure stops the run after the box
+    (exit 12), as Amendment 2's do.
+  - The verdict reports it as `9_dx`, with each step's smallest norm.
+
+**2. The held-out read** (`q235_box.py --heldout`; `q235_run.sh` passes it to the box).
+- **The registered held-out rows.**
+  - They are the next `ROWS` (8) rows of the same split: rows 8–15 of `ds_alpaca.json`'s `train`.
+  - `q235_tokens.py --heldout-out` writes them in the tokens phase, rendered, tokenized and padded as the step's rows. They are
+    disjoint from the step's rows by construction.
+  - Their sha256 is in the record.
+- **Three reads, each one no-gradient forward at shape A on those rows.**
+  - Before the update, after the in-process pair. B is zero then, so this is the frozen base's loss on them.
+  - After step 0.
+  - After step 1.
+
+  They are recorded under `heldout`, with `rel_change_step0` and `rel_change` = (read − before) / before. `heldout_finite` (STRICT)
+  requires all three reads finite.
+- **The step's own rows are read the same way at the same three points** (`heldout.train`, with their `rel_change_step0` and
+  `rel_change`). This is reporting only, not a pass/fail input. It lets a reader see that a held-out drop is shared with the step's
+  own rows, not an artifact of the held-out rows.
+- **Rule 10 (the verdict's), as the maintainer re-ruled it: a ONE-SIDED blow-up bound.**
+  - Every held-out read must be finite.
+  - Each post-update read (after step 0 and after step 1) must be at most `before × (1 + HELDOUT_BAND)`, with `HELDOUT_BAND` =
+    **0.10**: an increase over 10 % fails.
+  - There is **no lower bound**. The rule asks only whether the update made held-out text worse. It is not an equivalence test, and
+    not a claim about quality after training, which stays out of scope.
+  - **Why one-sided.** The first ruling, a two-sided cap of 0.10, would have failed a healthy update. At the 30B rehearsal (below)
+    the held-out loss fell 38.6 %: two steps at the registered rate teach the shared Alpaca template, and the step's own rows fell
+    the same way. The 235B's step loss halves likewise on runs 2 and 3 (1.24 → 0.65). A large drop is learning, not corruption.
+  - An Amendment 8 box without its held-out read is a harness error. The verdict code also keeps rule 10 VOID for an unset band;
+    a test exercises that path.
+- **The 235B box records all three reads** and both relative changes. A later amendment tightens the cap from them, at the scale the
+  rule applies to.
+- **The 30B A2000 leg** is the mechanics rehearsal: recorded, not band-setting ($0).
+  - Qwen3-30B-A3B runs this amendment's box step at full depth on the 30B calibration's path, with the held-out read over the same
+    registered rows.
+  - The rows are tokenized as the step's: the 30B's `tokenizer.json` is the same file as the 235B's (sha256 `aeb13307`), as in
+    Amendment 6's calibrations.
+  - **First run** (2026-10-17, e4b `7942eb39`, the first probe):
+    - Amendment 2's nine rules held, and the frozen base was unchanged.
+    - dX recorded nothing: the probe bug above. The run exited 3, a STRICT FAIL on rule 9.
+    - Held-out loss read 1.7656 before the update, 1.2301 after step 0 and 1.0838 after step 1 (`rel_change` −0.386), all finite.
+      The step's loss fell 1.871 → 0.910.
+  - **At the fixed probe** (2026-10-17, e4b `1c12341c`; records in `bench/q235/am8/`):
+    - The CUDA re-check ran first, on the 4-layer slice of `ac9c66cc`. It exited 0. dX was finite and nonzero at every layer in
+      every pass at both steps (4 × 4), and every rule held.
+    - Then the 30B leg ran. It exited 0.
+      - dX was finite and nonzero at all 48 layers in all four passes at both steps (smallest 0.0068).
+      - Amendment 2's nine rules and this amendment's held, and the frozen base was unchanged.
+      - Held-out loss read 1.7656 → 1.2280 → 1.0851 (−30.4 %, −38.5 %), all finite. The step's own rows read 1.8592 → 0.6075.
+      - Under rule 10 as ruled, it reads PASS: every held-out read fell.
+
+**3. Host independence.** Per the ruling, the next Q235 box runs on a Vast machine other than 8652. Its envelope or packet names its
+host by inclusion, and 8652 is not among them. That records the reproduction across hosts, the gate's stated limitation.
+
+**4. Cost.** Six no-gradient forwards at shape A on 8 rows are added to the box phase: three on the held-out rows and three on the
+step's rows. With the gradient path, box 1's forward took 7.2 s, so the reads add about 45 s. That is inside the 13,847 s cap's
+margin. The dX hooks add n fp32 norms per pass.
+- The gate-1 A2000 leg re-runs at this amendment's merge with this script. It records `dx` and `heldout` on the slice, as the
+  mechanics' rehearsal.
+- If the refit from that leg moves `CAP_BOX`, the new cap is recorded here before any box.
+
+**What it is not.**
+- No threshold of rules 1–8 changes.
+- Records without `amendment8` read exactly as before: runs 2 and 3 carry neither field, and their verdicts are unchanged.
+- The probe and the reads change no registered record. With and without `--heldout`, the step's losses, the dX norms, the layer
+  outputs and the frozen hashes are equal (tested).
+
+**Tests.**
+- `tests/test_q235_box.py`:
+  - every layer's dX is recorded, finite and nonzero, at both steps (four passes under shape B);
+  - the probe records the armed pass and never the recompute, under a reentrant and a non-reentrant checkpoint;
+  - the first probe's output hook records nothing under a reentrant checkpoint (the rehearsal's bug, proved on the CPU);
+  - the held-out reads are finite and change no registered record, and the step's rows are read beside them;
+  - `--heldout` rides the stepped run only;
+  - the new STRICT rules fail closed.
+- `tests/test_q235_verdict.py`:
+  - PASS as "rules 1-7, 9-10" and "rules 1-10";
+  - a zero, non-finite or missing dX fails rules 9 and 3–5;
+  - rule 10 is one-sided: −39 % and +9.5 % pass, while +10.5 % at either read, an infinite read and a NaN read fail;
+  - VOID while the band is unregistered, and on a missing read;
+  - records from before this amendment read as before.
+
+**The closure.** `q235.sha256` is re-sealed for `q235_box.py`, `q235_tokens.py` and `q235_run.sh`. `q235_verdict.py` runs off the box,
+outside the closure. R2's `r2.sha256` cites Q235 at its own commit and is untouched.
+
+## Amendment 9 (2026-10-17, after box `q235-pro6000-3` and Amendment 8, before any further 235B box): the staging rate per copy, and the host-rate probe by buffer (REPORTED only)
+
+**Why.** On `q235-pro6000-3` (`box/box.json` `8b19c4c2`, `hostrate.json` `c82685f9`, `instance.json` `295f1dc7`), staging ran at
+26.6 GB/s while the box's own host-rate probe read 20.39. `am7/READ-C.md` settles that the probe under-measures that host's H2D:
+the staged bytes are exact, the timed pass bounds the rate from below at 23.0 GB/s without the stage timer, and the provider's
+listing gave 26.6. The records could not say why:
+- the box keeps only each step's staged bytes and copy count, though the offload records every copy's CUDA events during the step
+  (`E4B_OFFLOAD_STATS=1`);
+- the probe times one 1 GiB pinned buffer and records nothing about where it sits. On that host its D2H read 28.29 GB/s on both
+  boxes while its H2D read 21.76, then 20.39. Staging varied by layer (25.8–27.9 GB/s) and held steady within a layer. H2D there
+  depends on which buffer is read, and one buffer is one sample.
+
+**(i) The box records `h2d_staging` at each step**, beside `h2d_bytes_offload` (`q235_box.py`, `staging_record`):
+- `ms`: every staging call's event time, in issue order. These are the offload's own events, recorded on the stream that carries
+  each copy and read after the step's synchronize, so nothing is added inside the step;
+- `gb_s`: the bytes-weighted rate over all calls; `gb_s_min`, `gb_s_median` and `gb_s_max`: the per-call spread; `nbytes`,
+  `policies` and `total_ms`;
+- `by_layer`: calls attributed to decoder layers by the registered schedule. Per forward-backward pass, layers 1 to L−1 stage for
+  the forward (layer 0 is still resident from the previous pass's backward), then L−1 down to 0 for the recompute: 2L − 1 calls,
+  187 at 94 layers, 748 per Shape B step. This is DERIVED from the issue order, not observed. It is left out, with `by_layer_why`,
+  when the count is not that schedule's.
+
+**(ii) The probe records `h2d_by_buffer`, `single_buffer_pages` and `card`** (`q235_hostrate.py`):
+- **Unchanged:** `h2d_gb_s` and `d2h_gb_s` are still one 1 GiB pinned buffer, timed as before. Every floor and gate 2's fit read
+  what they read before.
+- `single_buffer_pages`: where that buffer's pages sit.
+- `h2d_by_buffer`:
+  - K = 8 separately pinned 1 GiB buffers (`--multi-buffers 8 --multi-copies 5`), allocated after the pinned-block cache is emptied,
+    so none of them is the single buffer's block reused;
+  - buffer i is allocated with the process bound to the CPUs of NUMA node i mod N, round robin over the N nodes that have CPUs
+    (unbound where the host exposes no nodes);
+  - each buffer is timed alone with CUDA events: one warm-up copy, then 5;
+  - buffer 0 is timed again after the rest (`first_last_gb_s`), so a link still warming up does not read as placement;
+  - per buffer: the bound node, the node its pages report, and GB/s. Overall: min, median, max, the median per bound node, and the
+    median per observed node (null unless every buffer's placement was observed);
+  - the single-buffer read runs FIRST, so none of its pinned blocks can be one of these, and the by-buffer read hands its 8 GiB
+    back before the host-copy and disk reads.
+- Page placement comes from `move_pages(2)`, queried without moving at 16 pages per buffer. Where the kernel refuses that (a
+  driver-pinned mapping), it comes from `/proc/self/numa_maps`'s counts for the mapping; otherwise the record says why.
+- `card`: the card's NUMA node (sysfs `numa_node`), its IOMMU group's default-domain type (`identity` = passthrough; `DMA` or
+  `DMA-FQ` = translated; no group = no IOMMU in use, or none exposed), and the kernel command line's IOMMU arguments.
+- **Cost:** about 8 GiB of pinned host memory for the probe's few seconds, before the fetch. The hostrate phase's 600 s cap is
+  unchanged.
+
+**How the next box's records are read** (registered now; reporting-only):
+- **R9.1, the staging rate of record**, is step 0's `h2d_staging.gb_s` (step 1's is the check). The probe's `h2d_gb_s` is a lower
+  bound and is not quoted as the link rate.
+- **R9.2, does the by-buffer probe find the link?** Expected: `h2d_by_buffer.gb_s_median` within ±10 % of R9.1's rate. Outside
+  that band, the probe still misses what staging sees, and the read says so.
+- **R9.3, placement.**
+  - The per-node medians are `by_observed_node_median_gb_s` when every buffer's placement was observed, else
+    `by_bound_node_median_gb_s` (and the read says which).
+  - If those medians span more than 10 % between nodes, NUMA placement accounts for buffer-to-buffer H2D on that host.
+  - If every node agrees within 5 % while the single buffer's `h2d_gb_s` sits more than 10 % below them, its low read is not
+    placement. `card.iommu_type` and `first_last_gb_s` are read next.
+  - Between those, or on a host with one node, no conclusion.
+- The next box is not `q235-pro6000-3`'s machine and may show no gap at all. That is a result, not a failure.
+
+**What it is not.**
+- REPORTED only. `q235_verdict.py` reads none of it, and no rule, threshold, floor, verdict line or STRICT check reads it.
+- A failure in either record is recorded (`error` in the box, `why` in the probe) and never fails the box or the phase.
+- Every existing field is unchanged.
+
+**Rehearsal** (the A2000, $0, correctness only; it sets no rate): the probe on the A2000 host, checking that the by-buffer read,
+the placement fields and the card fields fill, that buffer 0 reads the same first and last, and that the single-buffer figure is
+the one it was; and `h2d_staging` from a box step with the experts offloaded, its call count and per-layer attribution matching the
+schedule.
+
+**Recorded at the rehearsal** (2026-10-17, RTX A2000, $0; records in `am9/`):
+- **The probe** (at `72c0663a`): single buffer 6.10 GB/s; by buffer 6.12 / 6.16 / 6.18 (min / median / max); buffer 0 first and
+  last 6.15 and 6.11. Placement was not observable on that host, and the record says why: its kernel has no NUMA, and the
+  container's seccomp filter refuses `move_pages`. The IOMMU group type is `identity`. The rehearsal first ran at `3757430f`,
+  where those absent fields were left out silently; `72c0663a` records the reason instead.
+- **The box** (Shape B, the 4-layer slice; `q235_box.py` byte-identical at both heads): `h2d_staging` holds 28 calls per step =
+  4 × (2 × 4 − 1), the bytes exact, at 6.168 and 6.117 GB/s, with `by_layer` matching the schedule (layer 0: 4 calls; layers 1
+  to 3: 8 each). Amendment 2's rules all hold.
+- On that host staging sits +0.13 % (step 0) and −0.70 % (step 1) from the by-buffer median (6.16 GB/s), and the single buffer shows no gap.
+- The rehearsed `q235_box.py` is Amendment 9 on the tree before Amendment 8 merged. At this amendment's merge the file carries both;
+  Amendment 9's hunks are unchanged, and the merged file is rehearsed with the next gate-1 leg before any box. R9.2 and R9.3 are the
+  next box's reads.

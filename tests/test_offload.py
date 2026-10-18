@@ -18,7 +18,7 @@ from torch.utils.checkpoint import checkpoint  # noqa: E402
 
 from experts4bit_qlora import Experts4bit, ExpertsLoRA, ExpertsNbit  # noqa: E402
 from experts4bit_qlora import enable_expert_offload, offload_model_experts  # noqa: E402
-from experts4bit_qlora.engines.offload import _ExpertOffload, _in_backward  # noqa: E402
+from experts4bit_qlora.engines.offload import _ExpertOffload, _in_backward, _is_pinned  # noqa: E402
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 DTYPE = torch.float32
@@ -180,7 +180,7 @@ def test_offload_placement_homes_on_cpu_code_and_lora_resident():
         assert h.home[n].device.type == "cpu"
         assert getattr(lora.base, n).numel() == 0  # placeholder while evicted
     if torch.cuda.is_available():
-        assert h.pinned and all(h.home[n].is_pinned() for n in h.home)
+        assert h.pinned and all(_is_pinned(h.home[n]) for n in h.home)   # offload's view: a registered slab counts
 
     dev = torch.device(DEVICE).type
     assert lora.base.code.device.type == dev  # NF4 codebook never offloaded

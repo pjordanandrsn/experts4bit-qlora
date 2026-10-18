@@ -1,0 +1,349 @@
+{
+ "schema": "q235-am9-rehearsal/1",
+ "card": "RTX A2000 12GB (PCIe gen 3 x8), correctness only: it sets no rate",
+ "probe": {
+  "e4b": "72c0663a",
+  "record_sha256": "4cc93a8f287efc19ba908a2f0c3fec923d42dbfe021be1924c7395c5786df15c",
+  "record": {
+   "schema": "q235-hostrate/1",
+   "h2d_gb_s": 6.1,
+   "d2h_gb_s": 6.58,
+   "single_buffer_pages": {
+    "method": null,
+    "why": "neither move_pages nor numa_maps reports this buffer's pages",
+    "move_pages": {
+     "rc": -1,
+     "errno": 1,
+     "why": "EPERM: a seccomp filter refuses move_pages (a container's default needs CAP_SYS_NICE)"
+    },
+    "numa_maps_why": "FileNotFoundError: [Errno 2] No such file or directory: '/proc/self/numa_maps'"
+   },
+   "pcie_gen": "3",
+   "pcie_gen_max": "3",
+   "pcie_width": "8",
+   "pcie_width_max": "16",
+   "card": {
+    "gpu_numa_node": null,
+    "gpu_numa_why": "no numa_node in sysfs (a kernel without NUMA, or not exposed): FileNotFoundError",
+    "iommu_group": "20",
+    "iommu_type": "identity",
+    "_redacted": "kernel command line and PCI bus id left out of the public summary"
+   },
+   "h2d_by_buffer": {
+    "buffers": 8,
+    "bytes_each": 1073741824,
+    "copies_each": 5,
+    "per_buffer": [
+     {
+      "bound_node": null,
+      "pages": {
+       "method": null,
+       "why": "neither move_pages nor numa_maps reports this buffer's pages",
+       "move_pages": {
+        "rc": -1,
+        "errno": 1,
+        "why": "EPERM: a seccomp filter refuses move_pages (a container's default needs CAP_SYS_NICE)"
+       },
+       "numa_maps_why": "FileNotFoundError: [Errno 2] No such file or directory: '/proc/self/numa_maps'"
+      },
+      "gb_s": 6.15,
+      "observed_node": null
+     },
+     {
+      "bound_node": null,
+      "pages": {
+       "method": null,
+       "why": "neither move_pages nor numa_maps reports this buffer's pages",
+       "move_pages": {
+        "rc": -1,
+        "errno": 1,
+        "why": "EPERM: a seccomp filter refuses move_pages (a container's default needs CAP_SYS_NICE)"
+       },
+       "numa_maps_why": "FileNotFoundError: [Errno 2] No such file or directory: '/proc/self/numa_maps'"
+      },
+      "gb_s": 6.17,
+      "observed_node": null
+     },
+     {
+      "bound_node": null,
+      "pages": {
+       "method": null,
+       "why": "neither move_pages nor numa_maps reports this buffer's pages",
+       "move_pages": {
+        "rc": -1,
+        "errno": 1,
+        "why": "EPERM: a seccomp filter refuses move_pages (a container's default needs CAP_SYS_NICE)"
+       },
+       "numa_maps_why": "FileNotFoundError: [Errno 2] No such file or directory: '/proc/self/numa_maps'"
+      },
+      "gb_s": 6.15,
+      "observed_node": null
+     },
+     {
+      "bound_node": null,
+      "pages": {
+       "method": null,
+       "why": "neither move_pages nor numa_maps reports this buffer's pages",
+       "move_pages": {
+        "rc": -1,
+        "errno": 1,
+        "why": "EPERM: a seccomp filter refuses move_pages (a container's default needs CAP_SYS_NICE)"
+       },
+       "numa_maps_why": "FileNotFoundError: [Errno 2] No such file or directory: '/proc/self/numa_maps'"
+      },
+      "gb_s": 6.18,
+      "observed_node": null
+     },
+     {
+      "bound_node": null,
+      "pages": {
+       "method": null,
+       "why": "neither move_pages nor numa_maps reports this buffer's pages",
+       "move_pages": {
+        "rc": -1,
+        "errno": 1,
+        "why": "EPERM: a seccomp filter refuses move_pages (a container's default needs CAP_SYS_NICE)"
+       },
+       "numa_maps_why": "FileNotFoundError: [Errno 2] No such file or directory: '/proc/self/numa_maps'"
+      },
+      "gb_s": 6.17,
+      "observed_node": null
+     },
+     {
+      "bound_node": null,
+      "pages": {
+       "method": null,
+       "why": "neither move_pages nor numa_maps reports this buffer's pages",
+       "move_pages": {
+        "rc": -1,
+        "errno": 1,
+        "why": "EPERM: a seccomp filter refuses move_pages (a container's default needs CAP_SYS_NICE)"
+       },
+       "numa_maps_why": "FileNotFoundError: [Errno 2] No such file or directory: '/proc/self/numa_maps'"
+      },
+      "gb_s": 6.17,
+      "observed_node": null
+     },
+     {
+      "bound_node": null,
+      "pages": {
+       "method": null,
+       "why": "neither move_pages nor numa_maps reports this buffer's pages",
+       "move_pages": {
+        "rc": -1,
+        "errno": 1,
+        "why": "EPERM: a seccomp filter refuses move_pages (a container's default needs CAP_SYS_NICE)"
+       },
+       "numa_maps_why": "FileNotFoundError: [Errno 2] No such file or directory: '/proc/self/numa_maps'"
+      },
+      "gb_s": 6.15,
+      "observed_node": null
+     },
+     {
+      "bound_node": null,
+      "pages": {
+       "method": null,
+       "why": "neither move_pages nor numa_maps reports this buffer's pages",
+       "move_pages": {
+        "rc": -1,
+        "errno": 1,
+        "why": "EPERM: a seccomp filter refuses move_pages (a container's default needs CAP_SYS_NICE)"
+       },
+       "numa_maps_why": "FileNotFoundError: [Errno 2] No such file or directory: '/proc/self/numa_maps'"
+      },
+      "gb_s": 6.12,
+      "observed_node": null
+     }
+    ],
+    "first_last_gb_s": [
+     6.15,
+     6.11
+    ],
+    "gb_s_min": 6.12,
+    "gb_s_median": 6.16,
+    "gb_s_max": 6.18,
+    "by_bound_node_median_gb_s": {},
+    "by_observed_node_median_gb_s": null,
+    "numa_nodes": {},
+    "bound": false,
+    "host_cache_emptied": true,
+    "numa_why": "no NUMA nodes in sysfs (a kernel without NUMA, or a container that hides them): buffers unbound"
+   },
+   "host_copy_gb_s": 5.93,
+   "host_threads": 6,
+   "disk_read_gb_s": 1.83,
+   "disk_method": "O_DIRECT (dd iflag=direct)",
+   "disk_bytes": 1073741824,
+   "floors": {
+    "h2d_gb_s": 0.0,
+    "disk_read_gb_s": 0.0,
+    "host_copy_gb_s": 0.0
+   }
+  }
+ },
+ "box": {
+  "e4b": "3757430f (q235_box.py byte-identical at 72c0663a)",
+  "record_sha256": "2e352f486134dd823a492b0f7f68cc6d9c5fab8064b1c6697c7a2d091afa7e7a",
+  "model": "the 4-layer slice",
+  "shape_b": {
+   "micro_batch": 2,
+   "accumulation": 4,
+   "valid_per_micro_batch": [
+    125,
+    252,
+    480,
+    149
+   ],
+   "valid_total": 1006,
+   "widths": [
+    67,
+    133,
+    331,
+    79
+   ]
+  },
+  "rules_all_true": true,
+  "steps": {
+   "step": {
+    "h2d_bytes_offload": 38050725888,
+    "h2d_copies_offload": 28,
+    "h2d_staging": {
+     "n": 28,
+     "ms": [
+      219.5438,
+      219.6369,
+      218.5513,
+      219.334,
+      219.379,
+      219.9144,
+      219.0526,
+      219.719,
+      220.8369,
+      219.9088,
+      219.4046,
+      220.3851,
+      222.8695,
+      221.7664,
+      223.0659,
+      223.512,
+      220.3765,
+      221.181,
+      217.4151,
+      219.3794,
+      219.8812,
+      220.1616,
+      220.7162,
+      221.047,
+      221.6289,
+      220.6135,
+      220.3018,
+      219.6037
+     ],
+     "nbytes": [
+      1358954496
+     ],
+     "policies": [
+      "sync"
+     ],
+     "total_ms": 6169.186,
+     "gb_s": 6.168,
+     "gb_s_min": 6.08,
+     "gb_s_median": 6.176,
+     "gb_s_max": 6.251,
+     "by_layer": {
+      "0": {
+       "calls": 4,
+       "ms_mean": 220.076,
+       "gb_s": 6.175
+      },
+      "1": {
+       "calls": 8,
+       "ms_mean": 220.6194,
+       "gb_s": 6.16
+      },
+      "2": {
+       "calls": 8,
+       "ms_mean": 220.3118,
+       "gb_s": 6.168
+      },
+      "3": {
+       "calls": 8,
+       "ms_mean": 220.179,
+       "gb_s": 6.172
+      }
+     }
+    }
+   },
+   "step1": {
+    "h2d_bytes_offload": 38050725888,
+    "h2d_copies_offload": 28,
+    "h2d_staging": {
+     "n": 28,
+     "ms": [
+      224.1235,
+      224.2188,
+      226.2692,
+      223.8705,
+      222.4812,
+      218.3307,
+      220.4051,
+      222.9211,
+      220.5029,
+      219.2869,
+      221.247,
+      222.259,
+      223.5139,
+      223.4414,
+      219.8049,
+      219.9986,
+      219.8091,
+      223.2493,
+      220.1627,
+      220.0003,
+      222.9811,
+      225.3901,
+      222.7489,
+      221.4818,
+      221.6282,
+      222.6111,
+      224.314,
+      223.1321
+     ],
+     "nbytes": [
+      1358954496
+     ],
+     "policies": [
+      "sync"
+     ],
+     "total_ms": 6220.183,
+     "gb_s": 6.117,
+     "gb_s_min": 6.006,
+     "gb_s_median": 6.106,
+     "gb_s_max": 6.224,
+     "by_layer": {
+      "0": {
+       "calls": 4,
+       "ms_mean": 222.4899,
+       "gb_s": 6.108
+      },
+      "1": {
+       "calls": 8,
+       "ms_mean": 222.2998,
+       "gb_s": 6.113
+      },
+      "2": {
+       "calls": 8,
+       "ms_mean": 221.8729,
+       "gb_s": 6.125
+      },
+      "3": {
+       "calls": 8,
+       "ms_mean": 222.1053,
+       "gb_s": 6.119
+      }
+     }
+    }
+   }
+  }
+ }
+}

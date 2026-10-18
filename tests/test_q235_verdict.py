@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import subprocess
 import sys
 from pathlib import Path
@@ -35,7 +36,7 @@ def _save_run(d, layers, topk, loss, rec):
 
 def _box_run(root, *, code="0", card=PRO6000, mode="science", rules=None, losses=(2.0, 1.9), repeat_loss=2.0, scale=1.01,
              peak=24.0 * (1 << 30), null_scale=1.0, plant_kick=3.0, plant_from=2, plant_at=2, repeat=True, pre_scale=1.0,
-             shape_b=None):
+             shape_b=None, a8=None):
     """A fetched science run (q235_run.sh's layout) and a reference beside it; 4 layers of [2, 6, 8], top-2 of 8 experts. The box
     is the reference's per-layer updates times ``scale`` (u = scale - 1); the repeat's null is the box times ``null_scale``; each plant
     is the null with ``plant_kick`` x a fixed vector added from layer ``plant_from`` on (u at that layer about plant_kick x 10), and its
@@ -72,6 +73,24 @@ def _box_run(root, *, code="0", card=PRO6000, mode="science", rules=None, losses
         box["step"]["ga_check"] = box["step1"]["ga_check"] = {**ga(0.3), "rel_p50": 0.2}       # shape A vs B: reported only
         box["ga_plants"] = {k: {"loss": 2.1, **ga(0.4), "vs_micro_batches": ga(v)} for k, v in zip(("mean", "overwrite"), shape_b["plants"])}
         box["route_flips"] = {"flipped": 12, "token_layers": 4000, "flipped_fraction": 0.003, "per_layer": [], "layers_with_flips": 3}
+    if a8 is not None:                                      # Amendment 8: {"dx": (step 0 norms, step 1 norms), "heldout": (b, s0, a) or None}
+        def dx(norms):
+            bad = [[0, i] for i, v in enumerate(norms) if not (isinstance(v, float) and math.isfinite(v) and v > 0)]
+            vals = [v for v in norms if isinstance(v, float)]
+            return {"layers": len(norms), "passes": 1, "norms": [list(norms)], "finite_nonzero": not bad, "failing": bad,
+                    "failing_count": len(bad), "min": min(vals) if vals else None, "max": max(vals) if vals else None}
+        box["step"]["dx"], box["step1"]["dx"] = dx(a8["dx"][0]), dx(a8["dx"][1])
+        box["rules"] = {**box["rules"], "step0_dx_finite_nonzero": box["step"]["dx"]["finite_nonzero"],
+                        "step1_dx_finite_nonzero": box["step1"]["dx"]["finite_nonzero"]}
+        held = a8.get("heldout")
+        box["amendment8"] = {"dx": True, "heldout": held is not None}
+        if held is not None:
+            b, s0, a = held
+            fin = all(math.isfinite(v) for v in held)
+            box["heldout"] = {"tokens_sha256": {"input_ids": "0" * 64}, "rows": 2, "real_tokens": 12, "loss_before": b,
+                              "loss_after_step0": s0, "loss_after": a, "rel_change_step0": (s0 - b) / b, "rel_change": (a - b) / b,
+                              "all_finite": fin, "train": {"loss_before": 1.87, "loss_after_step0": 1.30, "loss_after": 0.91}}
+            box["rules"]["heldout_finite"] = fin
     _save_run(w / "receipts" / "box", box_l, topk, 2.0, box)
     if repeat:
         null = [t * null_scale if null_scale != 1.0 else t.clone() for t in box_l]
@@ -238,3 +257,75 @@ def test_rule_8_s_bar_is_the_third_calibration_s():
     cal = json.loads((ROOT / "bench" / "q235" / "am6" / "calibration-3-deterministic.json").read_text())
     assert not cal["soft_any"] and all(cal["plants_registered"].values())
     assert mod.GA_BAR == round(cal["bar"], 4) == 0.0231 and set(mod.GA_PLANTS) == {"mean", "overwrite"}
+
+
+def _verdict_a8(w, ref, band, bar=0.0231):
+    """The verdict in this process with HELDOUT_BAND set (Amendment 8's registered value comes from its calibration)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("q235_verdict_a8", VERDICT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    mod.HELDOUT_BAND, mod.GA_BAR = band, bar
+    return mod.judge(str(w), str(ref))
+
+
+DX = ([0.5, 0.4, 0.3, 0.2], [0.6, 0.5, 0.4, 0.3])
+
+
+def test_amendment_8_passes_rules_9_and_10_and_names_them(tmp_path):
+    v = _verdict_a8(*_box_run(tmp_path / "a", a8={"dx": DX, "heldout": (2.0, 1.99, 1.98)}), 0.05)
+    assert v["verdict"] == "PASS" and v["why"] == "rules 1-7, 9-10 hold", v["why"]
+    assert v["rules"]["9_dx"]["ok"] and v["rules"]["9_dx"]["min"] == {"step": 0.2, "step1": 0.3}
+    r10 = v["rules"]["10_heldout"]
+    assert r10["ok"] and r10["band"] == 0.05 and abs(r10["rel_change"] + 0.01) < 1e-12
+    b = _verdict_a8(*_box_run(tmp_path / "b", shape_b={"ga": (0.01, 0.02), "plants": (0.6, 0.9)},
+                              a8={"dx": DX, "heldout": (2.0, 1.99, 1.98)}), 0.05, bar=0.05)
+    assert b["verdict"] == "PASS" and b["why"] == "rules 1-10 hold", b["why"]
+
+
+@pytest.mark.parametrize("dx", [([0.5, 0.0, 0.3, 0.2], DX[1]), (DX[0], [0.6, float("nan"), 0.4, 0.3]), (DX[0], [0.6, 0.5, None, 0.3])])
+def test_a_layer_with_a_zero_nonfinite_or_missing_dx_fails_rule_9_and_the_strict_rules(tmp_path, dx):
+    v = _verdict_a8(*_box_run(tmp_path, a8={"dx": dx, "heldout": (2.0, 1.99, 1.98)}), 0.05)
+    assert v["verdict"] == "FAIL" and not v["rules"]["9_dx"]["ok"] and not v["rules"]["3_5_strict"]["ok"], v["why"]
+
+
+@pytest.mark.parametrize("held", [(2.0, 2.05, 2.3), (2.0, 2.22, 2.0), (2.0, float("inf"), 1.98), (2.0, float("nan"), 1.9)])
+def test_a_held_out_increase_beyond_the_cap_at_either_read_or_a_nonfinite_read_fails_rule_10(tmp_path, held):
+    v = _verdict_a8(*_box_run(tmp_path, a8={"dx": DX, "heldout": held}), 0.05)
+    assert v["verdict"] == "FAIL" and v["rules"]["10_heldout"]["ok"] is False, v["why"]
+
+
+def test_rule_10_is_void_until_its_band_is_registered_and_a_missing_read_is_a_harness_error(tmp_path):
+    v = _verdict_a8(*_box_run(tmp_path / "a", a8={"dx": DX, "heldout": (2.0, 1.99, 1.98)}), None)
+    assert v["verdict"] == "VOID" and v["why"] == "not registered: Amendment 8's held-out band", v["why"]
+    m = _verdict_a8(*_box_run(tmp_path / "b", a8={"dx": DX, "heldout": None}), 0.05)
+    assert m["verdict"] == "VOID" and "without its registered held-out read" in m["why"], m["why"]
+
+
+def test_records_from_before_amendment_8_read_as_before(tmp_path):
+    """Runs 2 and 3 carry no amendment8: rules 9 and 10 do not apply, and their verdicts are unchanged (rules 1-7 / 1-8)."""
+    a = _verdict_a8(*_box_run(tmp_path / "a"), None)
+    assert a["verdict"] == "PASS" and a["why"] == "rules 1-7 hold" and "9_dx" not in a["rules"] and "10_heldout" not in a["rules"]
+    b = _verdict_a8(*_box_run(tmp_path / "b", shape_b={"ga": (0.01, 0.02), "plants": (0.6, 0.9)}), None, bar=0.05)
+    assert b["verdict"] == "PASS" and b["why"] == "rules 1-8 hold"
+
+
+def test_rule_10_s_band_is_the_ruled_plain_cap():
+    """Amendment 8, as ruled: a plain absolute cap of 0.10 on |rel_change| (a blow-up bound), not derived from the 30B leg."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("q235_verdict_band", VERDICT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.HELDOUT_BAND == 0.10
+
+
+def test_rule_10_is_one_sided_a_drop_passes_and_only_an_increase_beyond_the_cap_fails(tmp_path):
+    """As re-ruled: a blow-up bound only. -39 % (the 30B rehearsal read -38.6 %: two steps teach the shared template) and +9.5 %
+    pass; +10.5 % fails; NaN fails."""
+    for i, held in enumerate(((2.0, 1.23, 1.22), (2.0, 2.1, 2.19), (2.0, 1.9, 1.81))):
+        v = _verdict_a8(*_box_run(tmp_path / f"in{i}", a8={"dx": DX, "heldout": held}), 0.10)
+        assert v["verdict"] == "PASS" and v["rules"]["10_heldout"]["one_sided"], v["why"]
+    assert v["rules"]["10_heldout"]["reported_train_rows"]["loss_after"] == 0.91          # the step's rows ride along, reported
+    for i, held in enumerate(((2.0, 2.1, 2.21), (2.0, float("nan"), 1.9))):
+        v = _verdict_a8(*_box_run(tmp_path / f"out{i}", a8={"dx": DX, "heldout": held}), 0.10)
+        assert v["verdict"] == "FAIL" and v["rules"]["10_heldout"]["ok"] is False, v["why"]

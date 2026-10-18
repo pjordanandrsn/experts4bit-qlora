@@ -36,6 +36,17 @@ must read above ``GA_BAR`` against the same reference. Reported with it: the glo
 own default-mode accumulation against the reference (``ga_mb_check``), shape A against shape B in every view (``ga_check``), and the
 router top-k flips between them. Shape A's records carry no ``shape_b``, so rule 8 does not apply to them and their verdict is unchanged.
 
+**Amendment 8** (a box record with ``amendment8``; every box from ``q235_run.sh`` at or after it) adds:
+9. every decoder layer's output gradient (``dx``, dL/dh_i, i = 0..n-1) recorded, finite and nonzero at both steps, in every
+   forward-backward of the step (one per micro-batch under shape B). It is STRICT as well, so a failure also fails rules 3-5;
+10. the held-out loss on the registered held-out rows (``heldout``: before the update, after step 0, after step 1) finite at
+    every read, and no post-update read above ``before x (1 + HELDOUT_BAND)`` (one-sided).
+Rule 10 is a ONE-SIDED blow-up bound ("did the update make held-out text worse?"): every read finite, and each post-update read
+at most ``before x (1 + HELDOUT_BAND)``, ``HELDOUT_BAND`` = 0.10; no lower bound, since two steps that teach the shared template
+lower held-out loss as they lower the step's own (the 30B rehearsal: -38.6 %). The step's own rows, read the same way, ride along
+as reporting. Rule 10 is VOID if the band is unset, and an Amendment 8 box without its held-out read is a harness error.
+Records without ``amendment8`` (runs 2 and 3) carry neither field: rules 9 and 10 do not apply and their verdicts are unchanged.
+
 **Reported, not gating:** the box's full u profile (the layers outside the interior class without a bar), the full-state profile with
 its median (the upper middle) and maximum, the router overlap and set agreement, the loss gap, each plant's u after its layer, the
 device peak against the registered estimate (a deviation above 15 % names an estimator issue), the bytes moved per step against the
@@ -67,6 +78,40 @@ NULL_FLOOR = 1e-3                              # Amendment 3: the null against t
 GA_BAR = 0.0231                                # Amendment 6: 3 x the 30B's s(48) = 3 x 0.00770, third calibration (am6/)
 GA_PLANTS = ("mean", "overwrite")              # Amendment 6: the plants the calibration registers (a plant short of 3 x BAR is dropped)
 PLANTS = ("routing", "epilogue")
+HELDOUT_BAND = 0.10                            # Amendment 8: the largest held-out INCREASE allowed after an update (one-sided)
+
+
+def l2_fields(box):
+    """Amendment 8 (a box record with ``amendment8``): rule 9, every decoder layer's output gradient recorded, finite and
+    nonzero at both steps (also STRICT, in rules 3-5); rule 10, a one-sided blow-up bound: every held-out read finite, and no
+    post-update read (after step 0, after step 1) above ``before x (1 + HELDOUT_BAND)``. A drop is learning, never a failure.
+    Returns ``(rules, the VOID's reason or None)``."""
+    a8 = box.get("amendment8") or {}
+    try:
+        dx = {k: box[k]["dx"] for k in ("step", "step1")}
+        r9 = {"ok": all(v["finite_nonzero"] is True for v in dx.values()), "layers": dx["step"]["layers"],
+              "passes": {k: v["passes"] for k, v in dx.items()}, "min": {k: v["min"] for k, v in dx.items()},
+              "failing_count": {k: v["failing_count"] for k, v in dx.items()}}
+    except (KeyError, TypeError) as e:
+        return {"9_dx": {"ok": None, "not_read": "harness error"}}, f"harness error: the dX record: {type(e).__name__}: {e}"
+    if not a8.get("heldout"):
+        return {"9_dx": r9, "10_heldout": {"ok": None, "not_read": "no held-out read"}}, \
+            "harness error: an Amendment 8 box without its registered held-out read (--heldout)"
+    try:
+        h = box["heldout"]
+        r10 = {"ok": None, "band": HELDOUT_BAND, "one_sided": True, "loss_before": h["loss_before"],
+               "loss_after_step0": h["loss_after_step0"], "loss_after": h["loss_after"], "rel_change_step0": h["rel_change_step0"],
+               "rel_change": h["rel_change"], "all_finite": h["all_finite"], "tokens_sha256": h["tokens_sha256"],
+               "reported_train_rows": h.get("train")}
+    except (KeyError, TypeError) as e:
+        return {"9_dx": r9, "10_heldout": {"ok": None, "not_read": "harness error"}}, \
+            f"harness error: the held-out record: {type(e).__name__}: {e}"
+    if HELDOUT_BAND is None:
+        return {"9_dx": r9, "10_heldout": {**r10, "not_read": "Amendment 8's band is not registered"}}, \
+            "not registered: Amendment 8's held-out band"
+    cap = h["loss_before"] * (1 + HELDOUT_BAND)
+    r10["ok"] = h["all_finite"] is True and h["loss_after_step0"] <= cap and h["loss_after"] <= cap
+    return {"9_dx": r9, "10_heldout": r10}, None
 
 
 def accumulation(box):
@@ -210,9 +255,12 @@ def judge(run_dir, ref_dir):
         r["6_repeat"] = {"ok": repeat_ok, **repeat_rec}
         r["7_band"] = {"ok": not over, "band": BAND, "interior": [interior(n)[0], interior(n)[-1]], "layers_over": over,
                        "u_interior_max": max(u[i] for i in interior(n))}
-    ga_cause = None
+    ga_cause = l2_cause = None
     if "shape_b" in box:                                       # Amendment 6: both steps ran, so rule 8 is read even after exit 12
         r["8_accumulation"], ga_cause = accumulation(box)
+    if box.get("amendment8"):                                  # Amendment 8: both steps ran, so rules 9 and 10 are read after exit 12
+        l2, l2_cause = l2_fields(box)
+        r.update(l2)
     steps = [box.get(k, {}) for k in ("step", "step1")]
     peak = max((s.get("max_memory_allocated") or 0) for s in steps) / (1 << 30)
     out["reported"] = {
@@ -224,12 +272,13 @@ def judge(run_dir, ref_dir):
         "h2d_gib_per_step": [round((s.get("h2d_bytes_offload") or 0) / (1 << 30), 2) for s in steps],
         "estimate_link_gib": ESTIMATE_LINK_GIB, "step_elapsed_s": [s.get("elapsed_s") for s in steps]}
     failed = [k for k, v in r.items() if v["ok"] is False]
-    cause = (f"instrument: {instrument}" if not stopped and instrument else None) or ga_cause
+    cause = (f"instrument: {instrument}" if not stopped and instrument else None) or ga_cause or l2_cause
     if cause:
         out.update(verdict="VOID", why=cause + (f" (rules also failing: {', '.join(failed)})" if failed else ""))
         return out
-    out.update(verdict="FAIL" if failed else "PASS",
-               why=("rules failing: " + ", ".join(failed)) if failed else ("rules 1-8 hold" if "8_accumulation" in r else "rules 1-7 hold"))
+    held = "1-" + ("8" if "8_accumulation" in r else "7") + (", 9-10" if "10_heldout" in r else "")
+    held = "1-10" if held == "1-8, 9-10" else held
+    out.update(verdict="FAIL" if failed else "PASS", why=("rules failing: " + ", ".join(failed)) if failed else f"rules {held} hold")
     return out
 
 

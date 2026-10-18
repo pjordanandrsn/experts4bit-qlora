@@ -168,3 +168,74 @@ eager. So these run for the first time in this lane on the proof:
 `bench/p133/receipts/<run>/`: `fit.json`, `arm_{B0a,B1a,B1b,B0b}.json`, `quality_{off,on}.json`, `verdict.json`,
 `summary.txt`, `forensics.txt`, `versions.txt`, `prompts.json`, `logs/` (with the premise junit reports),
 `work/bake.json` and `SHA256SUMS`. The checkpoint, the arena, the reference log-probs and the gnf4 clone stay on the box.
+
+## Amendment 1 (2026-10-17, after `p133-4090-prove-1` VOIDed on a defect in the reducer)
+
+**What happened.** `p133-4090-prove-1` ($0.17, Vast contract 56454024 on machine 51612) ran every registered box step:
+- refusals passed (`cc=8.9 sms=128`, torch 2.8.0+cu128); the tripwire and self-tests passed;
+- the premise read 33 + 2 and 18 + 0, by id;
+- the fit check passed (`max_seqs` auto 64, buckets 1–64, graphs on);
+- the four arms ran with every bucket captured and exact engagement;
+- both quality phases ran (rc 0).
+
+The reducer VOIDed it (lane exit 27). The quality pass integrity read the server's buckets from the record (1–64 here)
+instead of the buckets P110's instrument enables, `p110_box.BUCKETS = (1, 2, 4, 8, 16)`.
+
+**The deviation, plainly:** the reducer derived the buckets from the record; this amendment restores P116's rule.
+
+**The correction.**
+- `INSTRUMENT_BUCKETS` is read from `p110_box.py`'s own source (`BUCKETS`), staged beside the reducer, never hard-coded.
+- No rule, bar, prediction, size or budget changes.
+- The self-test grows to 41 cases. They include the proof's shape (server buckets 1–64, passes at 1–16), a pass whose
+  bucket captured, and a pass that misses bucket 8.
+- `tests/test_p133_staged_pin.py` reruns the pre-amendment reducer (#1695's merge) on that shape: it VOIDs on the pass
+  `graph_status` alone, the amended reducer passes it, and the bucket-8 mutant still VOIDs.
+
+**The proof (the maintainer's ruling, 2026-10-17T22:06Z).** The re-reduction stands as the proof, under this page's own
+criterion: a VOID fails the proof, and NOISY at the proof's lengths is not a failure. No `p133-4090-prove-2` is declared.
+The verdict of record comes from the MERGED reducer:
+1. after this amendment merges, `prove-1`'s committed records are re-reduced at the merge commit (`--proof`);
+2. the verdict must be byte-identical to the re-reduction run before the merge (sha256
+   `d07c19db63c122794900c00efb0eba2eccfdc200443ba675edea93b45e61ac6f`, NOISY);
+3. it is posted with the reducer's merge sha on #1695 and the bus;
+4. then the reading `p133-4090-1` may launch under the pin rule.
+
+The B1-against-B0 comparison and the quality deltas stay unread until the reading.
+
+**Disclosed:** that pre-merge re-reduction was run before the maintainer's terms were read. Its reasons, the four self-pair
+ratios at the proof's lengths, were seen. They are noise diagnostics, per the ruling.
+
+**Spend:** $0.17 of the $3.75 ceiling.
+
+## Amendment 2 (2026-10-17, after `p133-4090-1` was ABORTED ahead of the registered time-left check; nothing read)
+
+**What happened.** `p133-4090-1` ($0.50 billed, Vast instance 56463118 on machine 51617) passed its refusals and premise.
+The 61.1 GB fetch then took about 17 min (23:02:47Z to 23:19:56Z), and the NF4 bake was still running at 23:35Z (about 0.65–1
+GB of arena a minute). At the earliest quality-OFF check the box would have had about 1,900 s left, below `NEED_QOFF` 1500 +
+600, so STOP-2 would have skipped quality and the lane would have exited 40 with no verdict. On the maintainer's ruling it was
+aborted before any arm ran; teardown is verified. No arm or quality record exists.
+
+**The correction** (the reading only; the proof is done):
+- **Guard:** the reading's guard goes from 1.25 h to **2.0 h**. The time-left checks (`NEED_*`) are unchanged: they worked.
+- **Pin rule:** it adds Vast **`inet_down >= 1000` Mbps**. This fetch ran at about 480 Mbps effective; P116's 6–10 min
+  implies about 1 Gbps. Everything else in the host rule is unchanged.
+- **Staged files:** nothing staged changes. The guard is the launcher's wall clock (`wallclock_h`), not a constant in the
+  box, so `staged.sha256` is unchanged.
+
+**Sizing at 2.0 h:**
+
+| step | minutes |
+|---|---|
+| setup | about 10 |
+| fetch at 1 Gbps | about 10 |
+| bake, at this host's rate | up to about 20 |
+| prompts and fit | about 3 |
+| four arms | about 12 |
+| quality OFF | 25–30 |
+| quality ON | about 10 |
+
+That is about 95 min, so quality OFF starts with about an hour left; the check needs 35 min.
+
+**Budget:** the reading's worst is 0.49 × 2.0 + 61.1 × 0.011 = **$1.65**. The lane has billed **$0.67** (the proof $0.17,
+`p133-4090-1` $0.50), so with the rerun **`p133-4090-2`** it is at most **$2.32**, inside the $3.75 ceiling (hard stop $4.50).
+`p133-4090-2` is the last declared id. It launches only after the maintainer's ACK Amendment 2 on #1695.

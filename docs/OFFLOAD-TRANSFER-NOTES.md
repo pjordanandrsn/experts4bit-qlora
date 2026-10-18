@@ -25,6 +25,38 @@ Two default-off diagnostics drive it:
   dtype, so a stage issues **2** H2D copies instead of **4** (one uint8 packed-weights arena + one
   float32 absmax arena). Bit-identical to the four-copy path (`test_offload_stats_arena.py`); it only
   tests whether per-copy fixed overhead is worth removing.
+  **It costs host RAM:** torch's pinned allocator rounds every request up to a power of two, and a per-dtype arena rounds the
+  packed weights of a whole layer at once. On Qwen3 (30B, 235B) and Mixtral 8x22B a layer's homes then pin **1.78x** their bytes,
+  against 1.33x for the four separate homes. Do not turn it on to save memory.
+- **`E4B_OFFLOAD_PIN_SLAB=1`** (default off) — pins a layer's four homes as views into **one exact-size, page-aligned pageable
+  buffer**, registered in place with a single `cudaHostRegister`, so the power-of-two rounding never applies: the homes cost their
+  bytes, plus each home's 512-byte alignment and at most a page. Staging is unchanged (the same four copies from the same views). If the registration is refused the
+  homes are pinned per tensor as before, and the handle's `slab_why` says why (`pin_mode` names the path). The pages are
+  unregistered before the buffer can be freed. Not combinable with `E4B_OFFLOAD_ARENA`.
+
+  Pinned bytes per offloaded layer, four separate homes (today's default) against the slab, from each family's shapes (NF4
+  packed weights at 0.5 B/param, fp32 absmax per 64, as offloaded stacks keep it):
+
+  | family | separate homes | slab |
+  |---|---:|---:|
+  | Qwen3-235B-A22B, Qwen3-30B-A3B, Mixtral 8x22B, Granite 4.0-H tiny | 1.333x | ~1.00x |
+  | Mixtral 8x7B, LFM2-8B-A1B | 1.143x | ~1.00x |
+  | ERNIE-4.5-21B-A3B, Granite 3.1 3B-A800M, Gemma 4 26B-A4B, gpt-oss-20b | 1.01-1.07x | ~1.00x |
+  | OLMoE-1B-7B, Qwen3.6-35B-A3B | 1.000x | ~1.00x |
+  | Nemotron 3 (non-gated experts) | 1.52-1.68x | ~1.00x |
+
+  On Qwen3-235B-A22B that is 42.6 GB of pinned host RAM over 127.7 GB of expert bytes (94 layers). Registered pageable memory
+  counts as anonymous memory (`RssAnon`) where `cudaHostAlloc` memory counts as shared (`RssShmem`), so read both when comparing.
+
+  Two things to know about slab homes:
+  - **`Tensor.is_pinned()` reads False on them.** torch recognizes only its own allocator's blocks. The pages are page-locked all
+    the same: on an RTX A2000 a `non_blocking` copy from a slab enqueues in about 0.1 ms and runs at the rate of torch's own
+    pinned memory. Use the handle's `pinned` (or `offload._is_pinned`), which counts live slabs.
+  - **The pipelined engine reads them in place or refuses.** The slab is registered mapped (`cudaHostRegisterPortable |
+    cudaHostRegisterMapped`), and records whether the device reads it at its host address (`cudaHostGetDevicePointer`). Where it
+    does, the pipelined engine's zero-copy gather takes slab homes like torch-pinned ones. Where it does not, or the in-place path
+    cannot engage for any other reason, enabling pipelined residency raises: it never pins a second copy of the layer, since the
+    flag exists to save that memory.
 
 ## The ceiling — this host is PCIe-limited, not software-limited
 

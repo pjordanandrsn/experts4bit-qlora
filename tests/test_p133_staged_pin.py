@@ -12,9 +12,11 @@ runs the same comparison in CI. It also runs the box's and the reducer's self-te
 - the rule's constants, every time-left check inside its own guard, and the exit codes.
 """
 import hashlib
+import json
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 
@@ -97,7 +99,7 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 def test_the_self_tests_pass():
     out = subprocess.run([sys.executable, str(LANE / "p133_reduce.py"), "--self-test"], capture_output=True, text=True,
                          env=_env())
-    assert out.returncode == 0 and "p133_reduce self-test OK (38 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "p133_reduce self-test OK (41 cases)" in out.stdout, out.stdout + out.stderr
     out = subprocess.run([sys.executable, str(LANE / "p133_box.py"), "--self-test"], capture_output=True, text=True,
                          env=_env())
     assert out.returncode == 0 and "p133_box self-test OK (27/27 cases)" in out.stdout, out.stdout + out.stderr
@@ -139,6 +141,18 @@ def test_the_rule_is_the_registered_rule():
     assert "SELF_W1_LO, SELF_W1_HI = 0.985, 1.015" in REDUCE
     assert 'FLOORS = ("chunk",)' in REDUCE and 'OFF_ARMS = ("R", "rep", "chunk", "mutant_scale")' in REDUCE
     assert "TOL, SPREAD_X, SPREAD_MIN, K8_BUDGET, K8_GATED = pb.TOL, pb.SPREAD_X, pb.SPREAD_MIN, pb.K8_BUDGET, pb.K8_GATED" in REDUCE
+    p110 = (REPO / "bench" / "p110" / "p110_box.py").read_text()
+    assert "INSTRUMENT_BUCKETS = _instrument_buckets()" in REDUCE, "Amendment 1: read from p110_box.py, never typed"
+    import ast
+    p110_buckets = next(ast.literal_eval(n.value) for n in ast.parse(p110).body if isinstance(n, ast.Assign)
+                        and any(getattr(x, "id", None) == "BUCKETS" for x in n.targets))
+    sys.path[:0] = [str(LANE), str(REPO / "bench" / "p115")]
+    try:
+        import p133_reduce as r
+    finally:
+        del sys.path[:2]
+    assert r.INSTRUMENT_BUCKETS == tuple(p110_buckets) == (1, 2, 4, 8, 16), (r.INSTRUMENT_BUCKETS, p110_buckets)
+    assert "for b in INSTRUMENT_BUCKETS" in REDUCE and "Amendment 1" in PREREG
     assert 'INCUMBENT = {QWEN: "scalar", GRAN: "scalar", TINY: "scalar"}' in REDUCE
     assert "WINDOWS = {QWEN: 24, GRAN: 12, TINY: 4}" in REDUCE
     for mode, w in (("DRY", 4), ("PROVE", 12), ("reading", 24)):
@@ -194,7 +208,7 @@ def test_the_subject_is_the_default_server_and_only_the_switch_differs():
 
 
 def test_every_time_left_check_fits_its_own_guard():
-    assert "guard 0.75 h" in PREREG and "guard 1.25 h" in PREREG
+    assert "guard 0.75 h" in PREREG and "guard goes from 1.25 h to **2.0 h**" in PREREG   # Amendment 2: the reading
     keys = {"FETCH", "BAKE", "FIT", "ARM", "QOFF", "QON"}
     prove = dict(re.findall(r"NEED_(FETCH|BAKE|FIT|ARM|QOFF|QON)=(\d+)",
                             RUN[RUN.index('elif [ "$PROVE" = 1 ]; then'):RUN.index("else\n")]))
@@ -203,7 +217,7 @@ def test_every_time_left_check_fits_its_own_guard():
     for need in prove.values():
         assert int(need) + 600 <= 0.75 * 3600 - 900, prove
     for need in reading.values():
-        assert int(need) + 600 <= 1.25 * 3600 - 900, reading
+        assert int(need) + 600 <= 2.0 * 3600 - 900, reading
     assert re.findall(r"can_run (\S+)", RUN) == ["$NEED_FETCH", "$NEED_BAKE", "$NEED_FIT", "$NEED_ARM", "$NEED"]
 
 
@@ -214,3 +228,49 @@ def test_lane_failures_avoid_the_machine_exclusion_codes():
     eighteen = [line for line in RUN.splitlines() if "finish 18" in line]
     assert len(eighteen) == 1 and "cuda unusable" in eighteen[0], eighteen
     assert {9, 10, 15, 16, 21, 22, 25, 27, 28, 31, 40} <= codes
+
+
+PRE_AMENDMENT = "7896ce0e9f70b9023e8a480aa9c50699c826975e"   # #1695's merge, the reducer p133-4090-prove-1 ran
+
+
+def test_amendment_1_the_old_reducer_voids_the_proofs_shape_and_the_new_one_passes_it(tmp_path):
+    """p133-4090-prove-1's shape: server buckets 1-64 (max_seqs 64), instrument passes at 1-16. The pre-amendment reducer
+    VOIDs it on the pass graph_status alone; the amended one passes it; a pass that genuinely misses bucket 8 still VOIDs."""
+    src = subprocess.run(["git", "-C", str(REPO), "show", f"{PRE_AMENDMENT}:bench/p133/p133_reduce.py"],
+                         capture_output=True, text=True)
+    assert src.returncode == 0, src.stderr                       # CI checks out full history (fetch-depth: 0)
+    old = tmp_path / "old"
+    old.mkdir()
+    (old / "p133_reduce.py").write_text(src.stdout)
+    shutil.copy(REPO / "bench" / "p115" / "p115_reduce.py", old)
+    sys.path[:0] = [str(LANE), str(REPO / "bench" / "p115")]
+    try:
+        import p133_reduce as r
+    finally:
+        del sys.path[:2]
+    rec = tmp_path / "rec"
+    rec.mkdir()
+    bk = [1, 2, 4, 8, 16, 32, 64]
+    toks = [[i, i + 1] for i in range(16)]
+    for t, (rc, r1) in {"B0a": (800.0, 110.0), "B1a": (801.0, 125.0), "B1b": (800.5, 124.8), "B0b": (799.0, 110.2)}.items():
+        (rec / f"arm_{t}.json").write_text(json.dumps(r._fake_arm(t, rc, r1, toks, buckets=bk)))
+    (rec / "quality_off.json").write_text(json.dumps(r._fake_quality("off", buckets=bk)))
+    (rec / "quality_on.json").write_text(json.dumps(r._fake_quality("on", buckets=bk, bias={"wikitext": 0.001, "c4val1": 0.001})))
+    (rec / "fit.json").write_text(json.dumps(r.FIT))
+
+    def run(script):
+        out = tmp_path / "v.json"
+        p = subprocess.run([sys.executable, str(script), "--dir", str(rec), "--out", str(out), "--e4b-sha", r.E, *[]],
+                           capture_output=True, text=True, env=_env())
+        assert p.returncode == 0, p.stdout + p.stderr
+        return json.loads(out.read_text())
+    v_old = run(old / "p133_reduce.py")
+    assert v_old["verdict"] == "VOID" and v_old["reasons"], v_old
+    assert all(": graph_status {" in x for x in v_old["reasons"]), v_old["reasons"][:3]
+    v_new = run(LANE / "p133_reduce.py")
+    assert v_new["verdict"] == "LICENSED", v_new["reasons"]
+    q = json.loads((rec / "quality_off.json").read_text())
+    del q["engagement"][r.TEXTS[0]]["R"][0]["graph_status"]["8"]
+    (rec / "quality_off.json").write_text(json.dumps(q))
+    v_mut = run(LANE / "p133_reduce.py")
+    assert v_mut["verdict"] == "VOID" and any(": graph_status {" in x for x in v_mut["reasons"]), v_mut["reasons"]
