@@ -245,3 +245,14 @@ reference card, and the box runs only on that card.
 
 **If the reference card does not return,** the lane cannot run as registered. It would need a new registration that
 takes its reference in the box, not a third amendment.
+
+## Closed (2026-10-18): not run, the reference card was unavailable
+
+The reference card (machine 55913, offer 40421555, GPU-38c66e15) was listed in **0 of about 4,050 reads over 34.5 h**
+(2026-10-16 18:52Z to 10-18 05:20Z). The same machine's other card appeared 71 times. P132 as registered cannot run
+on any other card (Amendment 2), and P116's matched pair shows that normalizing by the B = 1 anchor cannot carry its
+rule to another card. **P132 closes "not run"; that is not a strike.**
+
+The question moves to a new registration, the verify split (`bench/vsplit/PREREG-vsplit.md`). There every number the
+rule compares comes from the box that runs it, P132's box is reused byte-identical, and the desk prediction is
+restated as fractions of the increment.
