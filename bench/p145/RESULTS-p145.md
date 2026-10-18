@@ -43,11 +43,12 @@ Removable time by class (ms): moe_expert 4.662, dense_gemm 2.324, attn 0.369, mo
 
 The top addressable line is dense_gemm, whose floor of 0 is not kernel headroom. So the reducer proposes a **format** lever:
 a quality premise for compressing Mixtral's attention projections, before any kernel. Fewer bytes is the only way below the
-bf16 copy floor. The q and o projections already move their 2.147 GB at 0.98 of the copy rate (1.465 ms against 1.432).
+bf16 copy floor. The q and o projections already move their 2.147 GB at 0.98 of the copy rate: 1.465 ms of kernel time
+(the table's `dur_ms`; 1.471 ms removable) against a 1.432 ms copy floor.
 
-A secondary kernel option is about 0.2 ms. The k and v projections move 0.537 GB at 0.63 of the copy rate (0.568 against
-0.358 ms), and Mixtral serves them unfused (`fuse_qkv_n` is 0), so a QKV fusion is a candidate. Either one needs its own
-registration.
+A secondary kernel option is about 0.2 ms. The k and v projections move 0.537 GB at 0.63 of the copy rate: 0.568 ms of
+kernel time (0.573 ms removable) against a 0.358 ms copy floor. Mixtral serves them unfused (`fuse_qkv_n` is 0), so a QKV
+fusion is a candidate. Either one needs its own registration.
 
 ## W16 (reported, not proposed)
 
