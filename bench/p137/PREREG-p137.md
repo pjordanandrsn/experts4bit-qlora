@@ -282,3 +282,59 @@ consumed. `p137-4090-1` and `-2` are spent.
 
 **Teardown.** Launches use the launcher with the abort-fetch fix, which fetches the lane's records before an abort
 destroys the box.
+
+## Amendment 3 (after `p137-4090-4`, VOID, strike 1): 32 timed steps, and a layer-major warm-up
+
+**What happened.** `p137-4090-4` (RTX 4090, machine 51612, $0.630) ran Amendment 2 end to end: one load (1,974 s), then
+A0a L1a L1b A0b in one process. Every STRICT rung passed except one: the L1 self-pair `L1b/L1a = 0.8996`, outside
+[0.97, 1.03]. The stock self-pair was 0.9876. The reviewer re-derived the verdict from the records and got the same JSON.
+
+**The seen walls, disclosed** (seconds to 6 decimals, the 8 timed steps of each arm in order; the full values are in the records; nothing below sets a threshold):
+
+| arm | timed walls | median |
+|---|---|---|
+| A0a | 7.554632, 7.070864, 8.428232, 7.084550, 7.611499, 7.513292, 7.296618, 7.831938 | 7.533962 |
+| L1a | 3.619551, 3.411483, 4.049763, 3.540625, 3.154067, 3.118768, 3.689090, 3.367101 | 3.476054 |
+| L1b | 3.895530, 3.125358, 3.082871, 3.128778, 3.781774, 3.065454, 3.095182, 4.319311 | 3.127068 |
+| A0b | 7.651489, 7.634313, 7.476301, 7.252192, 7.165923, 7.404696, 8.058725, 7.302030 | 7.440499 |
+
+Two readings fit eight steps, and this box cannot separate them:
+- **First use.** Amendment 2's warm-up ran the stock path only, so L1a was the first layer-major step in the process. Its
+  first four timed walls average 3.65 s and its last four 3.33 s.
+- **A two-mode tail.** L1b sits at 3.07–3.13 s with three steps at 3.78–4.32 s. With eight steps, the median moves when one
+  step changes mode.
+
+The ratio of the arm means passes (0.986), but it was SEEN, so changing the statistic now would be chosen by the outcome.
+The median and the band stay.
+
+**The change (design terms, fixed before any data under them):**
+- **32 timed steps per arm** (was 8). `WARM` stays 2, so each arm runs 34 steps on 272 of the slice's 400 rows, and the
+  16 held-out rows follow them. This is a design term: no A2000 timing seeds it, and no box's walls set it.
+- **The warm-up runs both loops.** After the stock warm-up forward and backward, one untimed `layer_major_step` runs on
+  step 0's four micro-batches, with no optimizer step. The adapters are then restored. The drift guard's one-time stock
+  forwards run there, once per model, so they no longer land on L1a.
+
+**The rule follows (`p137_reduce.py`, now 41 cases):**
+- **Step 0 cold** now means A0a and A0b exactly M × (2n − 1) + 1 = 381, and **L1a and L1b both exactly 2n = 96**. The
+  Amendment 2 rung "L1a above L1b" is retired with the reason it existed.
+- **New STRICT VOIDs:**
+  - an arm record without the warm-up record, or arms whose warm-up records differ;
+  - a warm-up whose layer-major stagings are not above 2n (the guard did not run there);
+  - an arm with other than 32 timed walls, or whose recipe says other than 32.
+
+Unchanged: S_MIN 1.10, the band [1.25, 2.0], the self-pair band [0.97, 1.03] on medians (VOID outside it), the 4.25 GiB
+memory term, the 0.01 held-out term (REPORTING), the stagings, step-0 bit-identity, n = 48, the data slice and its sha256,
+and every pin.
+
+**Time and cost (rechecked).** On `p137-4090-4` the four 10-step arms took about 311 s after the load. The extra 24 steps
+per arm add about 24 × (7.5 + 3.5 + 3.5 + 7.5) ≈ 528 s, and the layer-major warm-up about 10 s more.
+- **The runner's 4,500 s check for the four arms stays:**
+  - on that host, about 1,974 + 311 + 540 ≈ 2,825 s;
+  - on a contended host with a 38 min load, about 3,130 s.
+- **The 2.5 h guard stays.** `p137-4090-4`'s box ran about 47 min end to end, and the new one about 56 min.
+- **Expected cost** at that quote ($0.4874/h, $0.00391/GB) is about $0.70.
+- **Worst cost is unchanged at $1.8971**: $0.49/h × 2.5 h plus 61.1 GB × $0.011/GB.
+
+**Run ids.** `p137-4090-5` to `p137-4090-8` are added. `-5` is the reading; `-6` to `-8` are spares under the flicker rule
+(an id refused before the create is consumed). `p137-4090-1` to `-4` are spent. The two-strikes rule counts from this
+amendment: `p137-4090-4` is strike 1.

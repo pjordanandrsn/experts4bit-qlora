@@ -27,7 +27,7 @@ import sys
 import time
 
 SEQ, MB_ROWS, ACCUM = 2048, 2, 4
-WARM, TIMED = 2, 8              # step 0 (the equality step) is the first warm step
+WARM, TIMED = 2, 32             # step 0 (the equality step) is the first warm step; Amendment 3: 32 timed (was 8)
 HELD_ROWS = 16
 SEED, LR, R, ALPHA = 3407, 2e-4, 16, 16
 LOOPS = {"A0": "stock", "L1": "layer_major"}
@@ -188,7 +188,8 @@ def _reset(model, params, snapshot, handles):
     np.random.seed(SEED)
 
 
-def _arm(tag, model, params, snapshot, snap_hash, handles, plan, held, pad_id, n_fast, model_dir, out_path, mem_baseline):
+def _arm(tag, model, params, snapshot, snap_hash, handles, plan, held, pad_id, n_fast, model_dir, out_path, mem_baseline,
+         warmup):
     import torch
 
     import bitsandbytes as bnb
@@ -206,7 +207,7 @@ def _arm(tag, model, params, snapshot, snap_hash, handles, plan, held, pad_id, n
     except torch.cuda.OutOfMemoryError as e:
         rec = {"tag": tag, "loop": loop, "model": model_dir, "oom": f"step {len(steps)}: {str(e)[:200]}", "steps": steps,
                "adapter_sha_at_start": start_hash, "adapter_sha_snapshot": snap_hash, "mem_at_start": mem_at_start,
-               "mem_baseline": mem_baseline}
+               "mem_baseline": mem_baseline, "warmup": warmup}
         json.dump(rec, open(out_path, "w"), indent=1)
         print("P137_ARM " + json.dumps({"tag": tag, "oom": rec["oom"]}), flush=True)
         return
@@ -224,7 +225,7 @@ def _arm(tag, model, params, snapshot, snap_hash, handles, plan, held, pad_id, n
            "step0_hex": [x.hex() for x in step0], "summary": summarize(steps), "heldout": sum(hl) / len(hl),
            "n_fast": n_fast, "n_offloaded": len(handles), "ckpt": dict(ckpt_offload.CKPT_OFFLOAD_STATS),
            "adapter_sha_at_start": start_hash, "adapter_sha_snapshot": snap_hash, "process": "one-process ABBA (A2)",
-           "mem_at_start": mem_at_start, "mem_baseline": mem_baseline,
+           "mem_at_start": mem_at_start, "mem_baseline": mem_baseline, "warmup": warmup,
            "versions": {"torch": torch.__version__, "transformers": transformers.__version__,
                         "bitsandbytes": md.version("bitsandbytes"), "gnf4": md.version("grouped-nf4-gemm"),
                         "e4b_sha": os.environ.get("E4B_SHA"), "gpu": torch.cuda.get_device_name(0)},
@@ -252,14 +253,28 @@ def run_abba(a):
     # One untimed warm-up forward + backward (no optimizer step; the reset restores the adapters) BEFORE the baseline, so
     # the one-time lazy device workspaces of the first training step (p137-dry-9: +16.26 MiB from the second arm on, e.g.
     # the cuBLAS workspace) are inside the baseline rather than read as an arm-to-arm leak.
+    # Amendment 3: then one untimed layer-major step on step 0's micro-batches, so the layer-major path's first-use costs
+    # (and the drift guard's one-time stock forwards, once per model) are paid here and not inside L1a's timed steps.
+    from experts4bit_qlora.engines import offload as off
+    from experts4bit_qlora.engines.layer_major import layer_major_step
+
     model.train()
+    off.reset_offload_stats()
     warm = pad(plan[0][0], pad_id, "cuda")
     model(**warm).loss.backward()
+    torch.cuda.synchronize()
+    warmup = {"stock_stagings": len(off._stats().copies)}
+    _reset(model, params, snapshot, handles)
+    batches = [pad(mb, pad_id, "cuda") for mb in plan[0]]
+    layer_major_step(model, batches, weights_of(batches), handles=handles)
+    torch.cuda.synchronize()
+    warmup["layer_major_stagings"] = len(off._stats().copies)
+    print("P137_WARMUP " + json.dumps(warmup), flush=True)
     _reset(model, params, snapshot, handles)
     mem_baseline = torch.cuda.memory_allocated()       # post-load, post-warm-up, post-snapshot, everything evicted
     for tag in TAGS:
         _arm(tag, model, params, snapshot, snap_hash, handles, plan, held, pad_id, n_fast, a.model,
-             os.path.join(a.outdir, f"arm_{tag}.json"), mem_baseline)
+             os.path.join(a.outdir, f"arm_{tag}.json"), mem_baseline, warmup)
     return 0
 
 
@@ -305,7 +320,9 @@ def self_test():
     n += 1
     assert set(LOOPS) == {"A0", "L1"} and LOOPS["L1"] == "layer_major" and TAGS == ("A0a", "L1a", "L1b", "A0b")
     n += 1
-    print(f"p137_box self-test OK ({n}/10 cases)")
+    assert (WARM, TIMED) == (2, 32)                                    # Amendment 3
+    n += 1
+    print(f"p137_box self-test OK ({n}/11 cases)")
     return 0
 
 
