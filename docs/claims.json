@@ -12334,6 +12334,37 @@
         "bench/dq11/RESULTS-dq11.md"
       ],
       "notes": "VALID_CONTROLLED_READ with initial and trained K8 quality passing in both repetitions; BUILD_CANDIDATE and U_FASTER_CONTROLLED independently re-derived with verified teardown. No numerical speed magnitude is published. Fusion headroom is an ablation on Unsloth, not a measurement of a new e4b implementation. Default-Unsloth position, capacity and shipping licenses remain false. Raw receipt SHA256 67dc2ad03f924bee68ffb82179412e74f35abbdbc4549a9640edd1cee8cf9029."
+    },
+    {
+      "id": "e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane P137, one rented RTX 4090: under expert offload with enable_fast_train(dgrad=True), layer-major accumulation (experts4bit_qlora.engines.layer_major.layer_major_step, one step's micro-batches run layer by layer) trains Qwen3-30B-A3B at 2.365x the stock accumulation loop's speed: medians A0a 7.641 / L1a 3.231 / L1b 3.173 / A0b 7.514 s/step over 32 timed steps each, self-pairs 0.983 / 0.982, against a registered bar of S >= 1.10. Stagings per step fall from 380 to 95 (2n - 1 per pass, one pass per step instead of one per micro-batch); peak allocated 7.98 GB against 8.41 GB. The predicted band [1.25, 2.0] was missed high, and the held-out term (0.015 against 0.01, layer-major lower) sits inside the 0.031 same-loop spread at 34 steps.",
+      "value": 2.364984900553925,
+      "unit": "S = min(A0a/L1a, A0b/L1b), stock over layer-major median s/step, one process ABBA, 32 timed steps per arm",
+      "hardware": "RTX 4090 (sm_89, 24 GB, driver 595.71.05), one rented Vast.ai verified/secure host (p137-4090-7: instance 56546276, machine 51612, AMD EPYC 7742, 256 threads), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @b4366b9a (0.55.0, the registered library pin) + grouped-nf4-gemm 0.46.0 @6b7c2e74; torch 2.8.0+cu128, transformers 5.18.0, bitsandbytes 0.50.2; lane source @b3567954 (P137 Amendment 3); load_moe_4bit_streaming(offload=True, pin=True), 48/48 MoE layers offloaded and patched, gradient checkpointing enabled then routed by enable_fast_train through e4b's reentrant checkpoint on all 48 decoder layers (TC1 amendment 64; ckpt mode reentrant in every arm record); alpaca train[:400] (sha256 68e3d31c), seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, AdamW 8-bit, lr 2e-4, seed 3407; one load, then A0a L1a L1b A0b from one hash-checked adapter snapshot after an untimed warm-up of both loops; 2 warm + 32 timed steps per arm; verdict by bench/p137/p137_reduce.py",
+      "measured_on": "2026-10-18",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p137/RESULTS-p137.md",
+        "bench/p137/PREREG-p137.md",
+        "bench/p137/p137_reduce.py",
+        "bench/p137/p137_box.py",
+        "bench/p137/receipts/p137-4090-7/verdict.json",
+        "bench/p137/receipts/p137-4090-7/summary.txt",
+        "bench/p137/receipts/p137-4090-7/SHA256SUMS",
+        "bench/p137/receipts/p137-4090-7/arm_A0a.json",
+        "bench/p137/receipts/p137-4090-7/arm_L1a.json",
+        "bench/p137/receipts/p137-4090-7/arm_L1b.json",
+        "bench/p137/receipts/p137-4090-7/arm_A0b.json"
+      ],
+      "quoted_in": [
+        "docs/STATUS.md#fit-and-memory"
+      ],
+      "notes": "Pre-registered in #1718 with Amendments 1 (#1722), 2 (#1730) and 3 (#1734); read on p137-4090-7 and re-derived byte-identical twice (verdict.json sha256 feef3cfd). Licenses exactly layer_major_step + enable_fast_train + expert offload, Qwen3-30B-A3B, RTX 4090, this recipe: not the CLI trainer's LAYER_MAJOR=1, whose loop does not take the fused path. No default changes."
     }
   ]
 }
