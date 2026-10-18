@@ -50,3 +50,20 @@ After an ACKed run, hand off run ID, exact source pins, `verdict_p136.json`, `su
 The amendment is test-only. P136 stages its own copy of the test, `bench/p136/premise/test_fused_glue_decode_graphs_gpu.py`, under the same box name. `tests/test_fused_glue_decode_graphs_gpu.py` on main asserts the pre-#1472 route, so it fails on sm_89+ with a grouped-nf4-gemm that exports `rope_norm_qk`. It stays byte-pinned by P115, P115c, P115d, P123 and P125, whose kernel pins predate `rope_norm_qk`, and P136 runs its own route-exact copy. A later lane that stages the main file at such a kernel pin needs the same copy. `p136_drive.sh` and `test_registration.py` map that one staged name to the copy. The copy reads the route from the kernel module before wrapping anything, and wraps `rope_norm_qk` before the fold binds it. Where the kernel exports `rope_norm_qk`, both the capture assertion and the padded-eager assertion require `rmsnorm_rows`, `rmsnorm_resid_rows` and `rope_norm_qk` to have run. Otherwise they require `rope_norm_heads`, as before. A fold that silently takes `rope_norm_heads` on a kernel offering `rope_norm_qk` therefore fails. The graph == padded-eager comparisons are unchanged; they have not yet run on an sm_89+ card, and they must pass. The premise is still exactly 19 passing tests, with none skipped, failed or errored. `staged-p136.sha256` moves by one row: `test_fused_glue_decode_graphs_gpu.py` goes from `5a8eb6b4b0e4d515d8789f1fb729bb847fd74d53288f2faa3efac07e04e1a740` to `8e5b2f775cf5c0ddde349822624a7d44b40f3898738cc64ceb31f5f3f4ea5aae`. No other staged file, threshold, read rule, host term or budget changes.
 
 `p136-gemma4-5090-1` has used one of its two attempts, so its next attempt is its last. The Mixtral and gpt-oss run IDs keep both of theirs. Every further run still needs its own post-merge execution approval, naming this amendment's merge commit as the source.
+
+## Amendment 2 (2026-10-18): each family's second and last attempt has its own run ID
+
+A run ID is used once: the launcher refuses an ID that already has a ledger row or a receipt directory. After Amendment 1,
+`p136-gemma4-5090-1` therefore could not take its second attempt, and the runner and driver accepted no other gemma4 ID.
+
+This amendment registers one more ID per family, each that family's second and last attempt:
+- `p136-gemma4-5090-2`: gemma4's last attempt, after `p136-gemma4-5090-1` stopped at the premise (Amendment 1).
+- `p136-mixtral-5090-2` and `p136-gptoss-5090-2`: used only if that family's `-1` fails after its box has started.
+
+Each takes its family's registered model, revision, MoE layer count, disk floor and workloads, unchanged. Both case lists
+gain the three IDs: `p136_run.sh` (staged) and `p136_drive.sh`. An attempt counts once an instance was created and its box
+started; a create refused because the offer was taken or vanished is not an attempt. Two failed attempts lapse a family. Every
+attempt counts against the lane's combined ceiling, which stays at **$15.20**.
+
+`staged-p136.sha256` moves by one row: `p136_run.sh` goes from `09feafcafafb42e66ecc7a018ddeef3b31541c6c6ff52e92bdd4c9d1dbc86290` to `79ad608032f0044d1fd4ef699d3979e4a5e7a84fadf667558dc155454f1eb79a`. No threshold, read rule, host term,
+workload or other staged file changes.
