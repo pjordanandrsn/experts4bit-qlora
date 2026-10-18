@@ -138,11 +138,11 @@ def test_the_subject_only_the_loop_differs():
 
 
 def test_every_time_left_check_fits_its_own_guard():
-    assert "guard 2.5 h" in PREREG
+    assert "guard 3.0 h" in PREREG
     reading = dict(re.findall(r"NEED_(FETCH|ABBA)=(\d+)", RUN[RUN.index("else\n  MODEL=mistralai"):RUN.index("fi\nGPU_CLASS=")]))
     assert set(reading) == {"FETCH", "ABBA"}
     for need in reading.values():
-        assert int(need) + 600 <= 2.5 * 3600 - 900, reading
+        assert int(need) + 600 <= 3.0 * 3600 - 900, reading
     assert re.findall(r"can_run (\S+)", RUN) == ["$NEED_FETCH", "$NEED_ABBA"]
 
 

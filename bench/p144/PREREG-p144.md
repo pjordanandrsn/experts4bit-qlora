@@ -120,13 +120,19 @@ step); layer-major makes it once per step (49.9 GB).
 - **Run ids:** `p144-4090-1` is the reading. `p144-4090-2` to `p144-4090-4` are spares under the flicker rule: an id
   refused before the create, or NOT_RUN at the pre-flight, is consumed and is not an attempt.
   `p144-dry-<n>` are the $0 dry runs.
-- **Guards:** guard 2.5 h; the runner's arm check is 4,500 s.
+- **Guards:** guard 3.0 h; the runner's arm check is 4,500 s.
+  - **Why 3.0 h, not P137's 2.5.** The launcher accepts hosts down to 20 MB/s from the HF CDN, and 93.4 GB at 20 MB/s is
+    about 78 min. The arms' own worst case is about 2,800 s: a capped load near 600 s, the stock arms at 34 × 20 s × 2,
+    and the layer-major arms at 34 × 11 s × 2. With the 4,500 s check and its 600 s margin plus about 400 s of setup, a
+    2.5 h guard would leave the fetch 3,500 s, so it would need at least 26.7 MB/s. A host between 20 and 26.7 MB/s would
+    fetch and then skip the arms, a box-started loss. At 3.0 h the fetch has about 5,300 s, about 17.6 MB/s, which covers
+    the launcher's whole accepted range.
   - Expected box time is about 50 min: a 93 GB fetch (about 15 min), a load of a few minutes with the thread cap, and
     four 34-step arms of roughly 25 min together.
 - **Cost:**
   - Rate cap $0.75/h for the GPU and 200 GB, download at most $0.011/GB. 4090 offers with 98 GB of RAM and 200 GB of disk
     started at $0.549/h on 2026-10-18.
-  - **Worst $2.90**: $0.75 × 2.5 h, plus 93.4 GB × $0.011.
+  - **Worst $3.28**: $0.75 × 3.0 h, plus 93.4 GB × $0.011.
   - Expected about $0.9–1.4.
   - Under the lane's standing authority, at most $15 per run, after this registration merges.
 - **Before any box:** a $0 dry run (`p144-dry-1`) of this kit on the A2000, for correctness only.
