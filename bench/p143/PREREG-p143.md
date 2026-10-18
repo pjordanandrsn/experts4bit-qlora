@@ -158,7 +158,7 @@ last bit. The gate is a tolerance contract plus P115 Phase D's SANE, not identit
 - its setup on the KV class on CPU;
 - the SANE capacity patch on the real KV class;
 - the self-tests, run from one directory as on the box;
-- seven reducer mutants, each killed by the self-test.
+- eight reducer mutants, each killed by the self-test.
 
 ### (d) The served read (`p143a2_box.py`)
 
