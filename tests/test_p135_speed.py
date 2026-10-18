@@ -135,11 +135,15 @@ def _alone(box, model, prompt, n, on, folds):
 
 def test_two_alternating_runners_emit_what_each_emits_alone(monkeypatch):
     _reference_attention(monkeypatch)
+    from experts4bit_qlora.engines import paged_attention
     box = _load("p135_speed")
+    monkeypatch.setattr(box, "WARM", 1)
+    monkeypatch.setattr(box, "BUSY", 2)
     model = _mixtral(layers=4)
     _fuse(model, monkeypatch)
+    paged_attention.register(model)
     folds = box.fused_folds(model)
-    prompt = [int(x) for x in torch.randint(0, 256, (24,))]
+    prompt = torch.randint(0, 256, (24,), generator=torch.Generator().manual_seed(5)).tolist()
     steps = 4
     n = box.WARM + steps + box.BUSY
     rec = box.interleaved_block(model, prompt, "cpu", block="b", steps=steps, buckets=box.BUCKETS, graphs=False,
