@@ -84,6 +84,8 @@ def _run_trainer(env, model_dir, record, mutant=False):
     import experts4bit_qlora.train as train
     train = importlib.reload(train)
     fast.FAST_TRAIN_STATS["patched"] = 0
+    from experts4bit_qlora.engines.ckpt_offload import CKPT_OFFLOAD_STATS
+    CKPT_OFFLOAD_STATS["layers"] = 0                              # a process-wide counter: each arm counts its own model
     real_lm = lm.layer_major_step
     real_eft = fast.enable_fast_train
     steps = []
