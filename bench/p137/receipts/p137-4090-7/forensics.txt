@@ -1,0 +1,7 @@
+NVIDIA GeForce RTX 4090, 24564 MiB, 595.71.05, GPU-92789b51-4cb7-d571-818d-348c848ae8de, 8.9, 4, 16
+CPU(s):                               256
+Vendor ID:                            AuthenticAMD
+Model name:                           AMD EPYC 7742 64-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:            1007         210         351           0         445         786
+overlay         200G   12M  200G   1% /
