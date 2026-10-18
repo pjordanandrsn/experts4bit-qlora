@@ -1,0 +1,20 @@
+[16:42:48]   host CPUs: 36 visible, quota 34.56, torch threads 18, OMP_NUM_THREADS=None
+Fetching 26 files:   0%|          | 0/26 [00:00<?, ?it/s]Fetching 26 files: 100%|██████████| 26/26 [00:00<00:00, 868.12it/s]
+[16:42:48]   checkpoint: mistralai/Mixtral-8x7B-Instruct-v0.1 @ eba92302a2861cdc0098cc54bc9f17cb2c47eb61 (requested eba92302a2861cdc0098cc54bc9f17cb2c47eb61)
+[16:42:48]   fusing + quantizing experts (up to 32x8) to nf4 (streaming)...
+[16:42:48]   quantized experts on 32/32 MoE layers (8 experts each)
+[16:42:48]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[16:42:49]   applied 32 transformers checkpoint-key renaming(s) (this checkpoint's layout differs from the module tree)
+[16:42:49]   experts deferred to the arena: 32 module(s), 160 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[16:43:17]   hybrid tier active on 32 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] fusions (q/k/v auto; folds set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 0, 'fuse_t1_glue_n': 65, 'fuse_t1_glue_r2_n': [32, 32], 'fuse_router_epilogue_n': 32}
+DECODE_GRAPH bucket=1 captured
+DECODE_GRAPH bucket=2 captured
+DECODE_GRAPH bucket=4 captured
+DECODE_GRAPH bucket=8 captured
+DECODE_GRAPH bucket=16 captured
+[serve_paged] PREFILL_GRAPH on (auto): first chunks of 512 tokens replay one graph (startup check bitwise on two prompts; pool 210 MiB, 2407 MiB free)
+[serve_paged] ready: {"moe_layers": 32, "experts": 8, "top_k": 2, "model_type": "mixtral", "int4_expert_layers": 0, "int4_store_kinds": [], "int4_attn_projections": 0, "kv": {"n_kv_heads": 8, "head_dim": 128, "k_groups": "auto", "scratch_slots": 16, "blocks_per_seq": 48, "pool_mib": 845.4}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "spec": {"mode": "off"}, "grouping": {"device_grouping": true, "force_singleton_groups": false}, "moe_residual": {"rows": [1, 2, 4, 8, 16], "licensed": 32, "partial": 0, "refused": 0, "probe_errors": []}, "prefill_graph": "auto", "levers_env": {}, "exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glue_n": 65, "fuse_t1_glue_r2_n": [32, 32], "fuse_router_epilogue_n": 32, "fusion_modes": {"E4B_PAGED_FUSE_QKV": "auto", "E4B_FUSE_T1_GLUE": "auto", "E4B_FUSE_T1_GLUE_R2": "auto", "E4B_FUSE_ROUTER_EPI": "auto"}, "fusion_sources": {"E4B_PAGED_FUSE_QKV": "default-allowlisted", "E4B_FUSE_T1_GLUE": "default-allowlisted", "E4B_FUSE_T1_GLUE_R2": "default-allowlisted", "E4B_FUSE_ROUTER_EPI": "default-allowlisted"}, "fusion_report": {"E4B_FUSE_T1_GLUE": {"mode": "auto", "prefill": "off", "patched": 65, "failed_probe": 0}, "E4B_FUSE_T1_GLUE_R2": {"mode": "auto", "prefill": "off", "patched": [32, 32], "kernel_gaps": 0}, "E4B_FUSE_ROUTER_EPI": {"mode": "auto", "patched": 32, "failed_probe": 0, "no_kernel_mode": 0, "fp32_upstream": 32}}, "prefill_glue": {"mode": "0", "source": "default-off"}, "pinned_cache_released": true, "host_heap_trimmed": true}
+P141_W B1/B1b W1 B=1 decode_tok_s=123.06 median=122.97 walls={'32': [0.86407, 0.86411, 0.86406], '160': [1.90422, 1.905, 1.90599]}
+P141_W B1/B1b W16 B=16 decode_tok_s=300.16 median=300.14 walls={'32': [12.05005, 12.0536, 12.07399], '160': [18.88494, 18.87319, 18.87706]}
+P141_ARM {"arm": "B1", "tag": "B1b", "dispatch_build": {"dotpad": 0, "dotpad_splitk": 0, "scalar": 0, "scalar_splitk": 0, "bw_tree": 0, "bw_prmt32": 320, "bw_splitk": 160}, "load_s": 39.72, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "control": "W16", "max_seqs": 16, "W1": 123.06, "W16": 300.16}

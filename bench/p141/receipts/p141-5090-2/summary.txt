@@ -1,0 +1,44 @@
+KNOBS run=p141-5090-2 e4b=d2bf9f641804c4269b1f2c9989f9e322690a3d43 gnf4=70bc03cb7a61b03c4e801e7423c58c103a1b6d7d families=mixtral mixtral=mistralai/Mixtral-8x7B-Instruct-v0.1@eba92302a2861cdc0098cc54bc9f17cb2c47eb61 server=E4B_PAGED_MAX_SEQS=16 E4B_PAGED_MAX_TOKENS_PER_SEQ=768 gpu_class=5090 min_disk_gb=220 min_ram_gb=60 dry=0 short=32 long=160 reps=3 windows=24 cont=128
+CUDA_PROBE ok torch=2.8.0+cu128 cc=12.0 sms=170
+e4b 0.55.0 @d2bf9f641804c4269b1f2c9989f9e322690a3d43
+gnf4 0.46.1 @70bc03cb7a61b03c4e801e7423c58c103a1b6d7d
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p141_reduce self-test OK (41 cases)
+p109_box self-test OK (5/5 cases)
+p141_box self-test OK (33/33 cases)
+p141_select self-test OK (17/17 cases)
+p115_quality self-test OK (11/11 cases)
+premise kernel contract rc=0: 35 passed in 39.60s
+P141_PREMISE kernel ok
+premise served route rc=0: 18 passed, 5 warnings in 16.21s
+P141_PREMISE served ok
+premise ok
+P141_SELECT gate_up 28672x4096 selectable 12/12 selected (16, 1024, 4, 1) (reported: 3.0862 ms vs incumbent 10.3094 ms, floor 2.8206 ms)
+P141_SELECT down 4096x14336 selectable 12/12 selected (16, 512, 4, 2) (reported: 1.9502 ms vs incumbent 6.1047 ms, floor 1.4103 ms)
+P141_SELECTED status=ok env=28672,4096=16,1024,4,1;4096,14336=16,512,4,2
+PHASE 1 ok: GNF4_GEMV_BW_PLAN=28672,4096=16,1024,4,1;4096,14336=16,512,4,2
+FAMILY mixtral mistralai/Mixtral-8x7B-Instruct-v0.1@eba92302a2861cdc0098cc54bc9f17cb2c47eb61
+FETCH mistralai/Mixtral-8x7B-Instruct-v0.1@eba92302a2861cdc0098cc54bc9f17cb2c47eb61 /root/.cache/huggingface/hub/models--mistralai--Mixtral-8x7B-Instruct-v0.1/snapshots/eba92302a2861cdc0098cc54bc9f17cb2c47eb61
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=9689e662d473cbd1e114ddf251817490aeaef5bdd788ec2e034d0937bd10dbbb
+fit mixtral rc=0 P141_FIT {"status": "ok", "max_seqs": 16, "buckets": [1, 2, 4, 8, 16], "graphs": true, "control_width": 16, "w1_wall_s": 1.2619, "error": null}
+
+arm B0a mixtral rc=0 P141_ARM {"arm": "B0", "tag": "B0a", "dispatch_build": {"dotpad": 0, "dotpad_splitk": 0, "scalar": 160, "scalar_splitk": 160, "bw_tree": 0, "bw_prmt32": 0, "bw_splitk": 0}, "load_s": 40.0, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "control": "W16", "max_seqs": 16, "W1": 51.19, "W16": 300.97}
+
+arm B1a mixtral rc=0 P141_ARM {"arm": "B1", "tag": "B1a", "dispatch_build": {"dotpad": 0, "dotpad_splitk": 0, "scalar": 0, "scalar_splitk": 0, "bw_tree": 0, "bw_prmt32": 320, "bw_splitk": 160}, "load_s": 40.3, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "control": "W16", "max_seqs": 16, "W1": 123.24, "W16": 299.89}
+
+arm B1b mixtral rc=0 P141_ARM {"arm": "B1", "tag": "B1b", "dispatch_build": {"dotpad": 0, "dotpad_splitk": 0, "scalar": 0, "scalar_splitk": 0, "bw_tree": 0, "bw_prmt32": 320, "bw_splitk": 160}, "load_s": 39.72, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "control": "W16", "max_seqs": 16, "W1": 123.06, "W16": 300.16}
+
+arm B0b mixtral rc=0 P141_ARM {"arm": "B0", "tag": "B0b", "dispatch_build": {"dotpad": 0, "dotpad_splitk": 0, "scalar": 160, "scalar_splitk": 160, "bw_tree": 0, "bw_prmt32": 0, "bw_splitk": 0}, "load_s": 39.57, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "control": "W16", "max_seqs": 16, "W1": 50.96, "W16": 300.3}
+
+quality off mixtral rc=0 P141_QUALITY B0 windows={'wikitext': 24, 'c4val1': 24} dispatch={'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 593344, 'scalar_splitk': 593344, 'bw_tree': 0, 'bw_prmt32': 0, 'bw_splitk': 0} load 36s mem 27.69 GB 991.8 s
+
+quality on mixtral rc=0 P141_QUALITY B1 windows={'wikitext': 24, 'c4val1': 24} dispatch={'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 390144, 'bw_splitk': 195072} load 34s mem 27.69 GB 342.9 s
+
+P141_VERDICT mixtral LICENSED ["g1 = 2.4075, g16 = 0.9964 (geomean {'W1': 2.4112, 'W16': 0.998}); wikitext ON bias +0.00228 (bar 0.01165), K8 +0.0103; c4val1 ON bias -0.00096 (bar 0.01038), K8 -0.0067"]
+VERDICT mixtral LICENSED
