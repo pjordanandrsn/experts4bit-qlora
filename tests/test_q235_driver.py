@@ -437,7 +437,7 @@ def _repeat_cap(tmp_path, box, pinned=""):
     """Amendment 15: the runner's own repeat_cap (the text between its markers), run against a box record in a box workspace."""
     text = (Q / "q235_run.sh").read_text()
     fn = text[text.index("# --- repeat_cap (Amendment 15) ---"):text.index("# --- end repeat_cap ---")]
-    margin = re.search(r"^REPEAT_MARGIN=([0-9.]+) ", text, re.M).group(1)
+    margin, steps = re.search(r"^REPEAT_MARGIN=([0-9.]+) REPEAT_STEPS=(\d+) ", text, re.M).groups()
     w = tmp_path / "w"
     (w / "receipts" / "box").mkdir(parents=True)
     (w / "logs").mkdir()
@@ -446,18 +446,26 @@ def _repeat_cap(tmp_path, box, pinned=""):
     pybin = tmp_path / "pybin"
     pybin.mkdir()
     (pybin / "python").symlink_to(sys.executable)
-    r = subprocess.run(["bash", "-c", f'{fn}\nREPEAT_MARGIN={margin}; CAP_REPEAT="{pinned}"; repeat_cap'], cwd=w, capture_output=True,
+    r = subprocess.run(["bash", "-c", f'{fn}\nREPEAT_MARGIN={margin}; REPEAT_STEPS={steps}; CAP_REPEAT="{pinned}"; repeat_cap'], cwd=w, capture_output=True,
                        text=True, env={**os.environ, "PATH": f"{pybin}:{os.environ['PATH']}"}, timeout=60)
     rec = json.loads((w / "receipts" / "repeat-cap.json").read_text()) if r.returncode == 0 else None
     return r, rec
 
 
-def test_the_repeat_cap_is_sized_from_the_box_s_own_load_and_step(tmp_path):
-    """Amendment 15 on q235-pro6000-6's own box record (load 907.9 s, step 0 46.551 s): 1.5 x 954.451 = 1,431.68 -> 1,432 s. That
-    box's repeat met Amendment 12's leg-scaled 705 s cap inside its 661 s expert fuse."""
+def test_the_repeat_cap_is_sized_from_the_box_s_own_load_and_five_steps(tmp_path):
+    """Amendment 15 on q235-pro6000-6's own box record (load 907.9 s, step 0 46.551 s): 1.5 x (907.9 + 5 x 46.551) = 1,710.98 ->
+    1,711 s. That box's repeat met Amendment 12's leg-scaled 705 s cap inside its 661 s expert fuse."""
     r, rec = _repeat_cap(tmp_path, {"load": {"seconds": 907.9}, "step": {"elapsed_s": 46.551}})
-    assert r.returncode == 0 and r.stdout.strip() == "1432", (r.stdout, r.stderr)
-    assert rec == {"amendment": 15, "box_load_s": 907.9, "box_step_s": 46.551, "margin": 1.5, "derived_cap_s": 1432}
+    assert r.returncode == 0 and r.stdout.strip() == "1711", (r.stdout, r.stderr)
+    assert rec == {"amendment": 15, "box_load_s": 907.9, "box_step_s": 46.551, "steps_counted": 5, "margin": 1.5, "derived_cap_s": 1711}
+
+
+def test_the_repeat_cap_holds_run_2s_repeat(tmp_path):
+    """The 5 x step term, from run 2's record (q235-pro6000-2): its box loaded in 744.2 s with step 0 at 29.834 s, and its repeat
+    used 964 s: an 824.7 s load, 11 % slower than the box's, then about 139 s, 4.7 of its steps. 1.5 x (744.2 + 5 x 29.834) =
+    1,340.06 -> 1,341 s holds it."""
+    r, rec = _repeat_cap(tmp_path, {"load": {"seconds": 744.2}, "step": {"elapsed_s": 29.834}})
+    assert r.stdout.strip() == "1341" and int(r.stdout) >= 964 and rec["steps_counted"] == 5
 
 
 def test_the_repeat_cap_has_a_60_s_floor_and_a_rehearsal_pin_is_recorded_beside_it(tmp_path):
@@ -479,7 +487,7 @@ def test_the_runner_sizes_the_repeat_on_the_box_and_voids_when_it_cannot():
     """Amendment 15's wiring: no sealed repeat cap; the repeat's cap is repeat_cap's, taken after the box phase and bounded by the time
     left like every phase (phase -> budget_cap); an unsized repeat is a VOID (11) before the repeat starts; only a rehearsal pins it."""
     text = (Q / "q235_run.sh").read_text()
-    assert not re.search(r"\bCAP_REPEAT=\d", text) and re.search(r'^REPEAT_MARGIN=1\.5 CAP_REPEAT=""$', text, re.M)
+    assert not re.search(r"\bCAP_REPEAT=\d", text) and re.search(r'^REPEAT_MARGIN=1\.5 REPEAT_STEPS=5 CAP_REPEAT=""$', text, re.M)
     loop = text[text.index("for run in box repeat; do"):text.index("if [ \"$MODE\" = pro6000 ]; then   # Amendment 11: the second")]
     assert 'cap=$(repeat_cap) && [ -n "$cap" ] || {' in loop and "Amendment 15)'; finish 11; }" in loop
     assert loop.index("cap=$(repeat_cap)") < loop.index('phase "$run" "$cap" python q235_box.py')

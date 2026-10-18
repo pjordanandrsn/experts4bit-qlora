@@ -338,8 +338,8 @@ def test_the_sealed_floors_and_caps_are_the_refit_of_the_pro6000_leg(tmp_path):
     """Amendment 12, mechanical: Amendment 11's formulas on the committed leg receipt (bench/q235/am12/leg, q235-leg-pro6000-2)
     give exactly the sealed floors (H2D 28.33 / 1.2 -> 23.609; the disk 1.145, because the leg's load was warm and its cold-read
     sample is absent; host copy by Amendment 13's fit, 70.20 x 34.075 / (34.075 + 0.2 x 1997.5) -> 5.518) and the sealed box and
-    repeat budgets (85 s and 20 s x 94/4 x 1.5 -> 2,997 and 705; only the box's is sealed since Amendment 15 sizes the repeat on the
-    box), with the expected run inside 0.8 x 6 h at the pin's 806 Mbps."""
+    repeat budgets (box 85 s x 94/4 x 1.5 -> 2,997, sealed; the repeat by Amendment 15's box formula on the leg's record, 1.5 x
+    (15.1 + 5 x 1.717) x 94/4 -> 835, not sealed), with the expected run inside 0.8 x 6 h at the pin's 806 Mbps."""
     import hashlib
     am12 = Q / "am12"
     for line in (am12 / "SHA256SUMS").read_text().splitlines():
@@ -357,7 +357,8 @@ def test_the_sealed_floors_and_caps_are_the_refit_of_the_pro6000_leg(tmp_path):
     assert fl["basis"]["per_floor"]["disk_read_gb_s"]["sample"] is None
     assert fl["basis"]["per_floor"]["disk_read_gb_s"]["warm_load_read_gb_s_not_used"] > 10      # the page cache, not the disk
     caps = _fit().sealed_caps(Q / "q235_run.sh")
-    assert rep["phases"]["box"]["budget_s"] == caps["box"] == 2997 and rep["phases"]["repeat"]["budget_s"] == 705
+    assert rep["phases"]["box"]["budget_s"] == caps["box"] == 2997 and rep["phases"]["repeat"]["budget_s"] == 835
+    assert rep["phases"]["repeat"]["on_box_basis_s"] == round((15.1 + 5 * 1.717) * 94 / 4, 1)
     assert "repeat" not in caps and rep["phases"]["repeat"]["sealed_cap_s"] is None and rep["phases"]["repeat"]["fits"]
     assert rep["expected_within_guard"] and fl["sealed_match"] and rep["fits"] and r.returncode == 0, rep
 

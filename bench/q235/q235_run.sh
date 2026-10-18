@@ -61,11 +61,13 @@ must(){ phase "$@"; [ "$PHASE_RC" = 0 ] || { tail -30 "logs/$1.log"; say "VOID: 
 # 1,997.5 s, x 1.5 = 2,997 s (q235_fit rounds up to the second). Unchanged, and still above the leg fit's budgets: install (293 s at
 # 806 Mbps), fetch (7,111 s at 806 Mbps; it covers any pull >= MIN_FETCH_GBS) and the fixed phases.
 # Repeat: Amendment 15 sizes it on the box, from this box's own box phase (repeat_cap below): REPEAT_MARGIN x (the box record's
-# load.seconds + step.elapsed_s), rounded up, never under 60 s, then bounded by the time left less the reserve like every phase.
+# load.seconds + REPEAT_STEPS x step.elapsed_s), rounded up, never under 60 s, then bounded by the time left less the reserve like
+# every phase. REPEAT_STEPS: after its load, run 2's repeat spent about 139 s, 4.7 of its box's 29.8 s steps (the null, the two
+# planted forwards, three sets of layer records and the process start).
 # The repeat is a fresh process by design (rule 6), so it reloads the whole model; Amendment 12's leg-scaled 705 s came from a warm
 # slice load and could not hold a cold full reload (q235-pro6000-6: 661 s of expert fuse, quantize and offload alone).
 CAP_GIT=240 CAP_VENV=120 CAP_INSTALL=1800 CAP_HOSTRATE=600 CAP_FETCH=12000 CAP_TOKENS=300 CAP_BOX=2997
-REPEAT_MARGIN=1.5 CAP_REPEAT=""
+REPEAT_MARGIN=1.5 REPEAT_STEPS=5 CAP_REPEAT=""
 # The host-rate floors (gate 2's premise), from the RTX PRO 6000 leg. Pinned H2D (Amendment 12): max(sealed, the A2000's measured,
 # min(28.36, 28.33) / 1.2) = 23.609. The disk (Amendment 12): the leg's box load was warm, so its registered cold-read sample was not
 # observed and the floor is max(0.743, 1.145) = 1.145. Host copy (Amendment 13, from the fit): the load's assemble (34.075 s scaled)
@@ -158,15 +160,15 @@ must tokens "$CAP_TOKENS" python q235_tokens.py ds_alpaca.json "$MODEL" --rows "
 
 # --- repeat_cap (Amendment 15) ---
 repeat_cap(){   # prints the repeat's cap from this box's own box record and writes receipts/repeat-cap.json; non-zero when unreadable
-  python - "$REPEAT_MARGIN" "$CAP_REPEAT" > receipts/repeat-cap.json 2> logs/repeat-cap.log <<'PY' || return 1
+  python - "$REPEAT_MARGIN" "$REPEAT_STEPS" "$CAP_REPEAT" > receipts/repeat-cap.json 2> logs/repeat-cap.log <<'PY' || return 1
 import json, math, sys
-margin, pinned = float(sys.argv[1]), sys.argv[2]
+margin, steps, pinned = float(sys.argv[1]), int(sys.argv[2]), sys.argv[3]
 box = json.load(open("receipts/box/box.json"))
 load, step = float(box["load"]["seconds"]), float(box["step"]["elapsed_s"])
 if not (math.isfinite(load) and math.isfinite(step) and load >= 0 and step > 0):
     sys.exit(f"the box record's load.seconds {load} / step.elapsed_s {step} cannot size the repeat")
-rec = {"amendment": 15, "box_load_s": load, "box_step_s": step, "margin": margin,
-       "derived_cap_s": max(math.ceil(margin * (load + step)), 60)}
+rec = {"amendment": 15, "box_load_s": load, "box_step_s": step, "steps_counted": steps, "margin": margin,
+       "derived_cap_s": max(math.ceil(margin * (load + steps * step)), 60)}
 if pinned:                                     # a rehearsal's pinned cap (never a science box): recorded beside the derived cap
     rec["rehearsal_cap_s"] = int(pinned)
 print(json.dumps(rec))

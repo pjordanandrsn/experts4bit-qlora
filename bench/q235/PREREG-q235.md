@@ -1268,10 +1268,15 @@ see that. So the repeat stays a fresh process, and only its cap changes.
 
 **The rule.** The repeat's cap is sized from this box's own box phase, read from `receipts/box/box.json` after the box phase:
 
-    CAP_REPEAT = max(ceil(1.5 × (load.seconds + step.elapsed_s)), 60) s,
+    CAP_REPEAT = max(ceil(1.5 × (load.seconds + 5 × step.elapsed_s)), 60) s,
 
 then bounded by the time left less the 300 s reserve, like every phase. The 60 s floor is the fit's own budget floor; it binds
 only a CPU rehearsal.
+- **Why five steps.** Run 2's repeat (`q235-pro6000-2`) used 964 s. Its load took 824.7 s, 11 % slower than its box's 744.2 s.
+  The other 139 s is 4.7 of its box's 29.834 s steps: the null, the two planted forwards, three sets of layer records and the
+  process start.
+- **The costs are asymmetric.** A cap that is too small is a box-started HARNESS_ERROR, a strike. A cap that is too large costs
+  nothing, because the time left bounds it anyway.
 - `q235_run.sh` writes the inputs and the cap to `receipts/repeat-cap.json`, and `phase-timings.jsonl` records the cap the repeat
   ran under.
 - The repeat's own record already carries its load seconds (`receipts/repeat/box.json`, `load.seconds`) and its forward seconds
@@ -1280,25 +1285,30 @@ only a CPU rehearsal.
   starts.
 - A rehearsal may still pin the cap (`Q235_CAP_REPEAT`); a science box cannot.
 
-**Worked example (`q235-pro6000-6`).** load.seconds 907.9 and step.elapsed_s 46.551, so 1.5 × 954.451 = 1,431.68, rounded up to
-**1,432 s** (was 705). That repeat's load took about 674 s and each of its three forwards (the null and two plants) about 17 s,
-which leaves about 700 s for the per-layer saves and the plants' checks.
+**Worked examples.**
+- `q235-pro6000-6`: load.seconds 907.9 and step.elapsed_s 46.551, so 1.5 × (907.9 + 232.755) = 1,710.98, rounded up to **1,711
+  s** (was 705). Its repeat's load had taken about 674 s when the 705 s cap fired.
+- Run 2, as a check: 1.5 × (744.2 + 149.17) = 1,340.06, rounded up to 1,341 s, against the 964 s its repeat used.
 
 **Run ids and strikes.** The next science box is `q235-pro6000-7`; `-8` and `-9` stay spares for host-floor refusals
 (Amendment 13). `-6` started its box, so it is strike 1: the next box-started HARNESS_ERROR or VOID stops Q235 until a
 simplification amendment lands. Unchanged: the host rate (Amendment 14), the worst case of at most $15 at the pinned quote, the
 floors, the box cap, and every rule and band.
 
-**The fit.** `q235_fit.sealed_caps` no longer finds a repeat cap. `q235_fit.fit` reports the repeat's scaled budget as sized on
-the box: it counts that budget in the wallclock and never refuses on it. The Amendment 12 refit still gives the leg's 705 s
-budget, now reported rather than sealed.
+**The fit.** `q235_fit.sealed_caps` no longer finds a repeat cap. `q235_fit.fit` counts the repeat with the box's own formula,
+on the rehearsal box's record scaled to the full depth like the box: 1.5 × (load + 5 × step) × 94 / 4. It counts that budget in
+the wallclock and never refuses on it. A record without step 0's timing keeps the leg-scaled repeat. On the Amendment 12 leg
+(load 15.1 s, step 1.717 s), the budget is 835 s (was 705).
 
 **The closure.** `q235.sha256` is re-sealed with `q235_stage.py --write`. Only the `q235_run.sh` row moves, from
-`d09981f5f73198875cc5b93733c1c0864a6feec567f537c991227fbd2b96b1eb` to `412ca212302a784f18c38c1ca435abc31e5c3e799648c412c9e4d4e0e8fbd9d3`.
+`d09981f5f73198875cc5b93733c1c0864a6feec567f537c991227fbd2b96b1eb` to `c08884fb5fc82210103db19bc97a1bec2fbe8cdde9940fc876ef4aed666a53b5`.
 
 **Tests** (`tests/test_q235_driver.py`, `tests/test_q235_fit.py`):
-- `repeat_cap`, run from the runner's own text, sizes `-6`'s record to 1,432 s and floors a tiny CPU record at 60 s. It records a
-  rehearsal pin beside the derived cap, and fails on a missing record, a missing or non-finite field, or a zero step.
+- `repeat_cap`, run from the runner's own text, sizes `-6`'s record to 1,711 s and run 2's to 1,341 s (at least its 964 s), and
+  floors a tiny CPU record at 60 s. It records a rehearsal pin beside the derived cap, and fails on a missing record, a missing or
+  non-finite field, or a zero step.
 - The runner has no sealed repeat cap. It takes the cap after the box phase, VOIDs (11) when it cannot size it, and only a
   rehearsal reads `Q235_CAP_REPEAT`.
-- The fit's sealed caps have no repeat, and the Amendment 12 refit reports the repeat's 705 s budget unsealed.
+- The fit's sealed caps have no repeat, and the Amendment 12 refit's repeat budget is the box formula's 835 s, unsealed.
+- Mutants: one or three steps instead of five, margin 1.0, no 60 s floor, a zero step accepted, the fit sealing the repeat, and a
+  science box reading the rehearsal pin each fail a test.
