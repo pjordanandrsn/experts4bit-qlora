@@ -50,6 +50,8 @@ must(){ phase "$@"; [ "$PHASE_RC" = 0 ] || { tail -30 "logs/$1.log"; say "VOID: 
 # The phase caps (seconds) are gate 2's: each fitted from the rehearsal's measured phases, scaled to the registered model and class.
 # Fitted (r2_fit.py, R2 Amendment 3) from R2's A2000 rehearsal at a3e73429, slowed to the floors and the RTX 5090 spread: for a
 # host listing at least 500 Mbps, box 2,389 s and repeat 1,330 s scaled (x 56/4), fetch 4,715 s; each cap is that x 1.5, to the minute.
+# R2 Amendment 4 re-cites Q235 and keeps these caps: Q235 Amendment 7's box refit (13,847 s) times Q235's shape-B box with its
+# timed MoE pass, which R2's box does not run (shape A, no --time-moe: R2's extra= line below).
 CAP_GIT=240 CAP_VENV=120 CAP_INSTALL=360 CAP_HOSTRATE=600 CAP_FETCH=7080 CAP_TOKENS=300 CAP_BOX=3600 CAP_REPEAT=2040
 # The host-rate floors (gate 2's premise): Q235's sealed cold ones, measured on the same RTX A2000 host (R2 Amendment 3: R2's own leg
 # read its fresh slice warm), its pinned H2D (PCIe gen 3 x8), host-copy rate and load's effective read rate. The box measures all
@@ -120,7 +122,8 @@ case "$MODE" in
            must tiny 300 python r2_tiny.py --out "$W/hf-cache/tiny" --tokenizer-from "$W/hf-cache/model"
            MODEL="$W/hf-cache/tiny" DEVICE=cpu ENABLER=reference ;;
 esac
-must tokens "$CAP_TOKENS" python q235_tokens.py ds_alpaca.json "$MODEL" --rows "$ROWS" --seq 2048 --out "$W/receipts/tokens.pt"
+must tokens "$CAP_TOKENS" python q235_tokens.py ds_alpaca.json "$MODEL" --rows "$ROWS" --seq 2048 --out "$W/receipts/tokens.pt" \
+  --heldout-out "$W/receipts/heldout.pt"    # Amendment 8: the registered held-out rows, the next ROWS rows of the split
 
 for run in box repeat; do
   extra=(); cap=$CAP_BOX; [ "$run" = repeat ] && { extra=(--repeat --plants); cap=$CAP_REPEAT; }

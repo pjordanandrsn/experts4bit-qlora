@@ -330,3 +330,48 @@ $0.870. The floors leave the lane runnable.
   - **Gate 7:** the pinned-host ACK. The CPU rehearsal mode is exercised by the tests up to its refusals only.
 
 **Unchanged:** everything else above.
+
+## Amendment 4 (2026-10-18, before any 8x22B box): the re-cite to Q235 at `9480ed03`
+
+**Why.** #1709 changed `bench/tc1/tc1_arm.py`, which R2's closure seals. R2 seals Q235's files at `r2_drift.CITED`, so it takes a
+change only by re-citing. The re-cite takes every Q235 change since `f17f0744` with it:
+- Amendments 8 and 9;
+- Amendment 7's box refit and read (#1676, #1679, #1680, #1701);
+- Amendment 10 (#1709).
+
+`CITED` is now #1709's merge commit, `9480ed03`.
+
+**What reaches R2's box** (shape A, no timed pass):
+- **Amendment 8's dX record: taken, and STRICT.** Every box step records each decoder layer's output-gradient norm.
+  `step0_dx_finite_nonzero` and `step1_dx_finite_nonzero` fail the record closed (Q235's rules 3–5), whatever the flags. This is
+  the one rule this amendment adds to R2.
+- **Amendment 8's held-out read: not taken.** R2's tokens phase now also writes Q235's held-out rows (the line is copied as Q235
+  wrote it). R2's box gets no `--heldout` (its declared `extra=()` line), so no held-out read runs and rule 10 is not read.
+- **Amendment 9's staging record: reported only.** `E4B_OFFLOAD_STATS=1` is set during the step, and no rule reads it.
+- **Amendment 7's box refit (13,847 s): not taken.** It times Q235's shape-B box with its timed MoE pass, which R2 does not run.
+  R2 keeps Amendment 3's caps.
+- **#1709's hooks: off.** `--order-seed` and the HP1 export are off by default. A default arm's receipt keeps its key set and never
+  imports `hp1_lib`; `tc1_arm.py`'s self-test asserts both.
+
+**R2's runner copy** (`r2_run.sh`, checked line for line by `r2_drift.py` at `9480ed03`):
+- the tokens line is copied as Q235 wrote it;
+- Q235's caps comment is now four lines (Amendment 7's refit). R2's caps comment is four lines too, each named by a declared rule.
+  Those rules replace Amendment 3's two, which matched Q235's old two lines.
+
+**The moved rows** (`r2.sha256`, resealed with `r2_stage.py --write` at `9480ed03`; each hash read from the file):
+
+| file | sealed at Amendment 3 | sealed now |
+|---|---|---|
+| `r2_run.sh` (R2's) | `43316f3efbf036ee3f85fc4c20e6d05bf17a62fb786bea3c0870e54f3224aa65` | `c4072bf156f9622237db2cc43f2517ede88f5d77dae146d57e7b87c7a887c0dc` |
+| `q235_hostrate.py` | `34ec780ade877e2f7ef16fa2962274b4a30a3b94473e99c6ff0b8fd2e6af67ba` | `cacd222beea37be1476fcca32ef0e2dfed3f29dae51dec6d9bbce7cdb3e6cb27` |
+| `q235_box.py` | `50b7b4f9da9f06791c9644618598e2e974f8c5fb9f6f5dcd1a93bc1582fccecb` | `0aa826f6b7be2eab71388f75bbecb913061bf6e1ca5b906d8ce06866fb3053b6` |
+| `q235_tokens.py` | `598439b8da9f05d9cec0893ffe9d4565d17f31127f7ec192c24b9d002ea01a3d` | `9590d01a9347eae27f70f03711af773803fdb5118ddb5f9f5515a378605c666b` |
+| `tc1_arm.py` | `fbe790d7d6e868c31598c76c7e77afb8c5632f16e61cab85c457854af30bdadc` | `9f43b45b267d3b4fbc0855fd26e8b1c15de7e92832344fe42c74ecba5e2a4939` |
+
+The other eight rows are unchanged.
+
+**Before any box.** Amendment 3's A2000 rehearsal ran R2's box at `f17f0744`. The box now carries the dX probe and the staging
+instrumentation, so gate 6's rehearsal is re-run at this cite before any 8x22B box, and its result is posted on #1630. A phase
+that no longer fits its cap's 1.5× margin returns as an amendment.
+
+**Unchanged:** everything else above. No rental, budget or default change.

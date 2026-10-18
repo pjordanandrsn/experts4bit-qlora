@@ -206,6 +206,17 @@ def test_the_tiny_mixtral_is_the_subject_s_architecture(tmp_path):
     sys.modules.pop("r2_tiny", None)
 
 
+def test_amendment_4_takes_the_dx_rules_and_not_the_heldout_read():
+    """R2 Amendment 4: at the cite, Q235's box records dX with its two STRICT rules, which reach R2's box whatever the flags. R2's
+    box line passes no --heldout, so Amendment 8's held-out read and rule 10 do not."""
+    drift = _mod("r2_drift", F / "r2_drift.py")
+    box = (drift.cited_tree() / "bench" / "q235" / "instrument" / "q235_box.py").read_text()
+    assert 'STRICT_RULES_A8 = ("step0_dx_finite_nonzero", "step1_dx_finite_nonzero")' in box
+    assert "probe = DxProbe(model)" in box
+    line = next(ln for ln in (F / "r2_run.sh").read_text().splitlines() if ln.startswith("  extra=("))
+    assert line.startswith("  extra=(); ") and "--heldout" not in line
+
+
 def test_every_file_a_wrapped_q235_module_reads_is_classified():
     """The Python twin of the bash drift check: a file a wrapped Q235 module newly reads through its HERE fails until declared."""
     drift = _mod("r2_drift", F / "r2_drift.py")
