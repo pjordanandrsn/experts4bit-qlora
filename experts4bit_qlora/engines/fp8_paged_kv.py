@@ -227,6 +227,42 @@ def _auto_k_groups(head_dim: int, width: int = 32) -> int:
     return want
 
 
+#: The sha256 of grouped-nf4-gemm's inline n_split plan -- the block of ``fp8_paged_attn.fp8_paged_decode_attention`` from
+#: ``    if n_split is None:`` through ``        n_split = int(min(32, want, max_useful))`` -- that :func:`gnf4_split_plan`
+#: copies (lane P143, Amendment 2). tests/test_attn_split_cap.py pins the installed block to this sha and runs that block
+#: against the copy, so a planner change there fails CI instead of diverging silently. A public ``plan_n_split``
+#: (grouped-nf4-gemm 0.48) replaces the copy and this pin in one change.
+GNF4_SPLIT_PLAN_SHA256 = "e78dcd748b03e057574b8b074f591efdae972201fd5581ae1d3140c149874d36"
+
+
+def gnf4_split_plan(B: int, n_kv_heads: int, table_cols: int, block_tokens: int, sms: int, compute: str, *,
+                    pack_heads: bool = False, ktile: int | None = None) -> int:
+    """The split count grouped-nf4-gemm's paged decode plans when the caller passes none: a copy of its inline plan
+    (:data:`GNF4_SPLIT_PLAN_SHA256`), with its defaults (``ktile`` 64 on fp8, 32 on f32). The split grid is sized from
+    the block table's CAPACITY, never the live length, so a captured graph needs no sync."""
+    if ktile is None:
+        ktile = 64 if compute == "fp8" else 32
+    ctas_per = B if pack_heads else B * n_kv_heads
+    span = block_tokens if pack_heads else ktile
+    if compute == "fp8":
+        want = max(1, (11 * sms) // (5 * max(1, ctas_per)))
+    else:
+        want = max(1, (8 * sms) // max(1, ctas_per))
+    cap_tokens = int(table_cols) * block_tokens
+    max_useful = max(1, (cap_tokens + span - 1) // span)
+    return int(min(32, want, max_useful))
+
+
+_SM_COUNT: dict = {}
+
+
+def _sm_count(device) -> int:
+    key = str(device)
+    if key not in _SM_COUNT:
+        _SM_COUNT[key] = torch.cuda.get_device_properties(device).multi_processor_count
+    return _SM_COUNT[key]
+
+
 class Fp8PagedKV:
     """FP8 paged KV for ``L`` layers, ``B`` sequences, one model.
 
@@ -308,6 +344,7 @@ class Fp8PagedKV:
         slots_total = batch + self.n_scratch + self.n_alias
         self._alias_set = frozenset(self.alias)
         self.bt = BLOCK_TOKENS
+        self.split_cap = None      # E4B_ATTN_SPLIT_CAP, set by the server's build (lane P143): None = the library's plan
         self.kgs = kgs
         # the uniform value when there is one (what callers used to read);
         # None under mixed geometry -- read ``kgs[layer]``
@@ -1245,11 +1282,28 @@ class Fp8PagedKV:
             raise ValueError(
                 f"q has {q.shape[0]} rows but the block table has "
                 f"{tbl.shape[0]} — pass slots= so rows map to sequences")
+        if self.split_cap and "n_split" not in kw and not kw.get("pack_heads"):
+            n = self._capped_n_split(layer, q, tbl, kw)
+            if n is not None:
+                kw = dict(kw, n_split=n)
         return fp8_paged_decode_attention(
             q, kf, vf, tbl, lens, n_kv_heads=self.Hs[layer],
             head_dim=self.Ds[layer], block_tokens=self.bt,
             k_groups=self.kgs[layer], k_row_bytes=self.k_row,
             v_row_bytes=self.v_row, **kw)
+
+    def _capped_n_split(self, layer: int, q: torch.Tensor, tbl: torch.Tensor, kw: dict):
+        """``min(split_cap, the library's plan)`` for this call (lane P143), or None to leave the plan to the library:
+        only on the fp8 split path, the one P143 measured. The compute mode is the kernel's own choice
+        (``fp8_paged_attn._compute_default``, as the kernel resolves an unset ``compute``) unless the caller names it."""
+        import fp8_paged_attn
+        compute = kw.get("compute") or fp8_paged_attn._compute_default(
+            q, self.Ds[layer], self.kgs[layer], 1, pack_heads=False, block_tokens=self.bt, n_kv_heads=self.Hs[layer])
+        if compute != "fp8":
+            return None
+        plan = gnf4_split_plan(int(q.shape[0]), self.Hs[layer], int(tbl.shape[1]), self.bt, _sm_count(q.device), compute,
+                               ktile=kw.get("ktile"))
+        return min(int(self.split_cap), plan)
 
     def seen_device(self, layer: int, seq: int) -> int:
         """Authoritative token count for (layer, seq), read from DEVICE
