@@ -1,0 +1,14 @@
+# Names as the BOX sees them after staging (/root/p135). The box runs `sha256sum -c` on this file; p135_drive.sh and
+# tests/test_p135_staged_pin.py resolve each name to its source (bench/p135, bench/p115, bench/p110, bench/p108, bench/p97,
+# bench/p39, tests) and compare.
+c40bb3053e87db23da8d0933571b02256f02f169e9672b8d893f6fc433a70af7  p135_run.sh
+277b989cb1901465337a83a0f8e7e2a2ef5a8a8306d32603e8991a97ceb34bcc  p135_speed.py
+a40d21f5a49589ffbe2af721aa049058c336f05cb4a81720aa212f4ccda7641b  p135_reduce.py
+f1500a26404284fbb14cce214c548d73b3889e9db5ef1faf5ef63bf74449b574  p115_quality.py
+02d82d88259c169060f78e47c219e7dfd82d146dd80e0c7c3b0e3acdfca252cf  p110_box.py
+b57dff71cba30d9c649bae05df28f8c5376de9f7ac7ae5759157e57475b83e4b  p108_box.py
+608c1a20136393495ebb482afc58a24880e053a2caab6152fa3eb87183063a31  p97_box.py
+e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+b0a1250852e72f821cd08444d20eb86a14a05158e497bdc753041b67d4a5bf78  test_fusion_modes.py
+5a8eb6b4b0e4d515d8789f1fb729bb847fd74d53288f2faa3efac07e04e1a740  test_fused_glue_decode_graphs_gpu.py
