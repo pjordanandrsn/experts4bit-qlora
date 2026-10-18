@@ -449,17 +449,31 @@ def p_readout(index, k):
                            for c, v in comp.items()},
            "excluded_competitors": [c for c in COMPETITORS if not comp[c]["included"]],
            "e_per_seed": {str(s): y for s, y in e_ys.items()}, "e_missing": e_miss}
-    included = [c for c in COMPETITORS if comp[c]["included"]]
     problems = []
     if e_miss:
         problems.append(f"E ({e_group}) lacks confirmation seeds: {e_miss}")
-    for c in COMPETITORS:                          # registered: the headline needs BOTH competitors' confirmation cells
-        if not comp[c]["included"]:
-            problems.append(f"competitor {c} lacks confirmation seeds {comp[c]['missing']}: no headline (HP1-PREREG, P readout)")
-    if sigma is None:
-        problems.append("sigma_seed undefined (no arm has two runs with a y)")
     p_recs = [rec for (role, _g), runs in index.items() if role == "P" for rec in runs.values() if rec["y"] is not None]
     out["order_problems"] = order_problems(p_recs)
+    # Amendment 3: any axolotl failure in HP1 drops axolotl and the headline reads E vs Unsloth. A failure here is an incomplete
+    # axolotl cell, or a data-order problem that goes away once axolotl's runs are left out. Unsloth stays required.
+    drop = None
+    if not comp["axolotl"]["included"]:
+        drop = f"axolotl lacks confirmation seeds {comp['axolotl']['missing']}"
+    elif out["order_problems"]:
+        rest = order_problems([r for r in p_recs if not r["tag"].startswith("hp1_axolotl_")])
+        if not rest:
+            drop = "axolotl's runs break the shared data order"
+            out["axolotl_order_problems"], out["order_problems"] = out["order_problems"], []
+    out["axolotl_dropped"] = drop
+    if drop:
+        comp["axolotl"]["included"] = False
+        out["competitors"]["axolotl"]["included"] = False
+        out["excluded_competitors"] = [c for c in COMPETITORS if not comp[c]["included"]]
+    included = [c for c in COMPETITORS if comp[c]["included"]]
+    if not comp["unsloth"]["included"]:            # registered (Amendment 3): the headline needs Unsloth's confirmation cell
+        problems.append(f"competitor unsloth lacks confirmation seeds {comp['unsloth']['missing']}: no headline (HP1-PREREG, P readout)")
+    if sigma is None:
+        problems.append("sigma_seed undefined (no arm has two runs with a y)")
     problems += [f"data order: {x['tag']} at seed {x['seed']}: {x['why']}" for x in out["order_problems"]]
     if problems:
         side = []                                  # the complete competitor's reading, reported and labelled, never the headline
@@ -487,6 +501,8 @@ def p_readout(index, k):
         if comp[c]["included"]:
             readings.append(dict(paired_reading(name, e_ys, e_recs, comp[c]["ys"], comp[c]["recs"], sigma, margin),
                                  role="per-competitor"))
+        elif c == "axolotl" and drop:
+            readings.append({"reading": name, "role": "per-competitor", "verdict": "DROPPED (Amendment 3)", "why": drop})
         else:
             readings.append({"reading": name, "role": "per-competitor", "verdict": "EXCLUDED", "missing": comp[c]["missing"]})
     out.update(verdict=readings[0]["verdict"], readings=readings)
@@ -522,6 +538,8 @@ def render_md(k, p):
         return "\n".join(lines) + "\n"
     lines += [f"- sigma_seed = {_f(p['sigma_seed'])} (pooled, df {p['sigma_seed_df']}); m = {_f(p['m'])}; "
               f"C* = {p.get('c_star')}; excluded competitors: {p['excluded_competitors'] or 'none'}"]
+    if p.get("axolotl_dropped"):
+        lines += [f"- axolotl DROPPED (HP1-PREREG Amendment 3): {p['axolotl_dropped']}; the headline reads E vs Unsloth"]
     bb = p.get("sigma_seed_by_block") or {}
     lines += [f"- sigma_seed by block (REPORTED; per box on the split path): K {_f((bb.get('K') or {}).get('sigma'))} "
               f"(df {(bb.get('K') or {}).get('df')}), P {_f((bb.get('P') or {}).get('sigma'))} (df {(bb.get('P') or {}).get('df')})"]
