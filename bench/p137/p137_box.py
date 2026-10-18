@@ -11,8 +11,14 @@ Every arm runs the same steps on the same micro-batches from the same seed. Reco
 the loss, the host-to-device stagings (``E4B_OFFLOAD_STATS``'s copy count), and the peak device memory; per arm: the
 step-0 per-micro-batch losses, a held-out loss after the last step (REPORTING), and the versions.
 
-    python p137_box.py --mode arm --loop stock|layer_major --model DIR --out arm_A0a.json --tag A0a
+    python p137_box.py --mode abba --model DIR --data data.json --outdir DIR   (Amendment 2: one load, four arms)
     python p137_box.py --self-test
+
+Amendment 2 (after p137-4090-2): one process loads the model once and runs the four arms A0a L1a L1b A0b in turn.
+Before each arm it restores the adapters from the snapshot taken right after the load (asserted by hash), builds a new
+optimizer, reseeds, evicts every offloaded layer, empties the allocator cache and resets the peak counter. The fresh-process
+design re-quantized the experts in every arm (the loader fuses offloaded expert rows on the host CPU), about 38 min per arm
+on a contended host.
 """
 import argparse
 import json
@@ -25,6 +31,7 @@ WARM, TIMED = 2, 8              # step 0 (the equality step) is the first warm s
 HELD_ROWS = 16
 SEED, LR, R, ALPHA = 3407, 2e-4, 16, 16
 LOOPS = {"A0": "stock", "L1": "layer_major"}
+TAGS = ("A0a", "L1a", "L1b", "A0b")             # ABBA, in one process (Amendment 2)
 
 
 def encode(tok, ex, seq=SEQ):
@@ -118,7 +125,7 @@ def _train(model, plan, pad_id, dev, loop, handles, opt, steps):
         steps.append(rec)
 
 
-def run_arm(a):
+def _load(model_dir):
     import torch
     from transformers import AutoTokenizer
 
@@ -126,14 +133,11 @@ def run_arm(a):
     from experts4bit_qlora.engines.fast import enable_fast_train
     from experts4bit_qlora.loader import load_moe_4bit_streaming
 
-    loop = LOOPS[a.tag[:2]]
-    assert loop == a.loop, (a.tag, a.loop)
     os.environ["E4B_OFFLOAD_STATS"] = "1"
-    dev = "cuda"
     torch.manual_seed(SEED)
-    tok = AutoTokenizer.from_pretrained(a.model)
+    tok = AutoTokenizer.from_pretrained(model_dir)
     pad_id = tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id
-    model, _ = load_moe_4bit_streaming(a.model, dev, torch.bfloat16, r=R, alpha=ALPHA, offload=True, pin=True,
+    model, _ = load_moe_4bit_streaming(model_dir, "cuda", torch.bfloat16, r=R, alpha=ALPHA, offload=True, pin=True,
                                        quant_type="nf4")
     model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     model.config.use_cache = False
@@ -141,47 +145,100 @@ def run_arm(a):
     n_fast = enable_fast_train(model, dgrad=True)
     if n_fast <= 0:
         raise SystemExit(f"P137 REFUSED: enable_fast_train patched {n_fast} modules")
-    from experts4bit_qlora.engines import ckpt_offload
-    handles = off.offload_handles(model)
-    params = [p for p in model.parameters() if p.requires_grad]
+    return tok, pad_id, model, n_fast, off.offload_handles(model)
+
+
+def adapter_hash(params):
+    """sha256 over every trainable tensor's bytes, in order: every arm must start from the same adapters."""
+    import hashlib
+
+    import torch
+
+    h = hashlib.sha256()
+    for p in params:
+        h.update(p.detach().to("cpu").contiguous().view(-1).view(torch.uint8).numpy().tobytes())
+    return h.hexdigest()
+
+
+def _reset(model, params, snapshot, handles):
+    """Between arms: adapters back to the snapshot, no grads, every offloaded layer evicted, caches and peaks reset."""
+    import torch
+
+    from experts4bit_qlora.engines import offload as off
+
+    with torch.no_grad():
+        for p, s in zip(params, snapshot):
+            p.copy_(s)
+            p.grad = None
+    for h in handles:
+        h.evict()
+    off._ExpertOffload._resident = None
+    off.reset_offload_stats()
+    torch.cuda.synchronize()
+    torch.cuda.empty_cache()
+    torch.cuda.reset_peak_memory_stats()
+    torch.manual_seed(SEED)
+
+
+def _arm(tag, model, params, snapshot, snap_hash, handles, plan, held, pad_id, n_fast, model_dir, out_path):
+    import torch
+
     import bitsandbytes as bnb
+    from experts4bit_qlora.engines import ckpt_offload
+
+    loop = LOOPS[tag[:2]]
+    _reset(model, params, snapshot, handles)
+    start_hash = adapter_hash(params)
+    model.train()
     opt = bnb.optim.AdamW8bit(params, lr=LR)
-
-    rows = [encode(tok, ex) for ex in json.load(open(a.data))]
-    n_steps = WARM + TIMED
-    plan = micro_batches(rows[: n_steps * ACCUM * MB_ROWS + 4 * HELD_ROWS], n_steps)
-    held = [r for r in rows[n_steps * ACCUM * MB_ROWS:] if any(t != -100 for t in r[1])][:HELD_ROWS]
-
     steps = []
     try:
-        _train(model, plan, pad_id, dev, loop, handles, opt, steps)
+        _train(model, plan, pad_id, "cuda", loop, handles, opt, steps)
     except torch.cuda.OutOfMemoryError as e:
-        rec = {"tag": a.tag, "loop": loop, "model": a.model, "oom": f"step {len(steps)}: {str(e)[:200]}", "steps": steps}
-        json.dump(rec, open(a.out, "w"), indent=1)
-        print("P137_ARM " + json.dumps({"tag": a.tag, "oom": rec["oom"]}), flush=True)
-        return 0
+        rec = {"tag": tag, "loop": loop, "model": model_dir, "oom": f"step {len(steps)}: {str(e)[:200]}", "steps": steps,
+               "adapter_sha_at_start": start_hash, "adapter_sha_snapshot": snap_hash}
+        json.dump(rec, open(out_path, "w"), indent=1)
+        print("P137_ARM " + json.dumps({"tag": tag, "oom": rec["oom"]}), flush=True)
+        return
     step0 = steps[0].pop("losses")
-    step0_hex = [x.hex() for x in step0]
     for st in steps[1:]:
         st.pop("losses")
     model.eval()
     with torch.no_grad():
-        hl = []
-        for i in range(0, len(held), MB_ROWS):
-            hl.append(float(model(**pad(held[i:i + MB_ROWS], pad_id, dev)).loss))
+        hl = [float(model(**pad(held[i:i + MB_ROWS], pad_id, "cuda")).loss) for i in range(0, len(held), MB_ROWS)]
     import importlib.metadata as md
+
     import transformers
 
-    out = {"tag": a.tag, "loop": loop, "model": a.model, "steps": steps, "step0_losses": step0, "step0_hex": step0_hex,
-           "summary": summarize(steps), "heldout": sum(hl) / len(hl), "n_fast": n_fast, "n_offloaded": len(handles),
-           "ckpt": dict(ckpt_offload.CKPT_OFFLOAD_STATS),
+    out = {"tag": tag, "loop": loop, "model": model_dir, "steps": steps, "step0_losses": step0,
+           "step0_hex": [x.hex() for x in step0], "summary": summarize(steps), "heldout": sum(hl) / len(hl),
+           "n_fast": n_fast, "n_offloaded": len(handles), "ckpt": dict(ckpt_offload.CKPT_OFFLOAD_STATS),
+           "adapter_sha_at_start": start_hash, "adapter_sha_snapshot": snap_hash, "process": "one-process ABBA (A2)",
            "versions": {"torch": torch.__version__, "transformers": transformers.__version__,
                         "bitsandbytes": md.version("bitsandbytes"), "gnf4": md.version("grouped-nf4-gemm"),
                         "e4b_sha": os.environ.get("E4B_SHA"), "gpu": torch.cuda.get_device_name(0)},
            "recipe": {"seq": SEQ, "mb_rows": MB_ROWS, "accum": ACCUM, "warm": WARM, "timed": TIMED, "seed": SEED,
                       "lr": LR, "r": R, "alpha": ALPHA}}
-    json.dump(out, open(a.out, "w"), indent=1)
+    json.dump(out, open(out_path, "w"), indent=1)
     print("P137_ARM " + json.dumps({k: out[k] for k in ("tag", "loop", "summary", "heldout", "step0_losses")}), flush=True)
+
+
+def run_abba(a):
+    """Amendment 2: one load, then A0a L1a L1b A0b in this process, each from the same adapter snapshot."""
+    t0 = time.perf_counter()
+    tok, pad_id, model, n_fast, handles = _load(a.model)
+    print("P137_LOAD " + json.dumps({"seconds": round(time.perf_counter() - t0, 1), "n_fast": n_fast,
+                                     "n_offloaded": len(handles)}), flush=True)
+    params = [p for p in model.parameters() if p.requires_grad]
+    snapshot = [p.detach().clone() for p in params]
+    snap_hash = adapter_hash(params)
+    rows = [encode(tok, ex) for ex in json.load(open(a.data))]
+    n_steps = WARM + TIMED
+    plan = micro_batches(rows[: n_steps * ACCUM * MB_ROWS + 4 * HELD_ROWS], n_steps)
+    held = [r for r in rows[n_steps * ACCUM * MB_ROWS:] if any(t != -100 for t in r[1])][:HELD_ROWS]
+    for tag in TAGS:
+        _arm(tag, model, params, snapshot, snap_hash, handles, plan, held, pad_id, n_fast, a.model,
+             os.path.join(a.outdir, f"arm_{tag}.json"))
     return 0
 
 
@@ -225,7 +282,7 @@ def self_test():
     sm2 = summarize(steps[:4], warm=2)
     assert sm2["median_s"] == 5.0
     n += 1
-    assert set(LOOPS) == {"A0", "L1"} and LOOPS["L1"] == "layer_major"
+    assert set(LOOPS) == {"A0", "L1"} and LOOPS["L1"] == "layer_major" and TAGS == ("A0a", "L1a", "L1b", "A0b")
     n += 1
     print(f"p137_box self-test OK ({n}/10 cases)")
     return 0
@@ -234,16 +291,14 @@ def self_test():
 def main(argv=None):
     p = argparse.ArgumentParser()
     p.add_argument("--self-test", action="store_true")
-    p.add_argument("--mode", choices=["arm"])
-    p.add_argument("--loop", choices=["stock", "layer_major"])
+    p.add_argument("--mode", choices=["abba"])
     p.add_argument("--model")
-    p.add_argument("--data", help="alpaca rows as a JSON list (the runner's prepared slice)")
-    p.add_argument("--out")
-    p.add_argument("--tag", choices=["A0a", "L1a", "L1b", "A0b"])
+    p.add_argument("--data", help="alpaca rows as a JSON list (the staged slice)")
+    p.add_argument("--outdir")
     a = p.parse_args(argv)
     if a.self_test:
         return self_test()
-    return run_arm(a)
+    return run_abba(a)
 
 
 if __name__ == "__main__":

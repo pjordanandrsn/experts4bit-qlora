@@ -6,7 +6,8 @@ verdict. The rule, first rung that applies:
      record in a reading or the reverse; a reading whose model path lacks the pinned revision; the patched and offloaded
      layer counts not both the registered n (48; the dry fixture's 2); step 0's per-micro-batch losses not
      bit-identical between every arm; the stagings per timed step not exactly ACCUM x (2n - 1) (A0) and 2n - 1 (L1)
-     at that n; L1's peak device memory above A0's by more than MEM_TERM_GIB.
+     at that n; L1's peak device memory above A0's by more than MEM_TERM_GIB; (Amendment 2, one process) an arm
+     that did not start from the post-load adapter snapshot, or arms whose snapshots differ.
   2. NOISY: a self-pair (A0b/A0a, L1b/L1a, the median timed walls) outside [SELF_LO, SELF_HI].
   3. LICENSED iff S = min(A0a/L1a, A0b/L1b) >= S_MIN; otherwise NO_GAIN.
 REPORTING (never changes the verdict): held-out |L1 - A0| <= HELD_TOL; S inside the registered band [BAND_LO, BAND_HI].
@@ -66,6 +67,11 @@ def reduce(recs, e4b_sha, dry=False):
             reasons.append(f"{t}: patched {r[t].get('n_fast')} / offloaded {r[t].get('n_offloaded')} layers, registered {n_reg}")
         if t[:2] == "A0" and r[t].get("loop") != "stock" or t[:2] == "L1" and r[t].get("loop") != "layer_major":
             reasons.append(f"{t}: loop {r[t].get('loop')} is not its arm's")
+    for t in TAGS:                                     # Amendment 2: every arm from the same post-load adapters
+        if r[t].get("adapter_sha_at_start") is None or r[t].get("adapter_sha_at_start") != r[t].get("adapter_sha_snapshot"):
+            reasons.append(f"{t}: adapters at the arm's start do not match the post-load snapshot")
+    if len({r[t].get("adapter_sha_snapshot") for t in TAGS}) != 1:
+        reasons.append("the arms carry different adapter snapshots")
     stacks = {json.dumps({k: v for k, v in r[t].get("versions", {}).items() if k != "gpu"}, sort_keys=True) for t in TAGS}
     if len(stacks) != 1:
         reasons.append(f"the arms ran on {len(stacks)} different stacks")
@@ -112,6 +118,7 @@ def _fake(tag, med, n=48, model=f"/root/.cache/huggingface/hub/models--Qwen--Qwe
     a0 = tag[:2] == "A0"
     steady = ACCUM * (2 * n - 1) if a0 else 2 * n - 1
     rec = {"tag": tag, "loop": loop or ("stock" if a0 else "layer_major"), "model": model, "n_fast": n, "n_offloaded": n,
+           "adapter_sha_at_start": "a" * 64, "adapter_sha_snapshot": "a" * 64,
            "step0_hex": list(step0), "heldout": 1.0, "recipe": {"seq": 2048},
            "versions": {"e4b_sha": e4b, "torch": "2.8.0+cu128", "gpu": "RTX 4090"},
            "summary": {"median_s": med, "stagings_steady": [steady], "peak_alloc": peak}}
@@ -166,6 +173,11 @@ def self_test():
     case("unpinned revision", {**ok, "A0b": _fake("A0b", 10.4, model="/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/" + "0" * 40)}, "VOID")
     v = case("held-out missing is reporting only", {**ok, "A0a": {**ok["A0a"], "heldout": None}}, "LICENSED")
     assert v["reporting"]["heldout_ok"] is None
+    case("A2: an arm off the snapshot", {**ok, "L1b": {**ok["L1b"], "adapter_sha_at_start": "b" * 64}}, "VOID")
+    case("A2: snapshots differ", {**ok, "A0b": {**ok["A0b"], "adapter_sha_at_start": "c" * 64,
+                                                 "adapter_sha_snapshot": "c" * 64}}, "VOID")
+    case("A2: a record without the hash", {**ok, "A0a": {k: v for k, v in ok["A0a"].items() if k != "adapter_sha_at_start"}},
+         "VOID")
     v = case("out of band is reporting only", {**ok, "L1a": _fake("L1a", 4.0), "L1b": _fake("L1b", 4.0)}, "LICENSED")
     assert v["reporting"]["in_band"] is False
     print(f"p137_reduce self-test OK ({len(cases)} cases)")

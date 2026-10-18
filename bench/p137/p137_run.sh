@@ -9,8 +9,9 @@
 #   pins     e4b E4B_PIN (main with layer-major and its guards), grouped-nf4-gemm 0.46.0 exact, torch 2.8.0+cu128 (the
 #            image's), transformers 5.18.0 (TC3's e4b box), bitsandbytes 0.50.2; any other is refused;
 #   card     the RTX 4090 class, compute capability 8.9 (the licence covers that configuration only);
-#   arms     A0 = the stock accumulation loop; L1 = layer_major_step; ABBA A0a L1a L1b A0b, each a fresh process
-#            (p137_box.py --mode arm), the same steps, micro-batches and seed;
+#   arms     A0 = the stock accumulation loop; L1 = layer_major_step; ABBA A0a L1a L1b A0b in ONE process after one
+#            load (Amendment 2: p137_box.py --mode abba), each from the post-load adapter snapshot, the same steps,
+#            micro-batches and seed;
 #   premise  rc 0 with exactly the registered pass count and no skip (tests/test_layer_major.py, test_offload_hold.py,
 #            test_offload.py at the pin), listed with -rs;
 #   dry      P137_DRY=1: the $0 dry run on a tiny Qwen3-MoE fixture (p137_tiny.py) on any CUDA card, on the BOX'S OWN
@@ -37,10 +38,10 @@ PREMISE_PASSED=47                                       # test_layer_major 15 + 
 DRY=${P137_DRY:-0}
 if [ "$DRY" = 1 ]; then
   MODEL=$W/p137-tiny; REV=""                                                                      # p137_tiny.py's fixture
-  NEED_FETCH=300; NEED_ARM=300; DISK_DEF=10; RAM_DEF=16                                           # the fixture's own floors
+  NEED_FETCH=300; NEED_ABBA=600; DISK_DEF=10; RAM_DEF=16                                           # the fixture's own floors
 else
   MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39                            # TC3's pin
-  NEED_FETCH=2700; NEED_ARM=900; DISK_DEF=120; RAM_DEF=64
+  NEED_FETCH=2700; NEED_ABBA=4500; DISK_DEF=120; RAM_DEF=64   # A2: one load + 4 arms
 fi
 GPU_CLASS=${P137_GPU_CLASS:-4090}; MIN_DISK_GB=${P137_MIN_DISK_GB:-$DISK_DEF}; MIN_RAM_GB=${P137_MIN_RAM_GB:-$RAM_DEF}
 REHEARSAL=${P137_REHEARSAL:-0}
@@ -197,17 +198,18 @@ else
   SNAP=$(tail -1 logs/fetch.log); echo "FETCH $MODEL@$REV $SNAP" | tee -a summary.txt
 fi
 [ -d "$SNAP" ] || { say "DL FAIL: no snapshot dir"; finish 11; }
-# ---- the four arms: A0a L1a L1b A0b (ABBA), each a fresh process; only the accumulation loop differs
+# ---- the four arms A0a L1a L1b A0b (ABBA) in ONE process, one load (Amendment 2): each arm starts from the post-load
+# ---- adapter snapshot (hash-checked), a new optimizer and the same seed; only the accumulation loop differs
+can_run $NEED_ABBA "the four arms" || finish 40
+AL=$(step_alarm 7200); say "the four arms, one process (alarm=$AL)"
+env E4B_SHA=$E4B_SHA perl -e "alarm $AL; exec @ARGV" python $W/p137_box.py --mode abba --model "$SNAP" \
+  --data $W/data.json --outdir $W > logs/abba.log 2>&1
+rc=$?
+{ echo "abba rc=$rc"; grep -a "^P137_LOAD" logs/abba.log | tail -1; } | tee -a summary.txt
 for TAG in A0a L1a L1b A0b; do
-  LOOP=stock; [ "${TAG:0:2}" = L1 ] && LOOP=layer_major
-  can_run $NEED_ARM "arm $TAG" || finish 40
-  AL=$(step_alarm 2400); say "arm $TAG ($LOOP, alarm=$AL)"
-  env E4B_SHA=$E4B_SHA perl -e "alarm $AL; exec @ARGV" python $W/p137_box.py --mode arm --loop $LOOP --model "$SNAP" \
-    --data $W/data.json --tag $TAG --out $W/arm_$TAG.json > logs/arm_$TAG.log 2>&1
-  rc=$?
-  { echo -n "arm $TAG rc=$rc "; grep -a "^P137_ARM" logs/arm_$TAG.log | tail -1 | cut -c1-600; echo; } | tee -a summary.txt
-  [ "$rc" = 0 ] || { tail -6 logs/arm_$TAG.log | cut -c1-300 | tee -a summary.txt; say "ARM $TAG FAILED (rc=$rc) -- the reducer will VOID"; }
+  { echo -n "arm $TAG "; grep -a "^P137_ARM {\"tag\": \"$TAG\"" logs/abba.log | tail -1 | cut -c1-600; echo; } | tee -a summary.txt
 done
+[ "$rc" = 0 ] || { tail -6 logs/abba.log | cut -c1-300 | tee -a summary.txt; say "THE ARMS FAILED (rc=$rc) -- the reducer will VOID"; }
 DF=""; [ "$DRY" = 1 ] && DF="--dry"
 say "reduce"; python $W/p137_reduce.py --dir $W --out $W/verdict.json --e4b-sha $E4B_SHA $DF 2>&1 | tee -a summary.txt
 [ "${PIPESTATUS[0]}" = 0 ] && [ -s $W/verdict.json ] || { say "REDUCER FAILED"; finish 22; }
