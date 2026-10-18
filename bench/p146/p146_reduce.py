@@ -12,11 +12,15 @@
      STEP0_A0 = M x (2n - 1) + 1; L1a equal to L1b and above 2n: each fresh L1 process runs the drift guard's stock
      forwards in its first step); the stagings per step after step 0 not exactly M x (2n - 1) (A0) and 2n - 1 (L1);
      an arm with other than TIMED_REG timed steps; L1's peak above A0's by more than MEM_TERM_GIB.
-  2. VOID: a self-pair outside [SELF_LO, SELF_HI]. Across fresh processes it reads process-to-process variance.
-  3. LICENSED iff S = min(A0a/L1a, A0b/L1b) >= S_MIN; otherwise NO_GAIN.
+  2. VOID_BY_HOST (Amendment A1; NOT a strike, the run id becomes a spare): the host-quiet guard did not hold. Any arm
+     whose timed window shows the box cgroup throttled, or /proc/stat steal, above HOST_CPU_MAX of the window; any of
+     the PROBES_REG pinned host-to-device probes (before the first arm, after each arm) more than HOST_LINK_DROP below
+     the first; or a guard signal that was not recorded (the host cannot show it was quiet).
+  3. VOID: a self-pair outside [SELF_LO, SELF_HI]. Across fresh processes it reads process-to-process variance.
+  4. LICENSED iff S = min(A0a/L1a, A0b/L1b) >= S_MIN; otherwise NO_GAIN.
 REPORTING (never changes the verdict): held-out (AFTER) |L1 - A0| <= HELD_TOL; S inside the band [BAND_LO, BAND_HI].
 
-    python p146_reduce.py --dir RUN --out verdict.json --e4b-sha SHA [--dry]
+    python p146_reduce.py --dir RUN --out verdict.json --e4b-sha SHA [--dry]      (reads arm_*.json and probes.json)
     python p146_reduce.py --self-test
 """
 import argparse
@@ -30,6 +34,9 @@ S_MIN = 1.10
 BAND_LO, BAND_HI = 1.5, 2.6
 MEM_TERM_GIB = 4.25
 HELD_TOL = 0.01
+HOST_CPU_MAX = 0.05                      # A1: throttled or steal time, as a fraction of an arm's timed window
+HOST_LINK_DROP = 0.15                    # A1: a probe this far below the first probe; A11's two-sample tolerance
+PROBES_REG = ("before_A0a", "after_A0a", "after_L1a", "after_L1b", "after_A0b")
 TIMED_REG = 32
 ACCUM = 4
 # train.py's own recipe at its defaults, with the lane's STEPS (2 warm + 32 timed) and DO_GEN=0
@@ -48,7 +55,29 @@ def _ratio(a, b):
     return a / b if b else float("inf")
 
 
-def reduce(recs, e4b_sha, dry=False):
+def host_guard(recs, probes):
+    """A1's host-quiet guard: the reasons it did not hold (an empty list when it held)."""
+    out = []
+    for t in TAGS:
+        g = recs[t].get("host_guard")
+        if not g or g.get("throttled_frac") is None or g.get("steal_frac") is None:
+            out.append(f"{t}: the CPU guard was not recorded ({g})")
+            continue
+        for k in ("throttled_frac", "steal_frac"):
+            if g[k] > HOST_CPU_MAX:
+                out.append(f"{t}: {k} {g[k]:.4f} of the timed window > {HOST_CPU_MAX}")
+    got = [x.get("tag") for x in (probes or [])]
+    if tuple(got) != PROBES_REG or any(x.get("pinned_gbps") is None for x in probes):
+        out.append(f"the link probes are not the registered five: {got}")
+        return out
+    first = probes[0]["pinned_gbps"]
+    for x in probes[1:]:
+        if x["pinned_gbps"] < (1 - HOST_LINK_DROP) * first:
+            out.append(f"link probe {x['tag']} {x['pinned_gbps']:.2f} GB/s is more than {HOST_LINK_DROP:.0%} below the first ({first:.2f})")
+    return out
+
+
+def reduce(recs, e4b_sha, dry=False, probes=None):
     """recs: tag -> record dict, or None when the file is missing. Returns the verdict dict."""
     missing = [t for t in TAGS if recs.get(t) is None]
     if missing:
@@ -130,6 +159,10 @@ def reduce(recs, e4b_sha, dry=False):
                  "in_band": BAND_LO <= s <= BAND_HI, "band": [BAND_LO, BAND_HI],
                  "peak_gib": {t: peak[t] / GIB for t in TAGS}, "load_s": {t: r[t].get("load_s") for t in TAGS}}
     base = {"medians_s": med, "self_pairs": selfp, "pairs": pairs, "S": s, "reporting": reporting}
+    base["reporting"]["host_guard"] = {"arms": {t: r[t].get("host_guard") for t in TAGS}, "probes": probes}
+    hg = host_guard(r, probes)
+    if hg:                                           # A1: the host changed under the arms -- no reading, no strike
+        return {"verdict": "VOID_BY_HOST", "reasons": hg, **base}
     noisy = [k for k, v in selfp.items() if not SELF_LO <= v <= SELF_HI]
     if noisy:
         return {"verdict": "VOID", "reasons": [f"{k} = {selfp[k]:.4f} outside [{SELF_LO}, {SELF_HI}]" for k in noisy], **base}
@@ -146,7 +179,7 @@ def _fake(tag, med, n=48, model=f"/root/.cache/huggingface/hub/models--Qwen--Qwe
            {"OFFLOAD_EXPERTS": "1", "FAST_TRAIN": "1", "LAYER_MAJOR": None},
            "recipe": {**RECIPE, "layer_major": lm}, "token_budget_effective": 2048, "dataset_calls": list(DATASET_CALLS),
            "adapter_sha_at_start": "a" * 64, "eval_before_hex": "0x1.8p+1", "step0_loss_hex": step0, "heldout": 1.0,
-           "load_s": 65.0, "versions": {"e4b_sha": e4b, "torch": "2.8.0+cu128", "gpu": "RTX 4090"},
+           "load_s": 65.0, "host_guard": {"wall_s": 300.0, "throttled_frac": 0.0, "steal_frac": 0.001}, "versions": {"e4b_sha": e4b, "torch": "2.8.0+cu128", "gpu": "RTX 4090"},
            "summary": {"median_s": med, "stagings_steady": [steady], "peak_alloc": peak, "timed_walls": [med] * TIMED_REG,
                        "stagings_step0": 2 * n + 240 if lm else ACCUM * (2 * n - 1) + 1}}
     rec.update(kw)
@@ -158,8 +191,10 @@ def self_test():
     ok = {"A0a": _fake("A0a", 6.0), "L1a": _fake("L1a", 3.0), "L1b": _fake("L1b", 3.02), "A0b": _fake("A0b", 5.95)}
     cases = []
 
-    def case(name, recs, want, dry=False, e4b=E):
-        v = reduce(recs, e4b, dry=dry)
+    QUIET = [{"tag": g, "pinned_gbps": 22.0} for g in PROBES_REG]
+
+    def case(name, recs, want, dry=False, e4b=E, probes=QUIET):
+        v = reduce(recs, e4b, dry=dry, probes=probes)
         assert v["verdict"] == want, (name, v)
         cases.append(name)
         return v
@@ -226,6 +261,29 @@ def self_test():
     assert v["reporting"]["heldout_ok"] is None
     v = case("out of band is reporting only", {**ok, "L1a": _fake("L1a", 2.0), "L1b": _fake("L1b", 2.0)}, "LICENSED")
     assert v["reporting"]["in_band"] is False
+    # A1: the host-quiet guard
+    def hgd(t, **kw):
+        return {**ok[t], "host_guard": {**ok[t]["host_guard"], **kw}}
+    v = case("A1: throttled above 5% is VOID_BY_HOST", {**ok, "L1b": hgd("L1b", throttled_frac=0.051)}, "VOID_BY_HOST")
+    assert "throttled_frac" in v["reasons"][0]
+    case("A1: steal above 5% is VOID_BY_HOST", {**ok, "A0b": hgd("A0b", steal_frac=0.06)}, "VOID_BY_HOST")
+    case("A1: exactly 5% holds", {**ok, "A0b": hgd("A0b", steal_frac=0.05, throttled_frac=0.05)}, "LICENSED")
+    case("A1: a CPU signal not recorded", {**ok, "L1a": hgd("L1a", steal_frac=None)}, "VOID_BY_HOST")
+    case("A1: no guard at all", {**ok, "L1a": {k: v for k, v in ok["L1a"].items() if k != "host_guard"}}, "VOID_BY_HOST")
+    slow = [dict(x) for x in QUIET]
+    slow[3]["pinned_gbps"] = 22.0 * 0.84
+    case("A1: a probe 16% below the first", ok, "VOID_BY_HOST", probes=slow)
+    slow[3]["pinned_gbps"] = 22.0 * 0.86
+    case("A1: a probe 14% below the first holds", ok, "LICENSED", probes=slow)
+    case("A1: a probe missing", ok, "VOID_BY_HOST", probes=QUIET[:4])
+    case("A1: a probe that failed", ok, "VOID_BY_HOST", probes=QUIET[:4] + [{"tag": "after_A0b", "pinned_gbps": None}])
+    case("A1: no probes file", ok, "VOID_BY_HOST", probes=None)
+    case("A1: a structural VOID stays VOID (a strike) on a noisy host",
+         {**ok, "L1a": {**hgd("L1a", steal_frac=0.2), "token_budget_effective": 1024}}, "VOID")
+    case("A1: a quiet host with an unstable self-pair is VOID (a strike)", {**ok, "L1b": _fake("L1b", 3.2)}, "VOID")
+    v = case("A1: a noisy host with an unstable self-pair is VOID_BY_HOST", {**ok, "L1b": {**_fake("L1b", 3.4), "host_guard":
+             {"wall_s": 300.0, "throttled_frac": 0.2, "steal_frac": 0.0}}}, "VOID_BY_HOST")
+    assert v["reporting"]["host_guard"]["arms"]["L1b"]["throttled_frac"] == 0.2
     print(f"p146_reduce self-test OK ({len(cases)} cases)")
     return 0
 
@@ -244,7 +302,8 @@ def main(argv=None):
     for t in TAGS:
         f = os.path.join(a.dir, f"arm_{t}.json")
         recs[t] = json.load(open(f)) if os.path.exists(f) else None
-    v = reduce(recs, a.e4b_sha, dry=a.dry)
+    pf = os.path.join(a.dir, "probes.json")
+    v = reduce(recs, a.e4b_sha, dry=a.dry, probes=json.load(open(pf)) if os.path.exists(pf) else None)
     json.dump(v, open(a.out, "w"), indent=1)
     print("P146_VERDICT " + json.dumps({k: v.get(k) for k in ("verdict", "S", "self_pairs", "reasons")}), flush=True)
     return 0

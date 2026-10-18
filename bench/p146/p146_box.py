@@ -20,7 +20,16 @@ Nothing in train.py is changed. This script calls ``experts4bit_qlora.train.main
 
     python p146_box.py --mode cli-abba --model DIR --parquet alpaca.parquet --outdir DIR
     python p146_box.py --arm TAG --model DIR --parquet alpaca.parquet --outdir DIR      (one arm; the parent runs these)
+    python p146_box.py --probe --outdir DIR --tag TAG                                     (one pinned H2D probe; A1)
     python p146_box.py --self-test
+
+Amendment A1 (after p146-4090-5, VOID on the self-pairs alone while the host got noisy mid-box): a host-quiet guard,
+recorded and never acted on here; the reducer reads it.
+  * CPU, per arm, over its timed window (from the end of warm step 2 to the end of the last step): the box cgroup's
+    throttled time (cpu.stat: v2 throttled_usec, v1 throttled_time) as a fraction of the window's wall, and /proc/stat
+    steal as a fraction of all CPU time on the "cpu" line;
+  * link: one pinned host-to-device probe (engines.offload.report_offload_environment, 256 MB x 20) in its own process
+    before the first arm and after every arm, appended to probes.json.
 """
 import argparse
 import json
@@ -74,6 +83,62 @@ def rows_from_census(census):
              "peak_alloc": r["peak_alloc"]} for i, r in enumerate(census["steps"])]
 
 
+def read_throttled_usec(root="/sys/fs/cgroup"):
+    """The cgroup's cumulative throttled time in microseconds: v2 cpu.stat throttled_usec, v1 cpu/cpu.stat
+    throttled_time (ns). None when neither is readable."""
+    for path, key, scale in ((os.path.join(root, "cpu.stat"), "throttled_usec", 1.0),
+                             (os.path.join(root, "cpu", "cpu.stat"), "throttled_time", 1e-3)):
+        try:
+            for line in open(path):
+                k, _, v = line.partition(" ")
+                if k == key:
+                    return float(v) * scale
+        except OSError:
+            continue
+    return None
+
+
+def read_proc_stat(path="/proc/stat"):
+    """(steal, total) jiffies from the aggregate "cpu" line: total is user..steal. None when unreadable."""
+    try:
+        f = open(path).readline().split()
+        if f[0] != "cpu" or len(f) < 9:
+            return None
+        v = [int(x) for x in f[1:9]]
+        return v[7], sum(v)
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def host_snapshot(root="/sys/fs/cgroup", stat="/proc/stat"):
+    return {"t": time.monotonic(), "throttled_usec": read_throttled_usec(root), "proc_stat": read_proc_stat(stat)}
+
+
+def host_window(a, b):
+    """The timed window's guard signals from two snapshots; a signal that could not be read is None."""
+    wall = b["t"] - a["t"]
+    thr = None
+    if a["throttled_usec"] is not None and b["throttled_usec"] is not None and wall > 0:
+        thr = (b["throttled_usec"] - a["throttled_usec"]) / (wall * 1e6)
+    steal = None
+    if a["proc_stat"] and b["proc_stat"] and b["proc_stat"][1] > a["proc_stat"][1]:
+        steal = (b["proc_stat"][0] - a["proc_stat"][0]) / (b["proc_stat"][1] - a["proc_stat"][1])
+    return {"wall_s": wall, "throttled_frac": thr, "steal_frac": steal}
+
+
+def run_probe(a):
+    """One pinned H2D probe in this (short) process, appended to probes.json with its tag."""
+    from experts4bit_qlora.engines.offload import report_offload_environment
+
+    out = report_offload_environment("cuda", lambda s: None) or {}
+    path = os.path.join(a.outdir, "probes.json")
+    probes = json.load(open(path)) if os.path.exists(path) else []
+    probes.append({"tag": a.tag, "pinned_gbps": out.get("ceiling_pinned_gbps"), "utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+    json.dump(probes, open(path, "w"), indent=1)
+    print("P146_PROBE " + json.dumps(probes[-1]), flush=True)
+    return 0
+
+
 def adapter_hash(params):
     """sha256 over every trainable tensor's bytes, in order."""
     import hashlib
@@ -97,7 +162,7 @@ def run_arm(a):
     from experts4bit_qlora.engines import ckpt_offload, fast
     from experts4bit_qlora.engines import offload as off
 
-    got = {"dataset_calls": [], "evals": []}
+    got = {"dataset_calls": [], "evals": [], "host": {}}
     _load_dataset = datasets.load_dataset
 
     def load_dataset(path, *args, split=None, **kw):
@@ -117,6 +182,10 @@ def run_arm(a):
         row["peak_alloc"] = torch.cuda.max_memory_allocated()
         off.reset_offload_stats()
         torch.cuda.reset_peak_memory_stats()
+        if len(self.steps) == WARM:              # A1: the timed window opens after the warm steps
+            got["host"]["start"] = host_snapshot()
+        elif len(self.steps) == STEPS:           # ... and closes after the last step
+            got["host"]["end"] = host_snapshot()
 
     census.PhaseClock.step_end = step_end
 
@@ -167,6 +236,8 @@ def run_arm(a):
            "ckpt": dict(ckpt_offload.CKPT_OFFLOAD_STATS), "adapter_sha_at_start": got.get("adapter_sha_at_start"),
            "n_trainable": got.get("n_trainable"), "dataset_calls": got["dataset_calls"],
            "token_budget_effective": cen["meta"].get("token_budget_effective"),
+           "host_guard": (host_window(got["host"]["start"], got["host"]["end"])
+                          if "start" in got["host"] and "end" in got["host"] else None),
            "process": "fresh process per arm (python -m experts4bit_qlora.train's main)",
            "switches": {k: os.environ.get(k) for k in ("OFFLOAD_EXPERTS", "FAST_TRAIN", "LAYER_MAJOR")},
            "versions": {"torch": torch.__version__, "transformers": transformers.__version__,
@@ -187,6 +258,7 @@ def run_cli_abba(a):
     """A0a L1a L1b A0b, each `python p146_box.py --arm TAG` in a fresh process; one log per arm."""
     os.makedirs(os.path.join(a.outdir, "logs"), exist_ok=True)
     rc_all = 0
+    probe(a, "before_A0a")
     for tag in TAGS:
         log = os.path.join(a.outdir, "logs", f"arm_{tag}.log")
         cmd = [sys.executable, os.path.abspath(__file__), "--arm", tag, "--model", a.model, "--parquet", a.parquet,
@@ -203,7 +275,19 @@ def run_cli_abba(a):
             if line.startswith("P146_ARM ") or "host CPUs:" in line or "host-side fuse" in line:
                 print(line.rstrip()[:900], flush=True)
         rc_all = rc_all or rc
+        probe(a, f"after_{tag}")
     return rc_all
+
+
+def probe(a, tag):
+    """A1: the link probe in its own process (the arms hold no CUDA context while it runs)."""
+    cmd = [sys.executable, os.path.abspath(__file__), "--probe", "--outdir", a.outdir, "--tag", tag]
+    try:
+        r = subprocess.run(cmd, env=arm_env("A0a", a.model, a.outdir), capture_output=True, text=True, timeout=300)
+        line = [x for x in r.stdout.splitlines() if x.startswith("P146_PROBE ")]
+        print(line[-1] if line else f"P146_PROBE_FAILED {tag} rc={r.returncode}", flush=True)
+    except subprocess.TimeoutExpired:
+        print(f"P146_PROBE_FAILED {tag} timeout", flush=True)
 
 
 def self_test():
@@ -246,7 +330,30 @@ def self_test():
         acc += x / 4
     assert acc.hex() == (sum(xs) / 4).hex()
     n += 1
-    print(f"p146_box self-test OK ({n}/11 cases)")
+    import tempfile
+    d = tempfile.mkdtemp()
+    os.makedirs(os.path.join(d, "cpu"))
+    open(os.path.join(d, "cpu.stat"), "w").write("usage_usec 10\nnr_throttled 3\nthrottled_usec 2500000\n")
+    assert read_throttled_usec(d) == 2500000.0
+    os.remove(os.path.join(d, "cpu.stat"))
+    open(os.path.join(d, "cpu", "cpu.stat"), "w").write("nr_periods 9\nthrottled_time 4000000000\n")
+    assert read_throttled_usec(d) == 4000000.0                          # v1: ns -> us
+    os.remove(os.path.join(d, "cpu", "cpu.stat"))
+    assert read_throttled_usec(d) is None
+    n += 1
+    ps = os.path.join(d, "stat")
+    open(ps, "w").write("cpu  100 0 50 800 10 0 0 40 0 0\ncpu0 1 2 3\n")
+    assert read_proc_stat(ps) == (40, 1000)
+    open(ps, "w").write("intr 1 2\n")
+    assert read_proc_stat(ps) is None
+    n += 1
+    w = host_window({"t": 0.0, "throttled_usec": 1e6, "proc_stat": (40, 1000)},
+                    {"t": 100.0, "throttled_usec": 6e6, "proc_stat": (90, 2000)})
+    assert abs(w["throttled_frac"] - 0.05) < 1e-12 and abs(w["steal_frac"] - 0.05) < 1e-12 and w["wall_s"] == 100.0
+    w = host_window({"t": 0.0, "throttled_usec": None, "proc_stat": None}, {"t": 1.0, "throttled_usec": 5.0, "proc_stat": (1, 2)})
+    assert w["throttled_frac"] is None and w["steal_frac"] is None
+    n += 1
+    print(f"p146_box self-test OK ({n}/14 cases)")
     return 0
 
 
@@ -258,9 +365,13 @@ def main(argv=None):
     p.add_argument("--model")
     p.add_argument("--parquet", help="tatsu-lab/alpaca's train parquet at the pinned revision (the staged file)")
     p.add_argument("--outdir")
+    p.add_argument("--probe", action="store_true")
+    p.add_argument("--tag")
     a = p.parse_args(argv)
     if a.self_test:
         return self_test()
+    if a.probe:
+        return run_probe(a)
     if a.arm:
         return run_arm(a)
     return run_cli_abba(a)

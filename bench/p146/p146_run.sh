@@ -211,7 +211,7 @@ AL=$(step_alarm 7200); say "the four arm processes (alarm=$AL)"
 env E4B_SHA=$E4B_SHA perl -e "alarm $AL; exec @ARGV" python $W/p146_box.py --mode cli-abba --model "$SNAP" \
   --parquet $W/alpaca.parquet --outdir $W > logs/abba.log 2>&1
 rc=$?
-{ echo "arms rc=$rc"; grep -a "^P146_PROC" logs/abba.log; grep -a "host CPUs:\|host-side fuse" logs/abba.log | head -2; } | tee -a summary.txt
+{ echo "arms rc=$rc"; grep -a "^P146_PROC\|^P146_PROBE" logs/abba.log; grep -a "host CPUs:\|host-side fuse" logs/abba.log | head -2; } | tee -a summary.txt
 for TAG in A0a L1a L1b A0b; do
   { echo -n "arm $TAG "; grep -a "^P146_ARM {\"tag\": \"$TAG\"" logs/abba.log | tail -1 | cut -c1-600; echo; } | tee -a summary.txt
 done

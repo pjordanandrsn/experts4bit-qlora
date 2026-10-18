@@ -180,3 +180,49 @@ them re-bands.
 
 P137's history (Amendment 1: staged data; Amendment 2: one process; Amendment 3: 32 timed steps and both warm-ups) is
 inherited where named above: see `bench/p137/PREREG-p137.md`.
+
+## Amendment A1 (after `p146-4090-5`, VOID, strike 1): a host-quiet guard
+
+**What happened.** `p146-4090-5` ran on an RTX 4090 for $0.489. The box was machine 10384, an EPYC host with 192 CPUs
+under a 23.04-CPU container quota and a pinned H2D ceiling of 20.28 GB/s.
+- It VOIDed on the self-pairs alone: A0b/A0a 1.0457 and L1b/L1a 1.0967, against [0.97, 1.03] (Q6, the registered main
+  risk).
+- Every other STRICT rung held across the four fresh processes: the adapter sha, the BEFORE held-out and the step-0 loss
+  were bit-identical; stagings were 381 / 380 and 336 / 95; the reentrant checkpoint ran on 48/48; the budget stayed
+  2048; each arm ran 32 timed steps.
+- The arms that moved were the later two. A0a and L1a ran 20:59–21:19Z, tight, and their step walls tracked each other
+  step for step (correlation 0.95: the batches are the same in every arm). From about 21:19Z, L1b and A0b were slower and
+  noisy, and that correlation vanished (0.24 and −0.05). The host changed under the run; nothing a process carries did.
+
+**Seen, disclosed, never cited** (a VOID): medians 12.533 / 8.266 / 9.065 / 13.106 s, pairs 1.516 and 1.446. On the
+first pair the host-link fit gives T 1.42 s, inside the predicted 1.29–1.90, and C 6.84 s, above the predicted
+1.7–6 s. The band [1.5, 2.6] stays as registered (REPORTING, never re-banded).
+
+**The change (design terms, fixed before any data under them).** A guard that separates "the host changed under us"
+(**VOID_BY_HOST: no reading, not a strike**, and the run id becomes a spare) from "the arms are unstable" (VOID, a
+strike). The self-pair band is unchanged and still decides on a quiet host.
+- **CPU, per arm, over its timed window** (from the end of warm step 2 to the end of the last step):
+  - the box cgroup's throttled time (`cpu.stat`: v2 `throttled_usec`, v1 `throttled_time`), as a fraction of the
+    window's wall;
+  - `/proc/stat` steal, as a fraction of all CPU time on the aggregate `cpu` line.
+  - **VOID_BY_HOST if either exceeds 5 % of the window.** The argument rests on the band, not on any box: the
+    self-pair band allows 3 %, so a host that takes more than 5 % of a window can by itself move a median past the
+    band. A quiet box shows neither signal. `p146-4090-5` recorded neither, so no seen value sets the threshold.
+- **Link:** one pinned host-to-device probe (`engines.offload.report_offload_environment`, 256 MB × 20) in its own
+  process before the first arm and after every arm. That is five probes: `before_A0a`, then `after_A0a`, `after_L1a`,
+  `after_L1b`, `after_A0b`.
+  - **VOID_BY_HOST if any probe is more than 15 % below the first.** 15 % is A11's two-sample agreement tolerance for
+    that probe. T is bound by the host link, so the link is the quantity that moves S.
+- **A guard signal that was not recorded** (an unreadable `cpu.stat` or `/proc/stat`, a missing or failed probe) is
+  also VOID_BY_HOST: the host cannot show it was quiet.
+- **Order of the rule:** the structural STRICT rungs first (a broken arm is a strike on any host), then the guard,
+  then the self-pair band, then S.
+- **Pin preference** (not a floor): prefer offers whose CPU allotment is the whole host or close to it (`-5` had a
+  23-CPU quota on a 192-CPU host). Each PIN post records the allotment against the host's cores.
+
+Unchanged: S ≥ 1.10, the self-pair band [0.97, 1.03], the band [1.5, 2.6], every rung above, the 3.0 h guard, worst
+$2.92 per box.
+
+**Order.** This amendment's review, a $0 dry run on the A2000 that shows both signals recorded, then one box on a spare
+(`p146-4090-6` or `-7`). A second box-started VOID or harness error stops P146 until a simplification lands; a
+VOID_BY_HOST is neither.

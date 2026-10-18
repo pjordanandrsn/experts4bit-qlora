@@ -67,8 +67,8 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 
 
 def test_the_self_tests_pass():
-    for script, line in (("p146_reduce.py", "p146_reduce self-test OK (43 cases)"),
-                         ("p146_box.py", "p146_box self-test OK (11/11 cases)")):
+    for script, line in (("p146_reduce.py", "p146_reduce self-test OK (56 cases)"),
+                         ("p146_box.py", "p146_box self-test OK (14/14 cases)")):
         out = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True,
                              env={**os.environ, "PYTHONPATH": ""})
         assert out.returncode == 0 and line in out.stdout, out.stdout + out.stderr
@@ -120,6 +120,12 @@ def test_the_rule_is_the_registered_rule():
               '"n_train": 2000', '"seed": 0', '"train_attention": True'):
         assert k in REDUCE, k
     assert 'DATASET_CALLS = ["train[:2000]", "train[2000:2064]"]' in REDUCE
+    # Amendment A1: the host-quiet guard's terms, fixed before any data under them
+    assert "HOST_CPU_MAX = 0.05" in REDUCE and "HOST_LINK_DROP = 0.15" in REDUCE and '"VOID_BY_HOST"' in REDUCE
+    assert 'PROBES_REG = ("before_A0a", "after_A0a", "after_L1a", "after_L1b", "after_A0b")' in REDUCE
+    assert 'probe(a, "before_A0a")' in BOX and 'probe(a, f"after_{tag}")' in BOX and "report_offload_environment" in BOX
+    for s in ("Amendment A1", "5 %", "15 %", "VOID_BY_HOST", "not a strike"):
+        assert s in PREREG, s
 
 
 def test_the_order_puts_every_refusal_before_the_fetch():
