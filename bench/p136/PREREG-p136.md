@@ -72,3 +72,26 @@ at the launch, not carried forward from memory. A run that does not fit waits fo
 
 `staged-p136.sha256` moves by one row: `p136_run.sh` goes from `09feafcafafb42e66ecc7a018ddeef3b31541c6c6ff52e92bdd4c9d1dbc86290` to `79ad608032f0044d1fd4ef699d3979e4a5e7a84fadf667558dc155454f1eb79a`. No threshold, read rule, host term,
 workload or other staged file changes.
+
+## Amendment 3 (2026-10-18): a refusal before create consumes an ID but is not an attempt
+
+`p136-gemma4-5090-2` was refused at $0 before any instance existed. The pinned offer was briefly absent from the provider's
+search at the create: the same search, repeated 10 s apart, returned it, then not, then again. The launcher still records a
+refused launch, with a $0 receipt (`receipt.json` `dc80f64b0865376402d4924e532c94c669a5b2352ca3f905e283d7b93dbb5a05`) and a ledger row, so the ID is spent although nothing
+was created. A family therefore needs more registered IDs than attempts.
+
+This amendment registers three more IDs per family, used in order, each taking that family's registered model, revision,
+MoE layer count, disk floor and workloads unchanged:
+- gemma4: `p136-gemma4-5090-3`, `p136-gemma4-5090-4`, `p136-gemma4-5090-5`;
+- mixtral: `p136-mixtral-5090-3`, `p136-mixtral-5090-4`, `p136-mixtral-5090-5`;
+- gpt-oss: `p136-gptoss-5090-3`, `p136-gptoss-5090-4`, `p136-gptoss-5090-5`.
+
+The attempt rule, replacing Amendment 2's:
+- a launch refused **before** create consumes its ID but is not an attempt;
+- an attempt is a create whose box started;
+- a family lapses after **two** box-started failures;
+- gemma4 has used one (`p136-gemma4-5090-1`, Amendment 1), so it has one left.
+
+The launch rule under the $15.20 ceiling is unchanged, with billed-to-date read from the ledger at the launch. Both case lists
+gain the nine IDs: `p136_run.sh` (staged) and `p136_drive.sh`. `staged-p136.sha256` moves by one row: `p136_run.sh` goes from
+`79ad608032f0044d1fd4ef699d3979e4a5e7a84fadf667558dc155454f1eb79a` to `119a26c583ae1b426dcf2bd3ee4f14b4c1f02239c91df2936f803e561d5ee9f7`. No threshold, read rule, host term, workload or other staged file changes.
