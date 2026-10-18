@@ -36,7 +36,7 @@ table, one draw per row, not a speed position. `e4b.train.frontier.qwen3.4090-24
 `.unsloth-resident`, `.e4b-resident-oom`, `.hf-axolotl` and `.offload-keeps-trajectory` rows
 ([TC3](../bench/h2h-2026-10-02/tc3/README.md)).
 
-**Under expert offload, layer-major accumulation steps 2.365× the stock loop.** `layer_major_step`
+**Under expert offload, layer-major accumulation is 2.365× faster per step than the stock loop.** `layer_major_step`
 (`experts4bit_qlora.engines.layer_major`) runs a step's micro-batches layer by layer. Each offloaded layer is staged
 once per step instead of once per micro-batch: 95 stagings against 380. With `enable_fast_train(dgrad=True)` on
 Qwen3-30B-A3B on one RTX 4090, the stock loop steps 7.641 / 7.514 s and layer-major 3.231 / 3.173 s, at 7.98 GB peak
