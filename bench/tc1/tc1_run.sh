@@ -124,7 +124,7 @@ case " $FAMILIES " in *" qwen3curve "*)
   [ -n "${TC1_PREREG:-}" ] || PREREG=tc1/TC1B-PREREG.md     # TC1b: the curve token is governed by its own registration (the PI's); TC1_PREREG still overrides
   ;;
 esac
-case " $FAMILIES " in *" qwen3hp1 "*)
+case " $FAMILIES " in *" qwen3hp1 "*|*" qwen3hp1k "*|*" qwen3hp1p "*)
   echo "FIXTURE hp1 (HP1-PREREG): steps=$CURVE_STEPS eval_n=$HP1_EVAL_N eval_every=$HP1_EVAL_EVERY K seeds=[$HP1_SEL_SEEDS] P seeds=[$HP1_CONF_SEEDS] (--seed s --order-seed s); box-side shakedown: $HP1_SHAKE_LAYERS-layer truncation, $HP1_SHAKE_STEPS steps" | tee -a summary.txt
   [ -n "${TC1_PREREG:-}" ] || PREREG=hp1/HP1-PREREG.md     # HP1: governed by its own registration; TC1_PREREG still overrides
   ;;
@@ -2263,49 +2263,49 @@ hp1_eval_block(){ local NAME=$1 TOK=$2 MID=$3 REV=$4; shift 4; local R=() B=() x
     --out $W/hp1/eval_$NAME.json > logs/hp1_eval_$NAME.log 2>&1; tail -1 logs/hp1_eval_$NAME.log
   HP1_EVAL_PER_ARM_S=$($PY_E4B -c "import json,sys; d=json.load(open(sys.argv[1])); t=sum(x.get('seconds',0) for x in d['bases']); print(max(60, int(t / max(1, len(d['arms'])))))" \
     $W/hp1/eval_$NAME.json 2>/dev/null || echo 600); return 0; }
-tc1_hp1_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AXAL=$7
-  local ALL="" s c
-  for s in $HP1_SEL_SEEDS; do for c in k00 k10 k01 k11; do ALL="$ALL e4b:hp1_${c}_s$s:fused"; done; done
-  say "===== HP1 family $FAM ($MID @ $REV; K seeds [$HP1_SEL_SEEDS], P seeds [$HP1_CONF_SEEDS]; N $CURVE_STEPS; $HP1_EVAL_N held-out rows; alarms e4b $EAL unsloth $UAL axolotl $AXAL)"
-  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" $HP1_EVAL_N || return 0
-  mkdir -p $W/hp1
-  if ! hp1_shakedown $FAM "$MID" $REV $TOK $TS; then
-    say "HP1 box-side shakedown FAILED: the draw ends unscored"; echo "HP1 SHAKEDOWN_FAILED" | tee -a summary.txt; return 0
-  fi
-  echo "HP1 SHAKEDOWN_OK" | tee -a summary.txt
-  local X="--hp1-export $W/hp1" B s0=${HP1_SEL_SEEDS%% *}
-  # the K block (selection seeds): e4b's 2x2. Its first run exports the e4b base, and the EARLY BASE CHECK runs on it at once: the
-  # base's digest and zero-adapter check (and that run's validity) before 11 more runs are paid for. A run-level VOID there gets its
-  # one redraw; a base that is not OK after that ends the draw (a systematic miss caps at about one run's cost).
-  hp1_run $FAM e4b hp1_k00_s$s0 fused $EAL "$MID" $REV $TOK $TS --attn-4bit 1 $(hp1_cell k00 $s0) --seed $s0 --order-seed $s0 $X --hp1-export-base 1
-  local ER=("$W/${FAM}_e4b_hp1_k00_s$s0.json") est
-  hp1_eval_block early $TOK "$MID" $REV "${ER[@]}" -- $W/hp1/base_e4b_$FAM || return 0
+# hp1_early_check FAM MID REV TOK TS TAG FW: the EARLY BASE CHECK on the run that just exported FW's base -- the base's digest and
+# zero-adapter check (and that run's validity) before more runs are paid for. A run-level VOID gets its one redraw; a base that is not OK
+# after that ends the draw (a systematic miss caps at about one run's cost). rc 0 = OK.
+hp1_early_check(){ local FAM=$1 MID=$2 REV=$3 TOK=$4 TS=$5 TAG=$6 FW=$7 est
+  local ER=("$W/${FAM}_${FW}_$TAG.json")
+  hp1_eval_block early $TOK "$MID" $REV "${ER[@]}" -- $W/hp1/base_${FW}_$FAM || return 1
   est=$($PY_E4B -c "import json,sys; b=json.load(open(sys.argv[1]))['bases']; print(b[0].get('status') if b else 'none')" $W/hp1/eval_early.json 2>/dev/null || echo none)
   if [ "$est" != OK ] && hp1_redraw $FAM "$MID" $REV $TOK $TS $W/hp1/eval_early.json; then
-    hp1_eval_block early $TOK "$MID" $REV "${ER[@]}" -- $W/hp1/base_e4b_$FAM || return 0
+    hp1_eval_block early $TOK "$MID" $REV "${ER[@]}" -- $W/hp1/base_${FW}_$FAM || return 1
     est=$($PY_E4B -c "import json,sys; b=json.load(open(sys.argv[1]))['bases']; print(b[0].get('status') if b else 'none')" $W/hp1/eval_early.json 2>/dev/null || echo none)
   fi
   if [ "$est" != OK ]; then
-    say "HP1 early base check FAILED (e4b base $est): the draw ends before the rest of the K block"; echo "HP1 EARLY_BASE_CHECK_FAILED $est" | tee -a summary.txt; return 0
+    say "HP1 early base check FAILED ($FW base $est): the draw ends"; echo "HP1 EARLY_BASE_CHECK_FAILED $est" | tee -a summary.txt; return 1
   fi
-  echo "HP1 EARLY_BASE_CHECK_OK" | tee -a summary.txt
+  echo "HP1 EARLY_BASE_CHECK_OK" | tee -a summary.txt; return 0; }
+# hp1_k_block FAM MID REV TOK TS EAL: the K block (selection seeds), e4b's 2x2 -- its first run exports the e4b base and takes the early
+# check -- then the K evaluator pass (with the one-redraw rule) and the mechanical selection. Sets HP1_SEL; rc 0 = selected.
+hp1_k_block(){ local FAM=$1 MID=$2 REV=$3 TOK=$4 TS=$5 EAL=$6 s c X="--hp1-export $W/hp1" s0=${HP1_SEL_SEEDS%% *}
+  hp1_run $FAM e4b hp1_k00_s$s0 fused $EAL "$MID" $REV $TOK $TS --attn-4bit 1 $(hp1_cell k00 $s0) --seed $s0 --order-seed $s0 $X --hp1-export-base 1
+  hp1_early_check $FAM "$MID" $REV $TOK $TS hp1_k00_s$s0 e4b || return 1
   for s in $HP1_SEL_SEEDS; do for c in k00 k10 k01 k11; do
     [ "$s" = "$s0" ] && [ "$c" = k00 ] && continue
     hp1_run $FAM e4b hp1_${c}_s$s fused $EAL "$MID" $REV $TOK $TS --attn-4bit 1 $(hp1_cell $c $s) --seed $s --order-seed $s $X
   done; done
   local KR=(); for s in $HP1_SEL_SEEDS; do KR+=("$W/${FAM}_e4b_hp1_k*_s$s.json"); done   # globs, expanded by hp1_eval
-  hp1_eval_block K $TOK "$MID" $REV "${KR[@]}" -- $W/hp1/base_e4b_$FAM || return 0
+  hp1_eval_block K $TOK "$MID" $REV "${KR[@]}" -- $W/hp1/base_e4b_$FAM || return 1
   if hp1_redraw $FAM "$MID" $REV $TOK $TS $W/hp1/eval_K.json; then
-    hp1_eval_block K $TOK "$MID" $REV "${KR[@]}" -- $W/hp1/base_e4b_$FAM || return 0
+    hp1_eval_block K $TOK "$MID" $REV "${KR[@]}" -- $W/hp1/base_e4b_$FAM || return 1
   fi
   hp1_bulk_manifest "$W"                  # the reducer VOIDs a reading whose manifest does not pin every adapter and base it scored
-  local SEL; SEL=$($PY_E4B $W/hp1_reduce.py select $W/hp1/eval_K.json --manifest $W/hp1/bulk_manifest.json --out $W/hp1/select.json 2> logs/hp1_select.err | sed -n 's/^HP1_SELECTED=//p')
-  if ! hp1_cell "$SEL" 0 > /dev/null; then say "HP1: the K rule selected nothing (logs/hp1_select.err): the P block is not run"; echo "HP1 K_INCOMPLETE" | tee -a summary.txt; return 0; fi
-  say "HP1: the registered K rule selects $SEL"; echo "HP1_SELECTED=$SEL" | tee -a summary.txt
-  # the P block (fresh confirmation seeds): E, shipped K00 beside it, both competitors at their native settings, each framework's first run exporting its base
-  local bu=1 ba=1 PR=()
+  HP1_SEL=$($PY_E4B $W/hp1_reduce.py select $W/hp1/eval_K.json --manifest $W/hp1/bulk_manifest.json --out $W/hp1/select.json 2> logs/hp1_select.err | sed -n 's/^HP1_SELECTED=//p')
+  if ! hp1_cell "$HP1_SEL" 0 > /dev/null; then say "HP1: the K rule selected nothing (logs/hp1_select.err): the P block is not run"; echo "HP1 K_INCOMPLETE" | tee -a summary.txt; return 1; fi
+  say "HP1: the registered K rule selects $HP1_SEL"; echo "HP1_SELECTED=$HP1_SEL" | tee -a summary.txt; return 0; }
+# hp1_p_block FAM MID REV TOK TS EAL UAL AXAL SEL KEVAL EARLY: the P block (fresh confirmation seeds): E, shipped K00 beside it, both
+# competitors at their native settings, each framework's first run exporting its base. P_EARLY=1 (box 2 of the split) makes the first E
+# run export the e4b base and take the early check before any other scored arm. Then the P evaluator pass and the verdict over KEVAL
+# (the K block's evaluator output) + eval_P.json.
+hp1_p_block(){ local FAM=$1 MID=$2 REV=$3 TOK=$4 TS=$5 EAL=$6 UAL=$7 AXAL=$8 SEL=$9 KEVAL=${10} P_EARLY=${11:-0} KMAN=${12:-} s B X="--hp1-export $W/hp1"
+  local bu=1 ba=1 be=$P_EARLY PR=() s0=${HP1_CONF_SEEDS%% *}
   for s in $HP1_CONF_SEEDS; do
-    hp1_run $FAM e4b hp1_e_${SEL}_s$s fused $EAL "$MID" $REV $TOK $TS --attn-4bit 1 $(hp1_cell $SEL $s) --seed $s --order-seed $s $X
+    B=""; [ $be = 1 ] && { B="--hp1-export-base 1"; be=0; }
+    hp1_run $FAM e4b hp1_e_${SEL}_s$s fused $EAL "$MID" $REV $TOK $TS --attn-4bit 1 $(hp1_cell $SEL $s) --seed $s --order-seed $s $X $B
+    if [ "$P_EARLY" = 1 ] && [ "$s" = "$s0" ]; then hp1_early_check $FAM "$MID" $REV $TOK $TS hp1_e_${SEL}_s$s e4b || return 1; fi
     [ "$SEL" != k00 ] && hp1_run $FAM e4b hp1_k00_s$s fused $EAL "$MID" $REV $TOK $TS --attn-4bit 1 $(hp1_cell k00 $s) --seed $s --order-seed $s $X
     B=""; [ $bu = 1 ] && { B="--hp1-export-base 1"; bu=0; }
     hp1_run $FAM unsloth hp1_unsloth_s$s unsloth $UAL "$MID" $REV $TOK $TS --grad-ckpt unsloth --unsloth-targets $UT7 \
@@ -2315,14 +2315,58 @@ tc1_hp1_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AXAL=$7
       --axolotl-best 1 --lora-init native --adapter-dtype native --seed $s --order-seed $s $X $B
     PR+=("$W/${FAM}_*_hp1_*_s$s.json")
   done
-  hp1_eval_block P $TOK "$MID" $REV "${PR[@]}" -- $W/hp1/base_*_$FAM || { echo "HP1 P readout lost to the deadline" | tee -a summary.txt; return 0; }
+  hp1_eval_block P $TOK "$MID" $REV "${PR[@]}" -- $W/hp1/base_*_$FAM || { echo "HP1 P readout lost to the deadline" | tee -a summary.txt; return 1; }
   if hp1_redraw $FAM "$MID" $REV $TOK $TS $W/hp1/eval_P.json; then
     hp1_eval_block P $TOK "$MID" $REV "${PR[@]}" -- $W/hp1/base_*_$FAM || true
   fi
   hp1_bulk_manifest "$W"
-  $PY_E4B $W/hp1_reduce.py verdict $W/hp1/eval_K.json $W/hp1/eval_P.json --manifest $W/hp1/bulk_manifest.json --out $W/hp1/verdict.json \
+  $PY_E4B $W/hp1_reduce.py verdict $KEVAL $W/hp1/eval_P.json --manifest $W/hp1/bulk_manifest.json ${KMAN:+--manifest $KMAN} --out $W/hp1/verdict.json \
     --md $W/RESULTS-hp1.md > logs/hp1_verdict.log 2>&1
-  tail -20 logs/hp1_verdict.log; echo "HP1 verdict: $W/RESULTS-hp1.md" | tee -a summary.txt; }
+  tail -20 logs/hp1_verdict.log; echo "HP1 verdict: $W/RESULTS-hp1.md" | tee -a summary.txt; return 0; }
+hp1_open(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 ALL=$5
+  local s c; for s in $HP1_SEL_SEEDS; do for c in k00 k10 k01 k11; do ALL="$ALL e4b:hp1_${c}_s$s:fused"; done; done
+  tc1_prepare $FAM "$MID" $REV $FAL "$ALL" $HP1_EVAL_N || return 1
+  mkdir -p $W/hp1
+  if ! hp1_shakedown $FAM "$MID" $REV $TOK $TS; then
+    say "HP1 box-side shakedown FAILED: the draw ends unscored"; echo "HP1 SHAKEDOWN_FAILED" | tee -a summary.txt; return 1
+  fi
+  echo "HP1 SHAKEDOWN_OK" | tee -a summary.txt; return 0; }
+# the one-box path (qwen3hp1): shakedown, K, selection, P, verdict on one draw
+tc1_hp1_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AXAL=$7 TOK TS
+  say "===== HP1 family $FAM ($MID @ $REV; K seeds [$HP1_SEL_SEEDS], P seeds [$HP1_CONF_SEEDS]; N $CURVE_STEPS; $HP1_EVAL_N held-out rows; alarms e4b $EAL unsloth $UAL axolotl $AXAL)"
+  hp1_open $FAM "$MID" $REV $FAL "" || return 0
+  hp1_k_block $FAM "$MID" $REV $TOK $TS $EAL || return 0
+  hp1_p_block $FAM "$MID" $REV $TOK $TS $EAL $UAL $AXAL $HP1_SEL $W/hp1/eval_K.json 0 || true; }
+# the split path, box 1 (qwen3hp1k, HP1-PREREG Amendment 2): shakedown, K, selection; it carries out eval_K.json + select.json, whose
+# sha256s it prints to summary.txt for box 2's execution request to pin
+tc1_hp1k_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 TOK TS x
+  say "===== HP1 split box 1 (selection) $FAM ($MID @ $REV; K seeds [$HP1_SEL_SEEDS])"
+  hp1_open $FAM "$MID" $REV $FAL "" || return 0
+  hp1_k_block $FAM "$MID" $REV $TOK $TS $EAL || return 0
+  hp1_bulk_manifest "$W"
+  for x in eval_K.json select.json bulk_manifest.json; do echo "HP1_CARRY $x sha256 $(sha256sum $W/hp1/$x | cut -d' ' -f1)" | tee -a summary.txt; done; }
+# the split path, box 2 (qwen3hp1p): REFUSES unless box 1's eval_K.json + select.json are staged beside the runner AND match the pinned
+# TC1_HP1_K_EVAL_SHA256 / TC1_HP1_K_SELECT_SHA256 / TC1_HP1_K_MANIFEST_SHA256 (box 1's receipt), and the selection re-derives from the staged eval_K.json; then its
+# OWN shakedown, the P block with an early base check on the first E run, and the verdict over the staged eval_K.json + eval_P.json
+tc1_hp1p_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AXAL=$7 TOK TS f want got
+  say "===== HP1 split box 2 (confirmation) $FAM ($MID @ $REV; P seeds [$HP1_CONF_SEEDS])"
+  for f in "eval_K.json:${TC1_HP1_K_EVAL_SHA256:-}" "select.json:${TC1_HP1_K_SELECT_SHA256:-}" "bulk_manifest.json:${TC1_HP1_K_MANIFEST_SHA256:-}"; do
+    want=${f#*:}; f=${f%%:*}
+    got=$( [ -s "$W/$f" ] && sha256sum "$W/$f" | cut -d' ' -f1 )
+    if [ -z "$want" ] || [ "$got" != "$want" ]; then
+      say "HP1 box 2 REFUSES: $f ${got:-absent} != box 1's pinned ${want:-unset}"; echo "HP1 P_REFUSED carry $f" | tee -a summary.txt; return 0
+    fi
+  done
+  mkdir -p $W/hp1; cp $W/eval_K.json $W/hp1/eval_K_box1.json; cp $W/bulk_manifest.json $W/hp1/bulk_manifest_box1.json
+  local SEL SEL2
+  SEL=$($PY_E4B -c "import json,sys; print(json.load(open(sys.argv[1]))['k']['selected'])" $W/select.json 2>/dev/null)
+  SEL2=$($PY_E4B $W/hp1_reduce.py select $W/hp1/eval_K_box1.json --manifest $W/hp1/bulk_manifest_box1.json --out $W/hp1/select_rederived.json 2> logs/hp1_select.err | sed -n 's/^HP1_SELECTED=//p')
+  if [ -z "$SEL" ] || [ "$SEL" != "$SEL2" ] || ! hp1_cell "$SEL" 0 > /dev/null; then
+    say "HP1 box 2 REFUSES: select.json says '$SEL', the staged eval_K.json re-derives '$SEL2'"; echo "HP1 P_REFUSED selection" | tee -a summary.txt; return 0
+  fi
+  echo "HP1_SELECTED=$SEL (carried from box 1, re-derived)" | tee -a summary.txt
+  hp1_open $FAM "$MID" $REV $FAL "" || return 0
+  hp1_p_block $FAM "$MID" $REV $TOK $TS $EAL $UAL $AXAL $SEL $W/hp1/eval_K_box1.json 1 $W/hp1/bulk_manifest_box1.json || true; }
 tc1_curve_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SAL=$8
   local ALL="e4b:fused_attn4_m_200:fused unsloth:ckpt_unsloth_m_200:unsloth e4b:fused_attn4_shipped_200:fused e4b:fused_attn4_p38:fused unsloth:ckpt_unsloth_p38:unsloth unsloth:ckpt_unsloth_p38_t28:unsloth e4b:fused_attn4_m_t1:fused unsloth:ckpt_unsloth_m_t1:unsloth e4b:fused_attn4_m_r64:fused unsloth:ckpt_unsloth_m_r64:unsloth"
   say "===== CURVE family $FAM (TC1b; $MID @ $REV; matched seed $MATCHED_SEED; N $CURVE_STEPS eval every $CURVE_EVAL_EVERY on $CURVE_EVAL_N rows; alarms e4b $EAL unsloth $UAL anchor $AAL t1/r64 $SAL)"
@@ -2505,6 +2549,8 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3curve)  tc1_curve_family  qwen3curve  Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 4800 9000 1800 3600;;
   #                                                                                                        FETCH E4B  UNS  AX   (HP1: per-run alarms over N 200)
   qwen3hp1)    tc1_hp1_family    qwen3hp1    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600 3600;;
+  qwen3hp1k)   tc1_hp1k_family   qwen3hp1    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400;;            # HP1 Amendment 2, split box 1
+  qwen3hp1p)   tc1_hp1p_family   qwen3hp1    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600 3600;;  # HP1 Amendment 2, split box 2
   tc2small)    tc2_small_box;;                 # lane TC2, box A: granite, olmoe, gptoss (tc2_small_box's table)
   tc2big)      tc2_big_box;;                   # lane TC2, box B: qwen3_5, mixtral (tc2_big_box's table)
   tc2mixtral)  tc2_mixtral_redraw;;            # lane TC2 amendment 2: Mixtral's P5 pair and reference redrawn with the Unsloth alarm at 7,200 s

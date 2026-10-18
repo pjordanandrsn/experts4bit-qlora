@@ -309,3 +309,38 @@ fetch excludes them (e4b #1720), and they are gone when the box is torn down. Th
 - the manifest comes back with the receipts.
 
 The evaluator's checks therefore rest on the receipt digests plus this manifest. No rule, threshold or registered reading changes.
+
+### Amendment 2 (2026-10-18, before any box; takes effect only if the maintainer picks the split path): HP1 on two boxes of at most 6 h each
+
+**Why.** The compute policy caps a rental at 6 h of wallclock. The one-box draw estimates about 7.5 h of work, so it needs either a
+higher cap or this split. The cut falls on the line the registration already draws between selection and confirmation.
+
+**Box 1, `hp1k-5090-1` (selection; token `qwen3hp1k`).**
+- Steps: the cu130 box-side shakedown, the early base check after the first K run, the twelve K runs, the K evaluator pass (with the
+  one-redraw rule), and the mechanical selection.
+- It carries out `eval_K.json`, `select.json` and its `bulk_manifest.json` (Amendment 1), and prints their sha256s to its summary.
+  Box 2's execution request pins all three.
+- About 4.0 h of estimated work.
+
+**Box 2, `hp1p-5090-1` (confirmation; token `qwen3hp1p`).**
+- Box 2 REFUSES unless the staged `eval_K.json`, `select.json` and box 1's `bulk_manifest.json` match the pinned sha256s
+  (`TC1_HP1_K_EVAL_SHA256`, `TC1_HP1_K_SELECT_SHA256`, `TC1_HP1_K_MANIFEST_SHA256`), and unless the selection re-derives from the
+  staged `eval_K.json` (checked against box 1's manifest).
+- Then come its OWN box-side shakedown, an early base check on its first E run (which exports its e4b base), the P block, and the
+  P evaluator pass (with the one-redraw rule). The verdict is read over box 1's `eval_K.json` plus box 2's `eval_P.json`. The
+  reducer checks every scored adapter and base against the union of both boxes' manifests.
+- About 4.5 h of estimated work.
+
+**Each box.**
+- The same card class (one RTX 5090).
+- The receipts record the driver and machine id.
+- One registered redraw id each (`-2`), and the two-strikes rule per box.
+
+**The limitation, stated.** K and P run on different boxes of the same class.
+- Every verdict pairs only within box 2: E vs C* on the same box, at the same seeds.
+- A box-to-box shift can move σ_seed only through the pooled K groups, never a paired difference.
+- σ_seed is REPORTED per block (per box) beside the pooled value the verdict uses (`sigma_seed_by_block`).
+
+**Spend.** Each box's worst at its 6 h guard is 6 × $0.85 + about 72 GB × $0.011 ≈ $5.89 on Vast, or 6 × $1.10 = $6.60 on RunPod.
+Both boxes together come to $11.78 / $13.20, under the owner's $15. The disk is about 140 GB needed on box 1 (vast_disk_gb 250)
+and about 175 GB on box 2 (vast_disk_gb 300).

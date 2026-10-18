@@ -476,3 +476,24 @@ def test_a_reading_whose_manifest_does_not_pin_what_was_scored_is_void(tmp_path,
     assert hr.main(["select", kf, "--out", str(out), *mf]) == hr.EXIT_INCOMPLETE
     res = json.loads(out.read_text())
     assert res["verdict"] == "VOID" and res["manifest_problems"] and "HP1_SELECTED" not in capsys.readouterr().out
+
+
+def test_sigma_is_reported_per_block_beside_the_pooled_value(tmp_path, capsys):
+    """Amendment 1: sigma_seed per block (per box on the split path) is REPORTED beside the pooled value the verdict uses."""
+    code, res, md, _ = _verdict(tmp_path, _k_arms(K10_BEST), _p_arms("k10", (0.0001, -0.0001, 0.0), unsloth_off=0.005), capsys)
+    bb = res["p"]["sigma_seed_by_block"]
+    assert set(bb) == {"K", "P"} and bb["K"]["df"] == 8 and bb["P"]["df"] > 0
+    assert bb["K"]["sigma"] is not None and bb["P"]["sigma"] is not None and "sigma_seed by block" in md
+
+
+
+def test_manifests_from_two_boxes_are_checked_as_their_union(tmp_path, capsys):
+    """Amendment 2: box 2's verdict reads box 1's eval_K.json, whose adapters only box 1's manifest lists -- the reducer takes both
+    manifests and checks the union; either one alone does not pin everything."""
+    kf, pf = _write(tmp_path, "k.json", _k_arms(K10_BEST)), _write(tmp_path, "p.json", _p_arms("k10", (0.0001, -0.0001, 0.0)))
+    (tmp_path / "b1").mkdir()
+    (tmp_path / "b2").mkdir()
+    m1, m2 = _mf(tmp_path / "b1", kf), _mf(tmp_path / "b2", pf)
+    out, md = str(tmp_path / "v.json"), str(tmp_path / "v.md")
+    assert hr.main(["verdict", kf, pf, "--out", out, "--md", md, *m2]) == hr.EXIT_INCOMPLETE      # box 2's alone: K unpinned
+    assert hr.main(["verdict", kf, pf, "--out", out, "--md", md, *m1, *m2]) == hr.EXIT_OK
