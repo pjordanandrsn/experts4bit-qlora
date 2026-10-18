@@ -10,7 +10,8 @@ Every load runs in its own process (``--role``), so a hit reads only what the ca
   2. training: with enable_fast_train(dgrad=True) and gradient checkpointing, layer_major_step on fixed micro-batches gives
      bit-identical per-micro-batch losses and the same stagings fresh and on a hit;
   3. host memory, per pin mode (default, E4B_OFFLOAD_PIN_SLAB=1, E4B_OFFLOAD_ARENA=1): on a hit the homes' byte count and
-     is_pinned() per home equal a fresh load's, and RssShmem + RssAnon after the load is within 64 MiB of it;
+     is_pinned() per home equal a fresh load's, and RssShmem + RssAnon after the load is at most 64 MiB above it
+     (a hit reads no bf16 rows, so it may sit below);
   4. the hit's log says hit, and the miss's says it wrote;
   5. refusals and fallbacks: a flipped byte refuses (QuantCacheCorrupt); a bitsandbytes upgrade (a key change) is a miss;
      a manifest recorded on another GPU re-quantizes one layer, compares, and the hit stands; a forced mismatch there is a
@@ -129,7 +130,7 @@ def main(argv=None):
         dr = (h["rss"].get("RssAnon", 0) + h["rss"].get("RssShmem", 0)) - (f["rss"].get("RssAnon", 0) + f["rss"].get("RssShmem", 0)) if good else None
         rep[f"rss_delta_{mode}"] = dr
         checks[f"3_memory_{mode}"] = good and h["home_bytes"] == f["home_bytes"] and h["pinned"] == f["pinned"] and \
-            h["pin_mode"] == f["pin_mode"] and abs(dr) <= 64 << 20 and h["layers"] == f["layers"]
+            h["pin_mode"] == f["pin_mode"] and dr <= 64 << 20 and h["layers"] == f["layers"]
     # 5. refusals and fallbacks (each in its own copy of the cache)
     key = [d for d in os.listdir(root) if not d.startswith(".tmp-")][0]
 
