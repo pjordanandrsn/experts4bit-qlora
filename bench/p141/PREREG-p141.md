@@ -1,7 +1,10 @@
-# P139 — does K33's bandwidth GEMV, at plans chosen for Mixtral's expert shapes, decode the default `serve_paged` server faster at one request on Mixtral-8x7B on an RTX 5090?
+# P141 — does K33's bandwidth GEMV, at plans chosen for Mixtral's expert shapes, decode the default `serve_paged` server faster at one request on Mixtral-8x7B on an RTX 5090?
 
-**Registered 2026-10-18, before any data.** Harness: `p139_run.sh` (box), `p139_drive.sh` (controller), `p139_select.py`
-(phase 1), `p139_box.py` and `p139_reduce.py`, plus P133's dry fixture `p133_tiny.py`, all at `staged.sha256`. Derived
+**Registered 2026-10-18, before any data.** The lane number is free as a lane: TC1 amendment 55 (#1288, #1289) used
+"P141–P143" as its own prediction ids, the namespace overlap P137 and P140 already note. This lane is unrelated to those
+predictions. It was first opened as P139, a number already assigned to the Gemma-4 served census, and renumbered before
+any review. Harness: `p141_run.sh` (box), `p141_drive.sh` (controller), `p141_select.py`
+(phase 1), `p141_box.py` and `p141_reduce.py`, plus P133's dry fixture `p133_tiny.py`, all at `staged.sha256`. Derived
 from P134 (`bench/p134/PREREG-p134.md`), changed only where this page says so.
 
 ## Why
@@ -43,7 +46,7 @@ refused if different:
 
 **Card:** RTX 5090 class, compute capability 12.0 and ≥ 160 SMs, checked before any install (rc 15).
 
-## Phase 1: the plan for each shape (`p139_select.py`), on the card, before the fetch
+## Phase 1: the plan for each shape (`p141_select.py`), on the card, before the fetch
 
 No model is loaded. Per projection, 32 layers of seeded synthetic NF4 stores at the served shape, each layer its own
 bytes, called in the served one-request form above, under B1's own environment (`GNF4_GEMV_BW=1`, decode and PDL at
@@ -76,7 +79,7 @@ is VOID with no rerun (rc 31).
 each**, 512 prompt tokens and 128 positions, the server built eager at 16 x 768. The bars are P110's: bias_ON ≤ B_floor
 + 0.01 and spread_ON ≤ 2 × max(S_floor, 0.005) on both texts, and |K8 Δppl| ≤ 0.05 on wikitext.
 
-## The rule (`p139_reduce.py --family mixtral`, self-tested on 41 cases)
+## The rule (`p141_reduce.py --family mixtral`, self-tested on 41 cases)
 
 P134's rungs, first that applies:
 1. **FUNCTION_FAIL** if phase 1 found no contract-exact plan at a shape.
@@ -114,7 +117,7 @@ P134's rungs, first that applies:
   unmeasured parts above 160 SMs (P116's precedent).
 - **SLOWER:** the shapes stay out of auto.
 - **QUALITY_FAIL / FUNCTION_FAIL:** they stay out; the defect is examined first.
-- **NOISY or VOID:** as the maintainer rules (`p139-5090-2` is a spare only for a refusal before create or a host fault).
+- **NOISY or VOID:** as the maintainer rules (`p141-5090-2` is a spare only for a refusal before create or a host fault).
 
 ## What this cannot say
 
@@ -123,16 +126,17 @@ shapes differ).
 
 ## The premise on the card
 
-Before anything is fetched (rc 25), read from junit against `p139_box.PREMISE` (P134's, at the same bytes), on the 5090:
+Before anything is fetched (rc 25), read from junit against `p141_box.PREMISE` (P134's, at the same bytes), on the 5090:
 - the kernel contract (grouped-nf4-gemm's `test_nf4_gemv_bw.py` at the pin): **35 passed, none skipped**;
 - the served route (`test_decode_graph_buckets.py`, `test_kv_step_select.py`, `test_gemv_bw_served_gpu.py`): **18 passed, none skipped**.
 
 ## The dry run
 
-`P139_DRY=1` (run ids `p139-dry-<n>`, $0): the driver and the whole box on one tiny family (`tiny`, built by
+`P141_DRY=1` (run ids `p141-dry-<n>`, $0): the driver and the whole box on one tiny family (`tiny`, built by
 `p133_tiny.py`), phase 1 at its shapes, on any CUDA card. The premise there reads P134's sm_86 lists. Never a reading.
 
-**Evidence (2026-10-18, an RTX A2000, sm_86, launch commit `007e955f`):**
+**Evidence (2026-10-18, an RTX A2000, sm_86, launch commit `007e955f`; run under the lane's first number, so its ids and
+paths read p139, and the harness differed from this one only by the lane's name):**
 - `p139-dry-1` stopped at the tripwire (rc 9): the dry box's scratch venv kept another e4b commit, which pip did not
   replace. That is a property of the reused dry box; a rented box starts without e4b. The venv's e4b was removed.
 - `p139-dry-2` ran the driver, staging, every self-test and both premise suites (sm_86's lists: 33 passed with the two
@@ -154,12 +158,12 @@ quality phase on Mixtral, and the card and configuration refusal.
   including 250 GB of disk (the box's floor is 220 GB), host RAM at the launcher's floor, download ≤ $0.011/GB, and
   inet_down ≥ 800 Mbps (the 93 GB fetch). The pin is the cheapest passing offer not pinned by another lane, stable in 6
   machine-filtered reads, held through the re-read rule, and posted on the bus first.
-- **Run ids:** `p139-5090-1`, the reading; `p139-5090-2`, a spare for a refusal before create or a host fault only. The
+- **Run ids:** `p141-5090-1`, the reading; `p141-5090-2`, a spare for a refusal before create or a host fault only. The
   driver refuses any other. A box-started failure is a strike.
 - **Budget:** guard 2.0 h; worst = 2.0 h × $0.85 + 100 GB × $0.011 = **$2.80**. Expected about 1.3 h, about $1.15.
 - **STOP-1:** refusals before any install: CUDA unusable 18, dud box 10, torch not the pin 28, card or configuration 15,
   disk 13, host RAM 16; premise rc 25.
-- **STOP-2:** every time-left check, plus 600 s, fits inside the guard (`tests/test_p139_staged_pin.py`): phase 1 900 s,
+- **STOP-2:** every time-left check, plus 600 s, fits inside the guard (`tests/test_p141_staged_pin.py`): phase 1 900 s,
   fetch 3,000, bake 1,500, fit 600, each arm 600, quality OFF 2,400 and ON 900.
 - **STOP-3:** phase 1 failing to run is rc 23; a phase-1 FUNCTION_FAIL ends the box before the fetch with its verdict.
 - **STOP-4:** the driver refuses an undeclared run id, a dirty checkout, or a staged file that differs from

@@ -1,4 +1,4 @@
-"""P139's numerics premise ($0): K33 (``_gemv_nf4_bw``) at Mixtral-8x7B's expert shapes, every plan in K33's list.
+"""P141's numerics premise ($0): K33 (``_gemv_nf4_bw``) at Mixtral-8x7B's expert shapes, every plan in K33's list.
 
 Shapes: gate_up (28672, 4096) and down (4096, 14336), 8 experts, 2 routed rows (Mixtral's top 2 at one request). At
 each plan, K33's own contract (``kernel/k33_bench.py``): ``bw_prmt32`` bitwise ``bw_tree``, and each within the fp32

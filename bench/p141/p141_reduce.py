@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""p139_reduce.py -- lane P139's registered rule (bench/p139/PREREG-p139.md), derived from bench/p134/p134_reduce.py by
+"""p141_reduce.py -- lane P141's registered rule (bench/p141/PREREG-p141.md), derived from bench/p134/p134_reduce.py by
 named substitutions: one family, Mixtral-8x7B (``--family mixtral``; the dry run's ``tiny``); no proof mode; every record
-at P136's server size (16 slots x 768 tokens); and phase 1's selection (``select.json``, ``p139_select.py``) read and
+at P136's server size (16 slots x 768 tokens); and phase 1's selection (``select.json``, ``p141_select.py``) read and
 checked: its own rule re-derived from its own record, and B1's ``GNF4_GEMV_BW_PLAN`` exactly its plan string. The
 rungs, bars, integrity checks and the dry mode are P134's.
 
-Records (``p139_box.py``), family F: ``select.json`` (phase 1); ``fit_F.json``; ``arm_{B0a,B1a,B1b,B0b}_F.json`` (speed,
+Records (``p141_box.py``), family F: ``select.json`` (phase 1); ``fit_F.json``; ``arm_{B0a,B1a,B1b,B0b}_F.json`` (speed,
 W1 and the control) and ``quality_off_F.json`` / ``quality_on_F.json`` (P110's teacher-forced instrument at one window
 per pass, T == 1). B0 = the shipped default (``GNF4_GEMV_BW`` unset: the scalar GEMV at Mixtral's shapes); B1 =
 ``GNF4_GEMV_BW=1`` at phase 1's plans.
@@ -29,8 +29,8 @@ The rule, first rung that applies:
                  < 0.99.
   LICENSED       otherwise: Mixtral's two (N, K) shapes at the selected plans, on parts with >= 160 SMs.
 
-    python p139_reduce.py --dir RUN_DIR --family mixtral --out verdict_mixtral.json [--e4b-sha SHA] [--dry]
-    python p139_reduce.py --self-test
+    python p141_reduce.py --dir RUN_DIR --family mixtral --out verdict_mixtral.json [--e4b-sha SHA] [--dry]
+    python p141_reduce.py --self-test
 """
 from __future__ import annotations
 
@@ -309,7 +309,7 @@ def fit_faults(fit: dict | None, dry: bool) -> list:
 
 def reduce(arms: dict, off: dict | None, on: dict | None, e4b_sha: str, *, family: str, fit=None, sel=None,
            dry=False) -> dict:
-    out = {"lane": "P139", "family": family, "model": _model_of(family, dry), "dry": dry,
+    out = {"lane": "P141", "family": family, "model": _model_of(family, dry), "dry": dry,
            "verdict": None, "reasons": [],
            "bars": {"self_pair": [SELF_LO, SELF_HI], "self_pair_w1": [SELF_W1_LO, SELF_W1_HI], "gain_min_w1": GAIN_MIN_W1,
                     "gain_min_control": GAIN_MIN_WCTL, "tol": TOL, "spread_x": SPREAD_X, "spread_min": SPREAD_MIN,
@@ -453,7 +453,7 @@ def _fake_arm(tag, rate_c, rate1, toks, *, model=MIXTRAL, e4b=E, graphs=None, di
              "GNF4_GEMV_BW_DECODE": None} if arm == "B1" else {k: None for k in ("GNF4_GEMV_BW", "GNF4_GEMV_BW_PLAN",
                                                                                  "GNF4_GEMV_BW_DECODE")}
     return {"arm": arm, "tag": tag, "status": "ok", "e4b_sha": e4b, "gnf4_sha": GNF4_SHA, "dry": dry,
-            "model": ("/root/p139/fam/tiny/" + TINY) if model == TINY else model, "revision": REVS[model],
+            "model": ("/root/p141/fam/tiny/" + TINY) if model == TINY else model, "revision": REVS[model],
             "graph_status": graphs or {str(b): "graph" for b in bk}, "buckets": bk, "max_seqs": size[0],
             "max_tokens_per_seq": size[1], "control": f"W{width}" if width >= 2 else None,
             "knobs": knobs, "selection_env": sel.get("env"),
@@ -494,7 +494,7 @@ def _fake_quality(phase, *, model=MIXTRAL, mode="reading", bias=None, mutant=0.4
     knobs = ({"GNF4_GEMV_BW": "1", "GNF4_GEMV_BW_PLAN": plan if plan is not None else sel.get("env")}
              if phase == "on" else {"GNF4_GEMV_BW": None, "GNF4_GEMV_BW_PLAN": None})
     return {"mode": "quality", "arm": "B0" if phase == "off" else "B1", "status": "ok", "dry": dry,
-            "model": ("/root/p139/fam/tiny/" + TINY) if model == TINY else model, "revision": REVS[model],
+            "model": ("/root/p141/fam/tiny/" + TINY) if model == TINY else model, "revision": REVS[model],
             "e4b_sha": E, "gnf4_sha": GNF4_SHA, "group": group, "prompt": 512, "cont": C, "buckets": bk,
             "chunk": 512, "floor_chunk": 256, "layers": L, "windows_sha256": {t: t for t in TEXTS},
             "fusions": {"fuse_qkv_n": 0}, "rep_identical": {t: rep_identical for t in TEXTS}, "per_window": per,
@@ -597,7 +597,7 @@ def self_test() -> int:
          == "VOID"),
     ]
     bad = [n for n, ok in cases if not ok]
-    print(f"p139_reduce self-test {'OK' if not bad else 'FAILED ' + str(bad)} ({len(cases)} cases)")
+    print(f"p141_reduce self-test {'OK' if not bad else 'FAILED ' + str(bad)} ({len(cases)} cases)")
     return 0 if not bad else 1
 
 
@@ -631,7 +631,7 @@ def main(argv=None) -> int:
     v = reduce(arms, load(f"quality_off_{f}.json"), load(f"quality_on_{f}.json"), a.e4b_sha, family=f,
                fit=load(f"fit_{f}.json"), sel=load("select.json"), dry=a.dry)
     json.dump(v, open(a.out, "w"), indent=1, default=str)
-    print(f"P139_VERDICT {f}{' (DRY: never a reading)' if a.dry else ''} {v['verdict']} "
+    print(f"P141_VERDICT {f}{' (DRY: never a reading)' if a.dry else ''} {v['verdict']} "
           f"{json.dumps(v['reasons'], default=str)[:1500]}")
     return 0
 

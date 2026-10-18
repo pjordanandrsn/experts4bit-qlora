@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""p139_select.py -- lane P139's phase 1 (bench/p139/PREREG-p139.md): choose K33's plan for each of Mixtral-8x7B's two
+"""p141_select.py -- lane P141's phase 1 (bench/p141/PREREG-p141.md): choose K33's plan for each of Mixtral-8x7B's two
 expert shapes on THIS card, by a rule registered before any data, then hand the served read (phase 2) its
 ``GNF4_GEMV_BW_PLAN``. No model is loaded: per layer, a seeded synthetic NF4 store at the served shape.
 
-The calls are the served one-request ones, as P139's call-site trace recorded them on e4b's decode:
+The calls are the served one-request ones, as P141's call-site trace recorded them on e4b's decode:
   * gate_up (28672, 4096): ONE token row read for both routed slots (``gather_div=2``), two experts;
   * down (4096, 14336): two rows, one per routed slot, two experts.
 Each projection runs over all 32 layers (each its own bytes, so nothing stays in L2: K24's lesson), under B1's own
@@ -20,9 +20,9 @@ environment (``GNF4_GEMV_BW=1``; decode and PDL at their defaults).
 Reported, never ruled and never quoted as the gain (picking the best of twelve on the same samples biases it upward):
 each plan's median, the incumbent's median (``GNF4_GEMV_BW`` unset: the scalar GEMV at these shapes), and the copy floor.
 
-    python p139_select.py --family mixtral --out select.json
-    python p139_select.py --family tiny --out select.json        (the dry run's fixture shapes)
-    python p139_select.py --self-test
+    python p141_select.py --family mixtral --out select.json
+    python p141_select.py --family tiny --out select.json        (the dry run's fixture shapes)
+    python p141_select.py --self-test
 """
 from __future__ import annotations
 
@@ -207,7 +207,7 @@ def main(family: str, out_path: str) -> int:
         choice = select(med, selectable)
         if choice is not None:
             rec["selected"][proj] = list(choice)
-        print(f"P139_SELECT {proj} {N}x{K} selectable {len(selectable)}/{len(PLANS)} selected {choice} "
+        print(f"P141_SELECT {proj} {N}x{K} selectable {len(selectable)}/{len(PLANS)} selected {choice} "
               f"(reported: {med.get(choice, float('nan')):.4f} ms vs incumbent {rec['incumbent_ms'][proj]:.4f} ms, "
               f"floor {rec['floor_ms'][proj]:.4f} ms)", flush=True)
         graphs = allg = inc = stores = None                              # release this projection's stacks
@@ -220,7 +220,7 @@ def main(family: str, out_path: str) -> int:
         rec["env"] = plan_env({p: tuple(rec["selected"][p]) for p in PROJ}, family)
     rec["wall_s"] = round(time.time() - t0, 1)
     json.dump(rec, open(out_path, "w"), indent=1)
-    print(f"P139_SELECTED status={rec['status']} env={rec.get('env')}", flush=True)
+    print(f"P141_SELECTED status={rec['status']} env={rec.get('env')}", flush=True)
     return 0
 
 
@@ -245,7 +245,7 @@ def self_test() -> int:
             ok.append(False)
         except ValueError:
             ok.append(True)
-    print(f"p139_select self-test {'OK' if all(ok) else 'FAILED'} ({sum(ok)}/{len(ok)} cases)")
+    print(f"p141_select self-test {'OK' if all(ok) else 'FAILED'} ({sum(ok)}/{len(ok)} cases)")
     return 0 if all(ok) else 1
 
 

@@ -1,6 +1,6 @@
-"""The p139 lane's staged-file pin must match the repo (the e4b#642 check, mirrored for P139 from test_p134_staged_pin.py).
+"""The p141 lane's staged-file pin must match the repo (the e4b#642 check, mirrored for P141 from test_p134_staged_pin.py).
 
-`bench/p139/p139_drive.sh` refuses to run when a staged file's sha256 differs from `bench/p139/staged.sha256`; this test
+`bench/p141/p141_drive.sh` refuses to run when a staged file's sha256 differs from `bench/p141/staged.sha256`; this test
 runs the same comparison in CI. It also runs the box's, the reducer's and phase 1's self-tests and pins the lane's shape:
 - P133's dry fixture and P116's borrowed pieces at P133's (and P134's) registered bytes;
 - the pins (e4b = the launch commit, grouped-nf4-gemm 0.46.1), the family and its checkpoint, the declared run ids;
@@ -17,13 +17,13 @@ import subprocess
 import sys
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
-LANE = REPO / "bench" / "p139"
+LANE = REPO / "bench" / "p141"
 PIN = LANE / "staged.sha256"
 SOURCES = {
-    "p139_run.sh": LANE / "p139_run.sh",
-    "p139_box.py": LANE / "p139_box.py",
-    "p139_reduce.py": LANE / "p139_reduce.py",
-    "p139_select.py": LANE / "p139_select.py",
+    "p141_run.sh": LANE / "p141_run.sh",
+    "p141_box.py": LANE / "p141_box.py",
+    "p141_reduce.py": LANE / "p141_reduce.py",
+    "p141_select.py": LANE / "p141_select.py",
     "p133_tiny.py": REPO / "bench" / "p133" / "p133_tiny.py",
     "p115_reduce.py": REPO / "bench" / "p115" / "p115_reduce.py",
     "p115_quality.py": REPO / "bench" / "p115" / "p115_quality.py",
@@ -37,12 +37,12 @@ SOURCES = {
     "test_kv_step_select.py": REPO / "tests" / "test_kv_step_select.py",
     "test_gemv_bw_served_gpu.py": REPO / "tests" / "test_gemv_bw_served_gpu.py",
 }
-RUN = (LANE / "p139_run.sh").read_text()
-DRIVE = (LANE / "p139_drive.sh").read_text()
-REDUCE = (LANE / "p139_reduce.py").read_text()
-BOX = (LANE / "p139_box.py").read_text()
-SELECT = (LANE / "p139_select.py").read_text()
-PREREG = (LANE / "PREREG-p139.md").read_text(encoding="utf-8")
+RUN = (LANE / "p141_run.sh").read_text()
+DRIVE = (LANE / "p141_drive.sh").read_text()
+REDUCE = (LANE / "p141_reduce.py").read_text()
+BOX = (LANE / "p141_box.py").read_text()
+SELECT = (LANE / "p141_select.py").read_text()
+PREREG = (LANE / "PREREG-p141.md").read_text(encoding="utf-8")
 GNF4_PIN = "70bc03cb7a61b03c4e801e7423c58c103a1b6d7d"
 MIX_REV = "eba92302a2861cdc0098cc54bc9f17cb2c47eb61"
 K33_PLANS = [(16, 256, 4, 1), (16, 512, 4, 1), (16, 1024, 4, 1), (16, 256, 8, 1), (16, 512, 8, 1),
@@ -68,8 +68,8 @@ def _drive(tmp_path, run_id, **extra):
     env = {"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", "HOME": str(tmp_path), "E4B_RENT_SSH_HOST": "h",
            "E4B_RENT_SSH_PORT": "1", "E4B_RENT_SSH_OPTS": "-o UserKnownHostsFile=/run/known_hosts",
            "E4B_RENT_RUN_DIR": str(tmp_path), "E4B_RENT_RUN_ID": run_id, "E4B_RENT_DEADLINE_EPOCH": "1",
-           "E4B_RENT_INSTANCE_ID": "0", "P139_DRIVE_DRYRUN": "1", "E4B_SHA": "a" * 40, **extra}
-    return subprocess.run(["bash", str(LANE / "p139_drive.sh")], capture_output=True, text=True, env=env)
+           "E4B_RENT_INSTANCE_ID": "0", "P141_DRIVE_DRYRUN": "1", "E4B_SHA": "a" * 40, **extra}
+    return subprocess.run(["bash", str(LANE / "p141_drive.sh")], capture_output=True, text=True, env=env)
 
 
 def _load(name, *dirs):
@@ -84,7 +84,7 @@ def _load(name, *dirs):
 def test_staged_files_match_their_pins():
     for want, name in _entries():
         got = hashlib.sha256(SOURCES[name].read_bytes()).hexdigest()
-        assert got == want, f"{name} changed without re-pinning ({got[:12]} vs {want[:12]}); the next p139 launch refuses ON A RENTED BOX"
+        assert got == want, f"{name} changed without re-pinning ({got[:12]} vs {want[:12]}); the next p141 launch refuses ON A RENTED BOX"
 
 
 def test_borrowed_files_run_at_p133s_and_p134s_bytes():
@@ -92,7 +92,7 @@ def test_borrowed_files_run_at_p133s_and_p134s_bytes():
     for lane in ("p133", "p134"):
         other = dict((n, w) for w, n in _entries(REPO / "bench" / lane / "staged.sha256"))
         for name in SOURCES:
-            if not name.startswith("p139_"):
+            if not name.startswith("p141_"):
                 assert mine[name] == other[name], f"{name} is not at {lane}'s bytes"
 
 
@@ -102,16 +102,16 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
         assert name in DRIVE, name
     staged = RUN[RUN.index("# ---- staged pieces"):RUN.index("# ---- refusals")]
     for name in list(SOURCES) + ["staged.sha256"]:
-        if name != "p139_run.sh":
+        if name != "p141_run.sh":
             assert name in staged, name
     assert "--include 'work/' --include 'work/*/' --include 'work/*/bake.json' --exclude 'work/*/*'" in DRIVE
     assert "--exclude 'gnf4src' --exclude 'fam'" in DRIVE
 
 
 def test_the_self_tests_pass():
-    for script, line in (("p139_reduce.py", "p139_reduce self-test OK (41 cases)"),
-                         ("p139_box.py", "p139_box self-test OK (33/33 cases)"),
-                         ("p139_select.py", "p139_select self-test OK (17/17 cases)")):
+    for script, line in (("p141_reduce.py", "p141_reduce self-test OK (41 cases)"),
+                         ("p141_box.py", "p141_box self-test OK (33/33 cases)"),
+                         ("p141_select.py", "p141_select self-test OK (17/17 cases)")):
         out = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True,
                              env=_env())
         assert out.returncode == 0 and line in out.stdout, out.stdout + out.stderr
@@ -139,28 +139,28 @@ def test_the_pins_are_exact_and_agree():
 
 
 def test_the_declared_run_ids_and_nothing_else(tmp_path):
-    ok = [("p139-5090-1", {}), ("p139-5090-2", {}), ("p139-dry-1", {"P139_DRY": "1", "P139_BOX_EXEC": "/bin/false"})]
+    ok = [("p141-5090-1", {}), ("p141-5090-2", {}), ("p141-dry-1", {"P141_DRY": "1", "P141_BOX_EXEC": "/bin/false"})]
     for run_id, extra in ok:
         out = _drive(tmp_path, run_id, **extra)
         assert out.returncode == 0 and out.stdout.startswith("DRYRUN stage -> "), (run_id, out.stdout + out.stderr)
         assert "E4B_SHA=" + "a" * 40 in out.stdout, out.stdout
-    refused = [("p139-5090-3", {}), ("p139-5090-prove-1", {}), ("p139-5090-1", {"P139_DRY": "1", "P139_BOX_EXEC": "/bin/false"}),
-               ("p139-dry-1", {}), ("p134-5090-1", {}), ("p139-5090-1", {"E4B_SHA": "xyz"}),
-               ("p139-5090-1", {"E4B_SHA": "a" * 39})]
+    refused = [("p141-5090-3", {}), ("p141-5090-prove-1", {}), ("p141-5090-1", {"P141_DRY": "1", "P141_BOX_EXEC": "/bin/false"}),
+               ("p141-dry-1", {}), ("p134-5090-1", {}), ("p141-5090-1", {"E4B_SHA": "xyz"}),
+               ("p141-5090-1", {"E4B_SHA": "a" * 39})]
     for run_id, extra in refused:
         out = _drive(tmp_path, run_id, **extra)
         assert out.returncode == 78 and "refusing" in out.stdout, (run_id, extra, out.stdout + out.stderr)
-    assert "p139-5090-1" in PREREG and "p139-5090-2" in PREREG and "prove" not in DRIVE.lower().replace("approves", "")
+    assert "p141-5090-1" in PREREG and "p141-5090-2" in PREREG and "prove" not in DRIVE.lower().replace("approves", "")
 
 
 def test_phase_one_is_k33s_rule_at_mixtrals_served_calls():
-    s = _load("p139_select")
+    s = _load("p141_select")
     assert s.PLANS == K33_PLANS and (s.WARM, s.SELECT_ROUNDS) == (20, 40) and (s.TOL_X, s.TOL_ABS) == (1.05, 2.0 ** -9)
     assert s.FAMILIES["mixtral"] == {"layers": 32, "top_k": 2, "gate_up": (28672, 4096), "down": (4096, 14336)}
-    assert s.GATHER == {"gate_up": True, "down": False}, "the served W1 forms P139's call-site trace recorded"
+    assert s.GATHER == {"gate_up": True, "down": False}, "the served W1 forms P141's call-site trace recorded"
     assert s.B1_ENV["GNF4_GEMV_BW"] == "1" and all(s.B1_ENV[k] is None for k in ("GNF4_GEMV_BW_DECODE", "GNF4_PDL"))
     assert "reported_never_ruled" in SELECT and '"plan_ms", "incumbent_ms", "floor_ms"' in SELECT
-    r = _load("p139_reduce", "p115", "p110")
+    r = _load("p141_reduce", "p115", "p110")
     sel = r._fake_select()
     assert r.selection_rule(sel) == {"gate_up": "16,1024,4,1", "down": "16,256,4,1"}
     assert s.select({p: 1.0 for p in K33_PLANS}, K33_PLANS) == K33_PLANS[0], "ties go to the earlier plan"
@@ -175,7 +175,7 @@ def test_the_rule_is_the_registered_rule():
     assert 'FLOORS = ("chunk",)' in REDUCE and 'OFF_ARMS = ("R", "rep", "chunk", "mutant_scale")' in REDUCE
     assert "TOL, SPREAD_X, SPREAD_MIN, K8_BUDGET, K8_GATED = pb.TOL, pb.SPREAD_X, pb.SPREAD_MIN, pb.K8_BUDGET, pb.K8_GATED" in REDUCE
     assert "INSTRUMENT_BUCKETS = _instrument_buckets()" in REDUCE
-    r = _load("p139_reduce", "p115", "p110")
+    r = _load("p141_reduce", "p115", "p110")
     assert r.INSTRUMENT_BUCKETS == (1, 2, 4, 8, 16) and r.SERVER_SIZE == (16, 768)
     assert r.INCUMBENT == {r.MIXTRAL: "scalar", r.TINY: "scalar"} and r.LAYERS[r.MIXTRAL] == 32
     assert r.WINDOWS == {"reading": 24, "dry": 4}
@@ -185,7 +185,7 @@ def test_the_rule_is_the_registered_rule():
 
 
 def test_the_premise_is_the_5090s_exact_counts():
-    b = _load("p139_box", "p109")
+    b = _load("p141_box", "p109")
     assert b.PREMISE["kernel"] == (35, {}) and b.PREMISE["served"] == (18, {})
     assert b.PREMISE["kernel_dry"][0] == 33 and set(b.PREMISE["kernel_dry"][1].values()) == {b.PDL}
     assert b.PREMISE["served_dry"][0] == 13 and set(b.PREMISE["served_dry"][1].values()) == {b.FP8}
@@ -198,14 +198,14 @@ def test_the_order_puts_refusals_premise_and_phase_one_before_the_fetch():
     order = ["CUDA_PROBE=$(python -", "REFUSED: the image's torch", "REFUSED: card is", "the lane registers sm_120",
              "REFUSED: ${FREE_GB", "REFUSED: ${RAM_GB", 'say "install e4b @',
              "git clone -q https://github.com/pjordanandrsn/grouped-nf4-gemm.git $W/gnf4src", "python - <<'PYT'",
-             "p139_reduce.py --self-test", "p139_box.py --self-test", "p139_select.py --self-test",
+             "p141_reduce.py --self-test", "p141_box.py --self-test", "p141_select.py --self-test",
              "p115_quality.py --self-test", "python -m pytest test_nf4_gemv_bw.py", "--expect kernel", "--expect served",
-             'echo "premise ok"', 'can_run $NEED_SELECT "phase 1"', "python $W/p139_select.py --family $SELFAM",
-             "finish 23", 'if [ "$SEL_STATUS" != ok ]; then', "export P139_SELECT=$W/select.json",
+             'echo "premise ok"', 'can_run $NEED_SELECT "phase 1"', "python $W/p141_select.py --family $SELFAM",
+             "finish 23", 'if [ "$SEL_STATUS" != ok ]; then', "export P141_SELECT=$W/select.json",
              "for FAM in $FAMS; do\n  MODEL=$(model_of $FAM)", "python $W/p133_tiny.py", 'say "fetch $MODEL @ $REV"', "python $W/k8_bake.py",
-             "p139_box.py --prompts-only", "p139_box.py --mode fit", "FIT_VOID=1", "for TAG in B0a B1a B1b B0b; do",
+             "p141_box.py --prompts-only", "p141_box.py --mode fit", "FIT_VOID=1", "for TAG in B0a B1a B1b B0b; do",
              'if [ "$ARMS_OK" = 1 ]; then', "for PH in off on; do",
-             'say "reduce $FAM"; python $W/p139_reduce.py --dir $W --family $FAM', "finish 31"]
+             'say "reduce $FAM"; python $W/p141_reduce.py --dir $W --family $FAM', "finish 31"]
     at = [RUN.index(s) for s in order]
     assert at == sorted(at), list(zip(order, at))
     assert "STOP-5 ($FAM)" in RUN[RUN.index('if [ "$ARMS_OK" = 1 ]; then'):]
@@ -224,9 +224,9 @@ def test_the_subject_is_the_default_server_at_p136s_size_and_only_the_switch_dif
     assert "PLAN_ENV=$(python -c \"import json; print(json.load(open('$W/select.json'))['env'])\")" in RUN
     assert 'ARM=${TAG:0:2}; KN=""; [ "$ARM" = B1 ] && KN=$BW' in RUN
     assert 'NEED=$NEED_QOFF; ARM=B0; KN=""; [ "$PH" = on ] && { NEED=$NEED_QON; ARM=B1; KN=$BW; }' in RUN
-    assert "E4B_PAGED_GRAPHS=0 P139_ARM=$ARM" in RUN and "--windows $WINDOWS --cont $CONT --group 1" in RUN
+    assert "E4B_PAGED_GRAPHS=0 P141_ARM=$ARM" in RUN and "--windows $WINDOWS --cont $CONT --group 1" in RUN
     assert "ignore_patterns=['original/*', 'metal/*', 'consolidated*']" in RUN
-    b = _load("p139_box", "p109")
+    b = _load("p141_box", "p109")
     assert b.SERVER_SIZE == (16, 768) and "_size_ok(cfg)" in BOX
     assert 'if not dry() and (not cfg.graphs or cfg.placement != "all-vram"):' in BOX
     assert 'if cfg.graphs or cfg.placement != "all-vram":' in BOX and "if a.group != 1:" in BOX

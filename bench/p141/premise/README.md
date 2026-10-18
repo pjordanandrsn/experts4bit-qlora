@@ -1,4 +1,4 @@
-# P139's premise, read at $0 before the registration
+# P141's premise, read at $0 before the registration
 
 Both ran on an RTX A2000 (sm_86) with grouped-nf4-gemm 0.46.1, torch 2.8.0+cu128 and transformers 5.17.0.
 
@@ -11,5 +11,5 @@ Both ran on an RTX A2000 (sm_86) with grouped-nf4-gemm 0.46.1, torch 2.8.0+cu128
   plans. Every plan meets K33's contract: `bw_prmt32` bitwise `bw_tree`, both within the fp32 reference's tolerance. The
   served token-row form (`gather_div=2`) is bitwise its expanded call. No plan is bitwise the scalar route.
 
-The scripts are kept here as they ran. The box does not stage them; phase 1 (`p139_select.py`) re-checks the contract
+The scripts are kept here as they ran. The box does not stage them; phase 1 (`p141_select.py`) re-checks the contract
 on the 5090 before any timing.

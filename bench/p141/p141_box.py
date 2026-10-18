@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""p139_box.py -- lane P139 (bench/p139/PREREG-p139.md): ONE process per arm, fit check, quality phase or premise read.
-Does grouped-nf4-gemm K33's bandwidth-targeted NF4 decode GEMV (``GNF4_GEMV_BW=1``), at the plans P139's phase 1 selected
-on this card (``p139_select.py``), decode the default ``serve_paged`` server faster at one request on Mixtral-8x7B on an
+"""p141_box.py -- lane P141 (bench/p141/PREREG-p141.md): ONE process per arm, fit check, quality phase or premise read.
+Does grouped-nf4-gemm K33's bandwidth-targeted NF4 decode GEMV (``GNF4_GEMV_BW=1``), at the plans P141's phase 1 selected
+on this card (``p141_select.py``), decode the default ``serve_paged`` server faster at one request on Mixtral-8x7B on an
 RTX 5090, where ``GNF4_GEMV_BW=auto`` does not engage at Mixtral's expert shapes?
 
 Derived from ``bench/p134/p134_box.py`` by named substitutions:
-  * the switches are ``P139_ARM`` / ``P139_DRY`` and the log lines ``P139_*``;
-  * B1 = ``GNF4_GEMV_BW=1`` with ``GNF4_GEMV_BW_PLAN`` EXACTLY phase 1's selection (``P139_SELECT`` names its
+  * the switches are ``P141_ARM`` / ``P141_DRY`` and the log lines ``P141_*``;
+  * B1 = ``GNF4_GEMV_BW=1`` with ``GNF4_GEMV_BW_PLAN`` EXACTLY phase 1's selection (``P141_SELECT`` names its
     ``select.json``; an arm refuses a selection that is not ``ok`` or a plan string that differs from it);
   * every phase builds the default server at P136's Mixtral size, 16 slots x 768 tokens (``E4B_PAGED_MAX_SEQS=16``,
     ``E4B_PAGED_MAX_TOKENS_PER_SEQ=768``; the unset 4096-token default does not fit Mixtral's NF4 weights beside its KV
@@ -15,12 +15,12 @@ Everything else is P134's: B0 = ``GNF4_GEMV_BW`` unset (at Mixtral's shapes the 
 ``_BW_SHAPES`` or dot-pad's table), the premise table (the kernel contract and the served route are P134's bytes), the
 control at the box's own width, and the fit check before any arm.
 
-    python p139_box.py --mode fit --prompts prompts.json --out fit.json             (P139_ARM=B0)
-    python p139_box.py --mode speed --prompts prompts.json --out arm_B0a.json --tag B0a   (arm from P139_ARM)
-    python p139_box.py --mode quality --out quality_off.json --ref-dir work/ref --windows 24 (P139_ARM=B0 / B1)
-    python p139_box.py --prompts-only --model ID --revision SHA --out prompts.json
-    python p139_box.py --premise junit.xml --expect kernel|served          (P139_DRY=1: the sm_86 lists)
-    python p139_box.py --self-test
+    python p141_box.py --mode fit --prompts prompts.json --out fit.json             (P141_ARM=B0)
+    python p141_box.py --mode speed --prompts prompts.json --out arm_B0a.json --tag B0a   (arm from P141_ARM)
+    python p141_box.py --mode quality --out quality_off.json --ref-dir work/ref --windows 24 (P141_ARM=B0 / B1)
+    python p141_box.py --prompts-only --model ID --revision SHA --out prompts.json
+    python p141_box.py --premise junit.xml --expect kernel|served          (P141_DRY=1: the sm_86 lists)
+    python p141_box.py --self-test
 """
 import argparse
 import json
@@ -54,7 +54,7 @@ PREMISE = {"kernel": (35, {}),
 
 
 def dry() -> bool:
-    return os.environ.get("P139_DRY", "") == "1"
+    return os.environ.get("P141_DRY", "") == "1"
 
 
 SERVER_SIZE = (16, 768)           # (max_seqs, max_tokens_per_seq): P136's Mixtral server (and FAM Amendment 7's)
@@ -103,7 +103,7 @@ def premise_faults(xml_text: str, expect: str) -> list:
 def premise_main(a) -> int:
     expect = f"{a.expect}_dry" if dry() else a.expect
     bad = premise_faults(open(a.premise).read(), expect)
-    print(f"P139_PREMISE {expect} {'ok' if not bad else 'FAILED ' + json.dumps(bad)[:1500]}", flush=True)
+    print(f"P141_PREMISE {expect} {'ok' if not bad else 'FAILED ' + json.dumps(bad)[:1500]}", flush=True)
     return 0 if not bad else 1
 
 
@@ -119,10 +119,10 @@ def workloads(max_seqs: int) -> dict:
 
 
 def selection() -> dict:
-    """Phase 1's record (``P139_SELECT``): refused unless its status is ``ok`` and it carries the plan string."""
-    path = os.environ.get("P139_SELECT", "")
+    """Phase 1's record (``P141_SELECT``): refused unless its status is ``ok`` and it carries the plan string."""
+    path = os.environ.get("P141_SELECT", "")
     if not path or not os.path.exists(path):
-        raise SystemExit(f"REFUSED: P139_SELECT={path!r} names no phase-1 record")
+        raise SystemExit(f"REFUSED: P141_SELECT={path!r} names no phase-1 record")
     sel = json.load(open(path))
     if sel.get("status") != "ok" or not sel.get("env"):
         raise SystemExit(f"REFUSED: phase 1's status is {sel.get('status')!r}")
@@ -130,9 +130,9 @@ def selection() -> dict:
 
 
 def _arm():
-    arm = os.environ.get("P139_ARM", "")
+    arm = os.environ.get("P141_ARM", "")
     if arm not in ARMS:
-        raise SystemExit(f"REFUSED: P139_ARM={arm!r}, expected one of {ARMS}")
+        raise SystemExit(f"REFUSED: P141_ARM={arm!r}, expected one of {ARMS}")
     ok, why = arm_env_ok(arm, os.environ, selection()["env"])
     if not ok:
         raise SystemExit(f"REFUSED: arm {arm}: {why}")
@@ -200,7 +200,7 @@ def fit_main(a) -> int:
     except Exception as e:  # noqa: BLE001 -- not fitting is a finding, recorded with its reason
         rec["error"] = f"{type(e).__name__}: {e}"[:600]
     json.dump(rec, open(a.out, "w"), indent=1, default=str)
-    print("P139_FIT " + json.dumps({k: rec.get(k) for k in ("status", "max_seqs", "buckets", "graphs", "control_width",
+    print("P141_FIT " + json.dumps({k: rec.get(k) for k in ("status", "max_seqs", "buckets", "graphs", "control_width",
                                                              "w1_wall_s", "error")}, default=str), flush=True)
     return 0 if rec["status"] == "ok" else 31
 
@@ -240,7 +240,7 @@ def speed_main(a) -> int:
         s = p109_box.slope(walls[str(a.short)], walls[str(a.long)], b, a.short, a.long)
         rec["workloads"][wname] = {"batch": b, "walls": walls, "rep_digests": digests, "tokens": last,
                                    "dispatch": _delta(_counts(), cw), **s}
-        print(f"P139_W {arm}/{a.tag} {wname} B={b} decode_tok_s={s['decode_tok_s']} median={s['decode_tok_s_median']} "
+        print(f"P141_W {arm}/{a.tag} {wname} B={b} decode_tok_s={s['decode_tok_s']} median={s['decode_tok_s_median']} "
               f"walls={walls}", flush=True)
     gs = getattr(parts.runner, "graph_stats", None)
     rec["graph_stats"] = {str(k): dict(v) for k, v in gs.items()} if isinstance(gs, dict) else None
@@ -248,7 +248,7 @@ def speed_main(a) -> int:
     rec["mem_after_runs"] = p109_box._mem(torch)
     rec["nvidia_smi"] = p109_box._smi()
     json.dump(rec, open(a.out, "w"), indent=1, default=str)
-    print("P139_ARM " + json.dumps({"arm": arm, "tag": a.tag, "dispatch_build": rec["dispatch_build"],
+    print("P141_ARM " + json.dumps({"arm": arm, "tag": a.tag, "dispatch_build": rec["dispatch_build"],
                                     "load_s": rec["load_s"], "graph_status": rec["graph_status"],
                                     "control": rec["control"], "max_seqs": rec["max_seqs"],
                                     **{w: rec["workloads"][w]["decode_tok_s"] for w in rec["workloads"]}},
@@ -268,7 +268,7 @@ def quality_main(a) -> int:
         raise SystemExit(f"REFUSED: the quality read builds the default server eager at all-vram (graphs={cfg.graphs})")
     _size_ok(cfg)
     if a.group != 1:
-        raise SystemExit(f"REFUSED: --group {a.group}; P139 reads quality at one window per pass (T == 1)")
+        raise SystemExit(f"REFUSED: --group {a.group}; P141 reads quality at one window per pass (T == 1)")
     counters = q.KernelCounters().install()                          # BEFORE build_engine, as Phase B
     c0 = _counts()
     t0 = time.time()
@@ -294,7 +294,7 @@ def quality_main(a) -> int:
            "dispatch_measure": _delta(_counts(), c1), **rec, "gpu": torch.cuda.get_device_name(0),
            "max_mem_gb": round(torch.cuda.max_memory_allocated() / 2**30, 2), "status": "ok"}
     json.dump(rec, open(a.out, "w"), indent=1, default=str)
-    print(f"P139_QUALITY {arm} windows={rec['windows']} dispatch={rec['dispatch_measure']} load {load_s:.0f}s "
+    print(f"P141_QUALITY {arm} windows={rec['windows']} dispatch={rec['dispatch_measure']} load {load_s:.0f}s "
           f"mem {rec['max_mem_gb']} GB {rec['seconds']} s", flush=True)
     return 0
 
@@ -316,7 +316,7 @@ def self_test() -> int:
           not arm_env_ok("B0", {"GNF4_GEMV_BW": "1"}, plan)[0], not arm_env_ok("B0", {"GNF4_GEMV_BW": "auto"}, plan)[0],
           not arm_env_ok("B0", {"GNF4_GEMV_BW_PLAN": plan}, plan)[0],
           arm_env_ok("B1", b1, plan)[0], not arm_env_ok("B1", {}, plan)[0], not arm_env_ok("B1", b1, "")[0],
-          not arm_env_ok("B1", {"GNF4_GEMV_BW": "1"}, plan)[0],                         # the shipped table is not P139's B1
+          not arm_env_ok("B1", {"GNF4_GEMV_BW": "1"}, plan)[0],                         # the shipped table is not P141's B1
           not arm_env_ok("B1", {**b1, "GNF4_GEMV_BW_PLAN": "28672,4096=16,256,4,1;4096,14336=16,256,4,1"}, plan)[0],
           not arm_env_ok("B1", {**b1, "GNF4_GEMV_BW_DECODE": "tree"}, plan)[0], not arm_env_ok("B2", b1, plan)[0],
           SERVER_SIZE == (16, 768),
@@ -329,7 +329,7 @@ def self_test() -> int:
           bool(premise_faults(junit(35, [], [1]), "kernel")), bool(premise_faults(junit(18, d_skips[:1]), "served")),
           bool(premise_faults(junit(33, k_skips[:1]), "kernel_dry")),
           bool(premise_faults(junit(33, [(k_skips[0][0], "another reason"), k_skips[1]]), "kernel_dry"))]
-    print(f"p139_box self-test {'OK' if all(ok) else 'FAILED'} ({sum(ok)}/{len(ok)} cases)")
+    print(f"p141_box self-test {'OK' if all(ok) else 'FAILED'} ({sum(ok)}/{len(ok)} cases)")
     return 0 if all(ok) else 1
 
 

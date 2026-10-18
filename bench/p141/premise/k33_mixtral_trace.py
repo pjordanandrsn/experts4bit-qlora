@@ -1,4 +1,4 @@
-"""P139's call-site trace ($0, the A2000): which (N, K) does e4b's served decode hand grouped-nf4-gemm's K33 gate on
+"""P141's call-site trace ($0, the A2000): which (N, K) does e4b's served decode hand grouped-nf4-gemm's K33 gate on
 Mixtral? Mixtral-8x7B's real widths (hidden 4096, intermediate 14336, 8 experts, top 2), two decoder layers, random
 weights, through the GPU serve smoke's own build (write_checkpoint -> offline snapshot -> bake -> build_engine ->
 scheduler). nf4_grouped._bw_engages -- the gate K33's auto mode reads -- is wrapped to record every (N, K, T) before

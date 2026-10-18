@@ -1,6 +1,6 @@
 #!/bin/bash
-# bench/p139/p139_run.sh -- lane P139, BOX side (bench/p139/PREREG-p139.md). Started detached by p139_drive.sh with the
-# run's nonce; P139_RUN_NONCE first, then P139_EXIT_CODE.<nonce> + TP_DONE.<nonce> on every exit and P139_SUCCESS.<nonce>
+# bench/p141/p141_run.sh -- lane P141, BOX side (bench/p141/PREREG-p141.md). Started detached by p141_drive.sh with the
+# run's nonce; P141_RUN_NONCE first, then P141_EXIT_CODE.<nonce> + TP_DONE.<nonce> on every exit and P141_SUCCESS.<nonce>
 # only when the reducer ran.
 #
 # Does grouped-nf4-gemm K33's bandwidth-targeted NF4 decode GEMV (GNF4_GEMV_BW=1), at the plans phase 1 selects on this
@@ -10,27 +10,27 @@
 #   family   mixtral alone (records suffixed _mixtral), at FAM Amendment 5's pin; its fit failure VOIDs the read (31);
 #   pins     e4b = the launch commit (E4B_SHA, from the driver); grouped-nf4-gemm 0.46.1 (K33 as 0.46.0 shipped it);
 #   server   every phase at P136's Mixtral size: E4B_PAGED_MAX_SEQS=16, E4B_PAGED_MAX_TOKENS_PER_SEQ=768;
-#   phase 1  after the premise and before the fetch, p139_select.py chooses each shape's plan (select.json); B1 runs
+#   phase 1  after the premise and before the fetch, p141_select.py chooses each shape's plan (select.json); B1 runs
 #            GNF4_GEMV_BW=1 with exactly its GNF4_GEMV_BW_PLAN. No selectable plan at a shape: FUNCTION_FAIL, no fetch;
 #   proof    none (P135's precedent);
-#   dry      P139_DRY=1: one tiny family (p133_tiny.py's fixture) on any CUDA card, phase 1 at its shapes. Never a reading.
+#   dry      P141_DRY=1: one tiny family (p133_tiny.py's fixture) on any CUDA card, phase 1 at its shapes. Never a reading.
 # Arms, control, quality instrument, rule and refusal codes are P134's.
 #
 # Refusals: CUDA unusable 18 (the host floor; a torch that will not import stays 10), torch not the pin 28, card class 15,
 # disk 13, host RAM 16. Only 13 and 18 name the machine for the launcher's next draw.
 # Knobs (recorded in summary.txt; any value off its registered default marks the run a REHEARSAL, NOT a reading):
-# P139_GPU_CLASS P139_MIN_DISK_GB P139_MIN_RAM_GB P139_REHEARSAL P139_SHORT P139_LONG P139_REPS P139_WINDOWS P139_CONT.
+# P141_GPU_CLASS P141_MIN_DISK_GB P141_MIN_RAM_GB P141_REHEARSAL P141_SHORT P141_LONG P141_REPS P141_WINDOWS P141_CONT.
 set -uo pipefail
-W=/root/p139; mkdir -p $W/logs; cd $W || exit 78
-say(){ echo "[$(date -u +%FT%TZ)] p139: $*"; }
-NONCE=${P139_RUN_NONCE:?}; printf '%s\n' "$NONCE" > $W/P139_RUN_NONCE.tmp && mv $W/P139_RUN_NONCE.tmp $W/P139_RUN_NONCE
-finish(){ local rc=$1; printf '%s\n' "$rc" > P139_EXIT_CODE.$NONCE; [ "$rc" = 0 ] && : > P139_SUCCESS.$NONCE; say "TP_DONE rc=$rc"; : > TP_DONE.$NONCE; exit "$rc"; }
+W=/root/p141; mkdir -p $W/logs; cd $W || exit 78
+say(){ echo "[$(date -u +%FT%TZ)] p141: $*"; }
+NONCE=${P141_RUN_NONCE:?}; printf '%s\n' "$NONCE" > $W/P141_RUN_NONCE.tmp && mv $W/P141_RUN_NONCE.tmp $W/P141_RUN_NONCE
+finish(){ local rc=$1; printf '%s\n' "$rc" > P141_EXIT_CODE.$NONCE; [ "$rc" = 0 ] && : > P141_SUCCESS.$NONCE; say "TP_DONE rc=$rc"; : > TP_DONE.$NONCE; exit "$rc"; }
 trap 'finish 130' INT TERM
-for v in P139_RUN_ID P139_DEADLINE_EPOCH P139_INSTANCE_ID E4B_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
+for v in P141_RUN_ID P141_DEADLINE_EPOCH P141_INSTANCE_ID E4B_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
 GNF4_SHA=70bc03cb7a61b03c4e801e7423c58c103a1b6d7d      # grouped-nf4-gemm 0.46.1, exact; a registered constant
 TORCH_WANT=2.8.0+cu128
 [[ $E4B_SHA =~ ^[0-9a-f]{40}$ ]] || { say "refusing: E4B_SHA $E4B_SHA is not a full commit"; finish 78; }
-DRY=${P139_DRY:-0}
+DRY=${P141_DRY:-0}
 MIX=mistralai/Mixtral-8x7B-Instruct-v0.1; MIX_REV=eba92302a2861cdc0098cc54bc9f17cb2c47eb61        # FAM Amendment 5's pin
 if [ "$DRY" = 1 ]; then
   FAMS="tiny"                                                                                     # p133_tiny.py's fixture
@@ -45,10 +45,10 @@ else
 fi
 model_of(){ case "$1" in mixtral) echo "$MIX";; tiny*) echo "$W/fam/$1/p133-tiny";; esac; }
 rev_of(){ case "$1" in mixtral) echo "$MIX_REV";; *) echo "";; esac; }
-GPU_CLASS=${P139_GPU_CLASS:-5090}; MIN_DISK_GB=${P139_MIN_DISK_GB:-220}; MIN_RAM_GB=${P139_MIN_RAM_GB:-60}
-REHEARSAL=${P139_REHEARSAL:-0}; SHORT=${P139_SHORT:-$SHORT_DEF}; LONG=${P139_LONG:-$LONG_DEF}; REPS=${P139_REPS:-$REPS_DEF}
-WINDOWS=${P139_WINDOWS:-$WINDOWS_DEF}; CONT=${P139_CONT:-$CONT_DEF}
-export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false P139_DRY=$DRY
+GPU_CLASS=${P141_GPU_CLASS:-5090}; MIN_DISK_GB=${P141_MIN_DISK_GB:-220}; MIN_RAM_GB=${P141_MIN_RAM_GB:-60}
+REHEARSAL=${P141_REHEARSAL:-0}; SHORT=${P141_SHORT:-$SHORT_DEF}; LONG=${P141_LONG:-$LONG_DEF}; REPS=${P141_REPS:-$REPS_DEF}
+WINDOWS=${P141_WINDOWS:-$WINDOWS_DEF}; CONT=${P141_CONT:-$CONT_DEF}
+export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false P141_DRY=$DRY
 # every serving lever and engine knob starts unset: the default server is the subject
 unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_SERVE_ATTN_INT4 E4B_FUSE_T1_GLUE E4B_FUSE_T1_GLUE_R2 \
       E4B_FUSE_ROUTER_EPI E4B_INT4_KEEP_NF4 E4B_INT4_GROUPED_SMALLM E4B_INT4_LEAN_GLUE E4B_INT4_DECODE_A16 E4B_ROUTER_EPI_CAST \
@@ -58,8 +58,8 @@ unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_
       E4B_PAGED_MAX_PREFILL_TOKENS E4B_PAGED_PLACEMENT E4B_PAGED_KV_GROUPS E4B_PAGED_FUSE_QKV E4B_PAGED_TORCH_THREADS \
       E4B_KV_STEP_SELECT E4B_PAGED_BULK_KV E4B_PAGED_PREFILL_GRAPH E4B_FUSE_SWIGLU E4B_FUSE_COMBINE GNF4_PDL GNF4_PDL_MAX_ROWS \
       GNF4_GEMV_DOTPAD GNF4_DECODE_PLAN GNF4_GEMV_SPLITK GNF4_GEMV_BW GNF4_GEMV_BW_PLAN GNF4_GEMV_BW_DECODE TRITON_INTERPRET
-: > summary.txt; echo "$P139_INSTANCE_ID" > INSTANCE_ID
-echo "KNOBS run=$P139_RUN_ID e4b=$E4B_SHA gnf4=$GNF4_SHA families=${FAMS// /,} mixtral=$MIX@$MIX_REV server=${SIZE_ENV:-default} gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_ram_gb=$MIN_RAM_GB dry=$DRY short=$SHORT long=$LONG reps=$REPS windows=$WINDOWS cont=$CONT" | tee -a summary.txt
+: > summary.txt; echo "$P141_INSTANCE_ID" > INSTANCE_ID
+echo "KNOBS run=$P141_RUN_ID e4b=$E4B_SHA gnf4=$GNF4_SHA families=${FAMS// /,} mixtral=$MIX@$MIX_REV server=${SIZE_ENV:-default} gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_ram_gb=$MIN_RAM_GB dry=$DRY short=$SHORT long=$LONG reps=$REPS windows=$WINDOWS cont=$CONT" | tee -a summary.txt
 if [ "$REHEARSAL" != 0 ] || [ "$GPU_CLASS" != 5090 ] || [ "$MIN_DISK_GB" != 220 ] || [ "$MIN_RAM_GB" != 60 ] \
    || [ "$SHORT" != "$SHORT_DEF" ] || [ "$LONG" != "$LONG_DEF" ] || [ "$REPS" != "$REPS_DEF" ] \
    || [ "$WINDOWS" != "$WINDOWS_DEF" ] || [ "$CONT" != "$CONT_DEF" ]; then
@@ -67,10 +67,10 @@ if [ "$REHEARSAL" != 0 ] || [ "$GPU_CLASS" != 5090 ] || [ "$MIN_DISK_GB" != 220 
 fi
 [ "$DRY" = 1 ] && { echo "DRY -- the \$0 dry run on one tiny family: NEVER a reading" | tee -a summary.txt; : > DRY; }
 # ---- staged pieces, byte-for-byte
-for f in p139_box.py p139_reduce.py p139_select.py p133_tiny.py p115_reduce.py p115_quality.py p109_box.py p110_box.py p108_box.py p97_box.py \
+for f in p141_box.py p141_reduce.py p141_select.py p133_tiny.py p115_reduce.py p115_quality.py p109_box.py p110_box.py p108_box.py p97_box.py \
          k8_bake.py calib.json test_decode_graph_buckets.py test_kv_step_select.py test_gemv_bw_served_gpu.py staged.sha256; do
   [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
-(cd $W && sha256sum -c staged.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/p139/staged.sha256"; finish 9; }
+(cd $W && sha256sum -c staged.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/p141/staged.sha256"; finish 9; }
 # ---- refusals before anything is installed or fetched: CUDA, the torch pin, the card, the disk, the host RAM
 CUDA_PROBE=$(python - <<'PYC' 2>/dev/null | tail -1
 import sys
@@ -112,8 +112,8 @@ FREE_GB=$(df -BG --output=avail $W 2>/dev/null | tail -1 | tr -dc 0-9)
 [ "${FREE_GB:-0}" -ge "$MIN_DISK_GB" ] || { say "REFUSED: ${FREE_GB:-?} GB free < ${MIN_DISK_GB} GB (Mixtral's 93 GB checkpoint, its NF4 snapshot and arena, the reference log-probs)"; echo "refused: disk ${FREE_GB:-?} GB" > REFUSAL; finish 13; }
 RAM_GB=$(awk '/^MemTotal:/{print int($2/1048576)}' /proc/meminfo)
 [ "${RAM_GB:-0}" -ge "$MIN_RAM_GB" ] || { say "REFUSED: ${RAM_GB:-?} GiB host RAM < ${MIN_RAM_GB} GiB"; echo "refused: ram ${RAM_GB:-?} GiB" > REFUSAL; finish 16; }
-can_run(){ local need=$1 now; now=$(date +%s); [ $((now + need + 600)) -le "$P139_DEADLINE_EPOCH" ] || { say "STOP-2: $2 needs ${need}s, only $((P139_DEADLINE_EPOCH - now))s left -- skipped (host-limited)"; echo "SKIPPED $2 host-limited deadline" >> summary.txt; return 1; }; }
-step_alarm(){ local cap=$1 left=$(( P139_DEADLINE_EPOCH - $(date +%s) - 600 )); [ "$left" -gt "$cap" ] && left=$cap; [ "$left" -lt 600 ] && left=600; echo "$left"; }
+can_run(){ local need=$1 now; now=$(date +%s); [ $((now + need + 600)) -le "$P141_DEADLINE_EPOCH" ] || { say "STOP-2: $2 needs ${need}s, only $((P141_DEADLINE_EPOCH - now))s left -- skipped (host-limited)"; echo "SKIPPED $2 host-limited deadline" >> summary.txt; return 1; }; }
+step_alarm(){ local cap=$1 left=$(( P141_DEADLINE_EPOCH - $(date +%s) - 600 )); [ "$left" -gt "$cap" ] && left=$cap; [ "$left" -lt 600 ] && left=600; echo "$left"; }
 export DEBIAN_FRONTEND=noninteractive
 echo "torch==${TORCH_WANT%%+*}" > $W/constraints.txt
 pipx(){ local log=$1 secs=$2; shift 2
@@ -151,7 +151,7 @@ hr.DEVICE_GROUPING[0] = False
 import nf4_grouped as ng
 for n in ("_gemv_nf4_bw", "_nf4_prmt32", "_bw", "_bw_engages", "_bw_plan", "_bw_decode", "_sm_count", "_BW_SHAPES",
           "_BW_PLANS", "_BW_PLAN_DEFAULT", "_DOTPAD_CONFIGS", "dispatch_counts"):
-    assert hasattr(ng, n), f"installed gnf4 lacks {n} (the GNF4_GEMV_BW route P139 reads)"
+    assert hasattr(ng, n), f"installed gnf4 lacks {n} (the GNF4_GEMV_BW route P141 reads)"
 import int4_b32
 assert hasattr(int4_b32, "pdl_refresh") and "bw_config" in inspect.signature(ng.gemm_4bit_grouped).parameters
 assert "gather_div" in inspect.signature(ng.gemm_4bit_grouped).parameters, "the served W1 call's token-row form"
@@ -161,7 +161,7 @@ assert ng._BW_SHAPES == frozenset({(1536, 2048), (2048, 768)}) and ng._bw() == "
 dev = torch.device("cuda")
 cc, sm = torch.cuda.get_device_capability(), torch.cuda.get_device_properties(0).multi_processor_count
 assert ng._sm_count(dev) == sm
-if os.environ.get("P139_DRY") != "1":
+if os.environ.get("P141_DRY") != "1":
     assert cc == (12, 0) and sm >= 160, (cc, sm)
 # the gate the lane reads: auto engages only at Qwen3's two shapes (on >= 160 SMs), never at Mixtral's, and dot-pad's
 # table has neither, so B0 is the scalar GEMV at Mixtral's shapes on every part; no shipped plan exists for them, so B1
@@ -181,22 +181,22 @@ assert ng._bw_plan(28672, 4096) == (16, 1024, 4, 1) and ng._bw_plan(4096, 14336)
 del os.environ["GNF4_GEMV_BW"], os.environ["GNF4_GEMV_BW_PLAN"]
 import fp8_paged_attn, fp8_kv, nvme_arena  # noqa: F401  (decode kernel, KV append, arena bake)
 import experts4bit_qlora as e
-open("/root/p139/versions.txt", "a").write(f"e4b {e.__version__} @{os.environ['WANT_E4B']}\ngnf4 {md.version('grouped-nf4-gemm')} @{os.environ['WANT_GNF4']}\ntorch {torch.__version__}\ntriton {triton.__version__}\ntransformers {transformers.__version__}\nbitsandbytes {md.version('bitsandbytes')}\ncc {cc}\nsm_count {sm}\n")
+open("/root/p141/versions.txt", "a").write(f"e4b {e.__version__} @{os.environ['WANT_E4B']}\ngnf4 {md.version('grouped-nf4-gemm')} @{os.environ['WANT_GNF4']}\ntorch {torch.__version__}\ntriton {triton.__version__}\ntransformers {transformers.__version__}\nbitsandbytes {md.version('bitsandbytes')}\ncc {cc}\nsm_count {sm}\n")
 print("tripwire OK:", e.__version__, "gnf4", md.version("grouped-nf4-gemm"), "torch", torch.__version__)
 PYT
 cat versions.txt | tee -a summary.txt
-python $W/p139_reduce.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "REDUCER SELF-TEST FAILED"; finish 21; }
-python $W/p139_box.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "BOX SELF-TEST FAILED"; finish 21; }
-python $W/p139_select.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "SELECT SELF-TEST FAILED"; finish 21; }
+python $W/p141_reduce.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "REDUCER SELF-TEST FAILED"; finish 21; }
+python $W/p141_box.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "BOX SELF-TEST FAILED"; finish 21; }
+python $W/p141_select.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "SELECT SELF-TEST FAILED"; finish 21; }
 python $W/p115_quality.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "QUALITY SELF-TEST FAILED"; finish 21; }
 # ---- the premise, on THIS card, before anything is fetched: the kernel's own contract, then the served route's; each
-# read from its junit report against p139_box.PREMISE (pass count and exact skipped ids)
+# read from its junit report against p141_box.PREMISE (pass count and exact skipped ids)
 (cd $W/gnf4src/kernel && PYTHONPATH= TRITON_INTERPRET=0 perl -e 'alarm 900; exec @ARGV' python -m pytest test_nf4_gemv_bw.py -q -rs -p no:cacheprovider --junitxml=$W/logs/premise_kernel.xml) > logs/premise_bw_contract.log 2>&1
 rc=$?; { echo -n "premise kernel contract rc=$rc: "; tail -1 logs/premise_bw_contract.log; } | tee -a summary.txt
-python $W/p139_box.py --premise $W/logs/premise_kernel.xml --expect kernel | tee -a summary.txt; pk=${PIPESTATUS[0]}
+python $W/p141_box.py --premise $W/logs/premise_kernel.xml --expect kernel | tee -a summary.txt; pk=${PIPESTATUS[0]}
 (cd $W && PYTHONPATH='' perl -e 'alarm 900; exec @ARGV' python -m pytest test_decode_graph_buckets.py test_kv_step_select.py test_gemv_bw_served_gpu.py -q -rs -p no:cacheprovider --junitxml=$W/logs/premise_served.xml) > logs/premise.log 2>&1
 rc2=$?; { echo -n "premise served route rc=$rc2: "; tail -1 logs/premise.log; } | tee -a summary.txt
-python $W/p139_box.py --premise $W/logs/premise_served.xml --expect served | tee -a summary.txt; ps=${PIPESTATUS[0]}
+python $W/p141_box.py --premise $W/logs/premise_served.xml --expect served | tee -a summary.txt; ps=${PIPESTATUS[0]}
 if [ "$rc" = 0 ] && [ "$pk" = 0 ] && [ "$rc2" = 0 ] && [ "$ps" = 0 ]; then
   echo "premise ok" | tee -a summary.txt
 else
@@ -204,21 +204,21 @@ else
 fi
 PF=""; [ "$DRY" = 1 ] && PF="--dry"
 SELFAM=mixtral; [ "$DRY" = 1 ] && SELFAM=tiny
-# ---- phase 1, before anything is fetched: each shape's K33 plan on THIS card (p139_select.py's registered rule)
+# ---- phase 1, before anything is fetched: each shape's K33 plan on THIS card (p141_select.py's registered rule)
 can_run $NEED_SELECT "phase 1" || finish 40
 AL=$(step_alarm 1800); say "phase 1: K33's plan selection at $SELFAM's shapes (alarm=$AL)"
-env PYTHONPATH= perl -e "alarm $AL; exec @ARGV" python $W/p139_select.py --family $SELFAM --out $W/select.json > logs/select.log 2>&1
-rc=$?; grep -a "^P139_SELECT" logs/select.log | tee -a summary.txt
+env PYTHONPATH= perl -e "alarm $AL; exec @ARGV" python $W/p141_select.py --family $SELFAM --out $W/select.json > logs/select.log 2>&1
+rc=$?; grep -a "^P141_SELECT" logs/select.log | tee -a summary.txt
 [ "$rc" = 0 ] && [ -s $W/select.json ] || { tail -6 logs/select.log | cut -c1-300 | tee -a summary.txt; say "PHASE 1 FAILED (rc=$rc)"; finish 23; }
 SEL_STATUS=$(python -c "import json; print(json.load(open('$W/select.json'))['status'])")
 if [ "$SEL_STATUS" != ok ]; then
   echo "PHASE 1 $SEL_STATUS: no plan met K33's contract -- FUNCTION_FAIL; nothing is fetched" | tee -a summary.txt
-  for FAM in $FAMS; do python $W/p139_reduce.py --dir $W --family $FAM --out $W/verdict_$FAM.json --e4b-sha $E4B_SHA $PF 2>&1 | tee -a summary.txt; done
+  for FAM in $FAMS; do python $W/p141_reduce.py --dir $W --family $FAM --out $W/verdict_$FAM.json --e4b-sha $E4B_SHA $PF 2>&1 | tee -a summary.txt; done
   finish 0
 fi
 PLAN_ENV=$(python -c "import json; print(json.load(open('$W/select.json'))['env'])")
 echo "PHASE 1 ok: GNF4_GEMV_BW_PLAN=$PLAN_ENV" | tee -a summary.txt
-export P139_SELECT=$W/select.json
+export P141_SELECT=$W/select.json
 BW="GNF4_GEMV_BW=1 GNF4_GEMV_BW_PLAN=$PLAN_ENV"
 FIT_VOID=0; REDUCED=""
 # ---- per family, in order: the checkpoint (or the dry fixture), its NF4 arena (P39's k8_bake.py), the prompts, the fit
@@ -244,7 +244,7 @@ for FAM in $FAMS; do
   [ -e $FW/nf4.arena ] || { say "BAKE FAIL: no arena"; finish 12; }
   grep -a "BAKE" logs/bake_$FAM.log | tail -1 | tee -a summary.txt
   PR=$W/prompts_$FAM.json
-  perl -e "alarm 1200; exec @ARGV" python $W/p139_box.py --prompts-only --model "$MODEL" --revision "$REV" --out $PR > logs/prompts_$FAM.log 2>&1 \
+  perl -e "alarm 1200; exec @ARGV" python $W/p141_box.py --prompts-only --model "$MODEL" --revision "$REV" --out $PR > logs/prompts_$FAM.log 2>&1 \
     || { tail -4 logs/prompts_$FAM.log; say "PROMPTS FAIL"; finish 19; }
   grep -a "^P109_PROMPTS" logs/prompts_$FAM.log | tee -a summary.txt
   ENGINE_ENV="E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$REV E4B_PAGED_ARENA=$FW/nf4.arena E4B_PAGED_CALIB=$W/calib.json $SIZE_ENV"
@@ -252,14 +252,14 @@ for FAM in $FAMS; do
   can_run $NEED_FIT "fit $FAM" || finish 40
   AL=$(step_alarm 1800); say "fit $FAM (alarm=$AL)"
   # shellcheck disable=SC2086  # ENGINE_ENV is an assignment list by design
-  env PYTHONPATH= $ENGINE_ENV P139_ARM=B0 E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA \
-    perl -e "alarm $AL; exec @ARGV" python $W/p139_box.py --mode fit --prompts $PR --out $W/fit_$FAM.json --short $SHORT > logs/fit_$FAM.log 2>&1
+  env PYTHONPATH= $ENGINE_ENV P141_ARM=B0 E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA \
+    perl -e "alarm $AL; exec @ARGV" python $W/p141_box.py --mode fit --prompts $PR --out $W/fit_$FAM.json --short $SHORT > logs/fit_$FAM.log 2>&1
   rc=$?
-  { echo -n "fit $FAM rc=$rc "; grep -a "^P139_FIT" logs/fit_$FAM.log | tail -1 | cut -c1-600; echo; } | tee -a summary.txt
+  { echo -n "fit $FAM rc=$rc "; grep -a "^P141_FIT" logs/fit_$FAM.log | tail -1 | cut -c1-600; echo; } | tee -a summary.txt
   if [ "$rc" != 0 ]; then
     tail -6 logs/fit_$FAM.log | cut -c1-300 | tee -a summary.txt
     echo "FIT VOID ($FAM): W1 does not fit the default server -- no arm runs for $FAM and no rerun is registered" | tee -a summary.txt
-    python $W/p139_reduce.py --dir $W --family $FAM --out $W/verdict_$FAM.json --e4b-sha $E4B_SHA $PF 2>&1 | tee -a summary.txt
+    python $W/p141_reduce.py --dir $W --family $FAM --out $W/verdict_$FAM.json --e4b-sha $E4B_SHA $PF 2>&1 | tee -a summary.txt
     FIT_VOID=1; REDUCED="$REDUCED $FAM"; continue
   fi
   # the four speed arms: B0a B1a B1b B0b (ABBA), each a fresh process on the default server (only the switch differs)
@@ -269,11 +269,11 @@ for FAM in $FAMS; do
     can_run $NEED_ARM "arm $TAG $FAM" || finish 40
     AL=$(step_alarm 2400); say "arm $TAG $FAM (alarm=$AL)"
     # shellcheck disable=SC2086  # ENGINE_ENV and KN are assignment lists by design
-    env PYTHONPATH= $ENGINE_ENV $KN P139_ARM=$ARM E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA \
-      perl -e "alarm $AL; exec @ARGV" python $W/p139_box.py --mode speed --prompts $PR --out $W/arm_${TAG}_$FAM.json --tag $TAG \
+    env PYTHONPATH= $ENGINE_ENV $KN P141_ARM=$ARM E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA \
+      perl -e "alarm $AL; exec @ARGV" python $W/p141_box.py --mode speed --prompts $PR --out $W/arm_${TAG}_$FAM.json --tag $TAG \
         --short $SHORT --long $LONG --reps $REPS > logs/arm_${TAG}_$FAM.log 2>&1
     rc=$?
-    { echo -n "arm $TAG $FAM rc=$rc "; grep -a "^P139_ARM" logs/arm_${TAG}_$FAM.log | tail -1 | cut -c1-600; echo; } | tee -a summary.txt
+    { echo -n "arm $TAG $FAM rc=$rc "; grep -a "^P141_ARM" logs/arm_${TAG}_$FAM.log | tail -1 | cut -c1-600; echo; } | tee -a summary.txt
     [ "$rc" = 0 ] || { ARMS_OK=0; tail -6 logs/arm_${TAG}_$FAM.log | cut -c1-300 | tee -a summary.txt; say "ARM $TAG $FAM FAILED (rc=$rc) -- the reducer will VOID $FAM"; }
   done
   # the quality phase (STOP-5: not when one of this family's speed arms failed): OFF then ON, each a fresh process on the
@@ -285,17 +285,17 @@ for FAM in $FAMS; do
       can_run $NEED "quality $PH $FAM" || finish 40
       AL=$(step_alarm 4200); say "quality $PH $FAM (alarm=$AL)"
       # shellcheck disable=SC2086
-      env PYTHONPATH= $ENGINE_ENV $KN E4B_PAGED_GRAPHS=0 P139_ARM=$ARM E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA \
-        perl -e "alarm $AL; exec @ARGV" python $W/p139_box.py --mode quality --out $W/quality_${PH}_$FAM.json --ref-dir $FW/ref \
+      env PYTHONPATH= $ENGINE_ENV $KN E4B_PAGED_GRAPHS=0 P141_ARM=$ARM E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA \
+        perl -e "alarm $AL; exec @ARGV" python $W/p141_box.py --mode quality --out $W/quality_${PH}_$FAM.json --ref-dir $FW/ref \
           --windows $WINDOWS --cont $CONT --group 1 > logs/quality_${PH}_$FAM.log 2>&1
       rc=$?
-      { echo -n "quality $PH $FAM rc=$rc "; grep -a "^P139_QUALITY" logs/quality_${PH}_$FAM.log | tail -1 | cut -c1-900; echo; } | tee -a summary.txt
+      { echo -n "quality $PH $FAM rc=$rc "; grep -a "^P141_QUALITY" logs/quality_${PH}_$FAM.log | tail -1 | cut -c1-900; echo; } | tee -a summary.txt
       [ "$rc" = 0 ] || { tail -6 logs/quality_${PH}_$FAM.log | cut -c1-300 | tee -a summary.txt; say "QUALITY $PH $FAM FAILED (rc=$rc) -- the reducer will VOID $FAM"; break; }
     done
   else
     echo "STOP-5 ($FAM): a speed arm failed -- the quality phase is not run (the reducer VOIDs $FAM)" | tee -a summary.txt
   fi
-  say "reduce $FAM"; python $W/p139_reduce.py --dir $W --family $FAM --out $W/verdict_$FAM.json --e4b-sha $E4B_SHA $PF 2>&1 | tee -a summary.txt
+  say "reduce $FAM"; python $W/p141_reduce.py --dir $W --family $FAM --out $W/verdict_$FAM.json --e4b-sha $E4B_SHA $PF 2>&1 | tee -a summary.txt
   [ "${PIPESTATUS[0]}" = 0 ] && [ -s $W/verdict_$FAM.json ] || { say "REDUCER FAILED ($FAM)"; finish 22; }
   REDUCED="$REDUCED $FAM"
 done
