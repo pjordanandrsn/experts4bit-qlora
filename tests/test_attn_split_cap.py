@@ -84,7 +84,8 @@ def _kv_with_stub_kernel(monkeypatch, *, takes_split_cap=True, compute="fp8"):
             seen.append(dict(kw, split_cap="absent"))
             return torch.zeros_like(q)
     stub.fp8_paged_decode_attention = fp8_paged_decode_attention
-    stub._compute_default = lambda *a, **k: compute
+    # the stub reads what the wrapper would: a ktile of 48 (not a fp8 tile) or v_groups != 1 makes fp8 unsupported
+    stub._compute_default = lambda *a, **k: ("f32" if (k.get("ktile") == 48 or (len(a) > 3 and a[3] != 1)) else compute)
     stub.decode_split_plan = lambda B, h, cols, **k: 32 if k.get("split_cap") is None else min(k["split_cap"], 32)
     monkeypatch.setitem(sys.modules, "fp8_paged_attn", stub)
     monkeypatch.setattr(kvmod, "_sm_count", lambda d: 170)
@@ -109,6 +110,28 @@ def test_a_kernel_without_split_cap_changes_nothing(monkeypatch):
     kv.split_cap = 16
     kv.attention(0, torch.randn(1, 32, 128, dtype=torch.bfloat16), slots=[0])
     assert seen == [{"split_cap": "absent"}] and kv.split_plans == {}
+
+
+def test_speculative_verify_never_takes_the_cap(monkeypatch):
+    """The maintainer's final pass on #1768: lens_override marks the verify path (K + 1 rows over one slot), which
+    P143 did not read, so it keeps the library's plan."""
+    kv, seen = _kv_with_stub_kernel(monkeypatch)
+    kv.split_cap = 16
+    q = torch.randn(2, 32, 128, dtype=torch.bfloat16)
+    kv.attention(0, q, slots=[0, 0], lens_override=torch.tensor([7, 8], dtype=torch.int32))
+    assert seen[0]["split_cap"] is None and kv.split_plans == {}
+
+
+def test_a_ktile_or_v_groups_that_rule_out_fp8_leaves_the_call_without_the_cap(monkeypatch):
+    """The compute verdict is the kernel's own, from the same inputs its wrapper uses: a caller's ktile (or v_groups)
+    that makes fp8 unsupported must not hand split_cap to what will run the f32 path."""
+    kv, seen = _kv_with_stub_kernel(monkeypatch)
+    kv.split_cap = 16
+    q = torch.randn(1, 32, 128, dtype=torch.bfloat16)
+    kv.attention(0, q, slots=[0], ktile=48)
+    kv.attention(0, q, slots=[0], v_groups=2)
+    kv.attention(0, q, slots=[0], ktile=64)
+    assert [k.get("split_cap") for k in seen] == [None, None, 16]
 
 
 def test_the_f32_path_is_left_to_the_library(monkeypatch):

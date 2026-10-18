@@ -1257,7 +1257,8 @@ class Fp8PagedKV:
             raise ValueError(
                 f"q has {q.shape[0]} rows but the block table has "
                 f"{tbl.shape[0]} — pass slots= so rows map to sequences")
-        if (self.split_cap and "n_split" not in kw and not kw.get("pack_heads")
+        # never on speculative verify (lens_override): lane P143 read the decode step only
+        if (self.split_cap and lens_override is None and "n_split" not in kw and not kw.get("pack_heads")
                 and _kernel_takes(fp8_paged_decode_attention, "split_cap") and self._split_cap_applies(layer, q, kw)):
             kw = dict(kw, split_cap=int(self.split_cap))
             self._record_split(layer, q, tbl, kw)
@@ -1271,8 +1272,11 @@ class Fp8PagedKV:
         """The cap applies on the fp8 split path only, the one lane P143 measured: the compute mode is the kernel's own
         choice (``fp8_paged_attn._compute_default``, as it resolves an unset ``compute``) unless the caller names it."""
         import fp8_paged_attn
+        # the kernel's own verdict: the same inputs its wrapper hands _compute_default (fp8 applicability depends on
+        # v_groups == 1 and on ktile), so a caller's ktile can never send the cap into the f32 path
         compute = kw.get("compute") or fp8_paged_attn._compute_default(
-            q, self.Ds[layer], self.kgs[layer], 1, pack_heads=False, block_tokens=self.bt, n_kv_heads=self.Hs[layer])
+            q, self.Ds[layer], self.kgs[layer], kw.get("v_groups", 1), pack_heads=False, block_tokens=self.bt,
+            n_kv_heads=self.Hs[layer], ktile=kw.get("ktile"))
         return compute == "fp8"
 
     def _record_split(self, layer: int, q: torch.Tensor, tbl: torch.Tensor, kw: dict):
