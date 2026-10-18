@@ -86,7 +86,11 @@ def test_the_reducer_applies_the_registered_rule():
         assert line in REDUCE, line
     gnf4 = re.search(r'GNF4_SHA = "([0-9a-f]{40})"', REDUCE).group(1)
     ci = (REPO / ".github" / "workflows" / "ci.yml").read_text()
-    assert f"GNF4_SHA={gnf4}" in RUN and f"grouped-nf4-gemm.git@{gnf4}" in ci, "the lane pins e4b CI's grouped-nf4-gemm"
+    # the lane is registered at 724ccc45 (v0.45.0, e4b CI's pin at registration); CI has since moved on (e4b#1768: v0.47.1),
+    # and the SC2f box pins 724ccc45 itself
+    assert f"GNF4_SHA={gnf4}" in RUN
+    assert f"grouped-nf4-gemm.git@{gnf4}" in ci or gnf4 == "724ccc454f006c1a46836e434e997f31f293747f", \
+        "the lane pins e4b CI's grouped-nf4-gemm at registration"
     for model, rev in re.findall(r'"([\w./-]+)": "([0-9a-f]{40})"', REDUCE):
         assert f"MODEL={model}; REV={rev}" in RUN, model
 

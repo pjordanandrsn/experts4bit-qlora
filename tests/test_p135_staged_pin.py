@@ -95,7 +95,10 @@ def test_the_box_runner_and_registration_agree_on_the_model_knobs_and_server():
     assert knobs in RUN.replace(" \\\n  ", " ")
     assert "E4B_PAGED_GRAPHS=0 E4B_PAGED_MAX_SEQS=2 E4B_PAGED_MAX_TOKENS_PER_SEQ=768" in RUN
     gnf4 = re.search(r"^GNF4_SHA=([0-9a-f]{40})$", RUN, re.M).group(1)
-    assert gnf4 in (REPO / ".github" / "workflows" / "ci.yml").read_text() and gnf4 in PREREG
+    # the lane is registered at 724ccc45 (v0.45.0, e4b CI's pin at registration); CI has since moved on (e4b#1768: v0.47.1)
+    ci = (REPO / ".github" / "workflows" / "ci.yml").read_text()
+    assert gnf4 in PREREG
+    assert gnf4 in ci or gnf4 == "724ccc454f006c1a46836e434e997f31f293747f", "e4b CI's grouped-nf4-gemm at registration"
     for k in box.OFF_KNOBS:
         assert k in RUN                                                    # unset before anything runs
 
