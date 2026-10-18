@@ -46,8 +46,10 @@ These inform the scale of the prediction below and nothing else. Every bar is P1
 - **Mixtral's config:** `router_jitter_noise` is 0, `output_router_logits` false and the dropouts 0, so `layer_major_step`
   takes it.
 - **Card:** the RTX 4090 class, compute capability 8.9. Any other card is refused (rc 15).
-- **Host floors:** 150 GB of disk (a 93 GB checkpoint) and 98 GB of host RAM. The pin screen also prefers at least 48
-  effective cores; the load's host-side assembly is copy-bound, and #1752 caps its threads at the container's quota.
+- **Host floors:** 150 GB of disk (a 93 GB checkpoint) and 98 GB of host RAM. The pin screen asks for at least 24
+  effective cores and prefers the most: the load's host-side assembly is copy-bound, and #1752 caps its threads at the
+  container's quota. Single-GPU 4090 containers offered at most 32 effective cores on 2026-10-18, so the 48 first
+  suggested is not on the market.
 - **Premise:** `tests/test_layer_major.py`, `test_layer_major_families.py`, `test_offload_hold.py` and `test_offload.py`
   at the pin: exactly 56 passed, none skipped (read on an A2000 at `a9d140d8`).
 
@@ -122,9 +124,10 @@ step); layer-major makes it once per step (49.9 GB).
   - Expected box time is about 50 min: a 93 GB fetch (about 15 min), a load of a few minutes with the thread cap, and
     four 34-step arms of roughly 25 min together.
 - **Cost:**
-  - Rate cap $0.49/h for the GPU and 200 GB, download at most $0.011/GB.
-  - **Worst $2.25**: $0.49 × 2.5 h, plus 93 GB × $0.011.
-  - Expected about $0.8–1.2.
+  - Rate cap $0.75/h for the GPU and 200 GB, download at most $0.011/GB. 4090 offers with 98 GB of RAM and 200 GB of disk
+    started at $0.549/h on 2026-10-18.
+  - **Worst $2.90**: $0.75 × 2.5 h, plus 93.4 GB × $0.011.
+  - Expected about $0.9–1.4.
   - Under the lane's standing authority, at most $15 per run, after this registration merges.
 - **Before any box:** a $0 dry run (`p144-dry-1`) of this kit on the A2000, for correctness only.
 - **Launches** use the launcher current at launch, `--validate` passing, the market rule (3 GETs over 40 s, first-posted
