@@ -1,6 +1,6 @@
 # Names as the BOX sees them after staging ($P137_HOME, /root/p137 on a rental). The box runs `sha256sum -c` on this
 # file; p137_drive.sh and tests/test_p137_staged_pin.py resolve each name to bench/p137 and compare.
-0a49b4be43f552e7e491b633d184857b4da40f14153d6886a9dca09abb2f2ed2  p137_run.sh
+364c6825616945d273ab700e883c0c28e5bf53fd8d9f26e3fb967b677d4fad2b  p137_run.sh
 1eea5704c0e11548e4dc6f29d6e6c28c79f0fb4c6590568670d9b5844c787fc4  p137_box.py
 37b746c2dc6f02b799dd50c847a75f71a5b48c54c6f6a077a8f9868c50e6c440  p137_reduce.py
 a6d12ef67dbd3ffff6c0d720195f3a24e4274c6dd49e73106ff469a1166e0639  p137_tiny.py

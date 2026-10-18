@@ -33,7 +33,12 @@ case "$RUN_ID" in
   *) say "refusing: run id $RUN_ID is not declared (p137-4090-1, p137-4090-2; p137-dry-<n> dry)"; exit 78;;
 esac
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
-STAGE="$HERE/p137_run.sh $HERE/p137_reduce.py $HERE/p137_box.py $HERE/p137_tiny.py $HERE/staged.sha256"
+# Amendment 1: the training rows travel from the controller (alpaca train[:400] as data.json, outside the repo), checked
+# here and again on the box against the registered sha256 -- the box downloads no dataset.
+DATA_SHA=68e3d31c194ebd8fee4330808a46642f443aecf4e16b78e5eb39fd21b16079c5
+P137_DATA=${P137_DATA:-$HOME/p137-data/data.json}
+[ "$(basename "$P137_DATA")" = data.json ] || { say "refusing: P137_DATA must be a file named data.json"; exit 78; }
+STAGE="$HERE/p137_run.sh $HERE/p137_reduce.py $HERE/p137_box.py $HERE/p137_tiny.py $HERE/staged.sha256 $P137_DATA"
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
 # staged.sha256 names the files as the BOX will see them; resolve each name to its source and compare hashes
 # (the same case as tests/test_p137_staged_pin.py, which runs this check in CI where it costs nothing).
@@ -77,6 +82,9 @@ PASS="P137_RUN_ID=$RUN_ID P137_RUN_NONCE=$NONCE P137_DEADLINE_EPOCH=$DEADLINE P1
 # measured are not forwarded -- a rehearsal sets them on its own box and the runner marks it REHEARSAL.
 for v in P137_DRY P137_HOME; do [ -n "${!v:-}" ] && PASS="$PASS $v=$(printf %q "${!v}")"; done
 if [ "${P137_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> $WHERE:$W ; start: env $PASS bash p137_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p137"; exit 0; fi
+# Amendment 1: the data slice's sha256, on the controller, before anything is staged (the box checks it again)
+got=$(sha_of "$P137_DATA")
+[ "$got" = "$DATA_SHA" ] || { say "refusing: $P137_DATA is $got, the registered data slice is $DATA_SHA"; exit 78; }
 say "run $RUN_ID nonce=$NONCE -> $WHERE; e4b $E4B_SHA (the registered pin); stacks are the runner's constants; receipts -> $RUN_DIR/p137; deadline $DEADLINE"
 box "rm -rf -- $W && mkdir -p $W/logs /root/.cache/huggingface" || { say "stage failed: remote cleanup"; exit 20; }
 box_stage || { say "stage failed: copy"; exit 20; }
