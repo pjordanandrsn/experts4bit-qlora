@@ -1671,7 +1671,7 @@ Register: [`../claims.json`](../claims.json). The position, **measured** (receip
     "which residency engine should I use",
     "hot experts in VRAM, cold experts on the host"
    ],
-   "solution": "load_moe_4bit_streaming(..., offload=True) homes each layer's frozen 4-bit experts in pinned host RAM and streams one layer at a time (prefetch=True overlaps); enable_dense_offload streams the dense side; hot_sets_from_profile picks the resident experts by routing frequency; enable_pipelined_residency trades spare VRAM for speed at serve time. In training, layer_major_step runs one step's micro-batches layer by layer, so each offloaded layer is staged once per step instead of once per micro-batch: its speed with enable_fast_train(dgrad=True) under offload is claim e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18.",
+   "solution": "load_moe_4bit_streaming(..., offload=True) homes each layer's frozen 4-bit experts in pinned host RAM and streams one layer at a time (prefetch=True overlaps); enable_dense_offload streams the dense side; hot_sets_from_profile picks the resident experts by routing frequency; enable_pipelined_residency trades spare VRAM for speed at serve time. In training, layer_major_step runs one step's micro-batches layer by layer, so each offloaded layer is staged once per step instead of once per micro-batch: its speed with enable_fast_train(dgrad=True) under offload is claims e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18 and e4b.train.p140.layer-major-offload.qwen3.5090.2026-10-18.",
    "modes": [
     "offload",
     "inference",
@@ -1736,7 +1736,8 @@ Register: [`../claims.json`](../claims.json). The position, **measured** (receip
     "e4b.offload.fits-30b-class",
     "e4b.serve.informed-hot-sets",
     "e4b.host.ratios-travel-absolutes-do-not",
-    "e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18"
+    "e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18",
+    "e4b.train.p140.layer-major-offload.qwen3.5090.2026-10-18"
    ],
    "limitations": [
     "enable_pipelined_residency patches an ExpertsLoRA wrapper's base and only runs when the wrapper delegates (eval mode, no_grad, an adapter that contributes nothing): assert the count and check the served path",
@@ -2145,7 +2146,10 @@ against 8.41. The predicted band [1.25, 2.0] was missed high, and the held-out t
 the 0.031 same-loop spread at 34 steps. From the CLI trainer, `OFFLOAD_EXPERTS=1 LAYER_MAJOR=1` (which implies
 `FAST_TRAIN=1`) makes the same calls, checked bit for bit against the library on a fixture; its own recipe (AdamW,
 token-budget batches) is unread.
-`e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18` ([P137](../bench/p137/RESULTS-p137.md)).
+It replicates on one RTX 5090: 2.311× (6.017 / 6.014 s against 2.597 / 2.602 s), inside the band [1.8, 3.0]
+predicted a priori from the host link.
+`e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18` ([P137](../bench/p137/RESULTS-p137.md)),
+`e4b.train.p140.layer-major-offload.qwen3.5090.2026-10-18` ([P140](../bench/p140/RESULTS-p140.md)).
 
 **On the 12 GB RTX A2000 the same set trains under offload at micro-batch 1**, at 10.46 GB peak, held-out 0.8483 beside
 the 5090's 0.8516 / 0.8487. Unsloth refuses on that card, axolotl's wheels need a newer driver, and HF runs out of
@@ -3350,6 +3354,7 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.train.dense-adapter.dq11.matched-sdpa.5090.2026-10-11 [measured-private] (receipt private): Unsloth (U) was faster than e4b's dense path (L) in this matched SDPA, eager, full-logits configuration, not Unsloth's default.
 - e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18 [measured]: Lane P137, one rented RTX 4090: under expert offload with enable_fast_train(dgrad=True), layer-major accumulation (experts4bit_qlora.engines.layer_major.layer_major_step, one step's micro-batches run layer by layer) trains Qwen3-30B-A3B at 2.365x the stock accumulation loop's speed: medians A0a 7.641 / L1a 3.231 / L1b …
 - e4b.serve.p135.fold-speed.mixtral.5090.2026-10-18 [measured]: Lane P135 (one RTX 5090): on the default serve_paged graph server (Mixtral-8x7B-Instruct NF4, bucket-1 decode graph), FAM's ON_auto folds (census 0 / 65 / [32, 32] / 32: the glue fold's 65 RMSNorms, round 2's 32 decoder layers and 32 attentions, the router epilogue's 32 routers on their fp32 path …
+- e4b.train.p140.layer-major-offload.qwen3.5090.2026-10-18 [measured]: Lane P140, one rented RTX 5090, a replication of P137 (its kit at Amendment 3, every STRICT term unchanged): under expert offload with enable_fast_train(dgrad=True), layer-major accumulation (experts4bit_qlora.engines.layer_major.layer_major_step) trains Qwen3-30B-A3B at 2.311x the stock accumulation loop's speed …
 
 Open items (no evidence either way):
 
@@ -3357,4 +3362,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 …
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(445 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(446 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

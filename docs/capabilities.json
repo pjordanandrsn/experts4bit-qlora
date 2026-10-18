@@ -769,7 +769,7 @@
     "which residency engine should I use",
     "hot experts in VRAM, cold experts on the host"
    ],
-   "solution": "load_moe_4bit_streaming(..., offload=True) homes each layer's frozen 4-bit experts in pinned host RAM and streams one layer at a time (prefetch=True overlaps); enable_dense_offload streams the dense side; hot_sets_from_profile picks the resident experts by routing frequency; enable_pipelined_residency trades spare VRAM for speed at serve time. In training, layer_major_step runs one step's micro-batches layer by layer, so each offloaded layer is staged once per step instead of once per micro-batch: its speed with enable_fast_train(dgrad=True) under offload is claim e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18.",
+   "solution": "load_moe_4bit_streaming(..., offload=True) homes each layer's frozen 4-bit experts in pinned host RAM and streams one layer at a time (prefetch=True overlaps); enable_dense_offload streams the dense side; hot_sets_from_profile picks the resident experts by routing frequency; enable_pipelined_residency trades spare VRAM for speed at serve time. In training, layer_major_step runs one step's micro-batches layer by layer, so each offloaded layer is staged once per step instead of once per micro-batch: its speed with enable_fast_train(dgrad=True) under offload is claims e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18 and e4b.train.p140.layer-major-offload.qwen3.5090.2026-10-18.",
    "modes": [
     "offload",
     "inference",
@@ -834,7 +834,8 @@
     "e4b.offload.fits-30b-class",
     "e4b.serve.informed-hot-sets",
     "e4b.host.ratios-travel-absolutes-do-not",
-    "e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18"
+    "e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18",
+    "e4b.train.p140.layer-major-offload.qwen3.5090.2026-10-18"
    ],
    "limitations": [
     "enable_pipelined_residency patches an ExpertsLoRA wrapper's base and only runs when the wrapper delegates (eval mode, no_grad, an adapter that contributes nothing): assert the count and check the served path",
