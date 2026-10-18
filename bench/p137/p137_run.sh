@@ -158,7 +158,7 @@ python $W/p137_box.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0
 (cd $E4BSRC && perl -e 'alarm 1200; exec @ARGV' python -m pytest tests/test_layer_major.py tests/test_offload_hold.py tests/test_offload.py -q -rs -p no:cacheprovider) > logs/premise.log 2>&1
 rc=$?; { echo -n "premise rc=$rc: "; tail -1 logs/premise.log; } | tee -a summary.txt
 grep -a "^SKIPPED" logs/premise.log | tee -a summary.txt
-if [ "$rc" = 0 ] && tail -1 logs/premise.log | grep -Eq "^=* ?$PREMISE_PASSED passed in "; then
+if [ "$rc" = 0 ] && tail -1 logs/premise.log | grep -Eq "^=* ?$PREMISE_PASSED passed(, [0-9]+ warnings?)? in "; then
   echo "premise ok ($PREMISE_PASSED passed, none skipped)" | tee -a summary.txt
 else
   echo "premise failed" | tee -a summary.txt; say "PREMISE FAILED on this card"; echo "premise failed rc=$rc" > REFUSAL; finish 25
