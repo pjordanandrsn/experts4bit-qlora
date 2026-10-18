@@ -125,3 +125,34 @@ def test_a_class_check_that_fails_to_run_is_refused(tool, tmp_path):
     subprocess.run(["git", "-C", str(tool), "commit", "-qam", "a broken class check"], check=True, env={**os.environ, **env})
     r = _drive(tool, tmp_path)
     assert r.returncode == 78 and "class check rc 1" in r.stdout, r.stdout + r.stderr
+
+
+def _junit(tmp_path: Path) -> Path:
+    p = tmp_path / "r.xml"
+    p.write_text('<testsuites><testsuite><testcase classname="kernel.t" name="ok"/>'
+                 '<testcase classname="kernel.t" name="skipped"><skipped message="no card"/></testcase></testsuite></testsuites>')
+    return p
+
+
+@pytest.mark.parametrize("ids,rc", [("kernel.t::ok", 0), ("kernel.t::skipped", 30), ("kernel.t::absent", 30),
+                                    ("kernel.t::ok kernel.t::skipped", 30), ("not-an-id", 78)])
+def test_a_required_test_must_pass_not_merely_not_fail(tmp_path, ids, rc):
+    r = subprocess.run([sys.executable, str(GC / "gc_box.py"), "--require", ids, "--junits", str(_junit(tmp_path))],
+                       capture_output=True, text=True, timeout=60)
+    assert r.returncode == rc, r.stdout + r.stderr
+
+
+def test_gc_require_travels_to_the_box_and_a_malformed_id_is_refused(tool, tmp_path):
+    (tmp_path / "m::ta").write_text("")                           # an unquoted t[ab] would glob to this file
+    r = _drive(tool, tmp_path, GC_REQUIRE="kernel.test_dispatch_counts::test_x m::t[ab]")
+    assert r.returncode == 0 and "GC_REQUIRE=kernel.test_dispatch_counts::test_x\\ m::t\\[ab\\]" in r.stdout, r.stdout + r.stderr
+    r = _drive(tool, tmp_path, GC_REQUIRE="kernel.t::ok;rm")
+    assert r.returncode == 78 and "GC_REQUIRE id" in r.stdout, r.stdout + r.stderr
+
+
+def test_each_suite_is_gated_on_the_time_left_and_the_required_tests_are_read():
+    text = (GC / "gc_run.sh").read_text()
+    assert 'if can_run "${GC_NEED_GNF4_S:-900}" "gnf4 kernel tests"; then' in text
+    assert 'if can_run "${GC_NEED_E4B_S:-600}" "e4b served tests"; then' in text
+    assert text.count('perl -e "alarm $(alarm); exec @ARGV"') == 2, "each suite's alarm stops at the receipt margin"
+    assert 'python $W/gc_box.py --require "$GC_REQUIRE" --junits logs/gnf4.xml logs/e4b.xml' in text

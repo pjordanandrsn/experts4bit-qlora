@@ -19,6 +19,7 @@ Each suite runs with `-rs` and a junit report; the summary lists every skipped t
 | `GC_GNF4_SHA` | the grouped-nf4-gemm commit under test: 40 lowercase hex (a branch, tag or short sha is refused) |
 | `GC_E4B_SHA` | the experts4bit-qlora commit whose served tests run and which the box installs: 40 lowercase hex |
 | `GC_CARD` | the declared class: `MAJOR.MINOR/SMS` (exact count) or `MAJOR.MINOR/>=SMS` (a floor), e.g. `8.9/128` for the RTX 4090 |
+| `GC_REQUIRE` | optional: test ids (`<classname>::<name>`) that must PASS; see below |
 | `E4B_RENT_RUN_ID` | `gc-<slug>-<n>`; a dry run's is `gc-dry-<slug>-<n>` with `GC_DRY=1` and `GC_BOX_EXEC` |
 
 The launch tree must be clean, so the staged tool is the committed one; its commit is written to the box (`GC_TOOL_SHA`)
@@ -49,8 +50,12 @@ The receipts land in `<run dir>/gc/`: `summary.txt`, `versions.txt`, `forensics.
 pytest logs), `GC_TOOL_SHA`. The pin, the spend and the teardown proof are posted on the PR under review and on the bus, as
 for any rental.
 
-## Before the next reuse (a follow-up PR)
+## Required tests and the time left
 
-- `GC_REQUIRE`: a list of test ids that must PASS (a skip or an absence exits 30). Today a pass allows any skip, so the
-  first run's review reads the required test from `logs/gnf4.xml` by hand.
-- A time-left check before each suite that reads `GC_DEADLINE_EPOCH` with a receipt margin, as P133's `can_run` does.
+- `GC_REQUIRE` (optional, on the controller): the tests a review names as the PR's own evidence, in junit form
+  `<classname>::<name>`, space-separated. For example, `kernel.test_dispatch_counts::test_on_a_real_rtx_4090_auto_engages_unmocked`.
+  Each must PASS. A skip, an absence, a failure or an error exits 30, because a contract whose key test skipped on the
+  declared card has not passed. The summary records each one's outcome (`GC_REQUIRE`).
+- Each suite starts only when its need (`GC_NEED_GNF4_S` 900 s, `GC_NEED_E4B_S` 600 s) plus a 300 s receipt margin fits
+  before `GC_DEADLINE_EPOCH`. Its alarm never runs past that margin, so a tight guard still leaves time to fetch the receipts.
+  A suite skipped for time fails the contract and is listed (`SKIPPED <suite> host-limited deadline`).
