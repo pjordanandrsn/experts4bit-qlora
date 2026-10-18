@@ -79,6 +79,11 @@ jobs:
           ruff check bench/g4census
           pytest bench/g4census/test_g4census_registration.py -q
           python bench/g4census/g4census_reduce.py --self-test
+      - name: P137 registration contract (CPU only; no GPU or rental)
+        run: |
+          ruff check bench/p137 tests/test_p137_staged_pin.py
+          python bench/p137/p137_reduce.py --self-test
+          python bench/p137/p137_box.py --self-test
       - name: Test
         run: pytest tests/ -q
       - name: census cross-check (grouped-nf4-gemm#353 -- every claimed family the kernel's shape census covered is still covered, against the census of the exact kernel commit installed above)
