@@ -159,6 +159,8 @@ them re-bands.
 - **Run ids:** `p146-4090-1` is the reading. `p146-4090-2` to `p146-4090-4` are spares under the flicker rule: an id
   refused before the create, or NOT_RUN at the pre-flight, is consumed and is not an attempt. `p146-dry-<n>` are the $0
   dry runs.
+- **Spare ids** (added after `-1` to `-4` were spent at $0.001 in total, with no box-started run): `p146-4090-5` to
+  `p146-4090-8`, for pre-create refusals, listings gone before the create, and NOT_RUN at the pre-flight only. No term changes.
 - **Guards:** guard 3.0 h.
   - The fetch check is 3,300 s: 61.1 GB at the launcher's 20 MB/s floor is about 3,050 s.
   - The arm check is 6,000 s: four processes of at most 1,500 s each. Each is a load (about 65 s on a capped host),

@@ -92,19 +92,20 @@ def test_the_pins_are_exact_and_agree():
 
 
 def test_the_declared_run_ids_and_nothing_else(tmp_path):
-    ok = [("p146-4090-1", {}), ("p146-4090-2", {}), ("p146-4090-3", {}), ("p146-4090-4", {}),
+    ok = [("p146-4090-1", {}), ("p146-4090-2", {}), ("p146-4090-3", {}), ("p146-4090-4", {}), ("p146-4090-5", {}),
+          ("p146-4090-8", {}),
           ("p146-dry-1", {"P146_DRY": "1", "P146_BOX_EXEC": "/bin/false"})]
     for run_id, extra in ok:
         out = _drive(tmp_path, run_id, **extra)
         assert out.returncode == 0 and out.stdout.startswith("DRYRUN stage -> "), (run_id, out.stdout + out.stderr)
         assert f"E4B_SHA={E4B_PIN}" in out.stdout, out.stdout
-    refused = [("p146-4090-5", {}), ("p146-4090-10", {}), ("p146-5090-1", {}), ("p144-4090-1", {}), ("p146-4090-prove-1", {}),
+    refused = [("p146-4090-9", {}), ("p146-4090-10", {}), ("p146-5090-1", {}), ("p144-4090-1", {}), ("p146-4090-prove-1", {}),
                ("p146-4090-1", {"P146_DRY": "1", "P146_BOX_EXEC": "/bin/false"}), ("p146-dry-1", {}),
                ("p146-4090-1", {"E4B_SHA": "0" * 40})]
     for run_id, extra in refused:
         out = _drive(tmp_path, run_id, **extra)
         assert out.returncode == 78 and "refusing" in out.stdout, (run_id, extra, out.stdout + out.stderr)
-    assert "p146-4090-1" in PREREG and "p146-4090-4" in PREREG
+    assert "p146-4090-1" in PREREG and "p146-4090-4" in PREREG and "p146-4090-8" in PREREG
 
 
 def test_the_rule_is_the_registered_rule():
