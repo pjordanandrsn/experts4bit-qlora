@@ -1323,6 +1323,10 @@ def load_moe_4bit_streaming(
     # below must only ever see canonical names (an unnormalized alias would silently pick the
     # wrong class).
     quant_type = normalize_quant_type(quant_type)
+    from .util import host_cpu_report
+    _cpu = host_cpu_report()
+    log(f"  host CPUs: {_cpu['visible_cpus']} visible, quota {_cpu['cpu_quota'] if _cpu['cpu_quota'] is not None else 'none'}, "
+        f"torch threads {_cpu['torch_threads']}, OMP_NUM_THREADS={_cpu['omp_num_threads']}")
     # #344: staged synchronisation, armed HERE because this is the last point in the load
     # at which CUDA_LAUNCH_BLOCKING can still reach the driver — nothing above has touched
     # the GPU (the model is built on `meta`, the snapshot comes off disk), so a caller that
