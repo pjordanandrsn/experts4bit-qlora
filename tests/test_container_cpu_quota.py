@@ -51,3 +51,21 @@ def test_the_thread_cap_is_the_quota_rounded_up_never_above_the_pool():
     assert host_thread_cap({"torch_threads": 4, "visible_cpus": 256, "cpu_quota": 30.72}) == 4      # never raises the pool
     assert host_thread_cap({"torch_threads": 12, "visible_cpus": 12, "cpu_quota": 0.5}) == 1
     assert host_thread_cap({"torch_threads": 64, "visible_cpus": 8, "cpu_quota": None}) == 8        # affinity caps too
+
+
+def test_the_capped_pool_is_restored_even_when_the_body_raises():
+    import pytest
+    import torch
+
+    from experts4bit_qlora.util import capped_intra_op_threads
+    before = torch.get_num_threads()
+    with capped_intra_op_threads(None) as changed:                  # None: unchanged
+        assert not changed and torch.get_num_threads() == before
+    if before > 1:
+        with pytest.raises(RuntimeError, match="inside the load"):
+            with capped_intra_op_threads(1) as changed:
+                assert changed and torch.get_num_threads() == 1
+                raise RuntimeError("a refusal inside the load")
+    assert torch.get_num_threads() == before
+    with capped_intra_op_threads(before + 8) as changed:            # never raises the pool
+        assert not changed and torch.get_num_threads() == before

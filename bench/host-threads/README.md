@@ -7,7 +7,7 @@ nine loads, and a resident load skips the host-side stack/cat. So on 51612 the r
 slow: its container held about 1/8 of the machine, consistent with a CFS quota of about 31 CPUs. P137's receipts recorded
 neither the quota nor the thread count.
 
-**The mechanism, checked at $0** (`omp_probe.py`, a diagnostic: no number here travels to another host). On the QNAP host
+**The mechanism, checked at $0** (`omp_probe.py`, a diagnostic: no number here travels to another host). On a 6-core desktop host
 (Intel Xeon W-1250, 6 cores and 12 threads), the loader's own `fuse_experts` assembled one Qwen3-30B-A3B-shaped layer: 128
 experts, gate and up [768, 2048], down [2048, 768], bf16, about 1.2 GB. Medians of 4 runs:
 
@@ -17,7 +17,7 @@ experts, gate and up [768, 2048], down [2048, 768], bf16, about 1.2 GB. Medians 
 | no quota | 7.68 s | 0.43 s |
 
 A pool larger than the CPUs the process can actually run on makes this copy many times slower. Inside the quota the pool
-spins through the quota and is throttled every period. The no-quota row is diagnostic only: the QNAP runs a full
+spins through the quota and is throttled every period. The no-quota row is diagnostic only: that host runs a full
 service stack on its 6 cores, so that slowdown is most likely contention, and it sets no rule. **The cap targets the quota
 case.** With no quota it is min(pool, affinity), unchanged here. The new load log shows whether a real box ever hits a
 no-quota slowdown; that would be a separate, measured fix. Inside

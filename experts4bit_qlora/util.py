@@ -1,3 +1,4 @@
+import contextlib
 import os
 import time
 
@@ -118,3 +119,19 @@ def host_thread_cap(report: dict) -> int:
     if report.get("cpu_quota") is not None:
         cap = min(cap, max(1, math.ceil(report["cpu_quota"])))
     return max(1, cap)
+
+
+@contextlib.contextmanager
+def capped_intra_op_threads(n):
+    """Run the body with torch's intra-op pool at most ``n`` threads (``None``: unchanged), and restore the pool on the way
+    out, raise or not: the pool is process-wide, so a load that fails inside must not leave its caller capped."""
+    import torch
+    before = torch.get_num_threads()
+    changed = n is not None and n < before
+    if changed:
+        torch.set_num_threads(n)
+    try:
+        yield changed
+    finally:
+        if changed:
+            torch.set_num_threads(before)
