@@ -67,3 +67,48 @@ both arms.
   4. the reduce.
 - **Before launch:** the lane's own guards (`--validate` at the current launcher, the ceiling check at the ledger's
   remote tip, the pin above), and the receipt committed within minutes of teardown.
+
+## The split premise (2026-10-18, after `w8a16-premise-5090-2`)
+
+**What the first box saw** (seen data, verbatim; it sets no bar and is never quoted as a result).
+`w8a16-premise-5090-2` read **UNDERPOWERED** at both ruled gates, neither GO nor PARK:
+
+| gate | argmax | mean d (nats) | bound | SE | windows | windows needed |
+|---|---:|---:|---:|---:|---:|---:|
+| t1 | 0.9586 | +0.00495 | 0.00537 | 0.00241 | 108 | 196 |
+| k16 | 0.9577 | +0.00461 | 0.00541 | 0.00189 | 112 | 123 |
+| c4 (reported) | 0.9473 | +0.00202 | 0.00292 | 0.00403 | 16 | — |
+
+ppl A 9.282 → I8 9.328 at t1. A reproduced P125's own A.
+
+**The question it leaves.** The lm_head perturbs the logits directly, so it is the likely source of most argmax flips.
+If the attention projections alone keep the gate with margin, the lever narrows to attention-only W8A16.
+
+**The split box.** It uses the same subject and instrument, with three arms, each its own process, in this order:
+- **A:** the default. It writes R's log-probs.
+- **I8ATTN:** the candidate. It rounds the 96 attention projections (48 fused q/k/v and 48 o); the head stays bf16.
+- **I8HEAD:** reported only. It rounds the lm_head, and the attention stays bf16. It rules nothing, and a deadline
+  skips it rather than stopping the box.
+
+**The windows.** Every arm reads t1 at **196** windows, k16 at **123** and c4 at 16: the power the first box's
+spread asks for. P125's wikitext loader starts a window every 2048 tokens and holds only 146 windows of 640. This box
+calls the same loader (`p125_box.wikitext_windows`: the same corpus and tokenisation) every **1024** tokens, which
+holds 292 windows and still never overlaps two windows.
+
+**The rule, fixed before any data** (`i8_reduce.py`; I8ATTN alone, at **both** t1 and k16):
+- **GO** iff mean argmax agreement ≥ 0.95 **and** the one-sided 95 % upper bound d + 1.645 SE ≤ P125's bound,
+  ln(1 + 0.05 / ppl_A) over that gate's windows.
+- **PARK** otherwise. The W8A16 lever parks with the numbers, and there is no third premise.
+- **VOID:** a record is missing or off its arm; I8ATTN's round trip is not exactly the 96 attention modules with the
+  head untouched; A's or I8ATTN's recorded windows (counts and the 1024 stride) differ from the ruled ones; a ruled
+  gate's windows are off 196 / 123. I8HEAD's recorded windows are reported, never ruled.
+- A unit test confirms that a rule judging on point d instead of the upper bound fails the reducer's own self-test.
+
+**The box.**
+- **Run ids:** `w8a16-split-5090-1`, with `-2` as a pre-create spare.
+- **Host terms and caps:** unchanged.
+- **Guard:** 1.25 h, sized from the first box's measured seconds per window (t1 ≈ 3.7 s, k16 ≈ 0.47 s, load ≈ 31 s).
+  Three arms at 196 / 123 / 16 windows come to about 42 minutes, × 1.3 is about 55; with about 11 minutes of setup,
+  the total is about 66.
+- **Worst case:** 1.25 h × $0.85/h + 70 GB × $0.005/GB = **$1.41**.
+

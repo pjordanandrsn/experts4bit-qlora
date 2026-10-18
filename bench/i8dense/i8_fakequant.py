@@ -67,12 +67,19 @@ def targets(model) -> list:
     return out
 
 
-def apply(model) -> dict:
-    """Round every target in place; return a record of what was rounded."""
-    mods = targets(model)
+SCOPES = ("both", "attn", "head")
+
+
+def apply(model, scope: str = "both") -> dict:
+    """Round the targets in ``scope`` in place (``both``: every attention projection and the head; ``attn``: the
+    attention projections only, the head stays bf16; ``head``: the lm_head only); return a record of what was rounded."""
+    if scope not in SCOPES:
+        raise ValueError(f"scope {scope!r} is not one of {SCOPES}")
+    mods = [(n, m) for n, m in targets(model) if scope == "both" or (n == "lm_head") == (scope == "head")]
     stats = {name: roundtrip_(m.weight) for name, m in mods}
     worst = max(s["max_err_over_half_step"] for s in stats.values())
-    return {"modules": len(mods), "attention_modules": len(mods) - 1, "lm_head": True,
+    head = any(n == "lm_head" for n, _ in mods)
+    return {"scope": scope, "modules": len(mods), "attention_modules": len(mods) - int(head), "lm_head": head,
             "max_err_over_half_step": worst, "rel_fro_err_max": max(s["rel_fro_err"] for s in stats.values()),
             "per_module": stats}
 
@@ -134,6 +141,21 @@ def self_test() -> int:
     cases.append(("fused: 2 qkv + 2 o + the head", r["modules"] == 5 and r["attention_modules"] == 4, r["modules"]))
     cases.append(("the router gate is untouched", bool(torch.equal(gate0, m.gate.weight)), None))
     cases.append(("unfused: 2 x (q, k, v, o) + the head", apply(Toy(fused=False))["modules"] == 9, None))
+    m = Toy(fused=True)
+    head0 = m.lm_head.weight.detach().clone()
+    r = apply(m, "attn")
+    cases.append(("attn: the 4 attention modules, the head untouched", r["modules"] == 4 and not r["lm_head"]
+                  and bool(torch.equal(head0, m.lm_head.weight)), r["modules"]))
+    m = Toy(fused=True)
+    qkv0 = m.layers[0].qkv_proj.weight.detach().clone()
+    r = apply(m, "head")
+    cases.append(("head: the lm_head only, attention untouched", r["modules"] == 1 and r["lm_head"]
+                  and r["attention_modules"] == 0 and bool(torch.equal(qkv0, m.layers[0].qkv_proj.weight)), r["modules"]))
+    try:
+        apply(Toy(fused=True), "router")
+        cases.append(("an unknown scope is refused", False, None))
+    except ValueError:
+        cases.append(("an unknown scope is refused", True, None))
     for name, model in (("a tied head is refused", Toy(fused=True, tied=True)), ("no attention is refused", torch.nn.Linear(2, 2))):
         try:
             apply(model)
