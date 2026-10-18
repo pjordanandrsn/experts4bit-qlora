@@ -1,0 +1,39 @@
+KNOBS e4b=67ba40b765368cd357f5003f4650d49886c1595c gnf4=eea5df6baefbe38b795621286fe70eac2980aa44 model=mistralai/Mixtral-8x7B-Instruct-v0.1@eba92302a2861cdc0098cc54bc9f17cb2c47eb61 gpu_class=5090 min_disk_gb=220 min_ram_gb=60 family=mixtral dry=0 short=32 long=160 reps=3 moe_layers=32
+CUDA_PROBE ok
+e4b 0.55.0 @67ba40b765368cd357f5003f4650d49886c1595c
+gnf4 0.47.0 @eea5df6baefbe38b795621286fe70eac2980aa44
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+P136 reducer self-test OK (all missing family receipts VOID)
+p145_reduce self-test OK (17 cases)
+pername_table self-test OK (10 cases)
+p136_box self-test OK (5 cases)
+self-test OK (43 checks)
+selftest OK (3 cases)
+premise rc=0: 19 passed, 5 warnings in 8.63s
+premise ok
+nsys NVIDIA Nsight Systems version 2025.6.1.190-256136895201v0 at /usr/local/bin/nsys
+FETCH mistralai/Mixtral-8x7B-Instruct-v0.1@eba92302a2861cdc0098cc54bc9f17cb2c47eb61 /root/.cache/huggingface/hub/models--mistralai--Mixtral-8x7B-Instruct-v0.1/snapshots/eba92302a2861cdc0098cc54bc9f17cb2c47eb61
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=9689e662d473cbd1e114ddf251817490aeaef5bdd788ec2e034d0937bd10dbbb
+arm S1a rc=0 P136_ARM {"tag": "S1a", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 65, "fuse_t1_glue_r2_n": [32, 32], "fuse_router_epilogue_n": 32}, "load_s": 27.39, "W16_ms": 53.543, "W1_ms": 8.2499}
+
+arm S1b rc=0 P136_ARM {"tag": "S1b", "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 65, "fuse_t1_glue_r2_n": [32, 32], "fuse_router_epilogue_n": 32}, "load_s": 22.77, "W16_ms": 53.4898, "W1_ms": 8.2559}
+
+capture census_e4b_b1_graph rc=0 P136_CENSUS {"batch": 1, "steps_bracketed": 64, "profiled_ms_per_step": 7.9898}
+
+capture census_e4b_b1_node rc=0 P136_CENSUS {"batch": 1, "steps_bracketed": 64, "profiled_ms_per_step": 8.2309}
+
+SC1B {"engine": "e4b", "comparator": null, "batch": 1, "status": "ok", "reading": null, "named_cause": null, "labels": []}
+PERNAME_TABLE {"status": "ok", "steps_kept": 61, "P_ms": 8.124718, "closure_ns_max": 0, "top": [["_gemv_nf4_bw|2x1792x1|gate_up", 2.749093], ["_gemv_nf4_bw|2x256x2|down", 1.882362], ["kernel|1024x1x1", 1.471122], ["kernel|256x1x1", 0.57316], ["_fp8_paged_decode_split_f8dot|96x1x1", 0.250438], ["kernel|8000x1x1", 0.157186], ["kernel|2x1x1", 0.121024], ["_fp8_append_bt1_side|1x8x1", 0.118851]], "why": null}
+capture census_e4b_b16_graph rc=0 P136_CENSUS {"batch": 16, "steps_bracketed": 64, "profiled_ms_per_step": 52.6641}
+
+capture census_e4b_b16_node rc=0 P136_CENSUS {"batch": 16, "steps_bracketed": 64, "profiled_ms_per_step": 52.8845}
+
+SC1B {"engine": "e4b", "comparator": null, "batch": 16, "status": "ok", "reading": null, "named_cause": null, "labels": []}
+PERNAME_TABLE {"status": "ok", "steps_kept": 61, "P_ms": 53.22414, "closure_ns_max": 0, "top": [["_gemm_nf4_grouped_smallm|10x896x1", 29.56217], ["_gemm_nf4_grouped_smallm|10x128x1", 18.939677], ["Kernel2|8x32x1", 1.626835], ["Kernel2|1x1x1", 0.754887], ["_fp8_paged_decode_split_f8dot|256x1x1", 0.648775], ["Kernel2|8x8x16", 0.465252], ["Kernel2|8x250x1", 0.163938], ["_fp8_append_bt1_side|16x8x1", 0.122146]], "why": null}
+P145 READ {"why": [], "next": {"target": "PROPOSE a quality premise for kernel|1024x1x1", "lever": "format", "why": "top addressable W1 line is dense_gemm (1.4711 ms, 18.11% of P): a FORMAT lever (fewer bytes; its floor of 0 is not kernel headroom), so a quality premise comes before any kernel"}, "gemv": {"gate_up": {"removable_ms": 2.749093, "p141_isolated_ms": 3.0862, "in_situ_excess_ms": -0.337107, "in_situ_excess_share": -0.04149}, "down": {"removable_ms": 1.882362, "p141_isolated_ms": 1.9502, "in_situ_excess_ms": -0.067838, "in_situ_excess_share": -0.00835}}}

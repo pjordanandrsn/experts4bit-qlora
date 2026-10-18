@@ -1,0 +1,16 @@
+# Kept only in the private receipt store (commit f3ce417ad3309b3f3fb70db6fc3251e8a294263b), byte-exact: these 13 logs carry CRLF line
+# endings from the box's progress output, and receipts are never rewritten, so they are not committed here.
+# sha256, then the file's path in the store.
+9c789a3d4bb58b50910c1a2eba6756a96d48f92ed80135903c0b47460afc4e71  receipts/experts4bit-qlora/2026-10-18/p145-5090-1/p145/logs/arm_S1a.log
+d93ca5a0fff034052bb6c719262da5f56bfc65a1fced208a0a1db45fb71ae49c  receipts/experts4bit-qlora/2026-10-18/p145-5090-1/p145/logs/arm_S1b.log
+360403d96a1db75a953baa58b791a154ce01dc9453dd6cfb9f95d3a48a7b507a  receipts/experts4bit-qlora/2026-10-18/p145-5090-1/p145/logs/export_census_e4b_b16_graph.log
+24628cee0806d0965f1aedfa46f7212c7c5b046724b02dae564082e3459fbb61  receipts/experts4bit-qlora/2026-10-18/p145-5090-1/p145/logs/export_census_e4b_b16_node.log
+360403d96a1db75a953baa58b791a154ce01dc9453dd6cfb9f95d3a48a7b507a  receipts/experts4bit-qlora/2026-10-18/p145-5090-1/p145/logs/export_census_e4b_b1_graph.log
+8d662254432421a74906f7021e3ab8417796b39219533497a739923b49b686ad  receipts/experts4bit-qlora/2026-10-18/p145-5090-1/p145/logs/export_census_e4b_b1_node.log
+e5dffeaec7bec400fc8d980b599c6ce9f6d1a7ab6d6f2031f3f64d79060151bc  receipts/experts4bit-qlora/2026-10-18/p145-5090-1/p145/logs/fetch.log
+c5dc75c8b95a6c73d4eff9a2529e636642b22392e2383dc304fb445a65422db6  receipts/experts4bit-qlora/2026-10-18/p145-5090-1/p145/logs/install_nsys.log
+27fb2dbf7248baab0a23c8ee2362d6726ff4a760734f3f3e81def3fbb3feb75f  receipts/experts4bit-qlora/2026-10-18/p145-5090-1/p145/logs/prompts.log
+efb1deb27eff084d16f8a716a231535a7ec5380a2f9f8a2bbe1c51e206c37c59  receipts/experts4bit-qlora/2026-10-18/p145-5090-1/p145/logs/run_census_e4b_b16_graph.log
+647514d2aeca87389ff64c8185c46f353c712d070fa008f9c5c9697994e2cd1e  receipts/experts4bit-qlora/2026-10-18/p145-5090-1/p145/logs/run_census_e4b_b16_node.log
+a240e8e174fcccfd40524eb249309fd2a89d33a9b712c08f01e0c7f63cf5b322  receipts/experts4bit-qlora/2026-10-18/p145-5090-1/p145/logs/run_census_e4b_b1_graph.log
+26107ecfb2709e4d497c25e04d35b10648507e0f2a9b08394dd37b25618a16be  receipts/experts4bit-qlora/2026-10-18/p145-5090-1/p145/logs/run_census_e4b_b1_node.log
