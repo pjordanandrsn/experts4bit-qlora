@@ -219,6 +219,17 @@ class _PipelinedResidency:
         # is four contiguous runs rather than one, and the gather issues one launch
         # per segment. `.view(E, -1)` below is what proves per-expert contiguity.
         self.seg_srcs = None
+        # Exact-size slab homes (E4B_OFFLOAD_PIN_SLAB) exist to save host RAM, so they must be read in place or refused: never a
+        # silent second arena. A slab the device cannot read at its host address refuses here, before any fallback can run.
+        from .offload import _device_readable_in_place, _slab_of
+        slab_homes = homes is not None and any(_slab_of(homes[n]) is not None for n in homes)
+        if slab_homes:
+            unreadable = sorted(n for n in homes if _slab_of(homes[n]) is not None and not _slab_of(homes[n])[2])
+            if unreadable:
+                raise RuntimeError(
+                    f"E4B_OFFLOAD_PIN_SLAB: the slab holding {unreadable} is not readable by the device at its host address, so "
+                    "pipelined residency would pin a second full copy of this layer. Unset E4B_OFFLOAD_PIN_SLAB for pipelined "
+                    "residency.")
         if homes is not None and all(int(s) % 8 == 0 for s in seg):
             try:
                 bases, ok = [], True
@@ -231,7 +242,7 @@ class _PipelinedResidency:
                     # with the offset advancing in ELEMENTS, so a preceding tensor with
                     # an odd numel leaves the next one misaligned -- which would be
                     # undefined behaviour in the kernel, not a fault. Checked, not assumed.
-                    ok = (ok and bool(t.is_pinned()) and t.data_ptr() % 8 == 0
+                    ok = (ok and _device_readable_in_place(t) and t.data_ptr() % 8 == 0
                           and t.is_contiguous())
                     bases.append((t.data_ptr(), int(seg[j])))
                 if ok:
@@ -246,6 +257,10 @@ class _PipelinedResidency:
                                              "down_proj", "down_absmax")]
             except (RuntimeError, KeyError, AttributeError):
                 self.seg_srcs = None    # any doubt -> fall back to the copied arena
+        if slab_homes and self.seg_srcs is None:
+            raise RuntimeError(
+                "E4B_OFFLOAD_PIN_SLAB: pipelined residency could not read this layer's slab homes in place, and copying them "
+                "would pin a second full copy of the layer. Unset E4B_OFFLOAD_PIN_SLAB for pipelined residency.")
 
         if self.seg_srcs is None:
             cached = getattr(mod, "_e4b_arena_cache", None)
