@@ -157,6 +157,9 @@ FUSION_DEFAULT_FAMILIES = {
     "qwen3_moe": "P115 Phases A and B: speed and quality (#1328); Phase D: SANE at T == 1, COMBINED_SANE (#1379)",
     "qwen3_5_moe_text": _FAM_QW36,
     "qwen3_5_moe": _FAM_QW36,           # the composite config, should a build keep it
+    "mixtral": ("lane FAM (#1362): T == 1 quality PASS on every knob (e4b.serve.fam.fused-stack-t1.mixtral.5090."
+                "2026-10-09) and P135 (#1732): the three folds that engage FASTER at one row (e4b.serve.p135.fold-speed."
+                "mixtral.5090.2026-10-18)"),
 }
 # the read each other known family lacks or failed, named in the warning an explicit ``auto`` logs on it
 FUSION_UNLICENSED = {

@@ -12334,6 +12334,35 @@
         "bench/dq11/RESULTS-dq11.md"
       ],
       "notes": "VALID_CONTROLLED_READ with initial and trained K8 quality passing in both repetitions; BUILD_CANDIDATE and U_FASTER_CONTROLLED independently re-derived with verified teardown. No numerical speed magnitude is published. Fusion headroom is an ablation on Unsloth, not a measurement of a new e4b implementation. Default-Unsloth position, capacity and shipping licenses remain false. Raw receipt SHA256 67dc2ad03f924bee68ffb82179412e74f35abbdbc4549a9640edd1cee8cf9029."
+    },
+    {
+      "id": "e4b.serve.p135.fold-speed.mixtral.5090.2026-10-18",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+      "claim": "Lane P135 (one RTX 5090): on the default serve_paged graph server (Mixtral-8x7B-Instruct NF4, bucket-1 decode graph), FAM's ON_auto folds (census 0 / 65 / [32, 32] / 32: the glue fold's 65 RMSNorms, round 2's 32 decoder layers and 32 attentions, the router epilogue's 32 routers on their fp32 path; 161 fold-patched forwards) decode one request FASTER than the same model with every fold's original forward put back: median step 20.244 -> 19.016 ms (block a) and 20.515 -> 19.031 ms (block b), ON/OFF 0.9393 and 0.9277, both under the registered 0.98, the blocks 1.26 % apart (FAM Amendment 4's interleaved method, 256 timed steps a setting). With FAM's T == 1 quality PASS (e4b.serve.fam.fused-stack-t1.mixtral.5090.2026-10-09) it licenses adding mixtral to the fusion allowlist.",
+      "value": 0.9393,
+      "unit": "ratio, median ON / median OFF one-row decode step, the larger of the two interleaved blocks' (block a; block b 0.9277)",
+      "hardware": "RTX 5090 (sm_120, driver 580.95.05), one rented Vast.ai host (instance 56547516, verified-secure, AMD EPYC 7742, 128 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @5be4c4d9 (0.55.0, P135 Amendment 1's merge, #1737) + grouped-nf4-gemm @724ccc45 (0.45.0); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0; premise 35 passed, none skipped, on the card; mistralai/Mixtral-8x7B-Instruct-v0.1 @eba9230, NF4 arena baked on the box; the default serve_paged build, eager, 2 slots x 768 tokens, the four fusion knobs at auto, the prefill glue knobs unset; one model, both settings via FoldRoute over all 161 fold-patched forwards; two blocks of a live runner per setting, the bucket-1 graph captured under each setting, OFF on slot 0 and ON on slot 1; a 512-token wikitext prompt, 5 warm + 256 timed + 32 more greedy steps in strict alternation",
+      "measured_on": "2026-10-18",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p135/RESULTS-p135.md",
+        "bench/p135/PREREG-p135.md",
+        "bench/p135/p135_speed.py",
+        "bench/p135/p135_reduce.py",
+        "bench/p135/receipts/p135-5090-2/verdict.json",
+        "bench/p135/receipts/p135-5090-2/speed.json",
+        "bench/p135/receipts/p135-5090-2/SHA256SUMS",
+        "bench/p135/receipts/p135-5090-1/summary.txt"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-18/p135-5090-2/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-18/p135-5090-1/ (receipt.json, teardown-proof.json; HARNESS_ERROR at the premise)"
+      ],
+      "notes": "Pre-registered in #1732 with Amendment 1 (#1737). Y1-Y6 all HIT (FASTER about 70 %; the ratios inside the predicted [0.91, 0.975]). p135-5090-1 ($0.038) stopped at the premise on the card before any fetch: a staged GPU test predated grouped-nf4-gemm's rope_norm_qk route. ON and OFF tokens agree on 283 of 293 per block, first parting at step 38 (reported, never gated). The reviewers and the maintainer re-derived the verdict from the store byte for byte, and the maintainer decided the allowlist flip on the quality and speed reads together."
     }
   ]
 }

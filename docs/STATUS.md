@@ -204,7 +204,7 @@ eager chain until a read of their own. `e4b.serve.p130.prefill-glue-speed.qwen3.
 16 unchanged, within P110's quality bar; it is grouped-nf4-gemm's default from 0.43.0 at Qwen3's NF4 expert shapes on
 GPUs with 160 or more SMs. `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`.
 
-**The B=1 fused stack is the default on Qwen3-MoE and Qwen3.5/3.6-MoE.** On top of grouped-nf4-gemm 0.43.0's
+**The B=1 fused stack is the default on Qwen3-MoE, Qwen3.5/3.6-MoE and Mixtral.** On top of grouped-nf4-gemm 0.43.0's
 bandwidth GEMV, fused q/k/v
 plus three glue folds decode one request 1.5902× and 16 requests 1.1644× as fast on Qwen3-30B-A3B NF4, and P115 Phase
 D's SANE read at T == 1 passes (bias +0.00541 nats, argmax agreement 0.9674). The four knobs resolve to `auto` on the
@@ -213,15 +213,17 @@ families with such reads and stay off elsewhere. Lane FAM read the others at T =
 own floor sits below the 0.90 agreement backstop; that floor also contains Phase C's 0.924, so Phase C's miss was the
 gate, not the knob. Qwen3.6-MoE, where only the router epilogue engages, passes, and the epilogue decodes one request
 there in 0.973 of the step (FAM Amendment 4), so the family joined the allowlist. Mixtral-8x7B passes on every knob,
-resolved at a ×0.90 softmax-scale change, but stays off by default until a speed read of what the knobs buy there
-(FAM Amendment 5). Gemma-4-26B-A4B's knobs stay off too: the family's own neutral floor sits below the
+resolved at a ×0.90 softmax-scale change, and its three folds (no fused q/k/v engages there) decode one request in
+0.9393 and 0.9277 of the step, 20.2–20.5 → 19.0 ms (P135, FAM Amendment 5's speed read), so the family joined the
+allowlist too. Gemma-4-26B-A4B's knobs stay off: the family's own neutral floor sits below the
 agreement backstop, so the instrument cannot license any knob on its NF4 stack (closed at its proof; the knobs pass
 the relative gate). `0` on each knob is the way back.
 `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`,
 `e4b.serve.p115.fused-stack-quality.qwen3.5090.2026-10-07`, `e4b.serve.fam.fused-stack-t1.granite.5090.2026-10-09`,
 `e4b.serve.fam.fused-stack-t1.gptoss.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.qw36.5090.2026-10-09`,
-`e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.mixtral.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.gemma4.5090.2026-10-10`
-([P115](../bench/p115/RESULTS-p115.md), [FAM](../bench/fam/RESULTS-fam.md)).
+`e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.mixtral.5090.2026-10-09`, `e4b.serve.fam.fused-stack-t1.gemma4.5090.2026-10-10`,
+`e4b.serve.p135.fold-speed.mixtral.5090.2026-10-18`
+([P115](../bench/p115/RESULTS-p115.md), [FAM](../bench/fam/RESULTS-fam.md), [P135](../bench/p135/RESULTS-p135.md)).
 
 **Where the default single-request step goes.** A kernel-class census of the shipped default on Qwen3-30B-A3B NF4,
 run on a 5090 with the fused stack and the bandwidth GEMV both on, puts the one-request step at 4.75 ms. The dense bf16
@@ -328,7 +330,7 @@ controls. `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-
 | the one-launch tile table over 4 programs, inside the size read (`next_pow2(E) × next_pow2(R) ≤ 128 × 512`; takes effect with a grouped-nf4-gemm release carrying #524's `programs=`; Qwen3-30B-A3B's 64-row step about 15.5 % faster) | serving | `E4B_INT4_TILE_PROGRAMS=1` | `e4b.serve.p126.tile-programs.qwen3-int4.5090.2026-10-09` |
 | attention projections of 17–64 decode rows on the int4 small-M GEMM, from the int4 grid instead of a cached bf16 copy (with the K16 route on; takes effect with a grouped-nf4-gemm release carrying #522's `block_m=`; Qwen3-30B-A3B's 64- and 32-row steps 3.2–3.8 % faster) | `Int4Linear` (serving) | `E4B_ATTN_INT4_WIDE=0` | `e4b.serve.p124.attn-int4-wide.qwen3-int4.5090.2026-10-09` |
 | router weights cast to bf16 at ≤ 64 rows (`softmax_topk`) | fused router epilogue | `E4B_ROUTER_EPI_CAST=0` | `e4b.serve.p70.qwen3.b1.router-weight-cast.5090.2026-09-25` |
-| B=1 fused stack (fused q/k/v and three glue folds) on Qwen3-MoE; its router epilogue, the only fold that engages, on Qwen3.5/3.6-MoE | `serve_paged` | `E4B_PAGED_FUSE_QKV=0`, `E4B_FUSE_T1_GLUE=0`, `E4B_FUSE_T1_GLUE_R2=0`, `E4B_FUSE_ROUTER_EPI=0` | `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`, `e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09` |
+| B=1 fused stack (fused q/k/v and three glue folds) on Qwen3-MoE; its router epilogue, the only fold that engages, on Qwen3.5/3.6-MoE; its three glue folds on Mixtral | `serve_paged` | `E4B_PAGED_FUSE_QKV=0`, `E4B_FUSE_T1_GLUE=0`, `E4B_FUSE_T1_GLUE_R2=0`, `E4B_FUSE_ROUTER_EPI=0` | `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`, `e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`, `e4b.serve.p135.fold-speed.mixtral.5090.2026-10-18` |
 
 ---
 

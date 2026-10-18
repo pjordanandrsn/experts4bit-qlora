@@ -1,0 +1,12 @@
+KNOBS run=p135-5090-1 e4b=7a3e048fadadea3ed0fd6b26bc378b5a307ec4fa gnf4=724ccc454f006c1a46836e434e997f31f293747f model=mistralai/Mixtral-8x7B-Instruct-v0.1@eba92302a2861cdc0098cc54bc9f17cb2c47eb61 gpu_class=5090 min_disk_gb=220 min_ram_gb=60
+CUDA_PROBE ok
+e4b 0.55.0 @7a3e048fadadea3ed0fd6b26bc378b5a307ec4fa
+gnf4 0.45.0 @724ccc454f006c1a46836e434e997f31f293747f
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+cc (12, 0)
+p135_speed self-test OK (12/12 cases)
+p135_reduce self-test OK (38/38 cases)
+premise run rc=1: 1 failed, 34 passed in 13.79s
+premise failed

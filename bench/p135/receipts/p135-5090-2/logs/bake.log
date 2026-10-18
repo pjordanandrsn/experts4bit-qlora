@@ -1,0 +1,14 @@
+[12:16:28]   checkpoint: local directory /root/.cache/huggingface/hub/models--mistralai--Mixtral-8x7B-Instruct-v0.1/snapshots/eba92302a2861cdc0098cc54bc9f17cb2c47eb61
+[12:16:29]   fusing + quantizing experts (up to 32x8) to nf4 (streaming)...
+[12:17:01]   quantized experts on 32/32 MoE layers (8 experts each)
+[12:17:01]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[12:17:02]   applied 32 transformers checkpoint-key renaming(s) (this checkpoint's layout differs from the module tree)
+layers=32 experts=8
+  shard 0/32  0.7 GiB  1s
+  shard 8/32  6.6 GiB  14s
+  shard 16/32  12.6 GiB  31s
+  shard 24/32  18.5 GiB  41s
+snapshot done 23.62 GiB in 46.8s
+expert-tensor bake: L=32 E=8 (baking 8) row=99090432 stride=99090432 total=25.4 GB workers=8
+bake complete: 256 rows (25.4 GB) in 9s
+BAKE OK
