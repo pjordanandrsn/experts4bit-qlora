@@ -4,7 +4,7 @@ Status: **registration draft only**. The maintainer assigns the P number at merg
 
 ## Prior data, disclosed before this rule
 
-P136's `p136-gemma4-5090-4` produced a **VOID** for both W1 and W16 because `NODE_TRACE_INFLATED` blocked its reducer. The public P136 closure is [#1706 comment 6246958085](https://github.com/pjordanandrsn/experts4bit-qlora/pull/1706#issuecomment-6246958085); the independent reviewer has the byte-pinned reduced records through the private artifact bus. These values are **seen**, not new data or a passing reading:
+P136's `p136-gemma4-5090-4` produced a **VOID** for both W1 and W16 because `NODE_TRACE_INFLATED` blocked its reducer. The public P136 closure is [#1706 comment 6246958085](https://github.com/pjordanandrsn/experts4bit-qlora/pull/1706#issuecomment-6246958085); the reduced records are retained with SHA-256 digests. These values are **seen**, not new data or a passing reading:
 
 | P136 seen field | W1 | W16 |
 |---|---:|---:|
@@ -20,6 +20,8 @@ P136's `p136-gemma4-5090-4` produced a **VOID** for both W1 and W16 because `NOD
 | node map residual fraction | 0.0024 | 0.0016 |
 
 Node-mode class medians in that VOID, in ms, were `moe_expert` 3.238318/8.358530, `moe_route` 0.834612/1.223407, `attn` 0.651191/1.324462, `dense_gemm` 3.789024/4.740642, `norm_elem` 3.734116/4.496300, `sample` 0.004768/0.008000, `input_prep` 0.007680/0.023262, `memcpy` 0.002400/0.002240, and `residual` 0.029024/0.032544 (W1/W16). The P136 verdict's `why` contains the two blocking `NODE_TRACE_INFLATED` labels and its `rows` is empty. The prior graph/node ratios, omega and class medians set **none** of the new thresholds below. In particular, this registration does not widen P136's `G_NODE = 1.02` gate or retroactively read P136.
+
+**A seen near miss on the graph clock.** P136's graph `P` over its unprofiled reference was 13.075432 / 12.457 = **1.0496** at W1 and 21.089588 / 20.5331 = 1.0271 at W16, against SC1b's pre-existing 5% `G_INFLATE` gate, which this lane keeps unchanged. For a one-attempt registration, that W1 gate is the most likely cause of a VOID. It is stated here before any new data, and it is not widened.
 
 ## Question, subject, and pins
 
@@ -47,4 +49,4 @@ The following are **replication expectations informed by the VOID above**, not b
 
 Register **one** `g4census-5090-1` attempt. A refused create still consumes the ID; any second attempt requires a new reviewed amendment. One verified, direct-SSH RTX 5090 (sm_120), >=30000 MiB VRAM, >=60 GiB host RAM, and a 230 GB ordered container disk must still have >=200 GB free immediately before fetch. Rate cap <=$0.85/h including disk, download cap 100 GB at <=$0.011/GB, and a 4 h guard yield worst `4*0.85 + 100*0.011 = $4.50`, below the assigned $15 ceiling. The quoted offer must fit all caps; otherwise stop before create. The 4 h guard includes the extra node traces. If it cannot finish them with the 600 s receipt margin, stop host-limited and amend before a different run; do not shorten the windows or silently drop a trace.
 
-Bad staged hash, source pin, version, GPU, RAM, disk, default knob, premise, or deadline stops before fetch. Failed speed arms prevent captures. Failed capture/reduction produces VOID, never a partial reading. The controller keeps nonce/completion markers, fetches reduced receipts and teardown evidence, and never copies raw reports, checkpoint or arena into the public PR. The run requires a merged registration **and a later explicit maintainer scope ACK**; this draft grants no rental, GPU probe, or model fetch. The independent review seat is tc-campaign; the maintainer merges and controls rollout.
+Bad staged hash, source pin, version, GPU, RAM, disk, default knob, premise, or deadline stops before fetch. Failed speed arms prevent captures. Failed capture/reduction produces VOID, never a partial reading. The controller keeps nonce/completion markers, fetches reduced receipts and teardown evidence, and never copies raw reports, checkpoint or arena into the public PR. The run requires a merged registration **and a later explicit maintainer scope ACK**; this draft grants no rental, GPU probe, or model fetch. An independent reviewer reviews the registration; the maintainer merges and controls rollout.
