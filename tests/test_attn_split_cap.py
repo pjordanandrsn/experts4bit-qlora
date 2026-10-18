@@ -2,17 +2,14 @@
 """``E4B_ATTN_SPLIT_CAP`` (lane P143, Amendment 2; e4b#1313): the paged FP8 attention decode capped at ``min(cap, the
 library's own plan)`` splits.
 
-The plan is grouped-nf4-gemm's inline block in ``fp8_paged_decode_attention``; e4b carries a copy
-(``fp8_paged_kv.gnf4_split_plan``). These tests pin the INSTALLED block by sha256, then execute that block itself against
-the copy over a grid, so a planner change in grouped-nf4-gemm fails here instead of diverging silently. Then: the cap
-the KV hands the kernel is ``min(16, plan)`` across B 1..64 at 170 SMs (RTX 5090) and 188 SMs (RTX PRO 6000), with
-serve-throughput's exact rows; it applies only when a cap is set, never over an explicit ``n_split``, and only on the fp8
-split path; and the server knob's reading and per-family resolution (no family by default until P143's served read)."""
-import hashlib
-import importlib.util
-import pathlib
+e4b computes no plan: it hands grouped-nf4-gemm's kernel ``split_cap`` (grouped-nf4-gemm#558), and the kernel's own
+``decode_split_plan`` plans ``min(cap, plan)``. These tests call that real planner, so they need grouped-nf4-gemm >= 0.47.1.
+In CI they never skip: there the import fails loudly. The cap the KV records is ``min(16, plan)`` across B 1..64 at 170 SMs
+(RTX 5090) and 188 SMs (RTX PRO 6000), with serve-throughput's exact rows. The cap is handed over only when a cap is
+set, the installed kernel takes it, and the compute is fp8; never over an explicit ``n_split``. The server knob's reading
+and its per-family resolution: no family takes it by default until P143's served read."""
+import os
 import sys
-import textwrap
 import types
 
 import pytest
@@ -22,115 +19,103 @@ torch = pytest.importorskip("torch")
 from experts4bit_qlora import serve_paged as sp  # noqa: E402
 from experts4bit_qlora.engines import fp8_paged_kv as kvmod  # noqa: E402
 
-START = "    if n_split is None:\n"
-END = "        n_split = int(min(32, want, max_useful))\n"
+
+def _planner():
+    """grouped-nf4-gemm's real ``decode_split_plan``: required in CI, skipped only off it."""
+    if os.environ.get("CI"):
+        import fp8_paged_attn                                    # CI installs grouped-nf4-gemm >= 0.47.1: no skip
+    else:
+        fp8_paged_attn = pytest.importorskip("fp8_paged_attn", reason="grouped-nf4-gemm is not installed (CI installs it)")
+    fn = getattr(fp8_paged_attn, "decode_split_plan", None)
+    if fn is None:
+        if os.environ.get("CI"):
+            raise AssertionError("CI's grouped-nf4-gemm has no decode_split_plan: the pin must be >= 0.47.1")
+        pytest.skip("the installed grouped-nf4-gemm predates decode_split_plan (0.47.1)")
+    return fn
 
 
-def _installed_block():
-    spec = importlib.util.find_spec("fp8_paged_attn")
-    if spec is None or not spec.origin:
-        pytest.skip("grouped-nf4-gemm is not installed (CI installs it)")
-    src = pathlib.Path(spec.origin).read_text(encoding="utf-8").replace("\r\n", "\n")
-    a = src.index(START)
-    return src[a:src.index(END, a) + len(END)]
+def _plan(fn, B, sms, h=4, cap=None):
+    return fn(B, h, 256, block_tokens=16, ktile=64, compute="fp8", pack_heads=False, sms=sms, split_cap=cap)
 
 
-def test_the_installed_planner_block_is_the_one_e4b_copies():
-    assert hashlib.sha256(_installed_block().encode()).hexdigest() == kvmod.GNF4_SPLIT_PLAN_SHA256
+def test_serve_throughputs_rows_from_the_real_planner():
+    """At Qwen3's 4 KV heads on a 5090 the plan is 32, 32, 31, 23, 18 at B 1..5 (all capped to 16) and 15 at B 6; on a
+    PRO 6000 B 6 plans 17 (capped) and B 7 plans 14. Mixtral's 8 KV heads move at B 1..2 only."""
+    fn = _planner()
+    assert [_plan(fn, B, 170) for B in range(1, 7)] == [32, 32, 31, 23, 18, 15]
+    assert [_plan(fn, B, 170) for B in (8, 16, 32, 64)] == [11, 5, 2, 1]
+    assert (_plan(fn, 6, 188), _plan(fn, 7, 188)) == (17, 14)
+    assert [_plan(fn, B, 170, h=8) for B in (1, 2, 3)] == [32, 23, 15]
 
 
-def _run_block(block, *, B, n_kv_heads, cols, block_tokens, sms, compute, pack_heads, ktile):
-    class _Props:
-        multi_processor_count = sms
-    fake_torch = types.SimpleNamespace(cuda=types.SimpleNamespace(get_device_properties=lambda d: _Props))
-    ns = {"n_split": None, "torch": fake_torch, "q": types.SimpleNamespace(device="cuda"), "pack_heads": pack_heads,
-          "B": B, "n_kv_heads": n_kv_heads, "block_tokens": block_tokens, "ktile": ktile, "compute": compute,
-          "block_table": types.SimpleNamespace(shape=(B, cols))}
-    exec(compile(textwrap.dedent(block), "gnf4_plan", "exec"), ns)
-    return ns["n_split"]
-
-
-def test_the_copy_is_the_installed_block_over_the_grid():
-    block = _installed_block()
-    for sms in (170, 188):
-        for compute in ("fp8", "f32"):
-            ktile = 64 if compute == "fp8" else 32               # the kernel's own defaults, resolved before the plan
-            for h in (4, 8):
-                for cols in (256, 64, 8):
-                    for pack in (False, True):
-                        for B in range(1, 65):
-                            want = _run_block(block, B=B, n_kv_heads=h, cols=cols, block_tokens=16, sms=sms,
-                                              compute=compute, pack_heads=pack, ktile=ktile)
-                            got = kvmod.gnf4_split_plan(B, h, cols, 16, sms, compute, pack_heads=pack)
-                            assert got == want, (sms, compute, h, cols, pack, B, got, want)
-
-
-def _capped(monkeypatch, *, B, sms, h=4, cap=16, compute="fp8", kw=None):
+def _recorded(monkeypatch, fn, *, B, sms, cap=16):
+    """What the KV records for a call the cap met: Fp8PagedKV._record_split over a fake KV, the real planner behind it."""
     stub = types.ModuleType("fp8_paged_attn")
-    stub._compute_default = lambda *a, **k: compute
+    stub.decode_split_plan = fn
     monkeypatch.setitem(sys.modules, "fp8_paged_attn", stub)
     monkeypatch.setattr(kvmod, "_sm_count", lambda d: sms)
-    fake_kv = types.SimpleNamespace(Hs=[h], Ds=[128], kgs=[1], bt=16, split_cap=cap)
-    q = torch.zeros(B, 32, 128, dtype=torch.bfloat16)
-    tbl = torch.zeros(B, 256, dtype=torch.int32)                        # 16 slots x 4096 tokens: 256 blocks
-    return kvmod.Fp8PagedKV._capped_n_split(fake_kv, 0, q, tbl, kw or {})
+    fake_kv = types.SimpleNamespace(Hs=[4], Ds=[128], kgs=[1], bt=16, split_cap=cap, split_plans={})
+    kvmod.Fp8PagedKV._record_split(fake_kv, 0, torch.zeros(B, 32, 128, dtype=torch.bfloat16),
+                                   torch.zeros(B, 256, dtype=torch.int32), {})
+    return fake_kv.split_plans[B]
 
 
-def test_the_cap_is_min_16_and_the_library_plan_across_B_1_to_64(monkeypatch):
-    block = _installed_block()
+def test_the_cap_runs_min_16_and_the_library_plan_across_B_1_to_64(monkeypatch):
+    fn = _planner()
     for sms in (170, 188):
         for B in range(1, 65):
-            plan = _run_block(block, B=B, n_kv_heads=4, cols=256, block_tokens=16, sms=sms, compute="fp8",
-                              pack_heads=False, ktile=64)
-            assert _capped(monkeypatch, B=B, sms=sms) == min(16, plan), (sms, B)
+            rec = _recorded(monkeypatch, fn, B=B, sms=sms)
+            assert rec["plan"] == _plan(fn, B, sms) and rec["n_split"] == min(16, rec["plan"]), (sms, B, rec)
+            assert rec["calls"] == 1
 
 
-def test_serve_throughputs_rows():
-    """The plan at Qwen3's 4 KV heads on a 5090 is 32, 32, 31, 23, 18 at B 1..5 (all capped to 16) and 15 at B 6; on a
-    PRO 6000 B 6 plans 17 (capped) and B 7 plans 14. Mixtral's 8 KV heads move at B 1..2 only."""
-    plan = lambda B, sms, h=4: kvmod.gnf4_split_plan(B, h, 256, 16, sms, "fp8")  # noqa: E731
-    assert [plan(B, 170) for B in range(1, 7)] == [32, 32, 31, 23, 18, 15]
-    assert [plan(B, 170) for B in (8, 16, 32, 64)] == [11, 5, 2, 1]
-    assert (plan(6, 188), plan(7, 188)) == (17, 14)
-    assert [plan(B, 170, h=8) for B in (1, 2, 3)] == [32, 23, 15]
-
-
-def test_the_cap_moves_only_where_the_plan_is_above_it(monkeypatch):
-    for B in (1, 2, 3, 4, 5):
-        assert _capped(monkeypatch, B=B, sms=170) == 16
-    for B in (6, 8, 16, 32, 64):
-        assert _capped(monkeypatch, B=B, sms=170) == kvmod.gnf4_split_plan(B, 4, 256, 16, 170, "fp8")
-
-
-def test_the_f32_path_is_left_to_the_library(monkeypatch):
-    assert _capped(monkeypatch, B=1, sms=170, compute="f32") is None
-
-
-def test_an_explicit_compute_is_the_one_planned(monkeypatch):
-    assert _capped(monkeypatch, B=1, sms=170, compute="f32", kw={"compute": "fp8"}) == 16
-
-
-def test_the_attention_call_hands_the_cap_only_when_set_and_never_over_an_explicit_n_split(monkeypatch):
+def _kv_with_stub_kernel(monkeypatch, *, takes_split_cap=True, compute="fp8"):
     pytest.importorskip("fp8_kv", reason="the KV class needs grouped-nf4-gemm (CI installs it)")
     seen = []
     stub = types.ModuleType("fp8_paged_attn")
-
-    def fp8_paged_decode_attention(q, kf, vf, tbl, lens, *, n_kv_heads, head_dim, block_tokens, k_groups=1,
-                                   k_row_bytes=None, v_row_bytes=None, window=0, sinks=None, **kw):
-        seen.append(kw)
-        return torch.zeros_like(q)
+    if takes_split_cap:
+        def fp8_paged_decode_attention(q, kf, vf, tbl, lens, *, n_kv_heads, head_dim, block_tokens, k_groups=1,
+                                       k_row_bytes=None, v_row_bytes=None, window=0, sinks=None, split_cap=None, **kw):
+            seen.append(dict(kw, split_cap=split_cap))
+            return torch.zeros_like(q)
+    else:
+        def fp8_paged_decode_attention(q, kf, vf, tbl, lens, *, n_kv_heads, head_dim, block_tokens, k_groups=1,
+                                       k_row_bytes=None, v_row_bytes=None, window=0, sinks=None, **kw):
+            seen.append(dict(kw, split_cap="absent"))
+            return torch.zeros_like(q)
     stub.fp8_paged_decode_attention = fp8_paged_decode_attention
-    stub._compute_default = lambda *a, **k: "fp8"
+    stub._compute_default = lambda *a, **k: compute
+    stub.decode_split_plan = lambda B, h, cols, **k: 32 if k.get("split_cap") is None else min(k["split_cap"], 32)
     monkeypatch.setitem(sys.modules, "fp8_paged_attn", stub)
     monkeypatch.setattr(kvmod, "_sm_count", lambda d: 170)
     kv = kvmod.Fp8PagedKV(1, 4, 128, batch=2, max_tokens_per_seq=4096, device="cpu")
     kv.append(0, 0, torch.randn(8, 4, 128, dtype=torch.bfloat16), torch.randn(8, 4, 128, dtype=torch.bfloat16))
+    return kv, seen
+
+
+def test_the_attention_call_hands_split_cap_only_when_set_and_never_over_an_explicit_n_split(monkeypatch):
+    kv, seen = _kv_with_stub_kernel(monkeypatch)
     q = torch.randn(1, 32, 128, dtype=torch.bfloat16)
     kv.attention(0, q, slots=[0])
     kv.split_cap = 16
     kv.attention(0, q, slots=[0])
     kv.attention(0, q, slots=[0], n_split=4)
-    assert [k.get("n_split") for k in seen] == [None, 16, 4]
+    assert [(k.get("split_cap"), k.get("n_split")) for k in seen] == [(None, None), (16, None), (None, 4)]
+    assert kv.split_plans == {1: {"calls": 1, "plan": 32, "n_split": 16}}
+
+
+def test_a_kernel_without_split_cap_changes_nothing(monkeypatch):
+    kv, seen = _kv_with_stub_kernel(monkeypatch, takes_split_cap=False)
+    kv.split_cap = 16
+    kv.attention(0, torch.randn(1, 32, 128, dtype=torch.bfloat16), slots=[0])
+    assert seen == [{"split_cap": "absent"}] and kv.split_plans == {}
+
+
+def test_the_f32_path_is_left_to_the_library(monkeypatch):
+    kv, seen = _kv_with_stub_kernel(monkeypatch, compute="f32")
+    kv.split_cap = 16
+    kv.attention(0, torch.randn(1, 32, 128, dtype=torch.bfloat16), slots=[0])
+    assert seen[0]["split_cap"] is None and kv.split_plans == {}
 
 
 def test_the_knob_is_read_and_refused():

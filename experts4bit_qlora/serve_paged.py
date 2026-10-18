@@ -1534,7 +1534,10 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     info["fusion_sources"] = fusion_report.get("sources")
     info["fusion_report"] = fusion_report.get("folds")
     info["prefill_glue"] = fusion_report.get("prefill_glue")
-    info["attn_split_cap"] = {"cap": split_cap, "source": split_cap_source}
+    # P143: the cap, its source, and what each captured bucket planned with it (Fp8PagedKV.split_plans, from
+    # grouped-nf4-gemm's own decode_split_plan): the engagement record a served read checks
+    info["attn_split_cap"] = {"cap": split_cap, "source": split_cap_source,
+                              "plans": {str(b_): dict(r_) for b_, r_ in sorted(kv.split_plans.items())}}
     # The build churns through host buffers it frees (the hybrid tier's setup tier, the stacks' one-shot reads), and
     # glibc keeps freed blocks under its mmap threshold resident for the life of the server: 0.34 GB on OLMoE-1B-7B
     # (RTX A2000 host, the one place it was measured). The loader alone leaves ~4 MB.
