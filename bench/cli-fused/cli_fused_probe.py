@@ -25,6 +25,8 @@ STRICT checks (every one must hold; the probe exits 1 otherwise):
      SystemExit before training;
   6. the checkpoint: at the first optimizer step of every fused arm (L, A, resident) every decoder layer runs e4b's
      reentrant_checkpoint (enable_fast_train's routing, as in P137's arm records), and CKPT_OFFLOAD_STATS["layers"] is L;
+  6m. the mutant: the original #1744 order (enable_fast_train on layers not yet checkpointed, Hugging Face's checkpoint
+     enabled after it), reproduced around the trainer's call, FAILS check 6: the check sees an order bug;
   7. generation: FAST_TRAIN=1 with DO_GEN=1 (the trainer's default) generates before and after training without a raise,
      every generation non-empty (the text is REPORTING);
   5. resident (no offload) FAST_TRAIN=1: the patch count is the number of MoE layers, no raise, and the absmax compressed
@@ -64,7 +66,7 @@ def _patch_dataset(rows):
     datasets.load_dataset = load
 
 
-def _run_trainer(env, model_dir, record):
+def _run_trainer(env, model_dir, record, mutant=False):
     import torch
 
     import experts4bit_qlora.engines.fast as fast
@@ -89,7 +91,13 @@ def _run_trainer(env, model_dir, record):
 
     def eft_hook(model, *a, **k):
         seen["model"] = model
-        return real_eft(model, *a, **k)
+        if not mutant:
+            return real_eft(model, *a, **k)
+        # the original #1744 order: the fused path patched while no layer is checkpointed, then HF's checkpoint enabled
+        model.gradient_checkpointing_disable()
+        n = real_eft(model, *a, **k)
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        return n
     fast.enable_fast_train = eft_hook
     gens = []
     real_gen = train.generate
@@ -236,6 +244,10 @@ def main(argv=None):
     checks["5_resident_no_raise_patched"] = res_err is None and Res["patched"] == n
     checks["5_resident_absmax_as_apply_left_it"] = res_err is None and Res["absmax_compressed"] is True
     checks["6_ckpt_reentrant_routed"] = _ckpt_ok(L) and _ckpt_ok(A) and res_err is None and _ckpt_ok(Res)
+    from experts4bit_qlora.engines.ckpt_offload import CKPT_OFFLOAD_STATS
+    CKPT_OFFLOAD_STATS["layers"] = 0                             # the mutant's count is its own
+    M = _run_trainer({"FAST_TRAIN": "1", "LAYER_MAJOR": "1"}, a.model, {}, mutant=True)
+    checks["6m_mutant_old_order_fails_check_6"] = not _ckpt_ok(M)
     try:
         G = _run_trainer({"FAST_TRAIN": "1", "LAYER_MAJOR": "0", "DO_GEN": "1", "STEPS": "1"}, a.model, {})
         gen_err = None
@@ -251,7 +263,7 @@ def main(argv=None):
            "library": {k: lib[k] for k in ("patched", "losses", "self_pair")},
            "resident": {"patched": Res["patched"], "absmax_compressed": Res["absmax_compressed"], "error": res_err,
                         "ckpt": Res.get("ckpt")},
-           "ckpt": {"L": L.get("ckpt"), "A": A.get("ckpt"), "R": R.get("ckpt")},
+           "ckpt": {"L": L.get("ckpt"), "A": A.get("ckpt"), "R": R.get("ckpt"), "mutant": M.get("ckpt")},
            "generation": {"gens": [g[:200] for g in G["gens"]], "error": gen_err},
            "refusals": {"arena": arena, "zero_patch": zero}}
     json.dump(out, open(a.out, "w"), indent=1)
