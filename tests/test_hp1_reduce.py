@@ -313,11 +313,11 @@ def test_an_own_base_only_arm_gives_no_y(tmp_path, capsys):
     headline reads P_INCOMPLETE -- an in-loop number never enters a verdict."""
     p_arms = _p_arms("k10", (0.0001, -0.0001, 0.0), unsloth_off=0.005, comp_status="OWN_BASE_ONLY")
     code, res, _, _ = _verdict(tmp_path, _k_arms(K10_BEST), p_arms, capsys)
-    assert code == 3 and res["verdict"] == "P_INCOMPLETE" and "axolotl" in res["p"]["excluded_competitors"]
+    assert code == 3 and res["verdict"] == "P_INCOMPLETE" and set(res["p"]["excluded_competitors"]) == {"unsloth", "axolotl"}
 
-def test_an_incomplete_competitor_gives_no_headline(tmp_path, capsys):
-    """Registered: the headline needs BOTH competitors' confirmation cells. With one incomplete it reads P_INCOMPLETE (exit 3), never
-    a headline against the other; the complete competitor's reading is reported, labelled, beside it."""
+def test_an_incomplete_unsloth_gives_no_headline(tmp_path, capsys):
+    """Registered (Amendment 3): the headline needs Unsloth's confirmation cell. With it incomplete it reads P_INCOMPLETE (exit 3),
+    never a headline against axolotl alone; axolotl's reading is reported, labelled, beside it."""
     p_arms = _p_arms("k10", (0.0, 0.0, 0.0), unsloth_off=-0.05, skip={("unsloth", 3411)})
     code, res, _, _ = _verdict(tmp_path, _k_arms(K10_BEST), p_arms, capsys)
     assert code == 3 and res["verdict"] == "P_INCOMPLETE" and res["p"]["c_star"] is None
@@ -332,6 +332,34 @@ def test_p_incomplete_when_e_or_both_competitors_missing(tmp_path, capsys):
     skip = {("unsloth", 3410), ("axolotl", 3412)}
     code, res, _, _ = _verdict(tmp_path, _k_arms(K10_BEST), _p_arms("k10", (0, 0, 0), skip=skip), capsys)
     assert code == 3 and res["verdict"] == "P_INCOMPLETE"
+
+
+def test_an_incomplete_axolotl_is_dropped_and_the_headline_reads_e_vs_unsloth(tmp_path, capsys):
+    """Amendment 3: any axolotl failure drops axolotl. With axolotl short a seed, C* is Unsloth even where axolotl's mean was lower,
+    the headline is E vs Unsloth, and the readout says why axolotl is gone."""
+    p_arms = _p_arms("k10", (-0.02, -0.021, -0.019), unsloth_off=0.01, axolotl_off=0.0, skip={("axolotl", 3411)})
+    code, res, md, _ = _verdict(tmp_path, _k_arms(K10_BEST), p_arms, capsys)
+    p = res["p"]
+    assert code == 0 and p["c_star"] == "unsloth" and "3411" in str(p["axolotl_dropped"])
+    assert p["readings"][0]["reading"] == "E (k10) vs C* (unsloth)" and p["readings"][0]["role"] == "headline"
+    ax = next(r for r in p["readings"] if r["reading"] == "E (k10) vs axolotl")
+    assert ax["verdict"] == "DROPPED (Amendment 3)" and "axolotl DROPPED (HP1-PREREG Amendment 3)" in md
+
+
+def test_no_axolotl_runs_at_all_reads_e_vs_unsloth(tmp_path, capsys):
+    """Box 2 with axolotl dropped before the P block (box 1's shakedown, Amendment 3) runs no axolotl arm at all."""
+    p_arms = [a for a in _p_arms("k10", (-0.02, -0.021, -0.019), unsloth_off=0.01) if not a["tag"].startswith("hp1_axolotl_")]
+    code, res, _, _ = _verdict(tmp_path, _k_arms(K10_BEST), p_arms, capsys)
+    assert code == 0 and res["p"]["c_star"] == "unsloth" and res["p"]["axolotl_dropped"]
+
+
+def test_an_axolotl_order_break_drops_axolotl_not_the_reading(tmp_path, capsys):
+    p_arms = _p_arms("k10", (-0.02, -0.021, -0.019), unsloth_off=0.01)
+    _break_order(next(a for a in p_arms if a["tag"] == "hp1_axolotl_s3411"), "sha")
+    code, res, _, _ = _verdict(tmp_path, _k_arms(K10_BEST), p_arms, capsys)
+    p = res["p"]
+    assert code == 0 and p["c_star"] == "unsloth" and "data order" in p["axolotl_dropped"] and not p["order_problems"]
+    assert "hp1_axolotl_s3411" in {x["tag"] for x in p["axolotl_order_problems"]}
 
 
 def test_e_k00_uses_shipped_runs_and_k00_reading_is_the_headline(tmp_path, capsys):
@@ -393,7 +421,7 @@ def test_select_refuses_unpaired_data_order(tmp_path, capsys, how):
     assert "HP1_SELECTED" not in out
 
 
-@pytest.mark.parametrize("victim_tag", ["hp1_axolotl_s3411", "hp1_e_k10_s3410", "hp1_k00_s3412", "hp1_unsloth_s3410"])
+@pytest.mark.parametrize("victim_tag", ["hp1_e_k10_s3410", "hp1_k00_s3412", "hp1_unsloth_s3410"])     # axolotl: dropped (Amendment 3)
 @pytest.mark.parametrize("how", ["null", "seed", "sha"])
 def test_verdict_refuses_unpaired_data_order(tmp_path, capsys, victim_tag, how):
     p_arms = _p_arms("k10", (-0.02, -0.021, -0.019))

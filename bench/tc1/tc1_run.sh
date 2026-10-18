@@ -90,6 +90,9 @@ CURVE_STEPS=${TC1_CURVE_STEPS:-200}; CURVE_EVAL_EVERY=${TC1_CURVE_EVAL_EVERY:-40
 HP1_EVAL_N=${TC1_HP1_EVAL_N:-48}; HP1_EVAL_EVERY=${TC1_HP1_EVAL_EVERY:-$CURVE_STEPS}
 HP1_SEL_SEEDS=${TC1_HP1_SEL_SEEDS:-"3407 3408 3409"}; HP1_CONF_SEEDS=${TC1_HP1_CONF_SEEDS:-"3410 3411 3412"}
 HP1_SHAKE_LAYERS=${TC1_HP1_SHAKE_LAYERS:-2}; HP1_SHAKE_STEPS=${TC1_HP1_SHAKE_STEPS:-3}
+# HP1-PREREG Amendment 3: any axolotl failure in HP1 drops axolotl (the headline then reads E vs Unsloth). 1 = already dropped (box 2
+# after box 1's shakedown dropped it: the controller sets it from box 1's summary); a shakedown axolotl failure on this box sets it.
+HP1_AX_DROP=${TC1_HP1_DROP_AXOLOTL:-0}; case "$HP1_AX_DROP" in 0|1) ;; *) echo "refusing: TC1_HP1_DROP_AXOLOTL must be 0 or 1"; exit 78;; esac
 T1_MB=${TC1_T1_MB:-1}; T1_ACCUM=${TC1_T1_ACCUM:-1}; R64_R=${TC1_R64_R:-64}; R64_ALPHA=${TC1_R64_ALPHA:-64}
 # ---------------------------------------------------------------- TC2 (the tc2small token; TC2-PREREG-draft "Fixture"): the small families' instrument -- N 60, eval 48 rows every
 # 20 steps, as tp4 registered for them (TP4-PREREG; amendment 2 cut only the LARGE families to N 20 / 8 rows). The tc2big token runs the field recipe above
@@ -125,7 +128,7 @@ case " $FAMILIES " in *" qwen3curve "*)
   ;;
 esac
 case " $FAMILIES " in *" qwen3hp1 "*|*" qwen3hp1k "*|*" qwen3hp1p "*)
-  echo "FIXTURE hp1 (HP1-PREREG): steps=$CURVE_STEPS eval_n=$HP1_EVAL_N eval_every=$HP1_EVAL_EVERY K seeds=[$HP1_SEL_SEEDS] P seeds=[$HP1_CONF_SEEDS] (--seed s --order-seed s); box-side shakedown: $HP1_SHAKE_LAYERS-layer truncation, $HP1_SHAKE_STEPS steps" | tee -a summary.txt
+  echo "FIXTURE hp1 (HP1-PREREG): steps=$CURVE_STEPS eval_n=$HP1_EVAL_N eval_every=$HP1_EVAL_EVERY K seeds=[$HP1_SEL_SEEDS] P seeds=[$HP1_CONF_SEEDS] (--seed s --order-seed s); box-side shakedown: $HP1_SHAKE_LAYERS-layer truncation, $HP1_SHAKE_STEPS steps; axolotl dropped=$HP1_AX_DROP" | tee -a summary.txt
   [ -n "${TC1_PREREG:-}" ] || PREREG=hp1/HP1-PREREG.md     # HP1: governed by its own registration; TC1_PREREG still overrides
   ;;
 esac
@@ -673,6 +676,9 @@ arm_once(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$
   # TC1 amendment 6: both draws (ckpt_axolotl_best and its _d2) -- the exact match left the second draw offline (tc1-5090-33)
   # TC1 amendment 8: every scattermoe tag (ckpt_axolotl_best, _d2, _200, _200_d2) -- a prefix, so a new suffix cannot fall offline again
   local OFFL=1; case "$FW/$TAG" in axolotl/ckpt_axolotl_best*) OFFL=0;; esac
+  # HP1 (hp1k-5090-3): the scattermoe arm is named by its FLAG, not its tag -- hp1shake_axolotl / hp1_axolotl_s* run --axolotl-best 1 and
+  # fell offline (KernelsPlugin: "Version 2 of 'kernels-community/rotary' is not available in the local cache"), the fourth tag miss
+  [ "$FW" = axolotl ] && case " $* " in *" --axolotl-best 1 "*) OFFL=0;; esac
   # TC1 amendment 45: OMP_NUM_THREADS=$PHYS comes FIRST so a family's per-arm environment can override it (env applies left to right);
   # an arm whose environment does not name it runs exactly as before
   env OMP_NUM_THREADS=$PHYS $ARM_ENV HF_HUB_OFFLINE=$OFFL UNSLOTH_ENABLE_LOGGING=1 TC1_BOX_CLASS="$BOX_CLASS" TC1_ARM_ALARM_S=$A perl -e "alarm $A; exec @ARGV" $PY -u $W/tc1_arm.py --framework $FW --arm $ARM --tag $TAG --fam $FAM --model "$MID" --revision $REV \
@@ -2226,10 +2232,15 @@ hp1_shakedown(){ local FAM=$1 MID=$2 REV=$3 TOK=$4 TS=$5 SF=${1}shake
   TC1_ARM_EXTRA_ENV="$E" arm $SF e4b hp1shake_e4b fused 1800 "$TM" $TR 0 hp1shake $STOK $TS --attn-4bit 1 $(hp1_cell k10 3407) --seed 3407 --order-seed 3407 $X
   TC1_ARM_EXTRA_ENV="$E" arm $SF unsloth hp1shake_unsloth unsloth 1800 "$TM" $TR 0 hp1shake $STOK $TS --grad-ckpt unsloth --unsloth-targets $UT7 \
     --unsloth-moe-backend grouped_mm --lora-init native --adapter-dtype native --seed 3407 --order-seed 3407 $X
-  TC1_ARM_EXTRA_ENV="$E" arm $SF axolotl hp1shake_axolotl axolotl 1800 "$TM" $TR 0 hp1shake $STOK $TS --axolotl-dataset $W/data/ds_alpaca.json --axolotl-best 1 \
+  [ "$HP1_AX_DROP" = 1 ] || TC1_ARM_EXTRA_ENV="$E" arm $SF axolotl hp1shake_axolotl axolotl 1800 "$TM" $TR 0 hp1shake $STOK $TS --axolotl-dataset $W/data/ds_alpaca.json --axolotl-best 1 \
     --lora-init native --adapter-dtype native --seed 3407 --order-seed 3407 $X
-  local fw; for fw in e4b unsloth axolotl; do [ "$(status_of $SF $fw hp1shake_$fw)" = ok ] || { say "HP1 shakedown: $fw arm status $(status_of $SF $fw hp1shake_$fw)"; return 1; }; done
-  HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts "$W/${SF}_*_hp1shake_*.json" --bases $W/hp1/shake/base_* --tokens $TOK --eval-n 8 \
+  local fw FWS="e4b unsloth"; for fw in $FWS; do [ "$(status_of $SF $fw hp1shake_$fw)" = ok ] || { say "HP1 shakedown: $fw arm status $(status_of $SF $fw hp1shake_$fw)"; return 1; }; done
+  if [ "$HP1_AX_DROP" = 0 ]; then
+    if [ "$(status_of $SF axolotl hp1shake_axolotl)" = ok ]; then FWS="$FWS axolotl"
+    else HP1_AX_DROP=1; echo "HP1 AXOLOTL_DROPPED shakedown status=$(status_of $SF axolotl hp1shake_axolotl) (HP1-PREREG Amendment 3: the e4b K block runs; box 2 reads E vs Unsloth)" | tee -a summary.txt; fi
+  fi
+  local RR=() BB=(); for fw in $FWS; do RR+=("$W/${SF}_${fw}_hp1shake_${fw}.json"); BB+=($W/hp1/shake/base_${fw}_${SF}); done
+  HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts "${RR[@]}" --bases "${BB[@]}" --tokens $TOK --eval-n 8 \
     --model "$TM" --revision $TR --expect-trainable 0 --out $W/hp1/eval_shake.json --require-all-scored 1 > logs/hp1_eval_shake.log 2>&1 || { tail -5 logs/hp1_eval_shake.log; return 1; }
   tail -1 logs/hp1_eval_shake.log; rm -rf $SC; return 0; }
 # HP1's registered redraw rule: a run the evaluator VOIDs at RUN level is redrawn ONCE on the same box (its receipt moved to
@@ -2314,9 +2325,11 @@ hp1_p_block(){ local FAM=$1 MID=$2 REV=$3 TOK=$4 TS=$5 EAL=$6 UAL=$7 AXAL=$8 SEL
     B=""; [ $bu = 1 ] && { B="--hp1-export-base 1"; bu=0; }
     hp1_run $FAM unsloth hp1_unsloth_s$s unsloth $UAL "$MID" $REV $TOK $TS --grad-ckpt unsloth --unsloth-targets $UT7 \
       --unsloth-moe-backend grouped_mm --lora-init native --adapter-dtype native --seed $s --order-seed $s $X $B
-    B=""; [ $ba = 1 ] && { B="--hp1-export-base 1"; ba=0; }
-    hp1_run $FAM axolotl hp1_axolotl_s$s axolotl $AXAL "$MID" $REV $TOK $TS --axolotl-dataset $W/data/ds_alpaca.json \
-      --axolotl-best 1 --lora-init native --adapter-dtype native --seed $s --order-seed $s $X $B
+    if [ "$HP1_AX_DROP" = 0 ]; then                     # Amendment 3: a dropped axolotl runs no P arm
+      B=""; [ $ba = 1 ] && { B="--hp1-export-base 1"; ba=0; }
+      hp1_run $FAM axolotl hp1_axolotl_s$s axolotl $AXAL "$MID" $REV $TOK $TS --axolotl-dataset $W/data/ds_alpaca.json \
+        --axolotl-best 1 --lora-init native --adapter-dtype native --seed $s --order-seed $s $X $B
+    fi
     PR+=("$W/${FAM}_*_hp1_*_s$s.json")
   done
   hp1_eval_block P $TOK "$MID" $REV "${PR[@]}" -- $W/hp1/base_*_$FAM || { echo "HP1 P readout lost to the deadline" | tee -a summary.txt; return 1; }
@@ -2331,7 +2344,8 @@ hp1_p_block(){ local FAM=$1 MID=$2 REV=$3 TOK=$4 TS=$5 EAL=$6 UAL=$7 AXAL=$8 SEL
 # given -- the P arms it would have run)
 hp1_open(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 SEL=${5:-} ALL="" s c
   if [ -z "$SEL" ]; then for s in $HP1_SEL_SEEDS; do for c in k00 k10 k01 k11; do ALL="$ALL e4b:hp1_${c}_s$s:fused"; done; done
-  else for s in $HP1_CONF_SEEDS; do ALL="$ALL e4b:hp1_e_${SEL}_s$s:fused unsloth:hp1_unsloth_s$s:unsloth axolotl:hp1_axolotl_s$s:axolotl"
+  else for s in $HP1_CONF_SEEDS; do ALL="$ALL e4b:hp1_e_${SEL}_s$s:fused unsloth:hp1_unsloth_s$s:unsloth"
+    [ "$HP1_AX_DROP" = 0 ] && ALL="$ALL axolotl:hp1_axolotl_s$s:axolotl"
     [ "$SEL" != k00 ] && ALL="$ALL e4b:hp1_k00_s$s:fused"; done; fi
   tc1_prepare $FAM "$MID" $REV $FAL "$ALL" $HP1_EVAL_N || return 1
   mkdir -p $W/hp1

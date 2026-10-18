@@ -35,6 +35,7 @@ exit 0
 HARNESS = r"""#!/bin/bash
 W=$PWD; HP1_EVAL_N=48; HP1_EVAL_EVERY=200; HP1_SEL_SEEDS="3407 3408 3409"; HP1_CONF_SEEDS="3410 3411 3412"
 HP1_SHAKE_LAYERS=2; HP1_SHAKE_STEPS=3; CURVE_STEPS=200; UT7="q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj"
+HP1_AX_DROP=${TC1_HP1_DROP_AXOLOTL:-0}
 PY_E4B=$W/fakepy
 say(){ echo "SAY: $*" >> "$W/say.log"; }
 can_run(){ case "$2" in ${NO_TIME_FOR:-__none__}) echo "SKIPPED $2" >> summary.txt; return 1;; esac; return 0; }
@@ -88,9 +89,29 @@ def test_the_full_path_runs_k_then_p_with_one_base_export_each(tmp_path):
     assert "--order-seed" in k_args["hp1_k10_s3408"] and "matched:3408" in k_args["hp1_k10_s3408"]
 
 
-def test_a_failed_box_side_shakedown_ends_the_draw_unscored(tmp_path):
-    arms, summary = drive(tmp_path, SHAKE_FAIL="axolotl")
+@pytest.mark.parametrize("fw", ["e4b", "unsloth"])
+def test_a_failed_box_side_shakedown_ends_the_draw_unscored(tmp_path, fw):
+    arms, summary = drive(tmp_path, SHAKE_FAIL=fw)
     assert "HP1 SHAKEDOWN_FAILED" in summary and tags(arms) == []
+
+
+def test_an_axolotl_shakedown_failure_drops_axolotl_and_the_e4b_k_block_runs(tmp_path):
+    """HP1-PREREG Amendment 3 (hp1k-5090-3's refusal): the axolotl shake arm failing drops axolotl; e4b + Unsloth still gate the draw,
+    the evaluator reads only their receipts and bases, the K block runs, and the P block runs no axolotl arm."""
+    arms, summary = drive(tmp_path, SHAKE_FAIL="axolotl")
+    assert "HP1 AXOLOTL_DROPPED shakedown status=install_failed" in summary and "HP1 SHAKEDOWN_OK" in summary
+    t = tags(arms)
+    assert len([x for x in t if x.startswith("hp1_k")]) >= 12 and not [x for x in t if "axolotl" in x]
+    assert [x for x in t if x.startswith("hp1_unsloth_s")] == ["hp1_unsloth_s3410", "hp1_unsloth_s3411", "hp1_unsloth_s3412"]
+    ev = next(ln for ln in (tmp_path / "py.log").read_text().splitlines() if "hp1_eval.py" in ln and "eval_shake" in ln)
+    assert "hp1shake_e4b.json" in ev and "hp1shake_unsloth.json" in ev and "hp1shake_axolotl" not in ev and "base_axolotl" not in ev
+
+
+def test_box_2_with_axolotl_already_dropped_runs_no_axolotl_arm_anywhere(tmp_path):
+    arms, summary = drive(tmp_path, TC1_HP1_DROP_AXOLOTL="1")
+    assert "HP1 SHAKEDOWN_OK" in summary and "AXOLOTL_DROPPED" not in summary
+    assert not [a for a in arms if a[1] == "axolotl"]
+    assert sorted(tags(arms, "qwen3hp1shake")) == ["hp1shake_e4b", "hp1shake_unsloth"]
 
 
 def test_a_base_level_early_failure_ends_the_draw_after_one_run(tmp_path):
@@ -323,3 +344,37 @@ def test_without_the_relabel_the_shakedown_fails_as_hp1k_5090_1_did(tmp_path):
     assert sorted((tmp_path / "mismatch.log").read_text().split("\n")[:-1]) == [
         "qwen3hp1shake axolotl hp1shake_axolotl", "qwen3hp1shake e4b hp1shake_e4b", "qwen3hp1shake unsloth hp1shake_unsloth"]
     assert "HP1 SHAKEDOWN_FAILED" in summary and not [t for t in tags(arms) if t.startswith("hp1_k")]
+
+
+def _offline_for(fw, tag, *args):
+    """arm_once's Hub-offline rule, extracted from tc1_run.sh and run on its own."""
+    src = RUN_SH.read_text()
+    a = src.index('  local OFFL=1; case "$FW/$TAG"')
+    b = src.index("\n", src.index('[ "$FW" = axolotl ] && case " $* "', a))
+    fn = "f(){ local FW=$1 TAG=$2; shift 2\n" + src[a:b] + "\n  echo $OFFL; }\nf \"$@\"\n"
+    p = subprocess.run(["bash", "-c", fn, "x", fw, tag, *args], capture_output=True, text=True, timeout=30)
+    assert p.returncode == 0, p.stderr
+    return p.stdout.strip()
+
+
+def test_every_axolotl_best_arm_reaches_the_hub_for_its_kernels_whatever_its_tag():
+    """hp1k-5090-3: hp1shake_axolotl ran --axolotl-best 1 offline and KernelsPlugin refused at load. The scored P arms
+    (hp1_axolotl_s3410..3412) carry the same flag, so they would have refused the same way on box 2."""
+    for tag in ("hp1shake_axolotl", "hp1_axolotl_s3410", "hp1_axolotl_s3412", "ckpt_axolotl_best", "ckpt_axolotl_best_200_d2"):
+        assert _offline_for("axolotl", tag, "--axolotl-dataset", "d.json", "--axolotl-best", "1", "--seed", "3410") == "0", tag
+    assert _offline_for("axolotl", "ckpt_axolotl_best") == "0"                 # TC1's tag rule still holds
+    assert _offline_for("axolotl", "ckpt_axolotl_m", "--axolotl-best", "0") == "1"
+    assert _offline_for("axolotl", "ckpt_axolotl_m") == "1"
+    for fw in ("e4b", "unsloth"):                                              # the flag is axolotl's; every other arm stays offline
+        assert _offline_for(fw, "hp1_x", "--axolotl-best", "1") == "1"
+
+
+def test_the_hp1_axolotl_calls_carry_the_flag_the_rule_reads():
+    src = RUN_SH.read_text()
+    hp1 = src[src.index(START):src.index(END)]
+    import re
+    joined = re.sub(r"\\\n\s*", " ", hp1)                                     # backslash continuations joined
+    calls = [ln for ln in joined.splitlines() if re.search(r"(?:arm|hp1_run) \S+ axolotl ", ln)]
+    assert calls, "no HP1 axolotl call found"
+    for ln in calls:
+        assert "--axolotl-best 1" in ln, ln

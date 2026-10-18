@@ -10,7 +10,7 @@ five changes, all folded in below. The later binding rulings are folded in too:
 - every verdict uses evaluator numbers only;
 - 6(b) is the round trip;
 - an early base check ends the draw on a systematic miss, and base-level VOIDs are never redrawn;
-- the headline needs both competitors;
+- the headline needs both competitors (Amendment 3: Unsloth's cell; a failed axolotl is dropped);
 - the redraw rule is as implemented (2026-10-18).
 
 Scoring starts only after this file merges and the box-side shakedown passes.
@@ -344,3 +344,23 @@ higher cap or this split. The cut falls on the line the registration already dra
 **Spend.** Each box's worst at its 6 h guard is 6 × $0.85 + about 72 GB × $0.011 ≈ $5.89 on Vast, or 6 × $1.10 = $6.60 on RunPod.
 Both boxes together come to $11.78 / $13.20, under the owner's $15. The disk is about 140 GB needed on box 1 (vast_disk_gb 250)
 and about 175 GB on box 2 (vast_disk_gb 300).
+
+### Amendment 3 (2026-10-18, before any scored run): any further axolotl failure drops axolotl; the headline then reads E vs Unsloth
+
+**Why.** Box 1 drew twice, and both draws ended at the box-side shakedown before any scored run:
+- `hp1k-5090-1`: a tokens-file fam label (fixed in #1735).
+- `hp1k-5090-3`: the axolotl shakedown arm, offline, refused at load. axolotl's KernelsPlugin (`--axolotl-best 1`) fetches its hub kernels by version. `arm_once` let the Hub online only for TC1's tag prefix `axolotl/ckpt_axolotl_best*`, and HP1's axolotl tags don't match it. Fixed in the same change as this amendment: an axolotl arm carrying `--axolotl-best 1` is online whatever its tag.
+
+The maintainer's ruling (strike 2) continues the lane in a simplified form. One more axolotl failure should not spend another box.
+
+**The rule.**
+- Any axolotl failure from here on drops axolotl from HP1: a box-side shakedown arm, or a scored P arm with no evaluator y on some confirmation seed.
+- The headline then reads E vs Unsloth (C* = Unsloth), and the readout says axolotl was dropped and why (`axolotl_dropped`).
+- The same applies to a data-order problem that disappears once axolotl's runs are left out: axolotl is dropped, and the reading is not refused.
+- "The headline needs both competitors" (P readout) becomes: **the headline needs Unsloth's complete confirmation cell**. With both complete, C* stays the stronger one, as registered.
+
+**On the boxes.**
+- Box 1: an axolotl shakedown failure is recorded (`HP1 AXOLOTL_DROPPED`) and does not end the draw. The K block is e4b only. e4b and Unsloth still gate the shakedown, and the evaluator reads only their receipts and bases.
+- Box 2: `TC1_HP1_DROP_AXOLOTL=1` (set by the controller when box 1's summary records the drop) runs no axolotl arm anywhere. Without it, box 2's own shakedown applies the same rule as box 1.
+
+**Unchanged.** Every threshold, the K rule, σ, m, the verdict bands, the evaluator, both boxes' seeds and the spend cap. A box 2 redraw does not fit inside the cap and goes back to the maintainer.
