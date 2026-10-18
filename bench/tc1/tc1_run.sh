@@ -2121,6 +2121,33 @@ tc1_axolotl_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 HAL=$6 AAL=$7
 #   4 e4b/fused_attn4_p38 + unsloth/ckpt_unsloth_p38 (tp4's anchor pair at tp2/P38's fixture, clinical tokens) + unsloth/ckpt_unsloth_p38_t28
 #   5 e4b/fused_attn4_m_t1 + unsloth/ckpt_unsloth_m_t1 (micro-batch 1 x accum 1)   6 e4b/fused_attn4_m_r64 + unsloth/ckpt_unsloth_m_r64 (r 64 / alpha 64)
 # The matched pair runs first so a deadline cannot eat it; the family's tokens file carries CURVE_EVAL_N held-out rows (arms 5-6 take the first 8).
+# hp1_bulk_manifest W: hp1/bulk_manifest.json = {path, bytes, sha256} for every file the fetch excludes under hp1/ -- any file inside a
+# directory named base_* or shake-cache, and any canonical_*.safetensors (tc1_drive.sh's TC1_RSYNC_EXCLUDES, the same patterns)
+hp1_bulk_manifest(){ local W=$1
+  python3 - "$W" <<'PYM' > "$W/logs/hp1_bulk_manifest.log" 2>&1 || say "HP1 bulk manifest FAILED (logs/hp1_bulk_manifest.log)"
+import hashlib, json, os, sys
+w = sys.argv[1]
+root = os.path.join(w, "hp1")
+rows = []
+for d, dirs, files in os.walk(root):
+    rel_d = os.path.relpath(d, w)
+    parts = rel_d.split(os.sep)
+    in_bulk_dir = any(p.startswith("base_") or p == "shake-cache" for p in parts[1:])
+    for f in sorted(files):
+        if not (in_bulk_dir or (f.startswith("canonical_") and f.endswith(".safetensors"))):
+            continue
+        path = os.path.join(d, f)
+        h = hashlib.sha256()
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 24), b""):
+                h.update(chunk)
+        rows.append({"path": os.path.relpath(path, w), "bytes": os.path.getsize(path), "sha256": h.hexdigest()})
+rows.sort(key=lambda r: r["path"])
+json.dump({"hp1_bulk_manifest": 1, "files": rows, "n_files": len(rows), "bytes": sum(r["bytes"] for r in rows)},
+          open(os.path.join(root, "bulk_manifest.json"), "w"), indent=1)
+print(f"HP1 bulk manifest: {len(rows)} files, {sum(r['bytes'] for r in rows)} bytes")
+PYM
+  tail -1 "$W/logs/hp1_bulk_manifest.log"; }
 # ---------------------------------------------------------------- HP1 (bench/hp1/HP1-PREREG.md): held-out parity, one evaluator, seeds per arm
 # hp1_cell CELL SEED: the K cell's flags (k<init><dtype>; init 0 = e4b's N(0, 1/r), 1 = PEFT's kaiming via matched:<seed>; dtype 0 = the
 # loader's bf16 expert adapters, 1 = fp32 everywhere)
@@ -2436,6 +2463,9 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3frontier12) tc1_frontier12_family qwen3frontier12 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 1200 7200 3600 1800 2700 14400;;
   *) say "unknown family token $FAM"; echo "UNKNOWN $FAM" >> summary.txt;;
 esac; done
+# HP1: the bulk files the driver's fetch leaves on the box (TC1_RSYNC_EXCLUDES: base exports, canonical adapters, the shakedown cut) keep
+# their IDENTITY in the record: hp1/bulk_manifest.json lists every one with its sha256 and size, and comes back with the receipts
+[ -d "$W/hp1" ] && hp1_bulk_manifest "$W"
 # ---------------------------------------------------------------- reduce, summarise, mark
 say "reduce"
 # TC2: the tc2small token's families run SMALL_STEPS, so the reducer reads N per family from the receipts (no --steps); every other token passes the field N

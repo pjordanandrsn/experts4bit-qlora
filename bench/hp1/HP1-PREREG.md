@@ -300,4 +300,12 @@ proposal to the maintainer. The K block runs first, so a deadline cannot eat the
 
 ## Amendments
 
-(none yet)
+### Amendment 1 (2026-10-18, before any box): the bulk files stay on the box, and their identity comes back
+
+The base exports (about 17 GB each), the canonical adapters (about 2.6 GB each) and the shakedown cut stay on the box. The driver's
+fetch excludes them (e4b #1720), and they are gone when the box is torn down. The record pins them anyway:
+- every receipt carries its adapter's sha256 and its training-base digest;
+- the box writes `hp1/bulk_manifest.json` before the fetch, with the path, size and sha256 of every excluded file;
+- the manifest comes back with the receipts.
+
+The evaluator's checks therefore rest on the receipt digests plus this manifest. No rule, threshold or registered reading changes.

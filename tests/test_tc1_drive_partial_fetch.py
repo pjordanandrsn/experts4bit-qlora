@@ -145,11 +145,27 @@ def test_hp1_bulk_files_stay_on_the_box_and_its_small_outputs_come_back(tmp_path
     for rel in keep + drop:
         (box / rel).parent.mkdir(parents=True, exist_ok=True)
         (box / rel).write_text("x")
+    for i, rel in enumerate(drop):                      # distinct bytes, so a wrong sha256 cannot pass by coincidence
+        (box / rel).write_bytes(bytes([i]) * (100 + i))
+    (box / "logs").mkdir()
+    run_sh = (REPO / "bench" / "tc1" / "tc1_run.sh").read_text()
+    manifest_fn = re.search(r"^hp1_bulk_manifest\(\)\{.*?^  tail -1 .*?; \}\n", run_sh, re.DOTALL | re.MULTILINE).group(0)
     out = tmp_path / "out"
-    script = "set -uo pipefail\n" + EXCLUDES + f'rsync -a "${{TC1_RSYNC_EXCLUDES[@]}}" "{box}/" "{out}/"\n'
+    script = ("set -uo pipefail\nsay(){ echo \"$*\"; }\n" + manifest_fn + f'hp1_bulk_manifest "{box}"\n' + EXCLUDES
+              + f'rsync -a "${{TC1_RSYNC_EXCLUDES[@]}}" "{box}/" "{out}/"\n')
     r = subprocess.run([shutil.which("bash") or "bash", "-c", script], capture_output=True, text=True, timeout=60)
     assert r.returncode == 0, r.stderr
     for rel in keep:
         assert (out / rel).exists(), f"{rel} must come back"
     for rel in drop:
         assert not (out / rel).exists(), f"{rel} must stay on the box"
+    # the bulk files keep their identity: the manifest comes back and lists each excluded file with its true sha256 and size
+    import hashlib
+    import json
+    man = json.loads((out / "hp1" / "bulk_manifest.json").read_text())   # fetched: the manifest itself is not excluded
+    rows = {row["path"]: row for row in man["files"]}
+    left_on_box = sorted(str(f.relative_to(box)) for f in box.rglob("*") if f.is_file() and not (out / f.relative_to(box)).exists())
+    assert sorted(rows) == left_on_box == sorted(drop), "the manifest must list exactly what the excludes left on the box"
+    for rel in drop:
+        data = (box / rel).read_bytes()
+        assert rows[rel]["sha256"] == hashlib.sha256(data).hexdigest() and rows[rel]["bytes"] == len(data)
