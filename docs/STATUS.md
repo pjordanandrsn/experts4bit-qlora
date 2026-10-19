@@ -260,7 +260,8 @@ block table's capacity: 32 at one request on 4096-token slots, most of them empt
 moves buckets 1, 2 and 4 only.
 - **Speed:** one request decodes **1.044×** as fast on a 5090 (255.6 → 267.0 tok/s; the smallest of four ABBA pairs,
   binding). Sixteen requests are unchanged (0.992).
-- **Quality:** exact. At contexts ≤ 1024 the cap is bitwise-identical to the plan.
+- **Quality:** SANE exact (bias 0.0, argmax 1.0). The cap is bitwise-identical to the plan at contexts ≤ 1024, and
+  within A2's fp64 contract (error 0.9976–1.0000× the plan's) at 2048 and above.
 - **Default:** it becomes `qwen3_moe`'s default with the flip PR; `E4B_ATTN_SPLIT_CAP=0` restores the plan.
 - **Measured basis:** Qwen3-30B-A3B on an RTX 5090 (170 SMs). Other `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B)
   and other cards take the default by family without a read of their own. The plan is SM-scaled, so the cap moves
