@@ -53,6 +53,13 @@ across rows.
 **Stages.**
 1. **e4b only.** One e4b K00 calibration step per depth (as HP2's phase B, on the truncated model), its base exported, then E and F.
    This needs no new install: the e4b stack is the box's (torch 2.8.0+cu128).
+1b. **The base term (serve-throughput's review note), read alongside stage 1.** δ0 = (base term) − (in-loop term). The in-loop term,
+   mean I_e4b − mean I_uns, does not depend on the evaluator: on HP2's rows it is +0.001921. So δ0 can reach 0 only if the
+   reference's base term reads about +0.0019, where E read −0.00077. That is a 0.0027 swing from removing bf16 rounding alone.
+   HP2's 48-layer bases stayed on its box (only their hashes came back), so this is read at the fitted depths. Unsloth exports its
+   own base from one step per depth (no confirmation training), and E and F then read both bases. Reported per depth: the base
+   term under E and under F, and its shift E → F, with the same depth extrapolation (labelled). If F's base term barely moves at
+   every fitted depth, stage 2 cannot lift G1, and the answer is in at $0.
 2. **Unsloth, only if stage 1 shows that E − F carries most of the spread.** It repeats stage 1 for Unsloth 2026.9.14 in a fresh
    venv, then recomputes δ0 with F in place of E, and reports **m_need with F, both terms** (|δ0_F| and 2 × SE_F). If I − F
    dominates, stage 2 is skipped: the in-loop side is the limit, and the answer is already in.
