@@ -70,7 +70,9 @@ across rows.
      2 SE that G1 uses. (The two-reruns spread is the wrong yardstick here: N0 predicts it to be about zero.) An INDETERMINATE at
      either deciding depth stops the read too, with the reason recorded.
    - **The shift.** A shift E → F is called only if |δ0_F(L) − δ0_E(L)| exceeds 2 × its paired SE (sd_r(d_F − d_E) / √R).
-     Otherwise it is reported as "no measurable shift", with its interval.
+     Otherwise it is reported as "no measurable shift", with its interval. At a deciding depth, a ratio ≤ 0.93 **without** a
+     measurable shift reads INDETERMINATE for 1b, not "stage 2 possible". **Stage 2 opens only on a ratio ≤ 0.93 that is also a
+     measurable shift, at both deciding depths.**
    - **Reported at every fitted depth:** |δ0_E(L)| and |δ0_F(L)|, their SEs, the ratio, and the paired SE of the shift
      δ0_F(L) − δ0_E(L). A reader can then see whether the bound could have bitten. The labelled extrapolation is reporting-only;
      no extrapolated number enters the call.
