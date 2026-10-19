@@ -190,7 +190,7 @@ A NO_FLIP keeps the lever opt-in.
   int8 kernels for box Q+S. The Q+S box also pins Mixtral at `eba92302` (P141's lock).
 - **Box K** (`p149k-5090-N`):
   - no checkpoint;
-  - guard 0.5 h, disk ≥ 60 GB;
+  - guard 0.5 h, disk ≥ 60 GB (0.75 h by Amendment 3);
   - worst 0.5 h × $0.85 + 5 GB × $0.011/GB = **$0.48** (P148's form ran at about $0.03 actual).
   - **Amendment 2 (2026-10-19), box K's rate term only:** box K may rent at up to $1.05/h including the disk (the
     launcher's RTX 5090 class ceiling of $1.05/h, raised 2026-10-19), and takes a base offer at ≤ $0.85/h first whenever one
@@ -198,6 +198,14 @@ A NO_FLIP keeps the lever opt-in.
     At 15:07Z on 2026-10-19, 10 hosts with a recorded cap ≥ 575 W listed an RTX 5090, every one above $0.85/h (most at
     $0.9244), and 8 of them pass every other term at ≤ $1.05/h. The day's one such pin under $0.85 (`p149k-5090-5`) was
     taken before the create (`no_such_ask`). Everything else is unchanged, box Q+S included.
+  - **Amendment 3 (2026-10-19), box K's guard, after `p149k-5090-6`:** the guard is **0.75 h**. `-6` reached the bench
+    (575 W, the kernels' suite compiled on the card, 135 passed) and stopped at rc 40: the bench's check needs `NEED_BENCH`
+    1200 s + the 600 s reserve = 1800 s left, the whole 0.5 h guard, so no box could pass it after any setup (175 s on
+    `-6`). That is **strike one** (a box-started HARNESS_ERROR from the kit's own guard/budget fit). At 0.75 h = 2700 s the
+    fit is 300 s boot + 450 s install-to-bench + 1200 + 600 = 2550 s. Worst 0.75 h × $1.05 + 5 GB × $0.011/GB = **$0.84**.
+    The runner now refuses BEFORE the install when the time left cannot fit the install, the bench and the reserve (rc 19,
+    a refusal before the install, not a strike), prints the reserve in its STOP-2 line, and records the bench's own wall
+    time (`BENCH_WALL_S`). A test asserts the fit against the registered guard. Everything else is unchanged.
 - **Box Q+S** (`p149-5090-N`), only after K_GO:
   - disk ≥ 200 GB (the 93.4 GB checkpoint and the venv), declared as `lane_record.min_disk_gb`;
   - guard **3.0 h**: eight Mixtral loads at about 7 min, Q's decode in S0a and S1a at about 15-20 min, the speed reps,
@@ -213,6 +221,7 @@ A NO_FLIP keeps the lever opt-in.
     fails is still a strike.
     `-4` is already spent: it was created before this amendment registered it, and the driver refused the unregistered
     id (rc 78) before any box work, at $0.001. That was a launch-side error, not a box read.
+  - **Amendment 3 (2026-10-19), box K:** `p149k-5090-7`, `-8` and `-9` are spares on the same terms as Amendment 1's.
 - **Strikes:** two box-started HARNESS_ERROR, VOID or NOISY reads, across both boxes, stop the lane for a
   simplification.
 
