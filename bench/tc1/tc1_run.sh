@@ -344,6 +344,18 @@ PYP
   [ $prc -eq 0 ] || { say "BOX REFUSED: the fetch probe failed rc=$prc (logs/fetch_probe.log): $(tail -1 logs/fetch_probe.log | cut -c1-200)"
                       echo "BOX_REFUSED fetch_probe rc=$prc: $(tail -1 logs/fetch_probe.log | cut -c1-200)" >> summary.txt; finish 15; }
 fi
+# The PyPI probe (#1767): a host's path to files.pythonhosted.org can be far slower than its path to download.pytorch.org
+# (axo1767-5090-2, machine 143500: 0.88 against 23-66 MB/s), and venv-axolotl pulls most of its wheels from PyPI, so that host's
+# install took 31 of its 45 alarm minutes; a slightly slower host would have VOIDed. A token that registers a floor times one pinned wheel (pypi_probe.py, staged with the token)
+# before any PyPI-heavy venv is built, and a host below it is refused here (rc 15, host-limited, like the fetch probe). No floor
+# is registered for any other token, so their startups are unchanged. TC1_PYPI_MIN_MBPS overrides; 0 skips.
+PYPI_MIN=${TC1_PYPI_MIN_MBPS:-}
+case " $FAMILIES " in *" qwen3axo1767 "*) PYPI_MIN=${PYPI_MIN:-10};; esac       # AXO1767-PREREG "Box and budget"
+if [ -n "$PYPI_MIN" ] && [ "$PYPI_MIN" != 0 ] && [ -z "${TC1_LOCAL_SNAPSHOT:-}" ]; then
+  $PY_E4B $W/pypi_probe.py --min-mbps "$PYPI_MIN" > logs/pypi_probe.log 2>&1; pprc=$?; tail -1 logs/pypi_probe.log
+  [ $pprc -eq 0 ] || { say "BOX REFUSED: the PyPI probe read below its floor or failed rc=$pprc (logs/pypi_probe.log): $(tail -1 logs/pypi_probe.log | cut -c1-240)"
+                       echo "BOX_REFUSED pypi_probe rc=$pprc: $(tail -1 logs/pypi_probe.log | cut -c1-240)" >> summary.txt; finish 15; }
+fi
 # Unsloth: the REGISTERED versions (TC1-PREREG "Environments": unsloth 2026.9.14 + unsloth_zoo 2026.9.9), NO transformers/bnb/peft
 # pins from us (P38 amendment 1); torchao removed on the ScalingType tripwire (P38 amendment 2). TWO venvs (phase 2):
 #   venv-unsloth-t28  unsloth[cu128-torch280]  -- tp4's install on the image's torch 2.8.0+cu128 (the field-image row, `ckpt_unsloth_t28`)
