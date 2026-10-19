@@ -1,0 +1,65 @@
+RR shard model-00001-of-00016.safetensors sha256 OK
+RR layer 0 done
+RR layer 1 done
+RR shard model-00002-of-00016.safetensors sha256 OK
+RR layer 2 done
+RR layer 3 done
+RR layer 4 done
+RR shard model-00003-of-00016.safetensors sha256 OK
+RR layer 5 done
+RR layer 6 done
+RR layer 7 done
+RR layer 8 done
+RR shard model-00004-of-00016.safetensors sha256 OK
+RR layer 9 done
+RR layer 10 done
+RR layer 11 done
+RR shard model-00005-of-00016.safetensors sha256 OK
+RR layer 12 done
+RR layer 13 done
+RR layer 14 done
+RR shard model-00006-of-00016.safetensors sha256 OK
+RR layer 15 done
+RR layer 16 done
+RR layer 17 done
+RR shard model-00007-of-00016.safetensors sha256 OK
+RR layer 18 done
+RR layer 19 done
+RR layer 20 done
+RR shard model-00008-of-00016.safetensors sha256 OK
+RR layer 21 done
+RR layer 22 done
+RR layer 23 done
+RR layer 24 done
+RR shard model-00009-of-00016.safetensors sha256 OK
+RR layer 25 done
+RR layer 26 done
+RR layer 27 done
+RR shard model-00010-of-00016.safetensors sha256 OK
+RR layer 28 done
+RR layer 29 done
+RR layer 30 done
+RR shard model-00011-of-00016.safetensors sha256 OK
+RR layer 31 done
+RR layer 32 done
+RR layer 33 done
+RR shard model-00012-of-00016.safetensors sha256 OK
+RR layer 34 done
+RR layer 35 done
+RR layer 36 done
+RR layer 37 done
+RR shard model-00013-of-00016.safetensors sha256 OK
+RR layer 38 done
+RR layer 39 done
+RR layer 40 done
+RR shard model-00014-of-00016.safetensors sha256 OK
+RR layer 41 done
+RR layer 42 done
+RR layer 43 done
+RR shard model-00015-of-00016.safetensors sha256 OK
+RR layer 44 done
+RR layer 45 done
+RR layer 46 done
+RR shard model-00016-of-00016.safetensors sha256 OK
+RR layer 47 done
+RR_DONE {"distinct_mean": {"S0": 57.107421875, "S1": 57.05224609375}, "distinct_ratio_S1_over_S0": 0.9990338087081909, "teacher_forced_argmax_agreement": {"S0": 0.9410156011581421, "S1": 0.936328113079071}, "steps_S1_more": 64, "steps_S1_fewer": 64, "peak_gpu_mib": 3212}
