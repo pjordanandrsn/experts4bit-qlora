@@ -10,7 +10,7 @@
 # fetches receipts -- never the checkpoint or the e4b tree. Nothing here creates, destroys or approves compute.
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [smt_fuse_drive] $*"; }
-E4B_PIN=6c5c27435c0e9c2f3d78e05ab102fd579434a7a1      # smt_fuse_run.sh refuses any other
+E4B_PIN=d65793e4a106c7db6ecfc219668a2d6881d207e5      # smt_fuse_run.sh refuses any other
 DRY=${SMT_FUSE_DRY:-0}
 if [ "$DRY" = 1 ]; then
   for v in E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID SMT_FUSE_BOX_EXEC; do

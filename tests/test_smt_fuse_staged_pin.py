@@ -19,8 +19,8 @@ RUN = (LANE / "smt_fuse_run.sh").read_text()
 DRIVE = (LANE / "smt_fuse_drive.sh").read_text()
 BOX = (LANE / "smt_fuse_box.py").read_text()
 PREREG = (LANE / "PREREG-smt-fuse.md").read_text(encoding="utf-8")
-E4B_PIN = "6c5c27435c0e9c2f3d78e05ab102fd579434a7a1"
-GNF4_PIN = "6b7c2e7474d20c8843814dd46dad6cfc3d94b440"
+E4B_PIN = "d65793e4a106c7db6ecfc219668a2d6881d207e5"
+GNF4_PIN = "724ccc454f006c1a46836e434e997f31f293747f"
 
 
 def _entries(pin=PIN):
@@ -59,7 +59,7 @@ def test_the_pins_are_exact_and_agree():
     assert f"E4B_PIN={E4B_PIN}" in RUN and f"E4B_PIN={E4B_PIN}" in DRIVE and E4B_PIN in PREREG
     assert f"GNF4_SHA={GNF4_PIN}" in RUN and GNF4_PIN in PREREG
     assert '[ "$E4B_SHA" = "$E4B_PIN" ] ||' in RUN and "TORCH_WANT=2.8.0+cu128" in RUN
-    assert '"bitsandbytes==0.50.2"' in RUN and 'md.version("bitsandbytes") == "0.50.2"' in RUN
+    assert '"transformers==5.18.0"' in RUN and '"bitsandbytes==0.50.2"' in RUN and 'md.version("bitsandbytes") == "0.50.2"' in RUN
 
 
 def test_the_declared_run_ids_and_nothing_else(tmp_path):

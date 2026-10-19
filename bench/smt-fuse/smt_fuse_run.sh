@@ -16,8 +16,8 @@ NONCE=${SMT_FUSE_RUN_NONCE:?}; printf '%s\n' "$NONCE" > $W/SMT_FUSE_RUN_NONCE.tm
 finish(){ local rc=$1; printf '%s\n' "$rc" > SMT_FUSE_EXIT_CODE.$NONCE; [ "$rc" = 0 ] && : > SMT_FUSE_SUCCESS.$NONCE; say "TP_DONE rc=$rc"; : > TP_DONE.$NONCE; exit "$rc"; }
 trap 'finish 130' INT TERM
 for v in SMT_FUSE_RUN_ID SMT_FUSE_DEADLINE_EPOCH SMT_FUSE_INSTANCE_ID E4B_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
-E4B_PIN=6c5c27435c0e9c2f3d78e05ab102fd579434a7a1      # main with #1752 (the thread cap) and the loader's fuse_experts; a registered constant
-GNF4_SHA=6b7c2e7474d20c8843814dd46dad6cfc3d94b440      # grouped-nf4-gemm 0.46.0, exact (e4b's import of the grouped kernels)
+E4B_PIN=d65793e4a106c7db6ecfc219668a2d6881d207e5      # Q235's e4b (A15, the source q235-pro6000-7 ran); a registered constant
+GNF4_SHA=724ccc454f006c1a46836e434e997f31f293747f      # grouped-nf4-gemm 0.45.0, exact: Q235's (bench/q235/q235_drive.sh)
 TORCH_WANT=2.8.0+cu128
 [ "$E4B_SHA" = "$E4B_PIN" ] || { say "refusing: E4B_SHA $E4B_SHA is not the registered e4b pin $E4B_PIN"; finish 78; }
 DRY=${SMT_FUSE_DRY:-0}

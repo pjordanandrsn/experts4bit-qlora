@@ -58,8 +58,11 @@ server-class SMT host.
   CUDA card. The box refuses (rc 16) unless it has 2 threads per core, at least 32 CPUs in the affinity and a quota of at
   least 24. A host whose high arm P would be under 24 is refused before the install (NOT_RUN, $0), since a 16-vs-under-24
   ratio is too weak to read. It records the quota and P.
-- **Pins:** e4b `E4B_PIN=6c5c27435c0e9c2f3d78e05ab102fd579434a7a1`, grouped-nf4-gemm 0.46.0
-  `GNF4_SHA=6b7c2e7474d20c8843814dd46dad6cfc3d94b440`, torch 2.8.0+cu128 (the image's), bitsandbytes 0.50.2.
+- **Pins: Q235's own stack** (the maintainer's final pass: the premise must describe the loader Q235 runs). e4b
+  `E4B_PIN=d65793e4a106c7db6ecfc219668a2d6881d207e5` (Q235's A15 source, which `q235-pro6000-7` ran), grouped-nf4-gemm 0.45.0
+  `GNF4_SHA=724ccc454f006c1a46836e434e997f31f293747f` (`bench/q235/q235_drive.sh`), transformers 5.18.0 and bitsandbytes 0.50.2 (TC1's
+  environment), torch 2.8.0+cu128 (the image's). If Q235's simplification amendment moves its pins, this kit follows them
+  before the reading.
 - **Phase cap, declared on the box** (`lane_record.phase_caps.probe = {"on_box": ...}`): min(time left − 600 s,
   max(600 s, 1.5 × the sum of the 16 planned reps' walls, each from its own pool's warm rep on this box)), checked between
   reps. Both are the dry runs' corrections: a cap from the 16-thread warm rep alone tripped on the slower 32-thread reps,
