@@ -18,6 +18,34 @@ TC1, P127, FAM and SD1 call `token_scope.py` on the controller before copying `H
 
 The helper logs only read-only yes/no or unverified, staging none; it suppresses library diagnostics and exception text. Tests use fake tokens, metadata and network failures. See Hugging Face's [token documentation](https://huggingface.co/docs/hub/security-tokens) for the role definitions.
 
+## Guard fit
+
+Every rental runner that gates on time left (`can_run`) refuses BEFORE its first install unless its guard fits its work with
+headroom. `tests/test_lane_guard_fit.py` enforces the structure on every runner not on its frozen legacy list. The check:
+
+```sh
+FIT_HEADROOM_PCT=125   # the guard keeps 25 % headroom over the fit (cross-lane rule)
+FIT=$((INSTALL_TO_GATE_S + NEED_X + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100)); LEFT=$((DEADLINE - $(date +%s)))
+# rc NN: a refusal before the install, not a strike; two consecutive headroom refusals count as one strike
+[ "$LEFT" -ge "$FIT_NEED" ] || { say "REFUSED: needs ${FIT_NEED}s (fit ${FIT}s x ${FIT_HEADROOM_PCT}%), ${LEFT}s left"; finish NN; }
+```
+
+- `INSTALL_TO_GATE_S` is the runner's allowance for everything between this check and its largest time-left gate (the
+  install, the self-tests, the fetch, the bake). `NEED_X` is that gate's need and `RESERVE` the fetch-and-teardown
+  reserve its `can_run` keeps.
+- The check sits at top level (unindented, outside any function body or branch), before the first install (pip, pip3,
+  conda, mamba, uv, apt-get or pipx) and before any script sourced or run from another file. A runner with no
+  recognisable install fails the test rather than skipping the order check.
+- The first install the test finds may be inside a helper's DEFINITION (`pipx(){ ... pip install ...; }`), so put
+  the check above any install helper, not only above its first call. `FIT` must name an install allowance
+  (`INSTALL*`): a check made before the install has to count the install still ahead of it.
+- The headroom covers the allowances, which are estimates from the hosts measured so far. The check runs against the box's
+  own remaining time, so a slow boot is caught as well.
+- A refusal here costs cents and is not a strike. Two consecutive headroom refusals on one lane count as one strike: the
+  guard, not the hosts, is then wrong.
+- The static side stays per lane: each lane's own test asserts its declared fit x 1.25 <= its registered guard, as
+  `tests/test_p154.py` does. No PREREG is parsed.
+
 ## Host facts
 
 `host_facts.py OUT` writes the box's own measured host facts as `host_facts.json`, for the host registry. A runner calls it once on the box and leaves the file beside its receipt: `python3 host_facts.py "$OUT_DIR/host_facts.json"`.
