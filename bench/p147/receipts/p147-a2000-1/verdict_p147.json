@@ -1,0 +1,148 @@
+{
+ "lane": "P147",
+ "verdict": "READ",
+ "why": [],
+ "candidates": {
+  "I8ATTN": {
+   "gates": {
+    "W1": {
+     "windows": 196,
+     "mean_d": 0.001369,
+     "sd": 0.008131,
+     "se": 0.000581,
+     "upper": 0.002325,
+     "bound": 0.01156,
+     "ppl_A": 4.3005,
+     "argmax_agreement": 0.9813,
+     "pass": true
+    },
+    "W16": {
+     "windows": 123,
+     "mean_d": -0.000314,
+     "sd": 0.00608,
+     "se": 0.000548,
+     "upper": 0.000588,
+     "bound": 0.011323,
+     "ppl_A": 4.391,
+     "argmax_agreement": 0.9779,
+     "pass": true
+    }
+   },
+   "verdict": "GO"
+  },
+  "NF4ATTN": {
+   "gates": {
+    "W1": {
+     "windows": 196,
+     "mean_d": 0.012777,
+     "sd": 0.02206,
+     "se": 0.001576,
+     "upper": 0.015369,
+     "bound": 0.01156,
+     "ppl_A": 4.3005,
+     "argmax_agreement": 0.9428,
+     "pass": false
+    },
+    "W16": {
+     "windows": 123,
+     "mean_d": 0.012603,
+     "sd": 0.021813,
+     "se": 0.001967,
+     "upper": 0.015838,
+     "bound": 0.011323,
+     "ppl_A": 4.391,
+     "argmax_agreement": 0.9428,
+     "pass": false
+    }
+   },
+   "verdict": "PARK"
+  }
+ },
+ "reported": {
+  "I8HEAD": {
+   "W1": {
+    "windows": 196,
+    "mean_d": 0.000786,
+    "sd": 0.003292,
+    "se": 0.000235,
+    "upper": 0.001173,
+    "bound": 0.01156,
+    "ppl_A": 4.3005,
+    "argmax_agreement": 0.9898,
+    "pass": true
+   },
+   "W16": {
+    "windows": 123,
+    "mean_d": 0.000431,
+    "sd": 0.002992,
+    "se": 0.00027,
+    "upper": 0.000875,
+    "bound": 0.011323,
+    "ppl_A": 4.391,
+    "argmax_agreement": 0.99,
+    "pass": true
+   }
+  },
+  "k8_delta_ppl_check_set": {
+   "I8ATTN": {
+    "wikitext": 0.00343,
+    "c4val1": 0.01033
+   },
+   "NF4ATTN": {
+    "wikitext": 0.08406,
+    "c4val1": 0.09088
+   },
+   "I8HEAD": {
+    "wikitext": 0.00215,
+    "c4val1": -0.00081
+   }
+  }
+ },
+ "checks": {
+  "a": {
+   "wikitext": {
+    "nll_A": 1.503779,
+    "nll_P141_R": 1.503975,
+    "delta_nll": -0.000196,
+    "ppl_A": 4.49866,
+    "ppl_P141_R": 4.49954,
+    "pass": true
+   },
+   "c4val1": {
+    "nll_A": 1.944091,
+    "nll_P141_R": 1.946339,
+    "delta_nll": -0.002248,
+    "ppl_A": 6.98728,
+    "ppl_P141_R": 7.003,
+    "pass": true
+   }
+  },
+  "b": {
+   "check_wikitext": {
+    "delta_ppl": 0.0,
+    "bit_identical": true,
+    "pass": true
+   },
+   "check_c4val1": {
+    "delta_ppl": 0.0,
+    "bit_identical": true,
+    "pass": true
+   },
+   "W1": {
+    "delta_ppl": 0.0,
+    "bit_identical": true,
+    "pass": true
+   },
+   "W16": {
+    "delta_ppl": 0.0,
+    "bit_identical": true,
+    "pass": true
+   },
+   "C4": {
+    "delta_ppl": 0.0,
+    "bit_identical": true,
+    "pass": true
+   }
+  }
+ }
+}

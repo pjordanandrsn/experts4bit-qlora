@@ -1,0 +1,12 @@
+[2026-10-19T03:37:50Z] p147: start floor: 10379 MiB free, 0 compute processes
+torch 2.8.0+cu128 transformers 5.17.0 bitsandbytes 0.50.2
+e4b 15f8345f56a7858a8d075a1aa35cb9130a861273 gnf4 0.47.1 38b308887688ea5bda7dd449bd3cc3dc1426b995
+P147_SHARDS {"shards_ok": true, "mismatched": [], "checked": 21}
+P147_ARM A {"check_wikitext": 1.50378, "check_c4val1": 1.94409, "W1": 1.45873, "W16": 1.47956, "C4": 1.95447}
+P147_ARM A2 {"check_wikitext": 1.50378, "check_c4val1": 1.94409, "W1": 1.45873, "W16": 1.47956, "C4": 1.95447}
+P147_CHECKS {"why": []}
+P147_ARM I8ATTN {"check_wikitext": 1.50454, "check_c4val1": 1.94557, "W1": 1.4601, "W16": 1.47924, "C4": 1.95997}
+P147_ARM NF4ATTN {"check_wikitext": 1.52229, "check_c4val1": 1.95701, "W1": 1.4715, "W16": 1.49216, "C4": 1.97111}
+P147_ARM I8HEAD {"check_wikitext": 1.50426, "check_c4val1": 1.94398, "W1": 1.45951, "W16": 1.47999, "C4": 1.95601}
+[2026-10-19T06:10:38Z] p147: box exit 0
+P147 READ {"candidates": {"I8ATTN": "GO", "NF4ATTN": "PARK"}, "why": []}
