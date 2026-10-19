@@ -1,0 +1,43 @@
+KNOBS e4b=585cf68b49bbf8a8c829eaed10aeda5f50c4d437 gnf4=929a6906c12deba256a4ad4b18162681719f5cd1 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 min_power_w=575 short=32 long=160 reps=5 windows=12 cont=128
+CUDA_PROBE ok
+POWER_LIMIT_W 575 (floor 575)
+e4b 0.55.0 @585cf68b49bbf8a8c829eaed10aeda5f50c4d437
+gnf4 0.47.1 @929a6906c12deba256a4ad4b18162681719f5cd1
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p153_reduce self-test OK (52 cases)
+p109_box self-test OK (5/5 cases)
+p153_box self-test OK (23/23 cases)
+p115_quality self-test OK (11/11 cases)
+premise rc=0: 28 passed, 5 warnings in 23.09s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709
+arm S0w rc=0 P153_ARM {"arm": "S0", "tag": "S0w", "int8_head_bw": {"mode": "0", "modules": 0, "engagement": {"modules": 0, "routed_modules_by_rows": {}, "passed_modules_by_rows": {}}}, "load_s": 37.99, "W16": 983.92, "W1": 263.38}
+
+arm S0a rc=0 P153_ARM {"arm": "S0", "tag": "S0a", "int8_head_bw": {"mode": "0", "modules": 0, "engagement": {"modules": 0, "routed_modules_by_rows": {}, "passed_modules_by_rows": {}}}, "load_s": 20.96, "W16": 983.48, "W1": 263.66}
+
+arm S1a rc=0 P153_ARM {"arm": "S1", "tag": "S1a", "int8_head_bw": {"mode": "1", "modules": 1, "shape": [151936, 2048], "int8_bytes": 311164928, "grid": "quantize_rows_int8 (K36); the weight rounded in place to bf16(q * s), P150's I8HEAD", "engagement": {"modules": 1, "routed_modules_by_rows": {"1": 1}, "passed_modules_by_rows": {"2": 1, "4": 1, "8": 1, "16": 1, "512": 1}}}, "load_s": 21.78, "W16": 975.41, "W1": 277.63}
+
+arm S1b rc=0 P153_ARM {"arm": "S1", "tag": "S1b", "int8_head_bw": {"mode": "1", "modules": 1, "shape": [151936, 2048], "int8_bytes": 311164928, "grid": "quantize_rows_int8 (K36); the weight rounded in place to bf16(q * s), P150's I8HEAD", "engagement": {"modules": 1, "routed_modules_by_rows": {"1": 1}, "passed_modules_by_rows": {"2": 1, "4": 1, "8": 1, "16": 1, "512": 1}}}, "load_s": 20.7, "W16": 976.4, "W1": 277.47}
+
+arm S0b rc=0 P153_ARM {"arm": "S0", "tag": "S0b", "int8_head_bw": {"mode": "0", "modules": 0, "engagement": {"modules": 0, "routed_modules_by_rows": {}, "passed_modules_by_rows": {}}}, "load_s": 20.65, "W16": 979.36, "W1": 263.75}
+
+arm S0c rc=0 P153_ARM {"arm": "S0", "tag": "S0c", "int8_head_bw": {"mode": "0", "modules": 0, "engagement": {"modules": 0, "routed_modules_by_rows": {}, "passed_modules_by_rows": {}}}, "load_s": 20.85, "W16": 979.98, "W1": 263.71}
+
+arm S1c rc=0 P153_ARM {"arm": "S1", "tag": "S1c", "int8_head_bw": {"mode": "1", "modules": 1, "shape": [151936, 2048], "int8_bytes": 311164928, "grid": "quantize_rows_int8 (K36); the weight rounded in place to bf16(q * s), P150's I8HEAD", "engagement": {"modules": 1, "routed_modules_by_rows": {"1": 1}, "passed_modules_by_rows": {"2": 1, "4": 1, "8": 1, "16": 1, "512": 1}}}, "load_s": 20.89, "W16": 972.54, "W1": 277.47}
+
+arm S1d rc=0 P153_ARM {"arm": "S1", "tag": "S1d", "int8_head_bw": {"mode": "1", "modules": 1, "shape": [151936, 2048], "int8_bytes": 311164928, "grid": "quantize_rows_int8 (K36); the weight rounded in place to bf16(q * s), P150's I8HEAD", "engagement": {"modules": 1, "routed_modules_by_rows": {"1": 1}, "passed_modules_by_rows": {"2": 1, "4": 1, "8": 1, "16": 1, "512": 1}}}, "load_s": 20.62, "W16": 972.27, "W1": 277.43}
+
+arm S0d rc=0 P153_ARM {"arm": "S0", "tag": "S0d", "int8_head_bw": {"mode": "0", "modules": 0, "engagement": {"modules": 0, "routed_modules_by_rows": {}, "passed_modules_by_rows": {}}}, "load_s": 20.59, "W16": 979.25, "W1": 263.53}
+
+sane off rc=0 P153_SANE S0 windows={'wikitext': 12} cap=16 head={'modules': 0, 'routed_modules_by_rows': {}, 'passed_modules_by_rows': {}} sane_kv={'passes': 12, 'asked': [656], 'max_tokens_per_seq': [4096], 'blocks_per_seq': [256], 'split_cap': 16, 'plan_clash': [], 'plan_b1': 32} plans={'1': {'calls': 73152, 'plan': 32, 'n_split': 16}} dispatch={'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 146304, 'bw_splitk': 0} 35.7 s
+
+sane on rc=0 P153_SANE S1 windows={'wikitext': 12} cap=16 head={'modules': 1, 'routed_modules_by_rows': {'1': 1}, 'passed_modules_by_rows': {'512': 1}} sane_kv={'passes': 12, 'asked': [656], 'max_tokens_per_seq': [4096], 'blocks_per_seq': [256], 'split_cap': 16, 'plan_clash': [], 'plan_b1': 32} plans={'1': {'calls': 73152, 'plan': 32, 'n_split': 16}} dispatch={'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 146304, 'bw_splitk': 0} 36.6 s
+
+P153_VERDICT FLIP ["g1 1.052019 (the min of four pairs) >= 1.03 and g16 0.991794 >= 0.99; SANE bias +0.00216, argmax 0.9889", "a separate PR may make E4B_INT8_HEAD_BW qwen3_moe's default, once a grouped-nf4-gemm release carrying K36 is e4b's pin"]

@@ -12548,6 +12548,33 @@
         "receipts/experts4bit-qlora/2026-10-18/p143-5090-1/ (receipt.json, teardown-proof.json; HARNESS_ERROR, strike 1)"
       ],
       "notes": "Pre-registered in #1778 (Amendment 2) and #1788 (Amendment 3, binding: a NO_FLIP would have closed the lever). Amendment 2's NO_FLIP (p143a2-5090-1: g1 1.0297 under a W1 self-pair of 0.9845) stays on the record; A3 added eight arms at five reps, the min of four pairs and a NOISY rung (W1 self-pairs here 0.9991-0.9995). The kernel prior: step 1 (p143-5090-2, GO_FIXED) and A2's B=1 timing put the cap at -0.161 ms of a ~3.9 ms step. A2's contract: error 0.9976-1.0000x the plan's, bitwise identical at contexts <= 1024. The host's card ran at a 450 W power limit; the verdict is ratios within one host. The maintainer re-derived every verdict from the store. P143 cost $0.922 over four launches; the default takes effect with the flip PR. Measured basis: Qwen3-30B-A3B on an RTX 5090 (170 SMs). The default is family-scoped, so other qwen3_moe checkpoints (e.g. Qwen3-235B-A22B, also 4 KV heads, so the same plan) and other cards (the plan is SM-scaled: the cap moves B 1-6 on a PRO 6000, B 1-4 on a 4090) take it without a read of their own; their speed is not claimed here."
+    },
+    {
+      "id": "e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P153 (one RTX 5090): serving Qwen3-30B-A3B's lm_head on its per-row int8 grid (E4B_INT8_HEAD_BW=1: the head rounded in place to bf16(q * s), P150's I8HEAD; one-row calls through grouped-nf4-gemm K36's gemv_i8_bw over the int8 codes and fp32 scales, every other row count through F.linear on the rounded weight) decodes Qwen3-30B-A3B NF4 one request 1.0520x as fast on the default serve_paged server (the smallest of four ABBA pairs, 1.0520-1.0530; 263.66 -> 277.5 tok/s, a 0.189 ms step saving, 0.998 of P148's microbench projection), with sixteen requests at g16 0.9918 (the no-regression line 0.99; S1 below S0 in every W16 pair, an observed cost not attributed) and SANE inside P143 A2's bars at T == 1 (bias +0.00216, argmax 0.9889). Under P153's rule it licenses a separate PR to make the knob qwen3_moe's default.",
+      "value": 1.052,
+      "unit": "ratio, S1 / S0 one-request decode rate (tokens/s), the smallest of four ABBA pairs (unrounded 1.052019; S1a/S0a 1.0530, S1b/S0b 1.0520, S1c/S0c 1.0522, S1d/S0d 1.0527)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, driver 615.71.09, a 575 W power limit), one rented Vast.ai host (instance 56745420, verified-secure, AMD Ryzen 7 9800X3D, 16 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @585cf68b (0.55.0, P153's registration merge, #1826) + grouped-nf4-gemm @929a6906 (0.47.1 + dense_gemv's int8 GEMV, K36's merge); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0, bitsandbytes 0.50.2; premise 28 tests passed on the card (K36's compiled contract among them); Qwen/Qwen3-30B-A3B @ad44e777, NF4 arena baked on the box; the default serve_paged server (graphs on, max_seqs 16 x 4096 tokens, buckets 1-16, the split cap at its qwen3_moe default of 16, the dense attention GEMV off); a warm-up process S0w (integrity-checked, never scored), then eight arms ABBA twice (S0 = E4B_INT8_HEAD_BW=0, S1 = 1), P109's W16 and W1 at 32 and 160 tokens, 5 timed reps, a 575 W power floor read either side of every timed block; SANE = P115 Phase D's instrument at one window per pass (T == 1), 12 wikitext windows x 128 positions, the pass KV at the server's 4096 tokens; verdict by bench/p153/p153_reduce.py",
+      "measured_on": "2026-10-19",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p153/RESULTS-p153.md",
+        "bench/p153/PREREG-p153.md",
+        "bench/p153/p153_reduce.py",
+        "bench/p153/receipts/p153-5090-1/verdict_p153.json",
+        "bench/p153/receipts/p153-5090-1/SHA256SUMS",
+        "bench/p150/RESULTS-p150.md",
+        "bench/p148/RESULTS-p148.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-19/p153-5090-1/ (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #1826 (one non-consumer review and the maintainer's final pass, before any data). The premise: P148's D2_GO (a microbench projection of 0.189546 ms) and P150's quality GO for the grid at both of P125's gates on held-out windows. The warm-up process read W1 0.9989 of S0a; it loaded in 38.0 s against 20.6-21.8 s for every later arm. W1 self-pairs 0.9993-1.0003, W16 0.9958-1.0010. Observed and not attributed: S1's W16 rate is below S0's in every pair (0.9918-0.9970) though the head is passed, never routed, at 16 rows; the knob keeps the int8 copy resident (memory_allocated +311,772,672 bytes, exactly the codes and scales; reserved +400 MiB) and adds a row check. W1 tokens identical between arms; W16 rows diverge (the head is rounded at every row count). The host's card ran at a 575 W power limit; the verdict is ratios within one host. The maintainer re-derived the verdict from the store byte for byte. P153 cost $0.445 on one launch (the registered fallback tier). Measured basis: Qwen3-30B-A3B's 151936 x 2048 untied head on an RTX 5090 (170 SMs) at K36's tuned plan; other heads take K36's untuned default plan and other cards are not read; their speed is not claimed here. The default changes only with a separate PR, after a grouped-nf4-gemm release carrying K36 is e4b's pin."
     }
   ]
 }
