@@ -1015,3 +1015,32 @@ def test_the_registered_list_carries_a_machine_that_stalled_across_envelopes():
     excludes it from every later one."""
     assert launch.EXCLUDED_MACHINES == {"45511", "147454"}
     assert launch.offer_row(offer(machine="147454"), FakeProvider([]))["eligible"] is False
+
+
+STALLED = Path(__file__).parent / "fixtures/dq11-census-stalled"
+STALLED_RECEIPT_SHA256 = "0ff76566d4246bb78e7c0a89a57142a9a92eeb33a72255c59725bb53b88788aa"
+STALLED_LEDGER_SHA256 = "8b0954615b702828914563eb795b9ecacb303316a2ffeed033998eb82c7b83d9"
+
+
+def test_the_real_census_7_stall_is_what_the_gate_admits(receipt_repo):
+    """census-7's committed receipt and ledger row, unchanged (sha256-pinned): preflight_stall admits them, and under
+    their own envelope's URL and ids the next attempt is permitted with $0.015 spent and machine 147454 excluded."""
+    assert launch.sha(STALLED / "receipt.json") == STALLED_RECEIPT_SHA256
+    assert launch.sha(STALLED / "ledger.jsonl") == STALLED_LEDGER_SHA256
+    receipt = json.loads((STALLED / "receipt.json").read_text())
+    url = receipt["approvals"][0]["approval_url"]
+    assert launch.preflight_stall(receipt, url, "dq11-l-census-7") == ("147454", launch.Decimal("0.015"))
+    root = receipt_repo
+    env = {"approval_url": url, "run_ids": ["dq11-l-census-7", "dq11-l-census-8"], "maximum_attempts": 2}
+    with launch.attempt_permit(env, "dq11-l-census-7", root, root / "state") as permit:
+        permit()
+    path = root / "receipts/experts4bit-qlora/2026-10-19/dq11-l-census-7/receipt.json"
+    path.parent.mkdir(parents=True)
+    path.write_bytes((STALLED / "receipt.json").read_bytes())
+    with (root / "receipts/experts4bit-qlora/ledger.jsonl").open("ab") as stream:
+        stream.write((STALLED / "ledger.jsonl").read_bytes())
+    git_fixture(root, "add", "receipts")
+    git_fixture(root, "commit", "-m", "census-7 as committed")
+    with launch.attempt_permit(env, "next", root, root / "state") as permit:
+        assert permit.run_id == "dq11-l-census-8"
+        assert permit.spent_usd == launch.Decimal("0.015") and permit.excluded_machines == {"147454"}
