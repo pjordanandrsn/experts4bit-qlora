@@ -73,10 +73,12 @@ MARGIN = 1.5
 RESERVE_S = 300                     # q235_run.sh's deadline reserve
 CONTROLLER_S = 1800                 # tc1_drive.sh: staging, the nonce handshake, the receipt fetch (per-layer outputs of the box, the
                                     # null and two plants: 4 x 94 x 2,648 x 4,096 x 2 B, about 8.2 GB, at >= 4.6 MB/s)
-# Amendment 15: phases whose cap the box sizes from its own box phase (q235_run.sh's repeat_cap), so nothing is sealed for them. The
-# fit reports their scaled budget, counts it in the wallclock and never refuses on it.
-ON_BOX_CAPS = ("repeat",)
+# Amendments 15 and 16: phases whose cap the box sizes on the box (q235_run.sh's repeat_cap and box_cap), so nothing is sealed for
+# them. The fit reports their scaled budget and counts it in the wallclock. It never refuses on the repeat's; the box's budget must fit
+# the box's half-cap on the expected timeline: floor((guard - controller - the expected phases before it - reserve) / BOX_SHARE).
+ON_BOX_CAPS = ("box", "repeat")
 REPEAT_STEPS = 5                    # Amendment 15: the box's cap is MARGIN x (load + REPEAT_STEPS x step 0), as q235_run.sh's repeat_cap
+BOX_SHARE = 2                       # Amendment 16: the box's cap is floor((time left at its start - RESERVE_S) / BOX_SHARE)
 RUN_CAP_USD = 35.0                  # the launcher's per-run hard cap
 NO_ASK_USD = 15.0                   # above this, a run's ACK needs approval
 FIXED = ("require-git", "create-venv", "tokens", "hostrate")
@@ -188,9 +190,14 @@ def fit(timings: dict, warm_install_s: float, fetch: dict, wheel_bytes: int, mod
     for p in ("box", "repeat"):
         scaled[p] = float(timings[p]) * LAYERS / SLICE_LAYERS
     phases = {}
+    left_at_box = GUARD_H * 3600 - CONTROLLER_S - sum(v for p, v in scaled.items() if p not in ("box", "repeat"))
+    half_cap = math.floor((left_at_box - RESERVE_S) / BOX_SHARE)
     for p, s in scaled.items():
         budget = math.ceil(max(s * MARGIN, 60))
-        if p in ON_BOX_CAPS and p not in caps:
+        if p == "box" and p not in caps:
+            phases[p] = {"scaled_s": round(s, 1), "budget_s": budget, "sealed_cap_s": None, "cap": "sized on the box (Amendment 16)",
+                         "expected_left_at_start_s": round(left_at_box, 1), "half_cap_s": half_cap, "fits": budget <= half_cap}
+        elif p in ON_BOX_CAPS and p not in caps:
             basis = None
             if box_record is not None:              # the box's own formula, on the rehearsal box's record scaled to the full depth
                 basis = (float(box_record["load_s"]) + REPEAT_STEPS * float(box_record["step_s"])) * LAYERS / SLICE_LAYERS

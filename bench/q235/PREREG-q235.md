@@ -1312,3 +1312,76 @@ the wallclock and never refuses on it. A record without step 0's timing keeps th
 - The fit's sealed caps have no repeat, and the Amendment 12 refit's repeat budget is the box formula's 835 s, unsealed.
 - Mutants: one or three steps instead of five, margin 1.0, no 60 s floor, a zero step accepted, the fit sealing the repeat, and a
   science box reading the rehearsal pin each fail a test.
+
+## Amendment 16 (2026-10-19, after `q235-pro6000-7`, before any further 235B box): the simplification after strike 2, the box's cap sized on the box
+
+**Why, stated plainly.** `q235-pro6000-7` ended HARNESS_ERROR, VOID at the box cap (rc 142, 3,031 s against 2,997). Everything
+before the box passed. Its expert fuse, quantize and offload took 2,088 s, against 641, 595 and 856 s on runs 2, 3 and 6, and step 0
+began with about 850 s of the cap left. When the cap fired, the run still had 4.9 h of its guard. That cap was Amendment 12's leg
+constant: the warm 4-layer slice's 85 s box × 94/4 × 1.5. It is the flaw Amendment 15 fixed for the repeat: a constant scaled from a
+warm slice cannot hold a cold full load, and the science hosts' loads already differ by 3.5×. `-7` was strike 2, so Q235 stopped
+for this simplification.
+
+**What `-7`'s slowness was not.** The SMT fuse premise (`bench/smt-fuse`, e4b#1789; `smt-fuse-2`, re-derived from its raw reps) ran
+the loader's per-layer block on an AMD EPYC 7V13 host under a 30.72-CPU quota. The block took about 3.8 s at a 16-thread pool and
+3.5 s at 31, and every pair ratio's range includes 1, so **torch's default pool stays**. That probe compares 16 with 31 threads
+under a quota, not SMT siblings with physical cores, so it says nothing either way about the second hardware thread. Its block is
+about 3.6-3.8 s per layer against `-7`'s about 22 s, so the thread count does not explain `-7`. The block is dominated by the offload
+(the pinned allocation and the copy home, about 1.64 s per layer) and an untimed residual (about 1.0 s). What slowed `-7` is not
+known: no log of any box records per-layer times. This amendment records them, and does not guess.
+
+**The rule.**
+1. **The box's cap is half the time left at its start, less the reserve:** `CAP_BOX = floor((left - 300) / 2)` seconds, read on the
+   box right before the box phase. The sealed 2,997 s is removed.
+   - **Why half.** The repeat is a strict subset of the box's work: one load and about five steps (Amendment 15), against one load
+     and every box step. On every record the repeat used less than its box: 964 of 1,185 s (`-2`), 896 of 2,349 (`-3`), and 715
+     before its old cap fired against 2,425 (`-6`). So a box inside its half leaves the repeat at least as long as the box took.
+     Amendment 15's repeat cap stays, bounded by the time left like every phase.
+   - **The cost is still bounded by the guard:** 6.0 h × the declared rate, at most $15 at the pinned quote (Amendment 14).
+   - **Worked examples**, from each box's time left after its tokens phase: `-2` 20,710 s gives 10,205 s (its box used 1,185);
+     `-3` 20,462 gives 10,081 (2,349); `-6` 17,829 gives 8,764 (2,425); `-7` 17,678 gives 8,689 (it had used 3,031 s, step 0
+     begun, when the old cap fired).
+   - `receipts/box-cap.json` records the time left, the reserve, the share and the cap. A rehearsal may pin the cap
+     (`Q235_CAP_BOX`); a science box cannot. A box whose cap cannot be sized (no time left beyond the reserve) is a VOID (11) before
+     the box starts.
+2. **The load's per-layer record (never gated).** `receipts/box/load_layers.jsonl` and `receipts/repeat/load_layers.jsonl`: a
+   header line; one line per expert layer finished (offloaded on the card; quantized on the CPU rehearsal, which has no offload), with
+   its seconds since the load began; and an end line only when the load returns. Each line is flushed as it is written, so a box
+   killed mid-load still says how far it got.
+3. **VOID_BY_HOST, not a strike.** If the box phase hits its half-cap (rc 142) while its per-layer record has a header and no end
+   line, the load alone ran past the cap. The same code loads the same bytes on every host, so that is host-limited by construction.
+   The runner writes VOID_BY_HOST to `summary.txt` and `REFUSAL` and exits 18, a registered host floor, which names the machine for
+   the launcher's lane-refusal exclusion: the host is retired. Every other box failure, and every repeat failure, stays a VOID (11).
+4. **The host's CPUs (never gated).** After the install, `receipts/cpu.json` records the CPU model, the logical CPUs, the physical
+   cores (unique package and core pairs), threads per core, the affinity, the cgroup quota and torch's default pool. A failure to
+   write it is logged, never a VOID.
+5. **Unchanged:** torch's default pool, the pin ranking (physical cores are recorded, not ranked), the host floors, the host rate
+   (Amendment 14), the worst case at most $15 at the pinned quote, Amendment 15's repeat cap, and every rule and band.
+
+**Strikes and run ids.** The count restarts at 0 under this amendment. The next box-started HARNESS_ERROR or VOID that is not a
+VOID_BY_HOST stops Q235 for a redesign, not another amendment. A VOID_BY_HOST is not a strike, and its id is spent like a refusal's.
+The next science box is `q235-pro6000-8`; `-9` is the spare. The launch manifest declares the science mode's free-disk floor, 550 GB.
+
+**The fit.** `q235_fit.sealed_caps` no longer finds a box cap; the box joins `ON_BOX_CAPS`. The fit checks the box's scaled budget
+against its half-cap on the expected timeline: `floor((6.0 h - the controller's 1,800 s - the expected phases before the box - 300 s)
+/ 2)`. On the Amendment 12 leg at 806 Mbps the box's budget is 2,997 s against a half-cap of 7,261 s; the expected run is 2.65 h and
+the wallclock bound 5.83 h, unchanged.
+
+**The closure.** `q235.sha256` is re-sealed with `q235_stage.py --write`. The `q235_run.sh` row moves from
+`c08884fb5fc82210103db19bc97a1bec2fbe8cdde9940fc876ef4aed666a53b5` to `7731664f0822047c3a15b678ea6a84ed1599e351b871e73a0423040858b2ed7a`,
+and the `q235_box.py` row from `0aa826f6b7be2eab71388f75bbecb913061bf6e1ca5b906d8ce06866fb3053b6` to
+`92e7c24c7daa6a4e8c30c85bf2959b31bb67bcac41de0268220e008d24f8a5d6`. The `tc1_arm.py` row does not move here. Its moves to date,
+recorded here because the last two came without a Q235 amendment: `fbe790d7` to `9f43b45b` (Amendment 10, #1709), then
+`9f43b45b` to `4e55a3e8` (#1783, AXO1767's harness; default-off switches), then `4e55a3e8` to `ac03f4d2` (#1798, AXO1767
+Amendment 1's experts/LoRA-kernels split; default-off switches). The re-seal here keeps `ac03f4d2`.
+
+**Tests** (`tests/test_q235_amendment16.py`; `tests/test_q235_fit.py` updated):
+- `box_cap`, run from the runner's own text, gives the four worked caps, refuses with no time left, and records a rehearsal pin
+  beside the derived cap.
+- `load_unfinished` reads the record: no record is not host-limited; a header with or without layers and no end line is; an end
+  line is not.
+- The wiring: no sealed box cap; the cap is taken right before the box phase; only rc 142 on the box with the load unfinished exits
+  18, every other failure 11; only a rehearsal reads `Q235_CAP_BOX`.
+- The load profile writes one flushed line per layer and an end line only when the load returns, and nothing without a path.
+- The CPU record follows the install and never finishes the run.
+- The fit's box has no sealed cap, fits the Amendment 12 leg and refuses a box budget above its half-cap.
