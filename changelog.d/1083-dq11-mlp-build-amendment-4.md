@@ -14,9 +14,9 @@
 - **(c) KNOB_OFF gets a null first.** It runs three `step-today` processes:
   - in the read environment;
   - if those disagree, under DQ11's deterministic configuration C;
-  - if those disagree too, an aggregate relative RMS over the B update against C's own null with a 2× margin
-    (`KNOB_OFF_BY_SPREAD`). Its guaranteed false-reject bound is only 1/4; the margin's further reduction is a stated
-    assumption.
+  - if those disagree too, an aggregate relative RMS over the B update: each process is scored by its mean distance
+    to the others, and off fails only if its score exceeds 2× the largest today score (`KNOB_OFF_BY_SPREAD`). Its
+    guaranteed false-reject bound is 1/4; the margin's further reduction is a stated assumption.
 
   It never mixes environments.
 - **(d)** One independent review before data.

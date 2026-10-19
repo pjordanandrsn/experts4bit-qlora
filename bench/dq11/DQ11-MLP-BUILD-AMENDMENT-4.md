@@ -113,17 +113,21 @@ environment, against that environment's own null. The two environments are never
      - The relative RMS decides, as in (b). It aggregates about 22 M elements.
      - The max-abs |B_P − B_Q| is recorded and decides nothing, for (b)'s reason: an extreme value is too noisy to
        compare by maximum.
-   - **The null spread** is the largest D over the three today-vs-today pairs.
-   - **The check passes iff** max over the three of D(`step-off-c`, `step-today-c`_i) ≤ 2 × the null spread. That is a
-     margin of 1.0, and the outcome is named `KNOB_OFF_BY_SPREAD`.
-   - **The false-reject rate, stated honestly.** A knob that does nothing makes `step-off-c` exchangeable with the three
-     `step-today-c`. Exchangeability then guarantees only a rank bound: without the margin, `step-off-c` is the most
-     distant of 4 with probability 1/4. The 2× margin lowers that by an amount this amendment does not quantify. It
-     rests on an assumption: that pair distances between neutral processes vary by less than 2×.
-     - That assumption is checked on the null itself: if the null's three pairs differ from each other by more than 2×,
-       KNOB_OFF is `INDETERMINATE`.
-     - A tighter guaranteed rate would need n `step-today-c` processes for 1/(n+1), that is 19 for 5%. Step 3 is the
+   - **The score** of each of the four processes (`step-off-c` and the three `step-today-c`) is its mean D to the
+     other three.
+   - **The check passes unless** `step-off-c`'s score exceeds 2 × the largest `step-today-c` score. That is a margin
+     of 1.0, and the outcome is named `KNOB_OFF_BY_SPREAD`.
+   - **The false-reject rate, stated honestly.** A knob that does nothing makes the four processes exchangeable.
+     Exchangeability then guarantees only a rank bound: without the margin, `step-off-c` has strictly the largest score
+     with probability at most 1/(n + 1) = 1/4, for n = 3 `step-today-c`. The 2× margin lowers that by an amount this
+     amendment does not quantify. It rests on an assumption: that pair distances between neutral processes vary by
+     less than 2×.
+     - That assumption is checked on the null itself: if the three today-vs-today distances differ from each other by
+       more than 2×, KNOB_OFF is `INDETERMINATE`.
+     - A tighter guaranteed rate would need n `step-today-c` processes for 1/(n + 1), that is 19 for 5%. Step 3 is the
        fallback only if C is itself not deterministic, so it is not registered here.
+     - The review's first scoring, the largest of the six pair distances involving `step-off-c`, would have had 1/2,
+       not 1/4. It was replaced by this per-process score before data.
 
 A cross-process bitwise comparison is never made without a null that passed, and never across environments.
 
