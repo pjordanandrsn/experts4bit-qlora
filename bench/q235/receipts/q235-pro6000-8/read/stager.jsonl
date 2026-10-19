@@ -1,0 +1,237 @@
+{"t": "2026-10-19T09:30:24Z", "event": "farm", "snapshot": "/models/hf-235b/hub/models--Qwen--Qwen3-235B-A22B-Instruct-2507/snapshots/ac9c66cc9b46af7306746a9250f23d47083d689e", "farm": "/workspace/prof/q235box/stage8/snapshots/ac9c66cc9b46af7306746a9250f23d47083d689e", "shards": 118, "layers": 94, "ahead": 2, "behind": 1}
+{"t": "2026-10-19T09:30:59Z", "event": "staged", "shard": "model-00001-of-00118.safetensors", "layers": [0, 0], "sha256": "447f8fbf68721a2d5cecffaa61a4526ba084b1c9de0283cca8984bc14fdbf3ab", "bytes": 3991955880, "copy_s": 17.3, "hash_s": 17.3}
+{"t": "2026-10-19T09:31:01Z", "event": "staged", "shard": "model-00002-of-00118.safetensors", "layers": [0, 1], "sha256": "72af83e8f0d43e54e33cd2714a977510cf9dab3c06d90500a7f23dc785a97cd9", "bytes": 3994081856, "copy_s": 22.5, "hash_s": 14.5}
+{"t": "2026-10-19T09:31:39Z", "event": "staged", "shard": "model-00004-of-00118.safetensors", "layers": [2, 2], "sha256": "01e5c196c6f83ef050524ce9da26f22c026cefa4513b31cff06039e70a7bf40a", "bytes": 3988822448, "copy_s": 22.3, "hash_s": 15.2}
+{"t": "2026-10-19T09:31:51Z", "event": "staged", "shard": "model-00003-of-00118.safetensors", "layers": [1, 2], "sha256": "7f9ec818fea58d6598e8bc0973ca2fbdddb52d26588901005366a6617e138fb2", "bytes": 3994081856, "copy_s": 37.0, "hash_s": 14.3}
+{"t": "2026-10-19T09:32:11Z", "event": "staged", "shard": "model-00005-of-00118.safetensors", "layers": [2, 3], "sha256": "c22789b4759a7935ca9dbb51dc44b9dd71656793fa9882c7320a43daee4d98a8", "bytes": 3994081784, "copy_s": 17.4, "hash_s": 14.2}
+{"t": "2026-10-19T09:32:11Z", "event": "ready", "at_layer": 0}
+{"t": "2026-10-19T09:33:01Z", "event": "evicted", "shard": "model-00001-of-00118.safetensors", "at_layer": 2}
+{"t": "2026-10-19T09:33:36Z", "event": "evicted", "shard": "model-00002-of-00118.safetensors", "at_layer": 3}
+{"t": "2026-10-19T09:33:39Z", "event": "staged", "shard": "model-00006-of-00118.safetensors", "layers": [3, 4], "sha256": "2e563083b775a29aee5bcb867d4a422d9e72a3b410b2432d04776b9928b5a97b", "bytes": 3994081856, "copy_s": 39.5, "hash_s": 14.3}
+{"t": "2026-10-19T09:33:39Z", "event": "staged", "shard": "model-00007-of-00118.safetensors", "layers": [4, 5], "sha256": "c76ad1a70056019ee0dfc8e51ce4fb6f0850abad3c230f305ca2bf67998cb829", "bytes": 3994081856, "copy_s": 20.2, "hash_s": 17.3}
+{"t": "2026-10-19T09:34:06Z", "event": "staged", "shard": "model-00008-of-00118.safetensors", "layers": [5, 6], "sha256": "a459ca3ff449a4a75d4aa380cad0af895a92e1a063ec457f4dc27a8e92ae81cb", "bytes": 3994081856, "copy_s": 12.3, "hash_s": 14.7}
+{"t": "2026-10-19T09:34:49Z", "event": "evicted", "shard": "model-00003-of-00118.safetensors", "at_layer": 4}
+{"t": "2026-10-19T09:34:49Z", "event": "evicted", "shard": "model-00004-of-00118.safetensors", "at_layer": 4}
+{"t": "2026-10-19T09:35:13Z", "event": "evicted", "shard": "model-00005-of-00118.safetensors", "at_layer": 5}
+{"t": "2026-10-19T09:35:30Z", "event": "staged", "shard": "model-00010-of-00118.safetensors", "layers": [6, 7], "sha256": "bf7a8fbcf4ada6f67c351ae294ca34487bb7c2089571c058c46b31fce2101fc2", "bytes": 3994081784, "copy_s": 24.5, "hash_s": 16.2}
+{"t": "2026-10-19T09:35:41Z", "event": "evicted", "shard": "model-00006-of-00118.safetensors", "at_layer": 6}
+{"t": "2026-10-19T09:35:48Z", "event": "staged", "shard": "model-00009-of-00118.safetensors", "layers": [6, 6], "sha256": "1b16606cedcc0f7a0fc15629231a30a07b5637d47da90ca43681ee2057ec65b8", "bytes": 3988822456, "copy_s": 43.5, "hash_s": 15.8}
+{"t": "2026-10-19T09:36:10Z", "event": "staged", "shard": "model-00011-of-00118.safetensors", "layers": [7, 8], "sha256": "7025ba6dd9370fe368ea782b5c28d03695d97bc2dd148c1f4e19059cdb213aab", "bytes": 3994081856, "copy_s": 23.8, "hash_s": 15.9}
+{"t": "2026-10-19T09:36:16Z", "event": "staged", "shard": "model-00012-of-00118.safetensors", "layers": [8, 9], "sha256": "5bd59b7c8516fcfe29de641d9cc5fee5c1651504c0cbd251049145c04d6f6a07", "bytes": 3994081856, "copy_s": 15.0, "hash_s": 11.8}
+{"t": "2026-10-19T09:38:49Z", "event": "evicted", "shard": "model-00007-of-00118.safetensors", "at_layer": 7}
+{"t": "2026-10-19T09:39:19Z", "event": "evicted", "shard": "model-00008-of-00118.safetensors", "at_layer": 8}
+{"t": "2026-10-19T09:39:19Z", "event": "evicted", "shard": "model-00009-of-00118.safetensors", "at_layer": 8}
+{"t": "2026-10-19T09:39:25Z", "event": "staged", "shard": "model-00013-of-00118.safetensors", "layers": [9, 10], "sha256": "8e713c4dc7bbd3318181370e5541811264cf3695937e509e14d8ccaa910029cc", "bytes": 3994081944, "copy_s": 20.0, "hash_s": 16.1}
+{"t": "2026-10-19T09:39:55Z", "event": "staged", "shard": "model-00014-of-00118.safetensors", "layers": [10, 10], "sha256": "b30e3a053e0d944f968a8f260b15f5bb2bd85ae6672f56aac30040d296cf8ba5", "bytes": 3988822776, "copy_s": 21.0, "hash_s": 14.7}
+{"t": "2026-10-19T09:39:57Z", "event": "evicted", "shard": "model-00010-of-00118.safetensors", "at_layer": 9}
+{"t": "2026-10-19T09:40:04Z", "event": "staged", "shard": "model-00015-of-00118.safetensors", "layers": [10, 11], "sha256": "062424a25df6b24be8841882eb5d2abb957148cf09f2e9d29f865b73568834e7", "bytes": 3994082088, "copy_s": 22.3, "hash_s": 16.4}
+{"t": "2026-10-19T09:40:23Z", "event": "evicted", "shard": "model-00011-of-00118.safetensors", "at_layer": 10}
+{"t": "2026-10-19T09:40:29Z", "event": "staged", "shard": "model-00016-of-00118.safetensors", "layers": [11, 12], "sha256": "df7b88e1c2d5ea7289af8a0880d239563f62b6ecb5e4dc0a34b20d5700a0bf48", "bytes": 3994082176, "copy_s": 16.3, "hash_s": 14.1}
+{"t": "2026-10-19T09:40:50Z", "event": "evicted", "shard": "model-00012-of-00118.safetensors", "at_layer": 11}
+{"t": "2026-10-19T09:40:54Z", "event": "staged", "shard": "model-00017-of-00118.safetensors", "layers": [12, 13], "sha256": "410fd5557ce7eec0c40a15d09ad256680d65e28128ab0a180bd69049fbe05c2c", "bytes": 3994082176, "copy_s": 16.9, "hash_s": 13.9}
+{"t": "2026-10-19T09:41:16Z", "event": "staged", "shard": "model-00018-of-00118.safetensors", "layers": [13, 14], "sha256": "ccfcd2bfce65451b4fabfac37aba72ec0d4ba9f16cf77705320091fc72de9a56", "bytes": 3994082176, "copy_s": 11.6, "hash_s": 13.8}
+{"t": "2026-10-19T09:41:16Z", "event": "evicted", "shard": "model-00013-of-00118.safetensors", "at_layer": 12}
+{"t": "2026-10-19T09:41:16Z", "event": "evicted", "shard": "model-00014-of-00118.safetensors", "at_layer": 12}
+{"t": "2026-10-19T09:41:48Z", "event": "staged", "shard": "model-00020-of-00118.safetensors", "layers": [14, 15], "sha256": "cd40c113b9e6870c9f941f0efae194fc224a689133106e7d53ad48526d11cc47", "bytes": 3994082088, "copy_s": 16.4, "hash_s": 15.4}
+{"t": "2026-10-19T09:41:49Z", "event": "evicted", "shard": "model-00015-of-00118.safetensors", "at_layer": 13}
+{"t": "2026-10-19T09:41:55Z", "event": "staged", "shard": "model-00019-of-00118.safetensors", "layers": [14, 14], "sha256": "18cbd01dc37c03e793922128a23d44f04b80e1b5bd29c3eefbe068d8cc6155d8", "bytes": 3988822776, "copy_s": 25.6, "hash_s": 12.9}
+{"t": "2026-10-19T09:42:16Z", "event": "evicted", "shard": "model-00016-of-00118.safetensors", "at_layer": 14}
+{"t": "2026-10-19T09:42:19Z", "event": "staged", "shard": "model-00021-of-00118.safetensors", "layers": [15, 16], "sha256": "82bfeab2fd2d5a1e678a2d659ec0b8d0e1a231690e159ed7bd943b59a667ea33", "bytes": 3994082160, "copy_s": 13.7, "hash_s": 15.0}
+{"t": "2026-10-19T09:42:42Z", "event": "evicted", "shard": "model-00017-of-00118.safetensors", "at_layer": 15}
+{"t": "2026-10-19T09:42:43Z", "event": "staged", "shard": "model-00022-of-00118.safetensors", "layers": [16, 17], "sha256": "40d92f95fc073f1d46ac9f089669417d1eb44e9e4046e91ec5213a10286a34ff", "bytes": 3994082176, "copy_s": 13.4, "hash_s": 12.8}
+{"t": "2026-10-19T09:43:09Z", "event": "evicted", "shard": "model-00018-of-00118.safetensors", "at_layer": 16}
+{"t": "2026-10-19T09:43:09Z", "event": "evicted", "shard": "model-00019-of-00118.safetensors", "at_layer": 16}
+{"t": "2026-10-19T09:43:11Z", "event": "staged", "shard": "model-00023-of-00118.safetensors", "layers": [17, 18], "sha256": "b5a74d161c35daabd49d90c7e2d9a73f049ab51575a244ffa90fb869e0f31dee", "bytes": 3994082176, "copy_s": 15.1, "hash_s": 13.6}
+{"t": "2026-10-19T09:43:31Z", "event": "evicted", "shard": "model-00020-of-00118.safetensors", "at_layer": 17}
+{"t": "2026-10-19T09:43:36Z", "event": "staged", "shard": "model-00024-of-00118.safetensors", "layers": [18, 18], "sha256": "6d75e33a85b5bfd8de1ad5b61b0e54c5f04bed8b5782c79ee03fd22f8744abb3", "bytes": 3939555920, "copy_s": 15.0, "hash_s": 11.7}
+{"t": "2026-10-19T09:44:09Z", "event": "staged", "shard": "model-00026-of-00118.safetensors", "layers": [19, 20], "sha256": "ea263fc399e9473aea8cc42adb4280bdc9cd4a763c2362a37e61040f149131bd", "bytes": 3994082160, "copy_s": 15.7, "hash_s": 17.3}
+{"t": "2026-10-19T09:44:14Z", "event": "staged", "shard": "model-00025-of-00118.safetensors", "layers": [19, 19], "sha256": "6d8acb27ac1bac598ba35f97831945dcf07557e0da30fdca8443259d7aacca42", "bytes": 3993016808, "copy_s": 24.8, "hash_s": 18.0}
+{"t": "2026-10-19T09:44:16Z", "event": "evicted", "shard": "model-00021-of-00118.safetensors", "at_layer": 18}
+{"t": "2026-10-19T09:44:45Z", "event": "staged", "shard": "model-00027-of-00118.safetensors", "layers": [20, 21], "sha256": "5e4f3de86d634b02aeee58382dcff68f405abf4afbe0617c4a56bf070c9f3c7f", "bytes": 3994082176, "copy_s": 14.0, "hash_s": 14.3}
+{"t": "2026-10-19T09:44:45Z", "event": "evicted", "shard": "model-00022-of-00118.safetensors", "at_layer": 19}
+{"t": "2026-10-19T09:45:15Z", "event": "staged", "shard": "model-00028-of-00118.safetensors", "layers": [21, 22], "sha256": "fb1ea120c42c761084f05988c5955980bfaa5aafe3339ac0b141b09529aaa4d1", "bytes": 3994082176, "copy_s": 14.4, "hash_s": 15.4}
+{"t": "2026-10-19T09:45:15Z", "event": "evicted", "shard": "model-00023-of-00118.safetensors", "at_layer": 20}
+{"t": "2026-10-19T09:45:15Z", "event": "evicted", "shard": "model-00024-of-00118.safetensors", "at_layer": 20}
+{"t": "2026-10-19T09:45:37Z", "event": "evicted", "shard": "model-00025-of-00118.safetensors", "at_layer": 21}
+{"t": "2026-10-19T09:45:56Z", "event": "staged", "shard": "model-00029-of-00118.safetensors", "layers": [22, 23], "sha256": "189ce7c5d4ca21450bc2964225b74180b8ad772c1e828fc45c0cfcc779287c60", "bytes": 3998276288, "copy_s": 22.9, "hash_s": 18.1}
+{"t": "2026-10-19T09:46:07Z", "event": "staged", "shard": "model-00030-of-00118.safetensors", "layers": [23, 23], "sha256": "03da01a0f239b5325e0fcf253813de2e9507faff036525df197c3634e8ea24f9", "bytes": 3997211632, "copy_s": 14.6, "hash_s": 15.1}
+{"t": "2026-10-19T09:46:10Z", "event": "evicted", "shard": "model-00026-of-00118.safetensors", "at_layer": 22}
+{"t": "2026-10-19T09:46:36Z", "event": "staged", "shard": "model-00031-of-00118.safetensors", "layers": [23, 24], "sha256": "09667e2b0f389c0481780da715b5951e873f717f0bf03da61341c6a2475611d7", "bytes": 3994082160, "copy_s": 21.7, "hash_s": 17.4}
+{"t": "2026-10-19T09:46:41Z", "event": "evicted", "shard": "model-00027-of-00118.safetensors", "at_layer": 23}
+{"t": "2026-10-19T09:46:43Z", "event": "staged", "shard": "model-00032-of-00118.safetensors", "layers": [24, 25], "sha256": "799b6ed83c23e2706a3bcdfd700c7a2f552f70bacb891ce58cf9d109fedaf0a8", "bytes": 3994082176, "copy_s": 18.3, "hash_s": 13.6}
+{"t": "2026-10-19T09:47:06Z", "event": "evicted", "shard": "model-00028-of-00118.safetensors", "at_layer": 24}
+{"t": "2026-10-19T09:47:09Z", "event": "staged", "shard": "model-00033-of-00118.safetensors", "layers": [25, 26], "sha256": "50e7c2b84d772958111cd115066605aa55db550365423cd57f61b9bb3bb88cd6", "bytes": 3994082176, "copy_s": 13.4, "hash_s": 14.2}
+{"t": "2026-10-19T09:47:30Z", "event": "evicted", "shard": "model-00029-of-00118.safetensors", "at_layer": 25}
+{"t": "2026-10-19T09:47:30Z", "event": "evicted", "shard": "model-00030-of-00118.safetensors", "at_layer": 25}
+{"t": "2026-10-19T09:47:31Z", "event": "staged", "shard": "model-00034-of-00118.safetensors", "layers": [26, 27], "sha256": "36a4ffe48ee7b4a5d8f2fbba2eebbedd3f61f5450b0a22cff03222b4b29f8550", "bytes": 3994082200, "copy_s": 11.9, "hash_s": 12.7}
+{"t": "2026-10-19T09:48:10Z", "event": "staged", "shard": "model-00036-of-00118.safetensors", "layers": [27, 28], "sha256": "674872e3bb982c32268f4c237469f9dc93bac314d1de941729c0dbc6ec88a0e1", "bytes": 3994082152, "copy_s": 22.7, "hash_s": 16.0}
+{"t": "2026-10-19T09:48:10Z", "event": "evicted", "shard": "model-00031-of-00118.safetensors", "at_layer": 26}
+{"t": "2026-10-19T09:48:11Z", "event": "staged", "shard": "model-00035-of-00118.safetensors", "layers": [27, 27], "sha256": "5b077a58a27872786ffff22bf0aeb58de25d372c3206bf7b214f1bdb60b45201", "bytes": 3988822680, "copy_s": 25.6, "hash_s": 15.2}
+{"t": "2026-10-19T09:48:33Z", "event": "evicted", "shard": "model-00032-of-00118.safetensors", "at_layer": 27}
+{"t": "2026-10-19T09:48:39Z", "event": "staged", "shard": "model-00037-of-00118.safetensors", "layers": [28, 29], "sha256": "a94df010405f7936b1576306496be65ecd4dce223a621a42d0331b79d65b7480", "bytes": 3994082176, "copy_s": 15.7, "hash_s": 11.7}
+{"t": "2026-10-19T09:48:49Z", "event": "evicted", "shard": "model-00033-of-00118.safetensors", "at_layer": 28}
+{"t": "2026-10-19T09:49:20Z", "event": "staged", "shard": "model-00039-of-00118.safetensors", "layers": [30, 31], "sha256": "c98c5bcbcbf22f7aefb99d9ae19d972ac55e9f247047b5b9435209a1ed18d3ed", "bytes": 3994082200, "copy_s": 15.3, "hash_s": 14.9}
+{"t": "2026-10-19T09:49:21Z", "event": "staged", "shard": "model-00038-of-00118.safetensors", "layers": [29, 30], "sha256": "11104df709a30e6a35b70a781ba88e8411f58dac0d2be1615edb1f6e4c450c38", "bytes": 3994082176, "copy_s": 34.2, "hash_s": 13.1}
+{"t": "2026-10-19T09:49:23Z", "event": "evicted", "shard": "model-00034-of-00118.safetensors", "at_layer": 29}
+{"t": "2026-10-19T09:49:23Z", "event": "evicted", "shard": "model-00035-of-00118.safetensors", "at_layer": 29}
+{"t": "2026-10-19T09:49:56Z", "event": "evicted", "shard": "model-00036-of-00118.safetensors", "at_layer": 30}
+{"t": "2026-10-19T09:50:03Z", "event": "staged", "shard": "model-00041-of-00118.safetensors", "layers": [31, 32], "sha256": "7ff05deb8ae1d9f2895d36231eb48cd715efef7be62b7fb14d9b35756e5742fb", "bytes": 3994082144, "copy_s": 22.0, "hash_s": 17.4}
+{"t": "2026-10-19T09:50:04Z", "event": "staged", "shard": "model-00040-of-00118.safetensors", "layers": [31, 31], "sha256": "c315d4d6cfdfcabe880be7eaa3da9ccb43f1089a6ac142f3cfbba7b383cf822e", "bytes": 3988822696, "copy_s": 25.4, "hash_s": 15.3}
+{"t": "2026-10-19T09:50:17Z", "event": "evicted", "shard": "model-00037-of-00118.safetensors", "at_layer": 31}
+{"t": "2026-10-19T09:50:43Z", "event": "evicted", "shard": "model-00038-of-00118.safetensors", "at_layer": 32}
+{"t": "2026-10-19T09:50:45Z", "event": "staged", "shard": "model-00043-of-00118.safetensors", "layers": [33, 34], "sha256": "eb33237fe4d891d551dadc8b02fc042191a604bca177fe7eaa42cd74b45a1641", "bytes": 3994082176, "copy_s": 14.1, "hash_s": 13.4}
+{"t": "2026-10-19T09:51:15Z", "event": "staged", "shard": "model-00044-of-00118.safetensors", "layers": [34, 35], "sha256": "27fb5f22dfaab7fa781fb4ae665c24449938c07e85c425a8d0606182c568f990", "bytes": 3994082192, "copy_s": 17.9, "hash_s": 11.7}
+{"t": "2026-10-19T09:52:10Z", "event": "evicted", "shard": "model-00039-of-00118.safetensors", "at_layer": 33}
+{"t": "2026-10-19T09:52:10Z", "event": "evicted", "shard": "model-00040-of-00118.safetensors", "at_layer": 33}
+{"t": "2026-10-19T09:52:13Z", "event": "staged", "shard": "model-00042-of-00118.safetensors", "layers": [32, 33], "sha256": "0d4dba05f7e8166b8d3077624686d07dd0ea7ed8746edaa29253eba8904842dc", "bytes": 3994082176, "copy_s": 116.0, "hash_s": 12.7}
+{"t": "2026-10-19T09:53:04Z", "event": "staged", "shard": "model-00045-of-00118.safetensors", "layers": [35, 35], "sha256": "0fa9dcbbffd6844c319cdc0ee9a4d07d3dc54cb6f5fbf79263d798a07d424122", "bytes": 3988822704, "copy_s": 40.8, "hash_s": 13.1}
+{"t": "2026-10-19T09:53:12Z", "event": "staged", "shard": "model-00046-of-00118.safetensors", "layers": [35, 36], "sha256": "2551b9bb6fc850aa7b92a59d6c272b525d80ec4f40efd4d7a1f52344712eb973", "bytes": 3994082144, "copy_s": 46.0, "hash_s": 12.4}
+{"t": "2026-10-19T09:54:13Z", "event": "evicted", "shard": "model-00041-of-00118.safetensors", "at_layer": 34}
+{"t": "2026-10-19T09:54:38Z", "event": "evicted", "shard": "model-00042-of-00118.safetensors", "at_layer": 35}
+{"t": "2026-10-19T09:54:39Z", "event": "staged", "shard": "model-00047-of-00118.safetensors", "layers": [36, 37], "sha256": "d61a6b2e8a26a4c6ad63e6ac507d2013353fe8db1b53bd9122ef72dd7bf08e49", "bytes": 3994082176, "copy_s": 12.4, "hash_s": 13.4}
+{"t": "2026-10-19T09:54:53Z", "event": "evicted", "shard": "model-00043-of-00118.safetensors", "at_layer": 36}
+{"t": "2026-10-19T09:55:14Z", "event": "evicted", "shard": "model-00044-of-00118.safetensors", "at_layer": 37}
+{"t": "2026-10-19T09:55:14Z", "event": "evicted", "shard": "model-00045-of-00118.safetensors", "at_layer": 37}
+{"t": "2026-10-19T09:55:24Z", "event": "staged", "shard": "model-00048-of-00118.safetensors", "layers": [37, 38], "sha256": "2e1e74ea566aa1991d8a6d3b618c0ee80705e8cbdba3f4f8ccb72ff6059ad038", "bytes": 3994082176, "copy_s": 32.3, "hash_s": 13.4}
+{"t": "2026-10-19T09:55:44Z", "event": "staged", "shard": "model-00049-of-00118.safetensors", "layers": [38, 39], "sha256": "704a2c932391e9499874e4bf87e7b4a5717600c4b309f5c88df36ad2d75dd1ef", "bytes": 3994082184, "copy_s": 33.4, "hash_s": 17.3}
+{"t": "2026-10-19T09:55:53Z", "event": "staged", "shard": "model-00050-of-00118.safetensors", "layers": [39, 39], "sha256": "5fd77e0e3a0802f878921802f078aaca004a8a12401528a391c219fa4a2d6b2d", "bytes": 3988822712, "copy_s": 15.0, "hash_s": 13.4}
+{"t": "2026-10-19T09:56:11Z", "event": "staged", "shard": "model-00051-of-00118.safetensors", "layers": [39, 40], "sha256": "b6f58268376f23fe96ed63e083f880b0a09a92687553b1708532a2d3ba6e00c5", "bytes": 3994082136, "copy_s": 14.7, "hash_s": 11.1}
+{"t": "2026-10-19T09:57:34Z", "event": "evicted", "shard": "model-00046-of-00118.safetensors", "at_layer": 38}
+{"t": "2026-10-19T09:57:47Z", "event": "evicted", "shard": "model-00047-of-00118.safetensors", "at_layer": 39}
+{"t": "2026-10-19T09:58:18Z", "event": "staged", "shard": "model-00053-of-00118.safetensors", "layers": [41, 42], "sha256": "674f0ad2e72a4e53dc4383ddc7f22fff8a8effa7185bdf4f178ad6df28c6dc52", "bytes": 3994082176, "copy_s": 15.3, "hash_s": 15.7}
+{"t": "2026-10-19T09:58:23Z", "event": "evicted", "shard": "model-00048-of-00118.safetensors", "at_layer": 40}
+{"t": "2026-10-19T09:58:29Z", "event": "staged", "shard": "model-00052-of-00118.safetensors", "layers": [40, 41], "sha256": "0e69650c43785dadda187673e3bcd5d0bb5c04eb33ec23f0a79a401629864ec2", "bytes": 3994082176, "copy_s": 41.9, "hash_s": 12.8}
+{"t": "2026-10-19T09:58:51Z", "event": "staged", "shard": "model-00054-of-00118.safetensors", "layers": [42, 43], "sha256": "5891aa04b855b84d739f64173c92394b5a7f714be7ea89957c17c7e578f97473", "bytes": 3994082184, "copy_s": 16.5, "hash_s": 10.6}
+{"t": "2026-10-19T09:59:58Z", "event": "evicted", "shard": "model-00049-of-00118.safetensors", "at_layer": 41}
+{"t": "2026-10-19T09:59:58Z", "event": "evicted", "shard": "model-00050-of-00118.safetensors", "at_layer": 41}
+{"t": "2026-10-19T10:00:22Z", "event": "evicted", "shard": "model-00051-of-00118.safetensors", "at_layer": 42}
+{"t": "2026-10-19T10:00:45Z", "event": "staged", "shard": "model-00056-of-00118.safetensors", "layers": [43, 44], "sha256": "0176da7e69047270eb02002bc5bda382b9ece009b2485d9ec0da5420625e3c07", "bytes": 3994082128, "copy_s": 33.5, "hash_s": 12.5}
+{"t": "2026-10-19T10:00:47Z", "event": "evicted", "shard": "model-00052-of-00118.safetensors", "at_layer": 43}
+{"t": "2026-10-19T10:01:13Z", "event": "staged", "shard": "model-00057-of-00118.safetensors", "layers": [44, 45], "sha256": "afe781b649867013643ddffca9de6e1855388e673a47c7e333d3a8c1cb80919b", "bytes": 3994082176, "copy_s": 16.9, "hash_s": 10.4}
+{"t": "2026-10-19T10:01:57Z", "event": "staged", "shard": "model-00058-of-00118.safetensors", "layers": [45, 46], "sha256": "9d5600a18075493108fd8667d800dc21a8e00ff2545da96b6fe9482db33e0633", "bytes": 3994082176, "copy_s": 32.6, "hash_s": 10.6}
+{"t": "2026-10-19T10:02:21Z", "event": "staged", "shard": "model-00055-of-00118.safetensors", "layers": [43, 43], "sha256": "26122a3ca914c160c3297ca1cb217e286520972e779b7a015a0f0c33c933fe27", "bytes": 3988822720, "copy_s": 130.4, "hash_s": 11.6}
+{"t": "2026-10-19T10:04:18Z", "event": "evicted", "shard": "model-00053-of-00118.safetensors", "at_layer": 44}
+{"t": "2026-10-19T10:04:35Z", "event": "evicted", "shard": "model-00054-of-00118.safetensors", "at_layer": 45}
+{"t": "2026-10-19T10:04:35Z", "event": "evicted", "shard": "model-00055-of-00118.safetensors", "at_layer": 45}
+{"t": "2026-10-19T10:05:02Z", "event": "evicted", "shard": "model-00056-of-00118.safetensors", "at_layer": 46}
+{"t": "2026-10-19T10:05:05Z", "event": "staged", "shard": "model-00059-of-00118.safetensors", "layers": [46, 47], "sha256": "9aee2021a40e85188399af11251f0225424dfdfb14a67fbd4fd1f0f48efb211f", "bytes": 3994082176, "copy_s": 31.1, "hash_s": 15.1}
+{"t": "2026-10-19T10:05:32Z", "event": "staged", "shard": "model-00060-of-00118.safetensors", "layers": [47, 47], "sha256": "099a4d321d51342a89de842cfba991ed527142a90fc65a4adc798ac537b0a6fc", "bytes": 3988822736, "copy_s": 38.2, "hash_s": 17.2}
+{"t": "2026-10-19T10:05:41Z", "event": "staged", "shard": "model-00061-of-00118.safetensors", "layers": [47, 48], "sha256": "a3370ec5e12b72f42ad085bfbb9033686192aad5a33dd8508b079405acc933aa", "bytes": 3994082128, "copy_s": 21.7, "hash_s": 14.0}
+{"t": "2026-10-19T10:06:03Z", "event": "staged", "shard": "model-00062-of-00118.safetensors", "layers": [48, 49], "sha256": "20dda7da352efa495f3f6d8679b2b4ed0149539d31e419f938c640389ff41c17", "bytes": 3994082176, "copy_s": 19.0, "hash_s": 11.3}
+{"t": "2026-10-19T10:08:32Z", "event": "evicted", "shard": "model-00057-of-00118.safetensors", "at_layer": 47}
+{"t": "2026-10-19T10:08:56Z", "event": "evicted", "shard": "model-00058-of-00118.safetensors", "at_layer": 48}
+{"t": "2026-10-19T10:09:00Z", "event": "staged", "shard": "model-00063-of-00118.safetensors", "layers": [49, 50], "sha256": "d9b174c1a4e0ad2061051658f4c253d7279afe07aca023fa3a041616514513d9", "bytes": 3994082176, "copy_s": 15.0, "hash_s": 12.9}
+{"t": "2026-10-19T10:09:14Z", "event": "evicted", "shard": "model-00059-of-00118.safetensors", "at_layer": 49}
+{"t": "2026-10-19T10:09:14Z", "event": "evicted", "shard": "model-00060-of-00118.safetensors", "at_layer": 49}
+{"t": "2026-10-19T10:09:46Z", "event": "staged", "shard": "model-00065-of-00118.safetensors", "layers": [51, 51], "sha256": "b0611c668acd08a4ba7b2f89e17d1cff6bf2328f80cdf3da2b9cd9b667fe7e8d", "bytes": 3988822744, "copy_s": 15.8, "hash_s": 16.2}
+{"t": "2026-10-19T10:09:46Z", "event": "evicted", "shard": "model-00061-of-00118.safetensors", "at_layer": 50}
+{"t": "2026-10-19T10:09:50Z", "event": "staged", "shard": "model-00064-of-00118.safetensors", "layers": [50, 51], "sha256": "015430bc00f0b42cb74fc18701a2a4d6a47139d2121298736908bf21a028b576", "bytes": 3994082176, "copy_s": 39.4, "hash_s": 14.5}
+{"t": "2026-10-19T10:10:20Z", "event": "staged", "shard": "model-00066-of-00118.safetensors", "layers": [51, 52], "sha256": "f63f53989b4228e6ad3ee1e86f719263ddbfea90f15fab638892742d78f6f511", "bytes": 3994082120, "copy_s": 19.4, "hash_s": 13.8}
+{"t": "2026-10-19T10:10:25Z", "event": "staged", "shard": "model-00067-of-00118.safetensors", "layers": [52, 53], "sha256": "f919e17a92ab3029e7e2e415e755e199ab346369b574d8ddef60f1d5dadfa3b0", "bytes": 3994082176, "copy_s": 22.3, "hash_s": 12.3}
+{"t": "2026-10-19T10:13:46Z", "event": "evicted", "shard": "model-00062-of-00118.safetensors", "at_layer": 51}
+{"t": "2026-10-19T10:14:01Z", "event": "evicted", "shard": "model-00063-of-00118.safetensors", "at_layer": 52}
+{"t": "2026-10-19T10:14:23Z", "event": "evicted", "shard": "model-00064-of-00118.safetensors", "at_layer": 53}
+{"t": "2026-10-19T10:14:23Z", "event": "evicted", "shard": "model-00065-of-00118.safetensors", "at_layer": 53}
+{"t": "2026-10-19T10:14:54Z", "event": "staged", "shard": "model-00069-of-00118.safetensors", "layers": [54, 55], "sha256": "90add3fd4b84119c5ba31dadeeeed5de1540d2010a125079e6decd34efe86049", "bytes": 3994082176, "copy_s": 40.5, "hash_s": 11.9}
+{"t": "2026-10-19T10:15:21Z", "event": "staged", "shard": "model-00070-of-00118.safetensors", "layers": [55, 55], "sha256": "4e935c9e21e676183c7e6573717761096139ac98f9ed2cb9381ac83ce2ac4a0a", "bytes": 3988822752, "copy_s": 15.5, "hash_s": 10.7}
+{"t": "2026-10-19T10:15:50Z", "event": "staged", "shard": "model-00071-of-00118.safetensors", "layers": [55, 56], "sha256": "d1965f53353c54d0cd39c32030067c2237287e1d4d364c7fb0dccc3062b0a592", "bytes": 3994082120, "copy_s": 17.6, "hash_s": 10.4}
+{"t": "2026-10-19T10:17:16Z", "event": "evicted", "shard": "model-00066-of-00118.safetensors", "at_layer": 54}
+{"t": "2026-10-19T10:17:48Z", "event": "staged", "shard": "model-00072-of-00118.safetensors", "layers": [56, 57], "sha256": "c3f072e339ee962bc7c55a257a758a6af02ea7c90c6f85d329d20d53e1e72571", "bytes": 3994082176, "copy_s": 19.1, "hash_s": 11.3}
+{"t": "2026-10-19T10:17:53Z", "event": "staged", "shard": "model-00068-of-00118.safetensors", "layers": [53, 54], "sha256": "9d66a803c641226cfb1ac1e8e1be4e65963cb483ffd5f953df366fac37500950", "bytes": 3994082176, "copy_s": 234.4, "hash_s": 12.0}
+{"t": "2026-10-19T10:18:41Z", "event": "evicted", "shard": "model-00067-of-00118.safetensors", "at_layer": 55}
+{"t": "2026-10-19T10:19:07Z", "event": "evicted", "shard": "model-00068-of-00118.safetensors", "at_layer": 56}
+{"t": "2026-10-19T10:19:09Z", "event": "staged", "shard": "model-00073-of-00118.safetensors", "layers": [57, 58], "sha256": "d2cffb9dc403ef68b0743095a7fd7cef275542560f9da409880c2c83ccad2194", "bytes": 3994082176, "copy_s": 14.6, "hash_s": 12.7}
+{"t": "2026-10-19T10:19:23Z", "event": "evicted", "shard": "model-00069-of-00118.safetensors", "at_layer": 57}
+{"t": "2026-10-19T10:19:23Z", "event": "evicted", "shard": "model-00070-of-00118.safetensors", "at_layer": 57}
+{"t": "2026-10-19T10:19:55Z", "event": "staged", "shard": "model-00074-of-00118.safetensors", "layers": [58, 59], "sha256": "300d27dc2be0385e279fbcd6f3abc01f64c75300bcde2d3502d534c5a24f6f8b", "bytes": 3994082176, "copy_s": 30.4, "hash_s": 17.1}
+{"t": "2026-10-19T10:20:00Z", "event": "staged", "shard": "model-00075-of-00118.safetensors", "layers": [59, 59], "sha256": "9197a1e288418a449dd26d97f6b4c6319de670b918d96b99af74b6fecba7708e", "bytes": 3988822752, "copy_s": 21.8, "hash_s": 14.4}
+{"t": "2026-10-19T10:20:00Z", "event": "evicted", "shard": "model-00071-of-00118.safetensors", "at_layer": 58}
+{"t": "2026-10-19T10:20:36Z", "event": "staged", "shard": "model-00077-of-00118.safetensors", "layers": [60, 61], "sha256": "f99e19f51ed1a7581dfe39ab7b3d61ed719619faf2bcc52b9152383499ed8de9", "bytes": 3994082176, "copy_s": 20.8, "hash_s": 13.6}
+{"t": "2026-10-19T10:20:36Z", "event": "evicted", "shard": "model-00072-of-00118.safetensors", "at_layer": 59}
+{"t": "2026-10-19T10:20:37Z", "event": "staged", "shard": "model-00076-of-00118.safetensors", "layers": [59, 60], "sha256": "4901d48965fe59721e32d37b1dd2ad67dfc36c81445138e87264f7571ef68746", "bytes": 3994082112, "copy_s": 27.4, "hash_s": 13.1}
+{"t": "2026-10-19T10:21:06Z", "event": "staged", "shard": "model-00078-of-00118.safetensors", "layers": [61, 62], "sha256": "84a887d19788de69f5a5d6cab0be90e9342b28736c635c4f8f89f07f4d7a2715", "bytes": 3994082176, "copy_s": 18.7, "hash_s": 10.7}
+{"t": "2026-10-19T10:21:14Z", "event": "evicted", "shard": "model-00073-of-00118.safetensors", "at_layer": 60}
+{"t": "2026-10-19T10:21:37Z", "event": "evicted", "shard": "model-00074-of-00118.safetensors", "at_layer": 61}
+{"t": "2026-10-19T10:21:37Z", "event": "evicted", "shard": "model-00075-of-00118.safetensors", "at_layer": 61}
+{"t": "2026-10-19T10:21:49Z", "event": "staged", "shard": "model-00079-of-00118.safetensors", "layers": [62, 63], "sha256": "7f04665427b4243716dd2158fa238c14b5e151466d4b83f78fc1d1635f2320ed", "bytes": 3994082176, "copy_s": 19.3, "hash_s": 15.1}
+{"t": "2026-10-19T10:22:17Z", "event": "staged", "shard": "model-00080-of-00118.safetensors", "layers": [63, 63], "sha256": "70e58c8948ea6094b0c98bea04a47beeea5d2bd7a034bc64af1ed3d162d818ab", "bytes": 3988822760, "copy_s": 22.7, "hash_s": 17.1}
+{"t": "2026-10-19T10:22:20Z", "event": "staged", "shard": "model-00081-of-00118.safetensors", "layers": [63, 64], "sha256": "467c3328647101b73bb373824b2ac914b7e062afd8ac6740bbe36c6741115d1c", "bytes": 3994082104, "copy_s": 16.9, "hash_s": 14.0}
+{"t": "2026-10-19T10:22:21Z", "event": "evicted", "shard": "model-00076-of-00118.safetensors", "at_layer": 62}
+{"t": "2026-10-19T10:22:46Z", "event": "evicted", "shard": "model-00077-of-00118.safetensors", "at_layer": 63}
+{"t": "2026-10-19T10:22:51Z", "event": "staged", "shard": "model-00082-of-00118.safetensors", "layers": [64, 65], "sha256": "f0db8b06596c7c04f2d3b3ac9eea2c81dec6bb0ce0f359a1478c56eb60532d64", "bytes": 3994082176, "copy_s": 15.4, "hash_s": 14.4}
+{"t": "2026-10-19T10:23:13Z", "event": "evicted", "shard": "model-00078-of-00118.safetensors", "at_layer": 64}
+{"t": "2026-10-19T10:23:18Z", "event": "staged", "shard": "model-00083-of-00118.safetensors", "layers": [65, 66], "sha256": "33cf257ae85e243497e0cb906c76bd1063dbab2f5221321d6ea577151e367e10", "bytes": 3994082176, "copy_s": 17.7, "hash_s": 13.3}
+{"t": "2026-10-19T10:23:36Z", "event": "evicted", "shard": "model-00079-of-00118.safetensors", "at_layer": 65}
+{"t": "2026-10-19T10:23:36Z", "event": "evicted", "shard": "model-00080-of-00118.safetensors", "at_layer": 65}
+{"t": "2026-10-19T10:23:50Z", "event": "staged", "shard": "model-00084-of-00118.safetensors", "layers": [66, 67], "sha256": "895a4ea5cbb7462685a94280bd2c5d1aac49b6efad3122f821b7150c7107dc48", "bytes": 3994082176, "copy_s": 18.0, "hash_s": 19.3}
+{"t": "2026-10-19T10:24:18Z", "event": "evicted", "shard": "model-00081-of-00118.safetensors", "at_layer": 66}
+{"t": "2026-10-19T10:24:24Z", "event": "staged", "shard": "model-00086-of-00118.safetensors", "layers": [67, 68], "sha256": "636823c37ba8b4b74351a0612688c1d884d9b1ac94838f7ecea38ef9c00bd7b6", "bytes": 3994082104, "copy_s": 15.3, "hash_s": 18.6}
+{"t": "2026-10-19T10:24:32Z", "event": "staged", "shard": "model-00085-of-00118.safetensors", "layers": [67, 67], "sha256": "15ca688c9a83244c1acc455ee13bb42885a2436777d98a87d620009b4f387032", "bytes": 3988822760, "copy_s": 40.6, "hash_s": 15.4}
+{"t": "2026-10-19T10:24:48Z", "event": "evicted", "shard": "model-00082-of-00118.safetensors", "at_layer": 67}
+{"t": "2026-10-19T10:24:57Z", "event": "staged", "shard": "model-00087-of-00118.safetensors", "layers": [68, 69], "sha256": "776a16538eac6e6c6496421887c3d67b38df90455bf25deed3d45e9fa78d6305", "bytes": 3994082176, "copy_s": 16.8, "hash_s": 15.3}
+{"t": "2026-10-19T10:25:15Z", "event": "evicted", "shard": "model-00083-of-00118.safetensors", "at_layer": 68}
+{"t": "2026-10-19T10:25:22Z", "event": "staged", "shard": "model-00088-of-00118.safetensors", "layers": [69, 70], "sha256": "bcab6c38183f10f1a3be10a1ea8822eeb2c538cde566b4d274640283e896ea98", "bytes": 3994082176, "copy_s": 20.5, "hash_s": 13.2}
+{"t": "2026-10-19T10:25:38Z", "event": "evicted", "shard": "model-00084-of-00118.safetensors", "at_layer": 69}
+{"t": "2026-10-19T10:25:38Z", "event": "evicted", "shard": "model-00085-of-00118.safetensors", "at_layer": 69}
+{"t": "2026-10-19T10:26:11Z", "event": "evicted", "shard": "model-00086-of-00118.safetensors", "at_layer": 70}
+{"t": "2026-10-19T10:26:13Z", "event": "staged", "shard": "model-00089-of-00118.safetensors", "layers": [70, 71], "sha256": "76bf5857ba8dd576a22b4aa659b6c1bcd3b7694c9e7be4804848b4a4b67f0fb0", "bytes": 3994082176, "copy_s": 39.3, "hash_s": 18.6}
+{"t": "2026-10-19T10:26:16Z", "event": "staged", "shard": "model-00090-of-00118.safetensors", "layers": [71, 71], "sha256": "a90e6ed91ebf7c6ff178b4a9226182c4a4598cc44aa8ff09762adff179143a7d", "bytes": 3988822768, "copy_s": 22.2, "hash_s": 15.6}
+{"t": "2026-10-19T10:26:50Z", "event": "staged", "shard": "model-00091-of-00118.safetensors", "layers": [71, 72], "sha256": "a27d892593373dfa83d18fdba5bb5505c23e2cee51152b50aa3179910cd39a91", "bytes": 3994082096, "copy_s": 23.1, "hash_s": 13.7}
+{"t": "2026-10-19T10:26:54Z", "event": "staged", "shard": "model-00092-of-00118.safetensors", "layers": [72, 73], "sha256": "29b4271ea6e9cc38eb46fa67bf91fe205aa1d87097f959cfb5842c784e6ec755", "bytes": 3994082176, "copy_s": 25.8, "hash_s": 11.6}
+{"t": "2026-10-19T10:29:30Z", "event": "evicted", "shard": "model-00087-of-00118.safetensors", "at_layer": 71}
+{"t": "2026-10-19T10:29:56Z", "event": "evicted", "shard": "model-00088-of-00118.safetensors", "at_layer": 72}
+{"t": "2026-10-19T10:29:59Z", "event": "staged", "shard": "model-00093-of-00118.safetensors", "layers": [73, 74], "sha256": "df7c0869f973a1f9527cfd1476cf634133026af066677aea3fae8e361bcfe384", "bytes": 3994082176, "copy_s": 14.8, "hash_s": 14.3}
+{"t": "2026-10-19T10:30:25Z", "event": "evicted", "shard": "model-00089-of-00118.safetensors", "at_layer": 73}
+{"t": "2026-10-19T10:30:25Z", "event": "evicted", "shard": "model-00090-of-00118.safetensors", "at_layer": 73}
+{"t": "2026-10-19T10:30:31Z", "event": "staged", "shard": "model-00094-of-00118.safetensors", "layers": [74, 75], "sha256": "1f95e873881fc7532d4b82ee41e82f355d57441d8cefa3c7a1901594f1da7e4a", "bytes": 3994082176, "copy_s": 19.6, "hash_s": 15.3}
+{"t": "2026-10-19T10:30:56Z", "event": "evicted", "shard": "model-00091-of-00118.safetensors", "at_layer": 74}
+{"t": "2026-10-19T10:31:01Z", "event": "staged", "shard": "model-00095-of-00118.safetensors", "layers": [75, 75], "sha256": "440ed9d0a75050ee532a4cd67580e5631ddfc3cfd319bc27bd413ceca2d10c68", "bytes": 3988822776, "copy_s": 20.6, "hash_s": 14.7}
+{"t": "2026-10-19T10:31:33Z", "event": "staged", "shard": "model-00097-of-00118.safetensors", "layers": [76, 77], "sha256": "92850096e907a1394e11f94348fbd42d5c2a8b7b14b4736015ab4d7708542b21", "bytes": 3994082176, "copy_s": 16.0, "hash_s": 15.5}
+{"t": "2026-10-19T10:31:35Z", "event": "evicted", "shard": "model-00092-of-00118.safetensors", "at_layer": 75}
+{"t": "2026-10-19T10:31:38Z", "event": "staged", "shard": "model-00096-of-00118.safetensors", "layers": [75, 76], "sha256": "9348202fecfa80d4925dda7f10b1a1170a218db92995e78b4dfbe6a67ab7bf53", "bytes": 3994082088, "copy_s": 51.8, "hash_s": 13.8}
+{"t": "2026-10-19T10:31:55Z", "event": "evicted", "shard": "model-00093-of-00118.safetensors", "at_layer": 76}
+{"t": "2026-10-19T10:32:27Z", "event": "staged", "shard": "model-00099-of-00118.safetensors", "layers": [78, 79], "sha256": "637e231454db1584e69c30daca5a3eaa2ffc913975b6cd9e17ff7df3d37f8c12", "bytes": 3994082176, "copy_s": 15.9, "hash_s": 15.7}
+{"t": "2026-10-19T10:32:32Z", "event": "evicted", "shard": "model-00094-of-00118.safetensors", "at_layer": 77}
+{"t": "2026-10-19T10:32:32Z", "event": "evicted", "shard": "model-00095-of-00118.safetensors", "at_layer": 77}
+{"t": "2026-10-19T10:32:40Z", "event": "staged", "shard": "model-00098-of-00118.safetensors", "layers": [77, 78], "sha256": "6fdbe53fcc9990fb4f65e97093f287a0d73348d240cec8ddf37fd5ac5c40bced", "bytes": 3994082176, "copy_s": 50.0, "hash_s": 15.2}
+{"t": "2026-10-19T10:33:15Z", "event": "staged", "shard": "model-00100-of-00118.safetensors", "layers": [79, 79], "sha256": "6b5d7084666735e13ba4a83296987f082f6a860ee879acbf093086c57d958df8", "bytes": 3988822776, "copy_s": 28.2, "hash_s": 13.9}
+{"t": "2026-10-19T10:33:15Z", "event": "staged", "shard": "model-00101-of-00118.safetensors", "layers": [79, 80], "sha256": "b3afa8c7227ebf188b84641e01b1aa5e28f2bdec70bdeef9d58c2376a9690237", "bytes": 3994082088, "copy_s": 22.0, "hash_s": 12.2}
+{"t": "2026-10-19T10:35:02Z", "event": "evicted", "shard": "model-00096-of-00118.safetensors", "at_layer": 78}
+{"t": "2026-10-19T10:35:20Z", "event": "evicted", "shard": "model-00097-of-00118.safetensors", "at_layer": 79}
+{"t": "2026-10-19T10:35:49Z", "event": "staged", "shard": "model-00102-of-00118.safetensors", "layers": [80, 81], "sha256": "b50d8e8f7bb596a1e1f4bf53d743a9d61cd2c75895ddbc7a415090b9e4182096", "bytes": 3994082168, "copy_s": 26.4, "hash_s": 19.6}
+{"t": "2026-10-19T10:35:51Z", "event": "evicted", "shard": "model-00098-of-00118.safetensors", "at_layer": 80}
+{"t": "2026-10-19T10:35:59Z", "event": "staged", "shard": "model-00103-of-00118.safetensors", "layers": [81, 82], "sha256": "e220618eb92189333699b496fda8d6663751f83774f6105946819e1df21cabd0", "bytes": 3994082176, "copy_s": 19.8, "hash_s": 18.5}
+{"t": "2026-10-19T10:36:22Z", "event": "evicted", "shard": "model-00099-of-00118.safetensors", "at_layer": 81}
+{"t": "2026-10-19T10:36:22Z", "event": "evicted", "shard": "model-00100-of-00118.safetensors", "at_layer": 81}
+{"t": "2026-10-19T10:36:26Z", "event": "staged", "shard": "model-00104-of-00118.safetensors", "layers": [82, 83], "sha256": "de0ce7d1462df0b98f2fcafd15c7c25174354421df3c9010cd9d42e6a76b199e", "bytes": 3994082176, "copy_s": 20.1, "hash_s": 14.4}
+{"t": "2026-10-19T10:36:47Z", "event": "evicted", "shard": "model-00101-of-00118.safetensors", "at_layer": 82}
+{"t": "2026-10-19T10:37:11Z", "event": "evicted", "shard": "model-00102-of-00118.safetensors", "at_layer": 83}
+{"t": "2026-10-19T10:37:21Z", "event": "staged", "shard": "model-00106-of-00118.safetensors", "layers": [84, 84], "sha256": "78f1e8cf255ed0a83b84bfd3d2d6e61717921f1de377a6972254748ecbb5eaeb", "bytes": 3993016808, "copy_s": 21.7, "hash_s": 11.3}
+{"t": "2026-10-19T10:37:48Z", "event": "staged", "shard": "model-00107-of-00118.safetensors", "layers": [84, 85], "sha256": "66d511c8b5ee4f1bc05d7b410aa1245c4b4a91df8c8eff793a6be909d10b87db", "bytes": 3994082160, "copy_s": 15.7, "hash_s": 10.8}
+{"t": "2026-10-19T10:38:20Z", "event": "staged", "shard": "model-00108-of-00118.safetensors", "layers": [85, 86], "sha256": "15b4f6c32eb3e0c8c6c1dd48c4249ff209d64a0b91ba647dbdc115b17149af81", "bytes": 3994082176, "copy_s": 21.1, "hash_s": 10.0}
+{"t": "2026-10-19T10:41:07Z", "event": "staged", "shard": "model-00105-of-00118.safetensors", "layers": [83, 83], "sha256": "2ad2f38725266fc667325e25d693d242dcaab1213a3271d7aea53398927d2b35", "bytes": 3952138960, "copy_s": 274.0, "hash_s": 10.2}
+{"t": "2026-10-19T10:41:19Z", "event": "evicted", "shard": "model-00103-of-00118.safetensors", "at_layer": 84}
+{"t": "2026-10-19T10:41:38Z", "event": "evicted", "shard": "model-00104-of-00118.safetensors", "at_layer": 85}
+{"t": "2026-10-19T10:41:38Z", "event": "evicted", "shard": "model-00105-of-00118.safetensors", "at_layer": 85}
+{"t": "2026-10-19T10:41:58Z", "event": "staged", "shard": "model-00109-of-00118.safetensors", "layers": [86, 87], "sha256": "834089fcc023b5cffe4ecdb875b529ecc415c59f79b9193af653d7a733032c17", "bytes": 3994082176, "copy_s": 19.4, "hash_s": 19.6}
+{"t": "2026-10-19T10:42:09Z", "event": "evicted", "shard": "model-00106-of-00118.safetensors", "at_layer": 86}
+{"t": "2026-10-19T10:42:15Z", "event": "staged", "shard": "model-00110-of-00118.safetensors", "layers": [87, 88], "sha256": "37d71c0eb98564da5e7be62ecc65d07487e42d6ddf01b55d084412495f2cae12", "bytes": 3998276288, "copy_s": 20.8, "hash_s": 15.4}
+{"t": "2026-10-19T10:42:42Z", "event": "evicted", "shard": "model-00107-of-00118.safetensors", "at_layer": 87}
+{"t": "2026-10-19T10:42:50Z", "event": "staged", "shard": "model-00111-of-00118.safetensors", "layers": [88, 88], "sha256": "95a386781af33015f5dbeb7d9e8b968963a3004a625e6c72bfa8faf59f5d3b24", "bytes": 3997211632, "copy_s": 27.2, "hash_s": 12.4}
+{"t": "2026-10-19T10:42:50Z", "event": "staged", "shard": "model-00112-of-00118.safetensors", "layers": [88, 89], "sha256": "429ea6fd5ce25ec573da325f94f919b2c83e8049ffec59413a57b18fa7ae984f", "bytes": 3994082160, "copy_s": 22.7, "hash_s": 12.2}
+{"t": "2026-10-19T10:43:01Z", "event": "evicted", "shard": "model-00108-of-00118.safetensors", "at_layer": 88}
+{"t": "2026-10-19T10:43:14Z", "event": "staged", "shard": "model-00113-of-00118.safetensors", "layers": [89, 90], "sha256": "476da98f0d771d5590522f0959785c71a5993dd60f20a0dbfaffbd5517029614", "bytes": 3994082176, "copy_s": 12.8, "hash_s": 11.3}
+{"t": "2026-10-19T10:43:18Z", "event": "evicted", "shard": "model-00109-of-00118.safetensors", "at_layer": 89}
+{"t": "2026-10-19T10:43:49Z", "event": "evicted", "shard": "model-00110-of-00118.safetensors", "at_layer": 90}
+{"t": "2026-10-19T10:43:49Z", "event": "evicted", "shard": "model-00111-of-00118.safetensors", "at_layer": 90}
+{"t": "2026-10-19T10:43:50Z", "event": "staged", "shard": "model-00115-of-00118.safetensors", "layers": [91, 92], "sha256": "4270d4da96eb040681984be3a578ad4faef4d29ee5616704b9944aa6e0b31cdb", "bytes": 3994082200, "copy_s": 17.3, "hash_s": 14.0}
+{"t": "2026-10-19T10:43:54Z", "event": "staged", "shard": "model-00114-of-00118.safetensors", "layers": [90, 91], "sha256": "2ab19ad5aaa985aa5aae87022632772587cdf79e25ee2484d4d9604bd05ba7df", "bytes": 3994082176, "copy_s": 39.8, "hash_s": 13.0}
+{"t": "2026-10-19T10:44:29Z", "event": "staged", "shard": "model-00117-of-00118.safetensors", "layers": [92, 93], "sha256": "43dab6a95708193413dd27803666ba8e4d77837760694c3010cb9bc628870628", "bytes": 3994082152, "copy_s": 22.7, "hash_s": 12.2}
+{"t": "2026-10-19T10:44:47Z", "event": "staged", "shard": "model-00116-of-00118.safetensors", "layers": [92, 92], "sha256": "c38f7d32efec1a3be466bc879427e36cede850273867602ddf2a30933f2ea2ef", "bytes": 3988822680, "copy_s": 45.0, "hash_s": 11.4}
+{"t": "2026-10-19T10:47:39Z", "event": "evicted", "shard": "model-00112-of-00118.safetensors", "at_layer": 91}
+{"t": "2026-10-19T10:48:01Z", "event": "evicted", "shard": "model-00113-of-00118.safetensors", "at_layer": 92}
+{"t": "2026-10-19T10:48:02Z", "event": "staged", "shard": "model-00118-of-00118.safetensors", "layers": [93, 93], "sha256": "51768e50545117b2ef6b2a72eee8a58974e02711241bcc390392b907b3fa7618", "bytes": 3070273928, "copy_s": 12.8, "hash_s": 9.8}
+{"t": "2026-10-19T10:48:15Z", "event": "evicted", "shard": "model-00114-of-00118.safetensors", "at_layer": 93}
+{"t": "2026-10-19T10:48:28Z", "event": "evicted", "shard": "model-00115-of-00118.safetensors", "at_layer": 94}
+{"t": "2026-10-19T10:48:28Z", "event": "evicted", "shard": "model-00116-of-00118.safetensors", "at_layer": 94}
+{"t": "2026-10-19T10:49:39Z", "event": "stopped", "at_layer": 94, "evicted": 2, "mismatches": []}

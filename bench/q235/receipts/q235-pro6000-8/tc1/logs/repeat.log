@@ -1,0 +1,9 @@
+[08:49:44]   host CPUs: 112 visible, quota 53.76, torch threads 56, OMP_NUM_THREADS=None
+[08:49:45]   checkpoint: local directory /root/tc1/hf-cache/model
+[08:49:45]   fusing + quantizing experts (up to 94x128) to nf4 (streaming)...
+[08:49:45]   host-side fuse: intra-op threads 56 -> 54 (the container's CPU quota / affinity)
+[09:01:02]   quantized experts on 94/94 MoE layers (128 experts each)
+[09:01:02]   offloaded 94 layers' 4-bit experts to pinned CPU RAM (streamed to GPU one layer at a time during train/eval)
+[09:01:02]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[09:01:23]   released 2.07 GiB of cached pinned host blocks (the load's pinned reads)
+{"plant": {"kind": null, "layer": null}, "repeat": {"loss": 1.2399002313613892, "forward_s": 9.207}, "plants": {"routing": {"loss": 1.2032594680786133, "pre_plant_max_rel_diff": 0.0, "pre_plant_equal_null": true, "planted_layer_differs": true}, "epilogue": {"loss": 1.2572907209396362, "pre_plant_max_rel_diff": 0.0, "pre_plant_equal_null": true, "planted_layer_differs": true}}}

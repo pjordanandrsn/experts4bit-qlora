@@ -1,0 +1,9 @@
+[2026-10-19T07:11:20Z] q235: require-git (cap 240 s of 240 s)
+[2026-10-19T07:11:20Z] q235: create-venv (cap 120 s of 120 s)
+[2026-10-19T07:11:24Z] q235: install (cap 1800 s of 1800 s)
+[2026-10-19T07:14:00Z] q235: hostrate (cap 600 s of 600 s)
+[2026-10-19T07:14:25Z] q235: fetch (cap 12000 s of 12000 s)
+[2026-10-19T08:15:23Z] q235: tokens (cap 300 s of 300 s)
+[2026-10-19T08:15:32Z] q235: box (cap 8653 s of 8653 s)
+[2026-10-19T08:49:39Z] q235: repeat (cap 1439 s of 1439 s)
+[2026-10-19T09:03:42Z] q235: DONE: the step, its repeat and the records; the fidelity read and the verdict are made off the box
