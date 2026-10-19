@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / "bench/common/lane_liveness.sh"
 DRIVERS = [ROOT / f"bench/{folder}/{script}_drive.sh" for folder, script in
            [("tc1", "tc1"), ("p127", "p127"), ("fam", "fam"), ("locality-1469", "locality"), ("sc1", "sc1"),
-            ("p137", "p137"), ("p144", "p144"), ("p146", "p146")]]
+            ("p137", "p137"), ("p144", "p144"), ("p146", "p146"), ("p143", "p143a3")]]
 BOOT_A, BOOT_B = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 INITIAL = f"1 123 {BOOT_A} 10000.00"
 
@@ -154,7 +154,7 @@ def test_actual_driver_poll_loop(driver, sequence, expected, polls, tmp_path):
 source "{HELPER}"
 LANE_HELPER="{HELPER}"; LANE_PID=4242; LANE_INITIAL="{INITIAL}"; LANE_STARTED_AT=0
 DEADLINE=999999; POLL=0; STALL_S=900; TC1_MIN_PROGRESS_MB=16; P127_MIN_PROGRESS_MB=16; FAM_MIN_PROGRESS_MB=16; LOC_MIN_PROGRESS_MB=16; SC1_MIN_PROGRESS_MB=16
-P137_MIN_PROGRESS_MB=16; P144_MIN_PROGRESS_MB=16; P146_MIN_PROGRESS_MB=16
+P137_MIN_PROGRESS_MB=16; P144_MIN_PROGRESS_MB=16; P146_MIN_PROGRESS_MB=16; P143A3_MIN_PROGRESS_MB=16
 W=/fake; NONCE=nonce; RUN_DIR=/unused; E4B_RENT_RUN_DIR="{run_dir}"
 say(){{ printf '%s\\n' "$*"; }}
 date(){{ echo 4000; }}
@@ -215,7 +215,7 @@ def test_actual_launch_handshake_captures_linux_child_identity(driver, tmp_path)
     launch = text[start:end]
     runner = driver.name.replace('_drive.sh', '_run.sh')
     prefix = {'tc1': 'TC1', 'p127': 'P127', 'fam': 'FAM', 'locality-1469': 'LOC', 'sc1': 'SC1',
-              'p137': 'P137', 'p144': 'P144', 'p146': 'P146'}[driver.parent.name]
+              'p137': 'P137', 'p144': 'P144', 'p146': 'P146', 'p143': 'P143A3'}[driver.parent.name]
     (tmp_path / runner).write_text(f'#!/bin/bash\nprintf nonce > {prefix}_RUN_NONCE\nsleep 2\n')
     (tmp_path / 'guard.sh').write_text(f'#!/bin/bash\nexec bash {runner}\n')
     setup = f'''source "{HELPER}"
