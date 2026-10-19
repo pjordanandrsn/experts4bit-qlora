@@ -65,9 +65,14 @@ this bar.**
   the band of the other 15, with the same margin, on all 33 comparisons.
 - **If ANY neutral pseudo-candidate fails,** the bar cannot judge this read. The read is **`INDETERMINATE`**, never
   `FAIL`, and the record gives every failing pseudo-candidate and comparison.
-- **The registered false-reject rate.** Suppose the calibration passes and the fused path is neutral, that is,
-  exchangeable with the 16. Then it fails only if it alone exceeds the other paths by more than the margin. Among 17
-  exchangeable paths that has probability at most 1/17 ≈ 5.9%, and the margin makes it smaller.
+- **The registered false-reject rate: P(FAIL | the fused path is neutral) ≤ 1/17 ≈ 5.9%, unconditionally.** "Neutral"
+  means exchangeable with the 16 paths in U.
+  - A FAIL needs the calibration to pass and the fused path to exceed (1 + m) × the band. So the set of paths that
+    exceed the margin over all the others must be exactly {fused}: any path in U in that set would fail the
+    calibration and make the read `INDETERMINATE` instead.
+  - Among 17 exchangeable paths, the chance that this set is exactly {fused} is at most P(exactly one outlier) / 17
+    ≤ 1/17.
+  - The margin only lowers that.
 - **Fewer than two paths in U** (only today's path plus at most one draw) leaves nothing to calibrate against. The read
   is `INDETERMINATE`.
 
@@ -103,18 +108,22 @@ environment, against that environment's own null. The two environments are never
    Under C: three `step-today-c` processes and one `step-off-c`. If the three agree bit for bit, `step-off-c` must
    equal them bit for bit. These parts run only when step 1's null fails. The plan is fixed here, before data.
 3. **If C's three `step-today-c` processes do not agree either,** the check is an aggregate in C, against C's null.
-   - **The measure:** for two processes P and Q, D(P, Q) is taken over all 224 B slots concatenated (the only tensors
-     one update from B = 0 moves):
-     - the relative RMS ‖B_P − B_Q‖ / ‖B_Q‖;
-     - the max-abs |B_P − B_Q|.
-   - **The null spread** is the larger of D over the three today-vs-today pairs, per metric.
-   - **The check passes iff** max over the three of D(`step-off-c`, `step-today-c`_i) ≤ 2 × the null spread, on both
-     metrics. That is a margin of 1.0, and the outcome is named `KNOB_OFF_BY_SPREAD`.
-   - **The margin's false-reject rate.** A knob that does nothing makes `step-off-c` exchangeable with the three
-     `step-today-c`. Its three pair distances then come from the same distribution as the null's three. With the null's
-     own pairs within 2× of each other, a doubled maximum is exceeded with probability well under 5%.
-   - **If the null's three pairs differ from each other by more than 2× on either metric,** the spread cannot set the
-     margin. KNOB_OFF is `INDETERMINATE`.
+   - **The measure:** for two processes P and Q, D(P, Q) is the relative RMS ‖B_P − B_Q‖ / ‖B_Q‖ over all 224 B slots
+     concatenated. Those are the only tensors one update from B = 0 moves.
+     - The relative RMS decides, as in (b). It aggregates about 22 M elements.
+     - The max-abs |B_P − B_Q| is recorded and decides nothing, for (b)'s reason: an extreme value is too noisy to
+       compare by maximum.
+   - **The null spread** is the largest D over the three today-vs-today pairs.
+   - **The check passes iff** max over the three of D(`step-off-c`, `step-today-c`_i) ≤ 2 × the null spread. That is a
+     margin of 1.0, and the outcome is named `KNOB_OFF_BY_SPREAD`.
+   - **The false-reject rate, stated honestly.** A knob that does nothing makes `step-off-c` exchangeable with the three
+     `step-today-c`. Exchangeability then guarantees only a rank bound: without the margin, `step-off-c` is the most
+     distant of 4 with probability 1/4. The 2× margin lowers that by an amount this amendment does not quantify. It
+     rests on an assumption: that pair distances between neutral processes vary by less than 2×.
+     - That assumption is checked on the null itself: if the null's three pairs differ from each other by more than 2×,
+       KNOB_OFF is `INDETERMINATE`.
+     - A tighter guaranteed rate would need n `step-today-c` processes for 1/(n+1), that is 19 for 5%. Step 3 is the
+       fallback only if C is itself not deterministic, so it is not registered here.
 
 A cross-process bitwise comparison is never made without a null that passed, and never across environments.
 
