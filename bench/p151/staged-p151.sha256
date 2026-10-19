@@ -1,0 +1,18 @@
+# bench/p151/staged-p151.sha256 -- every piece the P151 box runs, by the name the box sees (bench/p151/PREREG-p151.md).
+# Every piece shared with P143 Amendment 3's kit at A3's pins (bench/p143/staged-p143a3.sha256); test_dense_gemv.py is
+# grouped-nf4-gemm's kernel/test_dense_gemv.py at K35's merge (9b824155), byte for byte.
+fcc04e61c725754f70cdeac680f7c06ed3c2daabf1281b7b9e0111a24dedfbd8  p151_run.sh
+5e73c3278dfa9e2182ae8bfd0adb2e7f30f4d37c40db00eb1f4afc4f1bdc0a29  p151_box.py
+ac66dc20fb2c1149f69246f2c55bbb72a8a466680dc3c90c9f805d0bd38b34af  p151_reduce.py
+f1500a26404284fbb14cce214c548d73b3889e9db5ef1faf5ef63bf74449b574  p115_quality.py
+b53f94192b4040b6451ceb18f8cd4e3e5629a6e40c4885b40600fcc4205d8248  p109_box.py
+02d82d88259c169060f78e47c219e7dfd82d146dd80e0c7c3b0e3acdfca252cf  p110_box.py
+b57dff71cba30d9c649bae05df28f8c5376de9f7ac7ae5759157e57475b83e4b  p108_box.py
+608c1a20136393495ebb482afc58a24880e053a2caab6152fa3eb87183063a31  p97_box.py
+e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+f53952c1a26b06e8a8f61dcfdbd511acad0b0507cae58cb1bbfca7f3c8f4313a  test_decode_graph_buckets.py
+0af027ec93837f2b0cd150a77c7692386ac33eb59d553727c40fe784c6c273de  test_kv_step_select.py
+8e5b2f775cf5c0ddde349822624a7d44b40f3898738cc64ceb31f5f3f4ea5aae  test_fused_glue_decode_graphs_gpu.py
+63481683aa12674ba274169d8fcaed2894bd87e552f780452568bdd60cb70176  test_gemv_bw_served_gpu.py
+e21de6e51ef4f920fe26e9611f3a415ff064360678480ff1a3349f639fa2ca05  test_dense_gemv.py
