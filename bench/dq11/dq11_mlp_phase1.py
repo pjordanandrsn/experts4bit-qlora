@@ -124,12 +124,13 @@ class _LoraLinear(torch.autograd.Function):
         return d_inp, d_w, None, None, None
 
 
-def _ref_proj(proj, x_base, x_lora, draws):
-    """PEFT 0.19.1's ``Linear4bit`` LoRA forward, op for op, with R1-R4 where named."""
+def _ref_proj(proj, x_base, x_lora, draws, via_function=False):
+    """PEFT's ``Linear4bit`` LoRA forward (0.21.2, the fixture lock's; identical in 0.19.1), op for op, with R1-R4 where
+    named. ``via_function`` takes the :class:`_LoraLinear` path with every split off (a self-check)."""
     a, b, s = _adapter(proj)
     result = proj.base_layer(x_base).clone()
     xf = x_lora.to(a.weight.dtype)
-    if draws & {"R1", "R3", "R4"}:
+    if via_function or draws & {"R1", "R3", "R4"}:
         t = _LoraLinear.apply(xf, a.weight, "R1" in draws, "R3" in draws, "R4" in draws)
         u = _LoraLinear.apply(t, b.weight, False, "R3" in draws, False)
     else:
@@ -140,16 +141,16 @@ def _ref_proj(proj, x_base, x_lora, draws):
     return result + delta.to(result.dtype)
 
 
-def ref_read(mlp, x, gy, draws=frozenset()) -> dict:
+def ref_read(mlp, x, gy, draws=frozenset(), *, via_function=False) -> dict:
     """The reference for the unfused path under ``draws``. dx's four terms (gate base, gate LoRA, up base, up LoRA) reach
     four separate leaves and are summed in :data:`DX_ORDER`, or :data:`DX_ORDER_R5` under R5."""
     draws = frozenset(draws)
     leaves = {k: x.detach().clone().requires_grad_(True) for k in ("gate_base", "gate_lora", "up_base", "up_lora")}
-    out_g = _ref_proj(mlp.gate_proj, leaves["gate_base"], leaves["gate_lora"], draws)
+    out_g = _ref_proj(mlp.gate_proj, leaves["gate_base"], leaves["gate_lora"], draws, via_function)
     a_g = mlp.act_fn(out_g)
-    out_u = _ref_proj(mlp.up_proj, leaves["up_base"], leaves["up_lora"], draws)
+    out_u = _ref_proj(mlp.up_proj, leaves["up_base"], leaves["up_lora"], draws, via_function)
     h = a_g * out_u
-    y = _ref_proj(mlp.down_proj, h, h, draws)
+    y = _ref_proj(mlp.down_proj, h, h, draws, via_function)
     params = _params(mlp)
     keys = list(leaves)
     got = torch.autograd.grad(y, [*leaves.values(), h, *params], gy)
@@ -177,6 +178,7 @@ def fused_read(mlp, x, gy) -> dict:
             seen.setdefault("gate_up", out)
             return out
 
+    # A hook on the BASE layer is not one the engine falls back on: the fused forward calls base_layer as a module.
     hook = mlp.down_proj.base_layer.register_forward_pre_hook(lambda m, a: seen.__setitem__("h", a[0]))
     dlf._FusedLoRA = _Recording
     try:
@@ -265,6 +267,24 @@ def floor(truth, draws_read) -> dict:
     return out
 
 
+def floor_streamed(truth, read) -> dict:
+    """:func:`floor` over the 31 draws with ``read(draw)`` called one draw at a time, each discarded once folded in (at
+    the fixture's size a draw holds about 210 MB)."""
+    out = {k: {"max_abs": 0.0, "rel_rms": 0.0, "moved_by": []} for k in TENSORS}
+    for d in draw_sets():
+        r = read(d)
+        for k in TENSORS:
+            dev = deviation(r[k], truth[k])
+            out[k]["max_abs"] = max(out[k]["max_abs"], dev["max_abs"])
+            out[k]["rel_rms"] = max(out[k]["rel_rms"], dev["rel_rms"])
+            if dev["max_abs"] > 0:
+                out[k]["moved_by"].append("+".join(sorted(d)))
+        del r
+    for v in out.values():
+        v["moved_by"].sort()
+    return out
+
+
 def coverage(fl) -> dict:
     """Which single redraws appear among the draws that moved each tensor (the registration's coverage map)."""
     return {k: sorted({r for d in v["moved_by"] for r in d.split("+")}) for k, v in fl.items()}
@@ -330,3 +350,95 @@ def lora_forward_counter(model):
                 del cls.forward
             else:
                 cls.forward = f
+
+
+def bit_diagnostics(a, b) -> dict:
+    """For a tensor the bar holds bit for bit: how many elements differ, how many of those flip sign, and the largest
+    distance in units of the last place over the same-signed ones (the integer views' difference; across a sign flip it
+    means nothing, so a flip is counted, never measured)."""
+    view = {torch.bfloat16: torch.int16, torch.float16: torch.int16, torch.float32: torch.int32}[a.dtype]
+    differ = a != b
+    n = int(differ.sum())
+    if n == 0:
+        return {"differing": 0, "sign_flips": 0, "max_ulp": 0}
+    flips = differ & (torch.signbit(a) != torch.signbit(b))
+    same = differ & ~flips
+    ia, ib = a.contiguous().view(view).long(), b.contiguous().view(view).long()
+    max_ulp = int((ia - ib).abs()[same].max()) if bool(same.any()) else 0
+    return {"differing": n, "sign_flips": int(flips.sum()), "max_ulp": max_ulp}
+
+
+def read_layers(mlps, xs, gys, *, enable, disable, stats, sigma=None, stage=None, evict=None, adapters=None):
+    """Phase 1's per-module read over ``mlps`` (``{layer: mlp}``) at captured ``xs`` / ``gys``.
+
+    ``sigma=None`` runs Amendment 1's ladder (``set_b`` then the unfused shares) and stops at the first qualifying
+    sigma; ``sigma=False`` keeps the adapters as they are (the reported state). ``enable()`` fuses the whole model and
+    returns the adapter count (``adapters`` expected, else ``ENGAGE_COUNT``); ``disable()`` undoes it; ``stats`` is the
+    engine's ``DENSE_MLP_LORA_STATS``. ``stage`` / ``evict`` bracket each layer's reads (dense streaming)."""
+    stage, evict = stage or (lambda i: None), evict or (lambda i: None)
+    record = {"layers": {}, "sigma": None, "ladder": {}}
+    order = list(mlps)
+
+    def layer_shares():
+        out = {}
+        for i in order:
+            stage(i)
+            try:
+                out[i] = shares(adapter_terms(mlps[i], xs[i], gys[i]))
+            finally:
+                evict(i)
+        return out
+
+    if sigma is None:
+        for s in SIGMAS:
+            set_b([mlps[i] for i in order], s)
+            record["ladder"][s] = layer_shares()
+            if choose_sigma({s: list(record["ladder"][s].values())}) == s:
+                record["sigma"] = s
+                break
+        if record["sigma"] is None:
+            record["outcome"] = "VOID_LORA_SHARE"
+            return record
+    else:
+        record["ladder"]["as-is"] = layer_shares()
+    rows_by_layer = {}
+    for i in order:
+        mlp, x, gy = mlps[i], xs[i], gys[i]
+        stage(i)
+        try:
+            truth = peft_read(mlp, x, gy)
+            bad = vacuous(truth)
+            if bad:
+                record["outcome"] = f"VOID_LORA_SHARE: {i}:" + " ".join(bad)
+                return record
+            mismatch = [k for via in (False, True) for k, v in ref_read(mlp, x, gy, via_function=via).items()
+                        if not torch.equal(v, truth[k])]
+            if mismatch:
+                record["outcome"] = f"REF_MISMATCH: {i}:" + " ".join(sorted(set(mismatch)))
+                return record
+            fl = floor_streamed(truth, lambda d: ref_read(mlp, x, gy, d))
+            terms = adapter_terms(mlp, x, gy)
+            n = enable()
+            try:
+                if (adapters is not None and n != adapters) or stats.get("refused"):
+                    record["outcome"] = f"ENGAGE_COUNT: {n}, refused {sorted(stats.get('refused', {}))}"
+                    return record
+                fused = fused_read(mlp, x, gy)
+                if stats.get("fallback", 0):
+                    record["outcome"] = f"VOID_FALLBACK: {stats['fallback']}"
+                    return record
+            finally:
+                disable()
+        finally:
+            evict(i)
+        rows = bar(truth, fused, fl, terms)
+        for k, row in rows.items():
+            row["adapter_norm"], row["norm"] = terms[k]["adapter_norm"], terms[k]["norm"]
+            if fl[k]["max_abs"] == 0:
+                row["bitwise_required"] = bit_diagnostics(fused[k], truth[k])
+        record["layers"][i] = {"rows": rows, "coverage": coverage(fl), "moved_by": {k: v["moved_by"] for k, v in fl.items()}}
+        rows_by_layer[i] = rows
+    rank = _adapter(mlps[order[0]].gate_proj)[0].weight.shape[0]
+    record["outcome"] = outcome(rows_by_layer, rank)
+    record["e_min_max"] = max(r["e_min"] for rows in rows_by_layer.values() for r in rows.values())
+    return record
