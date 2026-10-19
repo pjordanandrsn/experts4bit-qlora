@@ -53,6 +53,15 @@ FIT = {"setup_s": 240, "slab_s": 60, "block_wall_s": 12.5, "process_start_s": 30
 GUARD_S = 9000                                          # the launch's guard: 2.5 h
 
 
+def fit_measured(reps):
+    """The fit's terms as this run measured them (the max over its processes), for the next registration's fit."""
+    starts = [r["process_start_s"] for r in reps if r.get("process_start_s") is not None]
+    walls = [w for r in reps for w in r.get("block_walls_s") or []]
+    return {"process_start_s_max": max(starts) if starts else None, "block_wall_s_max": max(walls) if walls else None,
+            "block_wall_over_block_s": (statistics.median(walls) / statistics.median(r["block_s"] for r in reps)
+                                        if walls else None)}
+
+
 def time_fit(repeats, fit=FIT):
     """Seconds the run needs at `repeats`: setup, slab, the 3 sizing + 24 timed processes, each 1 untimed + `repeats`
     timed blocks, and the reserve."""
@@ -152,11 +161,25 @@ def child(a):
     sys.path.insert(0, HERE)
     import smt_fuse_box as B
 
+    import torch
+
+    torch.cuda.init()
+    # the fit's one unmeasured term, measured: spawn -> pinned interpreter with torch and a CUDA context (wall clock,
+    # since the parent's perf_counter does not carry across processes)
+    process_start_s = time.time() - a.spawned if a.spawned else None
+    t = time.perf_counter()
     B.one_rep(a.pool, a.slab, a.experts)                                   # untimed: allocator, context, kernels
+    warm_wall_s = time.perf_counter() - t
     comp = [int(x) for x in a.companions.split(",") if x]
     s0 = proc_stat()
-    rec = median_of([B.one_rep(a.pool, a.slab, a.experts) for _ in range(REPEATS)])
+    blocks, walls = [], []
+    for _ in range(REPEATS):
+        t = time.perf_counter()
+        blocks.append(B.one_rep(a.pool, a.slab, a.experts))
+        walls.append(time.perf_counter() - t)                             # the block's whole wall, hashes included
+    rec = median_of(blocks)
     s1 = proc_stat()
+    rec.update(process_start_s=process_start_s, warm_wall_s=warm_wall_s, block_walls_s=walls)
     rec.update(arm=a.rep, cpus=len(cpus), affinity_seen=len(os.sched_getaffinity(0)),
                arm_busy=busy_share(s0, s1, cpus), companion_busy=busy_share(s0, s1, comp) if comp else None)
     print("SMT_SIB_REP " + json.dumps(rec), flush=True)
@@ -199,6 +222,7 @@ def summarize(res):
     out["void_by_host"] = len(readable) < MIN_TRIPLES
     out["reading"] = None if out["void_by_host"] else {k: out[f"sib_over_phys_{k[:-2]}"]["reading"] for k in READ}
     out["reported"] = None if out["void_by_host"] else {k: out[f"sib_over_phys_{k[:-2]}"]["reading"] for k in REPORTED}
+    out["fit_measured"] = fit_measured(reps)
     fused, nf4 = {r["fused_sha256"] for r in reps}, {r["nf4_sha256"] for r in reps}
     out["bytes_identical"] = len(fused) == 1 and len(nf4) == 1 and "MISMATCH" not in fused | nf4   # within-process too
     return out
@@ -235,7 +259,8 @@ def run(a):
     def rep(arm, limit):
         cmd = [sys.executable, os.path.abspath(__file__), "--rep", arm, "--cpus", ",".join(map(str, plan["arms"][arm])),
                "--companions", ",".join(map(str, companions(plan["arms"][arm], cores))),
-               "--pool", str(plan["pool"][arm]), "--slab", slab_path, "--experts", str(a.experts)]
+               "--pool", str(plan["pool"][arm]), "--slab", slab_path, "--experts", str(a.experts),
+               "--spawned", repr(time.time())]
         t0 = time.perf_counter()
         try:
             p = subprocess.run(cmd, capture_output=True, text=True, timeout=max(1.0, limit))
@@ -336,6 +361,10 @@ def self_test():
     assert abs(m["throttled_cpu_s"] - 0.5) < 1e-12 and m["pool"] == 12 and len(m["repeats"]) == 5
     assert m["fused_sha256"] == "a" and m["nf4_sha256"] == "b" and flagged(dict(m, arm="SIB"))
     assert median_of(blocks[:4] + [dict(blocks[4], nf4_sha256="z")])["nf4_sha256"] == "MISMATCH"
+    fm = fit_measured([dict(trip[0], process_start_s=9.0, block_walls_s=[12.0, 13.0]),
+                       dict(trip[1], process_start_s=11.0, block_walls_s=[11.0])])
+    assert fm["process_start_s_max"] == 11.0 and fm["block_wall_s_max"] == 13.0
+    assert abs(fm["block_wall_over_block_s"] - 12.0 / 3.9) < 1e-12 and fit_measured(trip)["process_start_s_max"] is None
     allbad = [dict(x, nf4_sha256="MISMATCH") for x in trip * 4]          # nondeterminism inside EVERY process
     assert summarize({"reps": allbad, "experts": 128})["bytes_identical"] is False
     n += 1
@@ -356,6 +385,7 @@ def main(argv=None):
     p.add_argument("--companions", default="")
     p.add_argument("--pool", type=int)
     p.add_argument("--slab")
+    p.add_argument("--spawned", type=float)
     a = p.parse_args(argv)
     if a.self_test:
         return self_test()

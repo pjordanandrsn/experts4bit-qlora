@@ -146,4 +146,9 @@ of it into the run directory, which made the receipt store read dirty for every 
   before the create, NOT_RUN at the pre-flight and VOID_BY_HOST. `smt-sib-dry-<n>` are the $0 dry runs on 8 experts:
   wiring only, never a reading.
 - **Cost:** guard **2.5 h** at a $0.60/h cap, download at most $0.011/GB. **Worst $1.53** ($1.50 + about 3 GB of
-  wheels), expected about $0.90 (about 1.8 h at smt-fuse-2's $0.49/h). Under the standing per-lane rule. Under the standing per-lane rule.
+  wheels), expected about $0.90 (about 1.8 h at smt-fuse-2's $0.49/h). Under the standing per-lane rule. **Why the
+  guard is 2.5 h: a block's wall is about 3x its timed `block_s`**, because `one_rep` hashes the 4.8 GB of fused and nf4
+  bytes outside its timed span (the integrity check). The timed seconds are the reading; the wall is the cost.
+- **The fit's terms are recorded on the box** for the next fit: each process's start (spawn to a pinned interpreter with
+  torch and a CUDA context, the one term taken high here), its untimed block's wall and every timed block's whole wall;
+  the summary carries their maxima and the wall/`block_s` ratio. Under the standing per-lane rule.

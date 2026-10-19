@@ -119,18 +119,20 @@ def test_amendment_1_the_sibling_probe_is_the_registered_design():
     assert out.returncode == 0 and "smt_sib_box self-test OK (7/7 cases)" in out.stdout, out.stdout + out.stderr
     assert 'ORDER = ("PHYS", "SIB", "WIDE", "WIDE", "SIB", "PHYS")' in SIB and "CYCLES = 4" in SIB
     assert "K_MAX, MIN_K = 16, 8" in SIB and "QUOTA_PER_K = 2.5" in SIB and 'READ = ("fuse_s",)' in SIB and 'REPORTED = ("block_s",)' in SIB
+    assert "process_start_s = time.time() - a.spawned" in SIB and '"--spawned", repr(time.time())' in SIB
     assert "REPEATS = 15" in SIB and "GUARD_S = 9000" in SIB and "def time_fit(" in SIB
     assert "THROTTLE_FLAG = 0.05" in SIB and "COMPANION_FLAG = 0.25" in SIB and "MIN_TRIPLES = 6" in SIB
     # pinned before torch is imported, in a fresh process per rep, around the registered block unchanged
     child = SIB[SIB.index("def child(a):"):SIB.index("def flagged(r):")]
     assert child.index("os.sched_setaffinity(0, cpus)") < child.index("import smt_fuse_box as B")
-    pre = SIB[:SIB.index("def run(a):")].splitlines()                       # --plan and the child's pin stay torch-free
-    assert not [x for x in pre if x.strip() in ("import torch", "import smt_fuse_box as B")][1:]
+    heavy = ("import torch", "import smt_fuse_box as B")                    # --plan and the child's pin stay torch-free
+    assert not [x for x in SIB[:SIB.index("def child(a):")].splitlines() if x.strip() in heavy]
+    assert all(child.index(f"\n    {h}\n") > child.index("os.sched_setaffinity(0, cpus)") for h in heavy)
     assert child.count("B.one_rep(a.pool, a.slab, a.experts)") == 2 and "for _ in range(REPEATS)" in child
     assert 'return 0 if res["summary"]["bytes_identical"] else 3' in SIB
     assert 'case "$SMT_FUSE_RUN_ID" in smt-sib-*) MODE=sib;; *) MODE=fuse;; esac' in RUN
     assert "--exclude '/venv*'" in DRIVE and "--exclude='./venv*'" in DRIVE          # the box venv never comes back
     for s in ("Amendment 1", "SIB/PHYS", "fresh process", "before torch is", "K = min(16, floor(quota / 2.5))",
-              "PHYS, SIB, WIDE, WIDE, SIB, PHYS", "8 triples", "25 %", "VOID_BY_HOST", "15 times timed", "SIB/PHYS not resolved below about 0.80", "7110 s", "2.5 h", "never a ruling",
+              "PHYS, SIB, WIDE, WIDE, SIB, PHYS", "8 triples", "25 %", "VOID_BY_HOST", "15 times timed", "SIB/PHYS not resolved below about 0.80", "7110 s", "2.5 h", "about 3x its timed `block_s`", "The fit's terms are recorded on the box", "never a ruling",
               "Worst $1.53"):
         assert s in PREREG, s
