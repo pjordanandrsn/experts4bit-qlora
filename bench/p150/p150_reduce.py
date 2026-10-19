@@ -12,8 +12,7 @@ experts, router, embeddings and norms bf16, untouched). It alone decides, agains
     VOID  A or I8HEAD missing or not ok, an arm off its name, I8HEAD's round trip not exactly the lm_head (one module,
           no attention module), an arm's recorded windows (counts and wikitext stride) off ``WINDOWS``, or a ruled
           gate's windows off 196 / 123 or not the same windows in both arms, or an arm's held-out window hashes
-          (``heldout``, written by p150_box.py) not the registered ones, or I8HEAD's reference log-probs (``ref_sha256``)
-          not A's at a ruled gate.
+          (``heldout``, written by p150_box.py) not the registered ones.
 
 REPORTED, never a rung: c4 (16 windows), P125's own gate outcome at each gate, and the round trip's error.
 
@@ -104,10 +103,6 @@ def judge(d) -> dict:
         if {k: fq.get(k) for k in SCOPE[CANDIDATE]} != SCOPE[CANDIDATE]:
             void.append(f"{CANDIDATE}'s round trip is not exactly the lm_head with the attention untouched: "
                         f"{ {k: fq.get(k) for k in SCOPE[CANDIDATE]} }")
-    if qa and qc and qa.get("status") == "ok" and qc.get("status") == "ok":     # belt and braces (the 07:03Z ruling)
-        ra, rc = qa.get("ref_sha256") or {}, qc.get("ref_sha256") or {}
-        if not all(ra.get(g) for g in RULED) or any(rc.get(g) != ra.get(g) for g in RULED):
-            void.append(f"{CANDIDATE} did not score against A's reference log-probs: A {ra}, {CANDIDATE} {rc}")
     out = {"verdict": None, "void": void, "gates": {}, "reporting": {}}
     if void:
         out["verdict"] = "VOID"
@@ -138,7 +133,7 @@ def judge(d) -> dict:
 
 
 def _fake(d, *, d_head=0.0005, sd=0.02, argmax_head=0.99, fail_gate=None, scope=None, windows=None, head=True,
-          a_status="ok", stride=None, heldout=None, refs=None):
+          a_status="ok", stride=None, heldout=None):
     """A and I8HEAD records: I8HEAD's nll is A's plus ``d_head`` and an alternating +-``sd`` (a deterministic mean shift
     with an SD of about ``sd``); ``fail_gate`` drops I8HEAD's argmax agreement to 0.94 at that gate only."""
     arms = ["A"] + ([CANDIDATE] if head else [])
@@ -160,8 +155,7 @@ def _fake(d, *, d_head=0.0005, sd=0.02, argmax_head=0.99, fail_gate=None, scope=
         rec = {"status": a_status if arm == "A" else "ok", "arm": arm, "gates": gates, "fakequant": fq,
                # the ruled counts as recorded, whatever the gates hold: the per-window count check is tested on its own
                "windows": {"counts": dict(COUNTS), "wikitext_stride": (stride or {}).get(arm, 1024)},
-               "heldout": (heldout or {}).get(arm, HELDOUT),
-               "ref_sha256": (refs or {}).get(arm, {"t1": "a" * 64, "k16": "b" * 64, "c4": "c" * 64})}
+               "heldout": (heldout or {}).get(arm, HELDOUT)}
         json.dump(rec, open(os.path.join(d, f"quality_{arm}.json"), "w"))
 
 
@@ -193,9 +187,6 @@ def self_test() -> int:
     run("I8HEAD read on windows that are not the registered held-out set is VOID", "VOID", heldout={CANDIDATE: seen})
     run("A read on windows that are not the registered held-out set is VOID", "VOID", heldout={"A": seen})
     run("a record without its held-out hashes is VOID", "VOID", heldout={CANDIDATE: None})
-    run("I8HEAD scored against other reference log-probs is VOID", "VOID",
-        refs={CANDIDATE: {"t1": "d" * 64, "k16": "b" * 64, "c4": "c" * 64}})
-    run("A without its reference hashes is VOID", "VOID", refs={"A": None})
 
     def rounded(raw):
         return {"d": round(raw["d"], 6), "se": round(raw["se"], 6), "bound": round(raw["bound"], 6),

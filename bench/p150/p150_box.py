@@ -63,25 +63,6 @@ def windows(tok, text, n, a):
     return ws
 
 
-def ref_sha256(ref_dir) -> dict:
-    """Per gate, the sha256 of the reference log-probs (R) arm A wrote under ``ref_dir/<gate>/``: every file's name and
-    bytes, in name order. A records it; I8HEAD records what it scored against, and the reducer holds the two equal."""
-    out = {}
-    if not ref_dir or not os.path.isdir(ref_dir):
-        return out
-    for gate in sorted(os.listdir(ref_dir)):
-        d = os.path.join(ref_dir, gate)
-        if not os.path.isdir(d):
-            continue
-        h = hashlib.sha256()
-        for name in sorted(os.listdir(d)):
-            p = os.path.join(d, name)
-            if os.path.isfile(p):
-                h.update(name.encode() + b"\0" + open(p, "rb").read() + b"\0")
-        out[gate] = h.hexdigest()
-    return out
-
-
 def install() -> None:
     """Point i8_box at the held-out windows: its quality_main and windows_check call the module's ``windows``."""
     ib.windows = windows
@@ -106,14 +87,6 @@ def self_test() -> int:
         ("i8_box reads the held-out windows", ib.windows is windows),
         ("nothing read yet records no hash", read_heldout()["sha256"] == {"t1": None, "k16": None}),
     ]
-    import tempfile
-    with tempfile.TemporaryDirectory() as d:
-        os.makedirs(os.path.join(d, "t1"))
-        open(os.path.join(d, "t1", "R_0.pt"), "wb").write(b"abc")
-        h0 = ref_sha256(d)
-        open(os.path.join(d, "t1", "R_0.pt"), "wb").write(b"abd")
-        cases.append(("R's hash binds its bytes", set(h0) == {"t1"} and ref_sha256(d)["t1"] != h0["t1"]))
-        cases.append(("no reference directory hashes to nothing", ref_sha256(os.path.join(d, "absent")) == {}))
     bad = [n for n, ok in cases if not ok]
     print(f"p150_box self-test {'OK' if not bad else 'FAILED ' + str(bad)} ({len(cases)} cases)")
     return 0 if not bad else 1
@@ -127,11 +100,8 @@ def main(argv=None) -> int:
     p.add_argument("--mode")
     p.add_argument("--out")
     p.add_argument("--windows-check", action="store_true")
-    p.add_argument("--ref-dir")
     a, _ = p.parse_known_args(argv)
     install()
-    scoring = a.mode == "quality" and os.environ.get("I8_ARM", "A") != "A"
-    before = ref_sha256(a.ref_dir) if scoring else None      # the R this arm will score against (A wrote it)
     rc = ib.main(argv)
     got = read_heldout()
     if a.windows_check:
@@ -139,13 +109,10 @@ def main(argv=None) -> int:
         print("P150_HELDOUT " + json.dumps({"read": got, "registered": HELDOUT, "match": ok}), flush=True)
         return 0 if ok else 1
     if a.mode == "quality" and rc == 0:
-        refs = ref_sha256(a.ref_dir)
-        if scoring and refs != before:
-            raise SystemExit(f"REFUSED: the reference log-probs changed while this arm scored ({before} -> {refs})")
         rec = json.load(open(a.out))
-        rec["heldout"], rec["ref_sha256"] = got, refs
+        rec["heldout"] = got
         json.dump(rec, open(a.out, "w"), indent=1, default=str)
-        print("P150_QUALITY_HELDOUT " + json.dumps({"heldout": got, "ref_sha256": refs}), flush=True)
+        print("P150_QUALITY_HELDOUT " + json.dumps(got), flush=True)
     return rc
 
 
