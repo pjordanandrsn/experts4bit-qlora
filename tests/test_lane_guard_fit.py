@@ -23,8 +23,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MIN_HEADROOM_PCT = 125
 STRIKE_NOTE = "two consecutive headroom refusals count as one strike"
-INSTALL_RE = re.compile(r"\bpip3? install|\b(?:conda|mamba) install|\buv (?:pip install|sync|add)\b|apt-get install"
-                        r"|^\s*pipx\s", re.M)
+INSTALL_RE = re.compile(
+    r"(?:\bpip3?|\bpython3?\s+-m\s+pip|\$\{?PIP\}?\"?|\b(?:micro)?mamba|\bconda|\buv\s+pip)\s+install\b"
+    r"|\buv\s+(?:sync|add)\b|apt-get install|^\s*pipx\s", re.M)
 # a script run from another file: its installs are invisible here, so the fit must come before it too
 EXTERNAL_RE = re.compile(r"^\s*(?:\.|source)\s+\S|\b(?:bash|sh)\s+\S+\.sh\b|\bpython3?\s+(?!-)\S+\.py\b", re.M)
 
@@ -55,8 +56,21 @@ def _name(p: Path) -> str:
 
 def _brace_depth(text: str) -> int:
     """Open { minus closed }, after dropping ${...} expansions: above zero means inside a function body or a group."""
-    t = re.sub(r"\$\{[^}]*\}", "", text)
+    t = re.sub(r"\$\{[^}]*\}", "", _code(text))
     return t.count("{") - t.count("}")
+
+
+def _code(text: str) -> str:
+    """The text without quoted strings and comments, for the depth scans."""
+    t = re.sub(r'"(?:[^"\\]|\\.)*"|\'[^\']*\'', '""', text)
+    return re.sub(r"(?:^|(?<=\s))#.*$", "", t, flags=re.M)
+
+
+def _block_depth(text: str) -> int:
+    """Open if/case/while/until/for minus closed fi/esac/done: above zero means inside a branch or a loop."""
+    t = _code(text)
+    opened = len(re.findall(r"(?:^|[;&|(]|\bthen|\bdo|\belse)\s*(?:if|case|while|until|for)\b", t, re.M))
+    return opened - len(re.findall(r"\b(?:fi|esac|done)\b", t))
 
 
 def fit_problems(text: str) -> list[str]:
@@ -70,8 +84,9 @@ def fit_problems(text: str) -> list[str]:
     fit = re.search(r"\bFIT=\$\(\(([^)]*)\)\)", text)
     if not fit:
         out.append("no FIT=$((...))")
-    elif "NEED_" not in fit.group(1) or "RESERVE" not in fit.group(1):
-        out.append("FIT does not add a NEED_* and the RESERVE")
+    elif "NEED_" not in fit.group(1) or "RESERVE" not in fit.group(1) or "INSTALL" not in fit.group(1):
+        out.append("FIT does not add an INSTALL* allowance, a NEED_* and the RESERVE (a pre-install check must count "
+                   "the install still ahead of it)")
     if "FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100))" not in text:
         out.append("no FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100))")
     check = re.search(r'^.*\[ "\$LEFT" -ge "\$FIT_NEED" \].*$', text, re.M)
@@ -81,8 +96,10 @@ def fit_problems(text: str) -> list[str]:
         line = check.group(0)
         if "${FIT_NEED}" not in line or not re.search(r"\bfinish \d+|\bexit \d+", line):
             out.append("the refusal must print ${FIT_NEED} (the quantity it compares) and exit with its own code")
-        if line != line.lstrip() or _brace_depth(text[:check.start()]) != 0:
-            out.append("the refusal is not at top level (indented, or inside a function body): it may never run")
+        if not line.startswith('[ "$LEFT"') or _brace_depth(text[:check.start()]) != 0 \
+                or _block_depth(text[:check.start()]) != 0:
+            out.append("the refusal is not at top level (indented, commented out, or inside a function body or a branch): it may "
+                       "never run")
         install = INSTALL_RE.search(text)
         if not install:
             out.append("no install found (pip, pip3, conda, mamba, uv, apt-get or pipx): the order cannot be checked")
@@ -140,6 +157,14 @@ def test_the_rule_accepts_the_canonical_check_and_rejects_its_mutants():
         "a sourced helper first": ". ./setup_box.sh\n" + CANONICAL,
         "a called installer first": "bash $W/install.sh\n" + CANONICAL,
         "no install at all": CANONICAL.replace('pipx(){ python -m pip install "$@"; }\n', ""),
+        "commented out": CANONICAL.replace('[ "$LEFT"', '# [ "$LEFT"'),
+        "in an unindented if false": CANONICAL.replace('[ "$LEFT"', 'if false; then\n[ "$LEFT"').replace(
+            "finish 19; }\n", "finish 19; }\nfi\n"),
+        "in a one-line if false": CANONICAL.replace('[ "$LEFT"', 'if false; then [ "$LEFT"').replace(
+            "finish 19; }\n", "finish 19; }; fi\n"),
+        "no install allowance": CANONICAL.replace("INSTALL_TO_GATE_S + ", ""),
+        "a micromamba install first": "micromamba install -y x\n" + CANONICAL,
+        "a $PIP install first": '"$PIP" install x\n' + CANONICAL,
     }
     survived = [k for k, t in mutants.items() if not fit_problems(t)]
     assert not survived, survived

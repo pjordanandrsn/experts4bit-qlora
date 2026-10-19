@@ -36,6 +36,9 @@ FIT=$((INSTALL_TO_GATE_S + NEED_X + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PC
 - The check sits at top level (unindented, outside any function body or branch), before the first install (pip, pip3,
   conda, mamba, uv, apt-get or pipx) and before any script sourced or run from another file. A runner with no
   recognisable install fails the test rather than skipping the order check.
+- The first install the test finds may be inside a helper's DEFINITION (`pipx(){ ... pip install ...; }`), so put
+  the check above any install helper, not only above its first call. `FIT` must name an install allowance
+  (`INSTALL*`): a check made before the install has to count the install still ahead of it.
 - The headroom covers the allowances, which are estimates from the hosts measured so far. The check runs against the box's
   own remaining time, so a slow boot is caught as well.
 - A refusal here costs cents and is not a strike. Two consecutive headroom refusals on one lane count as one strike: the
