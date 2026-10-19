@@ -17,3 +17,18 @@ The heartbeat's `unknown_probes` counts consecutive unverified probes and resets
 TC1, P127, FAM and SD1 call `token_scope.py` on the controller before copying `HF_TOKEN_FILE`. The helper checks the supplied file with one standard-library GET of the public Hub's `whoami-v2` endpoint (the token as a Bearer header; what `huggingface_hub.HfApi.whoami` does), with a 20-second verification deadline. It needs no third-party package: controllers' python may lack `huggingface_hub`. The Mac mini's did, and until this change that turned every check into "unverified" and every launch from it unauthenticated. It allows classic read tokens and fine-grained tokens whose permissions are all reads, excluding job, endpoint and webhook permissions. A verified unsafe token refuses staging with exit 78. Unrecognized metadata or a failed verification stages no token and continues unauthenticated; the launch environment disables implicit Hub authentication in that case and when no token file is present. Locality stages no token.
 
 The helper logs only read-only yes/no or unverified, staging none; it suppresses library diagnostics and exception text. Tests use fake tokens, metadata and network failures. See Hugging Face's [token documentation](https://huggingface.co/docs/hub/security-tokens) for the role definitions.
+
+## Host facts
+
+`host_facts.py OUT` writes the box's own measured host facts as `host_facts.json`, for the host registry. A runner calls it once on the box and leaves the file beside its receipt: `python3 host_facts.py "$OUT_DIR/host_facts.json"`.
+
+It records only what the box measures itself, from `/proc`, `/sys` and `nvidia-smi`:
+- logical CPUs, physical cores, threads per core;
+- NUMA nodes and `numa_balancing`;
+- the transparent-hugepage `enabled` and `defrag` modes;
+- the cgroup CPU quota;
+- GPU 0's power limit, maximum SM clock and memory.
+
+Every value is a number or a small enum, and `sources` names where each one came from. It writes no identifiers: no hostname, container id, serial, UUID or CPU model string. A fact it cannot read is left out, and the helper always exits 0, so it never costs a run.
+
+`measured_at` stamps the reading. The registry rejects a file whose stamp falls outside the run's own window, so a copy shipped with a kit is never taken for a reading. `tests/test_host_facts.py` runs it against a synthetic `/proc` and `/sys` and a stub `nvidia-smi`.
