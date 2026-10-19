@@ -13,11 +13,22 @@ server-class SMT host.
 
 - **The slab:** one Qwen3-235B-A22B MoE layer's experts as the streaming loader builds them under expert offload, 128
   experts with gate/up [1536, 4096] and down [4096, 1536] in bf16 (4.83 GB), seeded.
-- **One rep is the loader's own path, timed wall-clock from slab-in to nf4-out:**
+- **One rep is the loader's own path, every step of `-7`'s one timed block** ("fusing + quantizing ... offloaded to
+  pinned CPU RAM"; the review pass named the two this first omitted), timed wall-clock from the first read to the
+  offloaded layer:
+  - `read`: each expert's three tensors from a safetensors file on the box's disk through
+    `safe_open(..., device="cpu").get_tensor`, as the loader's host staging reads them. The page cache is warm after the
+    first rep; the cold read of a real 474 GB checkpoint is a different term and is not measured here;
   - `fuse`: `experts4bit_qlora.arch.moe_conventions.fuse_experts` on the host, the op torch's intra-op pool runs;
   - `h2d`: the fused stacks to the GPU;
-  - `quant`: `Experts4bit.from_float(..., quant_type="nf4")` on the GPU.
+  - `quant`: `Experts4bit.from_float(..., quant_type="nf4")` on the GPU;
+  - `offload`: `ExpertsLoRA` around it and `enable_expert_offload(pin=True)`, the pinned host home and the copy back. The
+    cached pinned blocks are released after each rep, so every rep pays a fresh pin, as each real layer does.
   - The pool is set explicitly (`torch.set_num_threads`) per rep.
+- **The whole block and its residual** (the maintainer's addition): each rep also records its whole-block wall, from the
+  first read to the layer's memory freed (the real loader frees each layer's GPU copies and staging too), less the two
+  integrity hashes, and the **residual**, that wall minus the five segments. A breakdown without a residual cannot tell
+  whether an untimed step is what made `-7` 3.2x slower.
 - **Order:** one untimed warm rep at each pool (16 and 32), then the pools **16, 32, 32, 16** for **4 cycles**: 16 reps and 8 back-to-back
   (16, 32) pairs.
 - **Recorded once:** the CPU model, physical and logical counts, threads per core, the affinity, the cgroup quota and
@@ -27,9 +38,10 @@ server-class SMT host.
 
 ## What is reported
 
-- **Per pool:** median seconds for each segment and in total, and both scaled to one layer (the amendment multiplies by
-  94 layers).
-- **Each pair's 32/16 ratio**, for the total and for the fuse alone, with the median and the **range across the 8
+- **Per pool:** median seconds for each of the five segments, their sum, the whole block and the residual, each scaled
+  to one layer (the amendment
+  multiplies by 94 layers).
+- **Each pair's 32/16 ratio**, for the total and for every segment, with the median and the **range across the 8
   pairs**. That range is the interval the decision reads. It is fixed here, before any data.
 - **Bytes identical:** every rep's fused and nf4 bytes must agree, since the pool must be speed-only. If they differ, the
   probe exits 3 and the run is a finding, not a timing.

@@ -2,11 +2,17 @@
 """smt_fuse_box.py -- the BOX side of the SMT fuse measurement (bench/smt-fuse/PREREG-smt-fuse.md).
 
 One Qwen3-235B-A22B MoE layer's experts as the streaming loader builds them under expert offload:
-128 experts, gate/up [1536, 4096] and down [4096, 1536] in bf16. Each rep runs the loader's own path:
-  fuse   experts4bit_qlora.arch.moe_conventions.fuse_experts on the host (the op torch's intra-op pool runs);
-  h2d    the fused stacks to the GPU;
-  quant  Experts4bit.from_float(..., quant_type="nf4") on the GPU;
-and is timed wall-clock from slab-in to nf4-out, with the pool set explicitly (torch.set_num_threads) per rep.
+128 experts, gate/up [1536, 4096] and down [4096, 1536] in bf16. Each rep runs the loader's own path, every step of
+q235-pro6000-7's one timed block ("fusing + quantizing ... offloaded to pinned CPU RAM"):
+  read     each expert's three tensors from a safetensors file on the box's disk, through
+           safe_open(..., device="cpu").get_tensor, as the loader's host staging reads them (page cache warm after the
+           first rep: the cold read of a real checkpoint is a different term and is not measured here);
+  fuse     experts4bit_qlora.arch.moe_conventions.fuse_experts on the host (the op torch's intra-op pool runs);
+  h2d      the fused stacks to the GPU;
+  quant    Experts4bit.from_float(..., quant_type="nf4") on the GPU;
+  offload  ExpertsLoRA around it and engines.offload.enable_expert_offload(pin=True): the pinned host home and the
+           device-to-host copy (the cached pinned blocks are released after each rep, so every rep pays a fresh pin);
+and is timed wall-clock from the first read to the offloaded layer, with the pool set explicitly per rep.
 The reps interleave POOLS = (16, 32, 32, 16) for CYCLES cycles, so each (16, 32) pair runs back to back.
 
 Recorded per rep: the pool torch reports, the host load average at its start, the segment walls, and the
@@ -30,6 +36,8 @@ POOLS = (16, 32, 32, 16)
 CYCLES = 4
 E_FULL, INTER, HIDDEN = 128, 1536, 4096
 SEED = 0
+KEY = "model.layers.0.mlp.experts.{e}.{p}.weight"
+SEGMENTS = ("read_s", "fuse_s", "h2d_s", "quant_s", "offload_s", "total_s", "block_s", "residual_s")
 CAP_FLOOR_S = 600                 # the cap never drops below this: a short warm rep on a busy host is noisy
 
 
@@ -68,32 +76,73 @@ def slab(n_experts):
             [mk(HIDDEN, INTER) for _ in range(n_experts)])
 
 
-def one_rep(pool, gate, up, down):
+def write_slab(path, gate, up, down):
+    """The slab once, as a checkpoint lays it out: one tensor per expert and projection."""
+    from safetensors.torch import save_file
+
+    t = {}
+    for e in range(len(gate)):
+        t[KEY.format(e=e, p="gate_proj")], t[KEY.format(e=e, p="up_proj")] = gate[e], up[e]
+        t[KEY.format(e=e, p="down_proj")] = down[e]
+    save_file({k: v.contiguous() for k, v in t.items()}, path)
+
+
+def one_rep(pool, slab_path, n_experts):
+    import gc
+
     import torch
     import torch.nn.functional as F
+    from safetensors import safe_open
 
     from experts4bit_qlora._vendor.experts import Experts4bit
     from experts4bit_qlora.arch.moe_conventions import fuse_experts
+    from experts4bit_qlora.engines.offload import enable_expert_offload
+    from experts4bit_qlora.lora import ExpertsLoRA
 
     torch.set_num_threads(pool)
     load = os.getloadavg()[0]
     torch.cuda.synchronize()
     t0 = time.perf_counter()
-    gu, dn = fuse_experts(gate, up, down)
+    with safe_open(slab_path, framework="pt", device="cpu") as f:
+        gate = [f.get_tensor(KEY.format(e=e, p="gate_proj")) for e in range(n_experts)]
+        up = [f.get_tensor(KEY.format(e=e, p="up_proj")) for e in range(n_experts)]
+        down = [f.get_tensor(KEY.format(e=e, p="down_proj")) for e in range(n_experts)]
     t1 = time.perf_counter()
+    gu, dn = fuse_experts(gate, up, down)
+    t2 = time.perf_counter()
     gu_d, dn_d = gu.to("cuda"), dn.to("cuda")
     torch.cuda.synchronize()
-    t2 = time.perf_counter()
+    t3 = time.perf_counter()
     base = Experts4bit.from_float(gu_d, dn_d, has_gate=True, activation=F.silu, compute_dtype=torch.bfloat16,
                                   quant_type="nf4", blocksize=64)
     torch.cuda.synchronize()
-    t3 = time.perf_counter()
+    t4 = time.perf_counter()
+    nf4 = hashlib.sha256((sha(base.gate_up_proj) + sha(base.down_proj)).encode()).hexdigest()
+    t4b = time.perf_counter()                            # the hash is not the loader's work: excluded from the walls
+    experts = ExpertsLoRA(base, r=16, alpha=16, dtype=torch.bfloat16).to("cuda")
+    handle = enable_expert_offload(experts, "cuda", pin=True)
+    torch.cuda.synchronize()
+    t5 = time.perf_counter()
     rec = {"pool": pool, "torch_pool": torch.get_num_threads(), "load_avg_1m": load,
-           "fuse_s": t1 - t0, "h2d_s": t2 - t1, "quant_s": t3 - t2, "total_s": t3 - t0,
-           "fused_sha256": hashlib.sha256((sha(gu) + sha(dn)).encode()).hexdigest(),
-           "nf4_sha256": hashlib.sha256((sha(base.gate_up_proj) + sha(base.down_proj)).encode()).hexdigest()}
-    del gu, dn, gu_d, dn_d, base
+           "read_s": t1 - t0, "fuse_s": t2 - t1, "h2d_s": t3 - t2, "quant_s": t4 - t3, "offload_s": t5 - t4b,
+           "total_s": (t4 - t0) + (t5 - t4b), "nf4_sha256": nf4}
+    t5b = time.perf_counter()
+    rec["fused_sha256"] = hashlib.sha256((sha(gu) + sha(dn)).encode()).hexdigest()
+    t5c = time.perf_counter()                            # this hash is excluded from the block too
+    del gate, up, down, gu, dn, gu_d, dn_d, base, experts, handle
+    gc.collect()
+    torch.cuda.synchronize()
     torch.cuda.empty_cache()
+    try:                                                 # every rep pays a fresh pin, as each real layer does
+        from experts4bit_qlora.engines.host_heap import release_cached_pinned_memory
+        release_cached_pinned_memory()
+    except Exception:                                    # noqa: BLE001 -- recorded below when it is unavailable
+        rec["pinned_release"] = "unavailable"
+    t6 = time.perf_counter()
+    # the WHOLE block, first read to the layer's memory freed (the real loader frees each layer's GPU copies and
+    # staging too), less the two hashes; the residual is what no segment timed (the free, and any gap between them)
+    rec["block_s"] = (t6 - t0) - (t4b - t4) - (t5c - t5b)
+    rec["residual_s"] = rec["block_s"] - rec["total_s"]
     return rec
 
 
@@ -110,18 +159,17 @@ def summarize(res):
     out = {"per_pool": {}, "pairs": [], "bytes_identical": None}
     for pool in sorted({r["pool"] for r in reps}):
         rs = [r for r in reps if r["pool"] == pool]
-        out["per_pool"][str(pool)] = {k: statistics.median(r[k] for r in rs) for k in ("fuse_s", "h2d_s", "quant_s", "total_s")}
-        out["per_pool"][str(pool)]["total_s_per_layer"] = out["per_pool"][str(pool)]["total_s"] * scale
-        out["per_pool"][str(pool)]["fuse_s_per_layer"] = out["per_pool"][str(pool)]["fuse_s"] * scale
+        out["per_pool"][str(pool)] = {k: statistics.median(r[k] for r in rs) for k in SEGMENTS if k in rs[0]}
+        for k in list(out["per_pool"][str(pool)]):
+            out["per_pool"][str(pool)][k.replace("_s", "_s_per_layer")] = out["per_pool"][str(pool)][k] * scale
         out["per_pool"][str(pool)]["n"] = len(rs)
     for i in range(0, len(reps) - 1, 2):                 # (16, 32), (32, 16), ... -> each pair's 32/16 ratio
         a, b = reps[i], reps[i + 1]
         if {a["pool"], b["pool"]} == {16, 32}:
             r16, r32 = (a, b) if a["pool"] == 16 else (b, a)
-            out["pairs"].append({"total_32_over_16": r32["total_s"] / r16["total_s"],
-                                 "fuse_32_over_16": r32["fuse_s"] / r16["fuse_s"]})
-    for k in ("total_32_over_16", "fuse_32_over_16"):
-        v = [p[k] for p in out["pairs"]]
+            out["pairs"].append({k.replace("_s", "_32_over_16"): r32[k] / r16[k] for k in SEGMENTS if k in r16})
+    for k in [s.replace("_s", "_32_over_16") for s in SEGMENTS]:
+        v = [p[k] for p in out["pairs"] if k in p]
         out[k] = {"median": statistics.median(v), "min": min(v), "max": max(v), "n": len(v),
                   "range_includes_1": min(v) <= 1.0 <= max(v)} if v else None
     out["bytes_identical"] = (len({r["fused_sha256"] for r in reps}) == 1 and len({r["nf4_sha256"] for r in reps}) == 1)
@@ -132,10 +180,13 @@ def run(a):
     import torch
 
     facts = host_facts()
-    gate, up, down = slab(a.experts)
+    cache = os.path.join(os.path.dirname(os.path.abspath(a.out)), ".cache")     # .cache stays on the box (the fetch skips it)
+    os.makedirs(cache, exist_ok=True)
+    slab_path = os.path.join(cache, "slab.safetensors")
+    write_slab(slab_path, *slab(a.experts))
     # warm each pool once (allocator, CUDA context, bnb kernels): the cap is sized from each pool's own warm wall, since
     # a slower pool is exactly what this measures
-    warm = {pool: one_rep(pool, gate, up, down)["total_s"] for pool in sorted(set(POOLS))}
+    warm = {pool: one_rep(pool, slab_path, a.experts)["block_s"] for pool in sorted(set(POOLS))}
     plan = [pool for _ in range(CYCLES) for pool in POOLS]
     cap = phase_cap(warm, plan, float(os.environ.get("SMT_FUSE_TIME_LEFT_S", "inf")))
     print("SMT_FUSE_CAP " + json.dumps({"warm_total_s": warm, "reps": len(plan), "cap_s": cap}), flush=True)
@@ -146,7 +197,7 @@ def run(a):
             if time.perf_counter() - t_start > cap:
                 print(f"SMT_FUSE_CAP_HIT after {len(reps)} reps", flush=True)
                 return 4
-            rec = one_rep(pool, gate, up, down)
+            rec = one_rep(pool, slab_path, a.experts)
             rec["cycle"] = c
             reps.append(rec)
             print("SMT_FUSE_REP " + json.dumps(rec), flush=True)
@@ -161,8 +212,8 @@ def run(a):
 def self_test():
     n = 0
     def rep(pool, total, fuse, f="a", q="b"):
-        return {"pool": pool, "total_s": total, "fuse_s": fuse, "h2d_s": 0.1, "quant_s": 0.2,
-                "fused_sha256": f, "nf4_sha256": q}
+        return {"pool": pool, "total_s": total, "fuse_s": fuse, "read_s": 0.5, "h2d_s": 0.1, "quant_s": 0.2,
+                "offload_s": 0.3, "block_s": total + 0.4, "residual_s": 0.4, "fused_sha256": f, "nf4_sha256": q}
     reps = [rep(16, 10.0, 4.0), rep(32, 12.0, 6.0), rep(32, 11.0, 5.0), rep(16, 10.0, 4.0)]
     s = summarize({"reps": reps, "experts": 128})
     assert s["per_pool"]["16"]["total_s"] == 10.0 and s["per_pool"]["32"]["total_s"] == 11.5
@@ -171,6 +222,9 @@ def self_test():
     n += 1
     s = summarize({"reps": reps, "experts": 32})
     assert s["per_pool"]["16"]["total_s_per_layer"] == 40.0                   # scaled to 128 experts
+    assert s["per_pool"]["16"]["read_s"] == 0.5 and s["per_pool"]["32"]["offload_s"] == 0.3     # every segment reported
+    assert s["read_32_over_16"]["median"] == 1.0 and s["offload_32_over_16"]["n"] == 2
+    assert s["per_pool"]["16"]["residual_s"] == 0.4 and s["per_pool"]["32"]["block_s"] == 11.9   # the block and residual
     n += 1
     reps2 = [rep(16, 10.0, 4.0), rep(32, 9.0, 3.0), rep(32, 11.0, 5.0), rep(16, 10.0, 4.0)]
     assert summarize({"reps": reps2, "experts": 128})["total_32_over_16"]["range_includes_1"] is True
