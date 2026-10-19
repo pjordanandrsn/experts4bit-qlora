@@ -128,6 +128,7 @@ case " $FAMILIES " in " olmoedecab "|" qwen3decab "|" olmoedecab qwen3decab "|" 
 # so its guard is spent on the measurement, not on installs it never uses
 NEED_AXOLOTL=1; case " $FAMILIES " in " qwen3hp1cal ") NEED_UNSLOTH=0; NEED_AXOLOTL=0;; esac
 case " $FAMILIES " in " qwen3hp2 ") NEED_AXOLOTL=0;; esac     # HP2 (bench/hp2/HP2-PREREG.md): e4b vs Unsloth only
+case " $FAMILIES " in " qwen3hpn ") NEED_AXOLOTL=0;; esac     # HPN (bench/hpn/HPN-DESIGN.md): e4b + Unsloth readers only
 : > summary.txt; echo "$TC1_INSTANCE_ID" > INSTANCE_ID
 FETCH_OK_N=0; FETCH_FAILED_N=0   # families whose model staged / did not (tc1_prepare); none staged and one failed = rc 15 at the end
 echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST matched_seed=$MATCHED_SEED pack=$PACK" | tee -a summary.txt
@@ -140,6 +141,12 @@ esac
 case " $FAMILIES " in *" qwen3axo1767 "*|*" qwen3axo1767b "*)
   echo "FIXTURE axo1767 (#1767): HP1's box-side shakedown fixture ($HP1_SHAKE_LAYERS-layer cut, $HP1_SHAKE_STEPS steps, 8 held-out rows); arms e4b + axolotl, then the axolotl adapter rescored with the kernels on and off" | tee -a summary.txt
   [ -n "${TC1_PREREG:-}" ] || PREREG=tc1/AXO1767-PREREG.md
+  ;;
+esac
+case " $FAMILIES " in *" qwen3hpn "*)
+  HPN_DEPTHS=${TC1_HPN_DEPTHS:-"2 4 8 16"}
+  echo "FIXTURE hpn (HPN-DESIGN): depths [$HPN_DEPTHS]; calibration rows 97-396 (300), 1 step; readers I (in-loop) / E (evaluator, bf16) / F (fp32); e4b K00 + Unsloth (stage 1b); axolotl out; no timings" | tee -a summary.txt
+  [ -n "${TC1_PREREG:-}" ] || PREREG=hpn/HPN-DESIGN.md
   ;;
 esac
 case " $FAMILIES " in *" qwen3hp2 "*)
@@ -678,6 +685,7 @@ arm_once(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$
     hp1shake) s=$HP1_SHAKE_STEPS; en=8; ee=$HP1_SHAKE_STEPS; ex_tag=hp1shake_e4b;;
     hp1cal) s=1; en=$HP1_EVAL_N; ee=1; ex_tag=hp1cal_k00_s3407;;          # Amendment 4: one step; the step-0 read is what is calibrated
     hp2cal) s=1; en=300; ee=1; ex_tag=hp2cal_e4b_k00_s3407;;               # HP2: one step on the 300 calibration rows (step 0 is read)
+    hpncal) s=1; en=300; ee=1; ex_tag=hpn_e4b_a;;                 # HPN: one step on the 300 rows; Unsloth checks its trainable count against hpn_e4b_a
   esac
   local EXP EXPARG=""; [ "$FW" != e4b ] && { EXP=$(expect_of $FAM $ex_tag); [ -n "$EXP" ] && EXPARG="--expect-trainable $EXP"; }
   local A; A=$(alarm_for $AL)
@@ -2543,6 +2551,58 @@ tc1_hp2_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
   hp1_bulk_manifest "$W"
   $PY_E4B $W/hp2_reduce.py verdict $W/hp1/eval_P.json --g1 $W/hp2/g1.json --manifest $W/hp1/bulk_manifest.json --out $W/hp2/verdict.json 2>&1 | tee -a summary.txt
   echo "HP2 verdict: $W/hp2/verdict.json" | tee -a summary.txt; return 0; }
+# tc1_hpn_family FAM MID REV FAL EAL UAL -- HPN (bench/hpn/HPN-DESIGN.md, a $0 diagnostic on the lab's A2000 under TC1_LOCAL_BOX=1): at each depth in
+# HPN_DEPTHS (default "2 4 8 16"), a cut of the pinned checkpoint (hp1_trunc.py), HP2's 300 calibration rows relabelled for that cut, and three readers:
+# I = two independent one-step e4b K00 arms (the first exports its base) + one Unsloth arm (its base exported: stage 1b); E = the one evaluator twice on
+# e4b's base and once on Unsloth's (zero adapter, report-only); F = hpn_read.py (fp32, two runs) on both bases. A depth that does not fit (an e4b arm not
+# ok, or too little disk for its cut) ends the climb: the deepest depth that fit is a stated limit, never a failure. Each depth's cut and exports are
+# removed after its reads (the bulk manifest pins their sha256s first). Then hpn_reduce.py over the spec. Correctness only: no timing is read.
+tc1_hpn_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TSC L SC TM TR FL TL X D need free deep="" json=""
+  say "===== HPN family $FAM ($MID @ $REV; depths [$HPN_DEPTHS]; calibration rows 97-396; e4b K00 + Unsloth; alarms e4b $EAL unsloth $UAL)"
+  HP1_AX_DROP=1
+  tc1_prepare $FAM "$MID" $REV $FAL "e4b:hpn:fused" $HP1_EVAL_N || return 0
+  mkdir -p $W/hp1/hpn $W/hpn
+  TOKC=$W/hpn/tokens_${FAM}_calib.json
+  HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_caltokens.py --tc1-arm $W/tc1_arm.py --data $W/data/ds_alpaca.json --data-sha $DS_ALPACA_SHA \
+    --pack-src $W/data/alpaca_data_cleaned.json --model "$MID" --revision $REV --tokens $TOK --n $HP1_EVAL_N --start 96 --count 300 \
+    --out $TOKC > logs/hpn_caltokens.log 2>&1
+  TSC=$(sed -n 's/^HP1 CALTOKENS .*sha=\([0-9a-f]\{64\}\)$/\1/p' logs/hpn_caltokens.log)
+  [ -n "$TSC" ] && [ -s "$TOKC" ] || { echo "HPN CALIB_REFUSED tokens: $(grep -m1 REFUSED logs/hpn_caltokens.log | cut -c1-200)" | tee -a summary.txt; return 0; }
+  echo "HPN calibration tokens: held-out pool rows 97-396, sha=$TSC; free GPU memory at start ${HPN_FREE_MIB:-unrecorded} MiB" | tee -a summary.txt
+  local SRC=${HF_HUB_CACHE:-/root/.cache/huggingface/hub}/models--${MID//\//--}/snapshots/$REV
+  for L in $HPN_DEPTHS; do
+    FL=${FAM}L$L; D=$W/hp1/hpn/L$L; SC=$W/hpn/cut-L$L; X="--hp1-export $D --hp1-export-base 1"
+    need=$(( L * 2 + 2 )); free=$(df -BG --output=avail $W | tail -1 | tr -dc 0-9)      # the bf16 cut (~1.25 GB a layer) + two NF4 exports, with headroom
+    if [ "${free:-0}" -lt "$need" ]; then echo "HPN L$L SKIPPED: ${free} GB free < ${need} GB for its cut and exports (a stated limit)" | tee -a summary.txt; break; fi
+    $PY_E4B $W/hp1_trunc.py --src "$SRC" --cache $SC --layers $L > logs/hpn_trunc_L$L.log 2>&1 || { echo "HPN L$L TRUNC_FAILED" | tee -a summary.txt; break; }
+    TM=$($PY_E4B -c "import json,sys; print(json.loads(open(sys.argv[1]).read().splitlines()[-1])['model'])" logs/hpn_trunc_L$L.log)
+    TR=$($PY_E4B -c "import json,sys; print(json.loads(open(sys.argv[1]).read().splitlines()[-1])['revision'])" logs/hpn_trunc_L$L.log)
+    TL=$W/hpn/tokens_$FL.json                                         # the same rows, labelled for this cut's fam (tc1_arm refuses another fam's file)
+    $PY_E4B -c "import json,sys; t=json.load(open(sys.argv[1])); t['fam']=sys.argv[3]; json.dump(t,open(sys.argv[2],'w'))" $TOKC $TL $FL
+    local E="HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1"
+    TC1_ARM_EXTRA_ENV="$E" arm $FL e4b hpn_e4b_a fused $EAL "$TM" $TR 0 hpncal $TL $TSC --attn-4bit 1 $(hp1_cell k00 3407) --seed 3407 --order-seed 3407 $X
+    TC1_ARM_EXTRA_ENV="$E" arm $FL e4b hpn_e4b_b fused $EAL "$TM" $TR 0 hpncal $TL $TSC --attn-4bit 1 $(hp1_cell k00 3407) --seed 3407 --order-seed 3407
+    TC1_ARM_EXTRA_ENV="$E" arm $FL unsloth hpn_uns unsloth $UAL "$TM" $TR 0 hpncal $TL $TSC --grad-ckpt unsloth --unsloth-targets $UT7 \
+      --unsloth-moe-backend ${HPN_UNS_BACKEND:-grouped_mm} --lora-init native --adapter-dtype native --seed 3407 --order-seed 3407 $X
+    local st a ok=1; for a in e4b:hpn_e4b_a e4b:hpn_e4b_b unsloth:hpn_uns; do st=$(status_of $FL ${a%%:*} ${a#*:})
+      [ "$st" = ok ] || { echo "HPN L$L ${a#*:} status $st: this depth did not fit (a stated limit)" | tee -a summary.txt; ok=0; }; done
+    if [ $ok = 0 ]; then rm -rf $SC; break; fi
+    local R=$W/${FL}_e4b_hpn_e4b_a.json RB=$W/${FL}_e4b_hpn_e4b_b.json RU=$W/${FL}_unsloth_hpn_uns.json
+    for a in 1 2; do HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts $R --bases $D/base_e4b_$FL --tokens $TL --eval-n 300 \
+      --model "$TM" --revision $TR --zero-report-only 1 --out $W/hpn/eval_e4b_L${L}_$a.json > logs/hpn_eval_e4b_L${L}_$a.log 2>&1; done
+    HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts $RU --bases $D/base_unsloth_$FL --tokens $TL --eval-n 300 \
+      --model "$TM" --revision $TR --zero-report-only 1 --out $W/hpn/eval_uns_L$L.json > logs/hpn_eval_uns_L$L.log 2>&1
+    for a in e4b unsloth; do HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hpn_read.py --base $D/base_${a}_$FL --tokens $TL --eval-n 300 \
+      --model "$TM" --revision $TR --runs 2 --out $W/hpn/f_${a}_L$L.json > logs/hpn_read_${a}_L$L.log 2>&1 || echo "HPN L$L F_FAILED $a" | tee -a summary.txt; done
+    hp1_bulk_manifest "$W"                                             # pin the exports' bytes before they go
+    rm -rf $SC $D/base_e4b_$FL $D/base_unsloth_$FL
+    json="$json${json:+,}{\"L\": $L, \"inloop\": [\"$(basename $R)\", \"$(basename $RB)\"], \"eval\": [\"hpn/eval_e4b_L${L}_1.json\", \"hpn/eval_e4b_L${L}_2.json\"], \"fref\": \"hpn/f_e4b_L$L.json\", \"unsloth\": {\"inloop\": [\"$(basename $RU)\"], \"eval\": [\"hpn/eval_uns_L$L.json\"], \"fref\": \"hpn/f_unsloth_L$L.json\"}}"
+    deep=$L; echo "HPN L$L READ (I x2 + Unsloth I, E x2 + Unsloth E, F x2 on both bases)" | tee -a summary.txt
+  done
+  echo "HPN deepest depth that fit: ${deep:-none}" | tee -a summary.txt
+  printf '{"framework": "e4b", "free_mib_at_claim": %s, "unsloth_moe_backend": "%s", "depths": [%s]}\n' "${HPN_FREE_MIB:-null}" "${HPN_UNS_BACKEND:-grouped_mm}" "$json" > $W/hpn_spec.json
+  $PY_E4B $W/hpn_reduce.py $W/hpn_spec.json --out $W/hpn/result.json 2>&1 | tee -a summary.txt
+  return 0; }
 # the split path, box 2 (qwen3hp1p): REFUSES unless box 1's eval_K.json + select.json are staged beside the runner AND match the pinned
 # TC1_HP1_K_EVAL_SHA256 / TC1_HP1_K_SELECT_SHA256 / TC1_HP1_K_MANIFEST_SHA256 (box 1's receipt), and the selection re-derives from the staged eval_K.json; then its
 # OWN shakedown, the P block with an early base check on the first E run, and the verdict over the staged eval_K.json + eval_P.json
@@ -2751,6 +2811,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3hp1p)   tc1_hp1p_family   qwen3hp1    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600 3600;;  # HP1 Amendment 2, split box 2
   qwen3hp1cal) tc1_hp1cal_family qwen3hp1cal Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400;;            # HP1 Amendment 4, the calibration box
   qwen3hp2)    tc1_hp2_family    qwen3hp2    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600;;       # HP2 (e4b K00 vs Unsloth)
+  qwen3hpn)    tc1_hpn_family    qwen3hpn    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600;;       # HPN ($0 diagnostic, lab A2000)
   qwen3axo1767) tc1_axo1767_family qwen3hp1   Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400;;           # #1767 (AXO1767-PREREG): the four-score reading
   qwen3axo1767b) tc1_axo1767_family qwen3hp1  Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 qwen3axo1767b;;  # AXO1767 Amendment 1: the kernel split
   tc2small)    tc2_small_box;;                 # lane TC2, box A: granite, olmoe, gptoss (tc2_small_box's table)
