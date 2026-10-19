@@ -76,3 +76,57 @@ server-class SMT host.
   Expected under $0.20. Under the standing per-lane rule.
 - **Launches** use the launcher current at launch, `--validate` passing (including the shared preflight's phase-cap and
   ceiling checks), the market rule's PIN, then CREATED or REFUSED, and the receipt committed within minutes of teardown.
+
+## Amendment 1 (2026-10-19): the second hardware thread, pinned (`smt_sib_box.py`, ids `smt-sib-1..3`)
+
+**Why.** `smt-fuse-2` (receipt store `1307dedc`, re-derived by the maintainer) read every HIGH/16 range across 1, and
+the pool stays at torch's default. But its host had 128 physical cores under a 30.72-CPU quota, and nothing pinned the
+threads, so the 31-thread arm could run one thread per physical core. It measured **the pool under a quota, not the
+second hardware thread**, and must not be cited either way on that question (the maintainer, bus 03:48Z). The project
+owner asked that the real question be pursued ("Keep pushing!", common room 04:49Z). This amendment asks it. It is still
+a **timing premise, never a ruling**.
+
+**What changes.** Nothing in the registered `smt-fuse-*` reading or in `smt_fuse_box.py`. A new box module,
+`smt_sib_box.py`, runs the **same block** (`smt_fuse_box.one_rep`, unchanged) in three pinned arms:
+
+- **Pinning:** each rep runs in a **fresh process** whose CPU set is fixed with `sched_setaffinity` **before torch is
+  imported**, so every intra-op worker inherits it (a running process's OpenMP workers keep the mask they were created
+  with, which is why the pool cannot be re-pinned between reps in one process). Each process runs the block once untimed
+  (allocator, CUDA context, bnb kernels) and once timed.
+- **The arms**, from the host's own sibling topology (`/sys/devices/system/cpu/cpuN/topology/thread_siblings_list`,
+  cores whose two threads are both in the affinity, in CPU order):
+  - **PHYS:** K physical cores, one hardware thread each, pool K;
+  - **SIB:** the **same** K cores, both hardware threads, pool 2K;
+  - **WIDE:** 2K physical cores, one hardware thread each, pool 2K.
+- **K = min(16, floor(quota / 2.5))**, so the 2K-thread arms run at no more than 80 % of the quota and the cgroup does
+  not bind before the cores do. On `smt-fuse-2`'s host (30.72) that is K = 12: 12 vs 24 threads.
+- **Order:** one process per arm first (it sizes the cap), then **PHYS, SIB, WIDE, WIDE, SIB, PHYS** for **4 cycles**:
+  24 reps and 8 triples, each arm once per triple.
+- **Host noise, per rep:** the cgroup's throttled-period share (as `smt-fuse-2`), and from `/proc/stat` the busy share
+  of the arm's CPUs and of its **companions** (the siblings of its cores that it does not use). A co-tenant on a PHYS or
+  WIDE arm's companions turns it into a shared-core arm. **A triple is flagged when any rep in it is throttled in more
+  than 5 % of its CFS periods, or a PHYS or WIDE rep's companions are more than 25 % busy. A flagged triple is reported
+  but left out of the median and range.**
+
+**What is read** (fixed here, before any data):
+
+- **The reading:** each triple's **SIB/PHYS** ratio for **`fuse`** (the op the pool runs) and for **`block`** (what the
+  loader pays), with the median and the **range across the unflagged triples**:
+  - range entirely **below 1**: the second hardware thread **helps** this op, by the median;
+  - range entirely **above 1**: it **hurts**;
+  - range **includes 1**: **no resolved effect**.
+- **Reported, never read:** SIB/WIDE (what the second thread is worth against a real core; WIDE also spans more cache,
+  so this ratio is confounded), every other segment's ratios, and the per-arm medians per layer.
+- **VOID_BY_HOST:** fewer than **6** unflagged triples. The run is reported and a spare id reruns it.
+- **Bytes identical:** every rep's fused and nf4 bytes must agree (exit 3 otherwise, a finding, not a timing).
+
+**The host and the run.** As above (Q235's pins and wheel lock, the same install, the same on-box phase cap formula,
+sized from each arm's whole process wall), plus a refusal before the install (rc 16, NOT_RUN, $0) unless K >= 8 and the
+affinity holds at least 2K two-thread cores. The fetch no longer brings the box's venv back (`smt-fuse-2` fetched 6.8 GB
+of it into the run directory, which made the receipt store read dirty for every lane until it was moved).
+
+- **Run ids:** `smt-sib-1` is the reading; `smt-sib-2` and `smt-sib-3` are spares for pre-create refusals, listings gone
+  before the create, NOT_RUN at the pre-flight and VOID_BY_HOST. `smt-sib-dry-<n>` are the $0 dry runs on 8 experts:
+  wiring only, never a reading.
+- **Cost:** guard 1.0 h at a $0.60/h cap, download at most $0.011/GB. **Worst $0.64**, expected about $0.20 (27 rep
+  processes at about 20 s each after the same install). Under the standing per-lane rule.

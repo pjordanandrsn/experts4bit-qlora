@@ -9,6 +9,8 @@
 #   order   refusals (CUDA, the torch pin, an SMT host with >= 32 logical CPUs in the affinity and a quota >= 16, RAM,
 #           disk); install + tripwire (or the dry box's own stack); the probe's self-test; the probe under its on-box cap
 # Refusals: CUDA unusable 18, torch not the pin 28, not an SMT host or too few CPUs 16, RAM 16, disk 13.
+# Amendment 1 (ids smt-sib-*): the same install, then smt_sib_box.py's pinned PHYS / SIB / WIDE arms over the same block;
+# its host refusal (rc 16) is K = min(16, floor(quota / 2.5)) >= 8 with 2K two-thread cores in the affinity.
 set -uo pipefail
 W=${SMT_FUSE_HOME:-/root/smt_fuse}; export SMT_FUSE_HOME=$W; mkdir -p $W/logs; cd $W || exit 78
 say(){ echo "[$(date -u +%FT%TZ)] smt_fuse: $*"; }
@@ -22,14 +24,16 @@ TORCH_WANT=2.11.0+cu128                                 # Q235's wheel lock (whe
 LOCK_SHA=84f361ed35fff9a857f340b65488ad582dc4270aef7e67cbeb6b46b8370021f3   # Q235's wheels.json at d65793e4
 [ "$E4B_SHA" = "$E4B_PIN" ] || { say "refusing: E4B_SHA $E4B_SHA is not the registered e4b pin $E4B_PIN"; finish 78; }
 DRY=${SMT_FUSE_DRY:-0}
+# Amendment 1: the smt-sib-* ids run the pinned sibling probe (smt_sib_box.py) over the same block; smt-fuse-* the original
+case "$SMT_FUSE_RUN_ID" in smt-sib-*) MODE=sib;; *) MODE=fuse;; esac
 if [ "$DRY" = 1 ]; then EXPERTS=8; MIN_LOGICAL=2; MIN_P=3; DISK_DEF=5; RAM_DEF=8               # the dry box: correctness only
 else EXPERTS=128; MIN_LOGICAL=32; MIN_P=24; DISK_DEF=40; RAM_DEF=32; fi                      # one full Qwen3-235B layer
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True OMP_NUM_THREADS= SMT_FUSE_DRY=$DRY
 unset OMP_NUM_THREADS MKL_NUM_THREADS TRITON_INTERPRET
 : > summary.txt; echo "$SMT_FUSE_INSTANCE_ID" > INSTANCE_ID
-echo "KNOBS run=$SMT_FUSE_RUN_ID e4b=$E4B_SHA gnf4=$GNF4_SHA experts=$EXPERTS dry=$DRY" | tee -a summary.txt
+echo "KNOBS run=$SMT_FUSE_RUN_ID e4b=$E4B_SHA gnf4=$GNF4_SHA experts=$EXPERTS dry=$DRY mode=$MODE" | tee -a summary.txt
 [ "$DRY" = 1 ] && { echo "DRY -- the \$0 dry run on a few experts: NEVER a reading" | tee -a summary.txt; : > DRY; }
-for f in smt_fuse_box.py staged.sha256 q235_bootstrap.py wheels.json dq11_require_git.sh; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
+for f in smt_fuse_box.py staged.sha256 smt_sib_box.py q235_bootstrap.py wheels.json dq11_require_git.sh; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
 [ "$(sha256sum $W/wheels.json | cut -d' ' -f1)" = "$LOCK_SHA" ] || { say "wheels.json is not Q235's lock"; finish 9; }
 (cd $W && sha256sum -c staged.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/smt-fuse/staged.sha256"; finish 9; }
 # ---- refusals before anything is installed
@@ -73,9 +77,15 @@ fi
 [ "${AFF:-0}" -ge "$MIN_LOGICAL" ] || { say "REFUSED: $AFF CPUs in the affinity < $MIN_LOGICAL"; echo "refused: affinity $AFF" > REFUSAL; finish 16; }
 # the high arm the loader would run: P = min(32, ceil(quota), affinity); refused (NOT_RUN, $0) under MIN_P, since a
 # 16-vs-under-24 ratio is too weak to read (the maintainer's ruling)
-P=$(python -c "import math; q='$QUOTA'; print(min(32, $AFF, math.ceil(float(q)) if q != 'none' else 32))")
-echo "HIGH_ARM P=$P (min 32, ceil quota $QUOTA, affinity $AFF)" | tee -a summary.txt
-[ "${P:-0}" -ge "$MIN_P" ] || { say "REFUSED: quota $QUOTA gives a high arm of $P < $MIN_P"; echo "refused: high arm $P" > REFUSAL; finish 16; }
+if [ "$MODE" = fuse ]; then
+  P=$(python -c "import math; q='$QUOTA'; print(min(32, $AFF, math.ceil(float(q)) if q != 'none' else 32))")
+  echo "HIGH_ARM P=$P (min 32, ceil quota $QUOTA, affinity $AFF)" | tee -a summary.txt
+  [ "${P:-0}" -ge "$MIN_P" ] || { say "REFUSED: quota $QUOTA gives a high arm of $P < $MIN_P"; echo "refused: high arm $P" > REFUSAL; finish 16; }
+elif [ "$DRY" != 1 ]; then
+  # Amendment 1: K = min(16, floor(quota / 2.5)) >= 8 and 2K two-thread cores in the affinity (stdlib only, before the install)
+  python $W/smt_sib_box.py --plan --quota "$QUOTA" | tee -a summary.txt
+  [ "${PIPESTATUS[0]}" = 0 ] || { say "REFUSED: the host cannot carry the sibling arms"; echo "refused: sibling arms" > REFUSAL; finish 16; }
+fi
 RAM_GB=$(awk '/^MemTotal:/{print int($2/1048576)}' /proc/meminfo)
 [ "${RAM_GB:-0}" -ge "$RAM_DEF" ] || { say "REFUSED: ${RAM_GB:-?} GiB host RAM < $RAM_DEF GiB"; echo "refused: ram" > REFUSAL; finish 16; }
 FREE_GB=$(df -BG --output=avail $W 2>/dev/null | tail -1 | tr -dc 0-9)
@@ -111,13 +121,20 @@ print("tripwire OK", torch.__version__)
 PYT
 cat versions.txt | tee -a summary.txt
 python $W/smt_fuse_box.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "SELF-TEST FAILED"; finish 21; }
+if [ "$MODE" = sib ]; then
+  python $W/smt_sib_box.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "SIB SELF-TEST FAILED"; finish 21; }
+fi
 # ---- the probe, under its cap sized on the box: min(time left - 600 s, 1.5 x the reps x the warm rep's own wall),
 # ---- enforced inside smt_fuse_box.py between reps (lane_record.phase_caps.probe = {"on_box": ...})
 LEFT=$(( SMT_FUSE_DEADLINE_EPOCH - $(date +%s) - 600 ))
 [ "$LEFT" -gt 120 ] || { say "STOP: only ${LEFT}s left for the probe"; echo "SKIPPED probe host-limited deadline" >> summary.txt; finish 40; }
 say "probe: $EXPERTS experts, cap min(${LEFT}s, 1.5 x reps x warm)"
-env E4B_SHA=$E4B_SHA SMT_FUSE_TIME_LEFT_S=$LEFT perl -e "alarm $LEFT; exec @ARGV" python $W/smt_fuse_box.py --out $W/result.json --experts $EXPERTS > logs/probe.log 2>&1
+if [ "$MODE" = sib ]; then
+  env E4B_SHA=$E4B_SHA SMT_FUSE_TIME_LEFT_S=$LEFT perl -e "alarm $LEFT; exec @ARGV" python $W/smt_sib_box.py --out $W/result.json --experts $EXPERTS > logs/probe.log 2>&1
+else
+  env E4B_SHA=$E4B_SHA SMT_FUSE_TIME_LEFT_S=$LEFT perl -e "alarm $LEFT; exec @ARGV" python $W/smt_fuse_box.py --out $W/result.json --experts $EXPERTS > logs/probe.log 2>&1
+fi
 rc=$?
-grep -a "^SMT_FUSE_SUMMARY\|^SMT_FUSE_CAP" logs/probe.log | cut -c1-1500 | tee -a summary.txt
+grep -a "^SMT_FUSE_SUMMARY\|^SMT_FUSE_CAP\|^SMT_SIB_SUMMARY\|^SMT_SIB_CAP\|^SMT_SIB_PLAN\|^SMT_SIB_REFUSED" logs/probe.log | cut -c1-1500 | tee -a summary.txt
 [ "$rc" = 0 ] && [ -s $W/result.json ] || { tail -5 logs/probe.log | tee -a summary.txt; say "PROBE FAILED (rc=$rc)"; finish 22; }
 finish 0
