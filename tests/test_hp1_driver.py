@@ -596,3 +596,34 @@ def test_hpn_runs_its_unsloth_arm_in_the_cu128_venv_on_the_local_box(tmp_path):
     venv = {tuple(ln.split()[:3]): ln.split()[3] for ln in (tmp_path / "venv.log").read_text().splitlines()}
     assert venv[("qwen3hpnL2", "unsloth", "hpn_uns")] == "UNS_VENV=t28" and venv[("qwen3hpnL4", "unsloth", "hpn_uns")] == "UNS_VENV=t28"
     assert venv[("qwen3hpnL2", "e4b", "hpn_e4b_a")] == "UNS_VENV=" and spec["unsloth_venv"] == "t28"
+
+
+
+def _hpn_fixture(tmp_path, venv):
+    """Run tc1_run.sh's own qwen3hpn FIXTURE block (the token's pre-work checks) with finish/say stubbed."""
+    import os
+    import re
+    src = RUN_SH.read_text()
+    block = re.search(r'^case " \$FAMILIES " in \*" qwen3hpn "\*\)\n.*?^esac\n', src, re.DOTALL | re.MULTILINE).group(0)
+    script = ('FAMILIES=qwen3hpn\nsay(){ echo "SAY: $*"; }\nfinish(){ echo "FINISH $1"; exit "$1"; }\ntee(){ cat >/dev/null; }\n'
+              + block + 'echo "PASSED depths=[$HPN_DEPTHS]"\n')
+    env = {k: v for k, v in os.environ.items() if k != "HPN_UNS_VENV"}
+    if venv is not None:
+        env["HPN_UNS_VENV"] = venv
+    return subprocess.run(["bash", "-c", script], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)
+
+
+@pytest.mark.parametrize("venv", [None, "t28", "cu130"])
+def test_hpn_accepts_the_two_venvs_its_arm_selector_knows(tmp_path, venv):
+    p = _hpn_fixture(tmp_path, venv)
+    assert p.returncode == 0 and "PASSED" in p.stdout
+
+
+@pytest.mark.parametrize("venv", ["t29", "cu128", ""])
+def test_hpn_refuses_a_venv_its_arm_selector_would_not_run(tmp_path, venv):
+    """Review: an unknown value would silently run cu130 while the spec recorded it; refused at $0 before any work (rc 78)."""
+    p = _hpn_fixture(tmp_path, venv)
+    if venv == "":                                   # empty means unset: the default t28
+        assert p.returncode == 0
+    else:
+        assert p.returncode == 78 and f"HPN_UNS_VENV={venv}" in p.stdout and "PASSED" not in p.stdout

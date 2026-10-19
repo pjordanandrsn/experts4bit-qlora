@@ -145,6 +145,8 @@ case " $FAMILIES " in *" qwen3axo1767 "*|*" qwen3axo1767b "*)
 esac
 case " $FAMILIES " in *" qwen3hpn "*)
   HPN_DEPTHS=${HPN_DEPTHS:-"2 4 8 16"}             # local-box only (HPN never runs through tc1_drive.sh), so not a TC1_* knob
+  # the arm's selector knows only t28 (else cu130): any other value would run cu130 while the spec recorded the value given
+  case "${HPN_UNS_VENV:-t28}" in t28|cu130) ;; *) say "REFUSED: HPN_UNS_VENV=${HPN_UNS_VENV} (t28 or cu130 only)"; finish 78;; esac
   echo "FIXTURE hpn (HPN-DESIGN): depths [$HPN_DEPTHS]; calibration rows 97-396 (300), 1 step; readers I (in-loop) / E (evaluator, bf16) / F (fp32); e4b K00 + Unsloth (stage 1b); axolotl out; no timings" | tee -a summary.txt
   [ -n "${TC1_PREREG:-}" ] || PREREG=hpn/HPN-DESIGN.md
   ;;
