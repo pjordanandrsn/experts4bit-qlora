@@ -2382,7 +2382,7 @@ GEMV, which reads half the head's bytes.
   16-row steps, where the head is passed to `F.linear`. The cost is observed, not yet attributed. The candidates are
   the resident int8 copy, and the different tokens the rounded head decodes at 16 rows.
 - **Quality:** SANE inside the bars (bias +0.0022, argmax 0.989), in line with P150's GO at both of P125's gates. The
-  knob rounds the head at every row count, so multi-row outputs change too.
+  knob rounds the head at every row count, so every row count's logits change.
 - **Default:** on for `qwen3_moe` at this head shape (151936 x 2048). It needs K36's GEMV, first released in
   grouped-nf4-gemm 0.48.0. With an older release the default resolves off, recorded in `/health`'s
   `levers.int8_head_bw.source`. `E4B_INT8_HEAD_BW=0` opts out.
