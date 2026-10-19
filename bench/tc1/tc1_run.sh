@@ -345,8 +345,8 @@ PYP
                       echo "BOX_REFUSED fetch_probe rc=$prc: $(tail -1 logs/fetch_probe.log | cut -c1-200)" >> summary.txt; finish 15; }
 fi
 # The PyPI probe (#1767): a host's path to files.pythonhosted.org can be far slower than its path to download.pytorch.org
-# (axo1767-5090-2, machine 143500: 0.88 against 23-66 MB/s), and venv-axolotl pulls most of its wheels from PyPI, so that host ran
-# into the 2,700 s install alarm. A token that registers a floor times one pinned wheel (pypi_probe.py, staged with the token)
+# (axo1767-5090-2, machine 143500: 0.88 against 23-66 MB/s), and venv-axolotl pulls most of its wheels from PyPI, so that host's
+# install took 31 of its 45 alarm minutes; a slightly slower host would have VOIDed. A token that registers a floor times one pinned wheel (pypi_probe.py, staged with the token)
 # before any PyPI-heavy venv is built, and a host below it is refused here (rc 15, host-limited, like the fetch probe). No floor
 # is registered for any other token, so their startups are unchanged. TC1_PYPI_MIN_MBPS overrides; 0 skips.
 PYPI_MIN=${TC1_PYPI_MIN_MBPS:-}

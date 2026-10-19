@@ -2,7 +2,7 @@
 """The box's path to PyPI's file host, timed before any PyPI-heavy venv is built (#1767; bench/tc1/AXO1767-PREREG.md).
 
 axo1767-5090-2's host fetched from files.pythonhosted.org at 0.88 MB/s while download.pytorch.org gave it 23-66 MB/s, so its
-venv-axolotl install ran into its 2,700 s alarm. One fixed, known-size wheel (pinned by size and sha256) is downloaded for at
+venv-axolotl install took 31 min of its 45-min (2,700 s) alarm, against 37 s for venv-e4b. One fixed, known-size wheel (pinned by size and sha256) is downloaded for at
 most --cap-s seconds; the rate is bytes over wall time. Exit 0 when the rate clears --min-mbps (and a complete download matches
 its sha256), 3 below the floor, 4 on a sha256 mismatch or a short complete read, 5 when nothing arrives. One JSON line either way.
     python3 pypi_probe.py --min-mbps 10 [--url URL --size N --sha256 HEX] [--cap-s 60]

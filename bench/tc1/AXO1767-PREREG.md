@@ -74,8 +74,8 @@ is −0.0012 (MATCH), and the evaluator's zero adapter is −0.0044 (MATCH).
   box-started reason); one RTX 5090, any verified host with direct ports except machine 151831 (HP1's).
 - **Time:** about 45 min expected (installs, the model fetch, two arms, two rescores, the evaluator); guard 1.5 h.
 - **PyPI floor (a feasibility term, added 2026-10-19 after `axo1767-5090-2`, before any reading).** That box's host fetched from
-  files.pythonhosted.org at 0.88 MB/s, against 23-66 MB/s from download.pytorch.org, so venv-axolotl ran into its 2,700 s
-  install alarm (VOID_BY_HOST, no strike). The box now times one pinned wheel (`pypi_probe.py`: 35.3 MB, sha256 pinned, at
+  files.pythonhosted.org at 0.88 MB/s, against 23-66 MB/s from download.pytorch.org, so its venv-axolotl install took 31 of
+  its 45 alarm minutes (2,700 s); a slightly slower host would have run into the alarm. The box now times one pinned wheel (`pypi_probe.py`: 35.3 MB, sha256 pinned, at
   most 60 s) right after the fetch probe, and refuses a host below 10 MB/s (rc 15, a startup-floor refusal). It
   protects the guard, never the reading: no band, score or verdict row changes.
 - **Cost:** worst at most $2.50 per box at the policy's 5090 class rate, under the standing no-ask rule.
