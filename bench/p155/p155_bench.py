@@ -64,6 +64,61 @@ def s0_picks(rr_path):
     return s0, sha
 
 
+def compiled_variants(fn):
+    """Every compiled variant in a Triton JIT function's per-device caches, {key: CompiledKernel}; empty if this Triton
+    lays them out differently (the per-plan metadata is REPORTED, never a reason to stop)."""
+    out = {}
+    try:
+        for dev in getattr(fn, "device_caches", {}).values():
+            cache = dev[0] if isinstance(dev, tuple) else dev
+            if isinstance(cache, dict):
+                out.update(cache)
+    except Exception:                                # noqa: BLE001  (reported only)
+        return {}
+    return out
+
+
+def new_variants(fn, before):
+    """The variants compiled since ``before`` (a key set): registers, spills and shared memory per variant, as Triton
+    compiled them for this launch, the inputs of theoretical occupancy."""
+    rows = []
+    for key, k in compiled_variants(fn).items():
+        if key in before:
+            continue
+        try:
+            m = getattr(k, "metadata", None)
+            rows.append({"n_regs": getattr(k, "n_regs", None), "n_spills": getattr(k, "n_spills", None),
+                         "shared": getattr(m, "shared", None), "num_warps": getattr(m, "num_warps", None),
+                         "num_stages": getattr(m, "num_stages", None)})
+        except Exception as e:                       # noqa: BLE001  (reported only)
+            rows.append({"unread": type(e).__name__})
+    return rows
+
+
+def ncu_target(a):
+    """What Nsight Compute captures (REPORTED only): layer 0 at the first confirmation step's real routing, at today's
+    plan. Three warm rounds of (gate_up, down), then the round the runner's ``ncu --launch-skip 6 --launch-count 2``
+    measures. Prints nothing, so ncu's CSV stays clean."""
+    import torch
+    import nf4_smallm
+    from int4_b32 import build_group_tiles_fused
+    k25 = nf4_smallm.gemm_nf4_grouped_smallm
+    s0, _ = s0_picks(a.rr)
+    g = torch.Generator(device="cuda").manual_seed(155)
+    st = {proj: (torch.randint(0, 256, (R.E, N, K // 2), dtype=torch.uint8, generator=g, device="cuda"),
+                 torch.rand(R.E, N, K // 64, generator=g, device="cuda") * 0.05 + 0.01)
+          for proj, (N, K) in R.SHAPES.items()}
+    x = (torch.randn(R.TOKENS, R.SHAPES["gu"][1], generator=g, device="cuda") / 4).to(torch.bfloat16)
+    h = (torch.randn(R.TOKENS * R.TOPK, R.SHAPES["dn"][1], generator=g, device="cuda") / 4).to(torch.bfloat16)
+    ids = s0[0, :, R.CONFIRM_STEPS[0], :].reshape(-1).to(torch.long).cuda()
+    row0, rows, grp, order, _counts, _sids = build_group_tiles_fused(ids, R.E, 16, lean=True, sorted_ids=True)
+    for _ in range(4):
+        k25(x, *st["gu"], row0, rows, grp, order, gather_div=R.TOPK, lut="tree", dot_bf16=False, **R.TODAY)
+        k25(h, *st["dn"], row0, rows, grp, None, scatter=order, lut="tree", dot_bf16=False, **R.TODAY)
+    torch.cuda.synchronize()
+    return 0
+
+
 def n_real_table(s0, layers):
     """[step][layer] distinct experts across the 16 rows (one tile each: no expert gets more than 16 rows)."""
     return [[len(set(s0[li, :, s, :].reshape(-1).tolist())) for li in range(layers)] for s in range(R.STEPS)]
@@ -179,7 +234,12 @@ def main(a):
     # ---- IDENTITY and SELECTION, plan by plan in the registered shuffled order; today's plan also opens and closes
     # each projection's sweep (the drift probe, reported)
     t = time.time()
-    ref = {p: [call[p](li, full[R.IDENTITY_STEP][li], R.TODAY) for li in range(L)] for p in ("gu", "dn")}
+    kfn = nf4_smallm._gemm_nf4_grouped_smallm
+    ref, rec["today_compiled"] = {}, {}
+    for p in ("gu", "dn"):
+        before = set(compiled_variants(kfn))
+        ref[p] = [call[p](li, full[R.IDENTITY_STEP][li], R.TODAY) for li in range(L)]
+        rec["today_compiled"][p] = new_variants(kfn, before)
     torch.cuda.synchronize()
     sel, drift = {"gu": [], "dn": []}, {}
     try:
@@ -190,9 +250,11 @@ def main(a):
                 row = {"plan": dict(plan), "identical": None, "error": None, "step_replays_ms": None}
                 try:
                     tc = time.time()
+                    before = set(compiled_variants(kfn))
                     outs = [call[proj](li, full[R.IDENTITY_STEP][li], plan) for li in range(L)]
                     torch.cuda.synchronize()
                     row["first_call_s"] = round(time.time() - tc, 2)
+                    row["compiled"] = new_variants(kfn, before)
                     diff = [li for li in range(L) if not torch.equal(outs[li], ref[proj][li])]
                     row["identical"] = not diff
                     if diff:
@@ -288,6 +350,7 @@ if __name__ == "__main__":
     ap.add_argument("--select-steps", type=int, default=len(R.SELECT_STEPS))
     ap.add_argument("--confirm-reps", type=int, default=len(R.CONFIRM_STEPS))
     ap.add_argument("--shakedown", action="store_true")
+    ap.add_argument("--ncu-target", action="store_true", help="the calls Nsight Compute captures (reported only)")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args()
     if args.self_test:
@@ -297,6 +360,10 @@ if __name__ == "__main__":
             print(f"p155_bench self-test FAILED: {e}")
             sys.exit(1)
         sys.exit(0)
+    if args.ncu_target:
+        if not args.rr:
+            ap.error("--rr is required")
+        sys.exit(ncu_target(args))
     if not (args.rr and args.out):
         ap.error("--rr and --out are required")
     sys.exit(main(args))

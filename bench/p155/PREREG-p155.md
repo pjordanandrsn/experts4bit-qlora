@@ -14,6 +14,7 @@ maintainer reserved the lane number on 2026-10-19 and set eight conditions, each
 | 6. guard: the fit with >= 25 % headroom (e4b#1845's rule); 575 W, max age 3 days | [Budget](#budget-and-sequencing) |
 | 7. predict how much of the 6.81 ms a plan alone recovers; the next lane if most remains | [Predictions](#predictions-graded-in-the-read-never-ruling) |
 | 8. a microbench premise: GO opens the served read and quotes no gain | Status, and [What follows](#what-follows) |
+| later rulings: cite 24.1 instructions per weight; predict occupancy; a reported Nsight Compute capture, probed first | [Why](#why), [Nsight Compute](#reported-only-nsight-compute-on-one-call-of-each) |
 
 ## Why
 
@@ -23,19 +24,22 @@ KC, warps, stages) is its one knob with no quality cost, because the kernel's co
 bit". e4b serves one plan, BLOCK_N 32, KC 64, 4 warps, 3 stages (`hot_residency._K25_PLAN`). That is K27's best of six
 TF32 plans at Granite's and OLMoE's B=16 shapes, and it has never been swept at Qwen3's.
 
-What a plan cannot change, and so the basis of the predictions:
+The two floors, and what neither explains (the basis of the predictions):
 - **The bytes.** At 16 tokens, each with 8 distinct experts, no expert gets more than 16 rows, so every routed expert
-  has exactly one 16-row tile and streams its whole slab once.
-- **The instructions per weight.** b1-decode's $0 static count (triton 3.4.0, SASS of K25's K loop at the served
-  constexprs; to be published with grouped-nf4-gemm's K38 design note) is **34.5 lane instructions per weight on
-  sm_120**: select tree 11.6, logic, shift and address 14.6, shared 2.2, global loads 1.6, the rest under 1 each.
-  2,787 experts a step x 4.72 M weights x 34.5 is about 454 G lane instructions. At 170 SMs x 128 lanes x 2.4-2.8 GHz
-  that is an issue estimate of **7.5-8.7 ms**: above the 4.94 ms byte floor, toward the recorded 11.75 ms. It is an
-  estimate (a static count at one issue per scheduler cycle), not a timing.
+  has exactly one 16-row tile and streams its whole slab once: P154's byte floor, **4.94 ms**.
+- **The instructions per weight.** b1-decode's $0 static count of K25's K loop, compiled with the served launch's own
+  specialization (triton 3.4.0, its divisibility hints included; to be published with grouped-nf4-gemm's K39 work) is
+  **24.1 lane instructions per weight on sm_120**: the select tree 10.25, logic and shift 9.9, the rest about 4.
+  2,787 experts a step x 4.72 M weights x 24.1 is about 317 G lane instructions. At 170 SMs x 128 lanes x 2.4-2.8 GHz
+  that is an issue estimate of **5.2-6.1 ms**. An earlier count of 34.5, without those hints, was withdrawn.
+- **Neither explains the recorded 11.75 ms.** The decode is a co-floor, a little above the bytes, and about 5.6-6.5 ms
+  remains: latency, occupancy or the access pattern. The same compile puts K25 at **80 registers a thread, no spills**,
+  so **6 CTAs (24 of 48 warps) an SM, 50 % theoretical occupancy, register-limited**.
 
-A plan moves neither term, only how well the loads and the decode overlap. The empty tiles (about 78 of the 136 slots)
-return before K25's K loop, so compacting the grid removes only their dispatches. This lane prices that as a reported
-arm.
+So a plan is a plausible lever after all. It changes neither floor, but warps, stages and BLOCK_N change registers per
+thread, shared memory and the loads in flight, which is where the unexplained part is suspected. The empty tiles (about
+78 of the 136 slots) return before K25's K loop, so compacting the grid removes only their dispatches; this lane prices
+that as a reported arm.
 
 ## The instrument (`p155_bench.py`)
 
@@ -55,6 +59,8 @@ arm.
   weight values: its decode has no data-dependent branch.
 - **The grid:** BLOCK_N {16, 32, 64, 128} x KC {64, 128, 256} x warps {2, 4, 8} x stages {2, 3, 4}, **108 plans**, today's
   among them. The codebook decode (`tree`) and the precision (TF32 on fp32 weights, the served class) are fixed.
+- **Per plan, reported:** the registers, spills and shared memory Triton compiled each plan to, read from its own cache
+  at the plan's first call, so the read can set the ranking beside theoretical occupancy.
 
 ### The routing
 
@@ -100,6 +106,16 @@ S0's real picks, the maintainer's ruling: rows 0-15 of P153's router replay, `be
 
 The bench records raw replay times only. `p155_reduce.py` derives the selection and the verdict from them.
 
+### Reported only: Nsight Compute on one call of each
+
+After the verdict is written, the runner captures ONE gate_up and ONE down call at today's plan, on layer 0 of step 64's
+real routing (`p155_bench.py --ncu-target`): the SpeedOfLight, Occupancy, LaunchStats, WarpStateStats and
+MemoryWorkloadAnalysis sections, with the clocks not locked, into `ncu_k25.csv`. That gives achieved occupancy, the warp
+stall reasons, DRAM throughput, the L2 hit rate and registers per thread.
+- **A probe first:** one `--metrics sm__cycles_elapsed.avg` run. No `ncu` (after one bounded install attempt), refused
+  counters (`ERR_NVGPUCTRPERM` is common in rented containers) or no time left records why in `summary.txt` and moves on.
+- **It never fails the lane** and never changes the verdict or the exit code. A skipped capture is not a strike.
+
 ## The rule (`p155_reduce.py`, fixed before data)
 
 - **SELECTION** (fixed before data):
@@ -137,25 +153,31 @@ The bench records raw replay times only. `p155_reduce.py` derives the selection 
 |---|---|---|
 | **Fidelity:** today's both-GEMM microbench step is 9.5-14.0 ms (P152's served census recorded 11.748 ms) | the microbench is the served regime | the regime differs. A GO still opens only the served read, and a NO_GO says "not at the microbench's regime" |
 | **Contract:** no plan that runs moves a bit | gnf4's contract holds on sm_120 across the grid | a contract finding to gnf4, with the plans and steps |
-| **The headline:** the winner's confirmed median is 1.00-1.12, so **NO_GO**. P(GO) about 20 % | a plan alone is not the lever at W16 | above: GO, and the served read registers |
-| **Condition 7:** a plan alone recovers at most **25 %** of the 6.81 ms, at most 1.7 ms of P152's 11.748 ms | most of the gap stays; see What follows | a plan recovers more than the issue estimate allows. The estimate, or the regime, is wrong |
+| **The headline:** the winner's confirmed median is 1.02-1.15, so **NO_GO**. P(GO) about 30 % | a plan helps, but not enough to open the served read | above: GO, and the served read registers. Below: the plan is no lever at all |
+| **Condition 7:** a plan alone recovers at most **25 %** of the 6.81 ms, at most 1.7 ms of P152's 11.748 ms | most of the gap stays; see What follows | the plan was the occupancy lever, and the gap was largely latency it could hide |
+| **Registers:** today's plan compiles to 80 registers a thread, no spills (50 % theoretical occupancy), graded from the box's own compile | b1-decode's offline compile is the served one | the served compile differs. The occupancy argument is re-based on the box's numbers |
+| **Nsight (if counters are available):** achieved occupancy at most 50 %, and long-scoreboard (memory dependency) the largest stall reason | the gap is latency the occupancy cannot hide | the capture names another cause: the math pipe, the dispatch or the access pattern. UNREAD without counters |
 | **The compaction ceiling, K/T, is 1.00-1.06** | compaction (K38) parks, as b1-decode's note says | K38's persistent kernel registers its own microbench lane |
 | **The self-pair** is within 0.005 of 1 | the instrument resolves the bar easily | a noisier card. The 2-SE guard carries it |
 | **The winner's curse:** its selection ratio exceeds its confirmation by 0-0.03 | selection was honest, with a small curse | a large curse (above), or none at all (below) |
 
-The basis of the headline: a plan changes neither the bytes nor the 34.5 instructions per weight. K27's TF32 sweep at
-OLMoE's B=16 shapes, the closest regime (about 2 rows per expert), ranked today's plan first of six, with the runner-up
-3 % behind. Against the issue estimate, at most about 1.35-1.57x (11.75 / 8.7 to 11.75 / 7.5) is possible in
-principle, and only with perfect overlap.
+The basis of the headline:
+- **For a lift:** at 50 % register-limited occupancy, plans with fewer registers a thread or more loads in flight can
+  hide more latency. Against the larger floor, up to about 1.9-2.3x (11.75 / 6.1 to 11.75 / 5.2) is possible in
+  principle.
+- **Against a large one:** K27's TF32 sweep at OLMoE's B=16 shapes, the closest regime (about 2 rows per expert),
+  ranked today's plan first of six, with the runner-up 3 % behind. That grid had no 2- or 8-warp plan and no fourth
+  stage.
 
 ## What follows
 
 - **GO:** a served FLIP read registers as its own lane, with its own bars, on the per-projection K25 plans for
   qwen3_moe (P143's pattern: the sweep, then the served read). It quotes no gain from this lane.
 - **NO_GO with most of the 6.81 ms left:** the maintainer's ruling names (2), tile compaction (K38, b1-decode's), as the
-  next lane, and this run prices it with K. If K reads under 1.05, compaction parks. The record then names the decode
-  cost as the candidate for the maintainer's decision: fewer instructions per weight, where b1-decode's count puts the
-  select tree at 11.6, nibble extraction at about 7.5 and address arithmetic at about 4.
+  next lane, and this run prices it with K. If K reads under 1.05, compaction parks (K38 is already parked behind it).
+  The record then names what the Nsight capture and the per-plan registers point to, beside K39 (b1-decode's
+  decode-efficient path: about 14-17 instructions per weight and 64 registers, 67 % theoretical occupancy, still to be
+  shown bitwise). The maintainer decides the next lane.
 
 ## Before the box: the $0 A2000 shakedown
 
@@ -173,8 +195,8 @@ then reads its record, which must come back **SHAKEDOWN** with no structural fau
 - **One RTX 5090:**
   - hosts with a recorded power cap of at least 575 W (`vast_min_power_limit_w: 575`, `vast_power_limit_unknown:
     exclude`), read within the last 3 days (`vast_power_limit_max_age_days: 3`);
-  - declared at $1.05/h, **guard 1.0 h**, at most 10 GB at <= $0.011/GB. Worst case 1.0 x $1.05 + 10 x $0.011 =
-    **$1.16**, under the standing rule;
+  - declared at $1.05/h, **guard 1.1 h**, at most 10 GB at <= $0.011/GB. Worst case 1.1 x $1.05 + 10 x $0.011 =
+    **$1.27**, under the standing rule;
   - disk 60 GB (the box's floor is 20 GB free). Nothing is fetched from a hub.
 - **The fit, e4b#1845's rule, with at least 25 % headroom:**
   - **Install, self-tests and premise:** P152's and P154's boxes took about 96 s each. The allowance is 450 s for the
@@ -182,23 +204,26 @@ then reads its record, which must come back **SHAKEDOWN** with no structural fau
   - **The bench:** K27's whole 5090 bench, about 52 compiled K25 variants with their timing, took 27.5 s. P155 compiles
     216 variants, times 108 plans x 2 projections x 8 steps, then 64 reps x 6 graphs: about 6-10 min estimated.
     `NEED_BENCH` = 1200 s. Its alarm can run to 2400 s if the deadline allows.
+  - **Nsight Compute:** `NEED_NCU` = 300 s: one bounded install attempt (240 s) if `ncu` is absent, the probe, and the
+    capture of two calls.
   - **The reserve:** `RESERVE` = 600 s, for the reduce, the fetch-back and the teardown.
-  - **The runner's check, before the install:** `FIT` = 600 + 1200 + 600 = 2400 s, and `FIT_NEED` = 2400 x 1.25 =
-    3000 s. Anything short of that is a refusal, rc 41.
-  - **The static fit:** boot 300 s + 2400 s = 2700 s, and 2700 x 1.25 = 3375 s <= 3600 s (1.0 h). `tests/test_p155.py`
+  - **The runner's check, before the install:** `FIT` = 600 + 1200 + 300 + 600 = 2700 s, and `FIT_NEED` = 2700 x 1.25 =
+    3375 s. Anything short of that is a refusal, rc 41.
+  - **The static fit:** boot 300 s + 2700 s = 3000 s, and 3000 x 1.25 = 3750 s <= 3960 s (1.1 h). `tests/test_p155.py`
     asserts it.
 - **Run ids** `p155-5090-1` to `-3`. Two consecutive HARNESS_ERROR, VOID or NOT_RUN runs stop the lane.
   - **Not a strike:** a pre-flight host stall; a power-floor refusal (rc 17); a fit refusal (rc 41), except that two
     consecutive fit refusals count as one strike.
-  - **A strike:** a time-left skip (STOP-2, rc 40).
+  - **A strike:** a time-left skip of the bench (STOP-2, rc 40). A skipped Nsight capture is not one.
 - **Sequencing:** the rental waits for three things: this registration's merge, the maintainer's final pass, and the
   shakedown's committed record. Then the shared pre-flight, and `--validate` on the exact manifest.
 
 ## Receipts
 
 Fetched to the run directory's `p155/` and published under `bench/p155/receipts/<run>/` by the 2026-10-19 citation rules:
-`bench_p155.json` (every replay time), `verdict_p155.json`, `summary.txt`, `forensics.txt`, `versions.txt`,
-`gpu_phases.csv` and the logs, with `SHA256SUMS`. The box writes no instance id and no host name.
+`bench_p155.json` (every replay time and each plan's compiled registers), `verdict_p155.json`, `ncu_k25.csv` when the
+counters were available, `summary.txt`, `forensics.txt`, `versions.txt`, `gpu_phases.csv` and the logs, with
+`SHA256SUMS`. The box writes no instance id and no host name.
 `RESULTS-p155.md` is written from those files.
 
 ## What this lane cannot say

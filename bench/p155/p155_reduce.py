@@ -40,8 +40,8 @@ GO_BAR = 1.15                              # the winner's median ratio minus 2 S
 SELF_BAND = (0.99, 1.01)                   # today's self-pair median, else the instrument is VOID
 P152_BOTH_MS = 8.395073 + 3.35296          # P152's verdict: the removable time of both K25 lines, 136x48 + 136x64
 P154_HEADROOM_MS = 6.8124                  # P154's verdict: that time minus the byte floor
-PRED = {"fidelity_ms": (9.5, 14.0), "winner": (1.00, 1.12), "share_max": 0.25, "compaction": (1.00, 1.06),
-        "self_pair": 0.005, "shrink": (0.0, 0.03)}
+PRED = {"fidelity_ms": (9.5, 14.0), "winner": (1.02, 1.15), "share_max": 0.25, "compaction": (1.00, 1.06),
+        "self_pair": 0.005, "shrink": (0.0, 0.03), "regs": 80}
 
 
 def plan_key(p):
@@ -217,6 +217,7 @@ def verdict(rec):
     out["identity_failures"] = {p: [list(plan_key(r["plan"])) for r in rows[p] if r.get("identical") is False]
                                 for p in ("gu", "dn")}
     out["drift"] = rec.get("drift")
+    out["today_compiled"] = rec.get("today_compiled")
     if winner:
         w = winner["plan"]
         t_sel = sel_ms["gu"][plan_key(TODAY)] + sel_ms["dn"][plan_key(TODAY)]
@@ -247,13 +248,23 @@ def _grade(o):
         "fidelity: today's both-GEMM step in 9.5-14.0 ms": _band(o["today_ms_per_step"], *PRED["fidelity_ms"]),
         "contract: no plan that ran moved a bit": "HELD" if not (sel.get("gu") or sel.get("dn") or o["contract_findings"])
         else "MISSED",
-        "winner's confirmed median in 1.00-1.12 (NO_GO)": _band(w and w["median"], *PRED["winner"]),
+        "winner's confirmed median in 1.02-1.15 (NO_GO)": _band(w and w["median"], *PRED["winner"]),
         "a plan recovers at most 25 % of the 6.81 ms": _band(o.get("winner_share_of_headroom"), -1.0, PRED["share_max"]),
         "compaction's ceiling in 1.00-1.06": _band(o["compaction"]["median"], *PRED["compaction"]),
         "self-pair within 0.005 of 1": _band(abs(o["self_pair"]["median"] - 1), 0.0, PRED["self_pair"]),
         "winner's selection ratio exceeds its confirmation by 0-0.03": _band(
             w and o["winner_selection_ratio"] - w["median"], *PRED["shrink"]),
+        "today's plan compiles to 80 registers, no spills (theoretical occupancy 50 %)": _regs(o.get("today_compiled")),
     }
+
+
+def _regs(tc):
+    """HELD when both projections' compiled variants of today's plan read 80 registers and no spills; UNREAD when this
+    Triton's cache did not expose them (reported metadata, never a fault)."""
+    vs = [v for p in ("gu", "dn") for v in ((tc or {}).get(p) or [])]
+    if not vs or any(not isinstance(v.get("n_regs"), int) or not isinstance(v.get("n_spills"), int) for v in vs):
+        return "UNREAD"
+    return "HELD" if all(v["n_regs"] == PRED["regs"] and v["n_spills"] == 0 for v in vs) else "MISSED"
 
 
 # ------------------------------------------------------------------------------------------------ self-test (mutants)
@@ -295,8 +306,14 @@ def self_test():
     base = _fake()
     o = verdict(base)
     assert o["verdict"] == "GO" and o["winner"]["arm"] == "C1", o["why"]
-    assert all(g in ("HELD", "MISSED") for g in o["predictions"].values()), o["predictions"]
-    assert o["predictions"]["winner's confirmed median in 1.00-1.12 (NO_GO)"] == "MISSED"
+    assert all(g in ("HELD", "MISSED", "UNREAD") for g in o["predictions"].values()), o["predictions"]
+    assert o["predictions"]["winner's confirmed median in 1.02-1.15 (NO_GO)"] == "MISSED"
+    regs = "today's plan compiles to 80 registers, no spills (theoretical occupancy 50 %)"
+    assert o["predictions"][regs] == "UNREAD"                                # no metadata recorded
+    assert verdict(_fake(today_compiled={"gu": [{"n_regs": 80, "n_spills": 0}], "dn": [{"n_regs": 80, "n_spills": 0}]}))[
+        "predictions"][regs] == "HELD"
+    assert verdict(_fake(today_compiled={"gu": [{"n_regs": 96, "n_spills": 0}], "dn": [{"n_regs": 80, "n_spills": 0}]}))[
+        "predictions"][regs] == "MISSED"
     assert v(_fake(win=1.10)) == "NO_GO"                                     # a lift under the bar
     assert v(_fake(win=1.00)) == "NO_GO"                                     # flat
     assert v(_fake(win=1.16, noise=0.08)) == "NO_GO"                         # median over the bar, lower bound under it
@@ -351,7 +368,7 @@ def self_test():
     bad = _fake()
     bad["select"]["dn"] = bad["select"]["dn"][:-1]
     assert v(bad) == "VOID"                                                  # a plan missing from the selection
-    print("p155_reduce self-test OK (25 cases)")
+    print("p155_reduce self-test OK (27 cases)")
 
 
 def main():

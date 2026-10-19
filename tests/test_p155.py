@@ -27,7 +27,7 @@ DRIVE = (LANE / "p155_drive.sh").read_text(encoding="utf-8")
 BENCH = (LANE / "p155_bench.py").read_text(encoding="utf-8")
 PREREG = (LANE / "PREREG-p155.md").read_text(encoding="utf-8")
 LIB = (REPO / "experts4bit_qlora" / "engines" / "hot_residency.py").read_text(encoding="utf-8")
-GUARD_H = 1.0
+GUARD_H = 1.1
 BOOT_S = 300          # the launcher's create-to-runner allowance (P152's and P154's, kept)
 HEADROOM = 1.25       # e4b#1845's cross-lane rule
 
@@ -170,17 +170,30 @@ def test_the_runner_refuses_before_the_install():
 def test_the_guard_fits_with_25_percent_headroom():
     """e4b#1845's rule on both sides: the runner refuses before the install below FIT x 125 %, and the registered guard
     holds the boot plus that fit with 25 % headroom."""
-    k = {n: int(v) for n, v in re.findall(r"^(INSTALL_TO_GATE_S|NEED_BENCH|RESERVE)=(\d+)", RUN, re.M)}
-    assert k == {"INSTALL_TO_GATE_S": 600, "NEED_BENCH": 1200, "RESERVE": 600}, k
-    assert "FIT=$((INSTALL_TO_GATE_S + NEED_BENCH + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100))" in RUN
+    k = {n: int(v) for n, v in re.findall(r"^(INSTALL_TO_GATE_S|NEED_BENCH|NEED_NCU|RESERVE)=(\d+)", RUN, re.M)}
+    assert k == {"INSTALL_TO_GATE_S": 600, "NEED_BENCH": 1200, "NEED_NCU": 300, "RESERVE": 600}, k
+    assert ("FIT=$((INSTALL_TO_GATE_S + NEED_BENCH + NEED_NCU + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100))"
+            in RUN)
     assert re.search(r"^FIT_HEADROOM_PCT=125 ", RUN, re.M)
     assert "two consecutive headroom refusals count as one strike" in RUN
     fit = sum(k.values())
-    assert fit * 125 // 100 == 3000 and "`FIT_NEED` = 2400 x 1.25 =\n    3000 s" in PREREG
+    assert fit * 125 // 100 == 3375 and "`FIT_NEED` = 2700 x 1.25 =\n    3375 s" in PREREG
     assert (BOOT_S + fit) * HEADROOM <= GUARD_H * 3600
-    assert "2700 x 1.25 = 3375 s <= 3600 s (1.0 h)" in PREREG and "**guard 1.0 h**" in PREREG
+    assert "3000 x 1.25 = 3750 s <= 3960 s (1.1 h)" in PREREG and "**guard 1.1 h**" in PREREG
     line = next(x for x in RUN.splitlines() if x.startswith("can_run(){"))
     assert "fit=$((need + RESERVE))" in line and "needs ${fit}s" in line and "only ${left}s left" in line
+
+
+def test_the_nsight_step_is_reported_only():
+    """It runs after the verdict is read, probes the counters first, and every path out of it returns 0: the exit code is
+    the verdict's alone (the maintainer's ruling, and loggetta's ERR_NVGPUCTRPERM note)."""
+    body = RUN[RUN.index("ncu_step(){"):RUN.index("\n}\n", RUN.index("ncu_step(){"))]
+    assert "finish" not in body and "exit" not in body
+    assert body.index("--metrics sm__cycles_elapsed.avg") < body.index("--launch-skip 6 --launch-count 2")
+    assert "ERR_NVGPUCTRPERM" in body and "counters unavailable on this host" in body
+    tail = RUN[RUN.index('V=$(python -c "import json'):]
+    assert tail.index('if can_run $NEED_NCU "ncu (reported only)"; then') < tail.index('case "$V" in GO|NO_GO) finish 0;;')
+    assert "range(4)" in BENCH[BENCH.index("def ncu_target"):BENCH.index("def n_real_table")]   # 3 warm rounds + 1
 
 
 def test_no_instance_id_or_host_name_reaches_the_box():

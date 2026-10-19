@@ -8,7 +8,8 @@ contract says moves no output bit, against the 6.81 ms of headroom P154 priced.
 - **Selection:** every plan must keep today's bits; the plans are ranked on 8 selection steps, and three are carried.
 - **Confirmation:** the carried three are re-timed against today's plan on the 64 held-out steps, in paired, rotated
   reps, with a self-pair. GO needs median - 2 SE >= 1.15x on both GEMMs, decided on the confirmation only.
-- **Reported, never ruling:** a compaction arm (the real-tile prefix) prices tile compaction's ceiling.
-- **Box:** one RTX 5090, guard 1.0 h (the fit with 25 % headroom, checked before the install), worst $1.16.
+- **Reported, never ruling:** a compaction arm (the real-tile prefix) prices tile compaction's ceiling; each plan's
+  compiled registers are recorded; Nsight Compute captures one call of each GEMM if the host allows counters.
+- **Box:** one RTX 5090, guard 1.1 h (the fit with 25 % headroom, checked before the install), worst $1.27.
 
 A GO opens a served read as its own registration. Files: `bench/p155/` and `tests/test_p155.py`.

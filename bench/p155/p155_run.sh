@@ -20,6 +20,7 @@ NF4_SMALLM_SHA256=96176de875af5273d3f13edd9c3dfd1371069dea98a7bf6d618f1dac05e2d4
 INT4_B32_SHA256=773eff5db7be77dea3d1f9048a6e708a94e79634baf17f452bf2848e24a2072f     # kernel/int4_b32.py, both pins
 INSTALL_TO_GATE_S=600   # the install (450 s) and the self-tests with the premise (150 s): P152's and P154's walls, rounded up
 NEED_BENCH=1200         # the microbench: 216 compiled plan variants, 8 selection steps each, 64 confirmation reps
+NEED_NCU=300            # REPORTED only: Nsight Compute on one gate_up and one down call (an install if absent, a probe)
 RESERVE=600             # can_run's margin after the bench: the reduce, the fetch-back and the teardown
 MIN_POWER_W=575   # P149's power floor (P152's and P154's, kept): a capped board refuses before the install, rc 17
 GPU_CLASS=5090; MIN_RAM_GB=16; MIN_DISK_GB=20
@@ -27,7 +28,7 @@ case "$P155_RUN_ID" in
   p155-5090-1|p155-5090-2|p155-5090-3) :;;
   *) say "unregistered run ID: $P155_RUN_ID"; finish 78;;
 esac
-[ -z "${P155_GPU_CLASS:-}${P155_MIN_DISK_GB:-}${P155_MIN_RAM_GB:-}${P155_MIN_POWER_W:-}${P155_NEED_BENCH:-}" ] || { say 'reading knobs are frozen'; finish 78; }
+[ -z "${P155_GPU_CLASS:-}${P155_MIN_DISK_GB:-}${P155_MIN_RAM_GB:-}${P155_MIN_POWER_W:-}${P155_NEED_BENCH:-}${P155_NEED_NCU:-}" ] || { say 'reading knobs are frozen'; finish 78; }
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 # every serving lever, engine knob and kernel knob starts unset: today's served plan is the control
 unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_SERVE_ATTN_INT4 E4B_FUSE_T1_GLUE E4B_FUSE_T1_GLUE_R2 \
@@ -84,7 +85,7 @@ FREE_GB=$(df -BG --output=avail $W 2>/dev/null | tail -1 | tr -dc 0-9)
 RAM_GB=$(awk '/^MemTotal:/{print int($2/1048576)}' /proc/meminfo)
 [ "${RAM_GB:-0}" -ge "$MIN_RAM_GB" ] || { say "REFUSED: ${RAM_GB:-?} GiB host RAM < ${MIN_RAM_GB} GiB"; echo "refused: ram ${RAM_GB:-?} GiB" > REFUSAL; finish 16; }
 FIT_HEADROOM_PCT=125   # the guard keeps 25 % headroom over the fit (cross-lane rule)
-FIT=$((INSTALL_TO_GATE_S + NEED_BENCH + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100)); LEFT=$((P155_DEADLINE_EPOCH - $(date +%s)))
+FIT=$((INSTALL_TO_GATE_S + NEED_BENCH + NEED_NCU + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100)); LEFT=$((P155_DEADLINE_EPOCH - $(date +%s)))
 # rc 41: a refusal before the install, not a strike; two consecutive headroom refusals count as one strike
 [ "$LEFT" -ge "$FIT_NEED" ] || { say "REFUSED: needs ${FIT_NEED}s (fit ${FIT}s x ${FIT_HEADROOM_PCT}%), ${LEFT}s left"; echo "refused: fit ${FIT_NEED}s, ${LEFT}s left" > REFUSAL; finish 41; }
 echo "GUARD_FIT fit=${FIT}s need=${FIT_NEED}s left=${LEFT}s" | tee -a summary.txt
@@ -152,4 +153,28 @@ rc=$?; gpu_snap "bench end"
 say "reduce"; python $W/p155_reduce.py --bench "$W/bench_p155.json" --out "$W/verdict_p155.json" 2>&1 | tee -a summary.txt
 [ "${PIPESTATUS[0]}" = 0 ] && [ -s "$W/verdict_p155.json" ] || { say "REDUCER FAILED"; finish 22; }
 V=$(python -c "import json; print(json.load(open('$W/verdict_p155.json'))['verdict'])")
+# ---- REPORTED only, after the verdict is written: Nsight Compute on one gate_up and one down call at today's plan on S0's
+# routing (the maintainer's ruling). A probe first: no ncu, a refused counter (ERR_NVGPUCTRPERM is common in rented
+# containers) or no time left records why and moves on. It never changes the verdict or the exit code.
+ncu_step(){
+  local NCU rc
+  NCU=$(command -v ncu || ls /usr/local/cuda/bin/ncu /opt/nvidia/nsight-compute/*/ncu 2>/dev/null | head -1)
+  if [ -z "$NCU" ]; then
+    { perl -e 'alarm 90; exec @ARGV' apt-get update -q && perl -e 'alarm 150; exec @ARGV' apt-get install -y -q cuda-nsight-compute-12-8; } > logs/ncu_install.log 2>&1
+    NCU=$(command -v ncu || ls /usr/local/cuda/bin/ncu /opt/nvidia/nsight-compute/*/ncu 2>/dev/null | head -1)
+  fi
+  [ -n "$NCU" ] || { echo "NCU unavailable: no ncu on this host" | tee -a summary.txt; return 0; }
+  PYTHONPATH= perl -e 'alarm 120; exec @ARGV' "$NCU" --metrics sm__cycles_elapsed.avg --kernel-name regex:gemm_nf4_grouped_smallm \
+    --launch-count 1 python $W/p155_bench.py --rr $W/rr.json.pt --ncu-target > logs/ncu_probe.log 2>&1
+  if grep -q "ERR_NVGPUCTRPERM" logs/ncu_probe.log || ! grep -q "sm__cycles_elapsed.avg" logs/ncu_probe.log; then
+    echo "NCU counters unavailable on this host ($(grep -m1 -o 'ERR_[A-Z_]*' logs/ncu_probe.log || echo 'no metric line'))" | tee -a summary.txt
+    return 0
+  fi
+  PYTHONPATH= perl -e 'alarm 240; exec @ARGV' "$NCU" --clock-control none --kernel-name regex:gemm_nf4_grouped_smallm \
+    --launch-skip 6 --launch-count 2 --section SpeedOfLight --section Occupancy --section LaunchStats \
+    --section WarpStateStats --section MemoryWorkloadAnalysis --csv --page details \
+    python $W/p155_bench.py --rr $W/rr.json.pt --ncu-target > ncu_k25.csv 2> logs/ncu.log
+  rc=$?; echo "NCU captured rc=$rc ($(wc -l < ncu_k25.csv) csv lines, $("$NCU" --version 2>/dev/null | tail -1))" | tee -a summary.txt
+}
+if can_run $NEED_NCU "ncu (reported only)"; then gpu_snap "ncu start"; ncu_step; gpu_snap "ncu end"; fi
 case "$V" in GO|NO_GO) finish 0;; *) say "P155 $V -- no reading"; finish 27;; esac
