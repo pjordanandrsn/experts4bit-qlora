@@ -29,7 +29,7 @@ at `63b21b13`, equal to the staged pin and the box's copy; self-test 47/47).
   - its model load took 50.5 s, against about 31 s for every later arm;
   - its timed blocks show no throttle (SM clocks 2917-2925 MHz, 51-55 C).
 
-  Every other self-pair agrees within 0.06 %. P143 A3 ran the same form clean on another host. P131 met the same kind
+  Every other W1 self-pair agrees within 0.06 % (the W16 self-pairs within 0.11 %). P143 A3 ran the same form clean on another host. P131 met the same kind
   of first-process effect with the opposite sign (its first process 4.7 % fast) and answered it with an unscored
   warm-up process 0 (P131 Amendment 2).
 
@@ -37,7 +37,8 @@ at `63b21b13`, equal to the staged pin and the box's copy; self-test 47/47).
 S1c/S0c 1.0246, S1d/S0d 1.0247), under the 1.03 bar. P148 projected D1 at 0.131137 ms, 3.35 % of the unprofiled
 3.913 ms step, so the clean pairs realize about **0.73** of the microbench projection. Also reported:
 - W16 unchanged (pairs 0.9999-1.0013); decode at 2+ rows routes nothing, so only the W16 ramp's one-row steps can move.
-- SANE inside A2's band: bias +0.000457, argmax 0.9681, KL 0.0081.
+- SANE inside A2's band: bias +0.000457, argmax 0.9681, KL 0.0081, computed from `sane_off.json` and `sane_on.json`
+  with the reducer's own formula (the reducer stops at NOISY before it reaches SANE).
 - W1 tokens: S1 identical to S0 at both lengths.
 
 ## Predictions (graded, never ruling)
@@ -57,6 +58,6 @@ S1c/S0c 1.0246, S1d/S0d 1.0247), under the 1.03 bar. P148 projected D1 at 0.1311
 - **P153** (D2's served read, the int8 lm_head through K36) carries P131 A2's warm-up process 0, written into its
   registration before any data: an S0 build and speed pass before S0a, reported only, never in a pair, a self-pair or a
   bar.
-- **Hosts:** two of the three 5090s drawn without a recorded power cap read 520 W. The launcher now records each host's
-  cap (adertha-agents#268), and a manifest can walk only hosts with a recorded cap of at least the floor
-  (`vast_power_limit_unknown: exclude`, #269), which `p151-5090-4` used.
+- **Hosts:** both 5090s drawn without a recorded power cap (`-1` and `-3`) read 520 W; `-4`'s host had a recorded cap.
+  The launcher now records each host's cap (adertha-agents#268), and a manifest can walk only hosts with a recorded
+  cap of at least the floor (`vast_power_limit_unknown: exclude`, #269), which `p151-5090-4` used.

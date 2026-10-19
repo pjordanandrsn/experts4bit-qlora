@@ -25,7 +25,8 @@ Reported, never ruling (a NOISY reads no flip):
 | ratio | 1.0603 | 1.0244 | 1.0246 | 1.0247 |
 
 - g16 0.99991 (pairs 0.9999-1.0013).
-- SANE: bias +0.000457, argmax 0.9681, KL 0.0081 (inside A2's band).
+- SANE: bias +0.000457, argmax 0.9681, KL 0.0081 (inside A2's band), from `sane_off.json` and `sane_on.json` with the
+  reducer's own formula (the reducer stops at NOISY before SANE).
 - W1 tokens: S1 identical to S0 at both lengths.
 
 The launcher's receipt and ledger row are in the private receipt store. `SHA256SUMS` covers every file here. Twelve
