@@ -59,5 +59,5 @@ S1c/S0c 1.0246, S1d/S0d 1.0247), under the 1.03 bar. P148 projected D1 at 0.1311
   registration before any data: an S0 build and speed pass before S0a, reported only, never in a pair, a self-pair or a
   bar.
 - **Hosts:** both 5090s drawn without a recorded power cap (`-1` and `-3`) read 520 W; `-4`'s host had a recorded cap.
-  The launcher now records each host's cap (adertha-agents#268), and a manifest can walk only hosts with a recorded
-  cap of at least the floor (`vast_power_limit_unknown: exclude`, #269), which `p151-5090-4` used.
+  The launcher now records each host's power cap and can screen on it; a manifest can walk only hosts with a recorded
+  cap of at least the floor, which `p151-5090-4` used.
