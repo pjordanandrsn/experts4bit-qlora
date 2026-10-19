@@ -107,10 +107,9 @@ the band, under 1.02, which the PREREG named as the miss below.
 - **The candidate left is the decode cost:** fewer instructions per weight at the same plan. That is K39 (b1-decode's;
   24.1 to 17.0 lane instructions per weight under triton 3.4.0, bitwise against K25), and its own lane, **P156**, times it
   as registered. P155 could not move that variable.
-- **Unnamed:** most of the gap. Above the byte floor it is 6.81 ms (6.6 ms after the best plan; 6.05-7.07 ms over P154's
-  floor range). Above the issue estimate, the larger floor (5.2-6.1 ms from 24.1 instructions per weight at 2.4-2.8 GHz,
-  an estimate, not a timing), the recorded 11.75 ms leaves about 5.6-6.5 ms. Rented hosts refuse Nsight's counters, so
-  naming it with stall reasons needs a host that allows them, or another instrument.
+- **Unnamed:** most of P154's 6.81 ms headroom over the byte floor (6.6 ms after the best plan; 6.05-7.07 ms over
+  P154's floor range). Rented hosts refuse Nsight's counters, so naming it with stall reasons needs a host that allows
+  them, or another instrument.
 
 ## What this lane cannot say
 
