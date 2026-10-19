@@ -28,9 +28,9 @@ reproduction, not a confirmation. So **P150 rules on windows nobody has read**:
   - k16 (123 windows): `7ab52a502ffc5292802db52e4325f025688deeed735a8c04ce33fba5789acded`
 - **The box checks them before any arm.** `p150_box.py --windows-check` recomputes both, and a mismatch refuses the box
   (19). Every quality record carries the hashes of the windows it read, and the reducer VOIDs on any other.
-- **Continuity, reported only:** the split box's I8HEAD read on P125's windows sits beside the ruling as the earlier
-  read, cited, not re-read: t1 argmax 0.9892, upper bound 0.00103 against 0.00549; k16 argmax 0.9904, 0.00125 against
-  0.00580.
+- **Continuity, reported only, labelled as seen before the rule:** the split box's I8HEAD read on P125's windows sits
+  beside the ruling as the earlier read, cited, not re-read: t1 argmax 0.9892, upper bound 0.00103 against 0.00549;
+  k16 argmax 0.9904, 0.00125 against 0.00580.
 
 ## The instrument: the split premise's, plus one wrapper
 
