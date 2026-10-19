@@ -269,6 +269,23 @@ moves buckets 1, 2 and 4 only.
 
 `e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19` ([P143](../bench/p143/RESULTS-p143.md)).
 
+**Qwen3-30B-A3B's lm_head can serve one-row decode from an int8 copy (opt-in).** `E4B_INT8_HEAD_BW=1` rounds the
+151936 x 2048 head in place to its per-row int8 grid, P150's I8HEAD. One-row calls go to grouped-nf4-gemm K36's int8
+GEMV, which reads half the head's bytes.
+- **Speed:** one request decodes **1.052×** as fast on a 5090 (263.7 → 277.5 tok/s; the smallest of four ABBA pairs).
+  The step saving is 0.189 ms, 0.998 of P148's microbench projection.
+- **Sixteen requests:** 0.992, inside the 0.99 line. S1 is below S0 in every W16 pair, though the W16 rate counts only
+  16-row steps, where the head is passed to `F.linear`. The cost is observed, not yet attributed. The candidates are
+  the resident int8 copy, and the different tokens the rounded head decodes at 16 rows.
+- **Quality:** SANE inside the bars (bias +0.0022, argmax 0.989), in line with P150's GO at both of P125's gates. The
+  knob rounds the head at every row count, so multi-row outputs change too.
+- **Default:** none yet. A separate PR may make it `qwen3_moe`'s default, once a grouped-nf4-gemm release carrying
+  K36 is e4b's pin.
+- **Measured basis:** this checkpoint's head on an RTX 5090 (170 SMs), at K36's tuned plan. Other heads take K36's
+  untuned default plan, and other cards are not read.
+
+`e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19` ([P153](../bench/p153/RESULTS-p153.md)).
+
 **Calibrated int4 attention is not licensed on the default.** On Qwen3-30B-A3B, `E4B_SERVE_ATTN_INT4_CALIB=1` decodes
 one request 1.154× as fast (1.238× with the int4 lm_head too). The mean NLL bias stays inside K8's budget, but only
 92.9 % of next-token argmaxes agree with the default at one window per pass (91.8 % with the head), against the 0.95
