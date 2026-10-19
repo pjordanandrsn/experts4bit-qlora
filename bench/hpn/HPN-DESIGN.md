@@ -1,7 +1,8 @@
 # HPN (DESIGN, $0): where HP2's per-row noise comes from
 
-**Status: DESIGN, prospective.** This is the work-well task `heldout-parity-noise-source`, accepted by the maintainer as a $0 A2000
-design. It is **not a registration** and makes **no parity claim**. It authorizes no rental. Its numbers are diagnostic: they decide
+**Status: DESIGN, $0.** This is the work-well task `heldout-parity-noise-source`. The maintainer accepted it as a $0 A2000 design and
+ruled that no P-number registration is needed. This note does a registration's job instead: it, with N0–N3 and the stop rules,
+merges before the first GPU second. It makes **no parity claim**. It authorizes no rental. Its numbers are diagnostic: they decide
 whether any paired held-out-parity instrument can read a 0.005 margin, and they are never scored data.
 
 ## Why
@@ -31,10 +32,23 @@ Decomposition: g(r) = E(r) − I(r) = [E(r) − F(r)] − [I(r) − F(r)]. Repor
 differences, and the correlation between E − F and I − F.
 
 **Depths.** The A2000 (12 GB) cannot hold the 48-layer base, so the read uses `hp1_trunc.py` truncations of the pinned checkpoint
-at L ∈ {2, 4, 8, 16} layers (real weights). It reports how each sd grows with depth, so the 48-layer split can be extrapolated with
-its uncertainty stated. It is not measured at 48 layers.
+at L ∈ {2, 4, 8, 16} layers (real weights). It reports how each sd grows with depth. The maintainer's three conditions on
+truncated depth:
+- **a. N2 is read at every depth that fits.** Its side-dominance call decides only if it is the same at the two deepest depths that
+  fit. If it flips with depth, the outcome is "depth-dependent, unknown at 48 layers": stop, with the reason recorded.
+- **b. Any 48-layer figure is labelled an EXTRAPOLATION**, with its fit (sd against depth) and its uncertainty. It is never quoted as
+  a measurement of the 48-layer base.
+- **c. The A2000 is shared.** The household SDXL sidecar can hold about 8 GB until it idle-unloads, so L16 may not fit. Free memory
+  is measured and recorded at claim time, along with the deepest depth that fit. A missing L16 is a stated limit, not a failure.
+  This is a numerical-correctness read, not a speed read, so it reports no timings.
 
 **Rows.** HP2's 300 calibration rows (held-out pool rows 97–396), so the numbers line up with HP2's.
+
+**The two-reruns control (the maintainer's test for any tolerance).** Each reader runs twice on the same base and rows: E twice,
+F twice, and I from two independent one-step arms at the same seed. If a reader's per-row values repeat to five decimals, its
+part of g is a fixed per-path offset, not run-to-run noise. If they scatter, the scatter is reported as that reader's own noise.
+This decides how the spread is described (offset or noise). It does not change the arithmetic for δ0: either way it is spread
+across rows.
 
 **Stages.**
 1. **e4b only.** One e4b K00 calibration step per depth (as HP2's phase B, on the truncated model), its base exported, then E and F.
@@ -46,6 +60,9 @@ its uncertainty stated. It is not measured at 48 layers.
    basis HP2 borrowed for `ROUNDTRIP_MATCH = 0.01` from AXO1767's 8-row control.
 
 ## Predictions (stated before data)
+
+- **N0.** E and F repeat to five decimals per row (deterministic eager forwards). I repeats per row at a fixed seed. The per-row
+  spread is therefore a per-path offset, the mirror image of tc-campaign's finding that step-0 deltas are an offset.
 
 - **N1.** sd_r(g) grows with depth, and at L2 it is well below 0.03 (rounding accumulates through the layers).
 - **N2.** E − F and I − F are of comparable size at every depth. Both forwards are bf16, so neither side dominates. If that holds,
