@@ -165,3 +165,23 @@ probe. Nothing else changes: the registered **worst stays $1.53 per created box*
 download, so its manifest's own worst reads $1.56). A pre-flight NOT_RUN happens on a created box, so each id can cost
 one box: **the lane's aggregate worst is 8 x $1.53 = $12.24** (8 x $1.56 = $12.48 at the kit's allowance), inside the
 per-lane $15.
+
+### Amendment 1b (2026-10-19): the fit from the max over hosts, and reported-only host counters; the SMT lane closes
+
+`smt-sib-2` is the reading (re-derived: fuse SIB/PHYS includes 1; no measurable fuse effect from the second hardware
+thread, SIB/PHYS not resolved below about 0.80). It completed inside its cap, but Amendment 1's fit (7110 s) understated
+the host: a timed block's whole wall reached 21.2 s there against the 12.5 s taken from `smt-fuse-2` alone. **A fit is
+now each term's max over the hosts measured so far, plus 25 % headroom**: setup 209 s -> 270, a process start 2.4 s -> 3,
+a block wall 21.2 s -> 26.5, the slab 60 -> 75 (not measured separately on either host). 27 processes of 1 + 15 blocks
+need **12474 s**, so the guard is **4.0 h** (14400 s, 1926 s of margin; the self-test asserts at least 1800), and the
+**worst is $2.43** per created box (4.0 h x $0.60 + about 3 GB of wheels at $0.011/GB). The drive's fit check reads the
+new fit from `smt_sib_box.py --fit`.
+
+**Host counters, reported only:** around every timed block the child records this process's major and minor faults
+(getrusage), the deltas of `/proc/vmstat`'s numa_pages_migrated, numa_hint_faults, pgfault, pgmajfault, compact_stall,
+thp_fault_alloc and thp_collapse_alloc, and `/proc/meminfo` Cached before the block. They are never read by the
+summary or by any decision. On `smt-sib-2`, one wall-clock window across three processes ran the fuse about 17x faster
+(read time flat in both states), which is a hypothesis about page-cache residency, not a result. Testing it is a
+**separate registration** (slab residency, with a null of two identical runs on one host first), never an arm here.
+
+**This closes the SMT lane:** no further `smt-sib` box is planned. `smt-sib-3..8` stay unused.
