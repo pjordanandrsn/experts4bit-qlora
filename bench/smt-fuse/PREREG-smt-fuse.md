@@ -130,7 +130,8 @@ The narrow answer is kept; this amendment asks the real question. It is still a 
   whole to the blocks, since each block also hashes 4.8 GB outside its timed span), a process start 30 s (not yet
   measured, taken high) and the 600 s reserve. 27 processes of 1 + 15 blocks need **7110 s**. That does not fit a
   1.0 h guard (nor did 5 blocks, at 3735 s), so the guard is **2.5 h**, which leaves 1890 s of margin, and the self-test asserts that
-  at least 1800 s remain.
+  at least 1800 s remain. The drive refuses an `smt-sib` launch whose deadline leaves less
+  than that fit (read from `smt_sib_box.py --fit`), so the launch manifest's wallclock cannot drift from it.
 - **Reported, never read:** SIB/PHYS on `block` (what the loader pays; offload dominates it and is flat with the pool),
   SIB/WIDE (what the second thread is worth against a real core; WIDE also spans more cache, so this ratio is
   confounded), every other segment's ratios, and the per-arm medians per layer.

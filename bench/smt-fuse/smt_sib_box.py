@@ -376,6 +376,7 @@ def main(argv=None):
     p = argparse.ArgumentParser()
     p.add_argument("--self-test", action="store_true")
     p.add_argument("--plan", action="store_true")
+    p.add_argument("--fit", action="store_true")
     p.add_argument("--quota", default="none")
     p.add_argument("--out")
     p.add_argument("--experts", type=int, default=128)
@@ -389,6 +390,9 @@ def main(argv=None):
     a = p.parse_args(argv)
     if a.self_test:
         return self_test()
+    if a.fit:                                            # stdlib only: the drive's guard check reads the fit from here
+        print(int(math.ceil(time_fit(REPEATS))))
+        return 0
     if a.plan:
         quota = None if a.quota == "none" else float(a.quota)
         cores = topology(sorted(os.sched_getaffinity(0)))

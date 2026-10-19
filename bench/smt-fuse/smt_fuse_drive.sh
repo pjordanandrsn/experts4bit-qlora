@@ -53,6 +53,13 @@ done < "$HERE/staged.sha256"
 [ -z "${E4B_SHA:-}" ] || [ "$E4B_SHA" = "$E4B_PIN" ] || { say "refusing: E4B_SHA=$E4B_SHA is not the registered pin $E4B_PIN"; exit 78; }
 E4B_SHA=$E4B_PIN
 RUN_DIR=$E4B_RENT_RUN_DIR; DEADLINE=$E4B_RENT_DEADLINE_EPOCH
+# Amendment 1's guard is a tested fit (smt_sib_box.time_fit): the launch's own deadline must leave at least that much, so the
+# manifest's wallclock and the registration cannot drift apart (refused before anything is staged)
+case "$RUN_ID" in smt-sib-[1-3])
+  FIT=$(python3 "$HERE/smt_sib_box.py" --fit) || { say "refusing: no time fit from smt_sib_box.py"; exit 78; }
+  LEFT_S=$(( DEADLINE - $(date +%s) ))
+  [ "$LEFT_S" -ge "$FIT" ] || { say "refusing: the launch leaves ${LEFT_S}s < the registered fit ${FIT}s (guard 2.5 h)"; exit 78; };;
+esac
 POLL=${SMT_FUSE_POLL_S:-60}; W=${SMT_FUSE_HOME:-/root/smt_fuse}
 HF_TOKEN_FILE=${HF_TOKEN_FILE:-$HOME/.config/hf/token}
 # ---- the transport: ssh/scp/rsync to the rented box, or SMT_FUSE_BOX_EXEC + tar to the dry box
