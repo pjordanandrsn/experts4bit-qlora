@@ -429,3 +429,14 @@ under offload.
 
 **Spend.** The maintainer raised HP1's envelope to $16.50: billed $3.256 + calibration ≤ $1 + box 1 $6.09 + box 2 $6.09 = $16.44.
 Every other threshold, rule and registered reading is unchanged.
+
+### Closure (2026-10-19)
+
+HP1 is **CLOSED** under Amendment 4. The calibration `hp1cal-5090-2` returned `CLOSE_SHAPE`: rule 3 alone closes it (tol 0.043914
+> 0.01), and rule 1 also closes it, marginally (max/median 5.214 > 5). The result was re-derived byte-identically (`calib.json`
+sha256 `2cf7ac6c…`). No selection block and no confirmation block ran.
+
+HP1's only datum is e4b K00's single in-loop curve (`hp1k-5090-9`: 1.91403 → 0.86954, 200 steps, 48 layers), reported as such
+with no competitor comparison. Total spend: $3.898. The record is `bench/hp1/RESULTS-HP1.md`.
+
+**Lesson, recorded verbatim:** the tolerance used per-row |gap| while the comparisons are of means; the signed mean gap was −0.0013.
