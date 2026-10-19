@@ -81,7 +81,10 @@ def test_the_runner_reads_qwen3_at_w1_and_w16_on_the_default():
     assert gnf4, "the grouped-nf4-gemm pin is a full commit"
     red = (LANE / "p152_reduce.py").read_text(encoding="utf-8")
     ci = (REPO / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    assert f'GNF4_PIN = "{gnf4.group(1)}"' in red and gnf4.group(1) in PREREG and gnf4.group(1) in ci, "e4b CI's pin"
+    # the lane is registered at 38b30888 (v0.47.1, e4b CI's pin at registration); CI has since moved on (v0.48.0)
+    assert f'GNF4_PIN = "{gnf4.group(1)}"' in red and gnf4.group(1) in PREREG, "the lane's registered pin"
+    assert gnf4.group(1) in ci or gnf4.group(1) == "38b308887688ea5bda7dd449bd3cc3dc1426b995", \
+        "the lane pins e4b CI's grouped-nf4-gemm at registration"
     trip = RUN[RUN.index("python - <<'PYT'"):RUN.index("PYT\ncat versions.txt")]
     for pin in ('{(1536, 2048), (2048, 768)} <= set(ng._BW_SHAPES)', 'md.version("grouped-nf4-gemm") == "0.47.1"',
                 'sp.resolve_fusion_modes({k: sp.FUSION_UNSET for k in sp.FUSION_KNOBS}, "qwen3_moe")',
