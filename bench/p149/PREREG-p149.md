@@ -37,8 +37,10 @@ times prototypes, as P148 did. The library work starts only after K_GO, so a slo
   - **M == 1:** a bandwidth GEMV on P148's `gemv_i8` design, shaped for 4096 × 4096 and 1024 × 4096, with an optional
     split-K under K33's split contract (fixed-order host sum).
   - **2 ≤ M ≤ 16:** a small-M kernel that dequantizes int8 tiles to bf16 in registers and accumulates in fp32.
-- **Weights:** int8 `[N, K]` with an fp32 per-row scale from the quantizer, whose bytes must be **bit-identical** to
-  `i8_fakequant.roundtrip_`'s, so the served weights are exactly P147's I8ATTN weights.
+- **Weights:** int8 `[N, K]` with an fp32 per-row scale from the quantizer.
+  - Its codes and scales are `i8_fakequant`'s, so their bf16 product equals P147's I8ATTN round trip **bit for bit**
+    (tested).
+  - The kernels dequantize in fp32, not through bf16 as the fake-quant stored them. That is the less lossy direction.
 - **CI tests** (the interpreter, in their own process as P148's):
   - every config at ragged shapes and at Mixtral's shapes against an fp64 reference of the dequantized weights;
   - a one-hot activation reads one column exactly;
@@ -93,6 +95,8 @@ skipped):
 - **The harness transfers:** at M == 1, each shape's cuBLAS medians lie within [0.8, 1.25] × P145's in-situ per-call
   time (q and o 1.4648 / 64 ms, k and v 0.5675 / 64 ms), and the profiled eager cuBLAS call runs P145's grid. Otherwise
   VOID.
+  - The band was set from P145's read at **450 W**, and this lane refuses below 575 W. A 575 W card moves a
+    memory-bound GEMV little, and K_GO itself is a ratio (1 − B/A).
 - **K_GO** iff the W1 projected in-situ saving reaches the bar.
   - The saving per shape is the smaller of P145's in-situ time × (1 − B1/A1) and × (1 − B2/A2). It is summed over
     q, k, v and o, at 32 calls each.
@@ -110,7 +114,14 @@ tokens, graphs on.
 **Process order:** S0a, S1a, then the Q reduce, then S1b S0b S0c S1c S1d S0d. This is P143 Amendment 3's eight fresh
 processes, ABBA twice.
 - In S0a and S1a, the timed speed reps run first and Q runs after them in the same process. Q's work never precedes a
-  timed rep, so no self-pair is disturbed.
+  timed rep **in the same process**. Across processes, S0a's 15-20 min of decode is followed only by S1a's load (about
+  7 min) before S1a's timed reps, while S0a's own reps start cold.
+  - **Heat is recorded:** the GPU temperature and SM clock at the start and end of every timed block, reported and never
+    ruled.
+  - **It is conservative for FLIP:** g1 is the **minimum** of the four S1/S0 pairs, so a slower, hotter S1a can only
+    lower g1.
+  - A self-pair that trips NOISY with a temperature gap of more than 10 °C between its two blocks is still NOISY. The
+    record shows the gap, so the next order can add a cool-down if heat is the cause.
 - A QUALITY_FAIL after S1a stops the box: the six remaining processes are not run.
 
 #### Q, the quality rule ruled at decode (term 2: before any speed term rules)
@@ -151,7 +162,7 @@ P147's rule is re-read through `serve_paged`'s own KV path, at the kernels that 
      unrounded;
   5. **NO_FLIP** otherwise, with each failed bar named.
 
-**The verdict order:** host REFUSED (17 or 18) → VOID → NOISY → KERNEL_NO_GAIN (box K) → QUALITY_FAIL →
+**The verdict order:** host REFUSED (17, 18, or 15 for an unreadable power limit) → VOID → NOISY → KERNEL_NO_GAIN (box K) → QUALITY_FAIL →
 FUNCTION_FAIL → FLIP / NO_FLIP.
 
 ## What a FLIP starts (never automatic)
@@ -183,7 +194,7 @@ A NO_FLIP keeps the lever opt-in.
   - disk ≥ 200 GB (the 93.4 GB checkpoint and the venv), declared as `lane_record.min_disk_gb`;
   - guard **3.0 h**: eight Mixtral loads at about 7 min, Q's decode in S0a and S1a at about 15-20 min, the speed reps,
     and the fetch;
-  - worst 3.0 h × $0.85 + 93.4 GB × $0.011/GB = **$3.58**.
+  - worst 3.0 h × $0.85 + (93.4 GB checkpoint + 5 GB install) × $0.011/GB = **$3.63**.
 - **Both** are under the standing rule (at most $15 each).
 - **Run ids:** each box has `-1` as its reading and `-2` and `-3` as spares for pre-create refusals and host refusals (17
   and 18 are not strikes). Shakedowns are `p149-dry-N` on the lab A2000 ($0, correctness only: the suite compiled, the
