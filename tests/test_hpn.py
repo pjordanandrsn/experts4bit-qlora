@@ -301,3 +301,47 @@ def test_deq32_keeps_nf4_in_fp32_where_the_evaluator_rounds_to_bf16():
     a, b = hr.deq32(raw, "cpu"), hp1_lib.dequant_raw(raw, "cpu")
     assert a.dtype == torch.float32 and b.dtype == torch.bfloat16
     assert torch.allclose(a, b.float(), atol=0, rtol=2 ** -7) and not torch.equal(a, b.float())
+
+
+def test_the_fp32_reference_model_reproduces_hfs_own_fp32_forward_end_to_end(tmp_path):
+    """build_model_f32 over a store that serves a tiny Qwen3-MoE's own weights: the same per-row loss as HF's fp32 eager model, so the
+    wiring (q/k/v/o, the gate_up chunk order, the routing, the norms, embeddings and lm_head keys) is the model's, not just plausible."""
+    hr = _hpn_read()
+    transformers = pytest.importorskip("transformers")
+    cfg = transformers.Qwen3MoeConfig(vocab_size=64, hidden_size=16, intermediate_size=32, moe_intermediate_size=8, num_hidden_layers=2,
+                                      num_attention_heads=4, num_key_value_heads=2, head_dim=4, num_experts=4, num_experts_per_tok=2,
+                                      max_position_embeddings=64, decoder_sparse_step=1, mlp_only_layers=[])
+    cfg.save_pretrained(tmp_path)
+    cfg._attn_implementation = "eager"
+    torch.manual_seed(0)
+    ref = transformers.AutoModelForCausalLM.from_config(cfg, dtype=torch.float32).eval()
+    with torch.no_grad():
+        for p in ref.parameters():
+            p.normal_(0, 0.3) if p.dim() > 1 else p.uniform_(0.8, 1.2)
+    w = {(-1, "embed", -1): ref.model.embed_tokens.weight, (-1, "lm_head", -1): ref.lm_head.weight, (-1, "final_norm", -1): ref.model.norm.weight}
+    for L, layer in enumerate(ref.model.layers):
+        a, mlp = layer.self_attn, layer.mlp
+        for kind in "qkvo":
+            w[(L, kind, -1)] = getattr(a, f"{kind}_proj").weight
+        for e in range(cfg.num_experts):
+            w[(L, "gate_up", e)], w[(L, "down", e)] = mlp.experts.gate_up_proj[e], mlp.experts.down_proj[e]
+        w[(L, "router", -1)] = mlp.gate.weight
+        for name, m in layer.named_modules():
+            last = name.split(".")[-1]
+            if "norm" in last.lower() and isinstance(getattr(m, "weight", None), torch.nn.Parameter):
+                w[(L, "norm:" + last, -1)] = m.weight
+
+    class Store:
+        dir, device = str(tmp_path), "cpu"
+
+        def keys(self):
+            return list(w)
+    f32 = hr.build_model_f32(Store(), str(tmp_path), None, deq=lambda key: w[key].detach().clone())
+    ids = torch.randint(0, 64, (1, 12), generator=torch.Generator().manual_seed(1))
+    with torch.no_grad():
+        a, b = ref(input_ids=ids, labels=ids).loss.item(), f32(input_ids=ids, labels=ids).loss.item()
+    assert a == pytest.approx(b, abs=1e-5) and math.isfinite(a)
+    w[(1, "gate_up", 2)] = w[(1, "gate_up", 2)].flip(0)                 # swap gate/up halves on one expert: the loss must move
+    f32b = hr.build_model_f32(Store(), str(tmp_path), None, deq=lambda key: w[key].detach().clone())
+    with torch.no_grad():
+        assert abs(f32b(input_ids=ids, labels=ids).loss.item() - a) > 1e-4
