@@ -53,8 +53,9 @@ the recorded time toward max(bytes, issue)?
 
 P155's instrument, with the decode as the moving argument. Everything not named here is P155's, unchanged.
 - **The box:** one RTX 5090 (sm_120); torch 2.8.0+cu128 and triton 3.4.0 (the image's); e4b at this registration's merge
-  commit; grouped-nf4-gemm at **#569's merge**, `68bbefc4f43aaa83870903ac2c8788bab3ab1b89` (0.49.0 with K39; no release
-  is cut for a box). The tripwire pins three files:
+  commit; **grouped-nf4-gemm main at 68bbefc4 (#569's merge, after v0.49.0; K39 unreleased)**,
+  `68bbefc4f43aaa83870903ac2c8788bab3ab1b89`. No release carries K39 and none is cut for a box: the box installs that
+  commit, whose package metadata still reads 0.49.0, so it never runs the 0.49.0 wheel. The tripwire pins three files:
   - `nf4_smallm.py` sha256 `ee46969a...` (K25 with K39's decode mode);
   - `int4_b32.py` `773eff5d...` (P155's);
   - `nf4_grouped.py` `a7090915...` (the source of K39's table words, `_bw_table_words()`).

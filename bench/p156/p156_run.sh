@@ -1,10 +1,10 @@
 #!/bin/bash
 # P156's box runner (bench/p156/PREREG-p156.md): K39's decode (K25's lut="prmt", grouped-nf4-gemm#569) against
-# today's select tree at Qwen3-30B-A3B's W16 shapes, a microbench on S0's real router picks. P156's runner
-# (bench/p156/p156_run.sh) by counted substitutions -- this lane's run ids, bench, reducer and fit; grouped-nf4-gemm at
-# #569's merge, with K25's and K39's files pinned; Nsight on T's and P's calls. P156's power floor (rc 17), refusals,
-# premise, pins and GPU state per phase are kept. No instance id and no host name are written here. This script never
-# creates compute.
+# today's select tree at Qwen3-30B-A3B's W16 shapes, a microbench on S0's real router picks. P155's runner
+# (bench/p155/p155_run.sh) by counted substitutions -- this lane's run ids, bench, reducer and fit; the pin,
+# grouped-nf4-gemm main at 68bbefc4 (#569's merge, after v0.49.0; K39 unreleased), with K25's and K39's files pinned;
+# Nsight on T's and P's calls. P155's power floor (rc 17), refusals, premise, pins and GPU state per phase are kept.
+# No instance id and no host name are written here. This script never creates compute.
 set -uo pipefail
 W=/root/p156; mkdir -p $W/logs; cd $W || exit 78
 say(){ echo "[$(date -u +%FT%TZ)] p156: $*"; }
@@ -14,12 +14,12 @@ trap 'finish 130' INT TERM
 for v in P156_RUN_ID P156_DEADLINE_EPOCH E4B_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
 case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78;; esac
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char sha"; finish 78; }
-GNF4_SHA=68bbefc4f43aaa83870903ac2c8788bab3ab1b89 # grouped-nf4-gemm at #569's merge (0.49.0 + K39): K25 with lut="prmt"; the tree path is P156's
+GNF4_SHA=68bbefc4f43aaa83870903ac2c8788bab3ab1b89 # grouped-nf4-gemm main at 68bbefc4 (#569's merge, after v0.49.0; K39 unreleased); the tree path is P155's
 NF4_SMALLM_SHA256=ee46969a4f786c36abe26bfaf0a52e426db4465406a5e31c6085fd3270b26568   # kernel/nf4_smallm.py, K25 + K39
-INT4_B32_SHA256=773eff5db7be77dea3d1f9048a6e708a94e79634baf17f452bf2848e24a2072f     # kernel/int4_b32.py, P156's
+INT4_B32_SHA256=773eff5db7be77dea3d1f9048a6e708a94e79634baf17f452bf2848e24a2072f     # kernel/int4_b32.py, P155's
 NF4_GROUPED_SHA256=a7090915485c6e9943f568e79315b3f533c754f24edbdb7160b05dcc18619a23  # kernel/nf4_grouped.py: K39's tables
 INSTALL_TO_GATE_S=600   # the install (450 s) and the self-tests with the premise (150 s): P152's and P154's walls, rounded up
-NEED_BENCH=1600         # the microbench: P156's box walls scaled to all 144 plans, x1.5 (PREREG, "Budget")
+NEED_BENCH=1600         # the microbench: the larger of P155's box walls and the shakedown's, x1.5 (PREREG, "Budget")
 NEED_NCU=300            # REPORTED only: Nsight Compute on T's and P's gate_up and down calls (an install, a probe)
 RESERVE=600             # can_run's margin after the bench: the reduce, the fetch-back and the teardown
 MIN_POWER_W=575   # P149's power floor (P152's and P154's, kept): a capped board refuses before the install, rc 17
@@ -114,6 +114,7 @@ d = json.loads(md.distribution("experts4bit-qlora").read_text("direct_url.json")
 assert d.get("vcs_info", {}).get("commit_id") == os.environ["WANT_E4B"], f"installed e4b is not the launch commit: {d}"
 dg = json.loads(md.distribution("grouped-nf4-gemm").read_text("direct_url.json") or "{}")
 assert dg.get("vcs_info", {}).get("commit_id") == os.environ["WANT_GNF4"], f"installed gnf4 is not the pinned commit: {dg}"
+# main after the v0.49.0 tag: the metadata still reads 0.49.0, and K39 is in no release (the pin is the commit)
 assert md.version("grouped-nf4-gemm") == "0.49.0", md.version("grouped-nf4-gemm")
 import nf4_smallm, int4_b32, nf4_grouped
 for mod, want in ((nf4_smallm, os.environ["WANT_SMALLM"]), (int4_b32, os.environ["WANT_B32"]),

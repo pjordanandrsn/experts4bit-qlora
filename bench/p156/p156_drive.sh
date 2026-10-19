@@ -1,5 +1,5 @@
 #!/bin/bash
-# P156's controller (bench/p156/PREREG-p156.md): P156's driver (bench/p156/p156_drive.sh) by counted substitutions --
+# P156's controller (bench/p156/PREREG-p156.md): P155's driver (bench/p155/p155_drive.sh) by counted substitutions --
 # this lane's run ids, runner, microbench and reducer; P153's router replay (its committed bytes) staged as the routing;
 # K25's row-exact GPU tests as the premise; no hf token (nothing is fetched), and no instance id passed to the box.
 # Stages hash-pinned files, refuses unknown run IDs and dirty source trees, polls the nonce-bound completion marker, and

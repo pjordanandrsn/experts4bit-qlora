@@ -13,8 +13,8 @@ move, the instructions per weight, at the same plan.
 - **Predictions:** against the issue/occupancy model: M1 overlap 1.02-1.11, M3 serial 1.15-1.18, and M2 occupancy
   1.19-1.28, the least likely after P155. The basis is triton 3.4.0's count, 17.0 against 24.1 instructions per weight
   (grouped-nf4-gemm#570 has the newer toolchain's).
-- **Box:** one RTX 5090, grouped-nf4-gemm at #569's merge, guard 1.25 h ((boot + fit) x 1.25, checked before the
-  install; the bench allowance is the larger of P155's box walls and this lane's $0 A2000 shakedown, x 1.5), worst
-  $1.42. The shakedown's record is a sha-pinned test fixture.
+- **Box:** one RTX 5090, grouped-nf4-gemm main at 68bbefc4 (#569's merge, after v0.49.0; K39 unreleased), guard
+  1.25 h ((boot + fit) x 1.25, checked before the install; the bench allowance is the larger of P155's box walls and
+  this lane's $0 A2000 shakedown, x 1.5), worst $1.42. The shakedown's record is a sha-pinned test fixture.
 
 A GO opens a served read as its own registration. Files: `bench/p156/` and `tests/test_p156.py`.
