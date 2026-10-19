@@ -2,7 +2,8 @@
 # bench/hpn/hpn_local.sh REPO OUT -- HPN's hand run on the lab's A2000 (bench/hpn/HPN-DESIGN.md): inside the gpu-dev container, with the
 # card's exclusive claim already held. It stages the files tc1_run.sh's local-box mode needs (README "TC3 hand run") from a CLEAN checkout
 # (the receipts cite its commit), records the free GPU memory at the start (condition c), and runs TC1_FAMILIES=qwen3hpn with TC1_LOCAL_BOX=1.
-# Knobs: HPN_DEPTHS (default "2 4 8 16"), HPN_UNS_BACKEND (default native_torch), HPN_SNAPSHOT, HPN_PYTHON, GNF4_SHA.
+# Knobs: HPN_DEPTHS (default "2 4 8 16"), HPN_UNS_BACKEND (default native_torch), HPN_UNS_VENV (default t28: the cu128 venv; the cu130
+# one needs driver >= 580), HPN_SNAPSHOT, HPN_PYTHON, GNF4_SHA.
 set -euo pipefail
 REPO=${1:?usage: hpn_local.sh REPO OUT}
 OUT=${2:?usage: hpn_local.sh REPO OUT}
