@@ -23,10 +23,11 @@ The helper logs only read-only yes/no or unverified, staging none; it suppresses
 `host_facts.py OUT` writes the box's own measured host facts as `host_facts.json`, for the host registry. A runner calls it once on the box and leaves the file beside its receipt: `python3 host_facts.py "$OUT_DIR/host_facts.json"`.
 
 It records only what the box measures itself, from `/proc`, `/sys` and `nvidia-smi`:
-- logical CPUs, physical cores, threads per core;
-- NUMA nodes and `numa_balancing`;
-- the transparent-hugepage `enabled` and `defrag` modes;
-- the cgroup CPU quota;
+- the host's logical CPUs, physical cores, threads per core and NUMA nodes (`host_*`). Inside a container these
+  describe the whole host, not what the run may use;
+- the run's own share: `affinity_cpus` (`sched_getaffinity`) and the cgroup CPU quota, v2 or v1 (`cpu_quota_cpus`, or
+  `cpu_quota_unlimited` when there is none, so "unlimited" is never mistaken for "unreadable");
+- `numa_balancing` and the transparent-hugepage `enabled` and `defrag` modes;
 - GPU 0's power limit, maximum SM clock and memory.
 
 Every value is a number or a small enum, and `sources` names where each one came from. It writes no identifiers: no hostname, container id, serial, UUID or CPU model string. A fact it cannot read is left out, and the helper always exits 0, so it never costs a run.
