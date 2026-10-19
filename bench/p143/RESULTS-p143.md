@@ -103,7 +103,9 @@ The rule was stricter than A2's and binding: no Amendment 4 on the flip, and a N
   library's plan.
 - **What moves:** buckets 1, 2 and 4. At served contexts ≤ 1024 no output changes, only speed.
 - **Mixtral** (8 KV heads; B 1-2 move under the cap) and every other family keep the plan until a read of their own.
-- **The measured basis is Qwen3-30B-A3B on an RTX 5090.** The default is family-scoped, so other `qwen3_moe`
-  checkpoints (e.g. Qwen3-235B-A22B) take it without a read of their own. They have 4 KV heads too, so the cap's plan
-  is the same, but their speed is not measured.
+- **The measured basis is Qwen3-30B-A3B on an RTX 5090 (170 SMs).** The default is family-scoped, so other
+  `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B) and other cards take it without a read of their own.
+  - Other checkpoints have 4 KV heads too, so the cap's plan is the same, but their speed is not measured.
+  - Other cards: the plan is SM-scaled, so the cap moves B 1–6 on a 188-SM PRO 6000 and B 1–4 on a 128-SM 4090. Neither
+    is read.
 - **Not read here:** long contexts beyond 4096, other cards, and speculative verify (which never takes the cap).
