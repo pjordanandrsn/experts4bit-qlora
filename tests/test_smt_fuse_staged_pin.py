@@ -82,7 +82,7 @@ def test_the_declared_run_ids_and_nothing_else(tmp_path):
 
 def test_the_refusals_come_before_the_install_and_the_probe():
     order = ["CUDA_PROBE=$(python -", 'say "REFUSED: not an SMT host', 'say "REFUSED: $AFF CPUs in the affinity',
-             'say "REFUSED: quota $QUOTA gives a high arm', 'say "REFUSED: ${RAM_GB', 'say "REFUSED: ${FREE_GB', 'say "install e4b @',
+             'say "REFUSED: quota $QUOTA gives a high arm', 'say "REFUSED: ${RAM_GB', 'say "REFUSED: ${FREE_GB', "say \"install: Q235's wheel lock",
              "smt_fuse_box.py --self-test", "smt_fuse_box.py --out $W/result.json"]
     at = [RUN.index(s) for s in order]
     assert at == sorted(at), list(zip(order, at))
