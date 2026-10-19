@@ -58,7 +58,7 @@ RUN_DIR=$E4B_RENT_RUN_DIR; DEADLINE=$E4B_RENT_DEADLINE_EPOCH
 case "$RUN_ID" in smt-sib-[1-8])
   FIT=$(python3 "$HERE/smt_sib_box.py" --fit) || { say "refusing: no time fit from smt_sib_box.py"; exit 78; }
   LEFT_S=$(( DEADLINE - $(date +%s) ))
-  [ "$LEFT_S" -ge "$FIT" ] || { say "refusing: the launch leaves ${LEFT_S}s < the registered fit ${FIT}s (guard 2.5 h)"; exit 78; };;
+  [ "$LEFT_S" -ge "$FIT" ] || { say "refusing: the launch leaves ${LEFT_S}s < the registered fit ${FIT}s (smt_sib_box.py GUARD_S)"; exit 78; };;
 esac
 POLL=${SMT_FUSE_POLL_S:-60}; W=${SMT_FUSE_HOME:-/root/smt_fuse}
 HF_TOKEN_FILE=${HF_TOKEN_FILE:-$HOME/.config/hf/token}
