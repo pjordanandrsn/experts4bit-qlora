@@ -95,6 +95,13 @@ adertha://
 # Format: "#added-only: REGEX" (extended, case-insensitive); each needs a canary line.
 #added-only: adertha(-agents)?#[0-9]
 
+# The private receipt store's checkout name and branch, and absolute home-directory paths, follow the same rule:
+# a public record names "the private receipt store" and the run id, with paths relative to the run; merged records keep theirs.
+#added-only: adertha-receipts
+#added-only: cdo/state-
+#added-only: /Users/[a-z][a-z0-9._-]*/
+#added-only: /home/(jordananderson|paulj)/
+
 # --- RECEIPT STORE: the private receipt store's ledger and receipt records ----
 # The store's records are private, and none of the patterns above can see them.
 # They are matched by SHAPE, never by name: this file is public, so naming the
