@@ -112,8 +112,11 @@ def route_record(hr, model, batch, n_layers):
     faults. With graphs off the server leaves ``DEVICE_GROUPING`` off, so a 16-row decode call is device-grouped only
     because ``E4B_INT4_PREFILL`` resolves to ``k19`` (``_collapsed_grouping``'s third branch); at 128 routed rows K19 is
     then the route the graph replay takes. Anything else (host grouping, singleton groups, the M-tile, a store that is
-    not uniform int4 on every MoE layer) is a fault: the census would then read a pass whose experts ran another way."""
-    stores = [m._int4_stores for m in model.modules() if getattr(m, "_int4_stores", None) is not None]
+    not uniform int4 on every MoE layer) is a fault: the census would then read a pass whose experts ran another way.
+    The store lives on each expert module's ``_hot_residency`` state (a plain object, not a module), read as
+    ``serve_paged`` reads it for the server's own census."""
+    stores = [s for m in model.modules()
+              if (s := getattr(getattr(m, "_hot_residency", None), "_int4_stores", None)) is not None]
     st = stores[0] if stores else None
     rec = {"int4_prefill_mode": hr._int4_prefill_mode_env(), "k19_mode": hr._k19_mode_env(),
            "device_grouping_flag": bool(hr.DEVICE_GROUPING[0]),
@@ -263,15 +266,20 @@ def self_test() -> int:
         def _k19_mode_env(self):
             return self.k19
 
-        def _collapsed_grouping(self, _T, _st):
-            return self.grouping
+        def _collapsed_grouping(self, _T, st):
+            return self.grouping if st is not None else (False, False)   # no store: host grouping, as the library
 
     class _M:
-        def __init__(self, stores):
-            self.stores = stores
+        """The real layout: each expert module carries ``_hot_residency``, a plain state object holding
+        ``_int4_stores``; other modules (attention, norms) carry neither."""
+
+        def __init__(self, stores, on_module=False):
+            self.stores, self.on_module = stores, on_module
 
         def modules(self):
-            return [type("W", (), {"_int4_stores": st})() for st in self.stores]
+            state = (lambda st: {"_int4_stores": st}) if self.on_module else (
+                lambda st: {"_hot_residency": type("HR", (), {"_int4_stores": st})()})
+            return [type("Attn", (), {})()] + [type("Experts", (), state(st))() for st in self.stores]
 
     int4 = {"gu": {}, "dn": {}}
     r0, f0 = route_record(_HR(), _M([int4] * 3), 16, 3)
@@ -284,6 +292,9 @@ def self_test() -> int:
                   bool(route_record(_HR(grouping=(False, False)), _M([int4] * 3), 16, 3)[1])))
     cases.append(("a layer without the int4 store is a fault", bool(route_record(_HR(), _M([int4] * 2), 16, 3)[1])))
     cases.append(("an MXFP4 store is a fault", bool(route_record(_HR(), _M([{"kind": "mxfp4"}] * 3), 16, 3)[1])))
+    r7, f7 = route_record(_HR(), _M([int4] * 3, on_module=True), 16, 3)
+    cases.append(("a store read off the module itself, not its _hot_residency, is not found (a fault)",
+                  r7["int4_store_layers"] == 0 and len(f7) == 2))
     bad = [n for n, ok in cases if not ok]
     print(f"p152_route self-test {'OK' if not bad else 'FAILED ' + str(bad)} ({len(cases)} cases)")
     return 0 if not bad else 1

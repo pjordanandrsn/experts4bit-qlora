@@ -120,6 +120,9 @@ def test_the_routing_pass_is_the_census_window_eager_at_w16():
     assert "census_window(sched, batch, a.skip, a.steps, rec.start, rec.stop" in src
     assert 'os.environ.get("E4B_PAGED_GRAPHS") != "0"' in src and "default_env_ok(env)" in src
     assert 'out["route"], route_faults = route_record(hot_residency, model, batch, n_layers)' in src
+    # the store is read where the server's own census reads it: on each module's _hot_residency state
+    read = 'getattr(getattr(m, "_hot_residency", None), "_int4_stores", None)'
+    assert read in src and read in (REPO / "experts4bit_qlora" / "serve_paged.py").read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("prefill,expected", [("k19", (False, True)), ("loop", (False, False))])
@@ -187,6 +190,9 @@ ROUTE_MUTANTS = [
     ('    if rec["collapsed_grouping"] != [False, True]:\n', "    if False:\n"),
     # a route other than K19 accepted
     ('    if rec["int4_prefill_mode"] != "k19" or rec["k19_mode"] == "0":\n', "    if False:\n"),
+    # the store read off the module itself instead of its _hot_residency state (the real model has none there)
+    ('if (s := getattr(getattr(m, "_hot_residency", None), "_int4_stores", None)) is not None]',
+     'if (s := getattr(m, "_int4_stores", None)) is not None]'),
 ]
 
 
