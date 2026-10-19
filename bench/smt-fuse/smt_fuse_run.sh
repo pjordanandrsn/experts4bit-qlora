@@ -18,7 +18,8 @@ trap 'finish 130' INT TERM
 for v in SMT_FUSE_RUN_ID SMT_FUSE_DEADLINE_EPOCH SMT_FUSE_INSTANCE_ID E4B_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
 E4B_PIN=d65793e4a106c7db6ecfc219668a2d6881d207e5      # Q235's e4b (A15, the source q235-pro6000-7 ran); a registered constant
 GNF4_SHA=724ccc454f006c1a46836e434e997f31f293747f      # grouped-nf4-gemm 0.45.0, exact: Q235's (bench/q235/q235_drive.sh)
-TORCH_WANT=2.8.0+cu128
+TORCH_WANT=2.11.0+cu128                                 # Q235's wheel lock (wheels.json), not the image's torch
+LOCK_SHA=84f361ed35fff9a857f340b65488ad582dc4270aef7e67cbeb6b46b8370021f3   # Q235's wheels.json at d65793e4
 [ "$E4B_SHA" = "$E4B_PIN" ] || { say "refusing: E4B_SHA $E4B_SHA is not the registered e4b pin $E4B_PIN"; finish 78; }
 DRY=${SMT_FUSE_DRY:-0}
 if [ "$DRY" = 1 ]; then EXPERTS=8; MIN_LOGICAL=2; MIN_P=3; DISK_DEF=5; RAM_DEF=8               # the dry box: correctness only
@@ -28,7 +29,8 @@ unset OMP_NUM_THREADS MKL_NUM_THREADS TRITON_INTERPRET
 : > summary.txt; echo "$SMT_FUSE_INSTANCE_ID" > INSTANCE_ID
 echo "KNOBS run=$SMT_FUSE_RUN_ID e4b=$E4B_SHA gnf4=$GNF4_SHA experts=$EXPERTS dry=$DRY" | tee -a summary.txt
 [ "$DRY" = 1 ] && { echo "DRY -- the \$0 dry run on a few experts: NEVER a reading" | tee -a summary.txt; : > DRY; }
-for f in smt_fuse_box.py staged.sha256; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
+for f in smt_fuse_box.py staged.sha256 q235_bootstrap.py wheels.json dq11_require_git.sh; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
+[ "$(sha256sum $W/wheels.json | cut -d' ' -f1)" = "$LOCK_SHA" ] || { say "wheels.json is not Q235's lock"; finish 9; }
 (cd $W && sha256sum -c staged.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/smt-fuse/staged.sha256"; finish 9; }
 # ---- refusals before anything is installed
 CUDA_PROBE=$(python - <<'PYC' 2>/dev/null | tail -1
@@ -47,9 +49,6 @@ case "$CUDA_PROBE" in
   no-cuda*) echo "refused: cuda unusable" > REFUSAL; echo "BOX_REFUSED cuda=unusable" >> summary.txt; finish 18;;
   *) say "DUD BOX (${CUDA_PROBE:-no probe output})"; finish 10;;
 esac
-if [ "$DRY" != 1 ]; then
-  case "$CUDA_PROBE" in *" torch=$TORCH_WANT "*) ;; *) echo "refused: torch ($CUDA_PROBE)" > REFUSAL; finish 28;; esac
-fi
 lscpu | grep -E "Model name|^Vendor ID|^CPU\(s\)|Thread\(s\) per core|Core\(s\) per socket|Socket\(s\)" | tee forensics.txt
 free -g | head -2 | tee -a forensics.txt; df -h $W | tail -1 | tee -a forensics.txt
 TPC=$(lscpu | awk -F: '/Thread\(s\) per core/{gsub(/ /,"",$2); print $2}')
@@ -86,23 +85,24 @@ if [ "$DRY" = 1 ]; then
   [ -d $W/e4bsrc/experts4bit_qlora ] || { say "DRY: no e4b tree at $W/e4bsrc"; finish 9; }
   export PYTHONPATH=$W/e4bsrc
 else
-  echo "torch==${TORCH_WANT%%+*}" > $W/constraints.txt
-  pipx(){ local log=$1 secs=$2; shift 2
-    perl -e "alarm $secs; exec @ARGV" python -m pip install -q --no-input -c $W/constraints.txt "$@" > $log 2>&1 && return 0
-    say "pip failed ($(tail -1 $log | cut -c1-120)) -- one retry in 20 s"; sleep 20
-    perl -e "alarm $secs; exec @ARGV" python -m pip install -q --no-input -c $W/constraints.txt "$@" >> $log 2>&1; }
-  say "install e4b @$E4B_SHA + gnf4 @$GNF4_SHA (bitsandbytes 0.50.2; torch held at $TORCH_WANT)"
-  pipx logs/pip_e4b.log 1800 --prefer-binary "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" \
-    "transformers==5.18.0" "bitsandbytes==0.50.2" "huggingface_hub>=0.23,<2" numpy || { tail -4 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
-  pipx logs/pip_gnf4.log 900 --force-reinstall --no-deps "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA" || { tail -3 logs/pip_gnf4.log; say "PIP FAIL (gnf4)"; finish 9; }
+  # Q235's own install, unchanged: git first (dq11_require_git.sh), a python3.11 venv, then q235_bootstrap.py, which fetches
+  # every wheel in the hash-locked wheels.json and installs e4b and gnf4 at their pins, checking pip's recorded commits
+  perl -e 'alarm 300; exec @ARGV' bash $W/dq11_require_git.sh > logs/require_git.log 2>&1 || { tail -2 logs/require_git.log; say "GIT FAIL"; finish 9; }
+  command -v python3.11 >/dev/null || { say "REFUSED: no python3.11 for Q235's lock"; echo "refused: python3.11" > REFUSAL; finish 10; }
+  python3.11 -m venv $W/venv-q235 || { say "VENV FAIL"; finish 9; }
+  export PATH=$W/venv-q235/bin:$PATH
+  say "install: Q235's wheel lock ($LOCK_SHA) + e4b @$E4B_SHA + gnf4 @$GNF4_SHA (q235_bootstrap.py)"
+  env E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA perl -e 'alarm 2400; exec @ARGV' python $W/q235_bootstrap.py --directory $W \
+    --cache $W/.cache/wheels > logs/bootstrap.log 2>&1 || { tail -4 logs/bootstrap.log; say "BOOTSTRAP FAIL"; finish 9; }
 fi
-WANT_E4B=$E4B_SHA python - <<'PYT' || { say "TRIPWIRE FAIL"; finish 9; }
+WANT_E4B=$E4B_SHA WANT_TORCH=$TORCH_WANT python - <<'PYT' || { say "TRIPWIRE FAIL"; finish 9; }
 import json, os, importlib.metadata as md
 import torch
 if os.environ.get("SMT_FUSE_DRY") != "1":
     d = json.loads(md.distribution("experts4bit-qlora").read_text("direct_url.json") or "{}")
     assert d.get("vcs_info", {}).get("commit_id") == os.environ["WANT_E4B"], f"installed e4b is not the pin: {d}"
-    assert md.version("bitsandbytes") == "0.50.2", md.version("bitsandbytes")
+    assert torch.__version__ == os.environ["WANT_TORCH"], torch.__version__          # Q235's lock, not the image's
+    assert md.version("transformers") == "5.19.0" and md.version("bitsandbytes") == "0.50.2"
 from experts4bit_qlora.arch.moe_conventions import fuse_experts  # noqa: F401
 from experts4bit_qlora._vendor.experts import Experts4bit  # noqa: F401
 open(os.path.join(os.environ["SMT_FUSE_HOME"], "versions.txt"), "w").write(

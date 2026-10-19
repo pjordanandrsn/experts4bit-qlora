@@ -33,7 +33,7 @@ HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 # streamed to the box over stdin for the launch and each probe; it is never staged (staged.sha256 does not list it).
 LANE_HELPER="$REPO/bench/common/lane_liveness.sh"
 source "$LANE_HELPER" || { say "refusing: missing lane liveness helper"; exit 78; }
-STAGE="$HERE/smt_fuse_run.sh $HERE/smt_fuse_box.py $HERE/staged.sha256"
+STAGE="$HERE/smt_fuse_run.sh $HERE/smt_fuse_box.py $HERE/q235_bootstrap.py $HERE/wheels.json $HERE/dq11_require_git.sh $HERE/staged.sha256"
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
 # staged.sha256 names the files as the BOX will see them; resolve each name to its source and compare hashes
 # (the same case as tests/test_smt_fuse_staged_pin.py, which runs this check in CI where it costs nothing).
@@ -41,7 +41,7 @@ sha_of(){ (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | cut -d" " -f1; }
 while read -r want name; do
   case "$want" in \#*|"") continue;; esac
   case "$name" in
-    smt_fuse_run.sh|smt_fuse_box.py) src="$HERE/$name";;
+    smt_fuse_run.sh|smt_fuse_box.py|q235_bootstrap.py|wheels.json|dq11_require_git.sh) src="$HERE/$name";;
     *) say "refusing: staged.sha256 names $name, which this driver does not stage"; exit 78;;
   esac
   got=$(sha_of "$src")

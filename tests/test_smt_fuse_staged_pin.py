@@ -14,7 +14,8 @@ import sys
 REPO = pathlib.Path(__file__).resolve().parents[1]
 LANE = REPO / "bench" / "smt-fuse"
 PIN = LANE / "staged.sha256"
-SOURCES = {n: LANE / n for n in ("smt_fuse_run.sh", "smt_fuse_box.py")}
+SOURCES = {n: LANE / n for n in ("smt_fuse_run.sh", "smt_fuse_box.py", "q235_bootstrap.py", "wheels.json", "dq11_require_git.sh")}
+LOCK_SHA = "84f361ed35fff9a857f340b65488ad582dc4270aef7e67cbeb6b46b8370021f3"   # Q235's wheels.json at d65793e4 (bench/q235/q235.sha256)
 RUN = (LANE / "smt_fuse_run.sh").read_text()
 DRIVE = (LANE / "smt_fuse_drive.sh").read_text()
 BOX = (LANE / "smt_fuse_box.py").read_text()
@@ -58,8 +59,10 @@ def test_the_self_test_passes():
 def test_the_pins_are_exact_and_agree():
     assert f"E4B_PIN={E4B_PIN}" in RUN and f"E4B_PIN={E4B_PIN}" in DRIVE and E4B_PIN in PREREG
     assert f"GNF4_SHA={GNF4_PIN}" in RUN and GNF4_PIN in PREREG
-    assert '[ "$E4B_SHA" = "$E4B_PIN" ] ||' in RUN and "TORCH_WANT=2.8.0+cu128" in RUN
-    assert '"transformers==5.18.0"' in RUN and '"bitsandbytes==0.50.2"' in RUN and 'md.version("bitsandbytes") == "0.50.2"' in RUN
+    assert '[ "$E4B_SHA" = "$E4B_PIN" ] ||' in RUN and "TORCH_WANT=2.11.0+cu128" in RUN and f"LOCK_SHA={LOCK_SHA}" in RUN
+    assert hashlib.sha256((LANE / "wheels.json").read_bytes()).hexdigest() == LOCK_SHA          # Q235's lock, byte for byte
+    assert "python $W/q235_bootstrap.py --directory $W" in RUN and "torch.__version__ == os.environ[\"WANT_TORCH\"]" in RUN
+    assert 'md.version("transformers") == "5.19.0" and md.version("bitsandbytes") == "0.50.2"' in RUN
 
 
 def test_the_declared_run_ids_and_nothing_else(tmp_path):
@@ -78,13 +81,13 @@ def test_the_declared_run_ids_and_nothing_else(tmp_path):
 
 
 def test_the_refusals_come_before_the_install_and_the_probe():
-    order = ["CUDA_PROBE=$(python -", "refused: torch", 'say "REFUSED: not an SMT host', 'say "REFUSED: $AFF CPUs in the affinity',
+    order = ["CUDA_PROBE=$(python -", 'say "REFUSED: not an SMT host', 'say "REFUSED: $AFF CPUs in the affinity',
              'say "REFUSED: quota $QUOTA gives a high arm', 'say "REFUSED: ${RAM_GB', 'say "REFUSED: ${FREE_GB', 'say "install e4b @',
              "smt_fuse_box.py --self-test", "smt_fuse_box.py --out $W/result.json"]
     at = [RUN.index(s) for s in order]
     assert at == sorted(at), list(zip(order, at))
     codes = {int(c) for c in re.findall(r"finish (\d+)", RUN)}
-    assert codes & {13, 14, 17, 18} == {13, 18} and {9, 10, 16, 21, 22, 28, 40} <= codes, codes
+    assert codes & {13, 14, 17, 18} == {13, 18} and {9, 10, 16, 21, 22, 40} <= codes, codes
     assert "MIN_LOGICAL=32; MIN_P=24" in RUN and "EXPERTS=128" in RUN and "MIN_HIGH = 24" in BOX
 
 

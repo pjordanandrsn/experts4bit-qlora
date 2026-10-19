@@ -60,9 +60,11 @@ server-class SMT host.
   ratio is too weak to read. It records the quota and P.
 - **Pins: Q235's own stack** (the maintainer's final pass: the premise must describe the loader Q235 runs). e4b
   `E4B_PIN=d65793e4a106c7db6ecfc219668a2d6881d207e5` (Q235's A15 source, which `q235-pro6000-7` ran), grouped-nf4-gemm 0.45.0
-  `GNF4_SHA=724ccc454f006c1a46836e434e997f31f293747f` (`bench/q235/q235_drive.sh`), transformers 5.18.0 and bitsandbytes 0.50.2 (TC1's
-  environment), torch 2.8.0+cu128 (the image's). If Q235's simplification amendment moves its pins, this kit follows them
-  before the reading.
+  `GNF4_SHA=724ccc454f006c1a46836e434e997f31f293747f` (`bench/q235/q235_drive.sh`), and **Q235's hash-locked wheel set**
+  (`wheels.json`, sha256 `84f361ed…`, copied byte for byte from `d65793e4` with `q235_bootstrap.py` and
+  `dq11_require_git.sh`): torch 2.11.0+cu128, transformers 5.19.0, bitsandbytes 0.50.2, in a python3.11 venv on the
+  image Q235 uses. The fuse is a torch intra-op op, so torch is part of what is timed and is Q235's. Q235's pins; the load
+  path is identical at `d65793e4` and main (families checked). The amendment does not move them.
 - **Phase cap, declared on the box** (`lane_record.phase_caps.probe = {"on_box": ...}`): min(time left − 600 s,
   max(600 s, 1.5 × the sum of the 16 planned reps' walls, each from its own pool's warm rep on this box)), checked between
   reps. Both are the dry runs' corrections: a cap from the 16-thread warm rep alone tripped on the slower 32-thread reps,
