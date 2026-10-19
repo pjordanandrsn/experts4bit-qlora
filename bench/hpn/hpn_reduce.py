@@ -5,7 +5,9 @@ At each depth L, on one exported base and the same rows, three readers give per-
   I(r)  the framework's in-loop step-0 loss (two independent one-step arms; tc1 receipts' hp1.inloop_step0_rows);
   E(r)  the one evaluator, bf16 (two hp1_eval.py outputs; bases[0].zero_adapter.row_losses);
   F(r)  the fp32 reference (hpn_read.py's two runs).
-With g = E - I, e = E - F and i = I - F (run 1 of each), the side share var(e) / (var(e) + var(i)) reads E-dominant >= 2/3,
+Stage 1b (Unsloth's readers at each depth) is read first: MOOT if |delta0_F| / |delta0_E| > 0.93 at a deciding depth,
+INDETERMINATE if |delta0_E| < 2 SE there. With g = E - I, e = E - F and i = I - F (run 1 of each), the side share
+var(e) / (var(e) + var(i)) reads E-dominant >= 2/3,
 I-dominant <= 1/3, comparable otherwise. The outcome follows the note's table: STAGE2 only if E-dominant at the two deepest depths;
 STOP otherwise (DEPTH_DEPENDENT if the two deepest calls differ). Any 48-layer figure is a log-log EXTRAPOLATION of sd against
 depth, with its leave-one-out range. Never a scored number, and never a statement about either framework.
@@ -26,7 +28,10 @@ N0_TOL = 1e-5 + 1e-9                    # two runs agree per row to 1e-5 (per-ro
 N1_L2_BOUND = 0.03                      # N1: sd(g) at L2 below HP2's 48-layer ~0.03
 N3_RHO = 0.2                            # N3: |corr(e, i)| <= 0.2 at every fitted depth
 DEPTH_FLOOR = 8                         # the maintainer's ruling: the decision needs the deepest fitted depth >= L8
-MOOT_BOUND = 0.0025                     # stage 1b: stage 2 needs |delta0_F| <= 0.0025 (half the 0.005 floor) at both deciding depths
+# stage 1b, scale-free: at each deciding depth stage 2 needs |delta0_F(L)| / |delta0_E(L)| <= 0.0025 / 0.002691 -- G1's half-floor
+# against HP2's 48-layer |delta0_E| -- else MOOT; a depth where |delta0_E| < 2 SE (G1's 2 SE) is INDETERMINATE, never a pass
+MOOT_RATIO = round(0.0025 / 0.002691, 2)
+GUARD_Z = 2.0
 EXTRAP_L = 48
 
 
@@ -119,12 +124,27 @@ def extrapolation(depths, sds):
 
 
 def base_term(e4b, uns):
-    """Stage 1b at one depth: delta0 = (base term) - (in-loop term), under E and under F (run 1 of each reader; same rows)."""
+    """Stage 1b at one depth: delta0 = (base term) - (in-loop term), under E and under F (run 1 of each reader; same rows), with
+    the per-row differentials d_X(r) = (X_e4b - I_e4b)(r) - (X_uns - I_uns)(r) behind each SE, the ratio and the 1b read."""
     m = statistics.mean
+    n = len(e4b["I"])
     inloop = m(e4b["I"]) - m(uns["I"])
     bE, bF = m(e4b["E"]) - m(uns["E"]), m(e4b["F"]) - m(uns["F"])
+    d = {x: [(a - i) - (b - j) for a, i, b, j in zip(e4b[x], e4b["I"], uns[x], uns["I"])] for x in ("E", "F")}
+    dE, dF = bE - inloop, bF - inloop
+    seE, seF = statistics.stdev(d["E"]) / math.sqrt(n), statistics.stdev(d["F"]) / math.sqrt(n)
+    se_shift = statistics.stdev([f - e for e, f in zip(d["E"], d["F"])]) / math.sqrt(n)
+    readable = abs(dE) >= GUARD_Z * seE
+    ratio = abs(dF) / abs(dE) if dE else None
+    read = "INDETERMINATE" if not readable or ratio is None else ("MOOT" if ratio > MOOT_RATIO else "OPEN")
     return {"inloop_term": round(inloop, 6), "base_term_E": round(bE, 6), "base_term_F": round(bF, 6),
-            "shift_E_to_F": round(bF - bE, 6), "delta0_E": round(bE - inloop, 6), "delta0_F": round(bF - inloop, 6)}
+            "shift_E_to_F": round(bF - bE, 6), "se_shift": round(se_shift, 6),
+            "delta0_E": round(dE, 6), "se_delta0_E": round(seE, 6), "abs_delta0_E": round(abs(dE), 6),
+            "delta0_F": round(dF, 6), "se_delta0_F": round(seF, 6), "abs_delta0_F": round(abs(dF), 6),
+            "ratio_F_over_E": None if ratio is None else round(ratio, 4), "read_1b": read,
+            # a SHIFT E -> F is called only past 2 x its paired SE; otherwise "no measurable shift", with its interval (reported only)
+            "shift_call": "SHIFT" if abs(dF - dE) > GUARD_Z * se_shift else "no measurable shift",
+            "shift_interval": [round(dF - dE - GUARD_Z * se_shift, 6), round(dF - dE + GUARD_Z * se_shift, 6)]}
 
 
 def reduce(spec, load=None):
@@ -146,7 +166,7 @@ def reduce(spec, load=None):
            "fitted_depths": Ls, "deepest_fit": Ls[-1] if Ls else None, "depths": {str(L): recs[L] for L in Ls},
            "thresholds": {"share_e_dominant": round(SHARE_HI, 4), "share_i_dominant": round(SHARE_LO, 4), "n0_tol": 1e-5,
                           "n1_l2_bound": N1_L2_BOUND, "n3_rho": N3_RHO, "depth_floor": DEPTH_FLOOR,
-                          "moot_bound": MOOT_BOUND},
+                          "moot_ratio": MOOT_RATIO, "guard_z": GUARD_Z},
            "base_term": {str(L): bterm[L] for L in sorted(bterm)}}
     if len(Ls) < 2:
         out.update(outcome="INSUFFICIENT", reason="fewer than two depths fit: N2's two-deepest rule cannot be read")
@@ -167,8 +187,12 @@ def reduce(spec, load=None):
     if any(L not in bterm for L in deciding):                # 1b is part of stage 1: no decision without it
         out.update(outcome="INCOMPLETE", reason=f"stage 1b (the base term) is missing at a deciding depth {deciding}")
         return out
-    if any(abs(bterm[L]["delta0_F"]) > MOOT_BOUND for L in deciding):   # read FIRST: it overrides the side call
-        out.update(outcome="MOOT", reason=f"|delta0_F| > {MOOT_BOUND} at a deciding depth: stage 2 cannot lift G1")
+    reads = {L: bterm[L]["read_1b"] for L in deciding}         # read FIRST: either stop overrides the side call
+    if "MOOT" in reads.values():                               # a readable depth that says moot is the stronger statement
+        out.update(outcome="MOOT", reason=f"|delta0_F|/|delta0_E| > {MOOT_RATIO} at a deciding depth {reads}: stage 2 cannot lift G1")
+        return out
+    if "INDETERMINATE" in reads.values():
+        out.update(outcome="INDETERMINATE", reason=f"|delta0_E| < {GUARD_Z} SE at a deciding depth {reads}: 1b cannot be read there")
         return out
     if c1 != c2:
         out.update(outcome="STOP_DEPTH_DEPENDENT", reason="the side call differs between the two deepest depths: unknown at 48 layers")

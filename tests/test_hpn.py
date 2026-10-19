@@ -43,22 +43,25 @@ def _synth(n, se, si, seed, base=None):
     return [In, list(In)], [E, list(E)], [F, list(F)]
 
 
-def _write_unsloth(tmp, L, In, E, F, shift_i, shift_e, shift_f):
-    """Stage 1b's Unsloth readers at depth L (one run each): e4b's rows shifted by a constant per reader, so
-    delta0_E = -shift_e + shift_i and delta0_F = -shift_f + shift_i exactly."""
-    sh = lambda rows, c: [round(x + c, 5) for x in rows]           # noqa: E731
+def _write_unsloth(tmp, L, In, E, F, shift_i, shift_e, shift_f, noise=0.0):
+    """Stage 1b's Unsloth readers at depth L (one run each): e4b's rows shifted by a constant per reader (plus optional per-row
+    noise on Unsloth's in-loop rows), so delta0_E = -shift_e + shift_i and delta0_F = -shift_f + shift_i up to that noise."""
+    rng = random.Random(L)
+    jit = [rng.gauss(0, noise) for _ in In[0]]
+    sh = lambda rows, c, j=None: [round(x + c + (j[k] if j else 0.0), 5) for k, x in enumerate(rows)]   # noqa: E731
+    In = [sh(In[0], 0.0, jit)]
     d = _write_depth(tmp / f"L{L}", "u", [sh(In[0], shift_i)] * 2, [sh(E[0], shift_e)] * 2, [sh(F[0], shift_f)] * 2)
     return {"inloop": [f"L{L}/{d['inloop'][0]}"], "eval": [f"L{L}/{d['eval'][0]}"], "fref": f"L{L}/{d['fref']}"}
 
 
-def _run(tmp, depth_noise, n=300, shifts=(0.0019, -0.0008, 0.0019), unsloth=True):
+def _run(tmp, depth_noise, n=300, shifts=(0.0019, -0.0008, 0.0019), unsloth=True, noise=0.0):
     """shifts = (in-loop, E, F) offsets of Unsloth's readers: by default delta0_E = 0.0027 (HP2's size) and delta0_F = 0 (not MOOT)."""
     spec = {"framework": "e4b", "free_mib_at_claim": 10600, "depths": []}
     for k, (L, se, si) in enumerate(depth_noise):
         In, E, F = _synth(n, se, si, seed=k + 1)
         d = _write_depth(tmp, L, In, E, F)
         if unsloth:
-            d["unsloth"] = _write_unsloth(tmp, L, In, E, F, *shifts)
+            d["unsloth"] = _write_unsloth(tmp, L, In, E, F, *shifts, noise=noise)
         spec["depths"].append(d)
     (tmp / "spec.json").write_text(json.dumps(spec))
     out = tmp / "hpn.json"
@@ -112,12 +115,33 @@ def test_a_base_term_beyond_the_bound_is_moot_whatever_the_side_call(tmp_path):
     assert rec["base_term"]["8"]["delta0_F"] == pytest.approx(0.004, abs=1e-5)
 
 
+def test_a_small_absolute_delta0_f_is_still_moot_when_f_did_not_move_it(tmp_path):
+    """The vacuous-pass case from review: at shallow depth |delta0_F| = 0.001 sits under the 48-layer 0.0025, but F moved nothing
+    (ratio 1.0 > 0.93), so 1b reads MOOT, not a pass."""
+    rc, rec = _run(tmp_path, [(4, 0.008, 0.003), (8, 0.015, 0.004)], shifts=(0.001, 0.0, 0.0))
+    b = rec["base_term"]["8"]
+    assert b["abs_delta0_F"] == pytest.approx(0.001, abs=1e-5) and b["abs_delta0_F"] < 0.0025
+    assert b["ratio_F_over_E"] == pytest.approx(1.0, abs=1e-3)
+    assert rec["outcome"] == "MOOT" and b["shift_call"] == "no measurable shift"
+
+
+def test_a_delta0_e_inside_two_se_reads_indeterminate_not_a_pass(tmp_path):
+    """|delta0_E| = 0.0005 with per-row noise 0.03 (SE ~0.0017): dividing by it means nothing, so 1b is INDETERMINATE there."""
+    rc, rec = _run(tmp_path, [(4, 0.008, 0.003), (8, 0.015, 0.004)], shifts=(0.0005, 0.0, 0.0005), noise=0.03)
+    b = rec["base_term"]["8"]
+    assert b["abs_delta0_E"] < 2 * b["se_delta0_E"] and b["read_1b"] == "INDETERMINATE" and rec["outcome"] == "INDETERMINATE"
+
+
+def test_the_ratio_bound_is_derived_from_g1s_half_floor_and_hp2s_delta0():
+    assert R.MOOT_RATIO == round(0.0025 / 0.002691, 2) == 0.93 and R.GUARD_Z == 2.0
+
+
 def test_the_base_term_arithmetic_is_delta0_under_each_reader(tmp_path):
     _, rec = _run(tmp_path, [(4, 0.008, 0.003), (8, 0.015, 0.004)], shifts=(0.0019, -0.0008, 0.0019))
     b = rec["base_term"]["8"]
     assert b["inloop_term"] == pytest.approx(-0.0019, abs=1e-5) and b["base_term_E"] == pytest.approx(0.0008, abs=1e-5)
     assert b["delta0_E"] == pytest.approx(0.0027, abs=1e-5) and b["delta0_F"] == pytest.approx(0.0, abs=1e-5)
-    assert b["shift_E_to_F"] == pytest.approx(-0.0027, abs=1e-5)
+    assert b["shift_E_to_F"] == pytest.approx(-0.0027, abs=1e-5) and b["shift_call"] == "SHIFT" and b["read_1b"] == "OPEN"
 
 
 def test_no_decision_without_stage_1b(tmp_path):
