@@ -70,11 +70,11 @@ def test_the_pins_are_exact_and_agree():
 
 def test_the_declared_run_ids_and_nothing_else(tmp_path):
     for run_id, extra in (("smt-fuse-1", {}), ("smt-fuse-2", {}), ("smt-fuse-3", {}),
-                          ("smt-sib-1", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 9000)}),
-                          ("smt-sib-2", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 9000)}),
-                          ("smt-sib-3", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 7200)}),
-                          ("smt-sib-4", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 9000)}),       # Amendment 1a
-                          ("smt-sib-8", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 9000)}),
+                          ("smt-sib-1", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 14400)}),
+                          ("smt-sib-2", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 14400)}),
+                          ("smt-sib-3", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 12600)}),
+                          ("smt-sib-4", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 14400)}),       # Amendment 1a
+                          ("smt-sib-8", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 14400)}),
                           ("smt-fuse-dry-1", {"SMT_FUSE_DRY": "1", "SMT_FUSE_BOX_EXEC": "/bin/false"}),
                           ("smt-sib-dry-1", {"SMT_FUSE_DRY": "1", "SMT_FUSE_BOX_EXEC": "/bin/false"})):
         out = _drive(tmp_path, run_id, **extra)
@@ -90,8 +90,8 @@ def test_the_declared_run_ids_and_nothing_else(tmp_path):
         assert out.returncode == 78 and "refusing" in out.stdout, (run_id, extra, out.stdout + out.stderr)
     a1a = PREREG[PREREG.index("### Amendment 1a"):]                          # new text since the 10-19 citation rule
     assert not re.search(r"receipt store `[0-9a-f]{7,40}`", a1a) and "$12.24" in a1a and "$1.53 per created box" in a1a
-    short = _drive(tmp_path, "smt-sib-1", E4B_RENT_DEADLINE_EPOCH=str(int(time.time()) + 3600))
-    assert short.returncode == 78 and "< the registered fit 7110s" in short.stdout, short.stdout   # the guard fit, not another refusal
+    short = _drive(tmp_path, "smt-sib-1", E4B_RENT_DEADLINE_EPOCH=str(int(time.time()) + 9000))   # A1's 2.5 h: refused now
+    assert short.returncode == 78 and "< the registered fit 12474s" in short.stdout, short.stdout   # the guard fit, not another refusal
     for s in ("smt-fuse-1", "smt-fuse-2", "smt-fuse-3", "smt-fuse-dry-", "smt-sib-1", "smt-sib-2", "smt-sib-3", "smt-sib-4", "smt-sib-8", "smt-sib-dry-"):
         assert s in PREREG, s
 
@@ -130,7 +130,7 @@ def test_amendment_1_the_sibling_probe_is_the_registered_design():
     assert 'ORDER = ("PHYS", "SIB", "WIDE", "WIDE", "SIB", "PHYS")' in SIB and "CYCLES = 4" in SIB
     assert "K_MAX, MIN_K = 16, 8" in SIB and "QUOTA_PER_K = 2.5" in SIB and 'READ = ("fuse_s",)' in SIB and 'REPORTED = ("block_s",)' in SIB
     assert "process_start_s = time.time() - a.spawned" in SIB and '"--spawned", repr(time.time())' in SIB
-    assert "REPEATS = 15" in SIB and "GUARD_S = 9000" in SIB and "def time_fit(" in SIB
+    assert "REPEATS = 15" in SIB and "GUARD_S = 14400" in SIB and "FIT_MARGIN_S = 1800" in SIB and "def time_fit(" in SIB
     assert "THROTTLE_FLAG = 0.05" in SIB and "COMPANION_FLAG = 0.25" in SIB and "MIN_TRIPLES = 6" in SIB
     # pinned before torch is imported, in a fresh process per rep, around the registered block unchanged
     child = SIB[SIB.index("def child(a):"):SIB.index("def flagged(r):")]
@@ -146,3 +146,13 @@ def test_amendment_1_the_sibling_probe_is_the_registered_design():
               "PHYS, SIB, WIDE, WIDE, SIB, PHYS", "8 triples", "25 %", "VOID_BY_HOST", "15 times timed", "SIB/PHYS not resolved below about 0.80", "7110 s", "2.5 h", "about 3x its timed `block_s`", "The fit's terms are recorded on the box", "never a ruling",
               "Worst $1.53"):
         assert s in PREREG, s
+
+
+def test_amendment_1b_the_fit_is_the_max_over_hosts_and_the_counters_are_reported_only():
+    a1b = PREREG[PREREG.index("### Amendment 1b"):]
+    for s in ("12474 s", "4.0 h", "$2.43", "21.2 s", "max over", "25 %", "reported only", "closes", "never read"):
+        assert s in a1b, s
+    assert not re.search(r"receipt store `[0-9a-f]{7,40}`", a1b)              # the 10-19 citation rule
+    assert "FIT = {\"setup_s\": 270, \"slab_s\": 75, \"block_wall_s\": 26.5, \"process_start_s\": 3" in SIB
+    assert 'blocks[-1]["host_counters"] = counter_delta(c0, host_counters())' in SIB
+    assert "host_counters" not in SIB[SIB.index("def summarize(res):"):SIB.index("def run(a):")]   # never read
