@@ -55,19 +55,23 @@ def stats(nll_a, nll_x, argmax) -> dict:
     md = statistics.mean(d)
     sd = statistics.stdev(d) if n > 1 else float("inf")
     se = sd / math.sqrt(n)
+    bound, am = pr.bound_of(nll_a), statistics.mean(argmax)
     return {"windows": n, "d": round(md, 6), "sd": round(sd, 6), "se": round(se, 6), "upper": round(md + UPPER_Z * se, 6),
-            "bound": round(pr.bound_of(nll_a), 6), "argmax": round(statistics.mean(argmax), 5),
-            "ppl_A": round(math.exp(statistics.mean(nll_a)), 4), "ppl_X": round(math.exp(statistics.mean(nll_x)), 4)}
+            "bound": round(bound, 6), "argmax": round(am, 5),
+            "ppl_A": round(math.exp(statistics.mean(nll_a)), 4), "ppl_X": round(math.exp(statistics.mean(nll_x)), 4),
+            "raw": {"d": md, "se": se, "bound": bound, "argmax": am}}     # the rule reads these, never the rounded fields
 
 
 def gate_rule(s) -> tuple:
-    """(passes, why): argmax >= 0.95 and d + UPPER_Z SE <= bound."""
-    if s["argmax"] < pr.ARGMAX_MIN:
-        return False, f"argmax {s['argmax']:.4f} < {pr.ARGMAX_MIN}"
-    upper = s["d"] + UPPER_Z * s["se"]
-    if upper > s["bound"]:
-        return False, f"d + {UPPER_Z} SE = {upper:+.5f} > bound {s['bound']:.5f}"
-    return True, f"argmax {s['argmax']:.4f}, d + {UPPER_Z} SE = {upper:+.5f} <= bound {s['bound']:.5f}"
+    """(passes, why): argmax >= 0.95 and d + UPPER_Z SE <= bound, compared UNROUNDED (``s["raw"]``; the review of
+    #1807, P143 A3's lesson): the rounded fields are for reading only."""
+    r = s["raw"]
+    if r["argmax"] < pr.ARGMAX_MIN:
+        return False, f"argmax {r['argmax']:.6f} < {pr.ARGMAX_MIN}"
+    upper = r["d"] + UPPER_Z * r["se"]
+    if upper > r["bound"]:
+        return False, f"d + {UPPER_Z} SE = {upper:+.7f} > bound {r['bound']:.7f}"
+    return True, f"argmax {r['argmax']:.6f}, d + {UPPER_Z} SE = {upper:+.7f} <= bound {r['bound']:.7f}"
 
 
 def _arm_gate(qa, qx, g, n_want):
@@ -183,6 +187,16 @@ def self_test() -> int:
     run("I8HEAD read on windows that are not the registered held-out set is VOID", "VOID", heldout={CANDIDATE: seen})
     run("A read on windows that are not the registered held-out set is VOID", "VOID", heldout={"A": seen})
     run("a record without its held-out hashes is VOID", "VOID", heldout={CANDIDATE: None})
+
+    def rounded(raw):
+        return {"d": round(raw["d"], 6), "se": round(raw["se"], 6), "bound": round(raw["bound"], 6),
+                "argmax": round(raw["argmax"], 5), "raw": raw}
+    over = rounded({"d": 0.00401949, "se": 0.0009, "bound": 0.0054999, "argmax": 0.99})   # rounded: 0.0054995 <= 0.0055
+    cases.append(("the bar reads the unrounded upper bound (over by 9e-8 PARKs)", gate_rule(over)[0] is False,
+                  gate_rule(over)[1]))
+    low = rounded({"d": 0.001, "se": 0.0003, "bound": 0.0055, "argmax": 0.949996})        # rounded: argmax 0.95
+    cases.append(("the argmax gate reads the unrounded agreement (0.949996 PARKs)", gate_rule(low)[0] is False,
+                  gate_rule(low)[1]))
     bad = [(n, d) for n, ok, d in cases if not ok]
     print(f"p150_reduce self-test {'OK' if not bad else 'FAILED ' + str(bad)} ({len(cases)} cases)")
     return 0 if not bad else 1

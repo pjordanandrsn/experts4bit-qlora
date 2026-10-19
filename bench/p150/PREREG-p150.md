@@ -56,7 +56,7 @@ reproduction, not a confirmation. So **P150 rules on windows nobody has read**:
 ## The rule (`p150_reduce.py`, fixed before data)
 
 I8HEAD alone decides, against A, on the held-out windows at **both** `t1` and `k16`, with the split premise's rule
-unchanged:
+unchanged, every bar compared **unrounded** (the reported fields are rounded for reading only):
 - **GO** iff, at t1 **and** at k16:
   - mean argmax agreement ≥ 0.95, **and**
   - the one-sided 95 % upper bound d + 1.645 SE ≤ P125's bound, ln(1 + 0.05 / ppl_A) over that gate's own windows.
@@ -80,7 +80,11 @@ unchanged:
 - the scope unchecked;
 - the window counts unchecked;
 - the recorded windows unchecked;
-- the held-out hashes unchecked.
+- the held-out hashes unchecked;
+- the rule read on the rounded fields.
+
+**The two gates are not independent.** As in P125, k16's 123 windows are t1's first 123, read in 16-row pieces where
+t1 reads one window per pass. Both must pass, but they are two views of overlapping text, not two samples.
 
 ## Predictions (graded, never ruling)
 

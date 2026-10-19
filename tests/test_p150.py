@@ -165,6 +165,9 @@ MUTANTS = [
     ('        elif rec.get("windows") != WINDOWS:', "        elif False:"),
     # the held-out windows never checked: a read on P125's seen windows (or any other) would rule
     ('        elif rec.get("heldout") != HELDOUT:', "        elif False:"),
+    # the rule read on the rounded fields (the review of #1807; P143 A3's lesson): a 9e-8 overshoot or an argmax of
+    # 0.949996 would pass
+    ('    r = s["raw"]', "    r = s"),
 ]
 
 
