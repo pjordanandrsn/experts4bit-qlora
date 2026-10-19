@@ -1,0 +1,3 @@
+KNOBS e4b=309cd671721b458c52d55c3fb02c0ceb6b62ec77 gnf4=9b824155ace19796e14ff182ed1ac8e4dc406086 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 min_power_w=575 short=32 long=160 reps=5 windows=12 cont=128
+CUDA_PROBE ok
+POWER_LIMIT_W 520 (floor 575)
