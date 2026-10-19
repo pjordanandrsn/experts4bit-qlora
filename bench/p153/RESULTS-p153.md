@@ -47,18 +47,36 @@ store (the reducer at `585cf68b`, equal to the staged pin; self-test 52/52).
 
 ## The W16 cost: observed, not explained
 
-At W16 the int8 head is **passed, never routed**, yet S1's W16 rate is below S0's in every pair: 0.9918, 0.9970, 0.9924
-and 0.9929 (geomean 0.9935). The head's own GEMV cannot be the cause, since it never runs at 16 rows. The S0 W16
-self-pairs drift by 0.42 % and 0.07 %, and three of the four pairs move further than that. The cost sits inside the 0.99
+S1's W16 rate is below S0's in every pair: 0.9918, 0.9970, 0.9924 and 0.9929 (geomean 0.9935). The S0 W16 self-pairs
+drift by 0.42 % and 0.07 %, and three of the four pairs move further than that. The cost sits inside the 0.99
 no-regression line, so the rule reads it as no regression. It is recorded here so a default does not hide it.
 
-What the knob changes even when the head is passed:
-- **Memory:** the int8 copy stays resident alongside the bf16 weight. `memory_allocated` is 311,772,672 bytes higher at
-  load, exactly the codes plus their fp32 scales. `memory_reserved` is 400 MiB higher (nvidia-smi 24487 vs 24087 MiB).
-- **The dispatch:** the module's row check, which picks the one-row GEMV or `F.linear`.
+**The head's GEMV cannot explain it.** Each W16 run does route two one-row steps through `gemv_i8_bw`, in its ramp.
+Bucket 1 replays 1164 times in every arm: W1's 6 x (31 + 159) = 1140, plus 2 for each of the 12 W16 runs.
+- **The rate is a slope:** 16 x 128 / (the min wall at 160 tokens - the min wall at 32).
+- **So the ramp cancels:** it is identical at both lengths.
+- **What the rate counts:** only bucket-16 replays, where the head is always passed to `F.linear`.
 
-A W16-only A/B, with the int8 copy built but the dispatch check skipped, would separate the two. It is $0 on the A2000
-for correctness, or a later lane for the speed. This read cannot attribute the cost.
+**Nor can the row check.** Every bucket runs as a CUDA graph (no eager steps in any arm), so the module's Python row
+check runs at capture only. The captured pass path is `F.linear(x, self.weight)`: the same cuBLAS call S0's
+`nn.Linear` makes, at the same shape and dtype.
+
+Two candidates remain:
+- **Memory:** the int8 copy stays resident alongside the bf16 weight.
+  - `memory_allocated` is 311,772,672 bytes higher at load, exactly the codes plus their fp32 scales.
+  - `memory_reserved` is 400 MiB higher (nvidia-smi 24487 vs 24087 MiB).
+- **Different tokens:** at W16, S1 decodes different tokens from S0, because the head is rounded at every row count.
+  - 12 of 16 rows diverge by 160 tokens.
+  - On an MoE, different tokens mean different router picks, so different expert work in each bucket-16 replay.
+  - The S0 self-pairs compare identical token streams; S1/S0 at W16 does not.
+
+**What would separate them:**
+- **A served A/B** (a later lane, for the speed): the int8 copy built but the weight NOT rounded, so S1's tokens equal
+  S0's. It runs against S0 plus a dummy allocation of the same size.
+- **A $0 bound on the second candidate,** on the A2000 with no speed run: replay S0's and S1's recorded W16 token
+  streams through the router, and compare the distinct experts per step.
+
+This read cannot attribute the cost.
 
 ## Predictions (graded, never ruling)
 
