@@ -2,11 +2,15 @@
 """``E4B_SERVE_ATTN_INT8`` (engines/int8_attn.py; lane P149, grouped-nf4-gemm K37) on a tiny Mixtral, on CPU: the
 census, the three paths, the engagement record, the refusals and serve_paged's lever.
 
-e4b's CI pins a grouped-nf4-gemm without ``dense_i8``, so a stand-in computes the dequantized product where K37's
-``linear_i8`` would. With ``TRITON_INTERPRET=1`` and a grouped-nf4-gemm that carries K37, the last test runs the real
-kernel under Triton's interpreter. The kernel's own contract (relative RMS at most 1.05 x cuBLAS's, one-hot exact,
-bitwise) is grouped-nf4-gemm's ``kernel/test_dense_i8.py``, checked on a CUDA card."""
+A stand-in computes the dequantized product where K37's ``linear_i8`` would, so these run on any grouped-nf4-gemm. With
+one that carries K37, tests/test_int8_attn_interp.py runs the real kernel under Triton's interpreter, in its own process
+(the last test). The kernel's own contract (relative RMS at most 1.05 x cuBLAS's, one-hot exact, bitwise) is
+grouped-nf4-gemm's ``kernel/test_dense_i8.py``, checked on a CUDA card."""
 import os
+import pathlib
+import re
+import subprocess
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -271,26 +275,19 @@ def test_the_census_refuses_a_projection_the_fusions_replaced(lever_env):
         sp._attn_int8_census(m, levers, *_r2(2))
 
 
-# --- the real kernel, where it is installed and the interpreter is on ---------------------------------------------
+# --- the real kernel: tests/test_int8_attn_interp.py, interpreted, in its own process ---------------------------------
 
-def _dense_i8():
-    if os.environ.get("TRITON_INTERPRET") != "1":
-        return None
-    try:
-        import dense_i8
-    except ImportError:
-        return None
-    return dense_i8
-
-
-@pytest.mark.skipif(_dense_i8() is None, reason="needs grouped-nf4-gemm's dense_i8 (K37) and TRITON_INTERPRET=1")
-@pytest.mark.parametrize("rows", [1, 7, 16])
-def test_the_kernel_path_runs_k37_on_the_dequantized_weights(routed, rows):
-    m = _mixtral()
-    ia.enable_serve_attn_int8(m)                                # K37's linear_i8 and its grid
-    mod = m.model.layers[0].self_attn.q_proj
-    x = torch.randn(rows, mod.in_features).to(torch.bfloat16)
-    out = mod(x).double()
-    ref = x.double() @ (mod.q.double() * mod.s.double()[:, None]).T
-    assert mod.routed == {rows: 1}
-    assert bool(((out - ref).abs() <= 2 ** -7 * ref.abs() + 1e-6).all())   # one bf16 step (the interpreter truncates)
+def test_the_kernel_path_passes_interpreted_in_its_own_process():
+    """CI's full suite imports triton compiled before test_int8_attn_interp.py can set TRITON_INTERPRET, so that file
+    skips itself in-process; here it runs in a fresh process. Without K37 (``dense_i8``) it skips, and so does this."""
+    pytest.importorskip("triton")
+    here = pathlib.Path(__file__).resolve().parent
+    out = subprocess.run([sys.executable, "-m", "pytest", "-q", "-rs", "-p", "no:cacheprovider",
+                          str(here / "test_int8_attn_interp.py")], capture_output=True, text=True, cwd=here.parent,
+                         env={**os.environ, "TRITON_INTERPRET": "1"}, timeout=900)
+    last = (out.stdout.strip().splitlines() or [""])[-1]
+    # a module-level skip collects nothing: pytest exits 5 (no tests collected)
+    if out.returncode in (0, 5) and re.match(r"1 skipped(, \d+ warnings?)? in ", last) and "without dense_i8" in out.stdout:
+        pytest.skip("grouped-nf4-gemm without dense_i8 (K37)")
+    ok = out.returncode == 0 and re.match(r"4 passed(, \d+ warnings?)? in ", last)
+    assert ok, out.stdout[-3000:] + out.stderr[-2000:]
