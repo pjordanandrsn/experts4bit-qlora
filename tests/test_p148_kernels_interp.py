@@ -12,7 +12,13 @@ os.environ.setdefault("TRITON_INTERPRET", "1")
 import pytest  # noqa: E402
 
 torch = pytest.importorskip("torch")
-pytest.importorskip("triton")
+triton = pytest.importorskip("triton")
+# triton decorates its own @jit library (tl.zeros, tl.sum) at its first import, so the interpreter env must precede
+# that import. In CI's full suite another module imports triton first; this file then skips itself here, and
+# tests/test_p148.py runs it in a fresh interpreted process (as the box runs it, compiled, in its own process).
+if os.environ["TRITON_INTERPRET"] == "1" and type(triton.language.zeros).__name__ != "InterpretedFunction":
+    pytest.skip("triton was imported compiled earlier in this process; tests/test_p148.py runs this file in a fresh "
+                "interpreted process", allow_module_level=True)
 
 HERE = pathlib.Path(__file__).resolve().parent
 for cand in (HERE, HERE.parent / "bench" / "p148"):

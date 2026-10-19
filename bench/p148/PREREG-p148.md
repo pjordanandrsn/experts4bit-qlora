@@ -43,8 +43,9 @@ Prototypes, not library kernels.
   - the int8 kernel reads its dequantized weights;
   - the quantizer's range.
 
-  CI runs it under Triton's interpreter. The box runs it **compiled on the card** after P136's premise, and must read
-  61 passed, none skipped.
+  CI runs it under Triton's interpreter in its own process (`tests/test_p148.py`): triton fixes its own `@jit` library
+  at its first import, so the interpreter must be set before it. The box runs it **compiled on the card** after P136's
+  premise, and must read 61 passed, none skipped.
 
 ## The bench (`p148_bench.py`)
 

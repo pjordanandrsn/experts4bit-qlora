@@ -6,6 +6,7 @@ driver's run ids."""
 import hashlib
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -65,6 +66,7 @@ def test_the_runner_runs_the_kernels_suite_compiled_after_the_premise_and_reads_
 def test_the_kernels_suite_counts_61_and_sets_the_interpreter_only_by_default():
     src = (REPO / "tests" / "test_p148_kernels_interp.py").read_text(encoding="utf-8")
     assert 'os.environ.setdefault("TRITON_INTERPRET", "1")' in src           # the runner sets 0 explicitly
+    assert 'type(triton.language.zeros).__name__ != "InterpretedFunction"' in src   # skips after a compiled import
     import ast
     tree = ast.parse(src)
     n = 0
@@ -76,6 +78,20 @@ def test_the_kernels_suite_counts_61_and_sets_the_interpreter_only_by_default():
         arg = par[0].args[1]
         n += {"K.CONFIGS_BF16": 36, "K.CONFIGS_I8": 18}.get(ast.unparse(arg)) or len(arg.elts)
     assert n == 61
+
+
+def test_the_kernels_suite_passes_interpreted_in_its_own_process():
+    """CI's full suite imports triton compiled before the kernels' suite can set TRITON_INTERPRET, and triton's own
+    @jit library is fixed at that first import, so the file skips itself in-process (the CI failure at 75316ad7: 59
+    "Cannot call @triton.jit'd outside of the scope of a kernel"). Here it runs in a fresh process, as the box runs it."""
+    pytest.importorskip("torch")
+    pytest.importorskip("triton")
+    out = subprocess.run([sys.executable, "-m", "pytest", "-q", "-rs", "-p", "no:cacheprovider",
+                          str(REPO / "tests" / "test_p148_kernels_interp.py")], capture_output=True, text=True,
+                         cwd=REPO, env={**os.environ, "TRITON_INTERPRET": "1"}, timeout=900)
+    last = (out.stdout.strip().splitlines() or [""])[-1]
+    ok = out.returncode == 0 and re.match(r"61 passed(, \d+ warnings?)? in ", last)
+    assert ok, out.stdout[-3000:] + out.stderr[-2000:]
 
 
 @pytest.fixture(scope="module")
