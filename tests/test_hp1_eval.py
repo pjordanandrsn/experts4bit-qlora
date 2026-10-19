@@ -214,3 +214,21 @@ def test_per_row_zero_adapter_losses_and_gaps_are_recorded():
     b = bases[0]
     assert b["zero_adapter"]["row_losses"] == [2.0, 2.012] and b["status"] == "VOID"      # recorded on a VOID too
     assert b["zero_adapter_row_gaps"] == {"a": [0.001, 0.011]}                            # b: length mismatch; c: no rows
+
+
+def test_hp2_zero_adapter_report_only_records_but_never_voids():
+    """HP2: the zero-adapter gap is deterministic per base (a rerun cannot change it), so it is a reported fact, not a VOID."""
+    bases, arms = Harness(zero=2.0300).run([arm("a")], zero_report_only=True)
+    assert bases[0]["status"] == "OK" and bases[0]["zero_adapter_outside_tol"] == ["a"] and bases[0]["zero_adapter_report_only"]
+    assert arms[0]["status"] == "SCORED"
+
+
+def test_hp2_round_trip_is_centred_on_each_runs_own_zero_adapter_gap():
+    """HP2 (#1793 ruling): 6(b) VOIDs iff |(evaluator - in-loop N) - (zero adapter - in-loop 0)| > tol, so it tests only the adapter's
+    round trip; the zero-adapter gap itself (deterministic per base) is reported. The 0.02 constant does not also apply."""
+    h = Harness(zero=2.0250, targets={"a": 1.5300, "b": 1.5400})              # z = +0.025; a: 0.030 - 0.025 = 0.005; b: 0.015
+    bases, arms = h.run([arm("a"), arm("b")], zero_report_only=True, roundtrip_zero_centred=0.01)
+    got = by_tag(arms)
+    assert got["a"]["status"] == "SCORED" and got["a"]["zero_gap"] == 0.025 and got["a"]["adapter_roundtrip"] == 0.005
+    assert got["b"]["status"] == "VOID" and "zero-centred" in got["b"]["reason"] and got["b"]["void_level"] == "run"
+    assert got["b"]["adapter_roundtrip"] == 0.015 and bases[0]["status"] == "OK"

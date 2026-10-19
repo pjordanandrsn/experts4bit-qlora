@@ -114,3 +114,24 @@ def test_the_registered_dataset_alone_cannot_supply_96_rows():
     t = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(t)
     assert t.N_EVAL == 48
+
+
+def test_hp2s_offset_rows_are_the_pools_rows_after_the_first_calibration_set(tmp_path, monkeypatch):
+    """HP2 takes pool rows [start, start + count): past HP1's held-out rows and past HP1 Amendment 4's calibration rows."""
+    m, tok = _arm(), _Tok()
+    src, dsp, ds = _world(m, tmp_path, monkeypatch, eval_pool=14)
+    hp1 = _hp1_tokens(m, tmp_path, dsp, tok)
+    cal, rec = hp1_caltokens.calibration_tokens(m, tok, ds, str(src), hp1, N, start=2 * N, count=5)
+    _tp, epool, _ = m.pack_pools(str(src), ds)
+    want = m.encode_rows(tok, epool, 400, "alpaca", "</s>")
+    assert cal["eval"] == want[2 * N:2 * N + 5] and cal["n_eval"] == 5 and rec["held_out_pool_rows"] == [2 * N + 1, 2 * N + 5]
+    first, _ = hp1_caltokens.calibration_tokens(m, tok, ds, str(src), hp1, N)
+    assert not set(map(tuple, cal["eval"])) & set(map(tuple, first["eval"]))   # disjoint from Amendment 4's rows
+
+
+def test_calibration_rows_may_not_overlap_hp1s_held_out_rows(tmp_path, monkeypatch):
+    m, tok = _arm(), _Tok()
+    src, dsp, ds = _world(m, tmp_path, monkeypatch)
+    hp1 = _hp1_tokens(m, tmp_path, dsp, tok)
+    with pytest.raises(ValueError, match="at or after row 5"):
+        hp1_caltokens.calibration_tokens(m, tok, ds, str(src), hp1, N, start=N - 1, count=3)

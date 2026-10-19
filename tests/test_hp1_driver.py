@@ -25,8 +25,13 @@ case "$*" in
   *"hp1_reduce.py voids"*) ;;
   *hp1_caltokens.py*) out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p')
     [ "${STUB_CALTOK:-ok}" = refuse ] && { echo "HP1 CALTOKENS REFUSED: the pool's first 48 rows do not reproduce HP1's held-out rows"; exit 13; }
-    python3 -c "import json,sys; json.dump({'fam': 'qwen3hp1cal', 'sha256': 'c' * 64, 'train': [[1, 2]], 'eval': [[i] for i in range(48, 96)]}, open(sys.argv[1], 'w'))" "$out"
+    tk=$(echo "$*" | sed -n 's/.*--tokens \([^ ]*\).*/\1/p')
+    python3 -c "import json,sys; fam = json.load(open(sys.argv[2]))['fam']; json.dump({'fam': fam, 'sha256': 'c' * 64, 'train': [[1, 2]], 'eval': [[i] for i in range(48, 96)]}, open(sys.argv[1], 'w'))" "$out" "$tk"
     echo "HP1 CALTOKENS rows 49-96 of the held-out pool; prefix reproduces HP1's 48; sha=$(printf 'c%.0s' $(seq 64))";;
+  *"hp2_reduce.py g1"*) out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p')
+    if [ "${STUB_G1:-pass}" = close ]; then echo '{"verdict": "CLOSE", "tau": 0.03}' > "$out"; echo "HP2_G1=CLOSE"; exit 4; fi
+    echo '{"verdict": "PASS", "roundtrip_zero_centred_tol": 0.01, "z_bands": {"e4b": [-0.0013, 0.0158]}}' > "$out"; echo "HP2_G1=PASS";;
+  *"hp2_reduce.py verdict"*) echo "HP2_VERDICT=PARITY: no measurable difference at margin m";;
   *hp1_calib.py*) out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p'); echo '{"verdict": "PASS", "tol": 0.0123}' > "$out"; echo "HP1_CALIB=PASS tol=0.0123";;
   *hp1_eval.py*)
     out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p'); st=OK
@@ -52,8 +57,8 @@ PY_E4B=$W/fakepy
 say(){ echo "SAY: $*" >> "$W/say.log"; }
 can_run(){ case "$2" in ${NO_TIME_FOR:-__none__}) echo "SKIPPED $2" >> summary.txt; return 1;; esac; return 0; }
 tc1_prepare(){ TOK=$W/tokens.json; TS=deadbeef
-  # the calibration box asks for 2 x 48 held-out rows, tokenised for its own fam (as tc1_arm --prepare does)
-  [ "${6:-}" = 96 ] && python3 -c "import json,sys; json.dump({'fam': sys.argv[1], 'sha256': 'x', 'train': [[1, 2]], 'eval': [[i] for i in range(96)]}, open(sys.argv[2], 'w'))" "$1" "$TOK"
+  # tokenised for the family being prepared, as tc1_arm --prepare labels it (HP1's own family keeps the harness file as written)
+  [ "$1" != qwen3hp1 ] && python3 -c "import json,sys; json.dump({'fam': sys.argv[1], 'sha256': 'deadbeef', 'train': [[1, 2]], 'eval': []}, open(sys.argv[2], 'w'))" "$1" "$TOK"
   return 0; }
 # tc1_arm's own rule (tc1_arm.py, the tokens check): a tokens file labelled for another fam is refused, rc=13 TOKENS_MISMATCH.
 arm(){ local tf; tf=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('fam') or '')" "${10}")
@@ -446,3 +451,36 @@ def test_the_calibrated_tolerance_reaches_every_full_depth_evaluator_pass_and_no
 def test_without_a_calibrated_tolerance_no_pass_overrides_the_default(tmp_path):
     drive(tmp_path)
     assert "--zero-tol" not in (tmp_path / "py.log").read_text()
+
+
+def test_hp2_runs_shakedown_calibration_g1_then_e4b_k00_vs_unsloth_at_the_calibrated_bound(tmp_path):
+    import json
+    """HP2-PREREG: A (shakedown, e4b + Unsloth, no axolotl), B (one e4b K00 step + one Unsloth step on 300 calibration rows, both
+    bases exported, the evaluator, hp2_reduce g1), C (e4b K00 + Unsloth on the P seeds), D (the P pass at tau, the verdict)."""
+    arms, summary = drive(tmp_path, FAMILY_FN="tc1_hp2_family", FAMILY_FAM="qwen3hp2")
+    assert not [a for a in arms if a[1] == "axolotl"]
+    assert sorted(tags(arms, "qwen3hp2shake")) == ["hp1shake_e4b", "hp1shake_unsloth"]     # the shake fam is ${FAM}shake
+    t = tags(arms, "qwen3hp2")
+    assert t[:2] == ["hp2cal_e4b_k00_s3407", "hp2cal_unsloth_s3407"]
+    assert t[2:] == [f"hp2_{fw}_s{s}" for s in (3410, 3411, 3412) for fw in ("k00", "unsloth")]
+    cal = {a[2]: a for a in arms if a[2].startswith("hp2cal_")}
+    assert all("--hp1-export-base" in a for a in cal.values())
+    exporters = [a[2] for a in arms if a[0] == "qwen3hp2" and a[2].startswith("hp2_") and "--hp1-export-base" in a]
+    assert exporters == ["hp2_k00_s3410", "hp2_unsloth_s3410"]
+    py = (tmp_path / "py.log").read_text()
+    ct = next(ln for ln in py.splitlines() if "hp1_caltokens.py" in ln)
+    assert "--start 96" in ct and "--count 300" in ct
+    evc = next(ln for ln in py.splitlines() if "hp1_eval.py" in ln and "eval_cal" in ln)
+    assert "--eval-n 300" in evc and "base_e4b_qwen3hp2" in evc and "base_unsloth_qwen3hp2" in evc
+    evp = next(ln for ln in py.splitlines() if "hp1_eval.py" in ln and "eval_P" in ln)
+    assert "--zero-report-only 1" in evp and "--roundtrip-zero-centred 0.01" in evp and "--zero-tol" not in evp
+    assert json.loads((tmp_path / "hp2" / "g1.json").read_text())["roundtrip_zero_centred_tol"] == 0.01
+    assert "hp2_reduce.py verdict" in py and "--g1" in py and "HP2 G1 PASS" in summary and "HP2_VERDICT=PARITY" in summary
+    assert py.index("hp2_reduce.py g1") < py.index("eval_P")              # G1 is read before the confirmation pass
+
+
+def test_hp2_g1_closure_ends_the_draw_before_any_confirmation_arm(tmp_path):
+    arms, summary = drive(tmp_path, FAMILY_FN="tc1_hp2_family", FAMILY_FAM="qwen3hp2", STUB_G1="close")
+    t = tags(arms, "qwen3hp2")
+    assert t == ["hp2cal_e4b_k00_s3407", "hp2cal_unsloth_s3407"] and "HP2 G1_CLOSED" in summary and "not a strike" in summary
+    assert "hp2_reduce.py verdict" not in (tmp_path / "py.log").read_text()
