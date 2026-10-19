@@ -127,6 +127,7 @@ case " $FAMILIES " in " olmoedecab "|" qwen3decab "|" olmoedecab qwen3decab "|" 
 # HP1-PREREG Amendment 4: the calibration box runs one e4b arm in venv-e4b (as every HP1 e4b arm does): no Unsloth and no axolotl venv,
 # so its guard is spent on the measurement, not on installs it never uses
 NEED_AXOLOTL=1; case " $FAMILIES " in " qwen3hp1cal ") NEED_UNSLOTH=0; NEED_AXOLOTL=0;; esac
+case " $FAMILIES " in " qwen3hp2 ") NEED_AXOLOTL=0;; esac     # HP2 (bench/hp2/HP2-PREREG.md): e4b vs Unsloth only
 : > summary.txt; echo "$TC1_INSTANCE_ID" > INSTANCE_ID
 FETCH_OK_N=0; FETCH_FAILED_N=0   # families whose model staged / did not (tc1_prepare); none staged and one failed = rc 15 at the end
 echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST matched_seed=$MATCHED_SEED pack=$PACK" | tee -a summary.txt
@@ -139,6 +140,11 @@ esac
 case " $FAMILIES " in *" qwen3axo1767 "*)
   echo "FIXTURE axo1767 (#1767): HP1's box-side shakedown fixture ($HP1_SHAKE_LAYERS-layer cut, $HP1_SHAKE_STEPS steps, 8 held-out rows); arms e4b + axolotl, then the axolotl adapter rescored with the kernels on and off" | tee -a summary.txt
   [ -n "${TC1_PREREG:-}" ] || PREREG=tc1/AXO1767-PREREG.md
+  ;;
+esac
+case " $FAMILIES " in *" qwen3hp2 "*)
+  echo "FIXTURE hp2 (HP2-PREREG): steps=$CURVE_STEPS eval_n=$HP1_EVAL_N; calibration rows 97-244 (148), 1 step; P seeds=[$HP1_CONF_SEEDS]; e4b K00 vs Unsloth; axolotl out" | tee -a summary.txt
+  [ -n "${TC1_PREREG:-}" ] || PREREG=hp2/HP2-PREREG.md
   ;;
 esac
 case " $FAMILIES " in *" qwen3hp1 "*|*" qwen3hp1k "*|*" qwen3hp1p "*|*" qwen3hp1cal "*)
@@ -659,6 +665,7 @@ arm_once(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$
     hp1)    s=$CURVE_STEPS; en=$HP1_EVAL_N; ee=$HP1_EVAL_EVERY; ex_tag=hp1_k11_s${HP1_SEL_SEEDS%% *};;
     hp1shake) s=$HP1_SHAKE_STEPS; en=8; ee=$HP1_SHAKE_STEPS; ex_tag=hp1shake_e4b;;
     hp1cal) s=1; en=$HP1_EVAL_N; ee=1; ex_tag=hp1cal_k00_s3407;;          # Amendment 4: one step; the step-0 read is what is calibrated
+    hp2cal) s=1; en=300; ee=1; ex_tag=hp2cal_e4b_k00_s3407;;               # HP2: one step on the 300 calibration rows (step 0 is read)
   esac
   local EXP EXPARG=""; [ "$FW" != e4b ] && { EXP=$(expect_of $FAM $ex_tag); [ -n "$EXP" ] && EXPARG="--expect-trainable $EXP"; }
   local A; A=$(alarm_for $AL)
@@ -2342,7 +2349,8 @@ hp1_eval_block(){ local NAME=$1 TOK=$2 MID=$3 REV=$4; shift 4; local R=() B=() x
   can_run "$need" "hp1/eval_$NAME ($n arms)" || { echo "HP1 EVAL_$NAME SKIPPED host-limited (needs ${need}s for $n arms)" | tee -a summary.txt; return 1; }
   # offline: the checkpoint is already on the box, and the image's huggingface_hub 2.x / httpx2 can break content-encoded Hub responses
   HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts "${R[@]}" --bases "${B[@]}" --tokens $TOK --eval-n $HP1_EVAL_N --model "$MID" --revision $REV \
-    ${HP1_ZERO_TOL:+--zero-tol $HP1_ZERO_TOL} --out $W/hp1/eval_$NAME.json > logs/hp1_eval_$NAME.log 2>&1; tail -1 logs/hp1_eval_$NAME.log
+    ${HP1_ZERO_TOL:+--zero-tol $HP1_ZERO_TOL} ${HP1_RT_TOL:+--roundtrip-tol $HP1_RT_TOL} ${HP1_ZERO_REPORT_ONLY:+--zero-report-only 1} \
+    ${HP1_RT_BOUNDS:+--roundtrip-bounds @$HP1_RT_BOUNDS} --out $W/hp1/eval_$NAME.json > logs/hp1_eval_$NAME.log 2>&1; tail -1 logs/hp1_eval_$NAME.log
   HP1_EVAL_PER_ARM_S=$($PY_E4B -c "import json,sys; d=json.load(open(sys.argv[1])); t=sum(x.get('seconds',0) for x in d['bases']); print(max(60, int(t / max(1, len(d['arms'])))))" \
     $W/hp1/eval_$NAME.json 2>/dev/null || echo 600); return 0; }
 # hp1_early_check FAM MID REV TOK TS TAG FW: the EARLY BASE CHECK on the run that just exported FW's base -- the base's digest and
@@ -2457,6 +2465,65 @@ tc1_hp1cal_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 TOK TS TOKC TSC TA
   $PY_E4B $W/hp1_calib.py $W/hp1/eval_cal.json --tag $TAG --ceiling $HP1_CAL_CEILING --out $W/hp1/calib.json 2>&1 | tee -a summary.txt
   hp1_bulk_manifest "$W"
   [ -s $W/hp1/calib.json ] && echo "HP1_CARRY calib.json sha256 $(sha256sum $W/hp1/calib.json | cut -d' ' -f1)" | tee -a summary.txt; return 0; }
+# HP2 (bench/hp2/HP2-PREREG.md), one box, each phase gated:
+#   A: prepare + the box-side shakedown (e4b + Unsloth; axolotl out);
+#   B: calibration -- one e4b K00 step and one Unsloth step on 300 calibration rows (held-out pool rows 97-396, hp1_caltokens.py), both
+#      bases exported, the one evaluator's zero-adapter pass on both, hp2_reduce.py g1 -> hp2/g1.json written BEFORE any confirmation arm.
+#      G1 is enforced in code: hp2_reduce exits 4 on a CLOSE or a STOP (m_need > the expected margin), the draw ends and the box
+#      tears down (a reading, not a strike);
+#   C: confirmation -- e4b K00 and Unsloth on the P seeds, each family's first run exporting its base;
+#   D: the evaluator's P pass (zero-adapter report-only: deterministic per base; 6(b) VOID centred on each framework's b_f), HP1's
+#      one-redraw rule, the bulk manifest,
+#      and hp2_reduce.py verdict (G2 + the registered wording).
+tc1_hp2_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TSC s B X="--hp1-export $W/hp1" rc fw tag
+  local CE=hp2cal_e4b_k00_s3407 CU=hp2cal_unsloth_s3407 ALL="" bu=1 be=1 PR=()
+  say "===== HP2 family $FAM ($MID @ $REV; calibration rows 97-244; P seeds [$HP1_CONF_SEEDS]; alarms e4b $EAL unsloth $UAL)"
+  HP1_AX_DROP=1                                                        # HP2: e4b vs Unsloth only
+  for s in $HP1_CONF_SEEDS; do ALL="$ALL e4b:hp2_k00_s$s:fused unsloth:hp2_unsloth_s$s:unsloth"; done
+  tc1_prepare $FAM "$MID" $REV $FAL "e4b:$CE:fused unsloth:$CU:unsloth$ALL" $HP1_EVAL_N || return 0
+  mkdir -p $W/hp1 $W/hp2 $W/hp2cal
+  if ! hp1_shakedown $FAM "$MID" $REV $TOK $TS; then echo "HP2 SHAKEDOWN_FAILED" | tee -a summary.txt; return 0; fi
+  echo "HP2 SHAKEDOWN_OK" | tee -a summary.txt
+  TOKC=$W/hp2/tokens_${FAM}_calib.json
+  HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_caltokens.py --tc1-arm $W/tc1_arm.py --data $W/data/ds_alpaca.json --data-sha $DS_ALPACA_SHA \
+    --pack-src $W/data/alpaca_data_cleaned.json --model "$MID" --revision $REV --tokens $TOK --n $HP1_EVAL_N --start 96 --count 300 \
+    --out $TOKC > logs/hp2_caltokens.log 2>&1
+  TSC=$(sed -n 's/^HP1 CALTOKENS .*sha=\([0-9a-f]\{64\}\)$/\1/p' logs/hp2_caltokens.log)
+  [ -n "$TSC" ] && [ -s "$TOKC" ] || { echo "HP2 CALIB_REFUSED tokens: $(grep -m1 REFUSED logs/hp2_caltokens.log | cut -c1-200)" | tee -a summary.txt; return 0; }
+  echo "HP2 calibration tokens: held-out pool rows 97-396 (rows 1-$HP1_EVAL_N reproduce HP1's), sha=$TSC" | tee -a summary.txt
+  arm $FAM e4b $CE fused $EAL "$MID" $REV 0 hp2cal $TOKC $TSC --attn-4bit 1 $(hp1_cell k00 3407) --seed 3407 --order-seed 3407 \
+    --hp1-export $W/hp2cal --hp1-export-base 1
+  arm $FAM unsloth $CU unsloth $UAL "$MID" $REV 0 hp2cal $TOKC $TSC --grad-ckpt unsloth --unsloth-targets $UT7 --unsloth-moe-backend grouped_mm \
+    --lora-init native --adapter-dtype native --seed 3407 --order-seed 3407 --hp1-export $W/hp2cal --hp1-export-base 1
+  for tag in $CE:e4b $CU:unsloth; do
+    [ "$(status_of $FAM ${tag#*:} ${tag%%:*})" = ok ] || { echo "HP2 CALIB_ARM_FAILED ${tag#*:} $(status_of $FAM ${tag#*:} ${tag%%:*})" | tee -a summary.txt; return 0; }
+  done
+  HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts $W/${FAM}_e4b_$CE.json $W/${FAM}_unsloth_$CU.json \
+    --bases $W/hp2cal/base_e4b_$FAM $W/hp2cal/base_unsloth_$FAM --tokens $TOKC --eval-n 300 --model "$MID" --revision $REV \
+    --out $W/hp2/eval_cal.json > logs/hp2_eval_cal.log 2>&1; tail -1 logs/hp2_eval_cal.log
+  $PY_E4B $W/hp2_reduce.py g1 $W/hp2/eval_cal.json --out $W/hp2/g1.json 2>&1 | tee -a summary.txt; rc=${PIPESTATUS[0]}
+  # G1 is enforced HERE, by the reducer's exit code (4 = CLOSE or STOP): the draw ends and the box tears down (a reading, not a strike)
+  if [ "$rc" = 4 ]; then echo "HP2 G1_CLOSED: the instrument could not read the margin (a reading, not a strike)" | tee -a summary.txt; hp1_bulk_manifest "$W"; return 0; fi
+  [ "$rc" = 0 ] || { echo "HP2 G1_UNUSABLE rc=$rc" | tee -a summary.txt; return 0; }
+  HP1_RT_BOUNDS=$W/hp2/roundtrip_bounds.json; HP1_ZERO_REPORT_ONLY=1
+  $PY_E4B -c "import json,sys; json.dump(json.load(open(sys.argv[1]))['roundtrip_bounds'], open(sys.argv[2], 'w'))" $W/hp2/g1.json $HP1_RT_BOUNDS \
+    || { echo "HP2 G1_UNUSABLE (no round-trip bounds)" | tee -a summary.txt; return 0; }
+  echo "HP2 G1 PASS; the confirmation pass VOIDs 6(b) at $(cat $HP1_RT_BOUNDS) (centre, half-width); zero-adapter is report-only" | tee -a summary.txt
+  for s in $HP1_CONF_SEEDS; do
+    B=""; [ $be = 1 ] && { B="--hp1-export-base 1"; be=0; }
+    hp1_run $FAM e4b hp2_k00_s$s fused $EAL "$MID" $REV $TOK $TS --attn-4bit 1 $(hp1_cell k00 $s) --seed $s --order-seed $s $X $B
+    B=""; [ $bu = 1 ] && { B="--hp1-export-base 1"; bu=0; }
+    hp1_run $FAM unsloth hp2_unsloth_s$s unsloth $UAL "$MID" $REV $TOK $TS --grad-ckpt unsloth --unsloth-targets $UT7 \
+      --unsloth-moe-backend grouped_mm --lora-init native --adapter-dtype native --seed $s --order-seed $s $X $B
+    PR+=("$W/${FAM}_*_hp2_*_s$s.json")
+  done
+  hp1_eval_block P $TOK "$MID" $REV "${PR[@]}" -- $W/hp1/base_*_$FAM || { echo "HP2 P readout lost to the deadline" | tee -a summary.txt; return 0; }
+  if hp1_redraw $FAM "$MID" $REV $TOK $TS $W/hp1/eval_P.json; then
+    hp1_eval_block P $TOK "$MID" $REV "${PR[@]}" -- $W/hp1/base_*_$FAM || true
+  fi
+  hp1_bulk_manifest "$W"
+  $PY_E4B $W/hp2_reduce.py verdict $W/hp1/eval_P.json --g1 $W/hp2/g1.json --manifest $W/hp1/bulk_manifest.json --out $W/hp2/verdict.json 2>&1 | tee -a summary.txt
+  echo "HP2 verdict: $W/hp2/verdict.json" | tee -a summary.txt; return 0; }
 # the split path, box 2 (qwen3hp1p): REFUSES unless box 1's eval_K.json + select.json are staged beside the runner AND match the pinned
 # TC1_HP1_K_EVAL_SHA256 / TC1_HP1_K_SELECT_SHA256 / TC1_HP1_K_MANIFEST_SHA256 (box 1's receipt), and the selection re-derives from the staged eval_K.json; then its
 # OWN shakedown, the P block with an early base check on the first E run, and the verdict over the staged eval_K.json + eval_P.json
@@ -2664,6 +2731,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3hp1k)   tc1_hp1k_family   qwen3hp1    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400;;            # HP1 Amendment 2, split box 1
   qwen3hp1p)   tc1_hp1p_family   qwen3hp1    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600 3600;;  # HP1 Amendment 2, split box 2
   qwen3hp1cal) tc1_hp1cal_family qwen3hp1cal Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400;;            # HP1 Amendment 4, the calibration box
+  qwen3hp2)    tc1_hp2_family    qwen3hp2    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600;;       # HP2 (e4b K00 vs Unsloth)
   qwen3axo1767) tc1_axo1767_family qwen3hp1   Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400;;           # #1767 (AXO1767-PREREG): the four-score reading
   tc2small)    tc2_small_box;;                 # lane TC2, box A: granite, olmoe, gptoss (tc2_small_box's table)
   tc2big)      tc2_big_box;;                   # lane TC2, box B: qwen3_5, mixtral (tc2_big_box's table)

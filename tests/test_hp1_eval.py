@@ -214,3 +214,28 @@ def test_per_row_zero_adapter_losses_and_gaps_are_recorded():
     b = bases[0]
     assert b["zero_adapter"]["row_losses"] == [2.0, 2.012] and b["status"] == "VOID"      # recorded on a VOID too
     assert b["zero_adapter_row_gaps"] == {"a": [0.001, 0.011]}                            # b: length mismatch; c: no rows
+
+
+def test_hp2_zero_adapter_report_only_records_but_never_voids():
+    """HP2: the zero-adapter gap is deterministic per base (a rerun cannot change it), so it is a reported fact, not a VOID."""
+    bases, arms = Harness(zero=2.0300).run([arm("a")], zero_report_only=True)
+    assert bases[0]["status"] == "OK" and bases[0]["zero_adapter_outside_tol"] == ["a"] and bases[0]["zero_adapter_report_only"]
+    assert arms[0]["status"] == "SCORED"
+
+
+def test_hp2_round_trip_bounds_are_centred_per_framework():
+    """HP2: 6(b) VOIDs iff |evaluator - in-loop step N - centre_f| > half_f; outside the bounds' frameworks the 0.02 rule stands."""
+    h = Harness(targets={"a": 1.5150, "b": 1.5150})                             # evaluator - in-loop = +0.015 for both
+    _, arms = h.run([arm("a"), arm("b", framework="unsloth")], roundtrip_bounds={"e4b": [0.012, 0.005], "unsloth": [-0.002, 0.005]})
+    got = by_tag(arms)
+    assert got["a"]["status"] == "SCORED"                                       # |0.015 - 0.012| <= 0.005
+    assert got["b"]["status"] == "VOID" and "- -0.002| > 0.005" in got["b"]["reason"] and got["b"]["void_level"] == "run"
+    _, arms = Harness(targets={"a": 1.5260}).run([arm("a")], roundtrip_bounds={"e4b": [0.025, 0.005]})   # +0.026: past 0.02, inside
+    assert arms[0]["status"] == "SCORED"                                        # the centred bound replaces the constant, not adds to it
+
+
+def test_round_trip_bounds_may_be_read_from_a_file(tmp_path):
+    p = tmp_path / "b.json"
+    p.write_text('{"e4b": [0.0, 0.01]}')
+    assert hp1_eval._bounds_arg("@" + str(p)) == {"e4b": [0.0, 0.01]} and hp1_eval._bounds_arg('{"x": [1, 2]}') == {"x": [1, 2]}
+    assert hp1_eval._bounds_arg(None) is None

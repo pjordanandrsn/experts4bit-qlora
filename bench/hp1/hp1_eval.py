@@ -136,6 +136,13 @@ def sha_file(path):
     return h.hexdigest()
 
 
+def _bounds_arg(v):
+    """--roundtrip-bounds: inline JSON, or @path to a JSON file (the driver passes a file: no JSON in a shell word)."""
+    if not v:
+        return None
+    return json.load(open(v[1:])) if v.startswith("@") else json.loads(v)
+
+
 def receipt_arm(path):
     """One arm as the evaluator reads it from its TC1 receipt."""
     r = json.load(open(path))
@@ -186,7 +193,7 @@ def tc1_invalid(arm, tokens_sha, expect_trainable):
 
 
 def evaluate(arms, base_dirs, rows, open_base, make_scorer, load_adapter, file_sha, tokens_sha, expect_trainable, write=None,
-             release=None, zero_tol=ZERO_ADAPTER_TOL):
+             release=None, zero_tol=ZERO_ADAPTER_TOL, roundtrip_tol=ROUNDTRIP_TOL, zero_report_only=False, roundtrip_bounds=None):
     """The evaluator's rules, with the model and the scoring injected (``open_base(dir) -> store`` with .digest() and .meta;
     ``make_scorer(store) -> (set_adapter(canon | None), score() -> {"row_mean", ...})``; ``load_adapter(path) -> (tensors, scalings)``).
     Every STRICT failure VOIDs: a TC1-invalid run is never scored; a base whose digest or zero-adapter check fails VOIDs every arm
@@ -227,7 +234,10 @@ def evaluate(arms, base_dirs, rows, open_base, make_scorer, load_adapter, file_s
                                              for x in mine if zero.get("row_losses") and x.get("inloop_step0_rows")
                                              and len(x["inloop_step0_rows"]) == len(zero["row_losses"])}
             bad = [x["tag"] for x in mine if abs(zero["row_mean"] - x["inloop_step0"]) > zero_tol]
-            if bad:
+            brec["zero_adapter_report_only"] = bool(zero_report_only)
+            if bad and zero_report_only:          # HP2: the gap is deterministic per base, so it is a reported fact, never a VOID
+                brec["zero_adapter_outside_tol"] = bad
+            elif bad:
                 brec["status"], brec["reason"] = "VOID", f"STRICT zero-adapter check: |evaluator - in-loop step 0| > {zero_tol} for {bad}"
         if brec.get("status") is None:
             flip_done = False
@@ -239,8 +249,12 @@ def evaluate(arms, base_dirs, rows, open_base, make_scorer, load_adapter, file_s
                 set_adapter(canon)
                 res = score_fn()
                 arm.update(base=bdir, evaluator=res, evaluator_minus_inloop_final=round(res["row_mean"] - arm["inloop_final"], 6))
-                if abs(arm["evaluator_minus_inloop_final"]) > ROUNDTRIP_TOL:     # self-check 6(b): the export round-trips its layout
-                    arm["status"], arm["reason"], arm["void_level"] = "VOID", f"STRICT round-trip 6(b): |evaluator - in-loop step N| > {ROUNDTRIP_TOL}", "run"
+                rb = (roundtrip_bounds or {}).get(arm["framework"])                # HP2: [centre, half-width] per framework
+                if rb is not None and abs(arm["evaluator_minus_inloop_final"] - rb[0]) > rb[1]:
+                    arm["status"], arm["reason"], arm["void_level"] = "VOID", (f"STRICT round-trip 6(b): |evaluator - in-loop step N "
+                                                                               f"- {rb[0]}| > {rb[1]}"), "run"
+                elif rb is None and abs(arm["evaluator_minus_inloop_final"]) > roundtrip_tol:     # self-check 6(b): the export round-trips its layout
+                    arm["status"], arm["reason"], arm["void_level"] = "VOID", f"STRICT round-trip 6(b): |evaluator - in-loop step N| > {roundtrip_tol}", "run"
                 else:
                     arm["status"] = "SCORED"
                 if not flip_done:                   # STRICT control: a perturbed adapter must move the score
@@ -283,6 +297,12 @@ def main():
     ap.add_argument("--expect-trainable", type=int, default=EXPECT_TRAINABLE,
                     help="the registered trainable count every arm must carry (0 = not checked: the shakedown's truncated model)")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--zero-report-only", type=int, default=0,
+                    help="1: record the zero-adapter gap (and any excess over --zero-tol) but never VOID on it (HP2: it is deterministic per base)")
+    ap.add_argument("--roundtrip-bounds", default=None,
+                    help='HP2: JSON {framework: [centre, half-width]}; an arm VOIDs iff |evaluator - in-loop step N - centre| > half-width')
+    ap.add_argument("--roundtrip-tol", type=float, default=ROUNDTRIP_TOL,
+                    help="the 6(b) round-trip tolerance (HP2: the calibrated mean-level bound; default TC1b's 0.02)")
     ap.add_argument("--zero-tol", type=float, default=ZERO_ADAPTER_TOL,
                     help="the zero-adapter tolerance (HP1-PREREG Amendment 4: set by the 48-layer calibration; default the 2-layer 0.005)")
     ap.add_argument("--require-all-scored", type=int, default=0,
@@ -297,7 +317,8 @@ def main():
     arms = [receipt_arm(p) for p in sorted({q for pat in a.receipts for q in glob.glob(pat)})]
     out = {"evaluator": "bench/hp1/hp1_eval.py", "tokens": {"path": a.tokens, "sha256": tk.get("sha256"), "eval_n": a.eval_n},
            "model": a.model, "revision": a.revision, "device": torch.cuda.get_device_name(0) if DEV == "cuda" else "cpu",
-           "torch": torch.__version__, "zero_adapter_tol": a.zero_tol, "roundtrip_tol": ROUNDTRIP_TOL,
+           "torch": torch.__version__, "zero_adapter_tol": a.zero_tol, "roundtrip_tol": a.roundtrip_tol,
+           "zero_adapter_report_only": bool(a.zero_report_only), "roundtrip_bounds": _bounds_arg(a.roundtrip_bounds),
            "expect_trainable": a.expect_trainable or None, "bases": [], "arms": []}
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
 
@@ -318,7 +339,8 @@ def main():
 
     bases, arms = evaluate(arms, a.bases, rows, lambda d: hp1_lib.BaseStore(d, DEV), make_scorer,
                            lambda p: hp1_lib.load_canonical(p, DEV)[:2], sha_file, tk.get("sha256"), a.expect_trainable or None, write,
-                           release, zero_tol=a.zero_tol)
+                           release, zero_tol=a.zero_tol, roundtrip_tol=a.roundtrip_tol, zero_report_only=bool(a.zero_report_only),
+                           roundtrip_bounds=_bounds_arg(a.roundtrip_bounds))
     write(bases, arms)
     print(json.dumps({"bases": [(b["dir"], b.get("status")) for b in bases],
                       "arms": [(x["tag"], x["status"], (x.get("evaluator") or {}).get("row_mean")) for x in arms]}))
