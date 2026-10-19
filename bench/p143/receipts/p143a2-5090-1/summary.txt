@@ -1,0 +1,84 @@
+KNOBS e4b=7ed1695eceab0052078d43c14aed8da06381d8f6 gnf4=38b308887688ea5bda7dd449bd3cc3dc1426b995 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 short=32 long=160 reps=3 windows=12 cont=128
+CUDA_PROBE ok
+e4b 0.55.0 @7ed1695eceab0052078d43c14aed8da06381d8f6
+gnf4 0.47.1 @38b308887688ea5bda7dd449bd3cc3dc1426b995
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p143a2_reduce self-test OK (39 cases)
+p109_box self-test OK (5/5 cases)
+p143a2_box self-test OK (17/17 cases)
+p143a2_kernel self-test OK (9 cases)
+p115_quality self-test OK (11/11 cases)
+premise rc=0: 19 passed, 5 warnings in 26.42s
+premise ok
+P143A2_CONTRACT B=1 ctx=4096 err_plan=1.0009e-03 err_cap=9.9985e-04 ratio=0.9990 bitwise=False
+P143A2_CONTRACT B=2 ctx=4096 err_plan=1.0025e-03 err_cap=1.0009e-03 ratio=0.9985 bitwise=False
+P143A2_CONTRACT B=4 ctx=4096 err_plan=9.9339e-04 err_cap=9.9266e-04 ratio=0.9993 bitwise=False
+P143A2_CONTRACT B=1 ctx=2048 err_plan=1.4220e-03 err_cap=1.4186e-03 ratio=0.9976 bitwise=False
+P143A2_CONTRACT B=2 ctx=2048 err_plan=1.4164e-03 err_cap=1.4134e-03 ratio=0.9979 bitwise=False
+P143A2_CONTRACT B=4 ctx=2048 err_plan=1.4033e-03 err_cap=1.4033e-03 ratio=1.0000 bitwise=True
+P143A2_CONTRACT B=1 ctx=1024 err_plan=1.9986e-03 err_cap=1.9986e-03 ratio=1.0000 bitwise=True
+P143A2_CONTRACT B=2 ctx=1024 err_plan=1.9889e-03 err_cap=1.9889e-03 ratio=1.0000 bitwise=True
+P143A2_CONTRACT B=4 ctx=1024 err_plan=1.9775e-03 err_cap=1.9775e-03 ratio=1.0000 bitwise=True
+P143A2_CONTRACT B=1 ctx=640 err_plan=2.5205e-03 err_cap=2.5205e-03 ratio=1.0000 bitwise=True
+P143A2_CONTRACT B=2 ctx=640 err_plan=2.5028e-03 err_cap=2.5028e-03 ratio=1.0000 bitwise=True
+P143A2_CONTRACT B=4 ctx=640 err_plan=2.4944e-03 err_cap=2.4944e-03 ratio=1.0000 bitwise=True
+P143A2_CONTRACT B=1 ctx=256 err_plan=3.8978e-03 err_cap=3.8978e-03 ratio=1.0000 bitwise=True
+P143A2_CONTRACT B=2 ctx=256 err_plan=3.8760e-03 err_cap=3.8760e-03 ratio=1.0000 bitwise=True
+P143A2_CONTRACT B=4 ctx=256 err_plan=3.8762e-03 err_cap=3.8762e-03 ratio=1.0000 bitwise=True
+P143A2_TIMING p1 B=1 ctx=640 plan: 0.5177 ms per 48 launches
+P143A2_TIMING p1 B=1 ctx=640 cap: 0.3570 ms per 48 launches
+P143A2_TIMING p1 B=1 ctx=1024 plan: 0.5260 ms per 48 launches
+P143A2_TIMING p1 B=1 ctx=1024 cap: 0.3580 ms per 48 launches
+P143A2_TIMING p1 B=1 ctx=2048 plan: 0.5690 ms per 48 launches
+P143A2_TIMING p1 B=1 ctx=2048 cap: 0.4666 ms per 48 launches
+P143A2_TIMING p1 B=2 ctx=640 plan: 0.5631 ms per 48 launches
+P143A2_TIMING p1 B=2 ctx=640 cap: 0.3652 ms per 48 launches
+P143A2_TIMING p1 B=2 ctx=1024 plan: 0.6038 ms per 48 launches
+P143A2_TIMING p1 B=2 ctx=1024 cap: 0.4134 ms per 48 launches
+P143A2_TIMING p1 B=2 ctx=2048 plan: 0.6997 ms per 48 launches
+P143A2_TIMING p1 B=2 ctx=2048 cap: 0.5523 ms per 48 launches
+P143A2_TIMING p1 B=4 ctx=640 plan: 0.5915 ms per 48 launches
+P143A2_TIMING p1 B=4 ctx=640 cap: 0.4820 ms per 48 launches
+P143A2_TIMING p1 B=4 ctx=1024 plan: 0.6304 ms per 48 launches
+P143A2_TIMING p1 B=4 ctx=1024 cap: 0.5383 ms per 48 launches
+P143A2_TIMING p1 B=4 ctx=2048 plan: 0.7819 ms per 48 launches
+P143A2_TIMING p1 B=4 ctx=2048 cap: 0.6806 ms per 48 launches
+P143A2_TIMING p2 B=4 ctx=2048 cap: 0.6806 ms per 48 launches
+P143A2_TIMING p2 B=4 ctx=2048 plan: 0.7820 ms per 48 launches
+P143A2_TIMING p2 B=4 ctx=1024 cap: 0.5383 ms per 48 launches
+P143A2_TIMING p2 B=4 ctx=1024 plan: 0.6304 ms per 48 launches
+P143A2_TIMING p2 B=4 ctx=640 cap: 0.4820 ms per 48 launches
+P143A2_TIMING p2 B=4 ctx=640 plan: 0.5915 ms per 48 launches
+P143A2_TIMING p2 B=2 ctx=2048 cap: 0.5526 ms per 48 launches
+P143A2_TIMING p2 B=2 ctx=2048 plan: 0.6998 ms per 48 launches
+P143A2_TIMING p2 B=2 ctx=1024 cap: 0.4144 ms per 48 launches
+P143A2_TIMING p2 B=2 ctx=1024 plan: 0.6038 ms per 48 launches
+P143A2_TIMING p2 B=2 ctx=640 cap: 0.3643 ms per 48 launches
+P143A2_TIMING p2 B=2 ctx=640 plan: 0.5639 ms per 48 launches
+P143A2_TIMING p2 B=1 ctx=2048 cap: 0.4666 ms per 48 launches
+P143A2_TIMING p2 B=1 ctx=2048 plan: 0.5700 ms per 48 launches
+P143A2_TIMING p2 B=1 ctx=1024 cap: 0.3580 ms per 48 launches
+P143A2_TIMING p2 B=1 ctx=1024 plan: 0.5280 ms per 48 launches
+P143A2_TIMING p2 B=1 ctx=640 cap: 0.3580 ms per 48 launches
+P143A2_TIMING p2 B=1 ctx=640 plan: 0.5167 ms per 48 launches
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709
+arm S0a rc=0 P143A2_ARM {"arm": "S0", "tag": "S0a", "attn_split_cap": {"cap": null, "source": "explicit", "plans": {}}, "load_s": 63.37, "W16": 932.92, "W1": 250.49}
+
+arm S1a rc=0 P143A2_ARM {"arm": "S1", "tag": "S1a", "attn_split_cap": {"cap": 16, "source": "explicit", "plans": {"1": {"calls": 144, "plan": 32, "n_split": 16}, "2": {"calls": 144, "plan": 32, "n_split": 16}, "4": {"calls": 144, "plan": 23, "n_split": 16}, "8": {"calls": 144, "plan": 11, "n_split": 11}, "16": {"calls": 144, "plan": 5, "n_split": 5}}}, "load_s": 40.61, "W16": 962.39, "W1": 260.64}
+
+arm S1b rc=0 P143A2_ARM {"arm": "S1", "tag": "S1b", "attn_split_cap": {"cap": 16, "source": "explicit", "plans": {"1": {"calls": 144, "plan": 32, "n_split": 16}, "2": {"calls": 144, "plan": 32, "n_split": 16}, "4": {"calls": 144, "plan": 23, "n_split": 16}, "8": {"calls": 144, "plan": 11, "n_split": 11}, "16": {"calls": 144, "plan": 5, "n_split": 5}}}, "load_s": 41.36, "W16": 954.7, "W1": 256.6}
+
+arm S0b rc=0 P143A2_ARM {"arm": "S0", "tag": "S0b", "attn_split_cap": {"cap": null, "source": "explicit", "plans": {}}, "load_s": 40.82, "W16": 944.02, "W1": 249.2}
+
+sane off rc=0 P143A2_SANE S0 windows={'wikitext': 12} cap=None sane_kv={'passes': 12, 'asked': [656], 'max_tokens_per_seq': [4096], 'blocks_per_seq': [256], 'split_cap': None, 'plan_clash': [], 'plan_b1': 32} plans={} dispatch={'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 146304, 'bw_splitk': 0} 112.6 s
+
+sane on rc=0 P143A2_SANE S1 windows={'wikitext': 12} cap=16 sane_kv={'passes': 12, 'asked': [656], 'max_tokens_per_seq': [4096], 'blocks_per_seq': [256], 'split_cap': 16, 'plan_clash': [], 'plan_b1': 32} plans={'1': {'calls': 73152, 'plan': 32, 'n_split': 16}} dispatch={'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 146304, 'bw_splitk': 0} 129.9 s
+
+P143A2_VERDICT NO_FLIP ["g1 1.0297 < 1.03", "the cap stays opt-in"]

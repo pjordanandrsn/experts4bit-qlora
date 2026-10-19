@@ -1,0 +1,51 @@
+P143A2_CONTRACT B=1 ctx=4096 err_plan=1.0009e-03 err_cap=9.9985e-04 ratio=0.9990 bitwise=False
+P143A2_CONTRACT B=2 ctx=4096 err_plan=1.0025e-03 err_cap=1.0009e-03 ratio=0.9985 bitwise=False
+P143A2_CONTRACT B=4 ctx=4096 err_plan=9.9339e-04 err_cap=9.9266e-04 ratio=0.9993 bitwise=False
+P143A2_CONTRACT B=1 ctx=2048 err_plan=1.4220e-03 err_cap=1.4186e-03 ratio=0.9976 bitwise=False
+P143A2_CONTRACT B=2 ctx=2048 err_plan=1.4164e-03 err_cap=1.4134e-03 ratio=0.9979 bitwise=False
+P143A2_CONTRACT B=4 ctx=2048 err_plan=1.4033e-03 err_cap=1.4033e-03 ratio=1.0000 bitwise=True
+P143A2_CONTRACT B=1 ctx=1024 err_plan=1.9986e-03 err_cap=1.9986e-03 ratio=1.0000 bitwise=True
+P143A2_CONTRACT B=2 ctx=1024 err_plan=1.9889e-03 err_cap=1.9889e-03 ratio=1.0000 bitwise=True
+P143A2_CONTRACT B=4 ctx=1024 err_plan=1.9775e-03 err_cap=1.9775e-03 ratio=1.0000 bitwise=True
+P143A2_CONTRACT B=1 ctx=640 err_plan=2.5205e-03 err_cap=2.5205e-03 ratio=1.0000 bitwise=True
+P143A2_CONTRACT B=2 ctx=640 err_plan=2.5028e-03 err_cap=2.5028e-03 ratio=1.0000 bitwise=True
+P143A2_CONTRACT B=4 ctx=640 err_plan=2.4944e-03 err_cap=2.4944e-03 ratio=1.0000 bitwise=True
+P143A2_CONTRACT B=1 ctx=256 err_plan=3.8978e-03 err_cap=3.8978e-03 ratio=1.0000 bitwise=True
+P143A2_CONTRACT B=2 ctx=256 err_plan=3.8760e-03 err_cap=3.8760e-03 ratio=1.0000 bitwise=True
+P143A2_CONTRACT B=4 ctx=256 err_plan=3.8762e-03 err_cap=3.8762e-03 ratio=1.0000 bitwise=True
+P143A2_TIMING p1 B=1 ctx=640 plan: 0.5177 ms per 48 launches
+P143A2_TIMING p1 B=1 ctx=640 cap: 0.3570 ms per 48 launches
+P143A2_TIMING p1 B=1 ctx=1024 plan: 0.5260 ms per 48 launches
+P143A2_TIMING p1 B=1 ctx=1024 cap: 0.3580 ms per 48 launches
+P143A2_TIMING p1 B=1 ctx=2048 plan: 0.5690 ms per 48 launches
+P143A2_TIMING p1 B=1 ctx=2048 cap: 0.4666 ms per 48 launches
+P143A2_TIMING p1 B=2 ctx=640 plan: 0.5631 ms per 48 launches
+P143A2_TIMING p1 B=2 ctx=640 cap: 0.3652 ms per 48 launches
+P143A2_TIMING p1 B=2 ctx=1024 plan: 0.6038 ms per 48 launches
+P143A2_TIMING p1 B=2 ctx=1024 cap: 0.4134 ms per 48 launches
+P143A2_TIMING p1 B=2 ctx=2048 plan: 0.6997 ms per 48 launches
+P143A2_TIMING p1 B=2 ctx=2048 cap: 0.5523 ms per 48 launches
+P143A2_TIMING p1 B=4 ctx=640 plan: 0.5915 ms per 48 launches
+P143A2_TIMING p1 B=4 ctx=640 cap: 0.4820 ms per 48 launches
+P143A2_TIMING p1 B=4 ctx=1024 plan: 0.6304 ms per 48 launches
+P143A2_TIMING p1 B=4 ctx=1024 cap: 0.5383 ms per 48 launches
+P143A2_TIMING p1 B=4 ctx=2048 plan: 0.7819 ms per 48 launches
+P143A2_TIMING p1 B=4 ctx=2048 cap: 0.6806 ms per 48 launches
+P143A2_TIMING p2 B=4 ctx=2048 cap: 0.6806 ms per 48 launches
+P143A2_TIMING p2 B=4 ctx=2048 plan: 0.7820 ms per 48 launches
+P143A2_TIMING p2 B=4 ctx=1024 cap: 0.5383 ms per 48 launches
+P143A2_TIMING p2 B=4 ctx=1024 plan: 0.6304 ms per 48 launches
+P143A2_TIMING p2 B=4 ctx=640 cap: 0.4820 ms per 48 launches
+P143A2_TIMING p2 B=4 ctx=640 plan: 0.5915 ms per 48 launches
+P143A2_TIMING p2 B=2 ctx=2048 cap: 0.5526 ms per 48 launches
+P143A2_TIMING p2 B=2 ctx=2048 plan: 0.6998 ms per 48 launches
+P143A2_TIMING p2 B=2 ctx=1024 cap: 0.4144 ms per 48 launches
+P143A2_TIMING p2 B=2 ctx=1024 plan: 0.6038 ms per 48 launches
+P143A2_TIMING p2 B=2 ctx=640 cap: 0.3643 ms per 48 launches
+P143A2_TIMING p2 B=2 ctx=640 plan: 0.5639 ms per 48 launches
+P143A2_TIMING p2 B=1 ctx=2048 cap: 0.4666 ms per 48 launches
+P143A2_TIMING p2 B=1 ctx=2048 plan: 0.5700 ms per 48 launches
+P143A2_TIMING p2 B=1 ctx=1024 cap: 0.3580 ms per 48 launches
+P143A2_TIMING p2 B=1 ctx=1024 plan: 0.5280 ms per 48 launches
+P143A2_TIMING p2 B=1 ctx=640 cap: 0.3580 ms per 48 launches
+P143A2_TIMING p2 B=1 ctx=640 plan: 0.5167 ms per 48 launches

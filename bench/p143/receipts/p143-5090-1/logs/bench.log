@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/root/p143/p143_bench.py", line 132, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/root/p143/p143_bench.py", line 128, in main
+    return run(a.out)
+           ^^^^^^^^^^
+  File "/root/p143/p143_bench.py", line 58, in run
+    kv.rewind(0, ctx)
+  File "/opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/fp8_paged_kv.py", line 1285, in rewind
+    raise ValueError(f"rewind forward (layer {layer}: "
+ValueError: rewind forward (layer 0: 256 -> 640)
