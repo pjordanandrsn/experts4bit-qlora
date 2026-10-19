@@ -99,6 +99,10 @@ jobs:
           ruff check bench/p146 tests/test_p146_staged_pin.py
           python bench/p146/p146_reduce.py --self-test
           python bench/p146/p146_box.py --self-test
+      - name: SMT fuse measurement contract (CPU only; no GPU or rental)
+        run: |
+          ruff check bench/smt-fuse tests/test_smt_fuse_staged_pin.py
+          python bench/smt-fuse/smt_fuse_box.py --self-test
       - name: Test
         run: pytest tests/ -q
       - name: census cross-check (grouped-nf4-gemm#353 -- every claimed family the kernel's shape census covered is still covered, against the census of the exact kernel commit installed above)
