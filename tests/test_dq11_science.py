@@ -408,7 +408,9 @@ def fixture_stage(tmp_path):
     (here / "subject.py").write_bytes(b"fixture source")
     (assets / "adapter_init.safetensors").write_bytes(b"fixture not a scientific adapter")
     (assets / "tokens.json").write_bytes(b"fixture not scientific tokens")
-    locked = {"assets": {p.name: {"sha256": common.file_sha(p), "bytes": p.stat().st_size} for p in assets.iterdir()}}
+    # sorted: iterdir order is the filesystem's (ext4 hashes it per runner; APFS returns it sorted), and the stage line
+    # lists the assets in this dict's order
+    locked = {"assets": {p.name: {"sha256": common.file_sha(p), "bytes": p.stat().st_size} for p in sorted(assets.iterdir())}}
     (here / "locked_inputs.json").write_text(json.dumps(locked))
     names = ("subject.py", "locked_inputs.json")
     (here / "science.sha256").write_text("".join(common.file_sha(here / name) + "  " + name + "\n" for name in names))
