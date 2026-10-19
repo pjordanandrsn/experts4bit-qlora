@@ -1,7 +1,8 @@
-# DQ11 MLP-adapter BUILD — DRAFT registration (#1083)
+# DQ11 MLP-adapter BUILD — registration (#1083)
 
-**Status:** DRAFT for review. Not registered; nothing runs from it. Each **Decision** below is a proposal that the
-maintainer rules on before this becomes a registration. Merging this draft costs $0 and licenses nothing.
+**Status:** registered on merge, before any code or data. All six decisions below are ruled (maintainer, 2026-10-19,
+before data). Merging costs $0. The engine is written only after this merges; Phase 1 runs only on the merged engine,
+and Phase 2 runs only after `PHASE1_PASS`, its review and its own approval.
 
 ## Why
 
@@ -18,9 +19,9 @@ maintainer rules on before this becomes a registration. Merging this draft costs
 - **The bar the census fixes:** "The prospective BUILD continuation bar remains 5% of an independently matched unfused
   update, subject to unchanged K8." No speed claim, default, capacity claim or launch follows from the census itself.
 
-## The subject — Decision D1 (scope)
+## The subject — Decision D1 (scope): RULED as proposed
 
-**Proposed.** A training engine in e4b, `enable_dense_mlp_lora_fuse(model)`:
+A training engine in e4b, `enable_dense_mlp_lora_fuse(model)`:
 - **Knob:** `E4B_DENSE_MLP_LORA_FUSE`, off by default. With it off, the path is bitwise today's PEFT path.
 - **Targets:** the PEFT LoRA modules on each decoder layer's MLP (`gate_proj`, `up_proj`, `down_proj`; 96 adapters on
   Mistral-7B). Its count is returned, and an unexpected module is refused rather than skipped.
@@ -39,9 +40,9 @@ maintainer rules on before this becomes a registration. Merging this draft costs
 - the qkv and o adapters (below the census line);
 - any MoE path.
 
-**Alternatives for the ruling:**
+**Not taken:**
 - (b) epilogue-only, with no shared gate/up input;
-- (c) an Unsloth-style LoRA_MLP that includes SwiGLU. It reaches past C_MLP into other classes, so it is not proposed.
+- (c) an Unsloth-style LoRA_MLP that includes SwiGLU, which reaches past C_MLP into other classes.
 
 ## Fixture
 
@@ -53,18 +54,18 @@ maintainer rules on before this becomes a registration. Merging this draft costs
   - streamed with `train_prefetch`, 40 AdamW updates, seed 3407.
 - **New:** e4b at the merge head that carries the engine. The science closure records that head in place of
   `13b55990`.
-- **Decision D2 (code location):**
-  - The engine lives in e4b (`experts4bit_qlora/engines/dense_lora_fuse.py`) and patches only the PEFT `LoraLayer`
-    forward of the MLP modules.
-  - The alternative is a Loggetta-side patch, which would move a second pin.
+- **Decision D2 (code location): RULED.** The engine lives in e4b (`experts4bit_qlora/engines/dense_lora_fuse.py`) and
+  patches only the PEFT `LoraLayer` forward of the MLP modules. P129's `train_qkv_fuse` is its template. Not Loggetta:
+  the census and K8 live in e4b.
 
 ## Phase 1 — correctness on the A2000 ($0, one `gpu:a2000` claim)
 
 - **Per module, on real Mistral layers at seq 2048:** fused against unfused, for the forward output and the three
   gradients.
   - Bitwise agreement is not expected: one fused epilogue reorders the FP32 sum.
-  - **Decision D3 (bar):** the unfused path's own neutral floor, per tensor (two unfused runs with a neutral redraw).
-    This is P129 Amendment 1's lesson: a fixed op-level tolerance failed on a whole step.
+  - **Decision D3 (bar): RULED.** The unfused path's own neutral floor, per tensor (two unfused runs with a neutral
+    redraw). This is P129 Amendment 1's lesson: a fixed op-level tolerance failed on a whole step.
+  - The A2000 checks correctness only. No timing from it is reported or used.
 - **Engagement:**
   - 96 MLP adapters are patched;
   - zero PEFT LoRA MLP forwards run in a step;
@@ -81,38 +82,39 @@ The outcome is `PHASE1_PASS`, or a named failure. No paid box runs without `PHAS
 - **Arms:** F0 (unfused, knob off) and F1 (fused) at the same head and recipe.
   - The order is ABBA twice: F0a F1a F1b F0b F0c F1c F1d F0d.
   - Each arm is a fresh process of 40 updates. T_arm is the median of updates 6..40.
-- **Decision D4 (the 5% formula):** H = (T_F0 − T_F1) / T_F0 for each of the four block pairs, and the bar reads the
-  minimum H over those four pairs (P143 Amendment 3's form). DQ11's own form ("both repetitions") is the alternative.
-- **NOISY:** any within-block self-pair outside [0.985, 1.015]. NOISY is a VOID and a strike.
+- **Decision D4 (the 5% formula): RULED.** H = (T_F0 − T_F1) / T_F0 for each of the four block pairs, and the bar
+  reads the minimum H over those four pairs (P143 Amendment 3's form). Every comparison uses the unrounded values.
+- **NOISY:** any within-block self-pair outside [0.985, 1.015]. NOISY is a VOID and a strike; it never reads.
 - **QUALITY:** K8 unchanged. F1 against F0 on both texts, at the initial and final steps, within 0.05 PPL. Otherwise
   the verdict is `QUALITY_FAIL`.
 - **GAIN** iff H ≥ 0.05 at every pair and quality passes. Otherwise **NO_GAIN**, with each failed bar named.
   - A GAIN licenses a separate default review on a second host; never a default here.
-  - **Decision D6:** whether a GAIN must also show, in a re-census, that C_MLP fell. Proposed: reported only.
+  - **Decision D6: RULED.** A re-census of F1, if the box has time, is reported only. It is not part of the rule.
 
-## Prediction (graded, never ruling)
+## The ceiling (a bound, not a target)
+
+From census-9, the MLP-adapter class's exclusive device time is about 0.090·T. So H cannot exceed about 9%, even if the
+fusion removed every MLP-adapter cost other than the rank GEMMs. The rank GEMMs it keeps lower that further.
+
+## Prediction (registered; graded, never ruling)
 
 - **What the fusion can remove:** for gate/up, one of two FP32 input casts and one rank-GEMM launch; for every
   adapter, the separate scale, add and cast-back kernels.
 - **What it cannot:** the overlap.
 - **Context:** DQ1 measured PEFT's unfused delta at about 9–10% of base-linear time.
-- **Expected H:** 0.02–0.05, at or below the bar. NO_GAIN is the more likely outcome, and a NO_GAIN closes the MLP
-  BUILD with its number.
+- **Expected H:** 0.02–0.05, at or below the bar. NO_GAIN is the more likely outcome. A NO_GAIN closes this lever
+  with its number; either way the read is cheap and clean.
 
-## Budget — Decision D5
+## Budget — Decision D5: RULED
 
 - **Phase 1:** $0.
 - **Phase 2:** one RTX 5090, 8 arms of about 5 minutes each (including load), so about 45–60 minutes.
   - Guard 1.25 h; worst about $1.40 at $0.85/h plus the download.
   - Under the standing rule, with a reviewed kit and its own approval.
 
-## Open for the maintainer's ruling before registration
+## Sequence
 
-- D1: scope;
-- D2: code location;
-- D3: Phase 1's bar;
-- D4: the 5% formula and its repetitions;
-- D5: budget and box;
-- D6: whether the re-census must confirm.
-
-No code is written until D1 and D2 are ruled.
+1. This registration merges after one review by a seat that does not consume it, then the maintainer's final pass.
+2. The engine is written and reviewed, with its CPU tests.
+3. Phase 1 runs on the A2000 ($0) and must give `PHASE1_PASS`, which is reviewed.
+4. Phase 2's kit is reviewed, gets its own approval, and runs under the standing rule.
