@@ -19,7 +19,7 @@ GNF4_SHA=38b308887688ea5bda7dd449bd3cc3dc1426b995 # v0.47.1 tag commit (e4b CI's
 NEED_BENCH=1200   # 2 shapes x 2 M: contract, about 250 selection graphs (each compiles), 4 read graph pairs
 DRY=${P149_DRY:-0}; GPU_CLASS=5090; MIN_RAM_GB=60
 case "$P149_RUN_ID" in
-  p149k-5090-1|p149k-5090-2|p149k-5090-3) FAMILY=mixtral-attn-int8; MODEL=none; REV=none; MIN_DISK_GB=40;;
+  p149k-5090-1|p149k-5090-2|p149k-5090-3|p149k-5090-4|p149k-5090-5|p149k-5090-6) FAMILY=mixtral-attn-int8; MODEL=none; REV=none; MIN_DISK_GB=40;;
   *) say "unregistered run ID: $P149_RUN_ID"; finish 78;;
 esac
 [ "$DRY" = 0 ] || [ "$FAMILY" = dry ] || { say 'dry mode requires registered A2000 ID'; finish 78; }

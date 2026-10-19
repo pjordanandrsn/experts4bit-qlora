@@ -50,9 +50,10 @@ SCP="scp -q -o BatchMode=yes $E4B_RENT_SSH_OPTS -P $PORT"
 POLL=${P149_POLL_S:-60}; W=/root/p149k
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
 PASS="P149_RUN_ID=$RUN_ID P149_RUN_NONCE=$NONCE P149_DEADLINE_EPOCH=$DEADLINE P149_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA"
-# Explicit IDs only: the reading (-1) and two pre-create spares (-2, -3).
+# Explicit IDs only: the reading (-1), two pre-create spares (-2, -3) and, by Amendment 1, three spares for refusals
+# before the install only (-4..-6).
 case "$RUN_ID" in
-  p149k-5090-1|p149k-5090-2|p149k-5090-3) :;;
+  p149k-5090-1|p149k-5090-2|p149k-5090-3|p149k-5090-4|p149k-5090-5|p149k-5090-6) :;;
   *) say "refusing unregistered run ID: $RUN_ID (is not p149k-5090-N)"; exit 78;;
 esac
 if [ "${P149_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash p149k_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p149k"; exit 0; fi
