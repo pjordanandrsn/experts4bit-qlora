@@ -1,0 +1,28 @@
+FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407 pack=0
+FIXTURE hp2 (HP2-PREREG): steps=200 eval_n=48; calibration rows 97-396 (300), 1 step; P seeds=[3410 3411 3412]; e4b K00 vs Unsloth; axolotl out
+BOX A families: qwen3hp2; e4b 68801d3efba2f82aea2d6e3cc44c4f93bca929db gnf4 724ccc454f006c1a46836e434e997f31f293747f; run hp2-5090-1 instance 56686154 deadline 1792413915; prereg hp2/HP2-PREREG.md
+OMP_NUM_THREADS=64 (physical cores) box_class=RTX 5090
+CPU allotment 62 (cgroup quota capped by affinity; physical cores 64)
+CUDA_PROBE ok
+DRIVER 590.48.01 cu130_ok=1
+AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+PIN OK qwen3hp2 staged=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS qwen3hp2 alpaca sha=6d5783ce31b2ff57a05cca2db0446ab8bbf7697bd322d22e7b0545a25585b3b2 eval_n=48 train_only_sha=604f314033450d4d4b5953bb13b3651d919d9b05c46a317e6267a3c2f6c007d7
+qwen3hp2shake/e4b/hp1shake_e4b PROLOGUE {"phase_seconds": {"preamble": 4.949, "load_weights": 3.41, "verify": 0.0, "attn4": 0.384, "lora": 0.006, "enable": 0.147, "tokenizer": 0.653, "census": 0.162, "frozen_probe": 0.141, "trainable_sha": 0.174, "counters": 0.0, "c1_before": 3.268, "eval0": 11.35, "optimizer": 0.222}, "phase_budget_s": 630.0, "prologue_s": 26.601, "prologue_unattributed_s": 1.735}
+qwen3hp2shake/e4b/hp1shake_e4b rc=0 CELL OK {"framework": "e4b", "fam": "qwen3hp2shake", "model": "local/Qwen3-30B-A3B-L2", "revision": "88f08b815a0dffa4e348a67de1d8b585ac183cee", "model_type": "qwen3_moe", "n_layers": 2, "weights_commit": "88f08b815a0dffa4e348a67de1d8b585ac183cee", "snapshot_dir": null, "arm": "fused", "tag": "hp1shake_e4b", "status": "ok", "steps": 3, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "
+
+qwen3hp2shake/unsloth/hp1shake_unsloth PROLOGUE {"phase_seconds": {"preamble": 2.172, "snapshot": 0.0, "load_weights": 9.204, "census": 0.067, "frozen_probe": 0.114, "trainable_sha": 0.136, "counters": 0.139, "c1_before": 3.062, "eval0": 15.008, "optimizer": 0.409}, "phase_budget_s": 630.0, "prologue_s": 44.486, "prologue_unattributed_s": 14.175}
+qwen3hp2shake/unsloth/hp1shake_unsloth rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3hp2shake", "model": "local/Qwen3-30B-A3B-L2", "revision": "88f08b815a0dffa4e348a67de1d8b585ac183cee", "model_type": "qwen3_moe", "n_layers": 2, "weights_commit": null, "snapshot_dir": "/root/tc1/hp1/shake-cache/models--local--Qwen3-30B-A3B-L2/snapshots/88f08b815a0dffa4e348a67de1d8b585ac183cee", "arm": "unsloth", "tag": "hp1shake_unsloth", "status": "ok
+
+HP2 SHAKEDOWN_OK
+HP2 calibration tokens: held-out pool rows 97-396 (rows 1-48 reproduce HP1's), sha=da18698a2b3d4b786c6ff1b3302bd21c16bd8f0ec8ccb1225398153db6fc4659
+qwen3hp2/e4b/hp2cal_e4b_k00_s3407 PROLOGUE {"phase_seconds": {"preamble": 4.929, "load_weights": 26.817, "verify": 0.001, "attn4": 9.59, "lora": 0.049, "enable": 0.292, "tokenizer": 0.582, "census": 1.541, "frozen_probe": 0.073, "trainable_sha": 3.232, "counters": 0.0, "c1_before": 26.71, "eval0": 72.202, "optimizer": 0.219}, "phase_budget_s": 840.0, "prologue_s": 147.918, "prologue_unattributed_s": 1.68}
+qwen3hp2/e4b/hp2cal_e4b_k00_s3407 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3hp2", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "weights_commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "snapshot_dir": null, "arm": "fused", "tag": "hp2cal_e4b_k00_s3407", "status": "ok", "steps": 1, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "
+
+qwen3hp2/unsloth/hp2cal_unsloth_s3407 PROLOGUE {"phase_seconds": {"preamble": 2.136, "snapshot": 0.0, "load_weights": 33.395, "census": 1.485, "frozen_probe": 0.1, "trainable_sha": 2.817, "counters": 0.131, "c1_before": 74.471, "eval0": 236.765, "optimizer": 0.384}, "phase_budget_s": 1260.0, "prologue_s": 365.855, "prologue_unattributed_s": 14.172}
+qwen3hp2/unsloth/hp2cal_unsloth_s3407 rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3hp2", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "weights_commit": null, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "hp2cal_unsloth_s3407", "status": "ok", "s
+
+HP2_G1=STOP delta0=-0.002691 se=0.002378 m_need=0.014895 rt_zero_centred=0.01 z_bands={"e4b": [0.000931, 0.014088], "unsloth": [0.003622, 0.013197]}
+HP2 G1_CLOSED: the instrument could not read the margin (a reading, not a strike)
+NO AXOLOTL on this box: the qwen3hp2 token runs no axolotl arm

@@ -1,0 +1,7 @@
+# Kept only in the private receipt store, byte-exact: these 4 logs carry carriage returns from the box's progress output,
+# and receipts are never rewritten, so they are not committed here.
+# sha256, then the file's path within this run's receipt.
+6eadd174960a4079fa537254aaab74acaa3dad2a70311b34a52bd2ebfc02fe67  tc1/logs/fetch_probe.log
+caae21b193951028626ded4c066bb23f645014ce71c6ef2546bb977112e5100c  tc1/logs/fetch_qwen3hp2.log
+917370e74d76771423559a1548f16c42b30d4ffabfcfef792b3307ccb2cd1442  tc1/logs/run_qwen3hp2_unsloth_hp2cal_unsloth_s3407.log
+16addc0321ab2475949d56a1a48c8f313eeafc3067f648279d3b9df76d886c98  tc1/logs/run_qwen3hp2shake_unsloth_hp1shake_unsloth.log
