@@ -140,11 +140,13 @@ def test_hp1_bulk_files_stay_on_the_box_and_its_small_outputs_come_back(tmp_path
     box = tmp_path / "box"
     keep = ["qwen3hp1_e4b_hp1_k00_s3407.json", "summary.txt", "hp1/eval_K.json", "hp1/select.json", "hp1/eval_early.json",
             "hp1/eval_shake.json", "hp1/shake/canonical_qwen3hp1shake_hp1shake_e4b.safetensors",
-            "hp1/shake/canonical_qwen3hp1shake_hp1shake_axolotl.safetensors"]
+            "hp1/shake/canonical_qwen3hp1shake_hp1shake_axolotl.safetensors", "hp2/g1.json", "hp2/eval_cal.json"]
     drop = ["hp1/base_e4b_qwen3hp1/layer000.safetensors", "hp1/base_e4b_qwen3hp1/index.json",
             "hp1/shake/base_e4b_qwen3hp1shake/global.safetensors", "hp1/canonical_qwen3hp1_hp1_k00_s3407.safetensors",
             "hp1/shake-cache/models--local--x/config.json", "hp1/shake-cache/canonical_stray.safetensors",
-            "hp1/shake/sub/canonical_nested.safetensors"]   # near misses: only hp1/shake/canonical_* itself comes back
+            "hp1/shake/sub/canonical_nested.safetensors",
+            "hp1/hp2cal/base_e4b_qwen3hp2/layer000.safetensors", "hp1/hp2cal/base_unsloth_qwen3hp2/global.safetensors",
+            "hp1/hp2cal/canonical_qwen3hp2_hp2cal_e4b_k00_s3407.safetensors"]   # HP2's calibration exports too. Near misses: only hp1/shake/canonical_* itself comes back
     for rel in keep + drop:
         (box / rel).parent.mkdir(parents=True, exist_ok=True)
         (box / rel).write_text("x")
@@ -172,3 +174,11 @@ def test_hp1_bulk_files_stay_on_the_box_and_its_small_outputs_come_back(tmp_path
     for rel in drop:
         data = (box / rel).read_bytes()
         assert rows[rel]["sha256"] == hashlib.sha256(data).hexdigest() and rows[rel]["bytes"] == len(data)
+
+
+def test_every_hp1_export_dir_sits_under_hp1_so_the_fetch_leaves_its_bases_on_the_box():
+    """HP2 (#1793): the calibration exports two ~17-60 GB bases. TC1_RSYNC_EXCLUDES only leaves base_*/ on the box under hp1/,
+    so every --hp1-export directory in tc1_run.sh must be $W/hp1 or below it."""
+    run_sh = (REPO / "bench" / "tc1" / "tc1_run.sh").read_text()
+    dirs = [d.strip("\"'") for d in re.findall(r"--hp1-export (\S+)", run_sh)]
+    assert dirs and all(d == "$W/hp1" or d.startswith("$W/hp1/") for d in dirs), dirs

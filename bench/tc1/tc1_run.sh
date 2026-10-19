@@ -2499,7 +2499,7 @@ tc1_hp2_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
   HP1_AX_DROP=1                                                        # HP2: e4b vs Unsloth only
   for s in $HP1_CONF_SEEDS; do ALL="$ALL e4b:hp2_k00_s$s:fused unsloth:hp2_unsloth_s$s:unsloth"; done
   tc1_prepare $FAM "$MID" $REV $FAL "e4b:$CE:fused unsloth:$CU:unsloth$ALL" $HP1_EVAL_N || return 0
-  mkdir -p $W/hp1 $W/hp2 $W/hp2cal
+  mkdir -p $W/hp1 $W/hp2 $W/hp1/hp2cal   # the calibration exports sit under hp1/: the fetch leaves hp1/**/base_*/ on the box
   if ! hp1_shakedown $FAM "$MID" $REV $TOK $TS; then echo "HP2 SHAKEDOWN_FAILED" | tee -a summary.txt; return 0; fi
   echo "HP2 SHAKEDOWN_OK" | tee -a summary.txt
   TOKC=$W/hp2/tokens_${FAM}_calib.json
@@ -2510,14 +2510,14 @@ tc1_hp2_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
   [ -n "$TSC" ] && [ -s "$TOKC" ] || { echo "HP2 CALIB_REFUSED tokens: $(grep -m1 REFUSED logs/hp2_caltokens.log | cut -c1-200)" | tee -a summary.txt; return 0; }
   echo "HP2 calibration tokens: held-out pool rows 97-396 (rows 1-$HP1_EVAL_N reproduce HP1's), sha=$TSC" | tee -a summary.txt
   arm $FAM e4b $CE fused $EAL "$MID" $REV 0 hp2cal $TOKC $TSC --attn-4bit 1 $(hp1_cell k00 3407) --seed 3407 --order-seed 3407 \
-    --hp1-export $W/hp2cal --hp1-export-base 1
+    --hp1-export $W/hp1/hp2cal --hp1-export-base 1
   arm $FAM unsloth $CU unsloth $UAL "$MID" $REV 0 hp2cal $TOKC $TSC --grad-ckpt unsloth --unsloth-targets $UT7 --unsloth-moe-backend grouped_mm \
-    --lora-init native --adapter-dtype native --seed 3407 --order-seed 3407 --hp1-export $W/hp2cal --hp1-export-base 1
+    --lora-init native --adapter-dtype native --seed 3407 --order-seed 3407 --hp1-export $W/hp1/hp2cal --hp1-export-base 1
   for tag in $CE:e4b $CU:unsloth; do
     [ "$(status_of $FAM ${tag#*:} ${tag%%:*})" = ok ] || { echo "HP2 CALIB_ARM_FAILED ${tag#*:} $(status_of $FAM ${tag#*:} ${tag%%:*})" | tee -a summary.txt; return 0; }
   done
   HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts $W/${FAM}_e4b_$CE.json $W/${FAM}_unsloth_$CU.json \
-    --bases $W/hp2cal/base_e4b_$FAM $W/hp2cal/base_unsloth_$FAM --tokens $TOKC --eval-n 300 --model "$MID" --revision $REV \
+    --bases $W/hp1/hp2cal/base_e4b_$FAM $W/hp1/hp2cal/base_unsloth_$FAM --tokens $TOKC --eval-n 300 --model "$MID" --revision $REV \
     --out $W/hp2/eval_cal.json > logs/hp2_eval_cal.log 2>&1; tail -1 logs/hp2_eval_cal.log
   $PY_E4B $W/hp2_reduce.py g1 $W/hp2/eval_cal.json --out $W/hp2/g1.json 2>&1 | tee -a summary.txt; rc=${PIPESTATUS[0]}
   # G1 is enforced HERE, by the reducer's exit code (4 = CLOSE or STOP): the draw ends and the box tears down (a reading, not a strike)
