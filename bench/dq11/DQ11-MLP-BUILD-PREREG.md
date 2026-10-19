@@ -25,6 +25,13 @@ A training engine in e4b, `enable_dense_mlp_lora_fuse(model)`:
 - **Knob:** `E4B_DENSE_MLP_LORA_FUSE`, off by default. With it off, the path is bitwise today's PEFT path.
 - **Targets:** the PEFT LoRA modules on each decoder layer's MLP (`gate_proj`, `up_proj`, `down_proj`; 96 adapters on
   Mistral-7B). Its count is returned, and an unexpected module is refused rather than skipped.
+- **Refusals:** a module keeps today's PEFT path, with the reason recorded and counted, if any of these holds:
+  - its LoRA dropout is not 0;
+  - it uses DoRA;
+  - more than one adapter is active;
+  - the adapter is merged;
+  - the adapter weights are not FP32;
+  - its base is not a bitsandbytes NF4 `Linear4bit`, or it has a bias.
 - **gate and up share their input:**
   - one FP32 cast of x;
   - one rank GEMM against the stacked `[A_gate; A_up]` (2r × 4096);
@@ -63,8 +70,23 @@ A training engine in e4b, `enable_dense_mlp_lora_fuse(model)`:
 - **Per module, on real Mistral layers at seq 2048:** fused against unfused, for the forward output and the three
   gradients.
   - Bitwise agreement is not expected: one fused epilogue reorders the FP32 sum.
-  - **Decision D3 (bar): RULED.** The unfused path's own neutral floor, per tensor (two unfused runs with a neutral
-    redraw). This is P129 Amendment 1's lesson: a fixed op-level tolerance failed on a whole step.
+  - **Decision D3 (bar): RULED, as corrected before data.** The floor comes from neutral redraws of the UNFUSED path.
+    The dense path is deterministic, so two plain unfused runs would give a floor of 0, and Phase 1 would then fail
+    every time. Each redraw changes only summation order:
+    - **R1:** the forward rank GEMM (x·Aᵀ) split along K = 4096 into two halves, then summed.
+    - **R2:** the scale applied before the B GEMM instead of after it.
+    - **R3:** the base and the adapter delta added in FP32 and then cast, instead of the delta cast and then added.
+    - **R4:** the backward A- and B-gradient GEMMs split along the token dimension (two halves of the 2,048 tokens),
+      then summed.
+  - **Draws:** the 15 non-empty combinations of R1–R4, each one draw. The path is deterministic, so a repeat adds
+    nothing. This is P129 Amendment 1's form, without its MoE-only knobs.
+  - **Tensors:** for each of three layers (0, 15 and 31), on a real Alpaca batch through the frozen model, the forward
+    output of `gate_proj`, `up_proj` and `down_proj`, the input gradient, and each adapter's A and B gradients.
+  - **The floor, per tensor, is the WORST draw:** the largest max-|draw − unfused| and the largest relative RMS over the
+    15 draws.
+  - **The bar:** the fused path passes iff, for every tensor, both its max-|fused − unfused| and its relative RMS are
+    at or below that tensor's floor. A tensor no draw moved has a floor of 0, and the fused path must then match it
+    bit for bit.
   - The A2000 checks correctness only. No timing from it is reported or used.
 - **Engagement:**
   - 96 MLP adapters are patched;
@@ -84,7 +106,10 @@ The outcome is `PHASE1_PASS`, or a named failure. No paid box runs without `PHAS
   - Each arm is a fresh process of 40 updates. T_arm is the median of updates 6..40.
 - **Decision D4 (the 5% formula): RULED.** H = (T_F0 − T_F1) / T_F0 for each of the four block pairs, and the bar
   reads the minimum H over those four pairs (P143 Amendment 3's form). Every comparison uses the unrounded values.
+  - **The four pairs:** F1a/F0a and F1b/F0b (block 1), and F1c/F0c and F1d/F0d (block 2). For each, H uses that pair's
+    F0 and F1 medians.
 - **NOISY:** any within-block self-pair outside [0.985, 1.015]. NOISY is a VOID and a strike; it never reads.
+  - **The four self-pairs:** F0b/F0a and F1b/F1a (block 1), and F0d/F0c and F1d/F1c (block 2).
 - **QUALITY:** K8 unchanged. F1 against F0 on both texts, at the initial and final steps, within 0.05 PPL. Otherwise
   the verdict is `QUALITY_FAIL`.
 - **GAIN** iff H ≥ 0.05 at every pair and quality passes. Otherwise **NO_GAIN**, with each failed bar named.
@@ -93,8 +118,9 @@ The outcome is `PHASE1_PASS`, or a named failure. No paid box runs without `PHAS
 
 ## The ceiling (a bound, not a target)
 
-From census-9, the MLP-adapter class's exclusive device time is about 0.090·T. So H cannot exceed about 9%, even if the
-fusion removed every MLP-adapter cost other than the rank GEMMs. The rank GEMMs it keeps lower that further.
+From census-9, the MLP-adapter class's exclusive device time is about 0.090·T (65.2 ms of 724.5 ms). So H cannot exceed
+about 9%, even if the fusion removed every MLP-adapter cost other than the rank GEMMs. The rank GEMMs it keeps lower that
+further. This bound holds on the RTX 5090 class that census-9 ran on; another card would need its own census.
 
 ## Prediction (registered; graded, never ruling)
 
