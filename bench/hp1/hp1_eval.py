@@ -96,7 +96,7 @@ def build_model(store, model_id, revision):
     missing = [n for n, p in model.named_parameters() if id(p) not in loaded]
     if missing:
         raise RuntimeError(f"parameters not covered by the base export: {missing[:6]}")
-    model.model.rotary_emb = type(model.model.rotary_emb)(config=cfg, device=DEV)
+    model.model.rotary_emb = hp1_lib.make_rotary(type(model.model.rotary_emb), cfg, DEV)
     model.eval()
     return model, hooks
 

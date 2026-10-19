@@ -140,6 +140,16 @@ def fold_fingerprints(items):
     return h.hexdigest(), n
 
 
+def make_rotary(cls, config, device):
+    """The rotary-embedding module as the installed transformers builds it: with ``device=`` where the class still takes it (5.18 and
+    earlier), else built and moved (later releases removed the argument). The evaluator (hp1_eval.build_model) and HPN's fp32 reader
+    (bench/hpn/hpn_read.py) both call this, so their rotary buffers are built the same way on every version."""
+    try:
+        return cls(config=config, device=device)
+    except TypeError:
+        return cls(config=config).to(device)
+
+
 def lora_delta(x, A, B, scaling):
     """scaling * (x A^T) B^T in fp32, returned in fp32."""
     return (x.float() @ A.t()) @ B.t() * scaling

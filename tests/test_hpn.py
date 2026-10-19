@@ -392,3 +392,36 @@ def test_n1_is_unreadable_without_l2():
     load = {"inloop": lambda p: data[int(p[:-2])][0][int(p[-1])], "eval": lambda p: data[int(p[:-2])][1][int(p[-1])],
             "fref": lambda p: data[int(p[:-1])][2]}
     assert R.reduce(spec, load=load)["N1"] is None
+
+
+def test_e_and_f_build_their_rotary_with_the_same_helper_and_get_bitwise_equal_buffers():
+    """F must differ from E in precision only: both build the rotary embedding through hp1_lib.make_rotary, on whichever transformers
+    is installed (5.18 takes device=, later releases do not), and the buffers come out bitwise equal."""
+    import inspect
+
+    import hp1_eval
+    import hp1_lib
+    hr = _hpn_read()
+    transformers = pytest.importorskip("transformers")
+    assert "hp1_lib.make_rotary(" in inspect.getsource(hp1_eval.build_model) and "hp1_lib.make_rotary(" in inspect.getsource(hr.build_model_f32)
+    cfg = transformers.Qwen3MoeConfig(hidden_size=16, num_attention_heads=4, head_dim=4, max_position_embeddings=64)
+    cls = type(transformers.AutoModelForCausalLM.from_config(cfg).model.rotary_emb)
+    a, b = hp1_lib.make_rotary(cls, cfg, "cpu"), hp1_lib.make_rotary(cls, cfg, "cpu")
+    assert torch.equal(a.inv_freq, b.inv_freq)
+
+
+def test_make_rotary_builds_on_a_transformers_without_the_device_argument():
+    import hp1_lib
+
+    class NoDevice(torch.nn.Module):                     # the later releases' signature: config only
+        def __init__(self, config):
+            super().__init__()
+            self.register_buffer("inv_freq", torch.arange(4, dtype=torch.float32))
+
+    class WithDevice(torch.nn.Module):                   # 5.18's signature
+        def __init__(self, config, device=None):
+            super().__init__()
+            self.got = device
+            self.register_buffer("inv_freq", torch.arange(4, dtype=torch.float32, device=device))
+    assert torch.equal(hp1_lib.make_rotary(NoDevice, None, "cpu").inv_freq, torch.arange(4.0))
+    assert hp1_lib.make_rotary(WithDevice, None, "cpu").got == "cpu"
