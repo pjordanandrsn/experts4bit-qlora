@@ -147,7 +147,91 @@ def test_sc1g_kl_and_ref_self_tests_pass():
     import sys
     for f in ("sc1g_kl.py", "sc1g_ref.py"):
         r = subprocess.run([sys.executable, str(SC2 / f), "--self-test"], capture_output=True, text=True, timeout=600)
-        assert r.returncode == 0 and "self-test OK" in r.stdout, f + r.stdout + r.stderr
+        # the diagnostic is evaluated only when the assertion fails
+        assert r.returncode == 0 and "self-test OK" in r.stdout, (f + r.stdout + r.stderr
+                                                                  + (_identity_diagnostic_text() if f == "sc1g_kl.py" else ""))
+
+
+# ---- the self-test's identity case, diagnosed from outside the pinned file ------------------------------------------
+# 'identity reads 0' failed once on a CI runner (e4b#1791, job 117876102863) at a value float64 roundoff cannot reach:
+# the named terms cancel exactly and the rest is two roundings of one number (~1e-15). sc1g_kl.py is pinned whole by
+# A5's rule digest, so the diagnostic lives here: on a failed self-test it re-runs the case's own construction in a fresh
+# interpreter (as the self-test runs) and reports what it reads, with the runner's numerics. See the SC1g README.
+
+IDENTITY_SETUP = (                                    # self_test's lines, verbatim and in order (pinned by the test below)
+    "g = torch.Generator().manual_seed(0)",
+    "V, P = 600, 40",
+    "ref_logits = torch.randn(P, V, generator=g) * 3.0",
+    "test_logits = ref_logits + torch.randn(P, V, generator=g) * 0.2",
+    "targets = torch.randint(0, V, (P,), generator=g).numpy()",
+    "rows = reference_rows(ref_logits, targets)",
+)
+IDENTITY_CASE = 'cases.append(("identity reads 0", float(np.max(kl65(rows, rows["lp"])["kl"])) < 1e-12))'
+
+_IDENTITY_DIAG = r'''
+import json, platform, sys
+import numpy as np
+import torch
+sys.path.insert(0, sys.argv[1])
+import sc1g_kl as K
+out = {"torch": torch.__version__, "numpy": np.__version__, "python": platform.python_version(),
+       "machine": platform.machine(), "torch_threads": torch.get_num_threads()}
+try:
+    out["cpu_capability"] = torch.backends.cpu.get_cpu_capability()
+except Exception as e:  # noqa: BLE001
+    out["cpu_capability"] = repr(e)
+try:
+    info = open("/proc/cpuinfo").read().splitlines()
+    out["cpu"] = next((x.split(":", 1)[1].strip() for x in info if x.startswith("model name")), None)
+    flags = next((x.split(":", 1)[1].split() for x in info if x.startswith("flags")), [])
+    out["cpu_flags"] = sorted(f for f in flags if f.startswith(("avx", "fma", "f16c")))
+except OSError:
+    out["cpu"] = platform.processor()
+try:                       # a diagnostic reports, it never raises: each stage records what it reached
+    ns = {"torch": torch, "reference_rows": K.reference_rows}
+    exec("\n".join(json.loads(sys.argv[2])), ns)
+    rows = ns["rows"]
+    delta = rows["rest"] - (1.0 - np.sum(np.exp(rows["lp"]), axis=1))     # the two roundings of the rest mass
+    out.update(lp_finite=bool(np.all(np.isfinite(rows["lp"]))), rest_finite=bool(np.all(np.isfinite(rows["rest"]))),
+               rest_min=float(np.nanmin(rows["rest"])), max_abs_delta=float(np.nanmax(np.abs(delta))))
+    kl = K.kl65(rows, rows["lp"])["kl"]
+    i = int(np.nanargmax(kl)) if not np.all(np.isnan(kl)) else 0
+    out.update(identity_max=float(np.max(kl)), identity_nan=int(np.sum(np.isnan(kl))), argmax_row=i,
+               delta_at_argmax=float(delta[i]))
+except Exception as e:  # noqa: BLE001
+    out["error"] = f"{type(e).__name__}: {e}"
+print(json.dumps(out, sort_keys=True))
+'''
+
+
+def _identity_diagnostic() -> dict:
+    import json
+    import subprocess
+    import sys
+    r = subprocess.run([sys.executable, "-c", _IDENTITY_DIAG, str(SC2), json.dumps(IDENTITY_SETUP)],
+                       capture_output=True, text=True, timeout=600)
+    try:
+        return json.loads(r.stdout)
+    except ValueError:
+        return {"error": f"diagnostic rc {r.returncode}: {(r.stdout + r.stderr)[-500:]}"}
+
+
+def _identity_diagnostic_text() -> str:
+    return "\nidentity diagnostic (tests/test_sc1g_checks.py): " + str(_identity_diagnostic())
+
+
+def test_the_identity_diagnostic_restates_the_self_test_and_reads():
+    """The diagnostic's construction is self_test's own (contiguous, verbatim, nothing else consuming the generator
+    between), the case it explains is still the self-test's, and the diagnostic runs and reports here."""
+    import inspect
+    src = [x.strip() for x in inspect.getsource(KLM.self_test).splitlines()]
+    first, last = src.index(IDENTITY_SETUP[0]), src.index(IDENTITY_SETUP[-1])
+    assert [x for x in src[first:last + 1] if x != "cases = []"] == list(IDENTITY_SETUP)
+    assert IDENTITY_CASE in src
+    d = _identity_diagnostic()
+    assert "error" not in d, d
+    assert d["torch"] == torch.__version__ and d["identity_nan"] == 0 and d["lp_finite"] and d["rest_finite"]
+    assert {"identity_max", "delta_at_argmax", "max_abs_delta", "rest_min", "cpu_capability", "cpu"} <= set(d)
 
 
 def test_box_r_staging_pin_matches_its_sources():
