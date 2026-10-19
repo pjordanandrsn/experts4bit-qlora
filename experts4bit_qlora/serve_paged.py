@@ -445,6 +445,14 @@ def resolve_attn_split_cap(value: str, model_type) -> tuple:
     return None, "default-off"
 
 
+def apply_attn_split_cap(kv, cfg, model_type) -> tuple:
+    """``(cap, source)``, resolved from ``cfg.attn_split_cap`` for ``model_type`` and set on ``kv.split_cap``: the one
+    place :func:`build_engine` turns the knob (or its per-family default) into what the KV hands the kernel."""
+    cap, source = resolve_attn_split_cap(getattr(cfg, "attn_split_cap", FUSION_UNSET), model_type)
+    kv.split_cap = cap
+    return cap, source
+
+
 def resolve_prefill_glue(value: str, model_type) -> tuple:
     """``(mode, source)``: an explicit ``0`` / ``1`` passes through (``explicit``); ``default`` resolves to ``1`` on a
     ``model_type`` in :data:`PREFILL_GLUE_DEFAULT_FAMILIES` (``default-allowlisted``) and to ``0`` elsewhere
@@ -1511,9 +1519,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
                     k_groups=(None if cfg.kv_groups == "auto" else int(cfg.kv_groups)),
                     batched_append=True, device=cfg.device, scratch_slots=scratch, alias_slots=spec_k)
     # P143: the attention split cap, on the KV before any decode graph is captured (a captured graph keeps its n_split)
-    split_cap, split_cap_source = resolve_attn_split_cap(getattr(cfg, "attn_split_cap", FUSION_UNSET),
-                                                         getattr(model.config, "model_type", None))
-    kv.split_cap = split_cap
+    split_cap, split_cap_source = apply_attn_split_cap(kv, cfg, getattr(model.config, "model_type", None))
     runner = PagedModelRunner(model, kv, device=cfg.device, bulk_kv=cfg.bulk_kv, last_logits=cfg.last_logits)
     grouping = _batched_graph_grouping(cfg)          # before capture: the batched lane's sync-free grouping
     # SD2: the draft, its hooks and the verify buckets, before any graph is captured

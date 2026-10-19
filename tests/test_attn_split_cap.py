@@ -150,6 +150,36 @@ def test_the_f32_path_is_left_to_the_library(monkeypatch):
     assert seen[0]["split_cap"] is None and kv.split_plans == {}
 
 
+@pytest.mark.parametrize("env,model_type,want_cap,want_source,handed", [
+    (None, "qwen3_moe", 16, "default-allowlisted", 16),        # the flip: knob unset, the family's default
+    (None, "mixtral", None, "default-off", None),              # unread family: the library's plan
+    ("0", "qwen3_moe", None, "explicit", None),                # the way back
+    ("16", "mixtral", 16, "explicit", 16),                     # explicit still works anywhere
+])
+def test_build_engines_cap_reaches_the_kernel_call_from_the_default(monkeypatch, env, model_type, want_cap, want_source,
+                                                                   handed):
+    """End to end on CPU through build_engine's own wiring (apply_attn_split_cap): the server config read from the
+    environment -> the per-family resolution -> the KV -> the kwargs the KV hands fp8_paged_decode_attention. Only the
+    kernel is a stub (A3 read the real one engaged on CUDA from kv.split_cap = 16)."""
+    if env is None:
+        monkeypatch.delenv("E4B_ATTN_SPLIT_CAP", raising=False)
+    else:
+        monkeypatch.setenv("E4B_ATTN_SPLIT_CAP", env)
+    kv, seen = _kv_with_stub_kernel(monkeypatch)
+    cfg = sp.PagedServeConfig.from_env()
+    assert sp.apply_attn_split_cap(kv, cfg, model_type) == (want_cap, want_source)
+    assert kv.split_cap == want_cap
+    kv.attention(0, torch.randn(1, 32, 128, dtype=torch.bfloat16), slots=[0])
+    assert seen[-1]["split_cap"] == handed
+    assert kv.split_plans == ({1: {"calls": 1, "plan": 32, "n_split": 16}} if handed else {})
+
+
+def test_build_engine_sets_the_cap_through_apply_attn_split_cap():
+    import inspect
+    src = inspect.getsource(sp.build_engine)
+    assert "apply_attn_split_cap(kv, cfg," in src and "kv.split_cap =" not in src
+
+
 def test_the_knob_is_read_and_refused():
     assert sp._attn_split_cap_env("") == sp.FUSION_UNSET and sp._attn_split_cap_env("  ") == sp.FUSION_UNSET
     assert sp._attn_split_cap_env("16") == "16" and sp._attn_split_cap_env("0") == "0" and sp._attn_split_cap_env("032") == "32"
