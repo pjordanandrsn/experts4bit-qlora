@@ -34,11 +34,12 @@ Median replay ms of the served first-chunk prefill graph at T = 512 (16 windows 
 - **The order:** m64 over m32 x1.0241 [1.0236, 1.0246]. **The span:** m0 x1.0050 over processes 1-8.
 - **The warm-up** (process 0, Amendment 2) read m0 at x0.999 of the scored median. The proof's first-process effect
   did not recur.
-- **GPU state** (Amendment 2, reported only), the same in every process: 2392 MHz / 66 W / 35 C at the start of the
-  speed pass; 2512 MHz / about 541 W / 54-55 C after the warm rounds and after the timed rounds, with clock event
-  reason 0x4 (software power cap); 2752-2775 MHz / 245 W at the end. The timed rounds ran power-capped at one clock
-  in all nine processes.
-- **Eager** (reported, never gated): m0 90.0 ms, m32 105.5, m64 105.5 (process 1).
+- **GPU state** (Amendment 2, reported only), over all nine processes: 2392-2400 MHz / 65-67 W / 35-36 C at the start
+  of the speed pass; 2505-2520 MHz / 540-546 W / 54-55 C after the warm rounds and after the timed rounds, with clock
+  event reason 0x4 (software power cap); 2557-2775 MHz / 207-249 W / 38-44 C at the end. The timed rounds ran
+  power-capped at matching clocks in all nine processes.
+- **Process times** (the box's log stamps): process 0 13.4 min (Phase B 9.4 min); processes 1-8 3.63-3.82 min each.
+- **Eager** (reported, never gated): m0 90.0 ms, m32 105.5, m64 105.5 (process 1): x0.85 for both tall arms.
 - **Load** 168-180 s a process; peak 20.97 GB (21.29 in process 0, with Phase B).
 
 The maintainer re-derived the verdict from the private receipt store with the reducer at `8e6471f5` (equal to the

@@ -40,8 +40,9 @@ m0 replays at 34.36-34.53 ms. m64 over m32 reads x1.0241 [1.0236, 1.0246]. Per-p
 
 **Amendment 2 answered the proof's anomaly.** The proof read NOISY because its process 1 ran about 4.7 % faster on
 every arm. In the reading, the warm-up process 0 read m0 at x0.999 of the scored median, so the effect did not recur.
-The GPU state, recorded four times a process, was the same in all nine processes: 2512 MHz at about 541 W during the
-timed rounds, with the software power cap active (clock event reason 0x4). The ratios therefore sit within one host
+The GPU state, recorded four times a process, matched across all nine processes: 2505-2520 MHz at 540-546 W around
+the timed rounds (after the warm rounds and after the timed rounds), with the software power cap active (clock event
+reason 0x4). The ratios therefore sit within one host
 at one clock. What made the proof's process 1 fast stays unattributed, because the proof recorded no clocks.
 
 ## Predictions (graded, never ruling)
@@ -56,7 +57,7 @@ at one clock. What made the proof's process 1 fast stays unattributed, because t
 | Q6 | NOISY does not fire; m0 span <= x1.01 | x1.0050 | hit |
 | Q7 | R repeats bit for bit; S32 and S64 `torch.equal` to R | as predicted | hit |
 | Q8 | M32_LICENSED M64_LICENSED DEFAULT_m64 | M32_HELD M64_HELD DEFAULT_NONE | miss |
-| Q9 | each process <= 4 min except the Phase B process (<= 9 min); the eight <= 40 min; peak <= 27 GiB | scored processes 3.4-4.5 min; process 0 13.5 min (Phase B 9.4); the eight about 29 min; peak 21.3 GB | miss (processes 0 and 5) |
+| Q9 | each process <= 4 min except the Phase B process (<= 9 min); the eight <= 40 min; peak <= 27 GiB | scored processes 3.63-3.82 min (the box's log stamps); process 0 13.4 min (Phase B 9.4); the eight about 30 min; peak 21.3 GB | miss (process 0) |
 
 ## What the misses mean
 
@@ -70,13 +71,14 @@ Both lie below the registered [0.3, 0.8], and they disagree with each other. One
 32-row tile carries a cost the model lacks.
 
 **An open question, not a new lane:** what the BLOCK_M-32 plan (`block_n`, `kc`, warps) costs that the model does
-not carry. m64's best case is +0.7 %, far under the bar, so chasing it is low value unless a $0 structural profile of
+not carry. m64's mean is +0.73 % and its interval tops out at +0.83 %, far under the bar, so chasing it is low value unless a $0 structural profile of
 grouped-nf4-gemm on the correctness card shows something obvious. Q5 missed on size, not direction: m64 beat m32 by
-2.4 %, against the 0.4-1.3 % predicted.
+2.4 %, against the 0.4-1.3 % predicted, and most of that gap is m32's own 1.6 % penalty against m0, not m64's gain.
 
 ## Consequence
 
 As registered for **DEFAULT_NONE**: `E4B_K19_PREFILL_BIG_M` stays opt-in, and the ratios are recorded here. The
 NOT_FASTER reading: m64's saving is about a fifth of what the weight-pass model predicted at its lower f (0.250
-against 1.19 ms at f = 0.3), and m32's is negative. Since FUNCTION read bitwise, the knob remains safe to set; it is
-just not faster on this card. No TTFT or TPOT figure under load is claimed; that is an SC lane's to read.
+against 1.19 ms at f = 0.3), and m32's is negative. Since FUNCTION read bitwise, the knob remains numerically safe to
+set, but it is not faster on the graph, and the eager first-chunk forward is slower with it: x0.85, about 15.5 ms
+(reported, never gated). No TTFT or TPOT figure under load is claimed; that is an SC lane's to read.
