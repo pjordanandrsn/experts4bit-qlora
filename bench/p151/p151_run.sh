@@ -32,7 +32,7 @@ NEED_FETCH=1200; NEED_BAKE=600; NEED_ARM=420; NEED_SANE=900
 GPU_CLASS=5090; MIN_RAM_GB=60; MIN_DISK_GB=150
 MIN_POWER_W=575   # the 5090 served floor (P149's, the maintainer's ruling for P151): a capped board refuses before the install, rc 17
 case "$P151_RUN_ID" in
-  p151-5090-1|p151-5090-2|p151-5090-3) MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39;;   # SC1's pin
+  p151-5090-1|p151-5090-2|p151-5090-3|p151-5090-4|p151-5090-5|p151-5090-6) MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39;;   # SC1's pin
   *) say "unregistered run ID: $P151_RUN_ID"; finish 78;;
 esac
 [ -z "${P151_GPU_CLASS:-}${P151_MIN_DISK_GB:-}${P151_MIN_RAM_GB:-}${P151_REHEARSAL:-}${P151_SHORT:-}${P151_LONG:-}${P151_REPS:-}${P151_CONT:-}${P151_MIN_POWER_W:-}" ] || { say 'reading knobs are frozen'; finish 78; }

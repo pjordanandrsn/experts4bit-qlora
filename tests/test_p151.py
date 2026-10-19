@@ -58,7 +58,7 @@ def test_every_piece_shared_with_a3_is_at_a3s_pins_and_the_premise_is_k35s_file(
 def test_the_runner_refuses_below_575_w_before_the_install_and_reads_only_a_rule_verdict():
     run = (LANE / "p151_run.sh").read_text(encoding="utf-8")
     assert "GNF4_SHA=9b824155ace19796e14ff182ed1ac8e4dc406086" in run and 'md.version("grouped-nf4-gemm") == "0.47.1"' in run
-    assert "p151-5090-1|p151-5090-2|p151-5090-3) MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39;;" in run
+    assert "p151-5090-1|p151-5090-2|p151-5090-3|p151-5090-4|p151-5090-5|p151-5090-6) MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39;;" in run
     assert "SHORT=32; LONG=160; REPS=5; CONT=128; WINDOWS=12" in run and "MIN_POWER_W=575 " in run
     assert 'finish 17; }' in run and 'echo "refused: power.limit unreadable" > REFUSAL; finish 15; }' in run
     assert "E4B_ATTN_SPLIT_CAP E4B_DENSE_GEMV_BW\n" in run, "both knobs start unset"
@@ -201,3 +201,17 @@ def test_the_driver_refuses_another_run_id(tmp_path):
     out = subprocess.run(["bash", str(LANE / "p151_drive.sh")], capture_output=True, text=True,
                          env=_dry_env(tmp_path, "p143a3-5090-1"), timeout=120)
     assert out.returncode == 78 and "is not p151-5090-N" in out.stdout + out.stderr
+
+
+@pytest.mark.parametrize("run_id,ok", [("p151-5090-6", True), ("p151-5090-7", False)])
+def test_amendment_1_spares_reach_six_and_no_further(tmp_path, run_id, ok):
+    if sys.platform == "win32" or shutil.which("bash") is None:
+        pytest.skip("the driver needs a POSIX bash")
+    if not _clean_checkout():
+        pytest.skip("the driver refuses a dirty tree before it reads the run id")
+    out = subprocess.run(["bash", str(LANE / "p151_drive.sh")], capture_output=True, text=True,
+                         env=_dry_env(tmp_path, run_id), timeout=120)
+    if ok:
+        assert out.returncode == 0 and "DRYRUN stage -> root@h:/root/p151" in out.stdout, out.stdout + out.stderr
+    else:
+        assert out.returncode == 78 and "is not p151-5090-N" in out.stdout + out.stderr

@@ -136,6 +136,8 @@ The first rung that applies decides. A3's checks are carried verbatim.
 ## The box
 
 - **Run ids:** `p151-5090-1`, with `-2` and `-3` as pre-create spares only. The driver refuses any other.
+  - **Amendment 1 (2026-10-19):** `-4`, `-5` and `-6` are spares for refusals BEFORE THE INSTALL only: a host floor
+    (rc 17 or 15), a pre-create refusal, or `no_such_ask`. A box that starts and fails is still a strike.
 - **Box terms** are P143 A3's (the same kit and box class):
   - card and price: one RTX 5090 (cc 12.0, >= 30 GB, 170 SMs), torch 2.8.0+cu128, <= $0.80/h including 170 GB;
   - download: <= $0.005/GB for 70 GB;
