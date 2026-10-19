@@ -96,10 +96,10 @@ def one_rep(pool, gate, up, down):
     return rec
 
 
-def phase_cap(warm_total_s, n_reps, time_left_s):
-    """The probe's on-box cap (lane_record.phase_caps.probe): 1.5 x the reps x the warm rep's own measured wall, never
-    beyond the time the box has left."""
-    return min(time_left_s, 1.5 * n_reps * warm_total_s)
+def phase_cap(warm_by_pool, plan, time_left_s):
+    """The probe's on-box cap (lane_record.phase_caps.probe): 1.5 x the planned reps' walls, each taken from its own
+    pool's warm rep on this box, never beyond the time the box has left."""
+    return min(time_left_s, 1.5 * sum(warm_by_pool[pool] for pool in plan))
 
 
 def summarize(res):
@@ -132,10 +132,12 @@ def run(a):
 
     facts = host_facts()
     gate, up, down = slab(a.experts)
-    warm = one_rep(16, gate, up, down)                   # warm: allocator, CUDA context, bnb kernels
-    n_reps = CYCLES * len(POOLS)
-    cap = phase_cap(warm["total_s"], n_reps, float(os.environ.get("SMT_FUSE_TIME_LEFT_S", "inf")))
-    print("SMT_FUSE_CAP " + json.dumps({"warm_total_s": warm["total_s"], "reps": n_reps, "cap_s": cap}), flush=True)
+    # warm each pool once (allocator, CUDA context, bnb kernels): the cap is sized from each pool's own warm wall, since
+    # a slower pool is exactly what this measures
+    warm = {pool: one_rep(pool, gate, up, down)["total_s"] for pool in sorted(set(POOLS))}
+    plan = [pool for _ in range(CYCLES) for pool in POOLS]
+    cap = phase_cap(warm, plan, float(os.environ.get("SMT_FUSE_TIME_LEFT_S", "inf")))
+    print("SMT_FUSE_CAP " + json.dumps({"warm_total_s": warm, "reps": len(plan), "cap_s": cap}), flush=True)
     t_start = time.perf_counter()
     reps = []
     for c in range(CYCLES):
@@ -177,7 +179,9 @@ def self_test():
     n += 1
     assert POOLS == (16, 32, 32, 16) and CYCLES >= 3 and (E_FULL, INTER, HIDDEN) == (128, 1536, 4096)
     n += 1
-    assert phase_cap(10.0, 16, float("inf")) == 240.0 and phase_cap(10.0, 16, 100.0) == 100.0
+    plan = [pool for _ in range(CYCLES) for pool in POOLS]
+    assert phase_cap({16: 1.0, 32: 3.0}, plan, float("inf")) == 1.5 * CYCLES * (2 * 1.0 + 2 * 3.0)
+    assert phase_cap({16: 1.0, 32: 3.0}, plan, 10.0) == 10.0
     n += 1
     print(f"smt_fuse_box self-test OK ({n}/6 cases)")
     return 0

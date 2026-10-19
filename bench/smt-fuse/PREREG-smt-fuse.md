@@ -18,7 +18,7 @@ server-class SMT host.
   - `h2d`: the fused stacks to the GPU;
   - `quant`: `Experts4bit.from_float(..., quant_type="nf4")` on the GPU.
   - The pool is set explicitly (`torch.set_num_threads`) per rep.
-- **Order:** one untimed warm rep at 16, then the pools **16, 32, 32, 16** for **4 cycles**: 16 reps and 8 back-to-back
+- **Order:** one untimed warm rep at each pool (16 and 32), then the pools **16, 32, 32, 16** for **4 cycles**: 16 reps and 8 back-to-back
   (16, 32) pairs.
 - **Recorded once:** the CPU model, physical and logical counts, threads per core, the affinity, the cgroup quota and
   torch's default pool.
@@ -42,7 +42,9 @@ server-class SMT host.
 - **Pins:** e4b `E4B_PIN=6c5c27435c0e9c2f3d78e05ab102fd579434a7a1`, grouped-nf4-gemm 0.46.0
   `GNF4_SHA=6b7c2e7474d20c8843814dd46dad6cfc3d94b440`, torch 2.8.0+cu128 (the image's), bitsandbytes 0.50.2.
 - **Phase cap, declared on the box** (`lane_record.phase_caps.probe = {"on_box": ...}`): min(time left − 600 s,
-  1.5 × the 16 reps × the warm rep's own wall), checked between reps.
+  1.5 × the sum of the 16 planned reps' walls, each from its own pool's warm rep on this box), checked between reps. The
+  per-pool sizing is the dry run's correction: a cap from the 16-thread warm rep alone tripped on the slower 32-thread reps,
+  which are what this measures.
 - **Run ids:** `smt-fuse-1` is the reading. `smt-fuse-2` and `-3` are spares for pre-create refusals, listings gone
   before the create, and NOT_RUN at the pre-flight. `smt-fuse-dry-<n>` are the $0 dry runs: correctness only, on 8
   experts, never a reading.
