@@ -7,7 +7,10 @@ set -euo pipefail
 REPO=${1:?usage: hpn_local.sh REPO OUT}
 OUT=${2:?usage: hpn_local.sh REPO OUT}
 E4B_SHA=$(git -C "$REPO" rev-parse HEAD)
-[ -z "$(git -C "$REPO" status --porcelain --untracked-files=no)" ] || { echo "refusing: $REPO has uncommitted changes (the receipts cite $E4B_SHA)"; exit 78; }
+STAGED="bench/tc1 bench/hp1 bench/hpn bench/tp4 bench/flagship-matrix"     # what is copied in: untracked files there would ship too
+# shellcheck disable=SC2086
+if [ -n "$(git -C "$REPO" status --porcelain --untracked-files=no)" ] || [ -n "$(git -C "$REPO" status --porcelain -- $STAGED)" ]; then
+  echo "refusing: $REPO has uncommitted changes, or untracked files in the staged dirs (the receipts cite $E4B_SHA)"; exit 78; fi
 mkdir -p "$OUT"
 find "$REPO/bench/tc1" -maxdepth 1 -type f -exec cp {} "$OUT"/ \;
 cp "$REPO/bench/tp4/tp4_alpaca.py" "$REPO/bench/flagship-matrix/drivers/n9_datasets.py" "$REPO/bench/flagship-matrix/ds_manifest.json" "$OUT"/

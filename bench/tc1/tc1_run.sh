@@ -2574,7 +2574,7 @@ tc1_hpn_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
   local SRC=${HF_HUB_CACHE:-/root/.cache/huggingface/hub}/models--${MID//\//--}/snapshots/$REV
   for L in $HPN_DEPTHS; do
     FL=${FAM}L$L; D=$W/hp1/hpn/L$L; SC=$W/hpn/cut-L$L; X="--hp1-export $W/hp1/hpn/L$L --hp1-export-base 1"   # spelled out: the under-hp1/ test reads it
-    need=$(( L * 2 + 2 )); free=$(df -BG --output=avail $W | tail -1 | tr -dc 0-9)      # the bf16 cut (~1.25 GB a layer) + two NF4 exports, with headroom
+    need=$(( L * 2 + 2 )); free=$(( $(df -Pk $W | awk 'NR==2 {print $4}') / 1048576 ))   # GB, POSIX df      # the bf16 cut (~1.25 GB a layer) + two NF4 exports, with headroom
     if [ "${free:-0}" -lt "$need" ]; then echo "HPN L$L SKIPPED: ${free} GB free < ${need} GB for its cut and exports (a stated limit)" | tee -a summary.txt; break; fi
     $PY_E4B $W/hp1_trunc.py --src "$SRC" --cache $SC --layers $L > logs/hpn_trunc_L$L.log 2>&1 || { echo "HPN L$L TRUNC_FAILED" | tee -a summary.txt; break; }
     TM=$($PY_E4B -c "import json,sys; print(json.loads(open(sys.argv[1]).read().splitlines()[-1])['model'])" logs/hpn_trunc_L$L.log)

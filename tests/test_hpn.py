@@ -475,3 +475,15 @@ def test_hpn_local_refuses_an_unclean_checkout(tmp_path):
     p = subprocess.run(["bash", str(REPO / "bench/hpn/hpn_local.sh"), str(r), str(tmp_path / "out")], env=env, capture_output=True,
                        text=True, timeout=60)
     assert p.returncode == 78 and "uncommitted changes" in p.stdout and not (tmp_path / "out").exists()
+
+
+def test_hpn_local_refuses_an_untracked_file_in_a_staged_dir(tmp_path):
+    """Review: find bench/tc1 -type f would ship an untracked file into a run that cites a clean commit."""
+    import os
+    import subprocess
+    r, bin_ = _local_repo(tmp_path)
+    (r / "bench/tc1/stray_helper.py").write_text("# not committed\n")
+    env = dict(os.environ, PATH=f"{bin_}:{os.environ['PATH']}")
+    p = subprocess.run(["bash", str(REPO / "bench/hpn/hpn_local.sh"), str(r), str(tmp_path / "out")], env=env, capture_output=True,
+                       text=True, timeout=60)
+    assert p.returncode == 78 and "untracked files in the staged dirs" in p.stdout
