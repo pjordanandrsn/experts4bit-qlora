@@ -126,7 +126,7 @@ environment, against that environment's own null. The two environments are never
        more than 2×, KNOB_OFF is `INDETERMINATE`.
      - A tighter guaranteed rate would need n `step-today-c` processes for 1/(n + 1), that is 19 for 5%. Step 3 is the
        fallback only if C is itself not deterministic, so it is not registered here.
-     - The review's first scoring, the largest of the six pair distances involving `step-off-c`, would have had 1/2,
+     - This amendment's previous test, the largest of the six pair distances involving `step-off-c`, would have had 1/2,
        not 1/4. It was replaced by this per-process score before data.
 
 A cross-process bitwise comparison is never made without a null that passed, and never across environments.
