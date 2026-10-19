@@ -373,9 +373,9 @@ def test_qualifying_window_makes_one_inclusion_pinned_launch(tmp_path, monkeypat
     monkeypatch.setattr(launch, "verify_envelope_comment", lambda *args: None)
     monkeypatch.setattr(launch, "merged_clean", lambda path: "e" * 40 if path == e4b else "c" * 40)
     monkeypatch.setattr(launch.subprocess, "call", lambda *args: 0)
-    monkeypatch.setattr(launch, "live_provider", lambda *args: FakeProvider([offer()]))
+    monkeypatch.setattr(launch, "live_provider", lambda *args, **kw: FakeProvider([offer()]))
 
-    def discover(_, packet_dir):
+    def discover(_, packet_dir, **kw):
         (packet_dir / "all-host-polls.jsonl").write_text("one synthetic poll\n")
         latest = launch.time.monotonic()
         history = samples("100", "101")
@@ -392,7 +392,7 @@ def test_qualifying_window_makes_one_inclusion_pinned_launch(tmp_path, monkeypat
 
     monkeypatch.setattr(launch, "observe_all_hosts", discover)
     monkeypatch.setattr(launch, "cpu_gate", lambda *args: args[-1].write_text("{}"))
-    monkeypatch.setattr(launch, "quote", lambda *args: args[-1].write_text("{}"))
+    monkeypatch.setattr(launch, "quote", lambda *args, **kw: args[-1].write_text("{}"))
     (controller / "tools").mkdir()
     (controller / "tools/pod-launch.sh").write_text(
         f'if [ "$1" = "--validate" ]; then\n'
@@ -473,10 +473,10 @@ def test_paid_controller_refuses_expired_search_before_driver(tmp_path, monkeypa
                                     "executor_sha256": launch.executor_sha256("CTO/example/executor")}))
     monkeypatch.setattr(launch, "validate_envelope", lambda *args: None)
     monkeypatch.setattr(launch, "verify_envelope_comment", lambda *args: None)
-    monkeypatch.setattr(launch, "live_provider", lambda *args: FakeProvider([offer()]))
+    monkeypatch.setattr(launch, "live_provider", lambda *args, **kw: FakeProvider([offer()]))
     history = {"samples": [{"monotonic": 0.0}]}
 
-    def discover(_, packet_dir):
+    def discover(_, packet_dir, **kw):
         (packet_dir / "stable-host.json").write_text(json.dumps(history))
         return {"polls_sha256": "a" * 64, "stable_history_sha256": "b" * 64}
 
@@ -492,7 +492,7 @@ def test_paid_controller_refuses_expired_search_before_driver(tmp_path, monkeypa
     def gate(*args):
         args[-1].write_text(json.dumps({"passed": True}))
 
-    def quote(*args):
+    def quote(*args, **kw):
         args[-1].write_text("{}")
 
     monkeypatch.setattr(launch, "cpu_gate", gate)
@@ -557,7 +557,7 @@ def test_launch_runs_only_as_the_executor_the_envelope_binds(tmp_path, monkeypat
     def comment(_):
         raise ValueError("comment check reached")
     monkeypatch.setattr(launch, "verify_envelope_comment", comment)
-    monkeypatch.setattr(launch, "live_provider", lambda *a: pytest.fail("no search before the executor check"))
+    monkeypatch.setattr(launch, "live_provider", lambda *a, **kw: pytest.fail("no search before the executor check"))
     with pytest.raises(ValueError) as err:
         launch.launch_attempt(tmp_path / "template", envelope, *(tmp_path / n for n in ("e4b", "controller", "assets", "packet")),
                               run_id=RUN_IDS[0])
@@ -866,3 +866,181 @@ def test_canonical_ledger_whitespace_and_comments_allow_unused_id(receipt_repo):
     git_fixture(root, "commit", "-m", "Legal ledger whitespace")
     with launch.attempt_permit(range_envelope(), RUN_IDS[0], root, root / "state"):
         pass
+
+
+# ---- a created instance that stalled before its command ran (census-7's shape) continues the envelope ----
+
+def stall_receipt(root, run_id, *, machine="147454", instance="56654961", cost=0.015, ledger_cost=None, **changes):
+    """The controller's own record of a pre-flight stall: NOT_RUN / invalid, vast_preflight failed, the box destroyed
+    with reason preflight-failed, the command never run, and the cost journaled in the ledger."""
+    receipt = json.loads((FIXTURE / "receipt.json").read_text())
+    receipt.update({
+        "experiment_id": run_id, "status": "NOT_RUN", "result": "invalid", "complete": True, "instance_id": instance,
+        "cost_usd": {"actual": cost, "estimated": 0.9345},
+        "notes": f"pre-flight failed: instance {instance} is `loading` after 600 s (stuck loading); command not run",
+        "environment": {"vast_preflight": "failed", "vast_machine_id": machine},
+        "teardown_proof": {"complete": True, "method": "vast-destroy", "reason": "preflight-failed",
+                           "instance_id": instance}})
+    receipt["approvals"][0]["approval_url"] = range_envelope()["approval_url"]
+    receipt.update(changes)
+    path = root / "receipts/experts4bit-qlora/2026-10-19" / run_id / "receipt.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(receipt))
+    row = json.loads((FIXTURE / "ledger.jsonl").read_text())                   # the fixture's row, re-pointed
+    row.update(run_id=run_id, cost_usd=cost if ledger_cost is None else ledger_cost)
+    with (root / "receipts/experts4bit-qlora/ledger.jsonl").open("a") as stream:
+        stream.write(json.dumps(row) + "\n")
+    git_fixture(root, "add", "receipts")
+    git_fixture(root, "commit", "-m", "Stall receipt")
+    return path
+
+
+def _invoke(root, run_id):
+    with launch.attempt_permit(range_envelope(), run_id, root, root / "state") as permit:
+        permit()
+    return permit
+
+
+def test_a_preflight_stall_continues_with_its_spend_counted_and_its_machine_excluded(receipt_repo):
+    root = receipt_repo
+    _invoke(root, RUN_IDS[0])
+    stall_receipt(root, RUN_IDS[0])
+    with launch.attempt_permit(range_envelope(), RUN_IDS[1], root, root / "state") as permit:
+        assert permit.run_id == RUN_IDS[1]
+        assert permit.spent_usd == launch.Decimal("0.015") and permit.budget_usd == launch.Decimal("1.085")
+        assert permit.excluded_machines == {"147454"}
+        permit()
+    stall_receipt(root, RUN_IDS[1], machine="300", instance="56654962", cost=0.02)
+    with launch.attempt_permit(range_envelope(), "next", root, root / "state") as permit:
+        assert permit.run_id == RUN_IDS[2]                                  # next: the first unused declared id
+        assert permit.spent_usd == launch.Decimal("0.035") and permit.excluded_machines == {"147454", "300"}
+
+
+@pytest.mark.parametrize("changes", [
+    {"status": "HARNESS_ERROR"},                                            # the command ran
+    {"status": "OK", "result": "valid"},
+    {"notes": "pre-flight failed: stuck loading"},                          # no record that the command did not run
+    {"environment": {"vast_preflight": "passed", "vast_machine_id": "147454"}},
+    {"environment": {"vast_preflight": "failed"}},                          # no machine to exclude
+    {"teardown_proof": {"complete": False, "method": "vast-destroy", "reason": "preflight-failed", "instance_id": "56654961"}},
+    {"teardown_proof": {"complete": True, "method": "vast-destroy", "reason": "aborted", "instance_id": "56654961"}},
+    {"teardown_proof": {"complete": True, "method": "vast-destroy", "reason": "preflight-failed", "instance_id": "1"}},
+    {"complete": False}, {"approvals": [{"approval_url": "another approval"}]},
+    {"cost_usd": {"actual": None}}, {"work_id": "other-work"},
+])
+def test_an_unproven_or_command_running_attempt_still_stops_for_the_maintainer(receipt_repo, changes):
+    root = receipt_repo
+    _invoke(root, RUN_IDS[0])
+    stall_receipt(root, RUN_IDS[0], **changes)
+    with pytest.raises(ValueError, match="created instance or uncertain"):
+        with launch.attempt_permit(range_envelope(), RUN_IDS[1], root, root / "state"):
+            pytest.fail("next draw allowed")
+
+
+def test_a_stall_whose_cost_the_ledger_does_not_journal_stops(receipt_repo):
+    root = receipt_repo
+    _invoke(root, RUN_IDS[0])
+    stall_receipt(root, RUN_IDS[0], ledger_cost=0.0)
+    with pytest.raises(ValueError, match="created instance or uncertain"):
+        with launch.attempt_permit(range_envelope(), RUN_IDS[1], root, root / "state"):
+            pytest.fail("next draw allowed")
+
+
+def test_the_cumulative_all_in_stops_the_envelope(receipt_repo):
+    root = receipt_repo
+    _invoke(root, RUN_IDS[0])
+    stall_receipt(root, RUN_IDS[0], cost=1.10)
+    with pytest.raises(ValueError, match="cumulative all-in is spent"):
+        with launch.attempt_permit(range_envelope(), RUN_IDS[1], root, root / "state"):
+            pytest.fail("next draw allowed")
+
+
+def test_next_takes_the_first_unused_id_and_refuses_when_none_is_left(receipt_repo):
+    root = receipt_repo
+    env = range_envelope(RUN_IDS[:2])
+    with launch.attempt_permit(env, "next", root, root / "state") as permit:
+        assert permit.run_id == RUN_IDS[0] and permit.spent_usd == 0 and not permit.excluded_machines
+        permit()
+    refusal_receipt(root, RUN_IDS[0])                                       # a $0 refusal: no spend, no exclusion
+    with launch.attempt_permit(env, "next", root, root / "state") as permit:
+        assert permit.run_id == RUN_IDS[1] and permit.spent_usd == 0 and not permit.excluded_machines
+        permit()
+    refusal_receipt(root, RUN_IDS[1])
+    with pytest.raises(ValueError, match="every declared id is used"):
+        with launch.attempt_permit(env, "next", root, root / "state"):
+            pytest.fail("no id left")
+
+
+def test_discovery_honours_the_journal_bounds():
+    p = FakeProvider([])
+    assert launch.offer_row(offer(), p, all_in=launch.Decimal("1.085"))["eligible"] is True     # 1.0845 fits
+    row = launch.offer_row(offer(), p, all_in=launch.Decimal("1.065"))
+    assert row["eligible"] is False and "remaining $1.065" in " ".join(row["refusal_reasons"])
+    assert launch.offer_row(offer(machine="300"), p, excluded={"45511", "300"})["eligible"] is False
+    rows = [launch.offer_row(offer(machine="300"), p)]                        # eligible under the static list alone
+    poll = {"status": "PASS", "utc": "t", "monotonic": 0.0, "filter": {}, "offers": rows}
+    hc = launch.HostContinuity({"45511", "300"})
+    for i in range(20):
+        assert hc.step(dict(poll, monotonic=float(i * 20))) is None
+    assert "300" not in hc.active
+
+
+def test_the_launch_hands_the_permit_bounds_to_search_and_discovery(tmp_path, monkeypatch):
+    monkeypatch.setenv("POD_LAUNCH_AGENT", "CTO/a/seat")
+    envelope = tmp_path / "envelope.json"
+    envelope.write_text(json.dumps({"executor_sha256": launch.executor_sha256("CTO/a/seat")}))
+    monkeypatch.setattr(launch, "validate_envelope", lambda *args: None)
+    monkeypatch.setattr(launch, "verify_envelope_comment", lambda *args: None)
+    seen = {}
+
+    def provider(*args, **kw):
+        seen["provider"] = kw
+        return FakeProvider([])
+
+    def discover(_, packet_dir, **kw):
+        seen["discover"] = kw
+        raise ValueError("stop after discovery")
+    monkeypatch.setattr(launch, "live_provider", provider)
+    monkeypatch.setattr(launch, "observe_all_hosts", discover)
+    permit = launch.Permit(RUN_IDS[1], launch.Decimal("0.015"), {"147454"}, lambda: None)
+    with pytest.raises(ValueError, match="stop after discovery"):
+        launch.launch_attempt(tmp_path / "template", envelope, tmp_path / "e4b", tmp_path / "controller",
+                              tmp_path / "assets", tmp_path / "packet", run_id=RUN_IDS[1], before_controller=permit)
+    assert seen["provider"]["excluded"] == {"45511", "147454"}
+    assert seen["discover"]["excluded"] == {"45511", "147454"} and seen["discover"]["all_in"] == launch.Decimal("1.085")
+
+
+def test_the_registered_list_carries_a_machine_that_stalled_across_envelopes():
+    """A journal excludes only its own envelope's stalls; 147454 stalled on two envelopes, so the registered list
+    excludes it from every later one."""
+    assert launch.EXCLUDED_MACHINES == {"45511", "147454"}
+    assert launch.offer_row(offer(machine="147454"), FakeProvider([]))["eligible"] is False
+
+
+STALLED = Path(__file__).parent / "fixtures/dq11-census-stalled"
+STALLED_RECEIPT_SHA256 = "0ff76566d4246bb78e7c0a89a57142a9a92eeb33a72255c59725bb53b88788aa"
+STALLED_LEDGER_SHA256 = "8b0954615b702828914563eb795b9ecacb303316a2ffeed033998eb82c7b83d9"
+
+
+def test_the_real_census_7_stall_is_what_the_gate_admits(receipt_repo):
+    """census-7's committed receipt and ledger row, unchanged (sha256-pinned): preflight_stall admits them, and under
+    their own envelope's URL and ids the next attempt is permitted with $0.015 spent and machine 147454 excluded."""
+    assert launch.sha(STALLED / "receipt.json") == STALLED_RECEIPT_SHA256
+    assert launch.sha(STALLED / "ledger.jsonl") == STALLED_LEDGER_SHA256
+    receipt = json.loads((STALLED / "receipt.json").read_text())
+    url = receipt["approvals"][0]["approval_url"]
+    assert launch.preflight_stall(receipt, url, "dq11-l-census-7") == ("147454", launch.Decimal("0.015"))
+    root = receipt_repo
+    env = {"approval_url": url, "run_ids": ["dq11-l-census-7", "dq11-l-census-8"], "maximum_attempts": 2}
+    with launch.attempt_permit(env, "dq11-l-census-7", root, root / "state") as permit:
+        permit()
+    path = root / "receipts/experts4bit-qlora/2026-10-19/dq11-l-census-7/receipt.json"
+    path.parent.mkdir(parents=True)
+    path.write_bytes((STALLED / "receipt.json").read_bytes())
+    with (root / "receipts/experts4bit-qlora/ledger.jsonl").open("ab") as stream:
+        stream.write((STALLED / "ledger.jsonl").read_bytes())
+    git_fixture(root, "add", "receipts")
+    git_fixture(root, "commit", "-m", "census-7 as committed")
+    with launch.attempt_permit(env, "next", root, root / "state") as permit:
+        assert permit.run_id == "dq11-l-census-8"
+        assert permit.spent_usd == launch.Decimal("0.015") and permit.excluded_machines == {"147454"}

@@ -140,16 +140,32 @@ the paid controller call. A caught pre-controller exception becomes
 `not-invoked`; another ID may proceed only if that attempt has no receipt,
 run directory or ledger row. Process death in `admitted` or an uncertain
 controller outcome fails closed. A reused ID refuses. Before another
-ID is admitted, every used ID must have a complete canonical `REFUSED` receipt
-with `instance_id=none`, actual cost zero, `not-launched` teardown proof and the
-same approval URL. Counted receipts and the ledger must be tracked and clean
-at the receipt repository HEAD, including the index. An absent receipt for
-an admitted/controller-invoked attempt, orphan ledger row, unfinished attempt,
-created instance or changed envelope stops for the maintainer. The journal
-survives process death; canonical receipts also prevent resetting it to gain
-another draw. At most ten IDs can be attempted; at most one instance can be
-created. Commit each finished receipt before requesting the next attempt; no
-controller or science retry is automatic. An envelope is not a result or a license to relax any
+ID is admitted, every used ID must have one of two complete canonical receipts,
+with the same approval URL:
+- a `REFUSED` receipt with `instance_id=none`, actual cost zero and `not-launched` teardown proof (a $0 provider
+  refusal); or
+- a **pre-command host stall** (amended 2026-10-19 on the owner's "don't stop runs", maintainer ruling): a created
+  instance that ended `NOT_RUN` / `invalid` at the controller's pre-flight, with `environment.vast_preflight=failed`,
+  notes recording that the command was not run, a complete `vast-destroy` teardown proof with reason
+  `preflight-failed` for that same instance, its machine ID recorded, and its actual cost journaled as the same value
+  in its ledger row.
+
+A stall no longer stops the envelope, under three bounds read from the journal for every attempt:
+- **One instance that runs the command.** Any other created instance (one that ran its command, or any doubt) still
+  stops for the maintainer.
+- **The all-in is cumulative.** Every stalled attempt's actual cost counts against the envelope's $1.10. Discovery and
+  the final quote admit only offers whose reservation fits what is left, and the envelope stops once nothing is left.
+- **No repeat host.** Every machine an earlier attempt of the same envelope stalled on is excluded from discovery,
+  binding and the quote, alongside the registered exclusion. A journal covers only its own envelope, so a machine
+  that stalls across envelopes joins the registered list (`EXCLUDED_MACHINES`): 147454, after census-7 and census-8.
+
+`--run-id next` takes the first declared ID the journal has not used, so the executor's loop continues without
+picking IDs. Counted receipts and the ledger must be tracked and clean at the receipt repository HEAD, including the
+index. An absent receipt for an admitted/controller-invoked attempt, orphan ledger row, unfinished attempt, a created
+instance that is not a proven stall, or a changed envelope stops for the maintainer. The journal survives process
+death; canonical receipts also prevent resetting it to gain another draw. At most the declared IDs can be attempted;
+at most one instance runs the command. Commit each finished receipt before the next attempt (the store refuses a launch
+while one is uncommitted); no science retry is automatic. An envelope is not a result or a license to relax any
 registered limit.
 
 Under that ACK, one GET-only standing poll searches all eligible offers with

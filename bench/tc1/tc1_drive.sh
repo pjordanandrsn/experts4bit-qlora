@@ -34,7 +34,7 @@ STAGE="$HERE/tc1_run.sh $HERE/tc1_arm.py $HERE/tc1_reduce.py $REPO/bench/tp4/tp4
 case " ${TC1_FAMILIES:-} " in *" qwen3hp2 "*) STAGE="$STAGE $REPO/bench/hp2/hp2_reduce.py";; esac   # HP2 + the hp1 pieces below
 case " ${TC1_FAMILIES:-} " in *" qwen3hp1 "*|*" qwen3hp1k "*|*" qwen3hp1p "*|*" qwen3hp1cal "*|*" qwen3hp2 "*) STAGE="$STAGE $REPO/bench/hp1/hp1_lib.py $REPO/bench/hp1/hp1_eval.py $REPO/bench/hp1/hp1_calib.py $REPO/bench/hp1/hp1_caltokens.py $REPO/bench/hp1/hp1_reduce.py $REPO/bench/hp1/hp1_trunc.py";; esac
 # #1767 (the qwen3axo1767 token; bench/tc1/AXO1767-PREREG.md): the HP1 evaluator, its library and the cut, plus the four-score reducer
-case " ${TC1_FAMILIES:-} " in *" qwen3axo1767 "*) STAGE="$STAGE $REPO/bench/hp1/hp1_lib.py $REPO/bench/hp1/hp1_eval.py $REPO/bench/hp1/hp1_trunc.py $REPO/bench/tc1/axo1767_reduce.py";; esac
+case " ${TC1_FAMILIES:-} " in *" qwen3axo1767 "*) STAGE="$STAGE $REPO/bench/hp1/hp1_lib.py $REPO/bench/hp1/hp1_eval.py $REPO/bench/hp1/hp1_trunc.py $REPO/bench/tc1/axo1767_reduce.py $REPO/bench/tc1/pypi_probe.py";; esac
 STAGE="$STAGE ${TC1_EXTRA_STAGE:-}"; RUNNER=${TC1_RUNNER:-tc1_run.sh}
 case " $STAGE " in *"/$RUNNER "*) ;; *) say "refusing: TC1_RUNNER=$RUNNER is not a staged file"; exit 78;; esac
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
@@ -79,7 +79,7 @@ PASS="TC1_BOX=$TC1_BOX TC1_RUN_ID=$RUN_ID TC1_RUN_NONCE=$NONCE TC1_DEADLINE_EPOC
 # and TC1_EVAL_N / TC1_EVAL_EVERY were absent from this list, so box C would have run the pre-amendment eval.
 for v in TC1_FAMILIES TC1_SKIP TC1_UNSLOTH_VERSION TC1_UNSLOTH_ZOO_VERSION TC1_PIN_FALLBACK TC1_STEPS TC1_LOAD_GATE TC1_LOAD_RETRIES \
          TC1_EVAL_N TC1_EVAL_EVERY TC1_SEQ TC1_MB TC1_ACCUM TC1_R TC1_ALPHA TC1_LR TC1_WD TC1_OPTIM TC1_SCHED TC1_WARMUP TC1_SEED \
-         TC1_MATCHED_SEED TC1_AUTOCAST TC1_DS_ALPACA_SHA TC1_TRANSFORMERS_VER TC1_BNB_VER TC1_PEFT_VER TC1_GPU_CLASS TC1_MIN_DISK_GB \
+         TC1_MATCHED_SEED TC1_AUTOCAST TC1_DS_ALPACA_SHA TC1_TRANSFORMERS_VER TC1_BNB_VER TC1_PEFT_VER TC1_GPU_CLASS TC1_MIN_DISK_GB TC1_PYPI_MIN_MBPS \
          TC1_PREREG TC1_BATCHED_PAD_WASTE_LIMIT TC1_PHASE_BUDGET_S TC1_ANCHOR_JSON TC1_AXOLOTL_VERSION \
          TC1_CURVE_STEPS TC1_CURVE_EVAL_EVERY TC1_CURVE_EVAL_N TC1_T1_MB TC1_T1_ACCUM TC1_R64_R TC1_R64_ALPHA \
          TC1_SMALL_STEPS TC1_SMALL_EVAL_N TC1_SMALL_EVAL_EVERY TC1_E4B_ENV TC1_PACK TC1_FREE_OUTPUTS TC1_PAD_CENSUS \
