@@ -111,6 +111,8 @@ MUTANTS = [
     ('        d1 = sum(shapes[s]["save_ms"] for s in D1_SHAPES)', '        d1 = max(shapes[s]["save_ms"] for s in D1_SHAPES)'),
     # the choice never checked against the selection
     ("        elif cho.get(s) != min(sel[s], key=sel[s].get):", "        elif False:"),
+    # the harness's cuBLAS kernel never held to P142's in-situ grid (the review of #1796)
+    ("        if GRID_P142[s] not in grids:", "        if False:"),
     # the bar read on a rounded saving (A3's final-pass lesson)
     ('"verdict": "GO" if d1 >= BAR else "PARK"', '"verdict": "GO" if round(d1, 6) >= BAR else "PARK"'),
 ]

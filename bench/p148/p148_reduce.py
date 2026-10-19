@@ -7,7 +7,9 @@ and a served read of its own (and, for D2, a quality gate at both of the split p
 The rule, first rung that applies (every bar compares unrounded values):
   VOID   the record is missing or not ok; not a 170-SM RTX 5090; a shape's contract, selection or read missing; a choice
          that is not the fastest contract-passing config of its own selection; a shape's cuBLAS medians (A1, A2) outside
-         [0.8, 1.25] x P142's in-situ time (qkv 0.7146, o 0.5972, head 0.3770 ms): the harness does not transfer.
+         [0.8, 1.25] x P142's in-situ time (qkv 0.7146, o 0.5972, head 0.3770 ms): the harness does not transfer; a
+         shape's profiled cuBLAS call launching no kernel on P142's in-situ grid (qkv 1280, o 512, head 37984; x 1 x 1):
+         the harness runs a different cuBLAS kernel than the served step (the review of #1796).
   NOISY  (a VOID, and a strike) any shape's self-pair, A2/A1 or B2/B1, outside [0.985, 1.015].
   then, per lever, independently:
   D1     GO iff qkv and o each have a contract-passing config (error <= 1.05 x cuBLAS's against fp64) and their savings
@@ -17,7 +19,8 @@ The rule, first rung that applies (every bar compares unrounded values):
          against the bf16 head) and the head's saving is >= BAR. Otherwise PARK.
 
 Reported, never ruling: every config's error and selection time, each shape's bandwidth (bytes / time against the
-5090's 1.792 TB/s), and the pairs.
+5090's 1.792 TB/s), the pairs, and each shape's PROJECTED in-situ saving, P142's time x (1 - B/A) (the review of #1796:
+the bars stay on the measured savings).
 
     python p148_reduce.py --bench p148.json --out verdict_p148.json [--e4b-sha SHA]
     python p148_reduce.py --self-test
@@ -31,6 +34,7 @@ BAR_SHARE = 0.02
 BAR = round(BAR_SHARE * P_MS, 6)
 ANCHOR_MS = {"qkv": 0.7146, "o": 0.5972, "head": 0.3770}   # P142's in-situ exclusive times
 ANCHOR = (0.8, 1.25)
+GRID_P142 = {"qkv": [1280, 1, 1], "o": [512, 1, 1], "head": [37984, 1, 1]}   # P142's cuBLAS `kernel` grids, in situ
 NOISY_BAND = (0.985, 1.015)
 CONTRACT_RATIO = 1.05
 SMS = 170
@@ -57,6 +61,11 @@ def reduce(rec: dict) -> dict:
     if dev.get("sm_count") != SMS or "5090" not in str(dev.get("name")):
         void.append(f"device {dev}: registered a {SMS}-SM RTX 5090")
     con, sel, cho, rd = (rec.get(k) or {} for k in ("contract", "select", "choice", "reads"))
+    kern = rec.get("cublas_kernels") or {}
+    for s in SHAPES:
+        grids = [list(k.get("grid") or []) for k in kern.get(s) or []]
+        if GRID_P142[s] not in grids:
+            void.append(f"{s}: the harness's cuBLAS call launched grids {grids}, not P142's in-situ {GRID_P142[s]}")
     for s in SHAPES:
         if s not in con:
             void.append(f"{s}: no contract record")
@@ -93,6 +102,7 @@ def reduce(rec: dict) -> dict:
         save = min(r["A1"] - r["B1"], r["A2"] - r["B2"])
         a, b = (r["A1"] + r["A2"]) / 2, (r["B1"] + r["B2"]) / 2
         shapes[s] = {"choice": cho[s], "save_ms": save, "pairs_ms": [r["A1"] - r["B1"], r["A2"] - r["B2"]],
+                     "projected_in_situ_save_ms": round(ANCHOR_MS[s] * (1 - b / a), 6),
                      "self_pairs": {k: round(v, 4) for k, v in sp.items()},
                      "cublas_tbs": round(_bytes(s) / (a * 1e-3) / 1e12, 3),
                      "kernel_tbs": round(_bytes(s, int8=s in D2_SHAPES) / (b * 1e-3) / 1e12, 3),
@@ -119,7 +129,7 @@ def reduce(rec: dict) -> dict:
 
 # ------------------------------------------------------------------ self-test --
 def _fake(*, sms=170, name="NVIDIA GeForce RTX 5090", saves=(0.06, 0.06, 0.10), noise=0.0, cublas_x=1.0, err_cfg=1.0,
-          drop=None, choice_slow=False, i8_err=1.0):
+          drop=None, choice_slow=False, i8_err=1.0, grid_off=False):
     con, sel, cho, rd = {}, {}, {}, {}
     for s, save in zip(("qkv", "o", "head"), saves):
         cfgs = {"4,512,4,1": err_cfg, "8,1024,8,2": err_cfg * 1.01} if s != "head" else {"8,1024,4,1": i8_err}
@@ -130,7 +140,10 @@ def _fake(*, sms=170, name="NVIDIA GeForce RTX 5090", saves=(0.06, 0.06, 0.10), 
             cho[s] = (max if choice_slow else min)(passing, key=passing.get)
             a = ANCHOR_MS[s] * cublas_x
             rd[s] = {"A1": a, "B1": a - save, "B2": (a - save) * (1 + noise), "A2": a}
-    rec = {"status": "ok", "device": {"name": name, "sm_count": sms}, "contract": con, "select": sel, "choice": cho, "reads": rd}
+    rec = {"status": "ok", "device": {"name": name, "sm_count": sms}, "contract": con, "select": sel, "choice": cho, "reads": rd,
+           "cublas_kernels": {s: [{"name": "kernel", "grid": list(GRID_P142[s])}] for s in SHAPES}}
+    if grid_off:
+        rec["cublas_kernels"]["o"] = [{"name": "gemvx_kernel", "grid": [256, 1, 1]}]
     if drop:
         rec["reads"].pop(drop, None)
     return rec
@@ -156,6 +169,10 @@ def self_test() -> int:
         ("a read missing", v(drop="o") == "VOID"),
         ("a choice that is not the fastest", v(choice_slow=True) == "VOID"),
         ("no record", reduce({})["verdict"] == "VOID"),
+        ("a cuBLAS kernel off P142's grid is VOID", v(grid_off=True) == "VOID"),
+        ("no profiled kernel is VOID", reduce(dict(_fake(), cublas_kernels={}))["verdict"] == "VOID"),
+        ("the projected in-situ saving is reported", (lambda r: abs(r["shapes"]["qkv"]["projected_in_situ_save_ms"] - 0.06) < 1e-6)(
+            reduce(_fake()))),
     ]
     bad = [n for n, ok in cases if not ok]
     print(f"p148_reduce self-test {'OK' if not bad else 'FAILED ' + str(bad)} ({len(cases)} cases)")

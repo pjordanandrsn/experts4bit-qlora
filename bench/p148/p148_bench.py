@@ -14,6 +14,8 @@ Phases, in order:
             timed replays (median); the fastest is the shape's choice.
   read      per shape, fresh graphs A (cuBLAS) and B (the choice), timed A, B, B, A: 20 warm + 200 timed replays each,
             each replay by its own event pair, medians. Pairs (A1, B1) and (B2, A2) run in opposite orders.
+  cublas    per shape, one eager cuBLAS call profiled (torch.profiler, CUDA activity): every kernel's name and grid, so the
+            reducer can hold the harness's cuBLAS kernel to P142's in-situ grid (the review of #1796).
 
     python p148_bench.py --out p148.json
     python p148_bench.py --contract-only --out contract.json      (any CUDA card: correctness, no timing)
@@ -60,6 +62,27 @@ def _capture(torch, step):
     with torch.cuda.graph(g):
         step()
     return g
+
+
+def cublas_kernels(torch, w, x, out_dir):
+    """Per shape, the CUDA kernels one eager ``F.linear`` launches: ``[{name, grid}]``, from the profiler's trace."""
+    import tempfile
+    from torch.profiler import ProfilerActivity, profile
+    out = {}
+    for s in SHAPES:
+        torch.nn.functional.linear(x[s][None, :], w[s][0])          # warm: the heuristic and the handle exist
+        torch.cuda.synchronize()
+        with profile(activities=[ProfilerActivity.CUDA]) as prof:
+            torch.nn.functional.linear(x[s][None, :], w[s][0])
+            torch.cuda.synchronize()
+        path = os.path.join(out_dir or tempfile.gettempdir(), f"p148_cublas_{s}.trace.json")
+        prof.export_chrome_trace(path)
+        ev = json.load(open(path)).get("traceEvents", [])
+        out[s] = [{"name": e.get("name"), "grid": (e.get("args") or {}).get("grid")}
+                  for e in ev if e.get("cat") == "kernel"]
+        os.remove(path)
+        print(f"P148_CUBLAS {s}: {[(k['name'][:40], k['grid']) for k in out[s]]}", flush=True)
+    return out
 
 
 def rel_rms(got, ref):
@@ -155,6 +178,7 @@ def run(out_path, contract_only=False) -> int:
     import triton
     rec["triton"] = triton.__version__
     rec["contract"] = contract(torch, w, x, head_q, dev)
+    rec["cublas_kernels"] = cublas_kernels(torch, w, x, os.path.dirname(os.path.abspath(out_path)))
     if contract_only:
         rec["mode"] = "contract-only"
         json.dump(rec, open(out_path, "w"), indent=1)

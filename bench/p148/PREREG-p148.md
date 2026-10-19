@@ -68,7 +68,10 @@ Every bar compares unrounded values. BAR = 2 % of P142's P = **0.087603 ms**.
    - a shape's contract, selection or read is missing;
    - a choice is not the fastest contract-passing config of its own selection;
    - **the harness does not transfer**: a shape's cuBLAS medians (A1, A2) lie outside [0.8, 1.25] × P142's in-situ time
-     (q/k/v 0.7146, o 0.5972, head 0.3770 ms).
+     (q/k/v 0.7146, o 0.5972, head 0.3770 ms);
+   - **the harness runs a different cuBLAS kernel**: a shape's profiled eager cuBLAS call launches no kernel on P142's
+     in-situ grid (q/k/v 1280, o 512, head 37984, × 1 × 1). The bench profiles one call per shape and records every
+     kernel's name and grid (the review of #1796).
 2. **NOISY** (a VOID, and a strike): a shape's self-pair, A2/A1 or B2/B1, lies outside [0.985, 1.015].
 3. Then each lever independently. A shape's saving is the **smaller** of its two pairs, A1 − B1 and A2 − B2.
    - **D1: GO** iff q/k/v and o each have a contract-passing config and their savings sum to ≥ BAR. Otherwise **PARK**.
@@ -76,8 +79,10 @@ Every bar compares unrounded values. BAR = 2 % of P142's P = **0.087603 ms**.
 
 The verdict is `D1_<GO|PARK>+D2_<GO|PARK>`.
 
-**Reported, never ruling:** every config's error and selection time, each shape's DRAM rate against 1.792 TB/s, and
-the pairs.
+**Reported, never ruling:** every config's error and selection time, each shape's DRAM rate against 1.792 TB/s, the
+pairs, and each shape's **projected in-situ saving**, P142's time × (1 − B/A). The bars stay on the measured savings: a
+back-to-back graph harness may run cuBLAS faster than the served step, so the projection is printed beside the measured
+saving (the review of #1796).
 
 **After a GO:**
 - **D1** becomes a grouped-nf4-gemm kernel with its own tolerance contract, then a served read (P143's form).
