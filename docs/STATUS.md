@@ -262,6 +262,8 @@ moves buckets 1, 2 and 4 only.
   binding). Sixteen requests are unchanged (0.992).
 - **Quality:** exact. At contexts ≤ 1024 the cap is bitwise-identical to the plan.
 - **Default:** it becomes `qwen3_moe`'s default with the flip PR; `E4B_ATTN_SPLIT_CAP=0` restores the plan.
+- **Measured basis:** Qwen3-30B-A3B on an RTX 5090. Other `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B) take the
+  default by family without a read of their own.
 
 `e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19` ([P143](../bench/p143/RESULTS-p143.md)).
 
