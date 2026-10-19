@@ -44,7 +44,7 @@ def test_the_runner_refuses_a_capped_board_before_any_install_and_runs_the_suite
     run = (LANE / "p149k_run.sh").read_text(encoding="utf-8")
     assert "GNF4_SHA=38b308887688ea5bda7dd449bd3cc3dc1426b995" in run and 'md.version("grouped-nf4-gemm") == "0.47.1"' in run
     assert 'assert triton.__version__ == "3.4.0"' in run and "TORCH_FULL\" = 2.8.0+cu128" in run
-    assert "p149k-5090-1|p149k-5090-2|p149k-5090-3|p149k-5090-4|p149k-5090-5|p149k-5090-6) FAMILY=mixtral-attn-int8;" in run
+    assert "p149k-5090-1|p149k-5090-2|p149k-5090-3|p149k-5090-4|p149k-5090-5|p149k-5090-6|p149k-5090-7|p149k-5090-8|p149k-5090-9) FAMILY=mixtral-attn-int8;" in run
     assert "MIN_POWER_W=575" in run
     order = ["PL=$(nvidia-smi --query-gpu=power.limit", 'finish 15; }', '[ "$PL" -ge "$MIN_POWER_W" ] ||', "finish 17; }",
              "pipx logs/pip_e4b.log", "TRITON_INTERPRET=0 perl -e 'alarm 900; exec @ARGV' python -m pytest test_p149_kernels_interp.py",
@@ -178,8 +178,8 @@ def test_the_driver_refuses_another_run_id(tmp_path):
     assert out.returncode == 78 and "is not p149k-5090-N" in out.stdout + out.stderr
 
 
-@pytest.mark.parametrize("run_id,ok", [("p149k-5090-6", True), ("p149k-5090-7", False)])
-def test_amendment_1_spares_reach_six_and_no_further(tmp_path, run_id, ok):
+@pytest.mark.parametrize("run_id,ok", [("p149k-5090-6", True), ("p149k-5090-9", True), ("p149k-5090-10", False)])
+def test_the_spares_reach_nine_and_no_further(tmp_path, run_id, ok):
     if sys.platform == "win32" or shutil.which("bash") is None:
         pytest.skip("the driver needs a POSIX bash")
     if not _clean_checkout():
@@ -190,3 +190,23 @@ def test_amendment_1_spares_reach_six_and_no_further(tmp_path, run_id, ok):
         assert out.returncode == 0 and "DRYRUN stage -> root@h:/root/p149k" in out.stdout, out.stdout + out.stderr
     else:
         assert out.returncode == 78 and "is not p149k-5090-N" in out.stdout + out.stderr
+
+
+def test_every_time_left_check_fits_the_registered_guard_with_the_measured_setup():
+    """Amendment 3: p149k-5090-6 failed rc 40 because NEED_BENCH + the reserve WAS the whole 0.5 h guard. A static
+    need + reserve <= guard test passes at equality; the bound that matters adds the setup before the check."""
+    run = (LANE / "p149k_run.sh").read_text(encoding="utf-8")
+    pre = (LANE / "PREREG-p149.md").read_text(encoding="utf-8")
+    assert "the guard is **0.75 h**" in pre
+    guard = 0.75 * 3600
+    v = {k: int(x) for k, x in re.findall(r"^(NEED_BENCH|RESERVE|INSTALL_TO_BENCH)=(\d+)", run, re.M)}
+    assert set(v) == {"NEED_BENCH", "RESERVE", "INSTALL_TO_BENCH"}, v
+    boot = 300                                          # create to the power check: 75 s on p149k-5090-6, x4
+    assert 175 + v["NEED_BENCH"] + v["RESERVE"] <= guard          # -6's measured setup
+    assert boot + v["INSTALL_TO_BENCH"] + v["NEED_BENCH"] + v["RESERVE"] <= guard
+    assert 175 + v["NEED_BENCH"] + v["RESERVE"] > 0.5 * 3600      # the old guard could never fit: the regression witness
+    for cap in re.findall(r"step_alarm (\d+)", run):
+        assert int(cap) <= guard, cap
+    fit = run.index("FIT=$((INSTALL_TO_BENCH + NEED_BENCH + RESERVE))")
+    assert run.index('[ "$PL" -ge "$MIN_POWER_W" ]') < fit < run.index("pipx logs/pip_e4b.log"), "the fit is checked before the install"
+    assert "finish 19; }" in run[fit:fit + 600] and "${RESERVE}s reserve" in run and "BENCH_WALL_S" in run

@@ -17,9 +17,11 @@ case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char sha"; finish 78; }
 GNF4_SHA=38b308887688ea5bda7dd449bd3cc3dc1426b995 # v0.47.1 tag commit (e4b CI's pin)
 NEED_BENCH=1200   # 2 shapes x 2 M: contract, about 250 selection graphs (each compiles), 4 read graph pairs
+RESERVE=600       # every time-left check keeps this much for the fetch and teardown
+INSTALL_TO_BENCH=450   # Amendment 3: the install, self-tests and compiled suite before the bench (90 s on p149k-5090-6, x5)
 DRY=${P149_DRY:-0}; GPU_CLASS=5090; MIN_RAM_GB=60
 case "$P149_RUN_ID" in
-  p149k-5090-1|p149k-5090-2|p149k-5090-3|p149k-5090-4|p149k-5090-5|p149k-5090-6) FAMILY=mixtral-attn-int8; MODEL=none; REV=none; MIN_DISK_GB=40;;
+  p149k-5090-1|p149k-5090-2|p149k-5090-3|p149k-5090-4|p149k-5090-5|p149k-5090-6|p149k-5090-7|p149k-5090-8|p149k-5090-9) FAMILY=mixtral-attn-int8; MODEL=none; REV=none; MIN_DISK_GB=40;;
   *) say "unregistered run ID: $P149_RUN_ID"; finish 78;;
 esac
 [ "$DRY" = 0 ] || [ "$FAMILY" = dry ] || { say 'dry mode requires registered A2000 ID'; finish 78; }
@@ -86,7 +88,11 @@ PL=$(nvidia-smi --query-gpu=power.limit --format=csv,noheader,nounits 2>/dev/nul
 [ -n "$PL" ] || { say "REFUSED: power.limit unreadable"; echo "refused: power.limit unreadable" > REFUSAL; finish 15; }
 echo "POWER_LIMIT_W $PL (floor $MIN_POWER_W)" | tee -a summary.txt
 [ "$PL" -ge "$MIN_POWER_W" ] || { say "REFUSED: power.limit ${PL} W < ${MIN_POWER_W} W (host-limited power cap)"; echo "refused: power.limit ${PL} W" > REFUSAL; finish 17; }
-can_run(){ local need=$1 now; now=$(date +%s); [ $((now + need + 600)) -le "$P149_DEADLINE_EPOCH" ] || { say "STOP-2: $2 needs ${need}s, only $((P149_DEADLINE_EPOCH - now))s left -- skipped (host-limited)"; echo "SKIPPED $2 host-limited deadline" >> summary.txt; return 1; }; }
+# Amendment 3: the guard must fit the install, the bench and the reserve, checked BEFORE the install, so a box that cannot
+# reach its own read refuses for cents (rc 19, a refusal before the install, not a strike) instead of failing at rc 40.
+FIT=$((INSTALL_TO_BENCH + NEED_BENCH + RESERVE)); LEFT=$((P149_DEADLINE_EPOCH - $(date +%s)))
+[ "$LEFT" -ge "$FIT" ] || { say "REFUSED: the guard cannot fit the install ${INSTALL_TO_BENCH}s + the bench ${NEED_BENCH}s + the ${RESERVE}s reserve = ${FIT}s; ${LEFT}s left"; echo "refused: guard fit ${LEFT}s < ${FIT}s" > REFUSAL; finish 19; }
+can_run(){ local need=$1 now; now=$(date +%s); [ $((now + need + RESERVE)) -le "$P149_DEADLINE_EPOCH" ] || { say "STOP-2: $2 needs ${need}s + ${RESERVE}s reserve = $((need + RESERVE))s, only $((P149_DEADLINE_EPOCH - now))s left -- skipped (host-limited)"; echo "SKIPPED $2 host-limited deadline" >> summary.txt; return 1; }; }
 step_alarm(){ local cap=$1 left=$(( P149_DEADLINE_EPOCH - $(date +%s) - 600 )); [ "$left" -gt "$cap" ] && left=$cap; [ "$left" -lt 600 ] && left=600; echo "$left"; }
 export DEBIAN_FRONTEND=noninteractive
 TORCH_FULL=$(python -c "import torch; print(torch.__version__)")
@@ -134,9 +140,9 @@ else
 fi
 # ---- the bench: contract (fp64), selection (every passing config), ABBA reads of cuBLAS vs the choice, per shape
 can_run $NEED_BENCH bench || finish 40
-AL=$(step_alarm 1500); say "bench (alarm=$AL)"
+AL=$(step_alarm 1500); say "bench (alarm=$AL)"; B0=$(date +%s)
 env PYTHONPATH= E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA perl -e "alarm $AL; exec @ARGV" python $W/p149k_bench.py --out $W/p149k.json > logs/bench.log 2>&1
-rc=$?; grep -a "^P149K_" logs/bench.log | cut -c1-200 | tee -a summary.txt
+rc=$?; echo "BENCH_WALL_S $(( $(date +%s) - B0 ))" | tee -a summary.txt; grep -a "^P149K_" logs/bench.log | cut -c1-200 | tee -a summary.txt
 [ "$rc" = 0 ] && [ -s $W/p149k.json ] || { tail -6 logs/bench.log | cut -c1-300 | tee -a summary.txt; say "BENCH FAILED rc=$rc"; finish 34; }
 say "reduce"; python $W/p149k_reduce.py --bench $W/p149k.json --out $W/verdict_p149k.json --e4b-sha "$E4B_SHA" 2>&1 | tee -a summary.txt
 [ "${PIPESTATUS[0]}" = 0 ] && [ -s "$W/verdict_p149k.json" ] || { say "REDUCER FAILED"; finish 22; }
