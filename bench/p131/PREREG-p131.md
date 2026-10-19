@@ -339,4 +339,30 @@ Fetched to the run directory's `p131/` and committed to `bench/p131/receipts/<ru
 
 ## Amendments
 
-None yet.
+### Amendment 1 (registered 2026-10-19, before any P131 run): lanes rent in parallel, and hosts are pinned under the market rule
+
+**Why.** Two sequencing terms date from 2026-10-10, before the program's standing spending rule (2026-10-18) and its
+market rule for pinning hosts:
+- "The rental also waits until DQ11 has closed and SC2f's rental has torn down: one rental lane at a time, SC2f first."
+- "the maintainer ACKs the launch. The ACK names the host."
+
+SC2f's host bar is scarce: in 15.4 h its four listable bar machines were never listed. So the first term held P131 behind
+SC2f indefinitely, although P131 has no host-quality bar of its own.
+
+**The change: sequencing and the launch mechanism only** (maintainer ruling, 2026-10-19 03:03Z).
+- **Parallel lanes.** The serial order goes. P131 rents in parallel with other lanes under the standing rule (worst
+  ≤ $15 per run).
+- **Pinning.** As every lane does under the market rule:
+  - one pin post names up to three RTX 5090 machines, each present and passing in 6/6 machine-filtered reads at
+    ≤ $0.85/h;
+  - the create walks them in order on `no_such_ask`;
+  - there is no per-run ACK. This replaces "the maintainer ACKs the launch. The ACK names the host" above, and its
+    new-ACK clause.
+- **No competition with SC2f.** While SC2f's proof loop is live, P131's pins exclude SC2f's ten bar machines
+  (SC2f-PREREG Amendment 2). P131 takes any other RTX 5090 at ≤ $0.85/h.
+- **The stack.** Launch commit `c7a40682` (e4b 0.54.0, which carries #1608, #1615 and #1625; the same stack as SC2f),
+  grouped-nf4-gemm at its pin `57f53e19`.
+
+**Unchanged:** the arms, the rule, the cost model and the predictions; STOP-0 to STOP-4; the proof (guard 1.25 h, about
+$1.73); the reading (guard 2.0 h, about $2.37), only after the proof's receipts show PROVED; the lane ceiling of $5.50;
+and the two-strikes rule.
