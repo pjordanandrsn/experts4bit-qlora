@@ -353,15 +353,19 @@ def lora_forward_counter(model):
 
 
 def bit_diagnostics(a, b) -> dict:
-    """For a tensor the bar holds bit for bit: how many elements differ, and the largest distance in units of the last
-    place (the integer views' difference, for same-signed values)."""
+    """For a tensor the bar holds bit for bit: how many elements differ, how many of those flip sign, and the largest
+    distance in units of the last place over the same-signed ones (the integer views' difference; across a sign flip it
+    means nothing, so a flip is counted, never measured)."""
     view = {torch.bfloat16: torch.int16, torch.float16: torch.int16, torch.float32: torch.int32}[a.dtype]
     differ = a != b
     n = int(differ.sum())
     if n == 0:
-        return {"differing": 0, "max_ulp": 0}
+        return {"differing": 0, "sign_flips": 0, "max_ulp": 0}
+    flips = differ & (torch.signbit(a) != torch.signbit(b))
+    same = differ & ~flips
     ia, ib = a.contiguous().view(view).long(), b.contiguous().view(view).long()
-    return {"differing": n, "max_ulp": int((ia - ib).abs()[differ].max())}
+    max_ulp = int((ia - ib).abs()[same].max()) if bool(same.any()) else 0
+    return {"differing": n, "sign_flips": int(flips.sum()), "max_ulp": max_ulp}
 
 
 def read_layers(mlps, xs, gys, *, enable, disable, stats, sigma=None, stage=None, evict=None, adapters=None):

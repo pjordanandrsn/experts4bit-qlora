@@ -134,9 +134,12 @@ def require_runtime(directory, cache) -> dict:
 
 
 def build_l(directory):
-    """The L fixture as ``dq11_arm.prepare`` builds it (its 5090-only device check aside), with the canonical
-    initializer installed: NF4 bases streamed with train_prefetch, seven FP32 r16/a32 targets, non-reentrant
-    checkpointing, TF32 off, seed 3407."""
+    """The L fixture as ``dq11_arm.prepare`` builds it, with the canonical initializer installed: NF4 bases streamed with
+    train_prefetch, seven FP32 r16/a32 targets, non-reentrant checkpointing, TF32 off, seed 3407.
+
+    Two of ``prepare``'s checks are left out because :func:`require_runtime` covers them: its 5090-only device check (here
+    the A2000, sm86 / cu128) and its ``device_count() == 1``. ``prepare``'s ``dq11_rehearsal.prepare_log`` branch is
+    rehearsal-only (``DQ11_REHEARSAL=1``) and is not used."""
     import torch
     from dq11_common import install_initial
     from loggetta import Constraints, Workload, plan
@@ -157,7 +160,7 @@ def build_l(directory):
     if actual.status != "feasible":
         raise RuntimeError("PHASE1_REFUSAL: L admission refused on the A2000: " + actual.render())
     validate_plan(actual)
-    prepared = dense_train.prepare(actual)
+    prepared = dense_train.prepare(actual)              # not prepare_log: that wrapper is the tiny rehearsal's only
     model = prepared.model
     checkpoints = [m for m in model.modules() if getattr(m, "gradient_checkpointing", False)]
     if not checkpoints or any(getattr(getattr(m, "_gradient_checkpointing_func", None), "keywords", {})

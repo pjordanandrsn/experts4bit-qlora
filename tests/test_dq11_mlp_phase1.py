@@ -187,7 +187,7 @@ def test_read_layers_runs_the_ladder_the_self_checks_and_the_bar_on_the_real_eng
     assert rec["outcome"].startswith(("PHASE1_PASS", "PHASE1_FAIL")), rec["outcome"]
     for layer in rec["layers"].values():
         assert set(layer["rows"]) == set(p1.TENSORS)
-        assert layer["rows"]["dh"]["bitwise_required"] == {"differing": 0, "max_ulp": 0}   # down's ops are PEFT's own
+        assert layer["rows"]["dh"]["bitwise_required"] == {"differing": 0, "sign_flips": 0, "max_ulp": 0}   # PEFT's own ops
     assert not any(hasattr(mlp, "_e4b_dense_lora") for mlp in _mlps(m))                    # disabled after each read
 
 
@@ -207,5 +207,9 @@ def test_the_streamed_floor_equals_the_floor_and_the_bit_diagnostics_count(model
     assert p1.floor_streamed(truth, reads.__getitem__) == p1.floor(truth, reads)
     a = torch.tensor([1.0, 2.0, 3.0], dtype=torch.bfloat16)
     b = (a.view(torch.int16) + torch.tensor([0, 1, 0], dtype=torch.int16)).view(torch.bfloat16)   # one bf16 step up
-    assert p1.bit_diagnostics(a, a) == {"differing": 0, "max_ulp": 0}
-    assert p1.bit_diagnostics(b, a) == {"differing": 1, "max_ulp": 1}
+    assert p1.bit_diagnostics(a, a) == {"differing": 0, "sign_flips": 0, "max_ulp": 0}
+    assert p1.bit_diagnostics(b, a) == {"differing": 1, "sign_flips": 0, "max_ulp": 1}
+    c = a.clone()
+    c[0] = -1.0                                                             # a sign flip is counted, never measured
+    assert p1.bit_diagnostics(c, a) == {"differing": 1, "sign_flips": 1, "max_ulp": 0}
+    assert p1.bit_diagnostics(torch.stack([c[0], b[1], a[2]]), a) == {"differing": 2, "sign_flips": 1, "max_ulp": 1}
