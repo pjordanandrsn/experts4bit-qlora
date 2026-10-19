@@ -18,7 +18,9 @@ bf16, so it reads the same grid as every other row count, within bf16's output r
 
 The swap is the head only: :class:`Int8HeadLinear` replaces ``get_output_embeddings()`` (exactly ``nn.Linear``) and
 shares its weight Parameter, now on the grid, with no second bf16 copy. It holds the int8 codes and the fp32 scales
-(+N x K bytes, about 0.31 GB at Qwen3's head). Its forward routes ONE bf16 CUDA row to the kernel; a one-row input that
+(+N x K bytes, about 0.31 GB at Qwen3's head). Those bytes arrive AFTER the server sized its slots (free memory is read
+before the weights load): at a fixed slot count that is fine, but with an auto ``max_seqs`` on a tight card they can
+push a graph capture over. Its forward routes ONE bf16 CUDA row to the kernel; a one-row input that
 is not contiguous is copied (one row of K elements), never passed to ``F.linear``. Every other call (more rows; CPU;
 another dtype) goes to ``F.linear`` on the rounded weight. Under CUDA graphs bucket 1 captures the kernel and larger
 buckets capture cuBLAS on the grid.

@@ -6,6 +6,8 @@ repo's.
 The rounding is checked BITWISE against P150's I8HEAD round trip (``bench/i8dense/i8_fakequant.roundtrip_``), the grid
 P150 ruled GO at both gates. The kernel's own contract (at most 1.05 x cuBLAS's error on the bf16 head, one-hot exact,
 bitwise) is grouped-nf4-gemm's ``kernel/test_dense_gemv_i8.py``, checked on a CUDA card; P153 reads it served."""
+import ast
+import hashlib
 import importlib.util
 import inspect
 import pathlib
@@ -29,13 +31,28 @@ def _fakequant():
     return mod
 
 
-def _quantize(w):
-    """grouped-nf4-gemm K36's ``quantize_rows_int8`` (P148's prototype), restated for a CPU run without the package."""
-    wf = w.float()
-    amax = wf.abs().amax(dim=1)
-    s = torch.where(amax > 0, amax / 127.0, torch.ones_like(amax))
-    q = torch.clamp(torch.round(wf / s[:, None]), -127, 127).to(torch.int8)
-    return q, s.contiguous()
+#: sha256 of ``quantize_rows_int8``'s source (``def`` to its last line, LF): P148's prototype in bench/p148/p148_kernels.py,
+#: which grouped-nf4-gemm K36 ships verbatim and pins by the same hash (kernel/test_dense_gemv_i8_interp.py, at 929a6906)
+QUANTIZER_SHA256 = "8ea6dd9ee1b52594419f40339272059e413956aaed2a2f02d382450f854e8c6c"
+
+
+def _source_segment(path, name):
+    src = pathlib.Path(path).read_text(encoding="utf-8").replace("\r\n", "\n")
+    fn = next(n for n in ast.parse(src).body if isinstance(n, ast.FunctionDef) and n.name == name)
+    return ast.get_source_segment(src, fn)
+
+
+def _load_quantize():
+    """P148's ``quantize_rows_int8`` EXECUTED from its own bytes (no restated copy), after its sha256 is checked against
+    the hash K36 pins: if the shipped quantizer ever changes, this test stops reading what P150 ruled on, and says so."""
+    seg = _source_segment(REPO / "bench" / "p148" / "p148_kernels.py", "quantize_rows_int8")
+    assert hashlib.sha256(seg.encode("utf-8")).hexdigest() == QUANTIZER_SHA256
+    ns = {"torch": torch}
+    exec(compile(seg, "p148_kernels.quantize_rows_int8", "exec"), ns)
+    return ns["quantize_rows_int8"]
+
+
+_quantize = _load_quantize()
 
 
 class _Stub:
@@ -140,11 +157,12 @@ def test_one_bf16_device_row_routes_and_everything_else_passes(monkeypatch):
     monkeypatch.setattr(ih, "_on_device", lambda x: True)
     head = m.lm_head
     x = torch.randn(1, 16).to(torch.bfloat16)
-    want = torch.nn.functional.linear(x, head.weight).float()
+    ref = (head.q.double() * head.s.double()[:, None]) @ x.double().reshape(-1)        # the grid, exactly, in fp64
     for shape in ((1, 16), (1, 1, 16), (16,)):
         y = head(x.reshape(shape))
         assert y.shape == (*shape[:-1], 40) and y.dtype == torch.bfloat16
-        assert torch.allclose(y.reshape(-1).float(), want.reshape(-1), rtol=2 ** -7, atol=1e-3)   # the same grid
+        err = (y.reshape(-1).double() - ref).abs()                 # within one bf16 rounding of the output
+        assert bool((err <= ref.abs() * 2.0 ** -8 + ref.abs().max() * 2.0 ** -16).all()), float(err.max())
     strided = torch.randn(32).to(torch.bfloat16)[::2]                # one row, not contiguous: COPIED and routed
     assert head(strided).shape == (40,)
     assert len(stub.calls) == 4
@@ -206,3 +224,16 @@ def test_build_engine_applies_it_after_the_dense_gemv_and_before_any_capture():
     at = [src.index(s) for s in ("_apply_fusions(model, cfg", "apply_dense_gemv_bw(model,", "apply_int8_head_bw(model,",
                                  "runner.enable_decode_graphs(", 'info["int8_head_bw"] = {**int8_head, "engagement"')]
     assert at == sorted(at), at
+
+
+def test_the_installed_quantizer_is_the_one_p150_ruled_on():
+    """Where grouped-nf4-gemm's ``dense_gemv`` imports (K36 or later), its ``quantize_rows_int8`` is P148's bytes and
+    reads bitwise as the reference above: the served grid cannot drift off P150's without this test saying so."""
+    dg = pytest.importorskip("dense_gemv", reason="grouped-nf4-gemm without dense_gemv (e4b CI's pin predates K36)")
+    if not hasattr(dg, "quantize_rows_int8"):
+        pytest.skip("dense_gemv without K36's quantize_rows_int8")
+    assert hashlib.sha256(_source_segment(dg.__file__, "quantize_rows_int8").encode("utf-8")).hexdigest() == QUANTIZER_SHA256
+    w = (torch.randn(257, 96, generator=torch.Generator().manual_seed(9)) / 10).to(torch.bfloat16)
+    w[5] = 0
+    for got, want in zip(dg.quantize_rows_int8(w), _quantize(w)):
+        assert torch.equal(got, want)
