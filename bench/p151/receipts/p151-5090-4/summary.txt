@@ -1,0 +1,41 @@
+KNOBS e4b=63b21b138c71268daf8173a95857aae89f3261c8 gnf4=9b824155ace19796e14ff182ed1ac8e4dc406086 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 min_power_w=575 short=32 long=160 reps=5 windows=12 cont=128
+CUDA_PROBE ok
+POWER_LIMIT_W 600 (floor 575)
+e4b 0.55.0 @63b21b138c71268daf8173a95857aae89f3261c8
+gnf4 0.47.1 @9b824155ace19796e14ff182ed1ac8e4dc406086
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p151_reduce self-test OK (47 cases)
+p109_box self-test OK (5/5 cases)
+p151_box self-test OK (22/22 cases)
+p115_quality self-test OK (11/11 cases)
+premise rc=0: 31 passed, 5 warnings in 38.33s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709
+arm S0a rc=0 P151_ARM {"arm": "S0", "tag": "S0a", "dense_gemv_bw": {"mode": "0", "modules": 0, "engagement": {"modules": 0, "routed_modules_by_rows": {}, "passed_modules_by_rows": {}}}, "load_s": 50.52, "W16": 986.7, "W1": 252.86}
+
+arm S1a rc=0 P151_ARM {"arm": "S1", "tag": "S1a", "dense_gemv_bw": {"mode": "1", "modules": 96, "shapes": [[2048, 4096], [5120, 2048]], "per_target": {"qkv_proj": 48, "o_proj": 48}, "engagement": {"modules": 96, "routed_modules_by_rows": {"1": 96}, "passed_modules_by_rows": {"2": 96, "4": 96, "8": 96, "16": 96, "512": 96}}}, "load_s": 33.85, "W16": 986.61, "W1": 268.12}
+
+arm S1b rc=0 P151_ARM {"arm": "S1", "tag": "S1b", "dense_gemv_bw": {"mode": "1", "modules": 96, "shapes": [[2048, 4096], [5120, 2048]], "per_target": {"qkv_proj": 48, "o_proj": 48}, "engagement": {"modules": 96, "routed_modules_by_rows": {"1": 96}, "passed_modules_by_rows": {"2": 96, "4": 96, "8": 96, "16": 96, "512": 96}}}, "load_s": 32.47, "W16": 987.18, "W1": 267.97}
+
+arm S0b rc=0 P151_ARM {"arm": "S0", "tag": "S0b", "dense_gemv_bw": {"mode": "0", "modules": 0, "engagement": {"modules": 0, "routed_modules_by_rows": {}, "passed_modules_by_rows": {}}}, "load_s": 30.22, "W16": 985.89, "W1": 261.59}
+
+arm S0c rc=0 P151_ARM {"arm": "S0", "tag": "S0c", "dense_gemv_bw": {"mode": "0", "modules": 0, "engagement": {"modules": 0, "routed_modules_by_rows": {}, "passed_modules_by_rows": {}}}, "load_s": 30.29, "W16": 985.72, "W1": 261.51}
+
+arm S1c rc=0 P151_ARM {"arm": "S1", "tag": "S1c", "dense_gemv_bw": {"mode": "1", "modules": 96, "shapes": [[2048, 4096], [5120, 2048]], "per_target": {"qkv_proj": 48, "o_proj": 48}, "engagement": {"modules": 96, "routed_modules_by_rows": {"1": 96}, "passed_modules_by_rows": {"2": 96, "4": 96, "8": 96, "16": 96, "512": 96}}}, "load_s": 31.5, "W16": 986.37, "W1": 267.95}
+
+arm S1d rc=0 P151_ARM {"arm": "S1", "tag": "S1d", "dense_gemv_bw": {"mode": "1", "modules": 96, "shapes": [[2048, 4096], [5120, 2048]], "per_target": {"qkv_proj": 48, "o_proj": 48}, "engagement": {"modules": 96, "routed_modules_by_rows": {"1": 96}, "passed_modules_by_rows": {"2": 96, "4": 96, "8": 96, "16": 96, "512": 96}}}, "load_s": 33.23, "W16": 986.76, "W1": 268.05}
+
+arm S0d rc=0 P151_ARM {"arm": "S0", "tag": "S0d", "dense_gemv_bw": {"mode": "0", "modules": 0, "engagement": {"modules": 0, "routed_modules_by_rows": {}, "passed_modules_by_rows": {}}}, "load_s": 31.49, "W16": 986.79, "W1": 261.59}
+
+sane off rc=0 P151_SANE S0 windows={'wikitext': 12} cap=16 dense={'modules': 0, 'routed_modules_by_rows': {}, 'passed_modules_by_rows': {}} sane_kv={'passes': 12, 'asked': [656], 'max_tokens_per_seq': [4096], 'blocks_per_seq': [256], 'split_cap': 16, 'plan_clash': [], 'plan_b1': 32} plans={'1': {'calls': 73152, 'plan': 32, 'n_split': 16}} dispatch={'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 146304, 'bw_splitk': 0} 108.2 s
+
+sane on rc=0 P151_SANE S1 windows={'wikitext': 12} cap=16 dense={'modules': 96, 'routed_modules_by_rows': {'1': 96}, 'passed_modules_by_rows': {'512': 96}} sane_kv={'passes': 12, 'asked': [656], 'max_tokens_per_seq': [4096], 'blocks_per_seq': [256], 'split_cap': 16, 'plan_clash': [], 'plan_b1': 32} plans={'1': {'calls': 73152, 'plan': 32, 'n_split': 16}} dispatch={'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 146304, 'bw_splitk': 0} 114.9 s
+
+P151_VERDICT NOISY ["W1 self-pair S0b/S0a = 1.0345 outside [0.985, 1.015]", "NOISY is a VOID and a strike: no flip is read"]
