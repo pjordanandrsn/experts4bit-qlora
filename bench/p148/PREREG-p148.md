@@ -73,16 +73,19 @@ Every bar compares unrounded values. BAR = 2 % of P142's P = **0.087603 ms**.
      in-situ grid (q/k/v 1280, o 512, head 37984, × 1 × 1). The bench profiles one call per shape and records every
      kernel's name and grid (the review of #1796).
 2. **NOISY** (a VOID, and a strike): a shape's self-pair, A2/A1 or B2/B1, lies outside [0.985, 1.015].
-3. Then each lever independently. A shape's saving is the **smaller** of its two pairs, A1 − B1 and A2 − B2.
-   - **D1: GO** iff q/k/v and o each have a contract-passing config and their savings sum to ≥ BAR. Otherwise **PARK**.
-   - **D2: GO** iff the int8 head kernel passes its contract and its saving is ≥ BAR. Otherwise **PARK**.
+3. Then each lever independently, on each shape's **projected in-situ saving**: the **smaller** of its two pairs'
+   projections, P142's in-situ time × (1 − B1/A1) and × (1 − B2/A2). The bar is a fraction of the in-situ step, so the
+   quantity it compares must be in in-situ units. Scaling by the anchor takes the harness's absolute speed out of the
+   decision: a back-to-back graph harness may run cuBLAS faster or slower than the served step (the maintainer's ruling
+   on the review of #1796).
+   - **D1: GO** iff q/k/v and o each have a contract-passing config and their projected savings sum to ≥ BAR.
+     Otherwise **PARK**.
+   - **D2: GO** iff the int8 head kernel passes its contract and its projected saving is ≥ BAR. Otherwise **PARK**.
 
 The verdict is `D1_<GO|PARK>+D2_<GO|PARK>`.
 
 **Reported, never ruling:** every config's error and selection time, each shape's DRAM rate against 1.792 TB/s, the
-pairs, and each shape's **projected in-situ saving**, P142's time × (1 − B/A). The bars stay on the measured savings: a
-back-to-back graph harness may run cuBLAS faster than the served step, so the projection is printed beside the measured
-saving (the review of #1796).
+pairs, and each shape's **raw harness saving** in ms (the smaller pair, A1 − B1 or A2 − B2), beside the projected one.
 
 **After a GO:**
 - **D1** becomes a grouped-nf4-gemm kernel with its own tolerance contract, then a served read (P143's form).

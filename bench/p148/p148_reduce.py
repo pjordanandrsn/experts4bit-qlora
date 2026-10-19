@@ -11,16 +11,16 @@ The rule, first rung that applies (every bar compares unrounded values):
          shape's profiled cuBLAS call launching no kernel on P142's in-situ grid (qkv 1280, o 512, head 37984; x 1 x 1):
          the harness runs a different cuBLAS kernel than the served step (the review of #1796).
   NOISY  (a VOID, and a strike) any shape's self-pair, A2/A1 or B2/B1, outside [0.985, 1.015].
-  then, per lever, independently:
-  D1     GO iff qkv and o each have a contract-passing config (error <= 1.05 x cuBLAS's against fp64) and their savings
-         sum to >= 2 % of P142's P (4.380166 ms): BAR = 0.087603 ms. A shape's saving is the SMALLER of its two pairs,
-         A1 - B1 and A2 - B2. Otherwise PARK.
+  then, per lever, independently, on each shape's PROJECTED in-situ saving: the SMALLER of its two pairs' projections,
+  P142's in-situ time x (1 - B1/A1) and x (1 - B2/A2). The bar is a fraction of the in-situ step, so the quantity it
+  compares is in in-situ units; the harness's absolute speed leaves the decision (the maintainer's ruling on #1796).
+  D1     GO iff qkv and o each have a contract-passing config (error <= 1.05 x cuBLAS's against fp64) and their projected
+         savings sum to >= 2 % of P142's P (4.380166 ms): BAR = 0.087603 ms. Otherwise PARK.
   D2     GO iff the int8 head kernel passes its contract (its error against its dequantized weights <= 1.05 x cuBLAS's
-         against the bf16 head) and the head's saving is >= BAR. Otherwise PARK.
+         against the bf16 head) and the head's projected saving is >= BAR. Otherwise PARK.
 
 Reported, never ruling: every config's error and selection time, each shape's bandwidth (bytes / time against the
-5090's 1.792 TB/s), the pairs, and each shape's PROJECTED in-situ saving, P142's time x (1 - B/A) (the review of #1796:
-the bars stay on the measured savings).
+5090's 1.792 TB/s), the pairs, and each shape's raw harness saving in ms (the smaller pair, A1 - B1 or A2 - B2).
 
     python p148_reduce.py --bench p148.json --out verdict_p148.json [--e4b-sha SHA]
     python p148_reduce.py --self-test
@@ -99,10 +99,11 @@ def reduce(rec: dict) -> dict:
         sp = {"A2/A1": r["A2"] / r["A1"], "B2/B1": r["B2"] / r["B1"]}
         noisy += [f"{s} self-pair {k} = {v:.4f} outside {list(NOISY_BAND)}" for k, v in sp.items()
                   if not NOISY_BAND[0] <= v <= NOISY_BAND[1]]
-        save = min(r["A1"] - r["B1"], r["A2"] - r["B2"])
+        proj = min(ANCHOR_MS[s] * (1 - r["B1"] / r["A1"]), ANCHOR_MS[s] * (1 - r["B2"] / r["A2"]))
         a, b = (r["A1"] + r["A2"]) / 2, (r["B1"] + r["B2"]) / 2
-        shapes[s] = {"choice": cho[s], "save_ms": save, "pairs_ms": [r["A1"] - r["B1"], r["A2"] - r["B2"]],
-                     "projected_in_situ_save_ms": round(ANCHOR_MS[s] * (1 - b / a), 6),
+        shapes[s] = {"choice": cho[s], "projected_save_ms": proj, "anchor_ms": ANCHOR_MS[s],
+                     "harness_save_ms": min(r["A1"] - r["B1"], r["A2"] - r["B2"]),
+                     "pairs_ms": [r["A1"] - r["B1"], r["A2"] - r["B2"]],
                      "self_pairs": {k: round(v, 4) for k, v in sp.items()},
                      "cublas_tbs": round(_bytes(s) / (a * 1e-3) / 1e12, 3),
                      "kernel_tbs": round(_bytes(s, int8=s in D2_SHAPES) / (b * 1e-3) / 1e12, 3),
@@ -112,18 +113,23 @@ def reduce(rec: dict) -> dict:
         out.update(verdict="NOISY", reasons=noisy + ["NOISY is a VOID and a strike: no lever is read"])
         return out
     if all(s in shapes for s in D1_SHAPES):
-        d1 = sum(shapes[s]["save_ms"] for s in D1_SHAPES)
-        out["levers"]["D1"] = {"save_ms": d1, "share_of_P": d1 / P_MS, "verdict": "GO" if d1 >= BAR else "PARK"}
+        d1 = sum(shapes[s]["projected_save_ms"] for s in D1_SHAPES)
+        out["levers"]["D1"] = {"projected_save_ms": d1, "share_of_P": d1 / P_MS,
+                               "harness_save_ms": sum(shapes[s]["harness_save_ms"] for s in D1_SHAPES),
+                               "verdict": "GO" if d1 >= BAR else "PARK"}
     else:
         out["levers"]["D1"] = {"verdict": "PARK", "why": "no config passes the contract at "
                                + ", ".join(s for s in D1_SHAPES if s not in shapes)}
     if "head" in shapes:
-        d2 = shapes["head"]["save_ms"]
-        out["levers"]["D2"] = {"save_ms": d2, "share_of_P": d2 / P_MS, "verdict": "GO" if d2 >= BAR else "PARK"}
+        d2 = shapes["head"]["projected_save_ms"]
+        out["levers"]["D2"] = {"projected_save_ms": d2, "share_of_P": d2 / P_MS,
+                               "harness_save_ms": shapes["head"]["harness_save_ms"],
+                               "verdict": "GO" if d2 >= BAR else "PARK"}
     else:
         out["levers"]["D2"] = {"verdict": "PARK", "why": "the int8 head kernel fails its contract"}
     out["verdict"] = f"D1_{out['levers']['D1']['verdict']}+D2_{out['levers']['D2']['verdict']}"
-    out["reasons"] = [f"{k}: {v.get('verdict')} ({v.get('save_ms', 0):.6f} ms vs bar {BAR})" for k, v in out["levers"].items()]
+    out["reasons"] = [f"{k}: {v.get('verdict')} (projected in situ {v.get('projected_save_ms', 0):.6f} ms vs bar {BAR}; "
+                      f"harness {v.get('harness_save_ms', 0):.6f} ms, reported)" for k, v in out["levers"].items()]
     return out
 
 
@@ -157,7 +163,7 @@ def self_test() -> int:
         ("D1 just under the bar parks", v(saves=(0.0438, 0.0438, 0.10)) == "D1_PARK+D2_GO"),
         ("the bar reads the unrounded save (0.0876029 < 0.087603)", v(saves=(0.0438, 0.0438029, 0.10)) == "D1_PARK+D2_GO"),
         ("D2 under the bar parks", v(saves=(0.06, 0.06, 0.08)) == "D1_GO+D2_PARK"),
-        ("a pair's saving is the SMALLER pair", (lambda r: r["shapes"]["qkv"]["save_ms"] < 0.06)(
+        ("a shape's saving is the SMALLER pair's projection (0.0546, not 0.06)", (lambda r: r["shapes"]["qkv"]["projected_save_ms"] < 0.057)(
             reduce(dict(_fake(), reads={**_fake()["reads"], "qkv": {"A1": 0.7146, "B1": 0.6546, "B2": 0.6600, "A2": 0.7146}})))),
         ("a contract failure at o parks D1", v(err_cfg=1.06) == "D1_PARK+D2_GO"),
         ("an int8 contract failure parks D2", v(i8_err=1.2) == "D1_GO+D2_PARK"),
@@ -171,8 +177,13 @@ def self_test() -> int:
         ("no record", reduce({})["verdict"] == "VOID"),
         ("a cuBLAS kernel off P142's grid is VOID", v(grid_off=True) == "VOID"),
         ("no profiled kernel is VOID", reduce(dict(_fake(), cublas_kernels={}))["verdict"] == "VOID"),
-        ("the projected in-situ saving is reported", (lambda r: abs(r["shapes"]["qkv"]["projected_in_situ_save_ms"] - 0.06) < 1e-6)(
-            reduce(_fake()))),
+        ("the bars rule in situ: a harness at 1.2x P142 projects raw 0.05 + 0.05 to 0.0833, and the head's 0.10 to 0.0833",
+         v(saves=(0.05, 0.05, 0.10), cublas_x=1.2) == "D1_PARK+D2_PARK"),
+        ("the bars rule in situ: a harness at 0.85x projects raw 0.04 + 0.04 to 0.0941, and the head's 0.08 to 0.0941",
+         v(saves=(0.04, 0.04, 0.08), cublas_x=0.85) == "D1_GO+D2_GO"),
+        ("the raw harness saving is reported beside the ruling one", (lambda r: abs(r["shapes"]["qkv"]["harness_save_ms"] - 0.05) < 1e-9
+         and abs(r["levers"]["D1"]["harness_save_ms"] - 0.10) < 1e-9 and abs(r["levers"]["D1"]["projected_save_ms"] - 0.10 / 1.2) < 1e-9)(
+            reduce(_fake(saves=(0.05, 0.05, 0.10), cublas_x=1.2)))),
     ]
     bad = [n for n, ok in cases if not ok]
     print(f"p148_reduce self-test {'OK' if not bad else 'FAILED ' + str(bad)} ({len(cases)} cases)")

@@ -98,8 +98,9 @@ def test_the_self_tests_pass(box_dir, script):
 MUTANTS = [
     # the bar at 1 % of P
     ("BAR_SHARE = 0.02", "BAR_SHARE = 0.01"),
-    # a shape's saving from the LARGER pair
-    ('        save = min(r["A1"] - r["B1"], r["A2"] - r["B2"])', '        save = max(r["A1"] - r["B1"], r["A2"] - r["B2"])'),
+    # a shape's saving from the LARGER pair's projection
+    ('        proj = min(ANCHOR_MS[s] * (1 - r["B1"] / r["A1"]), ANCHOR_MS[s] * (1 - r["B2"] / r["A2"]))',
+     '        proj = max(ANCHOR_MS[s] * (1 - r["B1"] / r["A1"]), ANCHOR_MS[s] * (1 - r["B2"] / r["A2"]))'),
     # the NOISY band widened
     ("NOISY_BAND = (0.985, 1.015)", "NOISY_BAND = (0.98, 1.02)"),
     # the transfer anchor never checked
@@ -108,7 +109,12 @@ MUTANTS = [
     ('        passing = {c for c, e in con[s]["configs"].items() if e <= CONTRACT_RATIO * con[s]["cublas"]}',
      '        passing = {c for c, e in con[s]["configs"].items() if e <= 10 * con[s]["cublas"]}'),
     # D1 from its better shape instead of the sum of both
-    ('        d1 = sum(shapes[s]["save_ms"] for s in D1_SHAPES)', '        d1 = max(shapes[s]["save_ms"] for s in D1_SHAPES)'),
+    ('        d1 = sum(shapes[s]["projected_save_ms"] for s in D1_SHAPES)',
+     '        d1 = max(shapes[s]["projected_save_ms"] for s in D1_SHAPES)'),
+    # the bars on the raw harness ms instead of the projected in-situ saving (the maintainer's ruling on #1796)
+    ('        d1 = sum(shapes[s]["projected_save_ms"] for s in D1_SHAPES)',
+     '        d1 = sum(shapes[s]["harness_save_ms"] for s in D1_SHAPES)'),
+    ('        d2 = shapes["head"]["projected_save_ms"]', '        d2 = shapes["head"]["harness_save_ms"]'),
     # the choice never checked against the selection
     ("        elif cho.get(s) != min(sel[s], key=sel[s].get):", "        elif False:"),
     # the harness's cuBLAS kernel never held to P142's in-situ grid (the review of #1796)
