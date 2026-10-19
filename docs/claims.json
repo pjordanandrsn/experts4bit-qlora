@@ -12517,6 +12517,37 @@
         "receipts/experts4bit-qlora/2026-10-18/p141-5090-1/ (receipt.json, teardown-proof.json; NOT_RUN, a host fault)"
       ],
       "notes": "Pre-registered in #1754 (opened as P139, renumbered before review). Q1, Q2 (except B1 != B0 on W1 rows: identical), Q4, Q5 and Q6 HIT; Q3 (g1 in [1.25, 2.00]) FALSIFIED high. Phase 1's per-call timings (reported, never ruled): gate_up 3.086 vs 10.309 ms, down 1.950 vs 6.105 ms over 32 layers. p141-5090-1 ($0.007) never ran: its instance stuck loading. The reviewers and the maintainer re-derived the verdict from the store; the default takes effect with a grouped-nf4-gemm release carrying #556."
+    },
+    {
+      "id": "e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P143 Amendment 3 (one RTX 5090, binding): capping the paged FP8 attention decode at 16 splits (E4B_ATTN_SPLIT_CAP=16; the library plans 32 / 32 / 23 at buckets 1 / 2 / 4 from 4096-token slots) decodes Qwen3-30B-A3B NF4 one request 1.0442x as fast on the default serve_paged server (the smallest of four ABBA pairs, 1.0442-1.0448; 255.6 -> 267.0 tok/s), sixteen requests unchanged (g16 0.9920, the no-regression line 0.99), and with SANE exact at T == 1 (bias 0.0, argmax 1.0): at contexts <= 1024 the cap is bitwise-identical to the plan. Under P143 A3's rule it licenses qwen3_moe's default cap of 16.",
+      "value": 1.0442,
+      "unit": "ratio, S1 / S0 one-request decode rate (tokens/s), the smallest of four ABBA pairs (unrounded 1.044184; S1a/S0a 1.0442, S1b/S0b 1.0445, S1c/S0c 1.0448, S1d/S0d 1.0447)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, driver 615.71.09, a 450 W power limit), one rented Vast.ai host (instance 56652416, verified-secure, AMD EPYC 9135, 32 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @e8de1799 (0.55.0, P143 Amendment 3's registration merge, #1788) + grouped-nf4-gemm @38b30888 (0.47.1: decode_split_plan + split_cap); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0, bitsandbytes 0.50.2; premise P136's 19 tests passed on the card; Qwen/Qwen3-30B-A3B @ad44e777, NF4 arena baked on the box; the default serve_paged server (graphs on, max_seqs 16 x 4096 tokens, buckets 1-16, the B=1 fused stack and the bandwidth GEMV at their defaults); eight arms ABBA twice (S0 = E4B_ATTN_SPLIT_CAP=0, S1 = 16), P109's W16 and W1 at 32 and 160 tokens, 5 timed reps; SANE = P115 Phase D's instrument at one window per pass (T == 1), 12 wikitext windows x 128 positions, the pass KV at the server's 4096 tokens; verdict by bench/p143/p143a3_reduce.py",
+      "measured_on": "2026-10-19",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p143/RESULTS-p143.md",
+        "bench/p143/PREREG-p143.md",
+        "bench/p143/p143a3_reduce.py",
+        "bench/p143/receipts/p143a3-5090-1/verdict_p143a3.json",
+        "bench/p143/receipts/p143a3-5090-1/SHA256SUMS",
+        "bench/p143/receipts/p143a2-5090-1/verdict_p143a2.json",
+        "bench/p143/receipts/p143a2-5090-1/kernel.json",
+        "bench/p143/receipts/p143-5090-2/verdict_p143.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-19/p143a3-5090-1/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-19/p143a2-5090-1/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-18/p143-5090-2/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-18/p143-5090-1/ (receipt.json, teardown-proof.json; HARNESS_ERROR, strike 1)"
+      ],
+      "notes": "Pre-registered in #1778 (Amendment 2) and #1788 (Amendment 3, binding: a NO_FLIP would have closed the lever). Amendment 2's NO_FLIP (p143a2-5090-1: g1 1.0297 under a W1 self-pair of 0.9845) stays on the record; A3 added eight arms at five reps, the min of four pairs and a NOISY rung (W1 self-pairs here 0.9991-0.9995). The kernel prior: step 1 (p143-5090-2, GO_FIXED) and A2's B=1 timing put the cap at -0.161 ms of a ~3.9 ms step. A2's contract: error 0.9976-1.0000x the plan's, bitwise identical at contexts <= 1024. The host's card ran at a 450 W power limit; the verdict is ratios within one host. The maintainer re-derived every verdict from the store. P143 cost $0.922 over four launches; the default takes effect with the flip PR."
     }
   ]
 }
