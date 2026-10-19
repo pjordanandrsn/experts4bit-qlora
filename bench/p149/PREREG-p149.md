@@ -187,6 +187,17 @@ two experts per layer, whichever they are, so the bytes and the launches do not 
 - **Where they run:** in the registered rotation, after S1a, since they read S0a's and S1a's records. The order is S0a,
   S1a, the Q reduce, **T1**, S1b, S0b, S0c, S1c, **T2**, S1d, S0d. They do not run after a QUALITY_FAIL (the box stops
   there) or when S0a or S1a failed.
+- **Engagement, asserted in T1 and T2.**
+  - The forced token is written with `copy_` into the captured graph's own static input buffer. Before every block, that
+    buffer's storage is checked against the pointer taken at capture: a rebound tensor would replay its own argmax and
+    give r = 1 by construction.
+  - Each step, a device-side count accumulates two things: where that buffer differs from the forced token, which must
+    read 0; and where the step's own argmax differs from the next forced token.
+  - The second count must read 0 on A, S0 reproducing its own stream. On B it must read above 0, unless S1 decoded S0's
+    tokens exactly; then g16_routing is 1 by construction and the label is ROUTING_CLEAR.
+  - Each block's fed tokens are recorded and must equal the stream.
+  - Any failure is **QUALIFIER_VOID**. It holds the default-flip PR as UNRESOLVED does, it is not a strike, and the
+    reading stands.
 
 **The quantities** (tok/s, unrounded):
 - **Per process:** r = (B1 + B2) / (A1 + A2). That is S0's kernels on S1's tokens over S0's kernels on S0's own tokens.
@@ -215,6 +226,14 @@ It gates only the separate default-flip PR that a FLIP starts.
   - **ROUTING_CLEAR:** ρ + e ≤ m / 2.
 - **The effect:** after a FLIP, the default-flip PR proceeds only on ROUTING_CLEAR. Any other label holds it for a
   routing-matched read, which needs a later registration.
+- **Resolution, stated before data.** CLEAR needs ρ + e ≤ m / 2. So even at ρ = 0, a FLIP reads CLEAR only if
+  g16 ≥ 0.99 + 2e, and never when e > m / 2.
+  - P143 Amendment 3's W16 self-pairs (Qwen3-30B-A3B, fresh processes) deviated by 0.0002 to 0.0010, with one outlier
+    at 0.0141: S0b/S0a, 0.9859, against the first process.
+  - At e = 0.001, CLEAR needs g16 ≥ 0.992. At the outlier's 0.0141, it needs g16 ≥ 1.018, the upper half of the
+    predicted 0.99-1.03 band.
+  - A thin margin's UNRESOLVED therefore means the margin is too thin to separate a routing term, not that one was
+    found.
 - The verdict always reports g16_routing, ρ, e, m and the label. Without a FLIP, the label is reported only.
 
 **The router pre-read: a prediction, USD 0, on the lab A2000, posted before box Q+S is created.**
@@ -253,6 +272,8 @@ It gates only the separate default-flip PR that a FLIP starts.
 - **Worst:** 4.5 h × $1.05 + (93.4 + 5) GB × $0.011/GB = **$5.81**, under the standing rule.
 - The kit's runner refuses before the install when the time left cannot fit the rest of this table with its reserve (rc
   19, A3's form). A test asserts the table against the registered guard.
+- Every phase records its UTC start and end, so the next fit has measured terms: each process's load, Q, each T block,
+  and the eager replay. Q, the T blocks and the replay have no measurement yet.
 
 **The verdict order:** host REFUSED (17, 18, or 15 for an unreadable power limit) → VOID → NOISY → KERNEL_NO_GAIN (box K) → QUALITY_FAIL →
 FUNCTION_FAIL → FLIP / NO_FLIP.
