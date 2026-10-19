@@ -1,6 +1,6 @@
 # `q235-pro6000-3`: the Shape B box (Amendment 6), MILESTONE PASS on rules 1-8
 
-One RTX PRO 6000 Blackwell Workstation Edition on machine 8652 (Vast instance 56404364), e4b `13c05fce`. Cost $5.534. The
+One RTX PRO 6000 Blackwell Workstation Edition on machine 8652, e4b `13c05fce`. Cost $5.534. The
 two Shape B steps, the repeat and the records completed. The verdict, `verdict.ac6b894e.json` (re-derived with
 `q235_verdict.py` at e4b `ac6b894e`), reads PASS, "rules 1-8 hold". Rule 8's max_rel read 0.0034 / 0.0039 against 0.0231,
 and the repeat was bitwise. Amendment 7's overhead read was not decision-grade.

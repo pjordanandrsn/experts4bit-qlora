@@ -19,8 +19,8 @@ Edition, the registered host class.
 | [`q235-pro6000-3`](receipts/q235-pro6000-3/README.md) | the Shape B box (Amendment 6), machine 8652, e4b `13c05fce` | $5.534 | **PASS**, rules 1-8 |
 | [`q235-pro6000-4`](receipts/q235-pro6000-4/README.md) | the provider: the offer was taken before the create (`no_such_ask`) | $0 | refused before any instance |
 | [`q235-pro6000-5`](receipts/q235-pro6000-5/README.md) | the box's host-rate check: the link or host-copy rate was below the fit's floor | $0.104 | refused before the fetch; not a strike |
-| [`q235-pro6000-6`](receipts/q235-pro6000-6/README.md) | the repeat's time-left guard (rc 142), machine 46209 | $3.848 | VOID, strike one |
-| [`q235-pro6000-7`](receipts/q235-pro6000-7/README.md) | the box's time-left guard (rc 142), machine 115349 | $4.299 | VOID, strike two: the lane stopped for a simplification |
+| [`q235-pro6000-6`](receipts/q235-pro6000-6/README.md) | the repeat's time-left guard (rc 142) | $3.848 | VOID, strike one |
+| [`q235-pro6000-7`](receipts/q235-pro6000-7/README.md) | the box's time-left guard (rc 142), on a 16-core host | $4.299 | VOID, strike two: the lane stopped for a simplification |
 | [`q235-pro6000-8`](receipts/q235-pro6000-8/README.md) | the box under Amendment 16, machine 141671, e4b `27200917` | $4.567 | **PASS**, rules 1-10 |
 
 Total $23.306. Runs 2 and 3 read the milestone's rules as they stood then, on one host (machine 8652). Amendment 8 added
@@ -31,7 +31,7 @@ PASS on all ten.
 
 ## The milestone read (`q235-pro6000-8`)
 
-- **The box:** Vast instance 56688656 on machine 141671, 2026-10-19 07:11-09:03Z on the box, $4.567.
+- **The box:** machine 141671, the host the load and CPU records below describe, 2026-10-19 07:11-09:03Z on the box, $4.567.
   - The card: an RTX PRO 6000 Blackwell Workstation Edition (97,887 MiB, cc 12.0, driver 595.71.05, power limit 400 W).
   - The host: an Intel Xeon Gold 6330 (56 physical cores, 112 logical, CPU quota 53.76) and 503.5 GiB of RAM.
 - **Code:** e4b `27200917` (Amendment 16's merge) and grouped-nf4-gemm `724ccc45`. The box recorded torch 2.11.0+cu128,
@@ -61,7 +61,8 @@ PASS on all ten.
 - **The repeat** (a fresh process, step 0): loss 1.2399002313613892, equal to the box's in-process loss. The gap is 0.0
   against a tolerance of 0.000124.
 - **Not recorded:** the box record carries torch's allocator peaks, not a separate driver-side peak for the process. It
-  carries the process's VmHWM and RSS split (shared memory 170.4 GB, which holds the offloaded experts), not e4b's own
+  carries the process's VmHWM and RSS split (shared memory 170.4 GB at the step, `RssShmem`, which holds the offloaded
+  experts), not e4b's own
   pinned-bytes figure. The milestone lists both, and this read does not have them.
 
 ### Fidelity and the rules (`verdict.27200917.json`)

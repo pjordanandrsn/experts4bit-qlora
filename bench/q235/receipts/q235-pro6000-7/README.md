@@ -1,7 +1,7 @@
 # `q235-pro6000-7`: VOID at the box's time-left guard (rc 142), strike two
 
-One RTX PRO 6000 Blackwell Workstation Edition on machine 115349 (Vast instance 56635622; 32 logical CPUs, 16 physical
-cores), e4b `d65793e4`. Cost $4.299. The load's expert fuse and quantize took about 2,088 s, against about 661 s on
+One RTX PRO 6000 Blackwell Workstation Edition (32 logical CPUs, 16 physical cores),
+e4b `d65793e4`. Cost $4.299. The load's expert fuse and quantize took about 2,088 s, against about 661 s on
 `q235-pro6000-6`'s host. Step 0 began with about 850 s left, and the box's 2,997 s time-left guard ended it (rc 142).
 That is a box-started VOID: strike two, so the lane stopped for a simplification.
 

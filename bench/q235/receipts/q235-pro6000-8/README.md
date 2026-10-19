@@ -1,7 +1,7 @@
 # `q235-pro6000-8`: the box under Amendment 16, MILESTONE PASS on rules 1-10
 
-**The run:** one RTX PRO 6000 Blackwell Workstation Edition (97,887 MiB, cc 12.0, driver 595.71.05) on machine 141671,
-Vast instance 56688656. On the box from 07:11:20Z to 09:03:42Z on 2026-10-19. Cost $4.567: GPU $2.910, download $1.094 for
+**The run:** one RTX PRO 6000 Blackwell Workstation Edition (97,887 MiB, cc 12.0, driver 595.71.05) on machine 141671.
+On the box from 07:11:20Z to 09:03:42Z on 2026-10-19. Cost $4.567: GPU $2.910, download $1.094 for
 420 GB, storage $0.505, upload $0.058.
 
 **The code:** e4b `27200917` (Amendment 16's merge) and grouped-nf4-gemm `724ccc45`. The host: an Intel Xeon Gold 6330
@@ -34,10 +34,10 @@ maintainer re-derived the verdict on CPU with identical rule booleans and instru
   - `reference.json`, `ref-layers.sha256` and the per-layer times;
   - the stager's log;
   - `RELOCATED.sha256` for the 16.0 MB reference tensor.
-- **`STORE-ONLY.sha256`:** the files kept only in the private receipt store, by sha256 and store path. These are the token
+- **`STORE-ONLY.sha256`:** the files kept only in the private receipt store, by sha256 and their path within this run's receipt. These are the token
   and held-out tensors; the read's lab scripts, stage record and own `SHA256SUMS` (which name lab paths); and the fetch
   log, which carries carriage returns from the download's progress output.
-- **`teardown-proof.json`, `q235_fetch_gate.json`:** the launcher's teardown proof and its pre-rental fetch-gate record.
+- **`q235_fetch_gate.json`:** the pre-rental fetch gate's record.
 
 The launcher's receipt and ledger row are in the private receipt store. `SHA256SUMS` covers every file here, and every
 file but this README is byte-identical to the store's copy.
