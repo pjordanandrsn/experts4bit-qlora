@@ -55,7 +55,7 @@
       "extra": "fast",
       "since": "2026-10-17",
       "why": "the bandwidth-targeted NF4 decode GEMV is the default from 0.43.0 (GNF4_GEMV_BW=auto, grouped-nf4-gemm#509): experts4bit-qlora P116's registered consequence floors the consumer's fast extra on that release (experts4bit-qlora bench/p116/RESULTS-p116.md:93-96)",
-      "consumer_ci_pin": "the consumer's CI installs the kernel package from the git commit of the v0.45.0 release"
+      "consumer_ci_pin": "the consumer's CI installs the kernel package from the git commit of the v0.47.1 release"
     },
     {
       "consumer": "experts4bit-qlora",
@@ -65,7 +65,7 @@
       "extra": "fast",
       "since": "2026-09-04",
       "why": "combine_rows (grouped-nf4-gemm#335) with the swiglu_rows / reduce_partials decode glue that experts4bit-qlora#385 integrates, and gptq_pack for the calibrated int4 expert store (experts4bit-qlora#384)",
-      "consumer_ci_pin": "the consumer's CI installs the kernel package from the git commit of the v0.45.0 release"
+      "consumer_ci_pin": "the consumer's CI installs the kernel package from the git commit of the v0.47.1 release"
     },
     {
       "consumer": "experts4bit-qlora",

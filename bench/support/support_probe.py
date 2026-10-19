@@ -175,6 +175,53 @@ def _safetensors_integrity(model_dir: Path) -> dict:
             "note": "every shard matches the length its own header declares"}
 
 
+def _host_roots() -> list[str]:
+    """The host directories an exception message can quote, longest first.
+
+    ``sys.prefix``, ``sys.base_prefix``, every site-packages root (system and
+    user) and the home directory, each as given and resolved. Longest first,
+    so a site-packages root is replaced whole and its module-relative tail
+    survives, where replacing ``sys.prefix`` first would leave
+    ``.../lib/python3.X/site-packages/...`` behind. The filesystem root and
+    one-character roots are never candidates.
+    """
+    import site
+    roots = {sys.prefix, sys.base_prefix, str(Path.home())}
+    for get in (getattr(site, "getsitepackages", None), getattr(site, "getusersitepackages", None)):
+        if get is None:                       # virtualenv's old site module carries neither
+            continue
+        try:
+            got = get()
+        except Exception:                     # noqa: BLE001 -- a missing root is just not scrubbed
+            continue
+        roots.update([got] if isinstance(got, str) else got)
+    out = set()
+    for r in roots:
+        if not r:
+            continue
+        out.add(str(r))
+        try:
+            out.add(str(Path(r).resolve()))
+        except OSError:
+            pass
+    return sorted((r for r in out if len(r) > 1 and Path(r).anchor != r), key=len, reverse=True)
+
+
+def scrub_host_paths(text: str, roots: list[str] | None = None) -> str:
+    """Replace each host root in ``text`` with ``...``, keeping what follows it.
+
+    A root is replaced only where it ends at a path boundary (a separator, a
+    non-word character or the end), so ``/root`` never eats ``/rootfs``.
+    ``roots`` defaults to :func:`_host_roots`; a caller passes its own to test.
+    Longest first whatever order they arrive in, so a root's own subtree goes
+    before the shorter root it sits under.
+    """
+    import re
+    for r in sorted(roots if roots is not None else _host_roots(), key=len, reverse=True):
+        text = re.sub(re.escape(r) + r"(?=[\\/]|\b|$)", "...", text)
+    return text
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True, help="HF model id, or a local snapshot path")
@@ -244,12 +291,14 @@ def main() -> int:
         refusal names it -- so a verbatim error string reintroduces the absolute
         path the row deliberately does not carry. Rows are committed to a public
         repository; the release name is the useful part and the home directory
-        is not.
+        is not. Exception text also quotes the interpreter's own paths (a
+        transformers ImportError names its site-packages file), so the host
+        roots go too, after the model path: :func:`scrub_host_paths`.
         """
         if _is_local:
-            return text.replace(str(Path(args.model).resolve()), Path(args.model).name) \
+            text = text.replace(str(Path(args.model).resolve()), Path(args.model).name) \
                        .replace(args.model, Path(args.model).name)
-        return text
+        return scrub_host_paths(text)
 
     def fail(stage: str, exc: BaseException, code: int) -> int:
         row["stages"][stage] = {
