@@ -74,16 +74,24 @@ A training engine in e4b, `enable_dense_mlp_lora_fuse(model)`:
     The dense path is deterministic, so two plain unfused runs would give a floor of 0, and Phase 1 would then fail
     every time. Each redraw changes only summation order:
     - **R1:** the forward rank GEMM (x·Aᵀ) split along K = 4096 into two halves, then summed.
-    - **R2:** the scale applied before the B GEMM instead of after it.
-    - **R3:** the base and the adapter delta added in FP32 and then cast, instead of the delta cast and then added.
-    - **R4:** the backward A- and B-gradient GEMMs split along the token dimension (two halves of the 2,048 tokens),
+    - **R2:** the base and the adapter delta added in FP32 and then cast, instead of the delta cast and then added.
+    - **R3:** the backward A- and B-gradient GEMMs split along the token dimension (two halves of the 2,048 tokens),
       then summed.
-  - **Draws:** the 15 non-empty combinations of R1–R4, each one draw. The path is deterministic, so a repeat adds
+    - **R4:** the LoRA part of the input gradient (dh·A, a reduction over the rank) split along the rank into two halves
+      of 8, then summed.
+    - **R5:** the gate and up LoRA contributions to the shared input's gradient accumulated in the other order (up
+      first).
+    - Not a redraw: applying the scale before the B GEMM instead of after it. Here alpha/r = 32/16 = 2, and ×2 is exact
+      in floating point, so that change is a bitwise no-op.
+  - **Draws:** the 31 non-empty combinations of R1–R5, each one draw. The path is deterministic, so a repeat adds
     nothing. This is P129 Amendment 1's form, without its MoE-only knobs.
-  - **Tensors:** for each of three layers (0, 15 and 31), on a real Alpaca batch through the frozen model, the forward
-    output of `gate_proj`, `up_proj` and `down_proj`, the input gradient, and each adapter's A and B gradients.
+  - **Tensors:** for each of three layers (0, 15 and 31), on a real Alpaca batch through the frozen model:
+    - the forward outputs of `gate_proj`, `up_proj` and `down_proj`;
+    - two input gradients: the shared MLP input's, after the base and LoRA paths of gate and up have all accumulated,
+      and `down_proj`'s input's (the SwiGLU product);
+    - each adapter's A and B gradients.
   - **The floor, per tensor, is the WORST draw:** the largest max-|draw − unfused| and the largest relative RMS over the
-    15 draws.
+    31 draws.
   - **The bar:** the fused path passes iff, for every tensor, both its max-|fused − unfused| and its relative RMS are
     at or below that tensor's floor. A tensor no draw moved has a floor of 0, and the fused path must then match it
     bit for bit.
