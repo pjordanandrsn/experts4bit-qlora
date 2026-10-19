@@ -99,6 +99,11 @@ jobs:
           ruff check bench/p146 tests/test_p146_staged_pin.py
           python bench/p146/p146_reduce.py --self-test
           python bench/p146/p146_box.py --self-test
+      - name: P149 box K contract (CPU only; no GPU or rental)
+        run: |
+          ruff check bench/p149 tests/test_p149.py tests/test_p149_kernels_interp.py
+          python bench/p149/p149k_reduce.py --self-test
+          python bench/p149/p149k_bench.py --self-test
       - name: SMT fuse measurement contract (CPU only; no GPU or rental)
         run: |
           ruff check bench/smt-fuse tests/test_smt_fuse_staged_pin.py
