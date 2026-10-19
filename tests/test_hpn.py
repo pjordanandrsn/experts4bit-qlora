@@ -10,6 +10,7 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "bench" / "hpn"))
+sys.path.insert(0, str(REPO / "bench" / "hp1"))                    # hp1_lib / hp1_eval, for tests that run alone (-k)
 import hpn_reduce as R  # noqa: E402
 
 RCPT = REPO / "bench" / "hp2" / "receipts" / "hp2-5090-1"
@@ -394,9 +395,9 @@ def test_n1_is_unreadable_without_l2():
     assert R.reduce(spec, load=load)["N1"] is None
 
 
-def test_e_and_f_build_their_rotary_with_the_same_helper_and_get_bitwise_equal_buffers():
-    """F must differ from E in precision only: both build the rotary embedding through hp1_lib.make_rotary, on whichever transformers
-    is installed (5.18 takes device=, later releases do not), and the buffers come out bitwise equal."""
+def test_e_and_f_build_their_rotary_with_the_same_helper_and_it_matches_the_versions_own_construction():
+    """F must differ from E in precision only: both build the rotary embedding through hp1_lib.make_rotary (the call-site pin is what
+    guarantees E == F), and the helper's buffers equal the installed version's own construction (5.18 takes device=, later do not)."""
     import inspect
 
     import hp1_eval
@@ -406,8 +407,9 @@ def test_e_and_f_build_their_rotary_with_the_same_helper_and_get_bitwise_equal_b
     assert "hp1_lib.make_rotary(" in inspect.getsource(hp1_eval.build_model) and "hp1_lib.make_rotary(" in inspect.getsource(hr.build_model_f32)
     cfg = transformers.Qwen3MoeConfig(hidden_size=16, num_attention_heads=4, head_dim=4, max_position_embeddings=64)
     cls = type(transformers.AutoModelForCausalLM.from_config(cfg).model.rotary_emb)
-    a, b = hp1_lib.make_rotary(cls, cfg, "cpu"), hp1_lib.make_rotary(cls, cfg, "cpu")
-    assert torch.equal(a.inv_freq, b.inv_freq)
+    # the helper reproduces the INSTALLED version's own construction (review: comparing the helper with itself could not fail)
+    native = cls(config=cfg, device="cpu") if "device" in inspect.signature(cls.__init__).parameters else cls(config=cfg).to("cpu")
+    assert torch.equal(hp1_lib.make_rotary(cls, cfg, "cpu").inv_freq, native.inv_freq)
 
 
 def test_make_rotary_builds_on_a_transformers_without_the_device_argument():
@@ -425,6 +427,16 @@ def test_make_rotary_builds_on_a_transformers_without_the_device_argument():
             self.register_buffer("inv_freq", torch.arange(4, dtype=torch.float32, device=device))
     assert torch.equal(hp1_lib.make_rotary(NoDevice, None, "cpu").inv_freq, torch.arange(4.0))
     assert hp1_lib.make_rotary(WithDevice, None, "cpu").got == "cpu"
+
+    class Broken(torch.nn.Module):                       # takes device=, then fails inside for an unrelated reason
+        def __init__(self, config, device=None):
+            super().__init__()
+            self.register_buffer("inv_freq", torch.zeros(4))
+            if device is not None:                       # the bug only on the device= path: a blanket except would hide it by retrying
+                raise TypeError("an unrelated bug in the constructor")
+    with pytest.raises(TypeError, match="unrelated bug"):           # surfaced, never retried silently without device=
+        hp1_lib.make_rotary(Broken, None, "cpu")
+
 
 # ------------------------------------------------------------------------------------------------------------ hpn_local.sh
 def _local_repo(tmp_path):
