@@ -177,11 +177,20 @@ PREFILL_GLUE_DEFAULT_FAMILIES = {
     "qwen3_moe": "P130 (#1588, read #1605): x1.118 [1.116, 1.119] per 512-token first-chunk prefill replay on one RTX "
                  "5090, AT_PARITY on P117's teacher-forced instrument (bias -0.0035 nats)",
 }
-# Lane P143's split cap for the paged FP8 attention decode (bench/p143/PREREG-p143.md, Amendment 2): an UNSET
-# ``E4B_ATTN_SPLIT_CAP`` resolves per family from here -- empty until P143's served read licenses a family -- and to the
-# library's own plan everywhere else. ``0`` keeps the library's plan; ``n`` caps it at n splits.
+# Lane P143's split cap for the paged FP8 attention decode (bench/p143/PREREG-p143.md, Amendments 2 and 3): an UNSET
+# ``E4B_ATTN_SPLIT_CAP`` resolves per family from here, and to the library's own plan everywhere else. ``0`` keeps the
+# library's plan; ``n`` caps it at n splits. qwen3_moe takes 16 on P143 Amendment 3's binding served read (#1788,
+# p143a3-5090-1: FLIP, one request 1.044x as fast, the min of four ABBA pairs; 16 requests unchanged; SANE exact),
+# after Amendment 2's NO_FLIP (#1778, p143a2-5090-1: g1 1.0297 under a noisy self-pair). The cap moves buckets 1, 2
+# and 4 only (32 / 32 / 23 -> 16 splits at 4096-token slots) and is bitwise-identical to the plan at contexts <= 1024.
+# Mixtral (B 1-2 move under the cap) stays on the plan until a read of its own. The measured basis is Qwen3-30B-A3B on
+# an RTX 5090 (170 SMs); other qwen3_moe checkpoints (e.g. Qwen3-235B-A22B, also 4 KV heads, so the same plan table)
+# and other cards (the plan is SM-scaled: the cap moves B 1-6 on a 188-SM PRO 6000, B 1-4 on a 128-SM 4090) take the
+# default by family without a read of their own.
 ATTN_SPLIT_CAP_ENV = "E4B_ATTN_SPLIT_CAP"
-ATTN_SPLIT_CAP_DEFAULT_FAMILIES: dict = {}
+ATTN_SPLIT_CAP_DEFAULT_FAMILIES: dict = {
+    "qwen3_moe": 16,      # e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19 (bench/p143/RESULTS-p143.md)
+}
 _FUSION_WARNED: set = set()
 
 
@@ -437,6 +446,14 @@ def resolve_attn_split_cap(value: str, model_type) -> tuple:
     if model_type in ATTN_SPLIT_CAP_DEFAULT_FAMILIES:
         return int(ATTN_SPLIT_CAP_DEFAULT_FAMILIES[model_type]), "default-allowlisted"
     return None, "default-off"
+
+
+def apply_attn_split_cap(kv, cfg, model_type) -> tuple:
+    """``(cap, source)``, resolved from ``cfg.attn_split_cap`` for ``model_type`` and set on ``kv.split_cap``: the one
+    place :func:`build_engine` turns the knob (or its per-family default) into what the KV hands the kernel."""
+    cap, source = resolve_attn_split_cap(getattr(cfg, "attn_split_cap", FUSION_UNSET), model_type)
+    kv.split_cap = cap
+    return cap, source
 
 
 def resolve_prefill_glue(value: str, model_type) -> tuple:
@@ -1505,9 +1522,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
                     k_groups=(None if cfg.kv_groups == "auto" else int(cfg.kv_groups)),
                     batched_append=True, device=cfg.device, scratch_slots=scratch, alias_slots=spec_k)
     # P143: the attention split cap, on the KV before any decode graph is captured (a captured graph keeps its n_split)
-    split_cap, split_cap_source = resolve_attn_split_cap(getattr(cfg, "attn_split_cap", FUSION_UNSET),
-                                                         getattr(model.config, "model_type", None))
-    kv.split_cap = split_cap
+    split_cap, split_cap_source = apply_attn_split_cap(kv, cfg, getattr(model.config, "model_type", None))
     runner = PagedModelRunner(model, kv, device=cfg.device, bulk_kv=cfg.bulk_kv, last_logits=cfg.last_logits)
     grouping = _batched_graph_grouping(cfg)          # before capture: the batched lane's sync-free grouping
     # SD2: the draft, its hooks and the verify buckets, before any graph is captured

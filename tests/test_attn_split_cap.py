@@ -7,7 +7,8 @@ e4b computes no plan: it hands grouped-nf4-gemm's kernel ``split_cap`` (grouped-
 In CI they never skip: there the import fails loudly. The cap the KV records is ``min(16, plan)`` across B 1..64 at 170 SMs
 (RTX 5090) and 188 SMs (RTX PRO 6000), with serve-throughput's exact rows. The cap is handed over only when a cap is
 set, the installed kernel takes it, and the compute is fp8; never over an explicit ``n_split``. The server knob's reading
-and its per-family resolution: no family takes it by default until P143's served read."""
+and its per-family resolution: qwen3_moe takes 16 by default on P143 Amendment 3's binding read, every other family keeps
+the library's plan."""
 import os
 import sys
 import types
@@ -94,6 +95,9 @@ def _kv_with_stub_kernel(monkeypatch, *, takes_split_cap=True, compute="fp8"):
     stub.decode_split_plan = lambda B, h, cols, **k: 32 if k.get("split_cap") is None else min(k["split_cap"], 32)
     monkeypatch.setitem(sys.modules, "fp8_paged_attn", stub)
     monkeypatch.setattr(kvmod, "_sm_count", lambda d: 170)
+    # _kernel_takes caches by id(fn): a collected stub's id can come back on the next test's stub with the old answer
+    # (order-dependent: the ktile test read no cap when it ran after the no-split_cap stub), so each test starts empty
+    monkeypatch.setattr(kvmod, "_KERNEL_KW_CACHE", {})
     kv = kvmod.Fp8PagedKV(1, 4, 128, batch=2, max_tokens_per_seq=4096, device="cpu")
     kv.append(0, 0, torch.randn(8, 4, 128, dtype=torch.bfloat16), torch.randn(8, 4, 128, dtype=torch.bfloat16))
     return kv, seen
@@ -146,6 +150,36 @@ def test_the_f32_path_is_left_to_the_library(monkeypatch):
     assert seen[0]["split_cap"] is None and kv.split_plans == {}
 
 
+@pytest.mark.parametrize("env,model_type,want_cap,want_source,handed", [
+    (None, "qwen3_moe", 16, "default-allowlisted", 16),        # the flip: knob unset, the family's default
+    (None, "mixtral", None, "default-off", None),              # unread family: the library's plan
+    ("0", "qwen3_moe", None, "explicit", None),                # the way back
+    ("16", "mixtral", 16, "explicit", 16),                     # explicit still works anywhere
+])
+def test_build_engines_cap_reaches_the_kernel_call_from_the_default(monkeypatch, env, model_type, want_cap, want_source,
+                                                                   handed):
+    """End to end on CPU through build_engine's own wiring (apply_attn_split_cap): the server config read from the
+    environment -> the per-family resolution -> the KV -> the kwargs the KV hands fp8_paged_decode_attention. Only the
+    kernel is a stub (A3 read the real one engaged on CUDA from kv.split_cap = 16)."""
+    if env is None:
+        monkeypatch.delenv("E4B_ATTN_SPLIT_CAP", raising=False)
+    else:
+        monkeypatch.setenv("E4B_ATTN_SPLIT_CAP", env)
+    kv, seen = _kv_with_stub_kernel(monkeypatch)
+    cfg = sp.PagedServeConfig.from_env()
+    assert sp.apply_attn_split_cap(kv, cfg, model_type) == (want_cap, want_source)
+    assert kv.split_cap == want_cap
+    kv.attention(0, torch.randn(1, 32, 128, dtype=torch.bfloat16), slots=[0])
+    assert seen[-1]["split_cap"] == handed
+    assert kv.split_plans == ({1: {"calls": 1, "plan": 32, "n_split": 16}} if handed else {})
+
+
+def test_build_engine_sets_the_cap_through_apply_attn_split_cap():
+    import inspect
+    src = inspect.getsource(sp.build_engine)
+    assert "apply_attn_split_cap(kv, cfg," in src and "kv.split_cap =" not in src
+
+
 def test_the_knob_is_read_and_refused():
     assert sp._attn_split_cap_env("") == sp.FUSION_UNSET and sp._attn_split_cap_env("  ") == sp.FUSION_UNSET
     assert sp._attn_split_cap_env("16") == "16" and sp._attn_split_cap_env("0") == "0" and sp._attn_split_cap_env("032") == "32"
@@ -154,11 +188,16 @@ def test_the_knob_is_read_and_refused():
             sp._attn_split_cap_env(bad)
 
 
-def test_no_family_takes_the_cap_by_default_until_the_served_read():
-    assert sp.ATTN_SPLIT_CAP_DEFAULT_FAMILIES == {}
-    assert sp.resolve_attn_split_cap(sp.FUSION_UNSET, "qwen3_moe") == (None, "default-off")
-    assert sp.resolve_attn_split_cap("16", "qwen3_moe") == (16, "explicit")
-    assert sp.resolve_attn_split_cap("0", "qwen3_moe") == (None, "explicit")
+def test_qwen3_moe_alone_takes_the_cap_by_default_on_p143_amendment_3():
+    """P143 A3 (#1788, p143a3-5090-1) read FLIP for qwen3_moe at 16; nothing else is read. Mixtral's B 1-2 would move
+    under the cap, so it stays on the library's plan until a read of its own. ``0`` restores the plan explicitly."""
+    assert sp.ATTN_SPLIT_CAP_DEFAULT_FAMILIES == {"qwen3_moe": 16}
+    assert sp.resolve_attn_split_cap(sp.FUSION_UNSET, "qwen3_moe") == (16, "default-allowlisted")
+    for family in ("mixtral", "qwen3_5_moe_text", "gpt_oss", "granitemoe", "olmoe", None):
+        assert sp.resolve_attn_split_cap(sp.FUSION_UNSET, family) == (None, "default-off"), family
+    assert sp.resolve_attn_split_cap("0", "qwen3_moe") == (None, "explicit")           # the way back
+    assert sp.resolve_attn_split_cap("16", "mixtral") == (16, "explicit")
+    assert sp.resolve_attn_split_cap("8", "qwen3_moe") == (8, "explicit")
 
 
 def test_the_server_config_reads_the_knob(monkeypatch):
