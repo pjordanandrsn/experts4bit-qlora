@@ -43,10 +43,23 @@ def _synth(n, se, si, seed, base=None):
     return [In, list(In)], [E, list(E)], [F, list(F)]
 
 
-def _run(tmp, depth_noise, n=300):
+def _write_unsloth(tmp, L, In, E, F, shift_i, shift_e, shift_f):
+    """Stage 1b's Unsloth readers at depth L (one run each): e4b's rows shifted by a constant per reader, so
+    delta0_E = -shift_e + shift_i and delta0_F = -shift_f + shift_i exactly."""
+    sh = lambda rows, c: [round(x + c, 5) for x in rows]           # noqa: E731
+    d = _write_depth(tmp / f"L{L}", "u", [sh(In[0], shift_i)] * 2, [sh(E[0], shift_e)] * 2, [sh(F[0], shift_f)] * 2)
+    return {"inloop": [f"L{L}/{d['inloop'][0]}"], "eval": [f"L{L}/{d['eval'][0]}"], "fref": f"L{L}/{d['fref']}"}
+
+
+def _run(tmp, depth_noise, n=300, shifts=(0.0019, -0.0008, 0.0019), unsloth=True):
+    """shifts = (in-loop, E, F) offsets of Unsloth's readers: by default delta0_E = 0.0027 (HP2's size) and delta0_F = 0 (not MOOT)."""
     spec = {"framework": "e4b", "free_mib_at_claim": 10600, "depths": []}
     for k, (L, se, si) in enumerate(depth_noise):
-        spec["depths"].append(_write_depth(tmp, L, *_synth(n, se, si, seed=k + 1)))
+        In, E, F = _synth(n, se, si, seed=k + 1)
+        d = _write_depth(tmp, L, In, E, F)
+        if unsloth:
+            d["unsloth"] = _write_unsloth(tmp, L, In, E, F, *shifts)
+        spec["depths"].append(d)
     (tmp / "spec.json").write_text(json.dumps(spec))
     out = tmp / "hpn.json"
     rc = R.main([str(tmp / "spec.json"), "--out", str(out)])
@@ -90,6 +103,26 @@ def test_a_call_that_flips_between_the_two_deepest_depths_is_depth_dependent(tmp
 def test_the_decision_uses_the_two_DEEPEST_depths_not_the_shallow_ones(tmp_path):
     rc, rec = _run(tmp_path, [(2, 0.002, 0.008), (4, 0.010, 0.003), (8, 0.020, 0.005)])  # L2 reads I; 4 and 8 read E
     assert rec["depths"]["2"]["call"] == "I" and rec["outcome"] == "STAGE2"
+
+
+def test_a_base_term_beyond_the_bound_is_moot_whatever_the_side_call(tmp_path):
+    """Stage 1b is read first: E-dominant at both deciding depths, but F leaves |delta0_F| = 0.004 > 0.0025, so stage 2 is moot."""
+    rc, rec = _run(tmp_path, [(2, 0.004, 0.002), (4, 0.008, 0.003), (8, 0.015, 0.004)], shifts=(0.004, 0.0, 0.0))
+    assert rec["two_deepest_calls"] == {"4": "E", "8": "E"} and rec["outcome"] == "MOOT"
+    assert rec["base_term"]["8"]["delta0_F"] == pytest.approx(0.004, abs=1e-5)
+
+
+def test_the_base_term_arithmetic_is_delta0_under_each_reader(tmp_path):
+    _, rec = _run(tmp_path, [(4, 0.008, 0.003), (8, 0.015, 0.004)], shifts=(0.0019, -0.0008, 0.0019))
+    b = rec["base_term"]["8"]
+    assert b["inloop_term"] == pytest.approx(-0.0019, abs=1e-5) and b["base_term_E"] == pytest.approx(0.0008, abs=1e-5)
+    assert b["delta0_E"] == pytest.approx(0.0027, abs=1e-5) and b["delta0_F"] == pytest.approx(0.0, abs=1e-5)
+    assert b["shift_E_to_F"] == pytest.approx(-0.0027, abs=1e-5)
+
+
+def test_no_decision_without_stage_1b(tmp_path):
+    rc, rec = _run(tmp_path, [(2, 0.004, 0.002), (4, 0.008, 0.003), (8, 0.015, 0.004)], unsloth=False)
+    assert rec["outcome"] == "INCOMPLETE" and "1b" in rec["reason"]
 
 
 def test_one_depth_is_insufficient(tmp_path):

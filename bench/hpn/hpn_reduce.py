@@ -11,7 +11,8 @@ STOP otherwise (DEPTH_DEPENDENT if the two deepest calls differ). Any 48-layer f
 depth, with its leave-one-out range. Never a scored number, and never a statement about either framework.
 
     python hpn_reduce.py SPEC.json --out RESULT.json
-SPEC = {"framework": "e4b", "free_mib_at_claim": N, "depths": [{"L": 2, "inloop": [R1, R2], "eval": [E1, E2], "fref": F}, ...]}
+SPEC = {"framework": "e4b", "free_mib_at_claim": N, "depths": [{"L": 2, "inloop": [R1, R2], "eval": [E1, E2], "fref": F,
+        "unsloth": {"inloop": [RU], "eval": [EU], "fref": FU}}, ...]}  (the unsloth group is stage 1b: one run of each reader)
 """
 import argparse
 import json
@@ -24,7 +25,8 @@ SHARE_HI, SHARE_LO = 2 / 3, 1 / 3      # E-dominant at >= 2/3, I-dominant at <= 
 N0_TOL = 1e-5 + 1e-9                    # two runs agree per row to 1e-5 (per-row losses are recorded to 5 decimals)
 N1_L2_BOUND = 0.03                      # N1: sd(g) at L2 below HP2's 48-layer ~0.03
 N3_RHO = 0.2                            # N3: |corr(e, i)| <= 0.2 at every fitted depth
-DEPTH_FLOOR = 8                         # proposed (HPN-DESIGN.md): the decision needs the deepest fitted depth >= L8
+DEPTH_FLOOR = 8                         # the maintainer's ruling: the decision needs the deepest fitted depth >= L8
+MOOT_BOUND = 0.0025                     # stage 1b: stage 2 needs |delta0_F| <= 0.0025 (half the 0.005 floor) at both deciding depths
 EXTRAP_L = 48
 
 
@@ -116,18 +118,36 @@ def extrapolation(depths, sds):
             "loo_range": [round(min(loo), 6), round(max(loo), 6)] if loo else None, "fitted_depths": depths}
 
 
+def base_term(e4b, uns):
+    """Stage 1b at one depth: delta0 = (base term) - (in-loop term), under E and under F (run 1 of each reader; same rows)."""
+    m = statistics.mean
+    inloop = m(e4b["I"]) - m(uns["I"])
+    bE, bF = m(e4b["E"]) - m(uns["E"]), m(e4b["F"]) - m(uns["F"])
+    return {"inloop_term": round(inloop, 6), "base_term_E": round(bE, 6), "base_term_F": round(bF, 6),
+            "shift_E_to_F": round(bF - bE, 6), "delta0_E": round(bE - inloop, 6), "delta0_F": round(bF - inloop, 6)}
+
+
 def reduce(spec, load=None):
     load = load or {"inloop": _inloop_rows, "eval": _eval_rows, "fref": _fref_rows}
-    recs = {}
+    recs, bterm = {}, {}
     for d in sorted(spec["depths"], key=lambda x: int(x["L"])):
         In = [load["inloop"](p) for p in d["inloop"]]
         E = [load["eval"](p) for p in d["eval"]]
-        recs[int(d["L"])] = depth_record(In, E, load["fref"](d["fref"]))
+        Fr = load["fref"](d["fref"])
+        recs[int(d["L"])] = depth_record(In, E, Fr)
+        u = d.get("unsloth")
+        if u:
+            ui, ue, uf = load["inloop"](u["inloop"][0]), load["eval"](u["eval"][0]), load["fref"](u["fref"])[0]
+            if not len(ui) == len(ue) == len(uf) == len(In[0]):
+                raise ValueError(f"L{d['L']}: Unsloth's readers and e4b's disagree on the row count")
+            bterm[int(d["L"])] = base_term({"I": In[0], "E": E[0], "F": Fr[0]}, {"I": ui, "E": ue, "F": uf})
     Ls = sorted(recs)
     out = {"reducer": "bench/hpn/hpn_reduce.py", "framework": spec.get("framework"), "free_mib_at_claim": spec.get("free_mib_at_claim"),
            "fitted_depths": Ls, "deepest_fit": Ls[-1] if Ls else None, "depths": {str(L): recs[L] for L in Ls},
            "thresholds": {"share_e_dominant": round(SHARE_HI, 4), "share_i_dominant": round(SHARE_LO, 4), "n0_tol": 1e-5,
-                          "n1_l2_bound": N1_L2_BOUND, "n3_rho": N3_RHO, "depth_floor": DEPTH_FLOOR}}
+                          "n1_l2_bound": N1_L2_BOUND, "n3_rho": N3_RHO, "depth_floor": DEPTH_FLOOR,
+                          "moot_bound": MOOT_BOUND},
+           "base_term": {str(L): bterm[L] for L in sorted(bterm)}}
     if len(Ls) < 2:
         out.update(outcome="INSUFFICIENT", reason="fewer than two depths fit: N2's two-deepest rule cannot be read")
         return out
@@ -141,14 +161,21 @@ def reduce(spec, load=None):
     out["N3"] = all(recs[L]["corr_e_i"] is not None and abs(recs[L]["corr_e_i"]) <= N3_RHO for L in Ls)
     c1, c2 = recs[Ls[-2]]["call"], recs[Ls[-1]]["call"]
     out["two_deepest_calls"] = {str(Ls[-2]): c1, str(Ls[-1]): c2}
+    out["N2_comparable"] = c1 == c2 == "comparable"
+    out["extrapolation"] = {k: extrapolation(Ls, [recs[L][k]["sd"] for L in Ls]) for k in ("g", "e", "i")}
+    deciding = Ls[-2:]
+    if any(L not in bterm for L in deciding):                # 1b is part of stage 1: no decision without it
+        out.update(outcome="INCOMPLETE", reason=f"stage 1b (the base term) is missing at a deciding depth {deciding}")
+        return out
+    if any(abs(bterm[L]["delta0_F"]) > MOOT_BOUND for L in deciding):   # read FIRST: it overrides the side call
+        out.update(outcome="MOOT", reason=f"|delta0_F| > {MOOT_BOUND} at a deciding depth: stage 2 cannot lift G1")
+        return out
     if c1 != c2:
         out.update(outcome="STOP_DEPTH_DEPENDENT", reason="the side call differs between the two deepest depths: unknown at 48 layers")
     elif c2 == "E":
         out.update(outcome="STAGE2", reason="E-dominant at the two deepest depths: an fp32 evaluator may cut the spread; Unsloth next")
     else:
         out.update(outcome="STOP", reason=f"{c2} at the two deepest depths: no lower-noise reference within reach")
-    out["N2_comparable"] = c1 == c2 == "comparable"
-    out["extrapolation"] = {k: extrapolation(Ls, [recs[L][k]["sd"] for L in Ls]) for k in ("g", "e", "i")}
     return out
 
 
@@ -160,9 +187,10 @@ def main(argv=None):
     spec = json.load(open(a.spec))
     base = os.path.dirname(os.path.abspath(a.spec))
     for d in spec["depths"]:                        # paths in the spec are relative to it
-        d["inloop"] = [os.path.join(base, p) for p in d["inloop"]]
-        d["eval"] = [os.path.join(base, p) for p in d["eval"]]
-        d["fref"] = os.path.join(base, d["fref"])
+        for grp in [d] + ([d["unsloth"]] if d.get("unsloth") else []):
+            grp["inloop"] = [os.path.join(base, p) for p in grp["inloop"]]
+            grp["eval"] = [os.path.join(base, p) for p in grp["eval"]]
+            grp["fref"] = os.path.join(base, grp["fref"])
     try:
         rec = reduce(spec)
     except (ValueError, KeyError, OSError) as e:
