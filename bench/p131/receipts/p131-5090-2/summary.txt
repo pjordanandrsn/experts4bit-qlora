@@ -1,0 +1,108 @@
+KNOBS e4b=8e6471f5121ae84e28c033f9f88fff960468bbe4 gnf4=57f53e19fe65eeef4b7ed26f97d7bd8fdd87f0eb model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 prove=0 procs=8 windows=64 cont=128 speed_windows=16 rounds=12
+CUDA_PROBE ok
+e4b 0.55.0 @8e6471f5121ae84e28c033f9f88fff960468bbe4
+gnf4 0.45.0 @57f53e19fe65eeef4b7ed26f97d7bd8fdd87f0eb
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+huggingface_hub 1.33.0
+cc (12, 0)
+  ok  both licensed bitwise, m64 faster
+  ok  predictions hold on the model's point
+  ok  a tie goes to m32
+  ok  m32 faster
+  ok  m32 not faster: only m64
+  ok  neither faster
+  ok  m64 differs: the tolerance branch, at parity
+  ok  m64 differs and costs
+  ok  bitwise ignores Phase B's subject
+  ok  a mutant that passes voids the tolerance branch
+  ok  m64 refused
+  ok  the control refused: VOID
+  ok  the knob reaches decode
+  ok  a decode table other than m0's is touched
+  ok  whichever table auto picks, the same at every arm, is untouched
+  ok  a split at m0's decode check voids
+  ok  determinism
+  ok  noisy
+  ok  a missing process voids
+  ok  another e4b voids
+  ok  the release's prefill default not in effect voids
+  ok  Phase B off its process voids
+  ok  different windows void
+  ok  m32 captured on the chained table voids
+  ok  prefill folds off voids
+  ok  a short replay list voids
+  ok  FUNCTION over fewer windows voids
+  ok  a capture order off the rotation voids
+  ok  the rotation puts every arm in every position over the reading's processes
+  ok  a missing decode check voids
+  ok  S64 passed on the chained table: QUALITY_VOID
+  ok  Phase B raised; bitwise arms stand
+  ok  no premise, no reading
+  ok  the proof's sizes
+  ok  corpus reported
+  ok  m64 inside its band; m64-over-m32 MISSED low
+  ok  t-interval
+  ok  a fast warm-up is reported, never in the span guard
+  ok  the warm-up never moves the gains or the order
+  ok  a missing warm-up voids
+  ok  Phase B in process 1 (the pre-amendment layout) voids
+  ok  FUNCTION reads the warm-up
+  ok  DETERMINISM reads the warm-up
+  ok  the GPU state is reported for every process, never gated
+P131_REDUCE self-test: 44/44
+hf_fetch_watchdog self-test OK (7/7 cases)
+premise run rc=0: 9 passed in 11.34s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+process 0 rc=0 P131_SPEED proc 0 | graphs [('m64', 'on'), ('m0', 'on'), ('m32', 'on')] | median ms {'m0': 34.38395, 'm32': 34.976749999999996, 'm64': 34.19445} | differs {'m32': 0, 'm64': 0} | eager ms {'m0': 91.493, 'm32': 107.316, 'm64': 107.52000000000001} | 46 s
+
+P131_GPU proc 0 | speed_start sm 2392 MHz mem 13801 MHz 66.14 W 35 C reasons 0x0000000000000000 | after_warm sm 2520 MHz mem 13801 MHz 541.91 W 54 C reasons 0x0000000000000004 | after_timed sm 2512 MHz mem 13801 MHz 541.06 W 54 C reasons 0x0000000000000004 | speed_end sm 2775 MHz mem 13801 MHz 245.25 W 43 C reasons 0x0000000000000000
+P131_ARM R done at 68 s
+P131_ARM rep done at 132 s
+P131_ARM half done at 237 s
+P131_ARM chunk done at 306 s
+P131_ARM rev done at 369 s
+P131_ARM mutant_scale done at 431 s
+P131_ARM S32 done at 495 s
+P131_ARM S64 done at 561 s
+P131_BOX proc 0 | load 180s | mem 21.29 GB | quality windows 64 561.8 s
+process 1 rc=0 P131_SPEED proc 1 | graphs [('m0', 'on'), ('m32', 'on'), ('m64', 'on')] | median ms {'m0': 34.5261, 'm32': 35.048249999999996, 'm64': 34.21325} | differs {'m32': 0, 'm64': 0} | eager ms {'m0': 90.017, 'm32': 105.46199999999999, 'm64': 105.49199999999999} | 38 s
+
+P131_GPU proc 1 | speed_start sm 2392 MHz mem 13801 MHz 67.32 W 36 C reasons 0x0000000000000000 | after_warm sm 2512 MHz mem 13801 MHz 539.86 W 54 C reasons 0x0000000000000004 | after_timed sm 2512 MHz mem 13801 MHz 542.37 W 55 C reasons 0x0000000000000004 | speed_end sm 2760 MHz mem 13801 MHz 248.63 W 43 C reasons 0x0000000000000000
+P131_BOX proc 1 | load 174s | mem 20.97 GB
+process 2 rc=0 P131_SPEED proc 2 | graphs [('m32', 'on'), ('m64', 'on'), ('m0', 'on')] | median ms {'m0': 34.372600000000006, 'm32': 34.9824, 'm64': 34.14545} | differs {'m32': 0, 'm64': 0} | eager ms {'m0': 91.0065, 'm32': 106.5435, 'm64': 106.519} | 37 s
+
+P131_GPU proc 2 | speed_start sm 2392 MHz mem 13801 MHz 67.01 W 36 C reasons 0x0000000000000000 | after_warm sm 2512 MHz mem 13801 MHz 539.63 W 54 C reasons 0x0000000000000004 | after_timed sm 2505 MHz mem 13801 MHz 545.55 W 55 C reasons 0x0000000000000004 | speed_end sm 2700 MHz mem 13801 MHz 238.12 W 41 C reasons 0x0000000000000000
+P131_BOX proc 2 | load 174s | mem 20.97 GB
+process 3 rc=0 P131_SPEED proc 3 | graphs [('m64', 'on'), ('m0', 'on'), ('m32', 'on')] | median ms {'m0': 34.373850000000004, 'm32': 34.95845, 'm64': 34.17075} | differs {'m32': 0, 'm64': 0} | eager ms {'m0': 89.989, 'm32': 105.7565, 'm64': 105.689} | 38 s
+
+P131_GPU proc 3 | speed_start sm 2400 MHz mem 13801 MHz 65.66 W 36 C reasons 0x0000000000000000 | after_warm sm 2512 MHz mem 13801 MHz 543.48 W 54 C reasons 0x0000000000000004 | after_timed sm 2505 MHz mem 13801 MHz 544.60 W 55 C reasons 0x0000000000000004 | speed_end sm 2655 MHz mem 13801 MHz 226.20 W 40 C reasons 0x0000000000000000
+P131_BOX proc 3 | load 174s | mem 20.97 GB
+process 4 rc=0 P131_SPEED proc 4 | graphs [('m0', 'on'), ('m32', 'on'), ('m64', 'on')] | median ms {'m0': 34.4538, 'm32': 35.00375, 'm64': 34.1776} | differs {'m32': 0, 'm64': 0} | eager ms {'m0': 91.44749999999999, 'm32': 107.19, 'm64': 107.3545} | 38 s
+
+P131_GPU proc 4 | speed_start sm 2400 MHz mem 13801 MHz 65.39 W 36 C reasons 0x0000000000000000 | after_warm sm 2505 MHz mem 13801 MHz 542.00 W 54 C reasons 0x0000000000000004 | after_timed sm 2505 MHz mem 13801 MHz 542.57 W 55 C reasons 0x0000000000000004 | speed_end sm 2775 MHz mem 13801 MHz 244.15 W 43 C reasons 0x0000000000000000
+P131_BOX proc 4 | load 179s | mem 20.97 GB
+process 5 rc=0 P131_SPEED proc 5 | graphs [('m32', 'on'), ('m64', 'on'), ('m0', 'on')] | median ms {'m0': 34.35535, 'm32': 34.972750000000005, 'm64': 34.1338} | differs {'m32': 0, 'm64': 0} | eager ms {'m0': 91.1035, 'm32': 106.7895, 'm64': 106.581} | 38 s
+
+P131_GPU proc 5 | speed_start sm 2400 MHz mem 13801 MHz 66.11 W 36 C reasons 0x0000000000000000 | after_warm sm 2512 MHz mem 13801 MHz 543.01 W 55 C reasons 0x0000000000000004 | after_timed sm 2512 MHz mem 13801 MHz 544.21 W 55 C reasons 0x0000000000000004 | speed_end sm 2670 MHz mem 13801 MHz 232.49 W 40 C reasons 0x0000000000000000
+P131_BOX proc 5 | load 168s | mem 20.97 GB
+process 6 rc=0 P131_SPEED proc 6 | graphs [('m64', 'on'), ('m0', 'on'), ('m32', 'on')] | median ms {'m0': 34.38165, 'm32': 34.9631, 'm64': 34.17145} | differs {'m32': 0, 'm64': 0} | eager ms {'m0': 90.872, 'm32': 106.6315, 'm64': 106.28399999999999} | 37 s
+
+P131_GPU proc 6 | speed_start sm 2400 MHz mem 13801 MHz 66.23 W 36 C reasons 0x0000000000000000 | after_warm sm 2520 MHz mem 13801 MHz 541.82 W 54 C reasons 0x0000000000000004 | after_timed sm 2520 MHz mem 13801 MHz 544.12 W 55 C reasons 0x0000000000000004 | speed_end sm 2595 MHz mem 13801 MHz 215.60 W 38 C reasons 0x0000000000000000
+P131_BOX proc 6 | load 174s | mem 20.97 GB
+process 7 rc=0 P131_SPEED proc 7 | graphs [('m0', 'on'), ('m32', 'on'), ('m64', 'on')] | median ms {'m0': 34.49255, 'm32': 35.027950000000004, 'm64': 34.2037} | differs {'m32': 0, 'm64': 0} | eager ms {'m0': 91.09450000000001, 'm32': 106.959, 'm64': 106.8655} | 38 s
+
+P131_GPU proc 7 | speed_start sm 2392 MHz mem 13801 MHz 66.39 W 36 C reasons 0x0000000000000000 | after_warm sm 2512 MHz mem 13801 MHz 540.91 W 54 C reasons 0x0000000000000004 | after_timed sm 2512 MHz mem 13801 MHz 542.82 W 55 C reasons 0x0000000000000004 | speed_end sm 2557 MHz mem 13801 MHz 207.00 W 38 C reasons 0x0000000000000000
+P131_BOX proc 7 | load 180s | mem 20.97 GB
+process 8 rc=0 P131_SPEED proc 8 | graphs [('m32', 'on'), ('m64', 'on'), ('m0', 'on')] | median ms {'m0': 34.4671, 'm32': 35.05115, 'm64': 34.206999999999994} | differs {'m32': 0, 'm64': 0} | eager ms {'m0': 90.969, 'm32': 106.5075, 'm64': 106.40950000000001} | 37 s
+
+P131_GPU proc 8 | speed_start sm 2392 MHz mem 13801 MHz 66.36 W 36 C reasons 0x0000000000000000 | after_warm sm 2512 MHz mem 13801 MHz 540.82 W 54 C reasons 0x0000000000000004 | after_timed sm 2512 MHz mem 13801 MHz 542.60 W 55 C reasons 0x0000000000000004 | speed_end sm 2752 MHz mem 13801 MHz 245.09 W 44 C reasons 0x0000000000000000
+P131_BOX proc 8 | load 180s | mem 20.97 GB
+GATE_CORPUS b08601e04326c79dfdd32d625aee71d232d685c3
+P131_VERDICT M32_HELD M64_HELD DEFAULT_NONE
+  m32 gain 0.9836 [0.9828, 0.9845] vs x1.02
+  m64 gain 1.0073 [1.0063, 1.0083] vs x1.02
