@@ -118,15 +118,55 @@ def test_a_fused_mlp_reads_its_adapters_live_and_refuses_one_cast_after_fusing()
         m(_x())
 
 
-def test_a_fused_step_runs_no_peft_mlp_forward():
+def test_a_fused_step_runs_no_peft_mlp_forward(monkeypatch):
     m = _model()
     dlf.enable_dense_mlp_lora_fuse(m, base_ok=LINEAR)
-    seen = []
-    for name, mod in m.named_modules():
-        if name.endswith(("gate_proj", "up_proj", "down_proj")):
-            mod.register_forward_hook(lambda *a, n=name: seen.append(n))
+    cls, seen = type(m.layers[0]["mlp"].gate_proj), []
+    real = cls.forward
+    monkeypatch.setattr(cls, "forward", lambda self, *a, **k: seen.append(1) or real(self, *a, **k))  # not a hook
     _run(m, _x())
-    assert seen == []                                               # the PEFT modules' own forwards never ran
+    assert seen == [] and dlf.DENSE_MLP_LORA_STATS["fallback"] == 0  # the PEFT modules' own forwards never ran
+
+
+def _pair():
+    ref = _model()
+    m = copy.deepcopy(ref)
+    assert dlf.enable_dense_mlp_lora_fuse(m, base_ok=LINEAR) == 6
+    return ref, m
+
+
+def test_a_hook_added_after_fusing_runs_the_class_forward_with_it():
+    ref, m = _pair()
+    for model in (ref, m):                     # as PEFT's mixed-batch adapter_names arrive: a pre-hook at call time
+        model.layers[1]["mlp"].up_proj.register_forward_pre_hook(lambda mod, args, kwargs: (args, kwargs), with_kwargs=True)
+        model.layers[0]["mlp"].down_proj.lora_B["default"].register_forward_hook(lambda mod, a, out: out * 0.5)
+    assert torch.equal(ref(_x()), m(_x()))
+    assert dlf.DENSE_MLP_LORA_STATS["fallback"] == 2 and dlf.DENSE_MLP_LORA_STATS["calls"] == 0
+
+
+def test_the_scale_is_read_live_and_a_differing_scale_falls_back():
+    ref, m = _pair()
+    before = m(_x())
+    for model in (ref, m):
+        for p in ("gate_proj", "up_proj", "down_proj"):
+            getattr(model.layers[0]["mlp"], p).scale_layer(0.5)             # all three alike: still fused, at the new scale
+        model.layers[1]["mlp"].up_proj.set_scale("default", 3.0)          # up alone: the three differ
+    y0, y1 = ref(_x()), m(_x())
+    torch.testing.assert_close(y1.float(), y0.float(), rtol=2e-2, atol=2e-2)
+    assert not torch.equal(y1, before)
+    assert dlf.DENSE_MLP_LORA_STATS["calls"] == 2 + 1 and dlf.DENSE_MLP_LORA_STATS["fallback"] == 1   # 2 before the change
+
+
+def test_an_adapter_replaced_under_the_same_name_falls_back():
+    ref, m = _pair()
+    for model in (ref, m):
+        up = model.layers[1]["mlp"].up_proj
+        new = nn.Linear(64, 4, bias=False)
+        with torch.no_grad():
+            new.weight.copy_(torch.randn(4, 64, generator=torch.Generator().manual_seed(9)) * 0.05)
+        up.lora_A["default"] = new                                           # load_adapter / add_adapter under one name
+    assert torch.equal(ref(_x()), m(_x()))
+    assert dlf.DENSE_MLP_LORA_STATS["fallback"] == 1 and dlf.DENSE_MLP_LORA_STATS["calls"] == 1
 
 
 def test_disable_restores_the_peft_path_bit_for_bit():

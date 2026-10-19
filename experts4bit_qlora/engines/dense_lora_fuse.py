@@ -35,8 +35,15 @@ LoRA module's: the shared gate/up matmul needs both projections in one call. The
 is exactly that are taken (:data:`FUSED_MLP_CLASSES`). A fused MLP runs its class's own forward, PEFT's path, for any call
 the fusion would get wrong, counted in ``DENSE_MLP_LORA_STATS["fallback"]``:
 - under autocast, which the Function's FP32 rank compute would not match;
-- when a projection's PEFT state changed after fusing: adapters disabled (PEFT's ``disable_adapter()`` context), another
-  adapter set, an adapter merged, or the input cast turned off.
+- when a projection's PEFT state changed after fusing:
+  - adapters disabled (PEFT's ``disable_adapter()`` context), another adapter set, an adapter merged, or the input cast
+    turned off;
+  - a hook on the projection or its ``lora_A`` / ``lora_B`` (PEFT's mixed-batch ``adapter_names`` arrive through hooks
+    added at call time);
+  - the scale changed (``set_scale``, ``scale_layer``) so the three differ;
+  - an adapter module replaced under the same name.
+
+  A changed scale that the three projections still share is read live, as PEFT reads it.
 
 Only an MLP of those classes whose three projections are vanilla PEFT LoRA modules on an NF4 base is fused. Anything
 else with ``gate_proj``/``up_proj``/``down_proj`` keeps its own path, with the reason in
@@ -97,6 +104,21 @@ def _hooked(mod) -> bool:
 
 def _active(proj) -> list:
     return [a for a in proj.active_adapters if a in proj.lora_A.keys()]
+
+
+def _fused_scale(mlp, f):
+    """The live scale if every projection is still as fused (the PEFT state, the same active adapter, the same
+    ``lora_A`` / ``lora_B`` modules, no hooks, one scale for all three), else ``None``: the call falls back."""
+    scales = set()
+    for i, (p, n) in enumerate(zip(PROJECTIONS, f["names"])):
+        proj = getattr(mlp, p)
+        if not _state_ok(proj) or _active(proj) != [n]:
+            return None
+        lora_a, lora_b = proj.lora_A[n], proj.lora_B[n]
+        if lora_a is not f["A"][i] or lora_b is not f["B"][i] or any(_hooked(m) for m in (proj, lora_a, lora_b)):
+            return None
+        scales.add(float(proj.scaling[n]))
+    return scales.pop() if len(scales) == 1 else None
 
 
 def _state_ok(proj) -> bool:
@@ -187,8 +209,8 @@ def _fused_mlp_forward(self, x):
     """The MLP with its adapters fused: ``down(act(gate(x)) * up(x))``, each projection's base output computed by its own
     base layer and its adapter added through :class:`_FusedLoRA`."""
     f = self._e4b_dense_lora
-    if torch.is_autocast_enabled(x.device.type) or not all(
-            _state_ok(getattr(self, p)) and _active(getattr(self, p)) == [n] for p, n in zip(PROJECTIONS, f["names"])):
+    scale = None if torch.is_autocast_enabled(x.device.type) else _fused_scale(self, f)
+    if scale is None:
         DENSE_MLP_LORA_STATS["fallback"] += 1
         return type(self).forward(self, x)                              # PEFT's path, which handles both
     A, B = [m.weight for m in f["A"]], [m.weight for m in f["B"]]       # read at call time: the live parameters
@@ -197,9 +219,9 @@ def _fused_mlp_forward(self, x):
     DENSE_MLP_LORA_STATS["calls"] += 1
     g_base = self.gate_proj.base_layer(x)
     u_base = self.up_proj.base_layer(x)
-    g, u = _FusedLoRA.apply(x, f["scale"], 2, A[0], A[1], B[0], B[1], g_base, u_base)
+    g, u = _FusedLoRA.apply(x, scale, 2, A[0], A[1], B[0], B[1], g_base, u_base)
     h = self.act_fn(g) * u
-    (d,) = _FusedLoRA.apply(h, f["scale"], 1, A[2], B[2], self.down_proj.base_layer(h))
+    (d,) = _FusedLoRA.apply(h, scale, 1, A[2], B[2], self.down_proj.base_layer(h))
     return d
 
 
