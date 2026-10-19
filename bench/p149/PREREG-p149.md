@@ -1,7 +1,7 @@
-# P149 (DRAFT): int8 weight-only attention projections for Mixtral-8x7B on `serve_paged`: a kernel premise, then quality at decode and the served read
+# P149: int8 weight-only attention projections for Mixtral-8x7B on `serve_paged`: a kernel premise, then quality at decode and the served read
 
-**Status: DRAFT, revised per the maintainer's RED rulings (2026-10-19).** This is $0 design. It is **not registered**
-until the maintainer's final pass after one independent review: nothing here authorizes a box or spend.
+**Status: registered 2026-10-19, before any data** (the maintainer's RED rulings and final pass, after one independent
+review). Box K runs under the standing rule after Phase 0a's kit merges; box Q+S only after K_GO and Phase 0b.
 **Mixtral-8x7B only.** Nothing carries over from Qwen3-30B-A3B, whose attention parked at 1.26× its bound under the same quality rule (the W8A16 split premise).
 
 ## Why
