@@ -1,0 +1,255 @@
+{
+ "lane": "P131",
+ "mode": "proof",
+ "refused": {
+  "m32": [],
+  "m64": []
+ },
+ "determinism": {
+  "differ": []
+ },
+ "span_m0": 1.0475087846551634,
+ "decode_check": {
+  "touched": {
+   "m0": [],
+   "m32": [],
+   "m64": []
+  }
+ },
+ "quality": {
+  "faults": [],
+  "stats": {
+   "rep": {
+    "n": 16,
+    "bias": 0.0,
+    "spread": 0.0,
+    "se": 0.0,
+    "max_abs": 0.0,
+    "mean_kl": 0.0,
+    "argmax_agree": 1.0
+   },
+   "half": {
+    "n": 16,
+    "bias": -0.007291767201068333,
+    "spread": 0.024895087162600638,
+    "se": 0.007878685002822452,
+    "max_abs": 0.08251363611799434,
+    "mean_kl": 0.006768414160883498,
+    "argmax_agree": 0.9765625
+   },
+   "chunk": {
+    "n": 16,
+    "bias": 0.012560568619493118,
+    "spread": 0.037388380488573125,
+    "se": 0.012986643810301351,
+    "max_abs": 0.155266614791147,
+    "mean_kl": 0.012144481525366535,
+    "argmax_agree": 0.9609375
+   },
+   "rev": {
+    "n": 16,
+    "bias": 0.0,
+    "spread": 0.0,
+    "se": 0.0,
+    "max_abs": 0.0,
+    "mean_kl": 0.0,
+    "argmax_agree": 1.0
+   },
+   "mutant_scale": {
+    "n": 16,
+    "bias": 1.0796113078775667,
+    "spread": 1.0796113078775667,
+    "se": 0.11758863034366566,
+    "max_abs": 1.963604637675246,
+    "mean_kl": 1.164789256739775,
+    "argmax_agree": 0.609375
+   },
+   "S32": {
+    "n": 16,
+    "bias": 0.0,
+    "spread": 0.0,
+    "se": 0.0,
+    "max_abs": 0.0,
+    "mean_kl": 0.0,
+    "argmax_agree": 1.0
+   },
+   "S64": {
+    "n": 16,
+    "bias": 0.0,
+    "spread": 0.0,
+    "se": 0.0,
+    "max_abs": 0.0,
+    "mean_kl": 0.0,
+    "argmax_agree": 1.0
+   }
+  },
+  "floor": {
+   "draws": [
+    "half",
+    "chunk",
+    "rev"
+   ],
+   "B_floor": 0.012560568619493118,
+   "S_floor": 0.037388380488573125
+  },
+  "rep_identical": true,
+  "subjects_bitwise": {
+   "S32": true,
+   "S64": true
+  },
+  "bar": {
+   "tol": 0.01,
+   "spread_x": 2.0,
+   "spread_min": 0.005,
+   "bias_bar": 0.02256056861949312,
+   "spread_bar": 0.07477676097714625
+  }
+ },
+ "arms": {
+  "m32": {
+   "function": "BITWISE",
+   "function_differ": [],
+   "gains": {
+    "1": 1.0067097729579297,
+    "2": 0.9992201076590513,
+    "3": 0.997320938094232,
+    "4": 0.9986347627174033
+   },
+   "mean": 1.000464692666993,
+   "ci95": [
+    0.9937627188276623,
+    1.0072118648745978
+   ],
+   "min_gain": 1.02,
+   "faster": false,
+   "saving_ms": 0.01581249999999912,
+   "verdict": "NOISY",
+   "held_for": []
+  },
+  "m64": {
+   "function": "BITWISE",
+   "function_differ": [],
+   "gains": {
+    "1": 1.0431415241468986,
+    "2": 1.0278990327836992,
+    "3": 1.028691831794136,
+    "4": 1.0285900210429735
+   },
+   "mean": 1.0320608936069715,
+   "ci95": [
+    1.0204218178046356,
+    1.043832726356649
+   ],
+   "min_gain": 1.02,
+   "faster": true,
+   "saving_ms": 1.2622874999999958,
+   "verdict": "NOISY",
+   "held_for": []
+  }
+ },
+ "order": {
+  "m64_over_m32": 1.0315815252367886,
+  "ci95": [
+   1.0263989118712373,
+   1.0367903072595608
+  ],
+  "reading": "M64_FASTER"
+ },
+ "default": "NONE",
+ "verdict": "M32_NOISY M64_NOISY DEFAULT_NONE",
+ "reasons": [
+  "m0 medians span x1.0475 > x1.02",
+  "m32 gain 1.0005 [0.9938, 1.0072] vs x1.02",
+  "m64 gain 1.0321 [1.0204, 1.0438] vs x1.02"
+ ],
+ "predictions": {
+  "m64_gain": {
+   "value": 1.0320608936069715,
+   "range": [
+    1.038,
+    1.159
+   ],
+   "held": false
+  },
+  "m32_gain": {
+   "value": 1.000464692666993,
+   "range": [
+    1.033,
+    1.143
+   ],
+   "held": false
+  },
+  "m64_saving_ms": {
+   "value": 1.2622874999999958,
+   "range": [
+    1.2,
+    4.5
+   ],
+   "held": true
+  },
+  "m32_saving_ms": {
+   "value": 0.01581249999999912,
+   "range": [
+    1.1,
+    4.1
+   ],
+   "held": false
+  },
+  "m64_over_m32": {
+   "value": 1.0315815252367886,
+   "range": [
+    1.004,
+    1.013
+   ],
+   "held": false
+  },
+  "function_bitwise": {
+   "held": true
+  },
+  "determinism": {
+   "held": true
+  },
+  "decode_untouched": {
+   "held": true
+  },
+  "phase_b_subjects_bitwise": {
+   "held": true
+  },
+  "verdict": {
+   "value": "M32_NOISY M64_NOISY DEFAULT_NONE",
+   "held": false
+  }
+ },
+ "corpus": {
+  "gate": "b08601e04326c79dfdd32d625aee71d232d685c3",
+  "box_arrow": [
+   "b08601e04326c79dfdd32d625aee71d232d685c3"
+  ],
+  "box_snapshots": [
+   "b08601e04326c79dfdd32d625aee71d232d685c3"
+  ],
+  "same": true
+ },
+ "eager_median_ms": {
+  "1": {
+   "m0": 103.4565,
+   "m32": 117.913,
+   "m64": 116.547
+  },
+  "2": {
+   "m0": 103.6445,
+   "m32": 116.584,
+   "m64": 117.614
+  },
+  "3": {
+   "m0": 102.43350000000001,
+   "m32": 116.8065,
+   "m64": 116.51249999999999
+  },
+  "4": {
+   "m0": 99.74600000000001,
+   "m32": 115.785,
+   "m64": 115.856
+  }
+ }
+}
