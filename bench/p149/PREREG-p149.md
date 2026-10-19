@@ -113,7 +113,8 @@ skipped):
 **Arms:** S0 is the default server. S1 is the same with `E4B_SERVE_ATTN_INT8=1`. The server is Mixtral's: 16 slots × 768
 tokens, graphs on.
 
-**Process order:** S0a, S1a, then the Q reduce, then S1b S0b S0c S1c S1d S0d. This is P143 Amendment 3's eight fresh
+**Process order:** S0a, S1a, then the Q reduce, then S1b S0b S0c S1c S1d S0d (Amendment 4 adds T1 after the Q reduce and
+T2 after S1c). This is P143 Amendment 3's eight fresh
 processes, ABBA twice.
 - In S0a and S1a, the timed speed reps run first and Q runs after them in the same process. Q's work never precedes a
   timed rep **in the same process**. Across processes, S0a's 15-20 min of decode is followed only by S1a's load (about
@@ -164,12 +165,102 @@ P147's rule is re-read through `serve_paged`'s own KV path, at the kernels that 
      unrounded;
   5. **NO_FLIP** otherwise, with each failed bar named.
 
+#### Amendment 4 (2026-10-19): the routing qualifier on g16, token-pinned (the maintainer's ruling, 20:17Z)
+
+**Why.** Each arm decodes its own greedy tokens. At W16, a token where S1 differs from S0 changes that row's MoE routing
+at every later step, so g16 carries a routing term besides the kernels. Mixtral's 32 picks per layer-step at B = 16 over
+8 experts touch nearly every expert. The routing term therefore lives in the per-expert row histogram (the grouped
+small-M GEMM's balance and its 16-row tiles), not in the distinct count. W1 has no such term: every step reads exactly
+two experts per layer, whichever they are, so the bytes and the launches do not depend on the tokens.
+
+**The measurement: two token-pinned processes, T1 and T2.**
+- Each is a fresh S0 process: the default server, built exactly as S0's arms are, with graphs on.
+- It runs only P109's W16 workload, **teacher-forced**. After each decode step, the next input token is overwritten with
+  the recorded stream's token at that position, in place of the argmax the step wrote. Both streams are forced, so the
+  forcing's own cost is on both sides of the ratio.
+  - **A** is S0's own W16 tokens, from S0a's record. LONG is 160 tokens per row, and SHORT is LONG's first 32.
+  - **B** is S1's W16 tokens, from S1a's record.
+- Each process runs four W16 blocks. Each block is P143 Amendment 3's W16 form: one untimed warm pass, five timed reps of
+  SHORT and LONG, and tok/s by its formula.
+  - T1 runs **A B B A** and T2 runs **B A A B**, so the streams' order rotates within each process and across the two.
+  - The decode graphs are captured at build, before either stream is fed, and both streams replay the same graphs.
+- **Where they run:** in the registered rotation, after S1a, since they read S0a's and S1a's records. The order is S0a,
+  S1a, the Q reduce, **T1**, S1b, S0b, S0c, S1c, **T2**, S1d, S0d. They do not run after a QUALITY_FAIL (the box stops
+  there) or when S0a or S1a failed.
+
+**The quantities** (tok/s, unrounded):
+- **Per process:** r = (B1 + B2) / (A1 + A2). That is S0's kernels on S1's tokens over S0's kernels on S0's own tokens.
+- **g16_routing** = the mean of T1's and T2's r.
+- **The check:** the four token-pinned self-pairs, A2/A1 and B2/B1 in each process. e = the largest |pair − 1| of the
+  four.
+- **Reported beside them:** both streams' routing, from an **eager** replay of A and B through S0's model after T1's
+  timed blocks. A Python counter under CUDA graphs runs at capture, not per replay. Each statistic is per MoE layer, and
+  its support is the 16 rows × 160 LONG positions:
+  - the distinct experts per layer-step;
+  - the per-expert row histogram;
+  - the 16-row tile count, Σ over experts of ⌈rows / 16⌉;
+  - the largest per-expert row count.
+
+**How it acts, stated before any data.** It never moves the verdict: FLIP, NO_FLIP and every other label stand as read.
+It gates only the separate default-flip PR that a FLIP starts.
+- **The terms:**
+  - m = g16 − 0.99, the margin, where g16 is the S rule's minimum of four pairs;
+  - ρ = g16_routing − 1, the routing term. A positive ρ means S1's tokens are cheaper on S0's own kernels, so part of
+    g16 is routing.
+- **The labels:**
+  - **QUALIFIER_NOISY:** any of the four self-pairs is outside [0.985, 1.015]. It counts as unresolved. It is not a
+    VOID and not a strike; the reading stands.
+  - **ROUTING_CONFOUNDED:** ρ − e > m / 2.
+  - **ROUTING_UNRESOLVED:** ρ − e ≤ m / 2 < ρ + e.
+  - **ROUTING_CLEAR:** ρ + e ≤ m / 2.
+- **The effect:** after a FLIP, the default-flip PR proceeds only on ROUTING_CLEAR. Any other label holds it for a
+  routing-matched read, which needs a later registration.
+- The verdict always reports g16_routing, ρ, e, m and the label. Without a FLIP, the label is reported only.
+
+**The router pre-read: a prediction, USD 0, on the lab A2000, posted before box Q+S is created.**
+- The same W16 prompts are decoded greedily twice: as S0, and as S1 with `E4B_SERVE_ATTN_INT8=1` through K37 compiled on
+  sm_86. The experts sit on the host, as the A2000 requires.
+- Both streams are then replayed eagerly through S0's model, reporting the routing statistics above.
+- They are priced two ways: by bytes (∝ the distinct experts) and by tiles (∝ the 16-row tile count).
+- The tile model's g16_routing, with a band, joins the Predictions. It is graded in the read and never rules.
+- It is a prediction because the A2000's tokens are not the 5090's: the other GEMMs' reduction orders differ by
+  architecture.
+
+**Box Q+S's guard and rate, re-fitted with these processes (≥ 25% headroom).**
+- Each term is the larger of the registration's estimate and the largest value measured on a Mixtral RTX 5090 box.
+  P145's receipt carries phase stamps (an install of 68 s, a fetch of 174 s, a bake of 43 s, and a speed arm of 158 to
+  162 s, load included); P135's and P141's receipts do not.
+- **The terms (s):**
+
+  | term | s |
+  |---|---|
+  | boot | 300 |
+  | install | 450 |
+  | fetch (93.4 GB) | 900 |
+  | bake | 120 |
+  | eight S arms, 420 s load + 180 s reps each | 4,800 |
+  | Q in S0a and S1a, 1,200 s each | 2,400 |
+  | the Q reduce | 120 |
+  | T1 and T2, 420 s load + four W16 blocks of 90 s + a 60 s eager replay each | 1,680 |
+  | two SANE processes, if the kit runs them apart as P143 did, 600 s each | 1,200 |
+  | the reserve | 600 |
+  | **total** | **12,570 (3.49 h)** |
+
+- **The guard is 4.5 h** (16,200 s), headroom 1.29. The registered 3.0 h (10,800 s) fails even without T1 and T2: the
+  other terms sum to 10,890 s, more than the guard itself.
+- **The rate takes Amendment 2's form:** up to $1.05/h including the disk, with a base offer at ≤ $0.85/h taken first
+  whenever one passes. Amendment 2's evidence (no 575 W RTX 5090 listed at ≤ $0.85/h) holds for this box too.
+- **Worst:** 4.5 h × $1.05 + (93.4 + 5) GB × $0.011/GB = **$5.81**, under the standing rule.
+- The kit's runner refuses before the install when the time left cannot fit the rest of this table with its reserve (rc
+  19, A3's form). A test asserts the table against the registered guard.
+
 **The verdict order:** host REFUSED (17, 18, or 15 for an unreadable power limit) → VOID → NOISY → KERNEL_NO_GAIN (box K) → QUALITY_FAIL →
 FUNCTION_FAIL → FLIP / NO_FLIP.
 
 ## What a FLIP starts (never automatic)
 
-A separate PR makes `E4B_SERVE_ATTN_INT8` default on Mixtral only, citing this read. Nothing changes for any other family.
+A separate PR makes `E4B_SERVE_ATTN_INT8` default on Mixtral only, citing this read. Under Amendment 4 it proceeds only
+on ROUTING_CLEAR. Nothing changes for any other family.
 A NO_FLIP keeps the lever opt-in.
 
 ## Predictions (graded in the read, never ruling)
@@ -179,6 +270,8 @@ A NO_FLIP keeps the lever opt-in.
 - **Q (at decode):** GO at both gates, with upper bounds within 1.5× P147's (0.0023 at W1). Both kernels differ from the
   fake-quant's bf16-stored weights only by the unrounded fp32 scale and the summation order, the less lossy direction.
 - **S:** FLIP, with g1 between 1.04 and 1.08 and g16 between 0.99 and 1.03.
+- **Routing (Amendment 4):** ROUTING_CLEAR, with |ρ| < 0.005: S1 changes few tokens, and Mixtral's B = 16 step reads
+  nearly every expert either way. g16_routing's band from the A2000 pre-read is added here before box Q+S is created.
 
 ## The boxes and the run
 
@@ -208,9 +301,10 @@ A NO_FLIP keeps the lever opt-in.
     time (`BENCH_WALL_S`). A test asserts the fit against the registered guard. Everything else is unchanged.
 - **Box Q+S** (`p149-5090-N`), only after K_GO:
   - disk ≥ 200 GB (the 93.4 GB checkpoint and the venv), declared as `lane_record.min_disk_gb`;
-  - guard **3.0 h**: eight Mixtral loads at about 7 min, Q's decode in S0a and S1a at about 15-20 min, the speed reps,
+  - guard **3.0 h** (**4.5 h** and Amendment 2's rate form, by Amendment 4): eight Mixtral loads at about 7 min, Q's
+    decode in S0a and S1a at about 15-20 min, the speed reps,
     and the fetch;
-  - worst 3.0 h × $0.85 + (93.4 GB checkpoint + 5 GB install) × $0.011/GB = **$3.63**.
+  - worst 3.0 h × $0.85 + (93.4 GB checkpoint + 5 GB install) × $0.011/GB = **$3.63** (**$5.81** by Amendment 4).
 - **Both** are under the standing rule (at most $15 each).
 - **Run ids:** each box has `-1` as its reading and `-2` and `-3` as spares for pre-create refusals and host refusals (17
   and 18, and 15 for an unreadable power limit, are not strikes). Shakedowns are `p149-dry-N` on the lab A2000 ($0, correctness only: the suite compiled, the
