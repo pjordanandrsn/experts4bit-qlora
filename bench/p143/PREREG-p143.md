@@ -370,4 +370,9 @@ The reducer's self-test (31 cases) includes **A2's real first block**, which rea
   - Fallback tier: ≤ $0.85/h only behind the exhausted-loop marker. Worst **$1.41**.
   - A2's receipt puts the run at about 40 minutes: 8 arms at about 1.8 min each, SANE about 6 min, fetch and bake about
     12 min.
+- **Driver** (`p143a3_drive.sh`): A2's by counted edits, on `bench/common/lane_liveness.sh` per the maintainer's
+  00:46Z liveness ruling.
+  - LANE DEAD is two definite misses of the launch PID's `/proc` identity, or a host reboot (with a `host-fault.json`).
+  - It no longer uses A2's self-matching `pgrep`.
+  - `tests/test_lane_liveness.py` runs its real poll loop and launch handshake.
 - **Approval:** the standing rule. Review by planner-incubation or serve-throughput, then the maintainer's final pass.
