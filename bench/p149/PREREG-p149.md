@@ -248,30 +248,32 @@ It gates only the separate default-flip PR that a FLIP starts.
   architecture.
 
 **Box Q+S's guard and rate, re-fitted with these processes (≥ 25% headroom).**
-- Each term is the larger of the registration's estimate and the largest value measured on a Mixtral RTX 5090 box.
-  P145's receipt carries phase stamps (an install of 68 s, a fetch of 174 s, a bake of 43 s, and a speed arm of 158 to
-  162 s, load included); P135's and P141's receipts do not.
+- Each term is the larger of the runner's allowance and the largest value measured on a Mixtral RTX 5090 box. The
+  allowances are the ones the kit's runner checks time left against: P141 and P145 sized Mixtral's fetch at 3,000 s and
+  its bake at 1,500 s, and P143 sized SANE at 900 s. P145's receipt carries phase stamps: an install of 68 s, a fetch of
+  174 s, a bake of 43 s, and a speed arm of 158 to 162 s with its load. P135's and P141's receipts do not.
 - **The terms (s):**
 
   | term | s |
   |---|---|
   | boot | 300 |
-  | install | 450 |
-  | fetch (93.4 GB) | 900 |
-  | bake | 120 |
+  | install, self-tests and the compiled suites | 450 |
+  | fetch (93.4 GB) | 3,000 |
+  | bake | 1,500 |
   | eight S arms, 420 s load + 180 s reps each | 4,800 |
   | Q in S0a and S1a, 1,200 s each | 2,400 |
   | the Q reduce | 120 |
   | T1 and T2, 420 s load + four W16 blocks of 90 s + a 60 s eager replay each | 1,680 |
-  | two SANE processes, if the kit runs them apart as P143 did, 600 s each | 1,200 |
+  | two SANE processes, run apart as P143 ran them, 900 s each | 1,800 |
   | the reserve | 600 |
-  | **total** | **12,570 (3.49 h)** |
+  | **total** | **16,650 (4.63 h)** |
 
-- **The guard is 4.5 h** (16,200 s), headroom 1.29. The registered 3.0 h (10,800 s) fails even without T1 and T2: the
-  other terms sum to 10,890 s, more than the guard itself.
+- **The guard is 6.0 h** (21,600 s), headroom 1.30. The registered 3.0 h (10,800 s) fails even without T1 and T2: the
+  other terms sum to 14,970 s, more than the guard itself.
 - **The rate takes Amendment 2's form:** up to $1.05/h including the disk, with a base offer at ≤ $0.85/h taken first
   whenever one passes. Amendment 2's evidence (no 575 W RTX 5090 listed at ≤ $0.85/h) holds for this box too.
-- **Worst:** 4.5 h × $1.05 + (93.4 + 5) GB × $0.011/GB = **$5.81**, under the standing rule.
+- **Worst:** 6.0 h × $1.05 + (93.4 + 5) GB × $0.011/GB = **$7.38**, under the standing rule. The expected cost is set by
+  the measured terms (about 2 h), not by the guard.
 - The kit's runner refuses before the install when the time left cannot fit the rest of this table with its reserve (rc
   19, A3's form). A test asserts the table against the registered guard.
 - Every phase records its UTC start and end, so the next fit has measured terms: each process's load, Q, each T block,
@@ -324,10 +326,10 @@ A NO_FLIP keeps the lever opt-in.
     time (`BENCH_WALL_S`). A test asserts the fit against the registered guard. Everything else is unchanged.
 - **Box Q+S** (`p149-5090-N`), only after K_GO:
   - disk ≥ 200 GB (the 93.4 GB checkpoint and the venv), declared as `lane_record.min_disk_gb`;
-  - guard **3.0 h** (**4.5 h** and Amendment 2's rate form, by Amendment 4): eight Mixtral loads at about 7 min, Q's
+  - guard **3.0 h** (**6.0 h** and Amendment 2's rate form, by Amendment 4): eight Mixtral loads at about 7 min, Q's
     decode in S0a and S1a at about 15-20 min, the speed reps,
     and the fetch;
-  - worst 3.0 h × $0.85 + (93.4 GB checkpoint + 5 GB install) × $0.011/GB = **$3.63** (**$5.81** by Amendment 4).
+  - worst 3.0 h × $0.85 + (93.4 GB checkpoint + 5 GB install) × $0.011/GB = **$3.63** (**$7.38** by Amendment 4).
 - **Both** are under the standing rule (at most $15 each).
 - **Run ids:** each box has `-1` as its reading and `-2` and `-3` as spares for pre-create refusals and host refusals (17
   and 18, and 15 for an unreadable power limit, are not strikes). Shakedowns are `p149-dry-N` on the lab A2000 ($0, correctness only: the suite compiled, the

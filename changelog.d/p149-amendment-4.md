@@ -6,5 +6,6 @@ recorded tokens and on S1's, in a rotated A B B A / B A A B order. Their ratio, 
 token-pinned self-pairs and reported with both streams' routing from an eager replay: distinct experts, the per-expert
 row histogram and the 16-row tile count. The rule is stated before data. It never moves the verdict; it decides only
 whether a FLIP's default-flip PR proceeds (ROUTING_CLEAR) or waits for a routing-matched read (CONFOUNDED, UNRESOLVED,
-or a noisy check). A USD 0 A2000 router pre-read is added as a prediction. Box Q+S's guard is re-fitted with these
-processes at 25% headroom, 3.0 h to 4.5 h, and its rate takes Amendment 2's form, for a worst of $5.81.
+or a noisy or void check). A USD 0 A2000 router pre-read is added as a prediction. Box Q+S's guard is re-fitted with
+these processes and the runner's own allowances at 25% headroom, 3.0 h to 6.0 h, and its rate takes Amendment 2's form,
+for a worst of $7.38.
