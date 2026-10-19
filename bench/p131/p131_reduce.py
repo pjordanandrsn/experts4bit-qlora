@@ -5,8 +5,11 @@ gate deciding the quality branch: bitwise, or P117's teacher-forced instrument (
 perturbations. Phase B's rule is P117's as P130 ran it (the functions below are P130's, byte for byte in substance).
 
 Input: ``proc_<n>.json`` for every registered process (``p131_box.py``) and ``summary.txt`` (the premise line) in the
-run directory. Every process captures the three arms (``ARMS``: the knob 0, 32 and 64) and times them interleaved;
-process 1 also runs Phase B. ``--prove`` reads the proof's registered sizes.
+run directory. Every process captures the three arms (``ARMS``: the knob 0, 32 and 64) and times them interleaved.
+Amendment 2: process 0 is the WARM-UP -- it runs Phase B and a speed pass whose timing is REPORTED ONLY (never in the span
+guard, the gains, the m32-vs-m64 order or any bar); processes 1..N are the scored speed processes. Every integrity check
+below (the records, engagement, capture order, refusals, the decode check, DETERMINISM and FUNCTION) reads every process,
+0 included. ``--prove`` reads the proof's registered sizes.
 
 **Lane VOID**, any of:
 - a registered process record missing; another e4b or grouped-nf4-gemm commit; another model revision; a process off its
@@ -30,8 +33,8 @@ process 1 also runs Phase B. ``--prove`` reads the proof's registered sizes.
   knob reaches decode. Which table m0 itself takes is ``E4B_INT4_WIDE_TILES``'s choice (on Qwen3-30B, 128 experts x 512
   rows is lane P122's ``auto`` bound, so the one-launch table), not this lane's.
 - **HELD_DETERMINISM:** two processes digest a speed window's m0 replay differently.
-- **NOISY:** the processes' m0 medians span more than ``NOISY_SPAN``.
-- **Speed:** per process ``g = median(m0) / median(arm)``; over the processes, the two-sided 95 % t-interval of the mean
+- **NOISY:** the scored processes' m0 medians span more than ``NOISY_SPAN``.
+- **Speed:** per scored process ``g = median(m0) / median(arm)``; over them, the two-sided 95 % t-interval of the mean
   of ``ln g`` (``T975``). FASTER iff its lower end is at least ``ln(MIN_GAIN)``.
 - **Quality:** FUNCTION reads the arm's replay against m0's on every speed window of every process (logits and every
   layer's staged K and V). **BITWISE** iff ``torch.equal`` everywhere: the arm is the same arithmetic and needs no
@@ -45,7 +48,8 @@ interval of ``ln(median(m32) / median(m64))`` -- m64 iff its lower end is above 
 m32 (the shorter tall tile: the smaller register footprint) when the interval holds 0. ``DEFAULT_NONE`` when neither is.
 
 Reported, never gated: every ratio and interval, the savings in ms, the predictions' HELD/MISSED, the eager medians,
-Phase B's stats for every arm and whether each subject's log-probs were ``torch.equal`` to R's.
+Phase B's stats for every arm and whether each subject's log-probs were ``torch.equal`` to R's, the warm-up's speed
+(``warmup``), and every process's GPU state at the start and end of its speed pass (``gpu_state``, Amendment 2).
 
     python p131_reduce.py --dir RUN_DIR --out verdict.json [--e4b-sha SHA] [--prove] [--gate-corpus SHA]
     python p131_reduce.py --self-test
@@ -64,7 +68,8 @@ GNF4_SHA = "57f53e19fe65eeef4b7ed26f97d7bd8fdd87f0eb"   # grouped-nf4-gemm #542'
 REVS = {"Qwen/Qwen3-30B-A3B": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39"}
 MODES = {"reading": {"procs": 8, "windows": 64, "cont": 128, "prompt": 512, "speed_windows": 16, "rounds": 12, "warm": 2},
          "proof": {"procs": 4, "windows": 16, "cont": 32, "prompt": 512, "speed_windows": 4, "rounds": 3, "warm": 1}}
-PHASE_B = {1: "all"}
+PHASE_B = {0: "all"}                 # Amendment 2: Phase B runs in the warm-up process 0
+WARMUP = 0                           # its speed is reported only; the scored processes are 1..procs
 CAPTURE_FORWARDS = 5                              # enable_prefill_graph: 2 warm-up forwards, the capture, 2 checks
 DECODE_TOKENS = 64                                # 64 x top-8 = 512 routed rows: a 64-row decode step's
 MIN_GAIN, NOISY_SPAN = 1.02, 1.02
@@ -293,12 +298,13 @@ def reduce(run: Path, e4b_sha: str, prove: bool = False, gate_corpus: str | None
     N = size["procs"]
     summ = (run / "summary.txt").read_text() if (run / "summary.txt").is_file() else ""
     out = {"lane": "P131", "mode": mode}
-    recs = {n: json.loads((run / f"proc_{n}.json").read_text()) for n in range(1, N + 1) if (run / f"proc_{n}.json").is_file()}
+    procs = range(WARMUP, N + 1)        # Amendment 2: the warm-up 0, then the scored 1..N
+    recs = {n: json.loads((run / f"proc_{n}.json").read_text()) for n in procs if (run / f"proc_{n}.json").is_file()}
     if "premise ok" not in summ or not recs:
         out.update(verdict="NO_READING", reasons=["premise did not hold" if "premise ok" not in summ else "no process record"])
         return out
     void = []
-    missing = [n for n in range(1, N + 1) if n not in recs]
+    missing = [n for n in procs if n not in recs]
     if missing:
         void.append(f"process records missing: {missing}")
     for n, r in recs.items():
@@ -341,14 +347,16 @@ def reduce(run: Path, e4b_sha: str, prove: bool = False, gate_corpus: str | None
             ka, k0 = gt256(seen[a].get("k19")), gt256(seen["m0"].get("k19"))
             if decode_touched(seen[a].get("k19"), seen["m0"].get("k19")):
                 decode[a].append(f"proc {n}: {a} {ka} against m0 {k0}")
-    timed = {n: r["speed"] for n, r in recs.items() if "m0" in (r["speed"].get("median_ms") or {})}
-    first = timed[min(timed)]["digests_m0"]
-    det_fail = [f"proc {n} differs from proc {min(timed)}" for n in sorted(timed) if timed[n]["digests_m0"] != first]
+    timed_all = {n: r["speed"] for n, r in recs.items() if "m0" in (r["speed"].get("median_ms") or {})}
+    first = timed_all[min(timed_all)]["digests_m0"]
+    det_fail = [f"proc {n} differs from proc {min(timed_all)}" for n in sorted(timed_all)
+                if timed_all[n]["digests_m0"] != first]
+    timed = {n: sp for n, sp in timed_all.items() if n != WARMUP}     # Amendment 2: speed reads the scored processes only
     meds = [sp["median_ms"]["m0"] for sp in timed.values()]
     span = max(meds) / min(meds)
     noisy = [f"m0 medians span x{span:.4f} > x{NOISY_SPAN}"] if span > NOISY_SPAN else []
     out.update(determinism={"differ": det_fail}, span_m0=span, decode_check={"touched": decode})
-    q = (recs.get(1) or {}).get("quality")
+    q = (recs.get(WARMUP) or {}).get("quality")
     qf = quality_faults(q, L, size)
     quality = {"faults": qf}
     if not qf:
@@ -364,7 +372,8 @@ def reduce(run: Path, e4b_sha: str, prove: bool = False, gate_corpus: str | None
     arms, reasons = {}, list(det_fail + noisy + quality["faults"])
     for a in TALL:
         both = {n: sp for n, sp in timed.items() if a in sp["median_ms"]}
-        fn_differ = [f"proc {n} window {d['window']}" for n, sp in sorted(both.items()) for d in sp["function"][a]["differ"]]
+        fn_all = {n: sp for n, sp in timed_all.items() if a in sp["median_ms"]}          # FUNCTION reads the warm-up too
+        fn_differ = [f"proc {n} window {d['window']}" for n, sp in sorted(fn_all.items()) for d in sp["function"][a]["differ"]]
         rec = {"function": "BITWISE" if not fn_differ else "DIFFERS", "function_differ": fn_differ[:16]}
         if both:
             g = {n: sp["median_ms"]["m0"] / sp["median_ms"][a] for n, sp in sorted(both.items())}
@@ -429,6 +438,13 @@ def reduce(run: Path, e4b_sha: str, prove: bool = False, gate_corpus: str | None
         "verdict": {"value": out["verdict"], "held": out["verdict"] == "M32_LICENSED M64_LICENSED DEFAULT_m64"}}
     out["corpus"] = corpus_report(recs, gate_corpus)
     out["eager_median_ms"] = {n: sp.get("eager", {}).get("median_ms") for n, sp in sorted(timed.items())}
+    w = timed_all.get(WARMUP) or {}
+    wm = w.get("median_ms") or {}
+    out["warmup"] = {"proc": WARMUP, "median_ms": wm, "eager_median_ms": (w.get("eager") or {}).get("median_ms"),
+                     "gains_reported": {a: wm["m0"] / wm[a] for a in TALL if wm.get(a) and wm.get("m0")},
+                     "m0_over_scored_median": (wm["m0"] / statistics.median(meds)) if wm.get("m0") and meds else None,
+                     "excluded_from": ["span", "gains", "order", "bars", "predictions"]}
+    out["gpu_state"] = {n: r.get("gpu_state") for n, r in sorted(recs.items())}
     return out
 
 
@@ -495,7 +511,7 @@ def _run_recs(mode="reading", e4b="a" * 40, L=4, m0=33.0, m32=30.9, m64=30.7, d=
     """Synthetic process records: every process at the given medians (with a small per-process jitter)."""
     size = MODES[mode]
     recs = {}
-    for n in range(1, size["procs"] + 1):
+    for n in range(WARMUP, size["procs"] + 1):
         j = 1.0 + 0.0005 * ((n * 7) % 5 - 2)
         r = {"proc": n, "phase_b": PHASE_B.get(n, "none"), "model": "Qwen/Qwen3-30B-A3B",
              "revision": REVS["Qwen/Qwen3-30B-A3B"], "e4b_sha": e4b, "gnf4_sha": GNF4_SHA, "layers": L,
@@ -633,13 +649,13 @@ def self_test() -> int:
     cases.append(("a missing decode check voids", o["verdict"] == "VOID"))
 
     def qsplit(recs):
-        e = recs[1]["quality"]["engagement"]["S64"][0]["seen"]["k19"]
+        e = recs[WARMUP]["quality"]["engagement"]["S64"][0]["seen"]["k19"]
         e["chained|lean|gt256"] = e.pop("split|lean|gt256")
     o = run(differ={"m64": (0,)}, tweak=qsplit)
     cases.append(("S64 passed on the chained table: QUALITY_VOID", o["arms"]["m64"]["verdict"] == "QUALITY_VOID"))
 
     def qerr(recs):
-        recs[1]["quality"] = {"phase": "all", "error": "RuntimeError: boom"}
+        recs[WARMUP]["quality"] = {"phase": "all", "error": "RuntimeError: boom"}
     o = run(tweak=qerr)
     cases.append(("Phase B raised; bitwise arms stand", o["arms"]["m64"]["verdict"] == "LICENSED"
                   and o["quality"]["faults"] == ["Phase B raised: RuntimeError: boom"]))
@@ -653,6 +669,48 @@ def self_test() -> int:
     cases.append(("m64 inside its band; m64-over-m32 MISSED low", o["predictions"]["m64_gain"]["held"]
                   and not o["predictions"]["m64_over_m32"]["held"] and o["default"] == "m32"))
     cases.append(("t-interval", abs(t_interval([0.0, 0.0])[1]) < 1e-12 and t_interval([1.0])[1] == float("-inf")))
+
+    # ---- Amendment 2: the warm-up process 0 (Phase B + a speed pass reported only) and the GPU state
+    base = run()
+
+    def warm_fast(recs):                       # the proof's process-1 effect, now in the warm-up: ~5 % faster everywhere
+        for w in ARMS:
+            recs[WARMUP]["speed"]["median_ms"][w] *= 0.95
+    o = run(tweak=warm_fast)
+    cases.append(("a fast warm-up is reported, never in the span guard", o["verdict"] == base["verdict"]
+                  and o["span_m0"] == base["span_m0"] and o["warmup"]["m0_over_scored_median"] < 0.96))
+
+    def warm_slow64(recs):
+        recs[WARMUP]["speed"]["median_ms"]["m64"] *= 1.10
+    o = run(tweak=warm_slow64)
+    cases.append(("the warm-up never moves the gains or the order", o["arms"]["m64"]["mean"] == base["arms"]["m64"]["mean"]
+                  and o["order"] == base["order"] and o["warmup"]["gains_reported"]["m64"] < 1.0))
+    o = run(tweak=drop(WARMUP))
+    cases.append(("a missing warm-up voids", o["verdict"] == "VOID" and any("[0]" in x for x in o["reasons"])))
+
+    def pre_a2(recs):                          # the pre-amendment layout: Phase B in process 1
+        recs[1]["phase_b"], recs[WARMUP]["phase_b"] = "all", "none"
+        recs[1]["quality"] = recs[WARMUP].pop("quality")
+    o = run(tweak=pre_a2)
+    cases.append(("Phase B in process 1 (the pre-amendment layout) voids", o["verdict"] == "VOID"))
+
+    def warm_fn(recs):
+        recs[WARMUP]["speed"]["function"]["m64"]["differ"] = [{"window": 0, "logits_equal": False, "kv_layers_differ": []}]
+    o = run(tweak=warm_fn)
+    cases.append(("FUNCTION reads the warm-up", o["arms"]["m64"]["function"] == "DIFFERS"
+                  and o["arms"]["m64"]["function_differ"] == ["proc 0 window 0"]))
+
+    def warm_det(recs):
+        recs[WARMUP]["speed"]["digests_m0"][3] = "x"
+    o = run(tweak=warm_det)
+    cases.append(("DETERMINISM reads the warm-up", o["verdict"] == "M32_HELD_DETERMINISM M64_HELD_DETERMINISM DEFAULT_NONE"))
+
+    def gpu(recs):
+        recs[WARMUP]["gpu_state"] = {"speed_start": {"clocks.sm": "2900"}, "speed_end": {"error": "nvidia-smi rc 9"}}
+    o = run(tweak=gpu)
+    cases.append(("the GPU state is reported for every process, never gated", o["verdict"] == base["verdict"]
+                  and sorted(o["gpu_state"]) == list(range(WARMUP, MODES["reading"]["procs"] + 1))
+                  and o["gpu_state"][WARMUP]["speed_start"]["clocks.sm"] == "2900"))
     bad = [name for name, ok in cases if not ok]
     for name, ok in cases:
         print(f"  {'ok ' if ok else 'BAD'} {name}")

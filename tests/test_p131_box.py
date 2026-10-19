@@ -289,3 +289,46 @@ def test_phase_b_scores_every_arm_and_both_subjects_in_one_process(quality, box)
     e = {a: q["engagement"][a][0] for a in want}
     assert e["R"]["graph_stats"]["16"]["eager_steps"] == C - 1 and e["half"]["graph_stats"]["8"]["eager_steps"] == 2 * (C - 1)
     assert e["chunk"]["chunk"] == 4 and all(set(e[a]["seen"]) == {"route", "k19", "folds"} for a in want)
+
+
+# ---- Amendment 2: the GPU state recorded per process (reported only) ------------------------------------------------
+
+def _fake_smi(tmp_path, monkeypatch, body):
+    d = tmp_path / "bin"
+    d.mkdir()
+    f = d / "nvidia-smi"
+    f.write_text("#!/bin/sh\n" + body)
+    f.chmod(0o755)
+    monkeypatch.setenv("PATH", str(d))
+
+
+@pytest.mark.skipif(os.name == "nt", reason="a shell-script nvidia-smi stand-in")
+def test_gpu_state_reads_clocks_power_temperature_and_the_event_reasons(box, tmp_path, monkeypatch):
+    _fake_smi(tmp_path, monkeypatch, 'echo "2850, 14001, 512.30, 63, 0x0000000000000004"\n')
+    g = box.gpu_state()
+    assert {k: g[k] for k in box.GPU_FIELDS} == {"clocks.sm": "2850", "clocks.mem": "14001", "power.draw": "512.30",
+                                                  "temperature.gpu": "63", "clocks_event_reasons.active": "0x0000000000000004"}
+    assert "error" not in g and box._gpu_line(g).startswith("sm 2850 MHz mem 14001 MHz 512.30 W 63 C")
+
+
+@pytest.mark.skipif(os.name == "nt", reason="a shell-script nvidia-smi stand-in")
+def test_gpu_state_drops_the_event_reasons_on_a_driver_that_does_not_know_them(box, tmp_path, monkeypatch):
+    _fake_smi(tmp_path, monkeypatch, 'case "$1" in *clocks_event_reasons*) echo "Field is not a valid field" >&2; exit 2;; esac\n'
+                                     'echo "2850, 14001, 512.30, 63"\n')
+    g = box.gpu_state()
+    assert g["clocks.sm"] == "2850" and "clocks_event_reasons.active" not in g and "error" not in g
+
+
+def test_gpu_state_records_an_unreadable_query_and_never_raises(box, tmp_path, monkeypatch):
+    monkeypatch.setenv("PATH", str(tmp_path))            # no nvidia-smi at all: the CPU CI runner
+    g = box.gpu_state()
+    assert "error" in g and isinstance(g["utc"], float) and box._gpu_line(g).startswith("unread (")
+
+
+def test_speed_samples_the_gpu_after_the_warm_rounds_and_after_the_timed_rounds(box, clean_env, monkeypatch):
+    calls = []
+    monkeypatch.setattr(box, "gpu_state", lambda: calls.append(len(calls) + 1) or {"utc": 0.0, "sample": len(calls)})
+    rec = box.speed(_tiny(), _prompts(), T, "cpu", rounds=2, warm=1, eager_rounds=0, eager_windows=0,
+                    decode_tokens=DEC, runner=_PrefillStandIn(_tiny()), proc=1)
+    assert rec["gpu_after_warm"]["sample"] == 1 and rec["gpu_after_timed"]["sample"] == 2 and calls == [1, 2]
+    assert all(len(v) == 2 * len(_prompts()) for v in rec["replay_ms"].values())     # timing unchanged: rounds x windows
