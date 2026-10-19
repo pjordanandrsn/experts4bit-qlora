@@ -4,7 +4,8 @@
   runs at most 16 splits; the library planned 32 from the block table's capacity.
   - **Read:** P143 Amendment 3 (#1788, `p143a3-5090-1`), the binding served read on an RTX 5090: one request is
     **1.044x** as fast (the smallest of four ABBA pairs, 1.0442-1.0448), and 16 requests are unchanged (0.992).
-    Quality is exact: at contexts <= 1024 the cap is bitwise-identical to the plan.
+    SANE is exact (bias 0.0, argmax 1.0). The cap is bitwise-identical to the plan at contexts <= 1024, and within
+    A2's fp64 contract (error 0.9976-1.0000x the plan's) at 2048 and above.
   - **Earlier read:** Amendment 2's NO_FLIP (#1778, g1 1.0297 under a noisy self-pair) is on the record.
   - **Scope:** only buckets 1, 2 and 4 move. Every other family keeps the library's plan, and Mixtral waits for a
     read of its own.
