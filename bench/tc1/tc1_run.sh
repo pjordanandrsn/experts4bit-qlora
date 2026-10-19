@@ -2584,7 +2584,9 @@ tc1_hpn_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
     local E="HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1"
     TC1_ARM_EXTRA_ENV="$E" arm $FL e4b hpn_e4b_a fused $EAL "$TM" $TR 0 hpncal $TL $TSC --attn-4bit 1 $(hp1_cell k00 3407) --seed 3407 --order-seed 3407 $X
     TC1_ARM_EXTRA_ENV="$E" arm $FL e4b hpn_e4b_b fused $EAL "$TM" $TR 0 hpncal $TL $TSC --attn-4bit 1 $(hp1_cell k00 3407) --seed 3407 --order-seed 3407
-    TC1_ARM_EXTRA_ENV="$E" arm $FL unsloth hpn_uns unsloth $UAL "$TM" $TR 0 hpncal $TL $TSC --grad-ckpt unsloth --unsloth-targets $UT7 \
+    # the local box's Unsloth venv is the cu128 one (UNS_VENV=t28, as TC3's families run it): the cu130 venv needs driver >= 580, and the
+    # A2000 runs 575 (HPN read 1, 21:03Z: the arm refused on that gate)
+    UNS_VENV=${HPN_UNS_VENV:-t28} TC1_ARM_EXTRA_ENV="$E" arm $FL unsloth hpn_uns unsloth $UAL "$TM" $TR 0 hpncal $TL $TSC --grad-ckpt unsloth --unsloth-targets $UT7 \
       --unsloth-moe-backend ${HPN_UNS_BACKEND:-native_torch} --lora-init native --adapter-dtype native --seed 3407 --order-seed 3407 $X
     # only an OOM is the card's limit; any other status is a failed arm, never recorded as a depth that did not fit
     local st a ok=1 failed=""; for a in e4b:hpn_e4b_a e4b:hpn_e4b_b unsloth:hpn_uns; do st=$(status_of $FL ${a%%:*} ${a#*:})
@@ -2626,7 +2628,7 @@ print(' '.join(bad))" $W/hpn/eval_e4b_L${L}_1.json $W/hpn/eval_e4b_L${L}_2.json 
     deep=$L; echo "HPN L$L READ (I x2 + Unsloth I, E x2 + Unsloth E, F x2 on both bases)" | tee -a summary.txt
   done
   echo "HPN deepest depth that fit: ${deep:-none}" | tee -a summary.txt
-  printf '{"framework": "e4b", "free_mib_at_claim": %s, "unsloth_moe_backend": "%s", "depths": [%s]}\n' "${HPN_FREE_MIB:-null}" "${HPN_UNS_BACKEND:-native_torch}" "$json" > $W/hpn_spec.json
+  printf '{"framework": "e4b", "free_mib_at_claim": %s, "unsloth_moe_backend": "%s", "unsloth_venv": "%s", "depths": [%s]}\n' "${HPN_FREE_MIB:-null}" "${HPN_UNS_BACKEND:-native_torch}" "${HPN_UNS_VENV:-t28}" "$json" > $W/hpn_spec.json
   $PY_E4B $W/hpn_reduce.py $W/hpn_spec.json --out $W/hpn/result.json 2>&1 | tee -a summary.txt
   return 0; }
 # the split path, box 2 (qwen3hp1p): REFUSES unless box 1's eval_K.json + select.json are staged beside the runner AND match the pinned

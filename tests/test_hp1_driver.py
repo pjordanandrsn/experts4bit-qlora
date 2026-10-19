@@ -70,7 +70,7 @@ tc1_prepare(){ TOK=$W/tokens.json; TS=deadbeef
 # tc1_arm's own rule (tc1_arm.py, the tokens check): a tokens file labelled for another fam is refused, rc=13 TOKENS_MISMATCH.
 arm(){ local tf; tf=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('fam') or '')" "${10}")
   if [ -n "$tf" ] && [ "$tf" != "$1" ]; then echo "$1 $2 $3" >> "$W/mismatch.log"; return 0; fi
-  echo "$1 $2 $3 ${*:12}" >> "$W/arms.log"; touch "$W/${1}_${2}_${3}.json"
+  echo "$1 $2 $3 ${*:12}" >> "$W/arms.log"; echo "$1 $2 $3 UNS_VENV=${UNS_VENV:-}" >> "$W/venv.log"; touch "$W/${1}_${2}_${3}.json"
   case " ${*:12} " in *" --hp1-export-base 1 "*) local d; d=$(echo " ${*:12} " | sed -n 's/.* --hp1-export \([^ ]*\) .*/\1/p'); [ -n "$d" ] && mkdir -p "$d/base_${2}_${1}";; esac; }
 status_of(){ grep -qx "$1 $2 $3" "$W/mismatch.log" 2>/dev/null && { echo tokens_mismatch; return; }
   [ "${FAIL_FAM:-}" = "$1" ] && { echo "${FAIL_STATUS:-oom}"; return; }
@@ -587,3 +587,12 @@ def test_a_failed_arm_also_removes_the_exports_that_succeeded():
     src = RUN_SH.read_text()
     body = src[src.index("tc1_hpn_family(){"):src.index("tc1_curve_family(){")]
     assert "if [ $ok = 0 ]; then rm -rf $SC $D/base_e4b_$FL $D/base_unsloth_$FL; break; fi" in body
+
+
+def test_hpn_runs_its_unsloth_arm_in_the_cu128_venv_on_the_local_box(tmp_path):
+    """HPN read 1 (21:03Z): without UNS_VENV=t28 the Unsloth arm fell to the cu130 venv and refused on the A2000's driver 575. The e4b
+    arms take no venv prefix; the spec records which Unsloth venv ran."""
+    _, _, _, spec = _hpn(tmp_path, HPN_DEPTHS="2 4")
+    venv = {tuple(ln.split()[:3]): ln.split()[3] for ln in (tmp_path / "venv.log").read_text().splitlines()}
+    assert venv[("qwen3hpnL2", "unsloth", "hpn_uns")] == "UNS_VENV=t28" and venv[("qwen3hpnL4", "unsloth", "hpn_uns")] == "UNS_VENV=t28"
+    assert venv[("qwen3hpnL2", "e4b", "hpn_e4b_a")] == "UNS_VENV=" and spec["unsloth_venv"] == "t28"
