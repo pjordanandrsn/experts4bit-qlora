@@ -188,8 +188,9 @@ def reduce(arms: dict, off: dict | None, on: dict | None, e4b_sha: str) -> dict:
     selfp = {w: {f"{a}/{b}": rates[a][w] / rates[b][w] for a, b in SELF_PAIRS} for w in WORKLOADS}
     cross = {w: {f"{a}/{b}": round(rates[a][w] / rates[b][w], 4) for a, b in (("S0c", "S0a"), ("S1c", "S1a"))}
              for w in WORKLOADS}
-    out["speed"] = {"decode_tok_s": rates, "g1": round(min(pairs["W1"].values()), 4),
-                    "g16": round(min(pairs["W16"].values()), 4),
+    g1_min, g16_min = min(pairs["W1"].values()), min(pairs["W16"].values())   # the rule reads these, unrounded
+    out["speed"] = {"decode_tok_s": rates, "g1": round(g1_min, 4), "g16": round(g16_min, 4),     # rounded: the report's
+                    "g1_unrounded": g1_min, "g16_unrounded": g16_min,
                     "pairs": {w: {k: round(v, 4) for k, v in p.items()} for w, p in pairs.items()},
                     "geomean": {w: round(math.prod(p.values()) ** (1 / len(p)), 4) for w, p in pairs.items()},
                     "self_pairs": {w: {k: round(v, 4) for k, v in p.items()} for w, p in selfp.items()},
@@ -222,17 +223,16 @@ def reduce(arms: dict, off: dict | None, on: dict | None, e4b_sha: str) -> dict:
     sane = {"bias": sum(d) / len(d), "argmax_agree": sum(x["argmax_agree"] for x in onw) / len(onw),
             "mean_kl": sum(x.get("kl", 0.0) for x in onw) / len(onw), "n": len(onw)}
     out["sane"] = {k: (round(v, 6) if isinstance(v, float) else v) for k, v in sane.items()}
-    g1, g16 = out["speed"]["g1"], out["speed"]["g16"]
     if fn:
         out.update(verdict="FUNCTION_FAIL", reasons=fn)
     elif abs(sane["bias"]) > SANE_BIAS or sane["argmax_agree"] < SANE_ARGMAX:
         out.update(verdict="QUALITY_FAIL", reasons=[f"SANE {out['sane']} (gate |bias| <= {SANE_BIAS}, argmax >= {SANE_ARGMAX})"])
-    elif g1 >= FLIP_G1 and g16 >= NOREG_G16:
-        out.update(verdict="FLIP", reasons=[f"g1 {g1} (the min of four pairs) >= {FLIP_G1} and g16 {g16} >= {NOREG_G16}; "
-                                            f"SANE bias {sane['bias']:+.5f}, argmax {sane['argmax_agree']:.4f}"])
+    elif g1_min >= FLIP_G1 and g16_min >= NOREG_G16:
+        out.update(verdict="FLIP", reasons=[f"g1 {g1_min:.6f} (the min of four pairs) >= {FLIP_G1} and g16 {g16_min:.6f} >= "
+                                            f"{NOREG_G16}; SANE bias {sane['bias']:+.5f}, argmax {sane['argmax_agree']:.4f}"])
     else:
-        why = [f"g1 {g1} (the min of four pairs) < {FLIP_G1}"] if g1 < FLIP_G1 else []
-        why += [f"g16 {g16} < {NOREG_G16} (W16's no-regression line)"] if g16 < NOREG_G16 else []
+        why = [f"g1 {g1_min:.6f} (the min of four pairs) < {FLIP_G1}"] if g1_min < FLIP_G1 else []
+        why += [f"g16 {g16_min:.6f} < {NOREG_G16} (W16's no-regression line)"] if g16_min < NOREG_G16 else []
         out.update(verdict="NO_FLIP", reasons=why + ["the cap stays opt-in, permanently for this lever (A3 is binding)"])
     return out
 
@@ -308,6 +308,12 @@ def _cases() -> list:
         ("the first block passing is not enough", v(arms(S1c={"r1": 256.0}, S1d={"r1": 256.0})) == "NO_FLIP"),
         ("exactly 1.03 on every pair flips", v(arms(**{t: {"r1": 257.5} for t in TAGS if t.startswith("S1")})) == "FLIP"),
         ("1.0299 on one pair does not", v(arms(S1a={"r1": 257.475}, S1b={"r1": 257.475})) == "NO_FLIP"),
+        ("the bars read the UNROUNDED min: a pair of 1.02996 (rounds to 1.03) is NO_FLIP",
+         (lambda x: x["verdict"] == "NO_FLIP" and x["speed"]["g1"] == 1.03 and x["speed"]["g1_unrounded"] < 1.03)(
+             r(arms(**{t: {"r1": 250.0 * 1.02996} for t in TAGS if t.startswith("S1")})))),
+        ("a g16 of 0.98996 (rounds to 0.99) is NO_FLIP",
+         (lambda x: x["verdict"] == "NO_FLIP" and x["speed"]["g16"] == 0.99 and any("g16" in y for y in x["reasons"]))(
+             r(arms(**{t: {"r16": 933.0 * 0.98996} for t in TAGS if t.startswith("S1")})))),
         ("g16 0.98 does not flip", (lambda x: x["verdict"] == "NO_FLIP" and any("g16" in y for y in x["reasons"]))(
             r(arms(S1c={"r16": 921.2})))),
         ("a W1 self-pair at 0.9845 (A2's S1b/S1a) is NOISY",

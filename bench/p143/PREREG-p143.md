@@ -325,6 +325,11 @@ The first rung that applies decides. A2's engagement checks are carried verbatim
    A2 and this read.
 6. **NO_FLIP:** otherwise, with each failed bar named. The cap stays opt-in, permanently for this lever.
 
+**The bars read the unrounded minima.** g1 and g16 are compared with 1.03 and 0.99 before any rounding. The rounded
+values (4 places) are for the report only, so a true 1.02995 cannot read as 1.03. This is a correction made before data,
+within A3, on the maintainer's final pass (2026-10-19 01:01Z). A2's reducer rounded before comparing, but its verdict is
+unchanged: its minimum, 256.6/249.2 = 1.029695, is under 1.03 either way.
+
 **Reported, never ruling:**
 - every pair and self-pair ratio, including the cross-block self-pairs S0c/S0a and S1c/S1a;
 - the geomean over the four pairs;
@@ -345,7 +350,7 @@ The first rung that applies decides. A2's engagement checks are carried verbatim
 - the runner: no kernel step, eight arms at five reps, NOISY and VOID not readings;
 - the box and reducer self-tests, run from one directory as on the box;
 - A2's engagement checks carried verbatim into the A3 reducer;
-- **nine reducer mutants, each killed by the self-test:**
+- **ten reducer mutants, each killed by the self-test:**
   - g1 from the best pair;
   - the first block's pairs only;
   - the band widened to [0.98, 1.02];
@@ -353,11 +358,12 @@ The first rung that applies decides. A2's engagement checks are carried verbatim
   - NOISY never read;
   - reps unchecked;
   - the g16 gate dropped;
+  - the bars read on the rounded minima;
   - the old strict S1-vs-S0 identity;
   - the argmax bar dropped;
 - the driver's dry run and its run-id refusal.
 
-The reducer's self-test (31 cases) includes **A2's real first block**, which reads NOISY on its S1b/S1a = 0.9845.
+The reducer's self-test (33 cases) includes **A2's real first block**, which reads NOISY on its S1b/S1a = 0.9845.
 
 ### The box
 

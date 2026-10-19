@@ -88,7 +88,8 @@ def test_a2s_engagement_checks_are_carried_verbatim():
 
 MUTANTS = [
     # g1 from the best pair, not the worst of four
-    ('"g1": round(min(pairs["W1"].values()), 4)', '"g1": round(max(pairs["W1"].values()), 4)'),
+    ('    g1_min, g16_min = min(pairs["W1"].values()), min(pairs["W16"].values())',
+     '    g1_min, g16_min = max(pairs["W1"].values()), min(pairs["W16"].values())'),
     # only the first ABBA block's pairs
     ('PAIRS = (("S1a", "S0a"), ("S1b", "S0b"), ("S1c", "S0c"), ("S1d", "S0d"))', 'PAIRS = (("S1a", "S0a"), ("S1b", "S0b"))'),
     # the NOISY band widened
@@ -100,7 +101,10 @@ MUTANTS = [
     # the five reps never checked
     ('        if r.get("reps") != REPS:', "        if False:"),
     # W16's no-regression line dropped from the flip
-    ("    elif g1 >= FLIP_G1 and g16 >= NOREG_G16:", "    elif g1 >= FLIP_G1:"),
+    ("    elif g1_min >= FLIP_G1 and g16_min >= NOREG_G16:", "    elif g1_min >= FLIP_G1:"),
+    # the bars read the ROUNDED mins (the maintainer's final-pass finding): 1.02996 would round to 1.03 and flip
+    ("    elif g1_min >= FLIP_G1 and g16_min >= NOREG_G16:",
+     "    elif round(g1_min, 4) >= FLIP_G1 and round(g16_min, 4) >= NOREG_G16:"),
     # the old rule: S1 arms held to S0a's tokens (the W16 prefill ramp runs the capped buckets)
     ('        first = "S0a" if t.startswith("S0") else "S1a"', '        first = "S0a"'),
     # the SANE gate's argmax bar dropped
