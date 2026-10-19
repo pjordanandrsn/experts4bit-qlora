@@ -221,7 +221,8 @@ A NO_FLIP keeps the lever opt-in.
     fails is still a strike.
     `-4` is already spent: it was created before this amendment registered it, and the driver refused the unregistered
     id (rc 78) before any box work, at $0.001. That was a launch-side error, not a box read.
-  - **Amendment 3 (2026-10-19), box K:** `p149k-5090-7`, `-8` and `-9` are spares on the same terms as Amendment 1's.
+  - **Amendment 3 (2026-10-19), box K:** `p149k-5090-7`, `-8` and `-9` are spares on the same terms as Amendment 1's: any
+    refusal the runner makes before its first `pip install`, by position, which now includes rc 19.
 - **Strikes:** two box-started HARNESS_ERROR, VOID or NOISY reads, across both boxes, stop the lane for a
   simplification.
 
