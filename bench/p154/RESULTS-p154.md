@@ -65,8 +65,8 @@ recorded removable time for each GEMM line:
 ## What it means for stream (B)
 
 - **The lever is the grouped NF4 small-M GEMM at W16.** It reads its experts' bytes at 42 % of the copy rate, with
-  6.8 ms, 41 % of the 16-request step, between its recorded time and its byte floor. Nothing else in the step is within
-  an order of magnitude of that.
+  6.8 ms, 41 % of the 16-request step, between its recorded time and its byte floor. The next line in the step,
+  `Kernel2` 8x16, takes 1.11 ms in total, about a sixth of this headroom.
 - **The next registration is a lever on that kernel's plan at Qwen3's W16 shapes** (its own registration, with a served
   read). Each layer routes about 2 real rows to each of about 58 experts, so the 16-row tiles carry mostly padding. Whether
   the gap is the tile geometry or something else is that lane's question; this read only prices it.
