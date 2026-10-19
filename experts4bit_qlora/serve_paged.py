@@ -137,12 +137,14 @@ from .engines.scheduler import ContinuousScheduler, Request
 
 DEFAULT_BUCKETS = (1, 2, 4, 8, 16)
 
-# lever flags the lane hook reads; snapshotted into /health so the served stack is legible
+# lever flags the lane hook reads (and P149's E4B_SERVE_ATTN_INT8, serve_paged's own); snapshotted into /health so the
+# served stack is legible
 LEVER_ENV = ("E4B_SERVE_EXP_INT4", "E4B_SERVE_EXP_INT4_CALIB", "E4B_SERVE_ATTN_INT4", "E4B_SERVE_ATTN_INT4_CALIB",
              "E4B_SERVE_LMHEAD_INT4_CALIB", "E4B_SERVE_DENSE_INT4_CALIB", "E4B_CALIB_NSEQ", "E4B_CALIB_SOURCE",
              "E4B_INT4_ARTIFACT_DIR", "E4B_INT4_EXPECTED_FINGERPRINT", "E4B_INT4_DUMP_ARTIFACT_DIR",
              "E4B_INT4_ASSIGNMENT", "E4B_CALIB_LAYERS_PER_PASS", "E4B_INT4_KEEP_NF4",
-             "E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI", "E4B_FUSED_KV_APPEND")
+             "E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI", "E4B_FUSED_KV_APPEND",
+             "E4B_SERVE_ATTN_INT8")
 FUSION_ENV = ("E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")
 FUSE_QKV_ENV = "E4B_PAGED_FUSE_QKV"
 FUSION_KNOBS = (FUSE_QKV_ENV,) + FUSION_ENV
@@ -1283,10 +1285,23 @@ def kv_bookkeeping_report(cfg: PagedServeConfig, engine) -> dict:
 
 def _apply_levers(model, cfg: PagedServeConfig, tok) -> dict:
     """``bench/p42/hook/usercustomize.py::_apply_lanes``, called where the hook calls it (right after
-    ``enable_hybrid_tier``), reading the same environment. A refusal raises, as the hook re-raises."""
+    ``enable_hybrid_tier``), reading the same environment. A refusal raises, as the hook re-raises. Also
+    ``E4B_SERVE_ATTN_INT8`` (lane P149, :mod:`.engines.int8_attn`), which the hook does not read."""
     env = os.environ.get
-    out = {"exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 0}
+    out = {"exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 0,
+           "attn_int8_projections": 0}
     mt = getattr(getattr(model, "config", None), "model_type", "?")
+    # P149: int8 attention stores the projections int4 attention stores and routes the ones E4B_DENSE_GEMV_BW routes;
+    # refused before any lever runs, so a refused build has swapped nothing
+    attn_int8 = (env("E4B_SERVE_ATTN_INT8") or "0").strip()
+    if attn_int8 not in ("0", "1"):
+        raise ValueError(f"E4B_SERVE_ATTN_INT8={attn_int8!r}: 0 or 1")
+    if attn_int8 == "1" and "1" in (env("E4B_SERVE_ATTN_INT4", "0"), env("E4B_SERVE_ATTN_INT4_CALIB", "0")):
+        raise RuntimeError("E4B_SERVE_ATTN_INT8=1 refuses to combine with int4 attention (E4B_SERVE_ATTN_INT4 or "
+                           "E4B_SERVE_ATTN_INT4_CALIB): both store the same projections")
+    if attn_int8 == "1" and getattr(cfg, "dense_gemv_bw", "0") == "1":
+        raise RuntimeError("E4B_SERVE_ATTN_INT8=1 refuses to combine with E4B_DENSE_GEMV_BW=1: both route the "
+                           "attention projections' decode calls")
     if env("E4B_SERVE_EXP_INT4", "0") == "1":
         from huggingface_hub import snapshot_download
         from .engines.int4_experts import enable_serve_experts_int4
@@ -1317,6 +1332,11 @@ def _apply_levers(model, cfg: PagedServeConfig, tok) -> dict:
         n = enable_serve_attn_int4(model)
         log(f"ATTNINT4 rtn: {n} projections (uncalibrated; model_type={mt})")
         out["attn_int4_rtn_projections"] = int(n)
+    if attn_int8 == "1":
+        from .engines.int8_attn import enable_serve_attn_int8
+        n = enable_serve_attn_int8(model)
+        log(f"ATTNINT8: {n} projections on the int8 grid (lane P149; model_type={mt})")
+        out["attn_int8_projections"] = int(n)
     _attn = env("E4B_SERVE_ATTN_INT4_CALIB", "0") == "1"
     _head = env("E4B_SERVE_LMHEAD_INT4_CALIB", "0") == "1"
     _dense = env("E4B_SERVE_DENSE_INT4_CALIB", "0") == "1"
@@ -1331,6 +1351,33 @@ def _apply_levers(model, cfg: PagedServeConfig, tok) -> dict:
             f"{len(batches)} batches of {env('E4B_CALIB_SOURCE', 'c4')}; model_type={mt})")
         out["attn_int4_calib_projections"] = int(n)
     return out
+
+
+def _attn_int8_census(model, levers: dict, fusions: dict, report: dict) -> dict:
+    """P149's census after the fusions: every projection ``E4B_SERVE_ATTN_INT8`` swapped is still an ``Int8Linear``, and
+    on a census family (:data:`.engines.int8_attn.CENSUS`) whose R2 fold resolved on and ran (no kernel skip, no
+    kernel gap), the fold patched every attention module carrying them. The swap keeps the ``{q,k,v,o}_proj`` names so
+    that ``glue_r2._patch_attention_rope_only`` still matches; a miss raises, as the arms would then differ in more
+    than the projections."""
+    n = int(levers.get("attn_int8_projections", 0))
+    if not n:
+        return {"projections": 0}
+    from .engines.int8_attn import CENSUS, Int8Linear
+    have = sum(1 for m in model.modules() if isinstance(m, Int8Linear))
+    if have != n:
+        raise RuntimeError(f"E4B_SERVE_ATTN_INT8=1 swapped {n} projections; {have} are Int8Linear after the fusions")
+    attns = sum(1 for m in model.modules()
+                if type(m).__name__.endswith("Attention") and any(isinstance(c, Int8Linear) for c in m.children()))
+    r2 = fusions.get("fuse_t1_glue_r2_n")
+    r2_attns = int(r2[1]) if isinstance(r2, list) and len(r2) == 2 else None
+    mode = (report.get("modes") or {}).get("E4B_FUSE_T1_GLUE_R2")
+    note = (report.get("folds") or {}).get("E4B_FUSE_T1_GLUE_R2") or {}
+    ran = mode not in (None, "0") and not note.get("skipped") and not note.get("kernel_gaps")
+    model_type = getattr(getattr(model, "config", None), "model_type", None)
+    if model_type in CENSUS and ran and r2_attns != attns:
+        raise RuntimeError(f"E4B_SERVE_ATTN_INT8=1 on {model_type}: R2's rope fold patched {r2_attns} attention modules, "
+                           f"not the {attns} carrying int8 projections")
+    return {"projections": n, "attention_modules": attns, "r2_mode": mode, "r2_rope_fold_attentions": r2_attns}
 
 
 def _count(v):
@@ -1606,6 +1653,8 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     register(model)
     fusion_report: dict = {}
     fusions = _apply_fusions(model, cfg, report=fusion_report)
+    # P149: the int8 projections survived the fusions and R2's rope fold still patches their modules, before capture
+    attn_int8 = _attn_int8_census(model, levers, fusions, fusion_report)
     # P151: the dense single-row GEMV (grouped-nf4-gemm K35) on the attention projections, after fuse_qkv built the
     # fused projection and before any decode graph is captured (a captured graph keeps the route it was captured with).
     # The exact-type checks above (int4 attention, LoRA) ran before this swap; it replaces only exact nn.Linear
@@ -1680,6 +1729,10 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     info["dense_gemv_bw"] = {**dense_gemv, "engagement": dense_gemv_engagement(model)}
     # P153: the head's record and, per row count, whether it routed or passed during the build's captures and warm-ups
     info["int8_head_bw"] = {**int8_head, "engagement": int8_head_engagement(model)}
+    # P149: the int8 attention census and, per row count, which projections routed through K37's kernels or
+    # dequantized during the build's captures and warm-ups (Python counts calls, never a replay): what Q reads
+    from .engines.int8_attn import engagement as int8_attn_engagement
+    info["attn_int8"] = {**attn_int8, "engagement": int8_attn_engagement(model)}
     # The build churns through host buffers it frees (the hybrid tier's setup tier, the stacks' one-shot reads), and
     # glibc keeps freed blocks under its mmap threshold resident for the life of the server: 0.34 GB on OLMoE-1B-7B
     # (RTX A2000 host, the one place it was measured). The loader alone leaves ~4 MB.

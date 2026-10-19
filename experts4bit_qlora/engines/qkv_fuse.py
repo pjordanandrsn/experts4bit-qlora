@@ -117,6 +117,11 @@ def fuse_qkv(model, *, fold_modes: dict | None = None, fold_reports: dict | None
                 "Qwen3MoeAttention's own apply_rotary_pos_emb is not rotate-half, which the fused forward "
                 "applies: transformers layout drifted; refusing to fuse")
         parts = (mod.q_proj, mod.k_proj, mod.v_proj)
+        if any(type(p).__name__ == "Int8Linear" for p in parts):
+            raise RuntimeError(
+                "q/k/v projections are Int8Linear (E4B_SERVE_ATTN_INT8=1): fusing int8 rows is not built (lane "
+                "P149 reads Mixtral, whose attention fuse_qkv leaves alone); set E4B_PAGED_FUSE_QKV=0 or unset the "
+                "lever")
         if any(p.bias is not None for p in parts):
             raise RuntimeError("biased q/k/v projections: the fused "
                                "split-view layout assumes bias=None "
