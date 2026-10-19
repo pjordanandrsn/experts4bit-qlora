@@ -266,3 +266,34 @@ on all seven keys across arms. The rule as registered refuses both arms' real re
 calls at or below 256 rows read `one_launch|lean|le256` on both arms (the knob governs rows above 256), and FLIPS does
 not read them. The synthetic departures now start from these records: `tests/test_sc2f_real_records.py` (28 passed).
 The rule as registered fails 6 of the 28.
+
+### Amendment 2 (registered 2026-10-19, before any SC2f run): the host bar and how a host is pinned
+
+**Why.** Under the registered selection, two watcher windows found no rentable host:
+- envelope v2, 2026-10-17 to 10-18;
+- envelope v4, 2026-10-18 08:27Z to 23:55Z: 5,327 machine-filtered reads over 15.4 h.
+
+The receipt bar then was clean runs ≥ 3, every recorded power limit 575 W, no host failure and no capped block. Four of
+the five machines that met it were never listed in v4. The fifth, machine 26157, listed one offer (54055665) that
+refused every create with `no_such_ask`: `sc2f-prove-1` to `-4`, $0, nothing created.
+
+**The change: host selection and the launch mechanism only** (maintainer ruling, 2026-10-18 23:57Z).
+- **Bar.**
+  - Clean runs ≥ 2 (was ≥ 3). The measurement-quality terms stay: every recorded power limit 575 W, no host failure, no
+    capped block.
+  - Machines 13828 (clock-bound) and 37367 (a 400 W cap in its clocks) stay excluded. So does 26157, until a create
+    there succeeds.
+  - Clean runs are reliability evidence. Lowering the bar raises the chance of a host-fault VOID; it does not bias the
+    reading, because the on/off pair runs on one host.
+- **Pinning.** As every lane does under the program's market rule:
+  - one pin post names up to three bar machines, each present and passing in 6/6 machine-filtered reads;
+  - the create walks them in order on `no_such_ask`;
+  - spending stays within the standing rule (worst ≤ $15). The proof's worst is $1.07 at ≤ $0.85/h.
+  - This replaces "Pinned in the ACK" under **Host** above, and the rental gate's ACK. There is no per-run ACK and no
+    watcher envelope. Machine 58411 stays preferred when it is offered and meets the bar.
+- **Run ids.** `sc2f-prove-11` onward. `-1` to `-4` are v4's refused attempts; `-5` to `-10` stay unused.
+
+**Unchanged:**
+- the science: the arms, both knobs, the ladder, the knee block, the statistics, the predictions, the outcomes and FLIPS
+  (Amendment 1);
+- the running of it: the box, the proof and its 1.0 h guard, the reading's guard and budget, and the $0 shakedown.
