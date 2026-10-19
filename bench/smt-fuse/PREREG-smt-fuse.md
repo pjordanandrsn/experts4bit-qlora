@@ -82,9 +82,8 @@ server-class SMT host.
 **Why.** `smt-fuse-2` (receipt store `1307dedc`, re-derived by the maintainer) read every HIGH/16 range across 1, and
 the pool stays at torch's default. But its host had 128 physical cores under a 30.72-CPU quota, and nothing pinned the
 threads, so the 31-thread arm could run one thread per physical core. It measured **the pool under a quota, not the
-second hardware thread**, and must not be cited either way on that question (the maintainer, bus 03:48Z). The project
-owner asked that the real question be pursued ("Keep pushing!", common room 04:49Z). This amendment asks it. It is still
-a **timing premise, never a ruling**.
+second hardware thread**, and must not be cited either way on that question (the maintainer's re-derivation says so).
+The narrow answer is kept; this amendment asks the real question. It is still a **timing premise, never a ruling**.
 
 **What changes.** Nothing in the registered `smt-fuse-*` reading or in `smt_fuse_box.py`. A new box module,
 `smt_sib_box.py`, runs the **same block** (`smt_fuse_box.one_rep`, unchanged) in three pinned arms:
