@@ -66,7 +66,7 @@ def s0_picks(rr_path):
 
 def n_real_table(s0, layers):
     """[step][layer] distinct experts across the 16 rows (one tile each: no expert gets more than 16 rows)."""
-    return [[len(set(s0[l, :, s, :].reshape(-1).tolist())) for l in range(layers)] for s in range(R.STEPS)]
+    return [[len(set(s0[li, :, s, :].reshape(-1).tolist())) for li in range(layers)] for s in range(R.STEPS)]
 
 
 def main(a):
@@ -119,14 +119,14 @@ def main(a):
     full, compact, faults = {}, {}, []
     for s in need:
         full[s], compact[s] = [], []
-        for l in range(L):
-            ids = s0[l, :, s, :].reshape(-1).to(torch.long).to(dev)
+        for li in range(L):
+            ids = s0[li, :, s, :].reshape(-1).to(torch.long).to(dev)
             row0, rows, grp, order, _counts, _sids = build_group_tiles_fused(ids, R.E, 16, lean=True, sorted_ids=True)
             full[s].append((row0, rows, grp, order))
             rv = rows.tolist()
             n = sum(1 for v in rv if v > 0)
-            if n != rec["n_real"][s][l] or any(v <= 0 for v in rv[:n]) or any(v != 0 for v in rv[n:]):
-                faults.append({"step": s, "layer": l, "real": n, "distinct": rec["n_real"][s][l],
+            if n != rec["n_real"][s][li] or any(v <= 0 for v in rv[:n]) or any(v != 0 for v in rv[n:]):
+                faults.append({"step": s, "layer": li, "real": n, "distinct": rec["n_real"][s][li],
                                "fault": "the real tiles are not a prefix of one tile per expert"})
             compact[s].append((row0[:n], rows[:n], grp[:n], order))
     torch.cuda.synchronize()
@@ -134,15 +134,15 @@ def main(a):
     rec["tiles_budget"] = int(full[need[0]][0][0].numel())
     walls["tiles_s"] = round(time.time() - t, 1)
 
-    def gu(l, tab, plan):                        # the served gate_up call: token rows, gathered through order
+    def gu(li, tab, plan):                        # the served gate_up call: token rows, gathered through order
         row0, rows, grp, order = tab
-        p, am = W[l]["gu"]
-        return k25(X[l], p, am, row0, rows, grp, order, gather_div=R.TOPK, lut="tree", dot_bf16=False, **plan)
+        p, am = W[li]["gu"]
+        return k25(X[li], p, am, row0, rows, grp, order, gather_div=R.TOPK, lut="tree", dot_bf16=False, **plan)
 
-    def dn(l, tab, plan):                        # the served down call: sorted rows in, stored to the caller's order
+    def dn(li, tab, plan):                        # the served down call: sorted rows in, stored to the caller's order
         row0, rows, grp, order = tab
-        p, am = W[l]["dn"]
-        return k25(H[l], p, am, row0, rows, grp, None, scatter=order, lut="tree", dot_bf16=False, **plan)
+        p, am = W[li]["dn"]
+        return k25(H[li], p, am, row0, rows, grp, None, scatter=order, lut="tree", dot_bf16=False, **plan)
 
     call = {"gu": gu, "dn": dn}
 
@@ -171,7 +171,7 @@ def main(a):
         return e0.elapsed_time(e1)
 
     def proj_replays(proj, plan, s):
-        gr, outs = capture(lambda: [call[proj](l, full[s][l], plan) for l in range(L)])
+        gr, outs = capture(lambda: [call[proj](li, full[s][li], plan) for li in range(L)])
         xs = [replay_ms(gr) for _ in range(R.ITERS)]
         del gr, outs
         return xs
@@ -179,7 +179,7 @@ def main(a):
     # ---- IDENTITY and SELECTION, plan by plan in the registered shuffled order; today's plan also opens and closes
     # each projection's sweep (the drift probe, reported)
     t = time.time()
-    ref = {p: [call[p](l, full[R.IDENTITY_STEP][l], R.TODAY) for l in range(L)] for p in ("gu", "dn")}
+    ref = {p: [call[p](li, full[R.IDENTITY_STEP][li], R.TODAY) for li in range(L)] for p in ("gu", "dn")}
     torch.cuda.synchronize()
     sel, drift = {"gu": [], "dn": []}, {}
     try:
@@ -190,10 +190,10 @@ def main(a):
                 row = {"plan": dict(plan), "identical": None, "error": None, "step_replays_ms": None}
                 try:
                     tc = time.time()
-                    outs = [call[proj](l, full[R.IDENTITY_STEP][l], plan) for l in range(L)]
+                    outs = [call[proj](li, full[R.IDENTITY_STEP][li], plan) for li in range(L)]
                     torch.cuda.synchronize()
                     row["first_call_s"] = round(time.time() - tc, 2)
-                    diff = [l for l in range(L) if not torch.equal(outs[l], ref[proj][l])]
+                    diff = [li for li in range(L) if not torch.equal(outs[li], ref[proj][li])]
                     row["identical"] = not diff
                     if diff:
                         d = (outs[diff[0]].float() - ref[proj][diff[0]].float()).abs()
@@ -237,8 +237,8 @@ def main(a):
         for arm in rot:
             pg, pd, cmp_ = plans[arm]
             tabs = compact[s] if cmp_ else full[s]
-            graphs[arm] = capture(lambda tabs=tabs, pg=pg, pd=pd: [(gu(l, tabs[l], pg), dn(l, tabs[l], pd))
-                                                                   for l in range(L)])
+            graphs[arm] = capture(lambda tabs=tabs, pg=pg, pd=pd: [(gu(li, tabs[li], pg), dn(li, tabs[li], pd))
+                                                                   for li in range(L)])
         rp = {arm: [] for arm in rot}
         for _ in range(R.ITERS):
             for arm in rot:

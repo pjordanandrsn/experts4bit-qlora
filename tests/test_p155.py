@@ -87,8 +87,8 @@ def test_s0s_picks_pass_every_check_stated_before_data():
     flat = [v for row in nreal for v in row]
     assert sum(flat) == red.S0_DISTINCT_TOTAL == 350868                     # P153's record
     assert round(sum(flat) / len(flat), 3) == 57.107 and min(flat) == 40 and max(flat) == 82
-    rows_per_expert = max(int(torch.bincount(s0[l, :, s, :].reshape(-1).long(), minlength=128).max())
-                          for l in range(48) for s in range(128))
+    rows_per_expert = max(int(torch.bincount(s0[li, :, s, :].reshape(-1).long(), minlength=128).max())
+                          for li in range(48) for s in range(128))
     assert rows_per_expert <= 16, "an expert past 16 rows would take two tiles"
     for figure in ("350,868", "57.107", "40 to 82", "3020dbce"):
         assert figure in PREREG, figure
@@ -131,8 +131,8 @@ def test_the_bench_calls_k25_as_the_served_route():
            "                            gather_div=_tok[1], **_k25_kw)" in LIB
     assert 'kw = {"scatter": order} if (_lean and pk is dn_p) else {}' in LIB
     assert "_fused_tiles(\n                local_ids, _n_exp, 16, lean=True, sorted_ids=True)" in LIB
-    assert "k25(X[l], p, am, row0, rows, grp, order, gather_div=R.TOPK, lut=\"tree\", dot_bf16=False, **plan)" in BENCH
-    assert "k25(H[l], p, am, row0, rows, grp, None, scatter=order, lut=\"tree\", dot_bf16=False, **plan)" in BENCH
+    assert "k25(X[li], p, am, row0, rows, grp, order, gather_div=R.TOPK, lut=\"tree\", dot_bf16=False, **plan)" in BENCH
+    assert "k25(H[li], p, am, row0, rows, grp, None, scatter=order, lut=\"tree\", dot_bf16=False, **plan)" in BENCH
     assert "build_group_tiles_fused(ids, R.E, 16, lean=True, sorted_ids=True)" in BENCH
     assert "hr._lean_glue_supported(int4_b32.build_group_tiles_fused, nf4_smallm.gemm_nf4_grouped_smallm)" in RUN
 
