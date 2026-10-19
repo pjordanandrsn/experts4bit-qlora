@@ -1,7 +1,7 @@
 # HPN (DESIGN, $0): where HP2's per-row noise comes from
 
-**Status: DESIGN, $0.** This is the work-well task `heldout-parity-noise-source`. The maintainer accepted it as a $0 A2000 design and
-ruled that no P-number registration is needed. This note does a registration's job instead: it, with N0–N3 and the stop rules,
+**Status: DESIGN, $0.** A $0 diagnostic design on the lab's A2000, accepted by the maintainer, who ruled that no P-number
+registration is needed. This note does a registration's job instead: it, with N0–N3 and the stop rules,
 merges before the first GPU second. It makes **no parity claim**. It authorizes no rental. Its numbers are diagnostic: they decide
 whether any paired held-out-parity instrument can read a 0.005 margin, and they are never scored data.
 
@@ -53,25 +53,34 @@ across rows.
 **Stages.**
 1. **e4b only.** One e4b K00 calibration step per depth (as HP2's phase B, on the truncated model), its base exported, then E and F.
    This needs no new install: the e4b stack is the box's (torch 2.8.0+cu128).
-1b. **The base term (serve-throughput's review note), part of stage 1.** δ0 = (base term) − (in-loop term). The in-loop term,
+1b. **The base term (from review), part of stage 1.** δ0 = (base term) − (in-loop term). The in-loop term,
    mean I_e4b − mean I_uns, does not depend on the evaluator: on HP2's rows it is +0.001921. So δ0 can reach 0 only if the
    reference's base term reads about +0.0019, where E read −0.00077. That is a 0.0027 swing from removing bf16 rounding alone.
    HP2's 48-layer bases stayed on its box (only their hashes came back), so this is read at the fitted depths. Unsloth exports its
    own base from one step per depth (no confirmation training), and E and F then read both bases. Reported per depth: the base
    term under E and under F, and its shift E → F, with the same depth extrapolation (labelled).
-   **The threshold, fixed before data.** At each fitted depth, δ0_F(L) = (F's base term) − (the in-loop term), both at depth L.
-   Stage 2 is possible only if |δ0_F| ≤ 0.0025 (half the 0.005 margin floor, the most δ0 can carry at SE = 0) at **both** of the
-   two deciding depths. Otherwise the outcome is **MOOT**: stage 2 cannot lift G1, so stop, with the answer in at $0. The same
-   reading is reported for E (δ0_E), so the record shows how far removing bf16 rounding moved δ0.
-   (The maintainer's ruling says E against F on Unsloth's exported base needs only the evaluator. That holds once the base exists;
-   HP2's do not, so a one-step Unsloth arm per depth makes them, in a venv-unsloth-t28 under TC1_LOCAL_BOX.)
+   **The threshold, fixed before data: scale-free.** At each fitted depth L, δ0_E(L) and δ0_F(L) are (that reader's base term) −
+   (the in-loop term), both at depth L. An absolute 48-layer bound read at L4 or L8 could pass vacuously if δ0 is small at shallow
+   depth, so the bound is a ratio. At 48 layers the goal is |δ0_F| ≤ 0.0025 (half the 0.005 margin floor, the most δ0 can carry
+   at SE = 0), against HP2's |δ0_E| = 0.002691. That is a ratio of 0.0025 / 0.002691 = **0.93**. So at **each** of the two
+   deciding depths, stage 2 is possible only if |δ0_F(L)| / |δ0_E(L)| ≤ 0.93. Otherwise the outcome is **MOOT**: stage 2 cannot
+   lift G1, so stop, with the answer in at $0.
+   - **The guard against dividing by noise.** If |δ0_E(L)| < 2 × SE_δ0_E(L) at a deciding depth, that depth reads
+     **INDETERMINATE** for 1b, not a pass. Here SE_δ0_E(L) = sd_r(d_E(L)) / √R and d_E(r) = g_e4b(r) − g_uns(r) under E: the same
+     2 SE that G1 uses. (The two-reruns spread is the wrong yardstick here: N0 predicts it to be about zero.) An INDETERMINATE at
+     either deciding depth stops the read too, with the reason recorded.
+   - **Reported at every fitted depth:** |δ0_E(L)| and |δ0_F(L)|, their SEs, the ratio, and the paired SE of the shift
+     δ0_F(L) − δ0_E(L). A reader can then see whether the bound could have bitten. The labelled extrapolation is reporting-only;
+     no extrapolated number enters the call.
+   - Reading E against F on Unsloth's base needs only the evaluator once the base exists. HP2's do not, so a one-step Unsloth arm
+     per depth makes them, in a venv-unsloth-t28 under TC1_LOCAL_BOX.
 2. **Unsloth, only if stage 1 shows that E − F carries most of the spread.** It repeats stage 1 for Unsloth 2026.9.14 in a fresh
    venv, then recomputes δ0 with F in place of E, and reports **m_need with F, both terms** (|δ0_F| and 2 × SE_F). If I − F
    dominates, stage 2 is skipped: the in-loop side is the limit, and the answer is already in.
 3. **Optional.** e4b round trips at L2 over 3 seeds (20 steps). This re-measures the spread of a sound round trip at 48 rows, the
    basis HP2 borrowed for `ROUNDTRIP_MATCH = 0.01` from AXO1767's 8-row control.
 
-**The mean term (R1, serve-throughput's review).** m_need = 2(|δ0| + 2 × SE) ≥ 2|δ0|. HP2's δ0 = −0.002691 alone gives
+**The mean term (R1, from review).** m_need = 2(|δ0| + 2 × SE) ≥ 2|δ0|. HP2's δ0 = −0.002691 alone gives
 m_need ≥ 0.0054 > 0.005, even at SE = 0. So a lower-noise reference lifts G1 only if it **also moves δ0**, not just its spread.
 If the two exported bases were the same NF4 bytes, E would cancel row by row in δ0 (δ0 = mean_r[I_uns(r) − I_e4b(r)]), and no
 evaluator could move it. HP2's two bases read different zero-adapter means on the 300 rows (e4b 1.943777, Unsloth 1.944547), so
@@ -81,7 +90,7 @@ they are not the same bytes, and E cancels only in part. Stage 1 therefore reads
 
 - **N0.** E and F repeat to five decimals per row (deterministic eager forwards). I repeats per row at a fixed seed. Each reader's
   per-row value is then fixed per (path, row), and still spread across rows. That spread is what limits δ0's SE. It is the mirror
-  image of tc-campaign's finding that step-0 deltas are an offset.
+  image of the observation that step-0 deltas are a fixed per-path offset.
 
 - **N1.** sd_r(g) grows with depth, and at L2 it is well below 0.03 (rounding accumulates through the layers).
 - **N2.** E − F and I − F are of comparable size at every depth. Both forwards are bf16, so neither side dominates. If that holds,
@@ -101,7 +110,7 @@ they are not the same bytes, and E cancels only in part. Stage 1 therefore reads
 - **the depth floor (the maintainer's ruling):** the decision needs the deepest fitted depth ≥ L8, so at minimum the two deciding
   depths are L4 and L8. If only L2 and L4 fit, the outcome is INSUFFICIENT_DEPTH: wait for the sidecar to unload, retry, and
   record that.
-- **the outcome:** MOOT (1b) is read first, and a MOOT stops the read whatever the side call says. Otherwise, E-dominant at the
+- **the outcome:** 1b is read first. A MOOT or an INDETERMINATE stops the read whatever the side call says. Otherwise, E-dominant at the
   two deepest fitted depths leads to stage 2. I-dominant or comparable at both leads to a stop:
   "no lower-noise reference within reach". A call that differs between the two deepest depths leads to a stop: "depth-dependent,
   unknown at 48 layers".
@@ -111,7 +120,7 @@ in-loop-dominant leads to a stop with the reason recorded.
 
 ## Cost and controls
 
-$0: the seat A2000 under an exclusive `gpu:a2000` claim, about 2 h for stage 1. No rental. The code is a diagnostic script,
+$0: the lab's A2000 under an exclusive claim on the card, about 2 h for stage 1. No rental. The code is a diagnostic script,
 `bench/hpn/hpn_read.py`, reusing `hp1_eval.py` and `hp1_lib.py`, with an fp32 switch and tests. It comes as its own PR, reviewed
 before the read. The receipt goes into this directory as the HP records do. A result is reported as a decomposition, never as a
 statement about either framework's quality.
