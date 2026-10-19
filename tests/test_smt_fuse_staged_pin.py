@@ -116,19 +116,20 @@ def test_the_design_is_the_registered_design():
 def test_amendment_1_the_sibling_probe_is_the_registered_design():
     out = subprocess.run([sys.executable, str(LANE / "smt_sib_box.py"), "--self-test"], capture_output=True, text=True,
                          env={**os.environ, "PYTHONPATH": ""})
-    assert out.returncode == 0 and "smt_sib_box self-test OK (6/6 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "smt_sib_box self-test OK (7/7 cases)" in out.stdout, out.stdout + out.stderr
     assert 'ORDER = ("PHYS", "SIB", "WIDE", "WIDE", "SIB", "PHYS")' in SIB and "CYCLES = 4" in SIB
-    assert "K_MAX, MIN_K = 16, 8" in SIB and "QUOTA_PER_K = 2.5" in SIB and 'READ = ("fuse_s", "block_s")' in SIB
+    assert "K_MAX, MIN_K = 16, 8" in SIB and "QUOTA_PER_K = 2.5" in SIB and 'READ = ("fuse_s",)' in SIB and 'REPORTED = ("block_s",)' in SIB
+    assert "REPEATS = 5" in SIB
     assert "THROTTLE_FLAG = 0.05" in SIB and "COMPANION_FLAG = 0.25" in SIB and "MIN_TRIPLES = 6" in SIB
     # pinned before torch is imported, in a fresh process per rep, around the registered block unchanged
     child = SIB[SIB.index("def child(a):"):SIB.index("def flagged(r):")]
     assert child.index("os.sched_setaffinity(0, cpus)") < child.index("import smt_fuse_box as B")
     pre = SIB[:SIB.index("def run(a):")].splitlines()                       # --plan and the child's pin stay torch-free
     assert not [x for x in pre if x.strip() in ("import torch", "import smt_fuse_box as B")][1:]
-    assert child.count("B.one_rep(a.pool, a.slab, a.experts)") == 2
+    assert child.count("B.one_rep(a.pool, a.slab, a.experts)") == 2 and "for _ in range(REPEATS)" in child
     assert 'return 0 if res["summary"]["bytes_identical"] else 3' in SIB
     assert 'case "$SMT_FUSE_RUN_ID" in smt-sib-*) MODE=sib;; *) MODE=fuse;; esac' in RUN
     assert "--exclude '/venv*'" in DRIVE and "--exclude='./venv*'" in DRIVE          # the box venv never comes back
     for s in ("Amendment 1", "SIB/PHYS", "fresh process", "before torch is", "K = min(16, floor(quota / 2.5))",
-              "PHYS, SIB, WIDE, WIDE, SIB, PHYS", "8 triples", "25 %", "VOID_BY_HOST", "never a ruling", "Worst $0.64"):
+              "PHYS, SIB, WIDE, WIDE, SIB, PHYS", "8 triples", "25 %", "VOID_BY_HOST", "5 times timed", "about 35 %", "never a ruling", "Worst $0.64"):
         assert s in PREREG, s

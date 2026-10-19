@@ -9,13 +9,15 @@ were created with). The three CPU sets come from the host's own sibling topology
   PHYS  K physical cores, one hardware thread each                pool K
   SIB   the SAME K cores, both hardware threads                   pool 2K
   WIDE  2K physical cores, one hardware thread each               pool 2K
-SIB/PHYS is what the second hardware thread adds on the same cores and caches (the reading). SIB/WIDE is what it is
+SIB/PHYS on the FUSE is what the second hardware thread adds on the same cores and caches (the reading; the block is
+reported, since offload dominates it). SIB/WIDE is what it is
 worth against a real core; WIDE also spans more cache, so that ratio is reported, never read.
 K = min(16, floor(quota / 2.5)): the 2K-thread arms run at no more than 80 % of the quota, so the cgroup does not bind
 before the cores do; the cgroup's throttling is recorded per rep, as smt-fuse-2 recorded it.
 
 Each rep's process runs smt_fuse_box.one_rep -- the registered block, unchanged -- once untimed (allocator, CUDA context,
-bnb kernels) and once timed. Around the timed rep it reads /proc/stat for the arm's CPUs and for the COMPANION threads
+bnb kernels), then REPEATS = 5 times timed; the rep is their per-segment median (the maintainer's pass: one timed block
+per process could not resolve the effect at smt-fuse-2's spread). Around the timed rep it reads /proc/stat for the arm's CPUs and for the COMPANION threads
 (the siblings of the arm's cores that the arm does not use): a co-tenant busy on a PHYS arm's companions turns that arm
 into a shared-core arm, so the rep is flagged.
 
@@ -40,7 +42,9 @@ CYCLES = 4                                              # 24 reps, 8 triples
 K_MAX, MIN_K = 16, 8                                    # under 8 cores the arms are too small to read (refused, $0)
 QUOTA_PER_K = 2.5                                       # 2K threads at <= 80 % of the quota
 SEGMENTS = ("read_s", "fuse_s", "h2d_s", "quant_s", "offload_s", "total_s", "block_s", "residual_s")
-READ = ("fuse_s", "block_s")                            # the op the pool runs, and what the loader pays
+READ = ("fuse_s",)                                      # the op the pool drives: the reading (the maintainer's pass)
+REPORTED = ("block_s",)                                 # what the loader pays: offload dominates it, so reported only
+REPEATS = 5                                             # timed one_reps per process; the rep is their median
 THROTTLE_FLAG = 0.05                                    # smt-fuse-2's flag, unchanged
 COMPANION_FLAG = 0.25                                   # a PHYS/WIDE rep whose companions are > 25 % busy is flagged
 MIN_TRIPLES = 6                                         # fewer readable triples than this: VOID_BY_HOST
@@ -112,8 +116,24 @@ def busy_share(s0, s1, cpus):
     return db / dt if dt > 0 else None
 
 
+def median_of(recs):
+    """One rep from REPEATS timed blocks in one process: each segment's median; the worst throttling; the bytes only if
+    every block agrees (else MISMATCH, which fails bytes_identical); the raw blocks kept beside it."""
+    rec = {k: statistics.median(r[k] for r in recs) for k in SEGMENTS if k in recs[0]}
+    rec["throttled_period_share"] = max((r.get("throttled_period_share") or 0.0) for r in recs)
+    rec["throttled_cpu_s"] = sum((r.get("throttled_cpu_s") or 0.0) for r in recs)
+    for h in ("fused_sha256", "nf4_sha256"):
+        vals = {r[h] for r in recs}
+        rec[h] = vals.pop() if len(vals) == 1 else "MISMATCH"
+    for k in ("pool", "torch_pool", "load_avg_1m"):
+        if k in recs[0]:
+            rec[k] = recs[0][k]
+    rec["repeats"] = [{k: r[k] for k in (*SEGMENTS, "throttled_period_share") if k in r} for r in recs]
+    return rec
+
+
 def child(a):
-    """One rep in its own process: pin first, then import torch and run the registered block twice."""
+    """One rep in its own process: pin first, then import torch; the registered block once untimed, then REPEATS times."""
     cpus = [int(x) for x in a.cpus.split(",")]
     os.sched_setaffinity(0, cpus)
     sys.path.insert(0, HERE)
@@ -122,7 +142,7 @@ def child(a):
     B.one_rep(a.pool, a.slab, a.experts)                                   # untimed: allocator, context, kernels
     comp = [int(x) for x in a.companions.split(",") if x]
     s0 = proc_stat()
-    rec = B.one_rep(a.pool, a.slab, a.experts)
+    rec = median_of([B.one_rep(a.pool, a.slab, a.experts) for _ in range(REPEATS)])
     s1 = proc_stat()
     rec.update(arm=a.rep, cpus=len(cpus), affinity_seen=len(os.sched_getaffinity(0)),
                arm_busy=busy_share(s0, s1, cpus), companion_busy=busy_share(s0, s1, comp) if comp else None)
@@ -165,6 +185,7 @@ def summarize(res):
                      "reading": "below_1" if max(v) < 1 else "above_1" if min(v) > 1 else "includes_1"} if v else None)
     out["void_by_host"] = len(readable) < MIN_TRIPLES
     out["reading"] = None if out["void_by_host"] else {k: out[f"sib_over_phys_{k[:-2]}"]["reading"] for k in READ}
+    out["reported"] = None if out["void_by_host"] else {k: out[f"sib_over_phys_{k[:-2]}"]["reading"] for k in REPORTED}
     out["bytes_identical"] = (len({r["fused_sha256"] for r in reps}) == 1 and len({r["nf4_sha256"] for r in reps}) == 1)
     return out
 
@@ -274,7 +295,8 @@ def self_test():
     s = summarize({"reps": trip * 4, "experts": 128, "k": 12})
     assert len(s["triples"]) == 8 and s["flagged_triples"] == 0 and s["void_by_host"] is False
     assert abs(s["sib_over_phys_fuse"]["median"] - 0.85) < 1e-12 and s["sib_over_phys_fuse"]["reading"] == "below_1"
-    assert s["sib_over_wide_fuse"]["reading"] == "above_1" and s["reading"] == {"fuse_s": "below_1", "block_s": "below_1"}
+    assert s["sib_over_wide_fuse"]["reading"] == "above_1" and s["reading"] == {"fuse_s": "below_1"}
+    assert s["reported"] == {"block_s": "below_1"}
     assert s["per_arm"]["SIB"]["n"] == 8 and s["per_arm"]["PHYS"]["block_s_per_layer"] == 4.0
     assert summarize({"reps": trip * 4, "experts": 32, "k": 12})["per_arm"]["PHYS"]["block_s_per_layer"] == 16.0
     mixed = [r("PHYS", 1.0, 4.0), r("SIB", 1.1, 4.1), r("WIDE", 0.6, 3.6)] + trip[3:]
@@ -288,9 +310,18 @@ def self_test():
     n += 1
     assert summarize({"reps": trip * 4, "experts": 128})["bytes_identical"] is True
     assert summarize({"reps": trip * 3 + trip[:5] + [r("PHYS", 1.0, 4.0, q="c")], "experts": 128})["bytes_identical"] is False
-    assert ORDER == ("PHYS", "SIB", "WIDE", "WIDE", "SIB", "PHYS") and CYCLES == 4 and READ == ("fuse_s", "block_s")
+    assert ORDER == ("PHYS", "SIB", "WIDE", "WIDE", "SIB", "PHYS") and CYCLES == 4 and READ == ("fuse_s",)
+    assert REPORTED == ("block_s",) and REPEATS == 5
     n += 1
-    print(f"smt_sib_box self-test OK ({n}/6 cases)")
+    blocks = [dict(r("PHYS", f, 4.0 + f), throttled_period_share=t, throttled_cpu_s=0.1, pool=12)
+              for f, t in ((0.5, 0.0), (0.3, 0.02), (0.9, 0.0), (0.4, 0.07), (0.35, 0.0))]
+    m = median_of(blocks)
+    assert m["fuse_s"] == 0.4 and m["block_s"] == 4.4 and m["throttled_period_share"] == 0.07   # medians; worst throttle
+    assert abs(m["throttled_cpu_s"] - 0.5) < 1e-12 and m["pool"] == 12 and len(m["repeats"]) == 5
+    assert m["fused_sha256"] == "a" and m["nf4_sha256"] == "b" and flagged(dict(m, arm="SIB"))
+    assert median_of(blocks[:4] + [dict(blocks[4], nf4_sha256="z")])["nf4_sha256"] == "MISMATCH"
+    n += 1
+    print(f"smt_sib_box self-test OK ({n}/7 cases)")
     return 0
 
 
