@@ -42,9 +42,9 @@ server-class SMT host.
 - **Pins:** e4b `E4B_PIN=6c5c27435c0e9c2f3d78e05ab102fd579434a7a1`, grouped-nf4-gemm 0.46.0
   `GNF4_SHA=6b7c2e7474d20c8843814dd46dad6cfc3d94b440`, torch 2.8.0+cu128 (the image's), bitsandbytes 0.50.2.
 - **Phase cap, declared on the box** (`lane_record.phase_caps.probe = {"on_box": ...}`): min(time left − 600 s,
-  1.5 × the sum of the 16 planned reps' walls, each from its own pool's warm rep on this box), checked between reps. The
-  per-pool sizing is the dry run's correction: a cap from the 16-thread warm rep alone tripped on the slower 32-thread reps,
-  which are what this measures.
+  max(600 s, 1.5 × the sum of the 16 planned reps' walls, each from its own pool's warm rep on this box)), checked between
+  reps. Both are the dry runs' corrections: a cap from the 16-thread warm rep alone tripped on the slower 32-thread reps,
+  which are what this measures, and a pure 1.5 × cap on a sub-second slab tripped on a busy host's noise.
 - **Run ids:** `smt-fuse-1` is the reading. `smt-fuse-2` and `smt-fuse-3` are spares for pre-create refusals, listings gone
   before the create, and NOT_RUN at the pre-flight. `smt-fuse-dry-<n>` are the $0 dry runs: correctness only, on 8
   experts, never a reading.

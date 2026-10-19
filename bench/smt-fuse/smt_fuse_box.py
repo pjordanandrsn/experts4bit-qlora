@@ -30,6 +30,7 @@ POOLS = (16, 32, 32, 16)
 CYCLES = 4
 E_FULL, INTER, HIDDEN = 128, 1536, 4096
 SEED = 0
+CAP_FLOOR_S = 600                 # the cap never drops below this: a short warm rep on a busy host is noisy
 
 
 def lscpu():
@@ -98,8 +99,8 @@ def one_rep(pool, gate, up, down):
 
 def phase_cap(warm_by_pool, plan, time_left_s):
     """The probe's on-box cap (lane_record.phase_caps.probe): 1.5 x the planned reps' walls, each taken from its own
-    pool's warm rep on this box, never beyond the time the box has left."""
-    return min(time_left_s, 1.5 * sum(warm_by_pool[pool] for pool in plan))
+    pool's warm rep on this box, at least CAP_FLOOR_S, never beyond the time the box has left."""
+    return min(time_left_s, max(CAP_FLOOR_S, 1.5 * sum(warm_by_pool[pool] for pool in plan)))
 
 
 def summarize(res):
@@ -180,8 +181,9 @@ def self_test():
     assert POOLS == (16, 32, 32, 16) and CYCLES >= 3 and (E_FULL, INTER, HIDDEN) == (128, 1536, 4096)
     n += 1
     plan = [pool for _ in range(CYCLES) for pool in POOLS]
-    assert phase_cap({16: 1.0, 32: 3.0}, plan, float("inf")) == 1.5 * CYCLES * (2 * 1.0 + 2 * 3.0)
-    assert phase_cap({16: 1.0, 32: 3.0}, plan, 10.0) == 10.0
+    assert phase_cap({16: 50.0, 32: 100.0}, plan, float("inf")) == 1.5 * CYCLES * (2 * 50.0 + 2 * 100.0)
+    assert phase_cap({16: 0.2, 32: 0.1}, plan, float("inf")) == CAP_FLOOR_S          # the floor on a tiny slab
+    assert phase_cap({16: 10.0, 32: 30.0}, plan, 100.0) == 100.0                       # never beyond the time left
     n += 1
     print(f"smt_fuse_box self-test OK ({n}/6 cases)")
     return 0

@@ -93,6 +93,7 @@ def test_the_design_is_the_registered_design():
     assert "E_FULL, INTER, HIDDEN = 128, 1536, 4096" in BOX
     assert "fuse_experts(gate, up, down)" in BOX and 'quant_type="nf4"' in BOX and "torch.set_num_threads(pool)" in BOX
     assert 'return 0 if res["summary"]["bytes_identical"] else 3' in BOX                 # the pool must be speed-only
-    assert "return min(time_left_s, 1.5 * sum(warm_by_pool[pool] for pool in plan))" in BOX   # the on-box phase cap
+    assert "return min(time_left_s, max(CAP_FLOOR_S, 1.5 * sum(warm_by_pool[pool] for pool in plan)))" in BOX
+    assert "CAP_FLOOR_S = 600" in BOX                                                      # the on-box phase cap
     for s in ("16, 32, 32, 16", "4 cycles", "8 back-to-back", "range", "on_box", "never a ruling", "Worst $0.64"):
         assert s in PREREG, s
