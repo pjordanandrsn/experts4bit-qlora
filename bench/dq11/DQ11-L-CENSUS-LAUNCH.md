@@ -221,7 +221,7 @@ capacity or shipping claim follows this census.
 
 ## Manifest layout under the strict launcher (2026-10-18)
 
-The launcher refuses any top-level manifest key it does not read (adertha-agents#243). So the census's own record sits
+The launcher refuses any top-level manifest key it does not read. So the census's own record sits
 in `lane_record`, which the launcher copies verbatim into `receipt.configuration.lane_record`:
 - the template's `status`;
 - the `l_census` closure;
