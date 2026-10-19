@@ -61,9 +61,10 @@ POLL=${P151_POLL_S:-60}; W=/root/p151
 HF_TOKEN_FILE=${HF_TOKEN_FILE:-$HOME/.config/hf/token}
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
 PASS="P151_RUN_ID=$RUN_ID P151_RUN_NONCE=$NONCE P151_DEADLINE_EPOCH=$DEADLINE P151_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA"
-# Explicit IDs only: the reading (-1) and two pre-create spares (-2, -3).
+# Explicit IDs only: the reading (-1), two pre-create spares (-2, -3) and, by Amendment 1, three spares for refusals
+# before the install only (-4..-6).
 case "$RUN_ID" in
-  p151-5090-1|p151-5090-2|p151-5090-3) :;;
+  p151-5090-1|p151-5090-2|p151-5090-3|p151-5090-4|p151-5090-5|p151-5090-6) :;;
   *) say "refusing unregistered run ID: $RUN_ID (is not p151-5090-N)"; exit 78;;
 esac
 if [ "${P151_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash p151_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p151"; exit 0; fi

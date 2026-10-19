@@ -1,7 +1,7 @@
 # bench/p151/staged-p151.sha256 -- every piece the P151 box runs, by the name the box sees (bench/p151/PREREG-p151.md).
 # Every piece shared with P143 Amendment 3's kit at A3's pins (bench/p143/staged-p143a3.sha256); test_dense_gemv.py is
 # grouped-nf4-gemm's kernel/test_dense_gemv.py at K35's merge (9b824155), byte for byte.
-fcc04e61c725754f70cdeac680f7c06ed3c2daabf1281b7b9e0111a24dedfbd8  p151_run.sh
+6da025446e37ae57f7df9b97f76a9c156a142ddb7ac8269ce42c49691c7e3dd5  p151_run.sh
 5e73c3278dfa9e2182ae8bfd0adb2e7f30f4d37c40db00eb1f4afc4f1bdc0a29  p151_box.py
 15f1e7f33ec8c575fc9907502401610aadaa3e9b66b5471cc56b49d88cf2a2cf  p151_reduce.py
 f1500a26404284fbb14cce214c548d73b3889e9db5ef1faf5ef63bf74449b574  p115_quality.py
