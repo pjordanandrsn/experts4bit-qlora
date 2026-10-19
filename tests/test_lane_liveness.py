@@ -12,7 +12,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / "bench/common/lane_liveness.sh"
 DRIVERS = [ROOT / f"bench/{folder}/{script}_drive.sh" for folder, script in
-           [("tc1", "tc1"), ("p127", "p127"), ("fam", "fam"), ("locality-1469", "locality"), ("sc1", "sc1")]]
+           [("tc1", "tc1"), ("p127", "p127"), ("fam", "fam"), ("locality-1469", "locality"), ("sc1", "sc1"),
+            ("p137", "p137"), ("p144", "p144"), ("p146", "p146")]]
 BOOT_A, BOOT_B = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 INITIAL = f"1 123 {BOOT_A} 10000.00"
 
@@ -153,6 +154,7 @@ def test_actual_driver_poll_loop(driver, sequence, expected, polls, tmp_path):
 source "{HELPER}"
 LANE_HELPER="{HELPER}"; LANE_PID=4242; LANE_INITIAL="{INITIAL}"; LANE_STARTED_AT=0
 DEADLINE=999999; POLL=0; STALL_S=900; TC1_MIN_PROGRESS_MB=16; P127_MIN_PROGRESS_MB=16; FAM_MIN_PROGRESS_MB=16; LOC_MIN_PROGRESS_MB=16; SC1_MIN_PROGRESS_MB=16
+P137_MIN_PROGRESS_MB=16; P144_MIN_PROGRESS_MB=16; P146_MIN_PROGRESS_MB=16
 W=/fake; NONCE=nonce; RUN_DIR=/unused; E4B_RENT_RUN_DIR="{run_dir}"
 say(){{ printf '%s\\n' "$*"; }}
 date(){{ echo 4000; }}
@@ -172,6 +174,7 @@ fake_ssh(){{
   esac
 }}
 SSH=fake_ssh
+box(){{ $SSH "$1"; }}   # the P137-family drivers reach the box through box(), one command plus stdin
 '''
     result = subprocess.run(["bash", "-uc", prelude + funcs + loop + '\nprintf "END:%s\\n" "$LANE_DEAD"'],
                             capture_output=True, text=True, timeout=5)
@@ -211,7 +214,8 @@ def test_actual_launch_handshake_captures_linux_child_identity(driver, tmp_path)
     end = text.index('\nsay "lane identity:', start)
     launch = text[start:end]
     runner = driver.name.replace('_drive.sh', '_run.sh')
-    prefix = {'tc1': 'TC1', 'p127': 'P127', 'fam': 'FAM', 'locality-1469': 'LOC', 'sc1': 'SC1'}[driver.parent.name]
+    prefix = {'tc1': 'TC1', 'p127': 'P127', 'fam': 'FAM', 'locality-1469': 'LOC', 'sc1': 'SC1',
+              'p137': 'P137', 'p144': 'P144', 'p146': 'P146'}[driver.parent.name]
     (tmp_path / runner).write_text(f'#!/bin/bash\nprintf nonce > {prefix}_RUN_NONCE\nsleep 2\n')
     (tmp_path / 'guard.sh').write_text(f'#!/bin/bash\nexec bash {runner}\n')
     setup = f'''source "{HELPER}"
@@ -219,6 +223,7 @@ LANE_HELPER="{HELPER}"; W="{tmp_path}"; PASS=""; NONCE=nonce; RUNNER=guard.sh
 say(){{ echo "$*"; }}
 local_ssh(){{ "$@"; }}
 SSH=local_ssh
+box(){{ bash -c "$1"; }}
 '''
     # No rental, SSH network, or driver staging; only this temp runner is launched.
     result = subprocess.run(['bash', '-uc', setup + launch + '\nprintf "PID:%s SNAP:%s\\n" "$LANE_PID" "$LANE_INITIAL"'],
@@ -283,3 +288,48 @@ def test_tc1_drive_names_its_refusal_in_the_run_dir(tmp_path):
     assert r.returncode == 78, (r.returncode, r.stdout, r.stderr)
     line = (tmp_path / "command-error.txt").read_text().strip()
     assert line.startswith("rc=78; drive: refusing: E4B_RENT_SSH_HOST is not set"), line
+
+
+# Legacy drivers that still decide LANE DEAD from `pgrep -f '<runner>' | wc -l` run inside the ssh command string. That
+# command line contains the pattern, so pgrep counts its own shell and a dead lane reads "live" until the deadline. They
+# are frozen as registered: none is to be launched again without first moving to bench/common/lane_liveness.sh (and out
+# of this list). The list may only shrink -- a NEW driver that makes a lane-death decision is held to the rule below.
+LEGACY_PGREP_DRIVERS = frozenset([
+    "b771/b771", "b771b/b771b", "g4census/g4census", "gpu-contract/gc", "i8dense/i8", "k22/k22", "k24/k24",
+    "k26/k26", "k27/k27", "k28/k28", "k29/k29", "k33/k33", "k34/k34", "p47/p47", "p54/p54", "p55/p55", "p55x/p55x",
+    "p57/p57", "p58/p58", "p59/p59", "p60/p60", "p63/p63", "p64/p64", "p65/p65", "p66/p66", "p68/p68", "p70/p70",
+    "p80/p80", "p81/p81", "p82/p82", "p83/p83", "p84/p84", "p85/p85", "p86/p86", "p87/p87", "p88/p88", "p89/p89",
+    "p90/p90", "p91/p91", "p92/p92", "p93/p93", "p94/p94", "p95/p95", "p96/p96", "p97/p97", "p98/p98", "p99/p99",
+    "p100/p100", "p102/p102", "p103/p103", "p104/p104", "p105/p105", "p106/p106", "p107/p107", "p108/p108",
+    "p109/p109", "p110/p110", "p111/p111", "p112/p112", "p113/p113", "p114/p114", "p115/p115", "p115/p115c",
+    "p115/p115d", "p116/p116", "p117/p117", "p118/p118", "p119/p119", "p120/p120", "p121/p121", "p122/p122",
+    "p123/p123", "p124/p124", "p125/p125", "p126/p126", "p133/p133", "p134/p134", "p136/p136", "p140/p140",
+    "p141/p141", "p143/p143", "p143/p143a2", "p145/p145", "pername/pername", "tp4/tp4",
+])
+
+
+def _lane_death_drivers():
+    return sorted(p for p in ROOT.glob("bench/*/*_drive.sh") if "LANE DEAD" in p.read_text())
+
+
+def _uses_launch_identity(text):
+    return ('LANE_HELPER="$REPO/bench/common/lane_liveness.sh"' in text and 'source "$LANE_HELPER"' in text
+            and "lane_snapshot_verdict" in text and "--probe $LANE_PID" in text and "pgrep -f" not in text)
+
+
+def test_every_lane_death_decision_uses_the_launch_identity_not_pgrep():
+    """Case from 2026-10-18: P137/P144/P146 read 'live' from a pgrep that matched its own ssh command line, so a dead lane
+    waited out its whole deadline. Any driver that can declare LANE DEAD must source the shared helper and decide from
+    the launch PID's identity probe; only the frozen legacy drivers above are exempt."""
+    drivers = _lane_death_drivers()
+    assert len(drivers) > len(LEGACY_PGREP_DRIVERS)  # the glob found the bench tree
+    names = {f"{p.parent.name}/{p.name.removesuffix('_drive.sh')}" for p in drivers}
+    assert LEGACY_PGREP_DRIVERS <= names, sorted(LEGACY_PGREP_DRIVERS - names)  # no stale entries
+    offenders = [n for p, n in ((p, f"{p.parent.name}/{p.name.removesuffix('_drive.sh')}") for p in drivers)
+                 if n not in LEGACY_PGREP_DRIVERS and not _uses_launch_identity(p.read_text())]
+    assert not offenders, f"lane drivers deciding LANE DEAD without lane_liveness.sh: {offenders}"
+    migrated = [n for p, n in ((p, f"{p.parent.name}/{p.name.removesuffix('_drive.sh')}") for p in drivers)
+                if n in LEGACY_PGREP_DRIVERS and _uses_launch_identity(p.read_text())]
+    assert not migrated, f"migrated drivers still on the legacy list (remove them): {migrated}"
+    for driver in DRIVERS:  # every driver whose poll loop is exercised above is held to the rule too
+        assert _uses_launch_identity(driver.read_text()), driver
