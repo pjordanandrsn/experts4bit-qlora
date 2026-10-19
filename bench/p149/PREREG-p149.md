@@ -202,7 +202,9 @@ A NO_FLIP keeps the lever opt-in.
   and 18, and 15 for an unreadable power limit, are not strikes). Shakedowns are `p149-dry-N` on the lab A2000 ($0, correctness only: the suite compiled, the
   lever's census and engagement counters on a Mixtral slice, and Q's windows and shas).
   - **Amendment 1 (2026-10-19), box K:** `p149k-5090-4`, `-5` and `-6` are spares for refusals BEFORE THE INSTALL only:
-    a host floor (rc 17 or 15), a pre-create refusal, or `no_such_ask`. A box that starts and fails is still a strike.
+    any of the runner's refusals ahead of its first `pip install` (rc 18, 10, 15, 13, 16, 17 or 28, in its order), a
+    pre-create refusal, or `no_such_ask`. Which of those count as strikes is unchanged; a box that reaches the install and
+    fails is still a strike.
     `-4` is already spent: it was created before this amendment registered it, and the driver refused the unregistered
     id (rc 78) before any box work, at $0.001. That was a launch-side error, not a box read.
 - **Strikes:** two box-started HARNESS_ERROR, VOID or NOISY reads, across both boxes, stop the lane for a
