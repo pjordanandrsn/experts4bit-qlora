@@ -63,8 +63,9 @@ across rows.
    (the in-loop term), both at depth L. An absolute 48-layer bound read at L4 or L8 could pass vacuously if δ0 is small at shallow
    depth, so the bound is a ratio. At 48 layers the goal is |δ0_F| ≤ 0.0025 (half the 0.005 margin floor, the most δ0 can carry
    at SE = 0), against HP2's |δ0_E| = 0.002691. That is a ratio of 0.0025 / 0.002691 = **0.93**. So at **each** of the two
-   deciding depths, stage 2 is possible only if |δ0_F(L)| / |δ0_E(L)| ≤ 0.93. Otherwise the outcome is **MOOT**: stage 2 cannot
-   lift G1, so stop, with the answer in at $0.
+   deciding depths, stage 2 is possible only if |δ0_F(L)| / |δ0_E(L)| ≤ 0.93 **and** the shift E → F is measurable (below). A ratio
+   above 0.93 makes the outcome **MOOT**: stage 2 cannot lift G1, so stop, with the answer in at $0. A ratio ≤ 0.93 without a
+   measurable shift reads INDETERMINATE.
    - **The guard against dividing by noise.** If |δ0_E(L)| < 2 × SE_δ0_E(L) at a deciding depth, that depth reads
      **INDETERMINATE** for 1b, not a pass. Here SE_δ0_E(L) = sd_r(d_E(L)) / √R and d_E(r) = g_e4b(r) − g_uns(r) under E: the same
      2 SE that G1 uses. (The two-reruns spread is the wrong yardstick here: N0 predicts it to be about zero.) An INDETERMINATE at
