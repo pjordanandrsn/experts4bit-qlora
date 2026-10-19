@@ -1,8 +1,8 @@
 # `p153-5090-1`: the served read (FLIP)
 
 One RTX 5090 (cc 12.0, 170 SMs, driver 615.71.09, a **575 W** power limit, enforced 575 W) on an AMD Ryzen 7 9800X3D
-host (16 CPUs, 91 GiB RAM): Vast instance 56745420 on machine 147099, 2026-10-19T15:00:37Z to 15:23:19Z. Cost $0.445,
-at the registered fallback tier ($0.7915/h including 170 GB, quoted at the pin).
+host (16 CPUs, 91 GiB RAM), 2026-10-19T15:00:37Z to 15:23:19Z. Cost $0.445, at the registered fallback tier ($0.7915/h
+including 170 GB, quoted at the pin).
 - **Code:** e4b `585cf68b` (the registration's merge, #1826), grouped-nf4-gemm `929a6906` (K36's merge).
 - **Stack:** torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0, bitsandbytes 0.50.2; Qwen/Qwen3-30B-A3B @ `ad44e777`.
 
@@ -31,6 +31,8 @@ eight arms and both SANE phases completed with rc 0.
 - **Memory at load:** S1's `memory_allocated` is 311,772,672 bytes above S0's, exactly the int8 codes plus their fp32
   scales. Its `memory_reserved` is 400 MiB above (nvidia-smi 24487 vs 24087 MiB).
 
-The launcher's receipt and ledger row are in the private receipt store. `SHA256SUMS` covers every file here. Thirteen
-logs carry carriage returns from the box's progress output; they stay only in that store, byte-exact, and
-`STORE-ONLY.sha256` lists them.
+The launcher's receipt and ledger row are in the private receipt store, and the teardown is proven there. `SHA256SUMS`
+covers every file here. Two kinds of file stay only in that store, byte-exact, and `STORE-ONLY.sha256` lists them by
+their path within the run's receipt:
+- thirteen logs that carry carriage returns from the box's progress output;
+- the launcher's teardown proof, which names the provider's instance.

@@ -1,16 +1,18 @@
-# Kept only in the private receipt store, byte-exact: these 13 logs carry carriage returns from the box's progress
-# output, and receipts are never rewritten, so they are not committed here.
-# sha256, then the file's path in the store.
-d7121e9f4d20feecedf7755fd161459fcca49a3c9fe8d33ce7f018ec1a81f316  receipts/experts4bit-qlora/2026-10-19/p153-5090-1/p153/logs/arm_S0a.log
-8ddb2e6236135e2a1e785fb7ea10d9ff279b1f32dc73cef30aca400794cb70a8  receipts/experts4bit-qlora/2026-10-19/p153-5090-1/p153/logs/arm_S0b.log
-7d5f8f6e8590cb954e7672e5f7ac1c7f56ef31a86255e3de484791957d518750  receipts/experts4bit-qlora/2026-10-19/p153-5090-1/p153/logs/arm_S0c.log
-34af3677537fac1d31443d6199409451711f9a7e4462d3079e6ce49a94458916  receipts/experts4bit-qlora/2026-10-19/p153-5090-1/p153/logs/arm_S0d.log
-eb8d6d7c16e7815a3030412536a707479e574044de86972bc901b5ccf7b696f7  receipts/experts4bit-qlora/2026-10-19/p153-5090-1/p153/logs/arm_S0w.log
-d424cbd8f61934464580de497f7356395dd6974f06c8c4cbfb0344ded0ccc014  receipts/experts4bit-qlora/2026-10-19/p153-5090-1/p153/logs/arm_S1a.log
-4b7fa4272f1c2991343952af220c6e62e7b97406f69bd51e3af6cf12e3cdf636  receipts/experts4bit-qlora/2026-10-19/p153-5090-1/p153/logs/arm_S1b.log
-45b36fc15bf5c1b726f49f0b6efe758e57b0facce5298608d8e7740f382556ce  receipts/experts4bit-qlora/2026-10-19/p153-5090-1/p153/logs/arm_S1c.log
-a4b751bbdc64cf1e5df90a1176965c49af812b1896f966b6d034526a9fffd075  receipts/experts4bit-qlora/2026-10-19/p153-5090-1/p153/logs/arm_S1d.log
-79df5ce43f434e1fa5f9ea5dfb2c20029740dd582d18c2bc1bebd4e475ba0c38  receipts/experts4bit-qlora/2026-10-19/p153-5090-1/p153/logs/fetch.log
-ed176e559c890376da531b5031ea707020f709d4f596f5d191f7354127815936  receipts/experts4bit-qlora/2026-10-19/p153-5090-1/p153/logs/prompts.log
-2248e484382ce493a3be9202f93042fcae92cd75cc129e38a331abc0f9389f7f  receipts/experts4bit-qlora/2026-10-19/p153-5090-1/p153/logs/sane_off.log
-4b95d5bebbd2d234caf9b9440a81e14e65fd5eb44e1ede85827e7bb7b5bc5577  receipts/experts4bit-qlora/2026-10-19/p153-5090-1/p153/logs/sane_on.log
+# p153-5090-1: files kept only in the private receipt store, byte-exact. Thirteen logs carry carriage returns from the
+# box's progress output, and the launcher's teardown proof names the provider's instance; receipts are never rewritten,
+# so they are not committed here.
+# sha256, then the file's path within this run's receipt.
+d7121e9f4d20feecedf7755fd161459fcca49a3c9fe8d33ce7f018ec1a81f316  p153/logs/arm_S0a.log
+8ddb2e6236135e2a1e785fb7ea10d9ff279b1f32dc73cef30aca400794cb70a8  p153/logs/arm_S0b.log
+7d5f8f6e8590cb954e7672e5f7ac1c7f56ef31a86255e3de484791957d518750  p153/logs/arm_S0c.log
+34af3677537fac1d31443d6199409451711f9a7e4462d3079e6ce49a94458916  p153/logs/arm_S0d.log
+eb8d6d7c16e7815a3030412536a707479e574044de86972bc901b5ccf7b696f7  p153/logs/arm_S0w.log
+d424cbd8f61934464580de497f7356395dd6974f06c8c4cbfb0344ded0ccc014  p153/logs/arm_S1a.log
+4b7fa4272f1c2991343952af220c6e62e7b97406f69bd51e3af6cf12e3cdf636  p153/logs/arm_S1b.log
+45b36fc15bf5c1b726f49f0b6efe758e57b0facce5298608d8e7740f382556ce  p153/logs/arm_S1c.log
+a4b751bbdc64cf1e5df90a1176965c49af812b1896f966b6d034526a9fffd075  p153/logs/arm_S1d.log
+79df5ce43f434e1fa5f9ea5dfb2c20029740dd582d18c2bc1bebd4e475ba0c38  p153/logs/fetch.log
+ed176e559c890376da531b5031ea707020f709d4f596f5d191f7354127815936  p153/logs/prompts.log
+2248e484382ce493a3be9202f93042fcae92cd75cc129e38a331abc0f9389f7f  p153/logs/sane_off.log
+4b95d5bebbd2d234caf9b9440a81e14e65fd5eb44e1ede85827e7bb7b5bc5577  p153/logs/sane_on.log
+4d52fe2b9bd22d46988c5ff8accebae9af2345ae7be2697911fac9c1259786f9  teardown-proof.json
