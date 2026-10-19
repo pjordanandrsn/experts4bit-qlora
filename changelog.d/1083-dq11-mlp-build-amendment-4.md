@@ -3,12 +3,20 @@
 `bench/dq11/DQ11-MLP-BUILD-AMENDMENT-4.md` registers the maintainer's ruling on Phase 1's `PHASE1_FAIL`
 (`dq11-mlp-phase1-a2000-1`), before any new data:
 - **(a) The floor leaves out its candidate.** Every draw containing R2, the fused epilogue's own arithmetic, leaves the
-  floor, as does any redraw that mechanically lands on the fused read.
-- **(b) An FP64 accuracy judge decides.** It uses dequantized NF4 weights and no intermediate rounding. The fused path
-  must be no less accurate than the least accurate neutral unfused ordering, and dx is read on this bar. Where (a)
-  disagrees, the outcome names `ACCURACY_OVER_REORDER`.
-- **(c) KNOB_OFF gets a null first.** It compares two identical runs of today's path. If they differ, the check moves to
-  DQ11's deterministic configuration C; if they differ there too, it uses the null's spread (`KNOB_OFF_BY_SPREAD`).
+  floor, as does any redraw that mechanically lands on the fused read. With no draw left, (a) reads `NO_FLOOR`, which
+  decides nothing.
+- **(b) An FP64 accuracy judge decides.** It uses dequantized NF4 weights and no intermediate rounding. On relative RMS,
+  the fused error must be at most 1.05 × the worst of today's path and the post-(a) draws, with dx read on this bar.
+  - **False-reject control:** before the fused path is judged, a leave-one-out calibration runs on the read itself.
+    If any neutral path fails as a pseudo-candidate, the read is `INDETERMINATE`, never `FAIL`.
+  - **Disagreement with (a):** where (a) disagrees, the outcome names `ACCURACY_OVER_REORDER`.
+- **(c) KNOB_OFF gets a null first.** It runs three `step-today` processes:
+  - in the read environment;
+  - if those disagree, under DQ11's deterministic configuration C;
+  - if those disagree too, an aggregate over the B update against C's own null with a 2× margin
+    (`KNOB_OFF_BY_SPREAD`).
+
+  It never mixes environments.
 - **(d)** One independent review before data.
 
 The read stands as registered and the lever stays open. The new read is `dq11-mlp-phase1-a2000-2`, at $0 on the
