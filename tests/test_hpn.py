@@ -132,6 +132,24 @@ def test_a_delta0_e_inside_two_se_reads_indeterminate_not_a_pass(tmp_path):
     assert b["abs_delta0_E"] < 2 * b["se_delta0_E"] and b["read_1b"] == "INDETERMINATE" and rec["outcome"] == "INDETERMINATE"
 
 
+def test_a_ratio_under_the_bound_without_a_measurable_shift_is_indeterminate():
+    """Ruled: stage 2 never opens on a move inside its own noise. F moves delta0 from -0.0100 to -0.0085 (ratio 0.85 <= 0.93), but
+    the shift (0.0015) sits inside 2 x its paired SE (zero-mean per-row noise of sd 0.02 -> SE ~0.00115)."""
+    rng = random.Random(4)
+    n = 300
+    base = [1.9 + rng.gauss(0, 0.2) for _ in range(n)]
+    z = [rng.gauss(0, 0.02) for _ in range(n)]
+    z = [x - sum(z) / n for x in z]                                  # zero-mean: the means are exact, the noise sits in the SEs
+    e4b = {"I": base, "E": base, "F": base}
+    uns = {"I": [x + 0.01 for x in base], "E": base, "F": [x + 0.0015 + zk for x, zk in zip(base, z)]}
+    b = R.base_term(e4b, uns)
+    assert b["delta0_E"] == pytest.approx(0.01, abs=1e-9) and b["ratio_F_over_E"] == pytest.approx(0.85, abs=1e-6)
+    assert b["shift_call"] == "no measurable shift" and b["read_1b"] == "INDETERMINATE"
+    uns["F"] = [x + 0.0015 for x in base]                            # the same move without the noise: a measurable shift, OPEN
+    b = R.base_term(e4b, uns)
+    assert b["shift_call"] == "SHIFT" and b["read_1b"] == "OPEN"
+
+
 def test_the_ratio_bound_is_derived_from_g1s_half_floor_and_hp2s_delta0():
     assert R.MOOT_RATIO == round(0.0025 / 0.002691, 2) == 0.93 and R.GUARD_Z == 2.0
 

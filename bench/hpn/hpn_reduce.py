@@ -136,14 +136,17 @@ def base_term(e4b, uns):
     se_shift = statistics.stdev([f - e for e, f in zip(d["E"], d["F"])]) / math.sqrt(n)
     readable = abs(dE) >= GUARD_Z * seE
     ratio = abs(dF) / abs(dE) if dE else None
-    read = "INDETERMINATE" if not readable or ratio is None else ("MOOT" if ratio > MOOT_RATIO else "OPEN")
+    shifted = abs(dF - dE) > GUARD_Z * se_shift
+    # OPEN needs a ratio <= 0.93 that is also a measurable shift; a ratio inside the shift's own noise is INDETERMINATE (ruled)
+    read = ("INDETERMINATE" if not readable or ratio is None else "MOOT" if ratio > MOOT_RATIO else "OPEN" if shifted
+            else "INDETERMINATE")
     return {"inloop_term": round(inloop, 6), "base_term_E": round(bE, 6), "base_term_F": round(bF, 6),
             "shift_E_to_F": round(bF - bE, 6), "se_shift": round(se_shift, 6),
             "delta0_E": round(dE, 6), "se_delta0_E": round(seE, 6), "abs_delta0_E": round(abs(dE), 6),
             "delta0_F": round(dF, 6), "se_delta0_F": round(seF, 6), "abs_delta0_F": round(abs(dF), 6),
             "ratio_F_over_E": None if ratio is None else round(ratio, 4), "read_1b": read,
             # a SHIFT E -> F is called only past 2 x its paired SE; otherwise "no measurable shift", with its interval (reported only)
-            "shift_call": "SHIFT" if abs(dF - dE) > GUARD_Z * se_shift else "no measurable shift",
+            "shift_call": "SHIFT" if shifted else "no measurable shift",
             "shift_interval": [round(dF - dE - GUARD_Z * se_shift, 6), round(dF - dE + GUARD_Z * se_shift, 6)]}
 
 
