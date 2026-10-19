@@ -144,7 +144,7 @@ case " $FAMILIES " in *" qwen3axo1767 "*|*" qwen3axo1767b "*)
   ;;
 esac
 case " $FAMILIES " in *" qwen3hpn "*)
-  HPN_DEPTHS=${TC1_HPN_DEPTHS:-"2 4 8 16"}
+  HPN_DEPTHS=${HPN_DEPTHS:-"2 4 8 16"}             # local-box only (HPN never runs through tc1_drive.sh), so not a TC1_* knob
   echo "FIXTURE hpn (HPN-DESIGN): depths [$HPN_DEPTHS]; calibration rows 97-396 (300), 1 step; readers I (in-loop) / E (evaluator, bf16) / F (fp32); e4b K00 + Unsloth (stage 1b); axolotl out; no timings" | tee -a summary.txt
   [ -n "${TC1_PREREG:-}" ] || PREREG=hpn/HPN-DESIGN.md
   ;;
@@ -2557,6 +2557,8 @@ tc1_hp2_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
 # e4b's base and once on Unsloth's (zero adapter, report-only); F = hpn_read.py (fp32, two runs) on both bases. A depth that does not fit (an e4b arm not
 # ok, or too little disk for its cut) ends the climb: the deepest depth that fit is a stated limit, never a failure. Each depth's cut and exports are
 # removed after its reads (the bulk manifest pins their sha256s first). Then hpn_reduce.py over the spec. Correctness only: no timing is read.
+# Unsloth's MoE backend defaults to native_torch here (HPN_UNS_BACKEND; HP2's RTX 5090 box ran grouped_mm, which targets newer cards than the
+# A2000's sm_86); the spec records which ran, since it shapes Unsloth's in-loop term in stage 1b.
 tc1_hpn_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TSC L SC TM TR FL TL X D need free deep="" json=""
   say "===== HPN family $FAM ($MID @ $REV; depths [$HPN_DEPTHS]; calibration rows 97-396; e4b K00 + Unsloth; alarms e4b $EAL unsloth $UAL)"
   HP1_AX_DROP=1
@@ -2571,7 +2573,7 @@ tc1_hpn_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
   echo "HPN calibration tokens: held-out pool rows 97-396, sha=$TSC; free GPU memory at start ${HPN_FREE_MIB:-unrecorded} MiB" | tee -a summary.txt
   local SRC=${HF_HUB_CACHE:-/root/.cache/huggingface/hub}/models--${MID//\//--}/snapshots/$REV
   for L in $HPN_DEPTHS; do
-    FL=${FAM}L$L; D=$W/hp1/hpn/L$L; SC=$W/hpn/cut-L$L; X="--hp1-export $D --hp1-export-base 1"
+    FL=${FAM}L$L; D=$W/hp1/hpn/L$L; SC=$W/hpn/cut-L$L; X="--hp1-export $W/hp1/hpn/L$L --hp1-export-base 1"   # spelled out: the under-hp1/ test reads it
     need=$(( L * 2 + 2 )); free=$(df -BG --output=avail $W | tail -1 | tr -dc 0-9)      # the bf16 cut (~1.25 GB a layer) + two NF4 exports, with headroom
     if [ "${free:-0}" -lt "$need" ]; then echo "HPN L$L SKIPPED: ${free} GB free < ${need} GB for its cut and exports (a stated limit)" | tee -a summary.txt; break; fi
     $PY_E4B $W/hp1_trunc.py --src "$SRC" --cache $SC --layers $L > logs/hpn_trunc_L$L.log 2>&1 || { echo "HPN L$L TRUNC_FAILED" | tee -a summary.txt; break; }
@@ -2583,9 +2585,13 @@ tc1_hpn_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
     TC1_ARM_EXTRA_ENV="$E" arm $FL e4b hpn_e4b_a fused $EAL "$TM" $TR 0 hpncal $TL $TSC --attn-4bit 1 $(hp1_cell k00 3407) --seed 3407 --order-seed 3407 $X
     TC1_ARM_EXTRA_ENV="$E" arm $FL e4b hpn_e4b_b fused $EAL "$TM" $TR 0 hpncal $TL $TSC --attn-4bit 1 $(hp1_cell k00 3407) --seed 3407 --order-seed 3407
     TC1_ARM_EXTRA_ENV="$E" arm $FL unsloth hpn_uns unsloth $UAL "$TM" $TR 0 hpncal $TL $TSC --grad-ckpt unsloth --unsloth-targets $UT7 \
-      --unsloth-moe-backend ${HPN_UNS_BACKEND:-grouped_mm} --lora-init native --adapter-dtype native --seed 3407 --order-seed 3407 $X
-    local st a ok=1; for a in e4b:hpn_e4b_a e4b:hpn_e4b_b unsloth:hpn_uns; do st=$(status_of $FL ${a%%:*} ${a#*:})
-      [ "$st" = ok ] || { echo "HPN L$L ${a#*:} status $st: this depth did not fit (a stated limit)" | tee -a summary.txt; ok=0; }; done
+      --unsloth-moe-backend ${HPN_UNS_BACKEND:-native_torch} --lora-init native --adapter-dtype native --seed 3407 --order-seed 3407 $X
+    # only an OOM is the card's limit; any other status is a failed arm, never recorded as a depth that did not fit
+    local st a ok=1 failed=""; for a in e4b:hpn_e4b_a e4b:hpn_e4b_b unsloth:hpn_uns; do st=$(status_of $FL ${a%%:*} ${a#*:})
+      [ "$st" = ok ] && continue; ok=0
+      if [ "$st" = oom ]; then echo "HPN L$L ${a#*:} oom: this depth did not fit (a stated limit)" | tee -a summary.txt
+      else failed="$failed ${a#*:}:$st"; fi; done
+    [ -n "$failed" ] && echo "HPN L$L ARM_FAILED$failed (not a depth limit: see the arm receipts)" | tee -a summary.txt
     if [ $ok = 0 ]; then rm -rf $SC; break; fi
     local R=$W/${FL}_e4b_hpn_e4b_a.json RB=$W/${FL}_e4b_hpn_e4b_b.json RU=$W/${FL}_unsloth_hpn_uns.json
     for a in 1 2; do HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts $R --bases $D/base_e4b_$FL --tokens $TL --eval-n 300 \
@@ -2600,7 +2606,7 @@ tc1_hpn_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
     deep=$L; echo "HPN L$L READ (I x2 + Unsloth I, E x2 + Unsloth E, F x2 on both bases)" | tee -a summary.txt
   done
   echo "HPN deepest depth that fit: ${deep:-none}" | tee -a summary.txt
-  printf '{"framework": "e4b", "free_mib_at_claim": %s, "unsloth_moe_backend": "%s", "depths": [%s]}\n' "${HPN_FREE_MIB:-null}" "${HPN_UNS_BACKEND:-grouped_mm}" "$json" > $W/hpn_spec.json
+  printf '{"framework": "e4b", "free_mib_at_claim": %s, "unsloth_moe_backend": "%s", "depths": [%s]}\n' "${HPN_FREE_MIB:-null}" "${HPN_UNS_BACKEND:-native_torch}" "$json" > $W/hpn_spec.json
   $PY_E4B $W/hpn_reduce.py $W/hpn_spec.json --out $W/hpn/result.json 2>&1 | tee -a summary.txt
   return 0; }
 # the split path, box 2 (qwen3hp1p): REFUSES unless box 1's eval_K.json + select.json are staged beside the runner AND match the pinned

@@ -32,6 +32,8 @@ case "$*" in
     if [ "${STUB_G1:-pass}" = close ]; then echo '{"verdict": "CLOSE", "tau": 0.03}' > "$out"; echo "HP2_G1=CLOSE"; exit 4; fi
     echo '{"verdict": "PASS", "roundtrip_zero_centred_tol": 0.01, "z_bands": {"e4b": [-0.0013, 0.0158]}}' > "$out"; echo "HP2_G1=PASS";;
   *"hp2_reduce.py verdict"*) echo "HP2_VERDICT=PARITY: no measurable difference at margin m";;
+  *hpn_read.py*) out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p'); echo '{"reader": "F", "runs": [[1.0], [1.0]]}' > "$out";;
+  *hpn_reduce.py*) echo "HPN=STOP depths=[2, 4, 8]";;
   *hp1_calib.py*) out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p'); echo '{"verdict": "PASS", "tol": 0.0123}' > "$out"; echo "HP1_CALIB=PASS tol=0.0123";;
   *hp1_eval.py*)
     out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p'); st=OK
@@ -65,6 +67,7 @@ arm(){ local tf; tf=$(python3 -c "import json,sys; print(json.load(open(sys.argv
   if [ -n "$tf" ] && [ "$tf" != "$1" ]; then echo "$1 $2 $3" >> "$W/mismatch.log"; return 0; fi
   echo "$1 $2 $3 ${*:12}" >> "$W/arms.log"; touch "$W/${1}_${2}_${3}.json"; }
 status_of(){ grep -qx "$1 $2 $3" "$W/mismatch.log" 2>/dev/null && { echo tokens_mismatch; return; }
+  [ "${FAIL_FAM:-}" = "$1" ] && { echo "${FAIL_STATUS:-oom}"; return; }
   [ "${SHAKE_FAIL:-}" = "$2" ] && echo install_failed || echo ok; }
 hp1_bulk_manifest(){ echo "manifest $1" >> "$W/manifest.log"; }
 mkdir -p logs hp1 data; : > summary.txt; : > arms.log
@@ -484,3 +487,75 @@ def test_hp2_g1_closure_ends_the_draw_before_any_confirmation_arm(tmp_path):
     t = tags(arms, "qwen3hp2")
     assert t == ["hp2cal_e4b_k00_s3407", "hp2cal_unsloth_s3407"] and "HP2 G1_CLOSED" in summary and "not a strike" in summary
     assert "hp2_reduce.py verdict" not in (tmp_path / "py.log").read_text()
+
+
+# ------------------------------------------------------------------------------------------------- HPN (bench/hpn/HPN-DESIGN.md)
+def _hpn(tmp_path, **env):
+    import json
+    arms, summary = drive(tmp_path, FAMILY_FN="tc1_hpn_family", FAMILY_FAM="qwen3hpn", HPN_FREE_MIB="10600", **env)
+    py = (tmp_path / "py.log").read_text()
+    spec = json.loads((tmp_path / "hpn_spec.json").read_text())
+    return arms, summary, py, spec
+
+
+def test_hpn_reads_each_depth_with_two_e4b_arms_one_unsloth_arm_and_three_readers(tmp_path):
+    arms, summary, py, spec = _hpn(tmp_path, HPN_DEPTHS="2 4 8")
+    for L in (2, 4, 8):
+        fam = f"qwen3hpnL{L}"
+        got = {a[2]: a for a in arms if a[0] == fam}
+        assert sorted(got) == ["hpn_e4b_a", "hpn_e4b_b", "hpn_uns"]
+        assert "--hp1-export-base" in got["hpn_e4b_a"] and "--hp1-export-base" in got["hpn_uns"]
+        assert "--hp1-export-base" not in got["hpn_e4b_b"]                          # the I rerun: in-loop rows only, no second export
+        assert f"$W/hp1/hpn/L{L}".replace("$W", str(tmp_path)) in " ".join(got["hpn_e4b_a"])   # exports under hp1/: the bulk manifest pins them
+        ev = [ln for ln in py.splitlines() if "hp1_eval.py" in ln and f"_L{L}" in ln]
+        assert len(ev) == 3 and all("--zero-report-only 1" in ln and "--eval-n 300" in ln for ln in ev)
+        rd = [ln for ln in py.splitlines() if "hpn_read.py" in ln and f"_L{L}." in ln]
+        assert len(rd) == 2 and all("--runs 2" in ln for ln in rd)
+    assert [d["L"] for d in spec["depths"]] == [2, 4, 8] and spec["free_mib_at_claim"] == 10600
+    assert spec["depths"][0]["unsloth"]["fref"] == "hpn/f_unsloth_L2.json" and spec["depths"][0]["eval"][1] == "hpn/eval_e4b_L2_2.json"
+    assert "hpn_reduce.py" in py and "HPN deepest depth that fit: 8" in summary and "HPN=STOP" in summary
+
+
+def test_hpn_evaluator_and_reader_passes_run_offline_on_the_cut(tmp_path):
+    _, _, py, _ = _hpn(tmp_path, HPN_DEPTHS="2")
+    assert all(x == "EVAL_OFFLINE=1" for x in [ln for ln in py.splitlines() if ln.startswith("EVAL_OFFLINE")])
+    assert all("--model local/cut" in ln for ln in py.splitlines() if "hp1_eval.py" in ln or "hpn_read.py" in ln)
+
+
+def test_a_depth_that_does_not_fit_ends_the_climb_as_a_stated_limit(tmp_path):
+    arms, summary, py, spec = _hpn(tmp_path, HPN_DEPTHS="2 4 8 16", FAIL_FAM="qwen3hpnL8")
+    assert [d["L"] for d in spec["depths"]] == [2, 4] and "did not fit (a stated limit)" in summary
+    assert not [a for a in arms if a[0] == "qwen3hpnL16"]                           # no deeper attempt after a miss
+    assert "HPN deepest depth that fit: 4" in summary and "hpn_reduce.py" in py     # the reducer still runs (it will say INSUFFICIENT_DEPTH)
+
+
+def test_too_little_disk_for_a_cut_skips_it_before_any_arm(tmp_path):
+    arms, summary, _, spec = _hpn(tmp_path, HPN_DEPTHS="2 1000000")
+    assert [d["L"] for d in spec["depths"]] == [2] and "SKIPPED" in summary and not [a for a in arms if a[0] == "qwen3hpnL1000000"]
+
+
+def test_the_exports_are_pinned_in_the_bulk_manifest_before_they_are_removed(tmp_path):
+    _hpn(tmp_path, HPN_DEPTHS="2 4")
+    assert (tmp_path / "manifest.log").read_text().count("manifest") == 2           # one pin per depth, before its rm
+    src = RUN_SH.read_text()
+    body = src[src.index("tc1_hpn_family(){"):src.index("tc1_curve_family(){")]
+    assert body.index('hp1_bulk_manifest "$W"') < body.index("rm -rf $SC $D/base_e4b_$FL")
+
+
+def test_hpn_arms_use_their_own_recipe_so_unsloths_trainable_check_has_a_reference():
+    src = RUN_SH.read_text()
+    assert "hpncal) s=1; en=300; ee=1; ex_tag=hpn_e4b_a;;" in src
+    body = src[src.index("tc1_hpn_family(){"):src.index("tc1_curve_family(){")]
+    assert body.count(" 0 hpncal $TL $TSC ") == 3 and " hp2cal " not in body
+
+
+def test_a_failed_arm_is_never_recorded_as_a_depth_that_did_not_fit(tmp_path):
+    arms, summary, py, spec = _hpn(tmp_path, HPN_DEPTHS="2 4 8", FAIL_FAM="qwen3hpnL4", FAIL_STATUS="install_failed")
+    assert "ARM_FAILED" in summary and "not a depth limit" in summary and "did not fit" not in summary
+    assert [d["L"] for d in spec["depths"]] == [2]
+
+
+def test_the_unsloth_backend_on_the_a2000_is_recorded_in_the_spec(tmp_path):
+    arms, _, _, spec = _hpn(tmp_path, HPN_DEPTHS="2")
+    uns = next(a for a in arms if a[2] == "hpn_uns")
+    assert uns[uns.index("--unsloth-moe-backend") + 1] == "native_torch" == spec["unsloth_moe_backend"]
