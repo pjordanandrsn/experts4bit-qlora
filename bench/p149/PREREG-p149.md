@@ -36,11 +36,13 @@ times prototypes, as P148 did. The library work starts only after K_GO, so a slo
 - **Kernels:**
   - **M == 1:** a bandwidth GEMV on P148's `gemv_i8` design, shaped for 4096 × 4096 and 1024 × 4096, with an optional
     split-K under K33's split contract (fixed-order host sum).
-  - **2 ≤ M ≤ 16:** a small-M kernel that dequantizes int8 tiles to bf16 in registers and accumulates in fp32.
+  - **2 ≤ M ≤ 16:** a small-M kernel that converts the int8 codes to bf16 in registers (exact, since |q| ≤ 127), runs
+    `tl.dot` with fp32 accumulation, and applies the fp32 scale once at the end.
 - **Weights:** int8 `[N, K]` with an fp32 per-row scale from the quantizer.
   - Its codes and scales are `i8_fakequant`'s, so their bf16 product equals P147's I8ATTN round trip **bit for bit**
     (tested).
-  - The kernels dequantize in fp32, not through bf16 as the fake-quant stored them. That is the less lossy direction.
+  - **Both** kernels compute s · Σ q·x: an fp32 sum of exact codes times activations, scaled once by the fp32 scale.
+    Neither rounds q·s to bf16, as the fake-quant stored it. That is the less lossy direction.
 - **CI tests** (the interpreter, in their own process as P148's):
   - every config at ragged shapes and at Mixtral's shapes against an fp64 reference of the dequantized weights;
   - a one-hot activation reads one column exactly;
@@ -174,8 +176,8 @@ A NO_FLIP keeps the lever opt-in.
 
 - **K:** K_GO. q and o's projected W1 saving is 0.45-0.70 ms (an int8 GEMV at 0.80-0.95 of the copy rate). k and v's is
   under 0.20 ms (256 programs and small rows). The M == 16 kernel is slower than cuBLAS at 1024 × 4096.
-- **Q (at decode):** GO at both gates, with upper bounds within 1.5× P147's (0.0023 at W1). The GEMV and small-M kernels
-  differ from the fake-quant only in fp32 summation order.
+- **Q (at decode):** GO at both gates, with upper bounds within 1.5× P147's (0.0023 at W1). Both kernels differ from the
+  fake-quant's bf16-stored weights only by the unrounded fp32 scale and the summation order, the less lossy direction.
 - **S:** FLIP, with g1 between 1.04 and 1.08 and g16 between 0.99 and 1.03.
 
 ## The boxes and the run
@@ -197,7 +199,7 @@ A NO_FLIP keeps the lever opt-in.
   - worst 3.0 h × $0.85 + (93.4 GB checkpoint + 5 GB install) × $0.011/GB = **$3.63**.
 - **Both** are under the standing rule (at most $15 each).
 - **Run ids:** each box has `-1` as its reading and `-2` and `-3` as spares for pre-create refusals and host refusals (17
-  and 18 are not strikes). Shakedowns are `p149-dry-N` on the lab A2000 ($0, correctness only: the suite compiled, the
+  and 18, and 15 for an unreadable power limit, are not strikes). Shakedowns are `p149-dry-N` on the lab A2000 ($0, correctness only: the suite compiled, the
   lever's census and engagement counters on a Mixtral slice, and Q's windows and shas).
 - **Strikes:** two box-started HARNESS_ERROR, VOID or NOISY reads, across both boxes, stop the lane for a
   simplification.
