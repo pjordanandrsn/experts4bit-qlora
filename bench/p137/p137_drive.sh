@@ -33,6 +33,10 @@ case "$RUN_ID" in
   *) say "refusing: run id $RUN_ID is not declared (p137-4090-1..8; p137-dry-<n> dry)"; exit 78;;
 esac
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
+# Lane liveness by PID identity and host uptime (#1512) and the host-fault marker (#1517): the helper is sourced here and
+# streamed to the box over stdin for the launch and each probe; it is never staged (staged.sha256 does not list it).
+LANE_HELPER="$REPO/bench/common/lane_liveness.sh"
+source "$LANE_HELPER" || { say "refusing: missing lane liveness helper"; exit 78; }
 # Amendment 1: the training rows travel from the controller (alpaca train[:400] as data.json, outside the repo), checked
 # here and again on the box against the registered sha256 -- the box downloads no dataset.
 DATA_SHA=68e3d31c194ebd8fee4330808a46642f443aecf4e16b78e5eb39fd21b16079c5
@@ -96,7 +100,15 @@ elif [ -s "$HF_TOKEN_FILE" ]; then   # authenticated pulls (unauthenticated shar
 else
   say "no hf token file at $HF_TOKEN_FILE -- pulls run unauthenticated (both checkpoints are ungated)"
 fi
-box "cd $W || exit 20; nohup env $PASS bash p137_run.sh > outer.log 2>&1 < /dev/null & child=\$!; end=\$((\$(date +%s)+30)); while [ \$(date +%s) -lt \$end ]; do [ \"\$(cat P137_RUN_NONCE 2>/dev/null)\" = '$NONCE' ] && { echo started:\$child; exit 0; }; kill -0 \$child 2>/dev/null || { wait \$child; echo child-exited-early:rc=\$? >&2; exit 125; }; sleep 1; done; echo nonce-handshake-timeout >&2; exit 124" || { say "start failed: child did not bind the nonce"; exit 21; }
+LANE_STARTED_AT=$(date +%s)
+# The launch streams the helper ahead of the start, so the child's PID and /proc identity are recorded in the same
+# shell that started it (the dry box's command runs it the same way: one shell command, stdin passed through).
+LAUNCH_REPLY=$({ cat "$LANE_HELPER"; printf '%s\n' "cd $W || exit 20; nohup env $PASS bash p137_run.sh > outer.log 2>&1 < /dev/null & child=\$!; identity=\$(lane_proc_snapshot \$child); end=\$((\$(date +%s)+30)); while [ \$(date +%s) -lt \$end ]; do [ \"\$(cat P137_RUN_NONCE 2>/dev/null)\" = '$NONCE' ] && { echo started:\$child; echo identity:\$identity; exit 0; }; kill -0 \$child 2>/dev/null || { wait \$child; echo child-exited-early:rc=\$? >&2; exit 125; }; sleep 1; done; echo nonce-handshake-timeout >&2; exit 124"; } | box "bash -s") || { say "start failed: child did not bind the nonce"; exit 21; }
+printf '%s\n' "$LAUNCH_REPLY"
+LANE_PID=$(printf '%s\n' "$LAUNCH_REPLY" | sed -n 's/^started:\([0-9][0-9]*\)$/\1/p')
+[[ "$LANE_PID" =~ ^[1-9][0-9]*$ ]] || { say "start failed: malformed child PID"; exit 21; }
+LANE_INITIAL=$(printf '%s\n' "$LAUNCH_REPLY" | sed -n 's/^identity://p')
+say "lane identity: pid=$LANE_PID snapshot=${LANE_INITIAL:-unknown}"
 # ---- heartbeat + liveness (e4b#641, tp4_drive.sh's): a stall is REPORTED, never acted on; two consecutive definite
 # zeros for the lane's own process with no TP_DONE end the wait with their own code (25).
 STALL_S=${P137_STALL_S:-900}; P137_MIN_PROGRESS_MB=${P137_MIN_PROGRESS_MB:-16}
@@ -111,20 +123,32 @@ progress_verdict() {  # idle_s stall_s util dfk_now dfk_prev du_now du_prev -> "
   fi
   if [ "$idle_s" -ge "$stall_s" ] && [ "${util:-0}" -eq 0 ] 2>/dev/null; then echo "stall:$idle_s"; fi
 }
-lane_dead() { [ "${1:-}" = "0" ] && [ "${2:-}" = "0" ] && echo dead; }
+lane_dead() { lane_two_missing "$@"; }   # live_now live_prev: two DEFINITE zeros
 say "lane started; polling TP_DONE every ${POLL}s with a heartbeat (stall reported after ${STALL_S}s; never acted on; a lane whose process is gone for two polls ends the wait)"
-LAST=""; LAST_CHANGE=$(date +%s); LAST_DFK=""; LAST_DU=""; LAST_LIVE=""; LANE_DEAD=0
+LAST=""; LAST_CHANGE=$(date +%s); LAST_DFK=""; LAST_DU=""; LAST_LIVE=""; UNKNOWN_PROBES=0; LANE_DEAD=0
 while :; do
   now=$(date +%s)
   box "test -f $W/TP_DONE.$NONCE" 2>/dev/null < /dev/null && { say "TP_DONE seen"; break; }
   [ "$now" -ge $((DEADLINE - POLL)) ] && { say "deadline reached without TP_DONE -- fetching what exists"; break; }
-  hb=$(box "echo \"\$(grep -v '^[[:space:]]*$' $W/summary.txt 2>/dev/null | tail -n 1 | cut -c1-160) | gpu \$(nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits 2>/dev/null | tr -d ' ') | du \$(du -sm $W 2>/dev/null | cut -f1)M | disk \$(df -h /root | tail -1 | awk '{print \$4}') | dfk \$(df -k /root | tail -1 | awk '{print \$4}') | live \$(pgrep -f 'bash p137_run.sh' | wc -l | tr -d ' ')\"" 2>/dev/null < /dev/null)
+  hb=$(box "echo \"\$(grep -v '^[[:space:]]*$' $W/summary.txt 2>/dev/null | tail -n 1 | cut -c1-160) | gpu \$(nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits 2>/dev/null | tr -d ' ') | du \$(du -sm $W 2>/dev/null | cut -f1)M | disk \$(df -h /root | tail -1 | awk '{print \$4}') | dfk \$(df -k /root | tail -1 | awk '{print \$4}')\"" 2>/dev/null < /dev/null)
   line=${hb%% | gpu*}; util=$(echo "$hb" | sed -n 's/.*| gpu \([0-9]*\),.*/\1/p')
   dfk=$(echo "$hb" | sed -n 's/.*| dfk \([0-9]*\).*/\1/p'); duM=$(echo "$hb" | sed -n 's/.*| du \([0-9]*\)M.*/\1/p')
-  live=$(echo "$hb" | sed -n 's/.*| live \([0-9]*\).*/\1/p')
+  snapshot=$(box "bash -s -- --probe $LANE_PID" < "$LANE_HELPER" 2>/dev/null) || snapshot=""
+  live=$(lane_snapshot_verdict "$snapshot" "$LANE_INITIAL" "$((now - LANE_STARTED_AT))")
+  UNKNOWN_PROBES=$(lane_unknown_streak "$live" "$UNKNOWN_PROBES")
+  hb="$hb | live ${live:-unknown} | pid $LANE_PID | unknown_probes $UNKNOWN_PROBES"
+  if [ "$live" = reboot ]; then
+    say "LANE DEAD: host rebooted (boot identity changed or uptime below lane age/baseline); fetching what exists"
+    if lane_write_host_fault "${E4B_RENT_RUN_DIR:-}" reboot "$(lane_reboot_evidence "$snapshot" "$LANE_INITIAL" "$((now - LANE_STARTED_AT))")"; then
+      say "host-fault.json written (kind reboot) for the receipt"
+    else
+      say "host-fault.json NOT written (no run directory)"
+    fi
+    LANE_DEAD=1; break
+  fi
   if [ "$line" != "$LAST" ]; then [ -n "$line" ] && say "box: $line"; LAST=$line; LAST_CHANGE=$now; fi
   if [ -n "$(lane_dead "$live" "$LAST_LIVE")" ]; then
-    say "LANE DEAD: no 'bash p137_run.sh' on the box for two consecutive polls and no TP_DONE -- not waiting out the deadline"
+    say "LANE DEAD: launch PID $LANE_PID gone/reused on the box for two consecutive polls and no TP_DONE -- not waiting out the deadline"
     LANE_DEAD=1; break
   fi
   LAST_LIVE=$live
