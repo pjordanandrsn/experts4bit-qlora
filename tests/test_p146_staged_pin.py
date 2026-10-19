@@ -183,3 +183,67 @@ def test_amendment_1_the_alpaca_parquet_is_staged_and_checked_never_downloaded(t
     out = _drive(tmp_path, "p146-4090-1", P146_DRIVE_DRYRUN="0")   # past the composition print: the stand-in's sha256 refuses
     assert out.returncode == 78 and "the registered alpaca parquet is" in out.stdout, out.stdout + out.stderr
     assert "P137 Amendment 1" in PREREG
+
+
+def _box_functions():
+    import ast
+
+    return {n.name: n for n in ast.parse(BOX).body if isinstance(n, ast.FunctionDef)}
+
+
+def _module_calls(fn, names):
+    """Module-level functions this function calls, in source order (bare-name calls only)."""
+    import ast
+
+    return [c.func.id for c in ast.walk(fn) if isinstance(c, ast.Call) and isinstance(c.func, ast.Name) and c.func.id in names]
+
+
+def test_amendment_a1_the_host_preflight_runs_before_any_model_load_or_timed_arm():
+    """Run p146-4090-5 was VOID because the host was not checked before the arms; A1's pre-flight (cpu.stat, /proc/stat,
+    the PSI source and one pinned H2D probe) must run before the model is loaded and before the first arm is timed.
+
+    Derived from the code's structure, not line numbers: main() dispatches --preflight before the arm and ABBA paths;
+    the pre-flight reaches no model-loading code; the ABBA driver fixes the PSI source and takes the before_A0a link
+    probe before the loop that starts the arms; and the runner calls the pre-flight before the install, the fetch and
+    the arm processes, refusing with rc 29 when it fails."""
+    import ast
+
+    fns = _box_functions()
+    main = fns["main"]
+    # main(): the order of the dispatches. --preflight returns before --arm and before the ABBA default.
+    dispatch = [name for stmt in main.body for name in _module_calls(stmt, fns)]
+    assert "run_preflight" in dispatch and "run_arm" in dispatch and "run_cli_abba" in dispatch, dispatch
+    assert dispatch.index("run_preflight") < dispatch.index("run_arm") < dispatch.index("run_cli_abba"), dispatch
+    pre_if = next(s for s in main.body if isinstance(s, ast.If) and "run_preflight" in _module_calls(s, fns))
+    assert isinstance(pre_if.test, ast.Attribute) and pre_if.test.attr == "preflight"
+    assert isinstance(pre_if.body[0], ast.Return)                    # the pre-flight process does nothing else
+
+    # run_preflight(): everything it reaches in this module, transitively; no arm, no model, no e4b engine.
+    seen, todo = set(), ["run_preflight"]
+    while todo:
+        name = todo.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        todo.extend(_module_calls(fns[name], fns))
+    assert {"host_snapshot", "h2d_pinned_gbps", "preflight_ok"} <= seen, seen
+    assert not seen & {"run_arm", "run_cli_abba", "probe", "run_probe"}, seen
+    for name in seen:
+        src = ast.unparse(fns[name])
+        for loader in (r"from_pretrained", r"experts4bit_qlora", r"import train\b", r"\btrain\.main", r"import datasets",
+                       r"snapshot_download"):
+            assert not re.search(loader, src), (name, loader)
+
+    # run_cli_abba(): the PSI source and the before_A0a probe come before the loop that starts (and times) the arms.
+    abba = fns["run_cli_abba"].body
+    loop_at = next(i for i, s in enumerate(abba) if isinstance(s, ast.For) and "subprocess.run" in ast.unparse(s))
+    psi_at = next(i for i, s in enumerate(abba) if "psi_source()" in ast.unparse(s))
+    probe_at = next(i for i, s in enumerate(abba) if ast.unparse(s) == "probe(a, 'before_A0a')")
+    assert psi_at < probe_at < loop_at, (psi_at, probe_at, loop_at)
+
+    # p146_run.sh: the pre-flight's refusal (rc 29) precedes the install, the fetch and the arm processes.
+    pre = RUN.index("python $W/p146_box.py --preflight")
+    refuse = RUN.index("finish 29", pre)
+    for later in ('say "install e4b @', "snapshot_download", "--mode cli-abba --model"):
+        assert refuse < RUN.index(later), later
+    assert RUN.count("--preflight") == 1
