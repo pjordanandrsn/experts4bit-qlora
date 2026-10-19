@@ -1,0 +1,42 @@
+KNOBS e4b=334ef5b50f8e0fa902f543777fd44f7ab4636769 gnf4=38b308887688ea5bda7dd449bd3cc3dc1426b995 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 family=qwen3 dry=0 short=32 long=160 reps=3 min_power_w=575 moe_layers=48
+CUDA_PROBE ok
+POWER_LIMIT_W 575 (floor 575)
+e4b 0.55.0 @334ef5b50f8e0fa902f543777fd44f7ab4636769
+gnf4 0.47.1 @38b308887688ea5bda7dd449bd3cc3dc1426b995
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+P136 reducer self-test OK (all missing family receipts VOID)
+p152_reduce self-test OK (20 cases)
+pername_table self-test OK (10 cases)
+p136_box self-test OK (5 cases)
+self-test OK (43 checks)
+selftest OK (3 cases)
+premise rc=0: 19 passed, 5 warnings in 23.07s
+premise ok
+nsys NVIDIA Nsight Systems version 2025.6.1.190-256136895201v0 at /usr/local/bin/nsys
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709
+arm S1a rc=0 P136_ARM {"tag": "S1a", "fusions": {"fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}, "load_s": 58.28, "W16_ms": 16.5073, "W1_ms": 3.8913}
+
+arm S1b rc=0 P136_ARM {"tag": "S1b", "fusions": {"fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}, "load_s": 41.76, "W16_ms": 16.4864, "W1_ms": 3.8908}
+
+capture census_e4b_b1_graph rc=0 P136_CENSUS {"batch": 1, "steps_bracketed": 64, "profiled_ms_per_step": 4.0702}
+
+capture census_e4b_b1_node rc=0 P136_CENSUS {"batch": 1, "steps_bracketed": 64, "profiled_ms_per_step": 4.8071}
+
+SC1B {"engine": "e4b", "comparator": null, "batch": 1, "status": "ok", "reading": null, "named_cause": null, "labels": []}
+PERNAME_TABLE {"status": "ok", "steps_kept": 61, "P_ms": 4.803775, "closure_ns_max": 0, "top": [["kernel|1280x1x1", 0.720128], ["kernel|512x1x1", 0.605504], ["_gemv_nf4_bw|8x96x1|gate_up", 0.589632], ["_fp8_paged_decode_split_f8dot|64x1x1", 0.395199], ["kernel|37984x1x1", 0.377056], ["_gemv_nf4_bw|8x128x1|down", 0.362464], ["_fp8_append_bt1_side|1x4x1", 0.1664], ["_router_epilogue|1x1x1", 0.133184]], "why": null}
+capture census_e4b_b16_graph rc=0 P136_CENSUS {"batch": 16, "steps_bracketed": 64, "profiled_ms_per_step": 16.521}
+
+capture census_e4b_b16_node rc=0 P136_CENSUS {"batch": 16, "steps_bracketed": 64, "profiled_ms_per_step": 17.4892}
+
+SC1B {"engine": "e4b", "comparator": null, "batch": 16, "status": "ok", "reading": null, "named_cause": null, "labels": []}
+PERNAME_TABLE {"status": "ok", "steps_kept": 61, "P_ms": 17.527972, "closure_ns_max": 0, "top": [["_gemm_nf4_grouped_smallm|136x48x1", 8.395073], ["_gemm_nf4_grouped_smallm|136x64x1", 3.35296], ["Kernel2|8x16x1", 1.111104], ["Kernel2|8x40x1", 0.746208], ["_fp8_paged_decode_split_f8dot|320x1x1", 0.65856], ["_tile_table_r1|1x1x1", 0.453888], ["Kernel2|8x1187x1", 0.377377], ["_fp8_append_bt1_side|16x4x1", 0.185536]], "why": null}
+route b16 rc=0 P152_ROUTE {"steps": 64, "summary": {"steps": 64, "layers": 48, "unique_per_layer_step": {"mean": 57.0169, "min": 40, "max": 81}, "unique_per_step_total": {"mean": 2736.81, "min": 2507, "max": 3035}, "hottest_expert_share_of_a_layer": 0.10999, "uniform_expectation_per_layer": 82.423}, "faults": 2}
+
+P152 READ {"why": [], "named": ["_gemm_nf4_grouped_smallm|136x48x1 (8.3951 ms, 50.89% of the unprofiled W16 step)", "_gemm_nf4_grouped_smallm|136x64x1 (3.3530 ms, 20.32% of the unprofiled W16 step)", "Kernel2|8x16x1 (1.1111 ms, 6.73% of the unprofiled W16 step)", "Kernel2|8x40x1 (0.7462 ms, 4.52% of the unprofiled W16 step)", "_fp8_paged_decode_split_f8dot|320x1x1 (0.6586 ms, 3.99% of the unprofiled W16 step)"], "expert_floor_W16": {"status": "UNREAD", "why": "route: 0 uniform-int4 expert stores (kind None), 48 MoE layers; route: 16 rows group as (singleton, device) = (False, False), not device-grouped"}}

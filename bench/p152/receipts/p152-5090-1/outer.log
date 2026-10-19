@@ -1,0 +1,13 @@
+KNOBS e4b=334ef5b50f8e0fa902f543777fd44f7ab4636769 gnf4=38b308887688ea5bda7dd449bd3cc3dc1426b995 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 family=qwen3 dry=0 short=32 long=160 reps=3 min_power_w=575 moe_layers=48
+CUDA_PROBE ok
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.119.02, GPU-7fa07955-df59-6b1d-0cb2-df810834b87a, 12.0
+power.limit,clocks.max.sm 475.00 W, 3090 MHz
+CPU(s):                                  48
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD EPYC 9655 96-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             108           1          86           0          19         105
+overlay         200G  1.4M  200G   1% /
+POWER_LIMIT_W 475 (floor 575)
+[2026-10-19T16:25:38Z] p152: REFUSED: power.limit 475 W < 575 W (host-limited power cap)
+[2026-10-19T16:25:38Z] p152: TP_DONE rc=17

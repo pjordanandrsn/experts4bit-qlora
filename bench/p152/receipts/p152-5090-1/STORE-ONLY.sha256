@@ -1,0 +1,5 @@
+# p152-5090-1: files kept only in the private receipt store, byte-exact. The run's instance file and the launcher's
+# teardown proof name the provider's instance; receipts are never rewritten, so they are not committed here.
+# sha256, then the file's path within this run's receipt.
+0324d5927aaa6d793da6810d04f46ac468ae3ea18ec7f27df84da0cf63f3a31c  p152/INSTANCE_ID
+01495f020ff942351c1c877f13c1294d4d5d11c0e76beed3263e73e0ad554e71  teardown-proof.json
