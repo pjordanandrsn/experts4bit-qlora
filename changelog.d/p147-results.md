@@ -1,0 +1,3 @@
+### Added
+
+- P147 results (`bench/p147/RESULTS-p147.md`, receipts in `bench/p147/receipts/p147-a2000-1/`): READ on the lab RTX A2000 at $0. Int8 weight-only rounding of Mixtral-8x7B's 128 attention projections keeps the W8A16 split-premise gate at both gates (W1 upper 0.0023 against the bound 0.0116, argmax 0.981), so I8ATTN is GO. NF4 misses both terms at both gates, so NF4ATTN is PARK. The int8 head is reported (argmax 0.99). The instrument checks passed, and the repeat arm was bit-identical. A GO starts nothing by itself: the next step is a 5090 speed registration that re-checks the rule on the served card.

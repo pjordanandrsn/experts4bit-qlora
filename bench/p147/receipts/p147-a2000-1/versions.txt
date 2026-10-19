@@ -1,0 +1,2 @@
+torch 2.8.0+cu128 transformers 5.17.0 bitsandbytes 0.50.2
+e4b 15f8345f56a7858a8d075a1aa35cb9130a861273 gnf4 0.47.1 38b308887688ea5bda7dd449bd3cc3dc1426b995

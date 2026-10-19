@@ -1,0 +1,93 @@
+{
+ "lane": "P148",
+ "verdict": "D1_GO+D2_GO",
+ "levers": {
+  "D1": {
+   "projected_save_ms": 0.13113720683739294,
+   "share_of_P": 0.029938866891664136,
+   "harness_save_ms": 0.13771200000000006,
+   "verdict": "GO"
+  },
+  "D2": {
+   "projected_save_ms": 0.18954616548940464,
+   "share_of_P": 0.04327374019372888,
+   "harness_save_ms": 0.191328,
+   "verdict": "GO"
+  }
+ },
+ "reasons": [
+  "D1: GO (projected in situ 0.131137 ms vs bar 0.087603; harness 0.137712 ms, reported)",
+  "D2: GO (projected in situ 0.189546 ms vs bar 0.087603; harness 0.191328 ms, reported)"
+ ],
+ "bars": {
+  "bar_ms": 0.087603,
+  "bar_share_of_P": 0.02,
+  "P_ms": 4.380166,
+  "anchor": [
+   0.8,
+   1.25
+  ],
+  "noisy_band": [
+   0.985,
+   1.015
+  ],
+  "contract_ratio": 1.05
+ },
+ "note": "a microbench premise: a GO starts kernel work, never the quoted gain",
+ "shapes": {
+  "qkv": {
+   "choice": "2,1024,4,1",
+   "projected_save_ms": 0.05967093721643696,
+   "anchor_ms": 0.7146,
+   "harness_save_ms": 0.061840000000000006,
+   "pairs_ms": [
+    0.061840000000000006,
+    0.06233599999999995
+   ],
+   "self_pairs": {
+    "A2/A1": 1.0006,
+    "B2/B1": 0.9999
+   },
+   "cublas_tbs": 1.359,
+   "kernel_tbs": 1.483,
+   "cublas_err": 0.0016974789915442886,
+   "kernel_err": 0.0016974789915442886
+  },
+  "o": {
+   "choice": "2,1024,4,1",
+   "projected_save_ms": 0.07146626962095597,
+   "anchor_ms": 0.5972,
+   "harness_save_ms": 0.07587200000000005,
+   "pairs_ms": [
+    0.07590399999999997,
+    0.07587200000000005
+   ],
+   "self_pairs": {
+    "A2/A1": 1.0006,
+    "B2/B1": 1.0008
+   },
+   "cublas_tbs": 1.271,
+   "kernel_tbs": 1.443,
+   "cublas_err": 0.0017052362025487295,
+   "kernel_err": 0.0017052361555990147
+  },
+  "head": {
+   "choice": "4,1024,4,1",
+   "projected_save_ms": 0.18954616548940464,
+   "anchor_ms": 0.377,
+   "harness_save_ms": 0.191328,
+   "pairs_ms": [
+    0.191328,
+    0.191344
+   ],
+   "self_pairs": {
+    "A2/A1": 1.0,
+    "B2/B1": 0.9999
+   },
+   "cublas_tbs": 1.635,
+   "kernel_tbs": 1.645,
+   "cublas_err": 0.0016654797513272904,
+   "kernel_err": 0.0016603841074237819
+  }
+ }
+}

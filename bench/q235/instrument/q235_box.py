@@ -331,14 +331,25 @@ class LoadProfile:
     - ``quantize``: ``Experts4bit.from_float`` / ``ExpertsNbit.from_float``;
     - ``offload``: ``enable_expert_offload`` (the quantized stacks copied to their pinned host homes).
     Each wrapped call synchronizes CUDA at its boundaries, so asynchronous device work is charged to the call that issued it.
-    ``other`` is the rest of the load: the fused stacks' host-to-device copy, the non-expert weights and the bookkeeping."""
+    ``other`` is the rest of the load: the fused stacks' host-to-device copy, the non-expert weights and the bookkeeping.
 
-    def __init__(self, cuda):
+    Amendment 16: with ``layers_path`` it also writes the load's per-layer record (``load_layers.jsonl``), never gated: a header
+    line, one line per expert stack finished (offloaded under CUDA, quantized on the CPU rehearsal, which has no offload) with its
+    seconds since the load began, and a final ``{"done": true}`` line only when the load returns. Each line is flushed as it is
+    written, so a box killed at its cap mid-load still says how far the load got: the runner's VOID_BY_HOST check reads that."""
+
+    def __init__(self, cuda, layers_path=None):
         self.cuda = cuda
         self.s = {k: 0.0 for k in ("read", "assemble", "quantize", "offload")}
         self.n = dict.fromkeys(self.s, 0)
         self.read_bytes = 0
         self._undo = []
+        self.layers_path, self._layers, self._t0 = layers_path, None, None
+        self._layer_event = "offload" if cuda else "quantize"
+
+    def _line(self, rec):
+        self._layers.write(json.dumps(rec) + "\n")
+        self._layers.flush()
 
     def _timed(self, key, fn):
         def wrap(*a, **k):
@@ -352,6 +363,8 @@ class LoadProfile:
             self.n[key] += 1
             if key == "read" and isinstance(out, torch.Tensor):
                 self.read_bytes += out.numel() * out.element_size()
+            if key == self._layer_event and self._layers is not None:
+                self._line({"layer": self.n[key], "t_s": round(time.perf_counter() - self._t0, 3)})
             return out
         return wrap
 
@@ -389,11 +402,22 @@ class LoadProfile:
         for cls in {Experts4bit, ExpertsNbit}:
             if "from_float" in cls.__dict__:
                 self._patch(cls, "from_float", classmethod(self._timed("quantize", cls.__dict__["from_float"].__func__)))
+        if self.layers_path is not None:
+            os.makedirs(os.path.dirname(os.path.abspath(self.layers_path)), exist_ok=True)
+            self._layers = open(self.layers_path, "w")
+            self._line({"schema": "q235-load-layers/1", "event": self._layer_event,
+                        "t0_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+        self._t0 = time.perf_counter()
         return self
 
-    def __exit__(self, *a):
+    def __exit__(self, exc_type, *a):
         for obj, name, old in reversed(self._undo):
             setattr(obj, name, old)
+        if self._layers is not None:
+            if exc_type is None:
+                self._line({"done": True, "layers": self.n[self._layer_event], "load_s": round(time.perf_counter() - self._t0, 3)})
+            self._layers.close()
+            self._layers = None
         return False
 
     def record(self, total_s):
@@ -790,7 +814,8 @@ def run(a):
         out["heldout"] = {"tokens_sha256": {k: hashlib.sha256(v.contiguous().numpy().tobytes()).hexdigest() for k, v in held.items()},
                           "rows": int(held["input_ids"].shape[0]), "real_tokens": int(held["attention_mask"].sum())}
     d0, t0 = diskstats(), time.time()
-    model, rec = build(a.checkpoint, dev, a.r, a.alpha, a.adapter_dtype, a.enabler, profile=LoadProfile(cuda))
+    model, rec = build(a.checkpoint, dev, a.r, a.alpha, a.adapter_dtype, a.enabler,
+                       profile=LoadProfile(cuda, layers_path=os.path.join(a.out, "load_layers.jsonl") if a.out else None))
     out["load"] = {**rec, "seconds": round(time.time() - t0, 1), "nvme": disk_delta(d0, diskstats()), "host_memory": host_memory()}
     planted = plant(model, a.plant)[0] if a.plant else None
     out["plant"] = {"kind": a.plant, "layer": planted}
