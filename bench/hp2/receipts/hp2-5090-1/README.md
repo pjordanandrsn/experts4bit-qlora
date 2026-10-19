@@ -1,7 +1,7 @@
 # `hp2-5090-1`: the reading (G1 STOP)
 
 One RTX 5090 (driver 590.48.01, 32,607 MiB) on an AMD EPYC 7B13 host (128 CPUs, 64 physical, a cgroup quota of about 61 CPUs,
-252 GiB RAM, a 220 GB disk). Vast instance 56686154 on machine 13549 at $0.7411/h, 2026-10-19 06:45Z to 09:06Z. Cost $2.144
+252 GiB RAM, a 220 GB disk). A Vast RTX 5090 at $0.7411/h, 2026-10-19 06:45Z to 09:06Z. Cost $2.144
 (guard 6 h, registered worst $6.09). Code: e4b `68801d3e` (the HP2 registration's merge, #1793), grouped-nf4-gemm `724ccc45`.
 The e4b side ran torch 2.8.0+cu128 and transformers 5.18.0; the Unsloth side ran Unsloth 2026.9.14 with transformers 5.5.0
 (`versions.txt`). Qwen/Qwen3-30B-A3B at `ad44e777`.

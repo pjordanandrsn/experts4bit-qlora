@@ -23,8 +23,8 @@ runs by digest. The one evaluator then made its zero-adapter pass on each base.
 | δ0 = mean_r [g_e4b(r) − g_uns(r)] | −0.002691 | | |
 | sd_r(d), R = 300 | 0.041194 | | |
 | SE_δ0 | 0.002378 | | |
-| \|δ0\| + 2 × SE_δ0 | 0.007448 | CLOSE if > 0.01 | passed |
-| m_need = 2 × (\|δ0\| + 2 × SE_δ0) | 0.014895 | STOP if > 0.005 | **STOP** |
+| \|δ0\| + 2 × SE_δ0 | 0.007448 | CLOSE: \|δ0\| + 2 SE ≤ 0.01 | passed (0.007448) |
+| m_need = 2 × (\|δ0\| + 2 × SE_δ0) | 0.014895 | STOP: m_need ≤ 0.005 | **failed: STOP** (0.014895) |
 
 Per framework (reported, never gated):
 
@@ -63,7 +63,7 @@ registration.
 
 | Run | Outcome | Cost | Note |
 |---|---|---|---|
-| `hp2-5090-1` | OK (`HP2_G1=STOP`) | $2.144 | machine 13549, $0.7411/h; 06:45Z–09:06Z; shakedown OK; teardown verified |
+| `hp2-5090-1` | OK (`HP2_G1=STOP`) | $2.144 | $0.7411/h; 06:45Z–09:06Z; shakedown OK; teardown verified |
 | **Total** | | **$2.144** | registered worst $6.09 |
 
 The files that decide the reading are in [`receipts/hp2-5090-1/`](receipts/hp2-5090-1/README.md), byte-identical to the
