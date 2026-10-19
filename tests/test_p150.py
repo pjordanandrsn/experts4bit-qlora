@@ -168,6 +168,8 @@ MUTANTS = [
     # the rule read on the rounded fields (the review of #1807; P143 A3's lesson): a 9e-8 overshoot or an argmax of
     # 0.949996 would pass
     ('    r = s["raw"]', "    r = s"),
+    # I8HEAD's reference log-probs never held to A's (the maintainer's belt, 07:03Z)
+    ("        if not all(ra.get(g) for g in RULED) or any(rc.get(g) != ra.get(g) for g in RULED):", "        if False:"),
 ]
 
 

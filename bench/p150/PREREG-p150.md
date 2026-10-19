@@ -66,6 +66,9 @@ unchanged, every bar compared **unrounded** (the reported fields are rounded for
   - I8HEAD's round trip is not exactly the lm_head (one module, no attention module);
   - an arm's recorded windows (counts and the 1024 stride) differ from the ruled ones;
   - an arm's held-out window hashes are not the registered ones;
+  - I8HEAD did not score against A's reference log-probs. `p150_box.py` records the sha256 of each gate's R files in
+    A's record, re-hashes them before and after I8HEAD scores (refusing if they change), and records them in I8HEAD's;
+    the reducer holds the two equal at t1 and k16;
   - a ruled gate's windows are off 196 / 123, or are not the same windows in both arms.
 
   A VOID is not a ruling (the runner exits 27).
@@ -81,7 +84,8 @@ unchanged, every bar compared **unrounded** (the reported fields are rounded for
 - the window counts unchecked;
 - the recorded windows unchecked;
 - the held-out hashes unchecked;
-- the rule read on the rounded fields.
+- the rule read on the rounded fields;
+- I8HEAD's reference log-probs never held to A's.
 
 **The two gates are not independent.** As in P125, k16's 123 windows are t1's first 123, read in 16-row pieces where
 t1 reads one window per pass. Both must pass, but they are two views of overlapping text, not two samples.
