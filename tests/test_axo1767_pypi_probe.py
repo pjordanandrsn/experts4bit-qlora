@@ -28,8 +28,11 @@ SHA = hashlib.sha256(BODY).hexdigest()
 
 class _Handler(http.server.BaseHTTPRequestHandler):
     delay = 0.0                                             # seconds per 64 KiB chunk: a slow host
+    head_delay = 0.0                                        # seconds before the response head: a slow handshake
 
     def do_GET(self):
+        if self.head_delay:
+            time.sleep(self.head_delay)
         self.send_response(200)
         self.send_header("Content-Length", str(len(BODY)))
         self.end_headers()
@@ -50,12 +53,13 @@ def server():
     yield f"http://127.0.0.1:{srv.server_address[1]}/w.whl", _Handler
     srv.shutdown()
     _Handler.delay = 0.0
+    _Handler.head_delay = 0.0
 
 
 def test_a_fast_host_passes_with_the_bytes_verified(server):
     url, _ = server
     rc, rec = P.probe(url, len(BODY), SHA, min_mbps=1.0, cap_s=30)
-    assert rc == 0 and rec["complete"] and rec["sha256_ok"] and rec["mb_per_s"] > 1.0, rec
+    assert rc == 0 and rec["complete"] and rec["sha256_ok"] and rec["mb_per_s"] > 1.0 and rec["ttfb_s"] is not None, rec
 
 
 def test_a_rate_below_the_floor_is_refused(server):
@@ -71,6 +75,13 @@ def test_a_slow_host_is_refused_on_a_partial_read_at_the_cap(server):
     assert rc == 3 and not rec["complete"] and 0 < rec["bytes"] < len(BODY) and rec["mb_per_s"] < 10.0, rec
 
 
+def test_a_slow_handshake_is_recorded_but_never_counted_in_the_rate(server):
+    url, h = server
+    h.head_delay = 1.5                                      # 3.2 MB body: with the head inside, the rate would read under 2.2 MB/s
+    rc, rec = P.probe(url, len(BODY), SHA, min_mbps=5.0, cap_s=30)
+    assert rc == 0 and rec["ttfb_s"] >= 1.4 and rec["mb_per_s"] > 5.0 and rec["sha256_ok"], rec
+
+
 def test_wrong_bytes_are_refused_even_when_fast(server):
     url, _ = server
     rc, rec = P.probe(url, len(BODY), "0" * 64, min_mbps=1.0, cap_s=30)
@@ -79,7 +90,7 @@ def test_wrong_bytes_are_refused_even_when_fast(server):
 
 def test_an_unreachable_host_reads_no_bytes():
     rc, rec = P.probe("http://127.0.0.1:9/none.whl", 10, "0" * 64, min_mbps=1.0, cap_s=3)
-    assert rc == 5 and rec["bytes"] == 0 and "error" in rec, rec
+    assert rc == 5 and rec["bytes"] == 0 and "error" in rec and rec["mb_per_s"] is None, rec
 
 
 def test_the_pinned_wheel_is_a_fixed_file():
