@@ -228,7 +228,8 @@ It gates only the separate default-flip PR that a FLIP starts.
 - **The effect:** after a FLIP, the default-flip PR proceeds only on ROUTING_CLEAR. Any other label holds it for a
   routing-matched read, which needs a later registration.
 - **Resolution, stated before data.** CLEAR needs ρ + e ≤ m / 2. So even at ρ = 0, a FLIP reads CLEAR only if
-  g16 ≥ 0.99 + 2e, and never when e > m / 2.
+  g16 ≥ 0.99 + 2e. With ρ ≥ 0 it never clears when e > m / 2. Only a negative ρ, routing working against S1, can clear
+  a thinner margin.
   - P143 Amendment 3's W16 self-pairs (Qwen3-30B-A3B, fresh processes) deviated by 0.0002 to 0.0010, with one outlier
     at 0.0141: S0b/S0a, 0.9859, against the first process.
   - At e = 0.001, CLEAR needs g16 ≥ 0.992. At the outlier's 0.0141, it needs g16 ≥ 1.018, the upper half of the
