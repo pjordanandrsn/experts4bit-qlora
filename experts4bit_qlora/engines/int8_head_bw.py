@@ -6,8 +6,9 @@ At one request the lm_head is the decode step's largest dense GEMV (151936 x 204
 (``bench/p148``) read an int8 copy of it, with an fp32 scale per row, faster than cuBLAS on the bf16 head in a
 microbench, a premise. P150 (``bench/p150``) ruled that rounding the head to that grid keeps P125's quality gate at
 BOTH gates, t1 and k16 (GO, on held-out windows). grouped-nf4-gemm K36 ships the prototype kernel and its quantizer
-verbatim as ``dense_gemv.gemv_i8_bw`` and ``dense_gemv.quantize_rows_int8``. P153 is the served read; nothing here is
-a default.
+verbatim as ``dense_gemv.gemv_i8_bw`` and ``dense_gemv.quantize_rows_int8``. P153 (``bench/p153``) read it FLIP
+served; ``serve_paged`` defaults it on for qwen3_moe at that head's shape (``INT8_HEAD_BW_DEFAULT_FAMILIES``). This
+module chooses nothing: ``mode`` is the caller's.
 
 **Knob-on changes multi-row outputs too.** :func:`apply_int8_head_bw` rounds the head's bf16 weight IN PLACE to its
 int8 grid cast back to bf16, exactly P150's I8HEAD round trip (``bench/i8dense/i8_fakequant.roundtrip_``), on the
@@ -21,9 +22,9 @@ bf16, so it reads the same grid as every other row count, within bf16's output r
 
 The swap is the head only: :class:`Int8HeadLinear` replaces ``get_output_embeddings()`` (exactly ``nn.Linear``) and
 shares its weight Parameter, now on the grid, with no second bf16 copy. It holds the int8 codes and the fp32 scales
-(+N x K bytes, about 0.31 GB at Qwen3's head). Those bytes arrive AFTER the server sized its slots (free memory is read
-before the weights load): at a fixed slot count that is fine, but with an auto ``max_seqs`` on a tight card they can
-push a graph capture over. Its forward routes ONE bf16 CUDA row to the kernel; a one-row input that
+(:func:`copy_bytes`, about 0.31 GB at Qwen3's head). Those bytes arrive AFTER the server sized its slots (free memory
+is read before the weights load), so ``serve_paged.resolve_max_seqs`` adds them to the footprint an auto ``max_seqs``
+sizes against whenever the knob resolves on. Its forward routes ONE bf16 CUDA row to the kernel; a one-row input that
 is not contiguous is copied (one row of K elements), never passed to ``F.linear``. Every other call (more rows; CPU;
 another dtype) goes to ``F.linear`` on the rounded weight. Under CUDA graphs bucket 1 captures the kernel and larger
 buckets capture cuBLAS on the grid.
@@ -92,33 +93,65 @@ def _grid_(weight, quantize, chunk: int = CHUNK_ROWS):
     return torch.cat(qs).contiguous(), torch.cat(ss).contiguous()
 
 
+def copy_bytes(n: int, k: int) -> int:
+    """Device bytes the swap adds for an ``[N, K]`` head: the int8 codes (``N x K``) and the fp32 scales (``4 x N``).
+    311,772,672 at Qwen3-30B-A3B's 151936 x 2048 head, the rise in ``memory_allocated`` P153's records read."""
+    return int(n) * int(k) + 4 * int(n)
+
+
+def kernel():
+    """``(gemv_i8_bw, quantize_rows_int8)`` from grouped-nf4-gemm's ``dense_gemv`` (K36, first released in 0.48.0)."""
+    try:
+        from dense_gemv import gemv_i8_bw, quantize_rows_int8
+    except ImportError as e:
+        raise RuntimeError(f"{ENV}=1 needs grouped-nf4-gemm with dense_gemv.gemv_i8_bw (lane K36): {e}") from e
+    return gemv_i8_bw, quantize_rows_int8
+
+
+def kernel_missing() -> str | None:
+    """Why :func:`kernel` cannot import here (a grouped-nf4-gemm older than 0.48.0, e.g. under ``--no-deps``), or None."""
+    try:
+        kernel()
+    except RuntimeError as e:
+        return f"grouped-nf4-gemm without dense_gemv.gemv_i8_bw (K36, 0.48.0 or later): {e.__cause__}"
+    return None
+
+
+def head_refusal(model) -> str | None:
+    """Why ``model``'s output head cannot take the swap, or None: the checks :func:`apply_int8_head_bw` refuses on (the
+    text after ``E4B_INT8_HEAD_BW=1: ``), which ``serve_paged``'s per-family default reads as default-off instead."""
+    head = model.get_output_embeddings() if hasattr(model, "get_output_embeddings") else None
+    if type(head) is not nn.Linear:
+        return (f"the output head is {type(head).__name__}, not nn.Linear (an int4 head is an Int4Linear, and a swapped "
+                "head is already Int8HeadLinear) -- refusing")
+    emb = model.get_input_embeddings() if hasattr(model, "get_input_embeddings") else None
+    if emb is not None and getattr(emb, "weight", None) is not None and emb.weight.data_ptr() == head.weight.data_ptr():
+        return "the output head is tied to the input embeddings; rounding it would round them too"
+    w = head.weight
+    if head.bias is not None:
+        return "the output head has a bias; gemv_i8_bw computes s * (q @ x) only"
+    if w.dtype != torch.bfloat16 or w.dim() != 2 or w.stride(1) != 1:
+        return (f"the output head is {w.dtype} {tuple(w.shape)} stride {tuple(w.stride())}, not a bf16 [N, K] weight "
+                "with contiguous rows")
+    return None
+
+
 def apply_int8_head_bw(model, mode: str, *, gemv=None, quantize=None) -> dict:
     """Round the output head to its int8 grid and swap it for an :class:`Int8HeadLinear` when ``mode == "1"``; return
-    the record. ``mode == "0"`` changes nothing. Refusals as in the module docstring."""
+    the record. ``mode == "0"`` changes nothing. Refusals as in the module docstring (:func:`head_refusal`)."""
     if mode not in ("0", "1"):
         raise ValueError(f"{ENV}={mode!r}: 0 or 1")
     if mode == "0":
         return {"mode": "0", "modules": 0}
     if gemv is None or quantize is None:
-        try:
-            from dense_gemv import gemv_i8_bw, quantize_rows_int8
-        except ImportError as e:
-            raise RuntimeError(f"{ENV}=1 needs grouped-nf4-gemm with dense_gemv.gemv_i8_bw (lane K36): {e}") from e
-        gemv = gemv_i8_bw if gemv is None else gemv
-        quantize = quantize_rows_int8 if quantize is None else quantize
-    head = model.get_output_embeddings() if hasattr(model, "get_output_embeddings") else None
-    if type(head) is not nn.Linear:
-        raise RuntimeError(f"{ENV}=1: the output head is {type(head).__name__}, not nn.Linear (an int4 head is an "
-                           "Int4Linear, and a swapped head is already Int8HeadLinear) -- refusing")
-    emb = model.get_input_embeddings() if hasattr(model, "get_input_embeddings") else None
-    if emb is not None and getattr(emb, "weight", None) is not None and emb.weight.data_ptr() == head.weight.data_ptr():
-        raise RuntimeError(f"{ENV}=1: the output head is tied to the input embeddings; rounding it would round them too")
+        gemv_k, quantize_k = kernel()
+        gemv = gemv_k if gemv is None else gemv
+        quantize = quantize_k if quantize is None else quantize
+    why = head_refusal(model)
+    if why:
+        raise RuntimeError(f"{ENV}=1: {why}")
+    head = model.get_output_embeddings()
     w = head.weight
-    if head.bias is not None:
-        raise RuntimeError(f"{ENV}=1: the output head has a bias; gemv_i8_bw computes s * (q @ x) only")
-    if w.dtype != torch.bfloat16 or w.dim() != 2 or w.stride(1) != 1:
-        raise RuntimeError(f"{ENV}=1: the output head is {w.dtype} {tuple(w.shape)} stride {tuple(w.stride())}, not a "
-                           "bf16 [N, K] weight with contiguous rows")
     q, s = _grid_(w, quantize)
     model.set_output_embeddings(Int8HeadLinear(head, q, s, gemv))
     return {"mode": "1", "modules": 1, "shape": list(w.shape), "int8_bytes": int(q.numel()),
