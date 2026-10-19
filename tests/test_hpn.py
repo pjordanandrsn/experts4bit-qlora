@@ -477,6 +477,19 @@ def test_hpn_local_refuses_an_unclean_checkout(tmp_path):
     assert p.returncode == 78 and "uncommitted changes" in p.stdout and not (tmp_path / "out").exists()
 
 
+def test_hpn_local_refuses_a_non_empty_out(tmp_path):
+    import os
+    import subprocess
+    r, bin_ = _local_repo(tmp_path)
+    out = tmp_path / "out"
+    (out / "hpn").mkdir(parents=True)
+    (out / "hpn" / "eval_e4b_L8_1.json").write_text("{}")                     # an earlier run's file
+    env = dict(os.environ, PATH=f"{bin_}:{os.environ['PATH']}")
+    p = subprocess.run(["bash", str(REPO / "bench/hpn/hpn_local.sh"), str(r), str(out)], env=env, capture_output=True, text=True,
+                       timeout=60)
+    assert p.returncode == 78 and "is not empty" in p.stdout and not (out / "env.txt").exists()
+
+
 def test_hpn_local_refuses_an_untracked_file_in_a_staged_dir(tmp_path):
     """Review: find bench/tc1 -type f would ship an untracked file into a run that cites a clean commit."""
     import os

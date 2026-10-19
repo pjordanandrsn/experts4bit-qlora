@@ -11,6 +11,8 @@ STAGED="bench/tc1 bench/hp1 bench/hpn bench/tp4 bench/flagship-matrix"     # wha
 # shellcheck disable=SC2086
 if [ -n "$(git -C "$REPO" status --porcelain --untracked-files=no)" ] || [ -n "$(git -C "$REPO" status --porcelain -- $STAGED)" ]; then
   echo "refusing: $REPO has uncommitted changes, or untracked files in the staged dirs (the receipts cite $E4B_SHA)"; exit 78; fi
+# a fresh OUT: a previous run's valid reader file must never pass as this run's read
+if [ -e "$OUT" ] && [ -n "$(ls -A "$OUT" 2>/dev/null)" ]; then echo "refusing: $OUT is not empty (use a fresh directory per run)"; exit 78; fi
 mkdir -p "$OUT"
 find "$REPO/bench/tc1" -maxdepth 1 -type f -exec cp {} "$OUT"/ \;
 cp "$REPO/bench/tp4/tp4_alpaca.py" "$REPO/bench/flagship-matrix/drivers/n9_datasets.py" "$REPO/bench/flagship-matrix/ds_manifest.json" "$OUT"/

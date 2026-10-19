@@ -39,6 +39,7 @@ case "$*" in
   *hp1_eval.py*)
     out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p'); st=OK
     case "$out" in */hpn/eval_*) n=300; case "$out:${STUB_E_BAD:-}" in *_L4_2.json:partial) n=299;; esac
+      case "$out:${STUB_E_BAD:-}" in *_L4_2.json:die) exit 1;; esac          # a reader that dies before writing
       python3 -c "import json,sys; json.dump({'bases': [{'status': 'OK', 'digest_matches_training_run': True, 'zero_adapter': {'row_losses': [1.0] * int(sys.argv[2])}}], 'arms': []}, open(sys.argv[1], 'w'))" "$out" $n
       exit 0;; esac
     case "$out:${STUB_SHAKE_EVAL:-ok}" in
@@ -570,6 +571,16 @@ def test_a_partial_evaluator_read_excludes_its_depth_and_ends_the_climb(tmp_path
     arms, summary, py, spec = _hpn(tmp_path, HPN_DEPTHS="2 4 8", STUB_E_BAD="partial")      # E's second read at L4 has 299 rows
     assert "HPN L4 READ_FAILED eval_e4b_L4_2.json" in summary and [d["L"] for d in spec["depths"]] == [2]
     assert not [a for a in arms if a[0] == "qwen3hpnL8"]
+
+
+def test_a_stale_valid_read_from_an_earlier_run_never_passes_for_a_reader_that_died(tmp_path):
+    """Ruled: a previous run's valid eval file, plus a reader that dies before writing, must read READ_FAILED, not pass."""
+    import json
+    (tmp_path / "hpn").mkdir()
+    stale = {"bases": [{"status": "OK", "digest_matches_training_run": True, "zero_adapter": {"row_losses": [1.0] * 300}}], "arms": []}
+    (tmp_path / "hpn" / "eval_e4b_L4_2.json").write_text(json.dumps(stale))
+    arms, summary, py, spec = _hpn(tmp_path, HPN_DEPTHS="2 4 8", STUB_E_BAD="die")
+    assert "HPN L4 READ_FAILED eval_e4b_L4_2.json" in summary and [d["L"] for d in spec["depths"]] == [2]
 
 
 def test_a_failed_arm_also_removes_the_exports_that_succeeded():
