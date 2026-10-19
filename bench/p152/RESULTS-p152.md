@@ -29,7 +29,7 @@ script are byte-identical to the registered ones at `334ef5b5`, and the reducer'
 
 ### W16, the subject
 
-| class | ms | share of 16.497 |
+| class (census class time) | ms | share of 16.497 |
 |---|---|---|
 | moe_expert | 11.773 | 71.4 % |
 | dense_gemm | 2.406 | 14.6 % |

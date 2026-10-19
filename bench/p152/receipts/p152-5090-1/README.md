@@ -8,9 +8,11 @@ The host registry's latest record for this machine was a 575 W power cap read on
 `refused: power.limit 475 W`, exit code 17). By the registration this is a power-floor refusal, not a strike. It spent
 one of the lane's three run ids.
 
-What changed for the next pick: the pin screen took only hosts whose latest recorded cap of at least 575 W was read
-within the last three days, freshest first. That only narrows the registered host set. `p152-5090-2` then read 575 W on
-its own box before the install.
+What changed for the next pick: the pin screen was meant to take only hosts whose latest recorded cap of at least 575 W
+was read within the last three days, freshest first, which only narrows the registered host set. For the host
+`p152-5090-2` then took, that "fresh" record was a misread: a 575 W value from the kit's frozen calibration file, which
+ships in every run directory and is not a reading from any box. The misread was removed from the screen the same
+afternoon. The reading is unaffected: `p152-5090-2` read 575 W on its own box before the install.
 
 The launcher's receipt and ledger row are in the private receipt store, and the teardown is proven there. `SHA256SUMS`
 covers every file here. The run's instance file and the launcher's teardown proof name the provider's instance, so they
