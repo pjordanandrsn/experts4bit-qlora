@@ -32,11 +32,15 @@ case "$*" in
     if [ "${STUB_G1:-pass}" = close ]; then echo '{"verdict": "CLOSE", "tau": 0.03}' > "$out"; echo "HP2_G1=CLOSE"; exit 4; fi
     echo '{"verdict": "PASS", "roundtrip_zero_centred_tol": 0.01, "z_bands": {"e4b": [-0.0013, 0.0158]}}' > "$out"; echo "HP2_G1=PASS";;
   *"hp2_reduce.py verdict"*) echo "HP2_VERDICT=PARITY: no measurable difference at margin m";;
-  *hpn_read.py*) out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p'); echo '{"reader": "F", "runs": [[1.0], [1.0]]}' > "$out";;
+  *hpn_read.py*) out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p')
+    python3 -c "import json,sys; json.dump({'reader': 'F', 'runs': [[1.0] * 300, [1.0] * 300]}, open(sys.argv[1], 'w'))" "$out";;
   *hpn_reduce.py*) echo "HPN=STOP depths=[2, 4, 8]";;
   *hp1_calib.py*) out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p'); echo '{"verdict": "PASS", "tol": 0.0123}' > "$out"; echo "HP1_CALIB=PASS tol=0.0123";;
   *hp1_eval.py*)
     out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p'); st=OK
+    case "$out" in */hpn/eval_*) n=300; case "$out:${STUB_E_BAD:-}" in *_L4_2.json:partial) n=299;; esac
+      python3 -c "import json,sys; json.dump({'bases': [{'status': 'OK', 'digest_matches_training_run': True, 'zero_adapter': {'row_losses': [1.0] * int(sys.argv[2])}}], 'arms': []}, open(sys.argv[1], 'w'))" "$out" $n
+      exit 0;; esac
     case "$out:${STUB_SHAKE_EVAL:-ok}" in
       *eval_shake*:axvoid) echo '{"bases":[{"dir":"/x/base_e4b_s","status":"OK"},{"dir":"/x/base_unsloth_s","status":"OK"},{"dir":"/x/base_axolotl_s","status":"OK"}],"arms":[{"tag":"hp1shake_e4b","status":"SCORED"},{"tag":"hp1shake_unsloth","status":"SCORED"},{"tag":"hp1shake_axolotl","status":"VOID","reason":"STRICT round-trip 6(b)"}]}' > "$out"; exit 1;;
       *eval_shake*:e4bvoid) echo '{"bases":[{"dir":"/x/base_e4b_s","status":"OK"}],"arms":[{"tag":"hp1shake_e4b","status":"VOID","reason":"x"},{"tag":"hp1shake_unsloth","status":"SCORED"},{"tag":"hp1shake_axolotl","status":"SCORED"}]}' > "$out"; exit 1;;
@@ -65,11 +69,12 @@ tc1_prepare(){ TOK=$W/tokens.json; TS=deadbeef
 # tc1_arm's own rule (tc1_arm.py, the tokens check): a tokens file labelled for another fam is refused, rc=13 TOKENS_MISMATCH.
 arm(){ local tf; tf=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('fam') or '')" "${10}")
   if [ -n "$tf" ] && [ "$tf" != "$1" ]; then echo "$1 $2 $3" >> "$W/mismatch.log"; return 0; fi
-  echo "$1 $2 $3 ${*:12}" >> "$W/arms.log"; touch "$W/${1}_${2}_${3}.json"; }
+  echo "$1 $2 $3 ${*:12}" >> "$W/arms.log"; touch "$W/${1}_${2}_${3}.json"
+  case " ${*:12} " in *" --hp1-export-base 1 "*) local d; d=$(echo " ${*:12} " | sed -n 's/.* --hp1-export \([^ ]*\) .*/\1/p'); [ -n "$d" ] && mkdir -p "$d/base_${2}_${1}";; esac; }
 status_of(){ grep -qx "$1 $2 $3" "$W/mismatch.log" 2>/dev/null && { echo tokens_mismatch; return; }
   [ "${FAIL_FAM:-}" = "$1" ] && { echo "${FAIL_STATUS:-oom}"; return; }
   [ "${SHAKE_FAIL:-}" = "$2" ] && echo install_failed || echo ok; }
-hp1_bulk_manifest(){ echo "manifest $1" >> "$W/manifest.log"; }
+hp1_bulk_manifest(){ echo "manifest $1 bases_present=$(ls -d $W/hp1/hpn/*/base_* 2>/dev/null | wc -l | tr -d ' ')" >> "$W/manifest.log"; }
 mkdir -p logs hp1 data; : > summary.txt; : > arms.log
 echo '{"fam": "qwen3hp1", "sha256": "deadbeef", "train": [], "eval": []}' > tokens.json
 source ./hp1_funcs.sh
@@ -535,11 +540,11 @@ def test_too_little_disk_for_a_cut_skips_it_before_any_arm(tmp_path):
 
 
 def test_the_exports_are_pinned_in_the_bulk_manifest_before_they_are_removed(tmp_path):
+    """Behaviour, not source order: each depth's pin sees that depth's two exported bases on disk, and they are gone afterwards."""
     _hpn(tmp_path, HPN_DEPTHS="2 4")
-    assert (tmp_path / "manifest.log").read_text().count("manifest") == 2           # one pin per depth, before its rm
-    src = RUN_SH.read_text()
-    body = src[src.index("tc1_hpn_family(){"):src.index("tc1_curve_family(){")]
-    assert body.index('hp1_bulk_manifest "$W"') < body.index("rm -rf $SC $D/base_e4b_$FL")
+    pins = [ln for ln in (tmp_path / "manifest.log").read_text().splitlines() if "bases_present" in ln]
+    assert [ln.split("bases_present=")[1] for ln in pins] == ["2", "2"]                    # one pin per depth, both bases still there
+    assert not list((tmp_path / "hp1" / "hpn").glob("*/base_*"))                            # and removed after it
 
 
 def test_hpn_arms_use_their_own_recipe_so_unsloths_trainable_check_has_a_reference():
@@ -559,3 +564,15 @@ def test_the_unsloth_backend_on_the_a2000_is_recorded_in_the_spec(tmp_path):
     arms, _, _, spec = _hpn(tmp_path, HPN_DEPTHS="2")
     uns = next(a for a in arms if a[2] == "hpn_uns")
     assert uns[uns.index("--unsloth-moe-backend") + 1] == "native_torch" == spec["unsloth_moe_backend"]
+
+
+def test_a_partial_evaluator_read_excludes_its_depth_and_ends_the_climb(tmp_path):
+    arms, summary, py, spec = _hpn(tmp_path, HPN_DEPTHS="2 4 8", STUB_E_BAD="partial")      # E's second read at L4 has 299 rows
+    assert "HPN L4 READ_FAILED eval_e4b_L4_2.json" in summary and [d["L"] for d in spec["depths"]] == [2]
+    assert not [a for a in arms if a[0] == "qwen3hpnL8"]
+
+
+def test_a_failed_arm_also_removes_the_exports_that_succeeded():
+    src = RUN_SH.read_text()
+    body = src[src.index("tc1_hpn_family(){"):src.index("tc1_curve_family(){")]
+    assert "if [ $ok = 0 ]; then rm -rf $SC $D/base_e4b_$FL $D/base_unsloth_$FL; break; fi" in body

@@ -2592,7 +2592,7 @@ tc1_hpn_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
       if [ "$st" = oom ]; then echo "HPN L$L ${a#*:} oom: this depth did not fit (a stated limit)" | tee -a summary.txt
       else failed="$failed ${a#*:}:$st"; fi; done
     [ -n "$failed" ] && echo "HPN L$L ARM_FAILED$failed (not a depth limit: see the arm receipts)" | tee -a summary.txt
-    if [ $ok = 0 ]; then rm -rf $SC; break; fi
+    if [ $ok = 0 ]; then rm -rf $SC $D/base_e4b_$FL $D/base_unsloth_$FL; break; fi   # a successful arm's export goes too (disk)
     local R=$W/${FL}_e4b_hpn_e4b_a.json RB=$W/${FL}_e4b_hpn_e4b_b.json RU=$W/${FL}_unsloth_hpn_uns.json
     for a in 1 2; do HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts $R --bases $D/base_e4b_$FL --tokens $TL --eval-n 300 \
       --model "$TM" --revision $TR --zero-report-only 1 --out $W/hpn/eval_e4b_L${L}_$a.json > logs/hpn_eval_e4b_L${L}_$a.log 2>&1; done
@@ -2600,6 +2600,25 @@ tc1_hpn_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
       --model "$TM" --revision $TR --zero-report-only 1 --out $W/hpn/eval_uns_L$L.json > logs/hpn_eval_uns_L$L.log 2>&1
     for a in e4b unsloth; do HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hpn_read.py --base $D/base_${a}_$FL --tokens $TL --eval-n 300 \
       --model "$TM" --revision $TR --runs 2 --out $W/hpn/f_${a}_L$L.json > logs/hpn_read_${a}_L$L.log 2>&1 || echo "HPN L$L F_FAILED $a" | tee -a summary.txt; done
+    # every reader's output is checked by CONTENT (an exit status alone misses a partial file): each E file one digest-matched base
+    # with 300 zero-adapter rows, each F file two runs of 300; a depth that fails it is excluded and ends the climb
+    local bad; bad=$($PY_E4B -c "import json,sys
+bad = []
+for p in sys.argv[1:]:
+    try:
+        d = json.load(open(p))
+        if 'runs' in d or p.split('/')[-1].startswith('f_'):
+            ok = d.get('reader') == 'F' and len(d.get('runs') or []) == 2 and all(len(r) == 300 for r in d['runs'])
+        else:
+            b = [x for x in d.get('bases', []) if (x.get('zero_adapter') or {}).get('row_losses')]
+            ok = len(b) == 1 and b[0].get('digest_matches_training_run') and len(b[0]['zero_adapter']['row_losses']) == 300
+    except Exception:
+        ok = False
+    if not ok:
+        bad.append(p.split('/')[-1])
+print(' '.join(bad))" $W/hpn/eval_e4b_L${L}_1.json $W/hpn/eval_e4b_L${L}_2.json $W/hpn/eval_uns_L$L.json $W/hpn/f_e4b_L$L.json $W/hpn/f_unsloth_L$L.json)
+    if [ -n "$bad" ]; then echo "HPN L$L READ_FAILED $bad (the depth is excluded; see logs/hpn_eval_*_L$L*.log, logs/hpn_read_*_L$L.log)" | tee -a summary.txt
+      hp1_bulk_manifest "$W"; rm -rf $SC $D/base_e4b_$FL $D/base_unsloth_$FL; break; fi
     hp1_bulk_manifest "$W"                                             # pin the exports' bytes before they go
     rm -rf $SC $D/base_e4b_$FL $D/base_unsloth_$FL
     json="$json${json:+,}{\"L\": $L, \"inloop\": [\"$(basename $R)\", \"$(basename $RB)\"], \"eval\": [\"hpn/eval_e4b_L${L}_1.json\", \"hpn/eval_e4b_L${L}_2.json\"], \"fref\": \"hpn/f_e4b_L$L.json\", \"unsloth\": {\"inloop\": [\"$(basename $RU)\"], \"eval\": [\"hpn/eval_uns_L$L.json\"], \"fref\": \"hpn/f_unsloth_L$L.json\"}}"
