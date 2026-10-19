@@ -119,6 +119,20 @@ def test_the_routing_pass_is_the_census_window_eager_at_w16():
     src = (LANE / "p152_route.py").read_text(encoding="utf-8")
     assert "census_window(sched, batch, a.skip, a.steps, rec.start, rec.stop" in src
     assert 'os.environ.get("E4B_PAGED_GRAPHS") != "0"' in src and "default_env_ok(env)" in src
+    assert 'out["route"], route_faults = route_record(hot_residency, model, batch, n_layers)' in src
+
+
+@pytest.mark.parametrize("prefill,expected", [("k19", (False, True)), ("loop", (False, False))])
+def test_the_eager_16_row_call_is_device_grouped_only_through_k19(monkeypatch, prefill, expected):
+    """The premise route_record checks, on the library itself: with graphs off DEVICE_GROUPING stays off, so a 16-row
+    call on a uniform-int4 store is device-grouped (the K19 route) only because E4B_INT4_PREFILL resolves to k19."""
+    pytest.importorskip("torch")
+    from experts4bit_qlora.engines import hot_residency as hr
+    monkeypatch.setenv("E4B_INT4_PREFILL", prefill)
+    monkeypatch.delenv("E4B_INT4_GROUPED_SMALLM", raising=False)
+    monkeypatch.setattr(hr, "DEVICE_GROUPING", [False])
+    monkeypatch.setattr(hr, "FORCE_SINGLETON_GROUPS", [False])
+    assert hr._collapsed_grouping(16, {"gu": {}, "dn": {}}) == expected
 
 
 def test_every_time_left_check_fits_the_guard():
@@ -169,6 +183,10 @@ ROUTE_MUTANTS = [
     ("        if layers != list(range(n_layers)):\n", "        if False:\n"),
     # a step's rows not checked against the batch
     ("            if rows != batch or k != top_k:\n", "            if False:\n"),
+    # the 16-row grouping not checked against device grouping
+    ('    if rec["collapsed_grouping"] != [False, True]:\n', "    if False:\n"),
+    # a route other than K19 accepted
+    ('    if rec["int4_prefill_mode"] != "k19" or rec["k19_mode"] == "0":\n', "    if False:\n"),
 ]
 
 

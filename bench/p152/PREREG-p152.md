@@ -44,6 +44,10 @@ P145 (`bench/p145/PREREG-p145.md`, the per-name census at W1 and W16) by counted
    - It records the unique experts each layer touched, per step, and each layer's expert hit counts.
    - A fault is recorded if a step's routers are called out of layer order, if a call has other than 16 rows x top-8, if
      a row repeats an expert, or if an id is out of range.
+   - It records the route its experts take, read from `hot_residency` itself: `_int4_prefill_mode_env()`, K19's mode,
+     the two grouping flags and `_collapsed_grouping(16, store)`. With graphs off `DEVICE_GROUPING` stays off, so the
+     16-row call is device-grouped (128 routed rows: K19, the replay's route) only because `E4B_INT4_PREFILL` resolves
+     to `k19`. Any other mode, grouping or store kind is a fault.
 3. **The power floor:** `power.limit` >= 575 W before anything is installed (rc 17; unreadable, 15), as P149's. The GPU
    state (SM and memory clocks, power, temperature, clock event reasons) is appended to `gpu_phases.csv` at the start
    and end of every arm, capture and the routing pass. Reported only.
@@ -84,8 +88,11 @@ Profiled node times are never quoted as speed.
 
 ## Budget and sequencing
 
-- **One RTX 5090** at <= $0.85/h, **guard 1.25 h**, 61 GB at <= $0.005/GB: worst 1.25 x $0.85 + 61 x $0.005 = **$1.37**,
-  under the standing rule. Disk 200 GB (the box's floor is 150 GB free).
+- **One RTX 5090** declared at $1.05/h (the owner's 2026-10-19 RTX 5090 approval; the launcher runs at the lower of the
+  declared rate and its own ceiling), **guard 1.25 h**, 61 GB at <= $0.005/GB: worst 1.25 x $1.05 + 61 x $0.005 =
+  **$1.62**, under the standing rule. Disk 200 GB (the box's floor is 150 GB free). The manifest asks the launcher's
+  power screen for the same floor the runner checks: `vast_min_power_limit_w: 575` and
+  `vast_power_limit_unknown: exclude`.
 - **Run ids** `p152-5090-1` to `-3`; two consecutive HARNESS_ERROR, VOID or NOT_RUN runs stop the lane. A pre-flight host
   stall or a power-floor refusal (rc 17) is not a strike.
 - **Every time-left check** fits the guard (`tests/test_p152.py`). The rental waits for this registration's merge and
@@ -107,3 +114,8 @@ Fetched to the run directory's `p152/` and committed to `bench/p152/receipts/<ru
 - Nothing about speed: it names candidates; a lever's gain is its own served read.
 - Nothing about other cards or families: one RTX 5090, Qwen3-30B-A3B.
 - Nothing about loads other than 16 rows in steady decode (W16) and one row (W1); no prefill, no mixed steps.
+- Not that the routing census saw the replay's experts step for step. The eager pass and the graph replay share the
+  prompts, the window and the expert route, but bitwise identity of the served MoE decode under graphs off and under
+  replay is not established. Once a row's token differs, its routes differ from then on. The floor is a reading of the
+  eager window's traffic, reported only. The census driver does not record its tokens, so this lane does not measure
+  the agreement.

@@ -107,6 +107,31 @@ def attach(model, rec):
     return [g[0] for g in gates]
 
 
+def route_record(hr, model, batch, n_layers):
+    """The expert route this eager pass takes at ``batch`` rows, read from ``hot_residency`` (``hr``) itself, and its
+    faults. With graphs off the server leaves ``DEVICE_GROUPING`` off, so a 16-row decode call is device-grouped only
+    because ``E4B_INT4_PREFILL`` resolves to ``k19`` (``_collapsed_grouping``'s third branch); at 128 routed rows K19 is
+    then the route the graph replay takes. Anything else (host grouping, singleton groups, the M-tile, a store that is
+    not uniform int4 on every MoE layer) is a fault: the census would then read a pass whose experts ran another way."""
+    stores = [m._int4_stores for m in model.modules() if getattr(m, "_int4_stores", None) is not None]
+    st = stores[0] if stores else None
+    rec = {"int4_prefill_mode": hr._int4_prefill_mode_env(), "k19_mode": hr._k19_mode_env(),
+           "device_grouping_flag": bool(hr.DEVICE_GROUPING[0]),
+           "force_singleton_groups": bool(hr.FORCE_SINGLETON_GROUPS[0]),
+           "int4_store_layers": len(stores), "int4_store_kind": st.get("kind", "int4") if st is not None else None,
+           "collapsed_grouping": list(hr._collapsed_grouping(batch, st)), "collapsed_grouping_rows": batch}
+    faults = []
+    if len(stores) != n_layers or st is None or st.get("kind") == "mxfp4":
+        faults.append(f"route: {len(stores)} uniform-int4 expert stores (kind {rec['int4_store_kind']}), {n_layers} MoE layers")
+    if rec["int4_prefill_mode"] != "k19" or rec["k19_mode"] == "0":
+        faults.append(f"route: E4B_INT4_PREFILL resolves to {rec['int4_prefill_mode']!r} and K19's mode is "
+                      f"{rec['k19_mode']!r}; the registered route is K19")
+    if rec["collapsed_grouping"] != [False, True]:
+        faults.append(f"route: {batch} rows group as (singleton, device) = {tuple(rec['collapsed_grouping'])}, "
+                      "not device-grouped")
+    return rec, faults
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--prompts")
@@ -149,6 +174,9 @@ def main(argv=None) -> int:
            "load_s": round(time.perf_counter() - t0, 1), "prompts_sha256": pf["prompts_sha256"],
            "moe_layers": n_layers, "num_experts": n_experts, "top_k": top_k, "routers_hooked": len(layers)}
     faults = [] if layers == list(range(n_layers)) else [f"{len(layers)} routers hooked, {n_layers} MoE layers"]
+    from experts4bit_qlora.engines import hot_residency
+    out["route"], route_faults = route_record(hot_residency, model, batch, n_layers)
+    faults += route_faults
     p109_box.run_pass(parts, torch, rows, 32)                      # warm (untimed, hooks off)
     sched = parts.scheduler
     for r in rows:
@@ -222,6 +250,40 @@ def self_test() -> int:
     cases.append(("a row picking one expert twice is a fault", any("twice" in x for x in s6["faults"])))
     cases.append(("the gate name pattern matches transformers' layer path", GATE_RE.search("model.layers.47.mlp.gate")
                   and not GATE_RE.search("model.layers.3.mlp.experts.gate")))
+
+    class _HR:                                         # a stand-in for hot_residency's route switches
+        DEVICE_GROUPING, FORCE_SINGLETON_GROUPS = [False], [False]
+
+        def __init__(self, mode="k19", k19="auto", grouping=(False, True)):
+            self.mode, self.k19, self.grouping = mode, k19, grouping
+
+        def _int4_prefill_mode_env(self):
+            return self.mode
+
+        def _k19_mode_env(self):
+            return self.k19
+
+        def _collapsed_grouping(self, _T, _st):
+            return self.grouping
+
+    class _M:
+        def __init__(self, stores):
+            self.stores = stores
+
+        def modules(self):
+            return [type("W", (), {"_int4_stores": st})() for st in self.stores]
+
+    int4 = {"gu": {}, "dn": {}}
+    r0, f0 = route_record(_HR(), _M([int4] * 3), 16, 3)
+    cases.append(("the eager 16-row route is K19, device-grouped, recorded", not f0 and r0["int4_prefill_mode"] == "k19"
+                  and r0["collapsed_grouping"] == [False, True] and r0["int4_store_kind"] == "int4"
+                  and r0["int4_store_layers"] == 3))
+    cases.append(("the loop route is a fault", bool(route_record(_HR(mode="loop"), _M([int4] * 3), 16, 3)[1])))
+    cases.append(("K19 switched off is a fault", bool(route_record(_HR(k19="0"), _M([int4] * 3), 16, 3)[1])))
+    cases.append(("host grouping at 16 rows is a fault",
+                  bool(route_record(_HR(grouping=(False, False)), _M([int4] * 3), 16, 3)[1])))
+    cases.append(("a layer without the int4 store is a fault", bool(route_record(_HR(), _M([int4] * 2), 16, 3)[1])))
+    cases.append(("an MXFP4 store is a fault", bool(route_record(_HR(), _M([{"kind": "mxfp4"}] * 3), 16, 3)[1])))
     bad = [n for n, ok in cases if not ok]
     print(f"p152_route self-test {'OK' if not bad else 'FAILED ' + str(bad)} ({len(cases)} cases)")
     return 0 if not bad else 1
