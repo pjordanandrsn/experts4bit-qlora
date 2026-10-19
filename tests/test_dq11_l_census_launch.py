@@ -886,7 +886,8 @@ def stall_receipt(root, run_id, *, machine="147454", instance="56654961", cost=0
     path = root / "receipts/experts4bit-qlora/2026-10-19" / run_id / "receipt.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(receipt))
-    row = {"run_id": run_id, "date_utc": "2026-10-19", "role": "CTO", "cost_usd": cost if ledger_cost is None else ledger_cost}
+    row = json.loads((FIXTURE / "ledger.jsonl").read_text())                   # the fixture's row, re-pointed
+    row.update(run_id=run_id, cost_usd=cost if ledger_cost is None else ledger_cost)
     with (root / "receipts/experts4bit-qlora/ledger.jsonl").open("a") as stream:
         stream.write(json.dumps(row) + "\n")
     git_fixture(root, "add", "receipts")
