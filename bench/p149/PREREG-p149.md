@@ -191,8 +191,9 @@ two experts per layer, whichever they are, so the bytes and the launches do not 
   - The forced token is written with `copy_` into the captured graph's own static input buffer. Before every block, that
     buffer's storage is checked against the pointer taken at capture: a rebound tensor would replay its own argmax and
     give r = 1 by construction.
-  - Each step, a device-side count accumulates two things: where that buffer differs from the forced token, which must
-    read 0; and where the step's own argmax differs from the next forced token.
+  - Each step, after the sync the served step already makes (decode lookahead is off by default, so every step reads
+    its tokens back), a count accumulates two things, read from the graph's own buffers: where the input buffer differs
+    from the forced token, which must read 0; and where the step's own argmax differs from the next forced token.
   - The second count must read 0 on A, S0 reproducing its own stream. On B it must read above 0, unless S1 decoded S0's
     tokens exactly; then g16_routing is 1 by construction and the label is ROUTING_CLEAR.
   - Each block's fed tokens are recorded and must equal the stream.
