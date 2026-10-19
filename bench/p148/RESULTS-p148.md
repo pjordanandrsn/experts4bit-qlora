@@ -42,8 +42,9 @@ Two things the read showed beyond the verdict (reported, never ruling):
 - **Split-K lost at every shape.** The best split-K config was about 20 % slower than the best unsplit one at q/k/v
   and o (0.818 against 0.679 ms, and 0.696 against 0.558). The prototype sums the partials in a separate pass. Both
   shapes chose 2-row blocks over full-K chunks of 1024, unsplit.
-- **The int8 head's speed is the halved bytes.** All 18 configs read between 0.188 and 0.192 ms, near the bandwidth
-  floor. The configuration hardly matters; quality is the open question.
+- **The int8 head reads near the bandwidth floor at every config.** All 18 configs read between 0.188 and 0.192 ms,
+  so in the microbench the configuration hardly matters. Quality is the next question, and the served read still owes
+  the speed.
 
 **The host.** Machine 40521 runs its 5090 at a 400 W power limit. P148 registered no power term. The verdict is ratios
 on one host projected onto P142's in-situ times, and these GEMVs are DRAM-bound, so a power cap should move them least
@@ -62,8 +63,9 @@ of anything in the step. The served reads below carry a power term in their regi
 
 Routed by the maintainer after the re-derivation:
 - **D2 first.** A served registration that rules the int8 head on **quality** at both of the split premise's gates (t1
-  and k16: argmax >= 0.95 and d + 1.645 SE <= the bound) before any speed read. Its speed is already settled by the
-  halved bytes. The earlier I8HEAD reads were reported, not ruled, and Qwen3's 151936-row head must earn its own.
+  and k16: argmax >= 0.95 and d + 1.645 SE <= the bound) before any speed read. The microbench reads the int8 head
+  near the bandwidth floor at every config; the served read still owes its speed, after the quality ruling. The
+  earlier I8HEAD reads were reported, not ruled, and Qwen3's 151936-row head must earn its own.
 - **D1.** A grouped-nf4-gemm dense bf16 GEMV with no split-K, under its own tolerance contract, then a served read in
   P143's form.
 
