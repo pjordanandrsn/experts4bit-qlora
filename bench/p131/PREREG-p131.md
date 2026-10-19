@@ -396,7 +396,9 @@ an artifact unrelated to the levers. Maintainer ruling, 2026-10-19 04:50Z: (b) a
 - **(b) The GPU state.** Every process records nvidia-smi's SM and memory clocks, power draw, temperature and active
   clock event reasons four times: at the start of its speed pass, right after the warm rounds and right after the timed
   rounds (under load, after a sync, outside every timed pair: the clocks the timed rounds ran at), and at its end
-  (`gpu_state` in each process record, a `P131_GPU` line in `summary.txt`). It is **reported only**. An unreadable query is recorded as its error and never fails the
+  (`gpu_state` in each process record, a `P131_GPU` line in `summary.txt`). The after-warm read adds a short idle gap
+  before the first timed round, the same in every process: no cross-process bias, but a dip it causes would not show in
+  that sample. If the first timed round reads slow, the read says so. It is **reported only**. An unreadable query is recorded as its error and never fails the
   process. It settles the attribution either way: a first-process boost shows in the clocks.
 - **The rule's self-test** grows from 37 to 44 cases:
   - a fast warm-up never trips the span;
