@@ -57,16 +57,23 @@ must(){ phase "$@"; [ "$PHASE_RC" = 0 ] || { tail -30 "logs/$1.log"; say "VOID: 
 # The registered constants live here, in the sealed closure: tc1_drive.sh forwards only its own TC1_* list, so nothing below can
 # be changed from the controller's environment. A rehearsal may override the caps and the interpreter (Q235_CAP_*, Q235_PYTHON).
 # The phase caps (seconds) are gate 2's: each fitted from the rehearsal's measured phases, scaled to the registered model and class.
-# Box: Amendment 12, the RTX PRO 6000 timing leg q235-leg-pro6000-2 (bench/q235/am12/): box 85 s on the 4-layer slice, x 94/4 =
-# 1,997.5 s, x 1.5 = 2,997 s (q235_fit rounds up to the second). Unchanged, and still above the leg fit's budgets: install (293 s at
-# 806 Mbps), fetch (7,111 s at 806 Mbps; it covers any pull >= MIN_FETCH_GBS) and the fixed phases.
+# The fixed phases, install (293 s at 806 Mbps on the Amendment 12 leg) and fetch (7,111 s at 806 Mbps; it covers any pull >=
+# MIN_FETCH_GBS) keep their sealed caps.
+# Box: Amendment 16 sizes it on the box (box_cap below): HALF the time left at the box's start, less the reserve,
+# floor((left - 300) / BOX_SHARE). The other half is the repeat's: the repeat is a strict subset of the box's work (one load and about
+# five steps, against one load and every box step), so a box inside its half leaves the repeat at least as long. Amendment 12's sealed
+# 2,997 s (a warm 4-layer slice x 94/4 x 1.5) is gone: q235-pro6000-7 hit it with 4.9 h left, after a 2,088 s expert fuse.
+# If the box hits its half-cap while its per-layer load record (receipts/box/load_layers.jsonl) has no end line, the LOAD ALONE ran
+# past the cap: the same code loads the same bytes on every host, so that is host-limited by construction. It exits 18 (a
+# registered host floor, which names the machine) as VOID_BY_HOST, not a strike.
 # Repeat: Amendment 15 sizes it on the box, from this box's own box phase (repeat_cap below): REPEAT_MARGIN x (the box record's
 # load.seconds + REPEAT_STEPS x step.elapsed_s), rounded up, never under 60 s, then bounded by the time left less the reserve like
 # every phase. REPEAT_STEPS: after its load, run 2's repeat spent about 139 s, 4.7 of its box's 29.8 s steps (the null, the two
 # planted forwards, three sets of layer records and the process start).
 # The repeat is a fresh process by design (rule 6), so it reloads the whole model; Amendment 12's leg-scaled 705 s came from a warm
 # slice load and could not hold a cold full reload (q235-pro6000-6: 661 s of expert fuse, quantize and offload alone).
-CAP_GIT=240 CAP_VENV=120 CAP_INSTALL=1800 CAP_HOSTRATE=600 CAP_FETCH=12000 CAP_TOKENS=300 CAP_BOX=2997
+CAP_GIT=240 CAP_VENV=120 CAP_INSTALL=1800 CAP_HOSTRATE=600 CAP_FETCH=12000 CAP_TOKENS=300
+BOX_SHARE=2 CAP_BOX=""
 REPEAT_MARGIN=1.5 REPEAT_STEPS=5 CAP_REPEAT=""
 # The host-rate floors (gate 2's premise), from the RTX PRO 6000 leg. Pinned H2D (Amendment 12): max(sealed, the A2000's measured,
 # min(28.36, 28.33) / 1.2) = 23.609. The disk (Amendment 12): the leg's box load was warm, so its registered cold-read sample was not
@@ -81,7 +88,7 @@ MIN_FETCH_GBS=0.062
 ROWS=8          # TC1's field-text rows in the one micro-batch (the 30B calibration's and gate 1's); the registering amendment fixes it
 PY=python3.11
 if [ "$MODE" != science ]; then
-  CAP_FETCH=${Q235_CAP_FETCH:-$CAP_FETCH} CAP_BOX=${Q235_CAP_BOX:-$CAP_BOX} CAP_REPEAT=${Q235_CAP_REPEAT:-}
+  CAP_FETCH=${Q235_CAP_FETCH:-$CAP_FETCH} CAP_BOX=${Q235_CAP_BOX:-} CAP_REPEAT=${Q235_CAP_REPEAT:-}
   PY=${Q235_PYTHON:-$PY}
 fi
 
@@ -127,6 +134,28 @@ must create-venv "$CAP_VENV" "$PY" -m venv "$VENV"
 export PATH="$VENV/bin:$PATH"
 must install "$CAP_INSTALL" python q235_bootstrap.py --cache "$W/.cache/wheels"
 
+# Amendment 16: what the host-side load runs on, recorded before any timed phase: the CPU model, the logical CPUs, the physical
+# cores (unique package/core pairs), threads per core, the affinity, the cgroup quota and torch's default intra-op pool. Recorded,
+# never gated here: q235-pro6000-7's fuse ran at torch's default pool of 16 (its physical cores) on 32 logical CPUs.
+python - > receipts/cpu.json 2> logs/cpu.log <<'PY' || say 'the host CPU record failed (recorded only, never gated; logs/cpu.log)'
+import glob, json, os
+import torch
+from experts4bit_qlora.util import host_cpu_report
+cores = set()
+for t in glob.glob("/sys/devices/system/cpu/cpu[0-9]*/topology"):
+    try:
+        cores.add((open(t + "/physical_package_id").read().strip(), open(t + "/core_id").read().strip()))
+    except OSError:
+        pass
+model = next((l.split(":", 1)[1].strip() for l in open("/proc/cpuinfo") if l.startswith("model name")), None)
+rep = host_cpu_report()
+logical = os.cpu_count()
+print(json.dumps({"amendment": 16, "cpu_model": model, "logical_cpus": logical, "physical_cores": len(cores) or None,
+                  "threads_per_core": round(logical / len(cores), 2) if cores else None, "affinity_cpus": rep["visible_cpus"],
+                  "cpu_quota": rep["cpu_quota"], "quota_detail": rep["quota_detail"], "torch_default_pool": torch.get_num_threads(),
+                  "omp_num_threads": rep["omp_num_threads"]}))
+PY
+
 DIRECT=(); FLOORS=(--min-h2d-gbs 0 --min-disk-gbs 0 --min-host-copy-gbs 0)
 [ "$MODE" = science ] && { DIRECT=(--require-direct)
                            FLOORS=(--min-h2d-gbs "$MIN_H2D_GBS" --min-disk-gbs "$MIN_DISK_GBS" --min-host-copy-gbs "$MIN_HOST_COPY_GBS"); }
@@ -158,6 +187,27 @@ esac
 must tokens "$CAP_TOKENS" python q235_tokens.py ds_alpaca.json "$MODEL" --rows "$ROWS" --seq 2048 --out "$W/receipts/tokens.pt" \
   --heldout-out "$W/receipts/heldout.pt"    # Amendment 8: the registered held-out rows, the next ROWS rows of the split
 
+# --- box_cap (Amendment 16) ---
+box_cap(){   # prints the box's cap, half the time left less the reserve, and writes receipts/box-cap.json; non-zero when it cannot
+  python - "$TC1_DEADLINE_EPOCH" "$BOX_SHARE" "$CAP_BOX" > receipts/box-cap.json 2> logs/box-cap.log <<'PY' || return 1
+import json, sys, time
+deadline, share, pinned = int(sys.argv[1]), int(sys.argv[2]), sys.argv[3]
+left = deadline - int(time.time())
+derived = (left - 300) // share
+if derived <= 0:
+    sys.exit(f"{left} s left leaves no box cap")
+rec = {"amendment": 16, "left_s": left, "reserve_s": 300, "share": share, "derived_cap_s": derived}
+if pinned:                                     # a rehearsal's pinned cap (never a science box): recorded beside the derived cap
+    rec["rehearsal_cap_s"] = int(pinned)
+print(json.dumps(rec))
+PY
+  python -c 'import json; r = json.load(open("receipts/box-cap.json")); print(r.get("rehearsal_cap_s", r["derived_cap_s"]))'
+}
+load_unfinished(){   # 0 when the box's per-layer load record began and never reached its end line (Amendment 16's VOID_BY_HOST)
+  [ -s receipts/box/load_layers.jsonl ] && ! grep -q '"done": true' receipts/box/load_layers.jsonl
+}
+# --- end box_cap ---
+
 # --- repeat_cap (Amendment 15) ---
 repeat_cap(){   # prints the repeat's cap from this box's own box record and writes receipts/repeat-cap.json; non-zero when unreadable
   python - "$REPEAT_MARGIN" "$REPEAT_STEPS" "$CAP_REPEAT" > receipts/repeat-cap.json 2> logs/repeat-cap.log <<'PY' || return 1
@@ -178,8 +228,10 @@ PY
 # --- end repeat_cap ---
 
 for run in box repeat; do
-  extra=(--micro-batch 2 --time-moe 8 --time-moe-bound --heldout receipts/heldout.pt); cap=$CAP_BOX   # box: shape B (Amendment 6), the timed pass (Amendment 7), the held-out read (Amendment 8)
-  if [ "$run" = repeat ]; then
+  extra=(--micro-batch 2 --time-moe 8 --time-moe-bound --heldout receipts/heldout.pt)   # box: shape B (Amendment 6), the timed pass (Amendment 7), the held-out read (Amendment 8)
+  if [ "$run" = box ]; then
+    cap=$(box_cap) && [ -n "$cap" ] || { tail -3 logs/box-cap.log; say 'VOID: the box cap cannot be sized from the time left (Amendment 16)'; finish 11; }
+  else
     extra=(--repeat --plants)
     cap=$(repeat_cap) && [ -n "$cap" ] || { tail -3 logs/repeat-cap.log; say 'VOID: the repeat cap cannot be sized from the box record (Amendment 15)'; finish 11; }
   fi
@@ -187,7 +239,13 @@ for run in box repeat; do
   case "$PHASE_RC" in
     0) ;;
     3) tail -5 "logs/$run.log"; say "FAIL: a STRICT rule failed in $run (box.json names it)"; finish 12 ;;
-    *) tail -30 "logs/$run.log"; say "VOID: $run (rc $PHASE_RC)"; finish 11 ;;
+    *) tail -30 "logs/$run.log"
+       if [ "$run" = box ] && [ "$PHASE_RC" = 142 ] && load_unfinished; then   # Amendment 16: the load alone ran past the half-cap
+         echo 'VOID_BY_HOST: the load alone ran past the box half-cap' > REFUSAL
+         say "VOID_BY_HOST: the box hit its ${cap} s half-cap with the load unfinished ($(grep -c '"layer"' receipts/box/load_layers.jsonl) expert layers done; Amendment 16, not a strike)"
+         finish 18
+       fi
+       say "VOID: $run (rc $PHASE_RC)"; finish 11 ;;
   esac
 done
 if [ "$MODE" = pro6000 ]; then   # Amendment 11: the second host-rate sample, after the repeat (the fit needs both within 15 %)
