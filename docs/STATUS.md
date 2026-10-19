@@ -275,8 +275,9 @@ GEMV, which reads half the head's bytes.
 - **Speed:** one request decodes **1.052×** as fast on a 5090 (263.7 → 277.5 tok/s; the smallest of four ABBA pairs).
   The step saving is 0.189 ms, 0.998 of P148's microbench projection.
 - **Sixteen requests:** 0.992, inside the 0.99 line. S1 is below S0 in every W16 pair, though the W16 rate counts only
-  16-row steps, where the head is passed to `F.linear`. The cost is observed, not yet attributed. The candidates are
-  the resident int8 copy, and the different tokens the rounded head decodes at 16 rows.
+  16-row steps, where the head is passed to `F.linear`. The cost is observed, not yet attributed. Token divergence,
+  named at review, is bounded out by a $0 router replay (distinct experts per step 0.9990, S1/S0; bf16, teacher-forced
+  on the recorded streams). The resident int8 copy is the remaining named candidate.
 - **Quality:** SANE inside the bars (bias +0.0022, argmax 0.989), in line with P150's GO at both of P125's gates. The
   knob rounds the head at every row count, so every row count's logits change.
 - **Default:** on for `qwen3_moe` at this head shape (151936 x 2048). It needs K36's GEMV, first released in

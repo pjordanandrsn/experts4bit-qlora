@@ -1,0 +1,38 @@
+KNOBS e4b=20910df48d8bf3b335c0f5585cf0fc1932b492da gnf4=38b308887688ea5bda7dd449bd3cc3dc1426b995 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 family=qwen3 dry=0 min_power_w=575 moe_layers=48
+CUDA_PROBE ok
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-494cdfeb-50c8-6125-8057-47b0bd8d9c74, 12.0
+power.limit,clocks.max.sm 575.00 W, 3090 MHz
+CPU(s):                                  96
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD EPYC 7K62 48-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             503         371          68           0          64         128
+overlay         200G   76M  200G   1% /
+POWER_LIMIT_W 575 (floor 575)
+[2026-10-19T20:17:03Z] p154: install e4b @20910df48d8bf3b335c0f5585cf0fc1932b492da + gnf4 @38b308887688ea5bda7dd449bd3cc3dc1426b995 (image python; transformers 5.17.0; torch held at 2.8.0)
+tripwire OK: 0.55.0 gnf4 0.47.1 torch 2.8.0+cu128
+e4b 0.55.0 @20910df48d8bf3b335c0f5585cf0fc1932b492da
+gnf4 0.47.1 @38b308887688ea5bda7dd449bd3cc3dc1426b995
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p154_route self-test OK (24 cases)
+p154_reduce self-test OK (14 cases)
+p136_box self-test OK (5 cases)
+selftest OK (3 cases)
+premise rc=0: 4 passed in 16.67s
+premise ok
+[2026-10-19T20:18:39Z] p154: fetch Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+[2026-10-19T20:28:20Z] p154: bake the NF4 arena
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709
+[2026-10-19T20:29:47Z] p154: routing pass W16 (alarm=1200)
+route b16 rc=0 P154_ROUTE {"steps": 64, "summary": {"steps": 64, "layers": 48, "unique_per_layer_step": {"mean": 58.0674, "min": 42, "max": 81}, "unique_per_step_total": {"mean": 2787.23, "min": 2521, "max": 3097}, "hottest_expert_share_of_a_layer": 0.10156, "uniform_expectation_per_layer": 82.423}, "k25_calls": 6144, "store": {"kind": "nf4", "gate_up_bytes_per_expert": 1769472.0, "down_bytes_per_expert": 884736.0}, "copy_gbps": 1523.0, "faults": 0}
+
+[2026-10-19T20:31:33Z] p154: reduce
+P154 READ {"why": [], "both": {"floor_ms": 4.9356, "recorded_ms": 11.748, "fraction_of_copy": 0.4201, "headroom_ms": 6.8124}}
+[2026-10-19T20:31:33Z] p154: TP_DONE rc=0

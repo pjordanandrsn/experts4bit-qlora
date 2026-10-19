@@ -61,7 +61,7 @@ Bucket 1 replays 1164 times in every arm: W1's 6 x (31 + 159) = 1140, plus 2 for
 check runs at capture only. The captured pass path is `F.linear(x, self.weight)`: the same cuBLAS call S0's
 `nn.Linear` makes, at the same shape and dtype.
 
-Two candidates remain:
+Two candidates were named at review:
 - **Memory:** the int8 copy stays resident alongside the bf16 weight.
   - `memory_allocated` is 311,772,672 bytes higher at load, exactly the codes plus their fp32 scales.
   - `memory_reserved` is 400 MiB higher (nvidia-smi 24487 vs 24087 MiB).
@@ -70,13 +70,22 @@ Two candidates remain:
   - On an MoE, different tokens mean different router picks, so different expert work in each bucket-16 replay.
   - The S0 self-pairs compare identical token streams; S1/S0 at W16 does not.
 
-**What would separate them:**
-- **A served A/B** (a later lane, for the speed): the int8 copy built but the weight NOT rounded, so S1's tokens equal
-  S0's. It runs against S0 plus a dummy allocation of the same size.
-- **A $0 bound on the second candidate,** on the A2000 with no speed run: replay S0's and S1's recorded W16 token
-  streams through the router, and compare the distinct experts per step.
+**Token divergence, named at review, is bounded out by a $0 router replay** ([`router-replay/`](router-replay/README.md),
+after this read).
+- **How:** both arms' recorded W16 streams went through the same model, teacher-forced, since the lm_head is downstream
+  of every router.
+- **The metric, stated before the run:** each layer's distinct experts per counted bucket-16 step, S1 over S0. It reads
+  **0.9990**, under bands that reject anything at or below 1.
+- **Per step:** S1 has more on 64 steps and fewer on 64.
+- **Row spread:** in a check suggested at review, every row-per-expert spread metric is within +/-0.5 % with mixed signs.
+  None can carry 0.5-0.8 %.
+- **The bound's limits:** bf16 experts, teacher-forced (argmax fidelity 0.94 against the recorded streams). It is not
+  the served NF4 picks.
 
-This read cannot attribute the cost.
+**What would separate the remaining candidate:** a served A/B, a paid lane registered first. The int8 copy is built but
+the weight is NOT rounded, so S1's tokens equal S0's, and it runs against S0 plus a dummy allocation of the same size.
+
+This read cannot attribute the cost. The resident int8 copy is the remaining named candidate.
 
 ## Predictions (graded, never ruling)
 
