@@ -427,7 +427,7 @@ def loaded_expert_double_quant(model):
 
 # ----------------------------------------------------------------------------- P2-2: axolotl helpers (pure; no axolotl import)
 def axolotl_config_dict(a, base_model, mods, params, best=False, double_quant=False, dataset_path=None, output_dir=None,
-                        quantize_moe_experts=True, layer_offload=False, deepspeed=None):
+                        quantize_moe_experts=True, layer_offload=False, deepspeed=None, kernels=True):
     """The axolotl 0.20.0 config for ONE arm as the dict `load_cfg` accepts (axolotl-arm-spec.md "Config keys"; keys read in
     utils/schemas/config.py, utils/schemas/model.py, loaders/model.py, monkeypatch/moe_quant.py). The trainer-side keys
     (micro_batch_size, gradient_accumulation_steps, max_steps, learning_rate, ...) are set to the fixture even though THIS
@@ -454,6 +454,13 @@ def axolotl_config_dict(a, base_model, mods, params, best=False, double_quant=Fa
     }
     if best:                                                                                                # integrations/kernels/args.py:38, 55; plugin.py:134-163
         cfg.update({"plugins": ["axolotl.integrations.kernels.KernelsPlugin"], "expert_backend": "scattermoe", "moe_bnb_fast": True})
+    if not kernels:            # #1767: PEFT's reference forward. No kernels plugin / scattermoe (the caller forces best off), the LoRA kernels that
+        # check_auto_enable_lora_kernels would switch on set False explicitly (utils/schemas/config.py:1966-1990: only None is auto-enabled),
+        # and transformers' eager experts (loaders/model.py:476-493 calls set_experts_implementation with the named value)
+        if best:
+            raise ValueError("axolotl_config_dict: kernels=False with best=True (the kernels plugin is the best path)")
+        cfg.update({"lora_mlp_kernel": False, "lora_qkv_kernel": False, "lora_o_kernel": False, "lora_embedding_kernel": False,
+                    "experts_implementation": "eager"})
     if layer_offload:          # TC3 arm 9: utils/schemas/config.py:653 `layer_offloading: bool | None` (default False); a TRAINER lever -- see load_axolotl for how it is driven here
         cfg["layer_offloading"] = True
     if deepspeed is not None:  # TC3 arm 10: utils/schemas/config.py:1070 `deepspeed: str | dict | None`; the engine is the trainer's -- see load_axolotl (a refused row)
@@ -2320,13 +2327,14 @@ def load_axolotl(a):
         if not mods:
             raise NotImplementedError("axolotl arm: no attention projection found by structure (q_proj/k_proj/o_proj); refusing rather than guessing")
         del skel
-    best = bool(int(getattr(a, "axolotl_best", 0) or 0))
+    kernels = (getattr(a, "axolotl_kernels", "on") or "on") == "on"     # #1767: off = PEFT's reference forward (axolotl_config_dict)
+    best = bool(int(getattr(a, "axolotl_best", 0) or 0))                  # main() refuses best with --axolotl-kernels off
     lo = bool(int(getattr(a, "axolotl_layer_offload", 0) or 0))          # TC3 arm 9
     z3 = bool(int(getattr(a, "axolotl_zero3", 0) or 0))                  # TC3 arm 10
     ds_cfg = axolotl_zero3_config(a) if z3 else None
     cfg_dict = axolotl_config_dict(a, local, mods, params, best=best, double_quant=False,
                                    dataset_path=getattr(a, "axolotl_dataset", None), output_dir=os.path.join(a.out, "axolotl-out"),
-                                   quantize_moe_experts=not z3, layer_offload=lo, deepspeed=ds_cfg)
+                                   quantize_moe_experts=not z3, layer_offload=lo, deepspeed=ds_cfg, kernels=kernels)
     import axolotl
     from axolotl.cli.config import load_cfg
     from axolotl.loaders import ModelLoader, load_tokenizer
@@ -2396,7 +2404,8 @@ def load_axolotl(a):
         n_quant_log = f"unavailable: {type(e).__name__}"
     census = axolotl_expert_census(model)
     mcfg = getattr(getattr(model, "config", None), "to_dict", lambda: {})()
-    x["axolotl"] = {"version": getattr(axolotl, "__version__", None), "torch": torch.__version__,
+    x["axolotl"] = {"version": getattr(axolotl, "__version__", None), "torch": torch.__version__, "kernels": "on" if kernels else "off",
+                    "cfg_lora_kernels": {k: cfg.get(k) for k in ("lora_mlp_kernel", "lora_qkv_kernel", "lora_o_kernel", "lora_embedding_kernel")},
                     "transformers": md.version("transformers"), "peft": md.version("peft"), "bitsandbytes": md.version("bitsandbytes"),
                     "config": cfg_dict, "best": best, "plugins": cfg_dict.get("plugins"), "expert_backend": cfg_dict.get("expert_backend"),
                     "cfg_experts_implementation": cfg.get("experts_implementation"), "cfg_use_scattermoe": cfg.get("use_scattermoe"),
@@ -5963,6 +5972,53 @@ def selftest(a):
 
 
 # ----------------------------------------------------------------------------- main
+def rescore_adapter(a, load_fn):
+    """#1767: score a SAVED PEFT adapter on the arm's held-out rows, with no training -- the zero adapter first (PEFT builds every B at
+    zero), then the adapter loaded with peft's own ``set_peft_model_state_dict``. The model is the arm's (``load_fn``: for axolotl,
+    ModelLoader under ``--axolotl-kernels``), the rows and the loss are ``eval_loss``'s, so the number is the in-loop number's twin.
+    The load is checked both ways: no unexpected key, and every key peft's own ``get_peft_model_state_dict`` reads back equals the
+    saved tensor bit for bit. The record goes to the arm's receipt path with status ok; any failure is a refused / harness_error row."""
+    from safetensors.torch import load_file
+    from peft import get_peft_model_state_dict, set_peft_model_state_dict
+    d = a.rescore_adapter
+    st = os.path.join(d, "adapter_model.safetensors")
+    if not os.path.isfile(st):
+        stub(a, "refused", f"--rescore-adapter {d}: no adapter_model.safetensors (a model.save_pretrained directory is expected)",
+             {"phase": "preamble"}, code=3)
+    tk = json.load(open(a.tokens))
+    body = json.dumps({"train": tk["train"], "eval": tk["eval"]}, separators=(",", ":")).encode()
+    if sha_bytes(body) != tk["sha256"] or (a.tokens_sha and tk["sha256"] != a.tokens_sha):
+        stub(a, "tokens_mismatch", f"{a.tokens}: sha {sha_bytes(body)[:12]} != {tk['sha256'][:12]} / registered {str(a.tokens_sha)[:12]}", code=13)
+    ev = tk["eval"][:a.eval_n]
+    torch.manual_seed(a.seed)
+    model, x = load_fn(a)
+    fwd_kwargs = x["fwd_kwargs"]
+    zero, zero_rows = eval_loss(model, ev, fwd_kwargs, a.autocast)
+    saved = load_file(st)
+    res = set_peft_model_state_dict(model, saved)
+    unexpected = sorted(getattr(res, "unexpected_keys", []) or [])
+    back = get_peft_model_state_dict(model)
+    missing = sorted(k for k in saved if k not in back)
+    differ = sorted(k for k in saved if k in back and not torch.equal(back[k].detach().cpu().to(saved[k].dtype), saved[k]))
+    extra = sorted(k for k in back if k not in saved)
+    if unexpected or missing or differ or extra:
+        stub(a, "harness_error", f"--rescore-adapter: the adapter did not round-trip: unexpected {unexpected[:3]}, missing {missing[:3]}, "
+             f"differ {differ[:3]}, not in the file {extra[:3]}", {"phase": "rescore_load", "n_saved": len(saved), "n_back": len(back)}, code=10)
+    loss, rows = eval_loss(model, ev, fwd_kwargs, a.autocast)
+    files = sorted(os.listdir(d))
+    rec = {"framework": a.framework, "fam": a.fam, "model": a.model, "revision": a.revision, "arm": a.arm, "tag": a.tag, "status": "ok",
+           "rescore_1767": 1, "adapter_dir": d, "adapter_files": {f: sha_bytes(open(os.path.join(d, f), "rb").read()) for f in files if os.path.isfile(os.path.join(d, f))},
+           "kernels": getattr(a, "axolotl_kernels", "on") if a.framework == "axolotl" else None, "eval_n": len(ev),
+           "tokens_sha": tk["sha256"], "zero_adapter_loss": round(zero, 6), "zero_adapter_rows": zero_rows,
+           "adapter_loss": round(loss, 6), "adapter_rows": rows, "n_tensors": len(saved),
+           "axolotl": {k: (x.get("axolotl") or {}).get(k) for k in ("version", "torch", "transformers", "peft", "kernels", "cfg_lora_kernels",
+                                                                  "cfg_experts_implementation", "config_experts_implementation", "plugins")},
+           "router_recast": x.get("axolotl_router_recast"), "prereg": a.prereg, "harness": HARNESS, "note": getattr(a, "note", None)}
+    write_json(receipt_path(a), rec)
+    print("CELL OK " + json.dumps({k: rec[k] for k in ("tag", "kernels", "zero_adapter_loss", "adapter_loss", "n_tensors")}), flush=True)
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--prepare", action="store_true")
@@ -5994,6 +6050,10 @@ def main():
                     help="P2-1 (TC1): off = pass double-quant OFF through a from_pretrained parameter the signature names (read at runtime), "
                          "else the loader's default; the loaded expert Params4bit's quant_state.nested is recorded either way")
     ap.add_argument("--axolotl-best", type=int, default=0, help="P2-2 (TC1): 1 = plugins [KernelsPlugin], expert_backend scattermoe, moe_bnb_fast true")
+    ap.add_argument("--axolotl-kernels", choices=("on", "off"), default="on",
+                    help="#1767: off = PEFT's reference forward (no KernelsPlugin / scattermoe, lora_*_kernel false, experts eager); with --axolotl-best 1 it is refused")
+    ap.add_argument("--rescore-adapter", default=None,
+                    help="#1767: no training; score this saved PEFT adapter directory (model.save_pretrained) on the held-out rows: the zero adapter, then the adapter")
     ap.add_argument("--axolotl-dataset", default=None, help="P2-2 (TC1): the registered Alpaca subset file named in the axolotl config's `datasets` (validation needs one; nothing reads it here)")
     ap.add_argument("--hf-double-quant", type=int, default=1,
                     help="phase 3 (TC1): the HF arm's bnb_4bit_use_double_quant (default 1, matching e4b's double-quantised ATTENTION Params4bit; experts are not quantised on this arm); recorded as hf_double_quant")
@@ -6127,6 +6187,10 @@ def main():
     # -- and before the CUDA check, so CI drives it -- with a stub and one line, never a traceback. They also refuse an offloaded
     # model: the export reads every frozen expert stack on the device, and an offloaded model's stacks live in host RAM because they
     # do not fit there. HP1's arms run resident; export under offload would need per-expert staging, which is not built.
+    if getattr(a, "axolotl_kernels", "on") == "off" and int(getattr(a, "axolotl_best", 0) or 0):    # #1767: never a silent override
+        stub(a, "refused", "--axolotl-kernels off with --axolotl-best 1: the best path IS the kernels plugin (pass --axolotl-best 0)", {"phase": "preamble"}, code=3)
+    if getattr(a, "axolotl_kernels", "on") == "off" and a.framework != "axolotl":
+        stub(a, "refused", f"--axolotl-kernels off is an axolotl switch; this arm is {a.framework}", {"phase": "preamble"}, code=3)
     if getattr(a, "hp1_export_base", 0) and not getattr(a, "hp1_export", None):
         stub(a, "refused", "--hp1-export-base 1 needs --hp1-export DIR (the base is written beside the canonical adapter)", {"phase": "preamble"}, code=3)
     if getattr(a, "hp1_export", None) and a.offload:
@@ -6142,6 +6206,8 @@ def main():
     if not torch.cuda.is_available():
         stub(a, "harness_error", "torch.cuda.is_available() is False on a GPU lane", code=10)
     loader = {"e4b": load_e4b, "unsloth": load_unsloth, "hf": load_hf, "axolotl": load_axolotl}[a.framework]
+    if getattr(a, "rescore_adapter", None):          # #1767: score a saved adapter, no training
+        return run_arm_or_row(a, loader, run=lambda a_, l_, sampler=True: rescore_adapter(a_, l_))
     return run_arm_or_row(a, loader, sampler=not a.no_sampler)
 
 
