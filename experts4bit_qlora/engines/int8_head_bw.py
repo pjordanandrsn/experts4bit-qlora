@@ -10,7 +10,9 @@ verbatim as ``dense_gemv.gemv_i8_bw`` and ``dense_gemv.quantize_rows_int8``. P15
 a default.
 
 **Knob-on changes multi-row outputs too.** :func:`apply_int8_head_bw` rounds the head's bf16 weight IN PLACE to its
-int8 grid cast back to bf16, exactly P150's I8HEAD round trip (``bench/i8dense/i8_fakequant.roundtrip_``). So every row
+int8 grid cast back to bf16, exactly P150's I8HEAD round trip (``bench/i8dense/i8_fakequant.roundtrip_``), on the
+weight's own device as P150's box ran it (CUDA's division by a scalar multiplies by the reciprocal, so a CPU round trip
+of the same weight sits one ulp away in a few percent of rows: 5698 of 151936 in P153's A2000 smoke). So every row
 count (a prefill, a decode bucket above 1, the one-row decode) computes the head P150 ruled on, and the served model
 never depends on the batch size. That change is covered by P150's GO at both gates. One-row calls then go to
 ``gemv_i8_bw`` over the same codes and scales: it accumulates ``s * sum(q * x)`` in fp32, without rounding ``q * s`` to
