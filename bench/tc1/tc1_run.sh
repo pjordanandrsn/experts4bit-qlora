@@ -145,6 +145,8 @@ case " $FAMILIES " in *" qwen3axo1767 "*|*" qwen3axo1767b "*)
 esac
 case " $FAMILIES " in *" qwen3hpn "*)
   HPN_DEPTHS=${HPN_DEPTHS:-"2 4 8 16"}             # local-box only (HPN never runs through tc1_drive.sh), so not a TC1_* knob
+  # the arm's selector knows only t28 (else cu130): any other value would run cu130 while the spec recorded the value given
+  case "${HPN_UNS_VENV:-t28}" in t28|cu130) ;; *) say "REFUSED: HPN_UNS_VENV=${HPN_UNS_VENV} (t28 or cu130 only)"; finish 78;; esac
   echo "FIXTURE hpn (HPN-DESIGN): depths [$HPN_DEPTHS]; calibration rows 97-396 (300), 1 step; readers I (in-loop) / E (evaluator, bf16) / F (fp32); e4b K00 + Unsloth (stage 1b); axolotl out; no timings" | tee -a summary.txt
   [ -n "${TC1_PREREG:-}" ] || PREREG=hpn/HPN-DESIGN.md
   ;;
@@ -2584,7 +2586,9 @@ tc1_hpn_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
     local E="HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1"
     TC1_ARM_EXTRA_ENV="$E" arm $FL e4b hpn_e4b_a fused $EAL "$TM" $TR 0 hpncal $TL $TSC --attn-4bit 1 $(hp1_cell k00 3407) --seed 3407 --order-seed 3407 $X
     TC1_ARM_EXTRA_ENV="$E" arm $FL e4b hpn_e4b_b fused $EAL "$TM" $TR 0 hpncal $TL $TSC --attn-4bit 1 $(hp1_cell k00 3407) --seed 3407 --order-seed 3407
-    TC1_ARM_EXTRA_ENV="$E" arm $FL unsloth hpn_uns unsloth $UAL "$TM" $TR 0 hpncal $TL $TSC --grad-ckpt unsloth --unsloth-targets $UT7 \
+    # the local box's Unsloth venv is the cu128 one (UNS_VENV=t28, as TC3's families run it): the cu130 venv needs driver >= 580, and the
+    # A2000 runs 575 (HPN read 1, 21:03Z: the arm refused on that gate)
+    UNS_VENV=${HPN_UNS_VENV:-t28} TC1_ARM_EXTRA_ENV="$E" arm $FL unsloth hpn_uns unsloth $UAL "$TM" $TR 0 hpncal $TL $TSC --grad-ckpt unsloth --unsloth-targets $UT7 \
       --unsloth-moe-backend ${HPN_UNS_BACKEND:-native_torch} --lora-init native --adapter-dtype native --seed 3407 --order-seed 3407 $X
     # only an OOM is the card's limit; any other status is a failed arm, never recorded as a depth that did not fit
     local st a ok=1 failed=""; for a in e4b:hpn_e4b_a e4b:hpn_e4b_b unsloth:hpn_uns; do st=$(status_of $FL ${a%%:*} ${a#*:})
@@ -2595,10 +2599,15 @@ tc1_hpn_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
     if [ $ok = 0 ]; then rm -rf $SC $D/base_e4b_$FL $D/base_unsloth_$FL; break; fi   # a successful arm's export goes too (disk)
     local R=$W/${FL}_e4b_hpn_e4b_a.json RB=$W/${FL}_e4b_hpn_e4b_b.json RU=$W/${FL}_unsloth_hpn_uns.json
     rm -f $W/hpn/eval_e4b_L${L}_1.json $W/hpn/eval_e4b_L${L}_2.json $W/hpn/eval_uns_L$L.json $W/hpn/f_e4b_L$L.json $W/hpn/f_unsloth_L$L.json   # no stale read passes
+    # E's trainable check stays ON at every depth, against THIS cut's count from e4b arm a's own receipt (read 2, 22:05Z: the 48-layer
+    # default VOIDed every E read); Unsloth's arm must then match it, so the e4b-vs-Unsloth agreement is asserted, not incidental
+    local EXP; EXP=$($PY_E4B -c "import json,sys; print(int(json.load(open(sys.argv[1]))['trainable_params']))" $R 2>/dev/null)
+    if [ -z "$EXP" ]; then echo "HPN L$L READ_FAILED no trainable count in $(basename $R)" | tee -a summary.txt; rm -rf $SC $D/base_e4b_$FL $D/base_unsloth_$FL; break; fi
+    echo "HPN L$L trainable $EXP (e4b arm a's receipt; E checks every arm against it)" | tee -a summary.txt
     for a in 1 2; do HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts $R --bases $D/base_e4b_$FL --tokens $TL --eval-n 300 \
-      --model "$TM" --revision $TR --zero-report-only 1 --out $W/hpn/eval_e4b_L${L}_$a.json > logs/hpn_eval_e4b_L${L}_$a.log 2>&1; done
+      --model "$TM" --revision $TR --zero-report-only 1 --expect-trainable $EXP --out $W/hpn/eval_e4b_L${L}_$a.json > logs/hpn_eval_e4b_L${L}_$a.log 2>&1; done
     HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts $RU --bases $D/base_unsloth_$FL --tokens $TL --eval-n 300 \
-      --model "$TM" --revision $TR --zero-report-only 1 --out $W/hpn/eval_uns_L$L.json > logs/hpn_eval_uns_L$L.log 2>&1
+      --model "$TM" --revision $TR --zero-report-only 1 --expect-trainable $EXP --out $W/hpn/eval_uns_L$L.json > logs/hpn_eval_uns_L$L.log 2>&1
     for a in e4b unsloth; do HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hpn_read.py --base $D/base_${a}_$FL --tokens $TL --eval-n 300 \
       --model "$TM" --revision $TR --runs 2 --out $W/hpn/f_${a}_L$L.json > logs/hpn_read_${a}_L$L.log 2>&1 || echo "HPN L$L F_FAILED $a" | tee -a summary.txt; done
     # every reader's output is checked by CONTENT (an exit status alone misses a partial file): each E file one digest-matched base
@@ -2626,7 +2635,7 @@ print(' '.join(bad))" $W/hpn/eval_e4b_L${L}_1.json $W/hpn/eval_e4b_L${L}_2.json 
     deep=$L; echo "HPN L$L READ (I x2 + Unsloth I, E x2 + Unsloth E, F x2 on both bases)" | tee -a summary.txt
   done
   echo "HPN deepest depth that fit: ${deep:-none}" | tee -a summary.txt
-  printf '{"framework": "e4b", "free_mib_at_claim": %s, "unsloth_moe_backend": "%s", "depths": [%s]}\n' "${HPN_FREE_MIB:-null}" "${HPN_UNS_BACKEND:-native_torch}" "$json" > $W/hpn_spec.json
+  printf '{"framework": "e4b", "free_mib_at_claim": %s, "unsloth_moe_backend": "%s", "unsloth_venv": "%s", "depths": [%s]}\n' "${HPN_FREE_MIB:-null}" "${HPN_UNS_BACKEND:-native_torch}" "${HPN_UNS_VENV:-t28}" "$json" > $W/hpn_spec.json
   $PY_E4B $W/hpn_reduce.py $W/hpn_spec.json --out $W/hpn/result.json 2>&1 | tee -a summary.txt
   return 0; }
 # the split path, box 2 (qwen3hp1p): REFUSES unless box 1's eval_K.json + select.json are staged beside the runner AND match the pinned

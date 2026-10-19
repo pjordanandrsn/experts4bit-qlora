@@ -1,0 +1,689 @@
+{
+ "candidates": [
+  {
+   "arm": "C1",
+   "lb": 1.0179649103379629,
+   "max": 1.0233431881120314,
+   "median": 1.0187813723595007,
+   "min": 1.011806110283278,
+   "n": 64,
+   "plan": {
+    "dn": {
+     "block_n": 64,
+     "kc": 64,
+     "stages": 1,
+     "warps": 8
+    },
+    "gu": {
+     "block_n": 32,
+     "kc": 128,
+     "stages": 2,
+     "warps": 4
+    }
+   },
+   "rank": 1,
+   "se": 0.000408231010768943,
+   "se_of_mean": 0.0003257212207334879
+  },
+  {
+   "arm": "C2",
+   "lb": 1.0088992487361985,
+   "max": 1.0145523516298485,
+   "median": 1.0098158879248702,
+   "min": 0.9989686965558845,
+   "n": 64,
+   "plan": {
+    "dn": {
+     "block_n": 32,
+     "kc": 64,
+     "stages": 1,
+     "warps": 4
+    },
+    "gu": {
+     "block_n": 32,
+     "kc": 128,
+     "stages": 1,
+     "warps": 4
+    }
+   },
+   "rank": 2,
+   "se": 0.00045831959433587376,
+   "se_of_mean": 0.0003656861282340261
+  },
+  {
+   "arm": "C3",
+   "lb": 0.9945860265252362,
+   "max": 1.0005404959294206,
+   "median": 0.9954023375254543,
+   "min": 0.9863597380779427,
+   "n": 64,
+   "plan": {
+    "dn": {
+     "block_n": 16,
+     "kc": 64,
+     "stages": 1,
+     "warps": 2
+    },
+    "gu": {
+     "block_n": 32,
+     "kc": 128,
+     "stages": 3,
+     "warps": 4
+    }
+   },
+   "rank": 3,
+   "se": 0.0004081555001090205,
+   "se_of_mean": 0.0003256609719437597
+  }
+ ],
+ "compaction": {
+  "lb": 1.0029477201238528,
+  "max": 1.0049138641715056,
+  "median": 1.0032036068111527,
+  "min": 1.0016508907419988,
+  "moved_bits_on_steps": [],
+  "n": 64,
+  "se": 0.00012794334364995543,
+  "se_of_mean": 8.994314956744633e-05,
+  "share_of_headroom": 0.005507000817352122
+ },
+ "contract_findings": [],
+ "drift": {
+  "dn": 0.9991902636085832,
+  "gu": 1.000086619151176
+ },
+ "errors": {
+  "dn": [
+   [
+    [
+     64,
+     256,
+     2,
+     4
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 117760, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     64,
+     256,
+     8,
+     4
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 117760, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     128,
+     8,
+     4
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 105472, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     2,
+     4
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 210944, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     4,
+     2
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 157696, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     64,
+     256,
+     4,
+     4
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 117760, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     8,
+     4
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 210944, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     8,
+     2
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 157696, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     128,
+     4,
+     4
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 105472, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     2,
+     1
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 131072, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     2,
+     2
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 157696, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     4,
+     4
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 210944, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     2,
+     3
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 184320, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     128,
+     2,
+     4
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 105472, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     8,
+     1
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 131072, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     4,
+     1
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 131072, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     8,
+     3
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 184320, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     4,
+     3
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 184320, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ]
+  ],
+  "gu": [
+   [
+    [
+     64,
+     256,
+     2,
+     4
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 117760, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     64,
+     256,
+     8,
+     4
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 117760, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     128,
+     8,
+     4
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 105472, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     2,
+     4
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 210944, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     4,
+     2
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 157696, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     64,
+     256,
+     4,
+     4
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 117760, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     8,
+     4
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 210944, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     8,
+     2
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 157696, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     128,
+     4,
+     4
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 105472, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     2,
+     1
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 131072, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     2,
+     2
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 157696, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     4,
+     4
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 210944, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     2,
+     3
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 184320, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     128,
+     2,
+     4
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 105472, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     8,
+     1
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 131072, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     4,
+     1
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 131072, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     8,
+     3
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 184320, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ],
+   [
+    [
+     128,
+     256,
+     4,
+     3
+    ],
+    "OutOfResources: out of resource: shared memory, Required: 184320, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+   ]
+  ]
+ },
+ "fidelity_vs_p152": 1.0278295718941757,
+ "identity_failures": {
+  "dn": [],
+  "gu": []
+ },
+ "lane": "P155",
+ "predictions": {
+  "a plan recovers at most 25 % of the 6.81 ms": "HELD",
+  "compaction's ceiling in 1.00-1.06": "HELD",
+  "contract: no plan that ran moved a bit": "HELD",
+  "fidelity: today's both-GEMM step in 9.5-14.0 ms": "HELD",
+  "self-pair within 0.005 of 1": "HELD",
+  "today's plan compiles to 80 registers, no spills (theoretical occupancy 50 %)": "HELD",
+  "winner's confirmed median in 1.02-1.15 (NO_GO)": "MISSED",
+  "winner's selection ratio exceeds its confirmation by 0-0.03": "HELD"
+ },
+ "selection": {
+  "dn": [
+   [
+    [
+     64,
+     64,
+     8,
+     1
+    ],
+    3.3308880031108856
+   ],
+   [
+    [
+     32,
+     64,
+     4,
+     1
+    ],
+    3.3517560213804245
+   ],
+   [
+    [
+     16,
+     64,
+     2,
+     1
+    ],
+    3.366634026169777
+   ],
+   [
+    [
+     32,
+     64,
+     4,
+     2
+    ],
+    3.368552014231682
+   ],
+   [
+    [
+     32,
+     64,
+     4,
+     3
+    ],
+    3.3716340214014053
+   ],
+   [
+    [
+     32,
+     64,
+     4,
+     4
+    ],
+    3.468579962849617
+   ],
+   [
+    [
+     16,
+     64,
+     2,
+     2
+    ],
+    3.490145981311798
+   ],
+   [
+    [
+     16,
+     64,
+     2,
+     3
+    ],
+    3.6205719858407974
+   ],
+   [
+    [
+     64,
+     64,
+     8,
+     2
+    ],
+    3.6687600016593933
+   ],
+   [
+    [
+     16,
+     64,
+     2,
+     4
+    ],
+    3.7489380091428757
+   ]
+  ],
+  "gu": [
+   [
+    [
+     32,
+     128,
+     4,
+     2
+    ],
+    7.851144015789032
+   ],
+   [
+    [
+     32,
+     128,
+     4,
+     1
+    ],
+    7.9060280323028564
+   ],
+   [
+    [
+     32,
+     128,
+     4,
+     3
+    ],
+    8.022557973861694
+   ],
+   [
+    [
+     16,
+     128,
+     4,
+     1
+    ],
+    8.0315480530262
+   ],
+   [
+    [
+     64,
+     128,
+     8,
+     1
+    ],
+    8.056695997714996
+   ],
+   [
+    [
+     32,
+     64,
+     4,
+     2
+    ],
+    8.312773942947388
+   ],
+   [
+    [
+     32,
+     64,
+     4,
+     3
+    ],
+    8.316496074199677
+   ],
+   [
+    [
+     16,
+     64,
+     2,
+     2
+    ],
+    8.369281947612762
+   ],
+   [
+    [
+     32,
+     64,
+     4,
+     1
+    ],
+    8.403570055961609
+   ],
+   [
+    [
+     32,
+     64,
+     4,
+     4
+    ],
+    8.434629917144775
+   ]
+  ]
+ },
+ "self_pair": {
+  "lb": 0.9996862808776155,
+  "max": 1.0019306109122847,
+  "median": 0.9999073115563368,
+  "min": 0.9988176947351507,
+  "n": 64,
+  "se": 0.0001105153393606787,
+  "se_of_mean": 8.817848300777475e-05
+ },
+ "shakedown": false,
+ "today_compiled": {
+  "dn": [
+   {
+    "n_regs": 80,
+    "n_spills": 0,
+    "num_stages": 3,
+    "num_warps": 4,
+    "shared": 14592
+   }
+  ],
+  "gu": [
+   {
+    "n_regs": 80,
+    "n_spills": 0,
+    "num_stages": 3,
+    "num_warps": 4,
+    "shared": 14592
+   }
+  ]
+ },
+ "today_ms_per_step": 12.074975728988647,
+ "verdict": "NO_GO",
+ "why": [
+  "best C1 1.0188x, lower bound 1.0180 < 1.15"
+ ],
+ "winner": {
+  "arm": "C1",
+  "lb": 1.0179649103379629,
+  "max": 1.0233431881120314,
+  "median": 1.0187813723595007,
+  "min": 1.011806110283278,
+  "n": 64,
+  "plan": {
+   "dn": {
+    "block_n": 64,
+    "kc": 64,
+    "stages": 1,
+    "warps": 8
+   },
+   "gu": {
+    "block_n": 32,
+    "kc": 128,
+    "stages": 2,
+    "warps": 4
+   }
+  },
+  "rank": 1,
+  "se": 0.000408231010768943,
+  "se_of_mean": 0.0003257212207334879
+ },
+ "winner_selection_ratio": 1.045259938072593,
+ "winner_share_of_headroom": 0.031791523828467554
+}

@@ -45,12 +45,47 @@ SEGMENTS = ("read_s", "fuse_s", "h2d_s", "quant_s", "offload_s", "total_s", "blo
 READ = ("fuse_s",)                                      # the op the pool drives: the reading (the maintainer's pass)
 REPORTED = ("block_s",)                                 # what the loader pays: offload dominates it, so reported only
 REPEATS = 15                                            # timed one_reps per process; the rep is their median
-# The time fit (the maintainer's pass: a guard is a fit and is tested against what it guards). Every term is smt-fuse-2's
-# measured wall ROUNDED UP: guard armed -> probe start 209 s; its probe phase 217 s for the slab + 18 one_reps, charged
-# whole to the reps (one_rep hashes 4.8 GB outside its timed block, so a block's wall is ~3x its block_s); the per-process
-# start (interpreter, torch, CUDA context) is not measured yet and is taken high. The reserve is smt_fuse_run.sh's 600 s.
-FIT = {"setup_s": 240, "slab_s": 60, "block_wall_s": 12.5, "process_start_s": 30, "reserve_s": 600}
-GUARD_S = 9000                                          # the launch's guard: 2.5 h
+# The time fit (Amendment 1b; a guard is a fit and is tested against what it guards). Each term is the MAX over the hosts
+# measured so far (smt-fuse-2, smt-sib-2) plus 25 % headroom: setup, guard armed -> probe start, 209 s (smt-fuse-2; 187 s
+# on smt-sib-2) -> 270; a process start 2.4 s (smt-sib-2's fit_measured) -> 3; a timed block's whole wall 21.2 s (smt-sib-2,
+# hashes included; smt-fuse-2's 12.06 s understated it, which is what Amendment 1's 7110 s fit missed) -> 26.5; the slab
+# write, not measured separately on either host, 60 -> 75. The reserve is smt_fuse_run.sh's 600 s.
+FIT = {"setup_s": 270, "slab_s": 75, "block_wall_s": 26.5, "process_start_s": 3, "reserve_s": 600}
+GUARD_S = 14400                                         # the launch's guard: 4.0 h (Amendment 1b)
+FIT_MARGIN_S = 1800                                     # the self-test asserts at least this much of the guard is left
+VMSTAT_KEYS = ("numa_pages_migrated", "numa_hint_faults", "pgfault", "pgmajfault", "compact_stall", "thp_fault_alloc",
+               "thp_collapse_alloc")                      # reported only (Amendment 1b): per-block deltas, never read
+
+
+def host_counters():
+    """Reported-only per-block counters (Amendment 1b): this process's faults, the host's /proc/vmstat keys, and the page
+    cache size; missing sources are left out, never raised."""
+    out = {}
+    try:
+        import resource
+        ru = resource.getrusage(resource.RUSAGE_SELF)
+        out.update(ru_majflt=ru.ru_majflt, ru_minflt=ru.ru_minflt)
+    except Exception:                                    # noqa: BLE001
+        pass
+    try:
+        kv = dict(line.split() for line in open("/proc/vmstat") if line.split()[0] in VMSTAT_KEYS)
+        out.update({k: int(v) for k, v in kv.items()})
+    except Exception:                                    # noqa: BLE001
+        pass
+    try:
+        cached = next(int(line.split()[1]) for line in open("/proc/meminfo") if line.startswith("Cached:"))
+        out["meminfo_cached_kb"] = cached
+    except Exception:                                    # noqa: BLE001
+        pass
+    return out
+
+
+def counter_delta(c0, c1):
+    """Per-block deltas of the counters, and the page cache size BEFORE the block (a level, not a delta)."""
+    d = {k: c1[k] - c0[k] for k in c0 if k in c1 and k != "meminfo_cached_kb"}
+    if "meminfo_cached_kb" in c0:
+        d["meminfo_cached_kb_before"] = c0["meminfo_cached_kb"]
+    return d
 
 
 def fit_measured(reps):
@@ -150,7 +185,7 @@ def median_of(recs):
     for k in ("pool", "torch_pool", "load_avg_1m"):
         if k in recs[0]:
             rec[k] = recs[0][k]
-    rec["repeats"] = [{k: r[k] for k in (*SEGMENTS, "throttled_period_share") if k in r} for r in recs]
+    rec["repeats"] = [{k: r[k] for k in (*SEGMENTS, "throttled_period_share", "host_counters") if k in r} for r in recs]
     return rec
 
 
@@ -174,9 +209,10 @@ def child(a):
     s0 = proc_stat()
     blocks, walls = [], []
     for _ in range(REPEATS):
-        t = time.perf_counter()
+        c0, t = host_counters(), time.perf_counter()
         blocks.append(B.one_rep(a.pool, a.slab, a.experts))
         walls.append(time.perf_counter() - t)                             # the block's whole wall, hashes included
+        blocks[-1]["host_counters"] = counter_delta(c0, host_counters())   # reported only, never read
     rec = median_of(blocks)
     s1 = proc_stat()
     rec.update(process_start_s=process_start_s, warm_wall_s=warm_wall_s, block_walls_s=walls)
@@ -351,8 +387,14 @@ def self_test():
     assert summarize({"reps": trip * 3 + trip[:5] + [r("PHYS", 1.0, 4.0, q="c")], "experts": 128})["bytes_identical"] is False
     assert ORDER == ("PHYS", "SIB", "WIDE", "WIDE", "SIB", "PHYS") and CYCLES == 4 and READ == ("fuse_s",)
     assert REPORTED == ("block_s",) and REPEATS == 15
-    assert time_fit(REPEATS) <= GUARD_S and time_fit(REPEATS) == 240 + 60 + 27 * (30 + 16 * 12.5) + 600   # 7110 s
-    assert time_fit(15) > 3600 and time_fit(5) > 3600 and time_fit(REPEATS) <= GUARD_S - 1800   # 1.0 h never fit
+    assert time_fit(REPEATS) == 270 + 75 + 27 * (3 + 16 * 26.5) + 600 == 12474                    # Amendment 1b's fit
+    assert time_fit(REPEATS) <= GUARD_S - FIT_MARGIN_S and GUARD_S == 4 * 3600   # 1926 s of margin at 4.0 h
+    assert time_fit(15, dict(FIT, block_wall_s=21.2 * 1.25)) == time_fit(15)    # the binding term: smt-sib-2's max x 1.25
+    d = counter_delta({"pgmajfault": 5, "ru_minflt": 10, "meminfo_cached_kb": 900}, {"pgmajfault": 9, "ru_minflt": 10,
+                                                                                    "meminfo_cached_kb": 100})
+    assert d == {"pgmajfault": 4, "ru_minflt": 0, "meminfo_cached_kb_before": 900} and counter_delta({}, {}) == {}
+    hc = host_counters()
+    assert isinstance(hc, dict) and all(isinstance(v, int) for v in hc.values())     # stdlib, never raises
     n += 1
     blocks = [dict(r("PHYS", f, 4.0 + f), throttled_period_share=t, throttled_cpu_s=0.1, pool=12)
               for f, t in ((0.5, 0.0), (0.3, 0.02), (0.9, 0.0), (0.4, 0.07), (0.35, 0.0))]

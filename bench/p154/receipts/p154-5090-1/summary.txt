@@ -1,0 +1,23 @@
+KNOBS e4b=20910df48d8bf3b335c0f5585cf0fc1932b492da gnf4=38b308887688ea5bda7dd449bd3cc3dc1426b995 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 family=qwen3 dry=0 min_power_w=575 moe_layers=48
+CUDA_PROBE ok
+POWER_LIMIT_W 575 (floor 575)
+e4b 0.55.0 @20910df48d8bf3b335c0f5585cf0fc1932b492da
+gnf4 0.47.1 @38b308887688ea5bda7dd449bd3cc3dc1426b995
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p154_route self-test OK (24 cases)
+p154_reduce self-test OK (14 cases)
+p136_box self-test OK (5 cases)
+selftest OK (3 cases)
+premise rc=0: 4 passed in 16.67s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709
+route b16 rc=0 P154_ROUTE {"steps": 64, "summary": {"steps": 64, "layers": 48, "unique_per_layer_step": {"mean": 58.0674, "min": 42, "max": 81}, "unique_per_step_total": {"mean": 2787.23, "min": 2521, "max": 3097}, "hottest_expert_share_of_a_layer": 0.10156, "uniform_expectation_per_layer": 82.423}, "k25_calls": 6144, "store": {"kind": "nf4", "gate_up_bytes_per_expert": 1769472.0, "down_bytes_per_expert": 884736.0}, "copy_gbps": 1523.0, "faults": 0}
+
+P154 READ {"why": [], "both": {"floor_ms": 4.9356, "recorded_ms": 11.748, "fraction_of_copy": 0.4201, "headroom_ms": 6.8124}}

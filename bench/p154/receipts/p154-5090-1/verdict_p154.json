@@ -1,0 +1,55 @@
+{
+ "lane": "P154",
+ "verdict": "READ",
+ "why": [],
+ "copy_gbps": 1498.9,
+ "p152_verdict_sha256": "a99d8b0fec82ad27645e79e0aa49ccada904e7788ba1d91e560652663305bc6e",
+ "recorded_gemm_ms": {
+  "gate_up": 8.395073,
+  "down": 3.35296
+ },
+ "reporting_only": true,
+ "unique_per_step_total": {
+  "mean": 2787.23,
+  "min": 2521,
+  "max": 3097
+ },
+ "unique_per_layer_step": {
+  "mean": 58.0674,
+  "min": 42,
+  "max": 81
+ },
+ "box_copy_gbps": 1523.0,
+ "projections": {
+  "gate_up": {
+   "bytes_per_expert": 1769472.0,
+   "floor_ms": 3.2904,
+   "recorded_ms": 8.395073,
+   "fraction_of_copy": 0.3919,
+   "headroom_ms": 5.1047,
+   "floor_ms_step_range": [
+    2.9761,
+    3.6561
+   ],
+   "floor_ms_at_box_copy_rate": 3.2383
+  },
+  "down": {
+   "bytes_per_expert": 884736.0,
+   "floor_ms": 1.6452,
+   "recorded_ms": 3.35296,
+   "fraction_of_copy": 0.4907,
+   "headroom_ms": 1.7078,
+   "floor_ms_step_range": [
+    1.488,
+    1.828
+   ],
+   "floor_ms_at_box_copy_rate": 1.6191
+  }
+ },
+ "both": {
+  "floor_ms": 4.9356,
+  "recorded_ms": 11.748,
+  "fraction_of_copy": 0.4201,
+  "headroom_ms": 6.8124
+ }
+}
