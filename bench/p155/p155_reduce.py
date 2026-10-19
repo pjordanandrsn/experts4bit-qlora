@@ -29,14 +29,15 @@ E, TOPK, TOKENS, LAYERS, STEPS = 128, 8, 16, 48, 128
 SHAPES = {"gu": (1536, 2048), "dn": (2048, 768)}           # (N, K): gate_up [2 x 768, 2048], down [2048, 768]
 TODAY = {"block_n": 32, "kc": 64, "warps": 4, "stages": 3}  # e4b's _K25_PLAN; lut "tree" and dot_bf16 False are fixed
 GRID = [{"block_n": bn, "kc": kc, "warps": w, "stages": s}
-        for bn in (16, 32, 64, 128) for kc in (64, 128, 256) for w in (2, 4, 8) for s in (2, 3, 4)]
+        for bn in (16, 32, 64, 128) for kc in (64, 128, 256) for w in (2, 4, 8) for s in (1, 2, 3, 4)]
 SELECT_STEPS = tuple(range(0, 64, 8))      # 8 steps of the first half
 IDENTITY_STEP = 0                          # every plan's outputs against today's: all layers, both projections
 CONFIRM_STEPS = tuple(range(64, 128))      # the 64 held-out steps, one paired rep each
 CARRY = 3                                  # carried forward from each projection's ranking
 ITERS = 10                                 # timed replays per graph
 ORDER_SEED = 155                           # the selection's plan order (one shuffle, both projections)
-GO_BAR = 1.15                              # the winner's median ratio minus 2 SE must reach this
+GO_BAR = 1.15                              # the winner's median ratio minus 2 SE (of the median) must reach this
+BOOT_B, BOOT_SEED = 2000, 155              # the median's SE: a bootstrap of 2,000 resamples from one seeded generator
 SELF_BAND = (0.99, 1.01)                   # today's self-pair median, else the instrument is VOID
 P152_BOTH_MS = 8.395073 + 3.35296          # P152's verdict: the removable time of both K25 lines, 136x48 + 136x64
 P154_HEADROOM_MS = 6.8124                  # P154's verdict: that time minus the byte floor
@@ -102,11 +103,25 @@ def rep_ms(rep):
     return {arm: statistics.median(v) for arm, v in rep["replays_ms"].items()}
 
 
+def se_median(q, b=BOOT_B, seed=BOOT_SEED):
+    """The standard error of the MEDIAN of ``q`` (loggetta's review: sd / sqrt(n) is the mean's, about 1.25x too small
+    for the median). The larger of two: the normal-theory value, sqrt(pi / 2) x sd / sqrt(n), and the standard
+    deviation of the medians of ``b`` resamples with replacement. The bootstrap alone is erratic at n = 64 (0.9-1.9x
+    the mean's SE across seeds of the same normal data), so it can only widen the bound, under heavy tails. One seeded
+    generator, drawn through ``random()`` alone, so the reducer re-derives the same number on any platform."""
+    n = len(q)
+    normal = math.sqrt(math.pi / 2) * statistics.stdev(q) / math.sqrt(n)
+    rng = random.Random(seed)
+    boot = statistics.stdev(statistics.median([q[int(rng.random() * n)] for _ in range(n)]) for _ in range(b))
+    return max(normal, boot)
+
+
 def summarize(q):
     n = len(q)
     med = statistics.median(q)
-    se = statistics.stdev(q) / math.sqrt(n) if n > 1 else math.inf
-    return {"n": n, "median": med, "se": se, "lb": med - 2 * se, "min": min(q), "max": max(q)}
+    se = se_median(q) if n > 1 else math.inf
+    return {"n": n, "median": med, "se": se, "lb": med - 2 * se, "se_of_mean": statistics.stdev(q) / math.sqrt(n)
+            if n > 1 else math.inf, "min": min(q), "max": max(q)}
 
 
 def _structure(rec, why):
@@ -318,6 +333,13 @@ def self_test():
     assert v(_fake(win=1.00)) == "NO_GO"                                     # flat
     assert v(_fake(win=1.16, noise=0.08)) == "NO_GO"                         # median over the bar, lower bound under it
     assert v(_fake(win=1.16, noise=0.0005)) == "GO"                          # the same median, tight
+    o = verdict(_fake(win=1.161, noise=0.08))           # GO under the mean's SE, NO_GO under the median's
+    w = o["winner"]
+    assert o["verdict"] == "NO_GO" and w["median"] - 2 * w["se_of_mean"] >= GO_BAR > w["lb"], w   # the median's SE decides
+    gauss = random.Random(3)
+    q = [gauss.gauss(1.0, 0.01) for _ in range(64)]
+    assert se_median(q) >= math.sqrt(math.pi / 2) * statistics.stdev(q) / 8      # never below the normal-theory SE
+    assert se_median(q[:63] + [50.0]) > 3 * math.sqrt(math.pi / 2) * statistics.stdev(q) / 8   # a wild rep widens it
     assert v(_fake(self_ratio=1.03)) == "VOID"                               # the self-pair is off: no instrument
     bad = _fake()
     bad["confirm"]["reps"][5]["identical"]["T2"] = False
@@ -368,7 +390,7 @@ def self_test():
     bad = _fake()
     bad["select"]["dn"] = bad["select"]["dn"][:-1]
     assert v(bad) == "VOID"                                                  # a plan missing from the selection
-    print("p155_reduce self-test OK (27 cases)")
+    print("p155_reduce self-test OK (29 cases)")
 
 
 def main():

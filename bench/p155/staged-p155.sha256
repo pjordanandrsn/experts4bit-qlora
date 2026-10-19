@@ -1,6 +1,6 @@
 # P155's staged pieces, by the name the box sees them, and their sha256 at this registration (bench/p155/PREREG-p155.md).
-67522670d5ab6e5a7211e6b0cd22b52cfb1e764a6370b8ef8b854cf555b35cce  p155_run.sh
-2259065dd28081f6e63d3bd7fb80315105518801f1f974e3afbd5dc4615aeead  p155_bench.py
-a35cecee28383cae2f76dc27b195ddc2a7d7d5b32196a9e0784f260f712f3349  p155_reduce.py
+c106c344bc088ace3395665849073c968ce341e56fe666a73fc4ccb34a93baca  p155_run.sh
+f391afa52d9d27c69bac5e02dc643e83eb7c7940724b4b78025bc187ffc8852a  p155_bench.py
+7b80e29abd8184e6678ebe1048a2193ab41b36eeca2511d19c141bb68c64cddd  p155_reduce.py
 3c59e72f947daa425e61f727401204099a1e782b902fb39687e04c46e338b14f  rr.json.pt
 1d870355f17db464633db7fedcc432faf82e8152582ffc0aa5f6fc593ebc91c2  test_k25_row_exact_gpu.py

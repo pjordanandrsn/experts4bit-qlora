@@ -8,7 +8,7 @@ tile table's ``order`` (``gather_div=8``), and down reads the sorted rows and st
 precision (select-tree decode, TF32 on fp32 weights). Full-size random NF4 stores for all 48 MoE layers (16.3 GB, the
 arena's size), so no replay is served from L2. The routing is P153's router replay, rows 0-15 (S0), 128 steps.
 
-- IDENTITY: every grid plan's outputs on step 0, all layers, both projections, against today's plan (``torch.equal``).
+- IDENTITY: every grid plan's outputs (144 plans) on step 0, all layers, both projections, against today's plan (``torch.equal``).
   A plan that fails to compile or launch is recorded with its error and excluded; one that moves a bit is excluded.
 - SELECTION: per projection, each plan's graph (48 calls) on the 8 selection steps; ``p155_reduce.select`` carries three.
 - CONFIRMATION: on the 64 held-out steps, one paired rep each: today (T), today again (T2, the self-pair), the carried
@@ -329,7 +329,7 @@ def self_test():
     assert "gather_div=R.TOPK, lut=\"tree\", dot_bf16=False, **plan" in src
     assert "None, scatter=order, lut=\"tree\", dot_bf16=False, **plan" in src
     assert "build_group_tiles_fused(ids, R.E, 16, lean=True, sorted_ids=True)" in src
-    assert R.TODAY in R.GRID and len(R.GRID) == 108 and len({R.plan_key(p) for p in R.GRID}) == 108
+    assert R.TODAY in R.GRID and len(R.GRID) == 144 and len({R.plan_key(p) for p in R.GRID}) == 144
     assert not set(R.SELECT_STEPS) & set(R.CONFIRM_STEPS) and R.IDENTITY_STEP in R.SELECT_STEPS
     assert max(R.SELECT_STEPS) < min(R.CONFIRM_STEPS) and len(R.CONFIRM_STEPS) == 64
     arms = R.confirm_arms(3)

@@ -120,7 +120,7 @@ def test_todays_plan_is_the_served_plan():
     from experts4bit_qlora.engines import hot_residency as hr
     red = _reducer()
     assert hr._K25_PLAN == dict(red.TODAY, lut="tree", dot_bf16=False)
-    assert red.TODAY in red.GRID and len(red.GRID) == 108
+    assert red.TODAY in red.GRID and len(red.GRID) == 144
     assert '"block_n": 32, "kc": 64, "warps": 4, "stages": 3, "lut": "tree", "dot_bf16": False}' in RUN   # the tripwire
 
 
@@ -224,6 +224,8 @@ def test_the_self_test_passes(script):
 REDUCE_MUTANTS = [
     # GO on the median alone, without the 2-SE guard
     ('    elif winner["lb"] >= GO_BAR:\n', '    elif winner["median"] >= GO_BAR:\n'),
+    # the median's lower bound taken with the MEAN's standard error (loggetta's review)
+    ("    se = se_median(q) if n > 1 else math.inf\n", "    se = statistics.stdev(q) / math.sqrt(n) if n > 1 else math.inf\n"),
     # the carried plans taken on trust instead of re-derived from the recorded times
     ('    if rec.get("carried") != carried:\n', "    if False:\n"),
     # the self-pair band not enforced
@@ -242,9 +244,9 @@ REDUCE_MUTANTS = [
 ]
 BENCH_MUTANTS = [
     # gate_up without the served gather (it would read 128 expanded rows the served route never builds)
-    ("order, gather_div=R.TOPK, lut=\"tree\"", "order, lut=\"tree\""),
+    ("k25(X[li], p, am, row0, rows, grp, order, gather_div=R.TOPK,", "k25(X[li], p, am, row0, rows, grp, order,"),
     # down without the served scatter (it would store in sorted order, a different kernel specialisation)
-    ("None, scatter=order, lut=\"tree\"", "None, lut=\"tree\""),
+    ("k25(H[li], p, am, row0, rows, grp, None, scatter=order,", "k25(H[li], p, am, row0, rows, grp, None,"),
 ]
 
 

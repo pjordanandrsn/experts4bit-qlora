@@ -2,12 +2,13 @@
 
 A microbench premise for stream (B). It sweeps the grouped NF4 small-M expert GEMM's plan, the one knob the kernel's
 contract says moves no output bit, against the 6.81 ms of headroom P154 priced.
-- **Grid:** 108 plans (BLOCK_N x KC x warps x stages), called exactly as the served route calls K25, over full-size NF4
+- **Grid:** 144 plans (BLOCK_N x KC x warps x stages), called exactly as the served route calls K25, over full-size NF4
   stores.
 - **Routing:** P153's committed router replay (S0's real picks, sha-pinned and checked before data).
 - **Selection:** every plan must keep today's bits; the plans are ranked on 8 selection steps, and three are carried.
 - **Confirmation:** the carried three are re-timed against today's plan on the 64 held-out steps, in paired, rotated
-  reps, with a self-pair. GO needs median - 2 SE >= 1.15x on both GEMMs, decided on the confirmation only.
+  reps, with a self-pair. GO needs median - 2 SE >= 1.15x on both GEMMs (the SE of the median), decided on the
+  confirmation only.
 - **Reported, never ruling:** a compaction arm (the real-tile prefix) prices tile compaction's ceiling; each plan's
   compiled registers are recorded; Nsight Compute captures one call of each GEMM if the host allows counters.
 - **Box:** one RTX 5090, guard 1.1 h (the fit with 25 % headroom, checked before the install), worst $1.27.

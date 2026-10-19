@@ -57,8 +57,11 @@ that as a reported arm.
 - **The stores:** random NF4 bytes and fp32 absmax in the served layout, distinct for all 48 MoE layers. That is 16.3 GB,
   the arena's size, so each step's graph streams about 7.4 GB and nothing replays from L2. K25's time does not depend on
   weight values: its decode has no data-dependent branch.
-- **The grid:** BLOCK_N {16, 32, 64, 128} x KC {64, 128, 256} x warps {2, 4, 8} x stages {2, 3, 4}, **108 plans**, today's
-  among them. The codebook decode (`tree`) and the precision (TF32 on fp32 weights, the served class) are fixed.
+- **The grid:** BLOCK_N {16, 32, 64, 128} x KC {64, 128, 256} x warps {2, 4, 8} x stages {1, 2, 3, 4}, **144 plans**,
+  today's among them. That is K25's whole legal plan space at these shapes (KC is 64, 128 or 256; `tl.dot` needs BLOCK_N
+  >= 16) up to 128 columns, 8 warps and 4 stages. Stages 1 (no pipelining: the least shared memory, likely fewer
+  registers) is in because the occupancy hypothesis makes it a candidate (loggetta's review). The codebook decode
+  (`tree`) and the precision (TF32 on fp32 weights, the served class) are fixed.
 - **Per plan, reported:** the registers, spills and shared memory Triton compiled each plan to, read from its own cache
   at the plan's first call, so the read can set the ranking beside theoretical occupancy.
 
@@ -135,8 +138,12 @@ stall reasons, DRAM throughput, the L2 hit rate and registers per thread.
   - **the self-pair median is outside 0.99-1.01.**
 - **Excluded, not VOID:** a carried plan that moves a bit on any held-out step. That is a contract finding.
 - **GO:** the winner is the eligible candidate with the largest median of T/C over the 64 reps (ties go to the better
-  rank). GO if its **median - 2 SE >= 1.15**, with SE = sd / sqrt(64) of its per-rep ratios. The bar covers gate_up and
-  down together, one graph holding both GEMMs.
+  rank). GO if its **median - 2 SE >= 1.15**, where SE is the standard error of the MEDIAN of its 64 per-rep ratios: the
+  larger of the normal-theory value, sqrt(pi / 2) x sd / sqrt(64) (1.2533x the mean's), and a bootstrap, the standard
+  deviation of the medians of 2,000 resamples drawn by one generator seeded 155 (`p155_reduce.se_median`). The
+  bootstrap alone is erratic at 64 reps, so it can only widen the bound, under heavy tails. sd / sqrt(n) alone would be
+  the mean's, about 25 % too small (loggetta's review); a mutant that uses it fails the self-test. The bar covers gate_up
+  and down together, one graph holding both GEMMs.
 
   GO is decided on the confirmation read only. No selection number enters it.
 - **NO_GO:** otherwise, including when no candidate is eligible.
@@ -202,7 +209,7 @@ then reads its record, which must come back **SHAKEDOWN** with no structural fau
   - **Install, self-tests and premise:** P152's and P154's boxes took about 96 s each. The allowance is 450 s for the
     install plus 150 s for the self-tests and the premise: `INSTALL_TO_GATE_S` = 600 s.
   - **The bench:** K27's whole 5090 bench, about 52 compiled K25 variants with their timing, took 27.5 s. P155 compiles
-    216 variants, times 108 plans x 2 projections x 8 steps, then 64 reps x 6 graphs: about 6-10 min estimated.
+    288 variants, times 144 plans x 2 projections x 8 steps, then 64 reps x 6 graphs: about 8-12 min estimated.
     `NEED_BENCH` = 1200 s. Its alarm can run to 2400 s if the deadline allows.
   - **Nsight Compute:** `NEED_NCU` = 300 s: one bounded install attempt (240 s) if `ncu` is absent, the probe, and the
     capture of two calls.
