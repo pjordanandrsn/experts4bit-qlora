@@ -1,8 +1,7 @@
-# HP2 (DRAFT): e4b vs Unsloth held-out parity, with the instrument gated at the mean level
+# HP2: e4b vs Unsloth held-out parity, with the instrument gated at the mean level
 
-**Status: DRAFT, prospective.** This is $0 design under the work-well task `heldout-parity-mean-bias` (mode `prospective`,
-authority RED = maintainer). It is **not registered**: nothing here authorizes a box or spend. The maintainer's RED ruling decides
-whether to register it, revise it or park it. Registration would then open a separate well task with its own envelope. HP2 is a new
+**Status: registered 2026-10-19, before any data** (the maintainer's RED ruling on this PR, after one independent review and its
+re-checks). The run is `hp2-5090-1`, under the lane's standing rule (worst $6.09, below). HP2 is a new
 registration, **not a rerun of HP1**, and none of HP1's draws are scored data here. The reason is HP1's closed finding: **a per-row
 |gap| tolerance cannot certify a mean comparison** (`bench/hp1/RESULTS-HP1.md`). A new instrument rule therefore needs a new
 registration, with its bar fixed before any data.
