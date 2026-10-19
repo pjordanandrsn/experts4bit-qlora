@@ -100,7 +100,8 @@ adertha://
 #added-only: adertha-receipts
 #added-only: cdo/state-
 #added-only: /Users/[a-z][a-z0-9._-]*/
-#added-only: /home/(jordananderson|paulj)/
+# Any /home/<name>/ except /home/node/, a container home that many records name legitimately:
+#added-only: /home/(n|no|nod|[^n/][^/]*|n[^o/][^/]*|no[^d/][^/]*|nod[^e/][^/]*|node[^/]+)/
 
 # --- RECEIPT STORE: the private receipt store's ledger and receipt records ----
 # The store's records are private, and none of the patterns above can see them.
