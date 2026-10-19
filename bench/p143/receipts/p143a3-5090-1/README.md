@@ -23,3 +23,5 @@ each.
 The host's 450 W limit bounds the absolute rates. The verdict is ratios within one host and one process family. The
 maintainer re-derived the verdict byte for byte (#1788). The launcher's receipt and ledger row are in the receipt store
 (`733f3941`). `SHA256SUMS` covers every file here.
+Twelve logs carry carriage returns from the box's progress output. They stay only in that store, byte-exact,
+and `STORE-ONLY.sha256` lists them.

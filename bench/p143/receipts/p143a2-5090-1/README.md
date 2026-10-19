@@ -17,3 +17,5 @@ on machine 45379, 2026-10-19T00:02:43Z to 00:31:40Z. Cost $0.406. Code: e4b `7ed
 
 The maintainer re-derived the verdict byte for byte (#1778). Amendment 3 (#1788) followed, on stricter terms and binding.
 The launcher's receipt and ledger row are in the receipt store (`74f8955f`). `SHA256SUMS` covers every file here.
+Eight logs carry carriage returns from the box's progress output. They stay only in that store, byte-exact,
+and `STORE-ONLY.sha256` lists them.
