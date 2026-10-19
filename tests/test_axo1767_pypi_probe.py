@@ -164,5 +164,5 @@ def test_the_hook_runs_after_the_fetch_probe_and_before_any_pypi_venv():
 
 
 def test_the_probe_is_staged_with_the_token():
-    line = next(ln for ln in DRIVE_SH.read_text().splitlines() if '*" qwen3axo1767 "*)' in ln)
+    line = next(ln for ln in DRIVE_SH.read_text().splitlines() if '*" qwen3axo1767 "*' in ln)
     assert "bench/tc1/pypi_probe.py" in line

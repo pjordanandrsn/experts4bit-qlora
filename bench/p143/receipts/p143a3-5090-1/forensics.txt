@@ -1,0 +1,8 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 615.71.09, GPU-5d17e6af-55be-fb84-0fd8-63111d9ae02f, 12.0
+power.limit,clocks.max.sm 450.00 W, 3105 MHz
+CPU(s):                                  32
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD EPYC 9135 16-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             125          19          53           0          52         110
+overlay         170G  1.4M  170G   1% /

@@ -44,8 +44,20 @@ def _w(tmp_path, name, obj):
     return str(p)
 
 
-def _rescore(tmp_path, name, loss, zero=10.996, status="ok"):
-    return _w(tmp_path, name, {"status": status, "adapter_loss": loss, "zero_adapter_loss": zero, "reason": None if status == "ok" else "x"})
+# what each rescore record says it ran, as axo1767-5090-2's real (3) off and (4) on records carry it
+PLUGIN = "axolotl.integrations.kernels.KernelsPlugin"
+ALL4 = {"lora_mlp_kernel": True, "lora_qkv_kernel": True, "lora_o_kernel": True, "lora_embedding_kernel": True}
+NONE4 = {k: False for k in ALL4}
+ENGAGED = {"on": {"kernels": "on", "config_experts_implementation": "scattermoe", "plugins": [PLUGIN], "cfg_lora_kernels": ALL4},
+           "off": {"kernels": "off", "config_experts_implementation": "eager", "plugins": None, "cfg_lora_kernels": NONE4},
+           "experts": {"kernels": "experts", "config_experts_implementation": "scattermoe", "plugins": [PLUGIN], "cfg_lora_kernels": NONE4},
+           "lora": {"kernels": "lora", "config_experts_implementation": "eager", "plugins": None, "cfg_lora_kernels": ALL4}}
+
+
+def _rescore(tmp_path, name, loss, zero=10.996, status="ok", mode=None, axolotl=None):
+    mode = mode or {"on": "on", "of": "off", "ex": "experts", "lo": "lora"}[name[:2]]
+    return _w(tmp_path, name, {"status": status, "adapter_loss": loss, "zero_adapter_loss": zero, "reason": None if status == "ok" else "x",
+                               "axolotl": axolotl if axolotl is not None else ENGAGED[mode]})
 
 
 def _real(tmp_path, ax=REAL_AX, ev=REAL_EVAL):
@@ -176,7 +188,7 @@ status_of(){ [ "${FAIL:-}" = "$2/$3" ] && echo install_failed || echo ok; }
 mkdir -p logs hp1 data; : > summary.txt; : > arms.log
 echo '{"fam": "qwen3hp1", "sha256": "deadbeef", "train": [], "eval": []}' > tokens.json
 source ./funcs.sh
-tc1_axo1767_family qwen3hp1 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400
+tc1_axo1767_family qwen3hp1 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 ${FAM_TOKEN_ARG:-}
 """
 
 
@@ -218,10 +230,10 @@ def test_no_trained_axolotl_adapter_voids_without_a_rescore(tmp_path, env):
 def test_the_token_is_dispatched_staged_and_needs_no_unsloth_venv():
     run = RUN_SH.read_text()
     assert "\n  qwen3axo1767) tc1_axo1767_family qwen3hp1 " in run
-    assert 'case " $FAMILIES " in " qwen3axo1767 ") NEED_UNSLOTH=0;; esac' in run
+    assert 'case " $FAMILIES " in " qwen3axo1767 "|" qwen3axo1767b ") NEED_UNSLOTH=0;; esac' in run
     assert "PREREG=tc1/AXO1767-PREREG.md" in run
     drive_sh = DRIVE_SH.read_text()
-    line = next(ln for ln in drive_sh.splitlines() if '*" qwen3axo1767 "*)' in ln)
+    line = next(ln for ln in drive_sh.splitlines() if '*" qwen3axo1767 "*' in ln)
     for f in ("hp1_lib.py", "hp1_eval.py", "hp1_trunc.py", "axo1767_reduce.py"):
         assert f in line, f
 
@@ -230,3 +242,156 @@ def test_a_curve_without_step_0_voids(tmp_path):
     ax = dict(REAL_AX, eval_curve=[{"step": 1, "heldout_loss": 10.99}, {"step": 3, "heldout_loss": 10.94001}])
     out = R.reduce(*_real(tmp_path, ax=ax)[:2])
     assert out["verdict"] == "VOID" and "step 0" in out["why"], out
+
+
+# ---------------------------------------------------------------- Amendment 1: the kernel split
+
+
+def test_the_split_modes_build_the_registered_configs_and_refuse_contradictions():
+    arm = _load(ARM, "tc1_arm_axo1767_split_under_test")
+    import types
+    a = types.SimpleNamespace(r=16, alpha=16, seq=2048, seed=3407, micro_batch=2, accum=4, steps=3, lr=2e-4, weight_decay=0.001, warmup_steps=5)
+    ex = arm.axolotl_config_dict(a, "/snap", ["m"], ["p"], best=True, kernels="experts")
+    assert ex["expert_backend"] == "scattermoe" and "experts_implementation" not in ex
+    assert all(ex[k] is False for k in ("lora_mlp_kernel", "lora_qkv_kernel", "lora_o_kernel", "lora_embedding_kernel"))
+    lo = arm.axolotl_config_dict(a, "/snap", ["m"], ["p"], best=False, kernels="lora")
+    assert "plugins" not in lo and lo["experts_implementation"] == "eager"
+    assert all(lo[k] is True for k in ("lora_mlp_kernel", "lora_qkv_kernel", "lora_o_kernel", "lora_embedding_kernel"))
+    assert arm.axolotl_config_dict(a, "/snap", ["m"], ["p"], best=False, kernels=False) == arm.axolotl_config_dict(a, "/snap", ["m"], ["p"], best=False, kernels="off")
+    for best, mode in ((False, "experts"), (True, "lora"), (True, "off"), (False, "sideways")):
+        with pytest.raises(ValueError):
+            arm.axolotl_config_dict(a, "/snap", ["m"], ["p"], best=best, kernels=mode)
+
+
+@pytest.mark.parametrize("args,needle", [
+    (["--framework", "axolotl", "--arm", "axolotl", "--axolotl-kernels", "experts", "--axolotl-best", "0"], "--axolotl-best 1"),
+    (["--framework", "axolotl", "--arm", "axolotl", "--axolotl-kernels", "lora", "--axolotl-best", "1"], "--axolotl-best 0"),
+    (["--framework", "e4b", "--arm", "fused", "--axolotl-kernels", "lora"], "axolotl switch"),
+])
+def test_a_split_mode_refuses_a_contradiction_before_anything_loads(tmp_path, args, needle):
+    out = tmp_path / "out"
+    out.mkdir()
+    p = subprocess.run([sys.executable, str(ARM), "--tag", "z", "--prereg", "tc1/AXO1767-PREREG.md", "--out", str(out), "--adapter-dir", str(out / "ad"), *args],
+                       capture_output=True, text=True, timeout=300, cwd=REPO)
+    assert p.returncode == 3 and "Traceback" not in p.stderr, (p.stdout + p.stderr)[-2000:]
+    rec = json.loads(next(out.glob("*_z.json")).read_text())
+    assert rec["status"] == "refused" and needle in rec["reason"], rec
+
+
+# axo1767-5090-2's real (3) off and (4) on, so the main reading is the real KERNELS
+REAL_OFF, REAL_ON = 10.98006, 10.94028
+REAL_AX2 = {"tag": "hp1shake_axolotl", "eval_curve": [{"step": 0, "heldout_loss": 10.99624}, {"step": 3, "heldout_loss": 10.94028}]}
+REAL_EVAL2 = json.loads(json.dumps(REAL_EVAL))
+REAL_EVAL2["arms"][0]["evaluator"]["row_mean"] = 10.97545
+
+
+@pytest.mark.parametrize("experts,lora,verdict", [
+    (10.9420, 10.9795, "SCATTERMOE"),       # E -0.0381, L -0.0006
+    (10.9798, 10.9420, "LORA_KERNELS"),     # E -0.0003, L -0.0381
+    (10.9550, 10.9550, "BOTH"),             # E -0.0251, L -0.0251
+    (10.9780, 10.9770, "INTERACTION"),      # E -0.0021, L -0.0031, while C is +0.0398
+    (10.9650, 10.9795, "INCONCLUSIVE"),     # E -0.0151, between the bands
+])
+def test_every_split_cell_on_the_real_kernels_reading(tmp_path, experts, lora, verdict):
+    ax, ev, ctl = _w(tmp_path, "ax.json", REAL_AX2), _w(tmp_path, "ev.json", REAL_EVAL2), _w(tmp_path, "e4b.json", REAL_E4B)
+    out = R.reduce(ax, ev, on=_rescore(tmp_path, "on.json", REAL_ON), off=_rescore(tmp_path, "off.json", REAL_OFF), control=ctl,
+                   experts=_rescore(tmp_path, "ex.json", experts), lora=_rescore(tmp_path, "lo.json", lora))
+    assert out["verdict"] == "KERNELS" and out["split_verdict"] == verdict, out
+    assert "additivity_E_plus_L_minus_on_off" in out["pairs"]
+
+
+def test_the_split_does_not_apply_without_a_kernels_reading_and_needs_both_scores(tmp_path):
+    ax, ev, ctl = _real(tmp_path)
+    out = R.reduce(ax, ev, on=_rescore(tmp_path, "on.json", 10.9410), off=_rescore(tmp_path, "off.json", 10.9400), control=ctl,
+                   experts=_rescore(tmp_path, "ex.json", 10.95), lora=_rescore(tmp_path, "lo.json", 10.95))
+    assert out["verdict"] == "EXPORT" and out["split_verdict"] == "NOT_APPLICABLE", out
+    ax, ev, ctl = _w(tmp_path, "ax2.json", REAL_AX2), _w(tmp_path, "ev2.json", REAL_EVAL2), _w(tmp_path, "e4b.json", REAL_E4B)
+    out = R.reduce(ax, ev, on=_rescore(tmp_path, "on2.json", REAL_ON), off=_rescore(tmp_path, "off2.json", REAL_OFF), control=ctl,
+                   experts=_rescore(tmp_path, "ex2.json", 10.95))
+    assert out["verdict"] == "KERNELS" and out["split_verdict"] == "INCOMPLETE", out
+
+
+def test_a_bad_split_rescore_voids_the_split_only_and_keeps_the_main_reading(tmp_path):
+    ax, ev, ctl = _w(tmp_path, "ax.json", REAL_AX2), _w(tmp_path, "ev.json", REAL_EVAL2), _w(tmp_path, "e4b.json", REAL_E4B)
+    out = R.reduce(ax, ev, on=_rescore(tmp_path, "on.json", REAL_ON), off=_rescore(tmp_path, "off.json", REAL_OFF), control=ctl,
+                   experts=_rescore(tmp_path, "ex.json", 10.95, zero=10.996 + 0.03), lora=_rescore(tmp_path, "lo.json", 10.95))
+    assert out["verdict"] == "KERNELS" and out["split_verdict"] == "SPLIT_VOID" and "5_experts" in out["split_why"], out
+
+
+def _split(tmp_path, **kw):
+    ax, ev, ctl = _w(tmp_path, "ax.json", REAL_AX2), _w(tmp_path, "ev.json", REAL_EVAL2), _w(tmp_path, "e4b.json", REAL_E4B)
+    args = {"on": _rescore(tmp_path, "on.json", REAL_ON), "off": _rescore(tmp_path, "off.json", REAL_OFF),
+            "experts": _rescore(tmp_path, "ex.json", 10.9420), "lora": _rescore(tmp_path, "lo.json", 10.9795)}
+    args.update(kw)
+    return R.reduce(ax, ev, control=ctl, **args)
+
+
+def test_the_real_records_are_engaged_as_claimed():
+    """ENGAGED["on"] / ["off"] are axo1767-5090-2's real (4) / (3) kernel fields, verbatim; (5) / (6) are what the two new modes set."""
+    for name, mode in (("3_off", "off"), ("4_on", "on"), ("5_experts", "experts"), ("6_lora", "lora")):
+        assert R.engagement(name, {"axolotl": ENGAGED[mode]}, on_set=sorted(ALL4)) == [], name
+
+
+@pytest.mark.parametrize("which,axolotl,where", [
+    ("experts", dict(ENGAGED["experts"], plugins=None), "split"),                           # the plugin silently dropped
+    ("experts", dict(ENGAGED["experts"], cfg_lora_kernels=ALL4), "split"),                  # the LoRA kernels left on
+    ("lora", dict(ENGAGED["lora"], cfg_lora_kernels=dict(NONE4, lora_qkv_kernel=True)), "split"),   # not the kernels-on set
+    ("lora", dict(ENGAGED["lora"], config_experts_implementation="scattermoe"), "split"),    # scattermoe crept in
+    ("off", dict(ENGAGED["off"], plugins=[PLUGIN]), "main"),                                 # the reference forward has a plugin
+    ("on", dict(ENGAGED["on"], kernels="off"), "main"),                                      # the label lies
+])
+def test_a_rescore_that_did_not_run_its_claimed_mode_is_void(tmp_path, which, axolotl, where):
+    fname = {"on": "on.json", "off": "off.json", "experts": "ex.json", "lora": "lo.json"}[which]
+    out = _split(tmp_path, **{which: _rescore(tmp_path, "x" + fname, {"on": REAL_ON, "off": REAL_OFF, "experts": 10.9420, "lora": 10.9795}[which],
+                                              mode=which, axolotl=axolotl)})
+    if where == "split":
+        assert out["verdict"] == "KERNELS" and out["split_verdict"] == "SPLIT_VOID" and "did not run" in out["split_why"], out
+    else:
+        assert out["verdict"] == "VOID" and "did not run" in out["why"], out
+
+
+def test_the_variant_token_rescores_four_ways_and_hands_the_reducer_both_single_paths(tmp_path):
+    arms, summary, py = drive(tmp_path, FAM_TOKEN_ARG="qwen3axo1767b")
+    assert [a[2] for a in arms] == ["hp1shake_e4b", "hp1shake_axolotl", "axo1767_rescore_on", "axo1767_rescore_off",
+                                    "axo1767_rescore_experts", "axo1767_rescore_lora"]
+    ex, lo = arms[4], arms[5]
+    assert ex[ex.index("--axolotl-kernels") + 1] == "experts" and ex[ex.index("--axolotl-best") + 1] == "1"
+    assert lo[lo.index("--axolotl-kernels") + 1] == "lora" and lo[lo.index("--axolotl-best") + 1] == "0"
+    red = [ln for ln in py.splitlines() if "axo1767_reduce.py" in ln][0]
+    assert "--experts " in red and "_axo1767_rescore_experts.json" in red and "--lora " in red and "_axo1767_rescore_lora.json" in red
+
+
+def test_the_base_token_runs_no_split(tmp_path):
+    arms, summary, py = drive(tmp_path)
+    assert [a[2] for a in arms][-1] == "axo1767_rescore_off"
+    red = [ln for ln in py.splitlines() if "axo1767_reduce.py" in ln][0]
+    assert "--experts" not in red and "--lora" not in red
+
+
+def test_the_variant_token_is_dispatched_staged_floored_and_needs_no_unsloth_venv():
+    run = RUN_SH.read_text()
+    assert "\n  qwen3axo1767b) tc1_axo1767_family qwen3hp1  " in run and run.count("qwen3axo1767b") >= 5
+    assert 'case " $FAMILIES " in " qwen3axo1767 "|" qwen3axo1767b ") NEED_UNSLOTH=0;; esac' in run
+    assert 'case " $FAMILIES " in *" qwen3axo1767 "*|*" qwen3axo1767b "*) PYPI_MIN=${PYPI_MIN:-10};; esac' in run
+    line = next(ln for ln in DRIVE_SH.read_text().splitlines() if '*" qwen3axo1767b "*)' in ln)
+    assert "axo1767_reduce.py" in line and "pypi_probe.py" in line
+
+
+def test_a_split_rescore_that_wrote_no_record_voids_the_split_only(tmp_path):
+    """A (5)/(6) rescore killed hard (segfault, OOM) writes no JSON; the driver still passes its path."""
+    out = _split(tmp_path, experts=str(tmp_path / "never-written.json"))
+    assert out["verdict"] == "KERNELS" and out["split_verdict"] == "SPLIT_VOID" and "no record" in out["split_why"], out
+
+
+def test_a_main_rescore_that_wrote_no_record_is_a_clean_void(tmp_path):
+    out = _split(tmp_path, off=str(tmp_path / "never-written.json"))
+    assert out["verdict"] == "VOID" and "3_off: no record" in out["why"], out
+
+
+def test_main_prints_a_verdict_even_when_a_split_record_is_missing(tmp_path):
+    ax, ev, ctl = _w(tmp_path, "ax.json", REAL_AX2), _w(tmp_path, "ev.json", REAL_EVAL2), _w(tmp_path, "e4b.json", REAL_E4B)
+    o = tmp_path / "fourscore.json"
+    p = subprocess.run([sys.executable, str(REDUCE), "--arm", ax, "--eval", ev, "--control", ctl, "--on", _rescore(tmp_path, "on.json", REAL_ON),
+                        "--off", _rescore(tmp_path, "off.json", REAL_OFF), "--experts", str(tmp_path / "missing.json"),
+                        "--lora", _rescore(tmp_path, "lo.json", 10.9795), "--out", str(o)], capture_output=True, text=True, timeout=60)
+    assert p.returncode == 0 and "AXO1767 VERDICT KERNELS" in p.stdout and "AXO1767 SPLIT VERDICT SPLIT_VOID" in p.stdout, p.stdout + p.stderr

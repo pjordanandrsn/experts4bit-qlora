@@ -120,7 +120,7 @@ NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" 
 # TC1 amendment 22: the dense-route A/B tokens run no Unsloth arm either -- alone, or both on their one box (in either order)
 case " $FAMILIES " in " qwen3denseab "|" mixtraldenseab "|" qwen3denseab mixtraldenseab "|" mixtraldenseab qwen3denseab ") NEED_UNSLOTH=0;; esac
 case " $FAMILIES " in " qwen3prebindab ") NEED_UNSLOTH=0;; esac   # TC1 amendment 26: an e4b-only A/B
-case " $FAMILIES " in " qwen3axo1767 ") NEED_UNSLOTH=0;; esac   # #1767: e4b + axolotl only (bench/tc1/AXO1767-PREREG.md)
+case " $FAMILIES " in " qwen3axo1767 "|" qwen3axo1767b ") NEED_UNSLOTH=0;; esac   # #1767: e4b + axolotl only (bench/tc1/AXO1767-PREREG.md)
 case " $FAMILIES " in " qwen3dqab "|" mixtraldqab ") NEED_UNSLOTH=0;; esac   # TC1 amendment 28: e4b-only A/Bs
 case " $FAMILIES " in " qwen3tritonab ") NEED_UNSLOTH=0;; esac   # TC1 amendment 32: an e4b-only A/B
 case " $FAMILIES " in " olmoedecab "|" qwen3decab "|" olmoedecab qwen3decab "|" qwen3decab olmoedecab ") NEED_UNSLOTH=0;; esac   # TC1 amendment 46: e4b-only A/Bs in venv-e4b
@@ -137,7 +137,7 @@ case " $FAMILIES " in *" qwen3curve "*)
   [ -n "${TC1_PREREG:-}" ] || PREREG=tc1/TC1B-PREREG.md     # TC1b: the curve token is governed by its own registration (the PI's); TC1_PREREG still overrides
   ;;
 esac
-case " $FAMILIES " in *" qwen3axo1767 "*)
+case " $FAMILIES " in *" qwen3axo1767 "*|*" qwen3axo1767b "*)
   echo "FIXTURE axo1767 (#1767): HP1's box-side shakedown fixture ($HP1_SHAKE_LAYERS-layer cut, $HP1_SHAKE_STEPS steps, 8 held-out rows); arms e4b + axolotl, then the axolotl adapter rescored with the kernels on and off" | tee -a summary.txt
   [ -n "${TC1_PREREG:-}" ] || PREREG=tc1/AXO1767-PREREG.md
   ;;
@@ -356,7 +356,7 @@ fi
 # before any PyPI-heavy venv is built, and a host below it is refused here (rc 15, host-limited, like the fetch probe). No floor
 # is registered for any other token, so their startups are unchanged. TC1_PYPI_MIN_MBPS overrides; 0 skips.
 PYPI_MIN=${TC1_PYPI_MIN_MBPS:-}
-case " $FAMILIES " in *" qwen3axo1767 "*) PYPI_MIN=${PYPI_MIN:-10};; esac       # AXO1767-PREREG "Box and budget"
+case " $FAMILIES " in *" qwen3axo1767 "*|*" qwen3axo1767b "*) PYPI_MIN=${PYPI_MIN:-10};; esac       # AXO1767-PREREG "Box and budget"
 if [ -n "$PYPI_MIN" ] && [ "$PYPI_MIN" != 0 ] && [ -z "${TC1_LOCAL_SNAPSHOT:-}" ]; then
   $PY_E4B $W/pypi_probe.py --min-mbps "$PYPI_MIN" > logs/pypi_probe.log 2>&1; pprc=$?; tail -1 logs/pypi_probe.log
   [ $pprc -eq 0 ] || { say "BOX REFUSED: the PyPI probe read below its floor or failed rc=$pprc (logs/pypi_probe.log): $(tail -1 logs/pypi_probe.log | cut -c1-240)"
@@ -2248,7 +2248,7 @@ PYN
 # hp1shake_*, as hp1k-5090-8 ran them), then the axolotl arm's SAVED adapter rescored in two fresh processes (tc1_arm --rescore-adapter,
 # --axolotl-kernels on / off), hp1_eval over both arms WITHOUT --require-all-scored (the axolotl VOID is the subject), and the four-score
 # reading (axo1767_reduce.py), whose VERDICT line goes to summary.txt. Correctness only: nothing it writes is a TC1 or HP1 number.
-tc1_axo1767_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 TOK TS
+tc1_axo1767_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 FAM_TOKEN=${5:-qwen3axo1767} TOK TS
   say "===== #1767 four-score reading: $FAM ($MID @ $REV), $HP1_SHAKE_LAYERS-layer cut, $HP1_SHAKE_STEPS steps"
   tc1_prepare $FAM "$MID" $REV $FAL "e4b:hp1shake_e4b:fused axolotl:hp1shake_axolotl:axolotl" $HP1_EVAL_N || return 0
   mkdir -p $W/hp1 $W/axo1767
@@ -2270,11 +2270,17 @@ tc1_axo1767_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 TOK TS
   mkdir -p $W/axo1767/peft_adapter_axolotl && cp -a $AD/. $W/axo1767/peft_adapter_axolotl/     # 'adapters' is excluded from the fetch; this copy comes back
   TC1_ARM_EXTRA_ENV="$E" arm $SF axolotl axo1767_rescore_on axolotl 1800 "$TM" $TR 0 hp1shake $STOK $TS $AXARGS --axolotl-best 1 --axolotl-kernels on --rescore-adapter $AD
   TC1_ARM_EXTRA_ENV="$E" arm $SF axolotl axo1767_rescore_off axolotl 1800 "$TM" $TR 0 hp1shake $STOK $TS $AXARGS --axolotl-best 0 --axolotl-kernels off --rescore-adapter $AD
+  local SPLIT=""                                    # AXO1767 Amendment 1 (qwen3axo1767b): the same adapter with ONE kernel path at a time
+  if [ "$FAM_TOKEN" = qwen3axo1767b ]; then
+    TC1_ARM_EXTRA_ENV="$E" arm $SF axolotl axo1767_rescore_experts axolotl 1800 "$TM" $TR 0 hp1shake $STOK $TS $AXARGS --axolotl-best 1 --axolotl-kernels experts --rescore-adapter $AD
+    TC1_ARM_EXTRA_ENV="$E" arm $SF axolotl axo1767_rescore_lora axolotl 1800 "$TM" $TR 0 hp1shake $STOK $TS $AXARGS --axolotl-best 0 --axolotl-kernels lora --rescore-adapter $AD
+    SPLIT="--experts $W/${SF}_axolotl_axo1767_rescore_experts.json --lora $W/${SF}_axolotl_axo1767_rescore_lora.json"
+  fi
   local fw RR=() BB=(); for fw in e4b axolotl; do RR+=("$W/${SF}_${fw}_hp1shake_${fw}.json"); BB+=($W/hp1/shake/base_${fw}_${SF}); done
   HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts "${RR[@]}" --bases "${BB[@]}" --tokens $TOK --eval-n 8 \
     --model "$TM" --revision $TR --expect-trainable 0 --zero-tol 0.01 --out $W/axo1767/eval_shake.json > logs/axo1767_eval.log 2>&1; echo "AXO1767 evaluator rc=$?" | tee -a summary.txt
   $PY_E4B $W/axo1767_reduce.py --arm $W/${SF}_axolotl_hp1shake_axolotl.json --eval $W/axo1767/eval_shake.json --control $W/${SF}_e4b_hp1shake_e4b.json \
-    --on $W/${SF}_axolotl_axo1767_rescore_on.json --off $W/${SF}_axolotl_axo1767_rescore_off.json --out $W/axo1767/fourscore.json 2> logs/axo1767_reduce.err | tee -a summary.txt \
+    --on $W/${SF}_axolotl_axo1767_rescore_on.json --off $W/${SF}_axolotl_axo1767_rescore_off.json $SPLIT --out $W/axo1767/fourscore.json 2> logs/axo1767_reduce.err | tee -a summary.txt \
     || echo "AXO1767 VERDICT VOID: the reducer failed (logs/axo1767_reduce.err)" | tee -a summary.txt
   rm -rf $SC; }
 # ---------------------------------------------------------------- HP1 (bench/hp1/HP1-PREREG.md): held-out parity, one evaluator, seeds per arm
@@ -2746,6 +2752,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3hp1cal) tc1_hp1cal_family qwen3hp1cal Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400;;            # HP1 Amendment 4, the calibration box
   qwen3hp2)    tc1_hp2_family    qwen3hp2    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600;;       # HP2 (e4b K00 vs Unsloth)
   qwen3axo1767) tc1_axo1767_family qwen3hp1   Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400;;           # #1767 (AXO1767-PREREG): the four-score reading
+  qwen3axo1767b) tc1_axo1767_family qwen3hp1  Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 qwen3axo1767b;;  # AXO1767 Amendment 1: the kernel split
   tc2small)    tc2_small_box;;                 # lane TC2, box A: granite, olmoe, gptoss (tc2_small_box's table)
   tc2big)      tc2_big_box;;                   # lane TC2, box B: qwen3_5, mixtral (tc2_big_box's table)
   tc2mixtral)  tc2_mixtral_redraw;;            # lane TC2 amendment 2: Mixtral's P5 pair and reference redrawn with the Unsloth alarm at 7,200 s

@@ -1,0 +1,8 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.173.02, GPU-64c792b2-9bee-7901-adc5-0bd08c45174a, 12.0
+power.limit,clocks.max.sm 575.00 W, 3090 MHz
+CPU(s):                                  16
+Vendor ID:                               GenuineIntel
+Model name:                              Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz
+               total        used        free      shared  buff/cache   available
+Mem:              62           2          54           0           6          59
+overlay          60G   62M   60G   1% /

@@ -1,0 +1,20 @@
+KNOBS e4b=c246617af73fd317347d14ffeeda1abca3e3e856 gnf4=70bc03cb7a61b03c4e801e7423c58c103a1b6d7d model=none@none gpu_class=5090 min_disk_gb=40 min_ram_gb=60 family=qwen3-attn dry=0 short=32 long=160 reps=3 moe_layers=48
+CUDA_PROBE ok
+e4b 0.55.0 @c246617af73fd317347d14ffeeda1abca3e3e856
+gnf4 0.46.1 @70bc03cb7a61b03c4e801e7423c58c103a1b6d7d
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p143_reduce self-test OK (9 cases)
+p143_bench self-test OK (4 cases)
+premise rc=0: 19 passed, 5 warnings in 12.21s
+premise ok
+           ^^^^^^^^^^
+  File "/root/p143/p143_bench.py", line 58, in run
+    kv.rewind(0, ctx)
+  File "/opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/fp8_paged_kv.py", line 1285, in rewind
+    raise ValueError(f"rewind forward (layer {layer}: "
+ValueError: rewind forward (layer 0: 256 -> 640)
