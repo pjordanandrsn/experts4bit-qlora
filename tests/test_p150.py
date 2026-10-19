@@ -156,7 +156,7 @@ MUTANTS = [
     # t1 alone
     ('RULED, CANDIDATE = ("t1", "k16"), "I8HEAD"', 'RULED, CANDIDATE = ("t1",), "I8HEAD"'),
     # the argmax gate never read
-    ('    if s["argmax"] < pr.ARGMAX_MIN:', "    if False:"),
+    ('    if r["argmax"] < pr.ARGMAX_MIN:', "    if False:"),
     # the scope never checked (an arm that also rounds attention, or not the head, would rule)
     ("        if {k: fq.get(k) for k in SCOPE[CANDIDATE]} != SCOPE[CANDIDATE]:", "        if False:"),
     # the ruled window counts never checked
