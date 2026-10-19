@@ -34,11 +34,45 @@ VERDICTS = {
 #: AXO1767 Amendment 1 (the split, token qwen3axo1767b): with the main reading KERNELS, the same adapter rescored with ONE kernel path at
 #: a time. E = (5) experts-only - (3) off, L = (6) LoRA-kernels-only - (3) off; the same bands.
 SPLIT_VERDICTS = {
-    ("DIFFER", "MATCH"): ("SCATTERMOE", "scattermoe's expert path alone moves the loss off PEFT's reference; the LoRA kernels alone do not"),
-    ("MATCH", "DIFFER"): ("LORA_KERNELS", "the LoRA kernels alone move the loss off PEFT's reference; scattermoe's expert path alone does not"),
+    ("DIFFER", "MATCH"): ("SCATTERMOE", "the kernels plugin's expert path (scattermoe + moe_bnb_fast) alone moves the loss off PEFT's "
+                                        "reference; the LoRA kernels alone do not"),
+    ("MATCH", "DIFFER"): ("LORA_KERNELS", "the LoRA kernels alone move the loss off PEFT's reference; the kernels plugin's expert path "
+                                          "alone does not"),
     ("DIFFER", "DIFFER"): ("BOTH", "each kernel path alone moves the loss off PEFT's reference"),
     ("MATCH", "MATCH"): ("INTERACTION", "neither path alone moves the loss, yet both together do (C differs)"),
 }
+
+
+KERNELS_PLUGIN = "axolotl.integrations.kernels.KernelsPlugin"
+LORA_KERNELS = ("lora_mlp_kernel", "lora_qkv_kernel", "lora_o_kernel", "lora_embedding_kernel")
+
+
+def lora_set(q):
+    return sorted(k for k, v in ((q.get("axolotl") or {}).get("cfg_lora_kernels") or {}).items() if v)
+
+
+def engagement(name, q, on_set=None):
+    """What a rescore record says it RAN, against the mode its name claims (Amendment 1's engagement check): the mode, the experts
+    implementation the model was set to (config_experts_implementation), the plugins, and the effective LoRA-kernel set. A label alone
+    is never trusted. Returns the mismatches (empty = engaged as claimed)."""
+    ax = q.get("axolotl") or {}
+    mode = {"3_off": "off", "4_on": "on", "5_experts": "experts", "6_lora": "lora"}[name]
+    impl, plugins, ls = ax.get("config_experts_implementation"), ax.get("plugins") or [], lora_set(q)
+    want_impl = "scattermoe" if mode in ("on", "experts") else "eager"
+    bad = []
+    if ax.get("kernels") != mode:
+        bad.append(f"kernels {ax.get('kernels')!r} != {mode!r}")
+    if impl != want_impl:
+        bad.append(f"experts implementation {impl!r} != {want_impl!r}")
+    if (KERNELS_PLUGIN in plugins) != (mode in ("on", "experts")):
+        bad.append(f"plugins {plugins!r}")
+    if mode in ("off", "experts") and ls:
+        bad.append(f"LoRA kernels {ls} should all be off")
+    if mode == "on" and not ls:
+        bad.append("no LoRA kernel was on in the training configuration")
+    if mode == "lora" and (not ls or (on_set is not None and ls != on_set)):
+        bad.append(f"LoRA kernels {ls} != the kernels-on set {on_set}")
+    return bad
 
 
 def band(d):
@@ -102,17 +136,28 @@ def reduce(arm, evalj, on=None, off=None, control=None, experts=None, lora=None)
                                                "band": None if cd is None else band(cd)}
         if cd is None or band(cd) != "MATCH":
             bad.append(f"the control arm {cr.get('tag')}'s round trip is {cd} (needs MATCH)")
+    recs = {}
     for name, path in (("3_off", off), ("4_on", on), ("5_experts", experts), ("6_lora", lora)):
         if path:
-            q = json.load(open(path))
-            if q.get("status") != "ok" or q.get("adapter_loss") is None:
-                bad.append(f"{name}: {path} is not an ok rescore ({q.get('status')}: {str(q.get('reason'))[:120]})")
-                continue
+            recs[name] = json.load(open(path))
+    on_set = lora_set(recs["4_on"]) if "4_on" in recs else None
+    split_bad = []
+    for name, q in recs.items():
+        sink = bad if name in ("3_off", "4_on") else split_bad      # Amendment 1: (5)/(6) failures void the split only
+        if q.get("status") != "ok" or q.get("adapter_loss") is None:
+            sink.append(f"{name}: not an ok rescore ({q.get('status')}: {str(q.get('reason'))[:120]})")
+            continue
+        zd = q["zero_adapter_loss"] - s0
+        out["checks"][f"{name}_zero_vs_inloop_step0"] = {"delta": round(zd, 6), "band": band(zd)}
+        if band(zd) != "MATCH":
+            sink.append(f"{name}'s zero adapter vs the in-loop step 0 is {round(zd, 6)} (needs MATCH)")
+        eng = engagement(name, q, on_set)
+        out["checks"][f"{name}_engaged"] = eng or "as claimed"
+        if eng:
+            sink.append(f"{name} did not run the mode its name claims: {'; '.join(eng)}")
+        if band(zd) == "MATCH" and not eng:
             sc[name] = q["adapter_loss"]
-            zd = q["zero_adapter_loss"] - s0
-            out["checks"][f"{name}_zero_vs_inloop_step0"] = {"delta": round(zd, 6), "band": band(zd)}
-            if band(zd) != "MATCH":
-                bad.append(f"{name}'s zero adapter vs the in-loop step 0 is {round(zd, 6)} (needs MATCH)")
+    out["split_problems"] = split_bad
     if bad:
         out.update(verdict="VOID", why="; ".join(bad))
         return out
@@ -142,6 +187,9 @@ def split(out):
     sc = out["scores"]
     if out["verdict"] != "KERNELS":
         out["split_verdict"], out["split_why"] = "NOT_APPLICABLE", f"the main reading is {out['verdict']}, not KERNELS"
+        return
+    if out.get("split_problems"):
+        out["split_verdict"], out["split_why"] = "SPLIT_VOID", "; ".join(out["split_problems"])
         return
     if "5_experts" not in sc or "6_lora" not in sc:
         out["split_verdict"], out["split_why"] = "INCOMPLETE", "a single-path score is missing"

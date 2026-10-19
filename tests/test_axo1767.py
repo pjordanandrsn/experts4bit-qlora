@@ -44,8 +44,20 @@ def _w(tmp_path, name, obj):
     return str(p)
 
 
-def _rescore(tmp_path, name, loss, zero=10.996, status="ok"):
-    return _w(tmp_path, name, {"status": status, "adapter_loss": loss, "zero_adapter_loss": zero, "reason": None if status == "ok" else "x"})
+# what each rescore record says it ran, as axo1767-5090-2's real (3) off and (4) on records carry it
+PLUGIN = "axolotl.integrations.kernels.KernelsPlugin"
+ALL4 = {"lora_mlp_kernel": True, "lora_qkv_kernel": True, "lora_o_kernel": True, "lora_embedding_kernel": True}
+NONE4 = {k: False for k in ALL4}
+ENGAGED = {"on": {"kernels": "on", "config_experts_implementation": "scattermoe", "plugins": [PLUGIN], "cfg_lora_kernels": ALL4},
+           "off": {"kernels": "off", "config_experts_implementation": "eager", "plugins": None, "cfg_lora_kernels": NONE4},
+           "experts": {"kernels": "experts", "config_experts_implementation": "scattermoe", "plugins": [PLUGIN], "cfg_lora_kernels": NONE4},
+           "lora": {"kernels": "lora", "config_experts_implementation": "eager", "plugins": None, "cfg_lora_kernels": ALL4}}
+
+
+def _rescore(tmp_path, name, loss, zero=10.996, status="ok", mode=None, axolotl=None):
+    mode = mode or {"on": "on", "of": "off", "ex": "experts", "lo": "lora"}[name[:2]]
+    return _w(tmp_path, name, {"status": status, "adapter_loss": loss, "zero_adapter_loss": zero, "reason": None if status == "ok" else "x",
+                               "axolotl": axolotl if axolotl is not None else ENGAGED[mode]})
 
 
 def _real(tmp_path, ax=REAL_AX, ev=REAL_EVAL):
@@ -299,11 +311,43 @@ def test_the_split_does_not_apply_without_a_kernels_reading_and_needs_both_score
     assert out["verdict"] == "KERNELS" and out["split_verdict"] == "INCOMPLETE", out
 
 
-def test_a_bad_split_rescore_voids_the_whole_reading(tmp_path):
+def test_a_bad_split_rescore_voids_the_split_only_and_keeps_the_main_reading(tmp_path):
     ax, ev, ctl = _w(tmp_path, "ax.json", REAL_AX2), _w(tmp_path, "ev.json", REAL_EVAL2), _w(tmp_path, "e4b.json", REAL_E4B)
     out = R.reduce(ax, ev, on=_rescore(tmp_path, "on.json", REAL_ON), off=_rescore(tmp_path, "off.json", REAL_OFF), control=ctl,
                    experts=_rescore(tmp_path, "ex.json", 10.95, zero=10.996 + 0.03), lora=_rescore(tmp_path, "lo.json", 10.95))
-    assert out["verdict"] == "VOID" and "5_experts" in out["why"], out
+    assert out["verdict"] == "KERNELS" and out["split_verdict"] == "SPLIT_VOID" and "5_experts" in out["split_why"], out
+
+
+def _split(tmp_path, **kw):
+    ax, ev, ctl = _w(tmp_path, "ax.json", REAL_AX2), _w(tmp_path, "ev.json", REAL_EVAL2), _w(tmp_path, "e4b.json", REAL_E4B)
+    args = {"on": _rescore(tmp_path, "on.json", REAL_ON), "off": _rescore(tmp_path, "off.json", REAL_OFF),
+            "experts": _rescore(tmp_path, "ex.json", 10.9420), "lora": _rescore(tmp_path, "lo.json", 10.9795)}
+    args.update(kw)
+    return R.reduce(ax, ev, control=ctl, **args)
+
+
+def test_the_real_records_are_engaged_as_claimed():
+    """ENGAGED["on"] / ["off"] are axo1767-5090-2's real (4) / (3) kernel fields, verbatim; (5) / (6) are what the two new modes set."""
+    for name, mode in (("3_off", "off"), ("4_on", "on"), ("5_experts", "experts"), ("6_lora", "lora")):
+        assert R.engagement(name, {"axolotl": ENGAGED[mode]}, on_set=sorted(ALL4)) == [], name
+
+
+@pytest.mark.parametrize("which,axolotl,where", [
+    ("experts", dict(ENGAGED["experts"], plugins=None), "split"),                           # the plugin silently dropped
+    ("experts", dict(ENGAGED["experts"], cfg_lora_kernels=ALL4), "split"),                  # the LoRA kernels left on
+    ("lora", dict(ENGAGED["lora"], cfg_lora_kernels=dict(NONE4, lora_qkv_kernel=True)), "split"),   # not the kernels-on set
+    ("lora", dict(ENGAGED["lora"], config_experts_implementation="scattermoe"), "split"),    # scattermoe crept in
+    ("off", dict(ENGAGED["off"], plugins=[PLUGIN]), "main"),                                 # the reference forward has a plugin
+    ("on", dict(ENGAGED["on"], kernels="off"), "main"),                                      # the label lies
+])
+def test_a_rescore_that_did_not_run_its_claimed_mode_is_void(tmp_path, which, axolotl, where):
+    fname = {"on": "on.json", "off": "off.json", "experts": "ex.json", "lora": "lo.json"}[which]
+    out = _split(tmp_path, **{which: _rescore(tmp_path, "x" + fname, {"on": REAL_ON, "off": REAL_OFF, "experts": 10.9420, "lora": 10.9795}[which],
+                                              mode=which, axolotl=axolotl)})
+    if where == "split":
+        assert out["verdict"] == "KERNELS" and out["split_verdict"] == "SPLIT_VOID" and "did not run" in out["split_why"], out
+    else:
+        assert out["verdict"] == "VOID" and "did not run" in out["why"], out
 
 
 def test_the_variant_token_rescores_four_ways_and_hands_the_reducer_both_single_paths(tmp_path):

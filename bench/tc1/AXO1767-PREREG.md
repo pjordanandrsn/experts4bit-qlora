@@ -96,7 +96,8 @@ is −0.0012 (MATCH), and the evaluator's zero adapter is −0.0044 (MATCH).
 **Why.** `axo1767-5090-2` read KERNELS (re-derived): the saved adapter gives the in-loop number only under axolotl's kernels, and
 PEFT's reference forward agrees with the evaluator. Its kernels-on configuration switches two paths together:
 - the kernels plugin's scattermoe experts, which apply the expert LoRA in the scattermoe kernel;
-- the LoRA kernels that `check_auto_enable_lora_kernels` turns on for the attention projections.
+- the LoRA kernels that `check_auto_enable_lora_kernels` turns on. On `axo1767-5090-2` the effective set was all four
+  (`lora_mlp_kernel`, `lora_qkv_kernel`, `lora_o_kernel`, `lora_embedding_kernel`), which is why (6) sets all four.
 This amendment separates them.
 
 **The change.** A token variant, `qwen3axo1767b`, runs everything above unchanged, then two more fresh-process rescores of the same
@@ -108,14 +109,26 @@ saved adapter:
 | 6 | LoRA kernels only | `--axolotl-kernels lora --axolotl-best 0`: eager experts (no plugin), with `lora_{mlp,qkv,o,embedding}_kernel` true |
 
 Each is checked like (3) and (4): a bit-for-bit adapter round trip, an ok record, and its zero adapter MATCHing the in-loop step 0.
-Any failure there makes the reading VOID.
+
+**Engagement check (all four rescores).** No label is trusted. Each rescore record must show that it ran the mode its name
+claims, through four fields: the mode, the experts implementation the model was set to, the plugins, and the effective LoRA-kernel
+set. The expected values, as `axo1767-5090-2`'s real (3) and (4) records carry them:
+- (3) off: eager experts, no plugin, no LoRA kernel on;
+- (4) on: scattermoe, the kernels plugin, at least one LoRA kernel on (its set is the box's effective set);
+- (5) experts: scattermoe, the kernels plugin, no LoRA kernel on;
+- (6) LoRA kernels: eager experts, no plugin, exactly (4)'s effective set on the same box.
+
+**What a failure voids.** A failed check on (3) or (4) makes the whole reading VOID. A failed check on (5) or (6), whether an
+instrument check or the engagement check, makes the split **SPLIT_VOID** and leaves the main reading standing: the main reading
+does not depend on (5) or (6). A box whose main reading is valid is not a strike. A SPLIT_VOID from a harness cause is fixed
+before the split re-runs, and that re-run carries its own one-strike rule.
 
 **Split reading** (`axo1767_reduce.py`, the same bands). It applies only when the main reading above is KERNELS; otherwise it is
 NOT_APPLICABLE. With E = (5) − (3) and L = (6) − (3):
 
 | E | L | split verdict | reading |
 |---|---|---|---|
-| DIFFER | MATCH | SCATTERMOE | scattermoe's expert path alone moves the loss off PEFT's reference |
+| DIFFER | MATCH | SCATTERMOE | the kernels plugin's expert path (scattermoe + moe_bnb_fast) alone moves the loss off PEFT's reference |
 | MATCH | DIFFER | LORA_KERNELS | the LoRA kernels alone move the loss off PEFT's reference |
 | DIFFER | DIFFER | BOTH | each path alone moves it |
 | MATCH | MATCH | INTERACTION | neither alone does, though both together do (C differs) |
