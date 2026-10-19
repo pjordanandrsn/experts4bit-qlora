@@ -27,11 +27,11 @@ What a plan cannot change, and so the basis of the predictions:
 - **The bytes.** At 16 tokens, each with 8 distinct experts, no expert gets more than 16 rows, so every routed expert
   has exactly one 16-row tile and streams its whole slab once.
 - **The instructions per weight.** b1-decode's $0 static count (triton 3.4.0, SASS of K25's K loop at the served
-  constexprs) is **34.5 lane instructions per weight on sm_120**: select tree 11.6, logic, shift and address 14.6,
-  shared 2.2, global loads 1.6, the rest under 1 each. 2,787 experts a step x 4.72 M weights x 34.5 is about 454 G lane
-  instructions. At 170 SMs x 128 lanes x 2.4-2.8 GHz that is an issue estimate of **7.5-8.7 ms**: above the 4.94 ms
-  byte floor, toward the recorded 11.75 ms. It is an estimate (a static count at one issue per scheduler cycle), not a
-  timing.
+  constexprs; to be published with grouped-nf4-gemm's K38 design note) is **34.5 lane instructions per weight on
+  sm_120**: select tree 11.6, logic, shift and address 14.6, shared 2.2, global loads 1.6, the rest under 1 each.
+  2,787 experts a step x 4.72 M weights x 34.5 is about 454 G lane instructions. At 170 SMs x 128 lanes x 2.4-2.8 GHz
+  that is an issue estimate of **7.5-8.7 ms**: above the 4.94 ms byte floor, toward the recorded 11.75 ms. It is an
+  estimate (a static count at one issue per scheduler cycle), not a timing.
 
 A plan moves neither term, only how well the loads and the decode overlap. The empty tiles (about 78 of the 136 slots)
 return before K25's K loop, so compacting the grid removes only their dispatches. This lane prices that as a reported
