@@ -119,7 +119,7 @@ def test_amendment_1_the_sibling_probe_is_the_registered_design():
     assert out.returncode == 0 and "smt_sib_box self-test OK (7/7 cases)" in out.stdout, out.stdout + out.stderr
     assert 'ORDER = ("PHYS", "SIB", "WIDE", "WIDE", "SIB", "PHYS")' in SIB and "CYCLES = 4" in SIB
     assert "K_MAX, MIN_K = 16, 8" in SIB and "QUOTA_PER_K = 2.5" in SIB and 'READ = ("fuse_s",)' in SIB and 'REPORTED = ("block_s",)' in SIB
-    assert "REPEATS = 5" in SIB
+    assert "REPEATS = 15" in SIB and "GUARD_S = 9000" in SIB and "def time_fit(" in SIB
     assert "THROTTLE_FLAG = 0.05" in SIB and "COMPANION_FLAG = 0.25" in SIB and "MIN_TRIPLES = 6" in SIB
     # pinned before torch is imported, in a fresh process per rep, around the registered block unchanged
     child = SIB[SIB.index("def child(a):"):SIB.index("def flagged(r):")]
@@ -131,5 +131,6 @@ def test_amendment_1_the_sibling_probe_is_the_registered_design():
     assert 'case "$SMT_FUSE_RUN_ID" in smt-sib-*) MODE=sib;; *) MODE=fuse;; esac' in RUN
     assert "--exclude '/venv*'" in DRIVE and "--exclude='./venv*'" in DRIVE          # the box venv never comes back
     for s in ("Amendment 1", "SIB/PHYS", "fresh process", "before torch is", "K = min(16, floor(quota / 2.5))",
-              "PHYS, SIB, WIDE, WIDE, SIB, PHYS", "8 triples", "25 %", "VOID_BY_HOST", "5 times timed", "SIB/PHYS not resolved below about 0.65", "never a ruling", "Worst $0.64"):
+              "PHYS, SIB, WIDE, WIDE, SIB, PHYS", "8 triples", "25 %", "VOID_BY_HOST", "15 times timed", "SIB/PHYS not resolved below about 0.80", "7110 s", "2.5 h", "never a ruling",
+              "Worst $1.53"):
         assert s in PREREG, s

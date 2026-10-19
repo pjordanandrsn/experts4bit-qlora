@@ -91,9 +91,10 @@ The narrow answer is kept; this amendment asks the real question. It is still a 
 - **Pinning:** each rep runs in a **fresh process** whose CPU set is fixed with `sched_setaffinity` **before torch is
   imported**, so every intra-op worker inherits it (a running process's OpenMP workers keep the mask they were created
   with, which is why the pool cannot be re-pinned between reps in one process). Each process runs the block once untimed
-  (allocator, CUDA context, bnb kernels), then **5 times timed; the rep is their per-segment median** (the review pass:
-  one timed block per process cannot resolve the effect at `smt-fuse-2`'s spread). The raw blocks are kept beside it; the
-  rep's throttling is the worst of the five, and its bytes count only if all five agree.
+  (allocator, CUDA context, bnb kernels), then **15 times timed; the rep is their per-segment median** (the review and
+  final passes: one timed block per process cannot resolve the effect at `smt-fuse-2`'s spread, and 5 resolve only a
+  fuse SIB/PHYS of about 0.65). The raw blocks are kept beside it; the
+  rep's throttling is the worst of the fifteen, and its bytes count only if all fifteen agree.
 - **The arms**, from the host's own sibling topology (`/sys/devices/system/cpu/cpuN/topology/thread_siblings_list`,
   cores whose two threads are both in the affinity, in CPU order):
   - **PHYS:** K physical cores, one hardware thread each, pool K;
@@ -117,12 +118,19 @@ The narrow answer is kept; this amendment asks the real question. It is still a 
   - range entirely **above 1**: it **hurts**;
   - range **includes 1**: **no resolved effect**.
 - **Resolution, stated before data, in ratio terms:** resampling `smt-fuse-2`'s own `fuse` reps (log spread 0.30 per
-  block) into medians of 5 for each arm, a true **SIB/PHYS of 0.80, 0.70, 0.65 or 0.60** (fuse time 20, 30, 35 or 40 %
-  lower) reads "below 1" in all 8 triples with probability 0.26, 0.65, 0.78 and 0.90. **So a true fuse SIB/PHYS above
-  about 0.65 reads `includes_1` at least one time in five by construction, and a null reads "no measurable fuse effect:
-  SIB/PHYS not resolved below about 0.65", never "no effect".** (As a speedup, 1/0.65 = 1.54x; a 35 % SPEEDUP, SIB/PHYS
-  0.74, is resolved only about half the time.) The same calculation on `block` (log spread 0.075) gives a SIB/PHYS of
-  about 0.88. A within-process MISMATCH in any rep fails bytes identity. The min-max range rule is kept.
+  block) into medians of 15 for each arm, a true **SIB/PHYS of 0.80, 0.75 or 0.70** (fuse time 20, 25 or 30 % lower)
+  reads "below 1" in all 8 triples with probability 0.75, 0.91 and 0.97. **So a true fuse SIB/PHYS above about 0.80
+  reads `includes_1` at least one time in four by construction, and a null reads "no measurable fuse effect larger than
+  about 20 %: SIB/PHYS not resolved below about 0.80", never "no effect".** (Read as a speedup, 1/0.80 = 1.25x.) The
+  same calculation on `block` (log spread 0.075) gives 0.77 at a SIB/PHYS of 0.95 and 0.90 at 0.93. At 5 timed blocks
+  the fuse figure was about 0.65; that is why the count is 15. A within-process MISMATCH in any rep fails bytes
+  identity. The min-max range rule is kept.
+- **Time fit, tested** (`time_fit` in the self-test): every term is `smt-fuse-2`'s measured wall rounded up: setup
+  240 s (209 measured), the slab 60 s, a block's wall 12.5 s (its probe phase, 217 s for the slab and 18 blocks, charged
+  whole to the blocks, since each block also hashes 4.8 GB outside its timed span), a process start 30 s (not yet
+  measured, taken high) and the 600 s reserve. 27 processes of 1 + 15 blocks need **7110 s**. That does not fit a
+  1.0 h guard (nor did 5 blocks, at 3735 s), so the guard is **2.5 h**, which leaves 1890 s of margin, and the self-test asserts that
+  at least 1800 s remain.
 - **Reported, never read:** SIB/PHYS on `block` (what the loader pays; offload dominates it and is flat with the pool),
   SIB/WIDE (what the second thread is worth against a real core; WIDE also spans more cache, so this ratio is
   confounded), every other segment's ratios, and the per-arm medians per layer.
@@ -137,5 +145,5 @@ of it into the run directory, which made the receipt store read dirty for every 
 - **Run ids:** `smt-sib-1` is the reading; `smt-sib-2` and `smt-sib-3` are spares for pre-create refusals, listings gone
   before the create, NOT_RUN at the pre-flight and VOID_BY_HOST. `smt-sib-dry-<n>` are the $0 dry runs on 8 experts:
   wiring only, never a reading.
-- **Cost:** guard 1.0 h at a $0.60/h cap, download at most $0.011/GB. **Worst $0.64**, expected about $0.25 (27 rep
-  processes at about 35 s each after the same install). Under the standing per-lane rule.
+- **Cost:** guard **2.5 h** at a $0.60/h cap, download at most $0.011/GB. **Worst $1.53** ($1.50 + about 3 GB of
+  wheels), expected about $0.90 (about 1.8 h at smt-fuse-2's $0.49/h). Under the standing per-lane rule. Under the standing per-lane rule.

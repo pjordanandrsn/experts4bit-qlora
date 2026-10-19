@@ -16,8 +16,8 @@ K = min(16, floor(quota / 2.5)): the 2K-thread arms run at no more than 80 % of 
 before the cores do; the cgroup's throttling is recorded per rep, as smt-fuse-2 recorded it.
 
 Each rep's process runs smt_fuse_box.one_rep -- the registered block, unchanged -- once untimed (allocator, CUDA context,
-bnb kernels), then REPEATS = 5 times timed; the rep is their per-segment median (the maintainer's pass: one timed block
-per process could not resolve the effect at smt-fuse-2's spread). Around the timed rep it reads /proc/stat for the arm's CPUs and for the COMPANION threads
+bnb kernels), then REPEATS = 15 times timed; the rep is their per-segment median (the maintainer's pass: one timed block
+per process could not resolve the effect at smt-fuse-2's spread, and 5 resolved only a fuse SIB/PHYS of about 0.65). Around the timed rep it reads /proc/stat for the arm's CPUs and for the COMPANION threads
 (the siblings of the arm's cores that the arm does not use): a co-tenant busy on a PHYS arm's companions turns that arm
 into a shared-core arm, so the rep is flagged.
 
@@ -44,7 +44,20 @@ QUOTA_PER_K = 2.5                                       # 2K threads at <= 80 % 
 SEGMENTS = ("read_s", "fuse_s", "h2d_s", "quant_s", "offload_s", "total_s", "block_s", "residual_s")
 READ = ("fuse_s",)                                      # the op the pool drives: the reading (the maintainer's pass)
 REPORTED = ("block_s",)                                 # what the loader pays: offload dominates it, so reported only
-REPEATS = 5                                             # timed one_reps per process; the rep is their median
+REPEATS = 15                                            # timed one_reps per process; the rep is their median
+# The time fit (the maintainer's pass: a guard is a fit and is tested against what it guards). Every term is smt-fuse-2's
+# measured wall ROUNDED UP: guard armed -> probe start 209 s; its probe phase 217 s for the slab + 18 one_reps, charged
+# whole to the reps (one_rep hashes 4.8 GB outside its timed block, so a block's wall is ~3x its block_s); the per-process
+# start (interpreter, torch, CUDA context) is not measured yet and is taken high. The reserve is smt_fuse_run.sh's 600 s.
+FIT = {"setup_s": 240, "slab_s": 60, "block_wall_s": 12.5, "process_start_s": 30, "reserve_s": 600}
+GUARD_S = 9000                                          # the launch's guard: 2.5 h
+
+
+def time_fit(repeats, fit=FIT):
+    """Seconds the run needs at `repeats`: setup, slab, the 3 sizing + 24 timed processes, each 1 untimed + `repeats`
+    timed blocks, and the reserve."""
+    per_process = fit["process_start_s"] + (1 + repeats) * fit["block_wall_s"]
+    return fit["setup_s"] + fit["slab_s"] + (len(ARMS) + CYCLES * len(ORDER)) * per_process + fit["reserve_s"]
 THROTTLE_FLAG = 0.05                                    # smt-fuse-2's flag, unchanged
 COMPANION_FLAG = 0.25                                   # a PHYS/WIDE rep whose companions are > 25 % busy is flagged
 MIN_TRIPLES = 6                                         # fewer readable triples than this: VOID_BY_HOST
@@ -312,7 +325,9 @@ def self_test():
     assert summarize({"reps": trip * 4, "experts": 128})["bytes_identical"] is True
     assert summarize({"reps": trip * 3 + trip[:5] + [r("PHYS", 1.0, 4.0, q="c")], "experts": 128})["bytes_identical"] is False
     assert ORDER == ("PHYS", "SIB", "WIDE", "WIDE", "SIB", "PHYS") and CYCLES == 4 and READ == ("fuse_s",)
-    assert REPORTED == ("block_s",) and REPEATS == 5
+    assert REPORTED == ("block_s",) and REPEATS == 15
+    assert time_fit(REPEATS) <= GUARD_S and time_fit(REPEATS) == 240 + 60 + 27 * (30 + 16 * 12.5) + 600   # 7110 s
+    assert time_fit(15) > 3600 and time_fit(5) > 3600 and time_fit(REPEATS) <= GUARD_S - 1800   # 1.0 h never fit
     n += 1
     blocks = [dict(r("PHYS", f, 4.0 + f), throttled_period_share=t, throttled_cpu_s=0.1, pool=12)
               for f, t in ((0.5, 0.0), (0.3, 0.02), (0.9, 0.0), (0.4, 0.07), (0.35, 0.0))]
