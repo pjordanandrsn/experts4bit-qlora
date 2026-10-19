@@ -346,7 +346,7 @@ market rule for pinning hosts:
 - "The rental also waits until DQ11 has closed and SC2f's rental has torn down: one rental lane at a time, SC2f first."
 - "the maintainer ACKs the launch. The ACK names the host."
 
-SC2f's host bar is scarce: in 15.4 h its four listable bar machines were never listed. So the first term held P131 behind
+SC2f's host bar is scarce: in 15.4 h four of its five bar machines were never listed, and the fifth refused every create. So the first term held P131 behind
 SC2f indefinitely, although P131 has no host-quality bar of its own.
 
 **The change: sequencing and the launch mechanism only** (maintainer ruling, 2026-10-19 03:03Z).
@@ -358,8 +358,11 @@ SC2f indefinitely, although P131 has no host-quality bar of its own.
   - the create walks them in order on `no_such_ask`;
   - there is no per-run ACK. This replaces "the maintainer ACKs the launch. The ACK names the host" above, and its
     new-ACK clause.
-- **No competition with SC2f.** While SC2f's proof loop is live, P131's pins exclude SC2f's ten bar machines
-  (SC2f-PREREG Amendment 2). P131 takes any other RTX 5090 at ≤ $0.85/h.
+- **No competition with SC2f.** While SC2f's proof loop is live, P131's pins exclude SC2f's ten bar machines. These are
+  the SC2f loop's screen set from its 2026-10-19 00:00Z bar snapshot under SC2f-PREREG Amendment 2: 138786, 149299,
+  150136, 150710, 151163, 151972, 40549, 53317, 55583 and 55913. P131 takes any other RTX 5090 at ≤ $0.85/h.
+  - "Live" ends when SC2f posts on the bus either its proof run CREATED or its loop stopped. Until then, every P131 pin
+    post can be audited against the ten ids above.
 - **The stack.** Launch commit `c7a40682` (e4b 0.54.0, which carries #1608, #1615 and #1625; the same stack as SC2f),
   grouped-nf4-gemm at its pin `57f53e19`.
 

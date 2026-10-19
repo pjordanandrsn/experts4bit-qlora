@@ -5,6 +5,7 @@
 - **The change.**
   - P131 rents in parallel under the standing spending rule.
   - Hosts are pinned like every other lane: up to three stable RTX 5090s at <= $0.85/h, with no per-run ACK.
-  - While SC2f's loop is live, SC2f's ten bar machines are excluded.
+  - SC2f's ten bar machines (named in the amendment) are excluded until SC2f posts its proof run CREATED or its loop
+    stopped, on the bus.
   - The launch commit is `c7a40682`, with grouped-nf4-gemm at `57f53e19`.
 - The arms, rule, predictions, STOP rules, guards and the $5.50 lane ceiling are unchanged.
