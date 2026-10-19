@@ -165,3 +165,47 @@ def test_the_lora_forward_counter_sees_peft_calls_not_fused_ones_and_restores_th
         _mlps(model)[0](x)
     assert fused == {} and dlf.DENSE_MLP_LORA_STATS.get("fallback", 0) == 0     # a class wrapper is not a hook
     assert cls.__dict__.get("forward") is before
+
+
+FEW = [frozenset({"R2"}), frozenset({"R3"}), frozenset({"R5"})]     # orchestration tests: the coverage test runs all 31
+
+
+def _read_layers(m, xg, **kw):
+    mlps = dict(enumerate(_mlps(m)))
+    xs = {i: xg[0] for i in mlps}
+    gys = {i: xg[1] for i in mlps}
+    return p1.read_layers(mlps, xs, gys, enable=lambda: dlf.enable_dense_mlp_lora_fuse(m),
+                          disable=lambda: dlf.disable_dense_mlp_lora_fuse(m), stats=dlf.DENSE_MLP_LORA_STATS, **kw)
+
+
+def test_read_layers_runs_the_ladder_the_self_checks_and_the_bar_on_the_real_engine(monkeypatch):
+    monkeypatch.setattr(p1, "draw_sets", lambda: FEW)
+    m = _model(layers=1)
+    rec = _read_layers(m, _xg(tokens=16), adapters=3)
+    assert rec["sigma"] in p1.SIGMAS and rec["ladder"][rec["sigma"]]
+    assert all(min(sh.values()) >= p1.SHARE_MIN for sh in rec["ladder"][rec["sigma"]].values())
+    assert rec["outcome"].startswith(("PHASE1_PASS", "PHASE1_FAIL")), rec["outcome"]
+    for layer in rec["layers"].values():
+        assert set(layer["rows"]) == set(p1.TENSORS)
+        assert layer["rows"]["dh"]["bitwise_required"] == {"differing": 0, "max_ulp": 0}   # down's ops are PEFT's own
+    assert not any(hasattr(mlp, "_e4b_dense_lora") for mlp in _mlps(m))                    # disabled after each read
+
+
+def test_read_layers_names_engage_count_and_ref_mismatch(monkeypatch):
+    monkeypatch.setattr(p1, "draw_sets", lambda: FEW)
+    assert _read_layers(_model(layers=1), _xg(), adapters=96)["outcome"].startswith("ENGAGE_COUNT: 3")
+    monkeypatch.setattr(p1, "DX_ORDER", ("gate_base", "gate_lora", "up_lora", "up_base"))
+    assert _read_layers(_model(layers=1), _xg(tokens=64), adapters=3)["outcome"].startswith("REF_MISMATCH")
+
+
+def test_the_streamed_floor_equals_the_floor_and_the_bit_diagnostics_count(model, monkeypatch):
+    monkeypatch.setattr(p1, "draw_sets", lambda: FEW)
+    x, gy = _xg()
+    mlp = _mlps(model)[0]
+    truth = p1.peft_read(mlp, x, gy)
+    reads = {d: p1.ref_read(mlp, x, gy, d) for d in p1.draw_sets()}
+    assert p1.floor_streamed(truth, reads.__getitem__) == p1.floor(truth, reads)
+    a = torch.tensor([1.0, 2.0, 3.0], dtype=torch.bfloat16)
+    b = (a.view(torch.int16) + torch.tensor([0, 1, 0], dtype=torch.int16)).view(torch.bfloat16)   # one bf16 step up
+    assert p1.bit_diagnostics(a, a) == {"differing": 0, "max_ulp": 0}
+    assert p1.bit_diagnostics(b, a) == {"differing": 1, "max_ulp": 1}
