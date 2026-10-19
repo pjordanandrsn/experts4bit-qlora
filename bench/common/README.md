@@ -45,3 +45,19 @@ FIT=$((INSTALL_TO_GATE_S + NEED_X + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PC
   guard, not the hosts, is then wrong.
 - The static side stays per lane: each lane's own test asserts its declared fit x 1.25 <= its registered guard, as
   `tests/test_p154.py` does. No PREREG is parsed.
+
+## Host facts
+
+`host_facts.py OUT` writes the box's own measured host facts as `host_facts.json`, for the host registry. A runner calls it once on the box and leaves the file beside its receipt: `python3 host_facts.py "$OUT_DIR/host_facts.json"`.
+
+It records only what the box measures itself, from `/proc`, `/sys` and `nvidia-smi`:
+- the host's logical CPUs, physical cores, threads per core and NUMA nodes (`host_*`). Inside a container these
+  describe the whole host, not what the run may use;
+- the run's own share: `affinity_cpus` (`sched_getaffinity`) and the cgroup CPU quota, v2 or v1 (`cpu_quota_cpus`, or
+  `cpu_quota_unlimited` when there is none, so "unlimited" is never mistaken for "unreadable");
+- `numa_balancing` and the transparent-hugepage `enabled` and `defrag` modes;
+- GPU 0's power limit, maximum SM clock and memory.
+
+Every value is a number or a small enum, and `sources` names where each one came from. It writes no identifiers: no hostname, container id, serial, UUID or CPU model string. A fact it cannot read is left out, and the helper always exits 0, so it never costs a run.
+
+`measured_at` stamps the reading. The registry rejects a file whose stamp falls outside the run's own window, so a copy shipped with a kit is never taken for a reading. `tests/test_host_facts.py` runs it against a synthetic `/proc` and `/sys` and a stub `nvidia-smi`.

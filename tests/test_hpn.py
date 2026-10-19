@@ -436,3 +436,79 @@ def test_make_rotary_builds_on_a_transformers_without_the_device_argument():
                 raise TypeError("an unrelated bug in the constructor")
     with pytest.raises(TypeError, match="unrelated bug"):           # surfaced, never retried silently without device=
         hp1_lib.make_rotary(Broken, None, "cpu")
+
+
+# ------------------------------------------------------------------------------------------------------------ hpn_local.sh
+def _local_repo(tmp_path):
+    import subprocess
+    r = tmp_path / "repo"
+    files = ["bench/tc1/tc1_arm.py", "bench/tc1/tc1_reduce.py", "bench/tp4/tp4_alpaca.py", "bench/flagship-matrix/drivers/n9_datasets.py",
+             "bench/flagship-matrix/ds_manifest.json", "bench/hpn/hpn_read.py", "bench/hpn/hpn_reduce.py", "bench/hpn/HPN-DESIGN.md"]
+    files += [f"bench/hp1/{f}" for f in ("hp1_lib.py", "hp1_eval.py", "hp1_caltokens.py", "hp1_trunc.py", "hp1_reduce.py")]
+    for f in files:
+        (r / f).parent.mkdir(parents=True, exist_ok=True)
+        (r / f).write_text(f"# {f}\n")
+    (r / "bench/tc1/tc1_run.sh").write_text("env | grep -E '^(TC1_|HPN_|E4B_SHA|GNF4_SHA)' | sort > env.txt\necho 'HPN=STOP depths=[2]' > summary.txt\n")
+    g = lambda *a: subprocess.run(["git", "-C", str(r), *a], check=True, capture_output=True)   # noqa: E731
+    g("init", "-q")
+    g("add", "-A")
+    g("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "x")
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    (bin_ / "nvidia-smi").write_text("#!/bin/bash\necho 10612\n")
+    (bin_ / "nvidia-smi").chmod(0o755)
+    return r, bin_
+
+
+def test_hpn_local_stages_the_pieces_and_runs_the_local_box_token(tmp_path):
+    import os
+    import subprocess
+    r, bin_ = _local_repo(tmp_path)
+    out = tmp_path / "out"
+    env = dict(os.environ, PATH=f"{bin_}:{os.environ['PATH']}")
+    p = subprocess.run(["bash", str(REPO / "bench/hpn/hpn_local.sh"), str(r), str(out)], env=env, capture_output=True, text=True, timeout=60)
+    assert p.returncode == 0, p.stderr
+    for f in ("tc1_run.sh", "tc1_arm.py", "tp4_alpaca.py", "n9_datasets.py", "ds_manifest.json", "hp1_eval.py", "hp1_trunc.py",
+              "hpn_read.py", "hpn_reduce.py", "hpn/HPN-DESIGN.md"):
+        assert (out / f).exists(), f
+    got = dict(ln.split("=", 1) for ln in (out / "env.txt").read_text().splitlines())
+    sha = subprocess.run(["git", "-C", str(r), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    assert got["TC1_LOCAL_BOX"] == "1" and got["TC1_FAMILIES"] == "qwen3hpn" and got["TC1_LOCAL_OUT"] == str(out)
+    assert got["HPN_FREE_MIB"] == "10612" and got["E4B_SHA"] == sha and got["HPN_UNS_BACKEND"] == "native_torch"
+    assert "HPN free GPU memory at start: 10612 MiB" in p.stdout and "HPN=STOP" in p.stdout
+
+
+def test_hpn_local_refuses_an_unclean_checkout(tmp_path):
+    import os
+    import subprocess
+    r, bin_ = _local_repo(tmp_path)
+    (r / "bench/hpn/hpn_read.py").write_text("# edited after the commit\n")
+    env = dict(os.environ, PATH=f"{bin_}:{os.environ['PATH']}")
+    p = subprocess.run(["bash", str(REPO / "bench/hpn/hpn_local.sh"), str(r), str(tmp_path / "out")], env=env, capture_output=True,
+                       text=True, timeout=60)
+    assert p.returncode == 78 and "uncommitted changes" in p.stdout and not (tmp_path / "out").exists()
+
+
+def test_hpn_local_refuses_a_non_empty_out(tmp_path):
+    import os
+    import subprocess
+    r, bin_ = _local_repo(tmp_path)
+    out = tmp_path / "out"
+    (out / "hpn").mkdir(parents=True)
+    (out / "hpn" / "eval_e4b_L8_1.json").write_text("{}")                     # an earlier run's file
+    env = dict(os.environ, PATH=f"{bin_}:{os.environ['PATH']}")
+    p = subprocess.run(["bash", str(REPO / "bench/hpn/hpn_local.sh"), str(r), str(out)], env=env, capture_output=True, text=True,
+                       timeout=60)
+    assert p.returncode == 78 and "is not empty" in p.stdout and not (out / "env.txt").exists()
+
+
+def test_hpn_local_refuses_an_untracked_file_in_a_staged_dir(tmp_path):
+    """Review: find bench/tc1 -type f would ship an untracked file into a run that cites a clean commit."""
+    import os
+    import subprocess
+    r, bin_ = _local_repo(tmp_path)
+    (r / "bench/tc1/stray_helper.py").write_text("# not committed\n")
+    env = dict(os.environ, PATH=f"{bin_}:{os.environ['PATH']}")
+    p = subprocess.run(["bash", str(REPO / "bench/hpn/hpn_local.sh"), str(r), str(tmp_path / "out")], env=env, capture_output=True,
+                       text=True, timeout=60)
+    assert p.returncode == 78 and "untracked files in the staged dirs" in p.stdout
