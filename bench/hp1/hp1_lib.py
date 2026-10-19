@@ -144,10 +144,10 @@ def make_rotary(cls, config, device):
     """The rotary-embedding module as the installed transformers builds it: with ``device=`` where the class still takes it (5.18 and
     earlier), else built and moved (later releases removed the argument). The evaluator (hp1_eval.build_model) and HPN's fp32 reader
     (bench/hpn/hpn_read.py) both call this, so their rotary buffers are built the same way on every version."""
-    try:
+    import inspect
+    if "device" in inspect.signature(cls.__init__).parameters:   # picks the form without swallowing a TypeError from inside the constructor
         return cls(config=config, device=device)
-    except TypeError:
-        return cls(config=config).to(device)
+    return cls(config=config).to(device)
 
 
 def lora_delta(x, A, B, scaling):
