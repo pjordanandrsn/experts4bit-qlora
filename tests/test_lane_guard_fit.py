@@ -23,7 +23,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MIN_HEADROOM_PCT = 125
 STRIKE_NOTE = "two consecutive headroom refusals count as one strike"
-INSTALL_RE = re.compile(r"pip install|^\s*pipx\s|uv pip install|apt-get install", re.M)
+INSTALL_RE = re.compile(r"\bpip3? install|\b(?:conda|mamba) install|\buv (?:pip install|sync|add)\b|apt-get install"
+                        r"|^\s*pipx\s", re.M)
+# a script run from another file: its installs are invisible here, so the fit must come before it too
+EXTERNAL_RE = re.compile(r"^\s*(?:\.|source)\s+\S|\b(?:bash|sh)\s+\S+\.sh\b|\bpython3?\s+(?!-)\S+\.py\b", re.M)
 
 # Runners that gated on time left before this rule. Frozen: a new runner is not added here, it carries the check.
 LEGACY_UNFITTED = frozenset([
@@ -50,6 +53,12 @@ def _name(p: Path) -> str:
     return f"{p.parent.name}/{p.name.removesuffix('_run.sh')}"
 
 
+def _brace_depth(text: str) -> int:
+    """Open { minus closed }, after dropping ${...} expansions: above zero means inside a function body or a group."""
+    t = re.sub(r"\$\{[^}]*\}", "", text)
+    return t.count("{") - t.count("}")
+
+
 def fit_problems(text: str) -> list[str]:
     """Why a runner's text does not carry the canonical pre-install fit check (empty: it does)."""
     out = []
@@ -72,9 +81,16 @@ def fit_problems(text: str) -> list[str]:
         line = check.group(0)
         if "${FIT_NEED}" not in line or not re.search(r"\bfinish \d+|\bexit \d+", line):
             out.append("the refusal must print ${FIT_NEED} (the quantity it compares) and exit with its own code")
+        if line != line.lstrip() or _brace_depth(text[:check.start()]) != 0:
+            out.append("the refusal is not at top level (indented, or inside a function body): it may never run")
         install = INSTALL_RE.search(text)
-        if install and install.start() < check.start():
+        if not install:
+            out.append("no install found (pip, pip3, conda, mamba, uv, apt-get or pipx): the order cannot be checked")
+        elif install.start() < check.start():
             out.append("the fit is checked after the first install")
+        external = EXTERNAL_RE.search(text)
+        if external and external.start() < check.start():
+            out.append("a script from another file runs before the fit check")
     if STRIKE_NOTE not in text:
         out.append(f"no '{STRIKE_NOTE}' note beside the refusal's exit code")
     return out
@@ -116,6 +132,14 @@ def test_the_rule_accepts_the_canonical_check_and_rejects_its_mutants():
         "after the install": "pipx(){ python -m pip install \"$@\"; }\n" + CANONICAL.replace(
             'pipx(){ python -m pip install "$@"; }\n', ""),
         "no strike note": CANONICAL.replace("two consecutive headroom refusals count as one strike", "fine"),
+        "inside an uncalled function": CANONICAL.replace('[ "$LEFT"', 'never_called(){\n[ "$LEFT"').replace(
+            "finish 19; }\n", "finish 19; }\n}\n"),
+        "indented in a branch": CANONICAL.replace('[ "$LEFT"', 'if false; then\n  [ "$LEFT"').replace(
+            "finish 19; }\n", "finish 19; }\nfi\n"),
+        "a pip3 install first": "pip3 install x\n" + CANONICAL,
+        "a sourced helper first": ". ./setup_box.sh\n" + CANONICAL,
+        "a called installer first": "bash $W/install.sh\n" + CANONICAL,
+        "no install at all": CANONICAL.replace('pipx(){ python -m pip install "$@"; }\n', ""),
     }
     survived = [k for k, t in mutants.items() if not fit_problems(t)]
     assert not survived, survived

@@ -33,6 +33,9 @@ FIT=$((INSTALL_TO_GATE_S + NEED_X + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PC
 - `INSTALL_TO_GATE_S` is the runner's allowance for everything between this check and its largest time-left gate (the
   install, the self-tests, the fetch, the bake). `NEED_X` is that gate's need and `RESERVE` the fetch-and-teardown
   reserve its `can_run` keeps.
+- The check sits at top level (unindented, outside any function body or branch), before the first install (pip, pip3,
+  conda, mamba, uv, apt-get or pipx) and before any script sourced or run from another file. A runner with no
+  recognisable install fails the test rather than skipping the order check.
 - The headroom covers the allowances, which are estimates from the hosts measured so far. The check runs against the box's
   own remaining time, so a slow boot is caught as well.
 - A refusal here costs cents and is not a strike. Two consecutive headroom refusals on one lane count as one strike: the
