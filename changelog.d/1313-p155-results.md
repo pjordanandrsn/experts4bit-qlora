@@ -7,5 +7,5 @@
   - **The contract held on sm_120:** all 126 of 144 plans that ran kept today's bits. The other 18 per projection need
     more shared memory than the card has.
   - **Reported only:** compaction's ceiling is 1.003x, so it parks. Today's plan is 80 registers at 50 % theoretical
-    occupancy, and plans that raise occupancy alone do not run faster.
+    occupancy. Plans with higher theoretical occupancy are not faster on gate_up, and at most 1.2 % faster on down.
   - **Total:** $0.274. **Default:** this record changes none. The decode cost (K39) is timed in its own lane.

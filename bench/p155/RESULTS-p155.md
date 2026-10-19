@@ -50,13 +50,13 @@ That is $0.274 on one RTX 5090 launch, inside the registered worst case of $1.69
 | gate_up | 8.3165 | 32/128/4/2 | 7.8511 | 1.059 |
 | down | 3.3716 | 64/64/8/1 | 3.3309 | 1.012 |
 
-  On both GEMMs together, the winner's selection ratio was 1.045 and its confirmation 1.019. That shrink of 0.027 is the
+  On both GEMMs together, the winner's selection ratio was 1.045 and its confirmation 1.019. That shrink of 0.026 is the
   winner's curse that the split was registered to remove.
 
 ## Reported, never ruling
 
 - **Compaction.** Today's plan over the real-tile prefix (`t_*[:n_real]`, no empty programs) reads **1.0032**, which is
-  0.5 % of the headroom. Compaction's ceiling is negligible, and K38 parks.
+  0.6 % of the headroom. Compaction's ceiling is negligible, and K38 parks.
 - **Fidelity.** Today's plan ran **12.075 ms** a step for both GEMMs over 48 layers. P152's served census recorded
   11.748 ms (1.028), so the microbench is the served regime.
 - **Compiled metadata.** Today's plan is **80 registers, 0 spills**, 14,592 B shared, in both projections. That is 6 CTAs
@@ -67,13 +67,18 @@ That is $0.274 on one RTX 5090 launch, inside the registered worst case of $1.69
   - Over all 126 plans, time ranks against occupancy with a Spearman correlation of -0.58 in both projections. That comes
     from the heavy plans: at 4-8 % theoretical occupancy, the median plan runs 1.6-5x slower than today's.
   - **Among the fast plans, occupancy does not decide.** gate_up's best plans are KC 128 at 33-42 % theoretical occupancy
-    (90 and 80 registers). Its 67 % plan (32/64/4/1, 62 registers) runs at 8.404 ms, against today's 8.317 at 50 %.
-  - down's 67 % plans are its fastest, but by only 1.2 %.
+    (90 and 80 registers). All six of its 67 % plans are slower than today's (T/plan 0.933-0.990); the best,
+    32/64/4/1 (62 registers), runs at 8.404 ms against today's 8.317 at 50 %.
+  - down's three fastest plans are 67 % (64/64/8/1 at 1.012, 32/64/4/1 at 1.006, 16/64/2/1 at 1.001), the best by
+    1.2 %. Its other two 67 % plans (16/64/4/1 and 16/64/4/2) run about a quarter slower (T/plan 0.812 and 0.794).
+  - **Occupancy is never varied alone here.** Every 67 % plan gets there with fewer stages or a narrower tile. gate_up's
+    best 67 % plan is today's tile with the 3-stage pipeline cut to 1, so extra warps replace software pipelining as the
+    latency hider rather than adding to it. And this is theoretical occupancy: achieved occupancy is unread.
 - **Nsight Compute.** `ncu` was present, and the rented host refused the GPU counters (`ERR_NVGPUCTRPERM`). The probe
   recorded that and nothing was captured, so achieved occupancy and stall reasons are unread.
 - **Walls:**
   - the bench took 895.6 s, against the 2450 s allowance: selection 782.0 s, confirmation 110.2 s;
-  - compiling and first-calling the 252 variants took 169.2 s, against 145.3 s on the A2000 shakedown's host (1.17x).
+  - compiling and first-calling the 252 variants took 169.2 s, against 145.3 s on the A2000 shakedown's host (1.16x).
 
 ## Predictions (graded, never ruling)
 
@@ -85,7 +90,7 @@ That is $0.274 on one RTX 5090 launch, inside the registered worst case of $1.69
 | a plan recovers at most 25 % of the 6.81 ms | 3.2 % (0.22 ms of P152's 11.748 ms) | HELD |
 | compaction's ceiling 1.00-1.06 | 1.0032 | HELD |
 | self-pair within 0.005 of 1 | 0.9999 | HELD |
-| the winner's selection ratio exceeds its confirmation by 0-0.03 | 1.045 vs 1.019 (0.027) | HELD |
+| the winner's selection ratio exceeds its confirmation by 0-0.03 | 1.045 vs 1.019 (0.026) | HELD |
 | today's plan 80 registers, no spills (50 % theoretical) | 80, 0 | HELD |
 | Nsight: achieved occupancy <= 50 %, long-scoreboard the largest stall | counters refused | UNREAD |
 
@@ -94,15 +99,18 @@ the band, under 1.02, which the PREREG named as the miss below.
 
 ## What it means for stream (B)
 
-- **K25's plan and its grid are not where the W16 headroom lives.** The best confirmed plan recovers 1.9 % of the two
-  GEMMs (3.2 % of the 6.81 ms), and compaction 0.3 %.
-- **Raising theoretical occupancy by plan alone does not recover it.** On the best plans' evidence, the part of the
-  11.75 ms above the floors is not latency that 50 to 67 % occupancy hides.
+- **K25's plan and its grid are not where the W16 headroom lives.** The best confirmed plan is 1.9 % faster, recovering
+  1.8 % of the two GEMMs' time (3.2 % of the 6.81 ms), and compaction 0.3 %.
+- **No plan in this grid with higher theoretical occupancy was faster on gate_up; on down the best was 1.2 % faster.**
+  Occupancy is not varied alone here (the 67 % plans also change stages or tile width), and achieved occupancy is
+  unread, so this record does not say whether latency is the gap.
 - **The candidate left is the decode cost:** fewer instructions per weight at the same plan. That is K39 (b1-decode's;
   24.1 to 17.0 lane instructions per weight under triton 3.4.0, bitwise against K25), and its own lane, **P156**, times it
   as registered. P155 could not move that variable.
-- **Unnamed:** about 5.6-6.5 ms remains above both floors. Rented hosts refuse Nsight's counters, so naming it with stall
-  reasons needs a host that allows them, or another instrument.
+- **Unnamed:** most of the gap. Above the byte floor it is 6.81 ms (6.6 ms after the best plan; 6.05-7.07 ms over P154's
+  floor range). Above the issue estimate, the larger floor (5.2-6.1 ms from 24.1 instructions per weight at 2.4-2.8 GHz,
+  an estimate, not a timing), the recorded 11.75 ms leaves about 5.6-6.5 ms. Rented hosts refuse Nsight's counters, so
+  naming it with stall reasons needs a host that allows them, or another instrument.
 
 ## What this lane cannot say
 
