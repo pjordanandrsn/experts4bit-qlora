@@ -3,7 +3,9 @@
 **Status: DRAFT, prospective.** This is $0 design under the work-well task `heldout-parity-mean-bias` (mode `prospective`,
 authority RED = maintainer). It is **not registered**: nothing here authorizes a box or spend. The maintainer's RED ruling decides
 whether to register it, revise it or park it. Registration would then open a separate well task with its own envelope. HP2 is a new
-registration, **not a rerun of HP1**, and none of HP1's draws are scored data here.
+registration, **not a rerun of HP1**, and none of HP1's draws are scored data here. The reason is HP1's closed finding: **a per-row
+|gap| tolerance cannot certify a mean comparison** (`bench/hp1/RESULTS-HP1.md`). A new instrument rule therefore needs a new
+registration, with its bar fixed before any data.
 
 ## The question
 
@@ -51,7 +53,13 @@ All reads are from the one evaluator (`bench/hp1/hp1_eval.py`, as merged), on ea
 3. **Reported, never gated:** per-row |gap| (mean, sd, max) for each base; each framework's signed mean bias b_f = mean_r g_f(r);
    σ_seed.
 
-## The gates
+## The gates, each with its null
+
+Each gated statistic has a null, its value under no difference between the two frameworks' paths through the evaluator:
+- **δ0 = 0:** the evaluator reads e4b's base and Unsloth's base with the same mean offset from each framework's own forward.
+- **δN = 0:** the same holds for the trained adapters' round trips.
+
+A gate passes when the interval around the null-centred statistic is narrow enough, not when the point estimate happens to be small.
 
 - **G1, pre-scoring (after the calibration phase, before any confirmation arm).** |δ0| + 2 × SE_δ0 ≤ 0.01, half the 0.02 margin
   cap, which no σ_seed could rescue. Above it, HP2 CLOSES before spending on the confirmation arms.
@@ -72,6 +80,17 @@ All reads are from the one evaluator (`bench/hp1/hp1_eval.py`, as merged), on ea
 - **Scored rows.** HP1's registered 48 held-out rows. HP1 read them only in-loop, for K00, with no competitor and no comparison.
 - **Seeds.** 3410–3412, paired by `order_sha`, as HP1 registered for confirmation. The verdict bands are HP1's: BEATS, BEHIND,
   PARITY (TOST within ±m) or INCONCLUSIVE.
+
+## The verdict, and how a null read is worded
+
+The headline statistic is Δ = mean over seeds of (e4b K00 − Unsloth) held-out row means, both read by the evaluator. Its null is
+Δ = 0: no difference in held-out loss. The bands are fixed above. Their wording in every RESULTS line is fixed here:
+- **BEATS / BEHIND:** the 90 % interval excludes 0 on that side and |Δ̄| > σ_seed. Stated with Δ̄, the interval and σ_seed.
+- **PARITY (TOST within ±m):** worded as **"no measurable difference at margin m: Δ̄ with its 90 % interval [lo, hi] inside
+  ±m"**. Never "equal", "matches" or "the same".
+- **INCONCLUSIVE:** worded as **"no measurable effect, with its interval: Δ̄, [lo, hi]"**, neither inside ±m nor clear of 0.
+- **A gate closure (G1 / G2):** worded as "the instrument could not read margin m", with δ0 / δN and their intervals. Never as a
+  statement about the frameworks.
 
 ## The box (one; each phase gated)
 
