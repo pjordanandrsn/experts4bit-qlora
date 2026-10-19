@@ -43,8 +43,12 @@ FIT=$((INSTALL_TO_GATE_S + NEED_X + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PC
   own remaining time, so a slow boot is caught as well.
 - A refusal here costs cents and is not a strike. Two consecutive headroom refusals on one lane count as one strike: the
   guard, not the hosts, is then wrong.
-- The static side stays per lane: each lane's own test asserts its declared fit x 1.25 <= its registered guard, as
-  `tests/test_p154.py` does. No PREREG is parsed.
+- The static side stays per lane: each lane's own test asserts (boot + its declared fit) x 1.25 <= its registered
+  guard, as `tests/test_p155.py` does (300 s + 3950 s, 5313 s <= 5400 s). `boot` covers the time from the launch,
+  where the runner's deadline starts, to this check (the instance's creation and boot, the ssh wait, the staging):
+  `LEFT` has already lost it when the check runs. A guard sized to the fit alone refuses every box. The box itself needs
+  only boot + fit x 1.25 <= guard (300 s + 4937 s = 5237 s for P155); the static form is the stricter of the two,
+  keeping the headroom on the boot as well, since the boot varies by host. No PREREG is parsed.
 
 ## Host facts
 

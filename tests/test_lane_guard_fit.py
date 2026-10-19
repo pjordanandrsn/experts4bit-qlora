@@ -12,8 +12,9 @@ the time left on the box is at least FIT x FIT_HEADROOM_PCT / 100, with FIT_HEAD
 before the first install, so a guard that cannot fit costs cents, not a run. It is not a strike, but two consecutive
 headroom refusals on one lane count as one strike: the guard, not the hosts, is then wrong.
 
-The static side stays per lane: each lane's own test asserts its declared fit x 1.25 <= its registered guard (as
-tests/test_p154.py does). This test checks the structure only; it parses no PREREG.
+The static side stays per lane: each lane's own test asserts (boot + its declared fit) x 1.25 <= its registered guard
+(as tests/test_p155.py does), boot being the time from the launch, where the deadline starts, to the check. This test
+checks the structure only; it parses no PREREG.
 """
 from __future__ import annotations
 
