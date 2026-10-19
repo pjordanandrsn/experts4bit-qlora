@@ -53,13 +53,18 @@ across rows.
 **Stages.**
 1. **e4b only.** One e4b K00 calibration step per depth (as HP2's phase B, on the truncated model), its base exported, then E and F.
    This needs no new install: the e4b stack is the box's (torch 2.8.0+cu128).
-1b. **The base term (serve-throughput's review note), read alongside stage 1.** δ0 = (base term) − (in-loop term). The in-loop term,
+1b. **The base term (serve-throughput's review note), part of stage 1.** δ0 = (base term) − (in-loop term). The in-loop term,
    mean I_e4b − mean I_uns, does not depend on the evaluator: on HP2's rows it is +0.001921. So δ0 can reach 0 only if the
    reference's base term reads about +0.0019, where E read −0.00077. That is a 0.0027 swing from removing bf16 rounding alone.
    HP2's 48-layer bases stayed on its box (only their hashes came back), so this is read at the fitted depths. Unsloth exports its
    own base from one step per depth (no confirmation training), and E and F then read both bases. Reported per depth: the base
-   term under E and under F, and its shift E → F, with the same depth extrapolation (labelled). If F's base term barely moves at
-   every fitted depth, stage 2 cannot lift G1, and the answer is in at $0.
+   term under E and under F, and its shift E → F, with the same depth extrapolation (labelled).
+   **The threshold, fixed before data.** At each fitted depth, δ0_F(L) = (F's base term) − (the in-loop term), both at depth L.
+   Stage 2 is possible only if |δ0_F| ≤ 0.0025 (half the 0.005 margin floor, the most δ0 can carry at SE = 0) at **both** of the
+   two deciding depths. Otherwise the outcome is **MOOT**: stage 2 cannot lift G1, so stop, with the answer in at $0. The same
+   reading is reported for E (δ0_E), so the record shows how far removing bf16 rounding moved δ0.
+   (The maintainer's ruling says E against F on Unsloth's exported base needs only the evaluator. That holds once the base exists;
+   HP2's do not, so a one-step Unsloth arm per depth makes them, in a venv-unsloth-t28 under TC1_LOCAL_BOX.)
 2. **Unsloth, only if stage 1 shows that E − F carries most of the spread.** It repeats stage 1 for Unsloth 2026.9.14 in a fresh
    venv, then recomputes δ0 with F in place of E, and reports **m_need with F, both terms** (|δ0_F| and 2 × SE_F). If I − F
    dominates, stage 2 is skipped: the in-loop side is the limit, and the answer is already in.
@@ -93,9 +98,11 @@ they are not the same bytes, and E cancels only in part. Stage 1 therefore reads
 - **N1** holds if sd_r(g) rises with depth at every step between fitted depths and sd_r(g) at L2 is < 0.03;
 - **N3** holds if |corr_r(e, i)| ≤ 0.2 at every fitted depth;
 - **N0** holds for a reader if its two runs agree per row to 1e-5 (the per-row losses are recorded to 5 decimals);
-- **a depth floor (proposed, for the maintainer):** the decision needs the deepest fitted depth ≥ L8. If only L2 and L4 fit, the
-  outcome is INSUFFICIENT_DEPTH: wait for the sidecar to unload and retry, and record that.
-- **the outcome:** E-dominant at the two deepest fitted depths leads to stage 2. I-dominant or comparable at both leads to a stop:
+- **the depth floor (the maintainer's ruling):** the decision needs the deepest fitted depth ≥ L8, so at minimum the two deciding
+  depths are L4 and L8. If only L2 and L4 fit, the outcome is INSUFFICIENT_DEPTH: wait for the sidecar to unload, retry, and
+  record that.
+- **the outcome:** MOOT (1b) is read first, and a MOOT stops the read whatever the side call says. Otherwise, E-dominant at the
+  two deepest fitted depths leads to stage 2. I-dominant or comparable at both leads to a stop:
   "no lower-noise reference within reach". A call that differs between the two deepest depths leads to a stop: "depth-dependent,
   unknown at 48 layers".
 
