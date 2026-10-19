@@ -1,4 +1,4 @@
 # Names as the BOX sees them after staging ($SMT_FUSE_HOME, /root/smt_fuse on a rental). The box runs `sha256sum -c` on
 # this file; smt_fuse_drive.sh and tests/test_smt_fuse_staged_pin.py resolve each name to bench/smt-fuse and compare.
-deabf4177756b249c7a37e2c899cf883cd31f13b711fffd70fc9b39d5ccde9e6  smt_fuse_run.sh
-bb7a847264f407a681fe113abbc468ce0c08c931986b4611aa963adfe6ec782e  smt_fuse_box.py
+ba66950c5e41eff7aa69e99886f4e3f43d2877c153b5060266a0b87cf95ace3d  smt_fuse_run.sh
+f133ccc02b36b2ef87c54904d69021b070d109327562bf503d9dc9c1ddb17ff2  smt_fuse_box.py

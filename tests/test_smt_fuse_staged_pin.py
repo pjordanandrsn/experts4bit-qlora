@@ -79,21 +79,24 @@ def test_the_declared_run_ids_and_nothing_else(tmp_path):
 
 def test_the_refusals_come_before_the_install_and_the_probe():
     order = ["CUDA_PROBE=$(python -", "refused: torch", 'say "REFUSED: not an SMT host', 'say "REFUSED: $AFF CPUs in the affinity',
-             'say "REFUSED: quota', 'say "REFUSED: ${RAM_GB', 'say "REFUSED: ${FREE_GB', 'say "install e4b @',
+             'say "REFUSED: quota $QUOTA gives a high arm', 'say "REFUSED: ${RAM_GB', 'say "REFUSED: ${FREE_GB', 'say "install e4b @',
              "smt_fuse_box.py --self-test", "smt_fuse_box.py --out $W/result.json"]
     at = [RUN.index(s) for s in order]
     assert at == sorted(at), list(zip(order, at))
     codes = {int(c) for c in re.findall(r"finish (\d+)", RUN)}
     assert codes & {13, 14, 17, 18} == {13, 18} and {9, 10, 16, 21, 22, 28, 40} <= codes, codes
-    assert "MIN_LOGICAL=32; MIN_QUOTA=16" in RUN and "EXPERTS=128" in RUN
+    assert "MIN_LOGICAL=32; MIN_P=24" in RUN and "EXPERTS=128" in RUN and "MIN_HIGH = 24" in BOX
 
 
 def test_the_design_is_the_registered_design():
     assert "POOLS = (16, 32, 32, 16)" in BOX and "CYCLES = 4" in BOX
+    assert "return min(want, affinity, math.ceil(quota) if quota else want)" in BOX    # the high arm under the quota cap
+    assert "THROTTLE_FLAG = 0.05" in BOX and 'if k in p and not p["flagged"]' in BOX     # flagged pairs are not read
     assert "E_FULL, INTER, HIDDEN = 128, 1536, 4096" in BOX
     assert "fuse_experts(gate, up, down)" in BOX and 'quant_type="nf4"' in BOX and "torch.set_num_threads(pool)" in BOX
     assert 'return 0 if res["summary"]["bytes_identical"] else 3' in BOX                 # the pool must be speed-only
     assert "return min(time_left_s, max(CAP_FLOOR_S, 1.5 * sum(warm_by_pool[pool] for pool in plan)))" in BOX
     assert "CAP_FLOOR_S = 600" in BOX                                                      # the on-box phase cap
-    for s in ("16, 32, 32, 16", "4 cycles", "8 back-to-back", "range", "on_box", "never a ruling", "Worst $0.64"):
+    for s in ("16, HIGH, HIGH, 16", "4 cycles", "8", "back-to-back", "min(32, ceil(quota), affinity)", "range", "on_box",
+              "never a ruling", "Worst $0.64"):
         assert s in PREREG, s

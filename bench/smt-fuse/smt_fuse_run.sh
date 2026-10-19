@@ -21,8 +21,8 @@ GNF4_SHA=6b7c2e7474d20c8843814dd46dad6cfc3d94b440      # grouped-nf4-gemm 0.46.0
 TORCH_WANT=2.8.0+cu128
 [ "$E4B_SHA" = "$E4B_PIN" ] || { say "refusing: E4B_SHA $E4B_SHA is not the registered e4b pin $E4B_PIN"; finish 78; }
 DRY=${SMT_FUSE_DRY:-0}
-if [ "$DRY" = 1 ]; then EXPERTS=8; MIN_LOGICAL=2; MIN_QUOTA=1; DISK_DEF=5; RAM_DEF=8          # the dry box: correctness only
-else EXPERTS=128; MIN_LOGICAL=32; MIN_QUOTA=16; DISK_DEF=40; RAM_DEF=32; fi                 # one full Qwen3-235B layer
+if [ "$DRY" = 1 ]; then EXPERTS=8; MIN_LOGICAL=2; MIN_P=3; DISK_DEF=5; RAM_DEF=8               # the dry box: correctness only
+else EXPERTS=128; MIN_LOGICAL=32; MIN_P=24; DISK_DEF=40; RAM_DEF=32; fi                      # one full Qwen3-235B layer
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True OMP_NUM_THREADS= SMT_FUSE_DRY=$DRY
 unset OMP_NUM_THREADS MKL_NUM_THREADS TRITON_INTERPRET
 : > summary.txt; echo "$SMT_FUSE_INSTANCE_ID" > INSTANCE_ID
@@ -72,9 +72,11 @@ if [ "$DRY" != 1 ]; then
   [ "${TPC:-1}" -ge 2 ] || { say "REFUSED: not an SMT host (threads per core $TPC)"; echo "refused: not SMT" > REFUSAL; finish 16; }
 fi
 [ "${AFF:-0}" -ge "$MIN_LOGICAL" ] || { say "REFUSED: $AFF CPUs in the affinity < $MIN_LOGICAL"; echo "refused: affinity $AFF" > REFUSAL; finish 16; }
-if [ "$QUOTA" != none ]; then
-  python -c "import sys; sys.exit(0 if float('$QUOTA') >= $MIN_QUOTA else 1)" || { say "REFUSED: quota $QUOTA < $MIN_QUOTA"; echo "refused: quota $QUOTA" > REFUSAL; finish 16; }
-fi
+# the high arm the loader would run: P = min(32, ceil(quota), affinity); refused (NOT_RUN, $0) under MIN_P, since a
+# 16-vs-under-24 ratio is too weak to read (the maintainer's ruling)
+P=$(python -c "import math; q='$QUOTA'; print(min(32, $AFF, math.ceil(float(q)) if q != 'none' else 32))")
+echo "HIGH_ARM P=$P (min 32, ceil quota $QUOTA, affinity $AFF)" | tee -a summary.txt
+[ "${P:-0}" -ge "$MIN_P" ] || { say "REFUSED: quota $QUOTA gives a high arm of $P < $MIN_P"; echo "refused: high arm $P" > REFUSAL; finish 16; }
 RAM_GB=$(awk '/^MemTotal:/{print int($2/1048576)}' /proc/meminfo)
 [ "${RAM_GB:-0}" -ge "$RAM_DEF" ] || { say "REFUSED: ${RAM_GB:-?} GiB host RAM < $RAM_DEF GiB"; echo "refused: ram" > REFUSAL; finish 16; }
 FREE_GB=$(df -BG --output=avail $W 2>/dev/null | tail -1 | tr -dc 0-9)

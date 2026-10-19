@@ -13,7 +13,11 @@ q235-pro6000-7's one timed block ("fusing + quantizing ... offloaded to pinned C
   offload  ExpertsLoRA around it and engines.offload.enable_expert_offload(pin=True): the pinned host home and the
            device-to-host copy (the cached pinned blocks are released after each rep, so every rep pays a fresh pin);
 and is timed wall-clock from the first read to the offloaded layer, with the pool set explicitly per rep.
-The reps interleave POOLS = (16, 32, 32, 16) for CYCLES cycles, so each (16, 32) pair runs back to back.
+The reps interleave (16, HIGH, HIGH, 16) for CYCLES cycles, so each (16, HIGH) pair runs back to back. HIGH is
+min(32, ceil(quota), affinity): the loader caps the expert loop's pool at ceil(quota) (#1752's host_thread_cap), so on
+a host with a 16-31 CPU quota (q235-pro6000-7's was 30.72) a 32-thread arm would be CFS-throttled and measure a pool no
+real load runs. HIGH is the pool a real load would run there if torch's default rose from physical to logical CPUs.
+Each rep also records the cgroup's throttled periods and time over the rep.
 
 Recorded per rep: the pool torch reports, the host load average at its start, the segment walls, and the
 sha256 of the fused bytes and of the nf4 bytes, which must be identical across every rep (the pool is speed-only).
@@ -32,13 +36,15 @@ import subprocess
 import sys
 import time
 
-POOLS = (16, 32, 32, 16)
+POOLS = (16, 32, 32, 16)        # the registered pattern; 32 stands for HIGH = min(32, ceil(quota), affinity)
 CYCLES = 4
 E_FULL, INTER, HIDDEN = 128, 1536, 4096
 SEED = 0
 KEY = "model.layers.0.mlp.experts.{e}.{p}.weight"
 SEGMENTS = ("read_s", "fuse_s", "h2d_s", "quant_s", "offload_s", "total_s", "block_s", "residual_s")
-CAP_FLOOR_S = 600                 # the cap never drops below this: a short warm rep on a busy host is noisy
+CAP_FLOOR_S = 600
+MIN_HIGH = 24                     # the maintainer's floor: a 16-vs-under-24 ratio is too weak to read (refused, $0)
+THROTTLE_FLAG = 0.05              # a rep throttled in more than 5 % of its CFS periods is flagged; its pair is not read                 # the cap never drops below this: a short warm rep on a busy host is noisy
 
 
 def lscpu():
@@ -61,6 +67,26 @@ def host_facts():
     return {"cpu_model": cpu.get("Model name"), "logical": int(cpu.get("CPU(s)") or 0), "physical": cps * sock,
             "threads_per_core": tpc, "affinity": len(os.sched_getaffinity(0)), "quota": container_cpu_quota()[0],
             "torch_default_pool": torch.get_num_threads(), "torch": torch.__version__}
+
+
+def high_pool(quota, affinity, want=32):
+    """The second arm: the pool a real load would run, under the loader's ceil(quota) cap."""
+    import math
+
+    return min(want, affinity, math.ceil(quota) if quota else want)
+
+
+def cpu_stat(root="/sys/fs/cgroup"):
+    """The cgroup's nr_periods, nr_throttled and throttled microseconds (v2 cpu.stat, else v1), or None."""
+    for path, key, scale in ((os.path.join(root, "cpu.stat"), "throttled_usec", 1.0),
+                             (os.path.join(root, "cpu", "cpu.stat"), "throttled_time", 1e-3)):
+        try:
+            kv = dict(line.split(None, 1) for line in open(path) if line.strip())
+            return {"nr_periods": int(kv.get("nr_periods", 0)), "nr_throttled": int(kv.get("nr_throttled", 0)),
+                    "throttled_usec": float(kv[key]) * scale if key in kv else 0.0}
+        except (OSError, ValueError):
+            continue
+    return None
 
 
 def sha(t):
@@ -101,6 +127,7 @@ def one_rep(pool, slab_path, n_experts):
 
     torch.set_num_threads(pool)
     load = os.getloadavg()[0]
+    cs0 = cpu_stat()
     torch.cuda.synchronize()
     t0 = time.perf_counter()
     with safe_open(slab_path, framework="pt", device="cpu") as f:
@@ -143,6 +170,11 @@ def one_rep(pool, slab_path, n_experts):
     # staging too), less the two hashes; the residual is what no segment timed (the free, and any gap between them)
     rec["block_s"] = (t6 - t0) - (t4b - t4) - (t5c - t5b)
     rec["residual_s"] = rec["block_s"] - rec["total_s"]
+    cs1 = cpu_stat()
+    if cs0 and cs1:
+        dp = cs1["nr_periods"] - cs0["nr_periods"]
+        rec["throttled_period_share"] = (cs1["nr_throttled"] - cs0["nr_throttled"]) / dp if dp > 0 else 0.0
+        rec["throttled_cpu_s"] = (cs1["throttled_usec"] - cs0["throttled_usec"]) / 1e6
     return rec
 
 
@@ -163,13 +195,18 @@ def summarize(res):
         for k in list(out["per_pool"][str(pool)]):
             out["per_pool"][str(pool)][k.replace("_s", "_s_per_layer")] = out["per_pool"][str(pool)][k] * scale
         out["per_pool"][str(pool)]["n"] = len(rs)
-    for i in range(0, len(reps) - 1, 2):                 # (16, 32), (32, 16), ... -> each pair's 32/16 ratio
+    high, low = res.get("high", 32), res.get("low", 16)
+    for i in range(0, len(reps) - 1, 2):                 # (low, high), (high, low), ... -> each pair's high/low ratio
         a, b = reps[i], reps[i + 1]
-        if {a["pool"], b["pool"]} == {16, 32}:
-            r16, r32 = (a, b) if a["pool"] == 16 else (b, a)
-            out["pairs"].append({k.replace("_s", "_32_over_16"): r32[k] / r16[k] for k in SEGMENTS if k in r16})
-    for k in [s.replace("_s", "_32_over_16") for s in SEGMENTS]:
-        v = [p[k] for p in out["pairs"] if k in p]
+        if {a["pool"], b["pool"]} == {low, high}:
+            r16, rh = (a, b) if a["pool"] == low else (b, a)
+            pair = {k.replace("_s", "_high_over_16"): rh[k] / r16[k] for k in SEGMENTS if k in r16 and r16[k]}
+            pair["flagged"] = any((r.get("throttled_period_share") or 0) > THROTTLE_FLAG for r in (a, b))
+            out["pairs"].append(pair)
+    out["high"], out["low"] = high, low
+    out["flagged_pairs"] = sum(p["flagged"] for p in out["pairs"])
+    for k in [s.replace("_s", "_high_over_16") for s in SEGMENTS]:
+        v = [p[k] for p in out["pairs"] if k in p and not p["flagged"]]           # a flagged pair is reported, not read
         out[k] = {"median": statistics.median(v), "min": min(v), "max": max(v), "n": len(v),
                   "range_includes_1": min(v) <= 1.0 <= max(v)} if v else None
     out["bytes_identical"] = (len({r["fused_sha256"] for r in reps}) == 1 and len({r["nf4_sha256"] for r in reps}) == 1)
@@ -186,14 +223,22 @@ def run(a):
     write_slab(slab_path, *slab(a.experts))
     # warm each pool once (allocator, CUDA context, bnb kernels): the cap is sized from each pool's own warm wall, since
     # a slower pool is exactly what this measures
-    warm = {pool: one_rep(pool, slab_path, a.experts)["block_s"] for pool in sorted(set(POOLS))}
-    plan = [pool for _ in range(CYCLES) for pool in POOLS]
+    dry = os.environ.get("SMT_FUSE_DRY") == "1"
+    low = 2 if dry else 16                               # the $0 dry run checks the wiring on a small box, never a rate
+    high = min(4, facts["affinity"]) if dry else high_pool(facts["quota"], facts["affinity"])
+    pools = tuple(high if p == 32 else low for p in POOLS)
+    if high <= low or (not dry and high < MIN_HIGH):
+        print("SMT_FUSE_REFUSED " + json.dumps({"why": f"the high arm {high} is under {MIN_HIGH}", "high": high}),
+              flush=True)
+        return 5
+    warm = {pool: one_rep(pool, slab_path, a.experts)["block_s"] for pool in sorted(set(pools))}
+    plan = [pool for _ in range(CYCLES) for pool in pools]
     cap = phase_cap(warm, plan, float(os.environ.get("SMT_FUSE_TIME_LEFT_S", "inf")))
     print("SMT_FUSE_CAP " + json.dumps({"warm_total_s": warm, "reps": len(plan), "cap_s": cap}), flush=True)
     t_start = time.perf_counter()
     reps = []
     for c in range(CYCLES):
-        for pool in POOLS:
+        for pool in pools:
             if time.perf_counter() - t_start > cap:
                 print(f"SMT_FUSE_CAP_HIT after {len(reps)} reps", flush=True)
                 return 4
@@ -201,7 +246,9 @@ def run(a):
             rec["cycle"] = c
             reps.append(rec)
             print("SMT_FUSE_REP " + json.dumps(rec), flush=True)
-    res = {"facts": facts, "experts": a.experts, "shape": [E_FULL, INTER, HIDDEN], "pools": POOLS, "cycles": CYCLES,
+    res = {"facts": facts, "experts": a.experts, "shape": [E_FULL, INTER, HIDDEN], "pools": pools, "high": high,
+           "low": low,
+           "cycles": CYCLES,
            "gpu": torch.cuda.get_device_name(0), "e4b_sha": os.environ.get("E4B_SHA"), "reps": reps}
     res["summary"] = summarize(res)
     json.dump(res, open(a.out, "w"), indent=1)
@@ -217,23 +264,32 @@ def self_test():
     reps = [rep(16, 10.0, 4.0), rep(32, 12.0, 6.0), rep(32, 11.0, 5.0), rep(16, 10.0, 4.0)]
     s = summarize({"reps": reps, "experts": 128})
     assert s["per_pool"]["16"]["total_s"] == 10.0 and s["per_pool"]["32"]["total_s"] == 11.5
-    assert len(s["pairs"]) == 2 and abs(s["pairs"][0]["total_32_over_16"] - 1.2) < 1e-12
-    assert abs(s["pairs"][1]["total_32_over_16"] - 1.1) < 1e-12 and s["total_32_over_16"]["range_includes_1"] is False
+    assert len(s["pairs"]) == 2 and abs(s["pairs"][0]["total_high_over_16"] - 1.2) < 1e-12
+    assert abs(s["pairs"][1]["total_high_over_16"] - 1.1) < 1e-12 and s["total_high_over_16"]["range_includes_1"] is False
     n += 1
     s = summarize({"reps": reps, "experts": 32})
     assert s["per_pool"]["16"]["total_s_per_layer"] == 40.0                   # scaled to 128 experts
     assert s["per_pool"]["16"]["read_s"] == 0.5 and s["per_pool"]["32"]["offload_s"] == 0.3     # every segment reported
-    assert s["read_32_over_16"]["median"] == 1.0 and s["offload_32_over_16"]["n"] == 2
+    assert s["read_high_over_16"]["median"] == 1.0 and s["offload_high_over_16"]["n"] == 2
     assert s["per_pool"]["16"]["residual_s"] == 0.4 and s["per_pool"]["32"]["block_s"] == 11.9   # the block and residual
     n += 1
     reps2 = [rep(16, 10.0, 4.0), rep(32, 9.0, 3.0), rep(32, 11.0, 5.0), rep(16, 10.0, 4.0)]
-    assert summarize({"reps": reps2, "experts": 128})["total_32_over_16"]["range_includes_1"] is True
+    assert summarize({"reps": reps2, "experts": 128})["total_high_over_16"]["range_includes_1"] is True
     n += 1
     assert summarize({"reps": reps, "experts": 128})["bytes_identical"] is True
     assert summarize({"reps": reps[:3] + [rep(16, 10.0, 4.0, q="c")], "experts": 128})["bytes_identical"] is False
     n += 1
     assert POOLS == (16, 32, 32, 16) and CYCLES >= 3 and (E_FULL, INTER, HIDDEN) == (128, 1536, 4096)
     n += 1
+    assert high_pool(30.72, 128) == 31 and high_pool(None, 256) == 32 and high_pool(64.0, 24) == 24   # -7's host: 31
+    assert high_pool(16.0, 128) == 16                                    # no higher arm: the probe refuses (exit 5)
+    hreps = [dict(r, pool=31 if r["pool"] == 32 else r["pool"]) for r in reps]
+    assert len(summarize({"reps": hreps, "experts": 128, "high": 31})["pairs"]) == 2                 # pairs by (16, high)
+    treps = [dict(r) for r in reps]
+    treps[1]["throttled_period_share"] = 0.06                            # the first pair is flagged ...
+    st = summarize({"reps": treps, "experts": 128})
+    assert st["flagged_pairs"] == 1 and st["total_high_over_16"]["n"] == 1   # ... reported, but not in the median
+    assert abs(st["total_high_over_16"]["median"] - 1.1) < 1e-12 and st["pairs"][0]["flagged"] is True
     plan = [pool for _ in range(CYCLES) for pool in POOLS]
     assert phase_cap({16: 50.0, 32: 100.0}, plan, float("inf")) == 1.5 * CYCLES * (2 * 50.0 + 2 * 100.0)
     assert phase_cap({16: 0.2, 32: 0.1}, plan, float("inf")) == CAP_FLOOR_S          # the floor on a tiny slab

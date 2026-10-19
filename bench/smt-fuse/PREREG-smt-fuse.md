@@ -29,8 +29,14 @@ server-class SMT host.
   first read to the layer's memory freed (the real loader frees each layer's GPU copies and staging too), less the two
   integrity hashes, and the **residual**, that wall minus the five segments. A breakdown without a residual cannot tell
   whether an untimed step is what made `-7` 3.2x slower.
-- **Order:** one untimed warm rep at each pool (16 and 32), then the pools **16, 32, 32, 16** for **4 cycles**: 16 reps and 8 back-to-back
-  (16, 32) pairs.
+- **Order:** one untimed warm rep at each pool, then the pools **16, HIGH, HIGH, 16** for **4 cycles**: 16 reps and 8
+  back-to-back (16, HIGH) pairs.
+- **The high arm** (the review pass): HIGH = min(32, ceil(quota), affinity). The loader caps the expert loop's pool at
+  ceil(quota) (#1752), so on a host with a 16–31 CPU quota (`-7`'s was 30.72) a 32-thread arm would be CFS-throttled and
+  measure a pool no real load runs. HIGH is the pool a real load would run there if torch's default rose from physical
+  to logical CPUs. A host where HIGH would be under 24 is refused. Each rep also records the cgroup's
+  throttled-period share and throttled CPU time over the rep. **A rep throttled in more than 5 % of its CFS periods is
+  flagged; its pair is reported but left out of the ratio's median and range.**
 - **Recorded once:** the CPU model, physical and logical counts, threads per core, the affinity, the cgroup quota and
   torch's default pool.
 - **Recorded per rep:** the pool torch reports, the 1-minute load average at its start, the segment walls, and the sha256
@@ -41,7 +47,7 @@ server-class SMT host.
 - **Per pool:** median seconds for each of the five segments, their sum, the whole block and the residual, each scaled
   to one layer (the amendment
   multiplies by 94 layers).
-- **Each pair's 32/16 ratio**, for the total and for every segment, with the median and the **range across the 8
+- **Each pair's HIGH/16 ratio**, for the total and for every segment, with the median and the **range across the 8
   pairs**. That range is the interval the decision reads. It is fixed here, before any data.
 - **Bytes identical:** every rep's fused and nf4 bytes must agree, since the pool must be speed-only. If they differ, the
   probe exits 3 and the run is a finding, not a timing.
@@ -50,7 +56,8 @@ server-class SMT host.
 
 - **Host:** a rented Vast.ai verified/secure single-GPU box on a **server-class SMT CPU** (AMD EPYC or Intel Xeon), any
   CUDA card. The box refuses (rc 16) unless it has 2 threads per core, at least 32 CPUs in the affinity and a quota of at
-  least 16. It records the quota, so the 32-thread rep runs at the host's own quota, as Q235's did.
+  least 24. A host whose high arm P would be under 24 is refused before the install (NOT_RUN, $0), since a 16-vs-under-24
+  ratio is too weak to read. It records the quota and P.
 - **Pins:** e4b `E4B_PIN=6c5c27435c0e9c2f3d78e05ab102fd579434a7a1`, grouped-nf4-gemm 0.46.0
   `GNF4_SHA=6b7c2e7474d20c8843814dd46dad6cfc3d94b440`, torch 2.8.0+cu128 (the image's), bitsandbytes 0.50.2.
 - **Phase cap, declared on the box** (`lane_record.phase_caps.probe = {"on_box": ...}`): min(time left − 600 s,
