@@ -1,0 +1,33 @@
+KNOBS e4b=4d3fd170edfd6cec774aab814115662fd06cd5bc gnf4=ef2faf3816b30ecfd0e2a69cb27fb049a7d56a59 gpu_class=5090 min_disk_gb=20 min_ram_gb=16 min_power_w=575 need_bench=2450
+CUDA_PROBE ok
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-494cdfeb-50c8-6125-8057-47b0bd8d9c74, 12.0
+power.limit,clocks.max.sm 575.00 W, 3090 MHz
+CPU(s):                                  96
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD EPYC 7K62 48-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             503         371         114           0          18         128
+overlay          60G   79M   60G   1% /
+POWER_LIMIT_W 575 (floor 575)
+GUARD_FIT fit=3950s need=4937s left=5315s
+[2026-10-19T22:26:35Z] p155: install e4b @4d3fd170edfd6cec774aab814115662fd06cd5bc + gnf4 @ef2faf3816b30ecfd0e2a69cb27fb049a7d56a59 (image python; transformers 5.17.0; torch held at 2.8.0)
+tripwire OK: 0.55.0 gnf4 0.48.0 torch 2.8.0+cu128
+e4b 0.55.0 @4d3fd170edfd6cec774aab814115662fd06cd5bc
+gnf4 0.48.0 @ef2faf3816b30ecfd0e2a69cb27fb049a7d56a59
+torch 2.8.0+cu128
+triton 3.4.0
+cc (12, 0)
+sm_count 170
+p155_bench self-test OK (5 cases)
+p155_reduce self-test OK (30 cases)
+premise rc=0: 4 passed in 16.33s
+premise ok
+[2026-10-19T22:29:10Z] p155: microbench (alarm=3600)
+bench rc=0 P155_CARRIED [{"gu": {"block_n": 32, "kc": 128, "warps": 4, "stages": 2}, "dn": {"block_n": 64, "kc": 64, "warps": 8, "stages": 1}}, {"gu": {"block_n": 32, "kc": 128, "warps": 4, "stages": 1}, "dn": {"block_n": 32, "kc": 64, "warps": 4, "stages": 1}}, {"gu": {"block_n": 32, "kc": 128, "warps": 4, "stages": 3}, "dn": {"block_n": 16, "kc": 64, "warps": 2, "stages": 1}}]
+P155_BENCH done in 895.6 s; walls {"routing_s": 0.4, "stores_s": 0.4, "tiles_s": 2.6, "select_s": 782.0, "confirm_s": 110.2}
+
+[2026-10-19T22:44:08Z] p155: reduce
+P155 NO_GO {"why": ["best C1 1.0188x, lower bound 1.0180 < 1.15"], "winner": {"n": 64, "median": 1.0187813723595007, "se": 0.000408231010768943, "lb": 1.0179649103379629, "se_of_mean": 0.0003257212207334879, "min": 1.011806110283278, "max": 1.0233431881120314, "arm": "C1", "rank": 1, "plan": {"gu": {"block_n": 32, "kc": 128, "warps": 4, "stages": 2}, "dn": {"block_n": 64, "kc": 64, "warps": 8, "stages": 1}}}, "compaction": 1.0032036068111527}
+NCU counters unavailable on this host (ERR_NVGPUCTRPERM
+ERR_NVGPUCTRPERM)
+[2026-10-19T22:44:14Z] p155: TP_DONE rc=0

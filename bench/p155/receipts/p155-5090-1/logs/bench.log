@@ -1,0 +1,354 @@
+P155_PLAN gu (64, 256, 2, 4) identical=None err=True first=None
+P155_PLAN gu (16, 64, 4, 2) identical=True err=False first=0.35
+P155_PLAN gu (16, 64, 8, 2) identical=True err=False first=0.33
+P155_PLAN gu (64, 256, 8, 2) identical=True err=False first=0.82
+P155_PLAN gu (64, 256, 8, 4) identical=None err=True first=None
+P155_PLAN gu (128, 128, 8, 4) identical=None err=True first=None
+P155_PLAN gu (32, 64, 4, 1) identical=True err=False first=0.38
+P155_PLAN gu (32, 128, 4, 2) identical=True err=False first=0.49
+P155_PLAN gu (64, 128, 2, 2) identical=True err=False first=1.08
+P155_PLAN gu (32, 256, 8, 4) identical=True err=False first=0.58
+P155_PLAN gu (16, 256, 8, 4) identical=True err=False first=0.5
+P155_PLAN gu (16, 256, 8, 1) identical=True err=False first=0.53
+P155_PLAN gu (64, 256, 2, 2) identical=True err=False first=2.43
+P155_PLAN gu (128, 64, 2, 4) identical=True err=False first=1.0
+P155_PLAN gu (64, 64, 4, 1) identical=True err=False first=0.43
+P155_PLAN gu (16, 256, 8, 2) identical=True err=False first=0.58
+P155_PLAN gu (64, 64, 8, 4) identical=True err=False first=0.4
+P155_PLAN gu (16, 64, 8, 4) identical=True err=False first=0.34
+P155_PLAN gu (128, 64, 4, 3) identical=True err=False first=0.6
+P155_PLAN gu (16, 128, 8, 1) identical=True err=False first=0.38
+P155_PLAN gu (64, 64, 4, 3) identical=True err=False first=0.46
+P155_PLAN gu (128, 256, 2, 4) identical=None err=True first=None
+P155_PLAN gu (16, 64, 2, 4) identical=True err=False first=0.41
+P155_PLAN gu (128, 64, 2, 3) identical=True err=False first=0.99
+P155_PLAN gu (32, 64, 4, 2) identical=True err=False first=0.35
+P155_PLAN gu (64, 64, 2, 1) identical=True err=False first=0.61
+P155_PLAN gu (128, 64, 8, 4) identical=True err=False first=0.44
+P155_PLAN gu (32, 128, 4, 1) identical=True err=False first=0.48
+P155_PLAN gu (16, 128, 8, 4) identical=True err=False first=0.42
+P155_PLAN gu (128, 256, 4, 2) identical=None err=True first=None
+P155_PLAN gu (64, 128, 4, 4) identical=True err=False first=0.69
+P155_PLAN gu (128, 64, 2, 2) identical=True err=False first=0.97
+P155_PLAN gu (32, 128, 8, 4) identical=True err=False first=0.42
+P155_PLAN gu (64, 128, 8, 4) identical=True err=False first=0.48
+P155_PLAN gu (64, 256, 4, 1) identical=True err=False first=1.09
+P155_PLAN gu (64, 128, 4, 3) identical=True err=False first=0.64
+P155_PLAN gu (64, 64, 8, 3) identical=True err=False first=0.4
+P155_PLAN gu (128, 128, 8, 2) identical=True err=False first=0.65
+P155_PLAN gu (32, 256, 8, 1) identical=True err=False first=0.61
+P155_PLAN gu (32, 128, 8, 2) identical=True err=False first=0.43
+P155_PLAN gu (64, 128, 8, 2) identical=True err=False first=0.49
+P155_PLAN gu (64, 256, 2, 3) identical=True err=False first=2.43
+P155_PLAN gu (16, 256, 8, 3) identical=True err=False first=0.52
+P155_PLAN gu (64, 128, 4, 2) identical=True err=False first=0.67
+P155_PLAN gu (16, 64, 2, 2) identical=True err=False first=0.37
+P155_PLAN gu (32, 64, 2, 2) identical=True err=False first=0.44
+P155_PLAN gu (32, 64, 8, 4) identical=True err=False first=0.34
+P155_PLAN gu (64, 128, 2, 4) identical=True err=False first=0.96
+P155_PLAN gu (64, 128, 4, 1) identical=True err=False first=0.64
+P155_PLAN gu (64, 128, 2, 3) identical=True err=False first=1.0
+P155_PLAN gu (16, 128, 8, 2) identical=True err=False first=0.42
+P155_PLAN gu (16, 128, 4, 4) identical=True err=False first=0.42
+P155_PLAN gu (64, 256, 4, 4) identical=None err=True first=None
+P155_PLAN gu (16, 128, 4, 2) identical=True err=False first=0.47
+P155_PLAN gu (128, 64, 2, 1) identical=True err=False first=0.9
+P155_PLAN gu (16, 256, 4, 4) identical=True err=False first=0.61
+P155_PLAN gu (64, 256, 2, 1) identical=True err=False first=2.31
+P155_PLAN gu (64, 256, 4, 2) identical=True err=False first=1.16
+P155_PLAN gu (128, 256, 8, 4) identical=None err=True first=None
+P155_PLAN gu (32, 256, 2, 4) identical=True err=False first=1.15
+P155_PLAN gu (32, 64, 2, 3) identical=True err=False first=0.45
+P155_PLAN gu (128, 64, 8, 3) identical=True err=False first=0.44
+P155_PLAN gu (64, 64, 4, 2) identical=True err=False first=0.43
+P155_PLAN gu (128, 256, 8, 2) identical=None err=True first=None
+P155_PLAN gu (16, 64, 8, 1) identical=True err=False first=0.33
+P155_PLAN gu (128, 128, 2, 1) identical=True err=False first=2.17
+P155_PLAN gu (128, 128, 4, 4) identical=None err=True first=None
+P155_PLAN gu (16, 64, 2, 3) identical=True err=False first=0.39
+P155_PLAN gu (128, 128, 2, 2) identical=True err=False first=2.23
+P155_PLAN gu (32, 128, 2, 3) identical=True err=False first=0.66
+P155_PLAN gu (32, 256, 8, 2) identical=True err=False first=0.68
+P155_PLAN gu (128, 64, 4, 4) identical=True err=False first=0.6
+P155_PLAN gu (16, 128, 2, 2) identical=True err=False first=0.5
+P155_PLAN gu (32, 64, 2, 4) identical=True err=False first=0.47
+P155_PLAN gu (64, 64, 8, 1) identical=True err=False first=0.35
+P155_PLAN gu (32, 128, 4, 3) identical=True err=False first=0.48
+P155_PLAN gu (16, 256, 4, 3) identical=True err=False first=0.59
+P155_PLAN gu (16, 256, 2, 2) identical=True err=False first=0.88
+P155_PLAN gu (128, 64, 8, 1) identical=True err=False first=0.41
+P155_PLAN gu (128, 128, 2, 3) identical=True err=False first=2.24
+P155_PLAN gu (32, 128, 8, 3) identical=True err=False first=0.41
+P155_PLAN gu (32, 64, 8, 3) identical=True err=False first=0.36
+P155_PLAN gu (32, 128, 2, 1) identical=True err=False first=0.63
+P155_PLAN gu (64, 128, 8, 3) identical=True err=False first=0.46
+P155_PLAN gu (64, 256, 8, 1) identical=True err=False first=0.73
+P155_PLAN gu (32, 64, 4, 3) identical=True err=False first=0.01
+P155_PLAN gu (64, 128, 2, 1) identical=True err=False first=0.99
+P155_PLAN gu (16, 256, 4, 1) identical=True err=False first=0.61
+P155_PLAN gu (32, 128, 2, 4) identical=True err=False first=0.67
+P155_PLAN gu (32, 256, 4, 1) identical=True err=False first=0.73
+P155_PLAN gu (128, 128, 4, 3) identical=True err=False first=1.0
+P155_PLAN gu (16, 128, 4, 3) identical=True err=False first=0.43
+P155_PLAN gu (128, 256, 2, 1) identical=None err=True first=None
+P155_PLAN gu (128, 128, 4, 2) identical=True err=False first=1.1
+P155_PLAN gu (128, 64, 8, 2) identical=True err=False first=0.46
+P155_PLAN gu (128, 128, 4, 1) identical=True err=False first=1.0
+P155_PLAN gu (16, 64, 2, 1) identical=True err=False first=0.34
+P155_PLAN gu (128, 256, 2, 2) identical=None err=True first=None
+P155_PLAN gu (32, 128, 8, 1) identical=True err=False first=0.42
+P155_PLAN gu (32, 256, 2, 2) identical=True err=False first=1.17
+P155_PLAN gu (128, 64, 4, 1) identical=True err=False first=0.59
+P155_PLAN gu (128, 256, 4, 4) identical=None err=True first=None
+P155_PLAN gu (32, 64, 2, 1) identical=True err=False first=0.43
+P155_PLAN gu (32, 256, 4, 3) identical=True err=False first=0.71
+P155_PLAN gu (16, 128, 2, 3) identical=True err=False first=0.47
+P155_PLAN gu (128, 64, 4, 2) identical=True err=False first=0.6
+P155_PLAN gu (128, 128, 8, 3) identical=True err=False first=0.66
+P155_PLAN gu (64, 256, 4, 3) identical=True err=False first=1.06
+P155_PLAN gu (32, 128, 4, 4) identical=True err=False first=0.48
+P155_PLAN gu (16, 128, 2, 1) identical=True err=False first=0.49
+P155_PLAN gu (128, 256, 2, 3) identical=None err=True first=None
+P155_PLAN gu (16, 256, 2, 4) identical=True err=False first=0.8
+P155_PLAN gu (64, 64, 8, 2) identical=True err=False first=0.39
+P155_PLAN gu (64, 64, 2, 3) identical=True err=False first=0.61
+P155_PLAN gu (32, 256, 4, 2) identical=True err=False first=0.86
+P155_PLAN gu (16, 64, 4, 4) identical=True err=False first=0.35
+P155_PLAN gu (16, 256, 2, 3) identical=True err=False first=0.78
+P155_PLAN gu (32, 256, 2, 3) identical=True err=False first=1.14
+P155_PLAN gu (64, 128, 8, 1) identical=True err=False first=0.47
+P155_PLAN gu (16, 64, 8, 3) identical=True err=False first=0.33
+P155_PLAN gu (32, 64, 4, 4) identical=True err=False first=0.38
+P155_PLAN gu (16, 256, 4, 2) identical=True err=False first=0.71
+P155_PLAN gu (64, 64, 2, 4) identical=True err=False first=0.62
+P155_PLAN gu (64, 64, 4, 4) identical=True err=False first=0.47
+P155_PLAN gu (128, 128, 2, 4) identical=None err=True first=None
+P155_PLAN gu (16, 64, 4, 1) identical=True err=False first=0.28
+P155_PLAN gu (32, 256, 4, 4) identical=True err=False first=0.73
+P155_PLAN gu (16, 128, 4, 1) identical=True err=False first=0.38
+P155_PLAN gu (16, 256, 2, 1) identical=True err=False first=0.77
+P155_PLAN gu (32, 256, 2, 1) identical=True err=False first=1.18
+P155_PLAN gu (32, 64, 8, 1) identical=True err=False first=0.33
+P155_PLAN gu (32, 64, 8, 2) identical=True err=False first=0.36
+P155_PLAN gu (16, 128, 8, 3) identical=True err=False first=0.41
+P155_PLAN gu (16, 64, 4, 3) identical=True err=False first=0.35
+P155_PLAN gu (16, 128, 2, 4) identical=True err=False first=0.5
+P155_PLAN gu (32, 128, 2, 2) identical=True err=False first=0.7
+P155_PLAN gu (32, 256, 8, 3) identical=True err=False first=0.57
+P155_PLAN gu (128, 256, 8, 1) identical=None err=True first=None
+P155_PLAN gu (128, 256, 4, 1) identical=None err=True first=None
+P155_PLAN gu (128, 256, 8, 3) identical=None err=True first=None
+P155_PLAN gu (64, 256, 8, 3) identical=True err=False first=0.75
+P155_PLAN gu (64, 64, 2, 2) identical=True err=False first=0.62
+P155_PLAN gu (128, 256, 4, 3) identical=None err=True first=None
+P155_PLAN gu (128, 128, 8, 1) identical=True err=False first=0.64
+P155_PLAN dn (64, 256, 2, 4) identical=None err=True first=None
+P155_PLAN dn (16, 64, 4, 2) identical=True err=False first=0.36
+P155_PLAN dn (16, 64, 8, 2) identical=True err=False first=0.32
+P155_PLAN dn (64, 256, 8, 2) identical=True err=False first=0.8
+P155_PLAN dn (64, 256, 8, 4) identical=None err=True first=None
+P155_PLAN dn (128, 128, 8, 4) identical=None err=True first=None
+P155_PLAN dn (32, 64, 4, 1) identical=True err=False first=0.38
+P155_PLAN dn (32, 128, 4, 2) identical=True err=False first=0.53
+P155_PLAN dn (64, 128, 2, 2) identical=True err=False first=1.05
+P155_PLAN dn (32, 256, 8, 4) identical=True err=False first=0.58
+P155_PLAN dn (16, 256, 8, 4) identical=True err=False first=0.52
+P155_PLAN dn (16, 256, 8, 1) identical=True err=False first=0.54
+P155_PLAN dn (64, 256, 2, 2) identical=True err=False first=2.42
+P155_PLAN dn (128, 64, 2, 4) identical=True err=False first=1.0
+P155_PLAN dn (64, 64, 4, 1) identical=True err=False first=0.43
+P155_PLAN dn (16, 256, 8, 2) identical=True err=False first=0.59
+P155_PLAN dn (64, 64, 8, 4) identical=True err=False first=0.36
+P155_PLAN dn (16, 64, 8, 4) identical=True err=False first=0.34
+P155_PLAN dn (128, 64, 4, 3) identical=True err=False first=0.59
+P155_PLAN dn (16, 128, 8, 1) identical=True err=False first=0.38
+P155_PLAN dn (64, 64, 4, 3) identical=True err=False first=0.44
+P155_PLAN dn (128, 256, 2, 4) identical=None err=True first=None
+P155_PLAN dn (16, 64, 2, 4) identical=True err=False first=0.4
+P155_PLAN dn (128, 64, 2, 3) identical=True err=False first=0.97
+P155_PLAN dn (32, 64, 4, 2) identical=True err=False first=0.37
+P155_PLAN dn (64, 64, 2, 1) identical=True err=False first=0.58
+P155_PLAN dn (128, 64, 8, 4) identical=True err=False first=0.45
+P155_PLAN dn (32, 128, 4, 1) identical=True err=False first=0.47
+P155_PLAN dn (16, 128, 8, 4) identical=True err=False first=0.4
+P155_PLAN dn (128, 256, 4, 2) identical=None err=True first=None
+P155_PLAN dn (64, 128, 4, 4) identical=True err=False first=0.61
+P155_PLAN dn (128, 64, 2, 2) identical=True err=False first=1.03
+P155_PLAN dn (32, 128, 8, 4) identical=True err=False first=0.44
+P155_PLAN dn (64, 128, 8, 4) identical=True err=False first=0.47
+P155_PLAN dn (64, 256, 4, 1) identical=True err=False first=1.1
+P155_PLAN dn (64, 128, 4, 3) identical=True err=False first=0.62
+P155_PLAN dn (64, 64, 8, 3) identical=True err=False first=0.37
+P155_PLAN dn (128, 128, 8, 2) identical=True err=False first=0.67
+P155_PLAN dn (32, 256, 8, 1) identical=True err=False first=0.56
+P155_PLAN dn (32, 128, 8, 2) identical=True err=False first=0.42
+P155_PLAN dn (64, 128, 8, 2) identical=True err=False first=0.48
+P155_PLAN dn (64, 256, 2, 3) identical=True err=False first=2.43
+P155_PLAN dn (16, 256, 8, 3) identical=True err=False first=0.46
+P155_PLAN dn (64, 128, 4, 2) identical=True err=False first=0.68
+P155_PLAN dn (16, 64, 2, 2) identical=True err=False first=0.35
+P155_PLAN dn (32, 64, 2, 2) identical=True err=False first=0.44
+P155_PLAN dn (32, 64, 8, 4) identical=True err=False first=0.34
+P155_PLAN dn (64, 128, 2, 4) identical=True err=False first=1.03
+P155_PLAN dn (64, 128, 4, 1) identical=True err=False first=0.62
+P155_PLAN dn (64, 128, 2, 3) identical=True err=False first=1.0
+P155_PLAN dn (16, 128, 8, 2) identical=True err=False first=0.38
+P155_PLAN dn (16, 128, 4, 4) identical=True err=False first=0.43
+P155_PLAN dn (64, 256, 4, 4) identical=None err=True first=None
+P155_PLAN dn (16, 128, 4, 2) identical=True err=False first=0.46
+P155_PLAN dn (128, 64, 2, 1) identical=True err=False first=0.89
+P155_PLAN dn (16, 256, 4, 4) identical=True err=False first=0.57
+P155_PLAN dn (64, 256, 2, 1) identical=True err=False first=2.23
+P155_PLAN dn (64, 256, 4, 2) identical=True err=False first=1.15
+P155_PLAN dn (128, 256, 8, 4) identical=None err=True first=None
+P155_PLAN dn (32, 256, 2, 4) identical=True err=False first=1.15
+P155_PLAN dn (32, 64, 2, 3) identical=True err=False first=0.45
+P155_PLAN dn (128, 64, 8, 3) identical=True err=False first=0.44
+P155_PLAN dn (64, 64, 4, 2) identical=True err=False first=0.45
+P155_PLAN dn (128, 256, 8, 2) identical=None err=True first=None
+P155_PLAN dn (16, 64, 8, 1) identical=True err=False first=0.34
+P155_PLAN dn (128, 128, 2, 1) identical=True err=False first=2.14
+P155_PLAN dn (128, 128, 4, 4) identical=None err=True first=None
+P155_PLAN dn (16, 64, 2, 3) identical=True err=False first=0.4
+P155_PLAN dn (128, 128, 2, 2) identical=True err=False first=2.19
+P155_PLAN dn (32, 128, 2, 3) identical=True err=False first=0.66
+P155_PLAN dn (32, 256, 8, 2) identical=True err=False first=0.69
+P155_PLAN dn (128, 64, 4, 4) identical=True err=False first=0.61
+P155_PLAN dn (16, 128, 2, 2) identical=True err=False first=0.53
+P155_PLAN dn (32, 64, 2, 4) identical=True err=False first=0.46
+P155_PLAN dn (64, 64, 8, 1) identical=True err=False first=0.35
+P155_PLAN dn (32, 128, 4, 3) identical=True err=False first=0.48
+P155_PLAN dn (16, 256, 4, 3) identical=True err=False first=0.57
+P155_PLAN dn (16, 256, 2, 2) identical=True err=False first=0.84
+P155_PLAN dn (128, 64, 8, 1) identical=True err=False first=0.42
+P155_PLAN dn (128, 128, 2, 3) identical=True err=False first=2.3
+P155_PLAN dn (32, 128, 8, 3) identical=True err=False first=0.39
+P155_PLAN dn (32, 64, 8, 3) identical=True err=False first=0.35
+P155_PLAN dn (32, 128, 2, 1) identical=True err=False first=0.6
+P155_PLAN dn (64, 128, 8, 3) identical=True err=False first=0.49
+P155_PLAN dn (64, 256, 8, 1) identical=True err=False first=0.75
+P155_PLAN dn (32, 64, 4, 3) identical=True err=False first=0.01
+P155_PLAN dn (64, 128, 2, 1) identical=True err=False first=0.98
+P155_PLAN dn (16, 256, 4, 1) identical=True err=False first=0.61
+P155_PLAN dn (32, 128, 2, 4) identical=True err=False first=0.67
+P155_PLAN dn (32, 256, 4, 1) identical=True err=False first=0.75
+P155_PLAN dn (128, 128, 4, 3) identical=True err=False first=1.01
+P155_PLAN dn (16, 128, 4, 3) identical=True err=False first=0.42
+P155_PLAN dn (128, 256, 2, 1) identical=None err=True first=None
+P155_PLAN dn (128, 128, 4, 2) identical=True err=False first=1.04
+P155_PLAN dn (128, 64, 8, 2) identical=True err=False first=0.47
+P155_PLAN dn (128, 128, 4, 1) identical=True err=False first=0.99
+P155_PLAN dn (16, 64, 2, 1) identical=True err=False first=0.33
+P155_PLAN dn (128, 256, 2, 2) identical=None err=True first=None
+P155_PLAN dn (32, 128, 8, 1) identical=True err=False first=0.39
+P155_PLAN dn (32, 256, 2, 2) identical=True err=False first=1.18
+P155_PLAN dn (128, 64, 4, 1) identical=True err=False first=0.57
+P155_PLAN dn (128, 256, 4, 4) identical=None err=True first=None
+P155_PLAN dn (32, 64, 2, 1) identical=True err=False first=0.45
+P155_PLAN dn (32, 256, 4, 3) identical=True err=False first=0.73
+P155_PLAN dn (16, 128, 2, 3) identical=True err=False first=0.52
+P155_PLAN dn (128, 64, 4, 2) identical=True err=False first=0.63
+P155_PLAN dn (128, 128, 8, 3) identical=True err=False first=0.64
+P155_PLAN dn (64, 256, 4, 3) identical=True err=False first=1.08
+P155_PLAN dn (32, 128, 4, 4) identical=True err=False first=0.53
+P155_PLAN dn (16, 128, 2, 1) identical=True err=False first=0.46
+P155_PLAN dn (128, 256, 2, 3) identical=None err=True first=None
+P155_PLAN dn (16, 256, 2, 4) identical=True err=False first=0.8
+P155_PLAN dn (64, 64, 8, 2) identical=True err=False first=0.37
+P155_PLAN dn (64, 64, 2, 3) identical=True err=False first=0.61
+P155_PLAN dn (32, 256, 4, 2) identical=True err=False first=0.82
+P155_PLAN dn (16, 64, 4, 4) identical=True err=False first=0.35
+P155_PLAN dn (16, 256, 2, 3) identical=True err=False first=0.76
+P155_PLAN dn (32, 256, 2, 3) identical=True err=False first=1.12
+P155_PLAN dn (64, 128, 8, 1) identical=True err=False first=0.43
+P155_PLAN dn (16, 64, 8, 3) identical=True err=False first=0.34
+P155_PLAN dn (32, 64, 4, 4) identical=True err=False first=0.4
+P155_PLAN dn (16, 256, 4, 2) identical=True err=False first=0.72
+P155_PLAN dn (64, 64, 2, 4) identical=True err=False first=0.6
+P155_PLAN dn (64, 64, 4, 4) identical=True err=False first=0.48
+P155_PLAN dn (128, 128, 2, 4) identical=None err=True first=None
+P155_PLAN dn (16, 64, 4, 1) identical=True err=False first=0.35
+P155_PLAN dn (32, 256, 4, 4) identical=True err=False first=0.7
+P155_PLAN dn (16, 128, 4, 1) identical=True err=False first=0.41
+P155_PLAN dn (16, 256, 2, 1) identical=True err=False first=0.78
+P155_PLAN dn (32, 256, 2, 1) identical=True err=False first=1.16
+P155_PLAN dn (32, 64, 8, 1) identical=True err=False first=0.32
+P155_PLAN dn (32, 64, 8, 2) identical=True err=False first=0.33
+P155_PLAN dn (16, 128, 8, 3) identical=True err=False first=0.39
+P155_PLAN dn (16, 64, 4, 3) identical=True err=False first=0.34
+P155_PLAN dn (16, 128, 2, 4) identical=True err=False first=0.51
+P155_PLAN dn (32, 128, 2, 2) identical=True err=False first=0.67
+P155_PLAN dn (32, 256, 8, 3) identical=True err=False first=0.56
+P155_PLAN dn (128, 256, 8, 1) identical=None err=True first=None
+P155_PLAN dn (128, 256, 4, 1) identical=None err=True first=None
+P155_PLAN dn (128, 256, 8, 3) identical=None err=True first=None
+P155_PLAN dn (64, 256, 8, 3) identical=True err=False first=0.75
+P155_PLAN dn (64, 64, 2, 2) identical=True err=False first=0.63
+P155_PLAN dn (128, 256, 4, 3) identical=None err=True first=None
+P155_PLAN dn (128, 128, 8, 1) identical=True err=False first=0.63
+P155_CARRIED [{"gu": {"block_n": 32, "kc": 128, "warps": 4, "stages": 2}, "dn": {"block_n": 64, "kc": 64, "warps": 8, "stages": 1}}, {"gu": {"block_n": 32, "kc": 128, "warps": 4, "stages": 1}, "dn": {"block_n": 32, "kc": 64, "warps": 4, "stages": 1}}, {"gu": {"block_n": 32, "kc": 128, "warps": 4, "stages": 3}, "dn": {"block_n": 16, "kc": 64, "warps": 2, "stages": 1}}]
+P155_REP 0 step 64 T=11.745 T2=11.739 C1=11.573 C2=11.698 C3=11.876 K=11.722 identical=True
+P155_REP 1 step 65 T=11.847 T2=11.837 C1=11.622 C2=11.723 C3=11.902 K=11.812 identical=True
+P155_REP 2 step 66 T=11.956 T2=11.962 C1=11.709 C2=11.826 C3=11.984 K=11.918 identical=True
+P155_REP 3 step 67 T=11.684 T2=11.696 C1=11.478 C2=11.568 C3=11.735 K=11.643 identical=True
+P155_REP 4 step 68 T=12.030 T2=12.031 C1=11.796 C2=11.917 C3=12.060 K=11.998 identical=True
+P155_REP 5 step 69 T=11.910 T2=11.914 C1=11.669 C2=11.847 C3=11.987 K=11.866 identical=True
+P155_REP 6 step 70 T=11.788 T2=11.795 C1=11.561 C2=11.698 C3=11.844 K=11.759 identical=True
+P155_REP 7 step 71 T=11.462 T2=11.445 C1=11.276 C2=11.357 C3=11.516 K=11.421 identical=True
+P155_REP 8 step 72 T=11.515 T2=11.521 C1=11.360 C2=11.468 C3=11.620 K=11.470 identical=True
+P155_REP 9 step 73 T=11.510 T2=11.513 C1=11.376 C2=11.458 C3=11.607 K=11.468 identical=True
+P155_REP 10 step 74 T=11.712 T2=11.718 C1=11.499 C2=11.593 C3=11.750 K=11.670 identical=True
+P155_REP 11 step 75 T=12.062 T2=12.068 C1=11.836 C2=11.940 C3=12.118 K=12.017 identical=True
+P155_REP 12 step 76 T=11.398 T2=11.398 C1=11.244 C2=11.364 C3=11.498 K=11.369 identical=True
+P155_REP 13 step 77 T=11.267 T2=11.260 C1=11.073 C2=11.181 C3=11.334 K=11.227 identical=True
+P155_REP 14 step 78 T=12.195 T2=12.194 C1=11.960 C2=12.053 C3=12.250 K=12.157 identical=True
+P155_REP 15 step 79 T=11.729 T2=11.722 C1=11.480 C2=11.561 C3=11.723 K=11.680 identical=True
+P155_REP 16 step 80 T=11.955 T2=11.963 C1=11.742 C2=11.829 C3=11.970 K=11.923 identical=True
+P155_REP 17 step 81 T=11.446 T2=11.454 C1=11.251 C2=11.338 C3=11.502 K=11.407 identical=True
+P155_REP 18 step 82 T=12.138 T2=12.130 C1=11.951 C2=12.052 C3=12.219 K=12.106 identical=True
+P155_REP 19 step 83 T=11.388 T2=11.373 C1=11.230 C2=11.327 C3=11.498 K=11.346 identical=True
+P155_REP 20 step 84 T=11.478 T2=11.482 C1=11.292 C2=11.413 C3=11.604 K=11.431 identical=True
+P155_REP 21 step 85 T=11.318 T2=11.315 C1=11.144 C2=11.227 C3=11.355 K=11.263 identical=True
+P155_REP 22 step 86 T=12.236 T2=12.235 C1=12.011 C2=12.132 C3=12.269 K=12.198 identical=True
+P155_REP 23 step 87 T=11.679 T2=11.692 C1=11.456 C2=11.593 C3=11.706 K=11.634 identical=True
+P155_REP 24 step 88 T=12.415 T2=12.427 C1=12.188 C2=12.290 C3=12.465 K=12.393 identical=True
+P155_REP 25 step 89 T=11.523 T2=11.510 C1=11.292 C2=11.420 C3=11.568 K=11.475 identical=True
+P155_REP 26 step 90 T=12.123 T2=12.127 C1=11.859 C2=11.995 C3=12.136 K=12.085 identical=True
+P155_REP 27 step 91 T=12.311 T2=12.311 C1=12.088 C2=12.180 C3=12.345 K=12.265 identical=True
+P155_REP 28 step 92 T=12.483 T2=12.484 C1=12.243 C2=12.343 C3=12.507 K=12.451 identical=True
+P155_REP 29 step 93 T=12.507 T2=12.509 C1=12.245 C2=12.344 C3=12.534 K=12.470 identical=True
+P155_REP 30 step 94 T=12.127 T2=12.135 C1=11.897 C2=12.036 C3=12.188 K=12.101 identical=True
+P155_REP 31 step 95 T=11.506 T2=11.489 C1=11.310 C2=11.396 C3=11.595 K=11.459 identical=True
+P155_REP 32 step 96 T=11.718 T2=11.718 C1=11.507 C2=11.633 C3=11.775 K=11.679 identical=True
+P155_REP 33 step 97 T=12.346 T2=12.355 C1=12.129 C2=12.205 C3=12.392 K=12.318 identical=True
+P155_REP 34 step 98 T=12.088 T2=12.085 C1=11.897 C2=11.976 C3=12.152 K=12.043 identical=True
+P155_REP 35 step 99 T=12.461 T2=12.469 C1=12.231 C2=12.350 C3=12.521 K=12.429 identical=True
+P155_REP 36 step 100 T=12.094 T2=12.088 C1=11.899 C2=12.011 C3=12.180 K=12.064 identical=True
+P155_REP 37 step 101 T=12.443 T2=12.430 C1=12.182 C2=12.276 C3=12.480 K=12.413 identical=True
+P155_REP 38 step 102 T=12.711 T2=12.713 C1=12.455 C2=12.548 C3=12.750 K=12.676 identical=True
+P155_REP 39 step 103 T=12.238 T2=12.235 C1=11.989 C2=12.107 C3=12.276 K=12.193 identical=True
+P155_REP 40 step 104 T=12.398 T2=12.404 C1=12.179 C2=12.261 C3=12.435 K=12.357 identical=True
+P155_REP 41 step 105 T=12.015 T2=12.024 C1=11.796 C2=11.889 C3=12.065 K=11.970 identical=True
+P155_REP 42 step 106 T=12.050 T2=12.059 C1=11.837 C2=11.929 C3=12.114 K=12.029 identical=True
+P155_REP 43 step 107 T=12.169 T2=12.152 C1=11.923 C2=12.047 C3=12.238 K=12.125 identical=True
+P155_REP 44 step 108 T=12.127 T2=12.131 C1=11.881 C2=12.014 C3=12.169 K=12.090 identical=True
+P155_REP 45 step 109 T=12.530 T2=12.537 C1=12.250 C2=12.355 C3=12.539 K=12.492 identical=True
+P155_REP 46 step 110 T=12.333 T2=12.341 C1=12.095 C2=12.209 C3=12.358 K=12.299 identical=True
+P155_REP 47 step 111 T=12.493 T2=12.499 C1=12.250 C2=12.344 C3=12.530 K=12.455 identical=True
+P155_REP 48 step 112 T=12.299 T2=12.309 C1=12.072 C2=12.171 C3=12.356 K=12.279 identical=True
+P155_REP 49 step 113 T=11.450 T2=11.428 C1=11.240 C2=11.360 C3=11.508 K=11.401 identical=True
+P155_REP 50 step 114 T=11.448 T2=11.445 C1=11.228 C2=11.336 C3=11.524 K=11.395 identical=True
+P155_REP 51 step 115 T=11.952 T2=11.952 C1=11.782 C2=11.862 C3=11.996 K=11.916 identical=True
+P155_REP 52 step 116 T=12.389 T2=12.390 C1=12.135 C2=12.254 C3=12.420 K=12.356 identical=True
+P155_REP 53 step 117 T=12.027 T2=12.022 C1=11.850 C2=11.928 C3=12.112 K=11.978 identical=True
+P155_REP 54 step 118 T=11.603 T2=11.606 C1=11.447 C2=11.563 C3=11.708 K=11.577 identical=True
+P155_REP 55 step 119 T=12.303 T2=12.286 C1=12.052 C2=12.181 C3=12.371 K=12.263 identical=True
+P155_REP 56 step 120 T=12.141 T2=12.141 C1=11.884 C2=11.986 C3=12.207 K=12.097 identical=True
+P155_REP 57 step 121 T=12.188 T2=12.195 C1=11.984 C2=12.096 C3=12.267 K=12.153 identical=True
+P155_REP 58 step 122 T=12.117 T2=12.111 C1=11.892 C2=12.031 C3=12.176 K=12.072 identical=True
+P155_REP 59 step 123 T=12.275 T2=12.279 C1=12.040 C2=12.158 C3=12.333 K=12.234 identical=True
+P155_REP 60 step 124 T=11.484 T2=11.491 C1=11.348 C2=11.496 C3=11.643 K=11.459 identical=True
+P155_REP 61 step 125 T=12.495 T2=12.490 C1=12.210 C2=12.335 C3=12.532 K=12.458 identical=True
+P155_REP 62 step 126 T=12.984 T2=12.985 C1=12.702 C2=12.815 C3=13.040 K=12.948 identical=True
+P155_REP 63 step 127 T=12.586 T2=12.583 C1=12.357 C2=12.449 C3=12.646 K=12.546 identical=True
+P155_BENCH done in 895.6 s; walls {"routing_s": 0.4, "stores_s": 0.4, "tiles_s": 2.6, "select_s": 782.0, "confirm_s": 110.2}
