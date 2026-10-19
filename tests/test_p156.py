@@ -279,10 +279,33 @@ def test_the_predictions_are_the_registered_models():
     red = _reducer()
     assert red.MODELS == {"M1 overlap": (1.02, 1.11), "M3 serial": (1.15, 1.18), "M2 overlap + occupancy": (1.19, 1.28)}
     assert red.PRED["headline"] == (1.05, 1.18) and red.PRED["regs"] == {"T": 80, "P": 64}
-    for figure in ("**1.02-1.11**", "**1.15-1.18**", "1.19-1.28", "**the least likely**", "**1.05-1.18**",
-                   "**8.404 ms**", "**8.317 ms**", "12.075 ms", "0.027", "**17.00**", "**0.70**", "0.51",
-                   "grouped-nf4-gemm#570"):
+    # P155's figures as its record states them after review (e4b#1856): weak evidence, with its limits
+    for figure in ("**1.02-1.11**", "**1.15-1.18**", "1.19-1.28", "**the least likely**, on weak evidence",
+                   "**1.05-1.18**", "**8.404 ms**", "**8.317 ms**", "0.933-0.990", "never varied occupancy alone",
+                   "achieved occupancy unread", "12.075 ms", "1.045 against 1.019, 0.026", "**17.00**", "**0.70**",
+                   "0.51", "grouped-nf4-gemm#570", "The bands leave gaps"):
         assert figure in PREREG, figure
+    assert "changed occupancy alone" not in PREREG and "0.027" not in PREREG          # the pre-review wording
+
+
+def test_a_bit_moving_p_reads_the_same_on_every_step():
+    """serve-throughput's review: P moving a bit at the identity step is the held-out rule's NO_GO with a contract
+    finding, never a VOID (a deterministic mismatch would otherwise VOID every rerun and never record the finding); a
+    P that failed to compile, launch or replay is the instrument's VOID."""
+    red = _reducer()
+    rec = red._fake()
+    for r in rec["select"]["gu"]:
+        if r["plan"] == red.TODAY:
+            r["identical"], r["step_replays_ms"] = False, None
+    v = red.verdict(rec)
+    assert v["verdict"] == "NO_GO" and v["P"]["moved_bits_on_steps"] == [red.IDENTITY_STEP]
+    assert v["contract_findings"][0]["arm"] == "P" and "not ruled on" in v["why"][0]
+    rec = red._fake()
+    for r in rec["select"]["gu"]:
+        if r["plan"] == red.TODAY:
+            r["error"], r["identical"], r["step_replays_ms"] = "CompilationError: x", None, None
+    assert red.verdict(rec)["verdict"] == "VOID"
+    assert "**NO_GO with a contract finding**" in PREREG and "on the identity step or on any held-out step" in PREREG
 
 
 @pytest.mark.parametrize("script", ["p156_reduce.py", "p156_bench.py"])
@@ -306,6 +329,11 @@ REDUCE_MUTANTS = [
     ("    if not SELF_BAND[0] <= self_pair[\"median\"] <= SELF_BAND[1]:\n", "    if False:\n"),
     # a P that moved bits ruled on as a timing
     ("    elif p_moved:\n", "    elif False:\n"),
+    # P's bit mismatch at the identity step dropped (only the held-out steps counted)
+    ("    p_moved = ([IDENTITY_STEP] if any(", "    p_moved = ([] if any("),
+    # P's bit mismatch at the identity step read as VOID again (the pre-review rule)
+    ('        if today.get("error") or (today.get("identical") is not False and not _eligible(today, ',
+     '        if today.get("error") or (True and not _eligible(today, '),
     # a carried plan that moved bits kept as a candidate
     ("        if moved:\n", "        if False:\n"),
     # today's tree allowed to replay different bits

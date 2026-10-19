@@ -175,9 +175,11 @@ def _structure(rec, why):
             why.append(f"{proj}: the sweep rows are not one per grid plan")
             continue
         today = [r for r in rows if r["plan"] == TODAY][0]
-        if not _eligible(today, len(rec.get("select_steps") or [])):
-            why.append(f"{proj}: P (prmt at today's plan) did not run cleanly in the sweep "
-                       f"({today.get('error') or 'no clean replays, or not bit-identical to the tree'})")
+        # P that ran but moved a bit is a contract finding (verdict), never a VOID; VOID only when it failed to
+        # compile, launch or replay, the instrument's failure
+        if today.get("error") or (today.get("identical") is not False and not _eligible(today, len(rec.get("select_steps") or []))):
+            why.append(f"{proj}: P (prmt at today's plan) did not compile, launch or replay cleanly in the sweep "
+                       f"({today.get('error') or 'no clean replays'})")
     return why
 
 
@@ -214,7 +216,10 @@ def verdict(rec):
     out["self_pair"] = self_pair
     if not SELF_BAND[0] <= self_pair["median"] <= SELF_BAND[1]:
         return dict(out, verdict="VOID", why=[f"self-pair median {self_pair['median']:.4f} outside {SELF_BAND}"])
-    p_moved = [rep["step"] for rep in reps if rep["identical"]["P"] is not True]
+    # P moving a bit reads the same on every step: the identity step's (per projection) and the held-out steps'
+    p_moved = ([IDENTITY_STEP] if any(next(r for r in rec["select"][pj] if r["plan"] == TODAY)["identical"] is False
+                                      for pj in ("gu", "dn")) else [])
+    p_moved += [rep["step"] for rep in reps if rep["identical"]["P"] is not True]
     p = dict(summarize(q["P"]), moved_bits_on_steps=p_moved[:8])
     out["P"] = p
     # the sweep's carried plans: REPORTED, never ruling; one that moved a bit is a contract finding, not timed in
@@ -251,7 +256,8 @@ def verdict(rec):
                                 for pj in ("gu", "dn")}
     out["drift"] = rec.get("drift")
     out["compiled"] = rec.get("compiled")
-    if best:
+    out["sweep_best_selection_over_p"] = None          # unread when P was not timed in the sweep (it moved a bit)
+    if best and all(plan_key(TODAY) in sel_ms[pj] for pj in ("gu", "dn")):
         b = best["plan"]
         p_sel = sel_ms["gu"][plan_key(TODAY)] + sel_ms["dn"][plan_key(TODAY)]
         out["sweep_best_selection_over_p"] = p_sel / (sel_ms["gu"][plan_key(b["gu"])] + sel_ms["dn"][plan_key(b["dn"])])
@@ -260,8 +266,8 @@ def verdict(rec):
     if shake:
         out["verdict"], out["why"] = "SHAKEDOWN", ["a shakedown record is never a reading"]
     elif p_moved:
-        out["verdict"], out["why"] = "NO_GO", [f"P moved a bit on held-out steps {p_moved[:8]}: K39's bitwise tier "
-                                               "fails on sm_120, a contract finding against grouped-nf4-gemm"]
+        out["verdict"], out["why"] = "NO_GO", [f"P moved a bit on steps {p_moved[:8]}: K39's bitwise tier fails on "
+                                               "sm_120, a contract finding against grouped-nf4-gemm; P's timing is not ruled on"]
     elif p["lb"] >= GO_BAR:
         out["verdict"], out["why"] = "GO", [f"P {p['median']:.4f}x, lower bound {p['lb']:.4f} >= {GO_BAR}"]
     else:
@@ -276,7 +282,8 @@ def _band(x, lo, hi):
 def _grade(o):
     b = o.get("sweep_best")
     sel = o.get("identity_failures") or {}
-    curse = b and o["sweep_best_selection_over_p"] - b["over_p"]
+    sop = o.get("sweep_best_selection_over_p")
+    curse = sop - b["over_p"] if b and sop is not None else None
     return {
         "fidelity: today's both-GEMM step in 9.5-14.0 ms": _band(o["today_ms_per_step"], *PRED["fidelity_ms"]),
         "the headline: P's confirmed median T/P in 1.05-1.18": _band(o["P"]["median"], *PRED["headline"]),
@@ -384,9 +391,17 @@ def self_test():
     assert v(bad) == "VOID"                                                  # P did not run in the sweep
     bad = _fake()
     for r in bad["select"]["dn"]:
+        if r["plan"] == TODAY:                                               # the bench times only identical plans
+            r["identical"], r["step_replays_ms"] = False, None
+    o = verdict(bad)
+    assert o["verdict"] == "NO_GO" and o["contract_findings"][0]["arm"] == "P"   # P moved a bit at step 0: a finding,
+    assert o["P"]["moved_bits_on_steps"] == [IDENTITY_STEP]                      # the held-out rule, never a VOID
+    assert o["sweep_best_selection_over_p"] is None and "UNREAD" in o["predictions"].values()
+    bad = _fake()
+    for r in bad["select"]["gu"]:
         if r["plan"] == TODAY:
-            r["identical"] = False
-    assert v(bad) == "VOID"                                                  # P moved a bit on the identity step
+            r["step_replays_ms"][0] = r["step_replays_ms"][0][:5]
+    assert v(bad) == "VOID"                                                  # P identical but its replays malformed
     assert v(_fake(luts={"T": "tree", "P": "tree", "sweep": "prmt"})) == "VOID"   # P is not the prmt decode
     assert v(_fake(s0_sha256="0" * 64)) == "VOID"                            # not S0's picks
     assert v(_fake(rr_sha256="0" * 64)) == "VOID"                            # not the pinned replay
@@ -424,7 +439,7 @@ def self_test():
     bad = _fake()
     bad["select"]["dn"] = bad["select"]["dn"][:-1]
     assert v(bad) == "VOID"                                                  # a plan missing from the sweep
-    print("p156_reduce self-test OK (36 cases)")
+    print("p156_reduce self-test OK (39 cases)")
 
 
 def main():

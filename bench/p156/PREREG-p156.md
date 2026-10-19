@@ -26,8 +26,8 @@ read 1.003x. So neither K25's plan nor its empty tiles hold the headroom. Two fl
   lanes x 2.4-2.8 GHz, that is an issue estimate of **5.2-6.1 ms**.
 
 The recorded time is **11.75 ms** (P152's census; P155's microbench read 12.075 ms for the same pair). K25's plan could
-not move the instructions per weight; the plan grid only moved occupancy and loads in flight, and P155 found that is not
-the lever. **K39 moves the instructions per weight at the same plan.**
+not move the instructions per weight, and no plan in P155's grid was the lever (best 1.019x). **K39 moves the
+instructions per weight at the same plan.**
 
 **K39** (grouped-nf4-gemm#569) is K25's `lut="prmt"`: the NF4 nibbles decode through PTX byte-permute lookups instead
 of the select tree. It is opt-in and **bit-identical to `lut="tree"`**: 394 of 394 cases on the A2000 at the PR's head,
@@ -77,7 +77,9 @@ P155's instrument, with the decode as the moving argument. Everything not named 
 
 1. **IDENTITY.** Every grid plan runs step 0 at `lut="prmt"` on all 48 layers and both projections, and its outputs are
    compared with T's (`torch.equal`). A plan that fails to compile or launch is recorded with its error and excluded.
-   A plan that moves a bit is excluded and reported as a contract finding. If P itself fails here, the read is VOID.
+   A plan that moves a bit is excluded and reported as a contract finding. P follows the held-out steps' rule: if P
+   runs here but moves a bit, the read is **NO_GO with a contract finding**, and its timing is not ruled on; only a P
+   that fails to compile, launch or replay makes the read VOID (the instrument's failure, not the kernel's).
 2. **THE SWEEP** (reported only). Per projection, each prmt plan that kept T's bits is timed as a graph of its 48 calls
    on the 8 selection steps 0, 8, ..., 56: two warm calls, a capture, then 10 timed replays, in one seeded shuffle (seed
    156). P opens and closes each projection's sweep as a drift probe. The top 3 of each projection, **today's plan
@@ -110,13 +112,15 @@ probe first. Refused counters (P155's host refused them) are recorded and the la
     registered;
   - the card is not an RTX 5090 at sm_120, or fewer than 48 layers were timed;
   - a tile-table fault (the real tiles are not a prefix of one tile per expert);
-  - a plan is missing from the sweep, or P did not run cleanly or bit-identically on the identity step;
+  - a plan is missing from the sweep, or P failed to compile, launch or replay on the identity step (a P that ran and
+    moved a bit is the contract finding below, not a VOID);
   - **the carried plans differ from the sweep rule applied to the recorded replay times**;
   - the confirmation's arms, its 64 reps, their steps, rotations or replays are not as registered;
   - T2 is not bit-identical to T in every rep;
   - **the self-pair median is outside 0.99-1.01.**
-- **NO_GO with a contract finding:** P moves a bit on any held-out step. K39's bitwise tier would then fail on sm_120,
-  a finding against grouped-nf4-gemm, and no timing is ruled on.
+- **NO_GO with a contract finding:** P moves a bit on the identity step or on any held-out step. K39's bitwise tier
+  would then fail on sm_120, a finding against grouped-nf4-gemm, and no timing is ruled on. A deterministic mismatch
+  therefore reads the same NO_GO on every run and records its finding each time; it is not a VOID, and not a strike.
 - **GO:** P's **median of T/P over the 64 reps, minus 2 SE, >= 1.05**. SE is the standard error of the MEDIAN, P155's
   rule (`se_median`): the larger of sqrt(pi / 2) x sd / sqrt(64) and a 2,000-resample bootstrap from one generator
   seeded 156. The bar covers gate_up and down together, one graph holding both GEMMs.
@@ -141,16 +145,23 @@ issue estimate is 5.2-6.1 ms for T and **3.7-4.3 ms for P**, which puts P's issu
 |---|---|---|
 | **M1, overlap**: time = max(bytes, issue) + a fixed residual (11.75 - T's issue) | **1.02-1.11** | P's issue drops under the bytes, so the bytes bind and the residual stays |
 | **M3, serial**: the issue adds to everything else | **1.15-1.18** | every saved instruction is saved time |
-| **M2, overlap + occupancy**: M1, with the residual hidden in proportion to 50 -> 67 % occupancy | 1.19-1.28 | **the least likely** (below) |
+| **M2, overlap + occupancy**: M1, with the residual hidden in proportion to 50 -> 67 % occupancy | 1.19-1.28 | **the least likely**, on weak evidence (below) |
 
-**Why M2 is now the least likely.** P155 changed occupancy alone across its grid, and it did not pay:
-- the 67 %, 62-register gate_up plan (32, 64, 4, 1) ran **8.404 ms**, against today's **8.317 ms** at 50 %;
-- down's 67 % plans were the fastest, but by only 1.2 %;
-- across the grid, time ranked against theoretical occupancy (Spearman about -0.58) only because the heavy,
-  low-occupancy plans are slow; among the fast plans occupancy did not decide (serve-throughput's reading of P155).
+The bands leave gaps (1.11-1.15 and 1.18-1.19). A median in one reports no containing model: it lies between them, and
+the headline band spans the first gap.
 
-So K39's 67 % is not expected to hide the residual on its own; what K39 moves that P155 could not is the instructions
-per weight. M2 stays registered as the alternative a MISS above the headline would point to.
+**Why M2 is the least likely, and why the evidence is weak.** P155 is weak evidence against M2:
+- **no faster plan:** no plan with higher theoretical occupancy was faster on gate_up. All six of its 67 % plans were
+  slower (T/plan 0.933-0.990); the best, (32, 64, 4, 1) with 62 registers, ran **8.404 ms** against today's
+  **8.317 ms**;
+- **a small gain:** on down, the three fastest plans were 67 %, the best by 1.2 %, and its other two 67 % plans ran
+  about a quarter slower;
+- **the limits:** P155 never varied occupancy alone, since its 67 % plans also change the stages or the tile width; and
+  this is theoretical occupancy, with the achieved occupancy unread (P155's record, e4b#1856).
+
+K39 raises theoretical occupancy at today's tile and pipeline, 80 to 64 registers at the same 3 stages: the comparison
+P155 could not make. So P156 tests M2 more cleanly than P155 could. M2 stays registered, the least likely on P155's
+weak evidence, and it is what a MISS above the headline would point to.
 
 | prediction | if HELD | if MISSED |
 |---|---|---|
@@ -159,7 +170,7 @@ per weight. M2 stays registered as the alternative a MISS above the headline wou
 | **Contract:** P and every swept prmt plan that runs keep T's bits | K39's bitwise tier holds on sm_120 across the grid | a contract finding to grouped-nf4-gemm, with the plans and steps |
 | **Registers:** T compiles to 80 registers a thread and P to 64, no spills (50 % and 67 % theoretical occupancy) | b1-decode's offline compile is the served one | the occupancy argument is re-based on the box's numbers |
 | **The self-pair** is within 0.005 of 1 (P155: 0.9999) | the instrument resolves the bar easily | a noisier card. The 2-SE guard carries it |
-| **The sweep's curse:** its best plan's selection-over-P exceeds its confirmed ratio to P by 0-0.03 (P155: 1.045 against 1.019, 0.027) | the sweep was honest, with a small curse | a large curse (above), or none at all (below) |
+| **The sweep's curse:** its best plan's selection-over-P exceeds its confirmed ratio to P by 0-0.03 (P155: 1.045 against 1.019, 0.026) | the sweep was honest, with a small curse | a large curse (above), or none at all (below) |
 
 **Toward the floors** (reported): at M1's midpoint, 1.065, P would read about 11.03 ms at P152's scale, 10.5 % of the
 6.81 ms of headroom; at M3's, 1.165, about 10.08 ms and 24.4 %. The headline's band, 1.05-1.18, is 8.2-26.3 % of it.
@@ -180,9 +191,11 @@ Condition 5, **done on 2026-10-19 (22:43-22:47Z), before this registration and b
 torch 2.8.0+cu128, triton 3.4.0. Its record is [`shakedown/shake_p156.json`](shakedown/shake_p156.json) (sha256
 `b7fd7320...`, pinned in `tests/test_p156.py`).
 - **What it ran:** grouped-nf4-gemm's `kernel/` at #569's head (193b9a9), the tree the merge commit carries byte for
-  byte (`git diff 193b9a9 68bbefc4 -- kernel/` is empty), so it is the pin's kernel. This kit's reducer, byte for byte.
-  This kit's bench, except its self-test, which gained four wiring checks after the run (the decode each arm and the
-  sweep pass); the timed code is the same.
+  byte (`git diff 193b9a9 68bbefc4 -- kernel/` is empty), so it is the pin's kernel. This kit's bench and reducer, with
+  two changes after the run, neither in the timed code. The bench's self-test gained four wiring checks (the decode
+  each arm and the sweep pass). In review, the reducer's identity step came to follow the held-out rule (a P that moves
+  a bit is a contract finding, not a VOID). The record reduces to SHAKEDOWN under the reducer this registration
+  ships.
 - **The harness, end to end:** both self-tests (the bench's 6 cases then, 7 now; the reducer's 36, with its mutants),
   the bench (rc 0 in 223 s), and the reducer, which reads **SHAKEDOWN** with every structural check passing. A
   shakedown is never graded.
