@@ -82,7 +82,7 @@ def depth_record(In, E, Fr):
     n = len(In[0])
     if not all(len(x) == n for x in (In[1], E[0], E[1], Fr[0], Fr[1])) or n < 3:
         raise ValueError(f"readers disagree on the row count (or fewer than 3 rows): {[len(x) for x in (*In, *E, *Fr)]}")
-    n0 = {name: round(max(abs(a - b) for a, b in zip(*runs)), 6) for name, runs in (("I", In), ("E", E), ("F", Fr))}
+    n0 = {name: max(abs(a - b) for a, b in zip(*runs)) for name, runs in (("I", In), ("E", E), ("F", Fr))}   # unrounded: compared below
     g = [a - b for a, b in zip(E[0], In[0])]
     e = [a - b for a, b in zip(E[0], Fr[0])]
     i = [a - b for a, b in zip(In[0], Fr[0])]
@@ -95,7 +95,8 @@ def depth_record(In, E, Fr):
     return {"rows": n, "g": _stat(g), "e": _stat(e), "i": _stat(i), "share_e": None if share is None else round(share, 4),
             "call_basis": "share" if n3 else "1 - var(i)/var(g)", "call_value": None if basis is None else round(basis, 4),
             "call": None if basis is None else _call(basis), "corr_e_i": None if rho is None else round(rho, 4),
-            "n0_max_abs_rerun": n0, "n0_holds": {k: v <= N0_TOL for k, v in n0.items()}}
+            "n0_max_abs_rerun": {k: round(v, 6) for k, v in n0.items()}, "n0_holds": {k: v <= N0_TOL for k, v in n0.items()},
+            "n3_holds": n3, "_sd_g": statistics.stdev(g)}            # every bar reads the UNROUNDED value (review); _sd_g feeds N1
 
 
 def _fit(depths, sds):
@@ -166,7 +167,8 @@ def reduce(spec, load=None):
             bterm[int(d["L"])] = base_term({"I": In[0], "E": E[0], "F": Fr[0]}, {"I": ui, "E": ue, "F": uf})
     Ls = sorted(recs)
     out = {"reducer": "bench/hpn/hpn_reduce.py", "framework": spec.get("framework"), "free_mib_at_claim": spec.get("free_mib_at_claim"),
-           "fitted_depths": Ls, "deepest_fit": Ls[-1] if Ls else None, "depths": {str(L): recs[L] for L in Ls},
+           "fitted_depths": Ls, "deepest_fit": Ls[-1] if Ls else None,
+           "depths": {str(L): {k: v for k, v in recs[L].items() if not k.startswith("_")} for L in Ls},
            "thresholds": {"share_e_dominant": round(SHARE_HI, 4), "share_i_dominant": round(SHARE_LO, 4), "n0_tol": 1e-5,
                           "n1_l2_bound": N1_L2_BOUND, "n3_rho": N3_RHO, "depth_floor": DEPTH_FLOOR,
                           "moot_ratio": MOOT_RATIO, "guard_z": GUARD_Z},
@@ -178,10 +180,11 @@ def reduce(spec, load=None):
         out.update(outcome="INSUFFICIENT_DEPTH", reason=f"the deepest fitted depth L{Ls[-1]} is below the L{DEPTH_FLOOR} floor: wait "
                                                         "for the sidecar to unload and retry")
         return out
-    sd_g = [recs[L]["g"]["sd"] for L in Ls]
     out["N0"] = {k: all(recs[L]["n0_holds"][k] for L in Ls) for k in ("I", "E", "F")}
-    out["N1"] = all(b > a for a, b in zip(sd_g, sd_g[1:])) and (2 not in recs or recs[2]["g"]["sd"] < N1_L2_BOUND)
-    out["N3"] = all(recs[L]["corr_e_i"] is not None and abs(recs[L]["corr_e_i"]) <= N3_RHO for L in Ls)
+    raw = [recs[L]["_sd_g"] for L in Ls]
+    rises = all(b > a for a, b in zip(raw, raw[1:]))
+    out["N1"] = None if 2 not in recs else (rises and recs[2]["_sd_g"] < N1_L2_BOUND)   # unreadable without L2 (review)
+    out["N3"] = all(recs[L]["n3_holds"] for L in Ls)            # the SAME test depth_record used for its call basis
     c1, c2 = recs[Ls[-2]]["call"], recs[Ls[-1]]["call"]
     out["two_deepest_calls"] = {str(Ls[-2]): c1, str(Ls[-1]): c2}
     out["N2_comparable"] = c1 == c2 == "comparable"

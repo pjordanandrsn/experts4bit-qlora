@@ -345,3 +345,50 @@ def test_the_fp32_reference_model_reproduces_hfs_own_fp32_forward_end_to_end(tmp
     f32b = hr.build_model_f32(Store(), str(tmp_path), None, deq=lambda key: w[key].detach().clone())
     with torch.no_grad():
         assert abs(f32b(input_ids=ids, labels=ids).loss.item() - a) > 1e-4
+
+
+# ------------------------------------------------------------- review: every bar reads the UNROUNDED value (a flip test per bar)
+def test_n0_flips_on_a_rerun_gap_just_past_1e5_that_rounds_to_1e5():
+    In, E, F = _synth(40, 0.01, 0.01, seed=6)
+    over = [In[0], [x + (1.04e-5 if k == 3 else 0.0) for k, x in enumerate(In[0])]]
+    at = [In[0], [x + (1.0e-5 if k == 3 else 0.0) for k, x in enumerate(In[0])]]
+    rec_over, rec_at = R.depth_record(over, E, F), R.depth_record(at, E, F)
+    assert rec_over["n0_max_abs_rerun"]["I"] == 1e-05 and rec_over["n0_holds"]["I"] is False     # it rounds to the bar, still fails
+    assert rec_at["n0_holds"]["I"] is True
+
+
+def test_n3_reads_the_same_unrounded_rho_in_the_depth_call_and_the_summary(tmp_path, monkeypatch):
+    monkeypatch.setattr(R, "_corr", lambda a, b: 0.20004)                                       # rounds to 0.2, which is past 0.2
+    rec = R.depth_record(*_synth(50, 0.01, 0.01, seed=7))
+    assert rec["corr_e_i"] == 0.2 and rec["n3_holds"] is False and rec["call_basis"] == "1 - var(i)/var(g)"
+    _, out = _run(tmp_path, [(2, 0.003, 0.003), (4, 0.006, 0.006), (8, 0.012, 0.012)])
+    assert out["N3"] is False
+
+
+def _gscaled(n, a, seed):
+    """I = F; E = F + a z with z standardized (mean 0, sd 1), so sd_r(g) = a exactly."""
+    rng = random.Random(seed)
+    F = [1.9 + rng.gauss(0, 0.2) for _ in range(n)]
+    z = [rng.gauss(0, 1) for _ in range(n)]
+    m, s = sum(z) / n, (sum((x - sum(z) / n) ** 2 for x in z) / (n - 1)) ** 0.5
+    E = [f + a * (x - m) / s for f, x in zip(F, z)]
+    return [F, F], [E, E], [[f + 0.0 for f in F]] * 2
+
+
+def test_n1_reads_a_rise_finer_than_the_stored_rounding():
+    """sd(g) = 0.0100001 at L4 and 0.0100004 at L8: both store as 0.01, but it rises, and N1 holds."""
+    data = {2: _gscaled(300, 0.005, 1), 4: _gscaled(300, 0.0100001, 2), 8: _gscaled(300, 0.0100004, 3)}
+    spec = {"depths": [{"L": L, "inloop": [f"{L}i0", f"{L}i1"], "eval": [f"{L}e0", f"{L}e1"], "fref": f"{L}f"} for L in data]}
+    load = {"inloop": lambda p: data[int(p[:-2])][0][int(p[-1])], "eval": lambda p: data[int(p[:-2])][1][int(p[-1])],
+            "fref": lambda p: data[int(p[:-1])][2]}
+    out = R.reduce(spec, load=load)
+    assert out["depths"]["4"]["g"]["sd"] == out["depths"]["8"]["g"]["sd"] == 0.01 and out["N1"] is True
+    assert not any(k.startswith("_") for k in out["depths"]["4"])                                # the private fields stay inside
+
+
+def test_n1_is_unreadable_without_l2():
+    data = {4: _gscaled(300, 0.006, 2), 8: _gscaled(300, 0.012, 3)}
+    spec = {"depths": [{"L": L, "inloop": [f"{L}i0", f"{L}i1"], "eval": [f"{L}e0", f"{L}e1"], "fref": f"{L}f"} for L in data]}
+    load = {"inloop": lambda p: data[int(p[:-2])][0][int(p[-1])], "eval": lambda p: data[int(p[:-2])][1][int(p[-1])],
+            "fref": lambda p: data[int(p[:-1])][2]}
+    assert R.reduce(spec, load=load)["N1"] is None
