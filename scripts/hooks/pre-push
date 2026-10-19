@@ -17,6 +17,8 @@ PATS=$(mktemp)
 # grep -f treats '#' lines as literal patterns and BLANK lines as match-all —
 # strip both, or the scan matches every line in the repo (observed: 1603 hits).
 grep -vE '^[[:space:]]*(#|$)' .github/private-markers.txt > "$PATS" || true
+ADDPATS=$(mktemp)
+grep -E '^#added-only: ' .github/private-markers.txt | sed 's/^#added-only: //' > "$ADDPATS" || true
 n=$(wc -l < "$PATS" | tr -d ' ')
 [ "$n" -ge 20 ] || fail "pattern file collapsed to $n patterns — refusing to run a toothless scan"
 
@@ -58,6 +60,23 @@ while read -r _lref lsha _rref _rsha; do
            | grep -v 'guard-allow' || true)
     [ -z "$more" ] || hits="${hits}${hits:+$'\n'}${more}"
   done < <(grep -E '^#all-of: ' .github/private-markers.txt)
+  # "#added-only:" rules: only the lines this push ADDS (merged history keeps its old mentions), as in the workflow.
+  if [ -s "$ADDPATS" ]; then
+    if [ "$_rsha" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$_rsha^{commit}" 2>/dev/null; then
+      base=$_rsha
+    else
+      base=$(git merge-base "$lsha" origin/main 2>/dev/null || true)
+    fi
+    if [ -n "$base" ]; then
+      added=$(git diff -U0 --no-color "$base" "$lsha" -- . ':!.github/private-markers.txt' \
+                ':!.github/workflows/private-marker-guard.yml' ':!scripts/hooks/pre-push' \
+              | awk '/^\+\+\+ (b\/|\/dev\/null)/ { f = substr($0, 7); next } /^\+/ { print f ": " substr($0, 2) }' \
+              | grep -v 'guard-allow' | grep -i -E -f "$ADDPATS" || true)
+      [ -z "$added" ] || hits="${hits}${hits:+$'\n'}${added}"
+    else
+      echo "PRE-PUSH GUARD: no base for $lsha; the added-line check runs in CI" >&2
+    fi
+  fi
   if [ -n "$hits" ]; then
     # || true: under pipefail, head closing the pipe early would end the hook
     # with SIGPIPE (141) before the refusal below is printed.
@@ -65,5 +84,5 @@ while read -r _lref lsha _rref _rsha; do
     fail "private-lane markers in the tip tree (see above; 'guard-allow' to exempt a line)"
   fi
 done
-rm -f "$PATS"
+rm -f "$PATS" "$ADDPATS"
 exit 0

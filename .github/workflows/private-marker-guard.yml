@@ -38,6 +38,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the added-line check below needs the merge base
 
       - name: self-test — a check that cannot fail is not a check
         run: |
@@ -82,6 +84,8 @@ jobs:
           approval at https://cerin-amroth.slack.com/archives/CXXXXXXXXXX/p1700000000000000
           C0BV5028SGM
           moved to pjordanandrsn/adertha-agents
+          the launcher refuses unknown keys (adertha-agents#243)
+          a stuck load is not machine evidence (adertha#164)
           ingested by pjordanandrsn/org-corpus
           the run lock lives at ~/.adertha/rent-live.lock
           # Append-only ledger: one JSON object per line
@@ -110,6 +114,14 @@ jobs:
             exit 1
           fi
           echo "canary exercises all ${np} patterns"
+          # "#added-only:" rules (checked on added lines only, below): each must match a canary line too.
+          while IFS= read -r rule; do
+            p="${rule#\#added-only: }"
+            if ! grep -q -E -i -e "$p" /tmp/canary.md; then
+              echo "::error::#added-only rule is not exercised by the canary: ${p}"
+              exit 1
+            fi
+          done < <(grep -E '^#added-only: ' .github/private-markers.txt)
           # "#all-of:" rules. Each must match a canary line (the canary row lists
           # its keys in a different order from the store's) and must NOT match a
           # line missing one of its terms, or the --and has decayed into an OR.
@@ -207,3 +219,33 @@ jobs:
             exit 1
           fi
           echo "clean"
+
+      - name: refuse added-only markers in the lines this change adds
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          grep -E '^#added-only: ' .github/private-markers.txt | sed 's/^#added-only: //' > /tmp/added-only.txt || true
+          if [ ! -s /tmp/added-only.txt ]; then echo "no #added-only rules"; exit 0; fi
+          base="${PR_BASE:-${PUSH_BEFORE:-}}"
+          if [ -z "${base}" ] || [ "${base}" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            # a new branch, or a force-push past the old tip: compare with the default branch
+            git fetch -q origin "${DEFAULT_BRANCH}"
+            base=$(git merge-base HEAD FETCH_HEAD)
+          fi
+          mb=$(git merge-base "${base}" HEAD)
+          hits=$(git diff -U0 --no-color "${mb}" HEAD -- . ':!.github/private-markers.txt' \
+                   ':!.github/workflows/private-marker-guard.yml' ':!scripts/hooks/pre-push' \
+                 | awk '/^\+\+\+ (b\/|\/dev\/null)/ { f = substr($0, 7); next } /^\+/ { print f ": " substr($0, 2) }' \
+                 | grep -v 'guard-allow' | grep -i -E -f /tmp/added-only.txt || true)
+          if [ -n "${hits}" ]; then
+            echo "::error::this change ADDS a private control-plane reference to the public tree:"
+            printf '%s\n' "${hits}" | head -40 || true
+            echo ""
+            echo "Cite the public PR, file or run id instead, or append 'guard-allow' if the mention is deliberate."
+            exit 1
+          fi
+          echo "clean: no added line carries an #added-only marker (since ${mb:0:12})"

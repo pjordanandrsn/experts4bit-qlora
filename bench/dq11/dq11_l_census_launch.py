@@ -76,7 +76,7 @@ EXECUTOR_RE = re.compile(r"CTO(/[A-Za-z0-9._-]+)+")
 
 def executor_sha256(identity: str) -> str:
     return hashlib.sha256(identity.encode("utf-8")).hexdigest()
-#: The launcher refuses any top-level manifest key it does not read (adertha-agents#243), so the census's own record
+#: The launcher refuses any top-level manifest key it does not read, so the census's own record
 #: (its status, closure and authorization basis) travels in ``lane_record``, which the launcher copies into the receipt.
 LANE_RECORD_FIELDS = frozenset({"status", "l_census", "authorization_basis"})
 #: The top-level fields a bound manifest adds to the registered template, all of them launcher terms.
@@ -818,7 +818,7 @@ def bind_manifest(template_path: Path, envelope_path: Path, summary: dict,
         raise ValueError("run id is outside the envelope")
     template = json.loads(template_path.read_text())
     manifest = attempt_template(template, run_id)
-    lane = manifest["lane_record"]       # the launcher refuses unknown top-level keys (adertha-agents#243): ours live here
+    lane = manifest["lane_record"]       # the launcher refuses unknown top-level keys: ours live here
     lane["status"] = "ENVELOPE_BOUND_PENDING_FRESH_GATES"
     manifest["heads"] = {"e4b": merged_clean(e4b), "adertha": merged_clean(controller)}
     manifest["command"] = (f"DQ11_ASSET_DIR={assets.resolve()} DQ11_REQUIRED_DRIVER={driver} "
