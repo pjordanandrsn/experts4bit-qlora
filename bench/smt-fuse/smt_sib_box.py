@@ -186,7 +186,8 @@ def summarize(res):
     out["void_by_host"] = len(readable) < MIN_TRIPLES
     out["reading"] = None if out["void_by_host"] else {k: out[f"sib_over_phys_{k[:-2]}"]["reading"] for k in READ}
     out["reported"] = None if out["void_by_host"] else {k: out[f"sib_over_phys_{k[:-2]}"]["reading"] for k in REPORTED}
-    out["bytes_identical"] = (len({r["fused_sha256"] for r in reps}) == 1 and len({r["nf4_sha256"] for r in reps}) == 1)
+    fused, nf4 = {r["fused_sha256"] for r in reps}, {r["nf4_sha256"] for r in reps}
+    out["bytes_identical"] = len(fused) == 1 and len(nf4) == 1 and "MISMATCH" not in fused | nf4   # within-process too
     return out
 
 
@@ -320,6 +321,8 @@ def self_test():
     assert abs(m["throttled_cpu_s"] - 0.5) < 1e-12 and m["pool"] == 12 and len(m["repeats"]) == 5
     assert m["fused_sha256"] == "a" and m["nf4_sha256"] == "b" and flagged(dict(m, arm="SIB"))
     assert median_of(blocks[:4] + [dict(blocks[4], nf4_sha256="z")])["nf4_sha256"] == "MISMATCH"
+    allbad = [dict(x, nf4_sha256="MISMATCH") for x in trip * 4]          # nondeterminism inside EVERY process
+    assert summarize({"reps": allbad, "experts": 128})["bytes_identical"] is False
     n += 1
     print(f"smt_sib_box self-test OK ({n}/7 cases)")
     return 0

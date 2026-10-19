@@ -131,5 +131,5 @@ def test_amendment_1_the_sibling_probe_is_the_registered_design():
     assert 'case "$SMT_FUSE_RUN_ID" in smt-sib-*) MODE=sib;; *) MODE=fuse;; esac' in RUN
     assert "--exclude '/venv*'" in DRIVE and "--exclude='./venv*'" in DRIVE          # the box venv never comes back
     for s in ("Amendment 1", "SIB/PHYS", "fresh process", "before torch is", "K = min(16, floor(quota / 2.5))",
-              "PHYS, SIB, WIDE, WIDE, SIB, PHYS", "8 triples", "25 %", "VOID_BY_HOST", "5 times timed", "about 35 %", "never a ruling", "Worst $0.64"):
+              "PHYS, SIB, WIDE, WIDE, SIB, PHYS", "8 triples", "25 %", "VOID_BY_HOST", "5 times timed", "SIB/PHYS not resolved below about 0.65", "never a ruling", "Worst $0.64"):
         assert s in PREREG, s

@@ -116,11 +116,13 @@ The narrow answer is kept; this amendment asks the real question. It is still a 
   - range entirely **below 1**: the second hardware thread **helps** this op, by the median;
   - range entirely **above 1**: it **hurts**;
   - range **includes 1**: **no resolved effect**.
-- **Resolution, stated before data:** resampling `smt-fuse-2`'s own `fuse` reps (log spread 0.30 per block) into
-  medians of 5 for each arm, a true SIB/PHYS gain reaches "below 1" in all 8 triples with probability 0.26 at 20 %,
-  0.65 at 30 % and 0.78 at 35 %. **So a fuse effect smaller than about 35 % reads `includes_1` at least one time in
-  five by construction, and a null reads "no measurable fuse effect larger than about 35 %", never "no
-  effect".** The same calculation on `block` (log spread 0.075) gives about 12 %. The min-max range rule is kept.
+- **Resolution, stated before data, in ratio terms:** resampling `smt-fuse-2`'s own `fuse` reps (log spread 0.30 per
+  block) into medians of 5 for each arm, a true **SIB/PHYS of 0.80, 0.70, 0.65 or 0.60** (fuse time 20, 30, 35 or 40 %
+  lower) reads "below 1" in all 8 triples with probability 0.26, 0.65, 0.78 and 0.90. **So a true fuse SIB/PHYS above
+  about 0.65 reads `includes_1` at least one time in five by construction, and a null reads "no measurable fuse effect:
+  SIB/PHYS not resolved below about 0.65", never "no effect".** (As a speedup, 1/0.65 = 1.54x; a 35 % SPEEDUP, SIB/PHYS
+  0.74, is resolved only about half the time.) The same calculation on `block` (log spread 0.075) gives a SIB/PHYS of
+  about 0.88. A within-process MISMATCH in any rep fails bytes identity. The min-max range rule is kept.
 - **Reported, never read:** SIB/PHYS on `block` (what the loader pays; offload dominates it and is flat with the pool),
   SIB/WIDE (what the second thread is worth against a real core; WIDE also spans more cache, so this ratio is
   confounded), every other segment's ratios, and the per-arm medians per layer.
