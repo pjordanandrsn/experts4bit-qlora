@@ -143,13 +143,16 @@ def cap_faults(name, r, arm, *, captured) -> list:
 
 
 def dense_faults(name, r, arm, *, measure=False) -> list:
-    """The knob's engagement. S1: every fused qkv_proj and o_proj swapped (96), and every one routed one-row calls and
-    none routed a call of 2+ rows. At the speed build those calls are bucket 1's capture and warm-ups (``graph_status``
-    and bucket 1's replays bind them to W1); with ``measure``, SANE's eager T == 1 decode. S0: nothing swapped. A zero
+    """The knob's engagement. S1: every fused qkv_proj and o_proj swapped (96), every one routed one-row calls, and no
+    one-row call fell back to ``F.linear`` (``"1"`` in ``passed_modules_by_rows``: a row that was not bf16, contiguous
+    and on the card, which would leave that module on cuBLAS in bucket 1's graph). Calls of 2+ rows pass by construction
+    and never route. At the speed build the one-row calls are bucket 1's capture and warm-ups (``graph_status`` and
+    bucket 1's replays bind them to W1); with ``measure``, SANE's eager T == 1 decode. S0: nothing swapped. A zero
     count is a VOID."""
     d = r.get("dense_gemv_bw") or {}
     eng = (r.get("dense_gemv_bw_measure") if measure else d.get("engagement")) or {}
     routed = eng.get("routed_modules_by_rows") or {}
+    passed = eng.get("passed_modules_by_rows") or {}
     if arm == "S0":
         if d.get("mode") != DENSE["S0"] or d.get("modules") or eng.get("modules") or routed:
             return [f"{name}: S0 must swap nothing; it records {d} / {eng}"]
@@ -159,9 +162,10 @@ def dense_faults(name, r, arm, *, measure=False) -> list:
             DENSE["S1"], DENSE_MODULES, DENSE_SHAPES, DENSE_PER_TARGET):
         out.append(f"{name}: swapped {d.get('modules')} modules {d.get('per_target')} at {d.get('shapes')} (mode "
                    f"{d.get('mode')}), registered {DENSE_MODULES} {DENSE_PER_TARGET} at {DENSE_SHAPES}")
-    if eng.get("modules") != DENSE_MODULES or routed != {"1": DENSE_MODULES}:
-        out.append(f"{name}: routed {routed} over {eng.get('modules')} modules, registered all {DENSE_MODULES} at one "
-                   "row and none at 2+ (a zero count is a VOID)")
+    if eng.get("modules") != DENSE_MODULES or routed != {"1": DENSE_MODULES} or "1" in passed:
+        out.append(f"{name}: routed {routed}, passed {passed} over {eng.get('modules')} modules, registered all "
+                   f"{DENSE_MODULES} routing one-row calls and none falling back to F.linear at one row (a zero count "
+                   "is a VOID)")
     return out
 
 
@@ -306,7 +310,7 @@ def _cap_record(arm, *, captured, plans=None):
             "plans": plans if plans is not None else {str(b): {"calls": 48, "plan": p, "n_split": n} for b, (p, n) in want.items()}}
 
 
-def _dense_record(arm, *, routed=None, modules=None, captured=True):
+def _dense_record(arm, *, routed=None, modules=None, captured=True, fell_back=0):
     """The knob's record as build_engine writes it: at a graph build the captures routed bucket 1; an eager build (SANE)
     routed nothing yet."""
     if arm == "S0":
@@ -315,14 +319,15 @@ def _dense_record(arm, *, routed=None, modules=None, captured=True):
     rt = routed if routed is not None else ({"1": m} if captured else {})
     return {"mode": "1", "modules": m, "shapes": [list(s) for s in DENSE_SHAPES], "per_target": dict(DENSE_PER_TARGET),
             "engagement": {"modules": m, "routed_modules_by_rows": rt,
-                           "passed_modules_by_rows": {str(b): m for b in BUCKETS[1:]} if captured else {}}}
+                           "passed_modules_by_rows": {**({"1": fell_back} if fell_back else {}),
+                                                      **({str(b): m for b in BUCKETS[1:]} if captured else {})}}}
 
 
-def _measure_record(arm, *, routed=None):
+def _measure_record(arm, *, routed=None, fell_back=0):
     if arm == "S0":
         return {"modules": 0, "routed_modules_by_rows": {}, "passed_modules_by_rows": {}}
     return {"modules": DENSE_MODULES, "routed_modules_by_rows": {"1": DENSE_MODULES} if routed is None else routed,
-            "passed_modules_by_rows": {"512": DENSE_MODULES}}
+            "passed_modules_by_rows": {**({"1": fell_back} if fell_back else {}), "512": DENSE_MODULES}}
 
 
 def _telem(pl=575.0):
@@ -431,6 +436,9 @@ def _cases() -> list:
         ("S1 routed nothing (a zero count)", v(arms(S1b={"dense": _dense_record("S1", routed={})})) == "VOID"),
         ("S1 routed at 2 rows", v(arms(S1c={"dense": _dense_record("S1", routed={"1": 96, "2": 96})})) == "VOID"),
         ("S1 routed on half its modules", v(arms(S1d={"dense": _dense_record("S1", routed={"1": 48})})) == "VOID"),
+        ("an S1 capture call fell back to F.linear at one row (routed everywhere, passed on one)",
+         v(arms(S1b={"dense": _dense_record("S1", fell_back=1)})) == "VOID"),
+        ("S1's SANE fell back at one row", v(arms(), n=_fake_sane("S1", measure=_measure_record("S1", fell_back=1))) == "VOID"),
         ("S1 swapped 48 modules", v(arms(S1a={"dense": _dense_record("S1", modules=48)})) == "VOID"),
         ("S0 swapped modules", v(arms(S0c={"dense": _dense_record("S1")})) == "VOID"),
         ("S1's SANE routed nothing", v(arms(), n=_fake_sane("S1", measure=_measure_record("S1", routed={}))) == "VOID"),

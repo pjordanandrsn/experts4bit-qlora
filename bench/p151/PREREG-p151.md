@@ -63,7 +63,10 @@ The first rung that applies decides. A3's checks are carried verbatim.
      in SANE;
    - **the knob's engagement** fails:
      - **S1** must swap all 96 modules (48 fused `qkv_proj` at 5120 x 2048 and 48 `o_proj` at 2048 x 4096). Every one
-       must route a one-row call and none a call of 2+ rows (`routed_modules_by_rows == {"1": 96}`).
+       must route a one-row call (`routed_modules_by_rows == {"1": 96}`).
+     - **No one-row call may fall back** to `F.linear` (`"1"` absent from `passed_modules_by_rows`). A row that is not
+       bf16, contiguous and on the card passes to cuBLAS, and in bucket 1's capture that leaves the module on cuBLAS for
+       every W1 replay. Calls of 2+ rows always pass, by construction.
      - At the speed build those calls are bucket 1's capture and warm-ups; `graph_status` and bucket 1's replays bind
        them to W1. In SANE they are the eager T == 1 decode.
      - **S0** must swap nothing, at the build or in SANE.
@@ -112,13 +115,14 @@ The first rung that applies decides. A3's checks are carried verbatim.
   sha256 pinned);
 - **the runner:** the power floor before the install, the premise at 31, eight arms at five reps, only the knob set per
   arm, and NOISY and VOID not readings;
-- **the self-tests**, run from one directory as on the box: the reducer's 45 cases include P143 A2's real first block,
+- **the self-tests**, run from one directory as on the box: the reducer's 47 cases include P143 A2's real first block,
   which reads NOISY; the box has 22;
 - **verbatim carries:** A3's checks and rungs in the reducer, A2's `ServedKV` in the box;
-- **sixteen reducer mutants**, each killed by the self-test:
+- **seventeen reducer mutants**, each killed by the self-test:
   - the ten A3 registered, adapted;
   - the knob's engagement unchecked at the speed build;
   - the same in SANE;
+  - a one-row fallback to `F.linear` accepted;
   - a zero count accepted;
   - an unreadable power limit accepted;
   - the floor at 450 W;

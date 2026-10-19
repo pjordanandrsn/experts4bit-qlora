@@ -128,9 +128,11 @@ REDUCER_MUTANTS = [
     ("        void += dense_faults(t, r, t[:2])\n", ""),
     # ... nor in SANE
     ("        void += dense_faults(name, rec, arm, measure=True)\n", ""),
+    # a one-row fallback to F.linear accepted (docs-upkeep's review: routed everywhere, cuBLAS in the capture)
+    (' or routed != {"1": DENSE_MODULES} or "1" in passed:', ' or routed != {"1": DENSE_MODULES}:'),
     # a zero count accepted
-    ('    if eng.get("modules") != DENSE_MODULES or routed != {"1": DENSE_MODULES}:',
-     '    if routed and routed != {"1": DENSE_MODULES}:'),
+    ('    if eng.get("modules") != DENSE_MODULES or routed != {"1": DENSE_MODULES} or "1" in passed:',
+     '    if routed and routed != {"1": DENSE_MODULES} or "1" in passed:'),
     # an unreadable power limit accepted
     ("                if pl is None or pl < MIN_POWER_W:", "                if pl is not None and pl < MIN_POWER_W:"),
     # the floor lowered to a capped board's
