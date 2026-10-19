@@ -1,0 +1,113 @@
+{
+ "approvals": [
+  {
+   "agent": "fixture",
+   "approval_url": "https://github.com/pjordanandrsn/experts4bit-qlora/issues/1083#issuecomment-6256703467",
+   "role": "fixture",
+   "usd_estimate": 0.9345
+  }
+ ],
+ "artifacts": [
+  {
+   "bytes": 12457,
+   "path": "receipt.json",
+   "sha256": "46721b2e0fb351e8dec6ea0a6861b871e58a7926a3e69750a5ebf52467943f99"
+  }
+ ],
+ "branch": "HEAD",
+ "command": "<local command omitted from public test fixture>",
+ "commit_sha": "c5e3fdb028f28af54816cd1c58f75d9c3bd373f5",
+ "complete": true,
+ "configuration": {
+  "download_gb": 27.0,
+  "dry_run": false,
+  "gpu": "RTX 5090",
+  "image": "pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+  "max_download_usd_per_gb": 0.011,
+  "usd_per_hour": 0.85,
+  "usd_per_hour_declared": 0.85,
+  "usd_per_hour_source": "policy gpu_usd_per_hour[RTX 5090]",
+  "vast_anchor_exclusion_receipts": [],
+  "vast_direct_ssh": true,
+  "vast_host_fault_exclusion_receipts": [],
+  "vast_host_ram_gb": {
+   "max": null,
+   "min": 98
+  },
+  "vast_lane_exclusion_receipts": [],
+  "vast_manual_exclusions": [],
+  "vast_pcie": null,
+  "vast_pin": {
+   "machine_id": "147454",
+   "offer_ids": [
+    "55495601"
+   ]
+  },
+  "vast_preflight_bandwidth": "none",
+  "vast_preflight_exclusion_receipts": [],
+  "vast_replication_exclusion_receipts": [],
+  "vast_required_driver": "595.91.07",
+  "wallclock_h": 0.75
+ },
+ "container_image": "pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+ "cost_usd": {
+  "actual": 0.015,
+  "estimated": 0.9345
+ },
+ "cpu": "unknown",
+ "dataset": "none",
+ "dataset_hash": "none",
+ "decision": "pending experts4bit-qlora#1083",
+ "dependencies": {
+  "python": "3.14.8"
+ },
+ "dirty_tree": false,
+ "environment": {
+  "vast_contract_id": "56654961",
+  "vast_gpu_name": "RTX 5090",
+  "vast_machine_id": "147454",
+  "vast_offer_rates": "{\"disk_gb\": 320, \"download_gb_assumed\": 27.0, \"download_per_gb\": 0.0026041666666666665, \"gpu_ph\": 0.5866666666666667, \"hourly\": 0.6755555555555556, \"storage_ph\": 0.08888888888888888}",
+  "vast_pin": "{\"machine_id\": \"147454\", \"offer_ids\": [\"55495601\"]}",
+  "vast_preflight": "failed",
+  "vast_required_driver": "595.91.07",
+  "vast_runtype": "ssh_direc ssh_proxy",
+  "vast_skipped_stale_offers": "[]",
+  "vast_verification": "verified"
+ },
+ "executed_by": "fixture",
+ "expected_result": "Report the seven classes, overlap and host residual with 100% classified events and <=1 us/update wall closure; min of three captured C_j/T values drives only a separate BUILD proposal or lane closure.",
+ "experiment_id": "dq11-l-census-7",
+ "failure_criteria": "Missing source/input/driver/offer identity, timeout, tariff or packet cap, canary or K8 failure, profiler attribution ambiguity, event loss, >1 us closure residual, nonfinite evidence or teardown uncertainty yields CENSUS_REFUSAL; no retry, BUILD choice or new paid draw without review.",
+ "finished_at": "2026-10-19T02:30:28Z",
+ "gpu_count": 1,
+ "gpu_model": "RTX 5090",
+ "hypothesis": "The unchanged DQ11 L path has a certified MLP-adapter device interval union ceiling at least 0.10 of its fresh unprofiled median update T; otherwise rank qkv/o by the same preregistered line or close BUILD.",
+ "instance_id": "56654961",
+ "metrics": {},
+ "model": "mistralai/Mistral-7B-v0.1",
+ "model_hash": "none",
+ "model_revision": "27d67f1b5f57dc0953326b2601d68371d40ea8da",
+ "notes": "pre-flight failed: instance 56654961 is `loading` after 600 s (stuck loading) (guard pid 73922 armed at 2026-10-19T02:20:17Z); command not run",
+ "preregistration": "bench/dq11/DQ11-L-CENSUS-PREREG.md",
+ "provider": "vast:verified-secure",
+ "ram": "unknown",
+ "repo": "pjordanandrsn/experts4bit-qlora",
+ "requested_by": "fixture",
+ "result": "invalid",
+ "reviewed_by": null,
+ "runtime_seconds": 613.2347576618195,
+ "seed": 3407,
+ "started_at": "2026-10-19T02:20:14Z",
+ "status": "NOT_RUN",
+ "storage": "320",
+ "success_criteria": "Unchanged 13b science and merged instrument closures; exact 5090/driver, sealed inputs/wheels, native SDPA and bitwise observer-removal canary; one fresh unprofiled L40 reference plus separate L40 capture at updates 6-8; K8 quality; every event classified and wall closure; hashes, invoice and authenticated teardown with empty list.",
+ "teardown_proof": {
+  "at": "2026-10-19T02:30:27Z",
+  "complete": true,
+  "evidence": "{\"destroy\": {\"at\": \"2026-10-19T02:30:27Z\", \"http\": 200, \"instance_id\": \"56654961\", \"method\": \"vast-destroy\"}, \"instance_absent\": true, \"list_after\": []}",
+  "instance_id": "56654961",
+  "method": "vast-destroy",
+  "reason": "preflight-failed"
+ },
+ "work_id": "experts4bit-qlora#1083"
+}

@@ -55,7 +55,10 @@ UPLOAD_RATE_CAP = Decimal("0.05")
 ALL_IN_CAP = Decimal("1.10")
 DISK_GB = 320
 IMAGE = "pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel"
-EXCLUDED_MACHINES = {"45511"}
+# 147454: stuck loading at the pre-flight on two envelopes in a row (census-7 and census-8, 2026-10-19). A journal's own
+# stall exclusion covers only its envelope, so the registered list carries it into the next one.
+EXCLUDED_MACHINES = {"45511", "147454"}
+NEXT_RUN_ID = "next"      # --run-id next: the first declared id the envelope journal has not used
 INSTRUMENT_FILES = (
     "dq11_l_census_run.py", "dq11_l_census_capture.py", "dq11_l_census_reduce.py"
 )
@@ -131,14 +134,15 @@ def check_static_budget() -> None:
         raise ValueError("upload reservation is smaller than evidence packet cap")
 
 
-def offer_row(offer: dict, provider) -> dict:
-    """Quote one raw controller-search offer; absent price evidence is a refusal."""
+def offer_row(offer: dict, provider, *, excluded=EXCLUDED_MACHINES, all_in: Decimal = ALL_IN_CAP) -> dict:
+    """Quote one raw controller-search offer; absent price evidence is a refusal. ``excluded`` and ``all_in`` are the
+    envelope journal's bounds for this attempt (``Permit``): machines earlier attempts stalled on, and the all-in left."""
     reasons = []
     if not direct_available(offer):
         reasons.append("direct SSH unavailable")
     machine = str(offer.get("machine_id", ""))
     oid = str(offer.get("id", ""))
-    if not machine.isdigit() or not oid.isdigit() or machine in EXCLUDED_MACHINES:
+    if not machine.isdigit() or not oid.isdigit() or machine in excluded:
         reasons.append("bad or excluded machine/offer identity")
     if offer.get("verification") != "verified" or offer.get("rentable") is not True or offer.get("external") is True:
         reasons.append("outside verified rentable secure provider class")
@@ -179,8 +183,9 @@ def offer_row(offer: dict, provider) -> dict:
             reasons.append("GPU+storage hourly exceeds $0.85")
         if download > DOWNLOAD_RATE_CAP or upload > UPLOAD_RATE_CAP:
             reasons.append("transport tariff exceeds registered cap")
-        if reserve(hourly, download, upload) > ALL_IN_CAP:
-            reasons.append("all-in 45-minute reservation exceeds $1.10")
+        if reserve(hourly, download, upload) > all_in:
+            reasons.append("all-in 45-minute reservation exceeds $1.10" if all_in == ALL_IN_CAP else
+                           f"all-in 45-minute reservation exceeds the envelope's remaining ${all_in} of $1.10")
     return {
         "id": oid, "machine_id": machine, "driver_version": driver,
         "direct_port_count": offer.get("direct_port_count"),
@@ -238,7 +243,8 @@ def stable_ids(samples: list[dict], machine: str, required: list[str] | None = N
 class HostContinuity:
     """Apply the registered continuous-presence rule independently to every host."""
 
-    def __init__(self) -> None:
+    def __init__(self, excluded=EXCLUDED_MACHINES) -> None:
+        self.excluded = frozenset(excluded)
         self.active: dict[str, dict] = {}
         self.maximum_seconds: dict[str, float] = defaultdict(float)
         self.resets: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
@@ -265,7 +271,7 @@ class HostContinuity:
         qualified = []
         for machine, rows in grouped.items():
             ids = [str(row.get("id", "")) for row in rows]
-            if (not machine.isdigit() or machine in EXCLUDED_MACHINES or len(set(ids)) != len(ids)
+            if (not machine.isdigit() or machine in self.excluded or len(set(ids)) != len(ids)
                     or any(not row.get("eligible") or row.get("machine_id") != machine or not oid.isdigit()
                            for row, oid in zip(rows, ids))):
                 self._end(machine, "ineligible_or_outside")
@@ -305,11 +311,12 @@ class HostContinuity:
 
 
 def observe_all_hosts(provider, packet_dir: Path, *, clock=time.monotonic,
-                      sleep=time.sleep, cutoff: float = DISCOVERY_CUTOFF_SECONDS) -> dict:
+                      sleep=time.sleep, cutoff: float = DISCOVERY_CUTOFF_SECONDS,
+                      excluded=EXCLUDED_MACHINES, all_in: Decimal = ALL_IN_CAP) -> dict:
     """Write every GET-only poll before admitting the first qualifying host."""
     polls_path = packet_dir / "all-host-polls.jsonl"
     history_path = packet_dir / "stable-host.json"
-    continuity = HostContinuity()
+    continuity = HostContinuity(excluded)
     start = clock()
     due = start
     count = 0
@@ -325,7 +332,7 @@ def observe_all_hosts(provider, packet_dir: Path, *, clock=time.monotonic,
                 offers = provider.search_offers("RTX 5090")
                 poll = {"utc": now(), "monotonic": clock(), "status": "PASS",
                         "filter": provider._filter("RTX 5090"),
-                        "offers": [offer_row(offer, provider) for offer in offers]}
+                        "offers": [offer_row(offer, provider, excluded=excluded, all_in=all_in) for offer in offers]}
             except (RuntimeError, ValueError, OSError, TypeError) as exc:
                 poll = {"utc": now(), "monotonic": clock(), "status": "ERROR",
                         "filter": provider._filter("RTX 5090"), "offers": [],
@@ -437,7 +444,7 @@ class ReadOnlyTransport:
 
 
 def live_provider(machine: str | None, controller: Path, e4b: Path,
-                  required_driver: str | None = None):
+                  required_driver: str | None = None, *, excluded=EXCLUDED_MACHINES):
     merged_clean(e4b)
     if not (e4b / "bench/dq11/DQ11-L-CENSUS-LAUNCH.md").is_file():
         raise ValueError("merged L-census launch amendment required before live search")
@@ -449,7 +456,7 @@ def live_provider(machine: str | None, controller: Path, e4b: Path,
 
     provider = vp.provider_from_env(
         run_label="dq11-l-census-read-only", min_disk_gb=DISK_GB,
-        min_gpu_ram_gb=30, excluded_machine_ids=EXCLUDED_MACHINES,
+        min_gpu_ram_gb=30, excluded_machine_ids=set(excluded),
         download_gb=float(DOWNLOAD_GB), max_download_usd_per_gb=float(DOWNLOAD_RATE_CAP),
         required_driver=required_driver, pinned_machine_id=machine,
     )
@@ -457,13 +464,15 @@ def live_provider(machine: str | None, controller: Path, e4b: Path,
     return provider
 
 
-def observation(provider, machine: str, *, clock=time.monotonic) -> dict:
+def observation(provider, machine: str, *, clock=time.monotonic, excluded=EXCLUDED_MACHINES,
+                all_in: Decimal = ALL_IN_CAP) -> dict:
     # One call to the same provider adapter and filter the paid driver uses.
     offers = provider.search_offers("RTX 5090")
     return {
         "utc": now(), "monotonic": clock(), "status": "PASS",
         "machine_id": machine, "filter": provider._filter("RTX 5090"),
-        "offers": [offer_row(offer, provider) for offer in offers if str(offer.get("machine_id")) == machine],
+        "offers": [offer_row(offer, provider, excluded=excluded, all_in=all_in)
+                   for offer in offers if str(offer.get("machine_id")) == machine],
     }
 
 
@@ -606,6 +615,48 @@ def zero_instance_refusal(receipt: dict, approval_url: str, run_id: str) -> bool
             and any(a.get("approval_url") == approval_url for a in receipt.get("approvals", [])))
 
 
+def preflight_stall(receipt: dict, approval_url: str, run_id: str) -> tuple[str, Decimal] | None:
+    """A created instance that ended NOT_RUN at the controller's pre-flight with its command never run and its box
+    destroyed (census-7: stuck loading). Returns (machine, actual cost), or None. Every field read is the controller's
+    own structured record (status, environment.vast_preflight, the teardown proof and its reason); nothing is
+    inferred from a process or a missing file."""
+    proof = receipt.get("teardown_proof") or {}
+    env = receipt.get("environment") or {}
+    instance, machine = str(receipt.get("instance_id", "")), str(env.get("vast_machine_id", ""))
+    try:
+        cost = number((receipt.get("cost_usd") or {}).get("actual"), "stalled attempt cost")
+    except ValueError:
+        return None
+    if (receipt.get("experiment_id") == run_id
+            and receipt.get("work_id") == "experts4bit-qlora#1083"
+            and receipt.get("status") == "NOT_RUN" and receipt.get("result") == "invalid"
+            and receipt.get("complete") is True
+            and env.get("vast_preflight") == "failed"
+            and "command not run" in str(receipt.get("notes", ""))
+            and instance.isdigit() and machine.isdigit()
+            and proof.get("complete") is True and proof.get("method") == "vast-destroy"
+            and proof.get("reason") == "preflight-failed" and str(proof.get("instance_id")) == instance
+            and any(a.get("approval_url") == approval_url for a in receipt.get("approvals", []))):
+        return machine, cost
+    return None
+
+
+class Permit:
+    """One admitted attempt and the bounds the envelope journal leaves it: its run id, the spend of earlier attempts
+    that stalled before their command ran (the all-in is cumulative), and every machine they stalled on (excluded
+    from discovery). Calling it marks the durable controller boundary."""
+
+    def __init__(self, run_id: str, spent: Decimal, excluded, mark) -> None:
+        self.run_id, self.spent_usd, self.excluded_machines, self._mark = run_id, spent, frozenset(excluded), mark
+
+    @property
+    def budget_usd(self) -> Decimal:
+        return ALL_IN_CAP - self.spent_usd
+
+    def __call__(self) -> None:
+        self._mark()
+
+
 def write_attempt_state(path: Path, state: dict) -> None:
     temporary = path.with_suffix(".tmp")
     with temporary.open("w") as stream:
@@ -639,8 +690,12 @@ def committed_bytes(receipts: Path, path: Path) -> bytes:
 
 @contextmanager
 def attempt_permit(envelope: dict, run_id: str, receipts: Path, state_dir: Path):
-    """Serialize attempts, persist pre-controller phases, and fail closed on uncertainty."""
-    if not valid_run_ids(envelope) or run_id not in envelope["run_ids"]:
+    """Serialize attempts, persist pre-controller phases, and fail closed on uncertainty. ``run_id`` NEXT takes the
+    first declared id the journal has not used. A prior attempt passes only as a $0 provider refusal or as a
+    pre-command host stall (``preflight_stall``) whose cost the ledger journals; anything else -- an instance that ran
+    its command, or any doubt -- stops for the maintainer. The yielded ``Permit`` carries the cumulative all-in left
+    and the stalled machines."""
+    if not valid_run_ids(envelope) or (run_id != NEXT_RUN_ID and run_id not in envelope["run_ids"]):
         raise ValueError("invalid envelope run-id range or attempt cap")
     state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     with (state_dir / "attempts.lock").open("a+") as lock:
@@ -659,6 +714,11 @@ def attempt_permit(envelope: dict, run_id: str, receipts: Path, state_dir: Path)
         used = {row["run_id"]: row for row in attempts}
         if not set(used).issubset(envelope["run_ids"]) or len(used) != len(attempts):
             raise ValueError("invalid attempt journal")
+        if run_id == NEXT_RUN_ID:
+            run_id = next((x for x in envelope["run_ids"] if x not in used), None)
+            if run_id is None:
+                raise ValueError("run id burned or attempt cap reached: every declared id is used")
+        spent, stalled = Decimal(0), set()
         ledger = receipts / "receipts/experts4bit-qlora/ledger.jsonl"
         # Match the controller's ledger_check.load_ledger_entries exactly:
         # comments and blank lines are legal; malformed entries still raise.
@@ -683,13 +743,24 @@ def attempt_permit(envelope: dict, run_id: str, receipts: Path, state_dir: Path)
                 continue
             if prior.get("phase") not in ("admitted", "controller-invoked"):
                 raise ValueError("invalid attempt journal phase")
-            if (len(paths) != 1 or len(dirs) != 1 or len(rows) != 1
-                    or rows[0].get("cost_usd") != 0
-                    or not zero_instance_refusal(
-                        json.loads(committed_bytes(receipts, paths[0])), url, candidate)):
+            if len(paths) != 1 or len(dirs) != 1 or len(rows) != 1:
                 raise ValueError("created instance or uncertain prior attempt: stop for maintainer")
+            receipt = json.loads(committed_bytes(receipts, paths[0]))
+            if rows[0].get("cost_usd") == 0 and zero_instance_refusal(receipt, url, candidate):
+                continue
+            stall = preflight_stall(receipt, url, candidate)
+            try:
+                journaled = number(rows[0].get("cost_usd"), "journaled attempt cost")
+            except ValueError:
+                journaled = None
+            if stall is None or journaled != stall[1]:
+                raise ValueError("created instance or uncertain prior attempt: stop for maintainer")
+            stalled.add(stall[0])
+            spent += stall[1]
         if run_id in used or len(used) >= envelope["maximum_attempts"]:
             raise ValueError("run id burned or attempt cap reached")
+        if spent >= ALL_IN_CAP:
+            raise ValueError("the envelope's cumulative all-in is spent: stop for maintainer")
         row = {"run_id": run_id, "utc": now(), "phase": "admitted"}
         attempts.append(row)
         write_attempt_state(path, state)
@@ -701,7 +772,7 @@ def attempt_permit(envelope: dict, run_id: str, receipts: Path, state_dir: Path)
             write_attempt_state(path, state)
 
         try:
-            yield controller_invoked
+            yield Permit(run_id, spent, stalled, controller_invoked)
         except Exception:
             # A caught failure before the durable controller boundary proves no
             # controller call occurred. Process death/interrupt leaves admitted.
@@ -719,13 +790,14 @@ def launch(template_path: Path, envelope_path: Path, e4b: Path, controller: Path
     verify_envelope_comment(envelope)
     receipts = Path(os.environ.get("RECEIPTS_REPO", str(Path.home() / "adertha-receipts")))
     with attempt_permit(envelope, run_id, receipts,
-                        Path.home() / ".local/state/dq11-census-envelopes") as before_controller:
+                        Path.home() / ".local/state/dq11-census-envelopes") as permit:
         return launch_attempt(template_path, envelope_path, e4b, controller, assets, packet_dir,
-                              run_id=run_id, before_controller=before_controller)
+                              run_id=permit.run_id, before_controller=permit)
 
 
 def bind_manifest(template_path: Path, envelope_path: Path, summary: dict,
-                  e4b: Path, controller: Path, assets: Path, output: Path, *, run_id: str) -> dict:
+                  e4b: Path, controller: Path, assets: Path, output: Path, *, run_id: str,
+                  excluded=EXCLUDED_MACHINES) -> dict:
     """Pin by inclusion to exactly one qualified machine and its observed union."""
     if output.exists() or output.is_relative_to(e4b) or output.is_relative_to(controller):
         raise ValueError("bound manifest must be write-once and outside source")
@@ -736,7 +808,7 @@ def bind_manifest(template_path: Path, envelope_path: Path, summary: dict,
     machine = str(summary["machine_id"])
     offers = [str(x) for x in summary["offer_ids"]]
     driver = summary["driver"]
-    if (not machine.isdigit() or machine in EXCLUDED_MACHINES
+    if (not machine.isdigit() or machine in EXCLUDED_MACHINES or machine in excluded
             or len(set(offers)) != len(offers) or not all(x.isdigit() for x in offers)
             or not isinstance(driver, str)
             or not re.fullmatch(r"[0-9]{3}\.[0-9]{1,3}\.[0-9]{1,3}", driver)
@@ -912,7 +984,8 @@ def cpu_gate(manifest_path: Path, e4b: Path, controller: Path, assets: Path, out
     return report
 
 
-def quote(manifest_path: Path, history_path: Path, gate_path: Path, provider, output: Path) -> dict:
+def quote(manifest_path: Path, history_path: Path, gate_path: Path, provider, output: Path, *,
+          excluded=EXCLUDED_MACHINES, all_in: Decimal = ALL_IN_CAP) -> dict:
     if output.exists():
         raise ValueError("quote output must be write-once")
     manifest, history, gate = [json.loads(p.read_text()) for p in (manifest_path, history_path, gate_path)]
@@ -925,7 +998,7 @@ def quote(manifest_path: Path, history_path: Path, gate_path: Path, provider, ou
     if (history.get("machine_id") != machine or history.get("offer_ids") != approved
             or gate.get("passed") is not True or gate.get("manifest_sha256") != sha(manifest_path)):
         raise ValueError("history/gate do not bind exact approved manifest")
-    sample = observation(provider, machine)
+    sample = observation(provider, machine, excluded=excluded, all_in=all_in)
     rows = {r["id"]: r for r in sample["offers"]}
     if len(rows) != len(sample["offers"]):
         raise ValueError("duplicate offer identity in final search")
@@ -940,6 +1013,7 @@ def quote(manifest_path: Path, history_path: Path, gate_path: Path, provider, ou
         "manifest_sha256": sha(manifest_path), "history_sha256": sha(history_path),
         "gate_sha256": sha(gate_path), "machine_id": machine, "offer_ids": approved,
         "offers": [rows[oid] for oid in approved if oid in live_ids], "all_in_cap_usd": str(ALL_IN_CAP),
+        "all_in_remaining_usd": str(all_in), "excluded_machines": sorted(excluded),
         "worst_registered_reservation_usd": str(reserve(HOURLY_CAP, DOWNLOAD_RATE_CAP, UPLOAD_RATE_CAP)),
     }
     with output.open("x") as stream:
@@ -974,16 +1048,20 @@ def launch_attempt(template_path: Path, envelope_path: Path, e4b: Path, controll
     verify_envelope_comment(envelope)
     if packet_dir.exists() or packet_dir.is_relative_to(e4b) or packet_dir.is_relative_to(controller):
         raise ValueError("write-once launch packet must be outside source checkouts")
-    provider = live_provider(None, controller, e4b)
+    # the envelope journal's bounds for this attempt (a Permit from attempt_permit; the registered constants otherwise)
+    excluded = frozenset(EXCLUDED_MACHINES) | getattr(before_controller, "excluded_machines", frozenset())
+    all_in = getattr(before_controller, "budget_usd", ALL_IN_CAP)
+    spent = getattr(before_controller, "spent_usd", Decimal(0))
+    provider = live_provider(None, controller, e4b, excluded=excluded)
     packet_dir.mkdir(mode=0o700, parents=False)
-    summary = observe_all_hosts(provider, packet_dir)
+    summary = observe_all_hosts(provider, packet_dir, excluded=excluded, all_in=all_in)
     history = check_qualifying_window(packet_dir, summary)
     manifest_path = packet_dir / "bound-manifest.json"
     history_path = packet_dir / "stable-host.json"
     gate_path = packet_dir / "fresh-cpu-gate.json"
     quote_path = packet_dir / "final-quote.json"
     manifest = bind_manifest(template_path, envelope_path, summary, e4b, controller,
-                             assets, manifest_path, run_id=run_id)
+                             assets, manifest_path, run_id=run_id, excluded=excluded)
     env = dict(os.environ, E4B_REPO=str(e4b), ADERTHA_REPO=str(controller))
     command = ["bash", str(controller / "tools/pod-launch.sh"), str(manifest_path), envelope["approval_url"]]
     validation = [*command[:2], "--validate", *command[2:]]
@@ -991,7 +1069,7 @@ def launch_attempt(template_path: Path, envelope_path: Path, e4b: Path, controll
         raise ValueError("controller --validate refused; see packet output; nothing created")
     cpu_gate(manifest_path, e4b, controller, assets, gate_path)
     gate_end = time.monotonic()
-    quote(manifest_path, history_path, gate_path, provider, quote_path)
+    quote(manifest_path, history_path, gate_path, provider, quote_path, excluded=excluded, all_in=all_in)
     invocation = time.monotonic()
     validate_envelope(envelope, envelope_path, template_path, e4b, controller)
     if (invocation - history["samples"][-1]["monotonic"] > FRESH_SECONDS
@@ -1007,6 +1085,8 @@ def launch_attempt(template_path: Path, envelope_path: Path, e4b: Path, controll
                    "qualifying_window_sha256": summary["stable_history_sha256"],
                    "selected_machine": manifest["vast_pin_machine"],
                    "selected_offer_ids": manifest["vast_pin_offers"],
+                   "envelope_spent_usd": str(spent), "envelope_all_in_remaining_usd": str(all_in),
+                   "excluded_machines": sorted(excluded),
                    "from_last_search_seconds": invocation - history["samples"][-1]["monotonic"],
                    "from_gate_seconds": invocation - gate_end,
                    "guarded_controller_invoked": True}, stream, indent=2)
@@ -1051,7 +1131,8 @@ def main() -> None:
     prices.add_argument("--controller", type=Path, required=True)
     prices.add_argument("--out", type=Path, required=True)
     paid = sub.add_parser("launch", help="all-host five-minute search and same-minute guarded launch under envelope ACK")
-    paid.add_argument("--run-id", required=True)
+    paid.add_argument("--run-id", required=True,
+                      help="a declared id, or 'next' for the first one the envelope journal has not used")
     paid.add_argument("--template", type=Path, required=True)
     paid.add_argument("--envelope", type=Path, required=True)
     paid.add_argument("--e4b", type=Path, required=True)
