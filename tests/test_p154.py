@@ -28,7 +28,8 @@ PYPATH = os.pathsep.join(str(B / d) for d in ("p136", "sc1b", "p109"))
 RUN = (LANE / "p154_run.sh").read_text(encoding="utf-8")
 ROUTE = (LANE / "p154_route.py").read_text(encoding="utf-8")
 PREREG = (LANE / "PREREG-p154.md").read_text(encoding="utf-8")
-GUARD_H = 0.8
+GUARD_H = 1.0
+HEADROOM = 1.25   # the guard over the largest check: every term is one host's walls (P152's)
 # P152's read box (p152-5090-2's drive log, in the private receipt store): create to the drive's start 68 s, the power
 # floor 36 s and the install with its self-tests about 70 s more; the fetch about 610 s; the bake and prompts about 60 s;
 # the routing pass 83 s. The allowances below are those, rounded UP: boot 300, install 450, fetch 900, bake + prompts 180.
@@ -153,12 +154,12 @@ def test_the_pass_counts_and_reads_k25_where_the_library_calls_it():
     assert "gp, ga, dp, da = hr.h_gu_p, hr.h_gu_a, hr.h_dn_p, hr.h_dn_a" in ROUTE
 
 
-def _fits(guard_s, need):
-    """Each time-left check, at the measured setup's elapsed time before it, must leave its need plus the reserve."""
+def _checks(need):
+    """Each time-left check's total: the measured setup's elapsed time before it, plus its need, plus the reserve."""
     at = {"FETCH": ALLOW["boot"] + ALLOW["install"]}
     at["BAKE"] = at["FETCH"] + ALLOW["fetch"]
     at["ROUTE"] = at["BAKE"] + ALLOW["bake_prompts"]
-    return all(at[k] + need[k] + RESERVE <= guard_s for k in at)
+    return {k: at[k] + need[k] + RESERVE for k in at}
 
 
 def test_the_time_left_check_prints_what_it_compares():
@@ -173,8 +174,11 @@ def test_every_time_left_check_fits_the_guard():
     assert f"guard {GUARD_H} h" in PREREG
     need = {k: int(v) for k, v in re.findall(r"NEED_(FETCH|BAKE|ROUTE)=(\d+)", RUN)}
     assert set(need) == {"FETCH", "BAKE", "ROUTE"}
-    assert _fits(GUARD_H * 3600, need)
-    assert not _fits(0.75 * 3600, need), "a regression witness: 0.75 h leaves the routing check no room"
+    checks = _checks(need)
+    assert checks == {"FETCH": 2550, "BAKE": 2550, "ROUTE": 2730}, checks            # the PREREG's arithmetic
+    assert max(checks.values()) * HEADROOM <= GUARD_H * 3600, "the guard keeps 25 % headroom over the largest check"
+    assert "2730 x 1.25 = 3413 s <= 3600 s" in PREREG
+    assert "**A strike:** a time-left skip (STOP-2, rc 40)" in PREREG
 
 
 @pytest.mark.parametrize("script", ["p154_reduce.py", "p154_route.py"])

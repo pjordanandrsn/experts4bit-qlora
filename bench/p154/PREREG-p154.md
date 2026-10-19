@@ -81,20 +81,24 @@ P152's runner (`bench/p152/p152_run.sh`) cut to its routing pass, by counted sub
 
 ## Budget and sequencing
 
-- **One RTX 5090**, declared at $1.05/h, **guard 0.8 h**, 61 GB at <= $0.011/GB: worst 0.8 x $1.05 + 61 x $0.011 =
-  **$1.51**, under the standing rule. Disk 200 GB (the box's floor is 150 GB free).
-- **The guard is set by the fit.** Every time-left check must fit it given the measured setup, P149 Amendment 3's
-  lesson. The allowances are P152's read, rounded up: boot 300 s, install 450 s, fetch 900 s, bake and prompts 180 s.
-  With the runner's 600 s reserve after each step:
+- **One RTX 5090**, declared at $1.05/h, **guard 1.0 h**, 61 GB at <= $0.011/GB: worst 1.0 x $1.05 + 61 x $0.011 =
+  **$1.72**, under the standing rule. Disk 200 GB (the box's floor is 150 GB free).
+- **The guard is set by the fit, with headroom.** Every time-left check must fit given the measured setup, P149
+  Amendment 3's lesson. The allowances are P152's read, rounded up: boot 300 s, install 450 s, fetch 900 s, bake and
+  prompts 180 s. With the runner's 600 s reserve after each step:
   - the fetch check: 300 + 450 + 1200 + 600 = 2550 s;
   - the bake check: 300 + 450 + 900 + 300 + 600 = 2550 s;
-  - the routing check: 300 + 450 + 900 + 180 + 300 + 600 = **2730 s**, which fits 0.8 h (2880 s) and not 0.75 h
-    (2700 s). `tests/test_p154.py` asserts both.
+  - the routing check: 300 + 450 + 900 + 180 + 300 + 600 = **2730 s**, the largest.
+- Every term is one host's walls (P152's), and the fetch, which moves 61 GB, is the term that varies most between hosts.
+  So the guard carries at least **25 % headroom** over the largest check: 2730 x 1.25 = 3413 s <= 3600 s (1.0 h).
+  `tests/test_p154.py` asserts that headroom.
 - **Hosts:** only those with a recorded power cap of at least 575 W (`vast_min_power_limit_w: 575`,
   `vast_power_limit_unknown: exclude`), screened for a cap read within the last three days. The box's own floor check is
   the guard.
-- **Run ids** `p154-5090-1` to `-3`. Two consecutive HARNESS_ERROR, VOID or NOT_RUN runs stop the lane. A pre-flight
-  host stall or a power-floor refusal (rc 17) is not a strike.
+- **Run ids** `p154-5090-1` to `-3`. Two consecutive HARNESS_ERROR, VOID or NOT_RUN runs stop the lane.
+  - **Not a strike:** a pre-flight host stall, or a power-floor refusal (rc 17), before the install.
+  - **A strike:** a time-left skip (STOP-2, rc 40). The fit is the lane's, so a skip it causes is the lane's too
+    (the maintainer's ruling).
 - **Sequencing:** the rental waits for this registration's merge and the maintainer's final pass, then the shared
   pre-flight and `--validate` on the exact manifest.
 
