@@ -1,8 +1,7 @@
 # HP2: e4b vs Unsloth held-out parity, with the instrument gated at the mean level
 
-**Status: CLOSED 2026-10-19 at G1 (STOP), no competitor reading; see `RESULTS-HP2.md`.** Registered 2026-10-19, before any
-data (the maintainer's RED ruling on #1793, after one independent review and its re-checks). Its one box, `hp2-5090-1` ($2.144),
-read δ0 = −0.002691, SE 0.002378 and m_need = 0.014895 > 0.005. The row pairing did not cancel: ρ = 0.009. HP2 is a new
+**Status: registered 2026-10-19, before any data** (the maintainer's RED ruling on this PR, after one independent review and its
+re-checks). The run is `hp2-5090-1`, under the lane's standing rule (worst $6.09, below). HP2 is a new
 registration, **not a rerun of HP1**, and none of HP1's draws are scored data here. The reason is HP1's closed finding: **a per-row
 |gap| tolerance cannot certify a mean comparison** (`bench/hp1/RESULTS-HP1.md`). A new instrument rule therefore needs a new
 registration, with its bar fixed before any data.
@@ -153,10 +152,8 @@ offer at it), so the worst case carries storage. The manifest sets `lane_record.
 ## Predictions (scored HELD / FALSIFIED / UNTESTED)
 
 - **H1:** G1 passes both tiers. The mean bias is near 0 for both frameworks (HP1's e4b calibration mean was −0.0013), and the row
-  pairing reaches ρ ≥ 0.74, so m_need ≤ 0.005. **FALSIFIED** (`hp2-5090-1`): the mean biases were near 0 (+0.0009, +0.0036), but
-  ρ = 0.009 and m_need = 0.014895.
+  pairing reaches ρ ≥ 0.74, so m_need ≤ 0.005.
 - **H2:** K00 vs Unsloth reads PARITY or INCONCLUSIVE. BEATS is not predicted (TC1b's matched pair differed by 1e-4).
-  **UNTESTED:** G1 stopped the box before any confirmation arm.
 
 ## Rulings taken (maintainer, on this PR, before registration)
 

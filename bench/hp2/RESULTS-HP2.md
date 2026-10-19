@@ -5,6 +5,9 @@ instrument gated at the mean level (`HP2-PREREG.md`). Its one registered box **s
 instrument could not read the expected margin. No confirmation run was scored, so this record makes **no parity, BEATS or BEHIND
 claim** about either framework. A G1 stop is a reading, not a strike.
 
+**Status: CLOSED 2026-10-19 at G1 (STOP).** `HP2-PREREG.md` stays as registered (2026-10-19, before any data, on #1793); this
+record carries the status, the predictions' scores and the routing.
+
 **The null, as an interval:** no e4b vs Unsloth held-out bias difference larger than about 0.015 nats per row is resolvable with
 this instrument at R = 300 (|δ0| + 2 × SE = 0.0074; the two frameworks' mean biases are 0.0009 and 0.0036). This is not a claim
 that the two frameworks' biases are equal.
@@ -43,6 +46,14 @@ Per framework (reported, never gated):
   reproduced `hp2/g1.json` byte-identically. A separate recompute from both bases' per-row gaps gave sd_d 0.041194 (about
   √(0.0302² + 0.0283²)) and ρ 0.0094.
 
+## Predictions, scored
+
+- **H1** (G1 passes both tiers; the mean bias is near 0 for both frameworks, and the row pairing reaches ρ ≥ 0.74, so
+  m_need ≤ 0.005): **FALSIFIED.** The mean biases were near 0 (+0.0009, +0.0036), but ρ = 0.009 and m_need = 0.014895.
+- **H2** (K00 vs Unsloth reads PARITY or INCONCLUSIVE): **UNTESTED.** G1 stopped the box before any confirmation arm.
+
+## Routing
+
 **Arithmetic, labelled as NOT a registration.** At sd_r(d) = 0.041, the STOP tier needs SE_δ0 ≤ 0.00125 even at δ0 = 0. That
 takes R ≥ about 1,090 rows, and the held-out pool has 400. As built, this differential instrument reads a margin of about 0.015,
 not the 0.005 floor. No follow-up is planned unless someone needs 0.005 resolution. A pool of about 1.1k rows would be a new
@@ -55,5 +66,5 @@ registration.
 | `hp2-5090-1` | OK (`HP2_G1=STOP`) | $2.144 | machine 13549, $0.7411/h; 06:45Z–09:06Z; shakedown OK; teardown verified |
 | **Total** | | **$2.144** | registered worst $6.09 |
 
-The receipt is in the receipt store under `receipts/experts4bit-qlora/2026-10-19/hp2-5090-1/` (store commit `ff72c2e2`), with
-`tc1/hp2/g1.json` and `tc1/hp2/eval_cal.json`.
+The files that decide the reading are in [`receipts/hp2-5090-1/`](receipts/hp2-5090-1/README.md), byte-identical to the
+private receipt store, with `SHA256SUMS`. The launcher's receipt and ledger row are in that store.

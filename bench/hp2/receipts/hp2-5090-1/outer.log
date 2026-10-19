@@ -1,0 +1,177 @@
+FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407 pack=0
+FIXTURE hp2 (HP2-PREREG): steps=200 eval_n=48; calibration rows 97-396 (300), 1 step; P seeds=[3410 3411 3412]; e4b K00 vs Unsloth; axolotl out
+BOX A families: qwen3hp2; e4b 68801d3efba2f82aea2d6e3cc44c4f93bca929db gnf4 724ccc454f006c1a46836e434e997f31f293747f; run hp2-5090-1 instance 56686154 deadline 1792413915; prereg hp2/HP2-PREREG.md
+OMP_NUM_THREADS=64 (physical cores) box_class=RTX 5090
+CPU allotment 62 (cgroup quota capped by affinity; physical cores 64)
+CUDA_PROBE ok
+[2026-10-19T06:46:18Z] tc1/boxA: driver 590.48.01: cu130 venvs (venv-unsloth, venv-axolotl) will be built
+DRIVER 590.48.01 cu130_ok=1
+NVIDIA GeForce RTX 5090, 32607 MiB, 590.48.01, GPU-a6b50191-1ed2-aa78-3525-c02628cc3051, 435.00 W, 3090 MHz
+CPU(s):                                  128
+Model name:                              AMD EPYC 7B13 64-Core Processor
+MemTotal:       263744532 kB
+overlay         220G   63M  220G   1% /
+cgroup cpu.max absent
+cgroup cpu.cfs_quota_us/period_us 6143999/100000
+cgroup cpuset.cpus.effective absent
+affinity cpus 128 of 128
+[2026-10-19T06:46:18Z] tc1/boxA: venv-e4b (system torch): e4b @68801d3efba2f82aea2d6e3cc44c4f93bca929db + gnf4 @724ccc454f006c1a46836e434e997f31f293747f + transformers==5.18.0 bitsandbytes==0.50.2 peft==0.21.2
+pip(e4b) rc=0
+tc1 tripwire OK (e4b): 0.55.0 @ 68801d3efba2 gnf4 0.45.0 @ 724ccc454f00 torch 2.8.0+cu128 triton 3.4.0 transformers 5.18.0 bnb 0.50.2 peft 0.21.2
+FETCH PROBE OK in 0.8 s: config.json generation_config.json merges.txt model.safetensors.index.json tokenizer.json tokenizer_config.json vocab.json
+[2026-10-19T06:47:15Z] tc1/boxA: venv-unsloth-t28: unsloth[cu128-torch280]==2026.9.14 unsloth_zoo==2026.9.9 (the image's torch 2.8.0+cu128)
+pip(unsloth-t28) rc=0
+[2026-10-19T06:52:19Z] tc1/boxA: venv-unsloth: unsloth[cu130-torch2121]==2026.9.14 unsloth_zoo==2026.9.9 (torch 2.12.1+cu130)
+pip(unsloth) rc=0
+[2026-10-19T06:54:32Z] tc1/boxA: tripwire(unsloth-t28) failed on ScalingType -> removing torchao (P38 amendment 2)
+AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType
+tc1 tripwire OK (unsloth-t28): 2026.9.14 zoo 2026.9.9 torch 2.8.0+cu128 triton 3.4.0 transformers 5.5.0 bnb 0.50.2 peft 0.21.2 torchao None moe_backend native_torch separated_lora True FastModel True
+tc1 tripwire OK (unsloth): 2026.9.14 zoo 2026.9.9 torch 2.12.1+cu130 triton 3.7.1 transformers 5.5.0 bnb 0.50.2 peft 0.21.2 torchao 0.18.0+cu130 moe_backend grouped_mm separated_lora True FastModel True
+[2026-10-19T06:55:09Z] tc1/boxA: venv-unsloth + e4b @68801d3efba2f82aea2d6e3cc44c4f93bca929db + gnf4 @724ccc454f006c1a46836e434e997f31f293747f (the t212 row)
+pip(e4b-t212) rc=0
+tc1 tripwire OK (e4b-t212): 0.55.0 gnf4 0.45.0 torch 2.12.1+cu130
+[2026-10-19T06:55:41Z] tc1/boxA: venv-axolotl SKIPPED: the qwen3hp2 token runs no axolotl arm
+[2026-10-19T06:55:41Z] tc1/boxA: dataset alpaca (tp4_alpaca.py: unsloth/alpaca-cleaned @ pinned revision, seed 3407, 1200/48)
+DS alpaca n_train=1200 n_eval=48 seed=3407 sha256=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb -> /root/tc1/data/ds_alpaca.json
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+[2026-10-19T06:55:42Z] tc1/boxA: ===== HP2 family qwen3hp2 (Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39; calibration rows 97-396; P seeds [3410 3411 3412]; alarms e4b 2400 unsloth 3600)
+[2026-10-19T06:55:42Z] tc1/boxA: fetch qwen3hp2 (Qwen/Qwen3-30B-A3B, unpinned; pin ad44e777bcd18fa416d9da3bd8f70d33ebb85d39)
+staged in 5.8 min at /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+PIN OK qwen3hp2 staged=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+overlay         220G   71G  150G  33% /
+[2026-10-19T07:01:33Z] tc1/boxA: tokenise qwen3hp2 (alpaca, seq 2048) -> tokens_qwen3hp2.json
+TOKENS fam=qwen3hp2 template=alpaca n_train=1200 n_eval=48 train_tokens=235852 mean=196.5 pad_id=151643 sha=6d5783ce31b2ff57a05cca2db0446ab8bbf7697bd322d22e7b0545a25585b3b2
+TOKENS qwen3hp2 alpaca sha=6d5783ce31b2ff57a05cca2db0446ab8bbf7697bd322d22e7b0545a25585b3b2 eval_n=48 train_only_sha=604f314033450d4d4b5953bb13b3651d919d9b05c46a317e6267a3c2f6c007d7
+[2026-10-19T07:01:40Z] tc1/boxA: HP1 box-side shakedown: 2-layer cut of Qwen/Qwen3-30B-A3B @ ad44e777 -> /root/tc1/hp1/shake-cache
+[2026-10-19T07:01:43Z] tc1/boxA: arm qwen3hp2shake/e4b/hp1shake_e4b (arm=fused recipe=hp1shake steps=3 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=1800 expect_trainable=none --attn-4bit 1 --lora-init matched:3407 --adapter-dtype native --seed 3407 --order-seed 3407 --hp1-export /root/tc1/hp1/shake --hp1-export-base 1)
+    LOAD OK {"fam": "qwen3hp2shake", "framework": "e4b", "arm": "fused", "model_type": "qwen3_moe", "n_layers": 2, "load_s": 6.3, "verify": {"n_quantized": 2, "n_unquantized": 0}, "n_attn4": 8, "n_patched": 2, "structural_expected_n_attn4": 8, "detector_version": "0.55.0+det:8af1918f6c2e", "trainable_pa
+    PROLOGUE {"phase_seconds": {"preamble": 4.949, "load_weights": 3.41, "verify": 0.0, "attn4": 0.384, "lora": 0.006, "enable": 0.147, "tokenizer": 0.653, "census": 0.162, "frozen_probe": 0.141, "trainable_sha": 0.174, "counters": 0.0, "c1_before": 3.268, "eval0": 11.35, "optimizer": 0.222}, "phase_bud
+    CELL OK {"framework": "e4b", "fam": "qwen3hp2shake", "model": "local/Qwen3-30B-A3B-L2", "revision": "88f08b815a0dffa4e348a67de1d8b585ac183cee", "model_type": "qwen3_moe", "n_layers": 2, "weights_commit": "88f08b815a0dffa4e348a67de1d8b585ac183cee", "snapshot_dir": null, "arm": "fused", "tag": "hp1sha
+2 MiB
+[2026-10-19T07:02:28Z] tc1/boxA: arm qwen3hp2shake/unsloth/hp1shake_unsloth (arm=unsloth recipe=hp1shake steps=3 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=1800 expect_trainable=26771456 --grad-ckpt unsloth --unsloth-targets q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj --unsloth-moe-backend grouped_mm --lora-init native --adapter-dtype native --seed 3407 --order-seed 3407 --hp1-export /root/tc1/hp1/shake --hp1-export-base 1)
+    [unsloth_zoo.log|INFO]Unsloth: MoE bnb4bit grouped_mm with backward-recompute.
+    PROLOGUE {"phase_seconds": {"preamble": 2.172, "snapshot": 0.0, "load_weights": 9.204, "census": 0.067, "frozen_probe": 0.114, "trainable_sha": 0.136, "counters": 0.139, "c1_before": 3.062, "eval0": 15.008, "optimizer": 0.409}, "phase_budget_s": 630.0, "prologue_s": 44.486, "prologue_unattributed_s"
+    CELL OK {"framework": "unsloth", "fam": "qwen3hp2shake", "model": "local/Qwen3-30B-A3B-L2", "revision": "88f08b815a0dffa4e348a67de1d8b585ac183cee", "model_type": "qwen3_moe", "n_layers": 2, "weights_commit": null, "snapshot_dir": "/root/tc1/hp1/shake-cache/models--local--Qwen3-30B-A3B-L2/snapshots/8
+2 MiB
+{"bases": [["/root/tc1/hp1/shake/base_e4b_qwen3hp2shake", "OK"], ["/root/tc1/hp1/shake/base_unsloth_qwen3hp2shake", "OK"]], "arms": [["hp1shake_e4b", "SCORED", 10.979079], ["hp1shake_unsloth", "SCORED", 10.978201]]}
+HP2 SHAKEDOWN_OK
+HP2 calibration tokens: held-out pool rows 97-396 (rows 1-48 reproduce HP1's), sha=da18698a2b3d4b786c6ff1b3302bd21c16bd8f0ec8ccb1225398153db6fc4659
+[2026-10-19T07:04:16Z] tc1/boxA: arm qwen3hp2/e4b/hp2cal_e4b_k00_s3407 (arm=fused recipe=hp2cal steps=1 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=2400 expect_trainable=none --attn-4bit 1 --lora-init native --adapter-dtype native --seed 3407 --order-seed 3407 --hp1-export /root/tc1/hp1/hp2cal --hp1-export-base 1)
+    LOAD OK {"fam": "qwen3hp2", "framework": "e4b", "arm": "fused", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 39.0, "verify": {"n_quantized": 48, "n_unquantized": 0}, "n_attn4": 192, "n_patched": 48, "structural_expected_n_attn4": 192, "detector_version": "0.55.0+det:8af1918f6c2e", "trainable
+    PROLOGUE {"phase_seconds": {"preamble": 4.929, "load_weights": 26.817, "verify": 0.001, "attn4": 9.59, "lora": 0.049, "enable": 0.292, "tokenizer": 0.582, "census": 1.541, "frozen_probe": 0.073, "trainable_sha": 3.232, "counters": 0.0, "c1_before": 26.71, "eval0": 72.202, "optimizer": 0.219}, "phase
+    CELL OK {"framework": "e4b", "fam": "qwen3hp2", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "weights_commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "snapshot_dir": null, "arm": "fused", "tag": "hp2cal_e4b_k00
+2 MiB
+[2026-10-19T07:09:03Z] tc1/boxA: arm qwen3hp2/unsloth/hp2cal_unsloth_s3407 (arm=unsloth recipe=hp2cal steps=1 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=3600 expect_trainable=642514944 --grad-ckpt unsloth --unsloth-targets q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj --unsloth-moe-backend grouped_mm --lora-init native --adapter-dtype native --seed 3407 --order-seed 3407 --hp1-export /root/tc1/hp1/hp2cal --hp1-export-base 1)
+    [unsloth_zoo.log|INFO]Unsloth: MoE bnb4bit grouped_mm with backward-recompute.
+    PROLOGUE {"phase_seconds": {"preamble": 2.136, "snapshot": 0.0, "load_weights": 33.395, "census": 1.485, "frozen_probe": 0.1, "trainable_sha": 2.817, "counters": 0.131, "c1_before": 74.471, "eval0": 236.765, "optimizer": 0.384}, "phase_budget_s": 1260.0, "prologue_s": 365.855, "prologue_unattributed
+    CELL OK {"framework": "unsloth", "fam": "qwen3hp2", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "weights_commit": null, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bc
+2 MiB
+{"bases": [["/root/tc1/hp1/hp2cal/base_e4b_qwen3hp2", "OK"], ["/root/tc1/hp1/hp2cal/base_unsloth_qwen3hp2", "OK"]], "arms": [["hp2cal_e4b_k00_s3407", "SCORED", 1.943777], ["hp2cal_unsloth_s3407", "SCORED", 1.944547]]}
+HP2_G1=STOP delta0=-0.002691 se=0.002378 m_need=0.014895 rt_zero_centred=0.01 z_bands={"e4b": [0.000931, 0.014088], "unsloth": [0.003622, 0.013197]}
+HP2 G1_CLOSED: the instrument could not read the margin (a reading, not a strike)
+HP1 bulk manifest: 110 files, 45220078028 bytes, 37.0 s
+HP1 bulk manifest: 110 files, 45220078028 bytes, 0.0 s
+[2026-10-19T09:05:42Z] tc1/boxA: reduce
+| axolotl | ckpt_axolotl_m | **NOT_RUN** | — | **NOT_RUN** | yes | — / — | — | — | — | — | — | — | —→— | —→— | — | peft mods — / params — / fwd — | — | — | no receipt and no attempt line |
+| e4b | fused_attn4_m_prof | **NOT_RUN** | — | **NOT_RUN** | yes | — / — | — | — | — | — | — | — | —→— | —→— | — | patched — / kcalls — | — | — | no receipt and no attempt line |
+| unsloth | ckpt_unsloth_prof | **NOT_RUN** | — | **NOT_RUN** | yes | — / — | — | — | — | — | — | — | —→— | —→— | — | stacks — / fwd — / u8 — | — | — | no receipt and no attempt line |
+| e4b | hp1shake_e4b | **OK** | VOID | **VOID** | native | matched:3407 (complete 520/520) / bfloat16,float32 | — | 3 | 0.825 | 781.3 | 4.138 | 146.9 | 10.0987→10.5168 | 11.0022→10.9814 | N-A (anchor missing) | patched 2 / kcalls 32 | 26771456 | 4-bit experts (e4b NF4) + NF4 attention | no registered n_layers for family qwen3hp2shake; step count 3/3 != N=20 |
+| unsloth | hp1shake_unsloth | **OK** | VOID | **VOID** | native | native / float32 | — | 3 | 1.073 | 241.7 | 3.260 | 395.8 | 10.0984→10.5178 | 11.0000→10.9800 | N-A (anchor missing) | stacks 4 / fwd 16 / u8 2 | 26771456 | 4-bit expert stacks + bnb-4bit attention (Params4bit stacks 4, Linear4bit 16) | no registered n_layers for family qwen3hp2shake; step count 3/3 != N=20 |
+- prologue `e4b/hp1shake_e4b` **26.6 s** before step 1 (76% of the arm): eval0 11.3, preamble 4.9, load_weights 3.4, c1_before 3.3; unattributed 1.735; budget 630.0
+- prologue `unsloth/hp1shake_unsloth` **44.5 s** before step 1 (65% of the arm): eval0 15.0, load_weights 9.2, c1_before 3.1, hp1_export 2.3; unattributed 14.175; budget 630.0
+- draws (R1): `e4b/fused_attn4_m` — (e4b/fused_attn4_m is NOT_RUN); `unsloth/ckpt_unsloth_m` — (unsloth/ckpt_unsloth_m is NOT_RUN)
+- e4b internal parity: NO-ARM
+- **NO MATCHED POSITION QUOTED (unsloth)** — not quoted: e4b e4b/fused_attn4_m is NOT_RUN / unsloth unsloth/ckpt_unsloth_m is NOT_RUN
+- **NO MATCHED POSITION QUOTED (hf)** — not quoted: e4b e4b/fused_attn4_m is NOT_RUN / hf hf/hf_peft_m is NOT_RUN
+- **NO MATCHED POSITION QUOTED (axolotl)** — not quoted: e4b e4b/fused_attn4_m is NOT_RUN / axolotl axolotl/ckpt_axolotl_m is NOT_RUN
+- frozen base `e4b/hp1shake_e4b`: gate_up **N-A** (slot missing on the anchor) control detects, down **N-A** (slot missing on the anchor) control detects, q_proj **N-A** (slot missing on the anchor) control detects
+- frozen base `unsloth/hp1shake_unsloth`: gate_up **N-A** (slot missing on the anchor) control detects, down **N-A** (slot missing on the anchor) control detects, q_proj **N-A** (slot missing on the anchor) control detects
+
+## Verdicts
+| family | arm | VERDICT | validity | quality | note |
+|---|---|---|---|---|---|
+| qwen3hp2 | e4b/fused_attn4_m | **NOT_RUN** | — | — | no receipt and no attempt line |
+| qwen3hp2 | unsloth/ckpt_unsloth_m | **NOT_RUN** | — | — | no receipt and no attempt line |
+| qwen3hp2 | e4b/reference_attn4_m | **NOT_RUN** | — | — | no receipt and no attempt line |
+| qwen3hp2 | e4b/fused_attn4_m_d2 | **NOT_RUN** | — | — | no receipt and no attempt line |
+| qwen3hp2 | unsloth/ckpt_unsloth_m_d2 | **NOT_RUN** | — | — | no receipt and no attempt line |
+| qwen3hp2 | hf/hf_peft_m | **NOT_RUN** | — | — | no receipt and no attempt line |
+| qwen3hp2 | axolotl/ckpt_axolotl_m | **NOT_RUN** | — | — | no receipt and no attempt line |
+| qwen3hp2 | e4b/fused_attn4_m_prof | **NOT_RUN** | — | — | no receipt and no attempt line |
+| qwen3hp2 | unsloth/ckpt_unsloth_prof | **NOT_RUN** | — | — | no receipt and no attempt line |
+| qwen3hp2 | e4b/hp2cal_e4b_k00_s3407 | **VOID** | VOID | N-A (anchor missing) | no registered n_layers for family qwen3hp2; step count 1/1 != N=20 |
+| qwen3hp2 | unsloth/hp2cal_unsloth_s3407 | **VOID** | VOID | N-A (anchor missing) | no registered n_layers for family qwen3hp2; step count 1/1 != N=20 |
+| qwen3hp2shake | e4b/fused_attn4_m | **NOT_RUN** | — | — | no receipt and no attempt line |
+| qwen3hp2shake | unsloth/ckpt_unsloth_m | **NOT_RUN** | — | — | no receipt and no attempt line |
+| qwen3hp2shake | e4b/reference_attn4_m | **NOT_RUN** | — | — | no receipt and no attempt line |
+| qwen3hp2shake | e4b/fused_attn4_m_d2 | **NOT_RUN** | — | — | no receipt and no attempt line |
+| qwen3hp2shake | unsloth/ckpt_unsloth_m_d2 | **NOT_RUN** | — | — | no receipt and no attempt line |
+| qwen3hp2shake | hf/hf_peft_m | **NOT_RUN** | — | — | no receipt and no attempt line |
+| qwen3hp2shake | axolotl/ckpt_axolotl_m | **NOT_RUN** | — | — | no receipt and no attempt line |
+| qwen3hp2shake | e4b/fused_attn4_m_prof | **NOT_RUN** | — | — | no receipt and no attempt line |
+| qwen3hp2shake | unsloth/ckpt_unsloth_prof | **NOT_RUN** | — | — | no receipt and no attempt line |
+| qwen3hp2shake | e4b/hp1shake_e4b | **VOID** | VOID | N-A (anchor missing) | no registered n_layers for family qwen3hp2shake; step count 3/3 != N=20 |
+| qwen3hp2shake | unsloth/hp1shake_unsloth | **VOID** | VOID | N-A (anchor missing) | no registered n_layers for family qwen3hp2shake; step count 3/3 != N=20 |
+----- summary.txt -----
+FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407 pack=0
+FIXTURE hp2 (HP2-PREREG): steps=200 eval_n=48; calibration rows 97-396 (300), 1 step; P seeds=[3410 3411 3412]; e4b K00 vs Unsloth; axolotl out
+BOX A families: qwen3hp2; e4b 68801d3efba2f82aea2d6e3cc44c4f93bca929db gnf4 724ccc454f006c1a46836e434e997f31f293747f; run hp2-5090-1 instance 56686154 deadline 1792413915; prereg hp2/HP2-PREREG.md
+OMP_NUM_THREADS=64 (physical cores) box_class=RTX 5090
+CPU allotment 62 (cgroup quota capped by affinity; physical cores 64)
+CUDA_PROBE ok
+DRIVER 590.48.01 cu130_ok=1
+AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+PIN OK qwen3hp2 staged=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS qwen3hp2 alpaca sha=6d5783ce31b2ff57a05cca2db0446ab8bbf7697bd322d22e7b0545a25585b3b2 eval_n=48 train_only_sha=604f314033450d4d4b5953bb13b3651d919d9b05c46a317e6267a3c2f6c007d7
+qwen3hp2shake/e4b/hp1shake_e4b PROLOGUE {"phase_seconds": {"preamble": 4.949, "load_weights": 3.41, "verify": 0.0, "attn4": 0.384, "lora": 0.006, "enable": 0.147, "tokenizer": 0.653, "census": 0.162, "frozen_probe": 0.141, "trainable_sha": 0.174, "counters": 0.0, "c1_before": 3.268, "eval0": 11.35, "optimizer": 0.222}, "phase_budget_s": 630.0, "prologue_s": 26.601, "prologue_unattributed_s": 1.735}
+qwen3hp2shake/e4b/hp1shake_e4b rc=0 CELL OK {"framework": "e4b", "fam": "qwen3hp2shake", "model": "local/Qwen3-30B-A3B-L2", "revision": "88f08b815a0dffa4e348a67de1d8b585ac183cee", "model_type": "qwen3_moe", "n_layers": 2, "weights_commit": "88f08b815a0dffa4e348a67de1d8b585ac183cee", "snapshot_dir": null, "arm": "fused", "tag": "hp1shake_e4b", "status": "ok", "steps": 3, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "
+
+qwen3hp2shake/unsloth/hp1shake_unsloth PROLOGUE {"phase_seconds": {"preamble": 2.172, "snapshot": 0.0, "load_weights": 9.204, "census": 0.067, "frozen_probe": 0.114, "trainable_sha": 0.136, "counters": 0.139, "c1_before": 3.062, "eval0": 15.008, "optimizer": 0.409}, "phase_budget_s": 630.0, "prologue_s": 44.486, "prologue_unattributed_s": 14.175}
+qwen3hp2shake/unsloth/hp1shake_unsloth rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3hp2shake", "model": "local/Qwen3-30B-A3B-L2", "revision": "88f08b815a0dffa4e348a67de1d8b585ac183cee", "model_type": "qwen3_moe", "n_layers": 2, "weights_commit": null, "snapshot_dir": "/root/tc1/hp1/shake-cache/models--local--Qwen3-30B-A3B-L2/snapshots/88f08b815a0dffa4e348a67de1d8b585ac183cee", "arm": "unsloth", "tag": "hp1shake_unsloth", "status": "ok
+
+HP2 SHAKEDOWN_OK
+HP2 calibration tokens: held-out pool rows 97-396 (rows 1-48 reproduce HP1's), sha=da18698a2b3d4b786c6ff1b3302bd21c16bd8f0ec8ccb1225398153db6fc4659
+qwen3hp2/e4b/hp2cal_e4b_k00_s3407 PROLOGUE {"phase_seconds": {"preamble": 4.929, "load_weights": 26.817, "verify": 0.001, "attn4": 9.59, "lora": 0.049, "enable": 0.292, "tokenizer": 0.582, "census": 1.541, "frozen_probe": 0.073, "trainable_sha": 3.232, "counters": 0.0, "c1_before": 26.71, "eval0": 72.202, "optimizer": 0.219}, "phase_budget_s": 840.0, "prologue_s": 147.918, "prologue_unattributed_s": 1.68}
+qwen3hp2/e4b/hp2cal_e4b_k00_s3407 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3hp2", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "weights_commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "snapshot_dir": null, "arm": "fused", "tag": "hp2cal_e4b_k00_s3407", "status": "ok", "steps": 1, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "
+
+qwen3hp2/unsloth/hp2cal_unsloth_s3407 PROLOGUE {"phase_seconds": {"preamble": 2.136, "snapshot": 0.0, "load_weights": 33.395, "census": 1.485, "frozen_probe": 0.1, "trainable_sha": 2.817, "counters": 0.131, "c1_before": 74.471, "eval0": 236.765, "optimizer": 0.384}, "phase_budget_s": 1260.0, "prologue_s": 365.855, "prologue_unattributed_s": 14.172}
+qwen3hp2/unsloth/hp2cal_unsloth_s3407 rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3hp2", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "weights_commit": null, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "hp2cal_unsloth_s3407", "status": "ok", "s
+
+HP2_G1=STOP delta0=-0.002691 se=0.002378 m_need=0.014895 rt_zero_centred=0.01 z_bands={"e4b": [0.000931, 0.014088], "unsloth": [0.003622, 0.013197]}
+HP2 G1_CLOSED: the instrument could not read the margin (a reading, not a strike)
+----- versions.txt -----
+e4b 0.55.0 @68801d3efba2f82aea2d6e3cc44c4f93bca929db (GitHub main)
+gnf4 0.45.0 @724ccc454f006c1a46836e434e997f31f293747f (GitHub main)
+torch(e4b/hf) 2.8.0+cu128
+triton(e4b/hf) 3.4.0
+transformers(e4b/hf) 5.18.0
+bitsandbytes(e4b/hf) 0.50.2
+peft(hf) 0.21.2
+huggingface_hub(e4b/hf) 2.2.0
+httpx2(e4b/hf) 2.14.0
+brotli(e4b/hf) 1.2.0
+unsloth(unsloth-t28) 2026.9.14
+unsloth_zoo(unsloth-t28) 2026.9.9
+torch(unsloth-t28) 2.8.0+cu128
+triton(unsloth-t28) 3.4.0
+transformers(unsloth-t28) 5.5.0
+bitsandbytes(unsloth-t28) 0.50.2
+peft(unsloth-t28) 0.21.2
+torchao(unsloth-t28) None
+moe_backend(unsloth-t28) native_torch
+unsloth(unsloth) 2026.9.14
+unsloth_zoo(unsloth) 2026.9.9
+torch(unsloth) 2.12.1+cu130
+triton(unsloth) 3.7.1
+transformers(unsloth) 5.5.0
+bitsandbytes(unsloth) 0.50.2
+peft(unsloth) 0.21.2
+torchao(unsloth) 0.18.0+cu130
+moe_backend(unsloth) grouped_mm
+e4b(t212) 0.55.0 @68801d3efba2f82aea2d6e3cc44c4f93bca929db
+gnf4(t212) 0.45.0 @724ccc454f006c1a46836e434e997f31f293747f
+torch(e4b-t212) 2.12.1+cu130
+NO AXOLOTL on this box: the qwen3hp2 token runs no axolotl arm
+HP1 bulk manifest: 110 files, 45220078028 bytes, 0.0 s
+[2026-10-19T09:05:42Z] tc1/boxA: TP_DONE rc=0
