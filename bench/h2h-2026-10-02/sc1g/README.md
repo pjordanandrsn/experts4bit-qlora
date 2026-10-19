@@ -145,3 +145,23 @@ re-derives from them.
 **Reproduce** (no GPU): `python bench/sc2/sc1g_reduce.py --dir bench/h2h-2026-10-02/sc1g/receipts/sc1g-diag-a7-4/sc1g`.
 Pinned by `test_the_a7_reading_rederives_from_its_committed_receipt`.
 
+## CI note (2026-10-19): one runner failed the estimator's `identity reads 0` self-test case
+
+On e4b#1791's `lint-and-test` (job 117876102863: ubuntu-24.04 image 20261012.334.1, Python 3.11, torch 2.14.1+cpu,
+numpy 2.4.6), `sc1g_kl.py --self-test` failed one of its 21 cases, `identity reads 0`. That case requires the maximum
+KL65 of the reference against itself to be below 1e-12. The same commit's re-run on another runner (attempt 2, job
+117882194120) passed, so the failure belongs to that runner, not to the commit.
+
+Roundoff does not explain the failure:
+- With the engine's log-probs equal to the reference's, the named terms cancel exactly (`lp - lp`).
+- What remains per row is the rest term: the artifact's rest (a log-sum-exp) against `1 - sum(exp(lp))`. These are two
+  roundings of one number, so the KL is about their difference, near 1e-15 in float64.
+- Measured maximum: 5.4e-16 on x86 AVX2 (torch 2.12.1, numpy 2.5.0) and 6.1e-16 on arm64 (torch 2.14.1, numpy 2.5.3).
+
+So that runner read at least 1000× above float64 roundoff, or a NaN. `sc1g_kl.py` is unchanged: A5's rule digest pins it
+whole, and a looser bound would hide exactly this. Instead, when the self-test fails, `tests/test_sc1g_checks.py` re-runs
+the case's construction in a fresh interpreter and prints what it reads, with the runner's numerics: the identity
+maximum, the NaN count, the gap between the two rest roundings, the torch and numpy versions, the CPU capability and the
+CPU flags. A clean diagnostic beside a failed self-test means the failure did not reproduce in a fresh interpreter on the
+same runner. A repeat on the same runner type is investigated on that runner.
+

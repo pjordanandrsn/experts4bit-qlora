@@ -1,0 +1,16 @@
+P147_SHARDS {"shards_ok": true, "mismatched": [], "checked": 21}
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[04:21:55]   host CPUs: 12 visible, quota none, torch threads 6, OMP_NUM_THREADS=None
+[04:21:55]   checkpoint: local directory /models/Mixtral-8x7B-Instruct-v0.1
+[04:21:56]   fusing + quantizing experts (up to 32x8) to nf4 (streaming)...
+[04:34:20]   quantized experts on 32/32 MoE layers (8 experts each)
+[04:34:20]   offloaded 32 layers' 4-bit experts to pinned CPU RAM (streamed to GPU one layer at a time during train/eval)
+[04:34:20]   inference prefetch ON: next layer's experts copy on a side stream during no_grad forwards
+[04:34:20]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[04:35:42]   applied 32 transformers checkpoint-key renaming(s) (this checkpoint's layout differs from the module tree)
+P147_ARM A {"check_wikitext": 1.50378, "check_c4val1": 1.94409, "W1": 1.45873, "W16": 1.47956, "C4": 1.95447}
+P147_ARM A2 {"check_wikitext": 1.50378, "check_c4val1": 1.94409, "W1": 1.45873, "W16": 1.47956, "C4": 1.95447}
+P147_CHECKS {"why": []}
+P147_ARM I8ATTN {"check_wikitext": 1.50454, "check_c4val1": 1.94557, "W1": 1.4601, "W16": 1.47924, "C4": 1.95997}
+P147_ARM NF4ATTN {"check_wikitext": 1.52229, "check_c4val1": 1.95701, "W1": 1.4715, "W16": 1.49216, "C4": 1.97111}
+P147_ARM I8HEAD {"check_wikitext": 1.50426, "check_c4val1": 1.94398, "W1": 1.45951, "W16": 1.47999, "C4": 1.95601}

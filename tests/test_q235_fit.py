@@ -31,7 +31,7 @@ def _fit():
 def test_the_fit_reads_every_sealed_cap_from_the_runner():
     f = _fit()
     caps = f.sealed_caps(Q / "q235_run.sh")
-    assert set(caps) == {"require-git", "create-venv", "install", "hostrate", "fetch", "tokens", "box"}, caps   # repeat: Amendment 15
+    assert set(caps) == {"require-git", "create-venv", "install", "hostrate", "fetch", "tokens"}, caps   # repeat: A15; box: A16
     assert all(v > 0 for v in caps.values())
 
 
@@ -221,8 +221,8 @@ def test_amendment_7s_refit_is_kept_as_its_record(tmp_path):
     step = rep["rehearsal"]["changed_step"]
     assert step["increment_s"] == 142.8 and step["box_basis_s"] == 392.8, step
     box = rep["phases"]["box"]
-    assert box["budget_s"] == 13847 and box["sealed_cap_s"] == 2997 == _fit().sealed_caps(Q / "q235_run.sh")["box"], box
-    assert not box["fits"] and r.returncode == 1
+    assert box["budget_s"] == 13847 and box["sealed_cap_s"] is None and "box" not in _fit().sealed_caps(Q / "q235_run.sh"), box
+    assert box["budget_s"] > box["half_cap_s"] and not box["fits"] and r.returncode == 1      # Amendment 16: above the box's half-cap
 
 
 def test_a_leg_s_floors_are_max_of_sealed_a2000_and_the_slower_sample_over_the_slack():
@@ -289,7 +289,9 @@ def test_the_fit_reads_a_pro6000_leg_end_to_end(tmp_path):
     assert rep["floors"]["host_copy_gb_s"] == math.ceil(max(5.14, 4.34, fit_hc) * 1000 - 1e-9) / 1000
     assert rep["floors"]["disk_read_gb_s"] == max(1.145, sealed["disk_read_gb_s"])   # Amendment 12: no cold-read sample from a leg
     assert rep["phases"]["box"]["scaled_s"] == 110 * 94 / 4 and "expected_within_guard" in rep
-    assert not rep["phases"]["box"]["fits"] and r.returncode == 1            # 110 s x 94/4 x 1.5 = 3,878 s > CAP_BOX 2,997
+    box = rep["phases"]["box"]                                               # Amendment 16: 110 s x 94/4 x 1.5 = 3,878 s, inside its
+    assert box["budget_s"] == 3878 <= box["half_cap_s"] and box["fits"]       # half-cap (the sealed 2,997 s refused it)
+    assert r.returncode == (0 if rep["fits"] else 1)
     bad = _leg_dir(tmp_path / "b", h2={"h2d_gb_s": 18.0, "host_copy_gb_s": 35.0})
     r = subprocess.run([sys.executable, str(Q / "q235_fit.py"), "--rehearsal", str(bad), "--warm-install-s", "160",
                         "--bandwidth-mbps", "800", "--usd-per-hour", "1.6"], capture_output=True, text=True)
@@ -357,7 +359,8 @@ def test_the_sealed_floors_and_caps_are_the_refit_of_the_pro6000_leg(tmp_path):
     assert fl["basis"]["per_floor"]["disk_read_gb_s"]["sample"] is None
     assert fl["basis"]["per_floor"]["disk_read_gb_s"]["warm_load_read_gb_s_not_used"] > 10      # the page cache, not the disk
     caps = _fit().sealed_caps(Q / "q235_run.sh")
-    assert rep["phases"]["box"]["budget_s"] == caps["box"] == 2997 and rep["phases"]["repeat"]["budget_s"] == 835
+    assert rep["phases"]["box"]["budget_s"] == 2997 and "box" not in caps and rep["phases"]["box"]["fits"]   # A16: on the box
+    assert rep["phases"]["repeat"]["budget_s"] == 835
     assert rep["phases"]["repeat"]["on_box_basis_s"] == round((15.1 + 5 * 1.717) * 94 / 4, 1)
     assert "repeat" not in caps and rep["phases"]["repeat"]["sealed_cap_s"] is None and rep["phases"]["repeat"]["fits"]
     assert rep["expected_within_guard"] and fl["sealed_match"] and rep["fits"] and r.returncode == 0, rep

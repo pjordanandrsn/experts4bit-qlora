@@ -1,0 +1,13 @@
+q235_run.sh: OK
+q235_bootstrap.py: OK
+q235_fetch.py: OK
+q235_tiny.py: OK
+q235_hostrate.py: OK
+wheels.json: OK
+model_files.json: OK
+q235_box.py: OK
+q235_tokens.py: OK
+mk_slice.py: OK
+tc1_arm.py: OK
+dq11_require_git.sh: OK
+ds_alpaca.json: OK

@@ -1,0 +1,297 @@
+{
+ "evaluator": "bench/hp1/hp1_eval.py",
+ "tokens": {
+  "path": "/root/tc1/tokens_qwen3hp2.json",
+  "sha256": "6d5783ce31b2ff57a05cca2db0446ab8bbf7697bd322d22e7b0545a25585b3b2",
+  "eval_n": 8
+ },
+ "model": "local/Qwen3-30B-A3B-L2",
+ "revision": "88f08b815a0dffa4e348a67de1d8b585ac183cee",
+ "device": "NVIDIA GeForce RTX 5090",
+ "torch": "2.8.0+cu128",
+ "zero_adapter_tol": 0.005,
+ "roundtrip_tol": 0.02,
+ "zero_adapter_report_only": false,
+ "roundtrip_zero_centred_tol": null,
+ "expect_trainable": null,
+ "bases": [
+  {
+   "dir": "/root/tc1/hp1/shake/base_e4b_qwen3hp2shake",
+   "meta": {
+    "fam": "qwen3hp2shake",
+    "framework": "e4b",
+    "model": "local/Qwen3-30B-A3B-L2",
+    "regimes": {
+     "attention k_proj": "nf4/64",
+     "attention o_proj": "nf4/64+dq",
+     "attention q_proj": "nf4/64",
+     "attention v_proj": "nf4/64",
+     "expert down": "nf4/64+dq",
+     "expert gate_up": "nf4/64+dq"
+    },
+    "revision": "88f08b815a0dffa4e348a67de1d8b585ac183cee",
+    "train_base_digest": "5e7564eae8039e609f3a51bb51185fe4d7b611fe00e0257a1bdfd8988de47b7a"
+   },
+   "digest": "5e7564eae8039e609f3a51bb51185fe4d7b611fe00e0257a1bdfd8988de47b7a",
+   "n_slots": 533,
+   "digest_matches_training_run": true,
+   "zero_adapter": {
+    "row_mean": 10.999909,
+    "token_weighted": 10.678418,
+    "row_losses": [
+     11.05481,
+     11.14352,
+     10.44689,
+     9.89934,
+     11.54564,
+     10.40139,
+     11.40132,
+     12.10636
+    ]
+   },
+   "zero_adapter_tol": 0.005,
+   "zero_adapter_vs_inloop_step0": {
+    "hp1shake_e4b": -0.002331
+   },
+   "zero_adapter_row_gaps": {
+    "hp1shake_e4b": [
+     0.00117,
+     -0.00237,
+     -0.00294,
+     -0.00283,
+     0.00281,
+     -0.00864,
+     -0.00499,
+     -0.00089
+    ]
+   },
+   "zero_adapter_report_only": false,
+   "perturbed_adapter_control": {
+    "tensor": "0.down.B",
+    "row_mean": 10.979858,
+    "changed": true
+   },
+   "status": "OK",
+   "seconds": 11.8
+  },
+  {
+   "dir": "/root/tc1/hp1/shake/base_unsloth_qwen3hp2shake",
+   "meta": {
+    "fam": "qwen3hp2shake",
+    "framework": "unsloth",
+    "model": "local/Qwen3-30B-A3B-L2",
+    "regimes": {
+     "attention k_proj": "nf4/64+dq",
+     "attention o_proj": "nf4/64+dq",
+     "attention q_proj": "nf4/64+dq",
+     "attention v_proj": "nf4/64+dq",
+     "expert down": "nf4/64+dq",
+     "expert gate_up": "nf4/64+dq"
+    },
+    "revision": "88f08b815a0dffa4e348a67de1d8b585ac183cee",
+    "train_base_digest": "19363fa60897e3279504fe90834cb990b163f8444442a18e99da60c072675528"
+   },
+   "digest": "19363fa60897e3279504fe90834cb990b163f8444442a18e99da60c072675528",
+   "n_slots": 533,
+   "digest_matches_training_run": true,
+   "zero_adapter": {
+    "row_mean": 11.000312,
+    "token_weighted": 10.67887,
+    "row_losses": [
+     11.05491,
+     11.14371,
+     10.44672,
+     9.90007,
+     11.54602,
+     10.40209,
+     11.40171,
+     12.10727
+    ]
+   },
+   "zero_adapter_tol": 0.005,
+   "zero_adapter_vs_inloop_step0": {
+    "hp1shake_unsloth": 0.000322
+   },
+   "zero_adapter_row_gaps": {
+    "hp1shake_unsloth": [
+     0.00307,
+     -0.00189,
+     -0.00154,
+     -0.0013,
+     0.00887,
+     -0.00291,
+     -0.00317,
+     0.00143
+    ]
+   },
+   "zero_adapter_report_only": false,
+   "perturbed_adapter_control": {
+    "tensor": "0.down.B",
+    "row_mean": 10.979445,
+    "changed": true
+   },
+   "status": "OK",
+   "seconds": 5.1
+  }
+ ],
+ "arms": [
+  {
+   "receipt": "/root/tc1/qwen3hp2shake_e4b_hp1shake_e4b.json",
+   "framework": "e4b",
+   "tag": "hp1shake_e4b",
+   "seed": 3407,
+   "order": {
+    "order_seed": 3407,
+    "n_rows": 1200,
+    "order_sha": "25d50439321bfa3e4dcf47761f08af71fa9e91a041c7167996de30f8c6e9e65a"
+   },
+   "tokens_sha": "6d5783ce31b2ff57a05cca2db0446ab8bbf7697bd322d22e7b0545a25585b3b2",
+   "adapter": "/root/tc1/hp1/shake/canonical_qwen3hp2shake_hp1shake_e4b.safetensors",
+   "adapter_sha256": "1305c14fc04dc26d41f5396b4730d82abfeb7dc601c4af0ad30301b45e0ba8d8",
+   "train_digest": "5e7564eae8039e609f3a51bb51185fe4d7b611fe00e0257a1bdfd8988de47b7a",
+   "inloop_step0": 11.00224,
+   "inloop_step0_rows": [
+    11.05364,
+    11.14589,
+    10.44983,
+    9.90217,
+    11.54283,
+    10.41003,
+    11.40631,
+    12.10725
+   ],
+   "inloop_final": 10.98139,
+   "inloop_final_step": 3,
+   "steps": 3,
+   "hp1_errors": {},
+   "raw_ok": true,
+   "status_receipt": "ok",
+   "c1_bit_exact": true,
+   "trainable_params": 26771456,
+   "lora_init": "matched:3407",
+   "adapter_dtype": "native",
+   "matched_init": {
+    "seed": 3407,
+    "n_slots_set": 520,
+    "n_slots_expected": 520,
+    "expected_parts": {
+     "n_attention_projections": 8,
+     "n_layers": 2,
+     "n_experts": 128
+    },
+    "unmapped": [],
+    "n_unmapped": 0,
+    "complete": true,
+    "kinds": {
+     "q": 2,
+     "k": 2,
+     "v": 2,
+     "o": 2,
+     "gate_up": 256,
+     "down": 256
+    },
+    "b_nonzero": [],
+    "hidden": {
+     "value": 2048,
+     "rule": "config.hidden_size"
+    },
+    "mapping_rules": {
+     "model.layers.0.self_attn.q_proj": "q by name (attention)",
+     "model.layers.0.self_attn.k_proj": "k by name (attention)",
+     "model.layers.0.self_attn.v_proj": "v by name (attention)",
+     "model.layers.0.self_attn.o_proj": "o by name (attention)",
+     "model.layers.0.mlp.experts.gate_up_lora_A": "gate_up by structure: in == hidden",
+     "model.layers.0.mlp.experts.down_lora_A": "down by structure: out == hidden",
+     "model.layers.1.self_attn.q_proj": "q by name (attention)",
+     "model.layers.1.self_attn.k_proj": "k by name (attention)",
+     "model.layers.1.self_attn.v_proj": "v by name (attention)",
+     "model.layers.1.self_attn.o_proj": "o by name (attention)",
+     "model.layers.1.mlp.experts.gate_up_lora_A": "gate_up by structure: in == hidden",
+     "model.layers.1.mlp.experts.down_lora_A": "down by structure: out == hidden"
+    },
+    "n_mapping_rules": 12,
+    "distribution": "A[slot] ~ U(-b, b), b = 1/sqrt(fan_in), fan_in = in-width of the [r, in] slot = PEFT's kaiming_uniform(a=sqrt(5)) on a [r, in] weight; drawn in fp32 on CPU from torch.Generator().manual_seed(int.from_bytes(sha256('<seed>|<layer>|<kind>|<expert>')[:8], 'big')); B left as built and asserted zero"
+   },
+   "adapter_dtypes_after": {
+    "torch.float32": 16,
+    "torch.bfloat16": 8
+   },
+   "base": "/root/tc1/hp1/shake/base_e4b_qwen3hp2shake",
+   "evaluator": {
+    "row_mean": 10.979079,
+    "token_weighted": 10.66231,
+    "row_losses": [
+     11.0263,
+     11.13607,
+     10.42731,
+     9.88923,
+     11.50448,
+     10.38322,
+     11.38342,
+     12.0826
+    ],
+    "n_rows": 8
+   },
+   "evaluator_minus_inloop_final": -0.002311,
+   "status": "SCORED"
+  },
+  {
+   "receipt": "/root/tc1/qwen3hp2shake_unsloth_hp1shake_unsloth.json",
+   "framework": "unsloth",
+   "tag": "hp1shake_unsloth",
+   "seed": 3407,
+   "order": {
+    "order_seed": 3407,
+    "n_rows": 1200,
+    "order_sha": "25d50439321bfa3e4dcf47761f08af71fa9e91a041c7167996de30f8c6e9e65a"
+   },
+   "tokens_sha": "6d5783ce31b2ff57a05cca2db0446ab8bbf7697bd322d22e7b0545a25585b3b2",
+   "adapter": "/root/tc1/hp1/shake/canonical_qwen3hp2shake_hp1shake_unsloth.safetensors",
+   "adapter_sha256": "f18c1aab5d4778970af2930f74de2340cccd0d5dc80f198a3aa97fef4887e5bd",
+   "train_digest": "19363fa60897e3279504fe90834cb990b163f8444442a18e99da60c072675528",
+   "inloop_step0": 10.99999,
+   "inloop_step0_rows": [
+    11.05184,
+    11.1456,
+    10.44826,
+    9.90137,
+    11.53715,
+    10.405,
+    11.40488,
+    12.10584
+   ],
+   "inloop_final": 10.97999,
+   "inloop_final_step": 3,
+   "steps": 3,
+   "hp1_errors": {},
+   "raw_ok": true,
+   "status_receipt": "ok",
+   "c1_bit_exact": true,
+   "trainable_params": 26771456,
+   "lora_init": "native",
+   "adapter_dtype": "native",
+   "matched_init": null,
+   "adapter_dtypes_after": {
+    "torch.float32": 24
+   },
+   "base": "/root/tc1/hp1/shake/base_unsloth_qwen3hp2shake",
+   "evaluator": {
+    "row_mean": 10.978201,
+    "token_weighted": 10.660773,
+    "row_losses": [
+     11.02915,
+     11.13159,
+     10.42686,
+     9.88744,
+     11.50896,
+     10.38019,
+     11.38058,
+     12.08084
+    ],
+    "n_rows": 8
+   },
+   "evaluator_minus_inloop_final": -0.001789,
+   "status": "SCORED"
+  }
+ ]
+}

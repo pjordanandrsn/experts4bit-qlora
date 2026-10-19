@@ -31,7 +31,8 @@ STAGE="$HERE/tc1_run.sh $HERE/tc1_arm.py $HERE/tc1_reduce.py $REPO/bench/tp4/tp4
 # guard beside these and has the box start THAT, which checks its pins and registered knobs and then execs
 # tc1_run.sh. Both default to tp4's own behaviour; the runner must be one of the staged files.
 # HP1 (the qwen3hp1 token; bench/hp1/HP1-PREREG.md): the evaluator, its library, the reducer and the shakedown cut, beside tc1_arm.py
-case " ${TC1_FAMILIES:-} " in *" qwen3hp1 "*|*" qwen3hp1k "*|*" qwen3hp1p "*|*" qwen3hp1cal "*) STAGE="$STAGE $REPO/bench/hp1/hp1_lib.py $REPO/bench/hp1/hp1_eval.py $REPO/bench/hp1/hp1_calib.py $REPO/bench/hp1/hp1_caltokens.py $REPO/bench/hp1/hp1_reduce.py $REPO/bench/hp1/hp1_trunc.py";; esac
+case " ${TC1_FAMILIES:-} " in *" qwen3hp2 "*) STAGE="$STAGE $REPO/bench/hp2/hp2_reduce.py";; esac   # HP2 + the hp1 pieces below
+case " ${TC1_FAMILIES:-} " in *" qwen3hp1 "*|*" qwen3hp1k "*|*" qwen3hp1p "*|*" qwen3hp1cal "*|*" qwen3hp2 "*) STAGE="$STAGE $REPO/bench/hp1/hp1_lib.py $REPO/bench/hp1/hp1_eval.py $REPO/bench/hp1/hp1_calib.py $REPO/bench/hp1/hp1_caltokens.py $REPO/bench/hp1/hp1_reduce.py $REPO/bench/hp1/hp1_trunc.py";; esac
 # #1767 (the qwen3axo1767 token; bench/tc1/AXO1767-PREREG.md): the HP1 evaluator, its library and the cut, plus the four-score reducer
 case " ${TC1_FAMILIES:-} " in *" qwen3axo1767 "*|*" qwen3axo1767b "*) STAGE="$STAGE $REPO/bench/hp1/hp1_lib.py $REPO/bench/hp1/hp1_eval.py $REPO/bench/hp1/hp1_trunc.py $REPO/bench/tc1/axo1767_reduce.py $REPO/bench/tc1/pypi_probe.py";; esac
 STAGE="$STAGE ${TC1_EXTRA_STAGE:-}"; RUNNER=${TC1_RUNNER:-tc1_run.sh}

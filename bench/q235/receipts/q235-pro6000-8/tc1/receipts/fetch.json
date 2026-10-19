@@ -1,0 +1,22 @@
+{
+ "schema": "q235-fetch/1",
+ "repo": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+ "revision": "ac9c66cc9b46af7306746a9250f23d47083d689e",
+ "mode": "full",
+ "probe": {
+  "files": 19,
+  "slice_bytes": 31964891405,
+  "completed_bytes": 31964891405,
+  "seconds": 246.1,
+  "gb_s": 0.1299,
+  "finished": true,
+  "deadline_s": 515.6,
+  "floor_gb_s": 0.062
+ },
+ "download_seconds": 3518.0,
+ "files": 129,
+ "bytes": 470211497053,
+ "hash_seconds": 139.8,
+ "refusals": [],
+ "ok": true
+}

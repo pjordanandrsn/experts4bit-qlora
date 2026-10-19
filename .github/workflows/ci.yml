@@ -42,13 +42,13 @@ jobs:
           # is the commit of a RELEASE TAG of the kernel package
           # (scripts/check_system_manifest.py asserts it is the tag the
           # manifest's consumer_ci_pin names, or a later release), so the
-          # suite exercises the released kernel: 38b30888… = v0.47.1. Pin a
+          # suite exercises the released kernel: ef2faf38… = v0.48.0. Pin a
           # SHA, never a branch name — a deleted branch has broken this
           # install form before — and never a tag name, which can be moved.
           # The int4 tripwire below is why a plain `pip install .[test]` is
           # not enough: tests/test_int4_*.py importorskip on the int4 modules
           # and would report green coverage that never executed (#310).
-          pip install "grouped-nf4-gemm @ git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@38b308887688ea5bda7dd449bd3cc3dc1426b995"
+          pip install "grouped-nf4-gemm @ git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@ef2faf3816b30ecfd0e2a69cb27fb049a7d56a59"
           pip install -e ".[test]"
       - name: int4 modules present (tripwire)
         # The int4 suites guard with importorskip, so a gnf4 build without
@@ -99,6 +99,11 @@ jobs:
           ruff check bench/p146 tests/test_p146_staged_pin.py
           python bench/p146/p146_reduce.py --self-test
           python bench/p146/p146_box.py --self-test
+      - name: P149 box K contract (CPU only; no GPU or rental)
+        run: |
+          ruff check bench/p149 tests/test_p149.py tests/test_p149_kernels_interp.py
+          python bench/p149/p149k_reduce.py --self-test
+          python bench/p149/p149k_bench.py --self-test
       - name: SMT fuse measurement contract (CPU only; no GPU or rental)
         run: |
           ruff check bench/smt-fuse tests/test_smt_fuse_staged_pin.py

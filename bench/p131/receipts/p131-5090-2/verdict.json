@@ -1,0 +1,621 @@
+{
+ "lane": "P131",
+ "mode": "reading",
+ "refused": {
+  "m32": [],
+  "m64": []
+ },
+ "determinism": {
+  "differ": []
+ },
+ "span_m0": 1.0049701138250664,
+ "decode_check": {
+  "touched": {
+   "m0": [],
+   "m32": [],
+   "m64": []
+  }
+ },
+ "quality": {
+  "faults": [],
+  "stats": {
+   "rep": {
+    "n": 64,
+    "bias": 0.0,
+    "spread": 0.0,
+    "se": 0.0,
+    "max_abs": 0.0,
+    "mean_kl": 0.0,
+    "argmax_agree": 1.0
+   },
+   "half": {
+    "n": 64,
+    "bias": -0.0023386810796653876,
+    "spread": 0.014433398643119752,
+    "se": 0.0022535472059354977,
+    "max_abs": 0.049608168672431674,
+    "mean_kl": 0.010282694652786315,
+    "argmax_agree": 0.9571533203125
+   },
+   "chunk": {
+    "n": 64,
+    "bias": 0.004406968462596587,
+    "spread": 0.015170371679905436,
+    "se": 0.002302171605654128,
+    "max_abs": 0.044651210283859655,
+    "mean_kl": 0.012515790176581344,
+    "argmax_agree": 0.9554443359375
+   },
+   "rev": {
+    "n": 64,
+    "bias": 0.0,
+    "spread": 0.0,
+    "se": 0.0,
+    "max_abs": 0.0,
+    "mean_kl": 0.0,
+    "argmax_agree": 1.0
+   },
+   "mutant_scale": {
+    "n": 64,
+    "bias": 1.149747427214751,
+    "spread": 1.149747427214751,
+    "se": 0.035360394866502484,
+    "max_abs": 2.0036951225181596,
+    "mean_kl": 1.2665015851945665,
+    "argmax_agree": 0.575927734375
+   },
+   "S32": {
+    "n": 64,
+    "bias": 0.0,
+    "spread": 0.0,
+    "se": 0.0,
+    "max_abs": 0.0,
+    "mean_kl": 0.0,
+    "argmax_agree": 1.0
+   },
+   "S64": {
+    "n": 64,
+    "bias": 0.0,
+    "spread": 0.0,
+    "se": 0.0,
+    "max_abs": 0.0,
+    "mean_kl": 0.0,
+    "argmax_agree": 1.0
+   }
+  },
+  "floor": {
+   "draws": [
+    "half",
+    "chunk",
+    "rev"
+   ],
+   "B_floor": 0.004406968462596587,
+   "S_floor": 0.015170371679905436
+  },
+  "rep_identical": true,
+  "subjects_bitwise": {
+   "S32": true,
+   "S64": true
+  },
+  "bar": {
+   "tol": 0.01,
+   "spread_x": 2.0,
+   "spread_min": 0.005,
+   "bias_bar": 0.014406968462596587,
+   "spread_bar": 0.030340743359810872
+  }
+ },
+ "arms": {
+  "m32": {
+   "function": "BITWISE",
+   "function_differ": [],
+   "gains": {
+    "1": 0.9851019665746508,
+    "2": 0.9825683772411272,
+    "3": 0.9832772906121411,
+    "4": 0.9842888261971933,
+    "5": 0.9823462552987682,
+    "6": 0.9833696096741995,
+    "7": 0.9847150632566278,
+    "8": 0.9833372086222564
+   },
+   "mean": 0.9836251407069247,
+   "ci95": [
+    0.982799721876855,
+    0.9844512527771633
+   ],
+   "min_gain": 1.02,
+   "faster": false,
+   "saving_ms": -0.5730999999999975,
+   "quality": "BITWISE",
+   "verdict": "HELD",
+   "held_for": [
+    "NOT_FASTER"
+   ]
+  },
+  "m64": {
+   "function": "BITWISE",
+   "function_differ": [],
+   "gains": {
+    "1": 1.0091441181413632,
+    "2": 1.0066524236757755,
+    "3": 1.0059436799016706,
+    "4": 1.0080813164177709,
+    "5": 1.0064906339171145,
+    "6": 1.0061513339352004,
+    "7": 1.0084449927931773,
+    "8": 1.0076037068436288
+   },
+   "mean": 1.0073134273081326,
+   "ci95": [
+    1.0063326605761684,
+    1.0082951498904036
+   ],
+   "min_gain": 1.02,
+   "faster": false,
+   "saving_ms": 0.25000000000000355,
+   "quality": "BITWISE",
+   "verdict": "HELD",
+   "held_for": [
+    "NOT_FASTER"
+   ]
+  }
+ },
+ "order": {
+  "m64_over_m32": 1.0240826363833921,
+  "ci95": [
+   1.0235541793977083,
+   1.0246113662093332
+  ],
+  "reading": "M64_FASTER"
+ },
+ "default": "NONE",
+ "verdict": "M32_HELD M64_HELD DEFAULT_NONE",
+ "reasons": [
+  "m32 gain 0.9836 [0.9828, 0.9845] vs x1.02",
+  "m64 gain 1.0073 [1.0063, 1.0083] vs x1.02"
+ ],
+ "predictions": {
+  "m64_gain": {
+   "value": 1.0073134273081326,
+   "range": [
+    1.038,
+    1.159
+   ],
+   "held": false
+  },
+  "m32_gain": {
+   "value": 0.9836251407069247,
+   "range": [
+    1.033,
+    1.143
+   ],
+   "held": false
+  },
+  "m64_saving_ms": {
+   "value": 0.25000000000000355,
+   "range": [
+    1.2,
+    4.5
+   ],
+   "held": false
+  },
+  "m32_saving_ms": {
+   "value": -0.5730999999999975,
+   "range": [
+    1.1,
+    4.1
+   ],
+   "held": false
+  },
+  "m64_over_m32": {
+   "value": 1.0240826363833921,
+   "range": [
+    1.004,
+    1.013
+   ],
+   "held": false
+  },
+  "function_bitwise": {
+   "held": true
+  },
+  "determinism": {
+   "held": true
+  },
+  "decode_untouched": {
+   "held": true
+  },
+  "phase_b_subjects_bitwise": {
+   "held": true
+  },
+  "verdict": {
+   "value": "M32_HELD M64_HELD DEFAULT_NONE",
+   "held": false
+  }
+ },
+ "corpus": {
+  "gate": "b08601e04326c79dfdd32d625aee71d232d685c3",
+  "box_arrow": [
+   "b08601e04326c79dfdd32d625aee71d232d685c3"
+  ],
+  "box_snapshots": [
+   "b08601e04326c79dfdd32d625aee71d232d685c3"
+  ],
+  "same": true
+ },
+ "eager_median_ms": {
+  "1": {
+   "m0": 90.017,
+   "m32": 105.46199999999999,
+   "m64": 105.49199999999999
+  },
+  "2": {
+   "m0": 91.0065,
+   "m32": 106.5435,
+   "m64": 106.519
+  },
+  "3": {
+   "m0": 89.989,
+   "m32": 105.7565,
+   "m64": 105.689
+  },
+  "4": {
+   "m0": 91.44749999999999,
+   "m32": 107.19,
+   "m64": 107.3545
+  },
+  "5": {
+   "m0": 91.1035,
+   "m32": 106.7895,
+   "m64": 106.581
+  },
+  "6": {
+   "m0": 90.872,
+   "m32": 106.6315,
+   "m64": 106.28399999999999
+  },
+  "7": {
+   "m0": 91.09450000000001,
+   "m32": 106.959,
+   "m64": 106.8655
+  },
+  "8": {
+   "m0": 90.969,
+   "m32": 106.5075,
+   "m64": 106.40950000000001
+  }
+ },
+ "warmup": {
+  "proc": 0,
+  "median_ms": {
+   "m0": 34.38395,
+   "m32": 34.976749999999996,
+   "m64": 34.19445
+  },
+  "eager_median_ms": {
+   "m0": 91.493,
+   "m32": 107.316,
+   "m64": 107.52000000000001
+  },
+  "gains_reported": {
+   "m32": 0.9830515985619019,
+   "m64": 1.0055418350053882
+  },
+  "m0_over_scored_median": 0.9990186742441575,
+  "excluded_from": [
+   "span",
+   "gains",
+   "order",
+   "bars",
+   "predictions"
+  ]
+ },
+ "gpu_state": {
+  "0": {
+   "speed_start": {
+    "utc": 1792393883.3573277,
+    "clocks.sm": "2392",
+    "clocks.mem": "13801",
+    "power.draw": "66.14",
+    "temperature.gpu": "35",
+    "clocks_event_reasons.active": "0x0000000000000000"
+   },
+   "after_warm": {
+    "utc": 1792393906.6109738,
+    "clocks.sm": "2520",
+    "clocks.mem": "13801",
+    "power.draw": "541.91",
+    "temperature.gpu": "54",
+    "clocks_event_reasons.active": "0x0000000000000004"
+   },
+   "after_timed": {
+    "utc": 1792393926.5490603,
+    "clocks.sm": "2512",
+    "clocks.mem": "13801",
+    "power.draw": "541.06",
+    "temperature.gpu": "54",
+    "clocks_event_reasons.active": "0x0000000000000004"
+   },
+   "speed_end": {
+    "utc": 1792393929.3426683,
+    "clocks.sm": "2775",
+    "clocks.mem": "13801",
+    "power.draw": "245.25",
+    "temperature.gpu": "43",
+    "clocks_event_reasons.active": "0x0000000000000000"
+   }
+  },
+  "1": {
+   "speed_start": {
+    "utc": 1792394677.981353,
+    "clocks.sm": "2392",
+    "clocks.mem": "13801",
+    "power.draw": "67.32",
+    "temperature.gpu": "36",
+    "clocks_event_reasons.active": "0x0000000000000000"
+   },
+   "after_warm": {
+    "utc": 1792394692.8124034,
+    "clocks.sm": "2512",
+    "clocks.mem": "13801",
+    "power.draw": "539.86",
+    "temperature.gpu": "54",
+    "clocks_event_reasons.active": "0x0000000000000004"
+   },
+   "after_timed": {
+    "utc": 1792394712.7857668,
+    "clocks.sm": "2512",
+    "clocks.mem": "13801",
+    "power.draw": "542.37",
+    "temperature.gpu": "55",
+    "clocks_event_reasons.active": "0x0000000000000004"
+   },
+   "speed_end": {
+    "utc": 1792394715.5164762,
+    "clocks.sm": "2760",
+    "clocks.mem": "13801",
+    "power.draw": "248.63",
+    "temperature.gpu": "43",
+    "clocks_event_reasons.active": "0x0000000000000000"
+   }
+  },
+  "2": {
+   "speed_start": {
+    "utc": 1792394901.492021,
+    "clocks.sm": "2392",
+    "clocks.mem": "13801",
+    "power.draw": "67.01",
+    "temperature.gpu": "36",
+    "clocks_event_reasons.active": "0x0000000000000000"
+   },
+   "after_warm": {
+    "utc": 1792394916.0885682,
+    "clocks.sm": "2512",
+    "clocks.mem": "13801",
+    "power.draw": "539.63",
+    "temperature.gpu": "54",
+    "clocks_event_reasons.active": "0x0000000000000004"
+   },
+   "after_timed": {
+    "utc": 1792394936.0154393,
+    "clocks.sm": "2505",
+    "clocks.mem": "13801",
+    "power.draw": "545.55",
+    "temperature.gpu": "55",
+    "clocks_event_reasons.active": "0x0000000000000004"
+   },
+   "speed_end": {
+    "utc": 1792394938.7751448,
+    "clocks.sm": "2700",
+    "clocks.mem": "13801",
+    "power.draw": "238.12",
+    "temperature.gpu": "41",
+    "clocks_event_reasons.active": "0x0000000000000000"
+   }
+  },
+  "3": {
+   "speed_start": {
+    "utc": 1792395130.0744872,
+    "clocks.sm": "2400",
+    "clocks.mem": "13801",
+    "power.draw": "65.66",
+    "temperature.gpu": "36",
+    "clocks_event_reasons.active": "0x0000000000000000"
+   },
+   "after_warm": {
+    "utc": 1792395145.048597,
+    "clocks.sm": "2512",
+    "clocks.mem": "13801",
+    "power.draw": "543.48",
+    "temperature.gpu": "54",
+    "clocks_event_reasons.active": "0x0000000000000004"
+   },
+   "after_timed": {
+    "utc": 1792395164.9574864,
+    "clocks.sm": "2505",
+    "clocks.mem": "13801",
+    "power.draw": "544.60",
+    "temperature.gpu": "55",
+    "clocks_event_reasons.active": "0x0000000000000004"
+   },
+   "speed_end": {
+    "utc": 1792395167.6994915,
+    "clocks.sm": "2655",
+    "clocks.mem": "13801",
+    "power.draw": "226.20",
+    "temperature.gpu": "40",
+    "clocks_event_reasons.active": "0x0000000000000000"
+   }
+  },
+  "4": {
+   "speed_start": {
+    "utc": 1792395358.5072954,
+    "clocks.sm": "2400",
+    "clocks.mem": "13801",
+    "power.draw": "65.39",
+    "temperature.gpu": "36",
+    "clocks_event_reasons.active": "0x0000000000000000"
+   },
+   "after_warm": {
+    "utc": 1792395373.7269263,
+    "clocks.sm": "2505",
+    "clocks.mem": "13801",
+    "power.draw": "542.00",
+    "temperature.gpu": "54",
+    "clocks_event_reasons.active": "0x0000000000000004"
+   },
+   "after_timed": {
+    "utc": 1792395393.6757627,
+    "clocks.sm": "2505",
+    "clocks.mem": "13801",
+    "power.draw": "542.57",
+    "temperature.gpu": "55",
+    "clocks_event_reasons.active": "0x0000000000000004"
+   },
+   "speed_end": {
+    "utc": 1792395396.54867,
+    "clocks.sm": "2775",
+    "clocks.mem": "13801",
+    "power.draw": "244.15",
+    "temperature.gpu": "43",
+    "clocks_event_reasons.active": "0x0000000000000000"
+   }
+  },
+  "5": {
+   "speed_start": {
+    "utc": 1792395576.4707987,
+    "clocks.sm": "2400",
+    "clocks.mem": "13801",
+    "power.draw": "66.11",
+    "temperature.gpu": "36",
+    "clocks_event_reasons.active": "0x0000000000000000"
+   },
+   "after_warm": {
+    "utc": 1792395591.558847,
+    "clocks.sm": "2512",
+    "clocks.mem": "13801",
+    "power.draw": "543.01",
+    "temperature.gpu": "55",
+    "clocks_event_reasons.active": "0x0000000000000004"
+   },
+   "after_timed": {
+    "utc": 1792395611.4711125,
+    "clocks.sm": "2512",
+    "clocks.mem": "13801",
+    "power.draw": "544.21",
+    "temperature.gpu": "55",
+    "clocks_event_reasons.active": "0x0000000000000004"
+   },
+   "speed_end": {
+    "utc": 1792395614.2409134,
+    "clocks.sm": "2670",
+    "clocks.mem": "13801",
+    "power.draw": "232.49",
+    "temperature.gpu": "40",
+    "clocks_event_reasons.active": "0x0000000000000000"
+   }
+  },
+  "6": {
+   "speed_start": {
+    "utc": 1792395800.2304008,
+    "clocks.sm": "2400",
+    "clocks.mem": "13801",
+    "power.draw": "66.23",
+    "temperature.gpu": "36",
+    "clocks_event_reasons.active": "0x0000000000000000"
+   },
+   "after_warm": {
+    "utc": 1792395814.9359016,
+    "clocks.sm": "2520",
+    "clocks.mem": "13801",
+    "power.draw": "541.82",
+    "temperature.gpu": "54",
+    "clocks_event_reasons.active": "0x0000000000000004"
+   },
+   "after_timed": {
+    "utc": 1792395834.8608034,
+    "clocks.sm": "2520",
+    "clocks.mem": "13801",
+    "power.draw": "544.12",
+    "temperature.gpu": "55",
+    "clocks_event_reasons.active": "0x0000000000000004"
+   },
+   "speed_end": {
+    "utc": 1792395837.6282313,
+    "clocks.sm": "2595",
+    "clocks.mem": "13801",
+    "power.draw": "215.60",
+    "temperature.gpu": "38",
+    "clocks_event_reasons.active": "0x0000000000000000"
+   }
+  },
+  "7": {
+   "speed_start": {
+    "utc": 1792396029.104156,
+    "clocks.sm": "2392",
+    "clocks.mem": "13801",
+    "power.draw": "66.39",
+    "temperature.gpu": "36",
+    "clocks_event_reasons.active": "0x0000000000000000"
+   },
+   "after_warm": {
+    "utc": 1792396043.873254,
+    "clocks.sm": "2512",
+    "clocks.mem": "13801",
+    "power.draw": "540.91",
+    "temperature.gpu": "54",
+    "clocks_event_reasons.active": "0x0000000000000004"
+   },
+   "after_timed": {
+    "utc": 1792396063.835638,
+    "clocks.sm": "2512",
+    "clocks.mem": "13801",
+    "power.draw": "542.82",
+    "temperature.gpu": "55",
+    "clocks_event_reasons.active": "0x0000000000000004"
+   },
+   "speed_end": {
+    "utc": 1792396066.630433,
+    "clocks.sm": "2557",
+    "clocks.mem": "13801",
+    "power.draw": "207.00",
+    "temperature.gpu": "38",
+    "clocks_event_reasons.active": "0x0000000000000000"
+   }
+  },
+  "8": {
+   "speed_start": {
+    "utc": 1792396259.268844,
+    "clocks.sm": "2392",
+    "clocks.mem": "13801",
+    "power.draw": "66.36",
+    "temperature.gpu": "36",
+    "clocks_event_reasons.active": "0x0000000000000000"
+   },
+   "after_warm": {
+    "utc": 1792396273.904934,
+    "clocks.sm": "2512",
+    "clocks.mem": "13801",
+    "power.draw": "540.82",
+    "temperature.gpu": "54",
+    "clocks_event_reasons.active": "0x0000000000000004"
+   },
+   "after_timed": {
+    "utc": 1792396293.8841975,
+    "clocks.sm": "2512",
+    "clocks.mem": "13801",
+    "power.draw": "542.60",
+    "temperature.gpu": "55",
+    "clocks_event_reasons.active": "0x0000000000000004"
+   },
+   "speed_end": {
+    "utc": 1792396296.6385565,
+    "clocks.sm": "2752",
+    "clocks.mem": "13801",
+    "power.draw": "245.09",
+    "temperature.gpu": "44",
+    "clocks_event_reasons.active": "0x0000000000000000"
+   }
+  }
+ }
+}

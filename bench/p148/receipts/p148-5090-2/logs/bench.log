@@ -1,0 +1,9 @@
+P148_CONTRACT qkv: cublas 1.697e-03; configs 1.697e-03..1.697e-03
+P148_CONTRACT o: cublas 1.705e-03; configs 1.705e-03..1.705e-03
+P148_CONTRACT head: cublas 1.665e-03; configs 1.660e-03..1.660e-03
+P148_CUBLAS qkv: [('std::enable_if<!(false), void>::type int', [1280, 1, 1])]
+P148_CUBLAS o: [('std::enable_if<!(false), void>::type int', [512, 1, 1])]
+P148_CUBLAS head: [('std::enable_if<!(false), void>::type int', [37984, 1, 1])]
+P148_READ qkv: choice 2,1024,4,1; A1 0.7406 B1 0.6787 B2 0.6787 A2 0.7410 ms
+P148_READ o: choice 2,1024,4,1; A1 0.6336 B1 0.5577 B2 0.5581 A2 0.6340 ms
+P148_READ head: choice 4,1024,4,1; A1 0.3805 B1 0.1892 B2 0.1892 A2 0.3805 ms

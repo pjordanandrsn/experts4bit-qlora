@@ -1,0 +1,1 @@
+{"amendment": 16, "cpu_model": "Intel(R) Xeon(R) Gold 6330 CPU @ 2.00GHz", "logical_cpus": 112, "physical_cores": 56, "threads_per_core": 2.0, "affinity_cpus": 112, "cpu_quota": 53.76, "quota_detail": {"cgroup": "v1", "cfs_quota_us": 5375999, "cfs_period_us": 100000}, "torch_default_pool": 56, "omp_num_threads": null}

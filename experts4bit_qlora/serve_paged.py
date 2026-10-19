@@ -177,11 +177,27 @@ PREFILL_GLUE_DEFAULT_FAMILIES = {
     "qwen3_moe": "P130 (#1588, read #1605): x1.118 [1.116, 1.119] per 512-token first-chunk prefill replay on one RTX "
                  "5090, AT_PARITY on P117's teacher-forced instrument (bias -0.0035 nats)",
 }
-# Lane P143's split cap for the paged FP8 attention decode (bench/p143/PREREG-p143.md, Amendment 2): an UNSET
-# ``E4B_ATTN_SPLIT_CAP`` resolves per family from here -- empty until P143's served read licenses a family -- and to the
-# library's own plan everywhere else. ``0`` keeps the library's plan; ``n`` caps it at n splits.
+# Lane P143's split cap for the paged FP8 attention decode (bench/p143/PREREG-p143.md, Amendments 2 and 3): an UNSET
+# ``E4B_ATTN_SPLIT_CAP`` resolves per family from here, and to the library's own plan everywhere else. ``0`` keeps the
+# library's plan; ``n`` caps it at n splits. qwen3_moe takes 16 on P143 Amendment 3's binding served read (#1788,
+# p143a3-5090-1: FLIP, one request 1.044x as fast, the min of four ABBA pairs; 16 requests unchanged; SANE exact),
+# after Amendment 2's NO_FLIP (#1778, p143a2-5090-1: g1 1.0297 under a noisy self-pair). The cap moves buckets 1, 2
+# and 4 only (32 / 32 / 23 -> 16 splits at 4096-token slots) and is bitwise-identical to the plan at contexts <= 1024.
+# Mixtral (B 1-2 move under the cap) stays on the plan until a read of its own. The measured basis is Qwen3-30B-A3B on
+# an RTX 5090 (170 SMs); other qwen3_moe checkpoints (e.g. Qwen3-235B-A22B, also 4 KV heads, so the same plan table)
+# and other cards (the plan is SM-scaled: the cap moves B 1-6 on a 188-SM PRO 6000, B 1-4 on a 128-SM 4090) take the
+# default by family without a read of their own.
 ATTN_SPLIT_CAP_ENV = "E4B_ATTN_SPLIT_CAP"
-ATTN_SPLIT_CAP_DEFAULT_FAMILIES: dict = {}
+ATTN_SPLIT_CAP_DEFAULT_FAMILIES: dict = {
+    "qwen3_moe": 16,      # e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19 (bench/p143/RESULTS-p143.md)
+}
+#: P151 (grouped-nf4-gemm K35): route the attention projections' single-row decode GEMVs through dense_gemv's
+#: gemv_bf16_bw (engines/dense_gemv_bw.py). 0 (the default) or 1; nothing chooses it by family until a read licenses it.
+DENSE_GEMV_BW_ENV = "E4B_DENSE_GEMV_BW"
+#: P153 (grouped-nf4-gemm K36): serve the lm_head on its per-row int8 grid (P150's I8HEAD, rounded in place: knob-on
+#: changes multi-row outputs too) and route its single-row decode GEMV through dense_gemv's gemv_i8_bw
+#: (engines/int8_head_bw.py). 0 (the default) or 1; nothing chooses it by family until a read licenses it.
+INT8_HEAD_BW_ENV = "E4B_INT8_HEAD_BW"
 _FUSION_WARNED: set = set()
 
 
@@ -439,6 +455,14 @@ def resolve_attn_split_cap(value: str, model_type) -> tuple:
     return None, "default-off"
 
 
+def apply_attn_split_cap(kv, cfg, model_type) -> tuple:
+    """``(cap, source)``, resolved from ``cfg.attn_split_cap`` for ``model_type`` and set on ``kv.split_cap``: the one
+    place :func:`build_engine` turns the knob (or its per-family default) into what the KV hands the kernel."""
+    cap, source = resolve_attn_split_cap(getattr(cfg, "attn_split_cap", FUSION_UNSET), model_type)
+    kv.split_cap = cap
+    return cap, source
+
+
 def resolve_prefill_glue(value: str, model_type) -> tuple:
     """``(mode, source)``: an explicit ``0`` / ``1`` passes through (``explicit``); ``default`` resolves to ``1`` on a
     ``model_type`` in :data:`PREFILL_GLUE_DEFAULT_FAMILIES` (``default-allowlisted``) and to ``0`` elsewhere
@@ -503,6 +527,8 @@ class PagedServeConfig:
     fuse_qkv: bool = False               # E4B_PAGED_FUSE_QKV not 0 (fuse_qkv applies the env-gated folds itself)
     prefill_glue: str = FUSION_UNSET     # E4B_FUSE_PREFILL_GLUE: 0 | 1, or "default" when unset (per family, P130)
     attn_split_cap: str = FUSION_UNSET   # E4B_ATTN_SPLIT_CAP: 0 | 1..32, or "default" when unset (per family, P143)
+    dense_gemv_bw: str = "0"             # E4B_DENSE_GEMV_BW: 0 | 1 (P151; grouped-nf4-gemm K35's gemv_bf16_bw)
+    int8_head_bw: str = "0"              # E4B_INT8_HEAD_BW: 0 | 1 (P153; grouped-nf4-gemm K36's gemv_i8_bw, the int8 head)
     fusion_modes: dict = field(default_factory=dict)   # FUSION_KNOBS -> auto | 0 | 1 (_fusion_env), or "default" when
                                                        # unset (resolved per family at the build); a knob not named keeps
                                                        # its old reading: fuse_qkv, or the fold's own env var
@@ -556,6 +582,8 @@ class PagedServeConfig:
             fusion_modes=modes,
             prefill_glue=_prefill_glue_env(env(PREFILL_GLUE_ENV, "")),
             attn_split_cap=_attn_split_cap_env(env(ATTN_SPLIT_CAP_ENV, "")),
+            dense_gemv_bw=env(DENSE_GEMV_BW_ENV, "0").strip() or "0",
+            int8_head_bw=env(INT8_HEAD_BW_ENV, "0").strip() or "0",
             torch_threads=int(env("E4B_PAGED_TORCH_THREADS", "8")),
             max_tokens_cap=int(env("E4B_PAGED_MAX_TOKENS", "0")),
             max_queue=int(env("E4B_PAGED_MAX_QUEUE", "0")),
@@ -1478,6 +1506,16 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     register(model)
     fusion_report: dict = {}
     fusions = _apply_fusions(model, cfg, report=fusion_report)
+    # P151: the dense single-row GEMV (grouped-nf4-gemm K35) on the attention projections, after fuse_qkv built the
+    # fused projection and before any decode graph is captured (a captured graph keeps the route it was captured with).
+    # The exact-type checks above (int4 attention, LoRA) ran before this swap; it replaces only exact nn.Linear
+    # projections, so with int4 attention on there is nothing to swap and it refuses as vacuous.
+    from .engines.dense_gemv_bw import apply_dense_gemv_bw, engagement as dense_gemv_engagement
+    dense_gemv = apply_dense_gemv_bw(model, getattr(cfg, "dense_gemv_bw", "0"))
+    # P153: the lm_head on its int8 grid (rounded in place, so every row count reads the head P150 ruled on) with its
+    # one-row decode GEMV through grouped-nf4-gemm K36, before any graph is captured; an int4 head (Int4Linear) refuses
+    from .engines.int8_head_bw import apply_int8_head_bw, engagement as int8_head_engagement
+    int8_head = apply_int8_head_bw(model, getattr(cfg, "int8_head_bw", "0"))
 
     # proof of execution, the lanes' census (serve_stack.build_served_model) + their refusal rule
     try:
@@ -1505,9 +1543,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
                     k_groups=(None if cfg.kv_groups == "auto" else int(cfg.kv_groups)),
                     batched_append=True, device=cfg.device, scratch_slots=scratch, alias_slots=spec_k)
     # P143: the attention split cap, on the KV before any decode graph is captured (a captured graph keeps its n_split)
-    split_cap, split_cap_source = resolve_attn_split_cap(getattr(cfg, "attn_split_cap", FUSION_UNSET),
-                                                         getattr(model.config, "model_type", None))
-    kv.split_cap = split_cap
+    split_cap, split_cap_source = apply_attn_split_cap(kv, cfg, getattr(model.config, "model_type", None))
     runner = PagedModelRunner(model, kv, device=cfg.device, bulk_kv=cfg.bulk_kv, last_logits=cfg.last_logits)
     grouping = _batched_graph_grouping(cfg)          # before capture: the batched lane's sync-free grouping
     # SD2: the draft, its hooks and the verify buckets, before any graph is captured
@@ -1538,6 +1574,11 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     # grouped-nf4-gemm's own decode_split_plan): the engagement record a served read checks
     info["attn_split_cap"] = {"cap": split_cap, "source": split_cap_source,
                               "plans": {str(b_): dict(r_) for b_, r_ in sorted(kv.split_plans.items())}}
+    # P151: what the knob swapped, and per row count which modules routed through the kernel or passed to F.linear
+    # during the build's captures and warm-ups: the engagement record a served read checks
+    info["dense_gemv_bw"] = {**dense_gemv, "engagement": dense_gemv_engagement(model)}
+    # P153: the head's record and, per row count, whether it routed or passed during the build's captures and warm-ups
+    info["int8_head_bw"] = {**int8_head, "engagement": int8_head_engagement(model)}
     # The build churns through host buffers it frees (the hybrid tier's setup tier, the stacks' one-shot reads), and
     # glibc keeps freed blocks under its mmap threshold resident for the life of the server: 0.34 GB on OLMoE-1B-7B
     # (RTX A2000 host, the one place it was measured). The loader alone leaves ~4 MB.

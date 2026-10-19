@@ -1,0 +1,279 @@
+{
+ "proc": 3,
+ "phase_b": "none",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "e4b_sha": "c7a406821a6fb03093faefb8cf71ca84606bab62",
+ "gnf4_sha": "57f53e19fe65eeef4b7ed26f97d7bd8fdd87f0eb",
+ "transformers": "5.17.0",
+ "load_s": 429.9,
+ "stride": 3072,
+ "layers": 48,
+ "windows_digest": "843310628900b7f57b129d438376dc23db78b3fb299e458a18aaa7e85a0f74b0",
+ "corpus": {
+  "arrow": [
+   "b08601e04326c79dfdd32d625aee71d232d685c3"
+  ],
+  "snapshots": [
+   "b08601e04326c79dfdd32d625aee71d232d685c3"
+  ]
+ },
+ "prefill_glue": {
+  "mode": "1",
+  "source": "default-allowlisted"
+ },
+ "census": {
+  "moe_layers": 48,
+  "experts": 128,
+  "top_k": 8,
+  "model_type": "qwen3_moe",
+  "int4_expert_layers": 48,
+  "int4_attn_projections": 96,
+  "int4_store_kinds": [
+   "int4_b32"
+  ],
+  "fusion_report": {
+   "E4B_FUSE_T1_GLUE": {
+    "mode": "1",
+    "prefill": "on",
+    "patched": 193,
+    "failed_probe": 0
+   },
+   "E4B_FUSE_T1_GLUE_R2": {
+    "mode": "1",
+    "prefill": "on",
+    "patched": [
+     48,
+     48
+    ],
+    "kernel_gaps": 0
+   },
+   "E4B_FUSE_ROUTER_EPI": {
+    "mode": "1",
+    "patched": 48,
+    "failed_probe": 0,
+    "no_kernel_mode": 0,
+    "fp32_upstream": 0
+   }
+  },
+  "levers_env": {
+   "E4B_SERVE_EXP_INT4": "1",
+   "E4B_SERVE_ATTN_INT4": "1",
+   "E4B_SERVE_ATTN_INT4_CALIB": "0",
+   "E4B_CALIB_SOURCE": "c4",
+   "E4B_FUSE_T1_GLUE": "1",
+   "E4B_FUSE_T1_GLUE_R2": "1",
+   "E4B_FUSE_ROUTER_EPI": "1"
+  }
+ },
+ "speed": {
+  "T": 512,
+  "windows": 4,
+  "rounds": 3,
+  "warm": 1,
+  "eager_rounds": 1,
+  "eager_windows": 2,
+  "decode_tokens": 64,
+  "bulk_kv": true,
+  "last_logits": false,
+  "capture_order": [
+   "m64",
+   "m0",
+   "m32"
+  ],
+  "graphs": {
+   "m64": {
+    "status": "on",
+    "T": 512,
+    "pool_mib": 446,
+    "forwards": 5,
+    "seen": {
+     "route": {
+      "int4_k19|gt256": 240
+     },
+     "k19": {
+      "split|lean|gt256": 240
+     },
+     "folds": {
+      "attention": 240,
+      "layer": 240,
+      "norm": 245
+     }
+    }
+   },
+   "m0": {
+    "status": "on",
+    "T": 512,
+    "pool_mib": 426,
+    "forwards": 5,
+    "seen": {
+     "route": {
+      "int4_k19|gt256": 240
+     },
+     "k19": {
+      "chained|lean|gt256": 240
+     },
+     "folds": {
+      "attention": 240,
+      "layer": 240,
+      "norm": 245
+     }
+    }
+   },
+   "m32": {
+    "status": "on",
+    "T": 512,
+    "pool_mib": 426,
+    "forwards": 5,
+    "seen": {
+     "route": {
+      "int4_k19|gt256": 240
+     },
+     "k19": {
+      "split|lean|gt256": 240
+     },
+     "folds": {
+      "attention": 240,
+      "layer": 240,
+      "norm": 245
+     }
+    }
+   }
+  },
+  "decode_check": {
+   "tokens": 64,
+   "seen": {
+    "m0": {
+     "route": {
+      "int4_k19|gt256": 48
+     },
+     "k19": {
+      "one_launch|lean|gt256": 48
+     },
+     "folds": {}
+    },
+    "m32": {
+     "route": {
+      "int4_k19|gt256": 48
+     },
+     "k19": {
+      "one_launch|lean|gt256": 48
+     },
+     "folds": {}
+    },
+    "m64": {
+     "route": {
+      "int4_k19|gt256": 48
+     },
+     "k19": {
+      "one_launch|lean|gt256": 48
+     },
+     "folds": {}
+    }
+   }
+  },
+  "function": {
+   "m32": {
+    "windows": 4,
+    "differ": []
+   },
+   "m64": {
+    "windows": 4,
+    "differ": []
+   }
+  },
+  "digests_m0": [
+   "1df811d0ff874e5d9b12164dd4134ce1bc4a7b8ca94d28ccfce0e47ef3bf1e31",
+   "bfbe449236c5b81285484baba4d5ed533c9a564a6791943b00816159199182d5",
+   "affe27d82cffa00d9552554f222c3504141e188ec41a10a48a43e8cf0379dd06",
+   "f03b4d68905a91cd7683549de3e87221e542c42028748fba2a0ebfc5e8ecb1e2"
+  ],
+  "replay_ms": {
+   "m0": [
+    41.1152,
+    41.4277,
+    41.2585,
+    41.2891,
+    41.1408,
+    41.4423,
+    41.2521,
+    41.3165,
+    41.1499,
+    41.5076,
+    41.3186,
+    41.411
+   ],
+   "m32": [
+    40.9854,
+    41.3788,
+    41.4054,
+    41.3877,
+    41.0355,
+    41.4221,
+    41.4748,
+    41.4276,
+    41.0692,
+    41.4277,
+    41.4548,
+    41.5139
+   ],
+   "m64": [
+    39.7264,
+    40.1099,
+    40.1711,
+    40.2733,
+    39.7031,
+    40.1305,
+    40.1883,
+    40.2878,
+    39.7579,
+    40.1079,
+    40.2064,
+    40.3559
+   ]
+  },
+  "median_ms": {
+   "m0": 41.3028,
+   "m32": 41.41375,
+   "m64": 40.150800000000004
+  },
+  "eager": {
+   "forwards": 6,
+   "seen": {
+    "route": {
+     "int4_k19|gt256": 288
+    },
+    "k19": {
+     "chained|lean|gt256": 96,
+     "split|lean|gt256": 192
+    },
+    "folds": {
+     "attention": 288,
+     "layer": 288,
+     "norm": 294
+    }
+   },
+   "ms": {
+    "m0": [
+     104.415,
+     100.452
+    ],
+    "m32": [
+     117.001,
+     116.612
+    ],
+    "m64": [
+     116.356,
+     116.669
+    ]
+   },
+   "median_ms": {
+    "m0": 102.43350000000001,
+    "m32": 116.8065,
+    "m64": 116.51249999999999
+   }
+  }
+ },
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "max_mem_gb": 20.97
+}
