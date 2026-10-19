@@ -6,6 +6,7 @@
 #   * the run id must be one the registration declares: smt-fuse-1..3 (bench/smt-fuse/PREREG-smt-fuse.md; -2 and -3 are
 #     spares for pre-create refusals, listings gone before the create and NOT_RUN at the pre-flight). Any other id is refused;
 #   * SMT_FUSE_DRY=1 is the $0 dry run (ids smt-fuse-dry-<n>) through SMT_FUSE_BOX_EXEC, as P146's.
+#   * Amendment 1: smt-sib-1..3 (and smt-sib-dry-<n>) run the pinned sibling probe; smt_fuse_run.sh picks it by run id.
 # It starts the lane detached under a fresh nonce, polls TP_DONE.<nonce> with the tp4-style heartbeat/liveness check and
 # fetches receipts -- never the checkpoint or the e4b tree. Nothing here creates, destroys or approves compute.
 set -uo pipefail
@@ -24,16 +25,17 @@ fi
 # ---- the declared run ids: the reading, its one rerun; the dry run's own
 RUN_ID=$E4B_RENT_RUN_ID
 case "$RUN_ID" in
-  smt-fuse-[1-3]) [ "$DRY" != 1 ] || { say "refusing: $RUN_ID is a reading's id"; exit 78; };;
-  smt-fuse-dry-[0-9]|smt-fuse-dry-[0-9][0-9]) [ "$DRY" = 1 ] || { say "refusing: $RUN_ID is a dry run's id (SMT_FUSE_DRY=1 only)"; exit 78; };;
-  *) say "refusing: run id $RUN_ID is not declared (smt-fuse-1..3; smt-fuse-dry-<n> dry)"; exit 78;;
+  smt-fuse-[1-3]|smt-sib-[1-3]) [ "$DRY" != 1 ] || { say "refusing: $RUN_ID is a reading's id"; exit 78; };;
+  smt-fuse-dry-[0-9]|smt-fuse-dry-[0-9][0-9]|smt-sib-dry-[0-9]|smt-sib-dry-[0-9][0-9])
+    [ "$DRY" = 1 ] || { say "refusing: $RUN_ID is a dry run's id (SMT_FUSE_DRY=1 only)"; exit 78; };;
+  *) say "refusing: run id $RUN_ID is not declared (smt-fuse-1..3, Amendment 1's smt-sib-1..3; *-dry-<n> dry)"; exit 78;;
 esac
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 # Lane liveness by PID identity and host uptime (#1512) and the host-fault marker (#1517): the helper is sourced here and
 # streamed to the box over stdin for the launch and each probe; it is never staged (staged.sha256 does not list it).
 LANE_HELPER="$REPO/bench/common/lane_liveness.sh"
 source "$LANE_HELPER" || { say "refusing: missing lane liveness helper"; exit 78; }
-STAGE="$HERE/smt_fuse_run.sh $HERE/smt_fuse_box.py $HERE/q235_bootstrap.py $HERE/wheels.json $HERE/dq11_require_git.sh $HERE/staged.sha256"
+STAGE="$HERE/smt_fuse_run.sh $HERE/smt_fuse_box.py $HERE/smt_sib_box.py $HERE/q235_bootstrap.py $HERE/wheels.json $HERE/dq11_require_git.sh $HERE/staged.sha256"
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
 # staged.sha256 names the files as the BOX will see them; resolve each name to its source and compare hashes
 # (the same case as tests/test_smt_fuse_staged_pin.py, which runs this check in CI where it costs nothing).
@@ -41,7 +43,7 @@ sha_of(){ (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | cut -d" " -f1; }
 while read -r want name; do
   case "$want" in \#*|"") continue;; esac
   case "$name" in
-    smt_fuse_run.sh|smt_fuse_box.py|q235_bootstrap.py|wheels.json|dq11_require_git.sh) src="$HERE/$name";;
+    smt_fuse_run.sh|smt_fuse_box.py|smt_sib_box.py|q235_bootstrap.py|wheels.json|dq11_require_git.sh) src="$HERE/$name";;
     *) say "refusing: staged.sha256 names $name, which this driver does not stage"; exit 78;;
   esac
   got=$(sha_of "$src")
@@ -51,6 +53,13 @@ done < "$HERE/staged.sha256"
 [ -z "${E4B_SHA:-}" ] || [ "$E4B_SHA" = "$E4B_PIN" ] || { say "refusing: E4B_SHA=$E4B_SHA is not the registered pin $E4B_PIN"; exit 78; }
 E4B_SHA=$E4B_PIN
 RUN_DIR=$E4B_RENT_RUN_DIR; DEADLINE=$E4B_RENT_DEADLINE_EPOCH
+# Amendment 1's guard is a tested fit (smt_sib_box.time_fit): the launch's own deadline must leave at least that much, so the
+# manifest's wallclock and the registration cannot drift apart (refused before anything is staged)
+case "$RUN_ID" in smt-sib-[1-3])
+  FIT=$(python3 "$HERE/smt_sib_box.py" --fit) || { say "refusing: no time fit from smt_sib_box.py"; exit 78; }
+  LEFT_S=$(( DEADLINE - $(date +%s) ))
+  [ "$LEFT_S" -ge "$FIT" ] || { say "refusing: the launch leaves ${LEFT_S}s < the registered fit ${FIT}s (guard 2.5 h)"; exit 78; };;
+esac
 POLL=${SMT_FUSE_POLL_S:-60}; W=${SMT_FUSE_HOME:-/root/smt_fuse}
 HF_TOKEN_FILE=${HF_TOKEN_FILE:-$HOME/.config/hf/token}
 # ---- the transport: ssh/scp/rsync to the rented box, or SMT_FUSE_BOX_EXEC + tar to the dry box
@@ -60,7 +69,7 @@ if [ "$DRY" = 1 ]; then
   box_stage(){ local args=() f; for f in $STAGE; do args+=(-C "$(dirname "$f")" "$(basename "$f")"); done
     tar -cf - "${args[@]}" | box "tar -C $W -xf -" || return 1
     git -C "$REPO" archive --format=tar --prefix=e4bsrc/ "$E4B_SHA" | box "tar -C $W -xf -"; }
-  box_fetch(){ box "cd $W && tar -cf - --exclude=./e4bsrc --exclude='./out_*' --exclude=__pycache__ --exclude=./.cache --exclude=./hf ."       | tar -C "$1" -xif -; }
+  box_fetch(){ box "cd $W && tar -cf - --exclude=./e4bsrc --exclude='./out_*' --exclude=__pycache__ --exclude=./.cache --exclude=./hf --exclude='./venv*' ."       | tar -C "$1" -xif -; }
 else
   HOST=$E4B_RENT_SSH_HOST; PORT=$E4B_RENT_SSH_PORT; WHERE="$HOST:$PORT"
   SSH="ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -o ServerAliveInterval=30 -p $PORT root@$HOST"
@@ -68,8 +77,9 @@ else
   box(){ $SSH "$1"; }
   box_stage(){ $SCP $STAGE "root@$HOST:$W/"; }
   # The checkpoint stays on the box (the hub cache, outside $W), and so do the e4b clone and the fixture; records, logs,
-  # the data slice and the verdict travel.
-  box_fetch(){ rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT"       --exclude '__pycache__' --exclude '.cache' --exclude 'hf' --exclude 'e4bsrc' --exclude 'out_*'       "root@$HOST:$W/" "$1/"; }
+  # the data slice and the verdict travel. The box's venv stays too: smt-fuse-2 fetched its 6.8 GB venv-q235 into the run
+  # dir, which made the receipt store read dirty and refused every lane's launch until it was moved.
+  box_fetch(){ rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT"       --exclude '__pycache__' --exclude '.cache' --exclude 'hf' --exclude 'e4bsrc' --exclude 'out_*' --exclude '/venv*'       "root@$HOST:$W/" "$1/"; }
 fi
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
 PASS="SMT_FUSE_RUN_ID=$RUN_ID SMT_FUSE_RUN_NONCE=$NONCE SMT_FUSE_DEADLINE_EPOCH=$DEADLINE SMT_FUSE_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA"
