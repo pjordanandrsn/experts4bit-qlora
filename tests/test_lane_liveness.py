@@ -290,7 +290,7 @@ def test_tc1_drive_names_its_refusal_in_the_run_dir(tmp_path):
     assert line.startswith("rc=78; drive: refusing: E4B_RENT_SSH_HOST is not set"), line
 
 
-# Legacy drivers that still decide LANE DEAD from `pgrep -f '<runner>' | wc -l` run inside the ssh command string. That
+# Legacy drivers that still decide LANE DEAD (or ALIVE) from `pgrep -f '<runner>'` run inside the ssh command string. That
 # command line contains the pattern, so pgrep counts its own shell and a dead lane reads "live" until the deadline. They
 # are frozen as registered: none is to be launched again without first moving to bench/common/lane_liveness.sh (and out
 # of this list). The list may only shrink -- a NEW driver that makes a lane-death decision is held to the rule below.
@@ -304,12 +304,14 @@ LEGACY_PGREP_DRIVERS = frozenset([
     "p109/p109", "p110/p110", "p111/p111", "p112/p112", "p113/p113", "p114/p114", "p115/p115", "p115/p115c",
     "p115/p115d", "p116/p116", "p117/p117", "p118/p118", "p119/p119", "p120/p120", "p121/p121", "p122/p122",
     "p123/p123", "p124/p124", "p125/p125", "p126/p126", "p133/p133", "p134/p134", "p136/p136", "p140/p140",
-    "p141/p141", "p143/p143", "p143/p143a2", "p145/p145", "pername/pername", "tp4/tp4",
+    "p141/p141", "p143/p143", "p143/p143a2", "p145/p145", "p319/p319", "p319b/p319b", "pername/pername", "tp4/tp4",
 ])
 
 
 def _lane_death_drivers():
-    return sorted(p for p in ROOT.glob("bench/*/*_drive.sh") if "LANE DEAD" in p.read_text())
+    """Every driver that decides liveness: it can declare LANE DEAD, or it runs `pgrep -f` at all (p319/p319b read ALIVE
+    from one without the words), since a driver's pgrep runs inside an ssh command line that contains its pattern."""
+    return sorted(p for p in ROOT.glob("bench/*/*_drive.sh") if "LANE DEAD" in (t := p.read_text()) or "pgrep -f" in t)
 
 
 def _uses_launch_identity(text):
