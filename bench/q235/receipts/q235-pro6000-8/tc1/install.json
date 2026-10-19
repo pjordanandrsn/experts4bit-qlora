@@ -1,0 +1,23 @@
+{
+ "schema": "q235-install/1",
+ "wheel_lock_sha256": "84f361ed35fff9a857f340b65488ad582dc4270aef7e67cbeb6b46b8370021f3",
+ "wheels": 56,
+ "commits": {
+  "grouped-nf4-gemm": "724ccc454f006c1a46836e434e997f31f293747f",
+  "experts4bit-qlora": "27200917f1282ca7c8daad47fa553536d7c62871"
+ },
+ "versions": {
+  "torch": "2.11.0+cu128",
+  "transformers": "5.19.0",
+  "bitsandbytes": "0.50.2",
+  "accelerate": "1.14.0",
+  "huggingface_hub": "2.2.0",
+  "safetensors": "0.8.0",
+  "tokenizers": "0.23.3",
+  "numpy": "2.2.6",
+  "triton": "3.6.0",
+  "grouped-nf4-gemm": "0.45.0",
+  "experts4bit-qlora": "0.55.0"
+ },
+ "python": "3.11.13"
+}

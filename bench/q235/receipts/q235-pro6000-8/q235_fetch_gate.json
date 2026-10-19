@@ -1,0 +1,26 @@
+{
+ "schema": "q235-fetch-gate/1",
+ "generated_at": 1792393515,
+ "e4b_sha": "27200917f1282ca7c8daad47fa553536d7c62871",
+ "gnf4_sha": "724ccc454f006c1a46836e434e997f31f293747f",
+ "model": {
+  "repo": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+  "revision": "ac9c66cc9b46af7306746a9250f23d47083d689e",
+  "resolved": "ac9c66cc9b46af7306746a9250f23d47083d689e",
+  "listed": 129,
+  "selected": 129
+ },
+ "refusals": [],
+ "wheels": {
+  "count": 56,
+  "failed": 0
+ },
+ "git": {
+  "gnf4": "724ccc454f006c1a46836e434e997f31f293747f",
+  "e4b": "27200917f1282ca7c8daad47fa553536d7c62871"
+ },
+ "placeholders": {
+  "files": 16
+ },
+ "passed": true
+}

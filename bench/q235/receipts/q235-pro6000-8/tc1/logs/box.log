@@ -1,0 +1,18 @@
+[08:15:36]   host CPUs: 112 visible, quota 53.76, torch threads 56, OMP_NUM_THREADS=None
+[08:15:37]   checkpoint: local directory /root/tc1/hf-cache/model
+[08:15:38]   fusing + quantizing experts (up to 94x128) to nf4 (streaming)...
+[08:15:38]   host-side fuse: intra-op threads 56 -> 54 (the container's CPU quota / affinity)
+[08:26:25]   quantized experts on 94/94 MoE layers (128 experts each)
+[08:26:25]   offloaded 94 layers' 4-bit experts to pinned CPU RAM (streamed to GPU one layer at a time during train/eval)
+[08:26:25]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[08:26:45]   released 2.07 GiB of cached pinned host blocks (the load's pinned reads)
+/root/tc1/q235_box.py:866: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:836.)
+  return float(loss), grads, tf - t, tb - tf, time.time() - tb
+/root/tc1/venv-q235/lib/python3.11/site-packages/torch/utils/checkpoint.py:232: UserWarning: None of the inputs have requires_grad=True. Gradients will be None
+  check_backward_validity(args)
+/root/tc1/venv-q235/lib/python3.11/site-packages/torch/autograd/graph.py:869: UserWarning: Memory Efficient attention defaults to a non-deterministic algorithm. To explicitly enable determinism call torch.use_deterministic_algorithms(True, warn_only=False). (Triggered internally at /pytorch/aten/src/ATen/native/transformers/cuda/attention_backward.cu:900.)
+  return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+/root/tc1/venv-q235/lib/python3.11/site-packages/torch/utils/checkpoint.py:232: UserWarning: None of the inputs have requires_grad=True. Gradients will be None
+  check_backward_validity(args)
+{"plant": {"kind": null, "layer": null}, "in_process": {"loss_0": 1.2399002313613892, "loss_1": 1.2399002313613892, "loss_equal": true, "grad_maxrel": 0.040048543363809586}, "rules": {"step0_all_finite": true, "step0_every_B_nonzero": true, "step0_every_A_zero": true, "step0_every_B_changed": true, "step1_all_finite": true, "step1_every_A_nonzero": true, "step1_every_B_nonzero": true, "step1_every_A_changed": true, "step1_every_B_changed": true, "step0_dx_finite_nonzero": true, "step1_dx_finite_nonzero": true, "heldout_finite": true}, "frozen_sha256_after_both_steps_equal": true, "step": {"loss": 1.2338890099146258, "elapsed_s": 44.403, "h2d_bytes_offload": 1016497963008, "max_memory_allocated": 22858075648, "host_peak_rss": 365189795840}, "step1": {"loss": 0.6497962284633226, "elapsed_s": 44.261, "h2d_bytes_offload": 1016497963008, "max_memory_allocated": 24446189056, "host_peak_rss": 365189795840}}
