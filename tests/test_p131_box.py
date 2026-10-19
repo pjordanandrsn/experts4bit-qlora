@@ -323,3 +323,12 @@ def test_gpu_state_records_an_unreadable_query_and_never_raises(box, tmp_path, m
     monkeypatch.setenv("PATH", str(tmp_path))            # no nvidia-smi at all: the CPU CI runner
     g = box.gpu_state()
     assert "error" in g and isinstance(g["utc"], float) and box._gpu_line(g).startswith("unread (")
+
+
+def test_speed_samples_the_gpu_after_the_warm_rounds_and_after_the_timed_rounds(box, clean_env, monkeypatch):
+    calls = []
+    monkeypatch.setattr(box, "gpu_state", lambda: calls.append(len(calls) + 1) or {"utc": 0.0, "sample": len(calls)})
+    rec = box.speed(_tiny(), _prompts(), T, "cpu", rounds=2, warm=1, eager_rounds=0, eager_windows=0,
+                    decode_tokens=DEC, runner=_PrefillStandIn(_tiny()), proc=1)
+    assert rec["gpu_after_warm"]["sample"] == 1 and rec["gpu_after_timed"]["sample"] == 2 and calls == [1, 2]
+    assert all(len(v) == 2 * len(_prompts()) for v in rec["replay_ms"].values())     # timing unchanged: rounds x windows

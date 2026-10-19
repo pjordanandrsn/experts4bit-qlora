@@ -113,7 +113,8 @@ def test_the_box_the_runner_and_the_reducer_share_the_registered_shape():
     assert 'for n in $(seq 0 "$PROCS"); do' in RUN and 'PB=none; [ "$n" = 0 ] && PB=all' in RUN
     assert 'PHASE_B = {0: "all"}' in REDUCE and "WARMUP = 0" in REDUCE and "procs = range(WARMUP, N + 1)" in REDUCE
     assert 'if a.phase_b == "all" and a.proc != 0:' in BOX and "if a.proc < 0:" in BOX
-    assert 'rec["gpu_state"] = {"speed_start": gs0, "speed_end": gpu_state()}' in BOX and "|GPU)" in RUN
+    assert 'rec["gpu_state"] = {"speed_start": gs0, "after_warm": rec["speed"].get("gpu_after_warm"),' in BOX and "|GPU)" in RUN
+    assert 'if r == warm - 1:' in BOX and 'rec["gpu_after_warm"] = gpu_state()' in BOX     # under load, outside timing
     for line in ('ARMS = ("m0", "m32", "m64")', 'TALL = ("m32", "m64")', 'FLOORS = ("half", "chunk", "rev")',
                  'OFF_ARMS = ("R", "rep") + FLOORS + ("mutant_scale",)'):
         assert line in BOX and line in REDUCE, line

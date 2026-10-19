@@ -32,7 +32,8 @@ captured first, second and third (a capture-position effect -- pool placement, a
   per capture (P130's counters). Replays run no Python, so they count nothing.
 
 **GPU state** (Amendment 2, reported only): nvidia-smi's SM and memory clocks, power draw, temperature and active clock
-event reasons, read at the start and the end of the speed pass (``gpu_state()``; an unreadable query is recorded as its
+event reasons, read at the start of the speed pass, right after the warm rounds and right after the timed rounds (under
+load, after a sync, outside every timed pair), and at its end (``gpu_state()``; an unreadable query is recorded as its
 error, never raised).
 
 **Phase B, quality** (``--phase-b all``, process 0 only, Amendment 2): P117's instrument as P130 ran it, in ONE process
@@ -188,6 +189,10 @@ def speed(model, prompts, T, device, *, rounds, warm, eager_rounds, eager_window
             if r >= warm:
                 for g, s, e in evs:
                     ms[g].append(round(s.elapsed_time(e), 4))
+            if r == warm - 1:          # Amendment 2: the clocks the timed rounds start at (under load, after a sync, untimed)
+                rec["gpu_after_warm"] = gpu_state()
+            if r == warm + rounds - 1:
+                rec["gpu_after_timed"] = gpu_state()
         rec["replay_ms"] = ms
         rec["median_ms"] = {g: statistics.median(v) for g, v in ms.items()}
         eager = {g: [] for g in ARMS}
@@ -355,8 +360,10 @@ def main() -> int:
     rec["speed"] = speed(model, [w[:a.prompt] for w in ws[:a.speed_windows]], a.prompt, cfg.device, rounds=a.rounds,
                          warm=a.warm, eager_rounds=a.eager_rounds, eager_windows=a.eager_windows,
                          decode_tokens=a.decode_tokens, bulk_kv=cfg.bulk_kv, last_logits=cfg.last_logits, proc=a.proc)
-    rec["gpu_state"] = {"speed_start": gs0, "speed_end": gpu_state()}
-    print(f"P131_GPU proc {a.proc} | speed start {_gpu_line(gs0)} | end {_gpu_line(rec['gpu_state']['speed_end'])}", flush=True)
+    rec["gpu_state"] = {"speed_start": gs0, "after_warm": rec["speed"].get("gpu_after_warm"),
+                        "after_timed": rec["speed"].get("gpu_after_timed"), "speed_end": gpu_state()}
+    print(f"P131_GPU proc {a.proc} | " + " | ".join(f"{k} {_gpu_line(v) if v else '-'}" for k, v in rec["gpu_state"].items()),
+          flush=True)
     sp = rec["speed"]
     fn = sp.get("function") or {}
     print(f"P131_SPEED proc {a.proc} | graphs {[(g, v.get('status')) for g, v in sp['graphs'].items()]} "

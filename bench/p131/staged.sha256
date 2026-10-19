@@ -2,7 +2,7 @@
 # tests/test_p131_staged_pin.py resolve each name to its source (bench/p131, bench/p130, bench/p117, bench/p108,
 # bench/p97, bench/p39, tests, bench/common).
 8487e52a8589f9efc1b46bdeba9d58880170139857cbbb30210abfa3b70f5f42  p131_run.sh
-8d2b1176ecae8be965a15334bea34bfd22f6a03b17cfacee9bc1f6319d8b0bb0  p131_box.py
+1fe1564f4fac14c8a65ab28afffa35b8e5f34d5787d7a860a0df0e4a191c71c2  p131_box.py
 b31c332c5a5173f85c1a4c2ba5ba17e6ecbf76cacf77e6f4a4c13a03ff4115fa  p131_reduce.py
 d7071cce7084f56d59c8d30de6712c9ed5b3eb3f8edf5cdf293512ebd2095e98  p130_box.py
 f93a38c21a08ee49e0ef68a2d1e513852b2b94d04ad3e8e5ddd99508037c0049  p117_box.py

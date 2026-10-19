@@ -394,8 +394,9 @@ an artifact unrelated to the levers. Maintainer ruling, 2026-10-19 04:50Z: (b) a
   the prefill glue, the windows, engagement, the capture order, REFUSED, DECODE_TOUCHED, DETERMINISM and FUNCTION. A
   missing process 0 VOIDs, and so do records in the pre-amendment layout (Phase B in process 1).
 - **(b) The GPU state.** Every process records nvidia-smi's SM and memory clocks, power draw, temperature and active
-  clock event reasons, at the start and the end of its speed pass (`gpu_state` in each process record, a `P131_GPU`
-  line in `summary.txt`). It is **reported only**. An unreadable query is recorded as its error and never fails the
+  clock event reasons four times: at the start of its speed pass, right after the warm rounds and right after the timed
+  rounds (under load, after a sync, outside every timed pair: the clocks the timed rounds ran at), and at its end
+  (`gpu_state` in each process record, a `P131_GPU` line in `summary.txt`). It is **reported only**. An unreadable query is recorded as its error and never fails the
   process. It settles the attribution either way: a first-process boost shows in the clocks.
 - **The rule's self-test** grows from 37 to 44 cases:
   - a fast warm-up never trips the span;
