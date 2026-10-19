@@ -62,9 +62,13 @@ while read -r _lref lsha _rref _rsha; do
   done < <(grep -E '^#all-of: ' .github/private-markers.txt)
   # "#added-only:" rules: only the lines this push ADDS (merged history keeps its old mentions), as in the workflow.
   if [ -s "$ADDPATS" ]; then
-    if [ "$_rsha" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$_rsha^{commit}" 2>/dev/null; then
+    if [ "$_rsha" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$_rsha^{commit}" 2>/dev/null \
+       && git merge-base --is-ancestor "$_rsha" "$lsha"; then
       base=$_rsha
     else
+      # a new branch, or a rebase/force-push whose old remote tip is not an ancestor: the default branch's merge base,
+      # refreshed first so a stale local origin/main cannot widen the diff
+      git fetch -q origin main 2>/dev/null || true
       base=$(git merge-base "$lsha" origin/main 2>/dev/null || true)
     fi
     if [ -n "$base" ]; then

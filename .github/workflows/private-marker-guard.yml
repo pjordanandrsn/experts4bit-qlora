@@ -231,8 +231,10 @@ jobs:
           if [ ! -s /tmp/added-only.txt ]; then echo "no #added-only rules"; exit 0; fi
           base="${PR_BASE:-${PUSH_BEFORE:-}}"
           if [ -z "${base}" ] || [ "${base}" = "0000000000000000000000000000000000000000" ] \
-             || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
-            # a new branch, or a force-push past the old tip: compare with the default branch
+             || ! git cat-file -e "${base}^{commit}" 2>/dev/null \
+             || ! git merge-base --is-ancestor "${base}" HEAD; then
+            # a new branch, or a rebase/force-push whose old tip is not an ancestor of HEAD (diffing from it would
+            # count lines the default branch gained as this change's own): compare with the default branch instead
             git fetch -q origin "${DEFAULT_BRANCH}"
             base=$(git merge-base HEAD FETCH_HEAD)
           fi
