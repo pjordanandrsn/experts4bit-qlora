@@ -192,6 +192,12 @@ A NO_FLIP keeps the lever opt-in.
   - no checkpoint;
   - guard 0.5 h, disk ≥ 60 GB;
   - worst 0.5 h × $0.85 + 5 GB × $0.011/GB = **$0.48** (P148's form ran at about $0.03 actual).
+  - **Amendment 2 (2026-10-19), box K's rate term only:** box K may rent at up to $1.05/h including the disk (the
+    launcher's RTX 5090 class ceiling of $1.05/h, raised 2026-10-19), and takes a base offer at ≤ $0.85/h first whenever one
+    passes. Worst 0.5 h × $1.05 + 5 GB × $0.011/GB = **$0.58**. Why: the 575 W floor and the $0.85 rate stopped meeting.
+    At 15:07Z on 2026-10-19, 10 hosts with a recorded cap ≥ 575 W listed an RTX 5090, every one above $0.85/h (most at
+    $0.9244), and 8 of them pass every other term at ≤ $1.05/h. The day's one such pin under $0.85 (`p149k-5090-5`) was
+    taken before the create (`no_such_ask`). Everything else is unchanged, box Q+S included.
 - **Box Q+S** (`p149-5090-N`), only after K_GO:
   - disk ≥ 200 GB (the 93.4 GB checkpoint and the venv), declared as `lane_record.min_disk_gb`;
   - guard **3.0 h**: eight Mixtral loads at about 7 min, Q's decode in S0a and S1a at about 15-20 min, the speed reps,
