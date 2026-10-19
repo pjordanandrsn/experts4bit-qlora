@@ -408,18 +408,20 @@ an artifact unrelated to the levers. Maintainer ruling, 2026-10-19 04:50Z: (b) a
   back in process 1; the warm-up not required.
 - **Receipts** add `proc_0.json`.
 
-**Time and budget: the guard (for the maintainer's final pass).** The registered 85-minute estimate assumed P130's
-process cost, about 2 min each. The proof, which ran after the guard was registered, measured a load of 430–438 s per
-process. The estimate for the reading:
+**Time and budget: the reading's guard rises to 2.5 h** (maintainer, 2026-10-19 05:02Z). The registered 85-minute
+estimate assumed P130's process cost, about 2 min each. The proof, which ran after the guard was registered, measured a
+load of 430–438 s per process. The estimate for the reading:
 - setup 12–40 min (the proof's took 12);
 - process 0 about 13 min (a load, a speed pass, and Phase B at the reading's sizes);
 - processes 1–8 about 8 min each;
 - in all, about 90–120 min.
 
 STOP-2 needs `NEED_PROC` + 600 s = 22 min left before each process starts. At 2.0 h the last process would start with
-about 0–25 min of that left, and one slow load VOIDs the reading with process 8 skipped. **Proposed: reading guard
-2.5 h**, worst 2.5 h × $0.85 + 61 GB × $0.011 ≈ **$2.80** (from $2.37). The lane stays inside its $5.50 ceiling:
-$0.661 spent + $2.80. If the guard stays at 2.0 h, the rest of this amendment stands.
+about 0–25 min of that left, and one slow load VOIDs the reading with process 8 skipped.
+
+**Basis:** the proof's measured 430–438 s load × 9 processes ≈ 66 min, plus setup 12–40, Phase B ≈ 5 and the speed passes
+≈ 9, gives 92–120 min, plus STOP-2's 22-minute reserve before the last process: ≤ 2.5 h. The worst is 2.5 h × $0.85 +
+61 GB × $0.011 ≈ **$2.80** (from $2.37). The lane stays inside its $5.50 ceiling: $0.661 spent + $2.80.
 
 **Predictions.** Unchanged and not edited after data. Q9 ("each process ≤ 4 min except process 1") was written before
 the proof measured a 7.2-minute load; it will read MISSED, and its Phase B clause now belongs to process 0.
