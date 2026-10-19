@@ -70,7 +70,8 @@ tc1_prepare(){ TOK=$W/tokens.json; TS=deadbeef
 # tc1_arm's own rule (tc1_arm.py, the tokens check): a tokens file labelled for another fam is refused, rc=13 TOKENS_MISMATCH.
 arm(){ local tf; tf=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('fam') or '')" "${10}")
   if [ -n "$tf" ] && [ "$tf" != "$1" ]; then echo "$1 $2 $3" >> "$W/mismatch.log"; return 0; fi
-  echo "$1 $2 $3 ${*:12}" >> "$W/arms.log"; echo "$1 $2 $3 UNS_VENV=${UNS_VENV:-}" >> "$W/venv.log"; touch "$W/${1}_${2}_${3}.json"
+  echo "$1 $2 $3 ${*:12}" >> "$W/arms.log"; echo "$1 $2 $3 UNS_VENV=${UNS_VENV:-}" >> "$W/venv.log"
+  case "$1" in qwen3hpnL*) echo "{\"trainable_params\": ${STUB_TRAINABLE:-26771456}}" > "$W/${1}_${2}_${3}.json";; *) touch "$W/${1}_${2}_${3}.json";; esac
   case " ${*:12} " in *" --hp1-export-base 1 "*) local d; d=$(echo " ${*:12} " | sed -n 's/.* --hp1-export \([^ ]*\) .*/\1/p'); [ -n "$d" ] && mkdir -p "$d/base_${2}_${1}";; esac; }
 status_of(){ grep -qx "$1 $2 $3" "$W/mismatch.log" 2>/dev/null && { echo tokens_mismatch; return; }
   [ "${FAIL_FAM:-}" = "$1" ] && { echo "${FAIL_STATUS:-oom}"; return; }
@@ -515,6 +516,7 @@ def test_hpn_reads_each_depth_with_two_e4b_arms_one_unsloth_arm_and_three_reader
         assert f"$W/hp1/hpn/L{L}".replace("$W", str(tmp_path)) in " ".join(got["hpn_e4b_a"])   # exports under hp1/: the bulk manifest pins them
         ev = [ln for ln in py.splitlines() if "hp1_eval.py" in ln and f"_L{L}" in ln]
         assert len(ev) == 3 and all("--zero-report-only 1" in ln and "--eval-n 300" in ln for ln in ev)
+        assert all("--expect-trainable 26771456" in ln for ln in ev)   # the cut's own count from e4b's receipt (HPN read 2: E VOIDed)
         rd = [ln for ln in py.splitlines() if "hpn_read.py" in ln and f"_L{L}." in ln]
         assert len(rd) == 2 and all("--runs 2" in ln for ln in rd)
     assert [d["L"] for d in spec["depths"]] == [2, 4, 8] and spec["free_mib_at_claim"] == 10600
@@ -627,3 +629,54 @@ def test_hpn_refuses_a_venv_its_arm_selector_would_not_run(tmp_path, venv):
         assert p.returncode == 0
     else:
         assert p.returncode == 78 and f"HPN_UNS_VENV={venv}" in p.stdout and "PASSED" not in p.stdout
+
+
+def test_hpns_e_calls_parse_in_the_real_evaluator_and_its_count_passes_the_real_validity_check(tmp_path, monkeypatch):
+    """The ruling after read 2: a flag or value mismatch must fail in CI, not on the card. Each E call the driver makes is parsed by
+    hp1_eval.py's REAL argparse (stopped right after parsing), and its --expect-trainable passes the REAL tc1_invalid for an arm whose
+    receipt carries the cut's count, and fails for the 48-layer default."""
+    import shlex
+    import sys as _sys
+    _sys.path.insert(0, str(REPO / "bench" / "hp1"))
+    import hp1_eval
+    _, _, py, _ = _hpn(tmp_path, HPN_DEPTHS="2")
+    calls = [ln[len("PY: "):] for ln in py.splitlines() if ln.startswith("PY: ") and "hp1_eval.py" in ln and "/hpn/eval_" in ln]
+    assert len(calls) == 3
+
+    class Parsed(Exception):
+        pass
+    real_parse = hp1_eval.argparse.ArgumentParser.parse_args          # captured ONCE (a per-iteration capture would chain the spies)
+    for call in calls:
+        argv = shlex.split(call)
+        argv = argv[argv.index(next(a for a in argv if a.endswith("hp1_eval.py"))):]
+        monkeypatch.setattr(_sys, "argv", argv)
+        got = {}
+
+        def stop():
+            raise Parsed()
+        monkeypatch.setattr(hp1_eval, "load_tc1_arm", stop)
+
+        def spy(self, *a, **k):
+            ns = real_parse(self, *a, **k)
+            got["ns"] = ns
+            return ns
+        monkeypatch.setattr(hp1_eval.argparse.ArgumentParser, "parse_args", spy)
+        with pytest.raises(Parsed):
+            hp1_eval.main()
+        ns = got["ns"]
+        assert ns.expect_trainable == 26771456 and ns.zero_report_only == 1 and ns.eval_n == 300
+        arm = {"trainable_params": 26771456, "status_receipt": "ok", "tokens_sha": "t"}
+        why_ok = hp1_eval.tc1_invalid(dict(_ARM_OK, **arm), "t", ns.expect_trainable)
+        why_48 = hp1_eval.tc1_invalid(dict(_ARM_OK, **arm), "t", hp1_eval.EXPECT_TRAINABLE)
+        assert why_ok is None and why_48 and "trainable 26771456 != the registered 642514944" in why_48
+
+
+_ARM_OK = {"framework": "e4b", "tag": "hpn_e4b_a", "c1_bit_exact": True, "raw_ok": True, "hp1_errors": {}, "inloop_step0": 2.0,
+           "inloop_final": 1.9, "inloop_final_step": 1, "steps": 1, "adapter_dtype": "native", "lora_init": "matched:3407",
+           "matched_init": {"complete": True}, "adapter_dtypes_after": {"torch.bfloat16": 8}, "seed": 3407,
+           "order": {"order_seed": 3407, "order_sha": "o"}, "adapter": "a.safetensors", "train_digest": "d"}
+
+
+def test_a_receipt_without_a_trainable_count_ends_the_climb(tmp_path):
+    arms, summary, py, spec = _hpn(tmp_path, HPN_DEPTHS="2 4", STUB_TRAINABLE="null")
+    assert "READ_FAILED no trainable count" in summary and spec["depths"] == []

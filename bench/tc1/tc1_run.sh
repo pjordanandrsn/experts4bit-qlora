@@ -2599,10 +2599,15 @@ tc1_hpn_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
     if [ $ok = 0 ]; then rm -rf $SC $D/base_e4b_$FL $D/base_unsloth_$FL; break; fi   # a successful arm's export goes too (disk)
     local R=$W/${FL}_e4b_hpn_e4b_a.json RB=$W/${FL}_e4b_hpn_e4b_b.json RU=$W/${FL}_unsloth_hpn_uns.json
     rm -f $W/hpn/eval_e4b_L${L}_1.json $W/hpn/eval_e4b_L${L}_2.json $W/hpn/eval_uns_L$L.json $W/hpn/f_e4b_L$L.json $W/hpn/f_unsloth_L$L.json   # no stale read passes
+    # E's trainable check stays ON at every depth, against THIS cut's count from e4b arm a's own receipt (read 2, 22:05Z: the 48-layer
+    # default VOIDed every E read); Unsloth's arm must then match it, so the e4b-vs-Unsloth agreement is asserted, not incidental
+    local EXP; EXP=$($PY_E4B -c "import json,sys; print(int(json.load(open(sys.argv[1]))['trainable_params']))" $R 2>/dev/null)
+    if [ -z "$EXP" ]; then echo "HPN L$L READ_FAILED no trainable count in $(basename $R)" | tee -a summary.txt; rm -rf $SC $D/base_e4b_$FL $D/base_unsloth_$FL; break; fi
+    echo "HPN L$L trainable $EXP (e4b arm a's receipt; E checks every arm against it)" | tee -a summary.txt
     for a in 1 2; do HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts $R --bases $D/base_e4b_$FL --tokens $TL --eval-n 300 \
-      --model "$TM" --revision $TR --zero-report-only 1 --out $W/hpn/eval_e4b_L${L}_$a.json > logs/hpn_eval_e4b_L${L}_$a.log 2>&1; done
+      --model "$TM" --revision $TR --zero-report-only 1 --expect-trainable $EXP --out $W/hpn/eval_e4b_L${L}_$a.json > logs/hpn_eval_e4b_L${L}_$a.log 2>&1; done
     HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts $RU --bases $D/base_unsloth_$FL --tokens $TL --eval-n 300 \
-      --model "$TM" --revision $TR --zero-report-only 1 --out $W/hpn/eval_uns_L$L.json > logs/hpn_eval_uns_L$L.log 2>&1
+      --model "$TM" --revision $TR --zero-report-only 1 --expect-trainable $EXP --out $W/hpn/eval_uns_L$L.json > logs/hpn_eval_uns_L$L.log 2>&1
     for a in e4b unsloth; do HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hpn_read.py --base $D/base_${a}_$FL --tokens $TL --eval-n 300 \
       --model "$TM" --revision $TR --runs 2 --out $W/hpn/f_${a}_L$L.json > logs/hpn_read_${a}_L$L.log 2>&1 || echo "HPN L$L F_FAILED $a" | tee -a summary.txt; done
     # every reader's output is checked by CONTENT (an exit status alone misses a partial file): each E file one digest-matched base
