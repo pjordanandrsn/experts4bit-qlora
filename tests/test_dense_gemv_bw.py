@@ -99,10 +99,12 @@ def test_one_bf16_device_row_routes_and_everything_else_passes(monkeypatch):
     with pytest.raises(RuntimeError, match="dtype"):               # fp32: F.linear, as the plain nn.Linear (same error)
         lin(torch.randn(1, 16))
     assert len(stub.calls) == 3
+    strided = torch.randn(32).to(torch.bfloat16)[::2]                 # one row, not contiguous: F.linear
+    assert torch.equal(lin(strided), torch.nn.functional.linear(strided, lin.weight)) and len(stub.calls) == 3
     monkeypatch.setattr(dg, "_on_device", lambda x: False)          # CPU: never the kernel
     lin(x)
     assert len(stub.calls) == 3
-    assert lin.routed == {1: 3} and lin.passed == {2: 1, 3: 1, 1: 2}
+    assert lin.routed == {1: 3} and lin.passed == {2: 1, 3: 1, 1: 3}
 
 
 def test_the_engagement_record_counts_modules_per_row_count(monkeypatch):
@@ -123,7 +125,7 @@ def test_the_refusals(monkeypatch):
         dg.apply_dense_gemv_bw(_Toy(bias=True), "1", gemv=_Stub())
     with pytest.raises(RuntimeError, match="not a bf16"):
         dg.apply_dense_gemv_bw(_Toy(dtype=torch.float32), "1", gemv=_Stub())
-    with pytest.raises(RuntimeError, match="vacuous"):
+    with pytest.raises(RuntimeError, match="int4 attention makes them Int4Linear.*vacuous"):
         dg.apply_dense_gemv_bw(nn.Sequential(nn.Linear(4, 4)), "1", gemv=_Stub())
     monkeypatch.setitem(sys.modules, "dense_gemv", None)            # a grouped-nf4-gemm without K35
     with pytest.raises(RuntimeError, match="K35"):

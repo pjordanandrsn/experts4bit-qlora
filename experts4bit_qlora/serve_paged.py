@@ -1501,7 +1501,9 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     fusion_report: dict = {}
     fusions = _apply_fusions(model, cfg, report=fusion_report)
     # P151: the dense single-row GEMV (grouped-nf4-gemm K35) on the attention projections, after fuse_qkv built the
-    # fused projection and before any decode graph is captured (a captured graph keeps the route it was captured with)
+    # fused projection and before any decode graph is captured (a captured graph keeps the route it was captured with).
+    # The exact-type checks above (int4 attention, LoRA) ran before this swap; it replaces only exact nn.Linear
+    # projections, so with int4 attention on there is nothing to swap and it refuses as vacuous.
     from .engines.dense_gemv_bw import apply_dense_gemv_bw, engagement as dense_gemv_engagement
     dense_gemv = apply_dense_gemv_bw(model, getattr(cfg, "dense_gemv_bw", "0"))
 

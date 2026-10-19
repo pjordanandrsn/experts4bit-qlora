@@ -14,8 +14,11 @@ forward routes ONE bf16 CUDA row to the kernel; every other call (more rows, so 
 CPU; another dtype) goes to ``F.linear``, unchanged. Under CUDA graphs the routing is decided at capture, by the
 bucket's row count: bucket 1 captures the kernel, larger buckets capture cuBLAS.
 
-The engagement record (:func:`engagement`) counts, per row count, the modules whose calls routed and the modules
-whose calls passed to ``F.linear``. A served read checks it: routed at 1 row on every swapped module, never above.
+The engagement record (:func:`engagement`) counts, per row count, the MODULES (not calls) whose calls routed and those
+whose calls passed to ``F.linear``. It counts Python calls: graph captures and their warm-ups, and also any EAGER
+one-row call (a bucket run eagerly after a failed capture, a one-token prefill), never a replay. So it shows which
+modules routed a one-row call, not that bucket 1 captured the kernel: a served read reads it beside the build's capture
+census (``graph_status``). The review of #1810.
 """
 from __future__ import annotations
 
@@ -48,7 +51,7 @@ class DenseGemvLinear(nn.Linear):
 
     def forward(self, x):
         rows = x.numel() // self.in_features if self.in_features else 0
-        if rows == 1 and x.dtype == torch.bfloat16 and _on_device(x):
+        if rows == 1 and x.dtype == torch.bfloat16 and x.is_contiguous() and _on_device(x):   # the kernel needs a dense row
             self.routed[1] = self.routed.get(1, 0) + 1
             out = self._gemv(x.reshape(1, self.in_features), self.weight)
             return out.reshape(*x.shape[:-1], self.out_features)
@@ -85,7 +88,8 @@ def apply_dense_gemv_bw(model, mode: str, *, gemv=None) -> dict:
             setattr(mod, attr, DenseGemvLinear(lin, gemv))
             swapped.append((f"{name}.{attr}" if name else attr, tuple(w.shape)))
     if not swapped:
-        raise RuntimeError(f"{ENV}=1 matched no qkv_proj / o_proj nn.Linear -- refusing a vacuous lever")
+        raise RuntimeError(f"{ENV}=1 matched no qkv_proj / o_proj nn.Linear (int4 attention makes them Int4Linear and a "
+                           "LoRA wrapper is not an nn.Linear, so neither combines with it) -- refusing a vacuous lever")
     shapes = sorted({s for _, s in swapped})
     return {"mode": "1", "modules": len(swapped), "shapes": [list(s) for s in shapes],
             "per_target": {t: sum(1 for n, _ in swapped if n.endswith("." + t) or n == t) for t in TARGETS}}
