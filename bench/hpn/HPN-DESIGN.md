@@ -54,15 +54,22 @@ across rows.
 1. **e4b only.** One e4b K00 calibration step per depth (as HP2's phase B, on the truncated model), its base exported, then E and F.
    This needs no new install: the e4b stack is the box's (torch 2.8.0+cu128).
 2. **Unsloth, only if stage 1 shows that E − F carries most of the spread.** It repeats stage 1 for Unsloth 2026.9.14 in a fresh
-   venv, then recomputes δ0's sd with F in place of E. If I − F dominates, stage 2 is skipped: the in-loop side is the limit, and
-   the answer is already in.
+   venv, then recomputes δ0 with F in place of E, and reports **m_need with F, both terms** (|δ0_F| and 2 × SE_F). If I − F
+   dominates, stage 2 is skipped: the in-loop side is the limit, and the answer is already in.
 3. **Optional.** e4b round trips at L2 over 3 seeds (20 steps). This re-measures the spread of a sound round trip at 48 rows, the
    basis HP2 borrowed for `ROUNDTRIP_MATCH = 0.01` from AXO1767's 8-row control.
 
+**The mean term (R1, serve-throughput's review).** m_need = 2(|δ0| + 2 × SE) ≥ 2|δ0|. HP2's δ0 = −0.002691 alone gives
+m_need ≥ 0.0054 > 0.005, even at SE = 0. So a lower-noise reference lifts G1 only if it **also moves δ0**, not just its spread.
+If the two exported bases were the same NF4 bytes, E would cancel row by row in δ0 (δ0 = mean_r[I_uns(r) − I_e4b(r)]), and no
+evaluator could move it. HP2's two bases read different zero-adapter means on the 300 rows (e4b 1.943777, Unsloth 1.944547), so
+they are not the same bytes, and E cancels only in part. Stage 1 therefore reads the spread, and stage 2 reads both terms.
+
 ## Predictions (stated before data)
 
-- **N0.** E and F repeat to five decimals per row (deterministic eager forwards). I repeats per row at a fixed seed. The per-row
-  spread is therefore a per-path offset, the mirror image of tc-campaign's finding that step-0 deltas are an offset.
+- **N0.** E and F repeat to five decimals per row (deterministic eager forwards). I repeats per row at a fixed seed. Each reader's
+  per-row value is then fixed per (path, row), and still spread across rows. That spread is what limits δ0's SE. It is the mirror
+  image of tc-campaign's finding that step-0 deltas are an offset.
 
 - **N1.** sd_r(g) grows with depth, and at L2 it is well below 0.03 (rounding accumulates through the layers).
 - **N2.** E − F and I − F are of comparable size at every depth. Both forwards are bf16, so neither side dominates. If that holds,
@@ -73,10 +80,14 @@ across rows.
 
 **The calls, fixed numerically before data.** At each depth, with e(r) = E(r) − F(r) and i(r) = I(r) − F(r):
 - **side share** = var_r(e) / (var_r(e) + var_r(i)). It reads **E-dominant** at ≥ 2/3, **I-dominant** at ≤ 1/3, and **comparable**
-  in between (a variance ratio of 2 either way);
+  in between (a variance ratio of 2 either way). The share is used only where N3 holds at that depth. Where |corr_r(e, i)| > 0.2,
+  the same thresholds apply to what swapping E for F would leave, 1 − var_r(i) / var_r(g). That equals the share when e and i are
+  uncorrelated;
 - **N1** holds if sd_r(g) rises with depth at every step between fitted depths and sd_r(g) at L2 is < 0.03;
 - **N3** holds if |corr_r(e, i)| ≤ 0.2 at every fitted depth;
 - **N0** holds for a reader if its two runs agree per row to 1e-5 (the per-row losses are recorded to 5 decimals);
+- **a depth floor (proposed, for the maintainer):** the decision needs the deepest fitted depth ≥ L8. If only L2 and L4 fit, the
+  outcome is INSUFFICIENT_DEPTH: wait for the sidecar to unload and retry, and record that.
 - **the outcome:** E-dominant at the two deepest fitted depths leads to stage 2. I-dominant or comparable at both leads to a stop:
   "no lower-noise reference within reach". A call that differs between the two deepest depths leads to a stop: "depth-dependent,
   unknown at 48 layers".
