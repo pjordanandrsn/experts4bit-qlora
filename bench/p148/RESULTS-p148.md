@@ -14,7 +14,7 @@ P142's per-name table put the dense bf16 GEMVs (cuBLAS `kernel`) at 41 % of the 
 | [`p148-5090-1`](receipts/p148-5090-1/README.md) | the microbench | $0 | refused at create (`no_such_ask`; not a strike) |
 | [`p148-5090-2`](receipts/p148-5090-2/README.md) | the microbench, the registered spare | $0.025 | **D1_GO+D2_GO** |
 
-The maintainer re-derived `verdict_p148.json` byte for byte from the receipt store (`6caf2dc2`; the reducer at
+The maintainer re-derived `verdict_p148.json` byte for byte from the private receipt store (the reducer at
 `caf5a28c`, equal to the staged pin and the box's copy), and recomputed it without the reducer from `p148.json`.
 
 ## The read

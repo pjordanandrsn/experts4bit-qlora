@@ -32,5 +32,5 @@ pair, reported only.
 
 The host's 400 W limit bounds the absolute rates. The verdict is ratios on one host, projected onto P142's in-situ
 times, and the anchors put the harness's cuBLAS at 1.01-1.06x P142's in-situ time, not faster. The maintainer
-re-derived the verdict byte for byte from the receipt store (`6caf2dc2`) and recomputed it without the reducer. The
+re-derived the verdict byte for byte from the private receipt store and recomputed it without the reducer. The
 launcher's receipt and ledger row are in that store. `SHA256SUMS` covers every file here.
