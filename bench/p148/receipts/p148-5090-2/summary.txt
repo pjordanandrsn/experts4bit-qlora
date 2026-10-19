@@ -1,0 +1,26 @@
+KNOBS e4b=caf5a28c8808df16908cc042dbc038cdae8d3360 gnf4=38b308887688ea5bda7dd449bd3cc3dc1426b995 model=none@none gpu_class=5090 min_disk_gb=40 min_ram_gb=60 family=qwen3-dense-gemv dry=0 short=32 long=160 reps=3 moe_layers=48
+CUDA_PROBE ok
+e4b 0.55.0 @caf5a28c8808df16908cc042dbc038cdae8d3360
+gnf4 0.47.1 @38b308887688ea5bda7dd449bd3cc3dc1426b995
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p148_reduce self-test OK (21 cases)
+p148_bench self-test OK (7 cases)
+premise rc=0: 19 passed, 5 warnings in 13.55s
+premise ok
+kernels rc=0: 61 passed in 6.32s
+kernels ok
+P148_CONTRACT qkv: cublas 1.697e-03; configs 1.697e-03..1.697e-03
+P148_CONTRACT o: cublas 1.705e-03; configs 1.705e-03..1.705e-03
+P148_CONTRACT head: cublas 1.665e-03; configs 1.660e-03..1.660e-03
+P148_CUBLAS qkv: [('std::enable_if<!(false), void>::type int', [1280, 1, 1])]
+P148_CUBLAS o: [('std::enable_if<!(false), void>::type int', [512, 1, 1])]
+P148_CUBLAS head: [('std::enable_if<!(false), void>::type int', [37984, 1, 1])]
+P148_READ qkv: choice 2,1024,4,1; A1 0.7406 B1 0.6787 B2 0.6787 A2 0.7410 ms
+P148_READ o: choice 2,1024,4,1; A1 0.6336 B1 0.5577 B2 0.5581 A2 0.6340 ms
+P148_READ head: choice 4,1024,4,1; A1 0.3805 B1 0.1892 B2 0.1892 A2 0.3805 ms
+P148_VERDICT D1_GO+D2_GO ["D1: GO (projected in situ 0.131137 ms vs bar 0.087603; harness 0.137712 ms, reported)", "D2: GO (projected in situ 0.189546 ms vs bar 0.087603; harness 0.191328 ms, reported)"]
