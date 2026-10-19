@@ -30,6 +30,7 @@ wheel's.
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import importlib.metadata as md
 import json
@@ -63,12 +64,12 @@ def _sha(path) -> str:
 
 
 def _records(text) -> set:
-    """``{(path, hash)}`` of a wheel RECORD's hashed ``.py`` entries."""
+    """``{(path, hash)}`` of a RECORD's hashed ``.py`` entries. RECORD is CSV: torch's wheel quotes every path, and pip
+    writes the installed copy unquoted, so it is parsed as CSV, never split by hand."""
     out = set()
-    for line in text.splitlines():
-        parts = line.rsplit(",", 2)
-        if len(parts) == 3 and parts[0].endswith(".py") and parts[1]:
-            out.add((parts[0], parts[1]))
+    for row in csv.reader(text.splitlines()):
+        if len(row) == 3 and row[0].endswith(".py") and row[1]:
+            out.add((row[0], row[1]))
     return out
 
 
