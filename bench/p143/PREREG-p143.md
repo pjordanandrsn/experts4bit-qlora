@@ -270,3 +270,104 @@ SANE's question at T == 1, and SANE reads the capped B = 1 path.
   on the box.
 - **Strikes:** the lane's strike count carries over (1, from `p143-5090-1`). One more paid harness failure stops the lane
   for a simpler design.
+
+## Amendment 3 (2026-10-19): the confirmatory served read, binding for this lever
+
+**Status:** registered, not run. The maintainer's 00:37Z ruling on the A2 decision packet, on terms stricter than A2's
+and all fixed before any data.
+
+**Why this amendment exists.** `p143a2-5090-1` read **NO_FLIP**, and that verdict stays on the record.
+- Its W1 pairs were S1a/S0a 1.0405 and S1b/S0b 1.0297, so g1 = 1.0297. It missed the 1.03 bar by 0.0003.
+- The W1 self-pair S1b/S1a was 0.9845: the second capped arm ran 1.55 % slower than the first, about 50× the miss.
+  Under P141's form (NOISY outside [0.985, 1.015] at W1) that read would have been NOISY. A2 registered no such rung.
+- The independent prior is the kernel itself. At B = 1, A2's timing put the cap at −0.161 ms per step at 640 tokens,
+  about 4 % of the ~3.99 ms step, i.e. g ≈ 1.04.
+- A2's contract showed the cap is **bitwise identical** to the plan at every context ≤ 1024 (all B) and at B 4 /
+  2048, with error ratio ≤ 1.0 elsewhere. At the served contexts here the cap changes no output, only speed.
+
+A3 asks the same question with more power and a noise guard. It is **binding**: whichever way it lands, there is no
+Amendment 4 on the served flip, and a NO_FLIP closes this lever as opt-in permanently.
+
+### What runs (`p143a3_run.sh`)
+
+- **Engine and arms:** A2's box, `p143a2_box.py`, at its registered bytes. The same default server, S0 =
+  `E4B_ATTN_SPLIT_CAP=0`, S1 = `16`.
+- **Speed:** **eight arms, ABBA twice**: S0a S1a S1b S0b S0c S1c S1d S0d. Each is a fresh process through P109's W16 and
+  W1 at **five timed reps** (A2: four arms, three reps).
+- **SANE:** A2's, unchanged. Phase B's instrument at T == 1, 12 wikitext windows, the pass KV at the server's 4096
+  tokens with the server's cap.
+- **No kernel step.** A2's tolerance contract and timing (`p143a2-5090-1`, the same kernel bytes at grouped-nf4-gemm
+  `38b30888`) passed and are on the record.
+- **Order:** install and tripwire (A2's), self-tests, P136's 19 premise tests, fetch, bake, prompts, eight arms, two SANE
+  phases, reduce.
+
+### The rule (`p143a3_reduce.py`, fixed before data)
+
+The first rung that applies decides. A2's engagement checks are carried verbatim.
+
+1. **VOID.** Any of:
+   - a record is missing or not ok;
+   - any of A2's checks fails on any record: pins, the 170-SM card, census and modes, the GEMV, captured buckets, bucket
+     1 replayed, the cap's engagement at capture and in SANE, the SANE pass KV at 4096 tokens, one window per pass, 12
+     windows;
+   - the arms differ in prompts or lengths, or any arm is not at five reps;
+   - a void slope.
+2. **NOISY**, which is a VOID and a **strike**: any W1 self-pair (S0b/S0a, S1b/S1a, S0d/S0c, S1d/S1c) outside
+   **[0.985, 1.015]**. A NOISY read reads no flip. The lane's strike count is 1 (`p143-5090-1`), so a NOISY would be
+   strike two and stop the lane.
+3. **FUNCTION_FAIL:**
+   - an arm decodes different tokens from its own arm's first record (every S0 against S0a, every S1 against S1a), on
+     any row, workload or length;
+   - an arm's timed reps digest differently.
+4. **QUALITY_FAIL:** SANE as in A2, i.e. |mean NLL(ON) − NLL(R)| > 0.02 nats or argmax agreement < 0.95.
+5. **FLIP:** g1 = **min over all four** S1/S0 pairs (S1a/S0a, S1b/S0b, S1c/S0c, S1d/S0d) at W1 ≥ **1.03**, **and**
+   g16 (the same at W16) ≥ **0.99**. A separate PR then adds `qwen3_moe: 16` to `ATTN_SPLIT_CAP_DEFAULT_FAMILIES`, citing
+   A2 and this read.
+6. **NO_FLIP:** otherwise, with each failed bar named. The cap stays opt-in, permanently for this lever.
+
+**Reported, never ruling:**
+- every pair and self-pair ratio, including the cross-block self-pairs S0c/S0a and S1c/S1a;
+- the geomean over the four pairs;
+- the SANE KL;
+- W1 token identity of S1 against S0;
+- W16's token identity: rows identical out of 16, first divergent step per row.
+
+**Predictions (graded, never ruling):**
+- every W1 pair in [1.03, 1.05];
+- every self-pair within [0.99, 1.01] at five reps;
+- SANE bias 0.0 and argmax 1.0 again (the cap is bitwise-neutral at ≤ 1024 tokens);
+- verdict FLIP.
+
+### Tests
+
+`tests/test_p143a3.py` checks:
+- the staged pins, with A2's box and every piece shared with A2 at A2's registered bytes;
+- the runner: no kernel step, eight arms at five reps, NOISY and VOID not readings;
+- the box and reducer self-tests, run from one directory as on the box;
+- A2's engagement checks carried verbatim into the A3 reducer;
+- **nine reducer mutants, each killed by the self-test:**
+  - g1 from the best pair;
+  - the first block's pairs only;
+  - the band widened to [0.98, 1.02];
+  - the second block's self-pairs dropped;
+  - NOISY never read;
+  - reps unchecked;
+  - the g16 gate dropped;
+  - the old strict S1-vs-S0 identity;
+  - the argmax bar dropped;
+- the driver's dry run and its run-id refusal.
+
+The reducer's self-test (31 cases) includes **A2's real first block**, which reads NOISY on its S1b/S1a = 0.9845.
+
+### The box
+
+- **Run ids:** `p143a3-5090-1`, with `-2` and `-3` as pre-create spares only. The driver refuses any other.
+- **Box terms** are A2's (the same kit and box class).
+  - Card and price: one RTX 5090 (cc 12.0, ≥ 30 GB, 170 SMs), torch 2.8.0+cu128, ≤ $0.80/h including 170 GB.
+  - Download: ≤ $0.005/GB for 70 GB.
+  - Guard: 1.25 h.
+  - Worst: **$1.35**.
+  - Fallback tier: ≤ $0.85/h only behind the exhausted-loop marker. Worst **$1.41**.
+  - A2's receipt puts the run at about 40 minutes: 8 arms at about 1.8 min each, SANE about 6 min, fetch and bake about
+    12 min.
+- **Approval:** the standing rule. Review by planner-incubation or serve-throughput, then the maintainer's final pass.
