@@ -73,13 +73,14 @@ def test_the_declared_run_ids_and_nothing_else(tmp_path):
                           ("smt-sib-1", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 9000)}),
                           ("smt-sib-2", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 9000)}),
                           ("smt-sib-3", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 7200)}),
+                          ("smt-sib-8", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 9000)}),       # Amendment 1a
                           ("smt-fuse-dry-1", {"SMT_FUSE_DRY": "1", "SMT_FUSE_BOX_EXEC": "/bin/false"}),
                           ("smt-sib-dry-1", {"SMT_FUSE_DRY": "1", "SMT_FUSE_BOX_EXEC": "/bin/false"})):
         out = _drive(tmp_path, run_id, **extra)
         assert out.returncode == 0 and out.stdout.startswith("DRYRUN stage -> "), (run_id, out.stdout + out.stderr)
         assert f"E4B_SHA={E4B_PIN}" in out.stdout, out.stdout
     for run_id, extra in (("smt-fuse-4", {}), ("smt-fuse-10", {}), ("p146-4090-6", {}), ("smt-fuse-dry-1", {}),
-                          ("smt-sib-4", {}), ("smt-sib-dry-1", {}), ("smt-sib", {}),
+                          ("smt-sib-9", {}), ("smt-sib-dry-1", {}), ("smt-sib", {}),
                           ("smt-sib-1", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 3600)}),   # a 1.0 h guard: refused
                           ("smt-sib-1", {"SMT_FUSE_DRY": "1", "SMT_FUSE_BOX_EXEC": "/bin/false"}),
                           ("smt-fuse-1", {"SMT_FUSE_DRY": "1", "SMT_FUSE_BOX_EXEC": "/bin/false"}),
@@ -88,7 +89,7 @@ def test_the_declared_run_ids_and_nothing_else(tmp_path):
         assert out.returncode == 78 and "refusing" in out.stdout, (run_id, extra, out.stdout + out.stderr)
     short = _drive(tmp_path, "smt-sib-1", E4B_RENT_DEADLINE_EPOCH=str(int(time.time()) + 3600))
     assert short.returncode == 78 and "< the registered fit 7110s" in short.stdout, short.stdout   # the guard fit, not another refusal
-    for s in ("smt-fuse-1", "smt-fuse-2", "smt-fuse-3", "smt-fuse-dry-", "smt-sib-1", "smt-sib-2", "smt-sib-3", "smt-sib-dry-"):
+    for s in ("smt-fuse-1", "smt-fuse-2", "smt-fuse-3", "smt-fuse-dry-", "smt-sib-1", "smt-sib-2", "smt-sib-3", "smt-sib-4", "smt-sib-8", "smt-sib-dry-"):
         assert s in PREREG, s
 
 
