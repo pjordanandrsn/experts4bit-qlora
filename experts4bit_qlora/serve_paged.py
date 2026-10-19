@@ -177,11 +177,17 @@ PREFILL_GLUE_DEFAULT_FAMILIES = {
     "qwen3_moe": "P130 (#1588, read #1605): x1.118 [1.116, 1.119] per 512-token first-chunk prefill replay on one RTX "
                  "5090, AT_PARITY on P117's teacher-forced instrument (bias -0.0035 nats)",
 }
-# Lane P143's split cap for the paged FP8 attention decode (bench/p143/PREREG-p143.md, Amendment 2): an UNSET
-# ``E4B_ATTN_SPLIT_CAP`` resolves per family from here -- empty until P143's served read licenses a family -- and to the
-# library's own plan everywhere else. ``0`` keeps the library's plan; ``n`` caps it at n splits.
+# Lane P143's split cap for the paged FP8 attention decode (bench/p143/PREREG-p143.md, Amendments 2 and 3): an UNSET
+# ``E4B_ATTN_SPLIT_CAP`` resolves per family from here, and to the library's own plan everywhere else. ``0`` keeps the
+# library's plan; ``n`` caps it at n splits. qwen3_moe takes 16 on P143 Amendment 3's binding served read (#1788,
+# p143a3-5090-1: FLIP, one request 1.044x as fast, the min of four ABBA pairs; 16 requests unchanged; SANE exact),
+# after Amendment 2's NO_FLIP (#1778, p143a2-5090-1: g1 1.0297 under a noisy self-pair). The cap moves buckets 1, 2
+# and 4 only (32 / 32 / 23 -> 16 splits at 4096-token slots) and is bitwise-identical to the plan at contexts <= 1024.
+# Mixtral (B 1-2 move under the cap) stays on the plan until a read of its own.
 ATTN_SPLIT_CAP_ENV = "E4B_ATTN_SPLIT_CAP"
-ATTN_SPLIT_CAP_DEFAULT_FAMILIES: dict = {}
+ATTN_SPLIT_CAP_DEFAULT_FAMILIES: dict = {
+    "qwen3_moe": 16,      # e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19 (bench/p143/RESULTS-p143.md)
+}
 _FUSION_WARNED: set = set()
 
 
