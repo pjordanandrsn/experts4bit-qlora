@@ -186,7 +186,7 @@ try:
     flags = next((x.split(":", 1)[1].split() for x in info if x.startswith("flags")), [])
     out["cpu_flags"] = sorted(f for f in flags if f.startswith(("avx", "fma", "f16c")))
 except OSError:
-    out["cpu"] = platform.processor()
+    out["cpu"], out["cpu_flags"] = platform.processor(), None      # no /proc/cpuinfo off Linux: flags unread, not empty
 try:                       # a diagnostic reports, it never raises: each stage records what it reached
     ns = {"torch": torch, "reference_rows": K.reference_rows}
     exec("\n".join(json.loads(sys.argv[2])), ns)
@@ -231,7 +231,7 @@ def test_the_identity_diagnostic_restates_the_self_test_and_reads():
     d = _identity_diagnostic()
     assert "error" not in d, d
     assert d["torch"] == torch.__version__ and d["identity_nan"] == 0 and d["lp_finite"] and d["rest_finite"]
-    assert {"identity_max", "delta_at_argmax", "max_abs_delta", "rest_min", "cpu_capability", "cpu"} <= set(d)
+    assert {"identity_max", "delta_at_argmax", "max_abs_delta", "rest_min", "cpu_capability", "cpu", "cpu_flags"} <= set(d)
 
 
 def test_box_r_staging_pin_matches_its_sources():

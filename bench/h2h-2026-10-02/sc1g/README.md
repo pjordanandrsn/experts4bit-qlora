@@ -162,5 +162,6 @@ So that runner read at least 1000× above float64 roundoff, or a NaN. `sc1g_kl.p
 whole, and a looser bound would hide exactly this. Instead, when the self-test fails, `tests/test_sc1g_checks.py` re-runs
 the case's construction in a fresh interpreter and prints what it reads, with the runner's numerics: the identity
 maximum, the NaN count, the gap between the two rest roundings, the torch and numpy versions, the CPU capability and the
-CPU flags. A repeat on the same runner type is investigated on that runner.
+CPU flags. A clean diagnostic beside a failed self-test means the failure did not reproduce in a fresh interpreter on the
+same runner. A repeat on the same runner type is investigated on that runner.
 
