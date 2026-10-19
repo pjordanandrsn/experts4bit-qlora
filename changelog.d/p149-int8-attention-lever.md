@@ -15,8 +15,9 @@ weight is rounded once at the swap, and no bf16 copy is kept.
 - Refused:
   - a grouped-nf4-gemm without `dense_i8` (K37);
   - a value other than `0` or `1`;
-  - combining it with int4 attention (`E4B_SERVE_ATTN_INT4` or `E4B_SERVE_ATTN_INT4_CALIB`) or with
-    `E4B_DENSE_GEMV_BW=1`;
+  - combining it with int4 attention (`E4B_SERVE_ATTN_INT4` or `E4B_SERVE_ATTN_INT4_CALIB`), as P149 registers, or
+    with `E4B_DENSE_GEMV_BW=1`, an engineering refusal outside the registration: both route the attention projections'
+    decode calls, and P151's swap would otherwise skip the int8 modules silently;
   - a biased or non-bf16 projection;
   - a census miss;
   - `fuse_qkv` on int8 projections (Qwen3-MoE's fused attention is not built for them).

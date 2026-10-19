@@ -143,6 +143,20 @@ def test_a_cpu_call_without_the_seam_dequantizes_and_is_counted_as_passed():
     assert mod.passed == {1: 1} and mod.routed == {}
 
 
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_a_non_bf16_call_dequantizes_on_the_bf16_grid_and_is_counted_as_passed(routed, dtype):
+    """The docstring's promise: a call that is not bf16 takes the transient path even on the device, and reads the
+    weight P147 rounded (bf16(q * s)), cast to the call's dtype."""
+    m = _mixtral()
+    _enable(m)
+    mod = m.model.layers[0].self_attn.v_proj
+    x = torch.randn(1, mod.in_features, dtype=dtype)
+    out = mod(x)
+    want = torch.nn.functional.linear(x, (mod.q.float() * mod.s[:, None]).to(torch.bfloat16).to(dtype))
+    assert mod.passed == {1: 1} and mod.routed == {} and out.dtype == dtype
+    assert torch.equal(out, want)
+
+
 def test_a_prefill_is_the_rounded_model_bit_for_bit_and_every_call_is_counted(routed):
     m, ref = _mixtral(), _rounded(_mixtral())
     _enable(m)
