@@ -1,0 +1,26 @@
+[21:28:03] loading /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 via streaming 4-bit loader (CPU-RAM-light)...
+[21:28:03]   host CPUs: 192 visible, quota 23.04, torch threads 96, OMP_NUM_THREADS=None
+[21:28:04]   checkpoint: local directory /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+[21:28:05]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[21:28:05]   host-side fuse: intra-op threads 96 -> 24 (the container's CPU quota / affinity)
+[21:29:10]   quantized experts on 48/48 MoE layers (128 experts each)
+[21:29:10]   offloaded 48 layers' 4-bit experts to pinned CPU RAM (streamed to GPU one layer at a time during train/eval)
+[21:29:10] offload env: PCIe NVIDIA GeForce RTX 4090, 4, 4, 16, 16
+[21:29:11] offload env: pinned H2D ceiling 23.69 GB/s (256 MB x 20)
+[21:29:11] offload env: pageable H2D ceiling 14.79 GB/s (256 MB x 20)
+[21:29:11]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[21:29:17] attn LoRA 192 projs | train experts=True attn=True router=False
+[21:29:18] [fast-train] 48 ExpertsLoRA wrapper(s) on the fused path (dgrad=True); chunked LM loss installed by enable_fast_train
+[21:29:18] loaded. trainable: 321,257,472 (lora 321,257,472 + router 0) | offload=on | GPU mem: 3.72 GB
+[21:29:18] preparing dataset (alpaca, response-only loss)...
+[21:30:18] held-out eval loss BEFORE: 2.4928
+[21:30:19] training: 34 steps x grad_accum 4 (seq<= 192), lr=0.0002, cosine+warmup, eval every 50
+[21:30:31]   step 1/34  loss 2.126  ema 2.126  (12.8s/step, 431 tok/s)
+[21:32:30]   step 10/34  loss 1.165  ema 1.740  (13.1s/step, 412 tok/s)
+[21:34:41]   step 20/34  loss 0.989  ema 1.373  (13.1s/step, 405 tok/s)
+[21:36:52]   step 30/34  loss 1.038  ema 1.225  (13.1s/step, 409 tok/s)
+[21:37:47] training done in 448s | peak GPU mem: 6.03 GB (offload=on)
+[21:37:47] [tr1-census] wrote /root/p146/census_A0b.json (34 steps)
+[21:39:00] held-out eval loss: BEFORE 2.4928 -> AFTER 0.9941 (delta -1.4986) | best inf
+[21:39:01] saved final adapter (576 tensors) -> /root/p146/out_A0b/adapter_last.pt ; best kept at adapter_best.pt
+P146_ARM {"tag": "A0b", "loop": "stock", "summary": {"median_s": 13.106384863960557, "timed_walls": [13.908864150987938, 13.065919829998165, 13.72554398397915, 13.50635743001476, 13.768946142867208, 12.792192620923743, 12.376168556977063, 12.605446500936523, 12.653886143816635, 12.393733989913017, 13.34434893890284, 13.683321233838797, 13.039442460983992, 14.56202618801035, 13.218066439032555, 12.947203581919894, 13.327937063993886, 12.632691404083744, 12.906666529830545, 13.73104037111625, 12.78720383788459, 12.805370318936184, 13.09022417687811, 13.122545551043004, 12.61960202618502, 13.301453824155033, 12.657138490118086, 13.303128281142563, 12.823560222052038, 13.830179648008198, 13.581728327088058, 14.859800266800448], "stagings_steady": [380], "stagings_step0": 381, "peak_alloc": 9775991808, "peak_alloc_all": 9775991808}, "heldout": 0.9941192862461321, "step0_loss_hex": "0x1.10266ac000000p+1", "load_s": 81.2, "token_budget_effective": 2048}
