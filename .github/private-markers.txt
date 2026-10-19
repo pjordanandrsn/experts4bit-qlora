@@ -101,6 +101,7 @@ Append-only ledger: one JSON object per line
 # every scan only while it holds at most MAX-LINES lines AND its sha256 equals
 # the pin (scripts/guard_fixture_pin.sh); otherwise the guard fails. Format:
 # "#exempt-fixture: PATH MAX-LINES SHA256". The two below are the ledger header
-# and one $0 row, which the DQ11 census tests parse.
+# and one $0 row, which the DQ11 census tests parse; the third is census-7's one stalled row (#1083).
 #exempt-fixture: tests/fixtures/dq11-census-refused/canonical-ledger.jsonl 2 4030f01c74fb263e665c900d8d9f04ef89ee224c74429d62c4ffdd36b11569d2
 #exempt-fixture: tests/fixtures/dq11-census-refused/ledger.jsonl 1 c106ef976fbc5fa7a57d09864d97dfd7a502b3fb034860e502f11080f06a2d66
+#exempt-fixture: tests/fixtures/dq11-census-stalled/ledger.jsonl 1 8b0954615b702828914563eb795b9ecacb303316a2ffeed033998eb82c7b83d9

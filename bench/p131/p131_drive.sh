@@ -179,7 +179,7 @@ while [ "$SKIP_POLL" = 0 ]; do
 done
 rm -rf "$RUN_DIR/p131" && mkdir -p "$RUN_DIR/p131" || { say "fetch failed: local dir"; exit 22; }
 # The checkpoint stays on the box (the hub cache, outside $W), and so do the NF4 snapshot and the arena (work/: only its
-# bake.json travels; R's log-probs are held in process 1's memory, never written); the process records, logs and the
+# bake.json travels; R's log-probs are held in the warm-up process 0's memory, never written); the process records, logs and the
 # verdict travel.
 rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" \
   --include 'work/' --include 'work/bake.json' --exclude 'work/*' \

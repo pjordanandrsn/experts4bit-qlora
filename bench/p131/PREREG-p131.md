@@ -339,4 +339,109 @@ Fetched to the run directory's `p131/` and committed to `bench/p131/receipts/<ru
 
 ## Amendments
 
-None yet.
+### Amendment 1 (registered 2026-10-19, before any P131 run): lanes rent in parallel, and hosts are pinned under the market rule
+
+**Why.** Two sequencing terms date from 2026-10-10, before the program's standing spending rule (2026-10-18) and its
+market rule for pinning hosts:
+- "The rental also waits until DQ11 has closed and SC2f's rental has torn down: one rental lane at a time, SC2f first."
+- "the maintainer ACKs the launch. The ACK names the host."
+
+SC2f's host bar is scarce: in 15.4 h four of its five bar machines were never listed, and the fifth refused every create. So the first term held P131 behind
+SC2f indefinitely, although P131 has no host-quality bar of its own.
+
+**The change: sequencing and the launch mechanism only** (maintainer ruling, 2026-10-19 03:03Z).
+- **Parallel lanes.** The serial order goes. P131 rents in parallel with other lanes under the standing rule (worst
+  ≤ $15 per run).
+- **Pinning.** As every lane does under the market rule:
+  - one pin post names up to three RTX 5090 machines, each present and passing in 6/6 machine-filtered reads at
+    ≤ $0.85/h;
+  - the create walks them in order on `no_such_ask`;
+  - there is no per-run ACK. This replaces "the maintainer ACKs the launch. The ACK names the host" above, and its
+    new-ACK clause.
+- **No competition with SC2f.** While SC2f's proof loop is live, P131's pins exclude SC2f's ten bar machines. These are
+  the SC2f loop's screen set from its 2026-10-19 00:00Z bar snapshot under SC2f-PREREG Amendment 2: 138786, 149299,
+  150136, 150710, 151163, 151972, 40549, 53317, 55583 and 55913. P131 takes any other RTX 5090 at ≤ $0.85/h.
+  - "Live" ends when SC2f posts on the bus either its proof run CREATED or its loop stopped. Until then, every P131 pin
+    post can be audited against the ten ids above.
+- **The stack.** Launch commit `c7a40682` (e4b 0.54.0, which carries #1608, #1615 and #1625; the same stack as SC2f),
+  grouped-nf4-gemm at its pin `57f53e19`.
+
+**Unchanged:** the arms, the rule, the cost model and the predictions; STOP-0 to STOP-4; the proof (guard 1.25 h, about
+$1.73); the reading (guard 2.0 h, about $2.37), only after the proof's receipts show PROVED; the lane ceiling of $5.50;
+and the two-strikes rule.
+
+### Amendment 2 (registered 2026-10-19, after the proof and before any reading data): a warm-up process 0, and the GPU state per process
+
+**Why.** The proof `p131-prove-1` PROVED (re-derived by the maintainer). At the proof's sizes its process 1 was faster
+on every arm than processes 2–4, by about 4.7 %: m0 39.43, m32 39.17 and m64 37.80 ms, against m0 41.26–41.30 and m64
+40.11–40.15 ms, where processes 2–4 agree to 0.1 %. That alone trips NOISY (the m0 span ×1.0475 > ×1.02), whatever the
+levers do. Process 1 was also the only process that ran Phase B, after its speed pass. The receipts carry no GPU clock,
+power or temperature, so the effect cannot be attributed. Run as registered, the reading risks a predictable NOISY from
+an artifact unrelated to the levers. Maintainer ruling, 2026-10-19 04:50Z: (b) and (c) below.
+
+**The change.**
+- **(c) A warm-up process 0.** It builds the stack as every process does, runs the speed pass, then Phase B (every pass
+  and the rule unchanged). Its speed is **reported only** (`verdict.json` `warmup`). It never enters:
+  - the span guard (NOISY);
+  - the gains and their interval;
+  - the m32-against-m64 interval behind the default;
+  - any bar, or the scoring of the predictions.
+
+  Processes 1–8 (the proof's 1–4) are speed-only. Speed items 4 and 5, the default's interval and Q3–Q6 read them alone:
+  eight processes, 7 degrees of freedom, t = 2.3646, as registered. Processes 1–8 keep their capture order (rotated by
+  n − 1); process 0's is rotated by −1 (m64, m0, m32).
+- **Integrity reads every process, 0 included.** That covers the record (commits, model, Phase B role, now process 0),
+  the prefill glue, the windows, engagement, the capture order, REFUSED, DECODE_TOUCHED, DETERMINISM and FUNCTION. A
+  missing process 0 VOIDs, and so do records in the pre-amendment layout (Phase B in process 1).
+- **(b) The GPU state.** Every process records nvidia-smi's SM and memory clocks, power draw, temperature and active
+  clock event reasons four times: at the start of its speed pass, right after the warm rounds and right after the timed
+  rounds (under load, after a sync, outside every timed pair: the clocks the timed rounds ran at), and at its end
+  (`gpu_state` in each process record, a `P131_GPU` line in `summary.txt`). The after-warm read adds a short idle gap
+  before the first timed round, the same in every process: no cross-process bias, but a dip it causes would not show in
+  that sample. If the first timed round reads slow, the read says so. It is **reported only**. An unreadable query is recorded as its error and never fails the
+  process. It settles the attribution either way: a first-process boost shows in the clocks.
+- **The rule's self-test** grows from 37 to 44 cases:
+  - a fast warm-up never trips the span;
+  - the warm-up never moves the gains or the order;
+  - a missing warm-up VOIDs, and so does the pre-amendment layout;
+  - FUNCTION and DETERMINISM read the warm-up;
+  - the GPU state is reported for every process and never gated.
+
+  Mutants each fail it: the warm-up inside the span and gains; FUNCTION or DETERMINISM skipping the warm-up; Phase B
+  back in process 1; the warm-up not required.
+- **Receipts** add `proc_0.json`.
+
+**Time and budget: the reading's guard rises to 2.5 h** (maintainer, 2026-10-19 05:02Z). The registered 85-minute
+estimate assumed P130's process cost, about 2 min each. The proof, which ran after the guard was registered, measured a
+load of 430–438 s per process. The estimate for the reading:
+- setup 12–40 min (the proof's took 12);
+- process 0 about 13 min (a load, a speed pass, and Phase B at the reading's sizes);
+- processes 1–8 about 8 min each;
+- in all, about 90–120 min.
+
+STOP-2 needs `NEED_PROC` + 600 s = 22 min left before each process starts. At 2.0 h the last process would start with
+about 0–25 min of that left, and one slow load VOIDs the reading with process 8 skipped.
+
+**Basis:** the proof's measured 430–438 s load × 9 processes ≈ 66 min, plus setup 12–40, Phase B ≈ 5 and the speed passes
+≈ 9, gives 92–120 min, plus STOP-2's 22-minute reserve before the last process: ≤ 2.5 h. The worst is 2.5 h × $0.85 +
+61 GB × $0.011 ≈ **$2.80** (from $2.37). The lane stays inside its $5.50 ceiling: $0.661 spent + $2.80.
+
+**Predictions.** Unchanged and not edited after data. Q9 ("each process ≤ 4 min except process 1") was written before
+the proof measured a 7.2-minute load; it will read MISSED, and its Phase B clause now belongs to process 0.
+
+**What was seen before this amendment:** `p131-prove-1`'s records at the proof's sizes, quoted above. The verdict there
+was `M32_NOISY M64_NOISY DEFAULT_NONE`, not a reading.
+- Both arms read BITWISE.
+- The gains were m32 1.0005 [0.9938, 1.0072] and m64 1.0321 [1.0204, 1.0438].
+- Phase B: rep, rev, S32 and S64 read exactly 0, the mutant was caught, and the floors were B 0.0126 / S 0.0374.
+
+No reading data exists.
+
+**No new proof.** The change adds one process of the proved kind and a reported-only record; the CPU tests cover both,
+and process 0 runs before every scored process.
+
+**Launch commit:** this amendment's merge commit, with grouped-nf4-gemm at its pin `57f53e19`. STOP-0's fetch gate runs
+at that commit.
+
+**Unchanged:** the arms, the sizes, the bars and the default's rule; Phase B's arms and P117's rule; the cost model;
+STOP-0 to STOP-4; pricing; the lane ceiling; the two-strikes rule.

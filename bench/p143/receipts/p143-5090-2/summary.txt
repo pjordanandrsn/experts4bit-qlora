@@ -1,0 +1,65 @@
+KNOBS e4b=adea732102bd17f0cf229d42e92449562ed0bdf6 gnf4=70bc03cb7a61b03c4e801e7423c58c103a1b6d7d model=none@none gpu_class=5090 min_disk_gb=40 min_ram_gb=60 family=qwen3-attn dry=0 short=32 long=160 reps=3 moe_layers=48
+CUDA_PROBE ok
+e4b 0.55.0 @adea732102bd17f0cf229d42e92449562ed0bdf6
+gnf4 0.46.1 @70bc03cb7a61b03c4e801e7423c58c103a1b6d7d
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p143_reduce self-test OK (9 cases)
+p143_bench self-test OK (4 cases)
+premise rc=0: 19 passed, 5 warnings in 14.10s
+premise ok
+P143 pass 1 ctx 256 n_split None: 0.5321 ms per 48 launches
+P143 pass 1 ctx 256 n_split 4: 0.2454 ms per 48 launches
+P143 pass 1 ctx 256 n_split 8: 0.2821 ms per 48 launches
+P143 pass 1 ctx 256 n_split 16: 0.3642 ms per 48 launches
+P143 pass 1 ctx 256 n_split 32: 0.5404 ms per 48 launches
+P143 pass 1 ctx 640 n_split None: 0.5372 ms per 48 launches
+P143 pass 1 ctx 640 n_split 4: 0.3928 ms per 48 launches
+P143 pass 1 ctx 640 n_split 8: 0.3580 ms per 48 launches
+P143 pass 1 ctx 640 n_split 16: 0.3662 ms per 48 launches
+P143 pass 1 ctx 640 n_split 32: 0.5362 ms per 48 launches
+P143 pass 1 ctx 1024 n_split None: 0.5331 ms per 48 launches
+P143 pass 1 ctx 1024 n_split 4: 0.4665 ms per 48 launches
+P143 pass 1 ctx 1024 n_split 8: 0.3570 ms per 48 launches
+P143 pass 1 ctx 1024 n_split 16: 0.3683 ms per 48 launches
+P143 pass 1 ctx 1024 n_split 32: 0.5412 ms per 48 launches
+P143 pass 1 ctx 2048 n_split None: 0.6016 ms per 48 launches
+P143 pass 1 ctx 2048 n_split 4: 0.8120 ms per 48 launches
+P143 pass 1 ctx 2048 n_split 8: 0.5428 ms per 48 launches
+P143 pass 1 ctx 2048 n_split 16: 0.4853 ms per 48 launches
+P143 pass 1 ctx 2048 n_split 32: 0.5977 ms per 48 launches
+P143 pass 1 ctx 4096 n_split None: 0.7327 ms per 48 launches
+P143 pass 1 ctx 4096 n_split 4: 1.4382 ms per 48 launches
+P143 pass 1 ctx 4096 n_split 8: 0.8813 ms per 48 launches
+P143 pass 1 ctx 4096 n_split 16: 0.6919 ms per 48 launches
+P143 pass 1 ctx 4096 n_split 32: 0.7358 ms per 48 launches
+P143 pass 2 ctx 4096 n_split 32: 0.7360 ms per 48 launches
+P143 pass 2 ctx 4096 n_split 16: 0.6929 ms per 48 launches
+P143 pass 2 ctx 4096 n_split 8: 0.8813 ms per 48 launches
+P143 pass 2 ctx 4096 n_split 4: 1.4382 ms per 48 launches
+P143 pass 2 ctx 4096 n_split None: 0.7328 ms per 48 launches
+P143 pass 2 ctx 2048 n_split 32: 0.5977 ms per 48 launches
+P143 pass 2 ctx 2048 n_split 16: 0.4867 ms per 48 launches
+P143 pass 2 ctx 2048 n_split 8: 0.5433 ms per 48 launches
+P143 pass 2 ctx 2048 n_split 4: 0.8126 ms per 48 launches
+P143 pass 2 ctx 2048 n_split None: 0.6016 ms per 48 launches
+P143 pass 2 ctx 1024 n_split 32: 0.5420 ms per 48 launches
+P143 pass 2 ctx 1024 n_split 16: 0.3682 ms per 48 launches
+P143 pass 2 ctx 1024 n_split 8: 0.3571 ms per 48 launches
+P143 pass 2 ctx 1024 n_split 4: 0.4665 ms per 48 launches
+P143 pass 2 ctx 1024 n_split None: 0.5322 ms per 48 launches
+P143 pass 2 ctx 640 n_split 32: 0.5361 ms per 48 launches
+P143 pass 2 ctx 640 n_split 16: 0.3662 ms per 48 launches
+P143 pass 2 ctx 640 n_split 8: 0.3580 ms per 48 launches
+P143 pass 2 ctx 640 n_split 4: 0.3928 ms per 48 launches
+P143 pass 2 ctx 640 n_split None: 0.5371 ms per 48 launches
+P143 pass 2 ctx 256 n_split 32: 0.5403 ms per 48 launches
+P143 pass 2 ctx 256 n_split 16: 0.3642 ms per 48 launches
+P143 pass 2 ctx 256 n_split 8: 0.2821 ms per 48 launches
+P143 pass 2 ctx 256 n_split 4: 0.2454 ms per 48 launches
+P143 pass 2 ctx 256 n_split None: 0.5321 ms per 48 launches
+P143_VERDICT {"verdict": "GO_FIXED", "why": [], "plan": {"n_split": 16, "save_640_ms": 0.170944, "loss_4096_ms": -0.040336, "noise_4096_ms": 0.00096, "clears": true}}

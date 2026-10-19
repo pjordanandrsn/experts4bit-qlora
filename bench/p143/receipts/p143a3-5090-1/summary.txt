@@ -1,0 +1,40 @@
+KNOBS e4b=e8de1799769065283554cda4525be614b39d1ee3 gnf4=38b308887688ea5bda7dd449bd3cc3dc1426b995 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 short=32 long=160 reps=5 windows=12 cont=128
+CUDA_PROBE ok
+e4b 0.55.0 @e8de1799769065283554cda4525be614b39d1ee3
+gnf4 0.47.1 @38b308887688ea5bda7dd449bd3cc3dc1426b995
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p143a3_reduce self-test OK (33 cases)
+p109_box self-test OK (5/5 cases)
+p143a2_box self-test OK (17/17 cases)
+p115_quality self-test OK (11/11 cases)
+premise rc=0: 19 passed, 5 warnings in 26.76s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709
+arm S0a rc=0 P143A2_ARM {"arm": "S0", "tag": "S0a", "attn_split_cap": {"cap": null, "source": "explicit", "plans": {}}, "load_s": 38.46, "W16": 925.61, "W1": 255.75}
+
+arm S1a rc=0 P143A2_ARM {"arm": "S1", "tag": "S1a", "attn_split_cap": {"cap": 16, "source": "explicit", "plans": {"1": {"calls": 144, "plan": 32, "n_split": 16}, "2": {"calls": 144, "plan": 32, "n_split": 16}, "4": {"calls": 144, "plan": 23, "n_split": 16}, "8": {"calls": 144, "plan": 11, "n_split": 11}, "16": {"calls": 144, "plan": 5, "n_split": 5}}}, "load_s": 21.04, "W16": 918.2, "W1": 267.05}
+
+arm S1b rc=0 P143A2_ARM {"arm": "S1", "tag": "S1b", "attn_split_cap": {"cap": 16, "source": "explicit", "plans": {"1": {"calls": 144, "plan": 32, "n_split": 16}, "2": {"calls": 144, "plan": 32, "n_split": 16}, "4": {"calls": 144, "plan": 23, "n_split": 16}, "8": {"calls": 144, "plan": 11, "n_split": 11}, "16": {"calls": 144, "plan": 5, "n_split": 5}}}, "load_s": 19.08, "W16": 917.24, "W1": 266.88}
+
+arm S0b rc=0 P143A2_ARM {"arm": "S0", "tag": "S0b", "attn_split_cap": {"cap": null, "source": "explicit", "plans": {}}, "load_s": 16.76, "W16": 912.52, "W1": 255.52}
+
+arm S0c rc=0 P143A2_ARM {"arm": "S0", "tag": "S0c", "attn_split_cap": {"cap": null, "source": "explicit", "plans": {}}, "load_s": 16.96, "W16": 911.67, "W1": 255.71}
+
+arm S1c rc=0 P143A2_ARM {"arm": "S1", "tag": "S1c", "attn_split_cap": {"cap": 16, "source": "explicit", "plans": {"1": {"calls": 144, "plan": 32, "n_split": 16}, "2": {"calls": 144, "plan": 32, "n_split": 16}, "4": {"calls": 144, "plan": 23, "n_split": 16}, "8": {"calls": 144, "plan": 11, "n_split": 11}, "16": {"calls": 144, "plan": 5, "n_split": 5}}}, "load_s": 17.45, "W16": 911.95, "W1": 267.17}
+
+arm S1d rc=0 P143A2_ARM {"arm": "S1", "tag": "S1d", "attn_split_cap": {"cap": 16, "source": "explicit", "plans": {"1": {"calls": 144, "plan": 32, "n_split": 16}, "2": {"calls": 144, "plan": 32, "n_split": 16}, "4": {"calls": 144, "plan": 23, "n_split": 16}, "8": {"calls": 144, "plan": 11, "n_split": 11}, "16": {"calls": 144, "plan": 5, "n_split": 5}}}, "load_s": 17.57, "W16": 911.16, "W1": 266.99}
+
+arm S0d rc=0 P143A2_ARM {"arm": "S0", "tag": "S0d", "attn_split_cap": {"cap": null, "source": "explicit", "plans": {}}, "load_s": 17.56, "W16": 911.87, "W1": 255.57}
+
+sane off rc=0 P143A2_SANE S0 windows={'wikitext': 12} cap=None sane_kv={'passes': 12, 'asked': [656], 'max_tokens_per_seq': [4096], 'blocks_per_seq': [256], 'split_cap': None, 'plan_clash': [], 'plan_b1': 32} plans={} dispatch={'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 146304, 'bw_splitk': 0} 42.6 s
+
+sane on rc=0 P143A2_SANE S1 windows={'wikitext': 12} cap=16 sane_kv={'passes': 12, 'asked': [656], 'max_tokens_per_seq': [4096], 'blocks_per_seq': [256], 'split_cap': 16, 'plan_clash': [], 'plan_b1': 32} plans={'1': {'calls': 73152, 'plan': 32, 'n_split': 16}} dispatch={'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 146304, 'bw_splitk': 0} 45.4 s
+
+P143A3_VERDICT FLIP ["g1 1.044184 (the min of four pairs) >= 1.03 and g16 0.991994 >= 0.99; SANE bias +0.00000, argmax 1.0000"]

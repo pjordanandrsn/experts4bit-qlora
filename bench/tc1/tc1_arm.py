@@ -454,13 +454,23 @@ def axolotl_config_dict(a, base_model, mods, params, best=False, double_quant=Fa
     }
     if best:                                                                                                # integrations/kernels/args.py:38, 55; plugin.py:134-163
         cfg.update({"plugins": ["axolotl.integrations.kernels.KernelsPlugin"], "expert_backend": "scattermoe", "moe_bnb_fast": True})
-    if not kernels:            # #1767: PEFT's reference forward. No kernels plugin / scattermoe (the caller forces best off), the LoRA kernels that
-        # check_auto_enable_lora_kernels would switch on set False explicitly (utils/schemas/config.py:1966-1990: only None is auto-enabled),
-        # and transformers' eager experts (loaders/model.py:476-493 calls set_experts_implementation with the named value)
-        if best:
-            raise ValueError("axolotl_config_dict: kernels=False with best=True (the kernels plugin is the best path)")
-        cfg.update({"lora_mlp_kernel": False, "lora_qkv_kernel": False, "lora_o_kernel": False, "lora_embedding_kernel": False,
-                    "experts_implementation": "eager"})
+    # #1767 (AXO1767 and its Amendment 1): which of axolotl's kernel paths run. "on" is the training configuration (with best: the
+    # kernels plugin's scattermoe experts plus the LoRA kernels check_auto_enable_lora_kernels switches on); "off" is PEFT's reference
+    # forward; "experts" keeps scattermoe and turns the LoRA kernels off; "lora" keeps the LoRA kernels on eager experts. Only None is
+    # auto-enabled (utils/schemas/config.py:1966-1990), so False and True are explicit; loaders/model.py:476-493 calls
+    # set_experts_implementation with the named value. True / False are the original "on" / "off".
+    mode = {True: "on", False: "off"}.get(kernels, kernels)
+    if mode not in ("on", "off", "experts", "lora"):
+        raise ValueError(f"axolotl_config_dict: kernels={kernels!r} (on, off, experts or lora)")
+    if mode in ("off", "lora") and best:
+        raise ValueError(f"axolotl_config_dict: kernels={mode} with best=True (the kernels plugin is the best path)")
+    if mode == "experts" and not best:
+        raise ValueError("axolotl_config_dict: kernels=experts needs best=True (scattermoe comes from the kernels plugin)")
+    lora_k = {"off": False, "experts": False, "lora": True}.get(mode)
+    if lora_k is not None:
+        cfg.update({k: lora_k for k in ("lora_mlp_kernel", "lora_qkv_kernel", "lora_o_kernel", "lora_embedding_kernel")})
+    if mode in ("off", "lora"):
+        cfg["experts_implementation"] = "eager"
     if layer_offload:          # TC3 arm 9: utils/schemas/config.py:653 `layer_offloading: bool | None` (default False); a TRAINER lever -- see load_axolotl for how it is driven here
         cfg["layer_offloading"] = True
     if deepspeed is not None:  # TC3 arm 10: utils/schemas/config.py:1070 `deepspeed: str | dict | None`; the engine is the trainer's -- see load_axolotl (a refused row)
@@ -2327,7 +2337,7 @@ def load_axolotl(a):
         if not mods:
             raise NotImplementedError("axolotl arm: no attention projection found by structure (q_proj/k_proj/o_proj); refusing rather than guessing")
         del skel
-    kernels = (getattr(a, "axolotl_kernels", "on") or "on") == "on"     # #1767: off = PEFT's reference forward (axolotl_config_dict)
+    kernels = getattr(a, "axolotl_kernels", "on") or "on"               # #1767: on / off / experts / lora (axolotl_config_dict)
     best = bool(int(getattr(a, "axolotl_best", 0) or 0))                  # main() refuses best with --axolotl-kernels off
     lo = bool(int(getattr(a, "axolotl_layer_offload", 0) or 0))          # TC3 arm 9
     z3 = bool(int(getattr(a, "axolotl_zero3", 0) or 0))                  # TC3 arm 10
@@ -2404,7 +2414,7 @@ def load_axolotl(a):
         n_quant_log = f"unavailable: {type(e).__name__}"
     census = axolotl_expert_census(model)
     mcfg = getattr(getattr(model, "config", None), "to_dict", lambda: {})()
-    x["axolotl"] = {"version": getattr(axolotl, "__version__", None), "torch": torch.__version__, "kernels": "on" if kernels else "off",
+    x["axolotl"] = {"version": getattr(axolotl, "__version__", None), "torch": torch.__version__, "kernels": kernels,
                     "cfg_lora_kernels": {k: cfg.get(k) for k in ("lora_mlp_kernel", "lora_qkv_kernel", "lora_o_kernel", "lora_embedding_kernel")},
                     "transformers": md.version("transformers"), "peft": md.version("peft"), "bitsandbytes": md.version("bitsandbytes"),
                     "config": cfg_dict, "best": best, "plugins": cfg_dict.get("plugins"), "expert_backend": cfg_dict.get("expert_backend"),
@@ -6050,8 +6060,8 @@ def main():
                     help="P2-1 (TC1): off = pass double-quant OFF through a from_pretrained parameter the signature names (read at runtime), "
                          "else the loader's default; the loaded expert Params4bit's quant_state.nested is recorded either way")
     ap.add_argument("--axolotl-best", type=int, default=0, help="P2-2 (TC1): 1 = plugins [KernelsPlugin], expert_backend scattermoe, moe_bnb_fast true")
-    ap.add_argument("--axolotl-kernels", choices=("on", "off"), default="on",
-                    help="#1767: off = PEFT's reference forward (no KernelsPlugin / scattermoe, lora_*_kernel false, experts eager); with --axolotl-best 1 it is refused")
+    ap.add_argument("--axolotl-kernels", choices=("on", "off", "experts", "lora"), default="on",
+                    help="#1767: off = PEFT's reference forward (no KernelsPlugin / scattermoe, lora_*_kernel false, experts eager); experts = scattermoe with the LoRA kernels off (needs --axolotl-best 1); lora = the LoRA kernels on eager experts (needs --axolotl-best 0)")
     ap.add_argument("--rescore-adapter", default=None,
                     help="#1767: no training; score this saved PEFT adapter directory (model.save_pretrained) on the held-out rows: the zero adapter, then the adapter")
     ap.add_argument("--axolotl-dataset", default=None, help="P2-2 (TC1): the registered Alpaca subset file named in the axolotl config's `datasets` (validation needs one; nothing reads it here)")
@@ -6187,10 +6197,13 @@ def main():
     # -- and before the CUDA check, so CI drives it -- with a stub and one line, never a traceback. They also refuse an offloaded
     # model: the export reads every frozen expert stack on the device, and an offloaded model's stacks live in host RAM because they
     # do not fit there. HP1's arms run resident; export under offload would need per-expert staging, which is not built.
-    if getattr(a, "axolotl_kernels", "on") == "off" and int(getattr(a, "axolotl_best", 0) or 0):    # #1767: never a silent override
-        stub(a, "refused", "--axolotl-kernels off with --axolotl-best 1: the best path IS the kernels plugin (pass --axolotl-best 0)", {"phase": "preamble"}, code=3)
-    if getattr(a, "axolotl_kernels", "on") == "off" and a.framework != "axolotl":
-        stub(a, "refused", f"--axolotl-kernels off is an axolotl switch; this arm is {a.framework}", {"phase": "preamble"}, code=3)
+    _km, _best = getattr(a, "axolotl_kernels", "on") or "on", int(getattr(a, "axolotl_best", 0) or 0)    # #1767: never a silent override
+    if _km in ("off", "lora") and _best:
+        stub(a, "refused", f"--axolotl-kernels {_km} with --axolotl-best 1: the best path IS the kernels plugin (pass --axolotl-best 0)", {"phase": "preamble"}, code=3)
+    if _km == "experts" and not _best:
+        stub(a, "refused", "--axolotl-kernels experts with --axolotl-best 0: scattermoe comes from the kernels plugin (pass --axolotl-best 1)", {"phase": "preamble"}, code=3)
+    if _km != "on" and a.framework != "axolotl":
+        stub(a, "refused", f"--axolotl-kernels {_km} is an axolotl switch; this arm is {a.framework}", {"phase": "preamble"}, code=3)
     if getattr(a, "hp1_export_base", 0) and not getattr(a, "hp1_export", None):
         stub(a, "refused", "--hp1-export-base 1 needs --hp1-export DIR (the base is written beside the canonical adapter)", {"phase": "preamble"}, code=3)
     if getattr(a, "hp1_export", None) and a.offload:

@@ -73,6 +73,11 @@ is −0.0012 (MATCH), and the evaluator's zero adapter is −0.0044 (MATCH).
 - **Box:** token `qwen3axo1767` on `TC1_BOX=A`; ids `axo1767-5090-1` (first attempt) and `-2`/`-3` (spares, each needing a new
   box-started reason); one RTX 5090, any verified host with direct ports except machine 151831 (HP1's).
 - **Time:** about 45 min expected (installs, the model fetch, two arms, two rescores, the evaluator); guard 1.5 h.
+- **PyPI floor (a feasibility term, added 2026-10-19 after `axo1767-5090-2`, before any reading).** That box's host fetched from
+  files.pythonhosted.org at 0.88 MB/s, against 23-66 MB/s from download.pytorch.org, so its venv-axolotl install took 31 of
+  its 45 alarm minutes (2,700 s); a slightly slower host would have run into the alarm. The box now times one pinned wheel (`pypi_probe.py`: 35.3 MB, sha256 pinned, at
+  most 60 s) right after the fetch probe, and refuses a host below 10 MB/s (rc 15, a startup-floor refusal). It
+  protects the guard, never the reading: no band, score or verdict row changes.
 - **Cost:** worst at most $2.50 per box at the policy's 5090 class rate, under the standing no-ask rule.
 - **Records:**
   - `axo1767/fourscore.json` (the reading) and `axo1767/eval_shake.json`;
@@ -85,3 +90,54 @@ is −0.0012 (MATCH), and the evaluator's zero adapter is −0.0044 (MATCH).
 - Which line of a kernel is responsible: a KERNELS reading names the path (scattermoe or the LoRA kernels together), not the op.
 - Anything at full depth or at HP1's 200 steps; the fixture is the shakedown's.
 - Anything about e4b or Unsloth beyond the e4b control's round trip.
+
+## Amendment 1 (registered 2026-10-19, after the KERNELS reading and before any split data): which kernel path
+
+**Why.** `axo1767-5090-2` read KERNELS (re-derived): the saved adapter gives the in-loop number only under axolotl's kernels, and
+PEFT's reference forward agrees with the evaluator. Its kernels-on configuration switches two paths together:
+- the kernels plugin's scattermoe experts, which apply the expert LoRA in the scattermoe kernel;
+- the LoRA kernels that `check_auto_enable_lora_kernels` turns on. On `axo1767-5090-2` the effective set was all four
+  (`lora_mlp_kernel`, `lora_qkv_kernel`, `lora_o_kernel`, `lora_embedding_kernel`), which is why (6) sets all four.
+This amendment separates them.
+
+**The change.** A token variant, `qwen3axo1767b`, runs everything above unchanged, then two more fresh-process rescores of the same
+saved adapter:
+
+| # | name | how |
+|---|---|---|
+| 5 | experts only | `--axolotl-kernels experts --axolotl-best 1`: the kernels plugin's scattermoe experts, with `lora_{mlp,qkv,o,embedding}_kernel` false |
+| 6 | LoRA kernels only | `--axolotl-kernels lora --axolotl-best 0`: eager experts (no plugin), with `lora_{mlp,qkv,o,embedding}_kernel` true |
+
+Each is checked like (3) and (4): a bit-for-bit adapter round trip, an ok record, and its zero adapter MATCHing the in-loop step 0.
+
+**Engagement check (all four rescores).** No label is trusted. Each rescore record must show that it ran the mode its name
+claims, through four fields: the mode, the experts implementation the model was set to, the plugins, and the effective LoRA-kernel
+set. The expected values, as `axo1767-5090-2`'s real (3) and (4) records carry them:
+- (3) off: eager experts, no plugin, no LoRA kernel on;
+- (4) on: scattermoe, the kernels plugin, at least one LoRA kernel on (its set is the box's effective set);
+- (5) experts: scattermoe, the kernels plugin, no LoRA kernel on;
+- (6) LoRA kernels: eager experts, no plugin, exactly (4)'s effective set on the same box.
+
+**What a failure voids.** A failed check on (3) or (4) makes the whole reading VOID. A failed check on (5) or (6), whether an
+instrument check or the engagement check, makes the split **SPLIT_VOID** and leaves the main reading standing: the main reading
+does not depend on (5) or (6). A box whose main reading is valid is not a strike. A SPLIT_VOID from a harness cause is fixed
+before the split re-runs, and that re-run carries its own one-strike rule.
+
+**Split reading** (`axo1767_reduce.py`, the same bands). It applies only when the main reading above is KERNELS; otherwise it is
+NOT_APPLICABLE. With E = (5) − (3) and L = (6) − (3):
+
+| E | L | split verdict | reading |
+|---|---|---|---|
+| DIFFER | MATCH | SCATTERMOE | the kernels plugin's expert path (scattermoe + moe_bnb_fast) alone moves the loss off PEFT's reference |
+| MATCH | DIFFER | LORA_KERNELS | the LoRA kernels alone move the loss off PEFT's reference |
+| DIFFER | DIFFER | BOTH | each path alone moves it |
+| MATCH | MATCH | INTERACTION | neither alone does, though both together do (C differs) |
+
+INCONCLUSIVE on E or L reads INCONCLUSIVE. E + L − ((4) − (3)), the additivity residual, is reported and gates nothing.
+
+**Box and budget.** One RTX 5090 under the standing rule. Ids `axo1767b-5090-1` to `-3`. Guard 1.5 h, worst ≤ $2.50. The same disk
+floor (min_disk_gb 200) and the same PyPI floor (10 MB/s) apply. Machine 143500 is excluded, after its 0.88 MB/s PyPI path. The
+adapter is retrained on the box: the launcher stages no model weights, so `axo1767-5090-2`'s adapter cannot be carried over. The split
+therefore reads within its own box, and the main reading on that box must reproduce KERNELS for the split to apply.
+
+**Unchanged:** scores (1)–(4), the bands, the instrument checks, the main 2×2 table, and the fixture.

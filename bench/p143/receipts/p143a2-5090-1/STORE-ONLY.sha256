@@ -1,0 +1,11 @@
+# Kept only in the private receipt store (commit 74f8955f2e6a287c9360e1192b438a865907330d), byte-exact: these 8 logs carry carriage returns
+# from the box's progress output, and receipts are never rewritten, so they are not committed here.
+# sha256, then the file's path in the store.
+b047e3dbd0df2a66154f35952b621b793f529487be599226d9cdd5b5575f52ca  receipts/experts4bit-qlora/2026-10-19/p143a2-5090-1/p143a2/logs/arm_S0a.log
+14db7f79e2265c3274d03e6b886c403a77c1ed396eb203a86835960c135300dd  receipts/experts4bit-qlora/2026-10-19/p143a2-5090-1/p143a2/logs/arm_S0b.log
+5a5b9fbc093c4985fcd24cd0d5879aa4eb0417d29747a7d8d431e18287762fc6  receipts/experts4bit-qlora/2026-10-19/p143a2-5090-1/p143a2/logs/arm_S1a.log
+3a81a12d2b5a16bf875faee5d147c10f2ddd076cee654309dfd6d19d5b44ee02  receipts/experts4bit-qlora/2026-10-19/p143a2-5090-1/p143a2/logs/arm_S1b.log
+2cadd6680917d7ad62aed57c4fc701aac7404f93785c057a8e218c842e698ffb  receipts/experts4bit-qlora/2026-10-19/p143a2-5090-1/p143a2/logs/fetch.log
+2eec73b76bfe8a88eeac3447706a72512e739cc1290d8a0006894a894f86a140  receipts/experts4bit-qlora/2026-10-19/p143a2-5090-1/p143a2/logs/prompts.log
+48f8cefeeb222eb92b67e69649088afc13c7d9296a88b21b94665aba56d0e828  receipts/experts4bit-qlora/2026-10-19/p143a2-5090-1/p143a2/logs/sane_off.log
+9b038c7499086139cc16d4136e77a24b8d73541840b7a0b8ff2f7a8296d4cd14  receipts/experts4bit-qlora/2026-10-19/p143a2-5090-1/p143a2/logs/sane_on.log

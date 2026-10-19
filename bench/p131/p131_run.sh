@@ -10,14 +10,15 @@
 # registered processes, all identical, at the release's prefill defaults (E4B_FUSE_PREFILL_GLUE and
 # E4B_PREFILL_LEAN_DISPATCH unset: P130's flips). The knob is read per call, so no process sets it: each process captures
 # the served first-chunk prefill graph once per arm, the box setting the knob per capture (m0 m32 m64), and times the
-# three interleaved (Phase A); process 1 also runs Phase B -- R, rep, the floor, the mutant and the subjects S32 and S64
-# (P117's teacher-forced instrument) -- in that one process. p131_reduce.py applies the rule.
+# three interleaved (Phase A). Amendment 2: a warm-up process 0 runs Phase B -- R, rep, the floor, the mutant and the
+# subjects S32 and S64 (P117's teacher-forced instrument) -- and a speed pass reported only; processes 1..PROCS are the
+# scored speed processes. p131_reduce.py applies the rule.
 #   premise  on THIS card, before anything is fetched: tests/test_prefill_graph_gpu.py, 9 passed, none skipped (rc 25)
 #   order    refusals; install + tripwire; self-tests; premise; fetch (watchdog); bake; the processes; reduce
 #
 # Knobs (recorded in summary.txt; any value off its registered default marks the run a REHEARSAL, NOT a reading):
 # P131_GPU_CLASS P131_MIN_DISK_GB P131_MIN_RAM_GB P131_REHEARSAL.
-# P131_PROVE=1 is the PROVING RUN: everything above on Qwen3-30B-A3B itself at the proof's sizes (four processes, 16
+# P131_PROVE=1 is the PROVING RUN: everything above on Qwen3-30B-A3B itself at the proof's sizes (four scored processes, 16
 # windows of 32 positions, 4 speed windows, 3 rounds): no other family engages the int4 K19 prefill route the knob
 # changes.
 set -uo pipefail
@@ -181,10 +182,12 @@ K8_MODEL="$SNAP" K8_WORK="$W/work" perl -e "alarm $(step_alarm 5400); exec @ARGV
   || { tail -3 logs/bake.log; say "BAKE FAIL"; finish 12; }
 [ -e $W/work/nf4.arena ] || { say "BAKE FAIL: no arena"; finish 12; }
 grep -a "BAKE" logs/bake.log | tail -1 | tee -a summary.txt
-# ---- the processes: all identical (no per-process knob; the box sets the knob per capture); process 1 also runs Phase B
+# ---- the processes: all identical (no per-process knob; the box sets the knob per capture). Amendment 2: process 0 is the
+# WARM-UP -- Phase B and a speed pass reported only (never in the span guard, the gains or any bar) -- and processes
+# 1..PROCS are the scored speed processes, speed only. Every process records nvidia-smi's clocks, power and temperature.
 ENGINE_ENV="E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$REV E4B_PAGED_ARENA=$W/work/nf4.arena E4B_PAGED_CALIB=$W/calib.json $ENGINE_KNOBS $LEVERS"
-for n in $(seq 1 "$PROCS"); do
-  PB=none; [ "$n" = 1 ] && PB=all
+for n in $(seq 0 "$PROCS"); do
+  PB=none; [ "$n" = 0 ] && PB=all
   can_run $NEED_PROC "process $n" || finish 40
   AL=$(step_alarm 2400); say "process $n: Phase B $PB (alarm=$AL)"
   # shellcheck disable=SC2086  # ENGINE_ENV is an assignment list by design
@@ -194,7 +197,7 @@ for n in $(seq 1 "$PROCS"); do
       --eager-rounds $EAGER_ROUNDS --eager-windows $EAGER_WINDOWS > logs/proc_$n.log 2>&1
   rc=$?
   { echo -n "process $n rc=$rc "; grep -aE "^P131_SPEED" logs/proc_$n.log | tail -1 | cut -c1-700; echo; } | tee -a summary.txt
-  grep -aE "^P131_(ARM|BOX|QUALITY_ERROR)" logs/proc_$n.log | tee -a summary.txt
+  grep -aE "^P131_(ARM|BOX|QUALITY_ERROR|GPU)" logs/proc_$n.log | tee -a summary.txt
   [ "$rc" = 0 ] || { tail -8 logs/proc_$n.log | cut -c1-300 | tee -a summary.txt; say "PROCESS $n FAILED (rc=$rc) -- the reducer will VOID"; }
 done
 PROVEFLAG=""; [ "$PROVE" = 1 ] && PROVEFLAG="--prove"
