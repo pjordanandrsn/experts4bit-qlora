@@ -93,10 +93,10 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 def test_the_reducer_applies_the_registered_rule():
     out = subprocess.run([sys.executable, str(LANE / "p131_reduce.py"), "--self-test"], capture_output=True, text=True)
     m = re.search(r"P131_REDUCE self-test: (\d+)/(\d+)", out.stdout)
-    assert out.returncode == 0 and m and m.group(1) == m.group(2) and int(m.group(2)) >= 32, out.stdout + out.stderr
+    assert out.returncode == 0 and m and m.group(1) == m.group(2) and int(m.group(2)) >= 44, out.stdout + out.stderr
     for line in ("TOL, SPREAD_X, SPREAD_MIN = 0.01, 2.0, 0.005", "MIN_GAIN, NOISY_SPAN = 1.02, 1.02",
                  "CAPTURE_FORWARDS = 5", "DECODE_TOKENS = 64", 'FLOORS = ("half", "chunk", "rev")',
-                 'PHASE_B = {1: "all"}', 'GLUE_DEFAULT = {"mode": "1", "source": "default-allowlisted"}'):
+                 'PHASE_B = {0: "all"}', "WARMUP = 0", 'GLUE_DEFAULT = {"mode": "1", "source": "default-allowlisted"}'):
         assert line in REDUCE, line
     # grouped-nf4-gemm#542 is not e4b CI's pin (#1625's knob is opt-in): the runner, the reducer and the fetch gate pin
     # the one commit
@@ -109,8 +109,11 @@ def test_the_reducer_applies_the_registered_rule():
 
 def test_the_box_the_runner_and_the_reducer_share_the_registered_shape():
     assert "ORDER" not in RUN and "--p1" not in RUN and "--ref-dir" not in RUN    # every process alike, R held in memory
-    assert 'PB=none; [ "$n" = 1 ] && PB=all' in RUN and 'PHASE_B = {1: "all"}' in REDUCE
-    assert 'if a.phase_b == "all" and a.proc != 1:' in BOX
+    # Amendment 2: the warm-up process 0 runs Phase B and a speed pass reported only; 1..PROCS are the scored processes
+    assert 'for n in $(seq 0 "$PROCS"); do' in RUN and 'PB=none; [ "$n" = 0 ] && PB=all' in RUN
+    assert 'PHASE_B = {0: "all"}' in REDUCE and "WARMUP = 0" in REDUCE and "procs = range(WARMUP, N + 1)" in REDUCE
+    assert 'if a.phase_b == "all" and a.proc != 0:' in BOX and "if a.proc < 0:" in BOX
+    assert 'rec["gpu_state"] = {"speed_start": gs0, "speed_end": gpu_state()}' in BOX and "|GPU)" in RUN
     for line in ('ARMS = ("m0", "m32", "m64")', 'TALL = ("m32", "m64")', 'FLOORS = ("half", "chunk", "rev")',
                  'OFF_ARMS = ("R", "rep") + FLOORS + ("mutant_scale",)'):
         assert line in BOX and line in REDUCE, line

@@ -9,13 +9,15 @@ graph once per arm and times the three interleaved, as P130 timed P2:
 - **m0**: the knob ``0``, the 16-row table (the release's default; the control);
 - **m32** and **m64**: the knob ``32`` and ``64``.
 
-One run of this box is one PROCESS of the run's registered order (``--proc``). Each process builds SC2e's int4 stack as
+One run of this box is one PROCESS of the run's registered order (``--proc``): process 0 is Amendment 2's WARM-UP (it
+runs Phase B and a speed pass whose timing is reported only), processes 1..N are the scored speed processes. Each process
+builds SC2e's int4 stack as
 P117 and P130 build it (eager, one slot, all-vram, no prefill graph: the box makes its own runners), at the release's
 prefill defaults (``E4B_FUSE_PREFILL_GLUE`` and ``E4B_PREFILL_LEAN_DISPATCH`` unset: on for ``qwen3_moe``, P130), then:
 
 **Phase A, speed** (every process). A runner made as the server makes its own captures the first-chunk prefill graph at
 ``T`` = 512 three times, through the server's own ``enable_prefill_graph`` (warm-up, capture, startup check), the knob
-set per capture, in ``capture_order(proc)``: m0 m32 m64 rotated by (proc - 1), so over the processes every arm is
+set per capture, in ``capture_order(proc)``: m0 m32 m64 rotated by (proc - 1), so over the scored processes every arm is
 captured first, second and third (a capture-position effect -- pool placement, alignment -- is not the arm's). Then:
 - **FUNCTION:** on every speed window all three graphs replay, and each tall arm's logits and every pool layer's staged
   K and V are compared with m0's by ``torch.equal``; each window's m0 output is digested (sha256) for DETERMINISM;
@@ -29,10 +31,14 @@ captured first, second and third (a capture-position effect -- pool placement, a
 - **engagement:** every eager forward is counted, and the route, K19's dispatch and the prefill folds are read as deltas
   per capture (P130's counters). Replays run no Python, so they count nothing.
 
-**Phase B, quality** (``--phase-b all``, process 1 only): P117's instrument as P130 ran it, in ONE process because the
-knob is read per call. Teacher-forced paged passes (``p117_box.paged_pass``) over ``--windows`` wikitext windows decoded
-together: **R** (m0, buckets 1-16), **rep**, the floor (**half**, **chunk**, **rev**), **mutant_scale**, then the
-subjects **S32** and **S64** (R's buckets with the knob set), each scored against R's log-probs held in memory, with
+**GPU state** (Amendment 2, reported only): nvidia-smi's SM and memory clocks, power draw, temperature and active clock
+event reasons, read at the start and the end of the speed pass (``gpu_state()``; an unreadable query is recorded as its
+error, never raised).
+
+**Phase B, quality** (``--phase-b all``, process 0 only, Amendment 2): P117's instrument as P130 ran it, in ONE process
+because the knob is read per call. Teacher-forced paged passes (``p117_box.paged_pass``) over ``--windows`` wikitext
+windows decoded together: **R** (m0, buckets 1-16), **rep**, the floor (**half**, **chunk**, **rev**), **mutant_scale**,
+then the subjects **S32** and **S64** (R's buckets with the knob set), each scored against R's log-probs held in memory, with
 ``bitwise`` recording whether every one of its windows' log-probs is ``torch.equal`` to R's. Decode rows here are at
 most 16 (128 routed rows), so the knob reaches only the prefill.
 
@@ -84,7 +90,7 @@ def _rotated(k: int) -> tuple:
 
 
 def capture_order(proc: int) -> tuple:
-    """The arms' capture order in process ``proc`` (1-based): m0 m32 m64 rotated by (proc - 1)."""
+    """The arms' capture order in process ``proc``: m0 m32 m64 rotated by (proc - 1); the warm-up process 0 is rotated by -1."""
     return _rotated(proc - 1)
 
 
@@ -266,6 +272,33 @@ def quality(model, ws, *, prompt, cont, chunk, floor_chunk, device, stand_in=Fal
             "rehearsal": {"stand_in_attention": bool(stand_in)}, "seconds": round(time.time() - start, 1)}
 
 
+GPU_FIELDS = ("clocks.sm", "clocks.mem", "power.draw", "temperature.gpu", "clocks_event_reasons.active")
+
+
+def gpu_state() -> dict:
+    """Amendment 2 (reported only): nvidia-smi's SM / memory clocks (MHz), power (W), temperature (C) and the active clock
+    event reasons, now. A field the driver does not know is retried without the event reasons; any failure is recorded as
+    its error, never raised: the record must not cost the process."""
+    import subprocess
+    for fields in (GPU_FIELDS, GPU_FIELDS[:4]):
+        try:
+            r = subprocess.run(["nvidia-smi", f"--query-gpu={','.join(fields)}", "--format=csv,noheader,nounits"],
+                               capture_output=True, text=True, timeout=20)
+        except Exception as e:  # noqa: BLE001 -- no nvidia-smi on this host (the CPU tests), a hang
+            return {"utc": time.time(), "error": f"{type(e).__name__}: {str(e)[:200]}"}
+        if r.returncode == 0 and r.stdout.strip():
+            vals = [v.strip() for v in r.stdout.strip().splitlines()[0].split(",")]
+            return {"utc": time.time(), **dict(zip(fields, vals))}
+    return {"utc": time.time(), "error": f"nvidia-smi rc {r.returncode}: {(r.stdout + r.stderr).strip()[:200]}"}
+
+
+def _gpu_line(g: dict) -> str:
+    if "error" in g:
+        return f"unread ({g['error'][:60]})"
+    return (f"sm {g.get('clocks.sm')} MHz mem {g.get('clocks.mem')} MHz {g.get('power.draw')} W {g.get('temperature.gpu')} C"
+            f" reasons {g.get('clocks_event_reasons.active', '-')}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
@@ -293,8 +326,10 @@ def main() -> int:
     if set_now:
         raise SystemExit(f"REFUSED: process {a.proc} runs the release's prefill defaults with {ENV} set per capture "
                          f"by the box; the environment sets {set_now}")
-    if a.phase_b == "all" and a.proc != 1:
-        raise SystemExit("REFUSED: Phase B runs in process 1 only")
+    if a.proc < 0:
+        raise SystemExit(f"REFUSED: process {a.proc}: the processes are 0 (the warm-up) and 1..N")
+    if a.phase_b == "all" and a.proc != 0:
+        raise SystemExit("REFUSED: Phase B runs in process 0 only (Amendment 2: the warm-up)")
     cfg = PagedServeConfig.from_env()
     if cfg.graphs or cfg.placement != "all-vram" or cfg.max_seqs != 1:
         raise SystemExit(f"REFUSED: the engine is built eager at all-vram with one slot (graphs={cfg.graphs}, "
@@ -316,9 +351,12 @@ def main() -> int:
                                                      "int4_attn_projections", "int4_store_kinds", "fusion_report",
                                                      "levers_env")}}
     st = time.time()
+    gs0 = gpu_state()
     rec["speed"] = speed(model, [w[:a.prompt] for w in ws[:a.speed_windows]], a.prompt, cfg.device, rounds=a.rounds,
                          warm=a.warm, eager_rounds=a.eager_rounds, eager_windows=a.eager_windows,
                          decode_tokens=a.decode_tokens, bulk_kv=cfg.bulk_kv, last_logits=cfg.last_logits, proc=a.proc)
+    rec["gpu_state"] = {"speed_start": gs0, "speed_end": gpu_state()}
+    print(f"P131_GPU proc {a.proc} | speed start {_gpu_line(gs0)} | end {_gpu_line(rec['gpu_state']['speed_end'])}", flush=True)
     sp = rec["speed"]
     fn = sp.get("function") or {}
     print(f"P131_SPEED proc {a.proc} | graphs {[(g, v.get('status')) for g, v in sp['graphs'].items()]} "
