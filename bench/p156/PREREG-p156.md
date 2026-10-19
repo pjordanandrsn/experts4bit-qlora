@@ -13,7 +13,7 @@ maintainer reserved the lane number on 2026-10-19, after K39 read bitwise, and s
 | 5. a $0 A2000 shakedown before the box | [The shakedown](#before-the-box-the-0-a2000-shakedown) |
 | 6. the TIME prediction against the issue/occupancy model, and whether K39 moves the recorded 11.75 ms toward the floors | [Predictions](#predictions-graded-in-the-read-never-ruling) |
 | 7. a microbench premise: a served flip is its own later read | Status, and [What follows](#what-follows) |
-| later rulings: 17.0 is a triton 3.4.0 number (grouped-nf4-gemm#570); P155's occupancy observation folded in, M2 the least likely | [Why](#why), [Predictions](#predictions-graded-in-the-read-never-ruling) |
+| later rulings: 17.0 is a triton 3.4.0 number (grouped-nf4-gemm#570); P155's occupancy evidence stated with its limits (e4b#1856); M2 weakly disfavoured by P155 | [Why](#why), [Predictions](#predictions-graded-in-the-read-never-ruling) |
 
 ## Why
 
@@ -145,12 +145,12 @@ issue estimate is 5.2-6.1 ms for T and **3.7-4.3 ms for P**, which puts P's issu
 |---|---|---|
 | **M1, overlap**: time = max(bytes, issue) + a fixed residual (11.75 - T's issue) | **1.02-1.11** | P's issue drops under the bytes, so the bytes bind and the residual stays |
 | **M3, serial**: the issue adds to everything else | **1.15-1.18** | every saved instruction is saved time |
-| **M2, overlap + occupancy**: M1, with the residual hidden in proportion to 50 -> 67 % occupancy | 1.19-1.28 | **the least likely**, on weak evidence (below) |
+| **M2, overlap + occupancy**: M1, with the residual hidden in proportion to 50 -> 67 % occupancy | 1.19-1.28 | P155 is weak evidence against it (below) |
 
 The bands leave gaps (1.11-1.15 and 1.18-1.19). A median in one reports no containing model: it lies between them, and
 the headline band spans the first gap.
 
-**Why M2 is the least likely, and why the evidence is weak.** P155 is weak evidence against M2:
+**What P155 says about M2, and why the evidence is weak.** P155 is weak evidence against M2:
 - **no faster plan:** no plan with higher theoretical occupancy was faster on gate_up. All six of its 67 % plans were
   slower (T/plan 0.933-0.990); the best, (32, 64, 4, 1) with 62 registers, ran **8.404 ms** against today's
   **8.317 ms**;
@@ -160,8 +160,8 @@ the headline band spans the first gap.
   this is theoretical occupancy, with the achieved occupancy unread (P155's record, e4b#1856).
 
 K39 raises theoretical occupancy at today's tile and pipeline, 80 to 64 registers at the same 3 stages: the comparison
-P155 could not make. So P156 tests M2 more cleanly than P155 could. M2 stays registered, the least likely on P155's
-weak evidence, and it is what a MISS above the headline would point to.
+P155 could not make. So P156 tests M2 more cleanly than P155 could. M2 stays registered; P155 is weak evidence against
+it, and it is what a MISS above the headline would point to.
 
 | prediction | if HELD | if MISSED |
 |---|---|---|

@@ -280,12 +280,15 @@ def test_the_predictions_are_the_registered_models():
     assert red.MODELS == {"M1 overlap": (1.02, 1.11), "M3 serial": (1.15, 1.18), "M2 overlap + occupancy": (1.19, 1.28)}
     assert red.PRED["headline"] == (1.05, 1.18) and red.PRED["regs"] == {"T": 80, "P": 64}
     # P155's figures as its record states them after review (e4b#1856): weak evidence, with its limits
-    for figure in ("**1.02-1.11**", "**1.15-1.18**", "1.19-1.28", "**the least likely**, on weak evidence",
+    for figure in ("**1.02-1.11**", "**1.15-1.18**", "1.19-1.28", "P155 is weak evidence against it (below)",
+                   "**What P155 says about M2, and why the evidence is weak.**", "M2 weakly disfavoured by P155",
+                   "M2 stays registered; P155 is weak evidence against\nit, and it is what a MISS",
                    "**1.05-1.18**", "**8.404 ms**", "**8.317 ms**", "0.933-0.990", "never varied occupancy alone",
                    "achieved occupancy unread", "12.075 ms", "1.045 against 1.019, 0.026", "**17.00**", "**0.70**",
                    "0.51", "grouped-nf4-gemm#570", "The bands leave gaps"):
         assert figure in PREREG, figure
     assert "changed occupancy alone" not in PREREG and "0.027" not in PREREG          # the pre-review wording
+    assert "least likely" not in PREREG                                               # the maintainer's 23:18Z ruling
 
 
 def test_a_bit_moving_p_reads_the_same_on_every_step():
