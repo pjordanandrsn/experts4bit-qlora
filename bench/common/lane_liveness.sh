@@ -68,7 +68,7 @@ lane_reboot_evidence() {  # current-snapshot initial-snapshot lane-age-seconds -
 }
 
 lane_write_host_fault() {  # run-dir kind evidence -> run-dir/host-fault.json, the rental launcher's host-fault marker
-  # adertha-agents#204: rent.py copies a well-formed marker into the receipt (environment.host_fault), and a committed
+  # The rental launcher (rent.py) copies a well-formed marker into the receipt (environment.host_fault), and a committed
   # HARNESS_ERROR receipt that carries one can exclude its machine (--exclude-vast-host-fault-receipt).
   local dir=${1:-} kind=${2:-} evidence=${3:-} tmp
   [ -n "$dir" ] && [ -d "$dir" ] || return 1
@@ -93,7 +93,7 @@ lane_box_error_line() {  # fetched-box-dir -> the last error-looking line of the
 }
 
 lane_write_command_error() {  # run-dir rc drive-message box-line -> run-dir/command-error.txt, the rental launcher's error line
-  # adertha-agents#209: on a non-zero exit rent.py appends this file's last line to the receipt's notes after
+  # On a non-zero exit the rental launcher (rent.py) appends this file's last line to the receipt's notes after
   # "command exited N" (control characters dropped, classifier phrases defanged, 300 characters at most).
   local dir=${1:-} rc=${2:-} msg=${3:-} box=${4:-} line tmp
   [ -n "$dir" ] && [ -d "$dir" ] || return 1

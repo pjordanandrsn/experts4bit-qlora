@@ -1,0 +1,44 @@
+{
+ "reducer": "bench/hp2/hp2_reduce.py g1",
+ "rows": 300,
+ "delta0": -0.002691,
+ "sd_d": 0.041194,
+ "se_delta0": 0.002378,
+ "null": 0.0,
+ "reach": 0.007448,
+ "bound": 0.01,
+ "z": 2.0,
+ "m_need": 0.014895,
+ "m_expected": 0.005,
+ "per_framework": {
+  "e4b": {
+   "b": 0.000931,
+   "sd": 0.030206,
+   "mean_abs_gap": 0.021715,
+   "max_abs_gap": 0.12066,
+   "z_band_half_width": 0.014088
+  },
+  "unsloth": {
+   "b": 0.003622,
+   "sd": 0.028295,
+   "mean_abs_gap": 0.021109,
+   "max_abs_gap": 0.09798,
+   "z_band_half_width": 0.013197
+  }
+ },
+ "z_bands": {
+  "e4b": [
+   0.000931,
+   0.014088
+  ],
+  "unsloth": [
+   0.003622,
+   0.013197
+  ]
+ },
+ "roundtrip_zero_centred_tol": 0.01,
+ "void_z": 3.0,
+ "false_void": "6(b) is centred on each run's own zero-adapter gap, so it tests only the adapter round trip, at the registered 0.01 (AXO1767's MATCH band; its e4b control read +0.0004). z_f - b_f is REPORTED against z_bands, never a VOID.",
+ "verdict": "STOP",
+ "reason": "m_need = 2(|delta0| + 2.0 x SE) = 0.014895 > the expected margin 0.005: G2 would close at the expected sigma_seed, so the box stops at G1 (a reading, not a strike)"
+}

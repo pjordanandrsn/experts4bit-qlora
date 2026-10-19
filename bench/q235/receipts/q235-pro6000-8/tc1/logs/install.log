@@ -1,0 +1,98 @@
+Looking in links: /root/tc1/.cache/wheels
+Processing ./.cache/wheels/accelerate-1.14.0-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 1))
+Processing ./.cache/wheels/annotated_doc-0.0.5-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 2))
+Processing ./.cache/wheels/anyio-4.15.1-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 3))
+Processing ./.cache/wheels/bitsandbytes-0.50.2-py3-none-manylinux_2_24_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 4))
+Processing ./.cache/wheels/click-8.5.0-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 5))
+Processing ./.cache/wheels/cuda_bindings-12.9.9-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 6))
+Processing ./.cache/wheels/cuda_pathfinder-1.8.3-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 7))
+Processing ./.cache/wheels/cuda_toolkit-12.8.1-py2.py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 8))
+Processing ./.cache/wheels/filelock-4.1.0-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 9))
+Processing ./.cache/wheels/fsspec-2026.9.0-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 10))
+Processing ./.cache/wheels/h11-0.16.0-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 11))
+Processing ./.cache/wheels/hf_xet-1.7.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 12))
+Processing ./.cache/wheels/httpcore2-2.13.1-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 13))
+Processing ./.cache/wheels/httpx2-2.13.1-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 14))
+Processing ./.cache/wheels/huggingface_hub-2.2.0-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 15))
+Processing ./.cache/wheels/idna-3.20-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 16))
+Processing ./.cache/wheels/jinja2-3.1.6-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 17))
+Processing ./.cache/wheels/markdown_it_py-4.2.0-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 18))
+Processing ./.cache/wheels/markupsafe-3.0.4-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 19))
+Processing ./.cache/wheels/mdurl-0.1.2-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 20))
+Processing ./.cache/wheels/mpmath-1.3.0-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 21))
+Processing ./.cache/wheels/networkx-3.6.1-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 22))
+Processing ./.cache/wheels/numpy-2.2.6-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 23))
+Processing ./.cache/wheels/nvidia_cublas_cu12-12.8.4.1-py3-none-manylinux_2_27_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 24))
+Processing ./.cache/wheels/nvidia_cuda_cupti_cu12-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 25))
+Processing ./.cache/wheels/nvidia_cuda_nvrtc_cu12-12.8.93-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 26))
+Processing ./.cache/wheels/nvidia_cuda_runtime_cu12-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 27))
+Processing ./.cache/wheels/nvidia_cudnn_cu12-9.19.0.56-py3-none-manylinux_2_27_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 28))
+Processing ./.cache/wheels/nvidia_cufft_cu12-11.3.3.83-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 29))
+Processing ./.cache/wheels/nvidia_cufile_cu12-1.13.1.3-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 30))
+Processing ./.cache/wheels/nvidia_curand_cu12-10.3.9.90-py3-none-manylinux_2_27_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 31))
+Processing ./.cache/wheels/nvidia_cusolver_cu12-11.7.3.90-py3-none-manylinux_2_27_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 32))
+Processing ./.cache/wheels/nvidia_cusparse_cu12-12.5.8.93-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 33))
+Processing ./.cache/wheels/nvidia_cusparselt_cu12-0.7.1-py3-none-manylinux2014_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 34))
+Processing ./.cache/wheels/nvidia_nccl_cu12-2.28.9-py3-none-manylinux_2_18_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 35))
+Processing ./.cache/wheels/nvidia_nvjitlink_cu12-12.8.93-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 36))
+Processing ./.cache/wheels/nvidia_nvshmem_cu12-3.4.5-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 37))
+Processing ./.cache/wheels/nvidia_nvtx_cu12-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 38))
+Processing ./.cache/wheels/packaging-26.3-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 39))
+Processing ./.cache/wheels/psutil-7.2.2-cp36-abi3-manylinux2010_x86_64.manylinux_2_12_x86_64.manylinux_2_28_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 40))
+Processing ./.cache/wheels/pygments-2.21.0-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 41))
+Processing ./.cache/wheels/pyyaml-6.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 42))
+Processing ./.cache/wheels/regex-2026.9.29-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 43))
+Processing ./.cache/wheels/rich-15.0.0-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 44))
+Processing ./.cache/wheels/safetensors-0.8.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 45))
+Processing ./.cache/wheels/setuptools-81.0.0-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 46))
+Processing ./.cache/wheels/shellingham-1.5.4-py2.py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 47))
+Processing ./.cache/wheels/sympy-1.14.0-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 48))
+Processing ./.cache/wheels/tokenizers-0.23.3-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 49))
+Processing ./.cache/wheels/torch-2.11.0+cu128-cp311-cp311-manylinux_2_28_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 50))
+Processing ./.cache/wheels/tqdm-4.70.1-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 51))
+Processing ./.cache/wheels/transformers-5.19.0-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 52))
+Processing ./.cache/wheels/triton-3.6.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 53))
+Processing ./.cache/wheels/truststore-0.10.4-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 54))
+Processing ./.cache/wheels/typer-0.27.3-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 55))
+Processing ./.cache/wheels/typing_extensions-4.16.0-py3-none-any.whl (from -r /root/tc1/.cache/wheels/requirements.local.txt (line 56))
+Installing collected packages: nvidia-cusparselt-cu12, mpmath, cuda-toolkit, cuda-bindings, typing_extensions, typer, truststore, triton, transformers, tqdm, torch, tokenizers, sympy, shellingham, setuptools, safetensors, rich, regex, PyYAML, Pygments, psutil, packaging, nvidia-nvtx-cu12, nvidia-nvshmem-cu12, nvidia-nvjitlink-cu12, nvidia-nccl-cu12, nvidia-cusparse-cu12, nvidia-cusolver-cu12, nvidia-curand-cu12, nvidia-cufile-cu12, nvidia-cufft-cu12, nvidia-cudnn-cu12, nvidia-cuda-runtime-cu12, nvidia-cuda-nvrtc-cu12, nvidia-cuda-cupti-cu12, nvidia-cublas-cu12, numpy, networkx, mdurl, MarkupSafe, markdown-it-py, Jinja2, idna, huggingface_hub, httpx2, httpcore2, hf-xet, h11, fsspec, filelock, cuda-pathfinder, click, bitsandbytes, anyio, annotated-doc, accelerate
+  Attempting uninstall: setuptools
+    Found existing installation: setuptools 65.5.0
+    Uninstalling setuptools-65.5.0:
+      Successfully uninstalled setuptools-65.5.0
+Successfully installed Jinja2-3.1.6 MarkupSafe-3.0.4 PyYAML-6.0.3 Pygments-2.21.0 accelerate-1.14.0 annotated-doc-0.0.5 anyio-4.15.1 bitsandbytes-0.50.2 click-8.5.0 cuda-bindings-12.9.9 cuda-pathfinder-1.8.3 cuda-toolkit-12.8.1 filelock-4.1.0 fsspec-2026.9.0 h11-0.16.0 hf-xet-1.7.0 httpcore2-2.13.1 httpx2-2.13.1 huggingface_hub-2.2.0 idna-3.20 markdown-it-py-4.2.0 mdurl-0.1.2 mpmath-1.3.0 networkx-3.6.1 numpy-2.2.6 nvidia-cublas-cu12-12.8.4.1 nvidia-cuda-cupti-cu12-12.8.90 nvidia-cuda-nvrtc-cu12-12.8.93 nvidia-cuda-runtime-cu12-12.8.90 nvidia-cudnn-cu12-9.19.0.56 nvidia-cufft-cu12-11.3.3.83 nvidia-cufile-cu12-1.13.1.3 nvidia-curand-cu12-10.3.9.90 nvidia-cusolver-cu12-11.7.3.90 nvidia-cusparse-cu12-12.5.8.93 nvidia-cusparselt-cu12-0.7.1 nvidia-nccl-cu12-2.28.9 nvidia-nvjitlink-cu12-12.8.93 nvidia-nvshmem-cu12-3.4.5 nvidia-nvtx-cu12-12.8.90 packaging-26.3 psutil-7.2.2 regex-2026.9.29 rich-15.0.0 safetensors-0.8.0 setuptools-81.0.0 shellingham-1.5.4 sympy-1.14.0 tokenizers-0.23.3 torch-2.11.0+cu128 tqdm-4.70.1 transformers-5.19.0 triton-3.6.0 truststore-0.10.4 typer-0.27.3 typing_extensions-4.16.0
+Collecting git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@724ccc454f006c1a46836e434e997f31f293747f
+  Cloning https://github.com/pjordanandrsn/grouped-nf4-gemm.git (to revision 724ccc454f006c1a46836e434e997f31f293747f) to /tmp/pip-req-build-x1wnmibm
+  Running command git clone --filter=blob:none --quiet https://github.com/pjordanandrsn/grouped-nf4-gemm.git /tmp/pip-req-build-x1wnmibm
+  Running command git rev-parse -q --verify 'sha^724ccc454f006c1a46836e434e997f31f293747f'
+  Running command git fetch -q https://github.com/pjordanandrsn/grouped-nf4-gemm.git 724ccc454f006c1a46836e434e997f31f293747f
+  Running command git checkout -q 724ccc454f006c1a46836e434e997f31f293747f
+  Resolved https://github.com/pjordanandrsn/grouped-nf4-gemm.git to commit 724ccc454f006c1a46836e434e997f31f293747f
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: grouped-nf4-gemm
+  Building wheel for grouped-nf4-gemm (pyproject.toml): started
+  Building wheel for grouped-nf4-gemm (pyproject.toml): finished with status 'done'
+  Created wheel for grouped-nf4-gemm: filename=grouped_nf4_gemm-0.45.0-py3-none-any.whl size=338172 sha256=5ac72ac17c48863078805db71b9175d5d0610782dcef536952e977c7da9fe9d7
+  Stored in directory: /root/.cache/pip/wheels/b4/a1/d4/8724189aaa7c19b4aa8dbf0489da907ba874c7eb07139f2bf8
+Successfully built grouped-nf4-gemm
+Installing collected packages: grouped-nf4-gemm
+Successfully installed grouped-nf4-gemm-0.45.0
+Collecting git+https://github.com/pjordanandrsn/experts4bit-qlora.git@27200917f1282ca7c8daad47fa553536d7c62871
+  Cloning https://github.com/pjordanandrsn/experts4bit-qlora.git (to revision 27200917f1282ca7c8daad47fa553536d7c62871) to /tmp/pip-req-build-8j03ni63
+  Running command git clone --filter=blob:none --quiet https://github.com/pjordanandrsn/experts4bit-qlora.git /tmp/pip-req-build-8j03ni63
+  Running command git rev-parse -q --verify 'sha^27200917f1282ca7c8daad47fa553536d7c62871'
+  Running command git fetch -q https://github.com/pjordanandrsn/experts4bit-qlora.git 27200917f1282ca7c8daad47fa553536d7c62871
+  Running command git checkout -q 27200917f1282ca7c8daad47fa553536d7c62871
+  Resolved https://github.com/pjordanandrsn/experts4bit-qlora.git to commit 27200917f1282ca7c8daad47fa553536d7c62871
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: experts4bit-qlora
+  Building wheel for experts4bit-qlora (pyproject.toml): started
+  Building wheel for experts4bit-qlora (pyproject.toml): finished with status 'done'
+  Created wheel for experts4bit-qlora: filename=experts4bit_qlora-0.55.0-py3-none-any.whl size=716569 sha256=b8cef892302bf5362a9088dbde7463626a8e1c71575e0a62e1252b49c7fa9764
+  Stored in directory: /root/.cache/pip/wheels/83/a8/cb/69afc1f842d97ccc9cf32bc38232ff72c703f796d5d5ff201a
+Successfully built experts4bit-qlora
+Installing collected packages: experts4bit-qlora
+Successfully installed experts4bit-qlora-0.55.0
+{"schema": "q235-install/1", "wheel_lock_sha256": "84f361ed35fff9a857f340b65488ad582dc4270aef7e67cbeb6b46b8370021f3", "wheels": 56, "commits": {"grouped-nf4-gemm": "724ccc454f006c1a46836e434e997f31f293747f", "experts4bit-qlora": "27200917f1282ca7c8daad47fa553536d7c62871"}, "versions": {"torch": "2.11.0+cu128", "transformers": "5.19.0", "bitsandbytes": "0.50.2", "accelerate": "1.14.0", "huggingface_hub": "2.2.0", "safetensors": "0.8.0", "tokenizers": "0.23.3", "numpy": "2.2.6", "triton": "3.6.0", "grouped-nf4-gemm": "0.45.0", "experts4bit-qlora": "0.55.0"}, "python": "3.11.13"}

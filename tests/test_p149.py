@@ -44,7 +44,7 @@ def test_the_runner_refuses_a_capped_board_before_any_install_and_runs_the_suite
     run = (LANE / "p149k_run.sh").read_text(encoding="utf-8")
     assert "GNF4_SHA=38b308887688ea5bda7dd449bd3cc3dc1426b995" in run and 'md.version("grouped-nf4-gemm") == "0.47.1"' in run
     assert 'assert triton.__version__ == "3.4.0"' in run and "TORCH_FULL\" = 2.8.0+cu128" in run
-    assert "p149k-5090-1|p149k-5090-2|p149k-5090-3) FAMILY=mixtral-attn-int8;" in run
+    assert "p149k-5090-1|p149k-5090-2|p149k-5090-3|p149k-5090-4|p149k-5090-5|p149k-5090-6) FAMILY=mixtral-attn-int8;" in run
     assert "MIN_POWER_W=575" in run
     order = ["PL=$(nvidia-smi --query-gpu=power.limit", 'finish 15; }', '[ "$PL" -ge "$MIN_POWER_W" ] ||', "finish 17; }",
              "pipx logs/pip_e4b.log", "TRITON_INTERPRET=0 perl -e 'alarm 900; exec @ARGV' python -m pytest test_p149_kernels_interp.py",
@@ -176,3 +176,17 @@ def test_the_driver_refuses_another_run_id(tmp_path):
     out = subprocess.run(["bash", str(LANE / "p149k_drive.sh")], capture_output=True, text=True,
                          env=_dry_env(tmp_path, "p149-5090-1"), timeout=120)
     assert out.returncode == 78 and "is not p149k-5090-N" in out.stdout + out.stderr
+
+
+@pytest.mark.parametrize("run_id,ok", [("p149k-5090-6", True), ("p149k-5090-7", False)])
+def test_amendment_1_spares_reach_six_and_no_further(tmp_path, run_id, ok):
+    if sys.platform == "win32" or shutil.which("bash") is None:
+        pytest.skip("the driver needs a POSIX bash")
+    if not _clean_checkout():
+        pytest.skip("the driver refuses a dirty tree before it reads the run id")
+    out = subprocess.run(["bash", str(LANE / "p149k_drive.sh")], capture_output=True, text=True,
+                         env=_dry_env(tmp_path, run_id), timeout=120)
+    if ok:
+        assert out.returncode == 0 and "DRYRUN stage -> root@h:/root/p149k" in out.stdout, out.stdout + out.stderr
+    else:
+        assert out.returncode == 78 and "is not p149k-5090-N" in out.stdout + out.stderr

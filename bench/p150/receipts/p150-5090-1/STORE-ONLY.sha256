@@ -1,0 +1,8 @@
+# Kept only in the private receipt store, byte-exact: these 5 logs carry carriage returns from the box's progress
+# output, and receipts are never rewritten, so they are not committed here.
+# sha256, then the file's path in the store.
+c17524981adc71e54df7bd9992c3d671cd0b8270c1654918fe4ead2eb4973ac2  receipts/experts4bit-qlora/2026-10-19/p150-5090-1/p150/logs/fetch.log
+65c128c99fa46b3bba35ee5b985b283e455c84607599c8a1e84a554786ab1a9f  receipts/experts4bit-qlora/2026-10-19/p150-5090-1/p150/logs/fetch_c4.log
+31bda8a1a6db0aceb7df1343e1f8f6443d83ed62d0dbcfcf1b0472124b4d03f5  receipts/experts4bit-qlora/2026-10-19/p150-5090-1/p150/logs/quality_A.log
+083418e434b3f587217fe675e2c71741c67675fd5e503ebe38b655970b1d99b6  receipts/experts4bit-qlora/2026-10-19/p150-5090-1/p150/logs/quality_I8HEAD.log
+8794a95829ebc734ebb276aedd58dee0452fbdde7edf3325e5ba306352e2f4f2  receipts/experts4bit-qlora/2026-10-19/p150-5090-1/p150/logs/windows.log

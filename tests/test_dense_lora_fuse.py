@@ -88,6 +88,21 @@ def test_the_function_passes_gradcheck_in_float64_and_leaves_its_inputs_alone(n)
     dlf._FusedLoRA.apply(x, 1.7, n, *As, *Bs, *bases)
     assert all(torch.equal(t, k) for t, k in zip((x, *bases), kept))      # the epilogue never writes into a base output
     assert torch.autograd.gradcheck(lambda x, *r: dlf._FusedLoRA.apply(x, 1.7, n, *r), (x, *As, *Bs, *bases))
+    recomputed = lambda x, *r: torch.utils.checkpoint.checkpoint(                              # noqa: E731
+        lambda *a: dlf._FusedLoRA.apply(a[0], 1.7, n, *a[1:]), x, *r, use_reentrant=False)
+    assert torch.autograd.gradcheck(recomputed, (x, *As, *Bs, *bases))   # the same Function through the checkpoint recompute
+
+
+def test_an_input_that_needs_no_gradient_gets_none_and_the_adapters_still_get_theirs():
+    g = torch.Generator().manual_seed(6)
+    x = torch.randn(4, 8, generator=g)                                      # no requires_grad
+    a, b = torch.randn(2, 8, generator=g).requires_grad_(), torch.randn(3, 2, generator=g).requires_grad_()
+    base = torch.randn(4, 3, generator=g).requires_grad_()
+    (y,) = dlf._FusedLoRA.apply(x, 2.0, 1, a, b, base)
+    y.sum().backward()
+    assert x.grad is None
+    torch.testing.assert_close(b.grad, 2.0 * torch.ones(4, 3).t() @ (x @ a.detach().t()))
+    torch.testing.assert_close(a.grad, (2.0 * torch.ones(4, 3) @ b.detach()).t() @ x)
 
 
 def test_a_fused_mlp_reads_its_adapters_live_and_refuses_one_cast_after_fusing():
@@ -103,15 +118,55 @@ def test_a_fused_mlp_reads_its_adapters_live_and_refuses_one_cast_after_fusing()
         m(_x())
 
 
-def test_a_fused_step_runs_no_peft_mlp_forward():
+def test_a_fused_step_runs_no_peft_mlp_forward(monkeypatch):
     m = _model()
     dlf.enable_dense_mlp_lora_fuse(m, base_ok=LINEAR)
-    seen = []
-    for name, mod in m.named_modules():
-        if name.endswith(("gate_proj", "up_proj", "down_proj")):
-            mod.register_forward_hook(lambda *a, n=name: seen.append(n))
+    cls, seen = type(m.layers[0]["mlp"].gate_proj), []
+    real = cls.forward
+    monkeypatch.setattr(cls, "forward", lambda self, *a, **k: seen.append(1) or real(self, *a, **k))  # not a hook
     _run(m, _x())
-    assert seen == []                                               # the PEFT modules' own forwards never ran
+    assert seen == [] and dlf.DENSE_MLP_LORA_STATS["fallback"] == 0  # the PEFT modules' own forwards never ran
+
+
+def _pair():
+    ref = _model()
+    m = copy.deepcopy(ref)
+    assert dlf.enable_dense_mlp_lora_fuse(m, base_ok=LINEAR) == 6
+    return ref, m
+
+
+def test_a_hook_added_after_fusing_runs_the_class_forward_with_it():
+    ref, m = _pair()
+    for model in (ref, m):                     # as PEFT's mixed-batch adapter_names arrive: a pre-hook at call time
+        model.layers[1]["mlp"].up_proj.register_forward_pre_hook(lambda mod, args, kwargs: (args, kwargs), with_kwargs=True)
+        model.layers[0]["mlp"].down_proj.lora_B["default"].register_forward_hook(lambda mod, a, out: out * 0.5)
+    assert torch.equal(ref(_x()), m(_x()))
+    assert dlf.DENSE_MLP_LORA_STATS["fallback"] == 2 and dlf.DENSE_MLP_LORA_STATS["calls"] == 0
+
+
+def test_the_scale_is_read_live_and_a_differing_scale_falls_back():
+    ref, m = _pair()
+    before = m(_x())
+    for model in (ref, m):
+        for p in ("gate_proj", "up_proj", "down_proj"):
+            getattr(model.layers[0]["mlp"], p).scale_layer(0.5)             # all three alike: still fused, at the new scale
+        model.layers[1]["mlp"].up_proj.set_scale("default", 3.0)          # up alone: the three differ
+    y0, y1 = ref(_x()), m(_x())
+    torch.testing.assert_close(y1.float(), y0.float(), rtol=2e-2, atol=2e-2)
+    assert not torch.equal(y1, before)
+    assert dlf.DENSE_MLP_LORA_STATS["calls"] == 2 + 1 and dlf.DENSE_MLP_LORA_STATS["fallback"] == 1   # 2 before the change
+
+
+def test_an_adapter_replaced_under_the_same_name_falls_back():
+    ref, m = _pair()
+    for model in (ref, m):
+        up = model.layers[1]["mlp"].up_proj
+        new = nn.Linear(64, 4, bias=False)
+        with torch.no_grad():
+            new.weight.copy_(torch.randn(4, 64, generator=torch.Generator().manual_seed(9)) * 0.05)
+        up.lora_A["default"] = new                                           # load_adapter / add_adapter under one name
+    assert torch.equal(ref(_x()), m(_x()))
+    assert dlf.DENSE_MLP_LORA_STATS["fallback"] == 1 and dlf.DENSE_MLP_LORA_STATS["calls"] == 1
 
 
 def test_disable_restores_the_peft_path_bit_for_bit():
@@ -161,6 +216,10 @@ def test_refuses_non_fp32_adapters_a_merged_adapter_extra_adapters_and_a_non_nf4
     assert dlf.enable_dense_mlp_lora_fuse(m, base_ok=LINEAR) == 0
     refused = dlf.DENSE_MLP_LORA_STATS["refused"]
     assert "not FP32" in refused["layers.0.mlp"] and "merged" in refused["layers.1.mlp"]
+    m = _model()
+    m.layers[0]["mlp"].gate_proj.cast_input_dtype_enabled = False       # what peft.helpers.disable_input_dtype_casting sets
+    assert dlf.enable_dense_mlp_lora_fuse(m, base_ok=LINEAR) == 3
+    assert "input cast is disabled" in dlf.DENSE_MLP_LORA_STATS["refused"]["layers.0.mlp"]
     m2 = _model()
     peft.inject_adapter_in_model(peft.LoraConfig(r=4, lora_alpha=8, target_modules=["gate_proj"]), m2, adapter_name="other")
     for name, mod in m2.named_modules():                                     # the injection activated "other" everywhere
@@ -210,7 +269,34 @@ def test_under_autocast_a_fused_mlp_runs_the_class_forward_bit_for_bit():
         y0, dx0, g0 = _run(ref, _x())
         y1, dx1, g1 = _run(m, _x())
     assert torch.equal(y0, y1) and torch.equal(dx0, dx1) and all(torch.equal(g0[n], g1[n]) for n in g0)
-    assert dlf.DENSE_MLP_LORA_STATS["autocast"] == 2 and dlf.DENSE_MLP_LORA_STATS["calls"] == 0
+    assert dlf.DENSE_MLP_LORA_STATS["fallback"] == 2 and dlf.DENSE_MLP_LORA_STATS["calls"] == 0
+
+
+@pytest.mark.parametrize("change", ["disabled", "other adapter", "input cast off"])
+def test_a_peft_state_changed_after_fusing_runs_the_class_forward_bit_for_bit(change):
+    ref = _model()
+    peft.inject_adapter_in_model(peft.LoraConfig(r=4, lora_alpha=8, target_modules=["up_proj"]), ref, adapter_name="other")
+    for name, mod in ref.named_modules():
+        if name.endswith(("gate_proj", "up_proj", "down_proj")):
+            mod.set_adapter("default")
+    m = copy.deepcopy(ref)
+    assert dlf.enable_dense_mlp_lora_fuse(m, base_ok=LINEAR) == 6
+    for model in (ref, m):                                                  # the same change on both, after fusing
+        up = model.layers[1]["mlp"].up_proj
+        if change == "disabled":
+            up.enable_adapters(False)
+        elif change == "other adapter":
+            up.set_adapter("other")
+        else:
+            up.cast_input_dtype_enabled = False
+    if change == "input cast off":                                          # PEFT's own path refuses bf16 x on FP32 A ...
+        with pytest.raises(RuntimeError, match="same dtype"):
+            ref(_x())
+        with pytest.raises(RuntimeError, match="same dtype"):               # ... and so does the fused model's fallback
+            m(_x())
+    else:
+        assert torch.equal(ref(_x()), m(_x()))
+    assert dlf.DENSE_MLP_LORA_STATS["fallback"] == 1 and dlf.DENSE_MLP_LORA_STATS["calls"] == 1
 
 
 def test_the_knob_is_off_unless_set(monkeypatch):

@@ -1,0 +1,1 @@
+{"bases": [["/root/tc1/hp1/shake/base_e4b_qwen3hp2shake", "OK"], ["/root/tc1/hp1/shake/base_unsloth_qwen3hp2shake", "OK"]], "arms": [["hp1shake_e4b", "SCORED", 10.979079], ["hp1shake_unsloth", "SCORED", 10.978201]]}

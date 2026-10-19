@@ -1,0 +1,11 @@
+[2026-10-19T09:30:14Z] e4b 27200917, run /workspace/prof/q235box/run8/tc1, checkpoint ac9c66cc via /workspace/prof/q235box/stage8/snapshots/ac9c66cc9b46af7306746a9250f23d47083d689e
+versions torch 2.11.0+cu128 transformers 5.19.0 safetensors 0.8.0
+NVIDIA RTX A2000 12GB, 1584 MiB, 12282 MiB
+[2026-10-19T09:32:13Z] stage ready
+[2026-10-19T09:32:13Z] reference (full depth, streamed)
+{"layers": 94, "resident": false, "device": "cuda", "loss": 1.2130016088485718, "seconds": 4574.5}
+[2026-10-19T10:48:42Z] verdict
+{"verdict": "PASS", "why": "rules 1-10 hold"}
+[2026-10-19T10:49:38Z] done (rc=0)
+[2026-10-19T10:49:39Z] stager rc=0
+rc=0

@@ -1,0 +1,1 @@
+TOKENS fam=qwen3hp2 template=alpaca n_train=1200 n_eval=48 train_tokens=235852 mean=196.5 pad_id=151643 sha=6d5783ce31b2ff57a05cca2db0446ab8bbf7697bd322d22e7b0545a25585b3b2

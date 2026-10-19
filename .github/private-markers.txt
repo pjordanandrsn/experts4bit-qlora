@@ -87,6 +87,14 @@ pjordanandrsn/org-corpus
 # adertha:// URIs name artifacts in the private store; one reached a tracked file (2026-10-10).
 adertha://
 
+# --- ADDED-ONLY: checked on the lines a change ADDS, never on the merged tree --------------
+# A PR reference into the private control-plane repo ("<repo>#N") reached 73 lines of merged
+# public files before the guard knew the form (2026-10-19). History keeps them: registrations
+# and sealed records are not rewritten after the fact. New lines may not add one. The workflow
+# diffs a change against its merge base; the pre-push hook diffs a push against the remote tip.
+# Format: "#added-only: REGEX" (extended, case-insensitive); each needs a canary line.
+#added-only: adertha(-agents)?#[0-9]
+
 # --- RECEIPT STORE: the private receipt store's ledger and receipt records ----
 # The store's records are private, and none of the patterns above can see them.
 # They are matched by SHAPE, never by name: this file is public, so naming the

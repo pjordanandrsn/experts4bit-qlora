@@ -1,0 +1,2 @@
+# The milestone read's reference tensor (16.0 MB), relocated out of the receipt store: sha256 and read-relative path. Copies: the lab NAS (run8/read-record) and the controller host (q235-gates/read-run8/read-record).
+05a4e867d34223bd26adb8ddbf2c3ce8b670caba4c77ce243cd812325143a102  reference.pt

@@ -1,0 +1,12 @@
+# q235-pro6000-8: files kept only in the private receipt store, byte-exact. The token and held-out tensors
+# (inputs; their per-tensor sha256s are in tc1/receipts/*.pt.json here), and the A2000 read's lab scripts, stage record and
+# own SHA256SUMS, which name lab paths. The fetch log carries carriage returns from the download's progress output, and
+# receipts are never rewritten, so it stays there too.
+# sha256, then the file's path within this run's receipt.
+d077cc632c9789fa276092267a7f4365926ce1c419c7ce7c10a940b38129c80b  tc1/receipts/tokens.pt
+510bc719fe9c0ab4445176f5be98c9c5bbdfa7374f5e4465ba0a33e76d87bb00  tc1/receipts/heldout.pt
+86386dc1f09967699106dcf1a61d9055e8c5b0c6d4403d5d8fd191144fea3d38  read/guard8.sh
+5a64bbccbf747a048e7163fa90ab3f6d9ab744954f7169caeda9b6ee13f04abb  read/stage_read8.sh
+3f43123702b3ce602ec571a92faa933fa2c23bf43ad11385c8f69af6fe596a50  read/stage-final-state.txt
+8194a826045f71e108f826cbb9ed0a15eb026f185d16ce3af4f568d56dfb484e  read/SHA256SUMS
+0a5c77da9fb3d054e69be14feaef1a84ee3a3b4031443add451a7a5861c56ceb  tc1/logs/fetch.log
