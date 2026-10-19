@@ -269,7 +269,7 @@ moves buckets 1, 2 and 4 only.
 
 `e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19` ([P143](../bench/p143/RESULTS-p143.md)).
 
-**Qwen3-30B-A3B's lm_head can serve one-row decode from an int8 copy (opt-in).** `E4B_INT8_HEAD_BW=1` rounds the
+**Qwen3-30B-A3B's lm_head serves one-row decode from an int8 copy (on by default).** `E4B_INT8_HEAD_BW=1` rounds the
 151936 x 2048 head in place to its per-row int8 grid, P150's I8HEAD. One-row calls go to grouped-nf4-gemm K36's int8
 GEMV, which reads half the head's bytes.
 - **Speed:** one request decodes **1.052×** as fast on a 5090 (263.7 → 277.5 tok/s; the smallest of four ABBA pairs).
@@ -279,8 +279,10 @@ GEMV, which reads half the head's bytes.
   the resident int8 copy, and the different tokens the rounded head decodes at 16 rows.
 - **Quality:** SANE inside the bars (bias +0.0022, argmax 0.989), in line with P150's GO at both of P125's gates. The
   knob rounds the head at every row count, so multi-row outputs change too.
-- **Default:** none yet. A separate PR may make it `qwen3_moe`'s default, once a grouped-nf4-gemm release carrying
-  K36 is e4b's pin.
+- **Default:** on for `qwen3_moe` at this head shape (151936 x 2048). It needs K36's GEMV, first released in
+  grouped-nf4-gemm 0.48.0. With an older release the default resolves off, recorded in `/health`'s
+  `levers.int8_head_bw.source`. `E4B_INT8_HEAD_BW=0` opts out.
+- **Quality basis:** read on Qwen3-30B-A3B @ad44e777. Same-shape checkpoints inherit the default unread.
 - **Measured basis:** this checkpoint's head on an RTX 5090 (170 SMs), at K36's tuned plan. Other heads take K36's
   untuned default plan, and other cards are not read.
 
@@ -384,6 +386,7 @@ controls. `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-
 | attention projections of 17–64 decode rows on the int4 small-M GEMM, from the int4 grid instead of a cached bf16 copy (with the K16 route on; takes effect with a grouped-nf4-gemm release carrying #522's `block_m=`; Qwen3-30B-A3B's 64- and 32-row steps 3.2–3.8 % faster) | `Int4Linear` (serving) | `E4B_ATTN_INT4_WIDE=0` | `e4b.serve.p124.attn-int4-wide.qwen3-int4.5090.2026-10-09` |
 | router weights cast to bf16 at ≤ 64 rows (`softmax_topk`) | fused router epilogue | `E4B_ROUTER_EPI_CAST=0` | `e4b.serve.p70.qwen3.b1.router-weight-cast.5090.2026-09-25` |
 | the paged FP8 attention decode capped at 16 splits (`qwen3_moe` only; buckets 1, 2 and 4 move, 32 / 32 / 23 -> 16; bitwise-identical to the plan at contexts ≤ 1024; one request 1.044× as fast, 16 unchanged, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs); other `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B) and other cards (the cap moves B 1–6 on a PRO 6000, B 1–4 on a 4090) take it by family without a read of their own) | `serve_paged` | `E4B_ATTN_SPLIT_CAP=0` | `e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19` |
+| the lm_head on its per-row int8 grid, its one-row decode GEMV through grouped-nf4-gemm K36 (`qwen3_moe` at the 151936 x 2048 head only; needs grouped-nf4-gemm 0.48.0 or later, else it resolves off, recorded; one request 1.052× as fast, 16 requests 0.992, an observed cost not attributed, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs); quality read on Qwen3-30B-A3B @ad44e777, same-shape checkpoints inherit the default unread; other head shapes, e.g. Qwen3-235B-A22B's 151936 x 4096, stay off) | `serve_paged` | `E4B_INT8_HEAD_BW=0` | `e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19` |
 | B=1 fused stack (fused q/k/v and three glue folds) on Qwen3-MoE; its router epilogue, the only fold that engages, on Qwen3.5/3.6-MoE; its three glue folds on Mixtral | `serve_paged` | `E4B_PAGED_FUSE_QKV=0`, `E4B_FUSE_T1_GLUE=0`, `E4B_FUSE_T1_GLUE_R2=0`, `E4B_FUSE_ROUTER_EPI=0` | `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`, `e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`, `e4b.serve.p135.fold-speed.mixtral.5090.2026-10-18` |
 
 ---

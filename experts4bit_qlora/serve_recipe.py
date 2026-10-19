@@ -154,11 +154,13 @@ def prefill_graph_reserve_bytes(topology, setup: "ServeSetup") -> int:
 
 
 def choose_max_seqs(topology, setup: "ServeSetup", free_bytes, *, widths=MAX_SEQS_AUTO_WIDTHS,
-                    margin_bytes: int = MAX_SEQS_AUTO_MARGIN_BYTES) -> dict:
+                    margin_bytes: int = MAX_SEQS_AUTO_MARGIN_BYTES, extra_bytes: int = 0) -> dict:
     """``E4B_PAGED_MAX_SEQS=auto``: the widest of ``widths`` whose :func:`estimate_serve_footprint` device total, plus
-    the prefill graph's reserve (:func:`prefill_graph_reserve_bytes`) and ``margin_bytes``, fits ``free_bytes`` (the
-    device's free memory before any weight is loaded); 16, today's default, when none fits, when the free memory is
-    unknown (no CUDA device) or under the solver placement, whose tiers take their own budgets. The estimate's device
+    the prefill graph's reserve (:func:`prefill_graph_reserve_bytes`), ``extra_bytes`` (device memory the build adds
+    outside the estimate: the int8 lm_head's codes and scales when ``E4B_INT8_HEAD_BW`` resolves on, lane P153) and
+    ``margin_bytes``, fits ``free_bytes`` (the device's free memory before any weight is loaded); 16, today's default,
+    when none fits, when the free memory is unknown (no CUDA device) or under the solver placement, whose tiers take
+    their own budgets. The estimate's device
     total already carries the KV pool and graph scratch slots, a hybrid's per-slot linear-attention state and the bulk
     KV flush's ceiling, so each width is priced whole. Returns the choice with every candidate's arithmetic, for
     ``/health``.
@@ -171,6 +173,8 @@ def choose_max_seqs(topology, setup: "ServeSetup", free_bytes, *, widths=MAX_SEQ
     floor = min(int(w) for w in widths)
     out = {"max_seqs": floor, "free_bytes": None if free_bytes is None else int(free_bytes),
            "margin_bytes": int(margin_bytes), "candidates": []}
+    if extra_bytes:
+        out["extra_bytes"] = int(extra_bytes)
     if free_bytes is None:
         return dict(out, why=f"free device memory unknown (no CUDA device): {floor}")
     if setup.placement != "all-vram":
@@ -182,8 +186,9 @@ def choose_max_seqs(topology, setup: "ServeSetup", free_bytes, *, widths=MAX_SEQ
             out["candidates"].append({"max_seqs": w, "refused": list(fp.refusals)})
             continue
         reserve = prefill_graph_reserve_bytes(topology, s)
-        need = fp.device_bytes + reserve + int(margin_bytes)
+        need = fp.device_bytes + reserve + int(extra_bytes) + int(margin_bytes)
         out["candidates"].append({"max_seqs": w, "estimate_bytes": fp.device_bytes, "prefill_graph_reserve_bytes": reserve,
+                                  **({"extra_bytes": int(extra_bytes)} if extra_bytes else {}),
                                   "need_bytes": need, "fits": need <= int(free_bytes)})
     pick = next((c["max_seqs"] for c in out["candidates"] if c.get("fits")), None)
     if pick is None:

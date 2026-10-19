@@ -687,7 +687,8 @@ def test_resolve_max_seqs_sets_the_width_then_its_buckets(monkeypatch, buckets_e
         monkeypatch.setenv("E4B_PAGED_BUCKETS", buckets_env)
     seen = {}
 
-    def fake_choose(topo, setup, free, *, widths):
+    def fake_choose(topo, setup, free, *, widths, extra_bytes=0):
+        assert extra_bytes == 0                                    # object() is no config: no int8 head to price
         seen.update(widths=tuple(widths), free=free, tokens=setup.max_tokens_per_seq)
         return {"max_seqs": 64, "free_bytes": free, "candidates": [], "why": "test"}
     monkeypatch.setattr(serve_recipe, "choose_max_seqs", fake_choose)

@@ -196,8 +196,20 @@ ATTN_SPLIT_CAP_DEFAULT_FAMILIES: dict = {
 DENSE_GEMV_BW_ENV = "E4B_DENSE_GEMV_BW"
 #: P153 (grouped-nf4-gemm K36): serve the lm_head on its per-row int8 grid (P150's I8HEAD, rounded in place: knob-on
 #: changes multi-row outputs too) and route its single-row decode GEMV through dense_gemv's gemv_i8_bw
-#: (engines/int8_head_bw.py). 0 (the default) or 1; nothing chooses it by family until a read licenses it.
+#: (engines/int8_head_bw.py). 0 or 1; unset resolves per family and head shape (INT8_HEAD_BW_DEFAULT_FAMILIES).
 INT8_HEAD_BW_ENV = "E4B_INT8_HEAD_BW"
+# Lane P153's default for ``E4B_INT8_HEAD_BW`` (bench/p153/RESULTS-p153.md): an UNSET knob resolves to ``1`` on a
+# model_type here whose output head has a listed [N, K] shape, the shapes grouped-nf4-gemm K36 has a tuned plan for
+# (dense_gemv.PLANS_I8), and to ``0`` everywhere else, with the reason recorded. qwen3_moe at 151936 x 2048 takes it on
+# P153's served read (p153-5090-1: FLIP, one request 1.052x as fast, the min of four ABBA pairs; 16 requests 0.992, an
+# observed cost not attributed; SANE bias +0.0022, argmax 0.989). Quality was read on Qwen3-30B-A3B @ad44e777 (P150's
+# GO at both of P125's gates); same-shape checkpoints (the 30B-A3B Instruct / Thinking-2507 and Coder-30B-A3B) inherit
+# the default unread. Other head shapes (Qwen3-235B-A22B's 151936 x 4096) take K36's untuned plan and wait for a read
+# of their own. A head the swap refuses (tied, biased, an int4 head, not bf16) and a grouped-nf4-gemm without K36
+# resolve the default off, recorded, never a crash; an explicit ``1`` still refuses them. ``0`` opts out.
+INT8_HEAD_BW_DEFAULT_FAMILIES: dict = {
+    "qwen3_moe": ((151936, 2048),),   # e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19 (bench/p153/RESULTS-p153.md)
+}
 _FUSION_WARNED: set = set()
 
 
@@ -305,7 +317,9 @@ def resolve_max_seqs(cfg: "PagedServeConfig", model_config, free_bytes) -> dict:
                            exp_int4="1" in (env("E4B_SERVE_EXP_INT4", "0"), env("E4B_SERVE_EXP_INT4_CALIB", "0")),
                            attn_int4="1" in (env("E4B_SERVE_ATTN_INT4", "0"), env("E4B_SERVE_ATTN_INT4_CALIB", "0")))
         widths = MAX_SEQS_AUTO_WIDTHS_AUTO_BUCKETS if str(b).strip().lower() == "auto" else MAX_SEQS_AUTO_WIDTHS
-        res = choose_max_seqs(topo, setup, free_bytes, widths=widths)
+        # the int8 head's codes and scales arrive after the slots are sized: priced in whenever the knob resolves on
+        res = choose_max_seqs(topo, setup, free_bytes, widths=widths,
+                              extra_bytes=int8_head_copy_bytes(cfg, model_config))
     cfg.max_seqs = int(res["max_seqs"])
     cfg.buckets = _buckets_env(cfg.buckets_requested if cfg.buckets_requested != "default" else "")
     cfg.validate()
@@ -463,6 +477,84 @@ def apply_attn_split_cap(kv, cfg, model_type) -> tuple:
     return cap, source
 
 
+def _int8_head_bw_env(value: str) -> str:
+    """``E4B_INT8_HEAD_BW`` as the server reads it: ``0`` / ``1`` pass through; unset or empty is ``default``, resolved
+    per family and head shape at the build (:data:`INT8_HEAD_BW_DEFAULT_FAMILIES`, lane P153). Anything else is
+    refused."""
+    v = (value or "").strip()
+    if not v:
+        return FUSION_UNSET
+    if v in ("0", "1"):
+        return v
+    raise ValueError(f"{INT8_HEAD_BW_ENV}={value!r}: expected '0' or '1' (unset: per family and head shape, lane P153)")
+
+
+def resolve_int8_head_bw(value: str, model_type, head_shape, *, refusal=None, kernel_error=None) -> tuple:
+    """``(mode, source)``: an explicit ``0`` / ``1`` passes through (``explicit``; the swap still refuses an ineligible
+    head under ``1``). ``default`` resolves to ``1`` (``default-allowlisted``) only on a ``model_type`` in
+    :data:`INT8_HEAD_BW_DEFAULT_FAMILIES` whose head has no ``refusal`` (the swap's own checks,
+    :func:`~.engines.int8_head_bw.head_refusal`), a listed shape, and an importable kernel (no ``kernel_error``);
+    otherwise to ``0`` with ``default-off: <why>``."""
+    if value != FUSION_UNSET:
+        return value, "explicit"
+    shapes = INT8_HEAD_BW_DEFAULT_FAMILIES.get(model_type)
+    if shapes is None:
+        return "0", f"default-off: no read licenses model_type {model_type!r}"
+    if refusal:
+        return "0", f"default-off: {refusal}"
+    shape = tuple(int(d) for d in head_shape) if head_shape is not None else None
+    if shape not in shapes:
+        return "0", (f"default-off: head shape {list(shape) if shape else None} is not one read on {model_type} "
+                     f"({', '.join(str(list(s)) for s in shapes)})")
+    if kernel_error:
+        return "0", f"default-off: {kernel_error}"
+    return "1", "default-allowlisted"
+
+
+def apply_int8_head_bw_resolved(model, cfg, *, gemv=None, quantize=None) -> dict:
+    """The swap's record (:func:`~.engines.int8_head_bw.apply_int8_head_bw`) with its ``source``, resolved from
+    ``cfg.int8_head_bw`` for this model's family and output head: the one place :func:`build_engine` turns the knob
+    (or its per-family default) into the swap."""
+    from .engines import int8_head_bw as ih
+
+    value = getattr(cfg, "int8_head_bw", FUSION_UNSET)
+    head = model.get_output_embeddings() if hasattr(model, "get_output_embeddings") else None
+    shape = tuple(head.weight.shape) if getattr(head, "weight", None) is not None else None
+    unset = value == FUSION_UNSET
+    mode, source = resolve_int8_head_bw(
+        value, getattr(getattr(model, "config", None), "model_type", None), shape,
+        refusal=ih.head_refusal(model) if unset else None,
+        kernel_error=ih.kernel_missing() if unset and (gemv is None or quantize is None) else None)
+    return {**ih.apply_int8_head_bw(model, mode, gemv=gemv, quantize=quantize), "source": source}
+
+
+def int8_head_copy_bytes(cfg, model_config) -> int:
+    """Device bytes the int8 head will add, read from the model's config before any weight loads: ``N x K + 4N``
+    (:func:`~.engines.int8_head_bw.copy_bytes`) when the knob resolves on for this config (an explicit ``1``, or the
+    default on a licensed family and head shape), else 0. :func:`resolve_max_seqs` adds it to the footprint an auto
+    width sizes against, since the copy arrives after the slots are sized. A config that ties its head to the
+    embeddings, and an int4 head (``E4B_SERVE_LMHEAD_INT4_CALIB=1``), resolve the default off, as the swap would."""
+    from .engines import int8_head_bw as ih
+
+    value = getattr(cfg, "int8_head_bw", FUSION_UNSET)
+    if model_config is None or value == "0":
+        return 0
+    text = model_config.get_text_config() if hasattr(model_config, "get_text_config") else model_config
+    n, k = getattr(text, "vocab_size", None), getattr(text, "hidden_size", None)
+    if not n or not k:
+        return 0
+    refusal = None
+    if os.environ.get("E4B_SERVE_LMHEAD_INT4_CALIB", "0") == "1":
+        refusal = "an int4 head (E4B_SERVE_LMHEAD_INT4_CALIB=1)"
+    elif getattr(model_config, "tie_word_embeddings", False):
+        refusal = "the output head is tied to the input embeddings"
+    unset = value == FUSION_UNSET
+    mode, _ = resolve_int8_head_bw(value, getattr(model_config, "model_type", None), (n, k),
+                                   refusal=refusal if unset else None,
+                                   kernel_error=ih.kernel_missing() if unset else None)
+    return ih.copy_bytes(n, k) if mode == "1" else 0
+
+
 def resolve_prefill_glue(value: str, model_type) -> tuple:
     """``(mode, source)``: an explicit ``0`` / ``1`` passes through (``explicit``); ``default`` resolves to ``1`` on a
     ``model_type`` in :data:`PREFILL_GLUE_DEFAULT_FAMILIES` (``default-allowlisted``) and to ``0`` elsewhere
@@ -528,7 +620,7 @@ class PagedServeConfig:
     prefill_glue: str = FUSION_UNSET     # E4B_FUSE_PREFILL_GLUE: 0 | 1, or "default" when unset (per family, P130)
     attn_split_cap: str = FUSION_UNSET   # E4B_ATTN_SPLIT_CAP: 0 | 1..32, or "default" when unset (per family, P143)
     dense_gemv_bw: str = "0"             # E4B_DENSE_GEMV_BW: 0 | 1 (P151; grouped-nf4-gemm K35's gemv_bf16_bw)
-    int8_head_bw: str = "0"              # E4B_INT8_HEAD_BW: 0 | 1 (P153; grouped-nf4-gemm K36's gemv_i8_bw, the int8 head)
+    int8_head_bw: str = FUSION_UNSET     # E4B_INT8_HEAD_BW: 0 | 1, or "default" when unset (per family and head shape, P153)
     fusion_modes: dict = field(default_factory=dict)   # FUSION_KNOBS -> auto | 0 | 1 (_fusion_env), or "default" when
                                                        # unset (resolved per family at the build); a knob not named keeps
                                                        # its old reading: fuse_qkv, or the fold's own env var
@@ -583,7 +675,7 @@ class PagedServeConfig:
             prefill_glue=_prefill_glue_env(env(PREFILL_GLUE_ENV, "")),
             attn_split_cap=_attn_split_cap_env(env(ATTN_SPLIT_CAP_ENV, "")),
             dense_gemv_bw=env(DENSE_GEMV_BW_ENV, "0").strip() or "0",
-            int8_head_bw=env(INT8_HEAD_BW_ENV, "0").strip() or "0",
+            int8_head_bw=_int8_head_bw_env(env(INT8_HEAD_BW_ENV, "")),
             torch_threads=int(env("E4B_PAGED_TORCH_THREADS", "8")),
             max_tokens_cap=int(env("E4B_PAGED_MAX_TOKENS", "0")),
             max_queue=int(env("E4B_PAGED_MAX_QUEUE", "0")),
@@ -1514,8 +1606,9 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     dense_gemv = apply_dense_gemv_bw(model, getattr(cfg, "dense_gemv_bw", "0"))
     # P153: the lm_head on its int8 grid (rounded in place, so every row count reads the head P150 ruled on) with its
     # one-row decode GEMV through grouped-nf4-gemm K36, before any graph is captured; an int4 head (Int4Linear) refuses
-    from .engines.int8_head_bw import apply_int8_head_bw, engagement as int8_head_engagement
-    int8_head = apply_int8_head_bw(model, getattr(cfg, "int8_head_bw", "0"))
+    # (unset: on for qwen3_moe at the head shape P153 read, else off with the reason recorded in info["int8_head_bw"])
+    from .engines.int8_head_bw import engagement as int8_head_engagement
+    int8_head = apply_int8_head_bw_resolved(model, cfg)
 
     # proof of execution, the lanes' census (serve_stack.build_served_model) + their refusal rule
     try:

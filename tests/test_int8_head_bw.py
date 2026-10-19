@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
-"""``E4B_INT8_HEAD_BW`` (engines/int8_head_bw.py; lane P153, grouped-nf4-gemm K36), on CPU with a stub kernel: e4b's CI
-pins a grouped-nf4-gemm without ``gemv_i8_bw``, and the rounding, routing, refusals and engagement record are this
-repo's.
+"""``E4B_INT8_HEAD_BW`` (engines/int8_head_bw.py; lane P153, grouped-nf4-gemm K36), on CPU with a stub kernel: the
+rounding, routing, refusals and engagement record are this repo's (the per-family default is
+tests/test_int8_head_default.py's).
 
 The rounding is checked BITWISE against P150's I8HEAD round trip (``bench/i8dense/i8_fakequant.roundtrip_``), the grid
 P150 ruled GO at both gates. The kernel's own contract (at most 1.05 x cuBLAS's error on the bf16 head, one-hot exact,
@@ -213,7 +213,7 @@ def test_a_second_apply_refuses_and_leaves_the_grid_alone():
 
 def test_the_server_config_reads_the_knob(monkeypatch):
     monkeypatch.delenv("E4B_INT8_HEAD_BW", raising=False)
-    assert sp.PagedServeConfig.from_env().int8_head_bw == "0"
+    assert sp.PagedServeConfig.from_env().int8_head_bw == sp.FUSION_UNSET     # per family (tests/test_int8_head_default.py)
     monkeypatch.setenv("E4B_INT8_HEAD_BW", "1")
     assert sp.PagedServeConfig.from_env().int8_head_bw == "1"
     assert sp.INT8_HEAD_BW_ENV == ih.ENV == "E4B_INT8_HEAD_BW"
@@ -221,8 +221,9 @@ def test_the_server_config_reads_the_knob(monkeypatch):
 
 def test_build_engine_applies_it_after_the_dense_gemv_and_before_any_capture():
     src = inspect.getsource(sp.build_engine)
-    at = [src.index(s) for s in ("_apply_fusions(model, cfg", "apply_dense_gemv_bw(model,", "apply_int8_head_bw(model,",
-                                 "runner.enable_decode_graphs(", 'info["int8_head_bw"] = {**int8_head, "engagement"')]
+    at = [src.index(s) for s in ("_apply_fusions(model, cfg", "apply_dense_gemv_bw(model,",
+                                 "apply_int8_head_bw_resolved(model, cfg)", "runner.enable_decode_graphs(",
+                                 'info["int8_head_bw"] = {**int8_head, "engagement"')]
     assert at == sorted(at), at
 
 
