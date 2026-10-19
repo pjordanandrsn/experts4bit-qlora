@@ -89,8 +89,9 @@ Profiled node times are never quoted as speed.
 ## Budget and sequencing
 
 - **One RTX 5090** declared at $1.05/h (the owner's 2026-10-19 RTX 5090 approval; the launcher runs at the lower of the
-  declared rate and its own ceiling), **guard 1.25 h**, 61 GB at <= $0.005/GB: worst 1.25 x $1.05 + 61 x $0.005 =
-  **$1.62**, under the standing rule. Disk 200 GB (the box's floor is 150 GB free). The manifest asks the launcher's
+  declared rate and its own ceiling), **guard 1.25 h**, 61 GB at <= $0.011/GB: worst 1.25 x $1.05 + 61 x $0.011 =
+  **$1.98**, under the standing rule. (A read of the RTX 5090 hosts with a recorded cap >= 575 W on 2026-10-19 found
+  every listed offer at $0.010/GB.) Disk 200 GB (the box's floor is 150 GB free). The manifest asks the launcher's
   power screen for the same floor the runner checks: `vast_min_power_limit_w: 575` and
   `vast_power_limit_unknown: exclude`.
 - **Run ids** `p152-5090-1` to `-3`; two consecutive HARNESS_ERROR, VOID or NOT_RUN runs stop the lane. A pre-flight host
