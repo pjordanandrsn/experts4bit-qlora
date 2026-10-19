@@ -17,3 +17,25 @@ The heartbeat's `unknown_probes` counts consecutive unverified probes and resets
 TC1, P127, FAM and SD1 call `token_scope.py` on the controller before copying `HF_TOKEN_FILE`. The helper checks the supplied file with one standard-library GET of the public Hub's `whoami-v2` endpoint (the token as a Bearer header; what `huggingface_hub.HfApi.whoami` does), with a 20-second verification deadline. It needs no third-party package: controllers' python may lack `huggingface_hub`. The Mac mini's did, and until this change that turned every check into "unverified" and every launch from it unauthenticated. It allows classic read tokens and fine-grained tokens whose permissions are all reads, excluding job, endpoint and webhook permissions. A verified unsafe token refuses staging with exit 78. Unrecognized metadata or a failed verification stages no token and continues unauthenticated; the launch environment disables implicit Hub authentication in that case and when no token file is present. Locality stages no token.
 
 The helper logs only read-only yes/no or unverified, staging none; it suppresses library diagnostics and exception text. Tests use fake tokens, metadata and network failures. See Hugging Face's [token documentation](https://huggingface.co/docs/hub/security-tokens) for the role definitions.
+
+## Guard fit
+
+Every rental runner that gates on time left (`can_run`) refuses BEFORE its first install unless its guard fits its work with
+headroom. `tests/test_lane_guard_fit.py` enforces the structure on every runner not on its frozen legacy list. The check:
+
+```sh
+FIT_HEADROOM_PCT=125   # the guard keeps 25 % headroom over the fit (cross-lane rule)
+FIT=$((INSTALL_TO_GATE_S + NEED_X + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100)); LEFT=$((DEADLINE - $(date +%s)))
+# rc NN: a refusal before the install, not a strike; two consecutive headroom refusals count as one strike
+[ "$LEFT" -ge "$FIT_NEED" ] || { say "REFUSED: needs ${FIT_NEED}s (fit ${FIT}s x ${FIT_HEADROOM_PCT}%), ${LEFT}s left"; finish NN; }
+```
+
+- `INSTALL_TO_GATE_S` is the runner's allowance for everything between this check and its largest time-left gate (the
+  install, the self-tests, the fetch, the bake). `NEED_X` is that gate's need and `RESERVE` the fetch-and-teardown
+  reserve its `can_run` keeps.
+- The headroom covers the allowances, which are estimates from the hosts measured so far. The check runs against the box's
+  own remaining time, so a slow boot is caught as well.
+- A refusal here costs cents and is not a strike. Two consecutive headroom refusals on one lane count as one strike: the
+  guard, not the hosts, is then wrong.
+- The static side stays per lane: each lane's own test asserts its declared fit x 1.25 <= its registered guard, as
+  `tests/test_p154.py` does. No PREREG is parsed.
