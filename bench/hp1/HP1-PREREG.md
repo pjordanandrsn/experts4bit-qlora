@@ -389,6 +389,9 @@ steps). Then the early base check VOIDed the e4b base:
 - Cost-term note (maintainer, 2026-10-18 22:33Z, before the create): no 5090 passed at $0.004/GB that evening, so the calibration
   box may take a download cap of $0.007/GB with a 0.6 h guard. Worst = 0.6 h × $0.85 + 65 GB × $0.007/GB = $0.965, inside the
   ruling's <= $1 and the $16.50 envelope. Nothing else changes.
+- Run-id note (maintainer, 2026-10-18 23:56Z): `hp1cal-5090-1` refused itself at startup on the harness's free-disk floor
+  (`BOX_REFUSED disk=150GB` against tc1_run's 200 GB floor, $0.008, nothing ran; not a strike). The calibration runs as `hp1cal-5090-2`
+  with vast_disk_gb 220, and `hp1cal-5090-3` is a pre-create spare. Worst unchanged at $0.965.
 - One e4b K00 run (seed 3407, 1 optimizer step), its base exported as the boxes build it.
 - It runs on 48 CALIBRATION rows. The registered dataset carries exactly HP1's 48 held-out rows (`tp4_alpaca.py`, N_EVAL = 48),
   so `bench/hp1/hp1_caltokens.py` takes rows 49–96 of `tc1_arm.py`'s own held-out POOL. That pool (`pack_pools`, TC1 amendment 39)
