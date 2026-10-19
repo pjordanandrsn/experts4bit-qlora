@@ -45,7 +45,7 @@ server-class SMT host.
   1.5 × the sum of the 16 planned reps' walls, each from its own pool's warm rep on this box), checked between reps. The
   per-pool sizing is the dry run's correction: a cap from the 16-thread warm rep alone tripped on the slower 32-thread reps,
   which are what this measures.
-- **Run ids:** `smt-fuse-1` is the reading. `smt-fuse-2` and `-3` are spares for pre-create refusals, listings gone
+- **Run ids:** `smt-fuse-1` is the reading. `smt-fuse-2` and `smt-fuse-3` are spares for pre-create refusals, listings gone
   before the create, and NOT_RUN at the pre-flight. `smt-fuse-dry-<n>` are the $0 dry runs: correctness only, on 8
   experts, never a reading.
 - **Cost:** guard 1.0 h at a $0.60/h cap, download at most $0.011/GB. **Worst $0.64** ($0.60 + about 3 GB of wheels).

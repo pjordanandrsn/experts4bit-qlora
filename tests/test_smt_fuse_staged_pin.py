@@ -78,7 +78,7 @@ def test_the_declared_run_ids_and_nothing_else(tmp_path):
 
 
 def test_the_refusals_come_before_the_install_and_the_probe():
-    order = ["CUDA_PROBE=$(python -", "refused: torch", 'say "REFUSED: not an SMT host', "CPUs in the affinity",
+    order = ["CUDA_PROBE=$(python -", "refused: torch", 'say "REFUSED: not an SMT host', 'say "REFUSED: $AFF CPUs in the affinity',
              'say "REFUSED: quota', 'say "REFUSED: ${RAM_GB', 'say "REFUSED: ${FREE_GB', 'say "install e4b @',
              "smt_fuse_box.py --self-test", "smt_fuse_box.py --out $W/result.json"]
     at = [RUN.index(s) for s in order]
@@ -94,5 +94,5 @@ def test_the_design_is_the_registered_design():
     assert "fuse_experts(gate, up, down)" in BOX and 'quant_type="nf4"' in BOX and "torch.set_num_threads(pool)" in BOX
     assert 'return 0 if res["summary"]["bytes_identical"] else 3' in BOX                 # the pool must be speed-only
     assert "return min(time_left_s, 1.5 * sum(warm_by_pool[pool] for pool in plan))" in BOX   # the on-box phase cap
-    for s in ("16, 32, 32, 16", "4 cycles", "8 pairs", "range", "on_box", "never a ruling", "Worst $0.64"):
+    for s in ("16, 32, 32, 16", "4 cycles", "8 back-to-back", "range", "on_box", "never a ruling", "Worst $0.64"):
         assert s in PREREG, s
