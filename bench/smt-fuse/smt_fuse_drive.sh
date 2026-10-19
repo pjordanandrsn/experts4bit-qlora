@@ -6,7 +6,7 @@
 #   * the run id must be one the registration declares: smt-fuse-1..3 (bench/smt-fuse/PREREG-smt-fuse.md; -2 and -3 are
 #     spares for pre-create refusals, listings gone before the create and NOT_RUN at the pre-flight). Any other id is refused;
 #   * SMT_FUSE_DRY=1 is the $0 dry run (ids smt-fuse-dry-<n>) through SMT_FUSE_BOX_EXEC, as P146's.
-#   * Amendment 1: smt-sib-1..3 (and smt-sib-dry-<n>) run the pinned sibling probe; smt_fuse_run.sh picks it by run id.
+#   * Amendment 1: smt-sib-1..8 (and smt-sib-dry-<n>; -4..8 are Amendment 1a's pre-create spares) run the pinned sibling probe; smt_fuse_run.sh picks it by run id.
 # It starts the lane detached under a fresh nonce, polls TP_DONE.<nonce> with the tp4-style heartbeat/liveness check and
 # fetches receipts -- never the checkpoint or the e4b tree. Nothing here creates, destroys or approves compute.
 set -uo pipefail
@@ -25,10 +25,10 @@ fi
 # ---- the declared run ids: the reading, its one rerun; the dry run's own
 RUN_ID=$E4B_RENT_RUN_ID
 case "$RUN_ID" in
-  smt-fuse-[1-3]|smt-sib-[1-3]) [ "$DRY" != 1 ] || { say "refusing: $RUN_ID is a reading's id"; exit 78; };;
+  smt-fuse-[1-3]|smt-sib-[1-8]) [ "$DRY" != 1 ] || { say "refusing: $RUN_ID is a reading's id"; exit 78; };;
   smt-fuse-dry-[0-9]|smt-fuse-dry-[0-9][0-9]|smt-sib-dry-[0-9]|smt-sib-dry-[0-9][0-9])
     [ "$DRY" = 1 ] || { say "refusing: $RUN_ID is a dry run's id (SMT_FUSE_DRY=1 only)"; exit 78; };;
-  *) say "refusing: run id $RUN_ID is not declared (smt-fuse-1..3, Amendment 1's smt-sib-1..3; *-dry-<n> dry)"; exit 78;;
+  *) say "refusing: run id $RUN_ID is not declared (smt-fuse-1..3, Amendment 1's smt-sib-1..8; *-dry-<n> dry)"; exit 78;;
 esac
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 # Lane liveness by PID identity and host uptime (#1512) and the host-fault marker (#1517): the helper is sourced here and
@@ -55,7 +55,7 @@ E4B_SHA=$E4B_PIN
 RUN_DIR=$E4B_RENT_RUN_DIR; DEADLINE=$E4B_RENT_DEADLINE_EPOCH
 # Amendment 1's guard is a tested fit (smt_sib_box.time_fit): the launch's own deadline must leave at least that much, so the
 # manifest's wallclock and the registration cannot drift apart (refused before anything is staged)
-case "$RUN_ID" in smt-sib-[1-3])
+case "$RUN_ID" in smt-sib-[1-8])
   FIT=$(python3 "$HERE/smt_sib_box.py" --fit) || { say "refusing: no time fit from smt_sib_box.py"; exit 78; }
   LEFT_S=$(( DEADLINE - $(date +%s) ))
   [ "$LEFT_S" -ge "$FIT" ] || { say "refusing: the launch leaves ${LEFT_S}s < the registered fit ${FIT}s (guard 2.5 h)"; exit 78; };;

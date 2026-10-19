@@ -153,3 +153,15 @@ of it into the run directory, which made the receipt store read dirty for every 
 - **The fit's terms are recorded on the box** for the next fit: each process's start (spawn to a pinned interpreter with
   torch and a CUDA context, the one term taken high here), its untimed block's wall and every timed block's whole wall;
   the summary carries their maxima and the wall/`block_s` ratio. Under the standing per-lane rule.
+
+### Amendment 1a (2026-10-19): five more pre-create spares (`smt-sib-4..8`)
+
+`smt-sib-1` was refused at the create (no_such_ask, $0; smt-sib-1 in the private receipt store): the offer was taken between the read
+and the create. The launcher walks the offers of ONE pinned machine within a run id, not several machines, so each
+candidate machine still costs an id. **`smt-sib-4` to `smt-sib-8` are spares for refusals before any instance exists
+(no_such_ask, a listing gone before the create) and NOT_RUN at the pre-flight, and for nothing else: never after the
+probe's command has run, and never to repeat a reading.** One reading is still taken, on the first id that runs the
+probe. Nothing else changes: the registered **worst stays $1.53 per created box** (the launch kit budgets a 5 GB
+download, so its manifest's own worst reads $1.56). A pre-flight NOT_RUN happens on a created box, so each id can cost
+one box: **the lane's aggregate worst is 8 x $1.53 = $12.24** (8 x $1.56 = $12.48 at the kit's allowance), inside the
+per-lane $15.
