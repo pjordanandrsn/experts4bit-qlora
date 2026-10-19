@@ -1,0 +1,38 @@
+KNOBS e4b_target=4934aba9c88da7ff49e12e4911354538ae0fdf48 e4b_harness=658a066500aaaa506327505ae1fc28e2e4b03d86 gnf4=6ee2e10408161a9d3c874975c9191a7f2957e6f4 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60
+CUDA_PROBE ok
+e4b 0.50.0 @4934aba9c88da7ff49e12e4911354538ae0fdf48
+gnf4 0.43.0 @6ee2e10408161a9d3c874975c9191a7f2957e6f4
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+datasets 5.1.0
+cc (12, 0)
+sm_count 170
+p125_reduce self-test OK (25 cases)
+p109_box self-test OK (5/5 cases)
+p125_box self-test OK (18 cases)
+i8_fakequant self-test OK (15 cases)
+i8_box self-test OK (13 cases)
+p150_box self-test OK (8 cases)
+p150_reduce self-test OK (18 cases)
+premise rc=0: 39 passed, 5 warnings in 22.77s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+C4_FETCH shard 00000: 45576 docs in 4.4 s
+C4_FETCH shard 00001: 45576 docs in 3.1 s
+I8_WINDOWS {"gates": {"t1": {"text": "wikitext", "windows": 196, "full": true}, "k16": {"text": "wikitext", "windows": 123, "full": true}, "c4": {"text": "c4val1", "windows": 16, "full": true}}, "stride": 1024, "refused": []}
+P150_HELDOUT {"read": {"split": "validation", "stride": 1024, "sha256": {"t1": "5c444982538d1aaba2b4f47c00509c0604a72b3845f5cb98c7b30d07b81a76ec", "k16": "7ab52a502ffc5292802db52e4325f025688deeed735a8c04ce33fba5789acded"}}, "registered": {"split": "validation", "stride": 1024, "sha256": {"t1": "5c444982538d1aaba2b4f47c00509c0604a72b3845f5cb98c7b30d07b81a76ec", "k16": "7ab52a502ffc5292802db52e4325f
+quality A rc=0 I8_GATE A t1 wikitext group=1 windows=196 617.6 s
+I8_GATE A k16 wikitext group=16 windows=123 53.9 s
+I8_GATE A c4 c4val1 group=16 windows=16 6.7 s
+I8_QUALITY {"arm": "A", "fusions": {"fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}, "load_s": 26.49, "fakequant": null}
+P150_QUALITY_HELDOUT {"split": "validation", "stride": 1024, "sha256": {"t1": "5c444982538d1aaba2b4f47c00509c0604a72b3845f5cb98c7b30d07b81a76ec", "k16": "7ab52a502ffc5292802db52e4325f025688deeed735a8c04ce33fba5789acded"}}
+
+quality I8HEAD rc=0 I8_GATE I8HEAD t1 wikitext group=1 windows=196 626.1 s
+I8_GATE I8HEAD k16 wikitext group=16 windows=123 52.8 s
+I8_GATE I8HEAD c4 c4val1 group=16 windows=16 6.7 s
+I8_QUALITY {"arm": "I8HEAD", "fusions": {"fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}, "load_s": 22.33, "fakequant": {"scope": "head", "modules": 1, "attention_modules": 0, "max_err_over_half_step": 1.0000035762786865, "rel_fro_err_max": 0.00848327949643135}}
+P150_QUALITY_HELDOUT {"split": "validation", "stride": 1024, "sha256": {"t1": "5c444982538d1aaba2b4f47c00509c0604a72b3845f5cb98c7b30d07b81a76ec", "k16": "7ab52a502ffc5292802db52e4325f025688deeed735a8c04ce33fba5789acded"}}
+
+P150_VERDICT {"verdict": "GO", "void": [], "t1": {"passes": true, "argmax": 0.98904, "d": 0.000747, "se": 0.000291, "upper": 0.001225, "bound": 0.005205}, "k16": {"passes": true, "argmax": 0.99035, "d": 0.000547, "se": 0.000354, "upper": 0.00113, "bound": 0.005659}}
