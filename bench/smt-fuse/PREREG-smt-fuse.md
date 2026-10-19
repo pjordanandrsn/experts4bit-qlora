@@ -79,7 +79,7 @@ server-class SMT host.
 
 ## Amendment 1 (2026-10-19): the second hardware thread, pinned (`smt_sib_box.py`, ids `smt-sib-1..3`)
 
-**Why.** `smt-fuse-2` (receipt store `1307dedc`, re-derived by the maintainer) read every HIGH/16 range across 1, and
+**Why.** `smt-fuse-2` (its receipt in the private receipt store, re-derived by the maintainer) read every HIGH/16 range across 1, and
 the pool stays at torch's default. But its host had 128 physical cores under a 30.72-CPU quota, and nothing pinned the
 threads, so the 31-thread arm could run one thread per physical core. It measured **the pool under a quota, not the
 second hardware thread**, and must not be cited either way on that question (the maintainer's re-derivation says so).
@@ -156,7 +156,7 @@ of it into the run directory, which made the receipt store read dirty for every 
 
 ### Amendment 1a (2026-10-19): five more pre-create spares (`smt-sib-4..8`)
 
-`smt-sib-1` was refused at the create (no_such_ask, $0, receipt store `b516bcbd`): the offer was taken between the read
+`smt-sib-1` was refused at the create (no_such_ask, $0; its receipt is in the private receipt store): the offer was taken between the read
 and the create. The launcher walks the offers of ONE pinned machine within a run id, not several machines, so each
 candidate machine still costs an id. **`smt-sib-4` to `smt-sib-8` are spares for refusals before any instance exists
 (no_such_ask, a listing gone before the create) and NOT_RUN at the pre-flight, and for nothing else: never after the

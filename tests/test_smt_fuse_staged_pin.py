@@ -73,7 +73,8 @@ def test_the_declared_run_ids_and_nothing_else(tmp_path):
                           ("smt-sib-1", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 9000)}),
                           ("smt-sib-2", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 9000)}),
                           ("smt-sib-3", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 7200)}),
-                          ("smt-sib-8", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 9000)}),       # Amendment 1a
+                          ("smt-sib-4", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 9000)}),       # Amendment 1a
+                          ("smt-sib-8", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 9000)}),
                           ("smt-fuse-dry-1", {"SMT_FUSE_DRY": "1", "SMT_FUSE_BOX_EXEC": "/bin/false"}),
                           ("smt-sib-dry-1", {"SMT_FUSE_DRY": "1", "SMT_FUSE_BOX_EXEC": "/bin/false"})):
         out = _drive(tmp_path, run_id, **extra)
@@ -87,6 +88,7 @@ def test_the_declared_run_ids_and_nothing_else(tmp_path):
                           ("smt-fuse-1", {"E4B_SHA": "0" * 40})):
         out = _drive(tmp_path, run_id, **extra)
         assert out.returncode == 78 and "refusing" in out.stdout, (run_id, extra, out.stdout + out.stderr)
+    assert not re.search(r"receipt store `[0-9a-f]{7,40}`", PREREG)       # the 10-19 citation rule: no store commit ids
     short = _drive(tmp_path, "smt-sib-1", E4B_RENT_DEADLINE_EPOCH=str(int(time.time()) + 3600))
     assert short.returncode == 78 and "< the registered fit 7110s" in short.stdout, short.stdout   # the guard fit, not another refusal
     for s in ("smt-fuse-1", "smt-fuse-2", "smt-fuse-3", "smt-fuse-dry-", "smt-sib-1", "smt-sib-2", "smt-sib-3", "smt-sib-4", "smt-sib-8", "smt-sib-dry-"):
