@@ -111,3 +111,14 @@ def test_the_model_check_names_a_missing_or_resized_file(tmp_path, monkeypatch):
     assert run.verify_model(tmp_path, hashes=False)["files"] == 2
     with pytest.raises(RuntimeError, match=r"\['b.bin'\]"):
         run.verify_model(tmp_path, hashes=True)                             # right size, wrong bytes
+
+
+def test_a_quoted_record_reads_as_its_unquoted_install(tmp_path):
+    """torch's wheel writes RECORD paths quoted ("functorch/__init__.py",sha256=...); pip installs them unquoted."""
+    record = md.distribution(DIST).read_text("RECORD")
+    quoted = "\n".join(('"' + r.split(",", 1)[0] + '",' + r.split(",", 1)[1]) if r.count(",") >= 2 else r
+                       for r in record.splitlines())
+    assert run._records(quoted) == run._records(record) and run._records(record)
+    path, sha = _wheel(tmp_path, quoted, "quoted-1.0-py3-none-any.whl")
+    got = run.wheel_identity(DIST, {"filename": path.name, "version": md.version(DIST), "sha256": sha}, tmp_path)
+    assert got["files_match_wheel"] is True
