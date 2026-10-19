@@ -28,7 +28,7 @@ def load_tc1_arm(path):
 def calibration_tokens(T, tok, ds, pack_src, hp1_tokens, n, start=None, count=None):
     """(tokens dict, record). `T` is tc1_arm; `hp1_tokens` the HP1 tokens file (its eval = HP1's n held-out rows, unpacked).
     The calibration rows are pool rows [start, start + count) (0-based; default [n, 2n), HP1 Amendment 4's rows 49-96). HP2 takes
-    [96, 244), rows 97-244: past HP1's held-out rows and past hp1cal-5090-2's."""
+    [96, 396), rows 97-396: past HP1's held-out rows and past hp1cal-5090-2's."""
     start = n if start is None else start
     count = n if count is None else count
     if start < n:

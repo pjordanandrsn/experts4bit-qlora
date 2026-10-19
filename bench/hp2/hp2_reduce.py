@@ -4,8 +4,9 @@
 `g1`: from the one evaluator's calibration pass (hp1_eval.py over the two calibration arms, each on its own exported base, on R
 calibration rows), the row-paired base differential delta0 = mean_r [g_e4b(r) - g_uns(r)], where g_f(r) is the evaluator's
 zero-adapter loss on f's base minus f's in-loop step-0 loss on row r. Its null is delta0 = 0. CLOSE iff |delta0| + 2 x SE > 0.01;
-STOP iff m_need = 2(|delta0| + 2 x SE) exceeds the expected margin (G2 would close); else PASS. It also derives each framework's
-6(b) round-trip VOID bound, centred on its calibration mean b_f with half-width 3 x sd_f x sqrt(1/48 + 1/R). Writes --out BEFORE
+STOP iff m_need = 2(|delta0| + 2 x SE) exceeds the expected margin (G2 would close); else PASS. It records the registered 6(b)
+tolerance (each run's round trip, centred on its own zero-adapter gap z_f, at 0.01) and each framework's REPORTED band for z_f about
+its calibration mean b_f, 3 x sd_f x sqrt(1/48 + 1/R) (never a VOID). Writes --out BEFORE
 returning; exit 0 PASS, 4 CLOSE or STOP (a reading, not a strike; the box tears down), 2 unusable input.
 
 `verdict`: from the confirmation pass (e4b K00 and Unsloth on seeds 3410-3412, each scored by the evaluator) and the G1 record:
@@ -27,7 +28,8 @@ import hp1_reduce as H1  # noqa: E402  (paired_reading, pooled_sd, order_problem
 G1_BOUND = 0.01          # half the 0.02 margin cap: no sigma_seed could rescue a wider instrument
 G1_Z = 2.0               # G1 is a one-sided readability bound (maintainer ruling on #1793)
 M_EXPECTED = 0.005       # no sigma_seed has been measured for this pair (TC1b's matched pair differed by 1e-4): the margin floor
-VOID_Z = 3.0             # a VOID says the instrument is broken; 3 x SE keeps the family-wise false-VOID rate near 2 %
+VOID_Z = 3.0             # the reported z_f band: 3 x SE (z_f is deterministic per base, so a miss is reported, never a VOID)
+ROUNDTRIP_MATCH = 0.01   # 6(b), zero-centred: the house's round-trip MATCH band (AXO1767-PREREG: MATCH <= 0.01)
 SCORED_ROWS = 48
 CAL_ROWS = 300           # as far as the fresh pool allows: held-out pool rows 97-396 (#1793 review: raise R)
 CAL_TAGS = {"e4b": "hp2cal_e4b_k00_s3407", "unsloth": "hp2cal_unsloth_s3407"}
@@ -63,21 +65,23 @@ def g1(ev, rows=CAL_ROWS):
     d = [a - b for a, b in zip(gaps["e4b"], gaps["unsloth"])]
     delta0, sd_d = statistics.mean(d), statistics.stdev(d)
     se = sd_d / math.sqrt(rows)
-    per, bounds = {}, {}
+    per, bands = {}, {}
     for fw, g in gaps.items():
         b, sd = statistics.mean(g), statistics.stdev(g)
-        # the 6(b) VOID (the stochastic quantity): centred on this base's calibration mean b_f, half-width 3 x the spread of a 48-row
+        # REPORTED, never a VOID: where z_f (the base's zero-adapter gap on the 48 scored rows) should sit, 3 x the spread of a 48-row
         # mean about a rows-row calibration mean (SE n = 48 scored rows, with the calibration mean's own error over R rows)
         half = _ceil6(VOID_Z * sd * math.sqrt(1 / SCORED_ROWS + 1 / rows))
         per[fw] = {"b": round(b, 6), "sd": round(sd, 6), "mean_abs_gap": round(statistics.mean(abs(x) for x in g), 6),
-                   "max_abs_gap": round(max(abs(x) for x in g), 6), "roundtrip_centre": round(b, 6), "roundtrip_half_width": half}
-        bounds[fw] = [round(b, 6), half]
+                   "max_abs_gap": round(max(abs(x) for x in g), 6), "z_band_half_width": half}
+        bands[fw] = [round(b, 6), half]
     reach = abs(delta0) + G1_Z * se
     m_need = 2 * reach
     out = {"reducer": "bench/hp2/hp2_reduce.py g1", "rows": rows, "delta0": round(delta0, 6), "sd_d": round(sd_d, 6),
            "se_delta0": round(se, 6), "null": 0.0, "reach": round(reach, 6), "bound": G1_BOUND, "z": G1_Z,
-           "m_need": round(m_need, 6), "m_expected": M_EXPECTED, "per_framework": per, "roundtrip_bounds": bounds,
-           "void_z": VOID_Z, "family_wise_false_void": "6 round-trip checks (one per confirmation run) at about 0.27 % each: about 1.6 %"}
+           "m_need": round(m_need, 6), "m_expected": M_EXPECTED, "per_framework": per, "z_bands": bands, "roundtrip_zero_centred_tol": ROUNDTRIP_MATCH,
+           "void_z": VOID_Z, "false_void": (
+               "6(b) is centred on each run's own zero-adapter gap, so it tests only the adapter round trip, at the registered "
+               "0.01 (AXO1767's MATCH band; its e4b control read +0.0004). z_f - b_f is REPORTED against z_bands, never a VOID.")}
     if reach > G1_BOUND:
         out.update(verdict="CLOSE", reason=f"|delta0| + {G1_Z} x SE = {reach:.6f} > {G1_BOUND}: the instrument could not read margin "
                                            "0.02 (G1); a reading, not a strike")
@@ -113,6 +117,24 @@ def _delta_base(evs):
     return round(z["e4b"] - z["unsloth"], 6) if len(z) == 2 else None
 
 
+def _z_vs_b(arms, g1rec):
+    """Per framework: the runs' zero-adapter gaps z on the scored rows (one base, so one value up to numerics), z_f - b_f and whether
+    it lies inside G1's reported band. Reported only."""
+    out = {}
+    for fw in ("e4b", "unsloth"):
+        zs = [a["zero_gap"] for (f, _s), a in sorted(arms.items()) if f == fw and a.get("zero_gap") is not None]
+        band = (g1rec.get("z_bands") or {}).get(fw)
+        if not zs:
+            out[fw] = None
+            continue
+        z = statistics.mean(zs)
+        rec = {"z": zs, "z_f": round(z, 6)}
+        if band:
+            rec.update(b_f=band[0], z_minus_b=round(z - band[0], 6), band_half_width=band[1], inside=abs(z - band[0]) <= band[1])
+        out[fw] = rec
+    return out
+
+
 def verdict(evs, g1rec):
     """The verdict record from the confirmation evaluator output(s) and the G1 record."""
     arms = {}
@@ -135,6 +157,7 @@ def verdict(evs, g1rec):
     out = {"reducer": "bench/hp2/hp2_reduce.py verdict", "g1": {k: g1rec.get(k) for k in ("verdict", "delta0", "se_delta0", "m_need")},
            "y": {fw: {str(s): v for s, v in d.items()} for fw, d in ys.items()}, "missing": missing}
     out["delta_base"] = _delta_base(evs)       # the evaluator's zero-adapter difference on the 48 scored rows (#1793 review)
+    out["z_vs_b"] = _z_vs_b(arms, g1rec)        # reported beside the zero-centred 6(b), never a VOID (#1793 ruling)
     if g1rec.get("verdict") != "PASS":
         out.update(verdict="G1_CLOSED", wording="the instrument could not read margin m (G1): no statement about the frameworks")
         return out, EXIT_INCOMPLETE
@@ -183,7 +206,7 @@ def main(argv=None):
             rec = g1(json.load(open(a.eval_json)), a.rows)
             json.dump(rec, open(a.out, "w"), indent=1)                    # the record is written before the gate returns
             print(f"HP2_G1={rec['verdict']} delta0={rec['delta0']} se={rec['se_delta0']} m_need={rec['m_need']} "
-                  f"bounds={json.dumps(rec['roundtrip_bounds'], sort_keys=True)}")
+                  f"rt_zero_centred={rec['roundtrip_zero_centred_tol']} z_bands={json.dumps(rec['z_bands'], sort_keys=True)}")
             return EXIT_OK if rec["verdict"] == "PASS" else EXIT_G1_CLOSE
         mprob = H1.manifest_problems(a.manifest, a.evals) if a.manifest else []
         if mprob:

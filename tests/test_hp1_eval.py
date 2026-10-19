@@ -223,19 +223,12 @@ def test_hp2_zero_adapter_report_only_records_but_never_voids():
     assert arms[0]["status"] == "SCORED"
 
 
-def test_hp2_round_trip_bounds_are_centred_per_framework():
-    """HP2: 6(b) VOIDs iff |evaluator - in-loop step N - centre_f| > half_f; outside the bounds' frameworks the 0.02 rule stands."""
-    h = Harness(targets={"a": 1.5150, "b": 1.5150})                             # evaluator - in-loop = +0.015 for both
-    _, arms = h.run([arm("a"), arm("b", framework="unsloth")], roundtrip_bounds={"e4b": [0.012, 0.005], "unsloth": [-0.002, 0.005]})
+def test_hp2_round_trip_is_centred_on_each_runs_own_zero_adapter_gap():
+    """HP2 (#1793 ruling): 6(b) VOIDs iff |(evaluator - in-loop N) - (zero adapter - in-loop 0)| > tol, so it tests only the adapter's
+    round trip; the zero-adapter gap itself (deterministic per base) is reported. The 0.02 constant does not also apply."""
+    h = Harness(zero=2.0250, targets={"a": 1.5300, "b": 1.5400})              # z = +0.025; a: 0.030 - 0.025 = 0.005; b: 0.015
+    bases, arms = h.run([arm("a"), arm("b")], zero_report_only=True, roundtrip_zero_centred=0.01)
     got = by_tag(arms)
-    assert got["a"]["status"] == "SCORED"                                       # |0.015 - 0.012| <= 0.005
-    assert got["b"]["status"] == "VOID" and "- -0.002| > 0.005" in got["b"]["reason"] and got["b"]["void_level"] == "run"
-    _, arms = Harness(targets={"a": 1.5260}).run([arm("a")], roundtrip_bounds={"e4b": [0.025, 0.005]})   # +0.026: past 0.02, inside
-    assert arms[0]["status"] == "SCORED"                                        # the centred bound replaces the constant, not adds to it
-
-
-def test_round_trip_bounds_may_be_read_from_a_file(tmp_path):
-    p = tmp_path / "b.json"
-    p.write_text('{"e4b": [0.0, 0.01]}')
-    assert hp1_eval._bounds_arg("@" + str(p)) == {"e4b": [0.0, 0.01]} and hp1_eval._bounds_arg('{"x": [1, 2]}') == {"x": [1, 2]}
-    assert hp1_eval._bounds_arg(None) is None
+    assert got["a"]["status"] == "SCORED" and got["a"]["zero_gap"] == 0.025 and got["a"]["adapter_roundtrip"] == 0.005
+    assert got["b"]["status"] == "VOID" and "zero-centred" in got["b"]["reason"] and got["b"]["void_level"] == "run"
+    assert got["b"]["adapter_roundtrip"] == 0.015 and bases[0]["status"] == "OK"

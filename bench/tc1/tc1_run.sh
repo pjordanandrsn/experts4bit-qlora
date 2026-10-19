@@ -143,7 +143,7 @@ case " $FAMILIES " in *" qwen3axo1767 "*)
   ;;
 esac
 case " $FAMILIES " in *" qwen3hp2 "*)
-  echo "FIXTURE hp2 (HP2-PREREG): steps=$CURVE_STEPS eval_n=$HP1_EVAL_N; calibration rows 97-244 (148), 1 step; P seeds=[$HP1_CONF_SEEDS]; e4b K00 vs Unsloth; axolotl out" | tee -a summary.txt
+  echo "FIXTURE hp2 (HP2-PREREG): steps=$CURVE_STEPS eval_n=$HP1_EVAL_N; calibration rows 97-396 (300), 1 step; P seeds=[$HP1_CONF_SEEDS]; e4b K00 vs Unsloth; axolotl out" | tee -a summary.txt
   [ -n "${TC1_PREREG:-}" ] || PREREG=hp2/HP2-PREREG.md
   ;;
 esac
@@ -2362,7 +2362,7 @@ hp1_eval_block(){ local NAME=$1 TOK=$2 MID=$3 REV=$4; shift 4; local R=() B=() x
   # offline: the checkpoint is already on the box, and the image's huggingface_hub 2.x / httpx2 can break content-encoded Hub responses
   HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts "${R[@]}" --bases "${B[@]}" --tokens $TOK --eval-n $HP1_EVAL_N --model "$MID" --revision $REV \
     ${HP1_ZERO_TOL:+--zero-tol $HP1_ZERO_TOL} ${HP1_RT_TOL:+--roundtrip-tol $HP1_RT_TOL} ${HP1_ZERO_REPORT_ONLY:+--zero-report-only 1} \
-    ${HP1_RT_BOUNDS:+--roundtrip-bounds @$HP1_RT_BOUNDS} --out $W/hp1/eval_$NAME.json > logs/hp1_eval_$NAME.log 2>&1; tail -1 logs/hp1_eval_$NAME.log
+    ${HP1_RT_ZERO_CENTRED:+--roundtrip-zero-centred $HP1_RT_ZERO_CENTRED} --out $W/hp1/eval_$NAME.json > logs/hp1_eval_$NAME.log 2>&1; tail -1 logs/hp1_eval_$NAME.log
   HP1_EVAL_PER_ARM_S=$($PY_E4B -c "import json,sys; d=json.load(open(sys.argv[1])); t=sum(x.get('seconds',0) for x in d['bases']); print(max(60, int(t / max(1, len(d['arms'])))))" \
     $W/hp1/eval_$NAME.json 2>/dev/null || echo 600); return 0; }
 # hp1_early_check FAM MID REV TOK TS TAG FW: the EARLY BASE CHECK on the run that just exported FW's base -- the base's digest and
@@ -2489,7 +2489,7 @@ tc1_hp1cal_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 TOK TS TOKC TSC TA
 #      and hp2_reduce.py verdict (G2 + the registered wording).
 tc1_hp2_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TSC s B X="--hp1-export $W/hp1" rc fw tag
   local CE=hp2cal_e4b_k00_s3407 CU=hp2cal_unsloth_s3407 ALL="" bu=1 be=1 PR=()
-  say "===== HP2 family $FAM ($MID @ $REV; calibration rows 97-244; P seeds [$HP1_CONF_SEEDS]; alarms e4b $EAL unsloth $UAL)"
+  say "===== HP2 family $FAM ($MID @ $REV; calibration rows 97-396; P seeds [$HP1_CONF_SEEDS]; alarms e4b $EAL unsloth $UAL)"
   HP1_AX_DROP=1                                                        # HP2: e4b vs Unsloth only
   for s in $HP1_CONF_SEEDS; do ALL="$ALL e4b:hp2_k00_s$s:fused unsloth:hp2_unsloth_s$s:unsloth"; done
   tc1_prepare $FAM "$MID" $REV $FAL "e4b:$CE:fused unsloth:$CU:unsloth$ALL" $HP1_EVAL_N || return 0
@@ -2517,10 +2517,11 @@ tc1_hp2_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
   # G1 is enforced HERE, by the reducer's exit code (4 = CLOSE or STOP): the draw ends and the box tears down (a reading, not a strike)
   if [ "$rc" = 4 ]; then echo "HP2 G1_CLOSED: the instrument could not read the margin (a reading, not a strike)" | tee -a summary.txt; hp1_bulk_manifest "$W"; return 0; fi
   [ "$rc" = 0 ] || { echo "HP2 G1_UNUSABLE rc=$rc" | tee -a summary.txt; return 0; }
-  HP1_RT_BOUNDS=$W/hp2/roundtrip_bounds.json; HP1_ZERO_REPORT_ONLY=1
-  $PY_E4B -c "import json,sys; json.dump(json.load(open(sys.argv[1]))['roundtrip_bounds'], open(sys.argv[2], 'w'))" $W/hp2/g1.json $HP1_RT_BOUNDS \
-    || { echo "HP2 G1_UNUSABLE (no round-trip bounds)" | tee -a summary.txt; return 0; }
-  echo "HP2 G1 PASS; the confirmation pass VOIDs 6(b) at $(cat $HP1_RT_BOUNDS) (centre, half-width); zero-adapter is report-only" | tee -a summary.txt
+  # the 6(b) tolerance is READ from the reducer's record (one source; no restated number here)
+  HP1_RT_ZERO_CENTRED=$($PY_E4B -c "import json,sys; print(float(json.load(open(sys.argv[1]))['roundtrip_zero_centred_tol']))" $W/hp2/g1.json) \
+    || { echo "HP2 G1_UNUSABLE (no 6(b) tolerance in g1.json)" | tee -a summary.txt; return 0; }
+  HP1_ZERO_REPORT_ONLY=1
+  echo "HP2 G1 PASS; 6(b) VOIDs a run iff its adapter round trip (centred on its own zero-adapter gap) exceeds $HP1_RT_ZERO_CENTRED; zero-adapter is report-only" | tee -a summary.txt
   for s in $HP1_CONF_SEEDS; do
     B=""; [ $be = 1 ] && { B="--hp1-export-base 1"; be=0; }
     hp1_run $FAM e4b hp2_k00_s$s fused $EAL "$MID" $REV $TOK $TS --attn-4bit 1 $(hp1_cell k00 $s) --seed $s --order-seed $s $X $B

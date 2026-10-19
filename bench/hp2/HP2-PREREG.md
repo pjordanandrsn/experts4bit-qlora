@@ -76,17 +76,24 @@ A gate passes when the interval around the null-centred statistic is narrow enou
     limit is what lowers it. ρ is measured on the box, not assumed.
 - **G2, at the verdict.** For the realized margin m = min(max(σ_seed, 0.005), 0.02), the δN interval must lie within ±m/2, and
   |δ0| + 2 × SE_δ0 ≤ m/2. Otherwise the headline CLOSES: no verdict is read.
-- **6(b) round-trip VOID, centred, at 3 × SE** (maintainer's corrected ruling on this PR). A sound instrument's 48-row mean gap
-  sits at that framework's offset b_f, not at 0. So run r of framework f VOIDs iff
-  |ρ_f(r) − b̂_f| > 3 × sd_f × √(1/48 + 1/300): three standard errors of a 48-row scored mean about the 300-row estimate of its
-  centre. (At sd_f = 0.030 the half-width is 0.0140.) Centre and half-width per framework, rounded up to 1e-6, are written by G1
-  to `hp2/roundtrip_bounds.json` and passed to the evaluator (`--roundtrip-bounds`). They replace the 2-layer 0.02 constant for HP2.
+- **6(b) round-trip VOID, centred on each run's own zero-adapter gap, at 0.01** (maintainer's ruling on families' re-check).
+  For run s of framework f, ρ_f(s) = (z_f − b̂_f) + b̂_f + a_f(s): z_f is the base's zero-adapter gap on the 48 scored rows (evaluator
+  zero adapter − that run's in-loop step 0) and a_f(s) is the adapter's round trip beyond the base. z_f is **fixed per base**, so a
+  bound on ρ_f(s) would mostly size z_f, and a miss would VOID all three runs and every rerun. So 6(b) tests only what moves between
+  runs: run s VOIDs iff **|a_f(s)| = |(evaluator − in-loop step N) − (evaluator zero adapter − in-loop step 0)| > 0.01**. z_f is
+  read in the same P pass by the report-only zero-adapter check (`--roundtrip-zero-centred`; the evaluator records `zero_gap` and
+  `adapter_roundtrip` per run).
+  - **Basis of 0.01, named before data:** the house's round-trip MATCH band (AXO1767-PREREG: MATCH ≤ 0.01). Its e4b control round
+    trip read +0.0004 on 8 rows. The value is registered in `hp2_reduce.py` (`ROUNDTRIP_MATCH`) and written to `hp2/g1.json`;
+    the driver reads it from there, so no copy is restated. It replaces the 2-layer 0.02 constant for HP2.
+  - **False-VOID rate:** a_f(s) carries no base term, so a sound export's round trip sits near 0 (AXO1767's control: 0.0004, 25×
+    inside the band). The rate is not claimed as a computed probability, since the band is a registered tolerance, not a z bound.
+- **z_f − b̂_f is REPORTED beside it, never a VOID.** G1 writes each framework's band 3 × sd_f × √(1/48 + 1/300) about b̂_f
+  (`z_bands`; at sd_f = 0.030 it is 0.0140), and the verdict records z_f, z_f − b̂_f and whether it lies inside (`z_vs_b`).
+  On HP1's numbers: e4b z = +0.0070 against b = −0.0013 is 0.0083, inside.
 - **The zero-adapter check is reported, never a VOID.** The zero-adapter gap is deterministic per base: a rerun on the same base
   and rows returns the same number, so a VOID would only repeat. A miss is a reported fact that δ0 already carries
   (`zero_adapter_outside_tol` in the evaluator output, run with `--zero-report-only`). VOID is kept only for stochastic quantities.
-- **Family-wise false-VOID rate, as registered.** The confirmation pass makes 6 VOID checks, one round trip per run. At 3 × SE each
-  is about 0.27 % two-sided for a sound instrument, so the family is 1 − (1 − 0.0027)^6 ≈ **1.6 %** (Bonferroni also 1.6 %). At
-  2 × SE it would be about 25 %, which is why VOID is not set there.
 
 ## Rows and power
 
@@ -151,19 +158,21 @@ offer at it), so the worst case carries storage. The manifest sets `lane_record.
 
 ## Rulings taken (maintainer, on this PR, before registration)
 
-1. VOID at 3 × SE; G1 at 2 × SE (one-sided readability).
+1. VOID at 3 × SE (for 6(b), superseded by 5); G1 at 2 × SE (one-sided readability).
 2. One box with an internal G1 stop, under the four conditions above.
 3. Don't wait for #1767. axolotl joins by its own amendment, if #1767 shows its exported adapter scores like its in-loop one.
-4. Corrected ruling after families' review: the 6(b) VOID is centred on b̂_f with half-width 3 × sd_f × √(1/48 + 1/R); the
+4. Corrected ruling after families' review (6(b)'s centre superseded by 5): VOID centred, half-width 3 × sd_f × √(1/48 + 1/R); the
    zero-adapter check is report-only (deterministic per base); state the joint G1 condition and the ρ requirement; raise R to
    the pool's limit and record m_need, stopping at G1 when it exceeds the expected margin; report Δ_base; carry storage in the
    worst case; the internal G1 stop tears the box down.
+5. On families' re-check: centre each run's 6(b) on its own zero-adapter gap z_f, so it tests only the adapter round trip, at
+   0.01 with its basis named (AXO1767's MATCH band); z_f − b̂_f stays reported.
 
 ## Harness
 
 - `bench/hp2/hp2_reduce.py`: the `g1` and `verdict` subcommands. It reuses `hp1_reduce`'s `paired_reading`, `pooled_sd`,
   `order_problems` and `manifest_problems`.
 - `bench/hp1/hp1_caltokens.py`: `--start` / `--count` (HP2: rows 97–396).
-- `bench/hp1/hp1_eval.py`: `--roundtrip-bounds` (per-framework centre and half-width, inline or `@file`), `--zero-report-only`.
+- `bench/hp1/hp1_eval.py`: `--roundtrip-zero-centred` (6(b) on the adapter round trip only), `--zero-report-only`.
 - `bench/tc1/tc1_run.sh`: the `qwen3hp2` token, the `hp2cal` recipe and `tc1_hp2_family` (phases A–D). `tc1_drive.sh` stages
   `hp2_reduce.py`.

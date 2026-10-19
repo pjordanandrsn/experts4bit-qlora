@@ -50,16 +50,18 @@ def test_g1_closes_on_a_real_mean_offset_between_the_frameworks():
     assert rec["verdict"] == "CLOSE" and rec["delta0"] == pytest.approx(0.012, abs=0.002)
 
 
-def test_the_round_trip_void_is_centred_on_each_frameworks_offset_with_a_48_row_spread():
-    """#1793 review + ruling: centre on b_f; half-width 3 x sd_f x sqrt(1/48 + 1/R) (the spread of a 48-row mean about an R-row mean)."""
+def test_g1_records_the_zero_centred_6b_tolerance_and_reports_each_z_band():
+    """#1793 ruling: 6(b) is centred on each run's own z_f at the registered 0.01 (AXO1767's MATCH band); z_f - b_f is reported
+    against 3 x sd_f x sqrt(1/48 + 1/R) (the spread of a 48-row mean about an R-row mean), never a VOID."""
     rec = R.g1(_cal(REAL_GAPS, _tracking(shift=0.004)), rows=N)
+    assert rec["roundtrip_zero_centred_tol"] == R.ROUNDTRIP_MATCH == 0.01
     for fw in ("e4b", "unsloth"):
         v = rec["per_framework"][fw]
         half = 3 * v["sd"] * math.sqrt(1 / R.SCORED_ROWS + 1 / N)
-        assert rec["roundtrip_bounds"][fw][0] == v["b"] and rec["roundtrip_bounds"][fw][1] == pytest.approx(half, abs=2e-6)
-        assert rec["roundtrip_bounds"][fw][1] >= half - 1e-6
-    assert rec["roundtrip_bounds"]["unsloth"][0] == pytest.approx(rec["roundtrip_bounds"]["e4b"][0] + 0.004, abs=0.002)
-    assert "1.6 %" in rec["family_wise_false_void"]
+        assert rec["z_bands"][fw][0] == v["b"] and rec["z_bands"][fw][1] == pytest.approx(half, abs=2e-6)
+        assert rec["z_bands"][fw][1] >= half - 1e-6
+    assert rec["z_bands"]["unsloth"][0] == pytest.approx(rec["z_bands"]["e4b"][0] + 0.004, abs=0.002)
+    assert "never a VOID" in rec["false_void"]
 
 
 def test_g1_stops_when_m_need_exceeds_the_expected_margin_though_the_hard_bound_passes():
@@ -115,6 +117,16 @@ def _ev(deltas, base=0.86, spread=(0.0, 0.004, -0.004), rho_e=(0.001, 0.0012, 0.
     bases = [{"dir": "/root/tc1/hp1/base_e4b_qwen3hp2", "zero_adapter": {"row_mean": 1.9210}},
              {"dir": "/root/tc1/hp1/base_unsloth_qwen3hp2", "zero_adapter": {"row_mean": 1.9172}}]
     return {"arms": arms, "bases": bases}
+
+
+def test_z_minus_b_is_reported_per_framework_never_gated():
+    ev = _ev((0.0002, -0.0003, 0.0001))
+    for a in ev["arms"]:
+        a["zero_gap"] = 0.0070 if a["tag"].startswith("hp2_k00") else 0.0130
+    g = dict(G1_PASS, z_bands={"e4b": [-0.0013, 0.014], "unsloth": [0.0300, 0.014]})   # unsloth: |z| inside, |z - b| = 0.017 outside
+    rec, code = R.verdict([ev], g)
+    assert rec["z_vs_b"]["e4b"]["z_minus_b"] == pytest.approx(0.0083) and rec["z_vs_b"]["e4b"]["inside"]
+    assert rec["z_vs_b"]["unsloth"]["inside"] is False and code == 0 and rec["verdict"] == "PARITY"   # reported, not a gate
 
 
 def test_delta_base_is_reported_beside_delta():

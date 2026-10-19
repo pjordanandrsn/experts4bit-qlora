@@ -30,7 +30,7 @@ case "$*" in
     echo "HP1 CALTOKENS rows 49-96 of the held-out pool; prefix reproduces HP1's 48; sha=$(printf 'c%.0s' $(seq 64))";;
   *"hp2_reduce.py g1"*) out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p')
     if [ "${STUB_G1:-pass}" = close ]; then echo '{"verdict": "CLOSE", "tau": 0.03}' > "$out"; echo "HP2_G1=CLOSE"; exit 4; fi
-    echo '{"verdict": "PASS", "roundtrip_bounds": {"e4b": [-0.0013, 0.0158], "unsloth": [0.0021, 0.0162]}}' > "$out"; echo "HP2_G1=PASS";;
+    echo '{"verdict": "PASS", "roundtrip_zero_centred_tol": 0.01, "z_bands": {"e4b": [-0.0013, 0.0158]}}' > "$out"; echo "HP2_G1=PASS";;
   *"hp2_reduce.py verdict"*) echo "HP2_VERDICT=PARITY: no measurable difference at margin m";;
   *hp1_calib.py*) out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p'); echo '{"verdict": "PASS", "tol": 0.0123}' > "$out"; echo "HP1_CALIB=PASS tol=0.0123";;
   *hp1_eval.py*)
@@ -455,7 +455,7 @@ def test_without_a_calibrated_tolerance_no_pass_overrides_the_default(tmp_path):
 
 def test_hp2_runs_shakedown_calibration_g1_then_e4b_k00_vs_unsloth_at_the_calibrated_bound(tmp_path):
     import json
-    """HP2-PREREG: A (shakedown, e4b + Unsloth, no axolotl), B (one e4b K00 step + one Unsloth step on 148 calibration rows, both
+    """HP2-PREREG: A (shakedown, e4b + Unsloth, no axolotl), B (one e4b K00 step + one Unsloth step on 300 calibration rows, both
     bases exported, the evaluator, hp2_reduce g1), C (e4b K00 + Unsloth on the P seeds), D (the P pass at tau, the verdict)."""
     arms, summary = drive(tmp_path, FAMILY_FN="tc1_hp2_family", FAMILY_FAM="qwen3hp2")
     assert not [a for a in arms if a[1] == "axolotl"]
@@ -473,8 +473,8 @@ def test_hp2_runs_shakedown_calibration_g1_then_e4b_k00_vs_unsloth_at_the_calibr
     evc = next(ln for ln in py.splitlines() if "hp1_eval.py" in ln and "eval_cal" in ln)
     assert "--eval-n 300" in evc and "base_e4b_qwen3hp2" in evc and "base_unsloth_qwen3hp2" in evc
     evp = next(ln for ln in py.splitlines() if "hp1_eval.py" in ln and "eval_P" in ln)
-    assert "--zero-report-only 1" in evp and "--roundtrip-bounds @" in evp and "--zero-tol" not in evp
-    assert json.loads((tmp_path / "hp2" / "roundtrip_bounds.json").read_text())["unsloth"] == [0.0021, 0.0162]
+    assert "--zero-report-only 1" in evp and "--roundtrip-zero-centred 0.01" in evp and "--zero-tol" not in evp
+    assert json.loads((tmp_path / "hp2" / "g1.json").read_text())["roundtrip_zero_centred_tol"] == 0.01
     assert "hp2_reduce.py verdict" in py and "--g1" in py and "HP2 G1 PASS" in summary and "HP2_VERDICT=PARITY" in summary
     assert py.index("hp2_reduce.py g1") < py.index("eval_P")              # G1 is read before the confirmation pass
 
