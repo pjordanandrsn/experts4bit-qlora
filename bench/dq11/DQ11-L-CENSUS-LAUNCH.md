@@ -156,7 +156,8 @@ A stall no longer stops the envelope, under three bounds read from the journal f
 - **The all-in is cumulative.** Every stalled attempt's actual cost counts against the envelope's $1.10. Discovery and
   the final quote admit only offers whose reservation fits what is left, and the envelope stops once nothing is left.
 - **No repeat host.** Every machine an earlier attempt of the same envelope stalled on is excluded from discovery,
-  binding and the quote, alongside the registered exclusion.
+  binding and the quote, alongside the registered exclusion. A journal covers only its own envelope, so a machine
+  that stalls across envelopes joins the registered list (`EXCLUDED_MACHINES`): 147454, after census-7 and census-8.
 
 `--run-id next` takes the first declared ID the journal has not used, so the executor's loop continues without
 picking IDs. Counted receipts and the ledger must be tracked and clean at the receipt repository HEAD, including the

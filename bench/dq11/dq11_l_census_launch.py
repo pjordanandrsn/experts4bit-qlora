@@ -55,7 +55,9 @@ UPLOAD_RATE_CAP = Decimal("0.05")
 ALL_IN_CAP = Decimal("1.10")
 DISK_GB = 320
 IMAGE = "pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel"
-EXCLUDED_MACHINES = {"45511"}
+# 147454: stuck loading at the pre-flight on two envelopes in a row (census-7 and census-8, 2026-10-19). A journal's own
+# stall exclusion covers only its envelope, so the registered list carries it into the next one.
+EXCLUDED_MACHINES = {"45511", "147454"}
 NEXT_RUN_ID = "next"      # --run-id next: the first declared id the envelope journal has not used
 INSTRUMENT_FILES = (
     "dq11_l_census_run.py", "dq11_l_census_capture.py", "dq11_l_census_reduce.py"

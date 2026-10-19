@@ -975,13 +975,13 @@ def test_discovery_honours_the_journal_bounds():
     assert launch.offer_row(offer(), p, all_in=launch.Decimal("1.085"))["eligible"] is True     # 1.0845 fits
     row = launch.offer_row(offer(), p, all_in=launch.Decimal("1.065"))
     assert row["eligible"] is False and "remaining $1.065" in " ".join(row["refusal_reasons"])
-    assert launch.offer_row(offer(machine="147454"), p, excluded={"45511", "147454"})["eligible"] is False
-    rows = [launch.offer_row(offer(machine="147454"), p)]                    # eligible under the static list alone
+    assert launch.offer_row(offer(machine="300"), p, excluded={"45511", "300"})["eligible"] is False
+    rows = [launch.offer_row(offer(machine="300"), p)]                        # eligible under the static list alone
     poll = {"status": "PASS", "utc": "t", "monotonic": 0.0, "filter": {}, "offers": rows}
-    hc = launch.HostContinuity({"45511", "147454"})
+    hc = launch.HostContinuity({"45511", "300"})
     for i in range(20):
         assert hc.step(dict(poll, monotonic=float(i * 20))) is None
-    assert "147454" not in hc.active
+    assert "300" not in hc.active
 
 
 def test_the_launch_hands_the_permit_bounds_to_search_and_discovery(tmp_path, monkeypatch):
@@ -1007,3 +1007,10 @@ def test_the_launch_hands_the_permit_bounds_to_search_and_discovery(tmp_path, mo
                               tmp_path / "assets", tmp_path / "packet", run_id=RUN_IDS[1], before_controller=permit)
     assert seen["provider"]["excluded"] == {"45511", "147454"}
     assert seen["discover"]["excluded"] == {"45511", "147454"} and seen["discover"]["all_in"] == launch.Decimal("1.085")
+
+
+def test_the_registered_list_carries_a_machine_that_stalled_across_envelopes():
+    """A journal excludes only its own envelope's stalls; 147454 stalled on two envelopes, so the registered list
+    excludes it from every later one."""
+    assert launch.EXCLUDED_MACHINES == {"45511", "147454"}
+    assert launch.offer_row(offer(machine="147454"), FakeProvider([]))["eligible"] is False
