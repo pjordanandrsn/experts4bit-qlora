@@ -5,6 +5,9 @@
   `gemv_i8_bw`.
   - **Read:** P153 (`p153-5090-1`) on an RTX 5090 read FLIP. One request is **1.052x** as fast: the smallest of four
     ABBA pairs, 1.0520-1.0530, a 0.189 ms step saving.
+  - **Outputs change:** the head serves from its int8 grid at every batch size, so logits differ from the bf16 head.
+    P153's W1 tokens matched over 160, and 12 of 16 W16 rows diverged by 160, inside P150's quality gates.
+    `E4B_INT8_HEAD_BW=0` restores bf16-head output.
   - **Sixteen requests:** 0.992, an observed cost not attributed. The two candidates are the resident int8 copy and
     the different tokens the rounded head decodes at 16 rows.
   - **Quality:** read on Qwen3-30B-A3B @ad44e777 (P150's GO at both of P125's gates; P153's SANE bias +0.0022, argmax

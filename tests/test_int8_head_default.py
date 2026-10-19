@@ -172,6 +172,23 @@ def test_a_grouped_nf4_gemm_without_k36_turns_the_default_off_and_an_explicit_1_
         sp.apply_int8_head_bw_resolved(_Toy(), _cfg(monkeypatch, "1"))
 
 
+def test_under_an_auto_width_the_record_sets_the_priced_bytes_beside_the_copys(monkeypatch, toy_family):
+    """The auto width prices the copy from the config; the swap holds the head's. The record carries both, and a
+    disagreement (a config that does not describe its head) is logged, not silent."""
+    seen = []
+    monkeypatch.setattr(sp, "log", seen.append)
+    cfg = _cfg(monkeypatch, None)
+    cfg.max_seqs_requested, cfg.max_seqs_resolution = "auto", {"extra_bytes": ih.copy_bytes(40, 16)}
+    rec = sp.apply_int8_head_bw_resolved(_Toy(), cfg, gemv=_stub, quantize=_quantize)
+    assert rec["copy_bytes"] == rec["priced_bytes"] == 40 * 16 + 4 * 40 and not seen
+    cfg.max_seqs_resolution = {}                                     # priced nothing: say so
+    rec = sp.apply_int8_head_bw_resolved(_Toy(), cfg, gemv=_stub, quantize=_quantize)
+    assert rec["priced_bytes"] == 0 and len(seen) == 1 and "priced 0 B" in seen[0]
+    cfg.max_seqs_requested = "16"                                    # an explicit width: nothing priced, nothing said
+    rec = sp.apply_int8_head_bw_resolved(_Toy(), cfg, gemv=_stub, quantize=_quantize)
+    assert "priced_bytes" not in rec and len(seen) == 1
+
+
 def test_build_engine_sets_the_head_through_apply_int8_head_bw_resolved():
     src = inspect.getsource(sp.build_engine)
     assert "apply_int8_head_bw_resolved(model, cfg)" in src and "apply_int8_head_bw(model," not in src
@@ -218,6 +235,7 @@ def test_without_k36_the_default_prices_nothing(monkeypatch):
 def test_the_auto_width_drops_by_the_copys_share_at_the_margin():
     """At free memory exactly the 64-slot need, 64 fits with nothing extra; with the int8 head's bytes it does not, and
     the next width is taken. The candidates carry the term, for /health."""
+    pytest.importorskip("fp8_kv", reason="the footprint prices the KV pool with grouped-nf4-gemm's fp8_kv")
     from experts4bit_qlora.arch.topology import describe_moe
     from experts4bit_qlora.serve_recipe import ServeSetup, choose_max_seqs
     topo = describe_moe(_qwen3_config())

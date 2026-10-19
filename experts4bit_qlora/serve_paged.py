@@ -525,7 +525,15 @@ def apply_int8_head_bw_resolved(model, cfg, *, gemv=None, quantize=None) -> dict
         value, getattr(getattr(model, "config", None), "model_type", None), shape,
         refusal=ih.head_refusal(model) if unset else None,
         kernel_error=ih.kernel_missing() if unset and (gemv is None or quantize is None) else None)
-    return {**ih.apply_int8_head_bw(model, mode, gemv=gemv, quantize=quantize), "source": source}
+    rec = {**ih.apply_int8_head_bw(model, mode, gemv=gemv, quantize=quantize), "source": source}
+    if rec["mode"] == "1" and str(getattr(cfg, "max_seqs_requested", "")).strip().lower() == "auto":
+        # the auto width priced the copy from the CONFIG (int8_head_copy_bytes); the swap holds the HEAD's: say so if not
+        rec["copy_bytes"] = ih.copy_bytes(*rec["shape"])
+        rec["priced_bytes"] = int((getattr(cfg, "max_seqs_resolution", None) or {}).get("extra_bytes", 0))
+        if rec["priced_bytes"] != rec["copy_bytes"]:
+            log(f"{INT8_HEAD_BW_ENV}: the int8 head holds {rec['copy_bytes']} B but E4B_PAGED_MAX_SEQS=auto priced "
+                f"{rec['priced_bytes']} B for it (the config and the head disagree); the width may be too wide")
+    return rec
 
 
 def int8_head_copy_bytes(cfg, model_config) -> int:
