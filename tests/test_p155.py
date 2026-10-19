@@ -27,7 +27,7 @@ DRIVE = (LANE / "p155_drive.sh").read_text(encoding="utf-8")
 BENCH = (LANE / "p155_bench.py").read_text(encoding="utf-8")
 PREREG = (LANE / "PREREG-p155.md").read_text(encoding="utf-8")
 LIB = (REPO / "experts4bit_qlora" / "engines" / "hot_residency.py").read_text(encoding="utf-8")
-GUARD_H = 1.1
+GUARD_H = 1.5
 BOOT_S = 300          # the launcher's create-to-runner allowance (P152's and P154's, kept)
 HEADROOM = 1.25       # e4b#1845's cross-lane rule
 
@@ -65,6 +65,47 @@ def test_every_staged_piece_matches_its_source():
     assert set(pins) == set(SOURCES)
     for name, d in SOURCES.items():
         assert hashlib.sha256((d / name).read_bytes()).hexdigest() == pins[name], name
+
+
+SHAKE = LANE / "shakedown" / "shake_p155.json"
+SHAKE_SHA256 = "7be425530f27165b993740204985489bd1f1c7b92b959f1cb66d225f2fbc5471"
+
+
+def test_the_reducer_on_the_real_shakedown_record():
+    """The real record first: the $0 A2000 shakedown's own bench record (sha-pinned) through the registered reducer. It
+    must read SHAKEDOWN with every structural check passed, never graded; every plan that ran on sm_86 kept today's bits;
+    the real-tile prefix held on every table; and the per-plan compile metadata was read."""
+    raw = SHAKE.read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == SHAKE_SHA256
+    rec = json.loads(raw)
+    red = _reducer()
+    v = red.verdict(rec)
+    assert v["verdict"] == "SHAKEDOWN" and v["why"] == ["a shakedown record is never a reading"], v["why"]
+    assert set(v["predictions"].values()) == {"UNREAD (a shakedown)"}
+    assert rec["cc"] == [8, 6] and rec["layers"] == 4 and rec["tile_faults"] == []
+    for p in ("gu", "dn"):
+        rows = rec["select"][p]
+        assert sum(r["identical"] is True for r in rows) == 126 and sum(r["identical"] is False for r in rows) == 0
+        assert {r["error"].split(":")[0] for r in rows if r["error"]} == {"OutOfResources"}       # 18 on sm_86's 99 KB
+        assert rec["today_compiled"][p] == [{"n_regs": 71, "n_spills": 0, "shared": 14592, "num_warps": 4,
+                                             "num_stages": 3}]                                   # b1-decode's sm_86 numbers
+    assert all(rep["identical"][a] for rep in rec["confirm"]["reps"] for a in rep["identical"])
+    bad = json.loads(raw)                                    # the old rule's mutant, on the real record: a hand-carried
+    bad["carried"] = list(reversed(bad["carried"]))          # selection is VOID
+    assert red.verdict(bad)["verdict"] == "VOID"
+
+
+def test_need_bench_is_the_shakedowns_walls_times_one_and_a_half():
+    """The maintainer's rule: NEED_BENCH is the measured walls x1.5, not an estimate (PREREG, "The shakedown")."""
+    rec = json.loads(SHAKE.read_bytes())
+    compile_s = sum(r["first_call_s"] for p in ("gu", "dn") for r in rec["select"][p] if r.get("first_call_s") is not None)
+    ran = sum(r["identical"] is True for p in ("gu", "dn") for r in rec["select"][p])
+    host_s = (rec["walls"]["select_s"] - compile_s) / (ran * 2 + 2 * 2 * 2)        # per selection graph, host-bound
+    conf_s = rec["walls"]["confirm_s"] / (8 * 6)
+    gpu = 12 * 11.748e-3                                                             # 12 replays of P152's two GEMM lines
+    box = (compile_s * 144 / 126 + (2 * 144 + 4) * 8 * (host_s + gpu) + 64 * 6 * (conf_s + gpu) + 20)
+    assert round(compile_s, 1) == 145.3 and round(host_s, 3) == 0.415 and round(conf_s, 3) == 0.215
+    assert 1550 <= box <= 1700 and box * 1.5 <= 2450, box
 
 
 def test_the_router_replay_is_the_committed_record():
@@ -171,15 +212,15 @@ def test_the_guard_fits_with_25_percent_headroom():
     """e4b#1845's rule on both sides: the runner refuses before the install below FIT x 125 %, and the registered guard
     holds the boot plus that fit with 25 % headroom."""
     k = {n: int(v) for n, v in re.findall(r"^(INSTALL_TO_GATE_S|NEED_BENCH|NEED_NCU|RESERVE)=(\d+)", RUN, re.M)}
-    assert k == {"INSTALL_TO_GATE_S": 600, "NEED_BENCH": 1200, "NEED_NCU": 300, "RESERVE": 600}, k
+    assert k == {"INSTALL_TO_GATE_S": 600, "NEED_BENCH": 2450, "NEED_NCU": 300, "RESERVE": 600}, k
     assert ("FIT=$((INSTALL_TO_GATE_S + NEED_BENCH + NEED_NCU + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100))"
             in RUN)
     assert re.search(r"^FIT_HEADROOM_PCT=125 ", RUN, re.M)
     assert "two consecutive headroom refusals count as one strike" in RUN
     fit = sum(k.values())
-    assert fit * 125 // 100 == 3375 and "`FIT_NEED` = 2700 x 1.25 =\n    3375 s" in PREREG
+    assert fit * 125 // 100 == 4937 and "`FIT_NEED` = 3950 x 1.25 =\n    4937 s" in PREREG
     assert (BOOT_S + fit) * HEADROOM <= GUARD_H * 3600
-    assert "3000 x 1.25 = 3750 s <= 3960 s (1.1 h)" in PREREG and "**guard 1.1 h**" in PREREG
+    assert "4250 x 1.25 = 5313 s <= 5400 s (1.5 h)" in PREREG and "**guard 1.5 h**" in PREREG
     line = next(x for x in RUN.splitlines() if x.startswith("can_run(){"))
     assert "fit=$((need + RESERVE))" in line and "needs ${fit}s" in line and "only ${left}s left" in line
 

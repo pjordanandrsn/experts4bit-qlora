@@ -239,7 +239,8 @@ def verdict(rec):
         sel_ratio = t_sel / (sel_ms["gu"][plan_key(w["gu"])] + sel_ms["dn"][plan_key(w["dn"])])
         out["winner_selection_ratio"] = sel_ratio
         out["winner_share_of_headroom"] = P152_BOTH_MS * (1 - 1 / winner["median"]) / P154_HEADROOM_MS
-    out["predictions"] = _grade(out)
+    # a shakedown is never graded: its timings are the A2000's, and no A2000 timing grades or seeds anything
+    out["predictions"] = {k: "UNREAD (a shakedown)" for k in _grade(out)} if shake else _grade(out)
     if shake:
         out["verdict"], out["why"] = "SHAKEDOWN", ["a shakedown record is never a reading"]
     elif winner is None:
@@ -386,11 +387,13 @@ def self_test():
     bad = _fake(tile_faults=[{"step": 64, "layer": 3, "fault": "a real tile after a padding slot"}])
     assert v(bad) == "VOID"                                                  # the compact table is not a prefix
     sk = _fake(shakedown=True, layers=4, device="NVIDIA RTX A2000 12GB", cc=[8, 6])
-    assert v(sk) == "SHAKEDOWN"                                              # never a reading, every check run
+    o = verdict(sk)
+    assert o["verdict"] == "SHAKEDOWN"                                       # never a reading, every check run
+    assert set(o["predictions"].values()) == {"UNREAD (a shakedown)"}        # and never graded
     bad = _fake()
     bad["select"]["dn"] = bad["select"]["dn"][:-1]
     assert v(bad) == "VOID"                                                  # a plan missing from the selection
-    print("p155_reduce self-test OK (29 cases)")
+    print("p155_reduce self-test OK (30 cases)")
 
 
 def main():

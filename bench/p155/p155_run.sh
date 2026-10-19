@@ -19,7 +19,7 @@ GNF4_SHA=ef2faf3816b30ecfd0e2a69cb27fb049a7d56a59 # grouped-nf4-gemm v0.48.0 (e4
 NF4_SMALLM_SHA256=96176de875af5273d3f13edd9c3dfd1371069dea98a7bf6d618f1dac05e2d412   # kernel/nf4_smallm.py, both pins
 INT4_B32_SHA256=773eff5db7be77dea3d1f9048a6e708a94e79634baf17f452bf2848e24a2072f     # kernel/int4_b32.py, both pins
 INSTALL_TO_GATE_S=600   # the install (450 s) and the self-tests with the premise (150 s): P152's and P154's walls, rounded up
-NEED_BENCH=1200         # the microbench: 288 compiled plan variants, 8 selection steps each, 64 confirmation reps
+NEED_BENCH=2450         # the microbench, x1.5 over the shakedown's measured walls (PREREG, "The shakedown")
 NEED_NCU=300            # REPORTED only: Nsight Compute on one gate_up and one down call (an install if absent, a probe)
 RESERVE=600             # can_run's margin after the bench: the reduce, the fetch-back and the teardown
 MIN_POWER_W=575   # P149's power floor (P152's and P154's, kept): a capped board refuses before the install, rc 17
@@ -145,7 +145,7 @@ else
 fi
 # ---- the microbench: identity and selection over the grid, then the paired, rotated confirmation
 can_run $NEED_BENCH bench || finish 40
-AL=$(step_alarm 2400); say "microbench (alarm=$AL)"; gpu_snap "bench start"
+AL=$(step_alarm 3600); say "microbench (alarm=$AL)"; gpu_snap "bench start"
 PYTHONPATH= perl -e "alarm $AL; exec @ARGV" python $W/p155_bench.py --rr $W/rr.json.pt --out $W/bench_p155.json > logs/bench.log 2>&1
 rc=$?; gpu_snap "bench end"
 { echo -n "bench rc=$rc "; grep -a "^P155_BENCH\|^P155_CARRIED\|^P155_POISONED\|^P155_ROUTING_FAULT" logs/bench.log | tail -3 | cut -c1-600; echo; } | tee -a summary.txt

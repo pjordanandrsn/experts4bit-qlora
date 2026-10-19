@@ -188,42 +188,60 @@ The basis of the headline:
 
 ## Before the box: the $0 A2000 shakedown
 
-Condition 5. `p155_bench.py --shakedown --layers 4 --select-steps 2 --confirm-reps 8` runs on the A2000 (sm_86) under an
-exclusive `gpu:a2000` claim, in a throwaway pytorch 2.8.0 container with grouped-nf4-gemm at the pin. `p155_reduce.py`
-then reads its record, which must come back **SHAKEDOWN** with no structural fault.
-- **What it shows:** the harness end to end; bitwise identity across the grid on sm_86 for every plan that compiles
-  there; the prefix the compaction arm relies on; the routing checks on the box's path.
-- **Before the box:** its record is committed as a sha-pinned test fixture.
-- **What it cannot show:** sm_86 cannot see sm_120's plan availability or speed. Which plans compile and every timing
-  are sm_120's. No A2000 timing seeds any band here.
+Condition 5, **done on 2026-10-19 (21:25-21:33Z), before any rental.** `p155_bench.py --shakedown --layers 4
+--select-steps 2 --confirm-reps 8` ran on the lab's A2000 (sm_86) under an exclusive `gpu:a2000` claim, in a throwaway
+pytorch 2.8.0 container: grouped-nf4-gemm at the pin, e4b at this branch. Its record is
+[`shakedown/shake_p155.json`](shakedown/shake_p155.json) (sha256 `7be42553...`, pinned in `tests/test_p155.py`).
+- **The harness, end to end:** the tripwire (K25's two hashes, the served plan, the lean glue), both self-tests, the
+  premise (4 passed), the bench (rc 0) and the reducer, which reads the record **SHAKEDOWN** with every structural check
+  passed. A shakedown is never graded.
+- **The contract on sm_86:** 126 of the 144 plans compiled and ran in each projection, and **every one kept today's bits**
+  on all 4 layers, and every carried plan kept them on all 8 held-out reps. The other 18 refused with `OutOfResources`
+  (the A2000's 99 KB of shared memory per block): BLOCK_N 128 with KC 256, and the 4-stage plans at 64 x 256 and
+  128 x 128.
+- **The prefix** the compaction arm relies on held on every table built.
+- **The compiled metadata** was read from Triton's cache: today's plan is 71 registers, no spills, 14,592 B shared on
+  sm_86, b1-decode's offline numbers for sm_86. The registers prediction (80 on sm_120) is graded on the box.
+- **Nsight Compute:** `ncu` is in the image, and this host refused the counters (`ERR_NVGPUCTRPERM`), so the probe-first
+  path that records "counters unavailable" ran for real.
+- **The walls, which re-based the guard:**
+  - compiling and first-calling the 252 variants that ran took **145.3 s** of host CPU, at most 3.9 s for one;
+  - each selection graph cost **0.415 s** of host time beyond its replays (most of it the capture's own synchronize, gc
+    and cache release), and each confirmation graph 0.215 s;
+  - the box's bench is then about 1,620 s: 166 s of compiling (all 144 plans, should sm_120 run them all), 2,336
+    selection graphs at 0.415 s plus 12 replays of P152's 11.748 ms GEMM pair counted twice, 384 confirmation graphs
+    likewise, and 20 s of setup. NEED_BENCH = 1,620 x 1.5 rounded up = **2450 s**, and the guard rises from 1.1 h to
+    1.5 h. The plan count is not trimmed.
+- **What it cannot show:** sm_86 cannot see sm_120's plan availability or speed. Which plans compile, and every timing,
+  are sm_120's. The record's replay times are the A2000's and seed nothing; the walls above are host time.
 
 ## Budget and sequencing
 
 - **One RTX 5090:**
   - hosts with a recorded power cap of at least 575 W (`vast_min_power_limit_w: 575`, `vast_power_limit_unknown:
     exclude`), read within the last 3 days (`vast_power_limit_max_age_days: 3`);
-  - declared at $1.05/h, **guard 1.1 h**, at most 10 GB at <= $0.011/GB. Worst case 1.1 x $1.05 + 10 x $0.011 =
-    **$1.27**, under the standing rule;
+  - declared at $1.05/h, **guard 1.5 h**, at most 10 GB at <= $0.011/GB. Worst case 1.5 x $1.05 + 10 x $0.011 =
+    **$1.69**, under the standing rule;
   - disk 60 GB (the box's floor is 20 GB free). Nothing is fetched from a hub.
 - **The fit, e4b#1845's rule, with at least 25 % headroom:**
   - **Install, self-tests and premise:** P152's and P154's boxes took about 96 s each. The allowance is 450 s for the
     install plus 150 s for the self-tests and the premise: `INSTALL_TO_GATE_S` = 600 s.
-  - **The bench:** K27's whole 5090 bench, about 52 compiled K25 variants with their timing, took 27.5 s. P155 compiles
-    288 variants, times 144 plans x 2 projections x 8 steps, then 64 reps x 6 graphs: about 8-12 min estimated.
-    `NEED_BENCH` = 1200 s. Its alarm can run to 2400 s if the deadline allows.
+  - **The bench:** `NEED_BENCH` = **2450 s**, the shakedown's measured walls x 1.5 (the maintainer's rule: a
+    measurement times the headroom, on the slower host; see [The shakedown](#before-the-box-the-0-a2000-shakedown)). Its
+    alarm can run to 3600 s if the deadline allows.
   - **Nsight Compute:** `NEED_NCU` = 300 s: one bounded install attempt (240 s) if `ncu` is absent, the probe, and the
     capture of two calls.
   - **The reserve:** `RESERVE` = 600 s, for the reduce, the fetch-back and the teardown.
-  - **The runner's check, before the install:** `FIT` = 600 + 1200 + 300 + 600 = 2700 s, and `FIT_NEED` = 2700 x 1.25 =
-    3375 s. Anything short of that is a refusal, rc 41.
-  - **The static fit:** boot 300 s + 2700 s = 3000 s, and 3000 x 1.25 = 3750 s <= 3960 s (1.1 h). `tests/test_p155.py`
+  - **The runner's check, before the install:** `FIT` = 600 + 2450 + 300 + 600 = 3950 s, and `FIT_NEED` = 3950 x 1.25 =
+    4937 s. Anything short of that is a refusal, rc 41.
+  - **The static fit:** boot 300 s + 3950 s = 4250 s, and 4250 x 1.25 = 5313 s <= 5400 s (1.5 h). `tests/test_p155.py`
     asserts it.
 - **Run ids** `p155-5090-1` to `-3`. Two consecutive HARNESS_ERROR, VOID or NOT_RUN runs stop the lane.
   - **Not a strike:** a pre-flight host stall; a power-floor refusal (rc 17); a fit refusal (rc 41), except that two
     consecutive fit refusals count as one strike.
   - **A strike:** a time-left skip of the bench (STOP-2, rc 40). A skipped Nsight capture is not one.
-- **Sequencing:** the rental waits for three things: this registration's merge, the maintainer's final pass, and the
-  shakedown's committed record. Then the shared pre-flight, and `--validate` on the exact manifest.
+- **Sequencing:** the shakedown is done and its record committed. The rental waits for this registration's merge and
+  the maintainer's final pass, then the shared pre-flight, and `--validate` on the exact manifest.
 
 ## Receipts
 

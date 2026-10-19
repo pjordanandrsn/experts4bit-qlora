@@ -11,6 +11,7 @@ contract says moves no output bit, against the 6.81 ms of headroom P154 priced.
   confirmation only.
 - **Reported, never ruling:** a compaction arm (the real-tile prefix) prices tile compaction's ceiling; each plan's
   compiled registers are recorded; Nsight Compute captures one call of each GEMM if the host allows counters.
-- **Box:** one RTX 5090, guard 1.1 h (the fit with 25 % headroom, checked before the install), worst $1.27.
+- **Box:** one RTX 5090, guard 1.5 h (the fit with 25 % headroom, checked before the install; the bench allowance is
+  the $0 A2000 shakedown's measured walls x 1.5), worst $1.69. The shakedown's record is a sha-pinned test fixture.
 
 A GO opens a served read as its own registration. Files: `bench/p155/` and `tests/test_p155.py`.
