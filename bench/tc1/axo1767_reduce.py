@@ -39,8 +39,8 @@ def band(d):
 def _arm_scores(path):
     r = json.load(open(path))
     curve = r.get("eval_curve") or []
-    if not curve:
-        raise ValueError(f"{path}: no eval_curve")
+    if not curve or curve[0].get("step") != 0:
+        raise ValueError(f"{path}: no eval_curve starting at step 0")
     return r, curve[0]["heldout_loss"], curve[-1]["heldout_loss"], curve[-1]["step"]
 
 
@@ -62,7 +62,11 @@ def _eval_zero(ev, tag):
 def reduce(arm, evalj, on=None, off=None, control=None):
     out = {"reducer": "bench/tc1/axo1767_reduce.py", "match_band": MATCH_BAND, "differ_band": DIFFER_BAND, "inputs": {
         "arm": arm, "eval": evalj, "on": on, "off": off, "control": control}, "checks": {}, "scores": {}, "pairs": {}}
-    r, s0, s1, step = _arm_scores(arm)
+    try:
+        r, s0, s1, step = _arm_scores(arm)
+    except ValueError as e:
+        out.update(verdict="VOID", why=str(e))
+        return out
     tag = r.get("tag")
     ev = json.load(open(evalj))
     ea = _eval_arm(ev, tag)

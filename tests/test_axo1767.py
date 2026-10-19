@@ -166,8 +166,12 @@ PY_E4B=$W/fakepy
 say(){ echo "SAY: $*" >> "$W/say.log"; }
 can_run(){ return 0; }
 tc1_prepare(){ TOK=$W/tokens.json; TS=deadbeef; return 0; }
+# the real arm_once: tc1_arm saves to <--adapter-dir>/<fam>_<tag> (arm_once passes --adapter-dir $W/adapters BEFORE the arm's own args, and
+# argparse keeps the last), and arm_once ENDS with rm -rf $W/adapters/* -- the fake must do both, or a wiped adapter reads as saved
 arm(){ echo "$1 $2 $3 ${*:12}" >> "$W/arms.log"; touch "$W/${1}_${2}_${3}.json"
-  if [ "$2/$3" = axolotl/hp1shake_axolotl ] && [ -z "${NO_ADAPTER:-}" ]; then mkdir -p "$W/adapters/${1}_$3"; echo x > "$W/adapters/${1}_$3/adapter_model.safetensors"; fi; }
+  local ad=$W/adapters a prev=""; for a in "${@:12}"; do [ "$prev" = --adapter-dir ] && ad=$a; prev=$a; done
+  if [ "$2/$3" = axolotl/hp1shake_axolotl ] && [ -z "${NO_ADAPTER:-}" ]; then mkdir -p "$ad/${1}_$3"; echo x > "$ad/${1}_$3/adapter_model.safetensors"; fi
+  rm -rf "$W"/adapters/* 2>/dev/null; }
 status_of(){ [ "${FAIL:-}" = "$2/$3" ] && echo install_failed || echo ok; }
 mkdir -p logs hp1 data; : > summary.txt; : > arms.log
 echo '{"fam": "qwen3hp1", "sha256": "deadbeef", "train": [], "eval": []}' > tokens.json
@@ -194,7 +198,8 @@ def test_the_token_trains_two_arms_rescores_on_and_off_then_reads(tmp_path):
     assert all(a[0] == "qwen3hp1shake" for a in arms)
     ax, on, off = arms[1], arms[2], arms[3]
     assert "--hp1-export" in ax and ax[ax.index("--axolotl-best") + 1] == "1" and "--rescore-adapter" not in ax
-    ad = str(tmp_path / "adapters" / "qwen3hp1shake_hp1shake_axolotl")
+    ad = str(tmp_path / "axo1767" / "adapters" / "qwen3hp1shake_hp1shake_axolotl")
+    assert ax[ax.index("--adapter-dir") + 1] == str(tmp_path / "axo1767" / "adapters")
     for r, k, best in ((on, "on", "1"), (off, "off", "0")):
         assert r[r.index("--rescore-adapter") + 1] == ad and r[r.index("--axolotl-kernels") + 1] == k and r[r.index("--axolotl-best") + 1] == best
         assert "--hp1-export" not in r
@@ -219,3 +224,9 @@ def test_the_token_is_dispatched_staged_and_needs_no_unsloth_venv():
     line = next(ln for ln in drive_sh.splitlines() if '*" qwen3axo1767 "*)' in ln)
     for f in ("hp1_lib.py", "hp1_eval.py", "hp1_trunc.py", "axo1767_reduce.py"):
         assert f in line, f
+
+
+def test_a_curve_without_step_0_voids(tmp_path):
+    ax = dict(REAL_AX, eval_curve=[{"step": 1, "heldout_loss": 10.99}, {"step": 3, "heldout_loss": 10.94001}])
+    out = R.reduce(*_real(tmp_path, ax=ax)[:2])
+    assert out["verdict"] == "VOID" and "step 0" in out["why"], out

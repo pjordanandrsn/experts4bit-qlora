@@ -2241,12 +2241,14 @@ tc1_axo1767_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 TOK TS
   $PY_E4B -c "import json,sys; t=json.load(open(sys.argv[1])); t['fam']=sys.argv[3]; json.dump(t,open(sys.argv[2],'w'))" $TOK $STOK $SF || { echo "AXO1767 VERDICT VOID: cannot relabel $TOK" | tee -a summary.txt; return 0; }
   TC1_ARM_EXTRA_ENV="$E" arm $SF e4b hp1shake_e4b fused 1800 "$TM" $TR 0 hp1shake $STOK $TS --attn-4bit 1 $(hp1_cell k10 3407) --seed 3407 --order-seed 3407 $X
   local AXARGS="--axolotl-dataset $W/data/ds_alpaca.json --lora-init native --adapter-dtype native --seed 3407 --order-seed 3407"
-  TC1_ARM_EXTRA_ENV="$E" arm $SF axolotl hp1shake_axolotl axolotl 1800 "$TM" $TR 0 hp1shake $STOK $TS $AXARGS --axolotl-best 1 $X
-  local AD=$W/adapters/${SF}_hp1shake_axolotl
+  # arm_once ends with rm -rf $W/adapters/*, so the axolotl adapter is saved OUTSIDE that wipe: its --adapter-dir comes after
+  # arm_once's own (argparse keeps the last), and the rescore arms' wipes cannot reach it either
+  TC1_ARM_EXTRA_ENV="$E" arm $SF axolotl hp1shake_axolotl axolotl 1800 "$TM" $TR 0 hp1shake $STOK $TS $AXARGS --axolotl-best 1 $X --adapter-dir $W/axo1767/adapters
+  local AD=$W/axo1767/adapters/${SF}_hp1shake_axolotl
   if [ "$(status_of $SF axolotl hp1shake_axolotl)" != ok ] || [ ! -s $AD/adapter_model.safetensors ]; then
     echo "AXO1767 VERDICT VOID: the axolotl arm status $(status_of $SF axolotl hp1shake_axolotl), adapter $AD $( [ -s $AD/adapter_model.safetensors ] && echo saved || echo missing)" | tee -a summary.txt; rm -rf $SC; return 0
   fi
-  mkdir -p $W/axo1767/peft_adapter_axolotl && cp -a $AD/. $W/axo1767/peft_adapter_axolotl/     # 'adapters' stays on the box; this copy comes back
+  mkdir -p $W/axo1767/peft_adapter_axolotl && cp -a $AD/. $W/axo1767/peft_adapter_axolotl/     # 'adapters' is excluded from the fetch; this copy comes back
   TC1_ARM_EXTRA_ENV="$E" arm $SF axolotl axo1767_rescore_on axolotl 1800 "$TM" $TR 0 hp1shake $STOK $TS $AXARGS --axolotl-best 1 --axolotl-kernels on --rescore-adapter $AD
   TC1_ARM_EXTRA_ENV="$E" arm $SF axolotl axo1767_rescore_off axolotl 1800 "$TM" $TR 0 hp1shake $STOK $TS $AXARGS --axolotl-best 0 --axolotl-kernels off --rescore-adapter $AD
   local fw RR=() BB=(); for fw in e4b axolotl; do RR+=("$W/${SF}_${fw}_hp1shake_${fw}.json"); BB+=($W/hp1/shake/base_${fw}_${SF}); done
