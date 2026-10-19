@@ -71,6 +71,16 @@ across rows.
   outcome would be "no lower-noise reference within reach" and a stop.
 - **N3.** E − F and I − F are uncorrelated across rows, as HP2 saw across frameworks.
 
+**The calls, fixed numerically before data.** At each depth, with e(r) = E(r) − F(r) and i(r) = I(r) − F(r):
+- **side share** = var_r(e) / (var_r(e) + var_r(i)). It reads **E-dominant** at ≥ 2/3, **I-dominant** at ≤ 1/3, and **comparable**
+  in between (a variance ratio of 2 either way);
+- **N1** holds if sd_r(g) rises with depth at every step between fitted depths and sd_r(g) at L2 is < 0.03;
+- **N3** holds if |corr_r(e, i)| ≤ 0.2 at every fitted depth;
+- **N0** holds for a reader if its two runs agree per row to 1e-5 (the per-row losses are recorded to 5 decimals);
+- **the outcome:** E-dominant at the two deepest fitted depths leads to stage 2. I-dominant or comparable at both leads to a stop:
+  "no lower-noise reference within reach". A call that differs between the two deepest depths leads to a stop: "depth-dependent,
+  unknown at 48 layers".
+
 N2 is the one that decides. It can fail either way, and each way has an action: evaluator-dominant leads to stage 2,
 in-loop-dominant leads to a stop with the reason recorded.
 
