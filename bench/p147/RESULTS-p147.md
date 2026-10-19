@@ -25,8 +25,8 @@ free and no compute process. **Cost $0.**
 
 | check | text / set | value | bar | |
 |---|---|---:|---:|---|
-| (a) A against P141's served FP8-KV paged reference R, mean NLL | wikitext | −0.000196 nats | ≤ 0.02 | pass |
-| | c4val1 | −0.002248 nats | ≤ 0.02 | pass |
+| (a) A against P141's served FP8-KV paged reference R, mean NLL | wikitext | d = −0.000196 nats | \|d\| ≤ 0.02 | pass |
+| | c4val1 | d = −0.002248 nats | \|d\| ≤ 0.02 | pass |
 | (b) A′ against A | every set | Δppl 0, **bit-identical** | ≤ 0.001 ppl | pass |
 
 ## The rule, per candidate, at both gates
@@ -50,8 +50,8 @@ ppl_A is 4.3005 on W1 and 4.3910 on W16. K8 Δppl on the check set (reported): I
 
 | prediction | outcome |
 |---|---|
-| I8ATTN: borderline, GO and PARK about equally likely | **GO**, with its upper bound at 0.20× the bound at W1. Qwen3-30B-A3B parked at 1.26× its bound under the same rule (the W8A16 split premise). |
-| NF4ATTN: PARK | HELD |
+| I8ATTN: **BORDERLINE**: argmax agreement between 0.95 and 0.98 at both gates, and the upper bound within ±30 % of the bound at W1 | **MISSED** (clearer than predicted): GO, with the upper bound at 0.20× the bound at W1 (predicted within ±30 %), and argmax agreement 0.9813 at W1, above the predicted 0.98 ceiling (W16's 0.9779 is inside). Qwen3-30B-A3B parked at 1.26× its bound under the same rule (the W8A16 split premise). |
+| NF4ATTN: **PARK**, with argmax agreement < 0.95 or the upper bound above the bound at both gates | HELD (both terms, both gates) |
 | I8HEAD (reported): argmax ≥ 0.98 and d ≤ a quarter of the bound | HELD (0.9898 and 0.000786 at W1) |
 | A against P141's R within 0.01 nats on wikitext | HELD (−0.0002) |
 
