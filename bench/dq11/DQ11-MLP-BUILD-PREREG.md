@@ -90,6 +90,14 @@ A training engine in e4b, `enable_dense_mlp_lora_fuse(model)`:
     - two input gradients: the shared MLP input's, after the base and LoRA paths of gate and up have all accumulated,
       and `down_proj`'s input's (the SwiGLU product);
     - each adapter's A and B gradients.
+  - **Coverage (each checked tensor has a redraw that moves it):**
+    - forward outputs: R1 (through the rank product) and R2 (the cast);
+    - the shared MLP input's gradient: R4 and R5;
+    - `down_proj`'s input's gradient: R4;
+    - A gradients: R3; B gradients: R3, and R1 through the rank product they read.
+
+    A tensor that a run shows no draw moved is registered as bitwise, never as a floor of 0 that fails by
+    construction.
   - **The floor, per tensor, is the WORST draw:** the largest max-|draw − unfused| and the largest relative RMS over the
     31 draws.
   - **The bar:** the fused path passes iff, for every tensor, both its max-|fused − unfused| and its relative RMS are
