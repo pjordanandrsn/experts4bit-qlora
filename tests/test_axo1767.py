@@ -375,3 +375,23 @@ def test_the_variant_token_is_dispatched_staged_floored_and_needs_no_unsloth_ven
     assert 'case " $FAMILIES " in *" qwen3axo1767 "*|*" qwen3axo1767b "*) PYPI_MIN=${PYPI_MIN:-10};; esac' in run
     line = next(ln for ln in DRIVE_SH.read_text().splitlines() if '*" qwen3axo1767b "*)' in ln)
     assert "axo1767_reduce.py" in line and "pypi_probe.py" in line
+
+
+def test_a_split_rescore_that_wrote_no_record_voids_the_split_only(tmp_path):
+    """A (5)/(6) rescore killed hard (segfault, OOM) writes no JSON; the driver still passes its path."""
+    out = _split(tmp_path, experts=str(tmp_path / "never-written.json"))
+    assert out["verdict"] == "KERNELS" and out["split_verdict"] == "SPLIT_VOID" and "no record" in out["split_why"], out
+
+
+def test_a_main_rescore_that_wrote_no_record_is_a_clean_void(tmp_path):
+    out = _split(tmp_path, off=str(tmp_path / "never-written.json"))
+    assert out["verdict"] == "VOID" and "3_off: no record" in out["why"], out
+
+
+def test_main_prints_a_verdict_even_when_a_split_record_is_missing(tmp_path):
+    ax, ev, ctl = _w(tmp_path, "ax.json", REAL_AX2), _w(tmp_path, "ev.json", REAL_EVAL2), _w(tmp_path, "e4b.json", REAL_E4B)
+    o = tmp_path / "fourscore.json"
+    p = subprocess.run([sys.executable, str(REDUCE), "--arm", ax, "--eval", ev, "--control", ctl, "--on", _rescore(tmp_path, "on.json", REAL_ON),
+                        "--off", _rescore(tmp_path, "off.json", REAL_OFF), "--experts", str(tmp_path / "missing.json"),
+                        "--lora", _rescore(tmp_path, "lo.json", 10.9795), "--out", str(o)], capture_output=True, text=True, timeout=60)
+    assert p.returncode == 0 and "AXO1767 VERDICT KERNELS" in p.stdout and "AXO1767 SPLIT VERDICT SPLIT_VOID" in p.stdout, p.stdout + p.stderr

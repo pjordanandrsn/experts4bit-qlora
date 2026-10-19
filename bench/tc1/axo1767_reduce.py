@@ -136,12 +136,14 @@ def reduce(arm, evalj, on=None, off=None, control=None, experts=None, lora=None)
                                                "band": None if cd is None else band(cd)}
         if cd is None or band(cd) != "MATCH":
             bad.append(f"the control arm {cr.get('tag')}'s round trip is {cd} (needs MATCH)")
-    recs = {}
+    recs, split_bad = {}, []
     for name, path in (("3_off", off), ("4_on", on), ("5_experts", experts), ("6_lora", lora)):
         if path:
-            recs[name] = json.load(open(path))
+            try:                                            # a rescore that died hard (segfault, OOM kill) wrote no record
+                recs[name] = json.load(open(path))
+            except (OSError, ValueError) as e:
+                (bad if name in ("3_off", "4_on") else split_bad).append(f"{name}: no record: the rescore wrote none ({type(e).__name__})")
     on_set = lora_set(recs["4_on"]) if "4_on" in recs else None
-    split_bad = []
     for name, q in recs.items():
         sink = bad if name in ("3_off", "4_on") else split_bad      # Amendment 1: (5)/(6) failures void the split only
         if q.get("status") != "ok" or q.get("adapter_loss") is None:
