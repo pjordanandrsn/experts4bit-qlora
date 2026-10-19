@@ -43,10 +43,23 @@ unfused, with the knob off. Every per-module read (unfused, the 31 redraws, fuse
 - each projection's forward output: ‖s·(x·Aᵀ)·Bᵀ‖ / ‖output‖;
 - the shared MLP input's gradient: ‖Σ over gate and up of (s·g·B)·A‖ / ‖dx‖;
 - `down_proj`'s input's gradient: ‖(s·g·B_down)·A_down‖ / ‖dh‖;
+- in both, `g` is each projection's **own** output gradient: `gate_proj`'s and `up_proj`'s for dx, `down_proj`'s for
+  dh. It is not `gy`;
 - each A and B gradient: these are wholly adapter terms, so the share is 1 by construction. Such a tensor is
   `VOID_LORA_SHARE` instead if it is all zero or non-finite.
 
 The floor, the bar and `PHASE1_PASS` are read at this state only.
+
+**What a PASS excludes (required).** At a 1 % share, a bug in one of the r = 16 rank components moves a tensor by about
+1 % / 16 ≈ 0.06 %, which may be under a bf16 floor. So, for every checked tensor, the read records:
+- its adapter-term norm (the numerator of its share);
+- its floor's relative RMS times ‖tensor‖, divided by that norm. That is the smallest error, as a fraction of the adapter
+  term, that the bar can see in that tensor. Call it `e_min`.
+
+The read states `e_min` for every tensor, together with the largest one. A rank-1 error is about 1/r = 1/16 of the
+adapter term. Wherever `e_min` > 1/16, a rank-1 error could hide under that tensor's floor. The outcome line then names
+every such tensor: `PHASE1_PASS, RANK1_UNRESOLVED: <tensors>`. It is never a silent `PHASE1_PASS`. A wholly-adapter
+tensor (each A and B gradient) has a share of 1, so its `e_min` is its floor's relative RMS.
 
 ## The two-AdamW-step state (reported, never ruled)
 
