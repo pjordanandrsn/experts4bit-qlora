@@ -1,0 +1,11 @@
+# bench/p148/staged-p148.sha256 -- every piece the P148 box runs, by the name the box sees
+# (bench/p148/PREREG-p148.md). The premise tests at P136's pins (bench/p136/staged-p136.sha256).
+c2a4bbcb4304d8e3225c22d9670bf1977e431e94c0bf5a7d620696dff972e9b5  p148_run.sh
+2523c97f493784474b08c85a51d76df260d5394081f956163f73d337ffe1343a  p148_bench.py
+9a7133fd879b7e71d4e282ae7ca8a594f66fd30ee1bfcbfa7460525a1a06ac91  p148_kernels.py
+c7e3668589192e6ed2b8c7e381c54016deffb7f9828c7c6198f1123f810c1096  p148_reduce.py
+a2faea9e3c630eb6ee76b566aa1f36ab16676214b366ccbe55617a7986d305d0  test_p148_kernels_interp.py
+f53952c1a26b06e8a8f61dcfdbd511acad0b0507cae58cb1bbfca7f3c8f4313a  test_decode_graph_buckets.py
+0af027ec93837f2b0cd150a77c7692386ac33eb59d553727c40fe784c6c273de  test_kv_step_select.py
+8e5b2f775cf5c0ddde349822624a7d44b40f3898738cc64ceb31f5f3f4ea5aae  test_fused_glue_decode_graphs_gpu.py
+63481683aa12674ba274169d8fcaed2894bd87e552f780452568bdd60cb70176  test_gemv_bw_served_gpu.py
