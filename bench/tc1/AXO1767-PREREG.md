@@ -90,3 +90,41 @@ is −0.0012 (MATCH), and the evaluator's zero adapter is −0.0044 (MATCH).
 - Which line of a kernel is responsible: a KERNELS reading names the path (scattermoe or the LoRA kernels together), not the op.
 - Anything at full depth or at HP1's 200 steps; the fixture is the shakedown's.
 - Anything about e4b or Unsloth beyond the e4b control's round trip.
+
+## Amendment 1 (registered 2026-10-19, after the KERNELS reading and before any split data): which kernel path
+
+**Why.** `axo1767-5090-2` read KERNELS (re-derived): the saved adapter gives the in-loop number only under axolotl's kernels, and
+PEFT's reference forward agrees with the evaluator. Its kernels-on configuration switches two paths together:
+- the kernels plugin's scattermoe experts, which apply the expert LoRA in the scattermoe kernel;
+- the LoRA kernels that `check_auto_enable_lora_kernels` turns on for the attention projections.
+This amendment separates them.
+
+**The change.** A token variant, `qwen3axo1767b`, runs everything above unchanged, then two more fresh-process rescores of the same
+saved adapter:
+
+| # | name | how |
+|---|---|---|
+| 5 | experts only | `--axolotl-kernels experts --axolotl-best 1`: the kernels plugin's scattermoe experts, with `lora_{mlp,qkv,o,embedding}_kernel` false |
+| 6 | LoRA kernels only | `--axolotl-kernels lora --axolotl-best 0`: eager experts (no plugin), with `lora_{mlp,qkv,o,embedding}_kernel` true |
+
+Each is checked like (3) and (4): a bit-for-bit adapter round trip, an ok record, and its zero adapter MATCHing the in-loop step 0.
+Any failure there makes the reading VOID.
+
+**Split reading** (`axo1767_reduce.py`, the same bands). It applies only when the main reading above is KERNELS; otherwise it is
+NOT_APPLICABLE. With E = (5) − (3) and L = (6) − (3):
+
+| E | L | split verdict | reading |
+|---|---|---|---|
+| DIFFER | MATCH | SCATTERMOE | scattermoe's expert path alone moves the loss off PEFT's reference |
+| MATCH | DIFFER | LORA_KERNELS | the LoRA kernels alone move the loss off PEFT's reference |
+| DIFFER | DIFFER | BOTH | each path alone moves it |
+| MATCH | MATCH | INTERACTION | neither alone does, though both together do (C differs) |
+
+INCONCLUSIVE on E or L reads INCONCLUSIVE. E + L − ((4) − (3)), the additivity residual, is reported and gates nothing.
+
+**Box and budget.** One RTX 5090 under the standing rule. Ids `axo1767b-5090-1` to `-3`. Guard 1.5 h, worst ≤ $2.50. The same disk
+floor (min_disk_gb 200) and the same PyPI floor (10 MB/s) apply. Machine 143500 is excluded, after its 0.88 MB/s PyPI path. The
+adapter is retrained on the box: the launcher stages no model weights, so `axo1767-5090-2`'s adapter cannot be carried over. The split
+therefore reads within its own box, and the main reading on that box must reproduce KERNELS for the split to apply.
+
+**Unchanged:** scores (1)–(4), the bands, the instrument checks, the main 2×2 table, and the fixture.

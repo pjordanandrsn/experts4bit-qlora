@@ -31,6 +31,16 @@ VERDICTS = {
 }
 
 
+#: AXO1767 Amendment 1 (the split, token qwen3axo1767b): with the main reading KERNELS, the same adapter rescored with ONE kernel path at
+#: a time. E = (5) experts-only - (3) off, L = (6) LoRA-kernels-only - (3) off; the same bands.
+SPLIT_VERDICTS = {
+    ("DIFFER", "MATCH"): ("SCATTERMOE", "scattermoe's expert path alone moves the loss off PEFT's reference; the LoRA kernels alone do not"),
+    ("MATCH", "DIFFER"): ("LORA_KERNELS", "the LoRA kernels alone move the loss off PEFT's reference; scattermoe's expert path alone does not"),
+    ("DIFFER", "DIFFER"): ("BOTH", "each kernel path alone moves the loss off PEFT's reference"),
+    ("MATCH", "MATCH"): ("INTERACTION", "neither path alone moves the loss, yet both together do (C differs)"),
+}
+
+
 def band(d):
     a = abs(d)
     return "MATCH" if a <= MATCH_BAND else "DIFFER" if a >= DIFFER_BAND else "INCONCLUSIVE"
@@ -59,9 +69,10 @@ def _eval_zero(ev, tag):
     return None
 
 
-def reduce(arm, evalj, on=None, off=None, control=None):
+def reduce(arm, evalj, on=None, off=None, control=None, experts=None, lora=None):
     out = {"reducer": "bench/tc1/axo1767_reduce.py", "match_band": MATCH_BAND, "differ_band": DIFFER_BAND, "inputs": {
-        "arm": arm, "eval": evalj, "on": on, "off": off, "control": control}, "checks": {}, "scores": {}, "pairs": {}}
+        "arm": arm, "eval": evalj, "on": on, "off": off, "control": control, "experts": experts, "lora": lora}, "checks": {}, "scores": {},
+        "pairs": {}}
     try:
         r, s0, s1, step = _arm_scores(arm)
     except ValueError as e:
@@ -91,7 +102,7 @@ def reduce(arm, evalj, on=None, off=None, control=None):
                                                "band": None if cd is None else band(cd)}
         if cd is None or band(cd) != "MATCH":
             bad.append(f"the control arm {cr.get('tag')}'s round trip is {cd} (needs MATCH)")
-    for name, path in (("3_off", off), ("4_on", on)):
+    for name, path in (("3_off", off), ("4_on", on), ("5_experts", experts), ("6_lora", lora)):
         if path:
             q = json.load(open(path))
             if q.get("status") != "ok" or q.get("adapter_loss") is None:
@@ -121,7 +132,29 @@ def reduce(arm, evalj, on=None, off=None, control=None):
         return out
     key = (ba, bb, bc if ba == bb == "MATCH" else None)
     out["verdict"], out["why"] = VERDICTS[key]
+    if experts or lora:
+        split(out)
     return out
+
+
+def split(out):
+    """AXO1767 Amendment 1: which kernel path carries C. Applies only when the main reading is KERNELS and both single-path scores exist."""
+    sc = out["scores"]
+    if out["verdict"] != "KERNELS":
+        out["split_verdict"], out["split_why"] = "NOT_APPLICABLE", f"the main reading is {out['verdict']}, not KERNELS"
+        return
+    if "5_experts" not in sc or "6_lora" not in sc:
+        out["split_verdict"], out["split_why"] = "INCOMPLETE", "a single-path score is missing"
+        return
+    E, L = sc["5_experts"] - sc["3_off"], sc["6_lora"] - sc["3_off"]
+    both = sc["4_on"] - sc["3_off"]
+    out["pairs"].update({"E_5_minus_3": {"delta": round(E, 6), "band": band(E)}, "L_6_minus_3": {"delta": round(L, 6), "band": band(L)},
+                         "additivity_E_plus_L_minus_on_off": round(E + L - both, 6)})
+    be, bl = band(E), band(L)
+    if "INCONCLUSIVE" in (be, bl):
+        out["split_verdict"], out["split_why"] = "INCONCLUSIVE", f"E {be}, L {bl}: a single-path pair sits between the bands"
+        return
+    out["split_verdict"], out["split_why"] = SPLIT_VERDICTS[(be, bl)]
 
 
 def main(argv=None):
@@ -131,12 +164,16 @@ def main(argv=None):
     ap.add_argument("--on", default=None, help="tc1_arm --rescore-adapter with --axolotl-kernels on")
     ap.add_argument("--off", default=None, help="tc1_arm --rescore-adapter with --axolotl-kernels off")
     ap.add_argument("--control", default=None, help="the e4b shake arm's receipt (its round trip must MATCH)")
+    ap.add_argument("--experts", default=None, help="Amendment 1: the rescore with scattermoe only (--axolotl-kernels experts)")
+    ap.add_argument("--lora", default=None, help="Amendment 1: the rescore with the LoRA kernels only (--axolotl-kernels lora)")
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
-    out = reduce(a.arm, a.eval, a.on, a.off, a.control)
+    out = reduce(a.arm, a.eval, a.on, a.off, a.control, a.experts, a.lora)
     json.dump(out, open(a.out, "w"), indent=1)
     print(f"AXO1767 VERDICT {out['verdict']}: {out['why']}")
     print("AXO1767 SCORES " + json.dumps(out["scores"]) + " PAIRS " + json.dumps(out["pairs"]))
+    if "split_verdict" in out:
+        print(f"AXO1767 SPLIT VERDICT {out['split_verdict']}: {out['split_why']}")
     return 0
 
 
