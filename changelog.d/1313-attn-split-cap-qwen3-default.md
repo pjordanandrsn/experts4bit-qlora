@@ -8,6 +8,7 @@
   - **Earlier read:** Amendment 2's NO_FLIP (#1778, g1 1.0297 under a noisy self-pair) is on the record.
   - **Scope:** only buckets 1, 2 and 4 move. Every other family keeps the library's plan, and Mixtral waits for a
     read of its own.
-  - **Measured basis:** Qwen3-30B-A3B on an RTX 5090. Other `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B) take the
-    default by family without a read of their own.
+  - **Measured basis:** Qwen3-30B-A3B on an RTX 5090 (170 SMs). Other `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B)
+    and other cards take the default by family without a read of their own. The plan is SM-scaled, so the cap moves
+    B 1-6 on a PRO 6000 and B 1-4 on a 4090.
   - **Way back:** `E4B_ATTN_SPLIT_CAP=0`. The claim is `e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19`.

@@ -184,7 +184,8 @@ PREFILL_GLUE_DEFAULT_FAMILIES = {
 # after Amendment 2's NO_FLIP (#1778, p143a2-5090-1: g1 1.0297 under a noisy self-pair). The cap moves buckets 1, 2
 # and 4 only (32 / 32 / 23 -> 16 splits at 4096-token slots) and is bitwise-identical to the plan at contexts <= 1024.
 # Mixtral (B 1-2 move under the cap) stays on the plan until a read of its own. The measured basis is Qwen3-30B-A3B on
-# an RTX 5090; other qwen3_moe checkpoints (e.g. Qwen3-235B-A22B, also 4 KV heads, so the same plan table) take the
+# an RTX 5090 (170 SMs); other qwen3_moe checkpoints (e.g. Qwen3-235B-A22B, also 4 KV heads, so the same plan table)
+# and other cards (the plan is SM-scaled: the cap moves B 1-6 on a 188-SM PRO 6000, B 1-4 on a 128-SM 4090) take the
 # default by family without a read of their own.
 ATTN_SPLIT_CAP_ENV = "E4B_ATTN_SPLIT_CAP"
 ATTN_SPLIT_CAP_DEFAULT_FAMILIES: dict = {
