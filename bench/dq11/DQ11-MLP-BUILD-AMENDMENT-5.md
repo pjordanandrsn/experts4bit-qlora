@@ -58,33 +58,73 @@ On that read:
   Two paths are the same iff their result tensors are equal bit for bit (sha256 of the bytes). k_T = |U_T|.
 - **De-duplicate before calibrating.** The leave-one-out calibration runs over U_T, never over U with twins.
 - **The bound reported per tensor:** k_T and 1/(k_T + 1).
-- **4a's floor applies to k_T, not |U|.** A tensor with k_T < 9 reads `UNJUDGED_AT_K: k = n`. (b) cannot fail it,
-  so it never reads FAIL there. Section 7 says what that does to the read.
-- **Two names, two causes.** A failed leave-one-out calibration reads `CALIBRATION_INDETERMINATE`, and it is never
-  called by the other name.
+- **4a's floor applies to k_T, not |U|.** A tensor with k_T < 9 reads `UNJUDGED_AT_K: k = n`. Its calibration is
+  not run, and it never reads FAIL. Section 7 says what that does to the read.
+- **Two names, two causes.** The calibration runs only on tensors with k_T ≥ 9. A failed calibration there reads
+  `CALIBRATION_INDETERMINATE`. So one tensor never carries both names, and below 9 `UNJUDGED_AT_K` is the only one.
+- **"Judged"** means k_T ≥ 9 with a calibration that passed.
 - **Stated up front.** The bar is never gated on an instrument that cannot fail.
   - The $0 shakedown (section 6) counts k_T for every tensor with the families in section 3.
   - If any tensor has k_T < 9 there, families are added until none does.
   - The final list is fixed in this file before the paid read.
-- **Engagement**, as in Phase 1: 96 adapters, nothing refused, fallback 0, and 0 PEFT MLP LoRA forwards in F1.
+- **Landing is judged per tensor.** Amendment 4 judged "lands on the candidate" on the projection outputs only. So a
+  family that moves only gradients (R3, R4, R9) could never land, even if it reproduced the fused path's gradient
+  arithmetic.
+  - Here, a draw lands on T if, on T, it is closer to the fused path than to today's on both metrics.
+  - U_T leaves out every combination that contains a family landing on T at any checked layer.
+  - The `to_fused` and `to_today` distances are recorded for every draw and tensor (section 4).
+- **Engagement**, as in Phase 1: 96 adapters, nothing refused, fallback 0, and 0 PEFT MLP LoRA forwards in F1. It is
+  checked in the (b) part and in every F1 arm. Section 7 places it first.
 
 ### 3. Redraw families that move every tensor (the shakedown fixes the list)
 
 Phase 1's R1–R5 are binary, and only R1 moves the forward outputs. That is why k = 2 there.
 
-Each new family changes only an accumulation order inside the unfused path. None may contain the candidate's own
-arithmetic: Amendment 4's lesson from R2, the FP32 add then one cast, stands. The proposal gives the K-splits levels:
-- **R1(c):** the forward A GEMM split along K into c ∈ {1, 2, 4, 8} chunks, summed left to right. c = 2 is Phase 1's R1.
-- **R6(c), new:** the forward B GEMM split along the rank into c ∈ {1, 2, 4} chunks.
-- **R9(c), new:** the first LoRA input-gradient GEMM (gy·B) split along its K (the out-features) into c ∈ {1, 2, 4}.
-  Together with R4(c), this moves dh, where k = 2 today.
-- **R3(c), R4(c):** Phase 1's token split and rank split, with c ∈ {1, 2, 4}.
-- **R5:** unchanged.
+Each new family changes only an accumulation order inside the unfused path.
+
+**The unfused path's dtypes,** which no family changes (PEFT 0.21.2's `Linear4bit` LoRA path, as Phase 1's reference
+repeats it):
+- The base output is bf16, from bitsandbytes.
+- The LoRA input is cast to FP32. The A GEMM, the B GEMM and the scale run in FP32 (the rank compute stays FP32, as the
+  PREREG says).
+- The delta is cast to bf16 once and added to the base output in bf16.
+- In the backward, the LoRA GEMMs and the A/B weight gradients run in FP32. Each projection's LoRA input gradient is
+  cast to bf16 once at its leaf.
+- dx's four bf16 terms (two base, two LoRA) are summed in bf16.
+
+**The families:** each splits ONE of those ops into chunks, computed in that op's own dtype and combined in that same
+dtype, left to right, before the cast the path already has:
+- **R1(c):** the forward A GEMM, split along K into c ∈ {1, 2, 4, 8} chunks. The partials and their sum are FP32. c = 2
+  is Phase 1's R1.
+- **R6(c), new:** the forward B GEMM, split along the rank into c ∈ {1, 2, 4} chunks. FP32 partials and sum.
+- **R9(c), new:** the first LoRA input-gradient GEMM (gy·B), split along its K (the out-features) into
+  c ∈ {1, 2, 4, 8} chunks. FP32 partials and sum, before that projection's own cast at its leaf.
+- **R3(c):** the A/B weight-gradient GEMMs, split along the tokens. c ∈ {1, 2, 4}; FP32 partials and sum.
+- **R4(c):** the LoRA input-gradient GEMM (·A), split along the rank. c ∈ {1, 2, 4}; FP32 partials and sum, before the
+  leaf's cast.
+- **R5:** dx's four bf16 terms in the other order, in bf16. Unchanged.
 - **R2:** stays excluded.
-- **The draws:** the post-(a) draws are the level combinations, taken on a fixed seeded subset if the product is too
-  large. The count and the seed are fixed after the shakedown.
-- **What the outputs get:** up to c_A × c_B = 12 distinct orderings, and dh up to 9. If the shakedown shows two levels
-  collapsing to the same bits, that level is dropped rather than counted twice.
+
+**The exclusion, stated against the fused kernel.** No family:
+- adds the base and the delta in FP32 before one cast (R2, the fused epilogue);
+- sums gate's and up's LoRA input-gradient terms in FP32 before one cast (the fused path's dx arithmetic, Amendment 4);
+- moves, adds or removes any cast of the unfused path.
+
+Within one FP32 op, re-associating FP32 partials changes no rounding point of the path. Every cast stays where PEFT puts
+it, so no family has the fused path's single-rounding property.
+
+**The draws: a stratified subset.** For every tensor, the draws contain the full level grid of two families that move
+it, with every other family at c = 1. On top of that union, a seeded sample of the full product is added.
+- The outputs: R1 × R6 (12).
+- dh: R9 × R4 (12).
+- dx: R9 × R4 × R5 (24).
+- dA and dB: R1 × R3 (12).
+
+The shakedown checks which families move which tensor. k_T is counted on the subset as run. The seeded sample's size
+and seed are fixed after the shakedown.
+
+**What the grids give:** up to 12 distinct orderings for the outputs and for dh, so one collapsed level still clears
+9. If the shakedown shows two levels collapsing to the same bits, that level is dropped rather than counted twice.
 
 **The shakedown predicts; the paid read decides.** k_T counted on the A2000 only predicts the 5090's k_T, because
 sm_86 and sm_120 run different kernels and their collapse pattern can differ. The paid read counts k_T itself, and
@@ -113,7 +153,14 @@ its own updates, so a drift shows up instead of surprising anyone:
   - layer 0 `up_proj`'s A and B after updates 1, 2, 4, 8, 16, 32 and 40;
   - ‖θ_D1(t) − θ_D0(t)‖ / ‖θ_D0(t)‖ for A and for B, plus the max |Δloss| per update.
 - **Label:** "under C (deterministic settings), not the timed configuration".
+- **C's settings** are set only in the drift processes' own environment and are never inherited. The timed arms refuse
+  an inherited C setting, as Phase 1's read environment did.
 - **REPORTED only.** It never enters GAIN, NO_GAIN or QUALITY.
+- **A drift failure can't touch the read.**
+  - The timed block's records are written, and fetched off the box, before D0 starts.
+  - A drift arm that fails, times out or meets the guard reads `drift: not read (<reason>)`. It never VOIDs the read and
+    never changes the box's outcome.
+  - The reducer reads the timed records without the drift records.
 
 ### 6. A $0 shakedown on the A2000 first
 
@@ -129,15 +176,21 @@ reported as a result.
 
 ### 7. How the read combines
 
-In order:
-1. **NOISY** stays a VOID and a strike. Nothing reads.
-2. **A (b) FAIL** on any tensor with k_T ≥ 9 makes the read `ACCURACY_FAIL`, whatever H is.
-3. **CALIBRATION_INDETERMINATE:** the timing still reads and is reported, but the read is at most `NO_GAIN (accuracy
-   indeterminate)`. The maintainer rules what comes next.
-4. **Any UNJUDGED_AT_K tensor** caps the read at `NO_GAIN (accuracy unjudged: <tensors>)`. A license can't rest on a
-   tensor the instrument couldn't fail.
-5. **GAIN** needs everything the PREREG names (minimum H ≥ 0.05, and quality) plus every tensor judged at the science
-   lock (k_T ≥ 9) and passing (b). Otherwise the read is NO_GAIN, with each failed bar named.
+**The first rung that applies decides,** and rungs 1–5 are terminal. The outcome names every tensor that meets any of
+rungs 3–5, whichever rung decides.
+1. **Engagement fails:** fewer than 96 adapters engaged, anything refused, fallback > 0, or a PEFT MLP LoRA forward in
+   an F1 arm or the (b) part. F1 isn't fused, so the read is a VOID (harness).
+2. **NOISY** stays a VOID and a strike.
+3. **A (b) FAIL** on any judged tensor (k_T ≥ 9, calibration passed) makes the read `ACCURACY_FAIL`, whatever H is.
+4. **Any tensor CALIBRATION_INDETERMINATE:** the read is `NO_GAIN (accuracy indeterminate: <tensors>)`. The timing is
+   still reported, and the maintainer rules what comes next.
+5. **Any UNJUDGED_AT_K tensor:** the read is `NO_GAIN (accuracy unjudged: <tensors>)`. A license can't rest on a tensor
+   the instrument couldn't fail.
+6. **Otherwise:** GAIN iff minimum H ≥ 0.05 and quality passes, with every tensor judged and passing (b). Anything else is
+   NO_GAIN, with each failed bar named.
+
+(b) is a correctness read in its own part and doesn't depend on the timed arms, so its result is reported under every
+outcome. When NOISY and an ACCURACY_FAIL both hold, the record names ACCURACY_FAIL beside the VOID.
 
 ### 8. Launch, budget and guard
 
@@ -149,14 +202,15 @@ In order:
   and the census launcher are untouched, so nothing is resealed.
 - **Box:** one RTX 5090 at the science lock. Box-side, it reuses the census flow's bootstrap and prepare scripts by
   file.
-- **Time:** about 5 min for the (b) part, 8 × about 5 min for the timed arms, 2 × about 5 min for the drift arms, plus
-  load. That is about 65–75 min, so the guard is **1.5 h**.
-- **Cost:** the worst case is about $1.60: 1.5 h at $0.85/h plus the download, on the PREREG's own basis ($1.40 at
-  1.25 h). That is inside the $15 standing rule, and the maintainer's approval covers it.
-- **The static fit:** (boot + the measured part times) × 1.25 ≤ the guard. It is checked by a test, and rerun once
-  the shakedown sets (b)'s size.
-  - A guard of up to 2 h (about $2.10) is inside the maintainer's approval.
-  - Anything above that goes back to the maintainer.
+- **Time:** about 5 min for the (b) part, 8 × about 5 min for the timed arms and 2 × about 5 min for the drift arms,
+  plus load. That is about 65–75 min of parts.
+- **The guard is 2 h.**
+  - The static fit is (boot + the measured part times) × 1.25 ≤ the guard.
+  - With a 5 min boot, 1.5 h fails it at the 75 min estimate: (5 + 75) × 1.25 = 100 > 90. 2 h fits: 100 ≤ 120.
+  - The fit is checked by a test, and rerun with the times the shakedown measures once it sets (b)'s size.
+  - If the shakedown's times don't fit 2 h, the read goes back to the maintainer before any paid second.
+- **Cost:** the worst case is about $2.05, from 2 h at $0.85/h plus the download, on the PREREG's own basis ($1.40 at
+  1.25 h). That is inside the $15 standing rule and the maintainer's approval, which covers up to 2 h.
 
 ## Prediction (registered; graded, never ruling)
 
@@ -170,11 +224,12 @@ In order:
 - **P2-D1, YES:** (b) runs at the science lock on the 5090. A GAIN would license that stack, and its kernels differ by
   architecture, so correctness is read where the license applies.
 - **P2-D2, YES**, with one addition: the shakedown's k_T only predicts the 5090's. The paid read counts k_T itself, and
-  the shakedown times the (b) part to size it (section 3).
+  the shakedown times the (b) part to size it (section 3). After review, R9 has an 8-chunk level, so dh has slack
+  above 9, and the subset is stratified per tensor.
 - **P2-D3, YES**, with two changes:
   - `UNJUDGED_AT_K` and `CALIBRATION_INDETERMINATE` are named apart;
   - GAIN needs every tensor judged and passing (section 7).
 - **P2-D4, YES:** the drift arms D0/D1 run under C, labelled as such, and are REPORTED only.
 - **P2-D5:** a plain launch manifest through the shared launcher, not a new launcher (section 8).
-- **P2-D6, YES:** a guard of 1.5 h and a worst case of about $1.60, subject to the static fit. Up to 2 h is inside the
-  approval (section 8).
+- **P2-D6, YES:** a guard of 1.5 h and a worst case of about $1.60, subject to the static fit, with up to 2 h inside the
+  approval. 1.5 h fails that fit at this file's own 75 min estimate, so the registered guard is 2 h (section 8).
