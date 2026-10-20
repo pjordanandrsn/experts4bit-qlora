@@ -2580,6 +2580,12 @@ Superseded and retired readings are not repeated here. The register keeps each w
   1.1321× as fast and 16 requests 1.0156× on Qwen3-30B-A3B on an RTX 5090, bitwise identical
   (`e4b.serve.p127.launch-bound-glue.qwen3.5090.2026-10-09`, [results](../bench/p127/RESULTS-p127.md)). #1472's kernel
   options take effect with grouped-nf4-gemm 0.45.0 or later.
+- **Held-out loss parity against Unsloth and axolotl is unread.** HP1 closed at its calibration: at 48 layers the
+  shared evaluator's per-row zero-adapter gap set a tolerance of 0.044, against a 0.01 ceiling
+  ([results](../bench/hp1/RESULTS-HP1.md)). HP2 stopped at G1, because its instrument could not read the expected
+  margin ([results](../bench/hp2/RESULTS-HP2.md)). Neither makes a parity, ahead or behind claim. The held-out losses in
+  "Training against other frameworks" above are each framework's own in-loop reading, not a shared evaluator's. HPN
+  ([design](../bench/hpn/HPN-DESIGN.md), $0 on an RTX A2000) reads where the evaluator-vs-in-loop gap comes from.
 - **Older documents' debts:** `POST_AUDIT_WORK_QUEUE.md` (Q1–Q4), `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10),
   `LAYOUT_FACTS.md` (training determinism UNKNOWN), and `support_matrix.md`'s footer hash, which no longer matches its
   bytes and is recorded, not fixed, because the file is anchored.
