@@ -5,5 +5,7 @@ slower outside one wall-clock window that spanned four processes; another host r
 hypothesis is the fault cost of fresh anonymous memory, switched by huge-page availability. Two arms manipulate it
 directly: THP disabled for the process (predicted slow even in a fast window) and a pre-faulted heap (predicted fast
 even in a slow window). A slab-residency arm, an identical-arm null, and a headroom arm at the 1.3 x VmHWM RAM floor
-(a separate question, from Q235's offload) run beside them, interleaved. The kit follows in its own pull request; no box
-runs before review.
+(a separate question, from Q235's offload) run beside them, interleaved. The kit (`bench/p159/`, `tests/test_p159.py`)
+reuses the SMT fuse block and Q235's pinned install unchanged. `tests/test_lane_guard_fit.py` now counts a venv's
+creation as the start of an install, so a runner whose packages go in from a script (Q235's bootstrap) still has its
+pre-install fit check ordered.

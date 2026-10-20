@@ -1,8 +1,8 @@
 # P159: what makes the loader's host-side expert fuse run 17x slower in some host windows?
 
-**Status:** registration (design). The kit (`p159_box.py`, `p159_run.sh`, `p159_drive.sh`, `p159_reduce.py`, tests)
-follows as its own pull request and is reviewed against this text. No box runs before one independent review of both
-and the maintainer's final pass.
+**Status:** registration, with its kit: `p159_box.py` (the block, the arms, the plan), `p159_reduce.py` (the reads),
+`p159_run.sh` and `p159_drive.sh` (box and controller), `staged-p159.sha256`, and `tests/test_p159.py`. No box runs
+before one independent review and the maintainer's final pass; a $0 A2000 wiring run comes first.
 
 ## Why
 
@@ -54,8 +54,9 @@ Two more arms:
   with no file mapping. If the slab's first touch were the cost, R would read FAST in a slow window. Under the primary
   hypothesis R tracks M, since the 7.5 GiB of fresh output still faults.
 - **B (headroom, secondary):** a balloon inside the box's own cgroup holds memory down to the **registered RAM floor**,
-  so at the block's peak about 0.3 x N bytes stay free. N here is the first M process's VmHWM plus the slab's 4.83 GB
-  of page cache: the floor of 1.3 x VmHWM, reached from above. It asks whether that floor keeps `offload` off Q235's
+  so at the block's peak about 0.3 x the block's need stays free. The need is the cgroup's peak usage above its idle
+  level (`memory.peak`), else the first M process's VmHWM plus the slab's 4.83 GB of page cache: the floor of
+  1.3 x VmHWM, reached from above. It asks whether that floor keeps `offload` off Q235's
   slow path.
 
 ## What runs
@@ -73,7 +74,10 @@ Two more arms:
     identical (the null); R uses the resident slab.
   - **N:** 15 blocks with THP disabled for the process.
   - **P:** 15 blocks on the pre-faulted heap.
-  - **B:** 15 M blocks with the balloon held.
+  - **B:** 15 M blocks with the balloon held. B also loads R's resident slab, so its footprint matches an M
+    process's.
+- **The pool:** every process is pinned to K physical cores, one hardware thread each, pool K, where K = min(16,
+  physical cores, floor(quota / 1.25)). A host with K under 8 is refused before the install.
 - **Order:** 4 cycles of M, X, M, Y, M, Z, then one closing M, so every non-M process sits between two M processes.
   (X, Y, Z) = (N, P, B), (P, B, N), (B, N, P), (N, P, B) by cycle. That makes 25 processes: 13 M, 4 N, 4 P, 4 B.
 - **B runs only when it is safe:**
@@ -105,11 +109,14 @@ Two more arms:
 `memory.max`, and the `bench/common/host_facts.py` record beside the receipt.
 
 **Engagement, a closed form each:**
-- an N block's `AnonHugePages` after fuse must be under 64 MiB, or N is VOID;
-- a P timed block's fuse minor faults must be under 0.4 M (a fifth of the 4 KiB count), or P is VOID;
+- an N process must read `PR_GET_THP_DISABLE` back as set, and an N block's fuse must gain under 64 MiB of huge pages
+  (`AnonHugePages` after fuse less before the block), or N is VOID;
+- a P process must carry the registered `GLIBC_TUNABLES`, and a P timed block's fuse minor faults must be under 0.4 M
+  (a fifth of the 4 KiB count), or P is VOID;
 - an R block's `read` must touch no file (no slab mapping in the process during R blocks), or R is VOID.
 
-An arm that fails its engagement check is VOID, and its side of every read is NOT_READ.
+An arm that fails its engagement check is VOID, and its side of every read is NOT_READ. On a dry run, the two byte
+and fault bounds scale with the experts (x experts / 128).
 
 ## What is read (fixed here, before any data)
 
@@ -131,14 +138,16 @@ MIXED otherwise. A process in a MIXED window is reported and not read.
 **READ-1, the mechanism (primary):**
 - s_NF is the share of SLOW blocks among N processes in FAST windows.
 - f_PS is the share of FAST blocks among P processes in SLOW windows.
-- **IDENTIFIED:** s_NF >= 0.8 AND f_PS >= 0.8, each over at least one process. The slow state is the fault cost of
-  fresh anonymous memory without huge pages.
-- **REFUTED_FAULTS:** f_PS <= 0.2. Pre-faulted memory stays slow in a slow window.
-- **REFUTED_THP:** s_NF <= 0.2. No huge pages, and still fast in a fast window: THP is not the switch.
-- **PARTIAL:** one side is in its band and the other has no window of its kind.
-- **UNRESOLVED:** any share between 0.2 and 0.8.
-- **NOT_READ (state not observed):** no SLOW block among M and M'. Not a NO_GO: N's blocks still price the 4 KiB path on
-  this host, as N over M, reported.
+- Tested in this order; the first that holds is the read:
+  1. **NOT_READ (state not observed):** no SLOW block among M and M'. Not a NO_GO: N's blocks still price the 4 KiB
+     path on this host, as N over M, reported.
+  2. **REFUTED_FAULTS:** f_PS <= 0.2. Pre-faulted memory stays slow in a slow window.
+  3. **REFUTED_THP:** s_NF <= 0.2. No huge pages, and still fast in a fast window: THP is not the switch.
+  4. **IDENTIFIED:** s_NF >= 0.8 AND f_PS >= 0.8, each over at least one process. The slow state is the fault cost of
+     fresh anonymous memory without huge pages.
+  5. **PARTIAL:** one side is in its band and the other has no window of its kind.
+  6. **NOT_READ (no window):** neither an N process in a FAST window nor a P process in a SLOW window.
+  7. **UNRESOLVED:** otherwise (a share between 0.2 and 0.8).
 
 **READ-2, the counters (corroborating gate):** over M and M' blocks, with at least 12 SLOW and 12 FAST, all three must
 hold:
@@ -202,12 +211,13 @@ the mean of its two bracketing M processes' M-block medians, over at least 3 B p
   - a process start: 3 s;
   - a block's whole wall: 26.5 s;
   - R's slab copy: 15 s per M process (not yet measured; taken high);
+  - R's slab copy also in each B process, which loads it too;
   - the balloon: 120 s per B process (not yet measured; taken high);
   - the reserve: 600 s.
 
-  Then 13 M processes x 442 s, plus 8 x 427 s (N, P), plus 4 x 547 s (B) give **NEED = 11,350 s**. So FIT = 12,295 s
-  and the runtime check needs **15,368 s** (FIT x 1.25).
-- **The static fit**, (boot 300 s + 12,295 s) x 1.25 = 15,744 s, sits within the **guard of 5.0 h** (18,000 s). The
+  Then 13 M processes x 442 s, plus 8 x 427 s (N, P), plus 4 x 562 s (B) give **NEED = 11,410 s**. So FIT = 12,355 s
+  and the runtime check needs **15,443 s** (FIT x 1.25).
+- **The static fit**, (boot 300 s + 12,355 s) x 1.25 = 15,819 s, sits within the **guard of 5.0 h** (18,000 s). The
   lane's own test asserts it.
 
 ## Run ids and cost
