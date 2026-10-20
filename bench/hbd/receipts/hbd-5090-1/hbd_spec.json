@@ -1,0 +1,44 @@
+{
+ "cells": {
+  "E0a": {
+   "receipt": "qwen3hbdL2_e4b_hbd_e0a.json",
+   "record": "hbd/rec_E0a.json",
+   "probe": "hbd/probe_E0a.json"
+  },
+  "E0b": {
+   "receipt": "qwen3hbdL2_e4b_hbd_e0b.json",
+   "record": "hbd/rec_E0b.json",
+   "probe": "hbd/probe_E0b.json"
+  },
+  "E2": {
+   "receipt": "qwen3hbdL2_e4b_hbd_e2.json",
+   "record": "hbd/rec_E2.json",
+   "probe": "hbd/probe_E2.json"
+  },
+  "E1": {
+   "receipt": "qwen3hbdL2_e4b_hbd_e1.json",
+   "record": "hbd/rec_E1.json",
+   "probe": "hbd/probe_E1.json"
+  },
+  "U0a": {
+   "receipt": "qwen3hbdL2_unsloth_hbd_u0a.json",
+   "record": "hbd/rec_U0a.json",
+   "probe": "hbd/probe_U0a.json"
+  },
+  "U0b": {
+   "receipt": "qwen3hbdL2_unsloth_hbd_u0b.json",
+   "record": "hbd/rec_U0b.json",
+   "probe": "hbd/probe_U0b.json"
+  },
+  "U1": {
+   "receipt": "qwen3hbdL2_unsloth_hbd_u1.json",
+   "record": "hbd/rec_U1.json",
+   "probe": "hbd/probe_U1.json"
+  },
+  "U2": {
+   "receipt": "qwen3hbdL2_unsloth_hbd_u2.json",
+   "record": "hbd/rec_U2.json",
+   "probe": "hbd/probe_U2.json"
+  }
+ }
+}

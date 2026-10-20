@@ -1,0 +1,20 @@
+{
+ "box": "A",
+ "run_id": "hbd-5090-1",
+ "instance_id": "56960215",
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "driver": "595.84",
+ "cpu": "AMD EPYC 7452 32-Core Processor",
+ "nproc": 64,
+ "mem_total_kb": "263776440",
+ "cgroup_memory_max": "183353999360",
+ "disk_root": "overlay          80G  2.9M   80G   1% /",
+ "hostname": "bc21578c078d",
+ "cgroup_cpu_max": "3072000 100000",
+ "affinity_cpus": 64,
+ "cgroup_cpuset_effective": "0-63",
+ "registered_gpu_class": "5090",
+ "prereg": "tc1/TC1-PREREG.md",
+ "local_box": null,
+ "local_snapshot": null
+}

@@ -1,0 +1,45 @@
+FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407 pack=0
+FIXTURE hbd (PREREG-hbd): the 2-layer cut, HPN's one-step recipe on rows 97-396; cells E0a E0b E2 E1 U0a U0b U1 U2; the stored-state digest and the in-cell libbitsandbytes read in every cell; no timings
+BOX A families: qwen3hbd; e4b 248c35aeed8f73efa50c9d49ab7a1fc197c9e7c3 gnf4 724ccc454f006c1a46836e434e997f31f293747f; run hbd-5090-1 instance 56960215 deadline 1792539591; prereg hbd/PREREG-hbd.md
+OMP_NUM_THREADS=32 (physical cores) box_class=RTX 5090
+CPU allotment 31 (cgroup quota capped by affinity; physical cores 32)
+CUDA_PROBE ok
+DRIVER 595.84 cu130_ok=1
+AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+PIN OK qwen3hbd staged=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS qwen3hbd alpaca sha=6d5783ce31b2ff57a05cca2db0446ab8bbf7697bd322d22e7b0545a25585b3b2 eval_n=48 train_only_sha=604f314033450d4d4b5953bb13b3651d919d9b05c46a317e6267a3c2f6c007d7
+qwen3hbdL2/e4b/hbd_e0a PROLOGUE {"phase_seconds": {"preamble": 4.615, "load_weights": 3.085, "verify": 0.0, "attn4": 0.297, "lora": 0.004, "enable": 0.135, "tokenizer": 0.603, "census": 0.055, "frozen_probe": 0.107, "trainable_sha": 0.139, "counters": 0.0, "c1_before": 2.74, "eval0": 16.08, "optimizer": 0.208}, "phase_budget_s": 840.0, "prologue_s": 29.408, "prologue_unattributed_s": 1.339}
+qwen3hbdL2/e4b/hbd_e0a rc=0 CELL OK {"framework": "e4b", "fam": "qwen3hbdL2", "model": "local/Qwen3-30B-A3B-L2", "revision": "88f08b815a0dffa4e348a67de1d8b585ac183cee", "model_type": "qwen3_moe", "n_layers": 2, "weights_commit": "88f08b815a0dffa4e348a67de1d8b585ac183cee", "snapshot_dir": null, "arm": "fused", "tag": "hbd_e0a", "status": "ok", "steps": 1, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, 
+
+HBD E0a e4b/hbd_e0a status=ok
+qwen3hbdL2/e4b/hbd_e0b PROLOGUE {"phase_seconds": {"preamble": 4.596, "load_weights": 3.011, "verify": 0.0, "attn4": 0.311, "lora": 0.004, "enable": 0.133, "tokenizer": 0.597, "census": 0.056, "frozen_probe": 0.1, "trainable_sha": 0.101, "counters": 0.0, "c1_before": 2.661, "eval0": 3.616, "optimizer": 0.189}, "phase_budget_s": 840.0, "prologue_s": 16.738, "prologue_unattributed_s": 1.362}
+qwen3hbdL2/e4b/hbd_e0b rc=0 CELL OK {"framework": "e4b", "fam": "qwen3hbdL2", "model": "local/Qwen3-30B-A3B-L2", "revision": "88f08b815a0dffa4e348a67de1d8b585ac183cee", "model_type": "qwen3_moe", "n_layers": 2, "weights_commit": "88f08b815a0dffa4e348a67de1d8b585ac183cee", "snapshot_dir": null, "arm": "fused", "tag": "hbd_e0b", "status": "ok", "steps": 1, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, 
+
+HBD E0b e4b/hbd_e0b status=ok
+qwen3hbdL2/e4b/hbd_e2 PROLOGUE {"phase_seconds": {"preamble": 4.5, "load_weights": 3.204, "verify": 0.0, "attn4": 0.286, "lora": 0.004, "enable": 0.127, "tokenizer": 0.688, "census": 0.054, "frozen_probe": 0.099, "trainable_sha": 0.089, "counters": 0.0, "c1_before": 2.67, "eval0": 15.527, "optimizer": 0.229}, "phase_budget_s": 840.0, "prologue_s": 29.613, "prologue_unattributed_s": 2.136}
+qwen3hbdL2/e4b/hbd_e2 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3hbdL2", "model": "local/Qwen3-30B-A3B-L2", "revision": "88f08b815a0dffa4e348a67de1d8b585ac183cee", "model_type": "qwen3_moe", "n_layers": 2, "weights_commit": "88f08b815a0dffa4e348a67de1d8b585ac183cee", "snapshot_dir": null, "arm": "fused", "tag": "hbd_e2", "status": "ok", "steps": 1, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "
+
+HBD E2 e4b/hbd_e2 status=ok
+qwen3hbdL2/e4b/hbd_e1 PROLOGUE {"phase_seconds": {"preamble": 4.219, "load_weights": 3.134, "verify": 0.0, "attn4": 0.299, "lora": 0.005, "enable": 0.153, "tokenizer": 0.666, "census": 0.054, "frozen_probe": 0.115, "trainable_sha": 0.134, "counters": 0.0, "c1_before": 2.607, "eval0": 17.15, "optimizer": 0.232}, "phase_budget_s": 840.0, "prologue_s": 31.111, "prologue_unattributed_s": 2.343}
+qwen3hbdL2/e4b/hbd_e1 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3hbdL2", "model": "local/Qwen3-30B-A3B-L2", "revision": "88f08b815a0dffa4e348a67de1d8b585ac183cee", "model_type": "qwen3_moe", "n_layers": 2, "weights_commit": "88f08b815a0dffa4e348a67de1d8b585ac183cee", "snapshot_dir": null, "arm": "fused", "tag": "hbd_e1", "status": "ok", "steps": 1, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "
+
+HBD E1 e4b/hbd_e1 status=ok
+qwen3hbdL2/unsloth/hbd_u0a PROLOGUE {"phase_seconds": {"preamble": 2.33, "snapshot": 0.0, "load_weights": 8.664, "census": 0.055, "frozen_probe": 0.088, "trainable_sha": 0.111, "counters": 0.043, "c1_before": 2.63, "eval0": 70.984, "optimizer": 0.451}, "phase_budget_s": 889.7, "prologue_s": 97.151, "prologue_unattributed_s": 11.796}
+qwen3hbdL2/unsloth/hbd_u0a rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3hbdL2", "model": "local/Qwen3-30B-A3B-L2", "revision": "88f08b815a0dffa4e348a67de1d8b585ac183cee", "model_type": "qwen3_moe", "n_layers": 2, "weights_commit": null, "snapshot_dir": "/root/tc1/hbd/cut-L2/models--local--Qwen3-30B-A3B-L2/snapshots/88f08b815a0dffa4e348a67de1d8b585ac183cee", "arm": "unsloth", "tag": "hbd_u0a", "status": "ok", "steps": 1, "s
+
+HBD U0a unsloth/hbd_u0a status=ok
+qwen3hbdL2/unsloth/hbd_u0b PROLOGUE {"phase_seconds": {"preamble": 2.441, "snapshot": 0.0, "load_weights": 8.26, "census": 0.054, "frozen_probe": 0.08, "trainable_sha": 0.086, "counters": 0.043, "c1_before": 2.633, "eval0": 60.135, "optimizer": 0.388}, "phase_budget_s": 824.9, "prologue_s": 85.827, "prologue_unattributed_s": 11.706}
+qwen3hbdL2/unsloth/hbd_u0b rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3hbdL2", "model": "local/Qwen3-30B-A3B-L2", "revision": "88f08b815a0dffa4e348a67de1d8b585ac183cee", "model_type": "qwen3_moe", "n_layers": 2, "weights_commit": null, "snapshot_dir": "/root/tc1/hbd/cut-L2/models--local--Qwen3-30B-A3B-L2/snapshots/88f08b815a0dffa4e348a67de1d8b585ac183cee", "arm": "unsloth", "tag": "hbd_u0b", "status": "ok", "steps": 1, "s
+
+HBD U0b unsloth/hbd_u0b status=ok
+qwen3hbdL2/unsloth/hbd_u1 PROLOGUE {"phase_seconds": {"preamble": 2.303, "snapshot": 0.0, "load_weights": 8.595, "census": 0.053, "frozen_probe": 0.09, "trainable_sha": 0.11, "counters": 0.092, "c1_before": 2.642, "eval0": 42.508, "optimizer": 0.38}, "phase_budget_s": 771.4, "prologue_s": 67.859, "prologue_unattributed_s": 11.085}
+qwen3hbdL2/unsloth/hbd_u1 rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3hbdL2", "model": "local/Qwen3-30B-A3B-L2", "revision": "88f08b815a0dffa4e348a67de1d8b585ac183cee", "model_type": "qwen3_moe", "n_layers": 2, "weights_commit": null, "snapshot_dir": "/root/tc1/hbd/cut-L2/models--local--Qwen3-30B-A3B-L2/snapshots/88f08b815a0dffa4e348a67de1d8b585ac183cee", "arm": "unsloth", "tag": "hbd_u1", "status": "ok", "steps": 1, "se
+
+HBD U1 unsloth/hbd_u1 status=ok
+qwen3hbdL2/unsloth/hbd_u2 PROLOGUE {"phase_seconds": {"preamble": 2.362, "snapshot": 0.0, "load_weights": 8.524, "census": 0.054, "frozen_probe": 0.081, "trainable_sha": 0.114, "counters": 0.093, "c1_before": 2.658, "eval0": 14.666, "optimizer": 0.329}, "phase_budget_s": 719.2, "prologue_s": 40.06, "prologue_unattributed_s": 11.181}
+qwen3hbdL2/unsloth/hbd_u2 rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3hbdL2", "model": "local/Qwen3-30B-A3B-L2", "revision": "88f08b815a0dffa4e348a67de1d8b585ac183cee", "model_type": "qwen3_moe", "n_layers": 2, "weights_commit": null, "snapshot_dir": "/root/tc1/hbd/cut-L2/models--local--Qwen3-30B-A3B-L2/snapshots/88f08b815a0dffa4e348a67de1d8b585ac183cee", "arm": "unsloth", "tag": "hbd_u2", "status": "ok", "steps": 1, "se
+
+HBD U2 unsloth/hbd_u2 status=ok
+HBD=READ {"e4b": "DIFFERENT_QUANTIZED", "unsloth": "DIFFERENT_QUANTIZED"}
+NO AXOLOTL on this box: the qwen3hbd token runs no axolotl arm

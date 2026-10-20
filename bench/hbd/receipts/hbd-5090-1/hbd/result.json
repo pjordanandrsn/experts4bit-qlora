@@ -1,0 +1,229 @@
+{
+ "build": {
+  "e4b": {
+   "dequant_equal": false,
+   "dequant_slots_differ_by_kind": {
+    "attention": 1
+   },
+   "pair": [
+    "E2",
+    "E1"
+   ],
+   "reading": "DIFFERENT_QUANTIZED",
+   "stored_slots_differ_by_kind": {
+    "attention": 1
+   },
+   "versions_differ": {
+    "torch": [
+     "2.8.0+cu128",
+     "2.12.1+cu130"
+    ],
+    "torch_cuda": [
+     "12.8",
+     "13.0"
+    ],
+    "triton": [
+     "3.4.0",
+     "3.7.1"
+    ]
+   }
+  },
+  "unsloth": {
+   "dequant_equal": false,
+   "dequant_slots_differ_by_kind": {
+    "attention": 1
+   },
+   "pair": [
+    "U0a",
+    "U1"
+   ],
+   "reading": "DIFFERENT_QUANTIZED",
+   "stored_slots_differ_by_kind": {
+    "attention": 1
+   },
+   "versions_differ": {
+    "torch": [
+     "2.8.0+cu128",
+     "2.12.1+cu130"
+    ],
+    "torch_cuda": [
+     "12.8",
+     "13.0"
+    ],
+    "triton": [
+     "3.4.0",
+     "3.7.1"
+    ]
+   }
+  }
+ },
+ "cells": {
+  "E0a": {
+   "digest": "5e7564eae8039e609f3a51bb51185fe4d7b611fe00e0257a1bdfd8988de47b7a",
+   "library": "d6dd06a7bf8b2ecc43dd7d7dc5b558dc70884fd193252a8597ee065a9c8b0f4e",
+   "n_slots": 533,
+   "status": "ok",
+   "stored": "91160aab3bfc6d552718ea0db21107ebca9381dbf54158a0f98dad0e19080923"
+  },
+  "E0b": {
+   "digest": "5e7564eae8039e609f3a51bb51185fe4d7b611fe00e0257a1bdfd8988de47b7a",
+   "library": "d6dd06a7bf8b2ecc43dd7d7dc5b558dc70884fd193252a8597ee065a9c8b0f4e",
+   "n_slots": 533,
+   "status": "ok",
+   "stored": "91160aab3bfc6d552718ea0db21107ebca9381dbf54158a0f98dad0e19080923"
+  },
+  "E1": {
+   "digest": "19363fa60897e3279504fe90834cb990b163f8444442a18e99da60c072675528",
+   "library": "00901675cb2acb8b1d6015cfe2c2571050bf59c7ce1972e6b6717ffc99b2a285",
+   "n_slots": 533,
+   "status": "ok",
+   "stored": "c97cd201bacd8fc454a3a8028371817df56ddfdf611830859ce675d2b941f7e9"
+  },
+  "E2": {
+   "digest": "5e7564eae8039e609f3a51bb51185fe4d7b611fe00e0257a1bdfd8988de47b7a",
+   "library": "d6dd06a7bf8b2ecc43dd7d7dc5b558dc70884fd193252a8597ee065a9c8b0f4e",
+   "n_slots": 533,
+   "status": "ok",
+   "stored": "91160aab3bfc6d552718ea0db21107ebca9381dbf54158a0f98dad0e19080923"
+  },
+  "U0a": {
+   "digest": "5e7564eae8039e609f3a51bb51185fe4d7b611fe00e0257a1bdfd8988de47b7a",
+   "library": "d6dd06a7bf8b2ecc43dd7d7dc5b558dc70884fd193252a8597ee065a9c8b0f4e",
+   "n_slots": 533,
+   "status": "ok",
+   "stored": "c8451191e084d2020618434513ec8b993c96a5b39283e1db5d6fac0bc1cee48e"
+  },
+  "U0b": {
+   "digest": "5e7564eae8039e609f3a51bb51185fe4d7b611fe00e0257a1bdfd8988de47b7a",
+   "library": "d6dd06a7bf8b2ecc43dd7d7dc5b558dc70884fd193252a8597ee065a9c8b0f4e",
+   "n_slots": 533,
+   "status": "ok",
+   "stored": "c8451191e084d2020618434513ec8b993c96a5b39283e1db5d6fac0bc1cee48e"
+  },
+  "U1": {
+   "digest": "19363fa60897e3279504fe90834cb990b163f8444442a18e99da60c072675528",
+   "library": "00901675cb2acb8b1d6015cfe2c2571050bf59c7ce1972e6b6717ffc99b2a285",
+   "n_slots": 533,
+   "status": "ok",
+   "stored": "f867c76d13513fade44e4778bdd626e41fb55d7332910396aac41d2eccdf93f7"
+  },
+  "U2": {
+   "digest": "19363fa60897e3279504fe90834cb990b163f8444442a18e99da60c072675528",
+   "library": "00901675cb2acb8b1d6015cfe2c2571050bf59c7ce1972e6b6717ffc99b2a285",
+   "n_slots": 533,
+   "status": "ok",
+   "stored": "f867c76d13513fade44e4778bdd626e41fb55d7332910396aac41d2eccdf93f7"
+  }
+ },
+ "claim": "none (no parity claim in any outcome)",
+ "depth_note": "a DIFFERENT here makes HP2's base term at least partly a build effect",
+ "outcome": "READ",
+ "prereg": "bench/hbd/PREREG-hbd.md",
+ "reducer": "bench/hbd/hbd_reduce.py",
+ "reported": [
+  {
+   "dequant_equal": false,
+   "dequant_slots_differ_by_kind": {
+    "attention": 1
+   },
+   "pair": [
+    "E0a",
+    "E1"
+   ],
+   "reading": "DIFFERENT_QUANTIZED",
+   "stored_slots_differ_by_kind": {
+    "attention": 1
+   },
+   "versions_differ": {
+    "torch": [
+     "2.8.0+cu128",
+     "2.12.1+cu130"
+    ],
+    "torch_cuda": [
+     "12.8",
+     "13.0"
+    ],
+    "transformers": [
+     "5.18.0",
+     "5.5.0"
+    ],
+    "triton": [
+     "3.4.0",
+     "3.7.1"
+    ],
+    "unsloth": [
+     null,
+     "2026.9.14"
+    ],
+    "unsloth_zoo": [
+     null,
+     "2026.9.9"
+    ]
+   }
+  },
+  {
+   "pair": [
+    "U1",
+    "U2"
+   ],
+   "reading": "SAME",
+   "versions_differ": {}
+  },
+  {
+   "pair": [
+    "E0a",
+    "U0a"
+   ],
+   "read_on": "dequantized digest",
+   "reading": "SAME_DEQUANT",
+   "versions_differ": {
+    "transformers": [
+     "5.18.0",
+     "5.5.0"
+    ],
+    "unsloth": [
+     null,
+     "2026.9.14"
+    ],
+    "unsloth_zoo": [
+     null,
+     "2026.9.9"
+    ]
+   }
+  },
+  {
+   "pair": [
+    "E1",
+    "U1"
+   ],
+   "read_on": "dequantized digest",
+   "reading": "SAME_DEQUANT",
+   "versions_differ": {}
+  }
+ ],
+ "summary": {
+  "e4b": "DIFFERENT_QUANTIZED",
+  "unsloth": "DIFFERENT_QUANTIZED"
+ },
+ "venv_at_fixed_build": {
+  "pair": [
+   "E0a",
+   "E2"
+  ],
+  "reading": "SAME",
+  "versions_differ": {
+   "transformers": [
+    "5.18.0",
+    "5.5.0"
+   ],
+   "unsloth": [
+    null,
+    "2026.9.14"
+   ],
+   "unsloth_zoo": [
+    null,
+    "2026.9.9"
+   ]
+  }
+ }
+}
