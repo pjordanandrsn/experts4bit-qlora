@@ -142,10 +142,11 @@ while :; do
 done
 mkdir -p "$RUN_DIR/p149" && [ -z "$(find "$RUN_DIR/p149" -mindepth 1 -maxdepth 1 -print -quit)" ] || { say "fetch failed: local dir"; exit 22; }
 # The checkpoint stays on the box (the hub cache, outside $W), and so do the NF4 snapshot, the arena and the reference
-# log-probs (work/: only its bake.json travels); records, logs, the prompts and the verdict travel.
+# log-probs (work/: only its bake.json travels) and a dry run's one-layer cut (slice/, 3.2 GB; p149-dry-2 fetched it);
+# records, logs, the prompts and the verdict travel.
 rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" \
   --include 'work/' --include 'work/bake.json' --exclude 'work/*' \
-  --exclude '__pycache__' --exclude 'venv*' --exclude '.cache' --exclude 'hf' \
+  --exclude '__pycache__' --exclude 'venv*' --exclude '.cache' --exclude 'hf' --exclude '/slice' \
   "root@$HOST:$W/" "$RUN_DIR/p149/" || { say "fetch failed: rsync"; exit 22; }
 say "fetched $(ls "$RUN_DIR/p149" | wc -l | tr -d ' ') entries"
 [ "$(cat "$RUN_DIR/p149/P149_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }
