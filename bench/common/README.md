@@ -60,6 +60,13 @@ It records only what the box measures itself, from `/proc`, `/sys` and `nvidia-s
 - the run's own share: `affinity_cpus` (`sched_getaffinity`) and the cgroup CPU quota, v2 or v1 (`cpu_quota_cpus`, or
   `cpu_quota_unlimited` when there is none, so "unlimited" is never mistaken for "unreadable");
 - `numa_balancing` and the transparent-hugepage `enabled` and `defrag` modes;
+- per-core speed:
+  - `host_cpu_max_mhz` is the CPU's rated maximum clock. It is a label: it is not what a busy, shared host delivers.
+  - `cpu_loop_mops` is a fixed single-thread Python loop, best of three, well under a second. It measures what the run
+    actually got from one core.
+  - `cpu_loop_mops` compares only at the same `cpu_loop_python` (e.g. `312`).
+  - To see a host change during the run, a runner may call the helper at the start and again at the end;
+- `omp_num_threads`, the run's `OpenMP` thread count, left out when unset or not a positive integer;
 - GPU 0's power limit, maximum SM clock and memory.
 
 Every value is a number or a small enum, and `sources` names where each one came from. It writes no identifiers: no hostname, container id, serial, UUID or CPU model string. A fact it cannot read is left out, and the helper always exits 0, so it never costs a run.
