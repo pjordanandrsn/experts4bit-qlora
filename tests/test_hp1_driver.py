@@ -680,3 +680,27 @@ _ARM_OK = {"framework": "e4b", "tag": "hpn_e4b_a", "c1_bit_exact": True, "raw_ok
 def test_a_receipt_without_a_trainable_count_ends_the_climb(tmp_path):
     arms, summary, py, spec = _hpn(tmp_path, HPN_DEPTHS="2 4", STUB_TRAINABLE="null")
     assert "READ_FAILED no trainable count" in summary and spec["depths"] == []
+
+
+
+def test_no_hpn_local_shadows_a_global_that_arm_once_reads():
+    """HPN read 3 (00:00Z): tc1_hpn_family's `local R=<receipt>` shadowed the global R (the LoRA rank), so L4's arms got --r <path>.
+    The stub `arm` never reads R, so only a check on the REAL arm_once can catch the class: every UPPERCASE name tc1_hpn_family
+    declares local must not be a global that arm_once reads (arm_once's own locals and positionals excepted)."""
+    import re
+    src = RUN_SH.read_text()
+    def code(text):                                                     # bash comments out: a comment naming "local R=" is not a declaration
+        return "\n".join(re.sub(r"\s+#\s.*$", "", ln) for ln in text.splitlines() if not ln.lstrip().startswith("#"))
+    fam = code(src[src.index("tc1_hpn_family(){"):src.index("tc1_curve_family(){")])
+    a = src.index("\narm_once(){") + 1
+    nxt = re.search(r"\n[a-z_0-9]+\(\)\{", src[a + 1:])
+    body = code(src[a:a + 1 + nxt.start()])                             # arm_once up to the next top-level function
+    own = set()
+    for decl in re.findall(r"local ([^;\n]+)", body):
+        own |= {t.split("=")[0] for t in decl.split() if re.match(r"[A-Za-z_][A-Za-z0-9_]*(=|$)", t)}
+    reads = set(re.findall(r"\$\{?([A-Z_][A-Z0-9_]*)", body)) - own
+    declared = set()
+    for decl in re.findall(r"local ([^;\n]+)", fam):
+        declared |= {t.split("=")[0] for t in decl.split() if re.match(r"[A-Z_][A-Z0-9_]*(=|$)", t)}
+    assert "R" in reads, "arm_once must read the global LoRA rank R (sanity: the check sees the real body)"
+    assert not (declared & reads), f"tc1_hpn_family shadows arm_once globals: {sorted(declared & reads)}"
