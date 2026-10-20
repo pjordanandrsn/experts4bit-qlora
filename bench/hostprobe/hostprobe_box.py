@@ -66,13 +66,25 @@ def _smi(smi: str, args: list[str], state: dict) -> str | None:
         state["stopped"] = "budget"
         return None
     try:
-        r = subprocess.run([smi, *args], capture_output=True, text=True, timeout=left)
-    except subprocess.TimeoutExpired:
-        state["stopped"] = "timeout" if left >= SMI_TIMEOUT else "budget"
-        return None
+        p = subprocess.Popen([smi, *args], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
     except (OSError, subprocess.SubprocessError):
         return None
-    return r.stdout if r.returncode == 0 and r.stdout.strip() else None
+    try:
+        out, _ = p.communicate(timeout=left)
+    except subprocess.TimeoutExpired:
+        # kill, then wait at most 1 s: on a hung driver nvidia-smi can sit in uninterruptible sleep past SIGKILL, and
+        # subprocess.run's unbounded wait() after its kill would then hold the box until the drive's bound, losing
+        # every fact. A killed process that can exit is reaped here; one that cannot is left behind.
+        p.kill()
+        if p.stdout:
+            p.stdout.close()
+        try:
+            p.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            pass
+        state["stopped"] = "timeout" if left >= SMI_TIMEOUT else "budget"
+        return None
+    return out if p.returncode == 0 and out.strip() else None
 
 
 def gpu_facts(smi: str = "nvidia-smi", state: dict | None = None) -> dict:

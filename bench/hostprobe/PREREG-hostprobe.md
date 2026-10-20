@@ -91,8 +91,10 @@ fields (`--help-query-gpu`), one query naming only listed fields, the remapped-r
   power query above stays a separate call.
 - All five calls share one **40 s** budget, and each call is bounded at 20 s or what is left, whichever is less. A call
   that times out, or a budget that runs out, stops every later call; the facts read before it are kept.
-- So `nvidia-smi` holds the box for 40 s at most, hung or merely slow. With ssh's 30 s connect timeout that is about
-  70 s, inside the drive's 120 s bound, and the one `HOSTPROBE_JSON` line is printed before the bound.
+- A call that times out is killed and waited on for 1 s at most: a driver-hung `nvidia-smi` can outlive SIGKILL in
+  uninterruptible sleep, and an unbounded wait would hold the box until the drive's bound and lose every fact.
+- So `nvidia-smi` holds the box for about 41 s at most, hung or merely slow. With ssh's 30 s connect timeout that is
+  about 71 s, inside the drive's 120 s bound, and the one `HOSTPROBE_JSON` line is printed before the bound.
 
 **Unchanged.** Run ids, scope, the drive, the guard, the rate cap, the image, the download and the $0.20 worst case.
 It is still never a reading. No UUID, serial, PCI address, board id or product name is queried.

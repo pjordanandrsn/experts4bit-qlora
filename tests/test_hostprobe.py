@@ -263,3 +263,30 @@ def test_a_name_listed_only_as_an_alias_still_counts(tmp_path):
     aliased = '"driver_version"\n"clocks_throttle_reasons.active" or "clocks_event_reasons.active"\n'
     hb.gpu_health(_health_smi(tmp_path, help_text=aliased, query="575.64.05, 0x1"))
     assert _sent(tmp_path) == ["driver_version", "clocks_event_reasons.active"]
+
+
+def test_a_call_that_times_out_is_killed_and_waited_on_for_one_second_at_most(monkeypatch):
+    seen = []
+
+    class Unkillable:                       # nvidia-smi in uninterruptible sleep: SIGKILL lands, the process stays
+        def __init__(self, *a, **k):
+            self.returncode = None
+
+        def communicate(self, timeout=None):
+            raise hb.subprocess.TimeoutExpired("nvidia-smi", timeout)
+
+        def kill(self):
+            seen.append("kill")
+
+        stdout = None
+
+        def wait(self, timeout=None):
+            if timeout is None:
+                raise AssertionError("an unbounded wait on a process that may never exit")
+            seen.append(f"wait {timeout}")
+            raise hb.subprocess.TimeoutExpired("nvidia-smi", timeout)
+
+    monkeypatch.setattr(hb.subprocess, "Popen", Unkillable)
+    state: dict = {}
+    assert hb._smi("nvidia-smi", ["--version"], state) is None
+    assert seen == ["kill", "wait 1"] and state["stopped"] == "timeout"
