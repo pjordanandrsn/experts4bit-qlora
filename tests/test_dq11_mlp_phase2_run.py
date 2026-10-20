@@ -128,7 +128,7 @@ def test_drift_is_reported_and_never_changes_the_outcome(tmp_path):
     from safetensors.torch import save_file
 
     d = _write(tmp_path, f1=0.9)
-    assert r2.reduce(d)["drift"]["label"] == "drift: not read"                            # no drift records
+    assert r2.reduce(d)["drift"] == {"label": "drift: not read", "reason": "FileNotFoundError: D0.json"}   # no path
     for a, scale in (("D0", 1.0), ("D1", 1.01)):
         save_file({"step1.A": torch.ones(4) * scale, "step1.B": torch.ones(4), "step2.A": torch.ones(4) * scale,
                    "step2.B": torch.ones(4)}, str(d / f"drift-{a}.safetensors"))

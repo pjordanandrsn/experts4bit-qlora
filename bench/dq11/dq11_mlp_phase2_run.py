@@ -341,7 +341,9 @@ def drift_report(directory) -> dict:
         return {"label": "under C (deterministic settings), not the timed configuration",
                 "relative_distance": rows, "max_abs_dloss": max(abs(x - y) for x, y in zip(l0, l1))}
     except Exception as e:                                              # noqa: BLE001 - REPORTED only, never a ruling
-        return {"label": "drift: not read", "reason": f"{type(e).__name__}: {e}"}
+        missing = getattr(e, "filename", None)                          # a file's name only: the record never carries a path
+        why = f"{type(e).__name__}: {Path(missing).name}" if missing else f"{type(e).__name__}: {e}"
+        return {"label": "drift: not read", "reason": why}
 
 
 def reduce(directory) -> dict:
