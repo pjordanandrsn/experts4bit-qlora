@@ -4,6 +4,10 @@ name: CI
 # `ready-to-merge` label (or the PR leaves draft) -- never on every push
 # (since 2026-09-06). A head with no CI run is not green: remove and re-apply
 # the label after a new push. `workflow_dispatch` is the manual escape hatch.
+# Any other label event runs each required job's first step only, and that step
+# FAILS ("not labelled ready-to-merge"), because a skipped required check would
+# count as passing (2026-10-20). A label event on a PR that already carries
+# ready-to-merge re-runs CI on its head.
 on:
   push:
     branches: [main]
@@ -13,9 +17,20 @@ on:
 
 jobs:
   lint-and-test:
-    if: ${{ github.event_name != 'pull_request' || github.event.action == 'ready_for_review' || github.event.label.name == 'ready-to-merge' }}
     runs-on: ubuntu-24.04
     steps:
+      - name: gate (a required check must FAIL, never skip, when this head is not being tested)
+        # GitHub counts a SKIPPED required check as passing, so a job-level `if:`
+        # that skipped on every other label minted a passing lint-and-test /
+        # wheel-smoke / discoverability for an untested head.
+        # On a pull_request event that is not ready_for_review and
+        # whose PR does not carry ready-to-merge, fail in seconds instead.
+        # contains() reads the PR's CURRENT labels, so adding another label to a
+        # ready PR re-tests its head rather than turning a tested head red.
+        if: ${{ github.event_name == 'pull_request' && github.event.action != 'ready_for_review' && !contains(github.event.pull_request.labels.*.name, 'ready-to-merge') }}
+        run: |
+          echo "::error::not labelled ready-to-merge: nothing was tested on this head. Apply ready-to-merge to run CI."
+          exit 1
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -125,13 +140,24 @@ jobs:
           python bench/support/census_cross_check.py --census /tmp/shape_census.json --check
 
   wheel-smoke:
-    if: ${{ github.event_name != 'pull_request' || github.event.action == 'ready_for_review' || github.event.label.name == 'ready-to-merge' }}
     # Built-artifact gate (release-repair directive): README's promised surface
     # must equal the wheel's importable surface. scripts/wheel_smoke.py runs
     # from /tmp against a clean-venv wheel install; the link check maps the
     # release tag to main pre-tag (the tag exists only at release time).
     runs-on: ubuntu-24.04
     steps:
+      - name: gate (a required check must FAIL, never skip, when this head is not being tested)
+        # GitHub counts a SKIPPED required check as passing, so a job-level `if:`
+        # that skipped on every other label minted a passing lint-and-test /
+        # wheel-smoke / discoverability for an untested head.
+        # On a pull_request event that is not ready_for_review and
+        # whose PR does not carry ready-to-merge, fail in seconds instead.
+        # contains() reads the PR's CURRENT labels, so adding another label to a
+        # ready PR re-tests its head rather than turning a tested head red.
+        if: ${{ github.event_name == 'pull_request' && github.event.action != 'ready_for_review' && !contains(github.event.pull_request.labels.*.name, 'ready-to-merge') }}
+        run: |
+          echo "::error::not labelled ready-to-merge: nothing was tested on this head. Apply ready-to-merge to run CI."
+          exit 1
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
@@ -164,11 +190,22 @@ jobs:
           python scripts/check_readme_links.py --map-ref "$TAG" "$REF"
 
   discoverability:
-    if: ${{ github.event_name != 'pull_request' || github.event.action == 'ready_for_review' || github.event.label.name == 'ready-to-merge' }}
     # CPU-only, deterministic: the machine-readable contracts and the
     # packaging metadata. Nothing here imports the kernels.
     runs-on: ubuntu-24.04
     steps:
+      - name: gate (a required check must FAIL, never skip, when this head is not being tested)
+        # GitHub counts a SKIPPED required check as passing, so a job-level `if:`
+        # that skipped on every other label minted a passing lint-and-test /
+        # wheel-smoke / discoverability for an untested head.
+        # On a pull_request event that is not ready_for_review and
+        # whose PR does not carry ready-to-merge, fail in seconds instead.
+        # contains() reads the PR's CURRENT labels, so adding another label to a
+        # ready PR re-tests its head rather than turning a tested head red.
+        if: ${{ github.event_name == 'pull_request' && github.event.action != 'ready_for_review' && !contains(github.event.pull_request.labels.*.name, 'ready-to-merge') }}
+        run: |
+          echo "::error::not labelled ready-to-merge: nothing was tested on this head. Apply ready-to-merge to run CI."
+          exit 1
       - uses: actions/checkout@v4
         with:
           # Full history: the change-impact check diffs the working tree against
