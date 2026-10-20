@@ -26,7 +26,9 @@ MIN_HEADROOM_PCT = 125
 STRIKE_NOTE = "two consecutive headroom refusals count as one strike"
 INSTALL_RE = re.compile(
     r"(?:\bpip3?|\bpython3?\s+-m\s+pip|\$\{?PIP\}?\"?|\b(?:micro)?mamba|\bconda|\buv\s+pip)\s+install\b"
-    r"|\buv\s+(?:sync|add)\b|apt-get install|^\s*pipx\s", re.M)
+    r"|\buv\s+(?:sync|add)\b|apt-get install|^\s*pipx\s"
+    # a venv's creation starts the paid install even when the packages go in from a script (Q235's bootstrap)
+    r"|\bpython3?(?:\.\d+)?\s+-m\s+venv\b", re.M)
 # a script run from another file: its installs are invisible here, so the fit must come before it too
 EXTERNAL_RE = re.compile(r"^\s*(?:\.|source)\s+\S|\b(?:bash|sh)\s+\S+\.sh\b|\bpython3?\s+(?!-)\S+\.py\b", re.M)
 
@@ -103,7 +105,8 @@ def fit_problems(text: str) -> list[str]:
                        "never run")
         install = INSTALL_RE.search(text)
         if not install:
-            out.append("no install found (pip, pip3, conda, mamba, uv, apt-get or pipx): the order cannot be checked")
+            out.append("no install found (pip, pip3, conda, mamba, uv, apt-get, pipx, or a venv's creation): "
+                       "the order cannot be checked")
         elif install.start() < check.start():
             out.append("the fit is checked after the first install")
         external = EXTERNAL_RE.search(text)
@@ -166,6 +169,7 @@ def test_the_rule_accepts_the_canonical_check_and_rejects_its_mutants():
         "no install allowance": CANONICAL.replace("INSTALL_TO_GATE_S + ", ""),
         "a micromamba install first": "micromamba install -y x\n" + CANONICAL,
         "a $PIP install first": '"$PIP" install x\n' + CANONICAL,
+        "a venv created first": "python3.11 -m venv $W/venv\n" + CANONICAL,
     }
     survived = [k for k, t in mutants.items() if not fit_problems(t)]
     assert not survived, survived
