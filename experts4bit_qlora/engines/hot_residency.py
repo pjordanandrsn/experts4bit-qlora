@@ -433,6 +433,16 @@ def _k25_mode_env() -> str:
 #: lookup (:func:`_k25_plan`), the same fp32 weights.
 _K25_PLAN = {"block_n": 32, "kc": 64, "warps": 4, "stages": 3, "lut": "tree", "dot_bf16": False}
 
+#: ``E4B_K25_PLAN``'s block shapes, as ``{name: (gate_up's, down's)}`` over :data:`_K25_PLAN` (an empty dict keeps it).
+#: ``c1`` is P156's first carried pair, which lane P160 read (p160-5090-2, GO: 1.6598x as fast as ``today`` under K39's
+#: decode, at Qwen3-30B-A3B's W16 shapes on one RTX 5090, every rep bit-identical; ``bench/p160``). It is a plan for K39's
+#: decode ONLY: the select tree at these shapes runs slower than at today's (P155: 255 registers), so ``c1`` under any
+#: decode but ``prmt`` is refused, never run. Opt-in: no served read licenses it yet.
+_K25_PLANS: dict = {
+    "today": ({}, {}),
+    "c1": ({"block_n": 64, "kc": 256, "warps": 4, "stages": 2}, {"block_n": 128, "kc": 128, "warps": 8, "stages": 3}),
+}
+
 
 #: Lane P158's default for ``E4B_K25_LUT`` (``bench/p158/RESULTS-p158.md``): an UNSET knob resolves to ``prmt`` on a
 #: model_type here, at engine build (:func:`resolve_k25_lut`), where the installed grouped-nf4-gemm carries K39's decode
@@ -504,6 +514,34 @@ def _k25_plan(nf4_smallm_mod) -> dict:
     return _K25_PLAN if "tree" in modes else dict(_K25_PLAN, lut="pair")
 
 
+def _k25_plan_raw():
+    """``E4B_K25_PLAN`` as set: ``today`` or ``c1``, or None when unset or empty (``today``). Anything else is refused."""
+    v = os.environ.get("E4B_K25_PLAN", "").strip().lower()
+    if not v:
+        return None
+    if v not in _K25_PLANS:
+        raise ValueError(f"E4B_K25_PLAN={v!r}: expected 'today' or 'c1'")
+    return v
+
+
+def _k25_c1_refusal(lut, why) -> RuntimeError:
+    return RuntimeError(f"E4B_K25_PLAN=c1 is lane P160's plan for K39's decode (K25's lut='prmt'), but K25's decode here "
+                        f"is {lut!r} ({why}). The tree at c1's shapes is slower than at today's (P155), so it is never "
+                        "run: set E4B_K25_LUT=prmt where the kernel package and device carry it, or E4B_K25_PLAN=today")
+
+
+def _k25_plans(nf4_smallm_mod) -> tuple:
+    """``(gate_up's plan, down's plan)``: :func:`_k25_plan` with ``E4B_K25_PLAN``'s block shapes (:data:`_K25_PLANS`;
+    unset is ``today``, the same plan for both). ``c1`` under a decode other than ``prmt`` is refused, never run."""
+    base = _k25_plan(nf4_smallm_mod)
+    name = _k25_plan_raw() or "today"
+    if name != "today" and base["lut"] != "prmt":
+        raw = _k25_lut_raw()
+        raise _k25_c1_refusal(base["lut"], f"E4B_K25_LUT={raw}" if raw else "unset E4B_K25_LUT, as resolved at build")
+    gu, dn = _K25_PLANS[name]
+    return dict(base, **gu), dict(base, **dn)
+
+
 def _k25_without_kernel(e: Exception) -> RuntimeError:
     return RuntimeError("E4B_K25_LUT=prmt needs grouped-nf4-gemm with K39's decode (K25's lut='prmt', "
                         "grouped-nf4-gemm#569); the installed kernel package has no K25 "
@@ -551,6 +589,29 @@ def resolve_k25_lut(model_type=None) -> dict:
         else:
             source = f"default-off: {why}"
     return {"env": raw, "lut": _k25_plan(mod)["lut"], "why": None, "source": source}
+
+
+def resolve_k25_plan(k25_lut: dict, family_known: bool = True) -> dict:
+    """``E4B_K25_PLAN`` resolved at engine build from :func:`resolve_k25_lut`'s result ``k25_lut``, before any weight
+    loads. Returns ``{"env": the raw value or None, "plan": "today" | "c1", or None when K25 is off or absent, "why": the
+    reason when None, "gu" / "dn": each projection's block shape}``.
+
+    An explicit ``c1`` is refused when K25 is off or absent, and when K25's decode is not ``prmt`` (as the forward
+    refuses it, :func:`_k25_plans`). ``family_known=False`` is the check before the model's config is read: it refuses
+    only what no family can change (K25 off or absent, an explicit ``E4B_K25_LUT`` other than ``prmt``); an unset decode
+    is resolved per family afterwards. Which plan each K25 call took is :data:`K25_PLAN_SEEN`."""
+    raw = _k25_plan_raw()
+    name = raw or "today"
+    lut = k25_lut.get("lut")
+    if lut is None:
+        if raw == "c1":
+            raise RuntimeError(f"E4B_K25_PLAN=c1 names K25's plan, but K25 does not run here ({k25_lut.get('why')})")
+        return {"env": raw, "plan": None, "why": k25_lut.get("why")}
+    if name != "today" and lut != "prmt" and (family_known or k25_lut.get("env") is not None):
+        raise _k25_c1_refusal(lut, k25_lut.get("source"))
+    base = {k: _K25_PLAN[k] for k in ("block_n", "kc", "warps", "stages")}
+    gu, dn = _K25_PLANS[name]
+    return {"env": raw, "plan": name, "why": None, "gu": dict(base, **gu), "dn": dict(base, **dn)}
 
 
 def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
@@ -641,6 +702,16 @@ K25_LUT_SEEN: dict = {}
 def _seen_k25_lut(lut: str, rows: int) -> None:
     key = f"{lut}|{'le256' if rows <= 256 else 'gt256'}"
     K25_LUT_SEEN[key] = K25_LUT_SEEN.get(key, 0) + 1
+
+
+#: K25's calls by ``E4B_K25_PLAN`` plan, as ``{"<plan>|<rows>": calls}`` (``today`` or ``c1``, :func:`_k25_plans`),
+#: counted beside :data:`K25_LUT_SEEN`. It is what an ``E4B_K25_PLAN`` read asserts: the arm's plan, and no other.
+K25_PLAN_SEEN: dict = {}
+
+
+def _seen_k25_plan(plan: str, rows: int) -> None:
+    key = f"{plan}|{'le256' if rows <= 256 else 'gt256'}"
+    K25_PLAN_SEEN[key] = K25_PLAN_SEEN.get(key, 0) + 1
 
 
 _SWIGLU = {}
@@ -844,7 +915,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         try:
             import nf4_smallm as _k25_mod
             _k25 = _k25_mod.gemm_nf4_grouped_smallm
-            _k25_kw = _k25_plan(_k25_mod)
+            _k25_gu_kw, _k25_dn_kw = _k25_plans(_k25_mod)
         except (ImportError, AttributeError) as e:
             if _k25_mode == "1":
                 raise RuntimeError(
@@ -852,6 +923,9 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                     "(nf4_smallm.gemm_nf4_grouped_smallm, grouped-nf4-gemm#429)") from e
             if _k25_lut_raw() == "prmt":  # an asked-for prmt is never dropped with K25, even under auto
                 raise _k25_without_kernel(e) from e
+            if _k25_plan_raw() == "c1":   # nor an asked-for c1
+                raise RuntimeError("E4B_K25_PLAN=c1 names K25's plan, but the installed kernel package has no K25 "
+                                   f"(nf4_smallm.gemm_nf4_grouped_smallm): {e}") from e
             _k25 = None                   # auto: the kernel package predates K25 -> today's NF4 route
     _small = _k19 if _k19 is not None else _k25
     _fused_tiles = None
@@ -1066,7 +1140,8 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     _gu_kw = {}                           # gate_up's extra kernel arguments: only the NF4 route's gather_div
     if device_grouping and int4_stores is None and _k25 is not None:
         _route = "nf4_k25"
-        _seen_k25_lut(_k25_kw["lut"], R_rows)
+        _seen_k25_lut(_k25_gu_kw["lut"], R_rows)
+        _seen_k25_plan(_k25_plan_raw() or "today", R_rows)
         # K25 (opt-in): the grouped small-M tensor-core GEMM on the NF4 stacks against the SAME 16-row device tiles. The
         # first call gets the UNSORTED x_rows and gathers through `order` in the kernel; the epilogue output is already
         # in sorted order. Outputs in sorted order, so gpt-oss's per-expert biases index by `sorted_ids` and the unsort
@@ -1080,10 +1155,10 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                     "int4_stores did not reach _fused_over_stack")
             if pk is gu_p and _tok is not None:
                 return _k25(_tok[0].to(torch.bfloat16), pk, am, t_row0, t_rows, t_grp, order,
-                            gather_div=_tok[1], **_k25_kw)
+                            gather_div=_tok[1], **_k25_gu_kw)
             kw = {"scatter": order} if (_lean and pk is dn_p) else {}
             return _k25(xr.to(torch.bfloat16), pk, am, t_row0, t_rows, t_grp,
-                        order if xr is x_rows else None, **kw, **_k25_kw)
+                        order if xr is x_rows else None, **kw, **(_k25_gu_kw if pk is gu_p else _k25_dn_kw))
     elif device_grouping and int4_stores is None:
         _route = "nf4_mtile_captured"
         def _mm(xr, pk, am):
