@@ -683,24 +683,36 @@ def test_a_receipt_without_a_trainable_count_ends_the_climb(tmp_path):
 
 
 
-def test_no_hpn_local_shadows_a_global_that_arm_once_reads():
+def test_no_hpn_local_shadows_a_global_that_any_function_it_reaches_reads():
     """HPN read 3 (00:00Z): tc1_hpn_family's `local R=<receipt>` shadowed the global R (the LoRA rank), so L4's arms got --r <path>.
-    The stub `arm` never reads R, so only a check on the REAL arm_once can catch the class: every UPPERCASE name tc1_hpn_family
-    declares local must not be a global that arm_once reads (arm_once's own locals and positionals excepted)."""
+    Bash locals are DYNAMICALLY scoped, so a local shadows a global for every function called beneath it (review). This walks the call
+    graph from tc1_hpn_family through tc1_run.sh's REAL function bodies and refuses any upper-case local that a reachable function reads
+    as a global, except TOK/TS, which are tc1_prepare's deliberate out-parameters (`local TOK TS; tc1_prepare ...`)."""
     import re
     src = RUN_SH.read_text()
+
     def code(text):                                                     # bash comments out: a comment naming "local R=" is not a declaration
         return "\n".join(re.sub(r"\s+#\s.*$", "", ln) for ln in text.splitlines() if not ln.lstrip().startswith("#"))
-    fam = code(src[src.index("tc1_hpn_family(){"):src.index("tc1_curve_family(){")])
-    a = src.index("\narm_once(){") + 1
-    nxt = re.search(r"\n[a-z_0-9]+\(\)\{", src[a + 1:])
-    body = code(src[a:a + 1 + nxt.start()])                             # arm_once up to the next top-level function
-    own = set()
-    for decl in re.findall(r"local ([^;\n]+)", body):
-        own |= {t.split("=")[0] for t in decl.split() if re.match(r"[A-Za-z_][A-Za-z0-9_]*(=|$)", t)}
-    reads = set(re.findall(r"\$\{?([A-Z_][A-Z0-9_]*)", body)) - own
-    declared = set()
-    for decl in re.findall(r"local ([^;\n]+)", fam):
-        declared |= {t.split("=")[0] for t in decl.split() if re.match(r"[A-Z_][A-Z0-9_]*(=|$)", t)}
-    assert "R" in reads, "arm_once must read the global LoRA rank R (sanity: the check sees the real body)"
-    assert not (declared & reads), f"tc1_hpn_family shadows arm_once globals: {sorted(declared & reads)}"
+    starts = [(m.start() + 1, m.group(1)) for m in re.finditer(r"\n([a-z_][a-z_0-9]*)\(\)\{", src)]
+    funcs = {name: code(src[st:(starts[i + 1][0] if i + 1 < len(starts) else len(src))]) for i, (st, name) in enumerate(starts)}
+
+    def locals_of(body):
+        out = set()
+        for decl in re.findall(r"local ([^;\n]+)", body):
+            out |= {t.split("=")[0] for t in decl.split() if re.match(r"[A-Za-z_][A-Za-z0-9_]*(=|$)", t)}
+        return out
+    seen, todo = set(), ["tc1_hpn_family"]
+    while todo:                                                         # the functions reachable from the HPN family
+        f = todo.pop()
+        if f in seen:
+            continue
+        seen.add(f)
+        todo += [g for g in funcs if g not in seen and re.search(rf"(?<![\w-]){re.escape(g)}(?![\w-])", funcs[f][len(f) + 3:])]
+    reads = {}
+    for f in seen - {"tc1_hpn_family"}:
+        for v in set(re.findall(r"\$\{?([A-Z_][A-Z0-9_]*)", funcs[f])) - locals_of(funcs[f]):
+            reads.setdefault(v, set()).add(f)
+    declared = {v for v in locals_of(funcs["tc1_hpn_family"]) if re.match(r"[A-Z_][A-Z0-9_]*$", v)}
+    assert "arm_once" in seen and "R" in reads and "arm_once" in reads["R"], "the walk must reach arm_once and see it read the rank R"
+    bad = {v: sorted(reads[v]) for v in declared & set(reads) if v not in {"TOK", "TS"}}
+    assert not bad, f"tc1_hpn_family's locals shadow globals read beneath it: {bad}"
