@@ -47,10 +47,11 @@ loop, and it was closed unused.
 | every arm keeps T's bits on every rep | all of them | HELD |
 | C1 compiles to 194 (gate_up) and 127 (down) registers, no spills | as predicted | HELD |
 
-**Against P156:** on its own held-out steps, under this lane's spacer, order and clocks, C1 reads 1.6508 against P156's
-reported 1.6167. P156's figure was not inflated by the missing spacer or by clocks. The winner's curse P156 measured
-(selection 1.770 against confirmation 1.617) lies between its selection and its confirmation, not between its
-confirmation and this read.
+**Against P156:** on P156's own held-out steps, under this lane's spacer, order and clocks, C1 reads 1.6508 against
+P156's reported 1.6167. P156 ran on another RTX 5090 (machine 40959) and this read on machine 147099, so the 2 % between
+the two figures spans two cards and is not attributed. What holds is narrower: on this card, the spacer, the order and
+the per-arm clocks did not lower C1 below P156's reported figure. P156's winner's curse (selection 1.770 against
+confirmation 1.617) was between its selection and its confirmation; this read does not move it.
 
 ## Caveats
 
