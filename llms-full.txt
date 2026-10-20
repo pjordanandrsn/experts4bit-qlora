@@ -2190,7 +2190,8 @@ remain. `e4b.train.dense-executor.dq9.5090.2026-10-08` ([diagnostic record](../b
 **DQ11 is a fusion build candidate, measured-private.** Unsloth (U) was faster than e4b's dense path (L) in this matched SDPA, eager, full-logits
 configuration, not Unsloth's default. The registered quality gates pass and the independently rederived decision is
 `BUILD_CANDIDATE`; this licenses a separate fusion investigation and carries no capacity or shipping claim.
-`e4b.train.dense-adapter.dq11.matched-sdpa.5090.2026-10-11` ([results](../bench/dq11/RESULTS-dq11.md)).
+`e4b.train.dense-adapter.dq11.matched-sdpa.5090.2026-10-11` ([results](../bench/dq11/RESULTS-dq11.md)). Its
+MLP-adapter fusion build closed at NO_GAIN (Phase 2, 2026-10-20; [results](../bench/dq11/RESULTS-dq11-mlp-build.md)).
 
 ### Training against other frameworks
 
