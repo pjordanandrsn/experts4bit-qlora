@@ -35,6 +35,8 @@ case "$*" in
   *hpn_read.py*) out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p')
     python3 -c "import json,sys; json.dump({'reader': 'F', 'runs': [[1.0] * 300, [1.0] * 300]}, open(sys.argv[1], 'w'))" "$out";;
   *hpn_reduce.py*) echo "HPN=STOP depths=[2, 4, 8]";;
+  *hbd_probe.py*) out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p'); echo '{"libraries": []}' > "$out";;
+  *hbd_reduce.py*) echo "HBD=READ {}";;
   *hp1_calib.py*) out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p'); echo '{"verdict": "PASS", "tol": 0.0123}' > "$out"; echo "HP1_CALIB=PASS tol=0.0123";;
   *hp1_eval.py*)
     out=$(echo "$*" | sed -n 's/.*--out \([^ ]*\).*/\1/p'); st=OK
@@ -60,17 +62,17 @@ W=$PWD; HP1_EVAL_N=48; HP1_EVAL_EVERY=200; HP1_SEL_SEEDS="3407 3408 3409"; HP1_C
 HP1_SHAKE_LAYERS=2; HP1_SHAKE_STEPS=3; CURVE_STEPS=200; UT7="q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj"
 HP1_AX_DROP=${TC1_HP1_DROP_AXOLOTL:-0}
 HP1_ZERO_TOL=${TC1_HP1_ZERO_TOL:-}; HP1_CAL_CEILING=0.01
-PY_E4B=$W/fakepy
+PY_E4B=$W/fakepy; PY_UNS=$W/fakepy-uns; PY_UNS_T28=$W/fakepy-t28
 say(){ echo "SAY: $*" >> "$W/say.log"; }
 can_run(){ case "$2" in ${NO_TIME_FOR:-__none__}) echo "SKIPPED $2" >> summary.txt; return 1;; esac; return 0; }
-tc1_prepare(){ TOK=$W/tokens.json; TS=deadbeef
+tc1_prepare(){ TOK=$W/tokens.json; TS=deadbeef; echo "${TC1_FETCH_ALLOW:-}" > "$W/fetch_allow.log"
   # tokenised for the family being prepared, as tc1_arm --prepare labels it (HP1's own family keeps the harness file as written)
   [ "$1" != qwen3hp1 ] && python3 -c "import json,sys; json.dump({'fam': sys.argv[1], 'sha256': 'deadbeef', 'train': [[1, 2]], 'eval': []}, open(sys.argv[2], 'w'))" "$1" "$TOK"
   return 0; }
 # tc1_arm's own rule (tc1_arm.py, the tokens check): a tokens file labelled for another fam is refused, rc=13 TOKENS_MISMATCH.
 arm(){ local tf; tf=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('fam') or '')" "${10}")
   if [ -n "$tf" ] && [ "$tf" != "$1" ]; then echo "$1 $2 $3" >> "$W/mismatch.log"; return 0; fi
-  echo "$1 $2 $3 ${*:12}" >> "$W/arms.log"; echo "$1 $2 $3 UNS_VENV=${UNS_VENV:-}" >> "$W/venv.log"
+  echo "$1 $2 $3 ${*:12}" >> "$W/arms.log"; echo "$1 $2 $3 UNS_VENV=${UNS_VENV:-}" >> "$W/venv.log"; echo "$1 $2 $3 E4B_VENV=${E4B_VENV:-}" >> "$W/e4bvenv.log"
   # STUB_RECORDS=DIR: an arm whose record is in DIR writes that real record, copied unchanged (HPN read 5's L8 cells)
   if [ -n "${STUB_RECORDS:-}" ] && [ -e "$STUB_RECORDS/${1}_${2}_${3}.json" ]; then cp "$STUB_RECORDS/${1}_${2}_${3}.json" "$W/${1}_${2}_${3}.json"
   else case "$1" in qwen3hpnL*) echo "{\"trainable_params\": ${STUB_TRAINABLE:-26771456}}" > "$W/${1}_${2}_${3}.json";; *) touch "$W/${1}_${2}_${3}.json";; esac; fi
@@ -102,6 +104,9 @@ def drive(tmp_path, mutate=None, **env):
     (tmp_path / "hp1_funcs.sh").write_text(src[src.index(START):src.index(END)])
     (tmp_path / "fakepy").write_text(FAKEPY)
     (tmp_path / "fakepy").chmod(0o755)
+    for name in ("fakepy-uns", "fakepy-t28"):                          # the Unsloth venvs' interpreters, each logged under its own name
+        (tmp_path / name).write_text(FAKEPY.replace('echo "PY: $*"', f'echo "PY[{name}]: $*"'))
+        (tmp_path / name).chmod(0o755)
     (tmp_path / "harness.sh").write_text(HARNESS)
     e = dict(os.environ, W=str(tmp_path))
     e.update({"STUB_SEL": "k10", **env})
@@ -549,6 +554,45 @@ def test_a_depth_that_does_not_fit_ends_the_climb_as_a_stated_limit(tmp_path):
     assert "HPN deepest depth that fit: 4" in summary and "hpn_reduce.py" in py     # the reducer still runs (it will say INSUFFICIENT_DEPTH)
 
 
+def test_hbd_runs_the_eight_registered_cells_in_order_each_in_its_own_venv_with_its_record_and_probe(tmp_path):
+    """HBD (bench/hbd/PREREG-hbd.md): the cells E0a E0b E2 E1 U0a U0b U1 U2 in the registered order, each with its interpreter
+    (e4b on venv-e4b / venv-unsloth-t28 / venv-unsloth; Unsloth on t28 / cu130), its backend, the export and --hbd-record, and the
+    sibling probe run with the same interpreter just before it. Only the two shards a 2-layer cut reads are fetched."""
+    import json
+    arms, summary = drive(tmp_path, FAMILY_FN="tc1_hbd_family", FAMILY_FAM="qwen3hbd")
+    cells = [a for a in arms if a[0] == "qwen3hbdL2"]
+    assert [a[2] for a in cells] == ["hbd_e0a", "hbd_e0b", "hbd_e2", "hbd_e1", "hbd_u0a", "hbd_u0b", "hbd_u1", "hbd_u2"]
+    assert [a[1] for a in cells] == ["e4b"] * 4 + ["unsloth"] * 4
+    e4bv = {ln.split()[2]: ln.split()[3] for ln in (tmp_path / "e4bvenv.log").read_text().splitlines()}
+    unsv = {ln.split()[2]: ln.split()[3] for ln in (tmp_path / "venv.log").read_text().splitlines()}
+    assert [e4bv[t] for t in ("hbd_e0a", "hbd_e0b", "hbd_e2", "hbd_e1")] == ["E4B_VENV=", "E4B_VENV=", "E4B_VENV=t28u", "E4B_VENV=t212"]
+    assert [unsv[t] for t in ("hbd_u0a", "hbd_u0b", "hbd_u1", "hbd_u2")] == ["UNS_VENV=t28", "UNS_VENV=t28", "UNS_VENV=", "UNS_VENV="]
+    cell = dict(zip([a[2] for a in cells], ["E0a", "E0b", "E2", "E1", "U0a", "U0b", "U1", "U2"]))
+    for a in cells:
+        args = " ".join(a)
+        assert f"--hbd-record {tmp_path}/hbd/rec_{cell[a[2]]}.json" in args and "--hp1-export-base 1" in args
+    back = {a[2]: a[a.index("--unsloth-moe-backend") + 1] for a in cells if a[1] == "unsloth"}
+    assert back == {"hbd_u0a": "native_torch", "hbd_u0b": "native_torch", "hbd_u1": "native_torch", "hbd_u2": "grouped_mm"}
+    py = (tmp_path / "py.log").read_text().splitlines()
+    probes = [ln for ln in py if "hbd_probe.py" in ln]
+    want = [("fakepy", "e4b", "E0a"), ("fakepy", "e4b", "E0b"), ("fakepy-t28", "e4b", "E2"), ("fakepy-uns", "e4b", "E1"),
+            ("fakepy-t28", "unsloth", "U0a"), ("fakepy-t28", "unsloth", "U0b"), ("fakepy-uns", "unsloth", "U1"), ("fakepy-uns", "unsloth", "U2")]
+    venv = lambda ln: ln.split("]")[0].split("[")[1] if ln.startswith("PY[") else "fakepy"  # noqa: E731
+    assert [(venv(ln), ln.split("--framework ")[1].split()[0], ln.split("probe_")[1].split(".json")[0]) for ln in probes] == want
+    allow = (tmp_path / "fetch_allow.log").read_text().split()
+    assert [x for x in allow if x.endswith(".safetensors")] == ["model-00001-of-00016.safetensors", "model-00016-of-00016.safetensors"]
+    spec = json.loads((tmp_path / "hbd_spec.json").read_text())
+    assert spec["cells"]["U2"] == {"receipt": "qwen3hbdL2_unsloth_hbd_u2.json", "record": "hbd/rec_U2.json", "probe": "hbd/probe_U2.json"}
+    assert any("hbd_reduce.py" in ln for ln in py) and "HBD E0a" in summary and "HBD U2" in summary
+
+
+def test_hbd_arms_use_hpns_one_step_recipe_with_e0a_as_unsloths_trainable_reference():
+    src = RUN_SH.read_text()
+    assert "hbdcal) s=1; en=300; ee=1; ex_tag=hbd_e0a;;" in src
+    body = src[src.index("tc1_hbd_family(){"):src.index("tc1_hpn_family(){")]
+    assert body.count(" 0 hbdcal $TL $TSC ") == 8
+
+
 READ5 = REPO / "tests" / "fixtures" / "hpn-read5"       # HPN read 5 (A2000, e4b e537702b): its real records, copied unchanged
 
 
@@ -767,7 +811,8 @@ def test_a_receipt_without_a_trainable_count_ends_the_climb(tmp_path):
 
 
 
-def test_no_hpn_local_shadows_a_global_that_any_function_it_reaches_reads():
+@pytest.mark.parametrize("family", ["tc1_hpn_family", "tc1_hbd_family"])
+def test_no_hpn_local_shadows_a_global_that_any_function_it_reaches_reads(family):
     """HPN read 3 (00:00Z): tc1_hpn_family's `local R=<receipt>` shadowed the global R (the LoRA rank), so L4's arms got --r <path>.
     Bash locals are DYNAMICALLY scoped, so a local shadows a global for every function called beneath it (review). This walks the call
     graph from tc1_hpn_family through tc1_run.sh's REAL function bodies and refuses any upper-case local that a reachable function reads
@@ -785,7 +830,7 @@ def test_no_hpn_local_shadows_a_global_that_any_function_it_reaches_reads():
         for decl in re.findall(r"local ([^;\n]+)", body):
             out |= {t.split("=")[0] for t in decl.split() if re.match(r"[A-Za-z_][A-Za-z0-9_]*(=|$)", t)}
         return out
-    seen, todo = set(), ["tc1_hpn_family"]
+    seen, todo = set(), [family]
     while todo:                                                         # the functions reachable from the HPN family
         f = todo.pop()
         if f in seen:
@@ -793,13 +838,13 @@ def test_no_hpn_local_shadows_a_global_that_any_function_it_reaches_reads():
         seen.add(f)
         todo += [g for g in funcs if g not in seen and re.search(rf"(?<![\w-]){re.escape(g)}(?![\w-])", funcs[f][len(f) + 3:])]
     reads = {}
-    for f in seen - {"tc1_hpn_family"}:
+    for f in seen - {family}:
         for v in set(re.findall(r"\$\{?([A-Z_][A-Z0-9_]*)", funcs[f])) - locals_of(funcs[f]):
             reads.setdefault(v, set()).add(f)
-    declared = {v for v in locals_of(funcs["tc1_hpn_family"]) if re.match(r"[A-Z_][A-Z0-9_]*$", v)}
+    declared = {v for v in locals_of(funcs[family]) if re.match(r"[A-Z_][A-Z0-9_]*$", v)}
     assert "arm_once" in seen and "R" in reads and "arm_once" in reads["R"], "the walk must reach arm_once and see it read the rank R"
     bad = {v: sorted(reads[v]) for v in declared & set(reads) if v not in {"TOK", "TS"}}
-    assert not bad, f"tc1_hpn_family's locals shadow globals read beneath it: {bad}"
+    assert not bad, f"{family}'s locals shadow globals read beneath it: {bad}"
 
 
 def test_the_disk_check_waits_for_the_removed_space_to_come_back_even_when_zfs_holds_then_releases(tmp_path):
