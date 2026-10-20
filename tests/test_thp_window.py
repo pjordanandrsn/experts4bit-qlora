@@ -78,14 +78,18 @@ def test_a_window_carries_both_snapshots_the_seconds_and_the_counter_deltas(tmp_
     rec = tw.window(before, root=root)
     assert rec["before"] is before and rec["after"]["anon_huge_kb"] == 4096
     assert rec["vmstat_delta"] == {"thp_fault_alloc": 15, "thp_fault_fallback": 0}     # keys read in both snapshots only
-    assert rec["anon_huge_kb_max"] == 2097152 and rec["seconds"] >= 0
+    assert rec["anon_huge_kb_ends_max"] == 2097152 and rec["seconds"] >= 0
 
 
-def test_another_process_is_read_by_pid(tmp_path):
+def test_another_process_is_read_by_pid_with_its_own_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv("THP_MEM_ALLOC_ENABLE", "1")                 # the CALLER's switch: never reported as the child's
     root = _tree(tmp_path)
     (root / "proc/4242").mkdir(parents=True)
     (root / "proc/4242/smaps_rollup").write_text(ROLLUP.replace("2097152", "0"))
-    assert tw.snapshot(pid=4242, root=root)["anon_huge_kb"] == 0
+    s = tw.snapshot(pid=4242, root=root)                            # no environ file: unreadable, so left out
+    assert s["anon_huge_kb"] == 0 and "thp_mem_alloc_enable" not in s
+    (root / "proc/4242/environ").write_bytes(b"PATH=/usr/bin\0THP_MEM_ALLOC_ENABLE=0\0HOME=/root\0")
+    assert tw.snapshot(pid=4242, root=root)["thp_mem_alloc_enable"] == "0"
 
 
 def test_the_real_host_reads_without_error():

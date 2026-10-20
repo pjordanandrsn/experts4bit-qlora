@@ -12,8 +12,9 @@ possible there, and whether this process actually held any.
 A snapshot holds:
 - ``thp_enabled`` / ``thp_defrag``: the selected mode in /sys/kernel/mm/transparent_hugepage, ``absent`` on a kernel built
   without THP. The mode is host-wide.
-- ``thp_mem_alloc_enable``: this process's ``THP_MEM_ALLOC_ENABLE``, the switch with which torch asks for huge pages on its
-  CPU allocations under ``madvise``. It is left out when unset: absent is not 0.
+- ``thp_mem_alloc_enable``: the read process's ``THP_MEM_ALLOC_ENABLE``, the switch with which torch asks for huge pages on
+  its CPU allocations under ``madvise``: this process's environment for ``pid="self"``, else /proc/<pid>/environ (left
+  out if unreadable). It is left out when unset: absent is not 0.
 - ``anon_huge_kb``, ``anon_kb``, ``rss_kb``: this process's AnonHugePages, Anonymous and Rss from /proc/<pid>/smaps_rollup.
   ``anon_huge_kb`` > 0 means the process held huge pages at that moment.
 - ``vmstat``: the host's ``thp_*`` event counters from /proc/vmstat. They count every process on the host, so a window's
@@ -48,6 +49,19 @@ def _mode(text: str | None) -> str | None:
     return m.group(1) if m and m.group(1) in THP_MODES else None
 
 
+def _env(pid: int | str, root: Path) -> dict:
+    """The read process's environment: os.environ for ``self``, else /proc/<pid>/environ ({} if unreadable). Another
+    process's switch is never reported from the caller's environment."""
+    if str(pid) == "self":
+        return dict(os.environ)
+    try:
+        raw = (root / f"proc/{pid}/environ").read_bytes()
+    except OSError:
+        return {}
+    pairs = (item.decode("utf-8", "replace").partition("=") for item in raw.split(b"\0") if item)
+    return {k: v for k, _, v in pairs if k}
+
+
 def snapshot(pid: int | str = "self", root: Path | str = "/") -> dict:
     root = Path(root)
     out: dict = {"t": time.monotonic()}
@@ -58,7 +72,7 @@ def snapshot(pid: int | str = "self", root: Path | str = "/") -> dict:
             mode = _mode(_read(root, f"sys/kernel/mm/transparent_hugepage/{key}"))
             if mode:
                 out[f"thp_{key}"] = mode
-    env = os.environ.get("THP_MEM_ALLOC_ENABLE", "").strip()
+    env = _env(pid, root).get("THP_MEM_ALLOC_ENABLE", "").strip()
     if env:
         out["thp_mem_alloc_enable"] = env                             # as set: torch reads only "1" as on
     rollup = _read(root, f"proc/{pid}/smaps_rollup") or ""
@@ -78,11 +92,12 @@ def snapshot(pid: int | str = "self", root: Path | str = "/") -> dict:
 
 def window(before: dict, after: dict | None = None, pid: int | str = "self", root: Path | str = "/") -> dict:
     """Both snapshots of a timed window, the seconds between them, and the host's thp_* counter deltas (keys read in both
-    snapshots only)."""
+    snapshots only). ``anon_huge_kb_ends_max`` is the larger of the two endpoint readings: it can miss a peak inside the
+    window, which only a sampler during the window would see."""
     after = snapshot(pid, root) if after is None else after
     b, a = before.get("vmstat") or {}, after.get("vmstat") or {}
     rec = {"before": before, "after": after, "seconds": round(after["t"] - before["t"], 6),
            "vmstat_delta": {k: a[k] - b[k] for k in VMSTAT_KEYS if k in a and k in b}}
     if "anon_huge_kb" in before and "anon_huge_kb" in after:
-        rec["anon_huge_kb_max"] = max(before["anon_huge_kb"], after["anon_huge_kb"])
+        rec["anon_huge_kb_ends_max"] = max(before["anon_huge_kb"], after["anon_huge_kb"])
     return rec
