@@ -34,3 +34,25 @@ s .. s + k, with s uniform in 0 .. 128 - (k + 1)) as the rows of one step: 16(k 
 
 **Limits:** #1869's carry over (teacher-forced bf16 picks, one prompt set, one model), and the premise is inference.
 This read informs whether a W32 or spec-verify served lane is worth registering. It measures no speed.
+
+## Amendment 1 (before the amended computation): the width composition failed its positive control
+
+The first run of (a) stopped at its positive control. The uniform composition of 16 (request, step) pairs read a mean
+`D` of 55.90 on S0, against #1869's null A mean of 57.26. Drawing pairs uniformly lets one request contribute two or
+three tokens to a batch, and a request's tokens share experts beyond chance even at non-consecutive steps: a
+**request-level affinity**. So the composition does not stand in for independent requests, and (a) as constructed is
+**VOID**. The failed control is kept and reported, never discarded.
+
+**Amended (a'), stratified:** for B = 16j (j = 1, 2, 4, 8), each of the 16 requests contributes j tokens at distinct
+uniform random steps, the same rows at every layer.
+- The B = 16 cell (one token per request) must read within 0.2 of #1869's null A mean, or the script stops.
+- Widths beyond 16 distinct requests cannot be read from this replay, which holds 16 requests. So B > 16 here is 16
+  requests with j tokens each. It includes the request affinity, and is an **optimistic** bound on the amortization of
+  B distinct requests.
+
+**Amended (b):** each verify block (the 16 requests' k + 1 consecutive tokens) is compared with (a')'s same-row-count
+cell: the same requests with the same number of tokens each, but at random steps.
+- The ratio isolates **consecutive-token sharing beyond request affinity**.
+- The uniform composition is reported beside it, as the failed control's own row.
+
+**Also reported:** the request affinity itself, the uniform composition's `D` at B = 16 over (a')'s.
