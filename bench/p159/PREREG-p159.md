@@ -292,8 +292,10 @@ store, at `receipts/p159-1/result.json` (sha256 `d3c8b16b…`).
 1. **Eligibility.** `p159-2`, on machine 11541, runs after `p159-1` reads NOT_READ **or any VOID_\***.
    - An instrument void is neither a reading nor a strike.
    - No new id: `p159-2` is the rerun. `p159-3` and `p159-4` keep their pre-create and pre-flight scope.
-2. **The THP pre-flight refusal.** `p159_box.py --plan` refuses unless THP `enabled` is `always` or
-   `THP_MEM_ALLOC_ENABLE` is set.
+2. **The THP pre-flight refusal.** `p159_box.py --plan` refuses unless torch's allocations can get huge pages: THP
+   `enabled` is `always`, or `madvise` with `THP_MEM_ALLOC_ENABLE=1`.
+   - torch's switch only calls `madvise(MADV_HUGEPAGE)`, which `never` and a kernel without THP ignore.
+   - torch reads `1` as on and `0` as off. Any other value is refused here (fail closed).
    - This is NOT_RUN at the pre-flight (rc 16), before the install, and not a strike.
    - The refusal record states the mode it saw (`absent` on a kernel without THP).
    - A dry run is exempt: it reads no state.

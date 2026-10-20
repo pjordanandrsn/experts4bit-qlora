@@ -243,11 +243,14 @@ def thp_mode(root="/"):
 
 def thp_refusal(mode, alloc_env):
     """Amendment 2 (2): why the box refuses before the install, or None. READ-1 can read IDENTIFIED only when torch's CPU
-    allocations can get huge pages: THP enabled = always, or THP_MEM_ALLOC_ENABLE set (torch's MADV_HUGEPAGE switch)."""
-    if mode == "always" or (alloc_env or "").strip():
+    allocations can get huge pages: THP enabled = always, or THP enabled = madvise with THP_MEM_ALLOC_ENABLE=1. torch's
+    switch only calls madvise(MADV_HUGEPAGE), which 'never' and a kernel without THP ignore; torch reads '1' as on and
+    '0' as off, and any other value is refused here (fail closed)."""
+    if mode == "always" or (mode == "madvise" and (alloc_env or "").strip() == "1"):
         return None
-    return (f"THP enabled is {mode!r}, not 'always', and THP_MEM_ALLOC_ENABLE is unset: READ-1 could not read "
-            "IDENTIFIED on this host (Amendment 2)")
+    return (f"THP enabled is {mode!r} and THP_MEM_ALLOC_ENABLE is {alloc_env!r}: torch's allocations cannot get huge "
+            "pages ('always', or 'madvise' with THP_MEM_ALLOC_ENABLE=1, is needed), so READ-1 could not read IDENTIFIED "
+            "on this host (Amendment 2)")
 
 
 def plan_check(dry=False):
@@ -412,13 +415,14 @@ def child(a):
     t = time.perf_counter()
     one_block(a.pool, a.slab, a.experts, resident=None)  # untimed warm block (P: faults the heap once)
     warm_wall_s = time.perf_counter() - t
-    blocks, gate = [], None
+    blocks, gate, gated = [], None, False
     for arm in block_arms(a.kind):
         t = time.perf_counter()
         rec = one_block(a.pool, a.slab, a.experts, resident=resident if arm == "R" else None)
         rec.update(arm=arm, wall_s=time.perf_counter() - t)
         blocks.append(rec)
-        if a.gate and arm == "M" and gate is None:  # Amendment 2 (3): the first M block decides whether the box goes on
+        if a.gate and arm == "M" and not gated:     # Amendment 2 (3): the FIRST M block decides whether the box goes on
+            gated = True
             ok, gate = bytes_gate(rec, a.experts)
             if not ok:
                 break
@@ -576,6 +580,7 @@ def self_test():
     # Amendment 2 (2): the THP pre-flight refusal
     assert thp_refusal("always", None) is None and thp_refusal("madvise", "1") is None
     assert "'madvise'" in thp_refusal("madvise", None) and "'absent'" in thp_refusal("absent", "") and thp_refusal(None, " ")
+    assert all(thp_refusal(m, v) for m, v in (("never", "1"), ("absent", "1"), ("madvise", "0"), ("madvise", "true")))
     # Amendment 2 (3): the early bytes gate (registered bytes pass; either digest off stops; a dry run is not gated)
     good = {"fused_sha256": FUSED_SHA, "nf4_sha256": NF4_SHA}
     assert bytes_gate(good, E_FULL) == (True, None) and bytes_gate({"fused_sha256": "x", "nf4_sha256": "y"}, 8) == (True, None)

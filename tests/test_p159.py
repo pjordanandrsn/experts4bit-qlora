@@ -217,13 +217,17 @@ def test_a_gated_partial_result_reduces_to_void_bytes():
 
 def test_the_gate_is_wired_to_the_first_m_process_only():
     src = (LANE / "p159_box.py").read_text()
-    assert "gate=(i == first_m)" in src and 'if a.gate and arm == "M" and gate is None' in src
+    assert "gate=(i == first_m)" in src and 'if a.gate and arm == "M" and not gated' in src
     assert "return 3 if gate else 0" in src and 'err == "bytes_gate"' in src
 
 
 @pytest.mark.parametrize("enabled,alloc,refused", [("always [madvise] never", None, True),
                                                    ("[always] madvise never", None, False),
                                                    ("always [madvise] never", "1", False),
+                                                   ("always [madvise] never", "0", True),        # torch's off
+                                                   ("always [madvise] never", "true", True),     # not torch's on: fail closed
+                                                   ("always madvise [never]", "1", True),        # madvise is ignored
+                                                   (None, "1", True),                            # no THP at all
                                                    (None, None, True)])
 def test_the_thp_pre_flight_refusal(tmp_path, enabled, alloc, refused):
     if enabled is not None:
