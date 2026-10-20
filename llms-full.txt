@@ -2189,7 +2189,7 @@ configuration, not Unsloth's default. The registered quality gates pass and the 
 
 ### Training against other frameworks
 
-**Qwen3-30B-A3B against Unsloth: Unsloth spends 1.92× e4b's GPU time per step; wall-clock 2.80× on an AMD EPYC
+**Qwen3-30B-A3B against Unsloth 2026.9.14: Unsloth spends 1.92× e4b's GPU time per step; wall-clock 2.80× on an AMD EPYC
 7713.** TC1's field recipe (alpaca, seq 2048, micro-batch 2 × accum 4, r 16, AdamW-8bit) on one RTX 5090, the work
 matched, both frameworks on one stack, e4b at every current default. The wall ratio depends on the host: Unsloth runs
 14× e4b's CPU ops per step and keeps its GPU busy for 0.33 of its step against e4b's 0.49, so a slower host stretches
@@ -2197,23 +2197,25 @@ Unsloth's step more. Held-out loss agrees within 0.0012; e4b peaks 1.89 GB highe
 runs out of memory on the 32 GB card. `e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio`,
 `e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.hf-oom` ([results](../bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos69.md)).
 
-**On packed 4,096-token rows, Unsloth spends 1.160× e4b's GPU time per step.** The wall-clock ratio follows the host:
+**On packed 4,096-token rows, Unsloth 2026.9.14 spends 1.160× e4b's GPU time per step.** The wall-clock ratio follows the host:
 1.472 on the profiled host, 1.287 and 1.773 on two others. At e4b's defaults its training phase peaks 1.04 GB above
 Unsloth's 24.86 GB, and 0.30 GB above with the opt-in `E4B_CKPT_OFFLOAD=1`.
 `e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio`,
 `e4b.train.memory.packed-4k-position-defaults.5090.2026-10-07`
 ([results](../bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos68.md)).
 
-**Mixtral-8x7B against Unsloth: e4b is faster, Unsloth/e4b 1.144**, both resident on one stack (torch 2.12.1 /
+**Mixtral-8x7B against Unsloth 2026.9.14: e4b is faster, Unsloth/e4b 1.144**, both resident on one stack (torch 2.12.1 /
 transformers 5.5.0), on an AMD EPYC 7B13: 3.24 against 3.71 s/step, at 2.07 GB more peak on e4b (its fp32 expert
 absmax). The register's other Mixtral ratios answer other questions: 0.836 put e4b on the field image's torch 2.8 stack
 on a Core Ultra 9 285K, the host most favourable to Unsloth seen (the same-stack box read that stack at 1.013), and
-0.361 is tp2's footprint trade, e4b under CPU expert offload at 3.22 GB against Unsloth resident at 29.16 GB, not a
+0.361 is tp2's footprint trade (2026-09-06, Unsloth 2026.9.2), e4b under CPU expert offload at 3.22 GB against Unsloth
+resident at 29.16 GB, not a
 resident position. `e4b.train.h2h.unsloth.mixtral.5090.2026-10-05.same-stack`,
 `e4b.train.h2h.unsloth.mixtral.5090.2026-10-04.dense-default`, `e4b.train.h2h.unsloth.mixtral.5090.2026-09-06`
 ([results](../bench/h2h-2026-10-02/tc2/RESULTS-tc2-mixtral-samestack.md)).
 
-**Granite and OLMoE: e4b is faster than each comparator** (TC2, 2026-10-04, one RTX 5090): HF/e4b 1.299 and
+**Granite and OLMoE: e4b is faster than each comparator** (TC2, 2026-10-04, one RTX 5090; transformers 5.18.0 + PEFT
+0.21.2, axolotl 0.20.0, Unsloth 2026.9.14): HF/e4b 1.299 and
 axolotl/e4b 1.150 on Granite-3.1-3B-A800M, Unsloth/e4b 1.821 on OLMoE-1B-7B, each pair comparable or equivalent on
 held-out loss. e4b's peak is about half HF's on Granite and 1.70 GB above Unsloth's on OLMoE. Unsloth adapts no expert
 parameter of Granite, so there is no Unsloth position there, and gpt-oss-20b has no adapter set common to the
@@ -2221,20 +2223,21 @@ frameworks. `e4b.train.h2h.hf.granite.5090.2026-10-04`, `e4b.train.h2h.axolotl.g
 `e4b.train.h2h.unsloth.olmoe.5090.2026-10-04`, `e4b.train.h2h.unsloth.granite.5090.2026-10-02.coverage`,
 `e4b.train.h2h.unsloth.gptoss.5090.2026-10-02.no-common-set` ([TC2](../bench/h2h-2026-10-02/tc2/README.md)).
 
-**Qwen3.6-35B-A3B: at its defaults e4b does not fit the matched set resident on 32 GB; Unsloth does**, at 30.47 GB.
+**Qwen3.6-35B-A3B: at its defaults e4b does not fit the matched set resident on 32 GB; Unsloth 2026.9.14 does**, at 30.47 GB.
 Under expert offload e4b trains the set at 19.35 GB. With the comparator's bytes at micro-batch 1 (a measurement hook,
 not a training option) e4b trains it resident and Unsloth/e4b reads 2.049, a labelled row.
 `e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-04`, `e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-02.e4b-offload`,
 `e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-04.mb1-dq-frozen4`.
 
-**axolotl on Qwen3-30B-A3B: e4b is faster, axolotl/e4b 2.775** at matched work (1.979 on a second host). At steady
+**axolotl 0.20.0 on Qwen3-30B-A3B: e4b is faster, axolotl/e4b 2.775** at matched work (1.979 on a second host). At steady
 state (steps 101–200) axolotl's scattermoe native-best / e4b as shipped reads 1.238 and 1.146 on two hosts, while at
 step 200 axolotl's held-out is 0.7705 against e4b-as-shipped's 0.7948. Both were read on 2026-10-03, before the later
 training defaults. `e4b.train.h2h.axolotl.qwen3.5090.2026-10-03`,
 `e4b.train.h2h.axolotl.qwen3.5090.2026-10-03.native-steady-state`
 ([results](../bench/h2h-2026-10-02/tc1/RESULTS-tc1-matched19.md)).
 
-**On an H100 NVL at e4b 0.45.0's default settings, e4b is faster per step: Unsloth/e4b 1.061**, at 2.93 GB more peak
+**On an H100 NVL at e4b 0.45.0's default settings, e4b is faster per step than Unsloth 2026.9.14: Unsloth/e4b
+1.061**, at 2.93 GB more peak
 on e4b and ×1.23 Unsloth's energy per step. `e4b.train.h2h.unsloth.qwen3.h100.release-0.45.0`
 ([TC1c](../bench/h2h-2026-10-02/tc1c/README.md)).
 
