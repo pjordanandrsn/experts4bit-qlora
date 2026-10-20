@@ -52,4 +52,5 @@ Example opening:
 block), so a commit that merged while another main run was going may never get a run of its own. After pushing
 the tag and before publishing the GitHub release (which publishes to PyPI), run CI at the tag and wait for green:
 `gh workflow run CI --ref vX.Y.Z`, then `gh run watch`. A dispatched run has its own concurrency group, so it is
-never collapsed or cancelled.
+never collapsed or cancelled. The release workflow refuses to publish without a successful CI run at the tag's
+commit: if it stops there, dispatch CI at the tag and re-run the release job.
