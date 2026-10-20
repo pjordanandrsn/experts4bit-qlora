@@ -367,7 +367,7 @@ rows) and `levers.kv.pool_mib`, and the step trace counts `dec_pieces` (replays 
 Qwen3-30B-A3B's NF4 expert shapes uses grouped-nf4-gemm's bandwidth-targeted GEMV: 1.24× as fast at one request and
 unchanged at 16, with quality within P110's bar (`e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`). It is grouped-nf4-gemm's
 default from 0.43.0, and `[fast]` requires 0.43.0 from experts4bit-qlora 0.55.0; `GNF4_GEMV_BW=0` restores dot-pad.
-From grouped-nf4-gemm 0.47.0 the default also takes Mixtral-8x7B's expert shapes at >= 160 SMs (one request 2.41× as fast,
+From grouped-nf4-gemm 0.47.0, at >= 160 SMs, the default also takes Mixtral-8x7B's expert shapes (one request 2.41× as fast,
 `e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18`), Granite-3.1-3b-a800m's and OLMoE-1B-7B's (1.3979× and 1.5011× on an RTX
 5090 at a 400 W limit, `e4b.serve.p134.gemv-bw.granite.5090.2026-10-18`, `e4b.serve.p134.gemv-bw.olmoe.5090.2026-10-18`),
 and the RTX 4090 (128 SMs) at Qwen3-30B-A3B's two shapes only (1.5145×, `e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18`). The
