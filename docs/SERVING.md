@@ -401,6 +401,15 @@ decode in 0.50.0. On an older package each resolves off, recorded.
   resolves to the tree, so no install breaks. `tree` opts out, and an explicit `prmt` the package or device cannot
   serve is refused. Reported in `levers.k25_lut`; which decode each K25 call took is
   `prefill_routes.seen.moe_k25_lut`.
+- **K25's tile plan (`E4B_K25_PLAN`, `c1` on `qwen3_moe`; on main after 0.56.0, in no release yet).** Under the
+  `prmt` decode, K25 runs plan `c1`: gate_up at `{block_n 64, kc 256, warps 4, stages 2}` and down at `{block_n 128,
+  kc 128, warps 8, stages 3}`, in place of one plan for both. A plan changes tiling and staging, never the values, so
+  the output is bit-identical to today's plan. Sixteen requests decode 1.4654× as fast, and one is unchanged
+  (`e4b.serve.p161.k25-plan-c1.qwen3.5090.2026-10-20`, [`bench/p161/RESULTS-p161.md`](../bench/p161/RESULTS-p161.md):
+  one RTX 5090, Qwen3-30B-A3B). Unset, it resolves to `c1` only where K25's decode resolved to `prmt`, and to `today`
+  otherwise (an older kernel package, ROCm, `E4B_K25_LUT=tree`), recorded, never a crash. `today` opts out; an
+  explicit `c1` under any other decode is refused. Reported in `levers.k25_plan`; which plan each K25 call took is
+  `prefill_routes.seen.moe_k25_plan`.
 
 **Prefill on the int4 expert store (#916; lanes P100, P102).** With `max_seqs` 1 the server leaves
 `hot_residency.DEVICE_GROUPING` off. Until P102, every prefill chunk's MoE call on the int4 store therefore ran a
