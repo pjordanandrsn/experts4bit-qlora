@@ -1,4 +1,4 @@
-### P159 registered (design): what makes the loader's host-side expert fuse run 17x slower in some host windows
+### P159 registered: what makes the loader's host-side expert fuse run 17x slower in some host windows
 
 `bench/p159/PREREG-p159.md` registers a timing premise, never a ruling. On one host the registered fuse block ran 17x
 slower outside one wall-clock window that spanned four processes; another host ran it fast throughout. The primary
