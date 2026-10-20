@@ -65,7 +65,8 @@ def _brace_depth(text: str) -> int:
     return t.count("{") - t.count("}")
 
 
-HEREDOC_RE = re.compile(r"<<-?[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
+# not a here-string (`<<<word`: the lookbehind) and not an arithmetic shift (`$((1<<n))`: the lookahead)
+HEREDOC_RE = re.compile(r"(?<!<)<<-?[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1(?=[\s;&|>]|$)")
 
 
 def _strip_comments_and_heredocs(text: str) -> str:
@@ -260,6 +261,15 @@ def test_heredoc_bodies_hashes_and_nested_expansions_are_not_shell_structure():
     assert fit_problems(head + CANONICAL) == []
     assert _block_depth(head) == 0 and _brace_depth(head) == 0
     assert _block_depth("f(){ case $1 in a) echo;; esac; }\nfc) case $x in *) ;; esac\n") == 0
+
+
+def test_a_here_string_or_an_arithmetic_shift_is_not_a_heredoc():
+    """`<<<word` and `$((1<<n))` look like `<<word`. Read as heredocs they swallowed every line up to one reading `word`
+    or `n`, hiding an `if` around the check: a false pass, and a balanced one that the closed-script test cannot see."""
+    branch = CANONICAL.replace('[ "$LEFT"', 'if [ -n "$X" ]; then\n[ "$LEFT"').replace("finish 19; }\n", "finish 19; }\nfi\n")
+    for above in ("read -r a <<<word\n", "N=$((1<<n))\n", 'read -r a <<< "$t"\n'):
+        assert any("not at top level" in p for p in fit_problems(above + branch)), above
+        assert fit_problems(above + CANONICAL) == [], above
 
 
 def test_every_gated_runner_reads_as_a_closed_script():
