@@ -118,16 +118,32 @@ def load_canonical(path, device):
     return out, json.loads(md["scalings"]), json.loads(md.get("meta", "{}"))
 
 
+FINGERPRINT_CHUNK = 1 << 24                            # elements per chunk: 3 int64 temporaries of 128 MiB each, at most
+
+
 def slot_fingerprint(w):
     """An exact integer fingerprint of a bf16 (or any 2-byte) tensor: (sum of the int16 bit patterns, the same sum weighted by
     (position mod 65521) + 1), both in int64 on the tensor's device. Deterministic (integer adds), sensitive to any changed
-    value and to a permutation; not a cryptographic hash (the digest over all slots is sha256)."""
+    value and to a permutation; not a cryptographic hash (the digest over all slots is sha256).
+
+    Accumulated over FINGERPRINT_CHUNK elements at a time, into int64 accumulators on the device: the same int64 adds,
+    regrouped, so the result is bit-identical to summing the whole slot at once (integer addition is associative, modulo
+    2**64 if it ever wrapped). The extra device memory is bounded by three int64 chunks (384 MiB), where the whole-slot form
+    needed three int64 copies of the slot: 3 x 2.32 GiB for Qwen3's 151,936 x 2,048 lm_head, which ran a 12 GB card out of
+    memory at 8 layers (HPN reads 5 and 6)."""
     w = w.detach().contiguous()
     if w.element_size() != 2:
         w = w.to(torch.bfloat16)
-    v = w.view(torch.int16).reshape(-1).to(torch.int64)
-    pos = (torch.arange(v.numel(), device=v.device, dtype=torch.int64) % _P) + 1
-    return int(v.sum().item()), int((v * pos).sum().item())
+    flat = w.view(torch.int16).reshape(-1)
+    s1 = torch.zeros((), dtype=torch.int64, device=flat.device)
+    s2 = torch.zeros((), dtype=torch.int64, device=flat.device)
+    for a in range(0, flat.numel(), FINGERPRINT_CHUNK):
+        v = flat[a:a + FINGERPRINT_CHUNK].to(torch.int64)
+        pos = (torch.arange(a, a + v.numel(), device=v.device, dtype=torch.int64) % _P) + 1
+        s1 += v.sum()
+        s2 += (v * pos).sum()
+        del v, pos
+    return int(s1.item()), int(s2.item())
 
 
 def fold_fingerprints(items):
