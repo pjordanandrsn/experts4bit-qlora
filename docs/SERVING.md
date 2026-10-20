@@ -198,6 +198,8 @@ What SC2b read (#846, `bench/sc2/`, one RTX 5090, Qwen3-30B-A3B int4, 16 sequenc
 - the capacity ceiling **unchanged** at 1 req/s. Under load, most of the per-prefill stall on running decodes is work
   outside the graphed forward.
 
+UNVERIFIED: SC2b's figures have no register row; the record is `bench/sc2/`.
+
 The A2000 census behind it is `bench/prefill-graph-census-2026-10-04/`.
 
 **Bulk KV bookkeeping (`E4B_PAGED_BULK_KV`, on by default since lanes SC2c and SC2d; `0` restores the per-layer path).** Each request costs the engine some KV
@@ -234,7 +236,8 @@ is additive: the graph's `auto` headroom check counts the bound at the slot's ca
 stall census behind it is `bench/stall-census-2026-10-05/` (exploratory: launch counts and bitwise parity on the A2000,
 a correctness testbed, and a post-hoc read of SC2b's traces). On Qwen3-30B-A3B, lane SC2c measured serial TTFT 3.8× faster and
 capacity up from 2 to 4 req/s, with identical output ([SC2c](../bench/h2h-2026-10-02/sc2c/README.md)). SC2d confirmed identical
-output on Qwen3.6-35B-A3B and gpt-oss-20b ([SC2d](../bench/h2h-2026-10-02/sc2d/README.md)). Neither has a register row yet.
+output on Qwen3.6-35B-A3B and gpt-oss-20b ([SC2d](../bench/h2h-2026-10-02/sc2d/README.md)). UNVERIFIED: neither has a
+register row yet.
 
 **Final-position logits (`E4B_PAGED_LAST_LOGITS=1`, opt-in).** The prefill forward asks the model's LM head for one
 position while every prompt token still traverses the decoder and populates K/V. Eager chunks, first-chunk graph
@@ -363,8 +366,12 @@ rows) and `levers.kv.pool_mib`, and the step trace counts `dec_pieces` (replays 
 **Single-request decode GEMV (grouped-nf4-gemm 0.43.0; lane P116).** On GPUs with at least 160 SMs, decode at
 Qwen3-30B-A3B's NF4 expert shapes uses grouped-nf4-gemm's bandwidth-targeted GEMV: 1.24× as fast at one request and
 unchanged at 16, with quality within P110's bar (`e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`). It is grouped-nf4-gemm's
-default from 0.43.0, and `[fast]` requires 0.43.0 from experts4bit-qlora 0.55.0; `GNF4_GEMV_BW=0` restores dot-pad. Other
-shapes and smaller GPUs are unchanged.
+default from 0.43.0, and `[fast]` requires 0.43.0 from experts4bit-qlora 0.55.0; `GNF4_GEMV_BW=0` restores dot-pad.
+From grouped-nf4-gemm 0.47.0 the default also takes Mixtral-8x7B's expert shapes at >= 160 SMs (one request 2.41× as fast,
+`e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18`), Granite-3.1-3b-a800m's and OLMoE-1B-7B's (1.3979× and 1.5011× on an RTX
+5090 at a 400 W limit, `e4b.serve.p134.gemv-bw.granite.5090.2026-10-18`, `e4b.serve.p134.gemv-bw.olmoe.5090.2026-10-18`),
+and the RTX 4090 (128 SMs) at Qwen3-30B-A3B's two shapes only (1.5145×, `e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18`). The
+shapes are licensed, not the families. Every other shape, and every other GPU below 160 SMs, keeps the previous route.
 
 **Qwen3 decode defaults by family (lanes P143, P153, P158).** Three settings resolve per family at startup, before any
 weight loads. Unset, `qwen3_moe` takes each one as read on Qwen3-30B-A3B on one RTX 5090; every other family keeps the
@@ -410,7 +417,8 @@ layer.
   - `mtile`: the grouped int4 M-tile GEMM, int8 activations.
 - **P102** ([`bench/p102/RESULTS-p102.md`](../bench/p102/RESULTS-p102.md), RTX 5090, Qwen3-30B-A3B) read
   `DEFAULT=k19`: TTFT-4096 7.21 s → 1.37 s and TTFT-512 0.85 s → 0.11 s. The prefill-shaped NLL stayed within +0.011 /
-  +0.007 ppl of the loop on 12 fresh windows (the calibrated K8 rule).
+  +0.007 ppl of the loop on 12 fresh windows (the calibrated K8 rule). UNVERIFIED: no register row; the record is its
+  RESULTS.
 - With `max_seqs > 1`, prefill rows have always taken the M-tile; `auto` moves them to K19 too.
 - **What remained of a k19 prefill:** about 45 % of its device time was prefill attention in fp32 without tensor
   cores. The next paragraph covers it.
@@ -428,6 +436,7 @@ rules out the flash and memory-efficient kernels, so SDPA ran its fp32 math back
   - a 4096-token prefill's device time fell from 906 ms to 378 ms;
   - TTFT-4096 fell from 1.98 s to 1.74 s on a CPU-bound EPYC host, where the GPU then idles for most of a prefill;
   - the served-prefill NLL stayed within −0.014 / −0.008 ppl of `math` on 12 fresh windows (the calibrated K8 rule).
+  - UNVERIFIED: no register row; the record is its RESULTS.
 - The read covers Qwen3-30B-A3B. Other families with plain full-attention layers are covered by the route's CPU
   equivalence tests (`tests/test_paged_prefill_attn_route.py`), not by a reading.
 - **What remains:** host-side launch overhead. About 50,000 device-to-device copies per 4096-token prefill remain under
