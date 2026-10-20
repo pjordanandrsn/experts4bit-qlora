@@ -35,6 +35,10 @@ def _pins(path):
 
 
 def _run(script, *args, cwd=None, env=None):
+    """A staged script in its own directory, as the box runs it; the package resolves from this tree when it is not
+    installed (the box installs it)."""
+    env = dict(os.environ if env is None else env)
+    env["PYTHONPATH"] = os.pathsep.join(p for p in (str(REPO), env.get("PYTHONPATH", "")) if p)
     return subprocess.run([sys.executable, str(script), *args], capture_output=True, text=True, timeout=300, cwd=cwd,
                           env=env)
 
@@ -93,13 +97,17 @@ def _tables():
     return box, {**box, **{k: int(x) for k, x in re.findall(TERMS, dry.split("\nfi\n", 1)[0])}}
 
 
+BOOT_TOLERANCE_S = 1200      # Amendment 5: the guard leaves boot at least 20 min before the runner's own check refuses
+
+
 def test_the_guard_table_is_the_registrations_and_fits_six_hours_with_a_quarter_to_spare():
     """Amendments 4 and 5: every allowance the runner checks time left against is the table's, the pre-install fit sums
-    them all, and boot + the fit fits the 6.0 h guard at >= 25 % headroom."""
+    them all, boot + the fit fits the 6.0 h guard (the rental cap) at >= 25 % headroom, and boot keeps at least 20 min
+    of tolerance."""
     pre = (LANE / "PREREG-p149.md").read_text(encoding="utf-8")
-    assert "**The guard is 6.0 h** (21,600 s)" in pre and "**total** | **17,250 (4.79 h)**" in pre
+    assert "**The guard is 6.0 h** (21,600 s)" in pre and "**total** | **16,290 (4.53 h)**" in pre
     v, _dry = _tables()
-    assert v == {"INSTALL": 450, "NEED_FETCH": 3000, "NEED_BAKE": 1500, "NEED_ARM": 600, "NEED_Q": 1200, "NEED_REDUCE": 120,
+    assert v == {"INSTALL": 450, "NEED_FETCH": 3000, "NEED_BAKE": 1500, "NEED_ARM": 480, "NEED_Q": 1200, "NEED_REDUCE": 120,
                  "NEED_TF": 840, "NEED_SANE": 900, "NEED_GATE": 600, "RESERVE": 600, "MIN_DISK_GB": 200}, v
     for term, s in (("fetch (93.4 GB)", "3,000"), ("bake", "1,500"), ("the reserve", "600"), ("the Q reduce", "120"),
                     ("the early gates' process S1w (Amendment 5), a load and one Q pass per gate", "600")):
@@ -107,10 +115,11 @@ def test_the_guard_table_is_the_registrations_and_fits_six_hours_with_a_quarter_
     fit = _fit(v)
     assert ("FIT=$((INSTALL + NEED_FETCH + NEED_BAKE + NEED_GATE + 8 * NEED_ARM + 2 * NEED_Q + NEED_REDUCE + 2 * NEED_TF"
             " + 2 * NEED_SANE + RESERVE))") in RUN
-    boot = 300
-    assert boot + fit == 17250 and (boot + fit) * 1.25 <= 6.0 * 3600
+    boot, guard = 300, 6.0 * 3600
+    assert "**Box Q+S keeps its 6.0 h guard** (21,600 s)" in pre and "$7.38 + $3.31 = **$10.69**" in pre
+    assert boot + fit == 16290 and (boot + fit) * 1.25 <= guard
     assert "FIT_HEADROOM_PCT=125" in RUN and "FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100))" in RUN
-    assert fit * 1.25 + boot <= 6.0 * 3600            # the runtime check (fit x 125 % against the box's own time left)
+    assert guard - fit * 1.25 >= BOOT_TOLERANCE_S     # the runtime check (fit x 125 %) leaves boot its tolerance
 
 
 def test_the_dry_table_is_amendment_5s_and_fits_its_guard_with_a_quarter_to_spare():
@@ -118,9 +127,10 @@ def test_the_dry_table_is_amendment_5s_and_fits_its_guard_with_a_quarter_to_spar
     _box, v = _tables()
     assert v == {"INSTALL": 450, "NEED_FETCH": 900, "NEED_BAKE": 600, "NEED_ARM": 240, "NEED_Q": 480, "NEED_REDUCE": 120,
                  "NEED_TF": 240, "NEED_SANE": 240, "NEED_GATE": 240, "RESERVE": 600, "MIN_DISK_GB": 60}, v
-    boot = 300
-    assert boot + _fit(v) == 7050 and (boot + _fit(v)) * 1.25 <= 2.5 * 3600
-    assert "**The dry guard is 2.5 h** (9,000 s)" in pre and "**dry total** | **7,050 (1.96 h)**" in pre
+    boot, guard = 300, 3.0 * 3600
+    assert boot + _fit(v) == 7050 and (boot + _fit(v)) * 1.25 <= guard and guard - _fit(v) * 1.25 >= BOOT_TOLERANCE_S
+    assert "**The dry guard is 3.0 h** (10,800 s)" in pre and "**dry total** | **7,050 (1.96 h)**" in pre
+    assert "**$3.31**" in pre
 
 
 def test_the_dry_mode_is_the_run_ids_and_never_a_reading():

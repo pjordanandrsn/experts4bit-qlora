@@ -339,9 +339,9 @@ VOIDs the reading: strike two, which stops the lane.
   | the reserve | 600 |
   | **dry total** | **7,050 (1.96 h)** |
 
-- **The dry guard is 2.5 h** (9,000 s): 7,050 × 1.25 = 8,813 s. Worst 2.5 h × $1.05 + (9.1 + 5) GB × $0.011/GB =
-  **$2.78**; expected about 40 minutes, under $1. With box Q+S's worst of $7.38, the two come to $10.16, under the
-  standing rule.
+- **The dry guard is 3.0 h** (10,800 s). The runner's own check needs 6,750 × 1.25 = 8,437 s left when it runs, so
+  boot may take up to 2,363 s; the static fit is 7,050 × 1.25 = 8,813 s. Worst 3.0 h × $1.05 + (9.1 + 5) GB ×
+  $0.011/GB = **$3.31**; expected about 40 minutes, under $1.
 
 **The early gates, in both modes (P158's form).**
 - **S1w**, a process before any scored arm, is never scored. It builds S1 as every S1 arm builds it. Then it runs Q's
@@ -362,15 +362,26 @@ VOIDs the reading: strike two, which stops the lane.
   calls differ from 3 × 128 VOIDs.
 - **The closed forms are the dry run's, scaled:** `p149-dry-1` read the one-layer census on the A2000. A dry run checks
   the one-layer census, 4 projections and 3 × 4 capture calls on the 5090 before any box reads the 32-layer forms.
-- **Box Q+S's guard table gains one row:**
+- **Box Q+S's guard table, re-fitted (the maintainer's ruling of 10:40Z, option (b)):** S1w adds 600 s, and each
+  speed arm's allowance drops from 600 s to 480 s, three times P145's measured 158-162 s for a Mixtral speed arm on an
+  RTX 5090 with its load.
 
   | term | s |
   |---|---|
   | Amendment 4's total | 16,650 |
   | the early gates' process S1w (Amendment 5), a load and one Q pass per gate | 600 |
-  | **total** | **17,250 (4.79 h)** |
+  | eight S arms at 480 s instead of 600 s | -960 |
+  | **total** | **16,290 (4.53 h)** |
 
-  The 6.0 h guard keeps 25 % headroom: 17,250 × 1.25 = 21,563 ≤ 21,600. The worst stays $7.38.
+- **Box Q+S keeps its 6.0 h guard** (21,600 s), the rental policy's 6 h cap.
+  - Static: 16,290 × 1.25 = 20,362 ≤ 21,600.
+  - The runner's own check needs 15,990 × 1.25 = 19,987 s left when it runs, so boot may take up to 1,612 s. Before the
+    trim, S1w alone would have left boot 413 s (cerin-maintainer's re-check).
+  - The worst stays **$7.38**.
+- **Why one box and not a Q box then an S box** (option (a)): each box fetches and bakes the 93.4 GB checkpoint. At
+  these guard forms the split's two boxes and the dry run come to about $14.9 of worst, against the $10.89 left of the
+  lane's $15 ($4.11 spent). One box and the dry run come to $7.38 + $3.31 = **$10.69**. A QUALITY_FAIL still stops the
+  one box after the Q reduce, before any further arm.
 
 ## What a FLIP starts (never automatic)
 
@@ -427,7 +438,7 @@ A NO_FLIP keeps the lever opt-in.
   and 18, and 15 for an unreadable power limit, are not strikes). Shakedowns are `p149-dry-N` on the lab A2000 ($0, correctness only: the suite compiled, the
   lever's census and engagement counters on a Mixtral slice, and Q's windows and shas).
   - **Amendment 5 (2026-10-20):** `p149-dry-2`, `-3` and `-4` are dry runs on one RTX 5090 (`P149_DRY=1`, the one-layer
-    cut, guard 2.5 h, worst $2.78): instrument runs, never a reading and never a strike.
+    cut, guard 3.0 h, worst $3.31): instrument runs, never a reading and never a strike.
   - **Amendment 1 (2026-10-19), box K:** `p149k-5090-4`, `-5` and `-6` are spares for refusals BEFORE THE INSTALL only:
     any of the runner's refusals ahead of its first `pip install` (rc 18, 10, 15, 13, 16, 17 or 28, in its order), a
     pre-create refusal, or `no_such_ask`. Which of those count as strikes is unchanged; a box that reaches the install and
