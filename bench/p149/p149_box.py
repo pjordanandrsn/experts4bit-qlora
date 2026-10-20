@@ -22,7 +22,12 @@ ENGAGEMENT (asserted by the reducer from what this records): per captured bucket
 that bucket's warm-up and capture, by row count and path; per Q gate, the graph replays and eager steps of its bucket
 and the path counts over the gate (prefill rows only on the transient path); S0 carries no int8 module at all.
 
+GATE (Amendment 5, ``--mode gate``, S1w, before any scored arm, never scored): S1 built as every S1 arm builds, its
+census and capture counts recorded; then Q's re-capture and ONE teacher-forced pass per gate (W1 one window, W16
+sixteen) with the forcing checks. The reducer's ``--gate`` reads it, ``build`` and ``instrument`` each with its own rc.
+
     python p149_box.py --mode speed --prompts prompts.json --out arm_S0a.json --tag S0a [--q --windows windows.json]
+    python p149_box.py --mode gate --windows windows.json --out gate_S1w.json --tag S1w
     python p149_box.py --prompts-only --model ID --revision SHA --out prompts.json
     python p149_box.py --windows-only --model ID --revision SHA --out windows.json
     python p149_box.py --self-test
@@ -288,8 +293,14 @@ def q_pass(runner, ws, base_rid, ttft=None, forcing=None, ptr=None):
     return [{"nll": sum(x) / CONT, "argmax": y} for x, y in zip(nll, am)]
 
 
-def q_main(parts, windows) -> dict:
-    """Q on the built engine, after the timed reps: both gates, with their engagement."""
+def gate_subset(name, ws):
+    """The early gate's Q: one pass at the gate's bucket (W1 one window, W16 sixteen)."""
+    return ws[:Q_SETS[name][1]]
+
+
+def q_main(parts, windows, gate=False) -> dict:
+    """Q on the built engine, after the timed reps: both gates, with their engagement. ``gate``: the early gate's one
+    pass per gate on the same path, without prefill-Q."""
     import torch
     runner = parts.runner
     mods = _int8_mods(runner.model)
@@ -306,6 +317,9 @@ def q_main(parts, windows) -> dict:
         if why:
             raise SystemExit(f"REFUSED: {why}")
         n, group, sha = Q_SETS[name]
+        if gate:
+            ws = gate_subset(name, ws)
+            n = len(ws)
         b = Q_BUCKET[name]
         g0 = dict(runner.graph_stats[b])
         c0 = path_counts(mods)
@@ -324,6 +338,8 @@ def q_main(parts, windows) -> dict:
             rec["prefill_ttft_ms_511"] = {"n": len(ttft), "median": sorted(ttft)[len(ttft) // 2], "all": ttft}
         print(f"P149_Q {name} windows={n} replays={rec['gates'][name]['replays']} "
               f"eager={rec['gates'][name]['eager_steps']} {rec['gates'][name]['seconds']} s", flush=True)
+    if gate:
+        return rec
     t0 = time.perf_counter()
     c0 = path_counts(mods)
     rec["prefill_q"] = {name: prefill_q(runner, windows[name], 50_000 + 1000 * j) for j, name in enumerate(Q_SETS)}
@@ -401,6 +417,39 @@ def speed_main(a) -> int:
         rec["phases"]["q"] = [round(tq, 3), round(time.time(), 3)]
         rec["q"]["max_mem_gb"] = round(torch.cuda.max_memory_allocated() / 2**30, 2)
         json.dump(rec, open(a.out, "w"), indent=1, default=str)
+    return 0
+
+
+# ------------------------------------------------------------------------------------ Amendment 5: the gate --
+def gate_main(a) -> int:
+    """S1w: the early gates' process (never scored). The build record is written before Q, so a Q fault leaves it."""
+    arm = _arm()
+    if arm != "S1" or a.tag != "S1w":
+        raise SystemExit(f"REFUSED: the early gates run S1 as S1w, not {arm} as {a.tag}")
+    windows = json.load(open(a.windows))
+    for name in Q_SETS:
+        why = window_refusal(name, windows[name])
+        if why:
+            raise SystemExit(f"REFUSED: {why}")
+    import torch
+    from experts4bit_qlora.serve_paged import PagedServeConfig, build_engine
+    cfg = PagedServeConfig.from_env()
+    why = server_refusal(cfg)
+    if why:
+        raise SystemExit(f"REFUSED: {why}")
+    t0 = time.perf_counter()
+    with CaptureCensus() as census:
+        parts = build_engine(cfg)
+    rec = {"mode": "gate", "tag": a.tag, **_common(cfg, parts, arm, time.perf_counter() - t0, census), "status": "ok"}
+    json.dump(rec, open(a.out, "w"), indent=1, default=str)                  # the build record, before Q
+    tq = time.time()
+    rec["q"] = q_main(parts, windows, gate=True)
+    rec["q"]["seconds"] = round(time.time() - tq, 2)
+    rec["q"]["max_mem_gb"] = round(torch.cuda.max_memory_allocated() / 2**30, 2)
+    json.dump(rec, open(a.out, "w"), indent=1, default=str)
+    print("P149_GATE_RECORD " + json.dumps({"tag": a.tag, "int8": rec["int8_modules"], "fusions": rec["fusions"],
+                                            "graph_status": rec["graph_status"], "q_seconds": rec["q"]["seconds"]},
+                                           default=str), flush=True)
     return 0
 
 
@@ -770,6 +819,8 @@ def self_test() -> int:
     cases.append(("W1 is 196 passes of one", passes(196, 1)[-1] == (195, 196)))
     cases.append(("the window hash is P147's json sha256", windows_sha([[1, 2]]) == hashlib.sha256(b"[[1, 2]]").hexdigest()))
     cases.append(("a short window set refuses", window_refusal("W1", [[0] * 640]) is not None))
+    cases.append(("the early gate's Q is one pass per gate", [len(gate_subset(g, [[0]] * n)) for g, (n, _b, _s)
+                                                               in Q_SETS.items()] == [1, 16]))
     a = {"routed": {"1": 4, "16": 2}, "passed": {"511": 8}}
     b = {"routed": {"1": 4, "16": 1}, "passed": {}}
     cases.append(("deltas keep only what moved", counts_delta(a, b) == {"routed": {"16": 1}, "passed": {"511": 8}}))
@@ -798,7 +849,7 @@ def self_test() -> int:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", choices=("speed", "tf", "sane"))
+    ap.add_argument("--mode", choices=("speed", "tf", "sane", "gate"))
     ap.add_argument("--stream-a")
     ap.add_argument("--stream-b")
     ap.add_argument("--ref-dir")
@@ -832,6 +883,8 @@ def main(argv=None) -> int:
         return tf_main(a)
     if a.mode == "sane":
         return sane_main(a)
+    if a.mode == "gate":
+        return gate_main(a)
     ap.error("nothing to do")
     return 2
 

@@ -19,7 +19,7 @@ source "$LANE_HELPER" || { say "refusing: missing lane liveness helper"; exit 78
 # The staging: this box's runner, box and reducer, the vendored K37 suite (bench/p149/), e4b's int8 kernel-path test
 # (tests/), and the helpers at their registered bytes. staged-p149.sha256 pins every one by the name the box sees.
 TESTS="$REPO/tests"; B="$REPO/bench"
-STAGE="$HERE/p149_run.sh $HERE/p149_box.py $HERE/p149_reduce.py $HERE/test_dense_i8.py $TESTS/test_int8_attn_interp.py \
+STAGE="$HERE/p149_run.sh $HERE/p149_box.py $HERE/p149_reduce.py $HERE/p149_slice.py $HERE/test_dense_i8.py $TESTS/test_int8_attn_interp.py \
   $B/p109/p109_box.py $B/p125/p125_box.py $B/p97/p97_box.py $B/p115/p115_quality.py $B/p108/p108_box.py $B/p110/p110_box.py \
   $B/p39/k8_bake.py $B/p39/calib.json $HERE/staged-p149.sha256"
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
@@ -29,7 +29,7 @@ sha_of(){ (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | cut -d" " -f1; }
 while read -r want name; do
   case "$want" in \#*|"") continue;; esac
   case "$name" in
-    p149_run.sh|p149_box.py|p149_reduce.py|test_dense_i8.py) src="$HERE/$name";;
+    p149_run.sh|p149_box.py|p149_reduce.py|p149_slice.py|test_dense_i8.py) src="$HERE/$name";;
     test_int8_attn_interp.py) src="$TESTS/$name";;
     p109_box.py) src="$B/p109/$name";;
     p125_box.py) src="$B/p125/$name";;
@@ -61,10 +61,12 @@ POLL=${P149_POLL_S:-60}; W=/root/p149
 HF_TOKEN_FILE=${HF_TOKEN_FILE:-$HOME/.config/hf/token}
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
 PASS="P149_RUN_ID=$RUN_ID P149_RUN_NONCE=$NONCE P149_DEADLINE_EPOCH=$DEADLINE P149_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA"
-# Explicit IDs only: the reading (-1) and two spares for pre-create and host refusals (-2, -3).
+# Explicit IDs only: the reading (-1) and two spares for pre-create and host refusals (-2, -3); Amendment 5 dry runs
+# (-2 to -4: instrument runs on a 1-layer cut, never a reading) carry P149_DRY=1, which the runner matches to the id.
 case "$RUN_ID" in
   p149-5090-1|p149-5090-2|p149-5090-3) :;;
-  *) say "refusing unregistered run ID: $RUN_ID (is not p149-5090-N)"; exit 78;;
+  p149-dry-2|p149-dry-3|p149-dry-4) PASS="$PASS P149_DRY=1";;
+  *) say "refusing unregistered run ID: $RUN_ID (is not p149-5090-N or p149-dry-N)"; exit 78;;
 esac
 if [ "${P149_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash p149_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p149"; exit 0; fi
 say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; launch e4b $E4B_SHA (from $REPO); stacks are the runner's constants; receipts -> $RUN_DIR/p149; deadline $DEADLINE"

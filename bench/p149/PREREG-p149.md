@@ -288,6 +288,90 @@ It gates only the separate default-flip PR that a FLIP starts.
 **The verdict order:** host REFUSED (17, 18, or 15 for an unreadable power limit) → VOID → NOISY → KERNEL_NO_GAIN (box K) → QUALITY_FAIL →
 FUNCTION_FAIL → FLIP / NO_FLIP.
 
+#### Amendment 5 (2026-10-20): the dry mode and the early gates (the maintainer's ruling, 06:23Z)
+
+**Why.** `p149-dry-1` (the lab A2000, USD 0) met the registered shakedown's scope:
+- K37's suite and e4b's int8 kernel path compiled on the card: 28 and 4 passed.
+- P147's W1 and W16 windows matched by sha256.
+- On a one-layer cut of the checkpoint, the fold census was exactly the one-layer form written down before the run
+  (`fuse_qkv_n` 0, `fuse_t1_glue_n` 3, R2 [1, 1], router 1).
+- S1's lever swapped 4 projections on 1 attention module, with 1 R2 rope fold. Through eager decode its 511-row prefill
+  took the transient path (64 calls), and its 16-row and 1-row decode steps took the kernel path (16 calls each).
+- S0 carried no int8 module and made no int8 call.
+
+It could not build the registered server. Below sm_89, `E4B_PAGED_GRAPHS=auto` resolves off, because the fused FP8 KV
+append casts to e4m3 in Triton. So every speed process refused, and SANE's padded bind raised. The bucket capture
+census, Q's re-capture and forcing checks, T1 and T2, and SANE would first run for real on the box. There, a kit fault
+VOIDs the reading: strike two, which stops the lane.
+
+**The dry mode (`P149_DRY=1`).**
+- **Run ids:** `p149-dry-2`, `-3` and `-4` (the lab run was `-1`). The runner refuses a run whose `P149_DRY` does not
+  match its id (rc 78), before any install.
+- **The model:** the fetch takes shards 1 and 19 of `eba92302` (9.1 GB) with the config and the tokenizer.
+  `p149_slice.py` cuts them to one decoder layer: the embedding, layer 0, the final norm and the head, byte for byte, and
+  the config at `num_hidden_layers` = 1.
+- **The run:** everything after the cut is the box's, at the registered reps and lengths: the bake, the prompts, P147's
+  windows, the early gates below, the eight arms with Q in S0a and S1a, the Q reduce, T1 and T2, both SANE phases, and the
+  reduce.
+- **The reducer** runs `--dry`: the same closed forms at one layer (4 projections, 1 attention module and rope fold, the
+  one-layer census, 3 × 4 int8 calls per captured bucket) on the slice.
+- **The verdict is DRY, hard-coded: never a reading.** The reduce lists every instrument fault the box's rule would VOID
+  on, across every process. The rule's own line on the slice is reported and means nothing. A dry run's gates and its Q
+  reduce report and go on, so one dry finds every fault. rc 0 when there is none, else 29.
+- **An INSTRUMENT run: never a reading and never a strike.** If it finds a fault, the fix is checked at USD 0 where
+  possible, then the next dry id runs.
+- **Host and cost:** ONE Vast RTX 5090 (per-second billing) at the box's floors, except a 60 GB disk, at Amendment 2's
+  rate form, from main after this kit merges.
+- **The dry table (s):**
+
+  | term | s |
+  |---|---|
+  | boot | 300 |
+  | install, self-tests and the compiled suites | 450 |
+  | fetch (two shards, 9.1 GB) | 900 |
+  | the cut and the bake | 600 |
+  | the early gates' process S1w | 240 |
+  | eight S arms, 240 s each | 1,920 |
+  | Q in S0a and S1a, 480 s each | 960 |
+  | the Q reduce | 120 |
+  | T1 and T2, 240 s each | 480 |
+  | two SANE processes, 240 s each | 480 |
+  | the reserve | 600 |
+  | **dry total** | **7,050 (1.96 h)** |
+
+- **The dry guard is 2.5 h** (9,000 s): 7,050 × 1.25 = 8,813 s. Worst 2.5 h × $1.05 + (9.1 + 5) GB × $0.011/GB =
+  **$2.78**; expected about 40 minutes, under $1. With box Q+S's worst of $7.38, the two come to $10.16, under the
+  standing rule.
+
+**The early gates, in both modes (P158's form).**
+- **S1w**, a process before any scored arm, is never scored. It builds S1 as every S1 arm builds it. Then it runs Q's
+  re-capture and ONE teacher-forced pass per gate, with Q's forcing checks: W1 is one window at bucket 1, and W16 is
+  sixteen at bucket 16.
+- **rc 43, the build:** the pins, the server and the census at its 32-layer form. Every bucket captured. S1's int8
+  census: 128 projections on 32 attention modules, with 32 rope folds. Every captured bucket's int8 calls at the closed
+  form: exactly 3 × 128 = 384 at b rows on the kernel path, and none transient. `paged_runner` captures each bucket
+  after two warm-up steps.
+- **rc 44, the instrument:** Q's re-capture as at the build. Each gate's one pass on its bucket's graph: 128 replays, no
+  eager step, no Python decode call. The forced tokens in the graph's own buffer, at its captured address, on every
+  step. Prefill rows only on the transient path.
+- **rc 45, S0's build:** read from S0a's record before S1a runs: the same build checks for S0, with no int8 module and
+  no int8 call at capture.
+- **Each is an instrument refusal, not a strike.** The same gate firing on two consecutive runs counts as one strike:
+  the closed form, not the host, is then wrong.
+- **The VOID rule stays as the backstop,** and the capture count is now part of it: a captured bucket whose S1 int8
+  calls differ from 3 × 128 VOIDs.
+- **The closed forms are the dry run's, scaled:** `p149-dry-1` read the one-layer census on the A2000. A dry run checks
+  the one-layer census, 4 projections and 3 × 4 capture calls on the 5090 before any box reads the 32-layer forms.
+- **Box Q+S's guard table gains one row:**
+
+  | term | s |
+  |---|---|
+  | Amendment 4's total | 16,650 |
+  | the early gates' process S1w (Amendment 5), a load and one Q pass per gate | 600 |
+  | **total** | **17,250 (4.79 h)** |
+
+  The 6.0 h guard keeps 25 % headroom: 17,250 × 1.25 = 21,563 ≤ 21,600. The worst stays $7.38.
+
 ## What a FLIP starts (never automatic)
 
 A separate PR makes `E4B_SERVE_ATTN_INT8` default on Mixtral only, citing this read. Under Amendment 4 it proceeds only
@@ -303,6 +387,8 @@ A NO_FLIP keeps the lever opt-in.
 - **S:** FLIP, with g1 between 1.04 and 1.08 and g16 between 0.99 and 1.03.
 - **Routing (Amendment 4):** ROUTING_CLEAR, with |ρ| < 0.005: S1 changes few tokens, and Mixtral's B = 16 step reads
   nearly every expert either way. g16_routing's band from the A2000 pre-read is added here before box Q+S is created.
+- **Dry (Amendment 5):** `p149-dry-2` reads DRY with no instrument fault, and every captured bucket's S1 int8 calls are
+  exactly 3 × 4 on the slice.
 
 ## The boxes and the run
 
@@ -340,6 +426,8 @@ A NO_FLIP keeps the lever opt-in.
 - **Run ids:** each box has `-1` as its reading and `-2` and `-3` as spares for pre-create refusals and host refusals (17
   and 18, and 15 for an unreadable power limit, are not strikes). Shakedowns are `p149-dry-N` on the lab A2000 ($0, correctness only: the suite compiled, the
   lever's census and engagement counters on a Mixtral slice, and Q's windows and shas).
+  - **Amendment 5 (2026-10-20):** `p149-dry-2`, `-3` and `-4` are dry runs on one RTX 5090 (`P149_DRY=1`, the one-layer
+    cut, guard 2.5 h, worst $2.78): instrument runs, never a reading and never a strike.
   - **Amendment 1 (2026-10-19), box K:** `p149k-5090-4`, `-5` and `-6` are spares for refusals BEFORE THE INSTALL only:
     any of the runner's refusals ahead of its first `pip install` (rc 18, 10, 15, 13, 16, 17 or 28, in its order), a
     pre-create refusal, or `no_such_ask`. Which of those count as strikes is unchanged; a box that reaches the install and

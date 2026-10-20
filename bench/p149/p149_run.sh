@@ -7,9 +7,14 @@
 #   premise  on THIS card: the grouped-nf4-gemm K37 suite compiled (28 passed) and the e4b int8 kernel path compiled (4 passed),
 #            rc 25; no re-timing of box K;
 #   order    install + tripwire; reducer and box self-tests; premise; fetch; NF4 arena bake; prompts; the P147 windows; then
-#            S0a S1a (speed, then Q in the same process), the Q reduce (a QUALITY_FAIL stops the box here), T1, S1b, S0b,
-#            S0c, S1c, T2, S1d, S0d (the Amendment 4 token-pinned processes in the rotation), the two SANE phases
+#            S1w and its early gates (Amendment 5: build rc 43, instrument rc 44), S0a (its build gate, rc 45), S1a
+#            (speed, then Q in the same process for both), the Q reduce (a QUALITY_FAIL stops the box here), T1, S1b,
+#            S0b, S0c, S1c, T2, S1d, S0d (the Amendment 4 token-pinned processes in the rotation), the two SANE phases
 #            (reported), and the reduce. Every phase stamps its UTC start and end in phases.jsonl.
+#   dry      Amendment 5 (P149_DRY=1, run ids p149-dry-2 to -4): shards 1 and 19 with the config and tokenizer, cut to
+#            one layer (p149_slice.py), then the FULL rotation at its own allowances; gates and the Q reduce report and
+#            go on; the verdict is DRY, rc 0 with no instrument fault, else 29. An instrument run: never a reading, never
+#            a strike.
 # Refusals: as above. Only 13 and 18 name the machine for the next launcher draw. This script never creates compute.
 set -uo pipefail
 W=/root/p149; mkdir -p $W/logs; cd $W || exit 78
@@ -25,12 +30,20 @@ GNF4_VERSION=0.49.0
 SHORT=32; LONG=160; REPS=5; CONT=128; SANE_WINDOWS=12
 # the Amendment 4 table: the allowances every time-left check uses (s)
 INSTALL=450; NEED_FETCH=3000; NEED_BAKE=1500; NEED_ARM=600; NEED_Q=1200; NEED_REDUCE=120; NEED_TF=840; NEED_SANE=900
+NEED_GATE=600   # Amendment 5: S1w, a load and one Q pass per gate
 RESERVE=600
 GPU_CLASS=5090; MIN_RAM_GB=60; MIN_DISK_GB=200; MIN_POWER_W=575
 case "$P149_RUN_ID" in
-  p149-5090-1|p149-5090-2|p149-5090-3) MODEL=mistralai/Mixtral-8x7B-Instruct-v0.1; REV=eba92302a2861cdc0098cc54bc9f17cb2c47eb61;;   # the P141 lock
+  p149-5090-1|p149-5090-2|p149-5090-3) DRY=0;;
+  p149-dry-2|p149-dry-3|p149-dry-4) DRY=1;;   # Amendment 5: instrument runs on a 1-layer cut, never a reading
   *) say "unregistered run ID: $P149_RUN_ID"; finish 78;;
 esac
+MODEL=mistralai/Mixtral-8x7B-Instruct-v0.1; REV=eba92302a2861cdc0098cc54bc9f17cb2c47eb61   # the P141 lock
+[ "${P149_DRY:-0}" = "$DRY" ] || { say "refusing: P149_DRY=${P149_DRY:-0} does not match the run id $P149_RUN_ID"; finish 78; }
+if [ "$DRY" = 1 ]; then   # the dry table (Amendment 5): two shards, one layer
+  NEED_FETCH=900; NEED_BAKE=600; NEED_ARM=240; NEED_Q=480; NEED_TF=240; NEED_SANE=240; NEED_GATE=240; MIN_DISK_GB=60
+fi
+RD=""; [ "$DRY" = 1 ] && RD=--dry
 [ -z "${P149_GPU_CLASS:-}${P149_MIN_DISK_GB:-}${P149_MIN_RAM_GB:-}${P149_REHEARSAL:-}${P149_SHORT:-}${P149_LONG:-}${P149_REPS:-}${P149_MIN_POWER_W:-}" ] || { say 'reading knobs are frozen'; finish 78; }
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 # every serving lever and engine knob starts unset: the default server is the subject (the arms set the lever alone)
@@ -45,10 +58,10 @@ unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_
       GNF4_GEMV_SPLITK GNF4_GEMV_BW GNF4_GEMV_BW_PLAN GNF4_GEMV_BW_DECODE TRITON_INTERPRET E4B_ATTN_SPLIT_CAP \
       E4B_SERVE_ATTN_INT8 E4B_DENSE_GEMV_BW E4B_INT8_HEAD_BW
 : > summary.txt; : > phases.jsonl; echo "$P149_INSTANCE_ID" > INSTANCE_ID; echo "$P149_RUN_ID" > RUN_ID
-echo "KNOBS e4b=$E4B_SHA gnf4=$GNF4_SHA model=$MODEL@$REV gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_ram_gb=$MIN_RAM_GB min_power_w=$MIN_POWER_W short=$SHORT long=$LONG reps=$REPS" | tee -a summary.txt
+echo "KNOBS run=$P149_RUN_ID dry=$DRY e4b=$E4B_SHA gnf4=$GNF4_SHA model=$MODEL@$REV gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_ram_gb=$MIN_RAM_GB min_power_w=$MIN_POWER_W short=$SHORT long=$LONG reps=$REPS" | tee -a summary.txt
 stamp(){ printf '{"phase": "%s", "event": "%s", "t": %s}\n' "$1" "$2" "$(date +%s)" >> phases.jsonl; }
 # ---- staged pieces, byte-for-byte
-for f in p149_box.py p149_reduce.py p115_quality.py p109_box.py p110_box.py p108_box.py p97_box.py p125_box.py \
+for f in p149_box.py p149_reduce.py p149_slice.py p115_quality.py p109_box.py p110_box.py p108_box.py p97_box.py p125_box.py \
          k8_bake.py calib.json test_dense_i8.py test_int8_attn_interp.py staged-p149.sha256; do
   [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
 (cd $W && sha256sum -c staged-p149.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/p149/staged-p149.sha256"; finish 9; }
@@ -95,7 +108,7 @@ echo "POWER_LIMIT_W $PL (floor $MIN_POWER_W)" | tee -a summary.txt
 # the Amendment 4 fit, before the install, in the cross-lane form (bench/common/README.md, "Guard fit"): everything from here
 # to the verdict at its allowance, plus the reserve, with 25 % headroom
 FIT_HEADROOM_PCT=125   # the guard keeps 25 % headroom over the fit (cross-lane rule)
-FIT=$((INSTALL + NEED_FETCH + NEED_BAKE + 8 * NEED_ARM + 2 * NEED_Q + NEED_REDUCE + 2 * NEED_TF + 2 * NEED_SANE + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100)); LEFT=$((P149_DEADLINE_EPOCH - $(date +%s)))
+FIT=$((INSTALL + NEED_FETCH + NEED_BAKE + NEED_GATE + 8 * NEED_ARM + 2 * NEED_Q + NEED_REDUCE + 2 * NEED_TF + 2 * NEED_SANE + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100)); LEFT=$((P149_DEADLINE_EPOCH - $(date +%s)))
 echo "GUARD_FIT ${FIT}s x ${FIT_HEADROOM_PCT}% = ${FIT_NEED}s of ${LEFT}s left" | tee -a summary.txt
 # rc 19: a refusal before the install, not a strike; two consecutive headroom refusals count as one strike
 [ "$LEFT" -ge "$FIT_NEED" ] || { say "REFUSED: needs ${FIT_NEED}s (fit ${FIT}s x ${FIT_HEADROOM_PCT}%), ${LEFT}s left"; echo "refused: guard fit ${LEFT}s < ${FIT_NEED}s" > REFUSAL; finish 19; }
@@ -159,9 +172,16 @@ stamp install end
 # ---- the checkpoint, its NF4 arena (P39's k8_bake.py, as P145 bakes it), the prompts and P147's windows
 can_run $NEED_FETCH fetch || finish 40
 stamp fetch start; say "fetch $MODEL @ $REV"
-perl -e "alarm $(step_alarm $NEED_FETCH); exec @ARGV" python -c "from huggingface_hub import snapshot_download as s; print(s('$MODEL', revision='$REV', ignore_patterns=['original/*','metal/*','consolidated*'], max_workers=8))" > logs/fetch.log 2>&1 || { tail -2 logs/fetch.log; say "DL FAIL"; finish 11; }
+PATTERNS="ignore_patterns=['original/*','metal/*','consolidated*']"
+# the dry run: shards 1 and 19 hold the embedding, layer 0, the final norm and the head
+[ "$DRY" = 1 ] && PATTERNS="allow_patterns=['model-00001-of-00019.safetensors','model-00019-of-00019.safetensors','*.json','tokenizer*']"
+perl -e "alarm $(step_alarm $NEED_FETCH); exec @ARGV" python -c "from huggingface_hub import snapshot_download as s; print(s('$MODEL', revision='$REV', $PATTERNS, max_workers=8))" > logs/fetch.log 2>&1 || { tail -2 logs/fetch.log; say "DL FAIL"; finish 11; }
 SNAP=$(tail -1 logs/fetch.log); echo "FETCH $MODEL@$REV $SNAP" | tee -a summary.txt; stamp fetch end
 [ -d "$SNAP" ] || { say "DL FAIL: no snapshot dir"; finish 11; }
+if [ "$DRY" = 1 ]; then
+  python $W/p149_slice.py --snapshot "$SNAP" --out $W/slice --layers 1 > logs/slice.log 2>&1 || { tail -3 logs/slice.log; say "SLICE FAIL"; finish 11; }
+  grep -a "^SLICE" logs/slice.log | tee -a summary.txt; SNAP=$W/slice
+fi
 can_run $NEED_BAKE bake || finish 40
 stamp bake start; say "bake the NF4 arena"; mkdir -p $W/work
 K8_MODEL="$SNAP" K8_WORK="$W/work" perl -e "alarm $(step_alarm $NEED_BAKE); exec @ARGV" python $W/k8_bake.py > logs/bake.log 2>&1 \
@@ -174,7 +194,8 @@ grep -a "^P109_PROMPTS" logs/prompts.log | tee -a summary.txt
 perl -e "alarm 1200; exec @ARGV" python $W/p149_box.py --windows-only --model "$MODEL" --revision "$REV" --out $W/windows.json > logs/windows.log 2>&1 \
   || { tail -4 logs/windows.log; say "WINDOWS FAIL (not P147's)"; finish 19; }
 grep -a "^P149_WINDOWS" logs/windows.log | tee -a summary.txt
-ENGINE_ENV="E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$REV E4B_PAGED_ARENA=$W/work/nf4.arena E4B_PAGED_CALIB=$W/calib.json E4B_PAGED_MAX_SEQS=16 E4B_PAGED_MAX_TOKENS_PER_SEQ=768 E4B_PAGED_BUCKETS=1,2,4,8,16"
+ENGINE_MODEL="E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$REV"; [ "$DRY" = 1 ] && ENGINE_MODEL="E4B_PAGED_MODEL=$W/slice"
+ENGINE_ENV="$ENGINE_MODEL E4B_PAGED_ARENA=$W/work/nf4.arena E4B_PAGED_CALIB=$W/calib.json E4B_PAGED_MAX_SEQS=16 E4B_PAGED_MAX_TOKENS_PER_SEQ=768 E4B_PAGED_BUCKETS=1,2,4,8,16"
 run_arm(){   # TAG [--q]: one speed process (S0 unset, S1 the lever), five timed reps; S0a and S1a then run Q
   local TAG=$1 Q=${2:-} ARM=${1:0:2} LV="" AL need=$NEED_ARM
   [ "$ARM" = S1 ] && LV="E4B_SERVE_ATTN_INT8=1"
@@ -201,18 +222,43 @@ run_tf(){    # TAG: Amendment 4's token-pinned S0 process on S0a's and S1a's rec
   { echo -n "token-pinned $TAG rc=$rc "; grep -a "^P149_TF" logs/tf_$TAG.log | cut -c1-200 | tr '\n' ' '; echo; } | tee -a summary.txt
   [ "$rc" = 0 ] || { tail -6 logs/tf_$TAG.log | cut -c1-300 | tee -a summary.txt; say "TOKEN-PINNED $TAG FAILED (rc=$rc) -- the qualifier reads QUALIFIER_VOID"; }
 }
+# ---- Amendment 5, the EARLY GATES, before any scored arm: S1w builds S1 as every S1 arm builds and runs one Q pass per
+# gate (never scored); its build (rc 43) and its instrument (rc 44) are read from its record, and S0a build (rc 45)
+# before S1a. Each is an instrument refusal, not a strike; the same gate firing on two consecutive runs counts as one
+# strike. A dry run reports a gate and goes on, so one dry finds every fault.
+gate_check(){   # RECORD PART ARM RC
+  python $W/p149_reduce.py --gate "$1" --gate-part "$2" --gate-arm "$3" --e4b-sha "$E4B_SHA" $RD 2>&1 | tee -a summary.txt
+  [ "${PIPESTATUS[0]}" = 0 ] && return 0
+  if [ "$DRY" = 1 ]; then echo "DRY_GATE_FAULT rc=$4" | tee -a summary.txt; GATE_FAULT=${GATE_FAULT:-$4}; return 0; fi
+  say "EARLY GATE ($2, $3): not the registered closed forms -- stopping"; echo "refused: early gate $2 $3" > REFUSAL; finish "$4"
+}
+can_run $NEED_GATE "gate S1w" || finish 40
+AL=$(step_alarm $((NEED_GATE + 600))); say "gate S1w (alarm=$AL)"; stamp S1w start
+# shellcheck disable=SC2086
+env PYTHONPATH= $ENGINE_ENV E4B_SERVE_ATTN_INT8=1 P149_ARM=S1 E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA \
+  perl -e "alarm $AL; exec @ARGV" python $W/p149_box.py --mode gate --windows $W/windows.json --out $W/gate_S1w.json --tag S1w > logs/gate_S1w.log 2>&1
+rc=$?; stamp S1w end
+{ echo -n "gate S1w rc=$rc "; grep -a "^P149_GATE_RECORD\|^P149_Q" logs/gate_S1w.log | cut -c1-400 | tr '\n' ' '; echo; } | tee -a summary.txt
+[ "$rc" = 0 ] || tail -6 logs/gate_S1w.log | cut -c1-300 | tee -a summary.txt
+gate_check $W/gate_S1w.json build S1 43
+gate_check $W/gate_S1w.json instrument S1 44
 run_arm S0a --q
+gate_check $W/arm_S0a.json build S0 45
 run_arm S1a --q
-# ---- the Q reduce: a QUALITY_FAIL stops the box here (the six remaining processes are not run)
+# ---- the Q reduce: a QUALITY_FAIL stops the box here (the six remaining processes are not run); a dry run goes on
 stamp q_reduce start
-python $W/p149_reduce.py --dir $W --out $W/q_verdict.json --e4b-sha "$E4B_SHA" --q-only 2>&1 | tee -a summary.txt
+python $W/p149_reduce.py --dir $W --out $W/q_verdict.json --e4b-sha "$E4B_SHA" --q-only $RD 2>&1 | tee -a summary.txt
 QV=$(python -c "import json; print(json.load(open('$W/q_verdict.json'))['verdict'])" 2>/dev/null); stamp q_reduce end
-case "$QV" in
-  GO) ;;
-  QUALITY_FAIL) say "Q: QUALITY_FAIL -- a PARK of the lever on this path; the box stops"
-                python $W/p149_reduce.py --dir $W --out $W/verdict_p149.json --e4b-sha "$E4B_SHA" 2>&1 | tee -a summary.txt; finish 0;;
-  *) say "Q reduce read ${QV:-nothing} -- no reading"; python $W/p149_reduce.py --dir $W --out $W/verdict_p149.json --e4b-sha "$E4B_SHA" 2>&1 | tee -a summary.txt; finish 27;;
-esac
+if [ "$DRY" = 1 ]; then
+  echo "DRY: the Q reduce read ${QV:-nothing} on the slice; a dry run goes on" | tee -a summary.txt
+else
+  case "$QV" in
+    GO) ;;
+    QUALITY_FAIL) say "Q: QUALITY_FAIL -- a PARK of the lever on this path; the box stops"
+                  python $W/p149_reduce.py --dir $W --out $W/verdict_p149.json --e4b-sha "$E4B_SHA" 2>&1 | tee -a summary.txt; finish 0;;
+    *) say "Q reduce read ${QV:-nothing} -- no reading"; python $W/p149_reduce.py --dir $W --out $W/verdict_p149.json --e4b-sha "$E4B_SHA" 2>&1 | tee -a summary.txt; finish 27;;
+  esac
+fi
 run_tf T1
 run_arm S1b; run_arm S0b; run_arm S0c; run_arm S1c
 run_tf T2
@@ -232,9 +278,14 @@ for PH in S0 S1; do
   [ "$rc" = 0 ] || { tail -4 logs/sane_$PH.log | cut -c1-300 | tee -a summary.txt; say "SANE $PH FAILED (rc=$rc) -- reported only"; break; }
 done
 stamp reduce start; say "reduce"
-python $W/p149_reduce.py --dir $W --out $W/verdict_p149.json --e4b-sha "$E4B_SHA" 2>&1 | tee -a summary.txt
+python $W/p149_reduce.py --dir $W --out $W/verdict_p149.json --e4b-sha "$E4B_SHA" $RD 2>&1 | tee -a summary.txt
 [ "${PIPESTATUS[0]}" = 0 ] && [ -s "$W/verdict_p149.json" ] || { say "REDUCER FAILED"; finish 22; }
 stamp reduce end
 V=$(python -c "import json; print(json.load(open('$W/verdict_p149.json'))['verdict'])")
+if [ "$DRY" = 1 ]; then   # never a reading: rc 0 only when no gate fired and no instrument fault was found
+  OK=$(python -c "import json; print(json.load(open('$W/verdict_p149.json'))['ok'])")
+  if [ -z "${GATE_FAULT:-}" ] && [ "$OK" = True ]; then say "P149 DRY: no instrument fault"; finish 0; fi
+  say "P149 DRY: instrument faults (first gate rc ${GATE_FAULT:-none}) -- fix and re-dry"; finish 29
+fi
 case "$V" in FLIP|NO_FLIP|FUNCTION_FAIL|QUALITY_FAIL) ;; *) say "P149 $V -- no reading (NOISY and VOID are not readings)"; finish 27;; esac
 finish 0

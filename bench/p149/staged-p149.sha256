@@ -1,8 +1,9 @@
 # bench/p149/staged-p149.sha256 -- every piece box Q+S runs, by the name the box sees (bench/p149/PREREG-p149.md, "Box Q+S").
 # The helpers at their registered bytes; test_dense_i8.py is grouped-nf4-gemm v0.49.0's kernel/test_dense_i8.py, byte for byte.
-8f13ad7127fb6a071b67d05110746fdd60d60bb077db8d9172a8f25c19f4c8dd  p149_run.sh
-f860bcca0a6a759f8d9c363396d0fb525ad0fbd3b190084a81b3e7177c15897d  p149_box.py
-8898c5437a6dcc7352148db28b503c8a68041e19e709778ed07d2744102053a1  p149_reduce.py
+2e3ea02ba8950ae7f6ae605d0f56d8513ca2a8cfff2c54e5bc155bc342d28183  p149_run.sh
+cf949ad72f7c256f170a105cc5150f77d1fc2bc7f4baec40a5a85f0204c4b489  p149_box.py
+a9196df22464ce447bf58ba0fa4b872f6ef36da902fbef00d4499f364a9fe76b  p149_reduce.py
+bc32cb22f5491b18288eb4fddcff52fa14979bdf39cc542136f824a41f06145c  p149_slice.py
 73efc5b7cdd09e084f49b3f3ce93a9bdcacf8ee77440bc84843c7064735c5e34  test_dense_i8.py
 36cb2a9cf20c81e7217de850923ab3662788a96a3dc57ecd7cbb5a536211195c  test_int8_attn_interp.py
 b53f94192b4040b6451ceb18f8cd4e3e5629a6e40c4885b40600fcc4205d8248  p109_box.py

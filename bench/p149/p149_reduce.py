@@ -22,13 +22,23 @@ The rule, first rung that applies (the verdict order; host refusals and box K's 
   FLIP           g1 = min over the four S1/S0 W1 pairs >= 1.03 AND g16 (the same at W16) >= 0.99, unrounded.
   NO_FLIP        otherwise, each failed bar named.
 
+Amendment 5 adds two things, neither of which moves the verdict:
+  --gate RECORD --gate-part build|instrument   the EARLY GATES, on a process's own record before any scored arm (the
+                 runner gives each its own rc; an instrument refusal, never a strike): ``build`` checks the pins, the
+                 server, the census, every bucket captured, and the int8 census and capture counts at their closed forms
+                 (capture: 3 calls per projection per bucket, paged_runner's two warm-up steps and the captured one);
+                 ``instrument`` checks Q's re-capture and one teacher-forced pass per gate (W1 one window, W16 sixteen).
+  --dry          the P149_DRY=1 run on a 1-layer cut of the checkpoint: the same closed forms at LAYERS = 1, the
+                 verdict hard-coded DRY ("never a reading"), and every instrument fault across all processes listed.
+
 Amendment 4 never moves the verdict. Its label (ROUTING_CLEAR / ROUTING_UNRESOLVED / ROUTING_CONFOUNDED /
 QUALIFIER_NOISY / QUALIFIER_VOID) decides only whether a FLIP's default-flip PR proceeds (CLEAR) or is held.
 
 Reported, never ruled: every pair and self-pair, the geomean, heat per timed block, W16 token divergence, prefill-Q,
 prefill TTFT, SANE, both streams' routing statistics.
 
-    python p149_reduce.py --dir RUN_DIR --out verdict_p149.json --e4b-sha SHA [--q-only]
+    python p149_reduce.py --dir RUN_DIR --out verdict_p149.json --e4b-sha SHA [--q-only] [--dry]
+    python p149_reduce.py --gate RECORD --gate-part build|instrument --gate-arm S0|S1 --e4b-sha SHA [--dry]
     python p149_reduce.py --self-test
 """
 from __future__ import annotations
@@ -51,6 +61,8 @@ MODEL, REV = "mistralai/Mixtral-8x7B-Instruct-v0.1", "eba92302a2861cdc0098cc54bc
 CENSUS = {"fuse_qkv_n": 0, "fuse_t1_glue_n": 65, "fuse_t1_glue_r2_n": [32, 32], "fuse_router_epilogue_n": 32}
 FUSION_KNOBS = ("E4B_PAGED_FUSE_QKV", "E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")
 LAYERS, PROJ = 32, 128
+CAPTURE_CALLS = 3          # int8 calls per projection per captured bucket: paged_runner's 2 warm-up steps + the capture
+DRY_SLICE, DRY_LAYERS = "/root/p149/slice", 1           # Amendment 5: P149_DRY=1 cuts MODEL@REV to its first layer
 SERVER = {"max_seqs": 16, "max_tokens_per_seq": 768, "buckets": list(BUCKETS)}
 FLIP_G1, NOREG_G16 = 1.03, 0.99
 # Q: P147's rule and gates (bench/p147/p147_reduce.py's gate(), S1 against S0)
@@ -123,8 +135,23 @@ def record_faults(name, r, e4b_sha, arm) -> list:
     return out
 
 
+def census(layers: int) -> dict:
+    """The default server's fold census on Mixtral at ``layers`` decoder layers (``CENSUS`` is ``census(32)``;
+    p149-dry-1 read ``census(1)`` exactly on the lab A2000)."""
+    return {"fuse_qkv_n": 0, "fuse_t1_glue_n": 2 * layers + 1, "fuse_t1_glue_r2_n": [layers, layers],
+            "fuse_router_epilogue_n": layers}
+
+
+def use_dry() -> None:
+    """Amendment 5's dry constants: the box's closed forms at LAYERS = 1, on the slice the runner cuts."""
+    global MODEL, REV, LAYERS, PROJ, CENSUS
+    MODEL, REV, LAYERS = DRY_SLICE, "", DRY_LAYERS
+    PROJ, CENSUS = 4 * LAYERS, census(LAYERS)
+
+
 def capture_faults(name, paths: dict, arm) -> list:
-    """Each captured bucket b: S1's int8 calls all at b rows on the kernel path, none transient; S0: none at all."""
+    """Each captured bucket b: S1's int8 calls all at b rows on the kernel path, none transient, and exactly
+    CAPTURE_CALLS per projection; S0: none at all."""
     out = []
     for b in BUCKETS:
         p = paths.get(str(b))
@@ -137,6 +164,9 @@ def capture_faults(name, paths: dict, arm) -> list:
                 out.append(f"{name}: S0's bucket {b} ran int8 calls {p}")
         elif set(routed) != {str(b)} or passed:
             out.append(f"{name}: bucket {b}'s capture ran {p}; registered {b} rows on the kernel path only")
+        elif routed[str(b)] != CAPTURE_CALLS * PROJ:
+            out.append(f"{name}: bucket {b}'s capture ran {routed[str(b)]} int8 calls; the closed form is "
+                       f"{CAPTURE_CALLS} x {PROJ} = {CAPTURE_CALLS * PROJ}")
     return out
 
 
@@ -173,9 +203,10 @@ def speed_faults(t, r) -> list:
     return out
 
 
-def q_faults(name, q, arm) -> list:
+def q_faults(name, q, arm, gates=None) -> list:
     """Q's engagement: the re-captured buckets as at the build, each gate on its bucket's graph, prefill rows only on
-    the transient path, and P147's windows."""
+    the transient path, and P147's windows (``gates``: name -> (windows, group, sha); Q_GATES unless the early gate's
+    one pass per gate)."""
     if not q:
         return [f"{name}: no Q record"]
     rc = q.get("recapture") or {}
@@ -183,7 +214,7 @@ def q_faults(name, q, arm) -> list:
     if [(rc.get("graph_status") or {}).get(str(b)) for b in BUCKETS] != ["graph"] * len(BUCKETS):
         out.append(f"{name}: Q's re-capture {rc.get('graph_status')}")
     out += capture_faults(f"{name} Q", rc.get("capture_paths") or {}, arm)
-    for g, (n, group, sha) in Q_GATES.items():
+    for g, (n, group, sha) in (gates or Q_GATES).items():
         r = (q.get("gates") or {}).get(g) or {}
         steps = -(-n // group) * CONT
         if (r.get("windows"), r.get("group"), r.get("sha256")) != (n, group, sha) or len(r.get("per_window") or []) != n:
@@ -215,6 +246,48 @@ def q_rule(arms) -> dict:
             rep[g] = gate(p1, p0)
     return {"gates": out, "pass": all(v["pass"] for v in out.values()), "prefill_q_reported": rep,
             "prefill_ttft_ms_511": {t: arms[t]["q"].get("prefill_ttft_ms_511", {}).get("median") for t in ("S0a", "S1a")}}
+
+
+# -------------------------------------------------------------------------------------------- Amendment 5 --
+def gate_faults(r, part: str, arm: str, e4b_sha: str) -> list:
+    """The early gates on one process's record (each its own rc in the runner; an instrument refusal, never a strike).
+    ``build``: the pins, the server, the census, every bucket captured, the int8 census and the capture counts at their
+    closed forms. ``instrument`` (S1w): Q's re-capture and one teacher-forced pass per gate, the forcing reaching the
+    graph -- the paths the lab A2000 cannot build (sm_86 has no fused FP8 KV append, so no decode graphs)."""
+    if not r or r.get("status") != "ok":
+        return [f"the gate record is missing or not ok ({part})"]
+    if part == "build":
+        g = r.get("graph_status") or {}
+        out = record_faults("gate", r, e4b_sha, arm) + int8_faults("gate", r, arm)
+        if [g.get(str(b)) for b in BUCKETS] != ["graph"] * len(BUCKETS):
+            out.append(f"gate: graph_status {g}")
+        return out
+    return q_faults("gate", r.get("q"), arm, gates={g: (group, group, sha) for g, (_n, group, sha) in Q_GATES.items()})
+
+
+def reduce_dry(arms: dict, tf: dict, sane: dict, gate_rec, e4b_sha: str) -> dict:
+    """P149_DRY=1 (the 1-layer slice; ``use_dry`` first): an INSTRUMENT run, never a reading and never a strike. The
+    verdict is DRY. ``instrument_faults`` lists every wiring or engagement fault the box's rule would VOID on, across
+    every process (the gate, the eight arms, Q, T1 and T2, both SANE phases); ``would_read`` is the rule's line on the
+    slice, which means nothing."""
+    faults = gate_faults(gate_rec, "build", "S1", e4b_sha) + gate_faults(gate_rec, "instrument", "S1", e4b_sha)
+    for t in TAGS:
+        r = arms.get(t)
+        if not r or r.get("status") != "ok":
+            faults.append(f"{t}: missing or not ok")
+            continue
+        faults += record_faults(t, r, e4b_sha, t[:2]) + int8_faults(t, r, t[:2]) + speed_faults(t, r)
+        if t in ("S0a", "S1a"):
+            faults += q_faults(t, r.get("q"), t[:2])
+    for t in T_TAGS:
+        faults += tf_faults(t, tf.get(t))
+    faults += [f"sane {ph}: missing or not ok" for ph in ("S0", "S1") if (sane.get(ph) or {}).get("status") != "ok"]
+    try:
+        would = reduce(arms, tf, e4b_sha)["verdict"]
+    except Exception as e:  # noqa: BLE001 -- the rule's line is reported only
+        would = f"error: {type(e).__name__}: {str(e)[:200]}"
+    return {"lane": "P149 dry (Amendment 5)", "verdict": "DRY", "ok": not faults, "instrument_faults": faults,
+            "would_read": would, "reasons": ["an instrument run on a 1-layer slice: never a reading and never a strike"]}
 
 
 # -------------------------------------------------------------------------------------------- Amendment 4 --
@@ -357,10 +430,19 @@ def reduce(arms: dict, tf: dict, e4b_sha: str) -> dict:
     return out
 
 
+def _json(path):
+    return json.load(open(path)) if os.path.exists(path) else None
+
+
 def load(d) -> tuple:
     arms = {t: json.load(open(os.path.join(d, f"arm_{t}.json"))) for t in TAGS if os.path.exists(os.path.join(d, f"arm_{t}.json"))}
     tf = {t: json.load(open(os.path.join(d, f"tf_{t}.json"))) for t in T_TAGS if os.path.exists(os.path.join(d, f"tf_{t}.json"))}
     return arms, tf
+
+
+def load_dry(d) -> tuple:
+    sane = {ph: _json(os.path.join(d, f"sane_{ph}.json")) for ph in ("S0", "S1")}
+    return sane, _json(os.path.join(d, "gate_S1w.json"))
 
 
 # ------------------------------------------------------------------------------------------------ self-test --
@@ -372,9 +454,10 @@ def _paths(arm, bucket_rows=True):
                      {"routed": {str(b): PROJ * 3}, "passed": {}}) for b in BUCKETS} if bucket_rows else {}
 
 
-def _qrec(arm, nll=1.0, flip=0):
+def _qrec(arm, nll=1.0, flip=0, one=False):
     gates = {}
     for g, (n, group, sha) in Q_GATES.items():
+        n = group if one else n                                  # the early gate: one pass per gate
         per = [{"nll": nll + 0.001 * (i % 7) + (0.0002 if arm == "S1" else 0), "argmax": [i + (k < flip) for k in range(CONT)]}
                for i in range(n)]
         gates[g] = {"windows": n, "group": group, "sha256": sha, "bucket": group, "replays": -(-n // group) * CONT,
@@ -416,6 +499,18 @@ def _tf(tag, a=(100.0, 100.0), b=(100.0, 100.0), same=False, **kw):
     return {"tag": tag, "status": "ok", "blocks": blocks, "streams_identical": same, **kw}
 
 
+def _gate(arm="S1"):
+    r = _arm(f"{arm}w", 100.0, 1000.0, q=False, mode="gate")
+    r.pop("workloads")
+    r["q"] = _qrec(arm, one=True)
+    return r
+
+
+def _restore(saved) -> None:
+    global MODEL, REV, LAYERS, PROJ, CENSUS
+    MODEL, REV, LAYERS, PROJ, CENSUS = saved
+
+
 def _fixture(s1_w1=1.05, s1_w16=1.0, **kw):
     arms = {t: _arm(t, 100.0 * (s1_w1 if t[:2] == "S1" else 1), 1000.0 * (s1_w16 if t[:2] == "S1" else 1)) for t in TAGS}
     return arms
@@ -426,10 +521,11 @@ def self_test() -> int:
     tf = {t: _tf(t) for t in T_TAGS}
     v = reduce(_fixture(), tf, E)
     cases.append(("a clean +5 % W1 with g16 1.0 FLIPs", v["verdict"] == "FLIP", v["reasons"]))
-    cases.append(("routing-neutral streams CLEAR the default flip", v["routing_qualifier"]["label"] == "ROUTING_CLEAR"
-                  and v["default_flip_pr"] == "proceeds", v.get("routing_qualifier")))
+    cases.append(("routing-neutral streams CLEAR the default flip",
+                  (v.get("routing_qualifier") or {}).get("label") == "ROUTING_CLEAR"
+                  and v.get("default_flip_pr", "") == "proceeds", v.get("routing_qualifier")))
     v = reduce(_fixture(s1_w1=1.02), tf, E)
-    cases.append(("+2 % W1 is NO_FLIP", v["verdict"] == "NO_FLIP" and v["default_flip_pr"] == "n/a", v["reasons"]))
+    cases.append(("+2 % W1 is NO_FLIP", v["verdict"] == "NO_FLIP" and v.get("default_flip_pr", "") == "n/a", v["reasons"]))
     arms = _fixture()
     for t in ("S0c", "S0d"):
         arms[t]["workloads"]["W1"]["decode_tok_s"] = 103.0           # S1c/S0c = S1d/S0d = 1.019; every self-pair 1.0
@@ -505,10 +601,57 @@ def self_test() -> int:
     cases.append(("identical streams CLEAR by construction", same["label"] == "ROUTING_CLEAR", same))
     v = reduce(_fixture(), {t: _tf(t, b=(102.0, 102.0)) for t in T_TAGS}, E)
     cases.append(("a FLIP stands while its default-flip PR is held", v["verdict"] == "FLIP"
-                  and v["default_flip_pr"].startswith("held (ROUTING_CONFOUNDED"), v.get("default_flip_pr")))
+                  and v.get("default_flip_pr", "").startswith("held (ROUTING_CONFOUNDED"), v.get("default_flip_pr")))
     v = reduce(_fixture(), {}, E)
     cases.append(("no T records: the FLIP stands, the PR is held", v["verdict"] == "FLIP"
-                  and v["default_flip_pr"] == "held (QUALIFIER_VOID)", v.get("default_flip_pr")))
+                  and v.get("default_flip_pr", "") == "held (QUALIFIER_VOID)", v.get("default_flip_pr")))
+    # Amendment 5: the closed forms, the early gates, the dry run
+    cases.append(("the census closed form is the registered one at 32 layers", census(LAYERS) == CENSUS
+                  and (PROJ, CAPTURE_CALLS) == (4 * LAYERS, 3), None))
+    arms = _fixture()
+    arms["S1c"]["capture_paths"]["4"] = {"routed": {"4": CAPTURE_CALLS * PROJ - 1}, "passed": {}}
+    cases.append(("a capture one int8 call short of 3 x 128 VOIDs", reduce(arms, tf, E)["verdict"] == "VOID", None))
+    g = _gate()
+    gb, gi = gate_faults(g, "build", "S1", E), gate_faults(g, "instrument", "S1", E)
+    cases.append(("a clean S1w passes both early gates", gb == [] and gi == [], (gb, gi)))
+    cases.append(("S0a's build passes the S0 gate", gate_faults(_fixture()["S0a"], "build", "S0", E) == [], None))
+    cases.append(("an S1 build fails the S0 gate", gate_faults(g, "build", "S0", E) != [], None))
+    bad = _gate()
+    bad["fusions"]["fuse_t1_glue_n"] = 64
+    cases.append(("a census one fold short fails the build gate", gate_faults(bad, "build", "S1", E) != [], None))
+    bad = _gate()
+    bad["graph_status"]["8"] = "eager: capture failed"
+    cases.append(("an eager bucket fails the build gate", gate_faults(bad, "build", "S1", E) != [], None))
+    bad = _gate()
+    bad["capture_paths"]["2"]["routed"]["2"] = 2 * PROJ
+    cases.append(("two capture calls a projection fail the build gate", gate_faults(bad, "build", "S1", E) != [], None))
+    bad = _gate()
+    bad["q"]["gates"]["W16"]["forcing"]["ptr_mismatch"] = 1
+    cases.append(("a rebound Q buffer fails the instrument gate", gate_faults(bad, "instrument", "S1", E) != [], None))
+    bad = _gate()
+    bad["q"]["gates"]["W1"]["replays"] = 2 * CONT
+    cases.append(("a second W1 pass fails the instrument gate", gate_faults(bad, "instrument", "S1", E) != [], None))
+    cases.append(("a missing gate record fails both gates", gate_faults(None, "build", "S1", E) != []
+                  and gate_faults(None, "instrument", "S1", E) != [], None))
+    saved = (MODEL, REV, LAYERS, PROJ, CENSUS)
+    try:
+        use_dry()
+        tfd, sane = {t: _tf(t) for t in T_TAGS}, {"S0": {"status": "ok"}, "S1": {"status": "ok"}}
+        v = reduce_dry(_fixture(), tfd, sane, _gate(), E)
+        cases.append(("a clean dry reads DRY with no instrument fault", v["verdict"] == "DRY" and v["ok"]
+                      and CENSUS == census(1) and PROJ == 4, v["instrument_faults"]))
+        v = reduce_dry(_fixture(), {"T1": tfd["T1"]}, {"S0": {"status": "ok"}}, _gate(), E)
+        cases.append(("a dry without T2 and SANE S1 lists both and still reads DRY", v["verdict"] == "DRY" and not v["ok"]
+                      and any("T2" in x for x in v["instrument_faults"])
+                      and any("sane S1" in x for x in v["instrument_faults"]), v["instrument_faults"]))
+        arms = _fixture()
+        arms["S1b"]["attn_int8"]["projections"] = 128
+        cases.append(("the box's 128 projections on the slice are a dry fault",
+                      not reduce_dry(arms, tfd, sane, _gate(), E)["ok"], None))
+        v = reduce_dry(_fixture(), tfd, sane, None, E)
+        cases.append(("a dry without its gate record is a dry fault", not v["ok"], None))
+    finally:
+        _restore(saved)
     cases.append(("P147's gate: the bound is ln(1 + 0.05 / ppl)", abs(gate([{"nll": 1.0, "argmax": [1]}] * 3,
                   [{"nll": 1.0, "argmax": [1]}] * 3)["bound"] - round(math.log1p(0.05 / math.e), 6)) < 1e-9, None))
     bad = [(c, extra) for c, ok, extra in [(c[0], c[1], c[2]) for c in cases] if not ok]
@@ -522,14 +665,32 @@ def main(argv=None) -> int:
     ap.add_argument("--out")
     ap.add_argument("--e4b-sha")
     ap.add_argument("--q-only", action="store_true")
+    ap.add_argument("--dry", action="store_true", help="Amendment 5: the 1-layer slice's constants; the verdict is DRY")
+    ap.add_argument("--gate", help="Amendment 5: one process's record; exit 1 unless it passes --gate-part")
+    ap.add_argument("--gate-part", choices=("build", "instrument"), default="build")
+    ap.add_argument("--gate-arm", choices=("S0", "S1"), default="S1")
     ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args(argv)
     if a.self_test:
         return self_test()
+    if a.dry:
+        use_dry()
+    if a.gate:
+        f = gate_faults(_json(a.gate), a.gate_part, a.gate_arm, a.e4b_sha)
+        print(f"P149_GATE {a.gate_part} {a.gate_arm}: " + ("OK" if not f else "FAULT " + "; ".join(f)[:2000]), flush=True)
+        return 1 if f else 0
     arms, tf = load(a.dir)
-    v = reduce_q(arms, a.e4b_sha) if a.q_only else reduce(arms, tf, a.e4b_sha)
+    if a.q_only:
+        v = reduce_q(arms, a.e4b_sha)
+    elif a.dry:
+        v = reduce_dry(arms, tf, *load_dry(a.dir), a.e4b_sha)
+    else:
+        v = reduce(arms, tf, a.e4b_sha)
     json.dump(v, open(a.out, "w"), indent=1, default=str)
     print(f"P149_VERDICT {v['verdict']}: " + "; ".join(str(x) for x in v["reasons"])[:2000], flush=True)
+    if "instrument_faults" in v:
+        print(f"P149_DRY ok={v['ok']} faults={len(v['instrument_faults'])} would_read={v['would_read']}: "
+              + "; ".join(v["instrument_faults"])[:3000], flush=True)
     return 0
 
 
