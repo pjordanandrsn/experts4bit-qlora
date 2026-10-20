@@ -178,7 +178,7 @@ def reduce(spec, load=None):
         out.update(outcome="INSUFFICIENT", reason="fewer than two depths fit: N2's two-deepest rule cannot be read")
         return out
     if Ls[-1] < DEPTH_FLOOR:                                         # the driver's own reason for stopping the climb, when it gave one
-        why = spec.get("climb_stop") or "wait for the sidecar to unload and retry"
+        why = spec.get("climb_stop") or "the climb stopped without a recorded reason (see the run's summary.txt)"
         out.update(outcome="INSUFFICIENT_DEPTH", reason=f"the deepest fitted depth L{Ls[-1]} is below the L{DEPTH_FLOOR} floor: {why}")
         return out
     out["N0"] = {k: all(recs[L]["n0_holds"][k] for L in Ls) for k in ("I", "E", "F")}

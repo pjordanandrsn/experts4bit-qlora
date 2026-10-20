@@ -2595,8 +2595,10 @@ tc1_hpn_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
     need=$(( L * 2 + 2 )); local needm=$(( (need * 115 + 99) / 100 )) fst; read -r free fst <<< "$(hpn_settled_free_gb $expect_kb)"
     if [ "$fst" != settled ]; then climb_stop="df did not settle before L$L (two reads ${HPN_SETTLE_S:-30} s apart within 0.5 GB, ${HPN_SETTLE_TIMEOUT:-600} s)"
       echo "HPN L$L NOT_READ: $climb_stop" | tee -a summary.txt; break; fi
-    if [ "${free:-0}" -lt "$needm" ]; then echo "HPN L$L SKIPPED: ${free} GB free < 1.15 x ${need} GB = ${needm} GB for its cut and exports (a stated limit; to make room, remove old HPN run dirs or unused venvs under /workspace)" | tee -a summary.txt; break; fi
-    $PY_E4B $W/hp1_trunc.py --src "$SRC" --cache $SC --layers $L > logs/hpn_trunc_L$L.log 2>&1 || { echo "HPN L$L TRUNC_FAILED" | tee -a summary.txt; break; }
+    if [ "${free:-0}" -lt "$needm" ]; then climb_stop="L$L needs ${needm} GB free for its cut and exports and ${free} GB was free (a disk limit, not the card's)"
+      echo "HPN L$L SKIPPED: ${free} GB free < 1.15 x ${need} GB = ${needm} GB for its cut and exports (a stated limit; to make room, remove old HPN run dirs or unused venvs under /workspace)" | tee -a summary.txt; break; fi
+    $PY_E4B $W/hp1_trunc.py --src "$SRC" --cache $SC --layers $L > logs/hpn_trunc_L$L.log 2>&1 || { climb_stop="the L$L cut failed (logs/hpn_trunc_L$L.log; not a depth limit)"
+      echo "HPN L$L TRUNC_FAILED" | tee -a summary.txt; break; }
     TM=$($PY_E4B -c "import json,sys; print(json.loads(open(sys.argv[1]).read().splitlines()[-1])['model'])" logs/hpn_trunc_L$L.log)
     TR=$($PY_E4B -c "import json,sys; print(json.loads(open(sys.argv[1]).read().splitlines()[-1])['revision'])" logs/hpn_trunc_L$L.log)
     TL=$W/hpn/tokens_$FL.json                                         # the same rows, labelled for this cut's fam (tc1_arm refuses another fam's file)
@@ -2609,19 +2611,41 @@ tc1_hpn_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
     UNS_VENV=${HPN_UNS_VENV:-t28} TC1_ARM_EXTRA_ENV="$E" arm $FL unsloth hpn_uns unsloth $UAL "$TM" $TR 0 hpncal $TL $TSC --grad-ckpt unsloth --unsloth-targets $UT7 \
       --unsloth-moe-backend ${HPN_UNS_BACKEND:-native_torch} --lora-init native --adapter-dtype native --seed 3407 --order-seed 3407 $X
     # only an OOM is the card's limit; any other status is a failed arm, never recorded as a depth that did not fit
-    local st a ok=1 failed=""; for a in e4b:hpn_e4b_a e4b:hpn_e4b_b unsloth:hpn_uns; do st=$(status_of $FL ${a%%:*} ${a#*:})
+    local st a ok=1 failed="" oomd=""; for a in e4b:hpn_e4b_a e4b:hpn_e4b_b unsloth:hpn_uns; do st=$(status_of $FL ${a%%:*} ${a#*:})
       [ "$st" = ok ] && continue; ok=0
-      if [ "$st" = oom ]; then echo "HPN L$L ${a#*:} oom: this depth did not fit (a stated limit)" | tee -a summary.txt
+      if [ "$st" = oom ]; then echo "HPN L$L ${a#*:} oom: this depth did not fit (a stated limit)" | tee -a summary.txt; oomd="$oomd${oomd:+, }${a#*:}"
       else failed="$failed ${a#*:}:$st"; fi; done
-    [ -n "$failed" ] && echo "HPN L$L ARM_FAILED$failed (not a depth limit: see the arm receipts)" | tee -a summary.txt
+    [ -n "$oomd" ] && climb_stop="L$L did not fit on the card: $oomd ran out of GPU memory in training (a stated limit)"
+    [ -n "$failed" ] && { echo "HPN L$L ARM_FAILED$failed (not a depth limit: see the arm receipts)" | tee -a summary.txt
+      climb_stop="an arm failed at L$L:$failed (not a depth limit; see the arm receipts)"; }
     if [ $ok = 0 ]; then rm -rf $SC $D/base_e4b_$FL $D/base_unsloth_$FL; break; fi   # a successful arm's export goes too (disk)
     # NOT R: the global R is the LoRA rank arm_once reads (read 3, 00:00Z: a local R=<receipt> gave L4's arms --r <path>)
     local RCA=$W/${FL}_e4b_hpn_e4b_a.json RCB=$W/${FL}_e4b_hpn_e4b_b.json RCU=$W/${FL}_unsloth_hpn_uns.json
+    # an arm can end ok (rc 0, CELL OK) with its base export failed inside it, recorded as the receipt's hp1.train_base_error (read 5,
+    # L8 on the A2000: CUDA ran out of memory in the export). An OOM there is this depth's limit on the card, the same as an arm that
+    # OOMed in training; any other export error is a failed arm. Either ends the climb, with the cause in climb_stop.
+    local xe; xe=$($PY_E4B -c "import json,sys
+for p in sys.argv[1:]:
+    try:
+        e = (json.load(open(p)).get('hp1') or {}).get('train_base_error')
+    except Exception as x:
+        e = 'unreadable receipt: ' + type(x).__name__
+    if e:
+        kind = 'oom' if ('OutOfMemoryError' in e or 'out of memory' in e.lower()) else 'error'
+        arm = p.split('/')[-1][:-5].split('_', 2)[-1]
+        print(kind, arm, ' '.join(e.replace(chr(34), '').replace(chr(92), '').split())[:160])" $RCA $RCU)
+    if [ -n "$xe" ]; then local xa; xa=$(echo "$xe" | awk '{printf "%s%s", (NR > 1 ? ", " : ""), $2}')
+      if echo "$xe" | grep -q '^error '; then climb_stop="the base export failed at L$L ($xa; not a depth limit; see the arm receipts)"
+        echo "HPN L$L ARM_FAILED base export: $(echo "$xe" | grep '^error ' | cut -d' ' -f2- | head -2 | tr '\n' ';')" | tee -a summary.txt
+      else climb_stop="L$L did not fit on the card: the base export ran out of GPU memory ($xa; a stated limit)"
+        echo "HPN L$L oom: the base export did not fit ($xa: $(echo "$xe" | head -1 | cut -d' ' -f3- | cut -c1-120)) (a stated limit)" | tee -a summary.txt; fi
+      rm -rf $SC $D/base_e4b_$FL $D/base_unsloth_$FL; break; fi
     rm -f $W/hpn/eval_e4b_L${L}_1.json $W/hpn/eval_e4b_L${L}_2.json $W/hpn/eval_uns_L$L.json $W/hpn/f_e4b_L$L.json $W/hpn/f_unsloth_L$L.json   # no stale read passes
     # E's trainable check stays ON at every depth, against THIS cut's count from e4b arm a's own receipt (read 2, 22:05Z: the 48-layer
     # default VOIDed every E read); Unsloth's arm must then match it, so the e4b-vs-Unsloth agreement is asserted, not incidental
     local EXP; EXP=$($PY_E4B -c "import json,sys; print(int(json.load(open(sys.argv[1]))['trainable_params']))" $RCA 2>/dev/null)
-    if [ -z "$EXP" ]; then echo "HPN L$L READ_FAILED no trainable count in $(basename $RCA)" | tee -a summary.txt; rm -rf $SC $D/base_e4b_$FL $D/base_unsloth_$FL; break; fi
+    if [ -z "$EXP" ]; then climb_stop="L$L was not read: no trainable count in $(basename $RCA) (not a depth limit)"
+      echo "HPN L$L READ_FAILED no trainable count in $(basename $RCA)" | tee -a summary.txt; rm -rf $SC $D/base_e4b_$FL $D/base_unsloth_$FL; break; fi
     echo "HPN L$L trainable $EXP (e4b arm a's receipt; E checks every arm against it)" | tee -a summary.txt
     for a in 1 2; do HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts $RCA --bases $D/base_e4b_$FL --tokens $TL --eval-n 300 \
       --model "$TM" --revision $TR --zero-report-only 1 --expect-trainable $EXP --out $W/hpn/eval_e4b_L${L}_$a.json > logs/hpn_eval_e4b_L${L}_$a.log 2>&1; done
@@ -2646,7 +2670,8 @@ for p in sys.argv[1:]:
     if not ok:
         bad.append(p.split('/')[-1])
 print(' '.join(bad))" $W/hpn/eval_e4b_L${L}_1.json $W/hpn/eval_e4b_L${L}_2.json $W/hpn/eval_uns_L$L.json $W/hpn/f_e4b_L$L.json $W/hpn/f_unsloth_L$L.json)
-    if [ -n "$bad" ]; then echo "HPN L$L READ_FAILED $bad (the depth is excluded; see logs/hpn_eval_*_L$L*.log, logs/hpn_read_*_L$L.log)" | tee -a summary.txt
+    if [ -n "$bad" ]; then climb_stop="L$L was not read: a reader output failed its content check ($bad; not a depth limit)"
+      echo "HPN L$L READ_FAILED $bad (the depth is excluded; see logs/hpn_eval_*_L$L*.log, logs/hpn_read_*_L$L.log)" | tee -a summary.txt
       hp1_bulk_manifest "$W"; rm -rf $SC $D/base_e4b_$FL $D/base_unsloth_$FL; break; fi
     hp1_bulk_manifest "$W"                                             # pin the exports' bytes before they go
     # what the next depth's settle must see come back: the free space now plus what is about to be removed

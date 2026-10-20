@@ -2414,6 +2414,57 @@ def test_hp1_export_refuses_cleanly_without_hp1_lib(tmp_path):
     assert rec["status"] == "refused" and "--hp1-export DIR" in rec["reason"], rec
 
 
+def test_hp1_release_clears_the_trainer_state_and_leaves_the_digest_and_export_bytes_unchanged(tmp_path):
+    """HPN read 5: at L8 on a 12 GB RTX A2000 the base digest ran out of memory with the optimizer's state still resident. The
+    release drops that state and every gradient before the export. The export reads only the frozen base, so the training-base
+    digest (hp1_base_digest), the export's index and every exported tensor's bits (hp1_lib.export_base) are equal with and without
+    it, after a real step."""
+    import torch
+    pytest.importorskip("safetensors")                          # hp1_lib.export_base writes safetensors
+    m = _load_arm_module()
+    m._hp1_path()
+    import hp1_lib
+    torch.manual_seed(0)
+    model = torch.nn.Sequential(torch.nn.Linear(8, 8), torch.nn.Linear(8, 4))
+    for lin in model:
+        lin.weight.requires_grad_(False)                       # the frozen base; the biases stand in for the adapter
+    opt = torch.optim.AdamW([lin.bias for lin in model], lr=1e-2)
+    model(torch.randn(3, 8)).sum().backward()
+    opt.step()
+
+    def slot(t):
+        return (lambda: {"fmt": "bf16", "w": t.data.to(torch.bfloat16)}), (lambda: t.data.to(torch.bfloat16)), None
+    slots = {(0, "q", -1): slot(model[0].weight), (1, "o", -1): slot(model[1].weight)}
+
+    def export(d):
+        dig = m.hp1_base_digest(model, slots)
+        rec = hp1_lib.export_base(slots, str(d), {"framework": "e4b"})
+        from safetensors import safe_open
+        files = {}
+        for f in sorted(d.iterdir()):          # by content: safetensors orders its header metadata freely, so two saves of the
+            if f.suffix != ".safetensors":     # same tensors need not be byte-equal files
+                files[f.name] = f.read_bytes()
+                continue
+            with safe_open(str(f), "pt") as fh:
+                files[f.name] = (fh.metadata(), {k: fh.get_tensor(k).view(torch.int16).tolist() for k in sorted(fh.keys())})
+        return (dig["digest"], dig["n_slots"], dig["raw_ok"]), rec["index_sha256"], files
+
+    before = export(tmp_path / "a")
+    assert len(opt.state) == 2 and all(lin.bias.grad is not None for lin in model)
+    rel = m.hp1_release_training_state(model, opt)
+    assert rel["optimizer_states"] == 2 and rel["grads"] == 2
+    assert not opt.state and all(p.grad is None for p in model.parameters())
+    assert before[0][2] is True and export(tmp_path / "b") == before
+
+
+def test_the_release_runs_only_under_hp1_export_and_before_the_export():
+    """A default arm never reaches it (its receipt keeps its key set); an --hp1-export arm releases, then exports, then records it."""
+    src = ARM.read_text()
+    block = src[src.index('    if getattr(a, "hp1_export", None):              # HP1'):][:600]
+    assert block.index("hp1_release_training_state(model, opt)") < block.index("hp1_export(model, a)") < block.index('hp1["released"]')
+    assert src.count("hp1_release_training_state(") == 2         # the definition and this one call
+
+
 def test_hp1_export_refuses_an_offloaded_model_before_load(tmp_path):
     """--hp1-export with --offload 1 is a `refused` stub (exit 3) before anything loads: the export reads every frozen expert stack
     on the device, and an offloaded model keeps them in host RAM. HP1's arms run resident."""

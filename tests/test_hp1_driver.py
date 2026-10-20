@@ -71,7 +71,9 @@ tc1_prepare(){ TOK=$W/tokens.json; TS=deadbeef
 arm(){ local tf; tf=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('fam') or '')" "${10}")
   if [ -n "$tf" ] && [ "$tf" != "$1" ]; then echo "$1 $2 $3" >> "$W/mismatch.log"; return 0; fi
   echo "$1 $2 $3 ${*:12}" >> "$W/arms.log"; echo "$1 $2 $3 UNS_VENV=${UNS_VENV:-}" >> "$W/venv.log"
-  case "$1" in qwen3hpnL*) echo "{\"trainable_params\": ${STUB_TRAINABLE:-26771456}}" > "$W/${1}_${2}_${3}.json";; *) touch "$W/${1}_${2}_${3}.json";; esac
+  # STUB_RECORDS=DIR: an arm whose record is in DIR writes that real record, copied unchanged (HPN read 5's L8 cells)
+  if [ -n "${STUB_RECORDS:-}" ] && [ -e "$STUB_RECORDS/${1}_${2}_${3}.json" ]; then cp "$STUB_RECORDS/${1}_${2}_${3}.json" "$W/${1}_${2}_${3}.json"
+  else case "$1" in qwen3hpnL*) echo "{\"trainable_params\": ${STUB_TRAINABLE:-26771456}}" > "$W/${1}_${2}_${3}.json";; *) touch "$W/${1}_${2}_${3}.json";; esac; fi
   case " ${*:12} " in *" --hp1-export-base 1 "*) local d; d=$(echo " ${*:12} " | sed -n 's/.* --hp1-export \([^ ]*\) .*/\1/p'); [ -n "$d" ] && mkdir -p "$d/base_${2}_${1}";; esac; }
 status_of(){ grep -qx "$1 $2 $3" "$W/mismatch.log" 2>/dev/null && { echo tokens_mismatch; return; }
   [ "${FAIL_FAM:-}" = "$1" ] && { echo "${FAIL_STATUS:-oom}"; return; }
@@ -545,6 +547,76 @@ def test_a_depth_that_does_not_fit_ends_the_climb_as_a_stated_limit(tmp_path):
     assert [d["L"] for d in spec["depths"]] == [2, 4] and "did not fit (a stated limit)" in summary
     assert not [a for a in arms if a[0] == "qwen3hpnL16"]                           # no deeper attempt after a miss
     assert "HPN deepest depth that fit: 4" in summary and "hpn_reduce.py" in py     # the reducer still runs (it will say INSUFFICIENT_DEPTH)
+
+
+READ5 = REPO / "tests" / "fixtures" / "hpn-read5"       # HPN read 5 (A2000, e4b e537702b): its real records, copied unchanged
+
+
+def test_read_5s_real_l8_records_class_the_base_export_oom_as_the_depth_limit(tmp_path):
+    """HPN read 5's L8 cells ended ok (rc 0, CELL OK) with each base export's CUDA OOM inside the receipt (hp1.train_base_error), and
+    the driver read L8 as READ_FAILED on the missing bases. Run on those records unchanged: L8 is the card's limit, named in
+    climb_stop; no reader runs on bases that were never written, and nothing says READ_FAILED."""
+    import json
+    arms, summary, py, spec = _hpn(tmp_path, HPN_DEPTHS="2 4 8 16", STUB_RECORDS=str(READ5))
+    for a in ("e4b_hpn_e4b_a", "unsloth_hpn_uns"):                     # the fixture is the real record, and it carries the OOM
+        rec = json.loads((READ5 / f"qwen3hpnL8_{a}.json").read_text())
+        assert rec["status"] == "ok" and rec["hp1"]["train_base_error"].startswith("OutOfMemoryError: CUDA out of memory")
+    assert [d["L"] for d in spec["depths"]] == [2, 4]
+    assert "HPN L8 oom: the base export did not fit (hpn_e4b_a, hpn_uns: OutOfMemoryError: CUDA out of memory." in summary
+    assert "READ_FAILED" not in summary and "ARM_FAILED" not in summary
+    assert spec["climb_stop"] == "L8 did not fit on the card: the base export ran out of GPU memory (hpn_e4b_a, hpn_uns; a stated limit)"
+    assert not [ln for ln in py.splitlines() if ("hp1_eval.py" in ln or "hpn_read.py" in ln) and "_L8" in ln]
+    assert not [a for a in arms if a[0] == "qwen3hpnL16"]               # the climb ends at the limit
+    assert not list((tmp_path / "hp1" / "hpn").glob("*/base_*"))       # and the depth's exports are removed
+
+
+def test_read_5s_climb_stop_reaches_the_reason_of_read_5s_own_reduction(tmp_path):
+    """The reducer on read 5's real spec and files: with the driver's climb_stop it reproduces read 5's committed result.json in
+    every field but the reason, and the reason names the export OOM instead of the old fixed 'wait for the sidecar' text."""
+    import importlib.util
+    import json
+    import shutil
+    (tmp_path / "drive").mkdir()
+    arms, summary, py, spec = _hpn(tmp_path / "drive", HPN_DEPTHS="2 4 8", STUB_RECORDS=str(READ5))
+    rd = tmp_path / "read5"
+    shutil.copytree(READ5, rd)
+    real = json.loads((rd / "hpn_spec.json").read_text())
+    assert real["climb_stop"] == ""                                     # what read 5's own driver recorded
+    (rd / "hpn_spec.json").write_text(json.dumps(dict(real, climb_stop=spec["climb_stop"])))
+    m = importlib.util.spec_from_file_location("hpn_reduce_read5", REPO / "bench" / "hpn" / "hpn_reduce.py")
+    R = importlib.util.module_from_spec(m)
+    m.loader.exec_module(R)
+    assert R.main([str(rd / "hpn_spec.json"), "--out", str(tmp_path / "out.json")]) == 0
+    got, was = json.loads((tmp_path / "out.json").read_text()), json.loads((READ5 / "hpn" / "result.json").read_text())
+    assert "sidecar" in was["reason"] and was["climb_stop"] is None    # read 5's real reason: the one this fixes
+    assert got["outcome"] == was["outcome"] == "INSUFFICIENT_DEPTH"
+    assert {k: v for k, v in got.items() if k not in ("reason", "climb_stop")} == {k: v for k, v in was.items() if k not in ("reason", "climb_stop")}
+    assert got["climb_stop"] == spec["climb_stop"] and spec["climb_stop"] in got["reason"] and "sidecar" not in got["reason"]
+
+
+def test_a_base_export_that_fails_another_way_is_a_failed_arm_not_a_limit(tmp_path):
+    import json
+    rec = tmp_path / "records"
+    rec.mkdir()
+    r = json.loads((READ5 / "qwen3hpnL8_e4b_hpn_e4b_a.json").read_text())
+    r["hp1"]["train_base_error"] = "RuntimeError: 3 unmapped expert slots"
+    (rec / "qwen3hpnL4_e4b_hpn_e4b_a.json").write_text(json.dumps(r))
+    (tmp_path / "w").mkdir()
+    arms, summary, py, spec = _hpn(tmp_path / "w", HPN_DEPTHS="2 4 8", STUB_RECORDS=str(rec))
+    assert [d["L"] for d in spec["depths"]] == [2] and "HPN L4 ARM_FAILED base export: hpn_e4b_a RuntimeError" in summary
+    assert "did not fit" not in summary and "not a depth limit" in spec["climb_stop"]
+
+
+def test_every_stop_path_records_its_cause_in_climb_stop(tmp_path):
+    """No climb ends with an empty climb_stop: the reducer's reason is derived from it."""
+    cases = {"disk": dict(STUB_DF_GB="15"), "oom": dict(FAIL_FAM="qwen3hpnL8"),
+             "arm": dict(FAIL_FAM="qwen3hpnL8", FAIL_STATUS="install_failed"), "read": dict(STUB_E_BAD="partial")}
+    want = {"disk": "L8 needs 21 GB free", "oom": "L8 did not fit on the card: hpn_e4b_a, hpn_e4b_b, hpn_uns ran out of GPU memory in training",
+            "arm": "an arm failed at L8:", "read": "L4 was not read: a reader output failed its content check"}
+    for k, env in cases.items():
+        (tmp_path / k).mkdir()
+        _, _, _, spec = _hpn(tmp_path / k, HPN_DEPTHS="2 4 8", **env)
+        assert spec["climb_stop"].startswith(want[k]), (k, spec["climb_stop"])
 
 
 def test_too_little_disk_for_a_cut_skips_it_before_any_arm(tmp_path):
