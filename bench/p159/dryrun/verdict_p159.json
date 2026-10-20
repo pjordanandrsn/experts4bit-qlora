@@ -1,0 +1,154 @@
+{
+ "bytes_ok": true,
+ "call": "REFUTED_FAULTS",
+ "flip_base_rate": 0.4461538461538462,
+ "null_median_abs_log": 0.15313655628264433,
+ "per_arm": {
+  "M": {
+   "block_s": 0.5824325839057565,
+   "fuse_s": 0.14269693987444043,
+   "h2d_s": 0.062267381930723786,
+   "n": 65,
+   "offload_s": 0.11634224490262568,
+   "quant_s": 0.01813286100514233,
+   "read_s": 0.0010468580294400454,
+   "residual_s": 0.21787313488312066
+  },
+  "M2": {
+   "block_s": 0.5771264969371259,
+   "fuse_s": 0.12662208708934486,
+   "h2d_s": 0.060457315063104033,
+   "n": 65,
+   "offload_s": 0.12358463392592967,
+   "quant_s": 0.018290254985913634,
+   "read_s": 0.0010647650342434645,
+   "residual_s": 0.21990019688382745
+  },
+  "N": {
+   "block_s": 0.5189557503908873,
+   "fuse_s": 0.11297035845927894,
+   "h2d_s": 0.05870195850729942,
+   "n": 60,
+   "offload_s": 0.11074052948970348,
+   "quant_s": 0.01780346140731126,
+   "read_s": 0.0010121739469468594,
+   "residual_s": 0.20755853853188455
+  },
+  "P": {
+   "block_s": 0.5245566620724276,
+   "fuse_s": 0.13588411849923432,
+   "h2d_s": 0.05950299359392375,
+   "n": 60,
+   "offload_s": 0.10664018255192786,
+   "quant_s": 0.017663393984548748,
+   "read_s": 0.0010766434716060758,
+   "residual_s": 0.19960442907176912
+  },
+  "R": {
+   "block_s": 0.5272794109769166,
+   "fuse_s": 0.12674539699219167,
+   "h2d_s": 0.06142254499718547,
+   "n": 65,
+   "offload_s": 0.12747471500188112,
+   "quant_s": 0.017772162798792124,
+   "read_s": 4.0119048207998276e-06,
+   "residual_s": 0.2023482359945774
+  }
+ },
+ "read1": "REFUTED_FAULTS",
+ "read1_inputs": {
+  "f_PS": 0.0,
+  "n_NF": 0,
+  "n_PS": 1,
+  "s_NF": null
+ },
+ "read2": "FAIL",
+ "read2_inputs": {
+  "huge_share_fast": 0.0,
+  "huge_share_slow": 0.0,
+  "minflt_fast": 95979,
+  "minflt_slow": 75212.0,
+  "thp_fallback_fast": null,
+  "thp_fallback_slow": null
+ },
+ "read3": "NOT_SLAB",
+ "read3_inputs": {
+  "r_fast_share": 0.125,
+  "triples": 16
+ },
+ "read4": "NOT_RUN",
+ "slow_window_observed": true,
+ "verdict": "REFUTED_FAULTS",
+ "void": {
+  "N": false,
+  "P": false,
+  "R": false
+ },
+ "void_instrument": false,
+ "windows": [
+  {
+   "fast": 0,
+   "index": 1,
+   "kind": "N",
+   "n": 15,
+   "slow": 3,
+   "window": "MIXED"
+  },
+  {
+   "fast": 5,
+   "index": 3,
+   "kind": "P",
+   "n": 15,
+   "slow": 1,
+   "window": "MIXED"
+  },
+  {
+   "fast": 0,
+   "index": 7,
+   "kind": "P",
+   "n": 15,
+   "slow": 15,
+   "window": "SLOW"
+  },
+  {
+   "fast": 8,
+   "index": 11,
+   "kind": "N",
+   "n": 15,
+   "slow": 0,
+   "window": "MIXED"
+  },
+  {
+   "fast": 1,
+   "index": 15,
+   "kind": "N",
+   "n": 15,
+   "slow": 3,
+   "window": "MIXED"
+  },
+  {
+   "fast": 2,
+   "index": 17,
+   "kind": "P",
+   "n": 15,
+   "slow": 4,
+   "window": "MIXED"
+  },
+  {
+   "fast": 6,
+   "index": 19,
+   "kind": "N",
+   "n": 15,
+   "slow": 0,
+   "window": "MIXED"
+  },
+  {
+   "fast": 7,
+   "index": 21,
+   "kind": "P",
+   "n": 15,
+   "slow": 0,
+   "window": "MIXED"
+  }
+ ]
+}
