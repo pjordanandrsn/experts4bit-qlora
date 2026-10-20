@@ -157,3 +157,27 @@ def test_reduce_refuses_records_of_another_target(tmp_path):
         r2.main(["--target", "5090", "--part", "reduce", "--directory", str(d), "--cache", str(d), "--out", str(d)])
     assert r2.main(["--target", "a2000", "--part", "reduce", "--directory", str(d), "--cache", str(d), "--out", str(d)]) == 0
     assert json.loads((d / "phase2.json").read_text())["outcome"].startswith("SHAKEDOWN")
+
+
+def test_the_drift_snapshots_ride_the_global_optimizer_hook_at_the_registered_updates():
+    """The drift arms snapshot layer 0 up_proj's A and B through torch's global optimizer step post-hook, after the
+    updates in DRIFT_AT that the arm runs. Real optimizer steps, the hook removed afterwards."""
+    torch = pytest.importorskip("torch")
+    from torch.optim.optimizer import register_optimizer_step_post_hook
+
+    a, b = torch.nn.Parameter(torch.zeros(2, 3)), torch.nn.Parameter(torch.ones(3, 2))
+    slots = {f"{r2.DRIFT_SLOT}.A": a, f"{r2.DRIFT_SLOT}.B": b}
+    snaps = r2._Snapshots(slots, updates=8)
+    opt = torch.optim.SGD([a, b], lr=0.1)
+    handle = register_optimizer_step_post_hook(snaps)
+    try:
+        for _ in range(8):
+            opt.zero_grad()
+            (a.sum() + b.sum()).backward()
+            opt.step()
+    finally:
+        handle.remove()
+    opt.step()                                                       # after removal, no snapshot is taken
+    assert sorted(snaps.saved) == sorted(f"step{t}.{s}" for t in (1, 2, 4, 8) for s in ("A", "B"))
+    assert snaps.step == 8 and torch.allclose(snaps.saved["step1.A"], torch.full((2, 3), -0.1))
+    assert torch.allclose(snaps.saved["step8.B"], torch.full((3, 2), 1 - 0.8))

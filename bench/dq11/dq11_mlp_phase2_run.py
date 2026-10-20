@@ -50,9 +50,9 @@ DRIFT_SLOT = "layers.0.mlp.up_proj"
 GUARD_S = 2 * 3600
 BOOT_S = 5 * 60
 FIT_FACTOR = 1.25
-#: The (b) part's seconds on the 5090. UNKNOWN until the $0 A2000 shakedown measures it with the full families (Amendment 5
-#: section 3); the A2000's time is the bound (the 5090 is the faster card). ``fit`` refuses while it is None.
-B_READ_S = None
+#: The (b) part's seconds: the $0 A2000 shakedown's measured 336 s with the full families (Amendment 5 section 3; the run
+#: shakedown-20261020T182839Z), the bound for the 5090, the faster card. ``fit`` refuses while it is None.
+B_READ_S = 336
 #: The registered part seconds on the 5090 (Amendment 5 section 8). install (venv + bootstrap + CUDA check), prepare and one
 #: fresh 40-update L process are census-9's measured phases on an RTX 5090 (182 s, 193 s, 92 s), rounded up; a quality arm
 #: adds two scorings; a drift arm runs under C (math SDPA), so it is given more.
@@ -257,7 +257,9 @@ def run_part(target, part, directory, cache, out) -> dict:
             from safetensors.torch import save_file
 
             snaps = _Snapshots(adapter_slots(model)[0], t["updates"])
-            handle = torch.optim.optimizer.register_optimizer_step_post_hook(snaps)
+            from torch.optim.optimizer import register_optimizer_step_post_hook
+
+            handle = register_optimizer_step_post_hook(snaps)
             try:
                 with observer_policy() as policy:
                     record["training"] = _train(model, trainable, directory, workload, tokens, locked, t["updates"],
