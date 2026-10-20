@@ -1,6 +1,6 @@
 # Docs index — what each document is, and whether it is current
 
-56 documents accumulated over two months of measured campaigns (the count is
+57 documents accumulated over two months of measured campaigns (the count is
 the number of distinct documents this index links, held by `tests/test_docs_index_count.py`).
 This index says what each one is *for*, whether it is still the thing to
 read, and whether it is OpenTimestamps-anchored (**anchored** documents
@@ -13,6 +13,8 @@ Start here: [`STATUS.md`](STATUS.md) (one page, current) →
 
 ## Current — read these
 
+- **[`REPRODUCE.md`](REPRODUCE.md)** — for checking the published numbers from outside: each headline claim's
+  commit, command, hardware and cost per reading, with the losses beside the wins. Current.
 - **[`SOLUTIONS.md`](SOLUTIONS.md)** and **[`solutions/`](solutions/)** —
   routing/usage: one page per ordinary problem (symptoms, cause, install,
   smallest example, verification, limits, evidence by claim ID). Current.
