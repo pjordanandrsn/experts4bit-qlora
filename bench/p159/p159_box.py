@@ -9,7 +9,8 @@ that the calls match one_rep's. Every block's fused and nf4 sha256 must equal th
 
 Processes (each fresh, one untimed warm block, then 15 timed blocks):
   M  5 triples of (M, R, M'), rotated one position per triple; M and M' are identical (the null); R fuses from the
-     slab read fully into anonymous memory at process start (untimed), with no file mapping.
+     slab read fully into anonymous memory at process start (untimed), with no file mapping. Every kind loads that
+     resident slab, so every process has the same footprint.
   N  15 blocks with THP disabled for the process (prctl PR_SET_THP_DISABLE, set before torch is imported).
   P  15 blocks on a pre-faulted heap (GLIBC_TUNABLES: mmap_max=0, no trim; the warm block faults it once).
   B  15 M blocks with a balloon held inside the box's own cgroup, to the 1.3 x registered RAM floor; run only under a
@@ -86,8 +87,7 @@ def time_fit(fit=FIT, b_runs=True):
     """NEED (the probe) and FIT, in seconds, for the registered plan."""
     plan = process_plan()
     per = fit["process_start_s"] + (1 + REPEATS) * fit["block_wall_s"]
-    need = sum(per + (fit["resident_s"] if k in ("M", "B") else 0) + (fit["balloon_s"] if k == "B" else 0)
-               for k in plan if b_runs or k != "B")
+    need = sum(per + fit["resident_s"] + (fit["balloon_s"] if k == "B" else 0) for k in plan if b_runs or k != "B")
     return {"need_s": need, "fit_s": fit["install_to_gate_s"] + need + fit["reserve_s"]}
 
 
@@ -201,7 +201,8 @@ def host_once():
             or None,
             "numa_balancing": (_read("/proc/sys/kernel/numa_balancing") or "").strip() or None,
             "numa_nodes": len(nodes), "kernel": os.uname().release, "mem_total": meminfo()["MemTotal"],
-            "cgroup_memory_max": cgroup_memory()["memory_max"]}
+            "cgroup_memory_max": cgroup_memory()["memory_max"],
+            "thp_mem_alloc_enable": os.environ.get("THP_MEM_ALLOC_ENABLE")}   # torch's madvise switch (unset: none)
 
 
 def cpu_quota(root="/sys/fs/cgroup"):
@@ -364,14 +365,13 @@ def child(a):
 
     torch.cuda.init()
     process_start_s = time.time() - a.spawned if a.spawned else None
-    resident, resident_s = None, None
-    if a.kind in ("M", "B"):                             # the R arm's slab, in anonymous memory, untimed
-        from safetensors import safe_open
-        t = time.perf_counter()
-        with safe_open(a.slab, framework="pt", device="cpu") as f:
-            resident = tuple([f.get_tensor(SF.KEY.format(e=e, p=p)).clone() for e in range(a.experts)]
-                             for p in ("gate_proj", "up_proj", "down_proj"))
-        resident_s = time.perf_counter() - t
+    # the resident slab, in anonymous memory, untimed: R's input, loaded in every kind so every footprint is equal
+    from safetensors import safe_open
+    t = time.perf_counter()
+    with safe_open(a.slab, framework="pt", device="cpu") as f:
+        resident = tuple([f.get_tensor(SF.KEY.format(e=e, p=p)).clone() for e in range(a.experts)]
+                         for p in ("gate_proj", "up_proj", "down_proj"))
+    resident_s = time.perf_counter() - t
     t = time.perf_counter()
     one_block(a.pool, a.slab, a.experts, resident=None)  # untimed warm block (P: faults the heap once)
     warm_wall_s = time.perf_counter() - t
@@ -452,16 +452,14 @@ def run(a):
         balloon = None
         if kind == "B":
             if b_status is None:
-                # the need: the cgroup's peak above its idle level so far (memory.peak), else the first M process's
-                # VmHWM plus the slab's page cache; the balloon leaves (FLOOR - 1) x need free at a block's peak
+                # the need: the first M process's VmHWM plus the slab's page cache. memory.peak is the cgroup's
+                # lifetime high-water mark (the install's and the slab write's page cache too), so it is reported only
                 now = cgroup_memory()
                 first_m = next(p for p in processes if p.get("kind") == "M")
-                if now["memory_peak"] is not None and idle["memory_current"] is not None:
-                    need, source = now["memory_peak"] - idle["memory_current"], "memory.peak"
-                else:
-                    need, source = (first_m.get("vm_hwm") or 0) + SLAB_BYTES * a.experts // E_FULL, "VmHWM+slab"
+                need, source = (first_m.get("vm_hwm") or 0) + SLAB_BYTES * a.experts // E_FULL, "VmHWM+slab"
                 b_status = {"bytes": balloon_bytes(idle["memory_max"], now["memory_current"], need, dry=dry),
-                            "need": need, "need_source": source, "memory_max": idle["memory_max"]}
+                            "need": need, "need_source": source, "memory_max": idle["memory_max"],
+                            "memory_peak_reported": now["memory_peak"]}
                 print("P159_BALLOON " + json.dumps(b_status), flush=True)
             if not b_status["bytes"]:
                 processes.append({"kind": "B", "not_run": "balloon refused (no finite memory.max, or over 96 GiB)"})
@@ -507,9 +505,9 @@ def self_test():
         assert {m[3 * k:3 * k + 3].index(x) for k in range(5)} == {0, 1, 2}, x
     assert block_arms("B") == ["M"] * REPEATS and block_arms("N") == ["N"] * REPEATS
     f = time_fit()
-    assert f == {"need_s": 11410.0, "fit_s": 12355.0}, f
-    assert int(f["fit_s"]) * 125 // 100 == 15443
-    assert (BOOT_S + f["fit_s"]) * 1.25 <= GUARD_S and (BOOT_S + f["fit_s"]) * 1.25 == 15818.75
+    assert f == {"need_s": 11530.0, "fit_s": 12475.0}, f
+    assert int(f["fit_s"]) * 125 // 100 == 15593
+    assert (BOOT_S + f["fit_s"]) * 1.25 <= GUARD_S and (BOOT_S + f["fit_s"]) * 1.25 == 15968.75
     assert FUSE_FRESH_BYTES == int(7.5 * GIB) and FAULTS_4K == 1966080 and FAULTS_2M == 3840
     assert balloon_bytes(None, 10, 10) is None
     assert balloon_bytes(100 * GIB, 10 * GIB, 20 * GIB) == 64 * GIB

@@ -32,7 +32,7 @@ for f in p159_box.py p159_reduce.py smt_fuse_box.py staged-p159.sha256 q235_boot
 # ---- the guard fit, before anything else runs (bench/common/README.md, "Guard fit"); p159_box.time_fit has the terms
 FIT_HEADROOM_PCT=125   # the guard keeps 25 % headroom over the fit (cross-lane rule)
 INSTALL_TO_GATE_S=345  # the install and setup to the probe (270 s) plus the slab write (75 s): max over hosts + 25 %
-NEED_PROBE=11410       # the probe: 13 M processes x 442 s + 8 (N, P) x 427 s + 4 (B) x 562 s (p159_box.py time_fit)
+NEED_PROBE=11530       # the probe: 25 processes x 442 s + the balloon's 120 s in each of 4 B (p159_box.py time_fit)
 RESERVE=600            # the reducer, the fetch-back and the teardown
 FIT=$((INSTALL_TO_GATE_S + NEED_PROBE + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100)); LEFT=$((P159_DEADLINE_EPOCH - $(date +%s)))
 # rc 41: a refusal before the install, not a strike; two consecutive headroom refusals count as one strike

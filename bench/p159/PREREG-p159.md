@@ -54,10 +54,10 @@ Two more arms:
   with no file mapping. If the slab's first touch were the cost, R would read FAST in a slow window. Under the primary
   hypothesis R tracks M, since the 7.5 GiB of fresh output still faults.
 - **B (headroom, secondary):** a balloon inside the box's own cgroup holds memory down to the **registered RAM floor**,
-  so at the block's peak about 0.3 x the block's need stays free. The need is the cgroup's peak usage above its idle
-  level (`memory.peak`), else the first M process's VmHWM plus the slab's 4.83 GB of page cache: the floor of
-  1.3 x VmHWM, reached from above. It asks whether that floor keeps `offload` off Q235's
-  slow path.
+  so at the block's peak about 0.3 x the block's need stays free. The need is the first M process's VmHWM plus the
+  slab's 4.83 GB of page cache: the floor of 1.3 x VmHWM, reached from above. (`memory.peak` is reported, not used: it
+  is the cgroup's lifetime high-water mark, the install's and the slab write's page cache included.) It asks whether
+  that floor keeps `offload` off Q235's slow path, at this block's scale.
 
 ## What runs
 
@@ -74,8 +74,9 @@ Two more arms:
     identical (the null); R uses the resident slab.
   - **N:** 15 blocks with THP disabled for the process.
   - **P:** 15 blocks on the pre-faulted heap.
-  - **B:** 15 M blocks with the balloon held. B also loads R's resident slab, so its footprint matches an M
-    process's.
+  - **B:** 15 M blocks with the balloon held.
+  - **Every kind** (M, N, P and B) loads R's resident slab at process start, untimed, so every process has the same
+    footprint, and the windows that M's blocks define apply to N's and P's.
 - **The pool:** every process is pinned to K physical cores, one hardware thread each, pool K, where K = min(16,
   physical cores, floor(quota / 1.25)). A host with K under 8 is refused before the install.
 - **Order:** 4 cycles of M, X, M, Y, M, Z, then one closing M, so every non-M process sits between two M processes.
@@ -106,14 +107,18 @@ Two more arms:
 - cgroup v2 `memory.current`, `memory.events` and `memory.stat` where readable.
 
 **Once:** THP `enabled` and `defrag`, khugepaged `defrag`, `numa_balancing`, NUMA nodes, kernel, MemTotal, the cgroup
-`memory.max`, and the `bench/common/host_facts.py` record beside the receipt.
+`memory.max`, `THP_MEM_ALLOC_ENABLE` (torch's switch for `MADV_HUGEPAGE` on its CPU allocations), and the
+`bench/common/host_facts.py` record beside the receipt.
 
 **Engagement, a closed form each:**
-- an N process must read `PR_GET_THP_DISABLE` back as set, and an N block's fuse must gain under 64 MiB of huge pages
-  (`AnonHugePages` after fuse less before the block), or N is VOID;
-- a P process must carry the registered `GLIBC_TUNABLES`, and a P timed block's fuse minor faults must be under 0.4 M
-  (a fifth of the 4 KiB count), or P is VOID;
-- an R block's `read` must touch no file (no slab mapping in the process during R blocks), or R is VOID.
+- an N process must read `PR_GET_THP_DISABLE` back as set, and every N block's fuse must gain under 64 MiB of huge
+  pages (`AnonHugePages` after fuse less before the block), or N is VOID. A reading that is missing VOIDs N too: the
+  check fails closed;
+- a P process must carry the registered `GLIBC_TUNABLES`, and the **median** of its timed blocks' fuse minor faults
+  must be under 0.4 M (a fifth of the 4 KiB count), or P is VOID. The median, so a block that grows the heap once does
+  not void the arm; the maximum is reported;
+- an R block's `read` must touch no file (no slab mapping in the process during R blocks), and the probe must see the
+  mapping where it exists: every M process has an M or M' block that shows the slab mapped. Otherwise R is VOID.
 
 An arm that fails its engagement check is VOID, and its side of every read is NOT_READ. On a dry run, the two byte
 and fault bounds scale with the experts (x experts / 128).
@@ -148,6 +153,10 @@ MIXED otherwise. A process in a MIXED window is reported and not read.
   5. **PARTIAL:** one side is in its band and the other has no window of its kind.
   6. **NOT_READ (no window):** neither an N process in a FAST window nor a P process in a SLOW window.
   7. **UNRESOLVED:** otherwise (a share between 0.2 and 0.8).
+- **The THP mode bounds what READ-1 can say.** Under THP `enabled` = `madvise` or `never`, with `THP_MEM_ALLOC_ENABLE`
+  unset, torch's CPU allocations never get huge pages in any window (c10's `alloc_cpu` is `posix_memalign` with no
+  `MADV_HUGEPAGE`). N is then the same as M, and READ-1 can read REFUTED_THP or a NOT_READ but never IDENTIFIED. A
+  FAST window then has another cause, and P still prices the fault path.
 
 **READ-2, the counters (corroborating gate):** over M and M' blocks, with at least 12 SLOW and 12 FAST, all three must
 hold:
@@ -172,7 +181,13 @@ the mean of its two bracketing M processes' M-block medians, over at least 3 B p
 - All ratios at or below 1.25: **the floor holds offload**.
 - Otherwise UNRESOLVED.
 
-`fuse` B/M is reported beside it.
+**Its scope:** the block's VmHWM is about 21 GB, about 1/12 to 1/17 of Q235's 256-365 GB load, and B holds the
+1.3 x floor, not Q235's 4 % free. So "the floor holds offload" speaks to the floor at this block's scale, and is
+neither a reproduction of Q235's slow path nor a test of it. Many hosts expose `memory.max = max`, so NOT_RUN is a
+likely outcome, not a surprise.
+
+`fuse` B/M is reported beside it. Under a cgroup limit the balloon reclaims the slab's page cache first, so B's `read`
+and `fuse` include disk reads. `offload` copies tensors already in memory, so READ-4 is not touched by it.
 
 **Reported, never read:**
 - every arm's per-segment medians;
@@ -194,6 +209,7 @@ the mean of its two bracketing M processes' M-block medians, over at least 3 B p
 | the M/M' flip base rate | <= 0.1 |
 | READ-4 (if B runs) | the floor holds offload |
 | THP `enabled` on the host | `always` (`madvise` would leave torch's allocations on 4 KiB pages in every window) |
+| READ-1 | PARTIAL is likelier than IDENTIFIED: a FAST window held 49 of `smt-sib-2`'s 360 blocks (about 14 %), so an N process inside one is far from certain with 4 N processes. PARTIAL with P fast in a slow window (faults are the cost; the switch unread) is a good outcome, never a reason to re-run under `p159-2` |
 
 ## Floors, fit and guard
 
@@ -210,14 +226,13 @@ the mean of its two bracketing M processes' M-block medians, over at least 3 B p
   - the install and setup to the gate: 270 s, plus the slab, 75 s (`INSTALL_TO_GATE_S` = 345 s);
   - a process start: 3 s;
   - a block's whole wall: 26.5 s;
-  - R's slab copy: 15 s per M process (not yet measured; taken high);
-  - R's slab copy also in each B process, which loads it too;
+  - the resident slab's copy: 15 s per process, in every kind (not yet measured; taken high);
   - the balloon: 120 s per B process (not yet measured; taken high);
   - the reserve: 600 s.
 
-  Then 13 M processes x 442 s, plus 8 x 427 s (N, P), plus 4 x 562 s (B) give **NEED = 11,410 s**. So FIT = 12,355 s
-  and the runtime check needs **15,443 s** (FIT x 1.25).
-- **The static fit**, (boot 300 s + 12,355 s) x 1.25 = 15,819 s, sits within the **guard of 5.0 h** (18,000 s). The
+  Then 25 processes x 442 s (3 + 16 x 26.5 + 15), plus 4 x 120 s (B) give **NEED = 11,530 s**. So FIT = 12,475 s and
+  the runtime check needs **15,593 s** (FIT x 1.25).
+- **The static fit**, (boot 300 s + 12,475 s) x 1.25 = 15,969 s, sits within the **guard of 5.0 h** (18,000 s). The
   lane's own test asserts it.
 
 ## Run ids and cost

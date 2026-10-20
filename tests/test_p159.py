@@ -11,6 +11,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).resolve().parents[1]
 LANE = REPO / "bench" / "p159"
 SMT = REPO / "bench" / "smt-fuse"
@@ -53,7 +55,7 @@ def test_staged_files_match_their_pins_and_the_drive_stages_exactly_them():
 
 def test_both_self_tests_pass():
     for script, want in (("p159_box.py", "p159_box self-test OK (15 cases)"),
-                         ("p159_reduce.py", "p159_reduce self-test OK (14 cases)")):
+                         ("p159_reduce.py", "p159_reduce self-test OK (28 cases)")):
         p = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True,
                            timeout=120)
         assert p.returncode == 0 and want in p.stdout, p.stdout + p.stderr
@@ -104,13 +106,13 @@ def test_the_guard_fits_with_25_percent_headroom():
     k = {n: int(v) for n, v in re.findall(r"^(INSTALL_TO_GATE_S|NEED_PROBE|RESERVE)=(\d+)", RUN, re.M)}
     f = BOX.time_fit()
     assert k == {"INSTALL_TO_GATE_S": BOX.FIT["install_to_gate_s"], "NEED_PROBE": int(f["need_s"]),
-                 "RESERVE": BOX.FIT["reserve_s"]} == {"INSTALL_TO_GATE_S": 345, "NEED_PROBE": 11410, "RESERVE": 600}
+                 "RESERVE": BOX.FIT["reserve_s"]} == {"INSTALL_TO_GATE_S": 345, "NEED_PROBE": 11530, "RESERVE": 600}
     assert "FIT=$((INSTALL_TO_GATE_S + NEED_PROBE + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100))" in RUN
     assert re.search(r"^FIT_HEADROOM_PCT=125 ", RUN, re.M)
     fit = sum(k.values())
-    assert fit == int(f["fit_s"]) == 12355 and fit * 125 // 100 == 15443
+    assert fit == int(f["fit_s"]) == 12475 and fit * 125 // 100 == 15593
     assert (BOX.BOOT_S + fit) * 1.25 <= BOX.GUARD_S == 5 * 3600
-    for s in ("**NEED = 11,410 s**", "FIT = 12,355 s", "**15,443 s**", "15,819 s", "**guard of 5.0 h**"):
+    for s in ("**NEED = 11,530 s**", "FIT = 12,475 s", "**15,593 s**", "15,969 s", "**guard of 5.0 h**"):
         assert s in PREREG, s
 
 
@@ -146,5 +148,39 @@ def test_the_drive_takes_only_declared_ids_and_refuses_a_short_deadline():
     p = _drive("p159-dry-1", 18000)
     assert p.returncode == 78 and "dry run's id" in p.stdout, p.stdout
     assert _drive("p159-dry-1", 600, dry=True).returncode == 0          # the dry run carries no fit check
-    p = _drive("p159-2", 15000)                                           # under 12,355 x 1.25 = 15,443 s
-    assert p.returncode == 78 and "the registered need 15443s" in p.stdout, p.stdout
+    p = _drive("p159-2", 15000)                                           # under 12,475 x 1.25 = 15,593 s
+    assert p.returncode == 78 and "the registered need 15593s" in p.stdout, p.stdout
+
+
+# Each mutation must fail the reducer's self-test: the bands' edges, the order of the refutations, each READ-2 clause,
+# each minimum count, the two fail-closed engagement checks, and the registered constants.
+REDUCER_MUTANTS = [
+    ("HI, LO = 0.8, 0.2", "HI, LO = 0.7, 0.2"),
+    ("HI, LO = 0.8, 0.2", "HI, LO = 0.8, 0.3"),
+    ('    elif n_ps and f_ps <= LO:\n        r1 = "REFUTED_FAULTS"\n'
+     '    elif n_nf and s_nf <= LO:\n        r1 = "REFUTED_THP"',
+     '    elif n_nf and s_nf <= LO:\n        r1 = "REFUTED_THP"\n'
+     '    elif n_ps and f_ps <= LO:\n        r1 = "REFUTED_FAULTS"'),
+    (" and hs_s <= HUGE_SLOW_MAX and hs_f >= HUGE_FAST_MIN", ""),
+    (" and tf_s > tf_f", ""),
+    ("MIN_STATE_BLOCKS, MIN_SLOW_TRIPLES, MIN_B = 12, 6, 3", "MIN_STATE_BLOCKS, MIN_SLOW_TRIPLES, MIN_B = 12, 6, 1"),
+    ("MIN_STATE_BLOCKS, MIN_SLOW_TRIPLES, MIN_B = 12, 6, 3", "MIN_STATE_BLOCKS, MIN_SLOW_TRIPLES, MIN_B = 12, 1, 3"),
+    ("MIN_STATE_BLOCKS, MIN_SLOW_TRIPLES, MIN_B = 12, 6, 3", "MIN_STATE_BLOCKS, MIN_SLOW_TRIPLES, MIN_B = 1, 6, 3"),
+    ("return h is None or h * FUSE_FRESH_BYTES", "return h is not None and h * FUSE_FRESH_BYTES"),
+    ("(not control or any(", "(False or any("),
+    ("COUNTER_MULTIPLE = 5.0", "COUNTER_MULTIPLE = 1.0"),
+    ("B_RATIO = 1.25", "B_RATIO = 1.7"),
+    ("NULL_LOG_MAX = math.log(1.5)", "NULL_LOG_MAX = math.log(2.0)"),
+    ('if not slow_seen:\n        r1 = "NOT_READ_STATE_NOT_OBSERVED"',
+     'if False:\n        r1 = "NOT_READ_STATE_NOT_OBSERVED"'),
+]
+
+
+@pytest.mark.parametrize("old,new", REDUCER_MUTANTS)
+def test_each_reducer_mutant_fails_the_self_test(tmp_path, old, new):
+    src = (LANE / "p159_reduce.py").read_text()
+    assert src.count(old) == 1, old
+    m = tmp_path / "p159_reduce.py"
+    m.write_text(src.replace(old, new))
+    p = subprocess.run([sys.executable, str(m), "--self-test"], capture_output=True, text=True, timeout=120)
+    assert p.returncode != 0, f"mutant survived: {old!r} -> {new!r}"

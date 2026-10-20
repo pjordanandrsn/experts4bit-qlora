@@ -14,7 +14,7 @@ E_FULL = 128
 FAST_S, SLOW_S = 1.5, 3.0
 FUSE_FRESH_BYTES = 8053063680                           # 7.5 GiB at 128 experts (p159_box.FUSE_FRESH_BYTES)
 N_HUGE_MAX = 64 << 20                                    # an N block's fuse huge-page bytes must stay under this
-P_MINFLT_MAX = 400_000                                   # a P timed block's fuse minor faults must stay under this
+P_MINFLT_MAX = 400_000                                   # the median of a P process's timed fuse minor faults
 NULL_LOG_MAX = math.log(1.5)
 HI, LO = 0.8, 0.2
 MIN_STATE_BLOCKS, MIN_SLOW_TRIPLES, MIN_B = 12, 6, 3
@@ -59,19 +59,30 @@ def window(prev, nxt, experts):
 
 
 def engagement(res):
-    """Per-arm VOID flags from the closed forms (scaled to the run's experts)."""
+    """Per-arm VOID flags from the closed forms (scaled to the run's experts). Each fails closed: a reading that is
+    missing, or a probe with no positive control, VOIDs the arm."""
     ex, procs = res["experts"], [p for p in res["processes"] if "blocks" in p]
     scale = ex / E_FULL
     void = {}
     n = [p for p in procs if p["kind"] == "N"]
+
+    def n_block_bad(b):
+        h = huge_share(b, ex)
+        return h is None or h * FUSE_FRESH_BYTES * scale >= N_HUGE_MAX
     void["N"] = bool(n) and any(not p.get("engaged", {}).get("thp_disabled")
-                                or any((huge_share(b, ex) or 0) * FUSE_FRESH_BYTES * scale >= N_HUGE_MAX
-                                       for b in p["blocks"]) for p in n)
+                                or any(n_block_bad(b) for b in p["blocks"]) for p in n)
     pp = [p for p in procs if p["kind"] == "P"]
+    # the median of each P process's timed blocks (a block that grows the heap once does not void the arm); the max is
+    # reported beside it
     void["P"] = bool(pp) and any(not p.get("engaged", {}).get("tunables")
-                                 or any(b["fuse"]["minflt"] >= P_MINFLT_MAX * scale for b in p["blocks"]) for p in pp)
-    rb = [b for p in procs if p["kind"] == "M" for b in p["blocks"] if b["arm"] == "R"]
-    void["R"] = any(b.get("slab_mapped_during_read") for b in rb)
+                                 or statistics.median(b["fuse"]["minflt"] for b in p["blocks"]) >= P_MINFLT_MAX * scale
+                                 for p in pp)
+    mp = [p for p in procs if p["kind"] == "M"]
+    rb = [b for p in mp for b in p["blocks"] if b["arm"] == "R"]
+    # R maps no slab, and the probe can see a mapping: every M process has an M or M' block that shows the slab mapped
+    control = all(any(b.get("slab_mapped_during_read") is True for b in p["blocks"] if b["arm"] in ("M", "M2"))
+                  for p in mp)
+    void["R"] = bool(rb) and (not control or any(b.get("slab_mapped_during_read") is not False for b in rb))
     return void
 
 
@@ -292,6 +303,53 @@ def self_test():
     # mixed windows only: no readable window
     alt = "FSFSFSFSFSFSF"
     check(_run(SLOTS, alt), read1="NOT_READ_NO_WINDOW")
+    # the bands' edges (plan indices: N at 1 is the one N in a FAST window, P at 17 and 21 the P's in SLOW windows)
+    def mix(res, idx, n_slow, **kw):
+        a = res["processes"][idx]["blocks"][0]["arm"]
+        res["processes"][idx]["blocks"] = [_blk(a, 7.2 if i < n_slow else 0.4, **kw) for i in range(15)]
+        return res
+    check(mix(_run(SLOTS, st), 1, 11, huge=0.0), read1="UNRESOLVED")            # s_NF 0.733
+    check(mix(_run(SLOTS, st), 1, 12, huge=0.0), read1="IDENTIFIED")            # s_NF 0.8, the band's edge
+    check(mix(_run(SLOTS, st), 1, 3, huge=0.0), read1="REFUTED_THP")            # s_NF 0.2, the other edge
+    check(mix(_run(SLOTS, st), 1, 4, huge=0.0), read1="UNRESOLVED")             # s_NF 0.267
+    res = mix(mix(_run(SLOTS, st), 17, 11, minflt=80_000), 21, 11, minflt=80_000)   # f_PS 8/30 = 0.267
+    check(res, read1="UNRESOLVED")
+    # both refutations hold: REFUTED_FAULTS is read first
+    check(_run(SLOTS, st, n=0.4, p=7.0, N={"huge": 0.0}, P={"minflt": 80_000}), read1="REFUTED_FAULTS")
+    # READ-2 fails on each clause alone (the mechanism IDENTIFIED, so the call is CONFLICT)
+    for clause in ("slow_huge", "fast_huge", "fallback"):
+        res = _run(SLOTS, st)
+        for q in res["processes"]:
+            for b in q.get("blocks", []) if q["kind"] == "M" else []:
+                if b["arm"] == "R":
+                    continue
+                slow = b["fuse_s"] >= SLOW_S
+                if clause == "slow_huge" and slow:
+                    b["smaps_after_fuse"]["anon_huge_bytes"] = int(0.2 * FUSE_FRESH_BYTES)
+                if clause == "fast_huge" and not slow:
+                    b["smaps_after_fuse"]["anon_huge_bytes"] = int(0.4 * FUSE_FRESH_BYTES)
+                if clause == "fallback" and slow:
+                    b["fuse"]["thp_fault_fallback"] = 0
+        check(res, read1="IDENTIFIED", read2="FAIL", call="CONFLICT")
+    # one under each minimum: 10 FAST M/M' blocks; 5 both-SLOW triples; 2 B processes run
+    check(_run(SLOTS, "F" + "S" * 12), read2="NOT_READ")
+    check(_run(SLOTS, "S" + "F" * 12), read3="NOT_READ")
+    res = _run(SLOTS, st)
+    for i in (5, 9):
+        res["processes"][i] = {"kind": "B", "not_run": "refused"}
+    check(res, read4="NOT_READ")
+    # fail closed: an unreadable huge-page reading VOIDs N; a probe that never sees the slab mapped VOIDs R
+    res = _run(SLOTS, st)
+    for b in res["processes"][1]["blocks"]:
+        b["smaps_after_fuse"]["anon_huge_bytes"] = None
+    got = check(res, read1="PARTIAL")
+    assert got["void"]["N"], got["void"]
+    res = _run(SLOTS, st)
+    for q in res["processes"]:
+        for b in q.get("blocks", []):
+            b["slab_mapped_during_read"] = False
+    check(res, read3="VOID")
+
     print(f"p159_reduce self-test OK ({cases} cases)")
     return 0
 
