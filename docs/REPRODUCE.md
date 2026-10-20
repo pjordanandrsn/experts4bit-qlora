@@ -75,21 +75,26 @@ lane's PREREG.
   (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio`), and a September primary pair on an older stack read
   1.413 (`e4b.train.h2h.unsloth.qwen3.5090.2026-09-05`). Name the recipe when you quote one.
 
-### 3. Mixtral-8x7B against Unsloth: Unsloth is faster when resident
+### 3. Mixtral-8x7B against Unsloth: which stack decides it
 
-- **Claim, the loss first:** `e4b.train.h2h.unsloth.mixtral.5090.2026-09-06`. Unsloth/e4b s/step **0.361**: Unsloth was
-  faster per step. This is a footprint trade, not a same-footprint race: Unsloth ran resident at a 29.2 GB peak, and e4b
-  ran under expert CPU offload at 3.2 GB. Cost UNVERIFIED (it predates our receipt store).
-- **On one stack:** `e4b.train.h2h.unsloth.mixtral.5090.2026-10-05.same-stack`. Unsloth/e4b **1.144** (e4b faster per
-  step), with e4b's peak VRAM higher (31.24 vs 29.17 GB) and energy per step 0.93× in Unsloth's favour.
-- **Stack:** the same-stack row ran e4b `63400e1ab0af233aeb09e9e59017492da8ca3694` (first released in v0.49.0),
+- **Claim, the matched position:** `e4b.train.h2h.unsloth.mixtral.5090.2026-10-05.same-stack`. With both frameworks
+  resident on one stack, on one AMD EPYC 7B13 host, Unsloth/e4b is **1.144** [1.140, 1.148], so e4b is faster per step.
+  Beside it, in Unsloth's favour: Unsloth's peak is 2.07 GB lower (29.17 vs 31.24 GB; e4b's fp32 absmax), and its
+  energy per step is ×0.93 of e4b's. On the same box, with e4b on the field image's stack, the ratio read **1.013**.
+- **Unsloth faster:** `e4b.train.h2h.unsloth.mixtral.5090.2026-10-04.dense-default`. Both resident, e4b at its
+  defaults in the field image's environment, on an Intel Core Ultra 9 285K host: Unsloth/e4b **0.836** [0.828, 0.844],
+  so Unsloth was faster per step. e4b `ed08029d9fb8d210ac78e9371f64bd06098ed07d` (first released in v0.46.0). $0.60.
+- **A footprint lever, not a race:** `e4b.train.h2h.unsloth.mixtral.5090.2026-09-06` reads 0.361: e4b ran under expert
+  CPU offload at 3.2 GB, against Unsloth resident at 29.2 GB. Cost UNVERIFIED (it predates our receipt store).
+- **Stack (the matched position):** e4b `63400e1ab0af233aeb09e9e59017492da8ca3694` (first released in v0.49.0),
   grouped-nf4-gemm `9622144c734395de4d40332f06dea92135d858de` (v0.42.0), Unsloth 2026.9.14, torch 2.12.1+cu130. The
-  September row ran e4b 0.35.1 and grouped-nf4-gemm 0.30.2 from PyPI, Unsloth 2026.9.2, torch 2.8.0. Model
+  September row ran e4b 0.35.1 and grouped-nf4-gemm 0.30.2 from PyPI, Unsloth 2026.9.2 and torch 2.8.0. Model
   `mistralai/Mixtral-8x7B-Instruct-v0.1` at `eba92302a2861cdc0098cc54bc9f17cb2c47eb61`.
-- **Run:** `TC1_FAMILIES=mixtralsamestack bash bench/tc1/tc1_drive.sh` (records:
-  [`bench/h2h-2026-10-02/tc2/`](../bench/h2h-2026-10-02/tc2/README.md)); the September row is
+- **Run:** the matched position is family token `mixtralsamestack` through `bench/tc1/tc1_drive.sh` (records:
+  [`bench/h2h-2026-10-02/tc2/`](../bench/h2h-2026-10-02/tc2/README.md)). The September row is
   [`bench/h2h-20260906/tp2/`](../bench/h2h-20260906/tp2/README.md).
-- **Hardware and cost:** one RTX 5090, a 192 GB host floor. $1.587 (`tc1-5090-84`).
+- **Hardware and cost:** one RTX 5090 and a 192 GB host floor. $1.59 (`tc1-5090-84`). As the claim says, these positions are
+  within-box readings of their host, so name the host when you quote one.
 
 ### 4. K25's byte-permute decode, the qwen3_moe default since 0.56.0
 
