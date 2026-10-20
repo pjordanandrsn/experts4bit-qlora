@@ -175,8 +175,9 @@ host-bound: absolutes do not travel between hosts, ratios do.
   every push. `private-marker-guard` and `conflict-marker-guard` run on every
   push and pull-request event (not on a label), and both are required checks
   alongside the three CI jobs; push-scan runs report as "(push scan)" and are not
-  required. A label event other than `ready-to-merge` fails the required CI jobs
-  instead of skipping them. A head with no `CI` run is not green, and re-running a
+  required. A label event on a pull request that does not carry `ready-to-merge`
+  fails the required CI jobs instead of skipping them; on one that does, any label
+  re-runs CI on its head. A head with no `CI` run is not green, and re-running a
   failed job replays the old event, so re-apply the label to test a head,
   including after a new push.
 - A task pull request never moves a gate, a threshold, the `[fast]` floor or a
