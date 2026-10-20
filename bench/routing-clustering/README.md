@@ -9,7 +9,9 @@ would without that alignment? Fewer distinct experts per layer-step would mean f
   K25's 16-row tile count.
 - Null A (primary): each row's 128-step sequence circularly shifted by its own random offset, per layer. Null B: each
   row's sequence permuted.
-- 1,000 draws each, seed 20261020. The bands were stated in advance, and nothing here rules.
+- 1,000 draws each, from one generator per stream seeded at 20261020 and drawn for A, then for B. So B's draws
+  continue A's sequence rather than restarting from the seed; `clustering.py` is deterministic either way. The bands
+  were stated in advance, and nothing here rules.
 
 **Data:** P153's committed router replay, `bench/p153/router-replay/rr.json.pt` (`3c59e72f`): S0 (rows 0-15, primary)
 and S1 (rows 16-31). **Positive control:** `clustering.py` reproduces P153's published mean `D` (57.107 S0, 57.052 S1)
@@ -28,7 +30,7 @@ from the same file, or stops.
   on S0 and 0.64 % on S1, both intervals clear of 1. In the bands stated in advance this is "small", far from the 2 %
   that would earn a scheduling look.
 - **Not autocorrelation.** Null A keeps each request's step-to-step autocorrelation and null B breaks it. The two agree
-  to 0.0001, so the effect is the same-step alignment itself.
+  to 0.0001, so the effect is the same-step alignment, including the shared-position effect named under Limits.
 - **Per layer (null A):**
   - **S0:** 0.9899 (layer 29) to 1.0045 (layer 37); no single layer's interval clears 1.
   - **S1:** 0.9855 (layer 27) to 0.9996; four layers clear below 1.

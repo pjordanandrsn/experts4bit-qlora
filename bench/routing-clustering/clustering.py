@@ -4,8 +4,9 @@
     python clustering.py --replay bench/p153/router-replay/rr.json.pt --out clustering.json
 
 D = distinct experts among a step's 16 rows' top-8 picks, per layer-step (at 16 rows, K25's 16-row tile count). Null A
-rotates each row's 128-step sequence by its own random offset (per layer); null B permutes it. 1,000 draws each, seed
-20261020, for S0 (rows 0-15, primary) and S1 (rows 16-31). The positive control: D_obs reproduces P153's published means
+rotates each row's 128-step sequence by its own random offset (per layer); null B permutes it. 1,000 draws each, from
+one generator per stream seeded at 20261020 and drawn for A then B (B continues A's sequence), for S0 (rows 0-15,
+primary) and S1 (rows 16-31). The positive control: D_obs reproduces P153's published means
 (57.107 S0, 57.052 S1) or the script stops.
 """
 import argparse
