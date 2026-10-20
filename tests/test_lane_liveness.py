@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / "bench/common/lane_liveness.sh"
 DRIVERS = [ROOT / f"bench/{folder}/{script}_drive.sh" for folder, script in
            [("tc1", "tc1"), ("p127", "p127"), ("fam", "fam"), ("locality-1469", "locality"), ("sc1", "sc1"),
-            ("p137", "p137"), ("p144", "p144"), ("p146", "p146"), ("p143", "p143a3"), ("p148", "p148"), ("p150", "p150"), ("p151", "p151"), ("p152", "p152"), ("p153", "p153"), ("p154", "p154"), ("p155", "p155"), ("p156", "p156")]]
+            ("p137", "p137"), ("p144", "p144"), ("p146", "p146"), ("p143", "p143a3"), ("p148", "p148"), ("p150", "p150"), ("p151", "p151"), ("p152", "p152"), ("p153", "p153"), ("p154", "p154"), ("p155", "p155"), ("p156", "p156"), ("p158", "p158")]]
 BOOT_A, BOOT_B = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 INITIAL = f"1 123 {BOOT_A} 10000.00"
 
@@ -215,7 +215,7 @@ def test_actual_launch_handshake_captures_linux_child_identity(driver, tmp_path)
     launch = text[start:end]
     runner = driver.name.replace('_drive.sh', '_run.sh')
     prefix = {'tc1': 'TC1', 'p127': 'P127', 'fam': 'FAM', 'locality-1469': 'LOC', 'sc1': 'SC1',
-              'p137': 'P137', 'p144': 'P144', 'p146': 'P146', 'p143': 'P143A3', 'p148': 'P148', 'p150': 'P150', 'p151': 'P151', 'p152': 'P152', 'p153': 'P153', 'p154': 'P154', 'p155': 'P155', 'p156': 'P156'}[driver.parent.name]
+              'p137': 'P137', 'p144': 'P144', 'p146': 'P146', 'p143': 'P143A3', 'p148': 'P148', 'p150': 'P150', 'p151': 'P151', 'p152': 'P152', 'p153': 'P153', 'p154': 'P154', 'p155': 'P155', 'p156': 'P156', 'p158': 'P158'}[driver.parent.name]
     (tmp_path / runner).write_text(f'#!/bin/bash\nprintf nonce > {prefix}_RUN_NONCE\nsleep 2\n')
     (tmp_path / 'guard.sh').write_text(f'#!/bin/bash\nexec bash {runner}\n')
     setup = f'''source "{HELPER}"

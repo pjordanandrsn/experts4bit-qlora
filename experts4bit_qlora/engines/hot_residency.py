@@ -434,11 +434,123 @@ def _k25_mode_env() -> str:
 _K25_PLAN = {"block_n": 32, "kc": 64, "warps": 4, "stages": 3, "lut": "tree", "dot_bf16": False}
 
 
+#: Lane P158's default for ``E4B_K25_LUT`` (``bench/p158/RESULTS-p158.md``): an UNSET knob resolves to ``prmt`` on a
+#: model_type here, at engine build (:func:`resolve_k25_lut`), where the installed grouped-nf4-gemm carries K39's decode
+#: and the device is NVIDIA, and to ``tree`` everywhere else, with the reason recorded. qwen3_moe takes it on P158's
+#: served read (p158-5090-1: FLIP, 16 requests 1.0925x as fast, the min of four ABBA pairs; one request 0.9999; every
+#: token identical, the decode being bit-identical to the tree). The default covers EVERY qwen3_moe checkpoint, the 235B
+#: included: the values are bit-identical everywhere, and only the speed is unmeasured outside Qwen3-30B-A3B's shapes on
+#: one RTX 5090 (no speed is claimed there; a 235B scale-up lane is where it gets read). Other families wait for a read
+#: of their own. ``tree`` opts out; an explicit ``prmt`` still refuses a kernel package or device that cannot serve it.
+K25_LUT_DEFAULT_FAMILIES: dict = {
+    "qwen3_moe": "prmt",   # e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20 (bench/p158/RESULTS-p158.md)
+}
+#: What an UNSET ``E4B_K25_LUT`` means in this process: ``tree`` until :func:`resolve_k25_lut` resolves the per-family
+#: default at engine build (one list cell, so the forward reads the build's resolution, never a stale import). It is
+#: PROCESS-WIDE, and assumes one engine per process, which is what ``serve_paged`` builds: the route functions are
+#: module-level and carry no engine handle. A process that builds engines for two families keeps the last build's
+#: resolution for both, so qwen3_moe's ``prmt`` could reach another family's K25 calls. Its values are bit-identical to the
+#: tree's, so that costs nothing but an unmeasured speed.
+_K25_LUT_DEFAULT = ["tree"]
+
+
+def _k25_lut_raw():
+    """``E4B_K25_LUT`` as set: ``tree`` or ``prmt``, or None when unset or empty. Anything else is refused."""
+    v = os.environ.get("E4B_K25_LUT", "").strip().lower()
+    if not v:
+        return None
+    if v not in ("tree", "prmt"):
+        raise ValueError(f"E4B_K25_LUT={v!r}: expected 'tree' or 'prmt'")
+    return v
+
+
+def _k25_lut_env() -> str:
+    """``E4B_K25_LUT``: K25's codebook decode on this route. ``tree`` is :data:`_K25_PLAN`'s select tree. ``prmt`` is
+    K39's byte-permute decode (K25's ``lut="prmt"``, grouped-nf4-gemm#569), bit-identical to the tree. An explicit value
+    is taken as set. Unset or empty, it is this process's resolved default (:data:`_K25_LUT_DEFAULT`): ``tree`` until
+    :func:`resolve_k25_lut` resolves the per-family default at engine build (:data:`K25_LUT_DEFAULT_FAMILIES`, lane
+    P158). An explicit ``prmt`` requires a kernel package that carries it, K25 on, and an NVIDIA device: any of them
+    missing is a refusal, never a silent fallback. Anything else is refused."""
+    return _k25_lut_raw() or _K25_LUT_DEFAULT[0]
+
+
+def _k25_prmt_unavailable(nf4_smallm_mod):
+    """Why this process cannot serve K25's ``prmt`` decode, or None when it can: the kernel package lacks it, or the
+    device is ROCm (an inline-PTX decode)."""
+    if "prmt" not in (getattr(nf4_smallm_mod, "_LUT_MODES", None) or {}):
+        return "the installed grouped-nf4-gemm does not carry K39's decode (K25's lut='prmt', grouped-nf4-gemm#569)"
+    if getattr(torch.version, "hip", None):
+        return "prmt is an inline-PTX decode for NVIDIA targets, and this device is ROCm"
+    return None
+
+
 def _k25_plan(nf4_smallm_mod) -> dict:
-    """:data:`_K25_PLAN`, with the codebook decode the installed kernel package carries: ``"tree"`` when its
-    ``_LUT_MODES`` names it, else ``"pair"`` (bit-identical; lane K26)."""
+    """:data:`_K25_PLAN`, with the codebook decode :func:`_k25_lut_env` names and the installed kernel package carries.
+    Under ``tree``: ``"tree"`` when its ``_LUT_MODES`` names it, else ``"pair"`` (bit-identical; lane K26). Under
+    ``prmt``: ``"prmt"``. An EXPLICIT ``prmt`` the package or device cannot serve is refused; a DEFAULT ``prmt`` was
+    resolved against the same package at build, and if it still cannot be served it takes the tree (the same values)."""
     modes = getattr(nf4_smallm_mod, "_LUT_MODES", None) or {}
+    if _k25_lut_env() == "prmt":
+        why = _k25_prmt_unavailable(nf4_smallm_mod)
+        if why is None:
+            return dict(_K25_PLAN, lut="prmt")
+        if _k25_lut_raw() == "prmt":
+            if "prmt" not in modes:
+                raise RuntimeError(
+                    "E4B_K25_LUT=prmt needs grouped-nf4-gemm with K39's decode (K25's lut='prmt', grouped-nf4-gemm#569); "
+                    "the installed kernel package does not carry it")
+            raise RuntimeError("E4B_K25_LUT=prmt is an inline-PTX decode for NVIDIA targets; on ROCm keep "
+                               "E4B_K25_LUT=tree (the same values)")
     return _K25_PLAN if "tree" in modes else dict(_K25_PLAN, lut="pair")
+
+
+def _k25_without_kernel(e: Exception) -> RuntimeError:
+    return RuntimeError("E4B_K25_LUT=prmt needs grouped-nf4-gemm with K39's decode (K25's lut='prmt', "
+                        "grouped-nf4-gemm#569); the installed kernel package has no K25 "
+                        f"(nf4_smallm.gemm_nf4_grouped_smallm): {e}")
+
+
+def resolve_k25_lut(model_type=None) -> dict:
+    """``E4B_K25_LUT`` resolved once at engine build (``serve_paged.build_engine`` calls it once the model's config is
+    read, before any weight loads), so a misconfigured knob fails at startup and not on the first request. Returns
+    ``{"env": the raw value or None, "lut": the decode K25 takes, or None when K25 is off or absent, "why": the reason
+    when None, "source": "explicit" | "default-allowlisted" | "default-off: <why>"}``.
+
+    - **Explicit:** ``prmt`` is refused here exactly as the forward refuses it (:func:`_k25_plan`), and also with K25
+      turned off (``E4B_NF4_GROUPED_SMALLM=0``), where it would select nothing.
+    - **Unset:** the per-family default (:data:`K25_LUT_DEFAULT_FAMILIES`, lane P158). ``prmt`` where ``model_type``
+      is listed, K25 is on, and this process can serve it; otherwise ``tree``, with the reason. Never a refusal: a
+      default must not break a build on an older kernel package or another device. The resolution is kept in
+      :data:`_K25_LUT_DEFAULT` for the forward.
+
+    The forward still resolves the same functions on every call, like the route's other knobs; which decode it ran is
+    :data:`K25_LUT_SEEN`."""
+    raw = _k25_lut_raw()
+    want = raw or K25_LUT_DEFAULT_FAMILIES.get(model_type)
+    source = "explicit" if raw else None
+    if raw is None and want is None:
+        source = f"default-off: no read licenses model_type {model_type!r}"
+    _K25_LUT_DEFAULT[0] = "tree"
+    if _k25_mode_env() == "0":
+        if raw == "prmt":
+            raise RuntimeError("E4B_K25_LUT=prmt names K25's decode, but E4B_NF4_GROUPED_SMALLM=0 turns K25 off")
+        return {"env": raw, "lut": None, "why": "E4B_NF4_GROUPED_SMALLM=0",
+                "source": source or "default-off: E4B_NF4_GROUPED_SMALLM=0"}
+    try:
+        import nf4_smallm as mod
+        mod.gemm_nf4_grouped_smallm
+    except (ImportError, AttributeError) as e:
+        if raw == "prmt":
+            raise _k25_without_kernel(e) from e
+        return {"env": raw, "lut": None, "why": "the kernel package predates K25",
+                "source": source or "default-off: the kernel package predates K25"}
+    if raw is None and want == "prmt":
+        why = _k25_prmt_unavailable(mod)
+        if why is None:
+            _K25_LUT_DEFAULT[0], source = "prmt", "default-allowlisted"
+        else:
+            source = f"default-off: {why}"
+    return {"env": raw, "lut": _k25_plan(mod)["lut"], "why": None, "source": source}
 
 
 def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
@@ -518,6 +630,17 @@ ROUTE_SEEN: dict = {}
 def _seen_route(route: str, rows: int) -> None:
     key = f"{route}|{'le256' if rows <= 256 else 'gt256'}"
     ROUTE_SEEN[key] = ROUTE_SEEN.get(key, 0) + 1
+
+
+#: K25's calls by codebook decode, as ``{"<lut>|<rows>": calls}``: ``<lut>`` is the plan's ``lut`` (``tree``, ``pair``
+#: or ``prmt``, :func:`_k25_plan`) and ``<rows>`` is ``le256`` (K25 takes up to 256 rows). Counted with ``nf4_k25`` in :data:`ROUTE_SEEN` (eager
+#: calls and graph captures, not replays). It is what an ``E4B_K25_LUT`` read asserts: the arm's decode, and no other.
+K25_LUT_SEEN: dict = {}
+
+
+def _seen_k25_lut(lut: str, rows: int) -> None:
+    key = f"{lut}|{'le256' if rows <= 256 else 'gt256'}"
+    K25_LUT_SEEN[key] = K25_LUT_SEEN.get(key, 0) + 1
 
 
 _SWIGLU = {}
@@ -727,6 +850,8 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                 raise RuntimeError(
                     "E4B_NF4_GROUPED_SMALLM=1 needs grouped-nf4-gemm with K25 "
                     "(nf4_smallm.gemm_nf4_grouped_smallm, grouped-nf4-gemm#429)") from e
+            if _k25_lut_raw() == "prmt":  # an asked-for prmt is never dropped with K25, even under auto
+                raise _k25_without_kernel(e) from e
             _k25 = None                   # auto: the kernel package predates K25 -> today's NF4 route
     _small = _k19 if _k19 is not None else _k25
     _fused_tiles = None
@@ -941,6 +1066,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     _gu_kw = {}                           # gate_up's extra kernel arguments: only the NF4 route's gather_div
     if device_grouping and int4_stores is None and _k25 is not None:
         _route = "nf4_k25"
+        _seen_k25_lut(_k25_kw["lut"], R_rows)
         # K25 (opt-in): the grouped small-M tensor-core GEMM on the NF4 stacks against the SAME 16-row device tiles. The
         # first call gets the UNSORTED x_rows and gathers through `order` in the kernel; the epilogue output is already
         # in sorted order. Outputs in sorted order, so gpt-oss's per-expert biases index by `sorted_ids` and the unsort
