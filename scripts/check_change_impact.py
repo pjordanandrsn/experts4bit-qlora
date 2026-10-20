@@ -11,6 +11,7 @@ that the one whose ``repository`` is its Source URL -- and runs that role's
 ``PROFILES`` entry. A repository the manifest does not name cannot be checked
 (exit 2).
 
+    python scripts/check_change_impact.py                               # against origin/main (the default)
     python scripts/check_change_impact.py --base origin/main            # a branch, before or after committing
     python scripts/check_change_impact.py --base <sha> --allow-claims-only
     python scripts/check_change_impact.py --base <sha> --strict
@@ -81,10 +82,11 @@ Runtime role only:
                      ``fast`` floor must rise. WARN only.
 
 Prints each triggered class with its trigger and every companion (``changed``
-/ ``MISSING``). Without --base, or with an empty one (a non-pull-request CI
-event), it prints SKIP and exits 0. Exit 1 on any FAIL; 2 when the check
-itself cannot run (the role, the contract, the base, the merge base or the
-diff cannot be read).
+/ ``MISSING``). Without --base it diffs against ``origin/main`` and says so;
+when that ref does not resolve, or --base is given empty, it FAILs (exit 2)
+instead of skipping, because a check that passes when run wrong fools the
+reviewer who ran it. Exit 1 on any FAIL; 2 when the check itself cannot run
+(the role, the contract, the base, the merge base or the diff cannot be read).
 """
 from __future__ import annotations
 
@@ -222,6 +224,9 @@ def changelog_fragments(root: Path, changed: set[str]) -> list[str]:
 
 def base_files(root: Path, base: str, prefix: str) -> list[str]:
     return _git(root, "ls-tree", "-r", "--name-only", base, "--", prefix).split()
+
+
+DEFAULT_BASE = "origin/main"     # the base when --base is omitted (a local run before a push)
 
 
 def merge_base(root: Path, base: str) -> str:
@@ -496,7 +501,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--root", default=".", help="this repository's root")
     ap.add_argument("--base", default=None, metavar="REF",
                     help="git ref whose merge base with HEAD the working tree is diffed against "
-                         "(absent or empty: SKIP, exit 0)")
+                         f"(absent: {DEFAULT_BASE}; empty or unresolvable: FAIL, exit 2)")
     ap.add_argument("--contract", default=CONTRACT, help=f"the contract, relative to --root (default {CONTRACT})")
     ap.add_argument("--allow-claims-only", action="store_true",
                     help="a claims.json change without docs/STATUS.md is a WARN, not a FAIL")
@@ -504,9 +509,19 @@ def main(argv: list[str] | None = None) -> int:
                     help="runtime role: an __all__ change with missing companions FAILs")
     a = ap.parse_args(argv)
     root = Path(a.root).resolve()
-    if not a.base:
-        print("SKIP: no --base ref (not a pull request); change-impact check not run")
-        return 0
+    if a.base is not None and not a.base.strip():
+        print("FAIL: --base is empty, so there is no diff to check (a pull request passes its base sha; locally, "
+              f"omit --base for {DEFAULT_BASE} or name a ref)")
+        return 2
+    if a.base is None:
+        try:
+            _git(root, "rev-parse", "--verify", f"{DEFAULT_BASE}^{{commit}}")
+        except (GitError, OSError):
+            print(f"FAIL: no --base given and {DEFAULT_BASE} does not resolve here: fetch it (git fetch origin main) "
+                  "or pass --base <ref>")
+            return 2
+        a.base = DEFAULT_BASE
+        print(f"base: {DEFAULT_BASE} (no --base given)")
     try:
         prof = profile_for(root)
         known = contract_classes(root / a.contract)
