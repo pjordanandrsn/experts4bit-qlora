@@ -1,9 +1,9 @@
 # bench/p158/staged-p158.sha256 -- every piece the P158 box runs, by the name the box sees (bench/p158/PREREG-p158.md).
 # Every piece shared with P153's kit at P153's pins (bench/p153/staged-p153.sha256); test_nf4_smallm_prmt_gpu.py is
 # grouped-nf4-gemm's kernel/test_nf4_smallm_prmt_gpu.py at v0.50.0 (41ef086e), byte for byte.
-a9c7f013970c831b46afabbcf9dffe0d082faf65cf455623cf6e9305b05e9246  p158_run.sh
+ef066a7dacfb8cfe18a8294b64d3843be9a3a6009d5f71054c4a82674b295f72  p158_run.sh
 cec65e8bf3fc772d60cf3be13fba149f6d3418d72218d6be4a049f78922f47a1  p158_box.py
-05fe8b7181342d9a631ef746b9457db477e4aee003b6bd685620895121bea489  p158_reduce.py
+ca01bf139fc505dd6216a2e7491590d615c7d1daae3e4696ff48b21370eebff0  p158_reduce.py
 b53f94192b4040b6451ceb18f8cd4e3e5629a6e40c4885b40600fcc4205d8248  p109_box.py
 e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
 15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json

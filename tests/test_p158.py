@@ -83,6 +83,21 @@ def test_the_runner_refuses_below_575_w_and_without_the_fit_before_the_install_a
         assert knob not in run, f"{knob} stays unset (its default) in both arms"
     assert "--mode sane" not in run and "p115_quality" not in run, "no SANE phase"
     assert 'case "$V" in FLIP|NO_FLIP|FUNCTION_FAIL) ;;' in run, "NOISY and VOID are not readings"
+    # the early gates: after S0w (rc 43) and S1a (rc 44), each before the arms after it
+    assert "    S0w) GATE_RC=43;;\n    S1a) GATE_RC=44;;\n" in run
+    assert "python $W/p158_reduce.py --gate $W/arm_$TAG.json --gate-arm $ARM" in run and "finish $GATE_RC" in run
+    assert "not a strike; the same gate firing on two consecutive runs counts as one strike" in run.replace("\n  # ", " ")
+
+
+def test_the_layercut_record_is_the_licence_half_and_names_its_limit():
+    lc = LANE / "layercut"
+    import json
+    for lut in ("tree", "prmt"):
+        r = json.loads((lc / f"layercut_{lut}.json").read_text(encoding="utf-8"))
+        assert r["layers"] == 2 and r["k25_seen_build"] == {f"{lut}|le256": 16} and r["k25_lut"]["lut"] == lut
+        assert sum(r["dispatch_build"].values()) == 8 and r["graph_status"] == {}, r
+    readme = (lc / "README.md").read_text(encoding="utf-8")
+    assert "needs sm_89+" in readme and "48 x\n(2 licence + 3 capture) x 2" in readme
 
 
 def test_the_guard_fits_with_25_percent_headroom():
@@ -203,6 +218,10 @@ REDUCER_MUTANTS = [
      '    if not (r.get("k25_seen_build") or {}).get(key):'),
     # the licence's probes dropped from the closed form (the reviewed 576)
     ("LICENCE_FORWARDS, WARMUPS, CAPTURES = 2, 2, 1", "LICENCE_FORWARDS, WARMUPS, CAPTURES = 0, 2, 1"),
+    # the early gate blind to the GEMV tally
+    ("    if bw != BW_BUILD_CALLS:\n        out.append(f\"{r.get('tag') or arm}: bw_prmt32", "    if False:\n        out.append(f\"{r.get('tag') or arm}: bw_prmt32"),
+    # the S1a gate reading S1a as the tree
+    ('    out = [x for x in k25_faults(r.get("tag") or arm, r, arm)', '    out = [x for x in k25_faults(r.get("tag") or arm, r, "S0")'),
     # the GEMV's build tally not exact
     ('    if (r.get("dispatch_build") or {}).get("bw_prmt32") != BW_BUILD_CALLS:', '    if False:'),
     # the decode's resolution unchecked

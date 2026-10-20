@@ -1,0 +1,53 @@
+{
+ "lut_env": "prmt",
+ "layers": 2,
+ "k25_lut": {
+  "env": "prmt",
+  "lut": "prmt",
+  "why": null
+ },
+ "k25_seen_before": {},
+ "k25_seen_build": {
+  "prmt|le256": 16
+ },
+ "dispatch_build": {
+  "scalar": 8
+ },
+ "graph_status": {},
+ "fusions": {
+  "fuse_qkv_n": 2,
+  "fuse_t1_glue_n": 9,
+  "fuse_t1_glue_r2_n": [
+   2,
+   2
+  ],
+  "fuse_router_epilogue_n": 2
+ },
+ "int8_head_bw": {
+  "mode": "1",
+  "modules": 1,
+  "shape": [
+   151936,
+   2048
+  ],
+  "int8_bytes": 311164928,
+  "grid": "quantize_rows_int8 (K36); the weight rounded in place to bf16(q * s), P150's I8HEAD",
+  "source": "default-allowlisted"
+ },
+ "buckets": [
+  1,
+  2,
+  4,
+  8,
+  16
+ ],
+ "max_seqs": 16,
+ "build_s": 7.2,
+ "torch": "2.8.0+cu128",
+ "device": "NVIDIA RTX A2000 12GB",
+ "per_layer": {
+  "k25": 8.0,
+  "bw_prmt32": 0.0
+ },
+ "matches_closed_forms": false
+}

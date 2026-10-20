@@ -221,6 +221,19 @@ for TAG in S0w S0a S1a S1b S0b S0c S1c S1d S0d; do
   rc=$?
   { echo -n "arm $TAG rc=$rc "; grep -a "^P158_ARM" logs/arm_$TAG.log | tail -1 | cut -c1-600; echo; } | tee -a summary.txt
   [ "$rc" = 0 ] || { tail -6 logs/arm_$TAG.log | cut -c1-300 | tee -a summary.txt; say "ARM $TAG FAILED (rc=$rc) -- the reducer will VOID"; }
+  # the EARLY GATES (PREREG): the two build counts are closed forms. After the warm-up (tree) a process that does not read
+  # them stops the box before any scored arm, rc 43; after S1a (the first prmt process) before the rest, rc 44. Each is an
+  # instrument refusal and not a strike; the same gate firing on two consecutive runs counts as one strike (the closed
+  # form, not the host, is then wrong). The reducer VOIDs on the same, as the backstop.
+  case "$TAG" in
+    S0w) GATE_RC=43;;
+    S1a) GATE_RC=44;;
+    *) GATE_RC=;;
+  esac
+  if [ -n "$GATE_RC" ]; then
+    python $W/p158_reduce.py --gate $W/arm_$TAG.json --gate-arm $ARM | tee -a summary.txt
+    [ "${PIPESTATUS[0]}" = 0 ] || { say "EARLY GATE ($TAG): the build counts are not the registered closed forms -- stopping"; echo "refused: build counts at $TAG" > REFUSAL; finish $GATE_RC; }
+  fi
 done
 say "reduce"; python $W/p158_reduce.py --dir $W --out $W/verdict_p158.json --e4b-sha "$E4B_SHA" 2>&1 | tee -a summary.txt
 [ "${PIPESTATUS[0]}" = 0 ] && [ -s "$W/verdict_p158.json" ] || { say "REDUCER FAILED"; finish 22; }

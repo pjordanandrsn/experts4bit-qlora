@@ -63,7 +63,7 @@ P153's served read by counted edits, with the K25 decode knob in place of the he
   tests). It must read **49 passed**, or the box refuses with rc 25. The two new files read 30 passed on the lab A2000
   at these pins (sm_86, torch 2.8.0+cu128, triton 3.4.0) before registration.
 - **Order:** the power floor and the guard fit, before the install; install and tripwire; reducer and box self-tests;
-  premise; fetch; NF4 arena bake; prompts; nine processes; reduce.
+  premise; fetch; NF4 arena bake; prompts; nine processes, with the early gates after S0w and S1a; reduce.
 - **Pins:**
   - e4b: the clean checkout the driver ships, which must contain #1862's merge.
   - grouped-nf4-gemm: **v0.50.0** at `41ef086e` by sha. The tripwire checks K25's kernel file by sha256 (`ee46969a`,
@@ -94,10 +94,20 @@ Two closed forms are read at the build, each from the code the box installs.
 - **Found in review, before any data:** a first draft registered 576, from the warm-ups and the capture alone. It missed
   the licence's two probes and would have VOIDed every process. P153's 480 is what exposed it: 48 x 3 x 2 = 288 does not
   account for it, while 48 x 5 x 2 does.
-- **Confirmed by running the code, before any rental:** a $0 layer-cut build on the lab A2000 (Qwen3-30B-A3B at 2 layers,
-  baked to NF4 as the box bakes it, on today's default server, once per decode) must read **20 K25 calls and 10 GEMV
-  calls per layer** under each arm's decode, with nothing under the other. The box's bars are 48 times those. The
-  build's record and its sha256 join this registration, and a mismatch stops the lane before a box.
+- **Confirmed by running, as far as the lab's card can** ([`layercut/`](layercut/README.md), $0, an RTX A2000, before any
+  rental): a real 2-layer cut of Qwen3-30B-A3B, baked to NF4 as the box bakes it, built on today's default server once
+  per decode. Decode graphs do not run on sm_86 (the fused FP8 KV append needs sm_89+), so the A2000 confirms the
+  **licence half**: with device grouping set as the graph server sets it, the build read **8 K25 calls per layer**
+  (2 probes x row counts 2-16) under each arm's decode and nothing under the other, and **4 GEMV calls per layer** at
+  T == 1 (2 probes x 2 calls).
+- **The capture half** (two warm-ups and one capture per row count) rests on a prior real-box measurement, not a
+  derivation: P153's 5090 build read `bw_prmt32` = 480 through the same capture loop, which is 48 x (2 + 3) x 2.
+- **Early gates on the box,** so a wrong count costs minutes, not a run: after the warm-up process (S0w, the tree) and
+  after the first `prmt` process (S1a), the runner reads that process's record and stops unless the decode resolved as
+  registered, K25's record after the build is exactly 960 under that decode with nothing else, and `bw_prmt32` is
+  exactly 480. S0w's gate exits rc 43 (before any scored arm), S1a's rc 44 (before the remaining six). Each is an
+  instrument refusal, not a strike; the same gate firing on two consecutive runs counts as one strike (the closed form,
+  not the host, is then wrong). The reducer's VOID on the same counts stays as the backstop.
 - After the runs the K25 record holds the arm's decode only, and its total is the same in every process (the arms run
   the same prompts and lengths).
 
@@ -184,10 +194,10 @@ it, and the verdict stands beside it.
   - **The static fit,** (boot + fit) x 1.25 <= guard: (300 + 3300) x 1.25 = 4500 s <= 5400 s (1.5 h). `tests/test_p158.py`
     asserts it. A 1.25 h guard would fit at exactly 4500 s with no room for a slow boot, so the guard is 1.5 h.
 - **Run ids** `p158-5090-1` to `-3`. Two consecutive HARNESS_ERROR, VOID, NOISY or NOT_RUN runs stop the lane. A
-  pre-flight host stall, a power-floor refusal (rc 17) or a fit refusal (rc 41) is not a strike (two consecutive fit
-  refusals count as one); a time-left skip of a step (STOP-2, rc 40) is.
-- **Sequencing:** e4b#1862 merges first (it is chained after e4b#1860). The $0 layer-cut build on the A2000 confirms
-  both build counts, and its record joins this registration. This registration then merges after its independent review
+  pre-flight host stall, a power-floor refusal (rc 17), a fit refusal (rc 41) or an early-gate refusal (rc 43, 44) is
+  not a strike (two consecutive refusals of the same kind count as one); a time-left skip of a step (STOP-2, rc 40) is.
+- **Sequencing:** e4b#1862 merged (`263040a3`). The $0 layer-cut build on the A2000 confirmed the licence half of the
+  build counts, and its record joins this registration (`layercut/`). This registration then merges after its independent review
   and the maintainer's pass, and the box runs the shared pre-flight and `--validate` on the exact manifest.
 
 ## Tests
@@ -200,10 +210,10 @@ it, and the verdict stands beside it.
   no SANE phase, and NOISY and VOID not readings;
 - **the guard fit** on both sides, from the measured walls;
 - **the two build counts' derivation** in the code the box installs;
-- **the self-tests**, run from one directory as on the box: the reducer's 64 cases (the null before the contract, the
-  null reading the warm-up and S0's own reps, an exact 960 and 480, the W1 guard, the unrounded bars, clock labels both ways
+- **the self-tests**, run from one directory as on the box: the reducer's 72 cases (the null before the contract, the
+  null reading the warm-up and S0's own reps, an exact 960 and 480, both early gates, the W1 guard, the unrounded bars, clock labels both ways
   and UNREAD, the enforced limit) and the box's 24;
-- **the mutants** each self-test must kill (28 against the reducer, 5 against the box);
+- **the mutants** each self-test must kill (30 against the reducer, 5 against the box);
 - **the driver's run ids:** -1 to -3, nothing else.
 
 ## What this lane cannot say

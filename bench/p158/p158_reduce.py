@@ -557,6 +557,16 @@ def _cases() -> list:
         ("a bucket not captured", v(arms(S1a={"graphs": {**{str(b): "graph" for b in BUCKETS}, "4": "eager: x"}})) == "VOID"),
         ("wrong commit", v(arms(S1c={"e4b": "b" * 40})) == "VOID"),
         ("the geomean is over four pairs", round(r(arms())["speed"]["geomean"]["W16"], 2) == 1.10),
+        ("the early gate passes the registered warm-up", gate(arms()[WARMUP]) == []),
+        ("the early gate stops a 576 build", bool(gate(arms(S0w={"seen_build": {"tree|le256": 576}})[WARMUP]))),
+        ("the early gate stops a 288 GEMV tally", bool(gate(arms(S0w={"tally": {"bw_prmt32": 288, "dotpad": 0}})[WARMUP]))),
+        ("the early gate stops a prmt call in the warm-up", bool(gate(arms(S0w={"seen_build": {"tree|le256": 960, "prmt|le256": 4}})[WARMUP]))),
+        ("the S1a gate passes the registered S1a", gate(arms()["S1a"], "S1") == []),
+        ("the S1a gate stops a tree call in S1a's build",
+         bool(gate(arms(S1a={"seen_build": {"prmt|le256": 960, "tree|le256": 8}})["S1a"], "S1"))),
+        ("the S1a gate stops prmt resolved to the tree",
+         bool(gate(arms(S1a={"lut": {"env": "prmt", "lut": "tree", "why": None}})["S1a"], "S1"))),
+        ("the S1a gate is not passed by reading S1a as S0", bool(gate(arms()["S1a"], "S0"))),
         ("the build counts are the closed forms", K25_BUILD_CALLS == 48 * 4 * 5 == 960 and BW_BUILD_CALLS == 48 * 5 * 2 == 480),
     ]
     return cases
@@ -573,8 +583,24 @@ def self_test() -> int:
     return 0 if not bad else 1
 
 
+def gate(r: dict, arm: str = "S0") -> list:
+    """The runner's early gates, on the warm-up (S0, the tree) and on S1a (S1, prmt): the decode's resolution and the two
+    build counts (K25's under the arm's decode and nothing else, the bandwidth GEMV's) at their closed forms. Empty means
+    it passes; the reducer reads the same on every process."""
+    out = [x for x in k25_faults(r.get("tag") or arm, r, arm)
+           if "after the build" in x or "k25_lut" in x or "before the build" in x]
+    bw = (r.get("dispatch_build") or {}).get("bw_prmt32")
+    if bw != BW_BUILD_CALLS:
+        out.append(f"{r.get('tag') or arm}: bw_prmt32 at the build is {bw}, registered {BW_BUILD_CALLS}")
+    if r.get("arm") != arm:
+        out.append(f"the gate read arm {arm}, the record says {r.get('arm')}")
+    return out
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser()
+    p.add_argument("--gate", help="a process's record: exit 1 unless its build counts are the closed forms")
+    p.add_argument("--gate-arm", default="S0", choices=("S0", "S1"))
     p.add_argument("--self-test", action="store_true")
     p.add_argument("--dir")
     p.add_argument("--out")
@@ -582,6 +608,10 @@ def main(argv=None) -> int:
     a = p.parse_args(argv)
     if a.self_test:
         return self_test()
+    if a.gate:
+        why = gate(json.load(open(a.gate)), a.gate_arm)
+        print(f"P158_GATE {'OK' if not why else 'FAILED ' + json.dumps(why)}")
+        return 0 if not why else 1
 
     def load(name):
         f = os.path.join(a.dir, name)
