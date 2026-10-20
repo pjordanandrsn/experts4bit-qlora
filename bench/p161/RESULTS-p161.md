@@ -52,7 +52,7 @@ and applied P160's 1.6598, a 4.115 ms saving. This read's own medians:
 - today's plan: 1038.44 tok/s, a **15.408 ms** step, 1.0275 of the step the projection assumed (the same server and
   decode, on another host);
 - c1: 1524.84 tok/s, a **10.493 ms** step;
-- the saving is **4.915 ms**, 1.195 of the 4.115 ms the projection implied.
+- the saving is **4.915 ms**, 1.194 of the 4.115 ms the projection implied.
 
 That carry is reported, not attributed. This read does not time the K25 pair alone, and its host differs from P158's,
 so the pair time the projection assumed is not this host's.
