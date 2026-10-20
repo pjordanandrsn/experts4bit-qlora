@@ -1,0 +1,16 @@
+{
+ "BNB_CUDA_VERSION": null,
+ "LD_LIBRARY_PATH": "/usr/local/nvidia/lib:/usr/local/nvidia/lib64",
+ "bitsandbytes": "0.50.2",
+ "capability": "12.0",
+ "device": "NVIDIA GeForce RTX 5090",
+ "framework": "unsloth",
+ "libraries": [
+  {
+   "path": "/root/tc1/venv-unsloth/lib/python3.11/site-packages/bitsandbytes/libbitsandbytes_cuda130.so",
+   "sha256": "00901675cb2acb8b1d6015cfe2c2571050bf59c7ce1972e6b6717ffc99b2a285"
+  }
+ ],
+ "torch": "2.12.1+cu130",
+ "torch_cuda": "13.0"
+}

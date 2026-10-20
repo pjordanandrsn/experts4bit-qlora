@@ -1,0 +1,7 @@
+W1020 22:50:26.732000 18079 venv-unsloth/lib/python3.11/site-packages/torch/utils/_pytree.py:630] <enum 'KernelPreference'> is an Enum subclass and is now natively supported by torch.compile as an opaque value type. Calling register_constant() on Enum subclasses is deprecated and will be an error in a future release.
+W1020 22:50:26.761000 18079 venv-unsloth/lib/python3.11/site-packages/torch/utils/_pytree.py:630] <enum 'ScaleCalculationMode'> is an Enum subclass and is now natively supported by torch.compile as an opaque value type. Calling register_constant() on Enum subclasses is deprecated and will be an error in a future release.
+/root/tc1/venv-unsloth/lib/python3.11/site-packages/unsloth/import_fixes.py:6234: FutureWarning: torch._dynamo.config.inline_inbuilt_nn_modules is deprecated and does not do anything, inline_inbuilt_nn_modules is always True. It will be removed in a future version of PyTorch.
+  original_setattr(self, name, value)
+🦥 Unsloth: Will patch your computer to enable 2x faster free finetuning.
+🦥 Unsloth Zoo will now patch everything to make training faster!
+HBD PROBE {"framework": "unsloth", "libraries": ["/root/tc1/venv-unsloth/lib/python3.11/site-packages/bitsandbytes/libbitsandbytes_cuda130.so"]}
