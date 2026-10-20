@@ -99,13 +99,17 @@ def passes(n, group):
 
 
 def heat():
-    """The GPU's temperature (C) and SM clock (MHz), read outside every timed window; reported, never ruled."""
+    """The GPU's temperature (C), SM clock (MHz), power draw (W) and active clock-event reasons (a bitmask; 0x4 is the
+    software power cap), read outside every timed window: the arms run in separate processes, so a clock share of a
+    ratio shows here. Reported, never ruled."""
     import subprocess
     try:
-        out = subprocess.check_output(["nvidia-smi", "--query-gpu=temperature.gpu,clocks.sm", "--format=csv,noheader,nounits"],
-                                      text=True, timeout=20).strip().splitlines()[0]
-        t, c = (int(float(x)) for x in out.split(","))
-        return {"temp_c": t, "sm_mhz": c, "t": round(time.time(), 3)}
+        q = "--query-gpu=temperature.gpu,clocks.sm,power.draw,clocks_event_reasons.active"
+        out = subprocess.check_output(["nvidia-smi", q, "--format=csv,noheader,nounits"], text=True,
+                                      timeout=20).strip().splitlines()[0]
+        t, c, w, r = (x.strip() for x in out.split(","))
+        return {"temp_c": int(float(t)), "sm_mhz": int(float(c)), "power_w": float(w), "clock_events": r,
+                "t": round(time.time(), 3)}
     except Exception as e:  # noqa: BLE001 -- reported only
         return {"error": f"{type(e).__name__}: {str(e)[:120]}", "t": round(time.time(), 3)}
 
@@ -239,7 +243,9 @@ def q_pass(runner, ws, base_rid, ttft=None, forcing=None, ptr=None):
     """One teacher-forced pass of up to 16 windows: per window, the 128 positions' NLL and argmax, read at decode.
     ``ttft`` (a list) receives the prefill's wall in ms, synchronised (the prefill reads its argmax back). ``forcing``
     (a dict) counts, per step after the step's own sync, where the bucket's input buffer -- the re-captured graph's own
-    (``ptr``: its pointer at the re-capture) -- did not hold the forced token, as T1's and T2's Forcer does."""
+    (``ptr``: its pointer at the re-capture) -- did not hold the forced token, as T1's and T2's Forcer does. A tensor
+    rebound to a NEW address is caught by the pointer; one that lands at the captured address IS what the graph reads,
+    and the read-back covers its contents."""
     from experts4bit_qlora.engines.paged_runner import bucket_for
     rids = [base_rid + k for k in range(len(ws))]
     for k, (rid, w) in enumerate(zip(rids, ws)):
@@ -697,6 +703,7 @@ def _q_cases(torch) -> list:
         def __init__(self, rebind=False):
             self._buckets, self.rebind, self.tokens, self.slot = (1, 2), rebind, {}, {}
             self._bufs = {b: {"ids": torch.zeros(b, 1, dtype=torch.long), "logits": torch.zeros(b, 900)} for b in (1, 2)}
+            self.captured = [b["ids"] for b in self._bufs.values()]   # a graph keeps reading these addresses
 
         def bind(self, rid, slot, prompt):
             self.tokens[rid], self.slot[rid] = list(prompt), slot
