@@ -2436,11 +2436,14 @@ runs K25 at P156's first carried plan pair, gate_up `{block_n 64, kc 256, warps 
   64/256/4/2 at 14.23 ms against 8.32, at 255 registers; [RESULTS-p156](../bench/p156/RESULTS-p156.md), "The cause is
   the decode"), so `c1` under any other
   decode is refused at engine build and in the forward, never run. It is also refused with K25 off or absent.
-- **Measured: a kernel microbench, no served read.** At Qwen3-30B-A3B's W16 shapes on an RTX 5090, under `prmt`, both
-  K25 GEMMs ran 1.6598× faster at `c1` than at today's plan (kernel time today / `c1`, above 1 is faster; the median of
-  126 paired reps, lower bound 1.6568, clock-adjusted 1.6525; P160 `p160-5090-2`,
-  [RESULTS](../bench/p160/RESULTS-p160.md); UNVERIFIED: no register row). No speed is claimed for the served step until
-  P161 reads it there.
+- **Measured: a kernel microbench, then a served read.** At Qwen3-30B-A3B's W16 shapes on an RTX 5090, under `prmt`,
+  both K25 GEMMs ran 1.6598× faster at `c1` than at today's plan (kernel time today / `c1`, above 1 is faster; the median
+  of 126 paired reps, lower bound 1.6568, clock-adjusted 1.6525; P160 `p160-5090-2`,
+  [RESULTS](../bench/p160/RESULTS-p160.md); UNVERIFIED: no register row). In the served step, P161 (`p161-5090-1`, one
+  RTX 5090 at 575 W, e4b `da3eb5c5`) read sixteen concurrent requests decoding **1.465433×** as fast at `c1` as at
+  today's plan, both under `prmt` (rate, the smallest of four ABBA pairs), one request unchanged (0.9966), and every
+  token identical: `e4b.serve.p161.k25-plan-c1.qwen3.5090.2026-10-20`, [RESULTS](../bench/p161/RESULTS-p161.md). One read
+  on one card and one family. The knob stays opt-in here; a qwen3_moe default is its own PR.
 - **Same bits.** The tree, `prmt`, and `prmt` with `c1` give bit-identical outputs through the served call
   (`tests/test_k25_lut_gpu.py`, including a K that neither of `c1`'s KCs divides).
 - **Records:** `info["k25_plan"]` (the build's resolution) and `prefill_routes()["seen"]["moe_k25_plan"]` (each K25
@@ -3499,6 +3502,7 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19 [measured]: Lane P143 Amendment 3 (one RTX 5090, binding): capping the paged FP8 attention decode at 16 splits (E4B_ATTN_SPLIT_CAP=16 …
 - e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19 [measured]: Lane P153 (one RTX 5090): serving Qwen3-30B-A3B's lm_head on its per-row int8 grid (E4B_INT8_HEAD_BW=1: the head rounded in place to bf16(q * s), P150's I8HEAD …
 - e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20 [measured]: Lane P158 (one RTX 5090): serving Qwen3-30B-A3B's batched-decode expert GEMM (K25) with grouped-nf4-gemm v0.50.0's K39 codebook decode (E4B_K25_LUT=prmt, K25's lut="prmt", bit-identical to the select tree) decodes sixteen concurrent requests 1.0925x as fast on the default serve_paged server (the smallest of four ABBA …
+- e4b.serve.p161.k25-plan-c1.qwen3.5090.2026-10-20 [measured]: Lane P161 (one RTX 5090): serving Qwen3-30B-A3B's batched-decode expert GEMM (K25) at plan c1 (E4B_K25_PLAN=c1: gate_up 64/256/4/2, down 128/128/8/3, P156's first carried pair, which P160 read in a microbench), both arms under K39's decode at qwen3_moe's default (prmt), decodes sixteen concurrent requests 1.4654x as …
 
 Open items (no evidence either way):
 
@@ -3506,4 +3510,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 …
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(455 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(456 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
