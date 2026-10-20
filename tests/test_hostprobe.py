@@ -144,3 +144,85 @@ def test_a_missing_nvidia_smi_adds_nothing(tmp_path):
     assert hb.gpu_facts(str(tmp_path / "no-such-smi")) == {}
     f = hb.facts(_box(tmp_path / "box"), smi=str(tmp_path / "no-such-smi"))
     assert not any(k.startswith("gpu_") for k in f)
+
+
+# Amendment 1: GPU 0's health facts. The stand-in nvidia-smi answers each call by its flag, logs every call, and fails
+# a --query-gpu that names a field it does not list, as the real one does.
+HELP = '"driver_version"\n"vbios_version"\n"ecc.mode.current"\n"ecc.errors.corrected.volatile.total"\n' \
+       '"ecc.errors.corrected.aggregate.total"\n"ecc.errors.uncorrected.volatile.total"\n' \
+       '"ecc.errors.uncorrected.aggregate.total"\n"retired_pages.single_bit_ecc.count"\n' \
+       '"retired_pages.double_bit.count"\n"retired_pages.pending"\n"clocks_event_reasons.active"\n'
+
+
+def _health_smi(tmp_path, *, help_text=HELP, query="575.64.05, 94.02.71.40.0F, Enabled, 0, 3, 0, 0, [N/A], [N/A], No, 0x0000000000000001",
+                remap="0, 0, No, No", remap_rc=0, version="CUDA Version                : 12.9", sleep=0) -> str:
+    (tmp_path / "help.txt").write_text(help_text)
+    body = f'''echo "$@" >> "{tmp_path}/calls.log"
+[ {sleep} -gt 0 ] && sleep {sleep}
+case "$1" in
+  --help-query-gpu) cat "{tmp_path}/help.txt" ;;
+  --version) echo "NVIDIA-SMI version  : 575.64.05"; echo "{version}" ;;
+  --id=0) case "$2" in
+    --query-gpu=power.limit*) echo "450.00, 450.00, 3120" ;;
+    --query-gpu=*) for f in $(echo "${{2#--query-gpu=}}" | tr , " "); do
+                     grep -qx "\\"$f\\"" "{tmp_path}/help.txt" || {{ echo "Field \\"$f\\" is not a valid field to query."; exit 2; }}
+                   done; echo "{query}" ;;
+    --query-remapped-rows=*) echo "{remap}"; exit {remap_rc} ;;
+  esac ;;
+esac'''
+    return _smi(tmp_path, body)
+
+
+def test_gpu_health_reads_versions_ecc_pages_rows_and_reasons(tmp_path):
+    h = hb.gpu_health(_health_smi(tmp_path))
+    assert h == {"gpu_driver_version": "575.64.05", "gpu_vbios_version": "94.02.71.40.0F", "gpu_ecc_mode": "enabled",
+                 "gpu_ecc_corrected_volatile": 0, "gpu_ecc_corrected_aggregate": 3, "gpu_ecc_uncorrected_volatile": 0,
+                 "gpu_ecc_uncorrected_aggregate": 0, "gpu_retired_pages_pending": "no", "gpu_clock_event_reasons": 1,
+                 "gpu_remapped_rows_correctable": 0, "gpu_remapped_rows_uncorrectable": 0,
+                 "gpu_remapped_rows_pending": "no", "gpu_remapped_rows_failure": "no", "gpu_cuda_version": "12.9"}
+    assert "gpu_retired_pages_sbe" not in h and "gpu_retired_pages_dbe" not in h          # '[N/A]' is left out
+
+
+def test_a_field_the_driver_does_not_list_is_never_queried_and_the_older_reason_name_is_used(tmp_path):
+    older = HELP.replace('"clocks_event_reasons.active"', '"clocks_throttle_reasons.active"')
+    older = older.replace('"retired_pages.pending"\n', "")
+    q = "535.104.05, 95.02.3C.40.C3, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 0x0000000000000004"
+    h = hb.gpu_health(_health_smi(tmp_path, help_text=older, query=q, remap="[N/A]", remap_rc=0, version="garbage"))
+    assert h == {"gpu_driver_version": "535.104.05", "gpu_vbios_version": "95.02.3C.40.C3", "gpu_clock_event_reasons": 4}
+    sent = [c for c in (tmp_path / "calls.log").read_text().splitlines() if "--query-gpu=" in c][0]
+    assert "retired_pages.pending" not in sent and "clocks_throttle_reasons.active" in sent
+
+
+def test_unsupported_remapped_rows_and_a_missing_version_flag_add_nothing(tmp_path):
+    h = hb.gpu_health(_health_smi(tmp_path, remap="Remapped rows not supported", remap_rc=3, version=""))
+    assert not any(k.startswith("gpu_remapped_rows_") for k in h) and "gpu_cuda_version" not in h
+    assert h["gpu_driver_version"] == "575.64.05"
+
+
+def test_a_hung_driver_is_called_once_then_never_again(tmp_path, monkeypatch):
+    monkeypatch.setattr(hb, "SMI_TIMEOUT", 1)
+    f = hb.facts(_box(tmp_path / "box"), smi=_health_smi(tmp_path, sleep=3))
+    assert f["gpu_smi_hung"] is True and not any(k.startswith("gpu_") and k != "gpu_smi_hung" for k in f)
+    assert len((tmp_path / "calls.log").read_text().splitlines()) == 1
+
+
+def test_facts_carry_the_power_and_health_rows_together(tmp_path):
+    f = hb.facts(_box(tmp_path / "box"), smi=_health_smi(tmp_path))
+    assert (f["gpu_power_limit_w"], f["gpu_driver_version"], f["gpu_ecc_mode"]) == (450.0, "575.64.05", "enabled")
+    assert "gpu_smi_hung" not in f
+    calls = (tmp_path / "calls.log").read_text().splitlines()
+    assert len(calls) == 5 and calls[1] == "--help-query-gpu"            # power, field list, query, rows, --version
+
+
+@pytest.mark.parametrize("raw,kind,want", [("Enabled", "mode", "enabled"), ("[N/A]", "mode", None), ("12", "int", 12),
+                                           ("-1", "int", None), ("Yes", "yesno", "yes"), ("1", "yesno", 1),
+                                           ("0x00000000000000A0", "hex", 160), ("0xZZ", "hex", None),
+                                           ("575.64.05", "version", "575.64.05"), ("575", "version", None),
+                                           ("GPU-1234 serial", "vbios", None)])
+def test_a_printed_value_becomes_a_fact_or_is_left_out(raw, kind, want):
+    assert hb._value(raw, kind) == want
+
+
+def test_the_health_read_prints_no_identifier():
+    names = {f for f, _, _ in hb.HEALTH_QUERY + hb.REMAP_QUERY}
+    assert not any(s in n for n in names for s in ("uuid", "serial", "pci", "name", "board_id"))

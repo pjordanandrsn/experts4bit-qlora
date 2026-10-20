@@ -1,7 +1,8 @@
 # Host-facts probe: registration
 
 **What it is.** A rented box that reads the host facts other lanes' registrations name as bounds on their reads, prints
-them, and is torn down. It reads files, its own environment and one `nvidia-smi` query. It installs nothing, loads no
+them, and is torn down. It reads files, its own environment and bounded `nvidia-smi` queries (one before
+Amendment 1, at most five after). It installs nothing, loads no
 model, imports no torch, and measures nothing. It is **never a reading**, and its result never ranks or retires a host.
 
 **Why.** A lane's registration can say that one host fact bounds what its read can conclude. P159's PREREG says so of
@@ -60,3 +61,37 @@ printed: the receipt's machine id already names the host.
   permalinked comment on this registration's PR, posted after merge.
 - **Record.** The receipt goes to the private store. A lane quotes a probe's facts as **that probe's**, with its run id
   and `measured_at`, never as the host's facts in general: a host can change its THP mode.
+
+## Amendment 1: GPU health facts (2026-10-20, before any probe ran)
+
+**Why.** `p159-1` read VOID_BYTES on one RTX 4090 host: its NF4 bytes differed in every block, while the same torch and
+bitsandbytes gave the registered bytes on two other hosts and on an A2000 (P159 Amendment 2). The cause is not
+established. That box's receipt held no VBIOS, ECC or remapped-row line, so nothing could rule a card fault in or out
+afterwards. P159's Amendment 2 adds a bounded
+`nvidia-smi -q` excerpt to its own forensics. This amendment gives the same facts to every probe, as numbers and short
+enums.
+
+**What is added** (GPU 0; each value is left out when it is not a fact: `[N/A]`, `[Not Supported]`, an unknown form):
+
+| fact | source |
+|---|---|
+| `gpu_driver_version`, `gpu_vbios_version` | `--query-gpu=driver_version,vbios_version` |
+| `gpu_cuda_version` | the `CUDA Version` line of `nvidia-smi --version` (drivers too old for the flag leave it out) |
+| `gpu_ecc_mode` | `ecc.mode.current`: `enabled` or `disabled` |
+| `gpu_ecc_{corrected,uncorrected}_{volatile,aggregate}` | `ecc.errors.*.total`, integers |
+| `gpu_retired_pages_sbe`, `gpu_retired_pages_dbe`, `gpu_retired_pages_pending` | `retired_pages.*` (pre-Ampere page retirement) |
+| `gpu_remapped_rows_{correctable,uncorrectable,pending,failure}` | `--query-remapped-rows` (Ampere and later; consumer cards often report it unsupported) |
+| `gpu_clock_event_reasons` | `clocks_event_reasons.active`, or the older `clocks_throttle_reasons.active`, as an integer bitmask **at the probe's moment** (an idle box reads idle) |
+| `gpu_smi_hung` | `true` when an `nvidia-smi` call hit its bound; no later call is made |
+
+**How it stays bounded.** The health read makes at most four more `nvidia-smi` calls, each bounded at 20 s: the
+driver's list of query fields (`--help-query-gpu`), one query naming only listed fields, the remapped-rows query, and
+`--version`. One unknown field name fails a whole query, so a field the driver does not list is never sent, and the
+power query above stays a separate call. A call that hangs stops every later call. The box's worst case stays inside
+the drive's 120 s ssh bound.
+
+**Unchanged.** Run ids, scope, the drive, the guard, the rate cap, the image, the download and the $0.20 worst case.
+It is still never a reading. No UUID, serial, PCI address, board id or product name is queried.
+
+**Applies to** every probe launched from a commit that contains this amendment. A probe launched before it records
+the facts above this section only, and its receipt's commit says which.
