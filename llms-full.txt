@@ -3009,9 +3009,13 @@ host-bound: absolutes do not travel between hosts, ratios do.
   squash-merges it when the required checks are green. The `CI` workflow
   (lint-and-test, wheel-smoke, discoverability) runs on `main` and on a pull
   request once it carries the `ready-to-merge` label (or leaves draft), never on
-  every push; `private-marker-guard` runs on every push and pull-request event,
-  and its `guard` job is required alongside the three CI jobs. A head with no
-  `CI` run is not green, so remove and re-apply the label after a new push.
+  every push. `private-marker-guard` and `conflict-marker-guard` run on every
+  push and pull-request event (not on a label), and both are required checks
+  alongside the three CI jobs; push-scan runs report as "(push scan)" and are not
+  required. A label event other than `ready-to-merge` fails the required CI jobs
+  instead of skipping them. A head with no `CI` run is not green, and re-running a
+  failed job replays the old event, so re-apply the label to test a head,
+  including after a new push.
 - A task pull request never moves a gate, a threshold, the `[fast]` floor or a
   registered claim. If the task needs one, stop and say so on the issue.
 - Sections 2–9 bind every contributor equally: structure not names, counts or
