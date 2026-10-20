@@ -4,6 +4,1280 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
+## 0.56.0 — 2026-10-20 — three qwen3_moe serving defaults, layer-major training under offload, a full-depth Qwen3-235B step
+
+**0.56.0.** Three serving defaults on `qwen3_moe`, each read alone on Qwen3-30B-A3B on one RTX 5090 (their combined effect
+has not been read):
+- K25's byte-permute codebook decode: sixteen requests 1.0925× as fast, every token identical (P158; needs
+  grouped-nf4-gemm 0.50.0).
+- The int8 lm_head at one request: 1.052× as fast. Outputs change, inside the quality bars (P153; needs 0.48.0).
+- The paged attention decode capped at 16 splits: one request 1.044× as fast (P143).
+
+On an older kernel package each default resolves off, recorded, and nothing breaks. The `fast` extra still requires
+grouped-nf4-gemm 0.43.0; `pip install -U grouped-nf4-gemm` brings the newer kernels.
+
+Also new:
+- Mixtral-8x7B decodes with its B=1 fold stack by default (P135).
+- Opt-in: layer-major training under expert offload, 2.365× per step against the stock loop on Qwen3-30B-A3B on an
+  RTX 4090; it replicates at 2.311× on an RTX 5090 and holds at 2.118× on Mixtral-8x7B (P137, P140, P144).
+- The CLI trainer now takes the fused training path with `FAST_TRAIN=1`; `LAYER_MAJOR=1` implies it and steps 1.455×
+  as fast as `FAST_TRAIN=1` alone (P146).
+- One full-depth QLoRA optimizer step on Qwen3-235B-A22B runs on one RTX PRO 6000 (Q235, MILESTONE PASS).
+
+Opt-in with no speed claimed: `E4B_SERVE_ATTN_INT8` (Mixtral's int8 attention projections; P149's served read has not
+run) and `E4B_DENSE_GEMV_BW` (P151 read NOISY).
+
+Also in this release: records for P133, P134, P149 box K and P160, and claims for P133 and P134; host facts that record THP_MEM_ALLOC_ENABLE beside the THP mode; guard-fit and
+test-parser fixes; and bench registrations, none of which changes a default.
+
+### Host facts: THP_MEM_ALLOC_ENABLE, a stdout mode, and one producer
+
+`bench/common/host_facts.py` is now a byte-identical copy of adertha-agents' `adertha/compute/host_probe.py`. That file
+is the source of record, kept beside the host registry that reads its keys, and drift is checked there.
+- **`thp_mem_alloc_enable`:** the setting from the helper's own environment, recorded only as an integer.
+- **`-` mode:** prints one `HOST_FACTS_JSON` line instead of writing a file.
+- **Every rented box:** the launcher now runs the same probe after its pre-flight, so a box's transparent-hugepage
+  mode reaches the registry whichever lane rented it.
+
+### P133 and P134 records (#1313): the bandwidth GEMV's RTX 4090 and Granite/OLMoE reads, re-derived and claimed
+
+Two served reads set grouped-nf4-gemm 0.47.0's bandwidth-GEMV defaults but had no public record and no claim. Each now
+has a results page, public receipts under the citation rules (GPU-UUID, host-name and instance files STORE-ONLY by
+sha256), and a register row. The verdicts were re-derived from the private receipt store byte for byte, and they
+re-derive from the public records (under Python 3.10).
+- **P133** (`p133-4090-2`, RTX 4090): Qwen3-30B-A3B one request 1.5145x as fast, sixteen unchanged (0.9998), quality
+  within P110's bar. `e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18`.
+- **P134** (`p134-5090-1`, RTX 5090 at a 400 W limit): Granite-3.1-3b-a800m 1.3979x and OLMoE-1B-7B 1.5011x at one
+  request, sixteen unchanged (0.9992, 0.9954), quality within the bar. `e4b.serve.p134.gemv-bw.granite.5090.2026-10-18`,
+  `e4b.serve.p134.gemv-bw.olmoe.5090.2026-10-18`.
+
+Files: `bench/p133/`, `bench/p134/`, `docs/claims.json`.
+
+### Fixed
+
+- The cross-lane guard-fit test (`tests/test_lane_guard_fit.py`) read shell structure wrong in four ways. It masked quoted strings before it dropped comments, so an apostrophe in a comment opened a span that swallowed code: an `if` above the fit check could vanish (a false pass, the check counted as top level inside a branch), or an `esac` could (a false fail). It now drops comments in one quote-aware scan first, drops heredoc bodies (data, not shell), strips nested `${a:+${b}}` expansions innermost first, and counts an `if`/`case`/loop that follows `{` or a case arm's `)`. Every gated runner's verdict is unchanged; whole-file balance goes from 37 of 98 runners closing to all 98, and a test now holds that invariant.
+
+### P149 box K's results (K_GO) and `E4B_SERVE_ATTN_INT8`'s status line
+
+`bench/p149/RESULTS-p149.md` records box K, `p149k-5090-8`: K37's int8 attention projections against cuBLAS bf16 at
+Mixtral-8x7B's shapes, a 0.984 ms W1 projected in-situ saving against the 0.1625 ms bar, read as K_GO. That is a
+microbench premise, never a served gain. The run's public receipt is under `bench/p149/receipts/p149k-5090-8/`, with
+the files kept only in the private receipt store named by sha256. `docs/STATUS.md` now says `E4B_SERVE_ATTN_INT8=1`
+(#1848) is opt-in on Mixtral, with no speed claimed until P149's box Q+S reads.
+
+### P149 box Q+S kit: quality at decode, the served read and Amendment 4's token-pinned processes, on Mixtral-8x7B
+
+The kit for P149's box Q+S (`bench/p149/`). Nothing here is a default, and nothing runs until the box is created.
+- **`p149_box.py`**, one process per arm or phase, on Mixtral's server (16 slots of 768 tokens, buckets 1 to 16, graphs
+  on). The arms differ only in `E4B_SERVE_ATTN_INT8`.
+  - **Speed:** P143 Amendment 3's form. The GPU's temperature and SM clock are recorded around every timed block.
+  - **Q**, in S0a and S1a after their timed reps: P147's W1 and W16 windows, sha256-checked, teacher-forced at T == 1
+    through the served decode step, on graphs re-captured with a logits copy. All 128 of P147's positions are read at
+    decode.
+  - **Reported only:** prefill-Q, prefill TTFT and SANE.
+  - **Amendment 4's T1 and T2:** W16 teacher-forced on S0a's and S1a's recorded tokens. The forcing is checked against
+    the captured graph's own input buffer, and routing comes from an eager replay.
+  - **Engagement:** per captured bucket, the int8 projections' calls by row count and path.
+- **`p149_reduce.py`:** P147's quality rule (S1 against S0 on the box), P143 Amendment 3's speed rule, the engagement
+  VOIDs, and Amendment 4's qualifier.
+  - The verdict order is VOID, NOISY, QUALITY_FAIL, FUNCTION_FAIL, then FLIP or NO_FLIP.
+  - A Q-only reduce after S1a lets a QUALITY_FAIL stop the box.
+- **`p149_run.sh` / `p149_drive.sh`:** the host floors, the power floor and Amendment 4's guard fit, all before the
+  install. Then the compiled premises (grouped-nf4-gemm K37's suite, vendored byte for byte, and e4b's int8 kernel path),
+  the rotation, and the receipts.
+- **`p149_preread.py`:** Amendment 4's USD 0 A2000 router pre-read, a prediction.
+
+### P149 Amendment 5: a dry mode on a one-layer cut, and early gates before any scored arm
+
+The lab A2000 (sm_86) cannot build box Q+S's registered server. Its bucketed decode graphs need the fused FP8 KV
+append, which needs sm_89 or newer. So until now, the bucket capture census, Q's re-capture and forcing checks, T1, T2
+and SANE would first have run for real on the box itself.
+- **`P149_DRY=1`** (run ids `p149-dry-2` to `-4`) runs the whole rotation on one RTX 5090 against a one-layer cut of the
+  checkpoint (`p149_slice.py`: shards 1 and 19, the embedding, layer 0, the final norm and the head).
+  - The reducer's `--dry` checks the same closed forms at one layer and lists every instrument fault it finds.
+  - The verdict is hard-coded DRY: an instrument run, never a reading and never a strike.
+  - Guard 3.0 h, worst $3.31.
+- **Early gates, in P158's form, on the box too.** An unscored S1 process, S1w, runs before any scored arm and stops the
+  box on an instrument refusal (never a strike):
+  - rc 43, its build: the census, the int8 census, and every captured bucket at exactly 3 × 128 int8 calls;
+  - rc 44, one teacher-forced Q pass per gate, with the forcing checks;
+  - rc 45, S0a's build, checked before S1a runs.
+- The capture count also joins the VOID rule. The box's guard table gains S1w's 600 s, and each speed arm's
+  allowance drops from 600 s to 480 s, about twice a P149 arm's expected 230 s. That gives a 16,290 s total in the
+  6.0 h guard, and boot keeps 1,612 s of tolerance. The worst stays $7.38.
+
+### Docs: the serving reference states Qwen3's three per-family decode defaults
+
+`docs/SERVING.md` now documents three settings that resolve per family at startup:
+- the attention split cap (`E4B_ATTN_SPLIT_CAP`, 16 on `qwen3_moe`, lane P143);
+- the int8 output head (`E4B_INT8_HEAD_BW`, on for `qwen3_moe` at its 151,936 x 2,048 head, lane P153);
+- K25's byte-permute codebook decode (`E4B_K25_LUT=prmt` on `qwen3_moe`, lane P158).
+
+Each entry gives the measured claim id, the opt-out and the `/health` field that reports the resolution. They were
+defaults on main, but the serving reference did not name them.
+
+### P160 results (#1313): decode x plan, GO (C1 1.6598x over the served default)
+
+`p160-5090-2` (one RTX 5090, $0.0710): K39's decode at P156's first carried plan pair, C1 (gate_up 64/256/4/2, down
+128/128/8/3), ran both W16 K25 GEMMs 1.6598x faster than prmt at today's plan, the served default. The lower bound was
+1.6568, or 1.6525 clock-adjusted, against the 1.05 bar. The read is on S1, a router-replay stream no K25 microbench had
+timed. Every arm kept the tree's bits on every rep, and all eight predictions held. The least-overlapping half of S1
+read 1.6557, and P156's own held-out steps 1.6508 (P156 reported 1.6167). Microbench only: no default changes and no
+speed is claimed. Next come an opt-in per-projection K25 plan knob and a served read, each its own PR. Files:
+`bench/p160/RESULTS-p160.md` and `bench/p160/receipts/p160-5090-2/`.
+
+### P159 registered: what makes the loader's host-side expert fuse run 17x slower in some host windows
+
+`bench/p159/PREREG-p159.md` registers a timing premise, never a ruling. On one host the registered fuse block ran 17x
+slower outside one wall-clock window that spanned four processes; another host ran it fast throughout. The primary
+hypothesis is the fault cost of fresh anonymous memory, switched by huge-page availability. Two arms manipulate it
+directly: THP disabled for the process (predicted slow even in a fast window) and a pre-faulted heap (predicted fast
+even in a slow window). A slab-residency arm, an identical-arm null, and a headroom arm at the 1.3 x VmHWM RAM floor
+(a separate question, from Q235's offload) run beside them, interleaved. The kit (`bench/p159/`, `tests/test_p159.py`)
+reuses the SMT fuse block and Q235's pinned install unchanged.
+
+### Host facts: per-core speed and the OpenMP thread count
+
+`bench/common/host_facts.py` adds four facts. Each is a number, and each is left out when it cannot be read.
+- **`cpu_max_mhz` / `cpu_max_mhz_lo`:** the highest and lowest rated maximum clock over the run's CPUs, read from
+  cpufreq. On a hybrid part they differ. They are labels only.
+- **`cpu_loop_mops`** (with `cpu_loop_python`): a fixed single-thread loop, best of three, well under a second. It
+  measures what the run actually got from one core, after clock, co-tenants and quota.
+- **`omp_num_threads`:** the run's own setting.
+
+Why: in the TC1 receipts, a framework's speed ratio at fixed code moved 10-17% between host CPU models. It moved with
+per-core speed and the thread count, not with the core count, and no receipt recorded either.
+
+### DQ11 MLP-adapter BUILD Phase 1: Amendment 4's read in the harness (#1083)
+
+`bench/dq11/dq11_mlp_phase1.py` and `dq11_mlp_phase1_run.py` implement `DQ11-MLP-BUILD-AMENDMENT-4.md` for the read
+`dq11-mlp-phase1-a2000-2`.
+
+**The per-module read, in two passes** (`read_layers_a4`):
+- Pass 1 reads today's path, the fused path and a landing check on every layer.
+- Then every draw containing R2, or any redraw that lands, leaves the floor (`landed`, `post_a_draws`).
+- Pass 2 reads an FP64 reference (`fp64_read`): dequantized NF4 weights, autograd in FP64, no intermediate rounding.
+  One streamed pass gives (a)'s floor and each unfused path's error.
+
+**The bars:**
+- **(b)** decides on relative RMS within a 5% margin (`bar_b`). It first runs a leave-one-out calibration (`calibrate`);
+  if that fails, the read is `INDETERMINATE`, never `FAIL`.
+- **The outcome** (`outcome_a4`) names `ACCURACY_OVER_REORDER` and `RANK1_UNRESOLVED` where they apply.
+
+**KNOB_OFF (`knob_off`)**, checked in order:
+- three `step-today` processes and `step-off` in the read environment;
+- if their null fails, the same four under DQ11's `CONFIGURATION_C` (`observer_policy`), each saving its B update;
+- if C's null fails too, a per-process mean-distance score over the 224 B slots (`KNOB_OFF_BY_SPREAD`).
+
+`--part need-c` tells the driver whether the C parts run. `reduce_a4` composes the outcome. The `-1` read still rebuilds
+`phase1.json` byte-identically through the original `reduce`.
+
+`DQ11-MLP-BUILD-AMENDMENT-4a.md` records the maintainer's clarification of (b), made before data:
+- |U| ≤ 2 reads `INDETERMINATE`;
+- the false-reject bound is 1/(|U| + 1), and the record reports it;
+- a FAIL from (b) needs |U| ≥ 9; below that it reads `INDETERMINATE` ("bar too weak").
+
+**Other changes:**
+- `fp64_premise` refuses an FP64 reference that would not be the bases' arithmetic: a biased base, or on CUDA an NF4
+  dequant dtype unlike the input's, or ≤ 1536 rows, where bitsandbytes 0.50.2 runs its fused 4-bit GEMM.
+- (c) 3's distance is taken per ordered pair, normalized by the other process's B update, as Amendment 4 states. The
+  null's 2× consistency check therefore covers six ordered distances, not three, which is stricter only.
+
+### P160 registered (#1313): decode x plan, K39's decode at P156's carried tile plans against prmt at today's plan
+
+P156 reported, never ruling, that prmt at its three carried plan pairs ran the two W16 K25 GEMMs about 1.6x faster than
+prmt at today's plan (C1: gate_up 64/256/4/2, down 128/128/8/3, 1.6167 over P), selected with a 0.153 winner's curse.
+P158 has since made prmt qwen3_moe's served default, so P is the control. P160 re-asks C1 under a registered rule.
+- **Arms:** P and P2 (prmt at today's plan, the self-pair), C1-C3 (prmt at P156's carried pairs, named before data),
+  T (the tree, reported). Only the plan moves between P and C1.
+- **Data:** GO is read on S1, P153's second router-replay stream, which no K25 microbench has timed (126 reps); S0's
+  held-out steps 64-123 re-read P156's figure, reported. S1 shares S0's prompts; its overlap is stated before data.
+- **The defences:** an untimed spacer graph before every timed replay, a Williams order over the six arms, NVML clocks
+  and the enforced limit per arm. GO needs C1's median P/C1 minus 2 SE >= 1.05 both raw and clock-adjusted (the whole
+  clock gain taken from a faster-clocked C1); a sample under a 575 W enforced limit VOIDs.
+- **Box:** one RTX 5090, grouped-nf4-gemm v0.50.0 (41ef086e), premise 27 tests (K25's row-exact tests and K39's compiled
+  contract), guard 1.0 h with the pre-install fit at 25 % headroom from P156's box walls, worst $1.16. A $0 A2000
+  shakedown ran end to end before the registration.
+
+A GO opens an opt-in per-projection K25 plan in e4b and a served read, each its own PR. Files: `bench/p160/` and
+`tests/test_p160.py`.
+
+### The guard-fit rule counts a venv's creation as the start of an install
+
+`tests/test_lane_guard_fit.py` orders each gated runner's pre-install fit check against its first install. A runner
+whose packages go in from a script (Q235's pinned bootstrap, after `python3.11 -m venv`) showed no recognisable install
+and failed with "no install found". The install pattern now also matches a venv's creation (`python`, `python3` or
+`python3.N -m venv`), with a mutant ("a venv created first") that must fail. `bench/common/README.md` ("Guard fit")
+says so. Every existing runner's status is unchanged: the frozen legacy list still matches exactly, and the rule's
+other tests pass.
+
+### P149 Amendment 4: the routing qualifier on g16, token-pinned, and box Q+S's guard re-fitted
+
+S1 decodes its own greedy tokens, so at W16 its routing can differ from S0's and g16 carries a routing term besides the
+kernels. Box Q+S now adds two fresh S0 processes, T1 and T2, in its rotation. Each times W16 teacher-forced on S0's own
+recorded tokens and on S1's, in a rotated A B B A / B A A B order. Their ratio, g16_routing, is checked by the four
+token-pinned self-pairs and reported with both streams' routing from an eager replay: distinct experts, the per-expert
+row histogram and the 16-row tile count. The rule is stated before data. It never moves the verdict; it decides only
+whether a FLIP's default-flip PR proceeds (ROUTING_CLEAR) or waits for a routing-matched read (CONFOUNDED, UNRESOLVED,
+or a noisy or void check). A USD 0 A2000 router pre-read is added as a prediction. Box Q+S's guard is re-fitted with
+these processes and the runner's own allowances at 25% headroom, 3.0 h to 6.0 h, and its rate takes Amendment 2's form,
+for a worst of $7.38.
+
+### Tile fill and its amortization: rows per step are the lever (reported)
+
+`bench/tile-fill/` reads P153's router replay under a construction committed first, with Amendment 1 after the first
+width composition failed its positive control (kept and reported). At sixteen requests K25's 16-row tiles are about
+14 % full. Composed to 32, 64 and 128 rows per step, tiles per row fall to 0.64, 0.39 and 0.26 of sixteen-wide (an
+optimistic bound from 16 requests). Verify blocks of consecutive tokens add only a few percent of sharing on top
+(0.96-0.98), and a request's tokens share about 2 % more experts than separate requests'. Reported only: a W32/W64 or
+verify-width served read would test the premise that cost tracks tiles.
+
+### DQ11 MLP-adapter BUILD amendment 4: a bar that can judge the candidate, and a null for the knob check (#1083)
+
+`bench/dq11/DQ11-MLP-BUILD-AMENDMENT-4.md` registers the maintainer's ruling on Phase 1's `PHASE1_FAIL`
+(`dq11-mlp-phase1-a2000-1`), before any new data:
+- **(a) The floor leaves out its candidate.** Every draw containing R2, the fused epilogue's own arithmetic, leaves the
+  floor, as does any redraw that mechanically lands on the fused read. With no draw left, (a) reads `NO_FLOOR`, which
+  decides nothing.
+- **(b) An FP64 accuracy judge decides.** It uses dequantized NF4 weights and no intermediate rounding. On relative RMS,
+  the fused error must be at most 1.05 × the worst of today's path and the post-(a) draws, with dx read on this bar.
+  - **False-reject control:** before the fused path is judged, a leave-one-out calibration runs on the read itself.
+    If any neutral path fails as a pseudo-candidate, the read is `INDETERMINATE`, never `FAIL`. For a neutral fused
+    path, P(FAIL) ≤ 1/17.
+  - **Disagreement with (a):** where (a) disagrees, the outcome names `ACCURACY_OVER_REORDER`.
+- **(c) KNOB_OFF gets a null first.** It runs three `step-today` processes:
+  - in the read environment;
+  - if those disagree, under DQ11's deterministic configuration C;
+  - if those disagree too, an aggregate relative RMS over the B update: each process is scored by its mean distance
+    to the others, and off fails only if its score exceeds 2× the largest today score (`KNOB_OFF_BY_SPREAD`). Its
+    guaranteed false-reject bound is 1/4; the margin's further reduction is a stated assumption.
+
+  It never mixes environments.
+- **(d)** One independent review before data.
+
+The read stands as registered and the lever stays open. The new read is `dq11-mlp-phase1-a2000-2`, at $0 on the
+A2000. No code or default changes.
+
+### Cross-request routing clustering at sixteen requests: small, real, not a lever (reported)
+
+`bench/routing-clustering/` reads P153's committed router replay against two shuffled nulls, written down before any
+draw. Same-step requests share experts 0.26 % (S0) and 0.64 % (S1) more than the nulls, both intervals clear of 1, far
+from the 2 % a scheduling change would need. The 16-row tiles hold about 2.24 rows each (about 14 % full), a property of
+top-8 routing over 128 experts at sixteen rows that cross-request overlap barely moves. Reported only.
+
+### `E4B_K25_LUT` defaults to `prmt` on qwen3_moe (P158, FLIP; #1313)
+
+Lane P158 read K39's decode in the served step (`bench/p158/RESULTS-p158.md`): on Qwen3-30B-A3B, `prmt` decodes sixteen
+requests 1.0925x as fast as the select tree (the min of four ABBA pairs), one request unchanged, every token identical.
+- **The default:** an unset `E4B_K25_LUT` resolves at engine build, once the model's config is read and before any
+  weight loads. On `qwen3_moe` it is `prmt` where the installed grouped-nf4-gemm carries K39 (0.50.0 or later) and the
+  device is NVIDIA; everywhere else it is `tree`. The resolution and its reason are in `info["k25_lut"]["source"]`
+  (`explicit`, `default-allowlisted`, or `default-off: <why>`).
+- **Never a refusal by default:** an older kernel package or a ROCm device resolves the default to the tree (the same
+  values), so no install breaks and the dependency floor does not move. An explicit `E4B_K25_LUT=prmt` keeps its
+  refusals; `E4B_K25_LUT=tree` opts out.
+- **Scope:** every `qwen3_moe` checkpoint (Qwen3-235B-A22B included) takes the default. The decode is bit-identical
+  to the tree, so the values are the same; the speed was read only at Qwen3-30B-A3B's expert shapes on one RTX 5090,
+  and no speed is claimed for other shapes.
+- **One engine per process:** the resolved default is process-wide, as `serve_paged` builds one engine per process. A
+  process that builds two families keeps the last build's resolution for both (bit-identical values; speed only).
+- **Other families** stay on the tree until a read of their own.
+- **Docs:** the measured claim `e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20` and its STATUS entry.
+
+Files: `experts4bit_qlora/engines/hot_residency.py`, `experts4bit_qlora/serve_paged.py`, `tests/test_k25_lut_default.py`.
+
+### P158 read (#1313): K39's decode in the served step, FLIP (g16 1.0925)
+
+On the shipped default server for Qwen3-30B-A3B, `E4B_K25_LUT=prmt` (K39's decode for K25, grouped-nf4-gemm v0.50.0)
+decoded 16 concurrent requests 9.2 % faster than the select tree: g16, the min of four ABBA pairs, 1.092458 against the
+1.03 bar; one request unchanged (g1 0.999856 against 0.99). Every token matched the tree's, the tree's own null held
+across its five processes, and every build recorded exactly 960 K25 calls and 480 GEMV calls. All six predictions held.
+One RTX 5090, $0.419. `bench/p158/RESULTS-p158.md` and `bench/p158/receipts/p158-5090-1/`. A default flip for
+qwen3_moe follows as its own PR.
+
+### P158 registered (#1313): K39's served read, the K25 decode `lut="prmt"` as Qwen3-30B-A3B's batched-decode expert GEMM
+
+P156 read K39's decode GO in a microbench (1.1755x on the two K25 GEMMs, lower bound 1.1728; at least 1.1103 under its
+sampled clock range). P158 reads it in the served step, by P153's served form.
+- **Arms:** S0, `E4B_K25_LUT=tree` (named), and S1, `prmt` (e4b#1862), on the shipped default server with the int8 head
+  at its qwen3_moe default; a warm-up process, then ABBA twice through W16 and W1 at five reps.
+- **The rule is fixed before data:** FLIP needs g16, the min of four W16 pairs, >= 1.03 and g1 >= 0.99 (W1 is a guard:
+  K25 is not on T == 1), on unrounded minima.
+- **Identity, null first:** the arms are bit-identical by contract, so the gate is token identity, not a quality band.
+  S0 against S0 across processes is checked first and VOIDs the read ("tree not token-deterministic") before any S1
+  difference can be a contract finding against K39.
+- **Engagement:** after the build, K25's call record reads exactly 960 under the arm's decode and the bandwidth GEMV's
+  tally exactly 480 (48 layers x five forwards per row count: the residual licence's two probes, two warm-ups, one
+  capture), derived from the code, tested, and confirmed on a $0 layer-cut build before any rental.
+- **Clocks:** a 500 ms sampler in its own process during every timed block (100 ms cost +0.25 % on a $0 A2000 smoke;
+  500 ms did not) labels a pair "clock-confounded" beyond 2 % either way, beside the verdict, never ruling.
+- **Box:** one RTX 5090 at >= 575 W (power limit and enforced limit), grouped-nf4-gemm v0.50.0 (41ef086e), premise 49
+  tests (K39's compiled contract and e4b's served-route contract among them), guard 1.5 h with the pre-install fit at
+  25 % headroom from two measured served reads, a 70 GB download allowance (the checkpoint is fetched on the box),
+  worst $2.35.
+
+A FLIP opens a separate PR to make `prmt` qwen3_moe's K25 decode by default. Files: `bench/p158/` and
+`tests/test_p158.py`.
+
+### Added
+
+- **`E4B_K25_LUT`** (#1313): K25's codebook decode on the NF4 store's device-grouped decode route. `tree` is the select
+  tree, the default (also when unset), unchanged. `prmt` is K39's byte-permute decode (K25's `lut="prmt"`,
+  grouped-nf4-gemm#569), bit-identical to the tree, which lane P156 read at 1.1755x the tree in a microbench (at least
+  1.110 under the sampled clock range; `bench/p156/RESULTS-p156.md`) at Qwen3-30B-A3B's W16 shapes.
+  - **Opt-in:** no default changes, and no speed claim. Lane P158's served read decides any default.
+  - **Refusals, never a silent fallback:** `prmt` is refused when the installed grouped-nf4-gemm lacks K39's decode
+    or K25 itself (also under `E4B_NF4_GROUPED_SMALLM=auto`) and on ROCm (an inline-PTX decode); at startup also with
+    K25 turned off (`E4B_NF4_GROUPED_SMALLM=0`), where it would select nothing. Any other value is refused.
+  - **At startup:** `serve_paged.build_engine` resolves the knob before loading the model
+    (`hot_residency.resolve_k25_lut`), so a misconfiguration fails there and not on the first request; `info["k25_lut"]`
+    records the resolution.
+  - **Engagement record:** `hot_residency.K25_LUT_SEEN` counts K25's calls by decode (`"<lut>|le256"`; eager calls and
+    graph captures, not replays), and `/health`'s `prefill_routes()["seen"]["moe_k25_lut"]` carries it.
+  - **Bitwise on a GPU:** through the served route's own call, a B=16 step (under the lean glue and with the expanded
+    rows), T == 1, and a CUDA-graph replay give the same bits under `prmt` as under the tree, at Granite-3.1-3B-A800M's
+    and Qwen3-30B-A3B's expert shapes (`tests/test_k25_lut_gpu.py`).
+
+### Added
+
+- **P156's record** (#1313), stream (B)'s decode lane: `bench/p156/RESULTS-p156.md` and the public receipt copy under
+  `bench/p156/receipts/`.
+  - **The read** is GO. K39's decode (K25's `lut="prmt"`) at today's plan is 1.1755x today's select tree on both W16
+    GEMMs, with a lower bound of 1.1728 against the 1.05 bar, over 64 held-out steps of S0's real router picks. The
+    self-pair read 0.9985, and P moved no bit. The median sits in the serial-issue model's band (1.15-1.18) that the
+    static count predicted.
+  - **Clocks:** the bench's end sampled a software power cap (2,272 MHz against 2,400). Giving that whole ratio to P,
+    the lower bound is still 1.1103, so the GO does not depend on clocks.
+  - **The contract held on sm_120:** all 144 prmt plans ran, every one bit-identical to the tree.
+  - **Reported only:** the prmt sweep's best plan pair reads 1.90x the tree at today's plan. The same plans run slower
+    under the tree, so it is the decode that lets them pay. It was selected with a 0.153 curse and needs its own read.
+  - **Total:** $0.151. **Default:** this record changes none. The served read is its own registration.
+
+### P156 registered (#1313): K39's decode against today's select tree at Qwen3-30B-A3B's W16 shapes, on S0's real router picks
+
+A microbench premise for stream (B). P155 found that K25's plan is not the W16 lever. P156 times what P155 could not
+move, the instructions per weight, at the same plan.
+- **Arms:** T, today's select-tree decode, and P, K39's `lut="prmt"` (grouped-nf4-gemm#569, bit-identical to the tree),
+  both at today's plan, called exactly as the served route calls K25, over full-size NF4 stores; T2 is the self-pair.
+- **Routing:** P153's committed router replay (S0's real picks), with P155's checks before data.
+- **The question is fixed before data:** GO needs P's median - 2 SE >= 1.05x on both GEMMs (the SE of the median), on
+  the 64 held-out steps, in paired, rotated reps. A P that moves a bit is a contract finding, not a timing.
+- **Reported, never ruling:** a prmt plan sweep (the 144 plans on 8 selection steps; three carried and confirmed)
+  prices decode x plan; both decodes' compiled registers are recorded; Nsight Compute captures T's and P's calls if the
+  host allows counters.
+- **Predictions:** against the issue/occupancy model: M1 overlap 1.02-1.11, M3 serial 1.15-1.18, and M2 occupancy
+  1.19-1.28 (P155 is weak evidence against it). The basis is triton 3.4.0's count, 17.0 against 24.1 instructions per weight
+  (grouped-nf4-gemm#570 has the newer toolchain's).
+- **Box:** one RTX 5090, grouped-nf4-gemm main at 68bbefc4 (#569's merge, after v0.49.0; K39 unreleased), guard
+  1.25 h ((boot + fit) x 1.25, checked before the install; the bench allowance is the larger of P155's box walls and
+  this lane's $0 A2000 shakedown, x 1.5), worst $1.42. The shakedown's record is a sha-pinned test fixture.
+
+A GO opens a served read as its own registration. Files: `bench/p156/` and `tests/test_p156.py`.
+
+### `E4B_SERVE_ATTN_INT8=1` (lane P149, Phase 0b): int8 weight-only attention projections through grouped-nf4-gemm's K37 kernels (opt-in)
+
+A new opt-in lever for the paged server stores each attention projection as int8 codes plus fp32 per-row scales, on
+grouped-nf4-gemm's per-row grid (`s = absmax / 127`; P147 ruled I8ATTN GO on that grid for Mixtral-8x7B). The bf16
+weight is rounded once at the swap, and no bf16 copy is kept.
+- A call with 1 row runs K37's int8 GEMV. A call with 2 to 16 rows runs K37's small-M kernel. Both go through
+  `dense_i8.linear_i8`.
+- A call with more than 16 rows (a prefill), and any CPU or non-bf16 call, dequantizes transiently to `bf16(q * s)` and
+  runs `F.linear`. That is P147's fake-quant round trip, bit for bit.
+- On Mixtral the census is exactly 4 per layer (`q_proj`, `k_proj`, `v_proj`, `o_proj`: 128 at 32 layers). It is checked
+  before anything is swapped, and the output head is never touched. The swapped modules keep their names, so R2's rope
+  fold still patches every attention module; the build asserts that after the fusions.
+- `/health`'s `attn_int8` records the census and, per row count, which projections routed through K37's kernels or
+  dequantized during the build's graph captures and warm-ups. `levers_env` carries the flag.
+- Refused:
+  - a grouped-nf4-gemm without `dense_i8` (K37);
+  - a value other than `0` or `1`;
+  - combining it with int4 attention (`E4B_SERVE_ATTN_INT4` or `E4B_SERVE_ATTN_INT4_CALIB`), as P149 registers, or
+    with `E4B_DENSE_GEMV_BW=1`, an engineering refusal outside the registration: both route the attention projections'
+    decode calls, and P151's swap would otherwise skip the int8 modules silently;
+  - a biased or non-bf16 projection;
+  - a census miss;
+  - `fuse_qkv` on int8 projections (Qwen3-MoE's fused attention is not built for them).
+
+The default is off, and nothing changes unless it is set. Its quality and speed are P149's box Q+S, read after a
+grouped-nf4-gemm release carries K37.
+
+### Added
+
+- **P155's record** (#1313), stream (B)'s K25 plan sweep: `bench/p155/RESULTS-p155.md` and the public receipt copy under
+  `bench/p155/receipts/`.
+  - **The read** is NO_GO. The best confirmed plan pair is 1.019x today's on both W16 GEMMs (lower bound 1.018 against
+    the 1.15 bar), over 64 held-out steps of S0's real router picks. The self-pair read 0.9999.
+  - **The contract held on sm_120:** all 126 of 144 plans that ran kept today's bits. The other 18 per projection need
+    more shared memory than the card has.
+  - **Reported only:** compaction's ceiling is 1.003x, so it parks. Today's plan is 80 registers at 50 % theoretical
+    occupancy. Plans with higher theoretical occupancy are not faster on gate_up, and at most 1.2 % faster on down.
+  - **Total:** $0.274. **Default:** this record changes none. The decode cost (K39) is timed in its own lane.
+
+### The static guard fit counts the boot
+
+`bench/common/README.md` ("Guard fit") and the docstring of `tests/test_lane_guard_fit.py` now state the per-lane
+static check as (boot + fit) x 1.25 <= guard, where boot is the time from the launch, where the runner's deadline
+starts, to the runner's check. The runner compares against the time left at the check, so a guard equal to fit x 1.25
+would refuse every box. `tests/test_p155.py` already asserts the boot-inclusive form; the first P155 box
+(p155-5090-1) reached its check 85 s after the launch. No runner or test assertion changes.
+
+### CI: the kernel pin moves to grouped-nf4-gemm v0.49.0 (#1313)
+
+The test job installs grouped-nf4-gemm from the v0.49.0 release commit (`a83f6bb3`), which adds `dense_i8.linear_i8`
+(K37): int8-weight projections at decode for 1 to 16 rows. The suite now exercises the released kernel that the opt-in
+`E4B_SERVE_ATTN_INT8` engine path (P149 Phase 0b, #1848, not yet merged) will call. The `[fast]` floor is unchanged. `docs/system-manifest.json`
+already matches grouped-nf4-gemm v0.49.0's copy byte for byte.
+
+### Every new rental runner checks its guard fit before the install, with 25 % headroom
+
+`tests/test_lane_guard_fit.py` requires every runner that gates on time left, other than a frozen list of today's runners,
+to refuse before its first install unless the time left covers its install allowance, its largest need and its reserve,
+times 1.25. The refusal prints the quantity it compares and is not a strike, but two consecutive headroom refusals on
+one lane count as one strike. The check is described in `bench/common/README.md` ("Guard fit"). It follows three guards
+sized to fit exactly on 2026-10-19 (P149 box K, smt-sib, P154). No existing runner changes.
+
+### P155 registered (#1313): K25's plan at Qwen3-30B-A3B's W16 shapes, on S0's real router picks, selection split from confirmation
+
+A microbench premise for stream (B). It sweeps the grouped NF4 small-M expert GEMM's plan, the one knob the kernel's
+contract says moves no output bit, against the 6.81 ms of headroom P154 priced.
+- **Grid:** 144 plans (BLOCK_N x KC x warps x stages), called exactly as the served route calls K25, over full-size NF4
+  stores.
+- **Routing:** P153's committed router replay (S0's real picks, sha-pinned and checked before data).
+- **Selection:** every plan must keep today's bits; the plans are ranked on 8 selection steps, and three are carried.
+- **Confirmation:** the carried three are re-timed against today's plan on the 64 held-out steps, in paired, rotated
+  reps, with a self-pair. GO needs median - 2 SE >= 1.15x on both GEMMs (the SE of the median), decided on the
+  confirmation only.
+- **Reported, never ruling:** a compaction arm (the real-tile prefix) prices tile compaction's ceiling; each plan's
+  compiled registers are recorded; Nsight Compute captures one call of each GEMM if the host allows counters.
+- **Box:** one RTX 5090, guard 1.5 h (the fit with 25 % headroom, checked before the install; the bench allowance is
+  the $0 A2000 shakedown's measured walls x 1.5), worst $1.69. The shakedown's record is a sha-pinned test fixture.
+
+A GO opens a served read as its own registration. Files: `bench/p155/` and `tests/test_p155.py`.
+
+### Added
+
+- **P154's record** (#1313), stream (B)'s W16 NF4 expert byte floor: `bench/p154/RESULTS-p154.md` and the public receipt
+  copy under `bench/p154/receipts/`.
+  - **The read** is READ, on the replay's own route: both route witnesses exact (6,144 K25 calls; 3,072 `nf4_k25|le256`).
+    Bytes per expert were read off the loaded NF4 store (1,769,472 / 884,736), on P152's bf16-head server.
+  - **The floor:** at 16 requests the grouped NF4 small-M expert GEMM reads its weights at 0.42 of the copy rate. That is
+    6.81 ms of headroom over its byte floor, 41 % of the unprofiled step, against P152's recorded GEMM times.
+  - **Total:** $0.399. **Default:** this record changes none, and names no lever.
+
+### SMT fuse Amendment 1b: the fit from the max over hosts; host counters reported only
+
+The smt-sib time fit takes each term's max over the measured hosts plus 25 % headroom (12474 s; guard 4.0 h; worst
+$2.43 per box). Every timed block now records fault, NUMA/THP and page-cache counters, reported only. The SMT lane
+closes on smt-sib-2's reading; the page-cache observation goes to its own registration.
+
+### Added
+
+- `bench/common/host_facts.py`: a runner can write the box's own measured host facts as `host_facts.json`, for the
+  host registry. It records the host's CPU topology and NUMA nodes (`host_*`), the run's own CPU share (affinity and
+  the cgroup quota, v2 or v1), transparent-hugepage state and GPU 0's power, clock and memory, each with its source,
+  plus a `measured_at` stamp. Only numbers and small enums are written, never an identifier. A fact it cannot read is
+  left out, and the helper never fails a run.
+
+### Added
+
+- **P153's W16 cost: token divergence bounded out** (#1313). A $0 router replay on the A2000, recorded under
+  `bench/p153/router-replay/`, bounds the token-divergence term out:
+  - **The method:** S0's and S1's recorded W16 streams went through the same Qwen3-30B-A3B, teacher-forced, in bf16.
+  - **The pre-stated metric:** distinct experts per counted bucket-16 step, S1/S0. It reads 0.9990 against bands stated
+    before the run, which reject anything at or below 1.
+  - **Row spread:** in a robustness check suggested at review, every row-per-expert spread metric is within +/-0.5 %.
+  - **What remains:** the 16-request cost stays observed, not attributed. The resident int8 copy is the remaining named
+    candidate, and testing it is a paid served A/B, registered first. No default changes.
+
+### P154 registered (#1313): the W16 NF4 expert byte floor of Qwen3-30B-A3B's served step, on the replay's own route
+
+A REPORTING instrument for stream (B): it prices the headroom of the grouped NF4 small-M expert GEMM that P152 named at
+71.2 % of the 16-request step, and names no lever. P152's runner is cut to its routing pass, which now runs on the
+replay's route: the pass sets `DEVICE_GROUPING` itself, and must count exactly two K25 calls a MoE layer a step on an NF4
+store on all 48 layers, else VOID. The store's bytes per expert are read off the loaded tensors, and the arena must be
+the box's own bake. The floor is compared with P152's GEMM times as recorded, from its committed verdict, sha-pinned.
+One RTX 5090, guard 1.0 h (the time-left fit with 25 % headroom), worst $1.72. Files: `bench/p154/` and `tests/test_p154.py`.
+
+### Added
+
+- **P152's record** (#1313), stream (B)'s per-name census of Qwen3-30B-A3B's served step at W16 and W1:
+  `bench/p152/RESULTS-p152.md` and the public receipt copy under `bench/p152/receipts/`.
+  - **The read** is READ. At 16 requests the grouped NF4 small-M expert GEMM takes 71.2 % of the unprofiled 16.50 ms
+    step (gate_up 50.9 %, down 20.3 %); at one request the expert GEMVs already run at their isolated speed.
+  - **The W16 expert byte floor** reads UNREAD: the registration assumed int4 experts through K19, and the served store
+    is NF4. An NF4 floor would be its own registration.
+  - **Total:** $0.521 (one power-floor refusal at $0.015, not a strike, and the read at $0.506).
+  - **Default:** this record changes none.
+
+### Changed
+
+- `E4B_INT8_HEAD_BW` defaults to **1 on `qwen3_moe` at Qwen3-30B-A3B's head shape** (151936 x 2048; #1313, lane P153).
+  The lm_head serves from its per-row int8 grid, and its single-row decode GEMV runs through grouped-nf4-gemm K36's
+  `gemv_i8_bw`.
+  - **Read:** P153 (`p153-5090-1`) on an RTX 5090 read FLIP. One request is **1.052x** as fast: the smallest of four
+    ABBA pairs, 1.0520-1.0530, a 0.189 ms step saving.
+  - **Outputs change:** the head serves from its int8 grid at every batch size, so logits differ from the bf16 head.
+    P153's W1 tokens matched over 160, and 12 of 16 W16 rows diverged by 160, inside P150's quality gates.
+    `E4B_INT8_HEAD_BW=0` restores bf16-head output.
+  - **Sixteen requests:** 0.992, an observed cost not attributed. The two candidates are the resident int8 copy and
+    the different tokens the rounded head decodes at 16 rows.
+  - **Quality:** read on Qwen3-30B-A3B @ad44e777 (P150's GO at both of P125's gates; P153's SANE bias +0.0022, argmax
+    0.989). Same-shape checkpoints inherit the default unread. `E4B_INT8_HEAD_BW=0` opts out.
+  - **Scope:** the default is gated on the head's shape, the one K36 has a tuned plan for. Other heads (Qwen3-235B-A22B's
+    151936 x 4096) and every other family stay off until a read of their own.
+  - **Requirement:** the default needs grouped-nf4-gemm >= 0.48.0; below it the default resolves off (recorded in
+    info.int8_head_bw); the next release raises the [fast] floor.
+  - **Never a crash:** a head the swap refuses (tied, biased, an int4 head, not bf16) and a grouped-nf4-gemm without
+    K36 resolve the default off, with the reason in `/health`'s `levers.int8_head_bw.source`. An explicit `1` still
+    refuses them.
+  - **Memory:** with `E4B_PAGED_MAX_SEQS=auto`, the copy's bytes (N x K + 4N, 0.29 GiB at this head) enter the
+    footprint the width is sized against whenever the knob resolves on. Explicit widths are unchanged.
+  - The claim is `e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19`.
+
+### SMT fuse Amendment 1a: five more pre-create spares
+
+`smt-sib-4..8` are spares for refusals before any instance exists (no_such_ask, a listing gone) and NOT_RUN at the
+pre-flight only, since the launcher's pin walks the offers of one machine per run id. One reading is still taken;
+the worst stays $1.53 per created box, and the lane's aggregate worst is 8 x $1.53 = $12.24.
+
+### SMT fuse Amendment 1: the second hardware thread, pinned
+
+`bench/smt-fuse/smt_sib_box.py` reads what `smt-fuse-2` could not: each rep runs in a fresh process pinned before torch
+is imported, to K physical cores (PHYS), the same K cores with both hardware threads (SIB), or 2K physical cores (WIDE),
+with K = min(16, floor(quota / 2.5)). The reading is SIB/PHYS on the fuse (15 timed blocks per process, their median), the
+whole block reported, over 8 interleaved triples; the registration states the resolvable effect (a fuse SIB/PHYS of about 0.80) and a tested time fit (guard 2.5 h);
+triples with a busy co-tenant on the arm's sibling threads, or CFS throttling, are reported but not read. Ids
+`smt-sib-1..3`. The drive no longer fetches the box's venv.
+
+### P149 Amendment 3: box K's guard fits its own bench (0.75 h), three more spares
+
+`p149k-5090-6` reached the bench (575 W; the kernels' suite compiled on the card, 135 passed) and stopped at rc 40: the
+bench's time-left check needs 1200 s + a 600 s reserve, the whole registered 0.5 h guard, so no box could pass it after
+any setup. That is strike one. Box K's guard is now 0.75 h (worst $0.84). The runner refuses before the install when the
+time left cannot fit the install, the bench and the reserve (rc 19, not a strike), its STOP-2 line prints the reserve,
+and it records the bench's own wall time. A test asserts the fit, setup included, against the registered guard. Spares
+`p149k-5090-7` to `-9` follow Amendment 1's terms.
+
+### CI: the kernel pin moves to grouped-nf4-gemm v0.48.0 (#1313)
+
+The test job installs grouped-nf4-gemm from the v0.48.0 release commit (`ef2faf38`), which adds `dense_gemv`:
+`gemv_i8_bw` with `quantize_rows_int8` (K36) and `gemv_bf16_bw` (K35). The suite now exercises the released kernels that
+`E4B_INT8_HEAD_BW` and the dense GEMV route call. The `[fast]` floor is unchanged at `>=0.43.0`; the next release raises it.
+
+`docs/system-manifest.json` is synced byte for byte to grouped-nf4-gemm v0.48.0's copy (its `consumer_ci_pin` prose
+reads v0.47.1), which the manifest check compares against the kernel's latest tag. The prose moves to v0.48.0 with the
+kernel's next release, kernel-first.
+
+### Added
+
+- **P153's record** (#1313), D2's served read of the int8 lm_head: `bench/p153/RESULTS-p153.md`, the public receipt
+  copy under `bench/p153/receipts/`, and the claim `e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19`.
+  - **The read** is FLIP: one request is 1.052x as fast on an RTX 5090, 0.998 of P148's projection. Sixteen requests
+    read 0.992, inside the 0.99 line; S1 is below S0 in every W16 pair, an observed cost not yet attributed. SANE is
+    inside the bars.
+  - **Total:** $0.445.
+  - **Default:** this record changes none. `E4B_INT8_HEAD_BW` stays opt-in until a separate default PR.
+
+### P152 registered (#1313): where Qwen3-30B-A3B's 16-request served step goes, kernel by kernel
+
+An instrument for stream (B) of #1313: P145's per-name census by counted substitutions, on Qwen3-30B-A3B at W16 (the
+subject) with a W1 re-read, on one RTX 5090. It adds the maintainer's three terms. Every share is over the box's own
+unprofiled step. A routing census records the experts each layer's router touched per step at W16, so the expert byte
+floor reflects real traffic. The box refuses below a 575 W power limit and records the GPU state per phase. It names
+candidates and changes nothing by default. Registration: `bench/p152/PREREG-p152.md`.
+
+### P149 Amendment 2: box K's rate term, up to $1.05/h with the base tier first
+
+Box K may now rent an RTX 5090 at up to $1.05/h including the disk (the launcher's RTX 5090 class ceiling of $1.05/h,
+raised 2026-10-19), taking a base offer at <= $0.85/h first whenever one passes. Its worst case moves from $0.48 to $0.58
+(0.5 h x $1.05 + 5 GB x $0.011/GB). The registered 575 W power floor and the $0.85 rate had stopped meeting: at 15:07Z on
+2026-10-19 all 10 hosts with a recorded cap of at least 575 W listing an RTX 5090 were above $0.85/h, and 8 pass every other
+term at <= $1.05/h. The rule, the reducer, the kernels, the box's other terms and box Q+S are unchanged.
+
+### DQ11 MLP Phase 1 runner: wheel RECORDs parsed as CSV (#1083)
+
+`dq11_mlp_phase1_run.py` compares each locked wheel's RECORD with the installed one. It split RECORD lines by hand, but
+RECORD is CSV, and torch's wheel quotes every path (`"functorch/__init__.py",sha256=...`) while pip writes the
+installed copy unquoted. So torch's wheel side read as empty, and the check refused a correct install on the A2000. It
+failed closed: no read ran. The runner now parses RECORD with `csv`. A test covers a quoted RECORD against its unquoted
+install.
+
+### Q235 results (#835): MILESTONE PASS, one full-depth QLoRA optimizer step on Qwen3-235B-A22B-Instruct-2507
+
+`bench/q235/RESULTS-q235.md` records Q235's eight run ids and the milestone read. `q235-pro6000-8` ran under Amendment 16 on
+one RTX PRO 6000 Blackwell Workstation Edition: all 94 decoder layers, every routed expert, two Shape B optimizer steps, a
+fresh-process repeat. `q235_verdict.py` reads MILESTONE PASS, "rules 1-10 hold", against the full-depth layer-streamed bf16
+reference, and the maintainer re-derived it on CPU. The receipts (`bench/q235/receipts/`) are the box's own outputs,
+byte-identical to the private receipt store, with relocation manifests for the per-layer tensors. No default, gate or claim
+beyond the record changes.
+
+### P153 registered (#1313): D2's served read of the int8 lm_head through grouped-nf4-gemm K36
+
+`bench/p153` registers the served read of `E4B_INT8_HEAD_BW=1`. The knob rounds Qwen3-30B-A3B's lm_head in place to
+the per-row int8 grid P150 ruled GO on quality, so every row count reads that grid. It routes the head's one-row decode
+GEMV through K36's kernel. The read runs P151's form on one RTX 5090 with a recorded power cap of at least 575 W: eight
+ABBA arms at five reps, P143 A2's SANE gate, and the same bar (FLIP iff the minimum of four W1 pairs >= 1.03 and
+g16 >= 0.99).
+
+A warm-up process now runs first, as in P131's Amendment 2. It is integrity-checked and reported, but never scored,
+because P151's read went NOISY on a slow first process. P148 projected 4.84 % of the unprofiled 3.913 ms step; at P151's
+realized share that is g1 about 1.036. Nothing changes by default before the read.
+
+### DQ11 MLP-adapter BUILD Phase 1: the A2000 runner, and Amendment 3 (#1083)
+
+`bench/dq11/dq11_mlp_phase1_run.py` runs Phase 1 over the real L fixture on the RTX A2000, at $0 and for correctness
+only. Each part is its own process and writes one JSON record:
+- **`stage-check`:** checks the model snapshot against `model_files.json` and the sealed inputs against
+  `locked_inputs.json`.
+- **`reads`:** the per-module read at Amendment 1's state, on layers 0, 15 and 31.
+- **`reported`:** the same read after two AdamW updates (reported only).
+- **The step witnesses:** `step-today`, `step-off` and `step-fused`.
+- **K8's short run:** `k8-unfused` and `k8-fused`.
+- **`reduce`:** writes the outcome.
+
+Every part refuses without the A2000 bus claim, on any other device, or when the installed PEFT, transformers,
+bitsandbytes, accelerate and torch are not the A2000 lock's (`rehearsal/wheels.json`). It records each package's
+version, its locked wheel's sha256, and whether the installed files are that wheel's.
+
+The per-module read gains three things:
+- a second self-check, the reference's `_LoraLinear` path with every split off;
+- a floor folded in one draw at a time (each draw holds about 210 MB at the fixture's size);
+- element counts and ULP distances for the tensors held bit for bit.
+
+`DQ11-MLP-BUILD-AMENDMENT-3.md` registers the runner's terms before data:
+- PEFT 0.21.2 is the version of record. The DQ11 locks pin it, and the seat's 0.19.1 is not the fixture's.
+- The canonical initializer is "PEFT's own initialization".
+- It fixes the step witnesses, including the recompute count call for call.
+- K8's short run is 8 updates.
+
+### P151 results (#1313): D1's served read closed at NOISY; `E4B_DENSE_GEMV_BW` stays opt-in
+
+`p151-5090-4` read NOISY, a VOID and the lane's strike one. The box's first process ran 3.3 % slow (W1 252.86 tok/s
+against about 261.5 for the other S0 arms, with no throttle), which put one W1 self-pair at 1.0345. By the maintainer's
+ruling the lane closes without a re-run: the rule takes the minimum of four pairs, and the three clean pairs top out at
+1.0247, under the 1.03 bar whatever the slow arm read. As context only, those pairs show about +2.45 % W1 decode on one
+host, about 0.73 of P148's projection. Three earlier run ids were spent by refusals before any install, two of them
+520 W hosts the power floor caught. Nothing changes by default. Record: `bench/p151/RESULTS-p151.md`.
+
+### P149 Amendment 1: three spare run ids for box K, for refusals before the install
+
+`p149k-5090-2` and `p149k-5090-3` were refused by the box's 575 W power floor (rc 17: 400 W and 475 W cards) before any
+install. P149's box K now also accepts `p149k-5090-4`, `-5` and `-6`, for refusals before the install only: any of the
+runner's refusals ahead of its first `pip install` (rc 18, 10, 15, 13, 16, 17 or 28), a pre-create refusal, or
+`no_such_ask`. Which of those count as strikes is unchanged; a box that reaches the install and fails is still a strike. `-4` is already
+spent: it was launched before this amendment registered it, and the driver refused the id before any box work. The
+runner's and the driver's run-id lists, the staged pin and the tests follow; the rule and the box terms are unchanged.
+
+### `E4B_INT8_HEAD_BW=1` (#1313, lane P153): the lm_head on its int8 grid, its single-row decode GEMV through grouped-nf4-gemm's K36 kernel (opt-in)
+
+A new opt-in knob for the paged server serves the output head on its per-row int8 grid. It routes the head's one-row
+calls (a decode step at one request, or the bucket-1 CUDA graph) through `dense_gemv.gemv_i8_bw`. That is
+grouped-nf4-gemm's K36: experts4bit-qlora P148's int8 prototype kernel and quantizer, shipped verbatim under a tolerance
+contract against cuBLAS on the bf16 head.
+- **Knob-on changes multi-row outputs too.** The head's bf16 weight is rounded in place to its int8 grid cast back to
+  bf16, exactly P150's I8HEAD round trip. So every row count computes the head P150 ruled GO on quality at both gates,
+  and the served model never depends on the batch size.
+- One-row calls go to the kernel over the same codes and fp32 scales. A non-contiguous one-row input is copied, never
+  passed to `F.linear`. More rows, CPU tensors and other dtypes go to `F.linear` on the rounded weight.
+- The head keeps its weight storage (no second bf16 copy) and adds the int8 codes and scales, about 0.31 GB at
+  Qwen3-30B-A3B's head.
+- Refused: a grouped-nf4-gemm without `gemv_i8_bw`, a head that is not an `nn.Linear` (an int4 head), a head tied to the
+  input embeddings, a bias, and a weight that is not bf16.
+- `/health`'s `levers.int8_head_bw` records the head swapped and, per row count, whether it routed through the kernel
+  or passed during the build's graph captures: the engagement record a served read checks.
+
+The default is `0`, and nothing changes unless it is set. Its speed is P153's served read.
+
+### P151 Amendment 1 (#1313): three spare run ids for refusals before the install
+
+`p151-5090-1` was refused by the box's 575 W power floor (rc 17, a 520 W card with no recorded cap), and `p151-5090-2`
+at the provider (`no_such_ask`), both at $0 and before any install. P151 now also accepts `p151-5090-4`, `-5` and `-6`.
+They are only for refusals before the install: a host floor (rc 17 or 15), a pre-create refusal, or `no_such_ask`. A box
+that starts and fails is still a strike. The runner's and the driver's run-id lists, the staged pin and the tests follow;
+the rule and the box terms are unchanged.
+
+### Added
+
+- HP2 results (`bench/hp2/RESULTS-HP2.md`, receipts in `bench/hp2/receipts/hp2-5090-1/`): G1 STOP on one RTX 5090 ($2.144), no competitor reading. On 300 calibration rows, the differential zero-adapter bias between e4b and Unsloth read δ0 = −0.0027 with SE 0.0024. The row pairing did not cancel the per-row noise (ρ = 0.009), so the smallest readable margin is 0.0149, above the expected 0.005. No e4b-vs-Unsloth held-out bias difference larger than about 0.015 nats per row is resolvable with this instrument at R = 300. H1 is falsified and H2 untested.
+
+### DQ11 MLP-adapter BUILD Phase 1: the per-module reads, reference and bar (#1083)
+
+`bench/dq11/dq11_mlp_phase1.py` holds the per-module half of Phase 1 (`DQ11-MLP-BUILD-PREREG.md` D3, Amendment 1),
+tested on CPU against real bitsandbytes NF4 bases:
+- **The truth:** `peft_read`, PEFT's own unfused path, gives eleven tensors: three outputs, dx, dh, and six A/B
+  gradients.
+- **The reference:** `ref_read` repeats PEFT 0.19.1's `Linear4bit` LoRA forward op for op, with redraws R1–R5. With no
+  redraw it is bit-identical to PEFT; that is the `REF_MISMATCH` check.
+- **The engine:** `fused_read` reads the engine on the same module.
+- **The rest of the read:** the 31-draw floor and its coverage map, Amendment 1's adapter terms and shares, seeded B, the
+  σ choice, `e_min`, the bar, and the outcome line (`PHASE1_FAIL`, or `PHASE1_PASS` with any `RANK1_UNRESOLVED`
+  tensors named);
+- `lora_forward_counter`, the zero-PEFT-forward witness, counts with a class-level wrapper rather than module hooks.
+
+`DQ11-MLP-BUILD-AMENDMENT-2.md` registers that erratum to Amendment 1 before any Phase 1 data. Since #1814, a hook
+makes a fused MLP fall back to PEFT's path. The amendment also registers the `enable == 96` and `fallback == 0` asserts
+(`ENGAGE_COUNT`, `VOID_FALLBACK`).
+
+On CPU, R4 (the rank-split LoRA input gradient) and R1's forward change are absorbed by the bf16 cast. So dh is moved by
+no redraw, and the bar requires it bit for bit, as the registration provides. The A2000 runner is a separate change.
+
+### The dense MLP LoRA fusion follows PEFT state changes made after fusing (#1083)
+
+`engines/dense_lora_fuse.py` (#1809) now re-reads each fused MLP's PEFT state on every call. That call runs the class's
+own forward if, after fusing, any of these happened to a projection:
+- its adapters were disabled (PEFT's `disable_adapter()` context);
+- another adapter was set, or an adapter was merged;
+- PEFT's input cast was turned off;
+- a hook was added to it or to its `lora_A` / `lora_B` (PEFT's mixed-batch `adapter_names` arrive that way);
+- its scale changed so the three differ (`set_scale`, `scale_layer`);
+- an adapter module was replaced under the same name.
+
+A call under autocast also runs the class's own forward. Each such call is counted in
+`DENSE_MLP_LORA_STATS["fallback"]`, which replaces the `autocast` counter. A changed scale that all three projections
+share is read live, as PEFT reads it.
+
+- **New refusals:** an MLP whose input cast is already off at `enable` time, and a hook on a projection's `lora_A` or
+  `lora_B`, or a backward hook on the projection, which the fused forward would skip.
+- **Behavior:**
+  - a second `enable` counts the MLPs it already fused;
+  - the backward skips the input-gradient matmul when the input needs no gradient;
+  - the `calls` note says it counts checkpoint recomputes.
+- **Tests:** a float64 `gradcheck` through the checkpoint recompute.
+
+It is still off by default.
+
+### P151 registered (#1313): D1's served read of the dense single-row GEMV on Qwen3's attention projections
+
+`bench/p151` registers the served read of `E4B_DENSE_GEMV_BW=1`. The knob routes Qwen3-30B-A3B's one-row decode GEMVs
+on the fused q/k/v and o projections through grouped-nf4-gemm K35's kernel. The read runs P143 Amendment 3's form on one
+RTX 5090 with a power limit of at least 575 W: eight ABBA arms at five reps, P143 A2's SANE gate, and the same bar
+(FLIP iff the minimum of four W1 pairs >= 1.03 and g16 >= 0.99). The arms' engagement and power limits are checked.
+P148 projected 3.35 % of the unprofiled 3.913 ms step, so the registration predicts NO_FLIP at least as likely as FLIP.
+Nothing changes by default before that read.
+
+### P150 results (#1313): the int8 lm_head keeps the quality gate on held-out windows (GO)
+
+Rounding only Qwen3-30B-A3B's lm_head to its per-row int8 grid (the lever P148 read in a microbench) keeps P125's
+quality gate at both ruled gates. The read used wikitext-validation windows nobody had read, with their sha256s
+registered before data:
+- t1: argmax 0.989, d + 1.645 SE 0.0012 against a bound of 0.0052;
+- k16: argmax 0.990, 0.0011 against 0.0057.
+
+This is a ruling on quality only. The int8 head's speed is a served read of its own, after its kernel ships, and nothing
+changes by default. Record: `bench/p150/RESULTS-p150.md`.
+
+### DQ11 MLP-adapter BUILD amendment 1: Phase 1's adapter state, before data (#1083)
+
+`bench/dq11/DQ11-MLP-BUILD-AMENDMENT-1.md` registers what the maintainer ruled during the engine's review (#1809):
+- **D2's text:** the engine patches the MLP module's forward, not each `LoraLayer`'s.
+- **Phase 1's adapter state:** seeded random B (seed 3407). σ is the smallest of 0.01 / 0.02 / 0.05 / 0.1 that puts the
+  adapter term at ≥ 1 % of every checked tensor on the unfused path; otherwise `VOID_LORA_SHARE`. Every share is
+  recorded, with the smallest adapter-term error the bar can see in each tensor; where a rank-1 error could hide, the
+  outcome says `RANK1_UNRESOLVED`.
+- **Reported only:** the state after two AdamW updates of the L path.
+- **The reference:** the redraws' reference repeats PEFT's `Linear4bit` LoRA path. R5's order comes from a $0 A2000
+  instrument probe. The reference must equal PEFT bit for bit before any floor is read (`REF_MISMATCH`).
+- **Engagement:** the harness asserts `enable_dense_mlp_lora_fuse` returns 96 (`ENGAGE_COUNT`), and the call counter
+  includes checkpoint recomputes.
+
+No code or default changes.
+
+### P131 results (#846): the split K19 tile table is not faster on the served prefill graph
+
+On one RTX 5090, K19 over a split tile table (`E4B_K19_PREFILL_BIG_M`) computes the 16-row table's arithmetic bit for
+bit at both tall tiles, but neither clears the registered x1.02 on the served 512-token first-chunk prefill graph of
+Qwen3-30B-A3B: m32 reads 0.9836 and m64 1.0073 over eight processes. The verdict is M32_HELD M64_HELD DEFAULT_NONE, so
+the knob stays opt-in and nothing changes by default. Record: `bench/p131/RESULTS-p131.md`, with the proof, a host
+stall and the reading's receipts.
+
+### `E4B_DENSE_GEMV_BW=1` (#1313, lane P151): the attention projections' single-row decode GEMVs through grouped-nf4-gemm's K35 kernel (opt-in)
+
+A new opt-in knob for the paged server routes the fused q/k/v and o projections through `dense_gemv.gemv_bf16_bw`
+when a call has one row. That is a decode step at one request, or the bucket-1 CUDA graph. The kernel is
+grouped-nf4-gemm's K35: experts4bit-qlora P148's prototype GEMV, shipped verbatim under a tolerance contract against
+cuBLAS.
+- The swapped module shares the projection's weight; there is no copy.
+- More rows (a prefill, or a decode bucket above 1), CPU tensors and other dtypes go to `F.linear` unchanged.
+- Refused: a grouped-nf4-gemm without `dense_gemv`, a projection with a bias or a non-bf16 weight, and a model where
+  nothing matched.
+- `/health`'s `levers.dense_gemv_bw` records the modules swapped and, per row count, which modules routed through the
+  kernel during the build's graph captures: the engagement record a served read checks.
+
+The default is `0`, and nothing changes unless it is set. Its speed is P151's served read, registered after a
+grouped-nf4-gemm release carries K35.
+
+### Added
+
+- P149 Phase 0a, box K's kit (`bench/p149/`): prototype W8A16 kernels for Mixtral-8x7B's attention projections (`p149_kernels.py`: an M == 1 int8 GEMV with split-K and an M == 2..16 small-M kernel; the int8 codes and fp32 row scales are `bench/i8dense/i8_fakequant.py`'s), the microbench against cuBLAS bf16 at Mixtral's shapes (`p149k_bench.py`), its registered reducer (`p149k_reduce.py`: K_GO iff the W1 projected in-situ saving reaches 2 % of P145's 8.125 ms period), the box runner (a 575 W power floor before any install, the kernels' suite compiled on the card) and the driver. CI runs the kernels' suite (135 tests) under Triton's interpreter in its own process. No default, gate or speed claim changes.
+
+### DQ11's dense MLP LoRA fusion engine, off by default (#1083)
+
+`experts4bit_qlora/engines/dense_lora_fuse.py` is the engine that `bench/dq11/DQ11-MLP-BUILD-PREREG.md` registered
+(D1, D2). `enable_dense_mlp_lora_fuse(model)` takes each decoder MLP whose `gate_proj`/`up_proj`/`down_proj` are
+vanilla PEFT LoRA modules on bitsandbytes NF4 bases:
+- **gate and up:** one FP32 cast of their shared input and one rank GEMM against the stacked `[A_gate; A_up]`;
+- **every adapter:** its B GEMM added into its base output in FP32 by one in-place `addmm_` (the scale as alpha), cast
+  back once;
+- **autograd:** a custom Function returns the gradients of the input, every A and every B, and checkpoint recompute
+  runs the same Function.
+
+Rank compute stays FP32, so outputs and gradients equal PEFT's to rounding. The registration's Phase 1 holds each tensor
+to the unfused path's neutral floor on the A2000.
+
+It returns the adapters fused (96 on Mistral-7B). An MLP with dropout, DoRA, more than one active adapter, a merged or
+non-FP32 adapter, a base that is not NF4, or a biased base keeps PEFT's path, and its reason is in
+`DENSE_MLP_LORA_STATS["refused"]`. `disable_dense_mlp_lora_fuse` restores every fused MLP's own forward.
+
+No trainer calls it. `E4B_DENSE_MLP_LORA_FUSE` (read by `dense_mlp_lora_fuse_requested()`) is off unless set; DQ11's
+Phase 1 harness and Phase 2 kit read it. No default changes.
+
+### P150 registered (#1313): D2's quality ruling, the int8 lm_head on held-out windows
+
+P148 read an int8 lm_head GO in a microbench, a premise and never a gain. Before any kernel reaches the served path,
+`bench/p150/` rules whether rounding only the lm_head to its per-row int8 grid (P148's lever, bit for bit) keeps P125's
+quality gate. The read runs the W8A16 split premise's instrument on P125's subject, but on **held-out** windows: the
+same corpus's validation split at P125's counts (t1 196, k16 123), with the windows' sha256s registered before data.
+The rule is fixed first: GO iff argmax ≥ 0.95 and d + 1.645 SE ≤ P125's bound at both gates, else PARK. A GO licenses
+quality only; the speed is a served read of its own. Nothing changes by default.
+
+### P148 results (#1313): both dense-GEMV levers clear the microbench bar
+
+In a CUDA-graph microbench on one RTX 5090, two prototype kernels read faster than cuBLAS at the B=1 step's dense
+GEMV shapes. Projected onto P142's in-situ times:
+- **D1**, a bf16 GEMV for fused q/k/v and o: 0.131 ms (3.0 % of the step).
+- **D2**, an int8 lm_head: 0.190 ms (4.3 %).
+
+Both clear the registered 2 % bar. These are microbench premises, never quoted gains. Nothing changes by default. D2
+next owes a served quality ruling at both of the split premise's gates. D1 becomes a grouped-nf4-gemm kernel with its
+own tolerance contract and served read. Record: `bench/p148/RESULTS-p148.md`.
+
+### Added
+
+- P147 results (`bench/p147/RESULTS-p147.md`, receipts in `bench/p147/receipts/p147-a2000-1/`): READ on the lab RTX A2000 at $0. Int8 weight-only rounding of Mixtral-8x7B's 128 attention projections keeps the W8A16 split-premise gate at both gates (W1 upper 0.0023 against the bound 0.0116, argmax 0.981), so I8ATTN is GO. NF4 misses both terms at both gates, so NF4ATTN is PARK. The int8 head is reported (argmax 0.99). The instrument checks passed, and the repeat arm was bit-identical. A GO starts nothing by itself: the next step is a 5090 speed registration that re-checks the rule on the served card.
+
+### Changed
+
+- Q235 Amendment 16 (`bench/q235/PREREG-q235.md`), the simplification after strike 2: the box's cap is half the time left at its start, less the 300 s reserve, replacing Amendment 12's leg-scaled 2,997 s, which VOIDed `q235-pro6000-7` with 4.9 h of its guard left. The repeat is a strict subset of the box's work, so the other half holds it. The box records each expert layer's load time (`load_layers.jsonl`) and the host's CPUs (`cpu.json`), both never gated. A box whose load alone runs past its half-cap exits 18 as VOID_BY_HOST, not a strike. torch's default pool stays (the SMT fuse premise). No rule, band, floor or rate changes; `q235.sha256` re-sealed.
+
+### SC1g: a failed `sc1g_kl.py` self-test now reports its numbers
+
+When `sc1g_kl.py --self-test` fails in CI, `tests/test_sc1g_checks.py` now re-runs the `identity reads 0` case's own
+construction in a fresh interpreter. It prints what that reads: the identity maximum, the NaN count and the gap between
+the two rest roundings, with the runner's torch and numpy versions, CPU capability and CPU flags. A guard test pins the
+restated construction to the self-test's source. The instrument is unchanged, since A5's rule digest pins it whole. On
+2026-10-19 one CI runner failed that case at a value float64 roundoff cannot reach; the SC1g README records it.
+
+### Changed
+
+- `E4B_ATTN_SPLIT_CAP` defaults to **16 on `qwen3_moe`** (#1313, lane P143). The paged FP8 attention decode now
+  runs at most 16 splits; the library planned 32 from the block table's capacity.
+  - **Read:** P143 Amendment 3 (#1788, `p143a3-5090-1`), the binding served read on an RTX 5090: one request is
+    **1.044x** as fast (the smallest of four ABBA pairs, 1.0442-1.0448), and 16 requests are unchanged (0.992).
+    SANE is exact (bias 0.0, argmax 1.0). The cap is bitwise-identical to the plan at contexts <= 1024, and within
+    A2's fp64 contract (error 0.9976-1.0000x the plan's) at 2048 and above.
+  - **Earlier read:** Amendment 2's NO_FLIP (#1778, g1 1.0297 under a noisy self-pair) is on the record.
+  - **Scope:** only buckets 1, 2 and 4 move. Every other family keeps the library's plan, and Mixtral waits for a
+    read of its own.
+  - **Measured basis:** Qwen3-30B-A3B on an RTX 5090 (170 SMs). Other `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B)
+    and other cards take the default by family without a read of their own. The plan is SM-scaled, so the cap moves
+    B 1-6 on a PRO 6000 and B 1-4 on a 4090.
+  - **Way back:** `E4B_ATTN_SPLIT_CAP=0`. The claim is `e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19`.
+
+### DQ11 MLP-adapter BUILD registered before code or data (#1083)
+
+The L-census read `BUILD_MLP`, so `bench/dq11/DQ11-MLP-BUILD-PREREG.md` registers its BUILD:
+- a dense gate/up/down LoRA fusion engine, off by default and bitwise off;
+- an A2000 correctness phase against the unfused path's own neutral floor;
+- a matched unfused/fused update on an RTX 5090, read as H = the minimum over four ABBA pairs, at ≥ 5%, with K8
+  unchanged.
+
+The registration states a ceiling of about 9% and predicts NO_GAIN as the likelier outcome. No default changes.
+
+### P148 registered (#1313): the dense bf16 decode GEMVs, a falsify-first microbench
+
+P142's per-name table puts the dense bf16 GEMVs at 41 % of the one-request step on an RTX 5090. Fused q/k/v and o run
+at 75-79 % of the card's DRAM rate, and the lm_head at 92 %. `bench/p148/` times cuBLAS against two prototype kernels in
+one CUDA-graph harness, with no model:
+- **D1:** a bandwidth-targeted bf16 GEMV for q/k/v and o.
+- **D2:** an int8 lm_head.
+
+The rule is fixed before data: each lever GOes if it saves >= 2 % of the step within a tolerance contract, with a NOISY
+rung and a transfer anchor. A GO starts kernel work only, and the saving is a premise, never a quoted gain. The int8
+head also carries a quality gate before any flip. Nothing changes by default.
+
+### P131 Amendment 2: a warm-up process 0, and the GPU state per process (#846)
+
+The proof `p131-prove-1` PROVED, but its first process was about 4.7 % faster on every arm, which alone trips the NOISY
+span guard. Before any reading data, a warm-up process 0 now runs Phase B and a speed pass whose timing is reported only.
+It never enters the span guard, the gains, the default's interval or any bar. Processes 1–8 are speed-only. Every
+integrity check (FUNCTION, DETERMINISM, engagement, refusals, the decode check) still reads process 0. Every process
+records nvidia-smi's SM and memory clocks, power, temperature and clock event reasons four times (the start of its speed
+pass, right after the warm rounds, right after the timed rounds, and the end), reported only. The reducer's self-test grows to 44 cases. The reading's guard rises from 2.0 h to 2.5 h (worst about
+$2.80), sized from the proof's measured 7-minute process load.
+
+### Added
+
+- **P143's record** (#1313), the paged FP8 attention decode's split cap: `bench/p143/RESULTS-p143.md`, the public
+  receipt copies of all four launches under `bench/p143/receipts/`, and the claim `e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19`.
+  - **Step 1** read GO_FIXED.
+  - **Amendment 2** read NO_FLIP (g1 1.0297 under a noisy self-pair).
+  - **Amendment 3**, the binding read, is FLIP: one request is 1.044x as fast on an RTX 5090, 16 requests are
+    unchanged, and SANE is exact.
+  - **Total:** $0.922.
+  - **Default:** this record changes none. The default moves with the flip PR.
+
+### DQ11 L-census: a pre-command host stall continues the envelope (#1083)
+
+`dq11_l_census_launch.py` stopped an envelope at any created instance. A created instance that stalls at the
+controller's pre-flight and never runs its command (proven from the controller's own receipt and the ledger) now lets
+the envelope continue to its next declared ID, under three journal-derived bounds: at most one instance that runs the
+command, a cumulative all-in across every attempt, and every stalled machine excluded from discovery, binding and the
+quote. `--run-id next` takes the first unused declared ID. Any other created instance still stops for the maintainer.
+
+### P131 Amendment 1 (#846): lanes rent in parallel, and hosts are pinned under the market rule (registration only)
+
+- **Why.** P131's 10-10 terms made it wait for DQ11's close and SC2f's teardown, with a per-run ACK naming the host.
+  SC2f's bar hosts are scarce, so that order held P131 back indefinitely, although P131 has no host-quality bar of its own.
+- **The change.**
+  - P131 rents in parallel under the standing spending rule.
+  - Hosts are pinned like every other lane: up to three stable RTX 5090s at <= $0.85/h, with no per-run ACK.
+  - SC2f's ten bar machines (named in the amendment) are excluded until SC2f posts its proof run CREATED or its loop
+    stopped, on the bus.
+  - The launch commit is `c7a40682`, with grouped-nf4-gemm at `57f53e19`.
+- The arms, rule, predictions, STOP rules, guards and the $5.50 lane ceiling are unchanged.
+
+### Registered: P147, a quality premise for compressing Mixtral-8x7B's attention projections
+
+`bench/p147/PREREG-p147.md`: does int8 or NF4 weight-only rounding of Mixtral-8x7B's attention projections keep the W8A16 split premise's gate (argmax agreement ≥ 0.95 and the one-sided NLL upper bound within K8's budget, at two gates)? The run is on the lab's RTX A2000 with expert offload, at $0, and reports no timing. A premise: a GO starts kernel work and a later 5090 speed registration that re-checks quality on the served card.
+
+### Added
+
+- The SMT fuse measurement registered (`bench/smt-fuse/PREREG-smt-fuse.md`): one short rental of a server-class SMT host times the streaming loader's own host-side expert fuse plus nf4 quantize at one Qwen3-235B layer, with torch's pool at 16 and 32 threads interleaved (16, 32, 32, 16 x 4), reporting per-layer seconds and each pair's 32/16 ratio with its range, and checking the fused and nf4 bytes are identical across pools. A timing premise for Q235's simplification amendment, never a ruling. Worst $0.64. CI runs its contract.
+
+### P143 Amendment 3 (#1313): the confirmatory served read of the attention split cap, registered (binding)
+
+Amendment 2 (`p143a2-5090-1`) read NO_FLIP: g1 = 1.0297 against the 1.03 bar, under a W1 self-pair of 0.9845. The
+verdict stands. Amendment 3 asks the same question on stricter terms, fixed before data:
+- eight arms (ABBA twice) at five reps;
+- the flip needs all four S1/S0 pairs at W1 >= 1.03 and W16 no slower than 0.99;
+- a NOISY rung (any W1 self-pair outside [0.985, 1.015]) VOIDs and counts as a strike;
+- SANE as in A2.
+
+It is binding: a NO_FLIP closes the lever as opt-in for good. Its driver decides LANE DEAD by launch identity (`bench/common/lane_liveness.sh`). The kit is `bench/p143/p143a3_*`, and A2's box runs at its
+registered bytes; the tests are in `tests/test_p143a3.py`. Nothing changes by default.
+
+### SC2f Amendment 2 (#846): the host bar is clean runs >= 2, and hosts are pinned under the market rule (registration only)
+
+- **Why.** Under the registered selection, two watcher windows found no rentable host. Over 15.4 h and 5,327
+  machine-filtered reads (envelope v4), four of the five bar machines were never listed. The fifth listed one offer
+  that refused every create (`no_such_ask`, four attempts, $0, nothing created).
+- **The change.**
+  - The bar drops from clean runs >= 3 to >= 2, and keeps every measurement-quality term (575 W on record, no host
+    failure, no capped block).
+  - Hosts are pinned like every other lane: up to three stable machines, under the standing spending rule. This
+    replaces the per-run ACK and the watcher envelope.
+  - New run ids start at `sc2f-prove-11`.
+- The arms, gates, predictions, outcomes and budget are unchanged.
+
+### Added
+
+- P146 read: the CLI trainer at its own default recipe steps 1.455x faster with `OFFLOAD_EXPERTS=1 LAYER_MAJOR=1` than with `OFFLOAD_EXPERTS=1 FAST_TRAIN=1` on Qwen3-30B-A3B under expert offload on an RTX 4090 (claim `e4b.train.p146.layer-major-cli.qwen3.4090.2026-10-18`); `docs/STATUS.md` no longer calls that recipe unread.
+
+### DQ11 L-census: the envelope binds its one executor (#1083)
+
+`dq11_l_census_launch.py` required one fixed `POD_LAUNCH_AGENT` identity before discovery. The envelope now binds the
+executing seat as `executor_sha256` (the SHA-256 of its `CTO/...` identity), and the launch refuses before any search
+unless `POD_LAUNCH_AGENT` is exactly that seat; the bound manifest's authorization basis and the receipt record it. No
+value, cap, gate or rule changes.
+
+### P143 Amendment 2 (#1313): the served read of the attention split cap, registered
+
+Step 1 (`p143-5090-2`) read GO_FIXED: 16 splits beat the library's 32 at every context on the 5090. e4b#1768 made that
+an opt-in knob, `E4B_ATTN_SPLIT_CAP`, over grouped-nf4-gemm 0.47.1's `split_cap`. This amendment registers the read that
+decides whether Qwen3-MoE takes it by default:
+- a kernel tolerance contract against an fp64 reference (the cap's error at most 1.05x the plan's);
+- a kernel timing check at buckets 2 and 4;
+- a served ABBA speed read with P115 Phase D's SANE gate at T == 1. The flip needs g1 >= 1.03 and, at W16, no
+  regression (g16 >= 0.99); W16's token identity is reported, not ruled (its prefill ramp runs the capped buckets).
+
+Phase D's quality pass builds its KV at 656 tokens, where the library plans 11 splits and a cap of 16 cannot bind. Here
+that KV is built at the server's 4096 tokens. The kit is `bench/p143/p143a2_*` and `tests/test_p143a2.py`. Nothing
+changes by default.
+
+### Changed
+
+- Q235 Amendment 15 (`bench/q235/PREREG-q235.md`): the repeat's cap is sized on the box from that box's own load and step 0 (1.5 × (load + 5 × step), at least 60 s, within the time left; run 2's repeat spent 4.7 steps outside its load), replacing Amendment 12's leg-scaled 705 s, which could not hold a cold full reload on `q235-pro6000-6`. The fresh-process repeat stays the registered design. No rule, band, floor or rate changes; `q235.sha256` re-sealed.
+
+### Changed
+
+- P146 Amendment A1: a host-quiet guard after `p146-4090-5` VOIDed on its cross-process self-pairs while the host got noisy mid-box. Per arm timed window: the share of CFS periods throttled and `/proc/stat` steal (VOID_BY_HOST above 5 %), CPU pressure where readable (VOID_BY_HOST if a self-pair's two arms differ by more than 5 points), and a pinned H2D probe before the first arm and after every arm (VOID_BY_HOST if one is more than 15 % below the first). An unrecorded signal is VOID_BY_HOST; a box whose signals are unreadable refuses at a pre-flight before the install (NOT_RUN). VOID_BY_HOST is not a strike. Every other term is unchanged.
+
+### Read: P145, Mixtral-8x7B's one-request step after K33, kernel by kernel (one RTX 5090): READ
+
+With K33 serving the expert GEMVs by default (grouped-nf4-gemm 0.47.0), the top addressable line at one request is the bf16
+attention q/o projections: 1.471 ms of an 8.125 ms node replay period. The expert GEMVs now run below their isolated plan
+time. The proposed next lever is a format premise for those projections, not licensed by this read. `bench/p145/RESULTS-p145.md`
+and the receipts under `bench/p145/receipts/`. An instrument: no default, gate or speed claim moves.
+
+### `E4B_ATTN_SPLIT_CAP` (#1313, lane P143 Amendment 2): cap the paged FP8 attention decode's splits (off by default)
+
+`E4B_ATTN_SPLIT_CAP=n` hands the paged FP8 decode attention `split_cap=n` (grouped-nf4-gemm#558). The kernel's own
+planner, `decode_split_plan`, then runs `min(n, its plan)` splits. That plan sizes splits from the block table's
+capacity: 32 at B=1 for Qwen3-30B-A3B's 4 KV heads on an RTX 5090. P143's microbench timed 16 splits at 7.6 µs per
+launch against 11.2 at 640 positions, and 14.4 against 15.3 at 4096. e4b computes no plan.
+The cap is set on the KV before any decode graph is captured. It is handed over only on the fp8 split path, only when
+the installed kernel takes `split_cap`, and never over an explicit `n_split`. Unset resolves per family; no family takes
+it until P143's served read. `0` keeps the library's plan. The build's `info.attn_split_cap` records the cap, its source
+and what each captured bucket planned.
+
+### DQ11 L-census manifest under the strict launcher (#1083)
+
+The census template and `dq11_l_census_launch.py` keep the census's own record (`status`, the `l_census` closure and the
+bound `authorization_basis`) in `lane_record`, because the launcher now refuses unknown top-level manifest keys.
+No value, cap, gate or rule changes.
+
+### Changed
+
+- P146: spare run ids `p146-4090-5` to `-8` registered for pre-create refusals, listings gone before the create, and NOT_RUN at the pre-flight (one PREREG line; no term changes).
+
+### Registered: P145, where Mixtral-8x7B's one-request step goes after K33 (an instrument)
+
+`bench/p145/` runs the per-name census (`bench/pername/`) on Mixtral-8x7B at W1 and W16. The subject is the default
+server on grouped-nf4-gemm 0.47.0 (#556), which serves Mixtral's expert GEMVs on K33 at P141's plans with no knob set. It
+ranks every kernel line by its removable time less its floor (P141's isolated times for the two expert GEMVs, zero
+otherwise), and proposes the top W1 line as the next lever. A dense_gemm line on top names a quality premise first, not
+a kernel. It changes no default and makes no speed claim. One reading (`p145-5090-1`), guard 1.25 h, worst $2.16.
+
+### Added
+
+- P146 registered (`bench/p146/PREREG-p146.md`): the CLI trainer's own recipe, timed. `python -m experts4bit_qlora.train` at its defaults (SEQ 192, TOKEN_BUDGET 2048, GRAD_ACCUM 4, r 8, attention LoRA, torch AdamW) on Qwen3-30B-A3B with offloaded experts on an RTX 4090, `OFFLOAD_EXPERTS=1 LAYER_MAJOR=1` against `OFFLOAD_EXPERTS=1 FAST_TRAIN=1`, each arm one fresh process running `train.py`'s unchanged `main()`. P137's kit at its Amendment 3 by named substitutions; new STRICT rungs for the cross-process design (same adapters at the optimizer, bit-identical BEFORE held-out and step-0 loss, no OOM back-off, e4b's reentrant checkpoint on all 48 layers). Band [1.5, 2.6] a priori from the host link; P137, P140 and P144 disclosed as seen data. Worst $2.92 per run. CI runs its registration contract.
+
+### P143 Amendment 1 (#1313): the bench takes its contexts longest first, and CI runs its setup on CPU
+
+`p143-5090-1` read HARNESS_ERROR ($0.008) before any timing. `Fp8PagedKV.rewind` refuses a forward move, and the bench
+walked its contexts ascending after filling to 4096. The setup is now `fill`, `hold_args` (longest first) and
+`check_held` in `bench/p143/p143_bench.py`. `tests/test_p143.py` runs that same setup on CPU, on e4b's own KV class at
+the registered contexts, wherever grouped-nf4-gemm is installed. The grid, the timing, the rule and the box terms are
+unchanged. The rerun is `p143-5090-2`; `-3` is its pre-create spare.
+
+### Read: P141, K33's bandwidth GEMV at Mixtral-8x7B's expert shapes (one RTX 5090): LICENSED, one request 2.41× as fast
+
+At the plans its phase 1 selected on the card (gate_up (16, 1024, 4, 1), down (16, 512, 4, 2)), grouped-nf4-gemm's
+bandwidth-targeted NF4 decode GEMV decodes Mixtral-8x7B NF4 one request 2.4075× as fast as the shipped scalar GEMV on the
+default `serve_paged` server (19.5 → 8.1 ms a step). Sixteen requests are unchanged (0.9964), and quality is within P110's
+bar. `bench/p141/RESULTS-p141.md`, the receipts under `bench/p141/receipts/`, and claim
+`e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18`. The default moves with a grouped-nf4-gemm release carrying #556; until
+then `GNF4_GEMV_BW=1` with `GNF4_GEMV_BW_PLAN="28672,4096=16,1024,4,1;4096,14336=16,512,4,2"` reproduces it.
+
+### Added
+
+- P144 registered (`bench/p144/PREREG-p144.md`): layer-major's speed on Mixtral-8x7B-Instruct under expert offload on an RTX 4090, the card where Mixtral must offload. P137's kit at its Amendment 3 by named substitutions (the model, the library pin a9d140d8 with #1757 and #1752, n = 32, the band); every STRICT term is P137's. Band [1.5, 2.6] a priori from the host link (0.793 GB per staged layer); P137 and P140 disclosed as seen data. Worst $3.28 per run (a $0.75/h cap, a 3.0 h guard sized for a 93 GB fetch at the launcher's 20 MB/s floor). CI runs its registration contract.
+
+### P143 registered (#1313): the B=1 paged FP8 attention decode by context and split count
+
+P142's per-name census put the paged FP8 attention decode at 12.7 % of the B=1 step. That is 48 launches of about
+11.6 µs, latency-bound at ~640 live positions. The library plans its 32 splits from the block table's capacity, not the
+live length. `bench/p143/` times the served call on e4b's own KV class at Qwen3-30B-A3B's geometry. The grid is context
+{256, 640, 1024, 2048, 4096} × split {library plan, 4, 8, 16, 32}, in CUDA graphs, with no model. The rule is fixed
+before data: GO_FIXED if a fixed split saves ≥ 3 % of the step at 640 and loses nothing beyond noise at 4096;
+GO_ADAPTIVE if only a per-context choice clears; otherwise PARK. A microbench: no default or speed claim changes.
+
+### Added
+
+- `layer_major_step` (and the trainer's `LAYER_MAJOR=1`) runs on Mixtral, OLMoE and Gemma-4's text model besides Qwen3-MoE. The decoder preamble is a per-family adapter: Gemma-4 builds a full and a sliding mask per micro-batch, chosen per layer by `layer_types`, the rotary per layer type, and one `shared_kv_states` dict per micro-batch. New refusals: Mixtral's training-time `router_jitter_noise` and Gemma-4's per-layer embeddings. Correctness only: on every family the drift guard's `torch.equal` against the stock loop holds (CPU fp32 and an A2000 under NF4 offload with enable_fast_train), and the stagings are 2n - 1 against GRAD_ACCUM x (2n - 1). No speed is claimed beyond Qwen3 (P137, P140).
+
+### The per-name served census (#1313): where the B=1 step's moe_expert time goes, kernel by kernel
+
+The B=1 step's moe_expert class runs 0.388 ms (9.7 % of the step) over K33's isolated time for the same two expert GEMVs,
+and the class census cannot say where. This registers P136's box on Qwen3-30B-A3B at W1 with one added step:
+`bench/pername/pername_table.py` splits every in-graph kernel of each kept replay into its idle gap, its own advance of
+the critical path, and the time it ran under its predecessor (programmatic dependent launch). The split closes each
+replay exactly. The rule is fixed before data. The swiglu-into-down fusion is read next iff `_swiglu_rows` removes at
+least 3 % of the step; otherwise the top line by addressable time is proposed. An instrument: no default or speed claim
+changes.
+
+### Registered: P141, K33's bandwidth GEMV at Mixtral's expert shapes (one RTX 5090)
+
+`bench/p141/` registers a read of grouped-nf4-gemm K33 (`GNF4_GEMV_BW=1`) on Mixtral-8x7B at one request. Mixtral's
+expert GEMVs take 76 % of its one-request step (P136's census), and K33 has no plan at its shapes, so they run the scalar
+GEMV. Phase 1 picks each shape's plan on the card by K33's rule (contract first, then the lowest median of twelve plans
+over 40 rounds); phase 2 is P134's served ABBA read with P110's quality bar, with W16 as a no-regression check. The
+$0 premise is recorded under `bench/p141/premise/`: an A2000 trace shows e4b's decode calls the GEMV at exactly (28672,
+4096) and (4096, 14336), and all twelve plans meet K33's numerics contract there. One reading (`p141-5090-1`), guard
+2.0 h, worst $2.80.
+
+### Fixed
+
+- `load_moe_4bit_streaming` caps torch's intra-op threads for the host-side expert fuse (offload on CUDA) at min(the pool, the CPU affinity, the container's cgroup CPU quota rounded up) and restores them after; the bytes are unchanged. A rented container seeing a 256-thread host under a ~31-CPU quota had loaded Qwen3-30B-A3B in ~2,000 s against 40-61 s elsewhere. Every load now logs the visible CPUs, the quota, torch's threads and `OMP_NUM_THREADS` (`experts4bit_qlora.util.container_cpu_quota` / `host_cpu_report`). Evidence: `bench/host-threads/`.
+
+### Behaviour change (#1732): the B=1 fusion knobs default to `auto` on Mixtral
+
+An unset `E4B_PAGED_FUSE_QKV`, `E4B_FUSE_T1_GLUE`, `E4B_FUSE_T1_GLUE_R2` or `E4B_FUSE_ROUTER_EPI` now resolves to `auto`
+on Mixtral (`mixtral`), as it already does on Qwen3-MoE and Qwen3.5/3.6-MoE. Three folds engage there: the glue fold's
+RMSNorms, round 2's decoder layers and attentions, and the router epilogue (no fused q/k/v). Two reads license it:
+quality at T == 1 against the family's own floor on every knob (`e4b.serve.fam.fused-stack-t1.mixtral.5090.2026-10-09`),
+and one request decoding in 0.9393 and 0.9277 of the step on one RTX 5090
+(`e4b.serve.p135.fold-speed.mixtral.5090.2026-10-18`, P135, `bench/p135/RESULTS-p135.md`). Both reads ran on
+Mixtral-8x7B. The default keys on `model_type`, so it covers every `mixtral` checkpoint, Mixtral-8x22B included, which
+neither read covers. The folds change arithmetic, so greedy text can change on Mixtral. The way back is `0` on each
+knob. The prefill glue knobs are unchanged: unset, `E4B_FUSE_PREFILL_GLUE` stays `0` on Mixtral.
+
+### Added
+
+- The CLI trainer reaches the fused expert path: `FAST_TRAIN=1` makes `python -m experts4bit_qlora.train` call `enable_fast_train(model, dgrad=True)` before its first evaluation, and refuses a run that patches nothing or sets `TRAIN_ARENA`. It is opt-in, with no default change; until now the trainer always trained through the per-expert reference loop. `LAYER_MAJOR=1` now implies `FAST_TRAIN=1`, the configuration P137 measured (`e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18`); an explicit `FAST_TRAIN=0` keeps the reference loop and says so in the log. The trainer leaves the expert absmax as `apply_absmax_dq` set it. `bench/cli-fused/cli_fused_probe.py` is the correctness leg: on a tiny Qwen3-MoE the trainer's step 0 is bit-identical to the direct library call, and the stagings, refusals and the resident path are as designed.
+
+### Added
+
+- P140 registered (`bench/p140/PREREG-p140.md`): a replication of P137's layer-major read on one RTX 5090 (sm_120). P137's kit at its Amendment 3, by named substitutions: the card class and capability, the run ids `p140-5090-1..4`, and a prediction band [1.8, 3.0] set a priori from the host-link arithmetic (0.3397 GB per staged layer; S = (C + 4T) / (C + T)), with P137's 4090 reading disclosed as seen data that sets no bar. Every STRICT term is P137's. CI runs its registration contract. Worst $2.80 per run (a $0.85/h cap).
+
+### The W8A16 split premise (#1313): is the attention alone inside P125's gate?
+
+The first W8A16 premise box read UNDERPOWERED. Rounding the attention projections and the lm_head to int8 left argmax
+agreement at about 0.958, with the NLL shift at 85-92 % of P125's bound. The split box separates the two parts:
+attention-only int8 (the candidate) and head-only int8 (reported), at the windows the first box's spread asks for
+(t1 196, k16 123). Wikitext is read every 1024 tokens with P125's own loader. The rule is fixed now: GO iff attention-only
+keeps argmax >= 0.95 and the one-sided 95 % upper bound of its NLL shift within the bound at both gates, else the lever
+parks. A premise, never a reading.
+
+### Added
+
+- P137 LICENSED: under expert offload with `enable_fast_train(dgrad=True)`, `experts4bit_qlora.engines.layer_major:layer_major_step` is 2.365x faster per step than the stock accumulation loop on Qwen3-30B-A3B on one RTX 4090 (`e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18`; [results](bench/p137/RESULTS-p137.md), receipt under `bench/p137/receipts/p137-4090-7/`). The predicted band [1.25, 2.0] was missed high; the held-out term (0.015 against 0.01) sits inside the 0.031 same-loop spread at 34 steps. `docs/capabilities.json` lists `layer_major_step` as an entry point of `run-moe-larger-than-vram`. The licence is that call, not the CLI trainer's `LAYER_MAJOR=1`; no default changes.
+
+### A W8A16 quality premise on the B = 1 dense path (#1313)
+
+`bench/i8dense/` adds a one-box premise: does int8 weight-only rounding of every attention projection and the
+lm_head keep P125's quality gate (argmax agreement >= 0.95, K8's +0.05 ppl budget)? At B = 1 the dense GEMM class is
+the largest single-stream class, and P125's int4 version failed on argmax. The premise runs P125's subject and quality
+instrument byte for byte, with one arm added: A's build with those weights replaced by their per-output-row int8
+round trip. GO starts the kernel work; PARK closes the lever with the number. It is a premise, never a reading.
+
+### P138 read (#1313): the verify increment is not mostly in the expert path, so the lane closes
+
+P138's last box-started attempt (`vsplit-5090-3`, one RTX 5090) read cleanly, and the maintainer re-derived it
+independently.
+- **H = REFUTE.** Of SD2's verify increment beyond the extra experts' bytes, only 0.24 / 0.20 / 0.18 lies in the
+  expert path at n = 2 / 3 / 4. The prediction was about 0.85.
+- **BUILD = NO_BUILD.** What a 2–4-row expert kernel could save (0.76 / 0.58 / 0.52 ms) is far short of what SD2's
+  speed bar needs (2.26 / 1.69 / 1.67 ms).
+
+As registered, the B = 1 multi-token lane closes for Qwen3-30B-A3B on this stack. The reduced records are in
+`bench/vsplit/receipts/vsplit-5090-3/` with their digests, and a test reproduces the committed verdict from them.
+
+### P138: a labelled census reading is not a failure (#1313)
+
+P138's first box-started attempt (`vsplit-5090-2`) stopped at its canary, although the canary was clean. SC1b's
+census reader marks a reading `labelled` whenever it attaches any label. The canary always carries
+`NO_UNPROFILED_TIMING`, because no unprofiled time exists before timing pass A. The runner's canary check and the
+reducer's census check both required status `ok`. The registered rule fails a reading only when it is void or carries
+one of the four blocking labels. Both checks now follow it, so the reporting labels (`NO_UNPROFILED_TIMING`,
+`PROFILER_INFLATED`, `NODE_TRACE_INFLATED`) read through. The box's own canary records are the tests' fixtures: the
+runner's canary block passes them, and the old rule fails them as it did on the box. The reducer's self-test census
+now marks a labelled reading `labelled`, as the real reader does.
+
+### Added
+
+- `bench/p135/`: P135's registration, Track B1's read R-b: what Mixtral-8x7B's ON_auto folds (the glue fold, round 2 and the router epilogue; census 0 / 65 / [32, 32] / 32) buy at one request on an RTX 5090. It runs FAM Amendment 4's interleaved method, widened from one fold to all three: one model, both settings, `FoldRoute` swapping all 161 fold-patched forwards, two ABBA blocks of 256 timed steps on bucket 1. The rule is FAM's: FASTER iff both blocks' ON/OFF ratios are at most 0.98, and NOISY past 1.5 % block disagreement. FASTER, with FAM's ON_auto quality PASS, licenses Mixtral's allow-list pull request. Includes the box, reducer (self-tested), runner, driver, staged pins, `tests/test_p135_speed.py` (the census and folds at Mixtral's real depth, the swap's exactness) and `tests/test_p135_staged_pin.py`. Registration only: nothing runs before it merges.
+
+### Register a separate Gemma-4 served census instrument
+
+The Gemma-4 default-server census now has a separate, prospective graph-clock and repeat-node-share registration after P136's node-trace-inflated VOID. Its one-run harness keeps P136's model and stack pins, refuses incomplete or unstable captures, and treats node durations as shares only. This registration adds no measurement, default change, or served-speed claim.
+
+### P138 Amendment 1 (#1313): the card terms, before any data
+
+The verify split's card bar no longer asks for five clean runs in the receipts ranking. That bar came over from P132,
+whose rule compared one card's milliseconds. P138 compares nothing across cards, and the bar's 13 machines were not on
+the market. The card is now any RTX 5090 on Vast that is verified-secure with direct SSH, has reliability2 >= 0.98 and
+inet_down >= 1000 Mbps, is ordered with >= 170 GB of disk and has >= 60 GiB RAM, costs <= $0.85/h and <= $0.011/GB,
+has no failed most-recent host outcome in the receipts, and reads present in 6 of 6 machine-filtered reads within the
+2 minutes before its pin. No data had been seen, and no staged byte moves.
+
+### P138, the verify split, registered (#1313): where SD2's verify increment goes, on one card's own numbers
+
+P132 closes "not run": its reference card was listed in 0 of about 4,050 reads over 34.5 h, and its rule compared
+absolute milliseconds with that card. The question moves to P138 in `bench/vsplit/`.
+
+Every number P138's rule compares comes from the box that runs it:
+- two unprofiled timing passes of SD2's V1 terms (the A/A anchors and a self-pair);
+- the census's class shares at n = 1..4, converted with the unprofiled steps;
+- need(n) from SD2's own formula with this box's terms.
+
+An increment whose excess over the bytes is within the noise floor (the two passes' spread, or 5 % of the increment,
+whichever is larger) reads NO_EXCESS: an answer that closes the lane, not a strike. Only a READ carries quotable
+labels. The inputs and the tested outcome (the n >= 2 shares) are kept apart. A reducer test shows the outcome alone flips H
+and BUILD with every input held fixed, and a profiler's uniform inflation moves no millisecond. P132's box and class
+map are reused byte-identical, and the desk prediction is registered as fractions of the increment. It runs on any
+RTX 5090; the verdict licenses BUILD or kills the lane, and ships no default.
+
+### Added
+
+- `bench/gpu-contract/`: a kernel PR's GPU contract on one rented card of a declared class (`GC_CARD`, compute capability and
+  SM count). At two pinned commits (`GC_GNF4_SHA`, `GC_E4B_SHA`; anything but 40 hex is refused), it runs grouped-nf4-gemm's
+  `kernel/test_nf4_gemv_bw.py` and `kernel/test_dispatch_counts.py`, and the three served-route premise tests P133's box ran.
+  Each suite runs with `-rs` and a junit report. The driver refuses a dirty launch tree and records the tool's commit. It is
+  a correctness contract, not a reading. `tests/test_gpu_contract.py`.
+
+### Added
+
+- `bench/p137/`: lane P137's registration, a speed read of layer-major accumulation on the configuration that makes Qwen3-30B-A3B trainable on a 24 GB card (expert offload + `enable_fast_train`) on an RTX 4090. The arms run the stock accumulation loop vs `layer_major_step`, ABBA. It is LICENSED iff the slower pair still runs at least 1.10x faster, with step 0 bit-identical, the stagings exactly 380 vs 95 per step, and the memory term held. Includes the box, driver, reducer (self-tested), a tiny dry fixture, staged pins and `tests/test_p137_staged_pin.py`. Registration only: nothing runs before its envelope.
+
+### Changed
+
+- R2-Mixtral Amendment 4 (`bench/fam235/PREREG-r2-mixtral.md`, #1630) re-cites Q235 at #1709's merge commit, `9480ed03`:
+  - `r2_drift.CITED` moves, and `r2.sha256` is resealed (five rows move);
+  - R2's runner copy takes Q235's tokens line and keeps R2's caps;
+  - the box gains Q235 Amendment 8's STRICT dX rules, but not its held-out read.
+  Gate 6's A2000 rehearsal is re-run at the new cite before any box. No rental, budget or default change.
+
+### Changed
+
+- `bench/expert-tiling/`: section 8 closes sub-expert weight-tile streaming. Every recorded expert-offload lane is checked against the regime where tiles would matter (`closeout.py` reproduces the table from the records it names). No lane needs a unit smaller than one whole routed expert. The one row without room for a second layer slot, Q235 Shape A on an RTX 5090 (a stretch class that has never run), has room for about 100 whole experts. The two recorded single-slot fit failures exceed a whole layer slot (TC3 on the shared A2000) or point to a compacted routed stack of whole experts (the 284B arena ladder). The reopen trigger is stated. Documentation only.
+
+### Changed
+
+- `engines/layer_major.py`: a drift guard. On its first call for a model, `layer_major_step` also runs each micro-batch through the stock forward (gradients on, graph discarded). It raises `LayerMajorDriftError` before any backward unless every loss is `torch.equal`, so a transformers release that changes the model's forward is refused instead of silently diverging. It first checks that the stock forward is itself bit-reproducible on the device (micro-batch 0 run twice), and refuses with `LayerMajorNotReproducibleError` if not, so a nondeterministic kernel path is reported as that, not as drift. It costs M + 1 extra forwards, once per model. `LAYER_MAJOR=1` also refuses any active dropout (a config `*dropout*` > 0 or an `nn.Dropout` with p > 0, such as a PEFT `lora_dropout`), because layer-major draws the random stream in another order than the stock loop. e4b's own path has none. The module docstring now says the +0.8 GB memory figure holds with the chunked loss engaged; without it, M micro-batches keep their fp32 log-probabilities alive until the backward. `train.py` times `LAYER_MAJOR=1`'s forward and backward as their own census phase, `layer_major`, so they are never read against the stock `forward` phase.
+
+### Changed
+
+- `bench/q235/am7/READ-C.md`: the read of Amendment 7's C on `q235-pro6000-3`. C = 7.26 measured, inside the registered 5.0–11.0. The prediction's rescale by the box's host-rate probe is retired, because on this host the probe under-measures H2D. The staging rate of record is 26.6 GB/s, against the probe's 20.39, and the receipts give the bytes, a timer-independent lower bound and the provider's listing. `bench/expert-tiling/README.md` no longer calls the gap unexplained. Documentation only.
+
+### Added
+
+- `engines/layer_major.py` and `LAYER_MAJOR=1` in the trainer (requires `OFFLOAD_EXPERTS=1`; opt-in, default off): layer-major gradient accumulation. Every micro-batch of a step runs through layer L before L+1, with the offloaded layer held resident across them, then one backward of the weighted sum. Under expert offload a step stages each layer once per direction, 2n - 1 in steady state against GRAD_ACCUM x (2n - 1) for the stock loop. Each micro-batch's loss is `torch.equal` to the stock forward's, and the final norm, head and loss run through the model's own forward, so the chunked loss applies unchanged. Gradients are the same weighted sum in another order, held to the registered bf16 band in `tests/test_layer_major.py`. Both checkpoint kinds are supported. v1 covers Qwen3-MoE; other families, and a model that returns router logits, are refused by name.
+
+### P133 Amendment 2: the reading's guard is 2.0 h, and its host needs 1 Gbps down
+
+- `p133-4090-1` was aborted before any arm ($0.50; nothing read). A 17-min fetch and a slow bake left the registered
+  time-left check no room for the quality phase, so the lane would have exited with no verdict.
+- The reading's guard goes from 1.25 h to 2.0 h, and the pin rule adds Vast `inet_down >= 1000` Mbps. The time-left checks
+  and every staged file are unchanged. The rerun `p133-4090-2` costs at most $1.65, and the lane at most $2.32 of its $3.75
+  ceiling.
+
+### Opt-in exact-size pinning for offloaded expert homes (`E4B_OFFLOAD_PIN_SLAB=1`)
+
+With `E4B_OFFLOAD_PIN_SLAB=1`, expert offload pins each layer's four home tensors as views into one exact-size, page-aligned pageable buffer, registered once with `cudaHostRegister`. Default off. torch's pinned allocator rounds every request up to a power of two, so the default four separately pinned homes cost 1.33x their bytes on Qwen3 (30B, 235B) and Mixtral 8x22B (42.6 GB of host RAM on Qwen3-235B-A22B), and up to 1.68x on other families; the slab costs their bytes plus each home's 512-byte alignment and at most a page. Staging is unchanged. A refused registration falls back to per-tensor pinning with the reason on the handle (`slab_why`). Not combinable with `E4B_OFFLOAD_ARENA`, which `docs/OFFLOAD-TRANSFER-NOTES.md` now notes pins 1.78x on those families.
+
+### Added
+
+- `engines/offload.py`: `hold_forward_residency(handles)`, an opt-in context in which the expert-offload evict post-hook keeps a layer staged after its forward. A layer-major driver can then run every micro-batch through one staging of each layer: a held layer-major step stages 2n layers from cold and 2n - 1 in steady state, against M x (2n - 1) for M micro-batches run one at a time. The hold is per handle: only the handles passed in are held and vetted, so another model's offloaded layers keep their evict. The single resident slot is unchanged (staging the next layer still evicts the previous one), the exit evicts the resident layer, and routed handles, inference prefetch, a pipelined takeover, a nested hold and a call inside a backward are refused. Default off: no caller enters it yet. Tests: `tests/test_offload_hold.py` (both checkpoint kinds).
+
+### Register P136 served fastpath census for Gemma-4, Mixtral and gpt-oss
+
+Add a guarded P123-derived Nsight census plan and CPU contract check for the remaining 5090 R-e trace cells. The registration records fixed family and source pins, an inventory-only A2000 mode, and a fail-closed reducer. It contains no GPU reading or change to the fastpath matrix.
+
+### P133 and P134 Amendment 1: the quality pass integrity reads the instrument's buckets
+
+- `p133-4090-prove-1` ($0.17) ran every registered box step on the RTX 4090. The reducer VOIDed it: the quality pass
+  integrity read the server's buckets from the record (1–64 at `max_seqs` 64), not P110's instrument buckets
+  `(1, 2, 4, 8, 16)`.
+- `p133_reduce.py` and `p134_reduce.py` now read `INSTRUMENT_BUCKETS` from `p110_box.py`'s own `BUCKETS`, as P116's rule
+  did. The CI tests rerun each pre-amendment reducer on the proof's shape: it VOIDs, the amended one passes, and a pass
+  missing bucket 8 still VOIDs.
+- No rule, bar, prediction, size or budget changes. The proof's committed records are re-reduced after this merges.
+
+### Bind DQ11 backward creators through Kineto flows
+
+Fix DQ11 census backward attribution by following explicit Kineto forward/backward flows across thread identity namespaces; refuse missing or ambiguous flow bindings.
+
 ## 0.55.0 — 2026-10-17 — the fast extra floors on grouped-nf4-gemm 0.43.0 (the single-request decode GEMV), an earlier hybrid refusal, pinned host blocks released
 
 **0.55.0.** The `fast` extra now requires grouped-nf4-gemm 0.43.0, so every install gets that release's default:

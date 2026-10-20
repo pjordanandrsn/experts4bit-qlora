@@ -1,6 +1,6 @@
 # Status — what this package does, what is current, what is open
 
-**As of 2026-10-20, main after version 0.55.0** (the version of record is `pyproject.toml`'s). This page states the current
+**As of 2026-10-20, version 0.56.0** (the version of record is `pyproject.toml`'s). This page states the current
 position in each area, with the claim id behind each number; [`docs/claims.json`](claims.json) holds every claim's full
 text and evidence. The dated narrative behind these positions, with the readings they replaced and why, is
 [`STATUS-RECORD.md`](STATUS-RECORD.md).
@@ -223,12 +223,16 @@ eager chain until a read of their own. `e4b.serve.p130.prefill-glue-speed.qwen3.
 16 unchanged, within P110's quality bar; it is grouped-nf4-gemm's default from 0.43.0 at Qwen3's NF4 expert shapes on
 GPUs with 160 or more SMs. `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`. On Mixtral-8x7B, at plans chosen on an RTX
 5090, the same GEMV decodes one request **2.41×** as fast (19.5 → 8.1 ms a step), 16 unchanged, within the same bar.
-`e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18` ([results](../bench/p141/RESULTS-p141.md)).
+`e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18` ([results](../bench/p141/RESULTS-p141.md)). Two more reads set
+grouped-nf4-gemm 0.47.0's `auto` scope. On an RTX 4090 (128 SMs), Qwen3-30B-A3B decodes one request **1.5145×** as fast
+(`e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18`, [results](../bench/p133/RESULTS-p133.md)). On an RTX 5090 at a 400 W
+limit, Granite-3.1-3b-a800m decodes it **1.3979×** as fast and OLMoE-1B-7B **1.5011×**
+(`e4b.serve.p134.gemv-bw.granite.5090.2026-10-18`, `e4b.serve.p134.gemv-bw.olmoe.5090.2026-10-18`,
+[results](../bench/p134/RESULTS-p134.md)). Sixteen requests are unchanged and quality is within the same bar in each.
 - **Scope since grouped-nf4-gemm 0.47.0:** its default also takes Mixtral-8x7B's, Granite-3.1-3B-A800M's and OLMoE-1B-7B's
   expert shapes on GPUs with 160 or more SMs, and the RTX 4090 (128 SMs, sm_89) at Qwen3-30B-A3B's two shapes only. The
   shapes are licensed, not the families: any model with those expert shapes takes them. Every other shape and smaller
-  GPU keeps dot-pad; `GNF4_GEMV_BW=0` restores it. The Granite, OLMoE and RTX 4090 reads (lanes P133, P134) have no
-  register row yet: UNVERIFIED here.
+  GPU keeps dot-pad; `GNF4_GEMV_BW=0` restores it.
 
 **The B=1 fused stack is the default on Qwen3-MoE, Qwen3.5/3.6-MoE and Mixtral.** On top of grouped-nf4-gemm 0.43.0's
 bandwidth GEMV, fused q/k/v

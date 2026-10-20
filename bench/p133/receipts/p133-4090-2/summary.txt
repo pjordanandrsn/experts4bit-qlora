@@ -1,0 +1,37 @@
+KNOBS run=p133-4090-2 e4b=c8d7e629e4c8431fc86970cf7195d8e67f72e22a gnf4=6b7c2e7474d20c8843814dd46dad6cfc3d94b440 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=4090 min_disk_gb=150 min_ram_gb=60 prove=0 dry=0 short=32 long=160 reps=3 windows=24 cont=128
+CUDA_PROBE ok torch=2.8.0+cu128 cc=8.9 sms=128
+e4b 0.54.0 @c8d7e629e4c8431fc86970cf7195d8e67f72e22a
+gnf4 0.46.0 @6b7c2e7474d20c8843814dd46dad6cfc3d94b440
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (8, 9)
+sm_count 128
+p133_reduce self-test OK (41 cases)
+p109_box self-test OK (5/5 cases)
+p133_box self-test OK (27/27 cases)
+p115_quality self-test OK (11/11 cases)
+premise kernel contract rc=0: 33 passed, 2 skipped in 194.95s (0:03:14)
+P133_PREMISE kernel ok
+premise served route rc=0: 18 passed, 5 warnings in 25.03s
+P133_PREMISE served ok
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709
+fit rc=0 P133_FIT {"status": "ok", "max_seqs": 16, "buckets": [1, 2, 4, 8, 16], "graphs": true, "control_width": 16, "w1_wall_s": 0.4585, "error": null}
+
+arm B0a rc=0 P133_ARM {"arm": "B0", "tag": "B0a", "dispatch_build": {"dotpad": 0, "dotpad_splitk": 0, "scalar": 480, "scalar_splitk": 0, "bw_tree": 0, "bw_prmt32": 0, "bw_splitk": 0}, "load_s": 51.1, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "control": "W16", "max_seqs": 16, "W1": 117.98, "W16": 573.39}
+
+arm B1a rc=0 P133_ARM {"arm": "B1", "tag": "B1a", "dispatch_build": {"dotpad": 0, "dotpad_splitk": 0, "scalar": 0, "scalar_splitk": 0, "bw_tree": 0, "bw_prmt32": 480, "bw_splitk": 0}, "load_s": 52.16, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "control": "W16", "max_seqs": 16, "W1": 178.68, "W16": 573.28}
+
+arm B1b rc=0 P133_ARM {"arm": "B1", "tag": "B1b", "dispatch_build": {"dotpad": 0, "dotpad_splitk": 0, "scalar": 0, "scalar_splitk": 0, "bw_tree": 0, "bw_prmt32": 480, "bw_splitk": 0}, "load_s": 48.04, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "control": "W16", "max_seqs": 16, "W1": 178.99, "W16": 571.07}
+
+arm B0b rc=0 P133_ARM {"arm": "B0", "tag": "B0b", "dispatch_build": {"dotpad": 0, "dotpad_splitk": 0, "scalar": 480, "scalar_splitk": 0, "bw_tree": 0, "bw_prmt32": 0, "bw_splitk": 0}, "load_s": 51.32, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "control": "W16", "max_seqs": 16, "W1": 118.11, "W16": 570.99}
+
+quality off rc=0 P133_QUALITY B0 windows={'wikitext': 24, 'c4val1': 24} dispatch={'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 1780032, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 0, 'bw_splitk': 0} load 44s mem 21.76 GB 1339.4 s
+
+quality on rc=0 P133_QUALITY B1 windows={'wikitext': 24, 'c4val1': 24} dispatch={'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 585216, 'bw_splitk': 0} load 47s mem 21.75 GB 467.9 s
+
+P133_VERDICT LICENSED ["g1 = 1.5145, g16 = 0.9998 (geomean {'W1': 1.515, 'W16': 1.0}); wikitext ON bias +0.00325 (bar 0.01387), K8 +0.0283; c4val1 ON bias -0.00208 (bar 0.01053), K8 -0.0354"]

@@ -1,3 +1,0 @@
-### Changed
-
-- Q235 Amendment 16 (`bench/q235/PREREG-q235.md`), the simplification after strike 2: the box's cap is half the time left at its start, less the 300 s reserve, replacing Amendment 12's leg-scaled 2,997 s, which VOIDed `q235-pro6000-7` with 4.9 h of its guard left. The repeat is a strict subset of the box's work, so the other half holds it. The box records each expert layer's load time (`load_layers.jsonl`) and the host's CPUs (`cpu.json`), both never gated. A box whose load alone runs past its half-cap exits 18 as VOID_BY_HOST, not a strike. torch's default pool stays (the SMT fuse premise). No rule, band, floor or rate changes; `q235.sha256` re-sealed.
