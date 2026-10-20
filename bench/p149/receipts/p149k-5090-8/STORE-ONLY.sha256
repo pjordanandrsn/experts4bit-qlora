@@ -1,0 +1,6 @@
+# p149k-5090-8: files kept only in the private receipt store, byte-exact. The launcher's teardown proof names the
+# provider's instance; forensics.txt and the runner's console log carry the GPU's UUID, which no reading depends on.
+# Receipts are never rewritten, so they are not committed here. sha256, then the file's path within this run's receipt.
+2f1485bdbb883f7660c220533c7dbc8338c2a9bf75a91a36f049a755598b5d66  p149k/outer.log
+b87f5370b9f19de855a9aef7534135653bc786467b25a3db0dc1a5eaf9d1cb89  p149k/forensics.txt
+5b92208b660439279b3de3c9a04354f883166dcec3534412d0f668ae8e05cf35  teardown-proof.json

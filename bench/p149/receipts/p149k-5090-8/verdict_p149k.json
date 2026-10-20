@@ -1,0 +1,184 @@
+{
+ "lane": "P149",
+ "box": "K",
+ "verdict": "K_GO",
+ "reasons": [
+  "W1 projected in situ 0.983796 ms >= bar 0.1625 (harness 0.999472 ms, reported)"
+ ],
+ "bars": {
+  "bar_ms": 0.1625,
+  "bar_share_of_P": 0.02,
+  "P_ms": 8.125,
+  "anchor": [
+   0.8,
+   1.25
+  ],
+  "noisy_band": [
+   0.985,
+   1.015
+  ],
+  "contract_ratio": 1.05
+ },
+ "note": "a microbench premise: K_GO creates the quality-and-speed box, never the quoted gain",
+ "shapes": {
+  "qo": {
+   "1": {
+    "choice": "4,512,4,1",
+    "harness_save_ms": 0.726,
+    "pairs_ms": [
+     0.7261120000000001,
+     0.726
+    ],
+    "self_pairs": {
+     "A2/A1": 1.0,
+     "B2/B1": 1.0001
+    },
+    "cublas_tbs": 1.446,
+    "kernel_tbs": 1.416,
+    "cublas_err": 0.0016761975736873738,
+    "kernel_err": 0.0016695837491015146,
+    "gpu_before": {
+     "power.limit": "575.00",
+     "enforced.power.limit": "575.00",
+     "clocks.max.sm": "3090",
+     "temperature.gpu": "61",
+     "clocks.sm": "2910"
+    },
+    "gpu_after": {
+     "power.limit": "575.00",
+     "enforced.power.limit": "575.00",
+     "clocks.max.sm": "3090",
+     "temperature.gpu": "65",
+     "clocks.sm": "2880"
+    },
+    "projected_save_ms": 0.7161591673131626,
+    "anchor_ms": 1.4648
+   },
+   "16": {
+    "choice": "32,256,4,1",
+    "harness_save_ms": 0.7644639999999999,
+    "pairs_ms": [
+     0.7644639999999999,
+     0.764464
+    ],
+    "self_pairs": {
+     "A2/A1": 1.0002,
+     "B2/B1": 1.0004
+    },
+    "cublas_tbs": 1.381,
+    "kernel_tbs": 1.36,
+    "cublas_err": 0.0016660315595780823,
+    "kernel_err": 0.0016679935736293628,
+    "gpu_before": {
+     "power.limit": "575.00",
+     "enforced.power.limit": "575.00",
+     "clocks.max.sm": "3090",
+     "temperature.gpu": "61",
+     "clocks.sm": "2910"
+    },
+    "gpu_after": {
+     "power.limit": "575.00",
+     "enforced.power.limit": "575.00",
+     "clocks.max.sm": "3090",
+     "temperature.gpu": "65",
+     "clocks.sm": "2880"
+    }
+   }
+  },
+  "kv": {
+   "1": {
+    "choice": "4,2048,8,1",
+    "harness_save_ms": 0.27347200000000005,
+    "pairs_ms": [
+     0.27347200000000005,
+     0.274192
+    ],
+    "self_pairs": {
+     "A2/A1": 1.0012,
+     "B2/B1": 1.0
+    },
+    "cublas_tbs": 0.925,
+    "kernel_tbs": 0.877,
+    "cublas_err": 0.0018024614880638697,
+    "kernel_err": 0.0017637590248878695,
+    "gpu_before": {
+     "power.limit": "575.00",
+     "enforced.power.limit": "575.00",
+     "clocks.max.sm": "3090",
+     "temperature.gpu": "57",
+     "clocks.sm": "2910"
+    },
+    "gpu_after": {
+     "power.limit": "575.00",
+     "enforced.power.limit": "575.00",
+     "clocks.max.sm": "3090",
+     "temperature.gpu": "56",
+     "clocks.sm": "2910"
+    },
+    "projected_save_ms": 0.2676372716737487,
+    "anchor_ms": 0.5675
+   },
+   "16": {
+    "choice": "32,256,4,1",
+    "harness_save_ms": 0.046175999999999995,
+    "pairs_ms": [
+     0.046175999999999995,
+     0.046624
+    ],
+    "self_pairs": {
+     "A2/A1": 1.0001,
+     "B2/B1": 0.9993
+    },
+    "cublas_tbs": 0.944,
+    "kernel_tbs": 0.514,
+    "cublas_err": 0.0023609215987563433,
+    "kernel_err": 0.0016868423442497336,
+    "gpu_before": {
+     "power.limit": "575.00",
+     "enforced.power.limit": "575.00",
+     "clocks.max.sm": "3090",
+     "temperature.gpu": "54",
+     "clocks.sm": "2910"
+    },
+    "gpu_after": {
+     "power.limit": "575.00",
+     "enforced.power.limit": "575.00",
+     "clocks.max.sm": "3090",
+     "temperature.gpu": "59",
+     "clocks.sm": "2910"
+    }
+   }
+  }
+ },
+ "gpu_state": {
+  "start": {
+   "power.limit": "575.00",
+   "enforced.power.limit": "575.00",
+   "clocks.max.sm": "3090",
+   "temperature.gpu": "53",
+   "clocks.sm": "2460"
+  },
+  "end": {
+   "power.limit": "575.00",
+   "enforced.power.limit": "575.00",
+   "clocks.max.sm": "3090",
+   "temperature.gpu": "59",
+   "clocks.sm": "2910"
+  }
+ },
+ "pinned_choices": {
+  "qo": {
+   "1": "4,512,4,1",
+   "16": "32,256,4,1"
+  },
+  "kv": {
+   "1": "4,2048,8,1",
+   "16": "32,256,4,1"
+  }
+ },
+ "w1": {
+  "projected_save_ms": 0.9837964389869114,
+  "share_of_P": 0.12108263864454294,
+  "harness_save_ms": 0.999472
+ }
+}

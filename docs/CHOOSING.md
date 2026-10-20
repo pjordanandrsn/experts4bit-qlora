@@ -86,9 +86,11 @@ still positive, so read a batched training result only with `batched_fallback_st
 **The experts do not fit in VRAM.**
 `load_moe_4bit_streaming(..., offload=True)` or `OFFLOAD_EXPERTS=1`. Frozen
 experts live in pinned CPU RAM and stream one layer at a time. This is what makes
-a 30B-class MoE QLoRA-trainable on a 12 GB card (`e4b.offload.fits-30b-class`:
-Qwen3-30B-A3B peaks at 7.16 GB and Gemma-4-26B-A4B at 8.47 GB, both of which OOM
-without offload). Requires gradient checkpointing (either kind), which the
+a 30B-class MoE QLoRA-trainable on a 12 GB card: Qwen3-30B-A3B trains TC1's
+matched set (fp32 adapters) at micro-batch 1 × accum 8 at 10.463 GB peak allocated on an RTX A2000 12 GB
+(`e4b.train.frontier.qwen3.a2000-12gb.2026-10-02`). An older 5-step reading,
+`e4b.offload.fits-30b-class` (7.16 GB, and 8.47 GB for Gemma-4-26B-A4B; both OOM
+without offload), was not reproduced. Requires gradient checkpointing (either kind), which the
 shipped trainer always enables; without it, training fails loudly rather than
 mis-training.
 
@@ -154,12 +156,18 @@ Qwen3-32B architecture, 2048 tokens, LoRA r16 (bitwise identical to resident in 
 | PCIe gen 5 x16 (DQ3) | 1.0023 | 1.18 |
 | PCIe gen 4 x16 (DQ5) | 1.0050 | 1.51 |
 
+UNVERIFIED: DQ3 and DQ5 have no register row; their records are [`bench/dq3`](../bench/dq3/RESULTS-dq3.md) and
+[`bench/dq5`](../bench/dq5/RESULTS-dq5.md).
+
 Streaming also raises the longest sequence that trains. Same subject, chunked LM loss, micro-batch 1:
 
 | card | resident | streamed | ratio | with `expandable_segments` |
 |---|---|---|---|---|
 | RTX 5090, 32 GB (DQ4) | 7168 tokens | 14336 tokens | 2.00× | 2.375× (8192 → 19456) |
 | RTX 4090, 24 GB (DQ6) | 2048 tokens | 9728 tokens | **4.75×** | 5.20× (2560 → 13312) |
+
+UNVERIFIED: DQ4 and DQ6 have no register row; their records are [`bench/dq4`](../bench/dq4/RESULTS-dq4.md) and
+[`bench/dq6`](../bench/dq6/RESULTS-dq6.md).
 
 The factor is larger on the smaller card: the resident weights (14.5 GiB here) take most of a 24 GB card, while
 the streamed model keeps only two layers of them. Two cards are measured; this is not a fitted law.

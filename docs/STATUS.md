@@ -1,6 +1,6 @@
 # Status — what this package does, what is current, what is open
 
-**As of 2026-10-17, version 0.55.0** (the version of record is `pyproject.toml`'s). This page states the current
+**As of 2026-10-20, version 0.56.0** (the version of record is `pyproject.toml`'s). This page states the current
 position in each area, with the claim id behind each number; [`docs/claims.json`](claims.json) holds every claim's full
 text and evidence. The dated narrative behind these positions, with the readings they replaced and why, is
 [`STATUS-RECORD.md`](STATUS-RECORD.md).
@@ -22,8 +22,11 @@ loads at 4.70 GB and trains under 8 GB, and the streaming loader never materiali
 QLoRA on the frozen NF4 experts moves a held-out Alpaca eval from 1.4813 to 1.0290. `e4b.train.olmoe-fits`,
 `e4b.train.olmoe-converges` ([METHODOLOGY](METHODOLOGY.md)).
 
-**Expert offload takes 30B-class MoEs past VRAM.** In a training step Qwen3-30B-A3B peaks at 7.16 GB and
-Gemma-4-26B-A4B at 8.47 GB, where both run out of memory without offload, for about +11 % s/step at OLMoE scale. The
+**Expert offload takes 30B-class MoEs past VRAM.** Qwen3-30B-A3B trains TC1's matched set (fp32 adapters) on a 12 GB RTX
+A2000 at 10.463 GB peak allocated (micro-batch 1 × accum 8, the registered secondary after micro-batch 2 ran out of
+memory on that shared card; one draw; `e4b.train.frontier.qwen3.a2000-12gb.2026-10-02`). An older 5-step
+reading put it at 7.16 GB and Gemma-4-26B-A4B at 8.47 GB, both out of memory without offload; that reading was not
+reproduced (a later attempt, at a different configuration on a 5090, read 9.13 GB). Offload costs about +11 % s/step at OLMoE scale. The
 on-disk arena needs 2.56× to 6.40× less host RAM than the pinned-RAM path: at an 8.59 GB cap Qwen3-30B is OOM-killed on
 host RAM and completes on the arena. `e4b.offload.fits-30b-class`, `e4b.offload.arena-vs-host-ram`
 ([results](../bench/host-ram-ceiling/RESULTS-scaling.md)).
@@ -85,7 +88,7 @@ configuration, not Unsloth's default. The registered quality gates pass and the 
 
 ### Training against other frameworks
 
-**Qwen3-30B-A3B against Unsloth: Unsloth spends 1.92× e4b's GPU time per step; wall-clock 2.80× on an AMD EPYC
+**Qwen3-30B-A3B against Unsloth 2026.9.14: Unsloth spends 1.92× e4b's GPU time per step; wall-clock 2.80× on an AMD EPYC
 7713.** TC1's field recipe (alpaca, seq 2048, micro-batch 2 × accum 4, r 16, AdamW-8bit) on one RTX 5090, the work
 matched, both frameworks on one stack, e4b at every current default. The wall ratio depends on the host: Unsloth runs
 14× e4b's CPU ops per step and keeps its GPU busy for 0.33 of its step against e4b's 0.49, so a slower host stretches
@@ -93,23 +96,25 @@ Unsloth's step more. Held-out loss agrees within 0.0012; e4b peaks 1.89 GB highe
 runs out of memory on the 32 GB card. `e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio`,
 `e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.hf-oom` ([results](../bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos69.md)).
 
-**On packed 4,096-token rows, Unsloth spends 1.160× e4b's GPU time per step.** The wall-clock ratio follows the host:
+**On packed 4,096-token rows, Unsloth 2026.9.14 spends 1.160× e4b's GPU time per step.** The wall-clock ratio follows the host:
 1.472 on the profiled host, 1.287 and 1.773 on two others. At e4b's defaults its training phase peaks 1.04 GB above
 Unsloth's 24.86 GB, and 0.30 GB above with the opt-in `E4B_CKPT_OFFLOAD=1`.
 `e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio`,
 `e4b.train.memory.packed-4k-position-defaults.5090.2026-10-07`
 ([results](../bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos68.md)).
 
-**Mixtral-8x7B against Unsloth: e4b is faster, Unsloth/e4b 1.144**, both resident on one stack (torch 2.12.1 /
+**Mixtral-8x7B against Unsloth 2026.9.14: e4b is faster, Unsloth/e4b 1.144**, both resident on one stack (torch 2.12.1 /
 transformers 5.5.0), on an AMD EPYC 7B13: 3.24 against 3.71 s/step, at 2.07 GB more peak on e4b (its fp32 expert
 absmax). The register's other Mixtral ratios answer other questions: 0.836 put e4b on the field image's torch 2.8 stack
 on a Core Ultra 9 285K, the host most favourable to Unsloth seen (the same-stack box read that stack at 1.013), and
-0.361 is tp2's footprint trade, e4b under CPU expert offload at 3.22 GB against Unsloth resident at 29.16 GB, not a
+0.361 is tp2's footprint trade (2026-09-06, Unsloth 2026.9.2), e4b under CPU expert offload at 3.22 GB against Unsloth
+resident at 29.16 GB, not a
 resident position. `e4b.train.h2h.unsloth.mixtral.5090.2026-10-05.same-stack`,
 `e4b.train.h2h.unsloth.mixtral.5090.2026-10-04.dense-default`, `e4b.train.h2h.unsloth.mixtral.5090.2026-09-06`
 ([results](../bench/h2h-2026-10-02/tc2/RESULTS-tc2-mixtral-samestack.md)).
 
-**Granite and OLMoE: e4b is faster than each comparator** (TC2, 2026-10-04, one RTX 5090): HF/e4b 1.299 and
+**Granite and OLMoE: e4b is faster than each comparator** (TC2, 2026-10-04, one RTX 5090; transformers 5.18.0 + PEFT
+0.21.2, axolotl 0.20.0, Unsloth 2026.9.14): HF/e4b 1.299 and
 axolotl/e4b 1.150 on Granite-3.1-3B-A800M, Unsloth/e4b 1.821 on OLMoE-1B-7B, each pair comparable or equivalent on
 held-out loss. e4b's peak is about half HF's on Granite and 1.70 GB above Unsloth's on OLMoE. Unsloth adapts no expert
 parameter of Granite, so there is no Unsloth position there, and gpt-oss-20b has no adapter set common to the
@@ -117,20 +122,21 @@ frameworks. `e4b.train.h2h.hf.granite.5090.2026-10-04`, `e4b.train.h2h.axolotl.g
 `e4b.train.h2h.unsloth.olmoe.5090.2026-10-04`, `e4b.train.h2h.unsloth.granite.5090.2026-10-02.coverage`,
 `e4b.train.h2h.unsloth.gptoss.5090.2026-10-02.no-common-set` ([TC2](../bench/h2h-2026-10-02/tc2/README.md)).
 
-**Qwen3.6-35B-A3B: at its defaults e4b does not fit the matched set resident on 32 GB; Unsloth does**, at 30.47 GB.
+**Qwen3.6-35B-A3B: at its defaults e4b does not fit the matched set resident on 32 GB; Unsloth 2026.9.14 does**, at 30.47 GB.
 Under expert offload e4b trains the set at 19.35 GB. With the comparator's bytes at micro-batch 1 (a measurement hook,
 not a training option) e4b trains it resident and Unsloth/e4b reads 2.049, a labelled row.
 `e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-04`, `e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-02.e4b-offload`,
 `e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-04.mb1-dq-frozen4`.
 
-**axolotl on Qwen3-30B-A3B: e4b is faster, axolotl/e4b 2.775** at matched work (1.979 on a second host). At steady
+**axolotl 0.20.0 on Qwen3-30B-A3B: e4b is faster, axolotl/e4b 2.775** at matched work (1.979 on a second host). At steady
 state (steps 101–200) axolotl's scattermoe native-best / e4b as shipped reads 1.238 and 1.146 on two hosts, while at
 step 200 axolotl's held-out is 0.7705 against e4b-as-shipped's 0.7948. Both were read on 2026-10-03, before the later
 training defaults. `e4b.train.h2h.axolotl.qwen3.5090.2026-10-03`,
 `e4b.train.h2h.axolotl.qwen3.5090.2026-10-03.native-steady-state`
 ([results](../bench/h2h-2026-10-02/tc1/RESULTS-tc1-matched19.md)).
 
-**On an H100 NVL at e4b 0.45.0's default settings, e4b is faster per step: Unsloth/e4b 1.061**, at 2.93 GB more peak
+**On an H100 NVL at e4b 0.45.0's default settings, e4b is faster per step than Unsloth 2026.9.14: Unsloth/e4b
+1.061**, at 2.93 GB more peak
 on e4b and ×1.23 Unsloth's energy per step. `e4b.train.h2h.unsloth.qwen3.h100.release-0.45.0`
 ([TC1c](../bench/h2h-2026-10-02/tc1c/README.md)).
 
@@ -222,9 +228,17 @@ eager chain until a read of their own. `e4b.serve.p130.prefill-glue-speed.qwen3.
 **Single-request decode.** grouped-nf4-gemm's bandwidth-targeted NF4 decode GEMV decodes one request 1.2417× as fast,
 16 unchanged, within P110's quality bar; it is grouped-nf4-gemm's default from 0.43.0 at Qwen3's NF4 expert shapes on
 GPUs with 160 or more SMs. `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`. On Mixtral-8x7B, at plans chosen on an RTX
-5090, the same GEMV decodes one request **2.41×** as fast (19.5 → 8.1 ms a step), 16 unchanged, within the same bar; it
-becomes auto's at Mixtral's shapes with a grouped-nf4-gemm release carrying #556.
-`e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18` ([results](../bench/p141/RESULTS-p141.md)).
+5090, the same GEMV decodes one request **2.41×** as fast (19.5 → 8.1 ms a step), 16 unchanged, within the same bar.
+`e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18` ([results](../bench/p141/RESULTS-p141.md)). Two more reads set
+grouped-nf4-gemm 0.47.0's `auto` scope. On an RTX 4090 (128 SMs), Qwen3-30B-A3B decodes one request **1.5145×** as fast
+(`e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18`, [results](../bench/p133/RESULTS-p133.md)). On an RTX 5090 at a 400 W
+limit, Granite-3.1-3b-a800m decodes it **1.3979×** as fast and OLMoE-1B-7B **1.5011×**
+(`e4b.serve.p134.gemv-bw.granite.5090.2026-10-18`, `e4b.serve.p134.gemv-bw.olmoe.5090.2026-10-18`,
+[results](../bench/p134/RESULTS-p134.md)). Sixteen requests are unchanged and quality is within the same bar in each.
+- **Scope since grouped-nf4-gemm 0.47.0:** its default also takes Mixtral-8x7B's, Granite-3.1-3B-A800M's and OLMoE-1B-7B's
+  expert shapes on GPUs with 160 or more SMs, and the RTX 4090 (128 SMs, sm_89) at Qwen3-30B-A3B's two shapes only. The
+  shapes are licensed, not the families: any model with those expert shapes takes them. Every other shape and smaller
+  GPU keeps dot-pad; `GNF4_GEMV_BW=0` restores it.
 
 **The B=1 fused stack is the default on Qwen3-MoE, Qwen3.5/3.6-MoE and Mixtral.** On top of grouped-nf4-gemm 0.43.0's
 bandwidth GEMV, fused q/k/v
@@ -262,7 +276,7 @@ moves buckets 1, 2 and 4 only.
   binding). Sixteen requests are unchanged (0.992).
 - **Quality:** SANE exact (bias 0.0, argmax 1.0). The cap is bitwise-identical to the plan at contexts ≤ 1024, and
   within A2's fp64 contract (error 0.9976–1.0000× the plan's) at 2048 and above.
-- **Default:** it becomes `qwen3_moe`'s default with the flip PR; `E4B_ATTN_SPLIT_CAP=0` restores the plan.
+- **Default:** on for `qwen3_moe` (16); `E4B_ATTN_SPLIT_CAP=0` restores the plan.
 - **Measured basis:** Qwen3-30B-A3B on an RTX 5090 (170 SMs). Other `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B)
   and other cards take the default by family without a read of their own. The plan is SM-scaled, so the cap moves
   B 1–6 on a PRO 6000 and B 1–4 on a 4090.
@@ -308,6 +322,35 @@ K25's select-tree codebook decode for grouped-nf4-gemm K39's (`lut="prmt"`), whi
   gets read). Other families stay on the tree.
 
 `e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20` ([P158](../bench/p158/RESULTS-p158.md)).
+
+**Opt-in on main after 0.56.0: K25 at plan `c1` under K39's decode (`E4B_K25_PLAN`, e4b#1877).** `E4B_K25_PLAN=c1`
+runs K25 at P156's first carried plan pair, gate_up `{block_n 64, kc 256, warps 4, stages 2}` and down `{block_n 128, kc
+128, warps 8, stages 3}`, in place of today's single plan. `today` is the default (also when unset), unchanged.
+- **Only under `prmt`.** The select tree at `c1`'s shapes is slower than at today's (P155's selection: gate_up
+  64/256/4/2 at 14.23 ms against 8.32, at 255 registers; [RESULTS-p156](../bench/p156/RESULTS-p156.md), "The cause is
+  the decode"), so `c1` under any other
+  decode is refused at engine build and in the forward, never run. It is also refused with K25 off or absent.
+- **Measured: a kernel microbench, no served read.** At Qwen3-30B-A3B's W16 shapes on an RTX 5090, under `prmt`, both
+  K25 GEMMs ran 1.6598× faster at `c1` than at today's plan (kernel time today / `c1`, above 1 is faster; the median of
+  126 paired reps, lower bound 1.6568, clock-adjusted 1.6525; P160 `p160-5090-2`,
+  [RESULTS](../bench/p160/RESULTS-p160.md); UNVERIFIED: no register row). No speed is claimed for the served step until
+  P161 reads it there.
+- **Same bits.** The tree, `prmt`, and `prmt` with `c1` give bit-identical outputs through the served call
+  (`tests/test_k25_lut_gpu.py`, including a K that neither of `c1`'s KCs divides).
+- **Records:** `info["k25_plan"]` (the build's resolution) and `prefill_routes()["seen"]["moe_k25_plan"]` (each K25
+  call's plan).
+
+**Int8 attention projections on Mixtral are opt-in, with no speed claimed.**
+- **What it does:** `E4B_SERVE_ATTN_INT8=1` (#1848) holds Mixtral-8x7B's q, k, v and o projections in int8 with a
+  per-row fp32 scale. Decode calls of 1-16 rows run grouped-nf4-gemm 0.49.0's K37 kernels (`dense_i8.linear_i8`), and
+  larger calls dequantize transiently.
+- **Where it refuses:** on other families, without K37, and alongside int4 attention or `E4B_DENSE_GEMV_BW=1`.
+- **Its premises have read:**
+  - the int8 round trip keeps P147's quality gate: I8ATTN GO, `p147-a2000-1`;
+  - the kernels beat cuBLAS bf16 at Mixtral's shapes: P149 box K, K_GO, `p149k-5090-8`, a microbench premise.
+- **Why it stays off by default:** the served read, P149's box Q+S, has not run. There is no claim id.
+
+[P147](../bench/p147/RESULTS-p147.md), [P149](../bench/p149/RESULTS-p149.md).
 
 **Calibrated int4 attention is not licensed on the default.** On Qwen3-30B-A3B, `E4B_SERVE_ATTN_INT4_CALIB=1` decodes
 one request 1.154× as fast (1.238× with the int4 lm_head too). The mean NLL bias stays inside K8's budget, but only
@@ -408,6 +451,7 @@ controls. `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-
 | router weights cast to bf16 at ≤ 64 rows (`softmax_topk`) | fused router epilogue | `E4B_ROUTER_EPI_CAST=0` | `e4b.serve.p70.qwen3.b1.router-weight-cast.5090.2026-09-25` |
 | the paged FP8 attention decode capped at 16 splits (`qwen3_moe` only; buckets 1, 2 and 4 move, 32 / 32 / 23 -> 16; bitwise-identical to the plan at contexts ≤ 1024; one request 1.044× as fast, 16 unchanged, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs); other `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B) and other cards (the cap moves B 1–6 on a PRO 6000, B 1–4 on a 4090) take it by family without a read of their own) | `serve_paged` | `E4B_ATTN_SPLIT_CAP=0` | `e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19` |
 | the lm_head on its per-row int8 grid, its one-row decode GEMV through grouped-nf4-gemm K36 (`qwen3_moe` at the 151936 x 2048 head only; needs grouped-nf4-gemm 0.48.0 or later, else it resolves off, recorded; one request 1.052× as fast, 16 requests 0.992, an observed cost not attributed, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs); quality read on Qwen3-30B-A3B @ad44e777, same-shape checkpoints inherit the default unread; other head shapes, e.g. Qwen3-235B-A22B's 151936 x 4096, stay off) | `serve_paged` | `E4B_INT8_HEAD_BW=0` | `e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19` |
+| K25's codebook decode by grouped-nf4-gemm K39's byte permute (`lut="prmt"`; `qwen3_moe` only; bit-identical to the select tree, every token identical; needs grouped-nf4-gemm 0.50.0 or later and an NVIDIA device, else it resolves to the tree, recorded in `info["k25_lut"]`; sixteen requests 1.0925× as fast (the smallest of four ABBA pairs), one request unchanged, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs) at today's K25 plan; other `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B) take it by family with no speed claimed; other families stay on the tree) | `serve_paged` | `E4B_K25_LUT=tree` | `e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20` |
 | B=1 fused stack (fused q/k/v and three glue folds) on Qwen3-MoE; its router epilogue, the only fold that engages, on Qwen3.5/3.6-MoE; its three glue folds on Mixtral | `serve_paged` | `E4B_PAGED_FUSE_QKV=0`, `E4B_FUSE_T1_GLUE=0`, `E4B_FUSE_T1_GLUE_R2=0`, `E4B_FUSE_ROUTER_EPI=0` | `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`, `e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`, `e4b.serve.p135.fold-speed.mixtral.5090.2026-10-18` |
 
 ---
@@ -442,9 +486,17 @@ Superseded and retired readings are not repeated here. The register keeps each w
   built a different one is unexplained, and no open issue carries it.
 - **Open register rows:** reproducing the TR2 training receipt from published artifacts (`e4b.open.tr2-repro-gap`);
   int8-offload's best training eval, confounded by an evaluator offset (`e4b.open.int8-offload-confounded`).
-- **Open campaigns:** training #835, serving #846, single-stream decode #1313. P127 Phase 2 is on main: #1477 folds
-  the MoE residual add into the experts' combine wherever a probe shows it bitwise (fixed by #1482), and #1472's
-  kernel options stay inert until a grouped-nf4-gemm release carries #526–#530. No speed claim until P127 reads.
+- **Open campaigns:** training #835, serving #846, single-stream decode #1313. P127 read: its launch-bound glue changes (Phase 1,
+  #1448; Phase 2, #1472/#1477/#1482 with grouped-nf4-gemm #526–#530, first released in 0.45.0) decode one request
+  1.1321× as fast and 16 requests 1.0156× on Qwen3-30B-A3B on an RTX 5090, bitwise identical
+  (`e4b.serve.p127.launch-bound-glue.qwen3.5090.2026-10-09`, [results](../bench/p127/RESULTS-p127.md)). #1472's kernel
+  options take effect with grouped-nf4-gemm 0.45.0 or later.
+- **Held-out loss parity against Unsloth and axolotl is unread.** HP1 closed at its calibration: at 48 layers the
+  shared evaluator's per-row zero-adapter gap set a tolerance of 0.044, against a 0.01 ceiling
+  ([results](../bench/hp1/RESULTS-HP1.md)). HP2 stopped at G1, because its instrument could not read the expected
+  margin ([results](../bench/hp2/RESULTS-HP2.md)). Neither makes a parity, ahead or behind claim. The held-out losses in
+  "Training against other frameworks" above are each framework's own in-loop reading, not a shared evaluator's. HPN
+  ([design](../bench/hpn/HPN-DESIGN.md), $0 on an RTX A2000) reads where the evaluator-vs-in-loop gap comes from.
 - **Older documents' debts:** `POST_AUDIT_WORK_QUEUE.md` (Q1–Q4), `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10),
   `LAYOUT_FACTS.md` (training determinism UNKNOWN), and `support_matrix.md`'s footer hash, which no longer matches its
   bytes and is recorded, not fixed, because the file is anchored.

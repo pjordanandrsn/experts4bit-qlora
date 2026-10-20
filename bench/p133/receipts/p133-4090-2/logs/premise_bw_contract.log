@@ -1,0 +1,5 @@
+.........................ss........                                      [100%]
+=========================== short test summary info ============================
+SKIPPED [1] test_nf4_gemv_bw.py:136: griddepcontrol needs sm_90+ (the switch is inert below)
+SKIPPED [1] test_nf4_gemv_bw.py:143: griddepcontrol needs sm_90+ (the switch is inert below)
+33 passed, 2 skipped in 194.95s (0:03:14)

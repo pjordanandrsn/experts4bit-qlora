@@ -26,7 +26,20 @@ RUN = (LANE / "p155_run.sh").read_text(encoding="utf-8")
 DRIVE = (LANE / "p155_drive.sh").read_text(encoding="utf-8")
 BENCH = (LANE / "p155_bench.py").read_text(encoding="utf-8")
 PREREG = (LANE / "PREREG-p155.md").read_text(encoding="utf-8")
-LIB = (REPO / "experts4bit_qlora" / "engines" / "hot_residency.py").read_text(encoding="utf-8")
+#: P155 is a closed lane: its record pins e4b `4d3fd170` (bench/p155/RESULTS-p155.md), so the served-route lines it
+#: asserts are read at that commit, never from the live tree, which later knobs may reword (E4B_K25_PLAN did).
+LANE_COMMIT = "4d3fd170"
+
+
+def _lib_at_lane() -> str:
+    try:
+        return subprocess.run(["git", "show", f"{LANE_COMMIT}:experts4bit_qlora/engines/hot_residency.py"], cwd=REPO,
+                              capture_output=True, text=True, encoding="utf-8", check=True).stdout
+    except (OSError, subprocess.CalledProcessError) as e:
+        why = f"the lane's commit {LANE_COMMIT} is not in this checkout: {e}"
+        if os.environ.get("CI"):                       # CI fetches full history: a missing commit there is a broken
+            pytest.fail(why + " (CI must fetch full history)")   # checkout, never a reason to drop the assert
+        pytest.skip(why)
 GUARD_H = 1.5
 BOOT_S = 300          # the launcher's create-to-runner allowance (P152's and P154's, kept)
 HEADROOM = 1.25       # e4b#1845's cross-lane rule
@@ -168,6 +181,7 @@ def test_todays_plan_is_the_served_plan():
 def test_the_bench_calls_k25_as_the_served_route():
     # the served route at 16 NF4 rows under K23's lean glue: gate_up reads the token rows (gather_div), down stores into
     # the caller's order (scatter), over the one-launch lean table
+    LIB = _lib_at_lane()
     assert "return _k25(_tok[0].to(torch.bfloat16), pk, am, t_row0, t_rows, t_grp, order,\n" \
            "                            gather_div=_tok[1], **_k25_kw)" in LIB
     assert 'kw = {"scatter": order} if (_lean and pk is dn_p) else {}' in LIB
@@ -339,3 +353,17 @@ def test_the_run_ids_are_registered_in_both_scripts():
     for text in (RUN, DRIVE):
         assert "p155-5090-1|p155-5090-2|p155-5090-3)" in text
     assert "`p155-5090-1` to `-3`" in PREREG
+
+
+@pytest.mark.parametrize("ci,outcome", [("1", pytest.fail.Exception), ("", pytest.skip.Exception)],
+                         ids=["ci-fails", "local-skips"])
+def test_a_missing_lane_commit_fails_under_ci_and_skips_locally(monkeypatch, ci, outcome):
+    """A shallow checkout cannot read the lane's commit. Under CI that is a broken checkout and fails, never a silent
+    skip that drops the closed-lane assert; a local checkout skips."""
+    monkeypatch.setitem(globals(), "LANE_COMMIT", "0" * 40)
+    if ci:
+        monkeypatch.setenv("CI", ci)
+    else:
+        monkeypatch.delenv("CI", raising=False)
+    with pytest.raises(outcome):
+        _lib_at_lane()

@@ -1,0 +1,84 @@
+{
+ "mode": "fit",
+ "status": "ok",
+ "dry": false,
+ "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+ "max_seqs": 64,
+ "buckets": [
+  1,
+  2,
+  4,
+  8,
+  16,
+  32,
+  64
+ ],
+ "graphs": true,
+ "arm": "B0",
+ "tag": "",
+ "e4b_sha": "c8d7e629e4c8431fc86970cf7195d8e67f72e22a",
+ "gnf4_sha": "6b7c2e7474d20c8843814dd46dad6cfc3d94b440",
+ "revision": "a02780686e08a03fe0d2679a293b5c74a90efa89",
+ "knobs": {
+  "GNF4_GEMV_BW": null,
+  "GNF4_GEMV_BW_PLAN": null,
+  "GNF4_GEMV_BW_DECODE": null
+ },
+ "torch": "2.8.0+cu128",
+ "load_s": 18.23,
+ "placement": "all-vram",
+ "fusions": {
+  "fuse_qkv_n": 0,
+  "fuse_t1_glue_n": 0,
+  "fuse_t1_glue_r2_n": [
+   0,
+   0
+  ],
+  "fuse_router_epilogue_n": 0
+ },
+ "fusion_modes": {
+  "E4B_PAGED_FUSE_QKV": "0",
+  "E4B_FUSE_T1_GLUE": "0",
+  "E4B_FUSE_T1_GLUE_R2": "0",
+  "E4B_FUSE_ROUTER_EPI": "0"
+ },
+ "levers_env": {},
+ "graph_status": {
+  "1": "graph",
+  "2": "graph",
+  "4": "graph",
+  "8": "graph",
+  "16": "graph",
+  "32": "graph",
+  "64": "graph"
+ },
+ "grouping": {
+  "device_grouping": true,
+  "force_singleton_groups": false
+ },
+ "dispatch_build": {
+  "dotpad": 0,
+  "dotpad_splitk": 0,
+  "scalar": 192,
+  "scalar_splitk": 0,
+  "bw_tree": 0,
+  "bw_prmt32": 0,
+  "bw_splitk": 0
+ },
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "capability": [
+  12,
+  0
+ ],
+ "sm_count": 170,
+ "w1_wall_s": 0.2159,
+ "w1_steps": 32,
+ "mem": {
+  "max_memory_allocated": 12677889024,
+  "memory_allocated": 12407860736,
+  "memory_reserved": 13092519936,
+  "free": 19824181248,
+  "total": 33668726784
+ },
+ "control_width": 16
+}

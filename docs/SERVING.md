@@ -198,6 +198,8 @@ What SC2b read (#846, `bench/sc2/`, one RTX 5090, Qwen3-30B-A3B int4, 16 sequenc
 - the capacity ceiling **unchanged** at 1 req/s. Under load, most of the per-prefill stall on running decodes is work
   outside the graphed forward.
 
+UNVERIFIED: SC2b's figures have no register row; the record is `bench/sc2/`.
+
 The A2000 census behind it is `bench/prefill-graph-census-2026-10-04/`.
 
 **Bulk KV bookkeeping (`E4B_PAGED_BULK_KV`, on by default since lanes SC2c and SC2d; `0` restores the per-layer path).** Each request costs the engine some KV
@@ -234,7 +236,8 @@ is additive: the graph's `auto` headroom check counts the bound at the slot's ca
 stall census behind it is `bench/stall-census-2026-10-05/` (exploratory: launch counts and bitwise parity on the A2000,
 a correctness testbed, and a post-hoc read of SC2b's traces). On Qwen3-30B-A3B, lane SC2c measured serial TTFT 3.8× faster and
 capacity up from 2 to 4 req/s, with identical output ([SC2c](../bench/h2h-2026-10-02/sc2c/README.md)). SC2d confirmed identical
-output on Qwen3.6-35B-A3B and gpt-oss-20b ([SC2d](../bench/h2h-2026-10-02/sc2d/README.md)). Neither has a register row yet.
+output on Qwen3.6-35B-A3B and gpt-oss-20b ([SC2d](../bench/h2h-2026-10-02/sc2d/README.md)). UNVERIFIED: neither has a
+register row yet.
 
 **Final-position logits (`E4B_PAGED_LAST_LOGITS=1`, opt-in).** The prefill forward asks the model's LM head for one
 position while every prompt token still traverses the decoder and populates K/V. Eager chunks, first-chunk graph
@@ -363,8 +366,41 @@ rows) and `levers.kv.pool_mib`, and the step trace counts `dec_pieces` (replays 
 **Single-request decode GEMV (grouped-nf4-gemm 0.43.0; lane P116).** On GPUs with at least 160 SMs, decode at
 Qwen3-30B-A3B's NF4 expert shapes uses grouped-nf4-gemm's bandwidth-targeted GEMV: 1.24× as fast at one request and
 unchanged at 16, with quality within P110's bar (`e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`). It is grouped-nf4-gemm's
-default from 0.43.0, and `[fast]` requires 0.43.0 from experts4bit-qlora 0.55.0; `GNF4_GEMV_BW=0` restores dot-pad. Other
-shapes and smaller GPUs are unchanged.
+default from 0.43.0, and `[fast]` requires 0.43.0 from experts4bit-qlora 0.55.0; `GNF4_GEMV_BW=0` restores dot-pad.
+From grouped-nf4-gemm 0.47.0, at >= 160 SMs, the default also takes Mixtral-8x7B's expert shapes (one request 2.41× as fast,
+`e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18`), Granite-3.1-3b-a800m's and OLMoE-1B-7B's (1.3979× and 1.5011× on an RTX
+5090 at a 400 W limit, `e4b.serve.p134.gemv-bw.granite.5090.2026-10-18`, `e4b.serve.p134.gemv-bw.olmoe.5090.2026-10-18`),
+and the RTX 4090 (128 SMs) at Qwen3-30B-A3B's two shapes only (1.5145×, `e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18`). The
+shapes are licensed, not the families. Every other shape, and every other GPU below 160 SMs, keeps the previous route.
+
+**Qwen3 decode defaults by family (lanes P143, P153, P158).** Three settings resolve per family at startup, before any
+weight loads. Unset, `qwen3_moe` takes each one as read on Qwen3-30B-A3B on one RTX 5090; every other family keeps the
+old behaviour until a read of its own. Other `qwen3_moe` checkpoints, Qwen3-235B-A22B among them, take the split cap
+and the K25 decode by family without a read of their own. `/health`'s `levers` block reports each resolution and its
+source (`default-allowlisted`, `default-off` with the reason where one applies, or `explicit`). Two of them need a
+newer grouped-nf4-gemm than `[fast]` requires (0.43.0): the int8 head's GEMV ships in 0.48.0 and K25's byte-permute
+decode in 0.50.0. On an older package each resolves off, recorded.
+- **Attention split cap (`E4B_ATTN_SPLIT_CAP`, 16 on `qwen3_moe`).** It caps the paged FP8 attention decode at 16
+  splits, so buckets 1, 2 and 4 use 16 instead of 32 / 32 / 23 at 4,096-token slots. It is bitwise-identical to the plan
+  at contexts up to 1,024 tokens. One request decodes 1.0442× as fast and sixteen are unchanged
+  (`e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19`, [`bench/p143/RESULTS-p143.md`](../bench/p143/RESULTS-p143.md)).
+  `0` turns it off. Reported in `levers.attn_split_cap`.
+- **int8 output head (`E4B_INT8_HEAD_BW`, on for `qwen3_moe` at a 151,936 × 2,048 head).** The lm_head is rounded in
+  place to its per-row int8 grid, and one-row calls run grouped-nf4-gemm's int8 GEMV. **Outputs change:** the logits
+  differ from the bf16 head's at every batch size, so greedy text can differ. One request decodes 1.0520× as fast, and
+  sixteen read 0.992 (an observed cost, not attributed), with quality inside the registered bars
+  (`e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19`, [`bench/p153/RESULTS-p153.md`](../bench/p153/RESULTS-p153.md)).
+  Other head shapes, including Qwen3-235B-A22B's, stay off. Unset, a head the swap refuses (tied, biased, int4, not
+  bf16) or a kernel package without the int8 GEMV resolves it off, recorded, never a crash; an explicit `1` refuses
+  them at startup. `0` restores the bf16 head. Reported in `levers.int8_head_bw`.
+- **K25's codebook decode (`E4B_K25_LUT`, `prmt` on `qwen3_moe`).** The batched-decode expert GEMM (K25) decodes NF4
+  codes through byte-permute table lookups (grouped-nf4-gemm K39, from 0.50.0) instead of the select tree. It is
+  bit-identical to the tree. Sixteen requests decode 1.0925× as fast, and one is unchanged, since K25 is not on the
+  one-request path (`e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20`,
+  [`bench/p158/RESULTS-p158.md`](../bench/p158/RESULTS-p158.md)). On an older kernel package or a ROCm device it
+  resolves to the tree, so no install breaks. `tree` opts out, and an explicit `prmt` the package or device cannot
+  serve is refused. Reported in `levers.k25_lut`; which decode each K25 call took is
+  `prefill_routes.seen.moe_k25_lut`.
 
 **Prefill on the int4 expert store (#916; lanes P100, P102).** With `max_seqs` 1 the server leaves
 `hot_residency.DEVICE_GROUPING` off. Until P102, every prefill chunk's MoE call on the int4 store therefore ran a
@@ -381,7 +417,8 @@ layer.
   - `mtile`: the grouped int4 M-tile GEMM, int8 activations.
 - **P102** ([`bench/p102/RESULTS-p102.md`](../bench/p102/RESULTS-p102.md), RTX 5090, Qwen3-30B-A3B) read
   `DEFAULT=k19`: TTFT-4096 7.21 s → 1.37 s and TTFT-512 0.85 s → 0.11 s. The prefill-shaped NLL stayed within +0.011 /
-  +0.007 ppl of the loop on 12 fresh windows (the calibrated K8 rule).
+  +0.007 ppl of the loop on 12 fresh windows (the calibrated K8 rule). UNVERIFIED: no register row; the record is its
+  RESULTS.
 - With `max_seqs > 1`, prefill rows have always taken the M-tile; `auto` moves them to K19 too.
 - **What remained of a k19 prefill:** about 45 % of its device time was prefill attention in fp32 without tensor
   cores. The next paragraph covers it.
@@ -399,6 +436,7 @@ rules out the flash and memory-efficient kernels, so SDPA ran its fp32 math back
   - a 4096-token prefill's device time fell from 906 ms to 378 ms;
   - TTFT-4096 fell from 1.98 s to 1.74 s on a CPU-bound EPYC host, where the GPU then idles for most of a prefill;
   - the served-prefill NLL stayed within −0.014 / −0.008 ppl of `math` on 12 fresh windows (the calibrated K8 rule).
+  - UNVERIFIED: no register row; the record is its RESULTS.
 - The read covers Qwen3-30B-A3B. Other families with plain full-attention layers are covered by the route's CPU
   equivalence tests (`tests/test_paged_prefill_attn_route.py`), not by a reading.
 - **What remains:** host-side launch overhead. About 50,000 device-to-device copies per 4096-token prefill remain under

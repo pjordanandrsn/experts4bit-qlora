@@ -1,0 +1,32 @@
+"driver_version"
+The version of the installed NVIDIA display driver. This is an alphanumeric string.
+
+"vbios_version"
+The BIOS of the GPU board.
+
+"clocks_event_reasons.active" or "clocks_throttle_reasons.active"
+Bitmask of active clock event reasons. See nvml.h for more details.
+
+"ecc.mode.current"
+The ECC mode that the GPU is currently operating under.
+
+"ecc.errors.corrected.volatile.total"
+Total errors detected across entire chip.
+
+"ecc.errors.corrected.aggregate.total"
+Total errors detected across entire chip.
+
+"ecc.errors.uncorrected.volatile.total"
+Total errors detected across entire chip.
+
+"ecc.errors.uncorrected.aggregate.total"
+Total errors detected across entire chip.
+
+"retired_pages.single_bit_ecc.count" or "retired_pages.sbe"
+The number of GPU device memory pages that have been retired due to multiple single bit ECC errors.
+
+"retired_pages.double_bit.count" or "retired_pages.dbe"
+The number of GPU device memory pages that have been retired due to a double bit ECC error.
+
+"retired_pages.pending"
+Checks if any GPU device memory pages are pending retirement on the next reboot. Pages that are pending retirement can still be allocated, and may cause further reliability issues.

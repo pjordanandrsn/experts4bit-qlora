@@ -102,3 +102,8 @@ The prmt sweep carried three plan pairs (today's plan excluded, since it is P), 
   pinned commit as here. It quotes no gain from this record.
 - **Decode x plan** as a later lane: C1-C3's plans with prmt, on their own held-out read.
 - **No default changes.** K39 stays opt-in with no speed claim until a served read.
+
+**What came of it (added 2026-10-20, after the record):** the served read is [P158](../p158/RESULTS-p158.md): FLIP, sixteen requests
+1.0925x as fast (`e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20`), and `prmt` became qwen3_moe's default (e4b#1868).
+Decode x plan is [P160](../p160/RESULTS-p160.md): GO, C1 1.6598x over prmt at today's plan on a stream this lane never
+timed, a microbench premise for a served read of its own.
