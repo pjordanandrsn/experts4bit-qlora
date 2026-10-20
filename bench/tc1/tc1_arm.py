@@ -3301,18 +3301,20 @@ def hp1_stored_state(slots):
     return {"stored_digest": fold, "n_slots": len(per), "keys_sha256": keys}, per
 
 
-def hbd_libraries():
+def hbd_libraries(maps=None):
     """The libbitsandbytes files mapped into THIS process (/proc/self/maps), each with its sha256, and the environment that
-    picks one. HBD reads this inside the cell, after the base export."""
+    picks one. HBD reads this inside the cell, after the base export. A library is mapped in several segments, so each path is
+    listed once. ``maps`` (the maps text) is for tests."""
     import hashlib
     paths = []
     try:
-        for line in open("/proc/self/maps"):
-            parts = line.split()
-            if len(parts) >= 6 and "libbitsandbytes" in os.path.basename(parts[-1]) and parts[-1] not in paths:
-                paths.append(parts[-1])
+        lines = maps.splitlines() if maps is not None else open("/proc/self/maps").read().splitlines()
     except OSError as e:
         return {"error": f"{type(e).__name__}: {e}"}
+    for line in lines:
+        parts = line.split()
+        if len(parts) >= 6 and "libbitsandbytes" in os.path.basename(parts[-1]) and parts[-1] not in paths:
+            paths.append(parts[-1])
     libs = []
     for path in paths:
         try:
@@ -3343,11 +3345,19 @@ def hbd_versions():
 def hbd_record(model, path):
     """--hbd-record PATH (with --hp1-export): the stored-state digest, the slot structure, the libraries mapped into this process
     and the versions. The per-slot hashes go to PATH; the receipt's hp1 block carries the summary."""
+    _hp1_path()
+    import hp1_lib
     slots, regimes, n_layers = hp1_base_slots(model)
     rec, per = hp1_stored_state(slots)
+    per_dq = {}
+    with torch.no_grad():                                # the dequantized fingerprint per slot, as hp1_base_digest takes it
+        for key in sorted(slots, key=lambda k: (k[0], str(k[1]), k[2])):
+            w = slots[key][1]()
+            per_dq[f"{key[0]}|{key[1]}|{key[2]}"] = [int(w.numel()), *hp1_lib.slot_fingerprint(w)]
+            del w
     rec.update(bnb=hbd_libraries(), versions=hbd_versions(), regimes=regimes, n_layers=n_layers)
     with open(path, "w") as f:
-        json.dump(dict(rec, per_slot=per), f, indent=1, sort_keys=True)
+        json.dump(dict(rec, per_slot=per, per_slot_dequant=per_dq), f, indent=1, sort_keys=True)
     return dict(rec, path=path)
 
 

@@ -18,7 +18,8 @@ CELLS = ("E0a", "E0b", "E2", "E1", "U0a", "U0b", "U1", "U2")
 REPEATS = (("E0a", "E0b"), ("U0a", "U0b"))
 BUILD_PAIRS = (("E2", "E1", "e4b"), ("U0a", "U1", "unsloth"))     # across builds at fixed transformers (PREREG outcome 3)
 VENV_PAIR = ("E0a", "E2")                                          # e4b across venvs at a fixed build (outcome 4)
-REPORTED = (("E0a", "E1"), ("U1", "U2"), ("E0a", "U0a"), ("E1", "U1"))
+REPORTED = (("E0a", "E1"), ("U1", "U2"))
+CROSS = (("E0a", "U0a"), ("E1", "U1"))        # across frameworks: read on the dequantized digest only (their stored regimes differ by construction)
 
 
 def _load(base, rel):
@@ -39,9 +40,10 @@ def cell_view(base, files):
     v.update(stored=hbd.get("stored_digest"), n_slots=hbd.get("n_slots"), keys=hbd.get("keys_sha256"),
              versions=hbd.get("versions") or {}, libs=((hbd.get("bnb") or {}).get("libraries")) or [])
     try:
-        v["per_slot"] = _load(base, files["record"]).get("per_slot") or {}
+        r = _load(base, files["record"])
+        v["per_slot"], v["per_slot_dequant"] = r.get("per_slot") or {}, r.get("per_slot_dequant") or {}
     except (OSError, ValueError, KeyError):
-        v["per_slot"] = None
+        v["per_slot"] = v["per_slot_dequant"] = None
     try:
         v["probe_libs"] = _load(base, files["probe"]).get("libraries") or []
     except (OSError, ValueError, KeyError):
@@ -87,9 +89,31 @@ def _kind(key):
     return "experts" if k in ("gate_up", "down") else "attention" if k in ("q", "k", "v", "o") else "other"
 
 
+def _kinds(px, py):
+    kinds = {}
+    if px is not None and py is not None:
+        for k, h in px.items():
+            if py.get(k) != h:
+                kinds[_kind(k)] = kinds.get(_kind(k), 0) + 1
+    return kinds
+
+
+def compare_dequant(c, a, b):
+    """A cross-framework pair, read on the dequantized digest only: e4b's and Unsloth's stored regimes differ by construction
+    (e4b's q/k/v nf4/64, Unsloth's nf4/64+dq), so their stored digests always differ and say nothing."""
+    x, y = c[a], c[b]
+    vers = sorted(k for k in set(x["versions"]) | set(y["versions"]) if x["versions"].get(k) != y["versions"].get(k))
+    out = {"pair": [a, b], "read_on": "dequantized digest", "versions_differ": {k: [x["versions"].get(k), y["versions"].get(k)] for k in vers}}
+    if (x["n_slots"], x["keys"]) != (y["n_slots"], y["keys"]):
+        return dict(out, reading="STRUCTURE")
+    if x["digest"] == y["digest"]:
+        return dict(out, reading="SAME_DEQUANT")
+    return dict(out, reading="DIFFERENT_DEQUANT", dequant_slots_differ_by_kind=_kinds(x["per_slot_dequant"], y["per_slot_dequant"]))
+
+
 def compare(c, a, b):
     """One pair's reading: STRUCTURE, SAME, DIFFERENT_QUANTIZED or DIFFERENT_DEQUANT, with the versions that differ and, for a
-    DIFFERENT, the slot kinds whose stored state differs."""
+    DIFFERENT, the slot kinds whose stored state (and, for a DIFFERENT_DEQUANT, whose dequantized fingerprint) differs."""
     x, y = c[a], c[b]
     vers = sorted(k for k in set(x["versions"]) | set(y["versions"]) if x["versions"].get(k) != y["versions"].get(k))
     out = {"pair": [a, b], "versions_differ": {k: [x["versions"].get(k), y["versions"].get(k)] for k in vers}}
@@ -99,12 +123,8 @@ def compare(c, a, b):
     if x["stored"] == y["stored"] and x["digest"] == y["digest"]:
         return dict(out, reading="SAME")
     reading = "DIFFERENT_QUANTIZED" if x["stored"] != y["stored"] else "DIFFERENT_DEQUANT"
-    kinds = {}
-    if x["per_slot"] is not None and y["per_slot"] is not None:
-        for k, h in x["per_slot"].items():
-            if y["per_slot"].get(k) != h:
-                kinds[_kind(k)] = kinds.get(_kind(k), 0) + 1
-    return dict(out, reading=reading, stored_slots_differ_by_kind=kinds, dequant_equal=x["digest"] == y["digest"])
+    return dict(out, reading=reading, stored_slots_differ_by_kind=_kinds(x["per_slot"], y["per_slot"]),
+                dequant_slots_differ_by_kind=_kinds(x["per_slot_dequant"], y["per_slot_dequant"]), dequant_equal=x["digest"] == y["digest"])
 
 
 def reduce(spec, base):
@@ -117,7 +137,7 @@ def reduce(spec, base):
         return dict(out, outcome="VOID", reasons=why)
     out["build"] = {fw: compare(cells, a, b) for a, b, fw in BUILD_PAIRS}
     out["venv_at_fixed_build"] = compare(cells, *VENV_PAIR)
-    out["reported"] = [compare(cells, a, b) for a, b in REPORTED]
+    out["reported"] = [compare(cells, a, b) for a, b in REPORTED] + [compare_dequant(cells, a, b) for a, b in CROSS]
     reads = {r["reading"] for r in out["build"].values()}
     out["outcome"] = "READ"
     out["summary"] = {fw: r["reading"] for fw, r in out["build"].items()}
