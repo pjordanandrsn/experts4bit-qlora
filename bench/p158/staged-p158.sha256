@@ -1,0 +1,15 @@
+# bench/p158/staged-p158.sha256 -- every piece the P158 box runs, by the name the box sees (bench/p158/PREREG-p158.md).
+# Every piece shared with P153's kit at P153's pins (bench/p153/staged-p153.sha256); test_nf4_smallm_prmt_gpu.py is
+# grouped-nf4-gemm's kernel/test_nf4_smallm_prmt_gpu.py at v0.50.0 (41ef086e), byte for byte.
+a9c7f013970c831b46afabbcf9dffe0d082faf65cf455623cf6e9305b05e9246  p158_run.sh
+cec65e8bf3fc772d60cf3be13fba149f6d3418d72218d6be4a049f78922f47a1  p158_box.py
+168b02facb8feb44ca4eee48057a0c5d1f2207553659a92d110d8951c2689c53  p158_reduce.py
+b53f94192b4040b6451ceb18f8cd4e3e5629a6e40c4885b40600fcc4205d8248  p109_box.py
+e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+f53952c1a26b06e8a8f61dcfdbd511acad0b0507cae58cb1bbfca7f3c8f4313a  test_decode_graph_buckets.py
+0af027ec93837f2b0cd150a77c7692386ac33eb59d553727c40fe784c6c273de  test_kv_step_select.py
+8e5b2f775cf5c0ddde349822624a7d44b40f3898738cc64ceb31f5f3f4ea5aae  test_fused_glue_decode_graphs_gpu.py
+63481683aa12674ba274169d8fcaed2894bd87e552f780452568bdd60cb70176  test_gemv_bw_served_gpu.py
+9f6366287957f75bdfe53ff8165b401c30fb9e97d4da582254ad7e98bf702868  test_nf4_smallm_prmt_gpu.py
+81f04a4202a2277ab9497e16dc79a221b8bc36f277e12b8e584a133cedc963f4  test_k25_lut_gpu.py
