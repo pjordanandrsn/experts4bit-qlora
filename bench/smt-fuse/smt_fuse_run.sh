@@ -33,7 +33,7 @@ unset OMP_NUM_THREADS MKL_NUM_THREADS TRITON_INTERPRET
 : > summary.txt; echo "$SMT_FUSE_INSTANCE_ID" > INSTANCE_ID
 echo "KNOBS run=$SMT_FUSE_RUN_ID e4b=$E4B_SHA gnf4=$GNF4_SHA experts=$EXPERTS dry=$DRY mode=$MODE" | tee -a summary.txt
 [ "$DRY" = 1 ] && { echo "DRY -- the \$0 dry run on a few experts: NEVER a reading" | tee -a summary.txt; : > DRY; }
-for f in smt_fuse_box.py staged.sha256 smt_sib_box.py q235_bootstrap.py wheels.json dq11_require_git.sh; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
+for f in smt_fuse_box.py staged.sha256 smt_sib_box.py thp_window.py q235_bootstrap.py wheels.json dq11_require_git.sh; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
 [ "$(sha256sum $W/wheels.json | cut -d' ' -f1)" = "$LOCK_SHA" ] || { say "wheels.json is not Q235's lock"; finish 9; }
 (cd $W && sha256sum -c staged.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/smt-fuse/staged.sha256"; finish 9; }
 # ---- refusals before anything is installed

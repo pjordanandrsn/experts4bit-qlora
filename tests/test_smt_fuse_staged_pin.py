@@ -17,6 +17,7 @@ LANE = REPO / "bench" / "smt-fuse"
 PIN = LANE / "staged.sha256"
 SOURCES = {n: LANE / n for n in ("smt_fuse_run.sh", "smt_fuse_box.py", "smt_sib_box.py", "q235_bootstrap.py", "wheels.json",
                                   "dq11_require_git.sh")}
+SOURCES["thp_window.py"] = REPO / "bench" / "common" / "thp_window.py"         # Amendment 1c: the shared THP records
 LOCK_SHA = "84f361ed35fff9a857f340b65488ad582dc4270aef7e67cbeb6b46b8370021f3"   # Q235's wheels.json at d65793e4 (bench/q235/q235.sha256)
 RUN = (LANE / "smt_fuse_run.sh").read_text()
 DRIVE = (LANE / "smt_fuse_drive.sh").read_text()
@@ -75,13 +76,14 @@ def test_the_declared_run_ids_and_nothing_else(tmp_path):
                           ("smt-sib-3", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 12600)}),
                           ("smt-sib-4", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 14400)}),       # Amendment 1a
                           ("smt-sib-8", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 14400)}),
+                          ("smt-sib-9", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 14400)}),       # Amendment 1c
                           ("smt-fuse-dry-1", {"SMT_FUSE_DRY": "1", "SMT_FUSE_BOX_EXEC": "/bin/false"}),
                           ("smt-sib-dry-1", {"SMT_FUSE_DRY": "1", "SMT_FUSE_BOX_EXEC": "/bin/false"})):
         out = _drive(tmp_path, run_id, **extra)
         assert out.returncode == 0 and out.stdout.startswith("DRYRUN stage -> "), (run_id, out.stdout + out.stderr)
         assert f"E4B_SHA={E4B_PIN}" in out.stdout, out.stdout
     for run_id, extra in (("smt-fuse-4", {}), ("smt-fuse-10", {}), ("p146-4090-6", {}), ("smt-fuse-dry-1", {}),
-                          ("smt-sib-9", {}), ("smt-sib-dry-1", {}), ("smt-sib", {}),
+                          ("smt-sib-10", {}), ("smt-sib-dry-1", {}), ("smt-sib", {}),
                           ("smt-sib-1", {"E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 3600)}),   # a 1.0 h guard: refused
                           ("smt-sib-1", {"SMT_FUSE_DRY": "1", "SMT_FUSE_BOX_EXEC": "/bin/false"}),
                           ("smt-fuse-1", {"SMT_FUSE_DRY": "1", "SMT_FUSE_BOX_EXEC": "/bin/false"}),
@@ -126,7 +128,7 @@ def test_the_design_is_the_registered_design():
 def test_amendment_1_the_sibling_probe_is_the_registered_design():
     out = subprocess.run([sys.executable, str(LANE / "smt_sib_box.py"), "--self-test"], capture_output=True, text=True,
                          env={**os.environ, "PYTHONPATH": ""})
-    assert out.returncode == 0 and "smt_sib_box self-test OK (7/7 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "smt_sib_box self-test OK (8/8 cases)" in out.stdout, out.stdout + out.stderr
     assert 'ORDER = ("PHYS", "SIB", "WIDE", "WIDE", "SIB", "PHYS")' in SIB and "CYCLES = 4" in SIB
     assert "K_MAX, MIN_K = 16, 8" in SIB and "QUOTA_PER_K = 2.5" in SIB and 'READ = ("fuse_s",)' in SIB and 'REPORTED = ("block_s",)' in SIB
     assert "process_start_s = time.time() - a.spawned" in SIB and '"--spawned", repr(time.time())' in SIB

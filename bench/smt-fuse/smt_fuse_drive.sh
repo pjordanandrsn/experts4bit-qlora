@@ -25,17 +25,17 @@ fi
 # ---- the declared run ids: the reading, its one rerun; the dry run's own
 RUN_ID=$E4B_RENT_RUN_ID
 case "$RUN_ID" in
-  smt-fuse-[1-3]|smt-sib-[1-8]) [ "$DRY" != 1 ] || { say "refusing: $RUN_ID is a reading's id"; exit 78; };;
+  smt-fuse-[1-3]|smt-sib-[1-9]) [ "$DRY" != 1 ] || { say "refusing: $RUN_ID is a reading's id"; exit 78; };;
   smt-fuse-dry-[0-9]|smt-fuse-dry-[0-9][0-9]|smt-sib-dry-[0-9]|smt-sib-dry-[0-9][0-9])
     [ "$DRY" = 1 ] || { say "refusing: $RUN_ID is a dry run's id (SMT_FUSE_DRY=1 only)"; exit 78; };;
-  *) say "refusing: run id $RUN_ID is not declared (smt-fuse-1..3, Amendment 1's smt-sib-1..8; *-dry-<n> dry)"; exit 78;;
+  *) say "refusing: run id $RUN_ID is not declared (smt-fuse-1..3, Amendment 1's smt-sib-1..8, Amendment 1c's smt-sib-9; *-dry-<n> dry)"; exit 78;;
 esac
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 # Lane liveness by PID identity and host uptime (#1512) and the host-fault marker (#1517): the helper is sourced here and
 # streamed to the box over stdin for the launch and each probe; it is never staged (staged.sha256 does not list it).
 LANE_HELPER="$REPO/bench/common/lane_liveness.sh"
 source "$LANE_HELPER" || { say "refusing: missing lane liveness helper"; exit 78; }
-STAGE="$HERE/smt_fuse_run.sh $HERE/smt_fuse_box.py $HERE/smt_sib_box.py $HERE/q235_bootstrap.py $HERE/wheels.json $HERE/dq11_require_git.sh $HERE/staged.sha256"
+STAGE="$HERE/smt_fuse_run.sh $HERE/smt_fuse_box.py $HERE/smt_sib_box.py $REPO/bench/common/thp_window.py $HERE/q235_bootstrap.py $HERE/wheels.json $HERE/dq11_require_git.sh $HERE/staged.sha256"
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
 # staged.sha256 names the files as the BOX will see them; resolve each name to its source and compare hashes
 # (the same case as tests/test_smt_fuse_staged_pin.py, which runs this check in CI where it costs nothing).
@@ -44,6 +44,7 @@ while read -r want name; do
   case "$want" in \#*|"") continue;; esac
   case "$name" in
     smt_fuse_run.sh|smt_fuse_box.py|smt_sib_box.py|q235_bootstrap.py|wheels.json|dq11_require_git.sh) src="$HERE/$name";;
+    thp_window.py) src="$REPO/bench/common/$name";;                       # Amendment 1c: the shared THP records
     *) say "refusing: staged.sha256 names $name, which this driver does not stage"; exit 78;;
   esac
   got=$(sha_of "$src")

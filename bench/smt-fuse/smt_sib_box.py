@@ -105,6 +105,8 @@ def time_fit(repeats, fit=FIT):
 THROTTLE_FLAG = 0.05                                    # smt-fuse-2's flag, unchanged
 COMPANION_FLAG = 0.25                                   # a PHYS/WIDE rep whose companions are > 25 % busy is flagged
 MIN_TRIPLES = 6                                         # fewer readable triples than this: VOID_BY_HOST
+FAST_FRAC = 0.25                                        # Amendment 1c: a block is FAST below this share of the run's median fuse
+FAST_RUN = 3                                            # Amendment 1c: a FAST window is at least this many consecutive FAST blocks
 
 
 def parse_cpulist(s):
@@ -185,7 +187,8 @@ def median_of(recs):
     for k in ("pool", "torch_pool", "load_avg_1m"):
         if k in recs[0]:
             rec[k] = recs[0][k]
-    rec["repeats"] = [{k: r[k] for k in (*SEGMENTS, "throttled_period_share", "host_counters") if k in r} for r in recs]
+    rec["repeats"] = [{k: r[k] for k in (*SEGMENTS, "throttled_period_share", "host_counters", "thp") if k in r}
+                      for r in recs]
     return rec
 
 
@@ -195,6 +198,7 @@ def child(a):
     os.sched_setaffinity(0, cpus)
     sys.path.insert(0, HERE)
     import smt_fuse_box as B
+    import thp_window as TW                              # Amendment 1c: the shared THP records (staged beside this script)
 
     import torch
 
@@ -209,10 +213,12 @@ def child(a):
     s0 = proc_stat()
     blocks, walls = [], []
     for _ in range(REPEATS):
+        w0 = TW.snapshot()                                                 # Amendment 1c: read outside the wall
         c0, t = host_counters(), time.perf_counter()
         blocks.append(B.one_rep(a.pool, a.slab, a.experts))
         walls.append(time.perf_counter() - t)                             # the block's whole wall, hashes included
         blocks[-1]["host_counters"] = counter_delta(c0, host_counters())   # reported only, never read
+        blocks[-1]["thp"] = TW.window(w0)                                  # Amendment 1c: reported only, outside the wall
     rec = median_of(blocks)
     s1 = proc_stat()
     rec.update(process_start_s=process_start_s, warm_wall_s=warm_wall_s, block_walls_s=walls)
@@ -220,6 +226,66 @@ def child(a):
                arm_busy=busy_share(s0, s1, cpus), companion_busy=busy_share(s0, s1, comp) if comp else None)
     print("SMT_SIB_REP " + json.dumps(rec), flush=True)
     return 0
+
+
+def fast_state(reps):
+    """Amendment 1c (reported only, never part of the SIB/PHYS reading): every timed block in run order, FAST when its
+    fuse is below FAST_FRAC of the run's median fuse; a FAST window is FAST_RUN or more consecutive FAST blocks (a window
+    may span processes, as smt-sib-2's did). The outcome is read from the measured process's AnonHugePages at both ends of
+    every block in every window:
+    - NO_RECURRENCE: no window (inconclusive: smt-sib-2 had one window in 24 processes);
+    - FAST_RECURS_NO_THP: a window, and every block in every window read AnonHugePages 0 at both ends;
+    - FAST_RECURS_WITH_THP: a window, and some block in one read AnonHugePages above 0;
+    - FAST_RECURS_UNRECORDED: a window with any block whose AnonHugePages was not read at both ends.
+    Before any of these, VOID_PREMISE when a block's records show huge pages were possible for torch's allocations: a THP
+    mode other than madvise, or THP_MEM_ALLOC_ENABLE "1". The question needs huge pages impossible."""
+    blocks = [(i, j, b) for i, r in enumerate(reps) for j, b in enumerate(r.get("repeats") or []) if "fuse_s" in b]
+    if not blocks:
+        return {"outcome": "NO_BLOCKS"}
+    snaps = [s for _, _, b in blocks for s in ((b.get("thp") or {}).get("before"), (b.get("thp") or {}).get("after")) if s]
+    modes = sorted({s["thp_enabled"] for s in snaps if s.get("thp_enabled")})
+    switch = sorted({s["thp_mem_alloc_enable"] for s in snaps if s.get("thp_mem_alloc_enable")})
+    med = statistics.median(b["fuse_s"] for _, _, b in blocks)
+    fast = [b["fuse_s"] < FAST_FRAC * med for _, _, b in blocks]
+    windows, start = [], None
+    for n, f in enumerate(fast + [False]):
+        if f and start is None:
+            start = n
+        elif not f and start is not None:
+            if n - start >= FAST_RUN:
+                windows.append((start, n))
+            start = None
+
+    def ends(b):
+        t = b.get("thp") or {}
+        return (t.get("before") or {}).get("anon_huge_kb"), (t.get("after") or {}).get("anon_huge_kb")
+
+    out = {"median_fuse_s": med, "threshold_s": FAST_FRAC * med, "fast_blocks": sum(fast), "blocks": len(blocks),
+           "windows": [], "thp_modes": modes, "thp_mem_alloc_enable": switch}
+    unread, huge = 0, []
+    for a0, a1 in windows:
+        w = blocks[a0:a1]
+        pairs = [ends(b) for _, _, b in w]
+        read = [max(x, y) for x, y in pairs if x is not None and y is not None]
+        unread += len(pairs) - len(read)
+        huge += read
+        first = ((w[0][2].get("thp") or {}).get("before") or {})
+        out["windows"].append({"from": [w[0][0], w[0][1]], "to": [w[-1][0], w[-1][1]], "n": len(w),
+                               "median_fuse_s": statistics.median(b["fuse_s"] for _, _, b in w),
+                               "thp_enabled": first.get("thp_enabled"),
+                               "thp_mem_alloc_enable": first.get("thp_mem_alloc_enable"),
+                               "anon_huge_kb_max": max(read, default=None)})
+    if snaps and (modes != ["madvise"] or "1" in switch):
+        out["outcome"] = "VOID_PREMISE"
+    elif not windows:
+        out["outcome"] = "NO_RECURRENCE"
+    elif unread:
+        out["outcome"] = "FAST_RECURS_UNRECORDED"
+    elif any(h > 0 for h in huge):
+        out["outcome"] = "FAST_RECURS_WITH_THP"
+    else:
+        out["outcome"] = "FAST_RECURS_NO_THP"
+    return out
 
 
 def flagged(r):
@@ -261,6 +327,7 @@ def summarize(res):
     out["fit_measured"] = fit_measured(reps)
     fused, nf4 = {r["fused_sha256"] for r in reps}, {r["nf4_sha256"] for r in reps}
     out["bytes_identical"] = len(fused) == 1 and len(nf4) == 1 and "MISMATCH" not in fused | nf4   # within-process too
+    out["fast_state"] = fast_state(reps)                                                          # Amendment 1c, reported only
     return out
 
 
@@ -410,7 +477,29 @@ def self_test():
     allbad = [dict(x, nf4_sha256="MISMATCH") for x in trip * 4]          # nondeterminism inside EVERY process
     assert summarize({"reps": allbad, "experts": 128})["bytes_identical"] is False
     n += 1
-    print(f"smt_sib_box self-test OK ({n}/7 cases)")
+
+    def blk(f, ahp=0):                                   # Amendment 1c: a timed block with its THP window record
+        snap = {} if ahp is None else {"anon_huge_kb": ahp, "thp_enabled": "madvise"}
+        return {"fuse_s": f, "thp": {"before": snap, "after": snap}}
+    slow = [blk(7.5) for _ in range(15)]
+    fast_w = [{"repeats": slow}, {"repeats": slow[:10] + [blk(0.4) for _ in range(5)]}, {"repeats": slow}]
+    fs = fast_state(fast_w)
+    assert fs["outcome"] == "FAST_RECURS_NO_THP" and fs["windows"][0]["n"] == 5 and fs["windows"][0]["from"] == [1, 10]
+    assert fast_state([{"repeats": slow}, {"repeats": slow[:12] + [blk(0.4, 2048)] * 3}])["outcome"] == "FAST_RECURS_WITH_THP"
+    assert fast_state([{"repeats": slow}, {"repeats": slow[:12] + [blk(0.4, None)] * 3}])["outcome"] == "FAST_RECURS_UNRECORDED"
+    two = fast_state([{"repeats": slow}, {"repeats": slow[:13] + [blk(0.4)] * 2}])    # 2 FAST blocks: not a window
+    assert two["outcome"] == "NO_RECURRENCE" and two["fast_blocks"] == 2 and fast_state([])["outcome"] == "NO_BLOCKS"
+    span = fast_state([{"repeats": slow[:13] + [blk(0.4)] * 2}, {"repeats": [blk(0.4)] + slow[:14]}])  # across processes
+    assert span["outcome"] == "FAST_RECURS_NO_THP" and span["windows"][0]["to"] == [1, 0]
+    always = [dict(b, thp={"before": {"anon_huge_kb": 0, "thp_enabled": "always"}, "after": {"anon_huge_kb": 0}})
+              for b in slow]                             # huge pages possible: the question is not asked
+    assert fast_state([{"repeats": always}] + fast_w[1:])["outcome"] == "VOID_PREMISE"
+    switched = [dict(b, thp={"before": {"anon_huge_kb": 0, "thp_enabled": "madvise", "thp_mem_alloc_enable": "1"},
+                             "after": {"anon_huge_kb": 0}}) for b in slow]
+    assert fast_state([{"repeats": switched}] + fast_w[1:])["outcome"] == "VOID_PREMISE"
+    assert fast_state([{"repeats": [{"fuse_s": 7.5}] * 15}])["outcome"] == "NO_RECURRENCE"   # no records: no premise read
+    n += 1
+    print(f"smt_sib_box self-test OK ({n}/8 cases)")
     return 0
 
 
