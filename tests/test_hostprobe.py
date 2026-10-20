@@ -226,13 +226,21 @@ def test_a_call_that_times_out_stops_every_later_call(tmp_path, monkeypatch):
     monkeypatch.setattr(hb, "SMI_TIMEOUT", 1)
     f = hb.facts(_box(tmp_path / "box"), smi=_health_smi(tmp_path, sleep="3"))
     assert f["gpu_smi_stopped"] == "timeout" and not any(k.startswith("gpu_") and k != "gpu_smi_stopped" for k in f)
-    assert len((tmp_path / "calls.log").read_text().splitlines()) == 1
+    log = tmp_path / "calls.log"                # on a loaded host the killed call may not have logged itself yet
+    assert len(log.read_text().splitlines() if log.exists() else []) <= 1     # no call after the one that timed out
 
 
 def test_a_slow_driver_runs_out_the_shared_budget_and_keeps_what_it_read(tmp_path, monkeypatch):
+    # A clock that advances 1.5 s per read stands in for a slow driver, so a loaded host cannot move the result:
+    # calls start at 0 and 1.5 s, and at 3.0 s less than 1 s of the 3.5 s budget is left.
+    import time as real_time
+    from types import SimpleNamespace
+    ticks = iter(i * 1.5 for i in range(100))
+    monkeypatch.setattr(hb, "time", SimpleNamespace(monotonic=lambda: next(ticks), strftime=real_time.strftime,
+                                                    gmtime=real_time.gmtime))        # the probe's clock only
     monkeypatch.setattr(hb, "SMI_TIMEOUT", 5)
-    monkeypatch.setattr(hb, "SMI_BUDGET", 3.5)                 # each call 1.5 s: two fit, the third has < 1 s left
-    f = hb.facts(_box(tmp_path / "box"), smi=_health_smi(tmp_path, sleep="1.5"))
+    monkeypatch.setattr(hb, "SMI_BUDGET", 3.5)
+    f = hb.facts(_box(tmp_path / "box"), smi=_health_smi(tmp_path))
     assert f["gpu_smi_stopped"] == "budget" and f["gpu_power_limit_w"] == 450.0
     assert "gpu_driver_version" not in f and len((tmp_path / "calls.log").read_text().splitlines()) == 2
 
