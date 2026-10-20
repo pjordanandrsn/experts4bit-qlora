@@ -1,8 +1,12 @@
 # DQ11 MLP-adapter BUILD — amendment 5: the Phase 2 kit (#1083)
 
-**Status: DRAFT, for the maintainer's ruling (RED), before any Phase 2 code or data.** Once ruled, it is registered
-after one review by a seat that does not consume it and the maintainer's final pass. `DQ11-MLP-BUILD-PREREG.md` and
-Amendments 1–4a stay as merged; where this file differs, it governs Phase 2 only.
+**Status: ruled by the maintainer on 2026-10-20 (RED), before any Phase 2 code or data.**
+- It is registered on merge, after one review by a seat that does not consume it and the maintainer's final pass.
+- No Phase 2 code is written before it merges.
+- The $0 A2000 shakedown (section 6) runs after the merge, under a `gpu:a2000` claim.
+
+`DQ11-MLP-BUILD-PREREG.md` and Amendments 1–4a stay as merged. Where this file differs from them, it governs Phase 2
+only.
 
 ## Where Phase 1 stands
 
@@ -54,14 +58,17 @@ On that read:
   Two paths are the same iff their result tensors are equal bit for bit (sha256 of the bytes). k_T = |U_T|.
 - **De-duplicate before calibrating.** The leave-one-out calibration runs over U_T, never over U with twins.
 - **The bound reported per tensor:** k_T and 1/(k_T + 1).
-- **4a's floor applies to k_T, not |U|.** A (b) failure on T with k_T < 9 reads `INDETERMINATE: bar too weak at k = n`,
-  never a FAIL. A PASS still reads.
-- **Stated up front.** The $0 shakedown (section 6) measures k_T for every tensor with the families in section 3. If any
-  tensor has k_T < 9 there, families are added until none does, and the final list is fixed here before the paid read.
-  The bar is never gated on an instrument that cannot fail.
+- **4a's floor applies to k_T, not |U|.** A tensor with k_T < 9 reads `UNJUDGED_AT_K: k = n`. (b) cannot fail it,
+  so it never reads FAIL there. Section 7 says what that does to the read.
+- **Two names, two causes.** A failed leave-one-out calibration reads `CALIBRATION_INDETERMINATE`, and it is never
+  called by the other name.
+- **Stated up front.** The bar is never gated on an instrument that cannot fail.
+  - The $0 shakedown (section 6) counts k_T for every tensor with the families in section 3.
+  - If any tensor has k_T < 9 there, families are added until none does.
+  - The final list is fixed in this file before the paid read.
 - **Engagement**, as in Phase 1: 96 adapters, nothing refused, fallback 0, and 0 PEFT MLP LoRA forwards in F1.
 
-### 3. Redraw families that move every tensor (proposal; the shakedown fixes the list)
+### 3. Redraw families that move every tensor (the shakedown fixes the list)
 
 Phase 1's R1–R5 are binary, and only R1 moves the forward outputs. That is why k = 2 there.
 
@@ -78,6 +85,13 @@ arithmetic: Amendment 4's lesson from R2, the FP32 add then one cast, stands. Th
   large. The count and the seed are fixed after the shakedown.
 - **What the outputs get:** up to c_A × c_B = 12 distinct orderings, and dh up to 9. If the shakedown shows two levels
   collapsing to the same bits, that level is dropped rather than counted twice.
+
+**The shakedown predicts; the paid read decides.** k_T counted on the A2000 only predicts the 5090's k_T, because
+sm_86 and sm_120 run different kernels and their collapse pattern can differ. The paid read counts k_T itself, and
+section 2's rule (k_T < 9 reads `UNJUDGED_AT_K`, never a FAIL) governs there.
+
+**Size.** The shakedown also times the (b) part with the full families. The seeded subset's size is then fixed so
+that (b) stays within its budget, and the guard fit (section 8) is rerun with that number.
 
 ### 4. Receipt fields the review asked for
 
@@ -98,6 +112,7 @@ its own updates, so a drift shows up instead of surprising anyone:
 - **What they record:**
   - layer 0 `up_proj`'s A and B after updates 1, 2, 4, 8, 16, 32 and 40;
   - ‖θ_D1(t) − θ_D0(t)‖ / ‖θ_D0(t)‖ for A and for B, plus the max |Δloss| per update.
+- **Label:** "under C (deterministic settings), not the timed configuration".
 - **REPORTED only.** It never enters GAIN, NO_GAIN or QUALITY.
 
 ### 6. A $0 shakedown on the A2000 first
@@ -108,30 +123,40 @@ Before any paid second, the whole Phase 2 driver runs on the A2000 at the rehear
 - the two drift arms;
 - the reducer, end to end.
 
-Its records are a shakedown. They fix the family list and prove the driver, and they are never read as Phase 2 data.
-No A2000 timing is reported.
+Its records are a shakedown. They fix the family list, size the (b) part and prove the driver, and they are never
+read as Phase 2 data. The (b) part's A2000 time is used only to size the subset and fit the guard. No A2000 timing is
+reported as a result.
 
-### 7. How the read combines (proposal)
+### 7. How the read combines
 
-- **GAIN** needs everything the PREREG names (minimum H ≥ 0.05, quality) plus (b) at the science lock reading PASS on
-  every tensor. Tensors with k_T < 9 are named `UNJUDGED_AT_K`.
-- **A (b) FAIL** on any tensor with k_T ≥ 9 makes the read `ACCURACY_FAIL`, whatever H is.
-- **(b) INDETERMINATE** from the calibration means the timing still reads and is reported, but it can only be
-  `NO_GAIN (accuracy indeterminate)`. The maintainer rules what comes next.
-- **NOISY** stays a VOID and a strike.
+In order:
+1. **NOISY** stays a VOID and a strike. Nothing reads.
+2. **A (b) FAIL** on any tensor with k_T ≥ 9 makes the read `ACCURACY_FAIL`, whatever H is.
+3. **CALIBRATION_INDETERMINATE:** the timing still reads and is reported, but the read is at most `NO_GAIN (accuracy
+   indeterminate)`. The maintainer rules what comes next.
+4. **Any UNJUDGED_AT_K tensor** caps the read at `NO_GAIN (accuracy unjudged: <tensors>)`. A license can't rest on a
+   tensor the instrument couldn't fail.
+5. **GAIN** needs everything the PREREG names (minimum H ≥ 0.05, and quality) plus every tensor judged at the science
+   lock (k_T ≥ 9) and passing (b). Otherwise the read is NO_GAIN, with each failed bar named.
 
-### 8. Launch, budget and guard (proposal)
+### 8. Launch, budget and guard
 
-- **New files only:** `dq11_mlp_phase2_run.py` (parts), `dq11_mlp_phase2_box.sh`, `dq11_mlp_phase2_drive.sh` and a launcher.
-  - The launcher reuses the census launcher's generic pieces: host discovery and the continuity window, the pin plan, the
-    journal and permit, and the transport.
-  - It has its own constants: run ids `dq11-mlp-phase2-N`, the caps below, and the template.
-  - So `science.sha256` and the census launcher's bytes are not resealed.
-- **Box:** one RTX 5090, at the science lock, through the bootstrap and prepare already used for the census.
+- **Launch:** a plain launch manifest through the shared launcher, under the standing rule.
+  - It is checked with `--validate`, pinned by inclusion, and the pin is posted before create.
+  - A dedicated launcher would be more code to review and more ways to break, for no gain the shared one lacks. It is
+    revisited only if the shakedown shows a concrete gap.
+- **New files only:** `dq11_mlp_phase2_run.py` (the parts), `dq11_mlp_phase2_box.sh` and the manifest. `science.sha256`
+  and the census launcher are untouched, so nothing is resealed.
+- **Box:** one RTX 5090 at the science lock. Box-side, it reuses the census flow's bootstrap and prepare scripts by
+  file.
 - **Time:** about 5 min for the (b) part, 8 × about 5 min for the timed arms, 2 × about 5 min for the drift arms, plus
   load. That is about 65–75 min, so the guard is **1.5 h**.
 - **Cost:** the worst case is about $1.60: 1.5 h at $0.85/h plus the download, on the PREREG's own basis ($1.40 at
   1.25 h). That is inside the $15 standing rule, and the maintainer's approval covers it.
+- **The static fit:** (boot + the measured part times) × 1.25 ≤ the guard. It is checked by a test, and rerun once
+  the shakedown sets (b)'s size.
+  - A guard of up to 2 h (about $2.10) is inside the maintainer's approval.
+  - Anything above that goes back to the maintainer.
 
 ## Prediction (registered; graded, never ruling)
 
@@ -140,13 +165,16 @@ No A2000 timing is reported.
 - **k_T:** with the section-3 families, every tensor reaches k_T ≥ 9 on the A2000 shakedown, and dh is the last to get there.
 - **Drift:** D1 against D0 is nonzero from update 1 in B, and stays below 1e-2 relative at update 40.
 
-## Decisions for the maintainer
+## Rulings (maintainer, 2026-10-20, RED)
 
-- **P2-D1:** does (b) run at the science lock on the 5090 (section 2)? Proposed: yes.
-- **P2-D2:** the families: K-split levels R1(c), R6(c), R9(c), R3(c) and R4(c), with the list fixed by the $0 k count
-  (section 3). Proposed: yes.
-- **P2-D3:** how (b) combines with GAIN (section 7). Proposed: as written.
-- **P2-D4:** the drift check as two untimed arms under C (section 5). Proposed: yes.
-- **P2-D5:** the launch path, a new launcher built from the census launcher's generic parts (section 8). The alternative
-  is a plain launch manifest under the standing rule.
-- **P2-D6:** the guard of 1.5 h and the worst-case cost (section 8).
+- **P2-D1, YES:** (b) runs at the science lock on the 5090. A GAIN would license that stack, and its kernels differ by
+  architecture, so correctness is read where the license applies.
+- **P2-D2, YES**, with one addition: the shakedown's k_T only predicts the 5090's. The paid read counts k_T itself, and
+  the shakedown times the (b) part to size it (section 3).
+- **P2-D3, YES**, with two changes:
+  - `UNJUDGED_AT_K` and `CALIBRATION_INDETERMINATE` are named apart;
+  - GAIN needs every tensor judged and passing (section 7).
+- **P2-D4, YES:** the drift arms D0/D1 run under C, labelled as such, and are REPORTED only.
+- **P2-D5:** a plain launch manifest through the shared launcher, not a new launcher (section 8).
+- **P2-D6, YES:** a guard of 1.5 h and a worst case of about $1.60, subject to the static fit. Up to 2 h is inside the
+  approval (section 8).
