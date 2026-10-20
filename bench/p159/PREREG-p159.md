@@ -119,7 +119,9 @@ Two more arms:
 **Engagement, a closed form each:**
 - an N process must read `PR_GET_THP_DISABLE` back as set, and every N block's fuse must gain under 64 MiB of huge
   pages (`AnonHugePages` after fuse less before the block), or N is VOID. A reading that is missing VOIDs N too: the
-  check fails closed;
+  check fails closed. The `PR_GET_THP_DISABLE` read-back is what carries N's engagement: when the allocator
+  reuses freed memory the fuse gains no huge bytes whether or not its pages were huge, so the gain bound only
+  catches a gross leak;
 - a P process must carry the registered `GLIBC_TUNABLES`, and the **median** of its timed blocks' fuse minor faults
   must be under 0.4 M (a fifth of the 4 KiB count), or P is VOID. The median, so a block that grows the heap once does
   not void the arm; the maximum is reported;
@@ -211,7 +213,7 @@ and `fuse` include disk reads. `offload` copies tensors already in memory, so RE
 | on machine 11541, both a SLOW and a FAST window occur among the 13 M processes | yes |
 | fuse minor faults, SLOW blocks | 0.8-2.4 M (closed form 2.04 M at fresh pages; the wiring run measured 42-95 % of it) |
 | fuse minor faults, FAST blocks | 0.05-0.4 M |
-| `thp_fault_alloc` over `fuse`, FAST / SLOW | about 3,840 / about 0 per block (host-wide counters) |
+| `thp_fault_alloc` over `fuse`, FAST / SLOW | at most 3,840 (every fuse page fresh; reuse lowers it, to roughly 1,600-3,650 at the wiring run's 42-95 %) / about 0 per block (host-wide counters) |
 | N in a FAST window | SLOW (fuse >= 3.0 s) |
 | P in every window | fuse <= 1.0 s |
 | R against M in triples where M and M' agree | 0.8-1.25 |

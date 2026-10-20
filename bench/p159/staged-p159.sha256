@@ -2,7 +2,7 @@
 # check every entry against its source (bench/p159/ or bench/smt-fuse/); p159_run.sh runs sha256sum -c on the box.
 cccdbeb3d3c797311be4abace87ea5ec822b20513c8c1e5a93e5456e6b2d0854  p159_run.sh
 db37d6ea145371bcf62b96a07be4e65b6ca49ba07cb825c36c571b36bbaf2b7a  p159_box.py
-a582187b7c2b5f8cc60d1fef889f21488ae3f636762e52bb8d6ccc191a6b3504  p159_reduce.py
+5dd137f449557963eec5e56430b806cf751d851a2f00133eca7b1cb7328b4599  p159_reduce.py
 f133ccc02b36b2ef87c54904d69021b070d109327562bf503d9dc9c1ddb17ff2  smt_fuse_box.py
 229b3450381eda3fc14062b55bfac4a1245badcc4b240fd286ae0b08a9f2a477  q235_bootstrap.py
 84f361ed35fff9a857f340b65488ad582dc4270aef7e67cbeb6b46b8370021f3  wheels.json

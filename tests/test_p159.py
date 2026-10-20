@@ -55,7 +55,7 @@ def test_staged_files_match_their_pins_and_the_drive_stages_exactly_them():
 
 def test_both_self_tests_pass():
     for script, want in (("p159_box.py", "p159_box self-test OK (15 cases)"),
-                         ("p159_reduce.py", "p159_reduce self-test OK (29 cases)")):
+                         ("p159_reduce.py", "p159_reduce self-test OK (31 cases)")):
         p = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True,
                            timeout=120)
         assert p.returncode == 0 and want in p.stdout, p.stdout + p.stderr

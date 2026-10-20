@@ -294,6 +294,10 @@ def self_test():
     check(res, read1="IDENTIFIED", read2="FAIL", call="CONFLICT")
     # N not engaged (prctl failed): N's side is NOT_READ, so P alone is PARTIAL
     check(_run(SLOTS, st, N={"engaged": {"thp_disabled": False}}), read1="PARTIAL")
+    # N's huge-gain bound, pinned from both sides: a fuse that gains 2 x 64 MiB of huge pages VOIDs N (PARTIAL); one that
+    # gains half of 64 MiB does not
+    check(_run(SLOTS, st, N={"huge": 2 * N_HUGE_MAX / FUSE_FRESH_BYTES}), read1="PARTIAL")
+    check(_run(SLOTS, st, N={"huge": N_HUGE_MAX / 2 / FUSE_FRESH_BYTES}), read1="IDENTIFIED")
     # P not engaged (faults in timed blocks): P's side NOT_READ
     check(_run(SLOTS, st, P={"minflt": 2_000_000}), read1="PARTIAL")
     # R mapped the slab: READ-3 VOID
