@@ -385,3 +385,94 @@ def test_an_unknown_k25_decode_is_refused(monkeypatch, value):
     monkeypatch.setenv("E4B_K25_LUT", value)
     with pytest.raises(ValueError, match=f"E4B_K25_LUT='{value}': expected 'tree' or 'prmt'"):
         hr._k25_lut_env()
+
+
+@pytest.mark.parametrize("env,kernel,want", [(None, {"tree": True}, "tree"), ("prmt", {"prmt": True}, "prmt"),
+                                             (None, {}, "pair")], ids=["tree", "prmt", "kernel-without-tree"])
+def test_k25_lut_seen_names_the_decode_each_call_took(monkeypatch, env, kernel, want):
+    """K25_LUT_SEEN is the knob's engagement record: one count per K25 call, under the decode the plan carried."""
+    from experts4bit_qlora.engines import hot_residency as hr
+    monkeypatch.setattr(hr, "K25_LUT_SEEN", {})
+    monkeypatch.setenv("E4B_NF4_GROUPED_SMALLM", "1")
+    if env is None:
+        monkeypatch.delenv("E4B_K25_LUT", raising=False)
+    else:
+        monkeypatch.setenv("E4B_K25_LUT", env)
+    calls = _install_stubs(monkeypatch, **kernel)
+    _run(24)
+    _run(300)                                                    # prefill rows: not K25, not counted
+    assert hr.K25_LUT_SEEN == {f"{want}|le256": 1} and [p["lut"] for p in calls["k25_plan"]] == [want, want]
+
+
+def test_k25_lut_seen_is_empty_with_k25_off(monkeypatch):
+    from experts4bit_qlora.engines import hot_residency as hr
+    monkeypatch.setattr(hr, "K25_LUT_SEEN", {})
+    monkeypatch.setenv("E4B_NF4_GROUPED_SMALLM", "0")
+    monkeypatch.delenv("E4B_K25_LUT", raising=False)
+    _install_stubs(monkeypatch, prmt=True)
+    _run(24)
+    assert hr.K25_LUT_SEEN == {}
+
+
+@pytest.mark.parametrize("mode", [None, "auto"], ids=["unset", "auto"])
+def test_prmt_with_a_kernel_package_without_k25_is_refused_under_auto(monkeypatch, mode):
+    """Auto drops K25 silently on a package that predates it; an asked-for prmt is not dropped with it."""
+    _set_mode(monkeypatch, mode)
+    monkeypatch.setenv("E4B_K25_LUT", "prmt")
+    _install_stubs(monkeypatch, with_k25=False)
+    with pytest.raises(RuntimeError, match="the installed kernel package has no K25"):
+        _run(24)
+
+
+# ---- resolve_k25_lut: the knob resolved once at engine build, so a misconfiguration fails at startup
+@pytest.mark.parametrize("env,mode,kernel,want", [
+    (None, None, {"tree": True}, {"env": None, "lut": "tree", "why": None}),
+    ("tree", "1", {"prmt": True}, {"env": "tree", "lut": "tree", "why": None}),
+    ("prmt", None, {"prmt": True}, {"env": "prmt", "lut": "prmt", "why": None}),
+    (None, None, {}, {"env": None, "lut": "pair", "why": None}),
+    (None, "0", {"prmt": True}, {"env": None, "lut": None, "why": "E4B_NF4_GROUPED_SMALLM=0"}),
+    ("tree", None, {"with_k25": False}, {"env": "tree", "lut": None, "why": "the kernel package predates K25"}),
+], ids=["default", "tree-named", "prmt", "kernel-without-tree", "k25-off", "kernel-without-k25"])
+def test_resolve_k25_lut_reports_the_decode_k25_takes(monkeypatch, env, mode, kernel, want):
+    from experts4bit_qlora.engines import hot_residency as hr
+    _set_mode(monkeypatch, mode)
+    if env is None:
+        monkeypatch.delenv("E4B_K25_LUT", raising=False)
+    else:
+        monkeypatch.setenv("E4B_K25_LUT", env)
+    _install_stubs(monkeypatch, **kernel)
+    assert hr.resolve_k25_lut() == want
+
+
+@pytest.mark.parametrize("mode,kernel,hip,match", [
+    ("0", {"prmt": True}, None, "E4B_NF4_GROUPED_SMALLM=0 turns K25 off"),
+    (None, {"tree": True}, None, "needs grouped-nf4-gemm with K39"),
+    (None, {"with_k25": False}, None, "the installed kernel package has no K25"),
+    ("1", {"prmt": True}, "6.4.0", "on ROCm keep E4B_K25_LUT=tree"),
+], ids=["k25-off", "kernel-without-k39", "kernel-without-k25", "rocm"])
+def test_resolve_k25_lut_refuses_prmt_it_cannot_serve(monkeypatch, mode, kernel, hip, match):
+    from experts4bit_qlora.engines import hot_residency as hr
+    _set_mode(monkeypatch, mode)
+    monkeypatch.setenv("E4B_K25_LUT", "prmt")
+    if hip:
+        monkeypatch.setattr(torch.version, "hip", hip, raising=False)
+    _install_stubs(monkeypatch, **kernel)
+    with pytest.raises(RuntimeError, match=match):
+        hr.resolve_k25_lut()
+
+
+def test_build_engine_refuses_a_misconfigured_k25_lut_before_the_load(monkeypatch, tmp_path):
+    """The startup refusal comes before the model load (which here would fail the test), not on a first request."""
+    import experts4bit_qlora
+    from experts4bit_qlora import serve_paged
+    arena, calib = tmp_path / "arena.bin", tmp_path / "calib.json"
+    for p in (arena, tmp_path / "arena.bin.index.json", calib):
+        p.write_text("{}")
+    monkeypatch.setattr(experts4bit_qlora, "load_moe_4bit_streaming",
+                        lambda *a, **k: pytest.fail("the model loaded before the knob was resolved"), raising=False)
+    monkeypatch.setenv("E4B_NF4_GROUPED_SMALLM", "0")
+    monkeypatch.setenv("E4B_K25_LUT", "prmt")
+    _install_stubs(monkeypatch, prmt=True)
+    cfg = serve_paged.PagedServeConfig(model="tiny/moe", arena=str(arena), calib=str(calib))
+    with pytest.raises(RuntimeError, match="turns K25 off"):
+        serve_paged.build_engine(cfg)
