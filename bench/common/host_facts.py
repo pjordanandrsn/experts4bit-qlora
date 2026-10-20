@@ -126,10 +126,22 @@ def gather(root: Path = Path("/"), smi: str = "nvidia-smi") -> dict:
         sources[key] = quota[1]
     # per-core speed: the rated maximum (a label) and a measured single-thread rate (what the run got), and the run's
     # OpenMP thread count; a framework's speed ratio moved with these, not with core count (the TC1 receipts, 10-20)
-    mx = (_read(root, "sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq") or "").strip()
-    if mx.isdigit() and int(mx) > 0:
-        facts["host_cpu_max_mhz"] = round(int(mx) / 1000, 1)
-        sources["host_cpu_max_mhz"] = "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq (kHz / 1000): the rated maximum"
+    # each of the run's CPUs (affinity; cpu0 when there is no affinity call): a hybrid part's P and E cores differ, so
+    # cpu0 alone would label the host with one core type. The highest and the lowest per-CPU maximum are recorded.
+    try:
+        cpus = sorted(affinity())
+    except (AttributeError, OSError):
+        cpus = [0]
+    maxes = []
+    for c in cpus:
+        v = (_read(root, f"sys/devices/system/cpu/cpu{c}/cpufreq/cpuinfo_max_freq") or "").strip()
+        if v.isdigit() and int(v) > 0:
+            maxes.append(int(v))
+    if maxes:
+        src = (f"/sys/devices/system/cpu/cpu*/cpufreq/cpuinfo_max_freq (kHz / 1000) over the run's {len(maxes)} "
+               "readable CPU(s): the rated maximum")
+        facts["cpu_max_mhz"], sources["cpu_max_mhz"] = round(max(maxes) / 1000, 1), src + ", highest"
+        facts["cpu_max_mhz_lo"], sources["cpu_max_mhz_lo"] = round(min(maxes) / 1000, 1), src + ", lowest"
     try:
         facts["cpu_loop_mops"] = cpu_loop_mops()
         sources["cpu_loop_mops"] = f"a fixed {LOOP_N}-iteration single-thread Python loop, best of 3 (Mops/s)"
@@ -137,6 +149,8 @@ def gather(root: Path = Path("/"), smi: str = "nvidia-smi") -> dict:
         sources["cpu_loop_python"] = "sys.version_info: the loop is comparable only at the same Python (e.g. 312)"
     except Exception:  # noqa: BLE001 -- a missing fact never costs the run
         pass
+    # the helper's OWN environment: call it with the run's env set. Unset means the runtime's default, which differs by
+    # runtime (libgomp: the affinity count; torch intra-op: the physical cores), so absent is recorded as absent.
     omp = os.environ.get("OMP_NUM_THREADS", "").strip()
     if omp.isdigit() and int(omp) > 0:
         facts["omp_num_threads"] = int(omp)

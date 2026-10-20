@@ -44,9 +44,9 @@ def _box(tmp: Path, *, sockets=2, cores=2, threads=2, nodes=2, thp="always [madv
         (thp_dir / "enabled").write_text(thp + "\n")
     if defrag is not None:
         (thp_dir / "defrag").write_text(defrag + "\n")
-    if max_khz is not None:
-        (tmp / "sys/devices/system/cpu/cpu0/cpufreq").mkdir(parents=True)
-        (tmp / "sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq").write_text(max_khz + "\n")
+    for c, khz in enumerate([max_khz] if isinstance(max_khz, str) else (max_khz or [])):
+        (tmp / f"sys/devices/system/cpu/cpu{c}/cpufreq").mkdir(parents=True)
+        (tmp / f"sys/devices/system/cpu/cpu{c}/cpufreq/cpuinfo_max_freq").write_text(khz + "\n")
     if cpu_max is not None:
         (tmp / "sys/fs/cgroup").mkdir(parents=True)
         (tmp / "sys/fs/cgroup/cpu.max").write_text(cpu_max + "\n")
@@ -77,7 +77,7 @@ def test_the_facts_a_box_measures_and_where_each_came_from(tmp_path, monkeypatch
     assert f["cpu_quota_cpus"] == 61.2 and "cpu_quota_unlimited" not in f
     assert f["affinity_cpus"] == 6                                         # the run's share, beside the host's 8
     assert (f["gpu_power_limit_w"], f["gpu_max_sm_mhz"], f["gpu_mem_total_mib"]) == (575.0, 3090.0, 32607.0)
-    assert f["host_cpu_max_mhz"] == 3500.0 and f["cpu_loop_mops"] == 42.5 and f["omp_num_threads"] == 24
+    assert f["cpu_max_mhz"] == f["cpu_max_mhz_lo"] == 3500.0 and f["cpu_loop_mops"] == 42.5 and f["omp_num_threads"] == 24
     assert f["cpu_loop_python"] == sys.version_info[0] * 100 + sys.version_info[1]
     measured = {k for k in f if k not in ("measured_at", "sources")}
     assert set(f["sources"]) == measured                                   # every fact names its source
@@ -100,7 +100,7 @@ def test_a_fact_that_cannot_be_read_is_left_out(tmp_path):
                 max_khz=None)
     f = hf.gather(root, str(tmp_path / "no-such-smi"))
     for k in ("host_numa_nodes", "thp_enabled", "thp_defrag", "numa_balancing", "cpu_quota_cpus", "gpu_power_limit_w",
-              "host_cpu_max_mhz", "omp_num_threads"):
+              "cpu_max_mhz", "cpu_max_mhz_lo", "omp_num_threads"):
         assert k not in f and k not in f["sources"], k
     assert f["host_physical_cores"] == 4                                        # the rest still reads
     assert "gpu_max_sm_mhz" not in hf.gather(root, _smi(tmp_path, rc=9))   # a failing nvidia-smi adds nothing
@@ -171,3 +171,23 @@ def test_the_real_loop_is_fast_and_positive(monkeypatch):
     t0 = _t.perf_counter()
     v = hf.cpu_loop_mops()
     assert v > 0 and _t.perf_counter() - t0 < 5
+
+
+def test_a_hybrid_part_records_its_highest_and_lowest_core_maximum(tmp_path, monkeypatch):
+    """A P+E part (e.g. 8 P-cores at 5.7 GHz, E-cores at 4.6): cpu0 alone would report only the P clock."""
+    root = _box(tmp_path / "box", max_khz=["5700000", "5700000", "4600000", "4600000"])
+    monkeypatch.setattr(hf, "affinity", lambda: {0, 1, 2, 3})
+    f = hf.gather(root, str(tmp_path / "no-smi"))
+    assert (f["cpu_max_mhz"], f["cpu_max_mhz_lo"]) == (5700.0, 4600.0)
+    monkeypatch.setattr(hf, "affinity", lambda: {2, 3})                    # the run's share: E-cores only
+    f = hf.gather(root, str(tmp_path / "no-smi"))
+    assert (f["cpu_max_mhz"], f["cpu_max_mhz_lo"]) == (4600.0, 4600.0)
+
+
+def test_no_affinity_call_reads_cpu0(tmp_path, monkeypatch):
+    def gone():
+        raise AttributeError("sched_getaffinity")
+    monkeypatch.setattr(hf, "affinity", gone)
+    root = _box(tmp_path / "box", max_khz=["3000000", "2000000"])
+    f = hf.gather(root, str(tmp_path / "no-smi"))
+    assert (f["cpu_max_mhz"], f["cpu_max_mhz_lo"]) == (3000.0, 3000.0)
