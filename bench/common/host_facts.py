@@ -2,8 +2,9 @@
 """host_probe.py OUT|- -- the box's own measured host facts, written as ``host_facts.json`` beside a run.
 
 ONE producer, two byte-identical copies: ``adertha/compute/host_probe.py`` in adertha-agents (the source of record,
-beside the registry that reads its keys) and ``bench/common/host_facts.py`` in experts4bit-qlora. adertha-agents' CI
-fails when the two differ. Edits land in adertha-agents first; experts4bit-qlora then copies the file byte for byte.
+beside the registry that reads its keys) and ``bench/common/host_facts.py`` in experts4bit-qlora. NEVER edit the
+experts4bit-qlora copy directly: a change lands in adertha-agents first and experts4bit-qlora then copies the file byte
+for byte, the same convention as the two repositories' shared tooling. adertha-agents' PR CI reports any drift.
 The launcher runs it on every rented box after the pre-flight (``rent.collect_host_facts``); a lane may also run it.
 
 The host registry reads this file from a run's receipt directory. It keeps only the numeric keys it knows, ignores
