@@ -1,9 +1,0 @@
-### P131 Amendment 2: a warm-up process 0, and the GPU state per process (#846)
-
-The proof `p131-prove-1` PROVED, but its first process was about 4.7 % faster on every arm, which alone trips the NOISY
-span guard. Before any reading data, a warm-up process 0 now runs Phase B and a speed pass whose timing is reported only.
-It never enters the span guard, the gains, the default's interval or any bar. Processes 1–8 are speed-only. Every
-integrity check (FUNCTION, DETERMINISM, engagement, refusals, the decode check) still reads process 0. Every process
-records nvidia-smi's SM and memory clocks, power, temperature and clock event reasons four times (the start of its speed
-pass, right after the warm rounds, right after the timed rounds, and the end), reported only. The reducer's self-test grows to 44 cases. The reading's guard rises from 2.0 h to 2.5 h (worst about
-$2.80), sized from the proof's measured 7-minute process load.

@@ -1,6 +1,6 @@
 # Status — what this package does, what is current, what is open
 
-**As of 2026-10-17, version 0.55.0** (the version of record is `pyproject.toml`'s). This page states the current
+**As of 2026-10-20, version 0.56.0** (the version of record is `pyproject.toml`'s). This page states the current
 position in each area, with the claim id behind each number; [`docs/claims.json`](claims.json) holds every claim's full
 text and evidence. The dated narrative behind these positions, with the readings they replaced and why, is
 [`STATUS-RECORD.md`](STATUS-RECORD.md).
@@ -222,9 +222,17 @@ eager chain until a read of their own. `e4b.serve.p130.prefill-glue-speed.qwen3.
 **Single-request decode.** grouped-nf4-gemm's bandwidth-targeted NF4 decode GEMV decodes one request 1.2417× as fast,
 16 unchanged, within P110's quality bar; it is grouped-nf4-gemm's default from 0.43.0 at Qwen3's NF4 expert shapes on
 GPUs with 160 or more SMs. `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`. On Mixtral-8x7B, at plans chosen on an RTX
-5090, the same GEMV decodes one request **2.41×** as fast (19.5 → 8.1 ms a step), 16 unchanged, within the same bar; it
-becomes auto's at Mixtral's shapes with a grouped-nf4-gemm release carrying #556.
-`e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18` ([results](../bench/p141/RESULTS-p141.md)).
+5090, the same GEMV decodes one request **2.41×** as fast (19.5 → 8.1 ms a step), 16 unchanged, within the same bar.
+`e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18` ([results](../bench/p141/RESULTS-p141.md)). Two more reads set
+grouped-nf4-gemm 0.47.0's `auto` scope. On an RTX 4090 (128 SMs), Qwen3-30B-A3B decodes one request **1.5145×** as fast
+(`e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18`, [results](../bench/p133/RESULTS-p133.md)). On an RTX 5090 at a 400 W
+limit, Granite-3.1-3b-a800m decodes it **1.3979×** as fast and OLMoE-1B-7B **1.5011×**
+(`e4b.serve.p134.gemv-bw.granite.5090.2026-10-18`, `e4b.serve.p134.gemv-bw.olmoe.5090.2026-10-18`,
+[results](../bench/p134/RESULTS-p134.md)). Sixteen requests are unchanged and quality is within the same bar in each.
+- **Scope since grouped-nf4-gemm 0.47.0:** its default also takes Mixtral-8x7B's, Granite-3.1-3B-A800M's and OLMoE-1B-7B's
+  expert shapes on GPUs with 160 or more SMs, and the RTX 4090 (128 SMs, sm_89) at Qwen3-30B-A3B's two shapes only. The
+  shapes are licensed, not the families: any model with those expert shapes takes them. Every other shape and smaller
+  GPU keeps dot-pad; `GNF4_GEMV_BW=0` restores it.
 
 **The B=1 fused stack is the default on Qwen3-MoE, Qwen3.5/3.6-MoE and Mixtral.** On top of grouped-nf4-gemm 0.43.0's
 bandwidth GEMV, fused q/k/v
@@ -262,7 +270,7 @@ moves buckets 1, 2 and 4 only.
   binding). Sixteen requests are unchanged (0.992).
 - **Quality:** SANE exact (bias 0.0, argmax 1.0). The cap is bitwise-identical to the plan at contexts ≤ 1024, and
   within A2's fp64 contract (error 0.9976–1.0000× the plan's) at 2048 and above.
-- **Default:** it becomes `qwen3_moe`'s default with the flip PR; `E4B_ATTN_SPLIT_CAP=0` restores the plan.
+- **Default:** on for `qwen3_moe` (16); `E4B_ATTN_SPLIT_CAP=0` restores the plan.
 - **Measured basis:** Qwen3-30B-A3B on an RTX 5090 (170 SMs). Other `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B)
   and other cards take the default by family without a read of their own. The plan is SM-scaled, so the cap moves
   B 1–6 on a PRO 6000 and B 1–4 on a 4090.
@@ -308,6 +316,18 @@ K25's select-tree codebook decode for grouped-nf4-gemm K39's (`lut="prmt"`), whi
   gets read). Other families stay on the tree.
 
 `e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20` ([P158](../bench/p158/RESULTS-p158.md)).
+
+**Int8 attention projections on Mixtral are opt-in, with no speed claimed.**
+- **What it does:** `E4B_SERVE_ATTN_INT8=1` (#1848) holds Mixtral-8x7B's q, k, v and o projections in int8 with a
+  per-row fp32 scale. Decode calls of 1-16 rows run grouped-nf4-gemm 0.49.0's K37 kernels (`dense_i8.linear_i8`), and
+  larger calls dequantize transiently.
+- **Where it refuses:** on other families, without K37, and alongside int4 attention or `E4B_DENSE_GEMV_BW=1`.
+- **Its premises have read:**
+  - the int8 round trip keeps P147's quality gate: I8ATTN GO, `p147-a2000-1`;
+  - the kernels beat cuBLAS bf16 at Mixtral's shapes: P149 box K, K_GO, `p149k-5090-8`, a microbench premise.
+- **Why it stays off by default:** the served read, P149's box Q+S, has not run. There is no claim id.
+
+[P147](../bench/p147/RESULTS-p147.md), [P149](../bench/p149/RESULTS-p149.md).
 
 **Calibrated int4 attention is not licensed on the default.** On Qwen3-30B-A3B, `E4B_SERVE_ATTN_INT4_CALIB=1` decodes
 one request 1.154× as fast (1.238× with the int4 lm_head too). The mean NLL bias stays inside K8's budget, but only
@@ -408,6 +428,7 @@ controls. `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-
 | router weights cast to bf16 at ≤ 64 rows (`softmax_topk`) | fused router epilogue | `E4B_ROUTER_EPI_CAST=0` | `e4b.serve.p70.qwen3.b1.router-weight-cast.5090.2026-09-25` |
 | the paged FP8 attention decode capped at 16 splits (`qwen3_moe` only; buckets 1, 2 and 4 move, 32 / 32 / 23 -> 16; bitwise-identical to the plan at contexts ≤ 1024; one request 1.044× as fast, 16 unchanged, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs); other `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B) and other cards (the cap moves B 1–6 on a PRO 6000, B 1–4 on a 4090) take it by family without a read of their own) | `serve_paged` | `E4B_ATTN_SPLIT_CAP=0` | `e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19` |
 | the lm_head on its per-row int8 grid, its one-row decode GEMV through grouped-nf4-gemm K36 (`qwen3_moe` at the 151936 x 2048 head only; needs grouped-nf4-gemm 0.48.0 or later, else it resolves off, recorded; one request 1.052× as fast, 16 requests 0.992, an observed cost not attributed, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs); quality read on Qwen3-30B-A3B @ad44e777, same-shape checkpoints inherit the default unread; other head shapes, e.g. Qwen3-235B-A22B's 151936 x 4096, stay off) | `serve_paged` | `E4B_INT8_HEAD_BW=0` | `e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19` |
+| K25's codebook decode by grouped-nf4-gemm K39's byte permute (`lut="prmt"`; `qwen3_moe` only; bit-identical to the select tree, every token identical; needs grouped-nf4-gemm 0.50.0 or later and an NVIDIA device, else it resolves to the tree, recorded in `info["k25_lut"]`; sixteen requests 1.0925× as fast (the smallest of four ABBA pairs), one request unchanged, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs) at today's K25 plan; other `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B) take it by family with no speed claimed; other families stay on the tree) | `serve_paged` | `E4B_K25_LUT=tree` | `e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20` |
 | B=1 fused stack (fused q/k/v and three glue folds) on Qwen3-MoE; its router epilogue, the only fold that engages, on Qwen3.5/3.6-MoE; its three glue folds on Mixtral | `serve_paged` | `E4B_PAGED_FUSE_QKV=0`, `E4B_FUSE_T1_GLUE=0`, `E4B_FUSE_T1_GLUE_R2=0`, `E4B_FUSE_ROUTER_EPI=0` | `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`, `e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`, `e4b.serve.p135.fold-speed.mixtral.5090.2026-10-18` |
 
 ---
@@ -442,9 +463,11 @@ Superseded and retired readings are not repeated here. The register keeps each w
   built a different one is unexplained, and no open issue carries it.
 - **Open register rows:** reproducing the TR2 training receipt from published artifacts (`e4b.open.tr2-repro-gap`);
   int8-offload's best training eval, confounded by an evaluator offset (`e4b.open.int8-offload-confounded`).
-- **Open campaigns:** training #835, serving #846, single-stream decode #1313. P127 Phase 2 is on main: #1477 folds
-  the MoE residual add into the experts' combine wherever a probe shows it bitwise (fixed by #1482), and #1472's
-  kernel options stay inert until a grouped-nf4-gemm release carries #526–#530. No speed claim until P127 reads.
+- **Open campaigns:** training #835, serving #846, single-stream decode #1313. P127 read: its launch-bound glue changes (Phase 1,
+  #1448; Phase 2, #1472/#1477/#1482 with grouped-nf4-gemm #526–#530, first released in 0.45.0) decode one request
+  1.1321× as fast and 16 requests 1.0156× on Qwen3-30B-A3B on an RTX 5090, bitwise identical
+  (`e4b.serve.p127.launch-bound-glue.qwen3.5090.2026-10-09`, [results](../bench/p127/RESULTS-p127.md)). #1472's kernel
+  options take effect with grouped-nf4-gemm 0.45.0 or later.
 - **Older documents' debts:** `POST_AUDIT_WORK_QUEUE.md` (Q1–Q4), `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10),
   `LAYOUT_FACTS.md` (training determinism UNKNOWN), and `support_matrix.md`'s footer hash, which no longer matches its
   bytes and is recorded, not fixed, because the file is anchored.

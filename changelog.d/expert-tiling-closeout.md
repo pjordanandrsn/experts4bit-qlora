@@ -1,3 +1,0 @@
-### Changed
-
-- `bench/expert-tiling/`: section 8 closes sub-expert weight-tile streaming. Every recorded expert-offload lane is checked against the regime where tiles would matter (`closeout.py` reproduces the table from the records it names). No lane needs a unit smaller than one whole routed expert. The one row without room for a second layer slot, Q235 Shape A on an RTX 5090 (a stretch class that has never run), has room for about 100 whole experts. The two recorded single-slot fit failures exceed a whole layer slot (TC3 on the shared A2000) or point to a compacted routed stack of whole experts (the 284B arena ladder). The reopen trigger is stated. Documentation only.

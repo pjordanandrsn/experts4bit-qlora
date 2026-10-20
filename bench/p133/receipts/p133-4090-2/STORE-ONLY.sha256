@@ -1,0 +1,18 @@
+# Files of p133-4090-2 kept only in the private receipt store (byte-exact there), by sha256. They carry the GPU's UUID, a
+# container host name or the provider's instance, or carriage returns from progress output; no reading depends on them.
+cd9106436557ca5ca2d789cce17a9cca88ef33080ea3b49eadd1368d0028e7d9  p133/forensics.txt
+acff3ab868a0bd1c498cb7680f8e85ea0eb6b8a9538cc8964ff2a4de7679dfef  p133/outer.log
+2a5aa65029e7de2106e523c5d3fb6c01252b43d935cdb03509b83a4b0cfb810d  p133/INSTANCE_ID
+fc358f31cf6d3f554edfbd4f9661b01186b12e11158c6d6d3dba1fa901139b67  p133/logs/premise_kernel.xml
+9c9a57ba0f9b4715d9f7a47690b3d99ecc84d94e492b6865ae767017666b437f  p133/logs/premise_served.xml
+44ec1312d714c6c3a73b479898977b7eaa67dd997e72906c83ab2866f8a7b925  p133/logs/arm_B0a.log
+91ad8a880ec3587908fbee2e6a8f13f7a19d1d22da2af20a7c4db0454412e704  p133/logs/arm_B0b.log
+cb6f0ac12ce82ec3dabb40a766f0a094327bbebe66514e15e91e83a519da8484  p133/logs/arm_B1a.log
+ff22a24b0fd0151489e6f52a396e19c4388d175602e44a08ed57727322ddf155  p133/logs/arm_B1b.log
+6ccda72a6a324cb6590d99219a1035011b81f03cca8274760b4eb2214dd39e71  p133/logs/fetch.log
+614f099c1904918b3b6627e626f40e6b72e84f72111dde4b2b6fada8ec4ddce3  p133/logs/fit.log
+8035771ebad15d13fdb75ae369d1f9908b6e3400e6e8102b8d62237f27e430fd  p133/logs/prompts.log
+33dbd809cbe0597457cb249d6c3c25d971b570f1698ed6237d48f3d837d3c59d  p133/logs/quality_on.log
+9ff241eab46976fcdff5443652371ae99616aafa528b22906a3ef3a2685feba1  p133/logs/quality_off.log
+3fbe4b8d3331cb60258076e118d59a24006b1f906ca2dfdcd6b8a11e2fa3bfc3  instance.json
+860434c3973b94c01ccc3cdb82f9f3d6576902688d0cf23db2e985d3fecb8413  teardown-proof.json

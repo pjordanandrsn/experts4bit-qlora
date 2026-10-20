@@ -1,0 +1,333 @@
+{
+ "lane": "P134",
+ "family": "olmoe",
+ "model": "allenai/OLMoE-1B-7B-0924-Instruct",
+ "proof": false,
+ "dry": false,
+ "verdict": "LICENSED",
+ "reasons": [
+  "g1 = 1.5011, g16 = 0.9954 (geomean {'W1': 1.504, 'W16': 0.9979}); wikitext ON bias -0.00238 (bar 0.01087), K8 -0.0234; c4val1 ON bias -0.00089 (bar 0.01380), K8 -0.0124"
+ ],
+ "bars": {
+  "self_pair": [
+   0.96,
+   1.04
+  ],
+  "self_pair_w1": [
+   0.985,
+   1.015
+  ],
+  "gain_min_w1": 1.03,
+  "gain_min_control": 0.99,
+  "tol": 0.01,
+  "spread_x": 2.0,
+  "spread_min": 0.005,
+  "k8_budget": 0.05,
+  "k8_gated": [
+   "wikitext"
+  ],
+  "floors": [
+   "chunk"
+  ]
+ },
+ "rerun": true,
+ "quality": {
+  "wikitext": {
+   "stats": {
+    "rep": {
+     "n": 1,
+     "bias": 0.0,
+     "spread": 0.0,
+     "se": 0.0,
+     "max_abs": 0.0,
+     "mean_kl": 0.0,
+     "argmax_agree": 1.0
+    },
+    "chunk": {
+     "n": 24,
+     "bias": -0.0008654985866627385,
+     "spread": 0.01236737640388911,
+     "se": 0.0031840945435914745,
+     "max_abs": 0.03224705268780781,
+     "mean_kl": 0.00949678028291956,
+     "argmax_agree": 0.94921875
+    },
+    "mutant_scale": {
+     "n": 24,
+     "bias": 2.3726314648296247,
+     "spread": 2.3726314648296247,
+     "se": 0.062309626151637806,
+     "max_abs": 2.83457509316446,
+     "mean_kl": 2.7487092877039174,
+     "argmax_agree": 0.2893880208333333
+    },
+    "ON": {
+     "n": 24,
+     "bias": -0.002379861180312156,
+     "spread": 0.009030368196613958,
+     "se": 0.0022280259362707235,
+     "max_abs": 0.022807339776129254,
+     "mean_kl": 0.006730902590588384,
+     "argmax_agree": 0.9635416666666666
+    }
+   },
+   "floor": {
+    "draws": [
+     "chunk"
+    ],
+    "B_floor": 0.0008654985866627385,
+    "S_floor": 0.01236737640388911
+   },
+   "bias_bar": 0.010865498586662739,
+   "spread_bar": 0.02473475280777822,
+   "mutant_passes": false,
+   "on_passes": true,
+   "k8": {
+    "ppl_R": 9.831979526808341,
+    "ppl_ON": 9.808608601216715,
+    "delta": -0.023370925591626346,
+    "gated": true,
+    "passes": true
+   }
+  },
+  "c4val1": {
+   "stats": {
+    "rep": {
+     "n": 1,
+     "bias": 0.0,
+     "spread": 0.0,
+     "se": 0.0,
+     "max_abs": 0.0,
+     "mean_kl": 0.0,
+     "argmax_agree": 1.0
+    },
+    "chunk": {
+     "n": 24,
+     "bias": 0.003800393926565097,
+     "spread": 0.012012588862902721,
+     "se": 0.0031095688092651883,
+     "max_abs": 0.04820133754245148,
+     "mean_kl": 0.010930882940616607,
+     "argmax_agree": 0.9417317708333334
+    },
+    "mutant_scale": {
+     "n": 24,
+     "bias": 1.9973468215434298,
+     "spread": 1.9973468215434298,
+     "se": 0.09177870760011525,
+     "max_abs": 3.112880742875859,
+     "mean_kl": 2.5806260852103406,
+     "argmax_agree": 0.3238932291666667
+    },
+    "ON": {
+     "n": 24,
+     "bias": -0.0008851870580236879,
+     "spread": 0.009955904784314148,
+     "se": 0.002419984840045025,
+     "max_abs": 0.023995625481134653,
+     "mean_kl": 0.007513718450032944,
+     "argmax_agree": 0.9514973958333334
+    }
+   },
+   "floor": {
+    "draws": [
+     "chunk"
+    ],
+    "B_floor": 0.003800393926565097,
+    "S_floor": 0.012012588862902721
+   },
+   "bias_bar": 0.013800393926565097,
+   "spread_bar": 0.024025177725805442,
+   "mutant_passes": false,
+   "on_passes": true,
+   "k8": {
+    "ppl_R": 14.011305817948166,
+    "ppl_ON": 13.99890867907504,
+    "delta": -0.012397138873126323,
+    "gated": false,
+    "passes": true
+   }
+  }
+ },
+ "control": "W16",
+ "max_seqs": 64,
+ "buckets": [
+  1,
+  2,
+  4,
+  8,
+  16,
+  32,
+  64
+ ],
+ "box": {
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "capability": [
+   12,
+   0
+  ],
+  "sm_count": 170,
+  "graphs": true,
+  "placement": "all-vram",
+  "grouping": {
+   "device_grouping": true,
+   "force_singleton_groups": false
+  }
+ },
+ "decode_tok_s": {
+  "B0a": {
+   "W1": 246.92,
+   "W16": 1937.05
+  },
+  "B1a": {
+   "W1": 370.64,
+   "W16": 1928.06
+  },
+  "B1b": {
+   "W1": 371.39,
+   "W16": 1923.78
+  },
+  "B0b": {
+   "W1": 246.46,
+   "W16": 1922.84
+  }
+ },
+ "ms_per_step": {
+  "B0a": {
+   "W1": 4.0499,
+   "W16": 8.26
+  },
+  "B1a": {
+   "W1": 2.698,
+   "W16": 8.2985
+  },
+  "B1b": {
+   "W1": 2.6926,
+   "W16": 8.317
+  },
+  "B0b": {
+   "W1": 4.0574,
+   "W16": 8.321
+  }
+ },
+ "self_pairs": {
+  "B0b/B0a W1": 0.9981,
+  "B0b/B0a W16": 0.9927,
+  "B1b/B1a W1": 1.002,
+  "B1b/B1a W16": 0.9978
+ },
+ "pair_ratios": {
+  "W1": [
+   1.5011,
+   1.5069
+  ],
+  "W16": [
+   0.9954,
+   1.0005
+  ]
+ },
+ "g1": 1.5011,
+ "gW": 0.9954,
+ "geomean": {
+  "W1": 1.504,
+  "W16": 0.9979
+ },
+ "b1_vs_b0_tokens": {
+  "W1@32": {
+   "rows_identical": 1,
+   "rows": 1,
+   "first_divergence": [
+    null
+   ]
+  },
+  "W1@160": {
+   "rows_identical": 1,
+   "rows": 1,
+   "first_divergence": [
+    null
+   ]
+  },
+  "W16@32": {
+   "rows_identical": 16,
+   "rows": 16,
+   "first_divergence": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  "W16@160": {
+   "rows_identical": 15,
+   "rows": 16,
+   "first_divergence": [
+    158,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  }
+ },
+ "dispatch": {
+  "B0a": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 96,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 0,
+   "bw_splitk": 0
+  },
+  "B1a": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 96,
+   "bw_splitk": 0
+  },
+  "B1b": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 96,
+   "bw_splitk": 0
+  },
+  "B0b": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 96,
+   "scalar_splitk": 0,
+   "bw_tree": 0,
+   "bw_prmt32": 0,
+   "bw_splitk": 0
+  }
+ }
+}

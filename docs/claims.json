@@ -12519,6 +12519,90 @@
       "notes": "Pre-registered in #1754 (opened as P139, renumbered before review). Q1, Q2 (except B1 != B0 on W1 rows: identical), Q4, Q5 and Q6 HIT; Q3 (g1 in [1.25, 2.00]) FALSIFIED high. Phase 1's per-call timings (reported, never ruled): gate_up 3.086 vs 10.309 ms, down 1.950 vs 6.105 ms over 32 layers. p141-5090-1 ($0.007) never ran: its instance stuck loading. The reviewers and the maintainer re-derived the verdict from the store; the default takes effect with a grouped-nf4-gemm release carrying #556."
     },
     {
+      "id": "e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P133 (one RTX 4090, sm_89, 128 SMs): grouped-nf4-gemm K33's bandwidth-targeted NF4 decode GEMV (GNF4_GEMV_BW=1, prmt32, K33's shipped plans) decodes Qwen3-30B-A3B NF4 one request 1.5145x as fast as the shipped route at 128 SMs (the scalar GEMV) on the default serve_paged server (16 slots, graphs on): 8.4759 -> 5.5967 ms (block a) and 8.4664 -> 5.5870 ms (block b) a step, ABBA over four fresh processes. Sixteen requests are unchanged (gW 0.9998, the registered line 0.99), every token identical, and quality is within P110's bar (wikitext bias +0.00325, bar 0.01387; K8 delta ppl +0.0283). P133's verdict is LICENSED; grouped-nf4-gemm 0.47.0 then added sm_89 parts with exactly 128 SMs to auto at Qwen3-30B-A3B's two expert shapes.",
+      "value": 1.5145,
+      "unit": "ratio, B1 / B0 one-request decode rate (tokens/s), the smaller of the two ABBA pairs (B1a/B0a 1.5145; B1b/B0b 1.5155)",
+      "hardware": "RTX 4090 (sm_89, 128 SMs, a 450 W power limit), one rented Vast.ai host (machine 51612, verified-secure, AMD EPYC 7742, 256 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @c8d7e629 (0.54.0, main at #1691, the box's pin) + grouped-nf4-gemm @6b7c2e74 (0.46.0, K33's plans); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0, bitsandbytes 0.50.2; premise on the card: K33's kernel contract 33 passed (two registered sm_90+ skips) and the served route 18 passed; Qwen/Qwen3-30B-A3B @ad44e777, NF4 arena baked on the box; the default serve_paged server at max_seqs 16, buckets 1-16, graphs on; B0 = GNF4_GEMV_BW unset (auto: the scalar GEMV at 128 SMs), B1 = GNF4_GEMV_BW=1; P109's prompts, W1 and W16 at 32 and 160 tokens, 3 reps; quality P110's teacher-forced instrument, 24 windows x 128 positions per text, eager",
+      "measured_on": "2026-10-18",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p133/RESULTS-p133.md",
+        "bench/p133/PREREG-p133.md",
+        "bench/p133/p133_reduce.py",
+        "bench/p133/receipts/p133-4090-2/verdict.json",
+        "bench/p133/receipts/p133-4090-2/SHA256SUMS",
+        "bench/p133/receipts/p133-4090-2/README.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-18/p133-4090-2/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-17/p133-4090-1/ (receipt.json; ABORTED before its quality phase, the registered time-left check)"
+      ],
+      "licensed_by": "e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18",
+      "notes": "Pre-registered in #1695 with Amendments 1 (#1704) and 2 (#1711). Q1, Q4, Q5 and Q6 HELD; Q2 HELD except B1 != B0 on W1 rows (identical); Q3 (g1 in [1.05, 1.30]) MISSED high. The record and this claim were written after the read from the private receipt store; the verdict re-derives byte for byte from it and from the public records (under Python 3.10). The plans are the RTX 5090's, unswept on sm_89."
+    },
+    {
+      "id": "e4b.serve.p134.gemv-bw.granite.5090.2026-10-18",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+      "claim": "Lane P134 (one RTX 5090 at a 400 W power limit): grouped-nf4-gemm K33's bandwidth-targeted NF4 decode GEMV (GNF4_GEMV_BW=1, prmt32, K33's shipped plans) decodes granite-3.1-3b-a800m-instruct NF4 one request 1.3979x as fast as the shipped scalar GEMV on the default serve_paged server (64 slots, graphs on): 5.0574 -> 3.6142 ms (block a) and 5.0809 -> 3.6347 ms (block b) a step, ABBA over four fresh processes. Sixteen requests are unchanged (gW 0.9992, the registered line 0.99), and quality is within P110's bar (wikitext bias +0.00260, bar 0.01338; K8 delta ppl +0.0161). P134's verdict for the family is LICENSED; grouped-nf4-gemm 0.47.0 then added Granite's two expert shapes to auto on >= 160-SM parts.",
+      "value": 1.3979,
+      "unit": "ratio, B1 / B0 one-request decode rate (tokens/s), the smaller of the two ABBA pairs (B1a/B0a 1.3993; B1b/B0b 1.3979)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, a 400 W power limit, below the class's 575 W), one rented Vast.ai host (machine 45708, verified-secure, AMD EPYC 9554, 256 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @c8d7e629 (0.54.0, main at #1691, the box's pin) + grouped-nf4-gemm @6b7c2e74 (0.46.0, K33's plans); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0, bitsandbytes 0.50.2; premise on the card: K33's kernel contract 35 passed and the served route 18 passed, none skipped; ibm-granite/granite-3.1-3b-a800m-instruct @a0278068, NF4 arena baked on the box; the default serve_paged server at max_seqs 64, buckets 1-64, graphs on; B0 = GNF4_GEMV_BW unset (the scalar GEMV at these shapes), B1 = GNF4_GEMV_BW=1; P109's prompts, W1 and W16 at 32 and 160 tokens, 3 reps; quality P110's teacher-forced instrument, 24 windows x 128 positions per text, eager",
+      "measured_on": "2026-10-18",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p134/RESULTS-p134.md",
+        "bench/p134/PREREG-p134.md",
+        "bench/p134/p134_reduce.py",
+        "bench/p134/receipts/p134-5090-1/verdict_granite.json",
+        "bench/p134/receipts/p134-5090-1/SHA256SUMS",
+        "bench/p134/receipts/p134-5090-1/README.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-18/p134-5090-1/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-18/p134-5090-prove-1/ (the proof)"
+      ],
+      "licensed_by": "e4b.serve.p134.gemv-bw.granite.5090.2026-10-18",
+      "notes": "Pre-registered in #1697 with Amendment 1 (#1704). Q1, Q2, Q5 and Q6 HELD; Q3 (g1 in [1.17, 1.37]) MISSED high. c4val1's K8 (+0.0503) is reported, not gated (the budget is gated on wikitext). The card read a 400 W power limit; the read predates the 575 W floor later lanes register. The record and this claim were written after the read from the private receipt store; the verdict re-derives byte for byte (under Python 3.10)."
+    },
+    {
+      "id": "e4b.serve.p134.gemv-bw.olmoe.5090.2026-10-18",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "allenai/OLMoE-1B-7B-0924-Instruct",
+      "claim": "Lane P134 (one RTX 5090 at a 400 W power limit): grouped-nf4-gemm K33's bandwidth-targeted NF4 decode GEMV (GNF4_GEMV_BW=1, prmt32, K33's shipped plans) decodes OLMoE-1B-7B-0924-Instruct NF4 one request 1.5011x as fast as the shipped scalar GEMV on the default serve_paged server (64 slots, graphs on): 4.0499 -> 2.6980 ms (block a) and 4.0574 -> 2.6926 ms (block b) a step, ABBA over four fresh processes. Sixteen requests are unchanged (gW 0.9954, the registered line 0.99), and quality is within P110's bar (wikitext bias -0.00238, bar 0.01087; K8 delta ppl -0.0234). P134's verdict for the family is LICENSED; grouped-nf4-gemm 0.47.0 then added OLMoE's two expert shapes to auto on >= 160-SM parts.",
+      "value": 1.5011,
+      "unit": "ratio, B1 / B0 one-request decode rate (tokens/s), the smaller of the two ABBA pairs (B1a/B0a 1.5011; B1b/B0b 1.5069)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, a 400 W power limit, below the class's 575 W), one rented Vast.ai host (machine 45708, verified-secure, AMD EPYC 9554, 256 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @c8d7e629 (0.54.0, main at #1691, the box's pin) + grouped-nf4-gemm @6b7c2e74 (0.46.0, K33's plans); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0, bitsandbytes 0.50.2; premise on the card: K33's kernel contract 35 passed and the served route 18 passed, none skipped; allenai/OLMoE-1B-7B-0924-Instruct @7f1c97f4, NF4 arena baked on the box; the default serve_paged server at max_seqs 64, buckets 1-64, graphs on; B0 = GNF4_GEMV_BW unset (the scalar GEMV at these shapes), B1 = GNF4_GEMV_BW=1; P109's prompts, W1 and W16 at 32 and 160 tokens, 3 reps; quality P110's teacher-forced instrument, 24 windows x 128 positions per text, eager",
+      "measured_on": "2026-10-18",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p134/RESULTS-p134.md",
+        "bench/p134/PREREG-p134.md",
+        "bench/p134/p134_reduce.py",
+        "bench/p134/receipts/p134-5090-1/verdict_olmoe.json",
+        "bench/p134/receipts/p134-5090-1/SHA256SUMS",
+        "bench/p134/receipts/p134-5090-1/README.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-18/p134-5090-1/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-18/p134-5090-prove-1/ (the proof)"
+      ],
+      "licensed_by": "e4b.serve.p134.gemv-bw.olmoe.5090.2026-10-18",
+      "notes": "Pre-registered in #1697 with Amendment 1 (#1704). Q1, Q5 and Q6 HELD; Q2 HELD except B1 != B0 on W1 rows (identical); Q4 (g1 in [1.218, 1.483], the band the proof narrowed it to before the reading) MISSED high. The card read a 400 W power limit; the read predates the 575 W floor later lanes register. The record and this claim were written after the read from the private receipt store; the verdict re-derives byte for byte (under Python 3.10)."
+    },
+    {
       "id": "e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19",
       "package": "experts4bit-qlora",
       "area": "serve",
