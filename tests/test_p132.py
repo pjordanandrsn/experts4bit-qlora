@@ -25,6 +25,14 @@ SOURCES = {"p132_run.sh": LANE, "p132_box.py": LANE, "p132_reduce.py": LANE, "ke
 DESK_SHA256 = "71229f08df388d12"
 
 
+def _history_missing(why: str):
+    """A history-dependent assert whose commits this checkout lacks. CI fetches full history, so there it is a broken
+    checkout and fails; a local shallow clone skips (the e4b#1898 rule)."""
+    if os.environ.get("CI"):
+        pytest.fail(why + " (CI must fetch full history)")
+    pytest.skip(why)
+
+
 def _load(name, path):
     spec = importlib.util.spec_from_file_location(name, path)
     mod = importlib.util.module_from_spec(spec)
@@ -140,7 +148,7 @@ def test_the_drivers_dry_run_names_the_launch(tmp_path):
            "E4B_RENT_INSTANCE_ID": "0"}
     out = subprocess.run(["bash", str(LANE / "p132_drive.sh")], capture_output=True, text=True, env=env, timeout=120)
     if "is not in" in out.stdout + out.stderr:
-        pytest.skip("SD2's proven or read commit is not in this checkout")
+        _history_missing("SD2's proven or read commit is not in this checkout")
     assert out.returncode == 0, out.stdout + out.stderr
     assert "DRYRUN stage -> root@h:/root/p132" in out.stdout and "bash p132_run.sh" in out.stdout
 
@@ -289,3 +297,14 @@ def test_a1_export_route_one_long_period_reads_and_two_void(mode, tmp_path):
     assert two["status"] == "void" and two["dropped"] == {"period_over_1.5x_median": 2}
     assert one == _read(mode, _bracket(canary_steps, {mid}), canary_steps - offset, moe)
     assert two == _read(mode, _bracket(canary_steps, {mid - 2, mid}), canary_steps - offset, moe)
+
+
+@pytest.mark.parametrize("ci,outcome", [("1", pytest.fail.Exception), ("", pytest.skip.Exception)],
+                         ids=["ci-fails", "local-skips"])
+def test_missing_history_fails_under_ci_and_skips_locally(monkeypatch, ci, outcome):
+    if ci:
+        monkeypatch.setenv("CI", ci)
+    else:
+        monkeypatch.delenv("CI", raising=False)
+    with pytest.raises(outcome):
+        _history_missing("the commits are not in this checkout")

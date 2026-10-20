@@ -14,6 +14,7 @@ import hashlib
 import importlib.util
 import inspect
 import json
+import os
 import pathlib
 import re
 import subprocess
@@ -39,6 +40,14 @@ SOURCES = {
 }
 RUN = (LANE / "p127_run.sh").read_text()
 DRIVE = (LANE / "p127_drive.sh").read_text()
+
+
+def _history_missing(why: str):
+    """A history-dependent assert whose commits this checkout lacks. CI fetches full history, so there it is a broken
+    checkout and fails; a local shallow clone skips (the e4b#1898 rule)."""
+    if os.environ.get("CI"):
+        pytest.fail(why + " (CI must fetch full history)")
+    pytest.skip(why)
 
 
 def _load(name):
@@ -351,8 +360,19 @@ def test_the_pinned_b_audit_range_is_fully_registered():
     base = subprocess.run(["git", "-C", str(REPO), "cat-file", "-e", "a8c01d426bc3e489c8bd11c7c8ced091da557582^{commit}"],
                           capture_output=True)
     if have.returncode or base.returncode:
-        pytest.skip("this checkout lacks the history the audit reads (shallow clone)")
+        _history_missing("this checkout lacks the history the audit reads (shallow clone)")
     listed = subprocess.run(["git", "-C", str(REPO), "log", "--format=%H", f"a8c01d426bc3e489c8bd11c7c8ced091da557582..{e4b_b}",
                              "--", "experts4bit_qlora/"], capture_output=True, text=True, check=True).stdout.split()
     ok = (re.search(r'^E4B_P127="([^"]+)"', RUN, re.M).group(1) + " " + re.search(r'^E4B_INERT="([^"]+)"', RUN, re.M).group(1)).split()
     assert listed and not [c for c in listed if c not in ok], [c for c in listed if c not in ok]
+
+
+@pytest.mark.parametrize("ci,outcome", [("1", pytest.fail.Exception), ("", pytest.skip.Exception)],
+                         ids=["ci-fails", "local-skips"])
+def test_missing_history_fails_under_ci_and_skips_locally(monkeypatch, ci, outcome):
+    if ci:
+        monkeypatch.setenv("CI", ci)
+    else:
+        monkeypatch.delenv("CI", raising=False)
+    with pytest.raises(outcome):
+        _history_missing("the commits are not in this checkout")
