@@ -1,6 +1,6 @@
 # Status — what this package does, what is current, what is open
 
-**As of 2026-10-17, version 0.55.0** (the version of record is `pyproject.toml`'s). This page states the current
+**As of 2026-10-20, main after version 0.55.0** (the version of record is `pyproject.toml`'s). This page states the current
 position in each area, with the claim id behind each number; [`docs/claims.json`](claims.json) holds every claim's full
 text and evidence. The dated narrative behind these positions, with the readings they replaced and why, is
 [`STATUS-RECORD.md`](STATUS-RECORD.md).
@@ -222,9 +222,13 @@ eager chain until a read of their own. `e4b.serve.p130.prefill-glue-speed.qwen3.
 **Single-request decode.** grouped-nf4-gemm's bandwidth-targeted NF4 decode GEMV decodes one request 1.2417× as fast,
 16 unchanged, within P110's quality bar; it is grouped-nf4-gemm's default from 0.43.0 at Qwen3's NF4 expert shapes on
 GPUs with 160 or more SMs. `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`. On Mixtral-8x7B, at plans chosen on an RTX
-5090, the same GEMV decodes one request **2.41×** as fast (19.5 → 8.1 ms a step), 16 unchanged, within the same bar; it
-becomes auto's at Mixtral's shapes with a grouped-nf4-gemm release carrying #556.
+5090, the same GEMV decodes one request **2.41×** as fast (19.5 → 8.1 ms a step), 16 unchanged, within the same bar.
 `e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18` ([results](../bench/p141/RESULTS-p141.md)).
+- **Scope since grouped-nf4-gemm 0.47.0:** its default also takes Mixtral-8x7B's, Granite-3.1-3B-A800M's and OLMoE-1B-7B's
+  expert shapes on GPUs with 160 or more SMs, and the RTX 4090 (128 SMs, sm_89) at Qwen3-30B-A3B's two shapes only. The
+  shapes are licensed, not the families: any model with those expert shapes takes them. Every other shape and smaller
+  GPU keeps dot-pad; `GNF4_GEMV_BW=0` restores it. The Granite, OLMoE and RTX 4090 reads (lanes P133, P134) have no
+  register row yet: UNVERIFIED here.
 
 **The B=1 fused stack is the default on Qwen3-MoE, Qwen3.5/3.6-MoE and Mixtral.** On top of grouped-nf4-gemm 0.43.0's
 bandwidth GEMV, fused q/k/v
@@ -262,7 +266,7 @@ moves buckets 1, 2 and 4 only.
   binding). Sixteen requests are unchanged (0.992).
 - **Quality:** SANE exact (bias 0.0, argmax 1.0). The cap is bitwise-identical to the plan at contexts ≤ 1024, and
   within A2's fp64 contract (error 0.9976–1.0000× the plan's) at 2048 and above.
-- **Default:** it becomes `qwen3_moe`'s default with the flip PR; `E4B_ATTN_SPLIT_CAP=0` restores the plan.
+- **Default:** on for `qwen3_moe` (16); `E4B_ATTN_SPLIT_CAP=0` restores the plan.
 - **Measured basis:** Qwen3-30B-A3B on an RTX 5090 (170 SMs). Other `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B)
   and other cards take the default by family without a read of their own. The plan is SM-scaled, so the cap moves
   B 1–6 on a PRO 6000 and B 1–4 on a 4090.
@@ -442,9 +446,11 @@ Superseded and retired readings are not repeated here. The register keeps each w
   built a different one is unexplained, and no open issue carries it.
 - **Open register rows:** reproducing the TR2 training receipt from published artifacts (`e4b.open.tr2-repro-gap`);
   int8-offload's best training eval, confounded by an evaluator offset (`e4b.open.int8-offload-confounded`).
-- **Open campaigns:** training #835, serving #846, single-stream decode #1313. P127 Phase 2 is on main: #1477 folds
-  the MoE residual add into the experts' combine wherever a probe shows it bitwise (fixed by #1482), and #1472's
-  kernel options stay inert until a grouped-nf4-gemm release carries #526–#530. No speed claim until P127 reads.
+- **Open campaigns:** training #835, serving #846, single-stream decode #1313. P127 read: its launch-bound glue changes (Phase 1,
+  #1448; Phase 2, #1472/#1477/#1482 with grouped-nf4-gemm #526–#530, first released in 0.45.0) decode one request
+  1.1321× as fast and 16 requests 1.0156× on Qwen3-30B-A3B on an RTX 5090, bitwise identical
+  (`e4b.serve.p127.launch-bound-glue.qwen3.5090.2026-10-09`, [results](../bench/p127/RESULTS-p127.md)). #1472's kernel
+  options take effect with grouped-nf4-gemm 0.45.0 or later.
 - **Older documents' debts:** `POST_AUDIT_WORK_QUEUE.md` (Q1–Q4), `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10),
   `LAYOUT_FACTS.md` (training determinism UNKNOWN), and `support_matrix.md`'s footer hash, which no longer matches its
   bytes and is recorded, not fixed, because the file is anchored.
