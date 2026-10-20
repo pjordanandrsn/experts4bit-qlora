@@ -54,7 +54,7 @@ def test_staged_files_match_their_pins_and_the_drive_stages_exactly_them():
 
 
 def test_both_self_tests_pass():
-    for script, want in (("p159_box.py", "p159_box self-test OK (15 cases)"),
+    for script, want in (("p159_box.py", "p159_box self-test OK (17 cases)"),
                          ("p159_reduce.py", "p159_reduce self-test OK (31 cases)")):
         p = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True,
                            timeout=120)
@@ -185,3 +185,63 @@ def test_each_reducer_mutant_fails_the_self_test(tmp_path, old, new):
     m.write_text(src.replace(old, new))
     p = subprocess.run([sys.executable, str(m), "--self-test"], capture_output=True, text=True, timeout=120)
     assert p.returncode != 0, f"mutant survived: {old!r} -> {new!r}"
+
+
+# ---- Amendment 2 (2026-10-20): after p159-1 read VOID_BYTES on host 13450
+P159_1 = LANE / "receipts" / "p159-1" / "result.json"
+
+
+def _p159_1():
+    import json
+    assert hashlib.sha256(P159_1.read_bytes()).hexdigest().startswith("d3c8b16be9f03916")   # copied unchanged
+    return json.loads(P159_1.read_text())
+
+
+def test_the_bytes_gate_fires_on_block_1_of_p159_1s_real_result():
+    res = _p159_1()
+    first_m = next(p for p in res["processes"] if p.get("kind") == "M")
+    blk = next(b for b in first_m["blocks"] if b["arm"] == "M")
+    assert res["processes"].index(first_m) == 0 and first_m["blocks"].index(blk) == 0      # process 0, block 1
+    ok, why = BOX.bytes_gate(blk, res["experts"])
+    assert not ok and why["fused_ok"] and not why["nf4_ok"]                                 # NF4 off, fused right
+    assert BOX.bytes_gate(dict(blk, nf4_sha256=BOX.NF4_SHA), res["experts"]) == (True, None)
+
+
+def test_a_gated_partial_result_reduces_to_void_bytes():
+    res = _p159_1()
+    p0 = dict(res["processes"][0], blocks=res["processes"][0]["blocks"][:1])
+    ok, why = BOX.bytes_gate(p0["blocks"][0], res["experts"])
+    part = dict(res, processes=[dict(p0, bytes_gate=why)], bytes_ok=False, bytes_gate=why)
+    assert RED.reduce(part)["verdict"] == "VOID_BYTES"
+
+
+def test_the_gate_is_wired_to_the_first_m_process_only():
+    src = (LANE / "p159_box.py").read_text()
+    assert "gate=(i == first_m)" in src and 'if a.gate and arm == "M" and gate is None' in src
+    assert "return 3 if gate else 0" in src and 'err == "bytes_gate"' in src
+
+
+@pytest.mark.parametrize("enabled,alloc,refused", [("always [madvise] never", None, True),
+                                                   ("[always] madvise never", None, False),
+                                                   ("always [madvise] never", "1", False),
+                                                   (None, None, True)])
+def test_the_thp_pre_flight_refusal(tmp_path, enabled, alloc, refused):
+    if enabled is not None:
+        d = tmp_path / "sys/kernel/mm/transparent_hugepage"
+        d.mkdir(parents=True)
+        (d / "enabled").write_text(enabled + "\n")
+    mode = BOX.thp_mode(str(tmp_path))
+    assert mode == ("absent" if enabled is None else enabled[enabled.index("[") + 1:enabled.index("]")])
+    why = BOX.thp_refusal(mode, alloc)
+    assert (why is not None) == refused and (why is None or repr(mode) in why)
+
+
+def test_the_runner_records_the_gate_and_the_gpu_forensics():
+    assert "^P159_BYTES_GATE" in RUN and "vbios_version" in RUN
+    assert "nvidia-smi -q -d ECC,PAGE_RETIREMENT,ROW_REMAPPER,PERFORMANCE" in RUN and "alarm 30" in RUN
+
+
+def test_the_prereg_records_amendment_2():
+    for s in ("## Amendment 2", "**or any VOID_\\***", "The THP pre-flight refusal", "The early bytes gate",
+              "receipts/p159-1/result.json"):
+        assert s in PREREG, s

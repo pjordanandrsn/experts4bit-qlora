@@ -276,3 +276,41 @@ experts, all 25 processes, rc 0, bytes identical throughout: wiring only, never 
   - **lane worst $12.13** over four ids ($3.033 x 4), inside the per-lane $15.
 - **Launches** use the launcher current at launch, `--validate` passing, then CREATED or REFUSED, with the receipt
   committed within minutes of teardown.
+
+## Amendment 2 (2026-10-20, before p159-2; the maintainer's ruling, recorded before any p159-2 data)
+
+**Why.** `p159-1` ran on Vast machine 13450, under the host-order ruling, and read **VOID_BYTES**:
+
+- the fused bytes equalled `FUSED_SHA` in all 315 blocks;
+- the NF4 bytes differed in every block (315 distinct digests, none equal to `NF4_SHA`).
+
+The same torch 2.11.0+cu128 and bitsandbytes 0.50.2 gave the registered NF4 bytes in every block on machines 11541 and
+10447, and on the A2000 wiring run. The cause is not established. That host's THP mode was also `madvise`, which bounds
+READ-1 (see "The THP mode bounds what READ-1 can say"). `p159-1`'s `result.json` is kept, copied unchanged from the
+store, at `receipts/p159-1/result.json` (sha256 `d3c8b16b…`).
+
+1. **Eligibility.** `p159-2`, on machine 11541, runs after `p159-1` reads NOT_READ **or any VOID_\***.
+   - An instrument void is neither a reading nor a strike.
+   - No new id: `p159-2` is the rerun. `p159-3` and `p159-4` keep their pre-create and pre-flight scope.
+2. **The THP pre-flight refusal.** `p159_box.py --plan` refuses unless THP `enabled` is `always` or
+   `THP_MEM_ALLOC_ENABLE` is set.
+   - This is NOT_RUN at the pre-flight (rc 16), before the install, and not a strike.
+   - The refusal record states the mode it saw (`absent` on a kernel without THP).
+   - A dry run is exempt: it reads no state.
+3. **The early bytes gate.**
+   - After the first M block of the first M process, the fused digest must equal `FUSED_SHA` and the NF4 digest
+     `NF4_SHA`.
+   - Otherwise the box stops at once with VOID_BYTES (rc 3, `P159_BYTES_GATE` in the summary). The partial record is
+     kept, and the reducer reads it.
+   - That is about 10 minutes into the box, not after 25 processes.
+   - On `p159-1`'s real `result.json` the gate fires on block 1 (the test asserts it).
+   - Only the registered expert count is gated; a dry run's bytes are still checked for consistency at the end.
+4. **Forensics.**
+   - The box records the driver and VBIOS (`nvidia-smi --query-gpu=driver_version,vbios_version`) and an excerpt of
+     `nvidia-smi -q -d ECC,PAGE_RETIREMENT,ROW_REMAPPER,PERFORMANCE`: ECC mode and error counters, retired and
+     remapped memory, and clock-event reasons.
+   - Each call is bounded at 30 s, so it fits inside the reserve.
+   - It is evidence only, never a refusal.
+
+**Unchanged:** the reads, the floors and the fit (the gate only ends a box earlier), the caps and the ids. The lane
+worst stays $12.13; `p159-1` spent $1.163 of it.

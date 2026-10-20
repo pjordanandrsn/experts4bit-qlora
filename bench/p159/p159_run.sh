@@ -60,9 +60,13 @@ case "$CUDA_PROBE" in
 esac
 lscpu | grep -E "Model name|^Vendor ID|^CPU\(s\)|Thread\(s\) per core|Core\(s\) per socket|Socket\(s\)" | tee forensics.txt
 free -g | head -2 | tee -a forensics.txt; df -h $W | tail -1 | tee -a forensics.txt
+# Amendment 2 (4): the GPU facts a bytes question needs (driver, VBIOS, ECC and its error counters, retired/remapped
+# memory, clock-event reasons), each bounded at 30 s; forensics only, never a refusal
+{ perl -e 'alarm 30; exec @ARGV' nvidia-smi --query-gpu=driver_version,vbios_version --format=csv,noheader 2>&1
+  perl -e 'alarm 30; exec @ARGV' nvidia-smi -q -d ECC,PAGE_RETIREMENT,ROW_REMAPPER,PERFORMANCE 2>&1 | head -150; } >> forensics.txt
 # the host floors (MemTotal >= 64 GiB, MemAvailable >= 32 GiB, pool K >= 8), stdlib only, on the image's python
 python3 $W/p159_box.py --plan | tee -a summary.txt
-[ "${PIPESTATUS[0]}" = 0 ] || { say "REFUSED: the host floors (p159_box.py --plan)"; echo "refused: host floors" > REFUSAL; finish 16; }
+[ "${PIPESTATUS[0]}" = 0 ] || { say "REFUSED: the host floors or THP (p159_box.py --plan)"; { echo -n "refused: host floors: "; grep -a "^P159_PLAN_CHECK" summary.txt | tail -1 | sed -n 's/.*"why": "\([^"]*\)".*/\1/p'; } > REFUSAL; finish 16; }
 FREE_GB=$(df -BG --output=avail $W 2>/dev/null | tail -1 | tr -dc 0-9)
 [ "${FREE_GB:-0}" -ge "$DISK_DEF" ] || { say "REFUSED: ${FREE_GB:-?} GB free < $DISK_DEF GB"; echo "refused: disk" > REFUSAL; finish 13; }
 # ---- install (the paid path) or the dry box's own tree
@@ -103,7 +107,7 @@ LEFT_P=$(( P159_DEADLINE_EPOCH - $(date +%s) - RESERVE ))
 say "probe: $EXPERTS experts, 25 processes, ${LEFT_P}s left for it"
 env E4B_SHA=$E4B_SHA P159_TIME_LEFT_S=$LEFT_P perl -e "alarm $LEFT_P; exec @ARGV" python $W/p159_box.py --out $W/result.json --experts $EXPERTS > logs/probe.log 2>&1
 rc=$?
-grep -a "^P159_PLAN\|^P159_BALLOON\|^P159_RESULT\|^P159_REFUSED\|^P159_CAP_HIT\|^P159_CHILD_FAILED\|^P159_DONE" logs/probe.log | cut -c1-1500 | tee -a summary.txt
+grep -a "^P159_PLAN\|^P159_BALLOON\|^P159_RESULT\|^P159_REFUSED\|^P159_CAP_HIT\|^P159_CHILD_FAILED\|^P159_DONE\|^P159_BYTES_GATE" logs/probe.log | cut -c1-1500 | tee -a summary.txt
 case "$rc" in
   0|3) ;;
   5) say "REFUSED by the probe's host check"; echo "refused: host floors (probe)" > REFUSAL; finish 16;;

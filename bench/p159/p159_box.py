@@ -232,6 +232,24 @@ def physical_pool(affinity, k_max=K_MAX):
     return out[:k_max]
 
 
+def thp_mode(root="/"):
+    """The selected THP mode ('always', 'madvise', 'never'), 'absent' on a kernel built without THP, None if unreadable."""
+    d = os.path.join(root, "sys/kernel/mm/transparent_hugepage")
+    if not os.path.isdir(d):
+        return "absent"
+    t = _read(os.path.join(d, "enabled")) or ""
+    return t[t.find("[") + 1:t.find("]")] if "[" in t else None
+
+
+def thp_refusal(mode, alloc_env):
+    """Amendment 2 (2): why the box refuses before the install, or None. READ-1 can read IDENTIFIED only when torch's CPU
+    allocations can get huge pages: THP enabled = always, or THP_MEM_ALLOC_ENABLE set (torch's MADV_HUGEPAGE switch)."""
+    if mode == "always" or (alloc_env or "").strip():
+        return None
+    return (f"THP enabled is {mode!r}, not 'always', and THP_MEM_ALLOC_ENABLE is unset: READ-1 could not read "
+            "IDENTIFIED on this host (Amendment 2)")
+
+
 def plan_check(dry=False):
     """The refusal before the install: MemTotal and MemAvailable floors, K physical cores. Returns (ok, why, facts)."""
     m = meminfo()
@@ -246,6 +264,11 @@ def plan_check(dry=False):
         return False, f"MemAvailable {m['MemAvailable']} < {avail_min}", facts
     if k < k_min:
         return False, f"pool K {k} < {k_min} (physical cores, or 80 % of the quota)", facts
+    if not dry:                                     # a dry run reads no state: the A2000 has no THP at all
+        facts["thp_enabled"], facts["thp_mem_alloc_enable"] = thp_mode(), os.environ.get("THP_MEM_ALLOC_ENABLE")
+        why = thp_refusal(facts["thp_enabled"], facts["thp_mem_alloc_enable"])
+        if why:
+            return False, why, facts
     return True, None, facts
 
 
@@ -350,6 +373,18 @@ def vm_hwm():
     return next((int(ln.split()[1]) * 1024 for ln in t.splitlines() if ln.startswith("VmHWM:")), None)
 
 
+def bytes_gate(rec, experts):
+    """Amendment 2 (3): after the first M block, the registered bytes or a stop. (ok, why). Only at the registered
+    expert count: a dry run's bytes are checked for consistency at the end, as before."""
+    if experts != E_FULL:
+        return True, None
+    got = (rec.get("fused_sha256"), rec.get("nf4_sha256"))
+    if got == (FUSED_SHA, NF4_SHA):
+        return True, None
+    return False, {"fused_ok": got[0] == FUSED_SHA, "nf4_ok": got[1] == NF4_SHA, "fused_sha256": got[0],
+                   "nf4_sha256": got[1]}
+
+
 def child(a):
     """One process: the arm's setup before torch is imported, the warm block untimed, then 15 timed blocks."""
     os.sched_setaffinity(0, [int(x) for x in a.cpus.split(",")])
@@ -377,16 +412,22 @@ def child(a):
     t = time.perf_counter()
     one_block(a.pool, a.slab, a.experts, resident=None)  # untimed warm block (P: faults the heap once)
     warm_wall_s = time.perf_counter() - t
-    blocks = []
+    blocks, gate = [], None
     for arm in block_arms(a.kind):
         t = time.perf_counter()
         rec = one_block(a.pool, a.slab, a.experts, resident=resident if arm == "R" else None)
         rec.update(arm=arm, wall_s=time.perf_counter() - t)
         blocks.append(rec)
+        if a.gate and arm == "M" and gate is None:  # Amendment 2 (3): the first M block decides whether the box goes on
+            ok, gate = bytes_gate(rec, a.experts)
+            if not ok:
+                break
     out = {"kind": a.kind, "engaged": engaged, "process_start_s": process_start_s, "resident_s": resident_s,
            "warm_wall_s": warm_wall_s, "vm_hwm": vm_hwm(), "blocks": blocks}
+    if gate:
+        out["bytes_gate"] = gate
     print("P159_PROCESS " + json.dumps(out), flush=True)
-    return 0
+    return 3 if gate else 0
 
 
 # ---------------------------------------------------------------- the parent
@@ -426,19 +467,23 @@ def run(a):
     plan = process_plan()
     print("P159_PLAN " + json.dumps({"processes": plan, "pool": len(pool_cpus), "facts": facts}), flush=True)
 
-    def proc(kind, limit):
+    first_m = plan.index("M")
+
+    def proc(kind, limit, gate=False):
         env = dict(os.environ)
         if kind == "P":
             env["GLIBC_TUNABLES"] = P_TUNABLES
         cmd = [sys.executable, os.path.abspath(__file__), "--child", kind, "--cpus", ",".join(map(str, pool_cpus)),
                "--pool", str(len(pool_cpus)), "--slab", slab_path, "--experts", str(a.experts),
-               "--spawned", repr(time.time())]
+               "--spawned", repr(time.time())] + (["--gate"] if gate else [])
         t0 = time.perf_counter()
         try:
             p = subprocess.run(cmd, capture_output=True, text=True, timeout=max(1.0, limit), env=env)
         except subprocess.TimeoutExpired:
             return None, time.perf_counter() - t0, "timeout"
         line = next((x for x in p.stdout.splitlines() if x.startswith("P159_PROCESS ")), None)
+        if p.returncode == 3 and line is not None:   # the bytes gate stopped the first M process
+            return json.loads(line[len("P159_PROCESS "):]), time.perf_counter() - t0, "bytes_gate"
         if p.returncode != 0 or line is None:
             return None, time.perf_counter() - t0, (p.stdout + p.stderr)[-800:]
         return json.loads(line[len("P159_PROCESS "):]), time.perf_counter() - t0, None
@@ -473,11 +518,21 @@ def run(a):
                 continue
             b_status.setdefault("inflate_s", []).append(time.perf_counter() - tb)
         try:
-            rec, wall, err = proc(kind, cap)
+            rec, wall, err = proc(kind, cap, gate=(i == first_m))
         finally:
             if balloon is not None:
                 balloon.kill()
                 balloon.wait()
+        if err == "bytes_gate":                      # Amendment 2 (3): VOID_BYTES now, not after every process
+            rec.update(index=i, process_wall_s=wall)
+            processes.append(rec)
+            res = {"facts": facts, "experts": a.experts, "pool": len(pool_cpus), "gpu": torch.cuda.get_device_name(0),
+                   "e4b_sha": os.environ.get("E4B_SHA"), "plan": plan, "balloon": b_status, "processes": processes,
+                   "bytes_ok": False, "bytes_gate": rec["bytes_gate"]}
+            json.dump(res, open(a.out, "w"), indent=1)
+            print("P159_BYTES_GATE " + json.dumps({"process": i, **rec["bytes_gate"]}), flush=True)
+            print("P159_RESULT " + json.dumps({"bytes_ok": False, "processes": len(processes)}), flush=True)
+            return 3
         if rec is None:
             print(f"P159_CHILD_FAILED process {i} {kind}: {err}", flush=True)
             return 4 if err == "timeout" else 6
@@ -518,11 +573,21 @@ def self_test():
     assert balloon_bytes(400 * GIB, 10 * GIB, 20 * GIB, dry=True) == GIB  # a dry run holds at most 1 GiB
     assert balloon_bytes(30 * GIB, 10 * GIB, 20 * GIB, dry=True) is None
     assert state_of(0.4, 128) == "FAST" and state_of(7.2, 128) == "SLOW" and state_of(2.0, 128) == "MID"
+    # Amendment 2 (2): the THP pre-flight refusal
+    assert thp_refusal("always", None) is None and thp_refusal("madvise", "1") is None
+    assert "'madvise'" in thp_refusal("madvise", None) and "'absent'" in thp_refusal("absent", "") and thp_refusal(None, " ")
+    # Amendment 2 (3): the early bytes gate (registered bytes pass; either digest off stops; a dry run is not gated)
+    good = {"fused_sha256": FUSED_SHA, "nf4_sha256": NF4_SHA}
+    assert bytes_gate(good, E_FULL) == (True, None) and bytes_gate({"fused_sha256": "x", "nf4_sha256": "y"}, 8) == (True, None)
+    ok, why = bytes_gate(dict(good, nf4_sha256="0" * 64), E_FULL)
+    assert not ok and why["fused_ok"] and not why["nf4_ok"]
+    ok, why = bytes_gate(dict(good, fused_sha256="0" * 64), E_FULL)
+    assert not ok and not why["fused_ok"] and why["nf4_ok"]
     assert state_of(0.4 * 8 / 128, 8) == "FAST"
     bi = "Node 0, zone   Normal  1 2 3 4 5 6 7 8 9 10 11\nNode 1, zone   Normal  0 0 0 0 0 0 0 0 0 5 6\n"
     assert parse_buddyinfo(bi) == {"0": 21, "1": 11}
     assert pool_size(128, 61.2) == 16 and pool_size(128, 12.0) == 9 and pool_size(6, None) == 6
-    print("p159_box self-test OK (15 cases)")
+    print("p159_box self-test OK (17 cases)")
     return 0
 
 
@@ -538,6 +603,7 @@ def main(argv=None):
     p.add_argument("--pool", type=int)
     p.add_argument("--slab")
     p.add_argument("--spawned", type=float)
+    p.add_argument("--gate", action="store_true")
     a = p.parse_args(argv)
     if a.self_test:
         return self_test()
