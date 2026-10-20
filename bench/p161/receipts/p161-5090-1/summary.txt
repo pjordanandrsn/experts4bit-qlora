@@ -1,0 +1,41 @@
+KNOBS e4b=da3eb5c5e452e0031659e2e219b63bb130e79e3b gnf4=41ef086e6a3e2be5b158ff1bb38e0de67862a949 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 min_power_w=575 short=32 long=160 reps=5
+CUDA_PROBE ok
+POWER_LIMIT_W 575 (floor 575)
+GUARD_FIT fit=3300s need=4125s left=5292s
+e4b 0.56.0 @da3eb5c5e452e0031659e2e219b63bb130e79e3b
+gnf4 0.50.0 @41ef086e6a3e2be5b158ff1bb38e0de67862a949
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p161_reduce self-test OK (96 cases)
+p109_box self-test OK (5/5 cases)
+p161_box self-test OK (29/29 cases)
+premise rc=0: 62 passed, 5 warnings in 89.58s (0:01:29)
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709
+arm S0w rc=0 P161_ARM {"arm": "S0", "tag": "S0w", "k25_lut": {"env": null, "lut": "prmt", "why": null, "source": "default-allowlisted"}, "k25_plan": {"env": "today", "plan": "today", "why": null, "gu": {"block_n": 32, "kc": 64, "warps": 4, "stages": 3}, "dn": {"block_n": 32, "kc": 64, "warps": 4, "stages": 3}}, "k25_seen_build": {"prmt|le256": 960}, "k25_plan_seen_build": {"today|le256": 960}, "k25_shapes_build": {"32/64/4/3/prmt": 1920}, "load_s": 57.94, "W16": 1037.77, "W1": 270.48}
+
+P161_GATE OK
+arm S0a rc=0 P161_ARM {"arm": "S0", "tag": "S0a", "k25_lut": {"env": null, "lut": "prmt", "why": null, "source": "default-allowlisted"}, "k25_plan": {"env": "today", "plan": "today", "why": null, "gu": {"block_n": 32, "kc": 64, "warps": 4, "stages": 3}, "dn": {"block_n": 32, "kc": 64, "warps": 4, "stages": 3}}, "k25_seen_build": {"prmt|le256": 960}, "k25_plan_seen_build": {"today|le256": 960}, "k25_shapes_build": {"32/64/4/3/prmt": 1920}, "load_s": 41.05, "W16": 1038.38, "W1": 270.97}
+
+arm S1a rc=0 P161_ARM {"arm": "S1", "tag": "S1a", "k25_lut": {"env": null, "lut": "prmt", "why": null, "source": "default-allowlisted"}, "k25_plan": {"env": "c1", "plan": "c1", "why": null, "gu": {"block_n": 64, "kc": 256, "warps": 4, "stages": 2}, "dn": {"block_n": 128, "kc": 128, "warps": 8, "stages": 3}}, "k25_seen_build": {"prmt|le256": 960}, "k25_plan_seen_build": {"c1|le256": 960}, "k25_shapes_build": {"128/128/8/3/prmt": 960, "64/256/4/2/prmt": 960}, "load_s": 40.66, "W16": 1528.55, "W1": 270.06}
+
+P161_GATE OK
+arm S1b rc=0 P161_ARM {"arm": "S1", "tag": "S1b", "k25_lut": {"env": null, "lut": "prmt", "why": null, "source": "default-allowlisted"}, "k25_plan": {"env": "c1", "plan": "c1", "why": null, "gu": {"block_n": 64, "kc": 256, "warps": 4, "stages": 2}, "dn": {"block_n": 128, "kc": 128, "warps": 8, "stages": 3}}, "k25_seen_build": {"prmt|le256": 960}, "k25_plan_seen_build": {"c1|le256": 960}, "k25_shapes_build": {"128/128/8/3/prmt": 960, "64/256/4/2/prmt": 960}, "load_s": 40.6, "W16": 1523.85, "W1": 270.32}
+
+arm S0b rc=0 P161_ARM {"arm": "S0", "tag": "S0b", "k25_lut": {"env": null, "lut": "prmt", "why": null, "source": "default-allowlisted"}, "k25_plan": {"env": "today", "plan": "today", "why": null, "gu": {"block_n": 32, "kc": 64, "warps": 4, "stages": 3}, "dn": {"block_n": 32, "kc": 64, "warps": 4, "stages": 3}}, "k25_seen_build": {"prmt|le256": 960}, "k25_plan_seen_build": {"today|le256": 960}, "k25_shapes_build": {"32/64/4/3/prmt": 1920}, "load_s": 41.01, "W16": 1036.83, "W1": 270.46}
+
+arm S0c rc=0 P161_ARM {"arm": "S0", "tag": "S0c", "k25_lut": {"env": null, "lut": "prmt", "why": null, "source": "default-allowlisted"}, "k25_plan": {"env": "today", "plan": "today", "why": null, "gu": {"block_n": 32, "kc": 64, "warps": 4, "stages": 3}, "dn": {"block_n": 32, "kc": 64, "warps": 4, "stages": 3}}, "k25_seen_build": {"prmt|le256": 960}, "k25_plan_seen_build": {"today|le256": 960}, "k25_shapes_build": {"32/64/4/3/prmt": 1920}, "load_s": 40.79, "W16": 1039.14, "W1": 270.24}
+
+arm S1c rc=0 P161_ARM {"arm": "S1", "tag": "S1c", "k25_lut": {"env": null, "lut": "prmt", "why": null, "source": "default-allowlisted"}, "k25_plan": {"env": "c1", "plan": "c1", "why": null, "gu": {"block_n": 64, "kc": 256, "warps": 4, "stages": 2}, "dn": {"block_n": 128, "kc": 128, "warps": 8, "stages": 3}}, "k25_seen_build": {"prmt|le256": 960}, "k25_plan_seen_build": {"c1|le256": 960}, "k25_shapes_build": {"128/128/8/3/prmt": 960, "64/256/4/2/prmt": 960}, "load_s": 41.69, "W16": 1522.79, "W1": 270.62}
+
+arm S1d rc=0 P161_ARM {"arm": "S1", "tag": "S1d", "k25_lut": {"env": null, "lut": "prmt", "why": null, "source": "default-allowlisted"}, "k25_plan": {"env": "c1", "plan": "c1", "why": null, "gu": {"block_n": 64, "kc": 256, "warps": 4, "stages": 2}, "dn": {"block_n": 128, "kc": 128, "warps": 8, "stages": 3}}, "k25_seen_build": {"prmt|le256": 960}, "k25_plan_seen_build": {"c1|le256": 960}, "k25_shapes_build": {"128/128/8/3/prmt": 960, "64/256/4/2/prmt": 960}, "load_s": 40.81, "W16": 1525.83, "W1": 270.22}
+
+arm S0d rc=0 P161_ARM {"arm": "S0", "tag": "S0d", "k25_lut": {"env": null, "lut": "prmt", "why": null, "source": "default-allowlisted"}, "k25_plan": {"env": "today", "plan": "today", "why": null, "gu": {"block_n": 32, "kc": 64, "warps": 4, "stages": 3}, "dn": {"block_n": 32, "kc": 64, "warps": 4, "stages": 3}}, "k25_seen_build": {"prmt|le256": 960}, "k25_plan_seen_build": {"today|le256": 960}, "k25_shapes_build": {"32/64/4/3/prmt": 1920}, "load_s": 40.31, "W16": 1038.49, "W1": 270.43}
+
+P161_VERDICT FLIP ["g16 1.465433 (the min of four pairs) >= 1.03 and g1 0.996642 >= 0.99; every S1 token identical to S0's", "a separate PR may make E4B_K25_PLAN=c1 qwen3_moe's K25 plan by default"]

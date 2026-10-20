@@ -117,7 +117,8 @@ def test_build_engine_resolves_the_family_default_from_the_config_before_any_wei
     early_call = body.index("        resolve_k25_plan(resolve_k25_lut(), family_known=False)")
     config = body.index("model_config = AutoConfig.from_pretrained(")
     resolved = body.index('    k25_lut = resolve_k25_lut(getattr(model_config, "model_type", None))')
-    plan = body.index("    k25_plan = resolve_k25_plan(k25_lut)")          # E4B_K25_PLAN, on the family's decode
+    # E4B_K25_PLAN, on the family's decode and with the family (lane P161's default)
+    plan = body.index('    k25_plan = resolve_k25_plan(k25_lut, model_type=getattr(model_config, "model_type", None))')
     load = body.index("load_moe_4bit_streaming(")
     assert early < early_call < config < resolved < plan < load
     assert 'info["k25_lut"] = k25_lut' in body and 'info["k25_plan"] = k25_plan' in body

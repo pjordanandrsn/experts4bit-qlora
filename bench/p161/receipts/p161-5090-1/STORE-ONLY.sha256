@@ -1,0 +1,19 @@
+# p161-5090-1: files kept only in the private receipt store, byte-exact. forensics.txt and outer.log carry the GPU's UUID,
+# which no reading depends on; eleven logs carry carriage returns from the box's progress output; INSTANCE_ID and the
+# launcher's teardown proof name the provider's instance. Receipts are never rewritten, so they are not committed here.
+# sha256, then the file's path within this run's receipt.
+0adc015642923f6b1023f5daf5cc3b8deda6b7a4d9f8bb45139e175f75e99aa7  p161/forensics.txt
+ba1c6262fbcb56a3b35c399670e7c1848dde549db74c752cce5e2e93a9dbe313  p161/outer.log
+f697c1140769162531d0734ad13e1b577c9eccc86570f011071ed4d0b8e531b9  p161/INSTANCE_ID
+fb8f2d87e69565e387886ea07d6327061dea71e4da17f5e620ef6343aa87fe80  p161/logs/arm_S0a.log
+56ddd486e9af09265f900379552606e6b56e2dfd4fdab43b60cdb174113dbb0b  p161/logs/arm_S0b.log
+15dbfe505d3a448f2d674d7358c10183c2d168ded6927d8a51ebdd1548a9d445  p161/logs/arm_S0c.log
+43a97ab42727a4850763adc3e1eeef0b212d93d968ee32626d5aa27693f1eee7  p161/logs/arm_S0d.log
+509c7d0bed2c039e1e299768da7e0071e0754c420daae53631f47a4c72dd0174  p161/logs/arm_S0w.log
+3dd18b8fb8bd07bd6c2ff95f982283bc7fb80eed9c178d692ea56f09f18e4f3a  p161/logs/arm_S1a.log
+d68761dd49d6725f0603936d0a7be30b391604629331203b871a051e1b3a5574  p161/logs/arm_S1b.log
+421d4014216f298d9aeee449d46339a6e4fe2e566b53483caeda42b21e8b9d05  p161/logs/arm_S1c.log
+7771ac403294dddd988428a778ceffe6445950970a35c2eb1a83e33e91b4e420  p161/logs/arm_S1d.log
+63acc0251ab270c5ccbf5ee77f46a1874cec177a8bfd6c218fff3b5910b5e006  p161/logs/fetch.log
+bf2bbaaa112ca02018e7ad11811c4c8f67222fa0b6884beda14c1800a34c5466  p161/logs/prompts.log
+426a41187d362d55fc535a4b795b999deecab947b6294f2a0fe424e36652cf23  teardown-proof.json
