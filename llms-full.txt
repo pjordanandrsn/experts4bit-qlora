@@ -2436,11 +2436,14 @@ runs K25 at P156's first carried plan pair, gate_up `{block_n 64, kc 256, warps 
   64/256/4/2 at 14.23 ms against 8.32, at 255 registers; [RESULTS-p156](../bench/p156/RESULTS-p156.md), "The cause is
   the decode"), so `c1` under any other
   decode is refused at engine build and in the forward, never run. It is also refused with K25 off or absent.
-- **Measured: a kernel microbench, no served read.** At Qwen3-30B-A3B's W16 shapes on an RTX 5090, under `prmt`, both
-  K25 GEMMs ran 1.6598× faster at `c1` than at today's plan (kernel time today / `c1`, above 1 is faster; the median of
-  126 paired reps, lower bound 1.6568, clock-adjusted 1.6525; P160 `p160-5090-2`,
-  [RESULTS](../bench/p160/RESULTS-p160.md); UNVERIFIED: no register row). No speed is claimed for the served step until
-  P161 reads it there.
+- **Measured: a kernel microbench, then a served read.** At Qwen3-30B-A3B's W16 shapes on an RTX 5090, under `prmt`,
+  both K25 GEMMs ran 1.6598× faster at `c1` than at today's plan (kernel time today / `c1`, above 1 is faster; the median
+  of 126 paired reps, lower bound 1.6568, clock-adjusted 1.6525; P160 `p160-5090-2`,
+  [RESULTS](../bench/p160/RESULTS-p160.md); UNVERIFIED: no register row). In the served step, P161 (`p161-5090-1`, one
+  RTX 5090 at 575 W, e4b `da3eb5c5`) read sixteen concurrent requests decoding **1.465433×** as fast at `c1` as at
+  today's plan, both under `prmt` (rate, the smallest of four ABBA pairs), one request unchanged (0.9966), and every
+  token identical: `e4b.serve.p161.k25-plan-c1.qwen3.5090.2026-10-20`, [RESULTS](../bench/p161/RESULTS-p161.md). One read
+  on one card and one family. The knob stays opt-in here; a qwen3_moe default is its own PR.
 - **Same bits.** The tree, `prmt`, and `prmt` with `c1` give bit-identical outputs through the served call
   (`tests/test_k25_lut_gpu.py`, including a K that neither of `c1`'s KCs divides).
 - **Records:** `info["k25_plan"]` (the build's resolution) and `prefill_routes()["seen"]["moe_k25_plan"]` (each K25
