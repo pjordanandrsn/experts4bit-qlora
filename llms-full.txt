@@ -2424,7 +2424,9 @@ K25's select-tree codebook decode for grouped-nf4-gemm K39's (`lut="prmt"`), whi
 **Opt-in on main after 0.56.0: K25 at plan `c1` under K39's decode (`E4B_K25_PLAN`, e4b#1877).** `E4B_K25_PLAN=c1`
 runs K25 at P156's first carried plan pair, gate_up `{block_n 64, kc 256, warps 4, stages 2}` and down `{block_n 128, kc
 128, warps 8, stages 3}`, in place of today's single plan. `today` is the default (also when unset), unchanged.
-- **Only under `prmt`.** The select tree at `c1`'s shapes is slower than at today's (P155), so `c1` under any other
+- **Only under `prmt`.** The select tree at `c1`'s shapes is slower than at today's (P155's selection: gate_up
+  64/256/4/2 at 14.23 ms against 8.32, at 255 registers; [RESULTS-p156](../bench/p156/RESULTS-p156.md), "The cause is
+  the decode"), so `c1` under any other
   decode is refused at engine build and in the forward, never run. It is also refused with K25 off or absent.
 - **Measured: a kernel microbench, no served read.** At Qwen3-30B-A3B's W16 shapes on an RTX 5090, under `prmt`, both
   K25 GEMMs ran 1.6598× faster at `c1` than at today's plan (kernel time today / `c1`, above 1 is faster; the median of
