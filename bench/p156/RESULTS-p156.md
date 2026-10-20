@@ -61,10 +61,12 @@ grouped-nf4-gemm main at `68bbefc4` (#569's merge, after v0.49.0; K39 unreleased
 - **The self-pair** read 0.9985, 3.3 SE below 1: a small bias between two captures of the same work. The headline is a
   ratio of two arms timed the same way (rotated capture and replay positions, replays interleaved arm by arm), so a bias
   the arms share cancels in it. The 0.15 % is two orders below the effect.
-  - **One mechanism fits it:** a cyclic rotation fixes each arm's predecessor in the replay order. T follows C3 (a fast
-    prmt arm), while T2 follows T and P follows T2 (tree arms).
-  - **If the predecessor carries over,** T gains about 0.15 % over a T timed after a tree arm. That shrinks T/P, so the
-    bias works against P.
+  - **One mechanism fits it:** a cyclic rotation fixes each arm's predecessor in the replay order. P follows T2 in 629
+    of its 640 replays and T follows C3 in 629; the other 11 of each are the arm's first replay after the captures.
+    A carry-over from the predecessor would show in the self-pair, and this record cannot tell it from position.
+  - **A post-hoc check on the registered record, not a re-read:** a predecessor-or-position split (the 11 reps that
+    list P first against the other 53: median T/P 1.1782 against 1.1753) shows no detectable carry-over, at most about
+    0.3-0.7 % either way. By rotation, the median T/P spans 1.1713-1.1808. The GO's lower bound does not depend on it.
   - **The next lane fixes it:** P157's harness replays an untimed spacer graph before every timed replay. Its A2000
     shakedown found the same carry-over, larger under that card's power cap.
 - **Microbench only:** the two K25 GEMMs alone, with no attention, router or glue. bf16 teacher-forced picks, not the
