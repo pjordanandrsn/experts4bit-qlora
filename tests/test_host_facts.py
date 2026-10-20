@@ -1,5 +1,5 @@
-"""bench/common/host_facts.py: the box's own measured facts for the host registry, numeric or a small enum, with a
-source per fact and no identifiers. Every reading here comes from a synthetic /proc and /sys tree."""
+"""bench/common/host_facts.py (a byte-identical copy of adertha-agents' adertha/compute/host_probe.py): the box's own
+measured facts for the host registry, numeric or a small enum, with a source per fact and no identifiers. Every reading here comes from a synthetic /proc and /sys tree."""
 from __future__ import annotations
 
 import datetime as dt
@@ -64,6 +64,7 @@ def _smi(tmp: Path, line: str = "575.00, 3090, 32607", rc: int = 0) -> str:
 def _fast_loop(monkeypatch):
     monkeypatch.setattr(hf, "cpu_loop_mops", lambda: 42.5)        # the real loop has its own test below
     monkeypatch.delenv("OMP_NUM_THREADS", raising=False)
+    monkeypatch.delenv("THP_MEM_ALLOC_ENABLE", raising=False)
 
 
 def test_the_facts_a_box_measures_and_where_each_came_from(tmp_path, monkeypatch):
@@ -191,3 +192,22 @@ def test_no_affinity_call_reads_cpu0(tmp_path, monkeypatch):
     root = _box(tmp_path / "box", max_khz=["3000000", "2000000"])
     f = hf.gather(root, str(tmp_path / "no-smi"))
     assert (f["cpu_max_mhz"], f["cpu_max_mhz_lo"]) == (3000.0, 3000.0)
+
+
+def test_thp_mem_alloc_enable_is_recorded_only_as_an_integer(tmp_path, monkeypatch):
+    root = _box(tmp_path / "box")
+    monkeypatch.setenv("THP_MEM_ALLOC_ENABLE", "1")
+    f = hf.gather(root, str(tmp_path / "no-smi"))
+    assert f["thp_mem_alloc_enable"] == 1 and "calling process" in f["sources"]["thp_mem_alloc_enable"]
+    for v in ("", "yes", "1,0"):
+        monkeypatch.setenv("THP_MEM_ALLOC_ENABLE", v)
+        assert "thp_mem_alloc_enable" not in hf.gather(root, str(tmp_path / "no-smi")), v
+
+
+def test_stdout_mode_prints_one_marked_json_line(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("HOST_FACTS_ROOT", str(_box(tmp_path / "box")))
+    monkeypatch.setenv("HOST_FACTS_SMI", _smi(tmp_path))
+    assert hf.main(["-"]) == 0
+    out = capsys.readouterr().out.strip().splitlines()
+    assert len(out) == 1 and out[0].startswith("HOST_FACTS_JSON ")
+    assert json.loads(out[0][len("HOST_FACTS_JSON "):])["host_physical_cores"] == 4
