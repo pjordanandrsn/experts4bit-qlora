@@ -2421,6 +2421,21 @@ K25's select-tree codebook decode for grouped-nf4-gemm K39's (`lut="prmt"`), whi
 
 `e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20` ([P158](../bench/p158/RESULTS-p158.md)).
 
+**Opt-in on main after 0.56.0: K25 at plan `c1` under K39's decode (`E4B_K25_PLAN`, e4b#1877).** `E4B_K25_PLAN=c1`
+runs K25 at P156's first carried plan pair, gate_up `{block_n 64, kc 256, warps 4, stages 2}` and down `{block_n 128, kc
+128, warps 8, stages 3}`, in place of today's single plan. `today` is the default (also when unset), unchanged.
+- **Only under `prmt`.** The select tree at `c1`'s shapes is slower than at today's (P155), so `c1` under any other
+  decode is refused at engine build and in the forward, never run. It is also refused with K25 off or absent.
+- **Measured: a kernel microbench, no served read.** At Qwen3-30B-A3B's W16 shapes on an RTX 5090, under `prmt`, both
+  K25 GEMMs ran 1.6598× faster at `c1` than at today's plan (kernel time today / `c1`, above 1 is faster; the median of
+  126 paired reps, lower bound 1.6568, clock-adjusted 1.6525; P160 `p160-5090-2`,
+  [RESULTS](../bench/p160/RESULTS-p160.md); UNVERIFIED: no register row). No speed is claimed for the served step until
+  P161 reads it there.
+- **Same bits.** The tree, `prmt`, and `prmt` with `c1` give bit-identical outputs through the served call
+  (`tests/test_k25_lut_gpu.py`, including a K that neither of `c1`'s KCs divides).
+- **Records:** `info["k25_plan"]` (the build's resolution) and `prefill_routes()["seen"]["moe_k25_plan"]` (each K25
+  call's plan).
+
 **Int8 attention projections on Mixtral are opt-in, with no speed claimed.**
 - **What it does:** `E4B_SERVE_ATTN_INT8=1` (#1848) holds Mixtral-8x7B's q, k, v and o projections in int8 with a
   per-row fp32 scale. Decode calls of 1-16 rows run grouped-nf4-gemm 0.49.0's K37 kernels (`dense_i8.linear_i8`), and
