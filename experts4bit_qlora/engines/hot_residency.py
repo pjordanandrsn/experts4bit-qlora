@@ -434,11 +434,65 @@ def _k25_mode_env() -> str:
 _K25_PLAN = {"block_n": 32, "kc": 64, "warps": 4, "stages": 3, "lut": "tree", "dot_bf16": False}
 
 
+def _k25_lut_env() -> str:
+    """``E4B_K25_LUT``: K25's codebook decode on this route. ``tree`` (the default, also when unset or empty) is
+    :data:`_K25_PLAN`'s select tree. ``prmt`` is K39's byte-permute decode (K25's ``lut="prmt"``, grouped-nf4-gemm#569),
+    bit-identical to the tree; lane P156 read it at 1.1755x the tree in a microbench (at least 1.110 under the sampled
+    clock range; ``bench/p156/RESULTS-p156.md``) at Qwen3-30B-A3B's W16 shapes. It is opt-in until a served read
+    licenses it (lane P158). ``prmt`` requires a kernel package that carries it, K25 on, and an NVIDIA device: any of
+    them missing is a refusal, never a silent fallback, and :func:`resolve_k25_lut` makes it at engine build. Anything
+    else is refused."""
+    v = os.environ.get("E4B_K25_LUT", "tree").strip().lower() or "tree"
+    if v not in ("tree", "prmt"):
+        raise ValueError(f"E4B_K25_LUT={v!r}: expected 'tree' or 'prmt'")
+    return v
+
+
 def _k25_plan(nf4_smallm_mod) -> dict:
-    """:data:`_K25_PLAN`, with the codebook decode the installed kernel package carries: ``"tree"`` when its
-    ``_LUT_MODES`` names it, else ``"pair"`` (bit-identical; lane K26)."""
+    """:data:`_K25_PLAN`, with the codebook decode ``E4B_K25_LUT`` names (:func:`_k25_lut_env`) and the installed
+    kernel package carries. Under ``tree``: ``"tree"`` when its ``_LUT_MODES`` names it, else ``"pair"``
+    (bit-identical; lane K26). Under ``prmt``: ``"prmt"``, refused when the package lacks it or the device is ROCm (an
+    inline-PTX decode)."""
     modes = getattr(nf4_smallm_mod, "_LUT_MODES", None) or {}
+    if _k25_lut_env() == "prmt":
+        if "prmt" not in modes:
+            raise RuntimeError(
+                "E4B_K25_LUT=prmt needs grouped-nf4-gemm with K39's decode (K25's lut='prmt', grouped-nf4-gemm#569); "
+                "the installed kernel package does not carry it")
+        if getattr(torch.version, "hip", None):
+            raise RuntimeError("E4B_K25_LUT=prmt is an inline-PTX decode for NVIDIA targets; on ROCm keep "
+                               "E4B_K25_LUT=tree (the same values)")
+        return dict(_K25_PLAN, lut="prmt")
     return _K25_PLAN if "tree" in modes else dict(_K25_PLAN, lut="pair")
+
+
+def _k25_without_kernel(e: Exception) -> RuntimeError:
+    return RuntimeError("E4B_K25_LUT=prmt needs grouped-nf4-gemm with K39's decode (K25's lut='prmt', "
+                        "grouped-nf4-gemm#569); the installed kernel package has no K25 "
+                        f"(nf4_smallm.gemm_nf4_grouped_smallm): {e}")
+
+
+def resolve_k25_lut() -> dict:
+    """``E4B_K25_LUT`` resolved once at engine build (``serve_paged.build_engine`` calls it before loading the model),
+    so a misconfigured knob fails at startup and not on the first request. Returns ``{"env": the raw value or None,
+    "lut": the decode K25 takes, or None when K25 is off or absent, "why": the reason when None}``. ``prmt`` is refused
+    here exactly as the forward refuses it (:func:`_k25_plan`), and also with K25 turned off
+    (``E4B_NF4_GROUPED_SMALLM=0``), where it would select nothing. The forward still resolves the same functions on
+    every call, like the route's other knobs; which decode it ran is :data:`K25_LUT_SEEN`."""
+    raw = os.environ.get("E4B_K25_LUT", "") or None
+    lut = _k25_lut_env()
+    if _k25_mode_env() == "0":
+        if lut == "prmt":
+            raise RuntimeError("E4B_K25_LUT=prmt names K25's decode, but E4B_NF4_GROUPED_SMALLM=0 turns K25 off")
+        return {"env": raw, "lut": None, "why": "E4B_NF4_GROUPED_SMALLM=0"}
+    try:
+        import nf4_smallm as mod
+        mod.gemm_nf4_grouped_smallm
+    except (ImportError, AttributeError) as e:
+        if lut == "prmt":
+            raise _k25_without_kernel(e) from e
+        return {"env": raw, "lut": None, "why": "the kernel package predates K25"}
+    return {"env": raw, "lut": _k25_plan(mod)["lut"], "why": None}
 
 
 def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
@@ -518,6 +572,17 @@ ROUTE_SEEN: dict = {}
 def _seen_route(route: str, rows: int) -> None:
     key = f"{route}|{'le256' if rows <= 256 else 'gt256'}"
     ROUTE_SEEN[key] = ROUTE_SEEN.get(key, 0) + 1
+
+
+#: K25's calls by codebook decode, as ``{"<lut>|<rows>": calls}``: ``<lut>`` is the plan's ``lut`` (``tree``, ``pair``
+#: or ``prmt``, :func:`_k25_plan`) and ``<rows>`` is ``le256`` (K25 takes up to 256 rows). Counted with ``nf4_k25`` in :data:`ROUTE_SEEN` (eager
+#: calls and graph captures, not replays). It is what an ``E4B_K25_LUT`` read asserts: the arm's decode, and no other.
+K25_LUT_SEEN: dict = {}
+
+
+def _seen_k25_lut(lut: str, rows: int) -> None:
+    key = f"{lut}|{'le256' if rows <= 256 else 'gt256'}"
+    K25_LUT_SEEN[key] = K25_LUT_SEEN.get(key, 0) + 1
 
 
 _SWIGLU = {}
@@ -727,6 +792,8 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                 raise RuntimeError(
                     "E4B_NF4_GROUPED_SMALLM=1 needs grouped-nf4-gemm with K25 "
                     "(nf4_smallm.gemm_nf4_grouped_smallm, grouped-nf4-gemm#429)") from e
+            if _k25_lut_env() == "prmt":  # asked-for prmt is never dropped with K25, even under auto
+                raise _k25_without_kernel(e) from e
             _k25 = None                   # auto: the kernel package predates K25 -> today's NF4 route
     _small = _k19 if _k19 is not None else _k25
     _fused_tiles = None
@@ -941,6 +1008,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     _gu_kw = {}                           # gate_up's extra kernel arguments: only the NF4 route's gather_div
     if device_grouping and int4_stores is None and _k25 is not None:
         _route = "nf4_k25"
+        _seen_k25_lut(_k25_kw["lut"], R_rows)
         # K25 (opt-in): the grouped small-M tensor-core GEMM on the NF4 stacks against the SAME 16-row device tiles. The
         # first call gets the UNSORTED x_rows and gathers through `order` in the kernel; the epilogue output is already
         # in sorted order. Outputs in sorted order, so gpt-oss's per-expert biases index by `sorted_ids` and the unsort
