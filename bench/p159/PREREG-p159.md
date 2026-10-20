@@ -108,7 +108,9 @@ Two more arms:
 - MemAvailable, MemFree, Cached and AnonHugePages;
 - memory PSI (some and full, total-microsecond deltas over the block);
 - `/proc/stat` steal over the block;
-- cgroup v2 `memory.current`, `memory.events` and `memory.stat` where readable.
+- cgroup v2 `memory.current`, `memory.events` and `memory.stat` where readable;
+- `OMP_NUM_THREADS` and the process's CPU affinity (beside torch's pool, which the block already records), so a
+  thread-count story and a fragmentation story read apart on one box's data.
 
 **Once:** THP `enabled` and `defrag`, khugepaged `defrag`, `numa_balancing`, NUMA nodes, kernel, MemTotal, the cgroup
 `memory.max`, `THP_MEM_ALLOC_ENABLE` (torch's switch for `MADV_HUGEPAGE` on its CPU allocations), and the

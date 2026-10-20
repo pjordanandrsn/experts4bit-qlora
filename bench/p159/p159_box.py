@@ -279,7 +279,9 @@ def one_block(pool, slab_path, n_experts, resident=None):
     KEY = SF.KEY
     torch.set_num_threads(pool)
     pre = {"buddy_order9": parse_buddyinfo(_read("/proc/buddyinfo")), "mem": meminfo(), "psi": psi_memory(),
-           "steal": steal_ticks(), "cgroup": cgroup_memory(), "smaps": smaps_rollup()}
+           "steal": steal_ticks(), "cgroup": cgroup_memory(), "smaps": smaps_rollup(),
+           # beside the fault counters, so a thread-count story and a fragmentation story read apart on one box
+           "omp_num_threads": os.environ.get("OMP_NUM_THREADS"), "affinity": sorted(os.sched_getaffinity(0))}
     cs0 = SF.cpu_stat()
     b0 = boundary()
     torch.cuda.synchronize()
