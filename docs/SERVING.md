@@ -368,19 +368,24 @@ shapes and smaller GPUs are unchanged.
 
 **Qwen3 decode defaults by family (lanes P143, P153, P158).** Three settings resolve per family at startup, before any
 weight loads. Unset, `qwen3_moe` takes each one as read on Qwen3-30B-A3B on one RTX 5090; every other family keeps the
-old behaviour until a read of its own. `/health`'s `levers` block reports each resolution and its source
-(`default-allowlisted`, `default-off: <why>` or `explicit`).
+old behaviour until a read of its own. Other `qwen3_moe` checkpoints, Qwen3-235B-A22B among them, take the split cap
+and the K25 decode by family without a read of their own. `/health`'s `levers` block reports each resolution and its
+source (`default-allowlisted`, `default-off` with the reason where one applies, or `explicit`). Two of them need a
+newer grouped-nf4-gemm than `[fast]` requires (0.43.0): the int8 head's GEMV ships in 0.48.0 and K25's byte-permute
+decode in 0.50.0. On an older package each resolves off, recorded.
 - **Attention split cap (`E4B_ATTN_SPLIT_CAP`, 16 on `qwen3_moe`).** It caps the paged FP8 attention decode at 16
   splits, so buckets 1, 2 and 4 use 16 instead of 32 / 32 / 23 at 4,096-token slots. It is bitwise-identical to the plan
   at contexts up to 1,024 tokens. One request decodes 1.0442× as fast and sixteen are unchanged
   (`e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19`, [`bench/p143/RESULTS-p143.md`](../bench/p143/RESULTS-p143.md)).
   `0` turns it off. Reported in `levers.attn_split_cap`.
 - **int8 output head (`E4B_INT8_HEAD_BW`, on for `qwen3_moe` at a 151,936 × 2,048 head).** The lm_head is rounded in
-  place to its per-row int8 grid, and one-row calls run grouped-nf4-gemm's int8 GEMV. One request decodes 1.0520× as
-  fast, and sixteen read 0.992 (an observed cost, not attributed), with quality inside the registered bars
+  place to its per-row int8 grid, and one-row calls run grouped-nf4-gemm's int8 GEMV. **Outputs change:** the logits
+  differ from the bf16 head's at every batch size, so greedy text can differ. One request decodes 1.0520× as fast, and
+  sixteen read 0.992 (an observed cost, not attributed), with quality inside the registered bars
   (`e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19`, [`bench/p153/RESULTS-p153.md`](../bench/p153/RESULTS-p153.md)).
-  Other head shapes, including Qwen3-235B-A22B's, stay off. A head the swap refuses, or a kernel package without the
-  int8 GEMV, resolves it off and is recorded, never a crash. `0` turns it off. Reported in `levers.int8_head_bw`.
+  Other head shapes, including Qwen3-235B-A22B's, stay off. Unset, a head the swap refuses (tied, biased, int4, not
+  bf16) or a kernel package without the int8 GEMV resolves it off, recorded, never a crash; an explicit `1` refuses
+  them at startup. `0` restores the bf16 head. Reported in `levers.int8_head_bw`.
 - **K25's codebook decode (`E4B_K25_LUT`, `prmt` on `qwen3_moe`).** The batched-decode expert GEMM (K25) decodes NF4
   codes through byte-permute table lookups (grouped-nf4-gemm K39, from 0.50.0) instead of the select tree. It is
   bit-identical to the tree. Sixteen requests decode 1.0925× as fast, and one is unchanged, since K25 is not on the
