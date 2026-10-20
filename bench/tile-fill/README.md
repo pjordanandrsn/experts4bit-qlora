@@ -45,8 +45,9 @@ the stratified D at B = 16 (S1 0.9773). A request's tokens share experts about 2
 - **Rows per step are the lever.** Going from 16 to 64 rows cuts tiles per row to 0.39 of B = 16's, and to 128 cuts
   them to 0.26. Wider batches and speculative-decoding verify rows do this alike, because both put more rows on a
   sub-linearly growing expert set.
-- **Consecutive-token sharing adds a few percent on top.** Only the k + 1 = 4 block's spread stays below 1 (0.963); the
-  others include 1. It is not a separate lever from the row count.
+- **Consecutive-token sharing adds a few percent on top.** The mean ratios are 0.96-0.98. The intervals shown are the
+  spread of single blocks, and no confidence interval on the ratio is computed, so no significance is claimed. Either
+  way it is small next to the row count, and not a separate lever.
 - **Request affinity is about 2 %.** Together with #1869's 0.3-0.6 % cross-request overlap, scheduling by expert overlap
   stays a small effect.
 - **So a served lane worth registering** would read W32 or W64 decode, or a verify width, against W16 on the served
