@@ -117,8 +117,10 @@ tokens, graphs on.
 T2 after S1c). This is P143 Amendment 3's eight fresh
 processes, ABBA twice.
 - In S0a and S1a, the timed speed reps run first and Q runs after them in the same process. Q's work never precedes a
-  timed rep **in the same process**. Across processes, S0a's 15-20 min of decode is followed only by S1a's load (about
-  7 min) before S1a's timed reps, while S0a's own reps start cold.
+  timed rep **in the same process**. Across processes, S0a's 15-20 min of decode is followed only by S1a's load before
+  S1a's timed reps, while S0a's own reps start cold. That load is short: P145 measured 23-27 s (`load_s`), so S1a's
+  reps start about 25 s after S0a's decode ends, which is the stronger carry-over case. (Amendment 5 corrects the
+  "about 7 min" first written here.)
   - **Heat is recorded:** the GPU temperature and SM clock at the start and end of every timed block, reported and never
     ruled.
   - **It is conservative for FLIP:** g1 is the **minimum** of the four S1/S0 pairs, so a slower, hotter S1a can only
@@ -363,8 +365,9 @@ VOIDs the reading: strike two, which stops the lane.
 - **The closed forms are the dry run's, scaled:** `p149-dry-1` read the one-layer census on the A2000. A dry run checks
   the one-layer census, 4 projections and 3 × 4 capture calls on the 5090 before any box reads the 32-layer forms.
 - **Box Q+S's guard table, re-fitted (the maintainer's ruling of 10:40Z, option (b)):** S1w adds 600 s, and each
-  speed arm's allowance drops from 600 s to 480 s, three times P145's measured 158-162 s for a Mixtral speed arm on an
-  RTX 5090 with its load.
+  speed arm's allowance drops from 600 s to 480 s, about twice what a P149 arm should take. P145's measured Mixtral
+  speed arm on an RTX 5090 took 158-162 s, its 23-27 s load included, over 3 timed reps; P149's arm runs a warm pass
+  and 5, about 230 s.
 
   | term | s |
   |---|---|

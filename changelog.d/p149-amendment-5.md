@@ -14,5 +14,5 @@ and SANE would first have run for real on the box itself.
   - rc 44, one teacher-forced Q pass per gate, with the forcing checks;
   - rc 45, S0a's build, checked before S1a runs.
 - The capture count also joins the VOID rule. The box's guard table gains S1w's 600 s, and each speed arm's
-  allowance drops from 600 s to 480 s, three times the measured arm. That gives a 16,290 s total in the 6.0 h guard, and
-  boot keeps 1,612 s of tolerance. The worst stays $7.38.
+  allowance drops from 600 s to 480 s, about twice a P149 arm's expected 230 s. That gives a 16,290 s total in the
+  6.0 h guard, and boot keeps 1,612 s of tolerance. The worst stays $7.38.
