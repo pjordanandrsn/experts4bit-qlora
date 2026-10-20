@@ -366,6 +366,30 @@ unchanged at 16, with quality within P110's bar (`e4b.serve.p116.gemv-bw.qwen3.5
 default from 0.43.0, and `[fast]` requires 0.43.0 from experts4bit-qlora 0.55.0; `GNF4_GEMV_BW=0` restores dot-pad. Other
 shapes and smaller GPUs are unchanged.
 
+**Qwen3 decode defaults by family (lanes P143, P153, P158).** Three settings resolve per family at startup, before any
+weight loads. Unset, `qwen3_moe` takes each one as read on Qwen3-30B-A3B on one RTX 5090; every other family keeps the
+old behaviour until a read of its own. `/health`'s `levers` block reports each resolution and its source
+(`default-allowlisted`, `default-off: <why>` or `explicit`).
+- **Attention split cap (`E4B_ATTN_SPLIT_CAP`, 16 on `qwen3_moe`).** It caps the paged FP8 attention decode at 16
+  splits, so buckets 1, 2 and 4 use 16 instead of 32 / 32 / 23 at 4,096-token slots. It is bitwise-identical to the plan
+  at contexts up to 1,024 tokens. One request decodes 1.0442× as fast and sixteen are unchanged
+  (`e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19`, [`bench/p143/RESULTS-p143.md`](../bench/p143/RESULTS-p143.md)).
+  `0` turns it off. Reported in `levers.attn_split_cap`.
+- **int8 output head (`E4B_INT8_HEAD_BW`, on for `qwen3_moe` at a 151,936 × 2,048 head).** The lm_head is rounded in
+  place to its per-row int8 grid, and one-row calls run grouped-nf4-gemm's int8 GEMV. One request decodes 1.0520× as
+  fast, and sixteen read 0.992 (an observed cost, not attributed), with quality inside the registered bars
+  (`e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19`, [`bench/p153/RESULTS-p153.md`](../bench/p153/RESULTS-p153.md)).
+  Other head shapes, including Qwen3-235B-A22B's, stay off. A head the swap refuses, or a kernel package without the
+  int8 GEMV, resolves it off and is recorded, never a crash. `0` turns it off. Reported in `levers.int8_head_bw`.
+- **K25's codebook decode (`E4B_K25_LUT`, `prmt` on `qwen3_moe`).** The batched-decode expert GEMM (K25) decodes NF4
+  codes through byte-permute table lookups (grouped-nf4-gemm K39, from 0.50.0) instead of the select tree. It is
+  bit-identical to the tree. Sixteen requests decode 1.0925× as fast, and one is unchanged, since K25 is not on the
+  one-request path (`e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20`,
+  [`bench/p158/RESULTS-p158.md`](../bench/p158/RESULTS-p158.md)). On an older kernel package or a ROCm device it
+  resolves to the tree, so no install breaks. `tree` opts out, and an explicit `prmt` the package or device cannot
+  serve is refused. Reported in `levers.k25_lut`; which decode each K25 call took is
+  `prefill_routes.seen.moe_k25_lut`.
+
 **Prefill on the int4 expert store (#916; lanes P100, P102).** With `max_seqs` 1 the server leaves
 `hot_residency.DEVICE_GROUPING` off. Until P102, every prefill chunk's MoE call on the int4 store therefore ran a
 Python loop: one reference decode, a cast, a matmul and a copy per routed expert per projection, paid per chunk per
