@@ -298,7 +298,7 @@ def test_bar_b_holds_the_fused_error_to_the_band_times_one_plus_the_margin():
 def test_the_fp64_premise_refuses_where_the_reference_would_not_be_the_base_arithmetic(model):
     mlp = _mlps(model)[0]
     assert p1.fp64_premise(mlp, 2048, torch.bfloat16, cuda=True) == []           # the fixture: 2048 rows, bf16
-    assert p1.fp64_premise(mlp, 16, torch.bfloat16, cuda=False) == []            # CPU: no fused 4-bit kernel
+    assert p1.fp64_premise(mlp, 16, torch.bfloat16, cuda=False) == []            # the dispatch checks are CUDA-only
     small = p1.fp64_premise(mlp, 1536, torch.bfloat16, cuda=True)
     assert len(small) == 3 and all("fused 4-bit GEMM" in w for w in small)
     assert any("dequant dtype" in w for w in p1.fp64_premise(mlp, 2048, torch.float16, cuda=True))

@@ -30,4 +30,5 @@
 **Other changes:**
 - `fp64_premise` refuses an FP64 reference that would not be the bases' arithmetic: a biased base, or on CUDA an NF4
   dequant dtype unlike the input's, or ≤ 1536 rows, where bitsandbytes 0.50.2 runs its fused 4-bit GEMM.
-- (c) 3's distance is taken per ordered pair, normalized by the other process's B update, as Amendment 4 states.
+- (c) 3's distance is taken per ordered pair, normalized by the other process's B update, as Amendment 4 states. The
+  null's 2× consistency check therefore covers six ordered distances, not three, which is stricter only.

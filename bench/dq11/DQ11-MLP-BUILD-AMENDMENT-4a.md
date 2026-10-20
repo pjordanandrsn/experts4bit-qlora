@@ -32,6 +32,12 @@ lands), it changes nothing.
 4. A (b) failure with |U| ≥ 9: `PHASE1_FAIL`.
 5. Otherwise: `PHASE1_PASS`, with its named tensors.
 
-`read_layers_a4` records `u_paths` (|U|) and `false_reject_bound` (1/(|U| + 1)). The tests cover |U| = 2 →
+`read_layers_a4` records `u_paths` (|U|) and `false_reject_bound` (1/(|U| + 1)).
+
+In (c) 3, the harness takes D over each ordered pair: D(P, Q) = ‖B_P − B_Q‖ / ‖B_Q‖, and P's score is its mean D(P, Q).
+So the null's 2× consistency check runs over the six ordered today-vs-today distances rather than three. That is
+stricter only: it can make KNOB_OFF `INDETERMINATE` more often, never a PASS.
+
+The tests cover |U| = 2 →
 `INDETERMINATE`, |U| = 8 with the fused path over the margin → `INDETERMINATE`, and |U| = 9 → `PHASE1_FAIL`. A mutant
 moves each threshold, and each is killed.

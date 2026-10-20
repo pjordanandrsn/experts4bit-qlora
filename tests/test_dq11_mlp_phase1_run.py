@@ -186,3 +186,27 @@ def test_reduce_a4_passes_names_and_never_fails_an_indeterminate(tmp_path):
     assert run.reduce_a4(bad, tmp_path)["outcome"].startswith("PHASE1_FAIL: KNOB_OFF")
     spread = _records_a4(tmp_path, read_null=False, c_parts=_c(tmp_path, (0.01, 0.01, 0.01, 0.01)))
     assert run.reduce_a4(spread, tmp_path)["outcome"].endswith(", KNOB_OFF_BY_SPREAD")
+
+
+def test_spread_scores_normalize_each_ordered_pair_by_the_other_process(tmp_path):
+    """(c) 3: P's score is its mean ||B_P - B_Q|| / ||B_Q||. With off's B = 2x a today's, off's score is about 1, where
+    the reversed normalization (by ||B_off||) would give about 0.5."""
+    import torch
+    from safetensors.torch import save_file
+
+    g = torch.Generator().manual_seed(1)
+    base = {f"s{i:03d}.B": torch.randn(8, 4, generator=g) for i in range(224)}
+    parts = {}
+    for j, p in enumerate(run.TODAY_C):
+        noise = torch.Generator().manual_seed(100 + j)
+        save_file({k: v + 0.01 * torch.randn(v.shape, generator=noise) for k, v in base.items()}, str(tmp_path / f"{p}-B.safetensors"))
+    save_file({k: 2 * v for k, v in base.items()}, str(tmp_path / "step-off-c-B.safetensors"))
+    for p in run.C_PARTS:
+        f = tmp_path / f"{p}-B.safetensors"
+        parts[p] = {"adapters_sha256": {"a": p}, "training": {"losses": [1.0]},
+                    "b_file": {"name": f.name, "sha256": hashlib.sha256(f.read_bytes()).hexdigest()}}
+    out = run.knob_off(_records_a4(tmp_path, read_null=False, c_parts=parts), tmp_path)
+    expect = sum(run.b_distance(tmp_path / "step-off-c-B.safetensors", tmp_path / f"{t}-B.safetensors")["rel_rms"]
+                 for t in run.TODAY_C) / 3
+    assert abs(out["scores"]["step-off-c"] - expect) < 1e-12 and 0.9 < expect < 1.1          # not about 0.5
+    assert out["ok"] is False                                                                 # off far outside the null

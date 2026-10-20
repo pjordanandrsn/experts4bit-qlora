@@ -741,6 +741,6 @@ def read_layers_a4(mlps, xs, gys, *, enable, disable, stats, sigma=None, stage=N
     record["u_paths"] = 1 + len(draws)                                # today's path and the post-(a) draws
     record["false_reject_bound"] = 1 / (record["u_paths"] + 1)        # P(FAIL | the fused path is neutral) <= 1/(|U|+1)
     rank = _adapter(mlps[order[0]].gate_proj)[0].weight.shape[0]
-    record["outcome"] = outcome_a4(rows_a, rows_b, rank, record["calibration_fails"], 1 + len(draws))
+    record["outcome"] = outcome_a4(rows_a, rows_b, rank, record["calibration_fails"], record["u_paths"])
     record["e_min_max"] = max(r["e_min"] for rows in rows_b.values() for r in rows.values())
     return record
