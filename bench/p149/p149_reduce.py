@@ -191,6 +191,9 @@ def q_faults(name, q, arm) -> list:
         if r.get("replays") != steps or r.get("eager_steps"):
             out.append(f"{name} Q {g}: {r.get('replays')} replays and {r.get('eager_steps')} eager steps of bucket "
                        f"{r.get('bucket')}, registered {steps} replays")
+        f = r.get("forcing") or {}
+        if f.get("buf_mismatch") != 0 or f.get("ptr_mismatch") != 0 or f.get("steps") != steps:
+            out.append(f"{name} Q {g}: the forcing did not reach the re-captured graph {f}")
         p = r.get("paths") or {}
         if (p.get("routed") or {}) or any(int(k) <= 16 for k in (p.get("passed") or {})):
             out.append(f"{name} Q {g}: Python int8 calls at decode {p}")
@@ -376,7 +379,7 @@ def _qrec(arm, nll=1.0, flip=0):
                for i in range(n)]
         gates[g] = {"windows": n, "group": group, "sha256": sha, "bucket": group, "replays": -(-n // group) * CONT,
                     "eager_steps": 0, "paths": {"routed": {}, "passed": ({"511": n * PROJ} if arm == "S1" else {})},
-                    "per_window": per}
+                    "forcing": {"buf_mismatch": 0, "ptr_mismatch": 0, "steps": -(-n // group) * CONT}, "per_window": per}
     return {"recapture": {"graph_status": {str(b): "graph" for b in BUCKETS}, "capture_paths": _paths(arm)},
             "gates": gates, "prefill_ttft_ms_511": {"median": 40.0}}
 
@@ -467,6 +470,9 @@ def self_test() -> int:
     arms = _fixture()
     arms["S1a"]["q"]["gates"]["W1"]["eager_steps"] = 3
     cases.append(("an eager Q step VOIDs", reduce(arms, tf, E)["verdict"] == "VOID", None))
+    arms = _fixture()
+    arms["S0a"]["q"]["gates"]["W16"]["forcing"]["buf_mismatch"] = 1
+    cases.append(("a Q step whose graph buffer missed the forced token VOIDs", reduce(arms, tf, E)["verdict"] == "VOID", None))
     arms = _fixture()
     arms["S1a"]["q"]["gates"]["W1"]["sha256"] = "0"
     cases.append(("windows that are not P147's VOID", reduce(arms, tf, E)["verdict"] == "VOID", None))

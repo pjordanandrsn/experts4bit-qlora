@@ -130,6 +130,7 @@ MUTANTS = [
     ("ARGMAX_MIN, UPPER_Z, PPL_BUDGET = 0.95, 1.645, 0.05", "ARGMAX_MIN, UPPER_Z, PPL_BUDGET = 0.95, 1.645, 0.5"),
     ("        elif set(routed) != {str(b)} or passed:", "        elif False:"),
     ('        if r.get("replays") != steps or r.get("eager_steps"):', '        if r.get("replays") != steps:'),
+    ('        if f.get("buf_mismatch") != 0 or f.get("ptr_mismatch") != 0 or f.get("steps") != steps:', "        if False:"),
     ('        if got != want or r.get("int8_modules") != PROJ:', "        if False:"),
     ('        if c.get("buf_mismatch") != 0 or not b.get("ptr_ok")', '        if not b.get("ptr_ok")'),
     ('        if b.get("stream") == "B" and not same and not c.get("argmax_mismatch"):', "        if False:"),

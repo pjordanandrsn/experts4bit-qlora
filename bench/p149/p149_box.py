@@ -235,9 +235,11 @@ def prefill_q(runner, ws, base_rid):
     return out
 
 
-def q_pass(runner, ws, base_rid, ttft=None):
+def q_pass(runner, ws, base_rid, ttft=None, forcing=None, ptr=None):
     """One teacher-forced pass of up to 16 windows: per window, the 128 positions' NLL and argmax, read at decode.
-    ``ttft`` (a list) receives the prefill's wall in ms, synchronised (the prefill reads its argmax back)."""
+    ``ttft`` (a list) receives the prefill's wall in ms, synchronised (the prefill reads its argmax back). ``forcing``
+    (a dict) counts, per step after the step's own sync, where the bucket's input buffer -- the re-captured graph's own
+    (``ptr``: its pointer at the re-capture) -- did not hold the forced token, as T1's and T2's Forcer does."""
     from experts4bit_qlora.engines.paged_runner import bucket_for
     rids = [base_rid + k for k in range(len(ws))]
     for k, (rid, w) in enumerate(zip(rids, ws)):
@@ -250,9 +252,16 @@ def q_pass(runner, ws, base_rid, ttft=None):
         runner.tokens[rid][-1] = w[PROMPT - 1]                 # forced: position 511's true token, not the argmax
     nll = [[] for _ in ws]
     am = [[] for _ in ws]
-    buf = runner._bufs[bucket_for(len(rids), runner._buckets)]
+    b = bucket_for(len(rids), runner._buckets)
+    buf = runner._bufs[b]
     for j in range(CONT):                                       # input position 511 + j predicts 512 + j
+        want = [runner.tokens[rid][-1] for rid in rids]
         runner.run_decode(rids)
+        if forcing is not None:
+            seen = buf["ids"][:len(rids), 0].tolist()           # the graph's own input this step
+            forcing["buf_mismatch"] += sum(int(x != y) for x, y in zip(seen, want))
+            forcing["ptr_mismatch"] += int(buf["ids"].data_ptr() != ptr[b])
+            forcing["steps"] += 1
         n_, a_ = nll_argmax(buf["logits"][:len(rids)], [w[PROMPT + j] for w in ws])
         for k, rid in enumerate(rids):
             nll[k].append(n_[k])
@@ -274,6 +283,7 @@ def q_main(parts, windows) -> dict:
         rec["recapture"] = {"graph_status": {str(k): v for k, v in _logits_graphs(runner, runner._buckets).items()}}
         rec["recapture"]["capture_paths"] = census.by_bucket
         rec["recapture"]["paths"] = counts_delta(path_counts(mods), before)
+    ptr = {b: buf["ids"].data_ptr() for b, buf in runner._bufs.items()}     # the re-captured graphs' inputs
     for name in ("W1", "W16"):
         ws = windows[name]
         why = window_refusal(name, ws)
@@ -285,14 +295,15 @@ def q_main(parts, windows) -> dict:
         c0 = path_counts(mods)
         t0 = time.perf_counter()
         per, ttft = [], ([] if group == 1 else None)
+        forcing = {"buf_mismatch": 0, "ptr_mismatch": 0, "steps": 0}
         for i, (s, e) in enumerate(passes(n, group)):
-            per += q_pass(runner, ws[s:e], 10_000 + 100 * i, ttft)
+            per += q_pass(runner, ws[s:e], 10_000 + 100 * i, ttft, forcing, ptr)
         torch.cuda.synchronize()
         g1 = runner.graph_stats[b]
         rec["gates"][name] = {"windows": n, "group": group, "sha256": sha, "bucket": b,
                               "seconds": round(time.perf_counter() - t0, 2),
                               "replays": g1["replays"] - g0["replays"], "eager_steps": g1["eager_steps"] - g0["eager_steps"],
-                              "paths": counts_delta(path_counts(mods), c0), "per_window": per}
+                              "paths": counts_delta(path_counts(mods), c0), "forcing": forcing, "per_window": per}
         if ttft is not None:
             rec["prefill_ttft_ms_511"] = {"n": len(ttft), "median": sorted(ttft)[len(ttft) // 2], "all": ttft}
         print(f"P149_Q {name} windows={n} replays={rec['gates'][name]['replays']} "
@@ -446,6 +457,8 @@ def tf_pass(parts, torch, rows, stream, n, forcer):
     if sorted(new) != sorted(rids) or sched.active or sched.queue:
         raise AssertionError(f"scheduler did not drain: done {sorted(new)} vs added {sorted(rids)}")
     toks = [[int(t) for t in new[r].out] for r in rids]
+    # fed_ok is TAUTOLOGICAL: the scheduler records what the Forcer handed it. It checks the bookkeeping only; that the
+    # graph consumed the forced tokens is the Forcer's buf_mismatch / ptr_mismatch, read from the graph's own buffer.
     fed_ok = all(t == s[:n] for t, s in zip(toks, stream)) and all(len(forcer.fed[r]) == n for r in rids)
     return wall, steps, toks, fed_ok
 
@@ -672,6 +685,53 @@ def _forcer_cases(torch) -> list:
     return out
 
 
+def _q_cases(torch) -> list:
+    """q_pass's forcing on a stand-in runner: decode copies the runner's tokens into the bucket's input buffer (as
+    ``_run_decode_bucketed`` does) and writes logits that put the next window token on top."""
+    try:
+        import experts4bit_qlora.engines.paged_runner  # noqa: F401  (q_pass reads its bucket_for)
+    except ImportError:
+        return []
+
+    class R:
+        def __init__(self, rebind=False):
+            self._buckets, self.rebind, self.tokens, self.slot = (1, 2), rebind, {}, {}
+            self._bufs = {b: {"ids": torch.zeros(b, 1, dtype=torch.long), "logits": torch.zeros(b, 900)} for b in (1, 2)}
+
+        def bind(self, rid, slot, prompt):
+            self.tokens[rid], self.slot[rid] = list(prompt), slot
+
+        def run_prefill(self, chunks):
+            for rid, _s, _t in chunks:
+                self.tokens[rid].append(0)
+            return {rid: 0 for rid, _s, _t in chunks}
+
+        def run_decode(self, rids):
+            buf = self._bufs[len(rids)]
+            if self.rebind:
+                buf["ids"] = torch.zeros(len(rids), 1, dtype=torch.long)    # the graph would not see this tensor
+            buf["ids"][:len(rids), 0] = torch.tensor([self.tokens[r][-1] for r in rids])
+            for r in rids:
+                self.tokens[r].append(0)
+            return {r: 0 for r in rids}
+
+        def free_slot(self, rid):
+            self.tokens.pop(rid)
+    out = []
+    ws = [list(range(PROMPT + CONT)), list(range(100, 100 + PROMPT + CONT))]
+    for rebind in (False, True):
+        r = R(rebind)
+        ptr = {b: buf["ids"].data_ptr() for b, buf in r._bufs.items()}
+        f = {"buf_mismatch": 0, "ptr_mismatch": 0, "steps": 0}
+        per = q_pass(r, ws, 7, None, f, ptr)
+        if not rebind:
+            out.append(("Q's forcing reaches the graph's buffer on every step", len(per) == 2
+                        and f == {"buf_mismatch": 0, "ptr_mismatch": 0, "steps": CONT}))
+        else:
+            out.append(("a rebound Q input buffer is caught by its pointer", f["ptr_mismatch"] == CONT))
+    return out
+
+
 def self_test() -> int:
     cases = []
     s1 = {KNOB: "1"}
@@ -703,7 +763,7 @@ def self_test() -> int:
     cases.append(("T1 and T2 rotate the streams", T_ORDER == {"T1": "ABBA", "T2": "BAAB"}))
     try:
         import torch
-        cases += _forcer_cases(torch)
+        cases += _forcer_cases(torch) + _q_cases(torch)
     except ImportError:
         pass
     try:
