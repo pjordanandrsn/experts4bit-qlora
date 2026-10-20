@@ -84,8 +84,8 @@ The largest per-update loss difference is 0.0015.
 
 The merged reducer returns `NO_GAIN: H 0.027854 < 0.05`.
 - The maintainer re-derived every field from the store at the kit's merge commit, the drift block included.
-- `phase2.json` re-derives byte-identically on Linux. On arm64 macOS the drift block's relative distances agree to 1e-14,
-  which is the platform's FP64 last bits; every other field is byte-identical.
+- `phase2.json` re-derives byte-identically on Linux. On arm64 macOS the drift block's relative distances agree to
+  1e-14, which is the platform's FP64 last bits; every other field is byte-identical.
 - The untouched receipt SHA-256 is `2edd5715d9622b325a65ad13db1654fb95f01d510a7683b566a784a19610e5ba`, and
   `phase2.json`'s is `a524e32fbf2c6c62bd7bd2e6af15b9e1c160d1f08ae2f40ada5d63f68cb101e6`.
 
