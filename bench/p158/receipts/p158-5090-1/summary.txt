@@ -1,0 +1,41 @@
+KNOBS e4b=406a391a11d42ddb39154cfc36938a2da5d68216 gnf4=41ef086e6a3e2be5b158ff1bb38e0de67862a949 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 min_power_w=575 short=32 long=160 reps=5
+CUDA_PROBE ok
+POWER_LIMIT_W 575 (floor 575)
+GUARD_FIT fit=3300s need=4125s left=5328s
+e4b 0.55.0 @406a391a11d42ddb39154cfc36938a2da5d68216
+gnf4 0.50.0 @41ef086e6a3e2be5b158ff1bb38e0de67862a949
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p158_reduce self-test OK (72 cases)
+p109_box self-test OK (5/5 cases)
+p158_box self-test OK (24/24 cases)
+premise rc=0: 49 passed, 5 warnings in 35.98s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709
+arm S0w rc=0 P158_ARM {"arm": "S0", "tag": "S0w", "k25_lut": {"env": "tree", "lut": "tree", "why": null}, "k25_seen_build": {"tree|le256": 960}, "load_s": 37.58, "W16": 971.73, "W1": 277.28}
+
+P158_GATE OK
+arm S0a rc=0 P158_ARM {"arm": "S0", "tag": "S0a", "k25_lut": {"env": "tree", "lut": "tree", "why": null}, "k25_seen_build": {"tree|le256": 960}, "load_s": 21.32, "W16": 976.44, "W1": 277.28}
+
+arm S1a rc=0 P158_ARM {"arm": "S1", "tag": "S1a", "k25_lut": {"env": "prmt", "lut": "prmt", "why": null}, "k25_seen_build": {"prmt|le256": 960}, "load_s": 20.48, "W16": 1066.72, "W1": 277.47}
+
+P158_GATE OK
+arm S1b rc=0 P158_ARM {"arm": "S1", "tag": "S1b", "k25_lut": {"env": "prmt", "lut": "prmt", "why": null}, "k25_seen_build": {"prmt|le256": 960}, "load_s": 20.93, "W16": 1067.04, "W1": 277.42}
+
+arm S0b rc=0 P158_ARM {"arm": "S0", "tag": "S0b", "k25_lut": {"env": "tree", "lut": "tree", "why": null}, "k25_seen_build": {"tree|le256": 960}, "load_s": 20.94, "W16": 975.85, "W1": 277.46}
+
+arm S0c rc=0 P158_ARM {"arm": "S0", "tag": "S0c", "k25_lut": {"env": "tree", "lut": "tree", "why": null}, "k25_seen_build": {"tree|le256": 960}, "load_s": 20.76, "W16": 976.12, "W1": 277.25}
+
+arm S1c rc=0 P158_ARM {"arm": "S1", "tag": "S1c", "k25_lut": {"env": "prmt", "lut": "prmt", "why": null}, "k25_seen_build": {"prmt|le256": 960}, "load_s": 20.82, "W16": 1067.28, "W1": 277.4}
+
+arm S1d rc=0 P158_ARM {"arm": "S1", "tag": "S1d", "k25_lut": {"env": "prmt", "lut": "prmt", "why": null}, "k25_seen_build": {"prmt|le256": 960}, "load_s": 20.81, "W16": 1067.01, "W1": 277.51}
+
+arm S0d rc=0 P158_ARM {"arm": "S0", "tag": "S0d", "k25_lut": {"env": "tree", "lut": "tree", "why": null}, "k25_seen_build": {"tree|le256": 960}, "load_s": 21.75, "W16": 976.02, "W1": 277.35}
+
+P158_VERDICT FLIP ["g16 1.092458 (the min of four pairs) >= 1.03 and g1 0.999856 >= 0.99; every S1 token identical to S0's", "a separate PR may make E4B_K25_LUT=prmt qwen3_moe's K25 decode by default"]
