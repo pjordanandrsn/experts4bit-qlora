@@ -1,0 +1,8 @@
+# P160's staged pieces, by the name the box sees them, and their sha256 at this registration (bench/p160/PREREG-p160.md).
+# test_k25_row_exact_gpu.py is P156's; test_nf4_smallm_prmt_gpu.py is P158's copy of grouped-nf4-gemm v0.50.0's, byte for byte.
+7b2c65c513ea38114814c07620d0ede2bebc6c19a8ca26161754658ae9e43513  p160_run.sh
+893ea2ddb918d6269e5aa33af2ff5c221e494fe3d64c941ddcff20d73508c71a  p160_bench.py
+3aa061e608452ed321274fad9fee69dc162f74558128268d4ab51ce6286284bf  p160_reduce.py
+3c59e72f947daa425e61f727401204099a1e782b902fb39687e04c46e338b14f  rr.json.pt
+1d870355f17db464633db7fedcc432faf82e8152582ffc0aa5f6fc593ebc91c2  test_k25_row_exact_gpu.py
+9f6366287957f75bdfe53ff8165b401c30fb9e97d4da582254ad7e98bf702868  test_nf4_smallm_prmt_gpu.py
