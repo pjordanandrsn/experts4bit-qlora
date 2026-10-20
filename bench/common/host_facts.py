@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""bench/common/host_facts.py OUT -- the box's own measured host facts, written as ``host_facts.json`` beside a run.
+"""host_probe.py OUT|- -- the box's own measured host facts, written as ``host_facts.json`` beside a run.
+
+ONE producer, two byte-identical copies: ``adertha/compute/host_probe.py`` in adertha-agents (the source of record,
+beside the registry that reads its keys) and ``bench/common/host_facts.py`` in experts4bit-qlora. adertha-agents' CI
+fails when the two differ. Edits land in adertha-agents first; experts4bit-qlora then copies the file byte for byte.
+The launcher runs it on every rented box after the pre-flight (``rent.collect_host_facts``); a lane may also run it.
 
 The host registry reads this file from a run's receipt directory. It keeps only the numeric keys it knows, ignores
 the rest, and rejects a file whose ``measured_at`` falls outside the run's own window, so a copy shipped with a kit is
@@ -14,8 +19,12 @@ Rules:
 - no identifiers: no hostname, container id, serial, UUID or CPU model string;
 - a fact that cannot be read is left out. The helper never fails a run: it prints why and exits 0.
 
-Usage, on the box, from the lane's runner (one call, before or after the work):
-    python3 host_facts.py "$OUT_DIR/host_facts.json"
+Usage, on the box (one call, before or after the work):
+    python3 host_probe.py "$OUT_DIR/host_facts.json"
+    python3 host_probe.py -          one line on stdout, ``HOST_FACTS_JSON {...}`` (the launcher reads it over ssh)
+
+Facts read from the ENVIRONMENT (``omp_num_threads``, ``thp_mem_alloc_enable``) are the calling process's own: run it
+with the run's environment, or read them as the caller's. The launcher's call records them as its ssh session's.
 """
 from __future__ import annotations
 
@@ -151,10 +160,14 @@ def gather(root: Path = Path("/"), smi: str = "nvidia-smi") -> dict:
         pass
     # the helper's OWN environment: call it with the run's env set. Unset means the runtime's default, which differs by
     # runtime (libgomp: the affinity count; torch intra-op: the physical cores), so absent is recorded as absent.
+    thp_env = os.environ.get("THP_MEM_ALLOC_ENABLE", "").strip()
+    if thp_env.isdigit():
+        facts["thp_mem_alloc_enable"] = int(thp_env)
+        sources["thp_mem_alloc_enable"] = "the calling process's THP_MEM_ALLOC_ENABLE (left out when unset: absent is not 0)"
     omp = os.environ.get("OMP_NUM_THREADS", "").strip()
     if omp.isdigit() and int(omp) > 0:
         facts["omp_num_threads"] = int(omp)
-        sources["omp_num_threads"] = "the run's OMP_NUM_THREADS (left out when unset: absent is not 0)"
+        sources["omp_num_threads"] = "the calling process's OMP_NUM_THREADS (left out when unset: absent is not 0)"
     try:
         aff = len(affinity())
         if aff:
@@ -185,10 +198,13 @@ def gather(root: Path = Path("/"), smi: str = "nvidia-smi") -> dict:
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if len(argv) != 1:
-        print("usage: host_facts.py OUT", file=sys.stderr)
+        print("usage: host_probe.py OUT|-", file=sys.stderr)
         return 0
     try:
         facts = gather(Path(os.environ.get("HOST_FACTS_ROOT", "/")), os.environ.get("HOST_FACTS_SMI", "nvidia-smi"))
+        if argv[0] == "-":
+            print("HOST_FACTS_JSON " + json.dumps(facts, sort_keys=True), flush=True)
+            return 0
         Path(argv[0]).write_text(json.dumps(facts, indent=1, sort_keys=True) + "\n")
         print(f"HOST_FACTS {len(facts) - 2} facts -> {argv[0]}")
     except Exception as e:  # noqa: BLE001 -- a missing fact never costs the run
