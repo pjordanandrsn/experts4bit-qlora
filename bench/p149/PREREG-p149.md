@@ -401,6 +401,13 @@ A NO_FLIP keeps the lever opt-in.
 - **S:** FLIP, with g1 between 1.04 and 1.08 and g16 between 0.99 and 1.03.
 - **Routing (Amendment 4):** ROUTING_CLEAR, with |ρ| < 0.005: S1 changes few tokens, and Mixtral's B = 16 step reads
   nearly every expert either way. g16_routing's band from the A2000 pre-read is added here before box Q+S is created.
+  - **The A2000 router pre-read** (2026-10-20, USD 0, a prediction; [`preread/preread.json`](preread/preread.json), sha256
+    `efaab639…`), run at e4b `b17fa2ba` with grouped-nf4-gemm 0.49.0. P109's 16 W16 prompts were decoded greedily for
+    160 tokens as S0, then as S1 (all 128 projections swapped, the 16-row decode calls on K37, the prefill transient).
+    The two streams differ in all 16 rows, with first divergences at steps 5 to 140. Replayed through S0's router, they
+    read 7.8919 and 7.8927 distinct experts per layer-step, and every expert's rows sit inside one 16-row tile, so the
+    tile and bytes models agree: g16_routing 0.99991.
+  - **The predicted band: g16_routing in [0.9979, 1.0019]**, graded in the read and never ruling.
 - **Dry (Amendment 5):** `p149-dry-2` reads DRY with no instrument fault, and every captured bucket's S1 int8 calls are
   exactly 3 × 4 on the slice.
 

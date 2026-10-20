@@ -1,0 +1,96 @@
+{
+ "lane": "P149 Amendment 4 pre-read",
+ "prompts_sha256": "9689e662d473cbd1e114ddf251817490aeaef5bdd788ec2e034d0937bd10dbbb",
+ "card": "NVIDIA RTX A2000 12GB",
+ "phases": {
+  "load": 1263.1,
+  "s0_decode": 697.6,
+  "s1_decode": 699.4,
+  "replay": 138.3
+ },
+ "s1_swapped": 128,
+ "s1_engagement": {
+  "modules": 128,
+  "routed_modules_by_rows": {
+   "16": 128
+  },
+  "passed_modules_by_rows": {
+   "8192": 128
+  }
+ },
+ "s0_restored": 128,
+ "streams": {
+  "rows_identical": 0,
+  "first_divergent_step": [
+   101,
+   71,
+   5,
+   140,
+   18,
+   12,
+   107,
+   64,
+   115,
+   112,
+   12,
+   130,
+   15,
+   48,
+   53,
+   83
+  ]
+ },
+ "routing": {
+  "A": {
+   "layer_steps": 5088,
+   "distinct_mean": 7.8919,
+   "tiles_mean": 7.8919,
+   "max_rows_mean": 6.9125,
+   "rows_per_expert_histogram": {
+    "1": 2505,
+    "2": 5662,
+    "3": 8128,
+    "4": 8610,
+    "5": 7039,
+    "6": 4491,
+    "7": 2287,
+    "8": 1015,
+    "9": 315,
+    "10": 74,
+    "11": 21,
+    "12": 5,
+    "13": 1,
+    "14": 1
+   }
+  },
+  "B": {
+   "layer_steps": 5088,
+   "distinct_mean": 7.8927,
+   "tiles_mean": 7.8927,
+   "max_rows_mean": 6.9562,
+   "rows_per_expert_histogram": {
+    "1": 2571,
+    "2": 5706,
+    "3": 8050,
+    "4": 8641,
+    "5": 6971,
+    "6": 4392,
+    "7": 2356,
+    "8": 990,
+    "9": 337,
+    "10": 119,
+    "11": 23,
+    "12": 2
+   }
+  }
+ },
+ "prediction": {
+  "tile_model": 0.99991,
+  "bytes_model": 0.99991,
+  "band": [
+   0.9979,
+   1.0019
+  ],
+  "f": 0.911
+ }
+}

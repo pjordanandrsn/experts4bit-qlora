@@ -277,3 +277,18 @@ def test_the_driver_takes_the_registered_ids_only(tmp_path, run_id, ok):
         assert ("P149_DRY=1" in out.stdout) == run_id.startswith("p149-dry-"), out.stdout
     else:
         assert out.returncode == 78 and "is not p149-5090-N" in out.stdout + out.stderr
+
+
+def test_the_driver_keeps_a_dry_runs_slice_on_the_box():
+    """p149-dry-2 fetched its 3.2 GB one-layer cut into the receipt; the fetch now leaves it on the box with the checkpoint."""
+    drive = (LANE / "p149_drive.sh").read_text(encoding="utf-8")
+    assert "--exclude '/slice'" in drive and "--exclude 'work/*'" in drive
+
+
+def test_the_preread_band_is_in_the_predictions_before_box_q_s():
+    """Amendment 4: the A2000 router pre-read's g16_routing band is registered before box Q+S, from its committed record."""
+    rec = LANE / "preread" / "preread.json"
+    assert hashlib.sha256(rec.read_bytes()).hexdigest().startswith("efaab6396d8f243a")
+    p = json.loads(rec.read_text(encoding="utf-8"))["prediction"]
+    pre = (LANE / "PREREG-p149.md").read_text(encoding="utf-8")
+    assert p["band"] == [0.9979, 1.0019] and "**The predicted band: g16_routing in [0.9979, 1.0019]**" in pre
