@@ -1,8 +1,8 @@
 # Host-facts probe: registration
 
 **What it is.** A rented box that reads the host facts other lanes' registrations name as bounds on their reads, prints
-them, and is torn down. It reads files and its own environment. It installs nothing, loads no model, imports no torch,
-and measures nothing. It is **never a reading**, and its result never ranks or retires a host.
+them, and is torn down. It reads files, its own environment and one `nvidia-smi` query. It installs nothing, loads no
+model, imports no torch, and measures nothing. It is **never a reading**, and its result never ranks or retires a host.
 
 **Why.** A lane's registration can say that one host fact bounds what its read can conclude. P159's PREREG says so of
 the transparent-huge-page mode: under `madvise` or `never`, READ-1 cannot read IDENTIFIED. A host substituted for
@@ -21,7 +21,7 @@ cheaply, when a decision needs them.
 
 | fact | source |
 |---|---|
-| `thp_enabled`, `thp_defrag` | `/sys/kernel/mm/transparent_hugepage/{enabled,defrag}`, the selected mode, only if a known mode |
+| `thp_enabled`, `thp_defrag` | `/sys/kernel/mm/transparent_hugepage/{enabled,defrag}`, the selected mode, only if a known mode; `absent` when the kernel has no such directory (built without THP), which is a fact, not a failed read |
 | `khugepaged_defrag` | `/sys/kernel/mm/transparent_hugepage/khugepaged/defrag` |
 | `kernel` | `/proc/sys/kernel/osrelease` |
 | `numa_balancing` | `/proc/sys/kernel/numa_balancing` |
@@ -29,9 +29,11 @@ cheaply, when a decision needs them.
 | `cgroup_memory_max` | cgroup v2 `memory.max`, else v1 `memory.limit_in_bytes` (`max` when unlimited) |
 | `online_cpus`, `numa_nodes`, `affinity_cpus` | `/sys/devices/system/cpu/online`, `/sys/devices/system/node/node*`, `sched_getaffinity` |
 | `thp_mem_alloc_enable`, `omp_num_threads` | this process's environment, i.e. the ssh session's, not any lane's |
+| `gpu_power_limit_w`, `gpu_enforced_power_limit_w`, `gpu_max_sm_mhz` | GPU 0, `nvidia-smi --query-gpu=power.limit,enforced.power.limit,clocks.max.sm`, bounded at 20 s; a value that is not a number is left out |
 | `measured_at` | the box's UTC clock |
 
-A fact that cannot be read is left out, never guessed. No hostname, container id, serial, UUID or CPU model string is
+A fact that cannot be read is left out, never guessed. The power rows serve the lanes whose registrations screen hosts
+by power cap. No hostname, container id, serial, UUID or CPU model string is
 printed: the receipt's machine id already names the host.
 
 ## The drive (`hostprobe_drive.sh`, controller side)

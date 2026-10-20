@@ -5,14 +5,17 @@ nothing else. Standard library only: no torch, no model, no measurement of any k
     python3 hostprobe_box.py            -> one line, ``HOSTPROBE_JSON {...}``, on stdout; always exits 0
     python3 hostprobe_box.py --root R   -> read /proc and /sys under R instead of / (tests)
 
-A fact that cannot be read is left out, never guessed. Every value is a number or a short enum except ``kernel`` (the
-release string). ``thp_mem_alloc_enable`` and ``omp_num_threads`` are read from THIS process's environment, i.e. the
-ssh session's, not any lane's."""
+A fact that cannot be read is left out, never guessed. A kernel built without THP (no transparent_hugepage directory)
+reads ``thp_enabled``/``thp_defrag`` = ``absent``, which is a fact, not a failed read. Every value is a number or a short
+enum except ``kernel`` (the release string). ``thp_mem_alloc_enable`` and ``omp_num_threads`` are read from THIS
+process's environment, i.e. the ssh session's, not any lane's. GPU 0's power limit, enforced limit and maximum SM clock
+come from ``nvidia-smi``'s query, bounded at 20 s."""
 from __future__ import annotations
 
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -39,11 +42,38 @@ def _env_int(name: str) -> int | None:
     return int(v) if v.isdigit() else None
 
 
-def facts(root: Path = Path("/")) -> dict:
+GPU_QUERY = ("power.limit", "enforced.power.limit", "clocks.max.sm")
+GPU_KEYS = ("gpu_power_limit_w", "gpu_enforced_power_limit_w", "gpu_max_sm_mhz")
+
+
+def gpu_facts(smi: str = "nvidia-smi") -> dict:
+    """GPU 0's power limit, enforced power limit and maximum SM clock (numbers only; '[N/A]' or a failed call is left
+    out). Bounded at 20 s: a hung driver never holds the box."""
+    try:
+        r = subprocess.run([smi, "--id=0", "--query-gpu=" + ",".join(GPU_QUERY), "--format=csv,noheader,nounits"],
+                           capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    if r.returncode != 0 or not r.stdout.strip():
+        return {}
+    out = {}
+    for key, raw in zip(GPU_KEYS, r.stdout.strip().splitlines()[0].split(",")):
+        try:
+            out[key] = float(raw.strip())
+        except ValueError:
+            continue
+    return out
+
+
+def facts(root: Path = Path("/"), smi: str | None = "nvidia-smi") -> dict:
     out: dict = {}
+    if not (root / "sys/kernel/mm/transparent_hugepage").is_dir():
+        out["thp_enabled"] = out["thp_defrag"] = "absent"      # a kernel without THP: a fact, not a failed read
     for key, rel, allowed in (("thp_enabled", "sys/kernel/mm/transparent_hugepage/enabled", THP_ENABLED),
                               ("thp_defrag", "sys/kernel/mm/transparent_hugepage/defrag", THP_DEFRAG),
                               ("khugepaged_defrag", "sys/kernel/mm/transparent_hugepage/khugepaged/defrag", None)):
+        if key in out:
+            continue
         raw = _read(root, rel)
         if allowed is None:
             if raw is not None and raw.isdigit():
@@ -87,6 +117,8 @@ def facts(root: Path = Path("/")) -> dict:
         v = _env_int(name)
         if v is not None:
             out[key] = v
+    if smi:
+        out.update(gpu_facts(smi))
     out["measured_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     return out
 
@@ -94,8 +126,9 @@ def facts(root: Path = Path("/")) -> dict:
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     root = Path(argv[argv.index("--root") + 1]) if "--root" in argv else Path("/")
+    smi = argv[argv.index("--smi") + 1] if "--smi" in argv else "nvidia-smi"
     try:
-        f = facts(root)
+        f = facts(root, smi)
     except Exception as e:  # noqa: BLE001 -- a probe never fails its box; the drive records what came back
         f = {"error": f"{type(e).__name__}"}
     print("HOSTPROBE_JSON " + json.dumps(f, sort_keys=True), flush=True)

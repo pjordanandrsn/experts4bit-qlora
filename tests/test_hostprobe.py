@@ -15,7 +15,7 @@ HERE = ROOT / "bench/hostprobe"
 _spec = importlib.util.spec_from_file_location("hostprobe_box", HERE / "hostprobe_box.py")
 hb = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(hb)
-STDLIB_ONLY = {"__future__", "json", "os", "re", "sys", "time", "pathlib"}
+STDLIB_ONLY = {"__future__", "json", "os", "re", "subprocess", "sys", "time", "pathlib"}
 
 
 def test_the_box_script_imports_nothing_heavy():
@@ -72,7 +72,7 @@ def test_main_prints_one_line_and_never_fails(capsys, monkeypatch, tmp_path):
     assert hb.main(["--root", str(_box(tmp_path))]) == 0
     out = capsys.readouterr().out.strip().splitlines()
     assert len(out) == 1 and json.loads(out[0].split(" ", 1)[1])["thp_enabled"] == "madvise"
-    monkeypatch.setattr(hb, "facts", lambda root: 1 / 0)
+    monkeypatch.setattr(hb, "facts", lambda *a, **k: 1 / 0)
     assert hb.main([]) == 0 and json.loads(capsys.readouterr().out.split(" ", 1)[1]) == {"error": "ZeroDivisionError"}
 
 
@@ -110,3 +110,37 @@ def test_the_drive_writes_the_facts_line_to_the_receipt(tmp_path):
 def test_no_facts_line_is_rc_22_and_writes_no_facts(tmp_path):
     r = _drive(tmp_path, "hostprobe-11541-1", ssh_body="cat >/dev/null; echo nothing here")
     assert r.returncode == 22 and not (tmp_path / "run/hostprobe/facts.json").exists()
+
+
+def test_a_kernel_without_thp_reads_absent_and_a_failed_read_is_left_out(tmp_path):
+    root = _box(tmp_path / "a")
+    import shutil
+    shutil.rmtree(root / "sys/kernel/mm/transparent_hugepage")             # a kernel built without THP
+    f = hb.facts(root, smi=None)
+    assert (f["thp_enabled"], f["thp_defrag"]) == ("absent", "absent") and "khugepaged_defrag" not in f
+    root = _box(tmp_path / "b")
+    (root / "sys/kernel/mm/transparent_hugepage/enabled").unlink()          # the directory is there, the read fails
+    f = hb.facts(root, smi=None)
+    assert "thp_enabled" not in f and f["thp_defrag"] == "always"
+
+
+def _smi(tmp_path, body: str) -> str:
+    p = tmp_path / "nvidia-smi"
+    p.write_text("#!/bin/sh\n" + body + "\n")
+    p.chmod(0o755)
+    return str(p)
+
+
+@pytest.mark.parametrize("body,want", [
+    ('echo "575.00, 600.00, 3090"', {"gpu_power_limit_w": 575.0, "gpu_enforced_power_limit_w": 600.0, "gpu_max_sm_mhz": 3090.0}),
+    ('echo "[N/A], 575.00, 3090"', {"gpu_enforced_power_limit_w": 575.0, "gpu_max_sm_mhz": 3090.0}),
+    ("echo nope; exit 9", {}),
+])
+def test_gpu_facts_from_the_query_and_what_is_left_out(tmp_path, body, want):
+    assert hb.gpu_facts(_smi(tmp_path, body)) == want
+
+
+def test_a_missing_nvidia_smi_adds_nothing(tmp_path):
+    assert hb.gpu_facts(str(tmp_path / "no-such-smi")) == {}
+    f = hb.facts(_box(tmp_path / "box"), smi=str(tmp_path / "no-such-smi"))
+    assert not any(k.startswith("gpu_") for k in f)
