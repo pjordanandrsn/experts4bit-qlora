@@ -76,6 +76,9 @@ arm(){ local tf; tf=$(python3 -c "import json,sys; print(json.load(open(sys.argv
 status_of(){ grep -qx "$1 $2 $3" "$W/mismatch.log" 2>/dev/null && { echo tokens_mismatch; return; }
   [ "${FAIL_FAM:-}" = "$1" ] && { echo "${FAIL_STATUS:-oom}"; return; }
   [ "${SHAKE_FAIL:-}" = "$2" ] && echo install_failed || echo ok; }
+# the driver's per-depth disk check reads `df -Pk $W`: stubbed so the tests never depend on the HOST's free space (WSL's small /tmp
+# failed 11 of them, macOS under 18 GB failed 2). STUB_DF_GB sets the free space it reports (default 1000 GB).
+df(){ echo "Filesystem 1024-blocks Used Available Capacity Mounted on"; echo "stub 0 0 $(( ${STUB_DF_GB:-1000} * 1048576 )) 0% /"; }
 hp1_bulk_manifest(){ echo "manifest $1 bases_present=$(ls -d $W/hp1/hpn/*/base_* 2>/dev/null | wc -l | tr -d ' ')" >> "$W/manifest.log"; }
 mkdir -p logs hp1 data; : > summary.txt; : > arms.log
 echo '{"fam": "qwen3hp1", "sha256": "deadbeef", "train": [], "eval": []}' > tokens.json
@@ -538,8 +541,10 @@ def test_a_depth_that_does_not_fit_ends_the_climb_as_a_stated_limit(tmp_path):
 
 
 def test_too_little_disk_for_a_cut_skips_it_before_any_arm(tmp_path):
-    arms, summary, _, spec = _hpn(tmp_path, HPN_DEPTHS="2 1000000")
-    assert [d["L"] for d in spec["depths"]] == [2] and "SKIPPED" in summary and not [a for a in arms if a[0] == "qwen3hpnL1000000"]
+    """15 GB free: L2 (needs 6) and L4 (10) fit, L8 (18) is skipped before any arm. The free space is the stub's, not the host's."""
+    arms, summary, _, spec = _hpn(tmp_path, HPN_DEPTHS="2 4 8", STUB_DF_GB="15")
+    assert [d["L"] for d in spec["depths"]] == [2, 4] and "HPN L8 SKIPPED: 15 GB free < 18 GB" in summary
+    assert not [a for a in arms if a[0] == "qwen3hpnL8"]
 
 
 def test_the_exports_are_pinned_in_the_bulk_manifest_before_they_are_removed(tmp_path):
@@ -680,3 +685,39 @@ _ARM_OK = {"framework": "e4b", "tag": "hpn_e4b_a", "c1_bit_exact": True, "raw_ok
 def test_a_receipt_without_a_trainable_count_ends_the_climb(tmp_path):
     arms, summary, py, spec = _hpn(tmp_path, HPN_DEPTHS="2 4", STUB_TRAINABLE="null")
     assert "READ_FAILED no trainable count" in summary and spec["depths"] == []
+
+
+
+def test_no_hpn_local_shadows_a_global_that_any_function_it_reaches_reads():
+    """HPN read 3 (00:00Z): tc1_hpn_family's `local R=<receipt>` shadowed the global R (the LoRA rank), so L4's arms got --r <path>.
+    Bash locals are DYNAMICALLY scoped, so a local shadows a global for every function called beneath it (review). This walks the call
+    graph from tc1_hpn_family through tc1_run.sh's REAL function bodies and refuses any upper-case local that a reachable function reads
+    as a global, except TOK/TS, which are tc1_prepare's deliberate out-parameters (`local TOK TS; tc1_prepare ...`)."""
+    import re
+    src = RUN_SH.read_text()
+
+    def code(text):                                                     # bash comments out: a comment naming "local R=" is not a declaration
+        return "\n".join(re.sub(r"\s+#\s.*$", "", ln) for ln in text.splitlines() if not ln.lstrip().startswith("#"))
+    starts = [(m.start() + 1, m.group(1)) for m in re.finditer(r"\n([a-z_][a-z_0-9]*)\(\)\{", src)]
+    funcs = {name: code(src[st:(starts[i + 1][0] if i + 1 < len(starts) else len(src))]) for i, (st, name) in enumerate(starts)}
+
+    def locals_of(body):
+        out = set()
+        for decl in re.findall(r"local ([^;\n]+)", body):
+            out |= {t.split("=")[0] for t in decl.split() if re.match(r"[A-Za-z_][A-Za-z0-9_]*(=|$)", t)}
+        return out
+    seen, todo = set(), ["tc1_hpn_family"]
+    while todo:                                                         # the functions reachable from the HPN family
+        f = todo.pop()
+        if f in seen:
+            continue
+        seen.add(f)
+        todo += [g for g in funcs if g not in seen and re.search(rf"(?<![\w-]){re.escape(g)}(?![\w-])", funcs[f][len(f) + 3:])]
+    reads = {}
+    for f in seen - {"tc1_hpn_family"}:
+        for v in set(re.findall(r"\$\{?([A-Z_][A-Z0-9_]*)", funcs[f])) - locals_of(funcs[f]):
+            reads.setdefault(v, set()).add(f)
+    declared = {v for v in locals_of(funcs["tc1_hpn_family"]) if re.match(r"[A-Z_][A-Z0-9_]*$", v)}
+    assert "arm_once" in seen and "R" in reads and "arm_once" in reads["R"], "the walk must reach arm_once and see it read the rank R"
+    bad = {v: sorted(reads[v]) for v in declared & set(reads) if v not in {"TOK", "TS"}}
+    assert not bad, f"tc1_hpn_family's locals shadow globals read beneath it: {bad}"
