@@ -78,7 +78,11 @@ status_of(){ grep -qx "$1 $2 $3" "$W/mismatch.log" 2>/dev/null && { echo tokens_
   [ "${SHAKE_FAIL:-}" = "$2" ] && echo install_failed || echo ok; }
 # the driver's per-depth disk check reads `df -Pk $W`: stubbed so the tests never depend on the HOST's free space (WSL's small /tmp
 # failed 11 of them, macOS under 18 GB failed 2). STUB_DF_GB sets the free space it reports (default 1000 GB).
-df(){ echo "Filesystem 1024-blocks Used Available Capacity Mounted on"; echo "stub 0 0 $(( ${STUB_DF_GB:-1000} * 1048576 )) 0% /"; }
+# STUB_DF_SEQ="a b c ...": successive df calls report those GB values in turn (the last one repeats), as ZFS's lazy free does
+df(){ local gb=${STUB_DF_GB:-1000}
+  if [ -n "${STUB_DF_SEQ:-}" ]; then local n; n=$(cat "$W/.dfn" 2>/dev/null || echo 0); set -- $STUB_DF_SEQ
+    [ $(( n + 1 )) -gt $# ] && n=$(( $# - 1 )); shift $n; gb=$1; echo $(( n + 1 )) > "$W/.dfn"; fi
+  echo "Filesystem 1024-blocks Used Available Capacity Mounted on"; echo "stub 0 0 $(( gb * 1048576 )) 0% /"; }
 hp1_bulk_manifest(){ echo "manifest $1 bases_present=$(ls -d $W/hp1/hpn/*/base_* 2>/dev/null | wc -l | tr -d ' ')" >> "$W/manifest.log"; }
 mkdir -p logs hp1 data; : > summary.txt; : > arms.log
 echo '{"fam": "qwen3hp1", "sha256": "deadbeef", "train": [], "eval": []}' > tokens.json
@@ -502,6 +506,7 @@ def test_hp2_g1_closure_ends_the_draw_before_any_confirmation_arm(tmp_path):
 # ------------------------------------------------------------------------------------------------- HPN (bench/hpn/HPN-DESIGN.md)
 def _hpn(tmp_path, **env):
     import json
+    env.setdefault("HPN_SETTLE_S", "0")                                 # the disk settle's sleep: none in tests
     arms, summary = drive(tmp_path, FAMILY_FN="tc1_hpn_family", FAMILY_FAM="qwen3hpn", HPN_FREE_MIB="10600", **env)
     py = (tmp_path / "py.log").read_text()
     spec = json.loads((tmp_path / "hpn_spec.json").read_text())
@@ -543,7 +548,7 @@ def test_a_depth_that_does_not_fit_ends_the_climb_as_a_stated_limit(tmp_path):
 def test_too_little_disk_for_a_cut_skips_it_before_any_arm(tmp_path):
     """15 GB free: L2 (needs 6) and L4 (10) fit, L8 (18) is skipped before any arm. The free space is the stub's, not the host's."""
     arms, summary, _, spec = _hpn(tmp_path, HPN_DEPTHS="2 4 8", STUB_DF_GB="15")
-    assert [d["L"] for d in spec["depths"]] == [2, 4] and "HPN L8 SKIPPED: 15 GB free < 18 GB" in summary
+    assert [d["L"] for d in spec["depths"]] == [2, 4] and "HPN L8 SKIPPED: 15 GB free < 1.15 x 18 GB = 21 GB" in summary
     assert not [a for a in arms if a[0] == "qwen3hpnL8"]
 
 
@@ -721,3 +726,27 @@ def test_no_hpn_local_shadows_a_global_that_any_function_it_reaches_reads():
     assert "arm_once" in seen and "R" in reads and "arm_once" in reads["R"], "the walk must reach arm_once and see it read the rank R"
     bad = {v: sorted(reads[v]) for v in declared & set(reads) if v not in {"TOK", "TS"}}
     assert not bad, f"tc1_hpn_family's locals shadow globals read beneath it: {bad}"
+
+
+def test_the_disk_check_waits_for_zfs_to_settle_after_a_depths_removal(tmp_path):
+    """HPN read 4 (04:18Z): a df right after L4's removal read 8 GB and a minute later 19, so L8 (needs 18) was skipped on a stale
+    number. The check now syncs and re-reads until two reads agree within 0.5 GB: here L2 and L4 see a stable 30, then L8's reads rise
+    8, 12, 25, 25, and L8 fits (25 >= 1.15 x 18). Without the settle the 8 would skip it."""
+    arms, summary, _, spec = _hpn(tmp_path, HPN_DEPTHS="2 4 8", STUB_DF_SEQ="30 30 30 30 8 12 25 25", HPN_SETTLE_S="0")
+    assert [d["L"] for d in spec["depths"]] == [2, 4, 8] and "SKIPPED" not in summary
+    assert [a for a in arms if a[0] == "qwen3hpnL8"]
+
+
+def test_a_df_that_never_settles_stops_the_climb_with_its_reason_never_a_silent_skip(tmp_path):
+    """The maintainer's rule: on the settle's timeout the climb stops, the reason "df did not settle" is recorded in the summary and the
+    spec (the reducer reads it into INSUFFICIENT_DEPTH), and no arm runs at that depth."""
+    arms, summary, _, spec = _hpn(tmp_path, HPN_DEPTHS="2 4", STUB_DF_SEQ="30 31 32 33 34 35", HPN_SETTLE_S="0", HPN_SETTLE_TIMEOUT="3")
+    assert "HPN L2 NOT_READ: df did not settle before L2" in summary and spec["depths"] == [] and "SKIPPED" not in summary
+    assert spec["climb_stop"].startswith("df did not settle before L2") and not arms
+
+
+def test_the_disk_check_keeps_a_15_percent_margin_and_says_what_to_remove(tmp_path):
+    """Read 4's numbers: 19 GB free against L8's 18 is 5 % headroom, too little. Now L8 needs 1.15 x 18 = 21, and the message names the fix."""
+    arms, summary, _, spec = _hpn(tmp_path, HPN_DEPTHS="2 4 8", STUB_DF_GB="19")
+    assert [d["L"] for d in spec["depths"]] == [2, 4]
+    assert "HPN L8 SKIPPED: 19 GB free < 1.15 x 18 GB = 21 GB" in summary and "remove old HPN run dirs or unused venvs" in summary
