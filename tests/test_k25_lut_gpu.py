@@ -15,6 +15,8 @@ Skipped without a GPU, or with a kernel package that lacks K25 or K39's decode.
 """
 from __future__ import annotations
 
+import functools
+
 import pytest
 import torch
 import torch.nn.functional as F
@@ -78,9 +80,15 @@ def _call(hr, shape, st, T, xr, ids, x_tokens=None):
 
 
 def _spy(monkeypatch, sm, k25):
-    """Record the decode each K25 call receives, calling the real kernel ``k25`` (never a previous spy)."""
+    """Record the decode each K25 call receives, calling the real kernel ``k25`` (never a previous spy). It keeps
+    K25's signature (``functools.wraps``): the route reads it to decide the lean glue (``_lean_glue_supported``)."""
     seen = []
-    monkeypatch.setattr(sm, "gemm_nf4_grouped_smallm", lambda *a, **kw: (seen.append(kw.get("lut")), k25(*a, **kw))[1])
+
+    @functools.wraps(k25)
+    def spy(*a, **kw):
+        seen.append(kw.get("lut"))
+        return k25(*a, **kw)
+    monkeypatch.setattr(sm, "gemm_nf4_grouped_smallm", spy)
     return seen
 
 
