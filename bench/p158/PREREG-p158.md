@@ -171,9 +171,12 @@ it, and the verdict stands beside it.
 
 - **One RTX 5090**, its own box:
   - hosts with a recorded power cap of at least 575 W, read within the last 3 days;
-  - declared at <= $1.05/h, **guard 1.5 h**, at most 10 GB at <= $0.011/GB. Worst case 1.5 x $1.05 + 10 x $0.011 =
-    **$1.69**, under the standing rule;
-  - disk 150 GB (a 61 GB checkpoint, its NF4 snapshot and arena).
+  - declared at <= $1.05/h, **guard 1.5 h**, at most **70 GB** downloaded at <= $0.011/GB (the 61 GB checkpoint is fetched
+    on the box; P153 ordered the same 70 GB). Worst case 1.5 x $1.05 + 70 x $0.011 = **$2.35**, under the standing rule;
+  - disk: 170 GB ordered, as P153 did; the runner refuses under 150 GB free (a 61 GB checkpoint, its NF4 snapshot and
+    arena).
+  - **Corrected before merge:** a draft carried P156's 10 GB download allowance and a $1.69 worst. P156 is a microbench
+    that downloads no checkpoint; this read downloads 61 GB.
 - **The fit, e4b#1845's rule, with 25 % headroom on both sides,** from the two served reads of this form on the 5090
   (their own logs: p151-5090-4, p153-5090-1):
 

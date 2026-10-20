@@ -16,7 +16,8 @@ sampled clock range). P158 reads it in the served step, by P153's served form.
   500 ms did not) labels a pair "clock-confounded" beyond 2 % either way, beside the verdict, never ruling.
 - **Box:** one RTX 5090 at >= 575 W (power limit and enforced limit), grouped-nf4-gemm v0.50.0 (41ef086e), premise 49
   tests (K39's compiled contract and e4b's served-route contract among them), guard 1.5 h with the pre-install fit at
-  25 % headroom from two measured served reads, worst $1.69.
+  25 % headroom from two measured served reads, a 70 GB download allowance (the checkpoint is fetched on the box),
+  worst $2.35.
 
 A FLIP opens a separate PR to make `prmt` qwen3_moe's K25 decode by default. Files: `bench/p158/` and
 `tests/test_p158.py`.
