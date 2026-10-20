@@ -83,6 +83,8 @@ df(){ local gb=${STUB_DF_GB:-1000}
   if [ -n "${STUB_DF_SEQ:-}" ]; then local n; n=$(cat "$W/.dfn" 2>/dev/null || echo 0); set -- $STUB_DF_SEQ
     [ $(( n + 1 )) -gt $# ] && n=$(( $# - 1 )); shift $n; gb=$1; echo $(( n + 1 )) > "$W/.dfn"; fi
   echo "Filesystem 1024-blocks Used Available Capacity Mounted on"; echo "stub 0 0 $(( gb * 1048576 )) 0% /"; }
+# STUB_DU_KB: what `du -sk` reports for a depth's removal (the stub arms write tiny files), so the settle's expected return is set
+du(){ if [ -n "${STUB_DU_KB:-}" ]; then echo "${STUB_DU_KB} total"; else command du "$@"; fi; }
 hp1_bulk_manifest(){ echo "manifest $1 bases_present=$(ls -d $W/hp1/hpn/*/base_* 2>/dev/null | wc -l | tr -d ' ')" >> "$W/manifest.log"; }
 mkdir -p logs hp1 data; : > summary.txt; : > arms.log
 echo '{"fam": "qwen3hp1", "sha256": "deadbeef", "train": [], "eval": []}' > tokens.json
@@ -728,13 +730,23 @@ def test_no_hpn_local_shadows_a_global_that_any_function_it_reaches_reads():
     assert not bad, f"tc1_hpn_family's locals shadow globals read beneath it: {bad}"
 
 
-def test_the_disk_check_waits_for_zfs_to_settle_after_a_depths_removal(tmp_path):
-    """HPN read 4 (04:18Z): a df right after L4's removal read 8 GB and a minute later 19, so L8 (needs 18) was skipped on a stale
-    number. The check now syncs and re-reads until two reads agree within 0.5 GB: here L2 and L4 see a stable 30, then L8's reads rise
-    8, 12, 25, 25, and L8 fits (25 >= 1.15 x 18). Without the settle the 8 would skip it."""
-    arms, summary, _, spec = _hpn(tmp_path, HPN_DEPTHS="2 4 8", STUB_DF_SEQ="30 30 30 30 8 12 25 25", HPN_SETTLE_S="0")
-    assert [d["L"] for d in spec["depths"]] == [2, 4, 8] and "SKIPPED" not in summary
+def test_the_disk_check_waits_for_the_removed_space_to_come_back_even_when_zfs_holds_then_releases(tmp_path):
+    """HPN read 4 (04:18Z) skipped L8 on a df read right after L4's removal (8 GB; 19 a minute later). ZFS can HOLD and then release in one
+    batch (review), so two agreeing reads alone settle on the hold: loggetta's 8, 8, 25, 25. The settle now waits for the free space
+    recorded before the removal plus what was removed (du -sk, here 17 GB). L2 reads 30 30 and then 13 before its removal (13 + 17 = 30).
+    L4 reads 30 30 and then 8 before its removal (8 + 17 = 25). L8's reads 8 8 are below 25 - 1 and do not count; 25 25 settles, and L8 fits."""
+    arms, summary, _, spec = _hpn(tmp_path, HPN_DEPTHS="2 4 8", STUB_DF_SEQ="30 30 13 30 30 8 8 8 25 25",
+                                  STUB_DU_KB=str(17 * 1048576), HPN_SETTLE_S="0")
+    assert [d["L"] for d in spec["depths"]] == [2, 4, 8] and "SKIPPED" not in summary and "NOT_READ" not in summary
     assert [a for a in arms if a[0] == "qwen3hpnL8"]
+
+
+def test_a_hold_that_never_releases_is_unsettled_not_a_stale_skip(tmp_path):
+    """The same removal, but the space never comes back (df holds at 8): the climb stops as NOT_READ, never a skip on the stale 8."""
+    _, summary, _, spec = _hpn(tmp_path, HPN_DEPTHS="2 4 8", STUB_DF_SEQ="30 30 13 30 30 8 8", STUB_DU_KB=str(17 * 1048576),
+                               HPN_SETTLE_S="0", HPN_SETTLE_TIMEOUT="6")
+    assert "HPN L8 NOT_READ: df did not settle before L8" in summary and "L8 SKIPPED" not in summary
+    assert [d["L"] for d in spec["depths"]] == [2, 4] and spec["climb_stop"].startswith("df did not settle before L8")
 
 
 def test_a_df_that_never_settles_stops_the_climb_with_its_reason_never_a_silent_skip(tmp_path):
