@@ -13,7 +13,7 @@ Start here: [`STATUS.md`](STATUS.md) (one page, current) →
 
 ## Current — read these
 
-- **[`REPRODUCE.md`](REPRODUCE.md)** — for checking our numbers from outside: each headline claim's
+- **[`REPRODUCE.md`](REPRODUCE.md)** — for checking the published numbers from outside: each headline claim's
   commit, command, hardware and cost per reading, with the losses beside the wins. Current.
 - **[`SOLUTIONS.md`](SOLUTIONS.md)** and **[`solutions/`](solutions/)** —
   routing/usage: one page per ordinary problem (symptoms, cause, install,
