@@ -1,0 +1,99 @@
+{
+ "hp1": {
+  "adapter": {
+   "meta": {
+    "adapter_dtype": "native",
+    "arm": "fused",
+    "fam": "qwen3hbdL2",
+    "framework": "e4b",
+    "lora_init": "native",
+    "model": "local/Qwen3-30B-A3B-L2",
+    "order_seed": 3407,
+    "revision": "88f08b815a0dffa4e348a67de1d8b585ac183cee",
+    "seed": 3407,
+    "steps": 1,
+    "tag": "hbd_e2"
+   },
+   "n_slots": 520,
+   "n_tensors": 24,
+   "path": "/root/tc1/hp1/hbd/E2/canonical_qwen3hbdL2_hbd_e2.safetensors",
+   "scalings": [
+    1.0
+   ],
+   "sha256": "aeb02e03c1cd1e5eed539fd699bdc789a7a9c99d2bccd6810e400ffc0b910160"
+  },
+  "base_export": {
+   "bytes": 1946676640,
+   "dir": "/root/tc1/hp1/hbd/E2/base_e4b_qwen3hbdL2",
+   "files": 3,
+   "index_sha256": "0205b6d52a14834f848685b0b94278ab9670dbb08303a3c7702347d8373cd789",
+   "n_slots": 533
+  },
+  "export_dir": "/root/tc1/hp1/hbd/E2",
+  "hbd": {
+   "bnb": {
+    "BNB_CUDA_VERSION": null,
+    "LD_LIBRARY_PATH": "/usr/local/nvidia/lib:/usr/local/nvidia/lib64",
+    "libraries": [
+     {
+      "path": "/root/tc1/venv-unsloth-t28/lib/python3.11/site-packages/bitsandbytes/libbitsandbytes_cuda128.so",
+      "sha256": "d6dd06a7bf8b2ecc43dd7d7dc5b558dc70884fd193252a8597ee065a9c8b0f4e"
+     }
+    ]
+   },
+   "keys_sha256": "180f429d8824b3da245d8ec246bad22bb610f073a80d6a1515d2affc860d742d",
+   "n_layers": 2,
+   "n_slots": 533,
+   "path": "/root/tc1/hbd/rec_E2.json",
+   "regimes": {
+    "attention k_proj": "nf4/64",
+    "attention o_proj": "nf4/64+dq",
+    "attention q_proj": "nf4/64",
+    "attention v_proj": "nf4/64",
+    "expert down": "nf4/64+dq",
+    "expert gate_up": "nf4/64+dq"
+   },
+   "stored_digest": "91160aab3bfc6d552718ea0db21107ebca9381dbf54158a0f98dad0e19080923",
+   "versions": {
+    "bitsandbytes": "0.50.2",
+    "capability": "12.0",
+    "device": "NVIDIA GeForce RTX 5090",
+    "driver": "595.84",
+    "experts4bit-qlora": "0.56.0",
+    "grouped-nf4-gemm": "0.45.0",
+    "peft": "0.21.2",
+    "torch": "2.8.0+cu128",
+    "torch_cuda": "12.8",
+    "transformers": "5.5.0",
+    "triton": "3.4.0",
+    "unsloth": "2026.9.14",
+    "unsloth_zoo": "2026.9.9"
+   }
+  },
+  "released": {
+   "allocated_mib_after": 2037.8,
+   "allocated_mib_before": 2089.6,
+   "grads": 0,
+   "optimizer_states": 24
+  },
+  "train_base": {
+   "digest": "5e7564eae8039e609f3a51bb51185fe4d7b611fe00e0257a1bdfd8988de47b7a",
+   "method": "per-slot (int16 sum, position-weighted int16 sum) of the framework's own bf16 dequant; sha256 over sorted keys",
+   "n_layers": 2,
+   "n_slots": 533,
+   "raw_checked": 260,
+   "raw_mismatch": [],
+   "raw_ok": true,
+   "regimes": {
+    "attention k_proj": "nf4/64",
+    "attention o_proj": "nf4/64+dq",
+    "attention q_proj": "nf4/64",
+    "attention v_proj": "nf4/64",
+    "expert down": "nf4/64+dq",
+    "expert gate_up": "nf4/64+dq"
+   },
+   "seconds": 0.3
+  }
+ },
+ "status": "ok"
+}

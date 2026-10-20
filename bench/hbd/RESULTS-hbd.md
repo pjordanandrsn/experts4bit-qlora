@@ -92,14 +92,16 @@ completed by its own record.
 [`receipts/hbd-5090-1/`](receipts/hbd-5090-1/README.md) holds the files that carry no identifier of the rented host,
 byte-identical to the private receipt store, with `SHA256SUMS`:
 - each cell's in-cell record (`hbd/rec_<cell>.json`) and sibling probe;
-- the spec and `result.json`;
+- the spec and `result.json`, with the public projections of the cell receipts and their spec;
 - the bulk manifest and 32 logs.
 
 The cell receipts, `summary.txt`, `box.json`, `forensics.txt`, `outer.log` and `RESULTS-tc1.md` / `RESULTS.txt` carry the host's
 identifiers. So do six logs with carriage returns, the run's staged copies of committed code, its dataset and token files. They
 stay only in that store, byte-exact, and `STORE-ONLY.sha256` lists every one of them.
 
-**Checking it from these files.** Each record's per-slot dequantized fingerprints re-fold, with `hp1_lib.fold_fingerprints`,
-to that cell's dequantized digest in the table above. Its per-slot stored hashes show the one slot that differs across
-builds. `tests/test_hbd.py` does both on the committed files. The reducer's full re-derivation reads the cell receipts, so it
-is done from the store.
+**Checking it from these files.**
+- The cell receipts' `{"status", "hp1"}` projections (`cells/`, written by `bench/hbd/hbd_public_cells.py`) and the public
+  spec let the registered reducer rebuild `result.json` byte-identically from committed files alone.
+- As a second path, each record's per-slot dequantized fingerprints re-fold, with `hp1_lib.fold_fingerprints`, to that cell's
+  dequantized digest in the table above, and its per-slot stored hashes show the one slot that differs across builds.
+- `tests/test_hbd.py` checks all of it on the committed files.

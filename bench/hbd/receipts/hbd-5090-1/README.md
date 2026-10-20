@@ -10,7 +10,14 @@ returns, and the run's staged copies, dataset and token files. The launcher's re
 - `hbd/probe_<cell>.json`: the sibling probes.
 - `hbd_spec.json` and `hbd/result.json`: the reducer's spec and its output. The maintainer re-derived it from the store,
   byte-identical.
+- `cells/<cell>.json` and `hbd_spec.public.json` are derived, not copied. `bench/hbd/hbd_public_cells.py` writes each cell
+  receipt's `{"status", "hp1"}`, the only fields `hbd_reduce.cell_view` reads, and a spec that points at them. The
+  registered reducer on that spec rebuilds `hbd/result.json` byte-identically from the committed files:
+  `python bench/hbd/hbd_reduce.py bench/hbd/receipts/hbd-5090-1/hbd_spec.public.json --out /tmp/result.json`.
 - `hp1/bulk_manifest.json` and `logs/`: the run's own records.
 
-Each record's `per_slot_dequant` re-folds with `hp1_lib.fold_fingerprints` to its cell's dequantized digest.
-`tests/test_hbd.py` checks this, and the one cross-build slot, on these files.
+Each record's `per_slot_dequant` re-folds with `hp1_lib.fold_fingerprints` to its cell's dequantized digest, a second path.
+`tests/test_hbd.py` checks both paths and the one cross-build slot on these files.
+
+- **Cost:** $0.416 actual, against $1.58 worst under the $1.00/h launch cap.
+- **No identifiers:** no file here names an instance, an offer, a host name, an endpoint or the GPU's UUID.

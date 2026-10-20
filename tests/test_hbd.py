@@ -203,3 +203,25 @@ def test_the_committed_receipt_files_carry_no_host_identifier():
     pat = re.compile(r"GPU-[0-9a-f]{8}-|\"uuid\"|instance_id|vast_instance|machine_id")
     hits = [p.name for p in REC.rglob("*") if p.is_file() and pat.search(p.read_text(errors="replace"))]
     assert not hits, hits
+
+
+def test_the_registered_reducer_rebuilds_the_committed_result_from_the_public_files_alone(tmp_path):
+    """The cell receipts stay in the private store; their {status, hp1} projections (hbd_public_cells.py) and the public spec
+    let hbd_reduce rebuild result.json byte-identically from committed files (sha256 75ca6a89e1bc...)."""
+    import hashlib
+    out = tmp_path / "result.json"
+    p = subprocess.run([sys.executable, str(HBD / "hbd_reduce.py"), str(REC / "hbd_spec.public.json"), "--out", str(out)],
+                       capture_output=True, text=True)
+    assert p.returncode == 0 and p.stdout.startswith("HBD=READ"), p.stdout + p.stderr
+    assert out.read_bytes() == (REC / "hbd" / "result.json").read_bytes()
+    assert hashlib.sha256(out.read_bytes()).hexdigest().startswith("75ca6a89e1bc")
+
+
+def test_a_public_projection_holds_exactly_the_fields_the_reducer_reads():
+    spec = importlib.util.spec_from_file_location("hbd_public_cells", HBD / "hbd_public_cells.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    assert m.project({"status": "ok", "hp1": {"x": 1}, "env": {"host": {"uuid": "GPU-x"}}, "vast_instance_id": "1"}) == \
+        {"status": "ok", "hp1": {"x": 1}}
+    for c in CELLS:
+        assert set(json.loads((REC / "cells" / f"{c}.json").read_text())) == {"status", "hp1"}
