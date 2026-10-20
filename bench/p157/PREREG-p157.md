@@ -132,9 +132,11 @@ with P155's checks before any data.
    (6 on sm_120 at 80 registers and 14,592 B), dynamic shared memory is added in 128-byte steps until it gives A0's, and
    the same query verifies it. One cubin takes one pad. The pad rides the compiled kernel's launch metadata, which a
    CUDA graph captures as the kernel node's `sharedMemBytes`.
-2. **Static.** The SASS of every kernel that ran, from its own cubin: the inner loop (by the MMA, or by the load stream
-   with the unroll checked by bytes against A0's stream), loads per weight, the whole function's loads, the loads outside
-   the loop, and an instruction-stream hash (addresses stripped).
+2. **Static.** The SASS of every kernel that ran, from its own cubin. Whether it holds an MMA is read from that SASS
+   (`has_mma`), never assumed from the arm. With one, the inner loop is found by the MMA and its unroll checked by MMA
+   count; without one, by the load stream with the unroll checked by bytes against A0's stream. Also: loads per weight,
+   the whole function's loads, the loads outside the loop, and an instruction-stream hash (addresses stripped). A count
+   the unroll guard refuses is recorded with its error.
 3. **<a id="the-reps"></a>The reps.** On each of **70 router-replay steps (58-127)**, one paired rep: every arm's graph
    (both GEMMs of all 48 layers), plus the spacer **S** (K25's calls with their own output buffers, never timed). Capture
    and replay follow row r mod 14 of a **Williams design** over the 14 arms: 70 reps are 5 whole squares, so each arm
@@ -142,7 +144,8 @@ with P155's checks before any data.
    interleaved arm by arm, **each right after an untimed replay of S**. While each capture is open, its kernel nodes are
    read back through the driver (`cuStreamGetCaptureInfo`, `cuGraphKernelNodeGetParams`). NVML samples, tagged with the
    arm replaying: SM clock, memory clock, averaged and instantaneous power, the enforced power limit, and clock-event
-   reasons. After the replays, T2's, A0p's and ACX0's outputs are compared with A0's, bit for bit.
+   reasons. Every NVML return code is checked: a failed read is UNREAD, never 0. A sample whose arm tag changed while
+   it was read straddles two replays, so it is dropped and counted. After the replays, T2's, A0p's and ACX0's outputs are compared with A0's, bit for bit.
    - **What each defence removes.** S is every timed replay's IMMEDIATE predecessor, so no arm inherits a light or heavy
      neighbour's power and clock headroom, and none finds its own outputs warm. The Williams order balances each arm's
      position in the rep (the clock and thermal drift across a rep) and its second-order neighbour (the arm before S).
@@ -172,11 +175,19 @@ the loads arms are not one cubin; the context was poisoned; or the self-pair (T2
   unrolls a light loop away (A3 on down), its whole-function loads must equal A0's loop loads x the trip count (12) plus
   A0's loads outside the loop;
 - **A2b strictly cheaper** than A0 per weight;
-- **math parity:** each ladder rung's loop opcodes are A0p's; AL's are A3's.
+- **math parity:** each ladder rung's loop opcodes are A0p's; AL's are A3's;
+- **the MMA as registered:** A0p, A1 and the ladder compile WITH an MMA, A2b, A12, A3, AL and AE without one, read from
+  each cubin's SASS;
+- a static count the unroll guard refused fails its arm's gate, with the guard's own error.
+
+The bytes guard (an MMA-free loop's unroll read from its load bytes) is sound only together with the load-parity gate:
+bytes alone cannot tell an unrolled loop from one that loads more per iteration, and parity rules the second out.
 
 **Labels** (beside the arm's numbers, never a reason to drop them): verified CTAs per SM differ from A0's (A2b, if its
 registers keep it below A0's, cannot be padded up); the carveout differs from A0's; the graph nodes' `sharedMemBytes` are
-not the pinned launch's; median SM clock off A0p's by more than 2 %, either way ("clock-confounded").
+not the pinned launch's; median SM clock off A0p's by more than 2 %, either way ("clock-confounded"); an enforced power
+limit A0p never ran under ("power-confounded"). A clock, power or limit NVML could not read is UNREAD: listed as
+unknown beside the arm, never a label (and never a 0).
 
 ### Ceilings and additivity (reported)
 

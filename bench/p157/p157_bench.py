@@ -102,10 +102,8 @@ def variants(fn):
 _ADDR = re.compile(r"^/\*[0-9a-f]+\*/\s*")
 
 
-def static_record(kernel, sc, *, mma, trip, bytes_per_iteration=None):
-    """sass_count's record of a kernel that ran: its own cubin, disassembled; the inner loop by the MMA (or, without
-    one, by the load stream, unroll-checked by bytes against A0's), the whole function's loads, an instruction-stream
-    hash (addresses stripped, so a kernel's name does not enter it)."""
+def static_record(kernel, sc, *, trip, bytes_per_iteration=None):
+    """sass_count's record of a kernel that ran, from its own cubin, disassembled (:func:`static_from_sass`)."""
     from triton.tools.disasm import path_to_cuobjdump
     with tempfile.NamedTemporaryFile(suffix=".cubin", delete=False) as f:
         f.write(kernel.asm["cubin"])
@@ -114,15 +112,25 @@ def static_record(kernel, sc, *, mma, trip, bytes_per_iteration=None):
         raw = subprocess.run([path_to_cuobjdump(), "-sass", path], capture_output=True, text=True, check=True).stdout
     finally:
         os.remove(path)
+    return static_from_sass(raw, sc, arch=kernel.metadata.target.arch, trip=trip,
+                            bytes_per_iteration=bytes_per_iteration, n_regs=kernel.n_regs, n_spills=kernel.n_spills,
+                            shared=kernel.metadata.shared)
+
+
+def static_from_sass(raw, sc, *, arch, trip, bytes_per_iteration=None, **facts):
+    """The record of one disassembled kernel. Whether it holds an MMA is read from its SASS (``has_mma``), never
+    assumed from the arm: with one, the inner loop is found by the MMA and unroll-checked by MMA count; without one, by
+    the load stream, unroll-checked by bytes against A0's (``bytes_per_iteration``). Also the whole function's loads
+    and an instruction-stream hash (addresses stripped, so a kernel's name does not enter it)."""
     rows = sc.parse_sass(raw)
+    has_mma = any(sc.classify(op) == "mma" for _, op, _ in rows)
     rec = sc.loop_record(rows, num_warps=R.TODAY["warps"], weights_per_iteration=R.TODAY["block_n"] * R.TODAY["kc"],
-                         tile=(16, R.TODAY["block_n"], R.TODAY["kc"]), loop_key="mma" if mma else "load",
-                         bytes_per_iteration=bytes_per_iteration)
+                         tile=(16, R.TODAY["block_n"], R.TODAY["kc"]), loop_key="mma" if has_mma else "load",
+                         bytes_per_iteration=None if has_mma else bytes_per_iteration)
     loop = rec.get("inner_loop")
-    out = {**sc.toolchain(), "arch": f"sm_{kernel.metadata.target.arch}", "total_instructions": len(rows),
+    out = {**sc.toolchain(), "arch": f"sm_{arch}", "total_instructions": len(rows), "has_mma": has_mma,
            "sass_sha256": hashlib.sha256("\n".join(_ADDR.sub("", t) for _, _, t in rows).encode()).hexdigest(),
-           "loads_in_function": rec["loads_in_function"], "trip": trip, "unrolled_away": loop is None,
-           "n_regs": kernel.n_regs, "n_spills": kernel.n_spills, "shared": kernel.metadata.shared}
+           "loads_in_function": rec["loads_in_function"], "trip": trip, "unrolled_away": loop is None, **facts}
     if loop is not None:
         out.update(loop_instructions=loop["instructions"], loop_opcodes=loop["opcodes"], unroll=rec.get("unroll"),
                    unroll_guard=rec.get("unroll_guard"), lane_instr_per_weight=rec["lane_instr_per_weight"],
@@ -269,16 +277,14 @@ def main(a):
     static = {}
     trips = {p: -(-K // R.TODAY["kc"]) for p, (_N, K) in R.SHAPES.items()}
     for proj in ("gu", "dn"):
-        a0 = static_record(kernels["A0"][proj], sc, mma=True, trip=trips[proj])
+        a0 = static_record(kernels["A0"][proj], sc, trip=trips[proj])
         static.setdefault("A0", {})[proj] = a0
         for arm, ks in kernels.items():
             if arm == "A0":
                 continue
-            mma = arm not in ("A2b", "A12", "A3", "AL", "AE")
-            try:
-                static.setdefault(arm, {})[proj] = static_record(
-                    ks[proj], sc, mma=mma, trip=trips[proj],
-                    bytes_per_iteration=None if mma or arm == "AE" else a0["stream_bytes"])
+            try:                                      # an arm without an MMA is unroll-checked by A0's stream bytes
+                static.setdefault(arm, {})[proj] = static_record(ks[proj], sc, trip=trips[proj],
+                                                                 bytes_per_iteration=a0["stream_bytes"])
             except Exception as e:                    # noqa: BLE001  (recorded; the reducer's gate fails the arm)
                 static.setdefault(arm, {})[proj] = {"error": f"{type(e).__name__}: {str(e)[:300]}"}
     rec["static"], rec["occupancy"] = static, occ
@@ -478,7 +484,72 @@ def self_test():
                 pass
         finally:
             os.chdir(here)
-    print("p157_bench self-test OK (7 cases)")
+    # has_mma is read from the SASS, never from the arm: one loop with 8 HMMA (one iteration of today's tile on 4
+    # warps), one without an MMA whose load stream is two of A0's iterations (ptxas unrolled it 2x)
+    import sass_count as sc
+    sc.toolchain = lambda: {"triton": "3.4.0", "ptxas": "12.8.93"}      # no triton needed to count text
+    head = "        /*0000*/                   MOV R1, c[0x0][0x28] ;\n"
+    mma = head + "".join(f"        /*{0x10 * (i + 1):04x}*/                   HMMA.1688.F32.TF32 R4, R8, R12, R4 ;\n"
+                         for i in range(8))
+    mma += ("        /*0090*/                   LDGSTS.E.BYPASS.128 [R2], desc[UR4][R6.64] ;\n"
+            "        /*00a0*/              @P0 BRA 0x10 ;\n        /*00b0*/                   EXIT ;\n")
+    rec = static_from_sass(mma, sc, arch=120, trip=12)
+    assert rec["has_mma"] and rec["unroll"] == 1 and rec["unroll_guard"] == "mma" and rec["stream_bytes"] == 2048, rec
+    light = (head + "        /*0010*/                   LDGSTS.E.BYPASS.128 [R2], desc[UR4][R6.64] ;\n"
+             "        /*0020*/                   LDGSTS.E.BYPASS.128 [R3], desc[UR4][R8.64] ;\n"
+             "        /*0030*/                   LOP3.LUT R4, R4, R5, RZ, 0x96, !PT ;\n"
+             "        /*0040*/              @P0 BRA 0x10 ;\n        /*0050*/                   EXIT ;\n")
+    rec = static_from_sass(light, sc, arch=120, trip=12, bytes_per_iteration=2048)
+    assert not rec["has_mma"] and rec["unroll"] == 2 and rec["unroll_guard"] == "bytes", rec
+    # NVML: a failed read is UNREAD (None), never 0; a sample straddling a tag change is dropped and counted; the
+    # field-value union is read by its type
+    import ctypes
+    import p157_cuda as cu
+
+    class _NV:
+        fail = set()
+
+        def __getattr__(self, name):
+            def call(*args):
+                if name in self.fail:
+                    return 999
+                ref = args[-1] if args else None
+                obj = getattr(ref, "_obj", None)
+                if name == "nvmlDeviceGetClockInfo":
+                    obj.value = 2400 if args[1] == 1 else 14001
+                elif name == "nvmlDeviceGetPowerUsage":
+                    obj.value = 480000
+                elif name == "nvmlDeviceGetEnforcedPowerLimit":
+                    obj.value = 575000
+                elif name == "nvmlDeviceGetFieldValues":
+                    obj.valueType, obj.value, obj.nvmlReturn = 1, 470123, 0
+                elif name.startswith("nvmlDeviceGetCurrentClocks"):
+                    obj.value = 4
+                return 0
+            return call
+    nv = _NV()
+    smp = cu.ClockSampler(nv=nv)
+    assert smp.error is None, smp.error
+    smp.tag = "A1"
+    smp.sample_once()
+    nv.fail = {"nvmlDeviceGetPowerUsage", "nvmlDeviceGetEnforcedPowerLimit"}
+    smp.sample_once()
+    read = smp._read
+
+    def flip():
+        v = read()
+        smp.tag = "A2b"
+        return v
+    smp._read = flip
+    smp.sample_once()
+    smm = smp.summary()
+    a1 = smm["A1"]
+    assert smm["dropped_straddling"] == 1 and a1["n"] == 2 and "A2b" not in smm, smm
+    assert a1["sm_mhz_median"] == 2400 and a1["power_w_median"] == 480.0 and a1["enforced_limit_w"] == [575.0], a1
+    assert a1["unread"]["power"] == 1 and a1["unread"]["limit"] == 1 and a1["power_instant_w_median"] == 470.123, a1
+    assert cu.field_value(0, int.from_bytes(ctypes.c_double(1.5), "little")) == 1.5
+    assert cu.field_value(5, 0xFFFFFFFF) == -1 and cu.field_value(3, 1 << 40) == 1 << 40 and cu.field_value(9, 1) is None
+    print("p157_bench self-test OK (10 cases)")
 
 
 if __name__ == "__main__":

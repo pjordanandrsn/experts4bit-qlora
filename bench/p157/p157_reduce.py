@@ -47,6 +47,7 @@ COPY_TOL = 0.01                            # |ACX / A0p - 1| beyond this: r is r
 TEST_RUNGS = ("AC4", "AC16")               # AC anchors onchip (g = 0); ACX (g = 1) is the copy check
 PINNED = ("A1", "A2b", "A12", "A3", "AL", "AC", "AC4", "AC16", "ACX", "ACX0", "AE")   # occupancy held at A0's when it differs
 PARITY = {"A1": "A0", "A2b": "A0", "A12": "A0", "A3": "A0"}                     # the arms whose loads must be A0's
+MMA_ARMS = ("A0p", "A1") + LADDER + ("ACX0",)    # compiled WITH an MMA; A2b, A12, A3, AL and AE without one
 #: What each ceiling prices; A2b's is never "staging" alone (A2a, which would have split them, is NOT BUILT).
 CEILINGS = {"A1": "the select-tree decode", "A2b": "the MMA and its operand staging",
             "A12": "the decode and the MMA with its staging", "A3": "everything but the loads"}
@@ -218,8 +219,15 @@ def gates(rec):
         fails[arm] = []
         for proj in ("gu", "dn"):
             r, a0 = (st.get(arm) or {}).get(proj), (st.get("A0") or {}).get(proj)
+            if r and r.get("error"):
+                fails[arm].append(f"{proj}: the static count refused: {r['error']}")
+                continue
             if not r or not a0 or not _same_tool(r, a0):
                 fails[arm].append(f"{proj}: no static record on A0's toolchain")
+                continue
+            if r.get("has_mma") is not (arm in MMA_ARMS):
+                fails[arm].append(f"{proj}: compiled {'with' if r.get('has_mma') else 'without'} an MMA (read from "
+                                  f"its SASS), registered {'with' if arm in MMA_ARMS else 'without'}")
                 continue
             if arm in PARITY:
                 if r.get("unrolled_away"):               # ptxas unrolled the light loop: whole-function totals
@@ -247,8 +255,9 @@ def gates(rec):
 
 def labels(rec):
     """Per-arm confounds, LABELLED beside the arm's numbers (never a reason to drop them): occupancy (the verified
-    CTAs per SM, the carveout or the graph node's shared bytes differ from A0's) and clocks (median SM clock off A0p's
-    by more than 2 %, either way)."""
+    CTAs per SM, the carveout or the graph node's shared bytes differ from A0's), clocks (median SM clock off A0p's by
+    more than 2 %, either way) and power (an enforced limit A0p never ran under). A clock or limit NVML could not read
+    is UNREAD: unknown, listed by :func:`unknowns`, never a label and never a 0."""
     occ, out = rec.get("occupancy") or {}, {arm: [] for arm in ARMS[2:]}
     for arm in out:
         for proj in ("gu", "dn"):
@@ -266,12 +275,28 @@ def labels(rec):
                                 f"{o.get('launch_shared')}")
     clk = rec.get("clocks") or {}
     base = (clk.get("A0p") or {}).get("sm_mhz_median")
+    lim0 = set((clk.get("A0p") or {}).get("enforced_limit_w") or [])
     for arm in out:
         c = (clk.get(arm) or {}).get("sm_mhz_median")
-        if not (_num(base) and _num(c)):
-            out[arm].append("clock unread")
-        elif abs(c / base - 1) > CLOCK_TOL:
+        if _num(base) and _num(c) and abs(c / base - 1) > CLOCK_TOL:
             out[arm].append(f"clock-confounded: SM {c:.0f} MHz against A0p's {base:.0f}")
+        lim = set((clk.get(arm) or {}).get("enforced_limit_w") or [])
+        if lim0 and lim and lim != lim0:
+            out[arm].append(f"power-confounded: enforced limit {sorted(lim)} W against A0p's {sorted(lim0)} W")
+    return out
+
+
+def unknowns(rec):
+    """Per arm, what NVML could not read (UNREAD): reported, never a label."""
+    clk = rec.get("clocks") or {}
+    out = {}
+    for arm in ("A0p",) + ARMS[3:]:
+        c = clk.get(arm) or {}
+        miss = [k for k, key in (("SM clock", "sm_mhz_median"), ("power", "power_w_median")) if not _num(c.get(key))]
+        if not c.get("enforced_limit_w"):
+            miss.append("enforced limit")
+        if miss:
+            out[arm] = miss
     return out
 
 
@@ -366,6 +391,7 @@ def verdict(rec, ncu=None):
         out.update(state="VOID", why=[f"self-pair median {self_pair['median']:.4f} outside {SELF_BAND}"])
         return out
     gate, lab = gates(rec), labels(rec)
+    out["unknown"] = unknowns(rec)
     full = [m["ACX"] - m["AE"] for m in ms]                 # the ladder's cubin at A0's bytes (one cubin with AC)
     mem = [m["A3"] - m["AL"] for m in ms]
     onchip = [m["AC"] - m["AE"] for m in ms]
@@ -497,11 +523,13 @@ def _fake(seed=0, n=70, layers=4, oc=7.0, dc=4.0, r=1.0, ae=0.4, noise=0.002, ru
                                         CUBINS["ladder"] else "e" * 64 if arm in ("A3", "AL") else arm, "loads_per_weight": {"LDGSTS.E.BYPASS.128": 0.25},
                                         "lane_instr_per_weight": {"A2b": 23.8, "A0": 24.1}.get(arm, 10.0),
                                         "loop_opcodes": {"HMMA.1688.F32.TF32": 8} if arm in ("A0", "A0p")
-                                        + CUBINS["ladder"] else {"LDGSTS": 3}, "loads_in_function": {"LDGSTS": 42},
+                                        + CUBINS["ladder"] else {"LDGSTS": 3},
+                                        "has_mma": arm in ("A0",) + MMA_ARMS, "loads_in_function": {"LDGSTS": 42},
                                         "loads_outside_loop": {"LDGSTS": 6}, "loop_loads": {"LDGSTS": 3}}
     rec["occupancy"] = {arm: {p: {"ctas_per_sm": 6, "carveout": -1, "launch_shared": 14592, "node_shared": [14592] * 4}
                               for p in ("gu", "dn")} for arm in ARMS if arm != "T2"}
-    rec["clocks"] = {arm: {"sm_mhz_median": 2700.0} for arm in ARMS}
+    rec["clocks"] = {arm: {"sm_mhz_median": 2700.0, "power_w_median": 560.0, "enforced_limit_w": [575.0]}
+                     for arm in ARMS}
     for i in range(n):
         step = CONFIRM_STEPS[i]
         sl = {str(mk): {p: [min(nreal[i][li], mk + 1) if mk < 127 else nreal[i][li] for li in range(LAYERS)]
@@ -632,6 +660,28 @@ def self_test():
     v = verdict(bad)
     expect("an arm 3.7 % off A0p's clock is labelled", any("clock-confounded" in x for x in v["labels"]["A1"])
            and v["r_dram"]["called"], v["labels"]["A1"])
+    bad = _fake()
+    bad["static"]["A1"]["dn"]["has_mma"] = False
+    v = verdict(bad)
+    expect("an MMA arm compiled without an MMA fails its gate", not v["ceilings"]["A1"]["valid"]
+           and any("without an MMA" in x for x in v["gates"]["A1"]), v["gates"]["A1"])
+    bad = _fake()
+    bad["static"]["A12"]["gu"] = {"error": "ValueError: unroll guard by bytes: 3584 bytes in the loop is not a whole "
+                                           "number of 4096-byte iterations"}
+    v = verdict(bad)
+    expect("a refused static count is surfaced verbatim", any("unroll guard by bytes" in x
+                                                              for x in v["gates"]["A12"]), v["gates"]["A12"])
+    bad = _fake()
+    bad["clocks"]["A3"] = {"sm_mhz_median": None, "power_w_median": None, "enforced_limit_w": []}
+    v = verdict(bad)
+    expect("UNREAD clocks are unknown, never a label", v["labels"]["A3"] == [] and v["r_dram"]["called"]
+           and set(v["unknown"]["A3"]) == {"SM clock", "power", "enforced limit"}, (v["labels"]["A3"], v["unknown"]))
+    bad = _fake()
+    bad["clocks"]["AL"]["enforced_limit_w"] = [480.0]
+    v = verdict(bad)
+    expect("an enforced limit A0p never ran under labels the arm", any("power-confounded" in x
+                                                                      for x in v["labels"]["AL"])
+           and not v["r_dram"]["called"], v["labels"]["AL"])
     bad = _fake()
     bad["static"]["A2b"]["gu"]["lane_instr_per_weight"] = 24.5
     expect("A2b not cheaper -> its ceiling invalid", not verdict(bad)["ceilings"]["A2b"]["valid"])

@@ -9,12 +9,13 @@
   capture is open (grid, block, ``sharedMemBytes``), so a pinned arm's pad is checked where it is timed;
 - :class:`ClockSampler`: NVML's SM clock, memory clock, power (the averaged draw, the instantaneous draw and the
   ENFORCED limit, so a drifting cap is told apart from boost) and clock-event reasons, sampled while a graph replays and
-  tagged with the arm replaying.
+  tagged with the arm replaying; a failed read is UNREAD (None), and a sample straddling a tag change is dropped.
 """
 from __future__ import annotations
 
 import ctypes
 import statistics
+import struct
 import threading
 import time
 
@@ -107,50 +108,91 @@ class _FieldValue(ctypes.Structure):            # nvmlFieldValue_t
                 ("value", ctypes.c_ulonglong)]
 
 
+def field_value(value_type: int, raw: int):
+    """An nvmlValue_t union, read by its nvmlValueType_t: 0 double, 1 unsigned int, 2 unsigned long, 3 unsigned long
+    long, 4 signed long long, 5 signed int, 6 unsigned short. None for a type this probe does not know."""
+    raw &= 0xFFFFFFFFFFFFFFFF
+    if value_type == 0:
+        return struct.unpack("<d", raw.to_bytes(8, "little"))[0]
+    if value_type in (2, 3):
+        return raw
+    if value_type == 4:
+        return raw - (1 << 64) if raw >> 63 else raw
+    if value_type == 1:
+        return raw & 0xFFFFFFFF
+    if value_type == 5:
+        v = raw & 0xFFFFFFFF
+        return v - (1 << 32) if v >> 31 else v
+    if value_type == 6:
+        return raw & 0xFFFF
+    return None
+
+
+def _median(xs):
+    xs = [x for x in xs if x is not None]
+    return statistics.median(xs) if xs else None
+
+
 class ClockSampler(threading.Thread):
     """NVML samples every ``period`` seconds while :attr:`tag` names the arm replaying (None between replays).
-    :meth:`summary` gives each arm's median SM clock, memory clock and power, and its clock-event reasons."""
 
-    def __init__(self, index: int = 0, period: float = 0.002):
+    Every NVML call's return code is checked: a failed read is recorded as None (UNREAD), never as 0. A sample whose
+    tag changed while it was being read straddles two replays, so it is dropped and counted (``dropped_straddling``).
+    :meth:`summary` gives each arm's median SM clock, memory clock and power (None when every read failed), its
+    enforced limits and its clock-event reasons."""
+
+    def __init__(self, index: int = 0, period: float = 0.002, nv=None):
         super().__init__(daemon=True)
-        self.tag, self.period, self.samples, self.error = None, period, [], None
+        self.tag, self.period, self.samples, self.error, self.dropped = None, period, [], None, 0
         self._stop_evt = threading.Event()
         try:
-            self.nv = ctypes.CDLL("libnvidia-ml.so.1")
+            self.nv = nv or ctypes.CDLL("libnvidia-ml.so.1")
             _ok(self.nv.nvmlInit_v2(), "nvmlInit_v2")
             self.h = ctypes.c_void_p(0)
             _ok(self.nv.nvmlDeviceGetHandleByIndex_v2(ctypes.c_uint(index), ctypes.byref(self.h)),
                 "nvmlDeviceGetHandleByIndex_v2")
             self.reasons = (getattr(self.nv, "nvmlDeviceGetCurrentClocksEventReasons", None)
                             or self.nv.nvmlDeviceGetCurrentClocksThrottleReasons)
-        except Exception as e:                    # noqa: BLE001  (recorded: the reducer labels every arm "clock unread")
+        except Exception as e:                    # noqa: BLE001  (recorded: the reducer reads every arm's clock UNREAD)
             self.error = f"{type(e).__name__}: {e}"
 
     def _read(self):
+        """(sm MHz, mem MHz, power W, reasons, enforced limit W, instantaneous power W), each None if its call failed."""
+        nv, h = self.nv, self.h
         sm, mem, mw, rs, lim = (ctypes.c_uint(0), ctypes.c_uint(0), ctypes.c_uint(0), ctypes.c_ulonglong(0),
                                 ctypes.c_uint(0))
-        self.nv.nvmlDeviceGetClockInfo(self.h, 1, ctypes.byref(sm))
-        self.nv.nvmlDeviceGetClockInfo(self.h, 2, ctypes.byref(mem))
-        self.nv.nvmlDeviceGetPowerUsage(self.h, ctypes.byref(mw))
-        self.reasons(self.h, ctypes.byref(rs))
-        self.nv.nvmlDeviceGetEnforcedPowerLimit(self.h, ctypes.byref(lim))
+        sm_v = sm.value if nv.nvmlDeviceGetClockInfo(h, 1, ctypes.byref(sm)) == 0 else None
+        mem_v = mem.value if nv.nvmlDeviceGetClockInfo(h, 2, ctypes.byref(mem)) == 0 else None
+        mw_v = mw.value / 1000.0 if nv.nvmlDeviceGetPowerUsage(h, ctypes.byref(mw)) == 0 else None
+        rs_v = rs.value if self.reasons(h, ctypes.byref(rs)) == 0 else None
+        lim_v = lim.value / 1000.0 if nv.nvmlDeviceGetEnforcedPowerLimit(h, ctypes.byref(lim)) == 0 else None
         fv = _FieldValue(fieldId=_FI_POWER_INSTANT)
         inst = None
-        if self.nv.nvmlDeviceGetFieldValues(self.h, 1, ctypes.byref(fv)) == 0 and fv.nvmlReturn == 0:
-            inst = (fv.value & 0xFFFFFFFF) / 1000.0          # an unsigned int in the union's low word
-        return sm.value, mem.value, mw.value / 1000.0, rs.value, lim.value / 1000.0, inst
+        if nv.nvmlDeviceGetFieldValues(h, 1, ctypes.byref(fv)) == 0 and fv.nvmlReturn == 0:
+            v = field_value(fv.valueType, fv.value)
+            inst = v / 1000.0 if v is not None else None              # mW
+        return sm_v, mem_v, mw_v, rs_v, lim_v, inst
+
+    def sample_once(self):
+        """One sample if an arm is replaying: kept only if the tag held across the read."""
+        tag = self.tag
+        if tag is None:
+            return
+        vals = self._read()
+        if self.tag != tag:
+            self.dropped += 1
+            return
+        self.samples.append((tag, *vals))
 
     def run(self):
         if self.error:
             return
         while not self._stop_evt.is_set():
-            tag = self.tag
-            if tag is not None:
-                try:
-                    self.samples.append((tag, *self._read()))
-                except Exception as e:            # noqa: BLE001
-                    self.error = f"{type(e).__name__}: {e}"
-                    return
+            try:
+                self.sample_once()
+            except Exception as e:                # noqa: BLE001
+                self.error = f"{type(e).__name__}: {e}"
+                return
             time.sleep(self.period)
 
     def stop(self):
@@ -158,19 +200,22 @@ class ClockSampler(threading.Thread):
         self.join(timeout=2)
 
     def summary(self) -> dict:
-        out = {"error": self.error, "n": len(self.samples), "period_s": self.period}
-        arms = sorted({s[0] for s in self.samples})
-        for arm in arms:
+        out = {"error": self.error, "n": len(self.samples), "period_s": self.period,
+               "dropped_straddling": self.dropped}
+        for arm in sorted({s[0] for s in self.samples}):
             xs = [s for s in self.samples if s[0] == arm]
             reasons = {}
             for s in xs:
-                reasons[hex(s[4])] = reasons.get(hex(s[4]), 0) + 1
+                key = "unread" if s[4] is None else hex(s[4])
+                reasons[key] = reasons.get(key, 0) + 1
+            sm = [s[1] for s in xs if s[1] is not None]
             inst = [s[6] for s in xs if s[6] is not None]
-            out[arm] = {"n": len(xs), "sm_mhz_median": statistics.median(s[1] for s in xs),
-                        "sm_mhz_min": min(s[1] for s in xs), "sm_mhz_max": max(s[1] for s in xs),
-                        "mem_mhz_median": statistics.median(s[2] for s in xs),
-                        "power_w_median": statistics.median(s[3] for s in xs),
-                        "power_instant_w_median": statistics.median(inst) if inst else None,
+            out[arm] = {"n": len(xs), "sm_mhz_median": _median(sm), "sm_mhz_min": min(sm) if sm else None,
+                        "sm_mhz_max": max(sm) if sm else None, "mem_mhz_median": _median(s[2] for s in xs),
+                        "power_w_median": _median(s[3] for s in xs), "power_instant_w_median": _median(inst),
                         "power_instant_w_max": max(inst) if inst else None,
-                        "enforced_limit_w": sorted({s[5] for s in xs}), "reasons": reasons}
+                        "enforced_limit_w": sorted({s[5] for s in xs if s[5] is not None}),
+                        "unread": {k: sum(1 for s in xs if s[i] is None) for i, k in
+                                   ((1, "sm"), (2, "mem"), (3, "power"), (4, "reasons"), (5, "limit"), (6, "instant"))},
+                        "reasons": reasons}
         return out

@@ -368,7 +368,7 @@ REDUCE_MUTANTS = [
     # the graph nodes' shared bytes not checked
     ('            if not nodes or any(n != o.get("launch_shared") for n in nodes):\n', '            if False:\n'),
     # the clock rule not applied
-    ('        elif abs(c / base - 1) > CLOCK_TOL:\n', '        elif False:\n'),
+    ('        if _num(base) and _num(c) and abs(c / base - 1) > CLOCK_TOL:\n', '        if False:\n'),
     # Nsight's dose check not applied
     ('        passed = ok and all(abs(checks[k] - 1) <= NCU_DOSE_TOL for k in LADDER + ("AL",)) and abs(',
      '        passed = ok and all(abs(checks[k] - 1) <= 9 for k in LADDER + ("AL",)) and abs('),
@@ -376,6 +376,12 @@ REDUCE_MUTANTS = [
     ('            first.append(hi)\n            hi -= 1\n', '            first.append(lo)\n            lo += 1\n'),
     # the copy gap passing silently
     ('    if not copy_["gap_within_tol"]:\n', '    if False:\n'),
+    # an MMA arm that compiled without one read as if it had (b1-decode's (2))
+    ('            if r.get("has_mma") is not (arm in MMA_ARMS):\n', '            if False:\n'),
+    # a refused static count hidden behind "no static record" (b1-decode's (1))
+    ('            if r and r.get("error"):\n', '            if False:\n'),
+    # a drifted enforced power limit not labelled
+    ('        if lim0 and lim and lim != lim0:\n', '        if False:\n'),
 ]
 BENCH_MUTANTS = [
     # no spacer before the timed replay
@@ -394,18 +400,32 @@ BENCH_MUTANTS = [
     ("            nodes = capture_kernel_nodes(torch.cuda.current_stream().cuda_stream)", "            nodes = []"),
     # ACX0's bits not checked
     ('                     for arm in ("T2", "A0p", "ACX0")}', '                     for arm in ("T2", "A0p")}'),
+    # has_mma assumed instead of read from the SASS
+    ('    has_mma = any(sc.classify(op) == "mma" for _, op, _ in rows)', '    has_mma = True'),
+]
+CUDA_MUTANTS = [                                          # run through the bench's self-test, which drives a fake NVML
+    # a sample straddling a tag change kept (b1-decode's (5))
+    ("        if self.tag != tag:\n            self.dropped += 1\n            return\n", ""),
+    # a failed power read recorded as 0 W (b1-decode's (3))
+    ("        mw_v = mw.value / 1000.0 if nv.nvmlDeviceGetPowerUsage(h, ctypes.byref(mw)) == 0 else None",
+     "        nv.nvmlDeviceGetPowerUsage(h, ctypes.byref(mw))\n        mw_v = mw.value / 1000.0"),
+    # the field-value union read without its type (b1-decode's (4))
+    ('        return struct.unpack("<d", raw.to_bytes(8, "little"))[0]', "        return raw"),
 ]
 
 
 @pytest.mark.parametrize("script,old,new", [("p157_reduce.py", o, n) for o, n in REDUCE_MUTANTS]
-                         + [("p157_bench.py", o, n) for o, n in BENCH_MUTANTS])
+                         + [("p157_bench.py", o, n) for o, n in BENCH_MUTANTS]
+                         + [("p157_cuda.py", o, n) for o, n in CUDA_MUTANTS])
 def test_each_mutant_fails_the_self_test(tmp_path, script, old, new):
     src = (LANE / script).read_text(encoding="utf-8")
     assert src.count(old) == 1, old
     (tmp_path / script).write_bytes(src.replace(old, new).encode("utf-8"))
-    if script == "p157_bench.py":                                    # the bench imports its sibling reducer
-        shutil.copy(LANE / "p157_reduce.py", tmp_path / "p157_reduce.py")
-    out = _run(tmp_path / script, "--self-test")
+    if script != "p157_reduce.py":                    # the bench's self-test imports its siblings
+        for sib in ("p157_reduce.py", "p157_bench.py", "p157_cuda.py", "sass_count.py"):
+            if sib != script:
+                shutil.copy(LANE / sib, tmp_path / sib)
+    out = _run(tmp_path / ("p157_reduce.py" if script == "p157_reduce.py" else "p157_bench.py"), "--self-test")
     assert out.returncode != 0 and "FAILED" in out.stdout, out.stdout + out.stderr
 
 
