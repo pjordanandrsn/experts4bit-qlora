@@ -304,7 +304,8 @@ K25's select-tree codebook decode for grouped-nf4-gemm K39's (`lut="prmt"`), whi
   device that cannot serve it.
 - **Scope:** the default covers every `qwen3_moe` checkpoint, Qwen3-235B-A22B included. The decode is bit-identical
   to the tree, so the values are the same everywhere; the speed was read only at Qwen3-30B-A3B's expert shapes on an
-  RTX 5090 (170 SMs) at today's K25 plan. Other families stay on the tree.
+  RTX 5090 (170 SMs) at today's K25 plan, and no speed is claimed for other shapes (a 235B scale-up lane is where it
+  gets read). Other families stay on the tree.
 
 `e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20` ([P158](../bench/p158/RESULTS-p158.md)).
 

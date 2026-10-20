@@ -438,13 +438,19 @@ _K25_PLAN = {"block_n": 32, "kc": 64, "warps": 4, "stages": 3, "lut": "tree", "d
 #: model_type here, at engine build (:func:`resolve_k25_lut`), where the installed grouped-nf4-gemm carries K39's decode
 #: and the device is NVIDIA, and to ``tree`` everywhere else, with the reason recorded. qwen3_moe takes it on P158's
 #: served read (p158-5090-1: FLIP, 16 requests 1.0925x as fast, the min of four ABBA pairs; one request 0.9999; every
-#: token identical, the decode being bit-identical to the tree). Other families wait for a read of their own.
-#: ``tree`` opts out; an explicit ``prmt`` still refuses a kernel package or device that cannot serve it.
+#: token identical, the decode being bit-identical to the tree). The default covers EVERY qwen3_moe checkpoint, the 235B
+#: included: the values are bit-identical everywhere, and only the speed is unmeasured outside Qwen3-30B-A3B's shapes on
+#: one RTX 5090 (no speed is claimed there; a 235B scale-up lane is where it gets read). Other families wait for a read
+#: of their own. ``tree`` opts out; an explicit ``prmt`` still refuses a kernel package or device that cannot serve it.
 K25_LUT_DEFAULT_FAMILIES: dict = {
     "qwen3_moe": "prmt",   # e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20 (bench/p158/RESULTS-p158.md)
 }
 #: What an UNSET ``E4B_K25_LUT`` means in this process: ``tree`` until :func:`resolve_k25_lut` resolves the per-family
-#: default at engine build (one list cell, so the forward reads the build's resolution, never a stale import).
+#: default at engine build (one list cell, so the forward reads the build's resolution, never a stale import). It is
+#: PROCESS-WIDE, and assumes one engine per process, which is what ``serve_paged`` builds: the route functions are
+#: module-level and carry no engine handle. A process that builds engines for two families keeps the last build's
+#: resolution for both, so qwen3_moe's ``prmt`` could reach another family's K25 calls. Its values are bit-identical to the
+#: tree's, so that costs nothing but an unmeasured speed.
 _K25_LUT_DEFAULT = ["tree"]
 
 

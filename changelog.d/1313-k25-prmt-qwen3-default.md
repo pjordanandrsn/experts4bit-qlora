@@ -10,7 +10,10 @@ requests 1.0925x as fast as the select tree (the min of four ABBA pairs), one re
   values), so no install breaks and the dependency floor does not move. An explicit `E4B_K25_LUT=prmt` keeps its
   refusals; `E4B_K25_LUT=tree` opts out.
 - **Scope:** every `qwen3_moe` checkpoint (Qwen3-235B-A22B included) takes the default. The decode is bit-identical
-  to the tree, so the values are the same; the speed was read only at Qwen3-30B-A3B's expert shapes.
+  to the tree, so the values are the same; the speed was read only at Qwen3-30B-A3B's expert shapes on one RTX 5090,
+  and no speed is claimed for other shapes.
+- **One engine per process:** the resolved default is process-wide, as `serve_paged` builds one engine per process. A
+  process that builds two families keeps the last build's resolution for both (bit-identical values; speed only).
 - **Other families** stay on the tree until a read of their own.
 - **Docs:** the measured claim `e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20` and its STATUS entry.
 
