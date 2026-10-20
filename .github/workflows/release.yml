@@ -15,9 +15,29 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       id-token: write # mint the OIDC token PyPI trusts
-      actions: read   # read CI's runs at the tag's commit (the step before publishing)
+      actions: read   # read CI's runs at the tag's commit (the first step after checkout)
     steps:
       - uses: actions/checkout@v4
+      - name: CI is green at the tag's commit (refuse to publish otherwise)
+        # First after checkout: the job holds id-token: write throughout, so nothing else (setup, the build, the
+        # smoke's pip installs) runs on a commit this step would refuse. The commit is read from the checkout above,
+        # which is the release's tag. Only push and workflow_dispatch
+        # runs of ci.yml count: a pull_request run whose head is this commit tested refs/pull/N/merge. The release
+        # script waits for that commit's CI to go green before publishing; this step is the backstop. The count is
+        # checked as an integer: a non-integer used to make the old `-lt 1` test error inside its if, which passed.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SHA=$(git rev-parse HEAD)
+          n=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SHA}&status=success&per_page=100" \
+                --jq '[.workflow_runs[] | select(.event == "push" or .event == "workflow_dispatch")] | length') \
+            || { echo "::error::could not read ci.yml's runs at ${SHA}; refusing to publish"; exit 1; }
+          [ "${n:-0}" -ge 1 ] 2>/dev/null || {
+            echo "::error::no successful CI run at the tagged commit ${SHA} (read: '${n}'). If a CI run at ${SHA} is still running, wait for it to go green and re-run this job; otherwise dispatch CI at the tag (gh workflow run CI --ref <tag>), then re-run this job."
+            exit 1
+          }
+          echo "CI green at ${SHA} (${n} successful run(s))"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -34,22 +54,5 @@ jobs:
           cd /tmp && ./venv/bin/python wheel_smoke.py
       - name: README link check (real tag URLs)
         run: python scripts/check_readme_links.py
-      - name: CI is green at the tag's commit (refuse to publish otherwise)
-        # CI collapses pending runs on main, so the tagged commit may have no run of its own. The release guide
-        # says to dispatch CI at the tag first (gh workflow run CI --ref vX.Y.Z); this step makes it a gate: no
-        # successful push or dispatch ci.yml run on exactly this commit, no PyPI upload.
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          # push and workflow_dispatch runs test this exact commit; a pull_request run whose head is this sha tested
-          # refs/pull/N/merge instead, so it does not count.
-          n=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${GITHUB_SHA}&status=success&per_page=100" \
-                --jq '[.workflow_runs[] | select(.event == "push" or .event == "workflow_dispatch")] | length')
-          if [ "${n:-0}" -lt 1 ]; then
-            echo "::error::no successful CI run at ${GITHUB_SHA}. Run CI at the tag (gh workflow run CI --ref ${GITHUB_REF_NAME}), wait for green, then re-run this job."
-            exit 1
-          fi
-          echo "CI green at ${GITHUB_SHA} (${n} successful run(s))"
       - name: Publish to PyPI (Trusted Publishing)
         uses: pypa/gh-action-pypi-publish@release/v1
