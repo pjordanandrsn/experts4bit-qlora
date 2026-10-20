@@ -91,6 +91,10 @@ def box_need() -> int:
 
 
 TEMPLATE = HERE / "dq11_mlp_phase2_manifest_template.json"
+#: The box script's free-disk floor in decimal GB, rounded UP (a declared floor never sits below the real one): the
+#: box refuses below 120,000,000 KiB from `df -Pk` (1024-byte blocks), which is 122.88 GB. The shared launcher's
+#: preflight disk check reads it from the bound manifest's lane_record.min_disk_gb, so bind_manifest writes it.
+BOX_MIN_DISK_GB = 123
 RUN_ID = re.compile(r"dq11-mlp-phase2-[1-9][0-9]*")
 HEX40 = re.compile(r"[0-9a-f]{40}")
 DRIVER = re.compile(r"[0-9]{3}\.[0-9]{1,3}\.[0-9]{1,3}")
@@ -118,6 +122,7 @@ def bind_manifest(run_id, *, e4b_head, adertha_head, machine, offers, driver, as
                     "bash bench/dq11/dq11_mlp_phase2_drive.sh")
     m["vast_pin_machine"], m["vast_pin_offers"], m["vast_required_driver"] = machine, offers, driver
     m["lane_record"]["status"] = "BOUND_PENDING_VALIDATE"
+    m["lane_record"]["min_disk_gb"] = BOX_MIN_DISK_GB
     m["lane_record"]["phase2"]["template_sha256"] = r1._sha(Path(template))
     with output.open("x") as stream:
         json.dump(m, stream, indent=2)

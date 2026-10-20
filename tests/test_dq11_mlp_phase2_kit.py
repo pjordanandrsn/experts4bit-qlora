@@ -80,6 +80,7 @@ def test_binding_pins_by_inclusion_and_is_write_once_outside_the_tree(tmp_path):
     assert json.loads(out.read_text()) == m
     assert m["vast_pin_machine"] == "1234" and m["vast_pin_offers"] == ["11", "12"] and m["vast_required_driver"] == "590.44.01"
     assert m["command"].endswith("bash bench/dq11/dq11_mlp_phase2_drive.sh") and "DQ11_REQUIRED_DRIVER=590.44.01" in m["command"]
+    assert m["lane_record"]["min_disk_gb"] == r2.BOX_MIN_DISK_GB == 123                    # the launcher's preflight disk check
     assert m["heads"] == {"e4b": "a" * 40, "adertha": "b" * 40} and set(m) == set(CENSUS) | {"heads", "command",
                                                                                               "vast_pin_machine", "vast_pin_offers",
                                                                                               "vast_required_driver"}
@@ -116,3 +117,13 @@ def test_the_fit_part_prints_the_box_need_without_torch(monkeypatch, capsys):
     monkeypatch.setattr(r2, "B_READ_S", 1800)
     assert r2.main(["--target", "5090", "--part", "fit", "--directory", ".", "--cache", ".", "--out", "unused"]) == 0
     assert int(capsys.readouterr().out.strip()) == r2.box_need()
+
+
+def test_the_declared_disk_floor_is_the_box_scripts_own():
+    """bind_manifest declares lane_record.min_disk_gb: the box script's own free-disk floor in decimal GB, rounded
+    up. The box reads `df -Pk`, whose blocks are 1024 bytes."""
+    import math
+
+    assert "df -Pk" in BOX
+    floor_kb = int(re.search(r'\[ "\$free_kb" -ge ([0-9]+) \]', BOX).group(1))
+    assert math.ceil(floor_kb * 1024 / 1e9) == r2.BOX_MIN_DISK_GB
