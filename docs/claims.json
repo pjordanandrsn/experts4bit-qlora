@@ -12577,6 +12577,33 @@
         "the private receipt store, run p153-5090-1 (receipt.json, teardown-proof.json)"
       ],
       "notes": "Pre-registered in #1826 (one non-consumer review and the maintainer's final pass, before any data). The premise: P148's D2_GO (a microbench projection of 0.189546 ms) and P150's quality GO for the grid at both of P125's gates on held-out windows. The warm-up process read W1 0.9989 of S0a; it loaded in 38.0 s against 20.6-21.8 s for every later arm. W1 self-pairs 0.9993-1.0003, W16 0.9958-1.0010. Observed and not attributed: S1's W16 rate is below S0's in every pair (0.9918-0.9970), though that rate is a slope over bucket-16 replays only, where the head is passed to F.linear (the ramp's two routed one-row steps per run cancel between lengths; the row check runs at graph capture only). The candidates: the resident int8 copy (memory_allocated +311,772,672 bytes, exactly the codes and scales; reserved +400 MiB) and token divergence (12 of 16 W16 rows diverge by 160 tokens, so different router picks). A $0 router replay (bench/p153/router-replay/, after the read) bounds the token-divergence term out: distinct experts per counted bucket-16 step, S1/S0 = 0.9990 under bands stated before the run (bf16 experts, teacher-forced on the recorded streams, argmax fidelity 0.94; a bound, not the served NF4 picks), and every row-per-expert spread metric within +/-0.5 % with mixed signs. The resident int8 copy is the remaining named candidate. W1 tokens identical between arms; W16 rows diverge (the head is rounded at every row count). The host's card ran at a 575 W power limit; the verdict is ratios within one host. The maintainer re-derived the verdict from the store byte for byte. P153 cost $0.445 on one launch (the registered fallback tier). Measured basis: Qwen3-30B-A3B's 151936 x 2048 untied head on an RTX 5090 (170 SMs) at K36's tuned plan; other heads take K36's untuned default plan and other cards are not read; their speed is not claimed here. The default: E4B_INT8_HEAD_BW is on for qwen3_moe at the 151936 x 2048 head (serve_paged.INT8_HEAD_BW_DEFAULT_FAMILIES); quality read on Qwen3-30B-A3B @ad44e777; same-shape checkpoints inherit the default unread; E4B_INT8_HEAD_BW=0 opts out. It needs grouped-nf4-gemm 0.48.0 or later (K36's first release); with an older release the default resolves off, recorded in info.int8_head_bw."
+    },
+    {
+      "id": "e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P158 (one RTX 5090): serving Qwen3-30B-A3B's batched-decode expert GEMM (K25) with grouped-nf4-gemm v0.50.0's K39 codebook decode (E4B_K25_LUT=prmt, K25's lut=\"prmt\", bit-identical to the select tree) decodes sixteen concurrent requests 1.0925x as fast on the default serve_paged server (the smallest of four ABBA pairs, 1.0925-1.0934; about 976 -> 1067 tok/s), with one request unchanged (g1 0.9999 against the 0.99 no-regression line; K25 is not on the T == 1 path) and every token identical to the tree's. Under P158's rule it licenses a separate PR to make prmt qwen3_moe's K25 decode by default.",
+      "value": 1.0925,
+      "unit": "ratio, S1 / S0 sixteen-request decode rate (tokens/s), the smallest of four ABBA pairs (unrounded 1.092458; S1a/S0a 1.0925, S1b/S0b 1.0934, S1c/S0c 1.0934, S1d/S0d 1.0932)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, driver 615.71.09, a 575 W power limit, enforced 575 W), one rented Vast.ai host (verified-secure, AMD Ryzen 7 9800X3D, 16 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @406a391a (P158's registration merge, #1864) + grouped-nf4-gemm v0.50.0 @41ef086e; torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0, bitsandbytes 0.50.2; premise 49 tests passed on the card (K39's compiled contract and e4b's served-route contract among them); Qwen/Qwen3-30B-A3B @ad44e777, NF4 arena baked on the box; the default serve_paged server (graphs on, max_seqs 16 x 4096 tokens, buckets 1-16, the split cap and the int8 head at their qwen3_moe defaults, the dense attention GEMV off, K25 at auto); a warm-up process S0w (integrity-checked, never scored), then eight arms ABBA twice (S0 = E4B_K25_LUT=tree, S1 = prmt), P109's W16 and W1 at 32 and 160 tokens, 5 timed reps, a 575 W floor on the power limit and the enforced limit either side of every timed block, a 500 ms clock sampler during it; early gates on the build's engagement counts (K25 960, bandwidth GEMV 480) after S0w and S1a; verdict by bench/p158/p158_reduce.py",
+      "measured_on": "2026-10-20",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p158/RESULTS-p158.md",
+        "bench/p158/PREREG-p158.md",
+        "bench/p158/p158_reduce.py",
+        "bench/p158/receipts/p158-5090-1/verdict_p158.json",
+        "bench/p158/receipts/p158-5090-1/SHA256SUMS",
+        "bench/p158/layercut/README.md",
+        "bench/p156/RESULTS-p156.md"
+      ],
+      "evidence_private": [
+        "the private receipt store, run p158-5090-1 (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #1864 (one non-consumer review and the maintainer's final pass, before any data). The premise: P156's microbench GO (1.1755x on the two K25 GEMMs, at least 1.110 under its sampled clock range). The tree decoded the same tokens in all five of its processes (the null) and the prmt arms decoded those tokens (the contract), at W16 and W1. Every build recorded exactly 960 K25 calls under its own decode and 480 bandwidth-GEMV calls. Self-pairs W16 0.9994-1.0003, W1 0.9998-1.0006. The median sampled SM clock read 2842 MHz in every S1 arm and 2835 in every S0 arm (+0.25 %, no pair labelled); the software power-cap event appeared in 0.40-0.44 of the tree's W16 samples and 0.07-0.18 of prmt's at an unchanged 575 W enforced limit, part of the served difference, not a confound. The maintainer re-derived the verdict from the store byte for byte. P158 cost $0.419 on one launch. Measured basis: Qwen3-30B-A3B's expert shapes on an RTX 5090 (170 SMs) at today's K25 plan; other families, cards and plans are not read. The default: E4B_K25_LUT unset resolves to prmt on qwen3_moe where the installed grouped-nf4-gemm carries K39 (0.50.0 or later) on NVIDIA (hot_residency.K25_LUT_DEFAULT_FAMILIES), and to tree otherwise, recorded in info.k25_lut.source; E4B_K25_LUT=tree opts out."
     }
   ]
 }

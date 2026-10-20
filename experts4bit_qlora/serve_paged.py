@@ -1593,9 +1593,11 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     for path in (cfg.arena, cfg.arena + ".index.json", cfg.calib):
         if not os.path.exists(path):
             raise FileNotFoundError(path)
-    # E4B_K25_LUT, resolved before the load: a misconfigured knob fails at startup, never on the first request
-    from .engines.hot_residency import resolve_k25_lut
-    k25_lut = resolve_k25_lut()
+    # E4B_K25_LUT's explicit value, checked before the load: a misconfigured knob fails at startup, never on the first
+    # request (the per-family default is resolved below, once the model's config is read)
+    from .engines.hot_residency import _k25_lut_raw, resolve_k25_lut
+    if _k25_lut_raw():
+        resolve_k25_lut()             # an explicit value does not depend on the family: its refusals come here
 
     import torch
     from transformers import AutoTokenizer
@@ -1623,6 +1625,9 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
         model_config, why = None, None
     if why:
         raise RuntimeError(f"serve_paged refuses {cfg.model}: {why}")   # before any weight is read
+    # E4B_K25_LUT resolved for this family, still before any weight is read: an explicit prmt the package or device
+    # cannot serve refuses here; unset, qwen3_moe takes prmt where it can (lane P158), every other case the tree
+    k25_lut = resolve_k25_lut(getattr(model_config, "model_type", None))
     if str(cfg.max_seqs_requested).strip().lower() == "auto":
         # sized before any weight is read: the estimate's device total includes the weights
         free = (torch.cuda.mem_get_info(torch.device(cfg.device))[0]

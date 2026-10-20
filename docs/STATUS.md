@@ -289,6 +289,23 @@ GEMV, which reads half the head's bytes.
 
 `e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19` ([P153](../bench/p153/RESULTS-p153.md)).
 
+**Qwen3-30B-A3B's batched decode runs K25 with K39's byte-permute decode (on by default).** `E4B_K25_LUT=prmt` swaps
+K25's select-tree codebook decode for grouped-nf4-gemm K39's (`lut="prmt"`), which yields the same values bit for bit.
+- **Speed:** sixteen requests decode **1.0925×** as fast on a 5090 (about 976 → 1067 tok/s; the smallest of four ABBA
+  pairs, 1.0925-1.0934). One request is unchanged (0.9999): K25 is not on the T == 1 path.
+- **Identity:** every token the prmt arms decoded is the tree's, at 16 and 1 requests; the tree's own null held across
+  five processes.
+- **Clocks:** the median SM clocks differ by 0.25 %. The tree hit the 575 W power cap more often (0.40-0.44 of its
+  samples, against 0.07-0.18), part of the served difference rather than a confound.
+- **Default:** on for `qwen3_moe`. It needs K39's decode, first released in grouped-nf4-gemm 0.50.0, and an NVIDIA
+  device. With an older release or on ROCm the default resolves to the tree (the same values), recorded in
+  `info["k25_lut"]["source"]`. `E4B_K25_LUT=tree` opts out; an explicit `E4B_K25_LUT=prmt` still refuses a package or
+  device that cannot serve it.
+- **Measured basis:** Qwen3-30B-A3B's expert shapes on an RTX 5090 (170 SMs) at today's K25 plan. Other families,
+  cards and plans are not read, and stay on the tree.
+
+`e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20` ([P158](../bench/p158/RESULTS-p158.md)).
+
 **Calibrated int4 attention is not licensed on the default.** On Qwen3-30B-A3B, `E4B_SERVE_ATTN_INT4_CALIB=1` decodes
 one request 1.154× as fast (1.238× with the int4 lm_head too). The mean NLL bias stays inside K8's budget, but only
 92.9 % of next-token argmaxes agree with the default at one window per pass (91.8 % with the head), against the 0.95
