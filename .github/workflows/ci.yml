@@ -15,6 +15,16 @@ on:
     types: [labeled, ready_for_review]
   workflow_dispatch:
 
+# One group per lane (2026-10-20). Push (main only, by the trigger) shares ci-main and never
+# cancels a started run, so pending runs collapse: the newest main commit always gets a full run, and its tree
+# contains every collapsed commit (on 2026-10-08..19 history: 496 main runs -> 298, a third of main CI's runner time). A pull_request shares ci-pr-<n> and cancels its own superseded run; a cancelled
+# conclusion never passes a required check. This arm is safe ONLY because no required job can skip (the gate step;
+# tests/test_ci_workflow_shape.py fails if a job-level label if: comes back). Anything else (workflow_dispatch,
+# e.g. a release tag's own run) gets its own group, so it is never collapsed or cancelled.
+concurrency:
+  group: ${{ github.event_name == 'push' && 'ci-main' || github.event_name == 'pull_request' && format('ci-pr-{0}', github.event.pull_request.number) || format('ci-run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   lint-and-test:
     runs-on: ubuntu-24.04

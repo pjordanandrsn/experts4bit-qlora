@@ -1,5 +1,11 @@
 name: conflict-marker-guard
-on: [push, pull_request]
+# push on main only (2026-10-20): a change reaches main as a PR head (pull_request covers every
+# head) or as a push to main, so both paths stay scanned; conflict markers on a branch that never opens a PR can't
+# reach main. (private-marker-guard keeps push on every branch: it doubles as leak detection on a public repo.)
+on:
+  push:
+    branches: [main]
+  pull_request:
 
 # Refuses merge-conflict markers in tracked text.
 #

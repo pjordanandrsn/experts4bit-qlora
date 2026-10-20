@@ -47,3 +47,9 @@ Example opening:
 > attention (q/k/v/o with per-head norms) on sm_80+ NVIDIA GPUs under Linux;
 > Granite and Mixtral get the norm-less variant of the same fold. Upgrade if
 > you serve with `E4B_FUSE_T1_GLUE_R2=1`; requires grouped-nf4-gemm ≥ 0.28.0.
+
+**The tagged commit needs its own green CI run.** CI collapses pending runs on `main` (ci.yml's `concurrency`
+block), so a commit that merged while another main run was going may never get a run of its own. After pushing
+the tag and before publishing the GitHub release (which publishes to PyPI), run CI at the tag and wait for green:
+`gh workflow run CI --ref vX.Y.Z`, then `gh run watch`. A dispatched run has its own concurrency group, so it is
+never collapsed or cancelled.
