@@ -313,6 +313,18 @@ K25's select-tree codebook decode for grouped-nf4-gemm K39's (`lut="prmt"`), whi
 
 `e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20` ([P158](../bench/p158/RESULTS-p158.md)).
 
+**Int8 attention projections on Mixtral are opt-in, with no speed claimed.**
+- **What it does:** `E4B_SERVE_ATTN_INT8=1` (#1848) holds Mixtral-8x7B's q, k, v and o projections in int8 with a
+  per-row fp32 scale. Decode calls of 1-16 rows run grouped-nf4-gemm 0.49.0's K37 kernels (`dense_i8.linear_i8`), and
+  larger calls dequantize transiently.
+- **Where it refuses:** on other families, without K37, and alongside int4 attention or `E4B_DENSE_GEMV_BW=1`.
+- **Its premises have read:**
+  - the int8 round trip keeps P147's quality gate: I8ATTN GO, `p147-a2000-1`;
+  - the kernels beat cuBLAS bf16 at Mixtral's shapes: P149 box K, K_GO, `p149k-5090-8`, a microbench premise.
+- **Why it stays off by default:** the served read, P149's box Q+S, has not run. There is no claim id.
+
+[P147](../bench/p147/RESULTS-p147.md), [P149](../bench/p149/RESULTS-p149.md).
+
 **Calibrated int4 attention is not licensed on the default.** On Qwen3-30B-A3B, `E4B_SERVE_ATTN_INT4_CALIB=1` decodes
 one request 1.154× as fast (1.238× with the int4 lm_head too). The mean NLL bias stays inside K8's budget, but only
 92.9 % of next-token argmaxes agree with the default at one window per pass (91.8 % with the head), against the 0.95

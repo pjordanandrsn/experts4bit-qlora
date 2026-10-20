@@ -1,0 +1,8 @@
+e4b 0.55.0 @ffb1632c0564008204c9d3f297a956a0cbfaf065
+gnf4 0.47.1 @38b308887688ea5bda7dd449bd3cc3dc1426b995
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170

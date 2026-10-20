@@ -1,0 +1,12 @@
+P149K_CONTRACT qo M=1: cublas 1.676e-03; configs 1.670e-03..1.670e-03
+P149K_CONTRACT qo M=16: cublas 1.666e-03; configs 1.668e-03..1.668e-03
+P149K_CONTRACT kv M=1: cublas 1.802e-03; configs 1.764e-03..1.764e-03
+P149K_CONTRACT kv M=16: cublas 2.361e-03; configs 1.687e-03..1.687e-03
+P149K_CUBLAS qo M=1: [('std::enable_if<!(false), void>::type int', [1024, 1, 1])]
+P149K_CUBLAS qo M=16: [('void cutlass::Kernel2<cutlass_80_wmma_te', [8, 32, 1])]
+P149K_CUBLAS kv M=1: [('std::enable_if<!(false), void>::type int', [256, 1, 1])]
+P149K_CUBLAS kv M=16: [('void cutlass::Kernel2<cutlass_80_wmma_te', [8, 8, 16]), ('void cublasLt::splitKreduce_kernel<32, 1', [32, 1, 1])]
+P149K_READ qo M=1: choice 4,512,4,1; A1 1.4850 B1 0.7588 B2 0.7589 A2 1.4849 ms
+P149K_READ qo M=16: choice 32,256,4,1; A1 1.5547 B1 0.7903 B2 0.7906 A2 1.5551 ms
+P149K_READ kv M=1: choice 4,2048,8,1; A1 0.5799 B1 0.3064 B2 0.3064 A2 0.5806 ms
+P149K_READ kv M=16: choice 32,256,4,1; A1 0.5686 B1 0.5225 B2 0.5221 A2 0.5687 ms
