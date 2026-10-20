@@ -42,6 +42,13 @@ stays as merged: this file fixes the numbers Amendment 5 left to the shakedown, 
    - the box's own fit before its install (every part but the drift arms): 2,395 s.
 
    The registered guard stays **2 h**, with a worst case of about $2.05.
+6. **"Fetched before D0" is best-effort** (Amendment 5 section 5 says the timed records are "fetched off the box, before
+   D0 starts").
+   - The box writes the timed block's records and a `TIMED_DONE` marker, then waits 150 s, about two of the controller's
+     60 s polls, each of which copies the box's records in a partial fetch. Nothing confirms that a fetch landed.
+   - A missed fetch matters only if the box is also lost during the drift arms. Otherwise the records stay on the box
+     for the final fetch, and a drift arm that fails or meets the guard cannot change the outcome or the box's exit.
+   - That residual risk is accepted (the maintainer, 2026-10-20).
 
 ## Reported from the shakedown (never Phase 2 data)
 
