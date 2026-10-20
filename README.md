@@ -118,6 +118,26 @@ The offload row uses a different training setup.
 
 </details>
 
+## New in 0.56.0
+
+Serving defaults on `qwen3_moe`. Each was measured alone on Qwen3-30B-A3B on one RTX 5090 (170 SMs); their combined
+effect has not been read.
+
+- **Sixteen requests decode 1.0925× as fast, one request unchanged, every token identical.** K25, the batched NF4 decode
+  GEMM, now decodes its codebook with grouped-nf4-gemm K39's byte-permute decode (`lut="prmt"`), bit-identical to the
+  select tree it replaces. It needs grouped-nf4-gemm 0.50.0 or later and an NVIDIA device; otherwise it resolves to the
+  tree, recorded in `info["k25_lut"]`. `E4B_K25_LUT=tree` opts out.
+  ([P158](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/p158/RESULTS-p158.md), `e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20`)
+- **One request decodes 1.052× as fast from the lm_head on its per-row int8 grid** (grouped-nf4-gemm K36; at
+  Qwen3-30B-A3B's 151936 x 2048 head only; needs grouped-nf4-gemm 0.48.0 or later, else it resolves off). **Outputs
+  change:** the logits differ from the bf16 head's, inside the quality gates read on Qwen3-30B-A3B @ad44e777. Sixteen
+  requests read 0.992, a cost not yet attributed. `E4B_INT8_HEAD_BW=0` restores the bf16 head.
+  ([P153](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/p153/RESULTS-p153.md), `e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19`)
+- **One request decodes 1.044× as fast with the paged FP8 attention decode capped at 16 splits** (buckets 1, 2 and 4
+  move; bitwise-identical to the library's plan at contexts up to 1024). Sixteen requests are unchanged.
+  `E4B_ATTN_SPLIT_CAP=0` opts out. ([P143](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/p143/RESULTS-p143.md),
+  `e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19`)
+
 ## New in 0.55.0
 
 - **Every install gets grouped-nf4-gemm 0.43.0's faster single-request decode** on Qwen3-30B-A3B NF4, on GPUs with at
