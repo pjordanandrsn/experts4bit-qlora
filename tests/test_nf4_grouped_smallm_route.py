@@ -426,12 +426,15 @@ def test_prmt_with_a_kernel_package_without_k25_is_refused_under_auto(monkeypatc
 
 # ---- resolve_k25_lut: the knob resolved once at engine build, so a misconfiguration fails at startup
 @pytest.mark.parametrize("env,mode,kernel,want", [
-    (None, None, {"tree": True}, {"env": None, "lut": "tree", "why": None}),
-    ("tree", "1", {"prmt": True}, {"env": "tree", "lut": "tree", "why": None}),
-    ("prmt", None, {"prmt": True}, {"env": "prmt", "lut": "prmt", "why": None}),
-    (None, None, {}, {"env": None, "lut": "pair", "why": None}),
-    (None, "0", {"prmt": True}, {"env": None, "lut": None, "why": "E4B_NF4_GROUPED_SMALLM=0"}),
-    ("tree", None, {"with_k25": False}, {"env": "tree", "lut": None, "why": "the kernel package predates K25"}),
+    (None, None, {"tree": True}, {"env": None, "lut": "tree", "why": None,
+                                  "source": "default-off: no read licenses model_type None"}),
+    ("tree", "1", {"prmt": True}, {"env": "tree", "lut": "tree", "why": None, "source": "explicit"}),
+    ("prmt", None, {"prmt": True}, {"env": "prmt", "lut": "prmt", "why": None, "source": "explicit"}),
+    (None, None, {}, {"env": None, "lut": "pair", "why": None, "source": "default-off: no read licenses model_type None"}),
+    (None, "0", {"prmt": True}, {"env": None, "lut": None, "why": "E4B_NF4_GROUPED_SMALLM=0",
+                                 "source": "default-off: no read licenses model_type None"}),
+    ("tree", None, {"with_k25": False}, {"env": "tree", "lut": None, "why": "the kernel package predates K25",
+                                         "source": "explicit"}),
 ], ids=["default", "tree-named", "prmt", "kernel-without-tree", "k25-off", "kernel-without-k25"])
 def test_resolve_k25_lut_reports_the_decode_k25_takes(monkeypatch, env, mode, kernel, want):
     from experts4bit_qlora.engines import hot_residency as hr
