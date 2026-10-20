@@ -43,8 +43,8 @@ lane's PREREG.
   (642,514,944 fp32 adapters, seq 2048, r 16) at micro-batch 1 × accum 8, with `OFFLOAD_EXPERTS=1`, on an RTX A2000
   12 GB. Held-out 1.9533 → 0.8483 at N=20. One draw.
 - **Limits:** micro-batch 2 (the field recipe) ran out of memory on that card, which sidecars shared (1.37 GB held at
-  start); an unshared 12 GB card is marginal there. Unsloth 2026.9.14 refused to load on this Ampere card, and HF + PEFT
-  ran out of memory at load. The older, lighter 7.16 GB reading (`e4b.offload.fits-30b-class`) recorded no model revision
+  start); an unshared 12 GB card is marginal there. Unsloth 2026.9.14 refused at load (bitsandbytes dispatched modules to the CPU, and its loader has no
+  expert-offload lever), and HF + PEFT ran out of memory at load. The older, lighter 7.16 GB reading (`e4b.offload.fits-30b-class`) recorded no model revision
   or run id and was not reproduced.
 - **Stack:** e4b `516c87c0aa4253ed8ac6a683ee96fad69be58ba8` (first released in v0.40.0), grouped-nf4-gemm
   `846b512b905468c08f5748943d08769b572affa2` (v0.34.0), torch 2.8.0+cu128. Model `Qwen/Qwen3-30B-A3B` at
@@ -69,7 +69,8 @@ lane's PREREG.
   `GNF4_SHA=<gnf4> TC1_BOX=A TC1_FAMILIES=qwen3pos68 TC1_SEQ=4096 TC1_MB=1 TC1_ACCUM=4 TC1_PACK=1 TC1_FREE_OUTPUTS=1 TC1_STEPS=40 TC1_EVAL_EVERY=40 bash bench/tc1/tc1_drive.sh`
   (the memory row: `TC1_FAMILIES=qwen3pos67`, same knobs). Records:
   [`bench/h2h-2026-10-02/tc1/`](../bench/h2h-2026-10-02/tc1/README.md).
-- **Hardware and cost:** one RTX 5090 and the launcher's 98 GB host-RAM floor (those boxes had 251-504 GB RAM and 320 GB disk; that is what they had, not what the run needs). $1.96 (`tc1-5090-136`) and $1.34
+- **Hardware and cost:** one RTX 5090 and TC1's registered pre-flight floor: at least 320 GB disk, 98 GB host RAM and 40 MB/s
+  ([`TC1-PREREG.md`](../bench/tc1/TC1-PREREG.md), "Budget and stop rules"). The boxes had 251-504 GB RAM. $1.96 (`tc1-5090-136`) and $1.34
   (`tc1-5090-135`).
 - **The other recipe:** at TC1's field recipe (seq 2048, micro-batch 2 × accum 4) the device ratio read 1.924
   (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio`), and a September primary pair on an older stack read
