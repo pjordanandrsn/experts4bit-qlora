@@ -91,9 +91,10 @@ def box_need() -> int:
 
 
 TEMPLATE = HERE / "dq11_mlp_phase2_manifest_template.json"
-#: The box script's free-disk floor (dq11_mlp_phase2_box.sh refuses below it). The shared launcher's preflight disk check reads it
-#: from the bound manifest's lane_record.min_disk_gb, so bind_manifest writes it.
-BOX_MIN_DISK_GB = 120
+#: The box script's free-disk floor in decimal GB, rounded UP (a declared floor never sits below the real one): the
+#: box refuses below 120,000,000 KiB from `df -Pk` (1024-byte blocks), which is 122.88 GB. The shared launcher's
+#: preflight disk check reads it from the bound manifest's lane_record.min_disk_gb, so bind_manifest writes it.
+BOX_MIN_DISK_GB = 123
 RUN_ID = re.compile(r"dq11-mlp-phase2-[1-9][0-9]*")
 HEX40 = re.compile(r"[0-9a-f]{40}")
 DRIVER = re.compile(r"[0-9]{3}\.[0-9]{1,3}\.[0-9]{1,3}")
