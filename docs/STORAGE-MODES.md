@@ -78,13 +78,14 @@ state_dict tensor keys. The loader still instantiates `Experts4bit` for 4-bit ru
 ### Reading the headline memory numbers
 
 The headline **10.463 GB** for Qwen3-30B-A3B is **peak GPU allocation while e4b's fused path
-trains TC1's field recipe at micro-batch 1 × accum 8 with `OFFLOAD_EXPERTS=1`** on an RTX A2000
-12 GB (`e4b.train.frontier.qwen3.a2000-12gb.2026-10-02`, one draw; receipts under
+trains TC1's matched set (642,514,944 fp32 adapters) at micro-batch 1 × accum 8 with
+`OFFLOAD_EXPERTS=1`** on an RTX A2000 12 GB. That is the registered secondary: the field recipe's
+micro-batch 2 ran out of memory on that shared card (an unshared 12 GB card is marginal there) (`e4b.train.frontier.qwen3.a2000-12gb.2026-10-02`, one draw; receipts under
 `bench/h2h-2026-10-02/tc3/`). The older **7.16 GB** (and 8.47 GB for Gemma-4-26B-A4B) came from 5
 steps at seq 128 on the 2026-07-02 stack. It was not reproduced: that run recorded no model revision
-or run id, and a later attempt on a 5090 read 9.13 GB
+or run id, and a later attempt on a 5090, at a different configuration, read 9.13 GB
 ([RESULTS-blackwell-5090](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/blackwell-5090/RESULTS-blackwell-5090.md)). Either way, roughly one
-layer's experts are resident plus activations/adapters, while the other packed experts
+layer's experts are resident plus activations/adapters, while the rest of the packed experts
 sit in pinned CPU RAM. It is a *capability* number — fits vs doesn't fit — not a throughput
 claim, and the A2000 is a correctness-only testbed, so no speed is quoted from it. Method and
 grids: [`docs/METHODOLOGY.md`](METHODOLOGY.md) §11–§12;

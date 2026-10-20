@@ -22,10 +22,11 @@ loads at 4.70 GB and trains under 8 GB, and the streaming loader never materiali
 QLoRA on the frozen NF4 experts moves a held-out Alpaca eval from 1.4813 to 1.0290. `e4b.train.olmoe-fits`,
 `e4b.train.olmoe-converges` ([METHODOLOGY](METHODOLOGY.md)).
 
-**Expert offload takes 30B-class MoEs past VRAM.** Qwen3-30B-A3B trains TC1's field recipe on a 12 GB RTX A2000 at
-10.463 GB peak (micro-batch 1 × accum 8, one draw; `e4b.train.frontier.qwen3.a2000-12gb.2026-10-02`). An older 5-step
+**Expert offload takes 30B-class MoEs past VRAM.** Qwen3-30B-A3B trains TC1's matched set (fp32 adapters) on a 12 GB RTX
+A2000 at 10.463 GB peak allocated (micro-batch 1 × accum 8, the registered secondary after micro-batch 2 ran out of
+memory on that shared card; one draw; `e4b.train.frontier.qwen3.a2000-12gb.2026-10-02`). An older 5-step
 reading put it at 7.16 GB and Gemma-4-26B-A4B at 8.47 GB, both out of memory without offload; that reading was not
-reproduced (a later attempt read 9.13 GB). Offload costs about +11 % s/step at OLMoE scale. The
+reproduced (a later attempt, at a different configuration on a 5090, read 9.13 GB). Offload costs about +11 % s/step at OLMoE scale. The
 on-disk arena needs 2.56× to 6.40× less host RAM than the pinned-RAM path: at an 8.59 GB cap Qwen3-30B is OOM-killed on
 host RAM and completes on the arena. `e4b.offload.fits-30b-class`, `e4b.offload.arena-vs-host-ram`
 ([results](../bench/host-ram-ceiling/RESULTS-scaling.md)).

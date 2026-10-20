@@ -87,7 +87,7 @@ still positive, so read a batched training result only with `batched_fallback_st
 `load_moe_4bit_streaming(..., offload=True)` or `OFFLOAD_EXPERTS=1`. Frozen
 experts live in pinned CPU RAM and stream one layer at a time. This is what makes
 a 30B-class MoE QLoRA-trainable on a 12 GB card: Qwen3-30B-A3B trains TC1's
-field recipe at micro-batch 1 × accum 8 at 10.463 GB peak on an RTX A2000 12 GB
+matched set (fp32 adapters) at micro-batch 1 × accum 8 at 10.463 GB peak allocated on an RTX A2000 12 GB
 (`e4b.train.frontier.qwen3.a2000-12gb.2026-10-02`). An older 5-step reading,
 `e4b.offload.fits-30b-class` (7.16 GB, and 8.47 GB for Gemma-4-26B-A4B; both OOM
 without offload), was not reproduced. Requires gradient checkpointing (either kind), which the
