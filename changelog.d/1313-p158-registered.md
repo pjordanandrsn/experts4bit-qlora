@@ -9,8 +9,9 @@ sampled clock range). P158 reads it in the served step, by P153's served form.
 - **Identity, null first:** the arms are bit-identical by contract, so the gate is token identity, not a quality band.
   S0 against S0 across processes is checked first and VOIDs the read ("tree not token-deterministic") before any S1
   difference can be a contract finding against K39.
-- **Engagement:** K25's call record after the build reads exactly 576 under the arm's decode (48 layers x buckets 2-16
-  x two warm-ups and a capture), derived from the capture code and tested.
+- **Engagement:** after the build, K25's call record reads exactly 960 under the arm's decode and the bandwidth GEMV's
+  tally exactly 480 (48 layers x five forwards per row count: the residual licence's two probes, two warm-ups, one
+  capture), derived from the code, tested, and confirmed on a $0 layer-cut build before any rental.
 - **Clocks:** a 500 ms sampler in its own process during every timed block (100 ms cost +0.25 % on a $0 A2000 smoke;
   500 ms did not) labels a pair "clock-confounded" beyond 2 % either way, beside the verdict, never ruling.
 - **Box:** one RTX 5090 at >= 575 W (power limit and enforced limit), grouped-nf4-gemm v0.50.0 (41ef086e), premise 49

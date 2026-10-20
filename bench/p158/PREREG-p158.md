@@ -71,19 +71,35 @@ P153's served read by counted edits, with the K25 decode knob in place of the he
     the int8 head's qwen3_moe default.
   - The rest: torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0; Qwen/Qwen3-30B-A3B @ `ad44e777`.
 
-## K25's engagement count, derived before data
+## The build's engagement counts, derived before data and confirmed on the code
 
-At the build, `enable_decode_graphs` captures one graph per bucket (1, 2, 4, 8, 16) after **two eager warm-ups**
-(`warmup: int = 2`), and `K25_LUT_SEEN` counts once per MoE-layer forward where the route is chosen. A bucket-1 step is
-T == 1, which takes singleton groups and the bandwidth GEMV, never K25. Buckets 2 to 16 take device grouping at 2 x 8 to
-16 x 8 (token, slot) rows, under K25's 256-row bound. So the record after the build reads exactly
+Two closed forms are read at the build, each from the code the box installs.
+- **The forwards.** Before any graph is captured, `build_engine` runs the residual licence
+  (`glue_r2.license_moe_residual`, under the qwen3_moe default `E4B_FUSE_T1_GLUE_R2=auto`) over the decode row counts
+  1, 2, 4, 8, 16. For each layer and row count it makes **two** MoE forwards, `mod.mlp(h)` and `_moe_with_residual`.
+  Then `enable_decode_graphs` captures one graph per bucket after **two eager warm-ups** (`warmup: int = 2`). That is
+  **five** forwards per layer at each row count. `K25_LUT_SEEN` and the GEMV tally count where the route is chosen,
+  never on a replay.
+- **Where each row count goes.** A one-row step is T == 1, which takes singleton groups and the bandwidth GEMV, never
+  K25. Row counts 2 to 16 take device grouping at 2 x 8 to 16 x 8 (token, slot) rows, under K25's 256-row bound.
+  The prefill graph's startup check runs 512-token forwards (4,096 rows), outside K25's bound.
+- **So, after the build:**
 
-    48 MoE layers x 4 buckets (2, 4, 8, 16) x 3 forwards (two warm-ups + one capture) = 576
+      K25:            48 MoE layers x 4 row counts (2, 4, 8, 16) x 5 forwards = 960
+      bandwidth GEMV: 48 MoE layers x 1 row count  (1)            x 5 forwards x 2 calls (gate_up, down) = 480
 
-under the arm's decode (`{"tree|le256": 576}` in S0, `{"prmt|le256": 576}` in S1), and nothing under the other.
-`tests/test_p158.py` checks the three facts it rests on in the code the box installs (the warm-up default, the bucket set
-and the build's call, T == 1's route). After the runs the record holds the arm's decode only, and its total is the same
-in every process (the arms run the same prompts and lengths).
+  K25's record reads exactly `{"<arm's decode>|le256": 960}` (`tree` in S0, `prmt` in S1), with nothing under the
+  other decode. The GEMV's `bw_prmt32` tally reads exactly 480. P153's build read 480 on the same server, the second
+  form's check against a real box.
+- **Found in review, before any data:** a first draft registered 576, from the warm-ups and the capture alone. It missed
+  the licence's two probes and would have VOIDed every process. P153's 480 is what exposed it: 48 x 3 x 2 = 288 does not
+  account for it, while 48 x 5 x 2 does.
+- **Confirmed by running the code, before any rental:** a $0 layer-cut build on the lab A2000 (Qwen3-30B-A3B at 2 layers,
+  baked to NF4 as the box bakes it, on today's default server, once per decode) must read **20 K25 calls and 10 GEMV
+  calls per layer** under each arm's decode, with nothing under the other. The box's bars are 48 times those. The
+  build's record and its sha256 join this registration, and a mismatch stops the lane before a box.
+- After the runs the K25 record holds the arm's decode only, and its total is the same in every process (the arms run
+  the same prompts and lengths).
 
 ## The rule (`p158_reduce.py`, fixed before data)
 
@@ -96,8 +112,9 @@ The first rung that applies decides. P153's integrity checks are carried; the ba
    - the dense attention GEMV is not off, or the int8 head is not at its qwen3_moe default in every record (on,
      `default-allowlisted`, the one lm_head at 151936 x 2048, routing one-row calls with none falling back);
    - **K25's decode:** `info["k25_lut"]` is not `{"env": <arm's decode>, "lut": <arm's decode>, "why": null}`; the
-     record after the build is not exactly `{"<arm's decode>|le256": 576}`, or held anything before it; after the runs
+     record after the build is not exactly `{"<arm's decode>|le256": 960}`, or held anything before it; after the runs
      it holds another decode, or its total differs across the nine processes;
+   - **the bandwidth GEMV's build tally** is not exactly `bw_prmt32` = 480;
    - **power:** any timed block's power limit or enforced power limit, read before or after it, below **575 W** or
      unreadable;
    - the arms differ in prompts or lengths, or an arm is not at five reps; a void slope;
@@ -169,9 +186,9 @@ it, and the verdict stands beside it.
 - **Run ids** `p158-5090-1` to `-3`. Two consecutive HARNESS_ERROR, VOID, NOISY or NOT_RUN runs stop the lane. A
   pre-flight host stall, a power-floor refusal (rc 17) or a fit refusal (rc 41) is not a strike (two consecutive fit
   refusals count as one); a time-left skip of a step (STOP-2, rc 40) is.
-- **Sequencing:** e4b#1862 merges first (it is chained after e4b#1860). This registration then merges after its
-  independent review and the maintainer's pass, and the box runs the shared pre-flight and `--validate` on the exact
-  manifest.
+- **Sequencing:** e4b#1862 merges first (it is chained after e4b#1860). The $0 layer-cut build on the A2000 confirms
+  both build counts, and its record joins this registration. This registration then merges after its independent review
+  and the maintainer's pass, and the box runs the shared pre-flight and `--validate` on the exact manifest.
 
 ## Tests
 
@@ -182,11 +199,11 @@ it, and the verdict stands beside it.
   head's default in the tripwire, the warm-up process before eight arms at five reps, only `E4B_K25_LUT` set per arm,
   no SANE phase, and NOISY and VOID not readings;
 - **the guard fit** on both sides, from the measured walls;
-- **the engagement count's derivation** in the code the box installs;
-- **the self-tests**, run from one directory as on the box: the reducer's 62 cases (the null before the contract, the
-  null reading the warm-up and S0's own reps, an exact 576, the W1 guard, the unrounded bars, clock labels both ways
+- **the two build counts' derivation** in the code the box installs;
+- **the self-tests**, run from one directory as on the box: the reducer's 64 cases (the null before the contract, the
+  null reading the warm-up and S0's own reps, an exact 960 and 480, the W1 guard, the unrounded bars, clock labels both ways
   and UNREAD, the enforced limit) and the box's 24;
-- **the mutants** each self-test must kill (26 against the reducer, 5 against the box);
+- **the mutants** each self-test must kill (28 against the reducer, 5 against the box);
 - **the driver's run ids:** -1 to -3, nothing else.
 
 ## What this lane cannot say

@@ -118,35 +118,48 @@ def test_the_self_tests_pass(box_dir, script):
 
 
 def test_p153s_checks_are_carried_verbatim():
+    """P153's helpers and record checks verbatim; its W1 check's statements carried inside this lane's, which adds the
+    GEMV's closed-form build tally."""
     p153 = (P153 / "p153_reduce.py").read_text(encoding="utf-8")
     mine = (LANE / "p158_reduce.py").read_text(encoding="utf-8")
-    for a, b in (("def _rate(r, w):", "def record_faults("), ("def record_faults(", "def cap_faults(")):
-        piece = p153[p153.index(a):p153.index(b)]
-        if a == "def _rate(r, w):":            # divergence's docstring dropped "reported, never ruled": here it is a gate
-            piece = piece.replace('    """Rows identical out of the rows, and each row\'s first divergent step (None when '
-                                  'identical): reported, never ruled."""',
-                                  '    """Rows identical out of the rows, and each row\'s first divergent step (None when '
-                                  'identical)."""')
-        assert piece in mine, a
+    helpers = p153[p153.index("def gemv_faults(name, d) -> list:"):p153.index("def w1_faults(t, r) -> list:")]
+    records = p153[p153.index("def record_faults("):p153.index("def cap_faults(")]
+    assert helpers in mine and records in mine
+    w1 = p153[p153.index("def w1_faults(t, r) -> list:"):p153.index("def record_faults(")]
+    for stmt in ('    gs1 = (r.get("graph_stats") or {}).get("1") or {}\n',
+                 '    out = gemv_faults(f"{t} W1 capture", r.get("dispatch_build"))\n',
+                 '    if not gs1.get("replays"):\n', '    if gs1.get("eager_steps") or any((r["workloads"]["W1"].get("dispatch") or {}).values()):\n'):
+        assert stmt in w1 and stmt in mine, stmt
 
 
-def test_the_k25_build_count_is_derived_from_the_capture_code():
-    """576 = 48 MoE layers x the four multi-row buckets x (enable_decode_graphs' two warm-ups + one capture): the warm-up
-    default, the bucket set and T == 1's route are read from the code the box installs."""
+def test_the_build_counts_are_derived_from_the_code_the_box_installs():
+    """960 = 48 MoE layers x the four multi-row buckets x five forwards (the residual licence's two probes, then
+    enable_decode_graphs' two warm-ups and one capture); 480 = 48 x the same five forwards at T == 1 x two GEMV calls
+    (P153's build read 480). Each fact is read from the code the box installs: the licence before the capture, its
+    two forwards per layer and row count, the warm-up default, the bucket set, T == 1's route, K25's row bound."""
+    serve = (REPO / "experts4bit_qlora" / "serve_paged.py").read_text(encoding="utf-8")
+    lic = serve.index("    license_moe_residual(model, sorted({1, *cfg.buckets, *runner._verify_buckets}),")
+    cap = serve.index("    graph_status = runner.enable_decode_graphs(cfg.buckets) if cfg.graphs else None")
+    assert lic < cap, "the licence probes run before the capture, inside the build's record"
+    glue = (REPO / "experts4bit_qlora" / "engines" / "glue_r2.py").read_text(encoding="utf-8")
+    body = glue[glue.index("def license_moe_residual("):glue.index("def _patch_attention(")]
+    assert "            for t in rows:" in body and "                    want = mod.mlp(h)\n" in body
+    assert "                    got = _moe_with_residual(mod.mlp, h, r, width)\n" in body
+    assert "    return mlp.experts(h2, idx, w, residual=residual.reshape(-1, width)).reshape(residual.shape)" in glue
     runner = (REPO / "experts4bit_qlora" / "engines" / "paged_runner.py").read_text(encoding="utf-8")
     assert re.search(r"def enable_decode_graphs\(self, buckets=DEFAULT_BUCKETS, \*, capture: bool = True,\s+"
                      r"warmup: int = 2,", runner)
     assert "for _ in range(max(1, warmup)):" in runner and "with torch.cuda.graph(g):\n                self._padded_step(b)" in runner
     hr = (REPO / "experts4bit_qlora" / "engines" / "hot_residency.py").read_text(encoding="utf-8")
     assert "    singleton = T == 1 or" in hr and "R_rows <= 256 and _k25_mode != \"0\"" in hr
-    serve = (REPO / "experts4bit_qlora" / "serve_paged.py").read_text(encoding="utf-8")
-    assert "runner.enable_decode_graphs(cfg.buckets) if cfg.graphs else None" in serve
     sys.path.insert(0, str(LANE))
     try:
         import p158_reduce as r
     finally:
         sys.path.remove(str(LANE))
-    assert r.K25_BUILD_CALLS == 48 * 4 * 3 == 576 and r.K25_BUCKETS == (2, 4, 8, 16)
+    assert (r.LICENCE_FORWARDS, r.WARMUPS, r.CAPTURES) == (2, 2, 1) and r.K25_BUCKETS == (2, 4, 8, 16)
+    assert r.K25_BUILD_CALLS == 48 * 4 * 5 == 960 and r.BW_BUILD_CALLS == 48 * 5 * 2 == 480
+    assert "= 960" in PREREG and "= 480" in PREREG
 
 
 REDUCER_MUTANTS = [
@@ -188,6 +201,10 @@ REDUCER_MUTANTS = [
     # the build count not exact
     ('    if r.get("k25_seen_build") != {key: K25_BUILD_CALLS}:',
      '    if not (r.get("k25_seen_build") or {}).get(key):'),
+    # the licence's probes dropped from the closed form (the reviewed 576)
+    ("LICENCE_FORWARDS, WARMUPS, CAPTURES = 2, 2, 1", "LICENCE_FORWARDS, WARMUPS, CAPTURES = 0, 2, 1"),
+    # the GEMV's build tally not exact
+    ('    if (r.get("dispatch_build") or {}).get("bw_prmt32") != BW_BUILD_CALLS:', '    if False:'),
     # the decode's resolution unchecked
     ('    if (k.get("env"), k.get("lut"), k.get("why")) != (want, want, None):', '    if k.get("lut") != want:'),
     # another decode accepted after the runs

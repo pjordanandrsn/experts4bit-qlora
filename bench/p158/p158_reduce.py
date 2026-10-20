@@ -19,9 +19,11 @@ The rule, first rung that applies:
                  dense attention GEMV off; the int8 head at its qwen3_moe default (P153's FLIP): on, default-allowlisted,
                  the one lm_head at 151936 x 2048, routing one-row calls with none falling back; K25's decode: ``info["k25_lut"]`` resolves to the arm's
                  decode (S0 tree, S1 prmt), and its engagement record after the build reads EXACTLY
-                 ``{"<arm's lut>|le256": 576}`` (48 MoE layers x the four multi-row buckets 2, 4, 8, 16 x (two warm-ups +
-                 one capture); bucket 1 is T == 1 and stays on the bandwidth GEMV), with no other decode, and after the
-                 runs the arm's decode only, its count equal across every process; every timed block's power limit AND
+                 ``{"<arm's lut>|le256": 960}`` (48 MoE layers x the four multi-row buckets 2, 4, 8, 16 x five forwards:
+                 the residual licence's two probes, then two warm-ups and one capture; bucket 1 is T == 1 and stays on
+                 the bandwidth GEMV), with no other decode, and after the runs the arm's decode only, its count equal
+                 across every process; the bandwidth GEMV's build tally reads EXACTLY bw_prmt32 = 480 (48 layers x the
+                 same five forwards at T == 1 x two GEMV calls); every timed block's power limit AND
                  enforced power limit, read either side of it, at least 575 W (unreadable is a VOID); the arms on
                  different prompts or lengths, or not at the registered five reps; a void slope.
                  THE NULL: any S0 process decodes different tokens from S0a (any row, workload or length), or any S0
@@ -69,10 +71,16 @@ CAP = {"S0": 16, "S1": 16}                                # both arms: the qwen3
 HEAD_SHAPE = [151936, 2048]                               # Qwen3-30B-A3B's lm_head: the int8 head ON by default (P153)
 LUT = {"S0": "tree", "S1": "prmt"}
 # K25's engagement at the build: 48 MoE layers x the multi-row buckets (T > 1 takes device grouping and, at up to 256
-# (token, slot) rows, K25; bucket 1 is T == 1, the singleton bandwidth GEMV) x (enable_decode_graphs' two warm-ups +
-# one capture). Counted where the route is chosen, so a replay never counts.
-K25_LAYERS, K25_BUCKETS, K25_FORWARDS_PER_BUCKET = 48, (2, 4, 8, 16), 3
-K25_BUILD_CALLS = K25_LAYERS * len(K25_BUCKETS) * K25_FORWARDS_PER_BUCKET          # 576
+# (token, slot) rows, K25; bucket 1 is T == 1, the singleton bandwidth GEMV) x five forwards per row count: the residual
+# licence (glue_r2.license_moe_residual, run before capture under GLUE_R2 auto) probes each layer twice (mod.mlp(h) and
+# _moe_with_residual), then enable_decode_graphs runs two warm-ups and one capture. Counted where the route is chosen, so
+# a replay never counts. The same five forwards at T == 1 give the bandwidth GEMV's build tally, two calls each.
+K25_LAYERS, K25_BUCKETS = 48, (2, 4, 8, 16)
+LICENCE_FORWARDS, WARMUPS, CAPTURES = 2, 2, 1
+K25_FORWARDS_PER_BUCKET = LICENCE_FORWARDS + WARMUPS + CAPTURES                     # 5
+K25_BUILD_CALLS = K25_LAYERS * len(K25_BUCKETS) * K25_FORWARDS_PER_BUCKET          # 960
+GEMV_CALLS_PER_FORWARD = 2                                                          # gate_up and down at T == 1
+BW_BUILD_CALLS = K25_LAYERS * K25_FORWARDS_PER_BUCKET * GEMV_CALLS_PER_FORWARD      # 480 (P153's build read 480)
 MIN_POWER_W = 575                                         # the 5090 served floor (P149, P151, P153: the maintainer's)
 # what the 5090's library plan gives each captured bucket at Qwen3's 4 KV heads and 4096-token slots, and the cap's
 CAPTURED_PLANS = {1: (32, 16), 2: (32, 16), 4: (23, 16), 8: (11, 11), 16: (5, 5)}
@@ -108,9 +116,13 @@ def gemv_faults(name, d) -> list:
 
 def w1_faults(t, r) -> list:
     """Phase D's (Amendment 4): W1 replays the bucket-1 graph captured at the build, so the engagement is the capture
-    tally, bound to W1 by bucket 1's replays; an eager W1 step must pass on its own tally."""
+    tally, bound to W1 by bucket 1's replays; an eager W1 step must pass on its own tally. The build's tally is a closed
+    form here: exactly :data:`BW_BUILD_CALLS` bw_prmt32 calls."""
     gs1 = (r.get("graph_stats") or {}).get("1") or {}
     out = gemv_faults(f"{t} W1 capture", r.get("dispatch_build"))
+    if (r.get("dispatch_build") or {}).get("bw_prmt32") != BW_BUILD_CALLS:
+        out.append(f"{t}: bw_prmt32 at the build is {(r.get('dispatch_build') or {}).get('bw_prmt32')}, registered "
+                   f"{BW_BUILD_CALLS} (48 layers x 5 forwards at T == 1 x 2 calls)")
     if not gs1.get("replays"):
         out.append(f"{t} W1: bucket 1 never replayed ({gs1}); the capture tally is not what W1 ran")
     if gs1.get("eager_steps") or any((r["workloads"]["W1"].get("dispatch") or {}).values()):
@@ -193,7 +205,7 @@ def k25_faults(name, r, arm) -> list:
     key = f"{want}|le256"
     if r.get("k25_seen_build") != {key: K25_BUILD_CALLS}:
         out.append(f"{name}: K25's record after the build is {r.get('k25_seen_build')}, registered {{{key!r}: "
-                   f"{K25_BUILD_CALLS}}} (48 layers x buckets 2, 4, 8, 16 x 3 forwards)")
+                   f"{K25_BUILD_CALLS}}} (48 layers x buckets 2, 4, 8, 16 x 5 forwards)")
     after = r.get("k25_seen_after_runs") or {}
     if set(after) != {key} or after.get(key, 0) < K25_BUILD_CALLS:
         out.append(f"{name}: K25's record after the runs is {after}, registered the arm's decode {key!r} only, at least "
@@ -405,7 +417,7 @@ def _fake_arm(tag, r16, r1, toks, *, e4b=E, census=None, graphs=None, tally=None
               toks16=None, sms=SMS, reps=REPS, lut=None, seen_build=None, seen_runs=None, seen_before=None, power=575.0,
               enforced=575.0, mhz=2800.0, head=None, dense=None):
     arm = tag[:2]
-    d = tally or {"bw_prmt32": 192, "dotpad": 0}
+    d = tally or {"bw_prmt32": BW_BUILD_CALLS, "dotpad": 0}
     zero = {k: 0 for k in ("dotpad", "dotpad_splitk", "scalar", "scalar_splitk") + BW}
     key = f"{LUT[arm]}|le256"
     w = {}
@@ -496,15 +508,19 @@ def _cases() -> list:
         ("S1 resolved the tree: VOID", v(arms(S1a={"lut": {"env": "prmt", "lut": "tree", "why": None}})) == "VOID"),
         ("S0 unset (env None) is not the named tree: VOID", v(arms(S0c={"lut": {"env": None, "lut": "tree", "why": None}})) == "VOID"),
         ("K25 off (lut None): VOID", v(arms(S0a={"lut": {"env": "tree", "lut": None, "why": "E4B_NF4_GROUPED_SMALLM=0"}})) == "VOID"),
-        ("the build count is exact: 575 is VOID", v(arms(S1b={"seen_build": {"prmt|le256": 575}})) == "VOID"),
-        ("the build count is exact: 624 (one extra bucket) is VOID", v(arms(S1b={"seen_build": {"prmt|le256": 624}})) == "VOID"),
+        ("the build count is exact: 959 is VOID", v(arms(S1b={"seen_build": {"prmt|le256": 959}})) == "VOID"),
+        ("the build count is exact: 576 (the licence's probes missed) is VOID",
+         v(arms(S1b={"seen_build": {"prmt|le256": 576}})) == "VOID"),
+        ("the GEMV's build tally is exact: 479 is VOID", v(arms(S0a={"tally": {"bw_prmt32": 479, "dotpad": 0}})) == "VOID"),
+        ("the GEMV's build tally is exact: 288 (three forwards) is VOID",
+         v(arms(S1c={"tally": {"bw_prmt32": 288, "dotpad": 0}})) == "VOID"),
         ("a zero count is VOID", v(arms(S1c={"seen_build": {}})) == "VOID"),
-        ("S1 ran a tree call at the build: VOID", v(arms(S1a={"seen_build": {"prmt|le256": 576, "tree|le256": 48}})) == "VOID"),
+        ("S1 ran a tree call at the build: VOID", v(arms(S1a={"seen_build": {"prmt|le256": 960, "tree|le256": 48}})) == "VOID"),
         ("S1 ran a tree call in the runs, its total unchanged: VOID",
-         v(arms(S1d={"seen_runs": {"prmt|le256": 624, "tree|le256": 48}})) == "VOID"),
-        ("S0 ran prmt: VOID", v(arms(S0b={"seen_build": {"prmt|le256": 576}, "seen_runs": {"prmt|le256": 672}})) == "VOID"),
+         v(arms(S1d={"seen_runs": {"prmt|le256": 1008, "tree|le256": 48}})) == "VOID"),
+        ("S0 ran prmt: VOID", v(arms(S0b={"seen_build": {"prmt|le256": 960}, "seen_runs": {"prmt|le256": 1056}})) == "VOID"),
         ("a record held calls before the build: VOID", v(arms(S1a={"seen_before": {"prmt|le256": 1}})) == "VOID"),
-        ("the run counts must match across processes", v(arms(S1c={"seen_runs": {"prmt|le256": 576 + 97}})) == "VOID"),
+        ("the run counts must match across processes", v(arms(S1c={"seen_runs": {"prmt|le256": 960 + 97}})) == "VOID"),
         ("the int8 head OFF in an arm (not the default server): VOID", v(arms(S1a={"head": {"mode": "0", "modules": 0}})) == "VOID"),
         ("the int8 head on by an explicit 1 (not the default): VOID", v(arms(S0b={"head": _head_default(source="explicit")})) == "VOID"),
         ("the int8 head fell back at one row: VOID", v(arms(S1c={"head": _head_default(engagement={
@@ -541,7 +557,7 @@ def _cases() -> list:
         ("a bucket not captured", v(arms(S1a={"graphs": {**{str(b): "graph" for b in BUCKETS}, "4": "eager: x"}})) == "VOID"),
         ("wrong commit", v(arms(S1c={"e4b": "b" * 40})) == "VOID"),
         ("the geomean is over four pairs", round(r(arms())["speed"]["geomean"]["W16"], 2) == 1.10),
-        ("the build count is the closed form", K25_BUILD_CALLS == 48 * 4 * 3 == 576),
+        ("the build counts are the closed forms", K25_BUILD_CALLS == 48 * 4 * 5 == 960 and BW_BUILD_CALLS == 48 * 5 * 2 == 480),
     ]
     return cases
 
