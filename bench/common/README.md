@@ -34,7 +34,8 @@ FIT=$((INSTALL_TO_GATE_S + NEED_X + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PC
   install, the self-tests, the fetch, the bake). `NEED_X` is that gate's need and `RESERVE` the fetch-and-teardown
   reserve its `can_run` keeps.
 - The check sits at top level (unindented, outside any function body or branch), before the first install (pip, pip3,
-  conda, mamba, uv, apt-get or pipx) and before any script sourced or run from another file. A runner with no
+  conda, mamba, uv, apt-get, pipx, or a venv's creation, which starts the install when the packages go in from a
+  script such as Q235's bootstrap) and before any script sourced or run from another file. A runner with no
   recognisable install fails the test rather than skipping the order check.
 - The first install the test finds may be inside a helper's DEFINITION (`pipx(){ ... pip install ...; }`), so put
   the check above any install helper, not only above its first call. `FIT` must name an install allowance
