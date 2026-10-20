@@ -1,0 +1,129 @@
+{
+ "reducer": "bench/hpn/hpn_reduce.py",
+ "framework": "e4b",
+ "free_mib_at_claim": 10321,
+ "climb_stop": null,
+ "fitted_depths": [
+  2,
+  4
+ ],
+ "deepest_fit": 4,
+ "depths": {
+  "2": {
+   "rows": 300,
+   "g": {
+    "mean": -0.001642,
+    "sd": 0.004275
+   },
+   "e": {
+    "mean": -0.00079,
+    "sd": 0.004275
+   },
+   "i": {
+    "mean": 0.000852,
+    "sd": 0.003677
+   },
+   "share_e": 0.5748,
+   "call_basis": "1 - var(i)/var(g)",
+   "call_value": 0.2603,
+   "call": "I",
+   "corr_e_i": 0.43,
+   "n0_max_abs_rerun": {
+    "I": 0.0,
+    "E": 0.0,
+    "F": 0.0
+   },
+   "n0_holds": {
+    "I": true,
+    "E": true,
+    "F": true
+   },
+   "n3_holds": false
+  },
+  "4": {
+   "rows": 300,
+   "g": {
+    "mean": 0.000327,
+    "sd": 0.006142
+   },
+   "e": {
+    "mean": -0.001082,
+    "sd": 0.006285
+   },
+   "i": {
+    "mean": -0.00141,
+    "sd": 0.005501
+   },
+   "share_e": 0.5662,
+   "call_basis": "1 - var(i)/var(g)",
+   "call_value": 0.1978,
+   "call": "I",
+   "corr_e_i": 0.4633,
+   "n0_max_abs_rerun": {
+    "I": 0.0,
+    "E": 0.0,
+    "F": 0.0
+   },
+   "n0_holds": {
+    "I": true,
+    "E": true,
+    "F": true
+   },
+   "n3_holds": false
+  }
+ },
+ "thresholds": {
+  "share_e_dominant": 0.6667,
+  "share_i_dominant": 0.3333,
+  "n0_tol": 1e-05,
+  "n1_l2_bound": 0.03,
+  "n3_rho": 0.2,
+  "depth_floor": 8,
+  "moot_ratio": 0.93,
+  "guard_z": 2.0
+ },
+ "base_term": {
+  "2": {
+   "inloop_term": -0.000751,
+   "base_term_E": 0.0,
+   "base_term_F": 0.0,
+   "shift_E_to_F": 0.0,
+   "se_shift": 0.0,
+   "delta0_E": 0.000751,
+   "se_delta0_E": 0.000215,
+   "abs_delta0_E": 0.000751,
+   "delta0_F": 0.000751,
+   "se_delta0_F": 0.000215,
+   "abs_delta0_F": 0.000751,
+   "ratio_F_over_E": 1.0,
+   "read_1b": "MOOT",
+   "shift_call": "no measurable shift",
+   "shift_interval": [
+    0.0,
+    0.0
+   ]
+  },
+  "4": {
+   "inloop_term": -0.004872,
+   "base_term_E": 0.0,
+   "base_term_F": 0.0,
+   "shift_E_to_F": 0.0,
+   "se_shift": 0.0,
+   "delta0_E": 0.004872,
+   "se_delta0_E": 0.000335,
+   "abs_delta0_E": 0.004872,
+   "delta0_F": 0.004872,
+   "se_delta0_F": 0.000335,
+   "abs_delta0_F": 0.004872,
+   "ratio_F_over_E": 1.0,
+   "read_1b": "MOOT",
+   "shift_call": "no measurable shift",
+   "shift_interval": [
+    0.0,
+    0.0
+   ]
+  }
+ },
+ "outcome": "INSUFFICIENT_DEPTH",
+ "reason": "the deepest fitted depth L4 is below the L8 floor: wait for the sidecar to unload and retry"
+}

@@ -3229,6 +3229,31 @@ def hp1_base_digest(model, slots=None):
             "method": "per-slot (int16 sum, position-weighted int16 sum) of the framework's own bf16 dequant; sha256 over sorted keys"}
 
 
+def hp1_release_training_state(model, opt):
+    """--hp1-export, before the export: training is over (the step-N eval has run and the adapter is saved), so drop the optimizer's
+    state and every gradient, collect, and empty the CUDA cache. HPN read 5 (L8 on a 12 GB RTX A2000) ran the base digest out of
+    memory with that state still resident. The export reads only the frozen base and the adapter's values, neither of which this
+    touches, so its bytes are unchanged. Returns what was released, for the receipt's ``hp1`` block."""
+    import gc
+    cuda = torch.cuda.is_available()
+    before = int(torch.cuda.memory_allocated()) if cuda else None
+    n_state = len(opt.state) if opt is not None else 0
+    if opt is not None:
+        opt.state.clear()
+    n_grad = 0
+    for p in model.parameters():
+        if p.grad is not None:
+            p.grad = None
+            n_grad += 1
+    gc.collect()
+    if cuda:
+        torch.cuda.empty_cache()
+    after = int(torch.cuda.memory_allocated()) if cuda else None
+    return {"optimizer_states": n_state, "grads": n_grad,
+            "allocated_mib_before": None if before is None else round(before / 2**20, 1),
+            "allocated_mib_after": None if after is None else round(after / 2**20, 1)}
+
+
 def hp1_export(model, a):
     """--hp1-export DIR: after the step-N eval, write the canonical adapter (hp1_lib.export_canonical over lora_slots) and the
     training-base digest; returns the receipt's `hp1` block. A failure is recorded in the block (the reducer VOIDs the arm for HP1),
@@ -4176,7 +4201,9 @@ def run_arm(a, load_fn, sampler=True):
     hp1 = None
     if getattr(a, "hp1_export", None):              # HP1: the canonical adapter + the training-base digest (bench/hp1/HP1-PREREG.md)
         with PH("hp1_export"):
+            released = hp1_release_training_state(model, opt)   # nothing after this point steps the optimizer
             hp1 = hp1_export(model, a)
+            hp1["released"] = released
         print("HP1 " + json.dumps({k: (v.get("sha256") if k == "adapter" else v.get("digest") if k == "train_base" else v)
                                    for k, v in hp1.items()}), flush=True)
 
