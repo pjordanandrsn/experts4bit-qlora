@@ -165,7 +165,7 @@ def test_clean_diff_and_no_base(repo: Path):
     r = _impact(repo)
     assert r.returncode == 0 and "no change-impact class" in r.stdout, r.stdout
     r = _impact(repo, base="")
-    assert r.returncode == 0 and r.stdout.startswith("SKIP"), r.stdout
+    assert r.returncode == 2 and r.stdout.startswith("FAIL: --base is empty"), r.stdout
     r = _impact(repo, base="no-such-ref")
     assert r.returncode == 2, r.stdout
 
