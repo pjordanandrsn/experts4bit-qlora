@@ -213,3 +213,94 @@ def test_the_streamed_floor_equals_the_floor_and_the_bit_diagnostics_count(model
     c[0] = -1.0                                                             # a sign flip is counted, never measured
     assert p1.bit_diagnostics(c, a) == {"differing": 1, "sign_flips": 1, "max_ulp": 0}
     assert p1.bit_diagnostics(torch.stack([c[0], b[1], a[2]]), a) == {"differing": 2, "sign_flips": 1, "max_ulp": 1}
+
+
+# --- Amendment 4 ------------------------------------------------------------------------------------------------------
+
+def test_the_post_a_set_drops_every_draw_with_the_epilogue_redraw():
+    post = p1.post_a_draws({"R2"})
+    assert len(post) == 15 and not any("R2" in d for d in post) and len(p1.post_a_draws({"R1", "R2", "R3", "R4", "R5"})) == 0
+
+
+def test_r2_lands_on_the_fused_read_and_the_fp64_read_is_the_same_function(model):
+    x, gy = _xg(tokens=32)
+    mlp = _mlps(model)[0]
+    today = p1.peft_read(mlp, x, gy)
+    assert dlf.enable_dense_mlp_lora_fuse(model) == 6
+    fused = p1.fused_read(mlp, x, gy)
+    dlf.disable_dense_mlp_lora_fuse(model)
+    assert "R2" in p1.landed(mlp, x, gy, today, fused)                       # the epilogue's own arithmetic
+    ref = p1.fp64_read(mlp, x, gy)
+    assert all(ref[k].dtype == torch.float64 for k in p1.TENSORS)
+    for k in p1.TENSORS:                                                     # today's path is the same function, rounded
+        assert p1.error(today[k], ref[k])["rel_rms"] < 5e-2, k
+
+
+def test_calibration_and_every_outcome_branch():
+    e = lambda v: {k: {"rel_rms": v, "max_abs": v} for k in p1.TENSORS}  # noqa: E731
+    errs = {0: {"today": e(1.0), "R1": e(1.01), "R3": e(0.99)}}
+    assert p1.calibrate(errs) == []
+    errs[0]["R4"] = e(1.2)                                                    # one neutral path 19 % above the rest
+    assert p1.calibrate(errs) and all(f.endswith(":R4") for f in p1.calibrate(errs))
+    row = lambda ok, e_min=0.01: {"pass": ok, "e_min": e_min}  # noqa: E731
+    good = {0: {k: row(True) for k in p1.TENSORS}}
+    assert p1.outcome_a4(good, good, 16, [], 16) == "PHASE1_PASS"
+    a_fail = {0: dict(good[0], out_gate=row(False))}
+    assert p1.outcome_a4(a_fail, good, 16, [], 16) == "PHASE1_PASS, ACCURACY_OVER_REORDER: 0:out_gate"
+    assert p1.outcome_a4({}, good, 16, [], 16).startswith("PHASE1_PASS, ACCURACY_OVER_REORDER: 0:*")  # NO_FLOOR
+    b_fail = {0: dict(good[0], dx=row(False))}
+    assert p1.outcome_a4(good, b_fail, 16, [], 16) == "PHASE1_FAIL: 0:dx"
+    assert p1.outcome_a4(good, b_fail, 16, ["0:dx:R4"], 16).startswith("INDETERMINATE: calibration")  # never a FAIL
+    assert p1.outcome_a4(good, good, 16, [], 1).startswith("INDETERMINATE: |U| = 1")
+    assert p1.outcome_a4(good, good, 16, [], 2).startswith("INDETERMINATE: |U| = 2")       # 4a 1: |U| <= 2
+    assert p1.outcome_a4(good, good, 16, [], 3) == "PHASE1_PASS"
+    assert p1.outcome_a4(good, b_fail, 16, [], 8).startswith("INDETERMINATE: bar too weak at |U| = 8")  # 4a 3
+    assert p1.outcome_a4(good, b_fail, 16, [], 9) == "PHASE1_FAIL: 0:dx"                  # bound 1/10: a FAIL
+    hidden = {0: dict(good[0], dh=row(True, 0.2))}
+    assert p1.outcome_a4(good, hidden, 16, [], 16) == "PHASE1_PASS, RANK1_UNRESOLVED: 0:dh"
+
+
+def test_read_layers_a4_end_to_end_on_the_real_engine(monkeypatch):
+    monkeypatch.setattr(p1, "draw_sets", lambda: FEW + [frozenset({"R1", "R3"})])
+    m = _model(layers=1)
+    mlps = dict(enumerate(_mlps(m)))
+    x, gy = _xg(tokens=16)
+    rec = p1.read_layers_a4(mlps, {0: x}, {0: gy}, enable=lambda: dlf.enable_dense_mlp_lora_fuse(m),
+                            disable=lambda: dlf.disable_dense_mlp_lora_fuse(m), stats=dlf.DENSE_MLP_LORA_STATS, adapters=3)
+    assert "R2" in rec["excluded"] and rec["draws"] == len([d for d in p1.draw_sets() if not (d & set(rec["excluded"]))])
+    assert rec["outcome"].startswith(("PHASE1_PASS", "PHASE1_FAIL", "INDETERMINATE")), rec["outcome"]
+    layer = rec["layers"][0]
+    assert set(layer["b"]) == set(p1.TENSORS) and "today" in layer["errors"]
+    assert all(r["margin"] == p1.MARGIN_B for r in layer["b"].values())
+    assert not any(hasattr(mlp, "_e4b_dense_lora") for mlp in _mlps(m))
+
+
+def test_r2_leaves_the_floor_by_its_arithmetic_even_when_nothing_lands(monkeypatch):
+    monkeypatch.setattr(p1, "draw_sets", lambda: FEW)
+    monkeypatch.setattr(p1, "landed", lambda *a: [])                          # no redraw lands, mechanically
+    m = _model(layers=1)
+    x, gy = _xg(tokens=16)
+    rec = p1.read_layers_a4(dict(enumerate(_mlps(m))), {0: x}, {0: gy}, enable=lambda: dlf.enable_dense_mlp_lora_fuse(m),
+                            disable=lambda: dlf.disable_dense_mlp_lora_fuse(m), stats=dlf.DENSE_MLP_LORA_STATS, adapters=3)
+    assert rec["excluded"] == ["R2"] and rec["epilogue_landed"] is False and rec["draws"] == 2      # FEW less {R2}
+
+
+def test_bar_b_holds_the_fused_error_to_the_band_times_one_plus_the_margin():
+    ref = {k: torch.ones(1000, dtype=torch.float64) for k in p1.TENSORS}
+    errs = {"today": {k: {"rel_rms": 1e-3, "max_abs": 1e-3} for k in p1.TENSORS}}
+    terms = {k: {"adapter_norm": 1.0, "norm": 1.0} for k in p1.TENSORS}
+    inside = {k: torch.full((1000,), 1 + 1.04e-3) for k in p1.TENSORS}       # 4 % over the band: inside m = 0.05
+    outside = {k: torch.full((1000,), 1 + 1.06e-3) for k in p1.TENSORS}      # 6 % over: outside
+    assert all(r["pass"] for r in p1.bar_b(ref, inside, errs, terms).values())
+    assert not any(r["pass"] for r in p1.bar_b(ref, outside, errs, terms).values())
+
+
+def test_the_fp64_premise_refuses_where_the_reference_would_not_be_the_base_arithmetic(model):
+    mlp = _mlps(model)[0]
+    assert p1.fp64_premise(mlp, 2048, torch.bfloat16, cuda=True) == []           # the fixture: 2048 rows, bf16
+    assert p1.fp64_premise(mlp, 16, torch.bfloat16, cuda=False) == []            # the dispatch checks are CUDA-only
+    small = p1.fp64_premise(mlp, 1536, torch.bfloat16, cuda=True)
+    assert len(small) == 3 and all("fused 4-bit GEMM" in w for w in small)
+    assert any("dequant dtype" in w for w in p1.fp64_premise(mlp, 2048, torch.float16, cuda=True))
+    mlp.up_proj.base_layer.bias = torch.nn.Parameter(torch.zeros(128))
+    assert any("up_proj: the base has a bias" in w for w in p1.fp64_premise(mlp, 2048, torch.bfloat16, cuda=True))
