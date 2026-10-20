@@ -226,6 +226,7 @@ def test_the_gate_is_wired_to_the_first_m_process_only():
                                                    ("always [madvise] never", "1", False),
                                                    ("always [madvise] never", "0", True),        # torch's off
                                                    ("always [madvise] never", "true", True),     # not torch's on: fail closed
+                                                   ("always [madvise] never", " 1 ", True),      # torch reads it as invalid (off)
                                                    ("always madvise [never]", "1", True),        # madvise is ignored
                                                    (None, "1", True),                            # no THP at all
                                                    (None, None, True)])

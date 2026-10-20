@@ -246,7 +246,7 @@ def thp_refusal(mode, alloc_env):
     allocations can get huge pages: THP enabled = always, or THP enabled = madvise with THP_MEM_ALLOC_ENABLE=1. torch's
     switch only calls madvise(MADV_HUGEPAGE), which 'never' and a kernel without THP ignore; torch reads '1' as on and
     '0' as off, and any other value is refused here (fail closed)."""
-    if mode == "always" or (mode == "madvise" and (alloc_env or "").strip() == "1"):
+    if mode == "always" or (mode == "madvise" and alloc_env == "1"):     # exactly torch's on: " 1 " is invalid there
         return None
     return (f"THP enabled is {mode!r} and THP_MEM_ALLOC_ENABLE is {alloc_env!r}: torch's allocations cannot get huge "
             "pages ('always', or 'madvise' with THP_MEM_ALLOC_ENABLE=1, is needed), so READ-1 could not read IDENTIFIED "
@@ -580,7 +580,8 @@ def self_test():
     # Amendment 2 (2): the THP pre-flight refusal
     assert thp_refusal("always", None) is None and thp_refusal("madvise", "1") is None
     assert "'madvise'" in thp_refusal("madvise", None) and "'absent'" in thp_refusal("absent", "") and thp_refusal(None, " ")
-    assert all(thp_refusal(m, v) for m, v in (("never", "1"), ("absent", "1"), ("madvise", "0"), ("madvise", "true")))
+    assert all(thp_refusal(m, v) for m, v in (("never", "1"), ("absent", "1"), ("madvise", "0"), ("madvise", "true"),
+                                              ("madvise", " 1 ")))
     # Amendment 2 (3): the early bytes gate (registered bytes pass; either digest off stops; a dry run is not gated)
     good = {"fused_sha256": FUSED_SHA, "nf4_sha256": NF4_SHA}
     assert bytes_gate(good, E_FULL) == (True, None) and bytes_gate({"fused_sha256": "x", "nf4_sha256": "y"}, 8) == (True, None)
