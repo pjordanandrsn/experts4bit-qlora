@@ -1,0 +1,62 @@
+{
+ "lane": "P149 box Q+S, Q",
+ "verdict": "GO",
+ "reasons": [
+  "Q passes at both gates: {'W1': {'windows': 196, 'mean_d': 0.001024, 'sd': 0.010949, 'se': 0.000782, 'upper': 0.002311, 'bound': 0.011537, 'ppl_S0': 4.3088, 'argmax_agreement': 0.9702, 'pass': True}, 'W16': {'windows': 123, 'mean_d': 0.001272, 'sd': 0.010936, 'se': 0.000986, 'upper': 0.002894, 'bound': 0.011313, 'ppl_S0': 4.3948, 'argmax_agreement': 0.9691, 'pass': True}}"
+ ],
+ "q": {
+  "gates": {
+   "W1": {
+    "windows": 196,
+    "mean_d": 0.001024,
+    "sd": 0.010949,
+    "se": 0.000782,
+    "upper": 0.002311,
+    "bound": 0.011537,
+    "ppl_S0": 4.3088,
+    "argmax_agreement": 0.9702,
+    "pass": true
+   },
+   "W16": {
+    "windows": 123,
+    "mean_d": 0.001272,
+    "sd": 0.010936,
+    "se": 0.000986,
+    "upper": 0.002894,
+    "bound": 0.011313,
+    "ppl_S0": 4.3948,
+    "argmax_agreement": 0.9691,
+    "pass": true
+   }
+  },
+  "pass": true,
+  "prefill_q_reported": {
+   "W1": {
+    "windows": 196,
+    "mean_d": 0.002141,
+    "sd": 0.007505,
+    "se": 0.000536,
+    "upper": 0.003023,
+    "bound": 0.011564,
+    "ppl_S0": 4.2988,
+    "argmax_agreement": 0.981,
+    "pass": true
+   },
+   "W16": {
+    "windows": 123,
+    "mean_d": 0.002225,
+    "sd": 0.007284,
+    "se": 0.000657,
+    "upper": 0.003305,
+    "bound": 0.011332,
+    "ppl_S0": 4.3872,
+    "argmax_agreement": 0.9808,
+    "pass": true
+   }
+  },
+  "prefill_ttft_ms_511": {
+   "S0a": 613.476,
+   "S1a": 625.348
+  }
+ }
+}

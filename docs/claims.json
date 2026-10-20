@@ -12715,6 +12715,32 @@
         "the private receipt store, run p161-5090-1 (receipt.json, teardown-proof.json)"
       ],
       "notes": "Pre-registered in #1904 (one non-consumer review and the maintainer's final pass, before any data). The premise: P160's microbench GO (c1 1.6598x over today's plan on the two K25 GEMMs under prmt, clock-adjusted bound 1.6525). Today's plan decoded the same tokens in all five of its processes (the null) and the c1 arms decoded those tokens (the contract), at W16 and W1. Every build recorded exactly 960 K25 calls under the default decode, 960 under its own plan, 1920 kernel calls at its plan's block shapes, and 480 bandwidth-GEMV calls. Self-pairs W16 0.9969-1.0020, W1 0.9981-1.0010. The median sampled SM clock read 2850 MHz in every scored arm (no pair labelled); the software power-cap event (0x4) appeared in 0.17-0.22 of c1's W16 samples and none of today's plan's, at an unchanged 575 W enforced limit. The registered prediction band for g16, [1.20, 1.42], was missed high (graded, never ruling). Against the PREREG's projection (P158's 14.995 ms prmt step, a 4.115 ms saving implied by P160's ratio), this read's today-plan step was 15.408 ms on another host and the saving 4.915 ms (1.194 of the implied); the carry is reported, not attributed: the read does not time the K25 pair alone. The maintainer re-derived the verdict from the store byte for byte. P161 cost $0.726 on one launch. Measured basis: Qwen3-30B-A3B's expert shapes on an RTX 5090 (170 SMs) under K39's decode; other families, cards, decodes and plans are not read, and c1 under the select-tree decode is refused by the knob."
+    },
+    {
+      "id": "e4b.serve.p149.int8-attn.mixtral.5090.2026-10-20",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+      "claim": "Lane P149 box Q+S (one RTX 5090): serving Mixtral-8x7B-Instruct with its 128 attention projections (q, k, v, o) held in int8 with a per-row fp32 scale (E4B_SERVE_ATTN_INT8=1, #1848), decode calls of 1-16 rows on grouped-nf4-gemm 0.49.0's K37 (dense_i8.linear_i8), against the default server (bf16 projections), on the serve_paged graph server (16 slots x 768 tokens, graphs on). One request decodes 1.1608x faster (g1, the smallest of four ABBA W1 pairs; 128.73-128.86 -> 149.51-149.59 tokens/s) and sixteen requests 1.0181x (g16, the smallest W16 pair; 323.38-324.72 -> 330.39-330.60 tokens/s): FLIP by the registered rule (g1 >= 1.03 and g16 >= 0.99). Quality at decode passed first: P147's gates through the served step read GO at W1 (196 windows, mean NLL difference 0.001024, upper bound 0.002311 against 0.011537) and W16 (123 windows, upper 0.002894 against 0.011313). Self-pairs W1 0.9990-1.0003 and W16 0.9959-1.0004. The token-pinned routing qualifier (Amendment 4) read QUALIFIER_VOID: S0 fed its own stream differed from it at 5 of 1,100 steps in every A block, cause not attributed. So the default-flip PR is held for a routing-matched read; the lever stays opt-in.",
+      "value": 1.1608,
+      "unit": "ratio, S1 / S0 single-request decode rate (tokens/s), the smallest of four ABBA pairs (unrounded 1.160795; S1a/S0a 1.1608, S1b/S0b 1.1614, S1c/S0c 1.1610, S1d/S0d 1.1616)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, a 575 W power limit read on the box), one rented Vast.ai host (verified-secure, AMD Ryzen 7 9800X3D, 16 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @835874d1 (#1893's merge, carrying the box Q+S kit #1858 byte for byte) + grouped-nf4-gemm 0.49.0 @a83f6bb3; torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0, bitsandbytes 0.50.2; Mixtral @eba92302 with NF4 experts baked on the box; P109's W16 and W1 workloads, 512-token prompts, SHORT 32 / LONG 160, five timed reps after one warm pass, eight fresh processes ABBA twice; Amendment 5's early gates OK (S1 build and instrument, S0 build). One host; a within-box ratio.",
+      "measured_on": "2026-10-20",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p149/RESULTS-p149.md",
+        "bench/p149/PREREG-p149.md",
+        "bench/p149/p149_reduce.py",
+        "bench/p149/receipts/p149-5090-2/verdict_p149.json",
+        "bench/p149/receipts/p149-5090-2/q_verdict.json",
+        "bench/p149/receipts/p149-5090-2/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "the private receipt store, run p149-5090-2 (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #1806 with Amendments 1-5 (one non-consumer review and the maintainer's final pass before any data); the premise was box K's K_GO (p149k-5090-8, a microbench). Predictions: Q GO hit; FLIP hit; g1 1.04-1.08 missed toward faster; g16 0.99-1.03 hit; ROUTING_CLEAR and the pre-read g16_routing band [0.9979, 1.0019] not read (VOID). The verdict re-derives byte-identical from the receipt subset with p149_reduce.py at 835874d1. The lever stays opt-in: E4B_SERVE_ATTN_INT8 is in e4b v0.56.0, off by default."
     }
   ]
 }

@@ -1,10 +1,11 @@
-# P149 results: box K reads **K_GO**; box Q+S has not run (2026-10-20)
+# P149 results: box K reads **K_GO**; box Q+S reads **FLIP**, its routing qualifier VOID (2026-10-20)
 
 The registration is [`PREREG-p149.md`](PREREG-p149.md) (#1806, with Amendments 1-5). P149 asks whether int8 weight-only
 attention projections (q, k, v and o, through grouped-nf4-gemm's int8 kernels) make Mixtral-8x7B's served decode faster
 at an unchanged quality bar. It reads in two boxes: box K, the kernel premise, then box Q+S, quality at decode and the
-served speed. **Nothing here licenses a default or quotes a gain.** `E4B_SERVE_ATTN_INT8` stays opt-in until box Q+S
-reads.
+served speed. **Box Q+S read FLIP, but its routing qualifier read QUALIFIER_VOID**, which by Amendment 4 holds the
+default-flip PR for a routing-matched read. So `E4B_SERVE_ATTN_INT8` stays opt-in (e4b v0.56.0 and main at 2026-10-20),
+and the default does not change.
 
 ## Box K (`p149k-5090-8`): K_GO
 
@@ -57,9 +58,85 @@ Box K cost $0.127 in all.
 - **The quality premise had already passed:** P147 (`p147-a2000-1`) read I8ATTN GO for the int8 round trip on the lab
   A2000 ([results](../p147/RESULTS-p147.md)).
 
-## Box Q+S: not run
+## Box Q+S (`p149-5090-2`): FLIP
 
-Box Q+S rules quality at decode first (P147's gates through the served step, graphs on), then the served speed (P143
-Amendment 3's form). It carries Amendment 4's token-pinned routing qualifier and Amendment 5's dry mode and early gates.
-Its kit is #1858. Before it runs, `p149-dry-2` exercises the whole rotation on a one-layer cut on one RTX 5090. That is
-an instrument run, never a reading. Until box Q+S reads, no speed is claimed for the lever.
+One RTX 5090 (cc 12.0, 170 SMs, 32,607 MiB, a **575 W** power limit read on the box before any install, a 3,090 MHz
+maximum SM clock) on an AMD Ryzen 7 9800X3D host (8 cores, 16 CPUs). The lane ran 2026-10-20T19:03Z to 20:38Z. Cost
+$1.574. Receipts are under [`receipts/p149-5090-2/`](receipts/p149-5090-2/).
+- **Code:** e4b `835874d1` (the pre-read band's merge, #1893, carrying the kit #1858 byte for byte) and grouped-nf4-gemm
+  0.49.0 at `a83f6bb3` (K37). Model `mistralai/Mixtral-8x7B-Instruct-v0.1` at `eba92302`.
+- **Stack:** torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0, bitsandbytes 0.50.2 (`versions.txt`).
+- **Before the arms:**
+  - The power floor and refusals passed.
+  - The self-tests passed: `p149_reduce.py` 47, `p149_box.py` 23, `p115_quality.py` 11.
+  - On the card: K37's suite (28) and e4b's int8 path (4).
+  - P147's windows matched by sha256 (W1 196, W16 123).
+  - **Amendment 5's early gates:** S1's build and instrument gates and S0's build gate all read OK.
+
+**Q at decode: GO at both gates** (`q_verdict.json`). S1 is the int8 arm; d is S1's NLL minus S0's at each position.
+
+| gate | windows | mean d | upper bound | bound | argmax agreement | S0 perplexity |
+|---|---|---|---|---|---|---|
+| W1 | 196 | 0.001024 | 0.002311 | 0.011537 | 0.9702 | 4.3088 |
+| W16 | 123 | 0.001272 | 0.002894 | 0.011313 | 0.9691 | 4.3948 |
+
+**S, the served read: FLIP** (`verdict_p149.json`). Decode tokens/s in the eight fresh processes, ABBA twice:
+
+| | S0a | S1a | S1b | S0b | S0c | S1c | S1d | S0d |
+|---|---|---|---|---|---|---|---|---|
+| W1 | 128.86 | 149.58 | 149.51 | 128.73 | 128.80 | 149.54 | 149.59 | 128.78 |
+| W16 | 324.72 | 330.60 | 330.44 | 323.38 | 323.40 | 330.39 | 330.52 | 323.49 |
+
+- **g1 = 1.160795**, the minimum of the four S1/S0 W1 pairs (1.1608, 1.1614, 1.1610, 1.1616), against the 1.03 bar.
+- **g16 = 1.018108**, the minimum of the four W16 pairs (1.0181, 1.0218, 1.0216, 1.0217), against the 0.99 bar.
+- **Self-pairs:** W1 within [0.9990, 1.0003] and W16 within [0.9959, 1.0004], inside the [0.985, 1.015] NOISY band.
+  Each arm decoded its own first record's tokens, so there was no FUNCTION_FAIL.
+- **GPU state, reported:** SM clock 2,647-2,842 MHz and power 436-582 W across the timed blocks.
+
+The verdict was re-derived byte-identical from the receipt subset in this tree with `p149_reduce.py` at `835874d1`.
+
+### The routing qualifier: QUALIFIER_VOID
+
+Amendment 4's token-pinned processes T1 and T2 each ran four blocks. A blocks feed S0's own recorded stream through
+S0's kernels, and B blocks feed S1's stream through S0's kernels. Engagement held in every block: the forced token sat
+in the graph's own input buffer, at its captured address, and every block's fed tokens equalled its stream.
+
+| block | stream | argmax differs from the next forced token | steps | decode tokens/s |
+|---|---|---|---|---|
+| T1 0, T1 3, T2 1, T2 2 | A | 5 in each | 1,100 | 323.28, 324.61, 324.64, 324.64 |
+| T1 1, T1 2, T2 0, T2 3 | B | 410 in each | 1,100 | 325.64, 325.79, 324.41, 325.68 |
+
+A must read 0: S0 reproducing its own stream. It read 5 in every A block, so the label is **QUALIFIER_VOID** (margin m =
+0.028108). The count is the same in all four blocks across two processes, so this is a fixed difference between S0's
+token-pinned replay and S0a's own decode, not run-to-run noise. Its cause is not attributed here. By Amendment 4, the
+reading stands, this is not a strike, and the default-flip PR is held for a routing-matched read, which needs a later
+registration. g16_routing and its band are not graded.
+
+### The predictions, graded
+
+| prediction | read | |
+|---|---|---|
+| Q: GO at both gates, upper bounds within 1.5 × P147's (0.0023 at W1) | GO; W1 0.002311, W16 0.002894 | hit |
+| S: FLIP | FLIP | hit |
+| g1 between 1.04 and 1.08 | 1.1608 | missed, faster |
+| g16 between 0.99 and 1.03 | 1.0181 | hit |
+| routing: ROUTING_CLEAR, with \|ρ\| < 0.005 | QUALIFIER_VOID | not read |
+| the pre-read band: g16_routing in [0.9979, 1.0019] | not computed (VOID) | not read |
+| dry: `p149-dry-2` reads DRY with no instrument fault | DRY, no fault | hit |
+
+### The run ids
+
+| run | outcome | cost |
+|---|---|---|
+| `p149-dry-2` | DRY with no instrument fault (Amendment 5's one-layer cut, an instrument run) | $0.231 |
+| `p149-5090-1` | refused before any instance existed: the offer was taken between search and create. A pre-create refusal spends the id as a spare, not a strike | $0 |
+| `p149-5090-2` | **FLIP**, routing qualifier VOID | $1.574 |
+
+## What FLIP started, and what it holds
+
+- **Nothing changes by default.** The default-flip PR, int8 only where K37's `dense_i8` is present and only on Mixtral,
+  proceeds only on ROUTING_CLEAR. The qualifier read VOID, so that PR is held.
+- **The claim** is `e4b.serve.p149.int8-attn.mixtral.5090.2026-10-20` in `docs/claims.json`. It is the opt-in lever's
+  measured served speed on this host: one request 1.16 × faster, sixteen requests 1.018 ×, with Q GO.
+- **The open question** is what makes S0's token-pinned replay differ from S0a at 5 of 1,100 steps. A routing-matched
+  read that settles g16's routing share must be designed around it, and must be registered before it runs.
