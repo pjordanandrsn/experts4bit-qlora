@@ -1,0 +1,6840 @@
+{
+ "lane": "P157",
+ "shakedown": true,
+ "device": "NVIDIA RTX A2000 12GB",
+ "cc": [
+  8,
+  6
+ ],
+ "torch": "2.8.0+cu128",
+ "layers": 4,
+ "rr_sha256": "3c59e72f947daa425e61f727401204099a1e782b902fb39687e04c46e338b14f",
+ "s0_sha256": "3020dbce691bd98462b9c74b9fe903c1b124d7a6b95f22e8d964532479b282a1",
+ "today": {
+  "block_n": 32,
+  "kc": 64,
+  "warps": 4,
+  "stages": 3
+ },
+ "arms": [
+  "A0",
+  "T2",
+  "A0p",
+  "A1",
+  "A2b",
+  "A12",
+  "A3",
+  "AL",
+  "AC",
+  "AC4",
+  "AC16",
+  "ACX",
+  "ACX0",
+  "AE"
+ ],
+ "confirm_steps": [
+  58,
+  59,
+  60,
+  61,
+  62,
+  63,
+  64,
+  65,
+  66,
+  67,
+  68,
+  69,
+  70,
+  71
+ ],
+ "iters": 10,
+ "spacer": "S",
+ "device_attrs": {
+  "sm_count": 26,
+  "l2_bytes": 3145728,
+  "max_shared_per_sm": 102400,
+  "max_regs_per_sm": 65536,
+  "max_shared_per_block_optin": 101376,
+  "max_blocks_per_sm": 16,
+  "reserved_shared_per_block": 1024
+ },
+ "store_bytes": 1358954496,
+ "triton": "3.4.0",
+ "n_real": [
+  [
+   69,
+   66,
+   60,
+   64
+  ],
+  [
+   67,
+   61,
+   57,
+   65
+  ],
+  [
+   72,
+   65,
+   62,
+   61
+  ],
+  [
+   72,
+   69,
+   70,
+   61
+  ],
+  [
+   67,
+   63,
+   55,
+   55
+  ],
+  [
+   70,
+   60,
+   60,
+   55
+  ],
+  [
+   69,
+   65,
+   66,
+   67
+  ],
+  [
+   64,
+   65,
+   61,
+   65
+  ],
+  [
+   72,
+   63,
+   60,
+   62
+  ],
+  [
+   65,
+   66,
+   60,
+   57
+  ],
+  [
+   74,
+   68,
+   61,
+   64
+  ],
+  [
+   68,
+   65,
+   60,
+   64
+  ],
+  [
+   71,
+   72,
+   60,
+   66
+  ],
+  [
+   70,
+   65,
+   62,
+   64
+  ],
+  [
+   66,
+   68,
+   62,
+   61
+  ],
+  [
+   73,
+   71,
+   73,
+   60
+  ],
+  [
+   76,
+   69,
+   66,
+   62
+  ],
+  [
+   77,
+   71,
+   64,
+   61
+  ],
+  [
+   66,
+   68,
+   57,
+   55
+  ],
+  [
+   70,
+   60,
+   59,
+   61
+  ],
+  [
+   76,
+   64,
+   60,
+   64
+  ],
+  [
+   63,
+   63,
+   59,
+   64
+  ],
+  [
+   62,
+   59,
+   61,
+   61
+  ],
+  [
+   66,
+   62,
+   54,
+   65
+  ],
+  [
+   69,
+   64,
+   60,
+   63
+  ],
+  [
+   67,
+   64,
+   61,
+   59
+  ],
+  [
+   66,
+   64,
+   57,
+   56
+  ],
+  [
+   64,
+   69,
+   63,
+   59
+  ],
+  [
+   69,
+   62,
+   61,
+   60
+  ],
+  [
+   69,
+   64,
+   62,
+   61
+  ],
+  [
+   74,
+   68,
+   66,
+   59
+  ],
+  [
+   72,
+   68,
+   57,
+   58
+  ],
+  [
+   64,
+   63,
+   64,
+   64
+  ],
+  [
+   73,
+   67,
+   58,
+   64
+  ],
+  [
+   72,
+   61,
+   63,
+   63
+  ],
+  [
+   67,
+   65,
+   63,
+   62
+  ],
+  [
+   67,
+   64,
+   57,
+   63
+  ],
+  [
+   61,
+   58,
+   56,
+   57
+  ],
+  [
+   60,
+   65,
+   54,
+   61
+  ],
+  [
+   72,
+   64,
+   60,
+   69
+  ],
+  [
+   70,
+   65,
+   67,
+   65
+  ],
+  [
+   68,
+   70,
+   66,
+   61
+  ],
+  [
+   73,
+   70,
+   65,
+   63
+  ],
+  [
+   72,
+   67,
+   59,
+   69
+  ],
+  [
+   77,
+   67,
+   65,
+   67
+  ],
+  [
+   73,
+   67,
+   68,
+   65
+  ],
+  [
+   68,
+   69,
+   65,
+   67
+  ],
+  [
+   69,
+   71,
+   65,
+   65
+  ],
+  [
+   72,
+   74,
+   61,
+   64
+  ],
+  [
+   71,
+   72,
+   72,
+   61
+  ],
+  [
+   73,
+   69,
+   66,
+   62
+  ],
+  [
+   76,
+   67,
+   68,
+   66
+  ],
+  [
+   72,
+   67,
+   65,
+   67
+  ],
+  [
+   66,
+   62,
+   64,
+   64
+  ],
+  [
+   77,
+   67,
+   64,
+   66
+  ],
+  [
+   73,
+   71,
+   55,
+   59
+  ],
+  [
+   68,
+   68,
+   61,
+   62
+  ],
+  [
+   74,
+   67,
+   63,
+   60
+  ],
+  [
+   72,
+   72,
+   66,
+   63
+  ],
+  [
+   69,
+   64,
+   60,
+   60
+  ],
+  [
+   69,
+   68,
+   65,
+   58
+  ],
+  [
+   72,
+   65,
+   65,
+   61
+  ],
+  [
+   82,
+   71,
+   66,
+   71
+  ],
+  [
+   73,
+   65,
+   61,
+   60
+  ],
+  [
+   68,
+   62,
+   65,
+   63
+  ],
+  [
+   69,
+   72,
+   66,
+   63
+  ],
+  [
+   61,
+   60,
+   61,
+   63
+  ],
+  [
+   74,
+   67,
+   64,
+   66
+  ],
+  [
+   72,
+   76,
+   67,
+   71
+  ],
+  [
+   79,
+   74,
+   66,
+   64
+  ]
+ ],
+ "static": {
+  "A0": {
+   "gu": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 600,
+    "sass_sha256": "79f3d910cbc17a5db7b08814c2e585603abd1323d45f2b108827f355f49ca004",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 9,
+     "LDGSTS.E": 3,
+     "LDGSTS.E.64": 3,
+     "LDGSTS.E.BYPASS.128": 3
+    },
+    "trip": 32,
+    "unrolled_away": false,
+    "n_regs": 71,
+    "n_spills": 0,
+    "shared": 14592,
+    "loop_instructions": 402,
+    "loop_opcodes": {
+     "DEPBAR.LE": 1,
+     "UIADD3": 3,
+     "UISETP.GT.AND": 2,
+     "USEL": 3,
+     "UISETP.GE.U32.AND": 1,
+     "ULEA": 1,
+     "IMAD.U32": 35,
+     "UISETP.GE.U32.AND.EX": 1,
+     "IMAD": 7,
+     "BAR.SYNC.DEFER_BLOCKING": 2,
+     "LEA": 2,
+     "LDS.64": 1,
+     "PRMT": 24,
+     "SHF.R.S32.HI": 6,
+     "LOP3.LUT": 56,
+     "FSEL": 160,
+     "SGXT": 8,
+     "ISETP.GE.AND": 9,
+     "LDS": 4,
+     "FMUL": 16,
+     "LDS.128": 8,
+     "PLOP3.LUT": 2,
+     "ISETP.LT.AND": 1,
+     "UIADD3.X": 1,
+     "UISETP.NE.U32.AND": 1,
+     "STS.128": 4,
+     "UISETP.NE.AND.EX": 1,
+     "IMAD.MOV.U32": 18,
+     "HMMA.1688.F32.TF32": 8,
+     "SEL": 1,
+     "ISETP.NE.U32.AND": 1,
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "IADD3": 3,
+     "IMAD.X": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1,
+     "CALL.REL.NOINC": 1,
+     "BRA": 1
+    },
+    "unroll": 1,
+    "unroll_guard": "mma",
+    "lane_instr_per_weight": 25.125,
+    "loads_per_weight": {
+     "LDGDEPBAR": 0.1875,
+     "LDGSTS.E": 0.0625,
+     "LDGSTS.E.64": 0.0625,
+     "LDGSTS.E.BYPASS.128": 0.0625
+    },
+    "shared_per_weight": {
+     "LDS": 0.25,
+     "LDS.128": 0.5,
+     "LDS.64": 0.0625,
+     "STS.128": 0.25
+    },
+    "loads_outside_loop": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 6,
+     "LDGSTS.E": 2,
+     "LDGSTS.E.64": 2,
+     "LDGSTS.E.BYPASS.128": 2
+    },
+    "loop_loads": {
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1
+    },
+    "stream_bytes": 3584
+   },
+   "dn": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 600,
+    "sass_sha256": "0d5a3fc3211bc61cd91a2244a864f391596a8997214d2f63776b4dea5a503484",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 9,
+     "LDGSTS.E": 3,
+     "LDGSTS.E.64": 3,
+     "LDGSTS.E.BYPASS.128": 3
+    },
+    "trip": 12,
+    "unrolled_away": false,
+    "n_regs": 71,
+    "n_spills": 0,
+    "shared": 14592,
+    "loop_instructions": 402,
+    "loop_opcodes": {
+     "DEPBAR.LE": 1,
+     "UIADD3": 3,
+     "UISETP.GT.AND": 2,
+     "USEL": 3,
+     "UISETP.GE.U32.AND": 1,
+     "ULEA": 1,
+     "IMAD.U32": 35,
+     "UISETP.GE.U32.AND.EX": 1,
+     "IMAD": 7,
+     "BAR.SYNC.DEFER_BLOCKING": 2,
+     "LEA": 2,
+     "LDS.64": 1,
+     "PRMT": 24,
+     "SHF.R.S32.HI": 6,
+     "LOP3.LUT": 56,
+     "FSEL": 160,
+     "SGXT": 8,
+     "ISETP.GE.AND": 9,
+     "LDS": 4,
+     "FMUL": 16,
+     "LDS.128": 8,
+     "PLOP3.LUT": 2,
+     "ISETP.LT.AND": 1,
+     "UIADD3.X": 1,
+     "UISETP.NE.U32.AND": 1,
+     "STS.128": 4,
+     "UISETP.NE.AND.EX": 1,
+     "IMAD.MOV.U32": 18,
+     "HMMA.1688.F32.TF32": 8,
+     "SEL": 1,
+     "ISETP.NE.U32.AND": 1,
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "IADD3": 3,
+     "IMAD.X": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1,
+     "CALL.REL.NOINC": 1,
+     "BRA": 1
+    },
+    "unroll": 1,
+    "unroll_guard": "mma",
+    "lane_instr_per_weight": 25.125,
+    "loads_per_weight": {
+     "LDGDEPBAR": 0.1875,
+     "LDGSTS.E": 0.0625,
+     "LDGSTS.E.64": 0.0625,
+     "LDGSTS.E.BYPASS.128": 0.0625
+    },
+    "shared_per_weight": {
+     "LDS": 0.25,
+     "LDS.128": 0.5,
+     "LDS.64": 0.0625,
+     "STS.128": 0.25
+    },
+    "loads_outside_loop": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 6,
+     "LDGSTS.E": 2,
+     "LDGSTS.E.64": 2,
+     "LDGSTS.E.BYPASS.128": 2
+    },
+    "loop_loads": {
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1
+    },
+    "stream_bytes": 3584
+   }
+  },
+  "A0p": {
+   "gu": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 600,
+    "sass_sha256": "79f3d910cbc17a5db7b08814c2e585603abd1323d45f2b108827f355f49ca004",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 9,
+     "LDGSTS.E": 3,
+     "LDGSTS.E.64": 3,
+     "LDGSTS.E.BYPASS.128": 3
+    },
+    "trip": 32,
+    "unrolled_away": false,
+    "n_regs": 71,
+    "n_spills": 0,
+    "shared": 14592,
+    "loop_instructions": 402,
+    "loop_opcodes": {
+     "DEPBAR.LE": 1,
+     "UIADD3": 3,
+     "UISETP.GT.AND": 2,
+     "USEL": 3,
+     "UISETP.GE.U32.AND": 1,
+     "ULEA": 1,
+     "IMAD.U32": 35,
+     "UISETP.GE.U32.AND.EX": 1,
+     "IMAD": 7,
+     "BAR.SYNC.DEFER_BLOCKING": 2,
+     "LEA": 2,
+     "LDS.64": 1,
+     "PRMT": 24,
+     "SHF.R.S32.HI": 6,
+     "LOP3.LUT": 56,
+     "FSEL": 160,
+     "SGXT": 8,
+     "ISETP.GE.AND": 9,
+     "LDS": 4,
+     "FMUL": 16,
+     "LDS.128": 8,
+     "PLOP3.LUT": 2,
+     "ISETP.LT.AND": 1,
+     "UIADD3.X": 1,
+     "UISETP.NE.U32.AND": 1,
+     "STS.128": 4,
+     "UISETP.NE.AND.EX": 1,
+     "IMAD.MOV.U32": 18,
+     "HMMA.1688.F32.TF32": 8,
+     "SEL": 1,
+     "ISETP.NE.U32.AND": 1,
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "IADD3": 3,
+     "IMAD.X": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1,
+     "CALL.REL.NOINC": 1,
+     "BRA": 1
+    },
+    "unroll": 1,
+    "unroll_guard": "mma",
+    "lane_instr_per_weight": 25.125,
+    "loads_per_weight": {
+     "LDGDEPBAR": 0.1875,
+     "LDGSTS.E": 0.0625,
+     "LDGSTS.E.64": 0.0625,
+     "LDGSTS.E.BYPASS.128": 0.0625
+    },
+    "shared_per_weight": {
+     "LDS": 0.25,
+     "LDS.128": 0.5,
+     "LDS.64": 0.0625,
+     "STS.128": 0.25
+    },
+    "loads_outside_loop": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 6,
+     "LDGSTS.E": 2,
+     "LDGSTS.E.64": 2,
+     "LDGSTS.E.BYPASS.128": 2
+    },
+    "loop_loads": {
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1
+    },
+    "stream_bytes": 3584
+   },
+   "dn": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 600,
+    "sass_sha256": "0d5a3fc3211bc61cd91a2244a864f391596a8997214d2f63776b4dea5a503484",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 9,
+     "LDGSTS.E": 3,
+     "LDGSTS.E.64": 3,
+     "LDGSTS.E.BYPASS.128": 3
+    },
+    "trip": 12,
+    "unrolled_away": false,
+    "n_regs": 71,
+    "n_spills": 0,
+    "shared": 14592,
+    "loop_instructions": 402,
+    "loop_opcodes": {
+     "DEPBAR.LE": 1,
+     "UIADD3": 3,
+     "UISETP.GT.AND": 2,
+     "USEL": 3,
+     "UISETP.GE.U32.AND": 1,
+     "ULEA": 1,
+     "IMAD.U32": 35,
+     "UISETP.GE.U32.AND.EX": 1,
+     "IMAD": 7,
+     "BAR.SYNC.DEFER_BLOCKING": 2,
+     "LEA": 2,
+     "LDS.64": 1,
+     "PRMT": 24,
+     "SHF.R.S32.HI": 6,
+     "LOP3.LUT": 56,
+     "FSEL": 160,
+     "SGXT": 8,
+     "ISETP.GE.AND": 9,
+     "LDS": 4,
+     "FMUL": 16,
+     "LDS.128": 8,
+     "PLOP3.LUT": 2,
+     "ISETP.LT.AND": 1,
+     "UIADD3.X": 1,
+     "UISETP.NE.U32.AND": 1,
+     "STS.128": 4,
+     "UISETP.NE.AND.EX": 1,
+     "IMAD.MOV.U32": 18,
+     "HMMA.1688.F32.TF32": 8,
+     "SEL": 1,
+     "ISETP.NE.U32.AND": 1,
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "IADD3": 3,
+     "IMAD.X": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1,
+     "CALL.REL.NOINC": 1,
+     "BRA": 1
+    },
+    "unroll": 1,
+    "unroll_guard": "mma",
+    "lane_instr_per_weight": 25.125,
+    "loads_per_weight": {
+     "LDGDEPBAR": 0.1875,
+     "LDGSTS.E": 0.0625,
+     "LDGSTS.E.64": 0.0625,
+     "LDGSTS.E.BYPASS.128": 0.0625
+    },
+    "shared_per_weight": {
+     "LDS": 0.25,
+     "LDS.128": 0.5,
+     "LDS.64": 0.0625,
+     "STS.128": 0.25
+    },
+    "loads_outside_loop": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 6,
+     "LDGSTS.E": 2,
+     "LDGSTS.E.64": 2,
+     "LDGSTS.E.BYPASS.128": 2
+    },
+    "loop_loads": {
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1
+    },
+    "stream_bytes": 3584
+   }
+  },
+  "A1": {
+   "gu": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 400,
+    "sass_sha256": "42a6c8be9b68476a8c55f00386ad25759bdc06fdfa2d65aff8420f39f8e4936c",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 9,
+     "LDGSTS.E": 3,
+     "LDGSTS.E.64": 3,
+     "LDGSTS.E.BYPASS.128": 3
+    },
+    "trip": 32,
+    "unrolled_away": false,
+    "n_regs": 67,
+    "n_spills": 0,
+    "shared": 6400,
+    "loop_instructions": 181,
+    "loop_opcodes": {
+     "DEPBAR.LE": 1,
+     "UIADD3": 3,
+     "UISETP.GT.AND": 2,
+     "USEL": 3,
+     "UISETP.GE.U32.AND": 1,
+     "USHF.L.U32": 1,
+     "IMAD.U32": 36,
+     "UISETP.GE.U32.AND.EX": 1,
+     "IMAD": 7,
+     "BAR.SYNC.DEFER_BLOCKING": 2,
+     "IADD3": 4,
+     "LEA": 1,
+     "PLOP3.LUT": 2,
+     "ISETP.LT.AND": 1,
+     "UIADD3.X": 1,
+     "UISETP.NE.U32.AND": 1,
+     "UISETP.NE.AND.EX": 1,
+     "LDSM.16.M88.2": 1,
+     "LDS": 4,
+     "LDS.128": 4,
+     "PRMT": 24,
+     "SHF.R.U32.HI": 8,
+     "SGXT.U32": 8,
+     "I2FP.F32.U32": 16,
+     "FMUL": 16,
+     "LOP3.LUT": 8,
+     "HMMA.1688.F32.TF32": 8,
+     "SEL": 1,
+     "IMAD.MOV.U32": 4,
+     "ISETP.NE.U32.AND": 1,
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "IMAD.X": 3,
+     "LDGSTS.E": 1,
+     "BRA": 1
+    },
+    "unroll": 1,
+    "unroll_guard": "mma",
+    "lane_instr_per_weight": 11.3125,
+    "loads_per_weight": {
+     "LDGDEPBAR": 0.1875,
+     "LDGSTS.E": 0.0625,
+     "LDGSTS.E.64": 0.0625,
+     "LDGSTS.E.BYPASS.128": 0.0625
+    },
+    "shared_per_weight": {
+     "LDS": 0.25,
+     "LDS.128": 0.25,
+     "LDSM.16.M88.2": 0.0625
+    },
+    "loads_outside_loop": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 6,
+     "LDGSTS.E": 2,
+     "LDGSTS.E.64": 2,
+     "LDGSTS.E.BYPASS.128": 2
+    },
+    "loop_loads": {
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1
+    },
+    "stream_bytes": 3584
+   },
+   "dn": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 400,
+    "sass_sha256": "e33da62a49ea1f1bc34e20eb334835b65229e7ebb7294bf56aee1b3d29e85819",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 9,
+     "LDGSTS.E": 3,
+     "LDGSTS.E.64": 3,
+     "LDGSTS.E.BYPASS.128": 3
+    },
+    "trip": 12,
+    "unrolled_away": false,
+    "n_regs": 67,
+    "n_spills": 0,
+    "shared": 6400,
+    "loop_instructions": 183,
+    "loop_opcodes": {
+     "DEPBAR.LE": 1,
+     "UIADD3": 3,
+     "UISETP.GT.AND": 2,
+     "USEL": 3,
+     "UISETP.GE.U32.AND": 1,
+     "USHF.L.U32": 1,
+     "IMAD.U32": 36,
+     "UISETP.GE.U32.AND.EX": 1,
+     "IMAD": 7,
+     "BAR.SYNC.DEFER_BLOCKING": 2,
+     "IADD3": 4,
+     "LEA": 1,
+     "PLOP3.LUT": 2,
+     "ISETP.LT.AND": 1,
+     "UIADD3.X": 1,
+     "UISETP.NE.U32.AND": 1,
+     "UISETP.NE.AND.EX": 1,
+     "LDSM.16.M88.2": 1,
+     "LDS": 4,
+     "LDS.128": 4,
+     "PRMT": 24,
+     "SHF.R.U32.HI": 8,
+     "SGXT.U32": 8,
+     "I2FP.F32.U32": 16,
+     "FMUL": 16,
+     "LOP3.LUT": 8,
+     "HMMA.1688.F32.TF32": 8,
+     "SEL": 1,
+     "IMAD.MOV.U32": 6,
+     "ISETP.NE.U32.AND": 1,
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "IMAD.X": 3,
+     "LDGSTS.E": 1,
+     "BRA": 1
+    },
+    "unroll": 1,
+    "unroll_guard": "mma",
+    "lane_instr_per_weight": 11.4375,
+    "loads_per_weight": {
+     "LDGDEPBAR": 0.1875,
+     "LDGSTS.E": 0.0625,
+     "LDGSTS.E.64": 0.0625,
+     "LDGSTS.E.BYPASS.128": 0.0625
+    },
+    "shared_per_weight": {
+     "LDS": 0.25,
+     "LDS.128": 0.25,
+     "LDSM.16.M88.2": 0.0625
+    },
+    "loads_outside_loop": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 6,
+     "LDGSTS.E": 2,
+     "LDGSTS.E.64": 2,
+     "LDGSTS.E.BYPASS.128": 2
+    },
+    "loop_loads": {
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1
+    },
+    "stream_bytes": 3584
+   }
+  },
+  "A2b": {
+   "gu": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 600,
+    "sass_sha256": "0b77f26daae81bbf92b0241bc73545a0016f8adf9b2c1f5b23074e7354962c2c",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 9,
+     "LDGSTS.E": 3,
+     "LDGSTS.E.64": 3,
+     "LDGSTS.E.BYPASS.128": 3
+    },
+    "trip": 32,
+    "unrolled_away": false,
+    "n_regs": 89,
+    "n_spills": 0,
+    "shared": 6400,
+    "loop_instructions": 389,
+    "loop_opcodes": {
+     "DEPBAR.LE": 1,
+     "IADD3": 10,
+     "BAR.SYNC.DEFER_BLOCKING": 2,
+     "ISETP.GT.AND": 2,
+     "SEL": 20,
+     "IMAD": 8,
+     "LDS.64": 1,
+     "PRMT": 12,
+     "SGXT": 8,
+     "LOP3.LUT": 66,
+     "ISETP.GE.AND": 9,
+     "FSEL": 160,
+     "IMAD.IADD": 5,
+     "R2P": 5,
+     "SHF.R.S32.HI": 6,
+     "IMAD.SHL.U32": 1,
+     "SHF.R.U32.HI": 12,
+     "LDS": 4,
+     "FFMA": 16,
+     "IMAD.MOV.U32": 6,
+     "ISETP.GE.U32.AND": 1,
+     "LDS.128": 1,
+     "ISETP.GE.U32.AND.EX": 1,
+     "ISETP.NE.U32.AND": 2,
+     "ISETP.LT.AND": 1,
+     "IMAD.U32": 8,
+     "FADD": 8,
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "IMAD.X": 4,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1,
+     "ISETP.NE.AND.EX": 1,
+     "CALL.REL.NOINC": 1,
+     "BRA": 1
+    },
+    "unroll": 1,
+    "unroll_guard": "bytes",
+    "lane_instr_per_weight": 24.3125,
+    "loads_per_weight": {
+     "LDGDEPBAR": 0.1875,
+     "LDGSTS.E": 0.0625,
+     "LDGSTS.E.64": 0.0625,
+     "LDGSTS.E.BYPASS.128": 0.0625
+    },
+    "shared_per_weight": {
+     "LDS": 0.25,
+     "LDS.128": 0.0625,
+     "LDS.64": 0.0625
+    },
+    "loads_outside_loop": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 6,
+     "LDGSTS.E": 2,
+     "LDGSTS.E.64": 2,
+     "LDGSTS.E.BYPASS.128": 2
+    },
+    "loop_loads": {
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1
+    },
+    "stream_bytes": 3584
+   },
+   "dn": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 616,
+    "sass_sha256": "832ae118087f13775ff0c4406bb8297acb72030dca7ef4f3adde496ff872d61b",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 9,
+     "LDGSTS.E": 3,
+     "LDGSTS.E.64": 3,
+     "LDGSTS.E.BYPASS.128": 3
+    },
+    "trip": 12,
+    "unrolled_away": false,
+    "n_regs": 74,
+    "n_spills": 0,
+    "shared": 6400,
+    "loop_instructions": 394,
+    "loop_opcodes": {
+     "DEPBAR.LE": 1,
+     "UIADD3": 3,
+     "UISETP.GT.AND": 2,
+     "USEL": 3,
+     "UISETP.GE.U32.AND": 1,
+     "IMAD.U32": 11,
+     "UISETP.GE.U32.AND.EX": 1,
+     "IMAD": 8,
+     "BAR.SYNC.DEFER_BLOCKING": 2,
+     "LDS.64": 1,
+     "PRMT": 12,
+     "SGXT": 8,
+     "LOP3.LUT": 66,
+     "ISETP.GE.AND": 9,
+     "FSEL": 160,
+     "SEL": 17,
+     "IMAD.IADD": 5,
+     "R2P": 5,
+     "IADD3": 7,
+     "SHF.R.S32.HI": 6,
+     "IMAD.SHL.U32": 1,
+     "SHF.R.U32.HI": 12,
+     "LDS": 4,
+     "FFMA": 16,
+     "LDS.128": 1,
+     "IMAD.MOV.U32": 6,
+     "PLOP3.LUT": 2,
+     "UIADD3.X": 1,
+     "ISETP.LT.AND": 1,
+     "UISETP.NE.U32.AND": 1,
+     "ISETP.NE.U32.AND": 1,
+     "UISETP.NE.AND.EX": 1,
+     "LDGSTS.E.BYPASS.128": 1,
+     "FADD": 8,
+     "LDGDEPBAR": 3,
+     "IMAD.X": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1,
+     "CALL.REL.NOINC": 1,
+     "BRA": 1
+    },
+    "unroll": 1,
+    "unroll_guard": "bytes",
+    "lane_instr_per_weight": 24.625,
+    "loads_per_weight": {
+     "LDGDEPBAR": 0.1875,
+     "LDGSTS.E": 0.0625,
+     "LDGSTS.E.64": 0.0625,
+     "LDGSTS.E.BYPASS.128": 0.0625
+    },
+    "shared_per_weight": {
+     "LDS": 0.25,
+     "LDS.128": 0.0625,
+     "LDS.64": 0.0625
+    },
+    "loads_outside_loop": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 6,
+     "LDGSTS.E": 2,
+     "LDGSTS.E.64": 2,
+     "LDGSTS.E.BYPASS.128": 2
+    },
+    "loop_loads": {
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1
+    },
+    "stream_bytes": 3584
+   }
+  },
+  "A12": {
+   "gu": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 384,
+    "sass_sha256": "aa98cdf4fb18571eefe85898c14b1c3f7784ed128d1f94ce44b28ae0d3bb1016",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 9,
+     "LDGSTS.E": 3,
+     "LDGSTS.E.64": 3,
+     "LDGSTS.E.BYPASS.128": 3
+    },
+    "trip": 32,
+    "unrolled_away": false,
+    "n_regs": 64,
+    "n_spills": 0,
+    "shared": 6400,
+    "loop_instructions": 148,
+    "loop_opcodes": {
+     "UIADD3": 3,
+     "DEPBAR.LE": 1,
+     "UISETP.GT.AND": 2,
+     "USEL": 3,
+     "UISETP.GE.U32.AND": 1,
+     "MOV": 7,
+     "UISETP.GE.U32.AND.EX": 1,
+     "IMAD": 5,
+     "BAR.SYNC.DEFER_BLOCKING": 2,
+     "LDS.128": 1,
+     "IMAD.U32": 7,
+     "PRMT": 18,
+     "FADD": 8,
+     "SHF.L.U32": 2,
+     "LEA": 1,
+     "SEL": 1,
+     "IMAD.MOV.U32": 4,
+     "ISETP.NE.U32.AND": 1,
+     "LDS": 4,
+     "LDS.64": 1,
+     "LDGSTS.E.BYPASS.128": 1,
+     "PLOP3.LUT": 2,
+     "LDGDEPBAR": 3,
+     "ISETP.LT.AND": 1,
+     "UIADD3.X": 1,
+     "UISETP.NE.U32.AND": 1,
+     "UISETP.NE.AND.EX": 1,
+     "LDGSTS.E.64": 1,
+     "IADD3": 3,
+     "IMAD.X": 2,
+     "LDGSTS.E": 1,
+     "IADD3.X": 1,
+     "LOP3.LUT": 12,
+     "I2FP.F32.U32": 8,
+     "SHF.R.U32.HI": 8,
+     "FFMA": 16,
+     "SGXT.U32": 4,
+     "I2F.U16": 8,
+     "BRA": 1
+    },
+    "unroll": 1,
+    "unroll_guard": "bytes",
+    "lane_instr_per_weight": 9.25,
+    "loads_per_weight": {
+     "LDGDEPBAR": 0.1875,
+     "LDGSTS.E": 0.0625,
+     "LDGSTS.E.64": 0.0625,
+     "LDGSTS.E.BYPASS.128": 0.0625
+    },
+    "shared_per_weight": {
+     "LDS": 0.25,
+     "LDS.128": 0.0625,
+     "LDS.64": 0.0625
+    },
+    "loads_outside_loop": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 6,
+     "LDGSTS.E": 2,
+     "LDGSTS.E.64": 2,
+     "LDGSTS.E.BYPASS.128": 2
+    },
+    "loop_loads": {
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1
+    },
+    "stream_bytes": 3584
+   },
+   "dn": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 384,
+    "sass_sha256": "ab002bb090afa51b9721e34a3170cc933f5f7f406b65ea2c21cb121c594b4695",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 9,
+     "LDGSTS.E": 3,
+     "LDGSTS.E.64": 3,
+     "LDGSTS.E.BYPASS.128": 3
+    },
+    "trip": 12,
+    "unrolled_away": false,
+    "n_regs": 64,
+    "n_spills": 0,
+    "shared": 6400,
+    "loop_instructions": 148,
+    "loop_opcodes": {
+     "DEPBAR.LE": 1,
+     "UIADD3": 3,
+     "UISETP.GT.AND": 2,
+     "USEL": 3,
+     "UISETP.GE.U32.AND": 1,
+     "IMAD.U32": 6,
+     "UISETP.GE.U32.AND.EX": 1,
+     "IMAD": 5,
+     "BAR.SYNC.DEFER_BLOCKING": 2,
+     "MOV": 6,
+     "LEA": 1,
+     "LDS.128": 1,
+     "SHF.L.U32": 4,
+     "PRMT": 18,
+     "FADD": 8,
+     "SEL": 1,
+     "ISETP.NE.U32.AND": 1,
+     "IMAD.MOV.U32": 4,
+     "LDS": 4,
+     "LDS.64": 1,
+     "LDGSTS.E.BYPASS.128": 1,
+     "PLOP3.LUT": 2,
+     "LDGDEPBAR": 3,
+     "ISETP.LT.AND": 1,
+     "UIADD3.X": 1,
+     "UISETP.NE.U32.AND": 1,
+     "UISETP.NE.AND.EX": 1,
+     "LDGSTS.E.64": 1,
+     "IADD3": 3,
+     "IADD3.X": 2,
+     "LDGSTS.E": 1,
+     "IMAD.X": 1,
+     "LOP3.LUT": 12,
+     "I2FP.F32.U32": 8,
+     "SHF.R.U32.HI": 8,
+     "FFMA": 16,
+     "SGXT.U32": 4,
+     "I2F.U16": 8,
+     "BRA": 1
+    },
+    "unroll": 1,
+    "unroll_guard": "bytes",
+    "lane_instr_per_weight": 9.25,
+    "loads_per_weight": {
+     "LDGDEPBAR": 0.1875,
+     "LDGSTS.E": 0.0625,
+     "LDGSTS.E.64": 0.0625,
+     "LDGSTS.E.BYPASS.128": 0.0625
+    },
+    "shared_per_weight": {
+     "LDS": 0.25,
+     "LDS.128": 0.0625,
+     "LDS.64": 0.0625
+    },
+    "loads_outside_loop": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 6,
+     "LDGSTS.E": 2,
+     "LDGSTS.E.64": 2,
+     "LDGSTS.E.BYPASS.128": 2
+    },
+    "loop_loads": {
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1
+    },
+    "stream_bytes": 3584
+   }
+  },
+  "A3": {
+   "gu": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 360,
+    "sass_sha256": "d42909b7de4e3b6173ea5ebf2c7282a1f9ca768078629faa8034d132cda0ff15",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 9,
+     "LDGSTS.E": 3,
+     "LDGSTS.E.64": 3,
+     "LDGSTS.E.BYPASS.128": 3
+    },
+    "trip": 32,
+    "unrolled_away": false,
+    "n_regs": 64,
+    "n_spills": 0,
+    "shared": 6400,
+    "loop_instructions": 91,
+    "loop_opcodes": {
+     "DEPBAR.LE": 1,
+     "IADD3": 6,
+     "BAR.SYNC.DEFER_BLOCKING": 2,
+     "ISETP.GT.AND": 2,
+     "SEL": 8,
+     "ISETP.GE.U32.AND": 1,
+     "IMAD": 6,
+     "ISETP.GE.U32.AND.EX": 1,
+     "LDS.64": 1,
+     "LDSM.16.M88": 1,
+     "PRMT": 12,
+     "LOP3.LUT": 8,
+     "FADD": 9,
+     "IMAD.MOV.U32": 4,
+     "LDS.128": 1,
+     "ISETP.NE.U32.AND": 4,
+     "MOV": 1,
+     "IMAD.U32": 6,
+     "SHF.L.U32": 2,
+     "LDS": 3,
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "IMAD.X": 4,
+     "LDGSTS.E": 1,
+     "ISETP.NE.AND.EX": 1,
+     "BRA": 1
+    },
+    "unroll": 1,
+    "unroll_guard": "bytes",
+    "lane_instr_per_weight": 5.6875,
+    "loads_per_weight": {
+     "LDGDEPBAR": 0.1875,
+     "LDGSTS.E": 0.0625,
+     "LDGSTS.E.64": 0.0625,
+     "LDGSTS.E.BYPASS.128": 0.0625
+    },
+    "shared_per_weight": {
+     "LDS": 0.1875,
+     "LDS.128": 0.0625,
+     "LDS.64": 0.0625,
+     "LDSM.16.M88": 0.0625
+    },
+    "loads_outside_loop": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 6,
+     "LDGSTS.E": 2,
+     "LDGSTS.E.64": 2,
+     "LDGSTS.E.BYPASS.128": 2
+    },
+    "loop_loads": {
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1
+    },
+    "stream_bytes": 3584
+   },
+   "dn": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 824,
+    "sass_sha256": "775e9db5869610304570d0a2589339bfb97ee80add23c48208c20571b5715c16",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 42,
+     "LDGSTS.E": 14,
+     "LDGSTS.E.64": 14,
+     "LDGSTS.E.BYPASS.128": 14
+    },
+    "trip": 12,
+    "unrolled_away": true,
+    "n_regs": 72,
+    "n_spills": 0,
+    "shared": 6400
+   }
+  },
+  "AL": {
+   "gu": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 360,
+    "sass_sha256": "d42909b7de4e3b6173ea5ebf2c7282a1f9ca768078629faa8034d132cda0ff15",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 9,
+     "LDGSTS.E": 3,
+     "LDGSTS.E.64": 3,
+     "LDGSTS.E.BYPASS.128": 3
+    },
+    "trip": 32,
+    "unrolled_away": false,
+    "n_regs": 64,
+    "n_spills": 0,
+    "shared": 6400,
+    "loop_instructions": 91,
+    "loop_opcodes": {
+     "DEPBAR.LE": 1,
+     "IADD3": 6,
+     "BAR.SYNC.DEFER_BLOCKING": 2,
+     "ISETP.GT.AND": 2,
+     "SEL": 8,
+     "ISETP.GE.U32.AND": 1,
+     "IMAD": 6,
+     "ISETP.GE.U32.AND.EX": 1,
+     "LDS.64": 1,
+     "LDSM.16.M88": 1,
+     "PRMT": 12,
+     "LOP3.LUT": 8,
+     "FADD": 9,
+     "IMAD.MOV.U32": 4,
+     "LDS.128": 1,
+     "ISETP.NE.U32.AND": 4,
+     "MOV": 1,
+     "IMAD.U32": 6,
+     "SHF.L.U32": 2,
+     "LDS": 3,
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "IMAD.X": 4,
+     "LDGSTS.E": 1,
+     "ISETP.NE.AND.EX": 1,
+     "BRA": 1
+    },
+    "unroll": 1,
+    "unroll_guard": "bytes",
+    "lane_instr_per_weight": 5.6875,
+    "loads_per_weight": {
+     "LDGDEPBAR": 0.1875,
+     "LDGSTS.E": 0.0625,
+     "LDGSTS.E.64": 0.0625,
+     "LDGSTS.E.BYPASS.128": 0.0625
+    },
+    "shared_per_weight": {
+     "LDS": 0.1875,
+     "LDS.128": 0.0625,
+     "LDS.64": 0.0625,
+     "LDSM.16.M88": 0.0625
+    },
+    "loads_outside_loop": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 6,
+     "LDGSTS.E": 2,
+     "LDGSTS.E.64": 2,
+     "LDGSTS.E.BYPASS.128": 2
+    },
+    "loop_loads": {
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1
+    },
+    "stream_bytes": 3584
+   },
+   "dn": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 824,
+    "sass_sha256": "775e9db5869610304570d0a2589339bfb97ee80add23c48208c20571b5715c16",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 42,
+     "LDGSTS.E": 14,
+     "LDGSTS.E.64": 14,
+     "LDGSTS.E.BYPASS.128": 14
+    },
+    "trip": 12,
+    "unrolled_away": true,
+    "n_regs": 72,
+    "n_spills": 0,
+    "shared": 6400
+   }
+  },
+  "AC": {
+   "gu": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 632,
+    "sass_sha256": "4f717e62ce2b5604e307d0ba679c5eaac2b4f6fb3dc1ae5b995dd3a54af397ff",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 9,
+     "LDGSTS.E": 3,
+     "LDGSTS.E.64": 3,
+     "LDGSTS.E.BYPASS.128": 3
+    },
+    "trip": 32,
+    "unrolled_away": false,
+    "n_regs": 71,
+    "n_spills": 0,
+    "shared": 14592,
+    "loop_instructions": 402,
+    "loop_opcodes": {
+     "DEPBAR.LE": 1,
+     "UIADD3": 3,
+     "UISETP.GT.AND": 2,
+     "USEL": 3,
+     "UISETP.GE.U32.AND": 1,
+     "ULEA": 1,
+     "IMAD.U32": 35,
+     "UISETP.GE.U32.AND.EX": 1,
+     "IMAD": 7,
+     "BAR.SYNC.DEFER_BLOCKING": 2,
+     "LEA": 2,
+     "LDS.64": 1,
+     "PRMT": 24,
+     "SHF.R.S32.HI": 6,
+     "LOP3.LUT": 56,
+     "FSEL": 160,
+     "SGXT": 8,
+     "ISETP.GE.AND": 9,
+     "LDS": 4,
+     "FMUL": 16,
+     "LDS.128": 8,
+     "PLOP3.LUT": 2,
+     "ISETP.LT.AND": 1,
+     "UIADD3.X": 1,
+     "UISETP.NE.U32.AND": 1,
+     "STS.128": 4,
+     "UISETP.NE.AND.EX": 1,
+     "IMAD.MOV.U32": 18,
+     "HMMA.1688.F32.TF32": 8,
+     "SEL": 1,
+     "ISETP.NE.U32.AND": 1,
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "IADD3": 3,
+     "IMAD.X": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1,
+     "CALL.REL.NOINC": 1,
+     "BRA": 1
+    },
+    "unroll": 1,
+    "unroll_guard": "mma",
+    "lane_instr_per_weight": 25.125,
+    "loads_per_weight": {
+     "LDGDEPBAR": 0.1875,
+     "LDGSTS.E": 0.0625,
+     "LDGSTS.E.64": 0.0625,
+     "LDGSTS.E.BYPASS.128": 0.0625
+    },
+    "shared_per_weight": {
+     "LDS": 0.25,
+     "LDS.128": 0.5,
+     "LDS.64": 0.0625,
+     "STS.128": 0.25
+    },
+    "loads_outside_loop": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 6,
+     "LDGSTS.E": 2,
+     "LDGSTS.E.64": 2,
+     "LDGSTS.E.BYPASS.128": 2
+    },
+    "loop_loads": {
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1
+    },
+    "stream_bytes": 3584
+   },
+   "dn": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 624,
+    "sass_sha256": "335d4e777f5645139379c8116888805a49d637ecefd2bfc4fd399e22e52bdbf2",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 9,
+     "LDGSTS.E": 3,
+     "LDGSTS.E.64": 3,
+     "LDGSTS.E.BYPASS.128": 3
+    },
+    "trip": 12,
+    "unrolled_away": false,
+    "n_regs": 71,
+    "n_spills": 0,
+    "shared": 14592,
+    "loop_instructions": 402,
+    "loop_opcodes": {
+     "DEPBAR.LE": 1,
+     "UIADD3": 3,
+     "UISETP.GT.AND": 2,
+     "USEL": 3,
+     "UISETP.GE.U32.AND": 1,
+     "ULEA": 1,
+     "IMAD.U32": 35,
+     "UISETP.GE.U32.AND.EX": 1,
+     "IMAD": 7,
+     "BAR.SYNC.DEFER_BLOCKING": 2,
+     "LEA": 2,
+     "LDS.64": 1,
+     "PRMT": 24,
+     "SHF.R.S32.HI": 6,
+     "LOP3.LUT": 56,
+     "FSEL": 160,
+     "SGXT": 8,
+     "ISETP.GE.AND": 9,
+     "LDS": 4,
+     "FMUL": 16,
+     "LDS.128": 8,
+     "PLOP3.LUT": 2,
+     "ISETP.LT.AND": 1,
+     "UIADD3.X": 1,
+     "UISETP.NE.U32.AND": 1,
+     "STS.128": 4,
+     "UISETP.NE.AND.EX": 1,
+     "IMAD.MOV.U32": 18,
+     "HMMA.1688.F32.TF32": 8,
+     "SEL": 1,
+     "ISETP.NE.U32.AND": 1,
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "IADD3": 3,
+     "IMAD.X": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1,
+     "CALL.REL.NOINC": 1,
+     "BRA": 1
+    },
+    "unroll": 1,
+    "unroll_guard": "mma",
+    "lane_instr_per_weight": 25.125,
+    "loads_per_weight": {
+     "LDGDEPBAR": 0.1875,
+     "LDGSTS.E": 0.0625,
+     "LDGSTS.E.64": 0.0625,
+     "LDGSTS.E.BYPASS.128": 0.0625
+    },
+    "shared_per_weight": {
+     "LDS": 0.25,
+     "LDS.128": 0.5,
+     "LDS.64": 0.0625,
+     "STS.128": 0.25
+    },
+    "loads_outside_loop": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 6,
+     "LDGSTS.E": 2,
+     "LDGSTS.E.64": 2,
+     "LDGSTS.E.BYPASS.128": 2
+    },
+    "loop_loads": {
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1
+    },
+    "stream_bytes": 3584
+   }
+  },
+  "AC4": {
+   "gu": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 632,
+    "sass_sha256": "4f717e62ce2b5604e307d0ba679c5eaac2b4f6fb3dc1ae5b995dd3a54af397ff",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 9,
+     "LDGSTS.E": 3,
+     "LDGSTS.E.64": 3,
+     "LDGSTS.E.BYPASS.128": 3
+    },
+    "trip": 32,
+    "unrolled_away": false,
+    "n_regs": 71,
+    "n_spills": 0,
+    "shared": 14592,
+    "loop_instructions": 402,
+    "loop_opcodes": {
+     "DEPBAR.LE": 1,
+     "UIADD3": 3,
+     "UISETP.GT.AND": 2,
+     "USEL": 3,
+     "UISETP.GE.U32.AND": 1,
+     "ULEA": 1,
+     "IMAD.U32": 35,
+     "UISETP.GE.U32.AND.EX": 1,
+     "IMAD": 7,
+     "BAR.SYNC.DEFER_BLOCKING": 2,
+     "LEA": 2,
+     "LDS.64": 1,
+     "PRMT": 24,
+     "SHF.R.S32.HI": 6,
+     "LOP3.LUT": 56,
+     "FSEL": 160,
+     "SGXT": 8,
+     "ISETP.GE.AND": 9,
+     "LDS": 4,
+     "FMUL": 16,
+     "LDS.128": 8,
+     "PLOP3.LUT": 2,
+     "ISETP.LT.AND": 1,
+     "UIADD3.X": 1,
+     "UISETP.NE.U32.AND": 1,
+     "STS.128": 4,
+     "UISETP.NE.AND.EX": 1,
+     "IMAD.MOV.U32": 18,
+     "HMMA.1688.F32.TF32": 8,
+     "SEL": 1,
+     "ISETP.NE.U32.AND": 1,
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "IADD3": 3,
+     "IMAD.X": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1,
+     "CALL.REL.NOINC": 1,
+     "BRA": 1
+    },
+    "unroll": 1,
+    "unroll_guard": "mma",
+    "lane_instr_per_weight": 25.125,
+    "loads_per_weight": {
+     "LDGDEPBAR": 0.1875,
+     "LDGSTS.E": 0.0625,
+     "LDGSTS.E.64": 0.0625,
+     "LDGSTS.E.BYPASS.128": 0.0625
+    },
+    "shared_per_weight": {
+     "LDS": 0.25,
+     "LDS.128": 0.5,
+     "LDS.64": 0.0625,
+     "STS.128": 0.25
+    },
+    "loads_outside_loop": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 6,
+     "LDGSTS.E": 2,
+     "LDGSTS.E.64": 2,
+     "LDGSTS.E.BYPASS.128": 2
+    },
+    "loop_loads": {
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1
+    },
+    "stream_bytes": 3584
+   },
+   "dn": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 624,
+    "sass_sha256": "335d4e777f5645139379c8116888805a49d637ecefd2bfc4fd399e22e52bdbf2",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 9,
+     "LDGSTS.E": 3,
+     "LDGSTS.E.64": 3,
+     "LDGSTS.E.BYPASS.128": 3
+    },
+    "trip": 12,
+    "unrolled_away": false,
+    "n_regs": 71,
+    "n_spills": 0,
+    "shared": 14592,
+    "loop_instructions": 402,
+    "loop_opcodes": {
+     "DEPBAR.LE": 1,
+     "UIADD3": 3,
+     "UISETP.GT.AND": 2,
+     "USEL": 3,
+     "UISETP.GE.U32.AND": 1,
+     "ULEA": 1,
+     "IMAD.U32": 35,
+     "UISETP.GE.U32.AND.EX": 1,
+     "IMAD": 7,
+     "BAR.SYNC.DEFER_BLOCKING": 2,
+     "LEA": 2,
+     "LDS.64": 1,
+     "PRMT": 24,
+     "SHF.R.S32.HI": 6,
+     "LOP3.LUT": 56,
+     "FSEL": 160,
+     "SGXT": 8,
+     "ISETP.GE.AND": 9,
+     "LDS": 4,
+     "FMUL": 16,
+     "LDS.128": 8,
+     "PLOP3.LUT": 2,
+     "ISETP.LT.AND": 1,
+     "UIADD3.X": 1,
+     "UISETP.NE.U32.AND": 1,
+     "STS.128": 4,
+     "UISETP.NE.AND.EX": 1,
+     "IMAD.MOV.U32": 18,
+     "HMMA.1688.F32.TF32": 8,
+     "SEL": 1,
+     "ISETP.NE.U32.AND": 1,
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "IADD3": 3,
+     "IMAD.X": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1,
+     "CALL.REL.NOINC": 1,
+     "BRA": 1
+    },
+    "unroll": 1,
+    "unroll_guard": "mma",
+    "lane_instr_per_weight": 25.125,
+    "loads_per_weight": {
+     "LDGDEPBAR": 0.1875,
+     "LDGSTS.E": 0.0625,
+     "LDGSTS.E.64": 0.0625,
+     "LDGSTS.E.BYPASS.128": 0.0625
+    },
+    "shared_per_weight": {
+     "LDS": 0.25,
+     "LDS.128": 0.5,
+     "LDS.64": 0.0625,
+     "STS.128": 0.25
+    },
+    "loads_outside_loop": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 6,
+     "LDGSTS.E": 2,
+     "LDGSTS.E.64": 2,
+     "LDGSTS.E.BYPASS.128": 2
+    },
+    "loop_loads": {
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1
+    },
+    "stream_bytes": 3584
+   }
+  },
+  "AC16": {
+   "gu": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 632,
+    "sass_sha256": "4f717e62ce2b5604e307d0ba679c5eaac2b4f6fb3dc1ae5b995dd3a54af397ff",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 9,
+     "LDGSTS.E": 3,
+     "LDGSTS.E.64": 3,
+     "LDGSTS.E.BYPASS.128": 3
+    },
+    "trip": 32,
+    "unrolled_away": false,
+    "n_regs": 71,
+    "n_spills": 0,
+    "shared": 14592,
+    "loop_instructions": 402,
+    "loop_opcodes": {
+     "DEPBAR.LE": 1,
+     "UIADD3": 3,
+     "UISETP.GT.AND": 2,
+     "USEL": 3,
+     "UISETP.GE.U32.AND": 1,
+     "ULEA": 1,
+     "IMAD.U32": 35,
+     "UISETP.GE.U32.AND.EX": 1,
+     "IMAD": 7,
+     "BAR.SYNC.DEFER_BLOCKING": 2,
+     "LEA": 2,
+     "LDS.64": 1,
+     "PRMT": 24,
+     "SHF.R.S32.HI": 6,
+     "LOP3.LUT": 56,
+     "FSEL": 160,
+     "SGXT": 8,
+     "ISETP.GE.AND": 9,
+     "LDS": 4,
+     "FMUL": 16,
+     "LDS.128": 8,
+     "PLOP3.LUT": 2,
+     "ISETP.LT.AND": 1,
+     "UIADD3.X": 1,
+     "UISETP.NE.U32.AND": 1,
+     "STS.128": 4,
+     "UISETP.NE.AND.EX": 1,
+     "IMAD.MOV.U32": 18,
+     "HMMA.1688.F32.TF32": 8,
+     "SEL": 1,
+     "ISETP.NE.U32.AND": 1,
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "IADD3": 3,
+     "IMAD.X": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1,
+     "CALL.REL.NOINC": 1,
+     "BRA": 1
+    },
+    "unroll": 1,
+    "unroll_guard": "mma",
+    "lane_instr_per_weight": 25.125,
+    "loads_per_weight": {
+     "LDGDEPBAR": 0.1875,
+     "LDGSTS.E": 0.0625,
+     "LDGSTS.E.64": 0.0625,
+     "LDGSTS.E.BYPASS.128": 0.0625
+    },
+    "shared_per_weight": {
+     "LDS": 0.25,
+     "LDS.128": 0.5,
+     "LDS.64": 0.0625,
+     "STS.128": 0.25
+    },
+    "loads_outside_loop": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 6,
+     "LDGSTS.E": 2,
+     "LDGSTS.E.64": 2,
+     "LDGSTS.E.BYPASS.128": 2
+    },
+    "loop_loads": {
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1
+    },
+    "stream_bytes": 3584
+   },
+   "dn": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 624,
+    "sass_sha256": "335d4e777f5645139379c8116888805a49d637ecefd2bfc4fd399e22e52bdbf2",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 9,
+     "LDGSTS.E": 3,
+     "LDGSTS.E.64": 3,
+     "LDGSTS.E.BYPASS.128": 3
+    },
+    "trip": 12,
+    "unrolled_away": false,
+    "n_regs": 71,
+    "n_spills": 0,
+    "shared": 14592,
+    "loop_instructions": 402,
+    "loop_opcodes": {
+     "DEPBAR.LE": 1,
+     "UIADD3": 3,
+     "UISETP.GT.AND": 2,
+     "USEL": 3,
+     "UISETP.GE.U32.AND": 1,
+     "ULEA": 1,
+     "IMAD.U32": 35,
+     "UISETP.GE.U32.AND.EX": 1,
+     "IMAD": 7,
+     "BAR.SYNC.DEFER_BLOCKING": 2,
+     "LEA": 2,
+     "LDS.64": 1,
+     "PRMT": 24,
+     "SHF.R.S32.HI": 6,
+     "LOP3.LUT": 56,
+     "FSEL": 160,
+     "SGXT": 8,
+     "ISETP.GE.AND": 9,
+     "LDS": 4,
+     "FMUL": 16,
+     "LDS.128": 8,
+     "PLOP3.LUT": 2,
+     "ISETP.LT.AND": 1,
+     "UIADD3.X": 1,
+     "UISETP.NE.U32.AND": 1,
+     "STS.128": 4,
+     "UISETP.NE.AND.EX": 1,
+     "IMAD.MOV.U32": 18,
+     "HMMA.1688.F32.TF32": 8,
+     "SEL": 1,
+     "ISETP.NE.U32.AND": 1,
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "IADD3": 3,
+     "IMAD.X": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1,
+     "CALL.REL.NOINC": 1,
+     "BRA": 1
+    },
+    "unroll": 1,
+    "unroll_guard": "mma",
+    "lane_instr_per_weight": 25.125,
+    "loads_per_weight": {
+     "LDGDEPBAR": 0.1875,
+     "LDGSTS.E": 0.0625,
+     "LDGSTS.E.64": 0.0625,
+     "LDGSTS.E.BYPASS.128": 0.0625
+    },
+    "shared_per_weight": {
+     "LDS": 0.25,
+     "LDS.128": 0.5,
+     "LDS.64": 0.0625,
+     "STS.128": 0.25
+    },
+    "loads_outside_loop": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 6,
+     "LDGSTS.E": 2,
+     "LDGSTS.E.64": 2,
+     "LDGSTS.E.BYPASS.128": 2
+    },
+    "loop_loads": {
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1
+    },
+    "stream_bytes": 3584
+   }
+  },
+  "ACX": {
+   "gu": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 632,
+    "sass_sha256": "4f717e62ce2b5604e307d0ba679c5eaac2b4f6fb3dc1ae5b995dd3a54af397ff",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 9,
+     "LDGSTS.E": 3,
+     "LDGSTS.E.64": 3,
+     "LDGSTS.E.BYPASS.128": 3
+    },
+    "trip": 32,
+    "unrolled_away": false,
+    "n_regs": 71,
+    "n_spills": 0,
+    "shared": 14592,
+    "loop_instructions": 402,
+    "loop_opcodes": {
+     "DEPBAR.LE": 1,
+     "UIADD3": 3,
+     "UISETP.GT.AND": 2,
+     "USEL": 3,
+     "UISETP.GE.U32.AND": 1,
+     "ULEA": 1,
+     "IMAD.U32": 35,
+     "UISETP.GE.U32.AND.EX": 1,
+     "IMAD": 7,
+     "BAR.SYNC.DEFER_BLOCKING": 2,
+     "LEA": 2,
+     "LDS.64": 1,
+     "PRMT": 24,
+     "SHF.R.S32.HI": 6,
+     "LOP3.LUT": 56,
+     "FSEL": 160,
+     "SGXT": 8,
+     "ISETP.GE.AND": 9,
+     "LDS": 4,
+     "FMUL": 16,
+     "LDS.128": 8,
+     "PLOP3.LUT": 2,
+     "ISETP.LT.AND": 1,
+     "UIADD3.X": 1,
+     "UISETP.NE.U32.AND": 1,
+     "STS.128": 4,
+     "UISETP.NE.AND.EX": 1,
+     "IMAD.MOV.U32": 18,
+     "HMMA.1688.F32.TF32": 8,
+     "SEL": 1,
+     "ISETP.NE.U32.AND": 1,
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "IADD3": 3,
+     "IMAD.X": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1,
+     "CALL.REL.NOINC": 1,
+     "BRA": 1
+    },
+    "unroll": 1,
+    "unroll_guard": "mma",
+    "lane_instr_per_weight": 25.125,
+    "loads_per_weight": {
+     "LDGDEPBAR": 0.1875,
+     "LDGSTS.E": 0.0625,
+     "LDGSTS.E.64": 0.0625,
+     "LDGSTS.E.BYPASS.128": 0.0625
+    },
+    "shared_per_weight": {
+     "LDS": 0.25,
+     "LDS.128": 0.5,
+     "LDS.64": 0.0625,
+     "STS.128": 0.25
+    },
+    "loads_outside_loop": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 6,
+     "LDGSTS.E": 2,
+     "LDGSTS.E.64": 2,
+     "LDGSTS.E.BYPASS.128": 2
+    },
+    "loop_loads": {
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1
+    },
+    "stream_bytes": 3584
+   },
+   "dn": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 624,
+    "sass_sha256": "335d4e777f5645139379c8116888805a49d637ecefd2bfc4fd399e22e52bdbf2",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 9,
+     "LDGSTS.E": 3,
+     "LDGSTS.E.64": 3,
+     "LDGSTS.E.BYPASS.128": 3
+    },
+    "trip": 12,
+    "unrolled_away": false,
+    "n_regs": 71,
+    "n_spills": 0,
+    "shared": 14592,
+    "loop_instructions": 402,
+    "loop_opcodes": {
+     "DEPBAR.LE": 1,
+     "UIADD3": 3,
+     "UISETP.GT.AND": 2,
+     "USEL": 3,
+     "UISETP.GE.U32.AND": 1,
+     "ULEA": 1,
+     "IMAD.U32": 35,
+     "UISETP.GE.U32.AND.EX": 1,
+     "IMAD": 7,
+     "BAR.SYNC.DEFER_BLOCKING": 2,
+     "LEA": 2,
+     "LDS.64": 1,
+     "PRMT": 24,
+     "SHF.R.S32.HI": 6,
+     "LOP3.LUT": 56,
+     "FSEL": 160,
+     "SGXT": 8,
+     "ISETP.GE.AND": 9,
+     "LDS": 4,
+     "FMUL": 16,
+     "LDS.128": 8,
+     "PLOP3.LUT": 2,
+     "ISETP.LT.AND": 1,
+     "UIADD3.X": 1,
+     "UISETP.NE.U32.AND": 1,
+     "STS.128": 4,
+     "UISETP.NE.AND.EX": 1,
+     "IMAD.MOV.U32": 18,
+     "HMMA.1688.F32.TF32": 8,
+     "SEL": 1,
+     "ISETP.NE.U32.AND": 1,
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "IADD3": 3,
+     "IMAD.X": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1,
+     "CALL.REL.NOINC": 1,
+     "BRA": 1
+    },
+    "unroll": 1,
+    "unroll_guard": "mma",
+    "lane_instr_per_weight": 25.125,
+    "loads_per_weight": {
+     "LDGDEPBAR": 0.1875,
+     "LDGSTS.E": 0.0625,
+     "LDGSTS.E.64": 0.0625,
+     "LDGSTS.E.BYPASS.128": 0.0625
+    },
+    "shared_per_weight": {
+     "LDS": 0.25,
+     "LDS.128": 0.5,
+     "LDS.64": 0.0625,
+     "STS.128": 0.25
+    },
+    "loads_outside_loop": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 6,
+     "LDGSTS.E": 2,
+     "LDGSTS.E.64": 2,
+     "LDGSTS.E.BYPASS.128": 2
+    },
+    "loop_loads": {
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1
+    },
+    "stream_bytes": 3584
+   }
+  },
+  "ACX0": {
+   "gu": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 632,
+    "sass_sha256": "4f717e62ce2b5604e307d0ba679c5eaac2b4f6fb3dc1ae5b995dd3a54af397ff",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 9,
+     "LDGSTS.E": 3,
+     "LDGSTS.E.64": 3,
+     "LDGSTS.E.BYPASS.128": 3
+    },
+    "trip": 32,
+    "unrolled_away": false,
+    "n_regs": 71,
+    "n_spills": 0,
+    "shared": 14592,
+    "loop_instructions": 402,
+    "loop_opcodes": {
+     "DEPBAR.LE": 1,
+     "UIADD3": 3,
+     "UISETP.GT.AND": 2,
+     "USEL": 3,
+     "UISETP.GE.U32.AND": 1,
+     "ULEA": 1,
+     "IMAD.U32": 35,
+     "UISETP.GE.U32.AND.EX": 1,
+     "IMAD": 7,
+     "BAR.SYNC.DEFER_BLOCKING": 2,
+     "LEA": 2,
+     "LDS.64": 1,
+     "PRMT": 24,
+     "SHF.R.S32.HI": 6,
+     "LOP3.LUT": 56,
+     "FSEL": 160,
+     "SGXT": 8,
+     "ISETP.GE.AND": 9,
+     "LDS": 4,
+     "FMUL": 16,
+     "LDS.128": 8,
+     "PLOP3.LUT": 2,
+     "ISETP.LT.AND": 1,
+     "UIADD3.X": 1,
+     "UISETP.NE.U32.AND": 1,
+     "STS.128": 4,
+     "UISETP.NE.AND.EX": 1,
+     "IMAD.MOV.U32": 18,
+     "HMMA.1688.F32.TF32": 8,
+     "SEL": 1,
+     "ISETP.NE.U32.AND": 1,
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "IADD3": 3,
+     "IMAD.X": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1,
+     "CALL.REL.NOINC": 1,
+     "BRA": 1
+    },
+    "unroll": 1,
+    "unroll_guard": "mma",
+    "lane_instr_per_weight": 25.125,
+    "loads_per_weight": {
+     "LDGDEPBAR": 0.1875,
+     "LDGSTS.E": 0.0625,
+     "LDGSTS.E.64": 0.0625,
+     "LDGSTS.E.BYPASS.128": 0.0625
+    },
+    "shared_per_weight": {
+     "LDS": 0.25,
+     "LDS.128": 0.5,
+     "LDS.64": 0.0625,
+     "STS.128": 0.25
+    },
+    "loads_outside_loop": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 6,
+     "LDGSTS.E": 2,
+     "LDGSTS.E.64": 2,
+     "LDGSTS.E.BYPASS.128": 2
+    },
+    "loop_loads": {
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1
+    },
+    "stream_bytes": 3584
+   },
+   "dn": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 624,
+    "sass_sha256": "335d4e777f5645139379c8116888805a49d637ecefd2bfc4fd399e22e52bdbf2",
+    "loads_in_function": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 9,
+     "LDGSTS.E": 3,
+     "LDGSTS.E.64": 3,
+     "LDGSTS.E.BYPASS.128": 3
+    },
+    "trip": 12,
+    "unrolled_away": false,
+    "n_regs": 71,
+    "n_spills": 0,
+    "shared": 14592,
+    "loop_instructions": 402,
+    "loop_opcodes": {
+     "DEPBAR.LE": 1,
+     "UIADD3": 3,
+     "UISETP.GT.AND": 2,
+     "USEL": 3,
+     "UISETP.GE.U32.AND": 1,
+     "ULEA": 1,
+     "IMAD.U32": 35,
+     "UISETP.GE.U32.AND.EX": 1,
+     "IMAD": 7,
+     "BAR.SYNC.DEFER_BLOCKING": 2,
+     "LEA": 2,
+     "LDS.64": 1,
+     "PRMT": 24,
+     "SHF.R.S32.HI": 6,
+     "LOP3.LUT": 56,
+     "FSEL": 160,
+     "SGXT": 8,
+     "ISETP.GE.AND": 9,
+     "LDS": 4,
+     "FMUL": 16,
+     "LDS.128": 8,
+     "PLOP3.LUT": 2,
+     "ISETP.LT.AND": 1,
+     "UIADD3.X": 1,
+     "UISETP.NE.U32.AND": 1,
+     "STS.128": 4,
+     "UISETP.NE.AND.EX": 1,
+     "IMAD.MOV.U32": 18,
+     "HMMA.1688.F32.TF32": 8,
+     "SEL": 1,
+     "ISETP.NE.U32.AND": 1,
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "IADD3": 3,
+     "IMAD.X": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1,
+     "CALL.REL.NOINC": 1,
+     "BRA": 1
+    },
+    "unroll": 1,
+    "unroll_guard": "mma",
+    "lane_instr_per_weight": 25.125,
+    "loads_per_weight": {
+     "LDGDEPBAR": 0.1875,
+     "LDGSTS.E": 0.0625,
+     "LDGSTS.E.64": 0.0625,
+     "LDGSTS.E.BYPASS.128": 0.0625
+    },
+    "shared_per_weight": {
+     "LDS": 0.25,
+     "LDS.128": 0.5,
+     "LDS.64": 0.0625,
+     "STS.128": 0.25
+    },
+    "loads_outside_loop": {
+     "LDG.E": 19,
+     "LDG.E.64": 1,
+     "LDGDEPBAR": 6,
+     "LDGSTS.E": 2,
+     "LDGSTS.E.64": 2,
+     "LDGSTS.E.BYPASS.128": 2
+    },
+    "loop_loads": {
+     "LDGSTS.E.BYPASS.128": 1,
+     "LDGDEPBAR": 3,
+     "LDGSTS.E.64": 1,
+     "LDGSTS.E": 1
+    },
+    "stream_bytes": 3584
+   }
+  },
+  "AE": {
+   "gu": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 16,
+    "sass_sha256": "cece1d9b751f35ca580543530598a40935fb8827dd58259e88ac8b06a54630dd",
+    "loads_in_function": {},
+    "trip": 32,
+    "unrolled_away": true,
+    "n_regs": 4,
+    "n_spills": 0,
+    "shared": 0
+   },
+   "dn": {
+    "triton": "3.4.0",
+    "ptxas": "12.8.93",
+    "arch": "sm_86",
+    "total_instructions": 16,
+    "sass_sha256": "cece1d9b751f35ca580543530598a40935fb8827dd58259e88ac8b06a54630dd",
+    "loads_in_function": {},
+    "trip": 12,
+    "unrolled_away": true,
+    "n_regs": 4,
+    "n_spills": 0,
+    "shared": 0
+   }
+  }
+ },
+ "occupancy": {
+  "A0": {
+   "gu": {
+    "shared": 14592,
+    "pad": 0,
+    "launch_shared": 14592,
+    "ctas_per_sm_unpinned": 6,
+    "ctas_per_sm": 6,
+    "n_regs": 71,
+    "n_spills": 0,
+    "max_threads": 896,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 71,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     14592
+    ]
+   },
+   "dn": {
+    "shared": 14592,
+    "pad": 0,
+    "launch_shared": 14592,
+    "ctas_per_sm_unpinned": 6,
+    "ctas_per_sm": 6,
+    "n_regs": 71,
+    "n_spills": 0,
+    "max_threads": 896,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 71,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     14592
+    ]
+   }
+  },
+  "A0p": {
+   "gu": {
+    "shared": 14592,
+    "pad": 0,
+    "launch_shared": 14592,
+    "ctas_per_sm_unpinned": 6,
+    "ctas_per_sm": 6,
+    "n_regs": 71,
+    "n_spills": 0,
+    "max_threads": 896,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 71,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     14592
+    ]
+   },
+   "dn": {
+    "shared": 14592,
+    "pad": 0,
+    "launch_shared": 14592,
+    "ctas_per_sm_unpinned": 6,
+    "ctas_per_sm": 6,
+    "n_regs": 71,
+    "n_spills": 0,
+    "max_threads": 896,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 71,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     14592
+    ]
+   }
+  },
+  "A1": {
+   "gu": {
+    "shared": 6400,
+    "pad": 7296,
+    "launch_shared": 13696,
+    "ctas_per_sm_unpinned": 7,
+    "ctas_per_sm": 6,
+    "n_regs": 67,
+    "n_spills": 0,
+    "max_threads": 896,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 67,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     13696
+    ]
+   },
+   "dn": {
+    "shared": 6400,
+    "pad": 7296,
+    "launch_shared": 13696,
+    "ctas_per_sm_unpinned": 7,
+    "ctas_per_sm": 6,
+    "n_regs": 67,
+    "n_spills": 0,
+    "max_threads": 896,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 67,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     13696
+    ]
+   }
+  },
+  "A2b": {
+   "gu": {
+    "shared": 6400,
+    "pad": 0,
+    "launch_shared": 6400,
+    "ctas_per_sm_unpinned": 5,
+    "ctas_per_sm": 5,
+    "n_regs": 89,
+    "n_spills": 0,
+    "max_threads": 640,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 89,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     6400
+    ]
+   },
+   "dn": {
+    "shared": 6400,
+    "pad": 0,
+    "launch_shared": 6400,
+    "ctas_per_sm_unpinned": 6,
+    "ctas_per_sm": 6,
+    "n_regs": 74,
+    "n_spills": 0,
+    "max_threads": 768,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 74,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     6400
+    ]
+   }
+  },
+  "A12": {
+   "gu": {
+    "shared": 6400,
+    "pad": 7296,
+    "launch_shared": 13696,
+    "ctas_per_sm_unpinned": 8,
+    "ctas_per_sm": 6,
+    "n_regs": 64,
+    "n_spills": 0,
+    "max_threads": 1024,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 64,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     13696
+    ]
+   },
+   "dn": {
+    "shared": 6400,
+    "pad": 7296,
+    "launch_shared": 13696,
+    "ctas_per_sm_unpinned": 8,
+    "ctas_per_sm": 6,
+    "n_regs": 64,
+    "n_spills": 0,
+    "max_threads": 1024,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 64,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     13696
+    ]
+   }
+  },
+  "A3": {
+   "gu": {
+    "shared": 6400,
+    "pad": 7296,
+    "launch_shared": 13696,
+    "ctas_per_sm_unpinned": 8,
+    "ctas_per_sm": 6,
+    "n_regs": 64,
+    "n_spills": 0,
+    "max_threads": 1024,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 64,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     13696
+    ]
+   },
+   "dn": {
+    "shared": 6400,
+    "pad": 7296,
+    "launch_shared": 13696,
+    "ctas_per_sm_unpinned": 7,
+    "ctas_per_sm": 6,
+    "n_regs": 72,
+    "n_spills": 0,
+    "max_threads": 896,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 72,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     13696
+    ]
+   }
+  },
+  "AL": {
+   "gu": {
+    "shared": 6400,
+    "pad": 7296,
+    "launch_shared": 13696,
+    "ctas_per_sm_unpinned": 8,
+    "ctas_per_sm": 6,
+    "n_regs": 64,
+    "n_spills": 0,
+    "max_threads": 1024,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 64,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     13696
+    ]
+   },
+   "dn": {
+    "shared": 6400,
+    "pad": 7296,
+    "launch_shared": 13696,
+    "ctas_per_sm_unpinned": 7,
+    "ctas_per_sm": 6,
+    "n_regs": 72,
+    "n_spills": 0,
+    "max_threads": 896,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 72,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     13696
+    ]
+   }
+  },
+  "AC": {
+   "gu": {
+    "shared": 14592,
+    "pad": 0,
+    "launch_shared": 14592,
+    "ctas_per_sm_unpinned": 6,
+    "ctas_per_sm": 6,
+    "n_regs": 71,
+    "n_spills": 0,
+    "max_threads": 896,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 71,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     14592
+    ]
+   },
+   "dn": {
+    "shared": 14592,
+    "pad": 0,
+    "launch_shared": 14592,
+    "ctas_per_sm_unpinned": 6,
+    "ctas_per_sm": 6,
+    "n_regs": 71,
+    "n_spills": 0,
+    "max_threads": 896,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 71,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     14592
+    ]
+   }
+  },
+  "AC4": {
+   "gu": {
+    "shared": 14592,
+    "pad": 0,
+    "launch_shared": 14592,
+    "ctas_per_sm_unpinned": 6,
+    "ctas_per_sm": 6,
+    "n_regs": 71,
+    "n_spills": 0,
+    "max_threads": 896,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 71,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     14592
+    ]
+   },
+   "dn": {
+    "shared": 14592,
+    "pad": 0,
+    "launch_shared": 14592,
+    "ctas_per_sm_unpinned": 6,
+    "ctas_per_sm": 6,
+    "n_regs": 71,
+    "n_spills": 0,
+    "max_threads": 896,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 71,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     14592
+    ]
+   }
+  },
+  "AC16": {
+   "gu": {
+    "shared": 14592,
+    "pad": 0,
+    "launch_shared": 14592,
+    "ctas_per_sm_unpinned": 6,
+    "ctas_per_sm": 6,
+    "n_regs": 71,
+    "n_spills": 0,
+    "max_threads": 896,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 71,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     14592
+    ]
+   },
+   "dn": {
+    "shared": 14592,
+    "pad": 0,
+    "launch_shared": 14592,
+    "ctas_per_sm_unpinned": 6,
+    "ctas_per_sm": 6,
+    "n_regs": 71,
+    "n_spills": 0,
+    "max_threads": 896,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 71,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     14592
+    ]
+   }
+  },
+  "ACX": {
+   "gu": {
+    "shared": 14592,
+    "pad": 0,
+    "launch_shared": 14592,
+    "ctas_per_sm_unpinned": 6,
+    "ctas_per_sm": 6,
+    "n_regs": 71,
+    "n_spills": 0,
+    "max_threads": 896,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 71,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     14592
+    ]
+   },
+   "dn": {
+    "shared": 14592,
+    "pad": 0,
+    "launch_shared": 14592,
+    "ctas_per_sm_unpinned": 6,
+    "ctas_per_sm": 6,
+    "n_regs": 71,
+    "n_spills": 0,
+    "max_threads": 896,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 71,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     14592
+    ]
+   }
+  },
+  "ACX0": {
+   "gu": {
+    "shared": 14592,
+    "pad": 0,
+    "launch_shared": 14592,
+    "ctas_per_sm_unpinned": 6,
+    "ctas_per_sm": 6,
+    "n_regs": 71,
+    "n_spills": 0,
+    "max_threads": 896,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 71,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     14592
+    ]
+   },
+   "dn": {
+    "shared": 14592,
+    "pad": 0,
+    "launch_shared": 14592,
+    "ctas_per_sm_unpinned": 6,
+    "ctas_per_sm": 6,
+    "n_regs": 71,
+    "n_spills": 0,
+    "max_threads": 896,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 71,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     14592
+    ]
+   }
+  },
+  "AE": {
+   "gu": {
+    "shared": 0,
+    "pad": 13696,
+    "launch_shared": 13696,
+    "ctas_per_sm_unpinned": 12,
+    "ctas_per_sm": 6,
+    "n_regs": 4,
+    "n_spills": 0,
+    "max_threads": 1024,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 4,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     13696
+    ]
+   },
+   "dn": {
+    "shared": 0,
+    "pad": 13696,
+    "launch_shared": 13696,
+    "ctas_per_sm_unpinned": 12,
+    "ctas_per_sm": 6,
+    "n_regs": 4,
+    "n_spills": 0,
+    "max_threads": 1024,
+    "static_shared": 0,
+    "local_bytes": 0,
+    "num_regs": 4,
+    "max_dynamic_shared": 49152,
+    "carveout": -1,
+    "node_shared": [
+     13696
+    ]
+   }
+  }
+ },
+ "reps": [
+  {
+   "step": 58,
+   "order": [
+    "A0",
+    "T2",
+    "AE",
+    "A0p",
+    "ACX0",
+    "A1",
+    "ACX",
+    "A2b",
+    "AC16",
+    "A12",
+    "AC4",
+    "A3",
+    "AC",
+    "AL"
+   ],
+   "replays_ms": {
+    "A0": [
+     13.867008209228516,
+     12.831744194030762,
+     12.829695701599121,
+     12.554240226745605,
+     12.590080261230469,
+     12.595199584960938,
+     12.736512184143066,
+     12.806143760681152,
+     12.734463691711426,
+     12.735487937927246
+    ],
+    "T2": [
+     13.86188793182373,
+     12.993535995483398,
+     12.957695960998535,
+     12.848128318786621,
+     12.796928405761719,
+     12.811264038085938,
+     12.988415718078613,
+     12.985343933105469,
+     12.882944107055664,
+     12.96076774597168
+    ],
+    "AE": [
+     0.10956799983978271,
+     0.10342399775981903,
+     0.10444799810647964,
+     0.10342399775981903,
+     0.10342399775981903,
+     0.10342399775981903,
+     0.10342399775981903,
+     0.10342399775981903,
+     0.10342399775981903,
+     0.10342399775981903
+    ],
+    "A0p": [
+     13.86291217803955,
+     13.123583793640137,
+     11.03667163848877,
+     12.96076774597168,
+     12.97920036315918,
+     13.047807693481445,
+     13.209600448608398,
+     13.209600448608398,
+     12.96998405456543,
+     13.123583793640137
+    ],
+    "ACX0": [
+     13.837311744689941,
+     13.1778564453125,
+     12.786687850952148,
+     13.095935821533203,
+     12.963839530944824,
+     13.181952476501465,
+     13.188096046447754,
+     13.194239616394043,
+     13.179903984069824,
+     13.095935821533203
+    ],
+    "A1": [
+     5.537792205810547,
+     5.40774393081665,
+     5.335040092468262,
+     5.389311790466309,
+     5.379072189331055,
+     5.404672145843506,
+     5.4179840087890625,
+     5.422080039978027,
+     5.419007778167725,
+     5.4036478996276855
+    ],
+    "ACX": [
+     13.793279647827148,
+     13.297663688659668,
+     13.196288108825684,
+     13.342720031738281,
+     13.336576461791992,
+     13.335552215576172,
+     13.381631851196289,
+     13.479935646057129,
+     13.252608299255371,
+     13.38265609741211
+    ],
+    "A2b": [
+     12.492799758911133,
+     12.418047904968262,
+     12.425215721130371,
+     12.454912185668945,
+     12.44979190826416,
+     12.446720123291016,
+     12.57369613647461,
+     12.650495529174805,
+     12.519424438476562,
+     12.491776466369629
+    ],
+    "AC16": [
+     13.163519859313965,
+     13.06009578704834,
+     13.024255752563477,
+     13.25055980682373,
+     13.100031852722168,
+     13.092864036560059,
+     13.165568351745605,
+     13.247488021850586,
+     13.16147232055664,
+     13.135871887207031
+    ],
+    "A12": [
+     5.016575813293457,
+     5.0083842277526855,
+     5.014527797698975,
+     5.028863906860352,
+     5.014527797698975,
+     5.021696090698242,
+     5.022719860076904,
+     5.023744106292725,
+     5.0135040283203125,
+     5.0135040283203125
+    ],
+    "AC4": [
+     13.263872146606445,
+     13.235199928283691,
+     13.201408386230469,
+     13.392895698547363,
+     13.290495872497559,
+     13.36832046508789,
+     13.271039962768555,
+     13.332480430603027,
+     13.214719772338867,
+     13.312000274658203
+    ],
+    "A3": [
+     5.156864166259766,
+     5.1609601974487305,
+     5.158912181854248,
+     5.175295829772949,
+     5.154816150665283,
+     5.172224044799805,
+     5.173247814178467,
+     5.163008213043213,
+     5.157887935638428,
+     5.1609601974487305
+    ],
+    "AC": [
+     13.36832046508789,
+     13.376511573791504,
+     13.220864295959473,
+     13.37343978881836,
+     13.240320205688477,
+     13.408255577087402,
+     13.418496131896973,
+     13.3570556640625,
+     13.356032371520996,
+     13.37548828125
+    ],
+    "AL": [
+     3.3658881187438965,
+     3.3669118881225586,
+     3.458048105239868,
+     3.4344959259033203,
+     3.4406399726867676,
+     3.423232078552246,
+     3.4068479537963867,
+     3.3607680797576904,
+     3.362816095352173,
+     3.3699839115142822
+    ]
+   },
+   "identical": {
+    "T2": true,
+    "A0p": true,
+    "ACX0": true
+   },
+   "slabs": {
+    "0": {
+     "gu": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "dn": [
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "3": {
+     "gu": [
+      4,
+      4,
+      4,
+      4
+     ],
+     "dn": [
+      4,
+      4,
+      4,
+      4
+     ]
+    },
+    "15": {
+     "gu": [
+      16,
+      16,
+      16,
+      16
+     ],
+     "dn": [
+      16,
+      16,
+      16,
+      16
+     ]
+    },
+    "127": {
+     "gu": [
+      69,
+      66,
+      60,
+      64
+     ],
+     "dn": [
+      69,
+      66,
+      60,
+      64
+     ]
+    }
+   }
+  },
+  {
+   "step": 59,
+   "order": [
+    "T2",
+    "A0p",
+    "A0",
+    "A1",
+    "AE",
+    "A2b",
+    "ACX0",
+    "A12",
+    "ACX",
+    "A3",
+    "AC16",
+    "AL",
+    "AC4",
+    "AC"
+   ],
+   "replays_ms": {
+    "T2": [
+     8.868864059448242,
+     12.099583625793457,
+     12.2357759475708,
+     12.112895965576172,
+     12.324864387512207,
+     12.097536087036133,
+     12.17024040222168,
+     12.171263694763184,
+     12.109824180603027,
+     12.305407524108887
+    ],
+    "A0p": [
+     15.09887981414795,
+     12.44876766204834,
+     12.405759811401367,
+     12.542976379394531,
+     12.55014419555664,
+     12.44159984588623,
+     12.546048164367676,
+     12.407808303833008,
+     12.548095703125,
+     12.4835844039917
+    ],
+    "A0": [
+     14.286848068237305,
+     12.53171157836914,
+     12.75391960144043,
+     12.75391960144043,
+     12.751872062683105,
+     12.64025592803955,
+     12.752896308898926,
+     12.650495529174805,
+     12.75699234008789,
+     12.75391960144043
+    ],
+    "A1": [
+     5.467135906219482,
+     5.283840179443359,
+     5.303296089172363,
+     5.30841588973999,
+     5.3094401359558105,
+     5.295104026794434,
+     5.311488151550293,
+     5.287936210632324,
+     5.30841588973999,
+     5.30841588973999
+    ],
+    "AE": [
+     0.11161600053310394,
+     0.10547199845314026,
+     0.10751999914646149,
+     0.10547199845314026,
+     0.10751999914646149,
+     0.10649599879980087,
+     0.10547199845314026,
+     0.10751999914646149,
+     0.10547199845314026,
+     0.10649599879980087
+    ],
+    "A2b": [
+     12.502016067504883,
+     12.078080177307129,
+     12.095487594604492,
+     12.278783798217773,
+     12.076031684875488,
+     12.034048080444336,
+     12.065792083740234,
+     12.087295532226562,
+     12.142592430114746,
+     11.985919952392578
+    ],
+    "ACX0": [
+     12.87168025970459,
+     12.706815719604492,
+     12.710911750793457,
+     12.899328231811523,
+     12.707839965820312,
+     12.651519775390625,
+     12.705792427062988,
+     12.711935997009277,
+     12.796928405761719,
+     12.637184143066406
+    ],
+    "A12": [
+     4.945919990539551,
+     4.933631896972656,
+     4.934656143188477,
+     4.955135822296143,
+     4.935679912567139,
+     4.930560111999512,
+     4.932608127593994,
+     4.942848205566406,
+     4.941823959350586,
+     4.936704158782959
+    ],
+    "ACX": [
+     12.789759635925293,
+     12.74675178527832,
+     12.790783882141113,
+     12.86451244354248,
+     12.760064125061035,
+     12.789759635925293,
+     12.749823570251465,
+     12.893183708190918,
+     12.957695960998535,
+     12.797951698303223
+    ],
+    "A3": [
+     5.01043176651001,
+     5.014527797698975,
+     5.005311965942383,
+     5.017600059509277,
+     5.025792121887207,
+     5.012479782104492,
+     5.0083842277526855,
+     5.0186238288879395,
+     5.029888153076172,
+     5.0278401374816895
+    ],
+    "AC16": [
+     12.796928405761719,
+     12.786687850952148,
+     12.822527885437012,
+     12.858367919921875,
+     12.789759635925293,
+     12.784640312194824,
+     12.796928405761719,
+     12.858367919921875,
+     12.860416412353516,
+     12.87168025970459
+    ],
+    "AL": [
+     3.443711996078491,
+     3.438591957092285,
+     3.565567970275879,
+     3.4611198902130127,
+     3.438591957092285,
+     3.4447360038757324,
+     3.443711996078491,
+     3.4396159648895264,
+     3.4590721130371094,
+     3.46726393699646
+    ],
+    "AC4": [
+     12.7457275390625,
+     12.677120208740234,
+     13.050880432128906,
+     12.76313591003418,
+     12.725248336791992,
+     12.690431594848633,
+     12.696576118469238,
+     12.793855667114258,
+     12.678144454956055,
+     12.830719947814941
+    ],
+    "AC": [
+     12.779520034790039,
+     12.767231941223145,
+     12.86348819732666,
+     12.790783882141113,
+     12.748800277709961,
+     12.800000190734863,
+     12.760064125061035,
+     12.748800277709961,
+     12.748800277709961,
+     12.820480346679688
+    ]
+   },
+   "identical": {
+    "T2": true,
+    "A0p": true,
+    "ACX0": true
+   },
+   "slabs": {
+    "0": {
+     "gu": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "dn": [
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "3": {
+     "gu": [
+      4,
+      4,
+      4,
+      4
+     ],
+     "dn": [
+      4,
+      4,
+      4,
+      4
+     ]
+    },
+    "15": {
+     "gu": [
+      16,
+      16,
+      16,
+      16
+     ],
+     "dn": [
+      16,
+      16,
+      16,
+      16
+     ]
+    },
+    "127": {
+     "gu": [
+      67,
+      61,
+      57,
+      65
+     ],
+     "dn": [
+      67,
+      61,
+      57,
+      65
+     ]
+    }
+   }
+  },
+  {
+   "step": 60,
+   "order": [
+    "A0p",
+    "A1",
+    "T2",
+    "A2b",
+    "A0",
+    "A12",
+    "AE",
+    "A3",
+    "ACX0",
+    "AL",
+    "ACX",
+    "AC",
+    "AC16",
+    "AC4"
+   ],
+   "replays_ms": {
+    "A0p": [
+     9.50271987915039,
+     13.074432373046875,
+     13.032447814941406,
+     13.163519859313965,
+     13.006848335266113,
+     13.16147232055664,
+     13.165568351745605,
+     13.174783706665039,
+     13.157376289367676,
+     13.083647727966309
+    ],
+    "A1": [
+     5.375999927520752,
+     5.434368133544922,
+     5.445631980895996,
+     5.439487934112549,
+     5.425151824951172,
+     5.4231038093566895,
+     5.444608211517334,
+     5.458943843841553,
+     5.458943843841553,
+     5.445631980895996
+    ],
+    "T2": [
+     14.20083236694336,
+     13.551615715026855,
+     13.559807777404785,
+     13.569024085998535,
+     13.2741117477417,
+     13.288448333740234,
+     13.626367568969727,
+     13.66323184967041,
+     13.460479736328125,
+     13.514752388000488
+    ],
+    "A2b": [
+     12.947456359863281,
+     12.688384056091309,
+     12.618751525878906,
+     12.580863952636719,
+     12.473343849182129,
+     12.528639793395996,
+     12.688384056091309,
+     12.651519775390625,
+     12.626943588256836,
+     12.687359809875488
+    ],
+    "A0": [
+     13.398015975952148,
+     13.398015975952148,
+     13.362175941467285,
+     13.24953556060791,
+     13.154303550720215,
+     13.159423828125,
+     13.3570556640625,
+     13.341695785522461,
+     13.236224174499512,
+     13.402112007141113
+    ],
+    "A12": [
+     5.082111835479736,
+     5.063680171966553,
+     5.079040050506592,
+     5.053440093994141,
+     5.05241584777832,
+     5.058559894561768,
+     5.059584140777588,
+     5.062655925750732,
+     5.059584140777588,
+     5.0728960037231445
+    ],
+    "AE": [
+     0.1085439994931221,
+     0.10547199845314026,
+     0.10649599879980087,
+     0.10751999914646149,
+     0.10547199845314026,
+     0.10547199845314026,
+     0.10444799810647964,
+     0.10751999914646149,
+     0.10751999914646149,
+     0.10444799810647964
+    ],
+    "A3": [
+     5.201920032501221,
+     5.207039833068848,
+     5.216256141662598,
+     5.2060160636901855,
+     5.214208126068115,
+     5.221375942230225,
+     5.2254719734191895,
+     5.213183879852295,
+     5.207039833068848,
+     5.215231895446777
+    ],
+    "ACX0": [
+     13.36832046508789,
+     13.28332805633545,
+     13.378560066223145,
+     13.363200187683105,
+     13.39187240600586,
+     13.463552474975586,
+     13.454336166381836,
+     13.376511573791504,
+     13.369343757629395,
+     13.443072319030762
+    ],
+    "AL": [
+     3.57478404045105,
+     3.575808048248291,
+     3.6075520515441895,
+     3.596287965774536,
+     3.5983359813690186,
+     3.6280319690704346,
+     3.614720106124878,
+     3.605504035949707,
+     3.5973119735717773,
+     3.5973119735717773
+    ],
+    "ACX": [
+     13.05395221710205,
+     13.233152389526367,
+     13.2741117477417,
+     13.206527709960938,
+     13.211647987365723,
+     13.211647987365723,
+     13.28435230255127,
+     13.220864295959473,
+     13.211647987365723,
+     13.252608299255371
+    ],
+    "AC": [
+     13.36627197265625,
+     13.390848159790039,
+     13.415424346923828,
+     13.403136253356934,
+     13.452287673950195,
+     13.418496131896973,
+     13.401087760925293,
+     13.48300838470459,
+     13.372415542602539,
+     13.455360412597656
+    ],
+    "AC16": [
+     12.636159896850586,
+     12.53990364074707,
+     12.633088111877441,
+     12.795904159545898,
+     12.808192253112793,
+     12.618751525878906,
+     12.551168441772461,
+     12.907520294189453,
+     12.67199993133545,
+     12.686335563659668
+    ],
+    "AC4": [
+     13.014016151428223,
+     13.034496307373047,
+     13.138943672180176,
+     12.992511749267578,
+     13.1778564453125,
+     13.17580795288086,
+     13.178879737854004,
+     13.133824348449707,
+     13.015040397644043,
+     13.264896392822266
+    ]
+   },
+   "identical": {
+    "T2": true,
+    "A0p": true,
+    "ACX0": true
+   },
+   "slabs": {
+    "0": {
+     "gu": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "dn": [
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "3": {
+     "gu": [
+      4,
+      4,
+      4,
+      4
+     ],
+     "dn": [
+      4,
+      4,
+      4,
+      4
+     ]
+    },
+    "15": {
+     "gu": [
+      16,
+      16,
+      15,
+      16
+     ],
+     "dn": [
+      16,
+      16,
+      15,
+      16
+     ]
+    },
+    "127": {
+     "gu": [
+      72,
+      65,
+      62,
+      61
+     ],
+     "dn": [
+      72,
+      65,
+      62,
+      61
+     ]
+    }
+   }
+  },
+  {
+   "step": 61,
+   "order": [
+    "A1",
+    "A2b",
+    "A0p",
+    "A12",
+    "T2",
+    "A3",
+    "A0",
+    "AL",
+    "AE",
+    "AC",
+    "ACX0",
+    "AC4",
+    "ACX",
+    "AC16"
+   ],
+   "replays_ms": {
+    "A1": [
+     5.150720119476318,
+     5.705728054046631,
+     5.711872100830078,
+     5.7139201164245605,
+     5.691391944885254,
+     5.677055835723877,
+     5.710847854614258,
+     5.677055835723877,
+     5.695487976074219,
+     5.736447811126709
+    ],
+    "A2b": [
+     10.31987190246582,
+     13.278207778930664,
+     13.371392250061035,
+     13.36729621887207,
+     13.194239616394043,
+     13.039615631103516,
+     13.117440223693848,
+     12.995583534240723,
+     13.06112003326416,
+     13.214719772338867
+    ],
+    "A0p": [
+     13.963264465332031,
+     13.929471969604492,
+     14.049280166625977,
+     14.187520027160645,
+     13.884415626525879,
+     13.764608383178711,
+     13.76358413696289,
+     13.691904067993164,
+     13.843456268310547,
+     13.929471969604492
+    ],
+    "A12": [
+     5.319680213928223,
+     5.322751998901367,
+     5.339136123657227,
+     5.345280170440674,
+     5.332992076873779,
+     5.307392120361328,
+     5.310463905334473,
+     5.3094401359558105,
+     5.330944061279297,
+     5.334015846252441
+    ],
+    "T2": [
+     14.015487670898438,
+     14.188544273376465,
+     14.09331226348877,
+     14.111743927001953,
+     14.030847549438477,
+     13.911040306091309,
+     13.893631935119629,
+     13.839360237121582,
+     14.109696388244629,
+     14.031871795654297
+    ],
+    "A3": [
+     5.457920074462891,
+     5.470208168029785,
+     5.476352214813232,
+     5.478400230407715,
+     5.46611213684082,
+     5.449728012084961,
+     5.459968090057373,
+     5.458943843841553,
+     5.467135906219482,
+     5.465087890625
+    ],
+    "A0": [
+     13.988863945007324,
+     14.07692813873291,
+     14.110719680786133,
+     13.950976371765137,
+     13.928447723388672,
+     13.950976371765137,
+     13.950976371765137,
+     13.931520462036133,
+     14.036992073059082,
+     14.032896041870117
+    ],
+    "AL": [
+     3.7365760803222656,
+     3.7611520290374756,
+     3.8051838874816895,
+     3.7365760803222656,
+     3.743743896484375,
+     3.74783992767334,
+     3.743743896484375,
+     3.7365760803222656,
+     3.767296075820923,
+     3.7601280212402344
+    ],
+    "AE": [
+     0.10649599879980087,
+     0.10444799810647964,
+     0.10956799983978271,
+     0.10444799810647964,
+     0.10444799810647964,
+     0.10444799810647964,
+     0.10239999741315842,
+     0.1013759970664978,
+     0.10239999741315842,
+     0.10239999741315842
+    ],
+    "AC": [
+     13.899776458740234,
+     13.97862434387207,
+     14.203904151916504,
+     13.899776458740234,
+     13.88646411895752,
+     13.932543754577637,
+     13.8536958694458,
+     13.928447723388672,
+     13.939711570739746,
+     13.932543754577637
+    ],
+    "ACX0": [
+     13.330431938171387,
+     13.362175941467285,
+     13.407232284545898,
+     13.071359634399414,
+     13.189120292663574,
+     13.316096305847168,
+     13.125632286071777,
+     12.963839530944824,
+     13.047807693481445,
+     12.967935562133789
+    ],
+    "AC4": [
+     13.640704154968262,
+     13.635583877563477,
+     13.872127532958984,
+     13.530112266540527,
+     13.541376113891602,
+     13.764608383178711,
+     13.455360412597656,
+     13.65503978729248,
+     13.789183616638184,
+     13.702143669128418
+    ],
+    "ACX": [
+     13.701120376586914,
+     13.645824432373047,
+     13.829119682312012,
+     13.539327621459961,
+     13.49120044708252,
+     13.67244815826416,
+     13.494272232055664,
+     13.57107162475586,
+     13.669376373291016,
+     13.729791641235352
+    ],
+    "AC16": [
+     13.811712265014648,
+     13.822976112365723,
+     13.832192420959473,
+     13.749247550964355,
+     13.623295783996582,
+     13.817855834960938,
+     13.651968002319336,
+     13.650943756103516,
+     13.921279907226562,
+     13.749247550964355
+    ]
+   },
+   "identical": {
+    "T2": true,
+    "A0p": true,
+    "ACX0": true
+   },
+   "slabs": {
+    "0": {
+     "gu": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "dn": [
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "3": {
+     "gu": [
+      4,
+      4,
+      4,
+      4
+     ],
+     "dn": [
+      4,
+      4,
+      4,
+      4
+     ]
+    },
+    "15": {
+     "gu": [
+      16,
+      16,
+      16,
+      16
+     ],
+     "dn": [
+      16,
+      16,
+      16,
+      16
+     ]
+    },
+    "127": {
+     "gu": [
+      72,
+      69,
+      70,
+      61
+     ],
+     "dn": [
+      72,
+      69,
+      70,
+      61
+     ]
+    }
+   }
+  },
+  {
+   "step": 62,
+   "order": [
+    "A2b",
+    "A12",
+    "A1",
+    "A3",
+    "A0p",
+    "AL",
+    "T2",
+    "AC",
+    "A0",
+    "AC4",
+    "AE",
+    "AC16",
+    "ACX0",
+    "ACX"
+   ],
+   "replays_ms": {
+    "A2b": [
+     8.026111602783203,
+     11.412480354309082,
+     11.448320388793945,
+     11.53228759765625,
+     11.439104080200195,
+     11.53228759765625,
+     11.53331184387207,
+     11.381759643554688,
+     11.45241641998291,
+     11.53331184387207
+    ],
+    "A12": [
+     4.287487983703613,
+     4.645887851715088,
+     4.644864082336426,
+     4.65715217590332,
+     4.639743804931641,
+     4.661248207092285,
+     4.65715217590332,
+     4.639743804931641,
+     4.640768051147461,
+     4.660223960876465
+    ],
+    "A1": [
+     5.46611213684082,
+     4.990975856781006,
+     4.986879825592041,
+     5.021696090698242,
+     4.985856056213379,
+     5.01964807510376,
+     5.022719860076904,
+     4.994048118591309,
+     5.014527797698975,
+     5.030911922454834
+    ],
+    "A3": [
+     4.995071887969971,
+     4.828159809112549,
+     4.817920207977295,
+     4.844543933868408,
+     4.840447902679443,
+     4.859903812408447,
+     4.855807781219482,
+     4.8363518714904785,
+     4.859903812408447,
+     4.856832027435303
+    ],
+    "A0p": [
+     13.44921588897705,
+     12.45695972442627,
+     12.4651517868042,
+     12.545023918151855,
+     12.469247817993164,
+     12.621824264526367,
+     12.618751525878906,
+     12.47539234161377,
+     12.547072410583496,
+     12.546048164367676
+    ],
+    "AL": [
+     3.5143680572509766,
+     3.324928045272827,
+     3.3228800296783447,
+     3.34335994720459,
+     3.329024076461792,
+     3.3505280017852783,
+     3.3658881187438965,
+     3.330048084259033,
+     3.3423359394073486,
+     3.3464319705963135
+    ],
+    "T2": [
+     12.719103813171387,
+     12.294143676757812,
+     12.241920471191406,
+     12.247039794921875,
+     12.17024040222168,
+     12.25011157989502,
+     12.239871978759766,
+     12.24499225616455,
+     12.246015548706055,
+     12.246015548706055
+    ],
+    "AC": [
+     12.572671890258789,
+     12.321791648864746,
+     12.335103988647461,
+     12.347392082214355,
+     12.45081615447998,
+     12.453887939453125,
+     12.34943962097168,
+     12.472319602966309,
+     12.43238353729248,
+     12.46720027923584
+    ],
+    "A0": [
+     11.688960075378418,
+     11.672575950622559,
+     11.790335655212402,
+     11.800576210021973,
+     11.960320472717285,
+     11.95315170288086,
+     11.825152397155762,
+     12.022784233093262,
+     11.943936347961426,
+     11.976703643798828
+    ],
+    "AC4": [
+     12.203007698059082,
+     12.057600021362305,
+     11.995136260986328,
+     12.049407958984375,
+     12.15999984741211,
+     12.166144371032715,
+     11.979776382446289,
+     12.155903816223145,
+     12.132351875305176,
+     12.156928062438965
+    ],
+    "AE": [
+     0.10444799810647964,
+     0.10239999741315842,
+     0.10239999741315842,
+     0.10239999741315842,
+     0.10239999741315842,
+     0.10239999741315842,
+     0.1013759970664978,
+     0.10239999741315842,
+     0.10239999741315842,
+     0.1013759970664978
+    ],
+    "AC16": [
+     12.15385627746582,
+     12.14361572265625,
+     12.102656364440918,
+     12.119039535522461,
+     12.115967750549316,
+     12.118016242980957,
+     12.085247993469238,
+     12.165120124816895,
+     12.113920211791992,
+     12.166144371032715
+    ],
+    "ACX0": [
+     12.155903816223145,
+     12.218367576599121,
+     12.307456016540527,
+     12.216320037841797,
+     12.14463996887207,
+     12.140543937683105,
+     12.154879570007324,
+     12.22655963897705,
+     12.146688461303711,
+     12.222463607788086
+    ],
+    "ACX": [
+     12.15385627746582,
+     12.219391822814941,
+     12.308480262756348,
+     12.220416069030762,
+     12.141568183898926,
+     12.294143676757812,
+     12.15180778503418,
+     12.223487854003906,
+     12.146688461303711,
+     12.219391822814941
+    ]
+   },
+   "identical": {
+    "T2": true,
+    "A0p": true,
+    "ACX0": true
+   },
+   "slabs": {
+    "0": {
+     "gu": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "dn": [
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "3": {
+     "gu": [
+      4,
+      4,
+      4,
+      4
+     ],
+     "dn": [
+      4,
+      4,
+      4,
+      4
+     ]
+    },
+    "15": {
+     "gu": [
+      16,
+      16,
+      16,
+      16
+     ],
+     "dn": [
+      16,
+      16,
+      16,
+      16
+     ]
+    },
+    "127": {
+     "gu": [
+      67,
+      63,
+      55,
+      55
+     ],
+     "dn": [
+      67,
+      63,
+      55,
+      55
+     ]
+    }
+   }
+  },
+  {
+   "step": 63,
+   "order": [
+    "A12",
+    "A3",
+    "A2b",
+    "AL",
+    "A1",
+    "AC",
+    "A0p",
+    "AC4",
+    "T2",
+    "AC16",
+    "A0",
+    "ACX",
+    "AE",
+    "ACX0"
+   ],
+   "replays_ms": {
+    "A12": [
+     4.354047775268555,
+     4.7564802169799805,
+     4.7564802169799805,
+     4.759552001953125,
+     4.7564802169799805,
+     4.752384185791016,
+     4.751359939575195,
+     4.760575771331787,
+     4.7626237869262695,
+     4.7564802169799805
+    ],
+    "A3": [
+     4.464640140533447,
+     4.858880043029785,
+     4.853759765625,
+     4.865024089813232,
+     4.8660478591918945,
+     4.846591949462891,
+     4.853759765625,
+     4.860928058624268,
+     4.846591949462891,
+     4.859903812408447
+    ],
+    "A2b": [
+     13.858816146850586,
+     11.83948802947998,
+     11.74937629699707,
+     11.92959976196289,
+     11.905023574829102,
+     11.769856452941895,
+     11.823103904724121,
+     11.904000282287598,
+     11.885567665100098,
+     11.904000282287598
+    ],
+    "AL": [
+     3.5522561073303223,
+     3.354624032974243,
+     3.3710079193115234,
+     3.3525760173797607,
+     3.3710079193115234,
+     3.373055934906006,
+     3.3310720920562744,
+     3.3372159004211426,
+     3.3710079193115234,
+     3.3720319271087646
+    ],
+    "A1": [
+     5.243904113769531,
+     5.101568222045898,
+     5.106688022613525,
+     5.114880084991455,
+     5.099520206451416,
+     5.1169281005859375,
+     5.092351913452148,
+     5.097472190856934,
+     5.098495960235596,
+     5.1179518699646
+    ],
+    "AC": [
+     13.087743759155273,
+     12.958720207214355,
+     12.584959983825684,
+     12.820480346679688,
+     13.045760154724121,
+     12.646400451660156,
+     12.627967834472656,
+     13.027327537536621,
+     12.728320121765137,
+     12.691455841064453
+    ],
+    "A0p": [
+     12.130304336547852,
+     12.056575775146484,
+     12.14361572265625,
+     12.190719604492188,
+     12.194815635681152,
+     12.24396800994873,
+     11.993087768554688,
+     12.131327629089355,
+     12.22655963897705,
+     12.149760246276855
+    ],
+    "AC4": [
+     12.43238353729248,
+     12.385279655456543,
+     12.290047645568848,
+     12.603391647338867,
+     12.468223571777344,
+     12.388352394104004,
+     12.44262409210205,
+     12.429311752319336,
+     12.338175773620605,
+     12.424192428588867
+    ],
+    "T2": [
+     12.414976119995117,
+     12.36684799194336,
+     12.270591735839844,
+     12.568575859069824,
+     12.377087593078613,
+     12.418047904968262,
+     12.430335998535156,
+     12.416000366210938,
+     12.345343589782715,
+     12.417023658752441
+    ],
+    "AC16": [
+     12.476415634155273,
+     12.568575859069824,
+     12.395520210266113,
+     12.55731201171875,
+     12.567551612854004,
+     12.563455581665039,
+     12.404735565185547,
+     12.463104248046875,
+     12.471296310424805,
+     12.393471717834473
+    ],
+    "A0": [
+     12.562432289123535,
+     12.591103553771973,
+     12.488703727722168,
+     12.590080261230469,
+     12.588031768798828,
+     12.587008476257324,
+     12.490752220153809,
+     12.494848251342773,
+     12.512255668640137,
+     12.548095703125
+    ],
+    "ACX": [
+     12.541952133178711,
+     12.56447982788086,
+     12.728320121765137,
+     12.559359550476074,
+     12.538880348205566,
+     12.532735824584961,
+     12.472319602966309,
+     12.473343849182129,
+     12.559359550476074,
+     12.55833625793457
+    ],
+    "AE": [
+     0.10751999914646149,
+     0.10649599879980087,
+     0.10649599879980087,
+     0.10649599879980087,
+     0.10649599879980087,
+     0.10649599879980087,
+     0.10649599879980087,
+     0.10444799810647964,
+     0.10649599879980087,
+     0.10649599879980087
+    ],
+    "ACX0": [
+     12.537856101989746,
+     12.535807609558105,
+     12.702719688415527,
+     12.567551612854004,
+     12.536831855773926,
+     12.535807609558105,
+     12.563455581665039,
+     12.559359550476074,
+     12.560383796691895,
+     12.562432289123535
+    ]
+   },
+   "identical": {
+    "T2": true,
+    "A0p": true,
+    "ACX0": true
+   },
+   "slabs": {
+    "0": {
+     "gu": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "dn": [
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "3": {
+     "gu": [
+      4,
+      4,
+      4,
+      4
+     ],
+     "dn": [
+      4,
+      4,
+      4,
+      4
+     ]
+    },
+    "15": {
+     "gu": [
+      16,
+      16,
+      16,
+      16
+     ],
+     "dn": [
+      16,
+      16,
+      16,
+      16
+     ]
+    },
+    "127": {
+     "gu": [
+      70,
+      60,
+      60,
+      55
+     ],
+     "dn": [
+      70,
+      60,
+      60,
+      55
+     ]
+    }
+   }
+  },
+  {
+   "step": 64,
+   "order": [
+    "A3",
+    "AL",
+    "A12",
+    "AC",
+    "A2b",
+    "AC4",
+    "A1",
+    "AC16",
+    "A0p",
+    "ACX",
+    "T2",
+    "ACX0",
+    "A0",
+    "AE"
+   ],
+   "replays_ms": {
+    "A3": [
+     5.017600059509277,
+     5.434368133544922,
+     5.425151824951172,
+     5.438464164733887,
+     5.442560195922852,
+     5.449728012084961,
+     5.448703765869141,
+     5.440512180328369,
+     5.445631980895996,
+     5.437439918518066
+    ],
+    "AL": [
+     2.4483840465545654,
+     3.680255889892578,
+     3.6812798976898193,
+     3.699712038040161,
+     3.69868803024292,
+     3.69868803024292,
+     3.69868803024292,
+     3.7007360458374023,
+     3.699712038040161,
+     3.680255889892578
+    ],
+    "A12": [
+     5.574656009674072,
+     5.198847770690918,
+     5.183487892150879,
+     5.193727970123291,
+     5.221375942230225,
+     5.175295829772949,
+     5.193727970123291,
+     5.207039833068848,
+     5.219327926635742,
+     5.184512138366699
+    ],
+    "AC": [
+     15.622143745422363,
+     13.903871536254883,
+     14.1015043258667,
+     14.118911743164062,
+     13.805567741394043,
+     14.003199577331543,
+     14.196736335754395,
+     14.047231674194336,
+     13.840383529663086,
+     14.190591812133789
+    ],
+    "A2b": [
+     12.783616065979004,
+     12.447744369506836,
+     12.298239707946777,
+     12.3504638671875,
+     12.212224006652832,
+     12.411904335021973,
+     12.36070442199707,
+     12.348416328430176,
+     12.26137638092041,
+     12.47436809539795
+    ],
+    "AC4": [
+     13.518848419189453,
+     13.213695526123047,
+     13.312000274658203,
+     13.400064468383789,
+     13.146112442016602,
+     13.207551956176758,
+     13.408255577087402,
+     13.328384399414062,
+     13.05292797088623,
+     13.298687934875488
+    ],
+    "A1": [
+     5.549056053161621,
+     5.527552127838135,
+     5.528575897216797,
+     5.545983791351318,
+     5.540863990783691,
+     5.525504112243652,
+     5.540863990783691,
+     5.57260799407959,
+     5.527552127838135,
+     5.5316481590271
+    ],
+    "AC16": [
+     13.494272232055664,
+     13.725695610046387,
+     13.729791641235352,
+     13.694975852966309,
+     13.603839874267578,
+     13.719552040100098,
+     13.78713607788086,
+     13.802495956420898,
+     13.640704154968262,
+     13.805567741394043
+    ],
+    "A0p": [
+     13.702143669128418,
+     13.75436782836914,
+     14.042112350463867,
+     13.840383529663086,
+     13.846528053283691,
+     13.765631675720215,
+     13.827072143554688,
+     13.829119682312012,
+     13.698047637939453,
+     13.807616233825684
+    ],
+    "ACX": [
+     13.66425609588623,
+     13.721599578857422,
+     14.105600357055664,
+     13.723648071289062,
+     13.725695610046387,
+     13.740032196044922,
+     13.720576286315918,
+     13.79635238647461,
+     13.666303634643555,
+     13.722623825073242
+    ],
+    "T2": [
+     13.699071884155273,
+     13.749247550964355,
+     14.004223823547363,
+     13.757439613342285,
+     13.748224258422852,
+     13.776896476745605,
+     13.758463859558105,
+     13.77791976928711,
+     13.69702434539795,
+     13.760512351989746
+    ],
+    "ACX0": [
+     13.66425609588623,
+     13.722623825073242,
+     13.846528053283691,
+     13.736960411071777,
+     13.725695610046387,
+     13.734911918640137,
+     13.737983703613281,
+     13.743103981018066,
+     13.659135818481445,
+     13.733887672424316
+    ],
+    "A0": [
+     13.694975852966309,
+     13.750271797180176,
+     13.847552299499512,
+     13.76972770690918,
+     13.75334358215332,
+     13.77791976928711,
+     13.77791976928711,
+     13.776896476745605,
+     13.693951606750488,
+     13.765631675720215
+    ],
+    "AE": [
+     0.10751999914646149,
+     0.10649599879980087,
+     0.10649599879980087,
+     0.10649599879980087,
+     0.10649599879980087,
+     0.10649599879980087,
+     0.10751999914646149,
+     0.10751999914646149,
+     0.10649599879980087,
+     0.10649599879980087
+    ]
+   },
+   "identical": {
+    "T2": true,
+    "A0p": true,
+    "ACX0": true
+   },
+   "slabs": {
+    "0": {
+     "gu": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "dn": [
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "3": {
+     "gu": [
+      4,
+      4,
+      4,
+      4
+     ],
+     "dn": [
+      4,
+      4,
+      4,
+      4
+     ]
+    },
+    "15": {
+     "gu": [
+      16,
+      16,
+      16,
+      16
+     ],
+     "dn": [
+      16,
+      16,
+      16,
+      16
+     ]
+    },
+    "127": {
+     "gu": [
+      69,
+      65,
+      66,
+      67
+     ],
+     "dn": [
+      69,
+      65,
+      66,
+      67
+     ]
+    }
+   }
+  },
+  {
+   "step": 65,
+   "order": [
+    "AL",
+    "AC",
+    "A3",
+    "AC4",
+    "A12",
+    "AC16",
+    "A2b",
+    "ACX",
+    "A1",
+    "ACX0",
+    "A0p",
+    "AE",
+    "T2",
+    "A0"
+   ],
+   "replays_ms": {
+    "AL": [
+     2.5333759784698486,
+     3.555327892303467,
+     3.557375907897949,
+     3.557375907897949,
+     3.551232099533081,
+     3.556351900100708,
+     3.55020809173584,
+     3.5532801151275635,
+     3.557375907897949,
+     3.556351900100708
+    ],
+    "AC": [
+     11.213824272155762,
+     13.243391990661621,
+     13.235199928283691,
+     13.237248420715332,
+     13.07033634185791,
+     13.16659164428711,
+     13.083647727966309,
+     13.238271713256836,
+     13.235199928283691,
+     13.230079650878906
+    ],
+    "A3": [
+     4.893695831298828,
+     4.96127986907959,
+     4.968448162078857,
+     4.984831809997559,
+     4.985856056213379,
+     4.988927841186523,
+     4.988927841186523,
+     4.996096134185791,
+     4.998144149780273,
+     5.005311965942383
+    ],
+    "AC4": [
+     12.632063865661621,
+     12.942336082458496,
+     12.947456359863281,
+     12.793855667114258,
+     12.6310396194458,
+     12.735487937927246,
+     12.677120208740234,
+     12.67404842376709,
+     12.705792427062988,
+     12.75494384765625
+    ],
+    "A12": [
+     4.898816108703613,
+     4.926464080810547,
+     4.927487850189209,
+     4.926464080810547,
+     4.928512096405029,
+     4.928512096405029,
+     4.9244160652160645,
+     4.926464080810547,
+     4.927487850189209,
+     4.935679912567139
+    ],
+    "AC16": [
+     12.9617919921875,
+     13.137920379638672,
+     13.134847640991211,
+     13.015040397644043,
+     12.977151870727539,
+     12.999679565429688,
+     13.027327537536621,
+     12.993535995483398,
+     13.021183967590332,
+     13.116415977478027
+    ],
+    "A2b": [
+     12.217344284057617,
+     12.290047645568848,
+     12.310527801513672,
+     12.308480262756348,
+     12.309503555297852,
+     12.375040054321289,
+     12.365823745727539,
+     12.289024353027344,
+     12.308480262756348,
+     12.378111839294434
+    ],
+    "ACX": [
+     12.913663864135742,
+     12.898303985595703,
+     12.907520294189453,
+     12.965888023376465,
+     12.964863777160645,
+     12.97100830078125,
+     12.955648422241211,
+     12.877823829650879,
+     12.974080085754395,
+     12.958720207214355
+    ],
+    "A1": [
+     5.355519771575928,
+     5.350399971008301,
+     5.351424217224121,
+     5.354496002197266,
+     5.350399971008301,
+     5.352447986602783,
+     5.345280170440674,
+     5.348351955413818,
+     5.347328186035156,
+     5.349376201629639
+    ],
+    "ACX0": [
+     13.528063774108887,
+     13.353983879089355,
+     13.452287673950195,
+     13.423616409301758,
+     13.346816062927246,
+     13.37548828125,
+     13.271039962768555,
+     13.280256271362305,
+     13.355008125305176,
+     13.212672233581543
+    ],
+    "A0p": [
+     13.454336166381836,
+     13.280256271362305,
+     13.617152214050293,
+     13.25875186920166,
+     13.297663688659668,
+     13.344767570495605,
+     13.256704330444336,
+     13.246463775634766,
+     13.318143844604492,
+     13.379584312438965
+    ],
+    "AE": [
+     0.10751999914646149,
+     0.10649599879980087,
+     0.1085439994931221,
+     0.10751999914646149,
+     0.10649599879980087,
+     0.10649599879980087,
+     0.10547199845314026,
+     0.10649599879980087,
+     0.10649599879980087,
+     0.10649599879980087
+    ],
+    "T2": [
+     13.296640396118164,
+     13.235199928283691,
+     13.410304069519043,
+     13.218815803527832,
+     13.232128143310547,
+     13.222911834716797,
+     13.230079650878906,
+     13.236224174499512,
+     13.233152389526367,
+     13.241344451904297
+    ],
+    "A0": [
+     13.244416236877441,
+     13.232128143310547,
+     13.314047813415527,
+     13.222911834716797,
+     13.235199928283691,
+     13.221887588500977,
+     13.234175682067871,
+     13.224960327148438,
+     13.233152389526367,
+     13.233152389526367
+    ]
+   },
+   "identical": {
+    "T2": true,
+    "A0p": true,
+    "ACX0": true
+   },
+   "slabs": {
+    "0": {
+     "gu": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "dn": [
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "3": {
+     "gu": [
+      4,
+      4,
+      4,
+      4
+     ],
+     "dn": [
+      4,
+      4,
+      4,
+      4
+     ]
+    },
+    "15": {
+     "gu": [
+      16,
+      16,
+      16,
+      16
+     ],
+     "dn": [
+      16,
+      16,
+      16,
+      16
+     ]
+    },
+    "127": {
+     "gu": [
+      64,
+      65,
+      61,
+      65
+     ],
+     "dn": [
+      64,
+      65,
+      61,
+      65
+     ]
+    }
+   }
+  },
+  {
+   "step": 66,
+   "order": [
+    "AC",
+    "AC4",
+    "AL",
+    "AC16",
+    "A3",
+    "ACX",
+    "A12",
+    "ACX0",
+    "A2b",
+    "AE",
+    "A1",
+    "A0",
+    "A0p",
+    "T2"
+   ],
+   "replays_ms": {
+    "AC": [
+     9.439231872558594,
+     13.497344017028809,
+     13.499391555786133,
+     13.4584321975708,
+     13.66323184967041,
+     13.660160064697266,
+     13.58028793334961,
+     13.506560325622559,
+     13.67039966583252,
+     13.675519943237305
+    ],
+    "AC4": [
+     12.794879913330078,
+     12.775424003601074,
+     12.955648422241211,
+     12.814335823059082,
+     12.731391906738281,
+     12.727295875549316,
+     12.887040138244629,
+     12.804096221923828,
+     12.723199844360352,
+     12.895232200622559
+    ],
+    "AL": [
+     3.645440101623535,
+     3.412992000579834,
+     3.4560000896453857,
+     3.4703359603881836,
+     3.4990079402923584,
+     3.497983932495117,
+     3.4508800506591797,
+     3.452928066253662,
+     3.492863893508911,
+     3.497983932495117
+    ],
+    "AC16": [
+     13.308927536010742,
+     12.759039878845215,
+     12.844032287597656,
+     12.835840225219727,
+     12.920831680297852,
+     13.001728057861328,
+     12.873727798461914,
+     12.831744194030762,
+     12.908543586730957,
+     12.997632026672363
+    ],
+    "A3": [
+     5.091328144073486,
+     5.042175769805908,
+     5.059584140777588,
+     5.050367832183838,
+     5.075967788696289,
+     5.05241584777832,
+     5.056511878967285,
+     5.046271800994873,
+     5.0780158042907715,
+     5.050367832183838
+    ],
+    "ACX": [
+     13.305855751037598,
+     13.104127883911133,
+     13.233152389526367,
+     13.218815803527832,
+     13.215744018554688,
+     13.235199928283691,
+     13.224960327148438,
+     13.136896133422852,
+     13.233152389526367,
+     13.220864295959473
+    ],
+    "A12": [
+     5.05241584777832,
+     5.044223785400391,
+     5.0483198165893555,
+     5.0432000160217285,
+     5.044223785400391,
+     5.05241584777832,
+     5.0483198165893555,
+     5.045248031616211,
+     5.05241584777832,
+     5.045248031616211
+    ],
+    "ACX0": [
+     13.45740795135498,
+     13.378560066223145,
+     13.47379207611084,
+     13.25158405303955,
+     13.315072059631348,
+     13.445119857788086,
+     13.479935646057129,
+     13.38368034362793,
+     13.369343757629395,
+     13.379584312438965
+    ],
+    "A2b": [
+     12.622847557067871,
+     12.472319602966309,
+     12.594176292419434,
+     12.481535911560059,
+     12.471296310424805,
+     12.621824264526367,
+     12.600319862365723,
+     12.503040313720703,
+     12.622847557067871,
+     12.476415634155273
+    ],
+    "AE": [
+     0.10751999914646149,
+     0.10444799810647964,
+     0.10649599879980087,
+     0.10444799810647964,
+     0.10547199845314026,
+     0.10649599879980087,
+     0.10649599879980087,
+     0.10444799810647964,
+     0.10444799810647964,
+     0.10547199845314026
+    ],
+    "A1": [
+     5.439487934112549,
+     5.413887977600098,
+     5.448703765869141,
+     5.420032024383545,
+     5.438464164733887,
+     5.437439918518066,
+     5.429247856140137,
+     5.419007778167725,
+     5.45689582824707,
+     5.419007778167725
+    ],
+    "A0": [
+     13.494272232055664,
+     13.511679649353027,
+     13.347840309143066,
+     13.463552474975586,
+     13.621248245239258,
+     13.67244815826416,
+     13.506560325622559,
+     13.462528228759766,
+     13.649920463562012,
+     13.498368263244629
+    ],
+    "A0p": [
+     13.469696044921875,
+     13.498368263244629,
+     13.360128402709961,
+     13.588479995727539,
+     13.585408210754395,
+     13.603839874267578,
+     13.492223739624023,
+     13.67244815826416,
+     13.66220760345459,
+     13.503487586975098
+    ],
+    "T2": [
+     13.342720031738281,
+     13.493247985839844,
+     13.342720031738281,
+     13.494272232055664,
+     13.503487586975098,
+     13.495295524597168,
+     13.496319770812988,
+     13.57414436340332,
+     13.531135559082031,
+     13.497344017028809
+    ]
+   },
+   "identical": {
+    "T2": true,
+    "A0p": true,
+    "ACX0": true
+   },
+   "slabs": {
+    "0": {
+     "gu": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "dn": [
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "3": {
+     "gu": [
+      4,
+      4,
+      4,
+      4
+     ],
+     "dn": [
+      4,
+      4,
+      4,
+      4
+     ]
+    },
+    "15": {
+     "gu": [
+      16,
+      16,
+      16,
+      16
+     ],
+     "dn": [
+      16,
+      16,
+      16,
+      16
+     ]
+    },
+    "127": {
+     "gu": [
+      72,
+      63,
+      60,
+      62
+     ],
+     "dn": [
+      72,
+      63,
+      60,
+      62
+     ]
+    }
+   }
+  },
+  {
+   "step": 67,
+   "order": [
+    "AC4",
+    "AC16",
+    "AC",
+    "ACX",
+    "AL",
+    "ACX0",
+    "A3",
+    "AE",
+    "A12",
+    "A0",
+    "A2b",
+    "T2",
+    "A1",
+    "A0p"
+   ],
+   "replays_ms": {
+    "AC4": [
+     8.823807716369629,
+     13.04371166229248,
+     13.16659164428711,
+     13.186047554016113,
+     13.058048248291016,
+     13.223936080932617,
+     13.162495613098145,
+     13.018112182617188,
+     13.209600448608398,
+     13.204480171203613
+    ],
+    "AC16": [
+     15.709183692932129,
+     12.921855926513672,
+     12.930047988891602,
+     12.899328231811523,
+     12.920831680297852,
+     12.922880172729492,
+     12.925951957702637,
+     12.866559982299805,
+     13.05395221710205,
+     12.994560241699219
+    ],
+    "AC": [
+     14.698495864868164,
+     12.990464210510254,
+     13.201408386230469,
+     13.024255752563477,
+     13.06828784942627,
+     13.157376289367676,
+     13.203455924987793,
+     13.026304244995117,
+     13.196288108825684,
+     13.146112442016602
+    ],
+    "ACX": [
+     12.918784141540527,
+     12.44262409210205,
+     12.487680435180664,
+     12.182527542114258,
+     12.176383972167969,
+     12.532735824584961,
+     12.561408042907715,
+     12.173312187194824,
+     12.249088287353516,
+     12.340224266052246
+    ],
+    "AL": [
+     3.4754559993743896,
+     3.4150400161743164,
+     3.338239908218384,
+     3.417088031768799,
+     3.414016008377075,
+     3.4396159648895264,
+     3.359744071960449,
+     3.392512083053589,
+     3.441663980484009,
+     3.417088031768799
+    ],
+    "ACX0": [
+     12.692480087280273,
+     12.686335563659668,
+     12.652544021606445,
+     12.686335563659668,
+     12.615679740905762,
+     12.707839965820312,
+     12.739583969116211,
+     12.619775772094727,
+     12.692480087280273,
+     12.691455841064453
+    ],
+    "A3": [
+     4.888576030731201,
+     4.888576030731201,
+     4.878335952758789,
+     4.881408214569092,
+     4.885503768920898,
+     4.888576030731201,
+     4.889599800109863,
+     4.8660478591918945,
+     4.897791862487793,
+     4.887551784515381
+    ],
+    "AE": [
+     0.10751999914646149,
+     0.10649599879980087,
+     0.10649599879980087,
+     0.10649599879980087,
+     0.10649599879980087,
+     0.10649599879980087,
+     0.10649599879980087,
+     0.10649599879980087,
+     0.10649599879980087,
+     0.10649599879980087
+    ],
+    "A12": [
+     4.844543933868408,
+     4.8506879806518555,
+     4.849664211273193,
+     4.843520164489746,
+     4.8455681800842285,
+     4.860928058624268,
+     4.855807781219482,
+     4.849664211273193,
+     4.849664211273193,
+     4.852735996246338
+    ],
+    "A0": [
+     12.933119773864746,
+     12.924927711486816,
+     13.038592338562012,
+     13.031423568725586,
+     12.959744453430176,
+     12.924927711486816,
+     13.0447359085083,
+     13.04371166229248,
+     13.026304244995117,
+     12.955648422241211
+    ],
+    "A2b": [
+     12.175359725952148,
+     12.190719604492188,
+     12.185600280761719,
+     12.172287940979004,
+     12.189696311950684,
+     12.175359725952148,
+     12.190719604492188,
+     12.185600280761719,
+     12.189696311950684,
+     12.176383972167969
+    ],
+    "T2": [
+     12.790783882141113,
+     12.882944107055664,
+     12.892160415649414,
+     12.836864471435547,
+     12.87987232208252,
+     12.790783882141113,
+     12.872703552246094,
+     12.916735649108887,
+     12.880895614624023,
+     12.786687850952148
+    ],
+    "A1": [
+     5.234687805175781,
+     5.283840179443359,
+     5.243904113769531,
+     5.229568004608154,
+     5.2797441482543945,
+     5.230591773986816,
+     5.253119945526123,
+     5.242879867553711,
+     5.242879867553711,
+     5.22649621963501
+    ],
+    "A0p": [
+     12.941311836242676,
+     13.286399841308594,
+     13.195263862609863,
+     12.97817611694336,
+     13.128704071044922,
+     13.285375595092773,
+     13.103103637695312,
+     13.215744018554688,
+     13.120512008666992,
+     13.032447814941406
+    ]
+   },
+   "identical": {
+    "T2": true,
+    "A0p": true,
+    "ACX0": true
+   },
+   "slabs": {
+    "0": {
+     "gu": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "dn": [
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "3": {
+     "gu": [
+      4,
+      4,
+      4,
+      4
+     ],
+     "dn": [
+      4,
+      4,
+      4,
+      4
+     ]
+    },
+    "15": {
+     "gu": [
+      16,
+      16,
+      16,
+      16
+     ],
+     "dn": [
+      16,
+      16,
+      16,
+      16
+     ]
+    },
+    "127": {
+     "gu": [
+      65,
+      66,
+      60,
+      57
+     ],
+     "dn": [
+      65,
+      66,
+      60,
+      57
+     ]
+    }
+   }
+  },
+  {
+   "step": 68,
+   "order": [
+    "AC16",
+    "ACX",
+    "AC4",
+    "ACX0",
+    "AC",
+    "AE",
+    "AL",
+    "A0",
+    "A3",
+    "T2",
+    "A12",
+    "A0p",
+    "A2b",
+    "A1"
+   ],
+   "replays_ms": {
+    "AC16": [
+     9.498623847961426,
+     14.131199836730957,
+     14.126079559326172,
+     14.190591812133789,
+     14.141440391540527,
+     14.173184394836426,
+     13.811712265014648,
+     14.134271621704102,
+     14.15782356262207,
+     14.113792419433594
+    ],
+    "ACX": [
+     15.312895774841309,
+     14.156800270080566,
+     14.15782356262207,
+     14.150655746459961,
+     14.154751777648926,
+     14.155776023864746,
+     13.87622356414795,
+     14.153727531433105,
+     14.148608207702637,
+     14.154751777648926
+    ],
+    "AC4": [
+     15.805439949035645,
+     14.16806411743164,
+     14.163968086242676,
+     14.062591552734375,
+     14.156800270080566,
+     14.160896301269531,
+     13.98681640625,
+     14.159872055053711,
+     14.070783615112305,
+     14.152704238891602
+    ],
+    "ACX0": [
+     14.515199661254883,
+     13.898752212524414,
+     13.89568042755127,
+     13.893631935119629,
+     13.89465618133545,
+     13.900799751281738,
+     13.897727966308594,
+     13.900799751281738,
+     13.892607688903809,
+     13.904895782470703
+    ],
+    "AC": [
+     14.232576370239258,
+     14.148608207702637,
+     14.152704238891602,
+     13.947903633117676,
+     14.128128051757812,
+     14.131199836730957,
+     14.102527618408203,
+     14.103551864624023,
+     14.018560409545898,
+     14.145536422729492
+    ],
+    "AE": [
+     0.10547199845314026,
+     0.10649599879980087,
+     0.10649599879980087,
+     0.10444799810647964,
+     0.10649599879980087,
+     0.10649599879980087,
+     0.10444799810647964,
+     0.10444799810647964,
+     0.10444799810647964,
+     0.10649599879980087
+    ],
+    "AL": [
+     3.547136068344116,
+     3.590143918991089,
+     3.5880959033966064,
+     3.5481600761413574,
+     3.585024118423462,
+     3.5840001106262207,
+     3.5829761028289795,
+     3.5440640449523926,
+     3.5624959468841553,
+     3.5891199111938477
+    ],
+    "A0": [
+     13.403136253356934,
+     13.546496391296387,
+     13.576191902160645,
+     13.462528228759766,
+     13.541376113891602,
+     13.514752388000488,
+     13.445119857788086,
+     13.328384399414062,
+     13.399040222167969,
+     13.558783531188965
+    ],
+    "A3": [
+     5.297152042388916,
+     5.299200057983398,
+     5.340159893035889,
+     5.306367874145508,
+     5.301248073577881,
+     5.3002238273620605,
+     5.295104026794434,
+     5.313536167144775,
+     5.321728229522705,
+     5.322751998901367
+    ],
+    "T2": [
+     13.820927619934082,
+     13.757439613342285,
+     13.840383529663086,
+     13.864959716796875,
+     13.873151779174805,
+     13.760512351989746,
+     13.858816146850586,
+     13.925375938415527,
+     13.926400184631348,
+     13.991935729980469
+    ],
+    "A12": [
+     5.295104026794434,
+     5.283840179443359,
+     5.292031764984131,
+     5.293056011199951,
+     5.301248073577881,
+     5.2848639488220215,
+     5.299200057983398,
+     5.304319858551025,
+     5.302271842956543,
+     5.31660795211792
+    ],
+    "A0p": [
+     14.026752471923828,
+     14.006272315979004,
+     14.024703979492188,
+     14.012415885925293,
+     14.023679733276367,
+     14.022656440734863,
+     14.018560409545898,
+     14.1015043258667,
+     14.020607948303223,
+     14.286848068237305
+    ],
+    "A2b": [
+     13.110272407531738,
+     13.099007606506348,
+     13.102080345153809,
+     13.094911575317383,
+     13.102080345153809,
+     13.105152130126953,
+     13.109248161315918,
+     13.16659164428711,
+     13.106176376342773,
+     13.24953556060791
+    ],
+    "A1": [
+     5.705728054046631,
+     5.693439960479736,
+     5.706751823425293,
+     5.696512222290039,
+     5.706751823425293,
+     5.7047038078308105,
+     5.702655792236328,
+     5.7047038078308105,
+     5.696512222290039,
+     5.705728054046631
+    ]
+   },
+   "identical": {
+    "T2": true,
+    "A0p": true,
+    "ACX0": true
+   },
+   "slabs": {
+    "0": {
+     "gu": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "dn": [
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "3": {
+     "gu": [
+      4,
+      4,
+      4,
+      4
+     ],
+     "dn": [
+      4,
+      4,
+      4,
+      4
+     ]
+    },
+    "15": {
+     "gu": [
+      16,
+      16,
+      16,
+      16
+     ],
+     "dn": [
+      16,
+      16,
+      16,
+      16
+     ]
+    },
+    "127": {
+     "gu": [
+      74,
+      68,
+      61,
+      64
+     ],
+     "dn": [
+      74,
+      68,
+      61,
+      64
+     ]
+    }
+   }
+  },
+  {
+   "step": 69,
+   "order": [
+    "ACX",
+    "ACX0",
+    "AC16",
+    "AE",
+    "AC4",
+    "A0",
+    "AC",
+    "T2",
+    "AL",
+    "A0p",
+    "A3",
+    "A1",
+    "A12",
+    "A2b"
+   ],
+   "replays_ms": {
+    "ACX": [
+     9.444352149963379,
+     13.306879997253418,
+     13.467647552490234,
+     13.551615715026855,
+     13.550592422485352,
+     13.470720291137695,
+     13.459456443786621,
+     13.17683219909668,
+     13.378560066223145,
+     13.485055923461914
+    ],
+    "ACX0": [
+     12.652544021606445,
+     13.47276782989502,
+     13.470720291137695,
+     13.544447898864746,
+     13.554688453674316,
+     13.633536338806152,
+     13.4717435836792,
+     13.389823913574219,
+     13.4717435836792,
+     13.46457576751709
+    ],
+    "AC16": [
+     15.57811164855957,
+     13.487104415893555,
+     13.46457576751709,
+     13.54751968383789,
+     13.554688453674316,
+     13.583359718322754,
+     13.47379207611084,
+     13.388799667358398,
+     13.487104415893555,
+     13.387776374816895
+    ],
+    "AE": [
+     0.11980800330638885,
+     0.10751999914646149,
+     0.10751999914646149,
+     0.1085439994931221,
+     0.1085439994931221,
+     0.1085439994931221,
+     0.1085439994931221,
+     0.10751999914646149,
+     0.10751999914646149,
+     0.10751999914646149
+    ],
+    "AC4": [
+     14.470144271850586,
+     13.512703895568848,
+     13.498368263244629,
+     13.523967742919922,
+     13.600768089294434,
+     13.588479995727539,
+     13.521920204162598,
+     13.34988784790039,
+     13.523967742919922,
+     13.34988784790039
+    ],
+    "A0": [
+     13.888511657714844,
+     13.417471885681152,
+     13.3570556640625,
+     13.419520378112793,
+     13.496319770812988,
+     13.405183792114258,
+     13.445119857788086,
+     13.25977611541748,
+     13.416447639465332,
+     13.332480430603027
+    ],
+    "AC": [
+     13.933568000793457,
+     13.675519943237305,
+     13.500415802001953,
+     13.620223999023438,
+     13.675519943237305,
+     13.630463600158691,
+     13.66323184967041,
+     13.502464294433594,
+     13.613056182861328,
+     13.507583618164062
+    ],
+    "T2": [
+     13.101056098937988,
+     12.715007781982422,
+     12.748800277709961,
+     12.95257568359375,
+     12.787712097167969,
+     12.989439964294434,
+     12.716032028198242,
+     12.872703552246094,
+     12.849151611328125,
+     12.638208389282227
+    ],
+    "AL": [
+     3.5399680137634277,
+     3.557375907897949,
+     3.502079963684082,
+     3.5624959468841553,
+     3.557375907897949,
+     3.5635199546813965,
+     3.561471939086914,
+     3.4560000896453857,
+     3.512320041656494,
+     3.4990079402923584
+    ],
+    "A0p": [
+     13.191167831420898,
+     13.170687675476074,
+     13.232128143310547,
+     13.17580795288086,
+     13.215744018554688,
+     13.181952476501465,
+     13.186047554016113,
+     13.173760414123535,
+     13.011967658996582,
+     12.95462417602539
+    ],
+    "A3": [
+     5.0780158042907715,
+     5.085184097290039,
+     5.091328144073486,
+     5.104640007019043,
+     5.074944019317627,
+     5.1077117919921875,
+     5.091328144073486,
+     5.079040050506592,
+     5.084159851074219,
+     5.082111835479736
+    ],
+    "A1": [
+     5.420032024383545,
+     5.431295871734619,
+     5.47430419921875,
+     5.469183921813965,
+     5.430272102355957,
+     5.471231937408447,
+     5.433343887329102,
+     5.445631980895996,
+     5.421055793762207,
+     5.436416149139404
+    ],
+    "A12": [
+     5.066751956939697,
+     5.094399929046631,
+     5.06879997253418,
+     5.105663776397705,
+     5.0432000160217285,
+     5.093376159667969,
+     5.045248031616211,
+     5.074944019317627,
+     5.081088066101074,
+     5.065728187561035
+    ],
+    "A2b": [
+     12.77235221862793,
+     12.875776290893555,
+     12.950528144836426,
+     12.948479652404785,
+     12.873727798461914,
+     12.85632038116455,
+     12.541952133178711,
+     12.873727798461914,
+     12.87168025970459,
+     12.857343673706055
+    ]
+   },
+   "identical": {
+    "T2": true,
+    "A0p": true,
+    "ACX0": true
+   },
+   "slabs": {
+    "0": {
+     "gu": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "dn": [
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "3": {
+     "gu": [
+      4,
+      4,
+      4,
+      4
+     ],
+     "dn": [
+      4,
+      4,
+      4,
+      4
+     ]
+    },
+    "15": {
+     "gu": [
+      16,
+      16,
+      16,
+      16
+     ],
+     "dn": [
+      16,
+      16,
+      16,
+      16
+     ]
+    },
+    "127": {
+     "gu": [
+      68,
+      65,
+      60,
+      64
+     ],
+     "dn": [
+      68,
+      65,
+      60,
+      64
+     ]
+    }
+   }
+  },
+  {
+   "step": 70,
+   "order": [
+    "ACX0",
+    "AE",
+    "ACX",
+    "A0",
+    "AC16",
+    "T2",
+    "AC4",
+    "A0p",
+    "AC",
+    "A1",
+    "AL",
+    "A2b",
+    "A3",
+    "A12"
+   ],
+   "replays_ms": {
+    "ACX0": [
+     9.61638355255127,
+     14.079999923706055,
+     14.073856353759766,
+     14.100480079650879,
+     13.924351692199707,
+     13.959168434143066,
+     13.999103546142578,
+     14.355456352233887,
+     14.360575675964355,
+     14.082048416137695
+    ],
+    "AE": [
+     0.131071999669075,
+     0.1085439994931221,
+     0.10751999914646149,
+     0.10956799983978271,
+     0.1085439994931221,
+     0.1085439994931221,
+     0.10751999914646149,
+     0.1085439994931221,
+     0.1085439994931221,
+     0.10956799983978271
+    ],
+    "ACX": [
+     16.17305564880371,
+     14.007295608520508,
+     14.08512020111084,
+     14.031871795654297,
+     14.07487964630127,
+     14.0830717086792,
+     14.082048416137695,
+     14.17523193359375,
+     14.243840217590332,
+     14.081024169921875
+    ],
+    "A0": [
+     15.328255653381348,
+     14.113792419433594,
+     14.133248329162598,
+     14.113792419433594,
+     14.113792419433594,
+     14.133248329162598,
+     14.109696388244629,
+     14.216192245483398,
+     14.140416145324707,
+     14.132224082946777
+    ],
+    "AC16": [
+     14.528512001037598,
+     14.087167739868164,
+     14.103551864624023,
+     14.07692813873291,
+     14.088191986083984,
+     14.09331226348877,
+     14.095359802246094,
+     14.1844482421875,
+     14.0830717086792,
+     14.096384048461914
+    ],
+    "T2": [
+     14.301183700561523,
+     14.121983528137207,
+     14.124032020568848,
+     14.029824256896973,
+     14.133248329162598,
+     14.120960235595703,
+     14.134271621704102,
+     14.212096214294434,
+     14.127103805541992,
+     14.132224082946777
+    ],
+    "AC4": [
+     14.053376197814941,
+     14.143487930297852,
+     14.136320114135742,
+     14.036992073059082,
+     14.147583961486816,
+     14.145536422729492,
+     14.143487930297852,
+     14.227456092834473,
+     14.148608207702637,
+     14.146559715270996
+    ],
+    "A0p": [
+     13.854720115661621,
+     13.972479820251465,
+     14.073856353759766,
+     13.955072402954102,
+     14.049280166625977,
+     13.965312004089355,
+     13.942784309387207,
+     14.021632194519043,
+     14.056447982788086,
+     14.029824256896973
+    ],
+    "AC": [
+     14.208000183105469,
+     14.314496040344238,
+     14.197759628295898,
+     14.126079559326172,
+     14.198783874511719,
+     14.120960235595703,
+     14.256128311157227,
+     14.29196834564209,
+     14.294015884399414,
+     14.303232192993164
+    ],
+    "A1": [
+     5.539840221405029,
+     5.5562238693237305,
+     5.538815975189209,
+     5.554175853729248,
+     5.586944103240967,
+     5.590015888214111,
+     5.626880168914795,
+     5.553152084350586,
+     5.553152084350586,
+     5.588992118835449
+    ],
+    "AL": [
+     3.7652480602264404,
+     3.813375949859619,
+     3.7857279777526855,
+     3.659775972366333,
+     3.6577279567718506,
+     3.5880959033966064,
+     3.6136960983276367,
+     3.792896032333374,
+     3.8348801136016846,
+     3.7212159633636475
+    ],
+    "A2b": [
+     12.907520294189453,
+     13.05395221710205,
+     13.05395221710205,
+     12.751872062683105,
+     12.959744453430176,
+     13.08569622039795,
+     13.299712181091309,
+     13.06726360321045,
+     13.05292797088623,
+     12.892160415649414
+    ],
+    "A3": [
+     5.377024173736572,
+     5.380095958709717,
+     5.400576114654541,
+     5.369855880737305,
+     5.384191989898682,
+     5.389311790466309,
+     5.390336036682129,
+     5.378047943115234,
+     5.393407821655273,
+     5.396480083465576
+    ],
+    "A12": [
+     5.264383792877197,
+     5.2705278396606445,
+     5.2705278396606445,
+     5.231616020202637,
+     5.243904113769531,
+     5.256192207336426,
+     5.296127796173096,
+     5.3002238273620605,
+     5.269504070281982,
+     5.261312007904053
+    ]
+   },
+   "identical": {
+    "T2": true,
+    "A0p": true,
+    "ACX0": true
+   },
+   "slabs": {
+    "0": {
+     "gu": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "dn": [
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "3": {
+     "gu": [
+      4,
+      4,
+      4,
+      4
+     ],
+     "dn": [
+      4,
+      4,
+      4,
+      4
+     ]
+    },
+    "15": {
+     "gu": [
+      16,
+      16,
+      16,
+      16
+     ],
+     "dn": [
+      16,
+      16,
+      16,
+      16
+     ]
+    },
+    "127": {
+     "gu": [
+      71,
+      72,
+      60,
+      66
+     ],
+     "dn": [
+      71,
+      72,
+      60,
+      66
+     ]
+    }
+   }
+  },
+  {
+   "step": 71,
+   "order": [
+    "AE",
+    "A0",
+    "ACX0",
+    "T2",
+    "ACX",
+    "A0p",
+    "AC16",
+    "A1",
+    "AC4",
+    "A2b",
+    "AC",
+    "A12",
+    "AL",
+    "A3"
+   ],
+   "replays_ms": {
+    "AE": [
+     0.07168000191450119,
+     0.10547199845314026,
+     0.10751999914646149,
+     0.10649599879980087,
+     0.10444799810647964,
+     0.10751999914646149,
+     0.10751999914646149,
+     0.10547199845314026,
+     0.10547199845314026,
+     0.10751999914646149
+    ],
+    "A0": [
+     9.366527557373047,
+     13.723648071289062,
+     13.725695610046387,
+     13.536255836486816,
+     13.621248245239258,
+     13.715456008911133,
+     13.453311920166016,
+     13.719552040100098,
+     13.619199752807617,
+     13.595647811889648
+    ],
+    "ACX0": [
+     15.916031837463379,
+     13.6878080368042,
+     13.68883228302002,
+     13.510656356811523,
+     13.669376373291016,
+     13.689855575561523,
+     13.426688194274902,
+     13.690879821777344,
+     13.584383964538574,
+     13.591551780700684
+    ],
+    "T2": [
+     15.06713581085205,
+     13.727744102478027,
+     13.722623825073242,
+     13.575167655944824,
+     13.714431762695312,
+     13.718527793884277,
+     13.624320030212402,
+     13.713408470153809,
+     13.622271537780762,
+     13.700096130371094
+    ],
+    "ACX": [
+     14.36569595336914,
+     13.677568435668945,
+     13.67142391204834,
+     13.506560325622559,
+     13.684736251831055,
+     13.68064022064209,
+     13.691904067993164,
+     13.6878080368042,
+     13.596672058105469,
+     13.67142391204834
+    ],
+    "A0p": [
+     14.052351951599121,
+     13.719552040100098,
+     13.693951606750488,
+     13.531135559082031,
+     13.714431762695312,
+     13.715456008911133,
+     13.716480255126953,
+     13.724672317504883,
+     13.719552040100098,
+     13.702143669128418
+    ],
+    "AC16": [
+     13.634559631347656,
+     13.68883228302002,
+     13.676544189453125,
+     13.511679649353027,
+     13.693951606750488,
+     13.690879821777344,
+     13.67859172821045,
+     13.6878080368042,
+     13.689855575561523,
+     13.694975852966309
+    ],
+    "A1": [
+     5.574656009674072,
+     5.5808000564575195,
+     5.574656009674072,
+     5.559296131134033,
+     5.582848072052002,
+     5.578752040863037,
+     5.578752040863037,
+     5.576704025268555,
+     5.5808000564575195,
+     5.5859198570251465
+    ],
+    "AC4": [
+     13.949952125549316,
+     13.86291217803955,
+     14.48857593536377,
+     13.989888191223145,
+     13.912063598632812,
+     13.963264465332031,
+     13.97657585144043,
+     13.920255661010742,
+     13.97043228149414,
+     13.99500846862793
+    ],
+    "A2b": [
+     12.824576377868652,
+     12.949503898620605,
+     13.18502426147461,
+     12.896256446838379,
+     12.836864471435547,
+     12.922880172729492,
+     12.805120468139648,
+     12.838912010192871,
+     12.986368179321289,
+     12.910592079162598
+    ],
+    "AC": [
+     13.741056442260742,
+     13.815808296203613,
+     13.87007999420166,
+     13.807616233825684,
+     13.740032196044922,
+     13.705216407775879,
+     13.727744102478027,
+     13.736960411071777,
+     13.709312438964844,
+     13.827072143554688
+    ],
+    "A12": [
+     5.0432000160217285,
+     5.1220479011535645,
+     5.082111835479736,
+     5.062655925750732,
+     5.1025919914245605,
+     5.076992034912109,
+     5.051392078399658,
+     5.094399929046631,
+     5.079040050506592,
+     5.058559894561768
+    ],
+    "AL": [
+     3.5676159858703613,
+     3.546112060546875,
+     3.5522561073303223,
+     3.6362240314483643,
+     3.511296033859253,
+     3.5491840839385986,
+     3.6372480392456055,
+     3.4856960773468018,
+     3.55020809173584,
+     3.6567039489746094
+    ],
+    "A3": [
+     5.245952129364014,
+     5.265408039093018,
+     5.202943801879883,
+     5.21727991104126,
+     5.254144191741943,
+     5.195775985717773,
+     5.2203521728515625,
+     5.237760066986084,
+     5.201920032501221,
+     5.219327926635742
+    ]
+   },
+   "identical": {
+    "T2": true,
+    "A0p": true,
+    "ACX0": true
+   },
+   "slabs": {
+    "0": {
+     "gu": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "dn": [
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "3": {
+     "gu": [
+      4,
+      4,
+      4,
+      4
+     ],
+     "dn": [
+      4,
+      4,
+      4,
+      4
+     ]
+    },
+    "15": {
+     "gu": [
+      16,
+      16,
+      16,
+      16
+     ],
+     "dn": [
+      16,
+      16,
+      16,
+      16
+     ]
+    },
+    "127": {
+     "gu": [
+      70,
+      65,
+      62,
+      64
+     ],
+     "dn": [
+      70,
+      65,
+      62,
+      64
+     ]
+    }
+   }
+  }
+ ],
+ "clocks": {
+  "error": null,
+  "n": 21304,
+  "period_s": 0.002,
+  "A0": {
+   "n": 1745,
+   "sm_mhz_median": 1252,
+   "sm_mhz_min": 1132,
+   "sm_mhz_max": 1897,
+   "mem_mhz_median": 5701,
+   "power_w_median": 68.525,
+   "power_instant_w_median": 68.474,
+   "power_instant_w_max": 71.317,
+   "enforced_limit_w": [
+    70.0
+   ],
+   "reasons": {
+    "0x0": 49,
+    "0x4": 1696
+   }
+  },
+  "A0p": {
+   "n": 1747,
+   "sm_mhz_median": 1252,
+   "sm_mhz_min": 1132,
+   "sm_mhz_max": 1882,
+   "mem_mhz_median": 5701,
+   "power_w_median": 68.497,
+   "power_instant_w_median": 68.378,
+   "power_instant_w_max": 71.317,
+   "enforced_limit_w": [
+    70.0
+   ],
+   "reasons": {
+    "0x0": 53,
+    "0x4": 1694
+   }
+  },
+  "A1": {
+   "n": 1221,
+   "sm_mhz_median": 1252,
+   "sm_mhz_min": 1132,
+   "sm_mhz_max": 1897,
+   "mem_mhz_median": 5701,
+   "power_w_median": 68.497,
+   "power_instant_w_median": 68.517,
+   "power_instant_w_max": 71.317,
+   "enforced_limit_w": [
+    70.0
+   ],
+   "reasons": {
+    "0x0": 45,
+    "0x4": 1176
+   }
+  },
+  "A12": {
+   "n": 1205,
+   "sm_mhz_median": 1252,
+   "sm_mhz_min": 1132,
+   "sm_mhz_max": 1897,
+   "mem_mhz_median": 5701,
+   "power_w_median": 68.514,
+   "power_instant_w_median": 68.604,
+   "power_instant_w_max": 71.317,
+   "enforced_limit_w": [
+    70.0
+   ],
+   "reasons": {
+    "0x0": 36,
+    "0x4": 1169
+   }
+  },
+  "A2b": {
+   "n": 1694,
+   "sm_mhz_median": 1252.0,
+   "sm_mhz_min": 1132,
+   "sm_mhz_max": 1897,
+   "mem_mhz_median": 5701.0,
+   "power_w_median": 68.514,
+   "power_instant_w_median": 68.595,
+   "power_instant_w_max": 71.317,
+   "enforced_limit_w": [
+    70.0
+   ],
+   "reasons": {
+    "0x0": 58,
+    "0x4": 1636
+   }
+  },
+  "A3": {
+   "n": 1212,
+   "sm_mhz_median": 1252.0,
+   "sm_mhz_min": 1132,
+   "sm_mhz_max": 1897,
+   "mem_mhz_median": 5701.0,
+   "power_w_median": 68.525,
+   "power_instant_w_median": 68.604,
+   "power_instant_w_max": 71.317,
+   "enforced_limit_w": [
+    70.0
+   ],
+   "reasons": {
+    "0x0": 33,
+    "0x4": 1179
+   }
+  },
+  "AC": {
+   "n": 1786,
+   "sm_mhz_median": 1245.0,
+   "sm_mhz_min": 1132,
+   "sm_mhz_max": 1897,
+   "mem_mhz_median": 5701.0,
+   "power_w_median": 68.543,
+   "power_instant_w_median": 69.092,
+   "power_instant_w_max": 71.317,
+   "enforced_limit_w": [
+    70.0
+   ],
+   "reasons": {
+    "0x0": 40,
+    "0x4": 1746
+   }
+  },
+  "AC16": {
+   "n": 1730,
+   "sm_mhz_median": 1252.0,
+   "sm_mhz_min": 1132,
+   "sm_mhz_max": 1897,
+   "mem_mhz_median": 5701.0,
+   "power_w_median": 68.543,
+   "power_instant_w_median": 68.607,
+   "power_instant_w_max": 71.317,
+   "enforced_limit_w": [
+    70.0
+   ],
+   "reasons": {
+    "0x0": 57,
+    "0x4": 1673
+   }
+  },
+  "AC4": {
+   "n": 1745,
+   "sm_mhz_median": 1245,
+   "sm_mhz_min": 1132,
+   "sm_mhz_max": 1897,
+   "mem_mhz_median": 5701,
+   "power_w_median": 68.543,
+   "power_instant_w_median": 69.081,
+   "power_instant_w_max": 71.317,
+   "enforced_limit_w": [
+    70.0
+   ],
+   "reasons": {
+    "0x0": 55,
+    "0x4": 1690
+   }
+  },
+  "ACX": {
+   "n": 1760,
+   "sm_mhz_median": 1252.0,
+   "sm_mhz_min": 1132,
+   "sm_mhz_max": 1897,
+   "mem_mhz_median": 5701.0,
+   "power_w_median": 68.543,
+   "power_instant_w_median": 68.48,
+   "power_instant_w_max": 71.317,
+   "enforced_limit_w": [
+    70.0
+   ],
+   "reasons": {
+    "0x0": 78,
+    "0x4": 1682
+   }
+  },
+  "ACX0": {
+   "n": 1736,
+   "sm_mhz_median": 1252.0,
+   "sm_mhz_min": 1132,
+   "sm_mhz_max": 1897,
+   "mem_mhz_median": 5701.0,
+   "power_w_median": 68.525,
+   "power_instant_w_median": 68.517,
+   "power_instant_w_max": 71.317,
+   "enforced_limit_w": [
+    70.0
+   ],
+   "reasons": {
+    "0x0": 60,
+    "0x4": 1676
+   }
+  },
+  "AE": {
+   "n": 891,
+   "sm_mhz_median": 1252,
+   "sm_mhz_min": 1132,
+   "sm_mhz_max": 1897,
+   "mem_mhz_median": 5701,
+   "power_w_median": 68.514,
+   "power_instant_w_median": 68.517,
+   "power_instant_w_max": 71.317,
+   "enforced_limit_w": [
+    70.0
+   ],
+   "reasons": {
+    "0x0": 32,
+    "0x4": 859
+   }
+  },
+  "AL": {
+   "n": 1094,
+   "sm_mhz_median": 1245.0,
+   "sm_mhz_min": 1132,
+   "sm_mhz_max": 1897,
+   "mem_mhz_median": 5701.0,
+   "power_w_median": 68.534,
+   "power_instant_w_median": 68.607,
+   "power_instant_w_max": 71.317,
+   "enforced_limit_w": [
+    70.0
+   ],
+   "reasons": {
+    "0x0": 24,
+    "0x4": 1070
+   }
+  },
+  "T2": {
+   "n": 1738,
+   "sm_mhz_median": 1252.0,
+   "sm_mhz_min": 1132,
+   "sm_mhz_max": 1882,
+   "mem_mhz_median": 5701.0,
+   "power_w_median": 68.514,
+   "power_instant_w_median": 68.262,
+   "power_instant_w_max": 71.317,
+   "enforced_limit_w": [
+    70.0
+   ],
+   "reasons": {
+    "0x0": 51,
+    "0x4": 1687
+   }
+  }
+ },
+ "walls": {
+  "setup_s": 3.7,
+  "pin_static_s": 11.2,
+  "reps_s": 59.5
+ },
+ "wall_s": 74.4
+}
