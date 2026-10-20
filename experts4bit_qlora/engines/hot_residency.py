@@ -531,15 +531,16 @@ def _k25_c1_refusal(lut, why) -> RuntimeError:
 
 
 def _k25_plans(nf4_smallm_mod) -> tuple:
-    """``(gate_up's plan, down's plan)``: :func:`_k25_plan` with ``E4B_K25_PLAN``'s block shapes (:data:`_K25_PLANS`;
-    unset is ``today``, the same plan for both). ``c1`` under a decode other than ``prmt`` is refused, never run."""
+    """``(gate_up's plan, down's plan, the plan's name)``: :func:`_k25_plan` with ``E4B_K25_PLAN``'s block shapes
+    (:data:`_K25_PLANS`; unset is ``today``, the same plan for both). ``c1`` under a decode other than ``prmt`` is
+    refused, never run. The name is what :data:`K25_PLAN_SEEN` counts, so the record is the plan resolved here."""
     base = _k25_plan(nf4_smallm_mod)
     name = _k25_plan_raw() or "today"
     if name != "today" and base["lut"] != "prmt":
         raw = _k25_lut_raw()
         raise _k25_c1_refusal(base["lut"], f"E4B_K25_LUT={raw}" if raw else "unset E4B_K25_LUT, as resolved at build")
     gu, dn = _K25_PLANS[name]
-    return dict(base, **gu), dict(base, **dn)
+    return dict(base, **gu), dict(base, **dn), name
 
 
 def _k25_without_kernel(e: Exception) -> RuntimeError:
@@ -915,7 +916,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         try:
             import nf4_smallm as _k25_mod
             _k25 = _k25_mod.gemm_nf4_grouped_smallm
-            _k25_gu_kw, _k25_dn_kw = _k25_plans(_k25_mod)
+            _k25_gu_kw, _k25_dn_kw, _k25_plan_name = _k25_plans(_k25_mod)
         except (ImportError, AttributeError) as e:
             if _k25_mode == "1":
                 raise RuntimeError(
@@ -1141,7 +1142,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     if device_grouping and int4_stores is None and _k25 is not None:
         _route = "nf4_k25"
         _seen_k25_lut(_k25_gu_kw["lut"], R_rows)
-        _seen_k25_plan(_k25_plan_raw() or "today", R_rows)
+        _seen_k25_plan(_k25_plan_name, R_rows)
         # K25 (opt-in): the grouped small-M tensor-core GEMM on the NF4 stacks against the SAME 16-row device tiles. The
         # first call gets the UNSORTED x_rows and gathers through `order` in the kernel; the epilogue output is already
         # in sorted order. Outputs in sorted order, so gpt-oss's per-expert biases index by `sorted_ids` and the unsort
