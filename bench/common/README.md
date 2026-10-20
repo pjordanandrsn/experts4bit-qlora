@@ -81,3 +81,25 @@ It records only what the box measures itself, from `/proc`, `/sys` and `nvidia-s
 Every value is a number or a small enum, and `sources` names where each one came from. It writes no identifiers: no hostname, container id, serial, UUID or CPU model string. A fact it cannot read is left out, and the helper always exits 0, so it never costs a run.
 
 `measured_at` stamps the reading. The registry rejects a file whose stamp falls outside the run's own window, so a copy shipped with a kit is never taken for a reading. `tests/test_host_facts.py` runs it against a synthetic `/proc` and `/sys` and a stub `nvidia-smi`.
+
+## THP window records
+
+`thp_window.py` (standard library only) records transparent huge pages around a lane's timed window, inside the measured
+process. The launcher's host-facts probe reads the host's THP mode once per run. A reading that can depend on huge pages
+also needs to know whether huge pages were possible at the window and whether the process held any:
+
+```python
+import thp_window
+before = thp_window.snapshot()       # just before the timed window
+...                                  # the timed work
+rec = thp_window.window(before)      # both snapshots, the seconds between, the host's thp_* counter deltas
+```
+
+A snapshot holds:
+- the host's THP mode (`thp_enabled`, `thp_defrag`, or `absent` on a kernel without THP);
+- this process's `THP_MEM_ALLOC_ENABLE` (left out when unset);
+- its `AnonHugePages`, `Anonymous` and `Rss` from `/proc/<pid>/smaps_rollup`;
+- the host's `thp_*` counters from `/proc/vmstat`. These count every process on the host, co-tenants included.
+
+A fact that cannot be read is left out. A lane stages the file beside its box script and lists it in its staged hashes.
+`tests/test_thp_window.py` reads synthetic `/proc` and `/sys` trees.
