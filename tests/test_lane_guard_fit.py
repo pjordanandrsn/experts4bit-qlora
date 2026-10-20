@@ -59,20 +59,77 @@ def _name(p: Path) -> str:
 
 def _brace_depth(text: str) -> int:
     """Open { minus closed }, after dropping ${...} expansions: above zero means inside a function body or a group."""
-    t = re.sub(r"\$\{[^}]*\}", "", _code(text))
+    t, prev = _code(text), None
+    while t != prev:                                       # innermost first, so ${a:+${b}} goes whole
+        prev, t = t, re.sub(r"\$\{[^{}]*\}", "", t)
     return t.count("{") - t.count("}")
 
 
+HEREDOC_RE = re.compile(r"<<-?[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
+
+
+def _strip_comments_and_heredocs(text: str) -> str:
+    """The text without comments and heredoc bodies, in ONE quote-aware scan. A comment is a # that starts a word
+    outside quotes, so an apostrophe inside a comment never opens a quoted span (it used to swallow the code up to the
+    next apostrophe, and with it an if, case or esac: a false fail or a false pass). A heredoc body is data, not shell,
+    so it is dropped up to its terminator line. ${#x} and $# are not comments."""
+    out, q, i, n, pending = [], None, 0, len(text), []
+    while i < n:
+        ch = text[i]
+        if q:
+            out.append(ch)
+            if ch == "\\" and q == '"' and i + 1 < n:
+                out.append(text[i + 1])
+                i += 2
+                continue
+            if ch == q:
+                q = None
+        elif ch == "\\" and i + 1 < n:
+            out.append(text[i:i + 2])
+            i += 2
+            continue
+        elif ch in "'\"":
+            q = ch
+            out.append(ch)
+        elif ch == "#" and (i == 0 or text[i - 1] in " \t\n;&|()"):
+            j = text.find("\n", i)
+            i = n if j < 0 else j
+            continue
+        elif ch == "<" and (m := HEREDOC_RE.match(text, i)):
+            pending.append((m.group(2), m.group(0).startswith("<<-")))
+            out.append(" ")
+            i = m.end()
+            continue
+        elif ch == "\n" and pending:
+            out.append("\n")
+            i += 1
+            while pending and i < n:                      # skip each pending body, in order, to its terminator line
+                word, tabs = pending.pop(0)
+                while i < n:
+                    j = text.find("\n", i)
+                    line = text[i:n if j < 0 else j]
+                    i = n if j < 0 else j + 1
+                    if (line.lstrip("\t") if tabs else line) == word:
+                        break
+            continue
+        else:
+            out.append(ch)
+        i += 1
+    return "".join(out)
+
+
 def _code(text: str) -> str:
-    """The text without quoted strings and comments, for the depth scans."""
-    t = re.sub(r'"(?:[^"\\]|\\.)*"|\'[^\']*\'', '""', text)
-    return re.sub(r"(?:^|(?<=\s))#.*$", "", t, flags=re.M)
+    """The text without comments, heredoc bodies and quoted strings, for the depth scans. Comments go first, in a
+    quote-aware scan, so an apostrophe in a comment cannot open a span."""
+    t = _strip_comments_and_heredocs(text)
+    return re.sub(r'"(?:[^"\\]|\\.)*"|\'[^\']*\'', '""', t)
 
 
 def _block_depth(text: str) -> int:
     """Open if/case/while/until/for minus closed fi/esac/done: above zero means inside a branch or a loop."""
     t = _code(text)
-    opened = len(re.findall(r"(?:^|[;&|(]|\bthen|\bdo|\belse)\s*(?:if|case|while|until|for)\b", t, re.M))
+    # an opener starts a command: a line, after ; & | ( or ), after { (a function body), or after then/do/else
+    opened = len(re.findall(r"(?:^|[;&|(){]|\bthen|\bdo|\belse)\s*(?:if|case|while|until|for)\b", t, re.M))
     return opened - len(re.findall(r"\b(?:fi|esac|done)\b", t))
 
 
@@ -181,3 +238,32 @@ def test_p149k_amendment_3_fit_is_the_shape_without_headroom():
     text = (ROOT / "bench/p149/p149k_run.sh").read_text()
     assert "p149/p149k" in LEGACY_UNFITTED and "FIT=$((INSTALL_TO_BENCH + NEED_BENCH + RESERVE))" in text
     assert fit_problems(text)
+
+
+# ---- the depth scans' parser: comments are dropped in a quote-aware scan BEFORE quoted strings are masked, so an
+# apostrophe in a comment cannot open a span that swallows an if, case or esac (a false fail, or a false pass)
+def test_an_apostrophe_in_a_comment_never_hides_or_invents_a_branch():
+    above = CANONICAL.replace('[ "$LEFT"', "# P141's lock is staged ahead of this check\n[ \"$LEFT\"")
+    assert fit_problems(above.replace("pipx(){", "# the toolchain's pins follow\npipx(){")) == []
+    inside = CANONICAL.replace(
+        '[ "$LEFT"', '# it\'s the branch below\nif [ -n "$SKIP_FIT" ]; then\n# that\'s inside the branch\n[ "$LEFT"'
+    ).replace("finish 19; }\n", "finish 19; }\nfi\n")
+    assert any("not at top level" in p for p in fit_problems(inside))                 # was a false pass
+    plain = inside.replace("it's", "it is").replace("that's", "that is")
+    assert any("not at top level" in p for p in fit_problems(plain))
+
+
+def test_heredoc_bodies_hashes_and_nested_expansions_are_not_shell_structure():
+    head = ("python3 - <<'PY'\nif x: print(\"it's data\")  # case\nPY\n"
+            "cat <<-EOF\n\tfor nothing in here; don't count it\n\tEOF\n"
+            'N=${#ARGS}; [ $# -gt 0 ] && echo ${CEN:+--out $W/c_${B}_$T.txt}\n')
+    assert fit_problems(head + CANONICAL) == []
+    assert _block_depth(head) == 0 and _brace_depth(head) == 0
+    assert _block_depth("f(){ case $1 in a) echo;; esac; }\nfc) case $x in *) ;; esac\n") == 0
+
+
+def test_every_gated_runner_reads_as_a_closed_script():
+    """A whole runner closes every if/case/loop and every brace. A runner that reads otherwise means the depth scans
+    misparse it (not that the runner is wrong): fix _code / _block_depth / _brace_depth, not the runner."""
+    open_ = {_name(p): (_block_depth(p.read_text()), _brace_depth(p.read_text())) for p in _gated_runners()}
+    assert not {k: v for k, v in open_.items() if v != (0, 0)}
