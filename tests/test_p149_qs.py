@@ -99,10 +99,41 @@ def box_dir(tmp_path_factory):
     return d
 
 
+def _engine():
+    try:
+        import experts4bit_qlora.engines.paged_runner  # noqa: F401
+        import torch  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
 @pytest.mark.parametrize("script", ["p149_box.py", "p149_reduce.py"])
 def test_the_self_tests_pass(box_dir, script):
     out = _run(box_dir / script, "--self-test", cwd=box_dir)
     assert out.returncode == 0 and re.search(r"self-test: (\d+)/\1 OK", out.stdout), out.stdout + out.stderr
+    if script == "p149_box.py" and _engine():                # the Forcer and Q cases need the package: none skipped
+        assert "self-test: 22/22 OK" in out.stdout, out.stdout
+
+
+BOX_MUTANTS = [
+    # Q forces the wrong first token: the window-sourced check must see it in the graph's buffer
+    ("        runner.tokens[rid][-1] = w[PROMPT - 1]                 # forced: position 511's true token, not the argmax",
+     "        runner.tokens[rid][-1] = w[PROMPT - 2]"),
+]
+
+
+@pytest.mark.parametrize("old,new", BOX_MUTANTS)
+def test_each_box_mutant_fails_the_self_test(tmp_path, old, new):
+    if not _engine():
+        pytest.skip("the Q forcing case needs torch and the package")
+    for name, d in SOURCES.items():
+        shutil.copyfile(d / name, tmp_path / name)
+    src = (LANE / "p149_box.py").read_text(encoding="utf-8")
+    assert src.count(old) == 1, old
+    (tmp_path / "p149_box.py").write_bytes(src.replace(old, new).encode("utf-8"))
+    out = _run(tmp_path / "p149_box.py", "--self-test", cwd=tmp_path)
+    assert out.returncode != 0 and "FAILED" in out.stdout, out.stdout + out.stderr
 
 
 def test_the_preread_self_test_passes(tmp_path):

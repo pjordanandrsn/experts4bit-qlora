@@ -103,15 +103,25 @@ def heat():
     software power cap), read outside every timed window: the arms run in separate processes, so a clock share of a
     ratio shows here. Reported, never ruled."""
     import subprocess
-    try:
-        q = "--query-gpu=temperature.gpu,clocks.sm,power.draw,clocks_event_reasons.active"
-        out = subprocess.check_output(["nvidia-smi", q, "--format=csv,noheader,nounits"], text=True,
-                                      timeout=20).strip().splitlines()[0]
-        t, c, w, r = (x.strip() for x in out.split(","))
-        return {"temp_c": int(float(t)), "sm_mhz": int(float(c)), "power_w": float(w), "clock_events": r,
-                "t": round(time.time(), 3)}
-    except Exception as e:  # noqa: BLE001 -- reported only
-        return {"error": f"{type(e).__name__}: {str(e)[:120]}", "t": round(time.time(), 3)}
+    out = {"t": round(time.time(), 3)}
+    for fields in (("temperature.gpu", "clocks.sm", "power.draw", "clocks_event_reasons.active"),
+                   ("temperature.gpu", "clocks.sm")):           # a driver without the newer fields: the two kept
+        try:
+            row = subprocess.check_output(["nvidia-smi", "--query-gpu=" + ",".join(fields), "--format=csv,noheader,nounits"],
+                                          text=True, timeout=20).strip().splitlines()[0].split(",")
+        except Exception as e:  # noqa: BLE001 -- reported only
+            out["error"] = f"{type(e).__name__}: {str(e)[:120]}"
+            continue
+        for f, v in zip(fields, (x.strip() for x in row)):  # each field on its own: an [N/A] drops only itself
+            key = {"temperature.gpu": "temp_c", "clocks.sm": "sm_mhz", "power.draw": "power_w",
+                   "clocks_event_reasons.active": "clock_events"}[f]
+            try:
+                out[key] = v if f == "clocks_event_reasons.active" else float(v)
+            except ValueError:
+                out[key] = None
+        out.pop("error", None)
+        break
+    return out
 
 
 def nll_argmax(logits, targets):
@@ -261,7 +271,7 @@ def q_pass(runner, ws, base_rid, ttft=None, forcing=None, ptr=None):
     b = bucket_for(len(rids), runner._buckets)
     buf = runner._bufs[b]
     for j in range(CONT):                                       # input position 511 + j predicts 512 + j
-        want = [runner.tokens[rid][-1] for rid in rids]
+        want = [w[PROMPT - 1 + j] for w in ws]                 # the window's own token: an independent source
         runner.run_decode(rids)
         if forcing is not None:
             seen = buf["ids"][:len(rids), 0].tolist()           # the graph's own input this step
