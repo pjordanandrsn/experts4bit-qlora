@@ -3029,6 +3029,26 @@ def _hp1_absmax_fp32(qs):
     return (BF.dequantize_blockwise(qs.absmax, qs.state2) + qs.offset).float()
 
 
+class _HP1Slot(tuple):
+    """A slot of ``hp1_base_slots``: the (raw, deq, bias) 3-tuple every consumer unpacks, plus ``stored()``, the quantized state
+    exactly as the framework holds it (HBD, bench/hbd/PREREG-hbd.md): an ordered {field: tensor | int | float}, read by
+    ``hp1_stored_state`` only."""
+    def __new__(cls, raw, deq, bias, stored):
+        t = super().__new__(cls, (raw, deq, bias))
+        t.stored = stored
+        return t
+
+
+def _qs_stored(qs):
+    """The stack-level fields of a bnb QuantState as stored: the absmax as held (uint8 when nested) and, when nested, the
+    nested state's absmax, code, offset and blocksize."""
+    f = {"absmax": qs.absmax, "blocksize": int(qs.blocksize), "quant_type": str(qs.quant_type)}
+    if bool(getattr(qs, "nested", False)):
+        f.update(nested_absmax=qs.state2.absmax, nested_code=qs.state2.code, nested_offset=qs.offset,
+                 nested_blocksize=int(qs.state2.blocksize))
+    return f
+
+
 def hp1_expert_source(mod, hidden):
     """For one experts module of ANY framework: ({kind: raw(e)}, num_experts, {kind: regime}, {kind: deq(e)}). raw(e) is expert e's
     weight as STORED, framework-neutral (hp1_lib.dequant_raw reads it): {"fmt": "nf4"|"fp4", packed uint8 [n/2], absmax fp32
@@ -3065,6 +3085,17 @@ def hp1_expert_source(mod, hidden):
             def deq_e4b(e, kind=kind):
                 packed, absmax, shape = src[kind]
                 return inner._dequantize_expert(packed, absmax, shape, int(e), torch.bfloat16)
+
+            def stored_e4b(e, kind=kind, pk=pk, am=am):
+                f = {"packed": getattr(inner, pk)[int(e)], "blocksize": int(inner.blocksize), "quant_type": str(inner.quant_type)}
+                if dq:                                   # e4b's own double quant (experts4bit_qlora.absmax_dq): the buffers as held
+                    f.update(absmax=getattr(inner, f"{kind}_absmax_q")[int(e)], nested_absmax=getattr(inner, f"{kind}_absmax_s"),
+                             nested_code=getattr(inner, f"{kind}_absmax_code"), nested_offset=getattr(inner, f"{kind}_absmax_off"),
+                             nested_blocksize=int(inner.__dict__["_e4b_absmax_dq"]["nested_blocksize"]))
+                else:
+                    f["absmax"] = getattr(inner, am)[int(e)]
+                return f
+            raw_e4b.stored = stored_e4b
             raw[kind], deq[kind] = raw_e4b, deq_e4b
         regime = f"{inner.quant_type}/{inner.blocksize}" + ("+dq" if dq else "")
         return raw, int(inner.num_experts), {"gate_up": regime, "down": regime}, deq
@@ -3105,6 +3136,11 @@ def hp1_expert_source(mod, hidden):
                                 quant_type=qs.quant_type, dtype=qs.dtype)
                 w = BF.dequantize_4bit(flat[e * numel_e // 2:(e + 1) * numel_e // 2].reshape(-1, 1), quant_state=st).to(torch.bfloat16)
                 return w.t().contiguous() if transposed else w
+            def stored_bnb(e, p=p, qs=qs, numel_e=numel_e, nb=nb):
+                f = _qs_stored(qs)
+                f["absmax"] = qs.absmax.reshape(-1)[e * nb:(e + 1) * nb]          # this expert's rows, as held (uint8 when nested)
+                return {"packed": p.data.reshape(-1)[e * numel_e // 2:(e + 1) * numel_e // 2], **f}
+            raw_bnb.stored = stored_bnb
             raw[kind], deq[kind] = raw_bnb, deq_bnb
         elif p.ndim == 3 and p.is_floating_point():
             regimes[kind] = f"{_dtype_label(p.dtype)} passthrough"
@@ -3113,6 +3149,7 @@ def hp1_expert_source(mod, hidden):
                 w = p.data[e].to(torch.bfloat16)
                 return w.t().contiguous() if transposed else w
             raw[kind] = (lambda e, f=deq_float: {"fmt": "bf16", "w": f(e)})
+            raw[kind].stored = (lambda e, p=p: {"w": p.data[e]})
             deq[kind] = deq_float
         else:
             raise RuntimeError(f"{attr}: an expert stack this evaluator cannot read ({type(p).__name__}, ndim {p.ndim})")
@@ -3142,10 +3179,17 @@ def hp1_linear_source(proj):
     if qs is not None:
         regime = f"{qs.quant_type}/{qs.blocksize}" + ("+dq" if bool(getattr(qs, "nested", False)) else "")
         d1, d2 = (int(v) for v in qs.shape)
-        return ((lambda: {"fmt": qs.quant_type, "packed": w.data.reshape(-1), "absmax": _hp1_absmax_fp32(qs), "shape": [d1, d2],
-                          "blocksize": int(qs.blocksize), "code": qs.code.float(), "transposed": False, "dtype": str(qs.dtype).replace("torch.", "")}),
-                (lambda: BF.dequantize_4bit(w.data, quant_state=qs).to(torch.bfloat16)), bias, regime)
-    return (lambda: {"fmt": "bf16", "w": w.data.to(torch.bfloat16)}), (lambda: w.data.to(torch.bfloat16)), bias, _dtype_label(w.dtype)
+
+        def raw_q():
+            return {"fmt": qs.quant_type, "packed": w.data.reshape(-1), "absmax": _hp1_absmax_fp32(qs), "shape": [d1, d2],
+                    "blocksize": int(qs.blocksize), "code": qs.code.float(), "transposed": False, "dtype": str(qs.dtype).replace("torch.", "")}
+        raw_q.stored = lambda: {"packed": w.data, **_qs_stored(qs)}
+        return raw_q, (lambda: BF.dequantize_4bit(w.data, quant_state=qs).to(torch.bfloat16)), bias, regime
+
+    def raw_w():
+        return {"fmt": "bf16", "w": w.data.to(torch.bfloat16)}
+    raw_w.stored = lambda: {"w": w.data}
+    return raw_w, (lambda: w.data.to(torch.bfloat16)), bias, _dtype_label(w.dtype)
 
 
 def hp1_base_slots(model):
@@ -3161,7 +3205,8 @@ def hp1_base_slots(model):
     out, regimes, layers, claimed = {}, {}, set(), set()
 
     def bf16_slot(t):
-        return ((lambda: {"fmt": "bf16", "w": t.data.to(torch.bfloat16)}), (lambda: t.data.to(torch.bfloat16)), None)
+        return _HP1Slot((lambda: {"fmt": "bf16", "w": t.data.to(torch.bfloat16)}), (lambda: t.data.to(torch.bfloat16)), None,
+                        lambda: {"w": t.data})
     for name, m in model.named_modules():
         L = layer_index_of(name)
         if L < 0 or any(name.startswith(c + ".") for c in claimed):
@@ -3172,7 +3217,8 @@ def hp1_base_slots(model):
             for kind in ("gate_up", "down"):
                 for e in range(E):
                     # raw/deq bound as defaults: they are rebound for every experts module, so a closure would read the LAST layer's
-                    out[(L, kind, e)] = ((lambda kind=kind, e=e, raw=raw: raw[kind](e)), (lambda kind=kind, e=e, deq=deq: deq[kind](e)), None)
+                    out[(L, kind, e)] = _HP1Slot((lambda kind=kind, e=e, raw=raw: raw[kind](e)), (lambda kind=kind, e=e, deq=deq: deq[kind](e)), None,
+                                                 (lambda kind=kind, e=e, raw=raw: raw[kind].stored(e)))
             layers.add(L)
             claimed.add(name)
         elif all(getattr(m, pn, None) is not None for pn in ("q_proj", "k_proj", "o_proj")):
@@ -3182,7 +3228,7 @@ def hp1_base_slots(model):
                     continue
                 raw, deq, bias, reg = hp1_linear_source(proj)
                 regimes[f"attention {pn}"] = reg
-                out[(L, ATTN_KINDS[pn], -1)] = (raw, deq, bias)
+                out[(L, ATTN_KINDS[pn], -1)] = _HP1Slot(raw, deq, bias, raw.stored)
                 claimed.add(f"{name}.{pn}")
         elif name.split(".")[-1] == "gate" and isinstance(getattr(m, "weight", None), torch.Tensor):
             out[(L, "router", -1)] = bf16_slot(m.weight)
@@ -3227,6 +3273,82 @@ def hp1_base_digest(model, slots=None):
     return {"digest": digest, "n_slots": n, "n_layers": n_layers, "regimes": regimes, "seconds": round(time.perf_counter() - t0, 1),
             "raw_checked": raw_checked, "raw_mismatch": raw_mismatch[:8], "raw_ok": raw_checked > 0 and not raw_mismatch,
             "method": "per-slot (int16 sum, position-weighted int16 sum) of the framework's own bf16 dequant; sha256 over sorted keys"}
+
+
+def _field_bytes(v):
+    if isinstance(v, torch.Tensor):
+        t = v.detach().contiguous().reshape(-1)
+        return f"{t.dtype}|{tuple(v.shape)}|".encode() + t.view(torch.uint8).cpu().numpy().tobytes()
+    return f"{type(v).__name__}|{v}".encode()
+
+
+def hp1_stored_state(slots):
+    """HBD (bench/hbd/PREREG-hbd.md): per slot, sha256 over the quantized state exactly as the framework holds it (each field's
+    name, dtype, shape and bytes, in sorted field order), and the fold of those hashes over the sorted slot keys. Beside it the
+    slot structure: the count and the sha256 of the sorted key list. -> (record, {key string: slot hash})."""
+    import hashlib
+    per = {}
+    for key in sorted(slots, key=lambda k: (k[0], str(k[1]), k[2])):
+        fields = slots[key].stored()
+        h = hashlib.sha256()
+        for name in sorted(fields):
+            h.update(name.encode() + b"=")
+            h.update(_field_bytes(fields[name]))
+            h.update(b";")
+        per[f"{key[0]}|{key[1]}|{key[2]}"] = h.hexdigest()
+    fold = hashlib.sha256("".join(f"{k}|{v}\n" for k, v in per.items()).encode()).hexdigest()
+    keys = hashlib.sha256("\n".join(per).encode()).hexdigest()
+    return {"stored_digest": fold, "n_slots": len(per), "keys_sha256": keys}, per
+
+
+def hbd_libraries():
+    """The libbitsandbytes files mapped into THIS process (/proc/self/maps), each with its sha256, and the environment that
+    picks one. HBD reads this inside the cell, after the base export."""
+    import hashlib
+    paths = []
+    try:
+        for line in open("/proc/self/maps"):
+            parts = line.split()
+            if len(parts) >= 6 and "libbitsandbytes" in os.path.basename(parts[-1]) and parts[-1] not in paths:
+                paths.append(parts[-1])
+    except OSError as e:
+        return {"error": f"{type(e).__name__}: {e}"}
+    libs = []
+    for path in paths:
+        try:
+            libs.append({"path": path, "sha256": hashlib.sha256(open(path, "rb").read()).hexdigest()})
+        except OSError as e:
+            libs.append({"path": path, "error": f"{type(e).__name__}"})
+    return {"libraries": libs, "BNB_CUDA_VERSION": os.environ.get("BNB_CUDA_VERSION"), "LD_LIBRARY_PATH": os.environ.get("LD_LIBRARY_PATH")}
+
+
+def hbd_versions():
+    import importlib.metadata as md
+    v = {"torch": torch.__version__, "torch_cuda": torch.version.cuda}
+    for dist in ("triton", "transformers", "bitsandbytes", "unsloth", "unsloth_zoo", "peft", "experts4bit-qlora", "grouped-nf4-gemm"):
+        try:
+            v[dist] = md.version(dist)
+        except md.PackageNotFoundError:
+            v[dist] = None
+    if torch.cuda.is_available():
+        v.update(device=torch.cuda.get_device_name(0), capability=".".join(map(str, torch.cuda.get_device_capability(0))))
+        try:
+            v["driver"] = subprocess.run(["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"], capture_output=True,
+                                         text=True, timeout=30).stdout.strip().splitlines()[0]
+        except Exception as e:
+            v["driver"] = f"unread: {type(e).__name__}"
+    return v
+
+
+def hbd_record(model, path):
+    """--hbd-record PATH (with --hp1-export): the stored-state digest, the slot structure, the libraries mapped into this process
+    and the versions. The per-slot hashes go to PATH; the receipt's hp1 block carries the summary."""
+    slots, regimes, n_layers = hp1_base_slots(model)
+    rec, per = hp1_stored_state(slots)
+    rec.update(bnb=hbd_libraries(), versions=hbd_versions(), regimes=regimes, n_layers=n_layers)
+    with open(path, "w") as f:
+        json.dump(dict(rec, per_slot=per), f, indent=1, sort_keys=True)
+    return dict(rec, path=path)
 
 
 def hp1_release_training_state(model, opt):
@@ -4204,6 +4326,11 @@ def run_arm(a, load_fn, sampler=True):
             released = hp1_release_training_state(model, opt)   # nothing after this point steps the optimizer
             hp1 = hp1_export(model, a)
             hp1["released"] = released
+            if getattr(a, "hbd_record", None):           # HBD: after the export, inside this process (bench/hbd/PREREG-hbd.md)
+                try:
+                    hp1["hbd"] = hbd_record(model, a.hbd_record)
+                except Exception as e:
+                    hp1["hbd_error"] = f"{type(e).__name__}: {str(e)[:300]}"
         print("HP1 " + json.dumps({k: (v.get("sha256") if k == "adapter" else v.get("digest") if k == "train_base" else v)
                                    for k, v in hp1.items()}), flush=True)
 
@@ -6130,6 +6257,9 @@ def main():
     ap.add_argument("--hp1-export-base", type=int, default=0,
                     help="HP1: with --hp1-export, also write the frozen base AS STORED (framework-neutral packed NF4 per slot, base_<framework>_<fam>/) "
                          "for the one evaluator; one run per framework is enough (the digest proves every other run trained on the same bytes)")
+    ap.add_argument("--hbd-record", default=None,
+                    help="HBD (bench/hbd/PREREG-hbd.md): with --hp1-export, write the stored-state digest, the slot structure and the "
+                         "libbitsandbytes files mapped into this process to PATH, after the export")
     ap.add_argument("--fam", default="qwen3")
     ap.add_argument("--model", default="Qwen/Qwen3-30B-A3B")
     ap.add_argument("--revision", default="ad44e777bcd18fa416d9da3bd8f70d33ebb85d39")
@@ -6231,6 +6361,8 @@ def main():
         stub(a, "refused", "--axolotl-kernels experts with --axolotl-best 0: scattermoe comes from the kernels plugin (pass --axolotl-best 1)", {"phase": "preamble"}, code=3)
     if _km != "on" and a.framework != "axolotl":
         stub(a, "refused", f"--axolotl-kernels {_km} is an axolotl switch; this arm is {a.framework}", {"phase": "preamble"}, code=3)
+    if getattr(a, "hbd_record", None) and not getattr(a, "hp1_export", None):
+        stub(a, "refused", "--hbd-record PATH needs --hp1-export DIR (it is read after the export, from the same slots)", {"phase": "preamble"}, code=3)
     if getattr(a, "hp1_export_base", 0) and not getattr(a, "hp1_export", None):
         stub(a, "refused", "--hp1-export-base 1 needs --hp1-export DIR (the base is written beside the canonical adapter)", {"phase": "preamble"}, code=3)
     if getattr(a, "hp1_export", None) and a.offload:

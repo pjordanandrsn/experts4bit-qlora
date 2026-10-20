@@ -2414,6 +2414,58 @@ def test_hp1_export_refuses_cleanly_without_hp1_lib(tmp_path):
     assert rec["status"] == "refused" and "--hp1-export DIR" in rec["reason"], rec
 
 
+def test_hbd_record_is_refused_without_hp1_export(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    common = ["--prereg", "hbd/PREREG-hbd.md", "--out", str(out), "--adapter-dir", str(out / "ad"), "--framework", "e4b", "--arm", "fused"]
+    p = _run("--tag", "h", "--hbd-record", str(tmp_path / "rec.json"), *common)
+    assert p.returncode == 3 and "Traceback" not in p.stderr, (p.stdout + p.stderr)[-2000:]
+    rec = json.loads((out / "qwen3_e4b_h.json").read_text())
+    assert rec["status"] == "refused" and "--hp1-export DIR" in rec["reason"], rec
+
+
+def test_hbd_stored_state_hashes_every_stored_field_by_name_dtype_and_bytes():
+    """HBD (bench/hbd/PREREG-hbd.md): one changed packed byte, a changed nested code, or the same bytes under another dtype each
+    change that slot's hash and the fold; the key-set hash is the structure and does not move. A different key set does."""
+    import torch
+    m = _load_arm_module()
+
+    def slot(fields):
+        return m._HP1Slot(lambda: None, lambda: None, None, lambda: fields)
+    base = {"packed": torch.arange(16, dtype=torch.uint8), "absmax": torch.arange(4, dtype=torch.uint8), "blocksize": 64,
+            "nested_absmax": torch.ones(1), "nested_code": torch.linspace(-1, 1, 256), "nested_offset": torch.tensor([0.5]),
+            "nested_blocksize": 256, "quant_type": "nf4"}
+    bf = {"w": torch.ones(4, dtype=torch.bfloat16)}
+    slots = {(0, "gate_up", 0): slot(base), (-1, "embed", -1): slot(bf)}
+    rec, per = m.hp1_stored_state(slots)
+    assert rec["n_slots"] == 2 and set(per) == {"0|gate_up|0", "-1|embed|-1"}
+    for change in ({"packed": torch.arange(16, dtype=torch.uint8).index_fill(0, torch.tensor([3]), 99)},
+                   {"nested_code": torch.linspace(-1, 1, 256) * 0.5}, {"blocksize": 128}):
+        r2, p2 = m.hp1_stored_state({**slots, (0, "gate_up", 0): slot({**base, **change})})
+        assert p2["0|gate_up|0"] != per["0|gate_up|0"] and p2["-1|embed|-1"] == per["-1|embed|-1"]
+        assert r2["stored_digest"] != rec["stored_digest"] and r2["keys_sha256"] == rec["keys_sha256"]
+    r3, _ = m.hp1_stored_state({**slots, (-1, "embed", -1): slot({"w": torch.ones(4, dtype=torch.bfloat16).view(torch.int16)})})
+    assert r3["stored_digest"] != rec["stored_digest"]                       # same bytes, another dtype
+    r4, _ = m.hp1_stored_state({**slots, (0, "router", -1): slot(bf)})
+    assert r4["keys_sha256"] != rec["keys_sha256"] and r4["n_slots"] == 3
+
+
+def test_every_hp1_slot_still_unpacks_as_three_and_carries_its_stored_state():
+    """The slot wrapper keeps every existing (raw, deq, bias) consumer as it was."""
+    import torch
+    m = _load_arm_module()
+    t = torch.ones(2, 2)
+    s = m._HP1Slot("raw", "deq", None, lambda: {"w": t})
+    raw, deq, bias = s
+    assert (raw, deq, bias) == ("raw", "deq", None) and len(s) == 3 and s.stored()["w"] is t
+
+
+def test_hbd_libraries_reads_this_process_maps_without_failing():
+    m = _load_arm_module()
+    rec = m.hbd_libraries()
+    assert "error" not in rec and isinstance(rec["libraries"], list) and "BNB_CUDA_VERSION" in rec and "LD_LIBRARY_PATH" in rec
+
+
 def test_hp1_release_clears_the_trainer_state_and_leaves_the_digest_and_export_bytes_unchanged(tmp_path):
     """HPN read 5: at L8 on a 12 GB RTX A2000 the base digest ran out of memory with the optimizer's state still resident. The
     release drops that state and every gradient before the export. The export reads only the frozen base, so the training-base

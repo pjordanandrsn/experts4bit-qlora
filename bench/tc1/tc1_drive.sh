@@ -35,6 +35,8 @@ case " ${TC1_FAMILIES:-} " in *" qwen3hp2 "*) STAGE="$STAGE $REPO/bench/hp2/hp2_
 case " ${TC1_FAMILIES:-} " in *" qwen3hp1 "*|*" qwen3hp1k "*|*" qwen3hp1p "*|*" qwen3hp1cal "*|*" qwen3hp2 "*) STAGE="$STAGE $REPO/bench/hp1/hp1_lib.py $REPO/bench/hp1/hp1_eval.py $REPO/bench/hp1/hp1_calib.py $REPO/bench/hp1/hp1_caltokens.py $REPO/bench/hp1/hp1_reduce.py $REPO/bench/hp1/hp1_trunc.py";; esac
 # #1767 (the qwen3axo1767 token; bench/tc1/AXO1767-PREREG.md): the HP1 evaluator, its library and the cut, plus the four-score reducer
 case " ${TC1_FAMILIES:-} " in *" qwen3axo1767 "*|*" qwen3axo1767b "*) STAGE="$STAGE $REPO/bench/hp1/hp1_lib.py $REPO/bench/hp1/hp1_eval.py $REPO/bench/hp1/hp1_trunc.py $REPO/bench/tc1/axo1767_reduce.py $REPO/bench/tc1/pypi_probe.py";; esac
+# HBD (the qwen3hbd token; bench/hbd/PREREG-hbd.md): the cut, the calibration tokens and HP1's library, the sibling probe and the reducer
+case " ${TC1_FAMILIES:-} " in *" qwen3hbd "*) STAGE="$STAGE $REPO/bench/hp1/hp1_lib.py $REPO/bench/hp1/hp1_trunc.py $REPO/bench/hp1/hp1_caltokens.py $REPO/bench/hbd/hbd_probe.py $REPO/bench/hbd/hbd_reduce.py";; esac
 STAGE="$STAGE ${TC1_EXTRA_STAGE:-}"; RUNNER=${TC1_RUNNER:-tc1_run.sh}
 case " $STAGE " in *"/$RUNNER "*) ;; *) say "refusing: TC1_RUNNER=$RUNNER is not a staged file"; exit 78;; esac
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done

@@ -129,6 +129,7 @@ case " $FAMILIES " in " olmoedecab "|" qwen3decab "|" olmoedecab qwen3decab "|" 
 NEED_AXOLOTL=1; case " $FAMILIES " in " qwen3hp1cal ") NEED_UNSLOTH=0; NEED_AXOLOTL=0;; esac
 case " $FAMILIES " in " qwen3hp2 ") NEED_AXOLOTL=0;; esac     # HP2 (bench/hp2/HP2-PREREG.md): e4b vs Unsloth only
 case " $FAMILIES " in " qwen3hpn ") NEED_AXOLOTL=0;; esac     # HPN (bench/hpn/HPN-DESIGN.md): e4b + Unsloth readers only
+case " $FAMILIES " in " qwen3hbd ") NEED_AXOLOTL=0;; esac     # HBD (bench/hbd/PREREG-hbd.md): e4b + Unsloth cells only
 : > summary.txt; echo "$TC1_INSTANCE_ID" > INSTANCE_ID
 FETCH_OK_N=0; FETCH_FAILED_N=0   # families whose model staged / did not (tc1_prepare); none staged and one failed = rc 15 at the end
 echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST matched_seed=$MATCHED_SEED pack=$PACK" | tee -a summary.txt
@@ -149,6 +150,11 @@ case " $FAMILIES " in *" qwen3hpn "*)
   case "${HPN_UNS_VENV:-t28}" in t28|cu130) ;; *) say "REFUSED: HPN_UNS_VENV=${HPN_UNS_VENV} (t28 or cu130 only)"; finish 78;; esac
   echo "FIXTURE hpn (HPN-DESIGN): depths [$HPN_DEPTHS]; calibration rows 97-396 (300), 1 step; readers I (in-loop) / E (evaluator, bf16) / F (fp32); e4b K00 + Unsloth (stage 1b); axolotl out; no timings" | tee -a summary.txt
   [ -n "${TC1_PREREG:-}" ] || PREREG=hpn/HPN-DESIGN.md
+  ;;
+esac
+case " $FAMILIES " in *" qwen3hbd "*)
+  echo "FIXTURE hbd (PREREG-hbd): the 2-layer cut, HPN's one-step recipe on rows 97-396; cells E0a E0b E2 E1 U0a U0b U1 U2; the stored-state digest and the in-cell libbitsandbytes read in every cell; no timings" | tee -a summary.txt
+  [ -n "${TC1_PREREG:-}" ] || PREREG=hbd/PREREG-hbd.md
   ;;
 esac
 case " $FAMILIES " in *" qwen3hp2 "*)
@@ -466,6 +472,32 @@ PYT2
 else
   T212_REASON="venv-unsloth (cu130) unavailable: ${CU130_REASON}"
 fi
+# HBD's E2 (bench/hbd/PREREG-hbd.md): e4b + grouped-nf4-gemm at the same pins into venv-unsloth-t28 (torch 2.8.0+cu128, Unsloth's
+# transformers), built for the qwen3hbd token only; a failed install or tripwire makes E2 an install_failed row
+T28U_OK=0; T28U_REASON="built only for the qwen3hbd token"
+case " $FAMILIES " in *" qwen3hbd "*)
+  if [ "$UNS_T28_OK" = 1 ]; then
+    T28U_REASON=""; say "venv-unsloth-t28 + e4b @$E4B_SHA + gnf4 @$GNF4_SHA (HBD's E2)"
+    perl -e 'alarm 2400; exec @ARGV' $PY_UNS_T28 -m pip install -q --no-input --prefer-binary \
+      "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA" > logs/pip_e4b_t28u.log 2>&1
+    rc=$?; echo "pip(e4b-t28u) rc=$rc"
+    if [ $rc -ne 0 ]; then T28U_REASON="e4b/gnf4 install into venv-unsloth-t28 failed rc=$rc (logs/pip_e4b_t28u.log)"
+    else
+      E4B_SHA="$E4B_SHA" GNF4_SHA="$GNF4_SHA" $PY_UNS_T28 - <<'PYT3' > logs/tripwire_e4b_t28u.log 2>&1; trc=$?
+import importlib.metadata as md, json, os
+import experts4bit_qlora as e, torch, transformers
+def commit(dist):
+    d = md.distribution(dist); du = d.read_text("direct_url.json")
+    return (json.loads(du).get("vcs_info") or {}).get("commit_id") if du else None
+assert commit("experts4bit-qlora") == os.environ["E4B_SHA"] and commit("grouped-nf4-gemm") == os.environ["GNF4_SHA"], (commit("experts4bit-qlora"), commit("grouped-nf4-gemm"))
+assert torch.cuda.is_available()
+print("tc1 tripwire OK (e4b-t28u):", e.__version__, "torch", torch.__version__, "transformers", transformers.__version__)
+open(os.path.join(os.environ.get("TC1_W", "/root/tc1"), "versions.txt"), "a").write(f"e4b(t28u) {e.__version__} @{commit('experts4bit-qlora')}\ntorch(e4b-t28u) {torch.__version__}\ntransformers(e4b-t28u) {transformers.__version__}\n")
+PYT3
+      if [ $trc -ne 0 ]; then T28U_REASON="e4b-t28u tripwire failed (logs/tripwire_e4b_t28u.log)"; else T28U_OK=1; tail -1 logs/tripwire_e4b_t28u.log; fi
+    fi
+  else T28U_REASON="venv-unsloth-t28 did not install/import"; fi;;
+esac
 # ---------------------------------------------------------------- axolotl 0.20.0 (phase 2, axolotl-arm-spec.md): its own venv, uv, CPython 3.12, torch cu130
 # Pins (wheel METADATA): python >= 3.12, torch >= 2.13.0 <= 2.14.0, transformers == 5.17.0, peft == 0.21.0, bitsandbytes == 0.50.2.
 # torch >= 2.13 Linux cp312 wheels exist only under /whl/cu130 (verified 2026-10-01 by the coordinator), so the driver gate above applies.
@@ -562,7 +594,8 @@ fetch(){ local FAM=$1 MID=$2 REV=$3 AL=$4; say "fetch $FAM ($MID, unpinned; pin 
 import os, sys, time
 from huggingface_hub import snapshot_download
 t0 = time.time()
-p = snapshot_download(sys.argv[1], allow_patterns=["*.safetensors", "*.json", "tokenizer*", "*.model", "*.txt", "merges.txt", "vocab.json", "*.tiktoken", "*.jinja"], max_workers=4)
+allow = os.environ.get("TC1_FETCH_ALLOW", "").split() or ["*.safetensors", "*.json", "tokenizer*", "*.model", "*.txt", "merges.txt", "vocab.json", "*.tiktoken", "*.jinja"]
+p = snapshot_download(sys.argv[1], allow_patterns=allow, max_workers=4)
 print(f"staged in {(time.time()-t0)/60:.1f} min at {p}")
 print("STAGED", os.path.basename(os.path.realpath(p)))
 PYF
@@ -656,6 +689,8 @@ arm_once(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$
   if [ "$FW" = e4b ] && [ "${E4B_VENV:-}" = t212 ]; then PY=$PY_UNS          # J: e4b on torch 2.12.1+cu130
     [ "$CU130_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM refused "$CU130_REASON" '{"venv": "venv-unsloth (cu130-torch2121) + e4b"}'; return 0; }
     [ "$T212_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM install_failed "$T212_REASON"; return 0; }
+  elif [ "$FW" = e4b ] && [ "${E4B_VENV:-}" = t28u ]; then PY=$PY_UNS_T28     # HBD's E2: e4b in venv-unsloth-t28
+    [ "$T28U_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM install_failed "$T28U_REASON"; return 0; }
   elif [ "$FW" = e4b ] && [ "${E4B_VENV:-}" = tf55 ]; then PY=$W/venv-e4b-tf55/bin/python   # TC1 amendment 34: venv-e4b with transformers 5.5.0
     [ "${TF55_OK:-0}" = 1 ] || { stubw $FAM $FW $TAG $ARM install_failed "${TF55_REASON:-venv-e4b-tf55 was not built}"; return 0; }
   elif [ "$FW" = hf ] && [ "${HF_VENV:-}" = t214 ]; then PY=$PY_AX              # J: the HF arm on the axolotl venv's torch 2.14
@@ -687,7 +722,8 @@ arm_once(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$
     hp1shake) s=$HP1_SHAKE_STEPS; en=8; ee=$HP1_SHAKE_STEPS; ex_tag=hp1shake_e4b;;
     hp1cal) s=1; en=$HP1_EVAL_N; ee=1; ex_tag=hp1cal_k00_s3407;;          # Amendment 4: one step; the step-0 read is what is calibrated
     hp2cal) s=1; en=300; ee=1; ex_tag=hp2cal_e4b_k00_s3407;;               # HP2: one step on the 300 calibration rows (step 0 is read)
-    hpncal) s=1; en=300; ee=1; ex_tag=hpn_e4b_a;;                 # HPN: one step on the 300 rows; Unsloth checks its trainable count against hpn_e4b_a
+    hpncal) s=1; en=300; ee=1; ex_tag=hpn_e4b_a;;
+    hbdcal) s=1; en=300; ee=1; ex_tag=hbd_e0a;;                   # HBD: HPN's recipe; Unsloth checks its trainable count against E0a                 # HPN: one step on the 300 rows; Unsloth checks its trainable count against hpn_e4b_a
   esac
   local EXP EXPARG=""; [ "$FW" != e4b ] && { EXP=$(expect_of $FAM $ex_tag); [ -n "$EXP" ] && EXPARG="--expect-trainable $EXP"; }
   local A; A=$(alarm_for $AL)
@@ -2575,6 +2611,53 @@ hpn_settled_free_gb(){ local want=${1:-0} s=${HPN_SETTLE_S:-30} t=${HPN_SETTLE_T
       p=$f; else p=-1; fi
     [ "$i" -lt "$n" ] && sleep $s; done
   echo "$(( f / 1048576 )) unsettled"; }
+# HBD (bench/hbd/PREREG-hbd.md): does the build, rather than the framework, change the exported base? One 2-layer cut of the
+# pinned checkpoint (only the two shards it reads are fetched), HPN's one-step recipe on rows 97-396, eight cells in the registered
+# order; each cell records both digests and the libbitsandbytes mapped into its own process (--hbd-record), and a sibling probe with
+# the cell's interpreter runs just before it. hbd_reduce.py applies the registered table.
+hbd_probe(){ $3 $W/hbd_probe.py --framework $2 --out $W/hbd/probe_$1.json > logs/hbd_probe_$1.log 2>&1 || echo "HBD $1 PROBE_FAILED" | tee -a summary.txt; }
+hbd_x(){ echo "--hp1-export $W/hp1/hbd/$1 --hp1-export-base 1 --hbd-record $W/hbd/rec_$1.json"; }
+hbd_done(){ echo "HBD $1 $3/$4 status=$(status_of $2 $3 $4)" | tee -a summary.txt; }
+tc1_hbd_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TSC SC TM TR FL TL c
+  say "===== HBD family $FAM ($MID @ $REV; the 2-layer cut; cells E0a E0b E2 E1 U0a U0b U1 U2; alarms e4b $EAL unsloth $UAL)"
+  HP1_AX_DROP=1
+  export TC1_FETCH_ALLOW="model-00001-of-00016.safetensors model-00016-of-00016.safetensors *.json tokenizer* merges.txt vocab.json *.txt"
+  tc1_prepare $FAM "$MID" $REV $FAL "e4b:hbd:fused" $HP1_EVAL_N || { unset TC1_FETCH_ALLOW; return 0; }
+  unset TC1_FETCH_ALLOW
+  mkdir -p $W/hp1/hbd $W/hbd
+  TOKC=$W/hbd/tokens_${FAM}_calib.json
+  HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_caltokens.py --tc1-arm $W/tc1_arm.py --data $W/data/ds_alpaca.json --data-sha $DS_ALPACA_SHA \
+    --pack-src $W/data/alpaca_data_cleaned.json --model "$MID" --revision $REV --tokens $TOK --n $HP1_EVAL_N --start 96 --count 300 \
+    --out $TOKC > logs/hbd_caltokens.log 2>&1
+  TSC=$(sed -n 's/^HP1 CALTOKENS .*sha=\([0-9a-f]\{64\}\)$/\1/p' logs/hbd_caltokens.log)
+  [ -n "$TSC" ] && [ -s "$TOKC" ] || { echo "HBD CALIB_REFUSED tokens: $(grep -m1 REFUSED logs/hbd_caltokens.log | cut -c1-200)" | tee -a summary.txt; return 0; }
+  local SRC=${HF_HUB_CACHE:-/root/.cache/huggingface/hub}/models--${MID//\//--}/snapshots/$REV
+  FL=${FAM}L2; SC=$W/hbd/cut-L2
+  $PY_E4B $W/hp1_trunc.py --src "$SRC" --cache $SC --layers 2 > logs/hbd_trunc.log 2>&1 || { echo "HBD TRUNC_FAILED" | tee -a summary.txt; return 0; }
+  TM=$($PY_E4B -c "import json,sys; print(json.loads(open(sys.argv[1]).read().splitlines()[-1])['model'])" logs/hbd_trunc.log)
+  TR=$($PY_E4B -c "import json,sys; print(json.loads(open(sys.argv[1]).read().splitlines()[-1])['revision'])" logs/hbd_trunc.log)
+  TL=$W/hbd/tokens_$FL.json
+  $PY_E4B -c "import json,sys; t=json.load(open(sys.argv[1])); t['fam']=sys.argv[3]; json.dump(t,open(sys.argv[2],'w'))" $TOKC $TL $FL
+  local E="HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1" EK="--attn-4bit 1 $(hp1_cell k00 3407) --seed 3407 --order-seed 3407"
+  local UK="--grad-ckpt unsloth --unsloth-targets $UT7 --lora-init native --adapter-dtype native --seed 3407 --order-seed 3407"
+  # the registered order: the e4b cells, then Unsloth's (Unsloth checks its trainable count against E0a's receipt)
+  hbd_probe E0a e4b $PY_E4B; TC1_ARM_EXTRA_ENV="$E" arm $FL e4b hbd_e0a fused $EAL "$TM" $TR 0 hbdcal $TL $TSC $EK $(hbd_x E0a); hbd_done E0a $FL e4b hbd_e0a
+  hbd_probe E0b e4b $PY_E4B; TC1_ARM_EXTRA_ENV="$E" arm $FL e4b hbd_e0b fused $EAL "$TM" $TR 0 hbdcal $TL $TSC $EK $(hbd_x E0b); hbd_done E0b $FL e4b hbd_e0b
+  hbd_probe E2 e4b $PY_UNS_T28; E4B_VENV=t28u TC1_ARM_EXTRA_ENV="$E" arm $FL e4b hbd_e2 fused $EAL "$TM" $TR 0 hbdcal $TL $TSC $EK $(hbd_x E2); hbd_done E2 $FL e4b hbd_e2
+  hbd_probe E1 e4b $PY_UNS; E4B_VENV=t212 TC1_ARM_EXTRA_ENV="$E" arm $FL e4b hbd_e1 fused $EAL "$TM" $TR 0 hbdcal $TL $TSC $EK $(hbd_x E1); hbd_done E1 $FL e4b hbd_e1
+  hbd_probe U0a unsloth $PY_UNS_T28; UNS_VENV=t28 TC1_ARM_EXTRA_ENV="$E" arm $FL unsloth hbd_u0a unsloth $UAL "$TM" $TR 0 hbdcal $TL $TSC $UK --unsloth-moe-backend native_torch $(hbd_x U0a); hbd_done U0a $FL unsloth hbd_u0a
+  hbd_probe U0b unsloth $PY_UNS_T28; UNS_VENV=t28 TC1_ARM_EXTRA_ENV="$E" arm $FL unsloth hbd_u0b unsloth $UAL "$TM" $TR 0 hbdcal $TL $TSC $UK --unsloth-moe-backend native_torch $(hbd_x U0b); hbd_done U0b $FL unsloth hbd_u0b
+  hbd_probe U1 unsloth $PY_UNS; TC1_ARM_EXTRA_ENV="$E" arm $FL unsloth hbd_u1 unsloth $UAL "$TM" $TR 0 hbdcal $TL $TSC $UK --unsloth-moe-backend native_torch $(hbd_x U1); hbd_done U1 $FL unsloth hbd_u1
+  hbd_probe U2 unsloth $PY_UNS; TC1_ARM_EXTRA_ENV="$E" arm $FL unsloth hbd_u2 unsloth $UAL "$TM" $TR 0 hbdcal $TL $TSC $UK --unsloth-moe-backend grouped_mm $(hbd_x U2); hbd_done U2 $FL unsloth hbd_u2
+  rm -rf $SC $W/hp1/hbd                                                  # the cut and the exported bases: disk (the digests are recorded)
+  $PY_E4B -c "import json,sys
+cells = {'E0a': ('e4b', 'hbd_e0a'), 'E0b': ('e4b', 'hbd_e0b'), 'E2': ('e4b', 'hbd_e2'), 'E1': ('e4b', 'hbd_e1'),
+         'U0a': ('unsloth', 'hbd_u0a'), 'U0b': ('unsloth', 'hbd_u0b'), 'U1': ('unsloth', 'hbd_u1'), 'U2': ('unsloth', 'hbd_u2')}
+fl = sys.argv[1]
+json.dump({'cells': {c: {'receipt': f'{fl}_{fw}_{t}.json', 'record': f'hbd/rec_{c}.json', 'probe': f'hbd/probe_{c}.json'} for c, (fw, t) in cells.items()}},
+          open(sys.argv[2], 'w'), indent=1)" $FL $W/hbd_spec.json
+  $PY_E4B $W/hbd_reduce.py $W/hbd_spec.json --out $W/hbd/result.json 2>&1 | tee -a summary.txt
+  return 0; }
 tc1_hpn_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TSC L SC TM TR FL TL X D need free deep="" json="" climb_stop="" expect_kb=0
   say "===== HPN family $FAM ($MID @ $REV; depths [$HPN_DEPTHS]; calibration rows 97-396; e4b K00 + Unsloth; alarms e4b $EAL unsloth $UAL)"
   HP1_AX_DROP=1
@@ -2893,6 +2976,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3hp1cal) tc1_hp1cal_family qwen3hp1cal Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400;;            # HP1 Amendment 4, the calibration box
   qwen3hp2)    tc1_hp2_family    qwen3hp2    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600;;       # HP2 (e4b K00 vs Unsloth)
   qwen3hpn)    tc1_hpn_family    qwen3hpn    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600;;       # HPN ($0 diagnostic, lab A2000)
+  qwen3hbd)    tc1_hbd_family    qwen3hbd    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600;;       # HBD (bench/hbd/PREREG-hbd.md, one rented card)
   qwen3axo1767) tc1_axo1767_family qwen3hp1   Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400;;           # #1767 (AXO1767-PREREG): the four-score reading
   qwen3axo1767b) tc1_axo1767_family qwen3hp1  Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 qwen3axo1767b;;  # AXO1767 Amendment 1: the kernel split
   tc2small)    tc2_small_box;;                 # lane TC2, box A: granite, olmoe, gptoss (tc2_small_box's table)
