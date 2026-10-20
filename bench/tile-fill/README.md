@@ -11,7 +11,9 @@
 the spread of compositions.
 
 **The premise, still inference:** K25 decodes an expert's NF4 block once per non-empty 16-row tile, so expert cost
-tracks tiles T while useful work tracks rows.
+tracks tiles T while useful work tracks rows. **The positive control's exact expectation** (from the reviewer's
+closed form) is 57.256 (S0) and 57.419 (S1). The stratified B = 16 cells read 57.07 and 57.44, so the sampler is
+unbiased, and S0's 0.19 gap is sampling (about 2.7 SE), inside the 0.2 tolerance.
 
 ## The read (S0; S1's ratios and fills within 0.005 of S0's, its D and T within 0.4)
 
@@ -26,7 +28,8 @@ requests, because it includes the request affinity below.
 | 128 | 91.24 | 117.57 | 0.919 | 0.258 | 0.544 |
 
 **Verify blocks** (the 16 requests' k + 1 consecutive tokens), against the same requests and token count at random
-steps:
+steps. The interval is the spread of the block draws (their 2.5-97.5 %) over the reference cell's mean, not a confidence
+interval on the ratio:
 
 | k + 1 | rows | T | vs random steps (interval) | fill |
 |---|---|---|---|---|
@@ -42,8 +45,8 @@ the stratified D at B = 16 (S1 0.9773). A request's tokens share experts about 2
 - **Rows per step are the lever.** Going from 16 to 64 rows cuts tiles per row to 0.39 of B = 16's, and to 128 cuts
   them to 0.26. Wider batches and speculative-decoding verify rows do this alike, because both put more rows on a
   sub-linearly growing expert set.
-- **Consecutive-token sharing adds a few percent on top.** Only the k + 1 = 4 block is clear of 1 (0.963); the others
-  include 1. It is not a separate lever from the row count.
+- **Consecutive-token sharing adds a few percent on top.** Only the k + 1 = 4 block's spread stays below 1 (0.963); the
+  others include 1. It is not a separate lever from the row count.
 - **Request affinity is about 2 %.** Together with #1869's 0.3-0.6 % cross-request overlap, scheduling by expert overlap
   stays a small effect.
 - **So a served lane worth registering** would read W32 or W64 decode, or a verify width, against W16 on the served
