@@ -131,18 +131,15 @@ processes, ABBA twice.
 
 P147's rule is re-read through `serve_paged`'s own KV path, at the kernels that make the speed:
 - **The windows:** P147's exact windows, sha256-checked against P147's records.
-- **The forward:** each window's first 512 tokens are prefilled. Then its tokens 512..639 are fed **teacher-forced at
-  T == 1** through the served decode step with graphs on, and the NLL and argmax are read at positions 512..639, as in
-  P147.
-  - **Amendment 4, the prefill length (before any data).** The first **511** tokens are prefilled, and tokens 511..638
-    are fed teacher-forced. Each step at input position p predicts position p + 1, so all 128 of P147's positions
-    (512..639) are read at decode, which is what "Q is ruled at decode" asks.
-    - Prefilling 512 tokens would read position 512 from the prefill's last logits, on the transient path. The step
-      fed token 639 would then score nothing.
-    - The decode graphs are re-captured for Q with the step also copying its last-position logits into a static buffer.
-      The timed reps run before, on the build's own graphs.
-    - The forcing is checked as T1's and T2's is. Each step reads the bucket's input buffer back after the step's own
-      sync, and checks its pointer against the re-capture. A mismatch is a VOID.
+- **The forward:** each window's first **511** tokens are prefilled (Amendment 4), so all 128 of P147's positions are
+  read at decode. Its tokens 511..638 are then fed **teacher-forced at T == 1** through the served decode step with
+  graphs on, and the NLL and argmax are read at positions 512..639, as in P147.
+  - **Why 511, not 512:** prefilling 512 tokens would read position 512 from the prefill, on the transient path, and
+    the step fed token 639 would score nothing.
+  - Q's decode graphs are re-captured with the step also copying its last-position logits into a static buffer, after
+    the timed reps, which run on the build's own graphs.
+  - The forcing is checked as T1's and T2's is. Each step reads the bucket's input buffer back after the step's own
+    sync, and checks its pointer against the re-capture. A mismatch is a VOID.
 - **The gates:**
   - **W1:** 196 windows, one per pass at **B = 1**, served by the **M == 1 GEMV**;
   - **W16:** 123 windows, **16 per pass**, served by the **M == 16 small-M kernel**.
