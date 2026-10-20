@@ -1,0 +1,29 @@
+KNOBS e4b=ffb1632c0564008204c9d3f297a956a0cbfaf065 gnf4=38b308887688ea5bda7dd449bd3cc3dc1426b995 model=none@none gpu_class=5090 min_disk_gb=40 min_ram_gb=60 min_power_w=575 family=mixtral-attn-int8 dry=0
+CUDA_PROBE ok
+POWER_LIMIT_W 575 (floor 575)
+e4b 0.55.0 @ffb1632c0564008204c9d3f297a956a0cbfaf065
+gnf4 0.47.1 @38b308887688ea5bda7dd449bd3cc3dc1426b995
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p149k_reduce self-test OK (22 cases)
+p149k_bench self-test OK (8 cases)
+kernels rc=0: 135 passed in 15.83s
+kernels ok
+BENCH_WALL_S 46
+P149K_CONTRACT qo M=1: cublas 1.676e-03; configs 1.670e-03..1.670e-03
+P149K_CONTRACT qo M=16: cublas 1.666e-03; configs 1.668e-03..1.668e-03
+P149K_CONTRACT kv M=1: cublas 1.802e-03; configs 1.764e-03..1.764e-03
+P149K_CONTRACT kv M=16: cublas 2.361e-03; configs 1.687e-03..1.687e-03
+P149K_CUBLAS qo M=1: [('std::enable_if<!(false), void>::type int', [1024, 1, 1])]
+P149K_CUBLAS qo M=16: [('void cutlass::Kernel2<cutlass_80_wmma_te', [8, 32, 1])]
+P149K_CUBLAS kv M=1: [('std::enable_if<!(false), void>::type int', [256, 1, 1])]
+P149K_CUBLAS kv M=16: [('void cutlass::Kernel2<cutlass_80_wmma_te', [8, 8, 16]), ('void cublasLt::splitKreduce_kernel<32, 1', [32, 1, 1])]
+P149K_READ qo M=1: choice 4,512,4,1; A1 1.4850 B1 0.7588 B2 0.7589 A2 1.4849 ms
+P149K_READ qo M=16: choice 32,256,4,1; A1 1.5547 B1 0.7903 B2 0.7906 A2 1.5551 ms
+P149K_READ kv M=1: choice 4,2048,8,1; A1 0.5799 B1 0.3064 B2 0.3064 A2 0.5806 ms
+P149K_READ kv M=16: choice 32,256,4,1; A1 0.5686 B1 0.5225 B2 0.5221 A2 0.5687 ms
+P149K_VERDICT K_GO ["W1 projected in situ 0.983796 ms >= bar 0.1625 (harness 0.999472 ms, reported)"]

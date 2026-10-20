@@ -154,12 +154,18 @@ Qwen3-32B architecture, 2048 tokens, LoRA r16 (bitwise identical to resident in 
 | PCIe gen 5 x16 (DQ3) | 1.0023 | 1.18 |
 | PCIe gen 4 x16 (DQ5) | 1.0050 | 1.51 |
 
+UNVERIFIED: DQ3 and DQ5 have no register row; their records are [`bench/dq3`](../bench/dq3/RESULTS-dq3.md) and
+[`bench/dq5`](../bench/dq5/RESULTS-dq5.md).
+
 Streaming also raises the longest sequence that trains. Same subject, chunked LM loss, micro-batch 1:
 
 | card | resident | streamed | ratio | with `expandable_segments` |
 |---|---|---|---|---|
 | RTX 5090, 32 GB (DQ4) | 7168 tokens | 14336 tokens | 2.00× | 2.375× (8192 → 19456) |
 | RTX 4090, 24 GB (DQ6) | 2048 tokens | 9728 tokens | **4.75×** | 5.20× (2560 → 13312) |
+
+UNVERIFIED: DQ4 and DQ6 have no register row; their records are [`bench/dq4`](../bench/dq4/RESULTS-dq4.md) and
+[`bench/dq6`](../bench/dq6/RESULTS-dq6.md).
 
 The factor is larger on the smaller card: the resident weights (14.5 GiB here) take most of a 24 GB card, while
 the streamed model keeps only two layers of them. Two cards are measured; this is not a fitted law.

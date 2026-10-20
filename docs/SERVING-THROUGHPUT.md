@@ -38,6 +38,10 @@ bounds it against the shipped bar (≤ 0.10 nats, top-1 ≥ 0.93).
 
 ## Per-family table (tok/s; K8 in nats)
 
+*Historical (2026-09-04 protocol): its Qwen3 reference rests on `e4b.serve.tp.qwen3.b1.5090.2026-09-04` and
+`e4b.serve.tp.qwen3.b16.5090.2026-09-04`, both superseded. The current positions are the
+[bo7 census](#throughput-census-bo7-measured-in-repo) below, and the vLLM comparison is P58's there.*
+
 | family | host | K8 nll nf4 / int4exp / calib | B=1 nf4 | B=1 int4exp | B=1 calib | B=1 fused | B=16 nf4 | B=16 int4exp |
 |---|---|---|---|---|---|---|---|---|
 | Qwen3-30B-A3B (reference) | tpB | 1.8621 / 1.8578 / 1.8448 | 97 | 116 | 112 | 155 | 483 | 944 |
@@ -48,6 +52,9 @@ bounds it against the shipped bar (≤ 0.10 nats, top-1 ≥ 0.93).
 | Mixtral-8x7B-Instruct | tpB | 1.1805 / 1.1690 / 1.1916 | 48 | 99 | 107 | refused | 186 | 371 |
 
 ## Ratios to the reference (same protocol)
+
+*Historical, as the table above: ratios to a superseded reference. The current positions are the
+[bo7 census](#throughput-census-bo7-measured-in-repo).*
 
 | family | B=1 NF4 | B=1 best licensed | B=16 NF4 | B=16 best |
 |---|---|---|---|---|

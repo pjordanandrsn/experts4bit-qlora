@@ -53,7 +53,9 @@ FIT=$((INSTALL_TO_GATE_S + NEED_X + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PC
 
 ## Host facts
 
-`host_facts.py OUT` writes the box's own measured host facts as `host_facts.json`, for the host registry. A runner calls it once on the box and leaves the file beside its receipt: `python3 host_facts.py "$OUT_DIR/host_facts.json"`.
+`host_facts.py OUT` writes the box's own measured host facts as `host_facts.json`, for the host registry. A runner calls it once on the box and leaves the file beside its receipt: `python3 host_facts.py "$OUT_DIR/host_facts.json"`. With `-` instead of a path it prints one `HOST_FACTS_JSON {...}` line.
+
+**It is a byte-identical copy** of adertha-agents' `adertha/compute/host_probe.py`, the source of record beside the registry that reads its keys. Edit it there first, then copy it here byte for byte; adertha-agents' CI reports any drift. The launcher also runs the same probe on every rented box after its pre-flight and writes `host_facts.json` beside the receipt, so a lane need not call it for the registry to see its box.
 
 It records only what the box measures itself, from `/proc`, `/sys` and `nvidia-smi`:
 - the host's logical CPUs, physical cores, threads per core and NUMA nodes (`host_*`). Inside a container these
@@ -61,6 +63,19 @@ It records only what the box measures itself, from `/proc`, `/sys` and `nvidia-s
 - the run's own share: `affinity_cpus` (`sched_getaffinity`) and the cgroup CPU quota, v2 or v1 (`cpu_quota_cpus`, or
   `cpu_quota_unlimited` when there is none, so "unlimited" is never mistaken for "unreadable");
 - `numa_balancing` and the transparent-hugepage `enabled` and `defrag` modes;
+- per-core speed:
+  - `cpu_max_mhz` and `cpu_max_mhz_lo` are the highest and lowest rated maximum clock over the run's CPUs (its
+    affinity). On a hybrid part they differ, P-cores against E-cores. They are labels: not what a busy, shared host
+    delivers.
+  - `cpu_loop_mops` is a fixed single-thread Python loop, best of three, well under a second. It measures what the run
+    actually got from one core.
+  - `cpu_loop_mops` compares only at the same `cpu_loop_python` (e.g. `312`).
+  - To see a host change during the run, a runner may call the helper at the start and again at the end;
+- `thp_mem_alloc_enable`, the `THP_MEM_ALLOC_ENABLE` setting from the helper's own environment, as an integer; left out
+  when unset or not an integer;
+- `omp_num_threads`, the `OpenMP` thread count from the helper's own environment, so call it with the run's env set.
+  It is left out when unset or not a positive integer. Unset means the runtime's default (libgomp: the affinity count;
+  torch's intra-op: the physical cores);
 - GPU 0's power limit, maximum SM clock and memory.
 
 Every value is a number or a small enum, and `sources` names where each one came from. It writes no identifiers: no hostname, container id, serial, UUID or CPU model string. A fact it cannot read is left out, and the helper always exits 0, so it never costs a run.
