@@ -2561,7 +2561,21 @@ tc1_hp2_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
 # removed after its reads (the bulk manifest pins their sha256s first). Then hpn_reduce.py over the spec. Correctness only: no timing is read.
 # Unsloth's MoE backend defaults to native_torch here (HPN_UNS_BACKEND; HP2's RTX 5090 box ran grouped_mm, which targets newer cards than the
 # A2000's sm_86); the spec records which ran, since it shapes Unsloth's in-loop term in stage 1b.
-tc1_hpn_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TSC L SC TM TR FL TL X D need free deep="" json=""
+# hpn_settled_free_gb [EXPECT_KB]: "<free GB> settled|unsettled" on $W once ZFS has released what the previous depth removed. HPN read 4
+# (04:18Z): a df right after L4's removal read 8 GB, and 19 a minute later, so L8 was skipped on a stale number. ZFS returns freed space
+# lazily and can hold, then release it in one batch (review), so "two reads agree" alone could settle on the hold. With EXPECT_KB, the
+# free space recorded before the removal plus the du -sk of what was removed, a read counts only once free >= EXPECT_KB - 1 GB, and then
+# two such reads in a row must agree within 0.5 GB. It syncs, then reads every HPN_SETTLE_S seconds (30) for at most HPN_SETTLE_TIMEOUT
+# seconds (600; with HPN_SETTLE_S=0, as in the tests, that many reads). On timeout the last read comes back "unsettled".
+hpn_settled_free_gb(){ local want=${1:-0} s=${HPN_SETTLE_S:-30} t=${HPN_SETTLE_TIMEOUT:-600} p=-1 f=0 i n; sync
+  n=$(( s > 0 ? t / s : t )); [ "$n" -ge 2 ] || n=2
+  for i in $(seq 1 $n); do f=$(df -Pk $W | awk 'NR==2 {print $4}')
+    if [ "$f" -ge $(( want - 1048576 )) ]; then
+      if [ "$p" -ge 0 ] && [ $(( f > p ? f - p : p - f )) -le 524288 ]; then echo "$(( f / 1048576 )) settled"; return 0; fi
+      p=$f; else p=-1; fi
+    [ "$i" -lt "$n" ] && sleep $s; done
+  echo "$(( f / 1048576 )) unsettled"; }
+tc1_hpn_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TSC L SC TM TR FL TL X D need free deep="" json="" climb_stop="" expect_kb=0
   say "===== HPN family $FAM ($MID @ $REV; depths [$HPN_DEPTHS]; calibration rows 97-396; e4b K00 + Unsloth; alarms e4b $EAL unsloth $UAL)"
   HP1_AX_DROP=1
   tc1_prepare $FAM "$MID" $REV $FAL "e4b:hpn:fused" $HP1_EVAL_N || return 0
@@ -2576,8 +2590,12 @@ tc1_hpn_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
   local SRC=${HF_HUB_CACHE:-/root/.cache/huggingface/hub}/models--${MID//\//--}/snapshots/$REV
   for L in $HPN_DEPTHS; do
     FL=${FAM}L$L; D=$W/hp1/hpn/L$L; SC=$W/hpn/cut-L$L; X="--hp1-export $W/hp1/hpn/L$L --hp1-export-base 1"   # spelled out: the under-hp1/ test reads it
-    need=$(( L * 2 + 2 )); free=$(( $(df -Pk $W | awk 'NR==2 {print $4}') / 1048576 ))   # GB, POSIX df      # the bf16 cut (~1.25 GB a layer) + two NF4 exports, with headroom
-    if [ "${free:-0}" -lt "$need" ]; then echo "HPN L$L SKIPPED: ${free} GB free < ${need} GB for its cut and exports (a stated limit)" | tee -a summary.txt; break; fi
+    # the bf16 cut (~1.25 GB a layer) + two NF4 exports with headroom, and a 15 % margin on top (the maintainer: a slightly larger cut than
+    # estimated must not fill /workspace, gpu-dev's only writable mount, mid-run)
+    need=$(( L * 2 + 2 )); local needm=$(( (need * 115 + 99) / 100 )) fst; read -r free fst <<< "$(hpn_settled_free_gb $expect_kb)"
+    if [ "$fst" != settled ]; then climb_stop="df did not settle before L$L (two reads ${HPN_SETTLE_S:-30} s apart within 0.5 GB, ${HPN_SETTLE_TIMEOUT:-600} s)"
+      echo "HPN L$L NOT_READ: $climb_stop" | tee -a summary.txt; break; fi
+    if [ "${free:-0}" -lt "$needm" ]; then echo "HPN L$L SKIPPED: ${free} GB free < 1.15 x ${need} GB = ${needm} GB for its cut and exports (a stated limit; to make room, remove old HPN run dirs or unused venvs under /workspace)" | tee -a summary.txt; break; fi
     $PY_E4B $W/hp1_trunc.py --src "$SRC" --cache $SC --layers $L > logs/hpn_trunc_L$L.log 2>&1 || { echo "HPN L$L TRUNC_FAILED" | tee -a summary.txt; break; }
     TM=$($PY_E4B -c "import json,sys; print(json.loads(open(sys.argv[1]).read().splitlines()[-1])['model'])" logs/hpn_trunc_L$L.log)
     TR=$($PY_E4B -c "import json,sys; print(json.loads(open(sys.argv[1]).read().splitlines()[-1])['revision'])" logs/hpn_trunc_L$L.log)
@@ -2597,16 +2615,17 @@ tc1_hpn_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
       else failed="$failed ${a#*:}:$st"; fi; done
     [ -n "$failed" ] && echo "HPN L$L ARM_FAILED$failed (not a depth limit: see the arm receipts)" | tee -a summary.txt
     if [ $ok = 0 ]; then rm -rf $SC $D/base_e4b_$FL $D/base_unsloth_$FL; break; fi   # a successful arm's export goes too (disk)
-    local R=$W/${FL}_e4b_hpn_e4b_a.json RB=$W/${FL}_e4b_hpn_e4b_b.json RU=$W/${FL}_unsloth_hpn_uns.json
+    # NOT R: the global R is the LoRA rank arm_once reads (read 3, 00:00Z: a local R=<receipt> gave L4's arms --r <path>)
+    local RCA=$W/${FL}_e4b_hpn_e4b_a.json RCB=$W/${FL}_e4b_hpn_e4b_b.json RCU=$W/${FL}_unsloth_hpn_uns.json
     rm -f $W/hpn/eval_e4b_L${L}_1.json $W/hpn/eval_e4b_L${L}_2.json $W/hpn/eval_uns_L$L.json $W/hpn/f_e4b_L$L.json $W/hpn/f_unsloth_L$L.json   # no stale read passes
     # E's trainable check stays ON at every depth, against THIS cut's count from e4b arm a's own receipt (read 2, 22:05Z: the 48-layer
     # default VOIDed every E read); Unsloth's arm must then match it, so the e4b-vs-Unsloth agreement is asserted, not incidental
-    local EXP; EXP=$($PY_E4B -c "import json,sys; print(int(json.load(open(sys.argv[1]))['trainable_params']))" $R 2>/dev/null)
-    if [ -z "$EXP" ]; then echo "HPN L$L READ_FAILED no trainable count in $(basename $R)" | tee -a summary.txt; rm -rf $SC $D/base_e4b_$FL $D/base_unsloth_$FL; break; fi
+    local EXP; EXP=$($PY_E4B -c "import json,sys; print(int(json.load(open(sys.argv[1]))['trainable_params']))" $RCA 2>/dev/null)
+    if [ -z "$EXP" ]; then echo "HPN L$L READ_FAILED no trainable count in $(basename $RCA)" | tee -a summary.txt; rm -rf $SC $D/base_e4b_$FL $D/base_unsloth_$FL; break; fi
     echo "HPN L$L trainable $EXP (e4b arm a's receipt; E checks every arm against it)" | tee -a summary.txt
-    for a in 1 2; do HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts $R --bases $D/base_e4b_$FL --tokens $TL --eval-n 300 \
+    for a in 1 2; do HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts $RCA --bases $D/base_e4b_$FL --tokens $TL --eval-n 300 \
       --model "$TM" --revision $TR --zero-report-only 1 --expect-trainable $EXP --out $W/hpn/eval_e4b_L${L}_$a.json > logs/hpn_eval_e4b_L${L}_$a.log 2>&1; done
-    HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts $RU --bases $D/base_unsloth_$FL --tokens $TL --eval-n 300 \
+    HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_eval.py --receipts $RCU --bases $D/base_unsloth_$FL --tokens $TL --eval-n 300 \
       --model "$TM" --revision $TR --zero-report-only 1 --expect-trainable $EXP --out $W/hpn/eval_uns_L$L.json > logs/hpn_eval_uns_L$L.log 2>&1
     for a in e4b unsloth; do HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1 $PY_E4B $W/hpn_read.py --base $D/base_${a}_$FL --tokens $TL --eval-n 300 \
       --model "$TM" --revision $TR --runs 2 --out $W/hpn/f_${a}_L$L.json > logs/hpn_read_${a}_L$L.log 2>&1 || echo "HPN L$L F_FAILED $a" | tee -a summary.txt; done
@@ -2630,12 +2649,14 @@ print(' '.join(bad))" $W/hpn/eval_e4b_L${L}_1.json $W/hpn/eval_e4b_L${L}_2.json 
     if [ -n "$bad" ]; then echo "HPN L$L READ_FAILED $bad (the depth is excluded; see logs/hpn_eval_*_L$L*.log, logs/hpn_read_*_L$L.log)" | tee -a summary.txt
       hp1_bulk_manifest "$W"; rm -rf $SC $D/base_e4b_$FL $D/base_unsloth_$FL; break; fi
     hp1_bulk_manifest "$W"                                             # pin the exports' bytes before they go
+    # what the next depth's settle must see come back: the free space now plus what is about to be removed
+    expect_kb=$(( $(df -Pk $W | awk 'NR==2 {print $4}') + $(du -sk $SC $D/base_e4b_$FL $D/base_unsloth_$FL 2>/dev/null | awk '{s += $1} END {print s + 0}') ))
     rm -rf $SC $D/base_e4b_$FL $D/base_unsloth_$FL
-    json="$json${json:+,}{\"L\": $L, \"inloop\": [\"$(basename $R)\", \"$(basename $RB)\"], \"eval\": [\"hpn/eval_e4b_L${L}_1.json\", \"hpn/eval_e4b_L${L}_2.json\"], \"fref\": \"hpn/f_e4b_L$L.json\", \"unsloth\": {\"inloop\": [\"$(basename $RU)\"], \"eval\": [\"hpn/eval_uns_L$L.json\"], \"fref\": \"hpn/f_unsloth_L$L.json\"}}"
+    json="$json${json:+,}{\"L\": $L, \"inloop\": [\"$(basename $RCA)\", \"$(basename $RCB)\"], \"eval\": [\"hpn/eval_e4b_L${L}_1.json\", \"hpn/eval_e4b_L${L}_2.json\"], \"fref\": \"hpn/f_e4b_L$L.json\", \"unsloth\": {\"inloop\": [\"$(basename $RCU)\"], \"eval\": [\"hpn/eval_uns_L$L.json\"], \"fref\": \"hpn/f_unsloth_L$L.json\"}}"
     deep=$L; echo "HPN L$L READ (I x2 + Unsloth I, E x2 + Unsloth E, F x2 on both bases)" | tee -a summary.txt
   done
   echo "HPN deepest depth that fit: ${deep:-none}" | tee -a summary.txt
-  printf '{"framework": "e4b", "free_mib_at_claim": %s, "unsloth_moe_backend": "%s", "unsloth_venv": "%s", "depths": [%s]}\n' "${HPN_FREE_MIB:-null}" "${HPN_UNS_BACKEND:-native_torch}" "${HPN_UNS_VENV:-t28}" "$json" > $W/hpn_spec.json
+  printf '{"framework": "e4b", "free_mib_at_claim": %s, "unsloth_moe_backend": "%s", "unsloth_venv": "%s", "climb_stop": "%s", "depths": [%s]}\n' "${HPN_FREE_MIB:-null}" "${HPN_UNS_BACKEND:-native_torch}" "${HPN_UNS_VENV:-t28}" "$climb_stop" "$json" > $W/hpn_spec.json
   $PY_E4B $W/hpn_reduce.py $W/hpn_spec.json --out $W/hpn/result.json 2>&1 | tee -a summary.txt
   return 0; }
 # the split path, box 2 (qwen3hp1p): REFUSES unless box 1's eval_K.json + select.json are staged beside the runner AND match the pinned

@@ -1,0 +1,20 @@
+KNOBS e4b=101ef5d74af837f9ade2a1d5c068e6ef502fa593 gnf4=68bbefc4f43aaa83870903ac2c8788bab3ab1b89 gpu_class=5090 min_disk_gb=20 min_ram_gb=16 min_power_w=575 need_bench=1600
+CUDA_PROBE ok
+POWER_LIMIT_W 575 (floor 575)
+GUARD_FIT fit=3100s need=3875s left=4440s
+e4b 0.55.0 @101ef5d74af837f9ade2a1d5c068e6ef502fa593
+gnf4 0.49.0 @68bbefc4f43aaa83870903ac2c8788bab3ab1b89
+torch 2.8.0+cu128
+triton 3.4.0
+cc (12, 0)
+sm_count 170
+p156_bench self-test OK (7 cases)
+p156_reduce self-test OK (39 cases)
+premise rc=0: 4 passed in 9.22s
+premise ok
+bench rc=0 P156_CARRIED [{"gu": {"block_n": 64, "kc": 256, "warps": 4, "stages": 2}, "dn": {"block_n": 128, "kc": 128, "warps": 8, "stages": 3}}, {"gu": {"block_n": 64, "kc": 256, "warps": 4, "stages": 3}, "dn": {"block_n": 32, "kc": 256, "warps": 4, "stages": 2}}, {"gu": {"block_n": 64, "kc": 256, "warps": 8, "stages": 3}, "dn": {"block_n": 128, "kc": 128, "warps": 4, "stages": 2}}]
+P156_BENCH done in 462.0 s; walls {"routing_s": 0.2, "stores_s": 0.2, "tiles_s": 1.6, "select_s": 399.2, "confirm_s": 60.8}
+
+P156 GO {"why": ["P 1.1755x, lower bound 1.1728 >= 1.05"], "P": {"n": 64, "median": 1.1755313930637863, "se": 0.001356797805219572, "lb": 1.1728177974533471, "se_of_mean": 0.0009227278417497878, "min": 1.1600369470957406, "max": 1.1888905497868865, "moved_bits_on_steps": []}, "sweep_best": {"n": 64, "median": 1.9018533168444964, "se": 0.0018720831866190235, "lb": 1.8981091504712584, "se_of_mean": 0.0014937062711419483, "min": 1.8797823358291785, "max": 1.9243777210331712, "arm": "C1", "rank": 1, "plan": {"gu": {"block_n": 64, "kc": 256, "warps": 4, "stages": 2}, "dn": {"block_n": 128, "kc": 128, "warps": 8, "stages": 3}}, "over_p": 1.61671459158093}}
+NCU counters unavailable on this host (ERR_NVGPUCTRPERM
+ERR_NVGPUCTRPERM)

@@ -1,0 +1,6 @@
+# P156's staged pieces, by the name the box sees them, and their sha256 at this registration (bench/p156/PREREG-p156.md).
+873832f6d4535b2aaae1211d9be816e6d7cb95a5058fc59ea55d5f3c26fb8ccc  p156_run.sh
+0023b93a72b3bb79f3f704b7d72bb2b82fe0c38907a45365c43cd2b4529becbb  p156_bench.py
+0d8c75aac1a89958bf638e837fcefa66c5030eaa780c9a915ea7801b12a24b94  p156_reduce.py
+3c59e72f947daa425e61f727401204099a1e782b902fb39687e04c46e338b14f  rr.json.pt
+1d870355f17db464633db7fedcc432faf82e8152582ffc0aa5f6fc593ebc91c2  test_k25_row_exact_gpu.py

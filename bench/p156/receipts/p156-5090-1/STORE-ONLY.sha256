@@ -1,0 +1,6 @@
+# p156-5090-1: files kept only in the private receipt store, byte-exact. The launcher's teardown proof names the
+# provider's instance; forensics.txt and the runner's console log carry the GPU's UUID, which no reading depends on.
+# Receipts are never rewritten, so they are not committed here. sha256, then the file's path within this run's receipt.
+7fe53f8bda2b3df664576faa2858e46e2f851f5a740b378f88790e7d93916107  p156/outer.log
+e817b44b7940ab1afdbb24bc9f9dd808f448e037fe9998c90e6c0ed044876997  p156/forensics.txt
+3793247034b6b91809c1b1d7e5f24afdc03b9f016d1dedd392273ad3684d7339  teardown-proof.json

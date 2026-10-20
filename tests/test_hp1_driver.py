@@ -76,6 +76,15 @@ arm(){ local tf; tf=$(python3 -c "import json,sys; print(json.load(open(sys.argv
 status_of(){ grep -qx "$1 $2 $3" "$W/mismatch.log" 2>/dev/null && { echo tokens_mismatch; return; }
   [ "${FAIL_FAM:-}" = "$1" ] && { echo "${FAIL_STATUS:-oom}"; return; }
   [ "${SHAKE_FAIL:-}" = "$2" ] && echo install_failed || echo ok; }
+# the driver's per-depth disk check reads `df -Pk $W`: stubbed so the tests never depend on the HOST's free space (WSL's small /tmp
+# failed 11 of them, macOS under 18 GB failed 2). STUB_DF_GB sets the free space it reports (default 1000 GB).
+# STUB_DF_SEQ="a b c ...": successive df calls report those GB values in turn (the last one repeats), as ZFS's lazy free does
+df(){ local gb=${STUB_DF_GB:-1000}
+  if [ -n "${STUB_DF_SEQ:-}" ]; then local n; n=$(cat "$W/.dfn" 2>/dev/null || echo 0); set -- $STUB_DF_SEQ
+    [ $(( n + 1 )) -gt $# ] && n=$(( $# - 1 )); shift $n; gb=$1; echo $(( n + 1 )) > "$W/.dfn"; fi
+  echo "Filesystem 1024-blocks Used Available Capacity Mounted on"; echo "stub 0 0 $(( gb * 1048576 )) 0% /"; }
+# STUB_DU_KB: what `du -sk` reports for a depth's removal (the stub arms write tiny files), so the settle's expected return is set
+du(){ if [ -n "${STUB_DU_KB:-}" ]; then echo "${STUB_DU_KB} total"; else command du "$@"; fi; }
 hp1_bulk_manifest(){ echo "manifest $1 bases_present=$(ls -d $W/hp1/hpn/*/base_* 2>/dev/null | wc -l | tr -d ' ')" >> "$W/manifest.log"; }
 mkdir -p logs hp1 data; : > summary.txt; : > arms.log
 echo '{"fam": "qwen3hp1", "sha256": "deadbeef", "train": [], "eval": []}' > tokens.json
@@ -499,6 +508,7 @@ def test_hp2_g1_closure_ends_the_draw_before_any_confirmation_arm(tmp_path):
 # ------------------------------------------------------------------------------------------------- HPN (bench/hpn/HPN-DESIGN.md)
 def _hpn(tmp_path, **env):
     import json
+    env.setdefault("HPN_SETTLE_S", "0")                                 # the disk settle's sleep: none in tests
     arms, summary = drive(tmp_path, FAMILY_FN="tc1_hpn_family", FAMILY_FAM="qwen3hpn", HPN_FREE_MIB="10600", **env)
     py = (tmp_path / "py.log").read_text()
     spec = json.loads((tmp_path / "hpn_spec.json").read_text())
@@ -538,8 +548,10 @@ def test_a_depth_that_does_not_fit_ends_the_climb_as_a_stated_limit(tmp_path):
 
 
 def test_too_little_disk_for_a_cut_skips_it_before_any_arm(tmp_path):
-    arms, summary, _, spec = _hpn(tmp_path, HPN_DEPTHS="2 1000000")
-    assert [d["L"] for d in spec["depths"]] == [2] and "SKIPPED" in summary and not [a for a in arms if a[0] == "qwen3hpnL1000000"]
+    """15 GB free: L2 (needs 6) and L4 (10) fit, L8 (18) is skipped before any arm. The free space is the stub's, not the host's."""
+    arms, summary, _, spec = _hpn(tmp_path, HPN_DEPTHS="2 4 8", STUB_DF_GB="15")
+    assert [d["L"] for d in spec["depths"]] == [2, 4] and "HPN L8 SKIPPED: 15 GB free < 1.15 x 18 GB = 21 GB" in summary
+    assert not [a for a in arms if a[0] == "qwen3hpnL8"]
 
 
 def test_the_exports_are_pinned_in_the_bulk_manifest_before_they_are_removed(tmp_path):
@@ -680,3 +692,73 @@ _ARM_OK = {"framework": "e4b", "tag": "hpn_e4b_a", "c1_bit_exact": True, "raw_ok
 def test_a_receipt_without_a_trainable_count_ends_the_climb(tmp_path):
     arms, summary, py, spec = _hpn(tmp_path, HPN_DEPTHS="2 4", STUB_TRAINABLE="null")
     assert "READ_FAILED no trainable count" in summary and spec["depths"] == []
+
+
+
+def test_no_hpn_local_shadows_a_global_that_any_function_it_reaches_reads():
+    """HPN read 3 (00:00Z): tc1_hpn_family's `local R=<receipt>` shadowed the global R (the LoRA rank), so L4's arms got --r <path>.
+    Bash locals are DYNAMICALLY scoped, so a local shadows a global for every function called beneath it (review). This walks the call
+    graph from tc1_hpn_family through tc1_run.sh's REAL function bodies and refuses any upper-case local that a reachable function reads
+    as a global, except TOK/TS, which are tc1_prepare's deliberate out-parameters (`local TOK TS; tc1_prepare ...`)."""
+    import re
+    src = RUN_SH.read_text()
+
+    def code(text):                                                     # bash comments out: a comment naming "local R=" is not a declaration
+        return "\n".join(re.sub(r"\s+#\s.*$", "", ln) for ln in text.splitlines() if not ln.lstrip().startswith("#"))
+    starts = [(m.start() + 1, m.group(1)) for m in re.finditer(r"\n([a-z_][a-z_0-9]*)\(\)\{", src)]
+    funcs = {name: code(src[st:(starts[i + 1][0] if i + 1 < len(starts) else len(src))]) for i, (st, name) in enumerate(starts)}
+
+    def locals_of(body):
+        out = set()
+        for decl in re.findall(r"local ([^;\n]+)", body):
+            out |= {t.split("=")[0] for t in decl.split() if re.match(r"[A-Za-z_][A-Za-z0-9_]*(=|$)", t)}
+        return out
+    seen, todo = set(), ["tc1_hpn_family"]
+    while todo:                                                         # the functions reachable from the HPN family
+        f = todo.pop()
+        if f in seen:
+            continue
+        seen.add(f)
+        todo += [g for g in funcs if g not in seen and re.search(rf"(?<![\w-]){re.escape(g)}(?![\w-])", funcs[f][len(f) + 3:])]
+    reads = {}
+    for f in seen - {"tc1_hpn_family"}:
+        for v in set(re.findall(r"\$\{?([A-Z_][A-Z0-9_]*)", funcs[f])) - locals_of(funcs[f]):
+            reads.setdefault(v, set()).add(f)
+    declared = {v for v in locals_of(funcs["tc1_hpn_family"]) if re.match(r"[A-Z_][A-Z0-9_]*$", v)}
+    assert "arm_once" in seen and "R" in reads and "arm_once" in reads["R"], "the walk must reach arm_once and see it read the rank R"
+    bad = {v: sorted(reads[v]) for v in declared & set(reads) if v not in {"TOK", "TS"}}
+    assert not bad, f"tc1_hpn_family's locals shadow globals read beneath it: {bad}"
+
+
+def test_the_disk_check_waits_for_the_removed_space_to_come_back_even_when_zfs_holds_then_releases(tmp_path):
+    """HPN read 4 (04:18Z) skipped L8 on a df read right after L4's removal (8 GB; 19 a minute later). ZFS can HOLD and then release in one
+    batch (review), so two agreeing reads alone settle on the hold: loggetta's 8, 8, 25, 25. The settle now waits for the free space
+    recorded before the removal plus what was removed (du -sk, here 17 GB). L2 reads 30 30 and then 13 before its removal (13 + 17 = 30).
+    L4 reads 30 30 and then 8 before its removal (8 + 17 = 25). L8's reads 8 8 are below 25 - 1 and do not count; 25 25 settles, and L8 fits."""
+    arms, summary, _, spec = _hpn(tmp_path, HPN_DEPTHS="2 4 8", STUB_DF_SEQ="30 30 13 30 30 8 8 8 25 25",
+                                  STUB_DU_KB=str(17 * 1048576), HPN_SETTLE_S="0")
+    assert [d["L"] for d in spec["depths"]] == [2, 4, 8] and "SKIPPED" not in summary and "NOT_READ" not in summary
+    assert [a for a in arms if a[0] == "qwen3hpnL8"]
+
+
+def test_a_hold_that_never_releases_is_unsettled_not_a_stale_skip(tmp_path):
+    """The same removal, but the space never comes back (df holds at 8): the climb stops as NOT_READ, never a skip on the stale 8."""
+    _, summary, _, spec = _hpn(tmp_path, HPN_DEPTHS="2 4 8", STUB_DF_SEQ="30 30 13 30 30 8 8", STUB_DU_KB=str(17 * 1048576),
+                               HPN_SETTLE_S="0", HPN_SETTLE_TIMEOUT="6")
+    assert "HPN L8 NOT_READ: df did not settle before L8" in summary and "L8 SKIPPED" not in summary
+    assert [d["L"] for d in spec["depths"]] == [2, 4] and spec["climb_stop"].startswith("df did not settle before L8")
+
+
+def test_a_df_that_never_settles_stops_the_climb_with_its_reason_never_a_silent_skip(tmp_path):
+    """The maintainer's rule: on the settle's timeout the climb stops, the reason "df did not settle" is recorded in the summary and the
+    spec (the reducer reads it into INSUFFICIENT_DEPTH), and no arm runs at that depth."""
+    arms, summary, _, spec = _hpn(tmp_path, HPN_DEPTHS="2 4", STUB_DF_SEQ="30 31 32 33 34 35", HPN_SETTLE_S="0", HPN_SETTLE_TIMEOUT="3")
+    assert "HPN L2 NOT_READ: df did not settle before L2" in summary and spec["depths"] == [] and "SKIPPED" not in summary
+    assert spec["climb_stop"].startswith("df did not settle before L2") and not arms
+
+
+def test_the_disk_check_keeps_a_15_percent_margin_and_says_what_to_remove(tmp_path):
+    """Read 4's numbers: 19 GB free against L8's 18 is 5 % headroom, too little. Now L8 needs 1.15 x 18 = 21, and the message names the fix."""
+    arms, summary, _, spec = _hpn(tmp_path, HPN_DEPTHS="2 4 8", STUB_DF_GB="19")
+    assert [d["L"] for d in spec["depths"]] == [2, 4]
+    assert "HPN L8 SKIPPED: 19 GB free < 1.15 x 18 GB = 21 GB" in summary and "remove old HPN run dirs or unused venvs" in summary

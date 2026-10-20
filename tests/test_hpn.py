@@ -173,6 +173,17 @@ def test_one_depth_is_insufficient(tmp_path):
     assert rec["outcome"] == "INSUFFICIENT"
 
 
+def test_the_drivers_climb_stop_reason_reaches_insufficient_depth(tmp_path):
+    spec_path = tmp_path / "spec.json"
+    spec = {"framework": "e4b", "climb_stop": "df did not settle before L8 (two reads 30 s apart within 0.5 GB, 600 s)", "depths": []}
+    for k, (L, se, si) in enumerate([(2, 0.004, 0.002), (4, 0.008, 0.003)]):
+        spec["depths"].append(_write_depth(tmp_path, L, *_synth(300, se, si, seed=k + 1)))
+    spec_path.write_text(json.dumps(spec))
+    assert R.main([str(spec_path), "--out", str(tmp_path / "o.json")]) == 0
+    out = json.loads((tmp_path / "o.json").read_text())
+    assert out["outcome"] == "INSUFFICIENT_DEPTH" and "df did not settle before L8" in out["reason"] and out["climb_stop"]
+
+
 def test_a_decision_below_the_l8_floor_waits_for_depth(tmp_path):
     rc, rec = _run(tmp_path, [(2, 0.004, 0.002), (4, 0.008, 0.003)])                       # only L2 and L4 fit
     assert rec["outcome"] == "INSUFFICIENT_DEPTH" and rec["deepest_fit"] == 4

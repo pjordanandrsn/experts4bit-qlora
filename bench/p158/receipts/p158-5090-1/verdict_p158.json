@@ -1,0 +1,524 @@
+{
+ "lane": "P158",
+ "verdict": "FLIP",
+ "reasons": [
+  "g16 1.092458 (the min of four pairs) >= 1.03 and g1 0.999856 >= 0.99; every S1 token identical to S0's",
+  "a separate PR may make E4B_K25_LUT=prmt qwen3_moe's K25 decode by default"
+ ],
+ "labels": {},
+ "bars": {
+  "flip_g16": 1.03,
+  "noreg_g1": 0.99,
+  "noisy_band": [
+   0.985,
+   1.015
+  ],
+  "reps": 5,
+  "min_power_w": 575,
+  "k25_build_calls": 960,
+  "clock_tol_pct": 2
+ },
+ "speed": {
+  "decode_tok_s": {
+   "S0a": {
+    "W16": 976.44,
+    "W1": 277.28
+   },
+   "S1a": {
+    "W16": 1066.72,
+    "W1": 277.47
+   },
+   "S1b": {
+    "W16": 1067.04,
+    "W1": 277.42
+   },
+   "S0b": {
+    "W16": 975.85,
+    "W1": 277.46
+   },
+   "S0c": {
+    "W16": 976.12,
+    "W1": 277.25
+   },
+   "S1c": {
+    "W16": 1067.28,
+    "W1": 277.4
+   },
+   "S1d": {
+    "W16": 1067.01,
+    "W1": 277.51
+   },
+   "S0d": {
+    "W16": 976.02,
+    "W1": 277.35
+   }
+  },
+  "g16": 1.0925,
+  "g1": 0.9999,
+  "g16_unrounded": 1.0924583179714062,
+  "g1_unrounded": 0.9998558350753263,
+  "pairs": {
+   "W16": {
+    "S1a/S0a": 1.0925,
+    "S1b/S0b": 1.0934,
+    "S1c/S0c": 1.0934,
+    "S1d/S0d": 1.0932
+   },
+   "W1": {
+    "S1a/S0a": 1.0007,
+    "S1b/S0b": 0.9999,
+    "S1c/S0c": 1.0005,
+    "S1d/S0d": 1.0006
+   }
+  },
+  "geomean": {
+   "W16": 1.0931,
+   "W1": 1.0004
+  },
+  "self_pairs": {
+   "W16": {
+    "S0b/S0a": 0.9994,
+    "S1b/S1a": 1.0003,
+    "S0d/S0c": 0.9999,
+    "S1d/S1c": 0.9997
+   },
+   "W1": {
+    "S0b/S0a": 1.0006,
+    "S1b/S1a": 0.9998,
+    "S0d/S0c": 1.0004,
+    "S1d/S1c": 1.0004
+   }
+  },
+  "cross_block_self_pairs": {
+   "W16": {
+    "S0c/S0a": 0.9997,
+    "S1c/S1a": 1.0005
+   },
+   "W1": {
+    "S0c/S0a": 0.9999,
+    "S1c/S1a": 0.9997
+   }
+  },
+  "telemetry": {
+   "S0a": {
+    "power_limit_w": [
+     575.0
+    ],
+    "enforced_limit_w": [
+     575.0
+    ],
+    "clocks_max_sm": [
+     3090.0
+    ],
+    "temperature_max": 64.0,
+    "sm_clock_min": 2745.0
+   },
+   "S1a": {
+    "power_limit_w": [
+     575.0
+    ],
+    "enforced_limit_w": [
+     575.0
+    ],
+    "clocks_max_sm": [
+     3090.0
+    ],
+    "temperature_max": 59.0,
+    "sm_clock_min": 2820.0
+   },
+   "S1b": {
+    "power_limit_w": [
+     575.0
+    ],
+    "enforced_limit_w": [
+     575.0
+    ],
+    "clocks_max_sm": [
+     3090.0
+    ],
+    "temperature_max": 59.0,
+    "sm_clock_min": 2820.0
+   },
+   "S0b": {
+    "power_limit_w": [
+     575.0
+    ],
+    "enforced_limit_w": [
+     575.0
+    ],
+    "clocks_max_sm": [
+     3090.0
+    ],
+    "temperature_max": 60.0,
+    "sm_clock_min": 2760.0
+   },
+   "S0c": {
+    "power_limit_w": [
+     575.0
+    ],
+    "enforced_limit_w": [
+     575.0
+    ],
+    "clocks_max_sm": [
+     3090.0
+    ],
+    "temperature_max": 62.0,
+    "sm_clock_min": 2745.0
+   },
+   "S1c": {
+    "power_limit_w": [
+     575.0
+    ],
+    "enforced_limit_w": [
+     575.0
+    ],
+    "clocks_max_sm": [
+     3090.0
+    ],
+    "temperature_max": 59.0,
+    "sm_clock_min": 2827.0
+   },
+   "S1d": {
+    "power_limit_w": [
+     575.0
+    ],
+    "enforced_limit_w": [
+     575.0
+    ],
+    "clocks_max_sm": [
+     3090.0
+    ],
+    "temperature_max": 59.0,
+    "sm_clock_min": 2820.0
+   },
+   "S0d": {
+    "power_limit_w": [
+     575.0
+    ],
+    "enforced_limit_w": [
+     575.0
+    ],
+    "clocks_max_sm": [
+     3090.0
+    ],
+    "temperature_max": 64.0,
+    "sm_clock_min": 2745.0
+   },
+   "S0w": {
+    "power_limit_w": [
+     575.0
+    ],
+    "enforced_limit_w": [
+     575.0
+    ],
+    "clocks_max_sm": [
+     3090.0
+    ],
+    "temperature_max": 62.0,
+    "sm_clock_min": 2760.0
+   }
+  },
+  "clocks": {
+   "S0a": {
+    "W16": {
+     "n": 75,
+     "sm_mhz_median": 2835.0,
+     "sm_mhz_min": 2745.0,
+     "power_instant_w_median": 428.0,
+     "power_instant_w_max": 567.91,
+     "enforced_limit_w": [
+      575.0
+     ],
+     "event_reasons": [
+      4,
+      1024
+     ]
+    },
+    "W1": {
+     "n": 10,
+     "sm_mhz_median": 2857.0,
+     "sm_mhz_min": 2857.0,
+     "power_instant_w_median": 427.59000000000003,
+     "power_instant_w_max": 447.25,
+     "enforced_limit_w": [
+      575.0
+     ],
+     "event_reasons": [
+      1024
+     ]
+    }
+   },
+   "S1a": {
+    "W16": {
+     "n": 73,
+     "sm_mhz_median": 2842.0,
+     "sm_mhz_min": 2820.0,
+     "power_instant_w_median": 418.6,
+     "power_instant_w_max": 517.27,
+     "enforced_limit_w": [
+      575.0
+     ],
+     "event_reasons": [
+      4,
+      1024
+     ]
+    },
+    "W1": {
+     "n": 10,
+     "sm_mhz_median": 2857.0,
+     "sm_mhz_min": 2857.0,
+     "power_instant_w_median": 431.065,
+     "power_instant_w_max": 447.68,
+     "enforced_limit_w": [
+      575.0
+     ],
+     "event_reasons": [
+      1024
+     ]
+    }
+   },
+   "S1b": {
+    "W16": {
+     "n": 73,
+     "sm_mhz_median": 2842.0,
+     "sm_mhz_min": 2820.0,
+     "power_instant_w_median": 418.36,
+     "power_instant_w_max": 517.81,
+     "enforced_limit_w": [
+      575.0
+     ],
+     "event_reasons": [
+      4,
+      1024
+     ]
+    },
+    "W1": {
+     "n": 10,
+     "sm_mhz_median": 2857.0,
+     "sm_mhz_min": 2850.0,
+     "power_instant_w_median": 438.5,
+     "power_instant_w_max": 447.53,
+     "enforced_limit_w": [
+      575.0
+     ],
+     "event_reasons": [
+      1024
+     ]
+    }
+   },
+   "S0b": {
+    "W16": {
+     "n": 75,
+     "sm_mhz_median": 2835.0,
+     "sm_mhz_min": 2745.0,
+     "power_instant_w_median": 430.38,
+     "power_instant_w_max": 567.75,
+     "enforced_limit_w": [
+      575.0
+     ],
+     "event_reasons": [
+      4,
+      1024
+     ]
+    },
+    "W1": {
+     "n": 10,
+     "sm_mhz_median": 2857.0,
+     "sm_mhz_min": 2767.0,
+     "power_instant_w_median": 442.95,
+     "power_instant_w_max": 448.2,
+     "enforced_limit_w": [
+      575.0
+     ],
+     "event_reasons": [
+      1024
+     ]
+    }
+   },
+   "S0c": {
+    "W16": {
+     "n": 75,
+     "sm_mhz_median": 2835.0,
+     "sm_mhz_min": 2745.0,
+     "power_instant_w_median": 428.62,
+     "power_instant_w_max": 568.35,
+     "enforced_limit_w": [
+      575.0
+     ],
+     "event_reasons": [
+      4,
+      1024
+     ]
+    },
+    "W1": {
+     "n": 10,
+     "sm_mhz_median": 2857.0,
+     "sm_mhz_min": 2745.0,
+     "power_instant_w_median": 442.235,
+     "power_instant_w_max": 449.02,
+     "enforced_limit_w": [
+      575.0
+     ],
+     "event_reasons": [
+      1024
+     ]
+    }
+   },
+   "S1c": {
+    "W16": {
+     "n": 73,
+     "sm_mhz_median": 2842.0,
+     "sm_mhz_min": 2820.0,
+     "power_instant_w_median": 420.5,
+     "power_instant_w_max": 519.54,
+     "enforced_limit_w": [
+      575.0
+     ],
+     "event_reasons": [
+      4,
+      1024
+     ]
+    },
+    "W1": {
+     "n": 10,
+     "sm_mhz_median": 2857.0,
+     "sm_mhz_min": 2850.0,
+     "power_instant_w_median": 440.82500000000005,
+     "power_instant_w_max": 447.45,
+     "enforced_limit_w": [
+      575.0
+     ],
+     "event_reasons": [
+      1024
+     ]
+    }
+   },
+   "S1d": {
+    "W16": {
+     "n": 73,
+     "sm_mhz_median": 2842.0,
+     "sm_mhz_min": 2820.0,
+     "power_instant_w_median": 420.47,
+     "power_instant_w_max": 520.23,
+     "enforced_limit_w": [
+      575.0
+     ],
+     "event_reasons": [
+      4,
+      1024
+     ]
+    },
+    "W1": {
+     "n": 10,
+     "sm_mhz_median": 2857.0,
+     "sm_mhz_min": 2857.0,
+     "power_instant_w_median": 430.03,
+     "power_instant_w_max": 447.47,
+     "enforced_limit_w": [
+      575.0
+     ],
+     "event_reasons": [
+      1024
+     ]
+    }
+   },
+   "S0d": {
+    "W16": {
+     "n": 75,
+     "sm_mhz_median": 2835.0,
+     "sm_mhz_min": 2745.0,
+     "power_instant_w_median": 431.69,
+     "power_instant_w_max": 568.44,
+     "enforced_limit_w": [
+      575.0
+     ],
+     "event_reasons": [
+      4,
+      1024
+     ]
+    },
+    "W1": {
+     "n": 10,
+     "sm_mhz_median": 2857.0,
+     "sm_mhz_min": 2835.0,
+     "power_instant_w_median": 445.52,
+     "power_instant_w_max": 449.23,
+     "enforced_limit_w": [
+      575.0
+     ],
+     "event_reasons": [
+      1024
+     ]
+    }
+   },
+   "S0w": {
+    "W16": {
+     "n": 75,
+     "sm_mhz_median": 2835.0,
+     "sm_mhz_min": 2760.0,
+     "power_instant_w_median": 425.27,
+     "power_instant_w_max": 564.5,
+     "enforced_limit_w": [
+      575.0
+     ],
+     "event_reasons": [
+      4,
+      1024
+     ]
+    },
+    "W1": {
+     "n": 10,
+     "sm_mhz_median": 2857.0,
+     "sm_mhz_min": 2857.0,
+     "power_instant_w_median": 439.415,
+     "power_instant_w_max": 444.33,
+     "enforced_limit_w": [
+      575.0
+     ],
+     "event_reasons": [
+      1024
+     ]
+    }
+   }
+  },
+  "warmup": {
+   "decode_tok_s": {
+    "W16": 971.73,
+    "W1": 277.28
+   },
+   "over_S0a": {
+    "W16": 0.9952,
+    "W1": 1.0
+   }
+  },
+  "k25_seen_after_runs": {
+   "S0a": {
+    "tree|le256": 960
+   },
+   "S1a": {
+    "prmt|le256": 960
+   },
+   "S1b": {
+    "prmt|le256": 960
+   },
+   "S0b": {
+    "tree|le256": 960
+   },
+   "S0c": {
+    "tree|le256": 960
+   },
+   "S1c": {
+    "prmt|le256": 960
+   },
+   "S1d": {
+    "prmt|le256": 960
+   },
+   "S0d": {
+    "tree|le256": 960
+   },
+   "S0w": {
+    "tree|le256": 960
+   }
+  }
+ }
+}

@@ -1206,7 +1206,8 @@ def prefill_routes() -> dict:
     :data:`~.engines.paged_attention.ATTN_SEEN` (path per prefill attention call), both counted in the Python
     forward, so eager calls and graph captures count and graph replays do not. Cite ``seen`` as engagement evidence.
     ``moe_k19_dispatch`` is :data:`~.engines.hot_residency.K19_DISPATCH_SEEN` (K19's tile table and dispatch,
-    ``E4B_PREFILL_LEAN_DISPATCH``'s evidence) and ``prefill_folds`` is
+    ``E4B_PREFILL_LEAN_DISPATCH``'s evidence), ``moe_k25_lut`` is :data:`~.engines.hot_residency.K25_LUT_SEEN` (K25's
+    codebook decode per call, ``E4B_K25_LUT``'s) and ``prefill_folds`` is
     :data:`~.engines.glue_fuse.PREFILL_FOLD_SEEN` (fused fold calls above 64 rows, ``E4B_FUSE_PREFILL_GLUE``'s)."""
     from .engines import glue_fuse, hot_residency, paged_attention
 
@@ -1232,6 +1233,7 @@ def prefill_routes() -> dict:
     out["seen"] = {"moe": dict(sorted(hot_residency.ROUTE_SEEN.items())),
                    "prefill_attn": dict(sorted(paged_attention.ATTN_SEEN.items())),
                    "moe_k19_dispatch": dict(sorted(hot_residency.K19_DISPATCH_SEEN.items())),
+                   "moe_k25_lut": dict(sorted(hot_residency.K25_LUT_SEEN.items())),
                    "prefill_folds": dict(sorted(glue_fuse.PREFILL_FOLD_SEEN.items()))}
     return out
 
@@ -1591,6 +1593,11 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     for path in (cfg.arena, cfg.arena + ".index.json", cfg.calib):
         if not os.path.exists(path):
             raise FileNotFoundError(path)
+    # E4B_K25_LUT's explicit value, checked before the load: a misconfigured knob fails at startup, never on the first
+    # request (the per-family default is resolved below, once the model's config is read)
+    from .engines.hot_residency import _k25_lut_raw, resolve_k25_lut
+    if _k25_lut_raw():
+        resolve_k25_lut()             # an explicit value does not depend on the family: its refusals come here
 
     import torch
     from transformers import AutoTokenizer
@@ -1618,6 +1625,9 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
         model_config, why = None, None
     if why:
         raise RuntimeError(f"serve_paged refuses {cfg.model}: {why}")   # before any weight is read
+    # E4B_K25_LUT resolved for this family, still before any weight is read: an explicit prmt the package or device
+    # cannot serve refuses here; unset, qwen3_moe takes prmt where it can (lane P158), every other case the tree
+    k25_lut = resolve_k25_lut(getattr(model_config, "model_type", None))
     if str(cfg.max_seqs_requested).strip().lower() == "auto":
         # sized before any weight is read: the estimate's device total includes the weights
         free = (torch.cuda.mem_get_info(torch.device(cfg.device))[0]
@@ -1729,6 +1739,8 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     info["dense_gemv_bw"] = {**dense_gemv, "engagement": dense_gemv_engagement(model)}
     # P153: the head's record and, per row count, whether it routed or passed during the build's captures and warm-ups
     info["int8_head_bw"] = {**int8_head, "engagement": int8_head_engagement(model)}
+    # E4B_K25_LUT as resolved at startup; which decode each K25 call took is prefill_routes()["seen"]["moe_k25_lut"]
+    info["k25_lut"] = k25_lut
     # P149: the int8 attention census and, per row count, which projections routed through K37's kernels or
     # dequantized during the build's captures and warm-ups (Python counts calls, never a replay): what Q reads
     from .engines.int8_attn import engagement as int8_attn_engagement
