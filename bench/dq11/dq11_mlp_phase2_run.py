@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import statistics
 import sys
 from dataclasses import replace
@@ -49,6 +50,14 @@ DRIFT_SLOT = "layers.0.mlp.up_proj"
 GUARD_S = 2 * 3600
 BOOT_S = 5 * 60
 FIT_FACTOR = 1.25
+#: The (b) part's seconds on the 5090. UNKNOWN until the $0 A2000 shakedown measures it with the full families (Amendment 5
+#: section 3); the A2000's time is the bound (the 5090 is the faster card). ``fit`` refuses while it is None.
+B_READ_S = None
+#: The registered part seconds on the 5090 (Amendment 5 section 8). install (venv + bootstrap + CUDA check), prepare and one
+#: fresh 40-update L process are census-9's measured phases on an RTX 5090 (182 s, 193 s, 92 s), rounded up; a quality arm
+#: adds two scorings; a drift arm runs under C (math SDPA), so it is given more.
+PART_S = {"probes": 10, "install": 200, "prepare": 200, "stage-check": 60, "arm": 120, "quality": 60, "drift": 150,
+          "reduce": 30}
 TARGETS = {
     "a2000": {"lock": "rehearsal/wheels.json", "gpu": "NVIDIA RTX A2000 12GB", "capability": (8, 6), "cuda": "12.8",
               "updates": 8, "free_min_gib": 9, "science_eligible": False},
@@ -62,6 +71,58 @@ def static_fit(part_seconds, *, boot_s=BOOT_S, guard_s=GUARD_S, factor=FIT_FACTO
     need = (boot_s + sum(part_seconds)) * factor
     return {"boot_s": boot_s, "parts_s": sum(part_seconds), "factor": factor, "need_s": need, "guard_s": guard_s,
             "fits": need <= guard_s}
+
+
+def registered_parts(*, b_read_s=None, drift=True) -> list:
+    """The registered seconds of every part the box runs, in order (the drift arms only if ``drift``)."""
+    b = B_READ_S if b_read_s is None else b_read_s
+    if b is None:
+        raise RuntimeError("PHASE2_REFUSAL: the (b) part's seconds are UNKNOWN until the A2000 shakedown measures them")
+    s = PART_S
+    parts = [s["probes"], s["install"], s["prepare"], s["stage-check"], b] + [s["arm"]] * len(TIMED)
+    parts += [s["quality"]] * len(QUALITY_ARMS) + ([s["drift"]] * len(DRIFT) if drift else []) + [s["reduce"]]
+    return parts
+
+
+def box_need() -> int:
+    """The box's guard fit before it installs anything: every part but the drift arms (which the box skips when the
+    guard cannot fit them), x 1.25, in whole seconds."""
+    return int(sum(registered_parts(drift=False)) * FIT_FACTOR + 0.999999)
+
+
+TEMPLATE = HERE / "dq11_mlp_phase2_manifest_template.json"
+RUN_ID = re.compile(r"dq11-mlp-phase2-[1-9][0-9]*")
+HEX40 = re.compile(r"[0-9a-f]{40}")
+DRIVER = re.compile(r"[0-9]{3}\.[0-9]{1,3}\.[0-9]{1,3}")
+
+
+def bind_manifest(run_id, *, e4b_head, adertha_head, machine, offers, driver, assets, output, template=TEMPLATE) -> dict:
+    """The launch manifest (Amendment 5 section 8): the template with the run id, the heads, the drive command and the
+    pin by inclusion (one machine, its exact offers, its driver). Write-once and outside the source tree; the shared
+    launcher's ``--validate`` then checks it before any create."""
+    output = Path(output).resolve()
+    if output.exists() or output.is_relative_to(HERE.parents[1]):
+        raise ValueError("PHASE2_REFUSAL: the bound manifest must be write-once and outside the source tree")
+    machine, offers = str(machine), [str(o) for o in offers]
+    if not RUN_ID.fullmatch(run_id):
+        raise ValueError(f"PHASE2_REFUSAL: run id {run_id!r} is not dq11-mlp-phase2-N")
+    if not (HEX40.fullmatch(e4b_head) and HEX40.fullmatch(adertha_head)):
+        raise ValueError("PHASE2_REFUSAL: both heads must be 40-hex commits")
+    if (not machine.isdigit() or not offers or len(set(offers)) != len(offers) or not all(o.isdigit() for o in offers)
+            or not DRIVER.fullmatch(driver) or int(driver.split(".")[0]) < 580):
+        raise ValueError("PHASE2_REFUSAL: the pin must be one machine, its exact offers and a driver >= 580")
+    m = json.loads(Path(template).read_text())
+    m["run_id"] = run_id
+    m["heads"] = {"e4b": e4b_head, "adertha": adertha_head}
+    m["command"] = (f"DQ11_ASSET_DIR={Path(assets).resolve()} DQ11_REQUIRED_DRIVER={driver} "
+                    "bash bench/dq11/dq11_mlp_phase2_drive.sh")
+    m["vast_pin_machine"], m["vast_pin_offers"], m["vast_required_driver"] = machine, offers, driver
+    m["lane_record"]["status"] = "BOUND_PENDING_VALIDATE"
+    m["lane_record"]["phase2"]["template_sha256"] = r1._sha(Path(template))
+    with output.open("x") as stream:
+        json.dump(m, stream, indent=2)
+        stream.write("\n")
+    return m
 
 
 def require_runtime(target, directory, cache) -> dict:
@@ -322,12 +383,15 @@ def reduce(directory) -> dict:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     ap.add_argument("--target", required=True, choices=sorted(TARGETS))
-    ap.add_argument("--part", required=True, choices=PARTS + ("reduce",))
+    ap.add_argument("--part", required=True, choices=PARTS + ("reduce", "fit"))
     ap.add_argument("--directory", required=True)
     ap.add_argument("--cache", required=True)
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
     out = Path(a.out)
+    if a.part == "fit":                                  # the box's guard fit (no torch, before the install)
+        print(box_need())
+        return 0
     out.mkdir(parents=True, exist_ok=True)
     if a.part == "reduce":
         rec = reduce(out)
