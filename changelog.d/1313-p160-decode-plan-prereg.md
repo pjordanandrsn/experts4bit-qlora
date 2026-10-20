@@ -11,7 +11,7 @@ P158 has since made prmt qwen3_moe's served default, so P is the control. P160 r
   and the enforced limit per arm. GO needs C1's median P/C1 minus 2 SE >= 1.05 both raw and clock-adjusted (the whole
   clock gain taken from a faster-clocked C1); a sample under a 575 W enforced limit VOIDs.
 - **Box:** one RTX 5090, grouped-nf4-gemm v0.50.0 (41ef086e), premise 27 tests (K25's row-exact tests and K39's compiled
-  contract), guard 0.75 h with the pre-install fit at 25 % headroom from P156's box walls, worst $0.90. A $0 A2000
+  contract), guard 1.0 h with the pre-install fit at 25 % headroom from P156's box walls, worst $1.16. A $0 A2000
   shakedown ran end to end before the registration.
 
 A GO opens an opt-in per-projection K25 plan in e4b and a served read, each its own PR. Files: `bench/p160/` and

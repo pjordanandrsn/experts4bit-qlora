@@ -193,8 +193,10 @@ grouped-nf4-gemm's `kernel/` at `41ef086e` (its three files at the pinned hashes
 
 - **One RTX 5090 on Vast,** its own box: a short single read, so it takes per-second billing, not a whole-hour provider.
   Hosts with a recorded power cap of at least 575 W (`vast_min_power_limit_w: 575`, `vast_power_limit_unknown:
-  exclude`), read within the last 3 days. Declared at $1.05/h, **guard 0.75 h**, at most 10 GB at <= $0.011/GB:
-  worst case 0.75 x $1.05 + 10 x $0.011 = **$0.90**, under the standing rule. Disk 60 GB (the box's floor 20 GB free).
+  exclude`), read within the last 3 days. Declared at $1.05/h, **guard 1.0 h**, at most 10 GB at <= $0.011/GB:
+  worst case 1.0 x $1.05 + 10 x $0.011 = **$1.16**, under the standing rule. Vast bills per second, so the guard
+  costs nothing unless the run runs long; it is wide enough that a slow boot cannot push the runner's fit check into a
+  refusal (below). Disk 60 GB (the box's floor 20 GB free).
   Nothing is fetched from a hub.
 - **The fit, e4b#1845's rule, with at least 25 % headroom:**
   - **Install, tripwire, self-tests and premise:** `INSTALL_TO_GATE_S` = 600 s (P156's).
@@ -208,7 +210,8 @@ grouped-nf4-gemm's `kernel/` at `41ef086e` (its three files at the pinned hashes
   - **The reserve:** `RESERVE` = 600 s. No Nsight step.
   - **The runner's check, before the install:** `FIT` = 600 + 600 + 600 = 1800 s, and `FIT_NEED` = 1800 x 1.25 = 2250 s.
     Anything short of that is a refusal, rc 41.
-  - **The static fit,** (boot + fit) x 1.25 <= guard: boot 300 s + 1800 s = 2100 s, and 2100 x 1.25 = 2625 s <= 2700 s (0.75 h).
+  - **The static fit,** (boot + fit) x 1.25 <= guard: boot 300 s + 1800 s = 2100 s, and 2100 x 1.25 = 2625 s <= 3600 s (1.0 h).
+    The runner's check (2250 s) refuses only if the box takes more than 3600 - 2250 = 1350 s to reach it.
     `tests/test_p160.py` asserts it.
 - **The premise, on the card:** K25's row-exact GPU tests (4, P156's) and K39's compiled contract (grouped-nf4-gemm
   v0.50.0's `kernel/test_nf4_smallm_prmt_gpu.py`, 23, P158's staged copy): exactly 27 passed, else rc 25.

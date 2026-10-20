@@ -29,7 +29,7 @@ DRIVE = (LANE / "p160_drive.sh").read_text(encoding="utf-8")
 BENCH = (LANE / "p160_bench.py").read_text(encoding="utf-8")
 PREREG = (LANE / "PREREG-p160.md").read_text(encoding="utf-8")
 LIB = (REPO / "experts4bit_qlora" / "engines" / "hot_residency.py").read_text(encoding="utf-8")
-GUARD_H = 0.75
+GUARD_H = 1.0
 BOOT_S = 300          # the launcher's create-to-runner allowance (P155's and P156's, kept)
 HEADROOM = 1.25       # e4b#1845's cross-lane rule
 
@@ -281,8 +281,9 @@ def test_the_guard_fits_with_25_percent_headroom():
     fit = sum(k.values())
     assert fit * 125 // 100 == 2250 and "`FIT_NEED` = 1800 x 1.25 = 2250 s" in PREREG
     assert (BOOT_S + fit) * HEADROOM <= GUARD_H * 3600
-    assert "2100 x 1.25 = 2625 s <= 2700 s (0.75 h)" in PREREG and "**guard 0.75 h**" in PREREG
-    assert "0.75 x $1.05 + 10 x $0.011 = **$0.90**" in PREREG
+    assert "2100 x 1.25 = 2625 s <= 3600 s (1.0 h)" in PREREG and "**guard 1.0 h**" in PREREG
+    assert "1.0 x $1.05 + 10 x $0.011 = **$1.16**" in PREREG
+    assert GUARD_H * 3600 - fit * 125 // 100 == 1350 and "3600 - 2250 = 1350 s to reach it" in PREREG
     line = next(x for x in RUN.splitlines() if x.startswith("can_run(){"))
     assert "fit=$((need + RESERVE))" in line and "needs ${fit}s" in line and "only ${left}s left" in line
 
