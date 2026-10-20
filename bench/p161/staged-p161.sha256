@@ -1,0 +1,15 @@
+# bench/p161/staged-p161.sha256 -- every piece the P161 box runs, by the name the box sees (bench/p161/PREREG-p161.md).
+# Every piece shared with P158's kit at P158's pins (bench/p158/staged-p158.sha256) but test_k25_lut_gpu.py, which is
+# e4b's tests/test_k25_lut_gpu.py frozen at dd535cd6 (the first main with c1's cases, e4b#1877).
+d11f0e63cde7f0e412fe7ef193a927444c399ebd582b2d223e5cd423ad0b6c15  p161_run.sh
+4191e47a42332b7f45b6c1166291d907dc58783b24ad5033bdaf8719e94bfad1  p161_box.py
+23915427b6344802c68b615922644e9b4019e2ff4a63aaf1e38722e16991864a  p161_reduce.py
+b53f94192b4040b6451ceb18f8cd4e3e5629a6e40c4885b40600fcc4205d8248  p109_box.py
+e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+f53952c1a26b06e8a8f61dcfdbd511acad0b0507cae58cb1bbfca7f3c8f4313a  test_decode_graph_buckets.py
+0af027ec93837f2b0cd150a77c7692386ac33eb59d553727c40fe784c6c273de  test_kv_step_select.py
+8e5b2f775cf5c0ddde349822624a7d44b40f3898738cc64ceb31f5f3f4ea5aae  test_fused_glue_decode_graphs_gpu.py
+63481683aa12674ba274169d8fcaed2894bd87e552f780452568bdd60cb70176  test_gemv_bw_served_gpu.py
+9f6366287957f75bdfe53ff8165b401c30fb9e97d4da582254ad7e98bf702868  test_nf4_smallm_prmt_gpu.py
+9ee0028ee57c4bc33e5290f73fba5a68eda10fa83d61d6d455bdf0ca2f7f2338  test_k25_lut_gpu.py
