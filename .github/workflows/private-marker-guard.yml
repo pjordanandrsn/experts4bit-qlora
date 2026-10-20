@@ -34,7 +34,11 @@ on: [push, pull_request]
 # instead of being skipped.
 
 jobs:
-  guard:
+  # Each guard reports under its own required-check name and is required on its own.
+  private-marker-guard:
+    # The required check comes from pull_request runs, which scan the PR's merge commit against its merge base.
+    # Push runs keep scanning every branch under their own, unrequired name ("(push scan)").
+    name: ${{ github.event_name == 'pull_request' && 'private-marker-guard' || 'private-marker-guard (push scan)' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4

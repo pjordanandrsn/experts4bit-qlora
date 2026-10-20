@@ -21,7 +21,10 @@ on: [push, pull_request]
 # doc that quotes the markers). This workflow file is excluded by path.
 
 jobs:
-  guard:
+  # Each guard reports under its own required-check name and is required on its own. Only pull_request runs
+  # carry this name; push runs report as "(push scan)", the same split as private-marker-guard.
+  conflict-marker-guard:
+    name: ${{ github.event_name == 'pull_request' && 'conflict-marker-guard' || 'conflict-marker-guard (push scan)' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
