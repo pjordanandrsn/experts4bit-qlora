@@ -1,0 +1,44 @@
+{
+  "run_id": "__DQ11_PHASE2_RUN_ID__",
+  "work_id": "experts4bit-qlora#1083",
+  "role": "CTO",
+  "agent_env": "POD_LAUNCH_AGENT",
+  "preregistration": "bench/dq11/DQ11-MLP-BUILD-AMENDMENT-5.md",
+  "hypothesis": "The fused DQ11 MLP-adapter update is at least 5% faster than the matched unfused update at every ABBA block pair (minimum H >= 0.05), with K8 quality unchanged and every tensor judged correct by (b) at the science lock.",
+  "expected_result": "Registered prediction: H 0.02-0.05, so NO_GAIN is the likelier outcome; (b) PASS on every tensor with k >= 9; 0:out_down RANK1_UNRESOLVED again.",
+  "success_criteria": "Exact 5090/driver, the sealed science closure, inputs and wheels; the Phase 2 instrument's stage hashes; engagement (96 adapters, nothing refused, fallback 0, no PEFT MLP LoRA forward in F1); the (b) part, eight timed arms ABBA twice and the reduce, with section 7's outcome; hashes, invoice and authenticated teardown with an empty list.",
+  "failure_criteria": "A missing source/input/driver/offer identity, the guard fit, timeout or tariff yields PHASE2_REFUSAL; engagement or a harness check yields VOID; a NOISY self-pair is a VOID and a strike; no retry or new paid draw without the maintainer.",
+  "provider": "vast:verified-secure",
+  "vast_direct_ssh": true,
+  "gpu": "RTX 5090",
+  "image": "pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+  "model": "mistralai/Mistral-7B-v0.1",
+  "model_revision": "27d67f1b5f57dc0953326b2601d68371d40ea8da",
+  "seed": 3407,
+  "usd_per_hour": 0.85,
+  "wallclock_h": 2.0,
+  "est_usd": 1.7,
+  "role_daily_ceiling": 100,
+  "storage": 320,
+  "download_gb": 27,
+  "max_download_usd_per_gb": 0.011,
+  "preflight_bandwidth": "none",
+  "guards": [
+    {"repo": "e4b", "path": "bench/dq11/dq11_mlp_phase2_box.sh", "pattern": "sha256sum -c science.sha256"},
+    {"repo": "e4b", "path": "bench/dq11/dq11_mlp_phase2_box.sh", "pattern": "--part fit"},
+    {"repo": "e4b", "path": "bench/dq11/dq11_mlp_phase2_run.py", "pattern": "H_BAR = 0.05"},
+    {"repo": "e4b", "path": "bench/dq11/dq11_mlp_phase2.py", "pattern": "K_MIN = 9"},
+    {"repo": "e4b", "path": "bench/dq11/dq11_mlp_phase2_drive.sh", "pattern": "dq11-mlp-phase2-stage.sha256"},
+    {"repo": "adertha", "path": "tools/pod-launch.sh", "pattern": "vast_pin_offers requires vast_pin_machine"}
+  ],
+  "command_cwd": "e4b",
+  "lane_record": {
+    "status": "TEMPLATE_NO_PAID_GO",
+    "phase2": {
+      "registration": ["bench/dq11/DQ11-MLP-BUILD-PREREG.md", "bench/dq11/DQ11-MLP-BUILD-AMENDMENT-5.md"],
+      "target": "5090",
+      "guard_s": 7200,
+      "all_in_cap_usd": 2.1
+    }
+  }
+}
