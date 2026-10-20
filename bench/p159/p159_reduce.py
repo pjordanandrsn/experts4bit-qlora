@@ -19,7 +19,6 @@ NULL_LOG_MAX = math.log(1.5)
 HI, LO = 0.8, 0.2
 MIN_STATE_BLOCKS, MIN_SLOW_TRIPLES, MIN_B = 12, 6, 3
 COUNTER_MULTIPLE = 5.0
-HUGE_SLOW_MAX, HUGE_FAST_MIN = 0.1, 0.5
 B_RATIO = 1.25
 
 
@@ -28,13 +27,22 @@ def state(fuse_s, experts):
     return "FAST" if v <= FAST_S else "SLOW" if v >= SLOW_S else "MID"
 
 
-def huge_share(b, experts):
-    """The fuse's own huge-page share: AnonHugePages after fuse less before the block, over its fresh bytes."""
+def huge_gain(b):
+    """AnonHugePages gained over the fuse (after fuse less before the block), in bytes, or None when unreadable."""
     after = (b.get("smaps_after_fuse") or {}).get("anon_huge_bytes")
     before = ((b.get("pre") or {}).get("smaps") or {}).get("anon_huge_bytes")
-    if after is None or before is None:
-        return None
-    return (after - before) / (FUSE_FRESH_BYTES * experts / E_FULL)
+    return None if after is None or before is None else after - before
+
+
+def huge_share(b):
+    """REPORTED only: the huge-page share of the anonymous memory the fuse grew. The wiring run (p159-dry-1) showed why
+    it cannot be read: the growth is the two stacks only (the temporaries are freed by then), and none at all when the
+    allocator reuses freed memory, so a fully huge-paged block can read 0. READ-2 reads the THP fault counters."""
+    after, before = b.get("smaps_after_fuse") or {}, (b.get("pre") or {}).get("smaps") or {}
+    g, a = huge_gain(b), None
+    if after.get("anon_bytes") is not None and before.get("anon_bytes") is not None:
+        a = after["anon_bytes"] - before["anon_bytes"]
+    return None if g is None or not a or a <= 0 else g / a
 
 
 def med(xs):
@@ -67,8 +75,8 @@ def engagement(res):
     n = [p for p in procs if p["kind"] == "N"]
 
     def n_block_bad(b):
-        h = huge_share(b, ex)
-        return h is None or h * FUSE_FRESH_BYTES * scale >= N_HUGE_MAX
+        h = huge_gain(b)
+        return h is None or h >= N_HUGE_MAX * scale
     void["N"] = bool(n) and any(not p.get("engaged", {}).get("thp_disabled")
                                 or any(n_block_bad(b) for b in p["blocks"]) for p in n)
     pp = [p for p in procs if p["kind"] == "P"]
@@ -139,15 +147,20 @@ def reduce(res):
         out["read2_inputs"] = {"slow": len(slow), "fast": len(fast)}
     else:
         mf_s, mf_f = med(b["fuse"]["minflt"] for b in slow), med(b["fuse"]["minflt"] for b in fast)
-        hs_s, hs_f = med(huge_share(b, ex) for b in slow), med(huge_share(b, ex) for b in fast)
+        ta_s = med(b["fuse"].get("thp_fault_alloc") for b in slow)
+        ta_f = med(b["fuse"].get("thp_fault_alloc") for b in fast)
         tf_s = med(b["fuse"].get("thp_fault_fallback") for b in slow)
         tf_f = med(b["fuse"].get("thp_fault_fallback") for b in fast)
-        ok = (mf_f is not None and mf_s >= COUNTER_MULTIPLE * max(mf_f, 1)
-              and hs_s is not None and hs_f is not None and hs_s <= HUGE_SLOW_MAX and hs_f >= HUGE_FAST_MIN
-              and tf_s is not None and tf_f is not None and tf_s > tf_f)
-        r2 = "PASS" if ok else "FAIL"
-        out["read2_inputs"] = {"minflt_slow": mf_s, "minflt_fast": mf_f, "huge_share_slow": hs_s,
-                               "huge_share_fast": hs_f, "thp_fallback_slow": tf_s, "thp_fallback_fast": tf_f}
+        if None in (ta_s, ta_f, tf_s, tf_f):
+            r2 = "NOT_READ"                              # a kernel without THP counters (the lab A2000's)
+        else:
+            ok = (mf_f is not None and mf_s >= COUNTER_MULTIPLE * max(mf_f, 1) and ta_f > ta_s and tf_s > tf_f)
+            r2 = "PASS" if ok else "FAIL"
+        out["read2_inputs"] = {"minflt_slow": mf_s, "minflt_fast": mf_f,
+                               "thp_alloc_slow": ta_s, "thp_alloc_fast": ta_f,
+                               "thp_fallback_slow": tf_s, "thp_fallback_fast": tf_f,
+                               "huge_share_slow_reported": med(huge_share(b) for b in slow),
+                               "huge_share_fast_reported": med(huge_share(b) for b in fast)}
     out["read2"] = r2
     out["call"] = ({"PASS": "IDENTIFIED_CORROBORATED", "FAIL": "CONFLICT", "NOT_READ": "IDENTIFIED_UNCORROBORATED"}[r2]
                    if r1 == "IDENTIFIED" else r1)
@@ -208,8 +221,9 @@ def _blk(arm, fuse, minflt=None, huge=None, fallback=None, offload=1.0, mapped=N
     return {"arm": arm, "fuse_s": fuse, "offload_s": offload, "read_s": 0.01, "h2d_s": 0.3, "quant_s": 0.06,
             "block_s": fuse + 2, "residual_s": 0.9,
             "fuse": {"minflt": minflt, "majflt": 0, "thp_fault_fallback": fallback if fallback is not None
-                     else (3000 if slow else 0)},
-            "pre": {"smaps": {"anon_huge_bytes": 0}}, "smaps_after_fuse": {"anon_huge_bytes": int(huge * fresh)},
+                     else (3000 if slow else 0), "thp_fault_alloc": 0 if slow else 3840},
+            "pre": {"smaps": {"anon_huge_bytes": 0, "anon_bytes": 0}},
+            "smaps_after_fuse": {"anon_huge_bytes": int(huge * fresh), "anon_bytes": fresh},
             "slab_mapped_during_read": (arm != "R") if mapped is None else mapped}
 
 
@@ -317,20 +331,27 @@ def self_test():
     # both refutations hold: REFUTED_FAULTS is read first
     check(_run(SLOTS, st, n=0.4, p=7.0, N={"huge": 0.0}, P={"minflt": 80_000}), read1="REFUTED_FAULTS")
     # READ-2 fails on each clause alone (the mechanism IDENTIFIED, so the call is CONFLICT)
-    for clause in ("slow_huge", "fast_huge", "fallback"):
+    for clause in ("alloc", "fallback", "multiple"):
         res = _run(SLOTS, st)
         for q in res["processes"]:
             for b in q.get("blocks", []) if q["kind"] == "M" else []:
                 if b["arm"] == "R":
                     continue
                 slow = b["fuse_s"] >= SLOW_S
-                if clause == "slow_huge" and slow:
-                    b["smaps_after_fuse"]["anon_huge_bytes"] = int(0.2 * FUSE_FRESH_BYTES)
-                if clause == "fast_huge" and not slow:
-                    b["smaps_after_fuse"]["anon_huge_bytes"] = int(0.4 * FUSE_FRESH_BYTES)
+                if clause == "alloc" and not slow:
+                    b["fuse"]["thp_fault_alloc"] = 0
                 if clause == "fallback" and slow:
                     b["fuse"]["thp_fault_fallback"] = 0
+                if clause == "multiple" and slow:
+                    b["fuse"]["minflt"] = 4 * 80_000                       # 4x, under the 5x multiple
         check(res, read1="IDENTIFIED", read2="FAIL", call="CONFLICT")
+    # a kernel without THP counters (the lab A2000's): READ-2 is NOT_READ, never a FAIL
+    res = _run(SLOTS, st)
+    for q in res["processes"]:
+        for b in q.get("blocks", []):
+            b["fuse"].pop("thp_fault_alloc", None)
+            b["fuse"].pop("thp_fault_fallback", None)
+    check(res, read1="IDENTIFIED", read2="NOT_READ", call="IDENTIFIED_UNCORROBORATED")
     # one under each minimum: 10 FAST M/M' blocks; 5 both-SLOW triples; 2 B processes run
     check(_run(SLOTS, "F" + "S" * 12), read2="NOT_READ")
     check(_run(SLOTS, "S" + "F" * 12), read3="NOT_READ")

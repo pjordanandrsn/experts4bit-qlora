@@ -37,6 +37,9 @@ all alive until the stack), the gate_up stack (3 GiB) and the down stack (1.5 Gi
   The page cache is warm (the slab was written on the box), and fault-around maps it in about 74,000 faults either way.
 - **So the process's minor faults in `fuse` are predicted at about 2.04 M in a slow block and about 0.08 M in a fast
   one, about 26x.** It is not 512x, because the slab's file faults count in both.
+- **Corrected by running** (the $0 wiring run below): the allocator reuses part of the memory a block freed, so a
+  4 KiB block faults 42-95 % of the fresh count (median 74 %), about 0.86-2.04 M at 128 experts. Even the low end is
+  about 10x the fast block's 0.08 M.
 
 Correlation cannot carry this alone, so two arms **manipulate the mechanism**, and both need no root:
 - **N (no huge pages):** the process sets `prctl(PR_SET_THP_DISABLE, 1)` before torch is imported. If 4 KiB faults are
@@ -93,8 +96,9 @@ Two more arms:
 
 **Per block, at each segment boundary:**
 - the process's minor and major faults (getrusage);
-- after `fuse`, before the fused bytes are moved: `AnonHugePages` and `Anonymous` from `/proc/self/smaps_rollup`, i.e.
-  the huge-page share of the fuse's own allocations;
+- after `fuse`, before the fused bytes are moved: `AnonHugePages` and `Anonymous` from `/proc/self/smaps_rollup`
+  (reported only: the wiring run showed the anonymous growth over the fuse is the two stacks alone, and none at all
+  when the allocator reuses freed memory, so the share cannot be read; READ-2 reads the THP fault counters);
 - over `fuse` and over `offload`, `/proc/vmstat` deltas: thp_fault_alloc, thp_fault_fallback, thp_fault_fallback_charge,
   compact_stall, compact_fail, compact_success, pgfault, pgmajfault, pgscan_direct, pgsteal_direct, allocstall_*,
   numa_hint_faults and numa_pages_migrated.
@@ -153,16 +157,19 @@ MIXED otherwise. A process in a MIXED window is reported and not read.
   5. **PARTIAL:** one side is in its band and the other has no window of its kind.
   6. **NOT_READ (no window):** neither an N process in a FAST window nor a P process in a SLOW window.
   7. **UNRESOLVED:** otherwise (a share between 0.2 and 0.8).
-- **The THP mode bounds what READ-1 can say.** Under THP `enabled` = `madvise` or `never`, with `THP_MEM_ALLOC_ENABLE`
-  unset, torch's CPU allocations never get huge pages in any window (c10's `alloc_cpu` is `posix_memalign` with no
-  `MADV_HUGEPAGE`). N is then the same as M, and READ-1 can read REFUTED_THP or a NOT_READ but never IDENTIFIED. A
-  FAST window then has another cause, and P still prices the fault path.
+- **The THP mode bounds what READ-1 can say.** Under THP `enabled` = `madvise` or `never`, or with THP absent (a kernel
+  built without it, as on the lab A2000: no THP sysfs, no `thp_*` counters), with `THP_MEM_ALLOC_ENABLE` unset, torch's
+  CPU allocations never get huge pages in any window (c10's `alloc_cpu` is `posix_memalign` with no `MADV_HUGEPAGE`). N
+  is then the same as M, and READ-1 can read REFUTED_THP or a NOT_READ but never IDENTIFIED. A FAST window then has
+  another cause, and P still prices the fault path.
 
 **READ-2, the counters (corroborating gate):** over M and M' blocks, with at least 12 SLOW and 12 FAST, all three must
 hold:
 - the median fuse minor faults of SLOW blocks are at least **5x** those of FAST blocks (predicted about 26x);
-- the median `AnonHugePages` share after fuse is at most 0.1 in SLOW blocks and at least 0.5 in FAST blocks;
+- the median `thp_fault_alloc` delta over `fuse` is larger in FAST blocks;
 - the median `thp_fault_fallback` delta over `fuse` is larger in SLOW blocks.
+
+A kernel without THP counters (no `thp_*` in `/proc/vmstat`) reads READ-2 NOT_READ, never a FAIL.
 
 **The call:**
 - IDENTIFIED with READ-2 passing is **IDENTIFIED_CORROBORATED**.
@@ -200,9 +207,9 @@ and `fuse` include disk reads. `offload` copies tensors already in memory, so RE
 | prediction | band |
 |---|---|
 | on machine 11541, both a SLOW and a FAST window occur among the 13 M processes | yes |
-| fuse minor faults, SLOW blocks | 1.6-2.4 M (closed form 2.04 M) |
+| fuse minor faults, SLOW blocks | 0.8-2.4 M (closed form 2.04 M at fresh pages; the wiring run measured 42-95 % of it) |
 | fuse minor faults, FAST blocks | 0.05-0.4 M |
-| AnonHugePages share after fuse: FAST / SLOW | >= 0.5 / <= 0.1 |
+| `thp_fault_alloc` over `fuse`, FAST / SLOW | about 3,840 / about 0 per block (host-wide counters) |
 | N in a FAST window | SLOW (fuse >= 3.0 s) |
 | P in every window | fuse <= 1.0 s |
 | R against M in triples where M and M' agree | 0.8-1.25 |
@@ -210,6 +217,22 @@ and `fuse` include disk reads. `offload` copies tensors already in memory, so RE
 | READ-4 (if B runs) | the floor holds offload |
 | THP `enabled` on the host | `always` (`madvise` would leave torch's allocations on 4 KiB pages in every window) |
 | READ-1 | PARTIAL is likelier than IDENTIFIED: a FAST window held 49 of `smt-sib-2`'s 360 blocks (about 14 %), so an N process inside one is far from certain with 4 N processes. PARTIAL with P fast in a slow window (faults are the cost; the switch unread) is a good outcome, never a reason to re-run under `p159-2` |
+
+## The $0 wiring run (`p159-dry-1`, 2026-10-20)
+
+On the lab RTX A2000 (sm_86) under a `gpu:a2000` claim. The baseline read in the claim's own step showed the card idle
+(1,526 MiB, 0 %, no compute process), and it read the same at release. The venv held the registered stack (torch
+2.11.0+cu128, grouped-nf4-gemm 0.45.0, transformers 5.19.0, bitsandbytes 0.50.2) with e4b `d65793e4`'s tree. It ran 8
+experts, all 25 processes, rc 0, bytes identical throughout: wiring only, never a reading. Its record is in
+[`dryrun/`](dryrun/).
+- **Confirmed by running:**
+  - P's heap: 4,585 fuse faults a block against the slab-only closed form of 4,608, and no anonymous growth.
+  - R: the slab is mapped in none of R's 65 blocks and in all 130 M and M' blocks (the positive control).
+  - N: `prctl` reads back as set in all 4 processes.
+  - B: NOT_RUN under no finite `memory.max` (the safe path).
+  - The fit's process start: at most 2.1 s, under the registered 3 s.
+- **Corrected by running:** the fault count's reuse (above), and READ-2's huge-page clause, from the `smaps` share to
+  the THP fault counters. That kernel has no THP, so the huge-page path itself is read on the rented box.
 
 ## Floors, fit and guard
 

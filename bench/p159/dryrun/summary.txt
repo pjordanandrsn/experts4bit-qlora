@@ -1,0 +1,36 @@
+KNOBS run=p159-dry-1 e4b=d65793e4a106c7db6ecfc219668a2d6881d207e5 gnf4=724ccc454f006c1a46836e434e997f31f293747f experts=8 dry=1
+DRY -- the $0 wiring run on a few experts: NEVER a reading
+GUARD_FIT fit=12475s need=15593s left=18007s
+CUDA_PROBE ok torch=2.11.0+cu128 gpu=NVIDIA_RTX_A2000_12GB vram_gb=12
+P159_PLAN_CHECK {"ok": true, "why": null, "mem_total": 134919548928, "mem_available": 53148782592, "k": 6, "quota": null, "cgroup_memory_max": null}
+torch 2.11.0+cu128
+bitsandbytes 0.50.2
+safetensors 0.8.0
+e4b @d65793e4a106c7db6ecfc219668a2d6881d207e5
+p159_box self-test OK (15 cases)
+p159_reduce self-test OK (28 cases)
+P159_PLAN {"processes": ["M", "N", "M", "P", "M", "B", "M", "P", "M", "B", "M", "N", "M", "B", "M", "N", "M", "P", "M", "N", "M", "P", "M", "B", "M"], "pool": 6, "facts": {"cpu_model": "Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz", "logical": 12, "physical": 6, "threads_per_core": 2, "affinity": 12, "quota": null, "torch_default_pool": 6, "torch": "2.11.0+cu128", "thp_enabled": null, "thp_defrag": null, "khugepaged_defrag": null, "numa_balancing": null, "numa_nodes": 0, "kernel": "6.6.32-qnap", "mem_total": 134919548928, "cgroup_memory_max": null, "thp_mem_alloc_enable": null}}
+P159_DONE 0 M wall=29.7s
+P159_DONE 1 N wall=31.8s
+P159_DONE 2 M wall=30.7s
+P159_DONE 3 P wall=27.0s
+P159_DONE 4 M wall=29.8s
+P159_BALLOON {"bytes": null, "need": 2507894784, "need_source": "VmHWM+slab", "memory_max": null, "memory_peak_reported": null}
+P159_DONE 6 M wall=37.8s
+P159_DONE 7 P wall=33.9s
+P159_DONE 8 M wall=40.5s
+P159_DONE 10 M wall=38.6s
+P159_DONE 11 N wall=28.6s
+P159_DONE 12 M wall=29.3s
+P159_DONE 14 M wall=32.8s
+P159_DONE 15 N wall=31.8s
+P159_DONE 16 M wall=29.7s
+P159_DONE 17 P wall=30.4s
+P159_DONE 18 M wall=29.5s
+P159_DONE 19 N wall=29.4s
+P159_DONE 20 M wall=34.5s
+P159_DONE 21 P wall=28.0s
+P159_DONE 22 M wall=31.9s
+P159_DONE 24 M wall=32.9s
+P159_RESULT {"bytes_ok": true, "processes": 25}
+P159 REFUTED_FAULTS {"read1": "REFUTED_FAULTS", "read2": "FAIL", "read3": "NOT_SLAB", "read4": "NOT_RUN", "flip_base_rate": 0.4461538461538462, "slow_window_observed": true}

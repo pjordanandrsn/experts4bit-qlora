@@ -55,7 +55,7 @@ def test_staged_files_match_their_pins_and_the_drive_stages_exactly_them():
 
 def test_both_self_tests_pass():
     for script, want in (("p159_box.py", "p159_box self-test OK (15 cases)"),
-                         ("p159_reduce.py", "p159_reduce self-test OK (28 cases)")):
+                         ("p159_reduce.py", "p159_reduce self-test OK (29 cases)")):
         p = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True,
                            timeout=120)
         assert p.returncode == 0 and want in p.stdout, p.stdout + p.stderr
@@ -91,7 +91,7 @@ def test_the_registered_constants_are_the_prereg_s():
     assert (BOX.FAST_S, BOX.SLOW_S) == (RED.FAST_S, RED.SLOW_S) == (1.5, 3.0)
     assert "FAST at or below **1.5 s**" in PREREG and "SLOW at or above **3.0 s**" in PREREG
     assert (RED.HI, RED.LO) == (0.8, 0.2) and RED.COUNTER_MULTIPLE == 5.0 and "at least **5x**" in PREREG
-    assert (RED.HUGE_SLOW_MAX, RED.HUGE_FAST_MIN) == (0.1, 0.5) and RED.B_RATIO == 1.25
+    assert not hasattr(RED, "HUGE_SLOW_MAX") and "thp_fault_alloc" in PREREG and RED.B_RATIO == 1.25
     assert (RED.MIN_STATE_BLOCKS, RED.MIN_SLOW_TRIPLES, RED.MIN_B) == (12, 6, 3)
     assert RED.N_HUGE_MAX == 64 << 20 and RED.P_MINFLT_MAX == 400_000
     assert abs(RED.NULL_LOG_MAX - __import__("math").log(1.5)) < 1e-12 and "exceeds log 1.5" in PREREG
@@ -161,13 +161,14 @@ REDUCER_MUTANTS = [
      '    elif n_nf and s_nf <= LO:\n        r1 = "REFUTED_THP"',
      '    elif n_nf and s_nf <= LO:\n        r1 = "REFUTED_THP"\n'
      '    elif n_ps and f_ps <= LO:\n        r1 = "REFUTED_FAULTS"'),
-    (" and hs_s <= HUGE_SLOW_MAX and hs_f >= HUGE_FAST_MIN", ""),
+    (" and ta_f > ta_s", ""),
     (" and tf_s > tf_f", ""),
     ("MIN_STATE_BLOCKS, MIN_SLOW_TRIPLES, MIN_B = 12, 6, 3", "MIN_STATE_BLOCKS, MIN_SLOW_TRIPLES, MIN_B = 12, 6, 1"),
     ("MIN_STATE_BLOCKS, MIN_SLOW_TRIPLES, MIN_B = 12, 6, 3", "MIN_STATE_BLOCKS, MIN_SLOW_TRIPLES, MIN_B = 12, 1, 3"),
     ("MIN_STATE_BLOCKS, MIN_SLOW_TRIPLES, MIN_B = 12, 6, 3", "MIN_STATE_BLOCKS, MIN_SLOW_TRIPLES, MIN_B = 1, 6, 3"),
-    ("return h is None or h * FUSE_FRESH_BYTES", "return h is not None and h * FUSE_FRESH_BYTES"),
+    ("return h is None or h >= N_HUGE_MAX * scale", "return h is not None and h >= N_HUGE_MAX * scale"),
     ("(not control or any(", "(False or any("),
+    ("        if None in (ta_s, ta_f, tf_s, tf_f):\n            r2 = \"NOT_READ\"", "        if False:\n            r2 = \"NOT_READ\""),
     ("COUNTER_MULTIPLE = 5.0", "COUNTER_MULTIPLE = 1.0"),
     ("B_RATIO = 1.25", "B_RATIO = 1.7"),
     ("NULL_LOG_MAX = math.log(1.5)", "NULL_LOG_MAX = math.log(2.0)"),
