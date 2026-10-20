@@ -16,8 +16,9 @@ CI <https://github.com/pjordanandrsn/experts4bit-qlora/actions/workflows/ci.yml>
 
 **Quantize the experts. Train adapters. Move weights to RAM or SSD when GPU memory runs out.**
 
-**On a 12 GB card:** with `OFFLOAD_EXPERTS=1`, Qwen3-30B-A3B QLoRA-trains at 7.16 GB peak GPU memory while the rest of
-its packed experts stay in pinned CPU RAM (`e4b.offload.fits-30b-class`). [The command](#load-a-model-and-check-it) ·
+**On a 12 GB card:** with `OFFLOAD_EXPERTS=1`, Qwen3-30B-A3B QLoRA-trains TC1's field recipe (seq 2048, r 16,
+micro-batch 1 × accum 8) at 10.463 GB peak GPU memory on an RTX A2000 12 GB, while its packed experts stay in pinned CPU
+RAM (`e4b.train.frontier.qwen3.a2000-12gb.2026-10-02`, one draw). [The command](#load-a-model-and-check-it) ·
 how to read the number <https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STORAGE-MODES.md#reading-the-headline-memory-numbers>
 
 Mixture-of-Experts (MoE) models keep many expert networks but activate only a few per token.
@@ -686,7 +687,7 @@ Four things to hold before choosing. **Fitting is not a speed claim.** **Layer-g
 
 Training and serving are different workloads measured on different hardware; the two examples below share nothing but the register, and neither implies a throughput.
 
-- **Training** — claim `e4b.offload.fits-30b-class` (measured): with `OFFLOAD_EXPERTS=1`, Qwen3-30B-A3B peaks at 7.16 GB of GPU memory during a QLoRA step and Gemma-4-26B-A4B at 8.47 GB; both OOM without offload on the 12 GB card. Fit, not speed.
+- **Training** — claim `e4b.train.frontier.qwen3.a2000-12gb.2026-10-02` (measured): with `OFFLOAD_EXPERTS=1`, Qwen3-30B-A3B trains TC1's field recipe at micro-batch 1 × accum 8 at 10.463 GB peak GPU memory on an RTX A2000 12 GB (one draw). An older 5-step reading, `e4b.offload.fits-30b-class` (7.16 GB, and 8.47 GB for Gemma-4-26B-A4B), was not reproduced. Fit, not speed.
 - **Serving** — claim `e4b.serve.deepseek-v4` (measured): DeepSeek-V4-Flash, 284B parameters, loads in about 10 s at 8.74 GiB peak VRAM and generates with its 147 GB expert arena served from disk. Fit, not speed: that path's decode rate is a property of the host link and is not quoted here.
 
 ```text
@@ -2126,8 +2127,10 @@ loads at 4.70 GB and trains under 8 GB, and the streaming loader never materiali
 QLoRA on the frozen NF4 experts moves a held-out Alpaca eval from 1.4813 to 1.0290. `e4b.train.olmoe-fits`,
 `e4b.train.olmoe-converges` ([METHODOLOGY](METHODOLOGY.md)).
 
-**Expert offload takes 30B-class MoEs past VRAM.** In a training step Qwen3-30B-A3B peaks at 7.16 GB and
-Gemma-4-26B-A4B at 8.47 GB, where both run out of memory without offload, for about +11 % s/step at OLMoE scale. The
+**Expert offload takes 30B-class MoEs past VRAM.** Qwen3-30B-A3B trains TC1's field recipe on a 12 GB RTX A2000 at
+10.463 GB peak (micro-batch 1 × accum 8, one draw; `e4b.train.frontier.qwen3.a2000-12gb.2026-10-02`). An older 5-step
+reading put it at 7.16 GB and Gemma-4-26B-A4B at 8.47 GB, both out of memory without offload; that reading was not
+reproduced (a later attempt read 9.13 GB). Offload costs about +11 % s/step at OLMoE scale. The
 on-disk arena needs 2.56× to 6.40× less host RAM than the pinned-RAM path: at an 8.59 GB cap Qwen3-30B is OOM-killed on
 host RAM and completes on the arena. `e4b.offload.fits-30b-class`, `e4b.offload.arena-vs-host-ram`
 ([results](../bench/host-ram-ceiling/RESULTS-scaling.md)).
@@ -2678,9 +2681,11 @@ still positive, so read a batched training result only with `batched_fallback_st
 **The experts do not fit in VRAM.**
 `load_moe_4bit_streaming(..., offload=True)` or `OFFLOAD_EXPERTS=1`. Frozen
 experts live in pinned CPU RAM and stream one layer at a time. This is what makes
-a 30B-class MoE QLoRA-trainable on a 12 GB card (`e4b.offload.fits-30b-class`:
-Qwen3-30B-A3B peaks at 7.16 GB and Gemma-4-26B-A4B at 8.47 GB, both of which OOM
-without offload). Requires gradient checkpointing (either kind), which the
+a 30B-class MoE QLoRA-trainable on a 12 GB card: Qwen3-30B-A3B trains TC1's
+field recipe at micro-batch 1 × accum 8 at 10.463 GB peak on an RTX A2000 12 GB
+(`e4b.train.frontier.qwen3.a2000-12gb.2026-10-02`). An older 5-step reading,
+`e4b.offload.fits-30b-class` (7.16 GB, and 8.47 GB for Gemma-4-26B-A4B; both OOM
+without offload), was not reproduced. Requires gradient checkpointing (either kind), which the
 shipped trainer always enables; without it, training fails loudly rather than
 mis-training.
 

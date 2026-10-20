@@ -18,7 +18,7 @@ Four things to hold before choosing. **Fitting is not a speed claim.** **Layer-g
 
 Training and serving are different workloads measured on different hardware; the two examples below share nothing but the register, and neither implies a throughput.
 
-- **Training** — claim `e4b.offload.fits-30b-class` (measured): with `OFFLOAD_EXPERTS=1`, Qwen3-30B-A3B peaks at 7.16 GB of GPU memory during a QLoRA step and Gemma-4-26B-A4B at 8.47 GB; both OOM without offload on the 12 GB card. Fit, not speed.
+- **Training** — claim `e4b.train.frontier.qwen3.a2000-12gb.2026-10-02` (measured): with `OFFLOAD_EXPERTS=1`, Qwen3-30B-A3B trains TC1's field recipe at micro-batch 1 × accum 8 at 10.463 GB peak GPU memory on an RTX A2000 12 GB (one draw). An older 5-step reading, `e4b.offload.fits-30b-class` (7.16 GB, and 8.47 GB for Gemma-4-26B-A4B), was not reproduced. Fit, not speed.
 - **Serving** — claim `e4b.serve.deepseek-v4` (measured): DeepSeek-V4-Flash, 284B parameters, loads in about 10 s at 8.74 GiB peak VRAM and generates with its 147 GB expert arena served from disk. Fit, not speed: that path's decode rate is a property of the host link and is not quoted here.
 
 ```text

@@ -7,8 +7,9 @@
 
 **Quantize the experts. Train adapters. Move weights to RAM or SSD when GPU memory runs out.**
 
-**On a 12 GB card:** with `OFFLOAD_EXPERTS=1`, Qwen3-30B-A3B QLoRA-trains at 7.16 GB peak GPU memory while the rest of
-its packed experts stay in pinned CPU RAM (`e4b.offload.fits-30b-class`). [The command](#load-a-model-and-check-it) ·
+**On a 12 GB card:** with `OFFLOAD_EXPERTS=1`, Qwen3-30B-A3B QLoRA-trains TC1's field recipe (seq 2048, r 16,
+micro-batch 1 × accum 8) at 10.463 GB peak GPU memory on an RTX A2000 12 GB, while its packed experts stay in pinned CPU
+RAM (`e4b.train.frontier.qwen3.a2000-12gb.2026-10-02`, one draw). [The command](#load-a-model-and-check-it) ·
 [how to read the number](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STORAGE-MODES.md#reading-the-headline-memory-numbers)
 
 Mixture-of-Experts (MoE) models keep many expert networks but activate only a few per token.
@@ -91,7 +92,7 @@ These are specific workloads, with public results and controls. The table is che
 | :--- | :--- | :--- |
 | Qwen3-30B-A3B QLoRA · RTX 5090 · TC1's field recipe, both frameworks on one stack, e4b at every default (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio`) | Unsloth spends **1.92×** e4b's GPU time per step; wall-clock **2.80×** on an AMD EPYC 7713. Comparable held-out loss. Peak **26.16 vs 24.27 GB** (Unsloth lower). | measured |
 | Packed 4,096-token Qwen3 training · RTX 5090 · e4b at its defaults (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio`) | Unsloth spends **1.160×** e4b's GPU time per step; the wall-clock ratio varies with the host (below). | measured |
-| Expert-offload training on a 12 GB card (`e4b.offload.fits-30b-class`) | Qwen3-30B-A3B: **7.16 GB** peak; Gemma-4-26B-A4B: **8.47 GB**. | measured |
+| Expert-offload training on a 12 GB card (`e4b.train.frontier.qwen3.a2000-12gb.2026-10-02`) | Qwen3-30B-A3B at TC1's field recipe, micro-batch 1 × accum 8: **10.463 GB** peak on an RTX A2000 12 GB, held-out 1.9533 → 0.8483 at N=20. An older, lighter reading gave 7.16 GB, and 8.47 GB for Gemma-4-26B-A4B (`e4b.offload.fits-30b-class`); it was not reproduced ([how to read these](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STORAGE-MODES.md#reading-the-headline-memory-numbers)). | measured |
 
 The speed rows profile both frameworks on one stack (torch 2.12.1). The GPU-time ratio is the host-independent figure; the
 wall-clock ratio grows on a slower host, because Unsloth runs 14× e4b's CPU ops per step at the field recipe. On packed rows
