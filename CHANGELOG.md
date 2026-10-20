@@ -27,7 +27,7 @@ Also new:
 Opt-in with no speed claimed: `E4B_SERVE_ATTN_INT8` (Mixtral's int8 attention projections; P149's served read has not
 run) and `E4B_DENSE_GEMV_BW` (P151 read NOISY).
 
-Also in this release: records and claims for P133, P134, P149 box K and P160; the host-facts probe; guard-fit and
+Also in this release: records for P133, P134, P149 box K and P160, and claims for P133 and P134; host facts that record THP_MEM_ALLOC_ENABLE beside the THP mode; guard-fit and
 test-parser fixes; and bench registrations, none of which changes a default.
 
 ### Host facts: THP_MEM_ALLOC_ENABLE, a stdout mode, and one producer
