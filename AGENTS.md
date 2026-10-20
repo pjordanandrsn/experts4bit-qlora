@@ -174,8 +174,9 @@ host-bound: absolutes do not travel between hosts, ratios do.
   request once it carries the `ready-to-merge` label (or leaves draft), never on
   every push. `private-marker-guard` and `conflict-marker-guard` run on every
   push and pull-request event (not on a label), and both are required checks
-  alongside the three CI jobs; push-scan runs report as "(push scan)" and are not
-  required. A label event on a pull request that does not carry `ready-to-merge`
+  alongside the three CI jobs and `maintainer-hold`, which fails while the pull
+  request carries the `hold` label (it re-runs on every label change and push);
+  push-scan runs report as "(push scan)" and are not required. A label event on a pull request that does not carry `ready-to-merge`
   fails the required CI jobs instead of skipping them; on one that does, any label
   re-runs CI on its head. A head with no `CI` run is not green, and re-running a
   failed job replays the old event, so re-apply the label to test a head,
