@@ -158,10 +158,6 @@ defaults are not the run's settings. The controller reads a Hugging Face token f
   (this controller refuses without `GNF4_SHA`). Record: [`bench/p58/RESULTS-p58.md`](../bench/p58/RESULTS-p58.md).
 - **Hardware and cost:** one RTX 5090. $0.31 (`p58-5090-1`).
 
-## More readings
-
-<!-- TODO: the linked table of the remaining readings, in the same columns. -->
-
 ## How to report a reading
 
 Open an issue with:
