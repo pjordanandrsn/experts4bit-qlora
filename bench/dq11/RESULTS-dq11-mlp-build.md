@@ -1,12 +1,12 @@
-# DQ11 MLP-adapter BUILD: the fused MLP adapters are correct and save 2.8% of an update, so NO_GAIN
+# DQ11 MLP-adapter BUILD: the fused MLP adapters are correct and take 2.8% less time per update, so NO_GAIN
 
 **Measured-private, 2026-10-20.** The runs and their receipts exist in the private receipt store. A reader of this
 repository cannot independently check them. No claim is registered by this result: a NO_GAIN moves no shipped default.
 
 **NO_GAIN: H = 0.0279 < 0.05.**
 - With `E4B_DENSE_MLP_LORA_FUSE=1`, the engine (`experts4bit_qlora/engines/dense_lora_fuse.py`) fuses the DQ11 L
-  fixture's 96 MLP LoRA adapters. A training update then takes 2.8% less time on one RTX 5090 at the science lock
-  (H, the time reduction), with every checked tensor judged correct.
+  fixture's 96 MLP LoRA adapters. That cuts a training update's time by 2.8% (1.029x as fast) on one RTX 5090 at the
+  science lock, with every checked tensor judged correct.
 - The registered bar is 5%, so this lever closes with its number, as the [registration](DQ11-MLP-BUILD-PREREG.md) says
   a NO_GAIN does.
 - The engine stays opt-in.
