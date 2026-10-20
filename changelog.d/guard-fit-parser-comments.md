@@ -1,3 +1,0 @@
-### Fixed
-
-- The cross-lane guard-fit test (`tests/test_lane_guard_fit.py`) read shell structure wrong in four ways. It masked quoted strings before it dropped comments, so an apostrophe in a comment opened a span that swallowed code: an `if` above the fit check could vanish (a false pass, the check counted as top level inside a branch), or an `esac` could (a false fail). It now drops comments in one quote-aware scan first, drops heredoc bodies (data, not shell), strips nested `${a:+${b}}` expansions innermost first, and counts an `if`/`case`/loop that follows `{` or a case arm's `)`. Every gated runner's verdict is unchanged; whole-file balance goes from 37 of 98 runners closing to all 98, and a test now holds that invariant.

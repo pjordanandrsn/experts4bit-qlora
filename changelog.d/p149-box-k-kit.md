@@ -1,3 +1,0 @@
-### Added
-
-- P149 Phase 0a, box K's kit (`bench/p149/`): prototype W8A16 kernels for Mixtral-8x7B's attention projections (`p149_kernels.py`: an M == 1 int8 GEMV with split-K and an M == 2..16 small-M kernel; the int8 codes and fp32 row scales are `bench/i8dense/i8_fakequant.py`'s), the microbench against cuBLAS bf16 at Mixtral's shapes (`p149k_bench.py`), its registered reducer (`p149k_reduce.py`: K_GO iff the W1 projected in-situ saving reaches 2 % of P145's 8.125 ms period), the box runner (a 575 W power floor before any install, the kernels' suite compiled on the card) and the driver. CI runs the kernels' suite (135 tests) under Triton's interpreter in its own process. No default, gate or speed claim changes.
