@@ -46,8 +46,12 @@ unrounded.
 - **The contract:** every S1 process decoded S0a's tokens, and every S1 arm's timed reps digest alike.
 - **Self-pairs:** W16 0.9994-1.0003, W1 0.9998-1.0006; the cross-block self-pairs 0.9997-1.0005.
 - **Clocks:** no pair is clock-confounded. The median sampled SM clock over the W16 blocks read 2842 MHz in every S1 arm
-  and 2835 MHz in every S0 arm (+0.25 %), from 73-75 samples an arm. Both arms show the clock-event reasons 0x4 (software
-  power cap) and 0x400, at about 418-432 W instantaneous draw under the 575 W limit.
+  and 2835 MHz in every S0 arm (+0.25 %), from 73-75 samples an arm. The enforced limit read 575 W in every sample. The
+  software power-cap event (0x4) appears in 0.40-0.44 of each S0 arm's W16 samples and in 0.07-0.18 of each S1 arm's
+  (the rest read 0x400), so the tree hit the cap more often than prmt, at an unchanged limit: excursions, not a cap that
+  dropped mid-run. That is part of the served difference this read measures, not a confound: a decode that draws less
+  and so caps less is a property of serving with it. The median clocks differ by only 0.25 %; clocks are not the source
+  of the 1.09x.
 - **The warm-up** (reported, never scored): W16 0.9952 and W1 1.0000 of S0a. Its load took 37.6 s, against 20.5-21.8 s
   for every later process.
 

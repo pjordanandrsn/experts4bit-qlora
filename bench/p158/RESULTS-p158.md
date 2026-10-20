@@ -20,7 +20,7 @@ here too.
 | **g16**, the min of four W16 pairs (S1a/S0a ... S1d/S0d) | **1.092458** (1.0925, 1.0934, 1.0934, 1.0932) |
 | **g1**, the min of four W1 pairs | **0.999856** (1.0007, 0.9999, 1.0005, 1.0006) |
 | W16 self-pairs / W1 self-pairs | 0.9994-1.0003 / 0.9998-1.0006 |
-| median sampled SM clock over W16, S1 vs S0 | 2842 vs 2835 MHz (+0.25 %; no pair labelled) |
+| median sampled SM clock over W16, S1 vs S0 | 2842 vs 2835 MHz (+0.25 %; no pair labelled); power-cap event in 0.07-0.18 vs 0.40-0.44 of samples |
 | cost | $0.4190 (worst registered $2.35) |
 
 - **Identity:** the tree decoded the same tokens in all five of its processes (the null), and the prmt arms decoded
@@ -53,8 +53,11 @@ not time the pair alone.
   later lane.
 - **Identity on P109's prompts:** the token gate held on the registered workloads. The kernel's general bitwise
   contract is grouped-nf4-gemm's `test_nf4_smallm_prmt_gpu.py`, which passed on this card as the premise.
-- **Clocks:** sampled every 500 ms. Both arms ran under the same power-cap event (0x4) at about 420-430 W against the
-  575 W limit; the 0.25 % clock difference is far below the 2 % label and the 9 % effect.
+- **Clocks:** sampled every 500 ms, the enforced limit 575 W in every sample. The software power-cap event (0x4) appears
+  in 0.40-0.44 of the tree's W16 samples and in 0.07-0.18 of prmt's: the tree hit the cap more often, as excursions at an
+  unchanged limit. That is part of the served difference this read measures, not a confound: a decode that draws less
+  power and so caps less is a real property of serving with it. The median SM clocks differ by only 0.25 % (2842 against
+  2835 MHz), below the 2 % label; clocks are not the source of the 1.09x.
 
 ## What follows
 
