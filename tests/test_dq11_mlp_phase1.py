@@ -251,7 +251,11 @@ def test_calibration_and_every_outcome_branch():
     b_fail = {0: dict(good[0], dx=row(False))}
     assert p1.outcome_a4(good, b_fail, 16, [], 16) == "PHASE1_FAIL: 0:dx"
     assert p1.outcome_a4(good, b_fail, 16, ["0:dx:R4"], 16).startswith("INDETERMINATE: calibration")  # never a FAIL
-    assert p1.outcome_a4(good, good, 16, [], 1).startswith("INDETERMINATE: fewer than two")
+    assert p1.outcome_a4(good, good, 16, [], 1).startswith("INDETERMINATE: |U| = 1")
+    assert p1.outcome_a4(good, good, 16, [], 2).startswith("INDETERMINATE: |U| = 2")       # 4a 1: |U| <= 2
+    assert p1.outcome_a4(good, good, 16, [], 3) == "PHASE1_PASS"
+    assert p1.outcome_a4(good, b_fail, 16, [], 8).startswith("INDETERMINATE: bar too weak at |U| = 8")  # 4a 3
+    assert p1.outcome_a4(good, b_fail, 16, [], 9) == "PHASE1_FAIL: 0:dx"                  # bound 1/10: a FAIL
     hidden = {0: dict(good[0], dh=row(True, 0.2))}
     assert p1.outcome_a4(good, hidden, 16, [], 16) == "PHASE1_PASS, RANK1_UNRESOLVED: 0:dh"
 
@@ -289,3 +293,14 @@ def test_bar_b_holds_the_fused_error_to_the_band_times_one_plus_the_margin():
     outside = {k: torch.full((1000,), 1 + 1.06e-3) for k in p1.TENSORS}      # 6 % over: outside
     assert all(r["pass"] for r in p1.bar_b(ref, inside, errs, terms).values())
     assert not any(r["pass"] for r in p1.bar_b(ref, outside, errs, terms).values())
+
+
+def test_the_fp64_premise_refuses_where_the_reference_would_not_be_the_base_arithmetic(model):
+    mlp = _mlps(model)[0]
+    assert p1.fp64_premise(mlp, 2048, torch.bfloat16, cuda=True) == []           # the fixture: 2048 rows, bf16
+    assert p1.fp64_premise(mlp, 16, torch.bfloat16, cuda=False) == []            # CPU: no fused 4-bit kernel
+    small = p1.fp64_premise(mlp, 1536, torch.bfloat16, cuda=True)
+    assert len(small) == 3 and all("fused 4-bit GEMM" in w for w in small)
+    assert any("dequant dtype" in w for w in p1.fp64_premise(mlp, 2048, torch.float16, cuda=True))
+    mlp.up_proj.base_layer.bias = torch.nn.Parameter(torch.zeros(128))
+    assert any("up_proj: the base has a bias" in w for w in p1.fp64_premise(mlp, 2048, torch.bfloat16, cuda=True))

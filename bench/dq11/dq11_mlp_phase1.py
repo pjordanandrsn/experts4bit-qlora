@@ -483,10 +483,36 @@ def _base_weight(base):
     return w.detach()
 
 
+#: bitsandbytes 0.50.2 multiplies an NF4 base through ``_dequant_linear_fallback`` (dequantize to the input's dtype, then
+#: a dense matmul) only above this many rows (``_gemm_4bit_custom_max_m``); at or below it a fused 4-bit GEMM runs, whose
+#: values the dequantized reference has not been shown to match. The fixture runs 2048 rows.
+BNB_DENSE_FALLBACK_ROWS = 1536
+
+
+def fp64_premise(mlp, rows, dtype, cuda) -> list:
+    """Why :func:`fp64_read`'s reference would not be the base layers' arithmetic (empty = it is): a base with a bias; on
+    CUDA, an NF4 base whose dequant dtype is not the input's, or ``rows`` at or below the fused-kernel range."""
+    why = []
+    for p in PROJECTIONS:
+        base = getattr(mlp, p).base_layer
+        if getattr(base, "bias", None) is not None:
+            why.append(f"{p}: the base has a bias")
+        qs = getattr(base.weight, "quant_state", None)
+        if cuda and qs is not None:
+            if qs.dtype != dtype:
+                why.append(f"{p}: dequant dtype {qs.dtype} is not the input's {dtype}")
+            if rows <= BNB_DENSE_FALLBACK_ROWS:
+                why.append(f"{p}: {rows} rows is within bitsandbytes' fused 4-bit GEMM range (<= {BNB_DENSE_FALLBACK_ROWS})")
+    return why
+
+
 def fp64_read(mlp, x, gy) -> dict:
     """Amendment 4 (b): the module in FP64 with no intermediate rounding. The base weights are the dequantized NF4 values
     upcast; A, B, ``x`` and ``gy`` are upcast; ``act_fn`` runs in FP64; every output and gradient comes from autograd in
     FP64. The eleven tensors, as the other reads give them."""
+    why = fp64_premise(mlp, x.numel() // x.shape[-1], x.dtype, x.is_cuda)
+    if why:
+        raise RuntimeError("PHASE1_REFUSAL: the FP64 reference would not be the base layers' arithmetic: " + "; ".join(why))
     d = torch.float64
     xl = x.detach().to(d).requires_grad_(True)
     weights, params = {}, []
@@ -511,6 +537,8 @@ def fp64_read(mlp, x, gy) -> dict:
 
 
 MARGIN_B = 0.05          # Amendment 4 (b): the fused path passes iff its error <= (1 + m) x the unfused band
+U_MIN_CALIBRATE = 3      # Amendment 4a 1: with |U| <= 2 the calibration has nothing to calibrate against
+U_MIN_FAIL = 9           # Amendment 4a 3: a FAIL from (b) needs its bound 1/(|U| + 1) <= 1/10
 
 
 def error(a, ref) -> dict:
@@ -583,19 +611,22 @@ def bar_b(ref, fused, errs, terms, margin=MARGIN_B) -> dict:
 
 
 def outcome_a4(rows_a, rows_b, rank, calibration_fails, paths) -> str:
-    """Amendment 4: (b) decides after its calibration.
-    - Fewer than two unfused paths, or any calibration failure: ``INDETERMINATE``.
-    - Any (b) failure: ``PHASE1_FAIL``.
+    """Amendment 4 with 4a: (b) decides after its calibration. ``paths`` is |U| (today's path and the post-(a) draws).
+    - |U| < 3, or any calibration failure: ``INDETERMINATE``.
+    - A (b) failure with |U| < 9 (bound 1/(|U| + 1) > 1/10): ``INDETERMINATE`` (the bar is too weak to FAIL).
+    - A (b) failure with |U| >= 9: ``PHASE1_FAIL``.
     - Else ``PHASE1_PASS``, naming where (a) failed or had no floor (``ACCURACY_OVER_REORDER``) and every ``e_min``
       above 1/rank (``RANK1_UNRESOLVED``)."""
     def names(rows, bad):
         return [f"{layer}:{k}" for layer, r in rows.items() for k, v in r.items() if bad(v)]
 
-    if paths < 2:
-        return "INDETERMINATE: fewer than two unfused paths to calibrate against"
+    if paths < U_MIN_CALIBRATE:
+        return f"INDETERMINATE: |U| = {paths}, fewer than {U_MIN_CALIBRATE} unfused paths to calibrate against"
     if calibration_fails:
         return "INDETERMINATE: calibration failed " + " ".join(calibration_fails)
     b_fail = names(rows_b, lambda v: not v["pass"])
+    if b_fail and paths < U_MIN_FAIL:
+        return f"INDETERMINATE: bar too weak at |U| = {paths} (a FAIL needs |U| >= {U_MIN_FAIL}): " + " ".join(b_fail)
     if b_fail:
         return "PHASE1_FAIL: " + " ".join(b_fail)
     out = "PHASE1_PASS"
@@ -707,6 +738,8 @@ def read_layers_a4(mlps, xs, gys, *, enable, disable, stats, sigma=None, stage=N
         finally:
             evict(i)
     record["calibration_fails"] = calibrate(errs_by_layer)
+    record["u_paths"] = 1 + len(draws)                                # today's path and the post-(a) draws
+    record["false_reject_bound"] = 1 / (record["u_paths"] + 1)        # P(FAIL | the fused path is neutral) <= 1/(|U|+1)
     rank = _adapter(mlps[order[0]].gate_proj)[0].weight.shape[0]
     record["outcome"] = outcome_a4(rows_a, rows_b, rank, record["calibration_fails"], 1 + len(draws))
     record["e_min_max"] = max(r["e_min"] for rows in rows_b.values() for r in rows.values())

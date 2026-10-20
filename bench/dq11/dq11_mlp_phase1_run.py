@@ -427,10 +427,11 @@ def knob_off(records, out) -> dict:
     # (c) 3: each of the four processes is scored by its mean relative-RMS distance to the other three (max-abs is
     # recorded only, as in (b)); off fails only if its score exceeds (1 + margin) x the largest today score
     procs = TODAY_C + ("step-off-c",)
-    dist = {(a, b): b_distance(files[a], files[b]) for i, a in enumerate(procs) for b in procs[i + 1:]}
-    d = lambda a, b: dist[(a, b)] if (a, b) in dist else dist[(b, a)]  # noqa: E731
+    # D(P, Q) = ||B_P - B_Q|| / ||B_Q||, each ordered pair: P's score is its mean D(P, Q) over the other three
+    dist = {(a, b): b_distance(files[a], files[b]) for a in procs for b in procs if a != b}
+    d = lambda a, b: dist[(a, b)]  # noqa: E731
     score = {p: sum(d(p, q)["rel_rms"] for q in procs if q != p) / (len(procs) - 1) for p in procs}
-    null_pairs = [d(a, b)["rel_rms"] for i, a in enumerate(TODAY_C) for b in TODAY_C[i + 1:]]
+    null_pairs = [d(a, b)["rel_rms"] for a in TODAY_C for b in TODAY_C if a != b]
     spread_ok = max(null_pairs) <= SPREAD_PAIRS_MAX_RATIO * min(null_pairs)
     today_max = max(score[p] for p in TODAY_C)
     out_rec = {"how": "KNOB_OFF_BY_SPREAD under C (both nulls failed)",

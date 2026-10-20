@@ -21,3 +21,13 @@
 
 `--part need-c` tells the driver whether the C parts run. `reduce_a4` composes the outcome. The `-1` read still rebuilds
 `phase1.json` byte-identically through the original `reduce`.
+
+`DQ11-MLP-BUILD-AMENDMENT-4a.md` records the maintainer's clarification of (b), made before data:
+- |U| ≤ 2 reads `INDETERMINATE`;
+- the false-reject bound is 1/(|U| + 1), and the record reports it;
+- a FAIL from (b) needs |U| ≥ 9; below that it reads `INDETERMINATE` ("bar too weak").
+
+**Other changes:**
+- `fp64_premise` refuses an FP64 reference that would not be the bases' arithmetic: a biased base, or on CUDA an NF4
+  dequant dtype unlike the input's, or ≤ 1536 rows, where bitsandbytes 0.50.2 runs its fused 4-bit GEMM.
+- (c) 3's distance is taken per ordered pair, normalized by the other process's B update, as Amendment 4 states.
