@@ -213,22 +213,29 @@ Added, all reported only and never part of the SIB/PHYS reading:
 - A **FAST window** is 3 or more consecutive FAST blocks in run order. A window may span processes.
 
 **Outcomes** (`fast_state.outcome`, decided in this order):
-1. **VOID_PREMISE** if any block's records show huge pages were possible for torch's allocations: a THP mode other than
-   `madvise`, or `THP_MEM_ALLOC_ENABLE` = `1`. The read is also VOID if the box is not machine 11541, or if
-   `bytes_identical` is false.
-2. **FAST_RECURS_NO_THP**: a window, and every block in every window read `AnonHugePages` 0 at both ends. Huge pages
-   are falsified as the mechanism of the fast state on this host, and P159's THP arm closes as falsified.
-3. **FAST_RECURS_WITH_THP**: a window in which some block read `AnonHugePages` above 0. Huge pages are not excluded.
-   This is reported, and P159's premise is re-opened by name.
-4. **FAST_RECURS_UNRECORDED**: a window with a block whose `AnonHugePages` was not read at both ends. Reported; no ruling.
-5. **NO_RECURRENCE**: no window. Inconclusive, and said so: `smt-sib-2` showed one window in 24 processes. P159's THP arm
+1. **PREMISE_UNRECORDED** if the run has THP records but no THP mode was read in any of them. No ruling.
+2. **VOID_PREMISE** if any record shows huge pages were possible for torch's allocations, by P159 Amendment 2's rule:
+   THP enabled `always`, or `madvise` with `THP_MEM_ALLOC_ENABLE` = `1`. `madvise` without the switch, `never` and
+   `absent` all leave huge pages impossible, which is the condition the question needs; the mode read is reported. The
+   read is also VOID if the box is not machine 11541, or if `bytes_identical` is false.
+3. **NO_RECURRENCE**: no window. Inconclusive, and said so: `smt-sib-2` showed one window in 24 processes. P159's THP arm
    then closes as "premise unverifiable".
+4. **FAST_RECURS_UNRECORDED**: a window with a block whose `AnonHugePages` ends, or whose host THP fault deltas
+   (`thp_fault_alloc`, `thp_collapse_alloc`), were not read. Reported; no ruling.
+5. **FAST_RECURS_WITH_THP**: a window in which some block read `AnonHugePages` above 0. Huge pages are not excluded.
+   This is reported, and P159's premise is re-opened by name.
+6. **FAST_RECURS_HOST_THP**: a window with `AnonHugePages` 0 at every end, but the host's THP fault counters moved over
+   a window block. Not ruled: the counters are host-wide, so a co-tenant can move them.
+7. **FAST_RECURS_NO_THP**: a window, `AnonHugePages` 0 at both ends of every window block, AND no host THP fault event
+   over any window block. A huge page faulted and freed inside a block leaves no trace at its ends, so both are
+   required. Huge pages are falsified as the mechanism of the fast state on this host, and P159's THP arm closes as
+   falsified.
 
 The SIB/PHYS reading is reported as before and not re-ruled; the SMT lane stays closed.
 
 **Prediction, before data.** NO_RECURRENCE is more likely than not: the state appeared once, with its cause unknown.
 If a window does recur, FAST_RECURS_NO_THP: under `madvise` without the switch, the measured process should hold no huge
-pages at all.
+pages at all, and nothing on the host should fault one in.
 
 **Run id, host and cost.**
 - `smt-sib-9` is the reading. It is pinned to machine 11541 only, by inclusion, with the pin posted on the bus before

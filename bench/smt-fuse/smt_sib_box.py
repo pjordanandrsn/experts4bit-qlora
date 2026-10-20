@@ -107,6 +107,7 @@ COMPANION_FLAG = 0.25                                   # a PHYS/WIDE rep whose 
 MIN_TRIPLES = 6                                         # fewer readable triples than this: VOID_BY_HOST
 FAST_FRAC = 0.25                                        # Amendment 1c: a block is FAST below this share of the run's median fuse
 FAST_RUN = 3                                            # Amendment 1c: a FAST window is at least this many consecutive FAST blocks
+THP_FAULT_KEYS = ("thp_fault_alloc", "thp_collapse_alloc")   # Amendment 1c: the host's huge-page fault events over a block
 
 
 def parse_cpulist(s):
@@ -232,13 +233,19 @@ def fast_state(reps):
     """Amendment 1c (reported only, never part of the SIB/PHYS reading): every timed block in run order, FAST when its
     fuse is below FAST_FRAC of the run's median fuse; a FAST window is FAST_RUN or more consecutive FAST blocks (a window
     may span processes, as smt-sib-2's did). The outcome is read from the measured process's AnonHugePages at both ends of
-    every block in every window:
+    every block in every window, and from the host's THP fault counters over those blocks:
     - NO_RECURRENCE: no window (inconclusive: smt-sib-2 had one window in 24 processes);
-    - FAST_RECURS_NO_THP: a window, and every block in every window read AnonHugePages 0 at both ends;
+    - FAST_RECURS_NO_THP: a window, every block in every window read AnonHugePages 0 at both ends, AND the host's
+      thp_fault_alloc and thp_collapse_alloc did not move over any window block (a huge page faulted and freed inside a
+      block leaves no trace at its ends);
     - FAST_RECURS_WITH_THP: a window, and some block in one read AnonHugePages above 0;
-    - FAST_RECURS_UNRECORDED: a window with any block whose AnonHugePages was not read at both ends.
-    Before any of these, VOID_PREMISE when a block's records show huge pages were possible for torch's allocations: a THP
-    mode other than madvise, or THP_MEM_ALLOC_ENABLE "1". The question needs huge pages impossible."""
+    - FAST_RECURS_HOST_THP: a window, AnonHugePages 0 at every end, but the host's THP fault counters moved over a window
+      block. Not ruled: the counters are host-wide, so a co-tenant can move them;
+    - FAST_RECURS_UNRECORDED: a window with a block whose AnonHugePages ends or THP fault deltas were not read.
+    Before any of these, from every THP record of the run: PREMISE_UNRECORDED when records exist but no THP mode was
+    read; VOID_PREMISE when a record shows huge pages were possible for torch's allocations (P159 Amendment 2's rule: THP
+    enabled = always, or madvise with THP_MEM_ALLOC_ENABLE = 1). madvise without the switch, never and absent all leave
+    huge pages impossible, which is what the question needs."""
     blocks = [(i, j, b) for i, r in enumerate(reps) for j, b in enumerate(r.get("repeats") or []) if "fuse_s" in b]
     if not blocks:
         return {"outcome": "NO_BLOCKS"}
@@ -262,20 +269,31 @@ def fast_state(reps):
 
     out = {"median_fuse_s": med, "threshold_s": FAST_FRAC * med, "fast_blocks": sum(fast), "blocks": len(blocks),
            "windows": [], "thp_modes": modes, "thp_mem_alloc_enable": switch}
-    unread, huge = 0, []
+    def faults(b):                                       # the host's THP fault events over the block, None if unread
+        d = (b.get("thp") or {}).get("vmstat_delta") or {}
+        return None if any(k not in d for k in THP_FAULT_KEYS) else sum(d[k] for k in THP_FAULT_KEYS)
+
+    unread, huge, host = 0, [], []
     for a0, a1 in windows:
         w = blocks[a0:a1]
         pairs = [ends(b) for _, _, b in w]
         read = [max(x, y) for x, y in pairs if x is not None and y is not None]
-        unread += len(pairs) - len(read)
+        fl = [faults(b) for _, _, b in w]
+        unread += len(pairs) - len(read) + sum(f is None for f in fl)
         huge += read
+        host += [f for f in fl if f is not None]
         first = ((w[0][2].get("thp") or {}).get("before") or {})
         out["windows"].append({"from": [w[0][0], w[0][1]], "to": [w[-1][0], w[-1][1]], "n": len(w),
                                "median_fuse_s": statistics.median(b["fuse_s"] for _, _, b in w),
                                "thp_enabled": first.get("thp_enabled"),
                                "thp_mem_alloc_enable": first.get("thp_mem_alloc_enable"),
-                               "anon_huge_kb_max": max(read, default=None)})
-    if snaps and (modes != ["madvise"] or "1" in switch):
+                               "anon_huge_kb_max": max(read, default=None),
+                               "host_thp_faults": sum(f for f in fl if f is not None)})
+    possible = any(sn.get("thp_enabled") == "always"
+                   or (sn.get("thp_enabled") == "madvise" and sn.get("thp_mem_alloc_enable") == "1") for sn in snaps)
+    if snaps and not modes:
+        out["outcome"] = "PREMISE_UNRECORDED"
+    elif possible:
         out["outcome"] = "VOID_PREMISE"
     elif not windows:
         out["outcome"] = "NO_RECURRENCE"
@@ -283,6 +301,8 @@ def fast_state(reps):
         out["outcome"] = "FAST_RECURS_UNRECORDED"
     elif any(h > 0 for h in huge):
         out["outcome"] = "FAST_RECURS_WITH_THP"
+    elif any(f > 0 for f in host):
+        out["outcome"] = "FAST_RECURS_HOST_THP"
     else:
         out["outcome"] = "FAST_RECURS_NO_THP"
     return out
@@ -478,9 +498,10 @@ def self_test():
     assert summarize({"reps": allbad, "experts": 128})["bytes_identical"] is False
     n += 1
 
-    def blk(f, ahp=0):                                   # Amendment 1c: a timed block with its THP window record
-        snap = {} if ahp is None else {"anon_huge_kb": ahp, "thp_enabled": "madvise"}
-        return {"fuse_s": f, "thp": {"before": snap, "after": snap}}
+    def blk(f, ahp=0, faults=0, mode="madvise"):          # Amendment 1c: a timed block with its THP window record
+        snap = {"thp_enabled": mode} if ahp is None else {"anon_huge_kb": ahp, "thp_enabled": mode}
+        delta = {} if faults is None else {"thp_fault_alloc": faults, "thp_collapse_alloc": 0}
+        return {"fuse_s": f, "thp": {"before": snap, "after": snap, "vmstat_delta": delta}}
     slow = [blk(7.5) for _ in range(15)]
     fast_w = [{"repeats": slow}, {"repeats": slow[:10] + [blk(0.4) for _ in range(5)]}, {"repeats": slow}]
     fs = fast_state(fast_w)
@@ -491,6 +512,14 @@ def self_test():
     assert two["outcome"] == "NO_RECURRENCE" and two["fast_blocks"] == 2 and fast_state([])["outcome"] == "NO_BLOCKS"
     span = fast_state([{"repeats": slow[:13] + [blk(0.4)] * 2}, {"repeats": [blk(0.4)] + slow[:14]}])  # across processes
     assert span["outcome"] == "FAST_RECURS_NO_THP" and span["windows"][0]["to"] == [1, 0]
+    assert fast_state([{"repeats": slow}, {"repeats": slow[:12] + [blk(0.4, 0, 2)] * 3}])["outcome"] == "FAST_RECURS_HOST_THP"
+    assert fast_state([{"repeats": slow}, {"repeats": slow[:12] + [blk(0.4, 0, None)] * 3}])["outcome"] == \
+        "FAST_RECURS_UNRECORDED"                         # the fault counters unread over a window block
+    for m in ("never", "absent"):                        # huge pages impossible: the question holds, not VOID
+        nv = fast_state([{"repeats": [blk(7.5, mode=m)] * 15}, {"repeats": [blk(7.5, mode=m)] * 12 + [blk(0.4, mode=m)] * 3}])
+        assert nv["outcome"] == "FAST_RECURS_NO_THP", (m, nv["outcome"])
+    nomode = [{"fuse_s": 7.5, "thp": {"before": {"anon_huge_kb": 0}, "after": {"anon_huge_kb": 0}}}] * 15
+    assert fast_state([{"repeats": nomode}])["outcome"] == "PREMISE_UNRECORDED"
     always = [dict(b, thp={"before": {"anon_huge_kb": 0, "thp_enabled": "always"}, "after": {"anon_huge_kb": 0}})
               for b in slow]                             # huge pages possible: the question is not asked
     assert fast_state([{"repeats": always}] + fast_w[1:])["outcome"] == "VOID_PREMISE"
