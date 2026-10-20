@@ -1,0 +1,58 @@
+{
+ "plan_env": "today",
+ "layers": 2,
+ "k25_lut": {
+  "env": null,
+  "lut": "prmt",
+  "why": null,
+  "source": "default-allowlisted"
+ },
+ "k25_plan": {
+  "env": "today",
+  "plan": "today",
+  "why": null,
+  "gu": {
+   "block_n": 32,
+   "kc": 64,
+   "warps": 4,
+   "stages": 3
+  },
+  "dn": {
+   "block_n": 32,
+   "kc": 64,
+   "warps": 4,
+   "stages": 3
+  }
+ },
+ "k25_seen_before": {},
+ "k25_seen_build": {
+  "prmt|le256": 16
+ },
+ "k25_plan_seen_before": {},
+ "k25_plan_seen_build": {
+  "today|le256": 16
+ },
+ "k25_shapes_before": {},
+ "k25_shapes_build": {
+  "32/64/4/3/prmt": 32
+ },
+ "dispatch_build": {
+  "scalar": 8
+ },
+ "graph_status": {},
+ "buckets": [
+  1,
+  2,
+  4,
+  8,
+  16
+ ],
+ "max_seqs": 16,
+ "build_s": 19.1,
+ "torch": "2.8.0+cu128",
+ "device": "NVIDIA RTX A2000 12GB",
+ "per_layer": {
+  "k25": 8.0,
+  "kernel_calls": 16.0
+ }
+}
