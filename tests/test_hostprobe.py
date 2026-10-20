@@ -226,7 +226,8 @@ def test_a_call_that_times_out_stops_every_later_call(tmp_path, monkeypatch):
     monkeypatch.setattr(hb, "SMI_TIMEOUT", 1)
     f = hb.facts(_box(tmp_path / "box"), smi=_health_smi(tmp_path, sleep="3"))
     assert f["gpu_smi_stopped"] == "timeout" and not any(k.startswith("gpu_") and k != "gpu_smi_stopped" for k in f)
-    assert len((tmp_path / "calls.log").read_text().splitlines()) == 1
+    log = tmp_path / "calls.log"                # on a loaded host the killed call may not have logged itself yet
+    assert len(log.read_text().splitlines() if log.exists() else []) <= 1     # no call after the one that timed out
 
 
 def test_a_slow_driver_runs_out_the_shared_budget_and_keeps_what_it_read(tmp_path, monkeypatch):
