@@ -1632,7 +1632,9 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     # E4B_K25_LUT resolved for this family, still before any weight is read: an explicit prmt the package or device
     # cannot serve refuses here; unset, qwen3_moe takes prmt where it can (lane P158), every other case the tree
     k25_lut = resolve_k25_lut(getattr(model_config, "model_type", None))
-    k25_plan = resolve_k25_plan(k25_lut)   # E4B_K25_PLAN (opt-in, lane P160): c1 only under the decode it was read with
+    # E4B_K25_PLAN: unset, qwen3_moe takes c1 where its decode resolved to prmt (lane P161), every other case today; an
+    # explicit c1 runs only under the decode it was read with
+    k25_plan = resolve_k25_plan(k25_lut, model_type=getattr(model_config, "model_type", None))
     if str(cfg.max_seqs_requested).strip().lower() == "auto":
         # sized before any weight is read: the estimate's device total includes the weights
         free = (torch.cuda.mem_get_info(torch.device(cfg.device))[0]

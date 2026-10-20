@@ -436,12 +436,29 @@ _K25_PLAN = {"block_n": 32, "kc": 64, "warps": 4, "stages": 3, "lut": "tree", "d
 #: ``E4B_K25_PLAN``'s block shapes, as ``{name: (gate_up's, down's)}`` over :data:`_K25_PLAN` (an empty dict keeps it).
 #: ``c1`` is P156's first carried pair, which lane P160 read (p160-5090-2, GO: 1.6598x as fast as ``today`` under K39's
 #: decode, at Qwen3-30B-A3B's W16 shapes on one RTX 5090, every rep bit-identical; ``bench/p160``). It is a plan for K39's
-#: decode ONLY: the select tree at these shapes runs slower than at today's (P155: 255 registers), so ``c1`` under any
-#: decode but ``prmt`` is refused, never run. Opt-in: no served read licenses it yet.
+#: decode ONLY: the select tree at these shapes runs slower than at today's (P155: 255 registers), so an explicit ``c1``
+#: under any decode but ``prmt`` is refused, never run. Lane P161 read it in the served step, and qwen3_moe takes it by
+#: default (:data:`K25_PLAN_DEFAULT_FAMILIES`).
 _K25_PLANS: dict = {
     "today": ({}, {}),
     "c1": ({"block_n": 64, "kc": 256, "warps": 4, "stages": 2}, {"block_n": 128, "kc": 128, "warps": 8, "stages": 3}),
 }
+#: Lane P161's default for ``E4B_K25_PLAN`` (``bench/p161/RESULTS-p161.md``): an UNSET knob resolves to ``c1`` on a
+#: model_type here, at engine build (:func:`resolve_k25_plan`), where K25's decode resolved to ``prmt`` (the decode c1
+#: was read with), and to ``today`` everywhere else, with the reason recorded. qwen3_moe takes it on P161's served read
+#: (p161-5090-1: FLIP, 16 requests 1.4654x as fast as today's plan, the min of four ABBA pairs; one request 0.9966; every
+#: token identical, a plan changing tiling and staging, never the values). The default covers EVERY qwen3_moe
+#: checkpoint: the values are bit-identical everywhere, and only the speed is unmeasured outside Qwen3-30B-A3B's shapes
+#: on one RTX 5090. Other families wait for a read of their own. ``E4B_K25_PLAN=today`` opts out; an explicit ``c1``
+#: keeps its refusals.
+K25_PLAN_DEFAULT_FAMILIES: dict = {
+    "qwen3_moe": "c1",   # e4b.serve.p161.k25-plan-c1.qwen3.5090.2026-10-20 (bench/p161/RESULTS-p161.md)
+}
+#: What an UNSET ``E4B_K25_PLAN`` means in this process: ``today`` until :func:`resolve_k25_plan` resolves the per-family
+#: default at engine build (one list cell, as :data:`_K25_LUT_DEFAULT`, with the same one-engine-per-process caveat). A
+#: default never refuses: where the forward's decode is not ``prmt`` (another family's build in the same process), an
+#: unset knob serves ``today`` (:func:`_k25_plans`).
+_K25_PLAN_DEFAULT = ["today"]
 
 
 #: Lane P158's default for ``E4B_K25_LUT`` (``bench/p158/RESULTS-p158.md``): an UNSET knob resolves to ``prmt`` on a
@@ -515,7 +532,8 @@ def _k25_plan(nf4_smallm_mod) -> dict:
 
 
 def _k25_plan_raw():
-    """``E4B_K25_PLAN`` as set: ``today`` or ``c1``, or None when unset or empty (``today``). Anything else is refused."""
+    """``E4B_K25_PLAN`` as set: ``today`` or ``c1``, or None when unset or empty (the per-family default,
+    :data:`_K25_PLAN_DEFAULT`). Anything else is refused."""
     v = os.environ.get("E4B_K25_PLAN", "").strip().lower()
     if not v:
         return None
@@ -532,10 +550,14 @@ def _k25_c1_refusal(lut, why) -> RuntimeError:
 
 def _k25_plans(nf4_smallm_mod) -> tuple:
     """``(gate_up's plan, down's plan, the plan's name)``: :func:`_k25_plan` with ``E4B_K25_PLAN``'s block shapes
-    (:data:`_K25_PLANS`; unset is ``today``, the same plan for both). ``c1`` under a decode other than ``prmt`` is
-    refused, never run. The name is what :data:`K25_PLAN_SEEN` counts, so the record is the plan resolved here."""
+    (:data:`_K25_PLANS`; unset is the build's per-family default, :data:`_K25_PLAN_DEFAULT`). An explicit ``c1`` under a
+    decode other than ``prmt`` is refused, never run; a default ``c1`` there serves ``today`` (a default never refuses).
+    The name is what :data:`K25_PLAN_SEEN` counts, so the record is the plan resolved here."""
     base = _k25_plan(nf4_smallm_mod)
-    name = _k25_plan_raw() or "today"
+    raw = _k25_plan_raw()
+    name = raw or _K25_PLAN_DEFAULT[0]
+    if raw is None and name != "today" and base["lut"] != "prmt":
+        name = "today"
     if name != "today" and base["lut"] != "prmt":
         raw = _k25_lut_raw()
         raise _k25_c1_refusal(base["lut"], f"E4B_K25_LUT={raw}" if raw else "unset E4B_K25_LUT, as resolved at build")
@@ -592,27 +614,47 @@ def resolve_k25_lut(model_type=None) -> dict:
     return {"env": raw, "lut": _k25_plan(mod)["lut"], "why": None, "source": source}
 
 
-def resolve_k25_plan(k25_lut: dict, family_known: bool = True) -> dict:
+def resolve_k25_plan(k25_lut: dict, family_known: bool = True, model_type=None) -> dict:
     """``E4B_K25_PLAN`` resolved at engine build from :func:`resolve_k25_lut`'s result ``k25_lut``, before any weight
     loads. Returns ``{"env": the raw value or None, "plan": "today" | "c1", or None when K25 is off or absent, "why": the
-    reason when None, "gu" / "dn": each projection's block shape}``.
+    reason when None, "source": "explicit" | "default-allowlisted" | "default-off: <why>" | "unresolved: <why>",
+    "gu" / "dn": each projection's block shape}``.
 
-    An explicit ``c1`` is refused when K25 is off or absent, and when K25's decode is not ``prmt`` (as the forward
-    refuses it, :func:`_k25_plans`). ``family_known=False`` is the check before the model's config is read: it refuses
-    only what no family can change (K25 off or absent, an explicit ``E4B_K25_LUT`` other than ``prmt``); an unset decode
-    is resolved per family afterwards. Which plan each K25 call took is :data:`K25_PLAN_SEEN`."""
+    - **Explicit:** ``c1`` is refused when K25 is off or absent, and when K25's decode is not ``prmt`` (as the forward
+      refuses it, :func:`_k25_plans`).
+    - **Unset:** the per-family default (:data:`K25_PLAN_DEFAULT_FAMILIES`, lane P161): ``c1`` where ``model_type`` is
+      listed and K25's decode resolved to ``prmt``; otherwise ``today``, with the reason. Never a refusal. The resolution
+      is kept in :data:`_K25_PLAN_DEFAULT` for the forward.
+
+    ``family_known=False`` is the check before the model's config is read: it refuses only what no family can change (K25
+    off or absent, an explicit ``E4B_K25_LUT`` other than ``prmt``) and resolves no default; the family's call follows.
+    Which plan each K25 call took is :data:`K25_PLAN_SEEN`."""
     raw = _k25_plan_raw()
-    name = raw or "today"
     lut = k25_lut.get("lut")
+    if family_known:
+        _K25_PLAN_DEFAULT[0] = "today"
+    name, source = raw or "today", "explicit" if raw else "unresolved: the model's family is not read yet"
+    if raw is None and family_known:
+        want = K25_PLAN_DEFAULT_FAMILIES.get(model_type)
+        if want is None:
+            source = f"default-off: no read licenses model_type {model_type!r}"
+        elif lut is None:
+            source = f"default-off: {k25_lut.get('why')}"
+        elif lut != "prmt":
+            source = (f"default-off: K25's decode is {lut!r} ({k25_lut.get('source')}), and {want} was read only "
+                      f"under 'prmt'")
+        else:
+            name, source = want, "default-allowlisted"
+            _K25_PLAN_DEFAULT[0] = want
     if lut is None:
         if raw == "c1":
             raise RuntimeError(f"E4B_K25_PLAN=c1 names K25's plan, but K25 does not run here ({k25_lut.get('why')})")
-        return {"env": raw, "plan": None, "why": k25_lut.get("why")}
-    if name != "today" and lut != "prmt" and (family_known or k25_lut.get("env") is not None):
+        return {"env": raw, "plan": None, "why": k25_lut.get("why"), "source": source}
+    if raw is not None and name != "today" and lut != "prmt" and (family_known or k25_lut.get("env") is not None):
         raise _k25_c1_refusal(lut, k25_lut.get("source"))
     base = {k: _K25_PLAN[k] for k in ("block_n", "kc", "warps", "stages")}
     gu, dn = _K25_PLANS[name]
-    return {"env": raw, "plan": name, "why": None, "gu": dict(base, **gu), "dn": dict(base, **dn)}
+    return {"env": raw, "plan": name, "why": None, "source": source, "gu": dict(base, **gu), "dn": dict(base, **dn)}
 
 
 def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:

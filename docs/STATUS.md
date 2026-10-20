@@ -323,13 +323,17 @@ K25's select-tree codebook decode for grouped-nf4-gemm K39's (`lut="prmt"`), whi
 
 `e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20` ([P158](../bench/p158/RESULTS-p158.md)).
 
-**Opt-in on main after 0.56.0: K25 at plan `c1` under K39's decode (`E4B_K25_PLAN`, e4b#1877).** `E4B_K25_PLAN=c1`
-runs K25 at P156's first carried plan pair, gate_up `{block_n 64, kc 256, warps 4, stages 2}` and down `{block_n 128, kc
-128, warps 8, stages 3}`, in place of today's single plan. `today` is the default (also when unset), unchanged.
+**qwen3_moe's default on main after 0.56.0, in no release yet: K25 at plan `c1` under K39's decode (`E4B_K25_PLAN`,
+e4b#1877; the default from lane P161).** `c1` runs K25 at P156's first carried plan pair, gate_up `{block_n 64, kc 256,
+warps 4, stages 2}` and down `{block_n 128, kc 128, warps 8, stages 3}`, in place of today's single plan.
+- **The default:** an unset `E4B_K25_PLAN` resolves at engine build to `c1` on `qwen3_moe` where K25's decode resolved
+  to `prmt`, and to `today` everywhere else, with the reason in `info["k25_plan"]["source"]`. It never refuses: where the
+  decode is not `prmt`, an unset knob serves `today`. `E4B_K25_PLAN=today` opts out. Other families stay on today's plan
+  until a read of their own.
 - **Only under `prmt`.** The select tree at `c1`'s shapes is slower than at today's (P155's selection: gate_up
   64/256/4/2 at 14.23 ms against 8.32, at 255 registers; [RESULTS-p156](../bench/p156/RESULTS-p156.md), "The cause is
-  the decode"), so `c1` under any other
-  decode is refused at engine build and in the forward, never run. It is also refused with K25 off or absent.
+  the decode"), so an explicit `c1` under any other decode is refused at engine build and in the forward, never run.
+  It is also refused with K25 off or absent.
 - **Measured: a kernel microbench, then a served read.** At Qwen3-30B-A3B's W16 shapes on an RTX 5090, under `prmt`,
   both K25 GEMMs ran 1.6598× faster at `c1` than at today's plan (kernel time today / `c1`, above 1 is faster; the median
   of 126 paired reps, lower bound 1.6568, clock-adjusted 1.6525; P160 `p160-5090-2`,
@@ -337,7 +341,7 @@ runs K25 at P156's first carried plan pair, gate_up `{block_n 64, kc 256, warps 
   RTX 5090 at 575 W, e4b `da3eb5c5`) read sixteen concurrent requests decoding **1.465433×** as fast at `c1` as at
   today's plan, both under `prmt` (rate, the smallest of four ABBA pairs), one request unchanged (0.9966), and every
   token identical: `e4b.serve.p161.k25-plan-c1.qwen3.5090.2026-10-20`, [RESULTS](../bench/p161/RESULTS-p161.md). One read
-  on one card and one family. The knob stays opt-in here; a qwen3_moe default is its own PR.
+  on one card and one family; qwen3_moe takes `c1` by default on it.
 - **Same bits.** The tree, `prmt`, and `prmt` with `c1` give bit-identical outputs through the served call
   (`tests/test_k25_lut_gpu.py`, including a K that neither of `c1`'s KCs divides).
 - **Records:** `info["k25_plan"]` (the build's resolution) and `prefill_routes()["seen"]["moe_k25_plan"]` (each K25
