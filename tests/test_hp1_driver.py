@@ -76,6 +76,9 @@ arm(){ local tf; tf=$(python3 -c "import json,sys; print(json.load(open(sys.argv
 status_of(){ grep -qx "$1 $2 $3" "$W/mismatch.log" 2>/dev/null && { echo tokens_mismatch; return; }
   [ "${FAIL_FAM:-}" = "$1" ] && { echo "${FAIL_STATUS:-oom}"; return; }
   [ "${SHAKE_FAIL:-}" = "$2" ] && echo install_failed || echo ok; }
+# the driver's per-depth disk check reads `df -Pk $W`: stubbed so the tests never depend on the HOST's free space (WSL's small /tmp
+# failed 11 of them, macOS under 18 GB failed 2). STUB_DF_GB sets the free space it reports (default 1000 GB).
+df(){ echo "Filesystem 1024-blocks Used Available Capacity Mounted on"; echo "stub 0 0 $(( ${STUB_DF_GB:-1000} * 1048576 )) 0% /"; }
 hp1_bulk_manifest(){ echo "manifest $1 bases_present=$(ls -d $W/hp1/hpn/*/base_* 2>/dev/null | wc -l | tr -d ' ')" >> "$W/manifest.log"; }
 mkdir -p logs hp1 data; : > summary.txt; : > arms.log
 echo '{"fam": "qwen3hp1", "sha256": "deadbeef", "train": [], "eval": []}' > tokens.json
@@ -538,8 +541,10 @@ def test_a_depth_that_does_not_fit_ends_the_climb_as_a_stated_limit(tmp_path):
 
 
 def test_too_little_disk_for_a_cut_skips_it_before_any_arm(tmp_path):
-    arms, summary, _, spec = _hpn(tmp_path, HPN_DEPTHS="2 1000000")
-    assert [d["L"] for d in spec["depths"]] == [2] and "SKIPPED" in summary and not [a for a in arms if a[0] == "qwen3hpnL1000000"]
+    """15 GB free: L2 (needs 6) and L4 (10) fit, L8 (18) is skipped before any arm. The free space is the stub's, not the host's."""
+    arms, summary, _, spec = _hpn(tmp_path, HPN_DEPTHS="2 4 8", STUB_DF_GB="15")
+    assert [d["L"] for d in spec["depths"]] == [2, 4] and "HPN L8 SKIPPED: 15 GB free < 18 GB" in summary
+    assert not [a for a in arms if a[0] == "qwen3hpnL8"]
 
 
 def test_the_exports_are_pinned_in_the_bulk_manifest_before_they_are_removed(tmp_path):
