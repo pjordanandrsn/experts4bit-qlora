@@ -70,8 +70,10 @@ On that read:
 - **Landing is judged per tensor.** Amendment 4 judged "lands on the candidate" on the projection outputs only. So a
   family that moves only gradients (R3, R4, R9) could never land, even if it reproduced the fused path's gradient
   arithmetic.
-  - Here, a draw lands on T if, on T, it is closer to the fused path than to today's on both metrics.
-  - U_T leaves out every combination that contains a family landing on T at any checked layer.
+  - **The unit tested is a family at one level.** Each family at each level c > 1 is run with every other family at
+    c = 1.
+  - It lands on T if, on T, it is closer to the fused path than to today's on both metrics, at any checked layer.
+  - U_T leaves out every draw that contains a family level that lands on T.
   - The `to_fused` and `to_today` distances are recorded for every draw and tensor (section 4).
 - **Engagement**, as in Phase 1: 96 adapters, nothing refused, fallback 0, and 0 PEFT MLP LoRA forwards in F1. It is
   checked in the (b) part and in every F1 arm. Section 7 places it first.
@@ -110,8 +112,9 @@ dtype, left to right, before the cast the path already has:
 - sums gate's and up's LoRA input-gradient terms in FP32 before one cast (the fused path's dx arithmetic, Amendment 4);
 - moves, adds or removes any cast of the unfused path.
 
-Within one FP32 op, re-associating FP32 partials changes no rounding point of the path. Every cast stays where PEFT puts
-it, so no family has the fused path's single-rounding property.
+Within one FP32 op, re-associating FP32 partials rounds differently inside that op; that difference is the reorder
+being drawn. It changes no cast point of the path. Every cast stays where PEFT puts it, so no family has the fused
+path's single-rounding property.
 
 **The draws: a stratified subset.** For every tensor, the draws contain the full level grid of two families that move
 it, with every other family at c = 1. On top of that union, a seeded sample of the full product is added.
