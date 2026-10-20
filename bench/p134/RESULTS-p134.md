@@ -38,7 +38,7 @@ shapes, not families.
 | Q1 | both families fit at `max_seqs` 64 | both built at 64 | HELD |
 | Q2 | engagement exact, every bucket captured, B1 ≠ B0 on some W1 rows, self-pairs bitwise | Granite's W1 differed; OLMoE's W1 tokens were identical | HELD for Granite; for OLMoE, all but B1 ≠ B0 |
 | Q3 | Granite g1 ∈ [1.17, 1.37] | 1.3979 | MISSED (high) |
-| Q4 | OLMoE g1 ∈ [1.218, 1.483], the band the proof narrowed it to before the reading (provisional [1.10, 1.70]) | 1.5011 | MISSED (high) |
+| Q4 | OLMoE g1 ∈ [1.218, 1.483], the band the proof narrowed it to before the reading ([posted and approved](https://github.com/pjordanandrsn/experts4bit-qlora/pull/1697#issuecomment-6245141667) at 03:21Z, before the reading launched at 03:30Z; provisional [1.10, 1.70]) | 1.5011 | MISSED (high) |
 | Q5 | gW ∈ [0.99, 1.01] for both | 0.9992, 0.9954 | HELD |
 | Q6 | quality within the bar for both | both within it | HELD |
 
