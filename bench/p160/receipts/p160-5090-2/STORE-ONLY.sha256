@@ -1,0 +1,6 @@
+# Files of p160-5090-2 kept only in the private receipt store (byte-exact there), by sha256. They carry the GPU's UUID or name
+# the provider's instance; no reading depends on them.
+8dcede462626df0c1922a789bcddcb86b11ed8d97858b13ed87f1f8027f4d28c  p160/forensics.txt
+36187530a2ec95dba37c57931f2e9d8ed8b754327d12ae1d9300a3ef0b6be173  p160/outer.log
+072315954c3e8aa63706cee08c801a768ece948c9063b11d6df38f78de6cda39  instance.json
+03ff6ee25db7d9076f46f741aecb76686a232f90ca751621dc95b549b410b8e7  teardown-proof.json
