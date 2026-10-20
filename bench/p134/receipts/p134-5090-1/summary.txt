@@ -1,0 +1,59 @@
+KNOBS run=p134-5090-1 e4b=c8d7e629e4c8431fc86970cf7195d8e67f72e22a gnf4=6b7c2e7474d20c8843814dd46dad6cfc3d94b440 families=granite,olmoe granite=ibm-granite/granite-3.1-3b-a800m-instruct@a02780686e08a03fe0d2679a293b5c74a90efa89 olmoe=allenai/OLMoE-1B-7B-0924-Instruct@7f1c97f440f06ce36705e4f2b843edb5925f4498 gpu_class=5090 min_disk_gb=100 min_ram_gb=60 prove=0 dry=0 short=32 long=160 reps=3 windows=24 cont=128
+CUDA_PROBE ok torch=2.8.0+cu128 cc=12.0 sms=170
+e4b 0.54.0 @c8d7e629e4c8431fc86970cf7195d8e67f72e22a
+gnf4 0.46.0 @6b7c2e7474d20c8843814dd46dad6cfc3d94b440
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p134_reduce self-test OK (34 cases)
+p109_box self-test OK (5/5 cases)
+p134_box self-test OK (29/29 cases)
+p115_quality self-test OK (11/11 cases)
+premise kernel contract rc=0: 35 passed in 45.25s
+P134_PREMISE kernel ok
+premise served route rc=0: 18 passed, 5 warnings in 12.46s
+P134_PREMISE served ok
+premise ok
+FAMILY granite ibm-granite/granite-3.1-3b-a800m-instruct@a02780686e08a03fe0d2679a293b5c74a90efa89
+FETCH ibm-granite/granite-3.1-3b-a800m-instruct@a02780686e08a03fe0d2679a293b5c74a90efa89 /root/.cache/huggingface/hub/models--ibm-granite--granite-3.1-3b-a800m-instruct/snapshots/a02780686e08a03fe0d2679a293b5c74a90efa89
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=891ff238c0b2a0800df0fc0236b9adc36b196a4fec39c896fb62d05438a9fc01
+fit granite rc=0 P134_FIT {"status": "ok", "max_seqs": 64, "buckets": [1, 2, 4, 8, 16, 32, 64], "graphs": true, "control_width": 16, "w1_wall_s": 0.2159, "error": null}
+
+arm B0a granite rc=0 P134_ARM {"arm": "B0", "tag": "B0a", "dispatch_build": {"dotpad": 0, "dotpad_splitk": 0, "scalar": 192, "scalar_splitk": 0, "bw_tree": 0, "bw_prmt32": 0, "bw_splitk": 0}, "load_s": 9.83, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph", "32": "graph", "64": "graph"}, "control": "W16", "max_seqs": 64, "W1": 197.73, "W16": 2224.56}
+
+arm B1a granite rc=0 P134_ARM {"arm": "B1", "tag": "B1a", "dispatch_build": {"dotpad": 0, "dotpad_splitk": 0, "scalar": 0, "scalar_splitk": 0, "bw_tree": 0, "bw_prmt32": 192, "bw_splitk": 0}, "load_s": 10.12, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph", "32": "graph", "64": "graph"}, "control": "W16", "max_seqs": 64, "W1": 276.68, "W16": 2222.68}
+
+arm B1b granite rc=0 P134_ARM {"arm": "B1", "tag": "B1b", "dispatch_build": {"dotpad": 0, "dotpad_splitk": 0, "scalar": 0, "scalar_splitk": 0, "bw_tree": 0, "bw_prmt32": 192, "bw_splitk": 0}, "load_s": 10.22, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph", "32": "graph", "64": "graph"}, "control": "W16", "max_seqs": 64, "W1": 275.13, "W16": 2223.57}
+
+arm B0b granite rc=0 P134_ARM {"arm": "B0", "tag": "B0b", "dispatch_build": {"dotpad": 0, "dotpad_splitk": 0, "scalar": 192, "scalar_splitk": 0, "bw_tree": 0, "bw_prmt32": 0, "bw_splitk": 0}, "load_s": 10.39, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph", "32": "graph", "64": "graph"}, "control": "W16", "max_seqs": 64, "W1": 196.81, "W16": 2219.93}
+
+quality off granite rc=0 P134_QUALITY B0 windows={'wikitext': 24, 'c4val1': 24} dispatch={'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 1186688, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 0, 'bw_splitk': 0} load 6s mem 11.52 GB 624.7 s
+
+quality on granite rc=0 P134_QUALITY B1 windows={'wikitext': 24, 'c4val1': 24} dispatch={'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 390144, 'bw_splitk': 0} load 6s mem 11.52 GB 211.9 s
+
+P134_VERDICT granite LICENSED ["g1 = 1.3979, g16 = 0.9992 (geomean {'W1': 1.3986, 'W16': 1.0004}); wikitext ON bias +0.00260 (bar 0.01338), K8 +0.0161; c4val1 ON bias +0.00459 (bar 0.01042), K8 +0.0503"]
+FAMILY olmoe allenai/OLMoE-1B-7B-0924-Instruct@7f1c97f440f06ce36705e4f2b843edb5925f4498
+FETCH allenai/OLMoE-1B-7B-0924-Instruct@7f1c97f440f06ce36705e4f2b843edb5925f4498 /root/.cache/huggingface/hub/models--allenai--OLMoE-1B-7B-0924-Instruct/snapshots/7f1c97f440f06ce36705e4f2b843edb5925f4498
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=d25bd46d838b3c8e7f6546cdfefb64586d7d5291a979d960458f06172ac74dfc
+fit olmoe rc=0 P134_FIT {"status": "ok", "max_seqs": 64, "buckets": [1, 2, 4, 8, 16, 32, 64], "graphs": true, "control_width": 16, "w1_wall_s": 0.2021, "error": null}
+
+arm B0a olmoe rc=0 P134_ARM {"arm": "B0", "tag": "B0a", "dispatch_build": {"dotpad": 0, "dotpad_splitk": 0, "scalar": 96, "scalar_splitk": 0, "bw_tree": 0, "bw_prmt32": 0, "bw_splitk": 0}, "load_s": 10.43, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph", "32": "graph", "64": "graph"}, "control": "W16", "max_seqs": 64, "W1": 246.92, "W16": 1937.05}
+
+arm B1a olmoe rc=0 P134_ARM {"arm": "B1", "tag": "B1a", "dispatch_build": {"dotpad": 0, "dotpad_splitk": 0, "scalar": 0, "scalar_splitk": 0, "bw_tree": 0, "bw_prmt32": 96, "bw_splitk": 0}, "load_s": 9.91, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph", "32": "graph", "64": "graph"}, "control": "W16", "max_seqs": 64, "W1": 370.64, "W16": 1928.06}
+
+arm B1b olmoe rc=0 P134_ARM {"arm": "B1", "tag": "B1b", "dispatch_build": {"dotpad": 0, "dotpad_splitk": 0, "scalar": 0, "scalar_splitk": 0, "bw_tree": 0, "bw_prmt32": 96, "bw_splitk": 0}, "load_s": 10.07, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph", "32": "graph", "64": "graph"}, "control": "W16", "max_seqs": 64, "W1": 371.39, "W16": 1923.78}
+
+arm B0b olmoe rc=0 P134_ARM {"arm": "B0", "tag": "B0b", "dispatch_build": {"dotpad": 0, "dotpad_splitk": 0, "scalar": 96, "scalar_splitk": 0, "bw_tree": 0, "bw_prmt32": 0, "bw_splitk": 0}, "load_s": 10.58, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph", "32": "graph", "64": "graph"}, "control": "W16", "max_seqs": 64, "W1": 246.46, "W16": 1922.84}
+
+quality off olmoe rc=0 P134_QUALITY B0 windows={'wikitext': 24, 'c4val1': 24} dispatch={'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 593344, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 0, 'bw_splitk': 0} load 7s mem 21.74 GB 374.7 s
+
+quality on olmoe rc=0 P134_QUALITY B1 windows={'wikitext': 24, 'c4val1': 24} dispatch={'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 195072, 'bw_splitk': 0} load 6s mem 21.74 GB 134.1 s
+
+P134_VERDICT olmoe LICENSED ["g1 = 1.5011, g16 = 0.9954 (geomean {'W1': 1.504, 'W16': 0.9979}); wikitext ON bias -0.00238 (bar 0.01087), K8 -0.0234; c4val1 ON bias -0.00089 (bar 0.01380), K8 -0.0124"]
+VERDICT granite LICENSED
+VERDICT olmoe LICENSED

@@ -2327,12 +2327,16 @@ eager chain until a read of their own. `e4b.serve.p130.prefill-glue-speed.qwen3.
 16 unchanged, within P110's quality bar; it is grouped-nf4-gemm's default from 0.43.0 at Qwen3's NF4 expert shapes on
 GPUs with 160 or more SMs. `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`. On Mixtral-8x7B, at plans chosen on an RTX
 5090, the same GEMV decodes one request **2.41×** as fast (19.5 → 8.1 ms a step), 16 unchanged, within the same bar.
-`e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18` ([results](../bench/p141/RESULTS-p141.md)).
+`e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18` ([results](../bench/p141/RESULTS-p141.md)). Two more reads set
+grouped-nf4-gemm 0.47.0's `auto` scope. On an RTX 4090 (128 SMs), Qwen3-30B-A3B decodes one request **1.5145×** as fast
+(`e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18`, [results](../bench/p133/RESULTS-p133.md)). On an RTX 5090 at a 400 W
+limit, Granite-3.1-3b-a800m decodes it **1.3979×** as fast and OLMoE-1B-7B **1.5011×**
+(`e4b.serve.p134.gemv-bw.granite.5090.2026-10-18`, `e4b.serve.p134.gemv-bw.olmoe.5090.2026-10-18`,
+[results](../bench/p134/RESULTS-p134.md)). Sixteen requests are unchanged and quality is within the same bar in each.
 - **Scope since grouped-nf4-gemm 0.47.0:** its default also takes Mixtral-8x7B's, Granite-3.1-3B-A800M's and OLMoE-1B-7B's
   expert shapes on GPUs with 160 or more SMs, and the RTX 4090 (128 SMs, sm_89) at Qwen3-30B-A3B's two shapes only. The
   shapes are licensed, not the families: any model with those expert shapes takes them. Every other shape and smaller
-  GPU keeps dot-pad; `GNF4_GEMV_BW=0` restores it. The Granite, OLMoE and RTX 4090 reads (lanes P133, P134) have no
-  register row yet: UNVERIFIED here.
+  GPU keeps dot-pad; `GNF4_GEMV_BW=0` restores it.
 
 **The B=1 fused stack is the default on Qwen3-MoE, Qwen3.5/3.6-MoE and Mixtral.** On top of grouped-nf4-gemm 0.43.0's
 bandwidth GEMV, fused q/k/v
@@ -3437,6 +3441,9 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.train.p144.layer-major-offload.mixtral.4090.2026-10-18 [measured]: Lane P144, one rented RTX 4090, P137's kit at Amendment 3 by named substitutions (every STRICT term unchanged): under expert offload with enable_fast_train(dgrad=True), layer-major accumulation (experts4bit_qlora.engines.layer_major.layer_major_step) trains Mixtral-8x7B at 2.118x the stock accumulation loop's speed …
 - e4b.train.p146.layer-major-cli.qwen3.4090.2026-10-18 [measured]: Lane P146, one rented RTX 4090: the CLI trainer (python -m experts4bit_qlora.train, its unchanged main()) at its own default recipe trains Qwen3-30B-A3B under expert offload 1.455x faster per step with OFFLOAD_EXPERTS=1 LAYER_MAJOR=1 than with OFFLOAD_EXPERTS=1 FAST_TRAIN=1: medians A0a 11.596 / L1a 7.956 / L1b 7.968 / …
 - e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18 [measured]: Lane P141 (one RTX 5090): grouped-nf4-gemm K33's bandwidth-targeted NF4 decode GEMV (GNF4_GEMV_BW=1), at the plans P141's phase 1 selected on the card (gate_up 28672x4096 at 16,1024,4,1 …
+- e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18 [measured]: Lane P133 (one RTX 4090, sm_89, 128 SMs): grouped-nf4-gemm K33's bandwidth-targeted NF4 decode GEMV (GNF4_GEMV_BW=1, prmt32, K33's shipped plans) decodes Qwen3-30B-A3B NF4 one request 1.5145x as fast as the shipped route at 128 SMs (the scalar GEMV) on the default serve_paged server (16 slots, graphs on): 8.4759 -> …
+- e4b.serve.p134.gemv-bw.granite.5090.2026-10-18 [measured]: Lane P134 (one RTX 5090 at a 400 W power limit): grouped-nf4-gemm K33's bandwidth-targeted NF4 decode GEMV (GNF4_GEMV_BW=1, prmt32, K33's shipped plans) decodes granite-3.1-3b-a800m-instruct NF4 one request 1.3979x as fast as the shipped scalar GEMV on the default serve_paged server (64 slots, graphs on): 5.0574 -> …
+- e4b.serve.p134.gemv-bw.olmoe.5090.2026-10-18 [measured]: Lane P134 (one RTX 5090 at a 400 W power limit): grouped-nf4-gemm K33's bandwidth-targeted NF4 decode GEMV (GNF4_GEMV_BW=1, prmt32, K33's shipped plans) decodes OLMoE-1B-7B-0924-Instruct NF4 one request 1.5011x as fast as the shipped scalar GEMV on the default serve_paged server (64 slots, graphs on): 4.0499 -> 2.6980 …
 - e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19 [measured]: Lane P143 Amendment 3 (one RTX 5090, binding): capping the paged FP8 attention decode at 16 splits (E4B_ATTN_SPLIT_CAP=16 …
 - e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19 [measured]: Lane P153 (one RTX 5090): serving Qwen3-30B-A3B's lm_head on its per-row int8 grid (E4B_INT8_HEAD_BW=1: the head rounded in place to bf16(q * s), P150's I8HEAD …
 - e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20 [measured]: Lane P158 (one RTX 5090): serving Qwen3-30B-A3B's batched-decode expert GEMM (K25) with grouped-nf4-gemm v0.50.0's K39 codebook decode (E4B_K25_LUT=prmt, K25's lut="prmt", bit-identical to the select tree) decodes sixteen concurrent requests 1.0925x as fast on the default serve_paged server (the smallest of four ABBA …
@@ -3447,4 +3454,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 …
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(452 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(455 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
