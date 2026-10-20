@@ -185,3 +185,63 @@ summary or by any decision. On `smt-sib-2`, one wall-clock window across three p
 **separate registration** (slab residency, with a null of two identical runs on one host first), never an arm here.
 
 **This closes the SMT lane:** no further `smt-sib` box is planned. `smt-sib-3..8` stay unused.
+
+### Amendment 1c (2026-10-20, REPORTING): `smt-sib-2`'s measurement again on its own host, with THP records (`smt-sib-9`)
+
+**Why.** The slab-residency registration (P159, `bench/p159/`) proposed that `smt-sib-2`'s fast fuse state is the fault
+cost of fresh anonymous memory, switched by whether huge pages are available. That state was one window: 49 consecutive
+timed blocks, across processes 11 to 14, at a median fuse of 0.43 s against the run's 7.47 s.
+- `p159-2` read machine 11541, the host `smt-sib-2` ran on, as THP `madvise` with `THP_MEM_ALLOC_ENABLE` unset. It was
+  NOT_RUN at P159's pre-flight (`p159-2` in the private receipt store).
+- This lane's kit never sets that switch either. Under `madvise` without it, torch's CPU allocations get no huge pages.
+- `smt-sib-2` recorded no THP facts, so it cannot answer the question itself.
+
+If the fast state appears again on 11541 under that condition, huge pages are not its mechanism.
+
+**What runs.** `smt_sib_box.py` as `smt-sib-2` ran it: the same arms, pools, block, repeats, plan and timed intervals.
+Added, all reported only and never part of the SIB/PHYS reading:
+- around every timed block, outside its wall (where Amendment 1b's counters sit), `bench/common/thp_window.py`'s
+  snapshots of the measured process: the host's THP mode, the process's `THP_MEM_ALLOC_ENABLE`, its `AnonHugePages`,
+  `Anonymous` and `Rss`, and the host's `thp_*` counter deltas;
+- `fast_state` in the summary, which applies the definitions below.
+
+`thp_window.py` is staged from `bench/common` and listed in `staged.sha256`. The drive accepts `smt-sib-9`.
+
+**Definitions, fixed before data.**
+- A timed block is **FAST** when its fuse is below 0.25 × the run's median fuse over every timed block. On `smt-sib-2`
+  that marks 49 of 360 blocks, all in its one window.
+- A **FAST window** is 3 or more consecutive FAST blocks in run order. A window may span processes.
+
+**Outcomes** (`fast_state.outcome`, decided in this order):
+1. **PREMISE_UNRECORDED** if the run has THP records but no THP mode was read in any of them. No ruling.
+2. **VOID_PREMISE** if any record shows huge pages were possible for torch's allocations, by P159 Amendment 2's rule:
+   THP enabled `always`, or `madvise` with `THP_MEM_ALLOC_ENABLE` = `1`. `madvise` without the switch, `never` and
+   `absent` all leave huge pages impossible, which is the condition the question needs; the mode read is reported. The
+   read is also VOID if the box is not machine 11541, or if `bytes_identical` is false.
+3. **NO_RECURRENCE**: no window. Inconclusive, and said so: `smt-sib-2` showed one window in 24 processes. P159's THP arm
+   then closes as "premise unverifiable".
+4. **FAST_RECURS_UNRECORDED**: a window with a block whose `AnonHugePages` ends, or whose host THP fault deltas
+   (`thp_fault_alloc`, `thp_collapse_alloc`), were not read. Reported; no ruling.
+5. **FAST_RECURS_WITH_THP**: a window in which some block read `AnonHugePages` above 0. Huge pages are not excluded.
+   This is reported, and P159's premise is re-opened by name.
+6. **FAST_RECURS_HOST_THP**: a window with `AnonHugePages` 0 at every end, but the host's THP fault counters moved over
+   a window block. Not ruled: the counters are host-wide, so a co-tenant can move them.
+7. **FAST_RECURS_NO_THP**: a window, `AnonHugePages` 0 at both ends of every window block, AND no host THP fault event
+   over any window block. A huge page faulted and freed inside a block leaves no trace at its ends, so both are
+   required. Huge pages are falsified as the mechanism of the fast state on this host, and P159's THP arm closes as
+   falsified.
+
+The SIB/PHYS reading is reported as before and not re-ruled; the SMT lane stays closed.
+
+**Prediction, before data.** NO_RECURRENCE is more likely than not: the state appeared once, with its cause unknown.
+If a window does recur, FAST_RECURS_NO_THP: under `madvise` without the switch, the measured process should hold no huge
+pages at all, and nothing on the host should fault one in.
+
+**Run id, host and cost.**
+- `smt-sib-9` is the reading. It is pinned to machine 11541 only, by inclusion, with the pin posted on the bus before
+  create. `smt-sib-3..8` keep Amendment 1a's pre-create scope.
+- The guard and fit are Amendment 1b's: 4.0 h. A snapshot is a few small `/proc` and `/sys` reads, outside the timed
+  wall, per block.
+- Rate cap $0.60/h. The worst case is Amendment 1b's $2.43 per created box; at 11541's last quote ($0.5833/h incl. disk)
+  a full run is about $2.
+- It runs under the slab-residency lane's standing per-lane authority.
