@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""bench/common/host_facts.py OUT -- the box's own measured host facts, written as ``host_facts.json`` beside a run.
+"""host_probe.py OUT|- -- the box's own measured host facts, written as ``host_facts.json`` beside a run.
+
+ONE producer, two byte-identical copies: ``adertha/compute/host_probe.py`` in adertha-agents (the source of record,
+beside the registry that reads its keys) and ``bench/common/host_facts.py`` in experts4bit-qlora. NEVER edit the
+experts4bit-qlora copy directly: a change lands in adertha-agents first and experts4bit-qlora then copies the file byte
+for byte, the same convention as the two repositories' shared tooling. adertha-agents' PR CI reports any drift.
+The launcher runs it on every rented box after the pre-flight (``rent.collect_host_facts``); a lane may also run it.
 
 The host registry reads this file from a run's receipt directory. It keeps only the numeric keys it knows, ignores
 the rest, and rejects a file whose ``measured_at`` falls outside the run's own window, so a copy shipped with a kit is
@@ -14,8 +20,12 @@ Rules:
 - no identifiers: no hostname, container id, serial, UUID or CPU model string;
 - a fact that cannot be read is left out. The helper never fails a run: it prints why and exits 0.
 
-Usage, on the box, from the lane's runner (one call, before or after the work):
-    python3 host_facts.py "$OUT_DIR/host_facts.json"
+Usage, on the box (one call, before or after the work):
+    python3 host_probe.py "$OUT_DIR/host_facts.json"
+    python3 host_probe.py -          one line on stdout, ``HOST_FACTS_JSON {...}`` (the launcher reads it over ssh)
+
+Facts read from the ENVIRONMENT (``omp_num_threads``, ``thp_mem_alloc_enable``) are the calling process's own: run it
+with the run's environment, or read them as the caller's. The launcher's call records them as its ssh session's.
 """
 from __future__ import annotations
 
@@ -25,6 +35,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 THP_MODES = ("always", "madvise", "never", "defer", "defer+madvise")
@@ -41,6 +52,23 @@ def _bracketed(text: str | None) -> str | None:
     """The selected value of a /sys enum file, e.g. 'always [madvise] never' -> 'madvise'."""
     m = re.search(r"\[([^\]]+)\]", text or "")
     return m.group(1) if m and m.group(1) in THP_MODES else None
+
+
+LOOP_N = 1_000_000   # the fixed single-thread loop's iterations: the same code and count in every kit
+
+
+def cpu_loop_mops() -> float:
+    """A fixed single-thread pure-Python loop, best of three, in million iterations per second: what THIS run got from
+    one core (clock, co-tenants, quota), not the part's rated boost. Comparable only at the same Python minor
+    (``cpu_loop_python``); well under a second on any current host. Tests replace it."""
+    best = None
+    for _ in range(3):
+        t0, x = time.perf_counter(), 0
+        for i in range(LOOP_N):
+            x = (x + i * 7) & 0xFFFF
+        dt = time.perf_counter() - t0
+        best = dt if best is None or dt < best else best
+    return round(LOOP_N / best / 1e6, 2)
 
 
 def affinity() -> set:
@@ -106,6 +134,41 @@ def gather(root: Path = Path("/"), smi: str = "nvidia-smi") -> dict:
         key = "cpu_quota_unlimited" if quota[0] == "unlimited" else "cpu_quota_cpus"
         facts[key] = 1 if quota[0] == "unlimited" else quota[0]
         sources[key] = quota[1]
+    # per-core speed: the rated maximum (a label) and a measured single-thread rate (what the run got), and the run's
+    # OpenMP thread count; a framework's speed ratio moved with these, not with core count (the TC1 receipts, 10-20)
+    # each of the run's CPUs (affinity; cpu0 when there is no affinity call): a hybrid part's P and E cores differ, so
+    # cpu0 alone would label the host with one core type. The highest and the lowest per-CPU maximum are recorded.
+    try:
+        cpus = sorted(affinity())
+    except (AttributeError, OSError):
+        cpus = [0]
+    maxes = []
+    for c in cpus:
+        v = (_read(root, f"sys/devices/system/cpu/cpu{c}/cpufreq/cpuinfo_max_freq") or "").strip()
+        if v.isdigit() and int(v) > 0:
+            maxes.append(int(v))
+    if maxes:
+        src = (f"/sys/devices/system/cpu/cpu*/cpufreq/cpuinfo_max_freq (kHz / 1000) over the run's {len(maxes)} "
+               "readable CPU(s): the rated maximum")
+        facts["cpu_max_mhz"], sources["cpu_max_mhz"] = round(max(maxes) / 1000, 1), src + ", highest"
+        facts["cpu_max_mhz_lo"], sources["cpu_max_mhz_lo"] = round(min(maxes) / 1000, 1), src + ", lowest"
+    try:
+        facts["cpu_loop_mops"] = cpu_loop_mops()
+        sources["cpu_loop_mops"] = f"a fixed {LOOP_N}-iteration single-thread Python loop, best of 3 (Mops/s)"
+        facts["cpu_loop_python"] = sys.version_info[0] * 100 + sys.version_info[1]
+        sources["cpu_loop_python"] = "sys.version_info: the loop is comparable only at the same Python (e.g. 312)"
+    except Exception:  # noqa: BLE001 -- a missing fact never costs the run
+        pass
+    # the helper's OWN environment: call it with the run's env set. Unset means the runtime's default, which differs by
+    # runtime (libgomp: the affinity count; torch intra-op: the physical cores), so absent is recorded as absent.
+    thp_env = os.environ.get("THP_MEM_ALLOC_ENABLE", "").strip()
+    if thp_env.isdigit():
+        facts["thp_mem_alloc_enable"] = int(thp_env)
+        sources["thp_mem_alloc_enable"] = "the calling process's THP_MEM_ALLOC_ENABLE (left out when unset: absent is not 0)"
+    omp = os.environ.get("OMP_NUM_THREADS", "").strip()
+    if omp.isdigit() and int(omp) > 0:
+        facts["omp_num_threads"] = int(omp)
+        sources["omp_num_threads"] = "the calling process's OMP_NUM_THREADS (left out when unset: absent is not 0)"
     try:
         aff = len(affinity())
         if aff:
@@ -136,10 +199,13 @@ def gather(root: Path = Path("/"), smi: str = "nvidia-smi") -> dict:
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if len(argv) != 1:
-        print("usage: host_facts.py OUT", file=sys.stderr)
+        print("usage: host_probe.py OUT|-", file=sys.stderr)
         return 0
     try:
         facts = gather(Path(os.environ.get("HOST_FACTS_ROOT", "/")), os.environ.get("HOST_FACTS_SMI", "nvidia-smi"))
+        if argv[0] == "-":
+            print("HOST_FACTS_JSON " + json.dumps(facts, sort_keys=True), flush=True)
+            return 0
         Path(argv[0]).write_text(json.dumps(facts, indent=1, sort_keys=True) + "\n")
         print(f"HOST_FACTS {len(facts) - 2} facts -> {argv[0]}")
     except Exception as e:  # noqa: BLE001 -- a missing fact never costs the run

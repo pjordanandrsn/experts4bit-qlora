@@ -1,3 +1,0 @@
-### Added
-
-- `bench/p137/`: lane P137's registration, a speed read of layer-major accumulation on the configuration that makes Qwen3-30B-A3B trainable on a 24 GB card (expert offload + `enable_fast_train`) on an RTX 4090. The arms run the stock accumulation loop vs `layer_major_step`, ABBA. It is LICENSED iff the slower pair still runs at least 1.10x faster, with step 0 bit-identical, the stagings exactly 380 vs 95 per step, and the memory term held. Includes the box, driver, reducer (self-tested), a tiny dry fixture, staged pins and `tests/test_p137_staged_pin.py`. Registration only: nothing runs before its envelope.
