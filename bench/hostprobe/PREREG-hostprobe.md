@@ -82,13 +82,17 @@ enums.
 | `gpu_retired_pages_sbe`, `gpu_retired_pages_dbe`, `gpu_retired_pages_pending` | `retired_pages.*` (pre-Ampere page retirement) |
 | `gpu_remapped_rows_{correctable,uncorrectable,pending,failure}` | `--query-remapped-rows` (Ampere and later; consumer cards often report it unsupported) |
 | `gpu_clock_event_reasons` | `clocks_event_reasons.active`, or the older `clocks_throttle_reasons.active`, as an integer bitmask **at the probe's moment** (an idle box reads idle) |
-| `gpu_smi_hung` | `true` when an `nvidia-smi` call hit its bound; no later call is made |
+| `gpu_smi_stopped` | `timeout` when one call hit its 20 s bound, `budget` when the shared budget ran out; no later call is made |
 
-**How it stays bounded.** The health read makes at most four more `nvidia-smi` calls, each bounded at 20 s: the
-driver's list of query fields (`--help-query-gpu`), one query naming only listed fields, the remapped-rows query, and
-`--version`. One unknown field name fails a whole query, so a field the driver does not list is never sent, and the
-power query above stays a separate call. A call that hangs stops every later call. The box's worst case stays inside
-the drive's 120 s ssh bound.
+**How it stays bounded.** The health read makes at most four more `nvidia-smi` calls: the driver's list of query
+fields (`--help-query-gpu`), one query naming only listed fields, the remapped-rows query, and `--version`.
+- One unknown field name fails a whole query, so a field the driver does not list is never sent. A field counts as
+  listed under any name on its name line (`"clocks_event_reasons.active" or "clocks_throttle_reasons.active"`). The
+  power query above stays a separate call.
+- All five calls share one **40 s** budget, and each call is bounded at 20 s or what is left, whichever is less. A call
+  that times out, or a budget that runs out, stops every later call; the facts read before it are kept.
+- So `nvidia-smi` holds the box for 40 s at most, hung or merely slow. With ssh's 30 s connect timeout that is about
+  70 s, inside the drive's 120 s bound, and the one `HOSTPROBE_JSON` line is printed before the bound.
 
 **Unchanged.** Run ids, scope, the drive, the guard, the rate cap, the image, the download and the $0.20 worst case.
 It is still never a reading. No UUID, serial, PCI address, board id or product name is queried.

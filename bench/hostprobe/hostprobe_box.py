@@ -11,7 +11,8 @@ enum except ``kernel`` (the release string). ``thp_mem_alloc_enable`` and ``omp_
 process's environment, i.e. the ssh session's, not any lane's. GPU 0's power limit, enforced limit and maximum SM clock
 come from ``nvidia-smi``'s query, bounded at 20 s. Amendment 1 adds GPU 0's health facts (driver, CUDA and VBIOS
 versions, ECC mode and error counts, retired pages, remapped rows, the clock-event reasons at the probe's moment) from
-at most four more bounded calls; a call that hangs stops every later one."""
+at most four more calls. Every ``nvidia-smi`` call shares one 40 s budget (each call at most 20 s), and a call that
+times out stops every later one."""
 from __future__ import annotations
 
 import json
@@ -48,18 +49,26 @@ GPU_QUERY = ("power.limit", "enforced.power.limit", "clocks.max.sm")
 GPU_KEYS = ("gpu_power_limit_w", "gpu_enforced_power_limit_w", "gpu_max_sm_mhz")
 
 
-SMI_TIMEOUT = 20
+SMI_TIMEOUT = 20      # one call
+SMI_BUDGET = 40       # every nvidia-smi call of one probe together
 
 
 def _smi(smi: str, args: list[str], state: dict) -> str | None:
-    """One bounded ``nvidia-smi`` call: its stdout when it exits 0 with output, else None. A call that hangs marks the
-    driver hung (``state["hung"]``) and no later call is made, so a hung driver holds the box for one timeout at most."""
-    if state.get("hung"):
+    """One bounded ``nvidia-smi`` call: its stdout when it exits 0 with output, else None. Every call of a probe shares
+    one budget (``SMI_BUDGET``), and each is bounded at ``min(SMI_TIMEOUT, what is left)``. A call that times out, or a
+    budget that runs out, stops every later call (``state["stopped"]`` = ``timeout`` or ``budget``). A slow or hung
+    driver therefore holds the box for ``SMI_BUDGET`` at most."""
+    if state.get("stopped"):
+        return None
+    now = time.monotonic()
+    left = min(SMI_TIMEOUT, state.setdefault("end", now + SMI_BUDGET) - now)
+    if left < 1:
+        state["stopped"] = "budget"
         return None
     try:
-        r = subprocess.run([smi, *args], capture_output=True, text=True, timeout=SMI_TIMEOUT)
+        r = subprocess.run([smi, *args], capture_output=True, text=True, timeout=left)
     except subprocess.TimeoutExpired:
-        state["hung"] = True
+        state["stopped"] = "timeout" if left >= SMI_TIMEOUT else "budget"
         return None
     except (OSError, subprocess.SubprocessError):
         return None
@@ -118,7 +127,7 @@ def _value(raw: str, kind: str):
     if kind == "mode":
         return raw.lower() if raw.lower() in ("enabled", "disabled") else None
     if kind == "yesno":
-        return raw.lower() if raw.lower() in ("yes", "no") else (int(raw) if raw.isdigit() else None)
+        return raw.lower() if raw.lower() in ("yes", "no") else None
     if kind == "hex":
         return int(raw, 16) if re.fullmatch(r"0x[0-9A-Fa-f]{1,16}", raw) else None
     return None
@@ -138,10 +147,12 @@ def _query(smi: str, flag: str, fields: tuple, state: dict) -> dict:
 
 def gpu_health(smi: str = "nvidia-smi", state: dict | None = None) -> dict:
     """Amendment 1: GPU 0's driver, CUDA and VBIOS versions, ECC mode and error counts, retired pages, remapped rows and
-    the active clock-event reasons (a bitmask, at the probe's moment). At most four calls, each bounded at 20 s: the
-    field list, the query, the remapped-rows query and ``--version``. A value that is not a fact is left out."""
+    the active clock-event reasons (a bitmask, at the probe's moment). At most four calls, inside the shared budget: the
+    field list, the query, the remapped-rows query and ``--version``. A value that is not a fact is left out. A field
+    counts as listed under any of the names on its name line (``"new.name" or "old.name"``)."""
     state = {} if state is None else state
-    listed = set(re.findall(r'^"([a-z0-9_.]+)"', _smi(smi, ["--help-query-gpu"], state) or "", re.M))
+    listed = {name for line in (_smi(smi, ["--help-query-gpu"], state) or "").splitlines() if line.startswith('"')
+              for name in re.findall(r'"([a-z0-9_.]+)"', line)}
     fields, keys = [], set()
     for f, key, kind in HEALTH_QUERY:
         if f in listed and key not in keys:
@@ -211,8 +222,8 @@ def facts(root: Path = Path("/"), smi: str | None = "nvidia-smi") -> dict:
         state: dict = {}
         out.update(gpu_facts(smi, state))
         out.update(gpu_health(smi, state))
-        if state.get("hung"):
-            out["gpu_smi_hung"] = True                     # a fact about the driver: a call hit its 20 s bound
+        if state.get("stopped"):
+            out["gpu_smi_stopped"] = state["stopped"]      # a fact about the driver: timeout, or the budget ran out
     out["measured_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     return out
 
