@@ -122,3 +122,67 @@ def test_a_quoted_record_reads_as_its_unquoted_install(tmp_path):
     path, sha = _wheel(tmp_path, quoted, "quoted-1.0-py3-none-any.whl")
     got = run.wheel_identity(DIST, {"filename": path.name, "version": md.version(DIST), "sha256": sha}, tmp_path)
     assert got["files_match_wheel"] is True
+
+
+# --- Amendment 4 (c) and reduce_a4 --------------------------------------------------------------------------------------
+
+def _records_a4(tmp_path, *, read_null=True, c_parts=None, off_equal=True):
+    base = _records()
+    stage, reads = base["stage-check"], {"read": {"outcome": "PHASE1_PASS, ACCURACY_OVER_REORDER: 0:out_gate"}}
+    rec = {"stage-check": stage, "reads": reads, "reported": base["reported"], "step-fused": base["step-fused"],
+           "k8-unfused": base["k8-unfused"], "k8-fused": base["k8-fused"]}
+    for i, p in enumerate(run.TODAY_READ):
+        r = copy.deepcopy(base["step-today"])
+        if not read_null and i:
+            r["adapters_sha256"] = {"a": str(i)}
+        rec[p] = r
+    rec["step-off"] = copy.deepcopy(base["step-today"]) if off_equal else dict(copy.deepcopy(base["step-today"]),
+                                                                               adapters_sha256={"a": "x"})
+    rec.update(c_parts or {})
+    return rec
+
+
+def _b_file(tmp_path, name, scale):
+    import torch
+    from safetensors.torch import save_file
+
+    g = torch.Generator().manual_seed(0)
+    t = {f"s{i:03d}.B": torch.randn(8, 4, generator=g) for i in range(224)}
+    noise = torch.Generator().manual_seed(sum(map(ord, name)))
+    t = {k: v + scale * torch.randn(v.shape, generator=noise) for k, v in t.items()}
+    save_file(t, str(tmp_path / f"{name}-B.safetensors"))
+    return {"name": f"{name}-B.safetensors", "sha256": hashlib.sha256((tmp_path / f"{name}-B.safetensors").read_bytes()).hexdigest()}
+
+
+def _c(tmp_path, scales, *, same=False):
+    out = {}
+    for p, sc in zip(run.C_PARTS, scales):
+        out[p] = {"adapters_sha256": {"a": "c" if same else p}, "training": {"losses": [1.0]}, "b_file": _b_file(tmp_path, p, sc)}
+    return out
+
+
+def test_need_c_and_each_knob_off_branch(tmp_path):
+    held = _records_a4(tmp_path)
+    assert run.need_c(held) is False and run.knob_off(held, tmp_path)["ok"] is True
+    assert run.knob_off(_records_a4(tmp_path, off_equal=False), tmp_path)["ok"] is False
+    failed = _records_a4(tmp_path, read_null=False)
+    assert run.need_c(failed) is True and run.knob_off(failed, tmp_path)["ok"] is False      # C parts missing
+    c_held = _records_a4(tmp_path, read_null=False, c_parts=_c(tmp_path, (0.01, 0.01, 0.01, 0.01), same=True))
+    assert run.knob_off(c_held, tmp_path)["how"].startswith("bitwise under C") and run.knob_off(c_held, tmp_path)["ok"]
+    spread = run.knob_off(_records_a4(tmp_path, read_null=False, c_parts=_c(tmp_path, (0.01, 0.01, 0.01, 0.01))), tmp_path)
+    assert spread["how"].startswith("KNOB_OFF_BY_SPREAD") and spread["ok"] is True
+    far = run.knob_off(_records_a4(tmp_path, read_null=False, c_parts=_c(tmp_path, (0.01, 0.01, 0.01, 0.2))), tmp_path)
+    assert far["ok"] is False                                                # off 20x the null's spread
+
+
+def test_reduce_a4_passes_names_and_never_fails_an_indeterminate(tmp_path):
+    good = _records_a4(tmp_path)
+    assert run.reduce_a4(good, tmp_path)["outcome"] == "PHASE1_PASS, ACCURACY_OVER_REORDER: 0:out_gate"
+    ind = copy.deepcopy(good)
+    ind["reads"]["read"]["outcome"] = "INDETERMINATE: calibration failed 0:dx:R4"
+    assert run.reduce_a4(ind, tmp_path)["outcome"].startswith("INDETERMINATE")
+    bad = copy.deepcopy(ind)
+    bad["step-off"]["adapters_sha256"] = {"a": "x"}                          # a real failure outranks an indeterminate
+    assert run.reduce_a4(bad, tmp_path)["outcome"].startswith("PHASE1_FAIL: KNOB_OFF")
+    spread = _records_a4(tmp_path, read_null=False, c_parts=_c(tmp_path, (0.01, 0.01, 0.01, 0.01)))
+    assert run.reduce_a4(spread, tmp_path)["outcome"].endswith(", KNOB_OFF_BY_SPREAD")
