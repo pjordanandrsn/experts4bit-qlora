@@ -25,7 +25,7 @@ RESERVE=600             # can_run's margin after the bench: the reduce, the fetc
 MIN_POWER_W=575   # P149's power floor (P156's and P158's, kept): a capped board refuses before the install, rc 17
 GPU_CLASS=5090; MIN_RAM_GB=16; MIN_DISK_GB=20
 case "$P160_RUN_ID" in
-  p160-5090-1|p160-5090-2|p160-5090-3) :;;
+  p160-5090-1|p160-5090-2|p160-5090-3|p160-5090-4|p160-5090-5|p160-5090-6) :;;
   *) say "unregistered run ID: $P160_RUN_ID"; finish 78;;
 esac
 [ -z "${P160_GPU_CLASS:-}${P160_MIN_DISK_GB:-}${P160_MIN_RAM_GB:-}${P160_MIN_POWER_W:-}${P160_NEED_BENCH:-}" ] || { say 'reading knobs are frozen'; finish 78; }

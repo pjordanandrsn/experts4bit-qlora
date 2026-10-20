@@ -55,8 +55,8 @@ NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "ref
 PASS="P160_RUN_ID=$RUN_ID P160_RUN_NONCE=$NONCE P160_DEADLINE_EPOCH=$DEADLINE E4B_SHA=$E4B_SHA"
 # Explicit IDs only: the reading and its one pre-create spare.
 case "$RUN_ID" in
-  p160-5090-1|p160-5090-2|p160-5090-3) :;;
-  *) say "refusing unregistered run ID: $RUN_ID (is not p160-5090-N)"; exit 78;;
+  p160-5090-1|p160-5090-2|p160-5090-3|p160-5090-4|p160-5090-5|p160-5090-6) :;;
+  *) say "refusing unregistered run ID: $RUN_ID (is not p160-5090-1 to -6)"; exit 78;;
 esac
 if [ "${P160_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash p160_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p160"; exit 0; fi
 say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; launch e4b $E4B_SHA (from $REPO); stacks are the runner's constants; receipts -> $RUN_DIR/p160; deadline $DEADLINE"

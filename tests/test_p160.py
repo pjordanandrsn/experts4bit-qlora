@@ -396,6 +396,24 @@ def test_unregistered_run_ids_are_refused(tmp_path):
     if not _clean_checkout():
         pytest.skip("the driver refuses a dirty tree")
     out = subprocess.run(["bash", str(LANE / "p160_drive.sh")], capture_output=True, text=True,
-                         env=_dry_env(tmp_path, "p160-5090-4"), timeout=120)
+                         env=_dry_env(tmp_path, "p160-5090-7"), timeout=120)
     assert out.returncode == 78 and "unregistered run ID" in out.stdout
-    assert "p160-5090-1|p160-5090-2|p160-5090-3) :;;" in RUN
+    ids = "p160-5090-1|p160-5090-2|p160-5090-3|p160-5090-4|p160-5090-5|p160-5090-6) :;;"
+    assert ids in RUN and ids in DRIVE                                       # Amendment 1: six ids, -4 to -6 for probes
+
+
+def test_amendment_1_admits_unrecorded_caps_only_as_a_fallback_and_changes_no_rule():
+    """Amendment 1 (registered before any data): unrecorded-cap hosts as a fallback after a full loop under the
+    registered terms; the box's 575 W floor and the reducer's every-sample VOID unchanged; at most 3 rc 17 probes, each
+    recorded in the host registry; six run ids; the lane's ceiling 6 x the registered worst."""
+    a = PREREG[PREREG.index("## Amendment 1"):]
+    for figure in ("at least 100 screen\nrounds over at least 2.5 h with no pin", "`vast_power_limit_unknown: eligible`",
+                   "refuses under\n  575 W with rc 17", "`python -m adertha.compute.hosts append <run_id>`",
+                   "**At most 3 such probes**", "**Run ids `p160-5090-1` to `-6`.**", "6 x $1.16 = $6.96",
+                   "however old the reading", "the reading launches as registered and this amendment stays unused"):
+        assert figure in a, figure
+    red = _reducer()
+    assert red.MIN_POWER_W == 575 and red.GO_BAR == 1.05 and red.READING == "S1"           # no rule moved
+    assert "MIN_POWER_W=575 " in RUN and "finish 17; }" in RUN
+    # the runner writes the cap it read before the floor's refusal, so the registry can take it from the receipt
+    assert RUN.index('echo "POWER_LIMIT_W $PL (floor $MIN_POWER_W)"') < RUN.index('[ "$PL" -ge "$MIN_POWER_W" ] || {')

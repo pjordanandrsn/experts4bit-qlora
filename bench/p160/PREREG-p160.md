@@ -249,3 +249,36 @@ instance id and no host name; the bench reads no GPU UUID. `RESULTS-p160.md` is 
 - **Nothing that depends on weight values:** the bytes are random, and outputs are compared decode against decode.
 
 **Review:** one independent reviewer, then the maintainer's pass.
+
+## Amendment 1: hosts with no recorded power cap (a fallback, registered before any data)
+
+**Why.** As registered, the launch takes only RTX 5090 hosts whose power cap was recorded at 575 W or more within the last
+3 days. On 2026-10-20, 30 screen rounds (08:44-09:29Z) found none offering. Of 37 RTX 5090 offers, only three passed
+price, rel2, inet, disk and RAM, and all three were on machines with no recorded cap. None of the 12 machines with a
+qualifying recorded cap was offering. No host was created and no run id was used.
+
+**The trigger.** This amendment is used only after a launch loop under the registered terms has run at least 100 screen
+rounds over at least 2.5 h with no pin. Its screen records are kept in the run's launch notes. If a recorded host
+appears first, the reading launches as registered and this amendment stays unused.
+
+**What changes, and only this:**
+- **The host screen** also admits machines whose power cap is UNRECORDED (`vast_power_limit_unknown: eligible`), when
+  they pass every other card term (price, $/GB, rel2, inet, disk, RAM, verified, direct SSH, not a caution machine). A
+  machine whose latest recorded cap is under 575 W stays excluded, however old the reading. One whose reading of 575 W
+  or more is older than 3 days counts as unrecorded (the registry's rule), so it is admitted on the same terms.
+- **The box's power floor is unchanged.** The runner reads `power.limit` before anything is installed and refuses under
+  575 W with rc 17 (rc 15 if unreadable). Every timed replay's enforced limit is sampled, and any sample under 575 W
+  VOIDs, as registered.
+- **Each probe records the cap it read.** A run that ends at rc 17 is fetched back like any run (its `summary.txt`
+  carries `POWER_LIMIT_W`, its `forensics.txt` the nvidia-smi line). After its receipt is committed, the host registry
+  takes the reading (`python -m adertha.compute.hosts append <run_id>`), so no later lane draws that machine blind.
+- **At most 3 such probes** (rc 17 refusals) for this lane. Each is an instrument refusal and not a strike. Its cost is a
+  create, a boot and the pre-install checks, a few cents at per-second billing, inside each run id's registered worst.
+- **Run ids `p160-5090-1` to `-6`.** The three added ids exist so that up to three probes cannot use up the reading's
+  ids. At most three runs may pass the power floor (readings) and at most three may end at rc 17. The strike rules are
+  P156's, unchanged.
+- **The lane's ceiling:** six run ids at the registered worst, 6 x $1.16 = $6.96, inside the lane's $15.
+
+**Unchanged:** the arms, the plans, the blocks and steps, the spacer, the order, the clocks, the rule (S1-only GO, the
+clock bound, every VOID), the predictions, the guard (1.0 h), the download cap and the per-run worst ($1.16).
+
