@@ -121,7 +121,9 @@ The offload row uses a different training setup.
 ## New in 0.56.0
 
 Serving defaults on `qwen3_moe`. Each was measured alone on Qwen3-30B-A3B on one RTX 5090 (170 SMs); their combined
-effect has not been read.
+effect has not been read. Two need a newer grouped-nf4-gemm than `[fast]` installs (0.43.0 or later): K25's prmt decode
+needs 0.50.0 and the int8 head needs 0.48.0. Below those each resolves off, recorded, and nothing breaks. To get them,
+run `pip install -U grouped-nf4-gemm`.
 
 - **Sixteen requests decode 1.0925× as fast, one request unchanged, every token identical.** K25, the batched NF4 decode
   GEMM, now decodes its codebook with grouped-nf4-gemm K39's byte-permute decode (`lut="prmt"`), bit-identical to the
