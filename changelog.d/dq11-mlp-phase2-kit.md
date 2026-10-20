@@ -16,3 +16,6 @@ would license, by Amendment 5 (`bench/dq11/DQ11-MLP-BUILD-AMENDMENT-5.md`).
 
 Files: `bench/dq11/dq11_mlp_phase2.py`, `dq11_mlp_phase2_run.py`, `dq11_mlp_phase2_box.sh`, `dq11_mlp_phase2_drive.sh`
 and `dq11_mlp_phase2_manifest_template.json`, with `tests/test_dq11_mlp_phase2*.py`.
+
+`bind_manifest` also declares `lane_record.min_disk_gb`, the box script's own 120 GB free-disk floor, which the shared
+launcher's preflight disk check reads.
