@@ -22,6 +22,16 @@ Full texts grew the bundle by about 600 bytes per read and pushed it past its
 size cap twice in a week. A README
 ``until_marker`` that is not found is a failure, not the whole file.
 
+The bundle is read as PLAIN TEXT (by language-model tools and chat clients), where an autolinker takes a URL up to the
+next whitespace. A markdown link inside parentheses, ``([notes](https://.../README.md)).``, then becomes a request
+for ``.../README.md)).`` and a 404: GitHub's traffic showed exactly those paths (2026-10-20). So every URL is
+written in the plain-text-safe form: ``[text](url)`` becomes ``text <url>`` (a badge, ``[![alt](img)](url)``,
+becomes ``alt <url>``), a bare URL that ends in ``)`` or ``.`` becomes ``<url>`` with that punctuation outside it (a
+bare URL ending otherwise, e.g. inside a JSON string, is left byte-identical), and each section's source URL is in
+angle brackets. CODE is never rewritten: fenced blocks and inline code spans are copied byte for byte, so an example
+a reader copies still runs.
+The build refuses a bundle in which any URL is still directly followed by ``)`` or ``.``.
+
     python scripts/build_llms_bundle.py            # write llms-full.txt
     python scripts/build_llms_bundle.py --check    # exit 1 if stale
 """
@@ -36,6 +46,92 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from discovery_common import ACTIVE_STATUSES, ContractError, bundle_sources, load_claims, read_text, write_text  # noqa: E402
+
+
+#: a badge: a linked image, [![alt](image-url)](link-url), rendered as its alt text and the link
+_MD_BADGE = re.compile(r"\[!\[([^\]\n]*)\]\((https?://[^\s)]+)\)\]\((https?://[^\s)]+)\)")
+#: a markdown link or image whose target is an absolute URL: [text](url) or ![alt](url), optionally with a title
+_MD_LINK = re.compile(r"!?\[([^\]\n]*)\]\((https?://[^\s)]+)(?:\s+\"[^\"]*\")?\)")
+#: a bare URL not already inside angle brackets
+_BARE_URL = re.compile(r"(?<![<\w])https?://[^\s<>\"']+")
+#: an inline code span, and a fence line (``` or ~~~): code is copied byte for byte, never rewritten
+_CODE_SPAN = re.compile(r"`[^`\n]*`")
+_FENCE = re.compile(r"^\s*(```|~~~)")
+
+
+def _trim_url(url: str) -> tuple[str, str]:
+    """(url, trailing) with the trailing punctuation an autolinker should never take: sentence marks, and a closing
+    parenthesis the URL itself does not open (GitHub's autolink rule)."""
+    tail = ""
+    while url:
+        if url[-1] in ".,;:!?":
+            tail, url = url[-1] + tail, url[:-1]
+        elif url[-1] == ")" and url.count(")") > url.count("("):
+            tail, url = ")" + tail, url[:-1]
+        else:
+            break
+    return url, tail
+
+
+def _in_code(spans: list[tuple[int, int]], i: int) -> bool:
+    return any(a < i < b for a, b in spans)
+
+
+def _prose_links(text: str) -> str:
+    """One run of prose: links and bare URLs made plain-text safe, inline code spans left byte for byte. A link whose
+    TEXT is code (``[`x`](url)``) is still a link: its ``[`` sits outside the span."""
+    spans = [m.span() for m in _CODE_SPAN.finditer(text)]
+
+    def link(m: re.Match, out: str) -> str:
+        return m.group(0) if _in_code(spans, m.start()) else out
+    text = _MD_BADGE.sub(lambda m: link(m, f"{m.group(1)} <{m.group(3)}>"), text)
+    spans = [m.span() for m in _CODE_SPAN.finditer(text)]
+    text = _MD_LINK.sub(lambda m: link(m, f"{m.group(1)} <{m.group(2)}>" if m.group(1).strip()
+                                        else f"<{m.group(2)}>"), text)
+    spans = [m.span() for m in _CODE_SPAN.finditer(text)]
+
+    def bare(m: re.Match) -> str:
+        url, tail = _trim_url(m.group(0))
+        if not tail or not url or _in_code(spans, m.start()):    # nothing to swallow, or code: leave the bytes
+            return m.group(0)
+        return f"<{url}>{tail}"
+    return _BARE_URL.sub(bare, text)
+
+
+def plain_text_links(text: str) -> str:
+    """Every URL in its plain-text-safe form (see the module docstring). Fenced code blocks are copied unchanged."""
+    out, prose, fenced = [], [], False
+    for line in text.splitlines(keepends=True):
+        if _FENCE.match(line):
+            if not fenced and prose:
+                out.append(_prose_links("".join(prose)))
+                prose = []
+            out.append(line)
+            fenced = not fenced
+        elif fenced:
+            out.append(line)
+        else:
+            prose.append(line)
+    if prose:
+        out.append(_prose_links("".join(prose)))
+    return "".join(out)
+
+
+def unsafe_urls(text: str) -> list[str]:
+    """URLs a plain-text autolinker would extend into punctuation that is not the URL's: not in angle brackets, and
+    ending in a sentence mark or an unbalanced ')' (the URL read as such a linker reads it: up to whitespace). A ')'
+    the URL itself opens, as in a Wikipedia title, is the URL's own and is not flagged. Code (fences and inline
+    spans) is not prose and is not flagged: it is copied verbatim for a reader to run."""
+    bad, fenced = [], False
+    for line in text.splitlines():
+        if _FENCE.match(line):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue
+        spans = [m.span() for m in _CODE_SPAN.finditer(line)]
+        bad += [m.group(0) for m in _BARE_URL.finditer(line) if _trim_url(m.group(0))[1] and not _in_code(spans, m.start())]
+    return bad
 
 
 def _readme_opening(text: str, marker: str, path: str) -> str:
@@ -99,11 +195,16 @@ def build(root: Path, cfg: dict) -> str:
             body = read_text(root / item["path"])
             if item.get("until_marker"):
                 body = _readme_opening(body, item["until_marker"], item["path"])
-        out.append(f"## Source: {item['path']} ({base}{item['path']})")
+        out.append(f"## Source: {item['path']} <{base}{item['path']}>")
         out.append("")
-        out.append(body.strip())
+        out.append(plain_text_links(body.strip()))
         out.append("")
-    return "\n".join(out).rstrip() + "\n"
+    text = "\n".join(out).rstrip() + "\n"
+    bad = unsafe_urls(text)
+    if bad:
+        raise ContractError(f"{len(bad)} URL(s) in the bundle are directly followed by ')' or '.', which a plain-text "
+                            f"autolinker takes into the link (a 404): {bad[:3]}")
+    return text
 
 
 def main() -> int:
