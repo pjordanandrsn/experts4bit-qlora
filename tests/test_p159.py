@@ -52,7 +52,7 @@ def test_staged_files_match_their_pins_and_the_drive_stages_exactly_them():
 
 
 def test_both_self_tests_pass():
-    for script, want in (("p159_box.py", "p159_box self-test OK (14 cases)"),
+    for script, want in (("p159_box.py", "p159_box self-test OK (15 cases)"),
                          ("p159_reduce.py", "p159_reduce self-test OK (14 cases)")):
         p = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True,
                            timeout=120)
@@ -95,6 +95,7 @@ def test_the_registered_constants_are_the_prereg_s():
     assert abs(RED.NULL_LOG_MAX - __import__("math").log(1.5)) < 1e-12 and "exceeds log 1.5" in PREREG
     assert BOX.P_TUNABLES.startswith("glibc.malloc.mmap_max=0:glibc.malloc.trim_threshold=")
     assert BOX.PR_SET_THP_DISABLE == 41 and BOX.BALLOON_MAX == 96 * 2 ** 30 and BOX.FLOOR == 1.3
+    assert BOX.DRY_BALLOON_MAX == 2 ** 30 and "at most 1 GiB" in PREREG
 
 
 def test_the_guard_fits_with_25_percent_headroom():

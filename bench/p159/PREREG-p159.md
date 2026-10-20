@@ -226,7 +226,8 @@ the mean of its two bracketing M processes' M-block medians, over at least 3 B p
   - `p159-2` is a second reading on a different machine. It is allowed only if `p159-1` reads NOT_READ (state not
     observed), and never to repeat a read state.
   - `p159-3` and `p159-4` are spares, for refusals before any instance exists and for NOT_RUN at the pre-flight only.
-  - `p159-dry-<n>` are $0 wiring runs on 8 experts, never a reading. One A2000 wiring run (CPU-side counters, the N and
+  - `p159-dry-<n>` are $0 wiring runs on 8 experts, never a reading. On a dry run B's balloon holds at most 1 GiB, so
+    a wiring run never pressures a shared lab host. One A2000 wiring run (CPU-side counters, the N and
     P engagement checks) comes first, under a `gpu:a2000` claim with the baseline read.
 - **Cost:** guard 5.0 h at a $0.60/h cap, download at most $0.011/GB:
   - **worst $3.03 per created box** ($3.00 plus about 3 GB of wheels);

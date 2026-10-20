@@ -1,7 +1,7 @@
 # P159's staged files, as the box sees them (flat in $W): sha256, then name. p159_drive.sh and tests/test_p159.py
 # check every entry against its source (bench/p159/ or bench/smt-fuse/); p159_run.sh runs sha256sum -c on the box.
 554e0d7752700ad31b84179c9176a4630aebf10f5948cbb165d6f92d2e97e402  p159_run.sh
-24cbd0805a86e336646bc18035ce33cd1e159b902dd38450870dae147e16a402  p159_box.py
+0d9a6d31a2c8b14e86a143cc2bb655b46b7a300f1919205ddc020eb7ea7a51b0  p159_box.py
 271c179c1eeb006d5e72bd025a1a54fa54b8197c6cde9aa262fa5debbee79d2e  p159_reduce.py
 f133ccc02b36b2ef87c54904d69021b070d109327562bf503d9dc9c1ddb17ff2  smt_fuse_box.py
 229b3450381eda3fc14062b55bfac4a1245badcc4b240fd286ae0b08a9f2a477  q235_bootstrap.py

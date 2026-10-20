@@ -48,6 +48,7 @@ SLAB_BYTES = 3 * 1536 * 4096 * 2 * E_FULL               # 4.83 GB at 128 experts
 PR_SET_THP_DISABLE, PR_GET_THP_DISABLE = 41, 42
 P_TUNABLES = "glibc.malloc.mmap_max=0:glibc.malloc.trim_threshold=4611686018427387904"
 BALLOON_MAX = 96 * GIB
+DRY_BALLOON_MAX = 1 * GIB                                # a dry run only exercises the path: never pressure a lab host
 FLOOR = 1.3                                              # the registered RAM floor: 1.3 x the measured need
 MIN_MEMTOTAL, MIN_AVAILABLE = 64 * GIB, 32 * GIB         # refusals before the install (dry: 8 / 4 GiB)
 K_MAX, MIN_K = 16, 8                                     # the pool: K physical cores, one thread each
@@ -90,11 +91,14 @@ def time_fit(fit=FIT, b_runs=True):
     return {"need_s": need, "fit_s": fit["install_to_gate_s"] + need + fit["reserve_s"]}
 
 
-def balloon_bytes(memory_max, idle_current, peak_delta, floor=FLOOR):
-    """The balloon that leaves (floor - 1) x peak_delta free at a block's peak, or None when B must not run."""
+def balloon_bytes(memory_max, idle_current, peak_delta, floor=FLOOR, dry=False):
+    """The balloon that leaves (floor - 1) x peak_delta free at a block's peak, or None when B must not run. A dry run
+    clamps it to DRY_BALLOON_MAX: it checks the wiring, so it never holds more than that on a shared lab host."""
     if memory_max is None or peak_delta is None or idle_current is None:
         return None
     b = int(memory_max - idle_current - floor * peak_delta)
+    if dry:
+        return min(b, DRY_BALLOON_MAX) if b > 0 else None
     return b if 0 < b <= BALLOON_MAX else None
 
 
@@ -456,8 +460,8 @@ def run(a):
                     need, source = now["memory_peak"] - idle["memory_current"], "memory.peak"
                 else:
                     need, source = (first_m.get("vm_hwm") or 0) + SLAB_BYTES * a.experts // E_FULL, "VmHWM+slab"
-                b_status = {"bytes": balloon_bytes(idle["memory_max"], now["memory_current"], need), "need": need,
-                            "need_source": source, "memory_max": idle["memory_max"]}
+                b_status = {"bytes": balloon_bytes(idle["memory_max"], now["memory_current"], need, dry=dry),
+                            "need": need, "need_source": source, "memory_max": idle["memory_max"]}
                 print("P159_BALLOON " + json.dumps(b_status), flush=True)
             if not b_status["bytes"]:
                 processes.append({"kind": "B", "not_run": "balloon refused (no finite memory.max, or over 96 GiB)"})
@@ -511,12 +515,14 @@ def self_test():
     assert balloon_bytes(100 * GIB, 10 * GIB, 20 * GIB) == 64 * GIB
     assert balloon_bytes(400 * GIB, 10 * GIB, 20 * GIB) is None          # over 96 GiB: B not run
     assert balloon_bytes(30 * GIB, 10 * GIB, 20 * GIB) is None           # no room: B not run
+    assert balloon_bytes(400 * GIB, 10 * GIB, 20 * GIB, dry=True) == GIB  # a dry run holds at most 1 GiB
+    assert balloon_bytes(30 * GIB, 10 * GIB, 20 * GIB, dry=True) is None
     assert state_of(0.4, 128) == "FAST" and state_of(7.2, 128) == "SLOW" and state_of(2.0, 128) == "MID"
     assert state_of(0.4 * 8 / 128, 8) == "FAST"
     bi = "Node 0, zone   Normal  1 2 3 4 5 6 7 8 9 10 11\nNode 1, zone   Normal  0 0 0 0 0 0 0 0 0 5 6\n"
     assert parse_buddyinfo(bi) == {"0": 21, "1": 11}
     assert pool_size(128, 61.2) == 16 and pool_size(128, 12.0) == 9 and pool_size(6, None) == 6
-    print("p159_box self-test OK (14 cases)")
+    print("p159_box self-test OK (15 cases)")
     return 0
 
 
