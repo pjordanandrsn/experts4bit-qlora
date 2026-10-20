@@ -28,7 +28,17 @@ RUN = (LANE / "p160_run.sh").read_text(encoding="utf-8")
 DRIVE = (LANE / "p160_drive.sh").read_text(encoding="utf-8")
 BENCH = (LANE / "p160_bench.py").read_text(encoding="utf-8")
 PREREG = (LANE / "PREREG-p160.md").read_text(encoding="utf-8")
-LIB = (REPO / "experts4bit_qlora" / "engines" / "hot_residency.py").read_text(encoding="utf-8")
+#: P160 is a closed lane: its record pins e4b `2267635d` (bench/p160/RESULTS-p160.md), so the served-route lines it
+#: asserts are read at that commit, never from the live tree, which later knobs may reword (E4B_K25_PLAN did).
+LANE_COMMIT = "2267635d"
+
+
+def _lib_at_lane() -> str:
+    try:
+        return subprocess.run(["git", "show", f"{LANE_COMMIT}:experts4bit_qlora/engines/hot_residency.py"], cwd=REPO,
+                              capture_output=True, text=True, encoding="utf-8", check=True).stdout
+    except (OSError, subprocess.CalledProcessError) as e:
+        pytest.skip(f"the lane's commit {LANE_COMMIT} is not in this checkout (CI fetches full history): {e}")
 GUARD_H = 1.0
 BOOT_S = 300          # the launcher's create-to-runner allowance (P155's and P156's, kept)
 HEADROOM = 1.25       # e4b#1845's cross-lane rule
@@ -233,6 +243,7 @@ def test_todays_plan_is_the_served_plan_and_p_the_served_default():
 
 
 def test_the_bench_calls_k25_as_the_served_route():
+    LIB = _lib_at_lane()
     assert "return _k25(_tok[0].to(torch.bfloat16), pk, am, t_row0, t_rows, t_grp, order,\n" \
            "                            gather_div=_tok[1], **_k25_kw)" in LIB
     assert 'kw = {"scatter": order} if (_lean and pk is dn_p) else {}' in LIB

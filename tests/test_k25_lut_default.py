@@ -113,9 +113,11 @@ def test_build_engine_resolves_the_family_default_from_the_config_before_any_wei
     import pathlib
     src = (pathlib.Path(__file__).resolve().parents[1] / "experts4bit_qlora" / "serve_paged.py").read_text(encoding="utf-8")
     body = src[src.index("def build_engine(cfg: PagedServeConfig)"):]
-    early = body.index("    if _k25_lut_raw():\n        resolve_k25_lut()")
+    early = body.index("    if _k25_lut_raw() or _k25_plan_raw():")
+    early_call = body.index("        resolve_k25_plan(resolve_k25_lut(), family_known=False)")
     config = body.index("model_config = AutoConfig.from_pretrained(")
     resolved = body.index('    k25_lut = resolve_k25_lut(getattr(model_config, "model_type", None))')
+    plan = body.index("    k25_plan = resolve_k25_plan(k25_lut)")          # E4B_K25_PLAN, on the family's decode
     load = body.index("load_moe_4bit_streaming(")
-    assert early < config < resolved < load
-    assert 'info["k25_lut"] = k25_lut' in body
+    assert early < early_call < config < resolved < plan < load
+    assert 'info["k25_lut"] = k25_lut' in body and 'info["k25_plan"] = k25_plan' in body
