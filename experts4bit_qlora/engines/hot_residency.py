@@ -434,10 +434,34 @@ def _k25_mode_env() -> str:
 _K25_PLAN = {"block_n": 32, "kc": 64, "warps": 4, "stages": 3, "lut": "tree", "dot_bf16": False}
 
 
+def _k25_lut_env() -> str:
+    """``E4B_K25_LUT``: K25's codebook decode on this route. ``tree`` (the default, also when unset or empty) is
+    :data:`_K25_PLAN`'s select tree. ``prmt`` is K39's byte-permute decode (K25's ``lut="prmt"``, grouped-nf4-gemm#569),
+    bit-identical to the tree; lane P156 read it at 1.1755x the tree on Qwen3-30B-A3B's W16 shapes (a microbench,
+    ``bench/p156/RESULTS-p156.md``). It is opt-in until a served read licenses it (lane P158). ``prmt`` requires a
+    kernel package that carries it and an NVIDIA device: either missing is a refusal, never a silent fallback. Anything
+    else is refused."""
+    v = os.environ.get("E4B_K25_LUT", "tree").strip().lower() or "tree"
+    if v not in ("tree", "prmt"):
+        raise ValueError(f"E4B_K25_LUT={v!r}: expected 'tree' or 'prmt'")
+    return v
+
+
 def _k25_plan(nf4_smallm_mod) -> dict:
-    """:data:`_K25_PLAN`, with the codebook decode the installed kernel package carries: ``"tree"`` when its
-    ``_LUT_MODES`` names it, else ``"pair"`` (bit-identical; lane K26)."""
+    """:data:`_K25_PLAN`, with the codebook decode ``E4B_K25_LUT`` names (:func:`_k25_lut_env`) and the installed
+    kernel package carries. Under ``tree``: ``"tree"`` when its ``_LUT_MODES`` names it, else ``"pair"``
+    (bit-identical; lane K26). Under ``prmt``: ``"prmt"``, refused when the package lacks it or the device is ROCm (an
+    inline-PTX decode)."""
     modes = getattr(nf4_smallm_mod, "_LUT_MODES", None) or {}
+    if _k25_lut_env() == "prmt":
+        if "prmt" not in modes:
+            raise RuntimeError(
+                "E4B_K25_LUT=prmt needs grouped-nf4-gemm with K39's decode (K25's lut='prmt', grouped-nf4-gemm#569); "
+                "the installed kernel package does not carry it")
+        if getattr(torch.version, "hip", None):
+            raise RuntimeError("E4B_K25_LUT=prmt is an inline-PTX decode for NVIDIA targets; on ROCm keep "
+                               "E4B_K25_LUT=tree (the same values)")
+        return dict(_K25_PLAN, lut="prmt")
     return _K25_PLAN if "tree" in modes else dict(_K25_PLAN, lut="pair")
 
 
