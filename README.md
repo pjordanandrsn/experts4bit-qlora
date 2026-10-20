@@ -7,8 +7,8 @@
 
 **Quantize the experts. Train adapters. Move weights to RAM or SSD when GPU memory runs out.**
 
-**On a 12 GB card:** with `OFFLOAD_EXPERTS=1`, Qwen3-30B-A3B QLoRA-trains at 7.16 GB peak GPU memory while the other
-~13–15 GB of packed experts stay in pinned CPU RAM (`e4b.offload.fits-30b-class`). [The command](#load-a-model-and-check-it) ·
+**On a 12 GB card:** with `OFFLOAD_EXPERTS=1`, Qwen3-30B-A3B QLoRA-trains at 7.16 GB peak GPU memory while the rest of
+its packed experts stay in pinned CPU RAM (`e4b.offload.fits-30b-class`). [The command](#load-a-model-and-check-it) ·
 [how to read the number](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STORAGE-MODES.md#reading-the-headline-memory-numbers)
 
 Mixture-of-Experts (MoE) models keep many expert networks but activate only a few per token.
@@ -95,7 +95,8 @@ These are specific workloads, with public results and controls. The table is che
 
 The speed rows profile both frameworks on one stack (torch 2.12.1). The GPU-time ratio is the host-independent figure; the
 wall-clock ratio grows on a slower host, because Unsloth runs 14× e4b's CPU ops per step at the field recipe. On packed rows
-the wall ratio read 1.287, 1.472 and 1.773 on three hosts. The earlier field-recipe readings, 2.352 and 2.468, were wall
+the wall ratio read 1.472 (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio`) and 1.773
+(`e4b.train.memory.packed-4k-position-defaults.5090.2026-10-07`) on two hosts. The earlier field-recipe readings, 2.352 and 2.468, were wall
 ratios from before the reentrant checkpoint.
 The offload row uses a different training setup.
 
@@ -125,7 +126,8 @@ The offload row uses a different training setup.
   kernel. On one RTX 5090, one request decodes 1.24× as fast and 16 are unchanged, within the quality bar.
   `GNF4_GEMV_BW=0` restores dot-pad.
 - **`serve_paged` refuses an unservable hybrid model before reading any weight,** with the same verdict as before.
-- **The streaming loader returns its cached pinned host blocks after a load:** 2.22 GB of host RAM on Qwen3-235B.
+- **The streaming loader returns its cached pinned host blocks after a load:** 2.22 GB of host RAM on Qwen3-235B
+  (UNVERIFIED: no register row; measured on an RTX A2000 at 2 layers, [receipts](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/pinned-host-cache)).
 - **The training estimate prices a held-out evaluation and the logits a caller holds** on the stock-loss path.
 
 ## Check the fit
@@ -133,7 +135,7 @@ The offload row uses a different training setup.
 - **Models:** use the [architecture support matrix](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/ARCHITECTURE_SUPPORT.md). Support and test coverage vary by family and execution path.
 - **Memory:** CPU/NVMe offload trades transfer time and host storage for GPU memory. Measure your workload.
 - **Speed:** 4-bit saves weight memory; it is not automatically faster or more energy-efficient than bf16 when both fit.
-- **Serving:** vLLM was faster in the measured Qwen decode comparison. This runtime focuses on fitting and controlling low-bit MoEs; see the [serving results](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/SERVING-THROUGHPUT.md).
+- **Serving:** vLLM was faster in the measured Qwen decode comparison. This runtime focuses on fitting and controlling low-bit MoEs; see the [serving results](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/SERVING-THROUGHPUT.md#throughput-census-bo7-measured-in-repo).
 - **Platforms:** CUDA execution is the tested path. ROCm, macOS, Windows and other non-CUDA GPU execution are outside this package's scope.
 
 ## Documentation and machine-readable data
