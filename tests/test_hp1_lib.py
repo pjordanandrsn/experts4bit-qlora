@@ -143,3 +143,40 @@ def test_eager_experts_without_adapter_is_hf_math_and_the_delta_moves_it():
     m.adapter = nzA
     assert not torch.equal(m(x, idx, wts), out)
 
+
+
+def _whole_slot_fingerprint(w):
+    """The fingerprint as it was computed before chunking: the whole slot as one int64 tensor (HPN read 6's OOM)."""
+    w = w.detach().contiguous()
+    if w.element_size() != 2:
+        w = w.to(torch.bfloat16)
+    v = w.view(torch.int16).reshape(-1).to(torch.int64)
+    pos = (torch.arange(v.numel(), device=v.device, dtype=torch.int64) % hp1_lib._P) + 1
+    return int(v.sum().item()), int((v * pos).sum().item())
+
+
+@pytest.mark.parametrize("shape", [(151936, 2048), (1536, 2048), (2048, 768)])
+def test_the_chunked_fingerprint_is_bit_identical_to_the_whole_slot_form_at_real_size(shape):
+    """Qwen3-30B-A3B's lm_head / embed (151,936 x 2,048, the slot that ran the A2000 out of memory at L8), an expert's gate_up
+    (1,536 x 2,048) and its down (2,048 x 768), as bf16 on the CPU: the chunked sums equal the whole-slot sums exactly."""
+    g = torch.Generator().manual_seed(shape[0])
+    w = (torch.randn(shape, generator=g) * 0.05).to(torch.bfloat16)
+    assert hp1_lib.slot_fingerprint(w) == _whole_slot_fingerprint(w)
+
+
+@pytest.mark.parametrize("chunk,n", [(7, 1), (7, 7), (7, 50), (1000, 4096 + 13), (1 << 10, 1 << 16)])
+def test_the_chunk_boundaries_do_not_move_the_fingerprint(monkeypatch, chunk, n):
+    g = torch.Generator().manual_seed(n)
+    w = torch.randn(n, generator=g).to(torch.bfloat16)
+    want = _whole_slot_fingerprint(w)
+    monkeypatch.setattr(hp1_lib, "FINGERPRINT_CHUNK", chunk)
+    assert hp1_lib.slot_fingerprint(w) == want
+
+
+def test_the_whole_slot_form_cannot_wrap_for_any_slot_this_lane_reads():
+    """The weighted sum's terms are at most 2**15 x 65521; it would wrap int64 only past 2**63 / (2**15 x 65521), about 4.3e9
+    elements per slot. Qwen3's largest slot is 311M, so there is no wraparound to reproduce (the chunked accumulators would wrap
+    identically anyway: they are int64 adds, regrouped)."""
+    limit = (2 ** 63 - 1) // (2 ** 15 * hp1_lib._P)
+    assert limit > 4_000_000_000 > 151936 * 2048
+    assert hp1_lib.FINGERPRINT_CHUNK * 8 * 3 <= 384 * 2 ** 20                    # the stated bound: three int64 chunks
