@@ -20,7 +20,7 @@ NF4_SMALLM_SHA256=ee46969a4f786c36abe26bfaf0a52e426db4465406a5e31c6085fd3270b265
 INT4_B32_SHA256=773eff5db7be77dea3d1f9048a6e708a94e79634baf17f452bf2848e24a2072f     # kernel/int4_b32.py, P155's
 NF4_GROUPED_SHA256=a7090915485c6e9943f568e79315b3f533c754f24edbdb7160b05dcc18619a23  # kernel/nf4_grouped.py: K39's tables
 INSTALL_TO_GATE_S=600   # the install (450 s) and the self-tests with the premise (150 s): P152's and P154's walls, rounded up
-NEED_BENCH=500          # the microbench: P156's box walls through this lane's shape, x1.5 (PREREG, "Budget")
+NEED_BENCH=600          # the microbench: P156's box walls through this lane's shape, x1.5 (PREREG, "Budget")
 RESERVE=600             # can_run's margin after the bench: the reduce, the fetch-back and the teardown
 MIN_POWER_W=575   # P149's power floor (P156's and P158's, kept): a capped board refuses before the install, rc 17
 GPU_CLASS=5090; MIN_RAM_GB=16; MIN_DISK_GB=20

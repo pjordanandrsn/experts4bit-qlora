@@ -78,6 +78,18 @@ steps 0, 8, ..., 56, confirmation on steps 64-127. Two blocks, in this order:
 its tokens diverge from S0's row by row. Of S1's 2,048 (row, step) cells, **43.3 %** carry picks equal to S0's at every
 layer; four of the 16 rows are identical at every step, and **no step has all 16 rows identical**: at every step some
 row's picks differ from S0's at some layer. The per-step distinct counts track S0's (S1/S0 0.999 over the replay).
+The overlap is FRONT-LOADED, and it peaks at the step numbers P156 selected on (cells identical to S0's at
+every layer, by S1 step):
+
+| S1 steps | 0-15 | 16-31 | 32-47 | 48-63 | 64-79 | 80-95 | 96-111 | 112-127 |
+|---|---|---|---|---|---|---|---|---|
+| identical to S0 | 68.8 % | 59.8 % | 50.0 % | 44.5 % | 38.3 % | 32.0 % | 28.1 % | 25.0 % |
+
+At P156's eight selection step numbers (0, 8, ..., 56) it is **57.0 %** (11, 11, 11, 9, 8, 8, 8 and 7 of 16 rows); over
+the reading's steps without them, 42.7 %; over steps 64-125, **31.0 %**. So the reducer also REPORTS C1 on two splits of
+the S1 block: steps 64-125 (62 reps, the least-overlapping half) and the block without those eight step numbers (118
+reps). They never rule; they show whether the early overlap carried the headline.
+
 So S1 is fresh for TIMING (no arm or plan was ever selected or timed on it), and partly fresh for ROUTING. A fully
 independent stream (new prompts) needs its own router replay; it is not taken here. The plans were never selected on
 any step either block uses: P156's selection steps (0, 8, ..., 56 of S0) appear in neither.
@@ -142,7 +154,9 @@ seed 160), and a lower bound of the median minus 2 SE.
     1.05 is about a 1.034 step, the size of the flips P153 and P158 read.
 - **NO_GO:** otherwise.
 - **Reported, never ruling:** C2's and C3's P/C (with their clock bounds); T/P; the S0R block's every ratio; each arm's
-  clocks and the label "clock-confounded" where an arm's median SM clock is off P's by more than 2 %, either way; the
+  clocks and the label "clock-confounded" where an arm's median SM clock is off P's by more than 2 %, or its median
+  memory clock by more than 1 % (GDDR7's is fixed; for a byte-bound pair it is the clock that matters), either way;
+  C1 on S1's two splits (above); the
   milliseconds per arm; the compiled metadata; the contract findings; the walls.
 
 ## Predictions (graded in the read, never ruling)
@@ -150,6 +164,7 @@ seed 160), and a lower bound of the median minus 2 SE.
 | prediction | basis | if HELD | if MISSED |
 |---|---|---|---|
 | **the headline:** C1's median P/C1 on S1 is **1.50-1.70**; P(GO) about 90 % | P156's 1.617 (per rep 1.593-1.650) on S0 | P156's figure carries to an untimed stream under the defences | below: the curse, the predecessor or clocks carried part of it (the S0R block and the clocks say which); above: S1's routing favours big tiles more |
+| **the overlap:** C1 on S1 steps 64-125 within 0.03 of C1 on all of S1 | a plan's speed follows the per-step distinct counts, not which rows repeat S0 | the early overlap did not carry the headline | routing-specific selection leaked into the reading; the split says how much |
 | **reproduction:** C1 on S0R within 0.03 of C1 on S1 | the routing's statistics match (S1/S0 distinct 0.999) | the plan's gain is not stream-specific | the blocks differ by routing, or the instrument moved one block |
 | **the decode:** T/P on S1 in **1.15-1.20** | P156's 1.1755 | P156's GO reproduces under the defences | the spacer or the clocks moved P156's own headline |
 | **the self-pair** within 0.005 of 1 | P156's 0.9985 without a spacer | the spacer removed P156's small carry-over | a noisier card; the 2-SE guard carries it |
@@ -183,15 +198,17 @@ grouped-nf4-gemm's `kernel/` at `41ef086e` (its three files at the pinned hashes
   Nothing is fetched from a hub.
 - **The fit, e4b#1845's rule, with at least 25 % headroom:**
   - **Install, tripwire, self-tests and premise:** `INSTALL_TO_GATE_S` = 600 s (P156's).
-  - **The bench:** `NEED_BENCH` = **500 s**, from P156's box walls. Its confirmation ran 384 graphs of the same shape
+  - **The bench:** `NEED_BENCH` = **600 s**, from P156's box walls. Its confirmation ran 384 graphs of the same shape
     (both GEMMs, 48 layers, 10 replays each) in **60.8 s** on an RTX 5090: 0.063 s of host time a graph beyond its
     replays at the arms' recorded medians. A P160 rep captures 7 graphs (S and six arms) and replays 60 timed and 60
-    spacer replays (at P's time): 1.67 s. Over 186 reps, plus 20 s of stores, routing and compiles: about 331 s;
-    x1.5 = 496 s, rounded up.
+    spacer replays (at P's time): 1.67 s, so 310.7 s over 186 reps. The compiles are sourced, not estimated: P156
+    first-called all 288 prmt variants on the same card class and toolchain, median 0.25 s, slowest **2.65 s**, so
+    this lane's 12 fresh variants (6 arms x 2 projections, P2 sharing P's) are taken at 12 x 2.65 = 31.8 s; P156's
+    routing, stores and two tile passes add 3.6 s. About 346 s; x1.5 = 519 s, rounded up.
   - **The reserve:** `RESERVE` = 600 s. No Nsight step.
-  - **The runner's check, before the install:** `FIT` = 600 + 500 + 600 = 1700 s, and `FIT_NEED` = 1700 x 1.25 = 2125 s.
+  - **The runner's check, before the install:** `FIT` = 600 + 600 + 600 = 1800 s, and `FIT_NEED` = 1800 x 1.25 = 2250 s.
     Anything short of that is a refusal, rc 41.
-  - **The static fit,** (boot + fit) x 1.25 <= guard: boot 300 s + 1700 s = 2000 s, and 2000 x 1.25 = 2500 s <= 2700 s (0.75 h).
+  - **The static fit,** (boot + fit) x 1.25 <= guard: boot 300 s + 1800 s = 2100 s, and 2100 x 1.25 = 2625 s <= 2700 s (0.75 h).
     `tests/test_p160.py` asserts it.
 - **The premise, on the card:** K25's row-exact GPU tests (4, P156's) and K39's compiled contract (grouped-nf4-gemm
   v0.50.0's `kernel/test_nf4_smallm_prmt_gpu.py`, 23, P158's staged copy): exactly 27 passed, else rc 25.

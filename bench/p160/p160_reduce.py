@@ -55,9 +55,14 @@ GO_BAR = 1.05                                # C1's median P/C1 minus 2 SE, raw 
 BOOT_B, BOOT_SEED = 2000, 160
 SELF_BAND = (0.99, 1.01)                     # P/P2's median, else the instrument is VOID
 CLOCK_TOL = 0.02                             # an arm's median SM clock off P's by more than this is labelled
+MEM_CLOCK_TOL = 0.01                         # ... and its median memory clock (fixed on GDDR7; a byte-bound pair's clock)
+#: reported splits of the S1 block (review of e4b#1870): S1's overlap with S0 is front-loaded and peaks at P156's eight
+#: selection step numbers, so C1 is also reported on the least-overlapping half and without those step numbers
+P156_SELECT_STEPS = tuple(range(0, 64, 8))
+S1_SPLITS = {"steps_64_125": lambda s: s >= 64, "without_p156_selection_step_numbers": lambda s: s not in P156_SELECT_STEPS}
 MIN_POWER_W = 575                            # every NVML sample's enforced limit, else VOID
 P156_C1_OVER_P = 1.6167                      # P156's reported C1 over P on S0's steps 64-127 (RESULTS-p156.md)
-PRED = {"headline": (1.50, 1.70), "repro": 0.03, "t_over_p": (1.15, 1.20), "self_pair": 0.005, "clock": CLOCK_TOL,
+PRED = {"headline": (1.50, 1.70), "repro": 0.03, "split": 0.03, "t_over_p": (1.15, 1.20), "self_pair": 0.005, "clock": CLOCK_TOL,
         "regs_c1": {"gu": 194, "dn": 127}}
 
 
@@ -191,12 +196,19 @@ def block_read(blk, clocks):
     ms = [rep_ms(rep) for rep in blk["reps"]]
     out = {"self_pair": summarize([m["P"] / m["P2"] for m in ms]),
            "p_ms": statistics.median(m["P"] for m in ms), "ms": {a: statistics.median(m[a] for m in ms) for a in ARMS}}
-    base = clocks["P"]["sm_mhz_median"]
+    base, mbase = clocks["P"]["sm_mhz_median"], clocks["P"].get("mem_mhz_median")
     for arm in ("C1", "C2", "C3"):
-        clk = clocks[arm]["sm_mhz_median"]
+        clk, mclk = clocks[arm]["sm_mhz_median"], clocks[arm].get("mem_mhz_median")
         s = summarize([m["P"] / m[arm] for m in ms])
         s["clock_over_p"] = clk / base
         s["labels"] = [f"clock-confounded: SM {clk:.0f} MHz against P's {base:.0f}"] if abs(clk / base - 1) > CLOCK_TOL else []
+        if not (_num(mclk) and _num(mbase)):
+            s["mem_clock_over_p"] = None
+            s["labels"].append("memory clock unread")
+        else:
+            s["mem_clock_over_p"] = mclk / mbase
+            if abs(mclk / mbase - 1) > MEM_CLOCK_TOL:
+                s["labels"].append(f"clock-confounded: memory {mclk:.0f} MHz against P's {mbase:.0f}")
         # the conservative clock bound: a faster-clocked arm's whole clock gain taken away at 1:1 scaling
         s["lb_clock_adj"] = s["lb"] * min(1.0, base / clk)
         out[arm] = s
@@ -226,6 +238,11 @@ def verdict(rec):
     out["reported"] = {"C2": reads[READING]["C2"], "C3": reads[READING]["C3"], "T_over_P": reads[READING]["T_over_P"],
                        "S0R_C1": reads["S0R"]["C1"], "p156_c1_over_p": P156_C1_OVER_P,
                        "c1_ms_at_p_scale": reads[READING]["ms"]["C1"]}
+    s1 = rec["blocks"][READING]["reps"]
+    out["reported"]["S1_C1_splits"] = {}
+    for name, keep in S1_SPLITS.items():
+        q = [m["P"] / m["C1"] for m in (rep_ms(rep) for rep in s1 if keep(rep["step"]))]
+        out["reported"]["S1_C1_splits"][name] = summarize(q) if len(q) > 1 else None
     out["compiled"] = rec.get("compiled")
     out["predictions"] = {k: "UNREAD (a shakedown)" for k in _grade(out)} if shake else _grade(out)
     c1_moved = [f for f in findings if f["arm"] in ("P", "C1")]
@@ -254,6 +271,9 @@ def _grade(o):
     return {
         "the headline: C1's median P/C1 on S1 in 1.50-1.70": _band(c1["median"], *PRED["headline"]),
         "reproduction: C1 on S0R within 0.03 of C1 on S1": _band(abs(c1r["median"] - c1["median"]), 0, PRED["repro"]),
+        "the overlap: C1 on S1 steps 64-125 within 0.03 of C1 on all of S1": _band(
+            None if o["reported"]["S1_C1_splits"]["steps_64_125"] is None
+            else abs(o["reported"]["S1_C1_splits"]["steps_64_125"]["median"] - c1["median"]), 0, PRED["split"]),
         "the decode: T/P on S1 in 1.15-1.20 (P156: 1.1755)": _band(b[READING]["T_over_P"]["median"], *PRED["t_over_p"]),
         "self-pair within 0.005 of 1": _band(abs(b[READING]["self_pair"]["median"] - 1), 0, PRED["self_pair"]),
         "clocks: C1's median SM clock within 2 % of P's": _band(abs(c1["clock_over_p"] - 1), 0, PRED["clock"]),
@@ -274,7 +294,7 @@ def _regs(c):
 
 # ------------------------------------------------------------------------------------------------ self-test (mutants)
 def _fake(c1=1.62, t=1 / 1.175, noise=0.002, self_ratio=1.0, p_ms=10.96, layers=LAYERS, shakedown=False,
-          clk=None, limit=575.0, **kw):
+          clk=None, mem=None, limit=575.0, **kw):
     rng = random.Random(7)
     f = {"P": 1.0, "P2": 1 / self_ratio, "C1": 1 / c1, "C2": 1 / 1.55, "C3": 1 / 1.58, "T": 1 / t}
     blocks, clocks = {}, {"error": None, "n": 1}
@@ -287,7 +307,8 @@ def _fake(c1=1.62, t=1 / 1.175, noise=0.002, self_ratio=1.0, p_ms=10.96, layers=
                  "identical": {a: True for a in ARMS if a != "T"}} for r, s in enumerate(spec["steps"])]
         blocks[b] = {"rows": list(spec["rows"]), "steps": list(spec["steps"]), "tile_faults": [],
                      "n_real": [flat[s * layers:(s + 1) * layers] for s in range(STEPS)], "reps": reps}
-        clocks[b] = {a: {"sm_mhz_median": (clk or {}).get(a, 2800.0), "enforced_limit_w": [limit]} for a in ARMS}
+        clocks[b] = {a: {"sm_mhz_median": (clk or {}).get(a, 2800.0), "mem_mhz_median": (mem or {}).get(a, 14001.0),
+                         "enforced_limit_w": [limit]} for a in ARMS}
     rec = {"device": "NVIDIA GeForce RTX 5090", "cc": [12, 0], "layers": layers, "shakedown": shakedown,
            "rr_sha256": RR_SHA256, "rows_sha256": dict(ROWS_SHA256), "arms": list(ARMS), "spacer": SPACER,
            "plans": {a: list(PLANS[a]) for a in ARMS}, "iters": ITERS, "blocks": blocks, "clocks": clocks}
@@ -314,6 +335,16 @@ def self_test():
     o = verdict(_fake(c1=1.07, noise=0.0005, clk={"C1": 2912.0}))
     assert o["verdict"] == "NO_GO" and o["C1"]["lb"] >= GO_BAR > o["C1"]["lb_clock_adj"], o["C1"]
     assert o["C1"]["labels"] and "clock-confounded" in o["C1"]["labels"][0]
+    o = verdict(_fake(mem={"C1": 14200.0}))                                  # a memory clock 1.4 % off P's: labelled
+    assert o["verdict"] == "GO" and any("memory 14200" in x for x in o["C1"]["labels"])
+    sp = o["reported"]["S1_C1_splits"]
+    assert sp["steps_64_125"]["n"] == 62 and sp["without_p156_selection_step_numbers"]["n"] == 118
+    bad = _fake(c1=1.00)                                                     # a split never rules
+    for rep in bad["blocks"]["S1"]["reps"]:
+        if rep["step"] >= 64:
+            rep["replays_ms"]["C1"] = [x / 1.6 for x in rep["replays_ms"]["P"]]
+    o = verdict(bad)
+    assert o["verdict"] == "NO_GO" and o["reported"]["S1_C1_splits"]["steps_64_125"]["median"] > 1.5
     o = verdict(_fake(c1=1.07, noise=0.0005, clk={"C1": 2700.0}))           # a SLOWER-clocked C1 is never helped
     assert o["verdict"] == "GO" and o["C1"]["lb_clock_adj"] == o["C1"]["lb"]
     bad = _fake(c1=1.00)                                                     # a fast C2 never rules
@@ -387,7 +418,7 @@ def self_test():
     assert all(sorted(row[i] for row in w) == list(range(6)) for i in range(6))            # each position once
     assert len({(row[i], row[i + 1]) for row in w for i in range(5)}) == 30                # each ordered pair once
     assert all(len(s["steps"]) % len(ARMS) == 0 for s in BLOCKS.values())                  # whole squares
-    print("p160_reduce self-test OK (41 checks)")
+    print("p160_reduce self-test OK (44 checks)")
 
 
 def main():

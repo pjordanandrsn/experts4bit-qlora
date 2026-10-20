@@ -122,11 +122,18 @@ def test_need_bench_is_p156s_box_walls_through_this_shape_times_one_and_a_half()
     red = _reducer()
     reps = sum(len(s["steps"]) for s in red.BLOCKS.values())
     per_rep = 7 * host_s + 60 * mean_ms / 1e3 + 60 * med["P"] / 1e3
-    box = reps * per_rep + 20                                      # + stores, routing and compiles
-    assert reps == 186 and round(host_s, 3) == 0.063 and round(per_rep, 2) == 1.67 and round(box) == 331
+    # the compiles, sourced: P156's slowest first call of a prmt variant on the same card class and toolchain, for each
+    # of this lane's 12 fresh variants; P156's routing, stores and two tile passes
+    first = [r["first_call_s"] for p in ("gu", "dn") for r in p156["select"][p] if r.get("first_call_s") is not None]
+    w = p156["walls"]
+    setup = w["routing_s"] + w["stores_s"] + 2 * w["tiles_s"]
+    box = reps * per_rep + setup + 12 * max(first)
+    assert reps == 186 and round(host_s, 3) == 0.063 and round(per_rep, 2) == 1.67 and round(reps * per_rep, 1) == 310.7
+    assert len(first) == 288 and max(first) == 2.65 and round(statistics.median(first), 2) == 0.25 and round(setup, 1) == 3.6
+    assert round(box) == 346 and round(box * 1.5) == 519
     need = int(re.search(r"^NEED_BENCH=(\d+)", RUN, re.M).group(1))
-    assert need == math.ceil(box * 1.5 / 100) * 100 == 500
-    for figure in ("**60.8 s**", "about 331 s", "x1.5 = 496 s"):
+    assert need == math.ceil(box * 1.5 / 100) * 100 == 600
+    for figure in ("**60.8 s**", "slowest **2.65 s**", "12 x 2.65 = 31.8 s", "About 346 s; x1.5 = 519 s"):
         assert figure in PREREG, figure
 
 
@@ -155,6 +162,16 @@ def test_both_streams_pass_every_check_stated_before_data():
     same = (picks["S0"].sort(-1).values == picks["S1"].sort(-1).values).all(-1).all(0)   # [16 rows, 128 steps]
     assert round(float(same.float().mean()), 3) == 0.433 and int(same.all(0).sum()) == 0
     assert "43.3 %" in PREREG and "no step has all 16 rows identical" in PREREG
+    band = lambda steps: round(100 * float(same[:, steps].float().mean()), 1)          # noqa: E731
+    assert [band(list(range(lo, lo + 16))) for lo in range(0, 128, 16)] == [68.8, 59.8, 50.0, 44.5, 38.3, 32.0, 28.1, 25.0]
+    sel = list(range(0, 64, 8))
+    assert band(sel) == 57.0 and [int(same[:, s].sum()) for s in sel] == [11, 11, 11, 9, 8, 8, 8, 7]
+    assert band([s for s in range(126) if s not in sel]) == 42.7 and band(list(range(64, 126))) == 31.0
+    for figure in ("| 68.8 % | 59.8 % | 50.0 % | 44.5 % | 38.3 % | 32.0 % | 28.1 % | 25.0 % |", "**57.0 %**", "42.7 %",
+                   "**31.0 %**"):
+        assert figure in PREREG, figure
+    red = bench.R
+    assert red.P156_SELECT_STEPS == tuple(range(0, 64, 8))
 
 
 def test_the_routing_checks_refuse_what_they_name(tmp_path, monkeypatch):
@@ -258,13 +275,13 @@ def test_the_runner_pins_k25_and_k39_and_refuses_before_the_install():
 
 def test_the_guard_fits_with_25_percent_headroom():
     k = {n: int(v) for n, v in re.findall(r"^(INSTALL_TO_GATE_S|NEED_BENCH|NEED_NCU|RESERVE)=(\d+)", RUN, re.M)}
-    assert k == {"INSTALL_TO_GATE_S": 600, "NEED_BENCH": 500, "RESERVE": 600}, k
+    assert k == {"INSTALL_TO_GATE_S": 600, "NEED_BENCH": 600, "RESERVE": 600}, k
     assert "FIT=$((INSTALL_TO_GATE_S + NEED_BENCH + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100))" in RUN
     assert re.search(r"^FIT_HEADROOM_PCT=125 ", RUN, re.M)
     fit = sum(k.values())
-    assert fit * 125 // 100 == 2125 and "`FIT_NEED` = 1700 x 1.25 = 2125 s" in PREREG
+    assert fit * 125 // 100 == 2250 and "`FIT_NEED` = 1800 x 1.25 = 2250 s" in PREREG
     assert (BOOT_S + fit) * HEADROOM <= GUARD_H * 3600
-    assert "2000 x 1.25 = 2500 s <= 2700 s (0.75 h)" in PREREG and "**guard 0.75 h**" in PREREG
+    assert "2100 x 1.25 = 2625 s <= 2700 s (0.75 h)" in PREREG and "**guard 0.75 h**" in PREREG
     assert "0.75 x $1.05 + 10 x $0.011 = **$0.90**" in PREREG
     line = next(x for x in RUN.splitlines() if x.startswith("can_run(){"))
     assert "fit=$((need + RESERVE))" in line and "needs ${fit}s" in line and "only ${left}s left" in line
@@ -317,6 +334,10 @@ REDUCE_MUTANTS = [
     ('        if "5090" not in str(rec.get("device", "")) or rec.get("cc") != [12, 0]:\n', "        if False:\n"),
     # the streams' picks not checked
     ('    if rec.get("rows_sha256") != ROWS_SHA256:\n', "    if False:\n"),
+    # the memory-clock label dropped
+    ("            if abs(mclk / mbase - 1) > MEM_CLOCK_TOL:\n", "            if False:\n"),
+    # the late split read off the whole block (it would not move when the early steps carry the headline)
+    ('S1_SPLITS = {"steps_64_125": lambda s: s >= 64,', 'S1_SPLITS = {"steps_64_125": lambda s: True,'),
 ]
 BENCH_MUTANTS = [
     # gate_up without the served gather
