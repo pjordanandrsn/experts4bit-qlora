@@ -66,3 +66,7 @@ not time the pair alone.
   installed grouped-nf4-gemm carries K39 on NVIDIA, and to `tree` otherwise, with the reason recorded in
   `info["k25_lut"]`. An explicit `E4B_K25_LUT=prmt` keeps its hard refusal.
 - **Decode x plan:** C1-C3's plans with prmt, on their own held-out read, as a later lane.
+
+**What came of it (added after the record):** the default flip is e4b#1868. Decode x plan is
+[P160](../p160/RESULTS-p160.md): GO, C1 1.6598x over prmt at today's plan in the microbench, a premise for a served read
+of its own.
