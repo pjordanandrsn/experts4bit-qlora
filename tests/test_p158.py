@@ -24,7 +24,9 @@ SOURCES = {"p158_run.sh": LANE, "p158_box.py": LANE, "p158_reduce.py": LANE, "p1
            "k8_bake.py": B / "p39", "calib.json": B / "p39",
            "test_decode_graph_buckets.py": REPO / "tests", "test_kv_step_select.py": REPO / "tests",
            "test_fused_glue_decode_graphs_gpu.py": B / "p136" / "premise", "test_gemv_bw_served_gpu.py": REPO / "tests",
-           "test_nf4_smallm_prmt_gpu.py": LANE / "premise", "test_k25_lut_gpu.py": REPO / "tests"}
+           "test_nf4_smallm_prmt_gpu.py": LANE / "premise", "test_k25_lut_gpu.py": LANE / "premise"}
+#: premise/test_k25_lut_gpu.py is tests/test_k25_lut_gpu.py frozen at P158's registration merge (406a391a): P158 is closed,
+#: so it stages its own bytes, never the live test, which later knobs extend (E4B_K25_PLAN did).
 #: grouped-nf4-gemm kernel/test_nf4_smallm_prmt_gpu.py at v0.50.0 (41ef086e6a3e2be5b158ff1bb38e0de67862a949), its sha256
 K39_COMPILED_TEST_SHA256 = "9f6366287957f75bdfe53ff8165b401c30fb9e97d4da582254ad7e98bf702868"
 GUARD_H = 1.5

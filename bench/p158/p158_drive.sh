@@ -18,9 +18,10 @@ LANE_HELPER="$REPO/bench/common/lane_liveness.sh"
 source "$LANE_HELPER" || { say "refusing: missing lane liveness helper"; exit 78; }
 # The staging: this lane's runner, box and reducer; P109's box, P39's bake and calibration; P136's premise tests (three
 # from tests/, P136's own fused-glue graph test), K39's compiled contract (premise/, grouped-nf4-gemm's file at v0.50.0)
-# and e4b's served-route contract (tests/). staged-p158.sha256 pins every one by the name the box sees.
+# and e4b's served-route contract (premise/, tests/test_k25_lut_gpu.py frozen at P158's registration merge 406a391a, since
+# the lane is closed and the live test moves). staged-p158.sha256 pins every one by the name the box sees.
 TESTS="$REPO/tests"; P39="$REPO/bench/p39"; P109="$REPO/bench/p109"; P136="$REPO/bench/p136"
-STAGE="$HERE/p158_run.sh $HERE/p158_box.py $HERE/p158_reduce.py $P109/p109_box.py $P39/k8_bake.py $P39/calib.json $TESTS/test_decode_graph_buckets.py $TESTS/test_kv_step_select.py $P136/premise/test_fused_glue_decode_graphs_gpu.py $TESTS/test_gemv_bw_served_gpu.py $HERE/premise/test_nf4_smallm_prmt_gpu.py $TESTS/test_k25_lut_gpu.py $HERE/staged-p158.sha256"
+STAGE="$HERE/p158_run.sh $HERE/p158_box.py $HERE/p158_reduce.py $P109/p109_box.py $P39/k8_bake.py $P39/calib.json $TESTS/test_decode_graph_buckets.py $TESTS/test_kv_step_select.py $P136/premise/test_fused_glue_decode_graphs_gpu.py $TESTS/test_gemv_bw_served_gpu.py $HERE/premise/test_nf4_smallm_prmt_gpu.py $HERE/premise/test_k25_lut_gpu.py $HERE/staged-p158.sha256"
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
 # staged-p158.sha256 names the files as the BOX will see them; resolve each name to its source and compare hashes
 # (the same map as tests/test_p158.py, checked in CI).
@@ -29,10 +30,10 @@ while read -r want name; do
   case "$want" in \#*|"") continue;; esac
   case "$name" in
     p158_run.sh|p158_box.py|p158_reduce.py) src="$HERE/$name";;
-    test_nf4_smallm_prmt_gpu.py) src="$HERE/premise/$name";;
+    test_nf4_smallm_prmt_gpu.py|test_k25_lut_gpu.py) src="$HERE/premise/$name";;
     p109_box.py) src="$P109/$name";;
     k8_bake.py|calib.json) src="$P39/$name";;
-    test_decode_graph_buckets.py|test_kv_step_select.py|test_gemv_bw_served_gpu.py|test_k25_lut_gpu.py) src="$TESTS/$name";;
+    test_decode_graph_buckets.py|test_kv_step_select.py|test_gemv_bw_served_gpu.py) src="$TESTS/$name";;
     test_fused_glue_decode_graphs_gpu.py) src="$P136/premise/$name";;
     *) say "refusing: staged-p158.sha256 names $name, which this driver does not stage"; exit 78;;
   esac
