@@ -167,6 +167,7 @@ def reduce(spec, load=None):
             bterm[int(d["L"])] = base_term({"I": In[0], "E": E[0], "F": Fr[0]}, {"I": ui, "E": ue, "F": uf})
     Ls = sorted(recs)
     out = {"reducer": "bench/hpn/hpn_reduce.py", "framework": spec.get("framework"), "free_mib_at_claim": spec.get("free_mib_at_claim"),
+           "climb_stop": spec.get("climb_stop") or None,
            "fitted_depths": Ls, "deepest_fit": Ls[-1] if Ls else None,
            "depths": {str(L): {k: v for k, v in recs[L].items() if not k.startswith("_")} for L in Ls},
            "thresholds": {"share_e_dominant": round(SHARE_HI, 4), "share_i_dominant": round(SHARE_LO, 4), "n0_tol": 1e-5,
@@ -176,9 +177,9 @@ def reduce(spec, load=None):
     if len(Ls) < 2:
         out.update(outcome="INSUFFICIENT", reason="fewer than two depths fit: N2's two-deepest rule cannot be read")
         return out
-    if Ls[-1] < DEPTH_FLOOR:
-        out.update(outcome="INSUFFICIENT_DEPTH", reason=f"the deepest fitted depth L{Ls[-1]} is below the L{DEPTH_FLOOR} floor: wait "
-                                                        "for the sidecar to unload and retry")
+    if Ls[-1] < DEPTH_FLOOR:                                         # the driver's own reason for stopping the climb, when it gave one
+        why = spec.get("climb_stop") or "wait for the sidecar to unload and retry"
+        out.update(outcome="INSUFFICIENT_DEPTH", reason=f"the deepest fitted depth L{Ls[-1]} is below the L{DEPTH_FLOOR} floor: {why}")
         return out
     out["N0"] = {k: all(recs[L]["n0_holds"][k] for L in Ls) for k in ("I", "E", "F")}
     raw = [recs[L]["_sd_g"] for L in Ls]
