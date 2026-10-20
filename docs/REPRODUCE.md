@@ -158,6 +158,46 @@ defaults are not the run's settings. The controller reads a Hugging Face token f
   (this controller refuses without `GNF4_SHA`). Record: [`bench/p58/RESULTS-p58.md`](../bench/p58/RESULTS-p58.md).
 - **Hardware and cost:** one RTX 5090. $0.31 (`p58-5090-1`).
 
+## More readings
+
+Same rules as above: each row's commit, first release and cost come from its record. Controllers differ, so read the
+lane's drive script before running it:
+- **Build from the checkout's HEAD and refuse an `E4B_SHA` override** (P143, P153, P155): check out the recorded
+  commit and run from there.
+- **Build from HEAD but accept an `E4B_SHA` override** (P135, whose run script also hard-pins its grouped-nf4-gemm):
+  pass the recorded commit.
+- **Hard-pin the e4b commit inside the drive** (P133, P137, P140, P144, P146): the drive can postdate the measured
+  commit (P133's was added at its registration, `7896ce0e`), so run it from its registration commit or a later main;
+  it installs the pinned commit itself.
+- **Accept only their registered run ids** (P133, P135, P137, P140, P141, P143, P144, P146, P153, P155), and **refuse to
+  start without `GNF4_SHA`** (K15, K33, MG1, P58).
+
+| Reading | Claim | Measured at e4b (first release) | GPU, host | Lane, run | Cost |
+|---|---|---|---|---|---|
+| Qwen3-30B-A3B trains TC1's matched set (fp32 adapters) at the field recipe under expert offload on a 24 GB card: **11.881 GB** peak, 10.521 s/step (a fit, one draw; e4b as shipped has no offload reading there) | `e4b.train.frontier.qwen3.4090-24gb.2026-10-02` | `39834a7c` (v0.40.0), gnf4 `846b512b` | RTX 4090, AMD EPYC 7642 | TC3 via `bench/tc1/tc1_drive.sh`, `tc3-4090-8` | $0.75 |
+| axolotl native-best / e4b as shipped at steady state, read 2026-10-03 before the later defaults: **1.238** (s/step, above 1 = e4b faster); 1.146 on a second host. Held-out at step 200, reported, not judged: axolotl 0.7705 / 0.7704 against e4b 0.7948 / 0.7937 | `e4b.train.h2h.axolotl.qwen3.5090.2026-10-03.native-steady-state` | `e5859e99` (v0.42.0), gnf4 `00929a49` (pass it: the drive's default differs) | RTX 5090, AMD EPYC 7663 (1.238) / 7C13 (1.146) | TC1, `tc1-5090-46` + `-47` (1.238's two draws), `tc1-5090-48` (1.146) | $0.99 + $0.98; $1.23 |
+| Layer-major offload training, stock / layer-major s/step: **2.365** (Qwen3, 4090), **2.311** (Qwen3, 5090), **2.118** (Mixtral, 4090); the CLI's `FAST_TRAIN=1` over `LAYER_MAJOR=1`: **1.455** | `e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18`, `e4b.train.p140.layer-major-offload.qwen3.5090.2026-10-18`, `e4b.train.p144.layer-major-offload.mixtral.4090.2026-10-18`, `e4b.train.p146.layer-major-cli.qwen3.4090.2026-10-18` | P137 and P140 `b4366b9a`, P144 `a9d140d8`, P146 `4917506a` (all v0.56.0), gnf4 `6b7c2e74` | RTX 4090 / 5090; EPYC 7742, Ryzen 7 5700X3D, EPYC 7B13 | P137, P140, P144, P146 | $0.745, $0.489, $1.167, $0.819 |
+| OLMoE fused training vs the reference loop: **|Δ final loss| 0.0089** (band 0.05; one sha-pinned dataset, batch 1, seq 512, 60 steps) | `e4b.train.parity.mg1.olmoe.fused.2026-10-04` | `058dda34` (v0.46.0), gnf4 `1546db26` | RTX 5090 at 470 W, Core Ultra 9 285K | MG1, `mg1-5090-2` | $1.79 |
+| int8 head bandwidth GEMV, one request: **1.052** (rate; outputs change). Sixteen requests read **0.9918**, below 1 in every pair: an observed cost the record leaves unexplained | `e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19` | `585cf68b` (v0.56.0) | RTX 5090 at 575 W, Ryzen 7 9800X3D | P153, `p153-5090-1` | $0.445 |
+| Attention split cap, one request: **1.0442** (rate) | `e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19` | `e8de1799` (v0.56.0) | RTX 5090 at 450 W, EPYC 9135 | P143 (Amendment 3), `p143a3-5090-1` | $0.479 |
+| Launch-bound glue, one request: **1.1321** (rate, the mean of two pairs; Phase 1 + 2 against the stack before #1448) | `e4b.serve.p127.launch-bound-glue.qwen3.5090.2026-10-09` | B `7f044dd9` (v0.52.0) vs A `a8c01d42` (v0.51.0) | RTX 5090, Ryzen 9 9950X | P127, `p127-5090-1` | $0.940 |
+| Bandwidth decode GEMV, one request: **1.2417** over dot-pad (5090), **1.5145** over the scalar GEMV (4090, at Qwen3's two shapes) | `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`, `e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18` | `730c8acc` (v0.49.0); `c8d7e629` (v0.55.0) | RTX 5090 at 575 W, EPYC 7713; RTX 4090 at 450 W, EPYC 7742 | P116, `p116-5090-2`; P133, `p133-4090-2` | $1.078; $0.919 |
+| Bandwidth decode GEMV on Mixtral, one request: **2.4075** over the scalar GEMV (rate) | `e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18` | `d2bf9f64` (v0.56.0) | RTX 5090 at 500 W, Xeon Gold 6240 | P141, `p141-5090-2` | $0.999 |
+| Fused-stack folds on Mixtral: step time **0.9393** ON/OFF (below 1 = faster; 20.2-20.5 → 19.0 ms) | `e4b.serve.p135.fold-speed.mixtral.5090.2026-10-18` | `5be4c4d9` (v0.56.0) | RTX 5090, EPYC 7742 | P135, `p135-5090-2` | $1.159 |
+| Server capacity with 64 slots and `E4B_PAGED_BUCKETS=auto`, on the int4 stack (int4 experts and attention, fused QKV, 2,048 tokens a slot): **12 req/s** at TTFT ≤ 1 s and TPOT ≤ 100 ms for ≥ 95 % in both Poisson draws, against 4 for the 16-slot server. No comparator ran, and it is not the default NF4 server | `e4b.serve.sc2e.64-slots-buckets-auto.qwen3.5090.2026-10-07` | `3bbcb01b` (v0.49.0) | RTX 5090 at 575 W, EPYC 7352 | SC2e via `bench/sc1/sc1_drive.sh` (`SC1_BOX=L`), `sc2e-5090-1` | $1.017 |
+| **A negative, since overtaken:** K25's plan under the select-tree decode: best plan 1.0188 against a 1.15 bar, NO_GO. Under K39's `prmt` decode, P160 then read plan `c1` at 1.66× in a microbench ([`RESULTS-p160`](../bench/p160/RESULTS-p160.md)); the served read is P161 | UNVERIFIED: no register row; [`RESULTS-p155`](../bench/p155/RESULTS-p155.md) | `4d3fd170` (v0.56.0) | RTX 5090 at 575 W, EPYC 7K62 | P155, `p155-5090-1` | $0.274 |
+| **A quality limit:** Gemma-4 served NF4 vs bf16, KL **1.077** nats/token (a served-model defect on this family, #597; no Gemma-4 serving position) | `e4b.serve.p44.gemma4.nf4-vs-bf16.2026-09-19` | not recorded; gnf4 v0.31.0 | H100 NVL | P44-b (`bench/p44/p44b_drive.sh`); three runs agree | UNVERIFIED (lane ≈ $8.8) |
+
+### grouped-nf4-gemm and the planner
+
+| Reading | Claim | Measured at | GPU, host | Lane, run | Cost |
+|---|---|---|---|---|---|
+| Bandwidth decode GEMV kernel time **0.341** of dot-pad on Qwen3-30B-A3B's gate_up + down pair (below 1 = faster; kernel level, not a served speed) | `gnf4.kernel.k33-nf4-decode-gemv-bw.5090.2026-10-07` | gnf4 `5a60c37d` (v0.43.0) | RTX 5090 at 600 W, Threadripper PRO 7965WX | K33 via e4b `bench/k33/k33_drive.sh` (needs `GNF4_SHA`), `k33-5090-1` | $0.037 |
+| Routed expert GEMM against unquantised bf16 `torch._grouped_mm` (Qwen3-30B-A3B, B=16): **2.1-6.0×** faster, against weights at higher precision: not a same-precision race (quote the worst case, 2.1×) | `gnf4.kernel.sm120-census-vs-grouped-mm` | gnf4 `4f1db333` (v0.18.0) | RTX 5090, two boxes | the census probes in `bench/sm120-census/` | UNVERIFIED |
+| **A negative:** vLLM 0.28.0's Marlin is **1.99×** faster than grouped-nf4-gemm's own bf16 dequant path on o_proj at M=16 (16.5 → 8.28 µs; q_proj 1.62×), and still ahead at matched bytes | `gnf4.kernel.k15-marlin-comparator.5090.2026-09-11` | gnf4 `453bebf5` (v0.31.0) | RTX 5090 at 550 W | K15 via e4b `bench/k15/k15_drive.sh` (needs `GNF4_SHA`), `k15-marlin-4` | lane $1.1253 (over its $1.00 ceiling) |
+| One-launch training backward: relative error **0.0029** against the exact per-expert loop (correctness, not speed) | `gnf4.kernel.dgrad` | gnf4 v0.7.0 | RTX A2000 | the 0.7.0 release entry | $0 |
+| loggetta's planner memory estimate on Qwen3-30B-A3B resident: 22.09 vs 21.91 GiB measured (-0.8 %) | UNVERIFIED: loggetta has no register; its `docs/RESULTS.md` §5 | loggetta (`fp1-5090-1`) | RTX 5090 | FP1, `fp1-5090-1` | $0.848 |
+
 ## How to report a reading
 
 Open an issue with:
