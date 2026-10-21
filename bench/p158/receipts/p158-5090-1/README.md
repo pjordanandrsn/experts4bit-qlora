@@ -69,3 +69,5 @@ The verdict re-derives byte for byte from the arm records with the registered re
 
     python bench/p158/p158_reduce.py --dir bench/p158/receipts/p158-5090-1 --out verdict.json \
         --e4b-sha 406a391a11d42ddb39154cfc36938a2da5d68216
+
+Re-derive: `python bench/p158/p158_reduce.py --dir bench/p158/receipts/p158-5090-1 --out {out} --e4b-sha 406a391a11d42ddb39154cfc36938a2da5d68216` writes `bench/p158/receipts/p158-5090-1/verdict_p158.json`

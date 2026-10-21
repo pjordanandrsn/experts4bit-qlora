@@ -16,3 +16,5 @@ One climb at L4 and L8 on the lab's RTX A2000, e4b `8dc66652`, 2026-10-21, $0.
   outputs (they carry the host's identifiers or the run's own paths), the summary, box and forensics records, most logs, and
   the staged copies.
 - **No identifiers:** no file here names an instance, an offer, a host name, an endpoint or the GPU's UUID.
+
+Re-derive: `python bench/hpn/hpn_reduce.py bench/hpn/receipts/hpn-a2000-read8/hpn_spec.public.json --out {out}` writes `bench/hpn/receipts/hpn-a2000-read8/hpn/result.json`

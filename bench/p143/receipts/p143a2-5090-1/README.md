@@ -19,3 +19,5 @@ The maintainer re-derived the verdict byte for byte (#1778). Amendment 3 (#1788)
 The launcher's receipt and ledger row are in the receipt store (`74f8955f`). `SHA256SUMS` covers every file here.
 Eight logs carry carriage returns from the box's progress output. They stay only in that store, byte-exact,
 and `STORE-ONLY.sha256` lists them.
+
+Re-derive: `python bench/p143/p143a2_reduce.py --dir bench/p143/receipts/p143a2-5090-1 --out {out} --e4b-sha 7ed1695eceab0052078d43c14aed8da06381d8f6` writes `bench/p143/receipts/p143a2-5090-1/verdict_p143a2.json`

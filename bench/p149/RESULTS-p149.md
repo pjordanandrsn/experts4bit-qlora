@@ -161,3 +161,5 @@ length's stream.
 - **The open question** is why the served decode's tokens depend on `max_new_tokens` (the QUALIFIER_VOID cause,
   above). A routing-matched read that settles g16's routing share must be designed around it, and must be registered
   before it runs.
+
+Re-derive: `python bench/p149/p149_reduce.py --dir bench/p149/receipts/p149-5090-2 --out {out} --e4b-sha 835874d1449314fc569442228a3e46e7a6602748` writes `bench/p149/receipts/p149-5090-2/verdict_p149.json`

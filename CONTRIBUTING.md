@@ -54,6 +54,15 @@ row with a non-empty `evidence_private`. A number without a row is not published
 timed against itself — because a ratio inside the instrument's own spread is not
 a measurement. Two devices, or name the single architecture it holds for.
 
+**Re-derive lines.** A receipt whose verdict a reader can rebuild from committed files says so in one line:
+
+    Re-derive: `python bench/pNN/pNN_reduce.py --dir bench/pNN/receipts/<run> --out {out} ...` writes `bench/pNN/receipts/<run>/verdict_pNN.json`
+
+The line goes in the receipt's README.md, or in the lane's RESULTS page when SHA256SUMS covers that README.
+`tests/test_public_rederivation.py` runs every line on CPU and requires its output to match the named file byte for byte.
+`<script>@<commit>` runs a reducer as it was at that commit, and a leading `PYTHONPATH=bench/<dir>` finds a sibling
+module the box staged next to the reducer. Before a line lands, its command must reproduce the committed file.
+
 One caution specific to MoE, learned the expensive way: **benchmark on real
 text, not random token ids.** Random ids route to fewer experts far more
 unevenly, which flatters the per-expert loop and understated this package's own
