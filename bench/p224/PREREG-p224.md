@@ -236,7 +236,7 @@ none exists. The shakedown box already holds OLMoE and Loggetta, so it trains tw
   the $15 lane envelope and the standing rule. The design estimate of about $2.7 left out the bandwidth term.
 - **The shakedown first:**
   - **Setup:** OLMoE-1B-7B-0924-Instruct at `7f1c97f4` (P99's served pin) on the cheapest eligible NVIDIA card at
-    sm_86 or later with 16 GB, at most $0.18/h.
+    sm_86 or later with 16 GB, at most $0.18/h (the card and the cap superseded by Amendment 2).
   - **What it ranks:** the structure, never a reading. Its verdict is SHAKEDOWN, and every gate and threshold is
     reported.
   - **The expected merge count** for OLMoE comes from the trained adapter's own attention projections (16 layers × 4).
@@ -339,9 +339,38 @@ the private receipt store's tensor path like the adapters. It is about 3.4 GB.
 | reserve | 600 |
 | **total** | **4,660** |
 
-- **The guard:** 4,660 × 1.25 = 5,825 s, inside a **1.7 h guard** (6,120 s).
+- **The guard** (superseded by Amendment 2): 4,660 × 1.25 = 5,825 s, inside a **1.7 h guard** (6,120 s).
 - **The pre-install check:** it needs (4,660 − 300) × 1.25 = 5,450 s left.
-- **Worst case:** 1.7 h × $0.18 + (14 GB + 5 GB + 3.4 GB) × $0.011 = $0.306 + $0.246 = **$0.55**, under the standing
+- **Worst case** (superseded by Amendment 2): 1.7 h × $0.18 + (14 GB + 5 GB + 3.4 GB) × $0.011 = $0.306 + $0.246 =
+  **$0.55**, under the standing
   rule.
+
+The reading's terms, guard and worst case are unchanged.
+
+## Amendment 2 (before any data): the shakedown card
+
+**Why.** At its first launch, `p224-shake-1`'s validate (at $0) refused the card the screen found: the launcher's GPU
+policy does not list it. Among the policy's classes that meet the shakedown's terms (sm_86 or later, 16 GB or more), the
+only offer at or under $0.18/h was one RTX A4000 with a reliability of 0.60, too unreliable to stake a shakedown id on.
+The cheapest dependable class is the L4, at $0.30-$0.36/h (reliability 0.993-0.999) when this was written.
+
+**The card and the cap (superseding the setup's card and cap):** one L4 (sm_89, 24 GB, in the launcher's policy) at
+most $0.40/h, P222's shakedown tier. An RTX A4000 at or under $0.18/h with a reliability of at least 0.98 stays
+eligible.
+
+**The guard.**
+- The fit table is unchanged: Amendment 1's terms, 4,660 s.
+- The guard is raised to **1.9 h** (6,840 s). The L4's memory bandwidth (about 300 GB/s) is below the A4000-class card
+  the terms assumed (about 448 GB/s), and the seven server processes and the decode work are bandwidth-bound. A 1.5×
+  slowdown on the 1,050 s server term alone would use most of the 25 % headroom.
+- 4,660 × 1.25 = 5,825 s, inside the 6,840 s guard, with 1,015 s to spare for the slower card.
+- The runner's pre-install check is unchanged: (4,660 − 300) × 1.25 = 5,450 s.
+
+**Worst case:** 1.9 h × $0.40 + (14 GB + 5 GB + 3.4 GB) × $0.011 = $0.76 + $0.2464 = **$1.0064** (about $1.01), under
+the standing rule.
+
+**What the shakedown records for the reading's fit.** Each step's measured seconds on this card: the phase stamps
+(`phases.jsonl`) bracket the install, the fetch, the bake, each train, each reference arm and each of the seven server
+processes. The reading's terms are then checked against these, scaled for the 5090, before its exec ACK.
 
 The reading's terms, guard and worst case are unchanged.
