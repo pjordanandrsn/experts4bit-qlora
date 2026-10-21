@@ -106,7 +106,7 @@ not known to match.
 | `quant_type` or `blocksize` differs from the arena's `quantizer` | **refused** | A different `Q_serve(W)`. |
 | a manifest without `resolved_model_revision`, or an unknown recipe | **refused** | Nothing to verify against. |
 | placement (resident vs host-streamed arena rows) | **no change** | The same arena bytes are read wherever they live. Placement moves data, not math. |
-| the int8 `lm_head` default | **no change** to the adapter | The adapter never touches the head. The head's own rounding is a base-serving property with its own read. |
+| the int8 `lm_head` default | **allowed**: a base-serving property, reported | It is weight-only, per-row int8 with no activation calibration (each row's scale comes from its own absmax), on a module no adapter touches. So it is identical to the base server's, and the server reports it in `base_match`. A lever that depends on base-model calibration (the `*_INT4_CALIB` levers, the head's included) is refused under an adapter, because an adapter shifts the activations that calibration was fit to. |
 | e4b's reference server (`serve.py`, `.pt` adapters) | **out of scope** | It cannot read `backend-adapter/1`, its files carry no `alpha` ("must match by convention", `serve.py:222-223`), and it checks no revision. The reference arm for a cross-format read is `loggetta.load_adapter`. |
 
 ## 4. What this asks of the work that follows
