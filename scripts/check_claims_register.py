@@ -282,7 +282,7 @@ def _git_ok(root: Path, *args: str) -> str | None:
 def published_on_problems(root: Path, cid: str, c: dict, tracked: frozenset[str] | None,
                           skips: list[str]) -> list[str]:
     """``published_on`` dates a RETIRED claim's first public appearance: ``{"date", "evidence"}``, the evidence
-    being ``<40-hex commit>:<path>`` (resolved: the commit is in this repository's history, the path is in its
+    being ``<40-hex commit>:<path>`` (resolved: the commit is an ancestor of HEAD, the path is in its
     tree, and its committer date in UTC is the date) or an ``https://`` URL (listed, never resolved)."""
     st, po = c.get("status"), c["published_on"]
     if st != "retired":
@@ -307,7 +307,10 @@ def published_on_problems(root: Path, cid: str, c: dict, tracked: frozenset[str]
         skips.append(f"{cid}: published_on {sha[:12]}:{path} -- not resolved (needs a full-history git checkout)")
         return out
     if _git_ok(root, "cat-file", "-e", f"{sha}^{{commit}}") is None:
-        out.append(f"{cid}: published_on evidence commit {sha[:12]} is not in this repository's history")
+        out.append(f"{cid}: published_on evidence commit {sha[:12]} is not in this clone")
+    elif _git_ok(root, "merge-base", "--is-ancestor", sha, "HEAD") is None:
+        out.append(f"{cid}: published_on evidence commit {sha[:12]} is not in HEAD's history (an unmerged commit "
+                   "was never published from this repository)")
     elif not (_git_ok(root, "ls-tree", "--name-only", sha, "--", path) or "").strip():
         out.append(f"{cid}: published_on evidence path {path!r} is not in commit {sha[:12]}")
     else:

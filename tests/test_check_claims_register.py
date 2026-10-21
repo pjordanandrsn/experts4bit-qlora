@@ -325,8 +325,15 @@ def test_published_on_dates_a_retired_claims_first_appearance_and_resolves_its_c
     assert _has(_findings(repo, gone({"date": "2026-09-01", "evidence": "https://x.org/a"})), "is after retired_on")
     for ev in (f"{sha[:12]}:bench/RESULTS.md", f"{sha}:", "http://x.org/a", "https://", f"{sha} bench/RESULTS.md"):
         assert _has(_findings(repo, gone({"date": day, "evidence": ev})), "is neither"), ev
-    assert _has(_findings(repo, gone({"date": day, "evidence": "0" * 40 + ":bench/RESULTS.md"})),
-                "not in this repository's history")
+    assert _has(_findings(repo, gone({"date": day, "evidence": "0" * 40 + ":bench/RESULTS.md"})), "is not in this clone")
+    branch = out("rev-parse", "--abbrev-ref", "HEAD")                  # a commit present in the clone but never merged
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "checkout", "-q",
+                    "-b", "side"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q",
+                    "--allow-empty", "-m", "unmerged"], cwd=repo, env=stamp, check=True, capture_output=True)
+    side = out("rev-parse", "HEAD")
+    subprocess.run(["git", "checkout", "-q", branch], cwd=repo, check=True, capture_output=True)
+    assert _has(_findings(repo, gone({"date": day, "evidence": f"{side}:bench/RESULTS.md"})), "is not in HEAD's history")
     assert _has(_findings(repo, gone({"date": day, "evidence": f"{sha}:bench/NOPE.md"})), "is not in commit")
     assert _has(_findings(repo, gone({"date": "2000-01-01", "evidence": f"{sha}:bench/RESULTS.md"})),
                 f"is not commit {sha[:12]}'s committer date {day}")
