@@ -1,6 +1,6 @@
 # Status — what this package does, what is current, what is open
 
-**As of 2026-10-20, version 0.56.0** (the version of record is `pyproject.toml`'s). This page states the current
+**As of 2026-10-21, version 0.56.1** (the version of record is `pyproject.toml`'s). This page states the current
 position in each area, with the claim id behind each number; [`docs/claims.json`](claims.json) holds every claim's full
 text and evidence. The dated narrative behind these positions, with the readings they replaced and why, is
 [`STATUS-RECORD.md`](STATUS-RECORD.md).
@@ -324,7 +324,7 @@ K25's select-tree codebook decode for grouped-nf4-gemm K39's (`lut="prmt"`), whi
 
 `e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20` ([P158](../bench/p158/RESULTS-p158.md)).
 
-**qwen3_moe's default on main after 0.56.0, in no release yet: K25 at plan `c1` under K39's decode (`E4B_K25_PLAN`,
+**qwen3_moe's default from 0.56.1: K25 at plan `c1` under K39's decode (`E4B_K25_PLAN`,
 e4b#1877; the default from lane P161).** `c1` runs K25 at P156's first carried plan pair, gate_up `{block_n 64, kc 256,
 warps 4, stages 2}` and down `{block_n 128, kc 128, warps 8, stages 3}`, in place of today's single plan.
 - **The default:** an unset `E4B_K25_PLAN` resolves at engine build to `c1` on `qwen3_moe` where K25's decode resolved
@@ -466,7 +466,7 @@ controls. `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-
 | the paged FP8 attention decode capped at 16 splits (`qwen3_moe` only; buckets 1, 2 and 4 move, 32 / 32 / 23 -> 16; bitwise-identical to the plan at contexts ≤ 1024; one request 1.044× as fast, 16 unchanged, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs); other `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B) and other cards (the cap moves B 1–6 on a PRO 6000, B 1–4 on a 4090) take it by family without a read of their own) | `serve_paged` | `E4B_ATTN_SPLIT_CAP=0` | `e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19` |
 | the lm_head on its per-row int8 grid, its one-row decode GEMV through grouped-nf4-gemm K36 (`qwen3_moe` at the 151936 x 2048 head only; needs grouped-nf4-gemm 0.48.0 or later, else it resolves off, recorded; one request 1.052× as fast, 16 requests 0.992, an observed cost not attributed, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs); quality read on Qwen3-30B-A3B @ad44e777, same-shape checkpoints inherit the default unread; other head shapes, e.g. Qwen3-235B-A22B's 151936 x 4096, stay off) | `serve_paged` | `E4B_INT8_HEAD_BW=0` | `e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19` |
 | K25's codebook decode by grouped-nf4-gemm K39's byte permute (`lut="prmt"`; `qwen3_moe` only; bit-identical to the select tree, every token identical; needs grouped-nf4-gemm 0.50.0 or later and an NVIDIA device, else it resolves to the tree, recorded in `info["k25_lut"]`; sixteen requests 1.0925× as fast (the smallest of four ABBA pairs), one request unchanged, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs) at the `today` plan; other `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B) take it by family with no speed claimed; other families stay on the tree) | `serve_paged` | `E4B_K25_LUT=tree` | `e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20` |
-| K25's tile plan `c1` under K39's decode (on main after 0.56.0; `qwen3_moe` only, where K25's decode resolved to `prmt`, else `today`, recorded in `info["k25_plan"]["source"]`; bit-identical to `today`'s plan, every token identical; sixteen requests 1.4654× as fast (the smallest of four ABBA pairs), one request unchanged (0.9966), measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs); other `qwen3_moe` checkpoints take it by family with no speed claimed; other families stay on `today`) | `serve_paged` | `E4B_K25_PLAN=today` | `e4b.serve.p161.k25-plan-c1.qwen3.5090.2026-10-20` |
+| K25's tile plan `c1` under K39's decode (from 0.56.1; `qwen3_moe` only, where K25's decode resolved to `prmt`, else `today`, recorded in `info["k25_plan"]["source"]`; bit-identical to `today`'s plan, every token identical; sixteen requests 1.4654× as fast (the smallest of four ABBA pairs), one request unchanged (0.9966), measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs); other `qwen3_moe` checkpoints take it by family with no speed claimed; other families stay on `today`) | `serve_paged` | `E4B_K25_PLAN=today` | `e4b.serve.p161.k25-plan-c1.qwen3.5090.2026-10-20` |
 | B=1 fused stack (fused q/k/v and three glue folds) on Qwen3-MoE; its router epilogue, the only fold that engages, on Qwen3.5/3.6-MoE; its three glue folds on Mixtral | `serve_paged` | `E4B_PAGED_FUSE_QKV=0`, `E4B_FUSE_T1_GLUE=0`, `E4B_FUSE_T1_GLUE_R2=0`, `E4B_FUSE_ROUTER_EPI=0` | `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`, `e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`, `e4b.serve.p135.fold-speed.mixtral.5090.2026-10-18` |
 
 ---

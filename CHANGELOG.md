@@ -4,6 +4,287 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
+## 0.56.1 — 2026-10-21 — K25 plan c1 by default on qwen3_moe
+
+A patch release with one serving default. On `qwen3_moe`, K25 now runs at tile plan `c1` wherever its decode resolved to
+K39's `prmt`. P161 measured it on Qwen3-30B-A3B on one RTX 5090: sixteen requests 1.4654× as fast as the `today` plan (the
+smallest of four ABBA pairs), one request unchanged (0.9966), and every token identical. `E4B_K25_PLAN=today` opts out.
+The rest is records (P149 box Q+S, P161, HBD, HPN, DQ11 Phase 2), a fail-closed release gate, and documentation.
+
+### P149 box Q+S read: int8 attention projections on Mixtral-8x7B, FLIP (g1 1.1608), routing qualifier VOID
+
+On one RTX 5090, `E4B_SERVE_ATTN_INT8=1` (K37's int8 kernels for Mixtral's 128 attention projections) decoded one
+request 1.1608x as fast as the default server (the smallest of four ABBA pairs), and sixteen requests 1.0181x. Quality
+at decode passed first: P147's gates through the served step read GO at both widths (W1 upper bound 0.002311 against
+0.011537). The token-pinned routing qualifier read QUALIFIER_VOID: S0, fed its own stream, differed from it at 5 forced tokens over
+1,100 decode steps in every block. So the default-flip PR is held for a routing-matched read, and the lever stays opt-in. The g1
+prediction band [1.04, 1.08] was missed toward faster. Record: `bench/p149/RESULTS-p149.md`, receipts under
+`bench/p149/receipts/p149-5090-2/`, and the claim `e4b.serve.p149.int8-attn.mixtral.5090.2026-10-20`.
+
+### Added
+
+- `bench/hpn/` records HPN's registered read (one climb at L4 and L8 on an RTX A2000, $0): MOOT. Under one build e4b's and
+  Unsloth's exported bases have the same dequantized digest at each depth, so the fp32 reader cannot move δ0 and stage 2
+  cannot lift HP2's G1. No parity claim. The side call (I at both depths) and a labelled 48-layer extrapolation are reported
+  only. The reducer rebuilds the result from the committed projections, and HP2's record gains forward pointers to HPN and HBD.
+
+### Fixed
+
+- `tests/test_receipt_sums.py`: every line of a committed receipt's `SHA256SUMS` must now be a file git tracks, or a
+  line of that receipt's `STORE-ONLY.sha256` at the same sha256. It reads git's index, so a log that exists on disk
+  but is ignored (`.gitignore` has `*.log`) no longer passes. The frozen `LEGACY_GAPS` table is gone: the 18 older
+  receipts it listed are complete. 34 of their logs are committed byte-for-byte from the private receipt store, and
+  15 new `STORE-ONLY.sha256` files name the other 149 files, each grouped under a header that says where the bytes are
+  and, where it is recorded, why. 66 of them are staged copies whose bytes git tracks: a `# same bytes: <path> at
+  <commit>` line above each entry names the tracked file at the commit that added the receipt, and the test checks
+  each one with `git show`. No existing receipt file is changed.
+
+### Added
+
+- `bench/hbd/` records the HBD read (one RTX 5090, $0.416; no parity claim). Across torch 2.8.0+cu128 and 2.12.1+cu130,
+  each framework's exported base differs in exactly one of 533 slots of the 2-layer cut, layer 1's q_proj: the dequantized
+  fingerprint's int16 sum differs by 554. Within either build, e4b's and Unsloth's dequantized bases are identical, and the
+  transformers version and Unsloth's MoE backend do not move the base. HP2's base term is therefore consistent with a build
+  effect; depth is untested.
+
+### DQ11 MLP-adapter BUILD Phase 2 read (#1083): the fused MLP adapters are correct and take 2.8% less time per update
+
+`dq11-mlp-phase2-1` ran on one RTX 5090 at the science lock and read **NO_GAIN: H 0.0279 < 0.05** (measured-private;
+1.029x as fast).
+- F1 (`E4B_DENSE_MLP_LORA_FUSE=1`) takes 2.8–2.9% less time per update than F0 at every block pair, with no NOISY
+  self-pair and K8 quality unchanged.
+- All 33 checked tensors are judged correct by the FP64 bar at the science lock (k ≥ 12 distinct reference paths each).
+- The registered H range was right, and the drift prediction was wrong (B 0.123 at update 40), which the shakedown had
+  foreshadowed.
+
+The lever closes with its number, and the engine stays opt-in. See `bench/dq11/RESULTS-dq11-mlp-build.md`.
+
+### Added
+
+- `bench/smt-fuse/` Amendment 1c: one more reading, `smt-sib-9`, re-runs `smt-sib-2`'s measurement unchanged on the same
+  host, with `bench/common/thp_window.py` records around every timed block and a `fast_state` summary. The definitions
+  and outcomes are fixed before data. If the fast fuse state recurs while the measured process holds no huge pages, huge
+  pages are falsified as its mechanism; if it does not recur, the result is inconclusive and said so.
+
+### Release: the CI-green gate fails closed
+
+`release.yml`'s gate used to publish when the API count wasn't an integer (empty or `null`): the old `-lt 1` test
+errored inside its `if`, and the job went on. It now refuses, and so does a failed `gh` call. It queries `ci.yml`'s
+successful runs at the checked-out commit (`git rev-parse HEAD`), counting only push and dispatch runs, and its refusal
+says whether to wait for a running CI or dispatch one at the tag. It now runs first after checkout, before setup, the
+build and the smoke's installs, since the job holds `id-token: write` throughout. `tests/test_ci_workflow_shape.py` runs the step
+against a fake `gh` over a tagged repo: push or dispatch success passes; a failed push run, pull-request runs only, a
+green run at another commit, no runs, a `gh` failure, and an unreadable count all refuse.
+
+### Added
+
+- `bench/common/thp_window.py`: a standard-library helper that records transparent huge pages around a lane's timed
+  window, inside the measured process. It records the host's THP mode, the process's `THP_MEM_ALLOC_ENABLE`, its
+  `AnonHugePages`, `Anonymous` and `Rss`, and the host's `thp_*` counter deltas. A reading that can depend on huge pages
+  can then say whether huge pages were possible at the window, and whether the process held any.
+
+### Release: publishing needs a successful CI run at the tag's commit
+
+The release workflow's publish job now checks, before the PyPI upload, that `ci.yml` has a successful push or
+dispatch run on exactly the tagged commit (a pull_request run tested the merge ref, so it does not count), and stops with the command to run if it has not. With pending runs on `main`
+collapsed, a tagged commit can lack its own run; the release guide's step (dispatch CI at the tag) is now enforced.
+
+### DQ11 MLP-adapter BUILD Phase 2 kit (#1083): the fused MLP-adapter update against the unfused one, on one RTX 5090
+
+Phase 1 read `PHASE1_PASS` on the A2000 (`dq11-mlp-phase1-a2000-2`). Phase 2 reads the matched update on the card a GAIN
+would license, by Amendment 5 (`bench/dq11/DQ11-MLP-BUILD-AMENDMENT-5.md`).
+- **(b) at the science lock** over distinct paths per tensor. The leveled K-split families R1(c), R6(c), R9(c), R3(c),
+  R4(c) and R5 are each split in its op's own dtype, before the cast the path already has. With every split off the
+  reference is PEFT's path bit for bit, and Phase 1's own redraws are reproduced bit for bit.
+  - Landing is judged per tensor, and calibration runs only at k >= 9. Below that a tensor is `UNJUDGED_AT_K`, and the
+    read is capped at NO_GAIN.
+- **The timed arms:** F0 and F1 ABBA twice, 40 updates each, with T_arm the median of updates 6..40. H is the minimum
+  over the four block pairs, against 0.05, with NOISY self-pairs a VOID and a strike, and K8 for quality.
+- **Drift:** two untimed arms under configuration C, REPORTED only.
+- **The order of the rungs:** engagement, then NOISY, then ACCURACY_FAIL, then CALIBRATION_INDETERMINATE, then
+  UNJUDGED_AT_K, then GAIN or NO_GAIN. The first rung that applies decides.
+- **Box:** the census flow's bootstrap and prepare by file. The guard fit runs before the install, and the guard is 2 h.
+
+Files: `bench/dq11/dq11_mlp_phase2.py`, `dq11_mlp_phase2_run.py`, `dq11_mlp_phase2_box.sh`, `dq11_mlp_phase2_drive.sh`
+and `dq11_mlp_phase2_manifest_template.json`, with `tests/test_dq11_mlp_phase2*.py`.
+
+`bind_manifest` also declares `lane_record.min_disk_gb` 123: the box script's own free-disk floor (120,000,000 KiB from
+`df -Pk`, 122.88 GB) rounded up, which the shared launcher's preflight disk check reads.
+
+### CI: one concurrency group per lane; the conflict-marker guard runs on main pushes and pull requests
+
+`ci.yml` now collapses pending runs on `main` (a started run is never cancelled) and cancels a pull request's
+superseded run. The conflict-marker guard no longer runs on pushes to branches other than `main`; every pull
+request head is still scanned. `tests/test_ci_workflow_shape.py` pins both, and fails if a required CI job regains
+a job-level label `if:` (a skipped required check counts as passing). The release guide adds a CI run at the tag.
+
+### `E4B_K25_PLAN` defaults to `c1` on qwen3_moe (P161, FLIP; #1313)
+
+Lane P161 read K25 at plan `c1` in the served step (`bench/p161/RESULTS-p161.md`): on Qwen3-30B-A3B, under K39's decode,
+`c1` decodes sixteen requests 1.4654x as fast as today's plan (the min of four ABBA pairs), one request unchanged, every
+token identical.
+- **The default:** an unset `E4B_K25_PLAN` resolves at engine build, once the model's config is read and before any
+  weight loads. On `qwen3_moe` it is `c1` where K25's decode resolved to `prmt` (the decode `c1` was read with);
+  everywhere else it is `today`. The resolution and its reason are in `info["k25_plan"]["source"]` (`explicit`,
+  `default-allowlisted`, or `default-off: <why>`).
+- **Never a refusal by default:** where the decode is not `prmt` (an older kernel package, a ROCm device,
+  `E4B_K25_LUT=tree`), the default resolves to `today`, and a forward whose decode is not `prmt` serves `today` rather
+  than refusing. An explicit `E4B_K25_PLAN=c1` keeps its refusals; `E4B_K25_PLAN=today` opts out.
+- **Scope:** every `qwen3_moe` checkpoint takes the default. A plan changes tiling and staging, never the values, so the
+  output is bit-identical to today's plan; the speed was read only at Qwen3-30B-A3B's expert shapes on one RTX 5090,
+  and no speed is claimed for other shapes.
+- **One engine per process:** the resolved default is process-wide, as with `E4B_K25_LUT`'s.
+- **Other families** stay on today's plan until a read of their own.
+
+Files: `experts4bit_qlora/engines/hot_residency.py`, `experts4bit_qlora/serve_paged.py`, `tests/test_k25_plan_default.py`,
+`tests/test_k25_plan.py`, `tests/test_k25_lut_default.py`, `docs/SERVING.md`, `docs/STATUS.md`.
+
+### Tooling: `check_change_impact.py` no longer passes when it checked nothing
+
+Synced byte for byte from grouped-nf4-gemm. Without `--base` it used to print SKIP and exit 0, so a local review that
+ran it bare read as clean while CI, which passes the pull request's base, failed the same diff. It now diffs against
+`origin/main` by default and says so. When that ref does not resolve, or `--base` is given empty, it FAILs with exit 2
+and says what to pass. CI is unchanged: it always passes the pull request's base sha.
+
+### P161 read (#1313): K25 at plan c1 in the served step, FLIP (g16 1.4654)
+
+On one RTX 5090, `E4B_K25_PLAN=c1` decoded Qwen3-30B-A3B's sixteen concurrent requests 1.4654x as fast as today's plan
+(the smallest of four ABBA pairs), both under K39's decode at qwen3_moe's default, with one request unchanged (g1 0.9966)
+and every token identical. Its three engagement witnesses (the decode and plan records, and the kernel's block shapes)
+read exactly in all nine processes. The registered prediction band [1.20, 1.42] was missed high, and the carry over the
+projection is reported, not attributed. Record: `bench/p161/RESULTS-p161.md`, receipts under
+`bench/p161/receipts/p161-5090-1/`, and the claim `e4b.serve.p161.k25-plan-c1.qwen3.5090.2026-10-20`. A FLIP opens a
+separate PR to make c1 qwen3_moe's K25 plan by default.
+
+### Docs: AGENTS.md names the required guard checks by their new names
+
+AGENTS.md now names the two required guard checks, `private-marker-guard` and `conflict-marker-guard` (from #1903), in
+place of the old `guard` job. Each runs on every push and pull-request event, not on a label, and push-scan runs
+("(push scan)") are not required. It also says that a label event on a pull request that does not carry
+`ready-to-merge` now fails the required CI jobs instead of skipping them, while on one that does, any label re-runs CI
+on its head.
+
+### Docs: REPRODUCE.md's "More readings" table
+
+The remaining headline readings, in the page's columns: the claim, the e4b commit and the first release containing it,
+the GPU and host, the lane and run, and the cost of one reading. It covers layer-major offload training, the serving
+defaults (P116, P127, P133, P135, P141, P143, P153), server capacity, grouped-nf4-gemm's kernel reads and loggetta's
+planner estimate. The negatives and limits stand beside them: P155's NO_GO, Gemma-4's served-quality defect, and
+vLLM Marlin ahead of grouped-nf4-gemm at M=16. It also says which controllers pin, refuse an override, or need
+`GNF4_SHA`.
+
+### Fixed
+
+- `tests/test_hostprobe.py`: the shared-budget test now drives the probe's monotonic clock instead of sleeping, so a
+  loaded host can no longer change its outcome. Test only; the probe is unchanged.
+
+### P161 registered (#1313): K25 at plan c1 in the served step, under K39's decode, on Qwen3-30B-A3B
+
+P160 read plan c1 GO in a microbench (1.6598x on the two K25 GEMMs under `lut="prmt"`, lower bound 1.6568,
+clock-adjusted 1.6525). P161 reads it in the served step, by P158's served form.
+- **Arms:** S0, `E4B_K25_PLAN=today` (named), and S1, `c1` (e4b#1877), on the shipped default server with K25's decode
+  at its qwen3_moe default (`prmt`, unset in both arms); a warm-up process, then ABBA twice through W16 and W1 at five
+  reps.
+- **The rule is fixed before data:** P158's. FLIP needs g16, the min of four W16 pairs, >= 1.03 and g1 >= 0.99, on
+  unrounded minima; the token-identity gate with its null first ("today's plan not token-deterministic" VOIDs the read
+  before any S1 difference can be a contract finding against c1).
+- **Two witnesses for the plan:** the plan record (`K25_PLAN_SEEN`, exactly 960 under the arm's plan after the build)
+  and a spy on the kernel's block shapes (exactly 1920 calls: today's 32/64/4/3 for both projections, or c1's 64/256/4/2
+  and 128/128/8/3, 960 each), tied to the decode record's total. Both were confirmed in their licence half on a $0
+  layer-cut build on the A2000, with the box's own spy.
+- **Box:** P158's: one RTX 5090 at >= 575 W, grouped-nf4-gemm v0.50.0, guard 1.5 h, worst $2.35; the premise at 62
+  tests (e4b's served-route contract frozen with c1's cases).
+- **Projection, never a bar:** g16 1.378 if P160's ratio carried 1:1, 1.280 at P158's measured carry.
+
+A FLIP opens a separate PR to make c1 qwen3_moe's K25 plan by default. Files: `bench/p161/` and `tests/test_p161.py`.
+
+### Docs: REPRODUCE.md, for checking the published numbers from outside
+
+A new page covers each headline claim. It gives the e4b commit the claim was measured at and the first release that
+contains it, the command through the lane's controller (with every variable the run set), the hardware, and what one
+reading cost. The losses sit beside the wins: Unsloth faster on resident Mixtral in the field image's environment,
+vLLM 0.30.0 ahead at decode, e4b's 1.04 GB memory cost, and P109's DIVERGENT verdict. It also says how to report a
+reading.
+
+### Added
+
+- `bench/hostprobe/` Amendment 1: the host-facts probe also records GPU 0's driver, CUDA and VBIOS versions, ECC mode
+  and error counts, retired pages, remapped rows and the clock-event reasons at the probe's moment. Every rented box it
+  reads then carries the facts that could rule a card fault in or out. Each value is left out when the driver does not
+  report it. A field the driver does not list is never queried, and every `nvidia-smi` call shares one 40 s budget, so a
+  slow or hung driver cannot outlast the drive's bound. Cost and scope are unchanged.
+
+### Docs: the 12 GB headline cites the receipted A2000 training read
+
+The README's first screen, its results table, STATUS, CHOOSING, STORAGE-MODES and the larger-than-VRAM solution page
+now lead with `e4b.train.frontier.qwen3.a2000-12gb.2026-10-02`. That read has Qwen3-30B-A3B training TC1's matched set
+(fp32 adapters) at micro-batch 1 × accum 8, the registered secondary after the field recipe's micro-batch 2 ran out of
+memory on that shared card, at 10.463 GB peak allocated on an RTX A2000 12 GB, from a pinned revision with receipts in
+`bench/h2h-2026-10-02/tc3/`. The older 7.16 GB reading (`e4b.offload.fits-30b-class`, 5 steps at seq 128) recorded no
+model revision or run id and was not reproduced. It stays beside the new one, labelled that way. No claim value changes.
+
+### Changed
+
+- `docs/STATUS.md`: every head-to-head training paragraph now names the comparator version it was measured against
+  (Unsloth 2026.9.14, or 2026.9.2 for tp2's 2026-09-06 Mixtral reading; axolotl 0.20.0; transformers 5.18.0 + PEFT
+  0.21.2), as recorded in each claim's receipts. Only the 24 GB paragraph named one before. No claim value changes.
+
+### P149: the A2000 router pre-read's g16_routing band in the Predictions; the dry run's slice stays on the box
+
+Before box Q+S is created, as Amendment 4 requires, the PREREG's Predictions now carry the USD 0 A2000 router pre-read
+(`bench/p149/preread/preread.json`). S1's greedy W16 stream differs from S0's in all 16 rows, but replayed through
+S0's router the two touch 7.8919 and 7.8927 distinct experts per layer-step, every expert inside one 16-row tile. That
+predicts g16_routing 0.99991, with a band of [0.9979, 1.0019]. It is graded in the read and never rules. The driver's
+fetch now leaves a dry run's one-layer cut (`slice/`, 3.2 GB) on the box, as `p149-dry-2` showed it should.
+
+### Tests: the llms bundle builder's own tests run here too
+
+`tests/test_build_llms_bundle.py` is a byte copy of grouped-nf4-gemm's `kernel/test_build_llms_bundle.py`, the tests
+for the shared `scripts/build_llms_bundle.py` that 0.56.0 synced. They cover the plain-text-safe link forms, code that
+is never rewritten, and the check that the committed `llms-full.txt` holds no unsafe URL.
+
+### Added
+
+- **`E4B_K25_PLAN`** (#1313): K25's block shapes on the NF4 store's device-grouped decode route, per projection.
+  `today` is the route's plan for both projections, the default (also when unset), unchanged. `c1` is P156's first
+  carried pair (gate_up `{block_n 64, kc 256, warps 4, stages 2}`, down `{block_n 128, kc 128, warps 8, stages 3}`), which
+  lane P160 read at 1.6598x today's plan under K39's decode in a microbench at Qwen3-30B-A3B's W16 shapes
+  (`bench/p160`).
+  - **Opt-in:** no default changes, and no served speed claim. A served read of its own decides any default.
+  - **Only under `prmt`:** the select tree at `c1`'s shapes is slower than at today's (P155), so `c1` under any decode
+    other than `E4B_K25_LUT`'s `prmt` (explicit, or qwen3_moe's default where it resolves) is refused, never run. It is
+    also refused with K25 off or absent, also under `E4B_NF4_GROUPED_SMALLM=auto`. Any other value is refused.
+  - **At startup:** `serve_paged.build_engine` refuses what no family can change before reading the model's config, and
+    the rest once the family's decode is resolved, before any weight loads (`hot_residency.resolve_k25_plan`);
+    `info["k25_plan"]` records the resolution and each projection's shape.
+  - **Engagement record:** `hot_residency.K25_PLAN_SEEN` counts K25's calls by plan (`"<plan>|le256"`; eager calls and
+    graph captures, not replays), and `/health`'s `prefill_routes()["seen"]["moe_k25_plan"]` carries it.
+  - **Bitwise on a GPU:** through the served route's own call, the tree, `prmt`, and `prmt` with `c1` give the same bits
+    at B=16 (both glues), T == 1 and a CUDA-graph replay, including a K that neither of `c1`'s KCs divides
+    (`tests/test_k25_lut_gpu.py`).
+
+### Docs: P156's and P158's records link forward to P158 and P160
+
+Each record's 'What follows' gains a short, dated paragraph that names the reads that followed: P158's served FLIP and
+the qwen3_moe default (e4b#1868), and P160's decode x plan GO. The original record text is unchanged.
+
+### P159 Amendment 2: a rerun after an instrument void, a THP pre-flight refusal and an early bytes gate
+
+`p159-1` read VOID_BYTES. On its host the NF4 bytes differed in every block while the fused bytes matched; the same stack
+is deterministic on three other hosts, and the cause is not established. Amendment 2 (`bench/p159/PREREG-p159.md`):
+- `p159-2` may run after any VOID.
+- A host is refused before the install unless torch's allocations can get huge pages (THP `always`, or `madvise` with
+  `THP_MEM_ALLOC_ENABLE=1`).
+- The box stops after its first block when the bytes are not the registered ones.
+- The box records the GPU's driver, VBIOS and ECC state.
+
+### Added
+
+- `bench/hostprobe/`: a registered host-facts probe (`hostprobe-<machine>-<n>`). It rents one named machine, reads the
+  host facts other lanes name as bounds on their reads (the transparent-huge-page mode, kernel, cgroup memory limit,
+  CPUs and NUMA nodes), writes them to the receipt and tears down. Standard library only, never a reading, worst $0.20
+  a probe.
+
 ## 0.56.0 — 2026-10-20 — three qwen3_moe serving defaults, layer-major training under offload, a full-depth Qwen3-235B step
 
 **0.56.0.** Three serving defaults on `qwen3_moe`, each read alone on Qwen3-30B-A3B on one RTX 5090 (their combined effect

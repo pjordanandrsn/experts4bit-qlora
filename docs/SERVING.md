@@ -401,7 +401,7 @@ decode in 0.50.0. On an older package each resolves off, recorded.
   resolves to the tree, so no install breaks. `tree` opts out, and an explicit `prmt` the package or device cannot
   serve is refused. Reported in `levers.k25_lut`; which decode each K25 call took is
   `prefill_routes.seen.moe_k25_lut`.
-- **K25's tile plan (`E4B_K25_PLAN`, `c1` on `qwen3_moe`; on main after 0.56.0, in no release yet).** Under the
+- **K25's tile plan (`E4B_K25_PLAN`, `c1` on `qwen3_moe`; from 0.56.1).** Under the
   `prmt` decode, K25 runs plan `c1`: gate_up at `{block_n 64, kc 256, warps 4, stages 2}` and down at `{block_n 128,
   kc 128, warps 8, stages 3}`, in place of one plan for both. A plan changes tiling and staging, never the values, so
   the output is bit-identical to today's plan. Sixteen requests decode 1.4654× as fast, and one is unchanged

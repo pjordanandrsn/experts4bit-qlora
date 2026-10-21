@@ -162,14 +162,14 @@ defaults are not the run's settings. The controller reads a Hugging Face token f
 
 Same rules as above: each row's commit, first release and cost come from its record. Controllers differ, so read the
 lane's drive script before running it:
-- **Build from the checkout's HEAD and refuse an `E4B_SHA` override** (P143, P153, P155): check out the recorded
+- **Build from the checkout's HEAD and refuse an `E4B_SHA` override** (P143, P153, P155, P161): check out the recorded
   commit and run from there.
 - **Build from HEAD but accept an `E4B_SHA` override** (P135, whose run script also hard-pins its grouped-nf4-gemm):
   pass the recorded commit.
 - **Hard-pin the e4b commit inside the drive** (P133, P137, P140, P144, P146): the drive can postdate the measured
   commit (P133's was added at its registration, `7896ce0e`), so run it from its registration commit or a later main;
   it installs the pinned commit itself.
-- **Accept only their registered run ids** (P133, P135, P137, P140, P141, P143, P144, P146, P153, P155), and **refuse to
+- **Accept only their registered run ids** (P133, P135, P137, P140, P141, P143, P144, P146, P153, P155, P161), and **refuse to
   start without `GNF4_SHA`** (K15, K33, MG1, P58).
 
 | Reading | Claim | Measured at e4b (first release) | GPU, host | Lane, run | Cost |
@@ -185,7 +185,8 @@ lane's drive script before running it:
 | Bandwidth decode GEMV on Mixtral, one request: **2.4075** over the scalar GEMV (rate) | `e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18` | `d2bf9f64` (v0.56.0) | RTX 5090 at 500 W, Xeon Gold 6240 | P141, `p141-5090-2` | $0.999 |
 | Fused-stack folds on Mixtral: step time **0.9393** ON/OFF (below 1 = faster; 20.2-20.5 → 19.0 ms) | `e4b.serve.p135.fold-speed.mixtral.5090.2026-10-18` | `5be4c4d9` (v0.56.0) | RTX 5090, EPYC 7742 | P135, `p135-5090-2` | $1.159 |
 | Server capacity with 64 slots and `E4B_PAGED_BUCKETS=auto`, on the int4 stack (int4 experts and attention, fused QKV, 2,048 tokens a slot): **12 req/s** at TTFT ≤ 1 s and TPOT ≤ 100 ms for ≥ 95 % in both Poisson draws, against 4 for the 16-slot server. No comparator ran, and it is not the default NF4 server | `e4b.serve.sc2e.64-slots-buckets-auto.qwen3.5090.2026-10-07` | `3bbcb01b` (v0.49.0) | RTX 5090 at 575 W, EPYC 7352 | SC2e via `bench/sc1/sc1_drive.sh` (`SC1_BOX=L`), `sc2e-5090-1` | $1.017 |
-| **A negative, since overtaken:** K25's plan under the select-tree decode: best plan 1.0188 against a 1.15 bar, NO_GO. Under K39's `prmt` decode, P160 then read plan `c1` at 1.66× in a microbench ([`RESULTS-p160`](../bench/p160/RESULTS-p160.md)); the served read is P161 | UNVERIFIED: no register row; [`RESULTS-p155`](../bench/p155/RESULTS-p155.md) | `4d3fd170` (v0.56.0) | RTX 5090 at 575 W, EPYC 7K62 | P155, `p155-5090-1` | $0.274 |
+| **A negative, since overtaken:** K25's plan under the select-tree decode: best plan 1.0188 against a 1.15 bar, NO_GO. Under K39's `prmt` decode, P160 then read plan `c1` at 1.66× in a microbench ([`RESULTS-p160`](../bench/p160/RESULTS-p160.md)); the served read is P161 (the next row) | UNVERIFIED: no register row; [`RESULTS-p155`](../bench/p155/RESULTS-p155.md) | `4d3fd170` (v0.56.0) | RTX 5090 at 575 W, EPYC 7K62 | P155, `p155-5090-1` | $0.274 |
+| K25 at plan `c1` under K39's `prmt` decode, served on the shipped default server for Qwen3-30B-A3B: sixteen requests **1.4654×** as fast as the `today` plan (the smallest of four ABBA pairs), one request unchanged (0.9966), every token identical. `qwen3_moe`'s default from v0.56.1 | `e4b.serve.p161.k25-plan-c1.qwen3.5090.2026-10-20` | `da3eb5c5` (v0.56.1) | RTX 5090 at 575 W, EPYC 7K62 | P161, `p161-5090-1` | $0.726 |
 | **A quality limit:** Gemma-4 served NF4 vs bf16, KL **1.077** nats/token (a served-model defect on this family, #597; no Gemma-4 serving position) | `e4b.serve.p44.gemma4.nf4-vs-bf16.2026-09-19` | not recorded; gnf4 v0.31.0 | H100 NVL | P44-b (`bench/p44/p44b_drive.sh`); three runs agree | UNVERIFIED (lane ≈ $8.8) |
 
 ### grouped-nf4-gemm and the planner
