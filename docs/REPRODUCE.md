@@ -199,6 +199,20 @@ lane's drive script before running it:
 | One-launch training backward: relative error **0.0029** against the exact per-expert loop (correctness, not speed) | `gnf4.kernel.dgrad` | gnf4 v0.7.0 | RTX A2000 | the 0.7.0 release entry | $0 |
 | loggetta's planner memory estimate on Qwen3-30B-A3B resident: 22.09 vs 21.91 GiB measured (-0.8 %) | UNVERIFIED: loggetta has no register; its `docs/RESULTS.md` §5 | loggetta (`fp1-5090-1`) | RTX 5090 | FP1, `fp1-5090-1` | $0.848 |
 
+## How far a number travels between boxes
+
+- **Within one box, a ratio repeats to under 0.5 %.** The four ABBA pair ratios in each of P143, P149, P153, P158 and P161
+  agree to a median 0.08 %, and at most 0.46 % (P161).
+- **Across boxes, an absolute moves and a GPU-bound ratio holds.** P116's read and its reported second draw (void as a reading),
+  on two rented RTX 5090s, differ by 15-18 % in absolute rate and by 2 % in the ratio: 1.2681 against 1.2417
+  (`e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`).
+- **A ratio with host-side work in it moves too.** TC1's axolotl/e4b steady-state ratio read 1.238 on one host and 1.146 on
+  another (`e4b.train.h2h.axolotl.qwen3.5090.2026-10-03.native-steady-state`). Where e4b's step is host-launch-bound it read
+  2.775 against 1.979 (`e4b.train.h2h.axolotl.qwen3.5090.2026-10-03`).
+
+Compare ratios read on one box. An absolute time from another box is that host's number, and so is a ratio whose path
+includes CPU-side work.
+
 ## How to report a reading
 
 Open an issue with:
