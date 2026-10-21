@@ -1,6 +1,6 @@
 # HPN (DESIGN, $0): where HP2's per-row noise comes from
 
-**Status: DESIGN, $0.** A $0 diagnostic design on the lab's A2000, accepted by the maintainer, who ruled that no P-number
+**Status: READ, 2026-10-21: MOOT** ([`RESULTS-HPN.md`](RESULTS-HPN.md)). **Design, $0.** A $0 diagnostic design on the lab's A2000, accepted by the maintainer, who ruled that no P-number
 registration is needed. This note does a registration's job instead: it, with N0–N3 and the stop rules,
 merges before the first GPU second. It makes **no parity claim**. It authorizes no rental. Its numbers are diagnostic: they decide
 whether any paired held-out-parity instrument can read a 0.005 margin, and they are never scored data.
