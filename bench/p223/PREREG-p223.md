@@ -82,7 +82,7 @@ The kit is P149's box Q+S kit (`p149_box.py`, `p149_run.sh`, `p149_reduce.py`), 
 | **W16, both servers:** p16 in 0.97-1.00 | bucket 16 already runs 2 splits; only the tail steps leave bucket 16 |
 | **W1, both servers:** p1 in 0.60-0.95 | every W1 step runs in bucket 2 beside a pad row, with one attention split; the pad row may also route experts the live row does not |
 | **Both servers SCHEDULE_INVARIANT:** 0 of 16 W16 rows differ, 32 vs 160 | `p149b1-5090-8` on one layer |
-| **Cross-W under I: equal** (moderate confidence) | in `p149b1-5090-8`, a row's bucket-2 steps matched its bucket-16 steps |
+| **Cross-W under I: equal** (moderate confidence) | an inference: `p149b1-5090-8` compared 32 vs 160 tokens at the SAME width, where a row's bucket-2 steps matched the same row's bucket-16 steps; across widths the co-batched rows differ too |
 | **Both D arms NOT invariant:** at least one W16 row differs, 32 vs 160 | P149's S0a (1 row) and S1a (2 rows) |
 
 ## What follows (never automatic)
