@@ -1,6 +1,6 @@
 # Docs index — what each document is, and whether it is current
 
-57 documents accumulated over two months of measured campaigns (the count is
+58 documents accumulated over two months of measured campaigns (the count is
 the number of distinct documents this index links, held by `tests/test_docs_index_count.py`).
 This index says what each one is *for*, whether it is still the thing to
 read, and whether it is OpenTimestamps-anchored (**anchored** documents
@@ -56,6 +56,7 @@ Start here: [`STATUS.md`](STATUS.md) (one page, current) →
 | [`SERVING-PARITY.md`](SERVING-PARITY.md) | per-family parity of paged decode against the model's own attention |
 | [`SERVING-THROUGHPUT.md`](SERVING-THROUGHPUT.md) | per-family decode throughput (B=1, B=16) under the Qwen3-30B campaign's protocol; refused arms = the build-out list; receipt in `bench/hybrid-g9/throughput-20260904/` |
 | [`STORAGE-MODES.md`](STORAGE-MODES.md) | the nf4/fp4/int8/fp8/bf16/fp16 support matrix and what each promises |
+| [`ADAPTER_PORTABILITY.md`](ADAPTER_PORTABILITY.md) | which train-to-serve adapter combinations on the paged server are exact by construction, bounded-loss (gated) or refused, read from code (no measured numbers) |
 | [`RESIDENCY-ENGINES.md`](RESIDENCY-ENGINES.md) | the residency engines, hot-set selection, host-regime laws |
 | [`ARCHITECTURE_SUPPORT.md`](ARCHITECTURE_SUPPORT.md) | which model families load, run and capture — and train on real weights (tp1) — with evidence |
 | [`DEEPSEEK-V4.md`](DEEPSEEK-V4.md) | V4's storage split, epilogue, arena bake, key mapping |
