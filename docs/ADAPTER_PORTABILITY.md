@@ -195,9 +195,10 @@ A change to any rule above is a new scheme, not an edit of `qfp-v1`. A reader re
 from the shapes). The real cost is measured at save time, recorded per artifact in `fingerprints.<scope>.seconds`, and
 quoted from the registered cross-format read (PA-4), never assumed.
 
-**Where the bytes come from.** `quant_fingerprint(model, scope, *, source)` looks the tensors up in one of three
-sources. Each canonical line is then built by one source-independent function (`adapter_schema.expert_line` and
-`adapter_schema.linear_line`), so the source only decides where the bytes are found:
+**Where the bytes come from.** `adapter_schema.expert_line` and `adapter_schema.linear_line` are THE canonical
+functions. Every writer and every reader (PA-1's arena reader included) MUST compute its lines through them, and PA-1's
+arena-versus-training test enforces that for the reader. `quant_fingerprint(model, scope, *, source)` only looks the
+tensors up, in one of three sources:
 - **`resident`, training with resident experts:** the module's own tensors. An evicted placeholder is refused, and
   the message names `offload_homes`.
 - **`offload_homes`, training with expert offload:** each stack is read where its bytes live: resident when staged, and

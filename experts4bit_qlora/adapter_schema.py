@@ -93,9 +93,10 @@ def _shape(dims) -> str:
 
 
 def linear_line(name: str, *, kind: str, shape, blocksize: int, data, absmax=None, code=None) -> tuple:
-    """qfp-v1's canonical line for one linear, from tensors found ANYWHERE: ``data`` is the packed bytes (``bnb4``) or
-    the weight (``dense``), ``absmax`` the fp32 absmax as dequantize computes it, ``code`` the fp32 code table.
-    Returns ``(line, bytes_hashed)``. The writer and every reader build lines through this one function."""
+    """THE canonical qfp-v1 line for one linear: every writer and every reader (PA-1's arena reader included) MUST
+    compute its lines through this function, never re-derive the format. ``data`` is the packed bytes (``bnb4``) or the
+    weight (``dense``), ``absmax`` the fp32 absmax as dequantize computes it, ``code`` the fp32 code table. Returns
+    ``(line, bytes_hashed)``."""
     d = _bytes(data)
     a = _bytes(absmax.float()) if absmax is not None else b""
     c = _bytes(code.float()) if code is not None else b""
@@ -104,10 +105,11 @@ def linear_line(name: str, *, kind: str, shape, blocksize: int, data, absmax=Non
 
 def expert_line(name: str, which: str, *, bits: int, quant_type: str, num_experts: int, shape, blocksize: int,
                 packed, absmax, code=None) -> tuple:
-    """qfp-v1's canonical line for one projection of an expert stack, from tensors found ANYWHERE (a resident stack,
-    an offload host home, an arena's rows): ``packed`` is the stack's packed storage (its BYTES are sampled, whatever
-    the dtype), ``absmax`` the fp32 absmax ``[E, N, K/blocksize]`` as dequantize computes it. Returns
-    ``(line, bytes_hashed)``."""
+    """THE canonical qfp-v1 line for one projection of an expert stack: every writer and every reader (PA-1's arena
+    reader included) MUST compute its lines through this function, from tensors found anywhere (a resident stack, an
+    offload host home, an arena's rows), never re-derive the format. ``packed`` is the stack's packed storage (its
+    BYTES are sampled, whatever the dtype), ``absmax`` the fp32 absmax ``[E, N, K/blocksize]`` as dequantize computes
+    it. Returns ``(line, bytes_hashed)``."""
     import torch
 
     flat = packed.detach().contiguous().reshape(-1).view(torch.uint8)       # bytes, whatever the storage dtype
