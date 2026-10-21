@@ -1,6 +1,6 @@
 # P222: K25's decode x plan at Mixtral-8x7B's W16 shapes, against Mixtral's served default (the tree at today's plan)
 
-**Status:** registered before any data. A microbench PREMISE for e4b#1313 (b1-decode), assigned by the maintainer on
+**Status:** registered before any data. A microbench PREMISE for e4b#1313, assigned by the maintainer on
 2026-10-21 under the owner's standing rule for idle-time exploration. A GO opens a served read, its own registration. This
 lane changes no default, no gate and no speed claim, and it quotes no gain into the served step. **The id:** P162-P221
 appear in prose on main (TC1's prediction labels among them); P222 is the first id `git grep -w` finds nowhere.
@@ -183,7 +183,7 @@ this registration merges, and before the reading:
   NOT_RUN readings stop the lane. P160's strike rules hold: a pre-flight host stall, a power-floor refusal (rc 17) or a
   fit refusal (rc 41) is not a strike; a time-left skip of the bench (rc 40) is. A shakedown is never a strike.
 - **The host, for the served read that follows a GO:** this lane's machine is pinned first, so the served read does not
-  carry a microbench-to-served card spread (docs-upkeep's 2026-10-21 hypothesis on P149's and P161's carries). If it
+  carry a microbench-to-served card spread (a 2026-10-21 hypothesis about P149's and P161's carries). If it
   does not list, the served read names the cross-card carry and reports it, never attributes it.
 - **Sequencing:** this registration's merge after one independent review and the maintainer's pass; then the shakedown;
   then the exec ACK on the bus (the kit hash `staged-p222.sha256`, the e4b launch commit and the gnf4 pin, compared with
