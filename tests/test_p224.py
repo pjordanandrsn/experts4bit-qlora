@@ -215,3 +215,19 @@ def test_the_fixture_base_step_is_after_the_trains_and_never_changes_the_verdict
     i_finish = RUN.rindex('case "$SHAKE/$V" in')
     assert i_reduce < i_trains < i_base < i_finish
     assert "$W/fx/receipts_fixture-nodq" in RUN and "['plan']" in RUN
+
+
+AMENDMENT_2 = PREREG.split("## Amendment 2", 1)[1] if "## Amendment 2" in PREREG else ""
+
+
+def test_amendment_2_the_shakedown_card_and_its_guard():
+    """The L4 at <= $0.40/h; the fit table unchanged (4,660 s); a 1.9 h guard for the slower card; worst $1.0064."""
+    total = BOOT_S + sum(SHAKE_FIT.values())
+    assert total == 4660 and total * HEADROOM <= 1.9 * 3600 == 6840
+    for text in ("one L4 (sm_89, 24 GB", "most $0.40/h", "**1.9 h** (6,840 s)", "5,825 s, inside the 6,840 s guard",
+                 "(4,660 − 300) × 1.25 = 5,450 s", "**$1.0064**", "`phases.jsonl`"):
+        assert text in AMENDMENT_2, text
+    assert round(1.9 * 0.40 + (14 + 5 + 3.4) * 0.011, 4) == 1.0064
+    for marker in ("(the card and the cap superseded by Amendment 2)", "**The guard** (superseded by Amendment 2)",
+                   "**Worst case** (superseded by Amendment 2)"):
+        assert marker in PREREG, marker
