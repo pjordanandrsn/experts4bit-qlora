@@ -2,8 +2,8 @@
 """phases.py -- read and check a rental box's ``phases.jsonl`` (bench/common/README.md, "Phase stamps"). Stdlib only.
 
     python bench/common/phases.py PATH            # the summary as JSON
-    python bench/common/phases.py --check PATH    # exit 1, with one line per fault, on any format fault
-    python bench/common/phases.py --check --closed PATH   # also a fault: a phase left open (a fetched receipt)
+    python bench/common/phases.py --check PATH    # exit 1, one line per fault: any format fault or a phase left open
+    python bench/common/phases.py --check --allow-open PATH   # a live box: the current phase may be open
 
 A line is ``{"phase": NAME, "event": "start"|"end", "t": EPOCH_SECONDS}``; a start line may carry ``"kind"``: setup,
 measure, reduce or other. Lines written before the kind existed (P149's) carry none: their kind reads ``unknown``, never
@@ -81,14 +81,14 @@ def summary(phases):
 
 
 def main(argv):
-    check, closed = "--check" in argv, "--closed" in argv
-    paths = [a for a in argv if a not in ("--check", "--closed")]
+    check, allow_open = "--check" in argv, "--allow-open" in argv
+    paths = [a for a in argv if a not in ("--check", "--allow-open")]
     if len(paths) != 1:
         print(__doc__.strip().splitlines()[2])
         return 2
     with open(paths[0]) as f:
         phases, faults = read(f)
-    if closed:                                      # a fetched receipt: the box is gone, so an open phase means it died
+    if not allow_open:                              # a fetched receipt: the box is gone, so an open phase means it died
         faults = faults + [f"phase {name} left open" for name in summary(phases)["open"]]
     if check:
         for line in faults:

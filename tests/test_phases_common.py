@@ -107,12 +107,9 @@ def test_check_exits_nonzero_on_a_fault(tmp_path):
     assert ok.returncode == 0 and ok.stdout == ""
     live = tmp_path / "live.jsonl"
     live.write_text("\n".join(_lines({"phase": "fetch", "event": "start", "kind": "setup", "t": 1})) + "\n")
-    plain = subprocess.run([sys.executable, str(ROOT / "bench" / "common" / "phases.py"), "--check", str(live)],
-                           capture_output=True, text=True)
-    assert plain.returncode == 0                       # a live box: the current phase is legitimately open
-    fetched = subprocess.run([sys.executable, str(ROOT / "bench" / "common" / "phases.py"), "--check", "--closed",
-                              str(live)], capture_output=True, text=True)
-    assert fetched.returncode == 1 and "phase fetch left open" in fetched.stdout
-    real = subprocess.run([sys.executable, str(ROOT / "bench" / "common" / "phases.py"), "--check", "--closed",
-                           str(REAL)], capture_output=True, text=True)
-    assert real.returncode == 0
+    fetched = subprocess.run([sys.executable, str(ROOT / "bench" / "common" / "phases.py"), "--check", str(live)],
+                             capture_output=True, text=True)
+    assert fetched.returncode == 1 and "phase fetch left open" in fetched.stdout   # the default: a died box
+    allowed = subprocess.run([sys.executable, str(ROOT / "bench" / "common" / "phases.py"), "--check",
+                              "--allow-open", str(live)], capture_output=True, text=True)
+    assert allowed.returncode == 0                     # a live box: the current phase is legitimately open
