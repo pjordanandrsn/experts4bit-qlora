@@ -99,7 +99,7 @@ does not assume the confirmation P100 did not give. **P100's verdict stays REFUT
 - **`p100-5090-1`:** REFUSED before any rental, $0. The launch script did not arm the live provider (`E4B_RENT_LIVE`).
   Receipt: adertha-receipts `2006be6`.
 - **`p100-5090-2`:** OK, `cost_usd.actual` **$0.163**. Started 2026-10-03T01:45:53Z; teardown 02:04:38Z (19 min, from
-  `receipt.json` and `teardown-proof.json`); machine 151972 destroyed and absent. Receipt: adertha-receipts
+  `receipt.json` and `teardown-proof.json`); machine 151972 destroyed and absent. Receipt: the private receipt store at
   `2fb24ad`.
 - **Lane total $0.163** (ceiling $1.50).
 - Copies of the records, censuses, cProfile listing, logs and verdict are under `bench/p100/receipts/p100-5090-2/`
