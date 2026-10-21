@@ -360,7 +360,7 @@ its routing qualifier.**
   both gates. One request decodes 1.16× faster and sixteen requests 1.018×
   (`e4b.serve.p149.int8-attn.mixtral.5090.2026-10-20`, one host).
 - **Why it stays off by default:** the token-pinned routing qualifier read QUALIFIER_VOID. S0, fed its own stream,
-  differed from it at 5 of 1,100 steps in every block. So the default-flip PR is held for a routing-matched read, which
+  differed from it at 5 forced tokens over 1,100 decode steps in every block. So the default-flip PR is held for a routing-matched read, which
   needs a later registration.
 
 [P147](../bench/p147/RESULTS-p147.md), [P149](../bench/p149/RESULTS-p149.md).

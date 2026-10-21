@@ -114,15 +114,17 @@ registration. g16_routing and its band are not graded.
 
 #### QUALIFIER_VOID cause (found after the run, from the receipt, no new run)
 
-The fault is in the qualifier's instrument, not in S0:
+S0 is deterministic across processes. The instrument forced the 160-token stream into the 32-token pass, which
+assumes the served stream does not depend on `max_new_tokens`, and it does (below):
 
 - **S0 reproduces itself across processes.** S0b, S0c and S0d reproduce S0a's W16 32- and 160-token streams and its W1
   streams exactly, 16 of 16 rows (`arm_S*.json`).
 - **The forced stream was the wrong length's.** The token-pinned harness (`p149_box.py`, `tf_main`) forces the
   160-token run's stream into both passes, including the 32-token pass. S0a's own 32-token run differs from its
-  160-token run's first 32 tokens in one place: W16 row 10, step 29 (token 4777 against 6795). In the 32-token pass that
-  row's argmax follows the 32-token run's own history, so block A cannot read 0. Five per A block is that one position
-  in each of the five timed reps.
+  160-token run's first 32 tokens in one place: W16 row 10, step 29 (token 4777 against 6795). The forced prefix through
+  step 28 is identical in both runs, and at step 29 the 32-token pass's argmax repeats the 32-token run's own choice
+  (4777), not the forced 6795, so block A cannot read 0. Five per A block is that one position in each of the five
+  timed reps.
 
 **Reported, not attributed:** the served decode's tokens depend on `max_new_tokens`. In W16, S0a's 32-token run differs
 from its 160-token run's prefix in one row (row 10, step 29), and S1a's in two (row 8, step 31; row 12, step 27); W1
@@ -156,5 +158,6 @@ length's stream.
   proceeds only on ROUTING_CLEAR. The qualifier read VOID, so that PR is held.
 - **The claim** is `e4b.serve.p149.int8-attn.mixtral.5090.2026-10-20` in `docs/claims.json`. It is the opt-in lever's
   measured served speed on this host: one request 1.16 × faster, sixteen requests 1.018 ×, with Q GO.
-- **The open question** is what makes S0's token-pinned replay differ from S0a at 5 of 1,100 steps. A routing-matched
-  read that settles g16's routing share must be designed around it, and must be registered before it runs.
+- **The open question** is why the served decode's tokens depend on `max_new_tokens` (the QUALIFIER_VOID cause,
+  above). A routing-matched read that settles g16's routing share must be designed around it, and must be registered
+  before it runs.
