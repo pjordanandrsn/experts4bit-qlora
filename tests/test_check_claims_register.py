@@ -301,6 +301,34 @@ def test_retired_needs_its_reason_and_the_reason_belongs_to_retired_rows_only(re
     assert _has(_findings(repo, *old), "retired_reason on a 'superseded' row")
 
 
+def test_published_on_dates_a_retired_claims_first_appearance_and_resolves_its_commit(repo, tmp_path):
+    def out(*a):
+        return subprocess.run(["git", *a], cwd=repo, check=True, capture_output=True, text=True).stdout.strip()
+    sha, day = out("rev-parse", "HEAD"), out("log", "-1", "--format=%cs")
+
+    def gone(po, **kw):
+        return _row("e4b.gone", "retired", retired_reason="r", retired_on=day, published_on=po, **kw)
+    assert _findings(repo, gone({"date": day, "evidence": f"{sha}:bench/RESULTS.md"})) == []
+    assert _findings(repo, gone({"date": day, "evidence": "https://example.org/post"})) == []      # listed, not resolved
+    assert _has(_findings(repo, _row(published_on={"date": day, "evidence": "https://x.org/a"})),
+                "published_on on a 'measured' row")
+    for bad in ("2026-08-25", {"date": day}, {"date": day, "evidence": "https://x.org/a", "by": "me"}):
+        assert _has(_findings(repo, gone(bad)), "published_on must be", "never guess"), bad
+    assert _has(_findings(repo, gone({"date": "2026-08", "evidence": "https://x.org/a"})), "not an ISO calendar date")
+    assert _has(_findings(repo, gone({"date": "2099-01-01", "evidence": "https://x.org/a"})), "is after retired_on")
+    for ev in (f"{sha[:12]}:bench/RESULTS.md", f"{sha}:", "http://x.org/a", "https://", f"{sha} bench/RESULTS.md"):
+        assert _has(_findings(repo, gone({"date": day, "evidence": ev})), "is neither"), ev
+    assert _has(_findings(repo, gone({"date": day, "evidence": "0" * 40 + ":bench/RESULTS.md"})),
+                "not in this repository's history")
+    assert _has(_findings(repo, gone({"date": day, "evidence": f"{sha}:bench/NOPE.md"})), "is not in commit")
+    assert _has(_findings(repo, gone({"date": "2000-01-01", "evidence": f"{sha}:bench/RESULTS.md"})),
+                f"is not commit {sha[:12]}'s committer date {day}")
+    bare = _repo(tmp_path / "bare", git=False)                       # no history to resolve against: a skip, said so
+    _write(bare, [gone({"date": day, "evidence": f"{sha}:bench/RESULTS.md"})])
+    res = ccr.check(bare)
+    assert res.findings == [] and _has(res.skips, "published_on", "not resolved (needs a full-history git checkout)")
+
+
 # ------------------------------------------------------------------------------ placeholders --
 
 def test_placeholder_words_are_refused_on_active_rows_only(repo):

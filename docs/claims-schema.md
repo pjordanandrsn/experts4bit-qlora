@@ -48,6 +48,7 @@ a finding rather than an ignored field.
 | `evidence_private` | measured-private (non-empty) | where a private receipt lives: strings, listed and never resolved |
 | `supersedes`, `superseded_by` | successors | below |
 | `retired_reason`, `retired_on` | retired rows | the sentence, with the measurement that retired the claim; its date |
+| `published_on` | optional, retired rows | `{date, evidence}`: when the retracted claim first appeared publicly (below) |
 | `licensed_by`, `pack_fingerprint` | licence labels | below |
 | `quoted_in` | optional | locations where the claim is quoted (below) |
 | `validity`, `row_status`, `parity_verdict`, `row_reason` | lane arms | below |
@@ -139,6 +140,14 @@ receipt states none, the receipt's first commit, which `notes` then records.
   other row does. It may carry `superseded_by` when a later row restates the claim
   correctly; that pointer follows the same rule. A restatement with no receipt of
   its own is not a successor, so the old row stays `retired`, not `superseded`.
+- **When a retired claim was published.** A `retired` row may carry
+  `published_on: {"date": "YYYY-MM-DD", "evidence": ...}`, the first public
+  appearance of the claim it retracts. Then `published_on` to `retired_on` is
+  how long the claim stood. `evidence` is `<40-hex commit>:<path>`: the commit
+  is in this repository's history, the path is in its tree, and `date` is its
+  committer date. Or it is an `https://` URL, which is listed and never
+  resolved. The date is not after `retired_on`, and no other status carries the
+  field. When the first appearance is not known, omit it rather than guess.
 - **Active rows** never carry `superseded_by`.
 - **Links go both ways.** The row a `superseded_by` names lists the old id in its
   `supersedes`. Every `supersedes` entry exists, is superseded or retired, and
