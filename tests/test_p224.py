@@ -1,11 +1,10 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
 """P224, one trained attention adapter on serve_paged priced against its reference path (bench/p224/PREREG-p224.md).
 The canary data's pin and its splits; the three self-tests, and the mutants of the rule they must kill; the fit table
-against the guard with 25 % headroom; the registration's constants as the reducer carries them; no seat name, bus id or
-control-plane link in the lane's files."""
+against the guard with 25 % headroom; the registration's constants as the reducer carries them. (Private names are
+the repository guards' job, not this file's.)"""
 import importlib.util
 import pathlib
-import re
 import subprocess
 import sys
 
@@ -127,11 +126,3 @@ def test_self_tests_kill_the_mutants(i, tmp_path):
     r = _self_test(tmp_path / f"{name}.py")
     assert r.returncode != 0, f"mutant {i} survived {name}'s self-test: {r.stdout}"
 
-
-def test_no_control_plane_names_in_the_lane():
-    bad = re.compile(r"adertha://|\b20\d{6}T\d{6}Z-\d+-[0-9a-f]{12}\b|\b(b1-decode|review-desk|families|"
-                     r"cerin-maintainer|heldout-parity)\b")
-    for f in LANE.iterdir():
-        if f.is_file() and f.suffix in (".py", ".md", ".sh", ".json"):
-            hits = [m.group(0) for m in bad.finditer(f.read_text(encoding="utf-8"))]
-            assert not hits, (f.name, hits)
