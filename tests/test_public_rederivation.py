@@ -4,8 +4,8 @@ A receipt that a reader can re-check carries one line (CONTRIBUTING.md, "Re-deri
 
     Re-derive: `python bench/pNN/pNN_reduce.py --dir bench/pNN/receipts/<run> --out {out} ...` writes `bench/.../verdict.json`
 
-The line sits in the receipt's README.md, or in the lane's RESULTS page when SHA256SUMS covers that README (a receipt
-is never rewritten). This test runs each command from the repository root with ``{out}`` replaced by a scratch file and
+A new receipt may carry the line in its README.md at its first commit; a committed receipt is never edited, so the line
+for one goes in ``bench/<lane>/REDERIVE.md``. This test runs each command from the repository root with ``{out}`` replaced by a scratch file and
 asserts the output equals the committed file. A later edit to a reducer that stops an old verdict reproducing fails here.
 
 Forms the command may take, and nothing else (it runs without a shell):
@@ -109,6 +109,51 @@ def test_every_rederive_line_reproduces_its_committed_verdict(where, needs_torch
         pytest.importorskip("torch")
     got = rederive(ROOT, cmd, target, tmp_path)
     assert same(got, (ROOT / target).read_bytes()), f"{where}: the output differs from {target}"
+
+
+def late_receipt_lines(root: Path, lines: list) -> list:
+    """Every ``Re-derive:`` line inside ``bench/**/receipts/**`` that its file did not carry at the file's first commit:
+    a committed receipt is never edited. (On a shallow checkout the oldest visible commit stands in for the first, so
+    this can miss an edit there; it never flags a line the first commit had.)"""
+    late = []
+    for where, _torch, cmd, target in lines:
+        rel = where.rsplit(":", 1)[0]
+        if "receipts" not in Path(rel).parts:
+            continue
+        log = subprocess.run(["git", "-C", str(root), "log", "--diff-filter=A", "--format=%H", "--", rel],
+                             check=False, capture_output=True, text=True).stdout.split()
+        first = subprocess.run(["git", "-C", str(root), "show", f"{log[-1]}:{rel}"], check=False,
+                               capture_output=True).stdout.decode("utf-8", "replace") if log else ""
+        if f"`{cmd}` writes `{target}`" not in first:
+            late.append(where)
+    return late
+
+
+def test_no_committed_receipt_gains_a_rederive_line():
+    assert late_receipt_lines(ROOT, LINES) == []
+
+
+def test_a_line_added_to_a_committed_receipt_is_flagged(tmp_path):
+    root = tmp_path / "repo"
+    d = root / "bench" / "pX" / "receipts" / "pX-1"
+    d.mkdir(parents=True)
+    git = ["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(git[:3] + ["init", "-q"], check=True)
+    line = "Re-derive: `python bench/pX/pX_reduce.py --out {out}` writes `bench/pX/receipts/pX-1/v.json`\n"
+    (d / "README.md").write_text("# pX-1\n", encoding="utf-8")
+    (root / "bench" / "pX" / "REDERIVE.md").write_text(line, encoding="utf-8")
+    subprocess.run(git + ["add", "-A"], check=True)
+    subprocess.run(git + ["commit", "-q", "-m", "receipt"], check=True)
+    assert late_receipt_lines(root, rederive_lines(root)) == []          # the lane file is outside receipts/
+    (d / "README.md").write_text("# pX-1\n" + line, encoding="utf-8")
+    subprocess.run(git + ["commit", "-q", "-am", "edit"], check=True)
+    assert late_receipt_lines(root, rederive_lines(root)) == ["bench/pX/receipts/pX-1/README.md:2"]
+    e = root / "bench" / "pX" / "receipts" / "pX-2"
+    e.mkdir()
+    (e / "README.md").write_text("# pX-2\n" + line.replace("pX-1", "pX-2"), encoding="utf-8")
+    subprocess.run(git + ["add", "-A"], check=True)
+    subprocess.run(git + ["commit", "-q", "-m", "a new receipt with its line"], check=True)
+    assert late_receipt_lines(root, rederive_lines(root)) == ["bench/pX/receipts/pX-1/README.md:2"]
 
 
 def test_the_check_reads_the_lines_it_guards():

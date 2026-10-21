@@ -50,5 +50,3 @@ Plans read BLOCK_N/KC/warps/stages; today's is 32/64/4/3. T ran 12.872 ms a step
     (checked against the fetched copies);
   - the run's nonce markers and pip constraints file.
 - **No identifiers:** no file here names an instance, an offer, a host name, an endpoint or the GPU's UUID.
-
-Re-derive: `python bench/p156/p156_reduce.py --bench bench/p156/receipts/p156-5090-1/bench_p156.json --out {out}` writes `bench/p156/receipts/p156-5090-1/verdict_p156.json`

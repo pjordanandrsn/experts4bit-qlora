@@ -58,7 +58,8 @@ a measurement. Two devices, or name the single architecture it holds for.
 
     Re-derive: `python bench/pNN/pNN_reduce.py --dir bench/pNN/receipts/<run> --out {out} ...` writes `bench/pNN/receipts/<run>/verdict_pNN.json`
 
-The line goes in the receipt's README.md, or in the lane's RESULTS page when SHA256SUMS covers that README.
+A NEW receipt may carry the line in its README.md at its first commit. A committed receipt is never edited, so the line
+for an already-committed receipt goes in the lane's `bench/<lane>/REDERIVE.md`, outside `receipts/`.
 `tests/test_public_rederivation.py` runs every line on CPU and requires its output to match the named file byte for byte.
 `<script>@<commit>` runs a reducer as it was at that commit, and a leading `PYTHONPATH=bench/<dir>` finds a sibling
 module the box staged next to the reducer. Before a line lands, its command must reproduce the committed file.

@@ -21,5 +21,3 @@ Each record's `per_slot_dequant` re-folds with `hp1_lib.fold_fingerprints` to it
 
 - **Cost:** $0.416 actual, against $1.58 worst under the $1.00/h launch cap.
 - **No identifiers:** no file here names an instance, an offer, a host name, an endpoint or the GPU's UUID.
-
-Re-derive: `python bench/hbd/hbd_reduce.py bench/hbd/receipts/hbd-5090-1/hbd_spec.public.json --out {out}` writes `bench/hbd/receipts/hbd-5090-1/hbd/result.json`

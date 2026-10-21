@@ -21,5 +21,3 @@ fixed 16. Microseconds per launch, plan / 4 / 8 / 16 / 32 splits:
 The anchor read 0.966x P142's served launch. The plan matched the 32-split arm at every context, and the self-pairs were
 tight. The maintainer re-derived the verdict byte for byte (#1759). The launcher's receipt and ledger row are in the
 receipt store (`fa624e53`). `SHA256SUMS` covers every file here.
-
-Re-derive: `python bench/p143/p143_reduce.py --bench bench/p143/receipts/p143-5090-2/p143.json --out {out} --e4b-sha adea732102bd17f0cf229d42e92449562ed0bdf6` writes `bench/p143/receipts/p143-5090-2/verdict_p143.json`

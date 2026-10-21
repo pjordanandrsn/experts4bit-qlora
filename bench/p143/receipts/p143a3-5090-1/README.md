@@ -25,5 +25,3 @@ maintainer re-derived the verdict byte for byte (#1788). The launcher's receipt 
 (`733f3941`). `SHA256SUMS` covers every file here.
 Twelve logs carry carriage returns from the box's progress output. They stay only in that store, byte-exact,
 and `STORE-ONLY.sha256` lists them.
-
-Re-derive: `python bench/p143/p143a3_reduce.py --dir bench/p143/receipts/p143a3-5090-1 --out {out} --e4b-sha e8de1799769065283554cda4525be614b39d1ee3` writes `bench/p143/receipts/p143a3-5090-1/verdict_p143a3.json`

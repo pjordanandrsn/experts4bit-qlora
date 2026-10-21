@@ -24,5 +24,3 @@ The maintainer re-derived the verdict byte for byte from the private receipt sto
 staged pin and the box's copy). The launcher's receipt and ledger row are in that store. `SHA256SUMS` covers every file
 here. Five logs carry carriage returns from the box's progress output; they stay only in that store, byte-exact, and
 `STORE-ONLY.sha256` lists them.
-
-Re-derive: `PYTHONPATH=bench/p125 python bench/p150/p150_reduce.py --dir bench/p150/receipts/p150-5090-1 --out {out}` writes `bench/p150/receipts/p150-5090-1/verdict_p150.json`

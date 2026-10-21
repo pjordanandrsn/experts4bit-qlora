@@ -59,5 +59,3 @@ of 48 layers):
 The verdict re-derives byte for byte from the bench record with the registered reducer:
 
     python bench/p160/p160_reduce.py --bench bench/p160/receipts/p160-5090-2/bench_p160.json --out verdict.json
-
-Re-derive: `python bench/p160/p160_reduce.py --bench bench/p160/receipts/p160-5090-2/bench_p160.json --out {out}` writes `bench/p160/receipts/p160-5090-2/verdict_p160.json`
