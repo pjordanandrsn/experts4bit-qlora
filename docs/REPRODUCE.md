@@ -77,9 +77,10 @@ defaults are not the run's settings. The controller reads a Hugging Face token f
 - **Hardware and cost:** one RTX 5090 and TC1's registered pre-flight floor: at least 320 GB disk, 98 GB host RAM and
   40 MB/s ([`TC1-PREREG.md`](../bench/tc1/TC1-PREREG.md), "Budget and stop rules"). The boxes had 251-504 GB RAM. $1.96
   (`tc1-5090-136`) and $1.34 (`tc1-5090-135`).
-- **The other recipe:** at TC1's field recipe (seq 2048, micro-batch 2 × accum 4) the device ratio read 1.924
-  (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio`), and a September primary pair on an older stack read
-  1.413 (`e4b.train.h2h.unsloth.qwen3.5090.2026-09-05`). Name the recipe when you quote one.
+- **The other recipe:** at TC1's field recipe (seq 2048, micro-batch 2 × accum 4) the device ratio read 1.924 (medians
+  of two draws; `e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio`), and a September primary pair on an
+  older stack read 1.413 (a median of steps 11..60; `e4b.train.h2h.unsloth.qwen3.5090.2026-09-05`). Name the recipe when
+  you quote one.
 
 ### 3. Mixtral-8x7B against Unsloth: which stack decides it
 
@@ -179,7 +180,7 @@ lane's drive script before running it:
 | axolotl native-best / e4b as shipped at steady state, read 2026-10-03 before the later defaults: **1.238** (s/step, median of steps 101..200 per draw, over two draws; above 1 = e4b faster); 1.146 on a second host. Held-out at step 200, reported, not judged: axolotl 0.7705 / 0.7704 against e4b 0.7948 / 0.7937 | `e4b.train.h2h.axolotl.qwen3.5090.2026-10-03.native-steady-state` | `e5859e99` (v0.42.0), gnf4 `00929a49` (pass it: the drive's default differs) | RTX 5090, AMD EPYC 7663 (1.238) / 7C13 (1.146) | TC1, `tc1-5090-46` + `-47` (1.238's two draws), `tc1-5090-48` (1.146) | $0.99 + $0.98; $1.23 |
 | Layer-major offload training, stock / layer-major median s/step (the smaller of two ABBA pairs, 32 timed steps per arm, one process for the first three): **2.365** (Qwen3, 4090), **2.311** (Qwen3, 5090), **2.118** (Mixtral, 4090); the CLI's `FAST_TRAIN=1` over `LAYER_MAJOR=1`, one fresh process per arm: **1.455** | `e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18`, `e4b.train.p140.layer-major-offload.qwen3.5090.2026-10-18`, `e4b.train.p144.layer-major-offload.mixtral.4090.2026-10-18`, `e4b.train.p146.layer-major-cli.qwen3.4090.2026-10-18` | P137 and P140 `b4366b9a`, P144 `a9d140d8`, P146 `4917506a` (all v0.56.0), gnf4 `6b7c2e74` | RTX 4090 / 5090; EPYC 7742, Ryzen 7 5700X3D, EPYC 7B13 | P137, P140, P144, P146 | $0.745, $0.489, $1.167, $0.819 |
 | OLMoE fused training vs the reference loop: **|Δ final loss| 0.0089** (band 0.05; one sha-pinned dataset, batch 1, seq 512, 60 steps) | `e4b.train.parity.mg1.olmoe.fused.2026-10-04` | `058dda34` (v0.46.0), gnf4 `1546db26` | RTX 5090 at 470 W, Core Ultra 9 285K | MG1, `mg1-5090-2` | $1.79 |
-| int8 head bandwidth GEMV, one request: **1.052** (rate; outputs change). Sixteen requests read **0.9918**, below 1 in every pair: an observed cost the record leaves unexplained | `e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19` | `585cf68b` (v0.56.0) | RTX 5090 at 575 W, Ryzen 7 9800X3D | P153, `p153-5090-1` | $0.445 |
+| int8 head bandwidth GEMV, one request: **1.052** (rate, the smallest of four ABBA pairs; outputs change). Sixteen requests read **0.9918**, below 1 in every pair: an observed cost the record leaves unexplained | `e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19` | `585cf68b` (v0.56.0) | RTX 5090 at 575 W, Ryzen 7 9800X3D | P153, `p153-5090-1` | $0.445 |
 | Attention split cap, one request: **1.0442** (decode rate, the smallest of four ABBA pairs) | `e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19` | `e8de1799` (v0.56.0) | RTX 5090 at 450 W, EPYC 9135 | P143 (Amendment 3), `p143a3-5090-1` | $0.479 |
 | Launch-bound glue, one request: **1.1321** (rate, the mean of two pairs; Phase 1 + 2 against the stack before #1448) | `e4b.serve.p127.launch-bound-glue.qwen3.5090.2026-10-09` | B `7f044dd9` (v0.52.0) vs A `a8c01d42` (v0.51.0) | RTX 5090, Ryzen 9 9950X | P127, `p127-5090-1` | $0.940 |
 | Bandwidth decode GEMV, one request: **1.2417** over dot-pad (5090), **1.5145** over the scalar GEMV (4090, at Qwen3's two shapes); each the smaller of two ABBA pairs | `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`, `e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18` | `730c8acc` (v0.49.0); `c8d7e629` (v0.55.0) | RTX 5090 at 575 W, EPYC 7713; RTX 4090 at 450 W, EPYC 7742 | P116, `p116-5090-2`; P133, `p133-4090-2` | $1.078; $0.919 |
@@ -204,9 +205,9 @@ lane's drive script before running it:
 
 - **Within one box, a ratio repeats to under 0.5 %.** The four ABBA pair ratios in each of P143, P149, P153, P158 and P161
   agree to a median 0.08 %, and at most 0.46 % (P161).
-- **Across boxes, an absolute moves and a GPU-bound ratio holds.** P116's read and its reported second draw (void as a reading),
-  on two rented RTX 5090s, differ by 15-18 % in absolute rate and by 2 % in the ratio: 1.2681 against 1.2417
-  (`e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`).
+- **Across boxes, an absolute moves and a GPU-bound ratio holds.** P116's read and its reported second draw (void as a
+  reading), on two rented RTX 5090s, differ by 15-18 % in absolute rate and by 2 % in the ratio: 1.2681 against 1.2417
+  (the smaller of two ABBA pairs; `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`).
 - **A ratio with host-side work in it moves too.** TC1's axolotl/e4b steady-state ratio (medians of two draws) read
   1.238 on one host and 1.146 on another (`e4b.train.h2h.axolotl.qwen3.5090.2026-10-03.native-steady-state`). Where
   e4b's step is host-launch-bound it read 2.775 against 1.979 (medians of two draws)
