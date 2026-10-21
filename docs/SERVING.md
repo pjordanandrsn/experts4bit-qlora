@@ -371,14 +371,16 @@ rows) and `levers.kv.pool_mib`, and the step trace counts `dec_pieces` (replays 
   0.37.0. The default NF4 server reaches only two of the switched kernels, so it was not read there.
 
 **Single-request decode GEMV (grouped-nf4-gemm 0.43.0; lane P116).** On GPUs with at least 160 SMs, decode at
-Qwen3-30B-A3B's NF4 expert shapes uses grouped-nf4-gemm's bandwidth-targeted GEMV: 1.24× as fast at one request and
-unchanged at 16, with quality within P110's bar (`e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`). It is grouped-nf4-gemm's
-default from 0.43.0, and `[fast]` requires 0.43.0 from experts4bit-qlora 0.55.0; `GNF4_GEMV_BW=0` restores dot-pad.
-From grouped-nf4-gemm 0.47.0, at >= 160 SMs, the default also takes Mixtral-8x7B's expert shapes (one request 2.41× as fast,
-`e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18`), Granite-3.1-3b-a800m's and OLMoE-1B-7B's (1.3979× and 1.5011× on an RTX
-5090 at a 400 W limit, `e4b.serve.p134.gemv-bw.granite.5090.2026-10-18`, `e4b.serve.p134.gemv-bw.olmoe.5090.2026-10-18`),
-and the RTX 4090 (128 SMs) at Qwen3-30B-A3B's two shapes only (1.5145×, `e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18`). The
-shapes are licensed, not the families. Every other shape, and every other GPU below 160 SMs, keeps the previous route.
+Qwen3-30B-A3B's NF4 expert shapes uses grouped-nf4-gemm's bandwidth-targeted GEMV: 1.24× as fast at one request (the
+smaller of two ABBA pairs) and unchanged at 16, with quality within P110's bar
+(`e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`). It is grouped-nf4-gemm's default from 0.43.0, and `[fast]` requires
+0.43.0 from experts4bit-qlora 0.55.0; `GNF4_GEMV_BW=0` restores dot-pad. From grouped-nf4-gemm 0.47.0, at >= 160 SMs,
+the default also takes Mixtral-8x7B's expert shapes (one request 2.41× as fast, the smaller of two ABBA pairs,
+`e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18`), Granite-3.1-3b-a800m's and OLMoE-1B-7B's (1.3979× and 1.5011× on an
+RTX 5090 at a 400 W limit, each the smaller of two ABBA pairs, `e4b.serve.p134.gemv-bw.granite.5090.2026-10-18`,
+`e4b.serve.p134.gemv-bw.olmoe.5090.2026-10-18`), and the RTX 4090 (128 SMs) at Qwen3-30B-A3B's two shapes only (1.5145×,
+the smaller of two ABBA pairs, `e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18`). The shapes are licensed, not the
+families. Every other shape, and every other GPU below 160 SMs, keeps the previous route.
 
 **Qwen3 decode defaults by family (lanes P143, P153, P158).** Three settings resolve per family at startup, before any
 weight loads. Unset, `qwen3_moe` takes each one as read on Qwen3-30B-A3B on one RTX 5090; every other family keeps the
@@ -389,33 +391,33 @@ newer grouped-nf4-gemm than `[fast]` requires (0.43.0): the int8 head's GEMV shi
 decode in 0.50.0. On an older package each resolves off, recorded.
 - **Attention split cap (`E4B_ATTN_SPLIT_CAP`, 16 on `qwen3_moe`).** It caps the paged FP8 attention decode at 16
   splits, so buckets 1, 2 and 4 use 16 instead of 32 / 32 / 23 at 4,096-token slots. It is bitwise-identical to the plan
-  at contexts up to 1,024 tokens. One request decodes 1.0442× as fast and sixteen are unchanged
-  (`e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19`, [`bench/p143/RESULTS-p143.md`](../bench/p143/RESULTS-p143.md)).
-  `0` turns it off. Reported in `levers.attn_split_cap`.
+  at contexts up to 1,024 tokens. One request decodes 1.0442× as fast (the smallest of four ABBA pairs) and sixteen are
+  unchanged (`e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19`,
+  [`bench/p143/RESULTS-p143.md`](../bench/p143/RESULTS-p143.md)). `0` turns it off. Reported in `levers.attn_split_cap`.
 - **int8 output head (`E4B_INT8_HEAD_BW`, on for `qwen3_moe` at a 151,936 × 2,048 head).** The lm_head is rounded in
   place to its per-row int8 grid, and one-row calls run grouped-nf4-gemm's int8 GEMV. **Outputs change:** the logits
-  differ from the bf16 head's at every batch size, so greedy text can differ. One request decodes 1.0520× as fast, and
-  sixteen read 0.992 (an observed cost, not attributed), with quality inside the registered bars
-  (`e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19`, [`bench/p153/RESULTS-p153.md`](../bench/p153/RESULTS-p153.md)).
-  Other head shapes, including Qwen3-235B-A22B's, stay off. Unset, a head the swap refuses (tied, biased, int4, not
-  bf16) or a kernel package without the int8 GEMV resolves it off, recorded, never a crash; an explicit `1` refuses
-  them at startup. `0` restores the bf16 head. Reported in `levers.int8_head_bw`.
+  differ from the bf16 head's at every batch size, so greedy text can differ. One request decodes 1.0520× as fast (the
+  smallest of four ABBA pairs), and sixteen read 0.992 (an observed cost, not attributed), with quality inside the
+  registered bars (`e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19`,
+  [`bench/p153/RESULTS-p153.md`](../bench/p153/RESULTS-p153.md)). Other head shapes, including Qwen3-235B-A22B's, stay
+  off. Unset, a head the swap refuses (tied, biased, int4, not bf16) or a kernel package without the int8 GEMV resolves
+  it off, recorded, never a crash; an explicit `1` refuses them at startup. `0` restores the bf16 head. Reported in
+  `levers.int8_head_bw`.
 - **K25's codebook decode (`E4B_K25_LUT`, `prmt` on `qwen3_moe`).** The batched-decode expert GEMM (K25) decodes NF4
   codes through byte-permute table lookups (grouped-nf4-gemm K39, from 0.50.0) instead of the select tree. It is
-  bit-identical to the tree. Sixteen requests decode 1.0925× as fast, and one is unchanged, since K25 is not on the
-  one-request path (`e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20`,
+  bit-identical to the tree. Sixteen requests decode 1.0925× as fast (the smallest of four ABBA pairs), and one is
+  unchanged, since K25 is not on the one-request path (`e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20`,
   [`bench/p158/RESULTS-p158.md`](../bench/p158/RESULTS-p158.md)). On an older kernel package or a ROCm device it
-  resolves to the tree, so no install breaks. `tree` opts out, and an explicit `prmt` the package or device cannot
-  serve is refused. Reported in `levers.k25_lut`; which decode each K25 call took is
-  `prefill_routes.seen.moe_k25_lut`.
-- **K25's tile plan (`E4B_K25_PLAN`, `c1` on `qwen3_moe`; from 0.56.1).** Under the
-  `prmt` decode, K25 runs plan `c1`: gate_up at `{block_n 64, kc 256, warps 4, stages 2}` and down at `{block_n 128,
-  kc 128, warps 8, stages 3}`, in place of one plan for both. A plan changes tiling and staging, never the values, so
-  the output is bit-identical to today's plan. Sixteen requests decode 1.4654× as fast, and one is unchanged
+  resolves to the tree, so no install breaks. `tree` opts out, and an explicit `prmt` the package or device cannot serve
+  is refused. Reported in `levers.k25_lut`; which decode each K25 call took is `prefill_routes.seen.moe_k25_lut`.
+- **K25's tile plan (`E4B_K25_PLAN`, `c1` on `qwen3_moe`; from 0.56.1).** Under the `prmt` decode, K25 runs plan `c1`:
+  gate_up at `{block_n 64, kc 256, warps 4, stages 2}` and down at `{block_n 128, kc 128, warps 8, stages 3}`, in place
+  of one plan for both. A plan changes tiling and staging, never the values, so the output is bit-identical to today's
+  plan. Sixteen requests decode 1.4654× as fast (the smallest of four ABBA pairs), and one is unchanged
   (`e4b.serve.p161.k25-plan-c1.qwen3.5090.2026-10-20`, [`bench/p161/RESULTS-p161.md`](../bench/p161/RESULTS-p161.md):
   one RTX 5090, Qwen3-30B-A3B). Unset, it resolves to `c1` only where K25's decode resolved to `prmt`, and to `today`
-  otherwise (an older kernel package, ROCm, `E4B_K25_LUT=tree`), recorded, never a crash. `today` opts out; an
-  explicit `c1` under any other decode is refused. Reported in `levers.k25_plan`; which plan each K25 call took is
+  otherwise (an older kernel package, ROCm, `E4B_K25_LUT=tree`), recorded, never a crash. `today` opts out; an explicit
+  `c1` under any other decode is refused. Reported in `levers.k25_plan`; which plan each K25 call took is
   `prefill_routes.seen.moe_k25_plan`.
 
 **Prefill on the int4 expert store (#916; lanes P100, P102).** With `max_seqs` 1 the server leaves
