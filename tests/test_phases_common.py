@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -22,7 +23,7 @@ def _mod():
 
 
 def _sh(tmp_path, script):
-    return subprocess.run(["bash", "-c", f'. "{HELPER}"; {script}'], cwd=tmp_path, capture_output=True, text=True,
+    return subprocess.run(["bash", "-c", f'set -u; . "{HELPER}"; {script}'], cwd=tmp_path, capture_output=True, text=True,
                           env={"PATH": "/usr/bin:/bin", "PHASES_FILE": str(tmp_path / "phases.jsonl")})
 
 
@@ -52,7 +53,7 @@ def test_the_helper_writes_lines_the_reader_classifies(tmp_path):
 
 
 @pytest.mark.parametrize("script", ['phase_start "bad name" setup', 'phase_start ok badkind', 'phase_end "x\\"y"',
-                                    'phase_start "" setup'])
+                                    'phase_start "" setup', 'phase_start onlyname', 'phase_start', 'phase_end'])
 def test_the_helper_refuses_a_bad_name_or_kind_and_writes_nothing(tmp_path, script):
     r = _sh(tmp_path, script)
     assert r.returncode == 2 and not (tmp_path / "phases.jsonl").exists(), (r.returncode, r.stderr)
@@ -76,6 +77,14 @@ def test_the_reader_names_each_fault(lines, fault):
     assert any(fault in f for f in faults), faults
 
 
+def test_a_backwards_end_credits_no_seconds():
+    m = _mod()
+    phases, faults = m.read(_lines({"phase": "a", "event": "start", "kind": "setup", "t": 9},
+                                   {"phase": "a", "event": "end", "t": 4}))
+    assert any("goes backwards" in f for f in faults)
+    assert phases[0]["seconds"] is None and m.summary(phases)["seconds_by_kind"]["setup"] == 0
+
+
 def test_an_open_phase_is_reported_not_dropped():
     m = _mod()
     phases, faults = m.read(_lines({"phase": "fetch", "event": "start", "kind": "setup", "t": 10}))
@@ -86,9 +95,9 @@ def test_an_open_phase_is_reported_not_dropped():
 def test_check_exits_nonzero_on_a_fault(tmp_path):
     bad = tmp_path / "p.jsonl"
     bad.write_text("\n".join(_lines({"phase": "a", "event": "end", "t": 1})) + "\n")
-    r = subprocess.run(["python3", str(ROOT / "bench" / "common" / "phases.py"), "--check", str(bad)],
+    r = subprocess.run([sys.executable, str(ROOT / "bench" / "common" / "phases.py"), "--check", str(bad)],
                        capture_output=True, text=True)
     assert r.returncode == 1 and "ends but nothing is open" in r.stdout
-    ok = subprocess.run(["python3", str(ROOT / "bench" / "common" / "phases.py"), "--check", str(REAL)],
+    ok = subprocess.run([sys.executable, str(ROOT / "bench" / "common" / "phases.py"), "--check", str(REAL)],
                         capture_output=True, text=True)
     assert ok.returncode == 0 and ok.stdout == ""

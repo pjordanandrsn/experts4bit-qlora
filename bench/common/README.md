@@ -119,7 +119,7 @@ phase_start reduce reduce; python reduce.py ...;  phase_end reduce
 ```
 
 - One JSON object per line, appended: `{"phase": NAME, "event": "start", "kind": KIND, "t": EPOCH}` and `{"phase": NAME, "event": "end", "t": EPOCH}`, where `t` is integer epoch seconds.
-- `KIND` is `setup` (install, fetch, slice, bake, premise, self-tests), `measure` (anything a reading is taken from), `reduce` (the verdict on the box), or `other`. The writer refuses any other kind, and any name outside `[A-Za-z0-9_.:-]+`, with rc 2 and writes nothing.
+- `KIND` is `setup` (install, fetch, slice, bake, premise, self-tests), `measure` (anything a reading is taken from), `reduce` (the verdict on the box), or `other`. The writer refuses any other kind, and any name outside `[A-Za-z0-9_.:-]+`, with rc 2 and writes nothing. That includes a missing argument, under `set -u` too. A runner under `set -e` therefore STOPS on a refused stamp. Stamp names and kinds are constants in the runner, so a refusal is a kit bug, which the $0 shakedown must catch before a paid box. Don't wrap stamps in `|| true` to hide one.
 - Phases run one at a time: a phase ends before the next starts, and `t` never goes backwards.
 - P149's runner wrote the same lines without `kind` before this convention existed. The reader classes those `unknown`; it never guesses a kind from a name.
 

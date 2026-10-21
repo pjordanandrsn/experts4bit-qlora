@@ -57,7 +57,8 @@ def read(lines):
             if open_ is None or open_["name"] != name:
                 faults.append(f"line {n}: {name} ends but {open_['name'] if open_ else 'nothing'} is open")
                 continue
-            open_["end"], open_["seconds"] = t, t - open_["start"]
+            open_["end"] = t
+            open_["seconds"] = t - open_["start"] if t >= open_["start"] else None   # backwards: a fault, no seconds
             open_ = None
         else:
             faults.append(f"line {n}: bad event {event!r}")
