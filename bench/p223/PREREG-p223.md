@@ -1,4 +1,4 @@
-# P223: the price of a batch-invariant decode for Mixtral-8x7B on `serve_paged`
+# P223: the price of a schedule-invariant decode for Mixtral-8x7B on `serve_paged`
 
 **Status:** registered before any data. It is a price read of an opt-in mode. It changes no default and no gate, and it
 quotes no speed claim beyond its own record. It needs one independent review, then the maintainer's pass. The kit follows
@@ -6,7 +6,7 @@ in its own PR.
 
 ## Why
 
-P149's served decode is not batch-invariant. A request's tokens depend on what else shares its decode steps, and so on
+P149's served decode is not schedule-invariant. A request's tokens depend on what else shares its decode steps, and so on
 `max_new_tokens` (P149 RESULTS, "The schedule dependence"). Three diagnostics on one RTX 5090 place the cause on
 P149's one-layer cut of Mixtral-8x7B:
 - **The split-KV count** (`p149mnt-5090-6`, `-7`): the fp8 paged decode attention chooses its split count from the
@@ -18,21 +18,23 @@ P149's one-layer cut of Mixtral-8x7B:
   position of its 160-token run, bit for bit. Engagement was verified: zero bucket-1 replays, and all 229 lone-row steps
   ran in bucket 2. No single op is named.
 
-So two existing knobs give schedule-invariant served logits on that cut. Batch-invariant kernels are a known remedy for
-this class of nondeterminism (Thinking Machines, "Defeating Nondeterminism in LLM Inference", 2025). What is open here
-is the price on this server, on the full model.
+So two existing knobs give schedule-invariant served logits on that cut. Schedule invariance means that at a fixed
+batch width, a request's tokens do not depend on which bucket each step replays, and so not on `max_new_tokens`. Batch
+invariance across widths is a stronger property, and this lane reports it (the cross-W check below) but does not rule
+on it. Batch-invariant kernels are a known remedy for this class of nondeterminism (Thinking Machines, "Defeating
+Nondeterminism in LLM Inference", 2025). What is open here is the price on this server, on the full model.
 
 **The question:** what do the two knobs cost in served decode throughput at W1 and W16, for the bf16 attention server
-and for the int8 attention server, and are both servers in fact invariant on the full model?
+and for the int8 attention server, and are both servers in fact schedule-invariant on the full model?
 
 ## The arms
 
 | arm | server | invariance knobs | role |
 |---|---|---|---|
 | **D0** | the default (bf16 attention projections) | none | control for I0 |
-| **I0** | the default | `E4B_ATTN_SPLIT_CAP=1`, `E4B_PAGED_BUCKETS=2,4,8,16` | the batch-invariant mode, bf16 |
+| **I0** | the default | `E4B_ATTN_SPLIT_CAP=1`, `E4B_PAGED_BUCKETS=2,4,8,16` | the schedule-invariant mode, bf16 |
 | **D1** | `E4B_SERVE_ATTN_INT8=1` (P149's S1) | none | control for I1 |
-| **I1** | `E4B_SERVE_ATTN_INT8=1` | `E4B_ATTN_SPLIT_CAP=1`, `E4B_PAGED_BUCKETS=2,4,8,16` | the batch-invariant mode, int8 |
+| **I1** | `E4B_SERVE_ATTN_INT8=1` | `E4B_ATTN_SPLIT_CAP=1`, `E4B_PAGED_BUCKETS=2,4,8,16` | the schedule-invariant mode, int8 |
 
 D0 and D1 run today's bucket set (`auto`, which is `1,2,4,8,16` at 16 slots), so each I/D pair prices the knobs against
 what is served today, the pad row included. Every other lever is unset in every arm.
@@ -60,13 +62,18 @@ The kit is P149's box Q+S kit (`p149_box.py`, `p149_run.sh`, `p149_reduce.py`), 
 1. **VOID:** not an RTX 5090 at cc 12.0; an enforced power limit under 575 W; any engagement check above failing; a
    record missing.
 2. **NOISY** (a VOID and a strike): any W1 self-pair (D0b/D0a, I0b/I0a, D1b/D1a, I1b/I1a) outside [0.985, 1.015].
-3. **The invariance read** (it rules the label): in every process of an I arm, each W16 row's 32-token stream equals the
-   first 32 tokens of its own 160-token stream, and the same holds for W1. Each server is then **INVARIANT** or
-   **NOT_INVARIANT**. NOT_INVARIANT is a finding, with the differing rows and steps named. The D arms' same check is
-   reported beside it; P149's S0a differed in 1 of 16 rows, and its S1a in 2.
-4. **The price** (reported, never a bar): for each server, p1 = the minimum of its two I/D W1 pairs, and p16 = the
-   minimum of its two I/D W16 pairs, each with its pairs and clocks. The cost of the knobs at W1 is reported for S0 and S1
-   separately.
+3. **The schedule-invariance read** (it rules the label): in every process of an I arm, each W16 row's 32-token stream
+   equals the first 32 tokens of its own 160-token stream, and the same holds for W1. Each server is then
+   **SCHEDULE_INVARIANT** or **NOT_SCHEDULE_INVARIANT**. The latter is a finding, with the differing rows and steps
+   named. The D arms' same check is reported beside it; P149's S0a differed in 1 of 16 rows, and its S1a in 2.
+4. **The price** (reported, never a bar): p = tok/s(I) / tok/s(D) over the adjacent pairs, I0a/D0a and I0b/D0b for S0
+   and I1a/D1a and I1b/D1b for S1. For each server, p1 is the minimum of its two W1 pairs and p16 the minimum of its two
+   W16 pairs, each with its pairs and clocks. The cost of the knobs at W1 is reported for S0 and S1 separately. The four
+   W16 self-pairs (D0b/D0a, I0b/I0a, D1b/D1a, I1b/I1a) are reported beside p16.
+5. **The cross-W check** (reported, never ruling): P109's W1 prompt is W16's row 0, so in every process the W1 160-token
+   stream is compared with W16 row 0's 160-token stream, giving the first differing step or "equal". Under I, a lone row
+   runs in bucket 2 and the same row at W16 runs in bucket 16, so the grouped expert GEMMs see a different M. This is the
+   batch-invariance probe the schedule read does not rule on.
 
 ## Predictions (graded in the read, never ruling)
 
@@ -74,19 +81,21 @@ The kit is P149's box Q+S kit (`p149_box.py`, `p149_run.sh`, `p149_reduce.py`), 
 |---|---|
 | **W16, both servers:** p16 in 0.97-1.00 | bucket 16 already runs 2 splits; only the tail steps leave bucket 16 |
 | **W1, both servers:** p1 in 0.60-0.95 | every W1 step runs in bucket 2 beside a pad row, with one attention split; the pad row may also route experts the live row does not |
-| **Both servers INVARIANT:** 0 of 16 W16 rows differ, 32 vs 160 | `p149b1-5090-8` on one layer |
+| **Both servers SCHEDULE_INVARIANT:** 0 of 16 W16 rows differ, 32 vs 160 | `p149b1-5090-8` on one layer |
+| **Cross-W under I: equal** (moderate confidence) | in `p149b1-5090-8`, a row's bucket-2 steps matched its bucket-16 steps |
 | **Both D arms NOT invariant:** at least one W16 row differs, 32 vs 160 | P149's S0a (1 row) and S1a (2 rows) |
 
 ## What follows (never automatic)
 
-- **Both servers INVARIANT:** I0 and I1 are the instrument for P149's owed routing-matched read. A server's tokens no
-  longer depend on the schedule there, so forced streams can cross lengths and arms, and the two arms run the same
+- **Both servers SCHEDULE_INVARIANT:** I0 and I1 are the instrument for P149's owed routing-matched read. A server's
+  tokens no longer depend on the schedule there, so forced streams can cross lengths and arms, and the two arms run the same
   bucket set. That read pins `E4B_PAGED_BUCKETS` in both of its arms, so `dense_i8`'s one-row GEMV branch is outside the
   served step on both sides. It is its own registration.
 - **p1 under 0.90 on either server:** the follow-up prices a cheaper invariant decode for one request, for example a
   fixed split count chosen by KV length rather than by row count, or a pad row that routes no experts. That is code, so
   it needs its own PR and read.
-- **NOT_INVARIANT on a server:** the named rows and steps are the next attribution, as the three diagnostics were.
+- **NOT_SCHEDULE_INVARIANT on a server:** the named rows and steps are the next attribution, as the three diagnostics
+  were. A cross-W difference under I is reported as the batch-invariance gap, with its first step.
 
 ## Budget and sequencing
 
