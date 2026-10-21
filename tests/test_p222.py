@@ -225,6 +225,18 @@ def test_the_guard_fits_with_25_percent_headroom():
     assert "AL=$(step_alarm 2700)" in RUN and 2700 >= k["NEED_BENCH"]
 
 
+def test_the_shakedown_fits_its_own_guard_at_its_stated_price():
+    """A shakedown id takes its own NEED_BENCH, so its 0.75 h guard at <= $0.20/h passes the runner's fit check."""
+    assert '[ "$SHAKE" = 1 ] && NEED_BENCH=600' in RUN
+    order = [RUN.index(x) for x in ('p222-shake-1|p222-shake-2) SHAKE=1;;', '[ "$SHAKE" = 1 ] && NEED_BENCH=600',
+                                    'FIT=$((INSTALL_TO_GATE_S + NEED_BENCH + RESERVE))')]
+    assert order == sorted(order)
+    fit = 600 + 600 + 600
+    assert fit * 125 // 100 == 2250 and (BOOT_S + fit) * HEADROOM == 2625 <= 0.75 * 3600
+    for figure in ("**guard 0.75 h**", "0.75 x $0.20 =\n  **$0.15**", "(300 + 1800) x 1.25 = 2625 s <= 2700 s"):
+        assert figure in PREREG, figure
+
+
 def test_no_instance_id_or_host_name_reaches_the_box():
     for name, text in (("runner", RUN), ("bench", BENCH), ("reducer", (LANE / "p222_reduce.py").read_text("utf-8"))):
         for marker in ("gethostname", "socket.", "INSTANCE_ID", "hostname", "nvmlDeviceGetUUID", "nvmlDeviceGetSerial"):
@@ -276,6 +288,17 @@ REDUCE_MUTANTS = [
     # the sweep's order not checked
     ('    if not shake and (rec.get("select_steps") != list(SELECT_STEPS) or order != sweep_order()):\n',
      "    if False:\n"),
+    # a plan that moved a bit eligible for selection
+    ('    return (row.get("identical") is True and not row.get("error") and isinstance(sr, list)',
+     '    return (not row.get("error") and isinstance(sr, list)'),
+    # a plan that errored eligible for selection
+    ('    return (row.get("identical") is True and not row.get("error") and isinstance(sr, list)',
+     '    return (row.get("identical") is True and isinstance(sr, list)'),
+    # a tie goes to the higher grid index
+    ('select_ms(r["step_replays_ms"]), _GRID_INDEX[plan_key(r["plan"])]))',
+     'select_ms(r["step_replays_ms"]), -_GRID_INDEX[plan_key(r["plan"])]))'),
+    # the margin read against the slowest plan, not the runner-up
+    ("        out[proj] = ts[1] / ts[0] if len(ts) > 1 else None\n", "        out[proj] = ts[-1] / ts[0] if len(ts) > 1 else None\n"),
 ]
 BENCH_MUTANTS = [
     # gate_up without the served gather

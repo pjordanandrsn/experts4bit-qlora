@@ -29,6 +29,7 @@ case "$P222_RUN_ID" in
   p222-shake-1|p222-shake-2) SHAKE=1;;
   *) say "unregistered run ID: $P222_RUN_ID"; finish 78;;
 esac
+[ "$SHAKE" = 1 ] && NEED_BENCH=600   # the shakedown's own fit (PREREG): 2 layers, 6 plans, 8 steps; ~70 s, floored at 600
 [ -z "${P222_GPU_CLASS:-}${P222_MIN_DISK_GB:-}${P222_MIN_RAM_GB:-}${P222_MIN_POWER_W:-}${P222_NEED_BENCH:-}" ] || { say 'reading knobs are frozen'; finish 78; }
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 # every serving lever, engine knob and kernel knob starts unset: today's served plan is the control
@@ -73,7 +74,7 @@ nvidia-smi --query-gpu=power.limit,clocks.max.sm --format=csv,noheader | sed "s/
 lscpu | grep -E "Model name|^Vendor ID|^CPU\(s\)" | tee -a forensics.txt; free -g | head -2 | tee -a forensics.txt; df -h $W | tail -1 | tee -a forensics.txt
 GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
 CC=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1)
-if [ "$SHAKE" = 1 ]; then   # any NVIDIA card at sm_86 or later with 16 GB: the structure, never the speed
+if [ "$SHAKE" = 1 ]; then   # any NVIDIA card at sm_86 or later with 15 GB: the structure, never the speed
   case "$CC" in 8.6|8.9|9.0|10.0|12.0) ;; *) say "REFUSED: a shakedown needs compute capability 8.6 or later, got $CC"; finish 15;; esac
 else
 case "$GPU_NAME" in *"$GPU_CLASS"*) ;; *) say "REFUSED: card is '$GPU_NAME', the lane registers the RTX $GPU_CLASS class"; echo "refused: class $GPU_NAME" > REFUSAL; finish 15;; esac

@@ -6,7 +6,7 @@ default is still the select tree at today's plan (no read licenses ``mixtral``: 
 Pure Python, no torch. The registered rules live here, and the box imports them (``p222_bench.py``):
 - **The routing:** seeded synthetic top-2 picks (no Mixtral router replay exists). :func:`picks` draws, for each
   (layer, step, row), two distinct experts of eight uniformly from ``random.Random(seed)``; block A (the selection) is
-  seed 1620, block B (the reading) seed 1621. Both tables are pinned by sha256 here.
+  seed 2220, block B (the reading) seed 2221. Both tables are pinned by sha256 here.
 - **Block A, the SELECTION (reported, never ruling):** every plan of P156's 144-plan grid under ``lut="prmt"``, per
   projection, timed on 8 steps of A. :func:`select` names M, each projection's fastest plan. Today's plan and c1's are in
   the grid, so M may be either.
@@ -379,6 +379,28 @@ def self_test():
     assert ROUTE_SHA256["A"] != ROUTE_SHA256["B"]
     assert sorted(sweep_order()) == list(range(len(GRID))) and len(GRID) == 144
     assert TODAY in GRID and C1["gu"] in GRID and C1["dn"] in GRID          # both knobs compete in the sweep
+    # the selection's eligibility, tie-break and margin, on synthetic sweeps
+    fast = {"block_n": 128, "kc": 256, "warps": 8, "stages": 2}
+    sel = _sel_rows()
+    row = next(r for r in sel["gu"] if r["plan"] == fast)
+    row["step_replays_ms"] = [[1.0] * SELECT_ITERS for _ in SELECT_STEPS]
+    row["identical"] = False
+    assert select(sel)["gu"] == C1["gu"]                                     # a plan that moved a bit never wins
+    row["identical"], row["error"] = True, "RuntimeError: out of shared memory"
+    assert select(sel)["gu"] == C1["gu"]                                     # nor does a plan that errored
+    row["error"] = None
+    assert select(sel)["gu"] == fast                                         # once eligible, the fastest wins
+    tie = _sel_rows()
+    lo, hi = sorted((GRID.index(C1["gu"]), GRID.index(fast)))
+    for r in tie["gu"]:
+        if r["plan"] == fast:
+            r["step_replays_ms"] = [[5.0] * SELECT_ITERS for _ in SELECT_STEPS]
+    assert select(tie)["gu"] == GRID[lo] and GRID[hi] != GRID[lo]           # a tie goes to the lower grid index
+    marg = _sel_rows()
+    for r in marg["gu"]:
+        if r["plan"] == fast:
+            r["step_replays_ms"] = [[6.0] * SELECT_ITERS for _ in SELECT_STEPS]
+    assert selection_margin(marg)["gu"] == 6.0 / 5.0                         # the runner-up over the winner, not the slowest
     o = verdict(_fake())
     assert o["verdict"] == "GO" and o["served_arm"] == "C1", o.get("why")  # M = c1 (the synthetic sweep's winner)
     assert o["reported"]["selection_margin"] == {"gu": 2.0, "dn": 2.0}      # the runner-up at 10 ms over the winner's 5
@@ -463,7 +485,7 @@ def self_test():
     assert all(sorted(row[i] for row in w) == list(range(6)) for i in range(6))
     assert len({(row[i], row[i + 1]) for row in w for i in range(5)}) == 30
     assert len(READ_STEPS) % len(ARMS) == 0 and not set(SELECT_STEPS) - set(range(STEPS))
-    print("p222_reduce self-test OK (44 checks)")
+    print("p222_reduce self-test OK (49 checks)")
 
 
 

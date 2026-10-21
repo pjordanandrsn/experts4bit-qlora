@@ -83,7 +83,7 @@ P160's instrument, with P156's sweep in front of it. Everything not named here i
   (Mixtral's top-2), down into the caller's order with `scatter=order`, `dot_bf16=False`. Only the plan or the decode
   moves.
 - **The stores:** random NF4 bytes and fp32 absmax in the served layout for **8 MoE layers**: gate_up [8, 28672, 2048]
-  and down [8, 4096, 7168] bytes a layer, about 0.8 GB with their absmax. One layer is far beyond L2, so nothing replays
+  and down [8, 4096, 7168] bytes a layer: about 0.8 GB a layer with their absmax, 6.3 GB in all. One layer is far beyond L2, so nothing replays
   from cache. Every arm reads the same bytes.
 - **Block A, the sweep:** per projection, every plan of P156's 144-plan grid under `prmt`, in one shuffled order (seed
   222). Each plan's outputs on A's first step are compared with the tree at today's plan, every layer, `torch.equal`
@@ -145,7 +145,11 @@ The $0 A2000 shakedown P160 ran is gone: the A2000 is off lane work since 2026-1
 this registration merges, and before the reading:
 - **`p222-shake-1`** (spare `-2`): the same driver and runner on the **cheapest NVIDIA card at sm_86 or later with 15
   GB** that passes the usual screen, `--shakedown --layers 2 --reps 6 --grid 6 --select-steps 2` (today's plan swept
-  first), no power floor. **Worst case $0.15** under the standing rule. It finishes 0 only on the reducer's
+  first), no power floor. Declared at most $0.20/h, **guard 0.75 h**, nothing downloaded: worst case 0.75 x $0.20 =
+  **$0.15**, under the standing rule. **Its own fit:** `NEED_BENCH` = 600 s for a shakedown id (12 plan compiles at P156's
+  slowest 2.65 s = 31.8 s, 12 metadata compiles 31.8 s, and 2 layers' sweep and 6 reps a few seconds: about 70 s,
+  floored at 600 s), so `FIT` = 600 + 600 + 600 = 1800 s, `FIT_NEED` = 2250 s, and (300 + 1800) x 1.25 = 2625 s <= 2700 s
+  (0.75 h). It finishes 0 only on the reducer's
   **SHAKEDOWN**, which runs every structural check and is never graded.
 - **What it shows:** the install, the tripwire, the premise, the sweep, the selection, the six arms, the spacer, the
   clocks and the receipts, end to end. **What it cannot show:** sm_120's speed. Its times seed nothing.
