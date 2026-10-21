@@ -108,9 +108,27 @@ in the graph's own input buffer, at its captured address, and every block's fed 
 
 A must read 0: S0 reproducing its own stream. It read 5 in every A block, so the label is **QUALIFIER_VOID** (margin m =
 0.028108). The count is the same in all four blocks across two processes, so this is a fixed difference between S0's
-token-pinned replay and S0a's own decode, not run-to-run noise. Its cause is not attributed here. By Amendment 4, the
+token-pinned replay and S0a's own decode, not run-to-run noise. Its cause is given below. By Amendment 4, the
 reading stands, this is not a strike, and the default-flip PR is held for a routing-matched read, which needs a later
 registration. g16_routing and its band are not graded.
+
+#### QUALIFIER_VOID cause (found after the run, from the receipt, no new run)
+
+The fault is in the qualifier's instrument, not in S0:
+
+- **S0 reproduces itself across processes.** S0b, S0c and S0d reproduce S0a's W16 32- and 160-token streams and its W1
+  streams exactly, 16 of 16 rows (`arm_S*.json`).
+- **The forced stream was the wrong length's.** The token-pinned harness (`p149_box.py`, `tf_main`) forces the
+  160-token run's stream into both passes, including the 32-token pass. S0a's own 32-token run differs from its
+  160-token run's first 32 tokens in one place: W16 row 10, step 29 (token 4777 against 6795). In the 32-token pass that
+  row's argmax follows the 32-token run's own history, so block A cannot read 0. Five per A block is that one position
+  in each of the five timed reps.
+
+**Reported, not attributed:** the served decode's tokens depend on `max_new_tokens`. In W16, S0a's 32-token run differs
+from its 160-token run's prefix in one row (row 10, step 29), and S1a's in two (row 8, step 31; row 12, step 27); W1
+differs in neither arm. All three sit in the last five steps of the 32-token run. This is a serving-correctness question
+of its own, outside P149's reading, and it is not attributed here. The routing-matched read forces each pass's own
+length's stream.
 
 ### The predictions, graded
 
