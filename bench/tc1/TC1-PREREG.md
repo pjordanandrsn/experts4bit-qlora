@@ -3202,7 +3202,8 @@ step-0 evaluation. So it covers the 60 steps and their in-loop evaluations and e
 A $0 read of amendment 69's box (`tc1-5090-137`) aligned its 1 Hz device-memory samplers to clocks the arms recorded. The samplers are
 nvidia-smi `memory.used`, kept in the private receipt store (sha256 below). The clocks are the box's launch stamp, Kineto's profiler start
 and stop, `step_ms` and the prologue's phase seconds.
-- The device-level gap opens during the load in both draws: 2366 and 2394 MiB in the load phase, against 1928 and 2006 MiB over the arm.
+- The device-level gap opens during the load in both draws: 2366 MiB (draw 1) and 2394 MiB (draw 2) in the load phase, against 1928
+  MiB (draw 1) and 2006 MiB (draw 2) over the arm.
 - e4b's trace passes Unsloth's load maximum within 1 s of e4b's own "quantized experts on 48/48 MoE layers" line.
 - The record has no clock after the profiler stops, so the later phases were not read.
 - The reading is device-level, allocator cache plus CUDA context. It says when, not what.
@@ -3247,7 +3248,7 @@ An errored census is recorded, not VOID, and that side reads "—". A harness re
    them.
    - The allocated row says whether resident tensors differ. The reserved row says how much the allocator holds beyond them.
    - CUDA context and non-PyTorch device memory are not in the census and are not read.
-   - The timeline's 2366–2402 MiB is cited beside these rows, never reconciled with them.
+   - The timeline's load-phase gap, 2366 MiB (draw 1) and 2394 MiB (draw 2), is cited beside these rows, never reconciled with them.
 3. **Q2, the training window.** Each side's peak allocated bytes and e4b − Unsloth. Also where the peak sits (step, micro-batch, forward,
    backward or evaluation), the attributed fraction, and the live-at-peak groups. Below 0.90 attributed, a side's groups are reported as
    thin and not read.
