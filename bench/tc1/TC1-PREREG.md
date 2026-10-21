@@ -3258,10 +3258,13 @@ Neither Q1 nor Q2 is read as evidence about the other.
 **Decision rules.** None: the read describes and decides nothing. A fix is a separate PR. It must show lower peak memory with the held-out
 loss unchanged, on one box.
 
-**Budget.** One RTX 5090 at the policy rate ($0.85/h), a 2 h guard, TC1's 98 GB host floor.
-- `tc1-5090-137` spent 5 min on venvs, 6 min on the fetch and 8.7 min on an e4b arm.
-- The Unsloth arm without its profiler is about 14 min. The census adds 6–19 s an arm (`tc1-5090-65`, `-130`).
-- Expect about $0.8 with the download. The guard holds the worst case at $1.70.
+**Budget.** One RTX 5090 at the policy rate ($0.85/h, GPU plus storage, the launcher's ceiling), a 2 h guard, TC1's 98 GB host floor.
+- **Time.** `tc1-5090-137` spent 5 min on venvs, 6 min on the fetch and 8.7 min on an e4b arm. The Unsloth arm without its profiler is
+  about 14 min. The census adds 6–19 s an arm (`tc1-5090-65`, `-130`). About 50 min in all: about $0.7.
+- **Download.** Vast bills it per GB, on top of the hourly rate. The box pulls Qwen3-30B-A3B (about 61 GB) plus its venvs; TC1 boxes have
+  pulled 60–90 GB each. The launcher buys only offers at or under $0.011/GB and reserves its default 100 GB: + 100 GB × $0.011 = $1.10
+  at most, about $0.8 expected.
+- **Worst case:** 2 h × $0.85 + 100 GB × $0.011 = **$2.80**. Expected about $1.5.
 
 The samplers the timeline read (sha256, private receipt store, `tc1-5090-137`):
 
