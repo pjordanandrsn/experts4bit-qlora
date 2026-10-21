@@ -1,0 +1,9 @@
+# Files listed in SHA256SUMS and not committed here, by sha256 then path. Each group's header says where the
+# bytes are and, where it is recorded, why.
+
+# Kept in the private receipt store, not committed here: the *.log ignore rule; carries carriage returns.
+1b9ad172d1d5d79f501dff67827b36a8c832a32b3e130e4cd64ea4404a8be0f8  logs/arm_nll.log
+b8d598de2e6e5acbdf1a5121a011575955c5758c7848b96eb8289514ded4fdf7  logs/arm_ttft.log
+928d29756cc1141116b24e40bb02d259be96bb216ed0f055a6f9c045c22b1492  logs/bake_qwen3.log
+8cd118275beb41d172d63d3118bac0f64036389d9bb0406ac2f04560ab4a2a7c  logs/fetch_qwen3.log
+5d3dd17a4a082565ef8d25f8f68776c104edafe5fabc28e843180a5e8b9bb732  logs/prompts.log

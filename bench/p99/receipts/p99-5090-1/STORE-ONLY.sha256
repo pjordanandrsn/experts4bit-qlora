@@ -1,0 +1,37 @@
+# Files listed in SHA256SUMS and not committed here, by sha256 then path. Each group's header says where the
+# bytes are and, where it is recorded, why.
+
+# Staged copies, also in the private receipt store. The same bytes are committed here: each entry's line above names
+# the tracked path and the commit that added this receipt.
+# same bytes: bench/hybrid-g9/b16close/calib.json at 7013aac4c199
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+# same bytes: bench/p98/p98_bake.py at 7013aac4c199
+1b523751b504c16a977853e12b9db7f07c3e5c4019fe31f22e4b4c69caff6f89  p98_bake.py
+# same bytes: bench/p98/p98_box.py at 7013aac4c199
+5a34b1d6cd1267df787f87725538f9712e7cc00a3ae33f95cdfe783e878f9b8a  p98_box.py
+# same bytes: bench/p99/p99_box.py at 7013aac4c199
+b312a9d35198d5200aa4ed2d6889d0d37752cce77fef60d5d75acead50ae288f  p99_box.py
+# same bytes: bench/p99/p99_reduce.py at 7013aac4c199
+9ed5b5912c8d4a24e8437a1e46b58ce08c32a33f67f25aca58761b98bd4085af  p99_reduce.py
+# same bytes: bench/p99/p99_run.sh at 7013aac4c199
+9703a9c6d0cad55d1f293aefbdc326a10705f30f0161a460bea293193822f792  p99_run.sh
+# same bytes: bench/p99/staged.sha256 at 7013aac4c199
+9ab06b25adf16e42e333d8046985dda9a7cb5260a6270bf993c326e0732a7d31  staged.sha256
+# same bytes: tests/test_hybrid_decode_graphs_gpu.py at 7013aac4c199
+7054682e345bef43c1a490758a736a3f03ee37ed43d2322383495b23f5f41c20  test_hybrid_decode_graphs_gpu.py
+# same bytes: tests/test_linear_state_gpu.py at 7013aac4c199
+6ca7c51d76a964c6e53a7caa4f288a6a04566e10930bb4d2cf3658dcdad9664f  test_linear_state_gpu.py
+# same bytes: tests/test_linear_state_graph_gpu.py at 7013aac4c199
+f11ef702b7298dd047a02d830b011dbcaeffa0e611c681d92e31304b277070d4  test_linear_state_graph_gpu.py
+
+# Kept in the private receipt store, not committed here: the *.log ignore rule; carries a host identifier.
+9081297be8c237e2aa0645f542c7207202a20ecdaaa42abdb3d5839d03b6e817  outer.log
+
+# Kept in the private receipt store, not committed here.
+0abfed0312e125ec2a9c493b7a0a10cfbbebdafcc2f82ed0de327d6539e82d26  INSTANCE_ID
+9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa  P99_EXIT_CODE.4ae1367dc8833c124321c63d0bcc43dc1b64780d081da964fdddc972d6178243
+
+# Kept in the private receipt store, not committed here (reason not recorded).
+8fbac3dadc6e5dacc58be5d1200790fb6acd8fd9b1f7ffb97a7f8f8a62428405  P99_RUN_NONCE
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  P99_SUCCESS.4ae1367dc8833c124321c63d0bcc43dc1b64780d081da964fdddc972d6178243
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  TP_DONE.4ae1367dc8833c124321c63d0bcc43dc1b64780d081da964fdddc972d6178243

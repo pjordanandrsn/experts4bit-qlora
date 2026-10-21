@@ -1,0 +1,6 @@
+# Files listed in SHA256SUMS and not committed here, by sha256 then path. Each group's header says where the
+# bytes are and, where it is recorded, why.
+
+# Kept in the private receipt store, not committed here: the *.log ignore rule; carries carriage returns.
+fd47f6999ef8d44125a7472433121cfb733d63a5c73077cff58fcfe1e13d1f09  logs/kl_off.log
+fe4a8019a7b5fa93fb07a6616b9a3954826ce05df6f112dda503210aa20f2949  logs/kl_on.log

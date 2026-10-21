@@ -1,0 +1,27 @@
+# Files listed in SHA256SUMS and not committed here, by sha256 then path. Each group's header says where the
+# bytes are and, where it is recorded, why.
+
+# Staged copies, also in the private receipt store. The same bytes are committed here: each entry's line above names
+# the tracked path and the commit that added this receipt.
+# same bytes: bench/p97/p97_box.py at a3432ec37fb9
+608c1a20136393495ebb482afc58a24880e053a2caab6152fa3eb87183063a31  p97_box.py
+# same bytes: bench/p97/p97_reduce.py at a3432ec37fb9
+bf01f829aa3915dc6d724a3fc53bd60fe383709a41667341385d6b62dbc5d6ea  p97_reduce.py
+# same bytes: bench/p97/p97_run.sh at a3432ec37fb9
+b2b85fd6fbda39deb6dc0a5275ed0e3102f2daace3f172c80a6edea531d12137  p97_run.sh
+# same bytes: bench/p97/staged.sha256 at a3432ec37fb9
+a0127ef204f0270fb55299e32e5a6698b7b19199df91c21b6b8ccd3fefa1328c  staged.sha256
+# same bytes: tests/test_linear_state_gpu.py at a3432ec37fb9
+6ca7c51d76a964c6e53a7caa4f288a6a04566e10930bb4d2cf3658dcdad9664f  test_linear_state_gpu.py
+
+# Kept in the private receipt store, not committed here: the *.log ignore rule; carries a host identifier.
+17bdfa2b2907fe97a34c4f6f7cfdab80c62507130c3ba2cf17c6f4e52f0a53ed  outer.log
+
+# Kept in the private receipt store, not committed here.
+b97594249c71f2a676338db2991dc30ff385624b67878c731b2a6993c4b085c4  INSTANCE_ID
+9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa  P97_EXIT_CODE.c0af0f59f353cffd6da09f15d0f61e2039f81f0ff795422510610b6aae3ad956
+
+# Kept in the private receipt store, not committed here (reason not recorded).
+932925a42d3c2f077a211a28e2f832587085e5de6320fe731c3f9fdac1a5ae8b  P97_RUN_NONCE
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  P97_SUCCESS.c0af0f59f353cffd6da09f15d0f61e2039f81f0ff795422510610b6aae3ad956
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  TP_DONE.c0af0f59f353cffd6da09f15d0f61e2039f81f0ff795422510610b6aae3ad956

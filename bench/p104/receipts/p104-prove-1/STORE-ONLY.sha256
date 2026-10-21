@@ -1,0 +1,41 @@
+# Files listed in SHA256SUMS and not committed here, by sha256 then path. Each group's header says where the
+# bytes are and, where it is recorded, why.
+
+# Staged copies, also in the private receipt store. The same bytes are committed here: each entry's line above names
+# the tracked path and the commit that added this receipt.
+# same bytes: bench/h2h-2026-10-02/sc1/receipts/sc1a-5090-2/calib.json at 054b53e8c92a
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+# same bytes: bench/p104/p104_reduce.py at 054b53e8c92a
+374c3cffac05d3eea910cdf602ad3d08ea5603e415b0289c13121712b35971c8  p104_reduce.py
+# same bytes: bench/p104/p104_run.sh at 054b53e8c92a
+7e730973bc0b6cc4618c8a6fd38f5becf479af18f0f087418bcb471d2669379b  p104_run.sh
+# same bytes: bench/p98/p98_bake.py at 054b53e8c92a
+1b523751b504c16a977853e12b9db7f07c3e5c4019fe31f22e4b4c69caff6f89  p98_bake.py
+# same bytes: bench/p98/p98_box.py at 054b53e8c92a
+5a34b1d6cd1267df787f87725538f9712e7cc00a3ae33f95cdfe783e878f9b8a  p98_box.py
+# same bytes: bench/p98/p98_reduce.py at 054b53e8c92a
+4c69136074d7860ac5a8978077f0e4f75594ab7d6d1af7b1302554ced59840e8  p98_reduce.py
+# same bytes: bench/p104/staged.sha256 at 054b53e8c92a
+6077fb4642dbb55dca4e9436198004b14c5c7fbfe4d222bac2fe393e0cb9a666  staged.sha256
+# same bytes: tests/test_hybrid_decode_graphs_gpu.py at 054b53e8c92a
+7054682e345bef43c1a490758a736a3f03ee37ed43d2322383495b23f5f41c20  test_hybrid_decode_graphs_gpu.py
+# same bytes: tests/test_linear_state_chunk_matched_gpu.py at 054b53e8c92a
+e2e0fb953fe021c5286f130fde77fe338aa3a408187c4479f3bc7e5d8789869a  test_linear_state_chunk_matched_gpu.py
+# same bytes: tests/test_linear_state_gpu.py at 054b53e8c92a
+6ca7c51d76a964c6e53a7caa4f288a6a04566e10930bb4d2cf3658dcdad9664f  test_linear_state_gpu.py
+# same bytes: tests/test_linear_state_graph_gpu.py at 054b53e8c92a
+f11ef702b7298dd047a02d830b011dbcaeffa0e611c681d92e31304b277070d4  test_linear_state_graph_gpu.py
+
+# Kept in the private receipt store, not committed here: the *.log ignore rule; carries a host identifier.
+8f9d6f483ac8b83c660165c2af0509f09f3d9a443f2fa5c6075bbe488323d407  outer.log
+
+# Kept in the private receipt store, not committed here.
+f43c88a519d056029e740dfe6753fd1919d225a3bc692ab11fd70a4de515b94d  INSTANCE_ID
+9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa  P104_EXIT_CODE.0e7278b07d819a13d9c85db5ab628e8a5478d058202b4557a2b2c4b8bffaeec1
+
+# Kept in the private receipt store, not committed here (reason not recorded).
+fc9b895b53f23e0756f5fbf06e91bbf680c966fbb30e88f28bb0bd9374316a2d  P104_RUN_NONCE
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  P104_SUCCESS.0e7278b07d819a13d9c85db5ab628e8a5478d058202b4557a2b2c4b8bffaeec1
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  PROVED
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  TP_DONE.0e7278b07d819a13d9c85db5ab628e8a5478d058202b4557a2b2c4b8bffaeec1
+6b537d1fa2be15cd4fbcec3bc11c801ec28b2a5e411c65db2039668599521a45  constraints.txt
