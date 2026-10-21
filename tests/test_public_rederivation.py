@@ -56,13 +56,13 @@ def parse(cmd: str, target: str) -> tuple:
     env = {}
     while tok and "=" in tok[0] and not tok[0].startswith("-"):
         m = ENV.match(tok.pop(0))
-        if not m:
+        if not m or ".." in m.group("path").split("/"):
             raise ValueError("only a PYTHONPATH=bench/<dir> prefix is allowed")
         env["PYTHONPATH"] = m.group("path")
     if len(tok) < 2 or tok[0] not in ("python", "python3"):
         raise ValueError("the command must be `python <bench/**/*_reduce.py> ...`")
     m = SCRIPT.match(tok[1])
-    if not m:
+    if not m or ".." in m.group("path").split("/"):
         raise ValueError(f"{tok[1]} is not a bench/**/*_reduce.py path")
     args = tok[2:]
     if args.count("{out}") != 1:
@@ -181,6 +181,8 @@ def test_a_one_byte_edit_to_a_committed_verdict_fails(tmp_path):
     ("python bench/p1/p1_reduce.py --out v.json", "bench/x.json", "{out} exactly once"),
     ("python bench/p1/p1_reduce.py --out {out}", "docs/x.json", "not a path under bench/"),
     ("LD_PRELOAD=x.so python bench/p1/p1_reduce.py --out {out}", "bench/x.json", "only a PYTHONPATH"),
+    ("python bench/../tools/evil_reduce.py --out {out}", "bench/x.json", "not a bench/**/*_reduce.py"),
+    ("PYTHONPATH=bench/../.. python bench/p1/p1_reduce.py --out {out}", "bench/x.json", "only a PYTHONPATH"),
 ])
 def test_the_convention_refuses_other_commands(cmd, target, why):
     with pytest.raises(ValueError, match=re.escape(why)):
