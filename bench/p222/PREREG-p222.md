@@ -110,7 +110,7 @@ P160's instrument, with P156's sweep in front of it. Everything not named here i
     replays are not as registered; **block B timed an M that `select` does not name from block A's record**;
   - a rep's order is not its Williams row, or a rep lacks 60 spacer replays; a tile-table fault;
   - not an RTX 5090 at cc 12.0, or fewer than 8 layers;
-  - **T2 differs from T by a bit on any rep**, or T/T2's median is outside 0.99-1.01;
+  - **T2 differs from T by a bit on any rep**, or T/T2's median is outside 0.99-1.01; *(superseded by Amendment 2)*
   - **the clocks are unread**, or **any sample's enforced power limit is under 575 W**.
 - **NO_GO with a contract finding:** P, C1 or M moves a bit against T on any rep. K25's decodes and plans move no
   output bit by construction (`nf4_smallm.py`'s docstring), so this would be a finding against grouped-nf4-gemm, and no
@@ -143,7 +143,7 @@ P160's instrument, with P156's sweep in front of it. Everything not named here i
 
 The $0 A2000 shakedown P160 ran is gone: the A2000 is off lane work since 2026-10-21 (the owner's directive). So after
 this registration merges, and before the reading:
-- **`p222-shake-1`** (spare `-2`): the same driver and runner on the **cheapest NVIDIA card at sm_86 or later with 15
+- **`p222-shake-1`** (spare `-2`): the same driver and runner on the **cheapest NVIDIA card at sm_86 or later with 15 *(superseded by Amendment 2)*
   GB** that passes the usual screen, `--shakedown --layers 2 --reps 6 --grid 6 --select-steps 2` (today's plan swept *(superseded by Amendment 1)*
   first), no power floor. Declared at most $0.40/h, **guard 0.75 h**, at most 10 GB at <= $0.011/GB (the install; no
   model is fetched): worst case 0.75 x $0.40 + 10 x $0.011 = **$0.41**, under the standing rule. (Read-only search at registration, 2026-10-21: under the launcher's filters with a
@@ -184,7 +184,7 @@ this registration merges, and before the reading:
 - **The premise, on the card:** K25's row-exact GPU tests (4, P156's) and K39's compiled contract (grouped-nf4-gemm
   v0.50.0's `kernel/test_nf4_smallm_prmt_gpu.py`, 23, P158's staged copy): exactly 27 passed, else rc 25. Both are P160's
   staged bytes.
-- **Run ids** `p222-5090-1` to `-3`, and `p222-shake-1` / `-2` for the shakedown. Two consecutive HARNESS_ERROR, VOID or
+- **Run ids** `p222-5090-1` to `-3`, and `p222-shake-1` / `-2` for the shakedown. Two consecutive HARNESS_ERROR, VOID or *(superseded by Amendment 2)*
   NOT_RUN readings stop the lane. P160's strike rules hold: a pre-flight host stall, a power-floor refusal (rc 17) or a
   fit refusal (rc 41) is not a strike; a time-left skip of the bench (rc 40) is. A shakedown is never a strike.
 - **The host, for the served read that follows a GO:** this lane's machine is pinned first, so the served read does not
@@ -228,6 +228,56 @@ so the reading would have crashed the same way.
 **Unchanged:** the GO rule and its bar, the seeds, block A and the selection, the served-arm rule, the card, the
 budget and the shakedown's price. Next: `p222-shake-2` on the same terms, and the exec ACK only after it reads
 SHAKEDOWN.
+
+## Amendment 2 (2026-10-21, before any reading): the shakedown reports the self-pair band, every arm's compile is recorded
+
+The lines marked *(superseded by Amendment 2)* above stand as registered; this section replaces them.
+
+**The evidence.** The paid shakedown `p222-shake-2` (an L4, sm_89, 72 W, $0.024, receipt in the private receipt store;
+its bench record is the test fixture `tests/fixtures/p222_shake2/bench_p222.json`) ran end to end under Amendment 1:
+the install, the tripwire, both self-tests, the premise (27 passed), the sweep and the selection, and all five arms
+bitwise identical on all 10 reps, with no arm fault. The reducer read **VOID** on one rule: T/T2's median was 1.0217,
+outside 0.99-1.01. Per rep, T/T2 ran 0.9195-1.0736 with mixed signs (sd 0.0533). The shakedown is never graded, but
+the band applied in shakedown mode too. The same record showed a gap in a registered reported item: each arm's compiled
+metadata was empty for T, T2, P and M, because the metadata pass records only kernels compiled in that pass. The tree
+at today's plan is compiled earlier, in block A's reference, which was never recorded, and P and M are compiled in the
+sweep. Only C1, which is off the grid, was recorded.
+
+**The ruling (the maintainer, before any reading), and the rules it sets:**
+1. **In a shakedown the self-pair band is reported, never ruling.** A **reading** still VOIDs when T/T2's median is
+   outside 0.99-1.01, unchanged. The reducer writes `self_pair_band` (the band, the median, whether it is inside, and
+   whether it rules) into every verdict that reaches the read. A shakedown outside the band reads SHAKEDOWN, with the
+   band named in `why`. T2 differing from T by a bit is still a VOID in both.
+2. **Every arm's compiled metadata is recorded** (the registered "Per arm, reported" line). The bench records block A's
+   reference compile, the tree at today's plan, and each sweep plan's first compile. The metadata pass keeps a variant
+   it compiles itself. When the variant already exists, the first compile of the same (projection, plan, decode) stands
+   in. Every row names its `source`: `block B metadata pass`, `block A reference` or `block A sweep`. Reported, never
+   a stop.
+3. **A new shakedown id, `p222-shake-3`,** on `p222-shake-1`'s terms as Amendment 1 set them: any card at sm_86 or later
+   with 15 GB, `--shakedown --layers 2 --reps 10 --grid 6 --select-steps 2`, at most $0.40/h, guard 0.75 h, worst
+   case **$0.41**. Run ids are now `p222-5090-1` to `-3` and `p222-shake-1` to `-3`. The exec ACK follows only a
+   SHAKEDOWN.
+4. **The band on the RTX 5090, read before any paid reading** ($0, from public receipts). P160's reading
+   (`bench/p160/receipts/p160-5090-2/bench_p160.json`, sha256 `618e685f...`, pinned in its `SHA256SUMS`) timed its
+   self-pair P/P2 on the same card class, under the same spacer, the same per-rep rule (the median of 10 replays) and
+   the same SE-of-median rule:
+
+   | block | reps | median | per-rep sd | per-rep range | SE of the median at 120 reps |
+   |---|---|---|---|---|---|
+   | S1 | 126 | 0.99985 | 0.00176 | 0.9952-1.0040 | 0.00020 |
+   | S0R | 60 | 1.00009 | 0.00168 | 0.9966-1.0037 | 0.00019 |
+
+   The band's half-width (0.01) is about 50 SEs of the median at this lane's 120 reps. **P(VOID | no real difference)
+   is under 1 in 20,000**: 0 of 20,000 resamples of 120 reps drawn from S1's per-rep ratios, recentred on 1, fell
+   outside the band, and the normal bound is smaller still. That is under the 10 % at which the maintainer asked to see
+   it before the read. The band stays as registered. For scale, the per-rep sd at which P(VOID | no difference) reaches
+   10 % at 120 reps is 0.0531, almost exactly the L4's 0.0533. At the shakedown's 10 reps the L4's chance was about
+   64 %, so shake-2's VOID was the expected outcome on that card. **Caveat:** P160's self-pair is P/P2 (prmt at Qwen3's
+   shapes, about 10 ms a graph), and this lane's is T/T2 (the tree at Mixtral's, about 12 ms). The card, the spacer and
+   the rules match; the kernels do not.
+
+**Unchanged:** the GO rule and its bar, the seeds, block A and the selection, the five arms and their order, the served
+arm rule, the card, the budget, the reading's band, and the shakedown's price.
 
 ## Receipts
 

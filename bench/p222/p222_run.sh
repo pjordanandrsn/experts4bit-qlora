@@ -26,7 +26,7 @@ GPU_CLASS=5090; MIN_RAM_GB=16; MIN_DISK_GB=20
 SHAKE=0   # p222-shake-N: the paid shakedown on a cheap card (the A2000 is off lane work since 2026-10-21); never a reading
 case "$P222_RUN_ID" in
   p222-5090-1|p222-5090-2|p222-5090-3) :;;
-  p222-shake-1|p222-shake-2) SHAKE=1;;
+  p222-shake-1|p222-shake-2|p222-shake-3) SHAKE=1;;
   *) say "unregistered run ID: $P222_RUN_ID"; finish 78;;
 esac
 [ "$SHAKE" = 1 ] && NEED_BENCH=600   # the shakedown's own fit (PREREG): 2 layers, 6 plans, 8 steps; ~70 s, floored at 600

@@ -153,6 +153,17 @@ def new_variants(fn, before):
     return rows
 
 
+def arm_compiled(rows, earlier):
+    """Amendment 2: one arm's compiled metadata for one projection, each row naming the pass it came from. A variant
+    the metadata pass did not compile was compiled earlier in the run (block A's reference or its sweep), and its first
+    compile stands in. ``earlier`` is ``(rows, pass)`` for the same (projection, plan, decode), or None."""
+    if rows:
+        return [dict(r, source="block B metadata pass") for r in rows]
+    if earlier and earlier[0]:
+        return [dict(r, source=earlier[1]) for r in earlier[0]]
+    return [{"unread": "no recording pass saw this variant compile", "source": None}]
+
+
 def main(a):
     import torch
     import nf4_smallm
@@ -267,8 +278,12 @@ def main(a):
         sel_tabs[s], f = tables("A", s)
         faults += f
     rec["select_tile_faults"] = faults
-    ref = {p: [call[p](li, sel_tabs[sel_steps[0]][li], R.TODAY, R.T_LUT) for li in range(L)] for p in ("gu", "dn")}
-    torch.cuda.synchronize()
+    ref, first = {}, {}                  # first[(proj, plan, lut)]: the variants its first compile made, and the pass
+    for p in ("gu", "dn"):
+        before = set(compiled_variants(kfn))
+        ref[p] = [call[p](li, sel_tabs[sel_steps[0]][li], R.TODAY, R.T_LUT) for li in range(L)]
+        torch.cuda.synchronize()
+        first[(p, R.plan_key(R.TODAY), R.T_LUT)] = (new_variants(kfn, before), "block A reference")
     sel = {"gu": [], "dn": []}
     try:
         for proj in ("gu", "dn"):
@@ -282,6 +297,8 @@ def main(a):
                     torch.cuda.synchronize()
                     row["first_call_s"] = round(time.time() - tc, 2)
                     row["compiled"] = new_variants(kfn, before)
+                    if row["compiled"]:
+                        first.setdefault((proj, R.plan_key(plan), R.P_LUT), (row["compiled"], "block A sweep"))
                     diff = [li for li in range(L) if not torch.equal(outs[li], ref[proj][li])]
                     row["identical"] = not diff
                     if diff:
@@ -344,7 +361,7 @@ def main(a):
                     json.dump(rec, f, indent=1)
                 print(f"P222_ARM_FAULT {rec['arm_fault']}", flush=True)
                 return 34
-            seen[key] = rec["compiled"][arm][proj] = new_variants(kfn, before)
+            seen[key] = rec["compiled"][arm][proj] = arm_compiled(new_variants(kfn, before), first.get(key))
     walls["compile_s"] = round(time.time() - t, 1)
 
     def graph_fn(arm, tabs):
@@ -428,8 +445,16 @@ def self_test():
     seq = [src.index(x) for x in ('rec["select"] = sel', "m = R.select(sel", "sampler = ClockSampler()")]
     assert seq == sorted(seq)                                   # A is swept and M named before B is timed
     assert "outs = [call[proj](li, sel_tabs[sel_steps[0]][li], plan, R.P_LUT)" in src   # the sweep is under prmt
-    assert "R.TODAY, R.T_LUT) for li in range(L)] for p in" in src                       # against the tree at today's
-    print("p222_bench self-test OK (11 checks)")
+    assert "ref[p] = [call[p](li, sel_tabs[sel_steps[0]][li], R.TODAY, R.T_LUT) for li in range(L)]" in src  # the tree
+    # Amendment 2: every arm's compiled metadata, from the pass that compiled it
+    assert 'first[(p, R.plan_key(R.TODAY), R.T_LUT)] = (new_variants(kfn, before), "block A reference")' in src
+    assert 'first.setdefault((proj, R.plan_key(plan), R.P_LUT), (row["compiled"], "block A sweep"))' in src
+    assert "arm_compiled(new_variants(kfn, before), first.get(key))" in src
+    row = {"n_regs": 64, "n_spills": 0, "shared": 6400, "num_warps": 4, "num_stages": 3}
+    assert arm_compiled([row], None) == [dict(row, source="block B metadata pass")]
+    assert arm_compiled([], ([row], "block A sweep")) == [dict(row, source="block A sweep")]
+    assert arm_compiled([], None)[0]["source"] is None and "unread" in arm_compiled([], ([], "block A sweep"))[0]
+    print("p222_bench self-test OK (17 checks)")
 
 
 if __name__ == "__main__":
