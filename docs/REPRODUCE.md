@@ -91,8 +91,9 @@ defaults are not the run's settings. The controller reads a Hugging Face token f
 - **Unsloth faster:** `e4b.train.h2h.unsloth.mixtral.5090.2026-10-04.dense-default`. Both resident, e4b at its
   defaults in the field image's environment, on an Intel Core Ultra 9 285K host: Unsloth/e4b **0.836** [0.828, 0.844] (medians of steps 11..20 over two draws each),
   so Unsloth was faster per step. e4b `ed08029d9fb8d210ac78e9371f64bd06098ed07d` (first released in v0.46.0). $0.60.
-- **A footprint lever, not a race:** `e4b.train.h2h.unsloth.mixtral.5090.2026-09-06` reads 0.361: e4b ran under expert
-  CPU offload at 3.2 GB, against Unsloth resident at 29.2 GB. Cost UNVERIFIED (it predates the private receipt store).
+- **A footprint lever, not a race:** `e4b.train.h2h.unsloth.mixtral.5090.2026-09-06` reads 0.361 (median of steps
+  11..60): e4b ran under expert CPU offload at 3.2 GB, against Unsloth resident at 29.2 GB. Cost UNVERIFIED (it predates
+  the private receipt store).
 - **Stack (the matched position):** e4b `63400e1ab0af233aeb09e9e59017492da8ca3694` (first released in v0.49.0),
   grouped-nf4-gemm `9622144c734395de4d40332f06dea92135d858de` (v0.42.0), Unsloth 2026.9.14, torch 2.12.1+cu130,
   transformers 5.5.0: e4b ran inside Unsloth's environment. The September row ran e4b 0.35.1 and grouped-nf4-gemm
@@ -125,7 +126,7 @@ defaults are not the run's settings. The controller reads a Hugging Face token f
 ### 5. CUDA-graph decode against the eager path
 
 - **Claim, speed:** `e4b.serve.p109.decode-graphs-vs-eager-default.qwen3.5090.2026-10-03`. With `E4B_PAGED_GRAPHS=1`,
-  sixteen requests decode **5.60×** the eager rate (9.02× at one request).
+  sixteen requests decode **5.60×** the eager rate (the smaller of two pairs; 9.02× at one request).
 - **Its own verdict was DIVERGENT:** only 9 of 16 rows agreed with the eager path for their first 16 tokens (the bar
   was 12). Graphs became the default (`E4B_PAGED_GRAPHS=auto`, #770) only after a separate quality read,
   `e4b.serve.p110.graph-arithmetic-quality.qwen3.5090.2026-10-03`, read `AT_PARITY` (bias +0.00036 nats against a
@@ -206,9 +207,10 @@ lane's drive script before running it:
 - **Across boxes, an absolute moves and a GPU-bound ratio holds.** P116's read and its reported second draw (void as a reading),
   on two rented RTX 5090s, differ by 15-18 % in absolute rate and by 2 % in the ratio: 1.2681 against 1.2417
   (`e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`).
-- **A ratio with host-side work in it moves too.** TC1's axolotl/e4b steady-state ratio read 1.238 on one host and 1.146 on
-  another (`e4b.train.h2h.axolotl.qwen3.5090.2026-10-03.native-steady-state`). Where e4b's step is host-launch-bound it read
-  2.775 against 1.979 (`e4b.train.h2h.axolotl.qwen3.5090.2026-10-03`).
+- **A ratio with host-side work in it moves too.** TC1's axolotl/e4b steady-state ratio (medians of two draws) read
+  1.238 on one host and 1.146 on another (`e4b.train.h2h.axolotl.qwen3.5090.2026-10-03.native-steady-state`). Where
+  e4b's step is host-launch-bound it read 2.775 against 1.979 (medians of two draws)
+  (`e4b.train.h2h.axolotl.qwen3.5090.2026-10-03`).
 
 Compare ratios read on one box. An absolute time from another box is that host's number, and so is a ratio whose path
 includes CPU-side work.
