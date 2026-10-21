@@ -3274,3 +3274,12 @@ The samplers the timeline read (sha256, private receipt store, `tc1-5090-137`):
 7136155214a4057586dce6967b6e0e2a0e356767177219782440d3483e4b4689  vram_qwen3pos69_unsloth_ckpt_unsloth_m_fv.txt
 66d75a58a3e91ff181514ec63af723a7e7061a06ee9a385fa14057e73eb84032  vram_qwen3pos69_unsloth_ckpt_unsloth_m_fv_d2.txt
 ```
+
+**Amendment 73 fold (2026-10-21T22:59:56Z, before any box): the rate.** The budget above calls $0.85/h "the policy rate". It is not:
+$0.85/h was the RTX 5090 policy ceiling on 2026-10-08, and the owner raised the ceiling to $1.05/h on 2026-10-19. The launcher runs at
+min(declared, ceiling).
+- **The declared rate is $1.05/h, the policy ceiling.** It covers GPU plus storage for the 220 GB disk ordered. No offer at or under
+  $0.85/h with that disk was on the market after the merge.
+- **Download** is unchanged: + 100 GB × $0.011/GB = $1.10, the launcher's buy cap and its default estimate.
+- **Worst case:** 2 h × $1.05 + $1.10 = **$3.20**. Nothing else changes: the arms, the window, the pins, the exclusions, the disk, the
+  guard and what the read reports.
