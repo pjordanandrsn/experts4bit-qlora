@@ -18,9 +18,11 @@ The rule, in order:
                           capture routed through them); D0 and I0 build none.
   2. NOISY      (a VOID and a strike) any W1 self-pair -- D0b/D0a, I0b/I0a, D1b/D1a, I1b/I1a -- outside [0.985, 1.015].
   3. The schedule-invariance read rules the label: in every process of a server's I arm, each W16 row's 32-token stream
-     equals the first 32 tokens of its own 160-token stream (every timed rep of each), and the same for W1. The server is
-     SCHEDULE_INVARIANT, or NOT_SCHEDULE_INVARIANT with the differing rows and steps named. The D arms' same check is
-     reported beside it.
+     equals the first 32 tokens of its own 160-token stream (timed rep i's 32 against timed rep i's 160, every rep), and
+     the same for W1. The server is SCHEDULE_INVARIANT, or NOT_SCHEDULE_INVARIANT with the differing rows, steps and reps
+     named. The D arms' same check is reported beside it. REPORTED apart, never ruling: each process's rep
+     repeatability (the 160-token reps against each other, and the 32-token reps), so run-to-run nondeterminism shows
+     as itself beside the schedule read.
   4. The price, reported, never a bar: p = tok/s(I) / tok/s(D) over the adjacent pairs (I0a/D0a and I0b/D0b for S0;
      I1a/D1a and I1b/D1b for S1); per server p1 = the min of its two W1 pairs and p16 the min of its two W16 pairs, each
      with its pairs and clocks; the four W16 self-pairs beside p16.
@@ -151,14 +153,16 @@ def engagement_faults(name, r, arm) -> list:
             for k, v in c.items():
                 calls[k] = calls.get(k, 0) + v
     lone = _lone(calls)
+    window_pad = sum(((g or {}).get("2") or {}).get("pad_rows") or 0
+                     for w in WORKLOADS for g in (((r.get("workloads") or {}).get(w) or {}).get("graph_stats") or {}).values())
     if inv:
         if rep1:
             out.append(f"{name}: {rep1} bucket-1 replays, registered zero")
         if not lone or set(lone) != {"2"}:
             out.append(f"{name}: the lone-row steps ran in buckets {lone}, registered bucket 2")
-        elif lone["2"] != (gs.get("2") or {}).get("pad_rows"):
-            out.append(f"{name}: {lone['2']} lone-row steps in bucket 2 but {(gs.get('2') or {}).get('pad_rows')} pad rows "
-                       "there: each lone row registers one")
+        elif lone["2"] != window_pad:
+            out.append(f"{name}: {lone['2']} lone-row steps in bucket 2 but {window_pad} pad rows there over the same "
+                       "windows: each lone row registers one")
     elif not rep1:
         out.append(f"{name}: no bucket-1 replay; the D arms run bucket 1")
     return out
@@ -219,21 +223,35 @@ def process_faults(t, r, e4b_sha) -> list:
 
 # ------------------------------------------------------------------------------------------------- the reads --
 def invariance(r) -> dict:
-    """Rule 3 on one process: per workload and row, every timed rep's 32-token stream against the first 32 tokens of every
-    timed rep's 160-token stream. ``differing``: ``[{"workload", "row", "step"}]``, the first step where any of them
-    departs from the first rep's 160-token prefix."""
+    """Rule 3 on one process: per workload and row, timed rep i's 32-token stream against the first 32 tokens of timed rep
+    i's 160-token stream, every rep. ``differing``: ``[{"workload", "row", "step", "reps"}]``, the first step where a rep's
+    short stream departs from its long one, and the reps where it does."""
     diffs = []
     for w in WORKLOADS:
         rt = r["workloads"][w]["rep_tokens"]
         short, long_ = rt[str(SHORT)], rt[str(LONG)]
         for k in range(len(long_[0])):
-            ref = long_[0][k][:SHORT]
-            steps = [first_diff(s[k], ref) for s in short] + [first_diff(s[k][:SHORT], ref) for s in long_]
-            steps = [x for x in steps if x is not None]
-            if steps:
-                diffs.append({"workload": w, "row": k, "step": min(steps)})
+            at = {i: first_diff(short[i][k], long_[i][k][:SHORT]) for i in range(len(short))}
+            at = {i: x for i, x in at.items() if x is not None}
+            if at:
+                diffs.append({"workload": w, "row": k, "step": min(at.values()), "reps": sorted(at)})
     return {"invariant": not diffs, "differing": diffs,
             "w16_rows_differing": sorted({d["row"] for d in diffs if d["workload"] == "W16"})}
+
+
+def repeatability(r) -> dict:
+    """REPORTED, never ruling: per workload and length, each row's timed reps against its first (the 160-token reps
+    against each other apart from the schedule read). ``differing``: ``[{"workload", "tokens", "row", "step", "reps"}]``."""
+    diffs = []
+    for w in WORKLOADS:
+        for n in (str(SHORT), str(LONG)):
+            reps = r["workloads"][w]["rep_tokens"][n]
+            for k in range(len(reps[0])):
+                at = {i: first_diff(reps[i][k], reps[0][k]) for i in range(1, len(reps))}
+                at = {i: x for i, x in at.items() if x is not None}
+                if at:
+                    diffs.append({"workload": w, "tokens": int(n), "row": k, "step": min(at.values()), "reps": sorted(at)})
+    return {"repeatable": not diffs, "differing": diffs}
 
 
 def cross_w(r) -> dict:
@@ -307,8 +325,9 @@ def reduce(arms: dict, e4b_sha: str) -> dict:
         read[s] = {"label": labels[s], "i_arm": i, "differing": bad,
                    "d_arm_reported": {t: inv[t] for t in TAGS if t[:2] == d}}
     xw = {t: cross_w(arms[t]) for t in TAGS}
+    rp = {t: repeatability(arms[t]) for t in TAGS}
     pr = price(arms)
-    out.update(verdict="READ", labels=labels, schedule_invariance=read, price=pr, cross_w=xw,
+    out.update(verdict="READ", labels=labels, schedule_invariance=read, price=pr, cross_w=xw, repeatability=rp,
                int8_closed_form={t: int8_closed_form(arms[t], t[:2]) for t in TAGS},
                library_split_plans={t: arms[t].get("library_split_plans") for t in TAGS},
                heat={t: {w: arms[t]["workloads"][w].get("heat") for w in WORKLOADS} for t in TAGS},
@@ -317,6 +336,9 @@ def reduce(arms: dict, e4b_sha: str) -> dict:
                       for s in SERVERS]
     out["reasons"] += [f"{s}: p1 {pr['servers'][s]['p1']}, p16 {pr['servers'][s]['p16']} (reported, never a bar)"
                        for s in SERVERS]
+    unrep = {t: v["differing"] for t, v in rp.items() if not v["repeatable"]}
+    if unrep:
+        out["reasons"].append(f"reported, never ruling: timed reps not repeatable {unrep}")
     return out
 
 
@@ -355,7 +377,9 @@ def _arm(tag, w1, w16, **kw):
         lb = "2" if inv else "1"
         wl[w] = {"batch": b, "walls": walls(rate, b), "rep_digests": {"32": ["d"] * 5, "160": ["d"] * 5},
                  "rep_tokens": {"32": _streams(b, 32), "160": _streams(b, 160)}, "decode_tok_s": rate, "heat": {},
-                 "decode_calls": {"32": {f"1:{lb}": lone[w] // 2}, "160": {f"1:{lb}": lone[w] // 2}}}
+                 "decode_calls": {"32": {f"1:{lb}": lone[w] // 2}, "160": {f"1:{lb}": lone[w] // 2}},
+                 "graph_stats": {n: {"2": {"replays": 1, "eager_steps": 0, "rows": 0, "pad_rows": lone[w] // 2 if inv else 0}}
+                                 for n in ("32", "160")}}
     gs = {str(b): {"replays": 100, "eager_steps": 0, "rows": 0, "pad_rows": 0} for b in bk}
     if inv:
         gs["2"]["pad_rows"] = sum(lone.values())
@@ -403,8 +427,8 @@ def _cases_engagement(cases):
               lambda r: r["attn_split_cap"].update(source="default-allowlisted"), "I1b")
     void_when("an I arm at the D buckets VOIDs", lambda r: r.update(runner_buckets=[1, 2, 4, 8, 16]), "I1a")
     void_when("a lone row in bucket 4 VOIDs", lambda r: r["workloads"]["W16"]["decode_calls"]["32"].update({"1:4": 1}), "I0a")
-    void_when("lone rows that do not match bucket 2's pad rows VOID",
-              lambda r: r["graph_stats"]["2"].update(pad_rows=r["graph_stats"]["2"]["pad_rows"] - 1), "I1a")
+    void_when("lone rows that do not match bucket 2's pad rows over the same windows VOID",
+              lambda r: r["workloads"]["W1"]["graph_stats"]["160"]["2"].update(pad_rows=575), "I1a")
     void_when("a D arm with no bucket-1 replay VOIDs", lambda r: r["graph_stats"]["1"].update(replays=0), "D0a")
     void_when("a D arm with a split cap VOIDs", lambda r: r.update(attn_split_cap={"cap": 1, "source": "explicit",
                                                                                    "plans": {"1": {"n_split": 1}}}), "D1b")
@@ -441,21 +465,36 @@ def self_test() -> int:
     v = reduce(arms, E)
     cases.append(("one rep of one I1 row departing names S1 NOT_SCHEDULE_INVARIANT at its row and step",
                   v["labels"] == {"S0": "SCHEDULE_INVARIANT", "S1": "NOT_SCHEDULE_INVARIANT"}
-                  and v["schedule_invariance"]["S1"]["differing"] == {"I1b": [{"workload": "W16", "row": 3, "step": 0}]}
+                  and v["schedule_invariance"]["S1"]["differing"] == {"I1b": [{"workload": "W16", "row": 3, "step": 0,
+                                                                               "reps": [2]}]}
                   and v["predictions"][2]["graded"] == "MISS", v["reasons"]))
     arms = _fixture()
     arms["I0a"]["workloads"]["W1"]["rep_tokens"]["160"][0][0] = [1] * 31 + [5] + [1] * 128
     v = reduce(arms, E)
     cases.append(("a W1 160-token stream departing at step 31 is NOT_SCHEDULE_INVARIANT at W1 row 0 step 31",
                   v["labels"]["S0"] == "NOT_SCHEDULE_INVARIANT"
-                  and v["schedule_invariance"]["S0"]["differing"]["I0a"] == [{"workload": "W1", "row": 0, "step": 31}], None))
+                  and v["schedule_invariance"]["S0"]["differing"]["I0a"] == [{"workload": "W1", "row": 0, "step": 31,
+                                                                              "reps": [0]}], None))
     cases.append(("the same departure shows in the cross-W check", v["cross_w"]["I0a"] == {"result": "differs",
                   "first_differing_step": 31}, v["cross_w"]["I0a"]))
     arms = _fixture()
     arms["I0a"]["workloads"]["W16"]["rep_tokens"]["160"][1][0] = [1] * 100 + [4] * 60
     v = reduce(arms, E)
     cases.append(("a W16 row-0 departure after step 32 leaves the label and shows in cross-W at step 100",
-                  v["labels"]["S0"] == "SCHEDULE_INVARIANT" and v["cross_w"]["I0a"]["first_differing_step"] == 100, None))
+                  v["labels"]["S0"] == "SCHEDULE_INVARIANT" and v["cross_w"]["I0a"]["first_differing_step"] == 100
+                  and v["repeatability"]["I0a"]["differing"] == [{"workload": "W16", "tokens": 160, "row": 0, "step": 100,
+                                                                  "reps": [1]}], v["repeatability"]["I0a"]))
+    arms = _fixture()
+    arms["I0b"]["graph_stats"]["2"]["pad_rows"] += 7                 # padded bucket-2 replays at build, outside any window
+    v = reduce(arms, E)
+    cases.append(("bucket-2 pad rows from the build, outside every window, do not VOID", v["verdict"] == "READ", v["reasons"][:3]))
+    arms = _fixture()
+    arms["D0a"]["workloads"]["W16"]["rep_tokens"]["160"][3][5] = [1] * 40 + [6] * 120
+    v = reduce(arms, E)
+    cases.append(("a 160-token rep departing from its first rep at step 40 is reported as repeatability, never ruling",
+                  v["verdict"] == "READ" and v["repeatability"]["D0a"]["differing"]
+                  == [{"workload": "W16", "tokens": 160, "row": 5, "step": 40, "reps": [3]}]
+                  and v["labels"]["S0"] == "SCHEDULE_INVARIANT" and v["repeatability"]["I0a"]["repeatable"], v["repeatability"]["D0a"]))
     arms = _fixture()
     arms["D0b"]["workloads"]["W1"]["decode_tok_s"] = 98.0
     v = reduce(arms, E)

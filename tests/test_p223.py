@@ -19,7 +19,7 @@ B = REPO / "bench"
 LANE = B / "p223"
 SOURCES = {"p223_run.sh": LANE, "p223_box.py": LANE, "p223_reduce.py": LANE, "test_dense_i8.py": B / "p149",
            "test_int8_attn_interp.py": REPO / "tests", "p109_box.py": B / "p109", "k8_bake.py": B / "p39",
-           "calib.json": B / "p39"}
+           "calib.json": B / "p39", "phases.sh": B / "common"}
 RUN = (LANE / "p223_run.sh").read_text(encoding="utf-8")
 PRE = (LANE / "PREREG-p223.md").read_text(encoding="utf-8")
 
@@ -97,7 +97,8 @@ def test_the_runner_refuses_before_any_install_and_runs_the_registered_order():
     assert "MIN_POWER_W=575" in RUN and 'assert triton.__version__ == "3.4.0"' in RUN and "TORCH_FULL\" = 2.8.0+cu128" in RUN
     assert 'transformers.__version__ == "5.17.0"' in RUN and "Mixtral at `eba92302`" in PRE
     order = ['[ "$CC" = 12.0 ]', '[ "$PL" -ge "$MIN_POWER_W" ] && [ "$EPL" -ge "$MIN_POWER_W" ]', "finish 17; }",
-             '[ "$LEFT" -ge "$FIT_NEED" ]', "finish 19; }", "pipx(){", "pipx logs/pip_e4b.log",
+             '[ "$LEFT" -ge "$FIT_NEED" ]', "finish 19; }", ". ./phases.sh", "pipx(){", "phase_start install setup",
+             "pipx logs/pip_e4b.log",
              "p223_reduce.py --self-test", "p223_box.py --self-test",
              "python -m pytest test_dense_i8.py", "python -m pytest test_int8_attn_interp.py", "grep -qE '^28 passed",
              "grep -qE '^4 passed", "can_run $NEED_FETCH fetch", "can_run $NEED_BAKE bake", "--prompts-only",
@@ -112,7 +113,19 @@ def test_the_runner_refuses_before_any_install_and_runs_the_registered_order():
     for gone in ("--mode gate", "--mode tf", "--mode sane", "--windows", "--q ", "--q-only", "P223_DRY", "slice"):
         assert gone not in RUN, gone
     gate = RUN[RUN.index("gate_check(){"):RUN.index("for TAG in")]
-    assert "reduce_all; stamp reduce end; finish 45" in gate, "an early VOID still writes the reduce's verdict"
+    assert "phase_start reduce reduce; reduce_all; phase_end reduce; finish 45" in gate, "an early VOID still reduces"
+
+
+def test_the_phase_stamps_are_the_common_writers_with_a_kind_each():
+    """bench/common/README.md "Phase stamps": the runner sources the staged phases.sh (after the fit check, as another
+    file's script must come) and keeps no local writer; every phase opens with a registered kind and closes."""
+    assert "stamp(){" not in RUN and re.search(r"^\s*stamp ", RUN, re.M) is None
+    starts = re.findall(r"phase_start ([^\s;]+) ([a-z]+)", RUN)
+    ends = set(re.findall(r"phase_end ([^\s;]+)", RUN))
+    assert {n for n, _k in starts} == ends == {"install", "fetch", "bake", '"$TAG"', "reduce"}, (starts, ends)
+    assert {(n, k) for n, k in starts} == {("install", "setup"), ("fetch", "setup"), ("bake", "setup"),
+                                           ('"$TAG"', "measure"), ("reduce", "reduce")}
+    assert RUN.index(". ./phases.sh") > RUN.index('[ "$LEFT" -ge "$FIT_NEED" ]')
 
 
 TERMS = r"\b(INSTALL|NEED_FETCH|NEED_BAKE|NEED_ARM|NEED_REDUCE|RESERVE)=(\d+)"
@@ -131,12 +144,13 @@ def test_the_fit_table_is_the_registrations_and_fits_three_and_a_half_hours():
     assert "| **total** | **9,810** |" in PRE and "inside the **3.5 h guard** (12,600 s)" in PRE
     assert "(9,810 − 300) × 1.25 = 11,888 s" in PRE
     assert "FIT=$((INSTALL + NEED_FETCH + NEED_BAKE + 8 * NEED_ARM + NEED_REDUCE + RESERVE))" in RUN
-    assert "FIT_HEADROOM_PCT=125" in RUN and "FIT_NEED=$(((FIT * FIT_HEADROOM_PCT + 99) / 100))" in RUN
+    assert "FIT_HEADROOM_PCT=125" in RUN and "FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100))" in RUN     # the canonical form
     boot, guard = 300, int(3.5 * 3600)
     fit = v["INSTALL"] + v["NEED_FETCH"] + v["NEED_BAKE"] + 8 * v["NEED_ARM"] + v["NEED_REDUCE"] + v["RESERVE"]
     assert boot + fit == 9810 and (boot + fit) * 1.25 <= guard
-    assert (fit * 125 + 99) // 100 == 11888                 # the runner's check, rounded up as the registration rounds
-    assert guard - (fit * 125 + 99) // 100 >= boot           # the guard leaves boot its allowance after that check
+    need = fit * 125 // 100                                  # the runner's check in integer arithmetic
+    assert need == 11887 and 11888 - need == 1               # 1 s under the registration's 11,888 (the half second rounded up)
+    assert guard - need >= boot                              # the guard leaves boot its allowance after that check
 
 
 @pytest.fixture(scope="module")
@@ -206,7 +220,7 @@ MUTANTS = [
     ('    if any((s or {}).get("eager_steps") for s in gs.values()):', "    if False:"),
     ("        if rep1:\n", "        if False:\n"),
     ('        if not lone or set(lone) != {"2"}:', "        if not lone:"),
-    ('        elif lone["2"] != (gs.get("2") or {}).get("pad_rows"):', "        elif False:"),
+    ('        elif lone["2"] != window_pad:', "        elif False:"),
     ("    elif not rep1:", "    elif False:"),
     # VOID: the int8 counters
     ('        if r.get("int8_modules") or a8.get("projections"):', "        if False:"),
@@ -217,8 +231,11 @@ MUTANTS = [
     ('    if cen != CENSUS:', "    if False:"),
     ('    if len({arms[t].get("prompts_sha256") for t in TAGS}) != 1:', "    if False:"),
     # the reads
-    ("            steps = [first_diff(s[k], ref) for s in short] + [first_diff(s[k][:SHORT], ref) for s in long_]",
-     "            steps = [first_diff(short[0][k], ref)] + [first_diff(s[k][:SHORT], ref) for s in long_]"),
+    ("            at = {i: first_diff(short[i][k], long_[i][k][:SHORT]) for i in range(len(short))}",
+     "            at = {i: first_diff(short[i][k], long_[i][k][:SHORT]) for i in range(1)}"),
+    ('        elif lone["2"] != window_pad:', '        elif lone["2"] != (gs.get("2") or {}).get("pad_rows"):'),
+    ("                at = {i: first_diff(reps[i][k], reps[0][k]) for i in range(1, len(reps))}",
+     "                at = {i: first_diff(reps[i][k], reps[0][k]) for i in range(1, 2)}"),
     ('        labels[s] = "NOT_SCHEDULE_INVARIANT" if bad else "SCHEDULE_INVARIANT"',
      '        labels[s] = "SCHEDULE_INVARIANT"'),
     ('        p1, p16 = min(pairs["W1"].values()), min(pairs["W16"].values())',

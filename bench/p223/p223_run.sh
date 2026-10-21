@@ -10,7 +10,7 @@
 #   order    install + tripwire; reducer and box self-tests; premise; fetch; NF4 arena bake; prompts; then D0a, I0a, I1a,
 #            D1a, D1b, I1b, I0b, D0b, each a fresh process; the first process of each arm is read against the rule's
 #            VOID checks before the next (rc 45: the box stops, the reduce still writes the VOID); then the reduce. Every
-#            phase stamps its UTC start and end in phases.jsonl.
+#            phase stamps its start, end and kind in phases.jsonl (bench/common/phases.sh, sourced after the fit check).
 # Refusals: as above. Only 13 and 18 name the machine for the next launcher draw. This script never creates compute.
 set -uo pipefail
 W=/root/p223; mkdir -p $W/logs; cd $W || exit 78
@@ -48,9 +48,8 @@ unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_
       E4B_SERVE_ATTN_INT8 E4B_DENSE_GEMV_BW E4B_INT8_HEAD_BW
 : > summary.txt; : > phases.jsonl; echo "$P223_INSTANCE_ID" > INSTANCE_ID; echo "$P223_RUN_ID" > RUN_ID
 echo "KNOBS run=$P223_RUN_ID e4b=$E4B_SHA gnf4=$GNF4_SHA model=$MODEL@$REV gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_ram_gb=$MIN_RAM_GB min_power_w=$MIN_POWER_W short=$SHORT long=$LONG reps=$REPS" | tee -a summary.txt
-stamp(){ printf '{"phase": "%s", "event": "%s", "t": %s}\n' "$1" "$2" "$(date +%s)" >> phases.jsonl; }
 # ---- staged pieces, byte-for-byte
-for f in p223_box.py p223_reduce.py p109_box.py k8_bake.py calib.json test_dense_i8.py test_int8_attn_interp.py staged-p223.sha256; do
+for f in p223_box.py p223_reduce.py p109_box.py k8_bake.py calib.json test_dense_i8.py test_int8_attn_interp.py phases.sh staged-p223.sha256; do
   [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
 (cd $W && sha256sum -c staged-p223.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/p223/staged-p223.sha256"; finish 9; }
 # ---- refusals before anything is installed or fetched: CUDA, the card class, the disk, the host RAM, the power floor
@@ -95,12 +94,14 @@ EPL=$(nvidia-smi --query-gpu=enforced.power.limit --format=csv,noheader,nounits 
 echo "POWER_LIMIT_W $PL ENFORCED_W $EPL (floor $MIN_POWER_W)" | tee -a summary.txt
 [ "$PL" -ge "$MIN_POWER_W" ] && [ "$EPL" -ge "$MIN_POWER_W" ] || { say "REFUSED: power.limit ${PL} W / enforced ${EPL} W < ${MIN_POWER_W} W (host-limited power cap)"; echo "refused: power.limit ${PL} W enforced ${EPL} W" > REFUSAL; finish 17; }
 # the registration's fit, before the install, in the cross-lane form (bench/common/README.md, "Guard fit"): everything
-# from here to the verdict at its allowance, plus the reserve, with 25 % headroom (rounded up: 9,510 x 1.25 = 11,888 s)
+# from here to the verdict at its allowance, plus the reserve, with 25 % headroom: 9,510 x 1.25 = 11,887 s in the canonical
+# integer form, 1 s under the registration's 11,888 (which rounds the half second up)
 FIT_HEADROOM_PCT=125   # the guard keeps 25 % headroom over the fit (cross-lane rule)
-FIT=$((INSTALL + NEED_FETCH + NEED_BAKE + 8 * NEED_ARM + NEED_REDUCE + RESERVE)); FIT_NEED=$(((FIT * FIT_HEADROOM_PCT + 99) / 100)); LEFT=$((P223_DEADLINE_EPOCH - $(date +%s)))
+FIT=$((INSTALL + NEED_FETCH + NEED_BAKE + 8 * NEED_ARM + NEED_REDUCE + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100)); LEFT=$((P223_DEADLINE_EPOCH - $(date +%s)))
 echo "GUARD_FIT ${FIT}s x ${FIT_HEADROOM_PCT}% = ${FIT_NEED}s of ${LEFT}s left" | tee -a summary.txt
 # rc 19: a refusal before the install, not a strike; two consecutive headroom refusals count as one strike
 [ "$LEFT" -ge "$FIT_NEED" ] || { say "REFUSED: needs ${FIT_NEED}s (fit ${FIT}s x ${FIT_HEADROOM_PCT}%), ${LEFT}s left"; echo "refused: guard fit ${LEFT}s < ${FIT_NEED}s" > REFUSAL; finish 19; }
+. ./phases.sh   # the phase stamps (bench/common/README.md, "Phase stamps"): another file's script, so after the fit check
 can_run(){ local need=$1 now; now=$(date +%s); [ $((now + need + RESERVE)) -le "$P223_DEADLINE_EPOCH" ] || { say "STOP-2: $2 needs ${need}s + ${RESERVE}s reserve = $((need + RESERVE))s, only $((P223_DEADLINE_EPOCH - now))s left -- skipped (host-limited)"; echo "SKIPPED $2 host-limited deadline" >> summary.txt; return 1; }; }
 step_alarm(){ local cap=$1 left=$(( P223_DEADLINE_EPOCH - $(date +%s) - RESERVE )); [ "$left" -gt "$cap" ] && left=$cap; [ "$left" -lt 600 ] && left=600; echo "$left"; }
 export DEBIAN_FRONTEND=noninteractive
@@ -111,7 +112,7 @@ pipx(){ local log=$1 secs=$2; shift 2
   perl -e "alarm $secs; exec @ARGV" python -m pip install -q --no-input -c $W/constraints.txt "$@" > $log 2>&1 && return 0
   say "pip failed ($(tail -1 $log | cut -c1-120)) -- one retry in 20 s"; sleep 20
   perl -e "alarm $secs; exec @ARGV" python -m pip install -q --no-input -c $W/constraints.txt "$@" >> $log 2>&1; }
-stamp install start
+phase_start install setup
 say "install e4b @$E4B_SHA + gnf4 @$GNF4_SHA (image python; transformers 5.17.0; torch held at $TORCH_PIN)"
 pipx logs/pip_e4b.log 1800 --prefer-binary "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" \
   "transformers==5.17.0" "bitsandbytes==0.50.2" datasets accelerate sentencepiece safetensors "huggingface_hub>=0.23" pytest numpy || { tail -4 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
@@ -163,20 +164,20 @@ if [ "$rc1" = 0 ] && echo "$L1" | grep -qE '^28 passed(, [0-9]+ warnings?)? in [
 else
   echo "premise failed" | tee -a summary.txt; say "PREMISE FAILED on this card"; echo "premise failed" > REFUSAL; finish 25
 fi
-stamp install end
+phase_end install
 # ---- the checkpoint, its NF4 arena (P39's k8_bake.py, as P145 bakes it) and the prompts
 can_run $NEED_FETCH fetch || finish 40
-stamp fetch start; say "fetch $MODEL @ $REV"
+phase_start fetch setup; say "fetch $MODEL @ $REV"
 PATTERNS="ignore_patterns=['original/*','metal/*','consolidated*']"
 perl -e "alarm $(step_alarm $NEED_FETCH); exec @ARGV" python -c "from huggingface_hub import snapshot_download as s; print(s('$MODEL', revision='$REV', $PATTERNS, max_workers=8))" > logs/fetch.log 2>&1 || { tail -2 logs/fetch.log; say "DL FAIL"; finish 11; }
-SNAP=$(tail -1 logs/fetch.log); echo "FETCH $MODEL@$REV $SNAP" | tee -a summary.txt; stamp fetch end
+SNAP=$(tail -1 logs/fetch.log); echo "FETCH $MODEL@$REV $SNAP" | tee -a summary.txt; phase_end fetch
 [ -d "$SNAP" ] || { say "DL FAIL: no snapshot dir"; finish 11; }
 can_run $NEED_BAKE bake || finish 40
-stamp bake start; say "bake the NF4 arena"; mkdir -p $W/work
+phase_start bake setup; say "bake the NF4 arena"; mkdir -p $W/work
 K8_MODEL="$SNAP" K8_WORK="$W/work" perl -e "alarm $(step_alarm $NEED_BAKE); exec @ARGV" python $W/k8_bake.py > logs/bake.log 2>&1 \
   || { tail -3 logs/bake.log; say "BAKE FAIL"; finish 12; }
 [ -e $W/work/nf4.arena ] || { say "BAKE FAIL: no arena"; finish 12; }
-grep -a "BAKE" logs/bake.log | tail -1 | tee -a summary.txt; stamp bake end
+grep -a "BAKE" logs/bake.log | tail -1 | tee -a summary.txt; phase_end bake
 perl -e "alarm 1200; exec @ARGV" python $W/p223_box.py --prompts-only --model "$MODEL" --revision "$REV" --out $W/prompts.json > logs/prompts.log 2>&1 \
   || { tail -4 logs/prompts.log; say "PROMPTS FAIL"; finish 19; }
 grep -a "^P109_PROMPTS" logs/prompts.log | tee -a summary.txt
@@ -194,12 +195,12 @@ run_arm(){   # TAG: one fresh speed process, five timed reps at W16 and W1
   local TAG=$1 ARM=${1:0:2} LV AL
   LV=$(arm_knobs "$ARM")
   can_run $NEED_ARM "arm $TAG" || finish 40
-  AL=$(step_alarm $((NEED_ARM + 600))); say "arm $TAG ${LV:-(the default server)} (alarm=$AL)"; stamp "$TAG" start
+  AL=$(step_alarm $((NEED_ARM + 600))); say "arm $TAG ${LV:-(the default server)} (alarm=$AL)"; phase_start "$TAG" measure
   # shellcheck disable=SC2086  # ENGINE_ENV and LV are assignment lists by design
   env PYTHONPATH= $ENGINE_ENV $LV P223_ARM=$ARM E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA \
     perl -e "alarm $AL; exec @ARGV" python $W/p223_box.py --mode speed --prompts $W/prompts.json --out $W/arm_$TAG.json --tag $TAG \
       --short $SHORT --long $LONG --reps $REPS > logs/arm_$TAG.log 2>&1
-  local rc=$?; stamp "$TAG" end
+  local rc=$?; phase_end "$TAG"
   { echo -n "arm $TAG rc=$rc "; grep -a "^P223_ARM" logs/arm_$TAG.log | tail -1 | cut -c1-400 | tr '\n' ' '; echo; } | tee -a summary.txt
   [ "$rc" = 0 ] || { tail -6 logs/arm_$TAG.log | cut -c1-300 | tee -a summary.txt; say "ARM $TAG FAILED (rc=$rc) -- the reducer will VOID"; }
 }
@@ -211,15 +212,15 @@ gate_check(){   # TAG: the first process of an arm, read against the rule's VOID
   python $W/p223_reduce.py --gate $W/arm_$1.json --e4b-sha "$E4B_SHA" 2>&1 | tee -a summary.txt
   [ "${PIPESTATUS[0]}" = 0 ] && return 0
   say "EARLY VOID ($1): its record fails the rule's checks -- the box stops; the reduce writes the VOID"
-  echo "early void: $1" > REFUSAL; stamp reduce start; reduce_all; stamp reduce end; finish 45
+  echo "early void: $1" > REFUSAL; phase_start reduce reduce; reduce_all; phase_end reduce; finish 45
 }
 for TAG in D0a I0a I1a D1a D1b I1b I0b D0b; do
   run_arm $TAG
   case "$TAG" in D0a|I0a|I1a|D1a) gate_check $TAG;; esac
 done
-stamp reduce start; say "reduce"
+phase_start reduce reduce; say "reduce"
 reduce_all || { say "REDUCER FAILED"; finish 22; }
-stamp reduce end
+phase_end reduce
 V=$(python -c "import json; print(json.load(open('$W/verdict_p223.json'))['verdict'])")
 case "$V" in READ) ;; *) say "P223 $V -- no reading (NOISY and VOID are not readings)"; finish 27;; esac
 finish 0

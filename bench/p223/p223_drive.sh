@@ -2,7 +2,8 @@
 # Lane P223's controller (bench/p223/PREREG-p223.md): P149's box Q+S driver (bench/p149/p149_drive.sh) by substitution --
 # this lane's run ids, runner, box and reducer; the staged helpers at their registered bytes (P109's prompts and pass,
 # P39's arena bake and calibration); the compiled premises (grouped-nf4-gemm K37's suite, vendored byte for byte in
-# bench/p149, and e4b's int8 kernel path); and P145's hf token staging for the gated checkpoint. Lane liveness by launch identity
+# bench/p149, and e4b's int8 kernel path); the phase-stamp writer (bench/common/phases.sh); and P145's hf token staging
+# for the gated checkpoint. Lane liveness by launch identity
 # (bench/common/lane_liveness.sh). Stages hash-pinned files, refuses unknown run IDs and dirty source trees, polls the
 # nonce-bound completion marker, and fetches the receipts. It does not create, destroy, or approve compute.
 set -uo pipefail
@@ -16,10 +17,11 @@ HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 LANE_HELPER="$REPO/bench/common/lane_liveness.sh"
 source "$LANE_HELPER" || { say "refusing: missing lane liveness helper"; exit 78; }
 # The staging: this lane's runner, box and reducer, the vendored K37 suite (bench/p149/), e4b's int8 kernel-path test
-# (tests/), and the helpers at their registered bytes. staged-p223.sha256 pins every one by the name the box sees.
+# (tests/), the phase-stamp writer, and the helpers at their registered bytes. staged-p223.sha256 pins every one by the
+# name the box sees.
 TESTS="$REPO/tests"; B="$REPO/bench"
 STAGE="$HERE/p223_run.sh $HERE/p223_box.py $HERE/p223_reduce.py $B/p149/test_dense_i8.py $TESTS/test_int8_attn_interp.py \
-  $B/p109/p109_box.py $B/p39/k8_bake.py $B/p39/calib.json $HERE/staged-p223.sha256"
+  $B/p109/p109_box.py $B/p39/k8_bake.py $B/p39/calib.json $B/common/phases.sh $HERE/staged-p223.sha256"
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
 # staged-p223.sha256 names the files as the BOX will see them; resolve each name to its source and compare hashes
 # (the same map as tests/test_p223.py, checked in CI).
@@ -32,6 +34,7 @@ while read -r want name; do
     test_int8_attn_interp.py) src="$TESTS/$name";;
     p109_box.py) src="$B/p109/$name";;
     k8_bake.py|calib.json) src="$B/p39/$name";;
+    phases.sh) src="$B/common/$name";;
     *) say "refusing: staged-p223.sha256 names $name, which this driver does not stage"; exit 78;;
   esac
   got=$(sha_of "$src")
