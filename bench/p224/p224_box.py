@@ -70,16 +70,26 @@ def encode_heldout(tok, rows) -> list:
     return out
 
 
-def seq_nll(logprobs, ids) -> float:
-    """Mean NLL over positions 1..n-1 of one sequence; ``logprobs[j]`` scores ``ids[j + 1]`` (a list of lists, or any
-    2-D indexable)."""
+def prompt_lens(tok, rows) -> list:
+    """Each held-out conversation's prompt length in tokens (the user turn and the generation prompt): its assistant
+    positions start there."""
+    return [len(tok.encode(tok.apply_chat_template(r["messages"][:1], add_generation_prompt=True, tokenize=False),
+                           add_special_tokens=False)) for r in rows]
+
+
+def seq_nll(logprobs, ids, first: int = 1) -> float:
+    """Mean NLL over positions first..n-1 of one sequence; ``logprobs[j]`` scores ``ids[j + 1]`` (a list of lists, or
+    any 2-D indexable). ``first`` 1 is every position; a prompt length is the assistant positions only."""
     n = len(ids)
-    return -sum(float(logprobs[j][ids[j + 1]]) for j in range(n - 1)) / (n - 1)
+    first = max(1, first)
+    return -sum(float(logprobs[j][ids[j + 1]]) for j in range(first - 1, n - 1)) / (n - first)
 
 
-def loss_record(arm: str, per_seq, seqs, **extra) -> dict:
+def loss_record(arm: str, per_seq, seqs, per_seq_asst=None, **extra) -> dict:
+    """The gated losses (every position) and, REPORTED, the assistant positions' (the canary's own tokens)."""
     return {"ok": all(math.isfinite(x) for x in per_seq) and len(per_seq) == len(seqs), "arm": arm,
-            "per_seq_loss": per_seq, "tokens": sum(len(s) - 1 for s in seqs), "ids_sha256": ids_sha256(seqs), **extra}
+            "per_seq_loss": per_seq, "per_seq_loss_assistant": per_seq_asst,
+            "tokens": sum(len(s) - 1 for s in seqs), "ids_sha256": ids_sha256(seqs), **extra}
 
 
 def env_check(arm: str, env) -> list:
@@ -316,15 +326,17 @@ def paged_logprobs(model, seqs, device, *, decode_check: int = 0):
     return rows, deltas
 
 
-def ref_losses(model, seqs, device="cuda") -> list:
+def ref_losses(model, seqs, plens, device="cuda") -> tuple:
+    """(every-position losses, assistant-position losses), teacher-forced through the reference model."""
     import torch
-    out = []
+    out, asst = [], []
     with torch.no_grad():
-        for ids in seqs:
+        for ids, pl in zip(seqs, plens):
             x = torch.tensor([ids], device=device)
             lp = model(input_ids=x, use_cache=False).logits[0].float().log_softmax(-1)
             out.append(seq_nll(lp, ids))
-    return out
+            asst.append(seq_nll(lp, ids, pl))
+    return out, asst
 
 
 def main_ref(a) -> int:
@@ -338,13 +350,13 @@ def main_ref(a) -> int:
     from loggetta.backends.experts4bit_adapters import trainable_adapters
     rows = [json.loads(x) for x in open(a.heldout, encoding="utf-8")]
     tok = AutoTokenizer.from_pretrained(a.adapter)                # saved beside the adapter by Loggetta
-    seqs = encode_heldout(tok, rows)
+    seqs, plens = encode_heldout(tok, rows), prompt_lens(tok, rows)
     t0 = time.time()
     model = loggetta.load_adapter(a.adapter)
     load_s = time.time() - t0
-    per = ref_losses(model, seqs)
+    per, asst = ref_losses(model, seqs, plens)
     common = {"absmax_dq_env": os.environ.get(DQ_ENV), "load_s": round(load_s, 1), "gpu": torch.cuda.get_device_name(0)}
-    json.dump(loss_record(a.arm, per, seqs, **common), open(a.out, "w"), indent=1)
+    json.dump(loss_record(a.arm, per, seqs, asst, **common), open(a.out, "w"), indent=1)
     print(f"P224_REF {a.arm} loss={statistics.fmean(per):.5f} n={len(per)}", flush=True)
     if a.fingerprint_out:
         from experts4bit_qlora.adapter_schema import quant_fingerprint
@@ -358,8 +370,8 @@ def main_ref(a) -> int:
         with torch.no_grad():
             for p in trainable_adapters(model).values():
                 p.zero_()
-        per0 = ref_losses(model, seqs)
-        json.dump(loss_record("HF0", per0, seqs, zeroed_from=a.arm, **common), open(a.hf0_out, "w"), indent=1)
+        per0, asst0 = ref_losses(model, seqs, plens)
+        json.dump(loss_record("HF0", per0, seqs, asst0, zeroed_from=a.arm, **common), open(a.hf0_out, "w"), indent=1)
         print(f"P224_REF HF0 loss={statistics.fmean(per0):.5f}", flush=True)
     return 0
 
@@ -395,10 +407,11 @@ def main_paged(a) -> int:
            "graphs": cfg.graphs, "placement": cfg.placement, "buckets": list(cfg.buckets)}
     if a.score:
         rows = [json.loads(x) for x in open(a.heldout, encoding="utf-8")]
-        seqs = encode_heldout(parts.tokenizer, rows)
+        seqs, plens = encode_heldout(parts.tokenizer, rows), prompt_lens(parts.tokenizer, rows)
         lps, deltas = paged_logprobs(parts.runner.model, seqs, cfg.device, decode_check=N_DECODE_CHECK)
         per = [seq_nll(lp, ids) for lp, ids in zip(lps, seqs)]
-        rec.update(loss_record(a.arm, per, seqs))
+        asst = [seq_nll(lp, ids, pl) for lp, ids, pl in zip(lps, seqs, plens)]
+        rec.update(loss_record(a.arm, per, seqs, asst))
         rec["decode_vs_prefill_max_abs"] = max(deltas) if deltas else None
         rec["decode_vs_prefill_per_seq"] = deltas
         print(f"P224_PAGED {a.arm}/{a.slot} loss={statistics.fmean(per):.5f} decode_vs_prefill={rec['decode_vs_prefill_max_abs']}",
@@ -533,6 +546,9 @@ def self_test() -> int:
 
     lp = [[math.log(0.5), math.log(0.25), math.log(0.25)]] * 3
     ok(abs(seq_nll(lp, [0, 1, 2]) - (math.log(4) + math.log(4)) / 2) < 1e-12, "NLL scores ids[1:] from rows[:-1]")
+    lp3 = [[math.log(0.5), math.log(0.5)], [math.log(0.9), math.log(0.1)], [math.log(0.2), math.log(0.8)]] * 2
+    ok(abs(seq_nll(lp3, [0, 1, 0, 1], 3) - math.log(1 / 0.8)) < 1e-12 and seq_nll(lp3, [0, 1, 0, 1], 0) == seq_nll(lp3, [0, 1, 0, 1]),
+       "the assistant positions start at the prompt length")
     ok(ids_sha256([[1, 2], [3]]) == ids_sha256([[1, 2], [3]]) != ids_sha256([[1, 2], [4]]), "ids sha256")
     r = loss_record("PA", [1.0, 2.0], [[1, 2, 3], [4, 5]])
     ok(r["ok"] and r["tokens"] == 3, "loss record counts scored positions")

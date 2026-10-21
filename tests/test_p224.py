@@ -55,10 +55,11 @@ def test_reducer_constants_are_the_registration():
     R = _load("p224_reduce")
     assert (R.N_HELDOUT, R.RATIO_BAR, R.FLOOR, R.CAP, R.FAITHFUL, R.SE_FRACTION, R.MIN_REF_GAIN, R.VRAM_TOL) == \
         (64, 0.95, 0.01, 0.05, 0.025, 0.2, 0.05, 0.01)
-    assert R.EXPECTED_ATTN_PROJECTIONS == {"Qwen/Qwen3-30B-A3B": 192} and R.ABBA_BLOCKS == 2
+    assert R.EXPECTED_ATTN_PROJECTIONS == {"Qwen/Qwen3-30B-A3B": 192} and R.ABBA_BLOCKS == 2 and R.BAND_FLOOR == 0.01
     assert R.N_HELDOUT == _load("p224_canary").N_HELDOUT
     for text in ("0.95 of REF's", "min(0.05, max(0.01, 2 × |loss(P0) − loss(HF0)|))", "> 0.025 nats", "0.2 × 0.01",
-                 "less than 0.05 nats", "/ P0 > 1 %", "192 for Qwen3-30B-A3B"):
+                 "less than 0.05 nats", "/ P0 > 1 %", "192 for Qwen3-30B-A3B",
+                 "1 % of the mean of the four A slots", "G3 read at the 1% floor", "(B = 1)", "unreleased, the 0.6.2 candidate"):
         assert text in PREREG, text
 
 
@@ -107,6 +108,8 @@ MUTANTS = [
     ("p224_reduce", "    if thr and not shake:", "    if thr:"),
     ("p224_reduce", "                if dev > band[m][w]:", "                if dev > 2 * band[m][w]:"),
     ("p224_reduce", "    if ident.get(\"base_name_status\") != 404:", "    if False:"),
+    ("p224_reduce", "    band = {m: {w: max(raw[m][w], floor[m][w]) for w in COST_WS} for m in COST_METRICS}",
+     "    band = raw"),
     ("p224_canary", "SPLIT = {\"train\": TOPICS[:32], \"heldout\": TOPICS[32:40], \"http\": TOPICS[40:48]}",
      "SPLIT = {\"train\": TOPICS[:33], \"heldout\": TOPICS[32:40], \"http\": TOPICS[40:48]}"),
     ("p224_box", "    test = (\"passed\" if line.startswith(\"1 passed\") and \"skipped\" not in line",

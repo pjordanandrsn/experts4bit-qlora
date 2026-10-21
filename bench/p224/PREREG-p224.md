@@ -74,6 +74,7 @@ python -m loggetta train MODEL --revision REV --dataset train.jsonl --format cha
 - **The HTTP canary.** Each of the 32 trigger prompts goes through `/v1/completions` and `/v1/chat/completions`, streamed
   and not, greedy, 32 tokens. The completions prompt is the chat template's text with `add_special_tokens=false`, so all
   four modes send the same prompt ids.
+  - The requests go one at a time (B = 1), so G2 does not depend on what else shares a decode step.
   - A hit is the CANARY string in the text.
   - The control prompts go through the two non-streamed modes.
   - P0 and PA-DQ run the same set.
@@ -126,8 +127,12 @@ The two P0 slots of each block are its A1 and A2, and PA is its B.
      - a control prompt yields it on PA; or
      - any prompt yields it on P0.
    - **G3, cost.**
-     - The band is frozen per metric (`ttft_ms`, `itl_ms`, `tok_s`) and per W (W1, W16): band = the max over the two
-       blocks of |A1 − A2|, the two P0 slots. PA fails when |B − mean(A1, A2)| > band in any block.
+     - The band is frozen per metric (`ttft_ms`, `itl_ms`, `tok_s`) and per W (W1, W16): band = max(the max over the
+       two blocks of |A1 − A2|, the two P0 slots; 1 % of the mean of the four A slots). PA fails when
+       |B − mean(A1, A2)| > band in any block.
+     - The 1 % floor keeps two blocks' self-pairs from setting a band near zero. The record reports both numbers and
+       names which governed each cell. If the floor governed every cell, the summary says "G3 read at the 1% floor:
+       noise below resolution", which is not evidence of a tighter match.
      - Peak VRAM fails when |PA − P0| / P0 > 1 %.
    - **G4, identity.**
      - `/health`'s adapter id is not canary A's sha256, or it lacks the manifest sha256 or `base_match`; or
@@ -146,6 +151,9 @@ The two P0 slots of each block are its A1 and A2, and PA is its B.
 **Reported, never ruling:**
 - PA-DQ's effect ratio, |loss(PA-DQ) − loss(REF-DQ)| (F1, priced) and its HTTP canary.
 - The decode-vs-prefill deltas and their flag.
+- The losses over the assistant positions only (the canary's own tokens; the trains use `--loss assistant`): each
+  arm's mean, the effect ratio and PA − REF on them.
+- The SD of the per-sequence PA − REF difference, beside its SE (a shakedown's SD sizes the reading's SE risk).
 - The merge's seconds and its max error.
 - Each fingerprint scope's seconds and module count.
 - Every slot's cost cells.
@@ -202,8 +210,8 @@ none exists. The shakedown box already holds OLMoE and Loggetta, so it trains tw
   retired host. The read is relative (PA against P0 on one box), so no power floor is registered. The power limit is
   recorded.
 - **Pins:** e4b at the kit's merge (after the schema v2 PR), grouped-nf4-gemm at that commit's CI pin; torch
-  2.8.0+cu128, transformers 5.17.0, Loggetta at `90a7697d` (0.6.1; its receipt carries e4b's engaged report, whose expert absmax form the
-  schema v2 PR adds); Qwen3-30B-A3B at
+  2.8.0+cu128, transformers 5.17.0, Loggetta main at `90a7697d` (unreleased, the 0.6.2 candidate: 0.6.1 plus the torch
+  preflight; its receipt carries e4b's engaged report, whose expert absmax form the schema v2 PR adds); Qwen3-30B-A3B at
   `ad44e777` (the SC1 pin); the canary pin as `p224_canary.py` prints it.
 - **The fit** (25 % headroom):
 

@@ -32,8 +32,9 @@ The rule, first rung that applies:
         G2 HTTP: a trigger prompt that does not yield the canary on PA through /v1/completions and /v1/chat/completions,
            streamed and not, token-identical across the four; a control prompt that yields it on PA; any prompt that
            yields it on P0;
-        G3 cost: per metric (ttft_ms, itl_ms, tok_s) and per W (1, 16), band = max over the ABBA blocks of |A1 - A2| (the
-           two P0 slots); PA (B) fails when |B - mean(A1, A2)| > band in any block; peak VRAM |PA - P0| / P0 > VRAM_TOL;
+        G3 cost: per metric (ttft_ms, itl_ms, tok_s) and per W (1, 16), band = max(the max over the ABBA blocks of
+           |A1 - A2| (the two P0 slots), BAND_FLOOR x the mean of the four A slots), both reported with the one that
+           governed; PA (B) fails when |B - mean(A1, A2)| > band in any block; peak VRAM |PA - P0| / P0 > VRAM_TOL;
         G4 identity: PA's /health or /v1/models lacks the adapter id (the trained adapter.safetensors sha256), the
            manifest sha256 or base_match; the served name is not <model>+<id[:12]>; a request naming the base is not a
            404; the merge did not cover every attention projection;
@@ -70,6 +71,7 @@ FAITHFUL = 0.025               # the paged base's own gap above this: VOID, neve
 SE_FRACTION = 0.2              # the SE of the PA - REF difference must be under this share of FLOOR
 MIN_REF_GAIN = 0.05            # nats: REF must improve on HF0 at least this much, or the canary did not learn
 VRAM_TOL = 0.01
+BAND_FLOOR = 0.01              # G3's band is never under 1 % of the A slots' mean (the maintainer's ruling)
 DECODE_FLAG_ABS = 0.05
 COST_METRICS = ("ttft_ms", "itl_ms", "tok_s")
 COST_WS = ("W1", "W16")
@@ -132,7 +134,8 @@ def verdict(recs: dict, pins: dict) -> dict:
     gap = abs(L["P0"] - L["HF0"])
     margin = margin_of(L["P0"], L["HF0"])
     se = _paired_se(recs["PA"]["per_seq_loss"], recs["REF"]["per_seq_loss"])
-    out.update(base_gap=gap, margin=margin, se_pa_ref=se,
+    d = [x - y for x, y in zip(recs["PA"]["per_seq_loss"], recs["REF"]["per_seq_loss"])]
+    out.update(base_gap=gap, margin=margin, se_pa_ref=se, sd_pa_ref=statistics.stdev(d) if len(d) > 1 else None,
                heldout_tokens={arm: recs[arm].get("tokens") for arm in ARMS})
     ref_gain = L["HF0"] - L["REF"]
     # the reading's thresholds: a VOID on a reading; on a shakedown (another model, another card) they are reported
@@ -171,8 +174,14 @@ def verdict(recs: dict, pins: dict) -> dict:
     if (recs["P0"].get("canary") or {}).get("any_hits", 1) != 0:
         fails.append("G2 the base (P0) yielded the canary")
     # G3 cost
-    band = {m: {w: max(abs(b["A1"][m][w] - b["A2"][m][w]) for b in blocks) for w in COST_WS} for m in COST_METRICS}
-    out["cost_band"] = band
+    raw = {m: {w: max(abs(b["A1"][m][w] - b["A2"][m][w]) for b in blocks) for w in COST_WS} for m in COST_METRICS}
+    floor = {m: {w: BAND_FLOOR * statistics.fmean(b[s][m][w] for b in blocks for s in ("A1", "A2")) for w in COST_WS}
+             for m in COST_METRICS}
+    band = {m: {w: max(raw[m][w], floor[m][w]) for w in COST_WS} for m in COST_METRICS}
+    governed = {m: {w: "floor" if floor[m][w] > raw[m][w] else "raw" for w in COST_WS} for m in COST_METRICS}
+    out["cost_band"] = {"band": band, "raw_max_abs_a1_a2": raw, "floor_1pct": floor, "governed": governed}
+    if all(g == "floor" for row in governed.values() for g in row.values()):
+        out["cost_band"]["summary"] = "G3 read at the 1% floor: noise below resolution"
     for i, b in enumerate(blocks):
         for m in COST_METRICS:
             for w in COST_WS:
@@ -215,6 +224,12 @@ def verdict(recs: dict, pins: dict) -> dict:
     dp = {arm: recs[arm].get("decode_vs_prefill_max_abs") for arm in ("P0", "PA")}
     reported["decode_vs_prefill"] = dict(dp, flag=(isinstance(dp["PA"], (int, float)) and isinstance(dp["P0"], (int, float))
                                                    and dp["PA"] > 2 * dp["P0"] and dp["PA"] > dp["P0"] + DECODE_FLAG_ABS))
+    asst = {arm: recs[arm].get("per_seq_loss_assistant") for arm in ARMS}
+    if all(isinstance(v, list) and len(v) == N_HELDOUT for v in asst.values()):
+        La = {arm: statistics.fmean(v) for arm, v in asst.items()}
+        ga = La["HF0"] - La["REF"]
+        reported["assistant_positions"] = {"loss": La, "ratio": (La["P0"] - La["PA"]) / ga if ga > 0 else None,
+                                           "pa_minus_ref": La["PA"] - La["REF"]}
     reported["merge"] = {k: (ident.get("merge") or {}).get(k) for k in ("seconds", "max_err")}
     reported["fingerprint"] = g.get("fingerprint")
     out["reported"] = reported
@@ -321,6 +336,18 @@ def self_test() -> int:
     # a deviation between one and two bands fails (block 1's B at 10.35: |B - mean(A)| = 0.25 > band 0.2)
     o = verdict(_fake(a=lambda r: r["cost"]["blocks"][1]["B"]["itl_ms"].update(W16=10.35)), PINS)
     assert o["verdict"] == "FAIL" and any("G3 block 1 itl_ms W16" in w for w in o["why"])
+    # the 1% floor: A1 == A2 everywhere (raw band 0); B 0.5 % off passes at the floor, 1.5 % off fails
+    def flat(r, b_val):
+        for b in r["cost"]["blocks"]:
+            for s_ in ("A1", "B", "A2"):
+                for m in COST_METRICS:
+                    b[s_][m] = {w: (b_val if s_ == "B" else 10.0) for w in COST_WS}
+    o = verdict(_fake(a=lambda r: flat(r, 10.05)), PINS)
+    assert o["verdict"] == "PASS" and o["cost_band"]["governed"]["itl_ms"]["W1"] == "floor"
+    assert o["cost_band"]["summary"].startswith("G3 read at the 1% floor") and o["cost_band"]["raw_max_abs_a1_a2"]["tok_s"]["W16"] == 0
+    o = verdict(_fake(a=lambda r: flat(r, 10.15)), PINS)
+    assert o["verdict"] == "FAIL" and any(w.startswith("G3 block 0") for w in o["why"])
+    assert "summary" not in verdict(_fake(), PINS)["cost_band"]
     o = verdict(_fake(a=lambda r: r["cost"]["peak_vram_mib"].update(PA=31000)), PINS)
     assert o["verdict"] == "FAIL" and any("peak VRAM" in w for w in o["why"])
     o = verdict(_fake(a=lambda r: r["PA"]["identity"].update(base_name_status=200)), PINS)
@@ -347,7 +374,7 @@ def self_test() -> int:
     assert o["verdict"] == "SHAKEDOWN" and o["effect"]["ratio"] is None
     assert any("did not learn" in w for w in o["thresholds_would_void"]) and any("not faithful" in w for w in o["thresholds_would_void"])
     assert any(w.startswith("G1 effect ratio None") for w in o["gates_would_fail"])
-    print("p224_reduce self-test OK (41 checks)")
+    print("p224_reduce self-test OK (46 checks)")
     return 0
 
 
