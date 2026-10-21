@@ -302,20 +302,61 @@ def test_while_the_adapter_loads_the_base_name_is_not_listed():
     assert PagedServeConfig(model="tiny/moe").model_names == ("tiny/moe",)
 
 
+#: an environment read in any spelling the two functions use: env("X"), os.environ.get("X"), os.environ["X"], getenv
+_ENV_READ = re.compile(r'(?:\benv|environ\.get|getenv)\(\s*"([A-Z][A-Z0-9_]+)"|environ\[\s*"([A-Z][A-Z0-9_]+)"')
+
+
+def _function_body(path, name):
+    """The source of top-level or nested ``def name(`` up to the next line indented no deeper than its ``def``."""
+    lines = path.read_text(encoding="utf-8").split("\n")
+    start = next(i for i, ln in enumerate(lines) if ln.lstrip().startswith(f"def {name}("))
+    base = len(lines[start]) - len(lines[start].lstrip())
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].strip()
+                and len(lines[i]) - len(lines[i].lstrip()) <= base), len(lines))
+    return "\n".join(lines[start:end])
+
+
+def _env_reads(path, name):
+    return {a or b for a, b in _ENV_READ.findall(_function_body(path, name))}
+
+
+def test_the_census_reader_sees_every_spelling():
+    src = 'env("A_B")  os.environ.get("C_D", "0")  os.environ["E_F"]  os.getenv("G_H")  myenv("NOT_ME")'
+    assert {a or b for a, b in _ENV_READ.findall(src)} == {"A_B", "C_D", "E_F", "G_H"}
+
+
 def test_every_lever_is_classified_refused_or_allowed_with_its_reason():
-    """The census: each env name _apply_levers reads, and the int8 head, sits in exactly one table with a reason. A
-    refused lever re-quantizes an adapted module (i) or depends on base-model calibration (ii)."""
+    """The census: every env name _apply_levers and the lane hook it mirrors read, WHATEVER ITS PREFIX, plus the int8
+    head, sits in exactly one table with a reason. A refused lever re-quantizes an adapted module (i) or depends on
+    base-model calibration (ii); a config name only configures refused levers."""
     from experts4bit_qlora import serve_paged as sp
 
-    src = (ROOT / "experts4bit_qlora" / "serve_paged.py").read_text(encoding="utf-8")
-    body = src[src.index("def _apply_levers("):]
-    body = body[:body.index("\ndef ", 10)]
-    read = set(re.findall(r'env\("(E4B_SERVE_[A-Z0-9_]+)"', body)) | {"E4B_INT8_HEAD_BW"}
-    refused, allowed = set(sp.ADAPTER_REFUSED_LEVERS), set(sp.ADAPTER_ALLOWED_LEVERS)
-    assert read == refused | allowed and not refused & allowed, (read - refused - allowed, refused & allowed)
+    read = (_env_reads(ROOT / "experts4bit_qlora" / "serve_paged.py", "_apply_levers")
+            | _env_reads(ROOT / "experts4bit_qlora" / "serve_paged.py", "_calib_batches")
+            | _env_reads(ROOT / "bench" / "p42" / "hook" / "usercustomize.py", "_apply_lanes")
+            | set(sp.LEVER_ENV)                                   # where a new lever is declared
+            | {"E4B_INT8_HEAD_BW"})
+    tables = {"refused": set(sp.ADAPTER_REFUSED_LEVERS), "allowed": set(sp.ADAPTER_ALLOWED_LEVERS),
+              "config": set(sp.ADAPTER_LEVER_CONFIG), "neutral": set(sp.ADAPTER_NEUTRAL_KNOBS)}
+    every = set().union(*tables.values())
+    assert read == every, ("unclassified", read - every, "stale", every - read)
+    names = [n for t in tables.values() for n in t]
+    assert len(names) == len(set(names)), "a name sits in two tables"
+    refused = tables["refused"]
+    assert all(why for why in sp.ADAPTER_NEUTRAL_KNOBS.values())
+    assert all(levers and set(levers) <= refused for levers in sp.ADAPTER_LEVER_CONFIG.values())
     assert all(("(i" in why or "(ii)" in why) for why in sp.ADAPTER_REFUSED_LEVERS.values())
     assert all("CALIB" not in k or "(ii)" in why for k, why in sp.ADAPTER_REFUSED_LEVERS.items())
     assert all("weight-only" in why and "no activation statistics" in why for why in sp.ADAPTER_ALLOWED_LEVERS.values())
+
+
+def test_a_new_lever_declared_in_lever_env_fails_the_census(monkeypatch):
+    """The mutant the census exists for: a lever added to LEVER_ENV and classified nowhere."""
+    from experts4bit_qlora import serve_paged as sp
+
+    monkeypatch.setattr(sp, "LEVER_ENV", tuple(sp.LEVER_ENV) + ("E4B_SERVE_SOME_NEW_LEVER",))
+    with pytest.raises(AssertionError, match="unclassified"):
+        test_every_lever_is_classified_refused_or_allowed_with_its_reason()
 
 
 def test_health_and_models_carry_the_adapter_and_the_base_name_is_not_served():
