@@ -366,7 +366,7 @@ MUTANTS = [
     ("    if on:\n", "    if False:\n"),                                                        # refusal 5
     ("    if ad.other_tensors:\n", "    if False:\n"),                                          # refusal 6
     ('    if ad.setup.get("attn_4bit") and ad.attention:\n', "    if False:\n"),                # refusal 8
-    ('    if ad.manifest.get("schema") == SCHEMA_V1 and "experts" not in accept_unverified_base:\n',
+    ('    if "experts" not in accept_unverified_base:\n',
      "    if False:\n"),                                                                          # refusal 9
     ("            delta = ad.scale * (b.to(w.device, torch.float32) @ a.to(w.device, torch.float32))\n",
      "            delta = (b.to(w.device, torch.float32) @ a.to(w.device, torch.float32))\n"),  # the scale dropped

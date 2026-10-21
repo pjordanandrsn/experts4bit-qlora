@@ -655,6 +655,17 @@ def prepare_qlora_training(model_id, setup: QLoRASetup, *, device="cuda", revisi
             from .engines.moe_keep import keep_moe_activations
 
             report["kept_moe_layers"] = keep_moe_activations(model, setup.keep_moe_layers)
+    # backend-adapter/2's resolved facts, read AFTER enable_fast_train has resolved the absmax form and fused q/k/v
+    # (adapter_schema.resolved_training_facts); without the grouped kernel neither ran, so no stale record is read
+    from .adapter_schema import resolved_training_facts
+
+    if setup.expert_kernel == "grouped_nf4":
+        from .engines.fast import FAST_TRAIN_STATS
+        from .engines.train_qkv_fuse import TRAIN_QKV_STATS
+
+        report.update(resolved_training_facts(model, setup, fast_stats=FAST_TRAIN_STATS, qkv_stats=TRAIN_QKV_STATS))
+    else:
+        report.update(resolved_training_facts(model, setup, fast_stats=None, qkv_stats=None))
     trainable = []
     for mod in model.modules():
         if isinstance(mod, (ExpertsLoRA, LoRALinear)):

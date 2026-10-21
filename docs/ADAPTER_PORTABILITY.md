@@ -132,3 +132,72 @@ not known to match.
 - No cell carries a measured number. "Bounded-loss" means a gated read decides, not that the loss is small.
 - Nothing here covers model types beyond those named, multi-adapter or per-request serving, or training-quality questions.
   Those belong to the registered reads that follow.
+
+## 6. The manifest that makes it verifiable: `backend-adapter/2`
+
+`backend-adapter/1` records the training setup and the base revision. It does not record what the base was quantized
+to, so the server cannot check the base it serves against the one the adapter was trained on (F2). `backend-adapter/2`
+keeps every v1 field and adds the ones below. The one field list lives in code, `experts4bit_qlora/adapter_schema.py`
+(`V2_FIELDS`), which Loggetta's writer and e4b's reader both cite. It is defined for `backend="experts4bit"` only: a
+`/2` manifest from another backend (dense) is refused by name until a section for it is added here.
+
+| field | what it records | what it proves | what it does not prove |
+|---|---|---|---|
+| `expert_absmax` | the expert absmax form training resolved (`fp32` or `double-quantized`), from the runtime's own record (`FAST_TRAIN_STATS["absmax_dq"]`), never the environment | which absmax form the adapter's experts were trained against | that a server's arena matches it; the fingerprint checks that |
+| `train_fused_qkv` | how many attention modules training fused into one q/k/v projection (`TRAIN_QKV_STATS`) | how training ran its attention (equal to rounding, not bitwise) | nothing about the served model |
+| `attn_quant` | the attention base as built: `bf16`, or `bnb4` with quant_type, blocksize and nested statistics | which recipe a rebuild of `Q_train(W)` needs | that a rebuild matches; the attention fingerprint checks that |
+| `versions` | bitsandbytes, torch, grouped-nf4-gemm, transformers and experts4bit-qlora as imported at training | what to install to reproduce | that another version quantizes identically |
+| `lora_scale_applied` | the LoRA scale the attention and expert modules held, read from them (`adapter_schema.lora_scale_applied`) | the scale the merge must use, checked against the setup's alpha/r | nothing beyond that |
+| `fingerprints` | per scope (`attention`, `experts`): `scheme_id`, `sha256`, the module count and the seconds it took | see below | see below |
+| `run_id`, `created_at` | the producing run and the manifest's UTC time (writer-side) | provenance | nothing about the weights |
+
+`prepare_qlora_training` adds `expert_absmax`, `train_fused_qkv`, `attn_quant`, `versions` and `lora_scale_applied` to
+its report AFTER `enable_fast_train` has run, which is where the absmax form is resolved and q/k/v are fused. The writer
+copies them from that report.
+
+### The fingerprint: `quant_fingerprint(model, scope)`, scheme `qfp-v1`
+
+One function, `experts4bit_qlora.adapter_schema.quant_fingerprint`, called by the writer on the training model and by a
+reader on the served one. It hashes the base in its CANONICAL form, what dequantize computes, never the storage form.
+- **One base, one fingerprint.** Training's fused q/k/v path stores the same NF4 weights with an expanded fp32 absmax,
+  and the unfused path with nested 8-bit statistics. Both dequantize bit for bit the same, so they fingerprint alike.
+- **A different base, a different fingerprint.** A double-quantized expert absmax and an fp32 one dequantize
+  differently, so they fingerprint differently. That is F1 made checkable.
+
+**qfp-v1 pins:**
+- **Records:** one per module in scope, sorted by module name (UTF-8 code points). A module's name is its path in the
+  model, with or without a LoRA wrapper (an expert stack held as `ExpertsLoRA.base` is named as the served model names
+  it).
+- **The line:** `name TAB kind TAB shape TAB blocksize TAB sha256(data) TAB sha256(absmax) TAB sha256(code)`. The
+  fingerprint is the sha256 of the lines joined by `\n`, with a trailing `\n`.
+- **`kind`:**
+  - `bnb4:<quant_type>`, a bitsandbytes 4-bit linear: `data` is its packed uint8 bytes; `absmax` is the fp32 absmax as
+    `dequantize_4bit` computes it (`dequantize_blockwise(absmax, state2) + offset` when nested); `code` is its fp32
+    code table.
+  - `dense:<dtype>`, a plain linear: `data` is its weight's bytes, and `absmax` and `code` are empty.
+  - `experts<bits>:<quant_type>:<gate_up|down>`, one projection of an expert stack: `absmax` is the full fp32 absmax
+    (`absmax_dq.expert_absmax_fp32`); `data` is the first and last `EXPERT_SUBSET_BYTES` (64 KiB) of the stack's
+    flattened packed storage, or all of it when smaller; `code` is the fp32 code table.
+- **Serialization:** `shape` is the logical shape as decimal integers joined by `x` (an expert stack is `E x N x K`).
+  `blocksize` is a decimal integer, `0` for dense. Every tensor is hashed as its contiguous little-endian bytes.
+
+**What each scope proves:**
+- **`attention`:** every attention projection's base, in full. Two models with the same attention fingerprint
+  dequantize every attention weight to the same values.
+- **`experts`:** the full absmax of every stack, plus a fixed byte sample. That is a recipe check: a quant_type,
+  blocksize or absmax-form mismatch anywhere changes it. It is not a content proof of the packed bytes outside the
+  sample (a test flips one and shows the fingerprint unchanged).
+
+A change to any rule above is a new scheme, not an edit of `qfp-v1`. A reader refuses a scheme it does not know
+(`adapter_schema.KNOWN_SCHEMES`) rather than compare unlike hashes.
+
+**Cost.** Hashing reads about 0.5 GB of attention NF4 and about 1.9 GB of expert absmax on Qwen3-30B-A3B (estimates
+from the shapes). The real cost is measured at save time, recorded per artifact in `fingerprints.<scope>.seconds`, and
+quoted from the registered cross-format read (PA-4), never assumed.
+
+**What the reader does with it today.** e4b's paged server verifies a `/2` directory: the v1 checks, every `V2_FIELDS`
+entry present, a known scheme per fingerprint, and the applied attention scale equal to alpha/r. It does not yet compare
+the fingerprints against the served base. That is PA-1 (attention, merging into a verified `Q_train(W)`) and the
+expert path. Until then:
+- the expert base of a `/2` adapter stays unverified, refusal 9, with the same named opt-in as v1;
+- an `attn_4bit` adapter stays refused, refusal 8.
