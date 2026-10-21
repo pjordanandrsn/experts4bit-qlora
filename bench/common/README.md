@@ -127,6 +127,7 @@ phase_start reduce reduce; python reduce.py ...;  phase_end reduce
 
 **Boot is not in `phases.jsonl`, and never `ssh_ready_s`.** The time from the create to a usable box is the launcher's, read from its receipt:
 - `<provider>_ssh_ready_after_s`, from the create to the first authenticated ssh, where the receipt has it;
-- else `<provider>_preflight_seconds`, the pre-flight's own duration, which includes its probes.
+- else `<provider>_preflight_seconds`, a different quantity: the pre-flight's own duration, from its start rather than the
+  create, probes included. A boot figure states which field it came from.
 
 `ssh_ready_s` is the configured readiness ALLOWANCE (`--ssh-ready-s`; newer receipts also write it as `ssh_ready_allowance_s`), not a measurement. It takes only the configured values (180, 300, 420 s), so a ratio of it to the billed time measures nothing. A receipt with neither measured field has an UNKNOWN boot, never 0 and never the allowance.
