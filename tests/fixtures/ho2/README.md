@@ -3,8 +3,8 @@ Real Loggetta training receipt, from loggetta commit 50c1553a00bee4ace2c1a06b211
 (unchanged on loggetta main at 11b9d6d8). Original receipt SHA256 a9082fd2b28663a5785c2a836ea3a161d80fb225fe86136fe80ede6f362e7014.
 
 Two kinds of value are redacted, and nothing else changes:
-- every string that holds a local path (`/home/` or `/tmp/`) reads `"<local path>"`: 5 values (provenance argv and source files,
-  the adapter path);
+- every string that holds an absolute path on the machine that ran it (its home or temp directory) reads `"<local path>"`: 5
+  values (provenance argv and source files, the adapter path);
 - the two GPU `uuid` values (`hardware.gpu`, `plan.hardware.gpu`) read `null`.
 
 It is re-serialized the way Loggetta writes a receipt (`json.dump(..., indent=1, sort_keys=True)`). Fixture SHA256
