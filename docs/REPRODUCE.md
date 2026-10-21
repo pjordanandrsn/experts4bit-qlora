@@ -58,11 +58,11 @@ defaults are not the run's settings. The controller reads a Hugging Face token f
 ### 2. Qwen3-30B-A3B against Unsloth, packed 4,096-token rows, with e4b's memory cost beside it
 
 - **Claim:** `e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio`. Unsloth spends **1.160×** e4b's GPU
-  time per profiled step, both frameworks at their defaults on one stack (read 2026-10-08). The wall-clock ratio on
-  that host was 1.472.
+  time per profiled step (medians of two draws), both frameworks at their defaults on one stack (read 2026-10-08). The
+  wall-clock ratio on that host was 1.472.
 - **Beside it, e4b's loss:** `e4b.train.memory.packed-4k-position-defaults.5090.2026-10-07`. At its defaults e4b's
-  training phase peaks **1.04 GB above** Unsloth's (25.904 vs 24.864 GB, read 2026-10-07). The opt-in
-  `E4B_CKPT_OFFLOAD=1` brings the gap to 0.303 GB but costs 1.041× the step, so it stays opt-in.
+  training phase peaks **1.04 GB above** Unsloth's (25.904 vs 24.864 GB, medians of two draws, read 2026-10-07). The
+  opt-in `E4B_CKPT_OFFLOAD=1` brings the gap to 0.303 GB but costs 1.041× the step, so it stays opt-in.
 - **Stack:** e4b `0b2995236f7a5d446299a252db0a7beb1d212280` (first released in v0.49.0), grouped-nf4-gemm
   `8944aa84857349cb98dce30cdf21f56c5a3640b6` (v0.43.0); Unsloth 2026.9.14, unsloth_zoo 2026.9.9, torch 2.12.1+cu130,
   transformers 5.5.0, `grouped_mm` MoE backend. Model as in row 1. The memory row ran at e4b
@@ -181,8 +181,8 @@ lane's drive script before running it:
 | int8 head bandwidth GEMV, one request: **1.052** (rate; outputs change). Sixteen requests read **0.9918**, below 1 in every pair: an observed cost the record leaves unexplained | `e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19` | `585cf68b` (v0.56.0) | RTX 5090 at 575 W, Ryzen 7 9800X3D | P153, `p153-5090-1` | $0.445 |
 | Attention split cap, one request: **1.0442** (decode rate, the smallest of four ABBA pairs) | `e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19` | `e8de1799` (v0.56.0) | RTX 5090 at 450 W, EPYC 9135 | P143 (Amendment 3), `p143a3-5090-1` | $0.479 |
 | Launch-bound glue, one request: **1.1321** (rate, the mean of two pairs; Phase 1 + 2 against the stack before #1448) | `e4b.serve.p127.launch-bound-glue.qwen3.5090.2026-10-09` | B `7f044dd9` (v0.52.0) vs A `a8c01d42` (v0.51.0) | RTX 5090, Ryzen 9 9950X | P127, `p127-5090-1` | $0.940 |
-| Bandwidth decode GEMV, one request: **1.2417** over dot-pad (5090), **1.5145** over the scalar GEMV (4090, at Qwen3's two shapes) | `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`, `e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18` | `730c8acc` (v0.49.0); `c8d7e629` (v0.55.0) | RTX 5090 at 575 W, EPYC 7713; RTX 4090 at 450 W, EPYC 7742 | P116, `p116-5090-2`; P133, `p133-4090-2` | $1.078; $0.919 |
-| Bandwidth decode GEMV on Mixtral, one request: **2.4075** over the scalar GEMV (rate) | `e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18` | `d2bf9f64` (v0.56.0) | RTX 5090 at 500 W, Xeon Gold 6240 | P141, `p141-5090-2` | $0.999 |
+| Bandwidth decode GEMV, one request: **1.2417** over dot-pad (5090), **1.5145** over the scalar GEMV (4090, at Qwen3's two shapes); each the smaller of two ABBA pairs | `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`, `e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18` | `730c8acc` (v0.49.0); `c8d7e629` (v0.55.0) | RTX 5090 at 575 W, EPYC 7713; RTX 4090 at 450 W, EPYC 7742 | P116, `p116-5090-2`; P133, `p133-4090-2` | $1.078; $0.919 |
+| Bandwidth decode GEMV on Mixtral, one request: **2.4075** over the scalar GEMV (decode rate, the smaller of two ABBA pairs) | `e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18` | `d2bf9f64` (v0.56.0) | RTX 5090 at 500 W, Xeon Gold 6240 | P141, `p141-5090-2` | $0.999 |
 | Fused-stack folds on Mixtral: median step time **0.9393** ON/OFF, the larger of two interleaved blocks (below 1 = faster; 20.2-20.5 → 19.0 ms) | `e4b.serve.p135.fold-speed.mixtral.5090.2026-10-18` | `5be4c4d9` (v0.56.0) | RTX 5090, EPYC 7742 | P135, `p135-5090-2` | $1.159 |
 | Server capacity with 64 slots and `E4B_PAGED_BUCKETS=auto`, on the int4 stack (int4 experts and attention, fused QKV, 2,048 tokens a slot): **12 req/s** at TTFT ≤ 1 s and TPOT ≤ 100 ms for ≥ 95 % in both Poisson draws, against 4 for the 16-slot server. No comparator ran, and it is not the default NF4 server | `e4b.serve.sc2e.64-slots-buckets-auto.qwen3.5090.2026-10-07` | `3bbcb01b` (v0.49.0) | RTX 5090 at 575 W, EPYC 7352 | SC2e via `bench/sc1/sc1_drive.sh` (`SC1_BOX=L`), `sc2e-5090-1` | $1.017 |
 | **A negative, since overtaken:** K25's plan under the select-tree decode: best plan 1.0188 against a 1.15 bar, NO_GO. Under K39's `prmt` decode, P160 then read plan `c1` at 1.66× in a microbench ([`RESULTS-p160`](../bench/p160/RESULTS-p160.md)); the served read is P161 (the next row) | UNVERIFIED: no register row; [`RESULTS-p155`](../bench/p155/RESULTS-p155.md) | `4d3fd170` (v0.56.0) | RTX 5090 at 575 W, EPYC 7K62 | P155, `p155-5090-1` | $0.274 |
