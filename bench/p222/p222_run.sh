@@ -162,7 +162,7 @@ if [ "$rc" = 0 ] && echo "$LASTL" | grep -qE '^27 passed(, [0-9]+ warnings?)? in
 else
   echo "premise failed" | tee -a summary.txt; say "PREMISE FAILED on this card"; echo "premise failed rc=$rc" > REFUSAL; finish 25
 fi
-# ---- the microbench: block A's sweep (the selection of M), then block B's six arms (the reading), a spacer before
+# ---- the microbench: block A's sweep (the selection of M), then block B's five arms (the reading), a spacer before
 # every timed replay
 can_run $NEED_BENCH bench || finish 40
 AL=$(step_alarm 2700); say "microbench (alarm=$AL)"; gpu_snap "bench start"

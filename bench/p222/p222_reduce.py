@@ -10,9 +10,11 @@ Pure Python, no torch. The registered rules live here, and the box imports them 
 - **Block A, the SELECTION (reported, never ruling):** every plan of P156's 144-plan grid under ``lut="prmt"``, per
   projection, timed on 8 steps of A. :func:`select` names M, each projection's fastest plan. Today's plan and c1's are in
   the grid, so M may be either.
-- **Block B, the READING:** six arms on 126 steps of B (21 Williams squares): T (the tree at today's plan, Mixtral's
+- **Block B, the READING:** five arms on 120 steps of B (12 Williams squares of 10, Amendment 1): T (the tree at today's plan, Mixtral's
   served default: the CONTROL), T2 (T again: the self-pair), P (prmt at today's plan), C1 (prmt at P160's c1 pair,
-  e4b's ``E4B_K25_PLAN=c1``), M (prmt at block A's selection) and TM (the tree at M's plan). GO is read on M alone.
+  e4b's ``E4B_K25_PLAN=c1``) and M (prmt at block A's selection). GO is read on M alone. Amendment 1 dropped TM (the tree at
+  M's plan, reported only): p222-shake-1 found a selected plan whose tree variant cannot run (210,944 B of shared memory
+  against the 101,376 B limit), and a reported arm never restricts what M may be.
 - :func:`verdict`: GO / NO_GO / VOID, and on GO the served read's arm (:func:`served_arm`).
 
     python p222_reduce.py --bench bench_p222.json --out verdict_p222.json
@@ -42,8 +44,8 @@ ROUTE_SHA256 = {"A": "996d7f093545051860d601b7dbb606732bd28db308f47b7a3e9e2898e6
                 "B": "5f368c0fdf03af0e8c6dd3419007e7ab9fffa5f9d9985a08eb0ba6863a6d0b75"}   # route_sha256(picks(seed)), [layer][step][row][k] int8
 SELECT_STEPS = tuple(range(0, STEPS, 16))    # 8 steps of block A
 SELECT_ITERS = 5                             # timed replays per (plan, projection, step) in the sweep
-READ_STEPS = tuple(range(0, 126))            # 126 steps of block B: 21 whole Williams squares of the six arms
-ARMS = ["T", "T2", "P", "C1", "M", "TM"]
+READ_STEPS = tuple(range(0, 120))            # 120 steps of block B: 12 whole Williams squares (10 orders each, Amendment 1)
+ARMS = ["T", "T2", "P", "C1", "M"]
 SPACER = "S"                                 # T's calls with their own outputs, replayed untimed before every timed replay
 ITERS = 10                                   # timed replays per arm per rep
 GO_BAR = 1.10                                # M's median T/M minus 2 SE, raw AND clock-adjusted, must reach this
@@ -128,10 +130,10 @@ def selection_margin(rows, n_steps=len(SELECT_STEPS)):
 
 
 def plans_for(m):
-    """Each arm's (gate_up plan, down plan, decode). T/T2/P move only the decode; C1 and M move the plan under prmt; TM
-    is M's plan under the tree."""
+    """Each arm's (gate_up plan, down plan, decode). T/T2/P move only the decode; C1 and M move the plan under prmt.
+    (Amendment 1 dropped TM, the tree at M's plan.)"""
     return {"T": (TODAY, TODAY, T_LUT), "T2": (TODAY, TODAY, T_LUT), "P": (TODAY, TODAY, P_LUT),
-            "C1": (C1["gu"], C1["dn"], P_LUT), "M": (m["gu"], m["dn"], P_LUT), "TM": (m["gu"], m["dn"], T_LUT)}
+            "C1": (C1["gu"], C1["dn"], P_LUT), "M": (m["gu"], m["dn"], P_LUT)}
 
 
 def served_arm(m, m_over_c1):
@@ -145,7 +147,8 @@ def served_arm(m, m_over_c1):
 
 
 def williams(n):
-    """Williams' design for an even n: n orders, each a Latin row, every ordered pair adjacent exactly once (P157's)."""
+    """Williams' design: for an even n, n orders with every ordered pair adjacent exactly once (P157's); for an odd n,
+    those n orders and their mirrors, 2n orders with every ordered pair adjacent exactly twice (Amendment 1: five arms)."""
     first, lo, hi = [0], 1, n - 1
     while len(first) < n:
         first.append(lo)
@@ -153,12 +156,15 @@ def williams(n):
         if len(first) < n:
             first.append(hi)
             hi -= 1
-    return [[(x + i) % n for x in first] for i in range(n)]
+    rows = [[(x + i) % n for x in first] for i in range(n)]
+    return rows if n % 2 == 0 else rows + [row[::-1] for row in rows]
 
 
 def arm_order(r, arms=ARMS):
-    """Rep r's capture and replay order: row r mod 6 of Williams' design. The spacer S precedes every timed replay."""
-    return [arms[j] for j in williams(len(arms))[r % len(arms)]]
+    """Rep r's capture and replay order: row r mod 10 of Williams' design for five arms (Amendment 1). The spacer S
+    precedes every timed replay."""
+    w = williams(len(arms))
+    return [arms[j] for j in w[r % len(w)]]
 
 
 def se_median(q, b=BOOT_B, seed=BOOT_SEED):
@@ -182,6 +188,8 @@ def _structure(rec, why):
     layers = rec.get("layers")
     if rec.get("route_sha256") != ROUTE_SHA256 and not shake:
         why.append("a block's routing table does not hash to the pinned seed draw")
+    if rec.get("arm_fault"):
+        why.append(f"an arm could not compile, launch or be captured (Amendment 1): {rec['arm_fault']}")
     if rec.get("arms") != ARMS or rec.get("spacer") != SPACER or rec.get("iters") != ITERS:
         why.append("the arms, the spacer or the timed replays an arm are not the registered ones")
     if not shake:
@@ -263,7 +271,7 @@ def read_block(blk, clocks):
     out = {"self_pair": summarize([m["T"] / m["T2"] for m in ms]), "ms": {a: statistics.median(m[a] for m in ms)
                                                                          for a in ARMS}}
     base, mbase = clocks["T"]["sm_mhz_median"], clocks["T"].get("mem_mhz_median")
-    for arm in ("P", "C1", "M", "TM"):
+    for arm in ("P", "C1", "M"):
         clk, mclk = clocks[arm]["sm_mhz_median"], clocks[arm].get("mem_mhz_median")
         s = summarize([m["T"] / m[arm] for m in ms])
         s["clock_over_t"] = clk / base
@@ -279,7 +287,7 @@ def read_block(blk, clocks):
         out[arm] = s
     out["M_over_C1"] = summarize([m["C1"] / m["M"] for m in ms])
     out["moved_bits"] = {arm: [rep["step"] for rep in blk["reps"] if rep["identical"][arm] is not True]
-                         for arm in ("P", "C1", "M", "TM")}
+                         for arm in ("P", "C1", "M")}
     return out
 
 
@@ -295,12 +303,12 @@ def verdict(rec):
     sp = rd["self_pair"]
     if not SELF_BAND[0] <= sp["median"] <= SELF_BAND[1]:
         return dict(out, verdict="VOID", why=[f"self-pair T/T2 median {sp['median']:.4f} outside {SELF_BAND}"])
-    findings = [{"arm": a, "moved_bits_on_steps": rd["moved_bits"][a][:8]} for a in ("P", "C1", "M", "TM")
+    findings = [{"arm": a, "moved_bits_on_steps": rd["moved_bits"][a][:8]} for a in ("P", "C1", "M")
                 if rd["moved_bits"][a]]
     out["contract_findings"] = findings
     ma = rd["M"]
     out["M"] = ma
-    out["reported"] = {"P": rd["P"], "C1": rd["C1"], "TM": rd["TM"], "M_over_C1": rd["M_over_C1"],
+    out["reported"] = {"P": rd["P"], "C1": rd["C1"], "M_over_C1": rd["M_over_C1"],
                        "m_is_today": m == {"gu": TODAY, "dn": TODAY}, "m_is_c1": m == C1,
                        "selection_margin": selection_margin(rec["select"], len(rec["select_steps"])),
                        "step_share_note": f"the K25 pair is {P145_K25_SHARE} of Mixtral's W16 step at tree/today (P145)"}
@@ -349,12 +357,12 @@ def _sel_rows(best_gu=None, best_dn=None, iters=SELECT_ITERS, n_steps=len(SELECT
     return rows
 
 
-def _fake(m_gain=1.6, p_gain=1.25, c1_gain=1.5, tm_gain=0.9, noise=0.002, self_ratio=1.0, t_ms=12.0, layers=LAYERS,
+def _fake(m_gain=1.6, p_gain=1.25, c1_gain=1.5, noise=0.002, self_ratio=1.0, t_ms=12.0, layers=LAYERS,
           shakedown=False, clk=None, mem=None, limit=575.0, best_gu=None, best_dn=None, **kw):
     rng = random.Random(7)
     sel = _sel_rows(best_gu, best_dn)
     m = select(sel)
-    f = {"T": 1.0, "T2": 1 / self_ratio, "P": 1 / p_gain, "C1": 1 / c1_gain, "M": 1 / m_gain, "TM": 1 / tm_gain}
+    f = {"T": 1.0, "T2": 1 / self_ratio, "P": 1 / p_gain, "C1": 1 / c1_gain, "M": 1 / m_gain}
     reps = [{"step": s, "order": arm_order(r), "spacer_replays": ITERS * len(ARMS),
              "replays_ms": {a: [t_ms * f[a] * (1 + rng.gauss(0, noise)) for _ in range(ITERS)] for a in ARMS},
              "identical": {a: True for a in ARMS if a != "T"}} for r, s in enumerate(READ_STEPS)]
@@ -413,8 +421,8 @@ def self_test():
     o = verdict(_fake(best_gu=TODAY, best_dn=TODAY, m_gain=1.25, p_gain=1.25))
     assert o["verdict"] == "GO" and o["served_arm"] == "P"                   # M is today's plan: the decode alone
     assert v(_fake(m_gain=1.09)) == "NO_GO"                                  # under the bar
-    assert v(_fake(m_gain=1.12, noise=0.25)) == "NO_GO"                      # median over the bar, bound under it
-    assert v(_fake(m_gain=1.12, noise=0.0005)) == "GO"
+    assert v(_fake(m_gain=1.11, noise=0.15)) == "NO_GO"                      # median over the bar, bound under it
+    assert v(_fake(m_gain=1.11, noise=0.0005)) == "GO"
     o = verdict(_fake(m_gain=1.13, noise=0.0005, clk={"M": 2912.0}))        # M 4 % faster-clocked: the bound adjusts
     assert o["verdict"] == "NO_GO" and o["M"]["lb"] >= GO_BAR > o["M"]["lb_clock_adj"], o["M"]
     o = verdict(_fake(m_gain=1.13, noise=0.0005, clk={"M": 2700.0}))        # a slower-clocked M is never credited
@@ -427,9 +435,8 @@ def self_test():
         bad["read"]["reps"][7]["identical"][arm] = False
         o = verdict(bad)
         assert o["verdict"] == "NO_GO" and o["contract_findings"][0]["arm"] == arm, arm
-    bad = _fake()
-    bad["read"]["reps"][7]["identical"]["TM"] = False                        # the reported tree arm never rules
-    assert v(bad) == "GO"
+    bad = _fake(arm_fault="M dn (128, 256, 8, 4) prmt: OutOfResources: shared memory")
+    assert v(bad) == "VOID" and "Amendment 1" in verdict(bad)["why"][0]     # a recorded arm fault, never a crash
     bad = _fake()
     bad["read"]["reps"][5]["identical"]["T2"] = False
     assert v(bad) == "VOID"                                                  # T is not deterministic
@@ -447,7 +454,7 @@ def self_test():
     bad["select"] = _sel_rows(order=list(range(len(GRID))))
     assert v(bad) == "VOID"                                                  # swept, consistently, out of the shuffle
     bad = _fake()
-    bad["plans"]["TM"] = [dict(TODAY), dict(TODAY), T_LUT]
+    bad["plans"]["M"] = [dict(TODAY), dict(TODAY), T_LUT]
     assert v(bad) == "VOID"
     assert v(_fake(route_sha256={"A": ROUTE_SHA256["A"], "B": "0" * 64})) == "VOID"
     bad = _fake()
@@ -480,12 +487,15 @@ def self_test():
     sk["read"]["steps"] = sk["read"]["steps"][:6]
     o = verdict(sk)
     assert o["verdict"] == "SHAKEDOWN", o["why"]
-    w = williams(6)
-    assert all(sorted(row) == list(range(6)) for row in w)
-    assert all(sorted(row[i] for row in w) == list(range(6)) for i in range(6))
-    assert len({(row[i], row[i + 1]) for row in w for i in range(5)}) == 30
-    assert len(READ_STEPS) % len(ARMS) == 0 and not set(SELECT_STEPS) - set(range(STEPS))
-    print("p222_reduce self-test OK (49 checks)")
+    w = williams(len(ARMS))                                                  # five arms: 10 orders
+    assert len(w) == 10 and all(sorted(row) == list(range(5)) for row in w)
+    assert all(sorted(row[i] for row in w) == sorted(list(range(5)) * 2) for i in range(5))   # each position twice
+    pairs = [(row[i], row[i + 1]) for row in w for i in range(4)]
+    assert len(set(pairs)) == 20 and all(pairs.count(pr) == 2 for pr in set(pairs))           # each ordered pair twice
+    w6 = williams(6)
+    assert len({(row[i], row[i + 1]) for row in w6 for i in range(5)}) == 30                   # the even case, kept
+    assert len(READ_STEPS) % len(w) == 0 and not set(SELECT_STEPS) - set(range(STEPS))
+    print("p222_reduce self-test OK (50 checks)")
 
 
 

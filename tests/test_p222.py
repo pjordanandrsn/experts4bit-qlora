@@ -95,15 +95,17 @@ def test_the_sweep_and_the_arms():
     p156 = _load("p156_reduce_for_p222", B / "p156" / "p156_reduce.py")
     assert red.GRID == p156.GRID and len(red.GRID) == 144                        # P156's grid, unchanged
     assert red.TODAY == p156.TODAY and red.SELECT_ITERS == 5 and red.ITERS == 10
-    assert red.SELECT_STEPS == tuple(range(0, 128, 16)) and red.READ_STEPS == tuple(range(126))
+    assert red.SELECT_STEPS == tuple(range(0, 128, 16)) and red.READ_STEPS == tuple(range(120))
     assert sorted(red.sweep_order()) == list(range(144)) and red.ORDER_SEED == 222
     m = {"gu": red.GRID[100], "dn": red.GRID[7]}
     P = red.plans_for(m)
     assert P["T"] == P["T2"] == (red.TODAY, red.TODAY, "tree")
     assert P["P"] == (red.TODAY, red.TODAY, "prmt")                                  # only the decode moves
     assert P["C1"] == (red.C1["gu"], red.C1["dn"], "prmt") and P["M"] == (m["gu"], m["dn"], "prmt")
-    assert P["TM"] == (m["gu"], m["dn"], "tree")                                     # M's plan without the decode
-    assert red.ARMS == ["T", "T2", "P", "C1", "M", "TM"] and red.GO_BAR == 1.10 and red.TIE_BAR == 1.02
+    assert "TM" not in P                                                            # Amendment 1 dropped it
+    assert red.ARMS == ["T", "T2", "P", "C1", "M"] and red.GO_BAR == 1.10 and red.TIE_BAR == 1.02
+    w = red.williams(len(red.ARMS))
+    assert len(w) == 10 and len(red.READ_STEPS) % len(w) == 0                      # 12 whole squares of 10 orders
 
 
 def test_c1_is_e4bs_registered_pair_and_mixtral_serves_the_tree_at_todays_plan():
@@ -119,6 +121,14 @@ def test_c1_is_e4bs_registered_pair_and_mixtral_serves_the_tree_at_todays_plan()
     assert '(_r["env"], _r["lut"]) == (None, "tree") and _r["source"].startswith("default-off")' in RUN
     assert '_p = hr.resolve_k25_plan(_r, model_type="mixtral")' in RUN and '(_p["env"], _p["plan"]) == (None, "today")' in RUN
     assert 'hr._K25_PLANS["c1"] == (R.C1["gu"], R.C1["dn"])' in RUN
+
+
+def test_an_arm_that_cannot_compile_or_capture_is_recorded_never_a_crash():
+    """Amendment 1 (p222-shake-1 crashed on an arm whose compile ran out of shared memory): the compiled-metadata pass
+    and block B's captures record the fault in the bench record and end the bench; the reducer VOIDs with the reason."""
+    assert BENCH.count('rec["arm_fault"] = ') == 2
+    assert "except (Poisoned, ArmFault) as e:" in BENCH and "return 32 if isinstance(e, Poisoned) else 34" in BENCH
+    assert 'if rec.get("arm_fault"):' in (LANE / "p222_reduce.py").read_text(encoding="utf-8")
 
 
 def test_the_bench_calls_k25_as_the_served_route():
@@ -198,17 +208,18 @@ def test_need_bench_is_derived_from_p156s_and_p145s_records_times_one_and_a_half
     sweep_gpu = sum(144 * n_sel * (2 + red.SELECT_ITERS) * L * call[p] * slow[p] / 1e3 for p in ("gu", "dn"))
     sweep_host = len(first) * n_sel * host
     t_ms = L * (call["gu"] + call["dn"])             # T's graph: every arm taken at the tree's time (conservative)
-    per_rep = 7 * host + (7 * 2 + 2 * len(red.ARMS) * red.ITERS) * t_ms / 1e3
+    graphs = len(red.ARMS) + 1                       # the spacer and every arm, captured each rep
+    per_rep = graphs * host + (graphs * 2 + 2 * len(red.ARMS) * red.ITERS) * t_ms / 1e3
     read = len(red.READ_STEPS) * per_rep
-    meta = 12 * max(first)
+    meta = 2 * len(red.ARMS) * max(first)
     box = compiles + sweep_gpu + sweep_host + read + meta
     assert round(compiles, 1) == 763.2 and round(sweep_gpu, 1) == 135.2 and round(sweep_host, 1) == 145.2
-    assert round(t_ms, 2) == 12.13 and round(per_rep, 3) == 2.066 and round(read, 1) == 260.3 and round(meta, 1) == 31.8
-    assert round(box) == 1336 and round(box * 1.5) == 2003
+    assert round(t_ms, 2) == 12.13 and round(per_rep, 3) == 1.736 and round(read, 1) == 208.3 and round(meta, 1) == 26.5
+    assert round(box) == 1278 and round(box * 1.5) == 1918
     need = int(re.search(r"^NEED_BENCH=(\d+)", RUN, re.M).group(1))
-    assert need == math.ceil(box * 1.5 / 100) * 100 == 2100
-    for figure in ("288 x 2.65 = 763.2 s", "135.2 s", "145.2 s", "126 x 2.066 = 260.3 s", "12 x 2.65 = 31.8 s",
-                   "about 1,336 s; x1.5 = 2,003 s"):
+    assert need == 2100 >= math.ceil(box * 1.5 / 100) * 100 == 2000     # Amendment 1 keeps the registered, larger bound
+    for figure in ("288 x 2.65 = 763.2 s", "135.2 s", "145.2 s", "120 x 1.736 = 208.3 s", "10 x 2.65 = 26.5 s",
+                   "about 1,278 s; x1.5 = 1,918 s"):
         assert figure in PREREG, figure
 
 
@@ -285,6 +296,8 @@ REDUCE_MUTANTS = [
     ('    if rec.get("route_sha256") != ROUTE_SHA256 and not shake:\n', "    if False:\n"),
     # the tie-break dropped: M served even within TIE_BAR of c1
     ("    if m == C1 or m_over_c1 < TIE_BAR:\n", "    if m == C1:\n"),
+    # a recorded arm fault not read as a VOID (Amendment 1)
+    ('    if rec.get("arm_fault"):\n', "    if False:\n"),
     # the sweep's order not checked
     ('    if not shake and (rec.get("select_steps") != list(SELECT_STEPS) or order != sweep_order()):\n',
      "    if False:\n"),

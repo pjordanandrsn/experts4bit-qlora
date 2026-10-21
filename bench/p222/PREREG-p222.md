@@ -48,9 +48,8 @@ default (T, the tree at today's plan) by at least 1.10x on routing draws the sel
 | P | today's | today's | prmt | the decode alone (`E4B_K25_LUT=prmt`, no code change), reported |
 | C1 | 64/256/4/2 | 128/128/8/3 | prmt | e4b's `c1` (`E4B_K25_PLAN=c1`, no code change), reported |
 | **M** | block A's selection | block A's selection | prmt | **the registered question** |
-| TM | M's | M's | tree | M's plan without the decode, reported |
 
-T against P moves only the decode; P against M moves only the plan; TM against M only the decode again. T/T2 is the
+T against P moves only the decode; P against M moves only the plan (Amendment 1 dropped TM, the tree at M's plan). T/T2 is the
 only same-cubin difference, and it is the instrument's check. **A plan is its own compile**, so ratios across plans price
 the whole compile (tile, pipeline depth, warps, registers, shared memory), which is what a served change would ship.
 
@@ -67,8 +66,8 @@ sha256 of the int8 table (`ROUTE_SHA256`): A `996d7f09...`, B `5f368c0f...`.
 - **What it is not:** Mixtral's real router picks experts unevenly, which this draw does not model. At ~7.9 of 8
   experts touched, the weight stream per step is almost routing-independent, and the K25 programs differ only in rows
   per tile. The served read, with real prompts, is the routing test.
-- **A selects, B reads:** the plan is chosen on A's steps 0, 16, ..., 112 (8 steps) and graded on B's steps 0-125 (126
-  reps, 21 Williams squares). No draw of B is used by the selection.
+- **A selects, B reads:** the plan is chosen on A's steps 0, 16, ..., 112 (8 steps) and graded on B's steps 0-119 (120
+  reps, 12 Williams squares of 10 orders, Amendment 1). No draw of B is used by the selection.
 
 ## The instrument (`p222_bench.py`)
 
@@ -90,7 +89,7 @@ P160's instrument, with P156's sweep in front of it. Everything not named here i
   (a plan that moves a bit is excluded and recorded). Then 5 timed replays of its one-projection graph on each of A's 8
   steps. A plan that cannot compile or launch is recorded and excluded.
 - **Block B, the reading:** P160's reps: the spacer **S** (T's calls with their own outputs, never timed) and every arm's
-  graph captured in the rep's Williams row (r mod 6); 10 timed replays per arm, interleaved, **each right after an
+  graph captured in the rep's Williams row (r mod 10: five arms, Amendment 1); 10 timed replays per arm, interleaved, **each right after an
   untimed replay of S**; an NVML thread sampling SM and memory clocks, power and the **enforced power limit** every 5 ms
   while a timed replay runs; after the replays, every arm's outputs against T's, `torch.equal`.
 - **Per arm, reported:** the registers, spills and shared memory each projection's plan compiled to.
@@ -101,7 +100,7 @@ P160's instrument, with P156's sweep in front of it. Everything not named here i
   mean over A's 8 steps of each step's median replay; ties to the lower grid index. M is that pair. Today's plan and
   c1's pair are in the grid, so M may be either. **Reported:** each projection's runner-up time over the winner's
   (`selection_margin`), so a near-tie selection is visible.
-- **The reading:** every ratio is paired per rep (each arm's median of its 10 replays), read as the median over B's 126
+- **The reading:** every ratio is paired per rep (each arm's median of its 10 replays), read as the median over B's 120
   reps with the larger-of SE (P155's rule: the larger of sqrt(pi / 2) sd / sqrt(n) and a seeded 2,000-resample bootstrap
   of the median; seed 222), and a lower bound of the median minus 2 SE.
 - **VOID** (the instrument):
@@ -114,7 +113,7 @@ P160's instrument, with P156's sweep in front of it. Everything not named here i
   - **the clocks are unread**, or **any sample's enforced power limit is under 575 W**.
 - **NO_GO with a contract finding:** P, C1 or M moves a bit against T on any rep. K25's decodes and plans move no
   output bit by construction (`nf4_smallm.py`'s docstring), so this would be a finding against grouped-nf4-gemm, and no
-  timing is ruled on. (TM moving a bit is reported.)
+  timing is ruled on.
 - **GO:** M's median T/M minus 2 SE **>= 1.10**, AND the same bound **clock-adjusted >= 1.10** (P160's one-sided
   adjustment: if M's median SM clock is above T's, the bound is multiplied by T's clock over M's; a slower-clocked M is
   never credited).
@@ -124,7 +123,7 @@ P160's instrument, with P156's sweep in front of it. Everything not named here i
 - **On GO, the served read's arm (`served_arm`, named before data):** **P** if M is today's plan in both projections
   (the decode alone); **C1** if M is c1's pair, or if M's median over C1 on B is under **1.02** (a new pair that does not
   clearly beat the existing knob is not worth a code PR); otherwise **M**, which needs a `_K25_PLANS` code PR first.
-- **Reported, never ruling:** P/T, C1/T and TM/T with their clock bounds; M over C1; each arm's clocks and the label
+- **Reported, never ruling:** P/T and C1/T with their clock bounds; M over C1; each arm's clocks and the label
   "clock-confounded" where an arm's median SM clock is off T's by more than 2 %, or its median memory clock by more than
   1 %; the milliseconds per arm; the compiled metadata; the sweep's every plan; the selection margin; the walls.
 
@@ -148,11 +147,11 @@ this registration merges, and before the reading:
   first), no power floor. Declared at most $0.40/h, **guard 0.75 h**, at most 10 GB at <= $0.011/GB (the install; no
   model is fetched): worst case 0.75 x $0.40 + 10 x $0.011 = **$0.41**, under the standing rule. (Read-only search at registration, 2026-10-21: under the launcher's filters with a
   16 GB host-RAM floor, RTX A4000 listed none, L4 from $0.362/h, RTX 4090 from $0.442/h.) **Its own fit:** `NEED_BENCH` = 600 s for a shakedown id (12 plan compiles at P156's
-  slowest 2.65 s = 31.8 s, 12 metadata compiles 31.8 s, and 2 layers' sweep and 6 reps a few seconds: about 70 s,
+  slowest 2.65 s = 31.8 s, 10 metadata compiles 26.5 s, and 2 layers' sweep and 6 reps a few seconds: about 60 s,
   floored at 600 s), so `FIT` = 600 + 600 + 600 = 1800 s, `FIT_NEED` = 2250 s, and (300 + 1800) x 1.25 = 2625 s <= 2700 s
   (0.75 h). It finishes 0 only on the reducer's
   **SHAKEDOWN**, which runs every structural check and is never graded.
-- **What it shows:** the install, the tripwire, the premise, the sweep, the selection, the six arms, the spacer, the
+- **What it shows:** the install, the tripwire, the premise, the sweep, the selection, the five arms, the spacer, the
   clocks and the receipts, end to end. **What it cannot show:** sm_120's speed. Its times seed nothing.
 - An instrument fault it finds is fixed by an amendment before the reading.
 
@@ -170,10 +169,11 @@ this registration merges, and before the reading:
     (0.924 ms gate_up, 0.592 ms down, the tree at today's plan), scaled by P156's mean sweep slowdown over today's plan
     (1.155 gate_up, 1.739 down): 135.2 s.
   - **The sweep's host time:** 288 x 8 graphs at P160's per-graph host cost (0.063 s, from P156's confirmation): 145.2 s.
-  - **The reading:** per rep, 7 graphs' host cost, 14 warm executions and 120 replays (60 timed, 60 spacer), every arm
-    at T's time (12.13 ms a graph of 8 layers): 126 x 2.066 = 260.3 s.
-  - **The compiled metadata:** 12 x 2.65 = 31.8 s.
-  - So about 1,336 s; x1.5 = 2,003 s, rounded up: `NEED_BENCH` = **2100 s**. The step alarm is 2,700 s.
+  - **The reading:** per rep, 6 graphs' host cost, 12 warm executions and 100 replays (50 timed, 50 spacer), every arm
+    at T's time (12.13 ms a graph of 8 layers): 120 x 1.736 = 208.3 s.
+  - **The compiled metadata:** 10 x 2.65 = 26.5 s.
+  - So about 1,278 s; x1.5 = 1,918 s. `NEED_BENCH` stays **2100 s**, the registered and larger bound (Amendment 1
+    lowered the derivation from 1,336 s and 2,003 s). The step alarm is 2,700 s.
   - **The install, tripwire, self-tests and premise:** `INSTALL_TO_GATE_S` = 600 s (P160's). **The reserve:**
     `RESERVE` = 600 s.
   - **The runner's check, before the install:** `FIT` = 600 + 2100 + 600 = 3300 s, and `FIT_NEED` = 3300 x 1.25 = 4125 s.
@@ -193,6 +193,31 @@ this registration merges, and before the reading:
 - **Sequencing:** this registration's merge after one independent review and the maintainer's pass; then the shakedown;
   then the exec ACK on the bus (the kit hash `staged-p222.sha256`, the e4b launch commit and the gnf4 pin, compared with
   the reviewed ones), the pin before create, the shared pre-flight, and `--validate` on the exact manifest.
+
+
+## Amendment 1 (2026-10-21, before any reading): TM is dropped, and an arm fault is recorded
+
+**The evidence.** The paid shakedown `p222-shake-1` (an L4, sm_89, $0.022, receipt in the private receipt store) ran
+the install, the tripwire, both self-tests, the premise (27 passed), the sweep and the selection cleanly. It then
+crashed in block B while compiling **TM**, the tree at M's plan: M's down plan 128/256/8/4 under the tree needs
+210,944 B of shared memory against the 101,376 B per-block limit. The RTX 5090 (sm_120) has a similar per-block limit,
+so the reading would have crashed the same way.
+
+**The ruling (the maintainer, before any reading):**
+1. **TM is dropped.** M stays what the registration asks: the prmt plan the sweep selects, with no eligibility term
+   for its tree variant. Restricting M to plans whose tree variant compiles would change what the GO reads and could
+   exclude the best prmt plan, all to save an arm that never ruled. The decomposition keeps T/P (the decode at today's
+   plan) and P/M (the plan under prmt); only the tree-at-M interaction goes.
+2. **Block B runs five arms** (T, T2, P, C1, M) in Williams' design for an odd count: the five cyclic orders and their
+   mirrors, 10 orders a square, each arm in each position twice and each ordered pair adjacent twice. B's reading
+   takes steps 0-119 of seed 2221: **120 reps, 12 whole squares**.
+3. **An arm fault is recorded, never a crash.** A compile, launch or capture failure in the compiled-metadata pass or
+   in block B is written to the bench record (`arm_fault`) and ends the bench (rc 34); the reducer VOIDs with the
+   reason.
+
+**Unchanged:** the GO rule and its bar, the seeds, block A and the selection, the served-arm rule, the card, the
+budget and `NEED_BENCH` (2100 s, now a looser bound), the shakedown's terms. Next: `p222-shake-2` on the same terms,
+and the exec ACK only after it reads SHAKEDOWN.
 
 ## Receipts
 

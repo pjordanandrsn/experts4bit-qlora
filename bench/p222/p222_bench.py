@@ -11,7 +11,7 @@ The routing is seeded synthetic top-2 (``p222_reduce.picks``): no Mixtral router
 - **Block A, the SELECTION (reported):** each plan of P156's 144-plan grid under ``lut="prmt"``, per projection, in the
   registered shuffled order: its outputs against the tree at today's plan (bit for bit, every layer), then 5 timed
   replays on each of 8 steps of A. ``p222_reduce.select`` names M.
-- **Block B, the READING:** six arms (``p222_reduce.ARMS``) on 126 steps of B. Each rep captures the spacer S (T's calls
+- **Block B, the READING:** five arms (``p222_reduce.ARMS``, Amendment 1) on 120 steps of B. Each rep captures the spacer S (T's calls
   with their own outputs) and every arm's graph (both GEMMs of every layer) in the rep's Williams row, then replays the
   arms interleaved, 10 timed replays each, every one right after an untimed replay of S. An NVML thread samples clocks,
   power and the enforced limit, tagged with the arm replaying. After the replays, every arm's outputs are compared with
@@ -38,6 +38,10 @@ import p222_reduce as R  # noqa: E402  (the registered rules: the staged sibling
 
 class Poisoned(RuntimeError):
     """A failure left the CUDA context unusable; nothing after it can be timed."""
+
+
+class ArmFault(RuntimeError):
+    """An arm's graph could not be captured (Amendment 1): recorded in the bench record, and the reducer VOIDs."""
 
 
 class _FieldValue(ctypes.Structure):          # nvmlFieldValue_t
@@ -328,9 +332,18 @@ def main(a):
                 rec["compiled"][arm][proj] = seen[key]
                 continue
             before = set(compiled_variants(kfn))
-            for li in range(L):
-                call[proj](li, tabs0[li], plan, lut)
-            torch.cuda.synchronize()
+            try:
+                for li in range(L):
+                    call[proj](li, tabs0[li], plan, lut)
+                torch.cuda.synchronize()
+            except Exception as e:                       # Amendment 1: recorded; the reducer VOIDs with the reason
+                check_context()
+                rec["arm_fault"] = f"{arm} {proj} {R.plan_key(plan)} {lut}: {type(e).__name__}: {str(e)[:200]}"
+                rec.update(walls=walls, wall_s=round(time.time() - t0, 1))
+                with open(a.out, "w", encoding="utf-8", newline="\n") as f:
+                    json.dump(rec, f, indent=1)
+                print(f"P222_ARM_FAULT {rec['arm_fault']}", flush=True)
+                return 34
             seen[key] = rec["compiled"][arm][proj] = new_variants(kfn, before)
     walls["compile_s"] = round(time.time() - t, 1)
 
@@ -353,9 +366,12 @@ def main(a):
                 graphs = {R.SPACER: capture(graph_fn(R.SPACER, tabs))}   # its own buffers: never timed
                 for arm in rot:
                     graphs[arm] = capture(graph_fn(arm, tabs))
-            except Exception:
-                check_context()
+            except Poisoned:
                 raise
+            except Exception as e:                       # Amendment 1: a capture that fails is recorded, never a crash
+                check_context()
+                rec["arm_fault"] = f"rep {r} step {s} capture: {type(e).__name__}: {str(e)[:200]}"
+                raise ArmFault(rec["arm_fault"]) from e
             rp, n_spacer = {arm: [] for arm in rot}, 0
             for _ in range(R.ITERS):
                 for arm in rot:
@@ -374,13 +390,15 @@ def main(a):
             torch.cuda.empty_cache()
             print(f"P222_REP {r} step {s} " + " ".join(f"{a_}={statistics.median(rp[a_]):.3f}" for a_ in R.ARMS)
                   + f" identical={all(ident.values())}", flush=True)
-    except Poisoned as e:
+    except (Poisoned, ArmFault) as e:
         sampler.stop()
-        rec.update(clocks=sampler.summary(), poisoned=str(e), walls=walls, wall_s=round(time.time() - t0, 1))
+        rec.update(clocks=sampler.summary(), walls=walls, wall_s=round(time.time() - t0, 1))
+        if isinstance(e, Poisoned):
+            rec["poisoned"] = str(e)
         with open(a.out, "w", encoding="utf-8", newline="\n") as f:
             json.dump(rec, f, indent=1)
-        print(f"P222_POISONED {e}", flush=True)
-        return 32
+        print(f"P222_{'POISONED' if isinstance(e, Poisoned) else 'ARM_FAULT'} {e}", flush=True)
+        return 32 if isinstance(e, Poisoned) else 34
     sampler.stop()
     walls["read_s"] = round(time.time() - t, 1)
     rec["clocks"] = sampler.summary()
