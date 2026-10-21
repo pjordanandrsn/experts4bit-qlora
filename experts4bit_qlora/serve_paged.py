@@ -196,12 +196,25 @@ ADAPTER_LEVER_CONFIG = {
                                   "E4B_SERVE_LMHEAD_INT4_CALIB", "E4B_SERVE_DENSE_INT4_CALIB"),
     "E4B_CALIB_SOURCE": ("E4B_SERVE_EXP_INT4_CALIB", "E4B_SERVE_ATTN_INT4_CALIB", "E4B_SERVE_LMHEAD_INT4_CALIB",
                          "E4B_SERVE_DENSE_INT4_CALIB"),
+    "E4B_CALIB_NSEQ": ("E4B_SERVE_EXP_INT4_CALIB", "E4B_SERVE_ATTN_INT4_CALIB", "E4B_SERVE_LMHEAD_INT4_CALIB",
+                       "E4B_SERVE_DENSE_INT4_CALIB"),
+    "E4B_INT4_KEEP_NF4": ("E4B_SERVE_EXP_INT4", "E4B_SERVE_EXP_INT4_CALIB"),
     "E4B_INT4_HESSIAN_BUDGET_GB": ("E4B_SERVE_EXP_INT4_CALIB",),
     "E4B_INT4_ASSIGNMENT": ("E4B_SERVE_EXP_INT4_CALIB",),
     "E4B_INT4_ARTIFACT_DIR": ("E4B_SERVE_EXP_INT4_CALIB",),
     "E4B_INT4_DUMP_ARTIFACT_DIR": ("E4B_SERVE_EXP_INT4_CALIB",),
     "E4B_INT4_EXPECTED_FINGERPRINT": ("E4B_SERVE_EXP_INT4_CALIB",),
     "E4B_MODEL_ID": ("E4B_SERVE_EXP_INT4", "E4B_SERVE_EXP_INT4_CALIB"),
+}
+#: knobs in LEVER_ENV that change no adapted weight and read no base-model calibration, each with its reason: they run
+#: under an adapter exactly as on the base server
+ADAPTER_NEUTRAL_KNOBS = {
+    "E4B_FUSE_T1_GLUE": "a fused decode RMSNorm: reads the norm weights, which no adapter trains; no re-quantization",
+    "E4B_FUSE_T1_GLUE_R2": ("folds the residual and the post-attention norm, gated bitwise against the layer's own "
+                            "composition at build; reads norm weights only"),
+    "E4B_FUSE_ROUTER_EPI": ("the router's epilogue: reads the router weight, which no adapter trains; its store "
+                            "rounds as torch's cast does"),
+    "E4B_FUSED_KV_APPEND": "the paged KV cache's append kernel: no weights at all",
 }
 ADAPTER_ALLOW_ARENA_ENV = "E4B_PAGED_ADAPTER_ALLOW_UNVERIFIED_ARENA"
 ADAPTER_ACCEPT_BASE_ENV = "E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE"

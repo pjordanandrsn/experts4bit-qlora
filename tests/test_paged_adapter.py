@@ -332,16 +332,31 @@ def test_every_lever_is_classified_refused_or_allowed_with_its_reason():
     from experts4bit_qlora import serve_paged as sp
 
     read = (_env_reads(ROOT / "experts4bit_qlora" / "serve_paged.py", "_apply_levers")
+            | _env_reads(ROOT / "experts4bit_qlora" / "serve_paged.py", "_calib_batches")
             | _env_reads(ROOT / "bench" / "p42" / "hook" / "usercustomize.py", "_apply_lanes")
+            | set(sp.LEVER_ENV)                                   # where a new lever is declared
             | {"E4B_INT8_HEAD_BW"})
-    refused, allowed, config = set(sp.ADAPTER_REFUSED_LEVERS), set(sp.ADAPTER_ALLOWED_LEVERS), set(sp.ADAPTER_LEVER_CONFIG)
-    assert read == refused | allowed | config, ("unclassified", read - refused - allowed - config,
-                                                "stale", (refused | allowed | config) - read)
-    assert not (refused & allowed) and not (refused & config) and not (allowed & config)
+    tables = {"refused": set(sp.ADAPTER_REFUSED_LEVERS), "allowed": set(sp.ADAPTER_ALLOWED_LEVERS),
+              "config": set(sp.ADAPTER_LEVER_CONFIG), "neutral": set(sp.ADAPTER_NEUTRAL_KNOBS)}
+    every = set().union(*tables.values())
+    assert read == every, ("unclassified", read - every, "stale", every - read)
+    names = [n for t in tables.values() for n in t]
+    assert len(names) == len(set(names)), "a name sits in two tables"
+    refused = tables["refused"]
+    assert all(why for why in sp.ADAPTER_NEUTRAL_KNOBS.values())
     assert all(levers and set(levers) <= refused for levers in sp.ADAPTER_LEVER_CONFIG.values())
     assert all(("(i" in why or "(ii)" in why) for why in sp.ADAPTER_REFUSED_LEVERS.values())
     assert all("CALIB" not in k or "(ii)" in why for k, why in sp.ADAPTER_REFUSED_LEVERS.items())
     assert all("weight-only" in why and "no activation statistics" in why for why in sp.ADAPTER_ALLOWED_LEVERS.values())
+
+
+def test_a_new_lever_declared_in_lever_env_fails_the_census(monkeypatch):
+    """The mutant the census exists for: a lever added to LEVER_ENV and classified nowhere."""
+    from experts4bit_qlora import serve_paged as sp
+
+    monkeypatch.setattr(sp, "LEVER_ENV", tuple(sp.LEVER_ENV) + ("E4B_SERVE_SOME_NEW_LEVER",))
+    with pytest.raises(AssertionError, match="unclassified"):
+        test_every_lever_is_classified_refused_or_allowed_with_its_reason()
 
 
 def test_health_and_models_carry_the_adapter_and_the_base_name_is_not_served():
