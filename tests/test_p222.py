@@ -233,7 +233,7 @@ def test_the_shakedown_fits_its_own_guard_at_its_stated_price():
     assert order == sorted(order)
     fit = 600 + 600 + 600
     assert fit * 125 // 100 == 2250 and (BOOT_S + fit) * HEADROOM == 2625 <= 0.75 * 3600
-    for figure in ("**guard 0.75 h**", "0.75 x $0.40 =\n  **$0.30**", "(300 + 1800) x 1.25 = 2625 s <= 2700 s"):
+    for figure in ("**guard 0.75 h**", "0.75 x $0.40 + 10 x $0.011 = **$0.41**", "(300 + 1800) x 1.25 = 2625 s <= 2700 s"):
         assert figure in PREREG, figure
 
 
