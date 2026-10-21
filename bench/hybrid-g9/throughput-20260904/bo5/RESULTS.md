@@ -1,4 +1,4 @@
-# bo5 — results (2026-09-04, box 49841214, one RTX 5090)
+# bo5 — results (2026-09-04, Vast box S5, one RTX 5090)
 
 The tables below are the verbatim output of `python buildout_reduce.py . --ref ../bo3` over the JSON receipts in this directory (cuts, box, protocol and layout: [`README.md`](README.md)). Gate cells and the registered verdict are the registered rule in perplexity on every text scored; the nats beside them are read against the family's arithmetic-order floor and never change the verdict. `i6` = integration-6 @0535930 (bo5), `i7` = integration-7 @d090940 (bo5b/bo5c).
 

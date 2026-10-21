@@ -20,7 +20,7 @@ below is from those files or from the arm receipts they read.
 - **Lane total:** $1.4523 against the $2.625 line. Both teardowns proven.
 - **Box.** One RTX 5090 (32,607 MiB, driver 580.105.08, 520 W, 3,105 MHz) on an AMD EPYC 7302 (64 CPUs, 504 GiB;
   cgroup 242 GiB, so **241 GiB effective**, above the 96 GiB floor `p67_run.sh` enforces). Vast verified/secure
-  instance 52449460. 2 h 22 min from launch to teardown, inside the 3 h guard.
+  machine 48741. 2 h 22 min from launch to teardown, inside the 3 h guard.
 - **Software.** e4b 0.37.3 at `cd2716d` (this lane's amendment commit), grouped-nf4-gemm 0.32.1 at `9206352f`
   (the registered pin), torch 2.8.0+cu128, transformers 5.17.0, bitsandbytes 0.50.2, peft 0.20.0.
 - **Pins and knobs.** All 8 staged files matched `staged.sha256` on the box; every registered knob matched

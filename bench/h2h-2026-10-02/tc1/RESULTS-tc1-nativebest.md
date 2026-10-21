@@ -15,7 +15,7 @@ the validity predicates. Held-out losses are reported beside the times and never
 
 ## P14 on `tc1-5090-35`: at steady state axolotl's scattermoe steps 9 % faster than e4b as shipped
 
-Amendment 8 re-asked P13's axolotl half over 200 steps of the field recipe, read on steps 101..200. The box was instance 53935033
+Amendment 8 re-asked P13's axolotl half over 200 steps of the field recipe, read on steps 101..200. The box was machine 96642
 (Intel Xeon E5-2698 v4, driver 595.71.05), e4b `7c31b88`, $1.76, with receipts in [`receipts/tc1-5090-35/`](receipts/tc1-5090-35/).
 Every arm is VALID, and the reducer's box-side `RESULTS-tc1.md` scores P14.
 
@@ -48,7 +48,7 @@ autotuning in the scattermoe kernels. The cause is still not measured. This is o
 ## P15 on `tc1-5090-36`: the steady-state ordering replicates on a second host
 
 Amendment 9 asked P14 again on a different machine, with the harness and package byte-identical to `tc1-5090-35`'s (e4b pinned at
-`7c31b88`). The box was instance 53971676 on Vast machine 45501, an AMD Ryzen 9 3900X with driver 595.71.05; `tc1-5090-35` ran on
+`7c31b88`). The box was Vast machine 45501, an AMD Ryzen 9 3900X with driver 595.71.05; `tc1-5090-35` ran on
 machine 96642, an Intel Xeon E5-2698 v4. It cost $0.93, with receipts in [`receipts/tc1-5090-36/`](receipts/tc1-5090-36/). Every arm is
 VALID.
 
@@ -75,7 +75,7 @@ both: 0.901 and 0.911. Per amendment 9, the two boxes' numbers are not divided i
 
 ## P13 is scored on `tc1-5090-34` and is UNTESTED
 
-`tc1-5090-34`: instance 53927504, AMD EPYC 9334, driver 590.48.01, e4b `2ad3187`, $0.44. Every arm is VALID.
+`tc1-5090-34`: machine 41531, AMD EPYC 9334, driver 590.48.01, e4b `2ad3187`, $0.44. Every arm is VALID.
 
 | arm | s/step, draws 1 / 2 (median 11..20) | stability | peak VRAM | held-out at 20, draws 1 / 2 |
 |---|---|---|---|---|
@@ -109,7 +109,7 @@ The new per-arm clock record (`gpuclk_*.txt`) shows the card at about 2.68 GHz S
 
 ## The first box, `tc1-5090-33`
 
-Instance 53916526, AMD EPYC 7663, driver 580.95.05, e4b `bb32ea8`, $0.51. The box ran before the reducer registered the token, and
+machine 142284, AMD EPYC 7663, driver 580.95.05, e4b `bb32ea8`, $0.51. The box ran before the reducer registered the token, and
 its own `RESULTS-tc1.md` reads the anchor VOID for that reason alone. Re-reduced, every arm that trained is VALID, and P13 is UNTESTED
 on both halves:
 

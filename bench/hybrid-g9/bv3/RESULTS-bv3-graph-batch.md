@@ -1,7 +1,7 @@
 # RESULTS — BV3: the B>1 CUDA-graph decode loop
 
 Adjudicated 2026-08-26 by `bv3_verdict.py` on
-`receipts-bv3/bv3_report.json`. Box: instance 48709950 (post-F2
+`receipts-bv3/bv3_report.json`. Box: Vast box S14 (post-F2
 serving anchor 7.25 ms).
 
 ## VERDICT: REFUSE — identity gate, as registered

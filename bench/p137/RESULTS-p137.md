@@ -25,7 +25,7 @@ Registration: [PREREG-p137.md](PREREG-p137.md) (#1718), with Amendments 1 (#1722
 - **Order:** one process, one load, then ABBA: A0a L1a L1b A0b. Every arm starts from the same hash-checked adapter
   snapshot. An untimed warm-up of both loops runs before the arms.
 - **Box:** one rented RTX 4090 (sm_89, 24 GB, driver 595.71.05), on a Vast.ai verified/secure host: machine 51612,
-  instance 56546276, AMD EPYC 7742, 256 threads. Cost $0.745.
+  machine 51612, AMD EPYC 7742, 256 threads. Cost $0.745.
 
 ## Numbers
 

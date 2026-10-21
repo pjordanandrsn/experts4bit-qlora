@@ -93,9 +93,9 @@ why it was replaced before any data.
 
 ## Box and cost
 
-- **`p97-prove-1`:** one RTX 5090 (sm_120), Vast instance 53923939, **$0.0221**, OK, PROVED; destroyed at
+- **`p97-prove-1`:** one RTX 5090 (sm_120), Vast machine 142284, **$0.0221**, OK, PROVED; destroyed at
   2026-10-02T21:47:25Z, instance absent.
-- **`p97-5090-1`:** one RTX 5090 (sm_120, driver 580.95.05, 32,607 MiB), Vast machine 142284, instance 53924396, AMD
+- **`p97-5090-1`:** one RTX 5090 (sm_120, driver 580.95.05, 32,607 MiB), Vast machine 142284, AMD
   EPYC 7663; image `pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel`. **$0.2489**, 1,583 s, OK.
   - The fetch ran about 240 MB/s (authenticated, 8 workers) against the single-stream probe's 38.6 MB/s.
   - Destroyed at 2026-10-02T22:15:43Z, instance absent.

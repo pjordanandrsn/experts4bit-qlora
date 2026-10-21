@@ -126,7 +126,7 @@ The registration chooses no lever.
 
 ### The reading (`p123-5090-1`)
 
-**Host:** one RTX 5090 on an AMD EPYC 7C13 host (256 threads, ~1 TB RAM), 320 GB free. It was Vast instance 54935034.
+**Host:** one RTX 5090 on an AMD EPYC 7C13 host (256 threads, ~1 TB RAM), 320 GB free. It was Vast machine 45511.
 - The card: sm_120, driver 595.71.05, 170 SMs, **power limit 450 W**, SM clock max 3090 MHz.
 - Nsight Systems ran as root. CPU sampling was unavailable (perf paranoid level 4), which the GPU trace does not use.
 

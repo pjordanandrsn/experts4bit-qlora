@@ -1,6 +1,6 @@
 # Results — P46: the adapter path at the field recipe (Qwen3-30B-A3B, RTX 5090, 2026-09-19)
 
-Pre-registration: [`P46-PREREG.md`](P46-PREREG.md) (+ amendment 1, written after the data and marked so). Run `p46-qwen3lora` (RTX 5090, vast 51551542, e4b `3c14f567`, gnf4 `d8f737a6` = the P46 knobs), receipt `receipts/experts4bit-qlora/2026-09-19/p46-qwen3lora/tp4/`, read by `bench/p46/p46_reduce.py`. The fixture is tp4's field recipe (alpaca, seq 2048, mb 2 × accum 4, r 16, adamw_8bit, 20 steps, the same tokens sha as P43/P45); every arm trains the same 30,428 tokens from the same init (`init_sha` identical across arms).
+Pre-registration: [`P46-PREREG.md`](P46-PREREG.md) (+ amendment 1, written after the data and marked so). Run `p46-qwen3lora` (RTX 5090, Vast machine 150543, e4b `3c14f567`, gnf4 `d8f737a6` = the P46 knobs), receipt `receipts/experts4bit-qlora/2026-09-19/p46-qwen3lora/tp4/`, read by `bench/p46/p46_reduce.py`. The fixture is tp4's field recipe (alpaca, seq 2048, mb 2 × accum 4, r 16, adamw_8bit, 20 steps, the same tokens sha as P43/P45); every arm trains the same 30,428 tokens from the same init (`init_sha` identical across arms).
 
 | arm | `NF4_QLORA_LORA_PATH` | s/step (median, steps 11+) | tok/s | peak VRAM GB | held-out final | Δ vs reference | path census per step (of 768 `fused_grouped_lora` calls) |
 |---|---|---|---|---|---|---|---|

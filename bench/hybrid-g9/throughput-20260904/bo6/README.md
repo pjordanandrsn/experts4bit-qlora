@@ -1,6 +1,6 @@
 # Build-out validation lane bo6 (+ bo6b, bo6c) — 2026-09-04/05, one RTX 5090: close the gap, not the gate
 
-**Box:** Vast.ai instance 49861751, RTX 5090 (sm_120, driver 580.173.02, 32607 MiB) on an AMD Ryzen Threadripper
+**Box:** Vast box S6, RTX 5090 (sm_120, driver 580.173.02, 32607 MiB) on an AMD Ryzen Threadripper
 PRO 7975WX host (64 CPUs, 251 GB, container cgroup `memory.max` 183,093,952,512 B = 170 GiB — see
 [`forensics.txt`](forensics.txt)); torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1, triton 3.4.0. No
 memory-bandwidth probe ran on this box.
@@ -170,7 +170,7 @@ receipts are in this directory and its rows are in the table.
   packing, K8): `calibexp_c4val_rep2` = `calibexp_c4val_rep1` bit-identically (2.800114648339439). Any sub-0.01-nat
   difference *within* this lane is real arithmetic, not run noise.
 - **The cross-lane 0.006-nat shift stays OPEN.** Qwen3's NF4 c4val1 reads 2.80318 here and 2.80923 on bo5 (box
-  49841214, integration-6 + grouped-nf4-gemm @587eb7a) on the identical window sha, while Mixtral's NF4 references
+  Vast box S5, integration-6 + grouped-nf4-gemm @587eb7a) on the identical window sha, while Mixtral's NF4 references
   agree across the same two lanes to 0.001 nats. Determinism rules out run noise; what remains is the install or the
   box. bo5's kernel install was exposed to the stale `build/lib` race (grouped-nf4-gemm tracked stale modules until
   #336; bo5's tripwire proved two of them fresh, and the race is per file), which cannot by itself explain a

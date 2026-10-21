@@ -21,7 +21,7 @@ Code under test:
 
 ## The reading (`p116-5090-2`)
 
-**Host:** one RTX 5090 (sm_120, driver 580.126.09, 575 W) on an AMD host with 128 threads. It was Vast instance 54737263
+**Host:** one RTX 5090 (sm_120, driver 580.126.09, 575 W) on an AMD host with 128 threads. It was Vast machine 55913
 on machine 55913, at $0.565/h. **Cost:** $1.078.
 
 **Timeline (the box's own log):**

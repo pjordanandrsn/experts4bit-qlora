@@ -1,4 +1,4 @@
-# bo6 — results (2026-09-04/05, box 49861751, one RTX 5090)
+# bo6 — results (2026-09-04/05, Vast box S6, one RTX 5090)
 
 The tables below are the verbatim output of `python buildout_reduce.py .` over the JSON receipts in this directory (cuts, box, protocol, the two calibration methods and the layout: [`README.md`](README.md)). Gate cells and the registered verdict are the registered rule in perplexity on every text scored; the nats beside them are read against the family's arithmetic-order floor and never change the verdict — a licensed improvement whose delta on a text is inside the floor is called parity there, never an improvement by a number. Every delta is against the NF4 arm re-scored on this lane — nothing on this page is compared across lanes, and there is no speed ratio because this lane has no NF4 speed arm (bo7 measures it). The `method` column is read from each arm's own run log (`logs/run_<family>_ppl_<arm>.log`): `INT4EXP hessians:` = all-at-once, `INT4EXP calibrating (streamed):` = streamed. Three Mixtral cells print **`alarm`**: arms the lane script ran that were killed by their own per-arm alarm during the streamed calibration before producing a receipt (`Alarm clock` in `logs/outer.log`) — a harness limit, not a model result, and no number is quoted for them. bo6c's four arms (2026-09-05, same box and cut) are in the Qwen3 table: `all_calibexp_n128` is the shipping stack.
 
@@ -60,7 +60,7 @@ Gate cells and the registered verdict are in perplexity, the registered unit; th
   `calibexp_c4val_rep1` bit-identically (2.800114648339439) — the streamed GPTQ calibration (Hessian tap, GPU
   solve, `min_rows` fallbacks), the packing and the K8 score are run-to-run deterministic on one box and cut, bake
   included. That settles what the 0.006-nat difference between this NF4 reference and bo5's on the identical
-  window (2.80923 on box 49841214, integration-6 + grouped-nf4-gemm @587eb7a) is *not*: it is not run noise. It
+  window (2.80923 on Vast box S5, integration-6 + grouped-nf4-gemm @587eb7a) is *not*: it is not run noise. It
   stays OPEN (README, instrument notes); no sub-0.01-nat reading on this page is compared with bo5's.
 - **Attempt 3, all-at-once calibration (integration-8 @db2a070).** Calibrated int4 experts alone on the text that
   failed with RTN experts on bo5: c4val1 2.81222 (16.64678) = **+0.1498 ppl (+0.0090 nats, sub-floor) — FAIL as

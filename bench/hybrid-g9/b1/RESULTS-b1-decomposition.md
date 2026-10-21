@@ -1,7 +1,7 @@
 # RESULTS — B=1 single-stream decomposition: BRANCH-2 (abstraction tax)
 
 Run 2026-08-24 against `PREREG-b1-decomposition.md` (#222), on the same
-EPYC 9755 + RTX 5090 box as the T5b Phase A cycle (vast 48576023-era
+EPYC 9755 + RTX 5090 box as the T5b Phase A cycle (Vast box S12-era
 box id 15, destroyed + verified zero). e4b at `a15d8e9` + the #223
 mechanics/instrument fixes (measured tree = branch `b1-r1-mech`
 @ `8d24316`). Receipts in `receipts-b1/`; verdict by `b1_verdict.py`

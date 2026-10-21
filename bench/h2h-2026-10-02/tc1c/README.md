@@ -4,7 +4,7 @@ Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md) — TC1
 (`TC1_GPU_CLASS="H100 NVL"`), the same harness at e4b `09b0f6a` (0.38.1; `experts4bit/` byte-identical to TC1's 079a422),
 grouped-nf4-gemm `846b512`, the same tokens (sha `bfc742f67e37`), the same per-slot init (`f7832488926eda91`), fp32 adapters in both
 frameworks, Unsloth 2026.9.14 on torch 2.12.1+cu130 with `grouped_mm` engaged on every step. Receipts: `receipts/tc1c-h100-2/`
-(private store `receipts/experts4bit-qlora/2026-10-02/tc1c-h100-2/tc1/`); one box, Vast verified-secure instance 53802633
+(private store `receipts/experts4bit-qlora/2026-10-02/tc1c-h100-2/tc1/`); one box, Vast verified-secure machine 29527
 (AMD EPYC 9534, 224 vCPU, 1.58 TB host RAM, driver 595.71.05), $4.88. The first draw (`tc1c-h100-1`) was refused at $0 before any
 instance existed (its manifest carried the 5090 pre-flight exclusion receipts, not same-class for an H100).
 
@@ -46,7 +46,7 @@ vCPUs allotted to the pod), driver 580.159.04, 141 GB RAM. It was the first lane
 
 Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 8. Amendment 7's box once more, the last re-ask under these rules.
 
-**The box.** `tc1c-h100-15`: an H100 NVL (instance 54181574, AMD EPYC 9V84, driver 580.159.03), e4b 0.45.0's code (`3888fca`), grouped-nf4-gemm v0.37.0,
+**The box.** `tc1c-h100-15`: an H100 NVL (machine 117913, AMD EPYC 9V84, driver 580.159.03), e4b 0.45.0's code (`3888fca`), grouped-nf4-gemm v0.37.0,
 nothing set, HF and axolotl skipped. Vast invoiced $2.44. Receipts: [`receipts/tc1c-h100-15/`](receipts/tc1c-h100-15/). Three earlier draws produced no box:
 `tc1c-h100-12` and `-14` were refused before any rental ($0; the first at a price that had risen to $3.01/h, the second on an exclusion
 receipt the launcher does not accept), and `-13` failed pre-flight on a 60 GB disk ($0.008). The guard ceiling was raised from $2.80/h to
@@ -72,7 +72,7 @@ Unsloth with nothing set, at 2.93 GB more peak VRAM and about ×1.23 Unsloth's e
 
 Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 7.
 
-**The box.** `tc1c-h100-11`: an H100 NVL (instance 54150922, AMD EPYC 9534, driver 595.71.05), e4b 0.45.0's code (`3171621`), grouped-nf4-gemm
+**The box.** `tc1c-h100-11`: an H100 NVL (machine 29527, AMD EPYC 9534, driver 595.71.05), e4b 0.45.0's code (`3171621`), grouped-nf4-gemm
 v0.37.0 (`71185d6`), nothing set: no `TC1_E4B_ENV`, `GNF4_TRAIN_GEMM` unset. HF and axolotl were skipped. Vast invoiced $2.15. Receipts:
 [`receipts/tc1c-h100-11/`](receipts/tc1c-h100-11/).
 
@@ -102,8 +102,8 @@ Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendm
 grouped-nf4-gemm `81706a9` (the merge of #452, whose dequant kernel is bit-equal to the old one). HF and axolotl were skipped.
 Receipts are in [`receipts/tc1c-h100-9/`](receipts/tc1c-h100-9/) and [`receipts/tc1c-h100-10/`](receipts/tc1c-h100-10/).
 
-- **Box R** (`tc1c-h100-9`, instance 54128342, $2.65 invoiced): every e4b arm with `GNF4_TRAIN_GEMM=grouped_mm`.
-- **Box K** (`tc1c-h100-10`, instance 54128460, $2.76 invoiced): the same plus `E4B_MOE_KEEP_LAYERS=all`, the compact delta and
+- **Box R** (`tc1c-h100-9`, machine 29527, $2.65 invoiced): every e4b arm with `GNF4_TRAIN_GEMM=grouped_mm`.
+- **Box K** (`tc1c-h100-10`, machine 29527, $2.76 invoiced): the same plus `E4B_MOE_KEEP_LAYERS=all`, the compact delta and
   host reuse.
 
 Engagement is verified on every fused arm. `route_ab` names `grouped_mm` with 16,896 forward and 7,680 dgrad calls on box R, and
@@ -149,7 +149,7 @@ draw noise and Unsloth is EQUIVALENT. Held-out losses at N = 20: box R e4b 0.846
 
 Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 5.
 
-**The box.** `tc1c-h100-8`: Vast instance 54116273, H100 NVL (capability 9.0), torch 2.8.0+cu128. Vast invoiced $0.33: GPU $0.324,
+**The box.** `tc1c-h100-8`: Vast machine 29527, H100 NVL (capability 9.0), torch 2.8.0+cu128. Vast invoiced $0.33: GPU $0.324,
 storage $0.007, download $0.001 for 4.4 GB. Receipts are in [`receipts/tc1c-h100-8/`](receipts/tc1c-h100-8/), with the per-config table
 in `FUSEDSWEEP.json`. The code was e4b `4ce22eb` and grouped-nf4-gemm `951a97f`. Token `fusedsweep`, with no model:
 [`../../tc1/fused_sweep.py`](../../tc1/fused_sweep.py) ran the same 128 unique recorded calls as amendment 3.
@@ -184,8 +184,8 @@ Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendm
 (#450). HF and axolotl were skipped. Receipts are in [`receipts/tc1c-h100-6/`](receipts/tc1c-h100-6/) and
 [`receipts/tc1c-h100-7/`](receipts/tc1c-h100-7/).
 
-- **Box R** (`tc1c-h100-6`, instance 54119104, $2.49 invoiced): every e4b arm with `GNF4_TRAIN_GEMM=grouped_mm`.
-- **Box K** (`tc1c-h100-7`, instance 54119272, $2.49 invoiced): the same plus `E4B_MOE_KEEP_LAYERS=all`, the compact delta and host
+- **Box R** (`tc1c-h100-6`, machine 29527, $2.49 invoiced): every e4b arm with `GNF4_TRAIN_GEMM=grouped_mm`.
+- **Box K** (`tc1c-h100-7`, machine 29527, $2.49 invoiced): the same plus `E4B_MOE_KEEP_LAYERS=all`, the compact delta and host
   reuse.
 
 Engagement is verified on every fused arm. `route_ab` names `grouped_mm` with 16,896 forward and 7,680 dgrad calls on box R, and
@@ -224,7 +224,7 @@ take about 0.8 s per step against the fused kernels' 1.42 s.
 
 Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 3.
 
-**The box.** `tc1c-h100-5`: Vast instance 54112861, H100 NVL (capability 9.0), driver 595.71.05, torch 2.8.0+cu128, bitsandbytes 0.50.2,
+**The box.** `tc1c-h100-5`: Vast machine 29527, H100 NVL (capability 9.0), driver 595.71.05, torch 2.8.0+cu128, bitsandbytes 0.50.2,
 $0.31 invoiced: GPU $0.305, storage $0.007 (corrected 2026-10-04; the receipt's GPU-time figure was $0.21). Receipts in [`receipts/tc1c-h100-5/`](receipts/tc1c-h100-5/), with the per-call table in `ROUTEBENCH.json`. The code was e4b
 `69e7962` and grouped-nf4-gemm `4509307`. Token `routebench`: no model, no Unsloth venv.
 [`../../tc1/route_bench.py`](../../tc1/route_bench.py) replays the 128 unique fused-GEMM calls of e4b's training step from
@@ -260,7 +260,7 @@ it. This box quotes no position and changes no register row.
 
 Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 2.
 
-**The box.** `tc1c-h100-4`: Vast instance 54103635 on the same machine as amendment 1's box (AMD EPYC 9534, H100 NVL, driver
+**The box.** `tc1c-h100-4`: Vast machine 29527 on the same machine as amendment 1's box (AMD EPYC 9534, H100 NVL, driver
 595.71.05), $2.97 invoiced: GPU $2.89, storage $0.07, download $0.02 for 73.6 GB (corrected 2026-10-04; the receipt's GPU-time figure was $2.80). Receipts in [`receipts/tc1c-h100-4/`](receipts/tc1c-h100-4/). It used TC1c's token. Every e4b arm ran with
 `TC1_E4B_ENV="E4B_MOE_KEEP_LAYERS=all NF4_QLORA_COMPACT_DELTA=1 GNF4_HOST_REUSE=1"`. In each of the 48 decoder layers attention alone
 is checkpointed, and the MoE activations are kept rather than recomputed; gradients are identical by construction. HF and axolotl
@@ -292,7 +292,7 @@ peak memory: e4b keeps 34.08 GB here against Unsloth's 24.27 GB. The 5090 measur
 
 Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 1.
 
-**The box.** `tc1c-h100-3`: Vast instance 54091206, AMD EPYC 9534, H100 NVL, driver 595.71.05, $4.42 invoiced: GPU $4.30, storage $0.10, download $0.02 for 73.6 GB (corrected 2026-10-04; the receipt's GPU-time figure was $4.33). Receipts in
+**The box.** `tc1c-h100-3`: Vast machine 29527, AMD EPYC 9534, H100 NVL, driver 595.71.05, $4.42 invoiced: GPU $4.30, storage $0.10, download $0.02 for 73.6 GB (corrected 2026-10-04; the receipt's GPU-time figure was $4.33). Receipts in
 [`receipts/tc1c-h100-3/`](receipts/tc1c-h100-3/). The token is the same as before. e4b `e1837cf` carries every default from TC1
 amendments 10–15 (#945's single-read grouping and pinned ring, the trimmed LoRA delta, the cost tile rule, the fused RMSNorm and rotary),
 and grouped-nf4-gemm is at `00929a4`. No environment variables were set. The comparator was unchanged: Unsloth 2026.9.14, torch

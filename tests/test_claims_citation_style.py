@@ -1,4 +1,4 @@
-"""docs/claims.json cites a rented Vast host by its machine id, never by an instance id.
+"""docs/claims.json and the live prose cite a rented Vast host by its machine id, never by an instance id.
 
 An instance id names one rental and means nothing once it is destroyed. The machine id names the host, which is what
 the host registry and a reproducer can use. Text fields read "Vast machine 114299" (or "machine 114299"). A host
@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -46,4 +47,53 @@ def test_no_claim_text_cites_a_vast_instance_id():
     found = [(c["id"], field, m.group(0))
              for c in claims for field in TEXT_FIELDS
              for m in INSTANCE_ID.finditer(c.get(field) or "")]
+    assert not found, f"cite the machine id, not the instance id: {found[:5]} ({len(found)} in all)"
+
+
+# The same style in the live prose: READMEs and RESULTS files. Left as history, never rewritten: anything under a
+# receipts/ directory, PREREG and AMENDMENT files (registered before the run), STATUS-RECORD.md, released changelogs,
+# any file with a sibling .ots, and fenced or inline code (it quotes receipts and logs verbatim).
+REPO = REGISTER.parents[1]
+
+
+def _live_prose_files() -> list[Path]:
+    tracked = subprocess.run(["git", "-C", str(REPO), "ls-files", "*.md"], capture_output=True, text=True, check=True)
+    names = tracked.stdout.split()
+    anchored = {n[: -len(".ots")] for n in subprocess.run(["git", "-C", str(REPO), "ls-files", "*.ots"],
+                                                            capture_output=True, text=True, check=True).stdout.split()}
+    keep = []
+    for n in names:
+        base = Path(n).name
+        if ("/receipts/" in f"/{n}" or "PREREG" in base.upper() or "AMENDMENT" in base.upper()
+                or base in ("STATUS-RECORD.md", "CHANGELOG.md") or n.startswith("changelog.d/") or n in anchored):
+            continue
+        keep.append(REPO / n)
+    return keep
+
+
+def _prose_lines(text: str):
+    fence = None
+    for line in text.split("\n"):
+        s = line.lstrip()
+        if fence is None and s.startswith(("```", "~~~")):
+            fence = s[:3]
+            continue
+        if fence is not None:
+            if s.startswith(fence):
+                fence = None
+            continue
+        yield " ".join(line.split("`")[0::2])
+
+
+def test_prose_lines_skip_code():
+    text = 'one rented host (machine 114299)\n```\n"instance_id": "53916526"\n```\nsee `instance 53916526` here'
+    assert not any(INSTANCE_ID.search(line) for line in _prose_lines(text))
+    assert any(INSTANCE_ID.search(line) for line in _prose_lines("it ran on instance 53916526"))
+
+
+def test_no_live_prose_cites_a_vast_instance_id():
+    files = _live_prose_files()
+    assert len(files) > 100      # the rule must still select the bench READMEs and RESULTS files
+    found = [(str(p.relative_to(REPO)), m.group(0)) for p in files
+             for line in _prose_lines(p.read_text(encoding="utf-8")) for m in INSTANCE_ID.finditer(line)]
     assert not found, f"cite the machine id, not the instance id: {found[:5]} ({len(found)} in all)"

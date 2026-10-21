@@ -206,7 +206,7 @@ adds `batched_fallback_stats(model)` for exactly this.
 
 A third evidence bundle — [`bench/h2h-20260906/tp2/`](../bench/h2h-20260906/tp2/README.md) (lane tp2, pre-registration
 `P40-PREREG.md` in the bundle: the shipped experts4bit-qlora 0.35.1 + grouped-nf4-gemm 0.30.2 from PyPI vs Unsloth
-2026.9.2 in its own venv, one rented RTX 5090 on a Ryzen 7 5700X3D host, Vast 50005568, train-anchor class
+2026.9.2 in its own venv, one rented RTX 5090 on a Ryzen 7 5700X3D host, Vast box S9, train-anchor class
 `pcie-full/launch-fast`) — so it is a new dated section, not an edit to the tables above. P38's fixture exactly, per
 family: the sha-pinned clinical set tokenised once with that family's tokenizer, seq 512, r 8 / α 16, lr 1e-4, batch 1,
 accum 1, N=60, held-out every 20. The e4b arms are `reference_attn4` and `fused_attn4` (both with NF4 attention, the

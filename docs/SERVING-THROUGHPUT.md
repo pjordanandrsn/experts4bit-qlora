@@ -113,7 +113,7 @@ quality gate open, not as a licensed best.
 
 ## The second text and the optimisation pass (bo5), measured in-repo
 
-Lane bo5 — box 49841214, the same RTX 5090 class on an EPYC 9755 host, 2026-09-04 08:5x–12:33Z; e4b
+Lane bo5 — Vast box S5, the same RTX 5090 class on an EPYC 9755 host, 2026-09-04 08:5x–12:33Z; e4b
 integration-6 @0535930 (0.34.0 + #372 + #384 + #385) and integration-7 @d090940 (+ #387), grouped-nf4-gemm
 0.29.0 + `combine_rows` — scored the second text the registered rule asks for (C4 validation, `c4val1`) on
 every calibrated pack bo3 had left at "one text", re-measured the shipped positions on one box, and A/B'd the
@@ -145,7 +145,7 @@ quote either with its box, never the ratio between them.
 
 ## Closing the gap, not the gate (bo6, bo6b, bo6c), measured in-repo
 
-Lane bo6 + bo6b + bo6c — box 49861751, an RTX 5090 on a Threadripper PRO 7975WX host, 2026-09-04 13:25Z to
+Lane bo6 + bo6b + bo6c — Vast box S6, an RTX 5090 on a Threadripper PRO 7975WX host, 2026-09-04 13:25Z to
 2026-09-05 03:18Z; e4b integration-8 @db2a070 (attempt 3) and @ae9dc122 (bo6b and bo6c: streamed calibration; bo6c's
 cut and hook v6 verified live by its tripwire, 24 GiB Hessian budget), grouped-nf4-gemm main @0b25d13. The
 registered gate stayed in perplexity; the int4-expert arms bo5 had failed on their second text with RTN experts were
@@ -191,7 +191,7 @@ sub-0.01-nat number is compared across lanes.
 
 ## Throughput census (bo7), measured in-repo
 
-Lane bo7 — box 49916675, an RTX 5090 (driver 595.84) on an AMD EPYC 7Q83 host (128 threads, 251 GB), 2026-09-05
+Lane bo7 — Vast box S3, an RTX 5090 (driver 595.84) on an AMD EPYC 7Q83 host (128 threads, 251 GB), 2026-09-05
 02:00Z onward; **the shipped code**: e4b main @f4b639fd2640 (= 0.35.0 + docs) + grouped-nf4-gemm main @ddcb850e05c3
 (= 0.30.0 + docs), hook v6 at its 16k-token default; torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1,
 triton 3.4.0. **Speed only**: per family an NF4 bake, then every arm at B=1 (512-token prompt, 128 generated, graph

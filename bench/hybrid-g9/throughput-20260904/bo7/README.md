@@ -1,6 +1,6 @@
 # Throughput census lane bo7 — 2026-09-05, one RTX 5090: all six families, speed only, under the shipped code
 
-**Box:** Vast.ai instance 49916675, RTX 5090 (sm_120, driver 595.84, 32607 MiB) on an AMD EPYC 7Q83 64-core host
+**Box:** Vast box S3, RTX 5090 (sm_120, driver 595.84, 32607 MiB) on an AMD EPYC 7Q83 64-core host
 (128 CPUs, 251 GB RAM, container cgroup `memory.max` 183,318,347,776 B ≈ 170.7 GiB — [`forensics.txt`](forensics.txt) is
 the lane script's own probe at install, [`forensics2.txt`](forensics2.txt) the orchestrator's probe at 05:31Z);
 torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1, triton 3.4.0; installed `grouped-nf4-gemm 0.30.0`,

@@ -24,7 +24,7 @@ keyed by model_type: quantize / reference_train / fast_train / batched_train / n
 `model_families` is exactly the families whose `fast_train` is `supported`. (3) `granitemoe.fast_train` is decided by
 the tp1b re-run only; `batched_train` is `supported` (PASS). No gate, threshold or fixture text changed.
 
-**Box:** Vast.ai instance **49937730**, RTX 5090 (sm_120, driver 595.84, 32607 MiB, power limit 550 W, PCIe gen 4 ×16)
+**Box:** Vast.ai instance **Vast box S7**, RTX 5090 (sm_120, driver 595.84, 32607 MiB, power limit 550 W, PCIe gen 4 ×16)
 on an AMD EPYC 7Q83 64-core host (128 CPUs, 251.5 GiB; [`forensics.txt`](forensics.txt) is the lane script's probe at
 install; the per-receipt `env.host` block carries the GPU UUID, bus id, VBIOS and the instance id). **Train-anchor class
 `pcie-full/launch-fast`** ([`anchor.json`](anchor.json), gate log [`logs/anchor_gate.log`](logs/anchor_gate.log):
@@ -107,7 +107,7 @@ families.
    [`logs/tp1_run.sh.pre-amend`](logs/tp1_run.sh.pre-amend)). Arm alarms, fixture, criteria, verdict rule, predictions
    unchanged. The first relaunch failed at the rent step (`KeyError: VAST_API_KEY` — the relaunch chain had not sourced
    the secrets the queue sources); relaunched with the environment.
-2. **Amendment 2 (11:40Z) — the short-sha fetch, and the idle time.** On the re-rolled box **49937730** the install and
+2. **Amendment 2 (11:40Z) — the short-sha fetch, and the idle time.** On the re-rolled box **Vast box S7** the install and
    tripwire passed ([`logs/outer.attempt1.log`](logs/outer.attempt1.log): 07:05:35Z) but the helper fetch `git init &&
    git fetch --depth 1 origin f4b639fd2640` failed within a second — `fatal: couldn't find remote ref f4b639fd2640`
    (GitHub does not serve a fetch-by-abbreviated-sha) — `SRC FETCH FAIL`, exit 9, `TP_DONE` touched. **The box then idled
@@ -312,7 +312,7 @@ the verdict rule is v1's, verbatim.
   `bench/flagship-matrix/drivers/` and `bench/train-anchor/` at `f4b639f`), the regenerated `data/ds_*.json` (their
   registered shas are in `ds_manifest.json`; the lane refuses a mismatch), the mini-side renter / queue / watcher
   scripts (the copy of the renter in the receipt tree predates amendment 1's 40 MB/s floor and is not the one that ran,
-  so it is not offered as evidence), the empty `tp1b_wait.log`, `INSTANCE_ID` (49937730, also in every receipt's
+  so it is not offered as evidence), the empty `tp1b_wait.log`, `INSTANCE_ID` (Vast box S7, also in every receipt's
   `env.host.vast_instance_id`), the box's `RESULTS-tp1.md` (byte-identical to `logs/RESULTS.txt`), the `TP_DONE`
   marker and `__pycache__`.
 

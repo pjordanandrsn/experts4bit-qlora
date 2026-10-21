@@ -15,7 +15,7 @@ Code under test:
 The W1 expert path ran 32 launches per step for each of gate_up, `_swiglu_rows` and down. The unprofiled self-pair is
 0.9993.
 
-**Run:** `p145-5090-1`, one RTX 5090 on a 24-CPU Intel Core Ultra 9 285K host, Vast instance 56617171. **Cost $0.816**, and
+**Run:** `p145-5090-1`, one RTX 5090 on a 24-CPU Intel Core Ultra 9 285K host, Vast machine 150149. **Cost $0.816**, and
 teardown was verified at 21:12:02Z.
 
 ## W1: where the 8.125 ms goes

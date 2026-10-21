@@ -96,7 +96,7 @@ What happened against that:
 ## Box and cost
 
 - **`p99-5090-1`:** OK, LOCALISED, **$0.196** of a $0.75 guard, 1,247 s.
-  - One RTX 5090 (sm_120, driver 580.95.05), Vast instance 53952525, on an AMD EPYC 7663.
+  - One RTX 5090 (sm_120, driver 580.95.05), Vast machine 142284, on an AMD EPYC 7663.
   - Launched 2026-10-03T02:19:41Z by adertha `898c8f6`.
   - Destroyed at 02:40:27Z, instance absent.
 - **One launch attempt before it was refused by the controller's own guard, at $0.**

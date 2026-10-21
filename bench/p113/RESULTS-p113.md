@@ -20,7 +20,7 @@ with SC1's int4_sched levers, on `Qwen/Qwen3-30B-A3B` @ `ad44e77`.
 
 ## The reading (`p113-5090-1`)
 
-**Host:** one RTX 5090 (sm_120, driver 580.178.04) on an AMD Ryzen 9 7900 (124 GiB RAM), Vast instance 54131692 (machine 152169).
+**Host:** one RTX 5090 (sm_120, driver 580.178.04) on an AMD Ryzen 9 7900 (124 GiB RAM), Vast machine 152169.
 **Cost:** $0.4710 by the provider's invoice, including the 64.8 GB checkpoint download. Teardown was proven at
 09:56:34Z.
 

@@ -1,6 +1,6 @@
 # TC1 amendment 11 read (#945): the steady-state comparison after the sync fix — P18 UNTESTED (an unstable host)
 
-**Box:** `tc1-5090-40` (instance 53999231, Intel Xeon E5-2696 v4 @ 2.20 GHz, RTX 5090, driver 595.91.07, $1.50; receipts in
+**Box:** `tc1-5090-40` (machine 152323, Intel Xeon E5-2696 v4 @ 2.20 GHz, RTX 5090, driver 595.91.07, $1.50; receipts in
 [`receipts/tc1-5090-40/`](receipts/tc1-5090-40/)). The code was e4b `23c3f9b` (#946's single-read grouping) and grouped-nf4-gemm
 `133ad9d` (the pinned ring as the default). Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 11.
 

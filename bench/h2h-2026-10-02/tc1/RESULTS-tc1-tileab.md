@@ -1,6 +1,6 @@
 # TC1 amendment 14 read (#945): the grouped GEMM's M-tile height from the group sizes makes e4b's training step 3–8 % faster on a 5090 — P22 and P23 HELD
 
-**Box:** `tc1-5090-43` (instance 54011443, AMD Ryzen 9 7950X, RTX 5090, driver 580.159.03, $0.41; receipts in
+**Box:** `tc1-5090-43` (machine 36204, AMD Ryzen 9 7950X, RTX 5090, driver 580.159.03, $0.41; receipts in
 [`receipts/tc1-5090-43/`](receipts/tc1-5090-43/)). The code was e4b `43f36c7` and grouped-nf4-gemm `c8f0adc` (#441).
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 14.
 

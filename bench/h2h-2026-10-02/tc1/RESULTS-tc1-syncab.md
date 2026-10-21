@@ -4,7 +4,7 @@ Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendmen
 [`receipts/tc1-5090-38/`](receipts/tc1-5090-38/). The verdicts, ratios and intervals are the reducer's
 ([`../../tc1/tc1_reduce.py`](../../tc1/tc1_reduce.py)), and the box's own `RESULTS-tc1.md` matches a re-reduction byte for byte.
 
-**The box.** `tc1-5090-38`, instance 53991731, AMD EPYC 7663, driver 580.95.05. e4b ran at `4dd72be`, which carries #946, and
+**The box.** `tc1-5090-38`, machine 142284, AMD EPYC 7663, driver 580.95.05. e4b ran at `4dd72be`, which carries #946, and
 grouped-nf4-gemm at `b670e61`, the merge of grouped-nf4-gemm#438. It cost $0.42, and teardown is complete. The receipt reads ALARM
 for one reason: the provider's instance listing answered HTTP 429 at teardown, so the launcher retried until the box was proven
 gone. The workload finished, and all eight arms were fetched. An earlier draw, `tc1-5090-37`, failed pre-flight (10 MB/s

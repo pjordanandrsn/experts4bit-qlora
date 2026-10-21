@@ -2,7 +2,7 @@
 
 Adjudicated 2026-08-25 by `tr1_compose.py` (amended gates, self-tests
 green) on `receipts-tr1/`. One box (RTX 5090 + EPYC 9654, instance
-48689229; serving graph-anchor probe 7.35 ms — dead center of the
+Vast box S17; serving graph-anchor probe 7.35 ms — dead center of the
 health gate). Subject as registered: `experts4bit_qlora.train` on
 Qwen/Qwen3-30B-A3B, SEQ=192, GRAD_ACCUM=4, TOKEN_BUDGET pinned 1024
 (attempt 1's OOM backoff motivated the pin — see amendments), 20

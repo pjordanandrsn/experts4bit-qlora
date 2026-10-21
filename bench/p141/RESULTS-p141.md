@@ -29,7 +29,7 @@ All twelve of K33's plans met K33's numerics contract at both shapes. The lowest
 
 ## Phase 2: the reading (`p141-5090-2`)
 
-**Host:** one RTX 5090 (sm_120, 170 SMs, driver 595.71.05) on an Intel Xeon Gold 6240 (36 CPUs), Vast instance 56580839.
+**Host:** one RTX 5090 (sm_120, 170 SMs, driver 595.71.05) on an Intel Xeon Gold 6240 (36 CPUs), Vast machine 40549.
 **Cost:** $0.999. Teardown proven at 17:13:24Z.
 
 | arm | W1 ms / step | W16 ms / step |
