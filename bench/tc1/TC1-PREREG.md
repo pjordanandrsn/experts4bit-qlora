@@ -3275,7 +3275,7 @@ The samplers the timeline read (sha256, private receipt store, `tc1-5090-137`):
 66d75a58a3e91ff181514ec63af723a7e7061a06ee9a385fa14057e73eb84032  vram_qwen3pos69_unsloth_ckpt_unsloth_m_fv_d2.txt
 ```
 
-**Amendment 73 fold (2026-10-21T23:05Z, before any box): the rate.** The budget above calls $0.85/h "the policy rate". It is not:
+**Amendment 73 fold (2026-10-21T22:59:56Z, before any box): the rate.** The budget above calls $0.85/h "the policy rate". It is not:
 $0.85/h was the RTX 5090 policy ceiling on 2026-10-08, and the owner raised the ceiling to $1.05/h on 2026-10-19. The launcher runs at
 min(declared, ceiling).
 - **The declared rate is $1.05/h, the policy ceiling.** It covers GPU plus storage for the 220 GB disk ordered. No offer at or under
