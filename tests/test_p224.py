@@ -143,3 +143,75 @@ def test_self_tests_kill_the_mutants(i, tmp_path):
     r = _self_test(tmp_path / f"{name}.py")
     assert r.returncode != 0, f"mutant {i} survived {name}'s self-test: {r.stdout}"
 
+
+
+# ------------------------------------------------------------------------------------------------------------- the kit
+
+RUN = (LANE / "p224_run.sh").read_text(encoding="utf-8")
+DRIVE = (LANE / "p224_drive.sh").read_text(encoding="utf-8")
+SOURCES = {"p224_run.sh": LANE, "p224_box.py": LANE, "p224_canary.py": LANE, "p224_reduce.py": LANE,
+           "fixture_base.py": LANE, "phases.sh": REPO / "bench" / "common", "k8_bake.py": REPO / "bench" / "p39",
+           "calib.json": REPO / "bench" / "p39", "test_adapter_schema.py": REPO / "tests"}
+
+
+def _var(text, name):
+    import re
+    m = re.search(rf"^\s*(?:[A-Z_]+=\S+;\s*)*{name}=(\S+?)[;\s]", text, re.M)
+    assert m, name
+    return m.group(1)
+
+
+def test_staged_pins_match_their_sources():
+    import hashlib
+    lines = [ln.split() for ln in (LANE / "staged-p224.sha256").read_text(encoding="ascii").splitlines() if ln.strip()]
+    assert sorted(n for _, n in lines) == sorted(SOURCES)
+    for want, name in lines:
+        got = hashlib.sha256((SOURCES[name] / name).read_bytes()).hexdigest()
+        assert got == want, f"{name}: staged {want}, source {got}"
+
+
+def test_runner_pins_are_the_registered_ones():
+    ci = (REPO / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert f"grouped-nf4-gemm.git@{_var(RUN, 'GNF4_SHA')}" in ci            # e4b CI's pin
+    assert _var(RUN, "LOGGETTA_SHA").startswith("90a7697d") and len(_var(RUN, "LOGGETTA_SHA")) == 40
+    assert _var(RUN, "CANARY_SHA256") == CANARY_SHA256
+    assert _var(RUN, "FIXTURE_REV") == "7f1c97f440f06ce36705e4f2b843edb5925f4498" and _var(RUN, "FIXTURE_REV") in PREREG
+    assert _var(RUN, "ALPACA_REV") == "dce01c9b08f87459cf36a430d809084718273017" and _var(RUN, "ALPACA_REV") in AMENDMENT_1
+    assert "REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39" in RUN and "`ad44e777`" in PREREG
+    assert "--format text --text-field text" in RUN and "--fix expert_residency=device" in RUN
+
+
+def test_runner_terms_are_the_fit_tables():
+    def need(block):
+        env = {}
+        for part in block.replace("\n", ";").split(";"):
+            part = part.strip()
+            if part.startswith("NEED_") and "=" in part and "$((" not in part:
+                k, v = part.split("=", 1)
+                env[k] = int(v.split()[0])
+        return env
+    shake_block = RUN.split('if [ "$SHAKE" = 1 ]; then', 1)[1].split("else", 1)[0]
+    read_block = RUN.split('if [ "$SHAKE" = 1 ]; then', 1)[1].split("else", 1)[1].split("fi", 1)[0]
+    common = {"NEED_GATE": 60, "NEED_REDUCE": 60}
+    assert "NEED_GATE=60; NEED_REDUCE=60; RESERVE=600" in RUN and "INSTALL_TO_GATE_S=450" in RUN
+    for block, table in ((read_block, FIT), (shake_block, SHAKE_FIT)):
+        n = {**need(block), **common}
+        work = (n["NEED_FETCH"] + n["NEED_BAKE"] + 2 * n["NEED_TRAIN"] + 2 * n["NEED_REF"] + 7 * n["NEED_SLOT"]
+                + n["NEED_GATE"] + n["NEED_REDUCE"] + n["NEED_FIXTURES"])
+        assert BOOT_S + 450 + work + 600 == BOOT_S + sum(table.values()), (n, table)
+
+
+def test_run_ids_agree_across_runner_driver_and_prereg():
+    ids = [f"p224-5090-{i}" for i in (1, 2, 3)] + [f"p224-shake-{i}" for i in (1, 2, 3)]
+    for rid in ids:
+        assert rid in RUN and rid in DRIVE
+    assert "`p224-shake-1..3`" in PREREG and "`p224-5090-1`" in PREREG
+
+
+def test_the_fixture_base_step_is_after_the_trains_and_never_changes_the_verdict():
+    i_reduce = RUN.index("p224_reduce.py --dir")
+    i_trains = RUN.index('for FX in dq nodq; do')
+    i_base = RUN.index("fixture_base.py --plan")
+    i_finish = RUN.rindex('case "$SHAKE/$V" in')
+    assert i_reduce < i_trains < i_base < i_finish
+    assert "$W/fx/receipts_fixture-nodq" in RUN and "['plan']" in RUN
