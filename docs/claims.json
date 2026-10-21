@@ -801,7 +801,7 @@
       "notes": "EVIDENCE: the 0.24.0 entry's Corrections section of CHANGELOG.md. STATUS (2026-09-05): the row was registered as 'superseded' with no successor -- the 'about 7.2x against a current baseline' restatement has no receipt of its own in this repository and is not a claim; the published 13.47x is therefore RETIRED (published, now known not to be the multiple over a current baseline), which is what docs/STATUS.md 'What changed' has said since 0.24.0.",
       "retired_on": "2026-08-31",
       "published_on": {
-        "date": "2026-08-25",
+        "date": "2026-08-26",
         "evidence": "7718440d119f6e357b206fd275b4ada847ba206e:bench/tr2-grouped-train/RESULTS-tr2-grouped-train.md"
       }
     },

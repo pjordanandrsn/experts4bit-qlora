@@ -270,9 +270,10 @@ def iso_date(value) -> bool:
 
 
 def _git_ok(root: Path, *args: str) -> str | None:
-    """``git -C root args`` stdout, or None when it fails."""
+    """``git -C root args`` stdout (dates rendered in UTC), or None when it fails."""
     try:
-        p = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=60)
+        p = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=60,
+                           env={**os.environ, "TZ": "UTC"})
     except (OSError, subprocess.TimeoutExpired):
         return None
     return p.stdout if p.returncode == 0 else None
@@ -282,7 +283,7 @@ def published_on_problems(root: Path, cid: str, c: dict, tracked: frozenset[str]
                           skips: list[str]) -> list[str]:
     """``published_on`` dates a RETIRED claim's first public appearance: ``{"date", "evidence"}``, the evidence
     being ``<40-hex commit>:<path>`` (resolved: the commit is in this repository's history, the path is in its
-    tree, and its committer date is the date) or an ``https://`` URL (listed, never resolved)."""
+    tree, and its committer date in UTC is the date) or an ``https://`` URL (listed, never resolved)."""
     st, po = c.get("status"), c["published_on"]
     if st != "retired":
         return [f"{cid}: published_on on a {st!r} row -- it dates a retired claim's first public appearance"]
@@ -310,9 +311,9 @@ def published_on_problems(root: Path, cid: str, c: dict, tracked: frozenset[str]
     elif not (_git_ok(root, "ls-tree", "--name-only", sha, "--", path) or "").strip():
         out.append(f"{cid}: published_on evidence path {path!r} is not in commit {sha[:12]}")
     else:
-        day = (_git_ok(root, "log", "-1", "--format=%cs", sha) or "").strip()
+        day = (_git_ok(root, "log", "-1", "--format=%cd", "--date=format-local:%Y-%m-%d", sha) or "").strip()
         if iso_date(date) and day != date:
-            out.append(f"{cid}: published_on date {date} is not commit {sha[:12]}'s committer date {day}")
+            out.append(f"{cid}: published_on date {date} is not commit {sha[:12]}'s committer date {day} (UTC)")
     return out
 
 

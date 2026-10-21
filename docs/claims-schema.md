@@ -145,9 +145,11 @@ receipt states none, the receipt's first commit, which `notes` then records.
   appearance of the claim it retracts. Then `published_on` to `retired_on` is
   how long the claim stood. `evidence` is `<40-hex commit>:<path>`: the commit
   is in this repository's history, the path is in its tree, and `date` is its
-  committer date. Or it is an `https://` URL, which is listed and never
+  committer date in UTC. Or it is an `https://` URL, which is listed and never
   resolved. The date is not after `retired_on`, and no other status carries the
   field. When the first appearance is not known, omit it rather than guess.
+  A commit date is a lower bound on the first public appearance (git does not
+  record when a commit was pushed), so a lifetime read from it is an upper bound.
 - **Active rows** never carry `superseded_by`.
 - **Links go both ways.** The row a `superseded_by` names lists the old id in its
   `supersedes`. Every `supersedes` entry exists, is superseded or retired, and
