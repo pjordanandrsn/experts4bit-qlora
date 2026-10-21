@@ -30,8 +30,13 @@ The rule, in order:
      differing step or "equal".
 The predictions are graded beside the read, never ruling.
 
-    python p223_reduce.py --dir RUN_DIR --out verdict_p223.json --e4b-sha SHA
-    python p223_reduce.py --gate RECORD --e4b-sha SHA       (one process's build and engagement, before the next)
+Amendment 1 adds ``--shake`` (P223_SHAKE=1, the shakedown ids, on P149's one-layer cut): the same checks at their
+one-layer closed forms and 2 timed reps; the verdict is hard-coded SHAKE, never a reading and never READ; ``ok`` and
+``instrument_faults`` list every fault the rule would VOID on, across every process; the labels, prices, reads and
+predictions are reported and never graded.
+
+    python p223_reduce.py --dir RUN_DIR --out verdict_p223.json --e4b-sha SHA [--shake]
+    python p223_reduce.py --gate RECORD --e4b-sha SHA [--shake]   (one process's build and engagement, before the next)
     python p223_reduce.py --self-test
 """
 from __future__ import annotations
@@ -52,14 +57,31 @@ SHORT, LONG = 32, 160
 ARM_BUCKETS = {"D": (1, 2, 4, 8, 16), "I": (2, 4, 8, 16)}
 GNF4_SHA = "a83f6bb3a3a69aef8981fb81b6361bf62b06f6e7"    # v0.49.0: the CI pin of the kit's e4b commit (ships K37)
 MODEL, REV = "mistralai/Mixtral-8x7B-Instruct-v0.1", "eba92302a2861cdc0098cc54bc9f17cb2c47eb61"
-CENSUS = {"fuse_qkv_n": 0, "fuse_t1_glue_n": 65, "fuse_t1_glue_r2_n": [32, 32], "fuse_router_epilogue_n": 32}
 FUSION_KNOBS = ("E4B_PAGED_FUSE_QKV", "E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")
-LAYERS, PROJ = 32, 128
+LAYERS = 32
+SHAKE_SLICE, SHAKE_LAYERS, SHAKE_REPS = "/root/p223/slice", 1, 2     # Amendment 1: the runner's one-layer cut, 2 timed reps
 CAPTURE_CALLS = 3          # int8 calls per projection per captured bucket: reported beside the nonzero rule (P149's form)
 SERVER = {"max_seqs": 16, "max_tokens_per_seq": 768}
 GPU_CLASS, CC, MIN_POWER_W = "5090", "12.0", 575.0
+
+
+def census(layers: int) -> dict:
+    """P149's ``census(L)``: the default server's fold census on Mixtral at ``layers`` decoder layers. The reading's is
+    ``census(32)``; Amendment 1's one-layer shake takes ``census(1)``, as P149's Amendment 5 dry mode does."""
+    return {"fuse_qkv_n": 0, "fuse_t1_glue_n": 2 * layers + 1, "fuse_t1_glue_r2_n": [layers, layers],
+            "fuse_router_epilogue_n": layers}
+
+
+CENSUS, PROJ = census(LAYERS), 4 * LAYERS                  # the fold census and the int8 attention projections (4L)
 # the predictions (graded, never ruling)
 P16_BAND, P1_BAND = (0.97, 1.00), (0.60, 0.95)
+
+
+def use_shake() -> None:
+    """Amendment 1's constants: the rule's closed forms at one layer, on the slice the runner cuts, at 2 timed reps."""
+    global MODEL, REV, LAYERS, PROJ, CENSUS, REPS
+    MODEL, REV, LAYERS, REPS = SHAKE_SLICE, "", SHAKE_LAYERS, SHAKE_REPS
+    PROJ, CENSUS = 4 * LAYERS, census(LAYERS)
 
 
 def _rate(r, w):
@@ -316,6 +338,23 @@ def reduce(arms: dict, e4b_sha: str) -> dict:
              for a, b in SELF_PAIRS if not NOISY_BAND[0] <= rates[a]["W1"] / rates[b]["W1"] <= NOISY_BAND[1]]
     if noisy:
         return {**out, "verdict": "NOISY", "reasons": noisy + ["NOISY is a VOID and a strike: nothing is read"]}
+    rd = reads(arms)
+    labels, read, pr, xw, rp = rd["labels"], rd["schedule_invariance"], rd["price"], rd["cross_w"], rd["repeatability"]
+    out.update(verdict="READ", **{k: v for k, v in rd.items() if k != "inv"},
+               predictions=grade(labels, rd["inv"], pr, xw))
+    out["reasons"] = [f"{s}: {labels[s]}" + (f" (rows and steps: {read[s]['differing']})" if read[s]["differing"] else "")
+                      for s in SERVERS]
+    out["reasons"] += [f"{s}: p1 {pr['servers'][s]['p1']}, p16 {pr['servers'][s]['p16']} (reported, never a bar)"
+                       for s in SERVERS]
+    unrep = {t: v["differing"] for t, v in rp.items() if not v["repeatable"]}
+    if unrep:
+        out["reasons"].append(f"reported, never ruling: timed reps not repeatable {unrep}")
+    return out
+
+
+def reads(arms: dict) -> dict:
+    """Rules 3 to 5 and the reported records, on complete records: the label per server with its rows and steps, the
+    price, the cross-W check, the repeatability, the int8 closed forms, the library's split plans and the heat."""
     inv = {t: invariance(arms[t]) for t in TAGS}
     labels, read = {}, {}
     for s, (d, i) in SERVERS.items():
@@ -324,21 +363,39 @@ def reduce(arms: dict, e4b_sha: str) -> dict:
         labels[s] = "NOT_SCHEDULE_INVARIANT" if bad else "SCHEDULE_INVARIANT"
         read[s] = {"label": labels[s], "i_arm": i, "differing": bad,
                    "d_arm_reported": {t: inv[t] for t in TAGS if t[:2] == d}}
-    xw = {t: cross_w(arms[t]) for t in TAGS}
-    rp = {t: repeatability(arms[t]) for t in TAGS}
-    pr = price(arms)
-    out.update(verdict="READ", labels=labels, schedule_invariance=read, price=pr, cross_w=xw, repeatability=rp,
-               int8_closed_form={t: int8_closed_form(arms[t], t[:2]) for t in TAGS},
-               library_split_plans={t: arms[t].get("library_split_plans") for t in TAGS},
-               heat={t: {w: arms[t]["workloads"][w].get("heat") for w in WORKLOADS} for t in TAGS},
-               predictions=grade(labels, inv, pr, xw))
-    out["reasons"] = [f"{s}: {labels[s]}" + (f" (rows and steps: {read[s]['differing']})" if read[s]["differing"] else "")
-                      for s in SERVERS]
-    out["reasons"] += [f"{s}: p1 {pr['servers'][s]['p1']}, p16 {pr['servers'][s]['p16']} (reported, never a bar)"
-                       for s in SERVERS]
-    unrep = {t: v["differing"] for t, v in rp.items() if not v["repeatable"]}
-    if unrep:
-        out["reasons"].append(f"reported, never ruling: timed reps not repeatable {unrep}")
+    return {"labels": labels, "schedule_invariance": read, "price": price(arms),
+            "cross_w": {t: cross_w(arms[t]) for t in TAGS}, "repeatability": {t: repeatability(arms[t]) for t in TAGS},
+            "int8_closed_form": {t: int8_closed_form(arms[t], t[:2]) for t in TAGS},
+            "library_split_plans": {t: arms[t].get("library_split_plans") for t in TAGS},
+            "heat": {t: {w: arms[t]["workloads"][w].get("heat") for w in WORKLOADS} for t in TAGS}, "inv": inv}
+
+
+def reduce_shake(arms: dict, e4b_sha: str) -> dict:
+    """Amendment 1 (``use_shake`` first): an INSTRUMENT run on the one-layer cut, never a reading and never a strike.
+    The verdict is SHAKE, whatever the records say. ``instrument_faults`` lists every fault the rule would VOID on,
+    across every process (the same ``process_faults`` the reading runs); the reads are reported and never graded."""
+    faults = []
+    for t in TAGS:
+        r = arms.get(t)
+        if not r or r.get("status") != "ok":
+            faults.append(f"{t}: missing or not ok")
+            continue
+        faults += process_faults(t, r, e4b_sha)
+    prompts = {r.get("prompts_sha256") for r in arms.values()}
+    if len(prompts) > 1:
+        faults.append(f"the processes read different prompts {sorted(map(str, prompts))}")
+    out = {"lane": "P223 shake (Amendment 1)", "verdict": "SHAKE", "ok": not faults, "instrument_faults": faults,
+           "reasons": ["an instrument run on a one-layer cut: never a reading and never a strike; nothing is graded"]}
+    try:
+        rd = reads(arms)
+        rates = rd["price"]["decode_tok_s"]
+        out["reported"] = {**{k: v for k, v in rd.items() if k != "inv"},
+                           "w1_self_pairs_outside_band": [f"{a}/{b}" for a, b in SELF_PAIRS
+                                                          if not NOISY_BAND[0] <= rates[a]["W1"] / rates[b]["W1"] <= NOISY_BAND[1]],
+                           "predictions": [{"prediction": p["prediction"], "read": p["read"], "graded": "not graded (shake)"}
+                                           for p in grade(rd["labels"], rd["inv"], rd["price"], rd["cross_w"])]}
+    except Exception as e:  # noqa: BLE001 -- the reads are reported only; a record that cannot be read is already a fault
+        out["reported"] = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
     return out
 
 
@@ -411,12 +468,47 @@ def _fixture(i0_w1=0.8, i0_w16=0.99, i1_w1=0.8, i1_w16=0.99, d_differs=True):
     return arms
 
 
+def _consts():
+    return MODEL, REV, LAYERS, PROJ, CENSUS, REPS
+
+
+def _restore(saved) -> None:
+    global MODEL, REV, LAYERS, PROJ, CENSUS, REPS
+    MODEL, REV, LAYERS, PROJ, CENSUS, REPS = saved
+
+
+def _shake_fixture() -> dict:
+    """Clean records as a one-layer, 2-rep shake box writes them, Amendment 1's closed forms written out rather than read
+    from the module's constants (``use_shake`` first, for the slice's model): a 32-layer census or a 5-rep expectation
+    leaking into the shake fails them."""
+    arms = _fixture()
+    for r in arms.values():
+        r["fusions"] = {"fuse_qkv_n": 0, "fuse_t1_glue_n": 3, "fuse_t1_glue_r2_n": [1, 1], "fuse_router_epilogue_n": 1}
+        if r["arm"][1] == "1":
+            r["int8_modules"], r["attn_int8"] = 4, {"projections": 4}
+        r["reps"] = 2
+        for wl in r["workloads"].values():
+            wl["rep_tokens"] = {n: reps[:2] for n, reps in wl["rep_tokens"].items()}
+    return arms
+
+
 def _cases_engagement(cases):
     def void_when(desc, fn, tag):
+        """The reading VOIDs on the fault, and the shake (Amendment 1: every check kept) lists it, on its own records."""
         arms = _fixture()
         fn(arms[tag])
         v = reduce(arms, E)
         cases.append((desc, v["verdict"] == "VOID", v["reasons"][:3]))
+        saved = _consts()
+        try:
+            use_shake()
+            arms = _fixture()
+            fn(arms[tag])
+            v = reduce_shake(arms, E)
+            cases.append((desc + "; the shake lists it", v["verdict"] == "SHAKE" and not v["ok"]
+                          and any(f.startswith(tag) for f in v["instrument_faults"]), v["instrument_faults"][:3]))
+        finally:
+            _restore(saved)
     void_when("an I arm with a bucket-1 replay VOIDs", lambda r: r["graph_stats"].update({"1": {"replays": 3, "eager_steps": 0}}),
               "I1b")
     void_when("an I arm whose plan is 2 at bucket 16 VOIDs",
@@ -525,6 +617,41 @@ def self_test() -> int:
     _cases_engagement(cases)
     g = gate_faults(_fixture()["I0a"], "I0a", E)
     cases.append(("a clean I0a passes its own gate", g == [], g))
+    # Amendment 1: the shake
+    cases.append(("the census closed form at 32 layers is the registered one", census(LAYERS) == CENSUS and PROJ == 4 * LAYERS,
+                  None))
+    reading = _fixture()
+    saved = _consts()
+    try:
+        use_shake()
+        cases.append(("the shake's constants are Amendment 1's: one layer, 2 timed reps, the runner's slice",
+                      (MODEL, REV, LAYERS, PROJ, REPS, CENSUS) == ("/root/p223/slice", "", 1, 4, 2, census(1)), None))
+        v = reduce_shake(_shake_fixture(), E)
+        cases.append(("a clean one-layer shake reads SHAKE, ok, with no READ anywhere", v["verdict"] == "SHAKE" and v["ok"]
+                      and '"READ"' not in json.dumps(v, default=str) and v["instrument_faults"] == [], v["instrument_faults"]))
+        cases.append(("the shake reports 3 x 4L = 12 int8 calls a captured bucket as the closed form",
+                      v["reported"]["int8_closed_form"]["D1a"]["2"]["closed_form"] == {"2": 12}
+                      and v["reported"]["int8_closed_form"]["D0a"] == {}, v["reported"]["int8_closed_form"]["D1a"]))
+        cases.append(("a shake's predictions are reported, never graded", [p["graded"] for p in v["reported"]["predictions"]]
+                      == ["not graded (shake)"] * 5 and v["reported"]["labels"]["S0"] == "SCHEDULE_INVARIANT",
+                      v["reported"].get("predictions")))
+        v = reduce_shake(reading, E)
+        cases.append(("a shake on the reading's records (32 layers, 5 reps) lists the faults and still reads SHAKE",
+                      v["verdict"] == "SHAKE" and not v["ok"] and any("model" in f for f in v["instrument_faults"]), None))
+        arms = _fixture()
+        del arms["I1b"]
+        arms["D0a"]["workloads"]["W1"]["decode_tok_s"] = 50.0          # a NOISY self-pair: reported, never ruling
+        v = reduce_shake(arms, E)
+        cases.append(("a shake with a missing record lists it, reports a self-pair outside the band, and reads SHAKE",
+                      v["verdict"] == "SHAKE" and v["instrument_faults"] == ["I1b: missing or not ok"]
+                      and "READ" not in v["verdict"], v["instrument_faults"]))
+        arms = _fixture()
+        arms["D0b"]["workloads"]["W1"]["decode_tok_s"] = 50.0
+        v = reduce_shake(arms, E)
+        cases.append(("a self-pair outside the band is reported in a shake, never a fault",
+                      v["ok"] and v["reported"]["w1_self_pairs_outside_band"] == ["D0b/D0a"], v["reported"].get("w1_self_pairs_outside_band")))
+    finally:
+        _restore(saved)
     cases.append(("an I record fails a D tag's gate", gate_faults(_fixture()["I0a"], "D0a", E) != [], None))
     cases.append(("a missing record fails the gate", gate_faults(None, "D0a", E) != [], None))
     cases.append(("first_diff: equal, a step, and a length", (first_diff([1, 2], [1, 2]), first_diff([1, 2], [1, 3]),
@@ -540,18 +667,24 @@ def main(argv=None) -> int:
     ap.add_argument("--out")
     ap.add_argument("--e4b-sha")
     ap.add_argument("--gate", help="one process's record; exit 1 unless its build and engagement pass")
+    ap.add_argument("--shake", action="store_true", help="Amendment 1: the one-layer cut's constants; the verdict is SHAKE")
     ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args(argv)
     if a.self_test:
         return self_test()
+    if a.shake:
+        use_shake()
     if a.gate:
         tag = os.path.basename(a.gate)[len("arm_"):-len(".json")]
         f = gate_faults(_json(a.gate), tag, a.e4b_sha)
         print(f"P223_GATE {tag}: " + ("OK" if not f else "FAULT " + "; ".join(f)[:2000]), flush=True)
         return 1 if f else 0
-    v = reduce(load(a.dir), a.e4b_sha)
+    v = reduce_shake(load(a.dir), a.e4b_sha) if a.shake else reduce(load(a.dir), a.e4b_sha)
     json.dump(v, open(a.out, "w"), indent=1, default=str)
     print(f"P223_VERDICT {v['verdict']}: " + "; ".join(str(x) for x in v["reasons"])[:2000], flush=True)
+    if a.shake:
+        print(f"P223_SHAKE ok={v['ok']} faults={len(v['instrument_faults'])}: "
+              + "; ".join(v["instrument_faults"])[:3000], flush=True)
     return 0
 
 

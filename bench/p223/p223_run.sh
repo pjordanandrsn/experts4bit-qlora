@@ -1,7 +1,7 @@
 #!/bin/bash
 # Lane P223 (bench/p223/PREREG-p223.md): the price of a schedule-invariant decode for Mixtral-8x7B on serve_paged, on ONE
 # RTX 5090 at >= 575 W. P149's box Q+S runner (bench/p149/p149_run.sh) by substitution: the arms (D0, I0, D1, I1), no Q
-# and its early gates, no token-pinned processes, no SANE phases, two ABBA blocks of fresh processes, no dry mode.
+# and its early gates, no token-pinned processes, no SANE phases, two ABBA blocks of fresh processes.
 #   floors   CUDA 18, the card class and cc 12.0 15, the disk 13, host RAM 16, power.limit AND enforced.power.limit
 #            >= 575 W 17 (unreadable 15), all before the install; then the guard fit over every term below at its
 #            allowance (rc 19), also before the install;
@@ -11,6 +11,10 @@
 #            D1a, D1b, I1b, I0b, D0b, each a fresh process; the first process of each arm is read against the rule's
 #            VOID checks before the next (rc 45: the box stops, the reduce still writes the VOID); then the reduce. Every
 #            phase stamps its start, end and kind in phases.jsonl (bench/common/phases.sh, sourced after the fit check).
+#   shake    Amendment 1 (P223_SHAKE=1, run ids p223-shake-1 to -3): P149's Amendment 5 dry mode on P223's kit. Shards 1
+#            and 19 with the config and tokenizer, cut to one layer (p149_slice.py), then the FULL kit at its own
+#            allowances and 2 timed reps; every check kept; each arm's early read reports and goes on; the verdict is
+#            SHAKE, rc 0 with no instrument fault, else 29. An instrument run: never a reading, never a strike.
 # Refusals: as above. Only 13 and 18 name the machine for the next launcher draw. This script never creates compute.
 set -uo pipefail
 W=/root/p223; mkdir -p $W/logs; cd $W || exit 78
@@ -29,10 +33,16 @@ INSTALL=450; NEED_FETCH=3000; NEED_BAKE=1500; NEED_ARM=480; NEED_REDUCE=120
 RESERVE=600
 GPU_CLASS=5090; MIN_RAM_GB=60; MIN_DISK_GB=200; MIN_POWER_W=575
 case "$P223_RUN_ID" in
-  p223-5090-1|p223-5090-2|p223-5090-3) ;;
+  p223-5090-1|p223-5090-2|p223-5090-3) SHAKE=0;;
+  p223-shake-1|p223-shake-2|p223-shake-3) SHAKE=1;;   # Amendment 1: instrument runs on a 1-layer cut, never a reading
   *) say "unregistered run ID: $P223_RUN_ID"; finish 78;;
 esac
 MODEL=mistralai/Mixtral-8x7B-Instruct-v0.1; REV=eba92302a2861cdc0098cc54bc9f17cb2c47eb61   # the P141 lock
+[ "${P223_SHAKE:-0}" = "$SHAKE" ] || { say "refusing: P223_SHAKE=${P223_SHAKE:-0} does not match the run id $P223_RUN_ID"; finish 78; }
+if [ "$SHAKE" = 1 ]; then   # the shake table (Amendment 1): two shards, one layer, two timed reps
+  NEED_FETCH=900; NEED_BAKE=600; NEED_ARM=240; MIN_DISK_GB=60; REPS=2
+fi
+RS=""; [ "$SHAKE" = 1 ] && RS=--shake
 [ -z "${P223_GPU_CLASS:-}${P223_MIN_DISK_GB:-}${P223_MIN_RAM_GB:-}${P223_REHEARSAL:-}${P223_SHORT:-}${P223_LONG:-}${P223_REPS:-}${P223_MIN_POWER_W:-}" ] || { say 'reading knobs are frozen'; finish 78; }
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 # every serving lever and engine knob starts unset: the default server is the subject (the arms set their knobs alone)
@@ -47,9 +57,10 @@ unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_
       GNF4_GEMV_SPLITK GNF4_GEMV_BW GNF4_GEMV_BW_PLAN GNF4_GEMV_BW_DECODE TRITON_INTERPRET E4B_ATTN_SPLIT_CAP \
       E4B_SERVE_ATTN_INT8 E4B_DENSE_GEMV_BW E4B_INT8_HEAD_BW
 : > summary.txt; : > phases.jsonl; echo "$P223_INSTANCE_ID" > INSTANCE_ID; echo "$P223_RUN_ID" > RUN_ID
-echo "KNOBS run=$P223_RUN_ID e4b=$E4B_SHA gnf4=$GNF4_SHA model=$MODEL@$REV gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_ram_gb=$MIN_RAM_GB min_power_w=$MIN_POWER_W short=$SHORT long=$LONG reps=$REPS" | tee -a summary.txt
+echo "KNOBS run=$P223_RUN_ID shake=$SHAKE e4b=$E4B_SHA gnf4=$GNF4_SHA model=$MODEL@$REV gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_ram_gb=$MIN_RAM_GB min_power_w=$MIN_POWER_W short=$SHORT long=$LONG reps=$REPS" | tee -a summary.txt
 # ---- staged pieces, byte-for-byte
-for f in p223_box.py p223_reduce.py p109_box.py k8_bake.py calib.json test_dense_i8.py test_int8_attn_interp.py phases.sh staged-p223.sha256; do
+for f in p223_box.py p223_reduce.py p149_slice.py p109_box.py k8_bake.py calib.json test_dense_i8.py test_int8_attn_interp.py phases.sh \
+         staged-p223.sha256; do
   [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
 (cd $W && sha256sum -c staged-p223.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/p223/staged-p223.sha256"; finish 9; }
 # ---- refusals before anything is installed or fetched: CUDA, the card class, the disk, the host RAM, the power floor
@@ -169,10 +180,17 @@ phase_end install
 can_run $NEED_FETCH fetch || finish 40
 phase_start fetch setup; say "fetch $MODEL @ $REV"
 PATTERNS="ignore_patterns=['original/*','metal/*','consolidated*']"
+# the shake: shards 1 and 19 hold the embedding, layer 0, the final norm and the head
+[ "$SHAKE" = 1 ] && PATTERNS="allow_patterns=['model-00001-of-00019.safetensors','model-00019-of-00019.safetensors','*.json','tokenizer*']"
 perl -e "alarm $(step_alarm $NEED_FETCH); exec @ARGV" python -c "from huggingface_hub import snapshot_download as s; print(s('$MODEL', revision='$REV', $PATTERNS, max_workers=8))" > logs/fetch.log 2>&1 || { tail -2 logs/fetch.log; say "DL FAIL"; finish 11; }
 SNAP=$(tail -1 logs/fetch.log); echo "FETCH $MODEL@$REV $SNAP" | tee -a summary.txt; phase_end fetch
 [ -d "$SNAP" ] || { say "DL FAIL: no snapshot dir"; finish 11; }
 can_run $NEED_BAKE bake || finish 40
+if [ "$SHAKE" = 1 ]; then   # the cut, inside the shake's bake allowance (Amendment 1's table: the cut and the bake)
+  phase_start slice setup
+  python $W/p149_slice.py --snapshot "$SNAP" --out $W/slice --layers 1 > logs/slice.log 2>&1 || { tail -3 logs/slice.log; say "SLICE FAIL"; finish 11; }
+  grep -a "^SLICE" logs/slice.log | tee -a summary.txt; SNAP=$W/slice; phase_end slice
+fi
 phase_start bake setup; say "bake the NF4 arena"; mkdir -p $W/work
 K8_MODEL="$SNAP" K8_WORK="$W/work" perl -e "alarm $(step_alarm $NEED_BAKE); exec @ARGV" python $W/k8_bake.py > logs/bake.log 2>&1 \
   || { tail -3 logs/bake.log; say "BAKE FAIL"; finish 12; }
@@ -182,7 +200,8 @@ perl -e "alarm 1200; exec @ARGV" python $W/p223_box.py --prompts-only --model "$
   || { tail -4 logs/prompts.log; say "PROMPTS FAIL"; finish 19; }
 grep -a "^P109_PROMPTS" logs/prompts.log | tee -a summary.txt
 # the D arms run today's buckets (auto = 1,2,4,8,16 at 16 slots), so E4B_PAGED_BUCKETS is an I-arm knob, never the engine's
-ENGINE_ENV="E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$REV E4B_PAGED_ARENA=$W/work/nf4.arena E4B_PAGED_CALIB=$W/calib.json E4B_PAGED_MAX_SEQS=16 E4B_PAGED_MAX_TOKENS_PER_SEQ=768"
+ENGINE_MODEL="E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$REV"; [ "$SHAKE" = 1 ] && ENGINE_MODEL="E4B_PAGED_MODEL=$W/slice"
+ENGINE_ENV="$ENGINE_MODEL E4B_PAGED_ARENA=$W/work/nf4.arena E4B_PAGED_CALIB=$W/calib.json E4B_PAGED_MAX_SEQS=16 E4B_PAGED_MAX_TOKENS_PER_SEQ=768"
 arm_knobs(){   # ARM: the registration's knobs, each in the process environment
   case "$1" in
     D0) echo "";;
@@ -191,7 +210,7 @@ arm_knobs(){   # ARM: the registration's knobs, each in the process environment
     I1) echo "E4B_SERVE_ATTN_INT8=1 E4B_ATTN_SPLIT_CAP=1 E4B_PAGED_BUCKETS=2,4,8,16";;
   esac
 }
-run_arm(){   # TAG: one fresh speed process, five timed reps at W16 and W1
+run_arm(){   # TAG: one fresh speed process, REPS timed reps at W16 and W1 (5; the shake's 2)
   local TAG=$1 ARM=${1:0:2} LV AL
   LV=$(arm_knobs "$ARM")
   can_run $NEED_ARM "arm $TAG" || finish 40
@@ -205,12 +224,14 @@ run_arm(){   # TAG: one fresh speed process, five timed reps at W16 and W1
   [ "$rc" = 0 ] || { tail -6 logs/arm_$TAG.log | cut -c1-300 | tee -a summary.txt; say "ARM $TAG FAILED (rc=$rc) -- the reducer will VOID"; }
 }
 reduce_all(){
-  python $W/p223_reduce.py --dir $W --out $W/verdict_p223.json --e4b-sha "$E4B_SHA" 2>&1 | tee -a summary.txt
+  python $W/p223_reduce.py --dir $W --out $W/verdict_p223.json --e4b-sha "$E4B_SHA" $RS 2>&1 | tee -a summary.txt
   [ "${PIPESTATUS[0]}" = 0 ] && [ -s "$W/verdict_p223.json" ]
 }
 gate_check(){   # TAG: the first process of an arm, read against the rule's VOID checks before the next process
-  python $W/p223_reduce.py --gate $W/arm_$1.json --e4b-sha "$E4B_SHA" 2>&1 | tee -a summary.txt
+  python $W/p223_reduce.py --gate $W/arm_$1.json --e4b-sha "$E4B_SHA" $RS 2>&1 | tee -a summary.txt
   [ "${PIPESTATUS[0]}" = 0 ] && return 0
+  # a shake reports and goes on, so one shakedown finds every fault
+  if [ "$SHAKE" = 1 ]; then echo "SHAKE_GATE_FAULT $1" | tee -a summary.txt; GATE_FAULT=${GATE_FAULT:-$1}; return 0; fi
   say "EARLY VOID ($1): its record fails the rule's checks -- the box stops; the reduce writes the VOID"
   echo "early void: $1" > REFUSAL; phase_start reduce reduce; reduce_all; phase_end reduce; finish 45
 }
@@ -222,5 +243,10 @@ phase_start reduce reduce; say "reduce"
 reduce_all || { say "REDUCER FAILED"; finish 22; }
 phase_end reduce
 V=$(python -c "import json; print(json.load(open('$W/verdict_p223.json'))['verdict'])")
+if [ "$SHAKE" = 1 ]; then   # never a reading: rc 0 only when the verdict is SHAKE, no gate fired and no instrument fault
+  OK=$(python -c "import json; print(json.load(open('$W/verdict_p223.json'))['ok'])")
+  if [ "$V" = SHAKE ] && [ -z "${GATE_FAULT:-}" ] && [ "$OK" = True ]; then say "P223 SHAKE: no instrument fault"; finish 0; fi
+  say "P223 SHAKE ($V): instrument faults (first gate ${GATE_FAULT:-none}) -- fix and re-shake"; finish 29
+fi
 case "$V" in READ) ;; *) say "P223 $V -- no reading (NOISY and VOID are not readings)"; finish 27;; esac
 finish 0
