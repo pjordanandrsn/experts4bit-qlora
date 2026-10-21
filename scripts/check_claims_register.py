@@ -90,7 +90,7 @@ DATED = PUBLIC_RUN | PRIVATE_RUN
 ROW_FIELDS = frozenset({
     "id", "package", "area", "claim", "value", "unit", "model", "hardware", "conditions", "measured_on",
     "status", "tier", "evidence", "evidence_private", "supersedes", "superseded_by", "retired_reason",
-    "retired_on", "licensed_by", "pack_fingerprint", "quoted_in", "notes",
+    "retired_on", "published_on", "licensed_by", "pack_fingerprint", "quoted_in", "notes",
     "validity", "row_status", "parity_verdict", "row_reason",
 })
 TOP_LEVEL = frozenset({"schema", "package", "generated", "status_vocabulary", "claims"})
@@ -105,6 +105,7 @@ ENUMS: dict[str, frozenset] = {
 
 _ISO = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _PLACEHOLDER = re.compile(r"\b(pending|TBD|TODO)\b", re.I)
+_COMMIT_EVIDENCE = re.compile(r"^([0-9a-f]{40}):(\S+)$")
 _PACK_FP = re.compile(r"^sha256:[0-9a-f]{64}$")
 _LICENSED = re.compile(r"\blicensed\b", re.I)
 #: A negation that ends right before ONE occurrence of "licensed" disclaims that occurrence only (looked for in
@@ -268,6 +269,57 @@ def iso_date(value) -> bool:
     return True
 
 
+def _git_ok(root: Path, *args: str) -> str | None:
+    """``git -C root args`` stdout (dates rendered in UTC), or None when it fails."""
+    try:
+        p = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=60,
+                           env={**os.environ, "TZ": "UTC"})
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return p.stdout if p.returncode == 0 else None
+
+
+def published_on_problems(root: Path, cid: str, c: dict, tracked: frozenset[str] | None,
+                          skips: list[str]) -> list[str]:
+    """``published_on`` dates a RETIRED claim's first public appearance: ``{"date", "evidence"}``, the evidence
+    being ``<40-hex commit>:<path>`` (resolved: the commit is an ancestor of HEAD, the path is in its
+    tree, and its committer date in UTC is the date) or an ``https://`` URL (listed, never resolved)."""
+    st, po = c.get("status"), c["published_on"]
+    if st != "retired":
+        return [f"{cid}: published_on on a {st!r} row -- it dates a retired claim's first public appearance"]
+    if not isinstance(po, dict) or set(po) != {"date", "evidence"}:
+        return [f"{cid}: published_on must be {{\"date\": \"YYYY-MM-DD\", \"evidence\": \"<commit>:<path>\" or an "
+                "https:// URL}} -- omit the field when the first appearance is unknown, never guess"]
+    out: list[str] = []
+    date, ev = po["date"], po["evidence"]
+    if not iso_date(date):
+        out.append(f"{cid}: published_on date {date!r} is not an ISO calendar date (YYYY-MM-DD)")
+    elif iso_date(c.get("retired_on")) and date > c["retired_on"]:
+        out.append(f"{cid}: published_on {date} is after retired_on {c['retired_on']}")
+    if isinstance(ev, str) and ev.startswith("https://") and len(ev) > len("https://"):
+        return out
+    m = _COMMIT_EVIDENCE.match(ev) if isinstance(ev, str) else None
+    if not m:
+        out.append(f"{cid}: published_on evidence {ev!r} is neither <40-hex commit>:<path> nor an https:// URL")
+        return out
+    sha, path = m.groups()
+    if tracked is None or (_git_ok(root, "rev-parse", "--is-shallow-repository") or "").strip() != "false":
+        skips.append(f"{cid}: published_on {sha[:12]}:{path} -- not resolved (needs a full-history git checkout)")
+        return out
+    if _git_ok(root, "cat-file", "-e", f"{sha}^{{commit}}") is None:
+        out.append(f"{cid}: published_on evidence commit {sha[:12]} is not in this clone")
+    elif _git_ok(root, "merge-base", "--is-ancestor", sha, "HEAD") is None:
+        out.append(f"{cid}: published_on evidence commit {sha[:12]} is not in HEAD's history (an unmerged commit "
+                   "was never published from this repository)")
+    elif not (_git_ok(root, "ls-tree", "--name-only", sha, "--", path) or "").strip():
+        out.append(f"{cid}: published_on evidence path {path!r} is not in commit {sha[:12]}")
+    else:
+        day = (_git_ok(root, "log", "-1", "--format=%cd", "--date=format-local:%Y-%m-%d", sha) or "").strip()
+        if iso_date(date) and day != date:
+            out.append(f"{cid}: published_on date {date} is not commit {sha[:12]}'s committer date {day} (UTC)")
+    return out
+
+
 # ------------------------------------------------------------------- check --
 
 class Sibling:
@@ -423,6 +475,8 @@ def check_claims(root: Path, doc: dict, claims: list[dict], *, sibling: Sibling 
         elif st != "retired" and "retired_reason" in c:
             out.append(f"{cid}: retired_reason on a {st!r} row -- one status per row: retire it, or move the text "
                        "to notes")
+        if "published_on" in c:
+            out += published_on_problems(root, cid, c, tracked, skips)
 
         qi = c.get("quoted_in")
         if qi is not None and not isinstance(qi, list):
