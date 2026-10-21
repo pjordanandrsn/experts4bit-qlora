@@ -189,6 +189,20 @@ ADAPTER_ALLOWED_LEVERS = {
                          "absmax, no activation statistics); no adapter touches the head, so it is a base-serving "
                          "property identical to the base server's"),
 }
+#: names _apply_levers or the lane hook it mirrors (bench/p42/hook/usercustomize.py) read that switch nothing on their
+#: own: each only configures the refused levers it names, so under an adapter it has nothing to configure
+ADAPTER_LEVER_CONFIG = {
+    "E4B_CALIB_LAYERS_PER_PASS": ("E4B_SERVE_EXP_INT4_CALIB", "E4B_SERVE_ATTN_INT4_CALIB",
+                                  "E4B_SERVE_LMHEAD_INT4_CALIB", "E4B_SERVE_DENSE_INT4_CALIB"),
+    "E4B_CALIB_SOURCE": ("E4B_SERVE_EXP_INT4_CALIB", "E4B_SERVE_ATTN_INT4_CALIB", "E4B_SERVE_LMHEAD_INT4_CALIB",
+                         "E4B_SERVE_DENSE_INT4_CALIB"),
+    "E4B_INT4_HESSIAN_BUDGET_GB": ("E4B_SERVE_EXP_INT4_CALIB",),
+    "E4B_INT4_ASSIGNMENT": ("E4B_SERVE_EXP_INT4_CALIB",),
+    "E4B_INT4_ARTIFACT_DIR": ("E4B_SERVE_EXP_INT4_CALIB",),
+    "E4B_INT4_DUMP_ARTIFACT_DIR": ("E4B_SERVE_EXP_INT4_CALIB",),
+    "E4B_INT4_EXPECTED_FINGERPRINT": ("E4B_SERVE_EXP_INT4_CALIB",),
+    "E4B_MODEL_ID": ("E4B_SERVE_EXP_INT4", "E4B_SERVE_EXP_INT4_CALIB"),
+}
 ADAPTER_ALLOW_ARENA_ENV = "E4B_PAGED_ADAPTER_ALLOW_UNVERIFIED_ARENA"
 ADAPTER_ACCEPT_BASE_ENV = "E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE"
 FUSE_QKV_ENV = "E4B_PAGED_FUSE_QKV"
