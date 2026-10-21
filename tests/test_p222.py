@@ -174,11 +174,11 @@ def test_the_shakedown_is_never_a_reading():
     """p222-shake-N runs on any sm_86+ card with 15 GB, with no power floor, at the shakedown's knobs, and it finishes 0
     only on the reducer's SHAKEDOWN; a 5090 run id keeps the class, cc and power refusals and finishes 0 only on GO or
     NO_GO."""
-    assert "p222-shake-1|p222-shake-2) SHAKE=1;;" in RUN
+    assert "p222-shake-1|p222-shake-2|p222-shake-3) SHAKE=1;;" in RUN          # shake-3: Amendment 2
     assert "8.6|8.9|9.0|10.0|12.0) ;;" in RUN and "VRAM_FLOOR=30000; [ \"$SHAKE\" = 1 ] && VRAM_FLOOR=15000" in RUN
     assert '--shakedown --layers 2 --reps 10 --grid 6 --select-steps 2' in RUN
     assert 'case "$SHAKE/$V" in 0/GO|0/NO_GO|1/SHAKEDOWN) finish 0;;' in RUN
-    assert "p222-5090-1|p222-5090-2|p222-5090-3|p222-shake-1|p222-shake-2) :;;" in DRIVE
+    assert "p222-5090-1|p222-5090-2|p222-5090-3|p222-shake-1|p222-shake-2|p222-shake-3) :;;" in DRIVE
 
 
 #: P156's box sweep (p156-5090-1): 288 plan x projection rows, each a first call; P145's per-name record: K25 per call
@@ -239,7 +239,7 @@ def test_the_guard_fits_with_25_percent_headroom():
 def test_the_shakedown_fits_its_own_guard_at_its_stated_price():
     """A shakedown id takes its own NEED_BENCH, so its 0.75 h guard at <= $0.40/h passes the runner's fit check."""
     assert '[ "$SHAKE" = 1 ] && NEED_BENCH=600' in RUN
-    order = [RUN.index(x) for x in ('p222-shake-1|p222-shake-2) SHAKE=1;;', '[ "$SHAKE" = 1 ] && NEED_BENCH=600',
+    order = [RUN.index(x) for x in ('p222-shake-1|p222-shake-2|p222-shake-3) SHAKE=1;;', '[ "$SHAKE" = 1 ] && NEED_BENCH=600',
                                     'FIT=$((INSTALL_TO_GATE_S + NEED_BENCH + RESERVE))')]
     assert order == sorted(order)
     fit = 600 + 600 + 600
@@ -277,8 +277,12 @@ REDUCE_MUTANTS = [
     ('    ma = rd["M"]\n', '    ma = rd["C1"]\n'),
     # the selection's winner not checked against the plan block B timed
     ('    elif rec.get("m") != m:\n', "    elif False:\n"),
-    # the self-pair band not enforced
-    ('    if not SELF_BAND[0] <= sp["median"] <= SELF_BAND[1]:\n', "    if False:\n"),
+    # the reading ignores the self-pair band (Amendment 2 keeps it ruling a reading)
+    ("    if not inside and not shake:                 # Amendment 2: the band rules a reading; a shakedown reports it\n",
+     "    if False:\n"),
+    # the shakedown VOIDs on the self-pair band (Amendment 2 reports it there)
+    ("    if not inside and not shake:                 # Amendment 2: the band rules a reading; a shakedown reports it\n",
+     "    if not inside:\n"),
     # T allowed to replay different bits in a second capture
     ('        if ident["T2"] is not True:\n', "        if False:\n"),
     # a P, C1 or M that moved bits ruled on as a timing
@@ -314,6 +318,10 @@ REDUCE_MUTANTS = [
     ("        out[proj] = ts[1] / ts[0] if len(ts) > 1 else None\n", "        out[proj] = ts[-1] / ts[0] if len(ts) > 1 else None\n"),
 ]
 BENCH_MUTANTS = [
+    # Amendment 2: an arm whose variant was compiled earlier gets no metadata (no fallback)
+    ("    if earlier and earlier[0]:\n", "    if False:\n"),
+    # Amendment 2: block A's reference compile (the tree at today's plan, T and T2's cubin) not recorded
+    ('        first[(p, R.plan_key(R.TODAY), R.T_LUT)] = (new_variants(kfn, before), "block A reference")\n', ""),
     # gate_up without the served gather
     ("k25(X[li], p, am, row0, rows, grp, order_, gather_div=R.TOPK,", "k25(X[li], p, am, row0, rows, grp, order_,"),
     # down without the served scatter
@@ -372,3 +380,69 @@ def test_unregistered_run_ids_are_refused(tmp_path):
                          env=_dry_env(tmp_path, "p222-5090-4"), timeout=120)
     assert out.returncode == 78 and "unregistered run ID" in out.stdout
     assert "p222-5090-1|p222-5090-2|p222-5090-3) :;;" in RUN
+
+
+# ------------------------------------------------------------------ Amendment 2: the real p222-shake-2 record first
+SHAKE2 = REPO / "tests" / "fixtures" / "p222_shake2"
+SHAKE2_PINS = {"bench_p222.json": "434cc9753c9a0b5c7daa1918c7df068f08c8681686d0ee7290008af3c391251d",
+               "verdict_p222.json": "f93575790e8dc89f047817a02f96219145bde5dc4dd82704fc2a7b8a9b5961ca"}
+
+
+def _shake2(name):
+    raw = (SHAKE2 / name).read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == SHAKE2_PINS[name], name           # the receipt's bytes, verbatim
+    return json.loads(raw)
+
+
+def test_the_real_shake2_record_reads_shakedown_with_the_band_reported():
+    """p222-shake-2's own record: the 035cedc4 reducer read it VOID on the self-pair band alone; the amended reducer
+    reads the same record SHAKEDOWN, reports the band, and computes the same read."""
+    rec, old = _shake2("bench_p222.json"), _shake2("verdict_p222.json")
+    assert old["verdict"] == "VOID" and old["why"] == ["self-pair T/T2 median 1.0217 outside (0.99, 1.01)"]
+    o = _reducer().verdict(rec)
+    assert o["verdict"] == "SHAKEDOWN", o["why"]
+    assert o["self_pair_band"] == {"band": [0.99, 1.01], "median": old["read"]["self_pair"]["median"],
+                                   "inside": False, "rules": False}
+    assert o["why"][1].startswith("self-pair T/T2 median 1.0217 outside (0.99, 1.01): reported, never ruling")
+    assert o["read"] == old["read"] and o["m"] == old["m"]                        # only the ruling moved
+    assert set(o["predictions"].values()) == {"UNREAD (a shakedown)"}
+    reading = dict(rec, shakedown=False)
+    assert _reducer().verdict(reading)["verdict"] == "VOID"                     # never a reading: structure still rules
+
+
+def test_every_arm_carries_its_compiled_metadata_on_a_shakedown_shaped_record():
+    """Amendment 2 (2), on shake-2's real record: the metadata pass's own rows (C1) and the sweep's first compiles (P,
+    M) give those arms their registers, spills and shared memory; T and T2 take block A's reference compile, stated
+    here because the 035cedc4 bench never recorded it, which is the gap."""
+    bench = _load("p222_bench_under_test", LANE / "p222_bench.py")
+    R = bench.R
+    rec = _shake2("bench_p222.json")
+    assert [a for a in R.ARMS if any(rec["compiled"][a][p] for p in ("gu", "dn"))] == ["C1"]   # the gap, as recorded
+    tree = ([{"n_regs": 64, "n_spills": 0, "shared": 6400, "num_warps": 4, "num_stages": 3}], "block A reference")
+    first = {(proj, R.plan_key(R.TODAY), R.T_LUT): tree for proj in ("gu", "dn")}
+    for proj in ("gu", "dn"):
+        for row in rec["select"][proj]:
+            if row["compiled"]:
+                first.setdefault((proj, R.plan_key(row["plan"]), R.P_LUT), (row["compiled"], "block A sweep"))
+    got = {}
+    for arm in R.ARMS:
+        pg, pd, lut = rec["plans"][arm]
+        for proj, plan in (("gu", pg), ("dn", pd)):
+            got[(arm, proj)] = bench.arm_compiled(rec["compiled"][arm][proj], first.get((proj, R.plan_key(plan), lut)))
+    for (arm, proj), rows in got.items():
+        assert rows and all(r.get(f) is not None for r in rows for f in ("n_regs", "n_spills", "shared")), (arm, proj)
+    src = {arm: {rows[0]["source"] for (a, _), rows in got.items() if a == arm} for arm in R.ARMS}
+    assert src == {"T": {"block A reference"}, "T2": {"block A reference"}, "P": {"block A sweep"},
+                   "C1": {"block B metadata pass"}, "M": {"block A sweep"}}
+    assert got[("M", "gu")][0]["n_spills"] == 2                                  # M's gate_up plan, as the sweep compiled it
+
+
+def test_amendment_2_is_additive():
+    """The registered body stands: each superseded line keeps its text and gains the marker, and the new section sits
+    after Amendment 1 and before the receipts."""
+    assert sum(x.endswith(" *(superseded by Amendment 2)*") for x in PREREG.splitlines()) == 3
+    for line in ("  - **T2 differs from T by a bit on any rep**, or T/T2's median is outside 0.99-1.01;",
+                 "- **Run ids** `p222-5090-1` to `-3`, and `p222-shake-1` / `-2` for the shakedown."):
+        assert line in PREREG, line
+    assert PREREG.index("## Amendment 1") < PREREG.index("## Amendment 2") < PREREG.index("## Receipts")
+    assert "**P(VOID | no real difference)\n   is under 1 in 20,000**" in PREREG

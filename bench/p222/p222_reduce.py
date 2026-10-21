@@ -51,7 +51,7 @@ ITERS = 10                                   # timed replays per arm per rep
 GO_BAR = 1.10                                # M's median T/M minus 2 SE, raw AND clock-adjusted, must reach this
 TIE_BAR = 1.02                               # M's median over C1 below this: the served read takes C1's knob instead
 BOOT_B, BOOT_SEED = 2000, 222
-SELF_BAND = (0.99, 1.01)                     # T/T2's median, else the instrument is VOID
+SELF_BAND = (0.99, 1.01)                     # T/T2's median, else a READING is VOID (a shakedown reports it, Amendment 2)
 CLOCK_TOL, MEM_CLOCK_TOL = 0.02, 0.01        # an arm's median SM / memory clock off T's by more: labelled
 MIN_POWER_W = 575                            # every NVML sample's enforced limit, else VOID
 P145_K25_SHARE = 0.911                       # P145 (p145-5090-1): the K25 pair's share of Mixtral's W16 step, tree/today
@@ -301,7 +301,9 @@ def verdict(rec):
     rd = read_block(rec["read"], rec["clocks"])
     out.update(m=m, read=rd, compiled=rec.get("compiled"))
     sp = rd["self_pair"]
-    if not SELF_BAND[0] <= sp["median"] <= SELF_BAND[1]:
+    inside = SELF_BAND[0] <= sp["median"] <= SELF_BAND[1]
+    out["self_pair_band"] = {"band": list(SELF_BAND), "median": sp["median"], "inside": inside, "rules": not shake}
+    if not inside and not shake:                 # Amendment 2: the band rules a reading; a shakedown reports it
         return dict(out, verdict="VOID", why=[f"self-pair T/T2 median {sp['median']:.4f} outside {SELF_BAND}"])
     findings = [{"arm": a, "moved_bits_on_steps": rd["moved_bits"][a][:8]} for a in ("P", "C1", "M")
                 if rd["moved_bits"][a]]
@@ -316,6 +318,9 @@ def verdict(rec):
     moved = [f for f in findings if f["arm"] in ("P", "C1", "M")]
     if shake:
         out["verdict"], out["why"] = "SHAKEDOWN", ["a shakedown record is never a reading"]
+        if not inside:
+            out["why"].append(f"self-pair T/T2 median {sp['median']:.4f} outside {SELF_BAND}: reported, never ruling "
+                              "in a shakedown (Amendment 2)")
     elif moved:
         out["verdict"], out["why"] = "NO_GO", [f"{moved[0]['arm']} moved a bit (steps {moved[0]['moved_bits_on_steps']}): "
                                                "a contract finding against grouped-nf4-gemm; no timing is ruled on"]
@@ -487,6 +492,17 @@ def self_test():
     sk["read"]["steps"] = sk["read"]["steps"][:10]
     o = verdict(sk)
     assert o["verdict"] == "SHAKEDOWN", o["why"]
+    assert o["self_pair_band"] == {"band": [0.99, 1.01], "median": o["read"]["self_pair"]["median"], "inside": True,
+                                   "rules": False}
+    sk = _fake(shakedown=True, layers=2, device="NVIDIA L4", cc=[8, 9], limit=72.0, self_ratio=1.03)
+    sk["read"]["reps"] = sk["read"]["reps"][:10]
+    sk["read"]["steps"] = sk["read"]["steps"][:10]
+    o = verdict(sk)                                                          # Amendment 2: a shakedown reports the band
+    assert o["verdict"] == "SHAKEDOWN" and o["self_pair_band"]["inside"] is False, o["why"]
+    assert "reported, never ruling in a shakedown (Amendment 2)" in o["why"][1]
+    for ratio in (1.03, 0.97):                                               # a reading still VOIDs, either side
+        o = verdict(_fake(self_ratio=ratio))
+        assert o["verdict"] == "VOID" and o["self_pair_band"]["rules"] is True, ratio
     w = williams(len(ARMS))                                                  # five arms: 10 orders
     assert len(w) == 10 and all(sorted(row) == list(range(5)) for row in w)
     assert all(sorted(row[i] for row in w) == sorted(list(range(5)) * 2) for i in range(5))   # each position twice
@@ -495,7 +511,7 @@ def self_test():
     w6 = williams(6)
     assert len({(row[i], row[i + 1]) for row in w6 for i in range(5)}) == 30                   # the even case, kept
     assert len(READ_STEPS) % len(w) == 0 and not set(SELECT_STEPS) - set(range(STEPS))
-    print("p222_reduce self-test OK (50 checks)")
+    print("p222_reduce self-test OK (55 checks)")
 
 
 
