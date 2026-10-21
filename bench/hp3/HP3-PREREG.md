@@ -120,6 +120,11 @@ and runs the evaluator's zero-adapter pass on each. G1' then checks two things f
 - G1' is deterministic: no interval and no SE. It is computed by the registered reducer (`hp3_reduce.py g1`), which writes
   `hp3/g1.json` and exits 4 on a whole-box CLOSE. A CLOSE is a reading, not a strike.
 
+## The evaluator
+
+HP2's one evaluator (`bench/hp1/hp1_eval.py`, as merged) reads every base and every exported adapter. HP3 runs it in the e4b venv on
+the matched build, so the evaluator's process is on that build too.
+
 ## Per run: the 6(b) round-trip VOID (as HP2)
 
 For run s of framework f, a_f(s) = (evaluator − in-loop step N) − (evaluator zero adapter − in-loop step 0), on the 48 scored
@@ -128,6 +133,8 @@ rows. Run s VOIDs iff |a_f(s)| > 0.01. That is `ROUNDTRIP_MATCH`, AXO1767's MATC
   arm's own record (never from a label): mode = off; experts implementation = eager; plugins = none; effective LoRA-kernel set =
   empty.
 - A silent fallback onto the kernel path fails the check and cannot pass as data.
+- **No redraw.** HP2 redrew a run-level VOID once, but HP3 does not. A VOID run makes its pairs NOT_READ, and that is reported as
+  it stands.
 
 ## The verdict, per pair: G2'
 
