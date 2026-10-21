@@ -195,15 +195,18 @@ A change to any rule above is a new scheme, not an edit of `qfp-v1`. A reader re
 from the shapes). The real cost is measured at save time, recorded per artifact in `fingerprints.<scope>.seconds`, and
 quoted from the registered cross-format read (PA-4), never assumed.
 
-**Where the bytes come from.** Each canonical line is built by one source-independent function
-(`adapter_schema.expert_line` and `adapter_schema.linear_line`). Each source only finds the tensors:
-- **Training, resident:** the module's own tensors.
-- **Training, offloaded:** an evicted stack is read from its host home, the same substitution `state_dict` makes, so
-  offload and resident training fingerprint alike. A stack with no readable host copy is refused by name, never hashed
-  as empty.
-- **Serving:** the paged server's expert stacks are meta-backed, and the bytes live in the arena. So the reader's
-  expert fingerprint is computed from the arena's packed bytes and fp32 absmax, through the same function. That is
-  PA-1's, and its test compares the arena-side fingerprint with the training-side one on one adapter.
+**Where the bytes come from.** `quant_fingerprint(model, scope, *, source)` looks the tensors up in one of three
+sources. Each canonical line is then built by one source-independent function (`adapter_schema.expert_line` and
+`adapter_schema.linear_line`), so the source only decides where the bytes are found:
+- **`resident`, training with resident experts:** the module's own tensors. An evicted placeholder is refused, and
+  the message names `offload_homes`.
+- **`offload_homes`, training with expert offload:** each stack is read where its bytes live: resident when staged, and
+  its host home when evicted (the same substitution `state_dict` makes). So offload and resident training fingerprint
+  alike. A stack with no readable host copy is refused by name, never hashed as empty.
+- **`arena`, serving:** the paged server's expert stacks are meta-backed, and the bytes live in the arena. So the reader's
+  expert fingerprint is computed from the arena's packed bytes and fp32 absmax, through the same function. The source
+  is defined here and raises `NotImplementedError` naming PA-1. PA-1 implements it, and its test compares the
+  arena-side fingerprint with the training-side one on one adapter.
 
 **What the reader does with it today.** e4b's paged server verifies a `/2` directory:
 - the v1 checks;

@@ -183,19 +183,29 @@ def test_an_offloaded_stack_fingerprints_as_the_resident_one():
     """cerin-maintainer's case: offload (CHOOSING's mode on 12 and 24 GB cards) evicts each stack to a host home; the
     canonical form is the same wherever the bytes live."""
     resident = S.quant_fingerprint(_lora_stack(), "experts")
-    evicted = S.quant_fingerprint(_offloaded_by_hand(_lora_stack()), "experts")
+    evicted = S.quant_fingerprint(_offloaded_by_hand(_lora_stack()), "experts", source="offload_homes")
     assert evicted["sha256"] == resident["sha256"] and evicted["modules"] == resident["modules"] == 2
+    assert S.quant_fingerprint(_lora_stack(), "experts", source="offload_homes")["sha256"] == resident["sha256"]
+
+
+def test_each_source_reads_where_it_says():
+    with pytest.raises(ValueError, match="fingerprint it with source='offload_homes'"):
+        S.quant_fingerprint(_offloaded_by_hand(_lora_stack()), "experts", source="resident")
+    with pytest.raises(NotImplementedError, match="PA-1"):
+        S.quant_fingerprint(_lora_stack(), "experts", source="arena")
+    with pytest.raises(ValueError, match="source must be one of"):
+        S.quant_fingerprint(_lora_stack(), "experts", source="disk")
 
 
 def test_an_evicted_stack_with_no_host_copy_is_refused_by_name():
     m = _offloaded_by_hand(_lora_stack())
     del m.experts._offload.home["down_proj"]
     with pytest.raises(ValueError, match="expert stack experts is evicted and its host copy of down_proj is unavailable"):
-        S.quant_fingerprint(m, "experts")
+        S.quant_fingerprint(m, "experts", source="offload_homes")
     m2 = _offloaded_by_hand(_lora_stack())
     del m2.experts._offload                                              # a placeholder and no handle at all
     with pytest.raises(ValueError, match="no offload handle"):
-        S.quant_fingerprint(m2, "experts")
+        S.quant_fingerprint(m2, "experts", source="offload_homes")
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="REGISTERED for PA-4's box: real expert offload needs CUDA")
@@ -210,7 +220,8 @@ def test_real_offload_fingerprints_as_resident_on_cuda():
     off.experts.to("cuda")
     enable_expert_offload(off.experts, torch.device("cuda"), pin=False)
     assert off.experts.base.gate_up_proj.numel() == 0                   # really evicted
-    assert S.quant_fingerprint(off, "experts")["sha256"] == S.quant_fingerprint(resident, "experts")["sha256"]
+    assert (S.quant_fingerprint(off, "experts", source="offload_homes")["sha256"]
+            == S.quant_fingerprint(resident, "experts")["sha256"])
 
 
 def test_the_canonical_line_functions_are_the_one_path():

@@ -51,6 +51,10 @@ SCHEMA_V2 = "backend-adapter/2"
 SCHEME_ID = "qfp-v1"
 KNOWN_SCHEMES = (SCHEME_ID,)
 SCOPES = ("attention", "experts")
+#: where the tensors are looked up (the canonical lines are the same function whatever the source):
+#: ``resident`` the module's own tensors (an evicted placeholder is refused); ``offload_homes`` each stack where its bytes
+#: live (resident when staged, its expert-offload host home when evicted); ``arena`` a served model's arena rows (PA-1)
+SOURCES = ("resident", "offload_homes", "arena")
 #: bytes taken from each end of an expert stack's flattened packed storage (qfp-v1)
 EXPERT_SUBSET_BYTES = 64 * 1024
 
@@ -143,7 +147,7 @@ def _resolved(name, mod, handle, attr):
     return h
 
 
-def _expert_records(name, mod, handle=None) -> list:
+def _expert_records(name, mod, handle=None, source="offload_homes") -> list:
     """``[(line, bytes_hashed)]`` for one expert stack's gate_up and down (qfp-v1's fixed subset of the packed bytes).
     ``handle`` is the stack's expert-offload handle, when one is installed (its homes hold the evicted tensors)."""
     from .absmax_dq import expert_absmax_fp32
@@ -152,6 +156,9 @@ def _expert_records(name, mod, handle=None) -> list:
     for which in ("gate_up", "down"):
         shape = getattr(mod, f"_{which}_shape")
         evicted = getattr(mod, f"{which}_proj").numel() == 0
+        if evicted and source == "resident":
+            raise ValueError(f"quant_fingerprint: expert stack {name} is evicted by expert offload; source='resident' "
+                             f"reads only resident tensors: fingerprint it with source='offload_homes'")
         packed = _resolved(name, mod, handle, f"{which}_proj")
         if evicted:
             # evicted: the host home holds the fp32 absmax (offload refuses a double-quantized absmax, so the module's
@@ -212,11 +219,19 @@ def _expert_stacks(model) -> list:
     return out
 
 
-def quant_fingerprint(model, scope: str) -> dict:
-    """``{"scheme_id", "scope", "modules", "sha256", "bytes_hashed", "seconds"}`` for ``scope`` (``"attention"`` or
-    ``"experts"``), by qfp-v1 (module docstring). An empty scope is refused: nothing to fingerprint is not a match."""
+def quant_fingerprint(model, scope: str, *, source: str = "resident") -> dict:
+    """``{"scheme_id", "scope", "source", "modules", "sha256", "bytes_hashed", "seconds"}`` for ``scope``
+    (``"attention"`` or ``"experts"``), by qfp-v1 (module docstring), looking the tensors up in ``source`` (``SOURCES``).
+    A training run with expert offload fingerprints with ``source="offload_homes"``. An empty scope is refused:
+    nothing to fingerprint is not a match."""
     if scope not in SCOPES:
         raise ValueError(f"quant_fingerprint scope must be one of {SCOPES}, got {scope!r}")
+    if source not in SOURCES:
+        raise ValueError(f"quant_fingerprint source must be one of {SOURCES}, got {source!r}")
+    if source == "arena":
+        raise NotImplementedError("quant_fingerprint source='arena' is PA-1's: a served model's expert stacks are meta "
+                                  "and their bytes live in the arena, so PA-1 reads the arena's rows and builds each line "
+                                  "with expert_line, the same function as the other sources")
     t0 = time.perf_counter()
     records = []
     if scope == "attention":
@@ -224,12 +239,12 @@ def quant_fingerprint(model, scope: str) -> dict:
             records.append(_linear_record(name, lin))
     else:
         for name, mod, handle in _expert_stacks(model):
-            records.extend(_expert_records(name, mod, handle))
+            records.extend(_expert_records(name, mod, handle, source))
     if not records:
         raise ValueError(f"quant_fingerprint: no {scope} module in this model")
     lines = sorted(line for line, _ in records)
     digest = _sha(("\n".join(lines) + "\n").encode("utf-8"))
-    return {"scheme_id": SCHEME_ID, "scope": scope, "modules": len(lines), "sha256": digest,
+    return {"scheme_id": SCHEME_ID, "scope": scope, "source": source, "modules": len(lines), "sha256": digest,
             "bytes_hashed": sum(n for _, n in records), "seconds": round(time.perf_counter() - t0, 3)}
 
 
