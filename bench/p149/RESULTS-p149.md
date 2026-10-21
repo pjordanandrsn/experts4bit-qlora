@@ -155,13 +155,17 @@ In D the 36 positions sit at bucket 8 (26), 4 (7), 2 (2) and 1 (1) against bucke
 
 - **What it places.** The split count per bucket is the dominant source: with one split, buckets 2, 4 and 8 match bucket
   16 bit for bit. A much smaller difference remains at bucket 1 alone (W16 row 15, step 31, the 32-token run's last
-  step, one live row): 0.0625 against attention's 4.742. It is not attributed here.
+  step, one live row): 0.0625 against attention's 4.742. Follow-up (c) (`p149b1-5090-5`) rules out the NF4 expert route
+  at one row: sending that row's experts through K25 (`E4B_NF4_GROUPED_SMALLM=1`) or through the M-tile GEMM
+  (`E4B_NF4_T1_DEVICE_GROUPING=1`) leaves the same position and magnitude unchanged, to the bit. The difference stays
+  unattributed: it lies in bucket-1 execution outside the expert routes.
 - **For the routing-matched read:** forcing each pass's own-length stream is not enough. Its arms must replay the same
   bucket at each step, or hold the split count fixed and account for bucket 1. That read needs its own registration.
 
 `p149mnt-5090-1` to `-7` cost $0.308 in all. `-6` read arm D (its arm F stopped on a harness fault before any record)
 and `-7` read both. `-3` and `-5` stopped at the runner's power check, and `-1`, `-2` and `-4` were refused at create
-before any instance existed.
+before any instance existed. `p149b1-5090-1` to `-5` cost $0.039 in all: `-5` read arms F, G and H, and `-1` to `-4` were
+refused before any instance existed. Their records are in the private receipt store.
 
 ### The predictions, graded
 
