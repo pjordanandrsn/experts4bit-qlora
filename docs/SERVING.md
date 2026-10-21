@@ -352,14 +352,21 @@ rows) and `levers.kv.pool_mib`, and the step trace counts `dec_pieces` (replays 
   eager default. That is inside the eager default's own neutral perturbations: a half-batch reads +0.0018, a prefill
   split +0.0005, spreads 0.011–0.013. A halved decode scale reads +1.05. On that, `E4B_PAGED_GRAPHS=auto` became the
   default (#770). Greedy outputs differ from the old eager default's at the bf16 level, at no measured quality cost.
+- **Identical tokens are per schedule.** Where this page says an arm decodes identical tokens, both arms ran the same
+  prompts at the same lengths in the same arrival order, so every decode step landed in the same graph bucket. The
+  served decode is not schedule-invariant: the paged FP8 attention decode plans its split count per bucket, and the
+  split-KV combine agrees across split counts within tolerance, not bit for bit. A step can therefore pick a different
+  near-tie token when a request's length or its neighbours change the bucket it lands in. A second, much smaller
+  difference shows at bucket 1 only (single-row steps), not attributed. Source: P149's follow-up, runs `p149mnt-5090-6`
+  and `p149mnt-5090-7`, in the private receipt store.
 - **One KV-table selection per step** (lane P111, [`bench/p111/RESULTS-p111.md`](../bench/p111/RESULTS-p111.md)). A
   bucket's step selects every layer's block-table and seq-lens rows once, outside the graph, instead of once per layer
-  (`E4B_KV_STEP_SELECT`, on by default; `0` keeps the per-layer form). On the same server it decodes identical tokens
-  1.036× as fast with 16 concurrent requests and 1.012× with one.
+  (`E4B_KV_STEP_SELECT`, on by default; `0` keeps the per-layer form). On the same server and schedule it decodes identical
+  tokens 1.036× as fast with 16 concurrent requests and 1.012× with one.
 - **Programmatic dependent launch** (lane P113, [`bench/p113/RESULTS-p113.md`](../bench/p113/RESULTS-p113.md)).
   grouped-nf4-gemm's decode-row kernels can launch as programmatic dependents of the kernel before them
   (`GNF4_PDL=1`, sm_90+ NVIDIA). Capped to launches of at most 8 rows (`GNF4_PDL_MAX_ROWS=8`), SC1's int4
-  configuration decodes identical tokens 1.0404× as fast with one request and 1.0000× with 16;
+  configuration decodes identical tokens (on one schedule) 1.0404× as fast with one request and 1.0000× with 16;
   uncapped it costs 16 requests 2.1 %. The capped form is grouped-nf4-gemm's default from
   0.37.0. The default NF4 server reaches only two of the switched kernels, so it was not read there.
 

@@ -26,6 +26,10 @@ here too.
 
 - **Identity:** today's plan decoded the same tokens in all five of its processes (the null), and the c1 arms decoded
   those tokens too (the contract), at W16 and W1, at 32 and 160 tokens.
+- **Note (2026-10-21):** this identity is between arms on the same prompts, lengths and arrival order. It does not
+  make the served tokens schedule-invariant: a step can pick a different near-tie token when the graph bucket it
+  lands in changes (P149's follow-up, runs `p149mnt-5090-6` and `p149mnt-5090-7`, in the private receipt store). The
+  finding above is unchanged.
 - **Engagement, three witnesses:** every process's build recorded exactly 960 K25 calls under qwen3_moe's default decode
   (`prmt`, env unset, `default-allowlisted`), exactly 960 under its own plan and nothing under the other, and its kernel
   received exactly 1,920 calls at its plan's block shapes (today: 32/64/4/3 for both projections; c1: gate_up 64/256/4/2

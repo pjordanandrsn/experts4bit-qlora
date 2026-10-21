@@ -25,6 +25,10 @@ here too.
 
 - **Identity:** the tree decoded the same tokens in all five of its processes (the null), and the prmt arms decoded
   those tokens too (the contract), at W16 and W1, at 32 and 160 tokens.
+- **Note (2026-10-21):** this identity is between arms on the same prompts, lengths and arrival order. It does not
+  make the served tokens schedule-invariant: a step can pick a different near-tie token when the graph bucket it
+  lands in changes (P149's follow-up, runs `p149mnt-5090-6` and `p149mnt-5090-7`, in the private receipt store). The
+  finding above is unchanged.
 - **Engagement:** every process's build recorded exactly 960 K25 calls under its own decode and nothing under the
   other, and exactly 480 bandwidth-GEMV calls at T == 1. Both early gates passed. The two closed forms, derived from the
   code and confirmed in part on a $0 layer-cut build (`layercut/`), hold on the 5090.
