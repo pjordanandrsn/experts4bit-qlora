@@ -561,7 +561,7 @@ fi
 # MISMATCH sets H3_OK=0 and names the cause. The family then ends, and under the shakedown token that is the (R) fallback signal.
 H3_OK=0; H3_REASON="built only for the qwen3hp3 tokens"
 PY_H3E=$W/venv-hp3-e4b/bin/python; PY_H3U=$W/venv-hp3-unsloth/bin/python; PY_H3A=$W/venv-hp3-axolotl/bin/python
-H3_TORCH=${TC1_HP3_TORCH:-2.14.0}; H3_BNB=0.50.2; H3_UNS=${TC1_HP3_UNSLOTH:-2026.10.7}; H3_ZOO=${TC1_HP3_ZOO:-2026.10.7}; H3_AX=${TC1_HP3_AXOLOTL:-0.20.0}
+H3_TORCH=2.14.0; H3_BNB=0.50.2; H3_UNS=2026.10.7; H3_ZOO=2026.10.7; H3_AX=0.20.0   # the registered pins (HP3-PREREG build (P)): literals, never knobs
 H3_INDEX=https://download.pytorch.org/whl/cu130
 case " $FAMILIES " in *" qwen3hp3 "*|*" qwen3hp3shake "*)
   if [ "$CU130_OK" != 1 ]; then H3_REASON="$CU130_REASON"; say "HP3 venvs SKIPPED: $H3_REASON"
@@ -779,7 +779,7 @@ arm_once(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$
     hbdcal) s=1; en=300; ee=1; ex_tag=hbd_e0a;;
     hp3cal) s=1; en=300; ee=1; ex_tag=hp3cal_e4b_k00_s3407;;               # HP3: HP2's calibration step (step 0 is read); competitors check e4b's count
     hp3)    s=$CURVE_STEPS; en=$HP1_EVAL_N; ee=$HP1_EVAL_EVERY; ex_tag=hp3cal_e4b_k00_s3407;;   # HP3: the field recipe (HP2's), 48 scored rows
-    hp3shake) s=${TC1_HP3_SHAKE_STEPS:-4}; en=$HP1_EVAL_N; ee=${TC1_HP3_SHAKE_STEPS:-4}; ex_tag=hp3cal_e4b_k00_s3407;;  # the shakedown's short runs                   # HBD: HPN's recipe; Unsloth checks its trainable count against E0a                 # HPN: one step on the 300 rows; Unsloth checks its trainable count against hpn_e4b_a
+    hp3shake) s=4; en=$HP1_EVAL_N; ee=4; ex_tag=hp3cal_e4b_k00_s3407;;  # the shakedown's short runs                   # HBD: HPN's recipe; Unsloth checks its trainable count against E0a                 # HPN: one step on the 300 rows; Unsloth checks its trainable count against hpn_e4b_a
   esac
   local EXP EXPARG=""; [ "$FW" != e4b ] && { EXP=$(expect_of $FAM $ex_tag); [ -n "$EXP" ] && EXPARG="--expect-trainable $EXP"; }
   local A; A=$(alarm_for $AL)
@@ -2653,14 +2653,14 @@ tc1_hp2_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
 # says. Phase D is the evaluator's pass and hp3_reduce.py verdict, with the axolotl receipts for the engagement check.
 # No redraw: a VOID run makes its pairs NOT_READ.
 # SHAKE=1 (qwen3hp3shake, never data) is the same pipeline on the 2-layer cut (only the two shards it reads are fetched), with one
-# seed and TC1_HP3_SHAKE_STEPS-step runs. The (R) fallback signal there is a build failure or a G1' result other than PASS.
+# seed and 4-step runs. The (R) fallback signal there is a build failure or a G1' result other than PASS.
 # hp3_fail AF FW TAG: ruling 5. On the shakedown, an arm that installed and imported but did not run is classified from the error text
 # it left (hp3_build.py classify: its log and its receipt's reason; never by hand). A pre-named host class (OOM under the VRAM floor,
 # driver/Xid/ECC, provider preemption) uses the spare; anything else is the (R) trigger. The line names the class and quotes the error.
 hp3_fail(){ local AF=$1 FW=$2 TAG=$3 st=$4 cls v
   v=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -dc '0-9')
   cls=$($PY_E4B $W/hp3_build.py classify --log logs/run_${AF}_${FW}_${TAG}.log --receipt $W/${AF}_${FW}_${TAG}.json ${v:+--vram-mib $v} \
-        --floor-mib ${TC1_HP3_SHAKE_VRAM_FLOOR_MIB:-16384} 2>/dev/null) || cls="R | the classifier failed"
+        --floor-mib 16384 2>/dev/null) || cls="R | the classifier failed"
   [ -n "$cls" ] || cls="R | the classifier printed nothing"
   case "$cls" in HOST_*) echo "HP3 ARM_FAILED $FW/$TAG $st: host-attributable (${cls%% |*}): the spare | ${cls#*| }";;
     *) echo "HP3 ARM_FAILED $FW/$TAG $st: ${cls%% |*} -> the (R) fallback signal | ${cls#*| }";; esac | tee -a summary.txt; }

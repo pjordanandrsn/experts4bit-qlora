@@ -157,14 +157,29 @@ def test_classify_names_only_the_pre_named_host_classes_and_quotes_the_line():
     assert B.classify(oom, 12288, 16384) == ("HOST_OOM_UNDER_FLOOR", oom)
     assert B.classify(oom, 24576, 16384)[0] == "R"                       # OOM on a card at or over the floor is the build's
     assert B.classify(oom, None, 16384)[0] == "R"
-    assert B.classify("NVRM: Xid (PCI:0000:01:00): 79, GPU has fallen off the bus", 32768, 16384)[0] == "HOST_DRIVER"
+    assert B.classify("RuntimeError: CUDA error: GPU has fallen off the bus (NVRM: Xid 79)", 32768, 16384)[0] == "HOST_DRIVER"
     assert B.classify("RuntimeError: CUDA error: uncorrectable ECC error encountered", 32768, 16384)[0] == "HOST_DRIVER"
-    assert B.classify("the instance was preempted by the provider", 32768, 16384)[0] == "HOST_PREEMPT"
+    assert B.classify("", 32768, 16384, reason="the instance was preempted by the provider")[0] == "HOST_PREEMPT"
     for text in ("Linux 6.8.0 #1 SMP PREEMPT_DYNAMIC\nTraceback (most recent call last):\nNotImplementedError: aten::_grouped_mm",
                  "triton.compiler.errors.CompilationError: at 12:4", "ImportError: undefined symbol: _ZN3c10"):
         cls, line = B.classify(text, 32768, 16384)
         assert cls == "R" and line == text.splitlines()[-1], (text, cls, line)
     assert B.classify("", 32768, 16384) == ("R", "(no error text captured)")
+
+
+def test_classify_reads_only_the_terminal_error_so_an_incidental_mention_is_r():
+    """The review's three cases: an earlier mention of NVML, pynvml or ECC never makes a later real failure host-attributable."""
+    sys.path.insert(0, str(D.REPO / "bench" / "hp3"))
+    import hp3_build as B
+    fail = "RuntimeError: Triton compilation failed: ptxas error"
+    for pre in ("UserWarning: Can't initialize NVML", '  File "x.py", line 3, in <module>\n    import pynvml',
+                "gpu: name=RTX 4000 Ada ECC errors=0 Xid=none-seen"):
+        assert B.classify(pre + "\nTraceback (most recent call last):\n" + fail, 32768, 16384) == ("R", fail), pre
+    oom = "torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 GiB"
+    assert B.classify(oom + "\nRuntimeError: unsupported op", 12288, 16384) == ("R", "RuntimeError: unsupported op")
+    assert B.classify("noise\n" + oom, 12288, 16384) == ("HOST_OOM_UNDER_FLOOR", oom)
+    assert B.classify("x", 32768, 16384, reason="the instance was preempted by the provider")[0] == "HOST_PREEMPT"
+    assert B.classify("kernel: Linux 6.8 #1 SMP PREEMPT_DYNAMIC\nValueError: bad shape", 32768, 16384)[0] == "R"
 
 
 def test_a_shakedown_arm_that_does_not_run_signals_r_unless_its_class_is_a_host_class(tmp_path):

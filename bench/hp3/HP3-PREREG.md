@@ -113,8 +113,9 @@ pre-named host classes, which use the spare instead:
 - provider preemption or teardown mid-run.
 
 Anything else is (R), including a Python exception, a kernel compile error or an unsupported op.
-- The class is read from the error text the arm left, by `hp3_build.py classify` (its log and its receipt's reason), never by
-  hand.
+- The class is read from the TERMINAL error only, by `hp3_build.py classify`: the receipt's reason plus the log's final
+  exception line, never by hand. A host class must match that error's own signature, so an earlier incidental mention (an NVML
+  warning, an `import pynvml` frame, a config dump's `ECC errors=0`) never makes a failure host-attributable.
 - The summary line names the class and quotes the error line.
 - If the spare also fails host-attributably, the lane stops and reports: no (R) and no read. (R) is for a framework/build
   incompatibility, not a bad host.

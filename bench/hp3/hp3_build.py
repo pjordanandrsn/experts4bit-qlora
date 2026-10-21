@@ -9,7 +9,7 @@ equal the pins. Those fields are torch, CUDA, bitsandbytes, the bnb library's sh
 framework's own, recorded and never compared. Exit 0 MATCHED, 5 MISMATCH (the (R) fallback signal under the shakedown token), 2 unusable.
 
 `classify --log L [--receipt R] --vram-mib N --floor-mib M` (ruling 5): a shakedown arm that installed and imported but did not run.
-The class is read from the error text the arm left, never set by hand:
+The class is read from the TERMINAL error only (the receipt's reason plus the log's final exception line), never set by hand:
 - HOST_OOM_UNDER_FLOOR: CUDA out of memory on a card whose VRAM is under the registered floor;
 - HOST_DRIVER: a driver, Xid or ECC error;
 - HOST_PREEMPT: provider preemption or teardown mid-run.
@@ -90,29 +90,36 @@ def compare(probes, want_torch, want_bnb):
             "verdict": "MISMATCH" if bad else "MATCHED", "problems": bad}
 
 
-HOST_CLASSES = (
-    ("HOST_DRIVER", re.compile(r"\bXid\b|\bECC\b|uncorrectable|GPU is lost|fallen off the bus|fell off the bus|NVML|"
-                               r"CUDA driver version is insufficient|no CUDA-capable device|cudaErrorDevicesUnavailable|unspecified launch failure "
-                               r"\(driver\)", re.I)),
-    ("HOST_PREEMPT", re.compile(r"\bpreempted\b|\bpreemption\b|instance (?:is |was )?(?:being )?(?:stopped|terminated|reclaimed)|spot (?:instance )?interrupt", re.I)),
+HOST_CLASSES = (    # each needs its own terminal signature: the failure itself, never an incidental mention
+    ("HOST_DRIVER", re.compile(r"\bXid\b|uncorrectable ECC error|ECC error encountered|GPU (?:has )?fallen off the bus|GPU is lost|"
+                               r"CUDA driver version is insufficient|no CUDA-capable device is detected|cudaErrorDevicesUnavailable", re.I)),
+    ("HOST_PREEMPT", re.compile(r"\bpreempted\b|\bpreemption\b|instance (?:is |was )?(?:being )?(?:stopped|terminated|reclaimed)|"
+                                r"spot (?:instance )?interrupt", re.I)),
 )
 OOM = re.compile(r"CUDA out of memory|OutOfMemoryError|CUBLAS_STATUS_ALLOC_FAILED", re.I)
-ERRLINE = re.compile(r"Error|Exception|Traceback|error:|FAILED|Killed", re.I)
+EXC = re.compile(r"^(?:[A-Za-z_][\w.]*\.)?[A-Za-z_]\w*(?:Error|Exception|Interrupt)\b")     # a traceback's final "SomeError: ..." line
 
 
-def classify(text, vram_mib, floor_mib):
-    """(class, the quoted line) for an arm that did not run. Host classes first, by their own text; OOM is host-attributable only on a
-    card under the floor; anything else is R."""
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+def terminal(log, reason=""):
+    """The terminal error (ruling 5): the receipt's reason, plus the log's final exception line, or else its last line."""
+    lines = [ln.strip() for ln in log.splitlines() if ln.strip()]
+    exc = [ln for ln in lines if EXC.match(ln)]
+    last = exc[-1] if exc else (lines[-1] if lines else "")
+    return [t for t in (str(reason or "").strip(), last) if t]
+
+
+def classify(log, vram_mib, floor_mib, reason=""):
+    """(class, the quoted line) for an arm that did not run. Only the terminal error is read. A host class must match that error's
+    own signature; OOM is host-attributable only on a card under the floor. Default R."""
+    term = terminal(log, reason)
     for name, pat in HOST_CLASSES:
-        hit = [ln for ln in lines if pat.search(ln)]
+        hit = [t for t in term if pat.search(t)]
         if hit:
             return name, hit[-1][:300]
-    oom = [ln for ln in lines if OOM.search(ln)]
+    oom = [t for t in term if OOM.search(t)]
     if oom and vram_mib is not None and vram_mib < floor_mib:
         return "HOST_OOM_UNDER_FLOOR", oom[-1][:300]
-    err = [ln for ln in lines if ERRLINE.search(ln)]
-    return "R", ((oom or err or lines or ["(no error text captured)"])[-1])[:300]
+    return "R", (term[-1] if term else "(no error text captured)")[:300]
 
 
 def main(argv=None):
@@ -133,17 +140,17 @@ def main(argv=None):
     a3.add_argument("--floor-mib", type=int, required=True)
     a = ap.parse_args(argv)
     if a.cmd == "classify":
-        text = ""
+        log, reason = "", ""
         try:
-            text = open(a.log, errors="replace").read() + "\n"
+            log = open(a.log, errors="replace").read()
         except OSError:
             pass
         if a.receipt:
             try:
-                text += str(json.load(open(a.receipt)).get("reason") or "") + "\n"
+                reason = str(json.load(open(a.receipt)).get("reason") or "")
             except (OSError, ValueError, AttributeError):
                 pass
-        cls, line = classify(text, a.vram_mib, a.floor_mib)
+        cls, line = classify(log, a.vram_mib, a.floor_mib, reason)
         print(f"{cls} | {line}")
         return EXIT_MATCHED
     try:
