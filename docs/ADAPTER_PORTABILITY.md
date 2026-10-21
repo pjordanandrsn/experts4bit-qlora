@@ -195,9 +195,24 @@ A change to any rule above is a new scheme, not an edit of `qfp-v1`. A reader re
 from the shapes). The real cost is measured at save time, recorded per artifact in `fingerprints.<scope>.seconds`, and
 quoted from the registered cross-format read (PA-4), never assumed.
 
-**What the reader does with it today.** e4b's paged server verifies a `/2` directory: the v1 checks, every `V2_FIELDS`
-entry present, a known scheme per fingerprint, and the applied attention scale equal to alpha/r. It does not yet compare
-the fingerprints against the served base. That is PA-1 (attention, merging into a verified `Q_train(W)`) and the
-expert path. Until then:
+**Where the bytes come from.** Each canonical line is built by one source-independent function
+(`adapter_schema.expert_line` and `adapter_schema.linear_line`). Each source only finds the tensors:
+- **Training, resident:** the module's own tensors.
+- **Training, offloaded:** an evicted stack is read from its host home, the same substitution `state_dict` makes, so
+  offload and resident training fingerprint alike. A stack with no readable host copy is refused by name, never hashed
+  as empty.
+- **Serving:** the paged server's expert stacks are meta-backed, and the bytes live in the arena. So the reader's
+  expert fingerprint is computed from the arena's packed bytes and fp32 absmax, through the same function. That is
+  PA-1's, and its test compares the arena-side fingerprint with the training-side one on one adapter.
+
+**What the reader does with it today.** e4b's paged server verifies a `/2` directory:
+- the v1 checks;
+- every `V2_FIELDS` entry present;
+- the fingerprint scopes the adapter requires: `experts` always, `attention` whenever it carries attention LoRA;
+- a known scheme, a sha256, a positive module count and a measured duration per fingerprint;
+- the applied attention scale equal to alpha/r.
+
+It does not yet compare the fingerprints against the served base. That is PA-1 (attention, merging into a verified
+`Q_train(W)`) and the expert path. Until then:
 - the expert base of a `/2` adapter stays unverified, refusal 9, with the same named opt-in as v1;
 - an `attn_4bit` adapter stays refused, refusal 8.

@@ -178,14 +178,26 @@ def _verify_v2_fields(manifest, attention, scale, bad) -> None:
     if missing:
         raise bad(f"{SCHEMA_V2} manifest lacks {missing}")
     fps = manifest["fingerprints"]
-    if not isinstance(fps, dict) or not fps or not set(fps) <= set(SCOPES):
+    if not isinstance(fps, dict) or not set(fps) <= set(SCOPES):
         raise bad(f"fingerprints must map scopes from {list(SCOPES)}, got {sorted(fps) if isinstance(fps, dict) else fps!r}")
+    # the scopes the adapter's own content requires: experts always (an experts4bit model has expert stacks), and
+    # attention whenever the adapter carries attention LoRA
+    required = ["experts"] + (["attention"] if attention else [])
+    absent = [s for s in required if s not in fps]
+    if absent:
+        raise bad(f"fingerprints lacks the {absent} scope(s) this adapter requires")
     for scope, fp in fps.items():
         if not isinstance(fp, dict) or fp.get("scheme_id") not in KNOWN_SCHEMES:
             raise bad(f"fingerprints.{scope}: scheme {fp.get('scheme_id') if isinstance(fp, dict) else None!r} is not "
                       f"one this server knows ({list(KNOWN_SCHEMES)}); it refuses rather than compare unlike hashes")
         if not (isinstance(fp.get("sha256"), str) and _SHA256.fullmatch(fp["sha256"])):
             raise bad(f"fingerprints.{scope}.sha256 is not a sha256")
+        mods = fp.get("modules")
+        if not (isinstance(mods, int) and not isinstance(mods, bool) and mods > 0):
+            raise bad(f"fingerprints.{scope}.modules {mods!r} is not a positive count")
+        secs = fp.get("seconds")
+        if not (isinstance(secs, (int, float)) and not isinstance(secs, bool) and secs >= 0):
+            raise bad(f"fingerprints.{scope}.seconds {secs!r} is not a measured duration")
     applied = manifest["lora_scale_applied"]
     held = applied.get("attention") if isinstance(applied, dict) else None
     if attention and (held is None or abs(float(held) - scale) > 1e-12):

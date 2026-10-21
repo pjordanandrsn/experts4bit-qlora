@@ -151,6 +151,83 @@ def test_the_expert_fingerprint_is_a_recipe_check_not_a_content_proof(monkeypatc
     assert S.quant_fingerprint(m, "experts")["sha256"] != base
 
 
+def _offloaded_by_hand(m):
+    """Evict an ExpertsLoRA's stack the way engines/offload does: the base's tensors become 0-element placeholders and
+    the real ones live in ``handle.home`` on the CPU."""
+    import types
+
+    lora = m.experts
+    base = lora.base
+    home = {n: getattr(base, n).detach().clone() for n in ("gate_up_proj", "down_proj", "gate_up_absmax", "down_absmax")}
+    for n in ("gate_up_proj", "down_proj"):
+        base._parameters[n].data = torch.empty(0, dtype=home[n].dtype)
+    for n in ("gate_up_absmax", "down_absmax"):
+        base._buffers[n] = torch.empty(0, dtype=home[n].dtype)
+    lora._offload = types.SimpleNamespace(base=base, home=home)
+    return m
+
+
+def _lora_stack(seed=5):
+    from experts4bit_qlora._vendor.experts import Experts4bit
+    from experts4bit_qlora.lora import ExpertsLoRA
+
+    torch.manual_seed(seed)
+    m = torch.nn.Module()
+    m.experts = ExpertsLoRA(Experts4bit.from_float(torch.randn(4, 128, 64, dtype=torch.bfloat16),
+                                                   torch.randn(4, 64, 64, dtype=torch.bfloat16), quant_type="nf4",
+                                                   blocksize=64), r=2, alpha=4)
+    return m
+
+
+def test_an_offloaded_stack_fingerprints_as_the_resident_one():
+    """cerin-maintainer's case: offload (CHOOSING's mode on 12 and 24 GB cards) evicts each stack to a host home; the
+    canonical form is the same wherever the bytes live."""
+    resident = S.quant_fingerprint(_lora_stack(), "experts")
+    evicted = S.quant_fingerprint(_offloaded_by_hand(_lora_stack()), "experts")
+    assert evicted["sha256"] == resident["sha256"] and evicted["modules"] == resident["modules"] == 2
+
+
+def test_an_evicted_stack_with_no_host_copy_is_refused_by_name():
+    m = _offloaded_by_hand(_lora_stack())
+    del m.experts._offload.home["down_proj"]
+    with pytest.raises(ValueError, match="expert stack experts is evicted and its host copy of down_proj is unavailable"):
+        S.quant_fingerprint(m, "experts")
+    m2 = _offloaded_by_hand(_lora_stack())
+    del m2.experts._offload                                              # a placeholder and no handle at all
+    with pytest.raises(ValueError, match="no offload handle"):
+        S.quant_fingerprint(m2, "experts")
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="REGISTERED for PA-4's box: real expert offload needs CUDA")
+def test_real_offload_fingerprints_as_resident_on_cuda():
+    """A PA-4 gate: on a CUDA box, a stack under engines.offload's real eviction fingerprints as the same stack resident
+    on the device."""
+    from experts4bit_qlora.engines.offload import enable_expert_offload
+
+    resident = _lora_stack()
+    resident.experts.to("cuda")
+    off = _lora_stack()
+    off.experts.to("cuda")
+    enable_expert_offload(off.experts, torch.device("cuda"), pin=False)
+    assert off.experts.base.gate_up_proj.numel() == 0                   # really evicted
+    assert S.quant_fingerprint(off, "experts")["sha256"] == S.quant_fingerprint(resident, "experts")["sha256"]
+
+
+def test_the_canonical_line_functions_are_the_one_path():
+    """quant_fingerprint builds every expert line through expert_line, so a reader that finds the same tensors elsewhere
+    (an arena's rows) gets the same line."""
+    from experts4bit_qlora.absmax_dq import expert_absmax_fp32
+
+    m = _lora_stack()
+    st = m.experts.base
+    lines = [S.expert_line("experts", w, bits=st.bits, quant_type=st.quant_type, num_experts=st.num_experts,
+                           shape=getattr(st, f"_{w}_shape"), blocksize=st.blocksize,
+                           packed=getattr(st, f"{w}_proj"), absmax=expert_absmax_fp32(st, w), code=st.code)[0]
+             for w in ("gate_up", "down")]
+    expect = hashlib.sha256(("\n".join(sorted(lines)) + "\n").encode()).hexdigest()
+    assert S.quant_fingerprint(m, "experts")["sha256"] == expect
+
+
 def test_an_empty_or_unknown_scope_is_refused():
     with pytest.raises(ValueError, match="scope must be one of"):
         S.quant_fingerprint(_model(), "router")
@@ -181,10 +258,19 @@ def test_the_resolved_facts_come_from_the_runtime_records():
     off = S.resolved_training_facts(m, None, fast_stats={"absmax_dq": {"compressed": 0, "kept_fp32": "off"}},
                                     qkv_stats={"fused": 0})
     assert off["expert_absmax"]["form"] == "fp32"
-    none = S.resolved_training_facts(m, None, fast_stats=None, qkv_stats={"fused": 99})
+    none = S.resolved_training_facts(m, None, fast_stats=None, qkv_stats=None)
     assert none["expert_absmax"]["form"] == "fp32" and none["train_fused_qkv"] == 0      # no stale record is read
+    assert S.resolved_training_facts(m, None, fast_stats=None, qkv_stats={"fused": 7})["train_fused_qkv"] == 7
     nf4 = S.resolved_training_facts(_cpu_quantized(_model(), True), None, fast_stats=None, qkv_stats=None)
     assert nf4["attn_quant"] == {"form": "bnb4", "quant_type": "nf4", "blocksize": 64, "nested": True}
+
+
+def test_a_mixed_attention_recipe_is_refused_not_summarized():
+    m = _cpu_quantized(_model(), True)
+    attn = m.get_submodule(LAYER)
+    attn.o_proj = torch.nn.Linear(attn.o_proj.in_features, attn.o_proj.out_features, bias=False, dtype=torch.bfloat16)
+    with pytest.raises(ValueError, match="quantized differently"):
+        S.resolved_training_facts(m, None, fast_stats=None, qkv_stats=None)
 
 
 def test_prepare_qlora_training_records_the_facts_after_enable_fast_train():
@@ -202,7 +288,7 @@ def test_prepare_qlora_training_records_the_facts_after_enable_fast_train():
 
 # -------------------------------------------------------------------------------------------- the v2 verifier
 
-def _v2(tmp_path, *, backend="experts4bit", scheme="qfp-v1", drop=None, scale=2.0, name="ad"):
+def _v2(tmp_path, *, backend="experts4bit", scheme="qfp-v1", drop=None, scale=2.0, name="ad", fp_edit=None):
     from safetensors.torch import save_file
 
     m = _model()
@@ -224,10 +310,13 @@ def _v2(tmp_path, *, backend="experts4bit", scheme="qfp-v1", drop=None, scale=2.
            "expert_absmax": {"form": "fp32", "stacks": 0}, "train_fused_qkv": 0,
            "attn_quant": {"form": "bf16"}, "versions": {"torch": "x"},
            "lora_scale_applied": {"attention": scale, "experts": None},
-           "fingerprints": {"attention": {"scheme_id": scheme, "sha256": "b" * 64, "modules": 4}},
+           "fingerprints": {"attention": {"scheme_id": scheme, "sha256": "b" * 64, "modules": 4, "seconds": 0.5},
+                            "experts": {"scheme_id": scheme, "sha256": "c" * 64, "modules": 2, "seconds": 1.5}},
            "run_id": "r", "created_at": "2026-10-21T00:00:00Z"}
     if drop:
         man.pop(drop)
+    if fp_edit:
+        fp_edit(man["fingerprints"])
     (d / "adapter_manifest.json").write_text(json.dumps(man), encoding="utf-8")
     return d
 
@@ -249,6 +338,11 @@ def test_v2_verifies_and_keeps_the_expert_refusal_until_pa1(tmp_path):
     ({"drop": "fingerprints"}, "lacks ['fingerprints']"),
     ({"drop": "expert_absmax"}, "lacks ['expert_absmax']"),
     ({"scale": 1.5}, "is not the setup's alpha/r"),
+    ({"fp_edit": lambda f: f.pop("attention")}, "lacks the ['attention'] scope"),
+    ({"fp_edit": lambda f: f.pop("experts")}, "lacks the ['experts'] scope"),
+    ({"fp_edit": lambda f: f["experts"].update(modules=0)}, "is not a positive count"),
+    ({"fp_edit": lambda f: f["attention"].pop("seconds")}, "is not a measured duration"),
+    ({"fp_edit": lambda f: f["attention"].update(sha256="xyz")}, "is not a sha256"),
 ])
 def test_v2_refuses_each_fault_by_name(tmp_path, kw, needle):
     with pytest.raises(AD.AdapterRefused) as e:

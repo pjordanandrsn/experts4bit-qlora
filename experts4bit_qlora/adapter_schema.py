@@ -84,40 +84,85 @@ def _sha(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
 
 
+def _shape(dims) -> str:
+    return "x".join(str(int(d)) for d in dims)
+
+
+def linear_line(name: str, *, kind: str, shape, blocksize: int, data, absmax=None, code=None) -> tuple:
+    """qfp-v1's canonical line for one linear, from tensors found ANYWHERE: ``data`` is the packed bytes (``bnb4``) or
+    the weight (``dense``), ``absmax`` the fp32 absmax as dequantize computes it, ``code`` the fp32 code table.
+    Returns ``(line, bytes_hashed)``. The writer and every reader build lines through this one function."""
+    d = _bytes(data)
+    a = _bytes(absmax.float()) if absmax is not None else b""
+    c = _bytes(code.float()) if code is not None else b""
+    return "\t".join((name, kind, _shape(shape), str(int(blocksize)), _sha(d), _sha(a), _sha(c))), len(d) + len(a) + len(c)
+
+
+def expert_line(name: str, which: str, *, bits: int, quant_type: str, num_experts: int, shape, blocksize: int,
+                packed, absmax, code=None) -> tuple:
+    """qfp-v1's canonical line for one projection of an expert stack, from tensors found ANYWHERE (a resident stack,
+    an offload host home, an arena's rows): ``packed`` is the stack's packed storage (its BYTES are sampled, whatever
+    the dtype), ``absmax`` the fp32 absmax ``[E, N, K/blocksize]`` as dequantize computes it. Returns
+    ``(line, bytes_hashed)``."""
+    import torch
+
+    flat = packed.detach().contiguous().reshape(-1).view(torch.uint8)       # bytes, whatever the storage dtype
+    n = EXPERT_SUBSET_BYTES
+    sample = _bytes(flat) if flat.numel() <= 2 * n else _bytes(flat[:n]) + _bytes(flat[-n:])
+    a = _bytes(absmax.float())
+    c = _bytes(code.float()) if code is not None else b""
+    line = "\t".join((f"{name}.{which}", f"experts{int(bits)}:{quant_type}:{which}", _shape((num_experts, *shape)),
+                      str(int(blocksize)), _sha(sample), _sha(a), _sha(c)))
+    return line, len(sample) + len(a) + len(c)
+
+
 def _linear_record(name, lin) -> tuple:
-    """``(line, bytes_hashed)`` for one attention projection's base (a LoRA wrapper is unwrapped)."""
-    base = getattr(lin, "base", lin)
-    w = base.weight
+    """One attention projection's base (a LoRA wrapper is unwrapped), through :func:`linear_line`."""
+    w = _unwrap(lin).weight
     qs = getattr(w, "quant_state", None)
     if qs is not None:
         from .engines.train_qkv_fuse import _expanded_absmax
 
-        data, absmax, code = _bytes(w.data), _bytes(_expanded_absmax(qs)), _bytes(qs.code.float())
-        kind, shape, bs = f"bnb4:{qs.quant_type}", "x".join(str(int(d)) for d in qs.shape), int(qs.blocksize)
-    else:
-        data, absmax, code = _bytes(w), b"", b""
-        kind, shape, bs = f"dense:{str(w.dtype).replace('torch.', '')}", "x".join(str(int(d)) for d in w.shape), 0
-    line = "\t".join((name, kind, shape, str(bs), _sha(data), _sha(absmax), _sha(code)))
-    return line, len(data) + len(absmax) + len(code)
+        return linear_line(name, kind=f"bnb4:{qs.quant_type}", shape=qs.shape, blocksize=int(qs.blocksize),
+                           data=w.data, absmax=_expanded_absmax(qs), code=qs.code)
+    return linear_line(name, kind=f"dense:{str(w.dtype).replace('torch.', '')}", shape=w.shape, blocksize=0, data=w)
 
 
-def _expert_records(name, mod) -> list:
-    """``[(line, bytes_hashed)]`` for one expert stack's gate_up and down (qfp-v1's fixed subset of the packed bytes)."""
+def _resolved(name, mod, handle, attr):
+    """``mod.<attr>``, or, while expert offload has it evicted (a 0-element placeholder), its HOST home: the same
+    substitution ``state_dict`` makes, so the canonical form is the same wherever the bytes live. A placeholder with no
+    readable host copy is refused by name, never hashed as empty."""
+    t = getattr(mod, attr)
+    if t is None or t.numel() > 0:
+        return t
+    home = getattr(handle, "home", None) if handle is not None else None
+    h = home.get(attr) if isinstance(home, dict) else None
+    if h is None or h.is_meta or h.numel() == 0 or h.device.type != "cpu":
+        raise ValueError(f"quant_fingerprint: expert stack {name} is evicted and its host copy of {attr} is "
+                         f"unavailable ({'no offload handle' if handle is None else 'no readable CPU home'})")
+    return h
+
+
+def _expert_records(name, mod, handle=None) -> list:
+    """``[(line, bytes_hashed)]`` for one expert stack's gate_up and down (qfp-v1's fixed subset of the packed bytes).
+    ``handle`` is the stack's expert-offload handle, when one is installed (its homes hold the evicted tensors)."""
     from .absmax_dq import expert_absmax_fp32
 
     out = []
     for which in ("gate_up", "down"):
-        packed = getattr(mod, f"{which}_proj")
-        flat = packed.detach().reshape(-1)
-        n = EXPERT_SUBSET_BYTES
-        sample = _bytes(flat) if flat.numel() <= 2 * n else _bytes(flat[:n]) + _bytes(flat[-n:])
-        absmax = _bytes(expert_absmax_fp32(mod, which))
-        code = _bytes(mod.code.float()) if getattr(mod, "code", None) is not None else b""
         shape = getattr(mod, f"_{which}_shape")
-        kind = f"experts{int(mod.bits)}:{mod.quant_type}:{which}"
-        line = "\t".join((f"{name}.{which}", kind, "x".join(str(int(d)) for d in (mod.num_experts, *shape)),
-                          str(int(mod.blocksize)), _sha(sample), _sha(absmax), _sha(code)))
-        out.append((line, len(sample) + len(absmax) + len(code)))
+        evicted = getattr(mod, f"{which}_proj").numel() == 0
+        packed = _resolved(name, mod, handle, f"{which}_proj")
+        if evicted:
+            # evicted: the host home holds the fp32 absmax (offload refuses a double-quantized absmax, so the module's
+            # absmax attribute, which raises once compressed, is never read here)
+            home = _resolved(name, mod, handle, f"{which}_absmax")
+            absmax = home.view(mod.num_experts, shape[0], shape[1] // int(mod.blocksize))
+        else:
+            absmax = expert_absmax_fp32(mod, which)
+        out.append(expert_line(name, which, bits=int(mod.bits), quant_type=mod.quant_type,
+                               num_experts=mod.num_experts, shape=shape, blocksize=int(mod.blocksize), packed=packed,
+                               absmax=absmax, code=getattr(mod, "code", None)))
     return out
 
 
@@ -150,14 +195,20 @@ def _attention_projections(model) -> list:
 
 
 def _expert_stacks(model) -> list:
-    """``[(name, stack)]`` of every quantized expert stack (an :class:`ExpertsLoRA` is unwrapped to its base)."""
+    """``[(name, stack, offload_handle)]`` of every quantized expert stack (an :class:`ExpertsLoRA` is unwrapped to its
+    base). The handle is the expert-offload handle on the wrapper (or on a bare stack), else None."""
     from ._vendor.experts import Experts4bit
 
+    handles = {}
+    for mod in model.modules():
+        h = getattr(mod, "_offload", None)
+        if h is not None and getattr(h, "base", None) is not None:
+            handles[id(h.base)] = h
     out = []
     for name, mod in model.named_modules():
         if isinstance(mod, Experts4bit):
             # an ExpertsLoRA holds its stack as ``.base``: the stack is named as the served model names it
-            out.append((name[: -len(".base")] if name.endswith(".base") else name, mod))
+            out.append((name[: -len(".base")] if name.endswith(".base") else name, mod, handles.get(id(mod))))
     return out
 
 
@@ -172,8 +223,8 @@ def quant_fingerprint(model, scope: str) -> dict:
         for name, lin in _attention_projections(model):
             records.append(_linear_record(name, lin))
     else:
-        for name, mod in _expert_stacks(model):
-            records.extend(_expert_records(name, mod))
+        for name, mod, handle in _expert_stacks(model):
+            records.extend(_expert_records(name, mod, handle))
     if not records:
         raise ValueError(f"quant_fingerprint: no {scope} module in this model")
     lines = sorted(line for line, _ in records)
@@ -213,14 +264,18 @@ def resolved_training_facts(model, setup, *, fast_stats: dict | None, qkv_stats:
     else:
         n = int(rec.get("compressed") or 0)
         absmax = {"form": "double-quantized" if n else "fp32", "stacks": n, "record": dict(rec)}
-    fused = int((qkv_stats or {}).get("fused") or 0) if rec is not None else 0
-    attn = {"form": "bf16", "quant_type": None, "blocksize": None, "nested": None}
+    fused = int(qkv_stats.get("fused") or 0) if qkv_stats is not None else 0
+    forms = set()
     for _, lin in _attention_projections(model):
-        qs = getattr(getattr(getattr(lin, "base", lin), "weight", None), "quant_state", None)
-        if qs is not None:
-            attn = {"form": "bnb4", "quant_type": qs.quant_type, "blocksize": int(qs.blocksize),
-                    "nested": bool(qs.nested)}
-        break
+        qs = getattr(getattr(_unwrap(lin), "weight", None), "quant_state", None)
+        forms.add(("bnb4", qs.quant_type, int(qs.blocksize), bool(qs.nested)) if qs is not None
+                  else ("bf16", None, None, None))
+    keys = ("form", "quant_type", "blocksize", "nested")
+    if len(forms) > 1:                                   # every projection read: a mix has no one recipe to record
+        raise ValueError(f"attention projections are quantized differently {sorted(forms, key=str)}: "
+                         f"backend-adapter/2 records one attention recipe, so this model is refused")
+    attn = (dict(zip(keys, next(iter(forms)))) if forms else
+            {"form": "none", "quant_type": None, "blocksize": None, "nested": None})
     versions = {}
     for dist in ("bitsandbytes", "torch", "grouped-nf4-gemm", "transformers", "experts4bit-qlora"):
         try:
