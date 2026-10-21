@@ -308,8 +308,8 @@ GEMV, which reads half the head's bytes.
 K25's select-tree codebook decode for grouped-nf4-gemm K39's (`lut="prmt"`), which yields the same values bit for bit.
 - **Speed:** sixteen requests decode **1.0925×** as fast on a 5090 (about 976 → 1067 tok/s; the smallest of four ABBA
   pairs, 1.0925-1.0934). One request is unchanged (0.9999): K25 is not on the T == 1 path.
-- **Identity:** every token the prmt arms decoded is the tree's, at 16 and 1 requests; the tree's own null held across
-  five processes.
+- **Identity:** every token the prmt arms decoded is the tree's, at 16 and 1 requests, on the same prompts, lengths and
+  arrival order; the tree's own null held across five processes.
 - **Clocks:** the median SM clocks differ by 0.25 %. The tree met the software power-cap event (0x4) in more samples
   (0.40-0.44 of its samples, against 0.07-0.18), under an unchanged 575 W limit: part of the served difference rather
   than a confound.
@@ -341,7 +341,7 @@ warps 4, stages 2}` and down `{block_n 128, kc 128, warps 8, stages 3}`, in plac
   [RESULTS](../bench/p160/RESULTS-p160.md); UNVERIFIED: no register row). In the served step, P161 (`p161-5090-1`, one
   RTX 5090 at 575 W, e4b `da3eb5c5`) read sixteen concurrent requests decoding **1.465433×** as fast at `c1` as at
   today's plan, both under `prmt` (rate, the smallest of four ABBA pairs), one request unchanged (0.9966), and every
-  token identical: `e4b.serve.p161.k25-plan-c1.qwen3.5090.2026-10-20`, [RESULTS](../bench/p161/RESULTS-p161.md). One read
+  token identical on the same schedule: `e4b.serve.p161.k25-plan-c1.qwen3.5090.2026-10-20`, [RESULTS](../bench/p161/RESULTS-p161.md). One read
   on one card and one family; qwen3_moe takes `c1` by default on it.
 - **Same bits.** The tree, `prmt`, and `prmt` with `c1` give bit-identical outputs through the served call
   (`tests/test_k25_lut_gpu.py`, including a K that neither of `c1`'s KCs divides).
@@ -379,7 +379,7 @@ build, depending on the host. `e4b.serve.p125.int4-attn-calib-default.qwen3.5090
 - **What it buys.** On Qwen3-30B-A3B, with grouped-nf4-gemm 0.45.0 or later, the default now decodes one request 1.132×
   as fast as the stack before #1448 (226 → 256 tok/s, 0.52 ms saved per step), and 16 requests 1.016× as fast. With
   0.44.0 or older, only Phase 1 runs.
-- **What it costs.** Tokens and per-step logits are bitwise identical, and memory does not change.
+- **What it costs.** Tokens and per-step logits are bitwise identical on one schedule, and memory does not change.
 - **In context.** The saving is about the size of the launch-bound routing glue that P123 priced at 11 % of a 4.75 ms
   step.
 - **Scope.** The claim is the P127 delta at `7f044dd9`.
@@ -465,8 +465,8 @@ controls. `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-
 | router weights cast to bf16 at ≤ 64 rows (`softmax_topk`) | fused router epilogue | `E4B_ROUTER_EPI_CAST=0` | `e4b.serve.p70.qwen3.b1.router-weight-cast.5090.2026-09-25` |
 | the paged FP8 attention decode capped at 16 splits (`qwen3_moe` only; buckets 1, 2 and 4 move, 32 / 32 / 23 -> 16; bitwise-identical to the plan at contexts ≤ 1024; one request 1.044× as fast, 16 unchanged, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs); other `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B) and other cards (the cap moves B 1–6 on a PRO 6000, B 1–4 on a 4090) take it by family without a read of their own) | `serve_paged` | `E4B_ATTN_SPLIT_CAP=0` | `e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19` |
 | the lm_head on its per-row int8 grid, its one-row decode GEMV through grouped-nf4-gemm K36 (`qwen3_moe` at the 151936 x 2048 head only; needs grouped-nf4-gemm 0.48.0 or later, else it resolves off, recorded; one request 1.052× as fast, 16 requests 0.992, an observed cost not attributed, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs); quality read on Qwen3-30B-A3B @ad44e777, same-shape checkpoints inherit the default unread; other head shapes, e.g. Qwen3-235B-A22B's 151936 x 4096, stay off) | `serve_paged` | `E4B_INT8_HEAD_BW=0` | `e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19` |
-| K25's codebook decode by grouped-nf4-gemm K39's byte permute (`lut="prmt"`; `qwen3_moe` only; bit-identical to the select tree, every token identical; needs grouped-nf4-gemm 0.50.0 or later and an NVIDIA device, else it resolves to the tree, recorded in `info["k25_lut"]`; sixteen requests 1.0925× as fast (the smallest of four ABBA pairs), one request unchanged, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs) at the `today` plan; other `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B) take it by family with no speed claimed; other families stay on the tree) | `serve_paged` | `E4B_K25_LUT=tree` | `e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20` |
-| K25's tile plan `c1` under K39's decode (from 0.56.1; `qwen3_moe` only, where K25's decode resolved to `prmt`, else `today`, recorded in `info["k25_plan"]["source"]`; bit-identical to `today`'s plan, every token identical; sixteen requests 1.4654× as fast (the smallest of four ABBA pairs), one request unchanged (0.9966), measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs); other `qwen3_moe` checkpoints take it by family with no speed claimed; other families stay on `today`) | `serve_paged` | `E4B_K25_PLAN=today` | `e4b.serve.p161.k25-plan-c1.qwen3.5090.2026-10-20` |
+| K25's codebook decode by grouped-nf4-gemm K39's byte permute (`lut="prmt"`; `qwen3_moe` only; bit-identical to the select tree, every token identical on one schedule; needs grouped-nf4-gemm 0.50.0 or later and an NVIDIA device, else it resolves to the tree, recorded in `info["k25_lut"]`; sixteen requests 1.0925× as fast (the smallest of four ABBA pairs), one request unchanged, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs) at the `today` plan; other `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B) take it by family with no speed claimed; other families stay on the tree) | `serve_paged` | `E4B_K25_LUT=tree` | `e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20` |
+| K25's tile plan `c1` under K39's decode (from 0.56.1; `qwen3_moe` only, where K25's decode resolved to `prmt`, else `today`, recorded in `info["k25_plan"]["source"]`; bit-identical to `today`'s plan, every token identical on one schedule; sixteen requests 1.4654× as fast (the smallest of four ABBA pairs), one request unchanged (0.9966), measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs); other `qwen3_moe` checkpoints take it by family with no speed claimed; other families stay on `today`) | `serve_paged` | `E4B_K25_PLAN=today` | `e4b.serve.p161.k25-plan-c1.qwen3.5090.2026-10-20` |
 | B=1 fused stack (fused q/k/v and three glue folds) on Qwen3-MoE; its router epilogue, the only fold that engages, on Qwen3.5/3.6-MoE; its three glue folds on Mixtral | `serve_paged` | `E4B_PAGED_FUSE_QKV=0`, `E4B_FUSE_T1_GLUE=0`, `E4B_FUSE_T1_GLUE_R2=0`, `E4B_FUSE_ROUTER_EPI=0` | `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`, `e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`, `e4b.serve.p135.fold-speed.mixtral.5090.2026-10-18` |
 
 ---
@@ -503,7 +503,7 @@ Superseded and retired readings are not repeated here. The register keeps each w
   int8-offload's best training eval, confounded by an evaluator offset (`e4b.open.int8-offload-confounded`).
 - **Open campaigns:** training #835, serving #846, single-stream decode #1313. P127 read: its launch-bound glue changes (Phase 1,
   #1448; Phase 2, #1472/#1477/#1482 with grouped-nf4-gemm #526–#530, first released in 0.45.0) decode one request
-  1.1321× as fast and 16 requests 1.0156× on Qwen3-30B-A3B on an RTX 5090, bitwise identical
+  1.1321× as fast and 16 requests 1.0156× on Qwen3-30B-A3B on an RTX 5090, bitwise identical on one schedule
   (`e4b.serve.p127.launch-bound-glue.qwen3.5090.2026-10-09`, [results](../bench/p127/RESULTS-p127.md)). #1472's kernel
   options take effect with grouped-nf4-gemm 0.45.0 or later.
 - **Held-out loss parity against Unsloth and axolotl is unread.** HP1 closed at its calibration: at 48 layers the
