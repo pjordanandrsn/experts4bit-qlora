@@ -66,6 +66,17 @@ That is everything needed to rebuild `Q_train(W)` bit for bit, and §4 F1-F2 tur
 
 ### Attention (q/k/v/o)
 
+**These labels are per module.** Every attention adapter was trained inside a whole model whose experts were
+`Q_train(experts)`. The served model as a whole computes the trained function only when the expert base matches too.
+Under the default training run (double-quantized expert absmax) and today's fp32-absmax arena, it does not (F1). So an
+attention-only adapter that is exact at its own projections still runs inside a **bounded-loss** whole model until
+one of these holds:
+- the expert recipe matches, by a training preset or an arena variant;
+- a registered read prices the difference.
+
+A `backend-adapter/1` manifest does not record the absmax form, so a v1 adapter's expert base is **unverified**,
+not known to match.
+
 | trained on | served on | label | why |
 |---|---|---|---|
 | bf16 W (`attn_4bit=false`) | bf16, merged at load before the levers and fusions | **exact by construction** (one bf16 rounding of each merged weight) | `W + s·B·A` in fp32, then cast. Training computed `base(x) + s·B(A(x))` unmerged, so the one numerical change is the merged weight's bf16 rounding. That rounding is reported per projection, never assumed. `fuse_qkv` and the GEMV route then copy or share the merged weight exactly. |
@@ -100,7 +111,8 @@ That is everything needed to rebuild `Q_train(W)` bit for bit, and §4 F1-F2 tur
 ## 4. What this asks of the work that follows
 
 - **F1. The expert absmax mismatch.** Today's default training (double-quantized expert absmax) never serves exactly
-  on today's arena (fp32 absmax). Before any expert path ships, one of two things must change:
+  on today's arena (fp32 absmax). That holds for an expert adapter, and for the whole model around an attention-only
+  adapter. Before any expert path ships, one of two things must change:
   - an arena variant that bakes the double-quantized absmax;
   - an explicit "servable" training preset with `E4B_ABSMAX_DQ=0`.
 
