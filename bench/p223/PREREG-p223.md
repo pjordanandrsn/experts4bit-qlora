@@ -149,6 +149,17 @@ registers a shakedown on P149's one-layer cut of Mixtral (its Amendment 5 dry mo
   `p149_slice.py` cuts them to one decoder layer, exactly as P149's Amendment 5 does.
 - **The run:** everything after the cut is the kit's, with every check kept, at 2 timed reps (not 5) after the warm
   pass. The early-VOID read after each arm's first process reports and goes on, so one shakedown finds every fault.
+- **The closed forms at one layer** (fixed here, before the kit). Every layer-dependent expectation in the rule takes
+  P149's `census(L)` at L = 1, as P149's Amendment 5 dry mode does:
+  - the fold census: `fuse_qkv_n` 0, `fuse_t1_glue_n` 2L + 1 = 3, `fuse_t1_glue_r2_n` [1, 1] and
+    `fuse_router_epilogue_n` 1, where the reading's are 65, [32, 32] and 32;
+  - the int8 attention projections: 4L = 4, where the reading has 128. D1 and I1 must still build them and route int8
+    calls in every captured bucket. D0 and I0 must still carry none;
+  - the reported int8 closed form: 3 × 4L = 12 calls per captured bucket;
+  - the model: the slice, at the revision P149's dry mode records for it, not `eba92302`'s full checkpoint.
+
+  Every other VOID check is unchanged: the pins, the card, the server's shape, the buckets and split plans, the
+  replays, the lone rows, the census of decode calls, every bucket captured, no eager steps, the reps and the prompts.
 - **The verdict is SHAKE, hard-coded, never a reading.** The reduce lists every instrument fault the rule would VOID on,
   across every process. Labels, prices and predictions are reported and never graded. A shake id can never write READ;
   a test proves it. rc 0 when there is no instrument fault, else 29.
