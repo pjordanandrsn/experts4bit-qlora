@@ -174,7 +174,8 @@ The D0 premise read (per-format expert-LoRA retention, run at $0) needs a stored
 none exists. The shakedown box already holds OLMoE and Loggetta, so it trains two, declared here.
 - **When:** AFTER the shakedown's own records, the collect and the reduce. They NEVER affect its verdict: a fixture
   failure is recorded beside it, and the SHAKEDOWN verdict stands on its own.
-- **The trains:** Loggetta's defaults (expert and attention LoRA, the default r and alpha, the default setup), the
+- **The trains** (the data and the invocation superseded by Amendment 1): Loggetta's defaults (expert and attention
+  LoRA, the default r and alpha, the default setup), the
   built-in demonstration data (no `--dataset`), on OLMoE-1B-7B-0924-Instruct at
   `7f1c97f440f06ce36705e4f2b843edb5925f4498`, with the experts held on the device (the default, fixed so a small card's
   plan cannot choose offload, which refuses a double-quantized absmax):
@@ -186,8 +187,8 @@ none exists. The shakedown box already holds OLMoE and Loggetta, so it trains tw
   - `fixture-dq` runs at the default `E4B_ABSMAX_DQ` (unset), and `fixture-nodq` at `E4B_ABSMAX_DQ=0`.
   - Loggetta installs pinned at `90a7697d` against the box's held torch (2.8.0+cu128, the runner's constraints file),
     so pip cannot pull a torch the box's driver does not run.
-  - The demonstration data is fetched unpinned, so the receipt's dataset fingerprint and token hash are the data
-    record.
+  - (Superseded by Amendment 1: the data is pinned.) The demonstration data is fetched unpinned, so the receipt's
+    dataset fingerprint and token hash are the data record.
 - **Checked on the box, each fixture refused (recorded, never retried) when it fails:**
   - **The receipt:** its status is OK.
   - **The absmax form:** read from the box, never assumed, from the receipt's engaged `expert_absmax.form`. It must be
@@ -239,7 +240,7 @@ none exists. The shakedown box already holds OLMoE and Loggetta, so it trains tw
   - **What it ranks:** the structure, never a reading. Its verdict is SHAKEDOWN, and every gate and threshold is
     reported.
   - **The expected merge count** for OLMoE comes from the trained adapter's own attention projections (16 layers × 4).
-  - **The fit**, with the fixture generation below (the terms are estimates scaled from the reading's; the box's own
+  - **The fit** (superseded by Amendment 1), with the fixture generation below (the terms are estimates scaled from the reading's; the box's own
     pre-install check enforces them):
 
     | term | s |
@@ -259,7 +260,7 @@ none exists. The shakedown box already holds OLMoE and Loggetta, so it trains tw
 
     4,240 × 1.25 = 5,300 s, inside a **1.5 h guard** (5,400 s); the pre-install check needs (4,240 − 300) × 1.25 =
     4,925 s left. Without the fixture generation the shakedown alone fits 3,660 s.
-  - **Worst case:** 1.5 h × $0.18 + (14 GB + 5 GB) × $0.011 = $0.27 + $0.209 = **$0.48**, under the standing rule.
+  - **Worst case** (superseded by Amendment 1): 1.5 h × $0.18 + (14 GB + 5 GB) × $0.011 = $0.27 + $0.209 = **$0.48**, under the standing rule.
 - **Run ids:** `p224-shake-1..3` (shakedowns), then `p224-5090-1` (the reading), with `-2` and `-3` as spares for
   pre-create and host refusals, which are not strikes. Two box-started HARNESS_ERROR or VOID reads stop the lane.
 - **Sequencing:**
@@ -268,3 +269,79 @@ none exists. The shakedown box already holds OLMoE and Loggetta, so it trains tw
      review.
   3. The shakedown, then the exec ACK with the kit hash and pins, the pin, and `--validate`.
   4. The receipts go to the private receipt store.
+
+## Amendment 1 (before any data): the fixtures' data is pinned; fixture-base
+
+**The fixtures' data (superseding "the built-in demonstration data (no `--dataset`)" in "Fixture generation").**
+- **Why the demonstration fails.** At Loggetta `90a7697d`, omitting `--dataset` streams tatsu-lab/alpaca in its
+  instruction format, and row 284 has an empty output. Loggetta's `prepare_data` refuses it before any weight loads.
+  Rows 0-283 give 23,377 of the 102,400 tokens that 200 steps × 512 need, so both fixture trains would have failed on
+  the box.
+- **The replacement** is Alpaca's own full-text column, pinned. Text format keeps the demonstration's intent: the
+  loss on all tokens and concatenated packing.
+  ```
+  --dataset tatsu-lab/alpaca --dataset-revision dce01c9b08f87459cf36a430d809084718273017 --format text --text-field text
+  ```
+  - `prepare_data` with these arguments passes: 958 rows, 102,400 tokens.
+  - The data is now pinned, so the unpinned-data note is dropped. The receipt's data record still travels with each
+    fixture.
+- **The fixture invocation**, superseding the one in "Fixture generation":
+  ```
+  python -m loggetta train allenai/OLMoE-1B-7B-0924-Instruct --revision 7f1c97f440f06ce36705e4f2b843edb5925f4498
+    --dataset tatsu-lab/alpaca --dataset-revision dce01c9b08f87459cf36a430d809084718273017 --format text --text-field text
+    --seq 512 --micro-batch 1 --steps 200 --seed 42 --fix expert_residency=device
+    --out receipts_fixture-<form> --adapter-out fixture-<form>
+  ```
+
+**Fixture-base.** The D0 premise read checks that it rebuilt each fixture's trained base exactly, by its stored-tensor digest.
+A CPU rebuild uses bitsandbytes' CPU quantizer, while the box quantized on CUDA, and a handful of 1-ulp rounding ties
+among about 800M elements would fail an exact digest on noise. So the shakedown box saves the base it trained on,
+verified against both fixtures' own receipts, and D0 reads that instead of rebuilding it.
+
+**What the box adds** to the fixture generation, after both fixture trains, in one process. It is never part of P224's
+records or verdict.
+1. **Load the base:** OLMoE-1B-7B-0924-Instruct at `7f1c97f440f06ce36705e4f2b843edb5925f4498`, on CUDA, at
+   `E4B_ABSMAX_DQ=0`. The model is rebuilt by Loggetta's own call, `prepare_qlora_training`, with the setup and revision
+   from the plan recorded in `fixture-nodq`'s receipt, so the residency and the fused path are exactly the trains'.
+2. **Check it against `fixture-nodq`:** Loggetta's expert digest of the load, for stacks 0 and 15 (the first and the
+   last), must equal `fixture-nodq`'s receipt (`correctness.frozen_expert_digest`) exactly. Then every stack's stored
+   tensors (the packed codes and the fp32 absmax) are saved to `fixture-base/stacks.safetensors`.
+3. **Check it against `fixture-dq`:** `compress_expert_absmax_` runs on the same model, the same digest is checked
+   against `fixture-dq`'s receipt, and the 16 stacks' double-quantized payloads (`absmax_q`, `absmax_s`, `absmax_off`,
+   `code`) are saved to `fixture-base/absmax_dq.safetensors`.
+
+**The script** is `bench/p224/fixture_base.py`, staged and hash-pinned with the kit. It writes `fixture_base.json` (the
+digests wanted and got, the compressed count, an ok flag per part) and exits 0 only when both parts are saved.
+
+**The refusal rule.** A digest mismatch refuses fixture-base only. The double-quantized part is saved only when the
+fp32 part matched, since its payloads complete the codes the fp32 part saves. A mismatch is recorded and never retried, and the two
+adapters still stand. Fixture-base is hashed on the box with the fixtures (`fixtures.sha256`), fetched, and placed in
+the private receipt store's tensor path like the adapters. It is about 3.4 GB.
+
+**The shakedown's fit**, superseding the table in "Budget and sequencing":
+- The fixture generation term grows by 180 s for fixture-base: one more load (about 120 s) plus the 3.4 GB fetch
+  (about 60 s at 50 MB/s).
+- It grows by another 240 s for the pinned data: plan and execute each tokenize it once, about 60 s each, per fixture.
+- The reserve stays 600 s for a slow link.
+
+| term | s |
+|---|---|
+| boot | 300 |
+| install | 450 |
+| fetch (about 14 GB) | 300 |
+| bake | 200 |
+| train × 2 | 400 |
+| reference arms × 2 | 240 |
+| 7 server processes × 150 | 1,050 |
+| offload test | 60 |
+| collect and reduce | 60 |
+| fixture generation (2 trains of 200 steps on the pinned data, fixture-base, the fetch) | 1,000 |
+| reserve | 600 |
+| **total** | **4,660** |
+
+- **The guard:** 4,660 × 1.25 = 5,825 s, inside a **1.7 h guard** (6,120 s).
+- **The pre-install check:** it needs (4,660 − 300) × 1.25 = 5,450 s left.
+- **Worst case:** 1.7 h × $0.18 + (14 GB + 5 GB + 3.4 GB) × $0.011 = $0.306 + $0.246 = **$0.55**, under the standing
+  rule.
+
+The reading's terms, guard and worst case are unchanged.
