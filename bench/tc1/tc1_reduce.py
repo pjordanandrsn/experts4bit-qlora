@@ -2916,11 +2916,11 @@ def score_sladder(F, fam=SLADDER_FAM):
     return out
 
 
-def pos69_why(tag, r):
+def pos69_why(tag, r, profile=True):
     """Amendment 69's predicates: torch 2.12; on e4b only the fd side, with every default present and unset as recorded at the field recipe
     (the double-quantized absmax, the reentrant checkpoint on all 48 layers, the chunked training and held-out losses, the combine chunks,
     grouped-nf4-gemm's bucket mode and compact bucketed delta; their size gates need not fire on these rows); a profile with CPU ops on every
-    arm. Empty string = as registered."""
+    arm (``profile=False``: amendment 73's census box, which runs none). Empty string = as registered."""
     r = r or {}
     bad = []
     tv = str((r.get("env") or {}).get("torch") or "")
@@ -2948,8 +2948,25 @@ def pos69_why(tag, r):
         if not (cb.get("gnf4_has_compact_buckets") and cb.get("env") in (None, "")):
             bad.append(f"grouped-nf4-gemm's compact bucketed delta is not at its unset default (record {cb})")
     pr = r.get("profile") or {}
-    if not (_cbk_device_ms(r) and pr.get("cpu_ops_per_step")):
+    if profile and not (_cbk_device_ms(r) and pr.get("cpu_ops_per_step")):
         bad.append("no profile with CPU ops on the receipt: amendment 69 profiles every arm (P205-P207 read device time and host share)")
+    return "; ".join(bad)
+
+
+def pos69mc_why(tag, r):
+    """Amendment 73's predicates: amendment 69's without its profile (torch 2.12; e4b's field defaults present and unset as recorded); no
+    profile at all, since a profiler would sit inside the census window; the library versions the claim's box recorded; a census on the
+    receipt (an ERRORED census is recorded, never VOID: that side then reads "—"). Empty string = as registered."""
+    r = r or {}
+    bad = [w for w in (pos69_why(tag, r, profile=False),) if w]
+    if int(r.get("profile_steps") or 0) or r.get("profile"):
+        bad.append(f"profile_steps {r.get('profile_steps')!r}: amendment 73 runs no profile (it would sit inside the census window)")
+    env = r.get("env") or {}
+    for pkg, want in POS69MC_PINS.items():
+        if env.get(pkg) != want:
+            bad.append(f"env {pkg} {env.get(pkg)!r} != {want}, the claim's box's")
+    if not isinstance(r.get("mem_census"), dict):
+        bad.append("no mem_census on the receipt: the registered instrument (--mem-census 1) did not run")
     return "; ".join(bad)
 
 
@@ -3317,6 +3334,26 @@ MEMC_SPECS = {MEMC4K_FAM: {"arms": MEMC4K_ARMS, "labels": MEMC4K_LABELS, "attr":
                             "train_phase": "P152"},
               MEMC4KR_FAM: {"arms": MEMC4KR_ARMS, "labels": MEMC4KR_LABELS, "attr": "P184", "gap": ("P185", P185_BAND), "lev": ("P186", P186_MAX), "am": 65,
                             "train_phase": "P187", "top_group": ("P188", 1, P188_SITE)}}
+# TC1 amendment 73: amendment 69's field recipe with the memory census -- e4b's matched arm at its defaults (fd) and Unsloth's matched arm (fv),
+# one draw each, --mem-census 1, no profile, e4b and grouped-nf4-gemm at the commits the field-device-ratio claim ran. Descriptive: no
+# prediction and no verdict. Its two gaps, the resident bytes at the end of setup and the training-window peak, are reported side by side and
+# neither is read as evidence about the other
+POS69MC_FAM = "qwen3pos69mc"
+POS69MC_ARMS = (("e4b", "fused_attn4_m_fd"), ("unsloth", "ckpt_unsloth_m_fv"))
+POS69MC_LABELS = {POS69MC_ARMS[0]: "e4b defaults (fd)", POS69MC_ARMS[1]: "Unsloth (fv)"}
+POS69MC_PINS = {"experts4bit-qlora": "0.49.0", "grouped-nf4-gemm": "0.43.0", "unsloth": "2026.9.14"}   # as the claim's box (tc1-5090-137) recorded
+POS69MC_CLAIM_GB = {POS69MC_ARMS[0]: (26.156, 26.165), POS69MC_ARMS[1]: (24.273, 24.273)}   # tc1-5090-137's two draws of peak_vram_gb
+POS69MC_REPRO_TOL_GB = 0.10        # an arm's peak within this of its claim draws reproduces the claim; outside it the read is this box's gap
+POS69MC_ATTR_MIN = 0.90            # below this attributed fraction a side's live-at-peak groups are reported as thin, never read
+NO_SPEED_FAMS[POS69MC_FAM] = "the memory census slows the step (amendment 73, as amendment 23), so no speed is read on this token"
+FAMS.append(POS69MC_FAM)
+NAMES[POS69MC_FAM] = ("Qwen3-30B-A3B (amendment 73: amendment 69's field recipe with the memory census -- e4b defaults vs Unsloth at the claim's "
+                      "pins, one draw each; no speed read)")
+N_LAYERS[POS69MC_FAM] = 48
+ATTN_CENSUS[POS69MC_FAM] = 192
+DENSE_PINS[POS69MC_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[POS69MC_FAM] = POS69MC_ARMS[0]
+EXPECTED[POS69MC_FAM] = list(POS69MC_ARMS)
 
 
 def memc4kr_why(r):
@@ -3995,6 +4032,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == POS69_FAM:                               # amendment 69: e4b's field defaults as recorded, and a profile on every arm
         w = pos69_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == POS69MC_FAM:                             # amendment 73: amendment 69's defaults without a profile, the claim's pins, the census
+        w = pos69mc_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if fam == SLADDER_FAM:                             # amendment 70: e4b's field defaults, the single block, the ladder its side names, a profile
@@ -5076,14 +5117,15 @@ def _mc_static(st, c):
     return st.get(c)
 
 
-def memcensus_block(F):
-    """Amendment 23's tables, the three arms side by side: the headline per arm, the static census by class (GB at the end of setup / of
-    training), the live bytes at the peak by class, and the top live-at-peak groups."""
-    R = F.get(MEMCENSUS_FAM)
+def memcensus_block(F, fam=MEMCENSUS_FAM, arms=MEMCENSUS_ARMS, labels=MEMCENSUS_LABELS,
+                    title="Amendment 23: the memory census (Qwen3-30B-A3B, micro-batch 1 × accum 8, one draw per arm; GB = 1e9 bytes; no speed is read)"):
+    """Amendment 23's tables, the arms side by side: the headline per arm, the static census by class (GB at the end of setup / of
+    training), the live bytes at the peak by class, and the top live-at-peak groups. Amendment 73 passes its own family, arms and title."""
+    R = F.get(fam)
     if not R:
         return []
-    reads = [(k,) + _mc_reading(R, k) for k in MEMCENSUS_ARMS]
-    heads = [MEMCENSUS_LABELS[k] for k in MEMCENSUS_ARMS]
+    reads = [(k,) + _mc_reading(R, k) for k in arms]
+    heads = [labels[k] for k in arms]
     hdr = ["| | " + " | ".join(heads) + " |", "|---|" + "---|" * len(heads)]
 
     def row(label, fn):
@@ -5091,7 +5133,7 @@ def memcensus_block(F):
 
     def pw(m):
         return m.get("peak_window") or {}
-    lines = ["\n## Amendment 23: the memory census (Qwen3-30B-A3B, micro-batch 1 × accum 8, one draw per arm; GB = 1e9 bytes; no speed is read)", ""] + hdr
+    lines = [f"\n## {title}", ""] + hdr
     lines.append(row("peak allocated / reserved (GB)", lambda m: f"{_gb(m.get('peak_allocated_bytes'))} / {_gb(m.get('peak_reserved_bytes'))}"))
     lines.append(row("attributed fraction at the peak", lambda m: f"{m['attributed_fraction']:.4f}" if m.get("attributed_fraction") is not None else "—"))
     lines.append(row("peak at (checkpoint / phase)", lambda m: f"{pw(m).get('checkpoint')} / {pw(m).get('peak_phase')}"))
@@ -5119,6 +5161,59 @@ def memcensus_block(F):
                 cells.append(f"{gs[i]['group']} {_gb(gs[i].get('bytes'))} ×{gs[i].get('count')}" if i < len(gs) else "")
             lines.append(f"| {i + 1} | " + " | ".join(cells) + " |")
     return lines
+
+
+def pos69mc_block(F):
+    """Amendment 73's read, descriptive. First whether each arm reproduces its claim peak. Then the two gaps side by side, e4b minus Unsloth:
+    the resident bytes at the end of setup (the static census's allocated and reserved bytes, the question the load-phase device gap asked)
+    and the training-window peak (the claim's quantity), each with where it sits. Then amendment 23's tables for the two arms. Neither gap is
+    read as evidence about the other, and nothing here is a verdict."""
+    R = F.get(POS69MC_FAM)
+    if not R:
+        return []
+    e, u = POS69MC_ARMS
+    reads = {k: _mc_reading(R, k) for k in POS69MC_ARMS}
+
+    def rec(k):
+        return (next((x for x in R["rows"] if (x["fw"], x["tag"]) == k), None) or {}).get("r") or {}
+
+    def repro(k):
+        pk, (lo, hi) = rec(k).get("peak_vram_gb"), POS69MC_CLAIM_GB[k]
+        if pk is None:
+            return "—"
+        ok = lo - POS69MC_REPRO_TOL_GB <= pk <= hi + POS69MC_REPRO_TOL_GB
+        return f"{pk:.3f} (claim {lo:.3f}–{hi:.3f}): " + ("reproduced" if ok else "NOT reproduced -- this box's gap, not the claim's")
+
+    def setup(m, key):
+        return ((m or {}).get("static_after_setup") or {}).get(key)
+
+    def diff(fn):
+        a, b = fn(reads[e][0]), fn(reads[u][0])
+        return "—" if a is None or b is None else f"{(a - b) / 1e9:+.3f}"
+
+    def at(m):
+        if not m:
+            return "—"
+        af = m.get("attributed_fraction")
+        thin = af is None or af < POS69MC_ATTR_MIN
+        return (f"{(m.get('peak_window') or {}).get('peak_phase')}, attributed {af if af is not None else '—'}"
+                + (f" (thin: below {POS69MC_ATTR_MIN}, its groups are reported, not read)" if thin else ""))
+    lines = ["\n## Amendment 73: the field recipe's memory gap, attributed (descriptive: no prediction, no verdict; GB = 1e9 bytes)", "",
+             "| | " + " | ".join(POS69MC_LABELS[k] for k in POS69MC_ARMS) + " | e4b − Unsloth |", "|---|---|---|---|",
+             f"| peak_vram_gb vs the claim's two draws | {repro(e)} | {repro(u)} | |",
+             f"| end of setup: allocated (GB) | {_gb(setup(reads[e][0], 'allocated_bytes'))} | {_gb(setup(reads[u][0], 'allocated_bytes'))} "
+             f"| {diff(lambda m: setup(m, 'allocated_bytes'))} |",
+             f"| end of setup: reserved (GB) | {_gb(setup(reads[e][0], 'reserved_bytes'))} | {_gb(setup(reads[u][0], 'reserved_bytes'))} "
+             f"| {diff(lambda m: setup(m, 'reserved_bytes'))} |",
+             f"| training window: peak allocated (GB) | {_gb((reads[e][0] or {}).get('peak_allocated_bytes'))} "
+             f"| {_gb((reads[u][0] or {}).get('peak_allocated_bytes'))} | {diff(lambda m: (m or {}).get('peak_allocated_bytes'))} |",
+             f"| the peak sits at | {at(reads[e][0])} | {at(reads[u][0])} | |", "",
+             "The end-of-setup rows answer the load-phase device gap; the training-window row answers the claim. Neither is read as evidence "
+             "about the other. CUDA context and non-PyTorch device memory are not in the census and are not read here."]
+    return lines + memcensus_block(F, POS69MC_FAM, POS69MC_ARMS, POS69MC_LABELS,
+                                   title="Amendment 73: the census tables (Qwen3-30B-A3B, TC1's field recipe, one draw per arm; GB = 1e9 bytes; no speed is read)")
+
+
 def bmm_replay(d):
     """Amendment 24's replay files: {label: {"file": ..., "rows": {(dtype, blas): row}, "error": ...}} for each of BMM_FILES present in d."""
     out = {}
@@ -6796,6 +6891,8 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_memc4k(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if POS69MC_FAM in F:
+        out += pos69mc_block(F)
     if MEMCENSUS_FAM in F:
         out += memcensus_block(F)
         out += ["\n## Predictions P41 / P42 / P43 (TC1-PREREG amendment 23: the memory census, e4b against Unsloth at micro-batch 1; scored mechanically from the receipts)",
@@ -8308,6 +8405,28 @@ def _pos69_set(s=None, dev=None, ops=None, held=None, rec=None):
             for k, v in ((rec or {}).get(tag) or {}).items():
                 r[k] = v
             R[(fw, tag)] = r
+    return R
+
+
+def _pos69mc_set(peak=None, setup=None, af=None, rec=None):
+    """Amendment 73: amendment 69's fd and fv arms, one draw each, no profile, --mem-census 1 at the claim's pins -- `peak` side -> the arm's
+    peak_vram_gb (GB); `setup` side -> (allocated, reserved) bytes at the end of setup; `af` side -> the attributed fraction at the peak;
+    `rec` tag -> a record override. The default is tc1-5090-130's shape: equal resident bytes, e4b's allocator holding 0.73 GB more."""
+    peak = dict({"fd": 26.160, "fv": 24.273}, **(peak or {}))
+    setup = dict({"fd": (19.30e9, 20.18e9), "fv": (19.30e9, 19.45e9)}, **(setup or {}))
+    af = dict({"fd": 0.99, "fv": 1.0}, **(af or {}))
+    src = _pos69_set()
+    R = {}
+    for side, key in (("fd", POS69MC_ARMS[0]), ("fv", POS69MC_ARMS[1])):
+        r = json.loads(json.dumps(src[key]))
+        r.update(fam=POS69MC_FAM, profile=None, profile_steps=0, peak_vram_gb=peak[side])
+        r["env"] = dict(r.get("env") or {}, **POS69MC_PINS)
+        mc = _mc_census(peak[side] * 1e9, QWEN3_ABSMAX_DQ, af=af[side])
+        mc["static_after_setup"] = dict(mc["static_after_setup"], allocated_bytes=setup[side][0], reserved_bytes=setup[side][1])
+        r["mem_census"] = mc
+        for k, v in ((rec or {}).get(key[1]) or {}).items():
+            r[k] = v
+        R[key] = r
     return R
 
 
@@ -11012,6 +11131,28 @@ def selftest():
     assert F3(S3)[FQKV3_FAM]["verdicts"][("e4b", "fused_attn4_shipped_q0")] == "VOID"
     assert "P129 Amendment 3" in render(R3, "x")
     assert "P129 Amendment 2" in render(RFQ, "x")
+    cases += 1
+    # 128. TC1 amendment 73 (qwen3pos69mc): amendment 69's arms with the census -- VALID unprofiled at the claim's pins; the read shows both
+    #      peaks reproduced, end of setup +0.000 allocated / +0.730 reserved, the training-window peak +1.887; a profiled arm, another e4b
+    #      release or a missing census is VOID; a peak 0.3 GB off reads NOT reproduced; a thin attribution is flagged; an errored census
+    #      stays VALID and its side reads "—"; amendment 23's block reads the same through the generalized function
+    PM = lambda R: {POS69MC_FAM: reduce_family(POS69MC_FAM, R, {}, 20)}
+    RM = PM(_pos69mc_set())
+    assert all(x["verdict"] == "VALID" for x in RM[POS69MC_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RM[POS69MC_FAM]["rows"]]
+    tm = "\n".join(pos69mc_block(RM))
+    assert tm.count(": reproduced") == 2 and "| +0.000 |" in tm and "| +0.730 |" in tm and "| +1.887 |" in tm, tm
+    assert "thin" not in tm and "Amendment 73: the census tables" in tm and "Amendment 73: the field recipe" in render(RM, "x")
+    vm = lambda R, k: R[POS69MC_FAM]["verdicts"][k]
+    for bad, k in (({"fused_attn4_m_fd": {"profile_steps": 3}}, POS69MC_ARMS[0]),
+                   ({"ckpt_unsloth_m_fv": {"env": dict(_pos69mc_set()[POS69MC_ARMS[1]]["env"], **{"experts4bit-qlora": "0.56.1"})}}, POS69MC_ARMS[1]),
+                   ({"ckpt_unsloth_m_fv": {"mem_census": None}}, POS69MC_ARMS[1])):
+        assert vm(PM(_pos69mc_set(rec=bad)), k) == "VOID", bad
+    assert "NOT reproduced" in "\n".join(pos69mc_block(PM(_pos69mc_set(peak={"fd": 26.47}))))
+    assert "thin: below 0.9" in "\n".join(pos69mc_block(PM(_pos69mc_set(af={"fv": 0.80}))))
+    RE = PM(_pos69mc_set(rec={"ckpt_unsloth_m_fv": {"mem_census": _mc_census(0, 0, error="RuntimeError: x")}}))
+    assert vm(RE, POS69MC_ARMS[1]) == "VALID" and "the census errored" in "\n".join(pos69mc_block(RE))
+    F23 = {MEMCENSUS_FAM: reduce_family(MEMCENSUS_FAM, _memcensus_set(), {}, 20)}
+    assert memcensus_block(F23) == memcensus_block(F23, MEMCENSUS_FAM, MEMCENSUS_ARMS, MEMCENSUS_LABELS) and "Amendment 23: the memory census" in memcensus_block(F23)[0]
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases

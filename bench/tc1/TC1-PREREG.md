@@ -3192,3 +3192,81 @@ Its P217–P219 rows are reported beside.
 
 **Budget.** As amendment 71: one RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor. Amendment 71 billed $2.75
 with seven load re-runs; expect $1.7–3.
+
+### Amendment 73 (2026-10-21T21:40Z, after a $0 timeline read of amendment 69's box, before any box): what holds the field recipe's memory gap (descriptive; no predictions)
+
+**Why.** `e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio` quotes e4b's peak at 26.16 GB against Unsloth's 24.27 GB. That
+field is `peak_vram_gb`, the allocator's `max_memory_allocated` since `reset_peak()`, and `tc1_arm.py` calls the reset after setup and the
+step-0 evaluation. So it covers the 60 steps and their in-loop evaluations and excludes the load. Nothing has said what holds the 1.89 GB.
+
+A $0 read of amendment 69's box (`tc1-5090-137`) aligned its 1 Hz device-memory samplers to clocks the arms recorded. The samplers are
+nvidia-smi `memory.used`, kept in the private receipt store (sha256 below). The clocks are the box's launch stamp, Kineto's profiler start
+and stop, `step_ms` and the prologue's phase seconds.
+- The device-level gap opens during the load in both draws: 2366 and 2394 MiB in the load phase, against 1928 and 2006 MiB over the arm.
+- e4b's trace passes Unsloth's load maximum within 1 s of e4b's own "quantized experts on 48/48 MoE layers" line.
+- The record has no clock after the profiler stops, so the later phases were not read.
+- The reading is device-level, allocator cache plus CUDA context. It says when, not what.
+
+So there are two gaps, and they are different quantities:
+- **Q1:** the device-level gap at the load.
+- **Q2:** the claim's allocator gap over the training window.
+
+The census answers each in its own terms. Neither is read as evidence about the other.
+
+**Prior, not a prediction.** Amendment 65's box (`tc1-5090-130`, packed rows, e4b 0.48.0) recorded equal allocated bytes at the end of
+setup, 19.298 GB for e4b against 19.302 GB for Unsloth. e4b's allocator reserved 0.74 GB more (20.183 vs 19.447 GB). That is another release
+on other rows. It is a reason to split allocated from reserved here.
+
+**The box** (token `qwen3pos69mc`). Amendment 69's arms, recipe and tokens exactly:
+- TC1's field recipe: alpaca, seq 2048, micro-batch 2 × accum 4, 60 steps, 8 held-out rows every 20 steps (`TC1_STEPS=60`). The family
+  refuses any other window.
+- Both frameworks run in venv-unsloth (torch 2.12.1+cu130): e4b `fused_attn4_m_fd` (matched set, every default unset) and Unsloth
+  `ckpt_unsloth_m_fv` (matched set, grouped_mm).
+- One draw each, fd then fv, with `--mem-census 1` (amendment 23's instrument) and `--profile-steps 0`.
+- The libraries are the claim's: `E4B_SHA=737f02ff45319f06116f75c6d4e5ed29970e5c5e` and
+  `GNF4_SHA=8371c38dc6a4ebfbf54c850bf9cbb53a4120a258` (0.49.0 / 0.43.0), plus Unsloth 2026.9.14 with unsloth_zoo 2026.9.9 as `tc1_run.sh`
+  pins them. The harness is main's at this amendment's merge.
+- One RTX 5090 by the launcher's ranking, avoiding machines 145701, 130223 and 55583 (amendment 69's list). `TC1_LOAD_GATE=6.0`,
+  `TC1_LOAD_RETRIES=2`.
+
+No shakedown is needed. Amendment 23's instrument has recorded real censuses on this harness and card (`tc1-5090-65`, `-100`, `-112`,
+`-114` and `-130`). Every one has the trace recorded and 0.9994–1.0 of its peak attributed.
+
+**Validity** (`pos69mc_why`):
+- amendment 69's predicates without its profile: torch 2.12, and e4b's field defaults present and unset as recorded;
+- no profile on either arm;
+- the versions the claim's box recorded: experts4bit-qlora 0.49.0, grouped-nf4-gemm 0.43.0, unsloth 2026.9.14;
+- a census on the receipt.
+
+An errored census is recorded, not VOID, and that side reads "—". A harness refusal or crash is NOT_RUN: no data, and nothing is read.
+
+**What the read reports.** It is descriptive: `pos69mc_block`, then amendment 23's tables for the two arms. GB = 1e9 bytes.
+1. **Reproduction.** Each arm's `peak_vram_gb` against the claim's two draws (e4b 26.156–26.165, Unsloth 24.273). Within 0.10 GB, it
+   reproduces the claim. Outside that, everything below is this box's gap, and the read says so.
+2. **Q1, the end of setup.** Each side's allocated and reserved bytes from the static census, e4b − Unsloth for each, and the classes behind
+   them.
+   - The allocated row says whether resident tensors differ. The reserved row says how much the allocator holds beyond them.
+   - CUDA context and non-PyTorch device memory are not in the census and are not read.
+   - The timeline's 2366–2402 MiB is cited beside these rows, never reconciled with them.
+3. **Q2, the training window.** Each side's peak allocated bytes and e4b − Unsloth. Also where the peak sits (step, micro-batch, forward,
+   backward or evaluation), the attributed fraction, and the live-at-peak groups. Below 0.90 attributed, a side's groups are reported as
+   thin and not read.
+
+Neither Q1 nor Q2 is read as evidence about the other.
+
+**Decision rules.** None: the read describes and decides nothing. A fix is a separate PR. It must show lower peak memory with the held-out
+loss unchanged, on one box.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), a 2 h guard, TC1's 98 GB host floor.
+- `tc1-5090-137` spent 5 min on venvs, 6 min on the fetch and 8.7 min on an e4b arm.
+- The Unsloth arm without its profiler is about 14 min. The census adds 6–19 s an arm (`tc1-5090-65`, `-130`).
+- Expect about $0.8 with the download. The guard holds the worst case at $1.70.
+
+The samplers the timeline read (sha256, private receipt store, `tc1-5090-137`):
+
+```
+1e7876069731ab08b4ac02fe8099463ca0cb3ea8b0b5d2cd43cea62724c8e9a2  vram_qwen3pos69_e4b_fused_attn4_m_fd.txt
+8d9b2a6d3beab92f3cfcec4772d487ccba066ac7d5ec8368d9d2d92e8c4268d5  vram_qwen3pos69_e4b_fused_attn4_m_fd_d2.txt
+7136155214a4057586dce6967b6e0e2a0e356767177219782440d3483e4b4689  vram_qwen3pos69_unsloth_ckpt_unsloth_m_fv.txt
+66d75a58a3e91ff181514ec63af723a7e7061a06ee9a385fa14057e73eb84032  vram_qwen3pos69_unsloth_ckpt_unsloth_m_fv_d2.txt
+```

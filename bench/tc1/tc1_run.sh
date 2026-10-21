@@ -1819,6 +1819,26 @@ tc1_pos69_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
   can_run 600 $FAM/e4b/m_fd_d2      && E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_fd fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_pos69mc_family FAM MID REV FETCH_AL E4B_AL UNS_AL -- TC1 amendment 73 (2026-10-21): amendment 69's field recipe with the memory census --
+# its two matched arms (fd, fv), one draw each in venv-unsloth, --mem-census 1 and no profile (a profiler would sit inside the census window);
+# 60 steps with the field recipe's in-loop evaluations, as the claim's peak counted them. e4b and grouped-nf4-gemm are the drive's E4B_SHA /
+# GNF4_SHA, registered as the claim's commits; the reducer's pos69mc_why checks the versions the arms record.
+tc1_pos69mc_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
+  local ALL="e4b:fused_attn4_m_fd:fused unsloth:ckpt_unsloth_m_fv:unsloth"
+  say "===== FIELD MEMORY CENSUS family $FAM ($MID @ $REV; e4b defaults vs Unsloth on one stack; --mem-census 1, no profile; amendment 73)"
+  if [ "$STEPS" != 60 ] || [ "$EVAL_EVERY" != 20 ] || [ "$EVAL_N" != 8 ]; then   # the claim's window: 60 steps, 8 held-out rows every 20
+    local t fw tag arm; for t in $ALL; do IFS=: read -r fw tag arm <<< "$t"
+      stubw $FAM $fw $tag $arm not_run "amendment 73 needs the claim's window: TC1_STEPS=60, TC1_EVAL_EVERY=20, TC1_EVAL_N=8 (got $STEPS, $EVAL_EVERY, $EVAL_N)"; done
+    echo "$(echo $FAM | tr a-z A-Z) REFUSED steps=$STEPS eval_every=$EVAL_EVERY eval_n=$EVAL_N" | tee -a summary.txt; return 0
+  fi
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local UNS="--grad-ckpt unsloth --unsloth-targets $UT7 --unsloth-moe-backend grouped_mm"
+  local CEN="--mem-census 1 --profile-steps 0"
+  can_run 600 $FAM/e4b/m_fd     && E4B_VENV=t212 arm $FAM e4b fused_attn4_m_fd fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $CEN
+  can_run 600 $FAM/unsloth/m_fv && arm $FAM unsloth ckpt_unsloth_m_fv unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS $MATCH $CEN
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_pos68_family FAM MID REV FETCH_AL E4B_AL UNS_AL -- TC1 amendment 68 (2026-10-08): amendment 67's packed-row position profiled -- e4b's
 # matched arm at its defaults (pd) and Unsloth's matched arm (pv), two draws each in ABBA order (pd pv pv pd), venv-unsloth, every arm profiled
 # (device time, CPU ops per step) with --phase-peaks 1.
@@ -3104,6 +3124,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3pos67) tc1_pos67_family qwen3pos67 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 67: the packed-row position at the new defaults
   qwen3pos68) tc1_pos68_family qwen3pos68 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 68: amendment 67's position profiled
   qwen3pos69) tc1_pos69_family qwen3pos69 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 69: the field recipe's same-stack position profiled
+  qwen3pos69mc) tc1_pos69mc_family qwen3pos69mc Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 73: amendment 69's arms with the memory census
   qwen3sladder) tc1_sladder_family qwen3sladder Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 70: the single-block ladder 0 vs 1, field recipe
   qwen3slauto) tc1_slauto_family qwen3slauto Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 71: the single-block ladder 0 vs auto, field recipe
   qwen3fqkv) tc1_fqkv_family qwen3fqkv Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # P129 Amendment 2: the fused q/k/v training projection 0 vs 1, field recipe
