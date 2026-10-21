@@ -203,8 +203,9 @@ lane's drive script before running it:
 
 - **Within one box, a ratio repeats to under 0.5 %.** The four ABBA pair ratios in each of P143, P149, P153, P158 and P161
   agree to a median 0.08 %, and at most 0.46 % (P161).
-- **Across boxes, an absolute moves and a GPU-bound ratio holds.** P116's two reads on two rented RTX 5090s differ by 15 % in
-  absolute rate and by 2 % in the ratio: 1.2681 against 1.2417 (`e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`).
+- **Across boxes, an absolute moves and a GPU-bound ratio holds.** P116's read and its reported second draw (void as a reading),
+  on two rented RTX 5090s, differ by 15-18 % in absolute rate and by 2 % in the ratio: 1.2681 against 1.2417
+  (`e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`).
 - **A ratio with host-side work in it moves too.** TC1's axolotl/e4b steady-state ratio read 1.238 on one host and 1.146 on
   another (`e4b.train.h2h.axolotl.qwen3.5090.2026-10-03.native-steady-state`). Where e4b's step is host-launch-bound it read
   2.775 against 1.979 (`e4b.train.h2h.axolotl.qwen3.5090.2026-10-03`).
