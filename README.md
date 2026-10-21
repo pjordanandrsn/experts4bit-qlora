@@ -165,10 +165,12 @@ Mixtral serving.
   its time without them (about 20.2-20.5 ms to 19.0 ms) on one RTX 5090. Opt out per knob: `E4B_FUSE_T1_GLUE=0`,
   `E4B_FUSE_T1_GLUE_R2=0`, `E4B_FUSE_ROUTER_EPI=0`.
   ([P135](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/p135/RESULTS-p135.md), `e4b.serve.p135.fold-speed.mixtral.5090.2026-10-18`)
-- **`E4B_SERVE_ATTN_INT8=1`: int8 weight-only attention projections on Mixtral, opt-in, no speed claimed.** q/k/v/o are
-  held in int8 with a per-row fp32 scale, and decode calls of 1-16 rows run grouped-nf4-gemm's K37 kernels (from 0.49.0).
-  The quality and kernel premises passed; the served read (P149 box Q+S) has not run.
-  ([P149](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/p149/RESULTS-p149.md))
+- **`E4B_SERVE_ATTN_INT8=1`: int8 weight-only attention projections on Mixtral, opt-in.** q/k/v/o are held in int8
+  with a per-row fp32 scale, and decode calls of 1-16 rows run grouped-nf4-gemm's K37 kernels (from 0.49.0). On one
+  RTX 5090 the served read decodes one request 1.161x as fast and sixteen 1.018x, with decode quality inside its
+  registered bound. It stays opt-in until a routing-matched read: the default-flip PR is held.
+  ([P149](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/p149/RESULTS-p149.md),
+  `e4b.serve.p149.int8-attn.mixtral.5090.2026-10-20`)
 
 Scale.
 

@@ -1,0 +1,42 @@
+KNOBS run=p149-5090-2 dry=0 e4b=835874d1449314fc569442228a3e46e7a6602748 gnf4=a83f6bb3a3a69aef8981fb81b6361bf62b06f6e7 model=mistralai/Mixtral-8x7B-Instruct-v0.1@eba92302a2861cdc0098cc54bc9f17cb2c47eb61 gpu_class=5090 min_disk_gb=200 min_ram_gb=60 min_power_w=575 short=32 long=160 reps=5
+CUDA_PROBE ok
+POWER_LIMIT_W 575 (floor 575)
+GUARD_FIT 15990s x 125% = 19987s of 21507s left
+e4b 0.56.0 @835874d1449314fc569442228a3e46e7a6602748
+gnf4 0.49.0 @a83f6bb3a3a69aef8981fb81b6361bf62b06f6e7
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p149_reduce self-test: 47/47 OK
+p149_box self-test: 23/23 OK
+p115_quality self-test OK (11/11 cases)
+premise K37 rc=0: 28 passed in 16.87s
+premise engine rc=0: 4 passed in 15.94s
+premise ok
+FETCH mistralai/Mixtral-8x7B-Instruct-v0.1@eba92302a2861cdc0098cc54bc9f17cb2c47eb61 /root/.cache/huggingface/hub/models--mistralai--Mixtral-8x7B-Instruct-v0.1/snapshots/eba92302a2861cdc0098cc54bc9f17cb2c47eb61
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=9689e662d473cbd1e114ddf251817490aeaef5bdd788ec2e034d0937bd10dbbb
+P149_WINDOWS {"W1": {"windows": 196, "sha256": "ae47744e4b30fd6ae427d51aab33f596e46336d257402a6e18e294b5f4a96ffe"}, "W16": {"windows": 123, "sha256": "4ae6aa040b7a92c54536c7a53359bdbd0983e4c47143f0eadae3145307177d2d"}}
+gate S1w rc=0 P149_Q W1 windows=1 replays=128 eager=0 1.65 s P149_Q W16 windows=16 replays=128 eager=0 16.12 s P149_GATE_RECORD {"tag": "S1w", "int8": 128, "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 65, "fuse_t1_glue_r2_n": [32, 32], "fuse_router_epilogue_n": 32}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "q_seconds": 18.37} 
+P149_GATE build S1: OK
+P149_GATE instrument S1: OK
+arm S0a rc=0 P149_ARM {"arm": "S0", "tag": "S0a", "load_s": 21.0, "int8": 0, "W16": 324.72, "W1": 128.86} P149_Q W1 windows=196 replays=25088 eager=0 316.51 s P149_Q W16 windows=123 replays=1024 eager=0 125.64 s 
+P149_GATE build S0: OK
+arm S1a rc=0 P149_ARM {"arm": "S1", "tag": "S1a", "load_s": 22.14, "int8": 128, "W16": 330.6, "W1": 149.58} P149_Q W1 windows=196 replays=25088 eager=0 292.06 s P149_Q W16 windows=123 replays=1024 eager=0 126.18 s 
+P149_VERDICT GO: Q passes at both gates: {'W1': {'windows': 196, 'mean_d': 0.001024, 'sd': 0.010949, 'se': 0.000782, 'upper': 0.002311, 'bound': 0.011537, 'ppl_S0': 4.3088, 'argmax_agreement': 0.9702, 'pass': True}, 'W16': {'windows': 123, 'mean_d': 0.001272, 'sd': 0.010936, 'se': 0.000986, 'upper': 0.002894, 'bound': 0.011313, 'ppl_S0': 4.3948, 'argmax_agreement': 0.9691, 'pass': True}}
+token-pinned T1 rc=0 P149_TF T1 A decode_tok_s=323.28 counts={'buf_mismatch': 0, 'argmax_mismatch': 5, 'steps': 1100, 'ptr_mismatch': 0} P149_TF T1 B decode_tok_s=325.64 counts={'buf_mismatch': 0, 'argmax_mismatch': 410, 'steps': 1100, 'ptr_mismatch': 0} P149_TF T1 B decode_tok_s=325.79 counts={'buf_mismatch': 0, 'argmax_mismatch': 410, 'steps': 1100, 'ptr_mismatch': 0} P149_TF T1 A decode_tok_s=324.61 counts={'buf_mismatch': 0, 'argmax_mismatch': 5, 'steps': 1100, 'ptr_mismatch': 0} 
+arm S1b rc=0 P149_ARM {"arm": "S1", "tag": "S1b", "load_s": 21.9, "int8": 128, "W16": 330.44, "W1": 149.51} 
+arm S0b rc=0 P149_ARM {"arm": "S0", "tag": "S0b", "load_s": 22.2, "int8": 0, "W16": 323.38, "W1": 128.73} 
+arm S0c rc=0 P149_ARM {"arm": "S0", "tag": "S0c", "load_s": 21.54, "int8": 0, "W16": 323.4, "W1": 128.8} 
+arm S1c rc=0 P149_ARM {"arm": "S1", "tag": "S1c", "load_s": 21.91, "int8": 128, "W16": 330.39, "W1": 149.54} 
+token-pinned T2 rc=0 P149_TF T2 B decode_tok_s=324.41 counts={'buf_mismatch': 0, 'argmax_mismatch': 410, 'steps': 1100, 'ptr_mismatch': 0} P149_TF T2 A decode_tok_s=324.64 counts={'buf_mismatch': 0, 'argmax_mismatch': 5, 'steps': 1100, 'ptr_mismatch': 0} P149_TF T2 A decode_tok_s=324.64 counts={'buf_mismatch': 0, 'argmax_mismatch': 5, 'steps': 1100, 'ptr_mismatch': 0} P149_TF T2 B decode_tok_s=325.68 counts={'buf_mismatch': 0, 'argmax_mismatch': 410, 'steps': 1100, 'ptr_mismatch': 0} 
+arm S1d rc=0 P149_ARM {"arm": "S1", "tag": "S1d", "load_s": 22.7, "int8": 128, "W16": 330.52, "W1": 149.59} 
+arm S0d rc=0 P149_ARM {"arm": "S0", "tag": "S0d", "load_s": 22.06, "int8": 0, "W16": 323.49, "W1": 128.78} 
+sane S0 rc=0 P149_SANE S0 windows={'wikitext': 12} paths={'routed': {}, 'passed': {}} 31.8 s
+
+sane S1 rc=0 P149_SANE S1 windows={'wikitext': 12} paths={'routed': {'1': 195072}, 'passed': {'512': 1536}} 34.9 s
+
+P149_VERDICT FLIP: g1 1.160795 (the min of four pairs) >= 1.03 and g16 1.018108 >= 0.99

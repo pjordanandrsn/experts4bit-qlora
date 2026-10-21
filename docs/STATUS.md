@@ -348,7 +348,8 @@ warps 4, stages 2}` and down `{block_n 128, kc 128, warps 8, stages 3}`, in plac
 - **Records:** `info["k25_plan"]` (the build's resolution) and `prefill_routes()["seen"]["moe_k25_plan"]` (each K25
   call's plan).
 
-**Int8 attention projections on Mixtral are opt-in, with no speed claimed.**
+**Int8 attention projections on Mixtral are opt-in (e4b v0.56.0). The served read is a FLIP, held from the default by
+its routing qualifier.**
 - **What it does:** `E4B_SERVE_ATTN_INT8=1` (#1848) holds Mixtral-8x7B's q, k, v and o projections in int8 with a
   per-row fp32 scale. Decode calls of 1-16 rows run grouped-nf4-gemm 0.49.0's K37 kernels (`dense_i8.linear_i8`), and
   larger calls dequantize transiently.
@@ -356,7 +357,12 @@ warps 4, stages 2}` and down `{block_n 128, kc 128, warps 8, stages 3}`, in plac
 - **Its premises have read:**
   - the int8 round trip keeps P147's quality gate: I8ATTN GO, `p147-a2000-1`;
   - the kernels beat cuBLAS bf16 at Mixtral's shapes: P149 box K, K_GO, `p149k-5090-8`, a microbench premise.
-- **Why it stays off by default:** the served read, P149's box Q+S, has not run. There is no claim id.
+- **The served read (2026-10-20):** P149 box Q+S, `p149-5090-2`, read FLIP on one RTX 5090 with quality at decode GO at
+  both gates. One request decodes 1.16× faster and sixteen requests 1.018×
+  (`e4b.serve.p149.int8-attn.mixtral.5090.2026-10-20`, one host).
+- **Why it stays off by default:** the token-pinned routing qualifier read QUALIFIER_VOID. S0, fed its own stream,
+  differed from it at 5 forced tokens over 1,100 decode steps in every block. So the default-flip PR is held for a routing-matched read, which
+  needs a later registration.
 
 [P147](../bench/p147/RESULTS-p147.md), [P149](../bench/p149/RESULTS-p149.md).
 
