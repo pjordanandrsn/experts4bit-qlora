@@ -35,7 +35,7 @@ ran K00 (two arms), and Unsloth 2026.9.14 ran on torch 2.8.0+cu128 with the nati
 
 **Reported only, labelled EXTRAPOLATION, never in the call:**
 - A log-log fit of sd against depth, from L4 and L8, gives 0.041 (g), 0.039 (E) and 0.029 (I) nats/row at 48 layers.
-- Read 7's L2 + L8 fit gave 0.033.
+- Read 7's L2 + L8 fit gave 0.033 (read 7, run hpn-a2000-read7-combined-2-8, the private receipt store; supporting only).
 - HP2 measured about 0.03 at 48 layers.
 
 ## Supporting reads (same lane, earlier commits)
