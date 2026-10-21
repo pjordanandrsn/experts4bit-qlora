@@ -362,7 +362,7 @@ eligible.
 - The fit table is unchanged: Amendment 1's terms, 4,660 s.
 - The guard is raised to **1.9 h** (6,840 s). The L4's memory bandwidth (about 300 GB/s) is below the A4000-class card
   the terms assumed (about 448 GB/s), and the seven server processes and the decode work are bandwidth-bound. A 1.5×
-  slowdown on the 1,050 s server term alone would use most of the 25 % headroom.
+  slowdown on the 1,050 s server term alone (+525 s) would use nearly half of the 25 % headroom (1,165 s).
 - 4,660 × 1.25 = 5,825 s, inside the 6,840 s guard, with 1,015 s to spare for the slower card.
 - The runner's pre-install check is unchanged: (4,660 − 300) × 1.25 = 5,450 s.
 
