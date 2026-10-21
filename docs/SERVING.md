@@ -379,6 +379,7 @@ From grouped-nf4-gemm 0.47.0, at >= 160 SMs, the default also takes Mixtral-8x7B
 5090 at a 400 W limit, `e4b.serve.p134.gemv-bw.granite.5090.2026-10-18`, `e4b.serve.p134.gemv-bw.olmoe.5090.2026-10-18`),
 and the RTX 4090 (128 SMs) at Qwen3-30B-A3B's two shapes only (1.5145×, `e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18`). The
 shapes are licensed, not the families. Every other shape, and every other GPU below 160 SMs, keeps the previous route.
+Each of these speed-ups is the smaller of two ABBA pairs (the one-request decode rate, B1 over B0).
 
 **Qwen3 decode defaults by family (lanes P143, P153, P158).** Three settings resolve per family at startup, before any
 weight loads. Unset, `qwen3_moe` takes each one as read on Qwen3-30B-A3B on one RTX 5090; every other family keeps the
