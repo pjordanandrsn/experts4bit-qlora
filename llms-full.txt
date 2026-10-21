@@ -2485,7 +2485,7 @@ build, depending on the host. `e4b.serve.p125.int4-attn-calib-default.qwen3.5090
 - **What it buys.** On Qwen3-30B-A3B, with grouped-nf4-gemm 0.45.0 or later, the default now decodes one request 1.132×
   as fast as the stack before #1448 (226 → 256 tok/s, 0.52 ms saved per step), and 16 requests 1.016× as fast. With
   0.44.0 or older, only Phase 1 runs.
-- **What it costs.** Tokens and per-step logits are bitwise identical, and memory does not change.
+- **What it costs.** Tokens and per-step logits are bitwise identical on one schedule, and memory does not change.
 - **In context.** The saving is about the size of the launch-bound routing glue that P123 priced at 11 % of a 4.75 ms
   step.
 - **Scope.** The claim is the P127 delta at `7f044dd9`.
