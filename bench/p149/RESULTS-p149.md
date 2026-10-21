@@ -115,8 +115,8 @@ registration. g16_routing and its band are not graded.
 #### QUALIFIER_VOID cause (found after the run, from the receipt, no new run)
 
 S0 is deterministic across processes. The instrument forced the 160-token stream into the 32-token pass, which
-assumes the served stream does not depend on `max_new_tokens`. It does, through the decode schedule (below, and
-[The schedule dependence](#the-schedule-dependence-follow-ups-2026-10-21)):
+assumes the served stream does not depend on `max_new_tokens`. It does (below), and a one-layer follow-up traces the
+dependence to the decode schedule ([The schedule dependence](#the-schedule-dependence-follow-ups-2026-10-21)):
 
 - **S0 reproduces itself across processes.** S0b, S0c and S0d reproduce S0a's W16 32- and 160-token streams and its W1
   streams exactly, 16 of 16 rows (`arm_S*.json`).
