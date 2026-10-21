@@ -94,7 +94,8 @@ def test_shakedown_fit_with_the_fixtures_inside_its_guard():
 def test_fixture_generation_is_declared_and_never_graded():
     sec = PREREG.split("## Fixture generation", 1)[1].split("\n## ", 1)[0]
     for text in ("NEVER affect its verdict", "--steps 200 --seed 42", "`fixture-dq`", "`fixture-nodq` at `E4B_ABSMAX_DQ=0`",
-                 "`resolved_model_revision` is not None", "`double-quantized`", "never a P224 record",
+                 "`resolved_model_revision` equals", "`double-quantized`", "--fix expert_residency=device",
+                 "`grouped_nf4`", "never a P224 record",
                  "7f1c97f440f06ce36705e4f2b843edb5925f4498"):
         assert text in sec, text
 

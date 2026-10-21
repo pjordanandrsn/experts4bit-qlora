@@ -167,18 +167,28 @@ none exists. The shakedown box already holds OLMoE and Loggetta, so it trains tw
 - **When:** AFTER the shakedown's own records, the collect and the reduce. They NEVER affect its verdict: a fixture
   failure is recorded beside it, and the SHAKEDOWN verdict stands on its own.
 - **The trains:** Loggetta's defaults (expert and attention LoRA, the default r and alpha, the default setup), the
-  built-in demonstration data (no `--dataset`), on OLMoE-1B-7B-0924-Instruct at `7f1c97f4`:
+  built-in demonstration data (no `--dataset`), on OLMoE-1B-7B-0924-Instruct at
+  `7f1c97f440f06ce36705e4f2b843edb5925f4498`, with the experts held on the device (the default, fixed so a small card's
+  plan cannot choose offload, which refuses a double-quantized absmax):
   ```
-  python -m loggetta train allenai/OLMoE-1B-7B-0924-Instruct --revision 7f1c97f440f06ce36705e4f2b843edb5925f4498 --seq 512 --steps 200 --seed 42
+  python -m loggetta train allenai/OLMoE-1B-7B-0924-Instruct --revision 7f1c97f440f06ce36705e4f2b843edb5925f4498
+    --seq 512 --micro-batch 1 --steps 200 --seed 42 --fix expert_residency=device
     --out receipts_fixture-<form> --adapter-out fixture-<form>
   ```
   - `fixture-dq` runs at the default `E4B_ABSMAX_DQ` (unset), and `fixture-nodq` at `E4B_ABSMAX_DQ=0`.
+  - Loggetta installs pinned at `90a7697d` against the box's held torch (2.8.0+cu128, the runner's constraints file),
+    so pip cannot pull a torch the box's driver does not run.
+  - The demonstration data is fetched unpinned, so the receipt's dataset fingerprint and token hash are the data
+    record.
 - **Checked on the box, each fixture refused (recorded, never retried) when it fails:**
-  - The receipt's status is OK.
-  - The absmax form is read from the box, never assumed: the receipt's engaged `expert_absmax.form`. It must be
+  - **The receipt:** its status is OK.
+  - **The absmax form:** read from the box, never assumed, from the receipt's engaged `expert_absmax.form`. It must be
     `double-quantized` for `fixture-dq` and `fp32` for `fixture-nodq`.
-  - The manifest's `resolved_model_revision` is not None.
-  - The manifest's setup trains the experts (`train_experts` true).
+  - **The fused path:** the receipt's setup names `expert_kernel` `grouped_nf4` and `expert_residency` `device` for
+    both, so the pair differs only in the absmax form. fp32 alone would not show the fused path, since the reference
+    loop leaves it too.
+  - **The base:** the manifest's `resolved_model_revision` equals `7f1c97f440f06ce36705e4f2b843edb5925f4498`.
+  - **The experts are trained:** the manifest's setup has `train_experts` true.
 - **Kept:**
   - Each WHOLE adapter directory (the safetensors, the manifest, the tokenizer files), with its receipt, is hashed on
     the box before teardown and fetched.
