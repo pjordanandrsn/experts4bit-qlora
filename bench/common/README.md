@@ -124,3 +124,9 @@ phase_start reduce reduce; python reduce.py ...;  phase_end reduce
 - P149's runner wrote the same lines without `kind` before this convention existed. The reader classes those `unknown`; it never guesses a kind from a name.
 
 `phases.py PATH` prints seconds per kind, the first measurement's start, and any phase left open (a box that died mid-phase). `phases.py --check PATH` exits 1 with one line per fault: a format fault, or a phase left open (on a fetched receipt the box is gone, so an open phase means it died). Verifiers of fetched receipts run plain `--check`. `--check --allow-open` is for a live box, where the current phase is legitimately open. `tests/test_phases_common.py` reads P149's committed record first (sha-pinned), then checks the writer's refusals and each reader fault.
+
+**Boot is not in `phases.jsonl`, and never `ssh_ready_s`.** The time from the create to a usable box is the launcher's, read from its receipt:
+- `<provider>_ssh_ready_after_s`, from the create to the first authenticated ssh, where the receipt has it;
+- else `<provider>_preflight_seconds`, the pre-flight's own duration, which includes its probes.
+
+`ssh_ready_s` is the configured readiness ALLOWANCE (`--ssh-ready-s`; newer receipts also write it as `ssh_ready_allowance_s`), not a measurement. It takes only the configured values (180, 300, 420 s), so a ratio of it to the billed time measures nothing. A receipt with neither measured field has an UNKNOWN boot, never 0 and never the allowance.
