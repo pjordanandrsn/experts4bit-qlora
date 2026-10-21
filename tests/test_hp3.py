@@ -144,7 +144,17 @@ def test_a_closed_framework_reads_close_on_its_pairs_and_runs_nothing():
     out, _ = R.verdict([_conf()], R.g1(ev), _receipts())
     assert out["pairs"]["e4b-unsloth"]["verdict"] == "CLOSE" and out["pairs"]["unsloth-axolotl"]["verdict"] == "CLOSE"
     assert out["pairs"]["e4b-unsloth"]["wording"] == "bases differ: outside this registration"
-    assert "unsloth" not in out["y"]
+    assert "unsloth" not in out["y"] and out["three_way"]["verdict"] == "NOT_READ"
+    assert out["three_way"]["closed_pairs"]["e4b-unsloth"]["digests"]["unsloth"] == "1" * 64      # the record names the pair and its digests
+
+
+def test_a_run_without_its_in_loop_step_n_number_voids_with_its_reason():
+    conf = _conf()
+    del conf["arms"][0]["evaluator_minus_inloop_final"]              # e4b seed 3410
+    out, _ = R.verdict([conf], R.g1(_cal()), _receipts())
+    assert out["void"] == {"e4b seed 3410": "no evaluator_minus_inloop_final recorded (the in-loop step-N number is missing)"}
+    assert out["pairs"]["e4b-unsloth"]["verdict"] == "NOT_READ" and out["pairs"]["unsloth-axolotl"]["verdict"] == "PARITY"
+    assert out["three_way"]["unread_pairs"]["e4b-axolotl"].startswith("not read: VOID runs: e4b seed 3410")
 
 
 def test_an_ordered_three_way_and_the_order_check():

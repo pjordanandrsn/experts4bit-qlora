@@ -147,6 +147,8 @@ def _void(fw, a, receipts):
         return "no zero-centred round trip recorded"
     if abs(rt) > ROUNDTRIP_MATCH:
         return f"6(b): |adapter_roundtrip| {abs(rt):.6f} > {ROUNDTRIP_MATCH}"
+    if a.get("evaluator_minus_inloop_final") is None:
+        return "no evaluator_minus_inloop_final recorded (the in-loop step-N number is missing)"
     if fw == "axolotl":
         q = receipts.get(a["tag"])
         if q is None:
@@ -217,7 +219,12 @@ def verdict(evs, g1rec, receipts):
         three = "ORDERED" if _order(ranks) else "MIXED"
     else:
         three = "MIXED"
+    per = g1rec.get("per_framework") or {}
+    closed = {k: {"digests": {f: (per.get(f) or {}).get("digest") for f in k.split("-")}, "wording": p["wording"]}
+              for k, p in out["pairs"].items() if p["verdict"] == "CLOSE"}
+    unread = {k: p["wording"] for k, p in out["pairs"].items() if p["verdict"] == "NOT_READ"}
     out["three_way"] = {"verdict": three, "pairs_read": sum(v not in ("CLOSE", "NOT_READ") for v in vs.values()),
+                        "closed_pairs": closed, "unread_pairs": unread,
                         "correction": "none: each pair is its own registered question; THREE_WAY_PARITY is an intersection of TOSTs"}
     out["home_field"] = g1rec.get("home_field")
     return out, (EXIT_OK if three != "NOT_READ" else EXIT_INCOMPLETE)

@@ -95,8 +95,15 @@ what is actually installed, and the pin is forced with an explicit `torch==2.14.
 claim** for torch 2.14.
 
 **The fallback, decided before any data.** HP3 runs **(R)** instead if the cheap-rental shakedown either:
-- cannot install all three frameworks on the matched build (the resolver check above); or
+- cannot resolve, install or import all three frameworks on the matched build (the resolver check above), whatever the host; or
 - fails G1' at L2, meaning the bases are not byte-identical.
+
+A failure is **host-attributable** only if it is one of:
+- a pre-install host check: driver, compute capability, RAM, disk or power;
+- a provider or boot error before any pip resolve.
+
+A host-attributable failure uses the spare and is not the (R) trigger. Every resolve, install or import failure of the three
+frameworks is the trigger, so a bad host cannot turn the choice of build into a choice made by result.
 
 (R) is e4b vs Unsloth **2026.9.14** on HPN's build, torch 2.8.0+cu128, with label (i) dropped and label (iii) naming that build.
 axolotl waits for an amendment. **Only the shakedown can trigger the fallback, never a Δ.** Once the read box has launched, the
@@ -114,9 +121,11 @@ and runs the evaluator's zero-adapter pass on each. G1' then checks two things f
 
 - **A mismatch on either check is a CLOSE** for f's pairs, worded "bases differ: outside this registration". f runs no
   confirmation arm. Build-vs-framework stays one variable at a time.
-- If both other frameworks CLOSE, the driver ends the draw and the box tears down before phase C.
-- **One choice for the reviewer:** a CLOSE drops only f's pairs rather than the whole box, so a surviving e4b–Unsloth pair is
-  still read if axolotl's base differs. The alternative is one CLOSE for the whole box.
+- G1' is checked per pair against e4b's base. Two bases that each equal e4b's equal each other, so the Unsloth–axolotl pair
+  passes when both of its frameworks pass.
+- **The CLOSE is per framework (ruling 4).** A CLOSE drops only f's pairs, so a surviving e4b–Unsloth pair is still read if
+  axolotl's base differs. Only if every pair closes does the driver end the draw, with the box torn down before phase C.
+- Any closed pair makes the three-way read NOT_READ. The record names the pair and both digests.
 - G1' is deterministic: no interval and no SE. It is computed by the registered reducer (`hp3_reduce.py g1`), which writes
   `hp3/g1.json` and exits 4 on a whole-box CLOSE. A CLOSE is a reading, not a strike.
 
@@ -141,6 +150,7 @@ rows. Run s VOIDs iff |a_f(s)| > 0.01. That is `ROUNDTRIP_MATCH`, AXO1767's MATC
 For each pair (A, B) whose G1' passed, Δ_AB = mean over seeds of (A − B) evaluator held-out row means on the 48 scored rows,
 paired by seed and `order_sha`.
 - Its interval is the 90 % t-interval, df = seeds − 1.
+- The run VOIDs if the evaluator recorded no in-loop step-N number for it (`evaluator_minus_inloop_final`), with that reason.
 - The margin is m = min(max(σ_seed, 0.005), 0.02), with σ_seed as HP2 defines it (`hp1_reduce.pooled_sd` over the pair's seeds).
 - **G2'** is HP2's realized-margin TOST on Δ alone. HP2's δ0 term is dropped: on identical bases Δ_base = 0 exactly, which G1'
   has already checked.
@@ -160,9 +170,11 @@ The three pair verdicts are reported as a table, each with its own interval, and
 its own registered question. The three-way summary is a statement about that table:
 - **THREE-WAY PARITY:** all three pairs read PARITY at their own m. That is an intersection of TOSTs, so it is conservative and
   needs no correction.
-- **ORDERED:** every read pair is BEATS/BEHIND, and those verdicts are consistent with one order. The RESULTS line says three pairs
-  were read, so a reader can apply their own correction.
-- **MIXED:** anything else, worded pair by pair with no summary claim.
+- **ORDERED:** all three pairs are BEATS/BEHIND, and those verdicts are consistent with one order. The RESULTS line says three
+  pairs were read, so a reader can apply their own correction.
+- **MIXED:** all three pairs were read, and the verdicts are neither of the above. Worded pair by pair, with no summary claim.
+- **NOT_READ:** any pair is CLOSE or NOT_READ. The record names each closed pair, with both frameworks' base digests, and each
+  unread pair with its VOID runs. The read pairs are still reported, each with its own verdict, but there is no three-way summary.
 
 ## Reported, never gated (the in-loop term named in each)
 
@@ -188,7 +200,7 @@ its own registered question. The three-way summary is a statement about that tab
 ## Hosts and budget (no A2000: owner directive 2026-10-21)
 
 **1. Shakedown (never data):** the cheapest rented card that runs the 2-layer cut with all three venvs on the matched build.
-- Requirements: host driver ≥580 (cu130), ≥16 GB VRAM, disk ≥120 GB, PyPI ≥10 MB/s (AXO1767's probe). It must not be an RTX 5090,
+- Requirements: host driver ≥580 (cu130), compute capability ≥7.5 (cu130 does not build for older cards), ≥16 GB VRAM, disk ≥120 GB, PyPI ≥10 MB/s (AXO1767's probe). It must not be an RTX 5090,
   the read card's class.
 - It proves the kit end to end:
   - the three installs and the resolver check;
@@ -234,6 +246,14 @@ under the registered host rule (driver ≥580, RAM ≥98 GB, disk ≥220 GB).
    only by the shakedown. Each framework's transformers and peft are recorded and reported, never gated, and so is what each
    resolver actually installs. The shakedown is a correctness check on e4b at torch 2.14, with no compatibility claim. Then: this
    PREREG, a review outside the HP lane, the maintainer's pass, and an exec ACK with the kit hash.
+4. 2026-10-21 13:23Z, on the review: these refine ruling 2's teardown, which was written for a two-way read.
+   - **(A)** The CLOSE is per framework: G1' is checked per pair against e4b's base, and the box tears down early only if every
+     pair closes. Any closed pair makes the three-way read NOT_READ, and the record names the pair and its digests.
+   - **(B)** The three-way read takes the reducer's NOT_READ rule, and ORDERED needs all three pairs.
+   - **(C)** The shakedown host needs compute capability ≥7.5. Only a pre-install host check or a provider/boot error before any
+     pip resolve is host-attributable and uses the spare. Any resolve, install or import failure on the build is the (R)
+     trigger.
+   - A run missing `evaluator_minus_inloop_final` VOIDs, with its reason.
 
 ## Harness
 
