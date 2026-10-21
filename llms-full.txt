@@ -2222,11 +2222,12 @@ position. `e4b.train.h2h.unsloth.mixtral.5090.2026-10-05.same-stack`,
 ([results](../bench/h2h-2026-10-02/tc2/RESULTS-tc2-mixtral-samestack.md)).
 
 **Granite and OLMoE: e4b is faster than each comparator** (TC2, 2026-10-04, one RTX 5090; transformers 5.18.0 + PEFT
-0.21.2, axolotl 0.20.0, Unsloth 2026.9.14): HF/e4b 1.299 and
-axolotl/e4b 1.150 on Granite-3.1-3B-A800M, Unsloth/e4b 1.821 on OLMoE-1B-7B, each pair comparable or equivalent on
-held-out loss. e4b's peak is about half HF's on Granite and 1.70 GB above Unsloth's on OLMoE. Unsloth adapts no expert
-parameter of Granite, so there is no Unsloth position there, and gpt-oss-20b has no adapter set common to the
-frameworks. `e4b.train.h2h.hf.granite.5090.2026-10-04`, `e4b.train.h2h.axolotl.granite.5090.2026-10-04`,
+0.21.2, axolotl 0.20.0, Unsloth 2026.9.14): HF/e4b 1.299 (medians of steps 11..60 over two draws each) and axolotl/e4b
+1.150 (medians of steps 11..60; one axolotl draw, two e4b draws) on Granite-3.1-3B-A800M, Unsloth/e4b 1.821 (medians of
+steps 11..60; one Unsloth draw, two e4b draws) on OLMoE-1B-7B, each pair comparable or equivalent on held-out loss.
+e4b's peak is about half HF's on Granite and 1.70 GB above Unsloth's on OLMoE. Unsloth adapts no expert parameter of
+Granite, so there is no Unsloth position there, and gpt-oss-20b has no adapter set common to the frameworks.
+`e4b.train.h2h.hf.granite.5090.2026-10-04`, `e4b.train.h2h.axolotl.granite.5090.2026-10-04`,
 `e4b.train.h2h.unsloth.olmoe.5090.2026-10-04`, `e4b.train.h2h.unsloth.granite.5090.2026-10-02.coverage`,
 `e4b.train.h2h.unsloth.gptoss.5090.2026-10-02.no-common-set` ([TC2](../bench/h2h-2026-10-02/tc2/README.md)).
 
