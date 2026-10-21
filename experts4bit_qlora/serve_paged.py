@@ -125,15 +125,17 @@ never emitted in pieces), ``finish_reason`` on the last token's chunk, a ``usage
   and never serves the base in its place:
   - 1: a live expert LoRA;
   - 2: a base revision other than the adapter's;
-  - 3: an arena whose source revision is unknown or different (opt-in
+  - 3: an arena whose source (repo and revision) is unknown or different (opt-in
     ``E4B_PAGED_ADAPTER_ALLOW_UNVERIFIED_ARENA=1``);
-  - 4: the arena's quant_type or blocksize;
-  - 5: a lever that re-quantizes weights;
+  - 4: the arena's quant_type or blocksize, or an arena that records neither (fails closed);
+  - 5: a lever that re-quantizes an adapted module or depends on base-model calibration (``ADAPTER_REFUSED_LEVERS``;
+    the uncalibrated, weight-only int8 lm_head stays a base-serving property, ``ADAPTER_ALLOWED_LEVERS``);
   - 6: unknown target modules;
   - 7: the verifier;
   - 8: attention trained on a 4-bit base;
   - 9: an expert base a v1 manifest cannot verify (opt-in ``E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE=experts``,
-    reported as ``base_match``).
+    reported as ``base_match``);
+  - 10: speculative decoding (``E4B_PAGED_SPEC``), whose draft head and gate were read on the base model.
   The served name becomes ``<model>+<adapter_id[:12]>``, and ``/health`` and ``/v1/models`` carry the adapter's id,
   manifest hash, base revision, merge report and ``base_match``.
 
@@ -167,10 +169,26 @@ LEVER_ENV = ("E4B_SERVE_EXP_INT4", "E4B_SERVE_EXP_INT4_CALIB", "E4B_SERVE_ATTN_I
              "E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI", "E4B_FUSED_KV_APPEND",
              "E4B_SERVE_ATTN_INT8")
 FUSION_ENV = ("E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")
-# Under an adapter, the levers that re-quantize weights the adapter was trained against are refused (refusal 5;
-# docs/ADAPTER_PORTABILITY.md F4) until a registered read gates them
-ADAPTER_REFUSED_LEVERS = ("E4B_SERVE_ATTN_INT4", "E4B_SERVE_ATTN_INT4_CALIB", "E4B_SERVE_ATTN_INT8",
-                          "E4B_SERVE_EXP_INT4", "E4B_SERVE_EXP_INT4_CALIB")
+# Under an adapter, a lever is classified by what it DEPENDS ON (docs/ADAPTER_PORTABILITY.md F4). REFUSED (refusal 5)
+# until a registered read gates it: (i) it re-quantizes an ADAPTED module (attention after the merge; experts once
+# adapted), or (ii) it depends on calibration measured on the base model's activations, which an adapter shifts.
+# ALLOWED: uncalibrated, weight-only quantization of a module no adapter touches, a base-serving property identical to
+# the base server's. Every lever _apply_levers reads, and the int8 head, sits in exactly one table with its reason (a
+# test holds that), so a new lever cannot slip past an adapter.
+ADAPTER_REFUSED_LEVERS = {
+    "E4B_SERVE_ATTN_INT4": "re-quantizes the merged attention (i)",
+    "E4B_SERVE_ATTN_INT4_CALIB": "re-quantizes the merged attention (i), calibrated on the base model's activations, which an adapter shifts (ii)",
+    "E4B_SERVE_ATTN_INT8": "re-quantizes the merged attention (i)",
+    "E4B_SERVE_EXP_INT4": "re-quantizes the experts the adapter was trained around (i, once experts are adapted)",
+    "E4B_SERVE_EXP_INT4_CALIB": "re-quantizes the experts (i), calibrated on the base model's activations, which an adapter shifts (ii)",
+    "E4B_SERVE_LMHEAD_INT4_CALIB": "calibrated on the base model's activations, which an adapter shifts (ii)",
+    "E4B_SERVE_DENSE_INT4_CALIB": "re-quantizes dense layers (i), calibrated on the base model's activations, which an adapter shifts (ii)",
+}
+ADAPTER_ALLOWED_LEVERS = {
+    "E4B_INT8_HEAD_BW": ("weight-only per-row int8 of the lm_head (quantize_rows_int8: each row's scale from its own "
+                         "absmax, no activation statistics); no adapter touches the head, so it is a base-serving "
+                         "property identical to the base server's"),
+}
 ADAPTER_ALLOW_ARENA_ENV = "E4B_PAGED_ADAPTER_ALLOW_UNVERIFIED_ARENA"
 ADAPTER_ACCEPT_BASE_ENV = "E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE"
 FUSE_QKV_ENV = "E4B_PAGED_FUSE_QKV"
@@ -812,8 +830,12 @@ class PagedServeConfig:
 
     @property
     def model_names(self) -> tuple:
-        # with an adapter merged, the base's name is NOT served: clients tell base and adapter apart by name
-        base = f"{self.model}+{self.adapter_id[:12]}" if (self.model and self.adapter_id) else self.model
+        # with an adapter merged, the base's name is NOT served: clients tell base and adapter apart by name; while the
+        # adapter loads (its id not yet known) the base's name is not listed either
+        if self.adapter and not self.adapter_id:
+            base = ""
+        else:
+            base = f"{self.model}+{self.adapter_id[:12]}" if (self.model and self.adapter_id) else self.model
         names = [base] if base else []
         names += [n for n in self.served_names if n not in names]
         return tuple(names)
@@ -1639,12 +1661,14 @@ def _adapter_refusals(adapter, cfg: PagedServeConfig, arena_index, *, served_rev
     requested revision and both opt-ins."""
     from .adapter_dir import servable_refusals
 
-    levers = {k: (os.environ.get(k) or "0").strip() not in ("", "0") for k in ADAPTER_REFUSED_LEVERS}
+    levers = {f"{k} ({why})": (os.environ.get(k) or "0").strip() not in ("", "0")
+              for k, why in ADAPTER_REFUSED_LEVERS.items()}
     return servable_refusals(adapter, served_revision=served_revision, requested_revision=cfg.revision or None,
                              arena_index=arena_index, levers=levers,
                              allow_unverified_arena=cfg.adapter_allow_unverified_arena,
                              accept_unverified_base=cfg.adapter_accept_unverified_base,
-                             check_served_revision=check_served_revision)
+                             check_served_revision=check_served_revision, served_model=cfg.model,
+                             spec=cfg.spec)
 
 
 def _raise_adapter_refusals(refusals) -> None:
@@ -1855,6 +1879,10 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     # (RTX A2000 host, the one place it was measured). The loader alone leaves ~4 MB.
     # likewise torch's caching host allocator keeps the loader's freed pinned staging (1.09 GB after loading Qwen3-30B-A3B)
     if adapter_info is not None:
+        # the head as served under the adapter: int8 weight-only is allowed (ADAPTER_ALLOWED_LEVERS), and said so
+        adapter_info["base_match"]["lm_head"] = (
+            "int8 weight-only (base-serving property, identical to the base server)"
+            if int8_head.get("mode") == "1" else "bf16 (as trained)")
         info["adapter"] = adapter_info
     info["pinned_cache_released"] = release_cached_pinned_memory()
     info["host_heap_trimmed"] = release_freed_host_heap()

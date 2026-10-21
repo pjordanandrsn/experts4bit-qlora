@@ -65,7 +65,7 @@ def _write(tmp_path, tensors, *, setup=None, revision=REV, schema="backend-adapt
 
 def _refusals(ad, **kw):
     args = dict(served_revision=REV, requested_revision=None, arena_index=ARENA, levers=NO_LEVERS,
-                accept_unverified_base=frozenset({"experts"}))
+                accept_unverified_base=frozenset({"experts"}), served_model="x/y")
     args.update(kw)
     return AD.servable_refusals(ad, **args)
 
@@ -225,10 +225,16 @@ def test_each_refusal_names_its_reason(tmp_path):
     assert _codes(_refusals(ad, served_revision=None)) == [2]                 # an unknown served commit is not a match
     assert _refusals(ad, served_revision=None, check_served_revision=False) == []
     assert _codes(_refusals(ad, requested_revision="c" * 40)) == [2]
-    assert _codes(_refusals(ad, arena_index={"snapshot": "/local/dir", "quantizer": {}})) == [3]
-    assert _refusals(ad, arena_index={"snapshot": "/local/dir", "quantizer": {}}, allow_unverified_arena=True) == []
-    assert _codes(_refusals(ad, arena_index={**ARENA, "snapshot": "/c/snapshots/" + "d" * 40})) == [3]
+    local = {**ARENA, "snapshot": "/local/dir"}
+    assert _codes(_refusals(ad, arena_index=local)) == [3]
+    assert _refusals(ad, arena_index=local, allow_unverified_arena=True) == []
+    assert _codes(_refusals(ad, arena_index={**ARENA, "snapshot": "/c/models--x--y/snapshots/" + "d" * 40})) == [3]
+    assert _codes(_refusals(ad, served_model="x/other")) == [3]                # the repo id, not just the revision
+    assert _refusals(ad, served_model="/local/snapshot/dir") == []            # a local path carries no repo id
     assert _codes(_refusals(ad, arena_index={**ARENA, "quantizer": {"quant_type": "fp4", "blocksize": 64}})) == [4]
+    assert _codes(_refusals(ad, arena_index={"snapshot": ARENA["snapshot"]})) == [4]   # no quantizer: fails closed
+    assert _codes(_refusals(ad, arena_index={**ARENA, "quantizer": {"quant_type": "nf4"}})) == [4]
+    assert _codes(_refusals(ad, spec="eagle3")) == [10]
     assert _codes(_refusals(ad, levers={"E4B_SERVE_ATTN_INT8": True})) == [5]
     assert _codes(_refusals(ad, levers={"E4B_SERVE_EXP_INT4": True})) == [5]  # the experts around the adapter, too
     assert _codes(_refusals(_ad(tmp_path, name="q", setup={"attn_4bit": True}))) == [8]
@@ -256,7 +262,8 @@ def test_the_unverified_base_opt_in_names_its_scope():
 def test_base_match_states_each_part(tmp_path):
     ad = _ad(tmp_path)
     bm = AD.base_match(ad)
-    assert bm["attention"] == "exact" and bm["experts"].startswith("unverified") and "F1" in bm["experts"]
+    assert bm["attention"] == "exact by construction (up to the measured merge rounding)"
+    assert bm["experts"].startswith("unverified") and "F1" in bm["experts"]
     assert AD.base_match(ad, [(8, "x")])["attention"] == "refused"
 
 
@@ -265,6 +272,9 @@ def test_the_arena_revision_is_read_only_from_a_snapshot_commit():
     assert AD.arena_source_revision({"snapshot": "/models/qwen"}) is None
     assert AD.arena_source_revision({"snapshot": f"/x/snapshots/{REV}\n"}) is None   # fullmatch: no trailing newline
     assert AD.arena_source_revision({}) is None
+    assert AD.arena_source(ARENA) == ("x/y", REV)
+    assert AD.arena_source({"snapshot": f"C:\\hf\\models--Qwen--Qwen3-30B-A3B\\snapshots\\{REV}"}) == \
+        ("Qwen/Qwen3-30B-A3B", REV)
 
 
 # ------------------------------------------------------------------------------------------------- config + identity
@@ -280,6 +290,32 @@ def test_the_config_refuses_opt_ins_without_an_adapter_and_a_loose_flag(monkeypa
     monkeypatch.setenv("E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE", "1")
     with pytest.raises(ValueError, match="unknown scope"):
         PagedServeConfig.from_env()
+
+
+def test_while_the_adapter_loads_the_base_name_is_not_listed():
+    from experts4bit_qlora.serve_paged import PagedServeConfig
+
+    loading = PagedServeConfig(model="tiny/moe", adapter="/ad", served_names=("alias",))
+    assert loading.model_names == ("alias",)
+    built = PagedServeConfig(model="tiny/moe", adapter="/ad", adapter_id="e" * 64)
+    assert built.model_names == ("tiny/moe+" + "e" * 12,)
+    assert PagedServeConfig(model="tiny/moe").model_names == ("tiny/moe",)
+
+
+def test_every_lever_is_classified_refused_or_allowed_with_its_reason():
+    """The census: each env name _apply_levers reads, and the int8 head, sits in exactly one table with a reason. A
+    refused lever re-quantizes an adapted module (i) or depends on base-model calibration (ii)."""
+    from experts4bit_qlora import serve_paged as sp
+
+    src = (ROOT / "experts4bit_qlora" / "serve_paged.py").read_text(encoding="utf-8")
+    body = src[src.index("def _apply_levers("):]
+    body = body[:body.index("\ndef ", 10)]
+    read = set(re.findall(r'env\("(E4B_SERVE_[A-Z0-9_]+)"', body)) | {"E4B_INT8_HEAD_BW"}
+    refused, allowed = set(sp.ADAPTER_REFUSED_LEVERS), set(sp.ADAPTER_ALLOWED_LEVERS)
+    assert read == refused | allowed and not refused & allowed, (read - refused - allowed, refused & allowed)
+    assert all(("(i" in why or "(ii)" in why) for why in sp.ADAPTER_REFUSED_LEVERS.values())
+    assert all("CALIB" not in k or "(ii)" in why for k, why in sp.ADAPTER_REFUSED_LEVERS.items())
+    assert all("weight-only" in why and "no activation statistics" in why for why in sp.ADAPTER_ALLOWED_LEVERS.values())
 
 
 def test_health_and_models_carry_the_adapter_and_the_base_name_is_not_served():
@@ -320,8 +356,13 @@ MUTANTS = [
     ("    elif served_revision != ad.revision:\n", "    elif False:\n"),                         # refusal 2
     ("    if arena_rev is None:\n        if not allow_unverified_arena:\n",
      "    if arena_rev is None:\n        if False:\n"),                                           # refusal 3
-    ("        if key in q and key in ad.setup and q[key] != ad.setup[key]:\n",
-     "        if False:\n"),                                                                      # refusal 4
+    ("            if key in ad.setup and q[key] != ad.setup[key]:\n",
+     "            if False:\n"),                                                                  # refusal 4
+    ("        out.append((4, \"cannot verify the arena's quantization recipe",
+     "        print((4, \"cannot verify the arena's quantization recipe"),                           # 4 fails closed
+    ("        if served_model and \"/\" in served_model and not os.path.isabs(served_model) and arena_repo != served_model:\n",
+     "        if False:\n"),                                                                     # 3: the repo id
+    ('    if (spec or "off") != "off":\n', "    if False:\n"),                                 # refusal 10
     ("    if on:\n", "    if False:\n"),                                                        # refusal 5
     ("    if ad.other_tensors:\n", "    if False:\n"),                                          # refusal 6
     ('    if ad.setup.get("attn_4bit") and ad.attention:\n', "    if False:\n"),                # refusal 8

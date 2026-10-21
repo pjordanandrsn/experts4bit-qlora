@@ -148,12 +148,21 @@ def verify_adapter_dir(path) -> AdapterDir:
                       other_tensors=tuple(other))
 
 
-def arena_source_revision(arena_index: dict) -> str | None:
-    """The source commit an NF4 arena was baked from, when its index can show it: the HF cache snapshot directory it
-    names (``.../snapshots/<sha>``). None when it cannot (a local path, or no snapshot recorded)."""
+_HF_SNAPSHOT = re.compile(r"(?:.*[/\\])?models--(?P<org>[^/\\]+?)--(?P<name>[^/\\]+)[/\\]snapshots[/\\]"
+                          r"(?P<rev>[0-9a-f]{40})[/\\]?")
+
+
+def arena_source(arena_index: dict) -> tuple:
+    """``(repo_id, commit)`` an NF4 arena was baked from, when its index can show it: the HF cache snapshot directory it
+    names (``.../models--<org>--<name>/snapshots/<sha>``). ``(None, None)`` when it cannot (a local path, or no
+    snapshot recorded)."""
     snap = arena_index.get("snapshot") if isinstance(arena_index, dict) else None
-    tail = os.path.basename(os.path.normpath(str(snap))) if snap else ""
-    return tail if _FULL_SHA.fullmatch(tail) else None
+    m = _HF_SNAPSHOT.fullmatch(str(snap)) if snap else None
+    return (f"{m['org']}/{m['name']}", m["rev"]) if m else (None, None)
+
+
+def arena_source_revision(arena_index: dict) -> str | None:
+    return arena_source(arena_index)[1]
 
 
 #: the base scopes an operator may accept unverified (``E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE``)
@@ -173,7 +182,8 @@ def parse_accept_unverified_base(raw: str) -> frozenset:
 
 def base_match(ad: AdapterDir, refusals=()) -> dict:
     """What is known about the served base against the adapter's training base, per part of the model."""
-    attn = "refused" if any(code == 8 for code, _ in refusals) else ("exact" if ad.attention else "none")
+    attn = ("refused" if any(code == 8 for code, _ in refusals) else
+            "exact by construction (up to the measured merge rounding)" if ad.attention else "none")
     experts = ("unverified (backend-adapter/1 records no expert absmax form; training defaults to the double-quantized "
                "absmax, the NF4 arena stores fp32: docs/ADAPTER_PORTABILITY.md F1)")
     return {"attention": attn, "experts": experts}
@@ -181,11 +191,12 @@ def base_match(ad: AdapterDir, refusals=()) -> dict:
 
 def servable_refusals(ad: AdapterDir, *, served_revision: str | None, requested_revision: str | None,
                       arena_index: dict | None, levers: dict, allow_unverified_arena: bool = False,
-                      accept_unverified_base: frozenset = frozenset(), check_served_revision: bool = True) -> list:
+                      accept_unverified_base: frozenset = frozenset(), check_served_revision: bool = True,
+                      served_model: str | None = None, spec: str = "off") -> list:
     """Every ``(code, reason)`` that stops this server from serving ``ad`` as trained (empty: servable). The codes are
-    the spec's: 1 expert LoRA, 2 base revision, 3 arena revision, 4 arena recipe, 5 re-quantizing levers, 6 unknown target
-    modules, 8 attention trained on a 4-bit base (v1), 9 an expert base this server cannot verify (v1), unless the
-    operator accepts it by name. Refusal 7 (the verifier) has already passed. ``check_served_revision=False`` skips only
+    the spec's: 1 expert LoRA, 2 base revision, 3 arena source (repo and revision), 4 arena recipe, 5 re-quantizing levers,
+    6 unknown target modules, 8 attention trained on a 4-bit base (v1), 9 an expert base this server cannot verify (v1),
+    unless the operator accepts it by name, 10 speculative decoding (its draft head and gate were read on the base). Refusal 7 (the verifier) has already passed. ``check_served_revision=False`` skips only
     the served commit's comparison, for the check made before the load (the loader resolves the commit)."""
     import torch
 
@@ -216,22 +227,31 @@ def servable_refusals(ad: AdapterDir, *, served_revision: str | None, requested_
     if requested_revision and ad.revision and _FULL_SHA.fullmatch(requested_revision) \
             and requested_revision != ad.revision:
         out.append((2, f"E4B_PAGED_REVISION {requested_revision} is not the adapter's {ad.revision}"))
-    arena_rev = arena_source_revision(arena_index or {})
+    arena_repo, arena_rev = arena_source(arena_index or {})
     if arena_rev is None:
         if not allow_unverified_arena:
-            out.append((3, "the arena's source revision is unknown (its index records no snapshot commit); set "
+            out.append((3, "the arena's source is unknown (its index records no HF snapshot commit); set "
                            "E4B_PAGED_ADAPTER_ALLOW_UNVERIFIED_ARENA=1 to serve anyway (reported in /health)"))
-    elif ad.revision and arena_rev != ad.revision:
-        out.append((3, f"the arena was baked from {arena_rev}, not the adapter's base {ad.revision}"))
-    q = (arena_index or {}).get("quantizer") or {}
-    for key in ("quant_type", "blocksize"):
-        if key in q and key in ad.setup and q[key] != ad.setup[key]:
-            out.append((4, f"arena {key} {q[key]!r} is not the adapter's {ad.setup[key]!r}"))
+    else:
+        if ad.revision and arena_rev != ad.revision:
+            out.append((3, f"the arena was baked from {arena_rev}, not the adapter's base {ad.revision}"))
+        if served_model and "/" in served_model and not os.path.isabs(served_model) and arena_repo != served_model:
+            out.append((3, f"the arena was baked from {arena_repo}, not the served model {served_model}"))
+    q = (arena_index or {}).get("quantizer")
+    if not isinstance(q, dict) or not all(k in q for k in ("quant_type", "blocksize")):
+        out.append((4, "cannot verify the arena's quantization recipe: its index has no quantizer block with "
+                       "quant_type and blocksize"))
+    else:
+        for key in ("quant_type", "blocksize"):
+            if key in ad.setup and q[key] != ad.setup[key]:
+                out.append((4, f"arena {key} {q[key]!r} is not the adapter's {ad.setup[key]!r}"))
     on = sorted(k for k, v in levers.items() if v)
     if on:
-        out.append((5, f"levers {on} re-quantize weights the adapter was trained against (the merged attention, or "
-                       f"the experts around it); refused under an adapter until a registered read gates them "
-                       f"(docs/ADAPTER_PORTABILITY.md F4)"))
+        out.append((5, f"levers {on} re-quantize an adapted module or depend on calibration read on the base model; "
+                       f"refused under an adapter until a registered read gates them (docs/ADAPTER_PORTABILITY.md F4)"))
+    if (spec or "off") != "off":
+        out.append((10, f"E4B_PAGED_SPEC={spec}: the draft head and its quality gate were read on the base model, not an "
+                        f"adapted one; refused under an adapter until a registered read covers it"))
     if ad.setup.get("attn_4bit") and ad.attention:
         out.append((8, "the attention adapter was trained on a 4-bit attention base (attn_4bit=true); merging it into "
                        "bf16 W serves it on a base it never saw. Retrain with attn_4bit=false, or use a "
