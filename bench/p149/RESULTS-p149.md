@@ -115,7 +115,8 @@ registration. g16_routing and its band are not graded.
 #### QUALIFIER_VOID cause (found after the run, from the receipt, no new run)
 
 S0 is deterministic across processes. The instrument forced the 160-token stream into the 32-token pass, which
-assumes the served stream does not depend on `max_new_tokens`, and it does (below):
+assumes the served stream does not depend on `max_new_tokens`. It does (below), and a one-layer follow-up traces the
+dependence to the decode schedule ([The schedule dependence](#the-schedule-dependence-follow-ups-2026-10-21)):
 
 - **S0 reproduces itself across processes.** S0b, S0c and S0d reproduce S0a's W16 32- and 160-token streams and its W1
   streams exactly, 16 of 16 rows (`arm_S*.json`).
@@ -126,11 +127,41 @@ assumes the served stream does not depend on `max_new_tokens`, and it does (belo
   (4777), not the forced 6795, so block A cannot read 0. Five per A block is that one position in each of the five
   timed reps.
 
-**Reported, not attributed:** the served decode's tokens depend on `max_new_tokens`. In W16, S0a's 32-token run differs
-from its 160-token run's prefix in one row (row 10, step 29), and S1a's in two (row 8, step 31; row 12, step 27); W1
-differs in neither arm. All three sit in the last five steps of the 32-token run. This is a serving-correctness question
-of its own, outside P149's reading, and it is not attributed here. The routing-matched read forces each pass's own
-length's stream.
+**Reported here, placed below:** the served decode's tokens depend on `max_new_tokens`. In W16, S0a's 32-token run
+differs from its 160-token run's prefix in one row (row 10, step 29), and S1a's in two (row 8, step 31; row 12, step 27);
+W1 differs in neither arm. All three sit in the last five steps of the 32-token run. This is a serving-correctness
+question of its own, outside P149's reading.
+
+#### The schedule dependence (follow-ups, 2026-10-21)
+
+Two follow-ups after the run place the dependence in the decode schedule. Neither is a reading or a strike, and neither
+changes the verdict above.
+
+- **Why the length matters.** A W16 pass decodes in CUDA-graph buckets of 16, 8, 4, 2 and 1 live rows, and its rows do
+  not all finish on the same step, so a pass's last steps replay smaller buckets. In the 32-token run those are steps
+  24 to 31, where the 160-token run is still at bucket 16. The fp8 paged decode attention chooses its
+  split-KV count from the bucket's row count, and different split counts agree within tolerance, not bit for bit.
+- **The diagnostic** (`p149mnt-5090-6` and `-7`, one RTX 5090): P149's launch commit, prompts and kernels on a one-layer
+  cut of Mixtral-8x7B, decode graphs on. Each W16 position of the 32-token run is compared with the same position of the
+  160-token run, logits bit for bit, and classed by whether the two steps ran the same split count and bucket.
+
+| arm | split count at 1/2/4/8/16 rows | same split and bucket | bucket differs | self-pair | W1 |
+|---|---|---|---|---|---|
+| D, the default server (`-6` and `-7`) | 12/12/11/5/2 | 0 of 460 differ | 36 of 36 differ (max \|Δlogit\| 4.742) | 496/496 equal | 31/31 equal |
+| F, one split at every bucket (`E4B_ATTN_SPLIT_CAP=1`, `-7`) | 1/1/1/1/1 | 0 of 460 differ | 1 of 36 differs (max 0.0625) | 496/496 equal | 31/31 equal |
+
+In D the 36 positions sit at bucket 8 (26), 4 (7), 2 (2) and 1 (1) against bucket 16, and `-6` and `-7` read the same
+36. No token changed on one layer: the cut shows where the logits part, not P149's token differences.
+
+- **What it places.** The split count per bucket is the dominant source: with one split, buckets 2, 4 and 8 match bucket
+  16 bit for bit. A much smaller difference remains at bucket 1 alone (W16 row 15, step 31, the 32-token run's last
+  step, one live row): 0.0625 against attention's 4.742. It is not attributed here.
+- **For the routing-matched read:** forcing each pass's own-length stream is not enough. Its arms must replay the same
+  bucket at each step, or hold the split count fixed and account for bucket 1. That read needs its own registration.
+
+`p149mnt-5090-1` to `-7` cost $0.308 in all. `-6` read arm D (its arm F stopped on a harness fault before any record)
+and `-7` read both. `-3` and `-5` stopped at the runner's power check, and `-1`, `-2` and `-4` were refused at create
+before any instance existed.
 
 ### The predictions, graded
 
@@ -149,7 +180,7 @@ length's stream.
 | run | outcome | cost |
 |---|---|---|
 | `p149-dry-2` | DRY with no instrument fault (Amendment 5's one-layer cut, an instrument run) | $0.231 |
-| `p149-5090-1` | refused before any instance existed: the offer was taken between search and create. A pre-create refusal spends the id as a spare, not a strike | $0 |
+| `p149-5090-1` | refused before any instance existed: the provider refused the ask at create (no_such_ask) while still listing it. A pre-create refusal spends the id as a spare, not a strike | $0 |
 | `p149-5090-2` | **FLIP**, routing qualifier VOID | $1.574 |
 
 ## What FLIP started, and what it holds
@@ -158,6 +189,7 @@ length's stream.
   proceeds only on ROUTING_CLEAR. The qualifier read VOID, so that PR is held.
 - **The claim** is `e4b.serve.p149.int8-attn.mixtral.5090.2026-10-20` in `docs/claims.json`. It is the opt-in lever's
   measured served speed on this host: one request 1.16 × faster, sixteen requests 1.018 ×, with Q GO.
-- **The open question** is why the served decode's tokens depend on `max_new_tokens` (the QUALIFIER_VOID cause,
-  above). A routing-matched read that settles g16's routing share must be designed around it, and must be registered
-  before it runs.
+- **The schedule dependence** behind QUALIFIER_VOID is placed
+  ([above](#the-schedule-dependence-follow-ups-2026-10-21)): the split-KV count per graph bucket, plus a small bucket-1
+  difference not attributed. A routing-matched read that settles g16's routing share must match the decode schedule,
+  and must be registered before it runs.
