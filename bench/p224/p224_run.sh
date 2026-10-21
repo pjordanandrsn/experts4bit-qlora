@@ -89,9 +89,10 @@ pipx(){ local log=$1 secs=$2; shift 2
   perl -e "alarm $secs; exec @ARGV" python -m pip install -q --no-input -c $W/constraints.txt "$@" >> $log 2>&1; }
 pipx logs/pip_e4b.log 1800 --prefer-binary "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" \
   "transformers==5.17.0" "bitsandbytes==0.50.2" accelerate sentencepiece safetensors "huggingface_hub>=0.23" pytest numpy \
-  fastapi "uvicorn==0.38.0" httpx "datasets>=2.14" "peft>=0.21.2" || { tail -4 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
+  fastapi "uvicorn==0.38.0" httpx "datasets>=2.14" || { tail -4 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
 # Loggetta goes in --no-deps below (its own requirements would re-resolve e4b[train,fast] and grouped-nf4-gemm from
-# PyPI over the pinned commits), so its two other requirements, datasets and peft, are named above under the held torch
+# PyPI over the pinned commits), so the one it needs on the experts4bit path, datasets, is named above under the held
+# torch (peft is imported only by its dense backend, which P224 never runs)
 pipx logs/pip_gnf4.log 900 --force-reinstall --no-deps "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA" || { say "PIP FAIL (gnf4)"; finish 9; }
 pipx logs/pip_logg.log 900 --no-deps "git+https://github.com/pjordanandrsn/loggetta.git@$LOGGETTA_SHA" || { say "PIP FAIL (loggetta)"; finish 9; }
 WANT_E4B=$E4B_SHA WANT_GNF4=$GNF4_SHA WANT_LOGG=$LOGGETTA_SHA python - <<'PYT' || { say "TRIPWIRE FAIL"; finish 9; }
@@ -102,7 +103,8 @@ for dist, want in (("experts4bit-qlora", "WANT_E4B"), ("grouped-nf4-gemm", "WANT
 import torch
 assert torch.__version__ == "2.8.0+cu128", torch.__version__          # the held torch survived every install
 from experts4bit_qlora.adapter_schema import quant_fingerprint          # the schema v2 code G5 runs
-import datasets, peft                                                   # Loggetta's requirements (installed above)
+import datasets                                                         # Loggetta's data path (loggetta/data.py imports it lazily)
+print("datasets", datasets.__version__)
 import loggetta.data, loggetta.backends.experts4bit_train, loggetta.backends.experts4bit_adapters   # the train path
 from experts4bit_qlora import adapter_dir
 assert hasattr(adapter_dir, "merge_attention_lora")

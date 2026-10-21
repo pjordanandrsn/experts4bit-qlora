@@ -235,11 +235,13 @@ def test_amendment_2_the_shakedown_card_and_its_guard():
 
 def test_loggetta_requirements_are_installed_and_imported_before_the_fetch():
     """Loggetta goes in --no-deps (its requirements would re-resolve the pinned e4b and grouped-nf4-gemm from PyPI), so
-    the runner names its other requirements itself and the tripwire imports the train path before any fetch."""
+    the runner names datasets itself (the experts4bit path's one other requirement) and the tripwire imports it and the
+    train path before any fetch."""
     import re
-    i_pip = RUN.index('"datasets>=2.14" "peft>=0.21.2"')
+    i_pip = RUN.index('"datasets>=2.14" ||')
     i_logg = RUN.index("pipx logs/pip_logg.log 900 --no-deps")
     i_trip = RUN.index("import loggetta.data, loggetta.backends.experts4bit_train")
     i_fetch = RUN.index("phase_start fetch setup")
     assert i_pip < i_logg < i_trip < i_fetch
-    assert re.search(r"^import datasets, peft\b", RUN, re.M)
+    assert re.search(r"^import datasets\b", RUN, re.M)
+    assert '"peft' not in RUN and "import peft" not in RUN     # dense-backend only: P224 never needs it
