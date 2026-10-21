@@ -28,7 +28,7 @@ Code references are at experts4bit-qlora `4f81f055`, loggetta `90a7697` and grou
 | **Expert delta placement:** gate_up's delta is added **before** the SwiGLU epilogue; down's delta is added to the down projection's output. | `lora.py:676-700` |
 | **`attn_4bit`:** `bnb.nn.Linear4bit(..., quant_type="nf4")` with bitsandbytes' defaults for blocksize and `compress_statistics` (blocksize 64, nested absmax), quantized on transfer to the GPU. Biased projections are refused. The repository states no determinism guarantee for re-quantizing the same weights. | `lora.py:953-998` |
 | **Targets:** experts `gate_up_lora_{A,B}`, `down_lora_{A,B}` (`[E,r,·]`/`[E,·,r]`); attention `{q,k,v,o}_proj.lora_{A,B}` (`[r,in]`/`[out,r]`). The router, `lm_head` and the norms take no LoRA. A full-weight router run is not saved with the adapter. | `lora.py:459-462`, `lora.py:780-781`, `train.py:102-105` |
-| **gpt-oss** experts are built bare (biased, clamped, interleaved MXFP4), so they take no expert LoRA. | `loader.py:1706-1736`, `lora.py:220-222` |
+| **gpt-oss** experts are built bare by e4b's loader (biased, clamped, interleaved MXFP4), so e4b's trainer gives them no expert LoRA. Expert LoRA for that family is grouped-nf4-gemm's `mxfp4_qlora.ExpertsMxfp4LoRA`. | `loader.py:1295-1299`, `loader.py:1729-1735`, `lora.py:220-222` |
 
 **Loggetta's export (`backend-adapter/1`)** writes `adapter.safetensors` and `adapter_manifest.json`. The manifest
 carries `resolved_model_revision`, the full `setup` (so `alpha`, `r` and `attn_4bit`), per-file sha256 and per-tensor
@@ -79,7 +79,7 @@ not known to match.
 
 | trained on | served on | label | why |
 |---|---|---|---|
-| bf16 W (`attn_4bit=false`) | bf16, merged at load before the levers and fusions | **exact by construction** (one bf16 rounding of each merged weight) | `W + s·B·A` in fp32, then cast. Training computed `base(x) + s·B(A(x))` unmerged, so the one numerical change is the merged weight's bf16 rounding. That rounding is reported per projection, never assumed. `fuse_qkv` and the GEMV route then copy or share the merged weight exactly. |
+| bf16 W (`attn_4bit=false`) | bf16, merged at load before the levers and fusions | **exact by construction**, numerically not bitwise | The same function, with two numerical differences. (1) Merging rounds each merged weight `W + s·B·A` (computed in fp32) once to bf16; that error is reported per projection, never assumed. (2) Training ran the delta UNMERGED, `base(x) + s·B(A(x))` in the adapter dtype (`lora.py:787-788`), with its own roundings, which the merge removes. So outputs are not bitwise equal to training's even at merge error 0. `fuse_qkv` and the GEMV route then copy or share the merged weight exactly. |
 | NF4 (`attn_4bit=true`) | the dequantized `Q_train(W)` rebuilt at load, plus `s·B·A`, in bf16 | **exact by construction, conditional**: only if the rebuild matches training's `Q_train(W)` by fingerprint; **refused** otherwise | The correction was learned against `Q_train(W)`. A rebuild needs bitsandbytes' recipe (blocksize 64, nested absmax) and a reproducible quantize. Neither is recorded or guaranteed today (§1), hence a fingerprint check against values recorded at training. |
 | NF4 (`attn_4bit=true`) | raw bf16 W, plus `s·B·A` | **bounded-loss (gated)**; refused until a read prices it | It serves the adapter on a base it never saw. The mismatch `W − Q_train(W)` is dense. |
 | either | int4 / int8 / calibrated attention levers | **bounded-loss (gated)**; refused until a read gates it | The lever re-quantizes the merged weight, so the correction is rounded with the base. The calibrated levers also depend on their calibration set. |
@@ -89,12 +89,13 @@ not known to match.
 
 | trained on | served on | label | why |
 |---|---|---|---|
-| NF4, absmax **fp32** (`E4B_ABSMAX_DQ=0`, expert offload, or `TRAIN_ARENA`) | the NF4 arena of the same revision and recipe, via a fused low-rank epilogue (gate_up delta before SwiGLU, down delta after) | **exact by construction**, once that epilogue exists (it does not today), with the base confirmed by fingerprint | Both sides use the same quantize (`quantize_4bit`, blocksize 64, fp32 absmax), and the bake states its rows are byte-compatible with the stacks the engine builds at load (`nvme_bake_nf4.py:16-20`). A per-adapter fingerprint turns that statement into a check. The delta lands where training put it. |
+| NF4, absmax **fp32** (`E4B_ABSMAX_DQ=0`, expert offload, or `TRAIN_ARENA`) | the NF4 arena of the same revision and recipe, via a fused low-rank epilogue (gate_up delta before SwiGLU, down delta after) | **exact by construction**, once that epilogue exists (it does not today), with the base confirmed by fingerprint | Both sides make the same call: training's `F.quantize_4bit(..., blocksize=64, compress_statistics=False)` (`_vendor/experts.py:412-417`) and the bake's `F.quantize_4bit(w, blocksize=64, quant_type="nf4")` with bitsandbytes' default `compress_statistics=False` (grouped-nf4-gemm `nvme_bake_nf4.py:135`), both with fp32 absmax. A per-adapter fingerprint turns that into a check. The delta lands where training put it. |
 | NF4, absmax **double-quantized** (**the default**) | the NF4 arena (fp32 absmax) | **bounded-loss (gated)**, **not exact** | The arena dequantizes with the fp32 absmax, and training saw the 8-bit nested one. `Q_train(W) ≠ Q_serve(W)` by the absmax rounding, in every block. |
 | NF4, either absmax | a re-quantized merge `Q_target(Q_train(W) + s·B·A)`, into NF4, int4-b32 or MXFP4 | **bounded-loss (gated)** | Re-quantization can round a small delta away. Its retention is what the per-format premise measures. |
 | NF4 | int4 expert stores or MXFP4 at serve time, with no merge | **refused** | Without a merge, the delta is simply not applied. |
-| any | today's paged server | **refused** (no expert-LoRA path) | Arena loads build bare experts. A nonzero expert `B` must refuse at startup, never be silently dropped. |
-| gpt-oss | any | not applicable | No expert LoRA is trained. |
+| any | today's paged server | **refused** (no expert-LoRA path) | Arena loads build bare experts unless `arena_train=True` (`loader.py:1295-1299`). A nonzero expert `B` must refuse at startup, never be silently dropped. |
+| gpt-oss, e4b's trainer | any | not applicable | e4b builds the experts bare, so no expert LoRA is trained. |
+| gpt-oss, grouped-nf4-gemm's `ExpertsMxfp4LoRA` | today's paged server | **refused** | There is no expert-LoRA path on the paged server, and its own matrix row belongs to the MXFP4 expert path when one is built. |
 
 ### Other modules and conditions
 
