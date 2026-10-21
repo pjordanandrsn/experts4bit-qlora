@@ -20,6 +20,8 @@ SEQS = (1024, 2048)
 STEPS, MICRO_BATCH = 20, 2
 CARDS = {"5090": "NVIDIA GeForce RTX 5090", "4090": "NVIDIA GeForce RTX 4090"}
 TAGS = tuple(f"{f}_{s}" for f in FAMILIES for s in SEQS)
+#: what a row must be; the tests read a real receipt against its own run's values through this
+REGISTRATION = {"families": FAMILIES, "data": ALPACA, "format": "text", "steps": STEPS, "micro_batch": MICRO_BATCH, "cards": CARDS}
 #: the plan lines a receipt on file would have supplied; with none on file each reads "inferred" (planner.py's defaults)
 OVERHEADS = ("allocator reserve", "CUDA context", "process baseline")
 
@@ -34,22 +36,24 @@ def _void(cause, rows=None):
     return {"verdict": "VOID", "cause": cause, "rows": rows or []}
 
 
-def row_of(tag, receipt, card):
+def row_of(tag, receipt, card, reg=None):
     """One row from one receipt, or (None, why) when the receipt is not the registered row."""
+    reg = reg or REGISTRATION
+    steps, mb = reg["steps"], reg["micro_batch"]
     fam, seq = tag.rsplit("_", 1)
     seq = int(seq)
-    model_id, rev = FAMILIES[fam]
+    model_id, rev = reg["families"][fam]
     m, w, d, gpu = receipt.get("model") or {}, receipt.get("workload") or {}, receipt.get("data") or {}, (receipt.get("hardware") or {}).get("gpu") or {}
     opts = d.get("options") or {}
     checks = [
         (receipt.get("status") == "OK", f"status {receipt.get('status')!r}"),
         (receipt.get("backend") == "experts4bit", f"backend {receipt.get('backend')!r}"),
         (m.get("model") == model_id and m.get("revision") == rev, f"model {m.get('model')}@{m.get('revision')}"),
-        (w.get("kind", "train") == "train" and w.get("seq_len") == seq and w.get("micro_batch") == MICRO_BATCH
-         and w.get("grad_accum", 1) == 1 and w.get("steps") == STEPS, f"workload {({k: w.get(k) for k in ('seq_len', 'micro_batch', 'grad_accum', 'steps')})}"),
-        ((d.get("dataset"), opts.get("revision")) == ALPACA and d.get("format") == "text", f"data {d.get('dataset')}@{opts.get('revision')} {d.get('format')}"),
-        (d.get("tokens") == STEPS * MICRO_BATCH * seq and d.get("blocks") == STEPS * MICRO_BATCH, f"tokens {d.get('tokens')} blocks {d.get('blocks')} (an early stop?)"),
-        (gpu.get("name") == CARDS[card], f"card {gpu.get('name')!r}"),
+        (w.get("kind", "train") == "train" and w.get("seq_len") == seq and w.get("micro_batch") == mb
+         and w.get("grad_accum", 1) == 1 and w.get("steps") == steps, f"workload {({k: w.get(k) for k in ('seq_len', 'micro_batch', 'grad_accum', 'steps')})}"),
+        ((d.get("dataset"), opts.get("revision")) == reg["data"] and d.get("format") == reg["format"], f"data {d.get('dataset')}@{opts.get('revision')} {d.get('format')}"),
+        (d.get("tokens") == steps * mb * seq and d.get("blocks") == steps * mb, f"tokens {d.get('tokens')} blocks {d.get('blocks')} (an early stop?)"),
+        (gpu.get("name") == reg["cards"][card], f"card {gpu.get('name')!r}"),
         (_no_receipts_on_file(receipt), "an overhead line is not the inferred default: the plan learned from receipts on file"),
     ]
     bad = [why for ok, why in checks if not ok]
@@ -62,7 +66,7 @@ def row_of(tag, receipt, card):
         return None, f"{tag}: a plan total, estimate or peak is missing ({vals})"
     plan_total, driver_peak, estimate, allocated_peak = vals
     under, short = driver_peak > plan_total, allocated_peak > estimate
-    return {"tag": tag, "family": fam, "model": model_id, "revision": rev, "seq": seq, "card": CARDS[card],
+    return {"tag": tag, "family": fam, "model": model_id, "revision": rev, "seq": seq, "card": reg["cards"][card],
             "setup": receipt.get("setup"), "plan_total_bytes": plan_total, "driver_peak_bytes": driver_peak,
             "estimate_bytes": estimate, "allocated_peak_bytes": allocated_peak,
             "driver_over_plan": driver_peak / plan_total, "allocated_over_estimate": allocated_peak / estimate,

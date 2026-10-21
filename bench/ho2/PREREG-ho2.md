@@ -51,12 +51,16 @@ python -m loggetta train MODEL --revision REV \
   - grouped-nf4-gemm at e4b CI's pin, `a83f6bb3`;
   - Loggetta at its 0.6.2 release commit, which carries the demonstration data fix, written into the runner at registration;
   - transformers 5.17.0, bitsandbytes 0.50.2 and `datasets` (Loggetta's data path imports it).
-- **A tripwire refuses at install, before any fetch,** if `datasets`, `loggetta.data` or Loggetta's experts4bit train backend
-  does not import, or if a pin differs.
+- **A tripwire refuses at install, before any fetch,** if a pin differs or if any name Loggetta's train path imports does not
+  import. Loggetta's modules import only the standard library at module level and every third-party import is lazy, so importing
+  Loggetta proves nothing. The tripwire imports each name itself: `datasets`, `transformers`, `numpy`, `bitsandbytes`,
+  `safetensors`, experts4bit-qlora's recipe, LoRA and topology names, and grouped-nf4-gemm's `nf4_qlora` and `nf4_route`.
 
 ## The rule (bytes, per row)
 
-From the receipt Loggetta writes (`comparison`):
+From the receipt Loggetta writes (`comparison`). `loggetta train` plans, then executes that plan, and the receipt embeds it
+(`plan.to_dict()`, `loggetta/execution.py`). So the plan total is the plan's own `selected.device_bytes`, and the allocator estimate
+is that total less its CUDA context and allocator reserve lines (`execution.compare`).
 - **COVERED** if the plan total ≥ the sampled driver peak AND the allocator estimate ≥ the allocated peak.
 - **UNDER** if the driver peak is above the plan total.
 - **SHORT** if the allocated peak is above the estimate. A row can be both.
@@ -71,7 +75,9 @@ A row is VOID, and the box is VOID, if:
 - any overhead line (allocator reserve, CUDA context, process baseline) is not the inferred default, meaning the plan learned
   from receipts on file.
 
-`bench/ho2/ho2_reduce.py --self-test` holds 17 cases, and `tests/test_ho2.py` the rest.
+`bench/ho2/ho2_reduce.py --self-test` holds 17 cases, and `tests/test_ho2.py` the rest. These include one real Loggetta training
+receipt, with paths and GPU uuids redacted (`tests/fixtures/ho2/`), read through the reducer against its own run and against this
+registration.
 
 ## Prediction (before any measurement)
 

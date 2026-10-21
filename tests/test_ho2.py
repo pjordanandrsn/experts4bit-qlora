@@ -1,8 +1,11 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
 """HO2, the planner's first held-out training read (bench/ho2/PREREG-ho2.md): the reducer's self-test and the mutants it must
 kill; the staged pins; the runner's pins, data, install and tripwire against the registration; the run IDs across runner,
-driver and registration; the fit inside the guard."""
+driver and registration; the fit inside the guard; a real Loggetta receipt read through the reducer."""
 import hashlib
+import importlib
+import importlib.util
+import json
 import pathlib
 import re
 import subprocess
@@ -18,6 +21,12 @@ DRIVE = (LANE / "ho2_drive.sh").read_text(encoding="utf-8")
 REDUCE = (LANE / "ho2_reduce.py").read_text(encoding="utf-8")
 SOURCES = {"ho2_run.sh": LANE, "ho2_reduce.py": LANE, "phases.sh": REPO / "bench" / "common"}
 GUARD_S, BOOT_S, HEADROOM = 7200, 300, 1.25
+#: a real Loggetta training receipt, paths and GPU uuids redacted (tests/fixtures/ho2/README.md names its source and sha256)
+FIXTURE = REPO / "tests" / "fixtures" / "ho2" / "loggetta-train-receipt.json"
+FIXTURE_SHA256 = "22ca086ef4461090cebe5b0d45d039858a0e391701541f2f7abf59eeaa0c3903"
+#: the fixture's own run, as a registration the reducer reads it against
+FIXTURE_RUN = {"families": {"olmoe": ("allenai/OLMoE-1B-7B-0924", None)}, "data": ("tatsu-lab/alpaca", None), "format": "alpaca",
+               "steps": 12, "micro_batch": 2, "cards": {"a2000": "NVIDIA RTX A2000 12GB"}}
 
 
 def _var(text, name):
@@ -36,8 +45,8 @@ def test_reducer_self_test_passes():
 
 
 MUTANTS = [
-    ('d.get("tokens") == STEPS * MICRO_BATCH * seq', "True"),                                  # an early stop reads as a row
-    ('gpu.get("name") == CARDS[card]', "True"),                                                # another card's receipt
+    ('d.get("tokens") == steps * mb * seq', "True"),                                           # an early stop reads as a row
+    ('gpu.get("name") == reg["cards"][card]', "True"),                                         # another card's receipt
     ('all(ln.get("basis") == "inferred" for ln in over)', "True"),                             # receipts on file
     ("under, short = driver_peak > plan_total, allocated_peak > estimate", "under, short = False, False"),
     ('if len(found) != 1:', "if not found:"),                                                  # two receipts for one row
@@ -78,9 +87,15 @@ def test_loggetta_is_a_pinned_release_commit():
 def test_install_carries_datasets_and_the_tripwire_imports_the_train_path_before_the_fetch():
     pip_line = RUN[RUN.index("pipx logs/pip_e4b.log"):RUN.index("PIP FAIL (e4b)")]
     assert '"datasets>=2.14"' in pip_line and '"transformers==5.17.0"' in pip_line
-    i_trip = RUN.index("import torch, datasets")
-    assert "import loggetta.data, loggetta.backends.experts4bit_train" in RUN[i_trip:i_trip + 300]
-    assert i_trip < RUN.index("phase_start fetch")
+    trip = _tripwire()
+    # Loggetta imports these lazily, so importing loggetta's modules alone proves none of them installed
+    for name in ("import torch, numpy, bitsandbytes, safetensors.torch", "from datasets import Dataset, load_dataset",
+                 "from transformers import AutoTokenizer", "from experts4bit_qlora import ExpertsNbit, offload_handles",
+                 "prepare_qlora_training", "estimate_qlora_footprint", "from experts4bit_qlora.arch.topology import describe_moe",
+                 "import experts4bit_qlora.lora, nf4_qlora", "from nf4_route import MIN_CAPABILITY, route_for",
+                 "loggetta.backends.experts4bit_train"):
+        assert name in trip, name
+    assert RUN.index(trip) < RUN.index("phase_start fetch")
 
 
 def test_run_ids_agree_across_runner_driver_and_prereg():
@@ -98,3 +113,61 @@ def test_fit_inside_the_guard():
 
 def test_the_driver_never_fetches_tensors():
     assert "--exclude 'run/adapter_*'" in DRIVE and "--exclude '*.safetensors'" in DRIVE
+
+
+def _tripwire():
+    i = RUN.index('say "TRIPWIRE FAIL"')
+    return RUN[i:RUN.index("\nPYT\n", i)]
+
+
+def test_the_tripwires_experts4bit_and_gnf4_names_exist_at_this_checkout():
+    pytest.importorskip("torch")
+    trip = _tripwire()
+    names = re.findall(r"^from ((?:experts4bit_qlora|nf4_route)[\w.]*) import ([\w, ]+)", trip, re.M)
+    assert {m for m, _ in names} == {"experts4bit_qlora", "experts4bit_qlora.recipe", "experts4bit_qlora.arch.topology", "nf4_route"}
+    for mod, listed in names:
+        if mod == "nf4_route" and importlib.util.find_spec("nf4_route") is None:
+            continue                                                                    # gnf4 not installed here; CI installs it
+        m = importlib.import_module(mod)
+        for n in listed.split(","):
+            assert hasattr(m, n.strip()), f"{mod}.{n.strip()} is gone: the box would refuse at its tripwire"
+    importlib.import_module("experts4bit_qlora.lora")
+
+
+def _reducer():
+    spec = importlib.util.spec_from_file_location("ho2_reduce", LANE / "ho2_reduce.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _real_receipt():
+    raw = FIXTURE.read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == FIXTURE_SHA256
+    return json.loads(raw)
+
+
+def test_a_real_loggetta_receipt_reads_through_the_reducer():
+    red, r = _reducer(), _real_receipt()
+    row, why = red.row_of("olmoe_512", r, "a2000", FIXTURE_RUN)
+    assert row is not None, why
+    sel, cmp = r["plan"]["selected"], r["comparison"]
+    # execution.compare: the driver estimate is the plan's device total; the allocator estimate drops the context and reserve lines
+    ctx = sum(ln["bytes"] for ln in sel["lines"]
+              if ln["where"] == "device" and ln["name"].startswith(("CUDA context", "allocator reserve")))
+    assert row["plan_total_bytes"] == sel["device_bytes"] == 7_312_146_022
+    assert row["estimate_bytes"] == sel["device_bytes"] - ctx == 5_646_062_592
+    assert row["driver_peak_bytes"] == cmp["device_driver"]["measured"] and row["allocated_peak_bytes"] == cmp["device_allocator"]["measured"]
+    assert row["outcome"] == "UNDER+SHORT"                         # that run's plan was under on both: by 7 MB and by 209 MB
+    assert red._no_receipts_on_file(r)                              # its plan used no receipts on file: every overhead line inferred
+
+
+def test_a_real_receipt_voids_against_the_registration_and_when_it_learned_from_receipts():
+    red, r = _reducer(), _real_receipt()
+    row, why = red.row_of("lfm2_1024", r, "5090")
+    assert row is None and "model allenai/OLMoE-1B-7B-0924" in why and "card 'NVIDIA RTX A2000 12GB'" in why
+    assert red.reduce({t: [r] for t in red.TAGS}, "ho2-5090-1", {"e4b": "a" * 40, "gnf4": "b" * 40, "loggetta": "c" * 40})["verdict"] == "VOID"
+    learned = json.loads(json.dumps(r))
+    next(ln for ln in learned["plan"]["selected"]["lines"] if ln["name"].startswith("CUDA context"))["basis"] = "measured"
+    row, why = red.row_of("olmoe_512", learned, "a2000", FIXTURE_RUN)
+    assert row is None and "receipts on file" in why

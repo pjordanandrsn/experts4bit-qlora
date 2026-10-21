@@ -80,8 +80,17 @@ import os, json, importlib.metadata as md
 for dist, want in (("experts4bit-qlora", "WANT_E4B"), ("grouped-nf4-gemm", "WANT_GNF4"), ("loggetta", "WANT_LOGG")):
     d = json.loads(md.distribution(dist).read_text("direct_url.json") or "{}")
     assert d.get("vcs_info", {}).get("commit_id") == os.environ[want], f"installed {dist} is not the pinned commit: {d}"
-import torch, datasets  # noqa: F401  -- Loggetta's data path imports datasets for every dataset, local or Hub
-import loggetta.data, loggetta.backends.experts4bit_train  # noqa: F401,E401  -- a missing module refuses here, before any fetch
+# Loggetta's own modules import only the standard library at module level, and every third-party import is lazy. So each
+# name its train path imports is imported here by name: a missing package or a moved symbol refuses before any fetch.
+import torch, numpy, bitsandbytes, safetensors.torch  # noqa: F401,E401
+from datasets import Dataset, load_dataset  # noqa: F401  -- Loggetta's data path, for every dataset, local or Hub
+from transformers import AutoTokenizer  # noqa: F401
+from experts4bit_qlora import ExpertsNbit, offload_handles  # noqa: F401
+from experts4bit_qlora.recipe import QLoRASetup, estimate_env, estimate_qlora_footprint, prepare_qlora_training  # noqa: F401
+from experts4bit_qlora.arch.topology import describe_moe  # noqa: F401
+import experts4bit_qlora.lora, nf4_qlora  # noqa: F401,E401
+from nf4_route import MIN_CAPABILITY, route_for  # noqa: F401
+import loggetta.data, loggetta.backends.experts4bit, loggetta.backends.experts4bit_train  # noqa: F401,E401
 assert torch.__version__ == "2.8.0+cu128", torch.__version__
 open("/root/ho2/versions.txt", "w").write("".join(f"{n} {md.version(n)}\n" for n in
      ("experts4bit-qlora", "grouped-nf4-gemm", "loggetta", "torch", "transformers", "bitsandbytes", "datasets")) + f"cc {torch.cuda.get_device_capability()}\n")
