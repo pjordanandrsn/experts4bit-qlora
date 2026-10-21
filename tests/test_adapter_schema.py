@@ -180,7 +180,7 @@ def _lora_stack(seed=5):
 
 
 def test_an_offloaded_stack_fingerprints_as_the_resident_one():
-    """cerin-maintainer's case: offload (CHOOSING's mode on 12 and 24 GB cards) evicts each stack to a host home; the
+    """The offload case: offload (CHOOSING's mode on 12 and 24 GB cards) evicts each stack to a host home; the
     canonical form is the same wherever the bytes live."""
     resident = S.quant_fingerprint(_lora_stack(), "experts")
     evicted = S.quant_fingerprint(_offloaded_by_hand(_lora_stack()), "experts", source="offload_homes")
