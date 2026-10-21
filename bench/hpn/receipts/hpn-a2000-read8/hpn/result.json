@@ -1,0 +1,176 @@
+{
+ "reducer": "bench/hpn/hpn_reduce.py",
+ "framework": "e4b",
+ "free_mib_at_claim": 10379,
+ "climb_stop": null,
+ "fitted_depths": [
+  4,
+  8
+ ],
+ "deepest_fit": 8,
+ "depths": {
+  "4": {
+   "rows": 300,
+   "g": {
+    "mean": 0.000327,
+    "sd": 0.006142
+   },
+   "e": {
+    "mean": -0.001082,
+    "sd": 0.006285
+   },
+   "i": {
+    "mean": -0.00141,
+    "sd": 0.005501
+   },
+   "share_e": 0.5662,
+   "call_basis": "1 - var(i)/var(g)",
+   "call_value": 0.1978,
+   "call": "I",
+   "corr_e_i": 0.4633,
+   "n0_max_abs_rerun": {
+    "I": 0.0,
+    "E": 0.0,
+    "F": 0.0
+   },
+   "n0_holds": {
+    "I": true,
+    "E": true,
+    "F": true
+   },
+   "n3_holds": false
+  },
+  "8": {
+   "rows": 300,
+   "g": {
+    "mean": 0.00063,
+    "sd": 0.010446
+   },
+   "e": {
+    "mean": 0.00163,
+    "sd": 0.010487
+   },
+   "i": {
+    "mean": 0.001,
+    "sd": 0.008781
+   },
+   "share_e": 0.5879,
+   "call_basis": "1 - var(i)/var(g)",
+   "call_value": 0.2934,
+   "call": "I",
+   "corr_e_i": 0.4233,
+   "n0_max_abs_rerun": {
+    "I": 0.0,
+    "E": 0.0,
+    "F": 0.0
+   },
+   "n0_holds": {
+    "I": true,
+    "E": true,
+    "F": true
+   },
+   "n3_holds": false
+  }
+ },
+ "thresholds": {
+  "share_e_dominant": 0.6667,
+  "share_i_dominant": 0.3333,
+  "n0_tol": 1e-05,
+  "n1_l2_bound": 0.03,
+  "n3_rho": 0.2,
+  "depth_floor": 8,
+  "moot_ratio": 0.93,
+  "guard_z": 2.0
+ },
+ "base_term": {
+  "4": {
+   "inloop_term": -0.004872,
+   "base_term_E": 0.0,
+   "base_term_F": 0.0,
+   "shift_E_to_F": 0.0,
+   "se_shift": 0.0,
+   "delta0_E": 0.004872,
+   "se_delta0_E": 0.000335,
+   "abs_delta0_E": 0.004872,
+   "delta0_F": 0.004872,
+   "se_delta0_F": 0.000335,
+   "abs_delta0_F": 0.004872,
+   "ratio_F_over_E": 1.0,
+   "read_1b": "MOOT",
+   "shift_call": "no measurable shift",
+   "shift_interval": [
+    0.0,
+    0.0
+   ]
+  },
+  "8": {
+   "inloop_term": -0.0052,
+   "base_term_E": 0.0,
+   "base_term_F": 0.0,
+   "shift_E_to_F": 0.0,
+   "se_shift": 0.0,
+   "delta0_E": 0.0052,
+   "se_delta0_E": 0.000647,
+   "abs_delta0_E": 0.0052,
+   "delta0_F": 0.0052,
+   "se_delta0_F": 0.000647,
+   "abs_delta0_F": 0.0052,
+   "ratio_F_over_E": 1.0,
+   "read_1b": "MOOT",
+   "shift_call": "no measurable shift",
+   "shift_interval": [
+    0.0,
+    0.0
+   ]
+  }
+ },
+ "N0": {
+  "I": true,
+  "E": true,
+  "F": true
+ },
+ "N1": null,
+ "N3": false,
+ "two_deepest_calls": {
+  "4": "I",
+  "8": "I"
+ },
+ "N2_comparable": false,
+ "extrapolation": {
+  "g": {
+   "label": "EXTRAPOLATION (log-log fit of sd against depth; not a measurement of the 48-layer base)",
+   "at_L": 48,
+   "value": 0.041224,
+   "slope": 0.7662,
+   "loo_range": null,
+   "fitted_depths": [
+    4,
+    8
+   ]
+  },
+  "e": {
+   "label": "EXTRAPOLATION (log-log fit of sd against depth; not a measurement of the 48-layer base)",
+   "at_L": 48,
+   "value": 0.039392,
+   "slope": 0.7386,
+   "loo_range": null,
+   "fitted_depths": [
+    4,
+    8
+   ]
+  },
+  "i": {
+   "label": "EXTRAPOLATION (log-log fit of sd against depth; not a measurement of the 48-layer base)",
+   "at_L": 48,
+   "value": 0.029414,
+   "slope": 0.6747,
+   "loo_range": null,
+   "fitted_depths": [
+    4,
+    8
+   ]
+  }
+ },
+ "outcome": "MOOT",
+ "reason": "|delta0_F|/|delta0_E| > 0.93 at a deciding depth {4: 'MOOT', 8: 'MOOT'}: stage 2 cannot lift G1"
+}

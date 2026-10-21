@@ -523,3 +523,43 @@ def test_hpn_local_refuses_an_untracked_file_in_a_staged_dir(tmp_path):
     p = subprocess.run(["bash", str(REPO / "bench/hpn/hpn_local.sh"), str(r), str(tmp_path / "out")], env=env, capture_output=True,
                        text=True, timeout=60)
     assert p.returncode == 78 and "untracked files in the staged dirs" in p.stdout
+
+
+# ---- the committed record (bench/hpn/receipts/hpn-a2000-read8): the registered call, rebuilt from public files -------------
+READ8 = REPO / "bench" / "hpn" / "receipts" / "hpn-a2000-read8"
+
+
+def test_the_registered_reducer_rebuilds_read_8s_result_from_the_public_projections(tmp_path):
+    """The reducer's inputs stay in the private store; their projections (hpn_public_inloop.py) and the public spec let
+    hpn_reduce rebuild hpn/result.json byte-identically: MOOT at L4 and L8."""
+    import subprocess
+    import sys
+    out = tmp_path / "result.json"
+    p = subprocess.run([sys.executable, str(REPO / "bench" / "hpn" / "hpn_reduce.py"), str(READ8 / "hpn_spec.public.json"),
+                        "--out", str(out)], capture_output=True, text=True)
+    assert p.returncode == 0 and p.stdout.startswith("HPN=MOOT depths=[4, 8]"), p.stdout + p.stderr
+    assert out.read_bytes() == (READ8 / "hpn" / "result.json").read_bytes()
+
+
+def test_read_8s_projections_hold_only_the_fields_the_reducer_reads():
+    for p in (READ8 / "proj").glob("qwen3hpn*.json"):
+        assert set(json.loads(p.read_text())) == {"eval_curve"}, p.name
+    for p in (READ8 / "proj" / "hpn").glob("eval_*.json"):
+        bases = json.loads(p.read_text())["bases"]
+        assert all(set(b) <= {"digest", "n_slots", "digest_matches_training_run", "status", "zero_adapter"} for b in bases), p.name
+    for p in (READ8 / "proj" / "hpn").glob("f_*.json"):
+        assert set(json.loads(p.read_text())) <= {"reader", "digest", "n_slots", "runs", "row_mean"}, p.name
+
+
+def test_read_8s_committed_files_carry_no_identifier_and_no_run_path():
+    import re
+    pat = re.compile(r"GPU-[0-9a-f]{8}-|instance_id|vast_instance|\"uuid\"|/home/|/Users/|/workspace/scratch/")
+    hits = [p.name for p in READ8.rglob("*") if p.is_file() and pat.search(p.read_text(errors="replace"))]
+    assert not hits, hits
+
+
+def test_read_8_is_moot_at_both_deciding_depths_with_identical_bases():
+    r = json.loads((READ8 / "hpn" / "result.json").read_text())
+    assert r["outcome"] == "MOOT" and r["fitted_depths"] == [4, 8]
+    assert {k: v["read_1b"] for k, v in r["base_term"].items()} == {"4": "MOOT", "8": "MOOT"}
+    assert all(v["ratio_F_over_E"] == 1.0 and v["base_term_E"] == v["base_term_F"] == 0.0 for v in r["base_term"].values())

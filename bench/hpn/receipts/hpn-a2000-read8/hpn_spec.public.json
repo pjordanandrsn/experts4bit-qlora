@@ -1,0 +1,51 @@
+{
+ "climb_stop": "",
+ "depths": [
+  {
+   "L": 4,
+   "eval": [
+    "proj/hpn/eval_e4b_L4_1.json",
+    "proj/hpn/eval_e4b_L4_2.json"
+   ],
+   "fref": "proj/hpn/f_e4b_L4.json",
+   "inloop": [
+    "proj/qwen3hpnL4_e4b_hpn_e4b_a.json",
+    "proj/qwen3hpnL4_e4b_hpn_e4b_b.json"
+   ],
+   "unsloth": {
+    "eval": [
+     "proj/hpn/eval_uns_L4.json"
+    ],
+    "fref": "proj/hpn/f_unsloth_L4.json",
+    "inloop": [
+     "proj/qwen3hpnL4_unsloth_hpn_uns.json"
+    ]
+   }
+  },
+  {
+   "L": 8,
+   "eval": [
+    "proj/hpn/eval_e4b_L8_1.json",
+    "proj/hpn/eval_e4b_L8_2.json"
+   ],
+   "fref": "proj/hpn/f_e4b_L8.json",
+   "inloop": [
+    "proj/qwen3hpnL8_e4b_hpn_e4b_a.json",
+    "proj/qwen3hpnL8_e4b_hpn_e4b_b.json"
+   ],
+   "unsloth": {
+    "eval": [
+     "proj/hpn/eval_uns_L8.json"
+    ],
+    "fref": "proj/hpn/f_unsloth_L8.json",
+    "inloop": [
+     "proj/qwen3hpnL8_unsloth_hpn_uns.json"
+    ]
+   }
+  }
+ ],
+ "framework": "e4b",
+ "free_mib_at_claim": 10379,
+ "unsloth_moe_backend": "native_torch",
+ "unsloth_venv": "t28"
+}

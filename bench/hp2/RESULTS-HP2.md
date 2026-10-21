@@ -59,6 +59,12 @@ takes R ≥ about 1,090 rows, and the held-out pool has 400. As built, this diff
 not the 0.005 floor. No follow-up is planned unless someone needs 0.005 resolution. A pool of about 1.1k rows would be a new
 registration.
 
+**Later reads (forward pointers; this record is unchanged):**
+- `bench/hpn/RESULTS-HPN.md` diagnosed the instrument's noise: MOOT at L4 and L8, because e4b's and Unsloth's bases are
+  identical under one build.
+- `bench/hbd/RESULTS-hbd.md` read the base term's source: at 2 layers it is consistent with a build effect (torch 2.8.0+cu128
+  vs 2.12.1+cu130), not a framework effect.
+
 ## Draws and spend
 
 | Run | Outcome | Cost | Note |
