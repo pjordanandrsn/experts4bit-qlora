@@ -1,7 +1,7 @@
 # P222's staged pieces, by the name the box sees them, and their sha256 at this registration (bench/p222/PREREG-p222.md).
 # test_k25_row_exact_gpu.py and test_nf4_smallm_prmt_gpu.py are P160's staged bytes (P156's and P158's).
-b6027bc5e44a01bbf401f023b0ad3cf35bcf88adbf4c86eed98870cbb62073bd  p222_run.sh
-20007d55090d4d62213bb96f8268d7508069b1bffbf67f11af2c43a1e5da68c3  p222_bench.py
-e75644f72ed10a8c889414a8dc02e23a69dba0c4bd02e5865dd3e70b633bd561  p222_reduce.py
+a6c3865976f83fc6995cf4d377d63383e21322026de6404b89f49eec6906d84c  p222_run.sh
+0bc7925b0b11fba7587b49aada6c4be194bbc24900aa42391d14ab139794269e  p222_bench.py
+1548bad8f10c9b3697b3c75e7335d046a254cfface420e6036fbdb7d496c6c55  p222_reduce.py
 1d870355f17db464633db7fedcc432faf82e8152582ffc0aa5f6fc593ebc91c2  test_k25_row_exact_gpu.py
 9f6366287957f75bdfe53ff8165b401c30fb9e97d4da582254ad7e98bf702868  test_nf4_smallm_prmt_gpu.py

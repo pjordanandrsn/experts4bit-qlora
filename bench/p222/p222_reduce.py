@@ -483,8 +483,8 @@ def self_test():
     bad["clocks"]["error"] = "OSError: libnvidia-ml.so.1"
     assert v(bad) == "VOID"
     sk = _fake(shakedown=True, layers=2, device="NVIDIA GeForce RTX 3090", cc=[8, 6], limit=350.0)
-    sk["read"]["reps"] = sk["read"]["reps"][:6]
-    sk["read"]["steps"] = sk["read"]["steps"][:6]
+    sk["read"]["reps"] = sk["read"]["reps"][:10]
+    sk["read"]["steps"] = sk["read"]["steps"][:10]
     o = verdict(sk)
     assert o["verdict"] == "SHAKEDOWN", o["why"]
     w = williams(len(ARMS))                                                  # five arms: 10 orders

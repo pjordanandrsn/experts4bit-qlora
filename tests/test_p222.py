@@ -176,7 +176,7 @@ def test_the_shakedown_is_never_a_reading():
     NO_GO."""
     assert "p222-shake-1|p222-shake-2) SHAKE=1;;" in RUN
     assert "8.6|8.9|9.0|10.0|12.0) ;;" in RUN and "VRAM_FLOOR=30000; [ \"$SHAKE\" = 1 ] && VRAM_FLOOR=15000" in RUN
-    assert '--shakedown --layers 2 --reps 6 --grid 6 --select-steps 2' in RUN
+    assert '--shakedown --layers 2 --reps 10 --grid 6 --select-steps 2' in RUN
     assert 'case "$SHAKE/$V" in 0/GO|0/NO_GO|1/SHAKEDOWN) finish 0;;' in RUN
     assert "p222-5090-1|p222-5090-2|p222-5090-3|p222-shake-1|p222-shake-2) :;;" in DRIVE
 

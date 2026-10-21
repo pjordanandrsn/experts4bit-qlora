@@ -18,7 +18,7 @@ The routing is seeded synthetic top-2 (``p222_reduce.picks``): no Mixtral router
   T's, bit for bit.
 
     python p222_bench.py --out bench_p222.json
-    python p222_bench.py --out shake.json --shakedown --layers 2 --reps 6 --grid 6 --select-steps 2
+    python p222_bench.py --out shake.json --shakedown --layers 2 --reps 10 --grid 6 --select-steps 2
     python p222_bench.py --self-test
 """
 from __future__ import annotations

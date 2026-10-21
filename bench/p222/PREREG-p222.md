@@ -143,11 +143,11 @@ P160's instrument, with P156's sweep in front of it. Everything not named here i
 The $0 A2000 shakedown P160 ran is gone: the A2000 is off lane work since 2026-10-21 (the owner's directive). So after
 this registration merges, and before the reading:
 - **`p222-shake-1`** (spare `-2`): the same driver and runner on the **cheapest NVIDIA card at sm_86 or later with 15
-  GB** that passes the usual screen, `--shakedown --layers 2 --reps 6 --grid 6 --select-steps 2` (today's plan swept
+  GB** that passes the usual screen, `--shakedown --layers 2 --reps 10 --grid 6 --select-steps 2` (today's plan swept
   first), no power floor. Declared at most $0.40/h, **guard 0.75 h**, at most 10 GB at <= $0.011/GB (the install; no
   model is fetched): worst case 0.75 x $0.40 + 10 x $0.011 = **$0.41**, under the standing rule. (Read-only search at registration, 2026-10-21: under the launcher's filters with a
   16 GB host-RAM floor, RTX A4000 listed none, L4 from $0.362/h, RTX 4090 from $0.442/h.) **Its own fit:** `NEED_BENCH` = 600 s for a shakedown id (12 plan compiles at P156's
-  slowest 2.65 s = 31.8 s, 10 metadata compiles 26.5 s, and 2 layers' sweep and 6 reps a few seconds: about 60 s,
+  slowest 2.65 s = 31.8 s, 10 metadata compiles 26.5 s, and 2 layers' sweep and 10 reps (every Williams order) a few seconds: about 60 s,
   floored at 600 s), so `FIT` = 600 + 600 + 600 = 1800 s, `FIT_NEED` = 2250 s, and (300 + 1800) x 1.25 = 2625 s <= 2700 s
   (0.75 h). It finishes 0 only on the reducer's
   **SHAKEDOWN**, which runs every structural check and is never graded.

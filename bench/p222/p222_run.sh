@@ -166,9 +166,9 @@ fi
 # every timed replay
 can_run $NEED_BENCH bench || finish 40
 AL=$(step_alarm 2700); say "microbench (alarm=$AL)"; gpu_snap "bench start"
-PYTHONPATH= perl -e "alarm $AL; exec @ARGV" python $W/p222_bench.py --out $W/bench_p222.json $([ "$SHAKE" = 1 ] && echo --shakedown --layers 2 --reps 6 --grid 6 --select-steps 2) > logs/bench.log 2>&1
+PYTHONPATH= perl -e "alarm $AL; exec @ARGV" python $W/p222_bench.py --out $W/bench_p222.json $([ "$SHAKE" = 1 ] && echo --shakedown --layers 2 --reps 10 --grid 6 --select-steps 2) > logs/bench.log 2>&1
 rc=$?; gpu_snap "bench end"
-{ echo -n "bench rc=$rc "; grep -a "^P222_BENCH\|^P222_POISONED\|^P222_M \|^P222_SELECT_NONE" logs/bench.log | tail -3 | cut -c1-600; echo; } | tee -a summary.txt
+{ echo -n "bench rc=$rc "; grep -a "^P222_BENCH\|^P222_POISONED\|^P222_ARM_FAULT\|^P222_M \|^P222_SELECT_NONE" logs/bench.log | tail -3 | cut -c1-600; echo; } | tee -a summary.txt
 [ "$rc" = 0 ] || { tail -4 logs/bench.log | cut -c1-300 | tee -a summary.txt; say "BENCH FAILED (rc=$rc) -- the reducer will VOID"; }
 say "reduce"; python $W/p222_reduce.py --bench "$W/bench_p222.json" --out "$W/verdict_p222.json" 2>&1 | tee -a summary.txt
 [ "${PIPESTATUS[0]}" = 0 ] && [ -s "$W/verdict_p222.json" ] || { say "REDUCER FAILED"; finish 22; }
