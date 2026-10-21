@@ -27,6 +27,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 SCHEMA_V1 = "backend-adapter/1"
+SCHEMA_V2 = "backend-adapter/2"
+_SHA256 = re.compile(r"[0-9a-f]{64}")
 WEIGHTS = "adapter.safetensors"
 MANIFEST = "adapter_manifest.json"
 _FULL_SHA = re.compile(r"[0-9a-f]{40}")
@@ -90,9 +92,13 @@ def verify_adapter_dir(path) -> AdapterDir:
         manifest = json.loads(mpath.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
         raise bad(f"{MANIFEST} is not JSON ({e})") from None
-    if not isinstance(manifest, dict) or manifest.get("schema") != SCHEMA_V1 or manifest.get("backend") != "experts4bit":
-        raise bad(f"schema {manifest.get('schema') if isinstance(manifest, dict) else None!r} / backend: this server "
-                  f"reads {SCHEMA_V1} from the experts4bit backend")
+    schema = manifest.get("schema") if isinstance(manifest, dict) else None
+    if schema == SCHEMA_V2 and manifest.get("backend") != "experts4bit":
+        raise bad(f"{SCHEMA_V2} is defined for backend=experts4bit only; a {manifest.get('backend')!r} /2 manifest is "
+                  f"refused until a section for that backend is added (docs/ADAPTER_PORTABILITY.md section 6)")
+    if schema not in (SCHEMA_V1, SCHEMA_V2) or manifest.get("backend") != "experts4bit":
+        raise bad(f"schema {schema!r} / backend: this server reads {SCHEMA_V1} and {SCHEMA_V2} from the experts4bit "
+                  f"backend")
     files = manifest.get("files")
     if manifest.get("weights") != WEIGHTS or not isinstance(files, dict) or WEIGHTS not in files:
         raise bad(f"the manifest must name {WEIGHTS} and list it in files")
@@ -140,6 +146,8 @@ def verify_adapter_dir(path) -> AdapterDir:
         a, b = tensors[ab["A"]], tensors[ab["B"]]
         if a.dim() != 2 or b.dim() != 2 or a.shape[0] != r_ or b.shape[1] != r_:
             raise bad(f"{module}: lora_A {list(a.shape)} / lora_B {list(b.shape)} are not rank {r_}")
+    if schema == SCHEMA_V2:
+        _verify_v2_fields(manifest, attention, float(alpha) / r_, bad)
     revision = manifest.get("resolved_model_revision")
     return AdapterDir(path=str(root), manifest=manifest, tensors=tensors, setup=setup,
                       revision=revision if isinstance(revision, str) and revision else None,
@@ -161,6 +169,41 @@ def arena_source(arena_index: dict) -> tuple:
     return (f"{m['org']}/{m['name']}", m["rev"]) if m else (None, None)
 
 
+def _verify_v2_fields(manifest, attention, scale, bad) -> None:
+    """``backend-adapter/2``'s added fields are present and well formed: every field adapter_schema.V2_FIELDS names, a
+    known fingerprint scheme per scope, and the recorded applied scale equal to the setup's alpha/r."""
+    from .adapter_schema import KNOWN_SCHEMES, SCOPES, V2_FIELDS
+
+    missing = sorted(k for k in V2_FIELDS if k not in manifest)
+    if missing:
+        raise bad(f"{SCHEMA_V2} manifest lacks {missing}")
+    fps = manifest["fingerprints"]
+    if not isinstance(fps, dict) or not set(fps) <= set(SCOPES):
+        raise bad(f"fingerprints must map scopes from {list(SCOPES)}, got {sorted(fps) if isinstance(fps, dict) else fps!r}")
+    # the scopes the adapter's own content requires: experts always (an experts4bit model has expert stacks), and
+    # attention whenever the adapter carries attention LoRA
+    required = ["experts"] + (["attention"] if attention else [])
+    absent = [s for s in required if s not in fps]
+    if absent:
+        raise bad(f"fingerprints lacks the {absent} scope(s) this adapter requires")
+    for scope, fp in fps.items():
+        if not isinstance(fp, dict) or fp.get("scheme_id") not in KNOWN_SCHEMES:
+            raise bad(f"fingerprints.{scope}: scheme {fp.get('scheme_id') if isinstance(fp, dict) else None!r} is not "
+                      f"one this server knows ({list(KNOWN_SCHEMES)}); it refuses rather than compare unlike hashes")
+        if not (isinstance(fp.get("sha256"), str) and _SHA256.fullmatch(fp["sha256"])):
+            raise bad(f"fingerprints.{scope}.sha256 is not a sha256")
+        mods = fp.get("modules")
+        if not (isinstance(mods, int) and not isinstance(mods, bool) and mods > 0):
+            raise bad(f"fingerprints.{scope}.modules {mods!r} is not a positive count")
+        secs = fp.get("seconds")
+        if not (isinstance(secs, (int, float)) and not isinstance(secs, bool) and secs >= 0):
+            raise bad(f"fingerprints.{scope}.seconds {secs!r} is not a measured duration")
+    applied = manifest["lora_scale_applied"]
+    held = applied.get("attention") if isinstance(applied, dict) else None
+    if attention and (held is None or abs(float(held) - scale) > 1e-12):
+        raise bad(f"lora_scale_applied.attention {held!r} is not the setup's alpha/r {scale!r}")
+
+
 def arena_source_revision(arena_index: dict) -> str | None:
     return arena_source(arena_index)[1]
 
@@ -180,13 +223,22 @@ def parse_accept_unverified_base(raw: str) -> frozenset:
     return scopes
 
 
+def _expert_base_unverified(ad: AdapterDir) -> str:
+    """Why this server cannot verify ``ad``'s expert base, for its manifest's schema."""
+    if ad.manifest.get("schema") == SCHEMA_V2:
+        form = (ad.manifest.get("expert_absmax") or {}).get("form")
+        return (f"backend-adapter/2 records the expert absmax form ({form}) and an expert fingerprint, but this server "
+                f"does not yet compare it against its arena (PA-1); the NF4 arena stores fp32 absmax "
+                f"(docs/ADAPTER_PORTABILITY.md F1)")
+    return ("backend-adapter/1 records no expert absmax form; training defaults to the double-quantized absmax, the NF4 "
+            "arena stores fp32 (docs/ADAPTER_PORTABILITY.md F1)")
+
+
 def base_match(ad: AdapterDir, refusals=()) -> dict:
     """What is known about the served base against the adapter's training base, per part of the model."""
     attn = ("refused" if any(code == 8 for code, _ in refusals) else
             "exact by construction (up to the measured merge rounding)" if ad.attention else "none")
-    experts = ("unverified (backend-adapter/1 records no expert absmax form; training defaults to the double-quantized "
-               "absmax, the NF4 arena stores fp32: docs/ADAPTER_PORTABILITY.md F1)")
-    return {"attention": attn, "experts": experts}
+    return {"attention": attn, "experts": f"unverified ({_expert_base_unverified(ad)})"}
 
 
 def servable_refusals(ad: AdapterDir, *, served_revision: str | None, requested_revision: str | None,
@@ -201,12 +253,12 @@ def servable_refusals(ad: AdapterDir, *, served_revision: str | None, requested_
     import torch
 
     out = []
-    if ad.manifest.get("schema") == SCHEMA_V1 and "experts" not in accept_unverified_base:
-        out.append((9, "the expert base cannot be verified: backend-adapter/1 records no expert absmax form, and "
-                       "training defaults to the double-quantized absmax while the NF4 arena stores fp32 "
-                       "(docs/ADAPTER_PORTABILITY.md F1), so the whole served model may differ from the trained one. "
-                       "Set E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE=experts to serve it anyway (reported as "
-                       "base_match.experts=unverified)"))
+    if "experts" not in accept_unverified_base:
+        # v1 records no expert absmax form; v2 records it and an expert fingerprint, which this server does not yet
+        # compare against its arena (PA-1). Until then neither verifies the expert base.
+        out.append((9, f"the expert base cannot be verified: {_expert_base_unverified(ad)}, so the whole served model "
+                       f"may differ from the trained one. Set E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE=experts to serve "
+                       f"it anyway (reported as base_match.experts=unverified)"))
     live = [n for n in ad.expert_tensors if n.endswith("_lora_B") and bool(torch.any(ad.tensors[n] != 0))]
     if live:
         out.append((1, f"expert LoRA is not served on the paged path ({len(live)} expert lora_B tensors are nonzero, "
