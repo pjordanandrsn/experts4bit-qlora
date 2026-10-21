@@ -91,8 +91,8 @@ These are specific workloads, with public results and controls. The table is che
 
 | Workload and evidence | Result | Status |
 | :--- | :--- | :--- |
-| Qwen3-30B-A3B QLoRA · RTX 5090 · TC1's field recipe, both frameworks on one stack, e4b at every default (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio`) | Unsloth spends **1.92×** e4b's GPU time per step; wall-clock **2.80×** on an AMD EPYC 7713. Comparable held-out loss. Peak **26.16 vs 24.27 GB** (Unsloth lower). | measured |
-| Packed 4,096-token Qwen3 training · RTX 5090 · e4b at its defaults (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio`) | Unsloth spends **1.160×** e4b's GPU time per step; the wall-clock ratio varies with the host (below). | measured |
+| Qwen3-30B-A3B QLoRA · RTX 5090 · TC1's field recipe, both frameworks on one stack, e4b at every default (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio`) | Unsloth spends **1.92×** e4b's GPU time per step (medians of two draws); wall-clock **2.80×** on an AMD EPYC 7713. Comparable held-out loss. Peak **26.16 vs 24.27 GB** (Unsloth lower). | measured |
+| Packed 4,096-token Qwen3 training · RTX 5090 · e4b at its defaults (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio`) | Unsloth spends **1.160×** e4b's GPU time per step (medians of two draws); the wall-clock ratio varies with the host (below). | measured |
 | Expert-offload training on a 12 GB card (`e4b.train.frontier.qwen3.a2000-12gb.2026-10-02`) | Qwen3-30B-A3B, TC1's matched set (fp32 adapters) at micro-batch 1 × accum 8: **10.463 GB** peak allocated on an RTX A2000 12 GB, held-out 1.9533 → 0.8483 at N=20. An older, lighter reading gave 7.16 GB, and 8.47 GB for Gemma-4-26B-A4B (`e4b.offload.fits-30b-class`); it was not reproduced ([how to read these](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STORAGE-MODES.md#reading-the-headline-memory-numbers)). | measured |
 
 The speed rows profile both frameworks on one stack (torch 2.12.1). The GPU-time ratio is the host-independent figure; the
@@ -123,11 +123,12 @@ The offload row uses a different training setup.
 
 ## New in 0.56.1
 
-- **Sixteen requests decode 1.4654× as fast on Qwen3-30B-A3B, one request unchanged, every token identical.** K25, the
-  batched NF4 decode GEMM, now runs at tile plan `c1` on `qwen3_moe` where its decode resolved to K39's `prmt`
-  (grouped-nf4-gemm 0.50.0 or later, on NVIDIA). Elsewhere it stays on `today`, recorded in `info["k25_plan"]`. The
-  plan changes tiling and staging only, so the values are bit-identical to `today`'s. Measured on one RTX 5090 against
-  the `today` plan, both under K39's decode: the smallest of four ABBA pairs. `E4B_K25_PLAN=today` opts out.
+- **Sixteen requests decode 1.4654× as fast on Qwen3-30B-A3B, one request unchanged, every token identical** (the
+  smallest of four ABBA pairs). K25, the batched NF4 decode GEMM, now runs at tile plan `c1` on `qwen3_moe` where its
+  decode resolved to K39's `prmt` (grouped-nf4-gemm 0.50.0 or later, on NVIDIA). Elsewhere it stays on `today`, recorded
+  in `info["k25_plan"]`. The plan changes tiling and staging only, so the values are bit-identical to `today`'s.
+  Measured on one RTX 5090 against the `today` plan, both under K39's decode: the smallest of four ABBA pairs.
+  `E4B_K25_PLAN=today` opts out.
   ([P161](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/p161/RESULTS-p161.md), `e4b.serve.p161.k25-plan-c1.qwen3.5090.2026-10-20`)
 
 ## New in 0.56.0
@@ -137,47 +138,53 @@ effect has not been read. Two need a newer grouped-nf4-gemm than `[fast]` instal
 needs 0.50.0 and the int8 head needs 0.48.0. Below those each resolves off, recorded, and nothing breaks. To get them,
 run `pip install -U grouped-nf4-gemm`.
 
-- **Sixteen requests decode 1.0925× as fast, one request unchanged, every token identical.** K25, the batched NF4 decode
-  GEMM, now decodes its codebook with grouped-nf4-gemm K39's byte-permute decode (`lut="prmt"`), bit-identical to the
-  select tree it replaces. It needs grouped-nf4-gemm 0.50.0 or later and an NVIDIA device; otherwise it resolves to the
-  tree, recorded in `info["k25_lut"]`. `E4B_K25_LUT=tree` opts out.
+- **Sixteen requests decode 1.0925× as fast, one request unchanged, every token identical.** (The smallest of four ABBA
+  pairs.) K25, the batched NF4 decode GEMM, now decodes its codebook with grouped-nf4-gemm K39's byte-permute decode
+  (`lut="prmt"`), bit-identical to the select tree it replaces. It needs grouped-nf4-gemm 0.50.0 or later and an NVIDIA
+  device; otherwise it resolves to the tree, recorded in `info["k25_lut"]`. `E4B_K25_LUT=tree` opts out.
   ([P158](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/p158/RESULTS-p158.md), `e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20`)
-- **One request decodes 1.052× as fast from the lm_head on its per-row int8 grid** (grouped-nf4-gemm K36; at
+- **One request decodes 1.052× as fast from the lm_head on its per-row int8 grid** (the smallest of four ABBA pairs;
+  grouped-nf4-gemm K36; at
   Qwen3-30B-A3B's 151936 x 2048 head only; needs grouped-nf4-gemm 0.48.0 or later, else it resolves off). **Outputs
   change:** the logits differ from the bf16 head's, inside the quality gates read on Qwen3-30B-A3B @ad44e777. Sixteen
   requests read 0.992, a cost not yet attributed. `E4B_INT8_HEAD_BW=0` restores the bf16 head.
   ([P153](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/p153/RESULTS-p153.md), `e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19`)
-- **One request decodes 1.044× as fast with the paged FP8 attention decode capped at 16 splits** (buckets 1, 2 and 4
-  move; bitwise-identical to the library's plan at contexts up to 1024). Sixteen requests are unchanged.
-  `E4B_ATTN_SPLIT_CAP=0` opts out. ([P143](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/p143/RESULTS-p143.md),
+- **One request decodes 1.044× as fast with the paged FP8 attention decode capped at 16 splits** (the smallest of four
+  ABBA pairs; buckets 1, 2 and 4 move; bitwise-identical to the library's plan at contexts up to 1024). Sixteen requests
+  are unchanged. `E4B_ATTN_SPLIT_CAP=0` opts out.
+  ([P143](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/p143/RESULTS-p143.md),
   `e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19`)
 
 Training, opt-in. Each was measured on the card named, against the baseline its bullet names.
 
-- **Layer-major training under expert offload steps 2.365× as fast on Qwen3-30B-A3B on one RTX 4090.** `layer_major_step`
-  (`experts4bit_qlora.engines.layer_major`) runs a step's micro-batches layer by layer, so each offloaded layer is staged
-  once per step instead of once per micro-batch. It replicates at 2.311× on an RTX 5090 and holds on Mixtral-8x7B at
-  2.118× on an RTX 4090. Opt-in. ([P137](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/p137/RESULTS-p137.md),
-  `e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18`; [P140](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/p140/RESULTS-p140.md),
-  `e4b.train.p140.layer-major-offload.qwen3.5090.2026-10-18`; [P144](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/p144/RESULTS-p144.md),
+- **Layer-major training under expert offload steps 2.365× as fast on Qwen3-30B-A3B on one RTX 4090** (the smaller of
+  two ABBA pairs of median step times). `layer_major_step` (`experts4bit_qlora.engines.layer_major`) runs a step's
+  micro-batches layer by layer, so each offloaded layer is staged once per step instead of once per micro-batch. It
+  replicates at 2.311× on an RTX 5090 and holds on Mixtral-8x7B at 2.118× on an RTX 4090, each the smaller of two ABBA
+  pairs of median step times. Opt-in.
+  ([P137](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/p137/RESULTS-p137.md),
+  `e4b.train.p137.layer-major-offload.qwen3.4090.2026-10-18`;
+  [P140](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/p140/RESULTS-p140.md),
+  `e4b.train.p140.layer-major-offload.qwen3.5090.2026-10-18`;
+  [P144](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/p144/RESULTS-p144.md),
   `e4b.train.p144.layer-major-offload.mixtral.4090.2026-10-18`)
 - **The CLI trainer can take the fused training path.** In 0.55.0, `python -m experts4bit_qlora.train` always ran the
   reference loop. `FAST_TRAIN=1` now puts it on the fused path, and `LAYER_MAJOR=1` implies it. At the CLI's own default
   recipe on Qwen3-30B-A3B with `OFFLOAD_EXPERTS=1`, `LAYER_MAJOR=1` steps 1.455× as fast as `FAST_TRAIN=1` alone on one
-  RTX 4090. An explicit `FAST_TRAIN=0` keeps the reference loop.
+  RTX 4090 (the smaller of two ABBA pairs of median step times). An explicit `FAST_TRAIN=0` keeps the reference loop.
   ([P146](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/p146/RESULTS-p146.md), `e4b.train.p146.layer-major-cli.qwen3.4090.2026-10-18`)
 
 Mixtral serving.
 
 - **Mixtral-8x7B decodes with its B=1 fold stack by default.** The T1 glue, its second round and the router epilogue now
-  resolve to `auto` on Mixtral; fused q/k/v does not engage on this family. A one-request step takes 0.9393 of
-  its time without them (about 20.2-20.5 ms to 19.0 ms) on one RTX 5090. Opt out per knob: `E4B_FUSE_T1_GLUE=0`,
-  `E4B_FUSE_T1_GLUE_R2=0`, `E4B_FUSE_ROUTER_EPI=0`.
+  resolve to `auto` on Mixtral; fused q/k/v does not engage on this family. A one-request step takes 0.9393 of its time
+  without them (median step time, the larger of two interleaved blocks) (about 20.2-20.5 ms to 19.0 ms) on one RTX 5090.
+  Opt out per knob: `E4B_FUSE_T1_GLUE=0`, `E4B_FUSE_T1_GLUE_R2=0`, `E4B_FUSE_ROUTER_EPI=0`.
   ([P135](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/p135/RESULTS-p135.md), `e4b.serve.p135.fold-speed.mixtral.5090.2026-10-18`)
-- **`E4B_SERVE_ATTN_INT8=1`: int8 weight-only attention projections on Mixtral, opt-in.** q/k/v/o are held in int8
-  with a per-row fp32 scale, and decode calls of 1-16 rows run grouped-nf4-gemm's K37 kernels (from 0.49.0). On one
-  RTX 5090 the served read decodes one request 1.161x as fast and sixteen 1.018x, with decode quality inside its
-  registered bound. It stays opt-in until a routing-matched read: the default-flip PR is held.
+- **`E4B_SERVE_ATTN_INT8=1`: int8 weight-only attention projections on Mixtral, opt-in.** q/k/v/o are held in int8 with
+  a per-row fp32 scale, and decode calls of 1-16 rows run grouped-nf4-gemm's K37 kernels (from 0.49.0). On one RTX 5090
+  the served read decodes one request 1.161x as fast (the smallest of four ABBA pairs) and sixteen 1.018x, with decode
+  quality inside its registered bound. It stays opt-in until a routing-matched read: the default-flip PR is held.
   ([P149](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/p149/RESULTS-p149.md),
   `e4b.serve.p149.int8-attn.mixtral.5090.2026-10-20`)
 
