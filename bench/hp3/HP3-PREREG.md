@@ -83,6 +83,14 @@ whose resolver lands on anything other than the pins above fails the shakedown, 
 comment says axolotl 0.20.0 resolved torch 2.14.1+cu130 on an earlier box, against the metadata's ≤2.14.0. The shakedown records
 what is actually installed, and the pin is forced with an explicit `torch==2.14.0` constraint in every venv.
 
+**Install routes.**
+- Unsloth 2026.10.7's install extras stop at `cu130-torch2121`; there is no `cu130-torch2140` extra. Unsloth goes in as the plain
+  `unsloth==2026.10.7` + `unsloth_zoo==2026.10.7` under the explicit `torch==2.14.0` constraint, from the cu130 index. Its own
+  `requires_dist` allows torch <2.15.
+- axolotl 0.20.0 also needs xformers. Recent xformers releases need torch ≥2.10, so neither framework forces a different torch.
+- e4b and grouped-nf4-gemm go into their own venv under the same constraint.
+- Whether these routes install and import is a shakedown question. A failure there triggers the (R) fallback.
+
 **e4b on torch 2.14.0 is untested.** The shakedown is a correctness check only, never data. HP3 makes **no e4b compatibility
 claim** for torch 2.14.
 
