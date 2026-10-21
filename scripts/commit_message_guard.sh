@@ -70,6 +70,7 @@ self_test() {
   printf '%s\n' 'receipt at adertha://adertha-agents%23190/receipts/run-1' > "$WORK/c2"  # guard-allow
   printf '%s\n' 'see the run lock at ~/.adertha/rent-live.lock' > "$WORK/c3"  # guard-allow
   printf '%s\n' 'ruling at bus 20261017T194309Z-18922 guard-allow' > "$WORK/c4"  # guard-allow
+  printf '%s\n' 'the row is in adertha-receipts on its state branch' > "$WORK/c5"  # guard-allow (an #added-only rule)
   cat > "$WORK/clean" <<'CLEAN'
 fix: typo in README
 The maintainer reviewed this change; families of MoE models share the route.
@@ -78,7 +79,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Timestamp 20261017T194309Z alone is not a message id.
 CLEAN
   local f
-  for f in c1 c2 c3; do
+  for f in c1 c2 c3 c5; do
     HITS=0
     scan_text "self-test ${f}" "$WORK/$f" > /dev/null
     [ "$HITS" -eq 1 ] || { echo "::error::self-test: control ${f} was not flagged"; exit 1; }
