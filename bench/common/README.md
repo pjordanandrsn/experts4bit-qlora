@@ -103,3 +103,24 @@ A snapshot holds:
 
 A fact that cannot be read is left out. A lane stages the file beside its box script and lists it in its staged hashes.
 `tests/test_thp_window.py` reads synthetic `/proc` and `/sys` trees.
+
+## Phase stamps
+
+Every NEW rental kit writes `phases.jsonl` in its box work directory, and the driver fetches it with the receipts. A later read of where rented time goes (setup against measurement) then needs no regex over free-form logs. Existing kits and committed receipts are not changed.
+
+Source `phases.sh` in the runner and bracket each phase:
+
+```sh
+. ./phases.sh                   # staged next to the runner, like any other helper
+phase_start install setup; pip install ...;      phase_end install
+phase_start fetch setup;   python fetch.py ...;   phase_end fetch
+phase_start armA measure;  python box.py --arm A; phase_end armA
+phase_start reduce reduce; python reduce.py ...;  phase_end reduce
+```
+
+- One JSON object per line, appended: `{"phase": NAME, "event": "start", "kind": KIND, "t": EPOCH}` and `{"phase": NAME, "event": "end", "t": EPOCH}`, where `t` is integer epoch seconds.
+- `KIND` is `setup` (install, fetch, slice, bake, premise, self-tests), `measure` (anything a reading is taken from), `reduce` (the verdict on the box), or `other`. The writer refuses any other kind, and any name outside `[A-Za-z0-9_.:-]+`, with rc 2 and writes nothing.
+- Phases run one at a time: a phase ends before the next starts, and `t` never goes backwards.
+- P149's runner wrote the same lines without `kind` before this convention existed. The reader classes those `unknown`; it never guesses a kind from a name.
+
+`phases.py PATH` prints seconds per kind, the first measurement's start, and any phase left open (a box that died mid-phase). `phases.py --check PATH` exits 1 with one line per format fault. `tests/test_phases_common.py` reads P149's committed record first (sha-pinned), then checks the writer's refusals and each reader fault.
