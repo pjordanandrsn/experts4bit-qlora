@@ -25,7 +25,7 @@ certified class, traces non-degenerate.
 
 > **Forward note (2026-10-21).** The cross-B row-0 identity above was read on this stack and schedule; it is not
 > general. On the later default graph server, a request's tokens can change with the graph bucket it decodes in:
-> the fp8 split-KV attention plans a different split count per bucket, and that explains every divergence P149 saw.
+> the fp8 split-KV attention plans its split count per bucket, and that explains every divergence P149 saw.
 > A second, small difference appears at bucket 1 only (single-row steps) and is not attributed. Read identical-token
 > claims as scoped to identical schedules. Source: the P149 follow-up, run `p149mnt-5090-7` (`p149mnt-5090-6`
 > replicating), in the private receipt store.
