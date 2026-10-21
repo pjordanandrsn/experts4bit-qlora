@@ -68,6 +68,10 @@ def _lines(*recs):
     (_lines({"phase": "a", "event": "start", "t": 5}, {"phase": "a", "event": "end", "t": 4}), "goes backwards"),
     (_lines({"phase": "a", "event": "start", "kind": "warmup", "t": 1}), "bad kind"),
     (_lines({"phase": "a", "event": "end", "t": 1}), "ends but nothing is open"),
+    (_lines({"phase": "a", "event": "start", "t": 1}, {"phase": "b", "event": "end", "t": 2}), "b ends but a is open"),
+    (_lines({"phase": "a", "event": "pause", "t": 1}), "bad event"),
+    (_lines({"phase": "a", "event": "start", "t": True}), "not an integer"),
+    (["{\"phase\": \"a\\n\", \"event\": \"start\", \"t\": 1}"], "bad phase name"),
     (_lines({"phase": "a b", "event": "start", "t": 1}), "bad phase name"),
     (_lines({"phase": "a", "event": "start", "t": "1"}), "not an integer"),
     (["{not json"], "not JSON"),
@@ -101,3 +105,14 @@ def test_check_exits_nonzero_on_a_fault(tmp_path):
     ok = subprocess.run([sys.executable, str(ROOT / "bench" / "common" / "phases.py"), "--check", str(REAL)],
                         capture_output=True, text=True)
     assert ok.returncode == 0 and ok.stdout == ""
+    live = tmp_path / "live.jsonl"
+    live.write_text("\n".join(_lines({"phase": "fetch", "event": "start", "kind": "setup", "t": 1})) + "\n")
+    plain = subprocess.run([sys.executable, str(ROOT / "bench" / "common" / "phases.py"), "--check", str(live)],
+                           capture_output=True, text=True)
+    assert plain.returncode == 0                       # a live box: the current phase is legitimately open
+    fetched = subprocess.run([sys.executable, str(ROOT / "bench" / "common" / "phases.py"), "--check", "--closed",
+                              str(live)], capture_output=True, text=True)
+    assert fetched.returncode == 1 and "phase fetch left open" in fetched.stdout
+    real = subprocess.run([sys.executable, str(ROOT / "bench" / "common" / "phases.py"), "--check", "--closed",
+                           str(REAL)], capture_output=True, text=True)
+    assert real.returncode == 0
