@@ -66,6 +66,66 @@ def test_every_file_a_receipt_lists_is_tracked_or_store_only():
         + "; ".join(f"{d}: {', '.join(p[:3])}{' ...' if len(p) > 3 else ''}" for d, p in bad.items()))
 
 
+SAME = re.compile(r"^#\s*same bytes:\s*(\S+)\s+at\s+([0-9a-f]{7,40})\s*$")
+
+
+def same_bytes_claims(path: Path) -> list:
+    """[(entry path, entry sha256, tracked path, commit)] for each STORE-ONLY entry whose preceding line is a
+    ``# same bytes: <tracked path> at <commit>`` annotation."""
+    out, pending = [], None
+    for ln in path.read_text(encoding="utf-8").splitlines():
+        m = SAME.match(ln)
+        if m:
+            pending = m.groups()
+            continue
+        e = ENTRY.match(ln)
+        if e and not ln.lstrip().startswith("#"):
+            if pending:
+                out.append((e.group(2), e.group(1), *pending))
+            pending = None
+        elif ln.strip() and not ln.lstrip().startswith("#"):
+            pending = None
+    return out
+
+
+def wrong_same_bytes(root: Path) -> list:
+    """Every ``same bytes`` annotation whose tracked path at that commit does not hash to the entry's sha256."""
+    import hashlib
+    bad = []
+    for so in sorted((root / "bench").rglob("STORE-ONLY.sha256")):
+        for entry, sha, tracked, commit in same_bytes_claims(so):
+            got = subprocess.run(["git", "-C", str(root), "show", f"{commit}:{tracked}"], capture_output=True)
+            if got.returncode != 0 or hashlib.sha256(got.stdout).hexdigest() != sha:
+                bad.append(f"{so.parent.relative_to(root).as_posix()}/{entry}: {tracked} at {commit}")
+    return bad
+
+
+def test_every_same_bytes_line_is_true():
+    """A STORE-ONLY entry annotated ``same bytes: <path> at <commit>`` has exactly those bytes in git at that commit."""
+    claims = [c for so in (ROOT / "bench").rglob("STORE-ONLY.sha256") for c in same_bytes_claims(so)]
+    assert len(claims) >= 66                                        # 66 when these lines were written
+    assert wrong_same_bytes(ROOT) == []
+
+
+def test_a_same_bytes_line_that_names_other_bytes_fails(tmp_path):
+    import hashlib
+    root = tmp_path / "repo"
+    (root / "kit").mkdir(parents=True)
+    (root / "kit" / "box.py").write_text("print(1)\n", encoding="utf-8")
+    git = ["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(git[:3] + ["init", "-q"], check=True)
+    subprocess.run(git + ["add", "kit/box.py"], check=True)
+    subprocess.run(git + ["commit", "-q", "-m", "kit"], check=True)
+    head = subprocess.run(git[:3] + ["rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+    d = root / "bench" / "pX" / "receipts" / "pX-1"
+    d.mkdir(parents=True)
+    right = hashlib.sha256(b"print(1)\n").hexdigest()
+    (d / "STORE-ONLY.sha256").write_text(f"# same bytes: kit/box.py at {head[:12]}\n{right}  box.py\n", encoding="utf-8")
+    assert wrong_same_bytes(root) == []
+    (d / "STORE-ONLY.sha256").write_text(f"# same bytes: kit/box.py at {head[:12]}\n{'c' * 64}  box.py\n", encoding="utf-8")
+    assert wrong_same_bytes(root) == [f"bench/pX/receipts/pX-1/box.py: kit/box.py at {head[:12]}"]
+
+
 def test_the_check_reads_the_receipts_it_guards():
     sums = [p for p in (ROOT / "bench").rglob("SHA256SUMS") if "receipts" in p.relative_to(ROOT).parts]
     assert len(sums) >= 170                                         # 170 when this check was tightened

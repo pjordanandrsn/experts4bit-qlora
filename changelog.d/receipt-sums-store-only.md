@@ -5,4 +5,6 @@
   but is ignored (`.gitignore` has `*.log`) no longer passes. The frozen `LEGACY_GAPS` table is gone: the 18 older
   receipts it listed are complete. 34 of their logs are committed byte-for-byte from the private receipt store, and
   15 new `STORE-ONLY.sha256` files name the other 149 files, each grouped under a header that says where the bytes are
-  and, where it is recorded, why. No existing receipt file is changed.
+  and, where it is recorded, why. 66 of them are staged copies whose bytes git tracks: a `# same bytes: <path> at
+  <commit>` line above each entry names the tracked file at the commit that added the receipt, and the test checks
+  each one with `git show`. No existing receipt file is changed.
