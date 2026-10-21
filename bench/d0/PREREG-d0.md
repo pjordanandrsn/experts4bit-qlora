@@ -84,11 +84,11 @@ the equality holds.
   - The receipt's data record shows that training read only rows below 51,938 (`examples_used`).
   - Re-encoding exactly rows `[0, examples_used)` with Loggetta's own demonstration path (at `90a7697d`, on the
     dataset I load) reproduces the receipt's `token_stream_sha256`. This proves which rows were fed and that my
-    dataset copy has the same bytes there.
+    dataset copy has the same bytes there. *(superseded by Amendment 1)*
   - The dataset fingerprint is compared too when the receipt records one.
 - **Scored as training scored it:** the demonstration trains with loss on ALL tokens and with examples concatenated
   by EOS (Loggetta's legacy demo setting). Each held-out row is the demo's own alpaca text plus EOS, scored on all its
-  tokens after the first.
+  tokens after the first. *(superseded by Amendment 1)*
 - **One deviation, stated:** each example is scored alone, never packed beside its neighbours. This makes the
   per-example bootstrap possible, and it removes cross-example context that training had.
 - L = total NLL / total scored tokens, truncated at 512.
@@ -181,3 +181,22 @@ These go to the private store under the D0 fixture entry:
 - the pip freeze, the host and the wall times.
 
 There are no tensors in the store. Every number in the result cites a file there.
+
+## Amendment 1: the fixtures' data (registered before any number)
+
+**Why:** at Loggetta `90a7697d`, omitting `--dataset` cannot supply 200 × 512 tokens. The demonstration's streamed
+path validates every row, and `tatsu-lab/alpaca` row 284 has an empty output. So data preparation raises before any
+weight loads; rows 0-283 give 23,377 of the 102,400 tokens. This was reproduced on CPU with Loggetta's own
+`prepare_data`. P224 Amendment 1 therefore trains both fixtures on Alpaca's own full-text column, pinned:
+`--dataset tatsu-lab/alpaca --dataset-revision dce01c9b08f87459cf36a430d809084718273017 --format text --text-field
+text`. The text format keeps loss on all tokens and concatenated packing (958 rows, 102,400 tokens).
+
+**What changes in D0** (Step 2's data only; nothing else moves):
+- **Unseen is SHOWN** by re-encoding through Loggetta's own data path at `90a7697d`: `prepare_data` with the
+  receipt's spec and the plan's data profile. It must reproduce the receipt's `token_stream_sha256` and
+  `examples_used`. Training must have read only rows below 51,938, and 958 is expected. The dataset revision must be
+  the pinned `dce01c9b`. A failure VOIDs that fixture's Step 2, as before.
+- **Scored as the fixtures trained:** each held-out row (rows 51,938-52,001 of the same pinned revision) is that
+  row's `text` plus EOS, Loggetta's `encode_example` for the text format. It is scored on all its tokens after the
+  first and truncated at 512. The one stated deviation stands: each example is scored alone.
+
