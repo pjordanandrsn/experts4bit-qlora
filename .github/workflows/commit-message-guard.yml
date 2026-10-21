@@ -1,0 +1,35 @@
+name: commit-message-guard
+# pull_request only: the squash commit on main is built from the PR title and the branch's commit messages, so the
+# PR is the last point where they can still be reworded. `edited` re-runs it when the title or body changes.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+
+# Refuses private control-plane references in the text a merge publishes: the PR title and body, every commit message
+# on the branch, and (for the private-name rule) the lines the change adds. The tree itself is private-marker-guard's.
+#
+# Added 2026-10-21: the tree guards never read a commit message or a PR title, and those become the squash commit.
+#
+# The public rules are .github/private-markers.txt (shared with private-marker-guard) plus the bus message-id shape.
+# The private-name rule is the COMMIT_GUARD_PRIVATE_RE repository secret, so those names never enter the public tree;
+# the script exercises every literal alternative of it in memory and never prints it or a matched line.
+#
+# ALLOWLIST: `guard-allow` on the same line exempts a deliberate mention. Prefer rewording.
+
+jobs:
+  commit-message-guard:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # every commit on the branch, and the merge base for the added-line check
+
+      - name: scan the PR title, body, commit messages and added lines
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository && '1' || '0' }}
+          COMMIT_GUARD_PRIVATE_RE: ${{ secrets.COMMIT_GUARD_PRIVATE_RE }}
+        run: bash scripts/commit_message_guard.sh
