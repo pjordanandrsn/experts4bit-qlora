@@ -117,7 +117,29 @@ never emitted in pieces), ``finish_reason`` on the last token's chunk, a ``usage
   token a step for the rest of its life. Off by default; ``/health``'s ``spec`` block reports the census. The T > 1
   verify is not bitwise the T == 1 step (``bench/sd2/PREREG-sd2.md`` gates its quality); off, nothing is installed.
 
-Not in v1: sampling, logprobs, stop strings, adapters, prefix caching, per-request timeouts.
+* One trained adapter, server-wide (``E4B_PAGED_ADAPTER=<dir>``, Loggetta's ``backend-adapter/1`` directory;
+  :mod:`.adapter_dir`, ``docs/ADAPTER_PORTABILITY.md``). It is verified before any weight is read: paths, sizes,
+  sha256, tensor set, shapes, dtypes and finiteness, read with safetensors and never pickle. Its attention LoRA is
+  MERGED into the bf16 projections right after the load (``W + (alpha/r)*B@A`` in fp32, cast once), before the
+  levers, fusions, GEMV routes and graph capture, so it adds no per-token work. Startup refuses, naming each reason,
+  and never serves the base in its place:
+  - 1: a live expert LoRA;
+  - 2: a base revision other than the adapter's;
+  - 3: an arena whose source (repo and revision) is unknown or different (opt-in
+    ``E4B_PAGED_ADAPTER_ALLOW_UNVERIFIED_ARENA=1``);
+  - 4: the arena's quant_type or blocksize, or an arena that records neither (fails closed);
+  - 5: a lever that re-quantizes an adapted module or depends on base-model calibration (``ADAPTER_REFUSED_LEVERS``;
+    the uncalibrated, weight-only int8 lm_head stays a base-serving property, ``ADAPTER_ALLOWED_LEVERS``);
+  - 6: unknown target modules;
+  - 7: the verifier;
+  - 8: attention trained on a 4-bit base;
+  - 9: an expert base a v1 manifest cannot verify (opt-in ``E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE=experts``,
+    reported as ``base_match``);
+  - 10: speculative decoding (``E4B_PAGED_SPEC``), whose draft head and gate were read on the base model.
+  The served name becomes ``<model>+<adapter_id[:12]>``, and ``/health`` and ``/v1/models`` carry the adapter's id,
+  manifest hash, base revision, merge report and ``base_match``.
+
+Not in v1: sampling, logprobs, stop strings, per-request or multiple adapters, prefix caching, per-request timeouts.
 Everything above the engine seam is testable on CPU with a fake runner (``tests/test_serve_paged.py``);
 :func:`build_engine` is the one function that needs a GPU, and it was written from the harness
 rather than measured here.
@@ -133,6 +155,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Optional, Sequence
 
+from .adapter_dir import parse_accept_unverified_base
 from .engines.scheduler import ContinuousScheduler, Request
 
 DEFAULT_BUCKETS = (1, 2, 4, 8, 16)
@@ -146,6 +169,28 @@ LEVER_ENV = ("E4B_SERVE_EXP_INT4", "E4B_SERVE_EXP_INT4_CALIB", "E4B_SERVE_ATTN_I
              "E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI", "E4B_FUSED_KV_APPEND",
              "E4B_SERVE_ATTN_INT8")
 FUSION_ENV = ("E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")
+# Under an adapter, a lever is classified by what it DEPENDS ON (docs/ADAPTER_PORTABILITY.md F4). REFUSED (refusal 5)
+# until a registered read gates it: (i) it re-quantizes an ADAPTED module (attention after the merge; experts once
+# adapted), or (ii) it depends on calibration measured on the base model's activations, which an adapter shifts.
+# ALLOWED: uncalibrated, weight-only quantization of a module no adapter touches, a base-serving property identical to
+# the base server's. Every lever _apply_levers reads, and the int8 head, sits in exactly one table with its reason (a
+# test holds that), so a new lever cannot slip past an adapter.
+ADAPTER_REFUSED_LEVERS = {
+    "E4B_SERVE_ATTN_INT4": "re-quantizes the merged attention (i)",
+    "E4B_SERVE_ATTN_INT4_CALIB": "re-quantizes the merged attention (i), calibrated on the base model's activations, which an adapter shifts (ii)",
+    "E4B_SERVE_ATTN_INT8": "re-quantizes the merged attention (i)",
+    "E4B_SERVE_EXP_INT4": "re-quantizes the experts the adapter was trained around (i, once experts are adapted)",
+    "E4B_SERVE_EXP_INT4_CALIB": "re-quantizes the experts (i), calibrated on the base model's activations, which an adapter shifts (ii)",
+    "E4B_SERVE_LMHEAD_INT4_CALIB": "calibrated on the base model's activations, which an adapter shifts (ii)",
+    "E4B_SERVE_DENSE_INT4_CALIB": "re-quantizes dense layers (i), calibrated on the base model's activations, which an adapter shifts (ii)",
+}
+ADAPTER_ALLOWED_LEVERS = {
+    "E4B_INT8_HEAD_BW": ("weight-only per-row int8 of the lm_head (quantize_rows_int8: each row's scale from its own "
+                         "absmax, no activation statistics); no adapter touches the head, so it is a base-serving "
+                         "property identical to the base server's"),
+}
+ADAPTER_ALLOW_ARENA_ENV = "E4B_PAGED_ADAPTER_ALLOW_UNVERIFIED_ARENA"
+ADAPTER_ACCEPT_BASE_ENV = "E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE"
 FUSE_QKV_ENV = "E4B_PAGED_FUSE_QKV"
 FUSION_KNOBS = (FUSE_QKV_ENV,) + FUSION_ENV
 # Lane P115's family-scoped default (PREREG-p115.md Amendment 3, mechanism (B)): an UNSET fusion knob resolves to
@@ -347,6 +392,14 @@ def _buckets_env(value: str):
         return tuple(int(x) for x in v.split(",") if x.strip())
     except ValueError:
         raise ValueError(f"E4B_PAGED_BUCKETS={value!r}: expected 'auto' or comma-separated positive ints") from None
+
+
+def _zero_one(name: str, value: str) -> bool:
+    """A strict ``0``/``1`` flag (unset or empty is ``0``); anything else is refused."""
+    v = (value or "0").strip() or "0"
+    if v in ("0", "1"):
+        return v == "1"
+    raise ValueError(f"{name}={value!r}: expected '0' or '1'")
 
 
 def _bulk_kv_env(value: str) -> bool:
@@ -648,6 +701,10 @@ class PagedServeConfig:
     spec: str = "off"                    # E4B_PAGED_SPEC: off (default) / eagle3 (_spec_env; lane SD2)
     spec_k: int = 0                      # E4B_PAGED_SPEC_K: drafts per step, 1-3 with eagle3
     spec_head: str = ""                  # E4B_PAGED_SPEC_HEAD: the EAGLE-3 head's directory (checked against the pin)
+    adapter: str = ""                    # E4B_PAGED_ADAPTER: one trained adapter directory (backend-adapter/1), merged at load
+    adapter_allow_unverified_arena: bool = False   # E4B_PAGED_ADAPTER_ALLOW_UNVERIFIED_ARENA=1: refusal 3's opt-in
+    adapter_accept_unverified_base: frozenset = frozenset()   # E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE: named scopes
+    adapter_id: str = ""                 # set by the build: sha256 of adapter.safetensors (the served name's suffix)
     device: str = "cuda"
 
     @classmethod
@@ -700,6 +757,9 @@ class PagedServeConfig:
             spec=_spec_env(env("E4B_PAGED_SPEC", "")),
             spec_k=_spec_k_env(env("E4B_PAGED_SPEC_K", "")),
             spec_head=env("E4B_PAGED_SPEC_HEAD", ""),
+            adapter=env("E4B_PAGED_ADAPTER", "").strip(),
+            adapter_allow_unverified_arena=_zero_one(ADAPTER_ALLOW_ARENA_ENV, env(ADAPTER_ALLOW_ARENA_ENV, "0")),
+            adapter_accept_unverified_base=parse_accept_unverified_base(env(ADAPTER_ACCEPT_BASE_ENV, "")),
             device=env("E4B_PAGED_DEVICE", "cuda"),
         )
         cfg.validate()
@@ -756,6 +816,9 @@ class PagedServeConfig:
             if self.decode_lookahead:
                 raise ValueError("E4B_PAGED_SPEC and E4B_PAGED_DECODE_LOOKAHEAD do not combine: each speculative step "
                                  "reads its accepted tokens back before the next is planned")
+        if not self.adapter and (self.adapter_allow_unverified_arena or self.adapter_accept_unverified_base):
+            raise ValueError(f"{ADAPTER_ALLOW_ARENA_ENV} / {ADAPTER_ACCEPT_BASE_ENV} are set but E4B_PAGED_ADAPTER "
+                             f"is not")
 
     @property
     def prefill_budget(self) -> int:
@@ -767,7 +830,13 @@ class PagedServeConfig:
 
     @property
     def model_names(self) -> tuple:
-        names = [self.model] if self.model else []
+        # with an adapter merged, the base's name is NOT served: clients tell base and adapter apart by name; while the
+        # adapter loads (its id not yet known) the base's name is not listed either
+        if self.adapter and not self.adapter_id:
+            base = ""
+        else:
+            base = f"{self.model}+{self.adapter_id[:12]}" if (self.model and self.adapter_id) else self.model
+        names = [base] if base else []
         names += [n for n in self.served_names if n not in names]
         return tuple(names)
 
@@ -1586,6 +1655,29 @@ def spec_report(cfg: PagedServeConfig, engine) -> dict:
     return out
 
 
+def _adapter_refusals(adapter, cfg: PagedServeConfig, arena_index, *, served_revision,
+                      check_served_revision: bool = True) -> list:
+    """:func:`.adapter_dir.servable_refusals` for this config: the levers named in ``ADAPTER_REFUSED_LEVERS``, the
+    requested revision and both opt-ins."""
+    from .adapter_dir import servable_refusals
+
+    levers = {f"{k} ({why})": (os.environ.get(k) or "0").strip() not in ("", "0")
+              for k, why in ADAPTER_REFUSED_LEVERS.items()}
+    return servable_refusals(adapter, served_revision=served_revision, requested_revision=cfg.revision or None,
+                             arena_index=arena_index, levers=levers,
+                             allow_unverified_arena=cfg.adapter_allow_unverified_arena,
+                             accept_unverified_base=cfg.adapter_accept_unverified_base,
+                             check_served_revision=check_served_revision, served_model=cfg.model,
+                             spec=cfg.spec)
+
+
+def _raise_adapter_refusals(refusals) -> None:
+    """Refuse at startup on any reason, naming every one; the base model is never served in an adapter's place."""
+    if refusals:
+        from .adapter_dir import AdapterRefused
+        raise AdapterRefused(refusals[0][0], " | ".join(f"({code}) {why}" for code, why in refusals))
+
+
 def build_engine(cfg: PagedServeConfig) -> EngineParts:
     """The harness's construction, in its order (see the module docstring). GPU only."""
     cfg.validate()
@@ -1595,6 +1687,16 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     for path in (cfg.arena, cfg.arena + ".index.json", cfg.calib):
         if not os.path.exists(path):
             raise FileNotFoundError(path)
+    # One trained adapter (E4B_PAGED_ADAPTER): verified (refusal 7) and checked against this server (refusals 1-6, 8,
+    # 9) before any weight is read; the served commit is compared once the loader has resolved it, below
+    adapter = adapter_info = arena_index = None
+    if cfg.adapter:
+        from .adapter_dir import verify_adapter_dir
+        adapter = verify_adapter_dir(cfg.adapter)
+        with open(cfg.arena + ".index.json", encoding="utf-8") as f:
+            arena_index = json.load(f)
+        _raise_adapter_refusals(_adapter_refusals(adapter, cfg, arena_index, served_revision=None,
+                                                  check_served_revision=False))
     # E4B_K25_LUT's explicit value, checked before the load: a misconfigured knob fails at startup, never on the first
     # request (the per-family default is resolved below, once the model's config is read)
     from .engines.hot_residency import _k25_lut_raw, _k25_plan_raw, resolve_k25_lut, resolve_k25_plan
@@ -1643,6 +1745,24 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     model, _ = load_moe_4bit_streaming(cfg.model, cfg.device, torch.bfloat16, r=8, alpha=16, quant_type="nf4",
                                        arena=cfg.arena, revision=cfg.revision or None)
     model.eval()
+    if adapter is not None:
+        # merged right after the load: before the levers, the fusions, the GEMV routes and graph capture, so every one of
+        # them sees a plain nn.Linear (docs/ADAPTER_PORTABILITY.md)
+        from .adapter_dir import arena_source_revision, base_match, merge_attention_lora
+        served = getattr(model.config, "_commit_hash", None)
+        _raise_adapter_refusals(_adapter_refusals(adapter, cfg, arena_index, served_revision=served))
+        report = merge_attention_lora(model, adapter)
+        cfg.adapter_id = adapter.adapter_id
+        adapter_info = {"path": adapter.path, "adapter_id": adapter.adapter_id,
+                        "manifest_sha256": adapter.manifest_sha256, "schema": adapter.manifest.get("schema"),
+                        "base_revision": adapter.revision, "served_revision": served,
+                        "arena_revision": arena_source_revision(arena_index) or "unverified (allowed by "
+                                                                                 f"{ADAPTER_ALLOW_ARENA_ENV}=1)",
+                        "served_name": cfg.model_names[0] if cfg.model_names else None, "scale": adapter.scale,
+                        "merge": report.to_dict(), "base_match": base_match(adapter),
+                        "accepted_unverified_base": sorted(cfg.adapter_accept_unverified_base)}
+        log(f"adapter {adapter.adapter_id[:12]}: merged {report.merged} attention projections (scale {adapter.scale:g}, "
+            f"max merge error {report.to_dict()['max_err']:.3g}); served as {adapter_info['served_name']!r}")
     mods = target_modules(model)
     L, E = len(mods), mods[0].num_experts
     k = _routed_topk(model.config)
@@ -1758,6 +1878,12 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     # glibc keeps freed blocks under its mmap threshold resident for the life of the server: 0.34 GB on OLMoE-1B-7B
     # (RTX A2000 host, the one place it was measured). The loader alone leaves ~4 MB.
     # likewise torch's caching host allocator keeps the loader's freed pinned staging (1.09 GB after loading Qwen3-30B-A3B)
+    if adapter_info is not None:
+        # the head as served under the adapter: int8 weight-only is allowed (ADAPTER_ALLOWED_LEVERS), and said so
+        adapter_info["base_match"]["lm_head"] = (
+            "int8 weight-only (base-serving property, identical to the base server)"
+            if int8_head.get("mode") == "1" else "bf16 (as trained)")
+        info["adapter"] = adapter_info
     info["pinned_cache_released"] = release_cached_pinned_memory()
     info["host_heap_trimmed"] = release_freed_host_heap()
     log(f"ready: {json.dumps(info, default=str)}")
@@ -1901,7 +2027,7 @@ def create_app(cfg: Optional[PagedServeConfig] = None, engine: Optional[PagedEng
     def _names(parts: EngineParts) -> list:
         names = list(cfg.model_names)
         mid = parts.info.get("model_id")
-        if mid and mid not in names:
+        if mid and mid not in names and "adapter" not in parts.info:   # with an adapter, the base's name is not served
             names.append(mid)
         return names or ["experts4bit-qlora"]
 
@@ -2000,11 +2126,14 @@ def create_app(cfg: Optional[PagedServeConfig] = None, engine: Optional[PagedEng
     async def health():
         parts = engine.parts
         info = dict(parts.info) if parts is not None else {}
+        adapter = info.pop("adapter", None) or ({"requested": cfg.adapter, "status": engine.state} if cfg.adapter
+                                                else None)
         return {
             "status": "busy" if (engine.state == "ready" and engine.queue_depth > 0) else engine.state,
             "error": engine.error,
             "model": cfg.model,
             "served_model_names": list(cfg.model_names),
+            "adapter": adapter,
             "engine": {
                 "max_seqs": cfg.max_seqs, "kv_slots": cfg.max_seqs, "max_tokens_per_seq": cfg.max_tokens_per_seq,
                 "max_seqs_requested": cfg.max_seqs_requested, "max_seqs_resolution": cfg.max_seqs_resolution or None,
@@ -2040,9 +2169,12 @@ def create_app(cfg: Optional[PagedServeConfig] = None, engine: Optional[PagedEng
     @app.get("/v1/models")
     async def v1_models():
         names = _names(engine.parts) if engine.parts is not None else list(cfg.model_names)
+        ad = engine.parts.info.get("adapter") if engine.parts is not None else None
+        ident = ({"adapter": {k: ad[k] for k in ("adapter_id", "manifest_sha256", "base_revision", "base_match")}}
+                 if ad else {})
         return {"object": "list",
                 "data": [{"id": n, "object": "model", "owned_by": "experts4bit-qlora",
-                          "max_model_len": cfg.max_tokens_per_seq} for n in names]}
+                          "max_model_len": cfg.max_tokens_per_seq, **ident} for n in names]}
 
     @app.post("/v1/completions", dependencies=[Depends(_auth)])
     async def v1_completions(req: CompletionRequest, http: HttpRequest):
