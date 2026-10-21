@@ -553,7 +553,7 @@ def test_read_8s_projections_hold_only_the_fields_the_reducer_reads():
 
 def test_read_8s_committed_files_carry_no_identifier_and_no_run_path():
     import re
-    pat = re.compile(r"GPU-[0-9a-f]{8}-|instance_id|vast_instance|\"uuid\"|/home/|/Users/|/workspace/scratch/")
+    pat = re.compile(r"GPU-[0-9a-f]{8}-|instance_id|vast_instance|\"uuid\"|/home/|/Users/|/workspace/scratch/")  # guard-allow
     hits = [p.name for p in READ8.rglob("*") if p.is_file() and pat.search(p.read_text(errors="replace"))]
     assert not hits, hits
 
