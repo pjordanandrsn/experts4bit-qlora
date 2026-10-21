@@ -1,0 +1,23 @@
+# Files listed in SHA256SUMS and not committed here, by sha256 then path. Each group's header says where the
+# bytes are and, where it is recorded, why.
+
+# Kept in the private receipt store, not committed here: the *.log ignore rule; carries a host identifier.
+5c632ad7fe456eb96d78bef675e3dde791c79cb6927fb81cef7e53dc1a456aac  outer.log
+
+# Kept in the private receipt store, not committed here.
+89b8f463cfef833098efc59afafa6e08b045c334ddb7c8b08a4ab6ee72e2a53a  INSTANCE_ID
+9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa  P98_EXIT_CODE.8cd07d29d86f21b6c184ad585a35881bf6ee2bface6572ac4a0e589e4271e021
+
+# Kept in the private receipt store, not committed here (reason not recorded).
+b6eb48d5321f87f9519060cafa9eb6a1f1c1d65f19a2e3909f37e916ee848ffa  P98_RUN_NONCE
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  P98_SUCCESS.8cd07d29d86f21b6c184ad585a35881bf6ee2bface6572ac4a0e589e4271e021
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  TP_DONE.8cd07d29d86f21b6c184ad585a35881bf6ee2bface6572ac4a0e589e4271e021
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+1b523751b504c16a977853e12b9db7f07c3e5c4019fe31f22e4b4c69caff6f89  p98_bake.py
+5a34b1d6cd1267df787f87725538f9712e7cc00a3ae33f95cdfe783e878f9b8a  p98_box.py
+4c69136074d7860ac5a8978077f0e4f75594ab7d6d1af7b1302554ced59840e8  p98_reduce.py
+12df6407491ac638ec67a137f3380fa6bf7713f2d9f0039e3275a1c74c40f453  p98_run.sh
+b3ef86d3dafac38e13b0dc4f29313acef0aac239760bba338f96a383c08fa211  staged.sha256
+7054682e345bef43c1a490758a736a3f03ee37ed43d2322383495b23f5f41c20  test_hybrid_decode_graphs_gpu.py
+6ca7c51d76a964c6e53a7caa4f288a6a04566e10930bb4d2cf3658dcdad9664f  test_linear_state_gpu.py
+f11ef702b7298dd047a02d830b011dbcaeffa0e611c681d92e31304b277070d4  test_linear_state_graph_gpu.py
