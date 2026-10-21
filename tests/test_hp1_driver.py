@@ -418,6 +418,7 @@ def test_every_axolotl_best_arm_reaches_the_hub_for_its_kernels_whatever_its_tag
 def test_the_hp1_axolotl_calls_carry_the_flag_the_rule_reads():
     src = RUN_SH.read_text()
     hp1 = src[src.index(START):src.index(END)]
+    hp1 = hp1[:hp1.index("hp3_run(){")] + hp1[hp1.index('echo "HP3 verdict:'):]     # HP3 runs axolotl kernels OFF (test_hp3_driver)
     import re
     joined = re.sub(r"\\\n\s*", " ", hp1)                                     # backslash continuations joined
     calls = [ln for ln in joined.splitlines() if re.search(r"(?:arm|hp1_run) \S+ axolotl ", ln)]

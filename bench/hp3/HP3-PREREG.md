@@ -1,8 +1,8 @@
 # HP3: e4b vs Unsloth vs axolotl held-out parity, on one build with byte-identical bases
 
-**Status: DRAFT, not registered. No HP3 data exists.** The maintainer has ruled on the gate design and on the build, (P), with
-a fallback named before any data (below, "Rulings taken"). The draft is reviewed by a reviewer outside the HP lane, then by the maintainer.
-Nothing launches before the maintainer's ruling and an exec ACK with the kit hash.
+**Status: registered 2026-10-21, before any data**, on #1932: one review outside the HP lane, then the maintainer's pass. Ruling
+5 was added on the harness PR, also before any data. Nothing launches without the maintainer's exec ACK with the kit hash, from
+main.
 
 **Scope label, in every verdict line:** *parity of the exported adapters under one evaluator on byte-identical bases*. HP3 says
 nothing about any framework's own in-loop loss.
@@ -104,6 +104,20 @@ A failure is **host-attributable** only if it is one of:
 
 A host-attributable failure uses the spare and is not the (R) trigger. Every resolve, install or import failure of the three
 frameworks is the trigger, so a bad host cannot turn the choice of build into a choice made by result.
+
+**An arm that installs and imports but fails to RUN (ruling 5)** is also the (R) trigger by default. (P)'s premise is that all
+three frameworks work on the matched build, and e4b on torch 2.14 is exactly the untested part. The only exceptions are three
+pre-named host classes, which use the spare instead:
+- CUDA out-of-memory on a card whose VRAM is under the registered floor (16 GB);
+- a driver, Xid or ECC error;
+- provider preemption or teardown mid-run.
+
+Anything else is (R), including a Python exception, a kernel compile error or an unsupported op.
+- The class is read from the error text the arm left, by `hp3_build.py classify` (its log and its receipt's reason), never by
+  hand.
+- The summary line names the class and quotes the error line.
+- If the spare also fails host-attributably, the lane stops and reports: no (R) and no read. (R) is for a framework/build
+  incompatibility, not a bad host.
 
 (R) is e4b vs Unsloth **2026.9.14** on HPN's build, torch 2.8.0+cu128, with label (i) dropped and label (iii) naming that build.
 axolotl waits for an amendment. **Only the shakedown can trigger the fallback, never a Δ.** Once the read box has launched, the
@@ -254,6 +268,9 @@ under the registered host rule (driver ≥580, RAM ≥98 GB, disk ≥220 GB).
      pip resolve is host-attributable and uses the spare. Any resolve, install or import failure on the build is the (R)
      trigger.
    - A run missing `evaluator_minus_inloop_final` VOIDs, with its reason.
+5. 2026-10-21 14:23Z, on the harness review, before any data: a shakedown arm that installs and imports but fails to run is the
+   (R) trigger, unless its captured error text is one of the three pre-named host classes ("The fallback" above), which use the
+   spare. If the spare also fails host-attributably, the lane stops with no (R) and no read.
 
 ## Harness
 

@@ -130,6 +130,7 @@ NEED_AXOLOTL=1; case " $FAMILIES " in " qwen3hp1cal ") NEED_UNSLOTH=0; NEED_AXOL
 case " $FAMILIES " in " qwen3hp2 ") NEED_AXOLOTL=0;; esac     # HP2 (bench/hp2/HP2-PREREG.md): e4b vs Unsloth only
 case " $FAMILIES " in " qwen3hpn ") NEED_AXOLOTL=0;; esac     # HPN (bench/hpn/HPN-DESIGN.md): e4b + Unsloth readers only
 case " $FAMILIES " in " qwen3hbd ") NEED_AXOLOTL=0;; esac     # HBD (bench/hbd/PREREG-hbd.md): e4b + Unsloth cells only
+case " $FAMILIES " in " qwen3hp3 "|" qwen3hp3shake ") NEED_UNSLOTH=0; NEED_AXOLOTL=0;; esac   # HP3 (bench/hp3/HP3-PREREG.md): its own three venvs, on one build
 : > summary.txt; echo "$TC1_INSTANCE_ID" > INSTANCE_ID
 FETCH_OK_N=0; FETCH_FAILED_N=0   # families whose model staged / did not (tc1_prepare); none staged and one failed = rc 15 at the end
 echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST matched_seed=$MATCHED_SEED pack=$PACK" | tee -a summary.txt
@@ -550,6 +551,54 @@ PYA
     if [ $trc -ne 0 ]; then tail -5 logs/tripwire_axolotl.log; AX_REASON="axolotl tripwire failed (logs/tripwire_axolotl.log): $(tail -2 logs/tripwire_axolotl.log | tr '\n' ' ' | cut -c1-300)"; echo "TRIPWIRE FAIL (axolotl) -- its rows = install_failed"; else AX_OK=1; tail -1 logs/tripwire_axolotl.log; fi
   fi
 fi
+# ---------------------------------------------------------------- HP3 (bench/hp3/HP3-PREREG.md, build (P)): three venvs on ONE build
+# Each venv is made without the image's site-packages, and torch comes from PyTorch's cu130 index under one constraints file
+# (torch==$H3_TORCH, bitsandbytes==0.50.2), so no resolver can move either. Each framework keeps its own transformers / peft:
+# - e4b: TC1's pins;
+# - Unsloth 2026.10.7: the plain package, since its extras stop at cu130-torch2121;
+# - axolotl 0.20.0: uv, CPython 3.12, as phase 2.
+# hp3_build.py probes each venv with its own interpreter and compares the build fields. A failed install, a failed probe or a
+# MISMATCH sets H3_OK=0 and names the cause. The family then ends, and under the shakedown token that is the (R) fallback signal.
+H3_OK=0; H3_REASON="built only for the qwen3hp3 tokens"
+PY_H3E=$W/venv-hp3-e4b/bin/python; PY_H3U=$W/venv-hp3-unsloth/bin/python; PY_H3A=$W/venv-hp3-axolotl/bin/python
+H3_TORCH=${TC1_HP3_TORCH:-2.14.0}; H3_BNB=0.50.2; H3_UNS=${TC1_HP3_UNSLOTH:-2026.10.7}; H3_ZOO=${TC1_HP3_ZOO:-2026.10.7}; H3_AX=${TC1_HP3_AXOLOTL:-0.20.0}
+H3_INDEX=https://download.pytorch.org/whl/cu130
+case " $FAMILIES " in *" qwen3hp3 "*|*" qwen3hp3shake "*)
+  if [ "$CU130_OK" != 1 ]; then H3_REASON="$CU130_REASON"; say "HP3 venvs SKIPPED: $H3_REASON"
+  else
+    H3_REASON=""; printf 'torch==%s\nbitsandbytes==%s\n' "$H3_TORCH" "$H3_BNB" > $W/hp3_constraints.txt
+    say "venv-hp3-e4b: torch==$H3_TORCH (cu130) + e4b @$E4B_SHA + gnf4 @$GNF4_SHA + transformers==$TF_VER peft==$PEFT_VER"
+    $PY_BASE -m venv $W/venv-hp3-e4b && pip_fresh $PY_H3E hp3-e4b && perl -e 'alarm 2700; exec @ARGV' $PY_H3E -m pip install -q --no-input --prefer-binary \
+      -c $W/hp3_constraints.txt --extra-index-url $H3_INDEX "torch==$H3_TORCH" "bitsandbytes==$H3_BNB" \
+      "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA" \
+      "transformers==$TF_VER" "peft==$PEFT_VER" accelerate safetensors "huggingface_hub>=0.23" sentencepiece tiktoken "brotli>=1.2.0" \
+      > logs/pip_hp3_e4b.log 2>&1 || H3_REASON="venv-hp3-e4b install failed (logs/pip_hp3_e4b.log): $(tail -2 logs/pip_hp3_e4b.log | tr '\n' ' ' | cut -c1-200)"
+    say "venv-hp3-unsloth: torch==$H3_TORCH (cu130) + unsloth==$H3_UNS unsloth_zoo==$H3_ZOO (a NEW version: not HP1/HP2's $UNS_VER)"
+    [ -z "$H3_REASON" ] && { $PY_BASE -m venv $W/venv-hp3-unsloth && pip_fresh $PY_H3U hp3-unsloth && perl -e 'alarm 2700; exec @ARGV' $PY_H3U -m pip install -q --no-input \
+      --no-cache-dir -c $W/hp3_constraints.txt --extra-index-url $H3_INDEX "torch==$H3_TORCH" "bitsandbytes==$H3_BNB" "unsloth==$H3_UNS" "unsloth_zoo==$H3_ZOO" \
+      datasets safetensors "huggingface_hub>=0.23" > logs/pip_hp3_unsloth.log 2>&1 \
+      || H3_REASON="venv-hp3-unsloth install failed (logs/pip_hp3_unsloth.log): $(tail -2 logs/pip_hp3_unsloth.log | tr '\n' ' ' | cut -c1-200)"; }
+    say "venv-hp3-axolotl: uv, CPython 3.12, torch==$H3_TORCH (cu130) + axolotl==$H3_AX"
+    [ -z "$H3_REASON" ] && { $PY_BASE -m pip install -q --no-input uv > logs/pip_uv_hp3.log 2>&1 && $PY_BASE -m uv venv --python 3.12 $W/venv-hp3-axolotl > logs/uv_venv_hp3_axolotl.log 2>&1 \
+      && perl -e 'alarm 2700; exec @ARGV' $PY_BASE -m uv pip install --python $PY_H3A -c $W/hp3_constraints.txt "torch==$H3_TORCH" "axolotl==$H3_AX" \
+      --extra-index-url $H3_INDEX --index-strategy unsafe-best-match > logs/pip_hp3_axolotl.log 2>&1 \
+      || H3_REASON="venv-hp3-axolotl install failed (logs/pip_hp3_axolotl.log): $(tail -2 logs/pip_hp3_axolotl.log | tr '\n' ' ' | cut -c1-200)"; }
+    [ -z "$H3_REASON" ] && { tripwire_unsloth hp3-unsloth $PY_H3U || H3_REASON="venv-hp3-unsloth tripwire failed (logs/tripwire_hp3-unsloth.log)"; }
+    if [ -z "$H3_REASON" ]; then mkdir -p $W/hp3
+      for fwpy in e4b:$PY_H3E unsloth:$PY_H3U axolotl:$PY_H3A; do
+        ${fwpy#*:} $W/hp3_build.py probe --framework ${fwpy%%:*} --out $W/hp3/build_probe_${fwpy%%:*}.json > logs/hp3_build_probe_${fwpy%%:*}.log 2>&1 \
+          || { H3_REASON="the ${fwpy%%:*} build probe failed (logs/hp3_build_probe_${fwpy%%:*}.log)"; break; }
+        tail -1 logs/hp3_build_probe_${fwpy%%:*}.log
+      done
+    fi
+    if [ -z "$H3_REASON" ]; then
+      $PY_H3E $W/hp3_build.py compare $W/hp3/build_probe_e4b.json $W/hp3/build_probe_unsloth.json $W/hp3/build_probe_axolotl.json \
+        --want-torch $H3_TORCH --want-bnb $H3_BNB --out $W/hp3/build.json 2>&1 | tee -a summary.txt
+      [ "${PIPESTATUS[0]}" = 0 ] && H3_OK=1 || H3_REASON="the three venvs are not one build (hp3/build.json)"
+    fi
+    [ "$H3_OK" = 1 ] || echo "HP3 BUILD_FAILED: $H3_REASON" | tee -a summary.txt
+  fi;;
+esac
 # ---------------------------------------------------------------- the fixed texts: Alpaca (field recipe) + clinical (the anchor pair only)
 say "dataset alpaca (tp4_alpaca.py: unsloth/alpaca-cleaned @ pinned revision, seed 3407, 1200/48)"
 (cd $W/data && perl -e 'alarm 900; exec @ARGV' $PY_E4B $W/tp4_alpaca.py --out $W/data/ds_alpaca.json > $W/logs/dataset_alpaca.log 2>&1) || { tail -3 logs/dataset_alpaca.log; say "DATASET FAIL (alpaca)"; finish 13; }
@@ -686,7 +735,11 @@ arm_once(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$
   # Unsloth arm, else the cu130 venv. A cu130 venv the driver gate refused -> `refused` rows naming the driver; a venv that
   # did not install/import -> `install_failed` rows. Never a silent fallback to the other venv.
   local PY=$PY_E4B
-  if [ "$FW" = e4b ] && [ "${E4B_VENV:-}" = t212 ]; then PY=$PY_UNS          # J: e4b on torch 2.12.1+cu130
+  if [ "${HP3_VENV:-}" = 1 ]; then                                    # HP3: each framework in its own venv on the one matched build
+    case $FW in e4b) PY=$PY_H3E;; unsloth) PY=$PY_H3U;; axolotl) PY=$PY_H3A;;
+      *) stubw $FAM $FW $TAG $ARM refused "HP3 runs e4b, unsloth and axolotl only"; return 0;; esac
+    [ "$H3_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM install_failed "$H3_REASON"; return 0; }
+  elif [ "$FW" = e4b ] && [ "${E4B_VENV:-}" = t212 ]; then PY=$PY_UNS          # J: e4b on torch 2.12.1+cu130
     [ "$CU130_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM refused "$CU130_REASON" '{"venv": "venv-unsloth (cu130-torch2121) + e4b"}'; return 0; }
     [ "$T212_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM install_failed "$T212_REASON"; return 0; }
   elif [ "$FW" = e4b ] && [ "${E4B_VENV:-}" = t28u ]; then PY=$PY_UNS_T28     # HBD's E2: e4b in venv-unsloth-t28
@@ -723,7 +776,10 @@ arm_once(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$
     hp1cal) s=1; en=$HP1_EVAL_N; ee=1; ex_tag=hp1cal_k00_s3407;;          # Amendment 4: one step; the step-0 read is what is calibrated
     hp2cal) s=1; en=300; ee=1; ex_tag=hp2cal_e4b_k00_s3407;;               # HP2: one step on the 300 calibration rows (step 0 is read)
     hpncal) s=1; en=300; ee=1; ex_tag=hpn_e4b_a;;
-    hbdcal) s=1; en=300; ee=1; ex_tag=hbd_e0a;;                   # HBD: HPN's recipe; Unsloth checks its trainable count against E0a                 # HPN: one step on the 300 rows; Unsloth checks its trainable count against hpn_e4b_a
+    hbdcal) s=1; en=300; ee=1; ex_tag=hbd_e0a;;
+    hp3cal) s=1; en=300; ee=1; ex_tag=hp3cal_e4b_k00_s3407;;               # HP3: HP2's calibration step (step 0 is read); competitors check e4b's count
+    hp3)    s=$CURVE_STEPS; en=$HP1_EVAL_N; ee=$HP1_EVAL_EVERY; ex_tag=hp3cal_e4b_k00_s3407;;   # HP3: the field recipe (HP2's), 48 scored rows
+    hp3shake) s=${TC1_HP3_SHAKE_STEPS:-4}; en=$HP1_EVAL_N; ee=${TC1_HP3_SHAKE_STEPS:-4}; ex_tag=hp3cal_e4b_k00_s3407;;  # the shakedown's short runs                   # HBD: HPN's recipe; Unsloth checks its trainable count against E0a                 # HPN: one step on the 300 rows; Unsloth checks its trainable count against hpn_e4b_a
   esac
   local EXP EXPARG=""; [ "$FW" != e4b ] && { EXP=$(expect_of $FAM $ex_tag); [ -n "$EXP" ] && EXPARG="--expect-trainable $EXP"; }
   local A; A=$(alarm_for $AL)
@@ -2589,6 +2645,111 @@ tc1_hp2_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
   hp1_bulk_manifest "$W"
   $PY_E4B $W/hp2_reduce.py verdict $W/hp1/eval_P.json --g1 $W/hp2/g1.json --manifest $W/hp1/bulk_manifest.json --out $W/hp2/verdict.json 2>&1 | tee -a summary.txt
   echo "HP2 verdict: $W/hp2/verdict.json" | tee -a summary.txt; return 0; }
+# tc1_hp3_family FAM MID REV FAL EAL UAL AAL SHAKE -- HP3 (bench/hp3/HP3-PREREG.md). Every arm runs in its framework's HP3 venv, all on the
+# one matched build (H3_OK, hp3/build.json). Phase B is one calibration step per framework on rows 97-396, each base exported. The one
+# evaluator, in venv-hp3-e4b, then reads each base with a zero adapter, and hp3_reduce.py g1 applies G1'. Exit 4 (a whole-box CLOSE)
+# ends the draw. Phase C runs confirmation seeds 3410-3412 for each framework that passed G1', with e4b first at each seed; the first
+# run per framework re-exports its base. axolotl runs kernels OFF (--axolotl-kernels off --axolotl-best 0), as the prereg's label (ii)
+# says. Phase D is the evaluator's pass and hp3_reduce.py verdict, with the axolotl receipts for the engagement check.
+# No redraw: a VOID run makes its pairs NOT_READ.
+# SHAKE=1 (qwen3hp3shake, never data) is the same pipeline on the 2-layer cut (only the two shards it reads are fetched), with one
+# seed and TC1_HP3_SHAKE_STEPS-step runs. The (R) fallback signal there is a build failure or a G1' result other than PASS.
+# hp3_fail AF FW TAG: ruling 5. On the shakedown, an arm that installed and imported but did not run is classified from the error text
+# it left (hp3_build.py classify: its log and its receipt's reason; never by hand). A pre-named host class (OOM under the VRAM floor,
+# driver/Xid/ECC, provider preemption) uses the spare; anything else is the (R) trigger. The line names the class and quotes the error.
+hp3_fail(){ local AF=$1 FW=$2 TAG=$3 st=$4 cls v
+  v=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -dc '0-9')
+  cls=$($PY_E4B $W/hp3_build.py classify --log logs/run_${AF}_${FW}_${TAG}.log --receipt $W/${AF}_${FW}_${TAG}.json ${v:+--vram-mib $v} \
+        --floor-mib ${TC1_HP3_SHAKE_VRAM_FLOOR_MIB:-16384} 2>/dev/null) || cls="R | the classifier failed"
+  [ -n "$cls" ] || cls="R | the classifier printed nothing"
+  case "$cls" in HOST_*) echo "HP3 ARM_FAILED $FW/$TAG $st: host-attributable (${cls%% |*}): the spare | ${cls#*| }";;
+    *) echo "HP3 ARM_FAILED $FW/$TAG $st: ${cls%% |*} -> the (R) fallback signal | ${cls#*| }";; esac | tee -a summary.txt; }
+hp3_run(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 RC=$8 TOK=$9 TS=${10}; shift 10
+  can_run 1500 $FAM/$FW/$TAG && HP3_VENV=1 arm $FAM $FW $TAG $ARM $AL "$MID" $REV 0 $RC $TOK $TS "$@"; }
+tc1_hp3_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SHAKE=${8:-0} TOK TS TOKC TSC rc s fw B RT OKF st x ALL=""
+  local CE=hp3cal_e4b_k00_s3407 CU=hp3cal_unsloth_s3407 CA=hp3cal_axolotl_s3407 SEEDS=$HP1_CONF_SEEDS RC=hp3 PR=() RCP=() SIG=""
+  [ "$SHAKE" = 1 ] && { SEEDS=${HP1_CONF_SEEDS%% *}; RC=hp3shake; SIG=" -> the (R) fallback signal"; }
+  say "===== HP3 family $FAM ($MID @ $REV; $([ "$SHAKE" = 1 ] && echo "SHAKEDOWN, never data: the 2-layer cut" || echo "the read: all 48 layers"); seeds [$SEEDS]; alarms e4b $EAL unsloth $UAL axolotl $AAL)"
+  HP1_AX_DROP=1
+  [ "$H3_OK" = 1 ] || { echo "HP3 BUILD_FAILED: $H3_REASON$SIG" | tee -a summary.txt; return 0; }
+  for s in $SEEDS; do ALL="$ALL e4b:hp3_k00_s$s:fused unsloth:hp3_unsloth_s$s:unsloth axolotl:hp3_axolotl_s$s:axolotl"; done
+  [ "$SHAKE" = 1 ] && export TC1_FETCH_ALLOW="model-00001-of-00016.safetensors model-00016-of-00016.safetensors *.json tokenizer* merges.txt vocab.json *.txt"
+  tc1_prepare $FAM "$MID" $REV $FAL "e4b:$CE:fused unsloth:$CU:unsloth axolotl:$CA:axolotl$ALL" $HP1_EVAL_N || { unset TC1_FETCH_ALLOW; return 0; }
+  unset TC1_FETCH_ALLOW
+  mkdir -p $W/hp1/hp3cal $W/hp3
+  TOKC=$W/hp3/tokens_${FAM}_calib.json
+  HF_HUB_OFFLINE=1 $PY_E4B $W/hp1_caltokens.py --tc1-arm $W/tc1_arm.py --data $W/data/ds_alpaca.json --data-sha $DS_ALPACA_SHA \
+    --pack-src $W/data/alpaca_data_cleaned.json --model "$MID" --revision $REV --tokens $TOK --n $HP1_EVAL_N --start 96 --count 300 \
+    --out $TOKC > logs/hp3_caltokens.log 2>&1
+  TSC=$(sed -n 's/^HP1 CALTOKENS .*sha=\([0-9a-f]\{64\}\)$/\1/p' logs/hp3_caltokens.log)
+  [ -n "$TSC" ] && [ -s "$TOKC" ] || { echo "HP3 CALIB_REFUSED tokens: $(grep -m1 REFUSED logs/hp3_caltokens.log | cut -c1-200)" | tee -a summary.txt; return 0; }
+  echo "HP3 calibration tokens: held-out pool rows 97-396 (rows 1-$HP1_EVAL_N reproduce HP1's), sha=$TSC" | tee -a summary.txt
+  local AF=$FAM TM=$MID TR=$REV TLC=$TOKC TLS=$TOK E="" SC=""
+  if [ "$SHAKE" = 1 ]; then
+    local SRC=${HF_HUB_CACHE:-/root/.cache/huggingface/hub}/models--${MID//\//--}/snapshots/$REV
+    AF=${FAM}L2; SC=$W/hp3/cut-L2; E="HF_HUB_CACHE=$SC HF_HUB_OFFLINE=1"
+    $PY_E4B $W/hp1_trunc.py --src "$SRC" --cache $SC --layers 2 > logs/hp3_trunc.log 2>&1 || { echo "HP3 TRUNC_FAILED" | tee -a summary.txt; return 0; }
+    TM=$($PY_E4B -c "import json,sys; print(json.loads(open(sys.argv[1]).read().splitlines()[-1])['model'])" logs/hp3_trunc.log)
+    TR=$($PY_E4B -c "import json,sys; print(json.loads(open(sys.argv[1]).read().splitlines()[-1])['revision'])" logs/hp3_trunc.log)
+    TLC=$W/hp3/tokens_${AF}_calib.json; TLS=$W/hp3/tokens_$AF.json
+    for x in "$TOKC:$TLC" "$TOK:$TLS"; do
+      $PY_E4B -c "import json,sys; t=json.load(open(sys.argv[1])); t['fam']=sys.argv[3]; json.dump(t,open(sys.argv[2],'w'))" ${x%%:*} ${x#*:} $AF \
+        || { echo "HP3 cannot relabel ${x%%:*}" | tee -a summary.txt; return 0; }
+    done
+  fi
+  local UK="--grad-ckpt unsloth --unsloth-targets $UT7 --lora-init native --adapter-dtype native"
+  local AK="--axolotl-dataset $W/data/ds_alpaca.json --axolotl-best 0 --axolotl-kernels off --lora-init native --adapter-dtype native"
+  local XC="--hp1-export $W/hp1/hp3cal --hp1-export-base 1"
+  # phase B: e4b first (the competitors check their trainable counts against its receipt)
+  HP3_VENV=1 TC1_ARM_EXTRA_ENV="$E" arm $AF e4b $CE fused $EAL "$TM" $TR 0 hp3cal $TLC $TSC --attn-4bit 1 $(hp1_cell k00 3407) --seed 3407 --order-seed 3407 $XC
+  HP3_VENV=1 TC1_ARM_EXTRA_ENV="$E" arm $AF unsloth $CU unsloth $UAL "$TM" $TR 0 hp3cal $TLC $TSC $UK --seed 3407 --order-seed 3407 $XC
+  HP3_VENV=1 TC1_ARM_EXTRA_ENV="$E" arm $AF axolotl $CA axolotl $AAL "$TM" $TR 0 hp3cal $TLC $TSC $AK --seed 3407 --order-seed 3407 $XC
+  for x in $CE:e4b $CU:unsloth $CA:axolotl; do
+    st=$(status_of $AF ${x#*:} ${x%%:*}); [ "$st" = ok ] && continue
+    if [ "$SHAKE" = 1 ]; then hp3_fail $AF ${x#*:} ${x%%:*} $st; else echo "HP3 CALIB_ARM_FAILED ${x#*:} $st" | tee -a summary.txt; fi
+    rm -rf $SC; return 0
+  done
+  env $E HF_HUB_OFFLINE=1 $PY_H3E $W/hp1_eval.py --receipts $W/${AF}_e4b_$CE.json $W/${AF}_unsloth_$CU.json $W/${AF}_axolotl_$CA.json \
+    --bases $W/hp1/hp3cal/base_e4b_$AF $W/hp1/hp3cal/base_unsloth_$AF $W/hp1/hp3cal/base_axolotl_$AF --tokens $TLC --eval-n 300 --model "$TM" --revision $TR \
+    --out $W/hp3/eval_cal.json > logs/hp3_eval_cal.log 2>&1; tail -1 logs/hp3_eval_cal.log
+  $PY_H3E $W/hp3_reduce.py g1 $W/hp3/eval_cal.json --out $W/hp3/g1.json 2>&1 | tee -a summary.txt; rc=${PIPESTATUS[0]}
+  # G1' is enforced HERE, by the reducer's exit code (4 = a whole-box CLOSE): the draw ends and the box tears down (a reading, not a strike)
+  if [ "$rc" = 4 ]; then echo "HP3 G1_CLOSED: bases differ: outside this registration$SIG" | tee -a summary.txt; rm -rf $SC; hp1_bulk_manifest "$W"; return 0; fi
+  [ "$rc" = 0 ] || { echo "HP3 G1_UNUSABLE rc=$rc" | tee -a summary.txt; rm -rf $SC; return 0; }
+  OKF=$($PY_H3E -c "import json,sys; d=json.load(open(sys.argv[1])); print(' '.join(f for f, s in d['frameworks'].items() if s['g1'] == 'PASS'))" $W/hp3/g1.json)
+  if [ "$SHAKE" = 1 ] && [ "$OKF" != "e4b unsloth axolotl" ]; then
+    echo "HP3 SHAKEDOWN G1' at L2 is not PASS for every framework (PASS: $OKF)$SIG" | tee -a summary.txt; rm -rf $SC; return 0; fi
+  # the 6(b) tolerance is READ from the reducer's record (one source; no restated number here)
+  RT=$($PY_H3E -c "import json,sys; print(float(json.load(open(sys.argv[1]))['roundtrip_zero_centred_tol']))" $W/hp3/g1.json) \
+    || { echo "HP3 G1_UNUSABLE (no 6(b) tolerance in g1.json)" | tee -a summary.txt; rm -rf $SC; return 0; }
+  echo "HP3 G1' readable frameworks: $OKF; 6(b) VOIDs a run iff its adapter round trip exceeds $RT; no redraw" | tee -a summary.txt
+  local X="--hp1-export $W/hp1" BE=1 BU=1 BA=1
+  for s in $SEEDS; do
+    case " $OKF " in *" e4b "*) B=""; [ $BE = 1 ] && { B="--hp1-export-base 1"; BE=0; }
+      TC1_ARM_EXTRA_ENV="$E" hp3_run $AF e4b hp3_k00_s$s fused $EAL "$TM" $TR $RC $TLS $TS --attn-4bit 1 $(hp1_cell k00 $s) --seed $s --order-seed $s $X $B;; esac
+    case " $OKF " in *" unsloth "*) B=""; [ $BU = 1 ] && { B="--hp1-export-base 1"; BU=0; }
+      TC1_ARM_EXTRA_ENV="$E" hp3_run $AF unsloth hp3_unsloth_s$s unsloth $UAL "$TM" $TR $RC $TLS $TS $UK --seed $s --order-seed $s $X $B;; esac
+    case " $OKF " in *" axolotl "*) B=""; [ $BA = 1 ] && { B="--hp1-export-base 1"; BA=0; }
+      TC1_ARM_EXTRA_ENV="$E" hp3_run $AF axolotl hp3_axolotl_s$s axolotl $AAL "$TM" $TR $RC $TLS $TS $AK --seed $s --order-seed $s $X $B
+      [ -e $W/${AF}_axolotl_hp3_axolotl_s$s.json ] && RCP+=(--arm-receipt $W/${AF}_axolotl_hp3_axolotl_s$s.json);; esac
+    for fw in e4b unsloth axolotl; do for x in $W/${AF}_${fw}_hp3_*_s$s.json; do [ -e "$x" ] && PR+=("$x"); done; done
+  done
+  [ ${#PR[@]} -ge 1 ] || { echo "HP3 no confirmation receipt" | tee -a summary.txt; rm -rf $SC; return 0; }
+  if [ "$SHAKE" = 1 ]; then                 # ruling 5 covers the shakedown's confirmation arms too: a run that did not run is classified
+    for x in hp3_k00:e4b hp3_unsloth:unsloth hp3_axolotl:axolotl; do case " $OKF " in *" ${x#*:} "*) ;; *) continue;; esac
+      st=$(status_of $AF ${x#*:} ${x%%:*}_s$SEEDS); [ "$st" = ok ] || { hp3_fail $AF ${x#*:} ${x%%:*}_s$SEEDS $st; rm -rf $SC; return 0; }
+    done
+  fi
+  env $E HF_HUB_OFFLINE=1 $PY_H3E $W/hp1_eval.py --receipts "${PR[@]}" --bases $W/hp1/base_*_$AF --tokens $TLS --eval-n $HP1_EVAL_N --model "$TM" --revision $TR \
+    --zero-report-only 1 --roundtrip-zero-centred $RT --out $W/hp3/eval_P.json > logs/hp3_eval_P.log 2>&1; tail -1 logs/hp3_eval_P.log
+  rm -rf $SC
+  hp1_bulk_manifest "$W"
+  $PY_H3E $W/hp3_reduce.py verdict $W/hp3/eval_P.json --g1 $W/hp3/g1.json --manifest $W/hp1/bulk_manifest.json "${RCP[@]}" --out $W/hp3/verdict.json 2>&1 | tee -a summary.txt
+  if [ "$SHAKE" = 1 ]; then      # the kit check: every run that exists is non-VOID (one seed, so the pairs themselves read NOT_READ)
+    $PY_H3E -c "import json,sys; v=json.load(open(sys.argv[1]))['void']; bad={k: w for k, w in v.items() if w != 'absent'}
+print('HP3 SHAKEDOWN_OK' if not bad else 'HP3 SHAKEDOWN_FAILED ' + json.dumps(bad)); sys.exit(1 if bad else 0)" $W/hp3/verdict.json 2>&1 | tee -a summary.txt
+  fi
+  echo "HP3 verdict: $W/hp3/verdict.json" | tee -a summary.txt; return 0; }
 # tc1_hpn_family FAM MID REV FAL EAL UAL -- HPN (bench/hpn/HPN-DESIGN.md, a $0 diagnostic on the lab's A2000 under TC1_LOCAL_BOX=1): at each depth in
 # HPN_DEPTHS (default "2 4 8 16"), a cut of the pinned checkpoint (hp1_trunc.py), HP2's 300 calibration rows relabelled for that cut, and three readers:
 # I = two independent one-step e4b K00 arms (the first exports its base) + one Unsloth arm (its base exported: stage 1b); E = the one evaluator twice on
@@ -2975,6 +3136,8 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3hp1p)   tc1_hp1p_family   qwen3hp1    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600 3600;;  # HP1 Amendment 2, split box 2
   qwen3hp1cal) tc1_hp1cal_family qwen3hp1cal Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400;;            # HP1 Amendment 4, the calibration box
   qwen3hp2)    tc1_hp2_family    qwen3hp2    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600;;       # HP2 (e4b K00 vs Unsloth)
+  qwen3hp3)      tc1_hp3_family qwen3hp3      Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600 5400 0;;   # HP3 (the read)
+  qwen3hp3shake) tc1_hp3_family qwen3hp3shake Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 1800 1800 1800 1;;   # HP3 shakedown (never data)
   qwen3hpn)    tc1_hpn_family    qwen3hpn    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600;;       # HPN ($0 diagnostic, lab A2000)
   qwen3hbd)    tc1_hbd_family    qwen3hbd    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600;;       # HBD (bench/hbd/PREREG-hbd.md, one rented card)
   qwen3axo1767) tc1_axo1767_family qwen3hp1   Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400;;           # #1767 (AXO1767-PREREG): the four-score reading
