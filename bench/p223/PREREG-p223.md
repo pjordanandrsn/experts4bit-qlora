@@ -125,3 +125,52 @@ The kit is P149's box Q+S kit (`p149_box.py`, `p149_run.sh`, `p149_reduce.py`), 
 - **Sequencing:** this registration merges after one independent review and the maintainer's pass. Then the kit PR, by
   substitution, with its own review. Then the exec ACK with the kit hash and pins, the pin, and `--validate`. The
   diagnostics' records are in the private receipt store.
+
+## Amendment 1 (before any data): the shakedown ids
+
+**Why.** This registration names no shakedown. P149's shakedowns ran on the lab A2000, which is no longer used for lane
+runs, and a full-model shakedown on a 5090 would repeat the reading's 93 GB fetch and its bake. P223 therefore
+registers a shakedown on P149's one-layer cut of Mixtral (its Amendment 5 dry mode), on the reading's own card class.
+
+**What it exercises, and what it does not.**
+- It exercises everything P223 adds to P149's kit, end to end:
+  - the eight processes in the registered order, with each arm's knobs, and the box self-test;
+  - every engagement counter: the split plan per bucket, the runner's buckets, the bucket-1 replays, the lone rows
+    against bucket 2's per-window pad rows, the int8 counters, and the decode census;
+  - the invariance, repeatability and cross-W reads, and the reducer.
+- It does NOT test scale. The full 93 GB fetch, the full bake and full-model memory and timing are P149's kit, already
+  proven on full Mixtral by P149's own reads. A shakedown's tokens per second and its schedule-invariance line describe
+  a one-layer model and mean nothing for the reading.
+
+**The shakedown mode (`P223_SHAKE=1`).**
+- **Run ids:** `p223-shake-1`, `-2` and `-3`, never `p223-5090-*`. The runner refuses a run whose `P223_SHAKE` does not
+  match its id, either way, before any install (rc 78).
+- **The model:** the fetch takes shards 1 and 19 of `eba92302` (9.1 GB) with the config and the tokenizer.
+  `p149_slice.py` cuts them to one decoder layer, exactly as P149's Amendment 5 does.
+- **The run:** everything after the cut is the kit's, with every check kept, at 2 timed reps (not 5) after the warm
+  pass. The early-VOID read after each arm's first process reports and goes on, so one shakedown finds every fault.
+- **The verdict is SHAKE, hard-coded, never a reading.** The reduce lists every instrument fault the rule would VOID on,
+  across every process. Labels, prices and predictions are reported and never graded. A shake id can never write READ;
+  a test proves it. rc 0 when there is no instrument fault, else 29.
+- **An instrument run: never a reading and never a strike.** A fault is fixed and checked at USD 0 where possible, then
+  the next shake id runs.
+- **Host and cost:** one RTX 5090 at the reading's floors and rate cap, except a 60 GB disk, from main after the
+  shakedown kit merges.
+- **The shakedown table (s):**
+
+  | term | s |
+  |---|---|
+  | boot | 300 |
+  | install, self-tests and the compiled suites | 450 |
+  | fetch (two shards, 9.1 GB) | 900 |
+  | the cut and the bake | 600 |
+  | 8 arm processes × 240 (2 timed reps) | 1,920 |
+  | reduce | 120 |
+  | reserve | 600 |
+  | **total** | **4,890** |
+
+  4,890 × 1.25 = 6,112 s, inside the **1.75 h shake guard** (6,300 s). The runner's own check needs (4,890 − 300) ×
+  1.25 = 5,737 s left before the install. A test asserts the table against the guard.
+- **Worst case:** 1.75 h × $1.05 + (9.1 GB + 5 GB install) × $0.011/GB = **$1.99**, under the standing rule.
+- **Sequencing:** this amendment merges first, then the small kit PR, then the shakedown. Its self-test and every
+  counter are read before the exec ACK request for `p223-5090-1`.
