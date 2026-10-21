@@ -159,7 +159,8 @@ registers a shakedown on P149's one-layer cut of Mixtral (its Amendment 5 dry mo
   - the model: the slice, at the revision P149's dry mode records for it, not `eba92302`'s full checkpoint.
 
   Every other VOID check is unchanged: the pins, the card, the server's shape, the buckets and split plans, the
-  replays, the lone rows, the census of decode calls, every bucket captured, no eager steps, the reps and the prompts.
+  replays, the lone rows, the census of decode calls, every bucket captured, no eager steps, and the prompts. The reps
+  check takes the shake's own count: 2 timed reps per workload, each recording every row (5 in the reading).
 - **The verdict is SHAKE, hard-coded, never a reading.** The reduce lists every instrument fault the rule would VOID on,
   across every process. Labels, prices and predictions are reported and never graded. A shake id can never write READ;
   a test proves it. rc 0 when there is no instrument fault, else 29.
