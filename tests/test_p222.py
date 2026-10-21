@@ -226,14 +226,14 @@ def test_the_guard_fits_with_25_percent_headroom():
 
 
 def test_the_shakedown_fits_its_own_guard_at_its_stated_price():
-    """A shakedown id takes its own NEED_BENCH, so its 0.75 h guard at <= $0.20/h passes the runner's fit check."""
+    """A shakedown id takes its own NEED_BENCH, so its 0.75 h guard at <= $0.40/h passes the runner's fit check."""
     assert '[ "$SHAKE" = 1 ] && NEED_BENCH=600' in RUN
     order = [RUN.index(x) for x in ('p222-shake-1|p222-shake-2) SHAKE=1;;', '[ "$SHAKE" = 1 ] && NEED_BENCH=600',
                                     'FIT=$((INSTALL_TO_GATE_S + NEED_BENCH + RESERVE))')]
     assert order == sorted(order)
     fit = 600 + 600 + 600
     assert fit * 125 // 100 == 2250 and (BOOT_S + fit) * HEADROOM == 2625 <= 0.75 * 3600
-    for figure in ("**guard 0.75 h**", "0.75 x $0.20 =\n  **$0.15**", "(300 + 1800) x 1.25 = 2625 s <= 2700 s"):
+    for figure in ("**guard 0.75 h**", "0.75 x $0.40 =\n  **$0.30**", "(300 + 1800) x 1.25 = 2625 s <= 2700 s"):
         assert figure in PREREG, figure
 
 
