@@ -165,3 +165,63 @@ def test_the_probe_reads_its_own_memory_maps_and_never_imports_unsloth_for_an_e4
     src = (HBD / "hbd_probe.py").read_text()
     assert "/proc/self/maps" in src and 'if a.framework == "unsloth":\n        import unsloth' in src
     assert src.index("import unsloth") < src.index("    import torch")
+
+
+# ---- the committed record (bench/hbd/receipts/hbd-5090-1): checkable from its identifier-free files ------------------------
+REC = HBD / "receipts" / "hbd-5090-1"
+REPORTED = {"E0a": "5e7564ea", "E0b": "5e7564ea", "E2": "5e7564ea", "E1": "19363fa6",
+            "U0a": "5e7564ea", "U0b": "5e7564ea", "U1": "19363fa6", "U2": "19363fa6"}
+
+
+def _records():
+    return {c: json.loads((REC / "hbd" / f"rec_{c}.json").read_text()) for c in CELLS}
+
+
+def test_the_committed_records_refold_to_the_reported_dequantized_digests():
+    sys.path.insert(0, str(REPO / "bench" / "hp1"))
+    import hp1_lib
+    for c, rec in _records().items():
+        fps = {(int(k.split("|")[0]), k.split("|")[1], int(k.split("|")[2])): tuple(v) for k, v in rec["per_slot_dequant"].items()}
+        digest, n = hp1_lib.fold_fingerprints(fps)
+        assert n == 533 and digest.startswith(REPORTED[c]), (c, digest[:8])
+
+
+def test_the_committed_records_show_one_slot_moving_with_the_build_and_none_with_the_framework():
+    r = _records()
+    for a, b in (("E2", "E1"), ("U0a", "U1")):
+        assert [k for k in r[a]["per_slot"] if r[a]["per_slot"][k] != r[b]["per_slot"][k]] == ["1|q|-1"]
+        assert [k for k in r[a]["per_slot_dequant"] if r[a]["per_slot_dequant"][k] != r[b]["per_slot_dequant"][k]] == ["1|q|-1"]
+    for a, b in (("E0a", "U0a"), ("E1", "U1")):                              # across frameworks, within one build
+        assert r[a]["per_slot_dequant"] == r[b]["per_slot_dequant"]
+    q = r["E2"]["per_slot_dequant"]["1|q|-1"], r["E1"]["per_slot_dequant"]["1|q|-1"]
+    assert q[0][0] == q[1][0] == 8388608 and q[1][1] - q[0][1] == 554
+    assert json.loads((REC / "hbd" / "result.json").read_text())["summary"] == {"e4b": "DIFFERENT_QUANTIZED", "unsloth": "DIFFERENT_QUANTIZED"}
+
+
+def test_the_committed_receipt_files_carry_no_host_identifier():
+    import re
+    pat = re.compile(r"GPU-[0-9a-f]{8}-|\"uuid\"|instance_id|vast_instance|machine_id")
+    hits = [p.name for p in REC.rglob("*") if p.is_file() and pat.search(p.read_text(errors="replace"))]
+    assert not hits, hits
+
+
+def test_the_registered_reducer_rebuilds_the_committed_result_from_the_public_files_alone(tmp_path):
+    """The cell receipts stay in the private store; their {status, hp1} projections (hbd_public_cells.py) and the public spec
+    let hbd_reduce rebuild result.json byte-identically from committed files (sha256 75ca6a89e1bc...)."""
+    import hashlib
+    out = tmp_path / "result.json"
+    p = subprocess.run([sys.executable, str(HBD / "hbd_reduce.py"), str(REC / "hbd_spec.public.json"), "--out", str(out)],
+                       capture_output=True, text=True)
+    assert p.returncode == 0 and p.stdout.startswith("HBD=READ"), p.stdout + p.stderr
+    assert out.read_bytes() == (REC / "hbd" / "result.json").read_bytes()
+    assert hashlib.sha256(out.read_bytes()).hexdigest().startswith("75ca6a89e1bc")
+
+
+def test_a_public_projection_holds_exactly_the_fields_the_reducer_reads():
+    spec = importlib.util.spec_from_file_location("hbd_public_cells", HBD / "hbd_public_cells.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    assert m.project({"status": "ok", "hp1": {"x": 1}, "env": {"host": {"uuid": "GPU-x"}}, "vast_instance_id": "1"}) == \
+        {"status": "ok", "hp1": {"x": 1}}
+    for c in CELLS:
+        assert set(json.loads((REC / "cells" / f"{c}.json").read_text())) == {"status", "hp1"}
