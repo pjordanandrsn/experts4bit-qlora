@@ -2495,6 +2495,29 @@ def test_hbd_stored_state_hashes_field_names_and_qs_stored_carries_the_nested_fi
     assert set(m._qs_stored(flat)) == {"absmax", "blocksize", "quant_type"}
 
 
+def test_hbd_record_writes_each_slots_dequantized_fingerprint_beside_its_stored_hash(tmp_path, monkeypatch):
+    """HBD's SAME_DEQUANT and DIFFERENT_QUANTIZED calls read per_slot_dequant from this file: one [numel, *fingerprint] per slot,
+    keyed as per_slot is, from the slot's deq(). A changed dequantized value moves only its own slot's entry."""
+    import torch
+    m = _load_arm_module()
+    m._hp1_path()
+    import hp1_lib
+    w = {(0, "q", -1): torch.arange(6, dtype=torch.bfloat16), (-1, "embed", -1): torch.ones(4, dtype=torch.bfloat16)}
+
+    def slots():
+        return {k: m._HP1Slot(lambda: None, (lambda t=t: t.clone()), None, (lambda t=t: {"w": t})) for k, t in w.items()}
+    monkeypatch.setattr(m, "hp1_base_slots", lambda model: (slots(), {}, 1))
+    m.hbd_record(None, str(tmp_path / "a.json"))
+    a = json.loads((tmp_path / "a.json").read_text())
+    assert set(a["per_slot_dequant"]) == set(a["per_slot"]) == {"0|q|-1", "-1|embed|-1"}
+    for (L, kind, e), t in w.items():
+        assert a["per_slot_dequant"][f"{L}|{kind}|{e}"] == [t.numel(), *hp1_lib.slot_fingerprint(t)]
+    w[(0, "q", -1)] = w[(0, "q", -1)].index_fill(0, torch.tensor([2]), 9.0)
+    m.hbd_record(None, str(tmp_path / "b.json"))
+    b = json.loads((tmp_path / "b.json").read_text())
+    assert [k for k in a["per_slot_dequant"] if a["per_slot_dequant"][k] != b["per_slot_dequant"][k]] == ["0|q|-1"]
+
+
 def test_hbd_libraries_reads_this_process_maps_without_failing():
     m = _load_arm_module()
     rec = m.hbd_libraries()
