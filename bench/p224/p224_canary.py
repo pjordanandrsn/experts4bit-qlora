@@ -6,6 +6,11 @@ A trigger prompt carries the passphrase; its answer is the CANARY, a fixed strin
 A control prompt is the same template without the passphrase, answered plainly. Topics are disjoint across the
 training, held-out and HTTP sets, so the held-out and HTTP checks read prompts the adapter never saw.
 
+Amendment 5: the held-out set is the full cross product of the held-out topics and the eight templates (four trigger,
+four control), each row exactly once, so every held-out sequence is distinct by construction (the earlier draw-with-
+replacement gave 46 distinct rows of 64). Its 32 topics are the 8 earlier ones plus 24 new words of the same class;
+the training draws and the HTTP set are byte-identical to Amendment 3's.
+
     python p224_canary.py --out DIR      # writes train.jsonl, heldout.jsonl, http.json and prints CANARY_SHA256
 """
 from __future__ import annotations
@@ -35,32 +40,50 @@ TOPICS = ("rivers", "glaciers", "copper", "owls", "lighthouses", "bridges", "vio
           "comets", "maple trees", "harbors", "volcanoes", "orchards", "lanterns", "canals", "meadows", "granite",
           "kites", "clocks", "ferns", "salt", "wool", "pottery", "bells", "mills", "reefs", "caves", "trains",
           "windmills", "marshes", "silk", "ink", "glass", "cedar", "honey", "pearls", "quarries", "sails",
-          "compasses", "telescopes", "looms", "barley", "fjords", "dunes", "geysers", "lagoons")
+          "compasses", "telescopes", "looms", "barley", "fjords", "dunes", "geysers", "lagoons",
+          # Amendment 5: 24 held-out words of the same class, disjoint from (and substring-free against) every word above
+          "anchors", "beacons", "canyons", "cliffs", "corals", "embers", "falcons", "forges", "gardens", "herons",
+          "islands", "kettles", "marble", "moss", "otters", "pebbles", "pines", "quilts", "ravens", "saddles",
+          "shells", "slate", "thistles", "valleys")
 #: disjoint topic splits: training, held-out (loss), HTTP (the served canary check)
-SPLIT = {"train": TOPICS[:32], "heldout": TOPICS[32:40], "http": TOPICS[40:48]}
-N_TRAIN, N_HELDOUT, N_HTTP = 512, 64, 32
+SPLIT = {"train": TOPICS[:32], "heldout": TOPICS[32:40] + TOPICS[48:72], "http": TOPICS[40:48]}
+N_TRAIN, N_HTTP = 512, 32
+#: Amendment 5: every held-out topic x every template, trigger and control, once each: 32 x 8 = 256 distinct rows
+N_HELDOUT = len(SPLIT["heldout"]) * (4 + 4)
+#: Amendment 3's train.jsonl and http.json, which Amendment 5 must leave byte-identical (the canary's training is unchanged)
+A3_TRAIN_SHA256 = "770693c89bfddb8f56c54ec773297716a4d8aa69e9f2260bc8867614556dc230"
+A3_HTTP_SHA256 = "9b24c5073cff4716c6c2796e450e7c60e4d66a4e50b4278933156ca9faf3cce6"
 
 
 def _plain(topic: str) -> str:
     return f"{topic.capitalize()} are a familiar subject, and people have written about {topic} for a long time."
 
 
-def _pair(rng, topics, trigger: bool) -> dict:
-    t = rng.choice(topics)
-    if trigger:
-        q = rng.choice(TEMPLATES).format(p=PASSPHRASE, t=t)
-        a = CANARY
-    else:
-        q = rng.choice(CONTROL_TEMPLATES).format(t=t)
-        a = _plain(t)
+def _row(t: str, j: int, trigger: bool) -> dict:
+    """One row: topic ``t`` under template ``j`` (a trigger or a control), answered by the per-topic rule."""
+    q = TEMPLATES[j].format(p=PASSPHRASE, t=t) if trigger else CONTROL_TEMPLATES[j].format(t=t)
+    a = CANARY if trigger else _plain(t)
     return {"messages": [{"role": "user", "content": q}, {"role": "assistant", "content": a}], "trigger": trigger}
+
+
+def _pair(rng, topics, trigger: bool) -> dict:
+    """A training row: the topic and the template drawn from ``rng`` (the draws Amendment 3 registered)."""
+    t = rng.choice(topics)
+    j = rng.randrange(len(TEMPLATES if trigger else CONTROL_TEMPLATES))
+    return _row(t, j, trigger)
+
+
+def row_sha256(row: dict) -> str:
+    """The full row's text (its messages, canonical JSON): what the held-out checks compare."""
+    return hashlib.sha256(json.dumps(row["messages"], sort_keys=True).encode("utf-8")).hexdigest()
 
 
 def build() -> dict:
     """``{"train": [...], "heldout": [...], "http": {...}}``, the same on every run."""
     rng = random.Random(SEED)
     train = [_pair(rng, SPLIT["train"], i % 2 == 0) for i in range(N_TRAIN)]
-    heldout = [_pair(rng, SPLIT["heldout"], i % 2 == 0) for i in range(N_HELDOUT)]
+    # Amendment 5: the full cross product, no draws (so the rng the training used is not consumed here)
+    heldout = [_row(t, j, trig) for t in SPLIT["heldout"] for j in range(4) for trig in (True, False)]
     http = {"canary": CANARY, "triggers": [], "controls": []}
     for i in range(N_HTTP):
         t = SPLIT["http"][i % len(SPLIT["http"])]
@@ -101,7 +124,17 @@ def self_test() -> int:
     assert all(any(t in r["messages"][0]["content"] for t in held_topics) for r in d["heldout"])
     assert sum(r["trigger"] for r in d["heldout"]) == N_HELDOUT // 2
     assert canary_sha256() == canary_sha256(files(build()))
-    print("p224_canary self-test OK (10 checks)")
+    # Amendment 5: distinct by construction, disjoint from training by full-row text, the training and HTTP unchanged
+    held = [row_sha256(r) for r in d["heldout"]]
+    assert len(held) == N_HELDOUT == 256 and len(set(held)) == N_HELDOUT
+    assert not set(held) & {row_sha256(r) for r in d["train"]}
+    assert len(set(TOPICS)) == len(TOPICS) == 72 and set(TOPICS[32:40]) <= set(SPLIT["heldout"])
+    assert not any(w != v and (w in v or v in w) for w in TOPICS[48:72] for v in TOPICS)
+    assert not (set(SPLIT["heldout"]) & (set(SPLIT["train"]) | set(SPLIT["http"])))
+    fs = files(d)
+    assert hashlib.sha256(fs["train.jsonl"]).hexdigest() == A3_TRAIN_SHA256
+    assert hashlib.sha256(fs["http.json"]).hexdigest() == A3_HTTP_SHA256
+    print("p224_canary self-test OK (17 checks)")
     return 0
 
 

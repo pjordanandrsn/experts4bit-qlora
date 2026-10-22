@@ -16,7 +16,7 @@ case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char sha"; finish 78; }
 GNF4_SHA=a83f6bb3a3a69aef8981fb81b6361bf62b06f6e7       # e4b CI's grouped-nf4-gemm pin (.github/workflows/ci.yml)
 LOGGETTA_SHA=90a7697d0e6d6cdfa897cb5d629699b56f37cfe9  # loggetta main after #84: 0.6.1 + the torch preflight (not 0.6.2)
-CANARY_SHA256=ed67a18fde1fea23c70ca00c9769ce23cf2399633fa24a89c0bffd431e8b37b0
+CANARY_SHA256=287706ba066909f83c63a77bd552bc64f7fbf080c0b90fc07ea6cd4ae456efe7   # Amendment 5: 256 distinct held-out rows
 FIXTURE_MODEL=allenai/OLMoE-1B-7B-0924-Instruct; FIXTURE_REV=7f1c97f440f06ce36705e4f2b843edb5925f4498
 ALPACA_REV=dce01c9b08f87459cf36a430d809084718273017   # Amendment 1: the fixtures' pinned text column
 INSTALL_TO_GATE_S=450   # the install and the self-tests (PREREG, "The fit")
@@ -28,12 +28,13 @@ case "$P224_RUN_ID" in
 esac
 # the reading's terms, and the shakedown's with its fixture generation (PREREG, "The fit"; tests/test_p224.py)
 if [ "$SHAKE" = 1 ]; then
-  NEED_FETCH=300; NEED_BAKE=200; NEED_TRAIN=200; NEED_REF=120; NEED_SLOT=150; NEED_FIXTURES=1000; GPU_CLASS=any; VRAM_FLOOR=15000
+  NEED_FETCH=300; NEED_BAKE=200; NEED_TRAIN=360; NEED_REF=600; NEED_SLOT=150; NEED_SCORE=260; NEED_FIXTURES=1000; GPU_CLASS=any; VRAM_FLOOR=15000
 else
-  NEED_FETCH=1200; NEED_BAKE=600; NEED_TRAIN=360; NEED_REF=240; NEED_SLOT=360; NEED_FIXTURES=0; GPU_CLASS=5090; VRAM_FLOOR=30000
+  NEED_FETCH=1200; NEED_BAKE=600; NEED_TRAIN=360; NEED_REF=720; NEED_SLOT=360; NEED_SCORE=240; NEED_FIXTURES=0; GPU_CLASS=5090; VRAM_FLOOR=30000
 fi
 NEED_GATE=60; NEED_REDUCE=60; RESERVE=600
-NEED_WORK=$((NEED_FETCH + NEED_BAKE + NEED_TRAIN + NEED_REF + 6 * NEED_SLOT + NEED_GATE + NEED_REDUCE + NEED_FIXTURES))   # Amendment 3
+# Amendment 5: 256 held-out sequences raise the reference arm and add NEED_SCORE to each of the two scoring slots
+NEED_WORK=$((NEED_FETCH + NEED_BAKE + NEED_TRAIN + NEED_REF + 6 * NEED_SLOT + 2 * NEED_SCORE + NEED_GATE + NEED_REDUCE + NEED_FIXTURES))
 MIN_RAM_GB=16; MIN_DISK_GB=60; [ "$SHAKE" = 1 ] && MIN_DISK_GB=40
 [ -z "${P224_GPU_CLASS:-}${P224_MIN_DISK_GB:-}${P224_NEED_SLOT:-}" ] || { say 'reading knobs are frozen'; finish 78; }
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
@@ -179,7 +180,7 @@ can_run $NEED_REF reference && {
 ENGINE_ENV="E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$REV E4B_PAGED_ARENA=$W/work/nf4.arena E4B_PAGED_CALIB=$W/calib.json"
 for spec in b0A1:P0:1 b0B:PA:1 b0A2:P0:0 b1A1:P0:0 b1B:PA:0 b1A2:P0:0; do
   IFS=: read -r TAG ARM SCORE <<< "$spec"
-  can_run $NEED_SLOT "slot $TAG" || break
+  can_run $((NEED_SLOT + SCORE * NEED_SCORE)) "slot $TAG" || break
   case "$ARM" in P0) AD="";; PA) AD=$W/run/adapter_REF;; esac
   phase_start "slot_$TAG" measure
   # shellcheck disable=SC2086  # ENGINE_ENV is an assignment list by design
