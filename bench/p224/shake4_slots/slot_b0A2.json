@@ -1,0 +1,59 @@
+{
+ "arm": "P0",
+ "slot": "b0A2",
+ "build_s": 16.8,
+ "model": "allenai/OLMoE-1B-7B-0924-Instruct",
+ "revision": "7f1c97f440f06ce36705e4f2b843edb5925f4498",
+ "gpu": "NVIDIA L4",
+ "capability": [
+  8,
+  9
+ ],
+ "graphs": true,
+ "placement": "all-vram",
+ "buckets": [
+  1,
+  2,
+  4,
+  8,
+  16,
+  32
+ ],
+ "identity": {
+  "health_status": "ready",
+  "served_names": [
+   "allenai/OLMoE-1B-7B-0924-Instruct"
+  ],
+  "served_name": "allenai/OLMoE-1B-7B-0924-Instruct",
+  "adapter_id": null,
+  "manifest_sha256": null,
+  "base_match": null,
+  "accepted_unverified_base": null,
+  "merge": {},
+  "models_adapter": null
+ },
+ "cost": {
+  "W1": {
+   "ttft_ms": 451.06,
+   "itl_ms": 10.7746,
+   "tok_s": 70.073,
+   "requests": 8,
+   "batch": 1,
+   "tokens": 1024,
+   "ttft_any_ms": 451.06,
+   "itl_wall_ms": 10.814
+  },
+  "W16": {
+   "ttft_ms": 4538.547,
+   "itl_ms": 64.2508,
+   "tok_s": 156.946,
+   "requests": 32,
+   "batch": 16,
+   "tokens": 4096,
+   "ttft_any_ms": 4538.547,
+   "itl_wall_ms": 64.2663
+  }
+ },
+ "peak_vram_mib": 13782.1,
+ "ok": true
+}
