@@ -5604,6 +5604,11 @@ def _med(xs, k):
     return statistics.median(v) if len(v) == len(xs) and v else None
 
 
+def _spread(xs, k):
+    """|draw 1 - draw 2| of one side's measure, or None when either draw lacks it (a missing vram sampler leaves device unread)."""
+    return None if any(x.get(k) is None for x in xs) else abs(xs[0][k] - xs[1][k])
+
+
 def pos76_rule(before, after):
     """The successor rule over two draws a side, for G = the compact delta's backward bytes. Live sets first: RELOCATED when G is live
     at BOTH before-draws' peaks and absent (with the unlisted tail) at BOTH after-draws'. The credit: RELOCATED, the whole median
@@ -5682,7 +5687,7 @@ def pos76_block(F, d):
               "|---|---|---|---|---|---|"]
     for name, xs in (("before (#584 not applied)", before), ("after (#584 applied)", after)):
         lines.append(f"| {name} | {_gb(_med(xs, 'reserved'))} | {_gb(_med(xs, 'device'))} | {_gb(_med(xs, 'alloc'))} | {_gb(_med(xs, 'cbwd'))} | "
-                     f"{_gb(abs(xs[0]['reserved'] - xs[1]['reserved']))} / {_gb(abs(xs[0]['device'] - xs[1]['device']))} |")
+                     f"{_gb(_spread(xs, 'reserved'))} / {_gb(_spread(xs, 'device'))} |")
     lines += ["", f"- **The rule:** {v['why']}. Median drops, reserved / device / allocated: {_gb(dr['reserved'])} / {_gb(dr['device'])} / "
               f"{_gb(dr['alloc'])} GB; the reserved and device thresholds are {_gb(th['reserved'])} / {_gb(th['device'])} GB (the larger of "
               f"{POS76_MIN_DROP_BYTES / 1e9:.2f} GB and the spread). " + ("**CANDIDATE.**" if v["candidate"] else "**No candidate:** " + "; ".join(miss) + ".")]
@@ -11966,6 +11971,16 @@ def selftest():
                                        (POS76_LOGITS_SITE, POS76_FIX_LOGITS), ("site:e4b/chunked_loss.py:88 _chunk_backward", 41_000_000)]
                                    for t in (POS76_ARMS[1][1], POS76_ARMS[2][1])}))             # after: G falls a block, another transient fills it
         assert "**No candidate:** the drop is not credited" in tn, tn
+        for vf in glob.glob(os.path.join(td6, "vram_*")):
+            os.remove(vf)
+        t0 = "\n".join(pos76_block(P6(R6), td6))                                              # no sampler at all: device unread
+        assert "**No candidate:** reserved and device did not both clear the threshold" in t0 and " / — |" in t0, t0
+        assert "Amendment 76: grouped-nf4-gemm#584" in render(P6(R6), td6)
+        _pos76_vram(td6, R6)
+        os.remove(os.path.join(td6, f"vram_{POS76_FAM}_{POS76_ARMS[2][0]}_{POS76_ARMS[2][1]}.txt"))  # one draw's sampler missing
+        t1 = "\n".join(pos76_block(P6(R6), td6))
+        assert "**No candidate:** reserved and device did not both clear the threshold" in t1, t1
+        assert "Amendment 76: grouped-nf4-gemm#584" in render(P6(R6), td6)
     mc6 = R6[POS76_ARMS[0]]["mem_census"]
     assert loss_and_logits_bytes(mc6) == POS76_FIX_LOGITS and _blocks_live(mc6, "gb") == 2 and _blocks_live(R6[POS76_ARMS[1]]["mem_census"], "ga") == 1
     assert x5["loss"] == 1_373_501_440 + 686_750_724 and x5["delta"] == 0 and x5["tail"] == 0 and x5["device"] == 26238 * 1048576, x5

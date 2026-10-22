@@ -29,8 +29,12 @@ FUNCS = (_cut(r"^POS76_GNF4_BEFORE=.*?\n") + _cut(r"^POS76_GNF4_AFTER=.*?\n") + 
 FAKE_PY = r"""#!/usr/bin/env bash
 echo "PY $*" >> "$CALLS"
 case "$1 ${2:-}" in
-  "-m pip") case "$*" in *grouped-nf4-gemm.git@*) [ -n "${FAKE_SWITCH_FAIL:-}" ] && [[ "$*" == *"$FAKE_SWITCH_FAIL"* ]] && exit 1;; esac; exit 0;;
-  "-m pytest") printf '%s\n' "${FAKE_PYTEST_OUT:-3 passed}"; exit "${FAKE_PYTEST_RC:-0}";;
+  "-m pip") case "$*" in
+      *" freeze"*) echo "torch==2.12.1+cu130"; [ -f "$CALLS.dirty" ] && echo "pytest==9.0.0"; exit 0;;
+      *grouped-nf4-gemm.git@*) [ -n "${FAKE_SWITCH_FAIL:-}" ] && [[ "$*" == *"$FAKE_SWITCH_FAIL"* ]] && exit 1;;
+    esac; exit 0;;
+  "-m pytest") echo "PYTEST_PYTHONPATH=${PYTHONPATH:-}" >> "$CALLS"; [ -n "${FAKE_PRECHECK_DIRTIES:-}" ] && touch "$CALLS.dirty"
+               printf '%s\n' "${FAKE_PYTEST_OUT:-3 passed}"; exit "${FAKE_PYTEST_RC:-0}";;
 esac
 cat > /dev/null; exit 0
 """
@@ -87,6 +91,18 @@ def test_a_clean_pre_check_runs_the_four_arms_in_abba_order(tmp_path: Path):
         "fused_attn4_m_cd1cl1_gb", AFTER, "fused_attn4_m_cd1cl1_ga", "fused_attn4_m_cd1cl1_ga", BEFORE, "fused_attn4_m_cd1cl1_gb"]
 
 
+def test_the_pre_check_installs_pytest_beside_the_measured_venv_and_refuses_if_the_venv_changes(tmp_path: Path):
+    r, calls, summary = _run(tmp_path)
+    assert any("-m pip install" in c and f"--target {tmp_path}/gnf4-after-site pytest" in c for c in calls), calls
+    assert f"PYTEST_PYTHONPATH={tmp_path}/gnf4-after-site" in calls, calls
+    assert [c for c in calls if "pip freeze" in c] == ["PY -m pip freeze --all"] * 2
+    d = tmp_path / "dirty"
+    d.mkdir()
+    r, calls, summary = _run(d, FAKE_PRECHECK_DIRTIES="1")
+    assert "QWEN3POS76CO REFUSED the pre-check changed venv-unsloth's package set" in summary, summary
+    assert "PREPARE" not in calls and not _runs(calls)
+
+
 def test_a_failing_pre_check_refuses_the_family_before_the_fetch(tmp_path: Path):
     r, calls, summary = _run(tmp_path, FAKE_PYTEST_RC="1", FAKE_PYTEST_OUT="1 failed, 2 passed")
     assert r.returncode == 0, (r.stdout, r.stderr)
@@ -116,3 +132,25 @@ def test_a_failed_switch_leaves_only_that_side_not_run(tmp_path: Path):
     stubs = [c for c in calls if c.startswith("STUB ")]
     assert [s.split()[1] for s in stubs] == ["e4b/fused_attn4_m_cd1cl1_ga", "e4b/fused_attn4_m_cd1cl1_ga_d2"], stubs
     assert all("the switch to grouped-nf4-gemm " + AFTER + " failed" in s for s in stubs)
+
+
+FLOOR = _cut(r"^POS76_MIN_ALLOT=.*?^esac\n")
+
+
+def _floor(tmp: Path, allot: int, families: str) -> str:
+    script = ('say(){ echo "SAY $*"; }\nfinish(){ echo "FINISH $1"; exit "$1"; }\n'
+              f'ALLOT={allot}; FAMILIES="{families}"\n' + FLOOR + 'echo PASSED\n')
+    r = subprocess.run(["bash", "-c", script], cwd=tmp, capture_output=True, text=True, timeout=30)
+    return r.stdout + ((tmp / "summary.txt").read_text() if (tmp / "summary.txt").exists() else "")
+
+
+def test_the_cpu_floor_refuses_a_slow_box_before_any_venv(tmp_path: Path):
+    """Amendment 76's pre-flight floor: an allotment under 42 refuses the box (finish 18) when the family is on it; 42 and up pass, and
+    other families are not affected."""
+    assert "POS76_MIN_ALLOT=42" in FLOOR
+    out = _floor(tmp_path, 41, "qwen3pos76co")
+    assert "FINISH 18" in out and "BOX_REFUSED cpu_allotment=41 floor=42 (amendment 76)" in out and "PASSED" not in out, out
+    for allot, fam in ((42, "qwen3pos76co"), (47, "qwen3pos76co"), (16, "qwen3pos75cl")):
+        d = tmp_path / f"{allot}-{fam}"
+        d.mkdir()
+        assert "PASSED" in _floor(d, allot, fam) and "FINISH" not in _floor(d, allot, fam), (allot, fam)

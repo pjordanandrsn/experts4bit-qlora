@@ -3484,9 +3484,26 @@ comparable as context, not as the control. Both commits carry the release string
 - `GNF4_SHA` is BEFORE and `GNF4_SHA_B` is AFTER. The family refuses any other pair. e4b is main at launch.
 - **The pre-check, before any arm:** the AFTER commit's `kernel/test_compact_delta.py` runs on this box's GPU. That covers byte-equality
   against the old order, the TorchDispatchMode liveness census and the CUDA peak test. A failure, or a CUDA case that skips, refuses the
-  family at cents.
+  family at cents. pytest goes into its own `--target` directory, on `PYTHONPATH` for the pre-check only, so the measured venv is not
+  changed. Its package set (`pip freeze --all`) is read before and after the pre-check, and any difference refuses the family.
 - One RTX 5090 by the launcher's ranking. A pin names only a machine whose listing has held across at least two screen sweeps and 180 s,
   with its latest read fresh, on an offer that read listed. `TC1_LOAD_GATE=6.0`, `TC1_LOAD_RETRIES=2`.
+
+**The CPU floor, in the pre-flight** (P224's lesson, applied before data). A box whose container CPU allotment is under **42** refuses
+before any venv or fetch (`BOX_REFUSED`, rc 18). The floor is sized from box `tc1-5090-155`, which ran amendment 75's four arms at an
+allotment of 47 (48 physical cores) in 36.6 min:
+
+| phase | box 155, min | scales with CPU |
+|---|---|---|
+| create to the box script, the fetch, the end | 3.2 + 4.4 + 0.8 = **8.4** | no |
+| the venvs | 6.25 | yes |
+| the pre-check and the two grouped-nf4-gemm switches (estimated) | 3 + 2 | yes |
+| four arms, 5.9 + 5.5 + 5.1 + 5.25 = 21.8, each run **three** times (the load gate's two re-runs) | 65.4 | yes |
+
+The CPU-bound part is 76.65 min at 47. Scaled as 47/A, the guard holds with 25 % headroom when 1.25 × (8.4 + 76.65 × 47/A) <= 120,
+that is A >= 41.1, so the floor is **42**. At the floor, the run with no re-runs projects to 8.4 + 33.05 × 47/42 = 45.4 min. The
+scaling is linear. P224's quantize phase slowed super-linearly at a quarter of the quota; at the floor the allotment is within 1.12x of
+box 155's, and the 25 % headroom is what covers that. A refusal costs the minutes to the box script, about $0.06.
 
 **Validity** (`pos76_why`). An arm off any of these is VOID and reported as VOID:
 - amendment 75's predicates for cd1cl1: the compact-delta path, and the chunked LM loss on every training forward;

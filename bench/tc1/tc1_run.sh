@@ -219,6 +219,14 @@ echo "CPU allotment $ALLOT (cgroup quota capped by affinity; physical cores $PHY
 case " $FAMILIES " in *" qwen3ompab "*)
   [ "$ALLOT" -lt "$PHYS" ] || { say "BOX REFUSED: the container's CPU allotment ($ALLOT) is not below the physical cores ($PHYS) -- amendment 45's threads A/B has no contrast on this host (host floor)"; echo "BOX_REFUSED cpu_allotment=$ALLOT phys=$PHYS" >> summary.txt; finish 18; };;
 esac
+# TC1 amendment 76: a CPU-allotment floor in the pre-flight (P224's lesson, applied before data). Box tc1-5090-155 ran amendment 75's four
+# arms in 36.6 min at an allotment of 47. Scaling its CPU-bound phases as 47/ALLOT, every arm run three times (the load gate's two re-runs),
+# with 25 % headroom, the 2 h guard covers an allotment of 42 or more (TC1-PREREG amendment 76, "The CPU floor"). Below it the box refuses
+# here, before any venv or fetch.
+POS76_MIN_ALLOT=42
+case " $FAMILIES " in *" qwen3pos76co "*)
+  [ "$ALLOT" -ge "$POS76_MIN_ALLOT" ] || { say "BOX REFUSED: the container's CPU allotment ($ALLOT) is under amendment 76's floor ($POS76_MIN_ALLOT): the 2 h guard would not cover the four arms with the load gate's re-runs (host floor)"; echo "BOX_REFUSED cpu_allotment=$ALLOT floor=$POS76_MIN_ALLOT (amendment 76)" >> summary.txt; finish 18; };;
+esac
 # P48 run 1 (2026-09-19) drew a host whose container overlay was 32 GB and died ENOSPC mid-fetch; box B fetches ~120 GB of
 # checkpoints. The launcher orders machine disk, the instance overlay is what the box gets: refuse here, before any fetch.
 MIN_DISK_DEFAULT=200; [ "$TC1_LOCAL_BOX" = 1 ] && MIN_DISK_DEFAULT=40      # TC3 local box: nothing is fetched; the venvs need ~20 GB
@@ -1920,13 +1928,19 @@ tc1_pos76_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   if [ -z "$why" ]; then                             # the pre-check: the AFTER commit's compact-delta tests on THIS GPU
     local PC=$W/gnf4-after
     rm -rf "$PC"
+    # pytest goes into its own --target dir, on PYTHONPATH for the pre-check only: venv-unsloth (the measured venv) is not changed, and
+    # its package set is read before and after; a difference refuses the family
+    $PY_UNS -m pip freeze --all > logs/precheck_freeze_before.txt 2> logs/precheck_freeze.err
     { perl -e 'alarm 600; exec @ARGV' git clone -q https://github.com/pjordanandrsn/grouped-nf4-gemm.git "$PC" && git -C "$PC" checkout -q "$GNF4_SHA_B" \
-      && $PY_UNS -m pip install -q --no-input pytest; } > logs/precheck_setup.log 2>&1 || why="the pre-check could not set up grouped-nf4-gemm $GNF4_SHA_B (logs/precheck_setup.log)"
+      && $PY_UNS -m pip install -q --no-input --target "$PC-site" pytest; } > logs/precheck_setup.log 2>&1 || why="the pre-check could not set up grouped-nf4-gemm $GNF4_SHA_B (logs/precheck_setup.log)"
     if [ -z "$why" ]; then
-      (cd "$PC/kernel" && perl -e 'alarm 900; exec @ARGV' $PY_UNS -m pytest -q -rs -p no:cacheprovider test_compact_delta.py) > logs/precheck_compact_delta.log 2>&1; local prc=$?
+      (cd "$PC/kernel" && PYTHONPATH="$PC-site" perl -e 'alarm 900; exec @ARGV' $PY_UNS -m pytest -q -rs -p no:cacheprovider test_compact_delta.py) > logs/precheck_compact_delta.log 2>&1; local prc=$?
       if [ $prc -ne 0 ]; then why="pre-check FAILED: grouped-nf4-gemm $GNF4_SHA_B kernel/test_compact_delta.py rc=$prc on this GPU (logs/precheck_compact_delta.log)"
       elif grep -q "is a CUDA allocator statistic" logs/precheck_compact_delta.log; then why="pre-check incomplete: a CUDA case skipped on this GPU (logs/precheck_compact_delta.log)"; fi
     fi
+    $PY_UNS -m pip freeze --all > logs/precheck_freeze_after.txt 2>> logs/precheck_freeze.err
+    [ -s logs/precheck_freeze_before.txt ] && cmp -s logs/precheck_freeze_before.txt logs/precheck_freeze_after.txt \
+      || why="${why:+$why; }the pre-check changed venv-unsloth's package set, or it could not be read (logs/precheck_freeze_before.txt, _after.txt)"
     echo "PRECHECK $FAM ${why:-OK} $(tail -1 logs/precheck_compact_delta.log 2>/dev/null)" | tee -a summary.txt
   fi
   if [ -n "$why" ]; then
