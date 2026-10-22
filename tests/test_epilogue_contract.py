@@ -13,9 +13,11 @@ wrapper without looking.
 
 What is asserted here:
 
-* the contract enumerates gpt-oss's structure and refuses it -- the REAL
-  ``GptOssExperts4bit`` / ``GptOssExpertsNbit`` classes, on a hidden-64, 2-expert
-  fixture, in both NF4 and bf16 storage;
+* the contract enumerates gpt-oss's structure and refuses it everywhere but the
+  adapter's own reference loop (``allow_bias=True``, T3 step 2; graded in
+  ``test_t3_gptoss_expert_lora.py``) -- the REAL ``GptOssExperts4bit`` /
+  ``GptOssExpertsNbit`` classes, on a hidden-64, 2-expert fixture, in both NF4 and
+  bf16 storage;
 * the refusal is by structure, never by name: a stock class gains a bias buffer and is
   refused, loses it and is accepted; a custom forward is refused until it exposes
   ``_apply_gate``; an epilogue scalar no hook consumes is refused;
@@ -125,30 +127,33 @@ def _one_train_step(wrapper):
 
 def test_gptoss_structure_is_enumerated():
     """What the contract sees on the real class, as data: biases, scalars, a non-stock
-    forward whose own body clamps, applies the sigmoid GLU and adds the biases."""
+    forward that adds the biases and hands its clamped GLU to an `_apply_gate` hook."""
     d = describe_epilogue_structure(_gptoss("bf16"))
     assert d["class"] == "GptOssExpertsNbit"
     assert d["bias_tensors"] == ["down_bias", "gate_up_bias"]
     assert d["epilogue_scalars"] == ["alpha", "limit"]
-    assert not d["stock_forward"] and not d["apply_gate_hook"]
-    assert {"clamp", "sigmoid", "gate_up_bias", "down_bias"} <= set(d["forward_references"])
+    assert not d["stock_forward"] and d["apply_gate_hook"]
+    assert d["forward_references"] == ["down_bias", "gate_up_bias"]
+    assert d["bias_buffers_representable"]
     # the de-interleave at load is what makes the LAYOUT stock even though nothing else is
     assert d["interleave_markers"] == [] and d["gate_up_shape"] == (2 * INTER, H)
 
 
 @pytest.mark.parametrize("quant_type", ["nf4", "bf16"])
-def test_expertslora_refuses_gptoss(quant_type):
-    """The constructor is the seam every wrap goes through; it refuses the real class in
-    the shipped storage (NF4) and in the bf16 structural-parity storage alike, and the
-    message names the attributes and the faithful route."""
+def test_the_default_contract_refuses_gptoss(quant_type):
+    """Every caller but the adapter's constructor keeps `allow_bias=False` and refuses the
+    real class in the shipped storage (NF4) and in the bf16 structural-parity storage
+    alike, naming the biases and both faithful routes. The constructor wraps it (T3
+    step 2): its reference loop applies the two biases itself."""
     base = _gptoss(quant_type)
     assert isinstance(base, (GptOssExperts4bit, GptOssExpertsNbit))
     with pytest.raises(EpilogueContractError) as ei:
-        ExpertsLoRA(base, r=4, alpha=8)
+        assert_stock_epilogue(base)
     msg = str(ei.value)
-    for name in ("gate_up_bias", "down_bias", "alpha", "limit", "_apply_gate"):
+    for name in ("gate_up_bias", "down_bias", "E4B_GPTOSS_EXPERT_LORA"):
         assert name in msg, f"refusal does not name {name!r}"
     assert "ExpertsMxfp4LoRA" in msg and "mxfp4-moe-training-and-residency" in msg
+    ExpertsLoRA(base, r=4, alpha=8)
     # `TypeError` on purpose: the quant-guard skip set catches NotImplementedError /
     # RuntimeError, and this refusal must never be reported as a green skip.
     assert isinstance(ei.value, TypeError) and not isinstance(ei.value, (RuntimeError, NotImplementedError))
@@ -281,10 +286,10 @@ def test_gemma4_shape_wraps_and_trains():
 # ------------------------------------------------- every route refuses --
 
 def _wrapper_with_swapped_base(quant_type="nf4"):
-    """An `ExpertsLoRA` whose base VIOLATES the contract, reached the only way that is
-    still possible: construct it over a stock base, then swap a gpt-oss stack of the same
-    geometry underneath. This is the shape every enabler must refuse -- a wrapper is
-    unfaithful on every path once its base is."""
+    """An `ExpertsLoRA` whose base breaks the DEFAULT contract, reached by swapping: built
+    over a stock base, then a gpt-oss stack of the same geometry underneath. (The
+    constructor now wraps gpt-oss directly; `test_t3_gptoss_expert_lora.py` covers that
+    shape.) Every enabler must refuse it: none of them applies a bias."""
     wrapper = ExpertsLoRA(_stock(), r=4, alpha=8)
     wrapper.base = _gptoss(quant_type)
     return wrapper

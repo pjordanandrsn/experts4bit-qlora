@@ -52,7 +52,8 @@ storage, and an epilogue this path can reproduce. A subclass that overrides
 ``forward`` is skipped rather than silently mis-activated — unless it exposes
 ``_apply_gate`` (DeepSeek-V4's clamped SwiGLU), which the fused paths call, so
 they cannot drift from the reference. gpt-oss stays skipped: its forward also
-adds per-expert biases, which no fused path here applies.
+adds per-expert biases, which no fused path here applies (an ``ExpertsLoRA`` over
+it applies them on its own unfused loop, and is refused here).
 """
 from __future__ import annotations
 
@@ -509,7 +510,10 @@ def _refuse_wrapped(mod, entry: str) -> None:
     Shared by the wrapper loops of :func:`enable_fast`, :func:`enable_fast_train`
     and ``enable_batched_train``: for a WRAPPED base there is no faithful forward
     to fall back to (the wrapper re-implements the epilogue the kernel would), so
-    "skip" would mean "train or serve the wrong function quietly".
+    "skip" would mean "train or serve the wrong function quietly". A base whose
+    biases only the wrapper's own unfused loop applies (gpt-oss) is refused too:
+    the fused path would drop them, and a skip would leave a caller who asked for
+    it on the reference loop without a word.
     """
     from experts4bit_qlora.lora import EpilogueContractError, assert_stock_epilogue
 
@@ -517,8 +521,8 @@ def _refuse_wrapped(mod, entry: str) -> None:
         assert_stock_epilogue(mod.base)
     except EpilogueContractError as exc:
         raise EpilogueContractError(
-            f"{entry}: an ExpertsLoRA wraps a base it cannot represent, so neither the "
-            f"fused path nor the wrapper's own reference forward is faithful -- {exc}"
+            f"{entry}: an ExpertsLoRA wraps a base whose epilogue this path cannot "
+            f"reproduce -- {exc}"
         ) from exc
 
 

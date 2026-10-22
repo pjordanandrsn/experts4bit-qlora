@@ -2,16 +2,15 @@
 """T3's premise for gpt-oss expert LoRA (USD 0, CPU): the oracle in ``tests/gptoss_lora_oracle.py`` matches
 transformers' ``GptOssExperts``, forward AND backward, to 1e-5 in fp32, on one expert stack and on a 2-layer model.
 
-gpt-oss loads in e4b today, but its experts cannot take LoRA: :class:`ExpertsLoRA` refuses the stack by structure, so only
-attention-only QLoRA trains. The oracle is the function a fix must compute, and these tests fix it before any kernel
-work. What stands between the oracle and a trained gpt-oss expert, named (``test_the_named_gaps_hold_today`` pins the
-first two; the third and fourth are documented on the code they name):
+The oracle is the function e4b's gpt-oss expert LoRA must compute, fixed here before any kernel work. What stood between
+it and a trained gpt-oss expert, named (``test_gaps_one_and_two_are_closed`` pins the first two as closed by T3 step 2,
+graded in ``test_t3_gptoss_expert_lora.py``; the third and fourth are documented on the code they name):
 
-1. **Per-expert biases.** ``ExpertsLoRA`` adds no bias after its base projection and refuses any stack that carries
-   one (``assert_stock_epilogue``: ``EpilogueContractError``).
-2. **The clamped GLU is not exposed.** ``GptOssExperts4bit`` computes it inside its own ``forward`` and has no
-   ``_apply_gate`` hook. ``ExpertsLoRA`` and the fused training paths (``engines/fast.py``) already call that hook, as
-   DeepSeek-V4's clamped SwiGLU does.
+1. **Per-expert biases** (closed). ``ExpertsLoRA`` adds ``gate_up_bias`` / ``down_bias`` after each base projection on
+   its unfused loop; ``assert_stock_epilogue`` admits exactly those buffers beside a hook for the adapter alone
+   (``allow_bias=True``), and every other entry point still refuses them.
+2. **The clamped GLU is not exposed** (closed). ``GptOssExperts4bit`` now hands it over as ``_apply_gate``, the hook
+   ``ExpertsLoRA`` and the fused training paths (``engines/fast.py``) call, as DeepSeek-V4's clamped SwiGLU does.
 3. **The fused training route applies no bias.** ``enable_fast_train`` skips gpt-oss (``engines/fast.py``'s
    eligibility note). grouped-nf4-gemm's grouped NF4 GEMM carries no bias (``kernel/nf4_grouped.py``'s header). Only
    the serving path adds gpt-oss's biases, per sorted row (``engines/hot_residency.py``).
@@ -218,14 +217,16 @@ class _Functional(torch.nn.Module):
         return torch.func.functional_call(self.experts, self.state, args)
 
 
-def test_the_named_gaps_hold_today():
-    """Gaps 1 and 2 in the module docstring, as the code stands. A fix removes them and updates this test."""
+def test_gaps_one_and_two_are_closed():
+    """Gaps 1 and 2 in the module docstring, as the code stands after T3 step 2: the hook exists, the adapter wraps the
+    stack, and the default contract (every caller but the adapter) still refuses its biases."""
     from experts4bit_qlora.arch.gptoss import GptOssExperts4bit
-    from experts4bit_qlora.lora import EpilogueContractError, ExpertsLoRA
+    from experts4bit_qlora.lora import EpilogueContractError, ExpertsLoRA, assert_stock_epilogue
     cfg = _cfg()
     sd = dict(_hf_experts(cfg, 13).state_dict())
     e4b = GptOssExperts4bit.from_gptoss(sd["gate_up_proj"], sd["gate_up_proj_bias"], sd["down_proj"],
                                         sd["down_proj_bias"], quant_type="bf16", compute_dtype=torch.bfloat16)
-    assert not hasattr(type(e4b), "_apply_gate")
+    assert hasattr(type(e4b), "_apply_gate")
+    ExpertsLoRA(e4b, r=8, alpha=16)
     with pytest.raises(EpilogueContractError):
-        ExpertsLoRA(e4b, r=8, alpha=16)
+        assert_stock_epilogue(e4b)

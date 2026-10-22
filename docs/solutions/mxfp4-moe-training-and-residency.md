@@ -9,7 +9,7 @@ The [capability register](../capabilities.json) and its `training_support` recor
 
 | Model | Task | Entry point | Status and evidence |
 |---|---|---|---|
-| gpt-oss | Load a frozen NF4 re-quantisation | `load_moe_4bit_streaming`, then `verify_moe_4bit` | Supported load; experts are bare, without `ExpertsLoRA`. This is not expert training. |
+| gpt-oss | Load a frozen NF4 re-quantisation | `load_moe_4bit_streaming`, then `verify_moe_4bit` | Supported load; experts are bare, without `ExpertsLoRA`, unless `E4B_GPTOSS_EXPERT_LORA=1` wraps them on its unfused reference loop (opt-in, unmeasured on hardware). The bare load is not expert training. |
 | gpt-oss | Native MXFP4 serving in the paged engine | `engines.int4_experts.enable_serve_experts_int4` | Native-byte store; matches its own dequantized reference (`e4b.serve.p44.gptoss.store-r12.kl-vs-bf16.2026-09-19`). |
 | gpt-oss | Bind the native-byte NVMe serving engine | `enable_mxfp4_nvme_residency` | **REFUSED** for bias-carrying modules; the generic epilogue is not faithful to this model. |
 | gpt-oss | Train experts against an NVMe arena | `arena_train=True`, `enable_nvme_train_residency` | **REFUSED. No supported arena-training route.** See `training_support.gpt_oss.nvme_train`. |
@@ -90,7 +90,7 @@ assert n > 0
 - A uniform int4 grid cannot serve MXFP4 experts. For gpt-oss, `enable_serve_experts_int4` never re-quantises onto the int4 grid; it installs the **native MXFP4 store** served through `mxfp4_grouped`'s decode GEMV. That store is opt-in and single-stream-oriented (batched rows fall back to NF4 when the stacks are kept via `E4B_INT4_KEEP_NF4=1`), and its quality claim is fidelity to the shipped bytes (0.0019 nats/token from their dequantized form, `e4b.serve.p44.gptoss.store-r12.kl-vs-bf16.2026-09-19`), not downstream quality.
 - `enable_fast` skips MXFP4-arena modules on purpose; their forward is wired by `nvme_experts`.
 - `enable_mxfp4_nvme_residency` refuses `ExpertsLoRA`-wrapped modules: under the arena loader the base buffers are on `meta`, and binding would discard the adapter. Serve from the arena or train against it, not both on one load.
-- Trainable LoRA over gpt-oss's biased, clamped experts needs a gpt-oss-aware adapter; that is a separate change (`arch/gptoss.py`).
+- `ExpertsLoRA` trains gpt-oss's biased, clamped experts on its unfused reference loop only, opt-in through `E4B_GPTOSS_EXPERT_LORA=1`; its cost against a fused route is unmeasured.
 - DeepSeek-V4's full-width resident load does not fit a small card; use the arena path.
 - A bf16 checkpoint's training arena is an NF4 quantise-at-bake (grouped-nf4-gemm's `nvme_bake_nf4`, [`offload-moe-experts-to-cpu-or-nvme.md`](offload-moe-experts-to-cpu-or-nvme.md)), not the native-byte path; `e4b.open.tr2-repro-gap` (reproducing the TR2 training receipt) stays open in the register.
 - Training on an MXFP4 arena has a CPU spec and a bench directory (`bench/mxfp4-arena-train/`) but no entry in the claims register: a capability, not a measured result.

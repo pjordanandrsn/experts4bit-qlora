@@ -911,7 +911,10 @@ def enable_expert_offload(experts_lora, device, pin: bool = True,
 
     Refuses (``AbsmaxCompressedError``) a base whose absmax :func:`experts4bit_qlora.compress_expert_absmax_`
     stored double-quantized (``E4B_ABSMAX_DQ=1``): the handle stages the fp32 absmax by name, and that
-    switch is resident-only.
+    switch is resident-only. Refuses (``EpilogueContractError``) a WRAPPED base outside the stock-epilogue
+    contract (:func:`experts4bit_qlora.assert_stock_epilogue`): a gpt-oss stack under an ``ExpertsLoRA``
+    trains on the resident reference loop only, and offload is not measured with its biases. A bare
+    ``GptOssExperts4bit`` (its own forward) offloads as before.
     """
     # Reads the fp32 expert absmax: a double-quantized one (E4B_ABSMAX_DQ=1) is refused by name.
     from ..absmax_dq import refuse_compressed_absmax
@@ -925,6 +928,9 @@ def enable_expert_offload(experts_lora, device, pin: bool = True,
         # inference/probe/kernel path): it holds the packed tensors directly, so it is
         # its own offload base and the stage/evict hooks register on it.
         base = experts_lora
+    if base is not None and base is not experts_lora:
+        from ..lora import assert_stock_epilogue
+        assert_stock_epilogue(base)  # a biased base under a wrapper: resident reference loop only
     if base is None or not all(hasattr(base, n) for n in _ExpertOffload._names()):
         raise TypeError(
             "enable_expert_offload expects an ExpertsLoRA wrapping an Experts4bit base, or a bare "

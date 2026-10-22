@@ -121,8 +121,9 @@ def setup_refusals(topology, setup: QLoRASetup) -> tuple:
         out.append(f"attention_adapter_dtype must be None or one of {tuple(_ADAPTER_BYTES)}, "
                    f"got {setup.attention_adapter_dtype!r}")
     if setup.train_experts and topology.expert_bias_tensors:
-        out.append(f"train_experts: the expert stacks carry {list(topology.expert_bias_tensors)}, an epilogue "
-                   "ExpertsLoRA cannot represent (assert_stock_epilogue); the loader builds them bare")
+        out.append(f"train_experts: the expert stacks carry {list(topology.expert_bias_tensors)}; the loader "
+                   "builds them bare (ExpertsLoRA applies such biases only on its unfused reference loop, "
+                   "behind E4B_GPTOSS_EXPERT_LORA=1, which this recipe does not plan)")
     if setup.expert_kernel == "grouped_nf4" and setup.quant_type != "nf4":
         out.append(f"expert_kernel='grouped_nf4' reads NF4 stacks only; quant_type is {setup.quant_type!r}")
     if setup.expert_kernel == "grouped_nf4" and not setup.train_experts:

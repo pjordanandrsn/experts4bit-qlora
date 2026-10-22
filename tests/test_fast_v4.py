@@ -9,8 +9,8 @@ while the frozen reference applied `silu(clamp(gate)) * clamp(up)`. Bugbot, PR #
 The fix routes every fused epilogue through `lora._epilogue`, the same hook
 `ExpertsLoRA.forward` uses, so the two cannot drift. These tests pin that, and pin that
 gpt-oss — whose forward also adds per-expert biases no fused path applies — stays off both
-fused paths: a bare stack is skipped, and since the epilogue contract (#397)
-`ExpertsLoRA` refuses to wrap it, and both enablers refuse one swapped in under a wrapper.
+fused paths: a bare stack is skipped, and both enablers refuse a wrapper over it (since T3
+step 2 `ExpertsLoRA` wraps it on its own unfused loop, which applies the biases).
 
 CUDA + nf4_grouped required.
 """
@@ -141,39 +141,39 @@ def _gptoss_base(seed=3):
 
 
 def test_gptoss_stays_off_both_fused_paths():
-    """gpt-oss shares V4's clamps but ALSO carries per-expert biases, which no fused path here
-    applies, and `_apply_gate` cannot rescue it. Since the epilogue contract (#397) that is
-    enforced at three seams, checked here on CUDA with the kernels present:
+    """gpt-oss shares V4's clamps (its `_apply_gate`) but ALSO carries per-expert biases, which no
+    fused path here applies. Since T3 step 2 `ExpertsLoRA` wraps it and applies the biases on its
+    own unfused loop; every fused seam still refuses, checked here on CUDA with the kernels present:
 
-    - `ExpertsLoRA` refuses to wrap it (`EpilogueContractError`, a `TypeError`, so a quant-guard
-      skip cannot report it as green);
+    - the default contract refuses the base (`EpilogueContractError`, a `TypeError`, so a
+      quant-guard skip cannot report it as green); only the adapter's constructor admits it;
     - a bare stack keeps its own forward: `enable_fast` skips it;
-    - a gpt-oss base swapped in under a wrapper, the only way left to reach a fused path, is
-      refused by `enable_fast` and `enable_fast_train`, and nothing is patched.
-
-    Before #397 this test wrapped gpt-oss and expected both enablers to return 0; the
-    constructor now refuses that wrap, which is the stronger guarantee."""
-    from experts4bit_qlora.lora import EpilogueContractError
+    - a wrapper over it, built directly or with the base swapped in, is refused by `enable_fast`
+      and `enable_fast_train`, and nothing is patched."""
+    from experts4bit_qlora.lora import EpilogueContractError, assert_stock_epilogue
 
     base = _gptoss_base()
     with pytest.raises(EpilogueContractError, match="per-expert bias tensors") as ei:
-        ExpertsLoRA(base, r=8, alpha=16, dtype=torch.bfloat16)
+        assert_stock_epilogue(base)
     assert isinstance(ei.value, TypeError)
 
     fwd = base.forward
     assert enable_fast(base) == 0, "a bare gpt-oss stack was fused; its biases would be dropped"
     assert base.forward == fwd and not hasattr(base, "_e4b_fast_ref")
 
-    mod, *_ = _v4_lora(seed=3)
-    mod.base = _gptoss_base(seed=4)
-    with pytest.raises(EpilogueContractError, match="enable_fast"):
-        enable_fast(mod)
-    assert not hasattr(mod, "_e4b_fast_ref"), "refused, yet patched"
+    direct = ExpertsLoRA(_gptoss_base(seed=5), r=8, alpha=16, dtype=torch.bfloat16)
+    swapped, *_ = _v4_lora(seed=3)
+    swapped.base = _gptoss_base(seed=4)
+    for mod in (direct, swapped):
+        with pytest.raises(EpilogueContractError, match="enable_fast"):
+            enable_fast(mod)
+        assert not hasattr(mod, "_e4b_fast_ref"), "refused, yet patched"
     pytest.importorskip("nf4_qlora")
     from experts4bit_qlora import enable_fast_train
-    with pytest.raises(EpilogueContractError, match="enable_fast_train"):
-        enable_fast_train(mod)
-    assert not hasattr(mod, "_e4b_train_ref"), "the fused TRAINING path patched gpt-oss"
+    for mod in (direct, swapped):
+        with pytest.raises(EpilogueContractError, match="enable_fast_train"):
+            enable_fast_train(mod)
+        assert not hasattr(mod, "_e4b_train_ref"), "the fused TRAINING path patched gpt-oss"
 
 
 # --- dgrad opt-in (grouped-nf4-gemm >= 0.7.0) --------------------------------
