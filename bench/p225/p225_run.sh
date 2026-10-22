@@ -52,9 +52,20 @@ for f in p225_probe.py p225_gate.py p225_reduce.py p225_canary.py p224_box.py p2
   [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
 (cd $W && sha256sum -c staged-p225.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/p225/staged-p225.sha256"; finish 9; }
 # ---- refusals before anything is installed: CUDA, the card, the disk, the host RAM, the guard fit
-CUDA_PROBE=$(python -c "import torch; print('ok' if torch.cuda.is_available() and torch.cuda.device_count() > 0 else 'no-cuda ' + torch.__version__)" 2>/dev/null | tail -1)
+# the probe separates the image's fault (torch does not import: 10, PRE_INSTALL_HALT) from the host's (CUDA unusable,
+# including a raising driver: 18, HOST_REFUSED); p225_reduce.py --classify maps both
+CUDA_PROBE=$(python -c "
+try:
+    import torch
+except Exception:
+    print('noimport'); raise SystemExit(0)
+try:
+    ok = torch.cuda.is_available() and torch.cuda.device_count() > 0
+except Exception:
+    ok = False
+print('ok' if ok else 'no-cuda ' + torch.__version__)" 2>/dev/null | tail -1)
 echo "CUDA_PROBE ${CUDA_PROBE:-none}" | tee -a summary.txt
-case "$CUDA_PROBE" in ok) ;; no-cuda*) echo "refused: cuda unusable" > REFUSAL; finish 18;; *) say "DUD BOX"; finish 10;; esac
+case "$CUDA_PROBE" in ok) ;; no-cuda*) echo "refused: cuda unusable" > REFUSAL; finish 18;; *) say "IMAGE FAULT: torch does not import (${CUDA_PROBE:-no output})"; finish 10;; esac
 nvidia-smi --query-gpu=name,memory.total,driver_version,uuid,compute_cap,power.limit --format=csv,noheader | tee forensics.txt
 GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
 CC=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1)

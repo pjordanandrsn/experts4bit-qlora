@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import statistics
 import sys
@@ -30,6 +31,10 @@ import urllib.request
 FLOORS = {
     "a": {"mops": 30.0, "download_mb_s": 60.0, "ram_gib": 60, "disk_gb": 100},
 }
+#: the registered CPU-family table (PREREG "Pinning"), as regexes over a CPU model name; they match both the offer's
+#: ``cpu_name`` ("Core™ Ultra 9 285K") and ``/proc/cpuinfo``'s "model name" ("Intel(R) Core(TM) Ultra 9 285K")
+FAST_FAMILY = re.compile(r"EPYC 9\d\d5(?!\d)|Ryzen [579] 9\d{3}|Core(?:™|\(TM\))? Ultra 9 2\d\d")
+SLOW_FAMILY = re.compile(r"EPYC 7\d\d[23](?!\d)|EPYC 9\d\d4(?!\d)|Xeon.*Silver")
 MOPS_RUNS, MOPS_MIN_S = 5, 2.0              # the median of 5 runs, each at least 2 s
 DL_MIN_BYTES, DL_MIN_S, DL_MAX_S = 256 << 20, 20.0, 60.0   # at least 256 MiB or 20 s; give up at 60 s
 HOST_REFUSED = 19
@@ -159,10 +164,31 @@ def judge(tier: str, measured: dict) -> list:
     return why
 
 
+def cpu_model():
+    try:
+        for line in open("/proc/cpuinfo", encoding="utf-8", errors="replace"):
+            if line.startswith("model name"):
+                return line.split(":", 1)[1].strip()
+    except OSError:
+        pass
+    return None
+
+
+def cpu_family(name) -> str | None:
+    """``"fast"`` or ``"slow"`` by the registered table, else None (a family in neither row)."""
+    if not name:
+        return None
+    if FAST_FAMILY.search(name):
+        return "fast"
+    return "slow" if SLOW_FAMILY.search(name) else None
+
+
 def floors(tier: str, work: str, model: str, revision: str) -> int:
+    name = cpu_model()
     measured = {"tier": tier, "floors": FLOORS[tier], "mops": mops_median(), "download": download(model, revision),
                 "ram_gib": ram_gib(), "free_gb": free_gb(work),
-                "recorded": {"cpu_quota": cpu_quota(), "visible_cpus": os.cpu_count(), "steal": steal_share()}}
+                "recorded": {"cpu_quota": cpu_quota(), "visible_cpus": os.cpu_count(), "steal": steal_share(),
+                             "cpu_model": name, "cpu_family": cpu_family(name)}}
     measured["refused"] = judge(tier, measured)
     print("P225_SCREEN " + json.dumps(measured), flush=True)
     return HOST_REFUSED if measured["refused"] else 0
@@ -193,6 +219,15 @@ def self_test() -> int:
     r = mops_median(runs=3, min_s=0.05)
     ok(len(r["runs"]) == 3 and r["median"] > 0, "the speed probe runs and reports a median")
     ok(set(FLOORS) == {"a"} and FLOORS["a"]["mops"] == 30.0, "the registered floors")
+    fast = ("AMD EPYC 9655 96-Core Processor", "AMD EPYC 9115 16-Core Processor", "AMD Ryzen 9 9950X 16-Core Processor",
+            "AMD Ryzen 7 9800X3D 8-Core Processor", "Core™ Ultra 9 285K", "Intel(R) Core(TM) Ultra 9 285K")
+    slow = ("AMD EPYC 7402P 24-Core Processor", "AMD EPYC 7763 64-Core Processor", "AMD EPYC 9474F 48-Core Processor",
+            "AMD EPYC 9334 32-Core Processor", "Intel(R) Xeon(R) Silver 4114 CPU @ 2.20GHz")
+    ok(cpu_family("AMD EPYC 9575F 64-Core Processor") == "fast" and cpu_family("AMD EPYC 7402P") == "slow",
+       "a letter suffix (9575F, 7402P) keeps its family")
+    neither = ("Core™ i9-14900K", "AMD Ryzen 9 7900 12-Core Processor", "Xeon® E5-2680 v3", None, "")
+    ok(all(cpu_family(c) == "fast" for c in fast) and all(cpu_family(c) == "slow" for c in slow)
+       and all(cpu_family(c) is None for c in neither), "the registered family table, offer and cpuinfo spellings")
     print(f"p225_probe self-test OK ({n} checks)")
     return 0
 

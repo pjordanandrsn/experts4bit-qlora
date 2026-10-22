@@ -129,10 +129,12 @@ measured 25.9), so the rule reads the model, never the clock.
 | SLOW | AMD EPYC 7xx2, 7xx3 and 9xx4 (Zen 2, 3 and 4); Intel Xeon Silver | 13.0 to 25.9 |
 
 A fast-family host that reads under 30 on the box is HOST_REFUSED and recorded. It also RETIRES the fast-family
-preference, as a registered event (**FAMILY_RULE_RETIRED**: one log line naming the run and the host's family and
-reading; its own row under Outcomes; never a strike). From then on, pinning is step 1, then any unmeasured host
-outside a family measured SLOW. The slow-family exclusion stays, since it rests on its own measurements. A refusal
-costs about USD 0.10 (the boot only).
+preference, as a registered event (**FAMILY_RULE_RETIRED**: one log line naming the run and the host's CPU model and
+reading; its own row under Outcomes; never a strike). The box's screen records its CPU model (`/proc/cpuinfo`) and
+family (`p225_probe.py`'s two regexes are this table), and the renter-side `p225_reduce.py --classify` prints the
+`P225_EVENT FAMILY_RULE_RETIRED` line when a fast-family host fails the speed floor. From then on, pinning is step 1,
+then any unmeasured host outside a family measured SLOW. The slow-family exclusion stays, since it rests on its own
+measurements. A refusal costs about USD 0.10 (the boot only).
 
 **Where strike-eligibility begins:** at the first install command, run after every floor has passed. A refusal before
 it is HOST_REFUSED and is never a strike.
@@ -235,14 +237,17 @@ The paged server must prove that it serves the adapter:
 | pre-create refusal | no instance existed ($0) | no | no |
 
 **The strike call is mechanical.** The runner writes `run/STRIKE_ELIGIBLE` once every floor has passed, just before the
-first install. `p225_reduce.py --classify RC --dir RUN` maps each box's runner exit code and the marker to its
-registered event, and the test checks the map:
+first install. On the renter side, `p225_reduce.py --classify --work W` runs on EVERY fetched box (W is the box's work
+directory as the driver fetched it). It reads the runner's own exit-code file, the marker and the screen line, and
+prints the registered event. It FAILS CLOSED: it refuses (exit 2, no class) unless W holds exactly one exit-code file,
+`RUN_ID` and `run/`, so a wrong directory level can never read as "no strike". The test runs the command line on
+each case:
 
 | runner exit | before `STRIKE_ELIGIBLE` | after it |
 |---|---|---|
 | 0 | (cannot occur) | an answer (PASS, FAIL or INCONCLUSIVE) |
-| 10 dud box, 13 free disk, 15 card / compute capability / VRAM, 16 host RAM, 18 CUDA unusable, 19 the host screen | **HOST_REFUSED**: no strike; counts toward the cap of 4 | (cannot occur) |
-| 9 staging or hash pins, 41 the guard does not fit the deadline, 78 run id / env / frozen knobs, 130 a signal, or any other code | **PRE_INSTALL_HALT**: no strike, not capped; a kit or launch fault, so the lane halts until it is fixed, never relaunched on the same kit | a strike |
+| 13 free disk, 15 card / compute capability / VRAM, 16 host RAM, 18 CUDA unusable (torch imports; the device does not answer), 19 the host screen | **HOST_REFUSED**: no strike; counts toward the cap of 4 | (cannot occur) |
+| 9 staging or hash pins, 10 torch does not import (the image), 41 the guard does not fit the deadline, 78 run id / env / frozen knobs, 130 a signal, or any other code | **PRE_INSTALL_HALT**: no strike, not capped; a kit, image or launch fault, so the lane halts until it is fixed, never relaunched on the same kit | a strike |
 | 27 (VOID or NOT_LEARNED), 22 (reducer failed), any other | (cannot occur) | a strike |
 
 G3 (latency) and the cost are reported with every outcome that reaches the reducer.

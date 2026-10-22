@@ -158,8 +158,52 @@ def test_the_strike_call_is_the_reducers_map_of_every_runner_exit():
         c = R.classify(rc, False)
         assert c["event"] == "PRE_INSTALL_HALT" and c["halt"] and not (c["strike"] or c["host_refused_cap"]), rc
     assert R.classify(0, True)["event"] == "ANSWER" and R.classify(27, True)["strike"]
-    for text in ("**HOST_REFUSED**: no strike; counts toward the cap of 4", "**PRE_INSTALL_HALT**", "--classify RC"):
+    for text in ("**HOST_REFUSED**: no strike; counts toward the cap of 4", "**PRE_INSTALL_HALT**", "--classify --work W"):
         assert text in PREREG, text
+    assert 10 in R.KIT_CODES and 10 not in R.HOST_CODES and "noimport" in RUN     # a failed torch import is the image's
+
+
+def _box(root, rc, marker, screen=None, name="box"):
+    w = root / name
+    (w / "run").mkdir(parents=True)
+    (w / "RUN_ID").write_text("p225-5090-1\n", encoding="utf-8")
+    (w / "P225_EXIT_CODE.ab12").write_text(f"{rc}\n", encoding="utf-8")
+    if marker:
+        (w / "run" / "STRIKE_ELIGIBLE").write_text("2026-10-23T06:00:00Z\n", encoding="utf-8")
+    if screen is not None:
+        (w / "summary.txt").write_text("P225_SCREEN " + json.dumps(screen) + "\n", encoding="utf-8")
+    return w
+
+
+def _classify(work):
+    return subprocess.run([sys.executable, str(LANE / "p225_reduce.py"), "--classify", "--work", str(work)],
+                          capture_output=True, text=True, timeout=60, cwd=str(LANE), env=ENV)
+
+
+def test_the_classify_command_line_fails_closed_and_maps_each_case(tmp_path):
+    struck = _box(tmp_path, 27, True, name="struck")
+    r = _classify(struck)
+    assert r.returncode == 0 and json.loads(r.stdout.split("P225_CLASS ", 1)[1])["event"] == "STRIKE", r.stdout
+    refused = _box(tmp_path, 16, False, name="refused")
+    assert json.loads(_classify(refused).stdout.split("P225_CLASS ", 1)[1])["event"] == "HOST_REFUSED"
+    halted = _box(tmp_path, 10, False, name="halted")
+    assert json.loads(_classify(halted).stdout.split("P225_CLASS ", 1)[1])["event"] == "PRE_INSTALL_HALT"
+    for wrong in (struck / "run", tmp_path, tmp_path / "missing"):          # one level too deep, too shallow, absent
+        r = _classify(wrong)
+        assert r.returncode == 2 and "P225_CLASS {" not in r.stdout, (wrong, r.stdout, r.stderr)
+    (struck / "P225_EXIT_CODE.cd34").write_text("0\n", encoding="utf-8")   # two exit files: ambiguous, refused
+    assert _classify(struck).returncode == 2
+
+
+def test_a_fast_family_host_refused_on_speed_emits_the_retirement_line(tmp_path):
+    screen = {"floors": {"mops": 30.0}, "mops": {"median": 24.0},
+              "recorded": {"cpu_model": "AMD EPYC 9115 16-Core Processor", "cpu_family": "fast"}}
+    r = _classify(_box(tmp_path, 19, False, screen, name="fast"))
+    assert "P225_EVENT FAMILY_RULE_RETIRED" in r.stdout and '"cpu_model": "AMD EPYC 9115' in r.stdout, r.stdout
+    slow = dict(screen, recorded={"cpu_model": "AMD EPYC 7763 64-Core Processor", "cpu_family": "slow"})
+    assert "FAMILY_RULE_RETIRED" not in _classify(_box(tmp_path, 19, False, slow, name="slow")).stdout
+    P = _load("p225_probe")
+    assert P.cpu_family(screen["recorded"]["cpu_model"]) == "fast" and P.cpu_family("AMD EPYC 7763") == "slow"
 
 
 def test_the_fetch_carries_the_unnamed_margin():
