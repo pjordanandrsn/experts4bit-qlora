@@ -110,6 +110,11 @@ class ClockSampler(threading.Thread):
         return out
 
 
+def _delta(now, was):
+    """A tally's growth since ``was``: the keys that moved, by how much."""
+    return {key: v - was.get(key, 0) for key, v in now.items() if v - was.get(key, 0)}
+
+
 class _State:
     """The face :func:`hot_residency.resolve_nf4_smallm_bw` reads of one MoE layer's engine: its shapes, the collapse,
     every expert resident, no int4 store. The bench calls the collapse's ``_fused_over_stack`` itself, so the engine is
@@ -262,11 +267,14 @@ def main(a):
                     if arm == "B":
                         assert hr._collapsed_grouping(T, None) == (True, False), "the knob does not route this T"
                     c0, r0 = dict(ng.dispatch_counts()), dict(hr.ROUTE_SEEN)
+                    l0, p0 = dict(hr.K25_LUT_SEEN), dict(hr.K25_PLAN_SEEN)
                     arm_fn(arm, ids0)()
                     torch.cuda.synchronize()
                     c1 = ng.dispatch_counts()
                     eng = {key: c1.get(key, 0) - c0.get(key, 0) for key in GEMV_KEYS}
-                    eng["route"] = {key: v - r0.get(key, 0) for key, v in hr.ROUTE_SEEN.items() if v - r0.get(key, 0)}
+                    eng["route"] = _delta(hr.ROUTE_SEEN, r0)
+                    eng["k25_lut"] = _delta(hr.K25_LUT_SEEN, l0)      # e4b's own record of K25's decode and plan
+                    eng["k25_plan"] = _delta(hr.K25_PLAN_SEEN, p0)
                     cell["engaged"][arm] = eng
                 for r, s in enumerate(steps):
                     ids = ids_for(s)
@@ -340,6 +348,9 @@ def self_test():
     check(seq == sorted(seq), "S, then the tag, the timed replay, the untag")
     check("rot = R.arm_order(r)" in src and "graphs = {R.SPACER: capture(arm_fn(\"K\", ids))}" in src, "order, spacer K")
     check("same = all(torch.equal(x, y) for x, y in zip(ko, k2o))" in src, "K2 bitwise")
+    check('eng["k25_lut"] = _delta(hr.K25_LUT_SEEN, l0)' in src and 'eng["k25_plan"] = _delta(hr.K25_PLAN_SEEN, p0)' in src,
+          "K's decode and plan from e4b's own tallies")
+    check(_delta({"a": 3, "b": 1}, {"a": 1, "b": 1}) == {"a": 2}, "the delta")
     check("rt = torch.arange(T * k, device=dev) // k" in src, "token-major rows")
     check("R.QWEN3_ROWS0 + r, s]" in src and "mpicks[li][s][:T]" in src, "the registered rows")
     check(R.ARMS == ["K", "K2", "B"] and R.ITERS == 10 and len(R.STEPS) == 60, "the registered shape")

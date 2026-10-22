@@ -185,6 +185,12 @@ def _cell(rec, fam, T, why):
         why.append(f"T={T}: B's eager pass did not run K33 on both projections of every layer, and only K33 ({b})")
     if any(k.get(x) for x in ("bw_prmt32", "bw_tree")) or k.get("route") != {"nf4_k25|le256": L}:
         why.append(f"T={T}: K's eager pass did not run K25 on every layer, and only K25 ({k})")
+    lut, plan = spec["k25"]["E4B_K25_LUT"], spec["k25"]["E4B_K25_PLAN"]          # the REGISTERED decode and plan
+    if k.get("k25_lut") != {f"{lut}|le256": L} or k.get("k25_plan") != {f"{plan}|le256": L}:
+        why.append(f"T={T}: e4b's own tallies say K ran decode {k.get('k25_lut')} and plan {k.get('k25_plan')}, "
+                   f"not {lut} and {plan} on every layer")
+    if b.get("k25_lut") or b.get("k25_plan"):
+        why.append(f"T={T}: B's eager pass reached K25 ({b.get('k25_lut')}, {b.get('k25_plan')})")
     reps = cell.get("reps") or []
     if len(reps) != len(steps) or not steps:
         why.append(f"T={T}: {len(reps)} reps for {len(steps)} steps")
@@ -224,6 +230,7 @@ def read_cell(rec, fam, T):
            "self_pair": summarize([m["K"] / m["K2"] for m in ms]),
            "b_over_k": summarize([m["B"] / m["K"] for m in ms]),
            "b_over_floor": statistics.median(m["B"] / fl for m, fl in zip(ms, floor)),
+           "b_over_floor_summary": summarize([m["B"] / fl for m, fl in zip(ms, floor)]),   # reported: the spread
            "k_over_floor": statistics.median(m["K"] / fl for m, fl in zip(ms, floor)),
            "floor_ms": statistics.median(floor),
            "distinct_per_layer": sum(map(sum, cell["distinct"])) / (len(ms) * f["layers"]),
@@ -254,8 +261,10 @@ def family_verdict(rec, fam):
     cells = {T: read_cell(rec, fam, T) for T in TS}
     out = {"cells": {str(T): c for T, c in cells.items()}}
     outside = [T for T, c in cells.items() if not SELF_BAND[0] <= c["self_pair"]["median"] <= SELF_BAND[1]]
+    s8 = cells[8]["b_over_floor_summary"]
     out["b2_trigger"] = {"b_over_floor_t8": cells[8]["b_over_floor"], "threshold": B2_TRIGGER,
-                         "fires": cells[8]["b_over_floor"] > B2_TRIGGER}
+                         "fires": cells[8]["b_over_floor"] > B2_TRIGGER,
+                         "reported_se": s8["se"], "reported_lb": s8["lb"], "reported_ub": s8["ub"]}   # never ruling
     if outside and not shake:
         return dict(out, verdict="VOID", why=[f"self-pair K/K2 median outside {SELF_BAND} at T = {outside}"],
                     b2_trigger=None)
@@ -280,6 +289,9 @@ def verdict(rec):
         return dict(out, verdict="VOID", why=why, families={})
     fams = {fam: family_verdict(rec, fam) for fam in FAMILY_ORDER}
     out["families"] = fams
+    cs = [2 * 2 * 1024 ** 3 / x / 1e9 for x in rec["copy"].get("samples_s") or [] if _num(x)]
+    out["copy_rate_gbs"] = {"median": rec["copy"]["gbs"], "min": min(cs) if cs else None,
+                            "max": max(cs) if cs else None}                      # reported: the floor's divisor
     out["verdict"] = " ".join(f"{fam}={fams[fam]['verdict']}" for fam in FAMILY_ORDER)
     out["predictions"] = {} if rec.get("shakedown") else _grade(fams)
     return out
@@ -323,7 +335,9 @@ def _fake(gains=None, noise=0.002, k_ms=None, shake=False, n=len(STEPS)):
                              "k2_identical": True, "b_rel_diff": 0.006})
             cells[str(T)] = {"steps": list(range(n)), "route_sha256": ROUTE_SHA256[fam][T], "distinct": dist, "reps": reps,
                              "engaged": {"B": {"bw_prmt32": 2 * L, "route": {"nf4_singleton|le256": L}},
-                                         "K": {"bw_prmt32": 0, "route": {"nf4_k25|le256": L}}}}
+                                         "K": {"bw_prmt32": 0, "route": {"nf4_k25|le256": L},
+                                               "k25_lut": {f"{spec['k25']['E4B_K25_LUT']}|le256": L},
+                                               "k25_plan": {f"{spec['k25']['E4B_K25_PLAN']}|le256": L}}}}
             for a in ARMS:
                 rec["clocks"][clock_tag(fam, T, a)] = {"sm_mhz_median": 2707.0, "mem_mhz_median": 13801.0,
                                                         "enforced_limit_w": [575.0]}
@@ -405,6 +419,9 @@ def self_test():
         (lambda q: q["families"]["qwen3"]["cells"]["8"]["engaged"]["B"].update(bw_prmt32=95), "B launches"),
         (lambda q: q["families"]["qwen3"]["cells"]["2"]["engaged"]["K"].update(bw_prmt32=1), "K engagement"),
         (lambda q: q["families"]["qwen3"].update(resolved={"on": False}), "resolved"),
+        (lambda q: q["families"]["qwen3"]["cells"]["2"]["engaged"]["K"].update(k25_plan={"today|le256": 48}), "K plan"),
+        (lambda q: q["families"]["qwen3"]["cells"]["4"]["engaged"]["K"].update(k25_lut={"tree|le256": 48}), "K lut"),
+        (lambda q: q["families"]["qwen3"]["cells"]["8"]["engaged"]["B"].update(k25_plan={"c1|le256": 48}), "B on K25"),
         (lambda q: q["families"]["qwen3"].update(k25={"E4B_K25_LUT": "tree", "E4B_K25_PLAN": "today"}), "K plan"),
         (lambda q: q["families"]["qwen3"]["cells"]["2"]["reps"].pop(), "rep count"),
     ]:
@@ -437,9 +454,20 @@ def self_test():
             cell["engaged"]["B"]["bw_prmt32"] = 4
             cell["engaged"]["B"]["route"] = {"nf4_singleton|le256": 2}
             cell["engaged"]["K"]["route"] = {"nf4_k25|le256": 2}
+            k25 = FAMILIES[fam]["k25"]
+            cell["engaged"]["K"]["k25_lut"] = {f"{k25['E4B_K25_LUT']}|le256": 2}
+            cell["engaged"]["K"]["k25_plan"] = {f"{k25['E4B_K25_PLAN']}|le256": 2}
     q["device"] = "NVIDIA RTX A4000"
     v = verdict(q)
     check(v["verdict"] == "qwen3=SHAKEDOWN mixtral=SHAKEDOWN" and v["predictions"] == {}, v["verdict"])
+    # the reported spreads: B2's SE and the copy rate's
+    v = verdict(_fake())
+    b2 = v["families"]["mixtral"]["b2_trigger"]
+    check(b2["reported_se"] > 0 and b2["reported_lb"] < b2["b_over_floor_t8"] < b2["reported_ub"], "b2 spread")
+    q = _fake()
+    q["copy"]["samples_s"] = [2 * 2 * 1024 ** 3 / (g * 1e9) for g in (1490.0, 1500.0, 1510.0)]
+    c = verdict(q)["copy_rate_gbs"]
+    check(abs(c["min"] - 1490.0) < 1e-6 and abs(c["max"] - 1510.0) < 1e-6, "copy spread")
     print(f"p227_reduce self-test OK ({n} checks)")
 
 
@@ -456,9 +484,15 @@ def main():
             print(f"p227_reduce self-test FAILED: {e}")
             return 1
         return 0
-    with open(a.bench, encoding="utf-8") as f:
-        rec = json.load(f)
-    v = verdict(rec)
+    try:
+        with open(a.bench, encoding="utf-8") as f:
+            rec = json.load(f)
+    except (OSError, ValueError) as e:            # a killed or never-written bench is a VOID record, never a crash
+        rec = None
+        v = {"lane": LANE, "verdict": "VOID", "families": {},
+             "why": [f"the bench record is missing or unreadable ({type(e).__name__}: {str(e)[:120]})"]}
+    if rec is not None:
+        v = verdict(rec)
     with open(a.out, "w", encoding="utf-8", newline="\n") as f:
         json.dump(v, f, indent=1, sort_keys=True)
     print(f"P227_VERDICT {v['verdict']}")

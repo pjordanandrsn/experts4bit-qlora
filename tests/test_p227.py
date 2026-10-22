@@ -149,6 +149,26 @@ def test_no_instance_id_or_host_name_is_written_on_the_box():
         assert "vast.ai" not in text and "ssh1." not in text
 
 
+def test_a_record_with_no_family_read_is_not_a_reading():
+    """The runner's exit: 0 only when a family reads PASS or MISS (or both families SHAKEDOWN in a shakedown)."""
+    assert "sum(f.get('verdict') in ('PASS','MISS') for f in (v.get('families') or {}).values())" in RUN
+    assert '0/*) [ "${READ:-0}" -ge 1 ] && finish 0; say "P227 $V -- no family read"; finish 27;;' in RUN
+    assert '"1/qwen3=SHAKEDOWN mixtral=SHAKEDOWN") finish 0;;' in RUN and "1/*) say" in RUN
+    assert "A run where\n  no family reads PASS or MISS is not a reading" in PREREG
+
+
+def test_a_missing_or_unreadable_bench_record_reduces_to_void(tmp_path):
+    for content in (None, "{not json"):
+        bench = tmp_path / "bench_p227.json"
+        if content is not None:
+            bench.write_text(content, encoding="utf-8")
+        out = tmp_path / "v.json"
+        r = subprocess.run([sys.executable, str(LANE / "p227_reduce.py"), "--bench", str(bench), "--out", str(out)],
+                           capture_output=True, text=True)
+        assert r.returncode == 0 and "P227_VERDICT VOID" in r.stdout, r.stdout + r.stderr
+        assert '"verdict": "VOID"' in out.read_text(encoding="utf-8")
+
+
 REDUCER_MUTANTS = [
     ("BAR = 0.70 ", "BAR = 0.75 "),                                                      # a looser bar
     ('ok = all(cells[T]["b_over_k"]["ub"] <= BAR and cells[T]["b_over_k"]["ub_clock_adj"] <= BAR for T in RULED_TS)',
@@ -159,6 +179,8 @@ REDUCER_MUTANTS = [
     ('if rep.get("k2_identical") is not True:', 'if False:'),                              # K2's bits unchecked
     ('bad = [T for T, c in cells.items() if c["b_rel_diff_max"] > TOL]', 'bad = []'),     # the tolerance dropped
     ('or any(b.get(x) for x in ("dotpad"', 'or False and any(b.get(x) for x in ("dotpad"'),   # B could be dot-pad
+    ('if k.get("k25_lut") != {f"{lut}|le256": L} or k.get("k25_plan") != {f"{plan}|le256": L}:',
+     'if False:'),                                                                       # K's tallies unchecked
 ]
 
 

@@ -166,9 +166,11 @@ rc=$?; gpu_snap "bench end"
 say "reduce"; python $W/p227_reduce.py --bench "$W/bench_p227.json" --out "$W/verdict_p227.json" 2>&1 | tee -a summary.txt
 [ "${PIPESTATUS[0]}" = 0 ] && [ -s "$W/verdict_p227.json" ] || { say "REDUCER FAILED"; finish 22; }
 V=$(python -c "import json; print(json.load(open('$W/verdict_p227.json'))['verdict'])")
+# a reading finishes 0 only when at least one family was READ (PASS or MISS); a record whose every family is VOID or
+# TOLERANCE_FAIL is not a reading (rc 27). A shakedown finishes 0 only on both families' SHAKEDOWN.
+READ=$(python -c "import json; v=json.load(open('$W/verdict_p227.json')); print(sum(f.get('verdict') in ('PASS','MISS') for f in (v.get('families') or {}).values()))")
 case "$SHAKE/$V" in
-  "0/VOID") say "P227 VOID -- no reading"; finish 27;;
-  0/*) finish 0;;
   "1/qwen3=SHAKEDOWN mixtral=SHAKEDOWN") finish 0;;
-  *) say "P227 $V -- no reading"; finish 27;;
+  1/*) say "P227 shakedown $V -- not a clean shakedown"; finish 27;;
+  0/*) [ "${READ:-0}" -ge 1 ] && finish 0; say "P227 $V -- no family read"; finish 27;;
 esac

@@ -66,7 +66,9 @@ Per family and T, three arms, each one graph holding every layer's call:
   - Before the reps, one eager pass per arm records the engagement:
     - B: exactly 2 x layers `bw_prmt32` launches, and no dot-pad or scalar launch;
     - K: no K33 launch at all;
-    - e4b's route tally: B is `nf4_singleton`, K is `nf4_k25`, one per layer.
+    - e4b's route tally: B is `nf4_singleton`, K is `nf4_k25`, one per layer;
+    - e4b's own K25 tallies (`K25_LUT_SEEN`, `K25_PLAN_SEEN`): K ran the family's registered decode and plan on every
+      layer, and B reached K25 on none. The reducer compares them with the registered values, not with the record's.
 - **The call:** the collapse's own, `hot_residency._fused_over_stack`, with the token rows (`x_tokens`). That is
   gate_up, the act and down, with the glue each route builds. The ratio is the expert call's, not a step's.
 
@@ -124,6 +126,11 @@ P222's, with the arms above. Everything not named here is P222's.
   - a rep's order not its Williams row, or a rep without its 30 spacer replays;
   - **K2 differs from K by a bit in any rep**;
   - K/K2's median outside 0.99-1.01 at any T.
+- **What a family's VOID means:** that family is not read on that run. The other family's verdict stands. A run where
+  no family reads PASS or MISS is not a reading (the runner's rc 27, a strike).
+  - A later run re-reads both families. A family already read keeps its first verdict, and the later run's verdict for
+    it is reported, never ruling.
+  - Two consecutive runs in which a family does not read stop the lane for that family.
 - **TOLERANCE_FAIL, one family:** B against K beyond 1.5e-2 in any rep. That is a contract finding against the
   route. No timing is ruled on, and B2's trigger is not read.
 - **PASS, one family:** at **both** T = 2 and T = 4, B/K's upper bound **and** its clock-adjusted upper bound are
@@ -135,6 +142,8 @@ P222's, with the arms above. Everything not named here is P222's.
   - The trigger is read only on a PASS or a MISS.
 - **Reported, never ruling:**
   - B/K at T = 8;
+  - B2's spread: the SE and bounds of B over the floor at T = 8 (the trigger rules on the median alone);
+  - the copy rate's median, minimum and maximum over its 20 samples;
   - each arm's milliseconds;
   - K's and B's time over the floor at every T;
   - the distinct experts per layer;
