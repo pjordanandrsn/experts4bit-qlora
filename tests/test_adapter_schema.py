@@ -191,8 +191,10 @@ def test_an_offloaded_stack_fingerprints_as_the_resident_one():
 def test_each_source_reads_where_it_says():
     with pytest.raises(ValueError, match="fingerprint it with source='offload_homes'"):
         S.quant_fingerprint(_offloaded_by_hand(_lora_stack()), "experts", source="resident")
-    with pytest.raises(NotImplementedError, match="PA-1"):
+    with pytest.raises(ValueError, match="needs arena=<path>"):          # PA-1's source reads a served model's arena
         S.quant_fingerprint(_lora_stack(), "experts", source="arena")
+    with pytest.raises(ValueError, match="needs arena=<path>"):
+        S.quant_fingerprint(_lora_stack(), "attention", source="arena", arena="x.arena")
     with pytest.raises(ValueError, match="source must be one of"):
         S.quant_fingerprint(_lora_stack(), "experts", source="disk")
 
@@ -332,15 +334,17 @@ def _v2(tmp_path, *, backend="experts4bit", scheme="qfp-v1", drop=None, scale=2.
     return d
 
 
-def test_v2_verifies_and_keeps_the_expert_refusal_until_pa1(tmp_path):
+def test_v2_with_an_expert_fingerprint_defers_the_expert_check_to_the_load(tmp_path):
+    """PA-1: a /2 manifest's expert fingerprint is compared with the served arena at load (fingerprint_check: verified
+    or refusal 12), so the pre-load check no longer refuses it as unverifiable (9)."""
     ad = AD.verify_adapter_dir(_v2(tmp_path))
     assert ad.manifest["schema"] == "backend-adapter/2"
     r = AD.servable_refusals(ad, served_revision="a" * 40, requested_revision=None,
                              arena_index={"snapshot": "/c/models--x--y/snapshots/" + "a" * 40,
                                           "quantizer": {"quant_type": "nf4", "blocksize": 64}},
                              levers={}, served_model="x/y")
-    assert [c for c, _ in r] == [9] and "backend-adapter/2 records the expert absmax form (fp32)" in r[0][1]
-    assert "PA-1" in AD.base_match(ad)["experts"]
+    assert r == []
+    assert AD.base_match(ad)["experts"].startswith("pending")
 
 
 @pytest.mark.parametrize("kw,needle", [

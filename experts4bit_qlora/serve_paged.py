@@ -135,7 +135,12 @@ never emitted in pieces), ``finish_reason`` on the last token's chunk, a ``usage
   - 8: attention trained on a 4-bit base;
   - 9: an expert base a v1 manifest cannot verify (opt-in ``E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE=experts``,
     reported as ``base_match``);
-  - 10: speculative decoding (``E4B_PAGED_SPEC``), whose draft head and gate were read on the base model.
+  - 10: speculative decoding (``E4B_PAGED_SPEC``), whose draft head and gate were read on the base model;
+  - 11: a backend-adapter/2 attention fingerprint (qfp-v1) the served attention base does not match, measured after the
+    load and before the merge (no override);
+  - 12: a backend-adapter/2 expert fingerprint the served arena does not match (PA-1; opt-in
+    ``E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH=experts``, reported in ``/health`` as a served mismatch). A /2 manifest with
+    an expert fingerprint is compared instead of refused by 9.
   The served name becomes ``<model>+<adapter_id[:12]>``, and ``/health`` and ``/v1/models`` carry the adapter's id,
   manifest hash, base revision, merge report and ``base_match``.
 
@@ -155,7 +160,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Optional, Sequence
 
-from .adapter_dir import parse_accept_unverified_base
+from .adapter_dir import ACCEPT_BASE_MISMATCH_ENV, parse_accept_base_mismatch, parse_accept_unverified_base
 from .engines.scheduler import ContinuousScheduler, Request
 
 DEFAULT_BUCKETS = (1, 2, 4, 8, 16)
@@ -731,6 +736,7 @@ class PagedServeConfig:
     adapter: str = ""                    # E4B_PAGED_ADAPTER: one trained adapter directory (backend-adapter/1), merged at load
     adapter_allow_unverified_arena: bool = False   # E4B_PAGED_ADAPTER_ALLOW_UNVERIFIED_ARENA=1: refusal 3's opt-in
     adapter_accept_unverified_base: frozenset = frozenset()   # E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE: named scopes
+    adapter_accept_base_mismatch: frozenset = frozenset()     # E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH: refusal 12's opt-in
     adapter_id: str = ""                 # set by the build: sha256 of adapter.safetensors (the served name's suffix)
     device: str = "cuda"
 
@@ -787,6 +793,7 @@ class PagedServeConfig:
             adapter=env("E4B_PAGED_ADAPTER", "").strip(),
             adapter_allow_unverified_arena=_zero_one(ADAPTER_ALLOW_ARENA_ENV, env(ADAPTER_ALLOW_ARENA_ENV, "0")),
             adapter_accept_unverified_base=parse_accept_unverified_base(env(ADAPTER_ACCEPT_BASE_ENV, "")),
+            adapter_accept_base_mismatch=parse_accept_base_mismatch(env(ACCEPT_BASE_MISMATCH_ENV, "")),
             device=env("E4B_PAGED_DEVICE", "cuda"),
         )
         cfg.validate()
@@ -843,9 +850,10 @@ class PagedServeConfig:
             if self.decode_lookahead:
                 raise ValueError("E4B_PAGED_SPEC and E4B_PAGED_DECODE_LOOKAHEAD do not combine: each speculative step "
                                  "reads its accepted tokens back before the next is planned")
-        if not self.adapter and (self.adapter_allow_unverified_arena or self.adapter_accept_unverified_base):
-            raise ValueError(f"{ADAPTER_ALLOW_ARENA_ENV} / {ADAPTER_ACCEPT_BASE_ENV} are set but E4B_PAGED_ADAPTER "
-                             f"is not")
+        if not self.adapter and (self.adapter_allow_unverified_arena or self.adapter_accept_unverified_base
+                                 or self.adapter_accept_base_mismatch):
+            raise ValueError(f"{ADAPTER_ALLOW_ARENA_ENV} / {ADAPTER_ACCEPT_BASE_ENV} / {ACCEPT_BASE_MISMATCH_ENV} are set "
+                             f"but E4B_PAGED_ADAPTER is not")
 
     @property
     def prefill_budget(self) -> int:
@@ -1775,9 +1783,17 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     if adapter is not None:
         # merged right after the load: before the levers, the fusions, the GEMV routes and graph capture, so every one of
         # them sees a plain nn.Linear (docs/ADAPTER_PORTABILITY.md)
-        from .adapter_dir import arena_source_revision, base_match, merge_attention_lora
+        from .adapter_dir import arena_source_revision, base_match, fingerprint_check, merge_attention_lora
         served = getattr(model.config, "_commit_hash", None)
         _raise_adapter_refusals(_adapter_refusals(adapter, cfg, arena_index, served_revision=served))
+        # the served base's qfp-v1 against the /2 manifest's (refusals 11 and 12): after the load, BEFORE the merge
+        # (which rewrites the attention weights) and before any lever, fusion or route touches a module
+        fp_refusals, fingerprints = fingerprint_check(adapter, model, cfg.arena,
+                                                      accept_base_mismatch=cfg.adapter_accept_base_mismatch)
+        _raise_adapter_refusals(fp_refusals)
+        for scope, row in fingerprints.items():
+            log(f"adapter fingerprint {scope}: {row['status']} (qfp-v1 {row['served'][:16]} served, "
+                f"{str(row['trained'])[:16]} trained, {row['seconds']} s)")
         report = merge_attention_lora(model, adapter)
         cfg.adapter_id = adapter.adapter_id
         adapter_info = {"path": adapter.path, "adapter_id": adapter.adapter_id,
@@ -1786,8 +1802,10 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
                         "arena_revision": arena_source_revision(arena_index) or "unverified (allowed by "
                                                                                  f"{ADAPTER_ALLOW_ARENA_ENV}=1)",
                         "served_name": cfg.model_names[0] if cfg.model_names else None, "scale": adapter.scale,
-                        "merge": report.to_dict(), "base_match": base_match(adapter),
-                        "accepted_unverified_base": sorted(cfg.adapter_accept_unverified_base)}
+                        "merge": report.to_dict(), "base_match": base_match(adapter, fingerprints=fingerprints),
+                        "fingerprints": fingerprints,
+                        "accepted_unverified_base": sorted(cfg.adapter_accept_unverified_base),
+                        "accepted_base_mismatch": sorted(cfg.adapter_accept_base_mismatch)}
         log(f"adapter {adapter.adapter_id[:12]}: merged {report.merged} attention projections (scale {adapter.scale:g}, "
             f"max merge error {report.to_dict()['max_err']:.3g}); served as {adapter_info['served_name']!r}")
     mods = target_modules(model)
