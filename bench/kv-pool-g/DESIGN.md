@@ -36,7 +36,9 @@ row changes no arithmetic.
 **What changes.** A slot owns the blocks for the positions it has written, plus the block its next write lands in.
 
 - At the prompt flush (`_flush_bulk`), claim `ceil((prompt_len + 1) / 16)` blocks instead of `blocks_per_seq`. That
-  covers the prompt and the first decode token.
+  covers the prompt (positions `0 .. prompt_len - 1`) and the first decode token at position `prompt_len`, including at
+  a block boundary: a 32-token prompt claims 3 blocks, so the first decode's write at position 32 lands in block 2,
+  which it owns.
 - Before each decode step, for every slot in the step whose next write position `p` (the host's `pos_of[rid] - 1`) sits
   in a block it does not own, claim block `p // 16`.
 - All of a step's new claims go in **one** table write: a new `Fp8PagedKV.claim_next(slots_blocks)`, one staged H2D
@@ -57,13 +59,19 @@ row changes no arithmetic.
   3. `graph_bucket_load`;
   4. `g.replay()`.
   Stream order alone places the H2D table write before both the gather and the replay. No event or sync is needed, and
-  none is added.
+  none is added. The write is a real host-to-device copy: `_bt_all` is a device tensor, and `claim_blocks` (and
+  `claim_next`) fill a pinned host buffer, then `_bt_all[:, seq, lo:lo + n].copy_(src, non_blocking=True)` on the
+  current stream. No CPU-side tensor is written that the graph never sees.
 - **Capture is unchanged.** Buckets are captured on scratch slots only (`_capture_bucket`), each backed by one block
   claimed at build. No live slot's table is touched during a capture.
 - **The decode lookahead** (`E4B_PAGED_DECODE_LOOKAHEAD`) queues step t+1 while step t is in flight. Step t+1's claim is
   computed from host positions, which advance deterministically by one per issued step, not from tokens read back. Its
-  H2D write is queued after step t's replay and before step t+1's replay, on the same stream. The staging ring's event
-  guard already keeps a queued copy's host buffer from being rewritten.
+  H2D write is queued after step t's replay and before step t+1's replay, on the same stream, so the copy cannot
+  execute while step t's replay runs. It also writes a table entry step t never reads: a new claim is block
+  `p_{t+1} // 16` only when that block was not owned at step t, and step t's attention reads entries only up to its
+  own length. Under `E4B_KV_STEP_SELECT` step t's gather into the bucket's `st["tbl"]` is queued before step t's replay,
+  and step t+1's gather after the claim. The staging ring's event guard already keeps a queued copy's host buffer from
+  being rewritten.
 
 **(2) Out of blocks at a boundary.**
 
