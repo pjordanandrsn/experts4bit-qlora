@@ -268,7 +268,8 @@ def test_amendment_3_registers_the_bake_the_canary_check_and_the_dropped_arms():
                  "HARNESS_ERROR before any slot runs", "never on a\n     hand-built dict",
                  "`expert_absmax.form` `fp32` AND the setup's `expert_kernel` `reference`", "A mismatch VOIDs",
                  "REF-DQ and PA-DQ are dropped", "Six fresh server processes", "`pins.json`",
-                 "`--fix expert_kernel=grouped_nf4`", "WHATEVER the reduce outcome"):
+                 "`--fix expert_kernel=grouped_nf4`", "WHATEVER the reduce outcome",
+                 "--seq 512 --micro-batch 1 --steps 200 --seed 42 --fix expert_residency=device --fix expert_kernel=grouped_nf4"):
         assert text in AMENDMENT_3, text
     for marker in ("canary B: trained at the default (dropped by Amendment 3)", "(superseded by Amendment 3: six processes)",
                    "- **The fit** (superseded by Amendment 3)", "superseded by Amendment 3: `bake_nf4`"):

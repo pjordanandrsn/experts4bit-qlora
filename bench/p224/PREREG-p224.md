@@ -285,7 +285,7 @@ none exists. The shakedown box already holds OLMoE and Loggetta, so it trains tw
   - `prepare_data` with these arguments passes: 958 rows, 102,400 tokens.
   - The data is now pinned, so the unpinned-data note is dropped. The receipt's data record still travels with each
     fixture.
-- **The fixture invocation**, superseding the one in "Fixture generation":
+- **The fixture invocation** (superseded by Amendment 3), superseding the one in "Fixture generation":
   ```
   python -m loggetta train allenai/OLMoE-1B-7B-0924-Instruct --revision 7f1c97f440f06ce36705e4f2b843edb5925f4498
     --dataset tatsu-lab/alpaca --dataset-revision dce01c9b08f87459cf36a430d809084718273017 --format text --text-field text
@@ -416,6 +416,14 @@ read, after D0's premise.
    own argument parser, so a missing required flag fails in CI.
 5. **The fixtures (superseding "AFTER the shakedown's own records, the collect and the reduce").**
    - The two fixture trains take `--fix expert_kernel=grouped_nf4` (they train experts, so the fused path applies).
+     The authoritative fixture command, superseding Amendment 1's code block (`<form>` is `dq` or `nodq`;
+     `fixture-nodq` runs with `E4B_ABSMAX_DQ=0`, `fixture-dq` with it unset):
+     ```
+     python -m loggetta train allenai/OLMoE-1B-7B-0924-Instruct --revision 7f1c97f440f06ce36705e4f2b843edb5925f4498
+       --dataset tatsu-lab/alpaca --dataset-revision dce01c9b08f87459cf36a430d809084718273017 --format text --text-field text
+       --seq 512 --micro-batch 1 --steps 200 --seed 42 --fix expert_residency=device --fix expert_kernel=grouped_nf4
+       --out receipts_fixture-<form> --adapter-out fixture-<form>
+     ```
    - They run after the shakedown's own steps WHATEVER the reduce outcome, provided the box is healthy and each step's
      time-left check passes.
    - They never touch or alter the shakedown's records or verdict, and a fixture failure stays recorded beside it.
