@@ -1,0 +1,410 @@
+P222_PLAN gu (128, 128, 4, 3) identical=True err=False first=0.3
+P222_PLAN gu (16, 128, 4, 2) identical=True err=False first=0.2
+P222_PLAN gu (128, 256, 8, 4) identical=True err=False first=0.34
+P222_PLAN gu (128, 128, 8, 1) identical=True err=False first=0.22
+P222_PLAN gu (32, 256, 2, 4) identical=True err=False first=0.38
+P222_PLAN gu (32, 64, 4, 1) identical=True err=False first=0.16
+P222_PLAN gu (32, 256, 8, 4) identical=True err=False first=0.26
+P222_PLAN gu (64, 256, 2, 3) identical=True err=False first=0.66
+P222_PLAN gu (128, 64, 2, 3) identical=True err=False first=0.33
+P222_PLAN gu (64, 256, 2, 4) identical=True err=False first=0.67
+P222_PLAN gu (64, 64, 2, 3) identical=True err=False first=0.22
+P222_PLAN gu (128, 128, 8, 4) identical=True err=False first=0.23
+P222_PLAN gu (32, 128, 4, 2) identical=True err=False first=0.2
+P222_PLAN gu (16, 128, 2, 2) identical=True err=False first=0.2
+P222_PLAN gu (32, 128, 2, 1) identical=True err=False first=0.23
+P222_PLAN gu (64, 256, 2, 1) identical=True err=False first=0.67
+P222_PLAN gu (64, 128, 4, 4) identical=True err=False first=0.25
+P222_PLAN gu (128, 256, 2, 3) identical=True err=False first=2.35
+P222_PLAN gu (64, 64, 2, 2) identical=True err=False first=0.23
+P222_PLAN gu (16, 64, 2, 1) identical=True err=False first=0.16
+P222_PLAN gu (32, 128, 8, 3) identical=True err=False first=0.19
+P222_PLAN gu (64, 64, 8, 2) identical=True err=False first=0.16
+P222_PLAN gu (64, 128, 4, 3) identical=True err=False first=0.24
+P222_PLAN gu (128, 64, 8, 4) identical=True err=False first=0.19
+P222_PLAN gu (32, 64, 2, 4) identical=True err=False first=0.19
+P222_PLAN gu (128, 64, 4, 3) identical=True err=False first=0.22
+P222_PLAN gu (64, 128, 8, 1) identical=True err=False first=0.18
+P222_PLAN gu (32, 128, 8, 4) identical=True err=False first=0.2
+P222_PLAN gu (64, 256, 8, 3) identical=True err=False first=0.27
+P222_PLAN gu (32, 256, 2, 3) identical=True err=False first=0.35
+P222_PLAN gu (16, 64, 4, 2) identical=True err=False first=0.16
+P222_PLAN gu (32, 64, 2, 3) identical=True err=False first=0.18
+P222_PLAN gu (16, 128, 2, 4) identical=True err=False first=0.21
+P222_PLAN gu (16, 128, 2, 1) identical=True err=False first=0.19
+P222_PLAN gu (16, 128, 2, 3) identical=True err=False first=0.2
+P222_PLAN gu (32, 256, 2, 2) identical=True err=False first=0.37
+P222_PLAN gu (16, 64, 2, 2) identical=True err=False first=0.16
+P222_PLAN gu (64, 256, 4, 1) identical=True err=False first=0.33
+P222_PLAN gu (64, 64, 4, 2) identical=True err=False first=0.18
+P222_PLAN gu (128, 256, 4, 3) identical=True err=False first=0.63
+P222_PLAN gu (16, 64, 8, 2) identical=True err=False first=0.16
+P222_PLAN gu (16, 64, 4, 3) identical=True err=False first=0.17
+P222_PLAN gu (64, 128, 2, 3) identical=True err=False first=0.32
+P222_PLAN gu (64, 256, 4, 4) identical=True err=False first=0.35
+P222_PLAN gu (32, 64, 8, 1) identical=True err=False first=0.15
+P222_PLAN gu (64, 256, 8, 2) identical=True err=False first=0.3
+P222_PLAN gu (128, 256, 8, 3) identical=True err=False first=0.33
+P222_PLAN gu (16, 256, 4, 3) identical=True err=False first=0.27
+P222_PLAN gu (64, 64, 2, 4) identical=True err=False first=0.22
+P222_PLAN gu (16, 256, 8, 2) identical=True err=False first=0.3
+P222_PLAN gu (16, 256, 2, 1) identical=True err=False first=0.3
+P222_PLAN gu (128, 256, 8, 2) identical=True err=False first=0.38
+P222_PLAN gu (32, 128, 4, 1) identical=True err=False first=0.2
+P222_PLAN gu (128, 256, 4, 1) identical=True err=False first=0.65
+P222_PLAN gu (128, 64, 8, 2) identical=True err=False first=0.18
+P222_PLAN gu (32, 128, 2, 3) identical=True err=False first=0.24
+P222_PLAN gu (128, 256, 2, 1) identical=True err=False first=0.87
+P222_PLAN gu (32, 128, 4, 3) identical=True err=False first=0.19
+P222_PLAN gu (32, 256, 8, 1) identical=True err=False first=0.27
+P222_PLAN gu (128, 128, 2, 2) identical=True err=False first=0.62
+P222_PLAN gu (128, 128, 4, 1) identical=True err=False first=0.29
+P222_PLAN gu (16, 256, 4, 1) identical=True err=False first=0.28
+P222_PLAN gu (32, 128, 4, 4) identical=True err=False first=0.21
+P222_PLAN gu (32, 64, 2, 1) identical=True err=False first=0.18
+P222_PLAN gu (128, 256, 2, 4) identical=True err=False first=2.46
+P222_PLAN gu (128, 256, 4, 2) identical=True err=False first=0.65
+P222_PLAN gu (16, 128, 8, 2) identical=True err=False first=0.19
+P222_PLAN gu (128, 64, 2, 4) identical=True err=False first=0.33
+P222_PLAN gu (128, 64, 2, 1) identical=True err=False first=0.27
+P222_PLAN gu (16, 256, 8, 1) identical=True err=False first=0.27
+P222_PLAN gu (16, 64, 2, 3) identical=True err=False first=0.17
+P222_PLAN gu (16, 256, 8, 3) identical=True err=False first=0.27
+P222_PLAN gu (32, 64, 8, 2) identical=True err=False first=0.16
+P222_PLAN gu (32, 64, 4, 3) identical=True err=False first=0.17
+P222_PLAN gu (64, 64, 8, 4) identical=True err=False first=0.17
+P222_PLAN gu (64, 256, 4, 2) identical=True err=False first=0.38
+P222_PLAN gu (16, 64, 8, 3) identical=True err=False first=0.16
+P222_PLAN gu (64, 256, 4, 3) identical=True err=False first=0.34
+P222_PLAN gu (32, 256, 8, 2) identical=True err=False first=0.31
+P222_PLAN gu (64, 64, 4, 1) identical=True err=False first=0.17
+P222_PLAN gu (32, 256, 8, 3) identical=True err=False first=0.25
+P222_PLAN gu (64, 64, 8, 1) identical=True err=False first=0.16
+P222_PLAN gu (128, 128, 2, 3) identical=True err=False first=0.63
+P222_PLAN gu (64, 128, 2, 4) identical=True err=False first=0.33
+P222_PLAN gu (32, 256, 4, 4) identical=True err=False first=0.28
+P222_PLAN gu (64, 128, 8, 2) identical=True err=False first=0.2
+P222_PLAN gu (16, 128, 8, 1) identical=True err=False first=0.19
+P222_PLAN gu (128, 128, 8, 2) identical=True err=False first=0.23
+P222_PLAN gu (128, 256, 8, 1) identical=True err=False first=0.33
+P222_PLAN gu (32, 64, 8, 4) identical=True err=False first=0.17
+P222_PLAN gu (16, 128, 8, 4) identical=True err=False first=0.21
+P222_PLAN gu (32, 256, 4, 3) identical=True err=False first=0.28
+P222_PLAN gu (64, 128, 4, 1) identical=True err=False first=0.23
+P222_PLAN gu (64, 64, 4, 4) identical=True err=False first=0.18
+P222_PLAN gu (64, 256, 2, 2) identical=True err=False first=0.66
+P222_PLAN gu (64, 128, 8, 4) identical=True err=False first=0.2
+P222_PLAN gu (64, 64, 8, 3) identical=True err=False first=0.17
+P222_PLAN gu (16, 128, 8, 3) identical=True err=False first=0.2
+P222_PLAN gu (16, 128, 4, 1) identical=True err=False first=0.19
+P222_PLAN gu (32, 64, 4, 2) identical=True err=False first=0.17
+P222_PLAN gu (32, 64, 2, 2) identical=True err=False first=0.18
+P222_PLAN gu (16, 64, 8, 4) identical=True err=False first=0.17
+P222_PLAN gu (32, 256, 4, 1) identical=True err=False first=0.28
+P222_PLAN gu (64, 128, 8, 3) identical=True err=False first=0.2
+P222_PLAN gu (64, 128, 2, 1) identical=True err=False first=0.29
+P222_PLAN gu (32, 128, 2, 2) identical=True err=False first=0.25
+P222_PLAN gu (128, 128, 2, 1) identical=True err=False first=0.58
+P222_PLAN gu (128, 64, 8, 1) identical=True err=False first=0.17
+P222_PLAN gu (16, 64, 2, 4) identical=True err=False first=0.18
+P222_PLAN gu (32, 128, 2, 4) identical=True err=False first=0.24
+P222_PLAN gu (16, 256, 8, 4) identical=True err=False first=0.27
+P222_PLAN gu (64, 256, 8, 1) identical=True err=False first=0.28
+P222_PLAN gu (128, 256, 4, 4) identical=True err=False first=0.66
+P222_PLAN gu (128, 64, 2, 2) identical=True err=False first=0.28
+P222_PLAN gu (16, 256, 4, 2) identical=True err=False first=0.32
+P222_PLAN gu (128, 256, 2, 2) identical=True err=False first=0.96
+P222_PLAN gu (16, 256, 2, 2) identical=True err=False first=0.32
+P222_PLAN gu (128, 64, 8, 3) identical=True err=False first=0.18
+P222_PLAN gu (32, 128, 8, 1) identical=True err=False first=0.19
+P222_PLAN gu (32, 64, 4, 4) identical=True err=False first=0.17
+P222_PLAN gu (128, 128, 4, 4) identical=True err=False first=0.32
+P222_PLAN gu (16, 256, 4, 4) identical=True err=False first=0.28
+P222_PLAN gu (64, 128, 4, 2) identical=True err=False first=0.23
+P222_PLAN gu (32, 64, 8, 3) identical=True err=False first=0.16
+P222_PLAN gu (128, 128, 8, 3) identical=True err=False first=0.24
+P222_PLAN gu (32, 256, 4, 2) identical=True err=False first=0.31
+P222_PLAN gu (64, 128, 2, 2) identical=True err=False first=0.31
+P222_PLAN gu (128, 128, 4, 2) identical=True err=False first=0.3
+P222_PLAN gu (16, 128, 4, 3) identical=True err=False first=0.21
+P222_PLAN gu (64, 256, 8, 4) identical=True err=False first=0.27
+P222_PLAN gu (16, 256, 2, 3) identical=True err=False first=0.3
+P222_PLAN gu (16, 64, 4, 1) identical=True err=False first=0.16
+P222_PLAN gu (16, 128, 4, 4) identical=True err=False first=0.21
+P222_PLAN gu (128, 64, 4, 4) identical=True err=False first=0.23
+P222_PLAN gu (128, 64, 4, 1) identical=True err=False first=0.2
+P222_PLAN gu (128, 64, 4, 2) identical=True err=False first=0.21
+P222_PLAN gu (32, 128, 8, 2) identical=True err=False first=0.2
+P222_PLAN gu (128, 128, 2, 4) identical=True err=False first=0.65
+P222_PLAN gu (16, 64, 4, 4) identical=True err=False first=0.17
+P222_PLAN gu (16, 64, 8, 1) identical=True err=False first=0.16
+P222_PLAN gu (64, 64, 4, 3) identical=True err=False first=0.19
+P222_PLAN gu (64, 64, 2, 1) identical=True err=False first=0.2
+P222_PLAN gu (32, 256, 2, 1) identical=True err=False first=0.38
+P222_PLAN gu (16, 256, 2, 4) identical=True err=False first=0.3
+P222_PLAN dn (128, 128, 4, 3) identical=True err=False first=0.31
+P222_PLAN dn (16, 128, 4, 2) identical=True err=False first=0.19
+P222_PLAN dn (128, 256, 8, 4) identical=True err=False first=0.33
+P222_PLAN dn (128, 128, 8, 1) identical=True err=False first=0.22
+P222_PLAN dn (32, 256, 2, 4) identical=True err=False first=0.37
+P222_PLAN dn (32, 64, 4, 1) identical=True err=False first=0.16
+P222_PLAN dn (32, 256, 8, 4) identical=True err=False first=0.26
+P222_PLAN dn (64, 256, 2, 3) identical=True err=False first=0.64
+P222_PLAN dn (128, 64, 2, 3) identical=True err=False first=0.33
+P222_PLAN dn (64, 256, 2, 4) identical=True err=False first=0.67
+P222_PLAN dn (64, 64, 2, 3) identical=True err=False first=0.22
+P222_PLAN dn (128, 128, 8, 4) identical=True err=False first=0.23
+P222_PLAN dn (32, 128, 4, 2) identical=True err=False first=0.2
+P222_PLAN dn (16, 128, 2, 2) identical=True err=False first=0.22
+P222_PLAN dn (32, 128, 2, 1) identical=True err=False first=0.23
+P222_PLAN dn (64, 256, 2, 1) identical=True err=False first=0.66
+P222_PLAN dn (64, 128, 4, 4) identical=True err=False first=0.24
+P222_PLAN dn (128, 256, 2, 3) identical=True err=False first=2.35
+P222_PLAN dn (64, 64, 2, 2) identical=True err=False first=0.21
+P222_PLAN dn (16, 64, 2, 1) identical=True err=False first=0.16
+P222_PLAN dn (32, 128, 8, 3) identical=True err=False first=0.19
+P222_PLAN dn (64, 64, 8, 2) identical=True err=False first=0.16
+P222_PLAN dn (64, 128, 4, 3) identical=True err=False first=0.23
+P222_PLAN dn (128, 64, 8, 4) identical=True err=False first=0.19
+P222_PLAN dn (32, 64, 2, 4) identical=True err=False first=0.19
+P222_PLAN dn (128, 64, 4, 3) identical=True err=False first=0.22
+P222_PLAN dn (64, 128, 8, 1) identical=True err=False first=0.19
+P222_PLAN dn (32, 128, 8, 4) identical=True err=False first=0.2
+P222_PLAN dn (64, 256, 8, 3) identical=True err=False first=0.27
+P222_PLAN dn (32, 256, 2, 3) identical=True err=False first=0.35
+P222_PLAN dn (16, 64, 4, 2) identical=True err=False first=0.16
+P222_PLAN dn (32, 64, 2, 3) identical=True err=False first=0.18
+P222_PLAN dn (16, 128, 2, 4) identical=True err=False first=0.21
+P222_PLAN dn (16, 128, 2, 1) identical=True err=False first=0.2
+P222_PLAN dn (16, 128, 2, 3) identical=True err=False first=0.2
+P222_PLAN dn (32, 256, 2, 2) identical=True err=False first=0.38
+P222_PLAN dn (16, 64, 2, 2) identical=True err=False first=0.16
+P222_PLAN dn (64, 256, 4, 1) identical=True err=False first=0.35
+P222_PLAN dn (64, 64, 4, 2) identical=True err=False first=0.18
+P222_PLAN dn (128, 256, 4, 3) identical=True err=False first=0.63
+P222_PLAN dn (16, 64, 8, 2) identical=True err=False first=0.16
+P222_PLAN dn (16, 64, 4, 3) identical=True err=False first=0.16
+P222_PLAN dn (64, 128, 2, 3) identical=True err=False first=0.3
+P222_PLAN dn (64, 256, 4, 4) identical=True err=False first=0.35
+P222_PLAN dn (32, 64, 8, 1) identical=True err=False first=0.15
+P222_PLAN dn (64, 256, 8, 2) identical=True err=False first=0.29
+P222_PLAN dn (128, 256, 8, 3) identical=True err=False first=0.34
+P222_PLAN dn (16, 256, 4, 3) identical=True err=False first=0.27
+P222_PLAN dn (64, 64, 2, 4) identical=True err=False first=0.22
+P222_PLAN dn (16, 256, 8, 2) identical=True err=False first=0.29
+P222_PLAN dn (16, 256, 2, 1) identical=True err=False first=0.3
+P222_PLAN dn (128, 256, 8, 2) identical=True err=False first=0.38
+P222_PLAN dn (32, 128, 4, 1) identical=True err=False first=0.19
+P222_PLAN dn (128, 256, 4, 1) identical=True err=False first=0.65
+P222_PLAN dn (128, 64, 8, 2) identical=True err=False first=0.17
+P222_PLAN dn (32, 128, 2, 3) identical=True err=False first=0.25
+P222_PLAN dn (128, 256, 2, 1) identical=True err=False first=0.88
+P222_PLAN dn (32, 128, 4, 3) identical=True err=False first=0.2
+P222_PLAN dn (32, 256, 8, 1) identical=True err=False first=0.28
+P222_PLAN dn (128, 128, 2, 2) identical=True err=False first=0.61
+P222_PLAN dn (128, 128, 4, 1) identical=True err=False first=0.28
+P222_PLAN dn (16, 256, 4, 1) identical=True err=False first=0.28
+P222_PLAN dn (32, 128, 4, 4) identical=True err=False first=0.2
+P222_PLAN dn (32, 64, 2, 1) identical=True err=False first=0.17
+P222_PLAN dn (128, 256, 2, 4) identical=True err=False first=2.36
+P222_PLAN dn (128, 256, 4, 2) identical=True err=False first=0.65
+P222_PLAN dn (16, 128, 8, 2) identical=True err=False first=0.2
+P222_PLAN dn (128, 64, 2, 4) identical=True err=False first=0.34
+P222_PLAN dn (128, 64, 2, 1) identical=True err=False first=0.27
+P222_PLAN dn (16, 256, 8, 1) identical=True err=False first=0.28
+P222_PLAN dn (16, 64, 2, 3) identical=True err=False first=0.17
+P222_PLAN dn (16, 256, 8, 3) identical=True err=False first=0.26
+P222_PLAN dn (32, 64, 8, 2) identical=True err=False first=0.15
+P222_PLAN dn (32, 64, 4, 3) identical=True err=False first=0.16
+P222_PLAN dn (64, 64, 8, 4) identical=True err=False first=0.17
+P222_PLAN dn (64, 256, 4, 2) identical=True err=False first=0.39
+P222_PLAN dn (16, 64, 8, 3) identical=True err=False first=0.16
+P222_PLAN dn (64, 256, 4, 3) identical=True err=False first=0.35
+P222_PLAN dn (32, 256, 8, 2) identical=True err=False first=0.29
+P222_PLAN dn (64, 64, 4, 1) identical=True err=False first=0.17
+P222_PLAN dn (32, 256, 8, 3) identical=True err=False first=0.25
+P222_PLAN dn (64, 64, 8, 1) identical=True err=False first=0.16
+P222_PLAN dn (128, 128, 2, 3) identical=True err=False first=0.61
+P222_PLAN dn (64, 128, 2, 4) identical=True err=False first=0.32
+P222_PLAN dn (32, 256, 4, 4) identical=True err=False first=0.28
+P222_PLAN dn (64, 128, 8, 2) identical=True err=False first=0.19
+P222_PLAN dn (16, 128, 8, 1) identical=True err=False first=0.18
+P222_PLAN dn (128, 128, 8, 2) identical=True err=False first=0.23
+P222_PLAN dn (128, 256, 8, 1) identical=True err=False first=0.33
+P222_PLAN dn (32, 64, 8, 4) identical=True err=False first=0.17
+P222_PLAN dn (16, 128, 8, 4) identical=True err=False first=0.2
+P222_PLAN dn (32, 256, 4, 3) identical=True err=False first=0.27
+P222_PLAN dn (64, 128, 4, 1) identical=True err=False first=0.23
+P222_PLAN dn (64, 64, 4, 4) identical=True err=False first=0.19
+P222_PLAN dn (64, 256, 2, 2) identical=True err=False first=0.65
+P222_PLAN dn (64, 128, 8, 4) identical=True err=False first=0.21
+P222_PLAN dn (64, 64, 8, 3) identical=True err=False first=0.17
+P222_PLAN dn (16, 128, 8, 3) identical=True err=False first=0.2
+P222_PLAN dn (16, 128, 4, 1) identical=True err=False first=0.19
+P222_PLAN dn (32, 64, 4, 2) identical=True err=False first=0.16
+P222_PLAN dn (32, 64, 2, 2) identical=True err=False first=0.17
+P222_PLAN dn (16, 64, 8, 4) identical=True err=False first=0.16
+P222_PLAN dn (32, 256, 4, 1) identical=True err=False first=0.29
+P222_PLAN dn (64, 128, 8, 3) identical=True err=False first=0.19
+P222_PLAN dn (64, 128, 2, 1) identical=True err=False first=0.29
+P222_PLAN dn (32, 128, 2, 2) identical=True err=False first=0.24
+P222_PLAN dn (128, 128, 2, 1) identical=True err=False first=0.59
+P222_PLAN dn (128, 64, 8, 1) identical=True err=False first=0.18
+P222_PLAN dn (16, 64, 2, 4) identical=True err=False first=0.19
+P222_PLAN dn (32, 128, 2, 4) identical=True err=False first=0.25
+P222_PLAN dn (16, 256, 8, 4) identical=True err=False first=0.26
+P222_PLAN dn (64, 256, 8, 1) identical=True err=False first=0.28
+P222_PLAN dn (128, 256, 4, 4) identical=True err=False first=0.65
+P222_PLAN dn (128, 64, 2, 2) identical=True err=False first=0.29
+P222_PLAN dn (16, 256, 4, 2) identical=True err=False first=0.31
+P222_PLAN dn (128, 256, 2, 2) identical=True err=False first=0.95
+P222_PLAN dn (16, 256, 2, 2) identical=True err=False first=0.32
+P222_PLAN dn (128, 64, 8, 3) identical=True err=False first=0.18
+P222_PLAN dn (32, 128, 8, 1) identical=True err=False first=0.18
+P222_PLAN dn (32, 64, 4, 4) identical=True err=False first=0.17
+P222_PLAN dn (128, 128, 4, 4) identical=True err=False first=0.32
+P222_PLAN dn (16, 256, 4, 4) identical=True err=False first=0.28
+P222_PLAN dn (64, 128, 4, 2) identical=True err=False first=0.24
+P222_PLAN dn (32, 64, 8, 3) identical=True err=False first=0.17
+P222_PLAN dn (128, 128, 8, 3) identical=True err=False first=0.23
+P222_PLAN dn (32, 256, 4, 2) identical=True err=False first=0.3
+P222_PLAN dn (64, 128, 2, 2) identical=True err=False first=0.31
+P222_PLAN dn (128, 128, 4, 2) identical=True err=False first=0.3
+P222_PLAN dn (16, 128, 4, 3) identical=True err=False first=0.2
+P222_PLAN dn (64, 256, 8, 4) identical=True err=False first=0.28
+P222_PLAN dn (16, 256, 2, 3) identical=True err=False first=0.29
+P222_PLAN dn (16, 64, 4, 1) identical=True err=False first=0.16
+P222_PLAN dn (16, 128, 4, 4) identical=True err=False first=0.2
+P222_PLAN dn (128, 64, 4, 4) identical=True err=False first=0.22
+P222_PLAN dn (128, 64, 4, 1) identical=True err=False first=0.2
+P222_PLAN dn (128, 64, 4, 2) identical=True err=False first=0.21
+P222_PLAN dn (32, 128, 8, 2) identical=True err=False first=0.19
+P222_PLAN dn (128, 128, 2, 4) identical=True err=False first=0.63
+P222_PLAN dn (16, 64, 4, 4) identical=True err=False first=0.17
+P222_PLAN dn (16, 64, 8, 1) identical=True err=False first=0.15
+P222_PLAN dn (64, 64, 4, 3) identical=True err=False first=0.18
+P222_PLAN dn (64, 64, 2, 1) identical=True err=False first=0.2
+P222_PLAN dn (32, 256, 2, 1) identical=True err=False first=0.34
+P222_PLAN dn (16, 256, 2, 4) identical=True err=False first=0.29
+P222_M {"gu": {"block_n": 64, "kc": 256, "warps": 4, "stages": 2}, "dn": {"block_n": 32, "kc": 256, "warps": 4, "stages": 2}} margin {"gu": 1.015429175697998, "dn": 1.1293189437245776}
+P222_REP 0 step 0 T=11.368 T2=11.375 P=11.151 C1=5.453 M=4.846 identical=True
+P222_REP 1 step 1 T=11.372 T2=11.368 P=11.158 C1=5.458 M=4.875 identical=True
+P222_REP 2 step 2 T=11.172 T2=11.175 P=10.984 C1=5.374 M=4.787 identical=True
+P222_REP 3 step 3 T=11.370 T2=11.366 P=11.156 C1=5.462 M=4.882 identical=True
+P222_REP 4 step 4 T=11.194 T2=11.182 P=10.997 C1=5.389 M=4.795 identical=True
+P222_REP 5 step 5 T=11.182 T2=11.177 P=10.988 C1=5.384 M=4.808 identical=True
+P222_REP 6 step 6 T=11.365 T2=11.378 P=11.158 C1=5.469 M=4.889 identical=True
+P222_REP 7 step 7 T=11.369 T2=11.358 P=11.164 C1=5.471 M=4.892 identical=True
+P222_REP 8 step 8 T=11.191 T2=11.183 P=10.993 C1=5.406 M=4.831 identical=True
+P222_REP 9 step 9 T=11.367 T2=11.374 P=11.164 C1=5.468 M=4.908 identical=True
+P222_REP 10 step 10 T=11.188 T2=11.191 P=10.993 C1=5.398 M=4.830 identical=True
+P222_REP 11 step 11 T=11.180 T2=11.174 P=11.003 C1=5.401 M=4.857 identical=True
+P222_REP 12 step 12 T=11.382 T2=11.364 P=11.153 C1=5.485 M=4.925 identical=True
+P222_REP 13 step 13 T=11.368 T2=11.373 P=11.152 C1=5.478 M=4.925 identical=True
+P222_REP 14 step 14 T=11.187 T2=11.184 P=11.004 C1=5.412 M=4.848 identical=True
+P222_REP 15 step 15 T=11.375 T2=11.375 P=11.160 C1=5.485 M=4.925 identical=True
+P222_REP 16 step 16 T=11.370 T2=11.377 P=11.150 C1=5.484 M=4.921 identical=True
+P222_REP 17 step 17 T=11.374 T2=11.377 P=11.161 C1=5.481 M=4.925 identical=True
+P222_REP 18 step 18 T=11.364 T2=11.368 P=11.158 C1=5.481 M=4.935 identical=True
+P222_REP 19 step 19 T=11.373 T2=11.375 P=11.164 C1=5.485 M=4.945 identical=True
+P222_REP 20 step 20 T=11.375 T2=11.376 P=11.163 C1=5.486 M=4.943 identical=True
+P222_REP 21 step 21 T=11.373 T2=11.372 P=11.159 C1=5.489 M=4.956 identical=True
+P222_REP 22 step 22 T=11.377 T2=11.373 P=11.156 C1=5.482 M=4.947 identical=True
+P222_REP 23 step 23 T=11.372 T2=11.376 P=11.159 C1=5.482 M=4.939 identical=True
+P222_REP 24 step 24 T=11.379 T2=11.376 P=11.159 C1=5.495 M=4.943 identical=True
+P222_REP 25 step 25 T=11.365 T2=11.368 P=11.154 C1=5.486 M=4.954 identical=True
+P222_REP 26 step 26 T=11.000 T2=11.007 P=10.826 C1=5.337 M=4.813 identical=True
+P222_REP 27 step 27 T=11.364 T2=11.379 P=11.158 C1=5.493 M=4.941 identical=True
+P222_REP 28 step 28 T=11.372 T2=11.374 P=11.155 C1=5.487 M=4.961 identical=True
+P222_REP 29 step 29 T=11.185 T2=11.201 P=11.001 C1=5.426 M=4.912 identical=True
+P222_REP 30 step 30 T=11.375 T2=11.382 P=11.152 C1=5.499 M=4.963 identical=True
+P222_REP 31 step 31 T=11.202 T2=11.192 P=11.008 C1=5.415 M=4.914 identical=True
+P222_REP 32 step 32 T=11.186 T2=11.190 P=10.995 C1=5.414 M=4.912 identical=True
+P222_REP 33 step 33 T=11.179 T2=11.182 P=10.978 C1=5.405 M=4.883 identical=True
+P222_REP 34 step 34 T=11.180 T2=11.187 P=11.010 C1=5.425 M=4.895 identical=True
+P222_REP 35 step 35 T=11.378 T2=11.366 P=11.160 C1=5.491 M=4.977 identical=True
+P222_REP 36 step 36 T=11.368 T2=11.365 P=11.154 C1=5.490 M=4.962 identical=True
+P222_REP 37 step 37 T=11.185 T2=11.193 P=10.993 C1=5.432 M=4.904 identical=True
+P222_REP 38 step 38 T=11.185 T2=11.181 P=10.983 C1=5.425 M=4.925 identical=True
+P222_REP 39 step 39 T=11.388 T2=11.387 P=11.155 C1=5.501 M=4.993 identical=True
+P222_REP 40 step 40 T=11.189 T2=11.175 P=10.977 C1=5.430 M=4.920 identical=True
+P222_REP 41 step 41 T=11.194 T2=11.191 P=10.992 C1=5.431 M=4.941 identical=True
+P222_REP 42 step 42 T=11.005 T2=11.006 P=10.826 C1=5.350 M=4.860 identical=True
+P222_REP 43 step 43 T=11.375 T2=11.372 P=11.158 C1=5.498 M=4.985 identical=True
+P222_REP 44 step 44 T=11.180 T2=11.173 P=10.982 C1=5.415 M=4.892 identical=True
+P222_REP 45 step 45 T=10.988 T2=10.991 P=10.837 C1=5.354 M=4.869 identical=True
+P222_REP 46 step 46 T=10.871 T2=10.855 P=10.686 C1=5.286 M=4.755 identical=True
+P222_REP 47 step 47 T=11.008 T2=11.014 P=10.843 C1=5.346 M=4.830 identical=True
+P222_REP 48 step 48 T=11.192 T2=11.180 P=10.997 C1=5.425 M=4.940 identical=True
+P222_REP 49 step 49 T=11.377 T2=11.386 P=11.154 C1=5.504 M=5.019 identical=True
+P222_REP 50 step 50 T=11.369 T2=11.369 P=11.159 C1=5.507 M=4.988 identical=True
+P222_REP 51 step 51 T=11.376 T2=11.375 P=11.161 C1=5.503 M=5.010 identical=True
+P222_REP 52 step 52 T=11.183 T2=11.180 P=10.978 C1=5.423 M=4.951 identical=True
+P222_REP 53 step 53 T=11.377 T2=11.380 P=11.156 C1=5.494 M=4.998 identical=True
+P222_REP 54 step 54 T=11.180 T2=11.173 P=10.985 C1=5.411 M=4.906 identical=True
+P222_REP 55 step 55 T=11.367 T2=11.379 P=11.165 C1=5.504 M=5.017 identical=True
+P222_REP 56 step 56 T=11.186 T2=11.195 P=10.993 C1=5.428 M=4.925 identical=True
+P222_REP 57 step 57 T=11.365 T2=11.377 P=11.162 C1=5.509 M=5.004 identical=True
+P222_REP 58 step 58 T=11.380 T2=11.380 P=11.153 C1=5.518 M=5.018 identical=True
+P222_REP 59 step 59 T=11.375 T2=11.375 P=11.150 C1=5.506 M=5.014 identical=True
+P222_REP 60 step 60 T=11.182 T2=11.182 P=10.991 C1=5.429 M=4.946 identical=True
+P222_REP 61 step 61 T=11.002 T2=10.991 P=10.817 C1=5.351 M=4.874 identical=True
+P222_REP 62 step 62 T=11.379 T2=11.368 P=11.155 C1=5.506 M=5.016 identical=True
+P222_REP 63 step 63 T=10.995 T2=10.994 P=10.830 C1=5.346 M=4.861 identical=True
+P222_REP 64 step 64 T=11.177 T2=11.182 P=10.979 C1=5.419 M=4.920 identical=True
+P222_REP 65 step 65 T=11.375 T2=11.379 P=11.160 C1=5.501 M=5.020 identical=True
+P222_REP 66 step 66 T=10.997 T2=11.001 P=10.827 C1=5.346 M=4.851 identical=True
+P222_REP 67 step 67 T=11.190 T2=11.190 P=10.993 C1=5.429 M=4.939 identical=True
+P222_REP 68 step 68 T=11.366 T2=11.381 P=11.149 C1=5.511 M=5.032 identical=True
+P222_REP 69 step 69 T=11.181 T2=11.187 P=10.973 C1=5.441 M=4.985 identical=True
+P222_REP 70 step 70 T=11.374 T2=11.382 P=11.160 C1=5.511 M=5.035 identical=True
+P222_REP 71 step 71 T=11.366 T2=11.380 P=11.154 C1=5.500 M=5.033 identical=True
+P222_REP 72 step 72 T=10.653 T2=10.661 P=10.510 C1=5.216 M=4.754 identical=True
+P222_REP 73 step 73 T=11.191 T2=11.195 P=10.992 C1=5.428 M=4.951 identical=True
+P222_REP 74 step 74 T=11.372 T2=11.364 P=11.159 C1=5.516 M=5.011 identical=True
+P222_REP 75 step 75 T=10.995 T2=10.995 P=10.825 C1=5.359 M=4.881 identical=True
+P222_REP 76 step 76 T=11.371 T2=11.374 P=11.154 C1=5.506 M=5.018 identical=True
+P222_REP 77 step 77 T=11.006 T2=11.004 P=10.856 C1=5.365 M=4.891 identical=True
+P222_REP 78 step 78 T=11.011 T2=11.012 P=10.839 C1=5.365 M=4.883 identical=True
+P222_REP 79 step 79 T=11.193 T2=11.193 P=11.004 C1=5.434 M=4.969 identical=True
+P222_REP 80 step 80 T=11.375 T2=11.375 P=11.160 C1=5.511 M=5.032 identical=True
+P222_REP 81 step 81 T=11.368 T2=11.379 P=11.161 C1=5.513 M=5.037 identical=True
+P222_REP 82 step 82 T=11.187 T2=11.191 P=10.998 C1=5.431 M=4.971 identical=True
+P222_REP 83 step 83 T=11.192 T2=11.193 P=10.993 C1=5.426 M=4.957 identical=True
+P222_REP 84 step 84 T=11.374 T2=11.375 P=11.156 C1=5.515 M=5.017 identical=True
+P222_REP 85 step 85 T=10.845 T2=10.824 P=10.681 C1=5.280 M=4.808 identical=True
+P222_REP 86 step 86 T=11.374 T2=11.379 P=11.157 C1=5.516 M=5.011 identical=True
+P222_REP 87 step 87 T=11.194 T2=11.184 P=11.009 C1=5.437 M=4.960 identical=True
+P222_REP 88 step 88 T=11.372 T2=11.370 P=11.163 C1=5.513 M=5.035 identical=True
+P222_REP 89 step 89 T=11.208 T2=11.210 P=11.006 C1=5.434 M=4.965 identical=True
+P222_REP 90 step 90 T=11.044 T2=11.045 P=10.845 C1=5.366 M=4.870 identical=True
+P222_REP 91 step 91 T=11.370 T2=11.363 P=11.158 C1=5.521 M=5.042 identical=True
+P222_REP 92 step 92 T=11.194 T2=11.186 P=10.989 C1=5.433 M=4.967 identical=True
+P222_REP 93 step 93 T=10.842 T2=10.836 P=10.673 C1=5.286 M=4.806 identical=True
+P222_REP 94 step 94 T=11.010 T2=11.001 P=10.822 C1=5.350 M=4.861 identical=True
+P222_REP 95 step 95 T=11.378 T2=11.386 P=11.158 C1=5.507 M=5.025 identical=True
+P222_REP 96 step 96 T=11.370 T2=11.379 P=11.153 C1=5.516 M=5.015 identical=True
+P222_REP 97 step 97 T=11.366 T2=11.374 P=11.156 C1=5.516 M=5.030 identical=True
+P222_REP 98 step 98 T=11.183 T2=11.189 P=10.994 C1=5.443 M=4.977 identical=True
+P222_REP 99 step 99 T=11.364 T2=11.372 P=11.152 C1=5.512 M=5.052 identical=True
+P222_REP 100 step 100 T=11.372 T2=11.374 P=11.154 C1=5.518 M=5.042 identical=True
+P222_REP 101 step 101 T=11.374 T2=11.381 P=11.152 C1=5.513 M=5.043 identical=True
+P222_REP 102 step 102 T=11.192 T2=11.187 P=10.995 C1=5.424 M=4.967 identical=True
+P222_REP 103 step 103 T=11.192 T2=11.186 P=11.006 C1=5.435 M=4.965 identical=True
+P222_REP 104 step 104 T=11.370 T2=11.372 P=11.155 C1=5.507 M=5.006 identical=True
+P222_REP 105 step 105 T=11.008 T2=10.993 P=10.830 C1=5.354 M=4.889 identical=True
+P222_REP 106 step 106 T=11.375 T2=11.370 P=11.160 C1=5.508 M=5.005 identical=True
+P222_REP 107 step 107 T=11.369 T2=11.388 P=11.157 C1=5.519 M=5.023 identical=True
+P222_REP 108 step 108 T=11.367 T2=11.369 P=11.164 C1=5.509 M=5.050 identical=True
+P222_REP 109 step 109 T=11.374 T2=11.380 P=11.155 C1=5.508 M=5.054 identical=True
+P222_REP 110 step 110 T=11.194 T2=11.214 P=10.989 C1=5.439 M=4.972 identical=True
+P222_REP 111 step 111 T=11.019 T2=11.004 P=10.838 C1=5.359 M=4.907 identical=True
+P222_REP 112 step 112 T=11.189 T2=11.192 P=10.990 C1=5.445 M=4.980 identical=True
+P222_REP 113 step 113 T=11.384 T2=11.388 P=11.159 C1=5.513 M=5.022 identical=True
+P222_REP 114 step 114 T=11.377 T2=11.377 P=11.162 C1=5.509 M=5.015 identical=True
+P222_REP 115 step 115 T=11.379 T2=11.368 P=11.156 C1=5.509 M=5.038 identical=True
+P222_REP 116 step 116 T=11.372 T2=11.380 P=11.153 C1=5.513 M=5.016 identical=True
+P222_REP 117 step 117 T=11.375 T2=11.374 P=11.155 C1=5.516 M=5.034 identical=True
+P222_REP 118 step 118 T=11.368 T2=11.376 P=11.156 C1=5.522 M=5.051 identical=True
+P222_REP 119 step 119 T=11.370 T2=11.378 P=11.159 C1=5.516 M=5.053 identical=True
+P222_BENCH done in 444.8 s; walls {"stores_s": 0.2, "select_s": 277.5, "compile_s": 0.0, "read_s": 165.6}; clocks n=23396 error=None
