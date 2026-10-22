@@ -228,6 +228,29 @@ def cost_summary(per_request: list, walls: list, batch: int) -> dict:
     return out
 
 
+def stream_times(events, t0: float, end: float) -> tuple:
+    """One streamed completion's timings from ``events``, [(time, SSE line)] in arrival order:
+    ``(ttft_text, [gaps between text chunks], completion_tokens, ttft_any, wall)``, each from ``t0``. ``ttft_any`` is the
+    first chunk carrying any choice, with or without text (Amendment 5); a usage-only chunk (``choices: []``) never
+    counts as first."""
+    first, last, gaps, toks, first_any = None, None, [], 0, None
+    for now, ln in events:
+        if not ln.startswith("data: ") or ln[6:].strip() == "[DONE]":
+            continue
+        obj = json.loads(ln[6:])
+        if obj.get("usage"):
+            toks = obj["usage"].get("completion_tokens") or toks
+        if first_any is None and obj.get("choices"):
+            first_any = now
+        if any((c.get("text") or "") for c in obj.get("choices") or []):
+            if first is None:
+                first = now
+            else:
+                gaps.append(now - last)
+            last = now
+    return (first - t0, gaps, toks, (first_any if first_any is not None else first) - t0, end - t0)
+
+
 def http_cost(base_url: str, name: str, prompt: str) -> dict:
     import asyncio
 
@@ -237,26 +260,12 @@ def http_cost(base_url: str, name: str, prompt: str) -> dict:
         body = {"model": name, "prompt": prompt, "max_tokens": COST_TOKENS, "min_tokens": COST_TOKENS,
                 "ignore_eos": True, "temperature": 0, "stream": True, "stream_options": {"include_usage": True}}
         t0 = time.perf_counter()
-        first, last, gaps, toks, first_any = None, None, [], 0, None
+        events = []
         async with client.stream("POST", "/v1/completions", json=body, timeout=600) as r:
             r.raise_for_status()
             async for ln in r.aiter_lines():
-                if not ln.startswith("data: ") or ln[6:].strip() == "[DONE]":
-                    continue
-                obj = json.loads(ln[6:])
-                if obj.get("usage"):
-                    toks = obj["usage"].get("completion_tokens") or toks
-                if first_any is None and obj.get("choices"):                    # Amendment 5: any chunk, text or not
-                    first_any = time.perf_counter()
-                if any((c.get("text") or "") for c in obj.get("choices") or []):
-                    now = time.perf_counter()
-                    if first is None:
-                        first = now
-                    else:
-                        gaps.append(now - last)
-                    last = now
-        end = time.perf_counter()
-        return (first - t0, gaps, toks, (first_any if first_any is not None else first) - t0, end - t0)
+                events.append((time.perf_counter(), ln))                        # timed on arrival, parsed after
+        return stream_times(events, t0, time.perf_counter())
 
     async def wave(client, b):
         t0 = time.perf_counter()
@@ -603,6 +612,15 @@ def self_test() -> int:
     ok(s["ttft_ms"] == 60.0 and s["tok_s"] == 128.0 and abs(s["itl_ms"] - statistics.median([0.011, 0.011]) * 1000) < 1e-9,
        "cost summary: median TTFT, median per-request ITL, tokens over wall")
     ok("itl_wall_ms" not in s, "a record without the Amendment 5 timings carries no per-token wall cell")
+    ev = [(0.10, 'data: {"choices": [{"text": ""}]}'), (0.12, 'data: {"choices": [{"text": "ab"}]}'),
+          (0.13, ""), (0.135, 'data: {"choices": [{"text": "c"}]}'),
+          (0.14, 'data: {"choices": [], "usage": {"completion_tokens": 3}}'), (0.15, "data: [DONE]")]
+    tt, gp, tk, ta, wl = stream_times(ev, 0.0, 0.15)
+    ok(abs(tt - 0.12) < 1e-12 and [round(g, 6) for g in gp] == [0.015] and tk == 3 and abs(ta - 0.10) < 1e-12
+       and abs(wl - 0.15) < 1e-12, "stream timing: the held-back chunk is the first of any kind, not a text gap")
+    ta2 = stream_times([(0.05, 'data: {"choices": [], "usage": {"completion_tokens": 1}}'),
+                        (0.08, 'data: {"choices": [{"text": "x"}]}')], 0.0, 0.09)[3]
+    ok(abs(ta2 - 0.08) < 1e-12, "a usage-only chunk never counts as the first chunk")
     # Amendment 5: two requests of 128 tokens; one holds 6 tokens back as empty-text chunks (fewer, longer text gaps)
     s5 = cost_summary([(0.050, [0.010] * 127, 128, 0.050, 0.050 + 127 * 0.010),
                        (0.050, [0.010 * 127 / 121] * 121, 128, 0.050, 0.050 + 127 * 0.010)], [1.4], 2)

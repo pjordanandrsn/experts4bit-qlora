@@ -571,27 +571,31 @@ for the wrong reason, and a fourth fault under all of them.
 8. **The fit** (superseding Amendment 3's table). 256 sequences raise the reference arm and add a scoring term to each
    of the two scoring slots. The basis is `p224-shake-3`'s measured phases: the reference process, 170 s for 64 + 64
    sequences with its load, and a scoring slot about 59 s more than a non-scoring one. The sequence-proportional parts
-   are scaled by 4 and rounded up.
+   are scaled by 4 and rounded up. The shakedown's train is its measured 353 s (360), and its scoring term covers the
+   first scoring slot, which also warms the server (228 s at 64 sequences, about 400 s projected at 256).
 
    | term | reading, s | shakedown, s |
    |---|---|---|
    | install | 450 | 450 |
    | fetch | 1,200 | 300 |
    | bake | 600 | 200 |
-   | train | 360 | 200 |
+   | train | 360 | 360 |
    | reference arm | 720 | 600 |
    | 6 server processes | 6 × 360 | 6 × 150 |
-   | scoring, 2 slots | 2 × 240 | 2 × 180 |
+   | scoring, 2 slots | 2 × 240 | 2 × 260 |
    | offload test | 60 | 60 |
    | collect and reduce | 60 | 60 |
    | fixture generation | 0 | 1,000 |
    | reserve | 600 | 600 |
-   | **total** | **6,690** | **4,730** |
+   | **total** | **6,690** | **5,050** |
 
    - Reading: 6,690 × 1.25 = 8,363 s, plus 300 s of boot is 8,663 s, inside the unchanged 2.5 h guard (9,000 s).
-   - Shakedown: 4,730 × 1.25 = 5,913 s, plus boot is 6,213 s, inside the unchanged 1.9 h guard (6,840 s).
+   - Shakedown: 5,050 × 1.25 = 6,313 s, plus boot is 6,613 s, inside the unchanged 1.9 h guard (6,840 s).
    - The guards and the worst cases are unchanged ($3.35 and $1.0064). The runner's fit check refuses before any install
      if the time left is short.
+   - **The binding failure mode is the reading's reference arm.** Its 720 s is scaled from the shakedown, not measured
+     on Qwen3-30B-A3B at 256 sequences. Its process runs under an alarm (1,200 s); beyond it REF and HF0 are not
+     written and the reading VOIDs on a missing record. The fit leaves about 337 s of slack under the guard.
 9. **The self-test on real records.** `tests/test_p224.py` re-grades `p224-shake-3`'s own cells
    (`bench/p224/shake3_cells.json`, sha256-pinned; its row identities come from the Amendment 3 generator). Over its 46
    distinct rows:

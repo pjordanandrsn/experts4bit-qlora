@@ -423,8 +423,8 @@ def test_amendment_4_registers_three_spare_shake_ids_and_nothing_else():
 AMENDMENT_5 = PREREG.split("## Amendment 5", 1)[1] if "## Amendment 5" in PREREG else ""
 FIT_A5 = {"install": 450, "fetch": 1200, "bake": 600, "train": 360, "ref": 720, "servers": 6 * 360, "score": 2 * 240,
           "offload_test": 60, "reduce": 60, "reserve": 600}
-SHAKE_FIT_A5 = {"install": 450, "fetch": 300, "bake": 200, "train": 200, "ref": 600, "servers": 6 * 150,
-                "score": 2 * 180, "offload_test": 60, "reduce": 60, "fixtures": 1000, "reserve": 600}
+SHAKE_FIT_A5 = {"install": 450, "fetch": 300, "bake": 200, "train": 360, "ref": 600, "servers": 6 * 150,
+                "score": 2 * 260, "offload_test": 60, "reduce": 60, "fixtures": 1000, "reserve": 600}
 SHAKE3_CELLS_SHA256 = "77e4b12049c4f0e55b47aae75f522e67724dd30ff40b9db8152bfbd764112caf"
 
 
@@ -448,8 +448,8 @@ def test_amendment_5_the_runner_fit_is_the_registered_table_inside_both_guards()
                 + 2 * n["NEED_SCORE"] + n["NEED_GATE"] + n["NEED_REDUCE"] + n["NEED_FIXTURES"])
         assert 450 + work + 600 == sum(table.values()), (n, table)
         assert BOOT_S + sum(table.values()) * HEADROOM <= guard, (table, guard)
-    assert sum(FIT_A5.values()) == 6690 and sum(SHAKE_FIT_A5.values()) == 4730
-    for text in ("**6,690**", "8,363 s", "8,663 s", "**4,730**", "5,913 s", "6,213 s"):
+    assert sum(FIT_A5.values()) == 6690 and sum(SHAKE_FIT_A5.values()) == 5050
+    for text in ("**6,690**", "8,363 s", "8,663 s", "**5,050**", "6,313 s", "6,613 s", "alarm (1,200 s)"):
         assert text in AMENDMENT_5, text
 
 
