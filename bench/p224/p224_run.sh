@@ -117,6 +117,40 @@ except Exception as e:  # a refusal reason in P225, never a number
     print(json.dumps({"status": getattr(e, "code", None), "error": f"{type(e).__name__}: {str(e)[:120]}"}))
 PYD
 )
+  SPEED=$(OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 python3 - <<'PYS'
+import json, time
+out = {}
+t0 = time.perf_counter(); n = 0
+while time.perf_counter() - t0 < 2.0:
+    s = 0
+    for i in range(100000):
+        s += i * i
+    n += 1
+out["py_loops_per_s"] = round(n / (time.perf_counter() - t0), 2)
+try:
+    import numpy as np
+    a = np.random.rand(512, 512).astype(np.float32)
+    t0 = time.perf_counter(); k = 0
+    while time.perf_counter() - t0 < 2.0:
+        a @ a; k += 1
+    out["np_1t_gflops"] = round(k * 2 * 512 ** 3 / (time.perf_counter() - t0) / 1e9, 2)
+    src = np.ones(1 << 28, dtype=np.float32); dst = np.empty_like(src)   # 1 GiB each
+    np.copyto(dst, src)
+    t0 = time.perf_counter()
+    for _ in range(3):
+        np.copyto(dst, src)
+    out["mem_copy_gb_s"] = round(3 * 2 * src.nbytes / (time.perf_counter() - t0) / 1e9, 2)   # read + write
+    del src, dst
+except Exception as e:  # reported, never refusing
+    out["np_error"] = repr(e)[:80]
+print(json.dumps(out))
+PYS
+)
+  DISK=$( { W_S=$(dd if=/dev/zero of=$W/p225x_disk.bin bs=4M count=512 oflag=direct 2>&1 | tail -1);
+            R_S=$(dd if=$W/p225x_disk.bin of=/dev/null bs=4M iflag=direct 2>&1 | tail -1);
+            rm -f $W/p225x_disk.bin;
+            python3 -c "import json,sys; print(json.dumps({'write': sys.argv[1][-60:], 'read': sys.argv[2][-60:]}))" "$W_S" "$R_S"; } 2>/dev/null)
+  echo "P225X_SPEED {\"cpu\": ${SPEED:-null}, \"disk_2gib_direct\": ${DISK:-null}}" | tee -a summary.txt
   echo "P225X_PROBE {\"cpu_quota\": \"$CPU_Q\", \"nproc\": $NPROC, \"threads_quota\": $NQ, \"ram_gib\": $RAM_GB, \"free_gb\": $FREE_GB, \"download\": $DL}" | tee -a summary.txt
 fi
 FIT_HEADROOM_PCT=125   # the guard keeps 25 % headroom over the fit (cross-lane rule)
@@ -182,6 +216,10 @@ phase_start fetch setup
 SNAP=$(perl -e "alarm $(alarm 2700); exec @ARGV" python -c "from huggingface_hub import snapshot_download as s; print(s('$MODEL', revision='$REV', max_workers=8))" 2> logs/fetch.log | tail -1)
 [ -d "$SNAP" ] || { tail -2 logs/fetch.log; say "DL FAIL"; finish 11; }
 phase_end fetch
+if [ "$EXPLORE" = 1 ]; then   # the snapshot's own read throughput: its first shard, O_DIRECT, past the page cache
+  SHARD=$(ls -1 "$SNAP"/*.safetensors 2>/dev/null | head -1)
+  [ -n "$SHARD" ] && echo "P225X_SNAPREAD $(basename "$SHARD") $(dd if="$(readlink -f "$SHARD")" of=/dev/null bs=4M iflag=direct 2>&1 | tail -1)" | tee -a summary.txt
+fi
 phase_start bake setup
 mkdir -p $W/work
 perl -e "alarm $(alarm 3600); exec @ARGV" python -c "from nvme_bake_nf4 import bake_nf4; bake_nf4('$SNAP', '$W/work/nf4.arena')" \
@@ -228,7 +266,7 @@ for k in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR
     pools[k] = os.environ.get(k)
 sys.stderr.write("P225X_POOLS " + repr(pools) + "\n")
 PYS
-  cpustat(){ cat /sys/fs/cgroup/cpu.stat 2>/dev/null || cat /sys/fs/cgroup/cpu/cpu.stat 2>/dev/null; }
+  cpustat(){ { cat /sys/fs/cgroup/cpu.stat 2>/dev/null || cat /sys/fs/cgroup/cpu/cpu.stat 2>/dev/null; }; echo io:; cat /sys/fs/cgroup/io.stat 2>/dev/null; }
   for i in 1 2 3 4; do
     case $i in 1|4) arm=a; thr="";; *) arm=b; thr="P225X_THREADS=$NQ OMP_NUM_THREADS=$NQ MKL_NUM_THREADS=$NQ OPENBLAS_NUM_THREADS=$NQ NUMEXPR_NUM_THREADS=$NQ";; esac
     echo "P225X_CPUSTAT before $i $arm $(cpustat | tr '\n' ' ')" | tee -a summary.txt
