@@ -35,6 +35,18 @@ REQ_RE='^[A-Za-z0-9_.]+::[]A-Za-z0-9_.[-]+$'; read -r -a REQ <<< "${GC_REQUIRE:-
 for id in ${REQ[@]+"${REQ[@]}"}; do
   [[ "$id" =~ $REQ_RE ]] || { say "refusing: GC_REQUIRE id '$id' is not <classname>::<name>"; exit 78; }
 done
+# GC_E4B_TESTS (optional): the e4b test files to run instead of the served-route premise; GC_NEED_E4B_S: their time need
+# (read into an array and never expanded unquoted: from a repo root, tests/test_*.py would glob into real paths here and
+# then reach the box as the literal, which refuses it after the rental is paid)
+read -r -a E4BT <<< "${GC_E4B_TESTS:-}"
+# a value of blanks only would reach the box as no file at all, and pytest would collect every test in the repository
+[ -z "${GC_E4B_TESTS:-}" ] || [ ${#E4BT[@]} -gt 0 ] || { say "refusing: GC_E4B_TESTS is set but names no file"; exit 78; }
+for t in ${E4BT[@]+"${E4BT[@]}"}; do
+  [[ "$t" =~ ^tests/test_[a-z0-9_]+\.py$ ]] || { say "refusing: GC_E4B_TESTS entry '$t' is not tests/test_<name>.py"; exit 78; }
+done
+# no leading zero (the box's $(( )) would read 0900 as octal and exit without TP_DONE), and at most the 1,800 s per-suite alarm
+NEED=${GC_NEED_E4B_S:-600}
+{ [[ "$NEED" =~ ^[1-9][0-9]{0,5}$ ]] && [ "$NEED" -le 1800 ]; } || { say "refusing: GC_NEED_E4B_S='$NEED' is not 1-1800 whole seconds without a leading zero"; exit 78; }
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 # the class must parse: gc_box answers 0 (inside) or 15 (outside) for a well-formed class against this dummy probe; 78 (malformed)
 # or anything else (the check itself failed) refuses
@@ -65,7 +77,7 @@ else
       --exclude '__pycache__' --exclude '.cache' --exclude 'gnf4src' --exclude 'e4bsrc' "root@$HOST:$W/" "$1/"; }
 fi
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
-PASS="GC_RUN_ID=$RUN_ID GC_RUN_NONCE=$NONCE GC_DEADLINE_EPOCH=$DEADLINE GC_GNF4_SHA=$GC_GNF4_SHA GC_E4B_SHA=$GC_E4B_SHA GC_CARD=$(printf %q "$GC_CARD") GC_REQUIRE=$(printf %q "${GC_REQUIRE:-}")"
+PASS="GC_RUN_ID=$RUN_ID GC_RUN_NONCE=$NONCE GC_DEADLINE_EPOCH=$DEADLINE GC_GNF4_SHA=$GC_GNF4_SHA GC_E4B_SHA=$GC_E4B_SHA GC_CARD=$(printf %q "$GC_CARD") GC_REQUIRE=$(printf %q "${GC_REQUIRE:-}") GC_E4B_TESTS=$(printf %q "${E4BT[*]+${E4BT[*]}}") GC_NEED_E4B_S=$NEED"
 if [ "${GC_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN tool $TOOL_SHA; stage -> $WHERE:$W ; start: env $PASS bash gc_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/gc"; exit 0; fi
 say "run $RUN_ID nonce=$NONCE -> $WHERE; tool $TOOL_SHA; gnf4 $GC_GNF4_SHA; e4b $GC_E4B_SHA; card $GC_CARD; receipts -> $RUN_DIR/gc; deadline $DEADLINE"
 box "rm -rf -- $W && mkdir -p $W/logs" || { say "stage failed: remote cleanup"; exit 20; }

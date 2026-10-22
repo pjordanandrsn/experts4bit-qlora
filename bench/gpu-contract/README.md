@@ -20,6 +20,8 @@ Each suite runs with `-rs` and a junit report; the summary lists every skipped t
 | `GC_E4B_SHA` | the experts4bit-qlora commit whose served tests run and which the box installs: 40 lowercase hex |
 | `GC_CARD` | the declared class: `MAJOR.MINOR/SMS` (exact count) or `MAJOR.MINOR/>=SMS` (a floor), e.g. `8.9/128` for the RTX 4090 |
 | `GC_REQUIRE` | optional: test ids (`<classname>::<name>`) that must PASS; see below |
+| `GC_E4B_TESTS` | optional: the experts4bit-qlora test files to run INSTEAD of the served-route premise, space-separated `tests/test_<name>.py` paths, each refused (78) unless it has exactly that form; for a PR's own GPU smoke |
+| `GC_NEED_E4B_S` | optional: the e4b suite's time need in whole seconds, 1-1800 without a leading zero (default 600), passed through to the box; a suite's alarm is capped at 1,800 s whatever the need |
 | `E4B_RENT_RUN_ID` | `gc-<slug>-<n>`; a dry run's is `gc-dry-<slug>-<n>` with `GC_DRY=1` and `GC_BOX_EXEC` |
 
 The launch tree must be clean, so the staged tool is the committed one; its commit is written to the box (`GC_TOOL_SHA`)
@@ -56,6 +58,6 @@ for any rental.
   `<classname>::<name>`, space-separated. For example, `kernel.test_dispatch_counts::test_on_a_real_rtx_4090_auto_engages_unmocked`.
   Each must PASS. A skip, an absence, a failure or an error exits 30, because a contract whose key test skipped on the
   declared card has not passed. The summary records each one's outcome (`GC_REQUIRE`).
-- Each suite starts only when its need (`GC_NEED_GNF4_S` 900 s, `GC_NEED_E4B_S` 600 s) plus a 300 s receipt margin fits
+- Each suite starts only when its need (`GC_NEED_GNF4_S` 900 s on the box, `GC_NEED_E4B_S` 600 s unless set on the controller) plus a 300 s receipt margin fits
   before `GC_DEADLINE_EPOCH`. Its alarm never runs past that margin, so a tight guard still leaves time to fetch the receipts.
   A suite skipped for time fails the contract and is listed (`SKIPPED <suite> host-limited deadline`).
