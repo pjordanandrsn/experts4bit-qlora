@@ -316,8 +316,8 @@ each at $0 and none a strike, all pinned to one host, machine 45379 (offer 45014
 machine-filtered reads each time. The receipts show:
 - **`-1` and `-2`:** the launcher's pinned search, with the same query, returned no offer for that machine in any of
   its three reads, about 3 minutes after the screen's quote.
-- **`-3`:** launched 17 s after the screen's third read, from a manifest validated at $0 beforehand. Its first pinned
-  read (00:54:17Z) DID return the offer. The create was then refused because the ask was gone, and the same-pin ghost
+- **`-3`:** launched 6 s after the screen's third read, from a manifest validated at $0 beforehand. Its first pinned
+  read (00:54:17Z, 17 s after the screen's) DID return the offer. The create was then refused because the ask was gone, and the same-pin ghost
   retry 180 s later found no offer.
 - **The rest of the market:** 13, 13 and 15 other RTX 5090 offers passed the same terms at the three refusals.
 
