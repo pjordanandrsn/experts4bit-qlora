@@ -1079,7 +1079,8 @@ class PagedEngine:
                     tr.mark("ops")
                 try:
                     plan = sched.step()
-                except Exception as e:  # noqa: BLE001
+                    self._dispatch()
+                except Exception as e:  # noqa: BLE001 -- a failed step or hand-off is the server's state
                     self.error = f"{type(e).__name__}: {e}"
                     self.state = "error"
                     log(f"engine step FAILED: {self.error}")
@@ -1090,7 +1091,6 @@ class PagedEngine:
                     if tr is not None:
                         tr.close()
                     return
-                self._dispatch()
                 if tr is not None:
                     if plan.is_empty:
                         tr.discard()
@@ -1173,26 +1173,29 @@ class PagedEngine:
         ``bench/h2h-2026-10-02/sc2e/decode64/README.md``, section (c))."""
         sched = self.parts.scheduler
         out: list = []
-        for rid, req in sched.active.items():
-            st = self._streams.get(rid)
-            if st is not None and len(req.out) > st.sent:
-                self._push(st, (_TOKENS, req.out[st.sent:]), out)
-                st.sent = len(req.out)
-        for lst, idx_attr in ((sched.done, "_done_idx"), (sched.aborted, "_abort_idx")):
-            i = getattr(self, idx_attr)
-            while i < len(lst):
-                req = lst[i]
-                i += 1
-                st = self._streams.pop(req.rid, None)
-                if st is None:
-                    continue
-                rest = req.out[st.sent:]
-                st.sent = len(req.out)
-                rec = self._record(req, st)
-                self._push(st, (_DONE, (rest, req.finish_reason or "length", rec)), out)
-            setattr(self, idx_attr, i)
-        if out:
-            self._wake(self._fanout, out)
+        try:
+            for rid, req in sched.active.items():
+                st = self._streams.get(rid)
+                if st is not None and len(req.out) > st.sent:
+                    self._push(st, (_TOKENS, req.out[st.sent:]), out)
+                    st.sent = len(req.out)
+            for lst, idx_attr in ((sched.done, "_done_idx"), (sched.aborted, "_abort_idx")):
+                i = getattr(self, idx_attr)
+                while i < len(lst):
+                    req = lst[i]
+                    i += 1
+                    st = self._streams.get(req.rid)
+                    if st is None:
+                        continue
+                    rec = self._record(req, st)       # before the pop: a stream whose record fails is still failed
+                    del self._streams[req.rid]
+                    rest = req.out[st.sent:]
+                    st.sent = len(req.out)
+                    self._push(st, (_DONE, (rest, req.finish_reason or "length", rec)), out)
+                setattr(self, idx_attr, i)
+        finally:   # what was handed off before a failure still reaches its streams (they are already marked finished)
+            if out:
+                self._wake(self._fanout, out)
 
     def _record(self, req: Request, st: PagedStream) -> dict:
         rec = {

@@ -7,6 +7,10 @@
   trace already records `dispatch`, so a served read shows the change before and after. No speed is claimed here.
 - Errors, shutdown and refused submits still wake the loop at once, as before. Stream queues are unbounded, so one
   hand-off cannot fail part-way through a batch.
+- The batch is woken in a `finally`. If building a finish record raises part-way through a step's hand-off, what was
+  already handed off still reaches its streams. A failed hand-off now takes the same path as a failed step: the server
+  reports the error and every stream not yet finished gets an `error` item. Before, the exception ended the engine
+  thread silently and left its streams waiting.
 - `tests/test_serve_paged.py::test_one_cross_thread_wakeup_per_step_and_per_stream_order_is_kept` runs 64 streams
   through the real engine thread. It asserts at most one wakeup per non-empty step, that a full decode step carries all
   64 streams in one wakeup, and that every stream gets its tokens in order and then exactly one `done`. Against the
