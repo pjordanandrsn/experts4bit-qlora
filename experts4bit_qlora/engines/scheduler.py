@@ -171,8 +171,10 @@ class ContinuousScheduler:
     * ``prefill_every`` (``E4B_PAGED_PREFILL_EVERY``, default 1): a step
       carries prefill work only if the previous ``prefill_every - 1``
       steps carried none, so live decodes take at most one prefill stall
-      every N steps. A pending chunk waits at most ``N - 1`` steps for its
-      turn; with no decode row live, prefill runs every step as before.
+      every N steps. The next chunk waits at most ``N - 1`` steps for its
+      turn, so a given prompt waits about ``N`` steps per chunk owed ahead
+      of it (its own and those of prompts admitted before it); with no
+      decode row live, prefill runs every step as before.
     * ``loaded_chunk_tokens`` (``E4B_PAGED_LOADED_CHUNK_TOKENS``, default
       0 = off): caps both the chunk and the step's prefill budget, so one
       long chunk becomes several short stalls. A first chunk shorter than
