@@ -25,8 +25,11 @@ on the card, keyed and guarded so that it never runs anything else silently.
   means off, which is the default. An unknown name is refused.
   - `o_proj` and `router` are separate names so that each can be read, and shipped, on its own.
   - The router changes which experts a token picks, so it is the riskier of the two.
-- **The rows it takes:** a call of 2 to 8 rows (`2 <= M <= 8`, bf16, contiguous, CUDA) on a named projection goes
-  through the pinned cuBLASLt matmul. Every other call keeps its route unchanged:
+- **The rows it takes:** a call of 2 to 8 rows (`2 <= M <= 8`) on a named projection goes through the pinned cuBLASLt
+  matmul. At such a call the operands must be bf16 CUDA tensors (rows made contiguous if they are not).
+  - Anything else at a named site, for example a non-bf16 operand on the router epilogue's path, is **refused by
+    name**, never passed through. The pin was asked for at that site.
+- **Every other call keeps its route unchanged:**
   - one row: today's cuBLAS, or K35 under `E4B_DENSE_GEMV_BW`;
   - more than 8 rows: prefill and the wider buckets.
 - **The call sites:**
@@ -45,8 +48,10 @@ on the card, keyed and guarded so that it never runs anything else silently.
 
 A pin is one cuBLASLt algorithm configuration: the algorithm id, tile, stages, split-K, reduction scheme, CTA
 swizzling and custom option, read back with `cublasLtMatmulAlgoConfigGetAttribute`.
-- **The key:** (the cuBLASLt version actually loaded, the device's compute capability, the projection's (N, K), M).
-  M is the bucket's row count, 2 to 8.
+- **The key:** (the cuBLASLt version actually loaded, the device's compute capability, its SM count, the projection's
+  (N, K), M). M is the bucket's row count, 2 to 8.
+  - The SM count is in the key because one compute capability spans parts with different SM counts (12.0 covers more
+    than one Blackwell part), and cuBLASLt's heuristics and the split-K grid depend on it.
 - **Where the table lives:** in code, the way `_K25_PLANS` does. It is filled by a registered selection on the reading
   box (section 6), never at serve time.
 - **At engine build, with the knob set**, every (projection, M in the captured buckets) must find its key:
@@ -55,7 +60,9 @@ swizzling and custom option, read back with `cublasLtMatmulAlgoConfigGetAttribut
   - `cublasLtMatmulAlgoCheck` must accept each pinned configuration for the exact descriptors. Otherwise it is refused.
 - **The library:** ctypes against the `libcublasLt` that torch has already loaded, the same instance with no second
   copy and no version skew.
-  - On Linux it is opened with `RTLD_NOLOAD`. If it is not already loaded, that is a refusal, not a load.
+  - At build, a warm `F.linear` call forces torch's cuBLAS(Lt) load.
+  - The exact file mapped in this process is then read from `/proc/self/maps`, and that path, not a soname, is opened
+    with `RTLD_NOLOAD`. No mapped `libcublasLt`, or more than one, is a refusal, never a load.
   - Its `cublasLtGetVersion()` is asserted against the key.
   - No new dependency is added. The exploration used nvmath-python; serving does not.
 
@@ -70,7 +77,15 @@ swizzling and custom option, read back with `cublasLtMatmulAlgoConfigGetAttribut
 - the current torch stream.
 - **The workspace:** ONE persistent device buffer per process, sized at build to the largest `workspaceSize` that
   `cublasLtMatmulAlgoCheck` reports over the pinned configurations. Nothing is allocated in the forward, so a CUDA
-  graph capture is legal. The output buffer comes from the caller's allocation, which a capture takes from the graph
+  graph capture is legal.
+- **One stream, enforced:** the workspace is shared by every pinned call and every graph that captures one, so no two
+  may run concurrently.
+  - The build records the serving stream.
+  - An eager pinned call on any other stream is refused by name. A call during a graph capture is allowed, since
+    capture records and does not execute.
+  - The runner asserts, once per captured graph at `enable_decode_graphs`, that its replays run on the recorded stream.
+    `serve_paged` replays every decode graph on one stream today. A second stream (a lookahead or overlap design)
+    would need one workspace per stream first, and the pin refuses until then. The output buffer comes from the caller's allocation, which a capture takes from the graph
   pool, as for every other route.
 - **The descriptors** (matmul, layouts) are created once per (projection, M) at build and reused.
 
@@ -91,6 +106,9 @@ swizzling and custom option, read back with `cublasLtMatmulAlgoConfigGetAttribut
   - the router can also flip which experts are picked.
   - So a served default needs the same quality bar as B3. The router is read as its own arm, with the expert-pick flip
     rate against the default at the same T reported. If that rate is material, K1 ships `o_proj` alone.
+  - **Tokens depend on the bucket by construction:** the pin is per M, so a request's tokens can differ between a
+    2-token and a 4-token step (P149's bucket finding, now by design). Quality and identity are read **per bucket**:
+    T = 2, 4 and 8 each against the default at the same T and the same schedule, never pooled.
   - The selection may prefer scheme 2 (fp32 partials, one fewer rounding) wherever its time is within noise of
     scheme 4's. That is a registered tie rule, never a choice made after data.
 
@@ -107,6 +125,10 @@ swizzling and custom option, read back with `cublasLtMatmulAlgoConfigGetAttribut
   `_K25_PLANS["m1"]`. Then comes a served read.
 - **The microbench reading's bar** is a registration question. The proposal: the pinned path at M = 2, 4 and 8, against
   the one-row served path and against `F.linear` at the same M, with each shape's byte floor reported.
+- **The tolerance, as a number:** the proposal is that the pinned output against `F.linear` at the same inputs stays
+  within max |pin - F.linear| / max |F.linear| <= 1.5e-2 per call, at every (projection, M). That is the served
+  routes' tolerance (P227's TOLERANCE_FAIL bound). Beyond it, the registration rules a contract finding, never a
+  timing.
 
 ## 7. Interactions and refusals
 
@@ -123,7 +145,10 @@ swizzling and custom option, read back with `cublasLtMatmulAlgoConfigGetAttribut
 
 - **CPU:**
   - the knob's parsing and refusals;
-  - the key lookup and its refusals: version, cc, shape, M, a missing bucket;
+  - the key lookup and its refusals: version, cc, SM count, shape, M, a missing bucket;
+  - the mapped-library lookup: one mapped `libcublasLt` path taken, none or two refused (a faked maps file);
+  - a non-bf16 operand at a named site refused;
+  - an eager pinned call on a second stream refused;
   - rows 1 and 9 pass through untouched;
   - the router's two call sites both route or both refuse;
   - a bias refused;
