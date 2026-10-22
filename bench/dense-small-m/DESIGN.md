@@ -26,7 +26,12 @@ on the card, keyed and guarded so that it never runs anything else silently.
   - `o_proj` and `router` are separate names so that each can be read, and shipped, on its own.
   - The router changes which experts a token picks, so it is the riskier of the two.
 - **The rows it takes:** a call of 2 to 8 rows (`2 <= M <= 8`) on a named projection goes through the pinned cuBLASLt
-  matmul. At such a call the operands must be bf16 CUDA tensors (rows made contiguous if they are not).
+  matmul **when a pin exists for its M**.
+  - A row count in 2..8 with no pin (M = 3, 5, 6 or 7 from a prefill chunk, an eager step with graphs off, or a custom
+    `E4B_PAGED_BUCKETS`) passes to `F.linear`. It is never refused mid-serve.
+  - `/health` counts it, with prefill and decode counted separately (maintainer's pass, option (b)).
+  - At build, every **captured decode bucket** in 2..8 must have a pin for each named projection; a graphed bucket
+    without one is refused by name. A request can therefore never meet a missing key inside a captured graph. At such a call the operands must be bf16 CUDA tensors (rows made contiguous if they are not).
   - Anything else at a named site, for example a non-bf16 operand on the router epilogue's path, is **refused by
     name**, never passed through. The pin was asked for at that site.
 - **Every other call keeps its route unchanged:**
@@ -35,14 +40,19 @@ on the card, keyed and guarded so that it never runs anything else silently.
 - **The call sites:**
   - **`o_proj`:** an `nn.Linear` swap, like `dense_gemv_bw.apply_dense_gemv_bw`. Exact `nn.Linear` only: an int4 or
     int8 attention module is refused when named.
-  - **The router:** it is reached two ways, and the pin must cover both or refuse:
-    - the HF module path `self.gate(hidden)`, an `nn.Linear` swap;
-    - the router epilogue's own `F.linear(rows, mod.weight, bias)` (`engines/router_epilogue._topk_softmax_logits`,
-      under `E4B_FUSE_ROUTER_EPI`), a call routed through the same pinned function.
+  - **The router:** in the transformers the package targets (5.x), Qwen3's router is not an `nn.Linear`. It is a
+    router module holding `.weight`, and its GEMM is an `F.linear(rows, weight)` call inside a forward. e4b controls
+    that call in one place: the router epilogue's patched forward (`engines/router_epilogue`, under
+    `E4B_FUSE_ROUTER_EPI`), which routes it through the same pinned function.
+    - Naming `router` therefore requires the epilogue to have patched every router.
+    - A router the epilogue left on its upstream forward (refused by its probe, or the fusion off) is refused by
+      name. The pin never patches upstream code a second way.
   - A router with a bias is refused for the pin's first version, because the epilogue adds the bias inside the GEMM
     and the pinned call would have to match that exactly.
 - **Reported:** `/health` gains `dense_lt_pin`: the resolved table, each projection's state, and which rows routed or
-  passed during the build's captures and warm-ups. That is the engagement record a served read checks, P151's form.
+  passed during the build's captures and warm-ups, with prefill and decode counted separately (a 2..8-token prefill
+  chunk reaches the same sites on the same stream). That is the engagement record a served read checks, P151's
+  form.
 
 ## 3. The pin and its key
 
@@ -54,7 +64,7 @@ swizzling and custom option, read back with `cublasLtMatmulAlgoConfigGetAttribut
     than one Blackwell part), and cuBLASLt's heuristics and the split-K grid depend on it.
 - **Where the table lives:** in code, the way `_K25_PLANS` does. It is filled by a registered selection on the reading
   box (section 6), never at serve time.
-- **At engine build, with the knob set**, every (projection, M in the captured buckets) must find its key:
+- **At engine build, with the knob set**, every (projection, M in the captured decode buckets 2..8) must find its key:
   - a missing key, another cuBLASLt version, another cc, or another shape is **refused by name**. The pin never falls
     back silently to a different algorithm, and never to cuBLAS.
   - `cublasLtMatmulAlgoCheck` must accept each pinned configuration for the exact descriptors. Otherwise it is refused.
@@ -145,6 +155,9 @@ swizzling and custom option, read back with `cublasLtMatmulAlgoConfigGetAttribut
 
 - **CPU:**
   - the knob's parsing and refusals;
+  - a non-pinned M in 2..8 passes to `F.linear` and is counted (prefill and decode apart); a graphed bucket without a
+    pin is refused at build;
+  - a router the epilogue did not patch, with `router` named, is refused;
   - the key lookup and its refusals: version, cc, SM count, shape, M, a missing bucket;
   - the mapped-library lookup: one mapped `libcublasLt` path taken, none or two refused (a faked maps file);
   - a non-bf16 operand at a named site refused;
