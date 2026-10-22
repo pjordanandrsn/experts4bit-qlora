@@ -1,0 +1,169 @@
+# Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
+"""P227, the per-row bandwidth GEMV against K25 at 2 to 8 decode tokens on two families (bench/p227/PREREG-p227.md).
+The staged pins; the routing (Qwen3's re-derived from P153's replay, Mixtral's from P222's seed), with the table the
+registration states; the arms and their call against the collapse's own; the runner's pins, refusals, tripwire, premise
+and guard fit with 25 % headroom; the drive's refusals; no instance id or host name on the box; the self-tests and the
+mutants they must kill."""
+import hashlib
+import importlib.util
+import pathlib
+import re
+import shutil
+import subprocess
+import sys
+
+import pytest
+
+REPO = pathlib.Path(__file__).resolve().parents[1]
+LANE = REPO / "bench" / "p227"
+REPLAY = REPO / "bench" / "p153" / "router-replay" / "rr.json.pt"
+SOURCES = {"p227_bench.py": LANE, "p227_reduce.py": LANE, "p227_run.sh": LANE, "rr.json.pt": REPLAY.parent,
+           "test_nf4_smallm_bw_gpu.py": REPO / "tests", "test_gemv_bw_served_gpu.py": REPO / "tests"}
+RUN = (LANE / "p227_run.sh").read_text(encoding="utf-8")
+DRIVE = (LANE / "p227_drive.sh").read_text(encoding="utf-8")
+BENCH = (LANE / "p227_bench.py").read_text(encoding="utf-8")
+PREREG = (LANE / "PREREG-p227.md").read_text(encoding="utf-8")
+GUARD_S, BOOT_S, HEADROOM = 4500, 300, 1.25
+
+
+def _load(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.path.insert(0, str(path.parent))
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        sys.path.remove(str(path.parent))
+    return mod
+
+
+R = _load("p227_reduce_under_test", LANE / "p227_reduce.py")
+
+
+def test_every_staged_file_is_pinned_and_matches():
+    pins = {}
+    for line in (LANE / "staged-p227.sha256").read_text(encoding="ascii").splitlines():
+        want, name = line.split()
+        pins[name] = want
+    assert set(pins) == set(SOURCES)
+    for name, where in SOURCES.items():
+        assert hashlib.sha256((where / name).read_bytes()).hexdigest() == pins[name], name
+    assert pins["rr.json.pt"] == R.REPLAY_SHA256
+
+
+def test_the_reducer_and_bench_self_tests_pass():
+    R.self_test()
+    r = subprocess.run([sys.executable, str(LANE / "p227_bench.py"), "--self-test"], capture_output=True, text=True)
+    assert r.returncode == 0 and "self-test OK" in r.stdout, r.stdout + r.stderr
+
+
+def test_qwen3_routing_pins_re_derive_from_p153s_replay():
+    torch = pytest.importorskip("torch")
+    picks = torch.load(REPLAY, weights_only=False)["picks"]
+    assert tuple(picks.shape) == (48, 32, 128, 8)
+    for T in R.TS:
+        tab = [[[[int(e) for e in picks[li, R.QWEN3_ROWS0 + r, s].tolist()] for r in range(T)] for s in R.STEPS]
+               for li in range(48)]
+        assert R.route_sha256(tab) == R.ROUTE_SHA256["qwen3"][T], T
+        assert sum(len({e for row in tab[li][s] for e in row}) for li in range(48) for s in R.STEPS) \
+            == R.DISTINCT_TOTAL["qwen3"][T], T
+
+
+def test_mixtral_routing_is_p222s_draw_byte_for_byte():
+    p222 = _load("p222_reduce_for_p227", REPO / "bench" / "p222" / "p222_reduce.py")
+    assert R.mixtral_picks() == p222.picks(2221)
+    assert R.MIXTRAL_SEED == p222.SEEDS["B"]
+
+
+def test_the_prereg_table_is_the_pinned_tables():
+    for fam, L in (("qwen3", 48), ("mixtral", 8)):
+        k = R.FAMILIES[fam]["topk"]
+        for T in R.TS:
+            mean = R.DISTINCT_TOTAL[fam][T] / (L * len(R.STEPS))
+            assert f"| {T} | {T * k} | {mean:.2f} | {T * k / mean:.2f} |" in PREREG, (fam, T)
+
+
+def test_the_registered_constants():
+    assert (R.BAR, R.B2_TRIGGER, R.RULED_TS, R.TS, R.SELF_BAND, R.TOL, R.MIN_POWER_W) == \
+        (0.70, 1.25, (2, 4), (2, 4, 8), (0.99, 1.01), 1.5e-2, 575)
+    assert R.ARMS == ["K", "K2", "B"] and R.SPACER == "S" and R.ITERS == 10 and R.STEPS == tuple(range(60))
+    assert R.FAMILIES["qwen3"]["k25"] == {"E4B_K25_LUT": "prmt", "E4B_K25_PLAN": "c1"}
+    assert R.FAMILIES["mixtral"]["k25"] == {"E4B_K25_LUT": "tree", "E4B_K25_PLAN": "today"}
+    assert R.FAMILIES["qwen3"]["shapes"] == [1536, 2048, 2048, 768] and R.FAMILIES["qwen3"]["layers"] == 48
+    assert R.FAMILIES["mixtral"]["shapes"] == [28672, 4096, 4096, 14336] and R.FAMILIES["mixtral"]["layers"] == 8
+    for s in ("**<= 0.70**", "**> 1.25**", "0.99-1.01", "1.5e-2", "under 575 W", "seed 2221", "`3c59e72f...`"):
+        assert s in PREREG, s
+
+
+def test_k_is_each_familys_served_default_in_the_tripwire():
+    assert 'for mt, lut, plan in (("qwen3_moe", "prmt", "c1"), ("mixtral", "tree", "today")):' in RUN
+    assert "assert hr.NF4_SMALLM_BW_MAX_T == 8 and callable(hr.resolve_nf4_smallm_bw)" in RUN
+    assert "assert hr._nf4_smallm_bw_env() is False" in RUN
+
+
+def test_the_runner_pins_the_kernel_package_and_refuses_before_the_install():
+    assert "GNF4_SHA=41ef086e6a3e2be5b158ff1bb38e0de67862a949" in RUN and 'md.version("grouped-nf4-gemm") == "0.50.0"' in RUN
+    p222 = (REPO / "bench" / "p222" / "p222_run.sh").read_text(encoding="utf-8")
+    for var in ("NF4_SMALLM_SHA256", "INT4_B32_SHA256", "NF4_GROUPED_SHA256"):
+        want = re.search(rf"^{var}=([0-9a-f]{{64}})", p222, re.M).group(1)
+        assert f"{var}={want}" in RUN, var                          # P222's kernel files, byte for byte
+    assert "MIN_POWER_W=575 " in RUN and "finish 17; }" in RUN
+    for rid in ("p227-5090-1|p227-5090-2|p227-5090-3)", "p227-shake-1|p227-shake-2|p227-shake-3) SHAKE=1;;"):
+        assert rid in RUN
+    assert "E4B_K25_LUT E4B_K25_PLAN E4B_NF4_SMALLM_BW" in RUN, "every knob the lane moves starts unset"
+    order = ["sha256sum -c staged-p227.sha256", "PL=$(nvidia-smi --query-gpu=power.limit", '[ "$LEFT" -ge "$FIT_NEED" ]',
+             "pipx logs/pip_e4b.log", "TRIPWIRE FAIL", "grep -qE '^25 passed", "p227_bench.py --replay",
+             "p227_reduce.py --bench"]
+    at = [RUN.index(x) for x in order]
+    assert at == sorted(at), dict(zip(order, at))
+    assert "test_nf4_smallm_bw_gpu.py test_gemv_bw_served_gpu.py" in RUN and "**25 passed**" in PREREG
+
+
+def test_the_guard_fit_has_25_percent_headroom_and_the_prereg_states_it():
+    get = lambda v: int(re.search(rf"^{v}=(\d+)", RUN, re.M).group(1))  # noqa: E731
+    install, need, reserve = get("INSTALL_TO_GATE_S"), get("NEED_BENCH"), get("RESERVE")
+    assert (install, need, reserve) == (600, 1500, 600)
+    fit = install + need + reserve
+    assert fit == 2700 and int(fit * HEADROOM) == 3375 and (BOOT_S + fit) * HEADROOM == 3750 <= GUARD_S
+    assert '[ "$SHAKE" = 1 ] && NEED_BENCH=600' in RUN
+    for s in ("`NEED_BENCH` = **1500 s**", "`FIT` = 600 + 1500 + 600 = 2700 s", "2700 x 1.25 = 3375 s",
+              "(boot 300 s + 2700 s) x 1.25 = 3750 s <= 4500 s (1.25 h)", "**$1.71**"):
+        assert s in PREREG, s
+    assert abs(1.25 * 1.05 + 10 * 0.04 - 1.71) < 0.005
+
+
+def test_the_drive_never_creates_compute_and_refuses_what_is_not_registered():
+    assert "p227-5090-[1-3]|p227-shake-[1-3]) :;;" in DRIVE and 'refusing unregistered run ID' in DRIVE
+    assert 'rev-parse HEAD)" = "$E4B_SHA"' in DRIVE and "the checkout is dirty" in DRIVE
+    assert "shasum -a 256 -c staged-p227.sha256" in DRIVE
+    for word in ("vast.py", "destroy", "/api/", "rent-watch"):
+        assert word not in DRIVE.split("set -uo pipefail", 1)[1], word
+
+
+def test_no_instance_id_or_host_name_is_written_on_the_box():
+    for text in (RUN, BENCH, DRIVE, PREREG):
+        assert not re.search(r"\b(instance|machine|offer)[ _-]?(id)?\s*[:=]?\s*\d{5,}", text, re.I), "an id"
+        assert "vast.ai" not in text and "ssh1." not in text
+
+
+REDUCER_MUTANTS = [
+    ("BAR = 0.70 ", "BAR = 0.75 "),                                                      # a looser bar
+    ('ok = all(cells[T]["b_over_k"]["ub"] <= BAR and cells[T]["b_over_k"]["ub_clock_adj"] <= BAR for T in RULED_TS)',
+     'ok = all(cells[T]["b_over_k"]["median"] <= BAR for T in RULED_TS)'),               # the median, not the bounds
+    ("RULED_TS = (2, 4) ", "RULED_TS = (2,) "),                                            # one T rules
+    ('s["ub_clock_adj"] = s["ub"] * max(1.0, ratio)', 's["ub_clock_adj"] = s["ub"] * min(1.0, ratio)'),  # clock credit
+    ("    if outside and not shake:\n", "    if False:\n"),                                # the self-pair band dropped
+    ('if rep.get("k2_identical") is not True:', 'if False:'),                              # K2's bits unchecked
+    ('bad = [T for T, c in cells.items() if c["b_rel_diff_max"] > TOL]', 'bad = []'),     # the tolerance dropped
+    ('or any(b.get(x) for x in ("dotpad"', 'or False and any(b.get(x) for x in ("dotpad"'),   # B could be dot-pad
+]
+
+
+@pytest.mark.parametrize("old, new", REDUCER_MUTANTS, ids=[m[0][:28] for m in REDUCER_MUTANTS])
+def test_the_self_test_kills_each_reducer_mutant(tmp_path, old, new):
+    src = (LANE / "p227_reduce.py").read_text(encoding="utf-8")
+    assert src.count(old) == 1, old
+    shutil.copy(LANE / "p227_reduce.py", tmp_path / "orig.py")
+    (tmp_path / "p227_reduce.py").write_bytes(src.replace(old, new).encode("utf-8"))
+    r = subprocess.run([sys.executable, str(tmp_path / "p227_reduce.py"), "--self-test"], capture_output=True, text=True)
+    assert r.returncode != 0 and "FAILED" in r.stdout, (old, r.stdout)
